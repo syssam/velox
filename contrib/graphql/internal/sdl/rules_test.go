@@ -1,6 +1,7 @@
 package sdl
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/syssam/velox2/contrib/graphql"
@@ -114,6 +115,23 @@ func TestAnnotationMisuse(t *testing.T) {
 			author.Annotations = ann(t, graphql.Skip(graphql.SkipMutationCreateInput))
 			load(t, model(post, target))
 		}
+
+		// A required O2O whose key the target's row holds: createUser writes
+		// no key of its own, so it can succeed without the edge.
+		user := entity("User", field("name", "string"))
+		profile := edge("profile", "O2O", "Profile")
+		profile.Required, profile.Field, profile.FieldOn = true, "user_id", "Profile"
+		user.Edges = []*plugin.Edge{profile}
+		user.Annotations = ann(t, graphql.Mutations(graphql.Create()))
+		target := entity("Profile", field("user_id", "int64"))
+		target.Annotations = ann(t, graphql.Skip())
+		s, _ := load(t, model(target, user))
+		if got := fieldsOf(s, "CreateUserInput"); !slices.Equal(got, []string{"name: String!"}) {
+			t.Errorf("CreateUserInput: %v", got)
+		}
+		// The same edge holding its key on User's row is refused.
+		profile.OwnsKey, profile.FieldOn = true, "User"
+		renderErr(t, model(target, user), "schema User, edge profile", "required", "createUser")
 	})
 
 	t.Run("a key the caller supplies", func(t *testing.T) {

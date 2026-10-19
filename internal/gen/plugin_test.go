@@ -264,3 +264,55 @@ func TestPluginModelJoinTypesAndComments(t *testing.T) {
 		t.Errorf("keys %+v", keys)
 	}
 }
+
+// Self-edges: FieldOn names the entity itself either way, so only OwnsKey
+// says whose row holds the key. Tree has a self M2O/O2M pair, an inverse
+// self O2O pair and a bidirectional O2O.
+type PlTree struct{ schema.Schema }
+
+func (PlTree) Edges() []schema.Edge {
+	return []schema.Edge{
+		edge.To("children", PlTree.Type),
+		edge.From("parent", PlTree.Type).Ref("children").Unique(),
+		edge.To("mentee", PlTree.Type).Unique(),
+		edge.From("mentor", PlTree.Type).Ref("mentee").Unique(),
+		edge.To("twin", PlTree.Type).Unique(),
+	}
+}
+
+func TestPluginModelOwnsKey(t *testing.T) {
+	g := mustBuild(t, PlTree{}, PlOwner{}, PlKey{}, PlPet{})
+	o, err := Lower(g, Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := PluginModel(g, o)
+	tree := pluginEntity(t, m, "PlTree")
+	for name, want := range map[string]struct {
+		kind string
+		owns bool
+	}{
+		"children": {"O2M", false}, // the children's rows hold it
+		"parent":   {"M2O", true},
+		"mentee":   {"O2O", false}, // the mentee's row holds it, through mentor
+		"mentor":   {"O2O", true},  // the inverse side holds it
+		"twin":     {"O2O", true},  // bidirectional: the one key is on the row
+	} {
+		ed := pluginEdge(t, tree, name)
+		if ed.Kind != want.kind || ed.OwnsKey != want.owns || ed.FieldOn != "PlTree" || ed.Field == "" {
+			t.Errorf("%s: kind %s owns %v field %q on %q, want %s owns %v on PlTree", name, ed.Kind, ed.OwnsKey, ed.Field, ed.FieldOn, want.kind, want.owns)
+		}
+	}
+	// The pair's two edges name one key.
+	if pluginEdge(t, tree, "mentee").Field != pluginEdge(t, tree, "mentor").Field || pluginEdge(t, tree, "children").Field != pluginEdge(t, tree, "parent").Field {
+		t.Error("a pair names two keys")
+	}
+	// Across entities: an O2M's key is the target's; an M2M has none.
+	owner := pluginEntity(t, m, "PlOwner")
+	if pets := pluginEdge(t, owner, "pets"); pets.OwnsKey {
+		t.Errorf("pets %+v", pets)
+	}
+	if keys := pluginEdge(t, owner, "keys"); keys.OwnsKey {
+		t.Errorf("keys %+v", keys)
+	}
+}

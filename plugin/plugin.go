@@ -79,19 +79,27 @@ type Field struct {
 
 // Edge is an edge of an entity.
 type Edge struct {
-	Name        string                     `json:"name"`
-	GoName      string                     `json:"go_name"`
-	Target      string                     `json:"target"` // the target entity's Name
-	Ref         string                     `json:"ref,omitempty"`
-	Kind        string                     `json:"kind"` // "O2O", "O2M", "M2O" or "M2M"
-	Unique      bool                       `json:"unique,omitempty"`
-	Required    bool                       `json:"required,omitempty"`
-	Inverse     bool                       `json:"inverse,omitempty"`
-	Immutable   bool                       `json:"immutable,omitempty"`
-	Field       string                     `json:"field,omitempty"`    // the foreign-key field's Name, on whichever entity holds it; "" for M2M
-	FieldOn     string                     `json:"field_on,omitempty"` // the Name of the entity whose table holds Field; "" for M2M
-	Comment     string                     `json:"comment,omitempty"`  // for descriptions
-	Join        string                     `json:"join,omitempty"`     // the join entity's Name for M2M, else ""
+	Name      string `json:"name"`
+	GoName    string `json:"go_name"`
+	Target    string `json:"target"` // the target entity's Name
+	Ref       string `json:"ref,omitempty"`
+	Kind      string `json:"kind"` // "O2O", "O2M", "M2O" or "M2M"
+	Unique    bool   `json:"unique,omitempty"`
+	Required  bool   `json:"required,omitempty"`
+	Inverse   bool   `json:"inverse,omitempty"`
+	Immutable bool   `json:"immutable,omitempty"`
+	Field     string `json:"field,omitempty"`    // the foreign-key field's Name, on whichever entity holds it; "" for M2M
+	FieldOn   string `json:"field_on,omitempty"` // the Name of the entity whose table holds Field; "" for M2M
+	// OwnsKey is true when the edge's own entity holds the foreign key on its
+	// own row: an M2O edge, an inverse O2O edge, or a bidirectional O2O edge
+	// (an O2O from an entity to itself with no inverse). Writing such an edge
+	// sets the entity's own key; writing any other edge re-points the
+	// target's rows (O2M, and an O2O whose key the target holds) or join
+	// rows (M2M). For an edge from an entity to itself FieldOn names the
+	// entity either way, so only OwnsKey tells.
+	OwnsKey     bool                       `json:"owns_key,omitempty"`
+	Comment     string                     `json:"comment,omitempty"` // for descriptions
+	Join        string                     `json:"join,omitempty"`    // the join entity's Name for M2M, else ""
 	Annotations map[string]json.RawMessage `json:"annotations,omitempty"`
 }
 

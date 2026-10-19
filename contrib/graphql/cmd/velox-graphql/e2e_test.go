@@ -78,6 +78,27 @@ func (Group) Edges() []schema.Edge {
 	return []schema.Edge{edge.From("users", User.Type).Ref("groups")}
 }
 
+// Category's self-edges: FieldOn names Category for each, so only OwnsKey
+// says whose row holds the key. Immutable keys make it show: a key on the
+// row is set on create only, a key on other rows gets no input at all.
+type Category struct{ schema.Schema }
+
+func (Category) Fields() []schema.Field { return []schema.Field{field.String("title")} }
+
+func (Category) Edges() []schema.Edge {
+	return []schema.Edge{
+		edge.To("children", Category.Type),
+		edge.From("parent", Category.Type).Ref("children").Unique().Immutable(),
+		edge.To("mentee", Category.Type).Unique(),
+		edge.From("mentor", Category.Type).Ref("mentee").Unique().Immutable(),
+		edge.To("twin", Category.Type).Unique().Immutable(),
+	}
+}
+
+func (Category) Annotations() []schema.Annotation {
+	return []schema.Annotation{graphql.Mutations(graphql.Create(), graphql.Update())}
+}
+
 type Secret struct{ schema.Schema }
 
 func (Secret) Fields() []schema.Field { return []schema.Field{field.String("value")} }
@@ -189,6 +210,12 @@ func TestPluginThroughVeloxGen(t *testing.T) {
 		"  deletePost(id: ID!): ID!\n",
 		"input CreatePostInput {\n  title: String!\n  authorID: ID!\n}\n",
 		"input UpdatePostInput {\n  title: String\n  authorID: ID\n}\n",
+		// Category's self-edges, read through OwnsKey: parent, mentor and the
+		// bidirectional twin hold their immutable keys on the row, so they are
+		// set on create only; children and mentee would re-point other rows'
+		// immutable keys, so they have no input.
+		"input CreateCategoryInput {\n  title: String!\n  parentID: ID\n  mentorID: ID\n  twinID: ID\n}\n",
+		"input UpdateCategoryInput {\n  title: String\n}\n",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("no %q in\n%s", want, got)

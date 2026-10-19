@@ -159,8 +159,10 @@ func entity(name string, fields ...*plugin.Field) *plugin.Entity {
 	}
 }
 
+// edge is an edge as velox-gen gives it: an M2O holds its key on its own
+// row; set OwnsKey on an inverse or bidirectional O2O.
 func edge(name, kind, target string) *plugin.Edge {
-	return &plugin.Edge{Name: name, GoName: goName(name), Kind: kind, Target: target, Unique: kind == "M2O" || kind == "O2O"}
+	return &plugin.Edge{Name: name, GoName: goName(name), Kind: kind, Target: target, Unique: kind == "M2O" || kind == "O2O", OwnsKey: kind == "M2O"}
 }
 
 func model(es ...*plugin.Entity) *plugin.Model {

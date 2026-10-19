@@ -59,7 +59,8 @@
           "unique": true,
           "inverse": true,
           "field": "category_children",
-          "field_on": "Category"
+          "field_on": "Category",
+          "owns_key": true
         }
       ],
       "primary_key": [
@@ -223,7 +224,8 @@
           "required": true,
           "inverse": true,
           "field": "author_id",
-          "field_on": "Post"
+          "field_on": "Post",
+          "owns_key": true
         }
       ],
       "primary_key": [

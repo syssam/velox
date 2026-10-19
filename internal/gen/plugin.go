@@ -63,7 +63,7 @@ func PluginModel(g *Graph, o *Out) *plugin.Model {
 			pe.Edges = append(pe.Edges, &plugin.Edge{
 				Name: ed.Name, GoName: ed.GoName, Target: ed.Target, Ref: ed.Ref,
 				Kind: ed.Rel.Kind, Unique: ed.Unique, Required: ed.Required, Inverse: ed.Inverse,
-				Immutable: ed.Immutable, Field: ed.Field, FieldOn: fieldOn(ge, ed), Join: joinOf(ed, joins),
+				Immutable: ed.Immutable, Field: ed.Field, FieldOn: fieldOn(ge, ed), OwnsKey: ed.Field != "" && ownFK(ed), Join: joinOf(ed, joins),
 				Comment: ed.Comment, Annotations: ed.Annotations,
 			})
 		}

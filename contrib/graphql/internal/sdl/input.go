@@ -176,8 +176,8 @@ func (g *graph) inputFields(o *object, typ string, create bool) ([]gqlField, err
 // edgeInputs are the input fields of o's edge i, on create or on update.
 // An edge stands for a foreign key, and its inputs only offer what a write
 // of that key may do:
-//   - a unique edge whose key is on o's row sets it: <edge>ID, and on update
-//     clear<Edge> when the key is nullable;
+//   - a unique edge whose key is on o's row (OwnsKey) sets it: <edge>ID, and
+//     on update clear<Edge> when the key is nullable;
 //   - an edge whose key is on the target's rows (O2M, and an O2O whose key
 //     the other entity holds) re-points those rows: <edge>IDs, or
 //     add/remove/clear on update; an O2O sets <edge>ID, and clears it on
@@ -187,13 +187,16 @@ func (g *graph) inputFields(o *object, typ string, create bool) ([]gqlField, err
 //   - an immutable key on o's row is set on create only;
 //   - an M2M edge writes join rows: <edge>IDs, add/remove/clear;
 //   - an edge to a type that is not a Node has no ID and no input. When that
-//     edge is required on create, createX could never succeed: an error.
+//     edge is required and holds its key on o's row, createX could never
+//     succeed: an error.
 func (g *graph) edgeInputs(o *object, i int, create bool) ([]gqlField, error) {
 	ed := o.ent.Edges[i]
 	t := g.byName[ed.Target]
 	where := "schema " + o.ent.Name + ", edge " + ed.Name
 	if t == nil || !t.node {
-		if create && ed.Unique && ed.Required {
+		// A required key on o's own row that createX could never set. When
+		// the target's row holds the key, createX writes none of its own.
+		if create && ed.Unique && ed.Required && ed.OwnsKey {
 			why := "is skipped"
 			if t != nil {
 				why = "is not a Node"
@@ -209,7 +212,6 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]gqlField, error) {
 	fk := g.keyField(ed)
 	immutable := ed.Immutable || fk != nil && fk.Immutable
 	nullable := fk == nil || fk.Nullable
-	own := ownKey(o.ent, ed)
 	one, many := upper(plugin.Singular(name)), plugin.Singular(name)
 	var out []gqlField
 	switch {
@@ -222,7 +224,7 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]gqlField, error) {
 		} else {
 			out = []gqlField{{name: "add" + one + "IDs", typ: "[ID!]"}, {name: "remove" + one + "IDs", typ: "[ID!]"}, {name: "clear" + upper(name), typ: "Boolean"}}
 		}
-	case ed.Unique && own:
+	case ed.Unique && ed.OwnsKey:
 		switch {
 		case create && ed.Required:
 			out = []gqlField{{name: name + "ID", typ: "ID!"}}
@@ -275,33 +277,6 @@ func (g *graph) keyField(ed *plugin.Edge) *plugin.Field {
 		}
 	}
 	return nil
-}
-
-// ownKey reports whether e's own rows hold the foreign key of its edge ed,
-// as velox-gen decides it: an M2O edge's, an inverse O2O edge's, and a
-// bidirectional O2O edge's (one to e itself with no inverse edge naming it).
-// FieldOn alone cannot tell for an edge from e to e.
-func ownKey(e *plugin.Entity, ed *plugin.Edge) bool {
-	switch {
-	case ed.Field == "": // a model without its key fields: the kind tells
-		return ed.Kind == "M2O" || ed.Kind == "O2O" && ed.Inverse
-	case ed.FieldOn != e.Name:
-		return false
-	case ed.Target != e.Name:
-		return true
-	case ed.Kind == "M2O":
-		return true
-	case ed.Kind == "O2O" && ed.Inverse:
-		return true
-	case ed.Kind == "O2O":
-		for _, x := range e.Edges {
-			if x.Inverse && x.Ref == ed.Name {
-				return false
-			}
-		}
-		return true
-	}
-	return false
 }
 
 // inputDesc is the description of o's create or update input.

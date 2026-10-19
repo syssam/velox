@@ -16,7 +16,7 @@
       ],
       "edges": [
         {"name": "children", "go_name": "Children", "target": "Category", "ref": "parent", "kind": "O2M", "field": "category_children", "field_on": "Category", "comment": "The subcategories."},
-        {"name": "parent", "go_name": "Parent", "target": "Category", "ref": "children", "kind": "M2O", "unique": true, "inverse": true, "field": "category_children", "field_on": "Category",
+        {"name": "parent", "go_name": "Parent", "target": "Category", "ref": "children", "kind": "M2O", "unique": true, "inverse": true, "field": "category_children", "field_on": "Category", "owns_key": true,
           "annotations": {"graphql": {"where_edge": true}}}
       ],
       "primary_key": [0],
@@ -59,8 +59,8 @@
         {"name": "created_at", "go_name": "CreatedAt", "column": "created_at", "type": "time", "go_type": "time.Time", "elem_type": "time.Time", "immutable": true, "has_default": true}
       ],
       "edges": [
-        {"name": "user", "go_name": "User", "target": "User", "ref": "likes", "kind": "M2O", "unique": true, "required": true, "inverse": true, "immutable": true, "field": "user_id", "field_on": "Like"},
-        {"name": "post", "go_name": "Post", "target": "Post", "ref": "likes", "kind": "M2O", "unique": true, "required": true, "inverse": true, "immutable": true, "field": "post_id", "field_on": "Like"}
+        {"name": "user", "go_name": "User", "target": "User", "ref": "likes", "kind": "M2O", "unique": true, "required": true, "inverse": true, "immutable": true, "field": "user_id", "field_on": "Like", "owns_key": true},
+        {"name": "post", "go_name": "Post", "target": "Post", "ref": "likes", "kind": "M2O", "unique": true, "required": true, "inverse": true, "immutable": true, "field": "post_id", "field_on": "Like", "owns_key": true}
       ],
       "primary_key": [0, 1],
       "tenant": -1,
@@ -92,7 +92,7 @@
           "comment": "Who last edited the post; the update default fills it."}
       ],
       "edges": [
-        {"name": "author", "go_name": "Author", "target": "User", "ref": "posts", "kind": "M2O", "unique": true, "required": true, "inverse": true, "field": "author_id", "field_on": "Post",
+        {"name": "author", "go_name": "Author", "target": "User", "ref": "posts", "kind": "M2O", "unique": true, "required": true, "inverse": true, "field": "author_id", "field_on": "Post", "owns_key": true,
           "comment": "The user who wrote the post.",
           "annotations": {"graphql": {"field_name": "writer", "where_edge": true}}},
         {"name": "likes", "go_name": "Likes", "target": "Like", "ref": "post", "kind": "O2M", "field": "post_id", "field_on": "Like",
@@ -159,7 +159,7 @@
           "annotations": {"graphql": {"field_name": "memberships", "connection": false}}},
         {"name": "likes", "go_name": "Likes", "target": "Like", "ref": "user", "kind": "O2M", "field": "user_id", "field_on": "Like"},
         {"name": "sessions", "go_name": "Sessions", "target": "Session", "kind": "O2M", "field": "user_sessions", "field_on": "Session"},
-        {"name": "best_friend", "go_name": "BestFriend", "target": "User", "kind": "O2O", "unique": true, "field": "user_best_friend", "field_on": "User",
+        {"name": "best_friend", "go_name": "BestFriend", "target": "User", "kind": "O2O", "unique": true, "field": "user_best_friend", "field_on": "User", "owns_key": true,
           "annotations": {"graphql": {"skip": 1}}}
       ],
       "primary_key": [0],

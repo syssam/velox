@@ -47,7 +47,7 @@ func blogInputs(t *testing.T) *plugin.Model {
 	likes := edge("likes", "O2M", "Like") // to an entity that is not a Node
 	likes.Field, likes.FieldOn = "user_id", "Like"
 	bf := edge("best_friend", "O2O", "User")
-	bf.Field, bf.FieldOn = "user_best_friend", "User"
+	bf.Field, bf.FieldOn, bf.OwnsKey = "user_best_friend", "User", true // bidirectional
 	user.Edges = []*plugin.Edge{posts, groups, profile, categories, likes, bf}
 
 	post := entity("Post", field("author_id", "int64"), field("title", "string"))
@@ -252,7 +252,7 @@ func TestEdgeInputsFollowTheKey(t *testing.T) {
 		flags(uid)
 		profile := entity("Profile", uid, field("bio", "string"))
 		owner := edge("user", "O2O", "User")
-		owner.Field, owner.FieldOn, owner.Inverse, owner.Ref = "user_id", "Profile", true, "profile"
+		owner.Field, owner.FieldOn, owner.Inverse, owner.Ref, owner.OwnsKey = "user_id", "Profile", true, "profile", true
 		owner.Required, owner.Immutable = !uid.Nullable, uid.Immutable
 		profile.Edges = []*plugin.Edge{owner}
 		user := entity("User", field("name", "string"))
