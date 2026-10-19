@@ -102,10 +102,11 @@ func keyOf(v any) (any, bool) {
 }
 
 // pinnedTo returns the DB a query's With loads run on: db, or on a DB with
-// replicas a copy whose reads go to t, the connection the query ran on
-// (Ruling 3). Parents and children are then read from one replica, with one
-// replication lag: children read from a replica further behind could be
-// missing for a parent read from one further ahead.
+// replicas or shards a copy whose reads go to t, the connection the query ran
+// on (Ruling 3). Parents and children are then read from one replica, with
+// one replication lag: children read from a replica further behind could be
+// missing for a parent read from one further ahead. On a sharded DB the loads
+// run on the query's shard without looking it up again.
 func (db *DB) pinnedTo(t target) *DB {
 	if db.rt == nil || db.inTx || t.ex == nil {
 		return db // every read runs on one connection already

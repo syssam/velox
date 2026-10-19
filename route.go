@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"net"
 	"reflect"
@@ -61,6 +62,98 @@ func WithReplicas(conns ...Conn) Option {
 	}
 	conns = slices.Clone(conns)
 	return func(c *config) { c.replicas = append(c.replicas, conns...) }
+}
+
+// Shard is one shard of a DB opened with OpenShards: a primary and its read
+// replicas, among which the shard's statements are routed as WithReplicas
+// routes a DB's.
+type Shard struct {
+	Primary  Conn
+	Replicas []Conn
+}
+
+// OpenShards returns a DB of dialect d whose statements each run on one of
+// shards, chosen from the statement's context (routing spec §5):
+//
+//  1. the shard OnShard names;
+//  2. otherwise, the one WithShardFor's function returns for the context's
+//     tenant (WithTenant); its error refuses the statement;
+//  3. otherwise none: the statement fails with ErrNoShard, as it does under
+//     AllTenants without OnShard.
+//
+// A name that is not one of shards fails with ErrNoShard too, naming it.
+// Within its shard a statement is routed as on a DB with replicas: writes to
+// the primary, reads to the replicas in turn, a failed replica read to the
+// shard's primary. Statement.Route.Shard names the shard.
+//
+// Tx picks its shard from its context at begin, and every statement in the
+// transaction runs there: one whose context names no shard as well, but one
+// whose context names another fails, and nothing is sent.
+//
+// WithShardFor is required, and WithReplicas is refused: each Shard has its
+// own Replicas. OpenShards panics on either mistake, on no shards, on a shard
+// named "" and on a shard whose Primary or a replica is the zero Conn, or a
+// PgxConn when d is not PostgreSQL.
+func OpenShards(d Dialect, shards map[string]Shard, opts ...Option) *DB {
+	if len(shards) == 0 {
+		panic("velox: OpenShards: no shards")
+	}
+	cfg := newConfig(opts)
+	if cfg.shardFor == nil {
+		panic("velox: OpenShards: WithShardFor is required, to find a statement's shard from its tenant")
+	}
+	if len(cfg.replicas) > 0 {
+		panic("velox: OpenShards: WithReplicas is for Open and OpenPgx; give each Shard its Replicas")
+	}
+	rt := &router{shards: make(map[string]*shard, len(shards)), shardFor: cfg.shardFor}
+	for _, name := range slices.Sorted(maps.Keys(shards)) {
+		s := shards[name]
+		if name == "" {
+			panic("velox: OpenShards: a shard's name must not be empty")
+		}
+		what := fmt.Sprintf("OpenShards: shard %q's", name)
+		switch {
+		case s.Primary.ex == nil:
+			panic(fmt.Sprintf("velox: %s Primary is the zero Conn; make it with SQLConn or PgxConn", what))
+		case s.Primary.pgx && d != Postgres:
+			panic(fmt.Sprintf("velox: %s Primary is a PgxConn, valid only for PostgreSQL; the DB is %s", what, d))
+		}
+		for i, c := range s.Replicas {
+			if c.ex == nil {
+				panic(fmt.Sprintf("velox: %s replica %d is the zero Conn; make it with SQLConn or PgxConn", what, i))
+			}
+		}
+		sh := newShard(d, s.Primary.ex, s.Replicas, what)
+		sh.name = name
+		rt.shards[name] = sh
+	}
+	return &DB{d: d, rt: rt, cfg: cfg}
+}
+
+// WithShardFor sets the function that gives the name of a statement's shard,
+// on a DB opened with OpenShards, from its context's tenant: the id given to
+// WithTenant. It is called, with the statement's context, for each statement
+// and Tx whose context has a tenant and no OnShard, so it should be fast; a
+// SQL(ctx) dry run calls it too. Its error refuses the statement, which then
+// matches both ErrNoShard and the error.
+//
+// It is required with OpenShards; given to Open or OpenPgx, it panics there.
+// A nil f panics.
+func WithShardFor(f func(ctx context.Context, tenant any) (string, error)) Option {
+	if f == nil {
+		panic("velox: WithShardFor(nil)")
+	}
+	return func(c *config) { c.shardFor = f }
+}
+
+// OnShard returns a context whose statements, on a DB opened with
+// OpenShards, run on the shard named name, whatever the context's tenant:
+// for admin jobs and for data that belongs to no tenant. A later OnShard
+// replaces it. On a DB opened otherwise it is ignored.
+func OnShard(ctx context.Context, name string) context.Context {
+	rc, _ := ctx.Value(routeKey{}).(routeCtx)
+	rc.shard, rc.onShard = name, true
+	return context.WithValue(ctx, routeKey{}, rc)
 }
 
 // Primary returns a context whose reads go to the primary, on a DB with
@@ -199,15 +292,21 @@ type routeKey struct{}
 // routeCtx is a context's route marks. Each function that sets one copies
 // the context's routeCtx, changes it, and stores the copy.
 type routeCtx struct {
-	primary bool     // Primary: reads go to the primary
 	sess    *session // WithSession's; nil: none
+	shard   string   // OnShard's name, when onShard is set
+	primary bool     // Primary: reads go to the primary
+	onShard bool     // OnShard: statements go to the shard named shard
 }
 
-// router is the connections of a DB with replicas, among which the route
-// stage chooses. A DB without replicas has none, and runs every statement on
-// db.ex.
+// router is the connections of a DB with replicas or shards, among which the
+// route stage chooses. A DB with neither has none, and runs every statement
+// on db.ex.
 type router struct {
-	one *shard // Open's primary and WithReplicas's replicas
+	one *shard // Open's primary and WithReplicas's replicas; nil when sharded
+	// shards are OpenShards's, by name, and shardFor its WithShardFor; nil
+	// on a DB that is not sharded.
+	shards   map[string]*shard
+	shardFor func(ctx context.Context, tenant any) (string, error)
 }
 
 // shard is a primary and its replicas.
@@ -230,21 +329,84 @@ type replica struct {
 // it there.
 type target struct {
 	ex      executor
-	sh      *shard // the shard it is on; nil on a DB without replicas and in a transaction
+	sh      *shard // the shard it is on; nil on a DB without a router and in a transaction
 	replica int    // index into sh.replicas; -1 for the primary
 }
 
-// newRouter returns the router of a DB of dialect d on primary and replicas.
-// A PgxConn on a DB of another dialect panics.
+// newRouter returns the router of an unsharded DB of dialect d on primary
+// and replicas. A PgxConn on a DB of another dialect panics.
 func newRouter(d Dialect, primary executor, replicas []Conn) *router {
+	return &router{one: newShard(d, primary, replicas, "WithReplicas:")}
+}
+
+// newShard returns a shard of a DB of dialect d on primary and replicas. A
+// PgxConn replica on a DB of another dialect panics, in a message that
+// starts with what.
+func newShard(d Dialect, primary executor, replicas []Conn, what string) *shard {
 	sh := &shard{primary: primary}
 	for i, c := range replicas {
 		if c.pgx && d != Postgres {
-			panic(fmt.Sprintf("velox: WithReplicas: replica %d is a PgxConn, valid only for PostgreSQL; the DB is %s", i, d))
+			panic(fmt.Sprintf("velox: %s replica %d is a PgxConn, valid only for PostgreSQL; the DB is %s", what, i, d))
 		}
 		sh.replicas = append(sh.replicas, &replica{ex: c.ex})
 	}
-	return &router{one: sh}
+	return sh
+}
+
+// shardOf returns the shard ctx names on a sharded DB, whose route marks are
+// rc: OnShard's, else the one WithShardFor gives for ctx's tenant. It returns
+// nil and no error when ctx names none, and an error wrapping ErrNoShard for
+// a name that is not a shard and for WithShardFor's error. Only without an
+// OnShard does it look the tenant up (Ruling 2).
+func (rt *router) shardOf(ctx context.Context, rc routeCtx) (*shard, error) {
+	if rc.onShard {
+		if sh := rt.shards[rc.shard]; sh != nil {
+			return sh, nil
+		}
+		return nil, fmt.Errorf("%w: OnShard names %q, which is not a shard of the DB", ErrNoShard, rc.shard)
+	}
+	id, _ := tenantOf(ctx)
+	if id == nil {
+		return nil, nil
+	}
+	name, err := rt.shardFor(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("%w: WithShardFor: %w", ErrNoShard, err)
+	}
+	if sh := rt.shards[name]; sh != nil {
+		return sh, nil
+	}
+	return nil, fmt.Errorf("%w: WithShardFor gave %q, which is not a shard of the DB", ErrNoShard, name)
+}
+
+// noShard is the error, wrapping ErrNoShard, of a statement or Tx whose
+// context ctx names no shard, outside a transaction.
+func noShard(ctx context.Context) error {
+	if _, all := tenantOf(ctx); all != "" {
+		return fmt.Errorf("%w: AllTenants names no shard; name one with OnShard", ErrNoShard)
+	}
+	return fmt.Errorf("%w: the context has neither OnShard nor a tenant (WithTenant)", ErrNoShard)
+}
+
+// shardForTx returns the shard a transaction begun with ctx runs on: on a
+// sharded DB the one ctx names, on a DB with replicas its one shard, and nil
+// on a DB without a router. Its error is Tx's.
+func (db *DB) shardForTx(ctx context.Context) (*shard, error) {
+	switch {
+	case db.rt == nil:
+		return nil, nil
+	case db.rt.one != nil:
+		return db.rt.one, nil
+	}
+	rc, _ := ctx.Value(routeKey{}).(routeCtx)
+	sh, err := db.rt.shardOf(ctx, rc)
+	if err == nil && sh == nil {
+		err = noShard(ctx)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("velox: transaction: %w", err)
+	}
+	return sh, nil
 }
 
 // route is the route stage: it chooses the connection st runs on, and
@@ -258,14 +420,36 @@ func newRouter(d Dialect, primary executor, replicas []Conn) *router {
 // replica's turn: it sends nothing. exec, not route, falls a failed replica
 // read over to the primary.
 //
-// On a DB without replicas it is one branch: no context lookup.
+// On a sharded DB the statement's shard comes first (routing spec §5): the
+// one its context names (shardOf), the pinned target's for a With load, the
+// transaction's in a transaction (Ruling 8). A statement whose shard cannot
+// be found fails, with nothing sent.
+//
+// On a DB without a router it is one branch: no context lookup.
 func (db *DB) route(ctx context.Context, st *Statement) (target, error) {
-	if db.rt == nil || db.inTx {
+	if db.rt == nil || db.inTx && db.txShard == nil {
 		// The DB's one connection, or the transaction's.
 		st.Route = Route{Replica: -1}
 		return target{ex: db.ex, replica: -1}, nil
 	}
+	if db.inTx {
+		return db.routeTx(ctx, st)
+	}
 	sh := db.rt.one
+	var rc routeCtx // read once, on a sharded DB here, else for a read below
+	switch {
+	case db.pin.ex != nil:
+		sh = db.pin.sh // a With load: its query's shard
+	case sh == nil:
+		rc, _ = ctx.Value(routeKey{}).(routeCtx)
+		var err error
+		if sh, err = db.rt.shardOf(ctx, rc); err == nil && sh == nil {
+			err = noShard(ctx)
+		}
+		if err != nil {
+			return target{}, stmtErr(st, err)
+		}
+	}
 	t := target{ex: sh.primary, sh: sh, replica: -1}
 	fallback := false
 	switch {
@@ -278,14 +462,39 @@ func (db *DB) route(ctx context.Context, st *Statement) (target, error) {
 			// have fallen over there.
 			t, fallback = target{ex: t.sh.primary, sh: t.sh, replica: -1}, true
 		}
+	case len(sh.replicas) == 0: // a shard without replicas
 	default:
-		rc, _ := ctx.Value(routeKey{}).(routeCtx)
+		if db.rt.one != nil {
+			rc, _ = ctx.Value(routeKey{}).(routeCtx)
+		}
 		if !rc.primary && (rc.sess == nil || !rc.sess.pinned()) {
 			t = sh.pick(st.DryRun)
 		}
 	}
 	st.Route = Route{Shard: t.sh.name, Replica: t.replica, Fallback: fallback}
 	return t, nil
+}
+
+// routeTx is route in a transaction on a sharded DB: the statement runs on
+// the transaction's connection, unless its context names another shard, or
+// names one that is not a shard, or WithShardFor fails (Ruling 8). A context
+// that names no shard is the transaction's.
+func (db *DB) routeTx(ctx context.Context, st *Statement) (target, error) {
+	rc, _ := ctx.Value(routeKey{}).(routeCtx)
+	sh, err := db.rt.shardOf(ctx, rc)
+	if err != nil {
+		return target{}, stmtErr(st, err)
+	}
+	if sh != nil && sh != db.txShard {
+		return target{}, fmt.Errorf("velox: %s: statement for shard %q in a transaction on shard %q", st.Entity.Name, sh.name, db.txShard.name)
+	}
+	st.Route = Route{Shard: db.txShard.name, Replica: -1}
+	return target{ex: db.ex, replica: -1}, nil
+}
+
+// stmtErr names st's entity in err, which the route stage found.
+func stmtErr(st *Statement, err error) error {
+	return fmt.Errorf("velox: %s: %w", st.Entity.Name, err)
 }
 
 // pick returns the next replica in turn that is not in back-off, or the

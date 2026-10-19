@@ -167,6 +167,11 @@ func ReplicaDownUntil(db *DB, i int) time.Time {
 	return time.Time{}
 }
 
+// DryRun prepares and routes st as the SQL(ctx) methods do.
+func DryRun(db *DB, ctx context.Context, st *Statement) (string, []any, error) {
+	return db.dryRun(ctx, st)
+}
+
 // OpenFake returns a DB of dialect d that runs statements on e.
 func OpenFake(d Dialect, e *FakeExec, opts ...Option) *DB { return newDB(d, e, opts) }
 

@@ -49,6 +49,11 @@ var (
 	// ErrImmutable: an update, Save or upsert's Update list assigned an
 	// Immutable column, including one a hook adds. An insert may set one.
 	ErrImmutable = errors.New("column is immutable")
+	// ErrNoShard: on a DB opened with OpenShards, a statement or Tx whose
+	// context names no shard (neither OnShard nor a tenant; AllTenants names
+	// none), or names one the DB does not have, or whose WithShardFor
+	// function failed. Nothing was sent.
+	ErrNoShard = errors.New("no shard for the statement")
 )
 
 // SchemaError reports a mistake in an entity's generated metadata (its Desc,

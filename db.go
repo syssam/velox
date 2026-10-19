@@ -38,6 +38,9 @@ type DB struct {
 	// successful write; the commit then pins the session of the context given
 	// to Tx. Its savepoints share it. Nil elsewhere.
 	txWrote *atomic.Bool
+	// txShard is, in a transaction on a sharded DB, the shard it runs on;
+	// nil elsewhere.
+	txShard *shard
 }
 
 type config struct {
@@ -55,6 +58,8 @@ type config struct {
 	pinWindow time.Duration
 	// backoff is WithReplicaBackoff's: how long a failed replica is skipped.
 	backoff time.Duration
+	// shardFor is WithShardFor's; nil: none.
+	shardFor func(ctx context.Context, tenant any) (string, error)
 }
 
 // Option configures a DB's pipeline.
@@ -132,10 +137,20 @@ const (
 	defaultBackoff   = 5 * time.Second
 )
 
-func newDB(d Dialect, ex executor, opts []Option) *DB {
+// newConfig returns the configuration opts make.
+func newConfig(opts []Option) *config {
 	cfg := &config{pinWindow: defaultPinWindow, backoff: defaultBackoff}
 	for _, o := range opts {
 		o(cfg)
+	}
+	return cfg
+}
+
+// newDB returns an unsharded DB of dialect d on ex, its primary.
+func newDB(d Dialect, ex executor, opts []Option) *DB {
+	cfg := newConfig(opts)
+	if cfg.shardFor != nil {
+		panic("velox: WithShardFor is for OpenShards; Open and OpenPgx open a DB on one shard")
 	}
 	if len(cfg.replicas) > 0 {
 		return &DB{d: d, rt: newRouter(d, ex, cfg.replicas), cfg: cfg}

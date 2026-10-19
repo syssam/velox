@@ -43,6 +43,13 @@ func RetrySerializable(n int) TxOption { return func(o *txOptions) { o.retries =
 //
 // WithTxAround's hooks wrap the whole call: every attempt and the commit.
 //
+// On a DB with replicas the transaction runs on the primary. On a DB opened
+// with OpenShards it runs on the primary of the shard ctx names, as a
+// statement's context names one; when ctx names none, Tx fails with
+// ErrNoShard, as "velox: transaction: no shard for the statement: …", before
+// anything is sent or any TxAround hook runs. Its statements run on that
+// shard too, and one whose context names another fails.
+//
 // Inside a transaction, Tx makes a savepoint instead, so an error in a nested
 // fn rolls back only that fn's work. A nested Tx (a savepoint) ignores options.
 //
@@ -51,6 +58,10 @@ func RetrySerializable(n int) TxOption { return func(o *txOptions) { o.retries =
 func (db *DB) Tx(ctx context.Context, fn func(tx *DB) error, opts ...TxOption) error {
 	if db.inTx {
 		return db.savepoint(ctx, fn)
+	}
+	sh, err := db.shardForTx(ctx)
+	if err != nil {
+		return err
 	}
 	var o txOptions
 	for _, opt := range opts {
@@ -76,10 +87,10 @@ func (db *DB) Tx(ctx context.Context, fn func(tx *DB) error, opts ...TxOption) e
 	if len(db.cfg.txArounds) == 0 {
 		// No closure here: one passed to the hooks escapes, and would cost
 		// a DB with nothing configured an allocation per transaction.
-		return db.attempts(tctx, tctx, fn, o, deadline, cause, info)
+		return db.attempts(tctx, tctx, fn, o, deadline, cause, info, sh)
 	}
 	return db.txAround(tctx, info, func(ctx context.Context) error {
-		return db.attempts(ctx, tctx, fn, o, deadline, cause, info)
+		return db.attempts(ctx, tctx, fn, o, deadline, cause, info, sh)
 	})
 }
 
@@ -87,8 +98,9 @@ func (db *DB) Tx(ctx context.Context, fn func(tx *DB) error, opts ...TxOption) e
 // failure as many times as o allows. tctx is the context Tx bounded, ctx the
 // one the TxAround hooks passed on (tctx when there are none); cause is
 // ErrTimeout when the deadline is velox's. info, when not nil, is updated
-// before each attempt and each retry.
-func (db *DB) attempts(ctx, tctx context.Context, fn func(*DB) error, o txOptions, deadline time.Time, cause error, info *TxInfo) error {
+// before each attempt and each retry. sh is the shard the transaction runs
+// on; nil on a DB without a router.
+func (db *DB) attempts(ctx, tctx context.Context, fn func(*DB) error, o txOptions, deadline time.Time, cause error, info *TxInfo, sh *shard) error {
 	for attempt := 1; ; attempt++ {
 		if info != nil {
 			info.Attempt = attempt
@@ -97,7 +109,7 @@ func (db *DB) attempts(ctx, tctx context.Context, fn func(*DB) error, o txOption
 		if db.rt != nil {
 			wrote = new(atomic.Bool) // one per attempt: a retry forgets a rolled back write
 		}
-		err := db.transaction(ctx, fn, o, deadline, cause, info, wrote)
+		err := db.transaction(ctx, fn, o, deadline, cause, info, wrote, sh)
 		if err == nil && wrote != nil && wrote.Load() {
 			db.pinSession(tctx) // the context given to Tx, not a TxAround hook's
 		}
@@ -132,12 +144,17 @@ func ended(err error) bool {
 // deadline, Tx's, ends the transaction as ctx's would, even when a TxAround
 // hook passed on a context without it: past it, nothing commits.
 //
-// wrote, nil on a DB without replicas, is the flag the transaction's
-// statements set on a successful write.
-func (db *DB) transaction(ctx context.Context, fn func(*DB) error, o txOptions, deadline time.Time, cause error, info *TxInfo, wrote *atomic.Bool) error {
+// wrote, nil on a DB without a router, is the flag the transaction's
+// statements set on a successful write. sh, nil on a DB without a router, is
+// the shard whose primary the transaction runs on.
+func (db *DB) transaction(ctx context.Context, fn func(*DB) error, o txOptions, deadline time.Time, cause error, info *TxInfo, wrote *atomic.Bool, sh *shard) error {
 	primary := db.ex
-	if db.rt != nil {
-		primary = db.rt.one.primary // a transaction runs on the primary
+	var txShard *shard // its statements check their shard against it
+	if sh != nil {
+		primary = sh.primary // a transaction runs on the primary
+		if db.rt.one == nil {
+			txShard = sh
+		}
 	}
 	ex, ctl, err := primary.begin(ctx, o)
 	if err != nil {
@@ -152,7 +169,7 @@ func (db *DB) transaction(ctx context.Context, fn func(*DB) error, o txOptions, 
 			_ = ctl.rollback(end)
 		}
 	}()
-	if err := fn(&DB{d: db.d, ex: ex, rt: db.rt, cfg: db.cfg, inTx: true, txDeadline: deadline, txCause: cause, tx: info, txWrote: wrote}); err != nil {
+	if err := fn(&DB{d: db.d, ex: ex, rt: db.rt, cfg: db.cfg, inTx: true, txDeadline: deadline, txCause: cause, tx: info, txWrote: wrote, txShard: txShard}); err != nil {
 		finished = true
 		if ctx.Err() != nil || past(deadline) {
 			info.end(TxError)
@@ -237,7 +254,7 @@ func (db *DB) savepoint(ctx context.Context, fn func(*DB) error) error {
 			_ = db.rollbackSavepoint(end, name)
 		}
 	}()
-	if err := fn(&DB{d: db.d, ex: db.ex, rt: db.rt, cfg: db.cfg, inTx: true, depth: db.depth + 1, txDeadline: db.txDeadline, txCause: db.txCause, tx: db.tx, txWrote: db.txWrote}); err != nil {
+	if err := fn(&DB{d: db.d, ex: db.ex, rt: db.rt, cfg: db.cfg, inTx: true, depth: db.depth + 1, txDeadline: db.txDeadline, txCause: db.txCause, tx: db.tx, txWrote: db.txWrote, txShard: db.txShard}); err != nil {
 		finished = true
 		// As in transaction: once the transaction's deadline has passed, the
 		// connection may be gone and the rollback's error is noise.

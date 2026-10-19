@@ -309,6 +309,8 @@ func TestRoutingMisconfigurationPanics(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = sqlDB.Close() }()
+	fake := func() velox.Conn { return velox.FakeConn(&velox.FakeExec{}) }
+	shardFor := velox.WithShardFor(func(context.Context, any) (string, error) { return "eu", nil })
 	for name, c := range map[string]struct {
 		open func()
 		want string // in the panic's message
@@ -322,6 +324,37 @@ func TestRoutingMisconfigurationPanics(t *testing.T) {
 		"SQLConn(nil)":                {func() { velox.SQLConn(nil) }, "velox: SQLConn(nil)"},
 		"PgxConn(nil)":                {func() { velox.PgxConn(nil) }, "velox: PgxConn(nil)"},
 		"a negative replica back-off": {func() { velox.WithReplicaBackoff(-1) }, "velox: WithReplicaBackoff(-1ns): the back-off must not be negative"},
+		"OpenShards without WithShardFor": {func() {
+			velox.OpenShards(velox.Postgres, map[string]velox.Shard{"eu": {Primary: fake()}})
+		}, "OpenShards: WithShardFor is required"},
+		"OpenShards with no shards": {func() {
+			velox.OpenShards(velox.Postgres, map[string]velox.Shard{}, shardFor)
+		}, "OpenShards: no shards"},
+		"OpenShards with a zero Primary": {func() {
+			velox.OpenShards(velox.Postgres, map[string]velox.Shard{"eu": {Primary: fake()}, "us": {}}, shardFor)
+		}, `shard "us"'s Primary is the zero Conn`},
+		"OpenShards with a zero Conn replica": {func() {
+			velox.OpenShards(velox.Postgres, map[string]velox.Shard{"eu": {Primary: fake(), Replicas: []velox.Conn{fake(), {}}}}, shardFor)
+		}, `shard "eu"'s replica 1 is the zero Conn`},
+		"OpenShards with a pgx primary on MySQL": {func() {
+			velox.OpenShards(velox.MySQL, map[string]velox.Shard{"eu": {Primary: velox.PgxConn(new(pgxpool.Pool))}}, shardFor)
+		}, `shard "eu"'s Primary is a PgxConn, valid only for PostgreSQL`},
+		"OpenShards with a pgx replica on MySQL": {func() {
+			velox.OpenShards(velox.MySQL, map[string]velox.Shard{"eu": {Primary: fake(), Replicas: []velox.Conn{velox.PgxConn(new(pgxpool.Pool))}}}, shardFor)
+		}, `shard "eu"'s replica 0 is a PgxConn, valid only for PostgreSQL`},
+		"OpenShards with an unnamed shard": {func() {
+			velox.OpenShards(velox.Postgres, map[string]velox.Shard{"": {Primary: fake()}}, shardFor)
+		}, "OpenShards: a shard's name must not be empty"},
+		"WithReplicas given to OpenShards": {func() {
+			velox.OpenShards(velox.Postgres, map[string]velox.Shard{"eu": {Primary: fake()}}, shardFor, velox.WithReplicas(fake()))
+		}, "OpenShards: WithReplicas is for Open and OpenPgx"},
+		"WithShardFor given to Open": {func() {
+			velox.Open(velox.SQLite, sqlDB, shardFor)
+		}, "WithShardFor is for OpenShards"},
+		"WithShardFor given to OpenPgx": {func() {
+			velox.OpenPgx(new(pgxpool.Pool), shardFor)
+		}, "WithShardFor is for OpenShards"},
+		"WithShardFor(nil)": {func() { velox.WithShardFor(nil) }, "velox: WithShardFor(nil)"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			defer func() {
