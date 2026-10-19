@@ -61,4 +61,14 @@ bin/velox-gen verify -out internal/testmodel ./internal/testmodel/schema
   go test -race -count=1 ./...
 )
 
+# contrib/graphql is its own module too: the annotations package, and later the
+# plugin and runtime.
+(
+  cd contrib/graphql
+  test -z "$(gofmt -l .)" || { echo "gofmt needed in contrib/graphql:"; gofmt -l .; exit 1; }
+  go vet ./...
+  go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
+  go test -race -count=1 ./...
+)
+
 go run ./bench/scale -n 500 -s 100 -check bench/scale/thresholds.json
