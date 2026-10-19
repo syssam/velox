@@ -157,6 +157,11 @@ Left by the observability plan:
 - The link peak grows with N, though a service's binary does not: the linker reads the whole `gen` package's object file. It was 185 MB at N=100 and 279 MB at N=500 (about 0.2 MB per entity). This is inherent to the choice of one generated package (core spec, A.6, note of 2026-10-19); splitting `gen` by domain is out of scope until after 1.0.
 - A relation's `Rel` handle is checked at every use, not at compile time: a hand-edited `Rel[User, Comment]` over a `Many[Post]` field compiles, and fails with a `*SchemaError` each time a statement uses it, whichever handle used the relation first (and in `velox-gen verify`, which calls `CheckRelation` for every generated handle).
 
+## Left by routing
+
+- Read-only transactions on replicas: `db.Tx(ctx, fn, ReadOnly())` runs on the primary, like every transaction.
+- `TxInfo` has no shard, so `contrib/otel`'s transaction spans carry no `velox.route.shard`; their statements' spans do.
+
 ## 1.0 release
 
 - The repo needs a `README.md` and a `LICENSE`.

@@ -1,6 +1,6 @@
 # velox2 examples
 
-Small runnable programs, one topic each, on an in-memory SQLite database.
+Small runnable programs, one topic each, on an in-memory SQLite database (routing uses SQLite files, one per database).
 Each directory is a `main` package with its own `schema/` and `gen/` packages,
 a README, and a golden test of its output.
 
@@ -12,6 +12,7 @@ a README, and a golden test of its output.
 | [policy](policy) | `Policy[E]` Read/Write/Insert by the user in the context; `ErrDenied` and `*PolicyError`; a child visible when its parent is, through `Has`; `SkipPolicy`; `SQL(ctx)` | `go run ./policy` |
 | [hooks](hooks) | The typed `Hooks()` of an entity: an insert hook deriving a field, an update hook that reads and sets values through a `Mutation` and writes an audit row on the write's DB (`m.DB()`; inside `db.Tx` it commits or rolls back with the write), a delete hook narrowing with `Where`, `On`, a generic hook any entity can list, `Save` writing back, `IsDryRun` | `go run ./hooks` |
 | [tx](tx) | `db.Tx` commit and rollback, a nested `Tx` savepoint, `ConstraintError`, `RetrySerializable`, `Timeout` and `WithDeadlines` | `go run ./tx` |
+| [routing](routing) | `OpenShards` with `WithShardFor` choosing a shard by tenant, a read replica, `WithSession` pinning a request's reads to the primary after its write, `Primary`, `OnShard`, `ErrNoShard`, and `Statement.Route`. SQLite files, one per database | `go run ./routing` |
 | [otel](otel) | Tracing and metrics with `contrib/otel` on an in-memory exporter: the span tree of a request and its transaction, fingerprints, call sites, the SQL comment sent, and the metric points | `go run ./otel` |
 | [tour](tour) | One walkthrough that touches everything once | `go run ./tour` |
 

@@ -29,6 +29,12 @@
 //
 // A method with a wrong signature does not compile. Hooks are a method
 // Hooks() []velox.Hook[User] in the same way.
+//
+// A DB can route its statements. WithReplicas sends reads to replicas in turn;
+// WithSession keeps a request reading its own writes from the primary for a
+// short window after a write; a replica that fails a read falls over to the
+// primary. OpenShards runs each statement on one shard, chosen from the
+// context's tenant (WithShardFor) or OnShard. See example/routing.
 package velox
 
 //go:generate go run ./internal/handlegen/gen

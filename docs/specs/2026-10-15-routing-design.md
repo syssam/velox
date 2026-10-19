@@ -1,6 +1,6 @@
 # velox2 Routing — design
 
-Status: draft for review · 2026-10-15 · Go 1.27+
+Status: implemented (routing plan) · 2026-10-15 · Go 1.27+
 
 This is sub-project 4 of five; the table of sub-projects is at the top of the Core design, `2026-10-14-core-design.md`. It fills the pipeline's route stage (Core §5): the choice of the connection a statement runs on. It covers:
 - primary/replica splitting;
@@ -158,3 +158,29 @@ Metrics keep their attributes; `velox.route.shard` is added to them because shar
 - Resharding.
 - Consistent hashing.
 - Connection-pool management: an application builds the pools.
+
+## Rulings made in implementation
+
+Made while building it (plan `2026-10-19-routing.md`, Rulings 1–11, as revised during review), and what they changed in the sections above.
+
+From the plan:
+1. `PgxConn` lives in the core beside `OpenPgx`; `Conn` is opaque, so the later dialect/pgx split can add constructors without changing a routing API.
+2. `WithSession`, `Primary` and `OnShard` share one context key, so a read on a DB with replicas makes one `ctx.Value` lookup for all three; `WithShardFor`'s tenant lookup is a second, made only on a sharded DB.
+3. A query's `With` loads run on the connection the query ran on (the parent's replica, or the primary after a fallback), so parents and children never come from replicas with different lag.
+4. (Revised.) A connection-class error from the query call or from the rows, on a replica, is retried once on the primary unless the reader has already handed a row to the caller; the replica always goes into back-off; a net timeout falls over only from a dial, so a slow query is not moved to the primary.
+5. A context cancelled or past its deadline never puts a replica in back-off and is never retried (`ctx.Err()` is checked before the error is classified).
+6. After a fallback, `Route.Replica` is `-1` and `Route.Fallback` is `true`.
+7. `PinnedUntil(ctx)` is added, so an application can store the time to give `PinUntil` on a user's next request; a session stores its pin end, a write sets it to now plus the window and never lowers it, and `PinUntil` on a context without a session does nothing.
+8. In a transaction, a statement naming no shard runs on the transaction's shard; one naming another fails with `statement for shard "X" in a transaction on shard "Y"` (not `ErrNoShard`); a `WithShardFor` error fails the statement; a commit that made a write marks the session of the `Tx` context, and a rolled-back savepoint does not clear the mark.
+9. `SQL(ctx)` runs the route stage: it returns `ErrNoShard` and the transaction-shard error as a run would, sets `Statement.Route`, and never fails over.
+10. `db.Tx(ctx, fn, ReadOnly())` runs on the primary like every transaction; read-only transactions on replicas stay out of scope.
+11. Every DB sets `Route{Replica: -1}`, with `Shard` on a sharded DB, so a hook never reads `Replica: 0` as replica 0 on a DB without replicas.
+
+From the review rounds, where they change behaviour:
+- A pinned `With` load falls over like any replica read, and one whose replica is in back-off goes to its shard's primary with `Fallback` set.
+- The classes that fall over, beyond §4's: `io.EOF`, `io.ErrUnexpectedEOF`, `pgconn.SafeToRetry`, a `*pgconn.PgError` with code 57P01, 57P02 or 57P03, and any pgx `ConnectError`.
+- MySQL numbers that occur only when connecting or when the server is going away fall over like pgx's `ConnectError`: 1040, 1045, 1053, 1129, 1130, 1203, 1226 and 1927.
+- MySQL's `ErrInvalidConn` is matched by type and text, without importing the driver, which would run its `init` in every program; a driver error reading "invalid connection" from another driver also falls over, once.
+- `OpenShards` also panics on a shard named `""`, a zero replica `Conn` and a `PgxConn` primary on a non-PostgreSQL DB; `OnShard(ctx, "")` fails closed.
+- A `WithShardFor` error matches both `ErrNoShard` and the application's error.
+- On a tenant-scoped entity, a context with no tenant fails with `ErrNoTenant` before routing; `AllTenants` without `OnShard` is what shows `ErrNoShard`.
