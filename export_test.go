@@ -26,6 +26,9 @@ type FakeExec struct {
 	Scanned int
 	// Err, when set, is returned by every query.
 	Err error
+	// RowsErr, when set, is what the rows of every query report from Err,
+	// after their last row.
+	RowsErr error
 	// Block makes query and exec wait until their context ends, then return
 	// its error.
 	Block bool
@@ -90,7 +93,7 @@ func (e *FakeExec) query(ctx context.Context, sql string, args []any) (rows, err
 	if len(e.Results) > 0 {
 		data, e.Results = e.Results[0], e.Results[1:]
 	}
-	return &fakeRows{data: data, e: e}, nil
+	return &fakeRows{data: data, e: e, err: e.RowsErr}, nil
 }
 
 func (e *FakeExec) exec(ctx context.Context, sql string, args []any) (result, error) {
@@ -149,6 +152,15 @@ func SetReplicaDown(db *DB, i int, until time.Time) {
 	db.rt.one.replicas[i].downUntil.Store(until.UnixNano())
 }
 
+// ReplicaDownUntil returns the end of db's replica i's back-off; zero when
+// it has none.
+func ReplicaDownUntil(db *DB, i int) time.Time {
+	if u := db.rt.one.replicas[i].downUntil.Load(); u != 0 {
+		return time.Unix(0, u)
+	}
+	return time.Time{}
+}
+
 // OpenFake returns a DB of dialect d that runs statements on e.
 func OpenFake(d Dialect, e *FakeExec, opts ...Option) *DB { return newDB(d, e, opts) }
 
@@ -166,10 +178,11 @@ type fakeRows struct {
 	data [][]any
 	i    int
 	e    *FakeExec
+	err  error // what Err reports
 }
 
 func (r *fakeRows) Next() bool { r.i++; return r.i <= len(r.data) }
-func (r *fakeRows) Err() error { return nil }
+func (r *fakeRows) Err() error { return r.err }
 func (r *fakeRows) Close() {
 	r.e.mu.Lock()
 	r.e.Closed++

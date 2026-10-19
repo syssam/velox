@@ -53,6 +53,8 @@ type config struct {
 	replicas  []Conn // WithReplicas
 	// pinWindow is WithPinWindow's: how long a write pins its session.
 	pinWindow time.Duration
+	// backoff is WithReplicaBackoff's: how long a failed replica is skipped.
+	backoff time.Duration
 }
 
 // Option configures a DB's pipeline.
@@ -123,11 +125,15 @@ func OpenPgx(pool *pgxpool.Pool, opts ...Option) *DB {
 }
 
 // defaultPinWindow is how long a write pins its session unless WithPinWindow
-// says otherwise.
-const defaultPinWindow = 2 * time.Second
+// says otherwise, and defaultBackoff how long a failed replica is skipped
+// unless WithReplicaBackoff does.
+const (
+	defaultPinWindow = 2 * time.Second
+	defaultBackoff   = 5 * time.Second
+)
 
 func newDB(d Dialect, ex executor, opts []Option) *DB {
-	cfg := &config{pinWindow: defaultPinWindow}
+	cfg := &config{pinWindow: defaultPinWindow, backoff: defaultBackoff}
 	for _, o := range opts {
 		o(cfg)
 	}
@@ -524,12 +530,23 @@ func (c *countedRows) Next() bool {
 // exec sends a rendered statement to t, the connection the route stage
 // chose, reads its rows with read and closes them; with a nil read it sends a
 // statement that returns no rows and fills *res. Either way it sets
-// st.Result, and records t in st.ran. Errors from the database, the driver or
-// read name the entity.
+// st.Result, and records where it ran in st.ran. Errors from the database,
+// the driver or read name the entity.
+//
+// A read sent to a replica that fails with a connection error before it
+// returned rows is sent again, once, to the primary (routing spec §4); the
+// replica is put in back-off. An error the rows report later is not retried
+// (Ruling 4), but a connection error among them still puts the replica in
+// back-off. Neither happens once ctx has ended (Ruling 5).
 func (db *DB) exec(ctx context.Context, st *Statement, t target, read func(rows) error, res *result) (err error) {
 	st.Result = Result{Affected: -1}
 	if err := checkParams(db.d, st); err != nil {
 		return err
+	}
+	if t.replica >= 0 && st.Route.Fallback {
+		// An Around hook retrying after a fallback: the statement runs where
+		// its Route says, the primary.
+		t = target{ex: t.sh.primary, sh: t.sh, replica: -1}
 	}
 	st.ran = t
 	if read == nil {
@@ -548,7 +565,13 @@ func (db *DB) exec(ctx context.Context, st *Statement, t target, read func(rows)
 	}
 	r, err := t.ex.query(ctx, st.SQL, st.Args)
 	if err != nil {
-		return dbErr(st.Entity, err)
+		if t.replica < 0 || ctx.Err() != nil || !failoverable(err) {
+			return dbErr(st.Entity, err)
+		}
+		t = db.fallBack(st, t)
+		if r, err = t.ex.query(ctx, st.SQL, st.Args); err != nil {
+			return dbErr(st.Entity, err)
+		}
 	}
 	// Count the rows only when something reads the count: an Around hook
 	// reads Result.Rows, and the cap needs it. Wrapping them allocates.
@@ -562,8 +585,13 @@ func (db *DB) exec(ctx context.Context, st *Statement, t target, read func(rows)
 		// an Iter, which runs inside read, panics. pgx reports some errors
 		// only once the rows are closed.
 		r.Close()
-		if rerr := r.Err(); rerr != nil && err == nil {
-			err = dbErr(st.Entity, rerr)
+		if rerr := r.Err(); rerr != nil {
+			if err == nil {
+				err = dbErr(st.Entity, rerr)
+			}
+			if t.replica >= 0 && ctx.Err() == nil && failoverable(rerr) {
+				t.sh.replicas[t.replica].down(db.cfg.backoff)
+			}
 		}
 		if counted != nil {
 			st.Result.Rows = counted.n

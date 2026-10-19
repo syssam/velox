@@ -319,8 +319,9 @@ func TestRoutingMisconfigurationPanics(t *testing.T) {
 		"a pgx replica on MySQL": {func() {
 			velox.Open(velox.MySQL, sqlDB, velox.WithReplicas(velox.SQLConn(sqlDB), velox.PgxConn(new(pgxpool.Pool))))
 		}, "replica 1 is a PgxConn, valid only for PostgreSQL"},
-		"SQLConn(nil)": {func() { velox.SQLConn(nil) }, "velox: SQLConn(nil)"},
-		"PgxConn(nil)": {func() { velox.PgxConn(nil) }, "velox: PgxConn(nil)"},
+		"SQLConn(nil)":                {func() { velox.SQLConn(nil) }, "velox: SQLConn(nil)"},
+		"PgxConn(nil)":                {func() { velox.PgxConn(nil) }, "velox: PgxConn(nil)"},
+		"a negative replica back-off": {func() { velox.WithReplicaBackoff(-1) }, "velox: WithReplicaBackoff(-1ns): the back-off must not be negative"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			defer func() {

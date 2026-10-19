@@ -136,11 +136,13 @@ type Rewrite func(ctx context.Context, st *Statement) error
 // statement and reads all its rows, so the hook wraps everything from sending
 // it to its last row; with Iter, that includes the body of the caller's loop.
 // The context passed to next must stay valid until next returns: a hook may
-// set a deadline and cancel it once next has returned.
+// set a deadline and cancel it once next has returned. A write pins the
+// session (WithSession) found in the context the hook passes to next.
 //
 // A hook must call next, and return its error, unless it returns an error of
 // its own instead. It may call next again to retry after an error; running
-// the statement again after Iter has yielded rows is an error. The first
+// the statement again after Iter has yielded rows is an error, and a read
+// that fell over to the primary (Route.Fallback) is retried there. The first
 // Around given to Open is the outermost.
 //
 // With Iter the caller's loop body runs inside the hooks, so a hook that

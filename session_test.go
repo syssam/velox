@@ -317,6 +317,29 @@ func TestPinUntil(t *testing.T) {
 		readOne(t, s.db, ctx)
 		s.check(t, true, [3]int{0, 1, 0}, onR0)
 	})
+	t.Run("a time past int64's nanoseconds pins, not wraps", func(t *testing.T) {
+		bothPaths(t, func(t *testing.T, hooked bool) {
+			for _, far := range []time.Time{time.Date(2262, 4, 12, 0, 0, 0, 0, time.UTC), time.Date(9999, 1, 1, 0, 0, 0, 0, time.UTC)} {
+				s := seeded(hooked)
+				sctx := velox.WithSession(ctx)
+				velox.PinUntil(sctx, far)
+				if got := velox.PinnedUntil(sctx); got.Before(time.Date(2262, 1, 1, 0, 0, 0, 0, time.UTC)) {
+					t.Errorf("PinUntil(%v): PinnedUntil %v", far, got)
+				}
+				readOne(t, s.db, sctx)
+				s.check(t, hooked, [3]int{1, 0, 0}, onPrimary)
+			}
+		})
+	})
+	t.Run("a time before int64's nanoseconds pins nothing", func(t *testing.T) {
+		for _, early := range []time.Time{{}, time.Date(1600, 1, 1, 0, 0, 0, 0, time.UTC)} {
+			sctx := velox.WithSession(ctx)
+			velox.PinUntil(sctx, early)
+			if got := velox.PinnedUntil(sctx); !got.IsZero() {
+				t.Errorf("PinUntil(%v): PinnedUntil %v, want zero", early, got)
+			}
+		}
+	})
 	t.Run("a session with no write has a zero pin", func(t *testing.T) {
 		if got := velox.PinnedUntil(velox.WithSession(ctx)); !got.IsZero() {
 			t.Errorf("PinnedUntil %v, want zero", got)
@@ -325,52 +348,173 @@ func TestPinUntil(t *testing.T) {
 }
 
 // TestSessionConcurrency: goroutines share one session, writing and reading.
-// A read issued after some goroutine's write has returned goes to the primary.
+// Before any write, reads go to the replicas; a read issued after some
+// goroutine's write has returned goes to the primary.
 func TestSessionConcurrency(t *testing.T) {
-	type holderKey struct{}
-	s := seeded(false, velox.WithPinWindow(time.Hour), velox.WithAround(
-		func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
-			if h, ok := ctx.Value(holderKey{}).(*velox.Route); ok {
-				*h = st.Route
+	bothPaths(t, func(t *testing.T, hooked bool) {
+		type holderKey struct{}
+		opts := []velox.Option{velox.WithPinWindow(time.Hour)}
+		if hooked {
+			opts = append(opts, velox.WithAround(
+				func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+					if h, ok := ctx.Value(holderKey{}).(*velox.Route); ok {
+						*h = st.Route
+					}
+					return next(ctx)
+				}))
+		}
+		s := seeded(false, opts...)
+		sctx := velox.WithSession(ctx)
+		const goroutines = 8
+		errs := make(chan string, 1000)
+		read := func() (velox.Route, bool) {
+			var got velox.Route
+			rctx := context.WithValue(sctx, holderKey{}, &got)
+			if _, err := s.db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).One(rctx); err != nil {
+				errs <- err.Error()
+				return got, false
+			}
+			return got, true
+		}
+
+		// No write yet: every read goes to a replica.
+		var wg sync.WaitGroup
+		for range goroutines {
+			wg.Go(func() {
+				for range 10 {
+					if got, ok := read(); ok && hooked && got.Replica == -1 {
+						errs <- "a read before any write ran on the primary"
+					}
+				}
+			})
+		}
+		wg.Wait()
+		if got := s.calls(); got != [3]int{0, goroutines * 10 / 2, goroutines * 10 / 2} {
+			t.Errorf("before any write, calls (primary, replica 0, replica 1) %v, want the replicas only", got)
+		}
+
+		var wrote atomic.Bool
+		var before atomic.Int64 // reads begun before any write returned
+		replicaCalls := s.r0.Calls + s.r1.Calls
+		for g := range goroutines {
+			wg.Go(func() {
+				for i := range 50 {
+					if (g+i)%7 == 0 {
+						if _, err := s.db.Update[testmodel.Invoice]().Set(I.Paid.Set(true)).Where(I.ID.EQ(1)).Exec(sctx); err != nil {
+							errs <- err.Error()
+							return
+						}
+						wrote.Store(true)
+						continue
+					}
+					after := wrote.Load() // a write returned before this read began
+					if !after {
+						before.Add(1)
+					}
+					got, ok := read()
+					if !ok {
+						return
+					}
+					if hooked && after && got.Replica != -1 {
+						errs <- "a read after a write ran on replica " + strconv.Itoa(got.Replica)
+					}
+				}
+			})
+		}
+		wg.Wait()
+		close(errs)
+		for e := range errs {
+			t.Error(e)
+		}
+		if n := s.r0.Calls + s.r1.Calls - replicaCalls; int64(n) > before.Load() {
+			t.Errorf("%d reads went to a replica once writes began, but only %d began before a write returned", n, before.Load())
+		}
+		if velox.PinnedUntil(sctx).IsZero() {
+			t.Error("the session was never pinned")
+		}
+	})
+}
+
+// TestTxAroundPins: the commit pins the session of the context given to Tx,
+// whatever context a TxAround hook passes on, and only once a commit has
+// succeeded.
+func TestTxAroundPins(t *testing.T) {
+	update := func(tx *velox.DB) error {
+		_, err := tx.Update[testmodel.Invoice]().Set(I.Paid.Set(true)).Where(I.ID.EQ(1)).Exec(ctx)
+		return err
+	}
+	t.Run("a hook that drops the session", func(t *testing.T) {
+		s := seeded(false, velox.WithTxAround(func(ctx context.Context, _ *velox.TxInfo, next func(context.Context) error) error {
+			return next(context.WithoutCancel(velox.WithSession(context.Background())))
+		}))
+		sctx := velox.WithSession(ctx)
+		if err := s.db.Tx(sctx, update); err != nil {
+			t.Fatal(err)
+		}
+		if velox.PinnedUntil(sctx).IsZero() {
+			t.Error("the session of the context given to Tx was not pinned")
+		}
+		readOne(t, s.db, sctx)
+		if s.r0.Calls != 0 || s.r1.Calls != 0 {
+			t.Errorf("the read went to %v, want the primary", s.calls())
+		}
+	})
+	retry := velox.WithTxAround(func(ctx context.Context, _ *velox.TxInfo, next func(context.Context) error) error {
+		err := next(ctx)
+		if err != nil {
+			err = next(ctx) // velox refuses a second call
+		}
+		return err
+	})
+	t.Run("a hook that retries a rolled back write", func(t *testing.T) {
+		s := seeded(false, retry)
+		sctx := velox.WithSession(ctx)
+		calls := 0
+		err := s.db.Tx(sctx, func(tx *velox.DB) error {
+			calls++
+			if err := update(tx); err != nil {
+				return err
+			}
+			return errors.New("undo")
+		})
+		if err == nil || !strings.Contains(err.Error(), "called next twice") || calls != 1 {
+			t.Fatalf("fn ran %d times, Tx returned %v; want one run and velox's refusal", calls, err)
+		}
+		if got := velox.PinnedUntil(sctx); !got.IsZero() {
+			t.Errorf("a rolled back write pinned the session until %v", got)
+		}
+	})
+	t.Run("a hook that retries after a failed commit", func(t *testing.T) {
+		s := seeded(false, retry)
+		s.p.CommitErr = errors.New("commit failed")
+		sctx := velox.WithSession(ctx)
+		if err := s.db.Tx(sctx, update); err == nil {
+			t.Fatal("Tx should fail")
+		}
+		if got := velox.PinnedUntil(sctx); !got.IsZero() {
+			t.Errorf("a failed commit pinned the session until %v", got)
+		}
+	})
+	t.Run("a hook that calls next again after a commit", func(t *testing.T) {
+		s := seeded(false, velox.WithTxAround(func(ctx context.Context, _ *velox.TxInfo, next func(context.Context) error) error {
+			if err := next(ctx); err != nil {
+				return err
 			}
 			return next(ctx)
 		}))
-	sctx := velox.WithSession(ctx)
-	var wrote atomic.Bool
-	var wg sync.WaitGroup
-	errs := make(chan string, 1000)
-	for g := range 8 {
-		wg.Go(func() {
-			for i := range 50 {
-				if (g+i)%7 == 0 {
-					if _, err := s.db.Update[testmodel.Invoice]().Set(I.Paid.Set(true)).Where(I.ID.EQ(1)).Exec(sctx); err != nil {
-						errs <- err.Error()
-						return
-					}
-					wrote.Store(true)
-					continue
-				}
-				after := wrote.Load() // a write returned before this read began
-				var got velox.Route
-				rctx := context.WithValue(sctx, holderKey{}, &got)
-				if _, err := s.db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).One(rctx); err != nil {
-					errs <- err.Error()
-					return
-				}
-				if after && got.Replica != -1 {
-					errs <- "a read after a write ran on replica " + strconv.Itoa(got.Replica)
-				}
-			}
-		})
-	}
-	wg.Wait()
-	close(errs)
-	for e := range errs {
-		t.Error(e)
-	}
-	if velox.PinnedUntil(sctx).IsZero() {
-		t.Error("the session was never pinned")
-	}
+		sctx := velox.WithSession(ctx)
+		calls := 0
+		err := s.db.Tx(sctx, func(tx *velox.DB) error { calls++; return update(tx) })
+		if err == nil || calls != 1 {
+			t.Fatalf("fn ran %d times, Tx returned %v; want one run and velox's refusal", calls, err)
+		}
+		if velox.PinnedUntil(sctx).IsZero() {
+			t.Error("the committed write did not pin the session")
+		}
+		if n := strings.Count(strings.Join(s.p.Log, "\n"), "COMMIT"); n != 1 {
+			t.Errorf("%d commits, want 1", n)
+		}
+	})
 }
 
 func TestPinWindowPanics(t *testing.T) {

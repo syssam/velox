@@ -3,11 +3,16 @@ package velox
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
+	"errors"
 	"fmt"
+	"math"
+	"net"
 	"slices"
 	"sync/atomic"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -83,11 +88,18 @@ func WithSession(ctx context.Context) context.Context {
 // its pin now: an application that stored the time of a user's last write
 // restarts the pin on the user's next request with it (PinnedUntil gives the
 // time to store). It never lowers a pin, and does nothing on a context
-// without a session.
+// without a session. A t after 2262, past what PinnedUntil can return, pins
+// until then: until the end of the session, in effect.
 func PinUntil(ctx context.Context, t time.Time) {
-	if rc, _ := ctx.Value(routeKey{}).(routeCtx); rc.sess != nil {
-		rc.sess.raise(t.UnixNano())
+	rc, _ := ctx.Value(routeKey{}).(routeCtx)
+	if rc.sess == nil || !t.After(time.Unix(0, 0)) {
+		return // a time before 1970 is past: it pins nothing
 	}
+	u := int64(math.MaxInt64) // t.UnixNano() wraps after 2262
+	if t.Before(time.Unix(0, math.MaxInt64)) {
+		u = t.UnixNano()
+	}
+	rc.sess.raise(u)
 }
 
 // PinnedUntil returns the time until which ctx's session reads the primary:
@@ -112,6 +124,17 @@ func WithPinWindow(d time.Duration) Option {
 		panic(fmt.Sprintf("velox: WithPinWindow(%v): the window must not be negative", d))
 	}
 	return func(c *config) { c.pinWindow = d }
+}
+
+// WithReplicaBackoff sets how long a replica is skipped after a read sent to
+// it failed with a connection error; the default is 5 seconds. The read
+// itself is retried once on the primary, with Statement.Route's Fallback set.
+// A negative d panics.
+func WithReplicaBackoff(d time.Duration) Option {
+	if d < 0 {
+		panic(fmt.Sprintf("velox: WithReplicaBackoff(%v): the back-off must not be negative", d))
+	}
+	return func(c *config) { c.backoff = d }
 }
 
 // session is a context's record of when its reads may leave the primary
@@ -226,10 +249,12 @@ func newRouter(d Dialect, primary executor, replicas []Conn) *router {
 // records the choice in st.Route.
 //
 // Writes, statements in a transaction, reads whose context is marked with
-// Primary and reads of a session within its pin window go to the primary. A With load goes where its query went (Ruling
-// 3). Any other read goes to the next replica in turn, skipping one in
-// back-off, or to the primary when every replica is. A dry run is routed as
-// the read would be, but takes no replica's turn: it sends nothing.
+// Primary and reads of a session within its pin window go to the primary. A
+// With load goes where its query went (Ruling 3). Any other read goes to the
+// next replica in turn, skipping one in back-off, or to the primary when
+// every replica is. A dry run is routed as the read would be, but takes no
+// replica's turn: it sends nothing. exec, not route, falls a failed replica
+// read over to the primary.
 //
 // On a DB without replicas it is one branch: no context lookup.
 func (db *DB) route(ctx context.Context, st *Statement) (target, error) {
@@ -256,6 +281,12 @@ func (db *DB) route(ctx context.Context, st *Statement) (target, error) {
 
 // pick returns the next replica in turn that is not in back-off, or the
 // primary when every one is. With peek set it leaves the turn where it was.
+//
+// When the replica whose turn it is is in back-off, the turn goes to one of
+// the others that are up, chosen by the turn too, so that the down replica's
+// reads are spread evenly over them rather than all falling to its
+// neighbour. Only that path reads the clock: with every replica up, pick is
+// one atomic add and one load.
 func (sh *shard) pick(peek bool) target {
 	var turn uint32
 	if peek {
@@ -263,21 +294,100 @@ func (sh *shard) pick(peek bool) target {
 	} else {
 		turn = sh.next.Add(1) - 1
 	}
-	n := len(sh.replicas)
-	first := int(turn % uint32(n))
-	var now int64 // read only when a replica has been in back-off
-	for k := range n {
-		i := (first + k) % n
-		r := sh.replicas[i]
-		if until := r.downUntil.Load(); until != 0 {
-			if now == 0 {
-				now = time.Now().UnixNano()
-			}
-			if now < until {
-				continue
-			}
+	n := uint32(len(sh.replicas))
+	if i := turn % n; sh.replicas[i].downUntil.Load() == 0 {
+		return target{ex: sh.replicas[i].ex, sh: sh, replica: int(i)}
+	}
+	return sh.pickUp(turn, time.Now().UnixNano())
+}
+
+// pickUp is pick's path when the replica whose turn it is has been in
+// back-off: that replica when its back-off has ended, else the
+// (turn/n mod up)th of the up replicas, else the primary.
+func (sh *shard) pickUp(turn uint32, now int64) target {
+	n := uint32(len(sh.replicas))
+	if i := turn % n; sh.replicas[i].up(now) {
+		return target{ex: sh.replicas[i].ex, sh: sh, replica: int(i)}
+	}
+	var up uint32
+	for _, r := range sh.replicas {
+		if r.up(now) {
+			up++
 		}
-		return target{ex: r.ex, sh: sh, replica: i}
+	}
+	if up == 0 {
+		return target{ex: sh.primary, sh: sh, replica: -1}
+	}
+	k := turn / n % up
+	first := -1
+	for i, r := range sh.replicas {
+		if !r.up(now) {
+			continue
+		}
+		if k == 0 {
+			return target{ex: r.ex, sh: sh, replica: i}
+		}
+		if first < 0 {
+			first = i
+		}
+		k--
+	}
+	if first >= 0 {
+		// One went down between the loops: take the first still up.
+		return target{ex: sh.replicas[first].ex, sh: sh, replica: first}
 	}
 	return target{ex: sh.primary, sh: sh, replica: -1}
+}
+
+// up reports whether r is out of back-off at now, in Unix nanoseconds. A
+// back-off that has ended is cleared, which returns r to pick's path that
+// does not read the clock.
+func (r *replica) up(now int64) bool {
+	until := r.downUntil.Load()
+	if until == 0 {
+		return true
+	}
+	if now < until {
+		return false
+	}
+	r.downUntil.CompareAndSwap(until, 0) // unless it failed again meanwhile
+	return true
+}
+
+// down puts r in back-off for d from now.
+func (r *replica) down(d time.Duration) {
+	r.downUntil.Store(time.Now().Add(d).UnixNano())
+}
+
+// fallBack records that st's read on replica t failed with a connection
+// error: the replica is put in back-off for the DB's WithReplicaBackoff, and
+// fallBack returns the shard's primary for exec to retry st on, with st.Route
+// (Ruling 6) and st.ran saying so.
+func (db *DB) fallBack(st *Statement, t target) target {
+	t.sh.replicas[t.replica].down(db.cfg.backoff)
+	p := target{ex: t.sh.primary, sh: t.sh, replica: -1}
+	st.Route = Route{Shard: t.sh.name, Replica: -1, Fallback: true}
+	st.ran = p
+	return p
+}
+
+// failoverable reports whether err, from sending a read, is a connection
+// error (routing spec §4) after which the read is retried on the primary:
+// the replica was not reached, or its connection is gone. A query error
+// (syntax, a constraint, a permission) is not. Neither is a context that
+// ended, which says nothing about the replica: exec checks the statement's
+// context before asking (Ruling 5), and context.DeadlineExceeded, itself a
+// net.Error, is ruled out here too.
+func failoverable(err error) bool {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	var ne net.Error
+	var ce *pgconn.ConnectError
+	return errors.Is(err, driver.ErrBadConn) ||
+		errors.Is(err, sql.ErrConnDone) ||
+		errors.Is(err, net.ErrClosed) ||
+		errors.Is(err, pgconn.ErrConnClosed) ||
+		errors.As(err, &ne) ||
+		errors.As(err, &ce)
 }
