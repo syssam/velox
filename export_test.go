@@ -27,8 +27,10 @@ type FakeExec struct {
 	// Err, when set, is returned by every query.
 	Err error
 	// RowsErr, when set, is what the rows of every query report from Err,
-	// after their last row.
-	RowsErr error
+	// after their last row. RowsErrs are the rows errors of successive
+	// queries, one each, before RowsErr.
+	RowsErr  error
+	RowsErrs []error
 	// Block makes query and exec wait until their context ends, then return
 	// its error.
 	Block bool
@@ -93,7 +95,11 @@ func (e *FakeExec) query(ctx context.Context, sql string, args []any) (rows, err
 	if len(e.Results) > 0 {
 		data, e.Results = e.Results[0], e.Results[1:]
 	}
-	return &fakeRows{data: data, e: e, err: e.RowsErr}, nil
+	rerr := e.RowsErr
+	if len(e.RowsErrs) > 0 {
+		rerr, e.RowsErrs = e.RowsErrs[0], e.RowsErrs[1:]
+	}
+	return &fakeRows{data: data, e: e, err: rerr}, nil
 }
 
 func (e *FakeExec) exec(ctx context.Context, sql string, args []any) (result, error) {

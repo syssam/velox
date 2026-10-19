@@ -385,7 +385,7 @@ func readIter[E any](it *iterRun[E], r rows) error {
 		if err := scanRow(r, it.m, it.st.Columns, dst, &e); err != nil {
 			return err
 		}
-		it.yielded = true
+		it.yielded, it.st.handed = true, true
 		if !it.yield(e, nil) {
 			it.stopped = true
 			return nil

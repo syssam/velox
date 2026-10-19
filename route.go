@@ -6,8 +6,10 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"net"
+	"reflect"
 	"slices"
 	"sync/atomic"
 	"time"
@@ -265,17 +267,24 @@ func (db *DB) route(ctx context.Context, st *Statement) (target, error) {
 	}
 	sh := db.rt.one
 	t := target{ex: sh.primary, sh: sh, replica: -1}
+	fallback := false
 	switch {
 	case st.Op != OpSelect:
 	case db.pin.ex != nil:
 		t = db.pin
+		if t.replica >= 0 && t.sh.replicas[t.replica].downUntil.Load() != 0 && !t.sh.replicas[t.replica].up(time.Now().UnixNano()) {
+			// The replica has failed since the query read it, on an earlier
+			// load: this one goes straight to the primary, as it would
+			// have fallen over there.
+			t, fallback = target{ex: t.sh.primary, sh: t.sh, replica: -1}, true
+		}
 	default:
 		rc, _ := ctx.Value(routeKey{}).(routeCtx)
 		if !rc.primary && (rc.sess == nil || !rc.sess.pinned()) {
 			t = sh.pick(st.DryRun)
 		}
 	}
-	st.Route = Route{Shard: t.sh.name, Replica: t.replica}
+	st.Route = Route{Shard: t.sh.name, Replica: t.replica, Fallback: fallback}
 	return t, nil
 }
 
@@ -359,6 +368,13 @@ func (r *replica) down(d time.Duration) {
 	r.downUntil.Store(time.Now().Add(d).UnixNano())
 }
 
+// broken reports whether err, from a read on t, is a connection error on a
+// replica, with ctx still live: whether the read falls over (Ruling 5: a
+// context that ended says nothing about the replica).
+func (db *DB) broken(ctx context.Context, t target, err error) bool {
+	return t.replica >= 0 && ctx.Err() == nil && failoverable(err)
+}
+
 // fallBack records that st's read on replica t failed with a connection
 // error: the replica is put in back-off for the DB's WithReplicaBackoff, and
 // fallBack returns the shard's primary for exec to retry st on, with st.Route
@@ -371,23 +387,68 @@ func (db *DB) fallBack(st *Statement, t target) target {
 	return p
 }
 
-// failoverable reports whether err, from sending a read, is a connection
-// error (routing spec §4) after which the read is retried on the primary:
-// the replica was not reached, or its connection is gone. A query error
+// failoverable reports whether err, from a read on a replica (the query call
+// or its rows), is a connection error (routing spec §4) after which the read
+// is retried on the primary: the replica was not reached, its connection is
+// gone, or its server is shutting down or starting up. A query error
 // (syntax, a constraint, a permission) is not. Neither is a context that
 // ended, which says nothing about the replica: exec checks the statement's
 // context before asking (Ruling 5), and context.DeadlineExceeded, itself a
-// net.Error, is ruled out here too.
+// net.Error, is ruled out here too. A net.Error that is a timeout counts only
+// from a dial: a read that timed out may be a slow query, not a dead replica.
 func failoverable(err error) bool {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return false
 	}
-	var ne net.Error
-	var ce *pgconn.ConnectError
-	return errors.Is(err, driver.ErrBadConn) ||
+	if errors.Is(err, driver.ErrBadConn) ||
 		errors.Is(err, sql.ErrConnDone) ||
 		errors.Is(err, net.ErrClosed) ||
+		errors.Is(err, io.EOF) ||
+		errors.Is(err, io.ErrUnexpectedEOF) ||
 		errors.Is(err, pgconn.ErrConnClosed) ||
-		errors.As(err, &ne) ||
-		errors.As(err, &ce)
+		pgconn.SafeToRetry(err) ||
+		mysqlInvalidConn(err) {
+		return true
+	}
+	var pg *pgconn.PgError
+	if errors.As(err, &pg) {
+		// admin_shutdown, crash_shutdown, cannot_connect_now
+		return pg.Code == "57P01" || pg.Code == "57P02" || pg.Code == "57P03"
+	}
+	var ce *pgconn.ConnectError
+	if errors.As(err, &ce) {
+		return true
+	}
+	var ne net.Error
+	if !errors.As(err, &ne) {
+		return false
+	}
+	var op *net.OpError
+	return !ne.Timeout() || errors.As(err, &op) && op.Op == "dial"
+}
+
+// mysqlInvalidConn reports whether err's tree holds go-sql-driver/mysql's
+// ErrInvalidConn, which the driver returns for a connection that broke. velox
+// does not import the driver (see constraint), so the sentinel, an
+// errors.New, is recognized by its type and text.
+func mysqlInvalidConn(err error) bool {
+	for err != nil {
+		if t := reflect.TypeOf(err); t.Kind() == reflect.Pointer && t.Elem().PkgPath() == "errors" && t.Elem().Name() == "errorString" && err.Error() == "invalid connection" {
+			return true
+		}
+		switch u := err.(type) {
+		case interface{ Unwrap() error }:
+			err = u.Unwrap()
+		case interface{ Unwrap() []error }:
+			for _, e := range u.Unwrap() {
+				if mysqlInvalidConn(e) {
+					return true
+				}
+			}
+			return false
+		default:
+			return false
+		}
+	}
+	return false
 }

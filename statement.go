@@ -110,6 +110,9 @@ type Statement struct {
 	Result Result
 
 	ran target // where exec sent it; its With loads run there (Ruling 3)
+	// handed is set once Iter has handed the caller a row: a broken
+	// connection is then not failed over, as the read cannot start again.
+	handed bool
 }
 
 // Result is what executing a statement did: a Statement's, which an Around
@@ -141,9 +144,11 @@ type Rewrite func(ctx context.Context, st *Statement) error
 //
 // A hook must call next, and return its error, unless it returns an error of
 // its own instead. It may call next again to retry after an error; running
-// the statement again after Iter has yielded rows is an error, and a read
-// that fell over to the primary (Route.Fallback) is retried there. The first
-// Around given to Open is the outermost.
+// the statement again after Iter has yielded rows is an error. A retry is
+// sent where the route stage now points: a read that fell over to the
+// primary (Route.Fallback), on a connection error from its query or its rows,
+// is retried there, not on the replica in back-off. The first Around given
+// to Open is the outermost.
 //
 // With Iter the caller's loop body runs inside the hooks, so a hook that
 // recovers a panic and returns normally makes Go report that a range function

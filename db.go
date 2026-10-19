@@ -533,12 +533,13 @@ func (c *countedRows) Next() bool {
 // st.Result, and records where it ran in st.ran. Errors from the database,
 // the driver or read name the entity.
 //
-// A read sent to a replica that fails with a connection error before it
-// returned rows is sent again, once, to the primary (routing spec §4); the
-// replica is put in back-off. An error the rows report later is not retried
-// (Ruling 4), but a connection error among them still puts the replica in
-// back-off. Neither happens once ctx has ended (Ruling 5).
-func (db *DB) exec(ctx context.Context, st *Statement, t target, read func(rows) error, res *result) (err error) {
+// A read on a replica whose connection fails before any row reached the
+// caller, whether the query call or the rows report it, is sent again, once,
+// to the primary (routing spec §4), and the replica is put in back-off. read
+// runs again from the start, as it does when an Around hook retries. Once
+// Iter has handed the caller a row, the replica's error is returned and only
+// the back-off happens. Neither happens once ctx has ended (Ruling 5).
+func (db *DB) exec(ctx context.Context, st *Statement, t target, read func(rows) error, res *result) error {
 	st.Result = Result{Affected: -1}
 	if err := checkParams(db.d, st); err != nil {
 		return err
@@ -565,7 +566,7 @@ func (db *DB) exec(ctx context.Context, st *Statement, t target, read func(rows)
 	}
 	r, err := t.ex.query(ctx, st.SQL, st.Args)
 	if err != nil {
-		if t.replica < 0 || ctx.Err() != nil || !failoverable(err) {
+		if !db.broken(ctx, t, err) {
 			return dbErr(st.Entity, err)
 		}
 		t = db.fallBack(st, t)
@@ -575,42 +576,70 @@ func (db *DB) exec(ctx context.Context, st *Statement, t target, read func(rows)
 	}
 	// Count the rows only when something reads the count: an Around hook
 	// reads Result.Rows, and the cap needs it. Wrapping them allocates.
+	n := db.rowCap(st)
 	var counted *countedRows
-	if n := db.rowCap(st); n > 0 || len(db.cfg.arounds) > 0 {
+	if n > 0 || len(db.cfg.arounds) > 0 {
 		counted = &countedRows{rows: r, left: n, capped: n > 0}
 		r = counted
 	}
-	defer func() {
-		// Deferred, so that the rows are closed even when the loop body of
-		// an Iter, which runs inside read, panics. pgx reports some errors
-		// only once the rows are closed.
-		r.Close()
-		if rerr := r.Err(); rerr != nil {
-			if err == nil {
-				err = dbErr(st.Entity, rerr)
+	rerr, rowsErr := readRows(r, read)
+	if rowsErr != nil && db.broken(ctx, t, rowsErr) {
+		if st.handed {
+			// Iter has handed the caller a row, which cannot be taken
+			// back: the error is returned, and only the replica pays.
+			t.sh.replicas[t.replica].down(db.cfg.backoff)
+		} else {
+			// The replica's connection broke before any row reached the
+			// caller: read on the primary, from the start. read starts
+			// anew, as for an Around hook's retry.
+			t = db.fallBack(st, t)
+			pr, err := t.ex.query(ctx, st.SQL, st.Args)
+			if err != nil {
+				return dbErr(st.Entity, err)
 			}
-			if t.replica >= 0 && ctx.Err() == nil && failoverable(rerr) {
-				t.sh.replicas[t.replica].down(db.cfg.backoff)
+			r = pr
+			if counted != nil {
+				*counted = countedRows{rows: pr, left: n, capped: n > 0}
+				r = counted
 			}
+			again, againRows := readRows(r, read)
+			if errors.Is(again, errIterAgain) {
+				return dbErr(st.Entity, rowsErr) // the replica's error
+			}
+			rerr, rowsErr = again, againRows
 		}
-		if counted != nil {
-			st.Result.Rows = counted.n
-			if st.Op != OpSelect && err == nil {
-				// The rows a write returned are the rows it affected.
-				st.Result.Affected = counted.n
-			}
-		}
+	}
+	switch {
+	case rerr != nil:
+		err = dbErr(st.Entity, rerr)
+	case counted != nil && counted.over:
+		err = fmt.Errorf("velox: %s: %w: more than %d; raise it with the query's MaxRows", st.Entity.Name, ErrTooManyRows, n)
+	case rowsErr != nil:
+		err = dbErr(st.Entity, rowsErr)
+	}
+	if counted != nil {
+		st.Result.Rows = counted.n
 		if st.Op != OpSelect && err == nil {
-			db.wrote(ctx)
+			// The rows a write returned are the rows it affected.
+			st.Result.Affected = counted.n
 		}
+	}
+	if st.Op != OpSelect && err == nil {
+		db.wrote(ctx)
+	}
+	return err
+}
+
+// readRows runs read on r and closes r, and returns read's error and the
+// error r reports once closed: pgx reports some errors only then. r is
+// closed even when read panics, as the loop body of an Iter, which runs
+// inside read, may.
+func readRows(r rows, read func(rows) error) (readErr, rowsErr error) {
+	defer func() {
+		r.Close()
+		rowsErr = r.Err()
 	}()
-	if err := read(r); err != nil {
-		return dbErr(st.Entity, err)
-	}
-	if counted != nil && counted.over {
-		return fmt.Errorf("velox: %s: %w: more than %d; raise it with the query's MaxRows", st.Entity.Name, ErrTooManyRows, db.rowCap(st))
-	}
-	return nil
+	return read(r), nil
 }
 
 // checkParams refuses a rendered statement with more parameters than
