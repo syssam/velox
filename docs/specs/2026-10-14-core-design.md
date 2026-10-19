@@ -277,7 +277,14 @@ or confirmed by measurement (Appendix A).
    `any`; `T` appears only in method signatures. Measured: holding `*T`/`[]T`
    (plus one marker method) made a service touching 5 entities emit descriptors
    for 180 entities; the fix cut cold-build CPU from 304 to 134 seconds and
-   monolith link memory from 2.6 to 1.1 GB.
+   monolith link memory from 2.6 to 1.1 GB. The same holds for relation
+   metadata: a generated entity's Desc never names its relation targets'
+   metadata (no `VeloxMeta`, no getter; the join entity of a many-to-many
+   relation is the one exception, and it has no relations). The use site supplies the target: the
+   `Rel[E, T]` handle puts it in the load or condition that uses the relation.
+   A Desc that named its targets would link every entity reachable through
+   relations, which is the whole schema when every edge has an inverse; this
+   keeps a service's binary independent of the size of the schema (A.6).
 3. **No ordinary method on a velox generic type** where avoidable. Relation
    fields are recognized by type name, not by a marker method; a method set
    adds descriptors for each method's type to every instantiation.
@@ -288,7 +295,10 @@ or confirmed by measurement (Appendix A).
    client or registry. Each entity is reached through its own package.
    Measured: a one-service binary is 3.2 MB in an application of 2,000
    entities, and linking one service's test binary peaks at 129 MB against
-   771 MB when all entities share one package.
+   771 MB when all entities share one package. (With the schema DSL all
+   entities are one generated package by choice; the service binary stays
+   independent of N by rule 2, and the linker's memory does not: see the
+   2026-10-19 note in A.6.)
 6. **Cross-package relations are a cost the application chooses.** Go
    recompiles every package whose exported types mention a changed type,
    transitively. A typed relation from package A to package B puts B's entity
@@ -810,7 +820,7 @@ that each query five entities of `gen`. One package has no leaves and roots, so
 the two rebuild rows became one, `schema_edit_rebuild_s`: add a field to one
 schema, regenerate, and rebuild every service. The relation shape is the old
 one (`bench/scale/main.go`, `generate`). Measured on the same machine (M3 Max)
-at N=500, S=100, three idle runs (the largest of each):
+at N=500, S=100, three runs at loads of 3.25 to 3.94 (the largest of each):
 
 | | Per-domain packages (2026-10-14) | One generated package (2026-10-16) |
 |---|---|---|
@@ -837,7 +847,8 @@ and `velox.CheckRelation(gen.Users.Posts)` resolves one relation, which
 the relations of generated code). `EdgeThrough` keeps its join entity's
 getter; a join entity has no relations of its own, so that is one hop and does
 not depend on N. Measured the same way, N=500, S=100, three runs (the largest
-of each):
+of each), at 1-minute loads of 2.57, 6.00 and 11.37 (only the first under 4;
+the harness waited 30 minutes for the others):
 
 | | One generated package, before (2026-10-16) | After |
 |---|---|---|
@@ -849,4 +860,6 @@ of each):
 The binary is flat. The linker's peak still grows with N (185 MB at N=100,
 279 MB at N=500): it reads the whole `gen` package's object file, though it
 keeps only what the service reaches. The CI thresholds for N=500 were
-re-baselined from the 2026-10-19 runs.
+re-baselined from the 2026-10-19 runs: times 4x the largest run, sizes and
+memory 1.5x (they were identical across loads; a 2x margin would pass the
+404 MB link peak of the build before the fix).

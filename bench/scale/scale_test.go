@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -34,6 +35,64 @@ func TestScaleHarnessSmall(t *testing.T) {
 	if problems := check(r, 20, th); len(problems) == 0 {
 		t.Error("check passed a measurement 1000 times over its threshold")
 	}
+}
+
+// TestServiceLinksOnlyItsEntities guards the link graph: a service that uses
+// five entities links those and the targets of their relations, one hop, and
+// no other entity of the schema. A relation that named its target's metadata
+// in the owner's Desc would link the whole connected model (the service's
+// binary grew with n until the use site named the target). The threshold in
+// thresholds.json catches the size; this names the entities.
+func TestServiceLinksOnlyItsEntities(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds an application; run without -short")
+	}
+	const n, s = 60, 2
+	dir := t.TempDir()
+	if _, err := run(config{n: n, services: s, dir: dir}); err != nil {
+		t.Fatal(err)
+	}
+	schemas, services := generate(n, s)
+	src := services[filepath.Join("s0", "main.go")]
+	entity := regexp.MustCompile(`gen\.E(\d+)\b`)
+	ref := regexp.MustCompile(`\bE(\d+)\.Type\b`)
+	used, allowed := map[string]bool{}, map[string]bool{}
+	for _, m := range entity.FindAllStringSubmatch(src, -1) {
+		used[m[1]] = true
+		allowed[m[1]] = true
+		// The targets of the used entity's relations: one hop.
+		for _, r := range ref.FindAllStringSubmatch(schemas[filepath.Join("schema", "e"+m[1]+".go")], -1) {
+			allowed[r[1]] = true
+		}
+	}
+	if len(used) != 5 {
+		t.Fatalf("s0 uses %d entities, want 5: %v", len(used), used)
+	}
+	out, err := exec.Command("go", "tool", "nm", filepath.Join(dir, "bin", "s0")).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The symbols the gen package itself defines for entity k: its methods,
+	// handles, metadata and Desc function, E<k>.*, (*E<k>).*, E<k>s, e<k>Meta
+	// and e<k>Desc. The type descriptors and generic instantiations that
+	// mention E<k> (the field Many[E<k>] of a neighbour's struct) are data
+	// about a type and do not link its code, so they are not counted.
+	sym := regexp.MustCompile(`(?m)^\s*\S+ [A-Za-z] example\.com/tmp/gen\.\(?\*?[Ee](\d+)(?:s|Meta|Desc)?(?:\.|$)`)
+	present := map[string]bool{}
+	for _, m := range sym.FindAllStringSubmatch(string(out), -1) {
+		present[m[1]] = true
+	}
+	for k := range used {
+		if !present[k] {
+			t.Errorf("entity E%s, which s0 uses, has no symbol: the scan is broken", k)
+		}
+	}
+	for k := range present {
+		if !allowed[k] {
+			t.Errorf("s0 links entity E%s, which it neither uses nor reaches by one relation from a used entity", k)
+		}
+	}
+	t.Logf("%d of %d entities have symbols in s0: %d used, %d allowed", len(present), n, len(used), len(allowed))
 }
 
 // TestCheckPassesAGenerousThreshold: check reports nothing when every

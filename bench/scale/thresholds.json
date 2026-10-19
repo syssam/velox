@@ -1,9 +1,9 @@
 {
   "500": {
-    "_measured": "2026-10-19 on darwin/arm64, Apple M3 Max (14 cores), n=500 schemas in one generated gen package, s=100 services, three runs after relations stopped naming their target's metadata in the Desc (the use site names it). 1-minute load average before each run: 2.57, 6.00, 11.37 (only the first was under 4: the machine was busy with other work for the 30 minutes the harness waited, so runs 2 and 3 are recorded at that load and the times are, if anything, high). Cold build 23.7, 22.7, 25.3 s; schema edit + regenerate + rebuild 20.2, 20.6, 22.4 s; service binary 5.66 MB in all three (and at n=100); link peak 278.6, 273.7, 279.3 MB. The largest of each: cold 25.27 s, schema edit 22.44 s, service 5.66 MB, link 279.3 MB. Times are 4x (CI runners have fewer, slower cores; recalibrate from the first GitHub run), sizes and memory 2x (they barely depend on the machine)",
+    "_measured": "2026-10-19 on darwin/arm64, Apple M3 Max (14 cores), n=500 schemas in one generated gen package, s=100 services, three runs after relations stopped naming their target's metadata in the Desc (the use site names it). 1-minute load average before each run: 2.57, 6.00, 11.37 (only the first was under 4: the machine was busy with other work for the 30 minutes the harness waited, so runs 2 and 3 are recorded at that load and the times are, if anything, high). Cold build 23.7, 22.7, 25.3 s; schema edit + regenerate + rebuild 20.2, 20.6, 22.4 s; service binary 5.66 MB in all three (and at n=100); link peak 278.6, 273.7, 279.3 MB. The largest of each: cold 25.27 s, schema edit 22.44 s, service 5.66 MB, link 279.3 MB. Times are 4x the largest (CI runners have fewer, slower cores; recalibrate from the first GitHub run). Sizes and memory are 1.5x, not the 2x of the old rule: the binary was identical across the three runs and across loads, and the link peak varied by 2%, so neither depends on the machine's load, and a tighter margin keeps the thresholds meaningful. At 11.33 MB (2x) a leak of a few hundred entities back into a service would pass, and at 558 MB the link peak of the earlier connected-graph build (404 MB, 23.6 MB binary) would pass; these thresholds fail it",
     "cold_build_s": 101.1,
     "schema_edit_rebuild_s": 89.8,
-    "service_binary_mb": 11.33,
-    "link_peak_mb": 558.6
+    "service_binary_mb": 8.5,
+    "link_peak_mb": 420
   }
 }
