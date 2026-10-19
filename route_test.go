@@ -24,12 +24,12 @@ type replicaSet struct {
 	routes    []velox.Route
 }
 
-// openReplicas opens a replicaSet; hooked adds an Around hook that records
-// each statement's Route, so the statements take run's path instead of
-// plain's.
-func openReplicas(hooked bool) *replicaSet {
+// openReplicas opens a replicaSet, with extra options; hooked adds an Around
+// hook that records each statement's Route, so the statements take run's path
+// instead of plain's.
+func openReplicas(hooked bool, extra ...velox.Option) *replicaSet {
 	s := &replicaSet{p: &velox.FakeExec{}, r0: &velox.FakeExec{}, r1: &velox.FakeExec{}}
-	opts := []velox.Option{velox.WithReplicas(velox.FakeConn(s.r0), velox.FakeConn(s.r1))}
+	opts := append([]velox.Option{velox.WithReplicas(velox.FakeConn(s.r0), velox.FakeConn(s.r1))}, extra...)
 	if hooked {
 		opts = append(opts, velox.WithAround(s.record))
 	}

@@ -101,7 +101,8 @@ type Statement struct {
 	Fingerprint string // set by rendering: the shape's ID, the hash of SQL without the comment
 	Args        []any  // set by rendering
 	// Route is where the statement runs: set by the route stage, after
-	// rendering and before the Around hooks.
+	// rendering. Rewrite hooks run before it and see it unset (zero, not
+	// Replica -1); Around hooks, and everything after them, see it set.
 	Route Route
 	// Result is reset before the Around hooks run, and set by each
 	// execution before next returns to them; a hook that retries sees the

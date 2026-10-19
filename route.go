@@ -64,8 +64,103 @@ func Primary(ctx context.Context) context.Context {
 	return context.WithValue(ctx, routeKey{}, rc)
 }
 
+// WithSession returns a context carrying a new session, typically one
+// request's: after a write made through the context (or a context derived
+// from it), the session's reads go to the primary for the DB's pin window
+// (WithPinWindow), so that the session reads its own writes from a replica
+// that may not have them yet. A transaction that wrote and committed counts as
+// a write, at its commit. Without a session in the context, nothing is
+// pinned. A session is safe for concurrent use and lives only in its context;
+// a context derived from a session's keeps it, and WithSession on one starts
+// a new one.
+func WithSession(ctx context.Context) context.Context {
+	rc, _ := ctx.Value(routeKey{}).(routeCtx)
+	rc.sess = new(session)
+	return context.WithValue(ctx, routeKey{}, rc)
+}
+
+// PinUntil pins ctx's session to the primary until t, if that is later than
+// its pin now: an application that stored the time of a user's last write
+// restarts the pin on the user's next request with it (PinnedUntil gives the
+// time to store). It never lowers a pin, and does nothing on a context
+// without a session.
+func PinUntil(ctx context.Context, t time.Time) {
+	if rc, _ := ctx.Value(routeKey{}).(routeCtx); rc.sess != nil {
+		rc.sess.raise(t.UnixNano())
+	}
+}
+
+// PinnedUntil returns the time until which ctx's session reads the primary:
+// the latest of its writes' pin windows and PinUntil's times. It is zero on a
+// context without a session, and on a session that has not been pinned.
+func PinnedUntil(ctx context.Context) time.Time {
+	rc, _ := ctx.Value(routeKey{}).(routeCtx)
+	if rc.sess == nil {
+		return time.Time{}
+	}
+	if u := rc.sess.until.Load(); u != 0 {
+		return time.Unix(0, u)
+	}
+	return time.Time{}
+}
+
+// WithPinWindow sets how long after a write its session's reads go to the
+// primary; the default is 2 seconds, sized to typical replica lag, so a DB
+// whose replicas lag more needs a larger window. A negative d panics.
+func WithPinWindow(d time.Duration) Option {
+	if d < 0 {
+		panic(fmt.Sprintf("velox: WithPinWindow(%v): the window must not be negative", d))
+	}
+	return func(c *config) { c.pinWindow = d }
+}
+
+// session is a context's record of when its reads may leave the primary
+// again.
+type session struct {
+	until atomic.Int64 // the end of the pin, in Unix nanoseconds; 0: none
+}
+
+// raise moves the pin's end to t, unless it is later already.
+func (s *session) raise(t int64) {
+	for {
+		u := s.until.Load()
+		if t <= u || s.until.CompareAndSwap(u, t) {
+			return
+		}
+	}
+}
+
+// pinned reports whether the session's reads must go to the primary now.
+func (s *session) pinned() bool {
+	u := s.until.Load()
+	return u != 0 && time.Now().UnixNano() < u
+}
+
+// wrote records that a statement wrote successfully: in a transaction, in the
+// flag its commit reads; outside one, in the context's session. A DB without
+// replicas keeps no record.
+func (db *DB) wrote(ctx context.Context) {
+	if db.inTx {
+		if db.txWrote != nil {
+			db.txWrote.Store(true)
+		}
+		return
+	}
+	if db.rt != nil {
+		db.pinSession(ctx)
+	}
+}
+
+// pinSession pins ctx's session, if it has one, for the DB's pin window from
+// now.
+func (db *DB) pinSession(ctx context.Context) {
+	if rc, _ := ctx.Value(routeKey{}).(routeCtx); rc.sess != nil {
+		rc.sess.raise(time.Now().Add(db.cfg.pinWindow).UnixNano())
+	}
+}
+
 // Route is where a statement runs. The route stage sets Statement.Route
-// before the Around hooks run.
+// after the Rewrite hooks and before the Around hooks run.
 type Route struct {
 	Shard    string // "" on an unsharded DB
 	Replica  int    // index into the replicas; -1 for the primary
@@ -79,7 +174,8 @@ type routeKey struct{}
 // routeCtx is a context's route marks. Each function that sets one copies
 // the context's routeCtx, changes it, and stores the copy.
 type routeCtx struct {
-	primary bool // Primary: reads go to the primary
+	primary bool     // Primary: reads go to the primary
+	sess    *session // WithSession's; nil: none
 }
 
 // router is the connections of a DB with replicas, among which the route
@@ -129,8 +225,8 @@ func newRouter(d Dialect, primary executor, replicas []Conn) *router {
 // route is the route stage: it chooses the connection st runs on, and
 // records the choice in st.Route.
 //
-// Writes, statements in a transaction and reads whose context is marked with
-// Primary go to the primary. A With load goes where its query went (Ruling
+// Writes, statements in a transaction, reads whose context is marked with
+// Primary and reads of a session within its pin window go to the primary. A With load goes where its query went (Ruling
 // 3). Any other read goes to the next replica in turn, skipping one in
 // back-off, or to the primary when every replica is. A dry run is routed as
 // the read would be, but takes no replica's turn: it sends nothing.
@@ -149,7 +245,8 @@ func (db *DB) route(ctx context.Context, st *Statement) (target, error) {
 	case db.pin.ex != nil:
 		t = db.pin
 	default:
-		if rc, _ := ctx.Value(routeKey{}).(routeCtx); !rc.primary {
+		rc, _ := ctx.Value(routeKey{}).(routeCtx)
+		if !rc.primary && (rc.sess == nil || !rc.sess.pinned()) {
 			t = sh.pick(st.DryRun)
 		}
 	}

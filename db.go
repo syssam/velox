@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"sync/atomic"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -33,6 +34,10 @@ type DB struct {
 	txDeadline time.Time
 	txCause    error
 	tx         *TxInfo // the transaction's, when hooks are configured
+	// txWrote is, in a transaction on a DB with replicas, set by its first
+	// successful write; the commit then pins the session of the context given
+	// to Tx. Its savepoints share it. Nil elsewhere.
+	txWrote *atomic.Bool
 }
 
 type config struct {
@@ -46,6 +51,8 @@ type config struct {
 	comment   *commenter // WithSQLComment; nil: off
 	txArounds []TxAround
 	replicas  []Conn // WithReplicas
+	// pinWindow is WithPinWindow's: how long a write pins its session.
+	pinWindow time.Duration
 }
 
 // Option configures a DB's pipeline.
@@ -115,8 +122,12 @@ func OpenPgx(pool *pgxpool.Pool, opts ...Option) *DB {
 	return newDB(Postgres, pgxExecutor{c: pool, pool: pool}, opts)
 }
 
+// defaultPinWindow is how long a write pins its session unless WithPinWindow
+// says otherwise.
+const defaultPinWindow = 2 * time.Second
+
 func newDB(d Dialect, ex executor, opts []Option) *DB {
-	cfg := &config{}
+	cfg := &config{pinWindow: defaultPinWindow}
 	for _, o := range opts {
 		o(cfg)
 	}
@@ -530,6 +541,9 @@ func (db *DB) exec(ctx context.Context, st *Statement, t target, read func(rows)
 		if res != nil {
 			*res = r
 		}
+		if st.Op != OpSelect {
+			db.wrote(ctx)
+		}
 		return nil
 	}
 	r, err := t.ex.query(ctx, st.SQL, st.Args)
@@ -557,6 +571,9 @@ func (db *DB) exec(ctx context.Context, st *Statement, t target, read func(rows)
 				// The rows a write returned are the rows it affected.
 				st.Result.Affected = counted.n
 			}
+		}
+		if st.Op != OpSelect && err == nil {
+			db.wrote(ctx)
 		}
 	}()
 	if err := read(r); err != nil {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -92,7 +93,14 @@ func (db *DB) attempts(ctx, tctx context.Context, fn func(*DB) error, o txOption
 		if info != nil {
 			info.Attempt = attempt
 		}
-		err := db.transaction(ctx, fn, o, deadline, cause, info)
+		var wrote *atomic.Bool
+		if db.rt != nil {
+			wrote = new(atomic.Bool) // one per attempt: a retry forgets a rolled back write
+		}
+		err := db.transaction(ctx, fn, o, deadline, cause, info, wrote)
+		if err == nil && wrote != nil && wrote.Load() {
+			db.pinSession(tctx) // the context given to Tx, not a TxAround hook's
+		}
 		if err != nil && cause != nil && timedOut(tctx) && !errors.Is(err, ErrTimeout) {
 			err = errors.Join(errTimeout("transaction"), err)
 		}
@@ -123,7 +131,10 @@ func ended(err error) bool {
 //
 // deadline, Tx's, ends the transaction as ctx's would, even when a TxAround
 // hook passed on a context without it: past it, nothing commits.
-func (db *DB) transaction(ctx context.Context, fn func(*DB) error, o txOptions, deadline time.Time, cause error, info *TxInfo) error {
+//
+// wrote, nil on a DB without replicas, is the flag the transaction's
+// statements set on a successful write.
+func (db *DB) transaction(ctx context.Context, fn func(*DB) error, o txOptions, deadline time.Time, cause error, info *TxInfo, wrote *atomic.Bool) error {
 	primary := db.ex
 	if db.rt != nil {
 		primary = db.rt.one.primary // a transaction runs on the primary
@@ -141,7 +152,7 @@ func (db *DB) transaction(ctx context.Context, fn func(*DB) error, o txOptions, 
 			_ = ctl.rollback(end)
 		}
 	}()
-	if err := fn(&DB{d: db.d, ex: ex, rt: db.rt, cfg: db.cfg, inTx: true, txDeadline: deadline, txCause: cause, tx: info}); err != nil {
+	if err := fn(&DB{d: db.d, ex: ex, rt: db.rt, cfg: db.cfg, inTx: true, txDeadline: deadline, txCause: cause, tx: info, txWrote: wrote}); err != nil {
 		finished = true
 		if ctx.Err() != nil || past(deadline) {
 			info.end(TxError)
@@ -226,7 +237,7 @@ func (db *DB) savepoint(ctx context.Context, fn func(*DB) error) error {
 			_ = db.rollbackSavepoint(end, name)
 		}
 	}()
-	if err := fn(&DB{d: db.d, ex: db.ex, rt: db.rt, cfg: db.cfg, inTx: true, depth: db.depth + 1, txDeadline: db.txDeadline, txCause: db.txCause, tx: db.tx}); err != nil {
+	if err := fn(&DB{d: db.d, ex: db.ex, rt: db.rt, cfg: db.cfg, inTx: true, depth: db.depth + 1, txDeadline: db.txDeadline, txCause: db.txCause, tx: db.tx, txWrote: db.txWrote}); err != nil {
 		finished = true
 		// As in transaction: once the transaction's deadline has passed, the
 		// connection may be gone and the rollback's error is noise.
