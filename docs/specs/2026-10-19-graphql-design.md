@@ -131,7 +131,7 @@ The plugin itself is `contrib/graphql/cmd/velox-graphql`. Annotations reach the 
 
 ### 3. The generated surface
 
-The plugin writes one SDL file, `gen/graphql/velox.graphqls`, and Go files `gen/gql_*.go`. The Go files carry the generated header and belong to the plugin.
+The plugin writes one SDL file, `gen/velox.graphqls`, and Go files `gen/gql_*.go`. The Go files carry the generated header and belong to the plugin.
 
 #### Types
 - **Type:** each entity not skipped becomes a type implementing `Node`. Its fields are the schema fields not skipped, plus edges.
@@ -243,7 +243,7 @@ The example (`example/graphql`) shows the whole of it:
 1. The schema, with `graphql.*` annotations.
 2. `go tool velox-gen -out gen -plugin velox-graphql ./schema`.
 3. A `gqlgen.yml` with:
-   - `schema: gen/graphql/*.graphqls` plus the application's own schema files;
+   - `schema: gen/*.graphqls` plus the application's own schema files;
    - `autobind` to the `gen` package;
    - models for `ID`, `Cursor`, `Time`, `UUID`, `Uint64`, `Bytes` and `JSON`, bound to the scalars in `veloxgql`.
 4. `go run github.com/99designs/gqlgen generate`.
