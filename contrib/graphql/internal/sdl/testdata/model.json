@@ -1,0 +1,186 @@
+{
+  "version": 1,
+  "schema_path": "example.com/app/schema",
+  "entities": [
+    {
+      "name": "Category",
+      "label": "category",
+      "handles": "Categories",
+      "table": "categories",
+      "comment": "A category of posts, in a tree.",
+      "imports": [],
+      "fields": [
+        {"name": "id", "go_name": "ID", "column": "id", "type": "int64", "go_type": "int64", "elem_type": "int64", "auto_id": true},
+        {"name": "title", "go_name": "Title", "column": "title", "type": "string", "go_type": "string", "elem_type": "string"},
+        {"name": "category_children", "go_name": "CategoryChildren", "column": "category_children", "type": "int64", "go_type": "*int64", "elem_type": "int64", "pointer": true, "nullable": true, "optional": true, "nillable": true, "implicit": "parent"}
+      ],
+      "edges": [
+        {"name": "children", "go_name": "Children", "target": "Category", "ref": "parent", "kind": "O2M", "field": "category_children", "field_on": "Category", "comment": "The subcategories."},
+        {"name": "parent", "go_name": "Parent", "target": "Category", "ref": "children", "kind": "M2O", "unique": true, "inverse": true, "field": "category_children", "field_on": "Category"}
+      ],
+      "primary_key": [0],
+      "tenant": -1
+    },
+    {
+      "name": "Group",
+      "label": "group",
+      "handles": "Groups",
+      "table": "groups",
+      "imports": [],
+      "fields": [
+        {"name": "id", "go_name": "ID", "column": "id", "type": "int64", "go_type": "int64", "elem_type": "int64", "auto_id": true},
+        {"name": "name", "go_name": "Name", "column": "name", "type": "string", "go_type": "string", "elem_type": "string",
+          "annotations": {"graphql": {"order_field": "NAME", "where_ops": 2147483648}}},
+        {"name": "visibility", "go_name": "Visibility", "column": "visibility", "type": "enum", "go_type": "GroupVisibility", "elem_type": "GroupVisibility", "has_default": true, "enum": "GroupVisibility", "enum_values": ["public", "private"],
+          "comment": "Who can see the group; a String, as its enum is skipped.",
+          "annotations": {"graphql": {"skip": 2}}}
+      ],
+      "edges": [
+        {"name": "users", "go_name": "Users", "target": "User", "ref": "groups", "kind": "M2M", "inverse": true, "join": "UserGroup",
+          "annotations": {"graphql": {"where_edge": true}}}
+      ],
+      "primary_key": [0],
+      "tenant": -1,
+      "annotations": {"graphql": {"query_field": "groups", "skip": 8}}
+    },
+    {
+      "name": "Like",
+      "label": "like",
+      "handles": "Likes",
+      "table": "likes",
+      "comment": "A user's like of a post. Its key is two columns, so it is not a Node.",
+      "imports": ["time"],
+      "fields": [
+        {"name": "user_id", "go_name": "UserID", "column": "user_id", "type": "int64", "go_type": "int64", "elem_type": "int64", "immutable": true},
+        {"name": "post_id", "go_name": "PostID", "column": "post_id", "type": "int64", "go_type": "int64", "elem_type": "int64", "immutable": true},
+        {"name": "weight", "go_name": "Weight", "column": "weight", "type": "int8", "go_type": "int8", "elem_type": "int8", "has_default": true},
+        {"name": "created_at", "go_name": "CreatedAt", "column": "created_at", "type": "time", "go_type": "time.Time", "elem_type": "time.Time", "immutable": true, "has_default": true}
+      ],
+      "edges": [
+        {"name": "user", "go_name": "User", "target": "User", "ref": "likes", "kind": "M2O", "unique": true, "required": true, "inverse": true, "immutable": true, "field": "user_id", "field_on": "Like"},
+        {"name": "post", "go_name": "Post", "target": "Post", "ref": "likes", "kind": "M2O", "unique": true, "required": true, "inverse": true, "immutable": true, "field": "post_id", "field_on": "Like"}
+      ],
+      "primary_key": [0, 1],
+      "tenant": -1
+    },
+    {
+      "name": "Post",
+      "label": "post",
+      "handles": "Posts",
+      "table": "posts",
+      "imports": ["encoding/json", "time"],
+      "fields": [
+        {"name": "id", "go_name": "ID", "column": "id", "type": "int64", "go_type": "int64", "elem_type": "int64", "auto_id": true},
+        {"name": "author_id", "go_name": "AuthorID", "column": "author_id", "type": "int64", "go_type": "int64", "elem_type": "int64",
+          "annotations": {"graphql": {"where_ops": 15}}},
+        {"name": "title", "go_name": "Title", "column": "title", "type": "string", "go_type": "string", "elem_type": "string",
+          "annotations": {"graphql": {"order_field": "TITLE", "where_ops": 2147483648}}},
+        {"name": "slug", "go_name": "Slug", "column": "slug", "type": "string", "go_type": "string", "elem_type": "string", "unique": true, "immutable": true,
+          "annotations": {"graphql": {"where_ops": 15, "update_input": false}}},
+        {"name": "status", "go_name": "Status", "column": "status", "type": "enum", "go_type": "PostStatus", "elem_type": "PostStatus", "has_default": true, "enum": "PostStatus", "enum_values": ["draft", "in_review", "published"],
+          "annotations": {"graphql": {"enum_values": {"published": "LIVE"}, "where_ops": 2147483648}}},
+        {"name": "published_at", "go_name": "PublishedAt", "column": "published_at", "type": "time", "go_type": "*time.Time", "elem_type": "time.Time", "pointer": true, "nullable": true, "optional": true,
+          "annotations": {"graphql": {"where_ops": 2147483648}}},
+        {"name": "tags", "go_name": "Tags", "column": "tags", "type": "json", "go_type": "[]string", "elem_type": "[]string", "has_default": true},
+        {"name": "views", "go_name": "Views", "column": "views", "type": "int", "go_type": "*int", "elem_type": "int", "pointer": true, "has_default": true,
+          "annotations": {"graphql": {"order_field": "VIEWS", "create_input": false}}},
+        {"name": "rating", "go_name": "Rating", "column": "rating", "type": "float64", "go_type": "*float64", "elem_type": "float64", "pointer": true, "nullable": true, "optional": true}
+      ],
+      "edges": [
+        {"name": "author", "go_name": "Author", "target": "User", "ref": "posts", "kind": "M2O", "unique": true, "required": true, "inverse": true, "field": "author_id", "field_on": "Post",
+          "comment": "The user who wrote the post.",
+          "annotations": {"graphql": {"field_name": "writer", "where_edge": true}}},
+        {"name": "likes", "go_name": "Likes", "target": "Like", "ref": "post", "kind": "O2M", "field": "post_id", "field_on": "Like",
+          "annotations": {"graphql": {"connection": false}}}
+      ],
+      "primary_key": [0],
+      "tenant": -1,
+      "annotations": {"graphql": {"query_field": "posts", "multi_order": true, "mutations": ["create", "update", "delete"]}}
+    },
+    {
+      "name": "Session",
+      "label": "session",
+      "handles": "Sessions",
+      "table": "sessions",
+      "imports": [],
+      "fields": [
+        {"name": "id", "go_name": "ID", "column": "id", "type": "int64", "go_type": "int64", "elem_type": "int64", "auto_id": true},
+        {"name": "token", "go_name": "Token", "column": "token", "type": "string", "go_type": "string", "elem_type": "string"},
+        {"name": "user_sessions", "go_name": "UserSessions", "column": "user_sessions", "type": "int64", "go_type": "*int64", "elem_type": "int64", "pointer": true, "nullable": true, "optional": true, "nillable": true, "implicit": "sessions"}
+      ],
+      "edges": [],
+      "primary_key": [0],
+      "tenant": -1,
+      "annotations": {"graphql": {"skip": 63}}
+    },
+    {
+      "name": "User",
+      "label": "user",
+      "handles": "Users",
+      "table": "users",
+      "comment": "User is a person who writes posts.\nIts GraphQL type is Account.",
+      "imports": ["github.com/google/uuid", "time"],
+      "fields": [
+        {"name": "id", "go_name": "ID", "column": "id", "type": "int64", "go_type": "int64", "elem_type": "int64", "auto_id": true},
+        {"name": "created_at", "go_name": "CreatedAt", "column": "created_at", "type": "time", "go_type": "time.Time", "elem_type": "time.Time", "immutable": true, "has_default": true,
+          "annotations": {"graphql": {"order_field": "CREATED_AT"}}},
+        {"name": "updated_at", "go_name": "UpdatedAt", "column": "updated_at", "type": "time", "go_type": "time.Time", "elem_type": "time.Time", "has_default": true, "update_default": true},
+        {"name": "created_by", "go_name": "CreatedBy", "column": "created_by", "type": "string", "go_type": "string", "elem_type": "string",
+          "annotations": {"graphql": {"skip": 63}}},
+        {"name": "org_id", "go_name": "OrgID", "column": "org_id", "type": "int64", "go_type": "int64", "elem_type": "int64"},
+        {"name": "name", "go_name": "Name", "column": "name", "type": "string", "go_type": "string", "elem_type": "string", "comment": "The display name.",
+          "annotations": {"graphql": {"field_name": "displayName", "where_ops": 1807}}},
+        {"name": "email", "go_name": "Email", "column": "email", "type": "string", "go_type": "string", "elem_type": "string", "unique": true,
+          "annotations": {"graphql": {"create_input": true}}},
+        {"name": "role", "go_name": "Role", "column": "role", "type": "enum", "go_type": "UserRole", "elem_type": "UserRole", "has_default": true, "enum": "UserRole", "enum_values": ["admin", "editor", "viewer"]},
+        {"name": "nickname", "go_name": "Nickname", "column": "nickname", "type": "string", "go_type": "*string", "elem_type": "string", "pointer": true, "nullable": true, "optional": true,
+          "annotations": {"graphql": {"directives": [{"name": "deprecated", "args": {"reason": "Use \"displayName\"."}}]}}},
+        {"name": "bio", "go_name": "Bio", "column": "bio", "type": "string", "go_type": "*string", "elem_type": "string", "pointer": true, "nullable": true, "nillable": true},
+        {"name": "age", "go_name": "Age", "column": "age", "type": "int", "go_type": "*int", "elem_type": "int", "pointer": true, "nullable": true, "optional": true},
+        {"name": "password_hash", "go_name": "PasswordHash", "column": "password_hash", "type": "string", "go_type": "string", "elem_type": "string", "sensitive": true},
+        {"name": "score", "go_name": "Score", "column": "score", "type": "float64", "go_type": "*float64", "elem_type": "float64", "pointer": true, "has_default": true},
+        {"name": "external_id", "go_name": "ExternalID", "column": "external_id", "type": "uuid", "go_type": "uuid.UUID", "elem_type": "uuid.UUID", "unique": true, "has_default": true},
+        {"name": "avatar", "go_name": "Avatar", "column": "avatar", "type": "bytes", "go_type": "[]byte", "elem_type": "[]byte", "nullable": true, "optional": true},
+        {"name": "quota", "go_name": "Quota", "column": "quota", "type": "uint64", "go_type": "uint64", "elem_type": "uint64"},
+        {"name": "active", "go_name": "Active", "column": "active", "type": "bool", "go_type": "bool", "elem_type": "bool", "has_default": true},
+        {"name": "settings", "go_name": "Settings", "column": "settings", "type": "json", "go_type": "map[string]any", "elem_type": "map[string]any", "nullable": true, "optional": true},
+        {"name": "user_best_friend", "go_name": "UserBestFriend", "column": "user_best_friend", "type": "int64", "go_type": "*int64", "elem_type": "int64", "pointer": true, "nullable": true, "optional": true, "nillable": true, "implicit": "best_friend"}
+      ],
+      "edges": [
+        {"name": "posts", "go_name": "Posts", "target": "Post", "ref": "author", "kind": "O2M", "field": "author_id", "field_on": "Post",
+          "comment": "The posts the user wrote.",
+          "annotations": {"graphql": {"where_edge": true, "directives": [{"name": "cost", "args": {"weight": 2.5, "tags": ["list", "paged"], "meta": {"cached": true, "ttl": null}}}]}}},
+        {"name": "groups", "go_name": "Groups", "target": "Group", "ref": "users", "kind": "M2M", "join": "UserGroup",
+          "annotations": {"graphql": {"field_name": "memberships", "connection": false}}},
+        {"name": "likes", "go_name": "Likes", "target": "Like", "ref": "user", "kind": "O2M", "field": "user_id", "field_on": "Like"},
+        {"name": "sessions", "go_name": "Sessions", "target": "Session", "kind": "O2M", "field": "user_sessions", "field_on": "Session"},
+        {"name": "best_friend", "go_name": "BestFriend", "target": "User", "kind": "O2O", "unique": true, "field": "user_best_friend", "field_on": "User",
+          "annotations": {"graphql": {"skip": 1}}}
+      ],
+      "primary_key": [0],
+      "tenant": 4,
+      "annotations": {"graphql": {"type": "Account", "query_field": "accounts", "mutations": ["create"], "skip": 4,
+        "directives": [{"name": "key", "args": {"fields": "id"}}]}}
+    },
+    {
+      "name": "UserGroup",
+      "label": "user_group",
+      "handles": "UserGroups",
+      "table": "user_groups",
+      "join": true,
+      "imports": [],
+      "fields": [
+        {"name": "user_id", "go_name": "UserID", "column": "user_id", "type": "int64", "go_type": "int64", "elem_type": "int64"},
+        {"name": "group_id", "go_name": "GroupID", "column": "group_id", "type": "int64", "go_type": "int64", "elem_type": "int64"}
+      ],
+      "edges": [],
+      "primary_key": [0, 1],
+      "tenant": -1
+    }
+  ],
+  "enums": [
+    {"type": "GroupVisibility", "values": ["public", "private"]},
+    {"type": "PostStatus", "values": ["draft", "in_review", "published"]},
+    {"type": "UserRole", "values": ["admin", "editor", "viewer"]}
+  ]
+}

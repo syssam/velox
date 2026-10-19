@@ -1,0 +1,236 @@
+# The vocabulary of velox's GraphQL types: the scalars, Node, PageInfo and
+# OrderDirection, bound to Go by contrib/graphql/veloxgql, and gqlgen's @goField.
+
+"""A time, as an RFC 3339 string."""
+scalar Time
+
+"""A UUID, as a string."""
+scalar UUID
+
+"""Bytes, as a base64 string."""
+scalar Bytes
+
+"""A JSON value."""
+scalar JSON
+
+"""An unsigned 64-bit integer, as a decimal string."""
+scalar Uint64
+
+"""An opaque cursor for paging through a connection."""
+scalar Cursor
+
+directive @goField(forceResolver: Boolean, name: String, omittable: Boolean) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION
+
+"""An object with a global ID."""
+interface Node {
+  """The global ID of the object."""
+  id: ID!
+}
+
+"""Information about a page of a connection."""
+type PageInfo {
+  """Whether there are more nodes after this page."""
+  hasNextPage: Boolean!
+  """Whether there are more nodes before this page."""
+  hasPreviousPage: Boolean!
+  """The cursor of the first node of the page."""
+  startCursor: Cursor
+  """The cursor of the last node of the page."""
+  endCursor: Cursor
+}
+
+"""The direction of an order."""
+enum OrderDirection {
+  ASC
+  DESC
+}
+
+# The root query.
+
+type Query {
+  """The node with this ID, or null."""
+  node(id: ID!): Node
+  """The nodes with these IDs, in their order; null for an ID with no node."""
+  nodes(ids: [ID!]!): [Node]!
+  groups(after: Cursor, first: Int, before: Cursor, last: Int): GroupConnection!
+  posts(after: Cursor, first: Int, before: Cursor, last: Int): PostConnection!
+  accounts(after: Cursor, first: Int, before: Cursor, last: Int): AccountConnection!
+}
+
+# Category
+
+"""A category of posts, in a tree."""
+type Category implements Node {
+  id: ID!
+  title: String!
+  """The subcategories."""
+  children(after: Cursor, first: Int, before: Cursor, last: Int): CategoryConnection! @goField(name: "ChildrenGQL")
+  parent: Category @goField(name: "ParentGQL")
+}
+
+"""A connection to a list of Category."""
+type CategoryConnection {
+  """The edges of this page."""
+  edges: [CategoryEdge!]!
+  """Information about this page."""
+  pageInfo: PageInfo!
+  """The number of nodes in the whole connection, not only on this page."""
+  totalCount: Int!
+}
+
+"""An edge in a connection to a list of Category."""
+type CategoryEdge {
+  """The Category at the end of the edge."""
+  node: Category!
+  """The cursor of this edge, for paging."""
+  cursor: Cursor!
+}
+
+# Group
+
+type Group implements Node {
+  id: ID!
+  name: String!
+  """Who can see the group; a String, as its enum is skipped."""
+  visibility: String!
+  users(after: Cursor, first: Int, before: Cursor, last: Int): AccountConnection! @goField(name: "UsersGQL")
+}
+
+"""A connection to a list of Group."""
+type GroupConnection {
+  """The edges of this page."""
+  edges: [GroupEdge!]!
+  """Information about this page."""
+  pageInfo: PageInfo!
+  """The number of nodes in the whole connection, not only on this page."""
+  totalCount: Int!
+}
+
+"""An edge in a connection to a list of Group."""
+type GroupEdge {
+  """The Group at the end of the edge."""
+  node: Group!
+  """The cursor of this edge, for paging."""
+  cursor: Cursor!
+}
+
+# Like
+
+"""A user's like of a post. Its key is two columns, so it is not a Node."""
+type Like {
+  weight: Int!
+  createdAt: Time!
+  user: Account! @goField(name: "UserGQL")
+  post: Post! @goField(name: "PostGQL")
+}
+
+"""A connection to a list of Like."""
+type LikeConnection {
+  """The edges of this page."""
+  edges: [LikeEdge!]!
+  """Information about this page."""
+  pageInfo: PageInfo!
+  """The number of nodes in the whole connection, not only on this page."""
+  totalCount: Int!
+}
+
+"""An edge in a connection to a list of Like."""
+type LikeEdge {
+  """The Like at the end of the edge."""
+  node: Like!
+  """The cursor of this edge, for paging."""
+  cursor: Cursor!
+}
+
+# Post
+
+type Post implements Node {
+  id: ID!
+  title: String!
+  slug: String!
+  status: PostStatus!
+  publishedAt: Time
+  tags: JSON!
+  views: Int!
+  rating: Float
+  """The user who wrote the post."""
+  writer: Account! @goField(name: "AuthorGQL")
+  likes: [Like!]! @goField(name: "LikesGQL")
+}
+
+enum PostStatus {
+  DRAFT
+  IN_REVIEW
+  LIVE
+}
+
+"""A connection to a list of Post."""
+type PostConnection {
+  """The edges of this page."""
+  edges: [PostEdge!]!
+  """Information about this page."""
+  pageInfo: PageInfo!
+  """The number of nodes in the whole connection, not only on this page."""
+  totalCount: Int!
+}
+
+"""An edge in a connection to a list of Post."""
+type PostEdge {
+  """The Post at the end of the edge."""
+  node: Post!
+  """The cursor of this edge, for paging."""
+  cursor: Cursor!
+}
+
+# User, as the type Account
+
+"""
+User is a person who writes posts.
+Its GraphQL type is Account.
+"""
+type Account implements Node @key(fields: "id") {
+  id: ID!
+  createdAt: Time!
+  updatedAt: Time!
+  """The display name."""
+  displayName: String! @goField(name: "Name")
+  email: String!
+  role: AccountRole!
+  nickname: String @deprecated(reason: "Use \"displayName\".")
+  bio: String
+  age: Int
+  score: Float!
+  externalID: UUID!
+  avatar: Bytes
+  quota: Uint64!
+  active: Boolean!
+  settings: JSON
+  """The posts the user wrote."""
+  posts(after: Cursor, first: Int, before: Cursor, last: Int): PostConnection! @goField(name: "PostsGQL") @cost(meta: {cached: true, ttl: null}, tags: ["list", "paged"], weight: 2.5)
+  memberships: [Group!]! @goField(name: "GroupsGQL")
+  likes(after: Cursor, first: Int, before: Cursor, last: Int): LikeConnection! @goField(name: "LikesGQL")
+}
+
+enum AccountRole {
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+"""A connection to a list of Account."""
+type AccountConnection {
+  """The edges of this page."""
+  edges: [AccountEdge!]!
+  """Information about this page."""
+  pageInfo: PageInfo!
+  """The number of nodes in the whole connection, not only on this page."""
+  totalCount: Int!
+}
+
+"""An edge in a connection to a list of Account."""
+type AccountEdge {
+  """The Account at the end of the edge."""
+  node: Account!
+  """The cursor of this edge, for paging."""
+  cursor: Cursor!
+}
