@@ -334,7 +334,7 @@ func TestPaginateRefuses(t *testing.T) {
 	}
 }
 
-// TestConnectionIsLazy is Ruling 2: a connection runs its page query once,
+// TestConnectionIsLazy: a connection runs its page query once,
 // when Page is first called, and its COUNT only when TotalCount is.
 func TestConnectionIsLazy(t *testing.T) {
 	ctx := context.Background()

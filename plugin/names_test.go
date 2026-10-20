@@ -27,15 +27,23 @@ func TestNamesGolden(t *testing.T) {
 		t.Fatal(err)
 	}
 	lines := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
-	if len(lines) < 60 {
-		t.Fatalf("golden has %d lines, want at least 60", len(lines))
+	// The count is pinned, so that deleting a row fails. Adding a row means
+	// raising it, by hand.
+	const rows = 243
+	if len(lines) != rows {
+		t.Fatalf("golden has %d rows, want %d", len(lines), rows)
 	}
+	seen := map[string]bool{}
 	for i, line := range lines {
 		c := strings.Split(line, "\t")
 		if len(c) != 5 {
 			t.Fatalf("line %d: %d columns, want 5", i+1, len(c))
 		}
 		in := c[0]
+		if seen[in] {
+			t.Fatalf("line %d: input %q is listed twice", i+1, in)
+		}
+		seen[in] = true
 		for _, x := range []struct{ name, got, want string }{
 			{"Snake", plugin.Snake(in), c[1]},
 			{"Plural", plugin.Plural(in), c[2]},

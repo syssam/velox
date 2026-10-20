@@ -25,8 +25,8 @@ var reserved = map[string]bool{"VeloxMeta": true, "String": true, "GoString": tr
 // Lower maps g to the model Render writes: Go names and types, handle kinds,
 // enums, the join entities of many-to-many relations, and the code of
 // defaults and checks. It returns every rule the output would break
-// (a name taken twice, an import name clash), as *Error values joined with errors.Join, ordered
-// by schema name.
+// (a name taken twice, an import name clash), as *Error values joined with
+// errors.Join, ordered by schema name.
 //
 // Lower does not change g. Two calls with equal Graphs and Configs give equal
 // results.

@@ -32,6 +32,7 @@ MB	mb	MBs	MB	MB
 Match	match	Matches	Match	Match
 OAuth2Token	oauth2token	OAuth2Tokens	OAuth2Token	OAuth2Token
 OrgID	org_id	OrgIDs	OrgID	OrgID
+OrgURLs	org_ur_ls	OrgURLses	OrgURL	OrgURLs
 OrgUnit	org_unit	OrgUnits	OrgUnit	OrgUnit
 QPS	qps	QPSs	QPS	QPS
 RAM	ram	RAMs	RAM	RAM
@@ -41,6 +42,7 @@ S3Bucket	s3bucket	S3Buckets	S3Bucket	S3Bucket
 SLA	sla	SLAs	SLA	SLA
 SMTP	smtp	SMTPs	SMTP	SMTP
 SQL	sql	SQLs	SQL	SQL
+SQLQuery	sql_query	SQLQueries	SQLQuery	SQLQuery
 SSH	ssh	SSHs	SSH	SSH
 SSO	sso	SSOs	SSO	SSO
 TCP	tcp	TCPs	TCP	TCP
@@ -53,6 +55,7 @@ URI	uri	URIs	URI	URI
 URL	url	URLs	URL	URL
 UTF8	utf8	UTF8s	UTF8	UTF8
 UUID	uuid	UUIDs	UUID	UUID
+UserIDs	user_ids	UserIDses	UserID	UserIDs
 UserInfo	user_info	UserInfos	UserInfo	UserInfo
 Users	users	Userses	User	Users
 VM	vm	VMs	VM	VM
@@ -73,6 +76,7 @@ ascii	ascii	asciis	ascii	ASCII
 ascii_x	ascii_x	ascii_xes	ascii_x	ASCIIX
 aws	aws	awses	aw	AWS
 aws_x	aws_x	aws_xes	aws_x	AWSX
+base64_data	base64_data	base64_datas	base64_data	Base64Data
 box	box	boxes	box	Box
 boxes	boxes	boxeses	box	Boxes
 bus	bus	buses	bu	Bus
@@ -139,6 +143,7 @@ rhs_x	rhs_x	rhs_xes	rhs_x	RHSX
 rpc	rpc	rpcs	rpc	RPC
 rpc_x	rpc_x	rpc_xes	rpc_x	RPCX
 s	s	ses	s	S
+s3_bucket	s3_bucket	s3_buckets	s3_bucket	S3Bucket
 sla	sla	slas	sla	SLA
 sla_x	sla_x	sla_xes	sla_x	SLAX
 smtp	smtp	smtps	smtp	SMTP

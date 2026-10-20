@@ -39,7 +39,8 @@ var acronyms = map[string]bool{
 // GoName is the Go name of a snake_case name: org_id → OrgID, api_key →
 // APIKey. It splits on "_"; a word in the acronym list is upper-cased, and any
 // other has its first letter raised. The result need not be an identifier:
-// GoName("in-progress") is "In-progress".
+// GoName("in-progress") is "In-progress". Its output must never change: it
+// names Go identifiers in users' code.
 func GoName(s string) string {
 	words := strings.Split(s, "_")
 	for i, w := range words {
@@ -60,7 +61,8 @@ func GoName(s string) string {
 // foreign-key columns match ent's: an underscore goes before an upper-case
 // letter that is neither first nor last when the previous letter is lower
 // case, or when the next is lower case and the previous is a letter that did
-// not itself start a word. A digit never starts a word.
+// not itself start a word. A digit never starts a word. Its output must never
+// change: it names tables, columns and labels that live in databases.
 func Snake(s string) string {
 	var (
 		j int
@@ -81,7 +83,8 @@ func Snake(s string) string {
 }
 
 // Plural is the plural of an English noun: user → users, category →
-// categories, box → boxes. velox-gen names tables and handles with it.
+// categories, box → boxes. velox-gen names tables and handles with it. Its output must never change: a
+// change would rename tables in existing databases.
 func Plural(s string) string {
 	switch {
 	case len(s) > 1 && s[len(s)-1] == 'y' && !strings.ContainsRune("aeiouAEIOU", rune(s[len(s)-2])):
