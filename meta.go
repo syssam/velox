@@ -29,7 +29,6 @@ type EntityInfo struct {
 	kit        *kit                       // set by MetaOnce.Load
 	check      func(col int, v any) error // Desc.Check; nil when the entity has no validators
 	immutable  bool                       // some column is Immutable
-	zeroNull   bool                       // some column is zeroNull
 	hooks      []hookFn                   // the Hooks method's, outermost first
 
 	// The entity's policy, bound once from its Policy method.
@@ -57,7 +56,7 @@ type ColumnInfo struct {
 	Field       string // the Go field name
 	Name        string // the column name
 	Type        any    // the field's Go type, a reflect.Type: read it with GoType
-	Nullable    bool   // the column is NULL-able: the field is a pointer, or its ColumnDesc says Nullable
+	Nullable    bool   // the field is a pointer
 	SQLType     string // empty: the dialect's default for Type
 	Default     any
 	HasDefault  bool
@@ -93,10 +92,6 @@ type ColumnInfo struct {
 	encode func(v any) ([]byte, error)    // ColumnDesc.Encode
 	decode func(data []byte, v any) error // ColumnDesc.Decode
 	off    uintptr                        // the field's offset in the entity
-	// zeroNull: Nullable, though the field is a value that NULL does not
-	// scan into; it is scanned through a pointer (scanDst), and NULL leaves
-	// the field's zero value.
-	zeroNull bool
 }
 
 // GoType returns the Go type of column c's field. ColumnInfo.Type holds it as
@@ -187,7 +182,7 @@ func validate(info *EntityInfo) error {
 		}
 	}
 	if info.Tenant >= 0 {
-		if c := info.Columns[info.Tenant]; c.Nullable || !rtype(c.Type).Comparable() {
+		if c := info.Columns[info.Tenant]; rtype(c.Type).Kind() == reflect.Pointer || !rtype(c.Type).Comparable() {
 			fail(c.Field, "the tenant column must be NOT NULL and comparable")
 		}
 		// Filled by a default, a row would land in a tenant the context

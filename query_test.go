@@ -24,7 +24,7 @@ var (
 const allCols = `"id", "created_at", "updated_at", "org_id", "number", "total", "paid", "paid_at", "note", "data"`
 
 func invoiceRow(id int64) []any {
-	return []any{id, t0, t0, int64(1), fmt.Sprintf("INV-%d", id), 12.5, true, t0, nil, []byte("d")}
+	return []any{id, t0, t0, int64(1), fmt.Sprintf("INV-%d", id), 12.5, true, t0, "", []byte("d")}
 }
 
 func TestAllScansEveryColumn(t *testing.T) {
@@ -35,7 +35,7 @@ func TestAllScansEveryColumn(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(got) != 2 || got[1].ID != 2 || got[1].Number != "INV-2" || got[1].PaidAt == nil ||
-		!got[1].PaidAt.Equal(t0) || got[1].Note != nil || string(got[1].Data) != "d" || !got[1].CreatedAt.Equal(t0) {
+		!got[1].PaidAt.Equal(t0) || got[1].Note != "" || string(got[1].Data) != "d" || !got[1].CreatedAt.Equal(t0) {
 		t.Fatalf("%+v", got)
 	}
 	want := `SELECT ` + allCols + ` FROM "invoices" WHERE "org_id" = $1 ORDER BY "id" LIMIT $2`
@@ -80,7 +80,7 @@ func TestColumnsAndOmit(t *testing.T) {
 	row := invoiceRow(6)
 	e.Rows = [][]any{append(row[:8:8], row[9])}
 	got, err = db.Query[testmodel.Invoice]().Omit(I.Note).Unbounded().All(ctx)
-	if err != nil || got[0].ID != 6 || got[0].Note != nil {
+	if err != nil || got[0].ID != 6 || got[0].Note != "" {
 		t.Fatalf("%+v, %v", got, err)
 	}
 	if want := `SELECT "id", "created_at", "updated_at", "org_id", "number", "total", "paid", "paid_at", "data" FROM "invoices"`; e.SQL != want {

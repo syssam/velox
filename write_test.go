@@ -15,7 +15,7 @@ import (
 func TestUpdateSetsUpdateDefaultColumns(t *testing.T) {
 	e := &velox.FakeExec{Affected: 2}
 	db := velox.OpenFake(velox.Postgres, e)
-	n, err := db.Update[testmodel.Invoice]().Set(I.Total.Add(5), I.Note.SetNull()).Where(I.OrgID.EQ(1)).Exec(ctx)
+	n, err := db.Update[testmodel.Invoice]().Set(I.Total.Add(5), I.Note.Set("")).Where(I.OrgID.EQ(1)).Exec(ctx)
 	if err != nil || n != 2 {
 		t.Fatalf("%d, %v", n, err)
 	}
@@ -23,7 +23,7 @@ func TestUpdateSetsUpdateDefaultColumns(t *testing.T) {
 	if e.SQL != want {
 		t.Fatalf("\n got %s\nwant %s", e.SQL, want)
 	}
-	if e.Args[0] != 5.0 || e.Args[1] != nil || e.Args[3] != int64(1) {
+	if e.Args[0] != 5.0 || e.Args[1] != "" || e.Args[3] != int64(1) {
 		t.Errorf("args %v", e.Args)
 	}
 	if at, ok := e.Args[2].(time.Time); !ok || time.Since(at) > time.Minute {

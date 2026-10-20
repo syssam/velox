@@ -72,7 +72,7 @@ type Field struct {
 	Size          int     // max length; 0 for the dialect default; math.MaxInt32 for Text
 	GoType        *GoType // nil: the standard type for Type
 	RType         any     // the reflect.Type of the field's Go type, to check functions; never serialized
-	Optional      bool    // not required on create, and the column is NULL-able
+	Optional      bool    // not required on create; the column stays NOT NULL, except a JSON field's
 	Nillable      bool    // the column is NULL-able, and the Go field a pointer
 	Immutable     bool    // refused in updates
 	Unique        bool    // a single-column unique index

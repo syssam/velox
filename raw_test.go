@@ -80,7 +80,7 @@ func TestRawScansByName(t *testing.T) {
 			got[0].PaidAt == nil || !got[0].PaidAt.Equal(t0) || got[1].PaidAt != nil || got[1].ID != 8 {
 			t.Fatalf("%+v", got)
 		}
-		if got[0].OrgID != 0 || !got[0].CreatedAt.IsZero() || got[0].Note != nil || got[0].Data != nil {
+		if got[0].OrgID != 0 || !got[0].CreatedAt.IsZero() || got[0].Note != "" || got[0].Data != nil {
 			t.Errorf("a column not returned is not zero: %+v", got[0])
 		}
 		if e.SQL != q || !reflect.DeepEqual(e.Args, []any{int64(1)}) {

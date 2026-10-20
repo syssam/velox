@@ -3,6 +3,7 @@
 package testmodel
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -22,7 +23,7 @@ type Invoice struct {
 	Total     float64          `json:"total,omitempty"`
 	Paid      bool             `json:"paid,omitempty"`
 	PaidAt    *time.Time       `json:"paid_at,omitempty"`
-	Note      *string          `json:"note,omitempty"`
+	Note      string           `json:"note,omitempty"`
 	Data      []byte           `json:"data,omitempty"`
 	Items     velox.Many[Item] `json:"items,omitzero"`
 }
@@ -37,7 +38,7 @@ var Invoices = struct {
 	Total     velox.NumberCol[Invoice, float64]
 	Paid      velox.Col[Invoice, bool]
 	PaidAt    velox.NullOrderedCol[Invoice, time.Time]
-	Note      velox.NullStringCol[Invoice, string]
+	Note      velox.StringCol[Invoice, string]
 	Data      velox.Col[Invoice, []byte]
 	Items     velox.Rel[Invoice, Item]
 }{
@@ -49,7 +50,7 @@ var Invoices = struct {
 	Total:     velox.NumberCol[Invoice, float64]{I: 5},
 	Paid:      velox.Col[Invoice, bool]{I: 6},
 	PaidAt:    velox.NullOrderedCol[Invoice, time.Time]{I: 7},
-	Note:      velox.NullStringCol[Invoice, string]{I: 8},
+	Note:      velox.StringCol[Invoice, string]{I: 8},
 	Data:      velox.Col[Invoice, []byte]{I: 9},
 	Items:     velox.Rel[Invoice, Item]{I: 0},
 }
@@ -117,6 +118,19 @@ func invoiceDesc() velox.Desc[Invoice] {
 			}
 			return nil
 		},
+		Check: func(col int, v any) error {
+			switch col {
+			case 8:
+				x := v.(string)
+				if x == *new(string) {
+					return nil
+				}
+				if x == "" {
+					return errors.New("must not be empty")
+				}
+			}
+			return nil
+		},
 	}
 }
 
@@ -126,11 +140,7 @@ func (x Invoice) String() string {
 	if x.PaidAt != nil {
 		p7 = *x.PaidAt
 	}
-	var p8 any
-	if x.Note != nil {
-		p8 = *x.Note
-	}
-	return fmt.Sprintf("Invoice(ID=%v, CreatedAt=%v, UpdatedAt=%v, OrgID=%v, Number=%v, Total=%v, Paid=%v, PaidAt=%v, Note=%v, Data=%v)", x.ID, x.CreatedAt, x.UpdatedAt, x.OrgID, x.Number, x.Total, x.Paid, p7, p8, x.Data)
+	return fmt.Sprintf("Invoice(ID=%v, CreatedAt=%v, UpdatedAt=%v, OrgID=%v, Number=%v, Total=%v, Paid=%v, PaidAt=%v, Note=%v, Data=%v)", x.ID, x.CreatedAt, x.UpdatedAt, x.OrgID, x.Number, x.Total, x.Paid, p7, x.Note, x.Data)
 }
 
 // GoString is String, so that %#v does not print the sensitive fields either.

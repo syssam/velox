@@ -39,6 +39,29 @@ func TestInsertAndReadBack(t *testing.T) {
 	})
 }
 
+// Invoice.note is Optional, with NotEmpty, and NOT NULL: left unset it is "",
+// which its validator lets pass and the column stores; set, it is checked.
+func TestOptionalValueField(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		inv := newInvoice(3, "UNSET")
+		if err := tg.db.Insert(&inv).Exec(ctx); err != nil {
+			t.Fatalf("an unset Optional field with a validator: %v", err)
+		}
+		got, err := tg.db.Query[testmodel.Invoice]().Where(I.ID.EQ(inv.ID), I.Note.EQ("")).One(ctx)
+		if err != nil || got.Note != "" {
+			t.Errorf("unset note read back: %+v, %v", got, err)
+		}
+		set := newInvoice(3, "SET")
+		set.Note = "kept"
+		if err := tg.db.Insert(&set).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := tg.db.Query[testmodel.Invoice]().Where(I.ID.EQ(set.ID)).One(ctx); err != nil || got.Note != "kept" {
+			t.Errorf("set note read back: %+v, %v", got, err)
+		}
+	})
+}
+
 func TestUniqueViolation(t *testing.T) {
 	want := map[velox.Dialect]string{
 		velox.Postgres: "invoices_org_number_uq",

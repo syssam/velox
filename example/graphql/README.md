@@ -22,10 +22,10 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' \
    `Type` renames an entity's GraphQL type (`Tag` is `Label`). A
    `Sensitive` field (`password_hash`) and the tenant column are in no type
    or input. `published_at` is `Optional().Nillable()`: `Optional` makes it
-   optional on create and its column NULL-able, and `Nillable` makes the Go
+   optional on create, and `Nillable` makes its column NULL-able and the Go
    field a `*time.Time` with a `Null*` handle, so a draft's `publishedAt` is
    `null` and `publishedAtIsNil` filters on it. `Optional()` alone would keep
-   a `time.Time`, which reads NULL as the zero time.
+   a NOT NULL column and a `time.Time`, whose zero time means unset.
 2. velox-gen with the plugin, which writes `gen/`: the entities, the GraphQL
    schema `gen/velox.graphqls`, and the `gql_*.go` files it binds to (IDs,
    connections, edges, orders, where inputs, `Node` and `Nodes`):

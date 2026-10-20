@@ -51,7 +51,7 @@ func PluginModel(g *Graph, o *Out) *plugin.Model {
 			pe.Fields = append(pe.Fields, &plugin.Field{
 				Name: of.Name, GoName: of.GoName, Column: of.Column,
 				Type: gf.Type, GoType: of.GoType, ElemType: of.ElemType, PkgPath: pkgPathOf(gf), Kind: goKindOf(gf),
-				Pointer: of.Pointer, Nullable: gf.Optional || gf.Nillable, Optional: gf.Optional, Nillable: gf.Nillable,
+				Pointer: of.Pointer, Nullable: gf.Nillable || gf.Optional && gf.Type == "json", Optional: gf.Optional, Nillable: gf.Nillable,
 				Immutable: of.Immutable, Sensitive: of.Sensitive, Unique: gf.Unique,
 				AutoID: gf.AutoID, HasDefault: of.DefaultCode != "" || of.DefaultFuncCode != "",
 				UpdateDefault: gf.UpdateDefault, Implicit: gf.Implicit,

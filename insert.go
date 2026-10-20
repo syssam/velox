@@ -253,9 +253,10 @@ func (q InsertQuery[E]) check[_ Lazy[E]]() error {
 // DefaultFunc. An UpdateDefault fills on update only.
 //
 // A zero value means unset. On a pointer field (velox-gen's Nillable) that is
-// nil, so any value can be stored. On any other field it is the zero value
-// itself: a string with a Default can never store "", which is why velox-gen
-// refuses a Default on a bool or number that is not Nillable.
+// nil, so any value can be stored. On any other field, such as an Optional
+// one, it is the zero value itself: a string with a Default can never store
+// "", which is why velox-gen refuses a Default on a bool or number that is
+// not Nillable.
 func fillDefaults[E any](m *Meta[E], p *E) {
 	for i := range m.info.Columns {
 		fillDefault(&m.info.Columns[i], m.addr(p, i))

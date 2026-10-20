@@ -278,13 +278,14 @@ func TestTypeMapping(t *testing.T) {
 		{field("uid", "uuid"), "UUID!"},
 		{field("raw", "bytes"), "Bytes!"},
 		{field("doc", "json"), "JSON!"},
-		{&plugin.Field{Name: "opt", GoName: "Opt", Type: "string", Nullable: true, Optional: true}, "String"},
+		{&plugin.Field{Name: "opt", GoName: "Opt", Type: "string", Optional: true}, "String!"}, // Optional alone: a NOT NULL column
+		{&plugin.Field{Name: "nil_str", GoName: "NilStr", Type: "string", Nullable: true, Nillable: true, Pointer: true}, "String"},
 		{&plugin.Field{Name: "nil_time", GoName: "NilTime", Type: "time", Pointer: true, Nullable: true, Optional: true, Nillable: true}, "Time"},
-		{&plugin.Field{Name: "opt_doc", GoName: "OptDoc", Type: "json", Nullable: true, Optional: true}, "JSON"}, // nullable, though no pointer: Nullable decides
+		{&plugin.Field{Name: "opt_doc", GoName: "OptDoc", Type: "json", Nullable: true, Optional: true}, "JSON"}, // Optional JSON: a NULL-able column, though no pointer
 		{&plugin.Field{Name: "secret", GoName: "Secret", Type: "string", Sensitive: true}, ""},
 		{field("org_id", "int64"), ""}, // the tenant column
 		{&plugin.Field{Name: "level", GoName: "Level", Type: "enum", EnumValues: []string{"low", "high"}}, "UserLevel!"},
-		{&plugin.Field{Name: "mood", GoName: "Mood", Type: "enum", EnumValues: []string{"ok"}, Nullable: true}, "UserMood"},
+		{&plugin.Field{Name: "mood", GoName: "Mood", Type: "enum", EnumValues: []string{"ok"}, Nullable: true, Nillable: true}, "UserMood"},
 	}
 	u := entity("User")
 	for _, c := range cases {
@@ -320,7 +321,7 @@ func TestTypeMapping(t *testing.T) {
 		author := edge("author", "M2O", "User")
 		author.Required, author.Field, author.FieldOn = true, "author_id", "Post"
 		post.Edges = []*plugin.Edge{author}
-		cat := entity("Category", &plugin.Field{Name: "category_parent", GoName: "CategoryParent", Type: "int64", Nullable: true, Implicit: "parent"})
+		cat := entity("Category", &plugin.Field{Name: "category_parent", GoName: "CategoryParent", Type: "int64", Nullable: true, Nillable: true, Implicit: "parent"})
 		parent := edge("parent", "M2O", "Category")
 		parent.Field, parent.FieldOn = "category_parent", "Category"
 		cat.Edges = []*plugin.Edge{parent}

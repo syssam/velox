@@ -105,16 +105,17 @@ func (g *graph) mutationsOf(o *object) error {
 //   - neither has a field whose Skip leaves out the input, or that
 //     CreateInput(false) or UpdateInput(false) leaves out;
 //   - a field with an UpdateDefault and no Default is not in the update input
-//     (the UpdateDefault fills it), nor in the create input, unless it is not
-//     nullable, when nothing else fills it on insert: it is in the create
+//     (the UpdateDefault fills it), nor in the create input, unless it is
+//     required, when nothing else fills it on insert: it is in the create
 //     input, and required; CreateInput(true) or UpdateInput(true) brings
 //     any such field into that input;
 //   - the update input has no immutable field or edge;
-//   - on create, a field is required unless it is nullable or has a Default
-//     (or DefaultFunc), so an UpdateDefault alone does not make it optional;
+//   - on create, a field is required unless it is Optional, nullable or has
+//     a Default (or DefaultFunc), so an UpdateDefault alone does not make it
+//     optional;
 //     a unique edge's ID is required when the edge is;
-//   - on update, every field is optional, and a nullable field can be
-//     cleared;
+//   - on update, every field is optional, and a Nillable field, which alone
+//     has a Null* handle to set NULL, can be cleared;
 //   - an edge to a type that is not a Node has no ID and is in neither;
 //   - an edge's inputs follow its foreign key's flags, on whichever entity
 //     holds it (see edgeInputs).
@@ -134,7 +135,8 @@ func (g *graph) inputFields(o *object, typ string, create bool) ([]gqlField, err
 		// An UpdateDefault fills the field on update only: on create it is
 		// left out, unless nothing else fills it, which is a field that is
 		// not nullable and has no Default.
-		in := !f.UpdateDefault || f.HasDefault || create && !f.Nullable
+		required := !f.Optional && !f.Nullable
+		in := !f.UpdateDefault || f.HasDefault || create && required
 		if p := explicit(a); p != nil {
 			in = *p
 		}
@@ -150,13 +152,13 @@ func (g *graph) inputFields(o *object, typ string, create bool) ([]gqlField, err
 		if err != nil {
 			return nil, err
 		}
-		if create && !f.Nullable && !f.HasDefault {
+		if create && required && !f.HasDefault {
 			t += "!"
 		}
 		if err := fs.add(gqlField{name: name, typ: t, desc: f.Comment, where: where}); err != nil {
 			return nil, err
 		}
-		if !create && f.Nullable {
+		if !create && f.Nillable {
 			if err := fs.add(gqlField{name: "clear" + upper(name), typ: "Boolean", where: where}); err != nil {
 				return nil, err
 			}

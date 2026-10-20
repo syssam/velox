@@ -65,11 +65,6 @@ type ColumnDesc struct {
 	UpdateDefault func() any
 	Immutable     bool
 	Sensitive     bool
-	// Nullable says the column is NULL-able though the field is a value, as
-	// velox-gen declares an Optional field that is not Nillable: NULL reads as
-	// the field's zero value, and the zero value is written as itself, not as
-	// NULL. A pointer field's column is NULL-able without it (nil is NULL).
-	Nullable bool
 	// Encode and Decode are the column's codec, both or neither: with them,
 	// velox binds the bytes Encode returns for the field's value, and decodes
 	// what it reads with Decode, into a pointer to the field. velox-gen sets
@@ -188,7 +183,7 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 		return nil, err
 	}
 	cols := make([]ColumnInfo, len(d.columns))
-	anyImmutable, anyZeroNull := false, false
+	anyImmutable := false
 	for i, c := range d.columns {
 		off, ft, ok := fieldOf(v.addr(i), base, t.Size())
 		if !ok {
@@ -196,7 +191,7 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 			// every scan writes through it: anything else is no column.
 			return fail(c.Field, "Addr does not return a pointer into the entity for column %d", i)
 		}
-		ci := ColumnInfo{Field: c.Field, Name: c.Name, Type: ft, Nullable: c.Nullable || ft.Kind() == reflect.Pointer, SQLType: c.SQLType,
+		ci := ColumnInfo{Field: c.Field, Name: c.Name, Type: ft, Nullable: ft.Kind() == reflect.Pointer, SQLType: c.SQLType,
 			HasDefault: c.Default != nil, DefaultFunc: c.DefaultFunc, UpdateDefault: c.UpdateDefault,
 			Immutable: c.Immutable, Sensitive: c.Sensitive, Codec: c.Encode != nil, encode: c.Encode, decode: c.Decode, off: off}
 		if (c.Encode == nil) != (c.Decode == nil) {
@@ -219,10 +214,6 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 		}
 		cols[i] = ci
 		anyImmutable = anyImmutable || c.Immutable
-		// A value NULL scans into needs no holder: a pointer, a slice or a
-		// map is nil, and a codec decodes NULL as the zero value itself.
-		cols[i].zeroNull = c.Nullable && c.Encode == nil && !nilable(ft)
-		anyZeroNull = anyZeroNull || cols[i].zeroNull
 	}
 	inRange := func(i int) bool { return i >= 0 && i < len(cols) }
 	for _, k := range d.primaryKey {
@@ -262,7 +253,7 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 		rels[i] = &relation{name: r.name, many: strings.HasPrefix(rt.Name(), "Many["), off: off, typ: rt, ownerCol: r.ownerCol, targetCol: r.targetCol, through: r.through}
 	}
 	info = &EntityInfo{Name: name, Table: d.table, Schema: d.schema, Columns: cols, PrimaryKey: d.primaryKey, Tenant: d.tenant,
-		Indexes: d.indexes, rels: rels, immutable: anyImmutable, zeroNull: anyZeroNull}
+		Indexes: d.indexes, rels: rels, immutable: anyImmutable}
 	if err := validate(info); err != nil {
 		return nil, err
 	}
@@ -301,15 +292,6 @@ func fieldOf(p any, base unsafe.Pointer, size uintptr) (uintptr, reflect.Type, b
 func boolOrNumber(t any) bool {
 	k := rtype(t).Kind()
 	return k == reflect.Bool || k >= reflect.Int && k <= reflect.Float64
-}
-
-// nilable reports whether NULL scans into a field of type ft as nil.
-func nilable(ft reflect.Type) bool {
-	switch ft.Kind() {
-	case reflect.Pointer, reflect.Slice, reflect.Map, reflect.Interface:
-		return true
-	}
-	return false
 }
 
 // defaultOf is a Desc's Default d as ColumnInfo holds it for a field of type

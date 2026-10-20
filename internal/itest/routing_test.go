@@ -239,7 +239,7 @@ func (r routingDriver) databases(t *testing.T) {
 // seed writes an invoice into d, a database read directly.
 func (r routingDriver) seed(t *testing.T, d *sql.DB, id, org int64, number string) {
 	t.Helper()
-	q := rebind(r.d, "INSERT INTO invoices (created_at, updated_at, id, org_id, number, total, paid, data) VALUES (?, ?, ?, ?, ?, 1, ?, ?)")
+	q := rebind(r.d, "INSERT INTO invoices (created_at, updated_at, id, org_id, number, total, paid, note, data) VALUES (?, ?, ?, ?, ?, 1, ?, '', ?)")
 	if _, err := d.ExecContext(ctx, q, t0, t0, id, org, number, false, []byte("d")); err != nil {
 		t.Fatal(err)
 	}

@@ -143,8 +143,8 @@ func TestPluginModelGolden(t *testing.T) {
 	if views := pluginField(t, post, "views"); views.Pointer || views.Nullable || views.GoType != "int" {
 		t.Fatalf("views %+v: a required number is no pointer", views)
 	}
-	if nick := pluginField(t, user, "nickname"); nick.Pointer || !nick.Nullable || !nick.Optional || nick.GoType != "string" {
-		t.Fatalf("nickname %+v: Optional makes the column NULL-able, not the field a pointer", nick)
+	if nick := pluginField(t, user, "nickname"); nick.Pointer || nick.Nullable || !nick.Optional || nick.GoType != "string" {
+		t.Fatalf("nickname %+v: Optional alone is a value on a NOT NULL column", nick)
 	}
 	if score := pluginField(t, user, "score"); !score.Pointer || !score.Nullable || !score.HasDefault || score.GoType != "*float64" {
 		t.Fatalf("score %+v: Nillable makes a pointer; its Default does not change it", score)
@@ -202,7 +202,7 @@ func TestPluginModelRoundTrip(t *testing.T) {
 type PlOwner struct{ schema.Schema }
 
 func (PlOwner) Fields() []schema.Field {
-	return []schema.Field{field.String("note").Optional().Comment("A note."), field.Enum("st").GoType(lwStatus("")).Default("off")}
+	return []schema.Field{field.String("note").Optional().Comment("A note."), field.Enum("st").GoType(lwStatus("")).Default("off"), field.Strings("labels").Optional()}
 }
 func (PlOwner) Edges() []schema.Edge {
 	return []schema.Edge{edge.To("keys", PlKey.Type).Comment("The keys."), edge.To("pets", PlPet.Type)}
@@ -257,8 +257,13 @@ func TestPluginModelJoinTypesAndComments(t *testing.T) {
 	if owner.Comment != "An owner." || pluginEdge(t, owner, "keys").Comment != "The keys." || pluginField(t, owner, "note").Comment != "A note." {
 		t.Errorf("comments: %q %q %q", owner.Comment, pluginEdge(t, owner, "keys").Comment, pluginField(t, owner, "note").Comment)
 	}
-	if n := pluginField(t, owner, "note"); !n.Nullable || !n.Optional || n.Pointer || n.GoType != "string" {
-		t.Errorf("note %+v", n)
+	if n := pluginField(t, owner, "note"); n.Nullable || !n.Optional || n.Pointer || n.GoType != "string" {
+		t.Errorf("note %+v: Optional alone is a value on a NOT NULL column", n)
+	}
+	// An Optional JSON field is the exception: a slice has no zero value to
+	// write, so its column is NULL-able, and NULL decodes to nil.
+	if l := pluginField(t, owner, "labels"); !l.Nullable || l.Pointer || l.GoType != "[]string" {
+		t.Errorf("labels %+v: an Optional JSON field's column is NULL-able", l)
 	}
 	// An enum with a Go type declares no enum type: the field names the Go
 	// type, and holds the values.

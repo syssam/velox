@@ -16,10 +16,17 @@ type common[B any] struct {
 	self B
 }
 
-// Optional makes the field not required on create, and its column NULL-able.
-// The Go field stays a value, with the handle of a value: NULL reads as its
-// zero value, and an insert writes the zero value, not NULL. Add Nillable to
-// tell NULL apart.
+// Optional makes the field not required on create. Its column stays NOT NULL
+// and its Go field a value: an unset field is its zero value, and an insert
+// writes its Default, or the zero value. The zero value means unset, so the
+// field's validators let it pass. A JSON field is the exception: Optional
+// makes its column NULL-able, as a slice or a map has no zero value to write,
+// and NULL reads as nil.
+//
+// velox-gen refuses an Optional enum with neither a Default nor Nillable,
+// whose zero value "" is no value, and an Optional edge field that is not
+// Nillable, whose zero value is no row's key. A field that is unique only
+// when present needs Nillable: every unset row holds the same zero value.
 func (c common[B]) Optional() B { c.d.Optional = true; return c.self }
 
 // Nillable makes the column NULL-able and the Go field a pointer, nil for
@@ -31,7 +38,9 @@ func (c common[B]) Nillable() B { c.d.Nillable = true; return c.self }
 // Immutable refuses the field in updates.
 func (c common[B]) Immutable() B { c.d.Immutable = true; return c.self }
 
-// Unique adds a single-column unique index.
+// Unique adds a single-column unique index. A field that is unique only when
+// present needs Nillable: NULLs do not collide, but the zero values of unset
+// Optional fields do.
 func (c common[B]) Unique() B { c.d.Unique = true; return c.self }
 
 // Sensitive leaves the field out of String(), JSON, logs and spans.

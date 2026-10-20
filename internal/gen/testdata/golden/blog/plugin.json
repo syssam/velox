@@ -190,7 +190,6 @@
           "go_type": "time.Time",
           "elem_type": "time.Time",
           "pkg_path": "time",
-          "nullable": true,
           "optional": true
         },
         {
@@ -331,7 +330,6 @@
           "type": "string",
           "go_type": "string",
           "elem_type": "string",
-          "nullable": true,
           "optional": true
         },
         {
@@ -352,7 +350,6 @@
           "type": "int",
           "go_type": "int",
           "elem_type": "int",
-          "nullable": true,
           "optional": true
         },
         {

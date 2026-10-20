@@ -29,7 +29,7 @@ func (User) Fields() []schema.Field {
 		field.Enum("role").Values("admin", "in_review").Default("admin").Annotations(graphql.EnumValues(map[string]string{"in_review": "REVIEWING"})),
 		field.String("password_hash").Sensitive(),
 		field.Uint64("quota"),
-		field.Time("seen_at").Optional(),
+		field.Time("seen_at").Optional().Nillable(),
 	}
 }
 
@@ -308,7 +308,7 @@ func (Owner) Fields() []schema.Field {
 		field.String("email").GoType(ids.Email("")).Optional().Nillable().Annotations(graphql.WhereOps(graphql.OpEQ)),
 		field.String("code").GoType(ids.Code("")),
 		field.Strings("tags"),
-		field.Bytes("blob").Optional(),
+		field.Bytes("blob").Optional().Nillable(),
 		field.Float32("ratio"),
 		field.Enum("tier").GoType(levels.Level("")).Annotations(graphql.Skip(graphql.SkipEnumField), graphql.WhereOps()),
 		field.Int32("rank").GoType(ids.Rank(0)).Annotations(graphql.WhereOps()),

@@ -28,7 +28,8 @@ func (Invoice) Fields() []schema.Field {
 		field.Float("total"),
 		field.Bool("paid"),
 		field.Time("paid_at").Optional().Nillable(),
-		field.String("note").Optional().Nillable(),
+		// Optional, and NOT NULL: "" means unset, which NotEmpty lets pass.
+		field.String("note").Optional().NotEmpty(),
 		field.Bytes("data"),
 	}
 }

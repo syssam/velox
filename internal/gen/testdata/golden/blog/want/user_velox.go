@@ -91,9 +91,9 @@ func userDesc() velox.Desc[User] {
 			{Field: "Name", Name: "name"},
 			{Field: "Email", Name: "email"},
 			{Field: "Role", Name: "role", Default: UserRoleViewer},
-			{Field: "Nickname", Name: "nickname", Nullable: true},
+			{Field: "Nickname", Name: "nickname"},
 			{Field: "Bio", Name: "bio"},
-			{Field: "Age", Name: "age", Nullable: true},
+			{Field: "Age", Name: "age"},
 			{Field: "PasswordHash", Name: "password_hash", Sensitive: true},
 			{Field: "Score", Name: "score", Default: float64(1.5)},
 		},
@@ -179,6 +179,9 @@ func userDesc() velox.Desc[User] {
 				}
 			case 10:
 				x := v.(int)
+				if x == *new(int) {
+					return nil
+				}
 				if x < 0 {
 					return errors.New("is less than 0")
 				}

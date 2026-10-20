@@ -195,9 +195,11 @@ func (s *entState) field(e *Entity, i int, f *Field) *OutField {
 	o.ElemType = elem
 	// Only Nillable makes a pointer: a Default never changes the Go type.
 	o.Pointer = f.Nillable && i != 0 && !nilKinds[kind]
-	// An Optional field's column is NULL-able, though its Go field is a
-	// value: NULL reads as the zero value. A nil-able Go type reads it as nil.
-	o.NullValue = f.Optional && !f.Nillable && i != 0 && !nilKinds[kind]
+	// An Optional field that is a value is unset at its zero value, which
+	// its validators let pass.
+	if f.Optional && !o.Pointer && i != 0 && !nilKinds[kind] {
+		o.Unset = unset(f, o.ElemType)
+	}
 	o.GoType = elem
 	if o.Pointer {
 		o.GoType = "*" + elem
@@ -494,6 +496,21 @@ func base(f *Field) string {
 	return ""
 }
 
+// unset is the condition on x, the value of the Optional value field f of
+// the Go type elem, that means it is unset: its zero value. It is "" for a
+// type whose zero value cannot be told by ==.
+func unset(f *Field, elem string) string {
+	switch {
+	case f.Type == "bytes":
+		return "len(x) == 0"
+	case f.Type == "time":
+		return "x.IsZero()"
+	case f.Type == "bool", numeric[f.Type], f.Type == "string", f.Type == "enum", f.Type == "uuid":
+		return "x == *new(" + elem + ")"
+	}
+	return ""
+}
+
 // checks writes the case of Check's switch for column col (Ruling 6), when f
 // has checks, an enum or validators.
 func (s *entState) checks(e *Entity, col int, f *Field, o *OutField, where string) {
@@ -512,6 +529,12 @@ func (s *entState) checks(e *Entity, col int, f *Field, o *OutField, where strin
 	}
 	line(0, "case %d:", col)
 	line(1, "x := v.(%s)", o.ElemType)
+	if o.Unset != "" {
+		// Optional: the zero value means unset, and unset is valid.
+		line(1, "if %s {", o.Unset)
+		line(2, "return nil")
+		line(1, "}")
+	}
 	if f.Type == "enum" {
 		vals := make([]string, len(f.Enums))
 		for i, en := range f.Enums {

@@ -248,9 +248,6 @@ func entityDesc(w *writer, e *OutEntity) {
 		if f.UpdateDefaultCode != "" {
 			parts = append(parts, "UpdateDefault: "+f.UpdateDefaultCode)
 		}
-		if f.NullValue {
-			parts = append(parts, "Nullable: true")
-		}
 		if f.Immutable {
 			parts = append(parts, "Immutable: true")
 		}

@@ -130,5 +130,5 @@ var t0 = time.Date(2026, 10, 15, 9, 0, 0, 0, time.UTC)
 
 // invoiceRow is one testmodel.Invoice row.
 func invoiceRow(id int64) []driver.Value {
-	return []driver.Value{id, t0, t0, int64(1), "INV", 12.5, true, nil, nil, []byte("d")}
+	return []driver.Value{id, t0, t0, int64(1), "INV", 12.5, true, nil, "", []byte("d")}
 }

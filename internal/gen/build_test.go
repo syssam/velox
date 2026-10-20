@@ -293,7 +293,7 @@ func TestBuildM2MColumnsOnInverse(t *testing.T) {
 type columnFieldMatch struct{ schema.Schema }
 
 func (columnFieldMatch) Fields() []schema.Field {
-	return []schema.Field{field.Int64("parent_id").Optional()}
+	return []schema.Field{field.Int64("parent_id").Optional().Nillable()}
 }
 func (columnFieldMatch) Edges() []schema.Edge {
 	return []schema.Edge{edge.To("parent", columnFieldMatch.Type).Unique().Field("parent_id").StorageKey(edge.Column("parent_id"))}
@@ -429,7 +429,7 @@ func (fieldMany) Edges() []schema.Edge {
 type fieldWrongType struct{ schema.Schema }
 
 func (fieldWrongType) Fields() []schema.Field {
-	return []schema.Field{field.Int("parent_id").Optional()}
+	return []schema.Field{field.Int("parent_id").Optional().Nillable()}
 }
 func (fieldWrongType) Edges() []schema.Edge {
 	return []schema.Edge{edge.To("parent", fieldWrongType.Type).Unique().Field("parent_id")}
@@ -464,6 +464,20 @@ type defaultNumber struct{ schema.Schema }
 
 func (defaultNumber) Fields() []schema.Field {
 	return []schema.Field{field.Float("score").Optional().Default(1.5)}
+}
+
+type optionalEnum struct{ schema.Schema }
+
+func (optionalEnum) Fields() []schema.Field {
+	return []schema.Field{field.Enum("mood").Values("calm", "busy").Optional()}
+}
+
+// optionalFK binds an Optional edge field that is not Nillable.
+type optionalFK struct{ schema.Schema }
+
+func (optionalFK) Fields() []schema.Field { return []schema.Field{field.Int64("parent_id").Optional()} }
+func (optionalFK) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("parent", optionalFK.Type).Unique().Field("parent_id")}
 }
 
 type defaultTenant struct{ schema.Schema }
@@ -598,7 +612,7 @@ func (clashPet) Fields() []schema.Field { return []schema.Field{field.Int64("cla
 type columnFieldMismatch struct{ schema.Schema }
 
 func (columnFieldMismatch) Fields() []schema.Field {
-	return []schema.Field{field.Int64("parent_id").Optional()}
+	return []schema.Field{field.Int64("parent_id").Optional().Nillable()}
 }
 func (columnFieldMismatch) Edges() []schema.Edge {
 	return []schema.Edge{edge.To("parent", columnFieldMismatch.Type).Unique().Field("parent_id").StorageKey(edge.Column("pid"))}
@@ -653,7 +667,7 @@ func (fkUnbound) Edges() []schema.Edge {
 type fieldStringFK struct{ schema.Schema }
 
 func (fieldStringFK) Fields() []schema.Field {
-	return []schema.Field{field.String("parent_id").Optional()}
+	return []schema.Field{field.String("parent_id").Optional().Nillable()}
 }
 func (fieldStringFK) Edges() []schema.Edge {
 	return []schema.Edge{edge.To("parent", fieldStringFK.Type).Unique().Field("parent_id")}
@@ -662,7 +676,7 @@ func (fieldStringFK) Edges() []schema.Edge {
 type immutableEdge struct{ schema.Schema }
 
 func (immutableEdge) Fields() []schema.Field {
-	return []schema.Field{field.Int64("parent_id").Optional()}
+	return []schema.Field{field.Int64("parent_id").Optional().Nillable()}
 }
 func (immutableEdge) Edges() []schema.Edge {
 	return []schema.Edge{edge.To("parent", immutableEdge.Type).Unique().Field("parent_id").Immutable()}
@@ -671,7 +685,7 @@ func (immutableEdge) Edges() []schema.Edge {
 type immutableField struct{ schema.Schema }
 
 func (immutableField) Fields() []schema.Field {
-	return []schema.Field{field.Int64("parent_id").Optional().Immutable()}
+	return []schema.Field{field.Int64("parent_id").Optional().Nillable().Immutable()}
 }
 func (immutableField) Edges() []schema.Edge {
 	return []schema.Edge{edge.To("parent", immutableField.Type).Unique().Field("parent_id")}
@@ -750,6 +764,8 @@ func TestBuildRules(t *testing.T) {
 		{"35 join columns collide on an inverse", []schema.Interface{cycle{}}, `schema cycle: edge "cycles": join table cycle_next has two columns named cycle_id; name them with edge.Columns`},
 		{"36 default on a bool", []schema.Interface{defaultBool{}}, `schema defaultBool: field "active": a Default on a bool or number that is not Nillable cannot be told from unset; make the field Nillable or drop the Default`},
 		{"36 default on an optional number", []schema.Interface{defaultNumber{}}, `schema defaultNumber: field "score": a Default on a bool or number that is not Nillable cannot be told from unset; make the field Nillable or drop the Default`},
+		{"37 optional enum", []schema.Interface{optionalEnum{}}, `schema optionalEnum: field "mood": an Optional enum needs a Default or Nillable`},
+		{"38 optional edge field", []schema.Interface{optionalFK{}}, `schema optionalFK: edge "parent": field "parent_id" must be Nillable when the edge is not Required: an unset foreign key is NULL`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			_, err := build(t, c.ss...)
@@ -774,7 +790,7 @@ func TestBuildRulesAreSingle(t *testing.T) {
 		{enumGoNames{}}, {clashOwner{}, clashPet{}}, {columnFieldMismatch{}}, {keyA{}, keyB{}}, {oneColumnM2M{}},
 		{twoColumnsO2M{}, Pet{}}, {invAssoc{}, invItem{}}, {enumGoTypeDup{}},
 		{fkUnbound{}}, {fieldStringFK{}}, {immutableEdge{}}, {immutableField{}}, {loop{}}, {cycle{}},
-		{defaultBool{}}, {defaultNumber{}},
+		{defaultBool{}}, {defaultNumber{}}, {optionalEnum{}}, {optionalFK{}},
 	} {
 		_, err := build(t, ss...)
 		if n := len(err.(interface{ Unwrap() []error }).Unwrap()); n != 1 {

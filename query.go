@@ -263,21 +263,7 @@ func scanRow[E any](r rows, m *Meta[E], cols []int, dst []any, p *E) error {
 		}
 		dst[i] = scanDst(m.info, c, m.addr(p, c))
 	}
-	if err := r.Scan(dst...); err != nil {
-		return err
-	}
-	if m.info.zeroNull {
-		for i := range dst {
-			c := i
-			if cols != nil {
-				c = cols[i]
-			}
-			if m.info.Columns[c].zeroNull {
-				scanned(dst[i], m.addr(p, c))
-			}
-		}
-	}
-	return nil
+	return r.Scan(dst...)
 }
 
 // Each way of running a query keeps its state (the statement, and what its rows

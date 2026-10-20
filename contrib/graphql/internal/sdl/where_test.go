@@ -17,9 +17,9 @@ func logic(typ string) []string {
 func TestWhere(t *testing.T) {
 	t.Run("defaults", func(t *testing.T) {
 		opt := func(f *plugin.Field) *plugin.Field { f.Nullable, f.Nillable, f.Pointer = true, true, true; return f }
-		// An Optional value: its column is NULL-able, but its handle has no
+		// An Optional value: its column is NOT NULL, and its handle has no
 		// IsNull.
-		val := func(f *plugin.Field) *plugin.Field { f.Nullable, f.Optional = true, true; return f }
+		val := func(f *plugin.Field) *plugin.Field { f.Optional = true; return f }
 		cases := []struct {
 			f    *plugin.Field
 			want []string

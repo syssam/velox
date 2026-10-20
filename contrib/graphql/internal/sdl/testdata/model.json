@@ -145,7 +145,7 @@
         {"name": "password_hash", "go_name": "PasswordHash", "column": "password_hash", "type": "string", "go_type": "string", "elem_type": "string", "sensitive": true},
         {"name": "score", "go_name": "Score", "column": "score", "type": "float64", "go_type": "float64", "elem_type": "float64", "has_default": true},
         {"name": "external_id", "go_name": "ExternalID", "column": "external_id", "type": "uuid", "go_type": "uuid.UUID", "elem_type": "uuid.UUID", "unique": true, "has_default": true},
-        {"name": "avatar", "go_name": "Avatar", "column": "avatar", "type": "bytes", "go_type": "[]byte", "elem_type": "[]byte", "nullable": true, "optional": true},
+        {"name": "avatar", "go_name": "Avatar", "column": "avatar", "type": "bytes", "go_type": "[]byte", "elem_type": "[]byte", "nullable": true, "optional": true, "nillable": true},
         {"name": "quota", "go_name": "Quota", "column": "quota", "type": "uint64", "go_type": "uint64", "elem_type": "uint64"},
         {"name": "active", "go_name": "Active", "column": "active", "type": "bool", "go_type": "bool", "elem_type": "bool", "has_default": true},
         {"name": "settings", "go_name": "Settings", "column": "settings", "type": "json", "go_type": "map[string]any", "elem_type": "map[string]any", "nullable": true, "optional": true},

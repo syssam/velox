@@ -118,7 +118,7 @@ func TestLowerTypes(t *testing.T) {
 	for _, c := range []struct{ name, goType, handle string }{
 		{"id", "int64", "velox.NumberCol[LwUser, int64]"},
 		{"name", "string", "velox.StringCol[LwUser, string]"},
-		{"nick", "string", "velox.StringCol[LwUser, string]"},             // Optional alone is no pointer: NULL reads as ""
+		{"nick", "string", "velox.StringCol[LwUser, string]"},             // Optional alone is a value on a NOT NULL column
 		{"active", "*bool", "velox.NullCol[LwUser, bool]"},                // Nillable, with a Default that does not change the type
 		{"role", "LwUserRole", "velox.StringCol[LwUser, LwUserRole]"},     // the generated enum type (Ruling 3)
 		{"seen", "*time.Time", "velox.NullOrderedCol[LwUser, time.Time]"}, //
@@ -129,7 +129,7 @@ func TestLowerTypes(t *testing.T) {
 			t.Errorf("%s: %+v, want %s %s", c.name, f, c.goType, c.handle)
 		}
 	}
-	if f := u.field("nick"); f.Pointer || !f.NullValue || f.ElemType != "string" || f.GoName != "Nick" || f.Column != "nick" {
+	if f := u.field("nick"); f.Pointer || f.Unset != "x == *new(string)" || f.ElemType != "string" || f.GoName != "Nick" || f.Column != "nick" {
 		t.Errorf("nick %+v", f)
 	}
 	if f := u.field("tags"); f.Pointer || f.ElemType != "[]string" || f.Tag != "`json:\"tags,omitempty\"`" {
@@ -314,6 +314,7 @@ func TestLowerChecks(t *testing.T) {
 		"if err := v0(x); err != nil {",
 		"case 2:",
 		"x := v.(int)",
+		"if x == *new(int) {", "return nil", // Optional: zero is unset, and valid
 		"if x < 1 {", `errors.New("is less than 1")`,
 		"if x > 120 {", `errors.New("is more than 120")`,
 		"if err := v1(x); err != nil {",

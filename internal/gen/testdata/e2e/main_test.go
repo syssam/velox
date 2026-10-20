@@ -22,7 +22,7 @@ const ddl = `
 CREATE TABLE users (
 	id INTEGER PRIMARY KEY, created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL,
 	created_by TEXT NOT NULL, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE, role TEXT NOT NULL,
-	nickname TEXT, age INTEGER, password_hash TEXT NOT NULL, score REAL NOT NULL);
+	nickname TEXT NOT NULL, age INTEGER NOT NULL, motto TEXT NOT NULL, password_hash TEXT NOT NULL, score REAL);
 CREATE TABLE posts (
 	id INTEGER PRIMARY KEY, author_id INTEGER NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, views INTEGER NOT NULL);
 CREATE TABLE notes (id INTEGER PRIMARY KEY, org_id INTEGER NOT NULL, text TEXT NOT NULL);
@@ -129,13 +129,11 @@ func TestDefaults(t *testing.T) {
 	if got.Role != gen.UserRoleViewer || got.Score == nil || *got.Score != 1.5 || got.CreatedAt.IsZero() || got.Age != 0 {
 		t.Errorf("read back: %+v", got)
 	}
-	// An Optional field is a value: its NULL column reads as the zero value.
-	if _, err := db.Exec(ctx, "e2e: NULL in Optional columns", "UPDATE users SET nickname = NULL, age = NULL WHERE id = ?", u.ID); err != nil {
-		t.Fatal(err)
-	}
-	got, err = db.Query[gen.User]().Where(gen.Users.ID.EQ(u.ID)).One(ctx)
-	if err != nil || got.Nickname != "" || got.Age != 0 || got.Name != "ada" {
-		t.Errorf("NULL read back: %+v, %v", got, err)
+	// age (Range(1, 150)) and motto (NotEmpty) are Optional and were left
+	// unset: their zero values mean unset, which the validators let pass, and
+	// the NOT NULL columns hold them.
+	if got.Age != 0 || got.Motto != "" {
+		t.Errorf("unset Optional fields read back: %+v", got)
 	}
 	p := gen.Post{AuthorID: u.ID, Title: "t"}
 	mustInsert(t, db, &p)
@@ -159,6 +157,7 @@ func TestValidators(t *testing.T) {
 		{"max length", "Name", func() any { return &gen.User{Name: long, Email: "a@b", CreatedBy: "root"} }},
 		{"match", "Email", func() any { u := newUser("ada"); u.Email = "nope"; return &u }},
 		{"range", "Age", func() any { u := newUser("ada"); u.Age = age; return &u }},
+		{"optional max length", "Motto", func() any { u := newUser("ada"); u.Motto = long; return &u }},
 		{"enum", "Role", func() any { u := newUser("ada"); u.Role = "bogus"; return &u }},
 		{"mixin min length", "CreatedBy", func() any { u := newUser("ada"); u.CreatedBy = "r"; return &u }},
 		{"mixin validate", "CreatedBy", func() any { u := newUser("ada"); u.CreatedBy = "Root"; return &u }},

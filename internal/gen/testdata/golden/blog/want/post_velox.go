@@ -66,7 +66,7 @@ func postDesc() velox.Desc[Post] {
 			{Field: "Title", Name: "title"},
 			{Field: "Slug", Name: "slug"},
 			{Field: "Status", Name: "status", Default: PostStatusDraft},
-			{Field: "PublishedAt", Name: "published_at", Nullable: true},
+			{Field: "PublishedAt", Name: "published_at"},
 			{Field: "Tags", Name: "tags", DefaultFunc: func() any { var v []string; _ = json.Unmarshal([]byte("[\"new\"]"), &v); return v }, Encode: json.Marshal, Decode: json.Unmarshal},
 			{Field: "Views", Name: "views"},
 		},

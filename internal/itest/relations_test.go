@@ -56,13 +56,13 @@ func TestHas(t *testing.T) {
 		wantIDs(t, ids(I.Items.HasWhere(It.Qty.GT(3))), []int64{2})
 		wantIDs(t, ids(velox.Not(I.Items.Has())), []int64{3, 4, 5})
 		wantIDs(t, ids(I.Items.HasWhere(It.Invoice.HasWhere(I.Number.EQ("INV-2")))), []int64{2})
-		// Invoices 3 and 5 already have a NULL note and updated_at t0, so they match
-		// without changing: 3 rows needs clientFoundRows on MySQL.
-		n, err := tg.db.Update[testmodel.Invoice]().Set(I.Note.SetNull(), I.UpdatedAt.Set(t0)).Where(velox.Not(I.Items.Has())).Exec(ctx)
+		// Invoices 3 and 5 already have no note ("") and updated_at t0, so they
+		// match without changing: 3 rows needs clientFoundRows on MySQL.
+		n, err := tg.db.Update[testmodel.Invoice]().Set(I.Note.Set(""), I.UpdatedAt.Set(t0)).Where(velox.Not(I.Items.Has())).Exec(ctx)
 		if err != nil || n != 3 {
 			t.Errorf("update with EXISTS: %d, %v", n, err)
 		}
-		notes := map[int64]*string{}
+		notes := map[int64]string{}
 		all, err := tg.db.Query[testmodel.Invoice]().Limit(10).All(ctx)
 		if err != nil {
 			t.Fatal(err)
@@ -70,7 +70,7 @@ func TestHas(t *testing.T) {
 		for _, inv := range all {
 			notes[inv.ID] = inv.Note
 		}
-		if notes[4] != nil || notes[2] == nil || *notes[2] != "a note" {
+		if notes[4] != "" || notes[2] != "a note" {
 			t.Errorf("notes after the update: 2 %v, 4 %v", notes[2], notes[4])
 		}
 	})

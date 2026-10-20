@@ -419,8 +419,12 @@ func (b *builder) foreignKey(n *node, s *edgeState) {
 			}
 			b.fail(12, n.ent.Name, edgeAt(le.Name), "%s", reason)
 		}
-		if f.Optional == le.Required {
+		switch {
+		case f.Optional == le.Required:
 			b.fail(13, n.ent.Name, edgeAt(le.Name), "field %q must be Optional exactly when the edge is not Required", f.Name)
+		case f.Optional && !f.Nillable:
+			// Unset, a value field would write 0, which no row's key is.
+			b.fail(38, n.ent.Name, edgeAt(le.Name), "field %q must be Nillable when the edge is not Required: an unset foreign key is NULL", f.Name)
 		}
 		switch {
 		case le.Immutable && !f.Immutable:
@@ -650,6 +654,10 @@ func (b *builder) validateFields(e *Entity) {
 		// default is rule 16's.
 		if len(f.Default) > 0 && !f.Nillable && !f.Tenant && (f.Type == "bool" || numeric[f.Type]) {
 			b.fail(36, e.Name, fieldAt(f.Name), "a Default on a bool or number that is not Nillable cannot be told from unset; make the field Nillable or drop the Default")
+		}
+		// Unset, an Optional enum would write "", which is no value.
+		if f.Type == "enum" && f.Optional && !f.Nillable && len(f.Default) == 0 {
+			b.fail(37, e.Name, fieldAt(f.Name), "an Optional enum needs a Default or Nillable")
 		}
 		switch f.Type {
 		case "enum":

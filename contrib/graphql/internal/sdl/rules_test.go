@@ -19,7 +19,7 @@ func TestAnnotationMisuse(t *testing.T) {
 	build := func(a anns) *plugin.Model {
 		name := field("name", "string")
 		name.Annotations = ann(t, a.name)
-		nickname := &plugin.Field{Name: "nickname", GoName: "Nickname", Type: "string", Nullable: true, Optional: true}
+		nickname := &plugin.Field{Name: "nickname", GoName: "Nickname", Type: "string", Nullable: true, Nillable: true, Optional: true}
 		nickname.Annotations = ann(t, a.nickname)
 		secret := &plugin.Field{Name: "secret", GoName: "Secret", Type: "string", Sensitive: true}
 		secret.Annotations = ann(t, a.secret)
@@ -44,7 +44,7 @@ func TestAnnotationMisuse(t *testing.T) {
 		a     anns
 		wants []string
 	}{
-		{"OrderField on an optional field", anns{nickname: graphql.OrderField("NICK")}, []string{"schema User, field nickname", "graphql.OrderField", "optional"}},
+		{"OrderField on a nullable field", anns{nickname: graphql.OrderField("NICK")}, []string{"schema User, field nickname", "graphql.OrderField", "nullable"}},
 		{"OrderField on a sensitive field", anns{secret: graphql.OrderField("SECRET")}, []string{"schema User, field secret", "graphql.OrderField", "sensitive"}},
 		{"OrderField on an edge", anns{posts: graphql.OrderField("POSTS")}, []string{"schema User, edge posts", "graphql.OrderField"}},
 		{"OrderField on a schema", anns{user: graphql.OrderField("X")}, []string{"schema User:", "graphql.OrderField"}},
