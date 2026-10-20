@@ -66,12 +66,14 @@ The reviews also agreed on what stays:
 
 ## 3. Schema DSL and velox-gen
 
-1. **One nullability rule (call).**
-   - `Optional()` means a NULL-able column, a pointer field and a `Null*` handle.
-   - `Nillable()` is accepted only with `Optional()`, where it does nothing (it is kept for ent ports); anywhere else it is an error.
+1. **One nullability rule, ent's (call, corrected 2026-10-20).** It follows old velox and ent exactly:
+   - `Nillable()` means a pointer Go field, a NULL-able column and a `Null*` handle. It is valid on its own.
+   - `Optional()` means the field need not be given on create. The column is NULL-able, the Go field stays a value type, and NULL reads back as the zero value.
+   - `Optional().Nillable()` means both.
    - A `Default` never changes the Go type.
-   - velox-gen refuses a `Default` on a required bool or number field: an insert cannot tell `false`/`0` from unset, so the field must be Optional or rely on a database default.
-   - A zero value means unset for required fields with a default. This is documented.
+   - A `Default` on a bool or number field that is not `Nillable` is refused, because a zero value cannot be told from unset.
+   - The plugin model's `Pointer` is Nillable, and its `Nullable` is Optional || Nillable.
+   - The first version of this rule tied Nillable to Optional. It was withdrawn because it broke ent ports.
 2. **velox-gen joins the root module (call).** It imports `internal/gen`, so a separate module breaks when velox2 is upgraded alone. `go get -tool github.com/syssam/velox2/cmd/velox-gen` keeps working.
 3. **Plugin protocol 2 and model 2, one bump, before gRPC (call).**
    - The request carries `Generator` and `Options` (`-plugin velox-grpc:go_package=x/pb`).
