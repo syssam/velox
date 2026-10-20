@@ -43,12 +43,12 @@ func answer(in io.Reader) plugin.Response {
 		return plugin.Response{Error: fmt.Sprintf("reading the request: %v", err)}
 	}
 	switch {
-	case req.Protocol != plugin.Version:
-		return plugin.Response{Error: fmt.Sprintf("plugin protocol %d is not supported: this velox-graphql speaks %d; use velox-gen and velox-graphql of one velox release", req.Protocol, plugin.Version)}
+	case req.Protocol != plugin.ProtocolVersion:
+		return plugin.Response{Error: fmt.Sprintf("plugin protocol %d is not supported: this velox-graphql speaks %d; use velox-gen and velox-graphql of one velox release", req.Protocol, plugin.ProtocolVersion)}
 	case req.Model == nil:
 		return plugin.Response{Error: "the request has no model"}
-	case req.Model.Version != plugin.Version:
-		return plugin.Response{Error: fmt.Sprintf("model version %d is not supported: this velox-graphql reads %d; use velox-gen and velox-graphql of one velox release", req.Model.Version, plugin.Version)}
+	case req.Model.Version != plugin.ModelVersion:
+		return plugin.Response{Error: fmt.Sprintf("model version %d is not supported: this velox-graphql reads %d; use velox-gen and velox-graphql of one velox release", req.Model.Version, plugin.ModelVersion)}
 	}
 	s, err := sdl.Render(req.Model)
 	if err != nil {

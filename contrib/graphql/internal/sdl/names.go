@@ -62,22 +62,57 @@ var builtins = []string{
 const builtin = "velox-graphql"
 
 // typeNames records which element declares each GraphQL type name, so that
-// two that would declare one name fail with both named.
-type typeNames map[string]string
+// two that would declare one name fail with both named. It also knows the Go
+// names velox-gen declares in the generated package, which gqlgen's autobind
+// would find for a GraphQL type of that name: a type may take one only as the
+// name of its own Go type (addGo).
+type typeNames struct {
+	declared map[string]string // GraphQL type name → what declares it
+	goNames  map[string]string // Go name in the generated package → what it is
+}
 
 func newTypeNames() typeNames {
-	n := make(typeNames, len(builtins))
+	n := typeNames{declared: make(map[string]string, len(builtins)), goNames: map[string]string{}}
 	for _, b := range builtins {
-		n[b] = builtin
+		n.declared[b] = builtin
 	}
 	return n
 }
 
+// reserve records that name is a Go name velox-gen declares in the generated
+// package, described by what. The first description stands.
+func (n typeNames) reserve(name, what string) {
+	if name != "" && n.goNames[name] == "" {
+		n.goNames[name] = what
+	}
+}
+
 // add records that owner declares the type name.
 func (n typeNames) add(name, owner string) error {
-	switch prev, ok := n[name]; {
+	if err := n.taken(name, owner); err != nil {
+		return err
+	}
+	if what, ok := n.goNames[name]; ok {
+		return fmt.Errorf("%s: the GraphQL type %s is also %s in the generated package, where gqlgen would bind it; rename it with graphql.Type", owner, name, what)
+	}
+	n.declared[name] = owner
+	return nil
+}
+
+// addGo is add for a type named after its own Go type in the generated
+// package.
+func (n typeNames) addGo(name, owner string) error {
+	if err := n.taken(name, owner); err != nil {
+		return err
+	}
+	n.declared[name] = owner
+	return nil
+}
+
+// taken is the error for owner declaring a name that something else declares.
+func (n typeNames) taken(name, owner string) error {
+	switch prev, ok := n.declared[name]; {
 	case !ok:
-		n[name] = owner
 		return nil
 	case prev == builtin:
 		return fmt.Errorf("%s: the GraphQL type %s is one velox-graphql declares itself; rename it with graphql.Type", owner, name)

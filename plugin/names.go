@@ -6,7 +6,9 @@ import "strings"
 // plural it names tables and handles with: categories → category, boxes →
 // box, friends → friend. A word that does not end in "s", such as children,
 // is returned unchanged. velox-gen names join columns and join entities with
-// it, and a plugin can name things after edges the same way.
+// it, and a plugin can name things after edges the same way. Because join
+// columns are named with it, its output must never change: a change would
+// rename columns in existing databases. Plugins' own names are frozen with it.
 func Singular(s string) string {
 	switch {
 	case strings.HasSuffix(s, "ies") && len(s) > 3:

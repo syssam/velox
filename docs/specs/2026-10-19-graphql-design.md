@@ -81,7 +81,7 @@ velox-gen gains a repeated flag, `-plugin name`.
 
 **Errors.** A plugin's error or non-zero exit fails the run, and nothing is written.
 
-**The protocol** is versioned in the JSON (`"plugin_protocol": 1`).
+**The protocol** is versioned in the JSON (`"plugin_protocol": 1`). The request also names the generated package: `"out_package"` (its name) and `"out_path"` (its import path).
 
 **What a plugin receives (call).** It gets the resolved model, not the raw `schema/load` model. That is everything velox-gen's own generator works from:
 - each entity's Go name, table and primary key;
@@ -286,7 +286,7 @@ Plan 1 (plugins and the SDL, `docs/plans/2026-10-19-graphql-1-sdl.md`) settled t
 
 **The plugin protocol and model (§1).**
 - velox-gen adds the header to a plugin's files (`#` for `.graphqls`, `//` for `.go`), so a plugin cannot forget it. A path with a directory part, `..`, another extension, a name velox-gen or another plugin writes, or an existing file without the header fails the run with nothing written.
-- A plugin runs in the application's module (`go tool <name>`, with `go get -tool` to declare it). The model is `plugin.Model`, versioned (`plugin.Version = 1`), built from velox-gen's own graph and pinned by a golden JSON test.
+- A plugin runs in the application's module (`go tool <name>`, with `go get -tool` to declare it). The model is `plugin.Model`, versioned (`plugin.ModelVersion = 1`; the protocol is versioned apart, `plugin.ProtocolVersion = 1`), built from velox-gen's own graph and pinned by a golden JSON test.
 - The model carries what the SDL and the Go files need beyond names and types:
   - `Edge.OwnsKey`: the edge's own entity holds the foreign key on its row. The plugin never re-derives which side holds it, and the where predicates, the edge inputs and the refusals below follow it.
   - `Edge.FieldOn`: the entity that holds the key field, which finds the key field.
@@ -298,12 +298,12 @@ Plan 1 (plugins and the SDL, `docs/plans/2026-10-19-graphql-1-sdl.md`) settled t
 **Names and bindings (§3).**
 - A GraphQL enum is named after velox-gen's Go enum type (`<Schema><Field>`), not after the GraphQL type, so gqlgen's autobind finds it when `graphql.Type` renames the entity. A custom-Go-type enum gets the same GraphQL name; plan 2 binds it with `@goModel` to the type's import path.
 - Every Node type's key is `id: ID! @goField(name: "IDGQL")`, the same `<Name>GQL` convention as edges; plan 2 generates `IDGQL()` returning the opaque global ID.
-- `graphql.FieldName` renames a field in GraphQL and binds it back with `@goField(name: "<GoName>")`; an application directive named `goField` is refused.
+- `graphql.FieldName` renames a field in GraphQL and binds it back with `@goField(name: "<GoName>")`; an application directive named `goField` is refused. `velox.graphqls` also declares `@goField` (with `type`) and `@goModel` as gqlgen documents them (v0.17.86), so the application must not redeclare either.
 
 **Inputs (§3 Mutations).**
 - A sensitive field is accepted in create and update inputs (a password is set, never read back) and appears in no type, where input or order. "Never exposed" is about output.
 - Edge inputs follow the foreign key's own flags, on whichever entity holds it. An immutable key drops every input that moves it; a required key drops `remove<Edge>IDs` and `clear<Edge>`, for one-to-many and inverse one-to-one alike. A many-to-many edge keeps them.
-- Only `Default` or `DefaultFunc` makes a create-input field optional. A field with only `UpdateDefault` is required on create.
+- Only `Default` or `DefaultFunc` makes a create-input field optional. A field with only `UpdateDefault` that is not nullable is in the create input and required, because nothing fills it on insert; it stays out of the update input, where the `UpdateDefault` fills it. A nullable field with only `UpdateDefault` is in neither input. `CreateInput(true)` and `UpdateInput(true)` bring any such field into that input.
 
 **Refusals.** Generation fails, naming the schema and element, for:
 - an annotation on the wrong kind of element (`OrderField` on an edge, `Mutations` on a field);

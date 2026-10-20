@@ -85,7 +85,7 @@ func TestPluginModelGolden(t *testing.T) {
 	g, o := blogModel(t)
 	m := PluginModel(g, o)
 
-	if m.Version != plugin.Version || m.SchemaPath != o.SchemaPath {
+	if m.Version != plugin.ModelVersion || m.SchemaPath != o.SchemaPath {
 		t.Fatalf("model %d %q", m.Version, m.SchemaPath)
 	}
 	user, post := pluginEntity(t, m, "User"), pluginEntity(t, m, "Post")
@@ -170,7 +170,7 @@ func TestPluginModelGolden(t *testing.T) {
 // TestPluginModelRoundTrip checks that the model round-trips through JSON.
 func TestPluginModelRoundTrip(t *testing.T) {
 	g, o := blogModel(t)
-	b, err := json.Marshal(plugin.Request{Protocol: plugin.Version, OutPackage: "gen", Model: PluginModel(g, o)})
+	b, err := json.Marshal(plugin.Request{Protocol: plugin.ProtocolVersion, OutPackage: "gen", Model: PluginModel(g, o)})
 	if err != nil {
 		t.Fatal(err)
 	}

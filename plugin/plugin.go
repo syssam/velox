@@ -2,17 +2,21 @@ package plugin
 
 import "encoding/json"
 
-// Version is the protocol version and the model's JSON version; both are 1
-// today. A plugin checks Request.Protocol, the version of the protocol, and
-// refuses a request whose Protocol it does not know. Model.Version is the
-// version of the model's JSON, which changes only when a field is removed or
-// changes meaning; added fields do not change it.
-const Version = 1
+// ProtocolVersion is the version of the plugin protocol, Request.Protocol: the
+// shape of the request and the response, and the rules for a plugin's files. A
+// plugin refuses a request whose Protocol it does not know.
+const ProtocolVersion = 1
+
+// ModelVersion is the version of the model's JSON, Model.Version. It changes
+// only when a field is removed or changes meaning; added fields do not change
+// it. A plugin refuses a model whose Version it does not know.
+const ModelVersion = 1
 
 // Request is what velox-gen writes to a plugin's standard input.
 type Request struct {
-	Protocol   int    `json:"plugin_protocol"` // the protocol version, [Version]; a plugin checks it
+	Protocol   int    `json:"plugin_protocol"` // the protocol version, [ProtocolVersion]; a plugin checks it
 	OutPackage string `json:"out_package"`     // the generated package's name
+	OutPath    string `json:"out_path"`        // the generated package's import path
 	Model      *Model `json:"model"`
 }
 
@@ -30,7 +34,7 @@ type File struct {
 
 // Model is the resolved model of a schema package, as velox-gen generates it.
 type Model struct {
-	Version    int       `json:"version"`     // the version of the model's JSON, [Version]
+	Version    int       `json:"version"`     // the version of the model's JSON, [ModelVersion]
 	SchemaPath string    `json:"schema_path"` // the schema package's import path
 	Entities   []*Entity `json:"entities"`    // the schemas', then the join entities', each sorted by Name
 	Enums      []*Enum   `json:"enums"`       // sorted by Type
@@ -44,7 +48,7 @@ type Entity struct {
 	Table       string                     `json:"table"`
 	Join        bool                       `json:"join,omitempty"`    // a many-to-many join entity
 	Comment     string                     `json:"comment,omitempty"` // the Comment annotation's text, for descriptions
-	Imports     []string                   `json:"imports"`           // the import paths of its fields' Go types, sorted
+	Imports     []string                   `json:"imports"`           // the generated file's imports besides velox and the schema package, check code's included (errors, regexp, ...), sorted; paths only, no qualifiers
 	Fields      []*Field                   `json:"fields"`            // Fields[0] is the ID
 	Edges       []*Edge                    `json:"edges"`
 	PrimaryKey  []int                      `json:"primary_key"` // indexes into Fields

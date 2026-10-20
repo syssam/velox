@@ -192,11 +192,11 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 	}
 	// The plugins run after velox-gen's own files are built and before
 	// anything is written.
-	pfiles, err := pluginFiles(f, gm, pattern, dir, pkg, env)
+	pfiles, owners, err := pluginFiles(f, gm, pattern, dir, pkg, env)
 	if err != nil {
 		return fail(err)
 	}
-	if err := mergePluginFiles(dir, want, pfiles); err != nil {
+	if err := mergePluginFiles(dir, want, pfiles, owners); err != nil {
 		return fail(err)
 	}
 	// Nothing is written before every path is known to be velox-gen's.
@@ -300,7 +300,7 @@ func runGenerateVerify(f genFlags, pattern, dir string, env []string, stdout, st
 	}
 	// The plugins' Go files are compiled with the package, as they are on
 	// disk; they must be the files the plugins write now.
-	pfiles, err := pluginFiles(f, gm, pattern, dir, pkg, env)
+	pfiles, _, err := pluginFiles(f, gm, pattern, dir, pkg, env)
 	if err != nil {
 		return fail(err)
 	}

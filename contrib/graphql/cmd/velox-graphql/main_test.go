@@ -32,11 +32,11 @@ func request(t *testing.T, r plugin.Request) string {
 }
 
 func TestRun(t *testing.T) {
-	m := &plugin.Model{Version: plugin.Version, Entities: []*plugin.Entity{{
+	m := &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
 		Name: "User", Tenant: -1, PrimaryKey: []int{0},
 		Fields: []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64"}, {Name: "name", GoName: "Name", Type: "string"}},
 	}}}
-	resp := respond(t, request(t, plugin.Request{Protocol: plugin.Version, OutPackage: "gen", Model: m}))
+	resp := respond(t, request(t, plugin.Request{Protocol: plugin.ProtocolVersion, OutPackage: "gen", Model: m}))
 	if resp.Error != "" || len(resp.Files) != 1 || resp.Files[0].Path != "velox.graphqls" ||
 		!strings.Contains(resp.Files[0].Content, "type User implements Node {\n") || strings.Contains(resp.Files[0].Content, "DO NOT EDIT") {
 		t.Errorf("%+v", resp)

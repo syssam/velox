@@ -107,6 +107,37 @@ type gqlEnum struct {
 	field  string // the field it is the type of
 }
 
+// reserveGoNames records the Go names velox-gen declares in the generated
+// package besides the ones the SDL derives its types from: each schema's
+// handles variable (Users), each entity's type (join entities have no
+// GraphQL type, and a schema's name is free only for itself), and each enum
+// type, whether or not the SDL declares an enum for it.
+func (g *graph) reserveGoNames(m *plugin.Model) {
+	for _, e := range m.Entities {
+		kind := "schema"
+		if e.Join {
+			kind = "join entity"
+		}
+		g.types.reserve(e.Name, "the Go type of "+kind+" "+e.Name)
+		g.types.reserve(e.Handles, "the handles variable of "+kind+" "+e.Name)
+	}
+	for _, en := range m.Enums {
+		g.types.reserve(en.Type, "the Go enum type "+en.Type+enumOwner(m, en.Type))
+	}
+}
+
+// enumOwner says whose field the enum type is, as ", of schema S, field f".
+func enumOwner(m *plugin.Model, typ string) string {
+	for _, e := range m.Entities {
+		for _, f := range e.Fields {
+			if f.Enum == typ {
+				return " of schema " + e.Name + ", field " + f.Name
+			}
+		}
+	}
+	return ""
+}
+
 // connArgs are the arguments of a connection to t's nodes: paging, and
 // orderBy and where when t has an order and a where input.
 func connArgs(t *object) string {
@@ -124,6 +155,7 @@ func build(m *plugin.Model) (*graph, error) {
 	for _, en := range m.Enums {
 		g.goEnums[en.Type] = true
 	}
+	g.reserveGoNames(m)
 	ents := slices.SortedStableFunc(slices.Values(m.Entities), func(a, b *plugin.Entity) int { return cmp.Compare(a.Name, b.Name) })
 
 	// A foreign-key field bound to an edge is in no type and no input: the
@@ -163,8 +195,12 @@ func build(m *plugin.Model) (*graph, error) {
 		case !validName(e.Name):
 			return nil, fmt.Errorf("%s: %q is not a GraphQL name; name the type with graphql.Type", where, e.Name)
 		}
-		for _, n := range []string{o.name, o.name + "Connection", o.name + "Edge"} {
-			if err := g.types.add(n, where); err != nil {
+		for i, n := range []string{o.name, o.name + "Connection", o.name + "Edge"} {
+			add := g.types.add
+			if i == 0 && o.name == e.Name {
+				add = g.types.addGo // the schema's own Go type
+			}
+			if err := add(n, where); err != nil {
 				return nil, err
 			}
 		}
@@ -431,7 +467,11 @@ func (g *graph) fieldType(o *object, f *plugin.Field, a graphql.Annotation, wher
 		if !validName(name) {
 			return "", fmt.Errorf("%s: the enum name %q is not a GraphQL name", where, name)
 		}
-		if err := g.types.add(name, where); err != nil {
+		add := g.types.add
+		if g.goEnums[f.Enum] {
+			add = g.types.addGo // velox-gen's own Go enum type
+		}
+		if err := add(name, where); err != nil {
 			return "", err
 		}
 		o.enums = append(o.enums, gqlEnum{name: name, values: values, field: f.Name})
@@ -656,7 +696,8 @@ func (w *writer) field(f gqlField) {
 }
 
 const vocabulary = `# The vocabulary of velox's GraphQL types: the scalars, Node, PageInfo and
-# OrderDirection, bound to Go by contrib/graphql/veloxgql, and gqlgen's @goField.
+# OrderDirection, bound to Go by contrib/graphql/veloxgql, and gqlgen's @goField
+# and @goModel, as gqlgen documents them.
 
 """A time, as an RFC 3339 string."""
 scalar Time
@@ -676,7 +717,9 @@ scalar Uint64
 """An opaque cursor for paging through a connection."""
 scalar Cursor
 
-directive @goField(forceResolver: Boolean, name: String, omittable: Boolean) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION
+directive @goField(forceResolver: Boolean, name: String, omittable: Boolean, type: String) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION
+
+directive @goModel(model: String, models: [String!], forceGenerate: Boolean) on OBJECT | INPUT_OBJECT | SCALAR | ENUM | INTERFACE | UNION
 
 """An object with a global ID."""
 interface Node {

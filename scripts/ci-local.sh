@@ -61,8 +61,8 @@ bin/velox-gen verify -out internal/testmodel ./internal/testmodel/schema
   go test -race -count=1 ./...
 )
 
-# contrib/graphql is its own module too: the annotations package, and later the
-# plugin and runtime.
+# contrib/graphql is its own module too: the annotations package and the
+# velox-graphql plugin, and later the runtime.
 (
   cd contrib/graphql
   test -z "$(gofmt -l .)" || { echo "gofmt needed in contrib/graphql:"; gofmt -l .; exit 1; }

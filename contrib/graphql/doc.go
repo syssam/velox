@@ -58,11 +58,17 @@
 // velox-graphql removes the file on the next run.
 //
 // The SDL binds to Go by gqlgen's @goField directive (a node's id to IDGQL, an
-// edge to <Edge>GQL) and by enum names (velox-gen's Go enum types). It is
-// valid GraphQL today, but the Go it binds to is not written yet: the Go
-// bindings (IDs, cursors, connections, the edge methods) and the runtime
-// package arrive with the next plans, and until then gqlgen cannot load the
-// application from this SDL alone.
+// edge to <Edge>GQL) and by enum names (velox-gen's Go enum types).
+// velox.graphqls declares the directives @goField and @goModel itself, as
+// gqlgen documents them (gqlgen v0.17.86, docs/content/config.md), so the
+// application must not redeclare them: a second declaration fails gqlgen's
+// load. Any other directive, @goTag for one, the application declares in its
+// own schema files.
+//
+// The SDL is valid GraphQL today, but the Go it binds to is not written yet:
+// the Go bindings (IDs, cursors, connections, the edge methods) and the
+// runtime package arrive with the next plans, and until then gqlgen cannot
+// load the application from this SDL alone.
 //
 // The annotation reaches the plugin as JSON under the key "graphql" of the
 // element's annotations; the plugin decodes an Annotation from it. The JSON

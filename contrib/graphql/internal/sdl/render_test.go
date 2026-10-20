@@ -166,7 +166,7 @@ func edge(name, kind, target string) *plugin.Edge {
 }
 
 func model(es ...*plugin.Entity) *plugin.Model {
-	return &plugin.Model{Version: plugin.Version, Entities: es}
+	return &plugin.Model{Version: plugin.ModelVersion, Entities: es}
 }
 
 // load renders m and loads the SDL with gqlparser, with others beside it.
@@ -784,7 +784,8 @@ func TestVocabulary(t *testing.T) {
 	_, sdl := load(t, model(entity("User")))
 	for _, want := range []string{
 		"scalar Time\n", "scalar UUID\n", "scalar Bytes\n", "scalar JSON\n", "scalar Uint64\n", "scalar Cursor\n",
-		"directive @goField(forceResolver: Boolean, name: String, omittable: Boolean) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION\n",
+		"directive @goField(forceResolver: Boolean, name: String, omittable: Boolean, type: String) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION\n",
+		"directive @goModel(model: String, models: [String!], forceGenerate: Boolean) on OBJECT | INPUT_OBJECT | SCALAR | ENUM | INTERFACE | UNION\n",
 		"interface Node {\n", "  id: ID!\n",
 		"type PageInfo {\n", "  hasNextPage: Boolean!\n", "  hasPreviousPage: Boolean!\n", "  startCursor: Cursor\n", "  endCursor: Cursor\n",
 		"enum OrderDirection {\n  ASC\n  DESC\n}\n",

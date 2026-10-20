@@ -2,6 +2,7 @@ package sdl
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/syssam/velox2/contrib/graphql"
@@ -200,6 +201,47 @@ func TestNameCollisions(t *testing.T) {
 		{"enum and entity", model(entity("User", &plugin.Field{Name: "role", GoName: "Role", Type: "enum", EnumValues: []string{"a"}}), entity("UserRole")), []string{"schema User, field role", "schema UserRole", "UserRole"}},
 	} {
 		t.Run(c.name, func(t *testing.T) { renderErr(t, c.m, c.wants...) })
+	}
+
+	// A type may not take a Go name velox-gen declares in the generated
+	// package, where gqlgen's autobind would bind the type to it.
+	handled := func(e *plugin.Entity, handles string) *plugin.Entity {
+		e.Handles = handles
+		return e
+	}
+	join := handled(entity("UserGroup"), "UserGroups")
+	join.Join = true
+	role := func(skip ...graphql.SkipMode) *plugin.Field {
+		f := &plugin.Field{Name: "role", GoName: "Role", Type: "enum", Enum: "UserRole", EnumValues: []string{"a"}}
+		if len(skip) > 0 {
+			f.Annotations = ann(t, graphql.Skip(skip...))
+		}
+		return f
+	}
+	withEnum := func(m *plugin.Model) *plugin.Model {
+		m.Enums = []*plugin.Enum{{Type: "UserRole", Values: []string{"a"}}}
+		return m
+	}
+	hidden := handled(entity("Hidden"), "Hiddens")
+	hidden.Annotations = ann(t, graphql.Skip(graphql.SkipType))
+	for _, c := range []struct {
+		name  string
+		m     *plugin.Model
+		wants []string
+	}{
+		{"handles", model(handled(entity("User"), "Users"), renamed("Article", "Users")), []string{"schema Article", "schema User", "Users", "handles"}},
+		{"join entity", model(handled(entity("User"), "Users"), join, renamed("Article", "UserGroup")), []string{"schema Article", "join entity UserGroup"}},
+		{"a name the schema gave up", model(renamed("User", "Person"), renamed("Article", "User")), []string{"schema Article", "schema User", "User"}},
+		{"a schema without a type", model(hidden, renamed("Article", "Hidden")), []string{"schema Article", "schema Hidden", "Hidden"}},
+		{"enum type", withEnum(model(handled(entity("User", role()), "Users"), renamed("Article", "UserRole"))), []string{"schema Article", "schema User, field role", "UserRole"}},
+		{"enum type of a skipped enum", withEnum(model(handled(entity("User", role(graphql.SkipEnumField)), "Users"), renamed("Article", "UserRole"))), []string{"schema Article", "schema User, field role", "UserRole"}},
+	} {
+		t.Run("Go name, "+c.name, func(t *testing.T) { renderErr(t, c.m, c.wants...) })
+	}
+	// A type and an enum take their own Go names.
+	_, sdl := load(t, withEnum(model(handled(entity("User", role()), "Users"), join)))
+	if !strings.Contains(sdl, "enum UserRole {") || !strings.Contains(sdl, "type User implements Node {") {
+		t.Errorf("own Go names:\n%s", sdl)
 	}
 
 	// Input fields that collide: a field named like another's predicate.

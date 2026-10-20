@@ -15,7 +15,7 @@ import (
 // read-only. o must be the result of lowering g.
 func PluginModel(g *Graph, o *Out) *plugin.Model {
 	m := &plugin.Model{
-		Version:    plugin.Version,
+		Version:    plugin.ModelVersion,
 		SchemaPath: o.SchemaPath,
 		Entities:   make([]*plugin.Entity, 0, len(o.Entities)),
 		Enums:      make([]*plugin.Enum, 0, len(o.Enums)),

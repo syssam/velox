@@ -37,15 +37,17 @@
 // -plugin names a generator plugin, a tool of your module that "go tool" runs
 // in the module directory (go get -tool example.com/some/velox-graphql, then
 // -plugin velox-graphql); repeat it for several. A plugin reads a JSON request
-// on standard input, {"plugin_protocol": 1, "out_package": name, "model": the
-// resolved model, see package github.com/syssam/velox2/plugin}, and writes
+// on standard input, {"plugin_protocol": 1, "out_package": name, "out_path": the
+// package's import path, "model": the resolved model, see package
+// github.com/syssam/velox2/plugin}, and writes
 // {"files": [{"path": name, "content": text}], "error": text} to standard
 // output. Each path is a file name, no directory, ending in .go or .graphqls,
 // in -out; velox-gen puts its header in front of the content, so the plugin's
 // files are checked, rewritten and, when the plugin is dropped from the
 // command, deleted like its own. A non-empty error, a non-zero exit, a path
 // that is not a file name of those kinds, one that velox-gen or another plugin
-// writes, or a file of yours at it, fails the run before anything is written.
+// writes (names that differ only in case are one file), or a file of yours at
+// it, fails the run before anything is written.
 //
 // verify builds a program in a temporary .velox-verify-* directory of your
 // module, imports the generated package and reports, for every entity, the

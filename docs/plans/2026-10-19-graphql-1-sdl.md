@@ -34,7 +34,7 @@
   - velox-gen adds the header; a plugin's content does not include it.
   - velox-gen writes, checks, and removes as stale only files that start with their header.
 - **The plugin protocol.**
-  - The request is JSON `{"plugin_protocol": 1, "out_package": "<name>", "model": <plugin.Model>}` on stdin.
+  - The request is JSON `{"plugin_protocol": 1, "out_package": "<name>", "out_path": "<import path>", "model": <plugin.Model>}` on stdin.
   - The response is JSON `{"files": [{"path": "<rel>", "content": "<text>"}], "error": "<text>"}` on stdout.
   - Paths are relative to `-out`, with no directory part in v1, and end in `.go` or `.graphqls`.
   - A non-empty `error`, a non-zero exit or an invalid path fails the run, and nothing is written.
@@ -42,7 +42,7 @@
 - **CI.**
   - `scripts/ci-local.sh` and `.github/workflows/ci.yml` match line for line.
   - The new module `contrib/graphql` gets vet, golangci-lint v2.14.0 and race tests in both.
-- **No machine-specific paths** in committed files. Set `GOCACHE=/private/tmp/claude-501/velox2-gocache` and `GOFLAGS=-p=2` only in the shell.
+- **No machine-specific paths** in committed files. Set a scratch `GOCACHE` and `GOFLAGS=-p=2` only in the shell.
 - **Commits** end with a blank line and `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Never push.
 
 ## Rulings this plan makes on the spec
@@ -59,7 +59,7 @@
    - enums;
    - raw annotations.
 
-   Its JSON is versioned (`plugin.Version = 1`). A test pins its JSON for the blog test model, as a golden file.
+   Its JSON is versioned (`plugin.ModelVersion = 1`; the protocol has its own, `plugin.ProtocolVersion = 1`). A test pins its JSON for the blog test model, as a golden file.
 4. **The annotation is one struct, `graphql.Annotation`,** named `"graphql"`, implementing `schema.Merger`. The constructors return it, so one `Annotations()` list may hold several, and they merge.
 
 ## Review Focus
@@ -86,10 +86,12 @@
 **Interfaces:**
 - Produces, in package `plugin`:
   ```go
-  const Version = 1
+  const ProtocolVersion = 1 // Request.Protocol
+  const ModelVersion = 1    // Model.Version
   type Request struct {
       Protocol   int    `json:"plugin_protocol"`
       OutPackage string `json:"out_package"`
+      OutPath    string `json:"out_path"` // the generated package's import path
       Model      *Model `json:"model"`
   }
   type Response struct {
@@ -185,7 +187,7 @@
     - a non-zero exit;
     - malformed JSON;
     - an unknown tool name.
-  - `TestPluginRequest`: the fake writes the request it received to a file. It has `plugin_protocol` 1, `out_package` `gen`, and the model's entities.
+  - `TestPluginRequest`: the fake writes the request it received to a file. It has `plugin_protocol` 1, `out_package` `gen`, `out_path` the import path of the `gen` package, and the model's entities.
   - `TestVerifyCompilesPluginGo`: a fake Go file that does not compile makes `verify` fail and name it.
 - [ ] **Step 2: Run** `go -C cmd/velox-gen test -run 'TestPlugin|TestVerifyCompilesPluginGo' ./...`. Expected: FAIL (flag provided but not defined: `-plugin`).
 - [ ] **Step 3: Implement.**
@@ -343,7 +345,7 @@
   - **Input rules:**
     - immutable fields are left out of `UpdateXInput`;
     - fields with a default (Default or DefaultFunc) are optional in `CreateXInput`;
-    - a field with `UpdateDefault` and no create-time default is left out of both;
+    - a field with `UpdateDefault` and no create-time default is left out of `UpdateXInput` (the `UpdateDefault` fills it). In `CreateXInput` it is required when it is not nullable, because nothing fills it on insert, and left out when it is nullable;
     - `CreateInput(false)`/`UpdateInput(false)` leave a field out;
     - the tenant column and implicit foreign keys are never inputs; their edges stand for them;
     - an update input with no fields gets no type, and its `updateX` is not written.

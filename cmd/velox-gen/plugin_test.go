@@ -12,20 +12,21 @@ import (
 )
 
 // pluginModule is genModule with the fake plugin (testdata/fakeplugin) added
-// as a tool of the module.
+// as two tools of the module, fakeplugin and fakeplugin2, which answer to
+// their own settings.
 func pluginModule(t *testing.T) string {
 	t.Helper()
 	src, err := os.ReadFile(filepath.Join("testdata", "fakeplugin", "main.go"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	dir := genModule(t, map[string]string{"fakeplugin/main.go": string(src)})
+	dir := genModule(t, map[string]string{"fakeplugin/main.go": string(src), "fakeplugin2/main.go": string(src)})
 	gomod := filepath.Join(dir, "go.mod")
 	b, err := os.ReadFile(gomod)
 	if err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, gomod, string(b)+"\ntool example.com/app/fakeplugin\n")
+	writeFile(t, gomod, string(b)+"\ntool example.com/app/fakeplugin\ntool example.com/app/fakeplugin2\n")
 	return dir
 }
 
@@ -160,14 +161,16 @@ func TestPluginPathsAreChecked(t *testing.T) {
 		{"empty", ""},
 		{"velox-gen's own file", "user_velox.go"},
 		{"velox-gen's package file", "velox.go"},
+		{"velox-gen's own file in another case", "User_velox.go"},
+		{"velox-gen's package file in another case", "Velox.go"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			env := fakeEnv(filesEnv(t, plugin.File{Path: c.path, Content: "package gen\n"}))
 			code, out, errs := veloxEnv(t, dir, env, "-plugin", "fakeplugin", "./schema")
 			want := "velox-gen: plugin fakeplugin: "
-			if strings.HasSuffix(c.path, "velox.go") { // a collision, found after the plugins ran
-				want = "velox-gen: plugin file gen/" + c.path + " collides"
+			if strings.HasSuffix(strings.ToLower(c.path), "velox.go") { // a collision, found after the plugins ran
+				want += "gen/" + c.path + " collides with gen/" + strings.ToLower(c.path) + ", which velox-gen writes"
 			}
 			if code != 1 || out != "" || !strings.HasPrefix(errs, want) {
 				t.Errorf("%d %q %q", code, out, errs)
@@ -198,6 +201,28 @@ func TestPluginPathsAreChecked(t *testing.T) {
 			t.Errorf("wrote %v", got)
 		}
 	})
+
+	// Two different plugins write one file, or two that differ only in case,
+	// which a case-insensitive file system takes for one.
+	for _, c := range []struct {
+		name, first, second, want string
+	}{
+		{"same name", "a.go", "a.go", "velox-gen: plugin fakeplugin2: a.go is also written by plugin fakeplugin\n"},
+		{"other case", "A.go", "a.go", "velox-gen: plugin fakeplugin2: a.go is also written by plugin fakeplugin as A.go: names that differ only in case are one file\n"},
+		{"graphqls", "velox.graphqls", "Velox.graphqls", "velox-gen: plugin fakeplugin2: Velox.graphqls is also written by plugin fakeplugin as velox.graphqls: names that differ only in case are one file\n"},
+	} {
+		t.Run("two plugins, "+c.name, func(t *testing.T) {
+			file := func(name string) string { return filesEnv(t, plugin.File{Path: name, Content: "x\n"}) }
+			env := fakeEnv(file(c.first), "FAKEPLUGIN2_"+file(c.second)[len("FAKEPLUGIN_"):])
+			code, out, errs := veloxEnv(t, dir, env, "-plugin", "fakeplugin", "-plugin", "fakeplugin2", "./schema")
+			if code != 1 || out != "" || errs != c.want {
+				t.Errorf("%d %q %q", code, out, errs)
+			}
+			if got := names(t, gen); len(got) != 0 {
+				t.Errorf("wrote %v", got)
+			}
+		})
+	}
 
 	t.Run("a file without the header", func(t *testing.T) {
 		const mine = "# not generated\n"
@@ -249,7 +274,7 @@ func TestPluginRequest(t *testing.T) {
 	if err := json.Unmarshal([]byte(read(t, dump)), &raw); err != nil {
 		t.Fatal(err)
 	}
-	for _, k := range []string{"plugin_protocol", "out_package", "model"} {
+	for _, k := range []string{"plugin_protocol", "out_package", "out_path", "model"} {
 		if _, ok := raw[k]; !ok {
 			t.Errorf("the request has no %q: %v", k, raw)
 		}
@@ -258,8 +283,15 @@ func TestPluginRequest(t *testing.T) {
 	if err := json.Unmarshal([]byte(read(t, dump)), &req); err != nil {
 		t.Fatal(err)
 	}
-	if req.Protocol != 1 || req.OutPackage != "gen" || req.Model == nil {
+	if req.Protocol != 1 || req.OutPackage != "gen" || req.OutPath != "example.com/app/gen" || req.Model == nil {
 		t.Fatalf("request: %+v", req)
+	}
+	// The import path is of the output directory, which does not exist yet.
+	if code, _, errs := veloxEnv(t, dir, fakeEnv("FAKEPLUGIN_DUMP="+dump), "-out", "internal/api", "-plugin", "fakeplugin", "./schema"); code != 0 {
+		t.Fatalf("%d %q", code, errs)
+	}
+	if err := json.Unmarshal([]byte(read(t, dump)), &req); err != nil || req.OutPackage != "api" || req.OutPath != "example.com/app/internal/api" {
+		t.Errorf("-out internal/api: %v, %q %q", err, req.OutPackage, req.OutPath)
 	}
 	var got []string
 	for _, e := range req.Model.Entities {

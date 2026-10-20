@@ -19,6 +19,7 @@ func blogInputs(t *testing.T) *plugin.Model {
 	created := &plugin.Field{Name: "created_at", GoName: "CreatedAt", Type: "time", Immutable: true, HasDefault: true}
 	updated := &plugin.Field{Name: "updated_at", GoName: "UpdatedAt", Type: "time", HasDefault: true, UpdateDefault: true}
 	editedBy := &plugin.Field{Name: "edited_by", GoName: "EditedBy", Type: "string", UpdateDefault: true}
+	touched := &plugin.Field{Name: "touched", GoName: "Touched", Type: "time", Nullable: true, Optional: true, UpdateDefault: true}
 	org := field("org_id", "int64")
 	secret := &plugin.Field{Name: "secret", GoName: "Secret", Type: "string", Sensitive: true}
 	handle := &plugin.Field{Name: "handle", GoName: "Handle", Type: "string", Immutable: true}
@@ -34,8 +35,8 @@ func blogInputs(t *testing.T) *plugin.Model {
 	skipped := field("skipped", "string")
 	skipped.Annotations = ann(t, graphql.Skip())
 	bestFriend := &plugin.Field{Name: "user_best_friend", GoName: "UserBestFriend", Type: "int64", Nullable: true, Optional: true, Implicit: "best_friend"}
-	user := entity("User", name, nickname, role, created, updated, editedBy, org, secret, handle, views, notes, hidden, createOnly, skipped, bestFriend)
-	user.Tenant = 7
+	user := entity("User", name, nickname, role, created, updated, editedBy, touched, org, secret, handle, views, notes, hidden, createOnly, skipped, bestFriend)
+	user.Tenant = 8 // org_id
 	user.Annotations = ann(t, graphql.Mutations(graphql.Create(), graphql.Update(), graphql.Delete()))
 	posts := edge("posts", "O2M", "Post")
 	posts.Field, posts.FieldOn = "author_id", "Post"
@@ -80,6 +81,9 @@ func TestInputs(t *testing.T) {
 	}{
 		{"CreateUserInput", []string{
 			"name: String!", "nickname: String", "role: UserRole", "createdAt: Time", "updatedAt: Time",
+			// editedBy has only an UpdateDefault and is not nullable: nothing
+			// fills it on insert, so it is required. touched is nullable: out.
+			"editedBy: String!",
 			"secret: String!", "handle: String!", "notes: String", "hidden: String!", "createOnly: String!",
 			"postIDs: [ID!]", "membershipIDs: [ID!]", "profileID: ID", "bestFriendID: ID",
 		}},
@@ -173,15 +177,44 @@ func TestInputs(t *testing.T) {
 
 	t.Run("explicit inputs", func(t *testing.T) {
 		// CreateInput(true) brings back a field the rules leave out.
-		by := &plugin.Field{Name: "edited_by", GoName: "EditedBy", Type: "string", UpdateDefault: true}
+		by := &plugin.Field{Name: "edited_by", GoName: "EditedBy", Type: "string", Nullable: true, Optional: true, UpdateDefault: true}
 		by.Annotations = ann(t, graphql.CreateInput(true))
 		u := entity("User", by)
 		u.Annotations = ann(t, graphql.Mutations(graphql.Create()))
 		s, _ := load(t, model(u))
-		// Only a Default makes a create field optional: velox fills an
-		// UpdateDefault on update only.
-		if got := fieldsOf(s, "CreateUserInput"); !slices.Equal(got, []string{"editedBy: String!"}) {
+		if got := fieldsOf(s, "CreateUserInput"); !slices.Equal(got, []string{"editedBy: String"}) {
 			t.Errorf("CreateUserInput: %v", got)
+		}
+	})
+
+	// An UpdateDefault fills a field on update, and only a field that is not
+	// nullable has nothing to fill it on insert: that one is required on
+	// create and stays out of update; UpdateInput(true) brings it in.
+	t.Run("update default", func(t *testing.T) {
+		for _, c := range []struct {
+			name           string
+			nullable       bool
+			ann            []graphql.Annotation
+			create, update []string
+		}{
+			{"required", false, nil, []string{"title: String!", "editedBy: String!"}, []string{"title: String"}},
+			{"nullable", true, nil, []string{"title: String!"}, []string{"title: String"}},
+			{"required, update input", false, []graphql.Annotation{graphql.UpdateInput(true)}, []string{"title: String!", "editedBy: String!"}, []string{"title: String", "editedBy: String"}},
+			{"required, no create input", false, []graphql.Annotation{graphql.CreateInput(false)}, []string{"title: String!"}, []string{"title: String"}},
+		} {
+			t.Run(c.name, func(t *testing.T) {
+				by := &plugin.Field{Name: "edited_by", GoName: "EditedBy", Type: "string", Nullable: c.nullable, Optional: c.nullable, UpdateDefault: true}
+				by.Annotations = ann(t, c.ann...)
+				u := entity("Post", field("title", "string"), by)
+				u.Annotations = ann(t, graphql.Mutations(graphql.Create(), graphql.Update()))
+				s, sdl := load(t, model(u))
+				if got := fieldsOf(s, "CreatePostInput"); !slices.Equal(got, c.create) {
+					t.Errorf("CreatePostInput:\n got %v\nwant %v\n%s", got, c.create, sdl)
+				}
+				if got := fieldsOf(s, "UpdatePostInput"); !slices.Equal(got, c.update) {
+					t.Errorf("UpdatePostInput:\n got %v\nwant %v\n%s", got, c.update, sdl)
+				}
+			})
 		}
 	})
 }
@@ -247,6 +280,7 @@ func TestEdgeInputsFollowTheKey(t *testing.T) {
 
 	// An O2O whose key the other entity holds: User.profile, with the key
 	// Profile.user_id.
+	required := false // User.profile is a required edge
 	o2o := func(flags func(f *plugin.Field)) *plugin.Model {
 		uid := field("user_id", "int64")
 		flags(uid)
@@ -258,6 +292,7 @@ func TestEdgeInputsFollowTheKey(t *testing.T) {
 		user := entity("User", field("name", "string"))
 		pe := edge("profile", "O2O", "Profile")
 		pe.Field, pe.FieldOn = "user_id", "Profile"
+		pe.Required = required
 		user.Edges = []*plugin.Edge{pe}
 		user.Annotations = ann(t, graphql.Mutations(graphql.Create(), graphql.Update()))
 		return model(profile, user)
@@ -273,7 +308,15 @@ func TestEdgeInputsFollowTheKey(t *testing.T) {
 			[]string{"name: String!", "profileID: ID"}, []string{"name: String", "profileID: ID"}},
 		{"O2O immutable", func(f *plugin.Field) { f.Immutable = true },
 			[]string{"name: String!"}, []string{"name: String"}},
+		// A required edge whose key is on the target's row: create must give
+		// the target, and update may move it but not clear it, whatever the
+		// key's nullability.
+		{"O2O required edge, nullable key", func(f *plugin.Field) {
+			f.Nullable, f.Optional = true, true
+			required = true
+		}, []string{"name: String!", "profileID: ID!"}, []string{"name: String", "profileID: ID"}},
 	} {
+		required = false
 		t.Run(c.name, func(t *testing.T) {
 			s, sdl := load(t, o2o(c.flags))
 			if got := fieldsOf(s, "CreateUserInput"); !slices.Equal(got, c.create) {

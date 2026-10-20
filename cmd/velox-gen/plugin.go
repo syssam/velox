@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
@@ -29,37 +30,46 @@ func (p *pluginFlag) Set(name string) error {
 
 // runPlugins runs each plugin, in order, as "go tool name" in modDir with the
 // request on its standard input, and returns their files by path relative to
-// the output directory, with the header of their kind in front. The run fails,
-// naming the plugin, when a plugin cannot be run, exits non-zero, answers
-// something that is not a response, reports an error, or names a path that is
-// not a file of the output directory (a bare name ending in .go or .graphqls),
-// or one that another plugin has written. A plugin's stderr is shown only
-// when it fails.
-func runPlugins(names []string, modDir, outPkg string, m *plugin.Model, env []string) (map[string][]byte, error) {
-	req, err := json.Marshal(plugin.Request{Protocol: plugin.Version, OutPackage: outPkg, Model: m})
+// the output directory, with the header of their kind in front, and the plugin
+// that wrote each. The run fails, naming the plugin, when a plugin cannot be
+// run, exits non-zero, answers something that is not a response, reports an
+// error, or names a path that is not a file of the output directory (a bare
+// name ending in .go or .graphqls), or one that another plugin has written;
+// two names that differ only in case are one file, as they are on a
+// case-insensitive file system. A plugin's stderr is shown only when it fails.
+func runPlugins(names []string, modDir string, req plugin.Request, env []string) (files map[string][]byte, owners map[string]string, err error) {
+	body, err := json.Marshal(req)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	files := map[string][]byte{}
-	by := map[string]string{} // path → the plugin that wrote it
+	files, owners = map[string][]byte{}, map[string]string{}
+	by := map[string]string{} // folded name → the path that took it
 	for _, name := range names {
-		resp, err := runPlugin(name, modDir, req, env)
+		resp, err := runPlugin(name, modDir, body, env)
 		if err != nil {
-			return nil, fmt.Errorf("plugin %s: %w", name, err)
+			return nil, nil, fmt.Errorf("plugin %s: %w", name, err)
 		}
 		for _, f := range resp.Files {
 			if err := checkPluginPath(f.Path); err != nil {
-				return nil, fmt.Errorf("plugin %s: %w", name, err)
+				return nil, nil, fmt.Errorf("plugin %s: %w", name, err)
 			}
-			if other, ok := by[f.Path]; ok {
-				return nil, fmt.Errorf("plugin %s: %s is also written by plugin %s", name, f.Path, other)
+			if other, ok := by[fold(f.Path)]; ok {
+				if other == f.Path {
+					return nil, nil, fmt.Errorf("plugin %s: %s is also written by plugin %s", name, f.Path, owners[other])
+				}
+				return nil, nil, fmt.Errorf("plugin %s: %s is also written by plugin %s as %s: names that differ only in case are one file", name, f.Path, owners[other], other)
 			}
-			by[f.Path] = name
+			by[fold(f.Path)] = f.Path
+			owners[f.Path] = name
 			files[f.Path] = withHeader(f.Path, f.Content)
 		}
 	}
-	return files, nil
+	return files, owners, nil
 }
+
+// fold is the key two file names share when a case-insensitive file system
+// takes them for one.
+func fold(path string) string { return strings.ToLower(filepath.Base(path)) }
 
 // runPlugin runs one plugin and decodes its response.
 func runPlugin(name, modDir string, req []byte, env []string) (*plugin.Response, error) {
@@ -104,33 +114,106 @@ func withHeader(path, content string) []byte {
 }
 
 // pluginFiles runs f's plugins on the model of gm and returns their files by
-// absolute path. It runs them in the module of the schema package at pattern.
-func pluginFiles(f genFlags, gm *genModel, pattern, dir, pkg string, env []string) (map[string][]byte, error) {
+// absolute path, and the plugin that wrote each. It runs them in the module of
+// the schema package at pattern.
+func pluginFiles(f genFlags, gm *genModel, pattern, dir, pkg string, env []string) (files map[string][]byte, owners map[string]string, err error) {
 	if len(f.plugins) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	mod, err := moduleDir(dir, pattern, env)
 	if err != nil {
-		return nil, err
-	}
-	files, err := runPlugins(f.plugins, mod, pkg, gen.PluginModel(gm.graph, gm.out), env)
-	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	out := f.outDir(dir)
-	abs := make(map[string][]byte, len(files))
-	for name, data := range files {
-		abs[filepath.Join(out, name)] = data
+	outPath, err := dirImportPath(out, env)
+	if err != nil {
+		return nil, nil, err
 	}
-	return abs, nil
+	req := plugin.Request{Protocol: plugin.ProtocolVersion, OutPackage: pkg, OutPath: outPath, Model: gen.PluginModel(gm.graph, gm.out)}
+	rel, byPlugin, err := runPlugins(f.plugins, mod, req, env)
+	if err != nil {
+		return nil, nil, err
+	}
+	files, owners = make(map[string][]byte, len(rel)), make(map[string]string, len(rel))
+	for name, data := range rel {
+		files[filepath.Join(out, name)] = data
+		owners[filepath.Join(out, name)] = byPlugin[name]
+	}
+	return files, owners, nil
+}
+
+// dirImportPath is the import path of the directory out, which need not exist
+// yet: its path below the module that holds it, joined to the module's path.
+func dirImportPath(out string, env []string) (string, error) {
+	base, rest := out, ""
+	for {
+		if fi, err := os.Stat(base); err == nil && fi.IsDir() {
+			break
+		}
+		parent := filepath.Dir(base)
+		if parent == base {
+			return "", fmt.Errorf("the import path of %s: no directory above it exists", out)
+		}
+		rest, base = filepath.Join(filepath.Base(base), rest), parent
+	}
+	if r, err := filepath.EvalSymlinks(base); err == nil {
+		base = r
+	}
+	cmd := exec.Command("go", "list", "-m", "-f", "{{.Path}}\t{{.Dir}}")
+	cmd.Dir = base
+	if env != nil {
+		cmd.Env = env
+	}
+	var so, se bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &so, &se
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("the import path of %s: go list -m: %w\n%s", out, err, strings.TrimRight(se.String(), "\n"))
+	}
+	// A workspace lists several modules: the one that holds out is the
+	// deepest one above it.
+	best, path := "", ""
+	for line := range strings.SplitSeq(so.String(), "\n") {
+		mp, md, ok := strings.Cut(strings.TrimSpace(line), "\t")
+		if !ok || md == "" {
+			continue
+		}
+		if r, err := filepath.EvalSymlinks(md); err == nil {
+			md = r
+		}
+		if within(md, base) && len(md) > len(best) {
+			best, path = md, mp
+		}
+	}
+	if best == "" {
+		return "", fmt.Errorf("the import path of %s: it is not in a module", out)
+	}
+	sub, err := filepath.Rel(best, filepath.Join(base, rest))
+	if err != nil {
+		return "", err
+	}
+	if sub == "." {
+		return path, nil
+	}
+	return path + "/" + filepath.ToSlash(sub), nil
+}
+
+// within reports whether dir is root or below it.
+func within(root, dir string) bool {
+	rel, err := filepath.Rel(root, dir)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // mergePluginFiles adds the plugins' files to want and refuses one at a path
-// velox-gen writes itself.
-func mergePluginFiles(dir string, want, files map[string][]byte) error {
+// velox-gen writes itself, whatever the case of its name. owners names the
+// plugin that wrote each file.
+func mergePluginFiles(dir string, want, files map[string][]byte, owners map[string]string) error {
+	mine := make(map[string]string, len(want)) // folded path → the path velox-gen writes
+	for p := range want {
+		mine[fold(p)] = p
+	}
 	for _, p := range slices.Sorted(maps.Keys(files)) {
-		if _, ok := want[p]; ok {
-			return fmt.Errorf("plugin file %s collides with a file velox-gen writes", relPath(dir, p))
+		if own, ok := mine[fold(p)]; ok {
+			return fmt.Errorf("plugin %s: %s collides with %s, which velox-gen writes", owners[p], relPath(dir, p), relPath(dir, own))
 		}
 		want[p] = files[p]
 	}

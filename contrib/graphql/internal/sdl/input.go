@@ -103,13 +103,16 @@ func (g *graph) mutationsOf(o *object) error {
 //   - neither has the primary key, the tenant or a foreign key; the edges
 //     stand for the foreign keys;
 //   - neither has a field whose Skip leaves out the input, or that
-//     CreateInput(false) or UpdateInput(false) leaves out, or with an
-//     UpdateDefault and no Default unless CreateInput(true) or
-//     UpdateInput(true) brings it in;
+//     CreateInput(false) or UpdateInput(false) leaves out;
+//   - a field with an UpdateDefault and no Default is not in the update input
+//     (the UpdateDefault fills it), nor in the create input, unless it is not
+//     nullable, when nothing else fills it on insert: it is in the create
+//     input, and required; CreateInput(true) or UpdateInput(true) brings
+//     any such field into that input;
 //   - the update input has no immutable field or edge;
 //   - on create, a field is required unless it is nullable or has a Default
-//     (or DefaultFunc): an UpdateDefault fills on update only; a unique
-//     edge's ID is required when the edge is;
+//     (or DefaultFunc), so an UpdateDefault alone does not make it optional;
+//     a unique edge's ID is required when the edge is;
 //   - on update, every field is optional, and a nullable field can be
 //     cleared;
 //   - an edge to a type that is not a Node has no ID and is in neither;
@@ -128,7 +131,10 @@ func (g *graph) inputFields(o *object, typ string, create bool) ([]gqlField, err
 		case o.node && i == e.PrimaryKey[0], i == e.Tenant, f.Implicit != "", o.fks[f.Name], a.Skip&skip != 0, !create && f.Immutable:
 			continue
 		}
-		in := !f.UpdateDefault || f.HasDefault
+		// An UpdateDefault fills the field on update only: on create it is
+		// left out, unless nothing else fills it, which is a field that is
+		// not nullable and has no Default.
+		in := !f.UpdateDefault || f.HasDefault || create && !f.Nullable
 		if p := explicit(a); p != nil {
 			in = *p
 		}
@@ -182,8 +188,9 @@ func (g *graph) inputFields(o *object, typ string, create bool) ([]gqlField, err
 //     the other entity holds) re-points those rows: <edge>IDs, or
 //     add/remove/clear on update; an O2O sets <edge>ID, and clears it on
 //     update. A required (non-null) key cannot be cleared, so remove and
-//     clear are left out; an immutable key cannot be moved, so the edge has
-//     no input at all, on create too, where it would re-point existing rows;
+//     clear are left out, and so is clear<Edge> of a required edge; an
+//     immutable key cannot be moved, so the edge has no input at all, on
+//     create too, where it would re-point existing rows;
 //   - an immutable key on o's row is set on create only;
 //   - an M2M edge writes join rows: <edge>IDs, add/remove/clear;
 //   - an edge to a type that is not a Node has no ID and no input. When that
@@ -244,7 +251,7 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]gqlField, error) {
 			typ = "ID!"
 		}
 		out = []gqlField{{name: name + "ID", typ: typ}}
-		if !create && nullable {
+		if !create && nullable && !ed.Required {
 			out = append(out, gqlField{name: "clear" + upper(name), typ: "Boolean"})
 		}
 	case create:

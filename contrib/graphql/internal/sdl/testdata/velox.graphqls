@@ -1,5 +1,6 @@
 # The vocabulary of velox's GraphQL types: the scalars, Node, PageInfo and
-# OrderDirection, bound to Go by contrib/graphql/veloxgql, and gqlgen's @goField.
+# OrderDirection, bound to Go by contrib/graphql/veloxgql, and gqlgen's @goField
+# and @goModel, as gqlgen documents them.
 
 """A time, as an RFC 3339 string."""
 scalar Time
@@ -19,7 +20,9 @@ scalar Uint64
 """An opaque cursor for paging through a connection."""
 scalar Cursor
 
-directive @goField(forceResolver: Boolean, name: String, omittable: Boolean) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION
+directive @goField(forceResolver: Boolean, name: String, omittable: Boolean, type: String) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION
+
+directive @goModel(model: String, models: [String!], forceGenerate: Boolean) on OBJECT | INPUT_OBJECT | SCALAR | ENUM | INTERFACE | UNION
 
 """An object with a global ID."""
 interface Node {
@@ -311,6 +314,8 @@ input CreatePostInput {
   publishedAt: Time
   tags: JSON
   rating: Float
+  """Who last edited the post; the update default fills it."""
+  editedBy: String!
   writerID: ID!
 }
 

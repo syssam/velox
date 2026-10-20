@@ -175,6 +175,32 @@ Left by the observability plan:
 - An ambiguous write (a timeout after commit, a scan error on `RETURNING`) does not pin its session, though it may have committed: a stale read within the window is possible. Spec §3 pins on a write that succeeded.
 - The itest's CI guard keys on the generic `CI=true`, which a contributor's extra job without databases would trip, loudly. A velox-specific variable would be safer.
 
+## Left by GraphQL plan 1
+
+- A plugin's stderr is dropped when it succeeds, so a plugin cannot warn.
+- A plugin takes no options (protoc's `--x_opt`).
+- The extension allowlist (`.go`, `.graphqls`) will need `.proto` for the gRPC plugin.
+- An entity with an auto ID gets no `id`/`idIn` filters: there is no field to annotate.
+- `Create()`, `Update()` and `Delete()` read oddly as package-level calls; `MutationCreate()` or constants would match entgql.
+- File names that Go ignores or build-constrains (`_x.go`, `x_linux.go`) pass the plugin path check.
+- "No such tool" is not pinned by a test, and the error has no `go get -tool` hint.
+- Untested or weak: the inverse join edge; the blog loader is duplicated in two tests; the round-trip test is weak.
+- `Directive.Args` maps are shared between merged annotations.
+- The `Op` constants lack doc comments.
+- The deps test admits `schema/...` subpackages; tighten it to the exact package.
+- A lone `\r` in a description is not normalized.
+- `childrenIDs` where entgql has `childIDs`: frozen, because `plugin.Singular` names join columns.
+
+## For GraphQL plan 2
+
+- Bind `Node` to a velox Go interface: gqlgen's type switch fails to compile without one.
+- One `JSON` scalar cannot autobind `[]string`, map and struct fields at once.
+- `Uint64` is documented as a decimal string, but gqlgen's built-in marshals a number; `uint8`/`uint16`/`uint32` under `Int` need marshalers.
+- The Go input and connection types take the GraphQL names (`CreateAccountInput`), not the entity's.
+- A connection method's parameters follow `connArgs` order, which varies by target.
+- A custom-Go-type enum binds with `@goModel` to the type's import path; `plugin.Field` needs the Go type's package path for it.
+- No test yet of a custom enum on a renamed entity; add it with the `@goModel` binding.
+
 ## 1.0 release
 
 - The repo needs a `README.md` and a `LICENSE`.
