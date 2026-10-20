@@ -16,7 +16,10 @@
 // # The DB
 //
 // Generated code runs its queries on the DB that DBFrom reads from the
-// request's context, where WithDB puts it.
+// request's context, where WithDB puts it. Handler is the gqlgen handler
+// extension that does so for every operation, and runs a mutation operation
+// in one transaction: it commits when the response has no errors, and rolls
+// back otherwise or on a panic.
 //
 // # Cursors
 //

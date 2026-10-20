@@ -1,0 +1,433 @@
+package veloxgql_test
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"slices"
+	"strings"
+	"sync"
+	"testing"
+
+	"github.com/99designs/gqlgen/graphql"
+	"github.com/99designs/gqlgen/graphql/handler"
+	"github.com/99designs/gqlgen/graphql/handler/transport"
+	"github.com/vektah/gqlparser/v2"
+	"github.com/vektah/gqlparser/v2/ast"
+	"github.com/vektah/gqlparser/v2/gqlerror"
+
+	"github.com/syssam/velox2"
+	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+)
+
+// handlerSDL is the schema of the handler's tests.
+const handlerSDL = `
+type Query {
+	count: Int!
+	hasDB: Boolean!
+}
+type Mutation {
+	add(id: Int!): Int!
+	fail(id: Int!): Int
+	boom(id: Int!): Int
+	cancel(id: Int!): Int!
+}
+type Subscription {
+	count: Int!
+}
+`
+
+// resolver resolves a root field from its arguments.
+type resolver func(ctx context.Context, args map[string]any) (any, error)
+
+// testSchema is an executable schema of handlerSDL that runs resolvers as
+// gqlgen's generated code does: one response, whose root fields run in
+// selection order through the operation's field middleware, with a
+// resolver's error or panic added to the response's errors and its field
+// null. A subscription sends two events, each resolving its fields again,
+// and ends.
+func testSchema(resolvers map[string]resolver) graphql.ExecutableSchema {
+	schema := gqlparser.MustLoadSchema(&ast.Source{Input: handlerSDL})
+	return &graphql.ExecutableSchemaMock{
+		SchemaFunc: func() *ast.Schema { return schema },
+		ComplexityFunc: func(context.Context, string, string, int, map[string]any) (int, bool) {
+			return 0, false
+		},
+		ExecFunc: func(ctx context.Context) graphql.ResponseHandler {
+			opCtx := graphql.GetOperationContext(ctx)
+			events := 1
+			if opCtx.Operation.Operation == ast.Subscription {
+				events = 2
+			}
+			return func(ctx context.Context) *graphql.Response {
+				if events == 0 {
+					return nil
+				}
+				events--
+				var buf strings.Builder
+				buf.WriteByte('{')
+				for i, sel := range opCtx.Operation.SelectionSet {
+					f := sel.(*ast.Field)
+					v, _ := json.Marshal(resolveField(ctx, opCtx, f, resolvers[f.Name]))
+					if i > 0 {
+						buf.WriteByte(',')
+					}
+					fmt.Fprintf(&buf, "%q:%s", f.Alias, v)
+				}
+				buf.WriteByte('}')
+				return &graphql.Response{Data: json.RawMessage(buf.String())}
+			}
+		},
+	}
+}
+
+// resolveField runs one root field, as a generated field function does.
+func resolveField(ctx context.Context, opCtx *graphql.OperationContext, f *ast.Field, r resolver) (ret any) {
+	fc := &graphql.FieldContext{
+		Object:     f.ObjectDefinition.Name,
+		Field:      graphql.CollectedField{Field: f},
+		Args:       f.ArgumentMap(opCtx.Variables),
+		IsMethod:   true,
+		IsResolver: true,
+	}
+	ctx = graphql.WithFieldContext(ctx, fc)
+	defer func() {
+		if p := recover(); p != nil {
+			graphql.AddError(ctx, opCtx.Recover(ctx, p))
+			ret = nil
+		}
+	}()
+	res, err := opCtx.ResolverMiddleware(ctx, func(ctx context.Context) (any, error) {
+		return r(ctx, fc.Args)
+	})
+	if err != nil {
+		graphql.AddError(ctx, err)
+		return nil
+	}
+	return res
+}
+
+// txLog records what a DB runs: each statement, "insert" or "select" with
+// " in tx" when it ran in a transaction, and how each transaction ended.
+type txLog struct {
+	mu    sync.Mutex
+	stmts []string
+	txs   []string
+}
+
+func (l *txLog) around(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+	s := st.Op.String()
+	if st.InTx {
+		s += " in tx"
+	}
+	l.mu.Lock()
+	l.stmts = append(l.stmts, s)
+	l.mu.Unlock()
+	return next(ctx)
+}
+
+func (l *txLog) txAround(ctx context.Context, tx *velox.TxInfo, next func(context.Context) error) error {
+	defer func() {
+		l.mu.Lock()
+		l.txs = append(l.txs, tx.Outcome.String())
+		l.mu.Unlock()
+	}()
+	return next(ctx)
+}
+
+// take returns what was recorded, and forgets it.
+func (l *txLog) take() (stmts, txs []string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	stmts, txs = l.stmts, l.txs
+	l.stmts, l.txs = nil, nil
+	return stmts, txs
+}
+
+// handlerDB opens an empty in-memory people table through velox, with
+// hooks that record into the returned log.
+func handlerDB(t *testing.T) (*velox.DB, *txLog) {
+	t.Helper()
+	sqlDB, err := sql.Open("sqlite", "file::memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	sqlDB.SetMaxOpenConns(1) // an in-memory database lives as long as its one connection
+	if _, err := sqlDB.Exec(`CREATE TABLE people (id INTEGER PRIMARY KEY, name TEXT NOT NULL, age INTEGER NOT NULL)`); err != nil {
+		t.Fatal(err)
+	}
+	l := &txLog{}
+	return velox.Open(velox.SQLite, sqlDB, velox.WithAround(l.around), velox.WithTxAround(l.txAround)), l
+}
+
+// errFail is the error of the fail field.
+var errFail = errors.New("fail failed")
+
+// handlerServer serves testSchema through veloxgql.Handler(db). Its
+// resolvers read the DB with DBFrom: add inserts a person and returns its
+// id; fail and boom insert one and then fail with errFail or panic; cancel
+// inserts one, calls the cancel function set in *cancel, and returns its
+// id; count counts the people; hasDB reports whether the context holds db
+// itself.
+func handlerServer(t *testing.T, db *velox.DB, cancel *context.CancelFunc) *handler.Server {
+	t.Helper()
+	insert := func(ctx context.Context, args map[string]any) (int64, error) {
+		tx, err := veloxgql.DBFrom(ctx)
+		if err != nil {
+			return 0, err
+		}
+		id := args["id"].(int64)
+		return id, tx.Insert(&person{ID: id, Name: "p", Age: 1}).Exec(ctx)
+	}
+	count := func(ctx context.Context, _ map[string]any) (any, error) {
+		db, err := veloxgql.DBFrom(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return db.Query[person]().Count(ctx)
+	}
+	srv := handler.New(testSchema(map[string]resolver{
+		"count": count,
+		"hasDB": func(ctx context.Context, _ map[string]any) (any, error) {
+			got, err := veloxgql.DBFrom(ctx)
+			return got == db, err
+		},
+		"add": func(ctx context.Context, args map[string]any) (any, error) {
+			return insert(ctx, args)
+		},
+		"fail": func(ctx context.Context, args map[string]any) (any, error) {
+			if _, err := insert(ctx, args); err != nil {
+				return nil, err
+			}
+			return nil, errFail
+		},
+		"boom": func(ctx context.Context, args map[string]any) (any, error) {
+			if _, err := insert(ctx, args); err != nil {
+				return nil, err
+			}
+			panic("boom")
+		},
+		"cancel": func(ctx context.Context, args map[string]any) (any, error) {
+			id, err := insert(ctx, args)
+			(*cancel)()
+			return id, err
+		},
+	}))
+	srv.AddTransport(transport.SSE{})
+	srv.AddTransport(transport.POST{})
+	srv.SetRecoverFunc(func(context.Context, any) error { return gqlerror.Errorf("internal system error") })
+	srv.Use(veloxgql.Handler(db))
+	return srv
+}
+
+// post sends query to srv as a JSON POST on ctx and returns the body.
+func post(t *testing.T, ctx context.Context, srv http.Handler, query string) string {
+	t.Helper()
+	body, _ := json.Marshal(map[string]string{"query": query})
+	r := httptest.NewRequestWithContext(ctx, http.MethodPost, "/", strings.NewReader(string(body)))
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, r)
+	return w.Body.String()
+}
+
+// peopleIDs returns the ids in the people table, read on db outside any
+// transaction.
+func peopleIDs(t *testing.T, db *velox.DB, l *txLog) []int64 {
+	t.Helper()
+	rows, err := db.Query[person]().OrderBy(people.ID.Asc()).Unbounded().All(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.take()
+	out := []int64{}
+	for _, r := range rows {
+		out = append(out, r.ID)
+	}
+	return out
+}
+
+func TestHandlerPutsTheDB(t *testing.T) {
+	db, l := handlerDB(t)
+	srv := handlerServer(t, db, nil)
+	if got, want := post(t, context.Background(), srv, `{ hasDB }`), `{"data":{"hasDB":true}}`; got != want {
+		t.Errorf("query: %s, want %s", got, want)
+	}
+	// A mutation's resolvers get the transaction's DB, not db.
+	if got, want := post(t, context.Background(), srv, `mutation { add(id: 1) }`), `{"data":{"add":1}}`; got != want {
+		t.Errorf("mutation: %s, want %s", got, want)
+	}
+	if stmts, _ := l.take(); !slices.Equal(stmts, []string{"insert in tx"}) {
+		t.Errorf("mutation statements %q, want one insert in a transaction", stmts)
+	}
+
+	// Without the handler, a resolver fails with ErrNoDB.
+	bare := handler.New(testSchema(map[string]resolver{"hasDB": func(ctx context.Context, _ map[string]any) (any, error) {
+		_, err := veloxgql.DBFrom(ctx)
+		if !errors.Is(err, veloxgql.ErrNoDB) {
+			t.Errorf("DBFrom without the handler: %v, want ErrNoDB", err)
+		}
+		return nil, err
+	}}))
+	bare.AddTransport(transport.POST{})
+	if got := post(t, context.Background(), bare, `{ hasDB }`); !strings.Contains(got, "veloxgql.Handler") {
+		t.Errorf("without the handler: %s, want an error naming veloxgql.Handler", got)
+	}
+}
+
+func TestHandlerNilDB(t *testing.T) {
+	defer func() {
+		if p := recover(); p == nil || !strings.Contains(fmt.Sprint(p), "nil DB") {
+			t.Errorf("Use(Handler(nil)) panicked with %v, want an error naming the nil DB", p)
+		}
+	}()
+	handler.New(testSchema(nil)).Use(veloxgql.Handler(nil))
+}
+
+func TestMutationCommits(t *testing.T) {
+	db, l := handlerDB(t)
+	srv := handlerServer(t, db, nil)
+	got := post(t, context.Background(), srv, `mutation { a: add(id: 1) b: add(id: 2) }`)
+	if want := `{"data":{"a":1,"b":2}}`; got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
+	// Both root fields ran in the one transaction, which committed.
+	stmts, txs := l.take()
+	if !slices.Equal(stmts, []string{"insert in tx", "insert in tx"}) || !slices.Equal(txs, []string{"commit"}) {
+		t.Errorf("statements %q, transactions %q; want two inserts in one committed transaction", stmts, txs)
+	}
+	if ids := peopleIDs(t, db, l); !slices.Equal(ids, []int64{1, 2}) {
+		t.Errorf("people %v, want [1 2]", ids)
+	}
+}
+
+func TestMutationRollsBack(t *testing.T) {
+	for _, c := range []struct {
+		name, query, want string
+	}{
+		{
+			"error",
+			`mutation { fail(id: 1) }`,
+			`{"errors":[{"message":"fail failed","path":["fail"]}],"data":null}`,
+		},
+		{
+			"panic",
+			`mutation { boom(id: 1) }`,
+			`{"errors":[{"message":"internal system error","path":["boom"]}],"data":null}`,
+		},
+		{
+			// A field that succeeds is rolled back with the one that fails,
+			// and its data is not reported.
+			"partial",
+			`mutation { a: add(id: 1) b: fail(id: 2) c: add(id: 3) }`,
+			`{"errors":[{"message":"fail failed","path":["b"]}],"data":null}`,
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			db, l := handlerDB(t)
+			srv := handlerServer(t, db, nil)
+			if got := post(t, context.Background(), srv, c.query); got != c.want {
+				t.Errorf("got %s, want %s", got, c.want)
+			}
+			if _, txs := l.take(); !slices.Equal(txs, []string{"rollback"}) {
+				t.Errorf("transactions %q, want one rolled back", txs)
+			}
+			if ids := peopleIDs(t, db, l); len(ids) != 0 {
+				t.Errorf("people %v, want none", ids)
+			}
+		})
+	}
+}
+
+// TestMutationCommitFails: a mutation whose resolvers succeed but whose
+// transaction does not commit, here because the request was canceled, keeps
+// nothing and says so.
+func TestMutationCommitFails(t *testing.T) {
+	db, l := handlerDB(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	srv := handlerServer(t, db, &cancel)
+	got := post(t, ctx, srv, `mutation { cancel(id: 1) }`)
+	if want := `{"errors":[{"message":"velox: transaction: context canceled"}],"data":null}`; got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
+	if _, txs := l.take(); !slices.Equal(txs, []string{"error"}) {
+		t.Errorf("transactions %q, want one that failed", txs)
+	}
+	if ids := peopleIDs(t, db, l); len(ids) != 0 {
+		t.Errorf("people %v, want none", ids)
+	}
+}
+
+// TestMutationPanicRollsBack: a panic gqlgen does not recover, here in a
+// response interceptor inside the handler's, rolls the transaction back and
+// carries on to the server, which reports it.
+func TestMutationPanicRollsBack(t *testing.T) {
+	db, l := handlerDB(t)
+	srv := handlerServer(t, db, nil)
+	srv.AroundResponses(func(ctx context.Context, next graphql.ResponseHandler) *graphql.Response {
+		resp := next(ctx)
+		if resp != nil {
+			panic("after the response")
+		}
+		return resp
+	})
+	got := post(t, context.Background(), srv, `mutation { add(id: 1) }`)
+	if want := `{"errors":[{"message":"internal system error"}],"data":null}`; got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
+	if _, txs := l.take(); !slices.Equal(txs, []string{"rollback"}) {
+		t.Errorf("transactions %q, want one rolled back", txs)
+	}
+	if ids := peopleIDs(t, db, l); len(ids) != 0 {
+		t.Errorf("people %v, want none", ids)
+	}
+}
+
+func TestQueryHasNoTx(t *testing.T) {
+	db, l := handlerDB(t)
+	srv := handlerServer(t, db, nil)
+	if got, want := post(t, context.Background(), srv, `{ count }`), `{"data":{"count":0}}`; got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
+	if stmts, txs := l.take(); !slices.Equal(stmts, []string{"select"}) || len(txs) != 0 {
+		t.Errorf("statements %q, transactions %q; want one select outside a transaction", stmts, txs)
+	}
+}
+
+// TestStreamedOperations: over SSE, which asks for responses until there are
+// none, a mutation still runs in one transaction, and a subscription gets
+// the DB with no transaction: each event's statements run on db.
+func TestStreamedOperations(t *testing.T) {
+	db, l := handlerDB(t)
+	srv := handlerServer(t, db, nil)
+	sse := func(query string) string {
+		t.Helper()
+		body, _ := json.Marshal(map[string]string{"query": query})
+		r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(string(body)))
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("Accept", "text/event-stream")
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, r)
+		return w.Body.String()
+	}
+	got := sse(`mutation { add(id: 1) }`)
+	if want := "event: next\ndata: {\"data\":{\"add\":1}}\n\n"; !strings.Contains(got, want) {
+		t.Errorf("mutation: %q, want it to hold %q", got, want)
+	}
+	if stmts, txs := l.take(); !slices.Equal(stmts, []string{"insert in tx"}) || !slices.Equal(txs, []string{"commit"}) {
+		t.Errorf("mutation: statements %q, transactions %q; want one insert in one committed transaction", stmts, txs)
+	}
+	got = sse(`subscription { count }`)
+	if want := "event: next\ndata: {\"data\":{\"count\":1}}\n\n"; strings.Count(got, want) != 2 {
+		t.Errorf("subscription: %q, want two events %q", got, want)
+	}
+	if stmts, txs := l.take(); !slices.Equal(stmts, []string{"select", "select"}) || len(txs) != 0 {
+		t.Errorf("subscription: statements %q, transactions %q; want two selects outside a transaction", stmts, txs)
+	}
+}
