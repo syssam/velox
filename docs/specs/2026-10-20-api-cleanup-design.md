@@ -66,14 +66,21 @@ The reviews also agreed on what stays:
 
 ## 3. Schema DSL and velox-gen
 
-1. **One nullability rule, ent's (call, corrected 2026-10-20).** It follows old velox and ent exactly:
+1. **One nullability rule, old velox's (call, corrected 2026-10-20).** It follows old velox (`compiler/gen/type_field.go`, `Column`):
    - `Nillable()` means a pointer Go field, a NULL-able column and a `Null*` handle. It is valid on its own.
-   - `Optional()` means the field need not be given on create. The column is NULL-able, the Go field stays a value type, and NULL reads back as the zero value.
+   - `Optional()` means the field need not be given on create. The column stays NOT NULL and the Go field a value type. An unset field writes its `Default`, or its zero value. Validators skip the zero value, which means unset.
+   - The exception is an `Optional` JSON field: its column is NULL-able, because a slice or map has no natural zero value. NULL decodes to nil.
    - `Optional().Nillable()` means both.
    - A `Default` never changes the Go type.
-   - A `Default` on a bool or number field that is not `Nillable` is refused, because a zero value cannot be told from unset.
-   - The plugin model's `Pointer` is Nillable, and its `Nullable` is Optional || Nillable.
-   - The first version of this rule tied Nillable to Optional. It was withdrawn because it broke ent ports.
+   - These are refused:
+     - a `Default` on a bool or number field that is not `Nillable`;
+     - an `Optional` enum that has neither a `Default` nor `Nillable`;
+     - an `Optional` edge field that is not `Nillable`.
+   - A field that is unique only when present needs `Nillable`.
+   - In the plugin model, `Pointer` is Nillable, and `Nullable` is Nillable || (Optional && JSON).
+   - Two earlier versions were withdrawn:
+     - the first tied Nillable to Optional;
+     - the second made every Optional column NULL-able, which is ent's rule but not old velox's.
 2. **velox-gen joins the root module (call).** It imports `internal/gen`, so a separate module breaks when velox2 is upgraded alone. `go get -tool github.com/syssam/velox2/cmd/velox-gen` keeps working.
 3. **Plugin protocol 2 and model 2, one bump, before gRPC (call).**
    - The request carries `Generator` and `Options` (`-plugin velox-grpc:go_package=x/pb`).
