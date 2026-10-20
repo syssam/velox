@@ -33,18 +33,13 @@
 // Time, UUID, Bytes, JSON, Uint64 and Cursor are the GraphQL scalars of
 // those names, and OrderDirection the enum: each implements gqlgen's
 // graphql.Marshaler and graphql.Unmarshaler. PageInfo is the object type,
-// which gqlgen binds by its fields. Map them in gqlgen.yml:
-//
-//	models:
-//	  Node:           {model: github.com/syssam/velox2/contrib/graphql/veloxgql.Noder}
-//	  Time:           {model: github.com/syssam/velox2/contrib/graphql/veloxgql.Time}
-//	  UUID:           {model: github.com/syssam/velox2/contrib/graphql/veloxgql.UUID}
-//	  Bytes:          {model: github.com/syssam/velox2/contrib/graphql/veloxgql.Bytes}
-//	  JSON:           {model: github.com/syssam/velox2/contrib/graphql/veloxgql.JSON}
-//	  Uint64:         {model: github.com/syssam/velox2/contrib/graphql/veloxgql.Uint64}
-//	  Cursor:         {model: github.com/syssam/velox2/contrib/graphql/veloxgql.Cursor}
-//	  OrderDirection: {model: github.com/syssam/velox2/contrib/graphql/veloxgql.OrderDirection}
-//	  PageInfo:       {model: github.com/syssam/velox2/contrib/graphql/veloxgql.PageInfo}
+// which gqlgen binds by its fields. The function marshalers MarshalTime,
+// MarshalUUID, MarshalBytes, MarshalUint64, MarshalUint and MarshalFloat32,
+// with their Unmarshal functions, bind the scalars to the Go types velox
+// entities hold (time.Time, uuid.UUID, []byte, uint64, uint, float32): gqlgen
+// prefers a model's function marshalers to its type. The gqlgen.yml models
+// that map each scalar are in the documentation of package
+// github.com/syssam/velox2/contrib/graphql.
 //
 // Uint64 is a decimal string on the wire both ways, since a JSON number loses
 // precision above 2^53 in many clients.

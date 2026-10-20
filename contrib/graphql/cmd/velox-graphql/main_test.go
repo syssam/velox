@@ -60,9 +60,10 @@ func TestRun(t *testing.T) {
 			Fields: []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64"}, {Name: "x", GoName: "X", Type: "other"}},
 		}}}}), "User"},
 		"go": {request(t, plugin.Request{Protocol: 1, OutPackage: "gen", Model: &plugin.Model{Version: 1, Entities: []*plugin.Entity{{
-			Name: "Clock", Label: "clock", Handles: "Clocks", Tenant: -1, PrimaryKey: []int{0},
-			Fields: []*plugin.Field{{Name: "id", GoName: "ID", Type: "float64"}, {Name: "x", GoName: "X", Type: "string"}},
-		}}}}), "cannot be a GraphQL ID"},
+			Name: "Node", Label: "node", Handles: "Nodes", Tenant: -1, PrimaryKey: []int{0},
+			Fields:      []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64"}, {Name: "x", GoName: "X", Type: "string"}},
+			Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"type":"Vertex"}`)},
+		}}}}), "gql_node.go"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			resp := respond(t, c.in)

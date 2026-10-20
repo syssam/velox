@@ -220,7 +220,7 @@ type Post implements Node {
   slug: String!
   status: PostStatus!
   publishedAt: Time
-  tags: JSON!
+  tags: JSON! @goField(name: "TagsGQL")
   views: Int!
   rating: Float
   """Who last edited the post; the update default fills it."""
@@ -354,7 +354,7 @@ type Account implements Node @key(fields: "id") {
   avatar: Bytes
   quota: Uint64!
   active: Boolean!
-  settings: JSON
+  settings: JSON @goField(name: "SettingsGQL")
   """The posts the user wrote."""
   posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection! @goField(name: "PostsGQL") @cost(meta: {cached: true, ttl: null}, tags: ["list", "paged"], weight: 2.5)
   memberships: [Group!]! @goField(name: "GroupsGQL")

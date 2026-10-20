@@ -147,7 +147,7 @@ func Nodes(ctx context.Context, ids []string) ([]veloxgql.Noder, error) {
 			keysAccount = append(keysAccount, k)
 			atAccount = append(atAccount, i)
 		default:
-			return nil, fmt.Errorf("node: %w: the ID is of no Node type", veloxgql.ErrWrongIDType)
+			return nil, fmt.Errorf("nodes: %w: the ID is of no Node type", veloxgql.ErrWrongIDType)
 		}
 	}
 	out := make([]veloxgql.Noder, len(ids))

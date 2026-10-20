@@ -261,6 +261,7 @@ const e2eEvent = `package schema
 import (
 	"github.com/google/uuid"
 
+	"example.com/app/ids"
 	"example.com/app/levels"
 	"github.com/syssam/velox2/contrib/graphql"
 	"github.com/syssam/velox2/schema"
@@ -287,6 +288,37 @@ func (Event) Fields() []schema.Field {
 func (Event) Annotations() []schema.Annotation {
 	return []schema.Annotation{graphql.QueryField("events")}
 }
+
+// Owner's key is of a type from a package named ids, as Nodes's parameter
+// is; its other fields' Go types are the application's own, or JSON, and
+// bind through getters.
+type Owner struct{ schema.Schema }
+
+func (Owner) Fields() []schema.Field {
+	return []schema.Field{
+		field.Int64("id").GoType(ids.UserID(0)).Annotations(graphql.WhereOps(graphql.OpEQ)),
+		field.String("email").GoType(ids.Email("")).Optional().Nillable().Annotations(graphql.WhereOps(graphql.OpEQ)),
+		field.String("code").GoType(ids.Code("")),
+		field.Strings("tags"),
+		field.Bytes("blob").Optional(),
+		field.Float32("ratio"),
+		field.Enum("tier").GoType(levels.Level("")).Annotations(graphql.Skip(graphql.SkipEnumField)),
+	}
+}
+
+func (Owner) Annotations() []schema.Annotation {
+	return []schema.Annotation{graphql.QueryField("owners")}
+}
+`
+
+// e2eIDs is the package of Owner's own Go types.
+const e2eIDs = `package ids
+
+type (
+	UserID int64
+	Email  string
+	Code   string
+)
 `
 
 // e2eLevels is the package of Event's own enum type.
@@ -303,12 +335,12 @@ func TestGoCompiles(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
-	dir, run := app(t, map[string]string{"schema/schema.go": e2eSchema, "schema/event.go": e2eEvent, "levels/levels.go": e2eLevels})
+	dir, run := app(t, map[string]string{"schema/schema.go": e2eSchema, "schema/event.go": e2eEvent, "levels/levels.go": e2eLevels, "ids/ids.go": e2eIDs})
 	out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql", "./schema")
 	if err != nil {
 		t.Fatalf("generate: %v\n%s", err, out)
 	}
-	for _, name := range []string{"gql_node.go", "gql_user.go", "gql_post.go", "gql_group.go", "gql_category.go", "gql_event.go"} {
+	for _, name := range []string{"gql_node.go", "gql_user.go", "gql_post.go", "gql_group.go", "gql_category.go", "gql_event.go", "gql_owner.go"} {
 		if !strings.Contains(out, "gen/"+name+"\n") {
 			t.Errorf("no gen/%s in\n%s", name, out)
 		}
@@ -323,6 +355,29 @@ func TestGoCompiles(t *testing.T) {
 	for _, name := range []string{"gql_secret.go", "gql_user_group.go"} {
 		if _, err := os.Stat(filepath.Join(dir, "gen", name)); !os.IsNotExist(err) {
 			t.Errorf("%s: %v, want none: the type is skipped, or a join entity", name, err)
+		}
+	}
+	// The fields whose Go type does not bind to their scalar bind to getters.
+	sdlText, err := os.ReadFile(filepath.Join(dir, "gen", "velox.graphqls"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner, err := os.ReadFile(filepath.Join(dir, "gen", "gql_owner.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for field, getter := range map[string]string{"email: String": "EmailGQL() *string", "code: String!": "CodeGQL() string", "tags: JSON!": "TagsGQL() (veloxgql.JSON, error)", "tier: String!": "TierGQL() string"} {
+		method, _, _ := strings.Cut(getter, "(")
+		if !strings.Contains(string(sdlText), "  "+field+" @goField(name: \""+method+"\")\n") {
+			t.Errorf("no %s bound to %s in\n%s", field, method, sdlText)
+		}
+		if !strings.Contains(string(owner), "func (x *Owner) "+getter+" {") {
+			t.Errorf("no getter %s in\n%s", getter, owner)
+		}
+	}
+	for _, own := range []string{"  blob: Bytes\n", "  ratio: Float!\n"} {
+		if !strings.Contains(string(sdlText), own) {
+			t.Errorf("no %q, bound to the field as it is, in\n%s", own, sdlText)
 		}
 	}
 	if out, err := run("build", "./gen"); err != nil {

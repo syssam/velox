@@ -75,12 +75,14 @@ type object struct {
 	fanns  []graphql.Annotation // the annotations of ent.Fields, by index
 	eanns  []graphql.Annotation // the annotations of ent.Edges, by index
 	name   string               // the GraphQL type name
-	node   bool                 // a Node: its key is one column
+	node   bool                 // a Node: its key is one column, of a type an ID holds
+	key    string               // the Go type veloxgql encodes the key of a Node as; "" for none
 	dirs   []directive          // the type's directives
 	fields []gqlField           // fields, then edges
 	enums  []gqlEnum
 	fks    map[string]bool // the names of ent's foreign-key fields
 
+	getters  []Getter     // the getters gqlgen binds fields to
 	order    *order       // nil for none
 	hasWhere bool         // it has a where input
 	where    []gqlField   // the where input's fields
@@ -187,7 +189,8 @@ func build(m *plugin.Model) (*graph, error) {
 		if e.Join || a.Skip&graphql.SkipType != 0 {
 			continue
 		}
-		o := &object{ent: e, ann: a, name: e.Name, node: len(e.PrimaryKey) == 1, fks: fks[e.Name]}
+		o := &object{ent: e, ann: a, name: e.Name, key: keyBase(e), fks: fks[e.Name]}
+		o.node = o.key != ""
 		switch {
 		case a.Type != "" && !validName(a.Type):
 			return nil, fmt.Errorf("%s: graphql.Type(%q) is not a GraphQL name", where, a.Type)
@@ -346,7 +349,14 @@ func (g *graph) fill(o *object) error {
 			typ += "!"
 		}
 		var dirs []directive
-		if !strings.EqualFold(name, f.GoName) {
+		switch v := g.goValue(f, a); {
+		case !v.own:
+			// gqlgen binds a field only to the Go type of its scalar: a getter
+			// converts the field's own.
+			gt := Getter{Field: i, Method: f.GoName + "GQL", Returns: v.getter, Pkg: v.getterPkg}
+			o.getters = append(o.getters, gt)
+			dirs = append(dirs, bindTo(gt.Method))
+		case !strings.EqualFold(name, f.GoName):
 			// gqlgen binds a field to the Go field of its name, ignoring case.
 			dirs = append(dirs, bindTo(f.GoName))
 		}

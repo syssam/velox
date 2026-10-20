@@ -14,8 +14,8 @@ import (
 // veloxgql.Noder.
 func (*Group) IsNode() {}
 
-// IDGQL is the global ID of the Group, the GraphQL field id: of the type Group
-// and the key id.
+// IDGQL is the global ID of the Group, the GraphQL field id: the type Group and
+// the key id, encoded.
 func (x *Group) IDGQL() string { return veloxgql.EncodeID("Group", x.ID) }
 
 // MarshalGQL writes e as a GraphQL String, its stored value: the field

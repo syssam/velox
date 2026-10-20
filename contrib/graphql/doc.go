@@ -68,11 +68,65 @@
 // The plugin also writes the Go that gqlgen's autobind binds the SDL's types
 // to, in the generated package: gen/gql_<label>.go for each entity with a
 // type (IsNode and IDGQL on a Node, the connection, edge, order and where
-// types, each named after its GraphQL type, and the marshalers of velox-gen's
-// enum types), and gen/gql_node.go with Node and Nodes. They use the runtime
+// types, each named after its GraphQL type, the <Field>GQL getters, and the
+// marshalers of velox-gen's enum types), and gen/gql_node.go with Node and
+// Nodes. They use the runtime
 // package veloxgql. The connections' pages, the edge methods and the root
 // connection functions are not written yet, and until they are gqlgen cannot
 // load the application from this SDL alone.
+//
+// # gqlgen.yml
+//
+// gqlgen binds a field only to a scalar model of the field's own Go type, so
+// each scalar maps to a list of models, one for each Go type velox entities
+// hold: veloxgql's function marshalers (MarshalTime for time.Time, and so on)
+// and gqlgen's own for the narrow integers. A field of another Go type of the
+// application's, and a JSON field, binds to a generated <Field>GQL getter
+// that returns a type of the list. With autobind to the generated package:
+//
+//	autobind:
+//	  - <module>/gen
+//	models:
+//	  Node:
+//	    model: github.com/syssam/velox2/contrib/graphql/veloxgql.Noder
+//	  Int:
+//	    model:
+//	      - github.com/99designs/gqlgen/graphql.Int
+//	      - github.com/99designs/gqlgen/graphql.Int8
+//	      - github.com/99designs/gqlgen/graphql.Int16
+//	      - github.com/99designs/gqlgen/graphql.Int32
+//	      - github.com/99designs/gqlgen/graphql.Int64
+//	      - github.com/99designs/gqlgen/graphql.Uint8
+//	      - github.com/99designs/gqlgen/graphql.Uint16
+//	      - github.com/99designs/gqlgen/graphql.Uint32
+//	  Float:
+//	    model:
+//	      - github.com/99designs/gqlgen/graphql.FloatContext
+//	      - github.com/syssam/velox2/contrib/graphql/veloxgql.Float32
+//	  Uint64:
+//	    model:
+//	      - github.com/syssam/velox2/contrib/graphql/veloxgql.Uint64
+//	      - github.com/syssam/velox2/contrib/graphql/veloxgql.Uint
+//	  Time:
+//	    model: github.com/syssam/velox2/contrib/graphql/veloxgql.Time
+//	  UUID:
+//	    model: github.com/syssam/velox2/contrib/graphql/veloxgql.UUID
+//	  Bytes:
+//	    model: github.com/syssam/velox2/contrib/graphql/veloxgql.Bytes
+//	  JSON:
+//	    model: github.com/syssam/velox2/contrib/graphql/veloxgql.JSON
+//	  Cursor:
+//	    model: github.com/syssam/velox2/contrib/graphql/veloxgql.Cursor
+//	  OrderDirection:
+//	    model: github.com/syssam/velox2/contrib/graphql/veloxgql.OrderDirection
+//	  PageInfo:
+//	    model: github.com/syssam/velox2/contrib/graphql/veloxgql.PageInfo
+//
+// String, Boolean and ID keep gqlgen's own models. veloxgql.Time,
+// veloxgql.UUID, veloxgql.Bytes and veloxgql.Uint64 resolve to the function
+// marshalers of those names, which bind time.Time, uuid.UUID, []byte and
+// uint64; veloxgql.Uint and veloxgql.Float32 to MarshalUint and
+// MarshalFloat32.
 //
 // The annotation reaches the plugin as JSON under the key "graphql" of the
 // element's annotations; the plugin decodes an Annotation from it. The JSON

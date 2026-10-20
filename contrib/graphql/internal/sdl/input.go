@@ -44,7 +44,7 @@ func (g *graph) mutationsOf(o *object) error {
 		kind string
 	}{{update, "update"}, {del, "delete"}} {
 		if c.on && !o.node {
-			return fmt.Errorf("%s: graphql.Mutations lists %s, which takes an ID, and its key is %d columns: it is not a Node", where, c.kind, len(e.PrimaryKey))
+			return fmt.Errorf("%s: graphql.Mutations lists %s, which takes an ID, and %s: it is not a Node", where, c.kind, notNode(e))
 		}
 	}
 

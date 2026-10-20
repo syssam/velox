@@ -32,10 +32,10 @@ const (
 // package outPkg at the import path outPath, without the generated-file
 // header, which velox-gen adds. The output depends only on its arguments.
 //
-// It fails on a model sdl.Build refuses, a Node whose key has no ID (a key
-// that is not an integer, a string, a UUID or an enum), an import of the
-// application's Go types it cannot name, and a Go name it writes that
-// velox-gen also declares in the package.
+// It fails on a model sdl.Build refuses, an import of the application's Go
+// types it cannot name, and a Go name it writes that velox-gen also declares
+// in the package. Which types are Nodes, the Go types of where predicates
+// and which fields bind to getters are sdl.Build's to decide.
 func Render(m *plugin.Model, outPath, outPkg string) ([]plugin.File, error) {
 	if outPkg == "" {
 		return nil, fmt.Errorf("velox-graphql: the request names no generated package")
@@ -212,6 +212,11 @@ func (r *renderer) typeFile(t *sdl.Type) (plugin.File, error) {
 			return plugin.File{}, err
 		}
 	}
+	for _, g := range t.Getters {
+		if err := r.writeGetter(f, t, g); err != nil {
+			return plugin.File{}, err
+		}
+	}
 	for _, en := range t.Enums {
 		if err := r.writeEnum(f, t, en); err != nil {
 			return plugin.File{}, err
@@ -253,72 +258,104 @@ func (r *renderer) typeFile(t *sdl.Type) (plugin.File, error) {
 	return f.finish("gql_"+e.Label+".go", r.outPkg)
 }
 
-// keyBase is the Go type of a Node's key that veloxgql encodes and decodes:
-// the field's own type, or for a type of the application's the builtin type
-// it is made of, which the key converts to and from.
-func keyBase(e *plugin.Entity) (*plugin.Field, string, error) {
-	k := e.Fields[e.PrimaryKey[0]]
-	switch k.Type {
-	case "int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16", "uint32", "uint64":
-		return k, k.Type, nil
-	case "string", "enum":
-		return k, "string", nil
-	case "uuid":
-		return k, "[16]byte", nil
-	}
-	return nil, "", fmt.Errorf("schema %s: its key, of type %s, cannot be a GraphQL ID, which veloxgql encodes for an integer, a string or a UUID; leave the schema out of GraphQL with graphql.Skip()", e.Name, k.Type)
-}
-
 func (r *renderer) writeNode(f *file, t *sdl.Type) error {
 	e := t.Entity
-	k, base, err := keyBase(e)
-	if err != nil {
-		return err
-	}
+	k := e.Fields[e.PrimaryKey[0]]
 	v := "x." + k.GoName
-	if k.ElemType != base {
-		v = base + "(" + v + ")"
+	if elem := cmp.Or(k.ElemType, t.Key); elem != t.Key {
+		v = t.Key + "(" + v + ")"
 	}
 	f.doc("", fmt.Sprintf("IsNode marks %s as a GraphQL Node: gqlgen binds the interface Node to veloxgql.Noder.", e.Name))
 	f.p("func (*%s) IsNode() {}", e.Name)
 	f.p("")
-	f.doc("", fmt.Sprintf("IDGQL is the global ID of the %s, the GraphQL field id: of the type %s and the key %s.", e.Name, t.Name, k.Name))
+	f.doc("", fmt.Sprintf("IDGQL is the global ID of the %s, the GraphQL field id: the type %s and the key %s, encoded.", e.Name, t.Name, k.Name))
 	f.p("func (x *%s) IDGQL() string { return %s.EncodeID(%q, %s) }", e.Name, f.veloxgql(), t.Name, v)
 	f.p("")
 	return nil
 }
 
-// goType is the Go type of the field's values, as the generated package
-// names it: ElemType, with its package imported, or unqualified when it is
-// the generated package's own.
-func (r *renderer) goType(f *file, e *plugin.Entity, fd *plugin.Field) (string, error) {
-	q, name, ok := strings.Cut(fd.ElemType, ".")
+// writeGetter writes g, which returns its field as the Go type the field's
+// scalar binds to.
+func (r *renderer) writeGetter(f *file, t *sdl.Type, g sdl.Getter) error {
+	e := t.Entity
+	fd := e.Fields[g.Field]
+	ret, err := r.qualify(f, e, fd, g.Returns, g.Pkg)
+	if err != nil {
+		return err
+	}
+	if g.JSON() {
+		f.doc("", fmt.Sprintf("%s is the field %s as JSON, the GraphQL scalar it is: gqlgen binds the field to it.", g.Method, fd.Name))
+		f.p("func (x *%s) %s() (%s, error) {", e.Name, g.Method, ret)
+		f.p("	b, err := %s.Marshal(x.%s)", f.use("encoding/json", "json"), fd.GoName)
+		f.p("	return %s(b), err", ret)
+		f.p("}")
+		f.p("")
+		return nil
+	}
+	f.doc("", fmt.Sprintf("%s is the field %s as a %s, the Go type its GraphQL scalar binds to: gqlgen binds the field to it.", g.Method, fd.Name, ret))
+	if !fd.Pointer {
+		f.p("func (x *%s) %s() %s { return %s(x.%s) }", e.Name, g.Method, ret, ret, fd.GoName)
+		f.p("")
+		return nil
+	}
+	f.p("func (x *%s) %s() *%s {", e.Name, g.Method, ret)
+	f.p("	if x.%s == nil {", fd.GoName)
+	f.p("		return nil")
+	f.p("	}")
+	f.p("	v := %s(*x.%s)", ret, fd.GoName)
+	f.p("	return &v")
+	f.p("}")
+	f.p("")
+	return nil
+}
+
+// locals are the names the generated code declares inside its functions,
+// and the packages and builtins it names: an imported package of the
+// application's named one of them is imported under another name, so that
+// none shadows the other.
+var locals = map[string]bool{
+	"ctx": true, "id": true, "ids": true, "typ": true, "err": true, "k": true, "db": true, "x": true,
+	"rows": true, "by": true, "i": true, "j": true, "out": true, "c": true, "n": true, "e": true,
+	"s": true, "b": true, "w": true, "v": true, "o": true,
+	"context": true, "json": true, "errors": true, "fmt": true, "io": true, "velox": true, "veloxgql": true,
+	"any": true, "bool": true, "string": true, "int": true, "len": true, "make": true, "append": true,
+	"nil": true, "error": true, "true": true, "false": true,
+}
+
+// qualify is the Go type typ of the package at pkg, as the generated file
+// names it: typ as it is when it names no package, unqualified when pkg is
+// the generated package, else with pkg imported. The qualifier is typ's own,
+// the package's name, unless it is one of locals, when the import is named
+// <qualifier>pkg. With no pkg, the qualifier names one of the entity's
+// imports, as in a model from before plugin.Field.PkgPath.
+func (r *renderer) qualify(f *file, e *plugin.Entity, fd *plugin.Field, typ, pkg string) (string, error) {
+	q, name, ok := strings.Cut(typ, ".")
 	switch {
 	case !ok:
-		return fd.ElemType, nil
+		return typ, nil
 	case strings.ContainsAny(q, "[]*"):
-		return "", fmt.Errorf("schema %s, field %s: velox-graphql cannot name the Go type %s", e.Name, fd.Name, fd.ElemType)
+		return "", fmt.Errorf("schema %s, field %s: velox-graphql cannot name the Go type %s", e.Name, fd.Name, typ)
 	}
-	p := fd.PkgPath
-	if p == "" {
-		// An older model: the entity's import whose last element is the
-		// qualifier.
+	if pkg == "" {
 		for _, imp := range e.Imports {
 			if path.Base(imp) == q {
-				p = imp
+				pkg = imp
 			}
 		}
 	}
-	switch p {
+	switch pkg {
 	case "":
-		return "", fmt.Errorf("schema %s, field %s: the model gives no package for the Go type %s", e.Name, fd.Name, fd.ElemType)
+		return "", fmt.Errorf("schema %s, field %s: the model gives no package for the Go type %s", e.Name, fd.Name, typ)
 	case r.outPath:
 		return name, nil
 	}
-	if prev, ok := f.imports[p]; ok && prev != q {
-		return "", fmt.Errorf("schema %s, field %s: the package %s is named both %s and %s", e.Name, fd.Name, p, prev, q)
+	if prev, ok := f.imports[pkg]; ok {
+		return prev + "." + name, nil
 	}
-	return f.use(p, q) + "." + name, nil
+	if locals[q] && pkg != veloxPath && pkg != veloxgqlPath && !slices.Contains([]string{"context", "encoding/json", "errors", "fmt", "io"}, pkg) {
+		q += "pkg"
+	}
+	return f.use(pkg, q) + "." + name, nil
 }
 
 // writeEnum writes the marshalers of velox-gen's Go enum type of the field
@@ -494,13 +531,13 @@ func (r *renderer) writeWhere(f *file, t *sdl.Type) error {
 			case g == "logic":
 				f.doc("\t", "Not, And and Or combine filters: a node matches when it does not match Not, matches each of And, and matches one of Or.")
 			case w.Kind == sdl.WhereHas || w.Kind == sdl.WhereHasWith:
-				f.p("\t// The edge %s: whether it has a node, or one that matches.", e.Edges[w.Edge].Name)
+				f.doc("\t", fmt.Sprintf("The edge %s: whether it has a node, or one that matches.", named(e.Edges[w.Edge].Name, w.On)))
 			case w.Edge >= 0:
-				f.p("\t// Predicates on the edge %s, by the ID of its node.", e.Edges[w.Edge].Name)
+				f.doc("\t", fmt.Sprintf("Predicates on the edge %s, by the ID of its node.", named(e.Edges[w.Edge].Name, w.On)))
 			case w.IDs():
 				f.p("\t// Predicates on the ID.")
 			default:
-				f.p("\t// Predicates on the field %s.", e.Fields[w.Field].Name)
+				f.doc("\t", fmt.Sprintf("Predicates on the field %s.", named(e.Fields[w.Field].Name, w.On)))
 			}
 		}
 		f.p("\t%s %s", w.GoName, typ)
@@ -509,50 +546,27 @@ func (r *renderer) writeWhere(f *file, t *sdl.Type) error {
 	return nil
 }
 
-// whereType is the Go type of the where-input field w: the GraphQL type's
-// Go type, a pointer for one value and a slice for a list. A GraphQL ID is
-// a string; Time, UUID and Uint64 are veloxgql's; an Int, a Float, a String
-// or a Boolean is the field's builtin type (int8, float32, ...); an enum is
-// the field's Go enum type.
+// whereType is the Go type of the where-input field w: an input for not and
+// has<Edge>With, else w.GoType, a pointer for one value and a slice for a
+// list.
 func (r *renderer) whereType(f *file, t *sdl.Type, w sdl.WhereField) (string, error) {
 	switch w.Kind {
 	case sdl.WhereNot:
 		return "*" + t.Name + "WhereInput", nil
 	case sdl.WhereAnd, sdl.WhereOr:
 		return "[]*" + t.Name + "WhereInput", nil
-	case sdl.WhereHas:
-		return "*bool", nil
 	case sdl.WhereHasWith:
 		return "[]*" + w.Target + "WhereInput", nil
 	}
-	if w.Type == "Boolean" {
-		return "*bool", nil // IsNil, NotNil, and a bool field's predicates
+	var fd *plugin.Field
+	if w.Field >= 0 {
+		fd = t.Entity.Fields[w.Field]
+	} else {
+		fd = &plugin.Field{Name: w.On}
 	}
-	elem := "string"
-	if !w.IDs() {
-		fd := t.Entity.Fields[w.Field]
-		switch fd.Type {
-		case "string":
-		case "time":
-			elem = f.veloxgql() + ".Time"
-		case "uuid":
-			elem = f.veloxgql() + ".UUID"
-		case "uint", "uint64":
-			elem = f.veloxgql() + ".Uint64"
-		case "int", "int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "float32", "float64":
-			elem = fd.Type
-		case "enum":
-			if r.veloxEnums[fd.Enum] {
-				elem = fd.Enum
-				break
-			}
-			var err error
-			if elem, err = r.goType(f, t.Entity, fd); err != nil {
-				return "", err
-			}
-		default:
-			return "", fmt.Errorf("schema %s, field %s: a where predicate on a field of type %s, which velox-graphql has no Go type for", t.Entity.Name, fd.Name, fd.Type)
-		}
+	elem, err := r.qualify(f, t.Entity, fd, w.GoType, w.GoPkg)
+	if err != nil {
+		return "", err
 	}
 	if strings.HasPrefix(w.Type, "[") {
 		return "[]" + elem, nil
@@ -580,21 +594,20 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 		if !t.Node {
 			continue
 		}
-		k, base, err := keyBase(t.Entity)
-		if err != nil {
+		k := t.Entity.Fields[t.Entity.PrimaryKey[0]]
+		elem := cmp.Or(k.ElemType, t.Key)
+		nd := node{t: t, base: t.Key, conv: "k"}
+		var err error
+		if nd.key, err = r.qualify(f, t.Entity, k, elem, k.PkgPath); err != nil {
 			return plugin.File{}, err
 		}
-		nd := node{t: t, base: base, conv: "k"}
-		if nd.key, err = r.goType(f, t.Entity, k); err != nil {
-			return plugin.File{}, err
-		}
-		if k.ElemType != base {
+		if elem != t.Key {
 			nd.conv = nd.key + "(k)"
 		}
 		nodes = append(nodes, nd)
 	}
-	noType := func(indent string) {
-		f.p("%sreturn nil, %s.Errorf(\"node: %%w: the ID is of no Node type\", %s.ErrWrongIDType)", indent, f.use("fmt", "fmt"), vgql)
+	noType := func(fn, indent string) {
+		f.p("%sreturn nil, %s.Errorf(\"%s: %%w: the ID is of no Node type\", %s.ErrWrongIDType)", indent, f.use("fmt", "fmt"), fn, vgql)
 	}
 
 	if len(nodes) == 0 {
@@ -605,7 +618,7 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 		f.p("\tif _, err := %s.IDType(id); err != nil {", vgql)
 		f.p("\t\treturn nil, err")
 		f.p("\t}")
-		noType("\t")
+		noType("node", "\t")
 		f.p("}")
 	} else {
 		f.p("// Node returns the node with the global ID id, or nil when no row has its")
@@ -640,7 +653,7 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 			f.p("\t\treturn x, nil")
 		}
 		f.p("\t}")
-		noType("\t")
+		noType("node", "\t")
 		f.p("}")
 	}
 
@@ -660,7 +673,7 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 		f.p("\t\tif _, err := %s.IDType(id); err != nil {", vgql)
 		f.p("\t\t\treturn nil, err")
 		f.p("\t\t}")
-		noType("\t\t")
+		noType("nodes", "\t\t")
 		f.p("\t}")
 		f.p("\treturn []%s.Noder{}, nil", vgql)
 		f.p("}")
@@ -696,7 +709,7 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 		f.p("\t\t\tat%s = append(at%[1]s, i)", nd.t.Name)
 	}
 	f.p("\t\tdefault:")
-	noType("\t\t\t")
+	noType("nodes", "\t\t\t")
 	f.p("\t\t}")
 	f.p("\t}")
 	f.p("\tout := make([]%s.Noder, len(ids))", vgql)
@@ -746,4 +759,13 @@ func orList(vs []string) string {
 		return strings.Join(vs, "")
 	}
 	return strings.Join(vs[:len(vs)-1], ", ") + " or " + vs[len(vs)-1]
+}
+
+// named is a schema element's name, with its GraphQL name when that differs:
+// "name (displayName)".
+func named(name, gql string) string {
+	if gql == "" || gql == name {
+		return name
+	}
+	return name + " (" + gql + ")"
 }

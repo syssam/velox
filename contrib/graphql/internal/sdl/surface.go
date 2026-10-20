@@ -1,6 +1,7 @@
 package sdl
 
 import (
+	"fmt"
 	"slices"
 
 	"github.com/syssam/velox2/contrib/graphql"
@@ -22,8 +23,16 @@ type Type struct {
 	// and XWhereInput are named after it.
 	Name string
 	// Node reports whether the type implements Node: its key is one column,
-	// whose ID is the field id.
+	// of a type an ID holds (an integer, a string, a UUID or an enum), whose
+	// ID is the field id.
 	Node bool
+	// Key is, for a Node, the Go type veloxgql encodes and decodes its key as:
+	// the key field's builtin type ("int64", "string"), or "[16]byte" for a
+	// UUID. A key of another Go type converts to and from it.
+	Key string
+	// Getters are the methods gqlgen binds fields to whose own Go type does
+	// not bind to their scalar, in the model's field order.
+	Getters []Getter
 	// Enums are the enum fields in GraphQL, in the model's field order.
 	Enums []Enum
 	// Order are the values of XOrderField, in the model's field order; nil
@@ -48,6 +57,20 @@ type Enum struct {
 	// values (plugin.Field.EnumValues), in their order; nil for a String.
 	Values []string
 }
+
+// Getter is a method that returns a field's value as the Go type its scalar
+// binds to: the SDL binds the field to it with @goField(name: Method). A
+// JSON field's getter marshals the value to veloxgql.JSON; any other
+// converts it to Returns.
+type Getter struct {
+	Field   int    // the index of the field in Entity.Fields
+	Method  string // <GoName>GQL
+	Returns string // the Go type it returns, as "veloxgql.Time" or "string"
+	Pkg     string // the import path of Returns' package; "" for a builtin type
+}
+
+// JSON reports whether the getter marshals a JSON field.
+func (g Getter) JSON() bool { return g.Returns == "veloxgql.JSON" }
 
 // OrderValue is a value of XOrderField: the field it orders by.
 type OrderValue struct {
@@ -92,6 +115,18 @@ type WhereField struct {
 	// and the type itself for not, and and or; "" for a predicate on a
 	// field that is not an ID.
 	Target string
+	// On is the GraphQL name of the field or edge the field is about, as
+	// "displayName" for displayNameNEQ and "writer" for writerIDIn or
+	// hasWriter; the type's name for not, and and or.
+	On string
+	// GoType is the Go type of a WherePred's values, as the generated
+	// package names it once GoPkg is imported: the field's own Go type when
+	// it binds to the scalar ("time.Time", "int8", "PostStatus"), else the
+	// one the scalar binds to ("string" for a string field of the
+	// application's own Go type); "string" for IDs, and "bool" for IsNil,
+	// NotNil and has<Edge>.
+	GoType string
+	GoPkg  string // the import path GoType names; "" for none
 }
 
 // IDs reports whether the field is a predicate on IDs.
@@ -106,7 +141,7 @@ func Build(m *plugin.Model) (*Surface, error) {
 	}
 	s := &Surface{Types: make([]*Type, 0, len(g.objects))}
 	for _, o := range g.objects {
-		t := &Type{Entity: o.ent, Name: o.name, Node: o.node, MultiOrder: o.ann.MultiOrder, Where: o.whereGo}
+		t := &Type{Entity: o.ent, Name: o.name, Node: o.node, Key: o.key, Getters: o.getters, MultiOrder: o.ann.MultiOrder, Where: o.whereGo}
 		for _, en := range o.enums {
 			i := slices.IndexFunc(o.ent.Fields, func(f *plugin.Field) bool { return f.Name == en.field })
 			t.Enums = append(t.Enums, Enum{Name: en.name, Field: i, Values: en.values})
@@ -133,4 +168,91 @@ func goOf(name, goName string) string {
 		return goName
 	}
 	return upper(name)
+}
+
+// The import paths of the Go types a scalar binds to.
+const (
+	veloxgqlPath = "github.com/syssam/velox2/contrib/graphql/veloxgql"
+	uuidPath     = "github.com/google/uuid"
+)
+
+// keyBase is the Go type veloxgql encodes the key of e as, when e can be a
+// Node: its key is one column, of an integer, a string, a UUID or an enum
+// type; "" when it cannot.
+func keyBase(e *plugin.Entity) string {
+	if len(e.PrimaryKey) != 1 {
+		return ""
+	}
+	switch k := e.Fields[e.PrimaryKey[0]]; k.Type {
+	case "int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16", "uint32", "uint64":
+		return k.Type
+	case "string", "enum":
+		return "string"
+	case "uuid":
+		return "[16]byte"
+	}
+	return ""
+}
+
+// notNode says why e is not a Node.
+func notNode(e *plugin.Entity) string {
+	if len(e.PrimaryKey) != 1 {
+		return fmt.Sprintf("its key is %d columns", len(e.PrimaryKey))
+	}
+	return fmt.Sprintf("its key is of type %s, which an ID does not hold", e.Fields[e.PrimaryKey[0]].Type)
+}
+
+// goValue is how the values of a field are in Go where gqlgen binds them to
+// the field's GraphQL type.
+type goValue struct {
+	typ, pkg string // the Go type, and the import path it names
+	// own reports whether that is the field's own Go type, which binds to
+	// its scalar through the models gqlgen.yml lists: velox's standard Go
+	// types, velox-gen's enum types, and the application's enum types, which
+	// bind with @goModel. A field of another Go type of the application's
+	// binds through a getter, which returns getter, of the package
+	// getterPkg.
+	own               bool
+	getter, getterPkg string
+}
+
+// goValue is the goValue of f, with the annotation a.
+func (g *graph) goValue(f *plugin.Field, a graphql.Annotation) goValue {
+	// A model that gives no ElemType (one written by hand) means velox's own.
+	is := func(typ string) bool { return f.ElemType == typ || f.ElemType == "" }
+	own := func(typ string) goValue { return goValue{typ: typ, own: is(typ)} }
+	var v goValue
+	switch f.Type {
+	case "string", "bool", "int", "int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "float32", "float64":
+		v = own(f.Type)
+		v.getter = f.Type
+	case "uint", "uint64":
+		v = own(f.Type)
+		v.getter, v.getterPkg = "veloxgql.Uint64", veloxgqlPath
+	case "time":
+		v = goValue{typ: "time.Time", pkg: "time", own: is("time.Time") && (f.PkgPath == "time" || f.PkgPath == "")}
+		v.getter, v.getterPkg = "veloxgql.Time", veloxgqlPath
+	case "uuid":
+		// velox's UUID type is github.com/google/uuid's; a model from before
+		// PkgPath names none.
+		v = goValue{typ: "uuid.UUID", pkg: uuidPath, own: is("uuid.UUID") && (f.PkgPath == uuidPath || f.PkgPath == "")}
+		v.getter, v.getterPkg = "veloxgql.UUID", veloxgqlPath
+	case "bytes":
+		v = own("[]byte")
+		v.getter, v.getterPkg = "veloxgql.Bytes", veloxgqlPath
+	case "json":
+		v = goValue{getter: "veloxgql.JSON", getterPkg: veloxgqlPath}
+	case "enum":
+		switch {
+		case g.goEnums[f.Enum]:
+			v = goValue{typ: f.Enum, own: true}
+		case a.Skip&graphql.SkipEnumField != 0:
+			// A String of the application's enum type, which has no
+			// marshalers of velox's.
+			v = goValue{typ: "string", getter: "string"}
+		default:
+			v = goValue{typ: f.ElemType, pkg: f.PkgPath, own: true}
+		}
+	}
+	return v
 }

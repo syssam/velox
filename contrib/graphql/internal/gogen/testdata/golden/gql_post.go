@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"time"
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
@@ -14,9 +15,16 @@ import (
 // veloxgql.Noder.
 func (*Post) IsNode() {}
 
-// IDGQL is the global ID of the Post, the GraphQL field id: of the type Post
-// and the key id.
+// IDGQL is the global ID of the Post, the GraphQL field id: the type Post and
+// the key id, encoded.
 func (x *Post) IDGQL() string { return veloxgql.EncodeID("Post", x.ID) }
+
+// TagsGQL is the field tags as JSON, the GraphQL scalar it is: gqlgen binds the
+// field to it.
+func (x *Post) TagsGQL() (veloxgql.JSON, error) {
+	b, err := json.Marshal(x.Tags)
+	return veloxgql.JSON(b), err
+}
 
 // MarshalGQL writes e as its value of the GraphQL enum PostStatus.
 func (e PostStatus) MarshalGQL(w io.Writer) {
@@ -132,7 +140,7 @@ type PostWhereInput struct {
 	And []*PostWhereInput
 	Or  []*PostWhereInput
 
-	// Predicates on the edge author, by the ID of its node.
+	// Predicates on the edge author (writer), by the ID of its node.
 	WriterID      *string
 	WriterIDNEQ   *string
 	WriterIDIn    []string
@@ -159,19 +167,19 @@ type PostWhereInput struct {
 	StatusIn    []PostStatus
 	StatusNotIn []PostStatus
 
-	// Predicates on the field published_at.
-	PublishedAt       *veloxgql.Time
-	PublishedAtNEQ    *veloxgql.Time
-	PublishedAtIn     []veloxgql.Time
-	PublishedAtNotIn  []veloxgql.Time
-	PublishedAtGT     *veloxgql.Time
-	PublishedAtGTE    *veloxgql.Time
-	PublishedAtLT     *veloxgql.Time
-	PublishedAtLTE    *veloxgql.Time
+	// Predicates on the field published_at (publishedAt).
+	PublishedAt       *time.Time
+	PublishedAtNEQ    *time.Time
+	PublishedAtIn     []time.Time
+	PublishedAtNotIn  []time.Time
+	PublishedAtGT     *time.Time
+	PublishedAtGTE    *time.Time
+	PublishedAtLT     *time.Time
+	PublishedAtLTE    *time.Time
 	PublishedAtIsNil  *bool
 	PublishedAtNotNil *bool
 
-	// The edge author: whether it has a node, or one that matches.
+	// The edge author (writer): whether it has a node, or one that matches.
 	HasWriter     *bool
 	HasWriterWith []*AccountWhereInput
 }

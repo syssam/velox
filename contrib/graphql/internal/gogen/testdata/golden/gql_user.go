@@ -18,9 +18,16 @@ type Account = User
 // veloxgql.Noder.
 func (*User) IsNode() {}
 
-// IDGQL is the global ID of the User, the GraphQL field id: of the type Account
-// and the key id.
+// IDGQL is the global ID of the User, the GraphQL field id: the type Account
+// and the key id, encoded.
 func (x *User) IDGQL() string { return veloxgql.EncodeID("Account", x.ID) }
+
+// SettingsGQL is the field settings as JSON, the GraphQL scalar it is: gqlgen
+// binds the field to it.
+func (x *User) SettingsGQL() (veloxgql.JSON, error) {
+	b, err := json.Marshal(x.Settings)
+	return veloxgql.JSON(b), err
+}
 
 // MarshalGQL writes e as its value of the GraphQL enum UserRole.
 func (e UserRole) MarshalGQL(w io.Writer) {
@@ -88,7 +95,7 @@ type AccountWhereInput struct {
 	And []*AccountWhereInput
 	Or  []*AccountWhereInput
 
-	// Predicates on the field name.
+	// Predicates on the field name (displayName).
 	DisplayName          *string
 	DisplayNameNEQ       *string
 	DisplayNameIn        []string

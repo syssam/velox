@@ -11,8 +11,8 @@ import (
 // veloxgql.Noder.
 func (*Category) IsNode() {}
 
-// IDGQL is the global ID of the Category, the GraphQL field id: of the type
-// Category and the key id.
+// IDGQL is the global ID of the Category, the GraphQL field id: the type
+// Category and the key id, encoded.
 func (x *Category) IDGQL() string { return veloxgql.EncodeID("Category", x.ID) }
 
 // CategoryConnection is the GraphQL type CategoryConnection, a connection to a

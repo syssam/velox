@@ -141,7 +141,7 @@ func (g *graph) whereOf(o *object) error {
 		{"not", in, "Not", WhereNot}, {"and", "[" + in + "!]", "And", WhereAnd}, {"or", "[" + in + "!]", "Or", WhereOr},
 	} {
 		fs.own(gqlField{name: n.name, typ: n.typ})
-		o.whereGo = append(o.whereGo, WhereField{Name: n.name, GoName: n.goName, Type: n.typ, Kind: n.kind, Field: -1, Edge: -1, Target: o.name})
+		o.whereGo = append(o.whereGo, WhereField{Name: n.name, GoName: n.goName, Type: n.typ, Kind: n.kind, Field: -1, Edge: -1, Target: o.name, On: o.name})
 	}
 	for i, f := range e.Fields {
 		a := o.fanns[i]
@@ -150,7 +150,7 @@ func (g *graph) whereOf(o *object) error {
 		}
 		where := "schema " + e.Name + ", field " + f.Name
 		var name, typ, kind, goBase, target string
-		edge := -1
+		edge, v := -1, goValue{typ: "string"} // an ID is a string
 		switch {
 		case o.node && i == e.PrimaryKey[0]:
 			name, typ, kind, goBase, target = "id", "ID", "ID", "ID", o.name
@@ -176,7 +176,11 @@ func (g *graph) whereOf(o *object) error {
 			if err != nil {
 				return err
 			}
-			name, typ, kind, goBase = n, t, f.Type, goOf(n, f.GoName)
+			name, typ, kind, goBase, v = n, t, f.Type, goOf(n, f.GoName), g.goValue(f, a)
+		}
+		on := name
+		if edge >= 0 {
+			on = strings.TrimSuffix(name, "ID")
 		}
 		ops, err := resolveOps(a.WhereOps, kind, f.Nullable, where)
 		if err != nil {
@@ -196,9 +200,14 @@ func (g *graph) whereOf(o *object) error {
 			if err := fs.add(pf); err != nil {
 				return err
 			}
-			o.whereGo = append(o.whereGo, WhereField{
-				Name: pf.name, GoName: goBase + p.suffix, Type: pf.typ, Kind: WherePred, Op: p.op, Field: i, Edge: edge, Target: target,
-			})
+			wf := WhereField{
+				Name: pf.name, GoName: goBase + p.suffix, Type: pf.typ, Kind: WherePred, Op: p.op, Field: i, Edge: edge, Target: target, On: on,
+				GoType: v.typ, GoPkg: v.pkg,
+			}
+			if p.takes == takesBool {
+				wf.GoType, wf.GoPkg = "bool", ""
+			}
+			o.whereGo = append(o.whereGo, wf)
 		}
 	}
 	for i, ed := range e.Edges {
@@ -216,7 +225,7 @@ func (g *graph) whereOf(o *object) error {
 			return err
 		}
 		goHas := "Has" + goOf(name, ed.GoName)
-		o.whereGo = append(o.whereGo, WhereField{Name: has.name, GoName: goHas, Type: has.typ, Kind: WhereHas, Field: -1, Edge: i, Target: t.name})
+		o.whereGo = append(o.whereGo, WhereField{Name: has.name, GoName: goHas, Type: has.typ, Kind: WhereHas, Field: -1, Edge: i, Target: t.name, On: name, GoType: "bool"})
 		// hasWith takes the target's where input; a target without one
 		// offers has alone.
 		if t.hasWhere {
@@ -224,7 +233,7 @@ func (g *graph) whereOf(o *object) error {
 			if err := fs.add(with); err != nil {
 				return err
 			}
-			o.whereGo = append(o.whereGo, WhereField{Name: with.name, GoName: goHas + "With", Type: with.typ, Kind: WhereHasWith, Field: -1, Edge: i, Target: t.name})
+			o.whereGo = append(o.whereGo, WhereField{Name: with.name, GoName: goHas + "With", Type: with.typ, Kind: WhereHasWith, Field: -1, Edge: i, Target: t.name, On: name})
 		}
 	}
 	o.where = fs.list
