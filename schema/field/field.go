@@ -24,7 +24,8 @@ type common[B any] struct {
 // and NULL reads as nil.
 //
 // velox-gen refuses an Optional enum with neither a Default nor Nillable,
-// whose zero value "" is no value, and an Optional edge field that is not
+// whose zero value "" is no value; an Optional bytes field with neither,
+// whose zero value nil binds NULL; and an Optional edge field that is not
 // Nillable, whose zero value is no row's key. A field that is unique only
 // when present needs Nillable: every unset row holds the same zero value.
 func (c common[B]) Optional() B { c.d.Optional = true; return c.self }

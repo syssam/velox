@@ -659,6 +659,10 @@ func (b *builder) validateFields(e *Entity) {
 		if f.Type == "enum" && f.Optional && !f.Nillable && len(f.Default) == 0 {
 			b.fail(37, e.Name, fieldAt(f.Name), "an Optional enum needs a Default or Nillable")
 		}
+		// Unset, an Optional bytes field is nil, which binds NULL.
+		if f.Type == "bytes" && f.Optional && !f.Nillable && len(f.Default) == 0 && !f.DefaultFunc {
+			b.fail(39, e.Name, fieldAt(f.Name), "an Optional bytes field needs a Default or Nillable")
+		}
 		switch f.Type {
 		case "enum":
 			b.validateEnum(e, f)

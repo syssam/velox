@@ -472,6 +472,17 @@ func (optionalEnum) Fields() []schema.Field {
 	return []schema.Field{field.Enum("mood").Values("calm", "busy").Optional()}
 }
 
+type optionalBytes struct{ schema.Schema }
+
+func (optionalBytes) Fields() []schema.Field { return []schema.Field{field.Bytes("blob").Optional()} }
+
+// optionalBytesOK has the Optional bytes fields that pass: with a Default, or Nillable.
+type optionalBytesOK struct{ schema.Schema }
+
+func (optionalBytesOK) Fields() []schema.Field {
+	return []schema.Field{field.Bytes("a").Optional().Default([]byte("x")), field.Bytes("b").Optional().Nillable()}
+}
+
 // optionalFK binds an Optional edge field that is not Nillable.
 type optionalFK struct{ schema.Schema }
 
@@ -766,6 +777,7 @@ func TestBuildRules(t *testing.T) {
 		{"36 default on an optional number", []schema.Interface{defaultNumber{}}, `schema defaultNumber: field "score": a Default on a bool or number that is not Nillable cannot be told from unset; make the field Nillable or drop the Default`},
 		{"37 optional enum", []schema.Interface{optionalEnum{}}, `schema optionalEnum: field "mood": an Optional enum needs a Default or Nillable`},
 		{"38 optional edge field", []schema.Interface{optionalFK{}}, `schema optionalFK: edge "parent": field "parent_id" must be Nillable when the edge is not Required: an unset foreign key is NULL`},
+		{"39 optional bytes", []schema.Interface{optionalBytes{}}, `schema optionalBytes: field "blob": an Optional bytes field needs a Default or Nillable`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			_, err := build(t, c.ss...)
@@ -790,7 +802,7 @@ func TestBuildRulesAreSingle(t *testing.T) {
 		{enumGoNames{}}, {clashOwner{}, clashPet{}}, {columnFieldMismatch{}}, {keyA{}, keyB{}}, {oneColumnM2M{}},
 		{twoColumnsO2M{}, Pet{}}, {invAssoc{}, invItem{}}, {enumGoTypeDup{}},
 		{fkUnbound{}}, {fieldStringFK{}}, {immutableEdge{}}, {immutableField{}}, {loop{}}, {cycle{}},
-		{defaultBool{}}, {defaultNumber{}}, {optionalEnum{}}, {optionalFK{}},
+		{defaultBool{}}, {defaultNumber{}}, {optionalEnum{}}, {optionalFK{}}, {optionalBytes{}},
 	} {
 		_, err := build(t, ss...)
 		if n := len(err.(interface{ Unwrap() []error }).Unwrap()); n != 1 {
@@ -798,6 +810,8 @@ func TestBuildRulesAreSingle(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildOptionalBytesWithDefaultOrNillable(t *testing.T) { mustBuild(t, optionalBytesOK{}) }
 
 func TestBuildErrorsAreSortedAndJoined(t *testing.T) {
 	_, err := build(t, twoTenants{}, dupField{})
