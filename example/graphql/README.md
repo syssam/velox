@@ -100,9 +100,9 @@ your schema and clients.
 `main_test.go` sends each over HTTP and checks the JSON response and the
 statements sent exactly.
 
-The schema has no JSON field and no mutations yet: velox core does not yet
-read or write JSON fields, and the generated mutations come with GraphQL
-plan 3.
+The schema declares no JSON field, as it teaches queries (contrib/graphql's
+end-to-end test covers a JSON field's getter), and has no mutations yet: the
+generated mutations come with GraphQL plan 3.
 
 ## Regenerate
 

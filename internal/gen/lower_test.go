@@ -122,7 +122,7 @@ func TestLowerTypes(t *testing.T) {
 		{"active", "*bool", "velox.NullCol[LwUser, bool]"},                // a literal Default on a bool (plan 1 Ruling 4)
 		{"role", "LwUserRole", "velox.StringCol[LwUser, LwUserRole]"},     // the generated enum type (Ruling 3)
 		{"seen", "*time.Time", "velox.NullOrderedCol[LwUser, time.Time]"}, //
-		{"tags", "[]string", "velox.Col[LwUser, []string]"},               // a JSON slice is never a pointer
+		{"tags", "[]string", "velox.JSONCol[LwUser, []string]"},           // a JSON slice is never a pointer
 	} {
 		f := u.field(c.name)
 		if f == nil || f.GoType != c.goType || f.Handle != c.handle {
@@ -170,6 +170,14 @@ func TestLowerJSONFlag(t *testing.T) {
 	}
 	if f := m.field("blob"); f.JSON {
 		t.Errorf("blob (field.Bytes) is JSON")
+	}
+	// A json field's handle only sets it (and, nullable, tests and sets NULL):
+	// no condition or order compares JSON.
+	if f := m.field("labels"); f.Handle != "velox.JSONCol[LwMixed, []string]" {
+		t.Errorf("labels: handle %s, want velox.JSONCol", f.Handle)
+	}
+	if f := m.field("box"); !f.JSON || !f.Pointer || f.Handle != "velox.NullJSONCol[LwMixed, gen.lwBox]" {
+		t.Errorf("box (an Optional field.JSON of a struct): JSON %v, pointer %v, handle %s, want velox.NullJSONCol", f.JSON, f.Pointer, f.Handle)
 	}
 	g, err := build(t, LwUser{}, LwPost{}, LwGroup{})
 	if err != nil {
@@ -362,8 +370,12 @@ func (LwMixed) Fields() []schema.Field {
 		field.Strings("labels").Default([]string{"a", "b"}),
 		field.Other("pt", uuidValue{}).SchemaType(map[string]string{"postgres": "uuid"}).Default(uuidValue{1}),
 		field.Enum("tier").Values("free", "paid").Default("paid"),
+		field.JSON("box", lwBox{}).Optional(),
 	}
 }
+
+// lwBox is a struct a json field holds.
+type lwBox struct{ W, H int }
 
 func TestLowerMixinPosition(t *testing.T) {
 	o := mustLower(t, Config{SchemaPath: lowerSchemaPath}, LwMixed{})

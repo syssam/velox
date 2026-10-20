@@ -72,8 +72,14 @@ type ColumnDesc struct {
 	// generated file, not the core, imports encoding/json, and a program
 	// whose entities hold no JSON does not link it. A hand-written Desc may
 	// plug in another codec. Decode's data is valid only during the call: it
-	// must neither change nor keep it. velox never guesses a codec from the
-	// Go type, as a []byte field holds bytes, not JSON.
+	// must neither change nor keep it. velox may hand it the bytes of a string
+	// the driver returned, read in place, so a Decode that writes to them
+	// writes to memory that may be read-only. Encode's result is kept in
+	// Statement.Args until the statement has run, so Encode must return a new
+	// slice on every call, never a buffer it reuses. A primary-key, tenant or
+	// relation-key column cannot have a codec: conditions on it are refused,
+	// so the metadata is. velox never guesses a codec from the Go type, as a
+	// []byte field holds bytes, not JSON.
 	Encode func(v any) ([]byte, error)
 	Decode func(data []byte, v any) error
 }

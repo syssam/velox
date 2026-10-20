@@ -35,7 +35,7 @@ var Posts = struct {
 	Slug        velox.StringCol[Post, string]
 	Status      velox.StringCol[Post, PostStatus]
 	PublishedAt velox.NullOrderedCol[Post, time.Time]
-	Tags        velox.Col[Post, []string]
+	Tags        velox.JSONCol[Post, []string]
 	Views       velox.NullNumberCol[Post, int]
 	Author      velox.Rel[Post, User]
 }{
@@ -45,7 +45,7 @@ var Posts = struct {
 	Slug:        velox.StringCol[Post, string]{I: 3},
 	Status:      velox.StringCol[Post, PostStatus]{I: 4},
 	PublishedAt: velox.NullOrderedCol[Post, time.Time]{I: 5},
-	Tags:        velox.Col[Post, []string]{I: 6},
+	Tags:        velox.JSONCol[Post, []string]{I: 6},
 	Views:       velox.NullNumberCol[Post, int]{I: 7},
 	Author:      velox.Rel[Post, User]{I: 0},
 }

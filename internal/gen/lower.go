@@ -212,6 +212,10 @@ func (s *entState) field(e *Entity, i int, f *Field) *OutField {
 	}
 	var h string
 	switch {
+	case o.JSON:
+		// Stored as JSON: no condition or order compares it, as equality and
+		// order of JSON differ by dialect, so its handle only sets it.
+		h = "JSONCol"
 	case f.Type == "time" || elem == "time.Time":
 		h = "OrderedCol"
 	case numeric[kind]:

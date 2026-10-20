@@ -3,6 +3,7 @@ package itest
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -31,13 +32,13 @@ type jrec struct {
 
 var JR = struct {
 	ID    velox.NumberCol[jrec, int64]
-	Tags  velox.Col[jrec, []string]
-	Attrs velox.Col[jrec, map[string]any]
-	Shape velox.Col[jrec, jShape]
-	Nums  velox.NullCol[jrec, []int]
+	Tags  velox.JSONCol[jrec, []string]
+	Attrs velox.JSONCol[jrec, map[string]any]
+	Shape velox.JSONCol[jrec, jShape]
+	Nums  velox.NullJSONCol[jrec, []int]
 }{
-	velox.NumberCol[jrec, int64]{I: 0}, velox.Col[jrec, []string]{I: 1}, velox.Col[jrec, map[string]any]{I: 2},
-	velox.Col[jrec, jShape]{I: 3}, velox.NullCol[jrec, []int]{I: 4},
+	velox.NumberCol[jrec, int64]{I: 0}, velox.JSONCol[jrec, []string]{I: 1}, velox.JSONCol[jrec, map[string]any]{I: 2},
+	velox.JSONCol[jrec, jShape]{I: 3}, velox.NullJSONCol[jrec, []int]{I: 4},
 }
 
 var jrecMeta velox.MetaOnce[jrec]
@@ -85,6 +86,28 @@ func jsonDDL(d velox.Dialect) string {
 	return fmt.Sprintf("CREATE TABLE json_recs (id %s PRIMARY KEY, tags %[2]s NOT NULL, attrs %[2]s NOT NULL, shape %[2]s NOT NULL, nums %[2]s NULL)", id, typ)
 }
 
+// eachJSON runs f on every target, as each does, and also, when MySQL is
+// tested, on MySQL through a DSN with interpolateParams=true: the driver then
+// writes the arguments into the statement's text, a []byte as a binary
+// string, which a JSON column refuses, so velox must bind a string.
+func eachJSON(t *testing.T, f func(t *testing.T, tg target)) {
+	each(t, f)
+	dsn := os.Getenv("VELOX_TEST_MYSQL")
+	if dsn == "" {
+		return
+	}
+	sep := "?"
+	if strings.Contains(dsn, "?") {
+		sep = "&"
+	}
+	tg := mysqlTarget(t, dsn+sep+"interpolateParams=true", nil)
+	tg.name = "mysql-interpolate"
+	t.Run(tg.name, func(t *testing.T) {
+		setup(t, tg)
+		f(t, tg)
+	})
+}
+
 // jsonSetup creates the table of jrec empty.
 func jsonSetup(t *testing.T, tg target) {
 	t.Helper()
@@ -95,14 +118,17 @@ func jsonSetup(t *testing.T, tg target) {
 
 // rawCol is column col of row id, read through database/sql without velox:
 // its text, and whether it is SQL NULL. The Go type the driver handed over is
-// logged, with the text, since the dialects differ in both.
+// logged with the text, when the test fails, since the dialects differ in
+// both. A value is checked to be stored in the dialect's JSON type: jsonb on
+// PostgreSQL, JSON on MySQL and TEXT on SQLite, so that a table of another
+// type does not pass on the strength of its text.
 func rawCol(t *testing.T, tg target, col string, id int64) (text string, null bool) {
 	t.Helper()
 	var v any
 	var isNull bool
-	q := rebind(tg.d, fmt.Sprintf("SELECT %s, %[1]s IS NULL FROM json_recs WHERE id = ?", col))
-	if err := tg.direct.QueryRowContext(ctx, q, id).Scan(&v, &isNull); err != nil {
-		t.Fatalf("%s: %v", q, err)
+	sel := rebind(tg.d, fmt.Sprintf("SELECT %s, %[1]s IS NULL FROM json_recs WHERE id = ?", col))
+	if err := tg.direct.QueryRowContext(ctx, sel, id).Scan(&v, &isNull); err != nil {
+		t.Fatalf("%s: %v", sel, err)
 	}
 	switch x := v.(type) {
 	case nil:
@@ -113,18 +139,32 @@ func rawCol(t *testing.T, tg target, col string, id int64) (text string, null bo
 	default:
 		t.Fatalf("raw %s: the driver handed over a %T", col, v)
 	}
-	t.Logf("raw %-5s id %d: %T %q (SQL NULL: %v)", col, id, v, text, isNull)
-	if tg.d == velox.SQLite && !isNull {
-		// The storage class: velox binds a string on SQLite, so the column
-		// holds TEXT. A []byte would be stored as a BLOB, which SQLite's JSON
-		// functions read as JSONB, not as text.
-		var typ string
-		if err := tg.direct.QueryRowContext(ctx, fmt.Sprintf("SELECT typeof(%s) FROM json_recs WHERE id = ?", col), id).Scan(&typ); err != nil {
-			t.Fatal(err)
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("raw %-5s id %d: %T %q (SQL NULL: %v)", col, id, v, text, isNull)
 		}
-		if typ != "text" {
-			t.Errorf("%s of %d is stored as %s on SQLite, want text", col, id, typ)
-		}
+	})
+	if isNull {
+		return text, isNull
+	}
+	// The stored type. On SQLite, the storage class: velox binds a string,
+	// so the column holds TEXT; a []byte would be stored as a BLOB, which
+	// SQLite's JSON functions read as JSONB, not as text.
+	q, args, want := fmt.Sprintf("SELECT typeof(%s) FROM json_recs WHERE id = ?", col), []any{id}, "text"
+	switch tg.d {
+	case velox.Postgres:
+		q, want = fmt.Sprintf("SELECT pg_typeof(%s)::text FROM json_recs WHERE id = ?", col), "jsonb"
+	case velox.MySQL:
+		// MySQL has no type of a value, only of its column.
+		q, args, want = "SELECT DATA_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "+
+			"AND TABLE_NAME = 'json_recs' AND COLUMN_NAME = ?", []any{col}, "json"
+	}
+	var typ string
+	if err := tg.direct.QueryRowContext(ctx, rebind(tg.d, q), args...).Scan(&typ); err != nil {
+		t.Fatalf("%s: %v", q, err)
+	}
+	if !strings.EqualFold(typ, want) {
+		t.Errorf("%s of %d is stored as %s on %s, want %s", col, id, typ, tg.name, want)
 	}
 	return text, isNull
 }
@@ -204,7 +244,7 @@ func jsonRec(id int64) jrec {
 // TestJSONInsertAndRead: a record with every column set is stored as JSON
 // text in the dialect's type and reads back equal.
 func TestJSONInsertAndRead(t *testing.T) {
-	each(t, func(t *testing.T, tg target) {
+	eachJSON(t, func(t *testing.T, tg target) {
 		jsonSetup(t, tg)
 		x := jsonRec(1)
 		if err := tg.db.Insert(&x).Exec(ctx); err != nil {
@@ -248,7 +288,7 @@ func TestJSONInsertAndRead(t *testing.T) {
 // slice or map in a field that is not a pointer is the JSON null, and each
 // reads back as nil. They are different values in the database.
 func TestJSONNullAndNull(t *testing.T) {
-	each(t, func(t *testing.T, tg target) {
+	eachJSON(t, func(t *testing.T, tg target) {
 		jsonSetup(t, tg)
 		x := jrec{ID: 1} // nil slice and map, zero struct, nil pointer
 		if err := tg.db.Insert(&x).Exec(ctx); err != nil {
@@ -299,7 +339,7 @@ func TestJSONNullAndNull(t *testing.T) {
 // TestJSONUpdate: Set encodes, SetNull stores SQL NULL, and a nil slice set
 // into a field that is not a pointer stores the JSON null.
 func TestJSONUpdate(t *testing.T) {
-	each(t, func(t *testing.T, tg target) {
+	eachJSON(t, func(t *testing.T, tg target) {
 		jsonSetup(t, tg)
 		x := jsonRec(1)
 		if err := tg.db.Insert(&x).Exec(ctx); err != nil {
@@ -334,7 +374,7 @@ func TestJSONUpdate(t *testing.T) {
 // TestJSONUpsert: the update branch of an upsert encodes the columns it
 // takes from the row proposed, and the insert branch encodes the row.
 func TestJSONUpsert(t *testing.T) {
-	each(t, func(t *testing.T, tg target) {
+	eachJSON(t, func(t *testing.T, tg target) {
 		jsonSetup(t, tg)
 		first := jsonRec(1)
 		if err := tg.db.Insert(&first).OnConflict(JR.ID).Update(JR.Tags, JR.Attrs, JR.Nums).Exec(ctx); err != nil {
@@ -365,7 +405,7 @@ func TestJSONUpsert(t *testing.T) {
 // TestJSONSave: Save writes the columns named, encoded, from the entity's Go
 // values.
 func TestJSONSave(t *testing.T) {
-	each(t, func(t *testing.T, tg target) {
+	eachJSON(t, func(t *testing.T, tg target) {
 		jsonSetup(t, tg)
 		x := jsonRec(1)
 		if err := tg.db.Insert(&x).Exec(ctx); err != nil {
@@ -392,22 +432,30 @@ func TestJSONSave(t *testing.T) {
 	})
 }
 
-// TestJSONConditions: a condition comparing a JSON column is refused by the
-// statement, on every dialect, before the database sees it.
+// TestJSONConditions: a condition comparing a JSON column, or an order by
+// one, is refused by the statement, on every dialect, before the database
+// sees it.
 func TestJSONConditions(t *testing.T) {
-	each(t, func(t *testing.T, tg target) {
+	eachJSON(t, func(t *testing.T, tg target) {
 		jsonSetup(t, tg)
 		x := jsonRec(1)
 		if err := tg.db.Insert(&x).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
-		_, err := tg.db.Query[jrec]().Where(JR.Tags.EQ([]string{"a"})).Unbounded().All(ctx)
+		// JR's JSONCol has no EQ: Col handles, as a hand-written Desc might
+		// declare, reach the statement's refusal.
+		tags, shape := velox.Col[jrec, []string]{I: 1}, velox.Col[jrec, jShape]{I: 3}
+		_, err := tg.db.Query[jrec]().Where(tags.EQ([]string{"a"})).Unbounded().All(ctx)
 		if err == nil || !strings.Contains(err.Error(), "tags") || !strings.Contains(err.Error(), "an encoded column") {
 			t.Errorf("EQ: got %v, want the column refused", err)
 		}
-		_, err = tg.db.Delete[jrec]().Where(JR.Shape.NEQ(jShape{})).Exec(ctx)
+		_, err = tg.db.Delete[jrec]().Where(shape.NEQ(jShape{})).Exec(ctx)
 		if err == nil || !strings.Contains(err.Error(), "shape") {
 			t.Errorf("NEQ in a delete: got %v", err)
+		}
+		_, err = tg.db.Query[jrec]().OrderBy(shape.Asc()).Unbounded().All(ctx)
+		if err == nil || !strings.Contains(err.Error(), "shape") || !strings.Contains(err.Error(), "order by") {
+			t.Errorf("ORDER BY: got %v, want the column refused", err)
 		}
 		if n, err := tg.db.Query[jrec]().Count(ctx); err != nil || n != 1 {
 			t.Errorf("the row is gone: %d, %v", n, err)
@@ -420,7 +468,7 @@ func TestJSONConditions(t *testing.T) {
 // silent zero. A document of the wrong type is valid JSON, so every dialect
 // stores it.
 func TestJSONDecodeError(t *testing.T) {
-	each(t, func(t *testing.T, tg target) {
+	eachJSON(t, func(t *testing.T, tg target) {
 		jsonSetup(t, tg)
 		tg.exec(t, `INSERT INTO json_recs (id, tags, attrs, shape, nums) VALUES (1, '[]', '{}', '"not a struct"', NULL)`)
 		_, err := tg.db.Query[jrec]().Where(JR.ID.EQ(1)).One(ctx)

@@ -112,6 +112,8 @@ func TestHandleMethodSets(t *testing.T) {
 		"NullOrderedCol": "Asc Between Desc EQ GT GTE In IsNull LT LTE NEQ NotIn NotNull Set SetNull column",
 		"NullNumberCol":  "Add Asc Between Desc EQ GT GTE In IsNull LT LTE NEQ NotIn NotNull Set SetNull Sub column",
 		"NullStringCol":  "Asc Between Contains Desc EQ EqualFold GT GTE HasPrefix HasSuffix In IsNull LT LTE Like NEQ NotIn NotNull Set SetNull column",
+		"JSONCol":        "Set column",
+		"NullJSONCol":    "IsNull NotNull Set SetNull column",
 	}
 	f, err := parser.ParseFile(token.NewFileSet(), "handles.go", nil, parser.SkipObjectResolution)
 	if err != nil {

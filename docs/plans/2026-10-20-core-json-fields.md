@@ -5,8 +5,8 @@
 **Goal:** A schema field declared with `field.JSON`, `field.Strings`, `field.Ints` or `field.Any` is stored as JSON and read back on every dialect. Today velox binds the Go value raw (a `[]string` reaches the driver as-is) and scans the column straight into the field, so these fields fail on PostgreSQL, MySQL and SQLite.
 
 **Architecture:**
-- Each column's metadata says whether it holds JSON. velox-gen sets this for `json` fields.
-- **Writes:** wherever velox binds a value for a column, a JSON column's value is first encoded with `encoding/json`. That covers insert rows, update assignments, `Save`, upsert updates and predicate values.
+- Each column's metadata may carry a codec (`ColumnDesc.Encode` and `Decode`, flag `ColumnInfo.Codec`). velox-gen sets `json.Marshal` and `json.Unmarshal` for `json` fields (Ruling 1 as amended).
+- **Writes:** wherever velox binds a value for a column, an encoded column's value is first encoded with its codec (encoding/json's, for velox-gen's json fields). That covers insert rows, update assignments, `Save` and upsert updates. A condition that compares the column is refused (Ruling 3).
 - **Reads:** wherever velox scans into a column, a JSON column is scanned through a small decoder. That covers `All`, `One`, `Iter`, loads and `RETURNING`.
 - Non-JSON columns are untouched, so every allocation budget stays the same.
 
@@ -23,7 +23,7 @@
   - The allocation budgets (`go test -run Budget -v .`) are unchanged: one-row 6, tenant 7, hundred rows 105, tx 9/6, observed 7/6, metadata 19, Insert 13, replica one-row 6.
   - The escape check is unchanged. Run `go build -gcflags=-m . 2>&1 | grep "db.go:$(grep -n 'func (db \*DB) plain' db.go | cut -d: -f1):"`. It must print `leaking param content: st` and `read does not escape`.
 - **Encoding.**
-  - A JSON column's value is encoded with `json.Marshal` and bound as `[]byte` on PostgreSQL and MySQL, and as a string on SQLite so that the column holds TEXT, not a BLOB (ruling of 2026-10-20, Task 2).
+  - A JSON column's value is encoded with `json.Marshal` and bound as `[]byte` on PostgreSQL. On SQLite and MySQL it is bound as a string when the bytes are valid UTF-8, which JSON always is, and as `[]byte` otherwise (a binary codec). SQLite then holds TEXT, not a BLOB (ruling of 2026-10-20, Task 2). MySQL's driver with `interpolateParams=true` writes a `[]byte` as a binary string, which a JSON column refuses with error 3144 (final review).
   - A nil pointer field, or a nil slice or map in a nullable field, binds SQL NULL.
   - A nil slice or map in a non-nullable field binds the JSON `null`, as ent does. The value is documented and tested.
 - **Decoding.**
@@ -31,18 +31,18 @@
   - A value that is not valid JSON fails with an error that names the entity and the column.
   - Drivers hand JSON to a scanner as `[]byte` or `string`. Both are accepted.
 - **Generated code.**
-  - velox-gen writes the JSON flag into `ColumnDesc`.
-  - `GeneratedCodeIsVersion3` stays, because the change is additive: a `Desc` without the flag still compiles.
+  - velox-gen writes the codec (`Encode: json.Marshal, Decode: json.Unmarshal`) into `ColumnDesc`, and gives a json field the handle `velox.JSONCol` (`velox.NullJSONCol` when nullable), which has only `Set` (and `SetNull`, `IsNull`, `NotNull`) (final review).
+  - `GeneratedCodeIsVersion3` stays, because the change is additive: a `Desc` without a codec still compiles.
   - The goldens are updated.
 - **CI.**
   - The itests run on PostgreSQL (pgx and database/sql), MySQL and SQLite.
   - `scripts/ci-local.sh` and `.github/workflows/ci.yml` stay identical.
-- **No machine-specific paths** in committed files. Set `GOCACHE=/private/tmp/claude-501/velox2-gocache` and `GOFLAGS=-p=2` only in the shell.
+- **No machine-specific paths** in committed files. Set `GOCACHE=<scratchpad>/velox2-gocache` and `GOFLAGS=-p=2` only in the shell.
 - **Commits** end with a blank line and `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Never push.
 
 ## Rulings this plan makes
 
-1. **One flag, set by the generator.** `ColumnDesc.JSON bool` becomes `ColumnInfo.JSON bool`, set by velox-gen for every `json` field.
+1. **One flag, set by the generator.** As first written: `ColumnDesc.JSON bool` becomes `ColumnInfo.JSON bool`, set by velox-gen for every `json` field. Superseded by the amendment below: there is no `JSON` flag, but a codec and `ColumnInfo.Codec`.
    - **Amended 2026-10-20 (controller ruling, during Task 1), and its flag renamed `Codec` (Task 1 review):** the core never imports encoding/json, so a program whose entities hold no JSON does not link it. `ColumnDesc` carries the codec instead of a flag: `Encode func(v any) ([]byte, error)` and `Decode func(data []byte, v any) error`, which velox-gen sets to `json.Marshal` and `json.Unmarshal` for every `json` field (the generated file imports encoding/json). `ColumnInfo.Codec` (first named `JSON`) is derived from `Encode != nil`, and the codec is kept unexported in `ColumnInfo`. Any codec sets the flag, so it does not mean "JSON": the migration planner takes a column's database type from the schema's field type, not from it. A `Desc` with one of the two is refused with a `*SchemaError` naming the column. A hand-written `Desc` may plug in another codec. `ColumnDesc.JSON bool` is dropped.
    - The core never guesses JSON from the Go type, because a `[]byte` field is bytes, not JSON.
 2. **Encoding is a binding concern.** It happens where arguments are built for a column.
@@ -50,7 +50,8 @@
    - Hooks and policies see Go values. Only `Statement.Args` holds the encoded bytes. Rewrite hooks run before rendering, so they see Go values too.
 3. **Comparison predicates on a JSON column are refused at statement time.** These are `EQ`, `NEQ`, `In`, `NotIn`, `GT`, `GTE`, `LT`, `LTE`, `Contains`, `HasPrefix` and `HasSuffix`.
    - The error names the column: JSON equality differs by dialect (jsonb normalises, TEXT does not).
-   - `IsNull`/`IsNotNull` work.
+   - `IsNull`/`NotNull` work.
+   - **Amended 2026-10-20 (final review):** ordering by an encoded column (`Asc`/`Desc`) is refused too, because order differs by dialect as equality does. velox-gen gives a json field the handle `velox.JSONCol[E, V]` (`velox.NullJSONCol[E, V]` when nullable), with only `Set` (and `SetNull`, `IsNull`, `NotNull`), so generated code refuses comparisons and ordering at compile time. The runtime refusal stays as the backstop for hand-written `Desc`s. A primary-key, tenant or relation-key column with a codec is refused when the metadata is built.
    - JSON path predicates are a follow-up.
 
 ## Review Focus
@@ -71,7 +72,7 @@
   - `meta.go`: the `ColumnInfo` field and its doc;
   - the argument building, wherever a statement's values become `Args` (render, insert rows, assignments, upserts, predicates);
   - the scanning (`scanRow`, the kit's scan, the `RETURNING` scan in `insert.go`).
-  - For the generator: `internal/gen/lower.go` and `render.go` set `JSON: true` in the generated `ColumnDesc`.
+  - For the generator: `internal/gen/lower.go` and `render.go` write `Encode: json.Marshal, Decode: json.Unmarshal` into the generated `ColumnDesc`.
 - Create: `json.go`, with the non-generic encode and decode helpers and the scan wrapper.
 - Test:
   - `json_test.go` (FakeExec);
@@ -88,7 +89,7 @@
   - `TestJSONReads`: FakeExec returns `[]byte` and `string` JSON. It checks that `All`, `One`, `Iter`, a `With` load and an Insert `RETURNING` decode into the fields. NULL leaves the pointer nil. Invalid JSON gives an error naming the entity and column.
   - `TestJSONPredicatesRefused`: `EQ` on a JSON column fails at statement time naming the column. `IsNull` works.
   - `TestJSONAllocations`: a one-row read of the JSON entity makes at most `budget + 1 + json's own` allocations per JSON column. Measure it and pin the number.
-  - `internal/gen`: golden update; a `field.Strings` field renders `JSON: true`.
+  - `internal/gen`: golden update; a `field.Strings` field renders `Encode: json.Marshal, Decode: json.Unmarshal`.
 - [ ] **Step 2: Run** `go test -run 'TestJSON' .`. Expected: FAIL.
 - [ ] **Step 3: Implement** (Rulings 1–3).
 - [ ] **Step 4: Run.** Run `go test -run Budget -v .` (every number unchanged) and the escape check. Then run `go test -race -count=1 ./...`, `go test ./internal/gen/`, vet, gofmt, lint and the example's `velox-gen -check` for every example (regenerated output committed if it changed). Expected: PASS.

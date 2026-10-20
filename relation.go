@@ -218,9 +218,18 @@ func (r *relation) buildThrough(owner *EntityInfo, l link, fail func(string, ...
 }
 
 // sameKey reports whether a.Columns[ac] and b.Columns[bc] can key a
-// relation: their types, without a pointer, are one comparable type.
+// relation: neither is encoded, and their types, without a pointer, are one
+// comparable type.
 func sameKey(a *EntityInfo, ac int, b *EntityInfo, bc int) error {
 	x, y := a.Columns[ac], b.Columns[bc]
+	for _, k := range [...]struct {
+		e *EntityInfo
+		c ColumnInfo
+	}{{a, x}, {b, y}} {
+		if k.c.Codec {
+			return fmt.Errorf("the key %s.%s is an encoded column, which cannot be compared", k.e.Name, k.c.Field)
+		}
+	}
 	if base(x.Type) != base(y.Type) {
 		return fmt.Errorf("the key types differ: %s.%s is %v and %s.%s is %v", a.Name, x.Field, base(x.Type), b.Name, y.Field, base(y.Type))
 	}

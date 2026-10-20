@@ -543,3 +543,36 @@ func (c NullStringCol[E, V]) IsNull[_ Lazy[V]]() Pred[E] {
 func (c NullStringCol[E, V]) NotNull[_ Lazy[V]]() Pred[E] {
 	return Pred[E]{node{op: opNotNull, col: c.I}}
 }
+
+// JSONCol is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column and neither compares nor orders by it, as equality and order of JSON differ by dialect. I is the column's index; velox-gen sets it.
+type JSONCol[E, V any] struct{ I int32 }
+
+func (c JSONCol[E, V]) column(*E) int32 { return c.I }
+
+// Set sets the column to v.
+func (c JSONCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
+	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
+}
+
+// NullJSONCol is JSONCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it.
+type NullJSONCol[E, V any] struct{ I int32 }
+
+func (c NullJSONCol[E, V]) column(*E) int32 { return c.I }
+
+// Set sets the column to v.
+func (c NullJSONCol[E, V]) Set[_ Lazy[V]](v V) Setter[E] {
+	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}
+}
+
+// SetNull sets the column to NULL.
+func (c NullJSONCol[E, V]) SetNull[_ Lazy[V]]() Setter[E] {
+	return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet}}
+}
+
+// IsNull is column IS NULL.
+func (c NullJSONCol[E, V]) IsNull[_ Lazy[V]]() Pred[E] { return Pred[E]{node{op: opIsNull, col: c.I}} }
+
+// NotNull is column IS NOT NULL.
+func (c NullJSONCol[E, V]) NotNull[_ Lazy[V]]() Pred[E] {
+	return Pred[E]{node{op: opNotNull, col: c.I}}
+}

@@ -30,18 +30,29 @@ type jDoc struct {
 	Nums    *[]int
 }
 
+// jDocs are jDoc's handles as velox-gen writes them: JSONCol and NullJSONCol
+// for the encoded columns, which set them and compare or order by nothing.
 var jDocs = struct {
 	ID      velox.NumberCol[jDoc, int64]
 	OwnerID velox.NumberCol[jDoc, int64]
-	Tags    velox.Col[jDoc, []string]
-	Attrs   velox.Col[jDoc, map[string]any]
-	Shape   velox.Col[jDoc, jShape]
-	Nums    velox.NullCol[jDoc, []int]
+	Tags    velox.JSONCol[jDoc, []string]
+	Attrs   velox.JSONCol[jDoc, map[string]any]
+	Shape   velox.JSONCol[jDoc, jShape]
+	Nums    velox.NullJSONCol[jDoc, []int]
 }{
 	velox.NumberCol[jDoc, int64]{I: 0}, velox.NumberCol[jDoc, int64]{I: 1},
-	velox.Col[jDoc, []string]{I: 2}, velox.Col[jDoc, map[string]any]{I: 3},
-	velox.Col[jDoc, jShape]{I: 4}, velox.NullCol[jDoc, []int]{I: 5},
+	velox.JSONCol[jDoc, []string]{I: 2}, velox.JSONCol[jDoc, map[string]any]{I: 3},
+	velox.JSONCol[jDoc, jShape]{I: 4}, velox.NullJSONCol[jDoc, []int]{I: 5},
 }
+
+// jDocCols are Col handles of jDoc's encoded columns, as a hand-written Desc
+// might declare them: their conditions and orders compile, and the statement
+// refuses them, the backstop behind JSONCol, which has none.
+var jDocCols = struct {
+	Tags  velox.Col[jDoc, []string]
+	Shape velox.Col[jDoc, jShape]
+	Nums  velox.NullCol[jDoc, []int]
+}{velox.Col[jDoc, []string]{I: 2}, velox.Col[jDoc, jShape]{I: 4}, velox.NullCol[jDoc, []int]{I: 5}}
 
 var jDocMeta velox.MetaOnce[jDoc]
 
@@ -115,8 +126,8 @@ func jFull() (jDoc, []any) {
 	return x, []any{int64(1), int64(2), []byte(`["a","b"]`), []byte(`{"k":1}`), []byte(`{"w":3,"h":4}`), []byte(`[5,6]`)}
 }
 
-// bound is args as SQLite binds them: each []byte, an encoded value, as a
-// string.
+// bound is args as SQLite and MySQL bind them: each []byte, an encoded value
+// that is valid UTF-8, as a string.
 func bound(args []any) []any {
 	out := make([]any, len(args))
 	for i, a := range args {
@@ -182,7 +193,7 @@ func TestJSONWrites(t *testing.T) {
 			t.Fatal(err)
 		}
 		want = append(want, int64(3), int64(2), []byte(`[]`), []byte("null"), []byte(`{"w":0,"h":0}`), nil)
-		sameArgs(t, "InsertAll", e.Args, want)
+		sameArgs(t, "InsertAll", e.Args, bound(want))
 	})
 	t.Run("Update", func(t *testing.T) {
 		e := &velox.FakeExec{Affected: 1}
@@ -234,7 +245,7 @@ func TestJSONWrites(t *testing.T) {
 			if !strings.Contains(e.SQL, "UPDATE") {
 				t.Fatalf("%v: no update branch: %s", d, e.SQL)
 			}
-			if d == velox.SQLite {
+			if d != velox.Postgres {
 				want = bound(want)
 			}
 			sameArgs(t, d.String()+" upsert", e.Args, want)
@@ -427,17 +438,17 @@ func TestJSONPredicatesRefused(t *testing.T) {
 			t.Errorf("%s: got %v, want the column refused", what, err)
 		}
 	}
-	_, err := db.Query[jDoc]().Where(jDocs.Tags.EQ([]string{"a"})).Limit(1).All(ctx)
+	_, err := db.Query[jDoc]().Where(jDocCols.Tags.EQ([]string{"a"})).Limit(1).All(ctx)
 	refused("EQ", err)
-	_, _, err = db.Query[jDoc]().Where(jDocs.Tags.NEQ(nil)).Limit(1).SQL(ctx)
+	_, _, err = db.Query[jDoc]().Where(jDocCols.Tags.NEQ(nil)).Limit(1).SQL(ctx)
 	refused("NEQ under SQL", err)
-	_, err = db.Query[jDoc]().Where(velox.Or(jDocs.ID.EQ(1), jDocs.Tags.In([]string{"a"}))).Limit(1).All(ctx)
+	_, err = db.Query[jDoc]().Where(velox.Or(jDocs.ID.EQ(1), jDocCols.Tags.In([]string{"a"}))).Limit(1).All(ctx)
 	refused("In under Or", err)
-	_, err = db.Update[jDoc]().Set(jDocs.OwnerID.Set(1)).Where(jDocs.Tags.NotIn([]string{"a"})).Exec(ctx)
+	_, err = db.Update[jDoc]().Set(jDocs.OwnerID.Set(1)).Where(jDocCols.Tags.NotIn([]string{"a"})).Exec(ctx)
 	refused("NotIn in an update", err)
-	_, err = db.Delete[jDoc]().Where(jDocs.Tags.EQ(nil)).Exec(ctx)
+	_, err = db.Delete[jDoc]().Where(jDocCols.Tags.EQ(nil)).Exec(ctx)
 	refused("EQ in a delete", err)
-	_, err = db.Query[jDoc]().Where(jDocs.Tags.EQ([]string{"a"})).Limit(1).Count(ctx)
+	_, err = db.Query[jDoc]().Where(jDocCols.Tags.EQ([]string{"a"})).Limit(1).Count(ctx)
 	refused("EQ in a Count", err)
 	hooked := velox.OpenFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
 		st.Where = append(st.Where, velox.ColumnEQ(2, []string{"a"}))
@@ -445,7 +456,7 @@ func TestJSONPredicatesRefused(t *testing.T) {
 	}))
 	_, err = hooked.Query[jDoc]().Limit(1).All(ctx)
 	refused("a Rewrite hook's ColumnEQ", err)
-	_, err = db.Query[jOwner]().Where(jOwners.Docs.HasWhere(jDocs.Tags.EQ([]string{"a"}))).Limit(1).All(ctx)
+	_, err = db.Query[jOwner]().Where(jOwners.Docs.HasWhere(jDocCols.Tags.EQ([]string{"a"}))).Limit(1).All(ctx)
 	refused("EQ under HasWhere", err)
 
 	e.Rows = nil
@@ -623,7 +634,7 @@ func TestCodecNeedsBoth(t *testing.T) {
 		}
 	}
 	if info := velox.InfoOf[jList](); info.Columns[0].Codec || !info.Columns[1].Codec {
-		t.Errorf("JSON is not derived from the codec: %+v", info.Columns)
+		t.Errorf("Codec is not derived from the codec: %+v", info.Columns)
 	}
 }
 
@@ -715,7 +726,7 @@ func TestAfterOverAnEncodedColumn(t *testing.T) {
 	for _, c := range []struct {
 		name string
 		by   velox.Order[jDoc]
-	}{{"shape", jDocs.Shape.Asc()}, {"tags", jDocs.Tags.Asc()}, {"nums", jDocs.Nums.Asc()}} {
+	}{{"shape", jDocCols.Shape.Asc()}, {"tags", jDocCols.Tags.Asc()}, {"nums", jDocCols.Nums.Asc()}} {
 		name := c.name
 		_, _, err := db.Query[jDoc]().OrderBy(c.by, jDocs.ID.Asc()).After(&last).Limit(2).SQL(ctx)
 		if err == nil || !strings.Contains(err.Error(), "After") || !strings.Contains(err.Error(), "column "+name) || !strings.Contains(err.Error(), "an encoded column") {
@@ -729,8 +740,9 @@ func TestAfterOverAnEncodedColumn(t *testing.T) {
 
 // TestJSONBindsPerDialect: an encoded value is bound as a string on SQLite,
 // so that the column holds TEXT (a []byte would be stored as a BLOB, which
-// SQLite's JSON functions read as JSONB), and as []byte on PostgreSQL and
-// MySQL. NULL stays nil.
+// SQLite's JSON functions read as JSONB), and on MySQL, whose driver with
+// interpolateParams=true writes a []byte as a binary string that a JSON
+// column refuses; as []byte on PostgreSQL. NULL stays nil.
 func TestJSONBindsPerDialect(t *testing.T) {
 	for _, d := range []velox.Dialect{velox.Postgres, velox.MySQL, velox.SQLite} {
 		e := &velox.FakeExec{Affected: 1}
@@ -738,7 +750,7 @@ func TestJSONBindsPerDialect(t *testing.T) {
 		x, want := jFull()
 		wantAll := append(append([]any(nil), want...), want...)
 		wantAll[len(want)] = int64(2) // the second row's key
-		if d == velox.SQLite {
+		if d != velox.Postgres {
 			want, wantAll = bound(want), bound(wantAll)
 		}
 		if err := db.Insert(&x).Exec(ctx); err != nil {
@@ -755,9 +767,209 @@ func TestJSONBindsPerDialect(t *testing.T) {
 			t.Fatal(err)
 		}
 		wantUp := []any{[]byte(`["x"]`), nil, int64(1)}
-		if d == velox.SQLite {
+		if d != velox.Postgres {
 			wantUp = bound(wantUp)
 		}
 		sameArgs(t, d.String()+" Update", e.Args, wantUp)
+	}
+}
+
+// jBin has a column with a binary codec, whose bytes are not UTF-8.
+type jBin struct {
+	ID  int64
+	Raw []byte
+}
+
+var jBins = struct {
+	ID  velox.NumberCol[jBin, int64]
+	Raw velox.JSONCol[jBin, []byte]
+}{velox.NumberCol[jBin, int64]{I: 0}, velox.JSONCol[jBin, []byte]{I: 1}}
+
+var jBinMeta velox.MetaOnce[jBin]
+
+func (*jBin) VeloxMeta() *velox.Meta[jBin] {
+	return jBinMeta.Load(func() velox.Desc[jBin] {
+		return velox.Desc[jBin]{
+			Table: "j_bins",
+			Columns: []velox.ColumnDesc{
+				{Field: "ID", Name: "id"},
+				{Field: "Raw", Name: "raw",
+					// Encode prefixes 0xff, never valid UTF-8.
+					Encode: func(v any) ([]byte, error) { return append([]byte{0xff}, v.([]byte)...), nil },
+					Decode: func(data []byte, v any) error { *v.(*[]byte) = append([]byte(nil), data[1:]...); return nil }},
+			},
+			PrimaryKey: []int{0},
+			Tenant:     -1,
+			Addr: func(x *jBin, i int) any {
+				if i == 0 {
+					return &x.ID
+				}
+				return &x.Raw
+			},
+		}
+	})
+}
+
+// TestBinaryCodecStaysBytes: bytes that are not valid UTF-8, which only a
+// binary codec returns, are bound as []byte on every dialect (a BLOB on
+// SQLite), never as a string that is not text; valid UTF-8 from the same
+// codec is a string on SQLite and MySQL.
+func TestBinaryCodecStaysBytes(t *testing.T) {
+	for _, d := range []velox.Dialect{velox.Postgres, velox.MySQL, velox.SQLite} {
+		e := &velox.FakeExec{Affected: 1}
+		db := velox.OpenFake(d, e)
+		x := jBin{ID: 1, Raw: []byte("ab")}
+		if err := db.Insert(&x).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		sameArgs(t, d.String()+" Insert", e.Args, []any{int64(1), []byte("\xffab")})
+		if _, err := db.Update[jBin]().Set(jBins.Raw.Set([]byte("c"))).Where(jBins.ID.EQ(1)).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		sameArgs(t, d.String()+" Update", e.Args, []any{[]byte("\xffc"), int64(1)})
+	}
+	e := &velox.FakeExec{Affected: 1}
+	db := velox.OpenFake(velox.SQLite, e)
+	if _, err := db.Update[jList]().Set(jLists.Words.Set([]string{"é"})).Where(jLists.ID.EQ(1)).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	sameArgs(t, "valid UTF-8", e.Args, []any{"<é>", int64(1)})
+}
+
+// TestJSONHandles: velox-gen's JSONCol and NullJSONCol are a Column[E], so
+// they name columns in Columns, Omit, Save and an upsert; they set the
+// column, and NullJSONCol sets and tests NULL.
+func TestJSONHandles(t *testing.T) {
+	e := &velox.FakeExec{Affected: 1}
+	db := velox.OpenFake(velox.Postgres, e)
+	if _, err := db.Update[jDoc]().Set(jDocs.Tags.Set([]string{"x"}), jDocs.Shape.Set(jShape{1, 2}), jDocs.Nums.SetNull()).Where(jDocs.ID.EQ(1)).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	sameArgs(t, "Set and SetNull", e.Args, []any{[]byte(`["x"]`), []byte(`{"w":1,"h":2}`), nil, int64(1)})
+	x, _ := jFull()
+	if err := db.Save(ctx, &x, jDocs.Attrs, jDocs.Nums); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(e.SQL, `UPDATE "j_docs" SET "attrs" = $1, "nums" = $2 WHERE "id" = $3`) {
+		t.Errorf("Save SQL %s", e.SQL)
+	}
+	if err := db.Insert(&x).OnConflict(jDocs.ID).Update(jDocs.Tags, jDocs.Nums).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(e.SQL, `"tags" = EXCLUDED."tags"`) || !strings.Contains(e.SQL, `"nums" = EXCLUDED."nums"`) {
+		t.Errorf("upsert SQL %s", e.SQL)
+	}
+	if _, _, err := db.Query[jDoc]().Columns(jDocs.ID, jDocs.Tags).Where(jDocs.Nums.IsNull()).Limit(1).SQL(ctx); err != nil {
+		t.Fatal(err)
+	}
+	q, _, err := db.Query[jDoc]().Columns(jDocs.ID, jDocs.Tags).Where(jDocs.Nums.IsNull()).Limit(1).SQL(ctx)
+	if err != nil || !strings.HasPrefix(q, `SELECT "id", "tags" FROM "j_docs" WHERE "nums" IS NULL`) {
+		t.Errorf("Columns and IsNull: %s, %v", q, err)
+	}
+	q, _, err = db.Query[jDoc]().Omit(jDocs.Attrs, jDocs.Shape).Where(jDocs.Nums.NotNull()).Limit(1).SQL(ctx)
+	if err != nil || strings.Contains(q, "attrs") || strings.Contains(q, "shape") || !strings.Contains(q, `"nums" IS NOT NULL`) {
+		t.Errorf("Omit and NotNull: %s, %v", q, err)
+	}
+}
+
+// TestOrderByAnEncodedColumn: ordering by an encoded column is refused when
+// the statement runs, naming the column, as the order of encoded values
+// differs by dialect; so is ordering a relation's load by one.
+func TestOrderByAnEncodedColumn(t *testing.T) {
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e)
+	refused := func(what, col string, err error) {
+		t.Helper()
+		if err == nil || !strings.Contains(err.Error(), "column "+col) || !strings.Contains(err.Error(), "order by") {
+			t.Errorf("%s: got %v, want ordering by %s refused", what, err, col)
+		}
+	}
+	_, _, err := db.Query[jDoc]().OrderBy(jDocCols.Tags.Asc()).Limit(1).SQL(ctx)
+	refused("Asc", "tags", err)
+	_, err = db.Query[jDoc]().OrderBy(jDocs.ID.Asc(), jDocCols.Shape.Desc()).Limit(1).All(ctx)
+	refused("Desc after the key", "shape", err)
+	_, err = db.Query[jDoc]().OrderBy(jDocCols.Nums.Asc()).Limit(1).All(ctx)
+	refused("a nullable column", "nums", err)
+	e.Rows = [][]any{{int64(1)}}
+	_, err = db.Query[jOwner]().With(jOwners.Docs.OrderBy(jDocCols.Tags.Asc())).Limit(1).All(ctx)
+	refused("a relation's load", "tags", err)
+}
+
+// jKey is an entity whose key columns a test gives a codec, which the
+// metadata refuses. Kids is keyed jKey.parent = jKid.ref.
+type jKey struct {
+	ID     int64
+	Org    int64
+	Parent int64
+	Kids   velox.Many[jKid]
+}
+
+// jKeyDesc is jKey's Desc, with a codec on the columns codec names.
+func jKeyDesc(tenant int, codec ...int) velox.Desc[jKey] {
+	cols := []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Org", Name: "org"}, {Field: "Parent", Name: "parent"}}
+	for _, c := range codec {
+		cols[c].Encode, cols[c].Decode = json.Marshal, json.Unmarshal
+	}
+	return velox.Desc[jKey]{
+		Table: "j_keys", Columns: cols, PrimaryKey: []int{0}, Tenant: tenant,
+		Relations: []velox.Relation{velox.EdgeTo[jKid]("Kids", 2, 1)},
+		Addr: func(x *jKey, i int) any {
+			return [...]any{&x.ID, &x.Org, &x.Parent}[i]
+		},
+		RelAddr: func(x *jKey, i int) any { return &x.Kids },
+	}
+}
+
+// jKid is the target of jKey's Kids, keyed by ref, an encoded column.
+type jKid struct {
+	ID  int64
+	Ref int64
+}
+
+var jKidMeta velox.MetaOnce[jKid]
+
+func (*jKid) VeloxMeta() *velox.Meta[jKid] {
+	return jKidMeta.Load(func() velox.Desc[jKid] {
+		return velox.Desc[jKid]{
+			Table:      "j_kids",
+			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Ref", Name: "ref", Encode: json.Marshal, Decode: json.Unmarshal}},
+			PrimaryKey: []int{0},
+			Tenant:     -1,
+			Addr: func(x *jKid, i int) any {
+				if i == 0 {
+					return &x.ID
+				}
+				return &x.Ref
+			},
+		}
+	})
+}
+
+// TestEncodedKeyRefused: a primary-key, tenant or relation-key column with a
+// codec is refused when the metadata is built, naming the column, as every
+// Save, scope and load compares it; so is a relation keyed by its target's
+// encoded column, when the relation is resolved.
+func TestEncodedKeyRefused(t *testing.T) {
+	if _, err := velox.LoadDesc(jKeyDesc(1)); err != nil {
+		t.Fatalf("without a codec: %v", err)
+	}
+	for _, c := range []struct {
+		name          string
+		tenant, col   int
+		field, reason string
+	}{
+		{"primary key", -1, 0, "ID", "primary key"},
+		{"tenant", 1, 1, "Org", "tenant"},
+		{"relation key", -1, 2, "Parent", "relation Kids"},
+	} {
+		_, err := velox.LoadDesc(jKeyDesc(c.tenant, c.col))
+		var se *velox.SchemaError
+		if !errors.As(err, &se) || se.Field != c.field || !strings.Contains(err.Error(), c.reason) || !strings.Contains(err.Error(), "codec") {
+			t.Errorf("%s: got %v, want a *SchemaError naming %s", c.name, err, c.field)
+		}
+	}
+	_, err := velox.LoadDesc(jKeyDesc(-1), velox.TargetOf[jKid]())
+	if err == nil || !strings.Contains(err.Error(), "jKid.Ref") || !strings.Contains(err.Error(), "encoded column") {
+		t.Errorf("a target's encoded key: got %v", err)
 	}
 }

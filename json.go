@@ -14,12 +14,12 @@ import (
 	"unsafe"
 )
 
-// encodeJSON is the argument bound for v, a value of the encoded column col
+// encodeCol is the argument bound for v, a value of the encoded column col
 // of entity in: the bytes its Encode returns, or nil (SQL NULL) for a nil
 // pointer, and for a nil slice or map when the column is nullable. In a
 // column that is not, a nil slice or map is encoded (by encoding/json, as
 // the JSON null).
-func encodeJSON(in *EntityInfo, col int, v any) (any, error) {
+func encodeCol(in *EntityInfo, col int, v any) (any, error) {
 	c := &in.Columns[col]
 	if c.encode == nil {
 		return nil, errNoCodec(in, col)
@@ -106,11 +106,18 @@ func (s *codecScanner) Scan(src any) error {
 	return nil
 }
 
-// errJSONCondition is the error for a condition that compares the encoded
+// errCodecCondition is the error for a condition that compares the encoded
 // column col of in: equality of encoded values differs by dialect (jsonb
 // normalises JSON, TEXT does not), so only IsNull and NotNull are allowed.
-func errJSONCondition(in *EntityInfo, col int) error {
-	return fmt.Errorf("velox: %s: column %s is an encoded column (JSON in velox-gen), which a condition cannot compare: their equality differs by dialect; only IsNull and NotNull apply to it", in.Name, in.Columns[col].Name)
+func errCodecCondition(in *EntityInfo, col int) error {
+	return fmt.Errorf("velox: %s: column %s is an encoded column (JSON in velox-gen), which a condition cannot compare: equality of encoded values differs by dialect; only IsNull and NotNull apply to it", in.Name, in.Columns[col].Name)
+}
+
+// errCodecOrderBy is the error for ordering by the encoded column col of in:
+// the order of encoded values differs by dialect (jsonb orders by its own
+// rules, MySQL's JSON by its, TEXT by the text), as their equality does.
+func errCodecOrderBy(in *EntityInfo, col int) error {
+	return fmt.Errorf("velox: %s: column %s is an encoded column (JSON in velox-gen), which a query cannot order by: the order of encoded values differs by dialect", in.Name, in.Columns[col].Name)
 }
 
 // errCodecAdd is the error for adding to or subtracting from the encoded

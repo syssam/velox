@@ -209,6 +209,8 @@ var genericObjects = []struct {
 	{"NullOrderedCol", "velox.NullOrderedCol[E, int64]", "", 19456}, // measured 15270
 	{"NullNumberCol", "velox.NullNumberCol[E, int64]", "", 19456},   // measured 15188
 	{"NullStringCol", "velox.NullStringCol[E, string]", "", 19456},  // measured 15228
+	{"JSONCol", "velox.JSONCol[E, []string]", "", 19456},            // measured 14814 (2026-10-20)
+	{"NullJSONCol", "velox.NullJSONCol[E, []string]", "", 19456},    // measured 15142 (2026-10-20)
 	{"Pred", "velox.Pred[E]", "", 5120},                             // measured 1014
 	{"Order", "velox.Order[E]", "", 6144},                           // measured 1114
 	{"Setter", "velox.Setter[E]", "", 8192},                         // measured 3168

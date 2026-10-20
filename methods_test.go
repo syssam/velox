@@ -25,11 +25,12 @@ func recvName(rt ast.Expr) string {
 	return ""
 }
 
-// handleKinds are the eight column handle types; each has an ordinary column
+// handleKinds are the ten column handle types; each has an ordinary column
 // method, which makes it a Column[E].
 var handleKinds = map[string]bool{
 	"Col": true, "OrderedCol": true, "NumberCol": true, "StringCol": true,
 	"NullCol": true, "NullOrderedCol": true, "NullNumberCol": true, "NullStringCol": true,
+	"JSONCol": true, "NullJSONCol": true,
 }
 
 // ordinaryMethod reports whether the method name of the generic type recv is
@@ -104,7 +105,7 @@ func genericOwnTypeParam(fd *ast.FuncDecl) bool {
 
 // TestMethodsOfGenericTypesAreGeneric enforces design §3 rule 1: a method of
 // a generic type is a generic method, compiled only where it is called. The
-// exceptions are exact: column on the eight handle kinds, which makes a handle
+// exceptions are exact: column on the ten handle kinds, which makes a handle
 // a Column[E], MarshalJSON on One and Many, and Mutate on MutateFunc.
 func TestMethodsOfGenericTypesAreGeneric(t *testing.T) {
 	fset := token.NewFileSet()

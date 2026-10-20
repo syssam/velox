@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // writer renders a statement. With argsOnly it collects the arguments and
@@ -64,23 +65,35 @@ func (w *writer) arg(v any) {
 }
 
 // colArg binds v, a value of column col: as it is, or when the column is an
-// encoded one, as the bytes its codec returns (a string on SQLite, so that
-// the column holds TEXT). Every value written to a column goes
-// through it, so that only the arguments hold the bytes (hooks see v).
+// encoded one, as the bytes its codec returns, which on SQLite and MySQL are
+// bound as a string when they are valid UTF-8 (textArg). Every value written
+// to a column goes through it, so that only the arguments hold the bytes
+// (hooks see v).
 func (w *writer) colArg(col int, v any) {
 	if w.in.Columns[col].Codec {
-		b, err := encodeJSON(w.in, col, v)
+		b, err := encodeCol(w.in, col, v)
 		if err != nil {
 			w.fail(err)
 		}
 		v = b
-		// SQLite stores a []byte as a BLOB whatever the column's affinity, and
-		// its JSON functions read a BLOB as JSONB; a string is stored as TEXT.
-		if bs, ok := b.([]byte); ok && w.d == SQLite {
+		if bs, ok := b.([]byte); ok && textArg(w.d, bs) {
 			v = string(bs)
 		}
 	}
 	w.arg(v)
+}
+
+// textArg reports whether the encoded value bs is bound as a string on
+// dialect d. SQLite stores a []byte as a BLOB whatever the column's affinity,
+// and its JSON functions read a BLOB as JSONB; a string is stored as TEXT.
+// MySQL's driver, with interpolateParams=true, writes a []byte as a binary
+// string, which a JSON column refuses (error 3144); a string it writes as
+// text. Bytes that are not valid UTF-8, which only a binary codec returns,
+// stay []byte (a BLOB on SQLite) rather than becoming a string that is not
+// text. PostgreSQL's drivers take a []byte for jsonb and json as the
+// document.
+func textArg(d Dialect, bs []byte) bool {
+	return (d == SQLite || d == MySQL) && utf8.Valid(bs)
 }
 
 var cmpText = [...]string{opEQ: " = ", opNEQ: " <> ", opGT: " > ", opGTE: " >= ", opLT: " < ", opLTE: " <= "}
@@ -113,6 +126,9 @@ func (w *writer) selectStmt(st *Statement) {
 			w.str(" ORDER BY ")
 		} else {
 			w.str(", ")
+		}
+		if w.in.Columns[o.Column].Codec {
+			w.fail(errCodecOrderBy(w.in, o.Column))
 		}
 		w.col(int32(o.Column))
 		if o.Desc {
@@ -149,7 +165,7 @@ func isNilArg(v any) bool {
 func (w *writer) pred(n node) {
 	if n.op >= opEQ && n.op <= opFold && w.in.Columns[n.col].Codec {
 		// Every condition that holds a value; IsNull and NotNull hold none.
-		w.fail(errJSONCondition(w.in, int(n.col)))
+		w.fail(errCodecCondition(w.in, int(n.col)))
 	}
 	if (n.op == opEQ || n.op == opNEQ) && isNilArg(n.v) {
 		w.predCol(n.col)

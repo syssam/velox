@@ -238,6 +238,7 @@ The handle type follows the field's type, by its underlying type
 | integers, floats, `decimal.Decimal`; types registered as numbers | `NumberCol` | `Add` `Sub`, `Sum` `Avg` |
 | `~string` | `StringCol` | `Like` `Contains` `HasPrefix` `HasSuffix` `EqualFold` |
 | `*T` of any of these | `Null…Col` | `IsNull` `NotNull` `SetNull` |
+| a `json` field (schema design, note of 2026-10-20) | `JSONCol`, `NullJSONCol` | only `Set`, and `IsNull` `NotNull` `SetNull` for `NullJSONCol`: no condition or order compares JSON |
 | `velox.One[T]` / `velox.Many[T]` | `Rel` (one type for both kinds) | `Has` `HasWhere` `Where` `OrderBy` `With` (§4.3) |
 
 Each column handle produces values typed by its entity (`velox.Pred[Invoice]`,

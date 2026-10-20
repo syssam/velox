@@ -69,19 +69,25 @@ type ColumnInfo struct {
 	Sensitive     bool // the column holds a secret (velox logs no values)
 	// Codec says the column's value is encoded: its ColumnDesc gave a codec
 	// (Encode and Decode), as velox-gen does, with encoding/json's, for every
-	// json field. The value is bound as the bytes Encode returns (as a string on
-	// SQLite, so that the column holds TEXT, not a BLOB), and only
-	// there: hooks and policies see the Go value, and only Statement.Args
-	// holds the bytes. In a nullable (pointer) field, a nil pointer, or a nil
-	// slice or map it points to, binds NULL; in any other field a nil slice
-	// or map is encoded (the JSON null, which reads back as nil). An untyped
-	// nil, which only a hook-built value can be, binds NULL in either. What
-	// is read, as []byte or string, is decoded with Decode; NULL leaves the
+	// json field. The value is bound as the bytes Encode returns, and only
+	// there: hooks and policies see the Go value, and only Statement.Args holds
+	// the bytes. On SQLite and MySQL bytes that are valid UTF-8 are bound as a
+	// string: SQLite stores a []byte as a BLOB, not TEXT, and MySQL's driver
+	// with interpolateParams=true writes a []byte as a binary string, which a
+	// JSON column refuses. Bytes that are not valid UTF-8, which only a binary
+	// codec returns, stay []byte. In a nullable (pointer) field, a nil pointer,
+	// or a nil slice or map it points to, binds NULL; in any other field a nil
+	// slice or map is encoded (the JSON null, which reads back as nil). An
+	// untyped nil, which only a hook-built value can be, binds NULL in either.
+	// What is read, as []byte or string, is decoded with Decode; NULL leaves the
 	// field at its zero value (nil, for a pointer). A condition other than
-	// IsNull and NotNull on the column is refused when the statement runs:
-	// equality of encoded values differs by dialect. The flag says nothing
-	// of the database type: the migration planner takes that from the
-	// schema's field type.
+	// IsNull and NotNull on the column, and ordering by it, are refused when the
+	// statement runs: equality and order of encoded values differ by dialect
+	// (velox-gen's JSONCol and NullJSONCol handles have no such methods, so
+	// generated code refuses them at compile time). A primary-key, tenant or
+	// relation-key column cannot be encoded: the metadata is refused. The flag
+	// says nothing of the database type: the migration planner takes that from
+	// the schema's field type.
 	Codec  bool
 	encode func(v any) ([]byte, error)    // ColumnDesc.Encode
 	decode func(data []byte, v any) error // ColumnDesc.Decode
@@ -146,8 +152,9 @@ func isRelation(t reflect.Type) bool {
 }
 
 // validate refuses metadata that would render wrong SQL: two columns of one
-// name, a key or index that names no field or one field twice, and a tenant
-// column that cannot be compared or filled safely.
+// name, a key or index that names no field or one field twice, a tenant
+// column that cannot be compared or filled safely, and a primary-key, tenant
+// or relation-key column with a codec.
 func validate(info *EntityInfo) error {
 	var errs []error
 	fail := func(field, format string, args ...any) {
@@ -185,6 +192,22 @@ func validate(info *EntityInfo) error {
 		}
 	}
 	set("the primary key", info.PrimaryKey)
+	// A key is compared by every Save, scope and load, and a condition on an
+	// encoded column is refused when the statement runs: every use would fail.
+	encodedKey := func(what string, col int) {
+		if col >= 0 && col < len(info.Columns) && info.Columns[col].Codec {
+			fail(info.Columns[col].Field, "%s column %s has a codec (Encode and Decode): an encoded column cannot be compared", what, info.Columns[col].Name)
+		}
+	}
+	for _, k := range info.PrimaryKey {
+		encodedKey("the primary key's", k)
+	}
+	if info.Tenant >= 0 {
+		encodedKey("the tenant", info.Tenant)
+	}
+	for _, r := range info.rels {
+		encodedKey("relation "+r.name+"'s key", r.ownerCol)
+	}
 	for _, ix := range info.Indexes {
 		if ix.Unique {
 			set("a unique index", ix.Columns)
