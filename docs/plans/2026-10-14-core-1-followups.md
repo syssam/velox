@@ -228,6 +228,9 @@ Left by the observability plan:
 - `Handler` returns an anonymous interface; a named type would read better in godoc. Settle its name and what it exposes.
 - Decide which exported helpers stay public: `CheckDepth`, `CheckWidth`, `Paginate` and `CursorOrder` are exported, but generated code does not need them. `AsInt` takes an unexported constraint.
 - `ErrFilterTooWide`'s text, "filter list is too long", is wrong for the node budget (`MaxFilterNodes`): give the budget its own text or error.
+- Move velox-gen's plural rule into the stdlib-only `plugin` package as `plugin.Plural`, frozen like `plugin.Singular`; gogen's root connection functions use a copy that no test pins to velox-gen's `Handles`.
+- The example README and main.go say introspection is free under the complexity limit; only `__Schema` is, `__type(name:)` costs a few points.
+- Generated enum `UnmarshalGQL` errors lack the `veloxgql: ` prefix the docs promise.
 
 ## 1.0 release
 
