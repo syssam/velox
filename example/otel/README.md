@@ -22,10 +22,11 @@ ctx = velox.WithTags(ctx, "route", "POST /invoices/{number}/pay") // in middlewa
 ```
 
 - **Spans.** One per statement, named `SELECT invoices` and the like, of kind
-  client. Inside `db.Tx` it is a child of the transaction's `velox.tx` span,
-  whatever context the code passed to the query; `velox.tx` holds the
-  isolation, the attempt count and the outcome (`commit`, `rollback`,
-  `error`).
+  client, a child of the span on the statement's context. Inside `db.Tx`,
+  fn's `ctx` carries the transaction's `velox.tx` span, so a statement run on
+  it (or on a context derived from it) nests under `velox.tx`; `velox.tx`
+  holds the isolation, the attempt count and the outcome (`commit`,
+  `rollback`, `error`).
 - **Fingerprint.** `velox.fingerprint` names the statement's shape: the same
   for every argument value, in every process running the same velox version.
 - **Call site.** `code.file.path` and `code.line.number` are the line of the

@@ -24,8 +24,10 @@ velox.Open(velox.SQLite, sqlDB, velox.WithDeadlines(velox.Deadlines{…}))
 ```
 
 - `fn`'s `ctx` is the transaction's: it carries its deadline. A statement on
-  `db` under it, where `tx` was meant, fails with `velox.ErrOutsideTx` before
-  anything is sent.
+  `db` (or any other `*velox.DB` but `tx`) under it, where `tx` was meant,
+  fails with `velox.ErrOutsideTx` before anything is sent, until the
+  transaction ends. `velox.WithoutTx(ctx)` lifts that for work that must not
+  join the transaction, such as an audit row that survives a rollback.
 - A nested `Tx` that fails undoes only its own work; here a duplicate
   account name is caught and the outer transaction opens `bob2` instead. On
   SQLite `ConstraintError.Constraint` holds the columns (`accounts.name`);

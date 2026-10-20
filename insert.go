@@ -552,6 +552,11 @@ func insertMany[E any](ctx context.Context, db *DB, m *Meta[E], xs []E, cf *Conf
 	if len(xs) == 0 {
 		return nil
 	}
+	// Before the batches' Tx, which would fail as the transaction's: the
+	// error names the entity on every path.
+	if db.foreign(ctx) {
+		return fmt.Errorf("velox: %s: %w", m.info.Name, ErrOutsideTx)
+	}
 	cols, per, err := prepareMany(ctx, db, m, xs)
 	if err != nil {
 		return err

@@ -13,9 +13,10 @@ import (
 )
 
 // txAround is the TxAround hook: one internal span per db.Tx call, around
-// every attempt and the commit, and its velox.tx.duration point. The
-// statements in the transaction nest under the span, whatever context fn
-// gives them, because next passes its context on as TxInfo.Context.
+// every attempt and the commit, and its velox.tx.duration point. next passes
+// on the span's context, which velox gives fn as its ctx: a statement run on
+// that ctx, or on one derived from it, nests under the span. One run on
+// another context nests under that context's span.
 func (a *adapter) txAround(ctx context.Context, tx *velox.TxInfo, next func(context.Context) error) error {
 	start := time.Now()
 	sctx, span := a.tracer.Start(ctx, spanTx, trace.WithSpanKind(trace.SpanKindInternal), trace.WithAttributes(

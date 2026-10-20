@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -418,6 +419,54 @@ func TestMutationGetsTheTxContext(t *testing.T) {
 	}
 }
 
+// TestMutationWithoutTx: a mutation's resolver holds only the transaction's
+// context. Under velox.WithoutTx it, its statement on the DB given to Handler
+// runs outside the transaction: the audit row survives the mutation's
+// rollback. Once the mutation has ended, the context the resolver kept marks
+// nothing, and a statement on the DB runs under it.
+func TestMutationWithoutTx(t *testing.T) {
+	// A file, so that a second connection sees the same database.
+	sqlDB, err := sql.Open("sqlite", "file:"+filepath.Join(t.TempDir(), "people.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	sqlDB.SetMaxOpenConns(2) // the transaction's, and the audit row's
+	if _, err := sqlDB.Exec(`CREATE TABLE people (id INTEGER PRIMARY KEY, name TEXT NOT NULL, age INTEGER NOT NULL)`); err != nil {
+		t.Fatal(err)
+	}
+	db := velox.Open(velox.SQLite, sqlDB)
+	var kept context.Context
+	srv := serve(db, map[string]resolver{
+		"fail": func(ctx context.Context, args map[string]any) (any, error) {
+			kept = ctx
+			id := args["id"].(int64)
+			// The audit row first: SQLite's transaction takes its write
+			// lock at its first write, and would make this one wait.
+			if err := db.Insert(&person{ID: 100 + id, Name: "audit", Age: 1}).Exec(velox.WithoutTx(ctx)); err != nil {
+				return nil, err
+			}
+			tx, err := veloxgql.DBFrom(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if err := tx.Insert(&person{ID: id, Name: "p", Age: 1}).Exec(ctx); err != nil {
+				return nil, err
+			}
+			return nil, errFail
+		},
+	})
+	if got := post(t, context.Background(), srv, `mutation { fail(id: 1) }`); !strings.Contains(got, errFail.Error()) {
+		t.Fatalf("got %s, want the resolver's error", got)
+	}
+	if ids := peopleIDs(t, db, &txLog{}); !slices.Equal(ids, []int64{101}) {
+		t.Errorf("people %v, want [101]: the audit row alone", ids)
+	}
+	if n, err := db.Query[person]().Count(context.WithoutCancel(kept)); err != nil || n != 1 {
+		t.Errorf("after the mutation, on the resolver's context: %d, %v; want 1 and no error", n, err)
+	}
+}
+
 func TestMutationRollsBack(t *testing.T) {
 	for _, c := range []struct {
 		name, query, want string
@@ -556,6 +605,10 @@ func TestStreamedOperations(t *testing.T) {
 func TestMutationResolversRunOneAtATime(t *testing.T) {
 	db, l := handlerDB(t)
 	var inFlight, most atomic.Int64
+	// arrived counts the resolvers that have started, and never goes down: a
+	// resolver waits for the other to start, not to be in flight still, which
+	// the other may no longer be by the time this one looks.
+	var arrived atomic.Int64
 	var wait atomic.Int64 // how long a resolver waits for the other, in ns
 	wait.Store(int64(30 * time.Second))
 	seen := func() {
@@ -570,7 +623,8 @@ func TestMutationResolversRunOneAtATime(t *testing.T) {
 		inFlight.Add(1)
 		defer inFlight.Add(-1)
 		seen()
-		for end := time.Now().Add(time.Duration(wait.Load())); inFlight.Load() < 2 && time.Now().Before(end); {
+		arrived.Add(1)
+		for end := time.Now().Add(time.Duration(wait.Load())); arrived.Load() < 2 && time.Now().Before(end); {
 			time.Sleep(time.Millisecond)
 		}
 		seen()
@@ -595,6 +649,7 @@ func TestMutationResolversRunOneAtATime(t *testing.T) {
 	l.take()
 
 	wait.Store(int64(100 * time.Millisecond))
+	arrived.Store(0)
 	if got, want := post(t, context.Background(), srv, `mutation { pair { a b } }`), `{"data":{"pair":{"a":0,"b":0}}}`; got != want {
 		t.Errorf("mutation: %s, want %s", got, want)
 	}

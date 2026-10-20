@@ -41,6 +41,9 @@ type DB struct {
 	// txShard is, in a transaction on a sharded DB, the shard it runs on;
 	// nil elsewhere.
 	txShard *shard
+	// txRoot is, in a transaction, its frame: the identity the mark on its
+	// fn's ctx carries, which its savepoints share. Nil elsewhere.
+	txRoot *txFrame
 }
 
 type config struct {
@@ -364,12 +367,11 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	return nil
 }
 
-// outsideTx fails a statement, st, on a DB in no transaction under a context
-// marked as a transaction's (txCtx), with ErrOutsideTx. It is one context
-// lookup, made only outside a transaction: the context of a statement in one
-// is the transaction's, or a savepoint's, or another the caller chose.
+// outsideTx fails a statement, st, under a context marked by a transaction
+// that has not ended and that db is not in (foreign), with ErrOutsideTx: one
+// context lookup, and a pointer compare.
 func (db *DB) outsideTx(ctx context.Context, st *Statement) error {
-	if !db.inTx && ctx.Value(txKey{}) != nil {
+	if db.foreign(ctx) {
 		return stmtErr(st, ErrOutsideTx)
 	}
 	return nil

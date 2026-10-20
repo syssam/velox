@@ -34,14 +34,26 @@ func RetrySerializable(n int) TxOption { return func(o *txOptions) { o.retries =
 // a *DB like any other, so a function that takes a *DB works inside a
 // transaction unchanged.
 //
-// fn's ctx is the context the transaction runs on: ctx, with the
-// transaction's deadline, as the TxAround hooks passed it on. It is
-// marked as the transaction's: a statement on a *DB in no transaction, db
-// itself say, under it or a context derived from it, fails with
-// ErrOutsideTx before anything is sent, which catches a statement meant for
-// tx; so does a Tx on such a *DB, which would begin another transaction. A
-// statement on db under another context, ctx in a goroutine fn starts say,
-// runs outside the transaction as usual.
+// fn's ctx is the context the transaction runs on: ctx, as the TxAround
+// hooks passed it on, with the values they added. It carries the
+// transaction's deadline, velox's or ctx's, whichever is earlier, unless a
+// TxAround hook passed on a context without it; the deadline bounds every
+// statement on tx either way.
+//
+// fn's ctx, and every context derived from it, is marked as the
+// transaction's. Under the mark, a statement on any *DB other than tx and its
+// savepoints fails before anything is sent, with ErrOutsideTx, as
+// "velox: <Entity>: statement outside its transaction". That includes db
+// itself, a DB from another Open, and another transaction's tx: such a
+// statement was most likely meant for tx. A Tx on such a *DB fails the same
+// way, as "velox: transaction: statement outside its transaction"; a nested
+// transaction is tx.Tx.
+//
+// The mark refuses nothing else. A statement under a context without the
+// mark runs as usual: one in a goroutine that fn starts with the ctx given to
+// Tx, for example. So does a statement under WithoutTx(ctx), which removes
+// the mark for work that must not join the transaction. Once the transaction
+// has ended, committed or rolled back, its mark counts as none.
 //
 // WithDeadlines' Tx and MaxTx, and Timeout, bound the whole call. The
 // transaction's deadline, velox's or ctx's, whichever is earlier, bounds every
@@ -61,17 +73,17 @@ func RetrySerializable(n int) TxOption { return func(o *txOptions) { o.retries =
 //
 // Inside a transaction, Tx makes a savepoint instead, so an error in a nested
 // fn rolls back only that fn's work. A nested Tx (a savepoint) ignores
-// options, and passes fn its ctx, marked as the savepoint's.
+// options, and passes fn the ctx it is given, marked as the transaction's.
 //
 // tx is valid only inside fn: after Tx returns, statements on it fail (or, for
 // a nested tx, run in the enclosing transaction). tx is not safe for
 // concurrent use: run its statements from one goroutine at a time.
 func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error, opts ...TxOption) error {
+	if db.foreign(ctx) {
+		return fmt.Errorf("velox: transaction: %w", ErrOutsideTx)
+	}
 	if db.inTx {
 		return db.savepoint(ctx, fn)
-	}
-	if ctx.Value(txKey{}) != nil {
-		return fmt.Errorf("velox: transaction: %w", ErrOutsideTx)
 	}
 	sh, err := db.shardForTx(ctx)
 	if err != nil {
@@ -162,7 +174,8 @@ func ended(err error) bool {
 // statements set on a successful write. sh, nil on a DB without a router, is
 // the shard whose primary the transaction runs on.
 //
-// fn gets ctx, marked as the transaction's.
+// fn gets ctx, marked as the transaction's; the mark ends when transaction
+// returns, after the commit or the rollback.
 func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) error, o txOptions, deadline time.Time, cause error, info *TxInfo, wrote *atomic.Bool, sh *shard) error {
 	primary := db.ex
 	var txShard *shard // its statements check their shard against it
@@ -177,6 +190,8 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 		info.end(TxError)
 		return fmt.Errorf("velox: begin: %w", err)
 	}
+	f := newTxFrame(ctx, DB{d: db.d, ex: ex, rt: db.rt, cfg: db.cfg, inTx: true, txDeadline: deadline, txCause: cause, tx: info, txWrote: wrote, txShard: txShard}, nil)
+	defer f.ended.Store(true) // deferred first, so it runs last: after the rollback
 	end := context.WithoutCancel(ctx)
 	finished := false
 	defer func() {
@@ -185,7 +200,7 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 			_ = ctl.rollback(end)
 		}
 	}()
-	if err := fn(newTxFrame(ctx, DB{d: db.d, ex: ex, rt: db.rt, cfg: db.cfg, inTx: true, txDeadline: deadline, txCause: cause, tx: info, txWrote: wrote, txShard: txShard})); err != nil {
+	if err := fn(&f.ctx, &f.db); err != nil {
 		finished = true
 		if ctx.Err() != nil || past(deadline) {
 			info.end(TxError)
@@ -257,8 +272,8 @@ func over(ctx context.Context) bool {
 }
 
 // savepoint runs fn under a savepoint of the current transaction, and gives
-// it ctx, marked as the savepoint's. It runs no TxAround hook; its statements
-// see the transaction's TxInfo.
+// it ctx, marked as the transaction's. It runs no TxAround hook; its
+// statements see the transaction's TxInfo.
 func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error) error {
 	name := "velox_" + strconv.Itoa(db.depth+1)
 	if _, err := db.ex.exec(ctx, "SAVEPOINT "+name, nil); err != nil {
@@ -271,7 +286,8 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 			_ = db.rollbackSavepoint(end, name)
 		}
 	}()
-	if err := fn(newTxFrame(ctx, DB{d: db.d, ex: db.ex, rt: db.rt, cfg: db.cfg, inTx: true, depth: db.depth + 1, txDeadline: db.txDeadline, txCause: db.txCause, tx: db.tx, txWrote: db.txWrote, txShard: db.txShard})); err != nil {
+	f := newTxFrame(ctx, DB{d: db.d, ex: db.ex, rt: db.rt, cfg: db.cfg, inTx: true, depth: db.depth + 1, txDeadline: db.txDeadline, txCause: db.txCause, tx: db.tx, txWrote: db.txWrote, txShard: db.txShard}, db.txRoot)
+	if err := fn(&f.ctx, &f.db); err != nil {
 		finished = true
 		// As in transaction: once the transaction's deadline has passed, the
 		// connection may be gone and the rollback's error is noise.
@@ -298,25 +314,55 @@ func (db *DB) rollbackSavepoint(ctx context.Context, name string) error {
 	return err
 }
 
+// WithoutTx returns ctx without the mark that Tx puts on fn's ctx, keeping
+// everything else: its values (the tenant, tags, spans), its deadline and its
+// cancellation. It is for work inside fn that must not join the transaction,
+// such as an audit row that must survive a rollback: under it, a statement on
+// db runs outside the transaction, on its own connection, and a Tx on db
+// begins a transaction of its own. A statement on tx under it still runs in
+// the transaction. On a context without the mark it returns ctx.
+func WithoutTx(ctx context.Context) context.Context {
+	if ctx.Value(txKey{}) == nil {
+		return ctx
+	}
+	return noTxCtx{ctx}
+}
+
+// noTxCtx is WithoutTx's context: its parent without the transaction's mark.
+type noTxCtx struct{ context.Context }
+
+// Value returns nil for txKey, and the parent context's value otherwise.
+func (c noTxCtx) Value(key any) any {
+	if _, ok := key.(txKey); ok {
+		return nil
+	}
+	return c.Context.Value(key)
+}
+
+// String names the context as the context package's do.
+func (c noTxCtx) String() string { return fmt.Sprint(c.Context) + ".WithoutTx" }
+
 // txKey is the context key of the mark a transaction's fn's context carries.
 type txKey struct{}
 
 // txCtx is the context a transaction's or a savepoint's fn gets: the context
-// it runs on, marked with the DB fn is given, which Value returns for txKey.
-// A statement on a DB in no transaction under it fails with ErrOutsideTx.
-// It is a context type of its own, rather than context.WithValue's, so that
-// it can live in the DB's allocation (txFrame): marking costs a transaction
-// no allocation.
+// it runs on, marked with the transaction's root frame, which Value returns
+// for txKey. The root frame is the transaction's identity, which its
+// savepoints share. Under a mark whose transaction has not ended, a
+// statement on a DB of another transaction, or of none, fails with
+// ErrOutsideTx (foreign). It is a context type of its own, rather than
+// context.WithValue's, so that it can live in the DB's allocation (txFrame):
+// marking costs a transaction no allocation.
 type txCtx struct {
 	context.Context
-	db *DB
+	root *txFrame
 }
 
-// Value returns the transaction's DB for txKey, and the parent context's
-// value otherwise.
+// Value returns the transaction's root frame for txKey, and the parent
+// context's value otherwise.
 func (c *txCtx) Value(key any) any {
 	if _, ok := key.(txKey); ok {
-		return c.db
+		return c.root
 	}
 	return c.Context.Value(key)
 }
@@ -325,15 +371,30 @@ func (c *txCtx) Value(key any) any {
 func (c *txCtx) String() string { return fmt.Sprint(c.Context) + ".WithTx" }
 
 // txFrame is a transaction's or a savepoint's DB and the context its fn
-// gets, in one allocation.
+// gets, in one allocation. ended is set, on the transaction's own frame (its
+// root), once the transaction has committed or rolled back.
 type txFrame struct {
-	db  DB
-	ctx txCtx
+	db    DB
+	ctx   txCtx
+	ended atomic.Bool
 }
 
-// newTxFrame returns ctx marked as the transaction's, and its DB, db.
-func newTxFrame(ctx context.Context, db DB) (context.Context, *DB) {
+// newTxFrame returns the frame of db, with ctx marked as the transaction's.
+// root is the transaction's frame, for a savepoint; nil for the transaction
+// itself, whose frame is its own root.
+func newTxFrame(ctx context.Context, db DB, root *txFrame) *txFrame {
 	f := &txFrame{db: db}
-	f.ctx = txCtx{Context: ctx, db: &f.db}
-	return &f.ctx, &f.db
+	if root == nil {
+		root = f
+	}
+	f.db.txRoot = root
+	f.ctx = txCtx{Context: ctx, root: root}
+	return f
+}
+
+// foreign reports whether ctx carries the mark of a transaction that has not
+// ended and that db is not in: db is in no transaction, or in another.
+func (db *DB) foreign(ctx context.Context) bool {
+	m, _ := ctx.Value(txKey{}).(*txFrame)
+	return m != nil && m != db.txRoot && !m.ended.Load()
 }

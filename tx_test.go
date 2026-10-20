@@ -311,11 +311,12 @@ func TestTxPassesItsContext(t *testing.T) {
 }
 
 // TestStatementOutsideItsTx is Review Focus 1: under a context marked as a
-// transaction's, a statement on a DB in no transaction fails with
+// transaction's, a statement on any DB but the transaction's and its
+// savepoints' (db, another Open's, another transaction's) fails with
 // ErrOutsideTx before it is sent; the transaction's own DB, its savepoints,
-// the TxAround hooks' work and a goroutine on the outer context run. Each
-// case runs on a DB without hooks (plain) and on one with an Around hook
-// (run).
+// the TxAround hooks' work, a goroutine on the outer context and WithoutTx
+// run. Each case runs on a DB without hooks (plain) and on one with an Around
+// hook (run).
 func TestStatementOutsideItsTx(t *testing.T) {
 	read := func(ctx context.Context, db *velox.DB) error {
 		_, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(ctx)
@@ -365,7 +366,53 @@ func TestStatementOutsideItsTx(t *testing.T) {
 		{"an InsertAll in batches on db", func(ctx context.Context, db, _ *velox.DB) error {
 			defer velox.SetMaxParams(velox.Postgres, 18)()
 			return db.InsertAll([]testmodel.Invoice{{OrgID: 1, Number: "A"}, {OrgID: 1, Number: "B"}, {OrgID: 1, Number: "C"}}).Exec(ctx)
+		}, true, ""},
+		{"an Iter on db", func(ctx context.Context, db, _ *velox.DB) error {
+			for _, err := range db.Query[testmodel.Invoice]().Limit(1).Iter(ctx) {
+				return err
+			}
+			return nil
+		}, true, ""},
+		{"an Insert on db", func(ctx context.Context, db, _ *velox.DB) error {
+			return db.Insert(&testmodel.Invoice{OrgID: 1, Number: "A"}).Exec(ctx)
+		}, true, ""},
+		{"a Save on db", func(ctx context.Context, db, _ *velox.DB) error {
+			return db.Save(ctx, &testmodel.Invoice{ID: 1, OrgID: 1, Number: "A"}, I.Number)
+		}, true, ""},
+		{"an upsert on db", func(ctx context.Context, db, _ *velox.DB) error {
+			return db.Insert(&testmodel.Invoice{OrgID: 1, Number: "A"}).OnConflict(I.OrgID, I.Number).Update(I.Total).Exec(ctx)
+		}, true, ""},
+		{"a DB of another Open", func(ctx context.Context, _, _ *velox.DB) error {
+			return read(ctx, velox.OpenFake(velox.Postgres, &velox.FakeExec{Rows: [][]any{invoiceRow(1)}}))
+		}, true, ""},
+		{"another transaction's DB", func(ctx context.Context, db, _ *velox.DB) error {
+			var err error
+			_ = db.Tx(outer, func(_ context.Context, other *velox.DB) error {
+				err = read(ctx, other)
+				return nil
+			})
+			return err
+		}, true, ""},
+		{"a savepoint of another transaction", func(ctx context.Context, db, _ *velox.DB) error {
+			var err error
+			_ = db.Tx(outer, func(_ context.Context, other *velox.DB) error {
+				err = other.Tx(ctx, func(context.Context, *velox.DB) error { return nil })
+				return nil
+			})
+			return err
 		}, true, "velox: transaction: statement outside its transaction"},
+		{"another transaction's DB with its ctx", func(_ context.Context, db, _ *velox.DB) error {
+			return db.Tx(outer, func(ctx context.Context, other *velox.DB) error { return read(ctx, other) })
+		}, false, ""},
+		{"db with WithoutTx", func(ctx context.Context, db, _ *velox.DB) error {
+			return read(velox.WithoutTx(ctx), db)
+		}, false, ""},
+		{"the transaction with WithoutTx", func(ctx context.Context, _, tx *velox.DB) error {
+			return read(velox.WithoutTx(ctx), tx)
+		}, false, ""},
+		{"a transaction on db with WithoutTx", func(ctx context.Context, db, _ *velox.DB) error {
+			return db.Tx(velox.WithoutTx(ctx), func(ctx context.Context, other *velox.DB) error { return read(ctx, other) })
+		}, false, ""},
 		{"a transaction on db with the outer ctx", func(_ context.Context, db, _ *velox.DB) error {
 			return db.Tx(outer, func(ctx context.Context, tx *velox.DB) error { return read(ctx, tx) })
 		}, false, ""},
@@ -387,9 +434,9 @@ func TestStatementOutsideItsTx(t *testing.T) {
 				}); err != nil {
 					t.Fatal(err)
 				}
-				sent := 0 // the outer transaction's BEGIN, and what else was sent: a query, an insert, a BEGIN
+				sent := 0 // what the refused statement would have sent: a query, an insert
 				for _, s := range e.Log {
-					if s == "BEGIN" || strings.Contains(s, "invoices") {
+					if strings.Contains(s, "invoices") {
 						sent++
 					}
 				}
@@ -400,7 +447,7 @@ func TestStatementOutsideItsTx(t *testing.T) {
 					t.Errorf("got %v, want ErrOutsideTx", got)
 				case c.outside && got.Error() != cmp.Or(c.msg, "velox: testmodel.Invoice: statement outside its transaction"):
 					t.Errorf("the error says %q", got)
-				case c.outside && sent != 1:
+				case c.outside && sent != 0:
 					t.Errorf("sent %q", e.Log)
 				}
 			})
@@ -430,5 +477,68 @@ func TestTxAroundHooksRunOutsideTheTx(t *testing.T) {
 	}
 	if len(errs) != 2 || errs[0] != nil || errs[1] != nil {
 		t.Errorf("the hook's statements: %v", errs)
+	}
+}
+
+// TestEndedTxMarksNothing: once its transaction has committed or rolled back,
+// the mark on fn's ctx counts as none, on contexts derived from it too.
+func TestEndedTxMarksNothing(t *testing.T) {
+	read := func(ctx context.Context, db *velox.DB) error {
+		_, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(ctx)
+		return err
+	}
+	for _, rollback := range []bool{false, true} {
+		db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Rows: [][]any{invoiceRow(1)}})
+		var kept, inner context.Context
+		_ = db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+			kept = ctx
+			_ = tx.Tx(ctx, func(ctx context.Context, _ *velox.DB) error { inner = ctx; return nil })
+			if err := read(kept, db); !errors.Is(err, velox.ErrOutsideTx) {
+				t.Errorf("rollback=%v: inside the transaction: %v, want ErrOutsideTx", rollback, err)
+			}
+			if rollback {
+				return errors.New("undo")
+			}
+			return nil
+		})
+		for name, c := range map[string]context.Context{
+			"fn's ctx":            kept,
+			"a ctx derived":       context.WithoutCancel(velox.WithTags(kept, "k", "v")),
+			"the savepoint's ctx": inner,
+		} {
+			if err := read(c, db); err != nil {
+				t.Errorf("rollback=%v: after the transaction, on %s: %v", rollback, name, err)
+			}
+			if err := db.Tx(c, func(ctx context.Context, tx *velox.DB) error { return read(ctx, tx) }); err != nil {
+				t.Errorf("rollback=%v: a Tx after the transaction, on %s: %v", rollback, name, err)
+			}
+		}
+	}
+}
+
+// TestWithoutTx: WithoutTx removes the mark and keeps the context's values
+// and deadline; on a context without the mark it returns ctx.
+func TestWithoutTx(t *testing.T) {
+	if got := velox.WithoutTx(ctx); got != ctx {
+		t.Error("WithoutTx changed a context without the mark")
+	}
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Rows: [][]any{invoiceRow(1)}})
+	tagged := velox.WithTags(ctx, "route", "POST /pay")
+	err := db.Tx(tagged, func(ctx context.Context, tx *velox.DB) error {
+		free := velox.WithoutTx(ctx)
+		if got, want := velox.TagsOf(free), velox.TagsOf(ctx); !reflect.DeepEqual(got, want) || len(got) == 0 {
+			t.Errorf("tags %v, want %v", got, want)
+		}
+		if id, all := velox.TenantOf(free); id != nil || all == "" {
+			t.Errorf("tenant %v, %q: the AllTenants of the caller's ctx is lost", id, all)
+		}
+		if a, _ := free.Deadline(); !a.Equal(func() time.Time { d, _ := ctx.Deadline(); return d }()) {
+			t.Errorf("deadline %v", a)
+		}
+		_, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(free)
+		return err
+	}, velox.Timeout(time.Minute))
+	if err != nil {
+		t.Fatal(err)
 	}
 }

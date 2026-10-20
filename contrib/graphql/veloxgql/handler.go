@@ -27,13 +27,15 @@ import (
 // resolvers get the transaction's DB and context, so every statement of the
 // operation, its nested fields' too, is in the transaction. A statement a
 // mutation's resolver runs on db itself, not on the DB DBFrom reads, fails
-// with velox.ErrOutsideTx. A transaction's DB is not safe for concurrent
-// use, and gqlgen runs only the mutation's root fields one after another:
-// below the root it resolves an object's fields that take a context, edges
-// among them, concurrently. So the handler runs a mutation's field resolvers
-// one at a time; queries' and subscriptions' still run concurrently. A
-// resolver of a mutation must not itself use the DB from more than one
-// goroutine.
+// with velox.ErrOutsideTx; under velox.WithoutTx(ctx) it runs outside the
+// transaction, as an audit row that must survive a rollback does.
+//
+// A transaction's DB is not safe for concurrent use, and gqlgen runs only
+// the mutation's root fields one after another: below the root it resolves
+// an object's fields that take a context, edges among them, concurrently. So
+// the handler runs a mutation's field resolvers one at a time; queries' and
+// subscriptions' still run concurrently. A resolver of a mutation must not
+// itself use the DB from more than one goroutine.
 //
 // The transaction commits when the response has no errors. It rolls back
 // when the response has any,
