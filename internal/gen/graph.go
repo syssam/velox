@@ -39,7 +39,7 @@ type Field struct {
 	load.Field
 	GoName   string `json:"go_name"`
 	Column   string `json:"column"`
-	Pointer  bool   `json:"pointer,omitempty"`  // Nillable, or a literal Default on a bool or number (Ruling 4)
+	Pointer  bool   `json:"pointer,omitempty"`  // Nillable: the Go field is a pointer, unless its type's zero value is nil already
 	AutoID   bool   `json:"auto_id,omitempty"`  // the ID velox added
 	Implicit string `json:"implicit,omitempty"` // the edge whose foreign key this field holds, when velox added it
 }

@@ -17,9 +17,15 @@ type common[B any] struct {
 }
 
 // Optional makes the field not required on create, and its column NULL-able.
+// The Go field stays a value, with the handle of a value: NULL reads as its
+// zero value, and an insert writes the zero value, not NULL. Add Nillable to
+// tell NULL apart.
 func (c common[B]) Optional() B { c.d.Optional = true; return c.self }
 
-// Nillable makes the Go field a pointer.
+// Nillable makes the column NULL-able and the Go field a pointer, nil for
+// NULL, with a Null* handle. A field whose Go type is nil-able already, such as
+// a slice or a map, stays as it is. Optional().Nillable() is both: optional on
+// create, and NULL as nil.
 func (c common[B]) Nillable() B { c.d.Nillable = true; return c.self }
 
 // Immutable refuses the field in updates.
@@ -69,7 +75,11 @@ func fail(d *desc.Field, format string, args ...any) {
 // typed holds the options of a field whose values are of the Go type V.
 type typed[B, V any] struct{ common[B] }
 
-// Default sets the value a new row gets when the field is not set.
+// Default sets the value a new row gets when the field is not set. It never
+// changes the Go type. A field that is not a pointer is unset when it holds its
+// zero value, so velox-gen refuses a Default on a bool or number that is not
+// Nillable, which could then never store false or 0: make the field Nillable
+// or drop the Default.
 func (t typed[B, V]) Default(v V) B { t.d.Default = v; return t.self }
 
 // DefaultFunc sets a func() returning the field's Go type, called when a new

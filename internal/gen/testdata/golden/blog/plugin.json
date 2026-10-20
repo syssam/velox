@@ -187,10 +187,9 @@
           "go_name": "PublishedAt",
           "column": "published_at",
           "type": "time",
-          "go_type": "*time.Time",
+          "go_type": "time.Time",
           "elem_type": "time.Time",
           "pkg_path": "time",
-          "pointer": true,
           "nullable": true,
           "optional": true
         },
@@ -209,10 +208,8 @@
           "go_name": "Views",
           "column": "views",
           "type": "int",
-          "go_type": "*int",
-          "elem_type": "int",
-          "pointer": true,
-          "has_default": true
+          "go_type": "int",
+          "elem_type": "int"
         }
       ],
       "edges": [
@@ -332,9 +329,8 @@
           "go_name": "Nickname",
           "column": "nickname",
           "type": "string",
-          "go_type": "*string",
+          "go_type": "string",
           "elem_type": "string",
-          "pointer": true,
           "nullable": true,
           "optional": true
         },
@@ -354,9 +350,8 @@
           "go_name": "Age",
           "column": "age",
           "type": "int",
-          "go_type": "*int",
+          "go_type": "int",
           "elem_type": "int",
-          "pointer": true,
           "nullable": true,
           "optional": true
         },
@@ -377,6 +372,8 @@
           "go_type": "*float64",
           "elem_type": "float64",
           "pointer": true,
+          "nullable": true,
+          "nillable": true,
           "has_default": true
         }
       ],

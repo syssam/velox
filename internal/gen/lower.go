@@ -193,7 +193,11 @@ func (s *entState) field(e *Entity, i int, f *Field) *OutField {
 	}
 	elem, kind := s.elemType(f, where)
 	o.ElemType = elem
-	o.Pointer = (f.Pointer || f.Optional || f.Nillable) && i != 0 && !nilKinds[kind]
+	// Only Nillable makes a pointer: a Default never changes the Go type.
+	o.Pointer = f.Nillable && i != 0 && !nilKinds[kind]
+	// An Optional field's column is NULL-able, though its Go field is a
+	// value: NULL reads as the zero value. A nil-able Go type reads it as nil.
+	o.NullValue = f.Optional && !f.Nillable && i != 0 && !nilKinds[kind]
 	o.GoType = elem
 	if o.Pointer {
 		o.GoType = "*" + elem

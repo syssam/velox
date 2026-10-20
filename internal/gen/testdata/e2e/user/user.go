@@ -19,9 +19,8 @@ func nickname(next velox.Mutator[User]) velox.Mutator[User] {
 	return velox.MutateFunc[User](func(ctx context.Context, m *velox.Mutation[User]) error {
 		HookRuns.Add(1)
 		for _, x := range m.Rows() {
-			if x.Nickname == nil {
-				n := "hooked"
-				x.Nickname = &n
+			if x.Nickname == "" {
+				x.Nickname = "hooked"
 			}
 		}
 		return next.Mutate(ctx, m)

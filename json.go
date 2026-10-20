@@ -65,11 +65,31 @@ type codecScanner struct {
 // a pointer to the column's field: addr itself, or, for an encoded column, a
 // codecScanner decoding into it, the one allocation such a column costs a
 // row.
+//
+// A column whose NULL does not scan into its field (ColumnInfo.zeroNull) is
+// read into a new pointer to the field's type, which the driver sets to nil
+// for NULL; scanned copies it into the field. That is the one allocation such
+// a column costs a row, besides the driver's.
 func scanDst(in *EntityInfo, col int, addr any) any {
-	if !in.Columns[col].Codec {
-		return addr
+	c := &in.Columns[col]
+	switch {
+	case c.Codec:
+		return &codecScanner{dst: addr, in: in, col: col}
+	case c.zeroNull:
+		return reflect.New(reflect.TypeOf(addr)).Interface()
 	}
-	return &codecScanner{dst: addr, in: in, col: col}
+	return addr
+}
+
+// scanned completes the scan of a zeroNull column: holder is what scanDst
+// returned, and addr the field's address. NULL leaves the zero value.
+func scanned(holder, addr any) {
+	f := reflect.ValueOf(addr).Elem()
+	if h := reflect.ValueOf(holder).Elem(); h.IsNil() {
+		f.SetZero()
+	} else {
+		f.Set(h.Elem())
+	}
 }
 
 // errNotBytes is why a value of a type other than []byte or string cannot

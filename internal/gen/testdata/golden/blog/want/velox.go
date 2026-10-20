@@ -4,7 +4,7 @@ package gen
 
 import "github.com/syssam/velox2"
 
-// Model: sha256:654bba12788c00886b2ffc7d40f3cf1055bb6e7ffdcd7bdf3fcd1670cc4dcd04
+// Model: sha256:228610696b7c842010064139d040f8a3c67f57fb190cd3d66b9c65c484729526
 const _ = velox.GeneratedCodeIsVersion4
 
 // PostStatus is an enum of the model.

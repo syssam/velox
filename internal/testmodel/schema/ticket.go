@@ -29,7 +29,7 @@ func (Ticket) Fields() []schema.Field {
 		field.String("title"),
 		field.Bool("done"),
 		field.Int64("invoice_id"),
-		field.Int64("parent_id").Optional(),
+		field.Int64("parent_id").Optional().Nillable(),
 	}
 }
 

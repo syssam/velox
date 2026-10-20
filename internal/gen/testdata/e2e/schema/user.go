@@ -23,7 +23,7 @@ func (User) Fields() []schema.Field {
 		field.String("nickname").Optional(),
 		field.Int("age").Optional().Range(0, 150),
 		field.String("password_hash").Sensitive(),
-		field.Float("score").Default(1.5),
+		field.Float("score").Nillable().Default(1.5),
 	}
 }
 

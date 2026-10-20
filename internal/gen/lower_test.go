@@ -33,7 +33,7 @@ func (LwUser) Fields() []schema.Field {
 	return []schema.Field{
 		field.String("name").NotEmpty(),
 		field.String("nick").Optional(),
-		field.Bool("active").Default(true),
+		field.Bool("active").Nillable().Default(true),
 		field.Enum("role").Values("viewer", "admin"),
 		field.Time("seen").Optional().Nillable(),
 		field.Strings("tags").Optional(),
@@ -118,8 +118,8 @@ func TestLowerTypes(t *testing.T) {
 	for _, c := range []struct{ name, goType, handle string }{
 		{"id", "int64", "velox.NumberCol[LwUser, int64]"},
 		{"name", "string", "velox.StringCol[LwUser, string]"},
-		{"nick", "*string", "velox.NullStringCol[LwUser, string]"},        // Optional makes a pointer (Ruling 2)
-		{"active", "*bool", "velox.NullCol[LwUser, bool]"},                // a literal Default on a bool (plan 1 Ruling 4)
+		{"nick", "string", "velox.StringCol[LwUser, string]"},             // Optional alone is no pointer: NULL reads as ""
+		{"active", "*bool", "velox.NullCol[LwUser, bool]"},                // Nillable, with a Default that does not change the type
 		{"role", "LwUserRole", "velox.StringCol[LwUser, LwUserRole]"},     // the generated enum type (Ruling 3)
 		{"seen", "*time.Time", "velox.NullOrderedCol[LwUser, time.Time]"}, //
 		{"tags", "[]string", "velox.JSONCol[LwUser, []string]"},           // a JSON slice is never a pointer
@@ -129,7 +129,7 @@ func TestLowerTypes(t *testing.T) {
 			t.Errorf("%s: %+v, want %s %s", c.name, f, c.goType, c.handle)
 		}
 	}
-	if f := u.field("nick"); !f.Pointer || f.ElemType != "string" || f.GoName != "Nick" || f.Column != "nick" {
+	if f := u.field("nick"); f.Pointer || !f.NullValue || f.ElemType != "string" || f.GoName != "Nick" || f.Column != "nick" {
 		t.Errorf("nick %+v", f)
 	}
 	if f := u.field("tags"); f.Pointer || f.ElemType != "[]string" || f.Tag != "`json:\"tags,omitempty\"`" {
@@ -177,7 +177,7 @@ func TestLowerJSONFlag(t *testing.T) {
 		t.Errorf("labels: handle %s, want velox.JSONCol", f.Handle)
 	}
 	if f := m.field("box"); !f.JSON || !f.Pointer || f.Handle != "velox.NullJSONCol[LwMixed, gen.lwBox]" {
-		t.Errorf("box (an Optional field.JSON of a struct): JSON %v, pointer %v, handle %s, want velox.NullJSONCol", f.JSON, f.Pointer, f.Handle)
+		t.Errorf("box (a Nillable field.JSON of a struct): JSON %v, pointer %v, handle %s, want velox.NullJSONCol", f.JSON, f.Pointer, f.Handle)
 	}
 	g, err := build(t, LwUser{}, LwPost{}, LwGroup{})
 	if err != nil {
@@ -344,6 +344,39 @@ func TestLowerChecks(t *testing.T) {
 	}
 }
 
+// LwDefaults pairs each field with a Default with the same field without one.
+type LwDefaults struct{ schema.Schema }
+
+func (LwDefaults) Fields() []schema.Field {
+	return []schema.Field{
+		field.Bool("b").Nillable(), field.Bool("b_def").Nillable().Default(true),
+		field.Float("f").Optional().Nillable(), field.Float("f_def").Optional().Nillable().Default(1.5),
+		field.Int("i"), field.Int("i_def").DefaultFunc(func() int { return 1 }),
+		field.String("s"), field.String("s_def").Default("x"),
+		field.String("o").Optional(), field.String("o_def").Optional().Default("x"),
+		field.Time("t").Nillable(), field.Time("t_def").Nillable().Default(time.Now),
+	}
+}
+
+// A Default never changes the Go type or the handle: only Nillable does.
+func TestLowerDefaultKeepsType(t *testing.T) {
+	e := mustLower(t, Config{SchemaPath: lowerSchemaPath}, LwDefaults{}).entity("LwDefaults")
+	for _, c := range []struct{ name, goType, handle string }{
+		{"b", "*bool", "velox.NullCol[LwDefaults, bool]"},
+		{"f", "*float64", "velox.NullNumberCol[LwDefaults, float64]"},
+		{"i", "int", "velox.NumberCol[LwDefaults, int]"},
+		{"s", "string", "velox.StringCol[LwDefaults, string]"},
+		{"o", "string", "velox.StringCol[LwDefaults, string]"},
+		{"t", "*time.Time", "velox.NullOrderedCol[LwDefaults, time.Time]"},
+	} {
+		for _, name := range []string{c.name, c.name + "_def"} {
+			if f := e.field(name); f.GoType != c.goType || f.Handle != c.handle {
+				t.Errorf("%s: %s %s, want %s %s", name, f.GoType, f.Handle, c.goType, c.handle)
+			}
+		}
+	}
+}
+
 // A mixin's field is read at Mixin()[m].Fields()[i], and every default that is
 // not a literal comes from the descriptor (Ruling 5).
 type lwMix struct{ mixin.Schema }
@@ -365,12 +398,12 @@ func (LwMixed) Fields() []schema.Field {
 		field.Time("touched").Optional().UpdateDefault(time.Now),
 		field.Bytes("blob").Default([]byte("b")),
 		field.String("lit").Default("hi"),
-		field.Int("count").Default(5),
-		field.Float("ratio").Default(1.5),
+		field.Int("count").Nillable().Default(5),
+		field.Float("ratio").Nillable().Default(1.5),
 		field.Strings("labels").Default([]string{"a", "b"}),
 		field.Other("pt", uuidValue{}).SchemaType(map[string]string{"postgres": "uuid"}).Default(uuidValue{1}),
 		field.Enum("tier").Values("free", "paid").Default("paid"),
-		field.JSON("box", lwBox{}).Optional(),
+		field.JSON("box", lwBox{}).Optional().Nillable(),
 	}
 }
 
@@ -771,7 +804,7 @@ type lwTime struct{ time.Time }
 type LwWhen struct{ schema.Schema }
 
 func (LwWhen) Fields() []schema.Field {
-	return []schema.Field{field.Time("at").GoType(lwTime{}), field.Time("opt").Optional().GoType(lwTime{})}
+	return []schema.Field{field.Time("at").GoType(lwTime{}), field.Time("opt").Nillable().GoType(lwTime{})}
 }
 
 func TestLowerTimeIsOrdered(t *testing.T) {

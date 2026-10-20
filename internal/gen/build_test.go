@@ -42,7 +42,7 @@ func mustBuild(t *testing.T, ss ...schema.Interface) *Graph {
 type User struct{ schema.Schema }
 
 func (User) Fields() []schema.Field {
-	return []schema.Field{field.Int64("org_id").Tenant(), field.String("name"), field.Bool("active").Default(true)}
+	return []schema.Field{field.Int64("org_id").Tenant(), field.String("name"), field.Bool("active").Nillable().Default(true)}
 }
 func (User) Edges() []schema.Edge {
 	return []schema.Edge{edge.To("posts", Post.Type), edge.To("groups", Group.Type)}
@@ -83,10 +83,32 @@ func TestBuildBlog(t *testing.T) {
 	}
 }
 
-func TestBuildDefaultBoolIsPointer(t *testing.T) {
-	f := mustBuild(t, User{}, Post{}, Group{}).Entity("User").Field("active")
-	if !f.Pointer || f.Nillable || f.Optional {
-		t.Fatalf("active %+v: a literal Default on a bool makes a pointer, NOT NULL column", f)
+// Nillable alone makes a pointer; Optional does not, and a Default does not
+// change it.
+func TestBuildNillableIsPointer(t *testing.T) {
+	g := mustBuild(t, User{}, Post{}, Group{}, defaults{})
+	if f := g.Entity("User").Field("active"); !f.Pointer || !f.Nillable || f.Optional {
+		t.Fatalf("active %+v: Nillable makes a pointer, and its Default does not change that", f)
+	}
+	d := g.Entity("defaults")
+	for name, want := range map[string]bool{"seen": true, "nick": false, "label": false, "count": false, "bio": true, "opt": false} {
+		if f := d.Field(name); f.Pointer != want {
+			t.Errorf("%s: pointer %v, want %v", name, f.Pointer, want)
+		}
+	}
+}
+
+// defaults has a pointer exactly where it has Nillable.
+type defaults struct{ schema.Schema }
+
+func (defaults) Fields() []schema.Field {
+	return []schema.Field{
+		field.Time("seen").Optional().Nillable(),
+		field.String("nick").Optional().Default("n"),
+		field.String("label").Default("l"),
+		field.Int("count").DefaultFunc(func() int { return 1 }),
+		field.Text("bio").Nillable(),
+		field.Int("opt").Optional(),
 	}
 }
 
@@ -434,6 +456,16 @@ func (optionalTenant) Fields() []schema.Field {
 	return []schema.Field{field.Int64("org").Tenant().Optional()}
 }
 
+type defaultBool struct{ schema.Schema }
+
+func (defaultBool) Fields() []schema.Field { return []schema.Field{field.Bool("active").Default(true)} }
+
+type defaultNumber struct{ schema.Schema }
+
+func (defaultNumber) Fields() []schema.Field {
+	return []schema.Field{field.Float("score").Optional().Default(1.5)}
+}
+
 type defaultTenant struct{ schema.Schema }
 
 func (defaultTenant) Fields() []schema.Field {
@@ -716,6 +748,8 @@ func TestBuildRules(t *testing.T) {
 		{"34 immutable field", []schema.Interface{immutableField{}}, `schema immutableField: edge "parent": field "parent_id" is Immutable but the edge is not`},
 		{"35 join columns collide", []schema.Interface{loop{}}, `schema loop: edge "loops": join table loop_loops has two columns named loop_id; name them with edge.Columns`},
 		{"35 join columns collide on an inverse", []schema.Interface{cycle{}}, `schema cycle: edge "cycles": join table cycle_next has two columns named cycle_id; name them with edge.Columns`},
+		{"36 default on a bool", []schema.Interface{defaultBool{}}, `schema defaultBool: field "active": a Default on a bool or number that is not Nillable cannot be told from unset; make the field Nillable or drop the Default`},
+		{"36 default on an optional number", []schema.Interface{defaultNumber{}}, `schema defaultNumber: field "score": a Default on a bool or number that is not Nillable cannot be told from unset; make the field Nillable or drop the Default`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			_, err := build(t, c.ss...)
@@ -740,6 +774,7 @@ func TestBuildRulesAreSingle(t *testing.T) {
 		{enumGoNames{}}, {clashOwner{}, clashPet{}}, {columnFieldMismatch{}}, {keyA{}, keyB{}}, {oneColumnM2M{}},
 		{twoColumnsO2M{}, Pet{}}, {invAssoc{}, invItem{}}, {enumGoTypeDup{}},
 		{fkUnbound{}}, {fieldStringFK{}}, {immutableEdge{}}, {immutableField{}}, {loop{}}, {cycle{}},
+		{defaultBool{}}, {defaultNumber{}},
 	} {
 		_, err := build(t, ss...)
 		if n := len(err.(interface{ Unwrap() []error }).Unwrap()); n != 1 {

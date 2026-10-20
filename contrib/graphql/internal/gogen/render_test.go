@@ -430,9 +430,7 @@ func typesModel(t *testing.T) *plugin.Model {
 				{Name: "id", GoName: "ID", Type: "int64", GoType: "ids.UserID", ElemType: "ids.UserID", PkgPath: "example.com/app/ids", Kind: "int64", Annotations: where(graphql.OpEQ)},
 				{Name: "email", GoName: "Email", Type: "string", GoType: "*ids.Email", ElemType: "ids.Email", PkgPath: "example.com/app/ids", Kind: "string", Pointer: true, Nullable: true, Annotations: where(graphql.OpEQ)},
 				{Name: "code", GoName: "Code", Type: "string", GoType: "ids.Code", ElemType: "ids.Code", PkgPath: "example.com/app/ids", Kind: "string"},
-				// A NOT NULL number with a literal Default, which velox-gen
-				// holds in a pointer.
-				{Name: "rank", GoName: "Rank", Type: "int32", GoType: "*ids.Rank", ElemType: "ids.Rank", PkgPath: "example.com/app/ids", Kind: "int32", Pointer: true, HasDefault: true, Annotations: ann(graphql.Annotation{OrderField: "RANK", WhereOps: graphql.OpIn})},
+				{Name: "rank", GoName: "Rank", Type: "int32", GoType: "ids.Rank", ElemType: "ids.Rank", PkgPath: "example.com/app/ids", Kind: "int32", Annotations: ann(graphql.Annotation{OrderField: "RANK", WhereOps: graphql.OpIn})},
 				{Name: "ref", GoName: "Ref", Type: "uuid", GoType: "ids.Ref", ElemType: "ids.Ref", PkgPath: "example.com/app/ids", Kind: "array", Annotations: where(graphql.OpEQ)},
 				{Name: "ratio", GoName: "Ratio", Type: "float64", GoType: "ids.Ratio", ElemType: "ids.Ratio", PkgPath: "example.com/app/ids", Kind: "float64", Annotations: where(graphql.OpGT)},
 				{Name: "on", GoName: "On", Type: "bool", GoType: "ids.Flag", ElemType: "ids.Flag", PkgPath: "example.com/app/ids", Kind: "bool", Annotations: where(graphql.OpEQ)},
@@ -498,7 +496,7 @@ func TestGoTypes(t *testing.T) {
 		// The key's order term converts the key to and from its base type,
 		// and an order field held in a pointer to and from its value.
 		"func(x *Owner) int64 { return int64(x.ID) }, func(x *Owner, v int64) { x.ID = idspkg.UserID(v) }),",
-		"func(x *Owner) int32 { var v int32 if x.Rank != nil { v = int32(*x.Rank) } return v }, func(x *Owner, v int32) { c := idspkg.Rank(v) x.Rank = &c }), nil",
+		"func(x *Owner) int32 { return int32(x.Rank) }, func(x *Owner, v int32) { x.Rank = idspkg.Rank(v) }), nil",
 		// Its where predicates take the scalar's Go type, and Pred converts.
 		" Email *string ", " RankIn []int32 ", " Ref *uuid.UUID ", " RatioGT *float64 ", " On *bool ",
 		` veloxgql.IDAs(f, "id", w.ID, "Owner", veloxgql.AsInt[idspkg.UserID, int64], Owners.ID.EQ) `,
@@ -607,6 +605,11 @@ func TestRenderErrors(t *testing.T) {
 		"a where on a time of another Go type": {&plugin.Model{Version: 1, Entities: []*plugin.Entity{withField(entity("Thing", "int64"),
 			&plugin.Field{Name: "at", GoName: "At", Type: "time", GoType: "types.Stamp", ElemType: "types.Stamp", PkgPath: "example.com/types", Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"where_ops":1}`)}})}},
 			"schema Thing, field at: velox-graphql converts a time field only from time.Time, and its Go type is types.Stamp"},
+		// Only a Nillable field is a pointer, and keyset paging needs an
+		// order column without NULLs.
+		"a pointer order field": {&plugin.Model{Version: 1, Entities: []*plugin.Entity{withField(entity("Thing", "int64"),
+			&plugin.Field{Name: "n", GoName: "N", Type: "int64", GoType: "*int64", ElemType: "int64", Pointer: true, Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"order_field":"N"}`)}})}},
+			"schema Thing, field n: a connection orders by it, and its Go field is a pointer, which only a Nillable field is"},
 		"a where field named Pred": {&plugin.Model{Version: 1, Entities: []*plugin.Entity{withField(entity("Thing", "int64"),
 			&plugin.Field{Name: "pred", GoName: "Pred", Type: "string", GoType: "string", ElemType: "string", Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"where_ops":1}`)}})}},
 			"schema Thing: the field pred of ThingWhereInput is the Go field Pred"},

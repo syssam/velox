@@ -25,9 +25,9 @@ type User struct {
 	Name         string            `json:"name,omitempty"`
 	Email        string            `json:"email,omitempty"`
 	Role         UserRole          `json:"role,omitempty"`
-	Nickname     *string           `json:"nickname,omitempty"`
+	Nickname     string            `json:"nickname,omitempty"`
 	Bio          *string           `json:"bio,omitempty"`
-	Age          *int              `json:"age,omitempty"`
+	Age          int               `json:"age,omitempty"`
 	PasswordHash string            `json:"-"`
 	Score        *float64          `json:"score,omitempty"`
 	Posts        velox.Many[Post]  `json:"posts,omitzero"`
@@ -44,9 +44,9 @@ var Users = struct {
 	Name         velox.StringCol[User, string]
 	Email        velox.StringCol[User, string]
 	Role         velox.StringCol[User, UserRole]
-	Nickname     velox.NullStringCol[User, string]
+	Nickname     velox.StringCol[User, string]
 	Bio          velox.NullStringCol[User, string]
-	Age          velox.NullNumberCol[User, int]
+	Age          velox.NumberCol[User, int]
 	PasswordHash velox.StringCol[User, string]
 	Score        velox.NullNumberCol[User, float64]
 	Posts        velox.Rel[User, Post]
@@ -60,9 +60,9 @@ var Users = struct {
 	Name:         velox.StringCol[User, string]{I: 5},
 	Email:        velox.StringCol[User, string]{I: 6},
 	Role:         velox.StringCol[User, UserRole]{I: 7},
-	Nickname:     velox.NullStringCol[User, string]{I: 8},
+	Nickname:     velox.StringCol[User, string]{I: 8},
 	Bio:          velox.NullStringCol[User, string]{I: 9},
-	Age:          velox.NullNumberCol[User, int]{I: 10},
+	Age:          velox.NumberCol[User, int]{I: 10},
 	PasswordHash: velox.StringCol[User, string]{I: 11},
 	Score:        velox.NullNumberCol[User, float64]{I: 12},
 	Posts:        velox.Rel[User, Post]{I: 0},
@@ -91,9 +91,9 @@ func userDesc() velox.Desc[User] {
 			{Field: "Name", Name: "name"},
 			{Field: "Email", Name: "email"},
 			{Field: "Role", Name: "role", Default: UserRoleViewer},
-			{Field: "Nickname", Name: "nickname"},
+			{Field: "Nickname", Name: "nickname", Nullable: true},
 			{Field: "Bio", Name: "bio"},
-			{Field: "Age", Name: "age"},
+			{Field: "Age", Name: "age", Nullable: true},
 			{Field: "PasswordHash", Name: "password_hash", Sensitive: true},
 			{Field: "Score", Name: "score", Default: float64(1.5)},
 		},
@@ -193,23 +193,15 @@ func userDesc() velox.Desc[User] {
 
 // String returns the entity's fields except its sensitive ones.
 func (x User) String() string {
-	var p8 any
-	if x.Nickname != nil {
-		p8 = *x.Nickname
-	}
 	var p9 any
 	if x.Bio != nil {
 		p9 = *x.Bio
-	}
-	var p10 any
-	if x.Age != nil {
-		p10 = *x.Age
 	}
 	var p12 any
 	if x.Score != nil {
 		p12 = *x.Score
 	}
-	return fmt.Sprintf("User(ID=%v, CreatedAt=%v, UpdatedAt=%v, CreatedBy=%v, OrgID=%v, Name=%v, Email=%v, Role=%v, Nickname=%v, Bio=%v, Age=%v, Score=%v)", x.ID, x.CreatedAt, x.UpdatedAt, x.CreatedBy, x.OrgID, x.Name, x.Email, x.Role, p8, p9, p10, p12)
+	return fmt.Sprintf("User(ID=%v, CreatedAt=%v, UpdatedAt=%v, CreatedBy=%v, OrgID=%v, Name=%v, Email=%v, Role=%v, Nickname=%v, Bio=%v, Age=%v, Score=%v)", x.ID, x.CreatedAt, x.UpdatedAt, x.CreatedBy, x.OrgID, x.Name, x.Email, x.Role, x.Nickname, p9, x.Age, p12)
 }
 
 // GoString is String, so that %#v does not print the sensitive fields either.

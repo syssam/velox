@@ -15,15 +15,15 @@ func (Sample) Fields() []schema.Field {
 	return []schema.Field{
 		field.String("name"),
 		field.String("status").GoType(kind.Status("")),
-		field.String("prev").GoType(kind.Status("")).Optional(),
+		field.String("prev").GoType(kind.Status("")).Optional().Nillable(),
 		field.Int64("price").GoType(kind.Cents(0)),
-		field.Float("ratio").Optional(),
+		field.Float("ratio").Optional().Nillable(),
 		field.Bool("flag"),
-		field.Bool("maybe_flag").Optional(),
+		field.Bool("maybe_flag").Optional().Nillable(),
 		field.Time("when"),
-		field.Time("maybe_when").Optional(),
+		field.Time("maybe_when").Optional().Nillable(),
 		field.Bytes("blob"),
-		field.Int64("parent_id").Optional(),
+		field.Int64("parent_id").Optional().Nillable(),
 		field.Int64("score").GoType(kind.Score(0)),
 	}
 }

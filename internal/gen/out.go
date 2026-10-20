@@ -53,6 +53,7 @@ type OutField struct {
 	GoType               string // as written in the struct, e.g. "*time.Time", "UserRole"
 	ElemType             string // GoType without the pointer
 	Pointer              bool
+	NullValue            bool   // the column is NULL-able, and the field a value NULL reads into as zero: ColumnDesc.Nullable
 	Handle               string // e.g. "velox.NullOrderedCol[User, time.Time]"
 	Tag                  string // the struct tag, including backquotes
 	Comment              string

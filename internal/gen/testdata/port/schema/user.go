@@ -18,7 +18,9 @@ func (User) Fields() []schema.Field {
 	return []schema.Field{
 		field.Int("age").Positive(),
 		field.String("name").Default("unknown"),
-		field.Bool("active").Default(true),
+		// ent writes Default(true) on a bool that is not Nillable; velox
+		// needs Nillable with it, as an insert cannot tell false from unset.
+		field.Bool("active").Nillable().Default(true),
 		field.Enum("role").Values("admin", "user"),
 		field.Time("created_at").Default(time.Now).Immutable(),
 		field.Strings("tags").Optional(),

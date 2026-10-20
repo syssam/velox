@@ -73,7 +73,7 @@ type Field struct {
 	GoType        *GoType // nil: the standard type for Type
 	RType         any     // the reflect.Type of the field's Go type, to check functions; never serialized
 	Optional      bool    // not required on create, and the column is NULL-able
-	Nillable      bool    // the Go field is a pointer
+	Nillable      bool    // the column is NULL-able, and the Go field a pointer
 	Immutable     bool    // refused in updates
 	Unique        bool    // a single-column unique index
 	Sensitive     bool    // left out of String(), JSON, logs and spans

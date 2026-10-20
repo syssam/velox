@@ -56,7 +56,7 @@ func (Post) Fields() []schema.Field {
 		field.String("title").Annotations(graphql.OrderField("TITLE"), graphql.WhereOps()),
 		field.Enum("status").Values("draft", "published").Default("draft").Annotations(graphql.WhereOps()),
 		field.Int64("views").Annotations(graphql.OrderField("VIEWS")),
-		field.Time("published_at").Optional().Annotations(graphql.WhereOps()),
+		field.Time("published_at").Optional().Nillable().Annotations(graphql.WhereOps()),
 	}
 }
 

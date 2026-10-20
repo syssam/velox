@@ -39,7 +39,7 @@ func TestPortEntSchema(t *testing.T) {
 		t.Fatalf("card %+v", e)
 	}
 	if c.Field("owner_id").Implicit != "" || !u.Field("active").Pointer || g.Entity("Pet").Field("user_pets") == nil {
-		t.Fatal("bound and implicit foreign keys, and the default bool")
+		t.Fatal("bound and implicit foreign keys, and the Nillable bool")
 	}
 	if e := u.Edge("groups"); e.Rel.Kind != "M2M" || e.Rel.Table != "user_groups" || g.Entity("Group").Table != "teams" {
 		t.Fatalf("groups %+v", e)

@@ -101,9 +101,7 @@ var idTypes = map[string]bool{
 
 // newField resolves a field of the model.
 func newField(lf *load.Field) *Field {
-	f := &Field{Field: *lf, GoName: pascal(lf.Name), Column: cmp.Or(lf.StorageKey, lf.Name)}
-	f.Pointer = f.Nillable || (len(f.Default) > 0 && (f.Type == "bool" || numeric[f.Type]))
-	return f
+	return &Field{Field: *lf, GoName: pascal(lf.Name), Column: cmp.Or(lf.StorageKey, lf.Name), Pointer: lf.Nillable}
 }
 
 // entities makes one Entity per schema, with its table, its fields and its ID
@@ -647,6 +645,12 @@ func (b *builder) validateFields(e *Entity) {
 		}
 	}
 	for _, f := range e.Fields {
+		// An insert fills a Default into a zero field, so on a bool or number
+		// that is not a pointer it could never store false or 0. The tenant's
+		// default is rule 16's.
+		if len(f.Default) > 0 && !f.Nillable && !f.Tenant && (f.Type == "bool" || numeric[f.Type]) {
+			b.fail(36, e.Name, fieldAt(f.Name), "a Default on a bool or number that is not Nillable cannot be told from unset; make the field Nillable or drop the Default")
+		}
 		switch f.Type {
 		case "enum":
 			b.validateEnum(e, f)

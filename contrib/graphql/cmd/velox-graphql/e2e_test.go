@@ -89,7 +89,7 @@ type Category struct{ schema.Schema }
 func (Category) Fields() []schema.Field {
 	return []schema.Field{
 		field.String("title"),
-		field.Int64("mentor_id").Optional().Immutable().Annotations(graphql.WhereOps(graphql.OpsEquality)),
+		field.Int64("mentor_id").Optional().Nillable().Immutable().Annotations(graphql.WhereOps(graphql.OpsEquality)),
 	}
 }
 
@@ -277,13 +277,13 @@ func (Event) Fields() []schema.Field {
 		field.Enum("state").Values("on", "off").Default("on").Annotations(graphql.Skip(graphql.SkipEnumField), graphql.WhereOps()),
 		field.Int8("rank").Annotations(graphql.WhereOps(graphql.OpsAll), graphql.OrderField("RANK")),
 		field.Uint64("size").Annotations(graphql.WhereOps()),
-		field.Time("at").Optional().Annotations(graphql.WhereOps()),
+		field.Time("at").Optional().Nillable().Annotations(graphql.WhereOps()),
 		field.Bool("done").Annotations(graphql.WhereOps()),
 		field.Float32("score").Annotations(graphql.WhereOps()),
 		field.UUID("ref", uuid.UUID{}).Annotations(graphql.WhereOps()),
 		field.String("name").Annotations(graphql.WhereOps(graphql.OpsAll)),
-		field.String("code").GoType(ids.Code("")).Optional().Annotations(graphql.WhereOps(graphql.OpsAll)),
-		field.Int64("owner_id").GoType(ids.UserID(0)).Optional().Annotations(graphql.WhereOps()),
+		field.String("code").GoType(ids.Code("")).Optional().Nillable().Annotations(graphql.WhereOps(graphql.OpsAll)),
+		field.Int64("owner_id").GoType(ids.UserID(0)).Optional().Nillable().Annotations(graphql.WhereOps()),
 	}
 }
 

@@ -16,7 +16,10 @@ func logic(typ string) []string {
 
 func TestWhere(t *testing.T) {
 	t.Run("defaults", func(t *testing.T) {
-		opt := func(f *plugin.Field) *plugin.Field { f.Nullable, f.Optional = true, true; return f }
+		opt := func(f *plugin.Field) *plugin.Field { f.Nullable, f.Nillable, f.Pointer = true, true, true; return f }
+		// An Optional value: its column is NULL-able, but its handle has no
+		// IsNull.
+		val := func(f *plugin.Field) *plugin.Field { f.Nullable, f.Optional = true, true; return f }
 		cases := []struct {
 			f    *plugin.Field
 			want []string
@@ -31,6 +34,7 @@ func TestWhere(t *testing.T) {
 			{field("uid", "uuid"), []string{"uid: UUID", "uidNEQ: UUID", "uidIn: [UUID!]", "uidNotIn: [UUID!]"}},
 			{opt(field("o", "string")), []string{"o: String", "oNEQ: String", "oIn: [String!]", "oNotIn: [String!]", "oContains: String", "oHasPrefix: String", "oHasSuffix: String", "oIsNil: Boolean", "oNotNil: Boolean"}},
 			{opt(field("ob", "bool")), []string{"ob: Boolean", "obNEQ: Boolean", "obIsNil: Boolean", "obNotNil: Boolean"}},
+			{val(field("ov", "bool")), []string{"ov: Boolean", "ovNEQ: Boolean"}},
 		}
 		for _, c := range cases {
 			c.f.Annotations = ann(t, graphql.WhereOps())
@@ -57,7 +61,7 @@ func TestWhere(t *testing.T) {
 	t.Run("foreign key", func(t *testing.T) {
 		aid := field("author_id", "int64")
 		aid.Annotations = ann(t, graphql.WhereOps())
-		eid := &plugin.Field{Name: "editor_id", GoName: "EditorID", Type: "int64", Nullable: true, Optional: true}
+		eid := &plugin.Field{Name: "editor_id", GoName: "EditorID", Type: "int64", Pointer: true, Nullable: true, Optional: true, Nillable: true}
 		eid.Annotations = ann(t, graphql.WhereOps(graphql.OpEQ, graphql.OpIsNil))
 		post := entity("Post", aid, eid)
 		author := edge("author", "M2O", "User")
@@ -98,7 +102,7 @@ func TestWhere(t *testing.T) {
 			{graphql.OpIsNil, "nIsNil: Boolean"}, {graphql.OpNotNil, "nNotNil: Boolean"},
 		}
 		for _, c := range ops {
-			n := &plugin.Field{Name: "n", GoName: "N", Type: "string", Nullable: true, Optional: true}
+			n := &plugin.Field{Name: "n", GoName: "N", Type: "string", Pointer: true, Nullable: true, Optional: true, Nillable: true}
 			n.Annotations = ann(t, graphql.WhereOps(c.op))
 			s, _ := load(t, model(entity("User", n)))
 			want := append(logic("UserWhereInput"), c.want)

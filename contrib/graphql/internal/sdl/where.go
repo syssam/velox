@@ -55,7 +55,8 @@ func opNames(ops graphql.WhereOp) string {
 
 // predicatesOf are the predicates a field of the type typ offers (has) and
 // those WhereOps() gives it (defaults). typ is "ID" for a key, else the
-// schema field type. A nullable field also has OpsNullable.
+// schema field type. A nullable field, one whose handle tests for NULL, also
+// has OpsNullable.
 func predicatesOf(typ string, nullable bool) (has, defaults graphql.WhereOp) {
 	switch typ {
 	case "string":
@@ -94,9 +95,9 @@ func resolveOps(ops graphql.WhereOp, typ string, nullable bool, where string) (g
 		return has, nil
 	}
 	if bad := ops &^ has; bad != 0 {
-		kind := "a required"
+		kind := "a non-Nillable"
 		if nullable {
-			kind = "an optional"
+			kind = "a Nillable"
 		}
 		return 0, fmt.Errorf("%s: graphql.WhereOps(%s): not a predicate of %s %s field, which has %s", where, opNames(bad), kind, typ, opNames(has))
 	}
@@ -182,7 +183,10 @@ func (g *graph) whereOf(o *object) error {
 		if edge >= 0 {
 			on = strings.TrimSuffix(name, "ID")
 		}
-		ops, err := resolveOps(a.WhereOps, kind, f.Nullable, where)
+		// IsNil and NotNil are the handle's IsNull and NotNull, which only a
+		// pointer (Nillable) field's Null* handle has: an Optional field that
+		// is a value reads NULL as its zero value, and has neither.
+		ops, err := resolveOps(a.WhereOps, kind, f.Pointer, where)
 		if err != nil {
 			return err
 		}

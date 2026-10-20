@@ -21,9 +21,9 @@ type Post struct {
 	Title       string          `json:"title,omitempty"`
 	Slug        string          `json:"slug,omitempty"`
 	Status      PostStatus      `json:"status,omitempty"`
-	PublishedAt *time.Time      `json:"published_at,omitempty"`
+	PublishedAt time.Time       `json:"published_at,omitempty"`
 	Tags        []string        `json:"tags,omitempty"`
-	Views       *int            `json:"views,omitempty"`
+	Views       int             `json:"views,omitempty"`
 	Author      velox.One[User] `json:"author,omitzero"`
 }
 
@@ -34,9 +34,9 @@ var Posts = struct {
 	Title       velox.StringCol[Post, string]
 	Slug        velox.StringCol[Post, string]
 	Status      velox.StringCol[Post, PostStatus]
-	PublishedAt velox.NullOrderedCol[Post, time.Time]
+	PublishedAt velox.OrderedCol[Post, time.Time]
 	Tags        velox.JSONCol[Post, []string]
-	Views       velox.NullNumberCol[Post, int]
+	Views       velox.NumberCol[Post, int]
 	Author      velox.Rel[Post, User]
 }{
 	ID:          velox.NumberCol[Post, int64]{I: 0},
@@ -44,9 +44,9 @@ var Posts = struct {
 	Title:       velox.StringCol[Post, string]{I: 2},
 	Slug:        velox.StringCol[Post, string]{I: 3},
 	Status:      velox.StringCol[Post, PostStatus]{I: 4},
-	PublishedAt: velox.NullOrderedCol[Post, time.Time]{I: 5},
+	PublishedAt: velox.OrderedCol[Post, time.Time]{I: 5},
 	Tags:        velox.JSONCol[Post, []string]{I: 6},
-	Views:       velox.NullNumberCol[Post, int]{I: 7},
+	Views:       velox.NumberCol[Post, int]{I: 7},
 	Author:      velox.Rel[Post, User]{I: 0},
 }
 
@@ -66,9 +66,9 @@ func postDesc() velox.Desc[Post] {
 			{Field: "Title", Name: "title"},
 			{Field: "Slug", Name: "slug"},
 			{Field: "Status", Name: "status", Default: PostStatusDraft},
-			{Field: "PublishedAt", Name: "published_at"},
+			{Field: "PublishedAt", Name: "published_at", Nullable: true},
 			{Field: "Tags", Name: "tags", DefaultFunc: func() any { var v []string; _ = json.Unmarshal([]byte("[\"new\"]"), &v); return v }, Encode: json.Marshal, Decode: json.Unmarshal},
-			{Field: "Views", Name: "views", Default: int(0)},
+			{Field: "Views", Name: "views"},
 		},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
@@ -135,15 +135,7 @@ func postDesc() velox.Desc[Post] {
 
 // String returns the entity's fields except its sensitive ones.
 func (x Post) String() string {
-	var p5 any
-	if x.PublishedAt != nil {
-		p5 = *x.PublishedAt
-	}
-	var p7 any
-	if x.Views != nil {
-		p7 = *x.Views
-	}
-	return fmt.Sprintf("Post(ID=%v, AuthorID=%v, Title=%v, Slug=%v, Status=%v, PublishedAt=%v, Tags=%v, Views=%v)", x.ID, x.AuthorID, x.Title, x.Slug, x.Status, p5, x.Tags, p7)
+	return fmt.Sprintf("Post(ID=%v, AuthorID=%v, Title=%v, Slug=%v, Status=%v, PublishedAt=%v, Tags=%v, Views=%v)", x.ID, x.AuthorID, x.Title, x.Slug, x.Status, x.PublishedAt, x.Tags, x.Views)
 }
 
 // GoString is String, so that %#v does not print the sensitive fields either.

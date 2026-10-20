@@ -27,8 +27,8 @@ func (Invoice) Fields() []schema.Field {
 		field.String("number"),
 		field.Float("total"),
 		field.Bool("paid"),
-		field.Time("paid_at").Optional(),
-		field.String("note").Optional(),
+		field.Time("paid_at").Optional().Nillable(),
+		field.String("note").Optional().Nillable(),
 		field.Bytes("data"),
 	}
 }

@@ -205,14 +205,8 @@ func postTermGQL(o *PostOrder) (veloxgql.OrderTerm[Post], error) {
 			func(x *Post, v string) { x.Title = v }), nil
 	case PostOrderFieldViews:
 		return veloxgql.Term(string(o.Field), o.Direction, Posts.Views.Asc(), Posts.Views.Desc(),
-			func(x *Post) int {
-				var v int
-				if x.Views != nil {
-					v = *x.Views
-				}
-				return v
-			},
-			func(x *Post, v int) { x.Views = &v }), nil
+			func(x *Post) int { return x.Views },
+			func(x *Post, v int) { x.Views = v }), nil
 	}
 	return veloxgql.OrderTerm[Post]{}, fmt.Errorf("veloxgql: PostOrder: %q is not a value of PostOrderField", o.Field)
 }

@@ -279,8 +279,8 @@ func TestTypeMapping(t *testing.T) {
 		{field("raw", "bytes"), "Bytes!"},
 		{field("doc", "json"), "JSON!"},
 		{&plugin.Field{Name: "opt", GoName: "Opt", Type: "string", Nullable: true, Optional: true}, "String"},
-		{&plugin.Field{Name: "nil_time", GoName: "NilTime", Type: "time", Nullable: true, Nillable: true}, "Time"},
-		{&plugin.Field{Name: "ptr", GoName: "Ptr", Type: "int", Pointer: true, HasDefault: true}, "Int!"}, // a pointer is not nullability
+		{&plugin.Field{Name: "nil_time", GoName: "NilTime", Type: "time", Pointer: true, Nullable: true, Optional: true, Nillable: true}, "Time"},
+		{&plugin.Field{Name: "opt_doc", GoName: "OptDoc", Type: "json", Nullable: true, Optional: true}, "JSON"}, // nullable, though no pointer: Nullable decides
 		{&plugin.Field{Name: "secret", GoName: "Secret", Type: "string", Sensitive: true}, ""},
 		{field("org_id", "int64"), ""}, // the tenant column
 		{&plugin.Field{Name: "level", GoName: "Level", Type: "enum", EnumValues: []string{"low", "high"}}, "UserLevel!"},

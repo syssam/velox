@@ -121,7 +121,7 @@ func TestPluginModelGolden(t *testing.T) {
 	if pw := pluginField(t, user, "password_hash"); !pw.Sensitive {
 		t.Fatalf("password_hash %+v", pw)
 	}
-	if bio := pluginField(t, user, "bio"); !bio.Nillable || !bio.Pointer || bio.GoType != "*string" || bio.ElemType != "string" || bio.PkgPath != "" {
+	if bio := pluginField(t, user, "bio"); bio.Optional || !bio.Nillable || !bio.Pointer || !bio.Nullable || bio.GoType != "*string" || bio.ElemType != "string" || bio.PkgPath != "" {
 		t.Fatalf("bio %+v", bio)
 	}
 	// The package of a named Go type, which a plugin imports to write it.
@@ -140,8 +140,14 @@ func TestPluginModelGolden(t *testing.T) {
 	if name := pluginField(t, user, "name"); name.Comment != "The display name." || name.Nullable {
 		t.Fatalf("name %+v", name)
 	}
-	if views := pluginField(t, post, "views"); !views.Pointer || views.Nullable {
-		t.Fatalf("views %+v: Pointer is about the struct, not nullability", views)
+	if views := pluginField(t, post, "views"); views.Pointer || views.Nullable || views.GoType != "int" {
+		t.Fatalf("views %+v: a required number is no pointer", views)
+	}
+	if nick := pluginField(t, user, "nickname"); nick.Pointer || !nick.Nullable || !nick.Optional || nick.GoType != "string" {
+		t.Fatalf("nickname %+v: Optional makes the column NULL-able, not the field a pointer", nick)
+	}
+	if score := pluginField(t, user, "score"); !score.Pointer || !score.Nullable || !score.HasDefault || score.GoType != "*float64" {
+		t.Fatalf("score %+v: Nillable makes a pointer; its Default does not change it", score)
 	}
 	if len(m.Enums) != len(o.Enums) || m.Enums[0].Type != o.Enums[0].Type {
 		t.Fatalf("enums %+v", m.Enums)
@@ -251,7 +257,7 @@ func TestPluginModelJoinTypesAndComments(t *testing.T) {
 	if owner.Comment != "An owner." || pluginEdge(t, owner, "keys").Comment != "The keys." || pluginField(t, owner, "note").Comment != "A note." {
 		t.Errorf("comments: %q %q %q", owner.Comment, pluginEdge(t, owner, "keys").Comment, pluginField(t, owner, "note").Comment)
 	}
-	if n := pluginField(t, owner, "note"); !n.Nullable || !n.Optional || !n.Pointer {
+	if n := pluginField(t, owner, "note"); !n.Nullable || !n.Optional || n.Pointer || n.GoType != "string" {
 		t.Errorf("note %+v", n)
 	}
 	// An enum with a Go type declares no enum type: the field names the Go

@@ -25,7 +25,7 @@ func (Post) Fields() []schema.Field {
 		field.Enum("status").Values("draft", "published").Default("draft"),
 		field.Time("published_at").Optional(),
 		field.Strings("tags").Default([]string{"new"}),
-		field.Int("views").Min(0).Default(0),
+		field.Int("views").Min(0),
 	}
 }
 

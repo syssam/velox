@@ -237,23 +237,14 @@ func (r *renderer) term(f *file, e *plugin.Entity, fd *plugin.Field, field, dir,
 		return v
 	}
 	handle := e.Handles + "." + fd.GoName
-	var get, set string
 	if fd.Pointer {
-		// velox-gen holds a NOT NULL number or bool with a literal Default in
-		// a pointer (its Ruling 4), and a key or an order field is never
-		// nullable (sdl refuses OrderField on one): a row the page query
-		// read has a value, and nil is only a row that was never read.
-		get = fmt.Sprintf("func(x *%s) %s {\n%s\tvar v %s\n%s\tif x.%s != nil {\n%s\t\tv = %s\n%s\t}\n%s\treturn v\n%s}",
-			e.Name, base, indent, base, indent, fd.GoName, indent, to(base, "*x."+fd.GoName), indent, indent, indent)
-		if conv {
-			set = fmt.Sprintf("func(x *%s, v %s) {\n%s\tc := %s\n%s\tx.%s = &c\n%s}", e.Name, base, indent, to(elem, "v"), indent, fd.GoName, indent)
-		} else {
-			set = fmt.Sprintf("func(x *%s, v %s) { x.%s = &v }", e.Name, base, fd.GoName)
-		}
-	} else {
-		get = fmt.Sprintf("func(x *%s) %s { return %s }", e.Name, base, to(base, "x."+fd.GoName))
-		set = fmt.Sprintf("func(x *%s, v %s) { x.%s = %s }", e.Name, base, fd.GoName, to(elem, "v"))
+		// Only a Nillable field is a pointer, and its column is nullable, on
+		// which sdl refuses OrderField; a key is never Nillable. A model that
+		// says otherwise is not velox-gen's.
+		return "", fmt.Errorf("schema %s, field %s: a connection orders by it, and its Go field is a pointer, which only a Nillable field is", e.Name, fd.Name)
 	}
+	get := fmt.Sprintf("func(x *%s) %s { return %s }", e.Name, base, to(base, "x."+fd.GoName))
+	set := fmt.Sprintf("func(x *%s, v %s) { x.%s = %s }", e.Name, base, fd.GoName, to(elem, "v"))
 	return fmt.Sprintf("%s.Term(%s, %s, %s.Asc(), %s.Desc(),\n%s\t%s,\n%s\t%s)", f.veloxgql(), field, dir, handle, handle, indent, get, indent, set), nil
 }
 

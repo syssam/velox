@@ -119,15 +119,23 @@ func TestDefaults(t *testing.T) {
 	if u.Score == nil || *u.Score != 1.5 {
 		t.Errorf("literal default: %v", u.Score)
 	}
-	if u.Nickname == nil || *u.Nickname != "hooked" || gen.HookRuns.Load() != before+1 {
+	if u.Nickname != "hooked" || gen.HookRuns.Load() != before+1 {
 		t.Errorf("hook: nickname %v, runs %d, before %d", u.Nickname, gen.HookRuns.Load(), before)
 	}
 	got, err := db.Query[gen.User]().Where(gen.Users.ID.EQ(u.ID)).One(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Role != gen.UserRoleViewer || got.Score == nil || *got.Score != 1.5 || got.CreatedAt.IsZero() || got.Age != nil {
+	if got.Role != gen.UserRoleViewer || got.Score == nil || *got.Score != 1.5 || got.CreatedAt.IsZero() || got.Age != 0 {
 		t.Errorf("read back: %+v", got)
+	}
+	// An Optional field is a value: its NULL column reads as the zero value.
+	if _, err := db.Exec(ctx, "e2e: NULL in Optional columns", "UPDATE users SET nickname = NULL, age = NULL WHERE id = ?", u.ID); err != nil {
+		t.Fatal(err)
+	}
+	got, err = db.Query[gen.User]().Where(gen.Users.ID.EQ(u.ID)).One(ctx)
+	if err != nil || got.Nickname != "" || got.Age != 0 || got.Name != "ada" {
+		t.Errorf("NULL read back: %+v, %v", got, err)
 	}
 	p := gen.Post{AuthorID: u.ID, Title: "t"}
 	mustInsert(t, db, &p)
@@ -150,7 +158,7 @@ func TestValidators(t *testing.T) {
 		{"not empty", "Name", func() any { u := newUser(""); return &u }},
 		{"max length", "Name", func() any { return &gen.User{Name: long, Email: "a@b", CreatedBy: "root"} }},
 		{"match", "Email", func() any { u := newUser("ada"); u.Email = "nope"; return &u }},
-		{"range", "Age", func() any { u := newUser("ada"); u.Age = &age; return &u }},
+		{"range", "Age", func() any { u := newUser("ada"); u.Age = age; return &u }},
 		{"enum", "Role", func() any { u := newUser("ada"); u.Role = "bogus"; return &u }},
 		{"mixin min length", "CreatedBy", func() any { u := newUser("ada"); u.CreatedBy = "r"; return &u }},
 		{"mixin validate", "CreatedBy", func() any { u := newUser("ada"); u.CreatedBy = "Root"; return &u }},
