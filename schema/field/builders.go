@@ -81,23 +81,29 @@ func Float32(name string) *numberBuilder[float32] { return newNumber[float32](na
 func Float64(name string) *numberBuilder[float64] { return newNumber[float64](name) }
 
 // Range requires lo <= value <= hi.
+// An Optional field's zero value means unset, and is not validated.
 func (b *numberBuilder[T]) Range(lo, hi T) *numberBuilder[T] {
 	return b.check("Range", lo, hi)
 }
 
 // Min requires value >= v.
+// An Optional field's zero value means unset, and is not validated.
 func (b *numberBuilder[T]) Min(v T) *numberBuilder[T] { return b.check("Min", v) }
 
 // Max requires value <= v.
+// An Optional field's zero value means unset, and is not validated.
 func (b *numberBuilder[T]) Max(v T) *numberBuilder[T] { return b.check("Max", v) }
 
 // Positive requires value > 0.
+// An Optional field's zero value means unset, and is not validated.
 func (b *numberBuilder[T]) Positive() *numberBuilder[T] { return b.check("Positive") }
 
 // Negative requires value < 0.
+// An Optional field's zero value means unset, and is not validated.
 func (b *numberBuilder[T]) Negative() *numberBuilder[T] { return b.check("Negative") }
 
 // NonNegative requires value >= 0.
+// An Optional field's zero value means unset, and is not validated.
 func (b *numberBuilder[T]) NonNegative() *numberBuilder[T] { return b.check("NonNegative") }
 
 func (b *numberBuilder[T]) check(kind string, args ...any) *numberBuilder[T] {
@@ -124,18 +130,22 @@ func Text(name string) *stringBuilder {
 }
 
 // NotEmpty requires a non-empty string.
+// An Optional field's zero value means unset, and is not validated.
 func (b *stringBuilder) NotEmpty() *stringBuilder { return b.check("NotEmpty") }
 
 // MinLen requires at least n bytes.
+// An Optional field's zero value means unset, and is not validated.
 func (b *stringBuilder) MinLen(n int) *stringBuilder { return b.check("MinLen", n) }
 
 // MaxLen requires at most n bytes, and sets the column's size to n.
+// An Optional field's zero value means unset, and is not validated.
 func (b *stringBuilder) MaxLen(n int) *stringBuilder {
 	b.d.Size = n
 	return b.check("MaxLen", n)
 }
 
 // Match requires the string to match re.
+// An Optional field's zero value means unset, and is not validated.
 func (b *stringBuilder) Match(re *regexp.Regexp) *stringBuilder {
 	if re == nil {
 		fail(b.d, "Match is given a nil regexp")
@@ -161,12 +171,15 @@ func Bytes(name string) *bytesBuilder {
 }
 
 // NotEmpty requires a non-empty value.
+// An Optional field's zero value means unset, and is not validated.
 func (b *bytesBuilder) NotEmpty() *bytesBuilder { return b.check("NotEmpty") }
 
 // MinLen requires at least n bytes.
+// An Optional field's zero value means unset, and is not validated.
 func (b *bytesBuilder) MinLen(n int) *bytesBuilder { return b.check("MinLen", n) }
 
 // MaxLen requires at most n bytes.
+// An Optional field's zero value means unset, and is not validated.
 func (b *bytesBuilder) MaxLen(n int) *bytesBuilder { return b.check("MaxLen", n) }
 
 func (b *bytesBuilder) check(kind string, args ...any) *bytesBuilder {

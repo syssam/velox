@@ -197,7 +197,8 @@ func (s *entState) field(e *Entity, i int, f *Field) *OutField {
 	o.Pointer = f.Nillable && i != 0 && !nilKinds[kind]
 	// An Optional field that is a value is unset at its zero value, which
 	// its validators let pass.
-	if f.Optional && !o.Pointer && i != 0 && !nilKinds[kind] {
+	// A bytes field is a slice, never a pointer, and nil is unset.
+	if f.Optional && !o.Pointer && i != 0 && (!nilKinds[kind] || f.Type == "bytes") {
 		o.Unset = unset(f, o.ElemType)
 	}
 	o.GoType = elem

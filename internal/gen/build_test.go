@@ -483,6 +483,18 @@ func (optionalBytesOK) Fields() []schema.Field {
 	return []schema.Field{field.Bytes("a").Optional().Default([]byte("x")), field.Bytes("b").Optional().Nillable()}
 }
 
+type optionalTime struct{ schema.Schema }
+
+func (optionalTime) Fields() []schema.Field { return []schema.Field{field.Time("seen").Optional()} }
+
+// optionalTimeOK has the Optional time fields that pass: with a Default, or
+// Nillable.
+type optionalTimeOK struct{ schema.Schema }
+
+func (optionalTimeOK) Fields() []schema.Field {
+	return []schema.Field{field.Time("a").Optional().Default(time.Now), field.Time("b").Optional().Nillable()}
+}
+
 // optionalFK binds an Optional edge field that is not Nillable.
 type optionalFK struct{ schema.Schema }
 
@@ -778,6 +790,7 @@ func TestBuildRules(t *testing.T) {
 		{"37 optional enum", []schema.Interface{optionalEnum{}}, `schema optionalEnum: field "mood": an Optional enum needs a Default or Nillable`},
 		{"38 optional edge field", []schema.Interface{optionalFK{}}, `schema optionalFK: edge "parent": field "parent_id" must be Nillable when the edge is not Required: an unset foreign key is NULL`},
 		{"39 optional bytes", []schema.Interface{optionalBytes{}}, `schema optionalBytes: field "blob": an Optional bytes field needs a Default or Nillable`},
+		{"40 optional time", []schema.Interface{optionalTime{}}, `schema optionalTime: field "seen": an Optional time field needs a Default or Nillable`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			_, err := build(t, c.ss...)
@@ -802,7 +815,7 @@ func TestBuildRulesAreSingle(t *testing.T) {
 		{enumGoNames{}}, {clashOwner{}, clashPet{}}, {columnFieldMismatch{}}, {keyA{}, keyB{}}, {oneColumnM2M{}},
 		{twoColumnsO2M{}, Pet{}}, {invAssoc{}, invItem{}}, {enumGoTypeDup{}},
 		{fkUnbound{}}, {fieldStringFK{}}, {immutableEdge{}}, {immutableField{}}, {loop{}}, {cycle{}},
-		{defaultBool{}}, {defaultNumber{}}, {optionalEnum{}}, {optionalFK{}}, {optionalBytes{}},
+		{defaultBool{}}, {defaultNumber{}}, {optionalEnum{}}, {optionalFK{}}, {optionalBytes{}}, {optionalTime{}},
 	} {
 		_, err := build(t, ss...)
 		if n := len(err.(interface{ Unwrap() []error }).Unwrap()); n != 1 {
@@ -812,6 +825,8 @@ func TestBuildRulesAreSingle(t *testing.T) {
 }
 
 func TestBuildOptionalBytesWithDefaultOrNillable(t *testing.T) { mustBuild(t, optionalBytesOK{}) }
+
+func TestBuildOptionalTimeWithDefaultOrNillable(t *testing.T) { mustBuild(t, optionalTimeOK{}) }
 
 func TestBuildErrorsAreSortedAndJoined(t *testing.T) {
 	_, err := build(t, twoTenants{}, dupField{})

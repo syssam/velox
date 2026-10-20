@@ -283,6 +283,7 @@ func (LwChecked) Fields() []schema.Field {
 		field.Enum("state").Values("on", "off"),
 		field.Int64("n").Positive(),
 		field.String("plain"),
+		field.Bytes("raw").Optional().DefaultFunc(func() []byte { return []byte("x") }).MaxLen(3),
 	}
 }
 
@@ -324,6 +325,11 @@ func TestLowerChecks(t *testing.T) {
 		"case 4:",
 		"x := v.(int64)",
 		"if x <= 0 {", `errors.New("is not positive")`,
+		// An Optional bytes field: nil, or empty, is unset, and valid.
+		"case 6:",
+		"x := v.([]byte)",
+		"if len(x) == 0 {", "return nil",
+		"if len(x) > 3 {",
 	}
 	at := 0
 	for _, w := range code {
@@ -396,7 +402,7 @@ func (LwMixed) Mixin() []schema.Mixin { return []schema.Mixin{mixin.Schema{}, lw
 func (LwMixed) Fields() []schema.Field {
 	return []schema.Field{
 		field.String("own").Validate(func(string) error { return nil }).DefaultFunc(func() string { return "x" }),
-		field.Time("touched").Optional().UpdateDefault(time.Now),
+		field.Time("touched").Optional().Nillable().UpdateDefault(time.Now),
 		field.Bytes("blob").Default([]byte("b")),
 		field.String("lit").Default("hi"),
 		field.Int("count").Nillable().Default(5),

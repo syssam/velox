@@ -24,8 +24,9 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' \
    or input. `published_at` is `Optional().Nillable()`: `Optional` makes it
    optional on create, and `Nillable` makes its column NULL-able and the Go
    field a `*time.Time` with a `Null*` handle, so a draft's `publishedAt` is
-   `null` and `publishedAtIsNil` filters on it. `Optional()` alone would keep
-   a NOT NULL column and a `time.Time`, whose zero time means unset.
+   `null` and `publishedAtIsNil` filters on it. velox-gen refuses `Optional()`
+   alone on a time field without a Default: its unset value, the zero time,
+   would go into a NOT NULL column, which MySQL's strict mode refuses.
 2. velox-gen with the plugin, which writes `gen/`: the entities, the GraphQL
    schema `gen/velox.graphqls`, and the `gql_*.go` files it binds to (IDs,
    connections, edges, orders, where inputs, `Node` and `Nodes`):

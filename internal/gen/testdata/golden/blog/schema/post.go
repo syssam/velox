@@ -23,7 +23,7 @@ func (Post) Fields() []schema.Field {
 			return nil
 		}),
 		field.Enum("status").Values("draft", "published").Default("draft"),
-		field.Time("published_at").Optional(),
+		field.Time("published_at").Optional().Nillable(),
 		field.Strings("tags").Default([]string{"new"}),
 		field.Int("views").Min(0),
 	}

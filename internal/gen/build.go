@@ -663,6 +663,11 @@ func (b *builder) validateFields(e *Entity) {
 		if f.Type == "bytes" && f.Optional && !f.Nillable && len(f.Default) == 0 && !f.DefaultFunc {
 			b.fail(39, e.Name, fieldAt(f.Name), "an Optional bytes field needs a Default or Nillable")
 		}
+		// Unset, an Optional time is the zero time, which MySQL's strict
+		// mode refuses.
+		if f.Type == "time" && f.Optional && !f.Nillable && len(f.Default) == 0 && !f.DefaultFunc {
+			b.fail(40, e.Name, fieldAt(f.Name), "an Optional time field needs a Default or Nillable")
+		}
 		switch f.Type {
 		case "enum":
 			b.validateEnum(e, f)

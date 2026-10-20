@@ -25,8 +25,9 @@ type common[B any] struct {
 //
 // velox-gen refuses an Optional enum with neither a Default nor Nillable,
 // whose zero value "" is no value; an Optional bytes field with neither,
-// whose zero value nil binds NULL; and an Optional edge field that is not
-// Nillable, whose zero value is no row's key. A field that is unique only
+// whose zero value nil binds NULL; an Optional time field with neither, whose
+// zero time MySQL's strict mode refuses; and an Optional edge field that is
+// not Nillable, whose zero value is no row's key. A field that is unique only
 // when present needs Nillable: every unset row holds the same zero value.
 func (c common[B]) Optional() B { c.d.Optional = true; return c.self }
 
@@ -101,6 +102,7 @@ func (t typed[B, V]) DefaultFunc(fn any) B { t.d.DefaultFunc = fn; return t.self
 func (t typed[B, V]) UpdateDefault(fn any) B { t.d.UpdateDefault = fn; return t.self }
 
 // Validate adds a function that checks the field's value.
+// An Optional field's zero value means unset, and is not validated.
 func (t typed[B, V]) Validate(fn func(V) error) B {
 	if fn == nil {
 		fail(t.d, "Validate is given a nil function")

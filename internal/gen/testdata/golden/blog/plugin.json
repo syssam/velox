@@ -187,10 +187,13 @@
           "go_name": "PublishedAt",
           "column": "published_at",
           "type": "time",
-          "go_type": "time.Time",
+          "go_type": "*time.Time",
           "elem_type": "time.Time",
           "pkg_path": "time",
-          "optional": true
+          "pointer": true,
+          "nullable": true,
+          "optional": true,
+          "nillable": true
         },
         {
           "name": "tags",

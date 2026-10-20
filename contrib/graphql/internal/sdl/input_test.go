@@ -203,7 +203,7 @@ func TestInputs(t *testing.T) {
 			{"required, no create input", false, []graphql.Annotation{graphql.CreateInput(false)}, []string{"title: String!"}, []string{"title: String"}},
 		} {
 			t.Run(c.name, func(t *testing.T) {
-				by := &plugin.Field{Name: "edited_by", GoName: "EditedBy", Type: "string", Nullable: c.nullable, Optional: c.nullable, UpdateDefault: true}
+				by := &plugin.Field{Name: "edited_by", GoName: "EditedBy", Type: "string", Nullable: c.nullable, Optional: c.nullable, Nillable: c.nullable, UpdateDefault: true}
 				by.Annotations = ann(t, c.ann...)
 				u := entity("Post", field("title", "string"), by)
 				u.Annotations = ann(t, graphql.Mutations(graphql.Create(), graphql.Update()))
