@@ -91,7 +91,7 @@ func TestBuildNillableIsPointer(t *testing.T) {
 		t.Fatalf("active %+v: Nillable makes a pointer, and its Default does not change that", f)
 	}
 	d := g.Entity("defaults")
-	for name, want := range map[string]bool{"seen": true, "nick": false, "label": false, "count": false, "bio": true, "opt": false} {
+	for name, want := range map[string]bool{"seen": true, "nick": false, "label": false, "count": true, "bio": true, "opt": false} {
 		if f := d.Field(name); f.Pointer != want {
 			t.Errorf("%s: pointer %v, want %v", name, f.Pointer, want)
 		}
@@ -106,7 +106,7 @@ func (defaults) Fields() []schema.Field {
 		field.Time("seen").Optional().Nillable(),
 		field.String("nick").Optional().Default("n"),
 		field.String("label").Default("l"),
-		field.Int("count").DefaultFunc(func() int { return 1 }),
+		field.Int("count").DefaultFunc(func() int { return 1 }).Nillable(),
 		field.Text("bio").Nillable(),
 		field.Int("opt").Optional(),
 	}
@@ -466,6 +466,12 @@ func (defaultNumber) Fields() []schema.Field {
 	return []schema.Field{field.Float("score").Optional().Default(1.5)}
 }
 
+type defaultFuncNumber struct{ schema.Schema }
+
+func (defaultFuncNumber) Fields() []schema.Field {
+	return []schema.Field{field.Int("count").DefaultFunc(func() int { return 1 })}
+}
+
 type optionalEnum struct{ schema.Schema }
 
 func (optionalEnum) Fields() []schema.Field {
@@ -785,8 +791,9 @@ func TestBuildRules(t *testing.T) {
 		{"34 immutable field", []schema.Interface{immutableField{}}, `schema immutableField: edge "parent": field "parent_id" is Immutable but the edge is not`},
 		{"35 join columns collide", []schema.Interface{loop{}}, `schema loop: edge "loops": join table loop_loops has two columns named loop_id; name them with edge.Columns`},
 		{"35 join columns collide on an inverse", []schema.Interface{cycle{}}, `schema cycle: edge "cycles": join table cycle_next has two columns named cycle_id; name them with edge.Columns`},
-		{"36 default on a bool", []schema.Interface{defaultBool{}}, `schema defaultBool: field "active": a Default on a bool or number that is not Nillable cannot be told from unset; make the field Nillable or drop the Default`},
-		{"36 default on an optional number", []schema.Interface{defaultNumber{}}, `schema defaultNumber: field "score": a Default on a bool or number that is not Nillable cannot be told from unset; make the field Nillable or drop the Default`},
+		{"36 default on a bool", []schema.Interface{defaultBool{}}, `schema defaultBool: field "active": a Default or DefaultFunc on a bool or number that is not Nillable cannot be told from unset; make the field Nillable or drop the Default`},
+		{"36 default on an optional number", []schema.Interface{defaultNumber{}}, `schema defaultNumber: field "score": a Default or DefaultFunc on a bool or number that is not Nillable cannot be told from unset; make the field Nillable or drop the Default`},
+		{"36 default func on a number", []schema.Interface{defaultFuncNumber{}}, `schema defaultFuncNumber: field "count": a Default or DefaultFunc on a bool or number that is not Nillable cannot be told from unset; make the field Nillable or drop the Default`},
 		{"37 optional enum", []schema.Interface{optionalEnum{}}, `schema optionalEnum: field "mood": an Optional enum needs a Default or Nillable`},
 		{"38 optional edge field", []schema.Interface{optionalFK{}}, `schema optionalFK: edge "parent": field "parent_id" must be Nillable when the edge is not Required: an unset foreign key is NULL`},
 		{"39 optional bytes", []schema.Interface{optionalBytes{}}, `schema optionalBytes: field "blob": an Optional bytes field needs a Default or Nillable`},
@@ -815,7 +822,7 @@ func TestBuildRulesAreSingle(t *testing.T) {
 		{enumGoNames{}}, {clashOwner{}, clashPet{}}, {columnFieldMismatch{}}, {keyA{}, keyB{}}, {oneColumnM2M{}},
 		{twoColumnsO2M{}, Pet{}}, {invAssoc{}, invItem{}}, {enumGoTypeDup{}},
 		{fkUnbound{}}, {fieldStringFK{}}, {immutableEdge{}}, {immutableField{}}, {loop{}}, {cycle{}},
-		{defaultBool{}}, {defaultNumber{}}, {optionalEnum{}}, {optionalFK{}}, {optionalBytes{}}, {optionalTime{}},
+		{defaultBool{}}, {defaultNumber{}}, {defaultFuncNumber{}}, {optionalEnum{}}, {optionalFK{}}, {optionalBytes{}}, {optionalTime{}},
 	} {
 		_, err := build(t, ss...)
 		if n := len(err.(interface{ Unwrap() []error }).Unwrap()); n != 1 {

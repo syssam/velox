@@ -16,6 +16,7 @@ func (Post) Fields() []schema.Field {
 		field.String("title").NotEmpty(),
 		field.Enum("status").Values("draft", "published").Default("draft"),
 		field.Int("views").Nillable().Min(0).Default(0),
+		field.Int("rank").Nillable().DefaultFunc(func() int { return 3 }),
 	}
 }
 

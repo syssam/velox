@@ -384,6 +384,8 @@ A static `Default` on a bool or numeric field must use a pointer field, so an
 explicit false or 0 can be inserted; `DefaultFunc` applies to any type and
 fills a zero field.
 
+*Note 2026-10-20 (API cleanup §3.1):* velox-gen refuses a `DefaultFunc` on a bool or number field that is not `Nillable` as well, for the same reason; a hand-written `Desc` may still have one. A pointer field's `DefaultFunc` returns the element type, which the insert stores through a new pointer.
+
 ### 4.3 Read
 
 ```go

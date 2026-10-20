@@ -94,7 +94,9 @@ type typed[B, V any] struct{ common[B] }
 func (t typed[B, V]) Default(v V) B { t.d.Default = v; return t.self }
 
 // DefaultFunc sets a func() returning the field's Go type, called when a new
-// row does not set the field.
+// row does not set the field. As with Default, a field that is not a pointer
+// is unset when it holds its zero value, so velox-gen refuses a DefaultFunc on
+// a bool or number that is not Nillable.
 func (t typed[B, V]) DefaultFunc(fn any) B { t.d.DefaultFunc = fn; return t.self }
 
 // UpdateDefault sets a func() returning the field's Go type, called on every

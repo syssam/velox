@@ -358,7 +358,7 @@ func (LwDefaults) Fields() []schema.Field {
 	return []schema.Field{
 		field.Bool("b").Nillable(), field.Bool("b_def").Nillable().Default(true),
 		field.Float("f").Optional().Nillable(), field.Float("f_def").Optional().Nillable().Default(1.5),
-		field.Int("i"), field.Int("i_def").DefaultFunc(func() int { return 1 }),
+		field.Int("i").Nillable(), field.Int("i_def").Nillable().DefaultFunc(func() int { return 1 }),
 		field.String("s"), field.String("s_def").Default("x"),
 		field.String("o").Optional(), field.String("o_def").Optional().Default("x"),
 		field.Time("t").Nillable(), field.Time("t_def").Nillable().Default(time.Now),
@@ -371,7 +371,7 @@ func TestLowerDefaultKeepsType(t *testing.T) {
 	for _, c := range []struct{ name, goType, handle string }{
 		{"b", "*bool", "velox.NullCol[LwDefaults, bool]"},
 		{"f", "*float64", "velox.NullNumberCol[LwDefaults, float64]"},
-		{"i", "int", "velox.NumberCol[LwDefaults, int]"},
+		{"i", "*int", "velox.NullNumberCol[LwDefaults, int]"},
 		{"s", "string", "velox.StringCol[LwDefaults, string]"},
 		{"o", "string", "velox.StringCol[LwDefaults, string]"},
 		{"t", "*time.Time", "velox.NullOrderedCol[LwDefaults, time.Time]"},
@@ -392,7 +392,7 @@ func (lwMix) Fields() []schema.Field {
 	return []schema.Field{
 		field.String("slug").Validate(func(string) error { return nil }),
 		field.Time("made").Default(time.Now),
-		field.Int64("rev").DefaultFunc(func() int64 { return 1 }),
+		field.Int64("rev").Nillable().DefaultFunc(func() int64 { return 1 }),
 	}
 }
 

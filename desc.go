@@ -57,11 +57,11 @@ type Desc[E any] struct {
 
 // For generated code. ColumnDesc describes one column of a Desc.
 type ColumnDesc struct {
-	Field         string // the Go field name
-	Name          string // the column name
-	SQLType       string // empty: the dialect's default
-	Default       any    // a value of the field's type (or of its element type, for a pointer field); nil when none
-	DefaultFunc   func() any
+	Field         string     // the Go field name
+	Name          string     // the column name
+	SQLType       string     // empty: the dialect's default
+	Default       any        // a value of the field's type (or of its element type, for a pointer field); nil when none
+	DefaultFunc   func() any // returns a value of the field's type (or of its element type, for a pointer field)
 	UpdateDefault func() any
 	Immutable     bool
 	Sensitive     bool

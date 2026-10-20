@@ -24,7 +24,7 @@ CREATE TABLE users (
 	created_by TEXT NOT NULL, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE, role TEXT NOT NULL,
 	nickname TEXT NOT NULL, age INTEGER NOT NULL, motto TEXT NOT NULL, password_hash TEXT NOT NULL, score REAL);
 CREATE TABLE posts (
-	id INTEGER PRIMARY KEY, author_id INTEGER NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, views INTEGER NOT NULL);
+	id INTEGER PRIMARY KEY, author_id INTEGER NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, views INTEGER NOT NULL, rank INTEGER);
 CREATE TABLE notes (id INTEGER PRIMARY KEY, org_id INTEGER NOT NULL, text TEXT NOT NULL);
 CREATE TABLE groups (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
 CREATE TABLE user_groups (user_id INTEGER NOT NULL, group_id INTEGER NOT NULL, PRIMARY KEY (user_id, group_id));`
@@ -138,7 +138,7 @@ func TestDefaults(t *testing.T) {
 	p := gen.Post{AuthorID: u.ID, Title: "t"}
 	mustInsert(t, db, &p)
 	gp, err := db.Query[gen.Post]().Where(gen.Posts.ID.EQ(p.ID)).One(ctx)
-	if err != nil || gp.Status != gen.PostStatusDraft || gp.Views == nil || *gp.Views != 0 {
+	if err != nil || gp.Status != gen.PostStatusDraft || gp.Views == nil || *gp.Views != 0 || gp.Rank == nil || *gp.Rank != 3 {
 		t.Errorf("post defaults: %+v, %v", gp, err)
 	}
 }

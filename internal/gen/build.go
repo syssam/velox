@@ -649,11 +649,11 @@ func (b *builder) validateFields(e *Entity) {
 		}
 	}
 	for _, f := range e.Fields {
-		// An insert fills a Default into a zero field, so on a bool or number
-		// that is not a pointer it could never store false or 0. The tenant's
-		// default is rule 16's.
-		if len(f.Default) > 0 && !f.Nillable && !f.Tenant && (f.Type == "bool" || numeric[f.Type]) {
-			b.fail(36, e.Name, fieldAt(f.Name), "a Default on a bool or number that is not Nillable cannot be told from unset; make the field Nillable or drop the Default")
+		// An insert fills a Default or DefaultFunc into a zero field, so on a
+		// bool or number that is not a pointer it could never store false or
+		// 0. The tenant's default is rule 16's.
+		if (len(f.Default) > 0 || f.DefaultFunc) && !f.Nillable && !f.Tenant && (f.Type == "bool" || numeric[f.Type]) {
+			b.fail(36, e.Name, fieldAt(f.Name), "a Default or DefaultFunc on a bool or number that is not Nillable cannot be told from unset; make the field Nillable or drop the Default")
 		}
 		// Unset, an Optional enum would write "", which is no value.
 		if f.Type == "enum" && f.Optional && !f.Nillable && len(f.Default) == 0 {

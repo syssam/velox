@@ -255,8 +255,8 @@ func (q InsertQuery[E]) check[_ Lazy[E]]() error {
 // A zero value means unset. On a pointer field (velox-gen's Nillable) that is
 // nil, so any value can be stored. On any other field, such as an Optional
 // one, it is the zero value itself: a string with a Default can never store
-// "", which is why velox-gen refuses a Default on a bool or number that is
-// not Nillable.
+// "", which is why velox-gen refuses a Default or DefaultFunc on a bool or
+// number that is not Nillable.
 func fillDefaults[E any](m *Meta[E], p *E) {
 	for i := range m.info.Columns {
 		fillDefault(&m.info.Columns[i], m.addr(p, i))
@@ -264,15 +264,23 @@ func fillDefaults[E any](m *Meta[E], p *E) {
 }
 
 // fillDefault sets the field that ptr points to as column c's Default or
-// DefaultFunc says. It is not generic, so that the reflect.Value it uses is not
-// compiled into every package that inserts.
+// DefaultFunc says. A DefaultFunc returns the element type of a pointer field
+// (velox-gen's Nillable), which is stored through a new pointer. It is not
+// generic, so that the reflect.Value it uses is not compiled into every
+// package that inserts.
 func fillDefault(c *ColumnInfo, ptr any) {
 	v := reflect.ValueOf(ptr).Elem()
 	switch {
 	case c.HasDefault && v.IsZero():
 		v.Set(defaultValue(c.Default))
 	case c.DefaultFunc != nil && v.IsZero():
-		v.Set(reflect.ValueOf(c.DefaultFunc()))
+		d := reflect.ValueOf(c.DefaultFunc())
+		if t := v.Type(); t.Kind() == reflect.Pointer && d.Type() != t {
+			p := reflect.New(t.Elem())
+			p.Elem().Set(d)
+			d = p
+		}
+		v.Set(d)
 	}
 }
 
