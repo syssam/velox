@@ -103,14 +103,14 @@ func TestRouteTable(t *testing.T) {
 		bothPaths(t, func(t *testing.T, hooked bool) {
 			s := openReplicas(hooked)
 			s.p.Rows = [][]any{invoiceRow(1)}
-			err := s.db.Tx(ctx, func(tx *velox.DB) error {
+			err := s.db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 				if _, err := tx.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(ctx); err != nil {
 					return err
 				}
 				if _, err := tx.Update[testmodel.Invoice]().Set(I.Paid.Set(true)).Where(I.ID.EQ(1)).Exec(ctx); err != nil {
 					return err
 				}
-				return tx.Tx(ctx, func(tx *velox.DB) error {
+				return tx.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 					_, err := tx.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).One(ctx)
 					return err
 				})

@@ -47,7 +47,7 @@ INSERT INTO invoices (number, customer, status, total_cents) VALUES
 // Nothing in it knows about tracing.
 func pay(ctx context.Context, db *velox.DB, number string) error {
 	I := gen.Invoices
-	return db.Tx(ctx, func(tx *velox.DB) error {
+	return db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		inv, err := tx.Query[gen.Invoice]().Where(I.Number.EQ(number)).One(ctx)
 		if err != nil {
 			return err

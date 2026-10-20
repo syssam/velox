@@ -16,8 +16,10 @@ import (
 // A hook must call next once, and return its error, unless it returns an
 // error of its own instead; a second call to next returns an error without
 // running anything. The context passed to next is the one the transaction
-// runs on, and TxInfo.Context; it must stay valid until next returns. The
-// first TxAround given to Open is the outermost.
+// runs on, which Tx's fn gets; it must stay valid until next returns. The
+// hook's own context is not the transaction's: a statement the hook runs on
+// the DB, before or after next, runs outside the transaction. The first
+// TxAround given to Open is the outermost.
 type TxAround func(ctx context.Context, tx *TxInfo, next func(context.Context) error) error
 
 // TxInfo describes a transaction to the hooks: a TxAround hook gets it, and
@@ -27,10 +29,9 @@ type TxInfo struct {
 	ID        uint64 // unique within the process
 	Isolation sql.IsolationLevel
 	ReadOnly  bool
-	Attempt   int             // 1 for the first try; RetrySerializable increments it
-	Context   context.Context // what the TxAround hooks passed to next; Tx's bounded context when there are none
-	Retries   []TxRetry       // the attempts RetrySerializable retried, in order
-	Outcome   TxOutcome       // how the last attempt ended; set before next returns
+	Attempt   int       // 1 for the first try; RetrySerializable increments it
+	Retries   []TxRetry // the attempts RetrySerializable retried, in order
+	Outcome   TxOutcome // how the last attempt ended; set before next returns
 }
 
 // TxRetry is an attempt that RetrySerializable retried.
@@ -73,13 +74,13 @@ func WithTxAround(h TxAround) Option {
 // txIDs numbers transactions; the first is 1.
 var txIDs atomic.Uint64
 
-// newTxInfo returns the TxInfo of a transaction on ctx with options o, or nil
-// when db has no hooks to read it.
-func (db *DB) newTxInfo(ctx context.Context, o txOptions) *TxInfo {
+// newTxInfo returns the TxInfo of a transaction with options o, or nil when
+// db has no hooks to read it.
+func (db *DB) newTxInfo(o txOptions) *TxInfo {
 	if !db.hooked() && len(db.cfg.txArounds) == 0 {
 		return nil
 	}
-	return &TxInfo{ID: txIDs.Add(1), Isolation: o.isolation, ReadOnly: o.readOnly, Context: ctx}
+	return &TxInfo{ID: txIDs.Add(1), Isolation: o.isolation, ReadOnly: o.readOnly}
 }
 
 // end records how the transaction's attempt ended; info may be nil.
@@ -98,7 +99,6 @@ func (db *DB) txAround(ctx context.Context, info *TxInfo, attempts func(context.
 			return errors.New("velox: transaction: a TxAround hook called next twice")
 		}
 		called = true
-		info.Context = ctx
 		last = attempts(ctx)
 		returned = true
 		return last

@@ -67,7 +67,7 @@ func TestTxDeadlineOnRealDatabases(t *testing.T) {
 		if tg.raw == nil {
 			return
 		}
-		err := tg.db.Tx(ctx, func(tx *velox.DB) error {
+		err := tg.db.Tx(ctx, func(_ context.Context, tx *velox.DB) error {
 			if _, err := tx.Update[testmodel.Invoice]().Set(I.Total.Set(2)).Where(I.ID.EQ(2)).Exec(ctx); err != nil {
 				return err
 			}
@@ -104,7 +104,7 @@ func TestCallersTxDeadlineOnRealDatabases(t *testing.T) {
 		cctx, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
 		defer cancel()
 		start := time.Now()
-		err := tg.db.Tx(cctx, func(tx *velox.DB) error {
+		err := tg.db.Tx(cctx, func(_ context.Context, tx *velox.DB) error {
 			lockRow(t, tg)
 			_, err := tx.Update[testmodel.Invoice]().Set(I.Total.Set(1)).Where(I.ID.EQ(1)).Exec(ctx)
 			return err

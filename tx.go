@@ -34,6 +34,15 @@ func RetrySerializable(n int) TxOption { return func(o *txOptions) { o.retries =
 // a *DB like any other, so a function that takes a *DB works inside a
 // transaction unchanged.
 //
+// fn's ctx is the context the transaction runs on: ctx, with the
+// transaction's deadline, as the TxAround hooks passed it on. It is
+// marked as the transaction's: a statement on a *DB in no transaction, db
+// itself say, under it or a context derived from it, fails with
+// ErrOutsideTx before anything is sent, which catches a statement meant for
+// tx; so does a Tx on such a *DB, which would begin another transaction. A
+// statement on db under another context, ctx in a goroutine fn starts say,
+// runs outside the transaction as usual.
+//
 // WithDeadlines' Tx and MaxTx, and Timeout, bound the whole call. The
 // transaction's deadline, velox's or ctx's, whichever is earlier, bounds every
 // statement inside it, nested Tx included, whatever context the statement is
@@ -51,14 +60,18 @@ func RetrySerializable(n int) TxOption { return func(o *txOptions) { o.retries =
 // shard too, and one whose context names another fails.
 //
 // Inside a transaction, Tx makes a savepoint instead, so an error in a nested
-// fn rolls back only that fn's work. A nested Tx (a savepoint) ignores options.
+// fn rolls back only that fn's work. A nested Tx (a savepoint) ignores
+// options, and passes fn its ctx, marked as the savepoint's.
 //
 // tx is valid only inside fn: after Tx returns, statements on it fail (or, for
 // a nested tx, run in the enclosing transaction). tx is not safe for
 // concurrent use: run its statements from one goroutine at a time.
-func (db *DB) Tx(ctx context.Context, fn func(tx *DB) error, opts ...TxOption) error {
+func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error, opts ...TxOption) error {
 	if db.inTx {
 		return db.savepoint(ctx, fn)
+	}
+	if ctx.Value(txKey{}) != nil {
+		return fmt.Errorf("velox: transaction: %w", ErrOutsideTx)
 	}
 	sh, err := db.shardForTx(ctx)
 	if err != nil {
@@ -84,7 +97,7 @@ func (db *DB) Tx(ctx context.Context, fn func(tx *DB) error, opts ...TxOption) e
 		defer cancel()
 		cause = ErrTimeout
 	}
-	info := db.newTxInfo(tctx, o)
+	info := db.newTxInfo(o)
 	if len(db.cfg.txArounds) == 0 {
 		// No closure here: one passed to the hooks escapes, and would cost
 		// a DB with nothing configured an allocation per transaction.
@@ -101,7 +114,7 @@ func (db *DB) Tx(ctx context.Context, fn func(tx *DB) error, opts ...TxOption) e
 // ErrTimeout when the deadline is velox's. info, when not nil, is updated
 // before each attempt and each retry. sh is the shard the transaction runs
 // on; nil on a DB without a router.
-func (db *DB) attempts(ctx, tctx context.Context, fn func(*DB) error, o txOptions, deadline time.Time, cause error, info *TxInfo, sh *shard) error {
+func (db *DB) attempts(ctx, tctx context.Context, fn func(context.Context, *DB) error, o txOptions, deadline time.Time, cause error, info *TxInfo, sh *shard) error {
 	for attempt := 1; ; attempt++ {
 		if info != nil {
 			info.Attempt = attempt
@@ -148,7 +161,9 @@ func ended(err error) bool {
 // wrote, nil on a DB without a router, is the flag the transaction's
 // statements set on a successful write. sh, nil on a DB without a router, is
 // the shard whose primary the transaction runs on.
-func (db *DB) transaction(ctx context.Context, fn func(*DB) error, o txOptions, deadline time.Time, cause error, info *TxInfo, wrote *atomic.Bool, sh *shard) error {
+//
+// fn gets ctx, marked as the transaction's.
+func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) error, o txOptions, deadline time.Time, cause error, info *TxInfo, wrote *atomic.Bool, sh *shard) error {
 	primary := db.ex
 	var txShard *shard // its statements check their shard against it
 	if sh != nil {
@@ -170,7 +185,7 @@ func (db *DB) transaction(ctx context.Context, fn func(*DB) error, o txOptions, 
 			_ = ctl.rollback(end)
 		}
 	}()
-	if err := fn(&DB{d: db.d, ex: ex, rt: db.rt, cfg: db.cfg, inTx: true, txDeadline: deadline, txCause: cause, tx: info, txWrote: wrote, txShard: txShard}); err != nil {
+	if err := fn(newTxFrame(ctx, DB{d: db.d, ex: ex, rt: db.rt, cfg: db.cfg, inTx: true, txDeadline: deadline, txCause: cause, tx: info, txWrote: wrote, txShard: txShard})); err != nil {
 		finished = true
 		if ctx.Err() != nil || past(deadline) {
 			info.end(TxError)
@@ -241,9 +256,10 @@ func over(ctx context.Context) bool {
 	return ctx.Err() != nil
 }
 
-// savepoint runs fn under a savepoint of the current transaction. It runs no
-// TxAround hook; its statements see the transaction's TxInfo.
-func (db *DB) savepoint(ctx context.Context, fn func(*DB) error) error {
+// savepoint runs fn under a savepoint of the current transaction, and gives
+// it ctx, marked as the savepoint's. It runs no TxAround hook; its statements
+// see the transaction's TxInfo.
+func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error) error {
 	name := "velox_" + strconv.Itoa(db.depth+1)
 	if _, err := db.ex.exec(ctx, "SAVEPOINT "+name, nil); err != nil {
 		return fmt.Errorf("velox: savepoint: %w", err)
@@ -255,7 +271,7 @@ func (db *DB) savepoint(ctx context.Context, fn func(*DB) error) error {
 			_ = db.rollbackSavepoint(end, name)
 		}
 	}()
-	if err := fn(&DB{d: db.d, ex: db.ex, rt: db.rt, cfg: db.cfg, inTx: true, depth: db.depth + 1, txDeadline: db.txDeadline, txCause: db.txCause, tx: db.tx, txWrote: db.txWrote, txShard: db.txShard}); err != nil {
+	if err := fn(newTxFrame(ctx, DB{d: db.d, ex: db.ex, rt: db.rt, cfg: db.cfg, inTx: true, depth: db.depth + 1, txDeadline: db.txDeadline, txCause: db.txCause, tx: db.tx, txWrote: db.txWrote, txShard: db.txShard})); err != nil {
 		finished = true
 		// As in transaction: once the transaction's deadline has passed, the
 		// connection may be gone and the rollback's error is noise.
@@ -280,4 +296,44 @@ func (db *DB) rollbackSavepoint(ctx context.Context, name string) error {
 	}
 	_, err := db.ex.exec(ctx, "RELEASE SAVEPOINT "+name, nil)
 	return err
+}
+
+// txKey is the context key of the mark a transaction's fn's context carries.
+type txKey struct{}
+
+// txCtx is the context a transaction's or a savepoint's fn gets: the context
+// it runs on, marked with the DB fn is given, which Value returns for txKey.
+// A statement on a DB in no transaction under it fails with ErrOutsideTx.
+// It is a context type of its own, rather than context.WithValue's, so that
+// it can live in the DB's allocation (txFrame): marking costs a transaction
+// no allocation.
+type txCtx struct {
+	context.Context
+	db *DB
+}
+
+// Value returns the transaction's DB for txKey, and the parent context's
+// value otherwise.
+func (c *txCtx) Value(key any) any {
+	if _, ok := key.(txKey); ok {
+		return c.db
+	}
+	return c.Context.Value(key)
+}
+
+// String names the context as the context package's do.
+func (c *txCtx) String() string { return fmt.Sprint(c.Context) + ".WithTx" }
+
+// txFrame is a transaction's or a savepoint's DB and the context its fn
+// gets, in one allocation.
+type txFrame struct {
+	db  DB
+	ctx txCtx
+}
+
+// newTxFrame returns ctx marked as the transaction's, and its DB, db.
+func newTxFrame(ctx context.Context, db DB) (context.Context, *DB) {
+	f := &txFrame{db: db}
+	f.ctx = txCtx{Context: ctx, db: &f.db}
+	return &f.ctx, &f.db
 }

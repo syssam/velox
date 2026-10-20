@@ -1,13 +1,16 @@
 package velox_test
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"reflect"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 
@@ -15,7 +18,7 @@ import (
 	"github.com/syssam/velox2/internal/testmodel"
 )
 
-func touch(tx *velox.DB) error {
+func touch(ctx context.Context, tx *velox.DB) error {
 	_, err := tx.Update[testmodel.Invoice]().Set(I.Paid.Set(true)).Where(I.ID.EQ(1)).Exec(ctx)
 	return err
 }
@@ -37,8 +40,8 @@ func TestTxRollsBackOnError(t *testing.T) {
 	boom := errors.New("boom")
 	e := &velox.FakeExec{}
 	db := velox.OpenFake(velox.Postgres, e)
-	err := db.Tx(ctx, func(tx *velox.DB) error {
-		if err := touch(tx); err != nil {
+	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		if err := touch(ctx, tx); err != nil {
 			return err
 		}
 		return boom
@@ -57,7 +60,7 @@ func TestTxRollsBackOnPanic(t *testing.T) {
 			t.Errorf("recovered %v, log %q", p, e.Log)
 		}
 	}()
-	_ = db.Tx(ctx, func(*velox.DB) error { panic("oops") })
+	_ = db.Tx(ctx, func(context.Context, *velox.DB) error { panic("oops") })
 	t.Error("Tx did not re-raise the panic")
 }
 
@@ -67,7 +70,7 @@ func TestTxRollsBackWhenTheContextIsCanceled(t *testing.T) {
 	e := &velox.FakeExec{}
 	db := velox.OpenFake(velox.Postgres, e)
 	c, cancel := context.WithCancel(ctx)
-	err := db.Tx(c, func(*velox.DB) error {
+	err := db.Tx(c, func(context.Context, *velox.DB) error {
 		cancel()
 		return c.Err()
 	})
@@ -83,8 +86,8 @@ func TestSavepointRollsBackWhenTheContextIsCanceled(t *testing.T) {
 	e := &velox.FakeExec{}
 	db := velox.OpenFake(velox.Postgres, e)
 	c, cancel := context.WithCancel(ctx)
-	err := db.Tx(c, func(tx *velox.DB) error {
-		return tx.Tx(c, func(*velox.DB) error {
+	err := db.Tx(c, func(ctx context.Context, tx *velox.DB) error {
+		return tx.Tx(c, func(context.Context, *velox.DB) error {
 			cancel()
 			return c.Err()
 		})
@@ -114,7 +117,7 @@ func TestTxRollsBackOnGoexit(t *testing.T) {
 	e := &velox.FakeExec{}
 	db := velox.OpenFake(velox.Postgres, e)
 	goexit(func() {
-		_ = db.Tx(ctx, func(*velox.DB) error { runtime.Goexit(); return nil })
+		_ = db.Tx(ctx, func(context.Context, *velox.DB) error { runtime.Goexit(); return nil })
 		t.Error("Tx returned after Goexit")
 	})
 	if want := []string{"BEGIN", "ROLLBACK"}; !reflect.DeepEqual(e.Log, want) {
@@ -124,8 +127,8 @@ func TestTxRollsBackOnGoexit(t *testing.T) {
 	e = &velox.FakeExec{}
 	db = velox.OpenFake(velox.Postgres, e)
 	goexit(func() {
-		_ = db.Tx(ctx, func(tx *velox.DB) error {
-			return tx.Tx(ctx, func(*velox.DB) error { runtime.Goexit(); return nil })
+		_ = db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+			return tx.Tx(ctx, func(context.Context, *velox.DB) error { runtime.Goexit(); return nil })
 		})
 		t.Error("Tx returned after Goexit")
 	})
@@ -144,8 +147,8 @@ func TestPanicInASavepointRollsBackBoth(t *testing.T) {
 			t.Errorf("recovered %v\n got %q\nwant %q", p, e.Log, want)
 		}
 	}()
-	_ = db.Tx(ctx, func(tx *velox.DB) error {
-		return tx.Tx(ctx, func(*velox.DB) error { panic("oops") })
+	_ = db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		return tx.Tx(ctx, func(context.Context, *velox.DB) error { panic("oops") })
 	})
 	t.Error("Tx did not re-raise the panic")
 }
@@ -154,11 +157,11 @@ func TestNestedTxUsesSavepoints(t *testing.T) {
 	boom := errors.New("boom")
 	e := &velox.FakeExec{}
 	db := velox.OpenFake(velox.Postgres, e)
-	err := db.Tx(ctx, func(tx *velox.DB) error {
+	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		if err := tx.Tx(ctx, touch); err != nil {
 			return err
 		}
-		if err := tx.Tx(ctx, func(*velox.DB) error { return boom }); !errors.Is(err, boom) {
+		if err := tx.Tx(ctx, func(context.Context, *velox.DB) error { return boom }); !errors.Is(err, boom) {
 			t.Errorf("inner error %v", err)
 		}
 		return nil
@@ -173,9 +176,9 @@ func TestNestedTxUsesSavepoints(t *testing.T) {
 func TestNestedTxDepth(t *testing.T) {
 	e := &velox.FakeExec{}
 	db := velox.OpenFake(velox.Postgres, e)
-	err := db.Tx(ctx, func(a *velox.DB) error {
-		return a.Tx(ctx, func(b *velox.DB) error {
-			return b.Tx(ctx, func(*velox.DB) error { return nil })
+	err := db.Tx(ctx, func(ctx context.Context, a *velox.DB) error {
+		return a.Tx(ctx, func(ctx context.Context, b *velox.DB) error {
+			return b.Tx(ctx, func(context.Context, *velox.DB) error { return nil })
 		})
 	})
 	want := []string{"BEGIN", "SAVEPOINT velox_1", "SAVEPOINT velox_2",
@@ -190,7 +193,7 @@ func TestRetrySerializable(t *testing.T) {
 	e := &velox.FakeExec{Errs: []error{serialization}}
 	db := velox.OpenFake(velox.Postgres, e)
 	runs := 0
-	err := db.Tx(ctx, func(tx *velox.DB) error { runs++; return touch(tx) }, velox.RetrySerializable(2))
+	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { runs++; return touch(ctx, tx) }, velox.RetrySerializable(2))
 	if err != nil || runs != 2 {
 		t.Fatalf("%v, runs %d", err, runs)
 	}
@@ -206,7 +209,7 @@ func TestRetrySerializable(t *testing.T) {
 	e = &velox.FakeExec{Errs: []error{errors.New("not retryable")}}
 	db = velox.OpenFake(velox.Postgres, e)
 	runs = 0
-	if err := db.Tx(ctx, func(tx *velox.DB) error { runs++; return touch(tx) }, velox.RetrySerializable(3)); err == nil || runs != 1 {
+	if err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { runs++; return touch(ctx, tx) }, velox.RetrySerializable(3)); err == nil || runs != 1 {
 		t.Errorf("a non-retryable error: %v, runs %d", err, runs)
 	}
 }
@@ -219,7 +222,7 @@ func TestTxOptionsAndInTx(t *testing.T) {
 	if err := db.Tx(ctx, touch, velox.Isolation(sql.LevelSerializable), velox.ReadOnly()); err != nil {
 		t.Fatal(err)
 	}
-	if err := touch(db); err != nil {
+	if err := touch(ctx, db); err != nil {
 		t.Fatal(err)
 	}
 	if e.Isolation != sql.LevelSerializable || !e.ReadOnly || !reflect.DeepEqual(inTx, []bool{true, false}) {
@@ -233,7 +236,7 @@ func TestRetryBound(t *testing.T) {
 		e := &velox.FakeExec{Err: serialization}
 		db := velox.OpenFake(velox.Postgres, e)
 		runs := 0
-		err := db.Tx(ctx, func(tx *velox.DB) error { runs++; return touch(tx) }, velox.RetrySerializable(tc.n))
+		err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { runs++; return touch(ctx, tx) }, velox.RetrySerializable(tc.n))
 		if !errors.Is(err, serialization) || runs != tc.runs {
 			t.Errorf("RetrySerializable(%d): runs %d, want %d; err %v", tc.n, runs, tc.runs, err)
 		}
@@ -245,12 +248,12 @@ func TestFailingCommit(t *testing.T) {
 	e := &velox.FakeExec{CommitErr: serialization}
 	db := velox.OpenFake(velox.Postgres, e)
 	runs := 0
-	err := db.Tx(ctx, func(tx *velox.DB) error {
+	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		runs++
 		if runs == 2 {
 			e.CommitErr = nil
 		}
-		return touch(tx)
+		return touch(ctx, tx)
 	}, velox.RetrySerializable(1))
 	want := []string{"BEGIN", touchSQL, "COMMIT", "BEGIN", touchSQL, "COMMIT"}
 	if err != nil || runs != 2 || !reflect.DeepEqual(e.Log, want) {
@@ -264,5 +267,168 @@ func TestFailingCommit(t *testing.T) {
 	want = []string{"BEGIN", touchSQL, "COMMIT"}
 	if !errors.Is(err, boom) || !strings.HasPrefix(err.Error(), "velox: commit: ") || !reflect.DeepEqual(e.Log, want) {
 		t.Errorf("%v\n got %q\nwant %q", err, e.Log, want)
+	}
+}
+
+// TestTxPassesItsContext: fn's ctx is the one the transaction runs on: it
+// has the transaction's deadline, velox's here, and what the caller's
+// context and the TxAround hooks put in it. A savepoint's fn gets the context
+// given to the nested Tx.
+func TestTxPassesItsContext(t *testing.T) {
+	type key struct{}
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{},
+		velox.WithDeadlines(velox.Deadlines{Tx: time.Hour}),
+		velox.WithTxAround(func(ctx context.Context, _ *velox.TxInfo, next func(context.Context) error) error {
+			return next(context.WithValue(ctx, hookKey{}, "hook"))
+		}))
+	outer := context.WithValue(ctx, key{}, "caller")
+	before := time.Now()
+	err := db.Tx(outer, func(ctx context.Context, tx *velox.DB) error {
+		dl, ok := ctx.Deadline()
+		if !ok || dl.Before(before.Add(time.Hour)) || dl.After(time.Now().Add(time.Hour)) {
+			t.Errorf("fn's ctx has the deadline %v, %v; want velox's, an hour from the start", dl, ok)
+		}
+		if got := ctx.Value(hookKey{}); got != "hook" {
+			t.Errorf("fn's ctx has %v from the TxAround hook", got)
+		}
+		if got := ctx.Value(key{}); got != "caller" {
+			t.Errorf("fn's ctx has %v from the caller's", got)
+		}
+		inner := context.WithValue(ctx, key{}, "savepoint")
+		return tx.Tx(inner, func(ctx context.Context, sp *velox.DB) error {
+			if got := ctx.Value(key{}); got != "savepoint" {
+				t.Errorf("the savepoint's fn has %v", got)
+			}
+			if got, _ := ctx.Deadline(); !got.Equal(dl) {
+				t.Errorf("the savepoint's fn has the deadline %v, want %v", got, dl)
+			}
+			return touch(ctx, sp)
+		})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestStatementOutsideItsTx is Review Focus 1: under a context marked as a
+// transaction's, a statement on a DB in no transaction fails with
+// ErrOutsideTx before it is sent; the transaction's own DB, its savepoints,
+// the TxAround hooks' work and a goroutine on the outer context run. Each
+// case runs on a DB without hooks (plain) and on one with an Around hook
+// (run).
+func TestStatementOutsideItsTx(t *testing.T) {
+	read := func(ctx context.Context, db *velox.DB) error {
+		_, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(ctx)
+		return err
+	}
+	outer := ctx
+	for _, c := range []struct {
+		name    string
+		fn      func(ctx context.Context, db, tx *velox.DB) error // ctx is fn's
+		outside bool
+		msg     string // the error's text when outside; the statement's by default
+	}{
+		{"the transaction with its ctx", func(ctx context.Context, _, tx *velox.DB) error { return read(ctx, tx) }, false, ""},
+		{"the transaction with a ctx derived from its", func(ctx context.Context, _, tx *velox.DB) error {
+			return read(velox.WithTags(ctx, "k", "v"), tx)
+		}, false, ""},
+		{"the transaction with the outer ctx", func(_ context.Context, _, tx *velox.DB) error { return read(outer, tx) }, false, ""},
+		{"a savepoint with its ctx", func(ctx context.Context, _, tx *velox.DB) error {
+			return tx.Tx(ctx, func(ctx context.Context, sp *velox.DB) error { return read(ctx, sp) })
+		}, false, ""},
+		{"a savepoint with the transaction's ctx", func(ctx context.Context, _, tx *velox.DB) error {
+			return tx.Tx(outer, func(_ context.Context, sp *velox.DB) error { return read(ctx, sp) })
+		}, false, ""},
+		{"the transaction with a savepoint's ctx", func(ctx context.Context, _, tx *velox.DB) error {
+			return tx.Tx(ctx, func(ctx context.Context, _ *velox.DB) error { return read(ctx, tx) })
+		}, false, ""},
+		{"a goroutine on db with the outer ctx", func(_ context.Context, db, _ *velox.DB) error {
+			errc := make(chan error)
+			go func() { errc <- read(outer, db) }()
+			return <-errc
+		}, false, ""},
+		{"db with the transaction's ctx", func(ctx context.Context, db, _ *velox.DB) error { return read(ctx, db) }, true, ""},
+		{"db with a ctx derived from the transaction's", func(ctx context.Context, db, _ *velox.DB) error {
+			return read(velox.WithTags(ctx, "k", "v"), db)
+		}, true, ""},
+		{"db with a savepoint's ctx", func(ctx context.Context, db, tx *velox.DB) error {
+			return tx.Tx(outer, func(ctx context.Context, _ *velox.DB) error { return read(ctx, db) })
+		}, true, ""},
+		{"a write on db", func(ctx context.Context, db, _ *velox.DB) error { return touch(ctx, db) }, true, ""},
+		{"a dry run on db", func(ctx context.Context, db, _ *velox.DB) error {
+			_, _, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).SQL(ctx)
+			return err
+		}, true, ""},
+		{"a transaction on db", func(ctx context.Context, db, _ *velox.DB) error {
+			return db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { return read(ctx, tx) })
+		}, true, "velox: transaction: statement outside its transaction"},
+		{"an InsertAll in batches on db", func(ctx context.Context, db, _ *velox.DB) error {
+			defer velox.SetMaxParams(velox.Postgres, 18)()
+			return db.InsertAll([]testmodel.Invoice{{OrgID: 1, Number: "A"}, {OrgID: 1, Number: "B"}, {OrgID: 1, Number: "C"}}).Exec(ctx)
+		}, true, "velox: transaction: statement outside its transaction"},
+		{"a transaction on db with the outer ctx", func(_ context.Context, db, _ *velox.DB) error {
+			return db.Tx(outer, func(ctx context.Context, tx *velox.DB) error { return read(ctx, tx) })
+		}, false, ""},
+	} {
+		for _, hooked := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/hooked=%v", c.name, hooked), func(t *testing.T) {
+				var opts []velox.Option
+				if hooked {
+					opts = append(opts, velox.WithAround(func(ctx context.Context, _ *velox.Statement, next func(context.Context) error) error {
+						return next(ctx)
+					}))
+				}
+				e := &velox.FakeExec{Rows: [][]any{invoiceRow(1)}}
+				db := velox.OpenFake(velox.Postgres, e, opts...)
+				var got error
+				if err := db.Tx(outer, func(ctx context.Context, tx *velox.DB) error {
+					got = c.fn(ctx, db, tx)
+					return nil
+				}); err != nil {
+					t.Fatal(err)
+				}
+				sent := 0 // the outer transaction's BEGIN, and what else was sent: a query, an insert, a BEGIN
+				for _, s := range e.Log {
+					if s == "BEGIN" || strings.Contains(s, "invoices") {
+						sent++
+					}
+				}
+				switch {
+				case !c.outside && got != nil:
+					t.Errorf("failed: %v", got)
+				case c.outside && !errors.Is(got, velox.ErrOutsideTx):
+					t.Errorf("got %v, want ErrOutsideTx", got)
+				case c.outside && got.Error() != cmp.Or(c.msg, "velox: testmodel.Invoice: statement outside its transaction"):
+					t.Errorf("the error says %q", got)
+				case c.outside && sent != 1:
+					t.Errorf("sent %q", e.Log)
+				}
+			})
+		}
+	}
+}
+
+// TestTxAroundHooksRunOutsideTheTx: a TxAround hook's context is not the
+// transaction's, before next and after, so the hook's own statements on db
+// run.
+func TestTxAroundHooksRunOutsideTheTx(t *testing.T) {
+	var db *velox.DB
+	var errs []error
+	read := func(ctx context.Context) {
+		_, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(ctx)
+		errs = append(errs, err)
+	}
+	db = velox.OpenFake(velox.Postgres, &velox.FakeExec{Rows: [][]any{invoiceRow(1)}},
+		velox.WithTxAround(func(ctx context.Context, _ *velox.TxInfo, next func(context.Context) error) error {
+			read(ctx)
+			err := next(ctx)
+			read(ctx)
+			return err
+		}))
+	if err := db.Tx(ctx, touch); err != nil {
+		t.Fatal(err)
+	}
+	if len(errs) != 2 || errs[0] != nil || errs[1] != nil {
+		t.Errorf("the hook's statements: %v", errs)
 	}
 }

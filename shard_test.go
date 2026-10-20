@@ -252,7 +252,7 @@ func TestTxPinsItsShard(t *testing.T) {
 		s.euP.Rows = [][]any{itemRow(1, 1, "A", 1)}
 		tctx := velox.WithTenant(bg, int64(1))
 		var mismatch, lookup error
-		err := s.db.Tx(tctx, func(tx *velox.DB) error {
+		err := s.db.Tx(tctx, func(ctx context.Context, tx *velox.DB) error {
 			for _, sctx := range []context.Context{tctx, bg, velox.AllTenants(bg, "report"), velox.OnShard(bg, "eu")} {
 				if _, err := tx.Query[testmodel.Item]().Limit(1).All(sctx); err != nil {
 					return err
@@ -263,7 +263,7 @@ func TestTxPinsItsShard(t *testing.T) {
 			}
 			_, mismatch = tx.Query[testmodel.Item]().Limit(1).All(velox.OnShard(tctx, "us"))
 			_, lookup = tx.Query[testmodel.Item]().Limit(1).All(velox.WithTenant(bg, int64(4)))
-			return tx.Tx(bg, func(tx *velox.DB) error { // a savepoint, on eu too
+			return tx.Tx(bg, func(ctx context.Context, tx *velox.DB) error { // a savepoint, on eu too
 				_, err := tx.Query[testmodel.Item]().Limit(1).All(bg)
 				return err
 			})
@@ -286,7 +286,7 @@ func TestTxPinsItsShard(t *testing.T) {
 
 		// A transaction OnShard names begins on that shard.
 		s = openShards(hooked)
-		if err := s.db.Tx(velox.OnShard(bg, "us"), func(tx *velox.DB) error {
+		if err := s.db.Tx(velox.OnShard(bg, "us"), func(ctx context.Context, tx *velox.DB) error {
 			_, err := tx.Delete[testmodel.Item]().Where(It.ID.EQ(1)).Exec(bg)
 			return err
 		}); err != nil {
@@ -320,7 +320,7 @@ func TestTxWithNoShard(t *testing.T) {
 				return next(ctx)
 			}))
 			ran := false
-			err := s.db.Tx(c.ctx, func(*velox.DB) error { ran = true; return nil })
+			err := s.db.Tx(c.ctx, func(context.Context, *velox.DB) error { ran = true; return nil })
 			if hooks != 0 {
 				t.Errorf("%d TxAround hooks ran; a refused Tx runs none", hooks)
 			}

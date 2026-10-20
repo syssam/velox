@@ -259,24 +259,26 @@ func run(ctx context.Context, w io.Writer) error {
 	say("no tenant in the context: ErrNoTenant=%t: %v", errors.Is(err, velox.ErrNoTenant), err)
 
 	// 7. A transaction: fn's error rolls it back, nil commits. tx is a
-	// *velox.DB like db. A nested Tx is a savepoint, so a failed statement
-	// undoes only its own work and the transaction goes on (on PostgreSQL a
-	// failed statement would otherwise abort the whole transaction).
+	// *velox.DB like db, and ctx is the transaction's: a statement on db
+	// under it fails with ErrOutsideTx. A nested Tx is a savepoint, so a
+	// failed statement undoes only its own work and the transaction goes on
+	// (on PostgreSQL a failed statement would otherwise abort the whole
+	// transaction).
 	say("\n== 7. Transactions")
-	err = db.Tx(acct, func(tx *velox.DB) error {
+	err = db.Tx(acct, func(ctx context.Context, tx *velox.DB) error {
 		next := gen.Invoice{Number: "INV-003", Customer: "Initech", Status: gen.InvoiceStatusSent, TotalCents: 80000}
-		err := tx.Tx(acct, func(tx *velox.DB) error { return tx.Insert(&next).Exec(acct) })
+		err := tx.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { return tx.Insert(&next).Exec(ctx) })
 		if ce := (*velox.ConstraintError)(nil); errors.As(err, &ce) && ce.Kind == velox.Unique {
 			say("%s is taken (%s constraint on %s); using INV-004", next.Number, ce.Kind, ce.Constraint)
 			next.Number = "INV-004"
-			err = tx.Insert(&next).Exec(acct)
+			err = tx.Insert(&next).Exec(ctx)
 		}
 		if err != nil {
 			return err
 		}
 		return tx.InsertAll([]gen.Line{
 			{InvoiceID: next.ID, Description: "Licences", AmountCents: 80000},
-		}).Exec(acct)
+		}).Exec(ctx)
 	})
 	if err != nil {
 		return err
@@ -309,12 +311,12 @@ func run(ctx context.Context, w io.Writer) error {
 	}
 
 	// 9. Deadlines. Timeout bounds one transaction, within WithDeadlines'
-	// MaxTx; every statement in it gets the transaction's deadline, whatever
-	// context it is given.
+	// MaxTx; fn's ctx carries the transaction's deadline, and every statement
+	// in it gets that deadline, whatever context it is given.
 	say("\n== 9. Deadlines")
-	err = db.Tx(acct, func(tx *velox.DB) error {
+	err = db.Tx(acct, func(ctx context.Context, tx *velox.DB) error {
 		time.Sleep(50 * time.Millisecond) // slow work while the transaction is open
-		_, err := tx.Query[gen.Invoice]().Count(acct)
+		_, err := tx.Query[gen.Invoice]().Count(ctx)
 		return err
 	}, velox.Timeout(10*time.Millisecond))
 	say("transaction past its Timeout: ErrTimeout=%t, context.DeadlineExceeded=%t\n  %v",

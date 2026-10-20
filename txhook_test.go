@@ -17,8 +17,8 @@ import (
 type hookKey struct{}
 
 // TestTxAroundWrapsTheCall: the first hook is the outermost; statements,
-// a savepoint's included, see the call's TxInfo and the context the
-// innermost hook passed, though touch runs them on the outer ctx.
+// a savepoint's included, see the call's TxInfo, and on fn's ctx what the
+// innermost hook passed.
 func TestTxAroundWrapsTheCall(t *testing.T) {
 	var log []string
 	hook := func(name string) velox.Option {
@@ -35,11 +35,11 @@ func TestTxAroundWrapsTheCall(t *testing.T) {
 	db := velox.OpenFake(velox.Postgres, e, hook("a"), hook("b"),
 		velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
 			seen = append(seen, st.Tx)
-			from = append(from, st.Tx.Context.Value(hookKey{}))
+			from = append(from, ctx.Value(hookKey{}))
 			return next(ctx)
 		}))
-	err := db.Tx(ctx, func(tx *velox.DB) error {
-		if err := touch(tx); err != nil {
+	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		if err := touch(ctx, tx); err != nil {
 			return err
 		}
 		return tx.Tx(ctx, touch) // a savepoint: no hook runs again
@@ -95,7 +95,7 @@ func TestTxIDsAreUnique(t *testing.T) {
 		return next(ctx)
 	}))
 	for range 2 {
-		if err := db.Tx(ctx, func(*velox.DB) error { return nil }); err != nil {
+		if err := db.Tx(ctx, func(context.Context, *velox.DB) error { return nil }); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -112,7 +112,7 @@ func TestStatementTx(t *testing.T) {
 		seen = append(seen, st.Tx)
 		return nil
 	}))
-	if err := touch(db); err != nil {
+	if err := touch(ctx, db); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Tx(ctx, touch, velox.RetrySerializable(1)); err != nil {
@@ -141,8 +141,8 @@ func TestTxAroundRules(t *testing.T) {
 		deadline, _ = ctx.Deadline()
 		return observe(context.WithoutCancel(ctx), tx, next)
 	}
-	untilDeadline := func(err error) func(*velox.DB) error {
-		return func(*velox.DB) error {
+	untilDeadline := func(err error) func(context.Context, *velox.DB) error {
+		return func(context.Context, *velox.DB) error {
 			for time.Now().Before(deadline) {
 				time.Sleep(time.Until(deadline))
 			}
@@ -160,7 +160,7 @@ func TestTxAroundRules(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		hook      velox.TxAround
-		fn        func(*velox.DB) error // nil: touch
+		fn        func(context.Context, *velox.DB) error // nil: touch
 		opts      []velox.TxOption
 		beginErr  error
 		commitErr error
@@ -185,7 +185,7 @@ func TestTxAroundRules(t *testing.T) {
 				_ = next(ctx)
 				return nil
 			},
-			fn: func(*velox.DB) error { return boom },
+			fn: func(context.Context, *velox.DB) error { return boom },
 			check: func(err error, _ *velox.FakeExec) bool {
 				return err != nil && err.Error() == "velox: transaction: a TxAround hook discarded the error from next"
 			},
@@ -197,7 +197,7 @@ func TestTxAroundRules(t *testing.T) {
 				second = next(ctx)
 				return err
 			},
-			fn: func(tx *velox.DB) error { runs++; return touch(tx) },
+			fn: func(ctx context.Context, tx *velox.DB) error { runs++; return touch(ctx, tx) },
 			check: func(err error, _ *velox.FakeExec) bool {
 				return err == nil && second != nil && strings.Contains(second.Error(), "called next twice") && runs == 1
 			},
@@ -205,7 +205,7 @@ func TestTxAroundRules(t *testing.T) {
 		{
 			name:    "rollback",
 			hook:    observe,
-			fn:      func(*velox.DB) error { return boom },
+			fn:      func(context.Context, *velox.DB) error { return boom },
 			check:   func(err error, _ *velox.FakeExec) bool { return err == boom },
 			outcome: velox.TxRollback,
 		},
@@ -219,7 +219,7 @@ func TestTxAroundRules(t *testing.T) {
 		{
 			name:    "deadline",
 			hook:    observe,
-			fn:      func(*velox.DB) error { time.Sleep(20 * time.Millisecond); return nil },
+			fn:      func(context.Context, *velox.DB) error { time.Sleep(20 * time.Millisecond); return nil },
 			opts:    []velox.TxOption{velox.Timeout(time.Millisecond)},
 			check:   func(err error, _ *velox.FakeExec) bool { return errors.Is(err, velox.ErrTimeout) },
 			outcome: velox.TxError,
@@ -267,7 +267,7 @@ func TestTxAroundRules(t *testing.T) {
 				}()
 				return next(ctx)
 			},
-			fn: func(*velox.DB) error { panic("oops") },
+			fn: func(context.Context, *velox.DB) error { panic("oops") },
 			check: func(err error, e *velox.FakeExec) bool {
 				return err != nil && err.Error() == "velox: transaction: a TxAround hook recovered a panic from next" &&
 					reflect.DeepEqual(e.Log, []string{"BEGIN", "ROLLBACK"})
@@ -315,7 +315,7 @@ func TestTxAroundRules(t *testing.T) {
 				t.Errorf("recovered %v, hook's defer ran %v, outcome %v, sent %q", p, deferred, info.Outcome, e.Log)
 			}
 		}()
-		_ = db.Tx(ctx, func(*velox.DB) error { panic("oops") })
+		_ = db.Tx(ctx, func(context.Context, *velox.DB) error { panic("oops") })
 		t.Error("Tx did not re-raise the panic")
 	})
 
@@ -332,7 +332,7 @@ func TestTxAroundRules(t *testing.T) {
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
-			_ = db.Tx(ctx, func(*velox.DB) error { runtime.Goexit(); return nil })
+			_ = db.Tx(ctx, func(context.Context, *velox.DB) error { runtime.Goexit(); return nil })
 			returned = true
 		}()
 		<-done

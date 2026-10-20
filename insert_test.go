@@ -241,7 +241,7 @@ func TestInsertAllInsideATransactionUsesASavepoint(t *testing.T) {
 	rows := []testmodel.Invoice{{OrgID: 1, Number: "A"}, {OrgID: 1, Number: "B"}, {OrgID: 1, Number: "C"}}
 	e := &velox.FakeExec{}
 	db := velox.OpenFake(velox.Postgres, e)
-	if err := db.Tx(ctx, func(tx *velox.DB) error { return tx.InsertAll(rows).Exec(ctx) }); err != nil {
+	if err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { return tx.InsertAll(rows).Exec(ctx) }); err != nil {
 		t.Fatal(err)
 	}
 	l := e.Log
@@ -253,7 +253,7 @@ func TestInsertAllInsideATransactionUsesASavepoint(t *testing.T) {
 	failing := &velox.FakeExec{Errs: []error{nil, nil, boom}} // SAVEPOINT, first INSERT, second INSERT
 	db = velox.OpenFake(velox.Postgres, failing)
 	var inner error
-	err := db.Tx(ctx, func(tx *velox.DB) error {
+	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		inner = tx.InsertAll(rows).Exec(ctx)
 		return nil // the caller swallows the error: the savepoint must already have undone batch one
 	})

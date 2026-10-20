@@ -39,7 +39,7 @@ func TestCallerIsTheApplicationFrame(t *testing.T) {
 	if got.Line != line || got.File != "callers_test.go" {
 		t.Errorf("Iter: %+v, want line %d", got, line)
 	}
-	err := db.Tx(ctx, func(tx *velox.DB) error {
+	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		line = here() + 1
 		_, err := tx.Query[testmodel.Invoice]().Limit(1).All(ctx)
 		return err

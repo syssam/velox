@@ -23,10 +23,10 @@
 // context's tags. An Around hook of the application's own that retries, given
 // before these options, gets one span per attempt.
 //
-// Inside db.Tx, a statement's span is a child of the span on the
-// transaction's context (the velox.tx span once the transaction hook is
-// installed), whatever context the code passes to the query: a statement run
-// on a request's context inside fn still nests under its transaction.
+// A statement's span is a child of the span on the statement's context.
+// Inside db.Tx, fn's ctx carries the transaction's span (velox.tx, once the
+// transaction hook is installed), so a statement run on it nests under its
+// transaction, and under a span the application starts inside fn on it.
 //
 // The transaction's span, velox.tx, is of kind internal and covers every
 // attempt RetrySerializable makes and the commit. It carries the isolation

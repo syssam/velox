@@ -368,9 +368,9 @@ func TestOneSpanPerAttempt(t *testing.T) {
 	}
 }
 
-// TestParent: in a transaction a statement's span is a child of the span on
-// the transaction's context, even when the statement runs on another
-// context; outside one, of the span on the statement's context. The
+// TestParent: a statement's span is a child of the span on its context: in a
+// transaction, on fn's ctx, the transaction's span, or a span the
+// application started inside fn; outside one, the request's. The
 // transaction's span here is the application's own: Around alone, without
 // veloxotel's TxAround.
 func TestParent(t *testing.T) {
@@ -385,8 +385,13 @@ func TestParent(t *testing.T) {
 	})
 	db := velox.Open(velox.Postgres, (&fakeDB{}).open(), txSpan, velox.WithAround(veloxotel.Around(veloxotel.Config{TracerProvider: tp})))
 
-	err := db.Tx(ctx, func(tx *velox.DB) error {
-		_, err := tx.Query[testmodel.Invoice]().Limit(1).All(ctx) // the outer ctx: no span
+	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		if _, err := tx.Query[testmodel.Invoice]().Limit(1).All(ctx); err != nil { // fn's ctx: the tx span
+			return err
+		}
+		actx, app := tr.Start(ctx, "app")
+		defer app.End()
+		_, err := tx.Query[testmodel.Invoice]().Limit(1).All(actx)
 		return err
 	})
 	if err != nil {
@@ -407,13 +412,19 @@ func TestParent(t *testing.T) {
 			byName[s.Name] = s
 		}
 	}
-	if len(stmts) != 2 {
-		t.Fatalf("%d statement spans, want 2", len(stmts))
+	if len(stmts) != 3 {
+		t.Fatalf("%d statement spans, want 3", len(stmts))
 	}
 	if got, want := stmts[0].Parent.SpanID(), byName["tx"].SpanContext.SpanID(); !want.IsValid() || got != want {
 		t.Errorf("in the transaction: parent %v, want tx %v", got, want)
 	}
-	if got, want := stmts[1].Parent.SpanID(), byName["req"].SpanContext.SpanID(); !want.IsValid() || got != want {
+	if got, want := stmts[1].Parent.SpanID(), byName["app"].SpanContext.SpanID(); !want.IsValid() || got != want {
+		t.Errorf("under the application's span in the transaction: parent %v, want app %v", got, want)
+	}
+	if got, want := byName["app"].Parent.SpanID(), byName["tx"].SpanContext.SpanID(); got != want {
+		t.Errorf("the application's span: parent %v, want tx %v", got, want)
+	}
+	if got, want := stmts[2].Parent.SpanID(), byName["req"].SpanContext.SpanID(); !want.IsValid() || got != want {
 		t.Errorf("outside: parent %v, want req %v", got, want)
 	}
 }

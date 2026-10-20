@@ -1,6 +1,7 @@
 package itest
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -136,12 +137,12 @@ func TestUpdateDeleteSave(t *testing.T) {
 func TestTransactions(t *testing.T) {
 	boom := errors.New("boom")
 	each(t, func(t *testing.T, tg target) {
-		err := tg.db.Tx(ctx, func(tx *velox.DB) error {
+		err := tg.db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 			a := newInvoice(7, "A")
 			if err := tx.Insert(&a).Exec(ctx); err != nil {
 				return err
 			}
-			if err := tx.Tx(ctx, func(inner *velox.DB) error {
+			if err := tx.Tx(ctx, func(ctx context.Context, inner *velox.DB) error {
 				b := newInvoice(7, "B")
 				if err := inner.Insert(&b).Exec(ctx); err != nil {
 					return err
@@ -156,7 +157,7 @@ func TestTransactions(t *testing.T) {
 			t.Fatal(err)
 		}
 		wantStrings(t, numbers(t, tg, 7), []string{"A"})
-		err = tg.db.Tx(ctx, func(tx *velox.DB) error {
+		err = tg.db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 			c := newInvoice(8, "C")
 			if err := tx.Insert(&c).Exec(ctx); err != nil {
 				return err

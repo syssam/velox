@@ -122,12 +122,12 @@ func run(ctx context.Context, w io.Writer) error {
 	// transaction: when fn fails, the rename and its audit row are both rolled
 	// back.
 	errAbort := errors.New("changed my mind")
-	txErr := db.Tx(ada, func(tx *velox.DB) error {
-		_, err := tx.Update[gen.Task]().Set(T.Title.Set("Ship it")).Where(T.ID.EQ(readme.ID)).Exec(ada)
+	txErr := db.Tx(ada, func(ctx context.Context, tx *velox.DB) error {
+		_, err := tx.Update[gen.Task]().Set(T.Title.Set("Ship it")).Where(T.ID.EQ(readme.ID)).Exec(ctx)
 		if err != nil {
 			return err
 		}
-		inside, err := tx.Query[gen.Audit]().Count(ada)
+		inside, err := tx.Query[gen.Audit]().Count(ctx)
 		if err != nil {
 			return err
 		}

@@ -187,8 +187,8 @@ func (l *txLog) take() (stmts, txs []string) {
 }
 
 // handlerDB opens an empty in-memory people table through velox, with
-// hooks that record into the returned log.
-func handlerDB(t *testing.T) (*velox.DB, *txLog) {
+// hooks that record into the returned log, and opts.
+func handlerDB(t *testing.T, opts ...velox.Option) (*velox.DB, *txLog) {
 	t.Helper()
 	sqlDB, err := sql.Open("sqlite", "file::memory:")
 	if err != nil {
@@ -200,7 +200,7 @@ func handlerDB(t *testing.T) (*velox.DB, *txLog) {
 		t.Fatal(err)
 	}
 	l := &txLog{}
-	return velox.Open(velox.SQLite, sqlDB, velox.WithAround(l.around), velox.WithTxAround(l.txAround)), l
+	return velox.Open(velox.SQLite, sqlDB, append([]velox.Option{velox.WithAround(l.around), velox.WithTxAround(l.txAround)}, opts...)...), l
 }
 
 // errFail is the error of the fail field.
@@ -389,6 +389,32 @@ func TestMutationCommits(t *testing.T) {
 	}
 	if ids := peopleIDs(t, db, l); !slices.Equal(ids, []int64{1, 2}) {
 		t.Errorf("people %v, want [1 2]", ids)
+	}
+}
+
+// TestMutationGetsTheTxContext: a mutation's resolvers get the transaction's
+// context. It has the transaction's deadline, and under it a statement on the
+// DB given to Handler, not the transaction's, fails with ErrOutsideTx, before
+// it waits for the connection the transaction holds.
+func TestMutationGetsTheTxContext(t *testing.T) {
+	db, _ := handlerDB(t, velox.WithDeadlines(velox.Deadlines{Tx: 30 * time.Second}))
+	var deadline bool
+	var outside error
+	srv := serve(db, map[string]resolver{
+		"add": func(ctx context.Context, args map[string]any) (any, error) {
+			_, deadline = ctx.Deadline()
+			_, outside = db.Query[person]().Count(ctx)
+			return args["id"], nil
+		},
+	})
+	if got, want := post(t, context.Background(), srv, `mutation { add(id: 1) }`), `{"data":{"add":1}}`; got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
+	if !deadline {
+		t.Error("the resolver's context has no deadline")
+	}
+	if !errors.Is(outside, velox.ErrOutsideTx) {
+		t.Errorf("a statement on the handler's DB: %v, want ErrOutsideTx", outside)
 	}
 }
 

@@ -179,7 +179,7 @@ func TestMetricsAttributesAreBounded(t *testing.T) {
 			if _, err := db.Query[testmodel.Invoice]().Limit(1).All(c); err != nil {
 				t.Fatal(err)
 			}
-			err := db.Tx(c, func(tx *velox.DB) error {
+			err := db.Tx(c, func(ctx context.Context, tx *velox.DB) error {
 				_, err := tx.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).Limit(1).All(c)
 				return err
 			})
@@ -267,7 +267,7 @@ func TestTxDurationMetric(t *testing.T) {
 	// panics in fn, which is a rollback.
 	f := &fakeDB{}
 	db, r := metered(t, f, veloxotel.Config{})
-	fn := func(tx *velox.DB) error {
+	fn := func(ctx context.Context, tx *velox.DB) error {
 		_, err := tx.Query[testmodel.Invoice]().Limit(1).All(ctx)
 		return err
 	}
@@ -279,7 +279,7 @@ func TestTxDurationMetric(t *testing.T) {
 		t.Fatal(err)
 	}
 	boom := errors.New("boom")
-	if err := db.Tx(ctx, func(*velox.DB) error { return boom }); !errors.Is(err, boom) {
+	if err := db.Tx(ctx, func(context.Context, *velox.DB) error { return boom }); !errors.Is(err, boom) {
 		t.Fatalf("rollback: %v", err)
 	}
 	f.commitErr = boom
@@ -292,7 +292,7 @@ func TestTxDurationMetric(t *testing.T) {
 	}
 	func() {
 		defer func() { _ = recover() }()
-		_ = db.Tx(ctx, func(*velox.DB) error { panic("in fn") })
+		_ = db.Tx(ctx, func(context.Context, *velox.DB) error { panic("in fn") })
 		t.Error("Tx did not re-raise the panic")
 	}()
 	got := map[string]uint64{}

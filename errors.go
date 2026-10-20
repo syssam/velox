@@ -54,6 +54,10 @@ var (
 	// none), or names one the DB does not have, or whose WithShardFor
 	// function failed. Nothing was sent.
 	ErrNoShard = errors.New("no shard for the statement")
+	// ErrOutsideTx: a statement, or a Tx, on a DB in no transaction, under
+	// the context a transaction's fn got (or one derived from it): it was
+	// most likely meant for the transaction's DB. Nothing was sent.
+	ErrOutsideTx = errors.New("statement outside its transaction")
 )
 
 // SchemaError reports a mistake in an entity's generated metadata (its Desc,

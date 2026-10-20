@@ -15,15 +15,7 @@ import (
 // around is the Around hook: one client span per execution of a statement,
 // from the call to next to its return, and its metric points.
 func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
-	// In a transaction, the parent is the span on the transaction's context,
-	// whatever context the statement was given.
-	parent := ctx
-	if st.Tx != nil && st.Tx.Context != nil {
-		if s := trace.SpanFromContext(st.Tx.Context); s.SpanContext().IsValid() {
-			parent = trace.ContextWithSpan(ctx, s)
-		}
-	}
-	sctx, span := a.tracer.Start(parent, operation(st)+" "+collection(st),
+	sctx, span := a.tracer.Start(ctx, operation(st)+" "+collection(st),
 		trace.WithSpanKind(trace.SpanKindClient), trace.WithAttributes(a.attributes(st)...))
 	// A panic in next, such as Iter's loop body's, ends the span and goes on:
 	// the adapter never recovers one. runtime.Goexit in an Iter loop body is

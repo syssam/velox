@@ -91,7 +91,7 @@ func TestDeadlineWrapsTheAroundHooks(t *testing.T) {
 func TestTxDeadline(t *testing.T) {
 	e := &velox.FakeExec{}
 	db := velox.OpenFake(velox.Postgres, e, velox.WithDeadlines(velox.Deadlines{Tx: 50 * time.Millisecond}))
-	err := db.Tx(ctx, func(tx *velox.DB) error {
+	err := db.Tx(ctx, func(_ context.Context, tx *velox.DB) error {
 		e.Block = true
 		_, err := tx.Query[testmodel.Invoice]().Limit(1).All(ctx) // the caller's ctx: the tx's deadline still applies
 		return err
@@ -104,10 +104,51 @@ func TestTxDeadline(t *testing.T) {
 	}
 }
 
+// TestStatementOnTheTxContextTimesOut: a statement run on fn's ctx, which
+// carries velox's deadline already, fails past it with ErrTimeout naming its
+// entity, as one run on a context without the deadline does; on a DB without
+// hooks (plain) and with an Around hook (run). With the caller's deadline
+// instead, it is the caller's error.
+func TestStatementOnTheTxContextTimesOut(t *testing.T) {
+	for _, hooked := range []bool{false, true} {
+		var opts []velox.Option
+		if hooked {
+			opts = append(opts, velox.WithAround(func(ctx context.Context, _ *velox.Statement, next func(context.Context) error) error {
+				return next(ctx)
+			}))
+		}
+		e := &velox.FakeExec{}
+		db := velox.OpenFake(velox.Postgres, e, opts...)
+		var stmt error
+		_ = db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+			e.Block = true
+			_, stmt = tx.Query[testmodel.Invoice]().Limit(1).All(ctx)
+			return stmt
+		}, velox.Timeout(20*time.Millisecond))
+		want := "velox: testmodel.Invoice: deadline set by velox passed: context deadline exceeded"
+		if !errors.Is(stmt, velox.ErrTimeout) || !errors.Is(stmt, context.DeadlineExceeded) || stmt.Error() != want {
+			t.Errorf("hooked=%v: the statement failed with %v, want %q", hooked, stmt, want)
+		}
+
+		e = &velox.FakeExec{}
+		db = velox.OpenFake(velox.Postgres, e, opts...)
+		cctx, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
+		_ = db.Tx(cctx, func(ctx context.Context, tx *velox.DB) error {
+			e.Block = true
+			_, stmt = tx.Query[testmodel.Invoice]().Limit(1).All(ctx)
+			return stmt
+		})
+		cancel()
+		if !errors.Is(stmt, context.DeadlineExceeded) || errors.Is(stmt, velox.ErrTimeout) {
+			t.Errorf("hooked=%v: past the caller's deadline, the statement failed with %v", hooked, stmt)
+		}
+	}
+}
+
 func TestTxPastItsDeadlineIsNotCommitted(t *testing.T) {
 	e := &velox.FakeExec{}
 	db := velox.OpenFake(velox.Postgres, e)
-	err := db.Tx(ctx, func(*velox.DB) error {
+	err := db.Tx(ctx, func(context.Context, *velox.DB) error {
 		time.Sleep(60 * time.Millisecond)
 		return nil
 	}, velox.Timeout(20*time.Millisecond))
@@ -137,7 +178,7 @@ func TestTimedOutTxReportsNoRollbackError(t *testing.T) {
 	conn := errors.New("conn closed")
 	e := &velox.FakeExec{RollbackErr: conn}
 	db := velox.OpenFake(velox.Postgres, e)
-	err := db.Tx(ctx, func(tx *velox.DB) error {
+	err := db.Tx(ctx, func(_ context.Context, tx *velox.DB) error {
 		e.Block = true
 		_, err := tx.Query[testmodel.Invoice]().Limit(1).All(ctx)
 		return err
@@ -148,8 +189,8 @@ func TestTimedOutTxReportsNoRollbackError(t *testing.T) {
 
 	e = &velox.FakeExec{}
 	db = velox.OpenFake(velox.Postgres, e)
-	err = db.Tx(ctx, func(tx *velox.DB) error {
-		return tx.Tx(ctx, func(nested *velox.DB) error {
+	err = db.Tx(ctx, func(_ context.Context, tx *velox.DB) error {
+		return tx.Tx(ctx, func(_ context.Context, nested *velox.DB) error {
 			e.Block = true
 			_, err := nested.Query[testmodel.Invoice]().Limit(1).All(ctx)
 			e.Block, e.Err = false, conn // ROLLBACK TO SAVEPOINT fails
@@ -162,15 +203,15 @@ func TestTimedOutTxReportsNoRollbackError(t *testing.T) {
 
 	e = &velox.FakeExec{RollbackErr: conn}
 	db = velox.OpenFake(velox.Postgres, e)
-	err = db.Tx(ctx, func(*velox.DB) error { return errors.New("boom") })
+	err = db.Tx(ctx, func(context.Context, *velox.DB) error { return errors.New("boom") })
 	if !errors.Is(err, conn) || !strings.Contains(err.Error(), "velox: rollback: conn closed") {
 		t.Errorf("in time: %v", err)
 	}
 
 	e = &velox.FakeExec{}
 	db = velox.OpenFake(velox.Postgres, e)
-	err = db.Tx(ctx, func(tx *velox.DB) error {
-		return tx.Tx(ctx, func(*velox.DB) error {
+	err = db.Tx(ctx, func(_ context.Context, tx *velox.DB) error {
+		return tx.Tx(ctx, func(context.Context, *velox.DB) error {
 			e.Err = conn
 			return errors.New("boom")
 		})
@@ -191,7 +232,7 @@ func TestCallersDeadlineBoundsTheTx(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		done <- db.Tx(cctx, func(tx *velox.DB) error {
+		done <- db.Tx(cctx, func(_ context.Context, tx *velox.DB) error {
 			e.Block = true
 			_, err := tx.Query[testmodel.Invoice]().Limit(1).All(ctx) // ctx has no deadline
 			return err
@@ -216,7 +257,7 @@ func TestTxPastCallersDeadlineIsNotCommitted(t *testing.T) {
 	db := velox.OpenFake(velox.Postgres, e)
 	cctx, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
 	defer cancel()
-	err := db.Tx(cctx, func(*velox.DB) error {
+	err := db.Tx(cctx, func(context.Context, *velox.DB) error {
 		time.Sleep(60 * time.Millisecond)
 		return nil
 	})
@@ -228,7 +269,7 @@ func TestTxPastCallersDeadlineIsNotCommitted(t *testing.T) {
 	e = &velox.FakeExec{}
 	db = velox.OpenFake(velox.Postgres, e)
 	cctx, cancel = context.WithCancel(ctx)
-	err = db.Tx(cctx, func(*velox.DB) error {
+	err = db.Tx(cctx, func(context.Context, *velox.DB) error {
 		cancel()
 		return nil
 	})
@@ -247,8 +288,8 @@ func TestSavepointGetsCallersDeadline(t *testing.T) {
 	defer cancel()
 	want, _ := cctx.Deadline()
 	var got time.Time
-	err := db.Tx(cctx, func(tx *velox.DB) error {
-		return tx.Tx(ctx, func(nested *velox.DB) error {
+	err := db.Tx(cctx, func(_ context.Context, tx *velox.DB) error {
+		return tx.Tx(ctx, func(_ context.Context, nested *velox.DB) error {
 			_, err := nested.Query[testmodel.Invoice]().Limit(1).All(ctx) // ctx has no deadline
 			got = e.Deadline
 			return err
@@ -263,7 +304,7 @@ func TestSavepointGetsCallersDeadline(t *testing.T) {
 func TestRetriesStopAtTheTxDeadline(t *testing.T) {
 	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{})
 	runs := 0
-	err := db.Tx(ctx, func(*velox.DB) error {
+	err := db.Tx(ctx, func(context.Context, *velox.DB) error {
 		runs++
 		time.Sleep(20 * time.Millisecond)
 		return &pgconn.PgError{Code: "40001"}
@@ -275,7 +316,7 @@ func TestRetriesStopAtTheTxDeadline(t *testing.T) {
 
 func TestTimeoutReplacesTheTxDefault(t *testing.T) {
 	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{}, velox.WithDeadlines(velox.Deadlines{Tx: 10 * time.Millisecond, MaxTx: time.Hour}))
-	err := db.Tx(ctx, func(*velox.DB) error {
+	err := db.Tx(ctx, func(context.Context, *velox.DB) error {
 		time.Sleep(40 * time.Millisecond)
 		return nil
 	}, velox.Timeout(time.Minute))
@@ -288,8 +329,8 @@ func TestStatementsInATxGetItsDeadline(t *testing.T) {
 	e := &velox.FakeExec{}
 	db := velox.OpenFake(velox.Postgres, e)
 	var got time.Time
-	err := db.Tx(ctx, func(tx *velox.DB) error {
-		return tx.Tx(ctx, func(nested *velox.DB) error { // a savepoint inherits it too
+	err := db.Tx(ctx, func(_ context.Context, tx *velox.DB) error {
+		return tx.Tx(ctx, func(_ context.Context, nested *velox.DB) error { // a savepoint inherits it too
 			_, err := nested.Query[testmodel.Invoice]().Limit(1).All(ctx)
 			got = e.Deadline // before RELEASE SAVEPOINT records its own
 			return err

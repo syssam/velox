@@ -126,7 +126,7 @@ func TestSessionAndPrimaryMarksCompose(t *testing.T) {
 }
 
 func TestTxCommitPins(t *testing.T) {
-	update := func(tx *velox.DB) error {
+	update := func(ctx context.Context, tx *velox.DB) error {
 		_, err := tx.Update[testmodel.Invoice]().Set(I.Paid.Set(true)).Where(I.ID.EQ(1)).Exec(ctx)
 		return err
 	}
@@ -146,8 +146,8 @@ func TestTxCommitPins(t *testing.T) {
 			s := seeded(hooked)
 			sctx := velox.WithSession(ctx)
 			boom := errors.New("boom")
-			err := s.db.Tx(sctx, func(tx *velox.DB) error {
-				if err := update(tx); err != nil {
+			err := s.db.Tx(sctx, func(ctx context.Context, tx *velox.DB) error {
+				if err := update(ctx, tx); err != nil {
 					return err
 				}
 				return boom
@@ -175,7 +175,7 @@ func TestTxCommitPins(t *testing.T) {
 		bothPaths(t, func(t *testing.T, hooked bool) {
 			s := seeded(hooked)
 			sctx := velox.WithSession(ctx)
-			err := s.db.Tx(sctx, func(tx *velox.DB) error {
+			err := s.db.Tx(sctx, func(ctx context.Context, tx *velox.DB) error {
 				_, err := tx.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).One(ctx)
 				return err
 			})
@@ -189,9 +189,9 @@ func TestTxCommitPins(t *testing.T) {
 	t.Run("a write in a savepoint that rolls back still pins", func(t *testing.T) {
 		s := seeded(false)
 		sctx := velox.WithSession(ctx)
-		err := s.db.Tx(sctx, func(tx *velox.DB) error {
-			_ = tx.Tx(ctx, func(tx *velox.DB) error {
-				if err := update(tx); err != nil {
+		err := s.db.Tx(sctx, func(ctx context.Context, tx *velox.DB) error {
+			_ = tx.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+				if err := update(ctx, tx); err != nil {
 					return err
 				}
 				return errors.New("undo")
@@ -209,7 +209,7 @@ func TestTxCommitPins(t *testing.T) {
 	t.Run("a write in a savepoint that commits pins", func(t *testing.T) {
 		s := seeded(false)
 		sctx := velox.WithSession(ctx)
-		err := s.db.Tx(sctx, func(tx *velox.DB) error { return tx.Tx(ctx, update) })
+		err := s.db.Tx(sctx, func(ctx context.Context, tx *velox.DB) error { return tx.Tx(ctx, update) })
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -222,10 +222,10 @@ func TestTxCommitPins(t *testing.T) {
 		s := seeded(false)
 		sctx := velox.WithSession(ctx)
 		attempt := 0
-		err := s.db.Tx(sctx, func(tx *velox.DB) error {
+		err := s.db.Tx(sctx, func(ctx context.Context, tx *velox.DB) error {
 			attempt++
 			if attempt == 1 {
-				if err := update(tx); err != nil {
+				if err := update(ctx, tx); err != nil {
 					return err
 				}
 				return &pgconn.PgError{Code: "40001"}
@@ -247,7 +247,7 @@ func TestTxCommitPins(t *testing.T) {
 func TestReadOnlyTxRunsOnThePrimary(t *testing.T) {
 	bothPaths(t, func(t *testing.T, hooked bool) {
 		s := seeded(hooked)
-		err := s.db.Tx(ctx, func(tx *velox.DB) error {
+		err := s.db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 			_, err := tx.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).One(ctx)
 			return err
 		}, velox.ReadOnly())
@@ -439,13 +439,13 @@ func TestSessionConcurrency(t *testing.T) {
 // whatever context a TxAround hook passes on, and only once a commit has
 // succeeded.
 func TestTxAroundPins(t *testing.T) {
-	update := func(tx *velox.DB) error {
+	update := func(ctx context.Context, tx *velox.DB) error {
 		_, err := tx.Update[testmodel.Invoice]().Set(I.Paid.Set(true)).Where(I.ID.EQ(1)).Exec(ctx)
 		return err
 	}
 	t.Run("a hook that drops the session", func(t *testing.T) {
 		s := seeded(false, velox.WithTxAround(func(ctx context.Context, _ *velox.TxInfo, next func(context.Context) error) error {
-			return next(context.WithoutCancel(velox.WithSession(context.Background())))
+			return next(context.WithoutCancel(velox.WithSession(ctx))) // a new session: the one given to Tx is not in it
 		}))
 		sctx := velox.WithSession(ctx)
 		if err := s.db.Tx(sctx, update); err != nil {
@@ -470,9 +470,9 @@ func TestTxAroundPins(t *testing.T) {
 		s := seeded(false, retry)
 		sctx := velox.WithSession(ctx)
 		calls := 0
-		err := s.db.Tx(sctx, func(tx *velox.DB) error {
+		err := s.db.Tx(sctx, func(ctx context.Context, tx *velox.DB) error {
 			calls++
-			if err := update(tx); err != nil {
+			if err := update(ctx, tx); err != nil {
 				return err
 			}
 			return errors.New("undo")
@@ -504,7 +504,7 @@ func TestTxAroundPins(t *testing.T) {
 		}))
 		sctx := velox.WithSession(ctx)
 		calls := 0
-		err := s.db.Tx(sctx, func(tx *velox.DB) error { calls++; return update(tx) })
+		err := s.db.Tx(sctx, func(ctx context.Context, tx *velox.DB) error { calls++; return update(ctx, tx) })
 		if err == nil || calls != 1 {
 			t.Fatalf("fn ran %d times, Tx returned %v; want one run and velox's refusal", calls, err)
 		}

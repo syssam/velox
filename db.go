@@ -177,11 +177,15 @@ func dbErr(info *EntityInfo, err error) error {
 // through run, or may take the shortcut of plain.
 func (db *DB) hooked() bool { return len(db.cfg.rewrites) > 0 || len(db.cfg.arounds) > 0 }
 
-// plain runs a statement on a DB with no hooks: resolving relations, guard,
-// scope, rendering (the SQL comment included), routing and execution.
+// plain runs a statement on a DB with no hooks: the transaction check
+// (outsideTx), resolving relations, guard, scope, rendering (the SQL comment
+// included), routing and execution.
 // Unlike run's, its st and read do not escape, so a caller's state and
 // reading closure can stay on the stack.
 func (db *DB) plain(ctx context.Context, st *Statement, read func(rows) error, res *result) error {
+	if err := db.outsideTx(ctx, st); err != nil {
+		return err
+	}
 	if err := st.resolve(); err != nil {
 		return err
 	}
@@ -212,11 +216,12 @@ func (db *DB) plain(ctx context.Context, st *Statement, read func(rows) error, r
 	if !db.timed() {
 		return db.exec(ctx, st, t, read, res)
 	}
+	// tctx is ctx itself when ctx's deadline comes first: then it is velox's
+	// only on a context velox bounded, such as a transaction's fn's ctx.
 	tctx, cancel := db.bound(ctx)
-	if cancel == nil {
-		return db.exec(ctx, st, t, read, res)
+	if cancel != nil {
+		defer cancel()
 	}
-	defer cancel()
 	if err := db.exec(tctx, st, t, read, res); err != nil {
 		if timedOut(tctx) {
 			return errTimeout(st.Entity.Name)
@@ -242,25 +247,31 @@ func (db *DB) run(ctx context.Context, st *Statement, read func(rows) error, res
 		return err
 	}
 	if db.timed() {
-		if tctx, cancel := db.bound(ctx); cancel != nil {
+		// As in plain, tctx may be ctx, and its deadline velox's.
+		tctx, cancel := db.bound(ctx)
+		if cancel != nil {
 			defer cancel()
-			if err := db.execute(tctx, st, t, read, res); err != nil {
-				if timedOut(tctx) {
-					return errTimeout(st.Entity.Name)
-				}
-				return err
-			}
-			return nil
 		}
+		if err := db.execute(tctx, st, t, read, res); err != nil {
+			if timedOut(tctx) {
+				return errTimeout(st.Entity.Name)
+			}
+			return err
+		}
+		return nil
 	}
 	return db.execute(ctx, st, t, read, res)
 }
 
 // prepare takes a statement through every stage before execution, for run
-// and for SQL(ctx): resolving the relations in its conditions (HasWhere
-// leaves them to the statement), guard, observe, rewrite hooks and their checks, scope, the row cap, and
-// rendering into st.SQL (comment included) and st.Args.
+// and for SQL(ctx): the transaction check (outsideTx), resolving the
+// relations in its conditions (HasWhere leaves them to the statement), guard,
+// observe, rewrite hooks and their checks, scope, the row cap, and rendering
+// into st.SQL (comment included) and st.Args.
 func (db *DB) prepare(ctx context.Context, st *Statement) error {
+	if err := db.outsideTx(ctx, st); err != nil {
+		return err
+	}
 	if err := st.resolve(); err != nil {
 		return err
 	}
@@ -349,6 +360,17 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	// After the fingerprint, which is of the text without the comment.
 	if db.cfg.comment != nil {
 		st.SQL += db.cfg.comment.text(st)
+	}
+	return nil
+}
+
+// outsideTx fails a statement, st, on a DB in no transaction under a context
+// marked as a transaction's (txCtx), with ErrOutsideTx. It is one context
+// lookup, made only outside a transaction: the context of a statement in one
+// is the transaction's, or a savepoint's, or another the caller chose.
+func (db *DB) outsideTx(ctx context.Context, st *Statement) error {
+	if !db.inTx && ctx.Value(txKey{}) != nil {
+		return stmtErr(st, ErrOutsideTx)
 	}
 	return nil
 }

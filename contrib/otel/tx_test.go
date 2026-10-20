@@ -28,20 +28,20 @@ func byName(spans tracetest.SpanStubs) map[string][]tracetest.SpanStub {
 	return m
 }
 
-// TestTxSpanTree: spec success criterion 1. fn runs its statements on the
-// outer ctx, which carries the request's span, not the transaction's; they
-// still nest under velox.tx, and velox.tx under the request.
+// TestTxSpanTree: spec success criterion 1. fn runs its statements on its
+// ctx, the transaction's: they nest under velox.tx, and velox.tx under the
+// request.
 func TestTxSpanTree(t *testing.T) {
 	// Attempt 1: BEGIN, the SELECT, then the UPDATE fails on a serialization
 	// failure; attempt 2 runs all three cleanly.
 	f := &fakeDB{rows: [][]driver.Value{invoiceRow(1)}, affected: 1, errs: []error{nil, nil, &pgconn.PgError{Code: "40001"}}}
 	db, exp, tp := traced(t, f, veloxotel.Config{})
 	req, root := tp.Tracer("t").Start(ctx, "POST /pay")
-	err := db.Tx(req, func(tx *velox.DB) error {
-		if _, err := tx.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(req); err != nil {
+	err := db.Tx(req, func(ctx context.Context, tx *velox.DB) error {
+		if _, err := tx.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(ctx); err != nil {
 			return err
 		}
-		_, err := tx.Update[testmodel.Invoice]().Set(I.Paid.Set(true)).Where(I.ID.EQ(1)).Exec(req)
+		_, err := tx.Update[testmodel.Invoice]().Set(I.Paid.Set(true)).Where(I.ID.EQ(1)).Exec(ctx)
 		return err
 	}, velox.RetrySerializable(1))
 	root.End()
@@ -83,7 +83,7 @@ func TestTxSpanTree(t *testing.T) {
 // transaction was given.
 func TestTxOptions(t *testing.T) {
 	db, exp, _ := traced(t, &fakeDB{}, veloxotel.Config{})
-	err := db.Tx(ctx, func(*velox.DB) error { return nil }, velox.Isolation(sql.LevelSerializable), velox.ReadOnly())
+	err := db.Tx(ctx, func(context.Context, *velox.DB) error { return nil }, velox.Isolation(sql.LevelSerializable), velox.ReadOnly())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,19 +101,19 @@ func TestTxOutcomes(t *testing.T) {
 	cases := []struct {
 		name    string
 		f       *fakeDB
-		fn      func(tx *velox.DB) error
+		fn      func(ctx context.Context, tx *velox.DB) error
 		outcome string
 		errType string
 	}{
-		{"rollback", &fakeDB{}, func(*velox.DB) error { return boom }, "rollback", "_OTHER"},
-		{"commit fails", &fakeDB{commitErr: boom}, func(*velox.DB) error { return nil }, "error", "_OTHER"},
-		{"begin fails", &fakeDB{errs: []error{boom}}, func(*velox.DB) error { return nil }, "error", "_OTHER"},
+		{"rollback", &fakeDB{}, func(context.Context, *velox.DB) error { return boom }, "rollback", "_OTHER"},
+		{"commit fails", &fakeDB{commitErr: boom}, func(context.Context, *velox.DB) error { return nil }, "error", "_OTHER"},
+		{"begin fails", &fakeDB{errs: []error{boom}}, func(context.Context, *velox.DB) error { return nil }, "error", "_OTHER"},
 		{
 			// Ticket's policy denies a context that names no user: the
 			// refusal comes before execution, so it makes no statement span
 			// and is seen only on the transaction it ends.
 			"denied", &fakeDB{},
-			func(tx *velox.DB) error {
+			func(ctx context.Context, tx *velox.DB) error {
 				_, err := tx.Query[testmodel.Ticket]().Limit(1).All(ctx)
 				return err
 			},
@@ -153,7 +153,7 @@ func TestPanicsEndTheSpans(t *testing.T) {
 		db, exp, _ := traced(t, &fakeDB{}, veloxotel.Config{})
 		got := func() (v any) {
 			defer func() { v = recover() }()
-			_ = db.Tx(ctx, func(*velox.DB) error { panic("in fn") })
+			_ = db.Tx(ctx, func(context.Context, *velox.DB) error { panic("in fn") })
 			return nil
 		}()
 		if got != "in fn" {
@@ -171,7 +171,7 @@ func TestPanicsEndTheSpans(t *testing.T) {
 		db, exp, _ := traced(t, &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}, veloxotel.Config{})
 		got := func() (v any) {
 			defer func() { v = recover() }()
-			_ = db.Tx(ctx, func(tx *velox.DB) error {
+			_ = db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 				for _, err := range tx.Query[testmodel.Invoice]().Limit(5).Iter(ctx) {
 					if err != nil {
 						return err
@@ -208,8 +208,8 @@ func TestPanicsEndTheSpans(t *testing.T) {
 // adds no velox.tx span, and its statements nest under the transaction's.
 func TestSavepointNoSpan(t *testing.T) {
 	db, exp, _ := traced(t, &fakeDB{}, veloxotel.Config{})
-	err := db.Tx(ctx, func(tx *velox.DB) error {
-		return tx.Tx(ctx, func(sp *velox.DB) error {
+	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		return tx.Tx(ctx, func(ctx context.Context, sp *velox.DB) error {
 			_, err := sp.Query[testmodel.Invoice]().Limit(1).All(ctx)
 			return err
 		})
@@ -234,7 +234,7 @@ func TestTxAroundAlone(t *testing.T) {
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exp))
 	t.Cleanup(func() { _ = tp.Shutdown(context.Background()) })
 	db := velox.Open(velox.Postgres, (&fakeDB{}).open(), velox.WithTxAround(veloxotel.TxAround(veloxotel.Config{TracerProvider: tp})))
-	err := db.Tx(ctx, func(tx *velox.DB) error {
+	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		_, err := tx.Query[testmodel.Invoice]().Limit(1).All(ctx)
 		return err
 	})
@@ -258,7 +258,7 @@ func TestTxAroundInnerHookWithoutNext(t *testing.T) {
 	refuse := velox.WithTxAround(func(context.Context, *velox.TxInfo, func(context.Context) error) error { return nil })
 	opts := append(veloxotel.Options(veloxotel.Config{TracerProvider: tp, MeterProvider: mp}), refuse)
 	db := velox.Open(velox.Postgres, (&fakeDB{}).open(), opts...)
-	if err := db.Tx(ctx, func(*velox.DB) error { return nil }); err == nil {
+	if err := db.Tx(ctx, func(context.Context, *velox.DB) error { return nil }); err == nil {
 		t.Fatal("no error")
 	}
 	if a := attrs(only(t, exp)); a["velox.tx.outcome"] != attribute.StringValue("error") {

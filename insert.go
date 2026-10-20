@@ -564,7 +564,7 @@ func insertMany[E any](ctx context.Context, db *DB, m *Meta[E], xs []E, cf *Conf
 		return err
 	}
 	var n int64 // in the transaction's closure: only this path pays for it
-	err = db.Tx(ctx, func(db *DB) error {
+	err = db.Tx(ctx, func(ctx context.Context, db *DB) error {
 		var err error
 		n, err = insertBatches(ctx, db, m, xs, cols, per, cf)
 		return err

@@ -96,13 +96,14 @@ func run(ctx context.Context, w io.Writer) error {
 	}
 	say("start:    %s", balances())
 
-	// fn returning nil commits. tx is a *velox.DB like db; fn is given no
-	// context, so it uses the one Tx was called with.
-	err = db.Tx(ctx, func(tx *velox.DB) error { return transfer(ctx, tx, "alice", "bob", 30) })
+	// fn returning nil commits. tx is a *velox.DB like db, and ctx is the
+	// transaction's: Tx's, with its deadline. Under it, a statement on db
+	// instead of tx fails with velox.ErrOutsideTx.
+	err = db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { return transfer(ctx, tx, "alice", "bob", 30) })
 	say("commit:   %s (err=%v)", balances(), err)
 
 	// fn's error rolls back everything fn did: here the first transfer.
-	err = db.Tx(ctx, func(tx *velox.DB) error {
+	err = db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		if err := transfer(ctx, tx, "bob", "alice", 10); err != nil {
 			return err
 		}
@@ -115,9 +116,9 @@ func run(ctx context.Context, w io.Writer) error {
 	// A nested Tx is a savepoint: its error undoes only its own work, and
 	// the outer transaction goes on. A unique violation is a
 	// *velox.ConstraintError on every dialect.
-	err = db.Tx(ctx, func(tx *velox.DB) error {
+	err = db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		acct := gen.Account{Name: "bob", Balance: 5}
-		err := tx.Tx(ctx, func(tx *velox.DB) error { return tx.Insert(&acct).Exec(ctx) })
+		err := tx.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { return tx.Insert(&acct).Exec(ctx) })
 		var ce *velox.ConstraintError
 		if errors.As(err, &ce) && ce.Kind == velox.Unique {
 			say("savepoint: %s constraint on %s; opening bob2 instead", ce.Kind, ce.Constraint)
@@ -133,7 +134,7 @@ func run(ctx context.Context, w io.Writer) error {
 	// safe to run again. This database has one connection, so no conflict
 	// happens and fn runs once.
 	attempts := 0
-	err = db.Tx(ctx, func(tx *velox.DB) error {
+	err = db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		attempts++
 		return transfer(ctx, tx, "bob2", "alice", 5)
 	}, velox.RetrySerializable(3))
@@ -142,7 +143,7 @@ func run(ctx context.Context, w io.Writer) error {
 	// Timeout bounds one transaction, within WithDeadlines' MaxTx. Every
 	// statement in it gets the transaction's deadline, and a transaction
 	// past it is rolled back, never committed.
-	err = db.Tx(ctx, func(tx *velox.DB) error {
+	err = db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		time.Sleep(50 * time.Millisecond) // slow work while the transaction is open
 		return transfer(ctx, tx, "alice", "bob", 1)
 	}, velox.Timeout(10*time.Millisecond))

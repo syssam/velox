@@ -9,20 +9,23 @@ go run ./tx
 ```
 
 ```go
-err := db.Tx(ctx, func(tx *velox.DB) error {   // nil commits, an error rolls back
-	return transfer(ctx, tx, "alice", "bob", 30) // fn gets no context: use Tx's
+err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { // nil commits, an error rolls back
+	return transfer(ctx, tx, "alice", "bob", 30)                // ctx is the transaction's
 })
 
-tx.Tx(ctx, func(tx *velox.DB) error { … })      // nested: a savepoint
+tx.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { … })  // nested: a savepoint
 
-var ce *velox.ConstraintError                   // the same on every dialect
+var ce *velox.ConstraintError                                    // the same on every dialect
 errors.As(err, &ce) && ce.Kind == velox.Unique
 
-db.Tx(ctx, fn, velox.RetrySerializable(3))       // re-run on serialization failure or deadlock
+db.Tx(ctx, fn, velox.RetrySerializable(3))                       // re-run on serialization failure or deadlock
 db.Tx(ctx, fn, velox.Timeout(10*time.Millisecond))
 velox.Open(velox.SQLite, sqlDB, velox.WithDeadlines(velox.Deadlines{…}))
 ```
 
+- `fn`'s `ctx` is the transaction's: it carries its deadline. A statement on
+  `db` under it, where `tx` was meant, fails with `velox.ErrOutsideTx` before
+  anything is sent.
 - A nested `Tx` that fails undoes only its own work; here a duplicate
   account name is caught and the outer transaction opens `bob2` instead. On
   SQLite `ConstraintError.Constraint` holds the columns (`accounts.name`);

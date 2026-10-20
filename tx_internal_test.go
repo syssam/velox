@@ -61,7 +61,7 @@ func TestOverDoesNotWaitForever(t *testing.T) {
 	e := &FakeExec{}
 	db := OpenFake(Postgres, e)
 	done := make(chan error, 1)
-	go func() { done <- db.Tx(stuck, func(*DB) error { return nil }) }()
+	go func() { done <- db.Tx(stuck, func(context.Context, *DB) error { return nil }) }()
 	select {
 	case err := <-done:
 		if !errors.Is(err, context.DeadlineExceeded) || err.Error() != "velox: transaction: context deadline exceeded" {

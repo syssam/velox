@@ -186,10 +186,11 @@ func BenchmarkOneRowWithDeadline(b *testing.B) {
 // read outside a transaction, so that the read's allocations, which vary
 // between Go versions, cancel out. What is left is the transaction's own 3:
 // Tx's options (opt(&o) makes them escape), the context its rollback runs
-// on, and the *DB fn is given. A TxInfo would be a fourth.
+// on, and the *DB fn is given, which holds fn's context, marked as the
+// transaction's. A TxInfo would be a fourth.
 func TestTxAllocationBudget(t *testing.T) {
 	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Rows: [][]any{invoiceRow(1)}})
-	read := func(db *velox.DB) error {
+	read := func(ctx context.Context, db *velox.DB) error {
 		_, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(ctx)
 		return err
 	}
@@ -197,7 +198,7 @@ func TestTxAllocationBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	alone := testing.AllocsPerRun(200, func() {
-		if err := read(db); err != nil {
+		if err := read(ctx, db); err != nil {
 			t.Fatal(err)
 		}
 	})

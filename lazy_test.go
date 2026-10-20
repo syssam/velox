@@ -375,7 +375,7 @@ func TestMutationDBIsTheTransaction(t *testing.T) {
 	lzSawDB = nil
 	within(t, 10*time.Second, func() {
 		errRollback := errors.New("rollback")
-		err := db.Tx(ctx, func(tx *velox.DB) error {
+		err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 			if err := tx.Insert(&lzNote{Title: "a"}).Exec(ctx); err != nil {
 				return err
 			}
