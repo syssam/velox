@@ -17,14 +17,17 @@ func (*Invoice) Policy() velox.Policy[Invoice] {
 		Read: func(ctx context.Context) (velox.Pred[Invoice], error) {
 			switch RoleOf(ctx) {
 			case Accountant:
-				return velox.Pred[Invoice]{}, nil
+				return velox.Allow[Invoice](), nil
 			case Viewer:
 				return Invoices.Status.NEQ(InvoiceStatusDraft), nil
 			}
 			return velox.Pred[Invoice]{}, velox.Deny("no billing role")
 		},
 		Write: func(ctx context.Context) (velox.Pred[Invoice], error) {
-			return velox.Pred[Invoice]{}, requireAccountant(ctx)
+			if err := requireAccountant(ctx); err != nil {
+				return velox.Pred[Invoice]{}, err
+			}
+			return velox.Allow[Invoice](), nil
 		},
 		Insert: func(ctx context.Context, _ *Invoice) error { return requireAccountant(ctx) },
 	}

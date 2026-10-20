@@ -99,8 +99,10 @@ func policyBypass(ctx context.Context) string {
 // functions it returns may share them: a relation resolves when a statement
 // holding the condition runs.
 //
-// Any field may be nil. A predicate function's zero Pred[E]{} restricts
-// nothing; any error it returns denies the statement.
+// Any field may be nil. A predicate function returns Allow[E]() for no
+// restriction; its zero Pred[E]{} fails the statement, naming the entity, so
+// that a code path that forgot to return a condition never lets a caller
+// through. Any error it returns denies the statement.
 type Policy[E any] struct {
 	// Read is ANDed into every SELECT, Count, With load and Has/HasWhere
 	// subquery on the entity, into every UPDATE, DELETE and Save, and into

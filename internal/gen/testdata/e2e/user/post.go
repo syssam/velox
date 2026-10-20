@@ -23,7 +23,7 @@ func (*Post) Policy() velox.Policy[Post] {
 			if v, _ := ctx.Value(viewerKey{}).(bool); v {
 				return Posts.Status.EQ(PostStatusPublished), nil
 			}
-			return velox.Pred[Post]{}, nil
+			return velox.Allow[Post](), nil
 		},
 		Insert: func(ctx context.Context, x *Post) error {
 			if x.Title == "forbidden" {

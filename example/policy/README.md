@@ -24,7 +24,9 @@ func (*Doc) Policy() velox.Policy[Doc] {
 }
 ```
 
-- A zero `velox.Pred[Doc]{}` restricts nothing; an error denies the statement
+- `velox.Allow[Doc]()` says "no restriction"; a zero `velox.Pred[Doc]{}` fails the
+  statement, naming the entity, so a forgotten branch never lets anyone
+  through. An error denies the statement
   with a `*velox.PolicyError` that matches `velox.ErrDenied`
   (`velox.Deny(reason)` makes one).
 - `Write` filters: a user's update of a doc they do not own changes no rows;

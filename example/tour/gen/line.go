@@ -11,7 +11,10 @@ import (
 func (*Line) Policy() velox.Policy[Line] {
 	return velox.Policy[Line]{
 		Write: func(ctx context.Context) (velox.Pred[Line], error) {
-			return velox.Pred[Line]{}, requireAccountant(ctx)
+			if err := requireAccountant(ctx); err != nil {
+				return velox.Pred[Line]{}, err
+			}
+			return velox.Allow[Line](), nil
 		},
 		Insert: func(ctx context.Context, _ *Line) error { return requireAccountant(ctx) },
 	}

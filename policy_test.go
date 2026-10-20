@@ -3,6 +3,7 @@ package velox_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -29,7 +30,7 @@ func TestPolicyReadPredicate(t *testing.T) {
 	}
 	wantSent(t, e, `SELECT `+ticketCols+` FROM "tickets" WHERE "done" = $1 AND "org_id" = $2 AND "owner" = $3 LIMIT $4`, false, int64(1), "ann", 5)
 
-	// The zero Pred adds nothing.
+	// Allow adds nothing.
 	if _, err := q.All(asUser("admin")); err != nil {
 		t.Fatal(err)
 	}
@@ -375,5 +376,153 @@ func TestPolicyMutualCycleIsRefused(t *testing.T) {
 	}
 	if e.Calls != 0 {
 		t.Errorf("%d statements sent", e.Calls)
+	}
+}
+
+// TestPolicyZeroPredFails: a policy written the old way, returning the zero
+// Pred for "no restriction", fails the statement; it never lets the caller
+// through. Allow is the way to say no restriction.
+func TestPolicyZeroPredFails(t *testing.T) {
+	e := &velox.FakeExec{Affected: 1}
+	db := velox.OpenFake(velox.Postgres, e)
+	const msg = "policy returned no predicate; return velox.Allow[E]() for no restriction"
+	zeroRead := pnoteReading(velox.Pred[pnote]{}, nil)
+
+	calls := e.Calls
+	_, err := db.Query[pnote]().Limit(1).All(zeroRead)
+	if err == nil || err.Error() != "velox: velox_test.pnote: "+msg {
+		t.Errorf("Read: %v", err)
+	}
+	if errors.Is(err, velox.ErrDenied) {
+		t.Errorf("a zero Pred is a policy bug, not a denial: %v", err)
+	}
+	_, err = db.Query[pnote]().Count(zeroRead)
+	if err == nil || !strings.Contains(err.Error(), msg) {
+		t.Errorf("Count: %v", err)
+	}
+	// The Read condition applies to an update and a delete as well.
+	_, err = db.Update[pnote]().Set(pn.Owner.Set("x")).Where(pn.ID.EQ(1)).Exec(zeroRead)
+	if err == nil || !strings.Contains(err.Error(), msg) {
+		t.Errorf("update with a zero Read: %v", err)
+	}
+
+	// An EXISTS reads its target: the error names the statement's entity, then
+	// the target.
+	_, err = db.Query[pbox]().Where(pboxNote.Has()).Limit(1).All(zeroRead)
+	if err == nil || err.Error() != "velox: velox_test.pbox: in the EXISTS on velox_test.pnote: "+msg {
+		t.Errorf("EXISTS: %v", err)
+	}
+
+	zeroWrite := pnoteWriting(velox.Pred[pnote]{}, nil)
+	_, err = db.Update[pnote]().Set(pn.Owner.Set("x")).Where(pn.ID.EQ(1)).Exec(zeroWrite)
+	if err == nil || err.Error() != "velox: velox_test.pnote: "+msg {
+		t.Errorf("Write on update: %v", err)
+	}
+	_, err = db.Delete[pnote]().Where(pn.ID.EQ(1)).Exec(zeroWrite)
+	if err == nil || !strings.Contains(err.Error(), msg) {
+		t.Errorf("Write on delete: %v", err)
+	}
+	if e.Calls != calls {
+		t.Errorf("%d statements sent past a zero policy Pred", e.Calls-calls)
+	}
+
+	// Allow, the explicit form, is accepted.
+	if _, err := db.Query[pnote]().Limit(1).All(pnoteReading(velox.Allow[pnote](), nil)); err != nil {
+		t.Errorf("Allow: %v", err)
+	}
+}
+
+// TestAllowRendersNothing: a policy that returns Allow adds no condition, so
+// the statement is the one an entity without a policy sends.
+func TestAllowRendersNothing(t *testing.T) {
+	e := &velox.FakeExec{Affected: 1}
+	db := velox.OpenFake(velox.Postgres, e)
+	allow := velox.Allow[pnote]()
+
+	q := db.Query[pnote]().Where(pn.ID.GT(0)).Limit(3)
+	if _, err := q.All(velox.SkipPolicy(context.Background(), "test")); err != nil {
+		t.Fatal(err)
+	}
+	wantSQL, wantArgs := e.SQL, e.Args
+	if strings.Contains(wantSQL, `"owner" =`) {
+		t.Fatalf("SkipPolicy sent %s", wantSQL)
+	}
+	if _, err := q.All(pnoteReading(allow, nil)); err != nil {
+		t.Fatal(err)
+	}
+	if e.SQL != wantSQL || !slices.Equal(e.Args, wantArgs) {
+		t.Errorf("select with Allow: %s %v, want %s %v", e.SQL, e.Args, wantSQL, wantArgs)
+	}
+
+	// Both of an update's conditions Allow: the statement is the caller's.
+	up := db.Update[pnote]().Set(pn.Owner.Set("x")).Where(pn.ID.EQ(1))
+	if _, err := up.Exec(velox.SkipPolicy(context.Background(), "test")); err != nil {
+		t.Fatal(err)
+	}
+	wantSQL, wantArgs = e.SQL, e.Args
+	ctx := context.WithValue(pnoteReading(allow, nil), pnoteWriteKey{}, pnoteAnswer{allow, nil})
+	if _, err := up.Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if e.SQL != wantSQL || !slices.Equal(e.Args, wantArgs) {
+		t.Errorf("update with Allow: %s %v, want %s %v", e.SQL, e.Args, wantSQL, wantArgs)
+	}
+
+	// And inside an EXISTS: the target's Allow adds nothing.
+	bq := db.Query[pbox]().Where(pboxNote.Has()).Limit(1)
+	if _, err := bq.All(velox.SkipPolicy(context.Background(), "test")); err != nil {
+		t.Fatal(err)
+	}
+	wantSQL = e.SQL
+	if _, err := bq.All(pnoteReading(allow, nil)); err != nil {
+		t.Fatal(err)
+	}
+	if e.SQL != wantSQL {
+		t.Errorf("EXISTS with Allow: %s, want %s", e.SQL, wantSQL)
+	}
+}
+
+// TestAllowComposes: Or(Allow, x) is Allow, And(Allow, x) is x, and
+// Not(Allow) matches nothing.
+func TestAllowComposes(t *testing.T) {
+	e := &velox.FakeExec{Affected: 1}
+	db := velox.OpenFake(velox.Postgres, e)
+	allow := velox.Allow[pnote]()
+	x := pn.Owner.EQ("ann")
+	skip := velox.SkipPolicy(context.Background(), "test")
+
+	sql := func(p velox.Pred[pnote]) (string, []any) {
+		t.Helper()
+		if _, err := db.Query[pnote]().Where(p).Limit(1).All(skip); err != nil {
+			t.Fatal(err)
+		}
+		return e.SQL, e.Args
+	}
+	same := func(name string, got, want velox.Pred[pnote]) {
+		t.Helper()
+		gs, ga := sql(got)
+		ws, wa := sql(want)
+		if gs != ws || !slices.Equal(ga, wa) {
+			t.Errorf("%s: %s %v, want %s %v", name, gs, ga, ws, wa)
+		}
+	}
+	same("And(Allow, x)", velox.And(allow, x), x)
+	same("And(x, Allow)", velox.And(x, allow), x)
+	same("And(Allow, Allow)", velox.And(allow, allow), allow)
+	same("And(Allow, x, y)", velox.And(allow, x, pn.Locked.EQ(true)), velox.And(x, pn.Locked.EQ(true)))
+	same("Or(Allow, x)", velox.Or(allow, x), allow)
+	same("Or(x, Allow)", velox.Or(x, allow), allow)
+	same("And(x, Or(Allow, y))", velox.And(x, velox.Or(allow, pn.Locked.EQ(true))), x)
+
+	if s, _ := sql(velox.Not(allow)); !strings.HasSuffix(s, `WHERE NOT (1 = 1) LIMIT $1`) {
+		t.Errorf("Not(Allow): %s", s)
+	}
+
+	// Allow in a Where matches every row: an update or delete that holds only
+	// it is refused as one that names no row.
+	_, err := db.Delete[pnote]().Where(velox.Or(allow, x)).Exec(skip)
+	want(t, err, velox.ErrNoWhere, "velox: velox_test.pnote: "+velox.ErrNoWhere.Error()+": its conditions match every row; add a condition, or All to change every row")
+	if _, err := db.Delete[pnote]().Where(velox.Not(allow)).Exec(skip); err != nil {
+		t.Errorf("Not(Allow) matches nothing, which is a condition: %v", err)
 	}
 }

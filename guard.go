@@ -48,6 +48,8 @@ func (db *DB) guard(st *Statement) error {
 // alone, as render writes it: an empty And, or NotIn of nothing, is 1 = 1.
 func alwaysTrue(n node) bool {
 	switch n.op {
+	case opAllow:
+		return true
 	case opAnd:
 		for _, k := range n.kids {
 			if !alwaysTrue(k) {

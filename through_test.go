@@ -299,7 +299,7 @@ func (*dPolicyJoin) VeloxMeta() *velox.Meta[dPolicyJoin] {
 }
 
 func (*dPolicyJoin) Policy() velox.Policy[dPolicyJoin] {
-	return velox.Policy[dPolicyJoin]{Read: func(context.Context) (velox.Pred[dPolicyJoin], error) { return velox.Pred[dPolicyJoin]{}, nil }}
+	return velox.Policy[dPolicyJoin]{Read: func(context.Context) (velox.Pred[dPolicyJoin], error) { return velox.Allow[dPolicyJoin](), nil }}
 }
 
 // dLinker has tags through dLink, a join entity whose Insert policy checks a
@@ -365,7 +365,7 @@ func (*dLink) Policy() velox.Policy[dLink] {
 			}
 			return nil
 		},
-		Write: func(context.Context) (velox.Pred[dLink], error) { return velox.Pred[dLink]{}, nil },
+		Write: func(context.Context) (velox.Pred[dLink], error) { return velox.Allow[dLink](), nil },
 	}
 }
 

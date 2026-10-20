@@ -345,8 +345,10 @@ func (e *cycleError) Error() string {
 }
 
 // policyCond checks what entity t's policy (which, "Read" or "Write")
-// returned for a statement of kind op: an error denies the statement, and a
-// condition is refused when it holds the zero Pred or is invalid. An EXISTS
+// returned for a statement of kind op: an error denies the statement, a zero
+// Pred fails it (a policy says Allow for no restriction), Allow is no
+// condition, and a condition is refused when it holds the zero Pred or is
+// invalid. An EXISTS
 // in the condition gets its target's tenant and Read condition, as one in the
 // statement's own conditions does: a policy that inherits another entity's
 // with Has sees only the rows that one lets through.
@@ -355,7 +357,9 @@ func (sc *scoper) policyCond(t *EntityInfo, op Op, which string, p Predicate, er
 	case err != nil:
 		return Predicate{}, &PolicyError{Entity: t.Name, Op: op, Err: err}
 	case p.n.op == 0:
-		return p, nil // no restriction
+		return Predicate{}, fmt.Errorf("velox: %s: policy returned no predicate; return velox.Allow[E]() for no restriction", t.Name)
+	case p.n.op == opAllow:
+		return Predicate{}, nil // no restriction
 	case hasZero(p.n):
 		return Predicate{}, fmt.Errorf("velox: %s: the %s policy's condition holds the zero Pred", t.Name, which)
 	}

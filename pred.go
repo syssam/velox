@@ -25,6 +25,7 @@ const (
 	opAnd
 	opOr
 	opNot
+	opAllow   // matches every row and renders to nothing in a policy
 	opExists  // col is the relation index, v its relRef, or its link once resolved, kids the target's conditions
 	opInvalid // v is the error
 )
@@ -67,14 +68,55 @@ func ColumnEQ(column int, v any) Predicate {
 	return Predicate{node{op: opEQ, col: int32(column), v: v}}
 }
 
-// And is true when every p is. And of nothing is true.
-func And[E any](ps ...Pred[E]) Pred[E] { return Pred[E]{node{op: opAnd, kids: nodes(ps)}} }
+// Allow is the condition that matches every row and renders to nothing: what
+// a policy's Read or Write returns for a caller it does not restrict. A policy
+// that returns the zero Pred[E] instead fails the statement, so that no
+// restriction is said, never implied.
+//
+// Allow composes as its meaning says: And drops it (And(Allow(), x) is x),
+// Or(Allow(), x) is Allow, and Not(Allow()) matches no row.
+func Allow[E any]() Pred[E] { return Pred[E]{node{op: opAllow}} }
 
-// Or is true when any p is. Or of nothing is false.
-func Or[E any](ps ...Pred[E]) Pred[E] { return Pred[E]{node{op: opOr, kids: nodes(ps)}} }
+// And is true when every p is. And of nothing is true. An Allow among the ps
+// adds nothing: And of only Allows is Allow, and And(Allow(), x) is x.
+func And[E any](ps ...Pred[E]) Pred[E] {
+	if !hasAllow(ps) {
+		return Pred[E]{node{op: opAnd, kids: nodes(ps)}}
+	}
+	kept := make([]node, 0, len(ps))
+	for _, p := range ps {
+		if p.n.op != opAllow {
+			kept = append(kept, p.n)
+		}
+	}
+	switch len(kept) {
+	case 0:
+		return Allow[E]()
+	case 1:
+		return Pred[E]{kept[0]}
+	}
+	return Pred[E]{node{op: opAnd, kids: kept}}
+}
 
-// Not is true when p is false.
+// Or is true when any p is. Or of nothing is false. Or of any Allow is Allow.
+func Or[E any](ps ...Pred[E]) Pred[E] {
+	if hasAllow(ps) {
+		return Allow[E]()
+	}
+	return Pred[E]{node{op: opOr, kids: nodes(ps)}}
+}
+
+// Not is true when p is false. Not(Allow()) is true for no row.
 func Not[E any](p Pred[E]) Pred[E] { return Pred[E]{node{op: opNot, kids: []node{p.n}}} }
+
+func hasAllow[E any](ps []Pred[E]) bool {
+	for i := range ps {
+		if ps[i].n.op == opAllow {
+			return true
+		}
+	}
+	return false
+}
 
 // predErr returns the error a condition carries: a relation that could not be
 // resolved when the condition was made.

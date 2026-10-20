@@ -227,6 +227,10 @@ func (w *writer) pred(n node) {
 	case opNotNull:
 		w.predCol(n.col)
 		w.str(" IS NOT NULL")
+	case opAllow:
+		// Only an Allow written into a Where or a Not reaches here: a
+		// policy's Allow is dropped before rendering.
+		w.str("1 = 1")
 	case opAnd, opOr:
 		if len(n.kids) == 0 {
 			if n.op == opAnd {

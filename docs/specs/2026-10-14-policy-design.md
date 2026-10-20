@@ -248,7 +248,8 @@ func (x *Invoice) Schema(s *velox.Schema) {
   than MySQL, an entity that declares Read or Write, and no `SkipPolicy`. MySQL
   has no such clause: an upsert that updates on an entity with a Read or
   Write policy is refused with `ErrPolicyUpsert`.
-- A zero `Pred[E]{}` means no restriction. Any error denies the statement.
+- `velox.Allow[E]()` means no restriction; a zero `Pred[E]{}` fails the
+  statement (API cleanup §1.2). Any error denies the statement.
   There is no allow-on-error. Denials are `*PolicyError{Entity, Op, Err}`,
   whose text is `velox: <Entity>: <op> denied by policy: <err>`;
   `velox.Deny(reason)` returns an error that makes one, and

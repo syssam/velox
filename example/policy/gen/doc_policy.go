@@ -8,8 +8,8 @@ import (
 
 // Policy declares Doc's policy. velox-gen binds it into Doc's metadata, and
 // velox calls it once, on a nil *Doc. Read and Write return a condition that
-// velox ANDs into every statement; an error denies the statement. A zero Pred
-// restricts nothing.
+// velox ANDs into every statement; an error denies the statement. Allow means
+// no restriction, and a zero Pred is an error.
 func (*Doc) Policy() velox.Policy[Doc] {
 	return velox.Policy[Doc]{
 		Read: func(ctx context.Context) (velox.Pred[Doc], error) {
@@ -17,7 +17,7 @@ func (*Doc) Policy() velox.Policy[Doc] {
 			case "":
 				return velox.Pred[Doc]{}, velox.Deny("no user")
 			case "admin":
-				return velox.Pred[Doc]{}, nil
+				return velox.Allow[Doc](), nil
 			default:
 				return velox.Or(Docs.Owner.EQ(u), Docs.Shared.EQ(true)), nil
 			}
@@ -28,7 +28,7 @@ func (*Doc) Policy() velox.Policy[Doc] {
 			case "":
 				return velox.Pred[Doc]{}, velox.Deny("no user")
 			case "admin":
-				return velox.Pred[Doc]{}, nil
+				return velox.Allow[Doc](), nil
 			default:
 				return Docs.Owner.EQ(u), nil
 			}

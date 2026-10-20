@@ -26,7 +26,7 @@ func (*Ticket) Policy() velox.Policy[Ticket] {
 		case "":
 			return velox.Pred[Ticket]{}, velox.Deny("no user")
 		case "admin":
-			return velox.Pred[Ticket]{}, nil
+			return velox.Allow[Ticket](), nil
 		default:
 			return Tickets.Owner.EQ(u), nil
 		}

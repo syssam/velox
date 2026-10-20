@@ -132,7 +132,7 @@ var entityDescHooksSrc = strings.Replace(entityDescUseSrc, `var (
 	eID `, `func (*E) Policy() velox.Policy[E] {
 	return velox.Policy[E]{
 		Read:   func(context.Context) (velox.Pred[E], error) { return eName.EQ("r"), nil },
-		Write:  func(context.Context) (velox.Pred[E], error) { return velox.Pred[E]{}, nil },
+		Write:  func(context.Context) (velox.Pred[E], error) { return velox.Allow[E](), nil },
 		Insert: func(_ context.Context, x *E) error { return nil },
 	}
 }

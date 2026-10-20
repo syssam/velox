@@ -37,6 +37,13 @@ func pnoteReading(p velox.Pred[pnote], err error) context.Context {
 	return context.WithValue(context.Background(), pnoteKey{}, pnoteAnswer{p, err})
 }
 
+// pnoteWriteKey's value, a pnoteAnswer, is what pnote's write policy returns.
+type pnoteWriteKey struct{}
+
+func pnoteWriting(p velox.Pred[pnote], err error) context.Context {
+	return context.WithValue(context.Background(), pnoteWriteKey{}, pnoteAnswer{p, err})
+}
+
 func (*pnote) Policy() velox.Policy[pnote] {
 	return velox.Policy[pnote]{
 		Read: func(ctx context.Context) (velox.Pred[pnote], error) {
@@ -46,8 +53,11 @@ func (*pnote) Policy() velox.Policy[pnote] {
 			}
 			return pn.Owner.EQ("ann"), nil
 		},
-		Write: func(context.Context) (velox.Pred[pnote], error) {
+		Write: func(ctx context.Context) (velox.Pred[pnote], error) {
 			pnoteWrites.Add(1)
+			if a, ok := ctx.Value(pnoteWriteKey{}).(pnoteAnswer); ok {
+				return a.p, a.err
+			}
 			return pn.Locked.EQ(false), nil
 		},
 	}
@@ -362,11 +372,11 @@ func (*dnote) Policy() velox.Policy[dnote] {
 	return velox.Policy[dnote]{
 		Read: func(ctx context.Context) (velox.Pred[dnote], error) {
 			noteDryRun(ctx, "Read")
-			return velox.Pred[dnote]{}, nil
+			return velox.Allow[dnote](), nil
 		},
 		Write: func(ctx context.Context) (velox.Pred[dnote], error) {
 			noteDryRun(ctx, "Write")
-			return velox.Pred[dnote]{}, nil
+			return velox.Allow[dnote](), nil
 		},
 		Insert: func(ctx context.Context, _ *dnote) error {
 			noteDryRun(ctx, "Insert")
