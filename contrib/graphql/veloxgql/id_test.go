@@ -54,6 +54,7 @@ func TestIDRoundTrip(t *testing.T) {
 	roundTrip(t, "ann", "User:ann")
 	roundTrip(t, "a:b/c ü", "User:a:b/c ü") // the type ends at the first colon
 	roundTrip(t, "", "User:")
+	roundTrip(t, "1:2", "User:1:2") // a string key may hold a colon; the type cannot
 
 	const text = "0193a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b"
 	u := uuid.MustParse(text)
@@ -100,6 +101,12 @@ func TestIDWrongType(t *testing.T) {
 }
 
 func TestIDMalformed(t *testing.T) {
+	// The variants below decode to "User:12" unless the decoder is strict.
+	for _, id := range []string{trailingBits(raw("User:12")), raw("User:12")[:3] + "\n" + raw("User:12")[3:]} {
+		if b, err := base64.RawURLEncoding.DecodeString(id); err != nil || string(b) != "User:12" {
+			t.Fatalf("%q does not test what it should: %q, %v", id, b, err)
+		}
+	}
 	std := base64.StdEncoding.EncodeToString([]byte("User:12")) // padded
 	cases := []struct {
 		name, id string
@@ -111,7 +118,12 @@ func TestIDMalformed(t *testing.T) {
 		{"standard alphabet", base64.RawStdEncoding.EncodeToString([]byte("User:?>")), decodeAs[string]},
 		{"no colon", raw("User1"), decodeAs[int64]},
 		{"empty type", raw(":1"), decodeAs[int64]},
+		{"trailing bits", trailingBits(raw("User:12")), decodeAs[int64]},
+		{"newline", raw("User:12")[:3] + "\n" + raw("User:12")[3:], decodeAs[int64]},
+		{"carriage return", raw("User:12")[:3] + "\r" + raw("User:12")[3:], decodeAs[int64]},
+		{"trailing newline", raw("User:12") + "\n", decodeAs[int64]},
 		{"key not an integer", raw("User:abc"), decodeAs[int64]},
+		{"two colons as an integer", raw("User:1:2"), decodeAs[int64]},
 		{"empty integer key", raw("User:"), decodeAs[int64]},
 		{"integer with a plus", raw("User:+1"), decodeAs[int64]},
 		{"integer with a leading zero", raw("User:01"), decodeAs[int64]},
@@ -141,6 +153,14 @@ func TestIDMalformed(t *testing.T) {
 			}
 		})
 	}
+}
+
+// trailingBits is id with other unused bits in its last character, which
+// a lenient decoder decodes to the same bytes.
+func trailingBits(id string) string {
+	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+	i := strings.IndexByte(alphabet, id[len(id)-1])
+	return id[:len(id)-1] + string(alphabet[i^1])
 }
 
 func decodeAs[K any](id string) error {

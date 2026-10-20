@@ -35,17 +35,22 @@ func EncodeID(typ string, key any) string {
 
 // DecodeID returns the key of id, which must be an ID of the GraphQL type
 // typ whose key is of type K. It fails with ErrWrongIDType when id is a
-// well-formed ID of another type, and with ErrBadID when id is not
-// base64url without padding of "<Type>:<key>" or its key is not the canonical
-// text of a K, the text EncodeID writes (so each row has one ID). Neither
-// error's text holds the key. K is any type EncodeID takes whose pointer
-// unmarshals it: a Go integer, a string, [16]byte, UUID, or a type with
-// MarshalText and UnmarshalText.
+// well-formed ID of another type, and with ErrBadID when id is not exactly
+// what EncodeID writes for some key: canonical base64url without padding (no
+// line breaks, no stray trailing bits) of "<Type>:<key>", the key the
+// canonical text of a K. So each row has one ID. Neither error's text holds
+// the key.
+//
+// K is a Go integer, a string, [16]byte, UUID, or a type with MarshalText
+// whose pointer has UnmarshalText, such as uuid.UUID. A named type without
+// those methods, such as type UserID int64 or a [16]byte UUID type without
+// text methods, is not supported: generated code decodes the underlying type
+// and converts it.
 func DecodeID[K any](id, typ string) (K, error) {
 	var zero K
-	b, err := base64.RawURLEncoding.DecodeString(id)
-	if err != nil {
-		return zero, badID(typ, "not base64url without padding")
+	b, ok := decodeBase64(id)
+	if !ok {
+		return zero, badID(typ, "not canonical base64url without padding")
 	}
 	t, key, ok := strings.Cut(string(b), ":")
 	switch {
@@ -59,14 +64,14 @@ func DecodeID[K any](id, typ string) (K, error) {
 	var k K
 	switch err := setValue(&k, text(key)); {
 	case errors.Is(err, errUnsupported):
-		return zero, fmt.Errorf("veloxgql: DecodeID: %T is not a supported key type", zero)
+		return zero, fmt.Errorf("veloxgql: DecodeID: %s is not a supported key type", typeName[K]())
 	case err != nil:
 		return zero, badID(typ, "the key does not parse")
 	}
 	canon, ok := keyText(k)
 	switch {
 	case !ok:
-		return zero, fmt.Errorf("veloxgql: DecodeID: %T is not a supported key type", zero)
+		return zero, fmt.Errorf("veloxgql: DecodeID: %s is not a supported key type", typeName[K]())
 	case canon != key:
 		return zero, badID(typ, "the key is not in its canonical form")
 	}

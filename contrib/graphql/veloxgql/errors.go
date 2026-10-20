@@ -16,8 +16,9 @@ var (
 	// expected, such as a Post ID given where a User ID is. Nothing is looked
 	// up with it.
 	ErrWrongIDType = errors.New("ID of another type")
-	// ErrBadCursor: a cursor that does not decode, or whose values are not of
-	// the types of the query's order: one taken under another order.
+	// ErrBadCursor: a cursor that does not decode, or one taken on another
+	// type or under another order than the query's (Cursor.Check), or whose
+	// values are not of the order's types (CursorValue).
 	ErrBadCursor = errors.New("malformed cursor")
 	// ErrPageTooLarge: first or last over MaxPage.
 	ErrPageTooLarge = errors.New("page is over the maximum")
@@ -25,6 +26,9 @@ var (
 	ErrBadPagination = errors.New("bad pagination arguments")
 	// ErrFilterTooDeep: a where input nested deeper than MaxFilterDepth.
 	ErrFilterTooDeep = errors.New("filter is nested too deep")
+	// ErrFilterTooWide: an and or an or list of a where input with more than
+	// MaxFilterWidth entries.
+	ErrFilterTooWide = errors.New("filter list is too long")
 	// ErrNoDB: a resolver ran with no DB in its context, which the handler
 	// puts there.
 	ErrNoDB = errors.New("no DB in the context")

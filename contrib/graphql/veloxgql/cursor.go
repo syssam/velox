@@ -7,63 +7,106 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 )
 
-// Cursor is a connection cursor: the values of a row's order terms and its
-// primary key. It is the Cursor scalar, a string on the wire that the client
-// does not read: EncodeCursor's text.
+// Cursor is a connection cursor: where a row is in a query's order. It is
+// the Cursor scalar. On the wire it is a string, EncodeCursor's text, which
+// the client passes back but does not read.
+//
+// A cursor is bound to the GraphQL type and the order it was taken under:
+// Check refuses it for another type or another order.
 type Cursor struct {
-	// Values are the row's values of the query's order terms, in order. After
-	// DecodeCursor they are JSON values; CursorValue converts each to its
-	// column's Go type.
-	Values []any
-	// Key is the row's primary key; after DecodeCursor, a JSON value too.
+	// Type is the GraphQL type of the connection's nodes, such as "User".
+	Type string
+	// Terms are the query's order terms with the row's values, in order. The
+	// primary key, which ends every order, is Key and not a term.
+	Terms []CursorTerm
+	// Key is the row's primary key. After DecodeCursor it is a JSON value, as
+	// each term's Value is; CursorValue converts them to their Go types.
 	Key any
+}
+
+// CursorTerm is one order term of a cursor and the row's value of it.
+type CursorTerm struct {
+	// Field is the term's order field, the GraphQL enum value, such as "NAME".
+	Field     string
+	Direction OrderDirection
+	Value     any
+}
+
+// CursorOrder is one term of a query's order, as Check compares it with a
+// cursor's.
+type CursorOrder struct {
+	Field     string
+	Direction OrderDirection
 }
 
 // cursorVersion is the version of the cursor's JSON document.
 const cursorVersion = 1
 
-// cursorDoc is the cursor's JSON document, {"v":1,"o":[…],"k":<key>}.
+// cursorDoc is the cursor's JSON document,
+// {"v":1,"t":"<Type>","o":[{"f":"<FIELD>","d":"ASC","v":<value>}…],"k":<key>}.
 type cursorDoc struct {
-	V *int   `json:"v"`
-	O *[]any `json:"o"`
-	K any    `json:"k"`
+	V *int             `json:"v"`
+	T *string          `json:"t"`
+	O *[]cursorTermDoc `json:"o"`
+	K any              `json:"k"`
+}
+
+type cursorTermDoc struct {
+	F *string         `json:"f"`
+	D *OrderDirection `json:"d"`
+	V any             `json:"v"`
 }
 
 // EncodeCursor returns c as a cursor: base64url without padding of the JSON
-// document {"v":1,"o":[…values…],"k":<key>}. Integers are JSON numbers with
-// every digit, an int64 above 2^53 included; times are RFC 3339 strings with
-// nanoseconds and the zone offset; UUIDs are their string form; NaN and
-// infinite floats are the strings NaN, +Inf and -Inf. A key is a number when
-// it is an integer and a string otherwise. A cursor with no Key, or a value
-// json.Marshal cannot write, is a mistake in the generated code, and
-// EncodeCursor panics.
+// document {"v":1,"t":"<Type>","o":[{"f":"<FIELD>","d":"ASC|DESC","v":<value>}…],"k":<key>}.
+// Integers are JSON numbers with every digit, an int64 above 2^53 included;
+// times are RFC 3339 strings with nanoseconds and the zone offset; UUIDs are
+// their string form; NaN and infinite floats are the strings NaN, +Inf and
+// -Inf. A key is a number when it is an integer and a string otherwise.
+//
+// A cursor with no Type or Key, a term with no Field or an invalid
+// Direction, or a value json.Marshal cannot write is a mistake in the
+// generated code, and EncodeCursor panics.
 func EncodeCursor(c Cursor) string {
-	if c.Key == nil {
+	switch {
+	case c.Type == "":
+		panic("veloxgql: EncodeCursor: the cursor has no type")
+	case c.Key == nil:
 		panic("veloxgql: EncodeCursor: the cursor has no key")
 	}
 	v := cursorVersion
-	o := make([]any, len(c.Values))
-	for i, x := range c.Values {
-		o[i] = jsonValue(x)
+	o := make([]cursorTermDoc, len(c.Terms))
+	for i, t := range c.Terms {
+		if t.Field == "" || !t.Direction.IsValid() {
+			panic("veloxgql: EncodeCursor: term " + strconv.Itoa(i) + " has no field or an invalid direction")
+		}
+		o[i] = cursorTermDoc{F: &t.Field, D: &t.Direction, V: jsonValue(t.Value)}
 	}
-	b, err := json.Marshal(cursorDoc{V: &v, O: &o, K: jsonValue(c.Key)})
+	b, err := json.Marshal(cursorDoc{V: &v, T: &c.Type, O: &o, K: jsonValue(c.Key)})
 	if err != nil {
 		panic("veloxgql: EncodeCursor: " + err.Error())
 	}
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
-// DecodeCursor decodes s, a cursor EncodeCursor wrote. Its Values and Key are
-// JSON values: json.Number for numbers, string, bool and, in Values, nil.
-// CursorValue converts them. A cursor that is not base64url without padding
-// of a version 1 document with "o" an array of such values and "k" a number
-// or a string, and nothing else, fails with ErrBadCursor.
+// DecodeCursor decodes s, a cursor EncodeCursor wrote. Its terms' Values and
+// its Key are JSON values: json.Number for numbers, string, bool and, in a
+// term, nil; CursorValue converts them. Check it against the query before
+// using it.
+//
+// s must be exactly what EncodeCursor writes for some cursor: canonical
+// base64url without padding (no line breaks, no stray trailing bits) of a
+// version 1 document with a non-empty type, terms each with a non-empty
+// field, ASC or DESC and a number, string, bool or null, and a key that is a
+// number or a string, and no other field. Anything else fails with
+// ErrBadCursor.
 func DecodeCursor(s string) (Cursor, error) {
-	b, err := base64.RawURLEncoding.DecodeString(s)
-	if err != nil {
-		return Cursor{}, badCursor("not base64url without padding")
+	b, ok := decodeBase64(s)
+	if !ok {
+		return Cursor{}, badCursor("not canonical base64url without padding")
 	}
 	dec := json.NewDecoder(bytes.NewReader(b))
 	dec.UseNumber()
@@ -78,42 +121,90 @@ func DecodeCursor(s string) (Cursor, error) {
 	switch {
 	case d.V == nil || *d.V != cursorVersion:
 		return Cursor{}, badCursor("not version 1")
+	case d.T == nil || *d.T == "":
+		return Cursor{}, badCursor("no type")
 	case d.O == nil:
-		return Cursor{}, badCursor("no order values")
+		return Cursor{}, badCursor("no order terms")
 	}
-	for _, v := range *d.O {
-		switch v.(type) {
+	c := Cursor{Type: *d.T, Terms: make([]CursorTerm, len(*d.O)), Key: d.K}
+	for i, t := range *d.O {
+		switch {
+		case t.F == nil || *t.F == "":
+			return Cursor{}, badCursor("an order term has no field")
+		case t.D == nil || !t.D.IsValid():
+			return Cursor{}, badCursor("an order term's direction is not ASC or DESC")
+		}
+		switch t.V.(type) {
 		case json.Number, string, bool, nil:
 		default:
 			return Cursor{}, badCursor("an order value is not a number, string, bool or null")
 		}
+		c.Terms[i] = CursorTerm{Field: *t.F, Direction: *t.D, Value: t.V}
 	}
 	switch d.K.(type) {
 	case json.Number, string:
 	default:
 		return Cursor{}, badCursor("the key is not a number or a string")
 	}
-	return Cursor{Values: *d.O, Key: d.K}, nil
+	return c, nil
 }
 
-// CursorValue converts v, a value or the key of a decoded cursor, to T, the
-// Go type of its column: a Go integer or Uint64 from a number, a float from a
-// number (or NaN, +Inf, -Inf), a string, a bool, a time.Time or Time from an
-// RFC 3339 string, a [16]byte or UUID from the UUID string form, []byte or
-// Bytes from standard base64, or a type whose pointer has UnmarshalText from
-// a string. A v of another type fails with ErrBadCursor: the cursor was taken
-// under another order.
+// decodeBase64 decodes s, base64url without padding, only when s is the
+// canonical encoding of what it decodes to: the decoder ignores line breaks
+// and accepts non-zero trailing bits, which would give one value many
+// encodings.
+func decodeBase64(s string) ([]byte, bool) {
+	b, err := base64.RawURLEncoding.DecodeString(s)
+	if err != nil || base64.RawURLEncoding.EncodeToString(b) != s {
+		return nil, false
+	}
+	return b, true
+}
+
+// Check reports whether c may be used on a connection of the GraphQL type
+// typ ordered by order, the query's terms without the primary key. A cursor
+// of another type fails with ErrBadCursor and, since its key is another
+// type's, ErrWrongIDType; one taken under another order (other fields, other
+// directions or another number of terms) with ErrBadCursor. Neither error's
+// text holds the cursor's type or fields.
+func (c Cursor) Check(typ string, order []CursorOrder) error {
+	if c.Type != typ {
+		return fmt.Errorf("veloxgql: %s cursor: %w: the key is an %w", typ, ErrBadCursor, ErrWrongIDType)
+	}
+	if len(c.Terms) != len(order) {
+		return fmt.Errorf("veloxgql: %s cursor: %w: taken under another order", typ, ErrBadCursor)
+	}
+	for i, t := range c.Terms {
+		if t.Field != order[i].Field || t.Direction != order[i].Direction {
+			return fmt.Errorf("veloxgql: %s cursor: %w: taken under another order", typ, ErrBadCursor)
+		}
+	}
+	return nil
+}
+
+// CursorValue converts v, a term's value or the key of a decoded cursor, to
+// T, the Go type of its column: a Go integer or Uint64 from a number, a float
+// from a number (or NaN, +Inf, -Inf), a string, a bool, a time.Time or Time
+// from an RFC 3339 string, a [16]byte or UUID from the UUID string form,
+// []byte or Bytes from standard base64, or a type whose pointer has
+// UnmarshalText from a string. A v of another type fails with ErrBadCursor.
 func CursorValue[T any](v any) (T, error) {
 	var t T
 	switch err := setValue(&t, v); {
 	case errors.Is(err, errUnsupported):
 		var zero T
-		return zero, fmt.Errorf("veloxgql: CursorValue: %T is not a supported type", zero)
+		return zero, fmt.Errorf("veloxgql: CursorValue: %s is not a supported type", typeName[T]())
 	case err != nil:
 		var zero T
-		return zero, badCursor(fmt.Sprintf("a value is not a %T", zero))
+		return zero, badCursor("a value is not a " + typeName[T]())
 	}
 	return t, nil
+}
+
+// typeName is T's name, an interface type's too, which %T of a zero T would
+// print as <nil>.
+func typeName[T any]() string {
+	return fmt.Sprintf("%T", (*T)(nil))[1:]
 }
 
 func badCursor(why string) error {
@@ -139,7 +230,8 @@ func (c *Cursor) UnmarshalGQL(v any) error {
 	return nil
 }
 
-// PageInfo is the GraphQL PageInfo of a connection.
+// PageInfo is the GraphQL type PageInfo of a connection, an object gqlgen
+// binds by its fields.
 type PageInfo struct {
 	HasNextPage     bool
 	HasPreviousPage bool
@@ -166,9 +258,11 @@ func (d OrderDirection) IsValid() bool {
 
 func (d OrderDirection) String() string { return string(d) }
 
-// MarshalGQL writes d as a JSON string.
+// MarshalGQL writes d as an escaped JSON string, so that even an invalid d
+// leaves the response valid JSON.
 func (d OrderDirection) MarshalGQL(w io.Writer) {
-	_, _ = io.WriteString(w, `"`+string(d)+`"`)
+	b, _ := json.Marshal(string(d)) // never fails for a string
+	_, _ = w.Write(b)
 }
 
 // UnmarshalGQL sets d from v, the string ASC or DESC.

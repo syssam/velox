@@ -5,20 +5,45 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
 	"math"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/99designs/gqlgen/graphql"
 	"github.com/google/uuid"
 
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
 )
 
-var (
-	_ graphql.Marshaler   = veloxgql.Cursor{}
-	_ graphql.Unmarshaler = (*veloxgql.Cursor)(nil)
-)
+// terms are order terms F0, F1, … ascending with the values vs.
+func terms(vs ...any) []veloxgql.CursorTerm {
+	out := make([]veloxgql.CursorTerm, len(vs))
+	for i, v := range vs {
+		out[i] = veloxgql.CursorTerm{Field: "F" + strconv.Itoa(i), Direction: veloxgql.OrderDirectionAsc, Value: v}
+	}
+	return out
+}
+
+// values are the Values of c's terms.
+func values(c veloxgql.Cursor) []any {
+	out := make([]any, len(c.Terms))
+	for i, t := range c.Terms {
+		out[i] = t.Value
+	}
+	return out
+}
+
+// cursorJSON is the JSON document of the cursor s.
+func cursorJSON(t *testing.T, s string) string {
+	t.Helper()
+	b, err := base64.RawURLEncoding.DecodeString(s)
+	if err != nil {
+		t.Fatalf("%q is not base64url without padding: %v", s, err)
+	}
+	return string(b)
+}
 
 func TestCursorRoundTrip(t *testing.T) {
 	hk := time.FixedZone("", 8*3600)
@@ -26,45 +51,69 @@ func TestCursorRoundTrip(t *testing.T) {
 	big := int64(1<<53 + 1) // a float64 would round it to 1<<53
 	u := uuid.MustParse("0193a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b")
 	c := veloxgql.Cursor{
-		Values: []any{"ann", big, when, true, 1.5, u, uint64(math.MaxUint64), veloxgql.Time(when.UTC())},
-		Key:    int64(1<<62 + 3),
+		Type: "User",
+		Terms: []veloxgql.CursorTerm{
+			{Field: "NAME", Direction: veloxgql.OrderDirectionAsc, Value: "ann"},
+			{Field: "AGE", Direction: veloxgql.OrderDirectionDesc, Value: big},
+		},
+		Key: int64(1<<62 + 3),
 	}
 	s := veloxgql.EncodeCursor(c)
-	b, err := base64.RawURLEncoding.DecodeString(s)
-	if err != nil {
-		t.Fatalf("EncodeCursor = %q, not base64url without padding: %v", s, err)
+	const want = `{"v":1,"t":"User","o":[{"f":"NAME","d":"ASC","v":"ann"},{"f":"AGE","d":"DESC","v":9007199254740993}],"k":4611686018427387907}`
+	if got := cursorJSON(t, s); got != want {
+		t.Fatalf("cursor JSON\n got %s\nwant %s", got, want)
 	}
-	const want = `{"v":1,"o":["ann",9007199254740993,"2026-10-20T01:02:03.123456789+08:00",true,1.5,` +
-		`"0193a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",18446744073709551615,"2026-10-19T17:02:03.123456789Z"],"k":4611686018427387907}`
-	if string(b) != want {
-		t.Fatalf("cursor JSON\n got %s\nwant %s", b, want)
-	}
-
 	d, err := veloxgql.DecodeCursor(s)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(d.Values) != len(c.Values) {
-		t.Fatalf("decoded %d values, want %d", len(d.Values), len(c.Values))
+	if d.Type != "User" || len(d.Terms) != 2 || d.Terms[0].Field != "NAME" || d.Terms[0].Direction != veloxgql.OrderDirectionAsc ||
+		d.Terms[1].Field != "AGE" || d.Terms[1].Direction != veloxgql.OrderDirectionDesc {
+		t.Fatalf("decoded %+v", d)
 	}
-	expect(t, d.Values[0], "ann")
-	expect(t, d.Values[1], big)
-	gotTime, err := veloxgql.CursorValue[time.Time](d.Values[2])
+	expect(t, d.Terms[0].Value, "ann")
+	expect(t, d.Terms[1].Value, big)
+	expect(t, d.Key, int64(1<<62+3))
+	if veloxgql.EncodeCursor(d) != s {
+		t.Errorf("a decoded cursor encodes to %q, want %q", veloxgql.EncodeCursor(d), s)
+	}
+
+	// Every kind of order value.
+	c = veloxgql.Cursor{
+		Type:  "User",
+		Terms: terms("ann", big, when, true, 1.5, u, uint64(math.MaxUint64), veloxgql.Time(when.UTC()), []byte{0, 0xff}),
+		Key:   int64(1),
+	}
+	d, err = veloxgql.DecodeCursor(veloxgql.EncodeCursor(c))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const wantValues = `["ann",9007199254740993,"2026-10-20T01:02:03.123456789+08:00",true,1.5,` +
+		`"0193a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",18446744073709551615,"2026-10-19T17:02:03.123456789Z","AP8="]`
+	if got, _ := json.Marshal(values(d)); string(got) != wantValues {
+		t.Fatalf("values\n got %s\nwant %s", got, wantValues)
+	}
+	v := values(d)
+	expect(t, v[0], "ann")
+	expect(t, v[1], big)
+	gotTime, err := veloxgql.CursorValue[time.Time](v[2])
 	if err != nil || !gotTime.Equal(when) || gotTime.Nanosecond() != 123456789 {
 		t.Errorf("time = %v, %v, want %v", gotTime, err, when)
 	}
 	if _, off := gotTime.Zone(); off != 8*3600 {
 		t.Errorf("time zone offset = %d, want %d", off, 8*3600)
 	}
-	expect(t, d.Values[3], true)
-	expect(t, d.Values[4], 1.5)
-	expect(t, d.Values[5], u)
-	expect(t, d.Values[5], [16]byte(u))
-	expect(t, d.Values[5], veloxgql.UUID(u))
-	expect(t, d.Values[6], uint64(math.MaxUint64))
-	expect(t, d.Values[6], veloxgql.Uint64(math.MaxUint64))
-	expect(t, d.Values[7], veloxgql.Time(when.UTC()))
-	expect(t, d.Key, int64(1<<62+3))
+	expect(t, v[3], true)
+	expect(t, v[4], 1.5)
+	expect(t, v[5], u)
+	expect(t, v[5], [16]byte(u))
+	expect(t, v[5], veloxgql.UUID(u))
+	expect(t, v[6], uint64(math.MaxUint64))
+	expect(t, v[6], veloxgql.Uint64(math.MaxUint64))
+	expect(t, v[7], veloxgql.Time(when.UTC()))
+	if got, err := veloxgql.CursorValue[[]byte](v[8]); err != nil || !bytes.Equal(got, []byte{0, 0xff}) {
+		t.Errorf("bytes = %v, %v", got, err)
+	}
 
 	// A key keeps its JSON type: a number for an integer, a string otherwise.
 	for _, k := range []struct {
@@ -77,13 +126,12 @@ func TestCursorRoundTrip(t *testing.T) {
 		{u, `"0193a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b"`},
 		{[16]byte(u), `"0193a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b"`},
 	} {
-		s := veloxgql.EncodeCursor(veloxgql.Cursor{Key: k.key})
-		b, _ := base64.RawURLEncoding.DecodeString(s)
-		if want := `{"v":1,"o":[],"k":` + k.json + `}`; string(b) != want {
-			t.Errorf("key %v: %s, want %s", k.key, b, want)
+		s := veloxgql.EncodeCursor(veloxgql.Cursor{Type: "User", Key: k.key})
+		if want := `{"v":1,"t":"User","o":[],"k":` + k.json + `}`; cursorJSON(t, s) != want {
+			t.Errorf("key %v: %s, want %s", k.key, cursorJSON(t, s), want)
 		}
 	}
-	d, err = veloxgql.DecodeCursor(veloxgql.EncodeCursor(veloxgql.Cursor{Key: u}))
+	d, err = veloxgql.DecodeCursor(veloxgql.EncodeCursor(veloxgql.Cursor{Type: "User", Key: u}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,17 +139,18 @@ func TestCursorRoundTrip(t *testing.T) {
 
 	// Floats that JSON has no number for are strings.
 	for _, f := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
-		d, err := veloxgql.DecodeCursor(veloxgql.EncodeCursor(veloxgql.Cursor{Values: []any{f}, Key: 1}))
+		d, err := veloxgql.DecodeCursor(veloxgql.EncodeCursor(veloxgql.Cursor{Type: "User", Terms: terms(f), Key: 1}))
 		if err != nil {
 			t.Fatal(err)
 		}
-		got, err := veloxgql.CursorValue[float64](d.Values[0])
+		got, err := veloxgql.CursorValue[float64](d.Terms[0].Value)
 		if err != nil || !(got == f || math.IsNaN(got) && math.IsNaN(f)) {
 			t.Errorf("float %v round-tripped to %v, %v", f, got, err)
 		}
 	}
 
 	// The scalar: a JSON string on the wire, both ways.
+	s = veloxgql.EncodeCursor(c)
 	var buf bytes.Buffer
 	c.MarshalGQL(&buf)
 	if want := `"` + s + `"`; buf.String() != want {
@@ -125,28 +174,108 @@ func expect[T comparable](t *testing.T, v any, want T) {
 	}
 }
 
+// Review Focus 1 and 2: a cursor is refused on another type and under
+// another order, before any query runs.
+func TestCursorCheck(t *testing.T) {
+	name := veloxgql.CursorOrder{Field: "NAME", Direction: veloxgql.OrderDirectionAsc}
+	c := veloxgql.Cursor{
+		Type:  "User",
+		Terms: []veloxgql.CursorTerm{{Field: "NAME", Direction: veloxgql.OrderDirectionAsc, Value: "ann"}},
+		Key:   int64(1),
+	}
+	d, err := veloxgql.DecodeCursor(veloxgql.EncodeCursor(c))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Check("User", []veloxgql.CursorOrder{name}); err != nil {
+		t.Errorf("the cursor's own type and order: %v", err)
+	}
+	key := veloxgql.Cursor{Type: "User", Key: int64(1)}
+	if err := key.Check("User", nil); err != nil {
+		t.Errorf("a key-only cursor under the key order: %v", err)
+	}
+
+	// Another type's cursor, with the same key type and order.
+	post := c
+	post.Type = "Post"
+	d, err = veloxgql.DecodeCursor(veloxgql.EncodeCursor(post))
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = d.Check("User", []veloxgql.CursorOrder{name})
+	if !errors.Is(err, veloxgql.ErrBadCursor) || !errors.Is(err, veloxgql.ErrWrongIDType) {
+		t.Errorf("a Post cursor on User: %v, want ErrBadCursor and ErrWrongIDType", err)
+	}
+	if err != nil && (!strings.Contains(err.Error(), "User") || strings.Contains(err.Error(), "Post")) {
+		t.Errorf("%q does not name only the expected type", err)
+	}
+
+	for label, order := range map[string][]veloxgql.CursorOrder{
+		"NAME vs EMAIL":  {{Field: "EMAIL", Direction: veloxgql.OrderDirectionAsc}},
+		"ASC vs DESC":    {{Field: "NAME", Direction: veloxgql.OrderDirectionDesc}},
+		"fewer terms":    nil,
+		"more terms":     {name, {Field: "AGE", Direction: veloxgql.OrderDirectionAsc}},
+		"terms reversed": {{Field: "AGE", Direction: veloxgql.OrderDirectionAsc}, name},
+	} {
+		cur := c
+		if label == "terms reversed" {
+			cur.Terms = []veloxgql.CursorTerm{c.Terms[0], {Field: "AGE", Direction: veloxgql.OrderDirectionAsc, Value: 1}}
+		}
+		err := cur.Check("User", order)
+		if !errors.Is(err, veloxgql.ErrBadCursor) || errors.Is(err, veloxgql.ErrWrongIDType) {
+			t.Errorf("%s: %v, want ErrBadCursor alone", label, err)
+		}
+		if err != nil && (strings.Contains(err.Error(), "NAME") || strings.Contains(err.Error(), "EMAIL")) {
+			t.Errorf("%s: %q echoes the fields", label, err)
+		}
+	}
+}
+
 func TestCursorMalformed(t *testing.T) {
 	doc := func(s string) string { return base64.RawURLEncoding.EncodeToString([]byte(s)) }
+	good := doc(`{"v":1,"t":"User","o":[],"k":1}`)
+	if _, err := veloxgql.DecodeCursor(good); err != nil {
+		t.Fatalf("the good cursor: %v", err)
+	}
+	// A variant of good's last character with other trailing bits: it
+	// decodes to the same bytes unless the decoder checks them.
+	trailing := trailingBits(good)
+	if b, err := base64.RawURLEncoding.DecodeString(trailing); err != nil || string(b) != cursorJSON(t, good) {
+		t.Fatalf("the trailing-bits variant does not test what it should: %q, %v", b, err)
+	}
 	for name, s := range map[string]string{
-		"empty":           "",
-		"bad base64":      "!!",
-		"padded":          base64.URLEncoding.EncodeToString([]byte(`{"v":1,"o":[],"k":1}`)),
-		"not JSON":        doc("not json"),
-		"not an object":   doc(`[1]`),
-		"version 2":       doc(`{"v":2,"o":[],"k":1}`),
-		"no version":      doc(`{"o":[],"k":1}`),
-		"version string":  doc(`{"v":"1","o":[],"k":1}`),
-		"no order":        doc(`{"v":1,"k":1}`),
-		"null order":      doc(`{"v":1,"o":null,"k":1}`),
-		"order an object": doc(`{"v":1,"o":{},"k":1}`),
-		"no key":          doc(`{"v":1,"o":[]}`),
-		"null key":        doc(`{"v":1,"o":[],"k":null}`),
-		"key an object":   doc(`{"v":1,"o":[],"k":{}}`),
-		"key a bool":      doc(`{"v":1,"o":[],"k":true}`),
-		"nested value":    doc(`{"v":1,"o":[[1]],"k":1}`),
-		"object value":    doc(`{"v":1,"o":[{"a":1}],"k":1}`),
-		"unknown field":   doc(`{"v":1,"o":[],"k":1,"x":0}`),
-		"trailing data":   doc(`{"v":1,"o":[],"k":1} 1`),
+		"empty":                   "",
+		"bad base64":              "!!",
+		"padded":                  base64.URLEncoding.EncodeToString([]byte(`{"v":1,"t":"User","o":[],"k":1}`)),
+		"trailing bits":           trailing,
+		"newline":                 good[:4] + "\n" + good[4:],
+		"carriage return":         good[:4] + "\r" + good[4:],
+		"trailing newline":        good + "\n",
+		"not JSON":                doc("not json"),
+		"not an object":           doc(`[1]`),
+		"version 2":               doc(`{"v":2,"t":"User","o":[],"k":1}`),
+		"no version":              doc(`{"t":"User","o":[],"k":1}`),
+		"version string":          doc(`{"v":"1","t":"User","o":[],"k":1}`),
+		"no type":                 doc(`{"v":1,"o":[],"k":1}`),
+		"empty type":              doc(`{"v":1,"t":"","o":[],"k":1}`),
+		"type a number":           doc(`{"v":1,"t":1,"o":[],"k":1}`),
+		"no order":                doc(`{"v":1,"t":"User","k":1}`),
+		"null order":              doc(`{"v":1,"t":"User","o":null,"k":1}`),
+		"order an object":         doc(`{"v":1,"t":"User","o":{},"k":1}`),
+		"term a bare value":       doc(`{"v":1,"t":"User","o":["ann"],"k":1}`),
+		"term with no field":      doc(`{"v":1,"t":"User","o":[{"d":"ASC","v":1}],"k":1}`),
+		"term with empty field":   doc(`{"v":1,"t":"User","o":[{"f":"","d":"ASC","v":1}],"k":1}`),
+		"term with no direction":  doc(`{"v":1,"t":"User","o":[{"f":"NAME","v":1}],"k":1}`),
+		"term with bad direction": doc(`{"v":1,"t":"User","o":[{"f":"NAME","d":"asc","v":1}],"k":1}`),
+		"term with unknown field": doc(`{"v":1,"t":"User","o":[{"f":"NAME","d":"ASC","v":1,"x":0}],"k":1}`),
+		"nested value":            doc(`{"v":1,"t":"User","o":[{"f":"NAME","d":"ASC","v":[1]}],"k":1}`),
+		"object value":            doc(`{"v":1,"t":"User","o":[{"f":"NAME","d":"ASC","v":{"a":1}}],"k":1}`),
+		"no key":                  doc(`{"v":1,"t":"User","o":[]}`),
+		"null key":                doc(`{"v":1,"t":"User","o":[],"k":null}`),
+		"key an object":           doc(`{"v":1,"t":"User","o":[],"k":{}}`),
+		"key a bool":              doc(`{"v":1,"t":"User","o":[],"k":true}`),
+		"unknown field":           doc(`{"v":1,"t":"User","o":[],"k":1,"x":0}`),
+		"trailing data":           doc(`{"v":1,"t":"User","o":[],"k":1} 1`),
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := veloxgql.DecodeCursor(s); !errors.Is(err, veloxgql.ErrBadCursor) {
@@ -165,8 +294,7 @@ func TestCursorMalformed(t *testing.T) {
 		}
 	}
 
-	// A value that is not of the order term's type: the cursor was taken
-	// under another order.
+	// A value that is not of the order term's type.
 	for name, f := range map[string]func() error{
 		"string as int64":   func() error { _, err := veloxgql.CursorValue[int64]("ann"); return err },
 		"number as string":  func() error { _, err := veloxgql.CursorValue[string](json.Number("1")); return err },
@@ -185,16 +313,32 @@ func TestCursorMalformed(t *testing.T) {
 			t.Errorf("%s: %v, want ErrBadCursor", name, err)
 		}
 	}
-	if _, err := veloxgql.CursorValue[struct{}]("x"); err == nil || errors.Is(err, veloxgql.ErrBadCursor) {
+	_, err := veloxgql.CursorValue[struct{}]("x")
+	if err == nil || errors.Is(err, veloxgql.ErrBadCursor) {
 		t.Errorf("CursorValue[struct{}] = %v, want an unsupported-type error", err)
+	}
+	// An interface type is named, not printed as <nil>.
+	_, err = veloxgql.CursorValue[io.Reader]("x")
+	if err == nil || !strings.Contains(err.Error(), "io.Reader") {
+		t.Errorf("CursorValue[io.Reader] = %v, want an error naming io.Reader", err)
 	}
 }
 
-func TestCursorEncodeKeyless(t *testing.T) {
-	defer func() {
-		if recover() == nil {
-			t.Error("EncodeCursor of a cursor with no key did not panic")
-		}
-	}()
-	veloxgql.EncodeCursor(veloxgql.Cursor{Values: []any{1}})
+func TestEncodeCursorPanics(t *testing.T) {
+	for name, c := range map[string]veloxgql.Cursor{
+		"no key":            {Type: "User", Terms: terms(1)},
+		"no type":           {Terms: terms(1), Key: 1},
+		"no field":          {Type: "User", Terms: []veloxgql.CursorTerm{{Direction: veloxgql.OrderDirectionAsc, Value: 1}}, Key: 1},
+		"invalid direction": {Type: "User", Terms: []veloxgql.CursorTerm{{Field: "NAME", Direction: "UP", Value: 1}}, Key: 1},
+		"unencodable value": {Type: "User", Terms: terms(make(chan int)), Key: 1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Error("EncodeCursor did not panic")
+				}
+			}()
+			veloxgql.EncodeCursor(c)
+		})
+	}
 }

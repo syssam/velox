@@ -8,6 +8,26 @@ import (
 	"io"
 	"strconv"
 	"time"
+
+	"github.com/99designs/gqlgen/graphql"
+)
+
+// The scalars, the Cursor and the OrderDirection enum are gqlgen marshalers.
+var (
+	_ graphql.Marshaler   = (*Time)(nil)
+	_ graphql.Unmarshaler = (*Time)(nil)
+	_ graphql.Marshaler   = (*UUID)(nil)
+	_ graphql.Unmarshaler = (*UUID)(nil)
+	_ graphql.Marshaler   = (*Bytes)(nil)
+	_ graphql.Unmarshaler = (*Bytes)(nil)
+	_ graphql.Marshaler   = (*JSON)(nil)
+	_ graphql.Unmarshaler = (*JSON)(nil)
+	_ graphql.Marshaler   = (*Uint64)(nil)
+	_ graphql.Unmarshaler = (*Uint64)(nil)
+	_ graphql.Marshaler   = (*Cursor)(nil)
+	_ graphql.Unmarshaler = (*Cursor)(nil)
+	_ graphql.Marshaler   = (*OrderDirection)(nil)
+	_ graphql.Unmarshaler = (*OrderDirection)(nil)
 )
 
 // Time is the Time scalar: an RFC 3339 string with nanoseconds and the zone

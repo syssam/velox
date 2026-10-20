@@ -12,6 +12,7 @@ var (
 	// MaxFilterDepth is how deep a where input may nest through not, and, or
 	// and has<Edge>With. Deeper is ErrFilterTooDeep, before any query runs.
 	MaxFilterDepth = 5
-	// MaxFilterWidth is the most entries an and or an or list may have.
+	// MaxFilterWidth is the most entries an and or an or list may have. More
+	// is ErrFilterTooWide, before any query runs.
 	MaxFilterWidth = 100
 )

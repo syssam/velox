@@ -13,18 +13,20 @@
 //
 // # Cursors
 //
-// A cursor is base64url without padding of the JSON document
-// {"v":1,"o":[…order values…],"k":<key>} (EncodeCursor, DecodeCursor).
-// Integers keep every digit and times their nanoseconds and zone offset.
-// CursorValue converts a decoded value back to its column's Go type; a value
-// of another type, a cursor taken under another order, is ErrBadCursor.
+// A cursor is base64url without padding of the versioned JSON document
+// {"v":1,"t":"<Type>","o":[{"f":"<FIELD>","d":"ASC","v":<value>}…],"k":<key>}
+// (EncodeCursor, DecodeCursor): the GraphQL type, the order terms with the
+// row's values, and the primary key. Integers keep every digit and times
+// their nanoseconds and zone offset. Cursor.Check refuses a cursor taken on
+// another type or under another order with ErrBadCursor, and CursorValue
+// converts a decoded value back to its column's Go type.
 //
 // # Scalars
 //
 // Time, UUID, Bytes, JSON, Uint64 and Cursor are the GraphQL scalars of
-// those names, and OrderDirection and PageInfo the enum and type: each
-// implements gqlgen's graphql.Marshaler and graphql.Unmarshaler. Map them in
-// gqlgen.yml:
+// those names, and OrderDirection the enum: each implements gqlgen's
+// graphql.Marshaler and graphql.Unmarshaler. PageInfo is the object type,
+// which gqlgen binds by its fields. Map them in gqlgen.yml:
 //
 //	models:
 //	  Node:           {model: github.com/syssam/velox2/contrib/graphql/veloxgql.Noder}
