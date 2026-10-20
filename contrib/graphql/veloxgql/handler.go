@@ -3,6 +3,7 @@ package veloxgql
 import (
 	"context"
 	"errors"
+	"sync"
 	"sync/atomic"
 
 	"github.com/99designs/gqlgen/graphql"
@@ -22,17 +23,25 @@ import (
 // them.
 //
 // A mutation operation runs in one db.Tx, on the primary, and its
-// resolvers get the transaction's DB. Its root fields run one after another,
-// as gqlgen runs a mutation's, so every statement of the operation, its
-// nested fields' too, is in the transaction. The transaction commits when
-// the response has no errors. It rolls back when the response has any,
+// resolvers get the transaction's DB, so every statement of the operation,
+// its nested fields' too, is in the transaction. A transaction's DB is not
+// safe for concurrent use, and gqlgen runs only the mutation's root fields
+// one after another: below the root it resolves an object's fields that take
+// a context, edges among them, concurrently. So the handler runs a
+// mutation's field resolvers one at a time; queries' and subscriptions'
+// still run concurrently. A resolver of a mutation must not itself use the
+// DB from more than one goroutine.
+//
+// The transaction commits when the response has no errors. It rolls back
+// when the response has any,
 // even a field's error under data the other fields filled, and when the
 // operation panics, whether gqlgen recovered the panic into an error or the
 // panic carries on. A response whose transaction did not commit, rolled
 // back or failed to commit, has data null, since nothing it reports was
 // kept, and the commit's error, if any, is added to its errors through the
 // server's error presenter. WithDeadlines' Tx and MaxTx bound the whole
-// operation.
+// operation: its statements are bounded by the transaction's deadline,
+// although its resolvers' ctx.Deadline() does not report it.
 //
 // A subscription runs in no transaction: each of its events' statements
 // run on db.
@@ -42,22 +51,31 @@ func Handler(db *velox.DB) interface {
 	graphql.HandlerExtension
 	graphql.OperationInterceptor
 	graphql.ResponseInterceptor
+	graphql.FieldInterceptor
 } {
 	return dbHandler{db: db}
 }
 
 // dbHandler is Handler's extension. It intercepts the operation to put the
-// DB in its context, which the executable schema runs in; and the response,
+// DB in its context, which the executable schema runs in; the response,
 // because a mutation's resolvers run while gqlgen makes its response (inside
 // the response interceptors), and the response is where their errors
-// collect, to decide between commit and rollback.
+// collect, to decide between commit and rollback; and a mutation's fields,
+// to run their resolvers one at a time.
 type dbHandler struct{ db *velox.DB }
 
-// mutationKey is the context key of a mutation operation's state: a
-// *atomic.Bool set once its first response has started. gqlgen runs a
-// mutation's fields in its first response; a transport that asks for more
-// (SSE, websockets) gets none, and runs no transaction for it.
+// mutationKey is the context key of a mutation operation's *mutation.
 type mutationKey struct{}
+
+// mutation is a mutation operation's state.
+type mutation struct {
+	// started is set once the first response has started. gqlgen runs a
+	// mutation's fields in its first response; a transport that asks for
+	// more (SSE, websockets) gets none, and runs no transaction for it.
+	started atomic.Bool
+	// mu is held while one of the operation's field resolvers runs.
+	mu sync.Mutex
+}
 
 // errRollback is what the transaction's function returns to roll back a
 // response with errors.
@@ -80,7 +98,7 @@ func (h dbHandler) Validate(graphql.ExecutableSchema) error {
 func (h dbHandler) InterceptOperation(ctx context.Context, next graphql.OperationHandler) graphql.ResponseHandler {
 	ctx = WithDB(ctx, h.db)
 	if op := graphql.GetOperationContext(ctx).Operation; op != nil && op.Operation == ast.Mutation {
-		ctx = context.WithValue(ctx, mutationKey{}, new(atomic.Bool))
+		ctx = context.WithValue(ctx, mutationKey{}, new(mutation))
 	}
 	return next(ctx)
 }
@@ -90,8 +108,8 @@ func (h dbHandler) InterceptOperation(ctx context.Context, next graphql.Operatio
 // error response gqlgen makes without running the operation, passes
 // through.
 func (h dbHandler) InterceptResponse(ctx context.Context, next graphql.ResponseHandler) *graphql.Response {
-	started, _ := ctx.Value(mutationKey{}).(*atomic.Bool)
-	if started == nil || started.Swap(true) {
+	m, _ := ctx.Value(mutationKey{}).(*mutation)
+	if m == nil || m.started.Swap(true) {
 		return next(ctx)
 	}
 	var resp *graphql.Response
@@ -118,4 +136,20 @@ func (h dbHandler) InterceptResponse(ctx context.Context, next graphql.ResponseH
 		out.Errors = append(out.Errors, graphql.GetErrors(rctx)...)
 	}
 	return out
+}
+
+// InterceptField implements graphql.FieldInterceptor: a mutation's field
+// resolvers run one at a time, so that its transaction's DB is never used
+// concurrently. The lock cannot nest: gqlgen calls the field interceptors
+// around the field's resolver alone (graphql.ResolveField passes the
+// resolver to OperationContext.ResolverMiddleware), and resolves the field's
+// children after they return.
+func (dbHandler) InterceptField(ctx context.Context, next graphql.Resolver) (any, error) {
+	m, _ := ctx.Value(mutationKey{}).(*mutation)
+	if m == nil {
+		return next(ctx)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return next(ctx)
 }

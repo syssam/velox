@@ -54,7 +54,8 @@ func RetrySerializable(n int) TxOption { return func(o *txOptions) { o.retries =
 // fn rolls back only that fn's work. A nested Tx (a savepoint) ignores options.
 //
 // tx is valid only inside fn: after Tx returns, statements on it fail (or, for
-// a nested tx, run in the enclosing transaction).
+// a nested tx, run in the enclosing transaction). tx is not safe for
+// concurrent use: run its statements from one goroutine at a time.
 func (db *DB) Tx(ctx context.Context, fn func(tx *DB) error, opts ...TxOption) error {
 	if db.inTx {
 		return db.savepoint(ctx, fn)

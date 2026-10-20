@@ -1,17 +1,21 @@
 package veloxgql_test
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/99designs/gqlgen/graphql/handler"
@@ -29,27 +33,38 @@ const handlerSDL = `
 type Query {
 	count: Int!
 	hasDB: Boolean!
+	pair: Pair!
 }
 type Mutation {
 	add(id: Int!): Int!
 	fail(id: Int!): Int
 	boom(id: Int!): Int
 	cancel(id: Int!): Int!
+	pair: Pair!
 }
 type Subscription {
 	count: Int!
 }
+type Pair {
+	a: Int!
+	b: Int!
+}
 `
 
-// resolver resolves a root field from its arguments.
+// resolver resolves a field from its arguments.
 type resolver func(ctx context.Context, args map[string]any) (any, error)
 
 // testSchema is an executable schema of handlerSDL that runs resolvers as
-// gqlgen's generated code does: one response, whose root fields run in
-// selection order through the operation's field middleware, with a
-// resolver's error or panic added to the response's errors and its field
-// null. A subscription sends two events, each resolving its fields again,
-// and ends.
+// gqlgen's generated code does. An operation has one response. A mutation's
+// root fields run one after another, in selection order; a query's root
+// fields, and every object's fields below the root, run concurrently,
+// through graphql.FieldSet, as gqlgen runs fields that take a context.
+// Each field's resolver runs through the operation's field middleware, and
+// its children resolve after it returns; a resolver's error or panic is
+// added to the response's errors and its field is null. A subscription
+// sends two events, each resolving its fields again, and ends.
+//
+// A root field's resolver is resolvers[name], another's resolvers["Type.name"].
 func testSchema(resolvers map[string]resolver) graphql.ExecutableSchema {
 	schema := gqlparser.MustLoadSchema(&ast.Source{Input: handlerSDL})
 	return &graphql.ExecutableSchemaMock{
@@ -59,8 +74,9 @@ func testSchema(resolvers map[string]resolver) graphql.ExecutableSchema {
 		},
 		ExecFunc: func(ctx context.Context) graphql.ResponseHandler {
 			opCtx := graphql.GetOperationContext(ctx)
+			op := opCtx.Operation.Operation
 			events := 1
-			if opCtx.Operation.Operation == ast.Subscription {
+			if op == ast.Subscription {
 				events = 2
 			}
 			return func(ctx context.Context) *graphql.Response {
@@ -68,28 +84,41 @@ func testSchema(resolvers map[string]resolver) graphql.ExecutableSchema {
 					return nil
 				}
 				events--
-				var buf strings.Builder
-				buf.WriteByte('{')
-				for i, sel := range opCtx.Operation.SelectionSet {
-					f := sel.(*ast.Field)
-					v, _ := json.Marshal(resolveField(ctx, opCtx, f, resolvers[f.Name]))
-					if i > 0 {
-						buf.WriteByte(',')
-					}
-					fmt.Fprintf(&buf, "%q:%s", f.Alias, v)
-				}
-				buf.WriteByte('}')
-				return &graphql.Response{Data: json.RawMessage(buf.String())}
+				var buf bytes.Buffer
+				resolveSet(ctx, opCtx, opCtx.Operation.SelectionSet, true, op == ast.Query, resolvers).MarshalGQL(&buf)
+				return &graphql.Response{Data: buf.Bytes()}
 			}
 		},
 	}
 }
 
-// resolveField runs one root field, as a generated field function does.
-func resolveField(ctx context.Context, opCtx *graphql.OperationContext, f *ast.Field, r resolver) (ret any) {
+// resolveSet resolves the fields of sels, concurrently or one after another.
+func resolveSet(ctx context.Context, opCtx *graphql.OperationContext, sels ast.SelectionSet, root, concurrent bool, resolvers map[string]resolver) graphql.Marshaler {
+	fields := graphql.CollectFields(opCtx, sels, nil)
+	fs := graphql.NewFieldSet(fields)
+	for i, f := range fields {
+		key := f.Name
+		if !root {
+			key = f.ObjectDefinition.Name + "." + f.Name
+		}
+		if concurrent {
+			fs.Concurrently(i, func(ctx context.Context) graphql.Marshaler {
+				return resolveField(ctx, opCtx, f, resolvers[key], resolvers)
+			})
+		} else {
+			fs.Values[i] = resolveField(ctx, opCtx, f, resolvers[key], resolvers)
+		}
+	}
+	fs.Dispatch(ctx)
+	return fs
+}
+
+// resolveField runs one field, as a generated field function does: the
+// resolver through the field middleware, then its children.
+func resolveField(ctx context.Context, opCtx *graphql.OperationContext, f graphql.CollectedField, r resolver, resolvers map[string]resolver) (ret graphql.Marshaler) {
 	fc := &graphql.FieldContext{
 		Object:     f.ObjectDefinition.Name,
-		Field:      graphql.CollectedField{Field: f},
+		Field:      f,
 		Args:       f.ArgumentMap(opCtx.Variables),
 		IsMethod:   true,
 		IsResolver: true,
@@ -98,7 +127,7 @@ func resolveField(ctx context.Context, opCtx *graphql.OperationContext, f *ast.F
 	defer func() {
 		if p := recover(); p != nil {
 			graphql.AddError(ctx, opCtx.Recover(ctx, p))
-			ret = nil
+			ret = graphql.Null
 		}
 	}()
 	res, err := opCtx.ResolverMiddleware(ctx, func(ctx context.Context) (any, error) {
@@ -106,10 +135,19 @@ func resolveField(ctx context.Context, opCtx *graphql.OperationContext, f *ast.F
 	})
 	if err != nil {
 		graphql.AddError(ctx, err)
-		return nil
+		return graphql.Null
 	}
-	return res
+	if len(f.Selections) > 0 {
+		return resolveSet(ctx, opCtx, f.Selections, false, true, resolvers)
+	}
+	b, _ := json.Marshal(res)
+	return rawJSON(b)
 }
+
+// rawJSON is a resolved leaf value.
+type rawJSON []byte
+
+func (j rawJSON) MarshalGQL(w io.Writer) { _, _ = w.Write(j) }
 
 // txLog records what a DB runs: each statement, "insert" or "select" with
 // " in tx" when it ran in a transaction, and how each transaction ended.
@@ -176,6 +214,11 @@ var errFail = errors.New("fail failed")
 // itself.
 func handlerServer(t *testing.T, db *velox.DB, cancel *context.CancelFunc) *handler.Server {
 	t.Helper()
+	return serve(db, handlerResolvers(db, cancel))
+}
+
+// handlerResolvers are handlerServer's resolvers.
+func handlerResolvers(db *velox.DB, cancel *context.CancelFunc) map[string]resolver {
 	insert := func(ctx context.Context, args map[string]any) (int64, error) {
 		tx, err := veloxgql.DBFrom(ctx)
 		if err != nil {
@@ -191,7 +234,7 @@ func handlerServer(t *testing.T, db *velox.DB, cancel *context.CancelFunc) *hand
 		}
 		return db.Query[person]().Count(ctx)
 	}
-	srv := handler.New(testSchema(map[string]resolver{
+	return map[string]resolver{
 		"count": count,
 		"hasDB": func(ctx context.Context, _ map[string]any) (any, error) {
 			got, err := veloxgql.DBFrom(ctx)
@@ -217,7 +260,12 @@ func handlerServer(t *testing.T, db *velox.DB, cancel *context.CancelFunc) *hand
 			(*cancel)()
 			return id, err
 		},
-	}))
+	}
+}
+
+// serve serves testSchema with resolvers through veloxgql.Handler(db).
+func serve(db *velox.DB, resolvers map[string]resolver) *handler.Server {
+	srv := handler.New(testSchema(resolvers))
 	srv.AddTransport(transport.SSE{})
 	srv.AddTransport(transport.POST{})
 	srv.SetRecoverFunc(func(context.Context, any) error { return gqlerror.Errorf("internal system error") })
@@ -429,5 +477,62 @@ func TestStreamedOperations(t *testing.T) {
 	}
 	if stmts, txs := l.take(); !slices.Equal(stmts, []string{"select", "select"}) || len(txs) != 0 {
 		t.Errorf("subscription: statements %q, transactions %q; want two selects outside a transaction", stmts, txs)
+	}
+}
+
+// TestMutationResolversRunOneAtATime: below a mutation's root, gqlgen
+// resolves an object's fields concurrently, but the transaction's DB is not
+// safe for concurrent use, so the handler runs a mutation's resolvers one at
+// a time. Pair.a and Pair.b each wait, up to a bound, for the other to be in
+// flight, and then count the people on the DB in their context. In a query
+// they overlap; in a mutation they never do, and both run in its
+// transaction.
+func TestMutationResolversRunOneAtATime(t *testing.T) {
+	db, l := handlerDB(t)
+	var inFlight, most atomic.Int64
+	seen := func() {
+		for n := inFlight.Load(); ; {
+			m := most.Load()
+			if n <= m || most.CompareAndSwap(m, n) {
+				return
+			}
+		}
+	}
+	side := func(ctx context.Context, args map[string]any) (any, error) {
+		inFlight.Add(1)
+		defer inFlight.Add(-1)
+		seen()
+		for end := time.Now().Add(100 * time.Millisecond); inFlight.Load() < 2 && time.Now().Before(end); {
+			time.Sleep(time.Millisecond)
+		}
+		seen()
+		db, err := veloxgql.DBFrom(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return db.Query[person]().Count(ctx)
+	}
+	resolvers := handlerResolvers(db, nil)
+	resolvers["pair"] = func(context.Context, map[string]any) (any, error) { return struct{}{}, nil }
+	resolvers["Pair.a"] = side
+	resolvers["Pair.b"] = side
+	srv := serve(db, resolvers)
+
+	if got, want := post(t, context.Background(), srv, `{ pair { a b } }`), `{"data":{"pair":{"a":0,"b":0}}}`; got != want {
+		t.Errorf("query: %s, want %s", got, want)
+	}
+	if n := most.Swap(0); n != 2 {
+		t.Errorf("query: at most %d resolvers in flight, want 2: the test schema does not run them concurrently", n)
+	}
+	l.take()
+
+	if got, want := post(t, context.Background(), srv, `mutation { pair { a b } }`), `{"data":{"pair":{"a":0,"b":0}}}`; got != want {
+		t.Errorf("mutation: %s, want %s", got, want)
+	}
+	if n := most.Load(); n != 1 {
+		t.Errorf("mutation: at most %d resolvers in flight, want 1", n)
+	}
+	if stmts, txs := l.take(); !slices.Equal(stmts, []string{"select in tx", "select in tx"}) || !slices.Equal(txs, []string{"commit"}) {
+		t.Errorf("mutation: statements %q, transactions %q; want two selects in one committed transaction", stmts, txs)
 	}
 }
