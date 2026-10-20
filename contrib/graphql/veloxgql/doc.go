@@ -1,0 +1,50 @@
+// Package veloxgql is the runtime the GraphQL code velox-graphql generates
+// binds to, through gqlgen: global IDs, connection cursors, the scalars, and
+// the limits on what a client may ask for.
+//
+// # IDs
+//
+// Every GraphQL ID is opaque and global: base64url without padding of
+// "<Type>:<key>", where Type is the GraphQL type name and key the primary
+// key's canonical text (EncodeID). In Go an ID is a string, gqlgen's built-in
+// ID. Generated code decodes one with DecodeID[K](id, "<Type>"), which
+// returns the typed key, and fails with ErrWrongIDType for an ID of another
+// type, before anything is looked up. Every Node entity implements Noder.
+//
+// # Cursors
+//
+// A cursor is base64url without padding of the JSON document
+// {"v":1,"o":[…order values…],"k":<key>} (EncodeCursor, DecodeCursor).
+// Integers keep every digit and times their nanoseconds and zone offset.
+// CursorValue converts a decoded value back to its column's Go type; a value
+// of another type, a cursor taken under another order, is ErrBadCursor.
+//
+// # Scalars
+//
+// Time, UUID, Bytes, JSON, Uint64 and Cursor are the GraphQL scalars of
+// those names, and OrderDirection and PageInfo the enum and type: each
+// implements gqlgen's graphql.Marshaler and graphql.Unmarshaler. Map them in
+// gqlgen.yml:
+//
+//	models:
+//	  Node:           {model: github.com/syssam/velox2/contrib/graphql/veloxgql.Noder}
+//	  Time:           {model: github.com/syssam/velox2/contrib/graphql/veloxgql.Time}
+//	  UUID:           {model: github.com/syssam/velox2/contrib/graphql/veloxgql.UUID}
+//	  Bytes:          {model: github.com/syssam/velox2/contrib/graphql/veloxgql.Bytes}
+//	  JSON:           {model: github.com/syssam/velox2/contrib/graphql/veloxgql.JSON}
+//	  Uint64:         {model: github.com/syssam/velox2/contrib/graphql/veloxgql.Uint64}
+//	  Cursor:         {model: github.com/syssam/velox2/contrib/graphql/veloxgql.Cursor}
+//	  OrderDirection: {model: github.com/syssam/velox2/contrib/graphql/veloxgql.OrderDirection}
+//	  PageInfo:       {model: github.com/syssam/velox2/contrib/graphql/veloxgql.PageInfo}
+//
+// Uint64 is a decimal string on the wire both ways, since a JSON number loses
+// precision above 2^53 in many clients.
+//
+// # Limits
+//
+// MaxPage, MaxFilterDepth and MaxFilterWidth cap what a client may ask for.
+// They are variables an application may set at start-up, before it serves a
+// request.
+//
+// Nothing in the package runs at program start.
+package veloxgql
