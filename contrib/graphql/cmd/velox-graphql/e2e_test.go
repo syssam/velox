@@ -681,7 +681,7 @@ CREATE TABLE posts (id INTEGER PRIMARY KEY, author_id INTEGER NOT NULL, title TE
 CREATE TABLE "groups" (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
 CREATE TABLE user_groups (user_id INTEGER NOT NULL, group_id INTEGER NOT NULL, PRIMARY KEY (user_id, group_id));
 CREATE TABLE categories (id INTEGER PRIMARY KEY, title TEXT NOT NULL, mentor_id INTEGER, category_children INTEGER, category_twin INTEGER);
-CREATE TABLE owners (id INTEGER PRIMARY KEY, email TEXT, code TEXT NOT NULL, blob BLOB, ratio REAL NOT NULL,
+CREATE TABLE owners (id INTEGER PRIMARY KEY, email TEXT, code TEXT NOT NULL, tags TEXT NOT NULL, blob BLOB, ratio REAL NOT NULL,
 	tier TEXT NOT NULL, rank INTEGER NOT NULL);
 CREATE TABLE events (id TEXT PRIMARY KEY, kind TEXT NOT NULL, level TEXT NOT NULL, state TEXT NOT NULL, rank INTEGER NOT NULL,
 	size INTEGER NOT NULL, at DATETIME, done BOOLEAN NOT NULL, score REAL NOT NULL, ref TEXT NOT NULL, name TEXT NOT NULL,
@@ -691,7 +691,7 @@ INSERT INTO users VALUES (1, 7, 'ann', 'admin', '', 0, NULL), (2, 7, 'bob', 'adm
 INSERT INTO posts VALUES (1, 1, 'xa', ''), (2, 1, 'b', ''), (3, 2, 'c', ''), (4, 3, 'xz', '');
 INSERT INTO "groups" VALUES (1, 'g1'), (2, 'g2');
 INSERT INTO user_groups VALUES (1, 1), (2, 2);
-INSERT INTO owners VALUES (1, 'a@x', 'c1', NULL, 0, 'low', 1), (2, NULL, 'c2', NULL, 0, 'high', 2), (3, 'b@x', 'c3', NULL, 0, 'low', 3);
+INSERT INTO owners VALUES (1, 'a@x', 'c1', '["x","y"]', NULL, 0, 'low', 1), (2, NULL, 'c2', '[]', NULL, 0, 'high', 2), (3, 'b@x', 'c3', 'null', NULL, 0, 'low', 3);
 INSERT INTO categories VALUES (1, 'root', NULL, NULL, NULL), (2, 'kid', 1, 1, NULL), (3, 'kid2', NULL, 1, NULL), (4, 'kid3', 2, 1, NULL);
 ` + "`" + `
 
@@ -1175,6 +1175,34 @@ func TestWhereIDs(t *testing.T) {
 	}
 }
 
+// TestOwnerTags: Owner.tags, a json field, is read by velox from the JSON
+// text stored, and bound to the schema's JSON scalar by the
+// generated getter: the stored JSON (a JSON null for a nil slice) and one
+// velox wrote.
+func TestOwnerTags(t *testing.T) {
+	ctx, db := open(t)
+	tags := func(id ids.UserID) (veloxgql.JSON, error) {
+		o, err := db.Query[gen.Owner]().Where(gen.Owners.ID.EQ(id)).One(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return o.TagsGQL()
+	}
+	for id, want := range map[ids.UserID]string{1: ` + "`" + `["x","y"]` + "`" + `, 2: ` + "`" + `[]` + "`" + `, 3: ` + "`" + `null` + "`" + `} {
+		got, err := tags(id)
+		if err != nil || string(got) != want {
+			t.Errorf("owner %d: TagsGQL %q, %v, want %s", id, got, err, want)
+		}
+	}
+	w := gen.Owner{ID: 9, Code: "c9", Tags: []string{"w", "é"}, Ratio: 1, Tier: "low", Rank: 9}
+	if err := db.Insert(&w).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := tags(9); err != nil || string(got) != ` + "`" + `["w","é"]` + "`" + ` {
+		t.Errorf("a written owner: TagsGQL %q, %v", got, err)
+	}
+}
+
 // TestNodesUnderTheRowCap: Nodes reads one row for each ID it has, even
 // when that is more than the DB's WithMaxRows cap.
 func TestNodesUnderTheRowCap(t *testing.T) {
@@ -1213,13 +1241,7 @@ func TestWhereRun(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
-	// velox reads and writes no JSON column on SQLite (a []string does not
-	// scan), so the app's Owner has no tags: Owner's rows are read here.
-	event := strings.Replace(e2eEvent, "\t\tfield.Strings(\"tags\"),\n", "", 1)
-	if event == e2eEvent {
-		t.Fatal("e2eEvent has no tags field to leave out")
-	}
-	_, run := app(t, map[string]string{"schema/schema.go": e2eSchema, "schema/event.go": event, "levels/levels.go": e2eLevels, "ids/ids.go": e2eIDs, "where_test.go": e2eWhere})
+	_, run := app(t, map[string]string{"schema/schema.go": e2eSchema, "schema/event.go": e2eEvent, "levels/levels.go": e2eLevels, "ids/ids.go": e2eIDs, "where_test.go": e2eWhere})
 	if out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql", "./schema"); err != nil {
 		t.Fatalf("generate: %v\n%s", err, out)
 	}
@@ -1230,7 +1252,7 @@ func TestWhereRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
-	for _, name := range []string{"TestWhereOps", "TestHasEdge", "TestWhereLogic", "TestWhereDepthAndWidth", "TestWhereIDs", "TestNodesUnderTheRowCap"} {
+	for _, name := range []string{"TestWhereOps", "TestHasEdge", "TestWhereLogic", "TestWhereDepthAndWidth", "TestWhereIDs", "TestNodesUnderTheRowCap", "TestOwnerTags"} {
 		if !strings.Contains(out, "--- PASS: "+name+" ") {
 			t.Errorf("no PASS of %s in\n%s", name, out)
 		}

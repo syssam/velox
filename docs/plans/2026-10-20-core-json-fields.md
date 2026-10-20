@@ -43,8 +43,7 @@
 ## Rulings this plan makes
 
 1. **One flag, set by the generator.** `ColumnDesc.JSON bool` becomes `ColumnInfo.JSON bool`, set by velox-gen for every `json` field.
-   - **Amended 2026-10-20 (controller ruling, during Task 1):** the core never imports encoding/json, so a program whose entities hold no JSON does not link it. `ColumnDesc` carries the codec instead of a flag: `Encode func(v any) ([]byte, error)` and `Decode func(data []byte, v any) error`, which velox-gen sets to `json.Marshal` and `json.Unmarshal` for every `json` field (the generated file imports encoding/json). `ColumnInfo.JSON` is derived from `Encode != nil`, and the codec is kept unexported in `ColumnInfo`. A `Desc` with one of the two is refused with a `*SchemaError` naming the column. A hand-written `Desc` may plug in another codec. `ColumnDesc.JSON bool` is dropped.
-   - A hand-written `Desc` can set it too.
+   - **Amended 2026-10-20 (controller ruling, during Task 1), and its flag renamed `Codec` (Task 1 review):** the core never imports encoding/json, so a program whose entities hold no JSON does not link it. `ColumnDesc` carries the codec instead of a flag: `Encode func(v any) ([]byte, error)` and `Decode func(data []byte, v any) error`, which velox-gen sets to `json.Marshal` and `json.Unmarshal` for every `json` field (the generated file imports encoding/json). `ColumnInfo.Codec` (first named `JSON`) is derived from `Encode != nil`, and the codec is kept unexported in `ColumnInfo`. Any codec sets the flag, so it does not mean "JSON": the migration planner takes a column's database type from the schema's field type, not from it. A `Desc` with one of the two is refused with a `*SchemaError` naming the column. A hand-written `Desc` may plug in another codec. `ColumnDesc.JSON bool` is dropped.
    - The core never guesses JSON from the Go type, because a `[]byte` field is bytes, not JSON.
 2. **Encoding is a binding concern.** It happens where arguments are built for a column.
    - It does not happen in the entity, the handles or the hooks.
@@ -68,7 +67,7 @@
 
 **Files:**
 - Modify:
-  - `desc.go`: `ColumnDesc.JSON`, copied into `ColumnInfo.JSON`;
+  - `desc.go`: `ColumnDesc.Encode` and `Decode`, kept in `ColumnInfo` (flag `Codec`);
   - `meta.go`: the `ColumnInfo` field and its doc;
   - the argument building, wherever a statement's values become `Args` (render, insert rows, assignments, upserts, predicates);
   - the scanning (`scanRow`, the kit's scan, the `RETURNING` scan in `insert.go`).
@@ -79,7 +78,7 @@
   - `internal/gen` goldens.
 
 **Interfaces:**
-- Produces: `ColumnDesc.JSON bool` and `ColumnInfo.JSON bool`. Everything else is unexported.
+- Produces: `ColumnDesc.Encode` and `Decode`, and `ColumnInfo.Codec bool`. Everything else is unexported.
 
 - [ ] **Step 1: Write the failing tests.**
   - `TestJSONWrites` uses a `Desc` entity with `[]string`, `map[string]any`, a struct and a `*[]int` (nullable) JSON column. Through FakeExec it checks the bound args of:

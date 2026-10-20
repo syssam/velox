@@ -187,7 +187,7 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 		}
 		ci := ColumnInfo{Field: c.Field, Name: c.Name, Type: ft, Nullable: ft.Kind() == reflect.Pointer, SQLType: c.SQLType,
 			HasDefault: c.Default != nil, DefaultFunc: c.DefaultFunc, UpdateDefault: c.UpdateDefault,
-			Immutable: c.Immutable, Sensitive: c.Sensitive, JSON: c.Encode != nil, encode: c.Encode, decode: c.Decode, off: off}
+			Immutable: c.Immutable, Sensitive: c.Sensitive, Codec: c.Encode != nil, encode: c.Encode, decode: c.Decode, off: off}
 		if (c.Encode == nil) != (c.Decode == nil) {
 			return fail(c.Field, "column %s has one of Encode and Decode; a codec needs both", c.Name)
 		}

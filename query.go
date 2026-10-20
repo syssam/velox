@@ -144,10 +144,11 @@ func (q Query[E]) Omit[_ Lazy[E]](cs ...Column[E]) Query[E] {
 // page: keyset pagination, which unlike Offset neither skips nor repeats rows
 // when rows are added between pages, and costs the same on every page. The
 // query's OrderBy must include every column of the primary key or of a
-// unique index, and no column that can be NULL. x must be a row a query
-// returned: its values carry the columns' stored precision, which a value made
-// in memory (a time with nanoseconds in a column that keeps microseconds) may
-// not, and the comparison would then skip or repeat a row. Count applies
+// unique index, and no column that can be NULL or that is encoded (a json
+// field). x must be a row a query returned: its values carry the columns'
+// stored precision, which a value made in memory (a time with nanoseconds in
+// a column that keeps microseconds) may not, and the comparison would then
+// skip or repeat a row. Count applies
 // After's condition too.
 func (q Query[E]) After[_ Lazy[E]](x *E) Query[E] {
 	if x == nil {
@@ -181,6 +182,9 @@ func (q Query[E]) prepare[_ Lazy[E]]() (Statement, error) {
 	ordered := make(map[int]bool, len(st.OrderBy))
 	for _, o := range st.OrderBy {
 		col := in.Columns[o.Column]
+		if col.Codec {
+			return st, errCodecOrder(in, o.Column)
+		}
 		if col.Nullable {
 			return st, fmt.Errorf("velox: %s: After cannot page over the nullable column %s", in.Name, col.Name)
 		}

@@ -217,7 +217,8 @@ Left by the observability plan:
 
 ## Left by GraphQL plan 2
 
-- JSON fields are broken in velox core: values are bound raw (a `[]string` as is) and scanned raw, with no `json.Marshal`/`Unmarshal`. It becomes its own small core plan right after GraphQL plan 2 merges: the write path marshals and the scan path unmarshals, per dialect (`jsonb`/`json`/`TEXT`), with itests on all three. Until then the GraphQL tests and `example/graphql` have no JSON field.
+- Resolved in the core JSON-fields plan (2026-10-20, `2026-10-20-core-json-fields.md`): JSON fields are encoded on write and decoded on read through a codec velox-gen supplies, stored as `jsonb`, `JSON` and `TEXT`, with itests on PostgreSQL (pgx and database/sql), MySQL and SQLite, and `Owner.tags` back in the GraphQL e2e. `example/graphql` still declares no JSON field.
+- JSON path predicates: a condition on a JSON column other than `IsNull`/`NotNull` is refused; querying inside a document (`->`, `JSON_EXTRACT`, `json_extract`) is a follow-up, per dialect. On SQLite the bytes velox binds are stored as a BLOB in the TEXT column (`typeof` says `blob`, as the itests log), which SQLite's JSON functions may read as JSONB, not text: the path predicates there must cast (`CAST(col AS TEXT)`), or the binding must pass a string.
 - Custom time Go types are refused by velox-graphql in v1: `plugin.Field.Kind` cannot tell a defined type (`type Stamp time.Time`) from a wrapper, so such a field must expose the standard type. Support them with a conversion the model can describe.
 - Binding application enums with `@goModel` (see "For GraphQL plan 2").
 - `example/graphql` declares no mutations: they arrive with GraphQL plan 3, and the example gains them then.

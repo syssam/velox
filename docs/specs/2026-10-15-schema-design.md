@@ -95,6 +95,11 @@ Options, which carry their ent meanings:
 - `Tenant()` marks the tenant column (policy design §2.1). It must be required, not `Nillable`, and of a comparable type, and it may have no `Default` or `UpdateDefault`.
 - `GoType(T)` uses a named Go type for the field.
 
+**JSON fields (note of 2026-10-20).** A `JSON` field is stored as JSON text, in `jsonb` on PostgreSQL, `JSON` on MySQL and `TEXT` on SQLite. The plan is `docs/plans/2026-10-20-core-json-fields.md`; its rulings are:
+- **One codec, supplied by the generator.** velox-gen writes `Encode: json.Marshal` and `Decode: json.Unmarshal` into the `ColumnDesc` of every `json` field (the generated file imports encoding/json). The core never imports encoding/json, so a program whose entities hold no JSON does not link it. `ColumnInfo.Codec` is true for a column with a codec; it says nothing of the database type, which the migration planner takes from the field type. A hand-written `Desc` may plug in another codec, and a `Desc` with only one of the two is refused. The core never guesses JSON from a Go type, because a `[]byte` field is bytes.
+- **Encoding is a binding concern.** The value is encoded where the arguments for a column are built and bound as `[]byte`, which every dialect accepts. Hooks and policies see Go values, and only `Statement.Args` holds the bytes. A nil pointer, or a nil slice or map in a nullable field, binds SQL NULL; a nil slice or map in a field that is not a pointer binds the JSON `null` (as ent does) and reads back as nil. Reading decodes `[]byte` or `string`; SQL NULL leaves a pointer nil and any other field at its zero value; a value that does not decode fails with an error naming the entity and the column.
+- **Conditions are refused.** `EQ`, `NEQ`, `In`, `NotIn`, the ordering and text predicates on a JSON column fail when the statement runs, naming the column, because equality differs by dialect (jsonb normalises JSON, TEXT does not). So does keyset paging ordered by one, and `Add` or `Sub` in an update. `IsNull` and `NotNull` work (SQL NULL only, not the JSON `null`). JSON path predicates are a follow-up.
+
 **Validators** compile into the generated code and run before every insert and update that assigns the field:
 - `NotEmpty`, `MinLen`, `MaxLen`, `Match(re)`;
 - `Range`, `Min`, `Max`, `Positive`, `NonNegative`;

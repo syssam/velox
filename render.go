@@ -64,10 +64,10 @@ func (w *writer) arg(v any) {
 }
 
 // colArg binds v, a value of column col: as it is, or as the bytes of its
-// JSON when the column holds JSON. Every value written to a column goes
+// JSON when the column is an encoded one. Every value written to a column goes
 // through it, so that only the arguments hold the bytes (hooks see v).
 func (w *writer) colArg(col int, v any) {
-	if w.in.Columns[col].JSON {
+	if w.in.Columns[col].Codec {
 		b, err := encodeJSON(w.in, col, v)
 		if err != nil {
 			w.fail(err)
@@ -141,7 +141,7 @@ func isNilArg(v any) bool {
 }
 
 func (w *writer) pred(n node) {
-	if n.op >= opEQ && n.op <= opFold && w.in.Columns[n.col].JSON {
+	if n.op >= opEQ && n.op <= opFold && w.in.Columns[n.col].Codec {
 		// Every condition that holds a value; IsNull and NotNull hold none.
 		w.fail(errJSONCondition(w.in, int(n.col)))
 	}
@@ -447,8 +447,8 @@ func (w *writer) updateStmt(st *Statement) {
 			w.col(int32(a.Column))
 			w.str(" - ")
 		}
-		if a.Op != AssignSet && w.in.Columns[a.Column].JSON {
-			w.fail(fmt.Errorf("velox: %s: column %s holds JSON, which cannot be added to or subtracted from", w.in.Name, w.in.Columns[a.Column].Name))
+		if a.Op != AssignSet && w.in.Columns[a.Column].Codec {
+			w.fail(errCodecAdd(w.in, a.Column))
 		}
 		w.colArg(a.Column, a.Value)
 	}

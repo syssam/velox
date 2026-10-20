@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -290,7 +291,7 @@ func TestJSONWrites(t *testing.T) {
 	t.Run("AddRefused", func(t *testing.T) {
 		db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Affected: 1})
 		st := &velox.Statement{Op: velox.OpUpdate, Entity: velox.InfoOf[jDoc](), Set: []velox.Assignment{{Column: 2, Op: velox.AssignAdd, Value: 1}}, AllRows: true}
-		if _, _, err := velox.DryRun(db, ctx, st); err == nil || !strings.Contains(err.Error(), "tags") {
+		if _, _, err := velox.DryRun(db, ctx, st); err == nil || !strings.Contains(err.Error(), "tags") || !strings.Contains(err.Error(), "an encoded column") {
 			t.Fatalf("Add on a JSON column: %v", err)
 		}
 	})
@@ -406,7 +407,7 @@ func TestJSONPredicatesRefused(t *testing.T) {
 	db := velox.OpenFake(velox.Postgres, e)
 	refused := func(what string, err error) {
 		t.Helper()
-		if err == nil || !strings.Contains(err.Error(), `tags`) || !strings.Contains(err.Error(), "JSON") {
+		if err == nil || !strings.Contains(err.Error(), `tags`) || !strings.Contains(err.Error(), "an encoded column") {
 			t.Errorf("%s: got %v, want the column refused", what, err)
 		}
 	}
@@ -605,7 +606,107 @@ func TestCodecNeedsBoth(t *testing.T) {
 			t.Errorf("got %v, want a *SchemaError naming the column", err)
 		}
 	}
-	if info := velox.InfoOf[jList](); info.Columns[0].JSON || !info.Columns[1].JSON {
+	if info := velox.InfoOf[jList](); info.Columns[0].Codec || !info.Columns[1].Codec {
 		t.Errorf("JSON is not derived from the codec: %+v", info.Columns)
+	}
+}
+
+// jStamp has an encoded column that every update writes: its UpdateDefault.
+type jStamp struct {
+	ID   int64
+	Hist []string
+}
+
+var jStamps = struct {
+	ID   velox.NumberCol[jStamp, int64]
+	Hist velox.Col[jStamp, []string]
+}{velox.NumberCol[jStamp, int64]{I: 0}, velox.Col[jStamp, []string]{I: 1}}
+
+var jStampMeta velox.MetaOnce[jStamp]
+
+func (*jStamp) VeloxMeta() *velox.Meta[jStamp] {
+	return jStampMeta.Load(func() velox.Desc[jStamp] {
+		return velox.Desc[jStamp]{
+			Table: "j_stamps",
+			Columns: []velox.ColumnDesc{
+				{Field: "ID", Name: "id"},
+				{Field: "Hist", Name: "hist", Encode: json.Marshal, Decode: json.Unmarshal, UpdateDefault: func() any { return []string{"u"} }},
+			},
+			PrimaryKey: []int{0},
+			Tenant:     -1,
+			Addr: func(x *jStamp, i int) any {
+				if i == 0 {
+					return &x.ID
+				}
+				return &x.Hist
+			},
+		}
+	})
+}
+
+// TestJSONUpdateDefault: an update fills the encoded column with its
+// UpdateDefault, encoded; naming the column keeps the default out.
+func TestJSONUpdateDefault(t *testing.T) {
+	e := &velox.FakeExec{Affected: 1}
+	db := velox.OpenFake(velox.Postgres, e)
+	if _, err := db.Update[jStamp]().Set(jStamps.ID.Set(2)).Where(jStamps.ID.EQ(1)).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(e.SQL, `"hist" = `) {
+		t.Fatalf("the UpdateDefault did not fire: %s", e.SQL)
+	}
+	sameArgs(t, "UpdateDefault", e.Args, []any{int64(2), []byte(`["u"]`), int64(1)})
+	if _, err := db.Update[jStamp]().Set(jStamps.Hist.Set([]string{"x"})).Where(jStamps.ID.EQ(1)).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	sameArgs(t, "an explicit value", e.Args, []any{[]byte(`["x"]`), int64(1)})
+	x := jStamp{ID: 1}
+	if err := db.Save(ctx, &x, jStamps.ID); err != nil {
+		t.Fatal(err)
+	}
+	sameArgs(t, "Save", e.Args, []any{int64(1), []byte(`["u"]`), int64(1)})
+}
+
+// TestCodecFlagWithoutCodec: an EntityInfo a hook built with Codec set on a
+// column that has no codec fails the write, naming the column, as does a
+// value a hook set to an untyped nil in a column that has one: NULL.
+func TestCodecFlagWithoutCodec(t *testing.T) {
+	e := &velox.FakeExec{Affected: 1}
+	db := velox.OpenFake(velox.Postgres, e)
+	in := *velox.InfoOf[jDoc]()
+	in.Columns = slices.Clone(in.Columns)
+	in.Columns[1].Codec = true // owner_id: no Encode or Decode
+	st := &velox.Statement{Op: velox.OpUpdate, Entity: &in, Set: []velox.Assignment{{Column: 1, Op: velox.AssignSet, Value: int64(7)}}, AllRows: true}
+	_, _, err := velox.DryRun(db, ctx, st)
+	if err == nil || !strings.Contains(err.Error(), "owner_id") || !strings.Contains(err.Error(), "no Encode and Decode") {
+		t.Fatalf("got %v, want an error naming the column and the missing codec", err)
+	}
+	// An untyped nil binds NULL, in a column that is not nullable too.
+	st = &velox.Statement{Op: velox.OpUpdate, Entity: velox.InfoOf[jDoc](), Set: []velox.Assignment{{Column: 2, Op: velox.AssignSet, Value: nil}}, AllRows: true}
+	_, args, err := velox.DryRun(db, ctx, st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sameArgs(t, "an untyped nil", args, []any{nil})
+}
+
+// TestAfterOverAnEncodedColumn: keyset paging ordered by an encoded column
+// is refused, naming the order column; a struct column is neither nullable
+// nor a slice or map, so it is not caught by the checks before it.
+func TestAfterOverAnEncodedColumn(t *testing.T) {
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{})
+	last := jDoc{ID: 1}
+	for _, c := range []struct {
+		name string
+		by   velox.Order[jDoc]
+	}{{"shape", jDocs.Shape.Asc()}, {"tags", jDocs.Tags.Asc()}, {"nums", jDocs.Nums.Asc()}} {
+		name := c.name
+		_, _, err := db.Query[jDoc]().OrderBy(c.by, jDocs.ID.Asc()).After(&last).Limit(2).SQL(ctx)
+		if err == nil || !strings.Contains(err.Error(), "After") || !strings.Contains(err.Error(), "column "+name) || !strings.Contains(err.Error(), "an encoded column") {
+			t.Errorf("%s: got %v, want After refused naming the column", name, err)
+		}
+	}
+	if _, _, err := db.Query[jDoc]().OrderBy(jDocs.ID.Asc()).After(&last).Limit(2).SQL(ctx); err != nil {
+		t.Errorf("paging over the key: %v", err)
 	}
 }

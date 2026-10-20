@@ -46,11 +46,11 @@ func encodeJSON(in *EntityInfo, col int, v any) (any, error) {
 	return b, nil
 }
 
-// errNoCodec is the error for a column marked JSON without its codec: an
-// EntityInfo a hook built or edited, as buildDesc refuses a Desc that gives
-// only one of Encode and Decode.
+// errNoCodec is the error for a column flagged as encoded (ColumnInfo.Codec)
+// without its codec: an EntityInfo a hook built or edited, as buildDesc
+// refuses a Desc that gives only one of Encode and Decode.
 func errNoCodec(in *EntityInfo, col int) error {
-	return fmt.Errorf("velox: %s: column %s is marked JSON but has no Encode and Decode", in.Name, in.Columns[col].Name)
+	return fmt.Errorf("velox: %s: column %s is an encoded column (Codec) but has no Encode and Decode", in.Name, in.Columns[col].Name)
 }
 
 // codecScanner scans an encoded column into its field: it is the scan
@@ -66,7 +66,7 @@ type codecScanner struct {
 // codecScanner decoding into it, the one allocation such a column costs a
 // row.
 func scanDst(in *EntityInfo, col int, addr any) any {
-	if !in.Columns[col].JSON {
+	if !in.Columns[col].Codec {
 		return addr
 	}
 	return &codecScanner{dst: addr, in: in, col: col}
@@ -110,5 +110,17 @@ func (s *codecScanner) Scan(src any) error {
 // column col of in: equality of encoded values differs by dialect (jsonb
 // normalises JSON, TEXT does not), so only IsNull and NotNull are allowed.
 func errJSONCondition(in *EntityInfo, col int) error {
-	return fmt.Errorf("velox: %s: column %s holds encoded values (JSON), which a condition cannot compare: their equality differs by dialect; only IsNull and NotNull apply to it", in.Name, in.Columns[col].Name)
+	return fmt.Errorf("velox: %s: column %s is an encoded column (JSON in velox-gen), which a condition cannot compare: their equality differs by dialect; only IsNull and NotNull apply to it", in.Name, in.Columns[col].Name)
+}
+
+// errCodecAdd is the error for adding to or subtracting from the encoded
+// column col of in.
+func errCodecAdd(in *EntityInfo, col int) error {
+	return fmt.Errorf("velox: %s: column %s is an encoded column, which cannot be added to or subtracted from", in.Name, in.Columns[col].Name)
+}
+
+// errCodecOrder is the error for paging After over the encoded column col of
+// in: no condition can compare it.
+func errCodecOrder(in *EntityInfo, col int) error {
+	return fmt.Errorf("velox: %s: After cannot page over the column %s, an encoded column (JSON in velox-gen): a condition cannot compare it", in.Name, in.Columns[col].Name)
 }

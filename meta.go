@@ -67,18 +67,21 @@ type ColumnInfo struct {
 	UpdateDefault func() any
 	Immutable     bool // an update may not assign the column
 	Sensitive     bool // the column holds a secret (velox logs no values)
-	// JSON says the column's value is encoded: its ColumnDesc gave a codec
+	// Codec says the column's value is encoded: its ColumnDesc gave a codec
 	// (Encode and Decode), as velox-gen does, with encoding/json's, for every
 	// json field. The value is bound as the bytes Encode returns, and only
 	// there: hooks and policies see the Go value, and only Statement.Args
 	// holds the bytes. In a nullable (pointer) field, a nil pointer, or a nil
 	// slice or map it points to, binds NULL; in any other field a nil slice
-	// or map is encoded (the JSON null, which reads back as nil). What is
-	// read, as []byte or string, is decoded with Decode; NULL leaves the
+	// or map is encoded (the JSON null, which reads back as nil). An untyped
+	// nil, which only a hook-built value can be, binds NULL in either. What
+	// is read, as []byte or string, is decoded with Decode; NULL leaves the
 	// field at its zero value (nil, for a pointer). A condition other than
 	// IsNull and NotNull on the column is refused when the statement runs:
-	// equality of encoded values differs by dialect.
-	JSON   bool
+	// equality of encoded values differs by dialect. The flag says nothing
+	// of the database type: the migration planner takes that from the
+	// schema's field type.
+	Codec  bool
 	encode func(v any) ([]byte, error)    // ColumnDesc.Encode
 	decode func(data []byte, v any) error // ColumnDesc.Decode
 	off    uintptr                        // the field's offset in the entity
