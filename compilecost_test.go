@@ -114,7 +114,7 @@ func Use(ctx context.Context, db *velox.DB, e *E) error {
 	if err := db.Insert(e).Exec(ctx); err != nil {
 		return err
 	}
-	if err := db.Save(ctx, e); err != nil {
+	if err := db.Save(e, eName).Exec(ctx); err != nil {
 		return err
 	}
 	if _, err := db.Update[E]().Set(eName.Set("x")).Where(eID.EQ(1)).Exec(ctx); err != nil {

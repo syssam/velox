@@ -24,7 +24,7 @@ db.Query[gen.User]().Where(U.Name.HasPrefix("B")).Count(ctx)
 for u, err := range db.Query[gen.User]().Unbounded().Iter(ctx) { … }
 
 db.Update[gen.User]().Set(U.Age.Add(1)).Where(U.Name.In("Ada", "Linus")).Exec(ctx)
-db.Save(ctx, grace, U.Email)                     // the named columns of a loaded struct
+db.Save(grace, U.Email).Exec(ctx)               // the named columns of a loaded struct
 db.Delete[gen.User]().Where(U.Age.LT(30)).Exec(ctx)
 ```
 

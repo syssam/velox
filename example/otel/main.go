@@ -53,7 +53,7 @@ func pay(ctx context.Context, db *velox.DB, number string) error {
 			return err
 		}
 		inv.Status = gen.InvoiceStatusPaid
-		return tx.Save(ctx, inv, I.Status)
+		return tx.Save(inv, I.Status).Exec(ctx)
 	})
 }
 

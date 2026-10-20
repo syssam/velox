@@ -41,11 +41,11 @@ func TestUpdateValidatesAndRefusesImmutable(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 	a := dAuthor{ID: 1, OrgID: 7, Name: "ada", CreatedAt: time.Now()}
-	if err := db.Save(tctx, &a, dAuthors.CreatedAt); !errors.Is(err, velox.ErrImmutable) {
+	if err := db.Save(&a, dAuthors.CreatedAt).Exec(tctx); !errors.Is(err, velox.ErrImmutable) {
 		t.Fatalf("Save: %v", err)
 	}
 	a.Name = ""
-	if err := db.Save(tctx, &a, dAuthors.Name); !errors.As(err, &ve) {
+	if err := db.Save(&a, dAuthors.Name).Exec(tctx); !errors.As(err, &ve) {
 		t.Fatalf("Save validates: %v", err)
 	}
 	if err := db.Insert(&dAuthor{Name: "ada"}).OnConflict(dAuthors.ID).Update(dAuthors.CreatedAt).Exec(tctx); !errors.Is(err, velox.ErrImmutable) {

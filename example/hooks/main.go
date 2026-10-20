@@ -114,7 +114,7 @@ func run(ctx context.Context, w io.Writer) error {
 	// Save runs the update hook as well, then stores every value it sent
 	// into the struct: the slug the hook set included.
 	readme.Title = "Write the docs"
-	if err := db.Save(ada, &readme, T.Title); err != nil {
+	if err := db.Save(&readme, T.Title).Exec(ada); err != nil {
 		return err
 	}
 	say("Save: title %q, slug %q", readme.Title, readme.Slug)

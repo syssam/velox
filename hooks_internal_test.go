@@ -19,7 +19,7 @@ func TestMutationSetReplacesAndAppends(t *testing.T) {
 		return nil
 	})
 	x := hnote{ID: 1, Title: "t", Note: "old"}
-	if err := db.Save(ctx, &x, hn.Title); err != nil {
+	if err := db.Save(&x, hn.Title).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if e.SQL != `UPDATE "hnotes" SET "title" = $1, "note" = $2 WHERE "id" = $3` {
@@ -31,11 +31,11 @@ func TestMutationSetReplacesAndAppends(t *testing.T) {
 	// After an error, and when no row matched, *x is as it was.
 	x = hnote{ID: 1, Title: "t", Note: "old"}
 	e.Errs = []error{errors.New("boom")}
-	if err := db.Save(ctx, &x, hn.Title); err == nil {
+	if err := db.Save(&x, hn.Title).Exec(ctx); err == nil {
 		t.Fatal("no error")
 	}
 	e.Affected = 0
-	if err := db.Save(ctx, &x, hn.Title); !errors.Is(err, ErrNotFound) {
+	if err := db.Save(&x, hn.Title).Exec(ctx); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("got %v", err)
 	}
 	if x.Title != "t" || x.Note != "old" {
@@ -63,7 +63,7 @@ func TestSaveStoresWhatItSent(t *testing.T) {
 		m.Set(hn.Note.Set("n"), hn.Due.SetNull())
 		return nil
 	})
-	if err := db.Save(ctx, &x, hn.Title); err != nil {
+	if err := db.Save(&x, hn.Title).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if x.Note != "old" || x.Due != nil {
@@ -73,7 +73,7 @@ func TestSaveStoresWhatItSent(t *testing.T) {
 		m.Set(hn.Due.Set(7))
 		return nil
 	})
-	if err := db.Save(ctx, &x, hn.Title); err != nil {
+	if err := db.Save(&x, hn.Title).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if x.Due == nil || *x.Due != 7 || five != 5 {
@@ -159,5 +159,26 @@ func TestMutationErrors(t *testing.T) {
 	}
 	if e.Calls != 0 {
 		t.Errorf("%d statements sent", e.Calls)
+	}
+}
+
+// TestSaveWhereIsTheStatementsWhere: the conditions of Where are the
+// statement's, so a hook's own come after them.
+func TestSaveWhereIsTheStatementsWhere(t *testing.T) {
+	e := &FakeExec{Affected: 1}
+	db := OpenFake(Postgres, e)
+	ctx := withHook(func(m *Mutation[hnote]) error {
+		m.Where(hn.Note.EQ("hook"))
+		return nil
+	})
+	x := hnote{ID: 1, Title: "t"}
+	if err := db.Save(&x, hn.Title).Where(hn.Note.EQ("caller")).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if want := `UPDATE "hnotes" SET "title" = $1 WHERE "id" = $2 AND "note" = $3 AND "note" = $4`; e.SQL != want {
+		t.Errorf("\n got %s\nwant %s", e.SQL, want)
+	}
+	if e.Args[2] != "caller" || e.Args[3] != "hook" {
+		t.Errorf("args %v", e.Args)
 	}
 }

@@ -84,7 +84,7 @@ scope are a few branches.
 
 ### 1.1 `SQL(ctx)`
 
-`Query.SQL`, `InsertQuery.SQL`, `UpdateQuery.SQL` and `DeleteQuery.SQL` take a
+`Query.SQL`, `InsertQuery.SQL`, `UpdateQuery.SQL`, `DeleteQuery.SQL` and `SaveQuery.SQL` take a
 context: `SQL(ctx context.Context) (string, []any, error)`. It runs every stage
 except execute: guard, entity hooks, rewrite, scope, row cap, render. It prints
 exactly what would be sent for that context, and returns the error the

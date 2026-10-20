@@ -415,7 +415,7 @@ func TestJSONSave(t *testing.T) {
 		x.Attrs = nil
 		x.Shape = jShape{W: 8}
 		x.Nums = nil
-		if err := tg.db.Save(ctx, &x, JR.Tags, JR.Attrs, JR.Nums); err != nil {
+		if err := tg.db.Save(&x, JR.Tags, JR.Attrs, JR.Nums).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
 		// The shape was not named: it keeps the stored value.
@@ -425,7 +425,7 @@ func TestJSONSave(t *testing.T) {
 		wantRaw(t, tg, "tags", 1, `["a","é<>&\"\\","😀\u2028","more"]`)
 		wantRaw(t, tg, "attrs", 1, "null")
 		wantSQLNull(t, tg, "nums", 1)
-		if err := tg.db.Save(ctx, &x, JR.Shape, JR.Nums); err != nil {
+		if err := tg.db.Save(&x, JR.Shape, JR.Nums).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
 		wantRaw(t, tg, "shape", 1, `{"w":8,"h":0}`)

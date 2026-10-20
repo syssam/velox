@@ -217,7 +217,7 @@ func TestJSONWrites(t *testing.T) {
 		e := &velox.FakeExec{Affected: 1}
 		db := velox.OpenFake(velox.Postgres, e)
 		x, _ := jFull()
-		if err := db.Save(ctx, &x, jDocs.Tags, jDocs.Attrs, jDocs.Nums); err != nil {
+		if err := db.Save(&x, jDocs.Tags, jDocs.Attrs, jDocs.Nums).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
 		if !strings.HasPrefix(e.SQL, `UPDATE "j_docs" SET "tags" = $1, "attrs" = $2, "nums" = $3 WHERE "id" = $4`) {
@@ -229,7 +229,7 @@ func TestJSONWrites(t *testing.T) {
 			t.Errorf("Save stored %+v", x)
 		}
 		x.Nums = nil
-		if err := db.Save(ctx, &x, jDocs.Nums); err != nil {
+		if err := db.Save(&x, jDocs.Nums).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
 		sameArgs(t, "Save of nil", e.Args, []any{nil, int64(1)})
@@ -688,7 +688,7 @@ func TestJSONUpdateDefault(t *testing.T) {
 	}
 	sameArgs(t, "an explicit value", e.Args, []any{[]byte(`["x"]`), int64(1)})
 	x := jStamp{ID: 1}
-	if err := db.Save(ctx, &x, jStamps.ID); err != nil {
+	if err := db.Save(&x, jStamps.ID).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
 	sameArgs(t, "Save", e.Args, []any{int64(1), []byte(`["u"]`), int64(1)})
@@ -847,7 +847,7 @@ func TestJSONHandles(t *testing.T) {
 	}
 	sameArgs(t, "Set and SetNull", e.Args, []any{[]byte(`["x"]`), []byte(`{"w":1,"h":2}`), nil, int64(1)})
 	x, _ := jFull()
-	if err := db.Save(ctx, &x, jDocs.Attrs, jDocs.Nums); err != nil {
+	if err := db.Save(&x, jDocs.Attrs, jDocs.Nums).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.HasPrefix(e.SQL, `UPDATE "j_docs" SET "attrs" = $1, "nums" = $2 WHERE "id" = $3`) {

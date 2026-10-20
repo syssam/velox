@@ -10,8 +10,8 @@ import (
 // "velox: <Entity>: ", so a sentinel's own text is a bare phrase; test for them
 // with errors.Is.
 var (
-	// ErrNotFound is returned by One when it finds no row, and by Save when no
-	// row has the key.
+	// ErrNotFound is returned by One when it finds no row, and by a Save's Exec
+	// when no row has the key and meets the Where conditions.
 	ErrNotFound = errors.New("not found")
 	// ErrNotSingular is returned by One when it finds more than one row.
 	ErrNotSingular = errors.New("more than one row")

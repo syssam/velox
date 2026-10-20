@@ -3,6 +3,7 @@ package itest
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -109,7 +110,7 @@ func TestUpdateDeleteSave(t *testing.T) {
 			t.Fatalf("%+v, %v", one, err)
 		}
 		one.Number = "CHANGED"
-		if err := tg.db.Save(ctx, one, I.Number); err != nil {
+		if err := tg.db.Save(one, I.Number).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}
 		again, err := tg.db.Query[testmodel.Invoice]().Where(I.ID.EQ(2)).One(ctx)
@@ -119,12 +120,12 @@ func TestUpdateDeleteSave(t *testing.T) {
 		// Naming UpdatedAt keeps its UpdateDefault from firing, so every value sent equals
 		// the stored one (one.UpdatedAt is what the first Save sent) and the row
 		// is matched but not changed: only clientFoundRows makes MySQL count it.
-		if err := tg.db.Save(ctx, one, I.Number, I.UpdatedAt); err != nil {
+		if err := tg.db.Save(one, I.Number, I.UpdatedAt).Exec(ctx); err != nil {
 			t.Errorf("saving unchanged values must still find the row (clientFoundRows on MySQL): %v", err)
 		}
 		missing := newInvoice(1, "X")
 		missing.ID = 999
-		if err := tg.db.Save(ctx, &missing, I.Number); !errors.Is(err, velox.ErrNotFound) {
+		if err := tg.db.Save(&missing, I.Number).Exec(ctx); !errors.Is(err, velox.ErrNotFound) {
 			t.Errorf("missing row: %v", err)
 		}
 		n, err = tg.db.Delete[testmodel.Invoice]().Where(I.ID.EQ(5)).Exec(ctx)
@@ -184,4 +185,50 @@ func numbers(t *testing.T, tg target, org int64) []string {
 		out[i] = got[i].Number
 	}
 	return out
+}
+
+// TestSaveBuilder: Where makes a Save conditional, which is optimistic
+// locking: a stale value gives ErrNotFound, and neither the row nor *x
+// changes. SQL(ctx) renders the statement and writes nothing.
+func TestSaveBuilder(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		mine, err := tg.db.Query[testmodel.Invoice]().Where(I.ID.EQ(2)).One(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		stale := mine.Total
+		// Another writer moves the total.
+		if _, err := tg.db.Update[testmodel.Invoice]().Set(I.Total.Add(1)).Where(I.ID.EQ(2)).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		mine.Number = "STALE"
+		before := *mine
+		err = tg.db.Save(mine, I.Number).Where(I.Total.EQ(stale)).Exec(ctx)
+		if !errors.Is(err, velox.ErrNotFound) {
+			t.Fatalf("stale write: %v", err)
+		}
+		if !reflect.DeepEqual(*mine, before) {
+			t.Errorf("a failed Save changed *x: %+v", mine)
+		}
+		row, err := tg.db.Query[testmodel.Invoice]().Where(I.ID.EQ(2)).One(ctx)
+		if err != nil || row.Number == "STALE" || row.Total != stale+1 {
+			t.Fatalf("the row changed: %+v, %v", row, err)
+		}
+
+		// SQL(ctx) writes nothing, whether the condition holds or not.
+		if _, _, err := tg.db.Save(mine, I.Number).Where(I.Total.EQ(row.Total)).SQL(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if row, _ := tg.db.Query[testmodel.Invoice]().Where(I.ID.EQ(2)).One(ctx); row.Number == "STALE" {
+			t.Fatal("SQL(ctx) wrote the row")
+		}
+
+		// With the current value, the write goes through.
+		if err := tg.db.Save(mine, I.Number).Where(I.Total.EQ(row.Total)).Exec(ctx); err != nil {
+			t.Fatalf("current write: %v", err)
+		}
+		if row, err := tg.db.Query[testmodel.Invoice]().Where(I.ID.EQ(2)).One(ctx); err != nil || row.Number != "STALE" {
+			t.Errorf("%+v, %v", row, err)
+		}
+	})
 }

@@ -291,7 +291,7 @@ func TestSaveOfAHiddenRow(t *testing.T) {
 	e := &velox.FakeExec{Affected: 0}
 	db := velox.OpenFake(velox.Postgres, e)
 	tk := testmodel.Ticket{ID: 1, OrgID: 1, Owner: "bob", Title: "T-1"}
-	err := db.Save(asUser("ann"), &tk, Tk.Title)
+	err := db.Save(&tk, Tk.Title).Exec(asUser("ann"))
 	if !errors.Is(err, velox.ErrNotFound) {
 		t.Fatalf("got %v", err)
 	}

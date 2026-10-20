@@ -19,7 +19,7 @@ func TestUpdateHookRefusesAnEmptyTitle(t *testing.T) {
 	}
 	// Save runs the hook too, and leaves *x as it was.
 	tk := testmodel.Ticket{ID: 1, OrgID: 1, Owner: "ann"}
-	if err := db.Save(asUser("admin"), &tk, Tk.Title); err == nil || err.Error() != text {
+	if err := db.Save(&tk, Tk.Title).Exec(asUser("admin")); err == nil || err.Error() != text {
 		t.Errorf("Save: %v", err)
 	}
 	if e.Calls != 0 {

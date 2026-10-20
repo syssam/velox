@@ -142,6 +142,15 @@ func TestDryRunSendsNoWrite(t *testing.T) {
 				return err
 			},
 			`UPDATE "daudited"`},
+		{"Save",
+			func(ctx context.Context, db *velox.DB) (string, error) {
+				s, _, err := db.Save(&daudited{ID: 1, Owner: "x"}, dauditedOwner).SQL(ctx)
+				return s, err
+			},
+			func(ctx context.Context, db *velox.DB) error {
+				return db.Save(&daudited{ID: 1, Owner: "x"}, dauditedOwner).Exec(ctx)
+			},
+			`UPDATE "daudited"`},
 		{"Delete",
 			func(ctx context.Context, db *velox.DB) (string, error) {
 				s, _, err := db.Delete[daudited]().Where(dauditedID.EQ(1)).SQL(ctx)
@@ -216,7 +225,7 @@ func TestDryRunRefusesEveryWrite(t *testing.T) {
 			_, err := db.Delete[dnote]().Where(dnoteID.EQ(1)).Exec(dry)
 			return err
 		},
-		"Save": func() error { return db.Save(dry, &dnote{ID: 1, Owner: "x"}, owner) },
+		"Save": func() error { return db.Save(&dnote{ID: 1, Owner: "x"}, owner).Exec(dry) },
 		"Tx": func() error {
 			return db.Tx(dry, func(context.Context, *velox.DB) error {
 				t.Error("fn of a Tx under a dry run ran")

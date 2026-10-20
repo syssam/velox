@@ -76,7 +76,7 @@ func TestSave(t *testing.T) {
 	e := &velox.FakeExec{Affected: 1}
 	db := velox.OpenFake(velox.Postgres, e)
 	inv := testmodel.Invoice{ID: 3, Number: "X"}
-	if err := db.Save(ctx, &inv, I.Number); err != nil {
+	if err := db.Save(&inv, I.Number).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if want := `UPDATE "invoices" SET "number" = $1, "updated_at" = $2 WHERE "id" = $3`; e.SQL != want {
@@ -86,11 +86,8 @@ func TestSave(t *testing.T) {
 		t.Errorf("args %v, UpdatedAt %v", e.Args, inv.UpdatedAt)
 	}
 	e.Affected = 0
-	if err := db.Save(ctx, &inv, I.Number); !errors.Is(err, velox.ErrNotFound) {
+	if err := db.Save(&inv, I.Number).Exec(ctx); !errors.Is(err, velox.ErrNotFound) {
 		t.Errorf("no row: %v", err)
-	}
-	if err := db.Save(ctx, &inv); err == nil || !strings.Contains(err.Error(), "Save names no columns") {
-		t.Errorf("no columns: %v", err)
 	}
 }
 
@@ -100,7 +97,7 @@ func TestSaveStoresUpdateDefaultOnlyAfterSuccess(t *testing.T) {
 	inv := testmodel.Invoice{ID: 3, Number: "X", UpdatedAt: t0}
 
 	e.Err = errors.New("boom")
-	if err := db.Save(ctx, &inv, I.Number); err == nil {
+	if err := db.Save(&inv, I.Number).Exec(ctx); err == nil {
 		t.Fatal("want the driver's error")
 	}
 	if !inv.UpdatedAt.Equal(t0) {
@@ -108,7 +105,7 @@ func TestSaveStoresUpdateDefaultOnlyAfterSuccess(t *testing.T) {
 	}
 
 	e.Err, e.Affected = nil, 0
-	if err := db.Save(ctx, &inv, I.Number); !errors.Is(err, velox.ErrNotFound) {
+	if err := db.Save(&inv, I.Number).Exec(ctx); !errors.Is(err, velox.ErrNotFound) {
 		t.Fatalf("no row: %v", err)
 	}
 	if !inv.UpdatedAt.Equal(t0) {
@@ -116,7 +113,7 @@ func TestSaveStoresUpdateDefaultOnlyAfterSuccess(t *testing.T) {
 	}
 
 	e.Affected = 1
-	if err := db.Save(ctx, &inv, I.Number); err != nil {
+	if err := db.Save(&inv, I.Number).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if inv.UpdatedAt.Equal(t0) || e.Args[1] != inv.UpdatedAt {
@@ -129,7 +126,7 @@ func TestAColumnAssignedTwiceIsRefused(t *testing.T) {
 	db := velox.OpenFake(velox.Postgres, e)
 	inv := testmodel.Invoice{ID: 3}
 	want := "velox: testmodel.Invoice: column number is assigned twice"
-	if err := db.Save(ctx, &inv, I.Number, I.Number); err == nil || err.Error() != want || e.Calls != 0 {
+	if err := db.Save(&inv, I.Number, I.Number).Exec(ctx); err == nil || err.Error() != want || e.Calls != 0 {
 		t.Errorf("Save: %v, calls %d", err, e.Calls)
 	}
 	u := db.Update[testmodel.Invoice]().Set(I.Total.Add(1), I.Total.Set(2)).Where(I.ID.EQ(1))
@@ -150,14 +147,89 @@ func TestAColumnAssignedTwiceIsRefused(t *testing.T) {
 func TestSaveRefusesNil(t *testing.T) {
 	e := &velox.FakeExec{Affected: 1}
 	db := velox.OpenFake(velox.Postgres, e)
-	if err := db.Save[testmodel.Invoice](ctx, nil, I.Number); err == nil || err.Error() != "velox: testmodel.Invoice: Save of a nil pointer" {
+	if err := db.Save[testmodel.Invoice](nil, I.Number).Exec(ctx); err == nil || err.Error() != "velox: testmodel.Invoice: Save of a nil pointer" {
 		t.Errorf("nil pointer: %v", err)
 	}
 	inv := testmodel.Invoice{ID: 3}
-	if err := db.Save(ctx, &inv, I.Number, nil); err == nil || err.Error() != "velox: testmodel.Invoice: Save names a nil column" {
+	if err := db.Save(&inv, I.Number, nil).Exec(ctx); err == nil || err.Error() != "velox: testmodel.Invoice: Save names a nil column" {
 		t.Errorf("nil column: %v", err)
 	}
 	if e.Calls != 0 {
 		t.Errorf("calls %d", e.Calls)
+	}
+}
+
+// TestSaveSQL: SQL(ctx) renders the statement Exec sends, with Where's
+// conditions after the key, sends nothing, leaves *x as it was and does not
+// fail with ErrNotFound for a row it did not look for.
+func TestSaveSQL(t *testing.T) {
+	e := &velox.FakeExec{Affected: 0}
+	db := velox.OpenFake(velox.Postgres, e)
+	inv := testmodel.Invoice{ID: 3, Number: "X"}
+	q := db.Save(&inv, I.Number).Where(I.Total.EQ(5), I.Paid.EQ(false))
+	text, args, err := q.SQL(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = `UPDATE "invoices" SET "number" = $1, "updated_at" = $2 WHERE "id" = $3 AND "total" = $4 AND "paid" = $5`
+	if text != want {
+		t.Errorf("\n got %s\nwant %s", text, want)
+	}
+	if len(args) != 5 || args[0] != "X" || args[2] != int64(3) || args[3] != 5.0 || args[4] != false {
+		t.Errorf("args %v", args)
+	}
+	if e.Calls != 0 {
+		t.Errorf("SQL(ctx) sent %d statements", e.Calls)
+	}
+	if !inv.UpdatedAt.IsZero() {
+		t.Errorf("SQL(ctx) changed *x: UpdatedAt %v", inv.UpdatedAt)
+	}
+	// Exec sends the same statement, and finds no row.
+	if err := q.Exec(ctx); !errors.Is(err, velox.ErrNotFound) {
+		t.Errorf("Exec: %v", err)
+	}
+	if e.SQL != want {
+		t.Errorf("Exec sent %s", e.SQL)
+	}
+	// The builder is a value: Where on it leaves it as it was.
+	q2 := q.Where(I.Note.EQ("n"))
+	if text2, _, err := q.SQL(ctx); err != nil || text2 != want {
+		t.Errorf("q after Where: %s %v", text2, err)
+	}
+	if text2, _, err := q2.SQL(ctx); err != nil || !strings.HasSuffix(text2, ` AND "note" = $6`) {
+		t.Errorf("q2: %s %v", text2, err)
+	}
+	// Errors are the same from SQL(ctx) as from Exec, and nothing is sent.
+	calls := e.Calls
+	for name, q := range map[string]velox.SaveQuery[testmodel.Invoice]{
+		"nil pointer":     db.Save[testmodel.Invoice](nil, I.Number),
+		"nil column":      db.Save(&inv, I.Number, nil),
+		"twice":           db.Save(&inv, I.Number, I.Number),
+		"zero predicate":  db.Save(&inv, I.Number).Where(velox.Pred[testmodel.Invoice]{}),
+		"zero after good": db.Save(&inv, I.Number).Where(I.Total.EQ(1), velox.Pred[testmodel.Invoice]{}),
+	} {
+		_, _, serr := q.SQL(ctx)
+		eerr := q.Exec(ctx)
+		if serr == nil || eerr == nil || serr.Error() != eerr.Error() {
+			t.Errorf("%s: SQL(ctx) %v, Exec %v", name, serr, eerr)
+		}
+	}
+	if e.Calls != calls {
+		t.Errorf("%d statements sent", e.Calls-calls)
+	}
+}
+
+// TestSaveWhereNeedsAMatch: a condition that does not hold is ErrNotFound,
+// and *x is as it was.
+func TestSaveWhereNeedsAMatch(t *testing.T) {
+	e := &velox.FakeExec{Affected: 0}
+	db := velox.OpenFake(velox.Postgres, e)
+	inv := testmodel.Invoice{ID: 3, Number: "X", UpdatedAt: t0}
+	err := db.Save(&inv, I.Number).Where(I.Total.EQ(1)).Exec(ctx)
+	if !errors.Is(err, velox.ErrNotFound) || !strings.Contains(err.Error(), "testmodel.Invoice") {
+		t.Errorf("got %v", err)
+	}
+	if !inv.UpdatedAt.Equal(t0) {
+		t.Errorf("UpdatedAt %v", inv.UpdatedAt)
 	}
 }

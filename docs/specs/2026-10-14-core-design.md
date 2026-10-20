@@ -439,7 +439,7 @@ text, args, err := db.Query[billing.Invoice]().Where(…).SQL(ctx) // no databas
 - Offset pagination is `Offset(n)`.
 - A statement with more parameters than the dialect allows is refused before it
   is sent.
-- `SQL(ctx)`, on `Query`, `InsertQuery`, `UpdateQuery` and `DeleteQuery`,
+- `SQL(ctx)`, on `Query`, `InsertQuery`, `UpdateQuery`, `DeleteQuery` and `SaveQuery`,
   returns the statement and arguments execution would send for that context,
   or the error execution would fail with before sending it (the parameter
   limit and the `With` key-column check included); it sends nothing. It runs
@@ -458,7 +458,7 @@ n, err := db.Update[billing.Invoice]().
     Where(I.ID.EQ(id)).
     Exec(ctx)                                   // rows affected
 
-err = db.Save(ctx, &inv, I.Number, I.Total)     // a loaded struct; columns named
+err = db.Save(&inv, I.Number, I.Total).Exec(ctx) // a loaded struct; columns named
 ```
 
 On MySQL, `Save` needs `clientFoundRows=true` in the DSN.

@@ -83,7 +83,7 @@ func TestTenantPredicateOnEveryOperation(t *testing.T) {
 	wantSent(t, e, `DELETE FROM "invoices" WHERE "org_id" = $1`, int64(7))
 
 	inv := testmodel.Invoice{ID: 1, OrgID: 7, Number: "INV-1"}
-	if err := db.Save(t7, &inv, I.Number); err != nil {
+	if err := db.Save(&inv, I.Number).Exec(t7); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.HasSuffix(e.SQL, ` WHERE "id" = $3 AND "org_id" = $4`) || e.Args[3] != int64(7) {
@@ -129,7 +129,7 @@ func TestNoTenantFailsEveryOperation(t *testing.T) {
 		_, countErr := db.Query[testmodel.Invoice]().Count(bg)
 		_, updErr := db.Update[testmodel.Invoice]().Set(I.Paid.Set(true)).Where(I.ID.EQ(1)).Exec(bg)
 		_, delErr := db.Delete[testmodel.Invoice]().Where(I.ID.EQ(1)).Exec(bg)
-		saveErr := db.Save(bg, &inv, I.Number)
+		saveErr := db.Save(&inv, I.Number).Exec(bg)
 		for name, err := range map[string]error{"All": allErr, "One": oneErr, "Iter": iterErr, "Count": countErr,
 			"Update": updErr, "Delete": delErr, "Save": saveErr} {
 			if !errors.Is(err, velox.ErrNoTenant) || err.Error() != "velox: testmodel.Invoice: no tenant in the context" {
@@ -213,14 +213,14 @@ func TestTenantColumnAssignments(t *testing.T) {
 		}
 	}
 	inv := testmodel.Invoice{ID: 1, OrgID: 8}
-	if err := db.Save(t7, &inv, I.OrgID); !errors.Is(err, velox.ErrTenantImmutable) {
+	if err := db.Save(&inv, I.OrgID).Exec(t7); !errors.Is(err, velox.ErrTenantImmutable) {
 		t.Errorf("Save of another tenant: %v", err)
 	}
 	if e.Calls != calls {
 		t.Errorf("%d refused statements sent", e.Calls-calls)
 	}
 	inv.OrgID = 7
-	if err := db.Save(t7, &inv, I.OrgID); err != nil {
+	if err := db.Save(&inv, I.OrgID).Exec(t7); err != nil {
 		t.Errorf("Save of the tenant: %v", err)
 	}
 	all := velox.AllTenants(context.Background(), "move an invoice")

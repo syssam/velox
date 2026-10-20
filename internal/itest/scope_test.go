@@ -274,7 +274,7 @@ func TestScopeSave(t *testing.T) {
 	eachCaller(t, func(t *testing.T, tg target, c who) {
 		for _, s := range seedTickets {
 			x := testmodel.Ticket{ID: s.id, OrgID: s.org, Owner: s.owner, Title: fmt.Sprintf("S%d", s.id)}
-			err := tg.db.Save(c.ctx, &x, Tk.Title)
+			err := tg.db.Save(&x, Tk.Title).Exec(c.ctx)
 			if slices.Contains(visible[c.name], s.id) {
 				if err != nil {
 					t.Errorf("ticket %d: %v", s.id, err)
@@ -288,7 +288,7 @@ func TestScopeSave(t *testing.T) {
 		// Saving the tenant column with another org is refused.
 		if c.name != "anyone" {
 			x := testmodel.Ticket{ID: 1, OrgID: 2, Owner: "ann", Title: "S1"}
-			if err := tg.db.Save(c.ctx, &x, Tk.OrgID); !errors.Is(err, velox.ErrTenantImmutable) {
+			if err := tg.db.Save(&x, Tk.OrgID).Exec(c.ctx); !errors.Is(err, velox.ErrTenantImmutable) {
 				t.Errorf("moving ticket 1 to org 2: %v", err)
 			}
 			if rows := ticketRows(t, tg); rows[0].org != 1 {

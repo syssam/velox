@@ -215,7 +215,7 @@ func run(ctx context.Context, w io.Writer) error {
 		return err
 	}
 	draft.Customer = "Umbrella Corp"
-	if err := db.Save(acct, draft, I.Customer); err != nil {
+	if err := db.Save(draft, I.Customer).Exec(acct); err != nil {
 		return err
 	}
 	say("Save: %s customer is now %s", draft.Number, draft.Customer)

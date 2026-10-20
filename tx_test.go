@@ -377,7 +377,7 @@ func TestStatementOutsideItsTx(t *testing.T) {
 			return db.Insert(&testmodel.Invoice{OrgID: 1, Number: "A"}).Exec(ctx)
 		}, true, ""},
 		{"a Save on db", func(ctx context.Context, db, _ *velox.DB) error {
-			return db.Save(ctx, &testmodel.Invoice{ID: 1, OrgID: 1, Number: "A"}, I.Number)
+			return db.Save(&testmodel.Invoice{ID: 1, OrgID: 1, Number: "A"}, I.Number).Exec(ctx)
 		}, true, ""},
 		{"an upsert on db", func(ctx context.Context, db, _ *velox.DB) error {
 			return db.Insert(&testmodel.Invoice{OrgID: 1, Number: "A"}).OnConflict(I.OrgID, I.Number).Update(I.Total).Exec(ctx)

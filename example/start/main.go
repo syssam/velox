@@ -126,7 +126,7 @@ func run(ctx context.Context, w io.Writer) error {
 	// There is no Save of every column: writing back a stale struct would
 	// lose concurrent updates.
 	grace.Email = "grace.hopper@example.com"
-	if err := db.Save(ctx, grace, U.Email); err != nil {
+	if err := db.Save(grace, U.Email).Exec(ctx); err != nil {
 		return err
 	}
 	say("Save: %s's email is %s", grace.Name, grace.Email)

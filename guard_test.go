@@ -59,7 +59,7 @@ func TestWriteWithoutWhereIsRefused(t *testing.T) {
 		t.Errorf("Delete All: %v", err)
 	}
 	inv := testmodel.Invoice{ID: 1}
-	if err := db.Save(ctx, &inv, I.Number); err != nil {
+	if err := db.Save(&inv, I.Number).Exec(ctx); err != nil {
 		t.Errorf("Save: %v", err)
 	}
 }

@@ -175,7 +175,7 @@ func TestSaveRunsTheHooks(t *testing.T) {
 	e := &velox.FakeExec{Affected: 1}
 	db := velox.OpenFake(velox.Postgres, e)
 	a := dAuthor{ID: 1, OrgID: 7, Name: "ada"}
-	if err := db.Save(context.WithValue(velox.WithTenant(ctx, int64(7)), renameTo{}, "grace"), &a, dAuthors.Name); err != nil {
+	if err := db.Save(&a, dAuthors.Name).Exec(context.WithValue(velox.WithTenant(ctx, int64(7)), renameTo{}, "grace")); err != nil {
 		t.Fatal(err)
 	}
 	if a.Name != "grace" || e.Args[0] != "grace" {

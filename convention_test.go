@@ -23,7 +23,7 @@ func TestReturnedErrorsNameTheEntityOnce(t *testing.T) {
 	want(t, err, velox.ErrNotSingular, "velox: testmodel.Invoice: more than one row")
 
 	inv := testmodel.Invoice{ID: 7}
-	err = db.Save(ctx, &inv, I.Number) // FakeExec reports 0 rows affected
+	err = db.Save(&inv, I.Number).Exec(ctx) // FakeExec reports 0 rows affected
 	want(t, err, velox.ErrNotFound, "velox: testmodel.Invoice: not found")
 
 	refused := errors.New("refused")

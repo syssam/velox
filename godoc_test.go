@@ -84,7 +84,7 @@ func TestGeneratedOnlyAPIIsMarked(t *testing.T) {
 		listed[n] = true
 	}
 	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, repoRoot(), func(fi fs.FileInfo) bool { return !strings.HasSuffix(fi.Name(), "_test.go") }, parser.ParseComments)
+	pkgs, err := parser.ParseDir(fset, repoRoot(), func(fi fs.FileInfo) bool { return !strings.HasSuffix(fi.Name(), "_test.go") }, parser.ParseComments) //nolint:staticcheck // one directory, one build; go/packages is not a dependency
 	if err != nil {
 		t.Fatal(err)
 	}
