@@ -81,9 +81,9 @@
 // cursors, and runs its page query and its COUNT only when gqlgen asks for
 // edges or pageInfo, and for totalCount. A where argument's Pred is one
 // veloxgql helper call for each predicate the input sets; it decodes IDs as
-// their type's, and refuses an ID of another type and a filter nested deeper
-// than veloxgql.MaxFilterDepth or wider than veloxgql.MaxFilterWidth before
-// any query runs. Mutations are not written yet, and until they are gqlgen
+// their type's, and refuses an ID of another type, and a filter nested
+// deeper than veloxgql.MaxFilterDepth, wider than veloxgql.MaxFilterWidth
+// or larger in all than veloxgql.MaxFilterNodes, before any query runs. Mutations are not written yet, and until they are gqlgen
 // cannot load the application from this SDL alone.
 //
 // # gqlgen.yml

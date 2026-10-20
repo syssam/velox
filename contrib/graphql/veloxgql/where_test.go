@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
@@ -72,32 +73,32 @@ func (w *personWhere) Pred(ctx context.Context, depth int) (velox.Pred[person], 
 	if w == nil {
 		return f.Pred()
 	}
-	veloxgql.Not(f, w.Not)
-	veloxgql.And(f, w.And)
-	veloxgql.Or(f, w.Or)
-	veloxgql.ID(f, w.ID, "Person", people.ID.EQ)
-	veloxgql.IDAs(f, w.IDNEQ, "Person", veloxgql.AsInt[personID, int64], peopleAs.ID.NEQ)
-	veloxgql.IDList(f, w.IDIn, "Person", people.ID.In)
-	veloxgql.IDListAs(f, w.IDNotIn, "Person", veloxgql.AsInt[personID, int64], peopleAs.ID.NotIn)
-	veloxgql.Value(f, w.Name, people.Name.EQ)
-	veloxgql.Value(f, w.NameNEQ, people.Name.NEQ)
-	veloxgql.List(f, w.NameIn, people.Name.In)
-	veloxgql.List(f, w.NameNotIn, people.Name.NotIn)
-	veloxgql.Value(f, w.NameGT, people.Name.GT)
-	veloxgql.Value(f, w.NameContains, people.Name.Contains)
-	veloxgql.Value(f, w.NameHasPrefix, people.Name.HasPrefix)
-	veloxgql.Value(f, w.NameHasSuffix, people.Name.HasSuffix)
-	veloxgql.ValueAs(f, w.Label, veloxgql.AsString[personName, string], peopleAs.Name.EQ)
-	veloxgql.ListAs(f, w.LabelNotIn, veloxgql.AsString[personName, string], peopleAs.Name.NotIn)
-	veloxgql.Value(f, w.Age, people.Age.EQ)
-	veloxgql.Value(f, w.AgeNEQ, people.Age.NEQ)
-	veloxgql.List(f, w.AgeIn, people.Age.In)
-	veloxgql.List(f, w.AgeNotIn, people.Age.NotIn)
-	veloxgql.Value(f, w.AgeGT, people.Age.GT)
-	veloxgql.Value(f, w.AgeGTE, people.Age.GTE)
-	veloxgql.Value(f, w.AgeLT, people.Age.LT)
-	veloxgql.Value(f, w.AgeLTE, people.Age.LTE)
-	veloxgql.Is(f, w.IsA, isA)
+	veloxgql.Not(f, "not", w.Not)
+	veloxgql.And(f, "and", w.And)
+	veloxgql.Or(f, "or", w.Or)
+	veloxgql.ID(f, "id", w.ID, "Person", people.ID.EQ)
+	veloxgql.IDAs(f, "idNEQ", w.IDNEQ, "Person", veloxgql.AsInt[personID, int64], peopleAs.ID.NEQ)
+	veloxgql.IDList(f, "idIn", w.IDIn, "Person", people.ID.In)
+	veloxgql.IDListAs(f, "idNotIn", w.IDNotIn, "Person", veloxgql.AsInt[personID, int64], peopleAs.ID.NotIn)
+	veloxgql.Value(f, "name", w.Name, people.Name.EQ)
+	veloxgql.Value(f, "nameNEQ", w.NameNEQ, people.Name.NEQ)
+	veloxgql.List(f, "nameIn", w.NameIn, people.Name.In)
+	veloxgql.List(f, "nameNotIn", w.NameNotIn, people.Name.NotIn)
+	veloxgql.Value(f, "nameGT", w.NameGT, people.Name.GT)
+	veloxgql.Value(f, "nameContains", w.NameContains, people.Name.Contains)
+	veloxgql.Value(f, "nameHasPrefix", w.NameHasPrefix, people.Name.HasPrefix)
+	veloxgql.Value(f, "nameHasSuffix", w.NameHasSuffix, people.Name.HasSuffix)
+	veloxgql.ValueAs(f, "label", w.Label, veloxgql.AsString[personName, string], peopleAs.Name.EQ)
+	veloxgql.ListAs(f, "labelNotIn", w.LabelNotIn, veloxgql.AsString[personName, string], peopleAs.Name.NotIn)
+	veloxgql.Value(f, "age", w.Age, people.Age.EQ)
+	veloxgql.Value(f, "ageNEQ", w.AgeNEQ, people.Age.NEQ)
+	veloxgql.List(f, "ageIn", w.AgeIn, people.Age.In)
+	veloxgql.List(f, "ageNotIn", w.AgeNotIn, people.Age.NotIn)
+	veloxgql.Value(f, "ageGT", w.AgeGT, people.Age.GT)
+	veloxgql.Value(f, "ageGTE", w.AgeGTE, people.Age.GTE)
+	veloxgql.Value(f, "ageLT", w.AgeLT, people.Age.LT)
+	veloxgql.Value(f, "ageLTE", w.AgeLTE, people.Age.LTE)
+	veloxgql.Is(f, "isA", w.IsA, isA)
 	return f.Pred()
 }
 
@@ -255,7 +256,7 @@ func TestWhereDepthAndWidth(t *testing.T) {
 		}
 		st.take()
 		_, err := nest(&personWhere{Name: strp("a")}, veloxgql.MaxFilterDepth+1, kind).Pred(ctx, 0)
-		if !errors.Is(err, veloxgql.ErrFilterTooDeep) || !strings.HasPrefix(err.Error(), "veloxgql: PersonWhereInput: ") {
+		if !errors.Is(err, veloxgql.ErrFilterTooDeep) || !strings.HasPrefix(err.Error(), "veloxgql: PersonWhereInput") {
 			t.Errorf("%s at depth 6: %v, want ErrFilterTooDeep", kind, err)
 		}
 		if ran := st.take(); len(ran) != 0 {
@@ -290,7 +291,7 @@ func TestWhereDepthAndWidth(t *testing.T) {
 		"nested or": {Not: &personWhere{Or: list(veloxgql.MaxFilterWidth + 1)}},
 	} {
 		_, err := w.Pred(ctx, 0)
-		if !errors.Is(err, veloxgql.ErrFilterTooWide) || !strings.HasPrefix(err.Error(), "veloxgql: PersonWhereInput: ") {
+		if !errors.Is(err, veloxgql.ErrFilterTooWide) || !strings.HasPrefix(err.Error(), "veloxgql: PersonWhereInput") {
 			t.Errorf("%s of 101: %v, want ErrFilterTooWide", name, err)
 		}
 	}
@@ -362,5 +363,157 @@ func TestWhereConversions(t *testing.T) {
 	}
 	if got := veloxgql.AsUUID[ref]([16]byte{1, 2}); got != (ref{1, 2}) {
 		t.Errorf("AsUUID: %v", got)
+	}
+}
+
+// shared is a where argument that holds leaf 100 times at each of depth
+// levels, the one input everywhere, as gqlgen unmarshals a GraphQL variable
+// used at many places: 100^depth inputs, from a request of a few kilobytes.
+func shared(leaf *personWhere, depth int) *personWhere {
+	w := leaf
+	for range depth {
+		ws := make([]*personWhere, veloxgql.MaxFilterWidth)
+		for i := range ws {
+			ws[i] = w
+		}
+		w = &personWhere{Or: ws}
+	}
+	return w
+}
+
+// TestWhereBudget is Review Focus 4 for the whole argument: MaxFilterNodes
+// bounds the inputs, predicates and In and NotIn values of one where
+// argument, however its lists and depth multiply, and over it the filter
+// fails with ErrFilterTooWide at once, before any statement runs.
+func TestWhereBudget(t *testing.T) {
+	db, st := peopleDB(t)
+	ctx := context.Background()
+	st.take()
+	w := shared(&personWhere{NameIn: []string{"a", "b"}, AgeGT: i64p(1)}, veloxgql.MaxFilterDepth)
+	start := time.Now()
+	_, err := w.Pred(ctx, 0)
+	if !errors.Is(err, veloxgql.ErrFilterTooWide) || !strings.Contains(err.Error(), "more than 1000") {
+		t.Fatalf("100^5 inputs: %v, want ErrFilterTooWide over the budget", err)
+	}
+	if d := time.Since(start); d > time.Second {
+		t.Errorf("100^5 inputs took %v to refuse", d)
+	}
+	if ran := st.take(); len(ran) != 0 {
+		t.Errorf("the refused filter ran %v", ran)
+	}
+	// It stops after about MaxFilterNodes nodes: a few allocations each.
+	if n := testing.AllocsPerRun(5, func() { _, _ = w.Pred(ctx, 0) }); n > 20*float64(veloxgql.MaxFilterNodes) {
+		t.Errorf("refusing 100^5 inputs allocates %v times", n)
+	}
+
+	// The count, to the last one: the input, its or and its ageIn with its
+	// values; and 9 inputs in the or, each with a nameIn of 98 values. Each
+	// input, predicate and value counts one: 1 + 1 + (1+97) + 9*(1+1+98) =
+	// 1000.
+	in := func(n int) []int64 {
+		vs := make([]int64, n)
+		for i := range vs {
+			vs[i] = int64(100 - i) // every age, 90 to 99, among them
+		}
+		return vs
+	}
+	names := make([]string, 98)
+	for i := range names {
+		names[i] = string(rune('a' + i%26))
+	}
+	budget := func(ages int) *personWhere {
+		ws := make([]*personWhere, 9)
+		for i := range ws {
+			ws[i] = &personWhere{NameIn: names}
+		}
+		return &personWhere{Or: ws, AgeIn: in(ages)}
+	}
+	if got := where(t, db, budget(97)); !slices.Equal(got, all) {
+		t.Errorf("a budget of 1000: %v", got)
+	}
+	if _, err := budget(98).Pred(ctx, 0); !errors.Is(err, veloxgql.ErrFilterTooWide) {
+		t.Errorf("1001: %v, want ErrFilterTooWide", err)
+	}
+	// Each where argument has its own budget, even under the context of
+	// another's nested input, which carries that one's.
+	f := veloxgql.NewFilter[person](ctx, "PersonWhereInput", 0)
+	for range 9 {
+		veloxgql.List(f, "ageIn", in(100), people.Age.In) // 909 of 1000
+	}
+	spy := &ctxSpy{}
+	veloxgql.Not(f, "not", spy)
+	if _, err := f.Pred(); err != nil || spy.ctx == nil {
+		t.Fatalf("909: %v", err)
+	}
+	if _, err := budget(97).Pred(spy.ctx, 0); err != nil {
+		t.Errorf("a second argument of 1000: %v", err)
+	}
+	// A nested input shares it.
+	if _, err := budget(97).Pred(spy.ctx, 1); !errors.Is(err, veloxgql.ErrFilterTooWide) {
+		t.Errorf("a nested input of 1000 after 909: %v, want ErrFilterTooWide", err)
+	}
+}
+
+// ctxSpy is a where input that holds for every row, and keeps the context
+// its Pred is called with.
+type ctxSpy struct{ ctx context.Context }
+
+func (s *ctxSpy) Pred(ctx context.Context, _ int) (velox.Pred[person], error) {
+	s.ctx = ctx
+	return velox.And[person](), nil
+}
+
+// TestWhereValueLists: an In or a NotIn list of more than MaxFilterWidth
+// values fails with ErrFilterTooWide, naming its field.
+func TestWhereValueLists(t *testing.T) {
+	_, st := peopleDB(t)
+	ctx := context.Background()
+	st.take()
+	many := make([]string, veloxgql.MaxFilterWidth+1)
+	for i := range many {
+		many[i] = personID64(int64(i + 1))
+	}
+	ages := make([]int64, veloxgql.MaxFilterWidth+1)
+	for name, c := range map[string]struct {
+		w     *personWhere
+		field string
+	}{
+		"In":       {&personWhere{NameIn: many}, "nameIn"},
+		"NotIn":    {&personWhere{AgeNotIn: ages}, "ageNotIn"},
+		"ListAs":   {&personWhere{LabelNotIn: many}, "labelNotIn"},
+		"IDList":   {&personWhere{IDIn: many}, "idIn"},
+		"IDListAs": {&personWhere{IDNotIn: many}, "idNotIn"},
+	} {
+		_, err := c.w.Pred(ctx, 0)
+		if !errors.Is(err, veloxgql.ErrFilterTooWide) || !strings.HasPrefix(err.Error(), "veloxgql: PersonWhereInput."+c.field+": ") {
+			t.Errorf("%s of 101: %v, want ErrFilterTooWide of %s", name, err, c.field)
+		}
+	}
+	if ran := st.take(); len(ran) != 0 {
+		t.Errorf("the refused lists ran %v", ran)
+	}
+	// 100 is the most.
+	if _, err := (&personWhere{IDIn: many[:veloxgql.MaxFilterWidth]}).Pred(ctx, 0); err != nil {
+		t.Errorf("100 IDs: %v", err)
+	}
+}
+
+// TestWhereErrorsNameTheField: an error names the path of fields that held
+// its cause, and never the key.
+func TestWhereErrorsNameTheField(t *testing.T) {
+	ctx := context.Background()
+	post := veloxgql.EncodeID("Post", int64(3))
+	for _, c := range []struct {
+		w    *personWhere
+		want string
+	}{
+		{&personWhere{ID: &post}, "veloxgql: PersonWhereInput.id: Person ID: ID of another type"},
+		{&personWhere{Or: []*personWhere{{}, {IDNotIn: []string{post}}}}, "veloxgql: PersonWhereInput.or[1]: PersonWhereInput.idNotIn: Person ID: ID of another type"},
+		{&personWhere{Not: &personWhere{And: []*personWhere{{IDNEQ: strp("x")}}}}, "veloxgql: PersonWhereInput.not: PersonWhereInput.and[0]: PersonWhereInput.idNEQ: Person ID: malformed ID: not canonical base64url without padding"},
+		{nest(&personWhere{}, veloxgql.MaxFilterDepth+1, "not"), "veloxgql: PersonWhereInput.not: PersonWhereInput.not: PersonWhereInput.not: PersonWhereInput.not: PersonWhereInput.not: PersonWhereInput.not: PersonWhereInput: filter is nested too deep: it is nested 6 deep, and the most is 5"},
+	} {
+		if _, err := c.w.Pred(ctx, 0); err == nil || err.Error() != c.want {
+			t.Errorf("%v, want %q", err, c.want)
+		}
 	}
 }

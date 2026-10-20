@@ -166,10 +166,10 @@ func (w *CategoryWhereInput) Pred(ctx context.Context, depth int) (velox.Pred[Ca
 	if w == nil {
 		return f.Pred()
 	}
-	veloxgql.Not(f, w.Not)
-	veloxgql.And(f, w.And)
-	veloxgql.Or(f, w.Or)
-	veloxgql.Is(f, w.HasParent, Categories.Parent.Has)
-	veloxgql.HasWith(f, w.HasParentWith, Categories.Parent.HasWhere)
+	veloxgql.Not(f, "not", w.Not)
+	veloxgql.And(f, "and", w.And)
+	veloxgql.Or(f, "or", w.Or)
+	veloxgql.Is(f, "hasParent", w.HasParent, Categories.Parent.Has)
+	veloxgql.HasWith(f, "hasParentWith", w.HasParentWith, Categories.Parent.HasWhere)
 	return f.Pred()
 }

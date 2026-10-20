@@ -3,6 +3,8 @@ package veloxgql
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/syssam/velox2"
 )
@@ -17,13 +19,13 @@ import (
 //		if w == nil {
 //			return f.Pred()
 //		}
-//		veloxgql.Not(f, w.Not)
-//		veloxgql.And(f, w.And)
-//		veloxgql.Or(f, w.Or)
-//		veloxgql.Value(f, w.DisplayName, Users.Name.EQ)
-//		veloxgql.List(f, w.DisplayNameIn, Users.Name.In)
-//		veloxgql.Is(f, w.HasPosts, Users.Posts.Has)
-//		veloxgql.HasWith(f, w.HasPostsWith, Users.Posts.HasWhere)
+//		veloxgql.Not(f, "not", w.Not)
+//		veloxgql.And(f, "and", w.And)
+//		veloxgql.Or(f, "or", w.Or)
+//		veloxgql.Value(f, "displayName", w.DisplayName, Users.Name.EQ)
+//		veloxgql.List(f, "displayNameIn", w.DisplayNameIn, Users.Name.In)
+//		veloxgql.Is(f, "hasPosts", w.HasPosts, Users.Posts.Has)
+//		veloxgql.HasWith(f, "hasPostsWith", w.HasPostsWith, Users.Posts.HasWhere)
 //		return f.Pred()
 //	}
 //
@@ -32,23 +34,39 @@ import (
 // stops it, and Pred returns it. None of them runs a query, so a refused
 // filter fails before any statement is built.
 type Filter[E any] struct {
-	ctx   context.Context
-	input string // the where input's GraphQL type, for errors
-	depth int
-	ps    []velox.Pred[E]
-	err   error
+	ctx    context.Context
+	input  string // the where input's GraphQL type, for errors
+	depth  int
+	budget *budget // the where argument's
+	ps     []velox.Pred[E]
+	err    error
 }
 
 // NewFilter returns the Filter of a where input of the GraphQL type input,
 // on E, at depth, how deeply it is nested in the where argument: 0 at the
 // top, one more inside each not, and, or and has<Edge>With. A depth over
-// MaxFilterDepth fails the filter with ErrFilterTooDeep. ctx is the
-// context nested inputs' Pred is called with.
+// MaxFilterDepth fails the filter with ErrFilterTooDeep.
+//
+// At depth 0 it starts the where argument's budget of MaxFilterNodes, and
+// puts it in the context nested inputs' Pred is called with, where their
+// NewFilter finds it: the input, each input nested in it, each predicate
+// they set and each value of their In and NotIn lists count one against it,
+// and over it the filter fails with ErrFilterTooWide. So the whole argument
+// is bounded, even when it holds one input many times over, as a GraphQL
+// variable used at many places does. One where argument's Pred calls run on
+// one goroutine.
 func NewFilter[E any](ctx context.Context, input string, depth int) *Filter[E] {
-	f := &Filter[E]{ctx: ctx, input: input, depth: depth}
-	if err := CheckDepth(depth); err != nil {
-		f.refuse(err)
+	b, _ := ctx.Value(budgetKey{}).(*budget)
+	if depth == 0 || b == nil {
+		b = &budget{left: MaxFilterNodes}
+		ctx = context.WithValue(ctx, budgetKey{}, b)
 	}
+	f := &Filter[E]{ctx: ctx, input: input, depth: depth, budget: b}
+	if err := CheckDepth(depth); err != nil {
+		f.refuse("", err)
+		return f
+	}
+	charge(f, "", 1)
 	return f
 }
 
@@ -66,22 +84,58 @@ func (f *Filter[E]) Pred[_ velox.Lazy[E]]() (velox.Pred[E], error) {
 	return velox.And(f.ps...), nil
 }
 
-// fail records err as the filter's error, unless it has one: a nested
-// input's error, or DecodeID's, which name what they are about.
-func fail[E any](f *Filter[E], err error) {
-	if f.err == nil {
-		f.err = err
+// budget is what is left of a where argument's MaxFilterNodes.
+type budget struct{ left int }
+
+// budgetKey is the context key of a where argument's budget.
+type budgetKey struct{}
+
+// charge counts n against the where argument's budget, for the field of
+// f's input; ok is false when that is over it, and f has the error.
+func charge[E any](f *Filter[E], field string, n int) (ok bool) {
+	f.budget.left -= n
+	if f.budget.left < 0 {
+		f.refuse(field, fmt.Errorf("%w: the where argument has more than %d inputs, predicates and list values", ErrFilterTooWide, MaxFilterNodes))
+		return false
+	}
+	return true
+}
+
+// fieldError is an error of the field at of a where input, at being
+// "<Input>.<field>", or "<Input>" for the input itself: its text is
+// "veloxgql: <at>: <err>", err's own "veloxgql: " left out, so that the
+// error of an input nested in a field names the path to it.
+type fieldError struct {
+	at  string
+	err error
+}
+
+func (e *fieldError) Error() string {
+	return "veloxgql: " + e.at + ": " + strings.TrimPrefix(e.err.Error(), "veloxgql: ")
+}
+
+func (e *fieldError) Unwrap() error { return e.err }
+
+// refuse records err, an error of field of the filter's input ("" for the
+// input itself), as the filter's error, unless it has one already.
+func (f *Filter[E]) refuse[_ velox.Lazy[E]](field string, err error) {
+	if f.err != nil {
+		return
+	}
+	at := f.input
+	if field != "" {
+		at += "." + field
+	}
+	f.err = &fieldError{at: at, err: err}
+}
+
+// add adds p to the filter's conditions, a predicate of field, which counts
+// one against the budget, and n more for its values.
+func add[E any](f *Filter[E], field string, n int, p velox.Pred[E]) {
+	if charge(f, field, 1+n) {
+		f.ps = append(f.ps, p)
 	}
 }
-
-// refuse records err, an error of the filter's own input, as the filter's
-// error: "veloxgql: <input>: <err>".
-func (f *Filter[E]) refuse[_ velox.Lazy[E]](err error) {
-	fail(f, fmt.Errorf("veloxgql: %s: %w", f.input, err))
-}
-
-// add adds p to the filter's conditions.
-func add[E any](f *Filter[E], p velox.Pred[E]) { f.ps = append(f.ps, p) }
 
 // CheckDepth checks depth, how deeply a where input is nested, against
 // MaxFilterDepth: deeper fails with ErrFilterTooDeep.
@@ -92,8 +146,9 @@ func CheckDepth(depth int) error {
 	return nil
 }
 
-// CheckWidth checks n, the length of a list of where inputs, against
-// MaxFilterWidth: more fails with ErrFilterTooWide.
+// CheckWidth checks n, the length of a list in a where input (of inputs, or
+// of In or NotIn values), against MaxFilterWidth: more fails with
+// ErrFilterTooWide.
 func CheckWidth(n int) error {
 	if n > MaxFilterWidth {
 		return fmt.Errorf("%w: it has %d entries, and the most is %d", ErrFilterTooWide, n, MaxFilterWidth)
@@ -108,31 +163,32 @@ type Input[E, T any] interface {
 	Pred(ctx context.Context, depth int) (velox.Pred[E], error)
 }
 
-// nested is the condition of w, an input nested in f's, one level deeper;
-// a nil w is an input that sets nothing, which holds for every row. ok is
-// false when w fails, and f has its error.
-func nested[E, U, T any, W Input[U, T]](f *Filter[E], w W) (p velox.Pred[U], ok bool) {
+// nested is the condition of w, an input nested in f's at field, one level
+// deeper; a nil w is an input that sets nothing, which holds for every row.
+// ok is false when w fails, and f has its error.
+func nested[E, U, T any, W Input[U, T]](f *Filter[E], field string, w W) (p velox.Pred[U], ok bool) {
 	if w == nil {
 		return velox.And[U](), true
 	}
 	p, err := w.Pred(f.ctx, f.depth+1)
 	if err != nil {
-		fail(f, err)
+		f.refuse(field, err)
 		return p, false
 	}
 	return p, true
 }
 
-// list is the conditions of ws, inputs nested in f's, after CheckWidth;
-// ok is false when one fails, and f has its error.
-func list[E, U, T any, W Input[U, T]](f *Filter[E], ws []W) (ps []velox.Pred[U], ok bool) {
+// list is the conditions of ws, the inputs nested in f's at field, after
+// CheckWidth; ok is false when one fails, and f has its error, which names
+// the entry, as "or[3]".
+func list[E, U, T any, W Input[U, T]](f *Filter[E], field string, ws []W) (ps []velox.Pred[U], ok bool) {
 	if err := CheckWidth(len(ws)); err != nil {
-		f.refuse(err)
+		f.refuse(field, err)
 		return nil, false
 	}
 	ps = make([]velox.Pred[U], 0, len(ws))
-	for _, w := range ws {
-		p, ok := nested(f, w)
+	for i, w := range ws {
+		p, ok := nested(f, field+"["+strconv.Itoa(i)+"]", w)
 		if !ok {
 			return nil, false
 		}
@@ -141,25 +197,28 @@ func list[E, U, T any, W Input[U, T]](f *Filter[E], ws []W) (ps []velox.Pred[U],
 	return ps, true
 }
 
+// Each helper takes the filter, the GraphQL name of the input's field,
+// which the errors of the field name, and the field's value.
+
 // Not adds the negation of w, the input's not: a node matches when it does
 // not match w. A nil w adds nothing.
-func Not[E, T any, W Input[E, T]](f *Filter[E], w W) {
+func Not[E, T any, W Input[E, T]](f *Filter[E], field string, w W) {
 	if f.err != nil || w == nil {
 		return
 	}
-	if p, ok := nested(f, w); ok {
-		add(f, velox.Not(p))
+	if p, ok := nested(f, field, w); ok {
+		add(f, field, 0, velox.Not(p))
 	}
 }
 
 // And adds ws, the input's and: a node matches when it matches each of ws.
 // An empty ws adds nothing. More than MaxFilterWidth fails with
 // ErrFilterTooWide.
-func And[E, T any, W Input[E, T]](f *Filter[E], ws []W) {
+func And[E, T any, W Input[E, T]](f *Filter[E], field string, ws []W) {
 	if f.err != nil || ws == nil {
 		return
 	}
-	if ps, ok := list(f, ws); ok {
+	if ps, ok := list(f, field, ws); ok && charge(f, field, 1) {
 		f.ps = append(f.ps, ps...)
 	}
 }
@@ -167,145 +226,155 @@ func And[E, T any, W Input[E, T]](f *Filter[E], ws []W) {
 // Or adds ws, the input's or: a node matches when it matches one of ws. An
 // empty ws adds nothing, as an empty and does, rather than matching no
 // node. More than MaxFilterWidth fails with ErrFilterTooWide.
-func Or[E, T any, W Input[E, T]](f *Filter[E], ws []W) {
+func Or[E, T any, W Input[E, T]](f *Filter[E], field string, ws []W) {
 	if f.err != nil || ws == nil {
 		return
 	}
-	ps, ok := list(f, ws)
+	ps, ok := list(f, field, ws)
 	switch {
 	case !ok || len(ps) == 0:
 	case len(ps) == 1:
-		add(f, ps[0])
+		add(f, field, 0, ps[0])
 	default:
-		add(f, velox.Or(ps...))
+		add(f, field, 0, velox.Or(ps...))
 	}
 }
 
 // HasWith adds has<Edge>With: a node matches when a node of the edge
 // matches each of ws, through has, the relation's HasWhere. An empty ws
 // adds nothing. More than MaxFilterWidth fails with ErrFilterTooWide.
-func HasWith[E, U, T any, W Input[U, T]](f *Filter[E], ws []W, has func(...velox.Pred[U]) velox.Pred[E]) {
+func HasWith[E, U, T any, W Input[U, T]](f *Filter[E], field string, ws []W, has func(...velox.Pred[U]) velox.Pred[E]) {
 	if f.err != nil || len(ws) == 0 {
 		return
 	}
-	if ps, ok := list(f, ws); ok {
-		add(f, has(ps...))
+	if ps, ok := list(f, field, ws); ok {
+		add(f, field, 0, has(ps...))
 	}
 }
 
 // Is adds a Boolean predicate: p() when b is true and its negation when b
 // is false. It is IsNil (p is the column's IsNull), NotNil (NotNull) and
 // has<Edge> (the relation's Has).
-func Is[E any](f *Filter[E], b *bool, p func() velox.Pred[E]) {
+func Is[E any](f *Filter[E], field string, b *bool, p func() velox.Pred[E]) {
 	switch {
 	case f.err != nil || b == nil:
 	case *b:
-		add(f, p())
+		add(f, field, 0, p())
 	default:
-		add(f, velox.Not(p()))
+		add(f, field, 0, velox.Not(p()))
 	}
 }
 
 // Value adds op(*v), a predicate on one value of the column's Go type: EQ,
 // NEQ, GT, GTE, LT, LTE, Contains, HasPrefix or HasSuffix.
-func Value[E, V any](f *Filter[E], v *V, op func(V) velox.Pred[E]) {
+func Value[E, V any](f *Filter[E], field string, v *V, op func(V) velox.Pred[E]) {
 	if f.err == nil && v != nil {
-		add(f, op(*v))
+		add(f, field, 0, op(*v))
 	}
 }
 
 // ValueAs is Value of a value the input holds as W, which conv converts to
 // the column's Go type V: a field of the application's own Go type, whose
 // GraphQL scalar binds to its base type.
-func ValueAs[E, W, V any](f *Filter[E], v *W, conv func(W) V, op func(V) velox.Pred[E]) {
+func ValueAs[E, W, V any](f *Filter[E], field string, v *W, conv func(W) V, op func(V) velox.Pred[E]) {
 	if f.err == nil && v != nil {
-		add(f, op(conv(*v)))
+		add(f, field, 0, op(conv(*v)))
 	}
 }
 
 // List adds op(vs...), a predicate on a list of the column's Go type: In or
 // NotIn. A non-nil empty list is a list of nothing, as the client sent it:
-// In matches no node, and NotIn every node.
-func List[E, V any](f *Filter[E], vs []V, op func(...V) velox.Pred[E]) {
-	if f.err == nil && vs != nil {
-		add(f, op(vs...))
+// In matches no node, and NotIn every node. More than MaxFilterWidth values
+// fail with ErrFilterTooWide.
+func List[E, V any](f *Filter[E], field string, vs []V, op func(...V) velox.Pred[E]) {
+	if f.err == nil && vs != nil && width(f, field, len(vs)) {
+		add(f, field, len(vs), op(vs...))
 	}
 }
 
 // ListAs is List of values the input holds as W, which conv converts to
 // the column's Go type V.
-func ListAs[E, W, V any](f *Filter[E], vs []W, conv func(W) V, op func(...V) velox.Pred[E]) {
-	if f.err != nil || vs == nil {
+func ListAs[E, W, V any](f *Filter[E], field string, vs []W, conv func(W) V, op func(...V) velox.Pred[E]) {
+	if f.err != nil || vs == nil || !width(f, field, len(vs)) {
 		return
 	}
 	out := make([]V, len(vs))
 	for i, v := range vs {
 		out[i] = conv(v)
 	}
-	add(f, op(out...))
+	add(f, field, len(vs), op(out...))
+}
+
+// width is CheckWidth(n) of field's list, with its error recorded in f.
+func width[E any](f *Filter[E], field string, n int) bool {
+	if err := CheckWidth(n); err != nil {
+		f.refuse(field, err)
+		return false
+	}
+	return true
 }
 
 // ID adds op(k), k the key of id, an ID of the GraphQL type typ decoded with
 // DecodeID[K]: EQ or NEQ on the key, or on a foreign key that holds typ's
 // keys. An ID of another type fails with ErrWrongIDType, and a malformed one
 // with ErrBadID.
-func ID[K, E any](f *Filter[E], id *string, typ string, op func(K) velox.Pred[E]) {
+func ID[K, E any](f *Filter[E], field string, id *string, typ string, op func(K) velox.Pred[E]) {
 	if f.err != nil || id == nil {
 		return
 	}
-	if k, ok := decode[K](f, *id, typ); ok {
-		add(f, op(k))
+	if k, ok := decode[K](f, field, *id, typ); ok {
+		add(f, field, 0, op(k))
 	}
 }
 
 // IDAs is ID of a column whose Go type V is not K, the Go type typ's keys
 // decode as: conv converts.
-func IDAs[K, E, V any](f *Filter[E], id *string, typ string, conv func(K) V, op func(V) velox.Pred[E]) {
+func IDAs[K, E, V any](f *Filter[E], field string, id *string, typ string, conv func(K) V, op func(V) velox.Pred[E]) {
 	if f.err != nil || id == nil {
 		return
 	}
-	if k, ok := decode[K](f, *id, typ); ok {
-		add(f, op(conv(k)))
+	if k, ok := decode[K](f, field, *id, typ); ok {
+		add(f, field, 0, op(conv(k)))
 	}
 }
 
 // IDList adds op(ks...), ks the keys of ids, as ID decodes them: In or NotIn
 // on the key, or on a foreign key. One ID of another type, or malformed,
-// fails the filter.
-func IDList[K, E any](f *Filter[E], ids []string, typ string, op func(...K) velox.Pred[E]) {
-	if f.err != nil || ids == nil {
+// fails the filter, and so do more than MaxFilterWidth IDs.
+func IDList[K, E any](f *Filter[E], field string, ids []string, typ string, op func(...K) velox.Pred[E]) {
+	if f.err != nil || ids == nil || !width(f, field, len(ids)) {
 		return
 	}
-	if ks, ok := decodeAll(f, ids, typ, func(k K) K { return k }); ok {
-		add(f, op(ks...))
+	if ks, ok := decodeAll(f, field, ids, typ, func(k K) K { return k }); ok {
+		add(f, field, len(ks), op(ks...))
 	}
 }
 
 // IDListAs is IDList of a column whose Go type V is not K: conv converts.
-func IDListAs[K, E, V any](f *Filter[E], ids []string, typ string, conv func(K) V, op func(...V) velox.Pred[E]) {
-	if f.err != nil || ids == nil {
+func IDListAs[K, E, V any](f *Filter[E], field string, ids []string, typ string, conv func(K) V, op func(...V) velox.Pred[E]) {
+	if f.err != nil || ids == nil || !width(f, field, len(ids)) {
 		return
 	}
-	if vs, ok := decodeAll(f, ids, typ, conv); ok {
-		add(f, op(vs...))
+	if vs, ok := decodeAll(f, field, ids, typ, conv); ok {
+		add(f, field, len(vs), op(vs...))
 	}
 }
 
-// decode is DecodeID[K](id, typ), with its error recorded in f.
-func decode[K, E any](f *Filter[E], id, typ string) (K, bool) {
+// decode is DecodeID[K](id, typ), with its error recorded in f as field's.
+func decode[K, E any](f *Filter[E], field, id, typ string) (K, bool) {
 	k, err := DecodeID[K](id, typ)
 	if err != nil {
-		fail(f, err)
+		f.refuse(field, err)
 		return k, false
 	}
 	return k, true
 }
 
 // decodeAll is the keys of ids, converted by conv.
-func decodeAll[K, E, V any](f *Filter[E], ids []string, typ string, conv func(K) V) ([]V, bool) {
+func decodeAll[K, E, V any](f *Filter[E], field string, ids []string, typ string, conv func(K) V) ([]V, bool) {
 	out := make([]V, len(ids))
 	for i, id := range ids {
-		k, ok := decode[K](f, id, typ)
+		k, ok := decode[K](f, field, id, typ)
 		if !ok {
 			return nil, false
 		}

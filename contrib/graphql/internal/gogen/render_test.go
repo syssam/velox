@@ -467,18 +467,18 @@ func TestGoTypes(t *testing.T) {
 		// Pred: one helper call for each predicate, converting the input's
 		// values to the column's Go type where they differ.
 		` f := veloxgql.NewFilter[Event](ctx, "EventWhereInput", depth) `,
-		` veloxgql.IDAs(f, w.ID, "Event", veloxgql.AsUUID[uuid.UUID, [16]byte], Events.ID.EQ) `,
-		` veloxgql.IDListAs(f, w.IDIn, "Event", veloxgql.AsUUID[uuid.UUID, [16]byte], Events.ID.In) `,
-		` veloxgql.Value(f, w.Level, Events.Level.EQ) `,
-		` veloxgql.Value(f, w.SizeGT, Events.Size.GT) `,
-		` veloxgql.List(f, w.RankIn, Events.Rank.In) `,
-		` veloxgql.Value(f, w.AtLT, Events.At.LT) `,
-		` veloxgql.Is(f, w.AtIsNil, Events.At.IsNull) `,
-		` veloxgql.Value(f, w.RefNEQ, Events.Ref.NEQ) `,
-		` veloxgql.IDAs(f, w.OwnerID, "Owner", veloxgql.AsInt[idspkg.UserID, int64], Events.OwnerID.EQ) `,
-		` veloxgql.IDListAs(f, w.OwnerIDNotIn, "Owner", veloxgql.AsInt[idspkg.UserID, int64], Events.OwnerID.NotIn) `,
-		` veloxgql.Is(f, w.HasOwner, Events.Owner.Has) `,
-		` veloxgql.HasWith(f, w.HasOwnerWith, Events.Owner.HasWhere) `,
+		` veloxgql.IDAs(f, "id", w.ID, "Event", veloxgql.AsUUID[uuid.UUID, [16]byte], Events.ID.EQ) `,
+		` veloxgql.IDListAs(f, "idIn", w.IDIn, "Event", veloxgql.AsUUID[uuid.UUID, [16]byte], Events.ID.In) `,
+		` veloxgql.Value(f, "level", w.Level, Events.Level.EQ) `,
+		` veloxgql.Value(f, "sizeGT", w.SizeGT, Events.Size.GT) `,
+		` veloxgql.List(f, "rankIn", w.RankIn, Events.Rank.In) `,
+		` veloxgql.Value(f, "atLT", w.AtLT, Events.At.LT) `,
+		` veloxgql.Is(f, "atIsNil", w.AtIsNil, Events.At.IsNull) `,
+		` veloxgql.Value(f, "refNEQ", w.RefNEQ, Events.Ref.NEQ) `,
+		` veloxgql.IDAs(f, "ownerID", w.OwnerID, "Owner", veloxgql.AsInt[idspkg.UserID, int64], Events.OwnerID.EQ) `,
+		` veloxgql.IDListAs(f, "ownerIDNotIn", w.OwnerIDNotIn, "Owner", veloxgql.AsInt[idspkg.UserID, int64], Events.OwnerID.NotIn) `,
+		` veloxgql.Is(f, "hasOwner", w.HasOwner, Events.Owner.Has) `,
+		` veloxgql.HasWith(f, "hasOwnerWith", w.HasOwnerWith, Events.Owner.HasWhere) `,
 	} {
 		if !strings.Contains(ev, want) {
 			t.Errorf("no %q in\n%s", want, ev)
@@ -501,12 +501,12 @@ func TestGoTypes(t *testing.T) {
 		"func(x *Owner) int32 { var v int32 if x.Rank != nil { v = int32(*x.Rank) } return v }, func(x *Owner, v int32) { c := idspkg.Rank(v) x.Rank = &c }), nil",
 		// Its where predicates take the scalar's Go type, and Pred converts.
 		" Email *string ", " RankIn []int32 ", " Ref *uuid.UUID ", " RatioGT *float64 ", " On *bool ",
-		` veloxgql.IDAs(f, w.ID, "Owner", veloxgql.AsInt[idspkg.UserID, int64], Owners.ID.EQ) `,
-		` veloxgql.ValueAs(f, w.Email, veloxgql.AsString[idspkg.Email, string], Owners.Email.EQ) `,
-		` veloxgql.ListAs(f, w.RankIn, veloxgql.AsInt[idspkg.Rank, int32], Owners.Rank.In) `,
-		` veloxgql.ValueAs(f, w.Ref, veloxgql.AsUUID[idspkg.Ref, uuid.UUID], Owners.Ref.EQ) `,
-		` veloxgql.ValueAs(f, w.RatioGT, veloxgql.AsFloat[idspkg.Ratio, float64], Owners.Ratio.GT) `,
-		` veloxgql.ValueAs(f, w.On, veloxgql.AsBool[idspkg.Flag, bool], Owners.On.EQ) `,
+		` veloxgql.IDAs(f, "id", w.ID, "Owner", veloxgql.AsInt[idspkg.UserID, int64], Owners.ID.EQ) `,
+		` veloxgql.ValueAs(f, "email", w.Email, veloxgql.AsString[idspkg.Email, string], Owners.Email.EQ) `,
+		` veloxgql.ListAs(f, "rankIn", w.RankIn, veloxgql.AsInt[idspkg.Rank, int32], Owners.Rank.In) `,
+		` veloxgql.ValueAs(f, "ref", w.Ref, veloxgql.AsUUID[idspkg.Ref, uuid.UUID], Owners.Ref.EQ) `,
+		` veloxgql.ValueAs(f, "ratioGT", w.RatioGT, veloxgql.AsFloat[idspkg.Ratio, float64], Owners.Ratio.GT) `,
+		` veloxgql.ValueAs(f, "on", w.On, veloxgql.AsBool[idspkg.Flag, bool], Owners.On.EQ) `,
 	} {
 		if !strings.Contains(owner, want) {
 			t.Errorf("no %q in\n%s", want, owner)

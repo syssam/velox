@@ -57,10 +57,22 @@
 //   - Is adds a Boolean predicate, or its negation: IsNil, NotNil and
 //     has<Edge>.
 //
-// A nesting deeper than MaxFilterDepth fails with ErrFilterTooDeep, and a
-// list of more than MaxFilterWidth inputs with ErrFilterTooWide (CheckDepth,
-// CheckWidth). None of it runs a query, so a refused filter fails before any
-// statement is built.
+// A nesting deeper than MaxFilterDepth fails with ErrFilterTooDeep (CheckDepth).
+// A list of more than MaxFilterWidth entries, of inputs or of In or NotIn
+// values, fails with ErrFilterTooWide (CheckWidth), and so does a where
+// argument over its budget of MaxFilterNodes inputs, predicates and values
+// in all. None of it runs a query, so a refused filter fails before any
+// statement is built. An error names the field that held its cause, through
+// the nesting: "veloxgql: OwnerWhereInput.hasEventsWith[0]:
+// EventWhereInput.ownerID: Owner ID: ID of another type".
+//
+// The predicates are SQL's, with its three-valued logic, as entgql's are:
+// on a nullable column, NEQ and NotIn leave out the rows whose column is
+// NULL, and so does not, so a not is not the complement of its input (use
+// IsNil to take the NULL rows in). Contains, HasPrefix and HasSuffix take
+// the client's text literally, % and _ included, and whether they ignore
+// case follows the database, as velox's handles do: PostgreSQL's does not
+// ignore it; MySQL's default collations and SQLite, for ASCII, do.
 //
 // # Scalars
 //
@@ -80,8 +92,8 @@
 //
 // # Limits
 //
-// MaxPage, MaxFilterDepth, MaxFilterWidth and MaxOrderTerms cap what a
-// client may ask for.
+// MaxPage, MaxFilterDepth, MaxFilterWidth, MaxFilterNodes and MaxOrderTerms
+// cap what a client may ask for.
 // They are variables an application may set at start-up, before it serves a
 // request.
 //

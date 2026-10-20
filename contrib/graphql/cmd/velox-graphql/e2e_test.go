@@ -1089,9 +1089,23 @@ func TestWhereDepthAndWidth(t *testing.T) {
 		}
 		return ws
 	}
+	// One input used 100 times at each of 5 levels, as a GraphQL variable
+	// used at many places unmarshals: over MaxFilterNodes long before its
+	// 100^5 inputs.
+	shared := &gen.EventWhereInput{NameIn: []string{"alpha", "beta"}}
+	for range 5 {
+		ws := make([]*gen.EventWhereInput, 100)
+		for i := range ws {
+			ws[i] = shared
+		}
+		shared = &gen.EventWhereInput{Or: ws}
+	}
 	for name, w := range map[string]*gen.EventWhereInput{
-		"or of 101":  {Or: many(101)},
-		"and of 101": {And: many(101)},
+		"a variable 100^5 times": shared,
+		"rankIn of 101":          {RankIn: make([]int8, 101)},
+		"idNotIn of 101":         {IDNotIn: make([]string, 101)},
+		"or of 101":              {Or: many(101)},
+		"and of 101":             {And: many(101)},
 		"hasOwnerWith of 101": {HasOwnerWith: func() []*gen.OwnerWhereInput {
 			ws := make([]*gen.OwnerWhereInput, 101)
 			for i := range ws {
@@ -1132,6 +1146,11 @@ func TestWhereIDs(t *testing.T) {
 		if err := run(); !errors.Is(err, veloxgql.ErrWrongIDType) {
 			t.Errorf("%s: %v, want ErrWrongIDType", name, err)
 		}
+	}
+	// The error names the fields that held the ID.
+	if _, err := owners(ctx, &gen.OwnerWhereInput{HasEventsWith: []*gen.EventWhereInput{{OwnerID: &post}}}); err == nil ||
+		err.Error() != "veloxgql: OwnerWhereInput.hasEventsWith[0]: EventWhereInput.ownerID: Owner ID: ID of another type" {
+		t.Errorf("the error of a nested ID: %v", err)
 	}
 	if _, err := owners(ctx, &gen.OwnerWhereInput{ID: ptr("not an ID")}); !errors.Is(err, veloxgql.ErrBadID) {
 		t.Errorf("a malformed ID: %v, want ErrBadID", err)

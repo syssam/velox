@@ -27,8 +27,9 @@ var (
 	ErrBadPagination = errors.New("bad pagination arguments")
 	// ErrFilterTooDeep: a where input nested deeper than MaxFilterDepth.
 	ErrFilterTooDeep = errors.New("filter is nested too deep")
-	// ErrFilterTooWide: an and or an or list of a where input with more than
-	// MaxFilterWidth entries.
+	// ErrFilterTooWide: a list of a where input (and, or, has<Edge>With, In,
+	// NotIn) with more than MaxFilterWidth entries, or a where argument over
+	// its budget of MaxFilterNodes.
 	ErrFilterTooWide = errors.New("filter list is too long")
 	// ErrNoDB: a resolver ran with no DB in its context, which the handler
 	// puts there.

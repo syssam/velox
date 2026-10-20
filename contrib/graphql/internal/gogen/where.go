@@ -67,7 +67,7 @@ func (r *renderer) writePred(f *file, t *sdl.Type) error {
 // field w of t.
 func (r *renderer) predCall(f *file, t *sdl.Type, w sdl.WhereField) (string, error) {
 	e, vgql := t.Entity, f.veloxgql()
-	field := "w." + w.GoName
+	field := fmt.Sprintf("%q, w.%s", w.Name, w.GoName) // the GraphQL name, for errors, and the value
 	switch w.Kind {
 	case sdl.WhereNot:
 		return fmt.Sprintf("%s.Not(f, %s)", vgql, field), nil
@@ -176,7 +176,9 @@ func (r *renderer) whereConv(f *file, e *plugin.Entity, fd *plugin.Field, w sdl.
 		return "", err
 	}
 	if as == "" {
-		// converts refuses every Go type of a time field but time.Time.
+		// A time field of another Go type: converts refuses it when the
+		// model gives its Kind, and this when it does not (a model written
+		// by hand).
 		return "", fmt.Errorf("schema %s, field %s: velox-graphql converts a time field only from time.Time, and its Go type is %s; give the field time.Time", e.Name, fd.Name, fd.ElemType)
 	}
 	col, err := r.qualify(f, e, fd, fd.ElemType, fd.PkgPath)
