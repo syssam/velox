@@ -115,6 +115,19 @@ func jFull() (jDoc, []any) {
 	return x, []any{int64(1), int64(2), []byte(`["a","b"]`), []byte(`{"k":1}`), []byte(`{"w":3,"h":4}`), []byte(`[5,6]`)}
 }
 
+// bound is args as SQLite binds them: each []byte, an encoded value, as a
+// string.
+func bound(args []any) []any {
+	out := make([]any, len(args))
+	for i, a := range args {
+		if b, ok := a.([]byte); ok {
+			a = string(b)
+		}
+		out[i] = a
+	}
+	return out
+}
+
 func sameArgs(t *testing.T, what string, got, want []any) {
 	t.Helper()
 	if !reflect.DeepEqual(got, want) {
@@ -220,6 +233,9 @@ func TestJSONWrites(t *testing.T) {
 			}
 			if !strings.Contains(e.SQL, "UPDATE") {
 				t.Fatalf("%v: no update branch: %s", d, e.SQL)
+			}
+			if d == velox.SQLite {
+				want = bound(want)
 			}
 			sameArgs(t, d.String()+" upsert", e.Args, want)
 		}
@@ -560,11 +576,11 @@ func TestCustomCodec(t *testing.T) {
 	if err := db.Insert(&x).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
-	sameArgs(t, "Insert", e.Args, []any{int64(1), []byte("<a,b>")})
+	sameArgs(t, "Insert", e.Args, []any{int64(1), "<a,b>"})
 	if _, err := db.Update[jList]().Set(jLists.Words.Set([]string{"c"})).Where(jLists.ID.EQ(1)).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
-	sameArgs(t, "Update", e.Args, []any{[]byte("<c>"), int64(1)})
+	sameArgs(t, "Update", e.Args, []any{"<c>", int64(1)})
 	e.Rows = [][]any{{int64(1), "<x,y>"}, {int64(2), []byte("<z>")}}
 	xs, err := db.Query[jList]().Limit(2).All(ctx)
 	if err != nil {
@@ -708,5 +724,40 @@ func TestAfterOverAnEncodedColumn(t *testing.T) {
 	}
 	if _, _, err := db.Query[jDoc]().OrderBy(jDocs.ID.Asc()).After(&last).Limit(2).SQL(ctx); err != nil {
 		t.Errorf("paging over the key: %v", err)
+	}
+}
+
+// TestJSONBindsPerDialect: an encoded value is bound as a string on SQLite,
+// so that the column holds TEXT (a []byte would be stored as a BLOB, which
+// SQLite's JSON functions read as JSONB), and as []byte on PostgreSQL and
+// MySQL. NULL stays nil.
+func TestJSONBindsPerDialect(t *testing.T) {
+	for _, d := range []velox.Dialect{velox.Postgres, velox.MySQL, velox.SQLite} {
+		e := &velox.FakeExec{Affected: 1}
+		db := velox.OpenFake(d, e)
+		x, want := jFull()
+		wantAll := append(append([]any(nil), want...), want...)
+		wantAll[len(want)] = int64(2) // the second row's key
+		if d == velox.SQLite {
+			want, wantAll = bound(want), bound(wantAll)
+		}
+		if err := db.Insert(&x).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		sameArgs(t, d.String()+" Insert", e.Args, want)
+		y := x
+		y.ID = 2
+		if err := db.InsertAll([]jDoc{x, y}).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		sameArgs(t, d.String()+" InsertAll", e.Args, wantAll)
+		if _, err := db.Update[jDoc]().Set(jDocs.Tags.Set([]string{"x"}), jDocs.Nums.SetNull()).Where(jDocs.ID.EQ(1)).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		wantUp := []any{[]byte(`["x"]`), nil, int64(1)}
+		if d == velox.SQLite {
+			wantUp = bound(wantUp)
+		}
+		sameArgs(t, d.String()+" Update", e.Args, wantUp)
 	}
 }

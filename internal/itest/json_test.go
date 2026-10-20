@@ -115,14 +115,16 @@ func rawCol(t *testing.T, tg target, col string, id int64) (text string, null bo
 	}
 	t.Logf("raw %-5s id %d: %T %q (SQL NULL: %v)", col, id, v, text, isNull)
 	if tg.d == velox.SQLite && !isNull {
-		// The storage class of the bytes bound: a []byte is a BLOB, which a
-		// TEXT column's affinity does not convert. Logged, since SQLite's JSON
-		// functions read a BLOB as JSONB, not as text.
+		// The storage class: velox binds a string on SQLite, so the column
+		// holds TEXT. A []byte would be stored as a BLOB, which SQLite's JSON
+		// functions read as JSONB, not as text.
 		var typ string
 		if err := tg.direct.QueryRowContext(ctx, fmt.Sprintf("SELECT typeof(%s) FROM json_recs WHERE id = ?", col), id).Scan(&typ); err != nil {
 			t.Fatal(err)
 		}
-		t.Logf("raw %-5s id %d: SQLite storage class %s", col, id, typ)
+		if typ != "text" {
+			t.Errorf("%s of %d is stored as %s on SQLite, want text", col, id, typ)
+		}
 	}
 	return text, isNull
 }

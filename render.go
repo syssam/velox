@@ -63,8 +63,9 @@ func (w *writer) arg(v any) {
 	}
 }
 
-// colArg binds v, a value of column col: as it is, or as the bytes of its
-// JSON when the column is an encoded one. Every value written to a column goes
+// colArg binds v, a value of column col: as it is, or when the column is an
+// encoded one, as the bytes its codec returns (a string on SQLite, so that
+// the column holds TEXT). Every value written to a column goes
 // through it, so that only the arguments hold the bytes (hooks see v).
 func (w *writer) colArg(col int, v any) {
 	if w.in.Columns[col].Codec {
@@ -73,6 +74,11 @@ func (w *writer) colArg(col int, v any) {
 			w.fail(err)
 		}
 		v = b
+		// SQLite stores a []byte as a BLOB whatever the column's affinity, and
+		// its JSON functions read a BLOB as JSONB; a string is stored as TEXT.
+		if bs, ok := b.([]byte); ok && w.d == SQLite {
+			v = string(bs)
+		}
 	}
 	w.arg(v)
 }

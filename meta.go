@@ -69,7 +69,8 @@ type ColumnInfo struct {
 	Sensitive     bool // the column holds a secret (velox logs no values)
 	// Codec says the column's value is encoded: its ColumnDesc gave a codec
 	// (Encode and Decode), as velox-gen does, with encoding/json's, for every
-	// json field. The value is bound as the bytes Encode returns, and only
+	// json field. The value is bound as the bytes Encode returns (as a string on
+	// SQLite, so that the column holds TEXT, not a BLOB), and only
 	// there: hooks and policies see the Go value, and only Statement.Args
 	// holds the bytes. In a nullable (pointer) field, a nil pointer, or a nil
 	// slice or map it points to, binds NULL; in any other field a nil slice

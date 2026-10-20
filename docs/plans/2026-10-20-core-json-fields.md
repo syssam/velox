@@ -23,7 +23,7 @@
   - The allocation budgets (`go test -run Budget -v .`) are unchanged: one-row 6, tenant 7, hundred rows 105, tx 9/6, observed 7/6, metadata 19, Insert 13, replica one-row 6.
   - The escape check is unchanged. Run `go build -gcflags=-m . 2>&1 | grep "db.go:$(grep -n 'func (db \*DB) plain' db.go | cut -d: -f1):"`. It must print `leaking param content: st` and `read does not escape`.
 - **Encoding.**
-  - A JSON column's value is encoded with `json.Marshal` and bound as `[]byte`, which every dialect accepts for JSON, JSONB and TEXT columns.
+  - A JSON column's value is encoded with `json.Marshal` and bound as `[]byte` on PostgreSQL and MySQL, and as a string on SQLite so that the column holds TEXT, not a BLOB (ruling of 2026-10-20, Task 2).
   - A nil pointer field, or a nil slice or map in a nullable field, binds SQL NULL.
   - A nil slice or map in a non-nullable field binds the JSON `null`, as ent does. The value is documented and tested.
 - **Decoding.**
