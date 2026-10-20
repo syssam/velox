@@ -189,6 +189,9 @@ func (db *DB) plain(ctx context.Context, st *Statement, read func(rows) error, r
 	if err := db.outsideTx(ctx, st); err != nil {
 		return err
 	}
+	if err := db.dryWrite(ctx, st); err != nil {
+		return err
+	}
 	if err := st.resolve(); err != nil {
 		return err
 	}
@@ -242,6 +245,9 @@ func (db *DB) plain(ctx context.Context, st *Statement, read func(rows) error, r
 // statement, and next (which holds read), so both escape; a statement with
 // no hooks of either kind uses plain.
 func (db *DB) run(ctx context.Context, st *Statement, read func(rows) error, res *result) error {
+	if err := db.dryWrite(ctx, st); err != nil {
+		return err
+	}
 	if err := db.prepare(ctx, st); err != nil {
 		return err
 	}
@@ -373,6 +379,20 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 func (db *DB) outsideTx(ctx context.Context, st *Statement) error {
 	if db.foreign(ctx) {
 		return stmtErr(st, ErrOutsideTx)
+	}
+	return nil
+}
+
+// dryWrite fails a statement that writes, st, under a dry-run context
+// (IsDryRun), with ErrDryRun: nothing is sent. It is made where a statement
+// is sent, in plain and run, never in prepare, which SQL(ctx) renders
+// through; so the statement being dry-run is rendered, and every other write
+// a hook makes under its context is refused. Every write goes through plain
+// or run, Raw included, so this is the one place the rule is kept. Reads
+// pass without a context lookup.
+func (db *DB) dryWrite(ctx context.Context, st *Statement) error {
+	if st.Op != OpSelect && IsDryRun(ctx) {
+		return stmtErr(st, ErrDryRun)
 	}
 	return nil
 }

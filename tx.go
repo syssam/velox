@@ -55,6 +55,9 @@ func RetrySerializable(n int) TxOption { return func(o *txOptions) { o.retries =
 // the mark for work that must not join the transaction. Once the transaction
 // has ended, committed or rolled back, its mark counts as none.
 //
+// Under a dry-run context (IsDryRun), such as the one SQL(ctx) gives a hook,
+// Tx fails with ErrDryRun before BEGIN, nested or not: it is a write.
+//
 // WithDeadlines' Tx and MaxTx, and Timeout, bound the whole call. The
 // transaction's deadline, velox's or ctx's, whichever is earlier, bounds every
 // statement inside it, nested Tx included, whatever context the statement is
@@ -81,6 +84,9 @@ func RetrySerializable(n int) TxOption { return func(o *txOptions) { o.retries =
 func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error, opts ...TxOption) error {
 	if db.foreign(ctx) {
 		return fmt.Errorf("velox: transaction: %w", ErrOutsideTx)
+	}
+	if IsDryRun(ctx) {
+		return fmt.Errorf("velox: transaction: %w", ErrDryRun)
 	}
 	if db.inTx {
 		return db.savepoint(ctx, fn)

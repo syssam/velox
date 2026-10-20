@@ -2,6 +2,7 @@ package velox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"slices"
@@ -93,7 +94,10 @@ func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 // Rewrite hooks, the tenant and policy scope and
 // rendering. So the hooks and the policy run, and can tell from
 // IsDryRun(ctx), or a Rewrite hook from Statement.DryRun, that the statement
-// will not be sent. Around hooks, which wrap execution, do not run.
+// will not be sent. Around hooks, which wrap execution, do not run. A write a
+// hook makes under ctx, an audit row through Mutation.DB say, is refused with
+// ErrDryRun: a hook that returns that error after next leaves SQL(ctx) its
+// statement; one that returns it before next, SQL(ctx) fails with it.
 func (u UpdateQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error) {
 	ctx = dryRunContext(ctx) // first, so that every hook sees it
 	st, err := u.statement()
@@ -159,6 +163,8 @@ func (d DeleteQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 // policy scope and rendering. So the hooks and the policy run, and can tell
 // from IsDryRun(ctx), or a Rewrite hook from Statement.DryRun, that the
 // statement will not be sent. Around hooks, which wrap execution, do not run.
+// A write a hook makes under ctx is refused with ErrDryRun, as in
+// UpdateQuery.SQL.
 func (d DeleteQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error) {
 	ctx = dryRunContext(ctx) // first, so that every hook sees it
 	if d.meta.err != nil {
@@ -248,10 +254,19 @@ func write(ctx context.Context, db *DB, st *Statement, dry, save bool) (int64, s
 		core = func(ctx context.Context, mu *mutation) error { return saveCore(ctx, db, mu) }
 	}
 	mu := &mutation{op: st.Op, st: st, dry: dry}
-	if err := mutate(ctx, db, st.Entity, mu, core); err != nil {
+	if err := mutate(ctx, db, st.Entity, mu, core); err != nil && !dryRefused(mu, err) {
 		return 0, "", nil, err
 	}
 	return mu.res.Affected, mu.sql, mu.args, nil
+}
+
+// dryRefused reports whether err, from the hooks of a statement under SQL(ctx),
+// is a write a hook made that was refused with ErrDryRun, after the statement
+// itself was rendered: SQL(ctx) then returns the statement, as the hook, not
+// the dry run, is what asked for a write. A hook that wrote before next, and
+// so before anything was rendered, gets the error.
+func dryRefused(mu *mutation, err error) bool {
+	return mu.dry && mu.sql != "" && errors.Is(err, ErrDryRun)
 }
 
 // writeCore is an update's or delete's work inside the hooks, their next.

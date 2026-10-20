@@ -61,6 +61,11 @@ type dryRunKey struct{}
 // anything runs, so everything handed that context sees it: the entity's
 // hooks (Hooks), the Policy functions and the Rewrite hooks. A Rewrite hook
 // can also read it from Statement.DryRun.
+//
+// A write made under such a context is refused: Exec of an Insert, InsertAll,
+// Update or Delete, Save, an upsert and Tx fail with ErrDryRun before
+// anything is sent, on any *DB, so a hook's audit write through
+// Mutation.DB does not happen and needs no check. Reads run as normal.
 func IsDryRun(ctx context.Context) bool {
 	dry, _ := ctx.Value(dryRunKey{}).(bool)
 	return dry

@@ -43,7 +43,10 @@ func (f MutateFunc[E]) Mutate(ctx context.Context, m *Mutation[E]) error { retur
 // nothing and fails the write. Every insert (Insert and InsertAll, whose
 // hooks run once over all its rows), update, delete and Save of the entity
 // runs them, and so do their SQL(ctx) methods, where next renders the
-// statement instead of sending it and IsDryRun(ctx) is true.
+// statement instead of sending it and IsDryRun(ctx) is true. A write a hook
+// makes under that ctx, an audit row through Mutation.DB say, fails with
+// ErrDryRun, and SQL(ctx) still returns the statement when the hook returns
+// that error after next; reads run as normal.
 //
 // The guard (ErrNoWhere and the like) runs on an update or delete as the
 // caller built it, before the hooks, and again inside next: a condition a

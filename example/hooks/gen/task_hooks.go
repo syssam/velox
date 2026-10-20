@@ -37,7 +37,8 @@ func deriveSlug(next velox.Mutator[Task]) velox.Mutator[Task] {
 // renamed sees the assignments of an Update or a Save through the Mutation:
 // Value reads one, Set adds or replaces one. It derives the new slug before
 // the statement is sent, and when the statement succeeded it writes an Audit
-// row.
+// row. Under SQL(ctx) that write is refused with velox.ErrDryRun, so printing
+// the statement records nothing; the hook needs no check for it.
 func renamed(next velox.Mutator[Task]) velox.Mutator[Task] {
 	return velox.MutateFunc[Task](func(ctx context.Context, m *velox.Mutation[Task]) error {
 		v, ok := m.Value(Tasks.Title)
@@ -51,11 +52,6 @@ func renamed(next velox.Mutator[Task]) velox.Mutator[Task] {
 		m.Set(Tasks.Slug.Set(slug(title)))
 		if err := next.Mutate(ctx, m); err != nil {
 			return err
-		}
-		// SQL(ctx) runs hooks too, without sending anything: a hook with an
-		// effect outside the statement checks IsDryRun.
-		if velox.IsDryRun(ctx) {
-			return nil
 		}
 		// m.DB() is the DB the write runs on: the transaction's when the
 		// caller is in db.Tx, so the audit row commits or rolls back with the

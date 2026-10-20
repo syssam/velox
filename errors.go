@@ -60,6 +60,12 @@ var (
 	// ended: it was most likely meant for the transaction's DB. Nothing was
 	// sent. WithoutTx lifts the check.
 	ErrOutsideTx = errors.New("statement outside its transaction")
+	// ErrDryRun: a write, or a Tx, under a context IsDryRun reports true,
+	// such as the one SQL(ctx) gives a hook: Insert, InsertAll, Update and
+	// Delete's Exec, Save, an upsert and Tx. Nothing was sent. Reads run.
+	// SQL(ctx) itself returns the statement it rendered, not this error,
+	// when it is a hook's write that was refused.
+	ErrDryRun = errors.New("write in a dry run")
 )
 
 // SchemaError reports a mistake in an entity's generated metadata (its Desc,

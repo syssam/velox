@@ -52,8 +52,11 @@ and works on a `*velox.Mutation[Task]`.
   an entity that has hooks.
 - **Delete hook.** `onlyDone` narrows with `m.Where(Tasks.Done.EQ(true))`: even
   `Delete().All()` removes only finished tasks.
-- **IsDryRun.** `SQL(ctx)` runs the hooks too, with `next` rendering the
-  statement instead of sending it. `renamed` writes its audit row only when
-  `!velox.IsDryRun(ctx)`, so printing a statement records nothing.
+- **Dry runs.** `SQL(ctx)` runs the hooks too, with `next` rendering the
+  statement instead of sending it. A write under that context fails with
+  `velox.ErrDryRun`, so `renamed`'s audit insert is refused and printing a
+  statement records nothing, with no check in the hook. `SQL(ctx)` still
+  returns the statement. Reads in a hook run as normal; `velox.IsDryRun(ctx)`
+  tells a hook it is in one.
 
 The output is in `testdata/output.golden`.

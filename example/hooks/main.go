@@ -2,7 +2,8 @@
 // hook that validates and derives a field, a generic hook that any entity
 // lists, an update hook that works through a Mutation and writes an audit row
 // on the write's DB (inside db.Tx, it commits or rolls back with the write), a
-// delete hook that narrows, On, Save storing what hooks set, and IsDryRun.
+// delete hook that narrows, On, Save storing what hooks set, and a dry run
+// that refuses the audit write.
 package main
 
 import (
@@ -87,7 +88,7 @@ func run(ctx context.Context, w io.Writer) error {
 
 	// The update hook adds the slug to an update that sets the title. SQL(ctx)
 	// runs the hook too, so the statement it prints has the slug; the hook's
-	// IsDryRun check keeps it from writing an audit row.
+	// audit write is refused (velox.ErrDryRun), so it records nothing.
 	rename := db.Update[gen.Task]().Set(T.Title.Set("Tag v1.0")).Where(T.Slug.EQ("tag-v1"))
 	text, args, err := rename.SQL(ada)
 	if err != nil {

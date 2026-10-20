@@ -139,11 +139,14 @@ func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 // the error Exec would fail with before sending it; it sends nothing, and
 // returns "" for an InsertAll of nothing. It runs every stage Exec runs
 // before execution: like Exec, it runs the entity's hooks, fills defaults and
-// the tenant into the caller's entities, then runs the validators, asks the policy's Insert and runs the
+// the tenant into the caller's structs (the *E or the []E you passed, which
+// it changes although it sends nothing; the generated key is the one field it
+// leaves), then runs the validators, asks the policy's Insert and runs the
 // Rewrite hooks, the scope and rendering. So the
 // hooks and the policy run, and can tell from IsDryRun(ctx), or a Rewrite
 // hook from Statement.DryRun, that the statement will not be sent. Around
-// hooks, which wrap execution, do not run. An InsertAll too large for one
+// hooks, which wrap execution, do not run. A write a hook makes under ctx is
+// refused with ErrDryRun, as in UpdateQuery.SQL. An InsertAll too large for one
 // statement gives the first. InTx is set when Exec sends the statement in a
 // transaction: inside one, for an InsertAll too large for one statement, and
 // for one whose update branch gets the policy's conditions.
@@ -157,7 +160,7 @@ func (q InsertQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, erro
 	}
 	if len(q.meta.info.hooks) > 0 {
 		mu := q.mutation(true)
-		if err := mutate(ctx, q.db, q.meta.info, mu, func(ctx context.Context, mu *mutation) error { return q.render(ctx, mu) }); err != nil {
+		if err := mutate(ctx, q.db, q.meta.info, mu, func(ctx context.Context, mu *mutation) error { return q.render(ctx, mu) }); err != nil && !dryRefused(mu, err) {
 			return "", nil, err
 		}
 		return mu.sql, mu.args, nil
