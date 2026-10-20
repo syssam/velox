@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/syssam/velox2/plugin"
 )
 
 // header starts every file velox-gen writes: velox-gen rewrites and deletes
@@ -79,7 +81,7 @@ func camel(label string) string {
 	if !ok {
 		return label
 	}
-	return first + pascal(rest)
+	return first + plugin.GoName(rest)
 }
 
 // renderPackage writes velox.go.

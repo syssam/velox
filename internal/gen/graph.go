@@ -19,7 +19,7 @@ type Graph struct {
 // Entity is one schema, resolved.
 type Entity struct {
 	Name        string                     `json:"name"`
-	Label       string                     `json:"label"` // snake(Name)
+	Label       string                     `json:"label"` // plugin.Snake(Name)
 	Table       string                     `json:"table"`
 	TableSchema string                     `json:"table_schema,omitempty"`
 	Fields      []*Field                   `json:"fields"` // Fields[0] is the ID; then the model's order; then implicit foreign keys

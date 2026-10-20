@@ -19,13 +19,13 @@ import (
 )
 
 // reserved are the Go names of the methods an entity has, which no field or
-// edge may take (Ruling 7).
+// edge may take.
 var reserved = map[string]bool{"VeloxMeta": true, "String": true, "GoString": true, "Policy": true, "Hooks": true}
 
 // Lower maps g to the model Render writes: Go names and types, handle kinds,
 // enums, the join entities of many-to-many relations, and the code of
 // defaults and checks. It returns every rule the output would break
-// (Ruling 7, import names), as *Error values joined with errors.Join, ordered
+// (a name taken twice, an import name clash), as *Error values joined with errors.Join, ordered
 // by schema name.
 //
 // Lower does not change g. Two calls with equal Graphs and Configs give equal
@@ -123,7 +123,7 @@ func (l *lowerer) entities() {
 	for _, e := range l.g.Entities {
 		s := &entState{l: l, name: e.Name, paths: map[string]string{}}
 		s.out = &OutEntity{
-			Name: e.Name, Label: e.Label, Handles: plural(e.Name), Table: e.Table, TableSchema: e.TableSchema,
+			Name: e.Name, Label: e.Label, Handles: plugin.Plural(e.Name), Table: e.Table, TableSchema: e.TableSchema,
 			Tenant: -1, Bound: l.cfg.Bound[e.Name],
 		}
 		if raw, ok := e.Annotations["Comment"]; ok {
@@ -278,7 +278,7 @@ func (s *entState) elemType(f *Field, where string) (elem, kind string) {
 		t := s.name + f.GoName
 		en := &OutEnum{Type: t}
 		for _, v := range f.Enums {
-			en.Consts = append(en.Consts, t+pascal(v.Name))
+			en.Consts = append(en.Consts, t+plugin.GoName(v.Name))
 			en.Values = append(en.Values, v.Value)
 		}
 		s.l.enums = append(s.l.enums, &enumDecl{enum: en, schema: s.name, where: where})
@@ -351,8 +351,8 @@ func qualifiers(ident string) []string {
 	return qs
 }
 
-// descriptor is the expression of f's descriptor in the schema package
-// (Ruling 5), by its position.
+// descriptor is the expression of f's descriptor in the schema package,
+// by its position.
 func (s *entState) descriptor(e *Entity, f *Field) string {
 	s.sch = true
 	p := f.Position
@@ -362,8 +362,8 @@ func (s *entState) descriptor(e *Entity, f *Field) string {
 	return fmt.Sprintf("(&sch.%s{}).Fields()[%d].Descriptor()", e.Name, p.Index)
 }
 
-// defaults writes the code of f's Default, DefaultFunc and UpdateDefault
-// (Ruling 5). Each read of the descriptor is a statement of the setup block,
+// defaults writes the code of f's Default, DefaultFunc and UpdateDefault.
+// Each read of the descriptor is a statement of the setup block,
 // which runs once, so the closure of a column does no descriptor read per row.
 func (s *entState) defaults(e *Entity, f *Field, o *OutField, where string) {
 	elem := o.ElemType
@@ -441,7 +441,7 @@ func (s *entState) literal(f *Field, elem, where string) (lit string, ok bool) {
 		if f.Type == "enum" && f.GoType == nil {
 			for _, en := range f.Enums {
 				if en.Value == v {
-					return elem + pascal(en.Name), true
+					return elem + plugin.GoName(en.Name), true
 				}
 			}
 			s.fail(where, "its Default %s is not one of the enum values", raw)
@@ -512,7 +512,7 @@ func unset(f *Field, elem string) string {
 	return ""
 }
 
-// checks writes the case of Check's switch for column col (Ruling 6), when f
+// checks writes the case of Check's switch for column col, when f
 // has checks, an enum or validators.
 func (s *entState) checks(e *Entity, col int, f *Field, o *OutField, where string) {
 	if len(f.Checks) == 0 && f.Type != "enum" && f.Validators == 0 {
@@ -731,7 +731,7 @@ func (l *lowerer) through(s *entState, e, t *Entity, ed *Edge) string {
 	}
 	j := l.joins[ed.Rel.Table]
 	if j == nil {
-		name := pascal(plugin.Singular(ed.Rel.Table))
+		name := plugin.GoName(plugin.Singular(ed.Rel.Table))
 		if !ident(name) {
 			s.fail(where, "join table %s has no Go name for its entity", ed.Rel.Table)
 			name = "Join"
@@ -741,12 +741,12 @@ func (l *lowerer) through(s *entState, e, t *Entity, ed *Edge) string {
 			s.fail(where, "join table %s lies between tables in different schemas (%q and %q)", ed.Rel.Table, owner.TableSchema, target.TableSchema)
 		}
 		js.out = &OutEntity{
-			TableSchema: owner.TableSchema, Name: name, Label: snake(name), Handles: plural(name), Table: ed.Rel.Table,
+			TableSchema: owner.TableSchema, Name: name, Label: plugin.Snake(name), Handles: plugin.Plural(name), Table: ed.Rel.Table,
 			PrimaryKey: []int{0, 1}, Tenant: -1, Join: true, Bound: l.cfg.Bound[name],
 		}
 		for i, ent := range []*Entity{owner, target} {
 			id := ent.Fields[0]
-			f := &Field{Field: load.Field{Name: cols[i], Type: id.Type, GoType: id.GoType}, GoName: pascal(cols[i]), Column: cols[i]}
+			f := &Field{Field: load.Field{Name: cols[i], Type: id.Type, GoType: id.GoType}, GoName: plugin.GoName(cols[i]), Column: cols[i]}
 			js.out.Fields = append(js.out.Fields, js.field(nil, i, f))
 		}
 		// Errors name the assoc edge, whichever of the pair makes the entity first.
@@ -773,7 +773,7 @@ func (l *lowerer) through(s *entState, e, t *Entity, ed *Edge) string {
 }
 
 // finish completes the entities' files, adds the join entities, and checks
-// that the generated names are distinct (Ruling 7).
+// that the generated names are distinct.
 func (l *lowerer) finish() {
 	for _, e := range l.g.Entities {
 		l.complete(l.state[e.Name])
@@ -822,7 +822,7 @@ func (l *lowerer) finish() {
 		}
 	}
 	for _, e := range l.g.Entities {
-		add(plural(e.Name), "handles variable", e.Name, "")
+		add(plugin.Plural(e.Name), "handles variable", e.Name, "")
 	}
 	for i, j := range joins {
 		if joinOK[i] {

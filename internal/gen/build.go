@@ -101,7 +101,7 @@ var idTypes = map[string]bool{
 
 // newField resolves a field of the model.
 func newField(lf *load.Field) *Field {
-	return &Field{Field: *lf, GoName: pascal(lf.Name), Column: cmp.Or(lf.StorageKey, lf.Name), Pointer: lf.Nillable}
+	return &Field{Field: *lf, GoName: plugin.GoName(lf.Name), Column: cmp.Or(lf.StorageKey, lf.Name), Pointer: lf.Nillable}
 }
 
 // entities makes one Entity per schema, with its table, its fields and its ID
@@ -110,8 +110,8 @@ func (b *builder) entities(m *load.Model) {
 	schemas := slices.Clone(m.Schemas)
 	slices.SortStableFunc(schemas, func(x, y *load.Schema) int { return strings.Compare(x.Name, y.Name) })
 	for _, s := range schemas {
-		e := &Entity{Name: s.Name, Label: snake(s.Name), Fields: []*Field{}, Edges: []*Edge{}, Annotations: s.Annotations}
-		e.Table = plural(e.Label)
+		e := &Entity{Name: s.Name, Label: plugin.Snake(s.Name), Fields: []*Field{}, Edges: []*Edge{}, Annotations: s.Annotations}
+		e.Table = plugin.Plural(e.Label)
 		if raw, ok := s.Annotations["Table"]; ok {
 			var t struct{ Schema, Table string }
 			if err := json.Unmarshal(raw, &t); err == nil {
@@ -185,7 +185,7 @@ func (b *builder) resolveEdges() {
 	for _, n := range b.nodes {
 		for _, le := range n.schema.Edges {
 			ed := &Edge{
-				Name: le.Name, GoName: pascal(le.Name), Target: le.Type, Unique: le.Unique, Required: le.Required,
+				Name: le.Name, GoName: plugin.GoName(le.Name), Target: le.Type, Unique: le.Unique, Required: le.Required,
 				Inverse: le.Inverse, Immutable: le.Immutable, Symbols: slices.Clone(le.Symbols),
 				Comment: le.Comment, Annotations: le.Annotations,
 			}
@@ -257,7 +257,7 @@ func (b *builder) resolveInverse(n *node, s *edgeState) {
 	ref := r.ed
 	ed.Ref, ref.Ref = ref.Name, ed.Name
 	e := n.ent
-	table, cols := e.Table, []string{t.ent.Label + "_" + snake(ref.Name)}
+	table, cols := e.Table, []string{t.ent.Label + "_" + plugin.Snake(ref.Name)}
 	switch au, iu := ref.Unique, le.Unique; {
 	case au && iu:
 		ed.Rel.Kind, ref.Rel.Kind = "O2O", "O2O"
@@ -303,7 +303,7 @@ func (b *builder) resolveInverse(n *node, s *edgeState) {
 // resolveAssoc resolves the assoc edge s of n, which no inverse edge claimed.
 func (b *builder) resolveAssoc(n *node, s *edgeState) {
 	le, ed, t := s.le, s.ed, s.target
-	cols := []string{n.ent.Label + "_" + snake(le.Name)}
+	cols := []string{n.ent.Label + "_" + plugin.Snake(le.Name)}
 	switch {
 	case !le.Unique && t == n:
 		ed.Rel.Kind, ed.Bidi = "M2M", true
@@ -384,7 +384,7 @@ func ownFK(ed *Edge) bool {
 }
 
 // foreignKeys binds every non-M2M relation to the field that holds its foreign
-// key, adding that field when no edge binds one (step 4, Ruling 5).
+// key, adding that field when no edge binds one (step 4: every relation has its key field).
 func (b *builder) foreignKeys() {
 	for _, n := range b.nodes {
 		for _, s := range n.edges {
@@ -461,7 +461,7 @@ func (b *builder) implicit(holder, ref *node, s *edgeState, required, unique, im
 		lf.GoType = &g
 	}
 	holder.ent.Fields = append(holder.ent.Fields, &Field{
-		Field: lf, GoName: pascal(name), Column: name, Pointer: !required, Implicit: s.ed.Name,
+		Field: lf, GoName: plugin.GoName(name), Column: name, Pointer: !required, Implicit: s.ed.Name,
 	})
 	b.bind(s, name, name)
 }
@@ -583,12 +583,12 @@ func (b *builder) validateNames(e *Entity) {
 			continue
 		}
 		for i, v := range f.Enums {
-			name := pascal(v.Name)
+			name := plugin.GoName(v.Name)
 			if !ident(name) {
 				continue // rule 20
 			}
 			for _, w := range f.Enums[:i] {
-				if w.Value != v.Value && pascal(w.Name) == name {
+				if w.Value != v.Value && plugin.GoName(w.Name) == name {
 					b.fail(30, e.Name, fieldAt(f.Name), "values %q and %q have one Go name %s", w.Value, v.Value, name)
 					break
 				}
@@ -699,7 +699,7 @@ func (b *builder) validateEnum(e *Entity, f *Field) {
 	}
 	reported := map[string]bool{}
 	for _, v := range f.Enums {
-		if !ident(pascal(v.Name)) && !reported[v.Value] {
+		if !ident(plugin.GoName(v.Name)) && !reported[v.Value] {
 			b.fail(20, e.Name, fieldAt(f.Name), "value %q has no Go name; use NamedValues", v.Value)
 			reported[v.Value] = true
 		}

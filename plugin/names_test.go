@@ -1,6 +1,8 @@
 package plugin_test
 
 import (
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/syssam/velox2/plugin"
@@ -13,6 +15,36 @@ func TestSingular(t *testing.T) {
 	} {
 		if got := plugin.Singular(in); got != want {
 			t.Errorf("Singular(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestNamesGolden pins the four frozen helpers to testdata/names.golden. It has
+// no update flag: changing the file by hand is the deliberate act.
+func TestNamesGolden(t *testing.T) {
+	data, err := os.ReadFile("testdata/names.golden")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
+	if len(lines) < 60 {
+		t.Fatalf("golden has %d lines, want at least 60", len(lines))
+	}
+	for i, line := range lines {
+		c := strings.Split(line, "\t")
+		if len(c) != 5 {
+			t.Fatalf("line %d: %d columns, want 5", i+1, len(c))
+		}
+		in := c[0]
+		for _, x := range []struct{ name, got, want string }{
+			{"Snake", plugin.Snake(in), c[1]},
+			{"Plural", plugin.Plural(in), c[2]},
+			{"Singular", plugin.Singular(in), c[3]},
+			{"GoName", plugin.GoName(in), c[4]},
+		} {
+			if x.got != x.want {
+				t.Errorf("line %d: %s(%q) = %q, want %q", i+1, x.name, in, x.got, x.want)
+			}
 		}
 	}
 }

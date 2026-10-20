@@ -15,4 +15,9 @@
 //
 // The package imports only the standard library, so that a plugin depends on
 // nothing else of velox.
+//
+// [Snake], [Plural], [Singular] and [GoName] are velox-gen's naming helpers,
+// and they are frozen: they decide table, column and Go names, which live in
+// databases and code, so a change to any output breaks users. The golden
+// table testdata/names.golden pins them.
 package plugin

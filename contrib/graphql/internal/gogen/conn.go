@@ -57,7 +57,7 @@ func connArgs(t *sdl.Type) string {
 func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	e, n := t.Entity, t.Name
 	what := "schema " + e.Name
-	root := plural(n) + "Connection"
+	root := plugin.Plural(n) + "Connection"
 	for _, name := range []string{n + "Connection", n + "Edge", root, connFunc(t), keyFunc(t)} {
 		if err := r.declare(name, what); err != nil {
 			return err
@@ -197,20 +197,6 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	f.p("\treturn %s.OrderTerm[%s]{}, %s.Errorf(\"veloxgql: %sOrder: %%q is not a value of %sOrderField\", o.Field)", vgql, e.Name, f.use("fmt", "fmt"), n, n)
 	f.p("}")
 	return nil
-}
-
-// plural is the plural of an English noun, by the rule velox-gen names an
-// entity's handles with (user → users, category → categories, box → boxes),
-// so that the root function of a connection reads like them.
-func plural(s string) string {
-	switch {
-	case len(s) > 1 && s[len(s)-1] == 'y' && !strings.ContainsRune("aeiouAEIOU", rune(s[len(s)-2])):
-		return s[:len(s)-1] + "ies"
-	case strings.HasSuffix(s, "s"), strings.HasSuffix(s, "x"), strings.HasSuffix(s, "z"),
-		strings.HasSuffix(s, "ch"), strings.HasSuffix(s, "sh"):
-		return s + "es"
-	}
-	return s + "s"
 }
 
 // term is the expression of a veloxgql.Term of the field fd, named field

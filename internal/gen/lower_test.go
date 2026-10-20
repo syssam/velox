@@ -120,7 +120,7 @@ func TestLowerTypes(t *testing.T) {
 		{"name", "string", "velox.StringCol[LwUser, string]"},
 		{"nick", "string", "velox.StringCol[LwUser, string]"},             // Optional alone is a value on a NOT NULL column
 		{"active", "*bool", "velox.NullCol[LwUser, bool]"},                // Nillable, with a Default that does not change the type
-		{"role", "LwUserRole", "velox.StringCol[LwUser, LwUserRole]"},     // the generated enum type (Ruling 3)
+		{"role", "LwUserRole", "velox.StringCol[LwUser, LwUserRole]"},     // the generated enum type
 		{"seen", "*time.Time", "velox.NullOrderedCol[LwUser, time.Time]"}, //
 		{"tags", "[]string", "velox.JSONCol[LwUser, []string]"},           // a JSON slice is never a pointer
 	} {
@@ -154,8 +154,8 @@ func TestLowerTypes(t *testing.T) {
 
 // TestLowerJSONFlag: a json field, and only a json field, is lowered with
 // JSON set, for which render writes encoding/json's codec into its
-// ColumnDesc and the file imports encoding/json (Ruling 1 of the JSON fields
-// plan, as amended). A bytes field holds bytes, not JSON.
+// ColumnDesc and the file imports encoding/json
+// (as the JSON fields plan amended it). A bytes field holds bytes, not JSON.
 func TestLowerJSONFlag(t *testing.T) {
 	o := mustLower(t, Config{Package: "gen", SchemaPath: lowerSchemaPath}, LwUser{}, LwPost{}, LwGroup{})
 	u := o.entity("LwUser")
@@ -385,7 +385,7 @@ func TestLowerDefaultKeepsType(t *testing.T) {
 }
 
 // A mixin's field is read at Mixin()[m].Fields()[i], and every default that is
-// not a literal comes from the descriptor (Ruling 5).
+// not a literal comes from the descriptor.
 type lwMix struct{ mixin.Schema }
 
 func (lwMix) Fields() []schema.Field {
@@ -460,7 +460,7 @@ func TestLowerMixinPosition(t *testing.T) {
 			t.Errorf("%s: %+v, want %q %q %q", c.name, f, c.def, c.fn, c.upd)
 		}
 	}
-	// The per-row cost (Ruling 5): no closure reads a descriptor.
+	// The per-row cost: no closure reads a descriptor.
 	for _, f := range e.Fields {
 		for _, code := range []string{f.DefaultFuncCode, f.UpdateDefaultCode} {
 			if strings.Contains(code, "Descriptor") || strings.Contains(code, "sch.") {

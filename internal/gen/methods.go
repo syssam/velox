@@ -28,7 +28,7 @@ func (e *FileError) Error() string { return e.Path + ": " + e.Reason }
 // method. The receiver must be *E: the binding calls the method on a nil *E,
 // which a method with a value receiver would panic on, so a method Policy or
 // Hooks with receiver E is a *FileError, and so is a file that declares a type
-// named like an entity (Ruling 11). A missing dir is no files.
+// named like an entity (its methods would clash with the generated ones). A missing dir is no files.
 //
 // The result holds only the entities that have at least one of the methods.
 func Methods(dir string, entities []string) (map[string]Bound, error) {
