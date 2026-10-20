@@ -52,10 +52,10 @@ func jDocDesc() velox.Desc[jDoc] {
 		Columns: []velox.ColumnDesc{
 			{Field: "ID", Name: "id"},
 			{Field: "OwnerID", Name: "owner_id"},
-			{Field: "Tags", Name: "tags", JSON: true},
-			{Field: "Attrs", Name: "attrs", JSON: true},
-			{Field: "Shape", Name: "shape", JSON: true},
-			{Field: "Nums", Name: "nums", JSON: true},
+			{Field: "Tags", Name: "tags", Encode: json.Marshal, Decode: json.Unmarshal},
+			{Field: "Attrs", Name: "attrs", Encode: json.Marshal, Decode: json.Unmarshal},
+			{Field: "Shape", Name: "shape", Encode: json.Marshal, Decode: json.Unmarshal},
+			{Field: "Nums", Name: "nums", Encode: json.Marshal, Decode: json.Unmarshal},
 		},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
@@ -495,5 +495,117 @@ func TestJSONAllocations(t *testing.T) {
 	}
 	if vx > jsonAllocs && !raceEnabled {
 		t.Errorf("a one-row read with 4 JSON columns makes %.0f allocations, over the %d pinned", vx, jsonAllocs)
+	}
+}
+
+// jList's Words column has a codec of its own, not JSON: the words joined
+// by commas inside angle brackets.
+type jList struct {
+	ID    int64
+	Words []string
+}
+
+var jLists = struct {
+	ID    velox.NumberCol[jList, int64]
+	Words velox.Col[jList, []string]
+}{velox.NumberCol[jList, int64]{I: 0}, velox.Col[jList, []string]{I: 1}}
+
+var jListMeta velox.MetaOnce[jList]
+
+func (*jList) VeloxMeta() *velox.Meta[jList] {
+	return jListMeta.Load(func() velox.Desc[jList] {
+		return velox.Desc[jList]{
+			Table: "j_lists",
+			Columns: []velox.ColumnDesc{
+				{Field: "ID", Name: "id"},
+				{Field: "Words", Name: "words", Encode: wrapWords, Decode: unwrapWords},
+			},
+			PrimaryKey: []int{0},
+			Tenant:     -1,
+			Addr: func(x *jList, i int) any {
+				if i == 0 {
+					return &x.ID
+				}
+				return &x.Words
+			},
+		}
+	})
+}
+
+func wrapWords(v any) ([]byte, error) {
+	ws, ok := v.([]string)
+	if !ok {
+		return nil, fmt.Errorf("not words: %T", v)
+	}
+	return []byte("<" + strings.Join(ws, ",") + ">"), nil
+}
+
+func unwrapWords(data []byte, v any) error {
+	s, pre := strings.CutPrefix(string(data), "<")
+	s, suf := strings.CutSuffix(s, ">")
+	if !pre || !suf {
+		return errors.New("not wrapped")
+	}
+	*v.(*[]string) = strings.Split(s, ",")
+	return nil
+}
+
+// TestCustomCodec: a hand-written Desc may give a column a codec other than
+// JSON's; velox binds what it encodes and decodes what it reads with it.
+func TestCustomCodec(t *testing.T) {
+	e := &velox.FakeExec{Affected: 1}
+	db := velox.OpenFake(velox.SQLite, e)
+	x := jList{ID: 1, Words: []string{"a", "b"}}
+	if err := db.Insert(&x).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	sameArgs(t, "Insert", e.Args, []any{int64(1), []byte("<a,b>")})
+	if _, err := db.Update[jList]().Set(jLists.Words.Set([]string{"c"})).Where(jLists.ID.EQ(1)).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	sameArgs(t, "Update", e.Args, []any{[]byte("<c>"), int64(1)})
+	e.Rows = [][]any{{int64(1), "<x,y>"}, {int64(2), []byte("<z>")}}
+	xs, err := db.Query[jList]().Limit(2).All(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(xs) != 2 || !reflect.DeepEqual(xs[0].Words, []string{"x", "y"}) || !reflect.DeepEqual(xs[1].Words, []string{"z"}) {
+		t.Fatalf("read %+v", xs)
+	}
+	e.Rows = [][]any{{int64(1), "x,y"}}
+	if _, err := db.Query[jList]().Limit(1).All(ctx); err == nil || !strings.Contains(err.Error(), "words") || !strings.Contains(err.Error(), "not wrapped") {
+		t.Fatalf("an undecodable value: %v", err)
+	}
+	if _, err := db.Query[jList]().Where(jLists.Words.EQ([]string{"a"})).Limit(1).All(ctx); err == nil || !strings.Contains(err.Error(), "words") {
+		t.Fatalf("a condition on the encoded column: %v", err)
+	}
+}
+
+// TestCodecNeedsBoth: a column with one of Encode and Decode is refused when
+// the metadata is built, naming the column.
+func TestCodecNeedsBoth(t *testing.T) {
+	for _, c := range []velox.ColumnDesc{
+		{Field: "Words", Name: "words", Encode: wrapWords},
+		{Field: "Words", Name: "words", Decode: unwrapWords},
+	} {
+		_, err := velox.LoadDesc(velox.Desc[jList]{
+			Table:      "j_lists",
+			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, c},
+			PrimaryKey: []int{0},
+			Tenant:     -1,
+			Addr: func(x *jList, i int) any {
+				if i == 0 {
+					return &x.ID
+				}
+				return &x.Words
+			},
+		})
+		var se *velox.SchemaError
+		if !errors.As(err, &se) || se.Field != "Words" || !strings.Contains(err.Error(), "words") {
+			t.Errorf("got %v, want a *SchemaError naming the column", err)
+		}
+	}
+	if info := velox.InfoOf[jList](); info.Columns[0].JSON || !info.Columns[1].JSON {
+		t.Errorf("JSON is not derived from the codec: %+v", info.Columns)
 	}
 }

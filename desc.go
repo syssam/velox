@@ -65,11 +65,17 @@ type ColumnDesc struct {
 	UpdateDefault func() any
 	Immutable     bool
 	Sensitive     bool
-	// JSON says the column holds the field's value as JSON: velox binds
-	// json.Marshal's bytes for it and decodes what it reads with
-	// json.Unmarshal. velox-gen sets it for every json field; velox never
-	// guesses it from the Go type, as a []byte field holds bytes, not JSON.
-	JSON bool
+	// Encode and Decode are the column's codec, both or neither: with them,
+	// velox binds the bytes Encode returns for the field's value, and decodes
+	// what it reads with Decode, into a pointer to the field. velox-gen sets
+	// them to json.Marshal and json.Unmarshal for every json field, so the
+	// generated file, not the core, imports encoding/json, and a program
+	// whose entities hold no JSON does not link it. A hand-written Desc may
+	// plug in another codec. Decode's data is valid only during the call: it
+	// must neither change nor keep it. velox never guesses a codec from the
+	// Go type, as a []byte field holds bytes, not JSON.
+	Encode func(v any) ([]byte, error)
+	Decode func(data []byte, v any) error
 }
 
 // descFields are the fields of a Desc that do not depend on E, so that
@@ -181,7 +187,10 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 		}
 		ci := ColumnInfo{Field: c.Field, Name: c.Name, Type: ft, Nullable: ft.Kind() == reflect.Pointer, SQLType: c.SQLType,
 			HasDefault: c.Default != nil, DefaultFunc: c.DefaultFunc, UpdateDefault: c.UpdateDefault,
-			Immutable: c.Immutable, Sensitive: c.Sensitive, JSON: c.JSON, off: off}
+			Immutable: c.Immutable, Sensitive: c.Sensitive, JSON: c.Encode != nil, encode: c.Encode, decode: c.Decode, off: off}
+		if (c.Encode == nil) != (c.Decode == nil) {
+			return fail(c.Field, "column %s has one of Encode and Decode; a codec needs both", c.Name)
+		}
 		if c.Immutable && c.UpdateDefault != nil {
 			return fail(c.Field, "Immutable column %s has an UpdateDefault; every update would be refused", c.Field)
 		}

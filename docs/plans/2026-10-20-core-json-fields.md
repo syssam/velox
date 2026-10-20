@@ -43,6 +43,7 @@
 ## Rulings this plan makes
 
 1. **One flag, set by the generator.** `ColumnDesc.JSON bool` becomes `ColumnInfo.JSON bool`, set by velox-gen for every `json` field.
+   - **Amended 2026-10-20 (controller ruling, during Task 1):** the core never imports encoding/json, so a program whose entities hold no JSON does not link it. `ColumnDesc` carries the codec instead of a flag: `Encode func(v any) ([]byte, error)` and `Decode func(data []byte, v any) error`, which velox-gen sets to `json.Marshal` and `json.Unmarshal` for every `json` field (the generated file imports encoding/json). `ColumnInfo.JSON` is derived from `Encode != nil`, and the codec is kept unexported in `ColumnInfo`. A `Desc` with one of the two is refused with a `*SchemaError` naming the column. A hand-written `Desc` may plug in another codec. `ColumnDesc.JSON bool` is dropped.
    - A hand-written `Desc` can set it too.
    - The core never guesses JSON from the Go type, because a `[]byte` field is bytes, not JSON.
 2. **Encoding is a binding concern.** It happens where arguments are built for a column.

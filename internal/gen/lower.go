@@ -206,6 +206,10 @@ func (s *entState) field(e *Entity, i int, f *Field) *OutField {
 	if f.GoType == nil && f.Type == "time" {
 		s.use("time", "time", where)
 	}
+	if o.JSON {
+		// The codec: the generated file, not the core, imports encoding/json.
+		s.use("encoding/json", "json", where)
+	}
 	var h string
 	switch {
 	case f.Type == "time" || elem == "time.Time":

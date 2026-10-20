@@ -141,7 +141,7 @@ func TestLowerTypes(t *testing.T) {
 	if f := u.field("active"); f.DefaultCode != "true" {
 		t.Fatalf("active default %q", f.DefaultCode)
 	}
-	if !reflect.DeepEqual(u.Imports, []string{"errors", "time"}) || u.Handles != "LwUsers" || u.Label != "lw_user" || u.Table != "lw_users" {
+	if !reflect.DeepEqual(u.Imports, []string{"encoding/json", "errors", "time"}) || u.Handles != "LwUsers" || u.Label != "lw_user" || u.Table != "lw_users" {
 		t.Errorf("user imports %v handles %s label %s table %s", u.Imports, u.Handles, u.Label, u.Table)
 	}
 	if o.Package != "gen" || o.SchemaPath != lowerSchemaPath || len(o.Hash) != 64 || o.NeedsSch {
@@ -153,8 +153,9 @@ func TestLowerTypes(t *testing.T) {
 }
 
 // TestLowerJSONFlag: a json field, and only a json field, is lowered with
-// JSON set, which render writes into its ColumnDesc (Ruling 1 of the JSON
-// fields plan). A bytes field holds bytes, not JSON.
+// JSON set, for which render writes encoding/json's codec into its
+// ColumnDesc and the file imports encoding/json (Ruling 1 of the JSON fields
+// plan, as amended). A bytes field holds bytes, not JSON.
 func TestLowerJSONFlag(t *testing.T) {
 	o := mustLower(t, Config{Package: "gen", SchemaPath: lowerSchemaPath}, LwUser{}, LwPost{}, LwGroup{})
 	u := o.entity("LwUser")
@@ -182,11 +183,32 @@ func TestLowerJSONFlag(t *testing.T) {
 	for _, f := range files {
 		src += string(f.Data)
 	}
-	if want := `{Field: "Tags", Name: "tags", JSON: true},`; !strings.Contains(src, want) {
+	if want := `{Field: "Tags", Name: "tags", Encode: json.Marshal, Decode: json.Unmarshal},`; !strings.Contains(src, want) {
 		t.Errorf("the generated code lacks %s", want)
 	}
-	if n := strings.Count(src, "JSON: true"); n != 1 {
-		t.Errorf("the generated code sets JSON on %d columns, want 1", n)
+	if n := strings.Count(src, "Encode: json.Marshal"); n != 1 {
+		t.Errorf("the generated code gives %d columns a codec, want 1", n)
+	}
+	// The codec is the only use of encoding/json in LwUser's file, which
+	// imports it; LwPost's, with no json field, does not.
+	seen := 0
+	for _, f := range files {
+		imports := strings.Contains(string(f.Data), `"encoding/json"`)
+		switch f.Name {
+		case "lw_user_velox.go":
+			seen++
+			if !imports {
+				t.Errorf("%s does not import encoding/json", f.Name)
+			}
+		case "lw_post_velox.go":
+			seen++
+			if imports {
+				t.Errorf("%s imports encoding/json", f.Name)
+			}
+		}
+	}
+	if seen != 2 {
+		t.Errorf("found %d of the 2 entity files", seen)
 	}
 }
 
