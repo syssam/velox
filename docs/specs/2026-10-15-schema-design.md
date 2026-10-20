@@ -223,18 +223,19 @@ This replaced the policy design §3's `BeforeInsert`, `BeforeUpdate` and `Before
 Commands:
 
 ```
-velox-gen [-out dir] [-package name] [-check] [./schema]
-velox-gen verify [-out dir] [./schema]
+velox-gen [-out dir] [-package name] [-plugin tool]... [-check] [./schema]
+velox-gen verify [-out dir] [-plugin tool]... [./schema]
 velox-gen describe [-json] [./schema]
 ```
 
 - The package is one schema package, `./schema` by default; `./...` and a pattern that names no schemas are errors.
 - `-out` is the generated package's directory (default `./gen`), `-package` its name.
 - `-check` writes nothing and exits 1 when a generated file is out of date, missing or left over. This is the stale check of §2.
+- `-plugin tool` (repeatable) names a generator plugin: a tool of the application's module that `go tool` runs with the resolved model as JSON on stdin and that answers with files for `-out`. velox-gen adds the header to those files and owns them like its own (`-check`, rewrite, stale removal). The protocol and the GraphQL plugin are in `2026-10-19-graphql-design.md`.
 - `verify` builds a program that imports the generated package and reports what `velox.CheckEntity` finds for every entity and `velox.CheckRelation` for every relation.
 - `describe` prints the resolved model; `-json` prints it as JSON.
 
-Flags are all the configuration there is. A `velox.yaml` arrives with the generator plugins, with GraphQL.
+Flags remain all the configuration there is; there is no `velox.yaml`.
 
 ## 5. Repository layout
 

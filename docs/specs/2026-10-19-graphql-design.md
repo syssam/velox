@@ -131,7 +131,7 @@ The plugin itself is `contrib/graphql/cmd/velox-graphql`. Annotations reach the 
 
 ### 3. The generated surface
 
-The plugin writes one SDL file, `gen/velox.graphqls`, and Go files `gen/gql_*.go`. The Go files carry the generated header and belong to the plugin.
+The plugin writes one SDL file, `gen/velox.graphqls` (flat, in the package directory, because velox-gen's stale-file scan reads only that directory), and Go files `gen/gql_*.go`. The Go files carry the generated header and belong to the plugin.
 
 #### Types
 - **Type:** each entity not skipped becomes a type implementing `Node`. Its fields are the schema fields not skipped, plus edges.
@@ -279,3 +279,42 @@ The work comes in four plans:
 2. **The runtime:** IDs and `node`, cursors and connections, ordering, where inputs, the core's `Before`, and the handler extension.
 3. **Mutations:** create, update and delete, with edges, in a transaction.
 4. **Collection and loading:** the core's `LimitEach`, collection, grouped counts, the example, itest, and bench/scale.
+
+## Rulings made in plan 1
+
+Plan 1 (plugins and the SDL, `docs/plans/2026-10-19-graphql-1-sdl.md`) settled these points. Where one differs from the text above, the ruling stands; the text above is left as it was written.
+
+**The plugin protocol and model (§1).**
+- velox-gen adds the header to a plugin's files (`#` for `.graphqls`, `//` for `.go`), so a plugin cannot forget it. A path with a directory part, `..`, another extension, a name velox-gen or another plugin writes, or an existing file without the header fails the run with nothing written.
+- A plugin runs in the application's module (`go tool <name>`, with `go get -tool` to declare it). The model is `plugin.Model`, versioned (`plugin.Version = 1`), built from velox-gen's own graph and pinned by a golden JSON test.
+- The model carries what the SDL and the Go files need beyond names and types:
+  - `Edge.OwnsKey`: the edge's own entity holds the foreign key on its row. The plugin never re-derives which side holds it, and the where predicates, the edge inputs and the refusals below follow it.
+  - `Edge.FieldOn`: the entity that holds the key field, which finds the key field.
+  - `Field.Nullable`, `Field.Enum` (the Go type's name, for a custom enum type too) and `Field.EnumValues` (the stored values, for every enum field).
+  - `Comment` on entities, fields and edges, which become GraphQL descriptions.
+  - `Entity.Imports`, the imports the Go files of plan 2 need for custom types.
+- The singular rule is `plugin.Singular`, in the stdlib-only `plugin` package. velox-gen's own names and a plugin's use the same function, so `<edge>IDs` and join names cannot drift. It singularizes only a name ending in `s`, so `children` becomes `childrenIDs` (entgql gives `childIDs`).
+
+**Names and bindings (§3).**
+- A GraphQL enum is named after velox-gen's Go enum type (`<Schema><Field>`), not after the GraphQL type, so gqlgen's autobind finds it when `graphql.Type` renames the entity. A custom-Go-type enum gets the same GraphQL name; plan 2 binds it with `@goModel` to the type's import path.
+- Every Node type's key is `id: ID! @goField(name: "IDGQL")`, the same `<Name>GQL` convention as edges; plan 2 generates `IDGQL()` returning the opaque global ID.
+- `graphql.FieldName` renames a field in GraphQL and binds it back with `@goField(name: "<GoName>")`; an application directive named `goField` is refused.
+
+**Inputs (§3 Mutations).**
+- A sensitive field is accepted in create and update inputs (a password is set, never read back) and appears in no type, where input or order. "Never exposed" is about output.
+- Edge inputs follow the foreign key's own flags, on whichever entity holds it. An immutable key drops every input that moves it; a required key drops `remove<Edge>IDs` and `clear<Edge>`, for one-to-many and inverse one-to-one alike. A many-to-many edge keeps them.
+- Only `Default` or `DefaultFunc` makes a create-input field optional. A field with only `UpdateDefault` is required on create.
+
+**Refusals.** Generation fails, naming the schema and element, for:
+- an annotation on the wrong kind of element (`OrderField` on an edge, `Mutations` on a field);
+- `OrderField` on an optional, sensitive, JSON or `Skip(SkipType)` field (keyset paging needs non-NULL columns, and order values are in the cursors);
+- `WhereOps` on a sensitive field or the tenant;
+- `CreateInput` or `UpdateInput` (either value) on a foreign key or the tenant, and `UpdateInput(true)` on an immutable field;
+- `QueryField` or `Mutations` on an entity whose type is skipped, an unknown mutation kind, and an update or delete mutation on an entity whose key is several columns;
+- `createX` for an entity whose key the caller supplies (no auto ID, no default): v1 has no raw-key field in the create input (a follow-up);
+- a required edge on the entity's own row whose target is skipped or not a Node, since `createX` could never set it;
+- an entity whose type would have no fields;
+- two schemas whose types, enums, inputs, connections or Query fields would share a name;
+- a name that is not a GraphQL name, and an SDL that gqlparser does not accept.
+
+**Types.** `uint` fields map to `Uint64`, and `SkipEnumField` makes an enum field a `String`. Plan 2 needs a uint marshaler under `Uint64`, and the enum's `MarshalGQL` must agree with `SkipEnumField`.

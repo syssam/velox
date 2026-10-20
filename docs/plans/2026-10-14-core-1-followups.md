@@ -149,7 +149,6 @@ Left by the observability plan:
 
 - `Optional` means a pointer field (Ruling 2): the column is NULL-able and velox scans a NULL only into a pointer. Ent gives `T`, so a ported schema's `Optional()` fields become `*T`. This is an ent difference.
 - Join entity naming: each many-to-many join table becomes an entity named `pascal(singular(table))` (`user_groups` gives `UserGroup`), which can collide with a schema of that name; the generator refuses the collision, and the only remedy is a different join table name (`edge.Table`).
-- `velox.yaml` and generator plugins arrive with the GraphQL sub-project.
 - The test model is generated from `internal/testmodel/schema`. A field's Go name comes from `pascal` of its name, so `SKU` is declared `field.String("SKU").StorageKey("sku")`: the name `sku` would give `Sku`. The named types `Status`, `Cents` and `Score` live in `internal/testmodel/kind` because the schema package names them in `GoType` and the generated package imports them; `testmodel` re-exports them as aliases.
 
 ## Left by schema plan 4
