@@ -258,8 +258,8 @@ func fillDefaults[E any](m *Meta[E], p *E) {
 }
 
 // fillDefault sets the field that ptr points to as column c's Default or
-// DefaultFunc says. It is not generic, so that the reflect.Value
-// it uses is not compiled into every package that inserts.
+// DefaultFunc says. It is not generic, so that the reflect.Value it uses is not
+// compiled into every package that inserts.
 func fillDefault(c *ColumnInfo, ptr any) {
 	v := reflect.ValueOf(ptr).Elem()
 	switch {

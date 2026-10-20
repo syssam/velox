@@ -32,9 +32,8 @@ func TxRetrySerializable(n int) TxOption { return func(o *txOptions) { o.retries
 
 // Tx runs fn in a transaction. fn's error rolls it back and is returned; nil
 // commits it; a panic in fn rolls it back and then panics again with the same
-// value, and runtime.Goexit rolls it back and carries on. tx is
-// a *DB like any other, so a function that takes a *DB works inside a
-// transaction unchanged.
+// value, and runtime.Goexit rolls it back and carries on. tx is a *DB like any
+// other, so a function that takes a *DB works inside a transaction unchanged.
 //
 // fn's ctx is the context the transaction runs on: ctx, as the TxAround
 // hooks passed it on, with the values they added. It carries the

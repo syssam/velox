@@ -112,7 +112,7 @@ func build(name string, t reflect.Type, s schema.Interface) (*Schema, error) {
 	}
 	for _, h := range []string{"Hooks", "Policy", "Interceptors"} {
 		if _, ok := mt.MethodByName(h); ok {
-			return nil, fmt.Errorf("has a %s method; hooks and policies are methods on the generated entity (schema design §3), not in the schema", h)
+			return nil, fmt.Errorf("has a %s method; hooks and policies are methods on the generated entity, not in the schema", h)
 		}
 	}
 	mixins, err := call("Mixin", s.Mixin)

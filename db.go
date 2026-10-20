@@ -17,8 +17,8 @@ import (
 // that does: generic methods cannot be in an interface, and one concrete type
 // means every function taking a *DB works in a transaction unchanged.
 //
-// A DB from Open, OpenPgx or OpenShards is safe for concurrent use by
-// multiple goroutines. The *DB that Tx gives its fn is not: see Tx.
+// A DB from Open, OpenPgx or OpenShards is safe for concurrent use by multiple
+// goroutines. The *DB that Tx gives its fn is not: see Tx.
 type DB struct {
 	d Dialect
 	// ex runs the statements of a DB without replicas, and of a transaction;
@@ -26,8 +26,8 @@ type DB struct {
 	ex  executor
 	rt  *router // WithReplicas's; nil without replicas
 	cfg *config
-	// pin is, on the DB a query's With loads run on, the connection the
-	// query ran on: their reads go there too. Zero otherwise.
+	// pin is, on the DB a query's With loads run on, the connection the query
+	// ran on: their reads go there too. Zero otherwise.
 	pin   target
 	inTx  bool
 	depth int // savepoint nesting inside a transaction
@@ -605,13 +605,12 @@ func (c *countedRows) Next() bool {
 // st.Result, and records where it ran in st.ran. Errors from the database,
 // the driver or read name the entity.
 //
-// A read on a replica whose connection fails before any row reached the
-// caller, whether the query call or the rows report it (the rows, only when
-// read itself returned no error), is sent again, once,
-// to the primary, and the replica is put in back-off. read
-// runs again from the start, as it does when an Around hook retries. Once
-// Iter has handed the caller a row, the replica's error is returned and only
-// the back-off happens. Neither happens once ctx has ended.
+// A read on a replica whose connection fails before any row reached the caller,
+// whether the query call or the rows report it (the rows, only when read itself
+// returned no error), is sent again, once, to the primary, and the replica is
+// put in back-off. read runs again from the start, as it does when an Around
+// hook retries. Once Iter has handed the caller a row, the replica's error is
+// returned and only the back-off happens. Neither happens once ctx has ended.
 func (db *DB) exec(ctx context.Context, st *Statement, t target, read func(rows) error, res *result) error {
 	st.Result = Result{Affected: -1}
 	if err := checkParams(db.d, st); err != nil {

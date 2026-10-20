@@ -30,7 +30,7 @@ type txOptions struct {
 	isolation sql.IsolationLevel
 	readOnly  bool
 	retries   int
-	timeout   time.Duration // Timeout; 0: the DB's Tx default
+	timeout   time.Duration // TxTimeout; 0: the DB's Tx default
 }
 
 // txControl ends a transaction.

@@ -4,8 +4,7 @@
 //
 // The constructors are Bool; Int, Int8, Int16, Int32, Int64, Uint, Uint8,
 // Uint16, Uint32, Uint64, Float32 and Float64; String and Text; Bytes; Time;
-// UUID; JSON, Strings, Ints and Floats; Enum; and Other. See section 1.1 of
-// the schema design for what each one means.
+// UUID; JSON, Strings, Ints and Floats; Enum; and Other.
 //
 // A builder never panics. A misuse, such as a GoType of the wrong kind or a
 // DefaultFunc of the wrong signature, is recorded in the descriptor's Err, and

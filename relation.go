@@ -22,11 +22,10 @@ type kit struct {
 	empty func() any                                // []E{}
 }
 
-// One holds a to-one relation, filled by With. Its zero value means not
-// loaded. The value is held as any so that an entity's type does not reach
-// the types of the entities it relates to: every package that uses an
-// instantiated generic type compiles its type descriptor and everything the
-// descriptor reaches.
+// One holds a to-one relation, filled by With. Its zero value means not loaded.
+// The value is held as any so that an entity's type does not reach the types of
+// the entities it relates to: every package that uses an instantiated generic
+// type compiles its type descriptor and everything the descriptor reaches.
 type One[T any] struct {
 	v      any // *T
 	loaded bool
@@ -61,9 +60,9 @@ type holder struct {
 	loaded bool
 }
 
-// For generated code. Relation is one relation field of a generated Desc: its name and the
-// columns that key it. EdgeTo and EdgeThrough make it. It carries no target
-// entity: the use site supplies that (see EdgeTo).
+// For generated code. Relation is one relation field of a generated Desc: its
+// name and the columns that key it. EdgeTo and EdgeThrough make it. It carries
+// no target entity: the use site supplies that (see EdgeTo).
 type Relation struct {
 	name string
 
@@ -308,10 +307,10 @@ func (r Rel[E, T]) spec[_ Lazy[T]]() loadSpec {
 	return loadSpec{rel: r.I, target: targetOf[T](), where: r.where, order: r.order, with: r.with, err: r.err}
 }
 
-// MarshalJSON writes the related entity, or null when there is none or it
-// was not loaded. Tag the field json:",omitzero" to leave a relation that was
-// not loaded out. (An ordinary method on a generic type, not a generic one,
-// because encoding/json looks for it by name; its body is one call.)
+// MarshalJSON writes the related entity, or null when there is none or it was
+// not loaded. Tag the field json:",omitzero" to leave a relation that was not
+// loaded out. (An ordinary method on a generic type, not a generic one, because
+// encoding/json looks for it by name; its body is one call.)
 func (o One[T]) MarshalJSON() ([]byte, error) { return json.Marshal(o.v) }
 
 // MarshalJSON writes the related entities, or null when they were not

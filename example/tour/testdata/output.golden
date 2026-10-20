@@ -50,5 +50,5 @@ org 1: 2750.00
 org 2: 990.00
 
 == 9. Deadlines
-transaction past its Timeout: ErrTimeout=true, context.DeadlineExceeded=true
+transaction past its TxTimeout: ErrTimeout=true, context.DeadlineExceeded=true
   velox: gen.Invoice: deadline set by velox passed: context deadline exceeded

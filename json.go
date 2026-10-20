@@ -1,9 +1,9 @@
 // This file holds the encoding and decoding of the columns whose ColumnDesc
 // supplies a codec (Encode and Decode): velox-gen's json fields, with
 // encoding/json's. The core never imports encoding/json itself, so a program
-// whose entities hold no JSON does not link it. The nil handling uses
-// reflect, so none of this is generic: the generic code
-// calls scanDst, and the writer colArg.
+// whose entities hold no JSON does not link it. The nil handling uses reflect,
+// so none of this is generic: the generic code calls scanDst, and the writer
+// colArg.
 
 package velox
 

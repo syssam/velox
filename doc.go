@@ -64,6 +64,8 @@
 //     lift the scope.
 //   - SkipPolicy lifts the entities' policies.
 //   - OnShard, ReadPrimary and WithSession route a statement.
+//   - PinUntil restarts a session's pin from a time stored earlier, as
+//     PinnedUntil gives it; it changes the session, not the context.
 //   - WithTags adds tags to the SQL comment.
 //   - WithoutTx removes a transaction's mark from a context.
 //
@@ -86,10 +88,10 @@
 // should: Desc, ColumnDesc, Relation, EdgeTo, EdgeThrough, Meta, MetaOnce,
 // BindPolicy, BindHooks, BoundPolicy, BoundHooks, Lazy and
 // GeneratedCodeIsVersion4. Each says "For generated code." in its
-// documentation. They are not part of velox's API: they change with
-// GeneratedCodeIsVersion, whose number changes when generated code must
-// change, and outside semantic versioning. Run velox-gen again after you
-// update velox; code generated for another version fails to compile.
+// documentation. They are not part of velox's API: they change only when
+// GeneratedCodeIsVersion4 is replaced by the next version, which is outside
+// semantic versioning. Run velox-gen again after you update velox; code
+// generated for another version fails to compile.
 package velox
 
 //go:generate go run ./internal/handlegen/gen
@@ -97,13 +99,11 @@ package velox
 // For generated code. GeneratedCodeIsVersion4 is referenced by every file
 // velox-gen writes from a schema package, so that generated code and this
 // library fail to compile together when they disagree. It is replaced by
-// GeneratedCodeIsVersion5 when generated code must change. (Version 4 is the
-// contract documented in the package documentation; version 3 was Desc
-// literals and switch-based Addr and RelAddr.)
+// GeneratedCodeIsVersion5 when generated code must change.
 const GeneratedCodeIsVersion4 = true
 
-// For generated code. Lazy is the constraint of the type parameter that every method of a
-// generic velox type carries, and that callers never write. A generic method
-// is compiled only where it is called; an ordinary method of a generic type is
-// compiled into every package that uses the type.
+// For generated code. Lazy is the constraint of the type parameter that every
+// method of a generic velox type carries, and that callers never write. A
+// generic method is compiled only where it is called; an ordinary method of a
+// generic type is compiled into every package that uses the type.
 type Lazy[T any] interface{ *T }

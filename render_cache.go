@@ -22,9 +22,9 @@ var maxCacheBytes = 4 << 20
 // fingerprint.
 type cached struct{ text, fp string }
 
-// fingerprint names a statement's shape: the first 8 bytes, as 16 lowercase
-// hex characters, of the SHA-256 of its SQL text without any comment.
-// velox sends every value as a parameter, so the text is the shape.
+// fingerprint names a statement's shape: the first 8 bytes, as 16 lowercase hex
+// characters, of the SHA-256 of its SQL text without any comment. velox sends
+// every value as a parameter, so the text is the shape.
 func fingerprint(text string) string {
 	sum := sha256.Sum256([]byte(text))
 	return hex.EncodeToString(sum[:8])

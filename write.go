@@ -233,8 +233,7 @@ func (db *DB) Save[E any, PE Entity[E]](ctx context.Context, x PE, cols ...Colum
 //
 // The guard runs on st as the caller built it before the hooks see it, and
 // again inside next, in the pipeline: a condition a hook adds never stands in
-// for the caller's Where. Without hooks, the pipeline's
-// guard is the only one.
+// for the caller's Where. Without hooks, the pipeline's guard is the only one.
 func write(ctx context.Context, db *DB, st *Statement, dry, save bool) (int64, string, []any, error) {
 	if len(st.Entity.hooks) == 0 {
 		var err error

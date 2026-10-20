@@ -48,8 +48,8 @@ func PgxConn(pool *pgxpool.Pool) Conn {
 
 // WithReplicas adds read replicas to a DB's primary, the connection Open or
 // OpenPgx was given. A read outside a transaction goes to a replica, each in
-// turn, unless its context is marked with ReadPrimary; a query's With loads go to
-// the replica the query read. Writes, and every statement in a transaction,
+// turn, unless its context is marked with ReadPrimary; a query's With loads go
+// to the replica the query read. Writes, and every statement in a transaction,
 // go to the primary. Statement.Route records the choice.
 //
 // Give each replica's pool a connect timeout shorter than your request
@@ -372,8 +372,8 @@ func newShard(d Dialect, primary executor, replicas []Conn, what string) *shard 
 
 // shardOf returns the shard ctx names on a sharded DB, whose route marks are
 // rc: OnShard's, else the one WithShardFor gives for ctx's tenant. It returns
-// nil and no error when ctx names none, and an error wrapping ErrNoShard for
-// a name that is not a shard and for WithShardFor's error. Only without an
+// nil and no error when ctx names none, and an error wrapping ErrNoShard for a
+// name that is not a shard and for WithShardFor's error. Only without an
 // OnShard does it look the tenant up.
 func (rt *router) shardOf(ctx context.Context, rc routeCtx) (*shard, error) {
 	if rc.onShard {
@@ -431,16 +431,15 @@ func (db *DB) shardForTx(ctx context.Context) (*shard, error) {
 //
 // Writes, statements in a transaction, reads whose context is marked with
 // ReadPrimary and reads of a session within its pin window go to the primary. A
-// With load goes where its query went. Any other read goes to the
-// next replica in turn, skipping one in back-off, or to the primary when
-// every replica is. A dry run is routed as the read would be, but takes no
-// replica's turn: it sends nothing. exec, not route, falls a failed replica
-// read over to the primary.
+// With load goes where its query went. Any other read goes to the next replica
+// in turn, skipping one in back-off, or to the primary when every replica is. A
+// dry run is routed as the read would be, but takes no replica's turn: it sends
+// nothing. exec, not route, falls a failed replica read over to the primary.
 //
-// On a sharded DB the statement's shard comes first: the
-// one its context names (shardOf), the pinned target's for a With load, the
-// transaction's in a transaction. A statement whose shard cannot
-// be found fails, with nothing sent.
+// On a sharded DB the statement's shard comes first: the one its context names
+// (shardOf), the pinned target's for a With load, the transaction's in a
+// transaction. A statement whose shard cannot be found fails, with nothing
+// sent.
 //
 // On a DB without a router it is one branch: no context lookup.
 func (db *DB) route(ctx context.Context, st *Statement) (target, error) {
@@ -492,10 +491,10 @@ func (db *DB) route(ctx context.Context, st *Statement) (target, error) {
 	return t, nil
 }
 
-// routeTx is route in a transaction on a sharded DB: the statement runs on
-// the transaction's connection, unless its context names another shard, or
-// names one that is not a shard, or WithShardFor fails. A context
-// that names no shard is the transaction's.
+// routeTx is route in a transaction on a sharded DB: the statement runs on the
+// transaction's connection, unless its context names another shard, or names
+// one that is not a shard, or WithShardFor fails. A context that names no shard
+// is the transaction's.
 func (db *DB) routeTx(ctx context.Context, st *Statement) (target, error) {
 	rc, _ := ctx.Value(routeKey{}).(routeCtx)
 	sh, err := db.rt.shardOf(ctx, rc)
@@ -595,16 +594,16 @@ func (r *replica) down(d time.Duration) {
 }
 
 // broken reports whether err, from a read on t, is a connection error on a
-// replica, with ctx still live: whether the read falls over. A context
-// that ended says nothing about the replica.
+// replica, with ctx still live: whether the read falls over. A context that
+// ended says nothing about the replica.
 func (db *DB) broken(ctx context.Context, t target, err error) bool {
 	return t.replica >= 0 && ctx.Err() == nil && failoverable(err)
 }
 
-// fallBack records that st's read on replica t failed with a connection
-// error: the replica is put in back-off for the DB's WithReplicaBackoff, and
-// fallBack returns the shard's primary for exec to retry st on, with st.Route
-// and st.ran saying so.
+// fallBack records that st's read on replica t failed with a connection error:
+// the replica is put in back-off for the DB's WithReplicaBackoff, and fallBack
+// returns the shard's primary for exec to retry st on, with st.Route and st.ran
+// saying so.
 func (db *DB) fallBack(st *Statement, t target) target {
 	t.sh.replicas[t.replica].down(db.cfg.backoff)
 	p := target{ex: t.sh.primary, sh: t.sh, replica: -1}
@@ -613,17 +612,17 @@ func (db *DB) fallBack(st *Statement, t target) target {
 	return p
 }
 
-// failoverable reports whether err, from a read on a replica (the query call
-// or its rows), is a connection error after which the read
-// is retried on the primary: the replica was not reached, its connection is
-// gone, or its server is shutting down or starting up. A query error
-// (syntax, a constraint, a permission) is not. Neither is a context that
-// ended, which says nothing about the replica: exec checks the statement's
-// context before asking, and context.DeadlineExceeded, itself a
-// net.Error, is ruled out here too. A net.Error that is a timeout counts only
-// from a dial: a read that timed out may be a slow query, not a dead replica.
-// A MySQL error that is the server refusing or ending the connection counts
-// (mysqlConnectError), as a pgx ConnectError does.
+// failoverable reports whether err, from a read on a replica (the query call or
+// its rows), is a connection error after which the read is retried on the
+// primary: the replica was not reached, its connection is gone, or its server
+// is shutting down or starting up. A query error (syntax, a constraint, a
+// permission) is not. Neither is a context that ended, which says nothing about
+// the replica: exec checks the statement's context before asking, and
+// context.DeadlineExceeded, itself a net.Error, is ruled out here too. A
+// net.Error that is a timeout counts only from a dial: a read that timed out
+// may be a slow query, not a dead replica. A MySQL error that is the server
+// refusing or ending the connection counts (mysqlConnectError), as a pgx
+// ConnectError does.
 func failoverable(err error) bool {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return false

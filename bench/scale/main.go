@@ -2,7 +2,7 @@
 // one gen package, with s services that each use five entities, and measures
 // what velox costs it to build: a cold build, the rebuild after adding a field
 // to one schema and regenerating, a service's binary size and the linker's
-// peak memory (design §9). With -check it compares the measurements with
+// peak memory. With -check it compares the measurements with
 // recorded thresholds and exits 1 when one is exceeded.
 //
 // Every build runs under a -toolexec wrapper that reads the linker's peak

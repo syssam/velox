@@ -102,11 +102,11 @@ type Statement struct {
 	Args        []any  // set by rendering
 	// Route is where the statement runs: set by the route stage, after
 	// rendering. Rewrite hooks run before it and see it unset (zero, not
-	// Replica -1); Around hooks, and everything after them, see it set.
-	// An Around hook reads it, with one exception: setting Route.Fallback
-	// to true sends the hook's retry to the primary. Changing Primary,
-	// OnShard or WithSession in the context passed to next does not
-	// re-route the statement, as routing happens before the Around hooks.
+	// Replica -1); Around hooks, and everything after them, see it set. An
+	// Around hook reads it, with one exception: setting Route.Fallback to true
+	// sends the hook's retry to the primary. Changing ReadPrimary, OnShard or
+	// WithSession in the context passed to next does not re-route the
+	// statement, as routing happens before the Around hooks.
 	Route Route
 	// Result is reset before the Around hooks run, and set by each
 	// execution before next returns to them; a hook that retries sees the

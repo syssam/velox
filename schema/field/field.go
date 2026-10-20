@@ -31,7 +31,7 @@ func (c common[B]) Unique() B { c.d.Unique = true; return c.self }
 // Sensitive leaves the field out of String(), JSON, logs and spans.
 func (c common[B]) Sensitive() B { c.d.Sensitive = true; return c.self }
 
-// Tenant marks the column that scopes every row to a tenant (policy design §2.1).
+// Tenant marks the column that scopes every row to a tenant.
 func (c common[B]) Tenant() B { c.d.Tenant = true; return c.self }
 
 // Comment sets the field's documentation.

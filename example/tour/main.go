@@ -319,7 +319,7 @@ func run(ctx context.Context, w io.Writer) error {
 		_, err := tx.Query[gen.Invoice]().Count(ctx)
 		return err
 	}, velox.TxTimeout(10*time.Millisecond))
-	say("transaction past its Timeout: ErrTimeout=%t, context.DeadlineExceeded=%t\n  %v",
+	say("transaction past its TxTimeout: ErrTimeout=%t, context.DeadlineExceeded=%t\n  %v",
 		errors.Is(err, velox.ErrTimeout), errors.Is(err, context.DeadlineExceeded), err)
 	return nil
 }

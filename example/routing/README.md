@@ -17,11 +17,11 @@ db := velox.OpenShards(velox.SQLite, map[string]velox.Shard{
 	velox.WithPinWindow(50*time.Millisecond),       // default 2 s
 )
 
-ctx = velox.WithSession(ctx)                    // per request, in middleware
-db.Update[gen.Note]()…Exec(ctx)                 // a write: pins this session
-db.Query[gen.Note]()…One(ctx)                   // in the window: the primary; after: a replica
-db.Query[gen.Note]()…One(velox.ReadPrimary(ctx))    // always the primary
-velox.OnShard(ctx, "us")                        // name a shard without a tenant
+ctx = velox.WithSession(ctx)                      // per request, in middleware
+db.Update[gen.Note]()…Exec(ctx)                   // a write: pins this session
+db.Query[gen.Note]()…One(ctx)                     // in the window: the primary; after: a replica
+db.Query[gen.Note]()…One(velox.ReadPrimary(ctx))  // always the primary
+velox.OnShard(ctx, "us")                          // name a shard without a tenant
 ```
 
 - `WithShardFor` gets the context's tenant (`WithTenant`) and returns a shard

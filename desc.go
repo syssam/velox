@@ -10,8 +10,8 @@ import (
 	"unsafe"
 )
 
-// For generated code. Desc is an entity's metadata as velox-gen writes it: literals, read on the
-// entity's first use. Its column order is the scan order.
+// For generated code. Desc is an entity's metadata as velox-gen writes it:
+// literals, read on the entity's first use. Its column order is the scan order.
 type Desc[E any] struct {
 	Table      string
 	Schema     string // the schema (PostgreSQL) or database holding Table; "" for the default
@@ -114,9 +114,9 @@ type descView struct {
 //
 // It does no more than call desc and bind its functions to a new entity: the
 // build, which uses reflect, is buildDesc's, and the binding of Policy and
-// Hooks is not generic, so that Load, compiled in every entity's package,
-// holds no reflect.Type and instantiates nothing for an
-// entity that has no policy or hook.
+// Hooks is not generic, so that Load, compiled in every entity's package, holds
+// no reflect.Type and instantiates nothing for an entity that has no policy or
+// hook.
 func (o *MetaOnce[E]) Load[_ Lazy[E]](desc func() Desc[E]) *Meta[E] {
 	o.once.Do(func() {
 		x := new(E)
@@ -311,15 +311,16 @@ func defaultOf(d any, ft reflect.Type) (any, bool) {
 	return nil, false
 }
 
-// For generated code. EdgeTo is a relation to entity T keyed owner.Columns[ownerCol] =
-// T.Columns[targetCol]. Its field must be a One[T] or a Many[T]: the metadata
-// is refused at first use when RelAddr returns another type, such as the
-// holder of another entity, as stale or hand-edited code would.
+// For generated code. EdgeTo is a relation to entity T keyed
+// owner.Columns[ownerCol] = T.Columns[targetCol]. Its field must be a One[T] or
+// a Many[T]: the metadata is refused at first use when RelAddr returns another
+// type, such as the holder of another entity, as stale or hand-edited code
+// would.
 //
-// The relation does not name T's metadata: if it did, every program that
-// links the owner would link T, and through T's own relations every entity
-// of the connected model. Where the relation is used, the handle Rel[E, T]
-// says T, and CheckRelation checks the target.
+// The relation does not name T's metadata: if it did, every program that links
+// the owner would link T, and through T's own relations every entity of the
+// connected model. Where the relation is used, the handle Rel[E, T] says T, and
+// CheckRelation checks the target.
 func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) Relation {
 	return Relation{
 		name: name, explicit: true, ownerCol: ownerCol, targetCol: targetCol,
@@ -327,10 +328,10 @@ func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) Relation 
 	}
 }
 
-// For generated code. EdgeThrough is a many-to-many relation to T through the join entity J:
-// owner.Columns[ownerCol] = J.Columns[joinOwner] and J.Columns[joinTarget] =
-// T.Columns[targetCol]. Its field is a Many[T]. J's rows are written like any
-// entity's, with Insert and Delete.
+// For generated code. EdgeThrough is a many-to-many relation to T through the
+// join entity J: owner.Columns[ownerCol] = J.Columns[joinOwner] and
+// J.Columns[joinTarget] = T.Columns[targetCol]. Its field is a Many[T]. J's
+// rows are written like any entity's, with Insert and Delete.
 //
 // Loading it reads J's rows for the owners' keys, then T's rows for the keys
 // they hold, and Has is an EXISTS on J holding an EXISTS on T. T's tenant and

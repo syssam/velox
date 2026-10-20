@@ -8,15 +8,14 @@ import (
 	"strings"
 )
 
-// scope applies the context's tenant and the entities' policies to a
-// statement. On a tenant-scoped entity it adds the
-// condition tenant = id, or fails the statement with ErrNoTenant when the
-// context has neither WithTenant nor AllTenants. Unless the context says
-// SkipPolicy, a SELECT gets the entity's Read policy and an UPDATE or DELETE
-// its Read and Write policies, after the tenant. Every EXISTS gets its
-// target's tenant and Read policy the same way. scope runs after the guard
-// and the Rewrite hooks, so neither sees what it adds and no hook can remove
-// it.
+// scope applies the context's tenant and the entities' policies to a statement.
+// On a tenant-scoped entity it adds the condition tenant = id, or fails the
+// statement with ErrNoTenant when the context has neither WithTenant nor
+// AllTenants. Unless the context says SkipPolicy, a SELECT gets the entity's
+// Read policy and an UPDATE or DELETE its Read and Write policies, after the
+// tenant. Every EXISTS gets its target's tenant and Read policy the same way.
+// scope runs after the guard and the Rewrite hooks, so neither sees what it
+// adds and no hook can remove it.
 //
 // st does not escape: scope passes it to no function value, and policy
 // functions are given only ctx, so plain's statement stays on the stack.

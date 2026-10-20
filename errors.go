@@ -6,12 +6,12 @@ import (
 	"strings"
 )
 
-// Errors velox returns. Each is returned wrapped, in an error whose text
-// starts "velox: <Entity>: ", so a sentinel's own text is a bare phrase; test
-// for them with errors.Is.
+// Errors velox returns. Each is returned wrapped, in an error whose text starts
+// "velox: <Entity>: ", so a sentinel's own text is a bare phrase; test for them
+// with errors.Is.
 var (
-	// ErrNotFound is returned by One when it finds no row, and by Save when
-	// no row has the key.
+	// ErrNotFound is returned by One when it finds no row, and by Save when no
+	// row has the key.
 	ErrNotFound = errors.New("not found")
 	// ErrNotSingular is returned by One when it finds more than one row.
 	ErrNotSingular = errors.New("more than one row")
@@ -31,15 +31,14 @@ var (
 	// velox set (WithDeadlines, TxTimeout) passes. The error also matches
 	// context.DeadlineExceeded; a deadline the caller set matches that alone.
 	ErrTimeout = errors.New("deadline set by velox passed")
-	// ErrNoTenant is returned by a statement on a tenant-scoped entity when
-	// its context has neither WithTenant nor AllTenants.
+	// ErrNoTenant is returned by a statement on a tenant-scoped entity when its
+	// context has neither WithTenant nor AllTenants.
 	ErrNoTenant = errors.New("no tenant in the context")
-	// ErrTenantMismatch is returned by a statement when the context's tenant
-	// is not of the tenant column's type, or an inserted row names another
-	// tenant.
+	// ErrTenantMismatch is returned by a statement when the context's tenant is
+	// not of the tenant column's type, or an inserted row names another tenant.
 	ErrTenantMismatch = errors.New("tenant does not match")
-	// ErrTenantImmutable is returned by an update when it assigns
-	// another tenant to the tenant column.
+	// ErrTenantImmutable is returned by an update when it assigns another
+	// tenant to the tenant column.
 	ErrTenantImmutable = errors.New("tenant column cannot change")
 	// ErrTenantUpsert is returned by an upsert that updates, when the update
 	// could change another tenant's row.
@@ -55,8 +54,8 @@ var (
 	// list assigns an Immutable column, including one a hook adds. An insert
 	// may set one.
 	ErrImmutable = errors.New("column is immutable")
-	// ErrNoShard is returned, on a DB opened with OpenShards, by a statement
-	// or Tx when its context names no shard (neither OnShard nor a tenant;
+	// ErrNoShard is returned, on a DB opened with OpenShards, by a statement or
+	// Tx when its context names no shard (neither OnShard nor a tenant;
 	// AllTenants names none), names one the DB does not have, or when the
 	// WithShardFor function failed. Nothing was sent.
 	ErrNoShard = errors.New("no shard for the statement")

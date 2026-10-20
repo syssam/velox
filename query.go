@@ -266,12 +266,12 @@ func scanRow[E any](r rows, m *Meta[E], cols []int, dst []any, p *E) error {
 	return r.Scan(dst...)
 }
 
-// Each way of running a query keeps its state (the statement, and what its
-// rows are read into) in one struct, read by a function given a pointer to
-// it. With hooks configured, the struct is allocated and run is used: hooks
-// may keep what they are given, so all that the reading reaches is on the
-// heap. With none, the struct is a local and plain is used, which keeps it,
-// and the closure reading the rows, on the stack.
+// Each way of running a query keeps its state (the statement, and what its rows
+// are read into) in one struct, read by a function given a pointer to it. With
+// hooks configured, the struct is allocated and run is used: hooks may keep
+// what they are given, so all that the reading reaches is on the heap. With
+// none, the struct is a local and plain is used, which keeps it, and the
+// closure reading the rows, on the stack.
 
 // allRun is the state of one All.
 type allRun[E any] struct {

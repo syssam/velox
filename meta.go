@@ -94,10 +94,10 @@ type ColumnInfo struct {
 	off    uintptr                        // the field's offset in the entity
 }
 
-// GoType returns the Go type of column c's field. ColumnInfo.Type holds it
-// as any, and this is a function rather than a method, so that no velox type
-// reaches reflect.Type: every package that reaches it compiles about 134 KiB
-// of wrappers for reflect's iterator types.
+// GoType returns the Go type of column c's field. ColumnInfo.Type holds it as
+// any, and this is a function rather than a method, so that no velox type
+// reaches reflect.Type: every package that reaches it compiles about 134 KiB of
+// wrappers for reflect's iterator types.
 func GoType(c ColumnInfo) reflect.Type { return rtype(c.Type) }
 
 // rtype returns the reflect.Type that v holds; velox's types hold them as any
@@ -108,8 +108,8 @@ func rtype(v any) reflect.Type {
 }
 
 // elemType returns, as any, the reflect.Type of what the pointer p points to.
-// Generic code calls it with a nil *T in place of reflect.TypeFor[T](), so
-// that its body, compiled where it is called, holds no reflect.Type.
+// Generic code calls it with a nil *T in place of reflect.TypeFor[T](), so that
+// its body, compiled where it is called, holds no reflect.Type.
 func elemType(p any) any { return reflect.TypeOf(p).Elem() }
 
 // IndexInfo describes one index.
@@ -125,8 +125,9 @@ type Meta[E any] struct {
 	err  error
 }
 
-// For generated code. MetaOnce builds an entity's Meta on first use. Its zero value is ready, so
-// a generated file declares one without running anything at program start.
+// For generated code. MetaOnce builds an entity's Meta on first use. Its zero
+// value is ready, so a generated file declares one without running anything at
+// program start.
 type MetaOnce[E any] struct {
 	once sync.Once
 	m    *Meta[E]
@@ -139,9 +140,9 @@ type Entity[E any] interface {
 	VeloxMeta() *Meta[E]
 }
 
-// isRelation reports a One or Many field. It goes by the type's name: a
-// marker method would give every instantiation a method table, compiled into
-// every package that uses it.
+// isRelation reports a One or Many field. It goes by the type's name: a marker
+// method would give every instantiation a method table, compiled into every
+// package that uses it.
 func isRelation(t reflect.Type) bool {
 	if t.PkgPath() != reflect.TypeFor[holder]().PkgPath() { // not a package-level value: nothing runs at start
 		return false
