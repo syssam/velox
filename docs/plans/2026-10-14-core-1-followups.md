@@ -233,6 +233,18 @@ Left by the observability plan:
 - The example README and main.go say introspection is free under the complexity limit; only `__Schema` is, `__type(name:)` costs a few points.
 - Generated enum `UnmarshalGQL` errors lack the `veloxgql: ` prefix the docs promise.
 
+## Left by API plan 1
+
+From the final review of API plan 1 (2026-10-20). Each item names the plan that takes it.
+
+- **API plan 2 (DSL and velox-gen):** rules 37, 39 and 40 are three copies of one check (an `Optional`, non-`Nillable` field of a type whose unset value cannot be stored needs a `Default`). Make them one table of `{type, rule, noun}`, so that a rule 41 is one line.
+- **API plan 2:** `internal/gen` comments cite "Ruling N" of old plans (`lower.go`, `build.go`, `methods.go`). They are not public, but they rot; the velox-gen rewrite should drop them. The citation test scans only public packages.
+- **API plan 3 (dialects):** `SQL(ctx)` of a statement with a policy `Allow` or a zero-Pred failure is tested on PostgreSQL only; add it to the dialect test sweep.
+- **API plans 3–4:** the citation scan (`TestGodocCitesNoSpec`) does not cover the contrib modules. `contrib/otel/metrics.go` and `attrs.go` still say "spec §2.x".
+- **API plan 4 (otel):** `contrib/otel/attrs.go` re-implements the core's unexported `Op.raw()` and `Statement.reads()`. Export `Op.Raw()` and `Op.Reads()` (additive), so hooks and adapters share one definition.
+- **Perf pass with the pgx split:** `Save` allocates its `cols` slice. No API impact, and no budget pins Save.
+- Accepted, no change: an empty `InsertAll` skips the transaction and dry-run checks (it sends nothing; documented on `Exec`); the Save compile test's cgo note.
+
 ## 1.0 release
 
 - The repo needs a `README.md` and a `LICENSE`.

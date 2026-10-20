@@ -68,8 +68,8 @@ type dryRunKey struct{}
 // can also read it from Statement.DryRun.
 //
 // A write made under such a context is refused: Exec of an Insert, InsertAll,
-// Update or Delete, Save, an upsert and Tx fail with ErrDryRun before
-// anything is sent, on any *DB, so a hook's audit write through
+// Update or Delete, Save, an upsert, DB.Exec (raw SQL) and Tx fail with
+// ErrDryRun before anything is sent, on any *DB, so a hook's audit write through
 // Mutation.DB does not happen and needs no check. Reads run as normal.
 func IsDryRun(ctx context.Context) bool {
 	dry, _ := ctx.Value(dryRunKey{}).(bool)

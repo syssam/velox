@@ -2,7 +2,6 @@ package velox
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"reflect"
 	"slices"
@@ -179,7 +178,9 @@ func (d DeleteQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, erro
 }
 
 // SaveQuery is a Save of one entity, built by chaining and run by Exec. Like
-// Query it is a value: extending it leaves it as it was.
+// Query it is a value: extending it leaves it as it was. It holds x, not its
+// values: *x is read when Exec or SQL runs, not when Save is called, and
+// after Exec it holds what was written, the UpdateDefault values included.
 type SaveQuery[E any] struct {
 	db    *DB
 	meta  *Meta[E]
@@ -194,7 +195,9 @@ type SaveQuery[E any] struct {
 //	db.Save(&inv, I.Number, I.Total).Exec(ctx)
 //
 // At least one column is required, which the signature enforces. Naming a
-// column twice is an error, reported by Exec and SQL.
+// column twice is an error, reported by Exec and SQL. *x is read when Exec or
+// SQL runs, not here; after Exec, *x holds the values written, the
+// UpdateDefault ones included.
 func (db *DB) Save[E any, PE Entity[E]](x PE, col Column[E], more ...Column[E]) SaveQuery[E] {
 	cols := make([]Column[E], 1+len(more))
 	cols[0] = col
@@ -330,9 +333,30 @@ func write(ctx context.Context, db *DB, st *Statement, dry, save bool) (int64, s
 // is a write a hook made that was refused with ErrDryRun, after the statement
 // itself was rendered: SQL(ctx) then returns the statement, as the hook, not
 // the dry run, is what asked for a write. A hook that wrote before next, and
-// so before anything was rendered, gets the error.
+// so before anything was rendered, gets the error, and so does one whose
+// error joins another to ErrDryRun.
 func dryRefused(mu *mutation, err error) bool {
-	return mu.dry && mu.sql != "" && errors.Is(err, ErrDryRun)
+	return mu.dry && mu.sql != "" && onlyDryRun(err)
+}
+
+// onlyDryRun reports whether err is ErrDryRun, wrapped or joined, on every
+// branch of its tree: errors.Join(ErrDryRun, other) is not.
+func onlyDryRun(err error) bool {
+	switch x := err.(type) {
+	case nil:
+		return false
+	case interface{ Unwrap() []error }:
+		errs := x.Unwrap()
+		for _, e := range errs {
+			if !onlyDryRun(e) {
+				return false
+			}
+		}
+		return len(errs) > 0
+	case interface{ Unwrap() error }:
+		return err == ErrDryRun || onlyDryRun(x.Unwrap())
+	}
+	return err == ErrDryRun
 }
 
 // writeCore is an update's or delete's work inside the hooks, their next.

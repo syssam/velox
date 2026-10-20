@@ -76,7 +76,7 @@ The reviews also agreed on what stays:
    - `Optional().Nillable()` means both.
    - A `Default` never changes the Go type.
    - These are refused:
-     - a `Default` on a bool or number field that is not `Nillable`;
+     - a `Default` or `DefaultFunc` on a bool or number field that is not `Nillable` (an insert fills either into a zero field, so false or 0 could never be stored);
      - an `Optional` enum, bytes or time field that has neither a `Default` nor `Nillable` (MySQL's strict mode refuses the zero time);
      - an `Optional` edge field that is not `Nillable`.
    - A field that is unique only when present needs `Nillable`.
@@ -166,12 +166,13 @@ Added 2026-10-20. Each is a decision taken during the plan, and it stands.
 1. `TxInfo.Context` is removed. A statement's span is parented on the statement's own context, which inside `Tx` is the transaction's.
 2. `db.Tx` on a non-transaction `*DB` under a context marked by a transaction fails with `ErrOutsideTx`: a nested transaction is `tx.Tx`. The check compares transactions, so a statement on transaction B's `*DB` under transaction A's context fails too. A savepoint shares its transaction's identity. A mark whose transaction has ended counts as no mark.
 3. `velox.WithoutTx(ctx)` returns a context without the mark, keeping tenant, tags and spans. It is the explicit way out for work that must not join the transaction, such as an audit row that survives a rollback.
-4. A zero `Pred` from a policy is a plain error naming the entity, not a `*PolicyError`, so it does not match `ErrDenied`: it is a programming error, not a denial.
-5. `SQL(ctx)` treats an `ErrDryRun` returned by a hook as success once the statement was rendered (an audit write after `next`), and returns it when nothing was rendered (a hook that wrote before `next`).
+4. A zero `Pred` from a policy is a plain error naming the entity and the policy (`Read` or `Write`), not a `*PolicyError`, so it does not match `ErrDenied`: it is a programming error, not a denial. A policy that returns an error with it denies the statement with that error.
+5. `SQL(ctx)` treats an `ErrDryRun` returned by a hook as success once the statement was rendered (an audit write after `next`), and returns it when nothing was rendered (a hook that wrote before `next`). An error that joins another error to `ErrDryRun` is returned. A write that is both under a dry run and outside its transaction fails with `ErrDryRun`, with hooks or without.
 6. Nullability follows old velox exactly (§3.1). Two earlier rulings that went the other way (a pointer for every `Optional`, then a NULL-able column for every `Optional`) were withdrawn.
 7. `GeneratedCodeIsVersion4` stays at 4: version 4 is not released, and the nullability rules are additive.
 8. GraphQL create inputs are not required when the field is `Optional` or `Nillable`. Update inputs offer `clear<Field>` and `IsNil` filters only for `Nillable` fields, because a value handle cannot write NULL.
 9. The documents' history is kept. Plans and reviews record what was decided then; older specs get a dated note where a rule changed.
+10. `Or(Allow(), x)` is `Allow` only when no other kid is or holds the zero `Pred`, an invalid condition or a `Has`; otherwise the `Or` keeps every kid, so the statement still fails on a bad one (a `Has`'s relation resolves only when the statement runs). It matches every row either way.
 
 ## 7. Order and plans
 

@@ -5,6 +5,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -84,13 +85,24 @@ func TestGeneratedOnlyAPIIsMarked(t *testing.T) {
 		listed[n] = true
 	}
 	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, repoRoot(), func(fi fs.FileInfo) bool { return !strings.HasSuffix(fi.Name(), "_test.go") }, parser.ParseComments) //nolint:staticcheck // one directory, one build; go/packages is not a dependency
+	entries, err := os.ReadDir(repoRoot())
 	if err != nil {
 		t.Fatal(err)
 	}
 	docs := map[string]string{}
 	var pkgDoc string
-	for _, f := range pkgs["velox"].Files {
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, filepath.Join(repoRoot(), name), nil, parser.ParseComments)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if f.Name.Name != "velox" {
+			continue
+		}
 		if f.Doc != nil {
 			pkgDoc += f.Doc.Text()
 		}

@@ -23,3 +23,34 @@ func TestInsertHookCannotMoveTheTenant(t *testing.T) {
 		t.Errorf("InsertAll: %v", err)
 	}
 }
+
+// A DefaultFunc returns a pointer field's element type, which fillDefault
+// stores through a new pointer; a set pointer keeps its value.
+func TestFillDefaultFuncOnPointer(t *testing.T) {
+	c := ColumnInfo{DefaultFunc: func() any { return 3 }}
+	var p *int
+	fillDefault(&c, &p)
+	if p == nil || *p != 3 {
+		t.Fatalf("unset pointer: %v", p)
+	}
+	zero := 0
+	p = &zero
+	fillDefault(&c, &p)
+	if *p != 0 {
+		t.Fatalf("a set 0 was replaced by %d", *p)
+	}
+	var v int
+	fillDefault(&c, &v)
+	if v != 3 {
+		t.Fatalf("value field: %d", v)
+	}
+}
+
+// TestCheckColumnsAllow: an Allow names no column, so checkColumns does not
+// check its col, which on an entity of no columns would be out of range.
+func TestCheckColumnsAllow(t *testing.T) {
+	st := &Statement{Op: OpSelect, Entity: &EntityInfo{Name: "none"}, Where: []Predicate{{node{op: opAllow}}}}
+	if err := checkColumns(st); err != nil {
+		t.Fatal(err)
+	}
+}

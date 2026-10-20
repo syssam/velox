@@ -516,6 +516,60 @@ func TestEndedTxMarksNothing(t *testing.T) {
 	}
 }
 
+// TestEndedTxMarksNothingOnEveryEnd: a transaction ended by a panic in fn,
+// by runtime.Goexit in fn, or by a retry (the first attempt's transaction
+// rolled back) leaves no mark either. A begin that fails makes no frame, so
+// there is no mark to end.
+func TestEndedTxMarksNothingOnEveryEnd(t *testing.T) {
+	read := func(ctx context.Context, db *velox.DB) error {
+		_, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(ctx)
+		return err
+	}
+	for _, end := range []string{"panic", "Goexit"} {
+		db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Rows: [][]any{invoiceRow(1)}})
+		var kept context.Context
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			defer func() { _ = recover() }()
+			_ = db.Tx(ctx, func(ctx context.Context, _ *velox.DB) error {
+				kept = ctx
+				if err := read(kept, db); !errors.Is(err, velox.ErrOutsideTx) {
+					t.Errorf("%s: inside the transaction: %v, want ErrOutsideTx", end, err)
+				}
+				if end == "panic" {
+					panic("fn failed")
+				}
+				runtime.Goexit()
+				return nil
+			})
+		}()
+		<-done
+		if err := read(kept, db); err != nil {
+			t.Errorf("%s: after the transaction: %v", end, err)
+		}
+	}
+
+	// The retried attempt runs while the first attempt's transaction has
+	// ended: the first attempt's ctx is unmarked by then.
+	e := &velox.FakeExec{Rows: [][]any{invoiceRow(1)}, Errs: []error{&pgconn.PgError{Code: "40001"}}}
+	db := velox.OpenFake(velox.Postgres, e)
+	var first context.Context
+	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		if first == nil {
+			first = ctx
+			return touch(ctx, tx) // fails, to be retried
+		}
+		if err := read(first, db); err != nil {
+			t.Errorf("the first attempt's ctx, during the retry: %v", err)
+		}
+		return nil
+	}, velox.TxRetrySerializable(2))
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 // TestWithoutTx: WithoutTx removes the mark and keeps the context's values
 // and deadline; on a context without the mark it returns ctx.
 func TestWithoutTx(t *testing.T) {
@@ -541,4 +595,20 @@ func TestWithoutTx(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// Cancelling the parent cancels the WithoutTx ctx.
+	parent, cancel := context.WithCancel(ctx)
+	_ = db.Tx(parent, func(ctx context.Context, _ *velox.DB) error {
+		free := velox.WithoutTx(ctx)
+		cancel()
+		select {
+		case <-free.Done():
+		case <-time.After(time.Second):
+			t.Error("cancelling the parent did not cancel the WithoutTx ctx")
+		}
+		if !errors.Is(free.Err(), context.Canceled) {
+			t.Errorf("Err %v, want context.Canceled", free.Err())
+		}
+		return nil
+	})
 }

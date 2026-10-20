@@ -233,3 +233,22 @@ func TestSaveWhereNeedsAMatch(t *testing.T) {
 		t.Errorf("UpdatedAt %v", inv.UpdatedAt)
 	}
 }
+
+// TestSaveWhereOnTheKeyKeepsTheKey: a condition on the key column is added to
+// the key's, never put in its place, so Save writes x's row or none. *x is
+// read when SQL or Exec runs, not when Save is called.
+func TestSaveWhereOnTheKeyKeepsTheKey(t *testing.T) {
+	e := &velox.FakeExec{Affected: 1}
+	db := velox.OpenFake(velox.Postgres, e)
+	inv := testmodel.Invoice{ID: 3, Number: "X"}
+	q := db.Save(&inv, I.Number).Where(I.ID.EQ(4))
+	inv.Number = "Y"
+	text, args, err := q.SQL(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = `UPDATE "invoices" SET "number" = $1, "updated_at" = $2 WHERE "id" = $3 AND "id" = $4`
+	if text != want || args[0] != "Y" || args[2] != int64(3) || args[3] != int64(4) {
+		t.Errorf("%s %v", text, args)
+	}
+}

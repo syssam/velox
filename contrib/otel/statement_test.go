@@ -665,4 +665,22 @@ func TestRawSpans(t *testing.T) {
 			}
 		}
 	}
+
+	// A Raw read that fails: its span has the error, and still no operation
+	// or collection.
+	failing := &fakeDB{errs: []error{errors.New("boom")}}
+	db, exp, _ = traced(t, failing, veloxotel.Config{})
+	if _, err := db.Raw[testmodel.Invoice]("locks the batch", q).All(bare); err == nil {
+		t.Fatal("no error")
+	}
+	s := only(t, exp)
+	a := attrs(s)
+	if s.Name != "postgresql" || s.Status.Code != codes.Error || a["error.type"].AsString() != "_OTHER" {
+		t.Errorf("failed Raw: %q status %v error.type %q", s.Name, s.Status, a["error.type"].AsString())
+	}
+	for _, k := range []attribute.Key{"db.operation.name", "db.collection.name"} {
+		if _, ok := a[k]; ok {
+			t.Errorf("failed Raw: unexpected %s = %v", k, a[k].String())
+		}
+	}
 }

@@ -68,9 +68,9 @@ func dbSystem(d velox.Dialect) string {
 }
 
 // operation is db.operation.name's value: the statement's SQL verb. Raw SQL
-// (OpRawQuery and OpRawExec) has none: velox does not parse it out of the text, as the semantic
-// conventions advise for a language whose one statement can hold several
-// operations, so the attribute is left off.
+// (OpRawQuery and OpRawExec) has none: velox does not parse it out of the
+// text, as the semantic conventions advise for a language whose one
+// statement can hold several operations, so the attribute is left off.
 func operation(st *velox.Statement) string {
 	switch st.Op {
 	case velox.OpSelect:

@@ -23,8 +23,8 @@ func errNoReason(name string) error {
 // Exec runs query, raw SQL that returns no rows, with args, and returns the
 // number of rows it affected, as the driver counts them. reason says why the
 // statement may skip the tenant scope and the policy; if it is empty or only
-// white space, Exec fails before anything runs. See Raw for what raw SQL goes
-// through, and what it skips.
+// white space, Exec fails before anything runs. The hooks see reason as
+// given, untrimmed. See Raw for what raw SQL goes through, and what it skips.
 //
 // velox treats Exec as a write (OpRawExec), whatever its SQL: it goes to the
 // primary, pins the session (WithSession), and fails with ErrDryRun under a
@@ -59,7 +59,7 @@ type RawQuery[E any] struct {
 // Raw returns query, raw SQL with args, as a query whose rows scan into
 // entity E. reason says why it may skip the tenant scope and the policy; if
 // it is empty or only white space, running the query fails before anything
-// is sent.
+// is sent. The hooks see reason as given, untrimmed.
 //
 // Each column the SQL returns is scanned, by name, into E's field of that
 // column name, through its codec when it has one; a column E has no field
@@ -83,8 +83,9 @@ type RawQuery[E any] struct {
 // The SQL is sent as written, in the dialect's placeholders ($1 on
 // PostgreSQL, ? elsewhere), and args are bound as given: no codec encodes
 // them. With WithSQLComment, trailing semicolons and white space are trimmed
-// from the SQL before the comment is appended. Raw has no SQL(ctx) method:
-// its SQL is the caller's already.
+// from the SQL before the comment is appended, on a line of its own when the
+// SQL's last line holds a -- comment. Raw has no SQL(ctx) method: its SQL is
+// the caller's already.
 //
 // velox treats Raw as a read: it goes to a replica unless ReadPrimary or a
 // pinned session says otherwise, and runs under a dry run (IsDryRun). Run a
@@ -224,7 +225,8 @@ func resultColumns(r rows) ([]string, error) {
 // sets the fingerprint, of the caller's SQL, and appends the SQL comment,
 // after trimming trailing semicolons and white space: a comment after a
 // statement's terminator would make a second, empty statement, which MySQL
-// without multiStatements refuses.
+// without multiStatements refuses. When the last line holds "--", the comment
+// goes on a line of its own, so that a line comment does not swallow it.
 func (db *DB) prepareRaw(ctx context.Context, st *Statement) {
 	db.observe(ctx, st)
 	if len(db.cfg.arounds) > 0 {
@@ -232,7 +234,11 @@ func (db *DB) prepareRaw(ctx context.Context, st *Statement) {
 	}
 	st.Fingerprint = fingerprint(st.SQL)
 	if db.cfg.comment != nil {
-		st.SQL = strings.TrimRight(st.SQL, "; \t\r\n") + db.cfg.comment.text(st)
+		q := strings.TrimRight(st.SQL, "; \t\r\n")
+		if strings.Contains(q[strings.LastIndexByte(q, '\n')+1:], "--") {
+			q += "\n"
+		}
+		st.SQL = q + db.cfg.comment.text(st)
 	}
 }
 

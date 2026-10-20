@@ -120,7 +120,9 @@ func (q InsertQuery[E]) DoNothing[_ Lazy[E]]() InsertQuery[E] {
 // statements is atomic: outside a transaction it runs them in one, and inside
 // one it runs them under a savepoint. So is an upsert of several rows whose
 // update branch gets the policy's conditions, so that the error for a hidden
-// row also undoes the rows written with it.
+// row also undoes the rows written with it. An InsertAll of no entities sends
+// nothing and returns nil under any context, a dry run's or another
+// transaction's included: its hooks do not run.
 func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 	if err := q.check(); err != nil {
 		return err
@@ -570,7 +572,11 @@ func insertMany[E any](ctx context.Context, db *DB, m *Meta[E], xs []E, cf *Conf
 		return nil
 	}
 	// Before the batches' Tx, which would fail as the transaction's: the
-	// error names the entity on every path.
+	// error names the entity on every path. The dry run first, as run and
+	// plain check it.
+	if IsDryRun(ctx) {
+		return fmt.Errorf("velox: %s: %w", m.info.Name, ErrDryRun)
+	}
 	if db.foreign(ctx) {
 		return fmt.Errorf("velox: %s: %w", m.info.Name, ErrOutsideTx)
 	}

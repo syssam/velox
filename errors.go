@@ -67,8 +67,8 @@ var (
 	ErrOutsideTx = errors.New("statement outside its transaction")
 	// ErrDryRun is returned by a write, or a Tx, under a context IsDryRun
 	// reports true for, such as the one SQL(ctx) gives a hook: Insert,
-	// InsertAll, Update and Delete's Exec, Save, an upsert and Tx. Nothing was
-	// sent. Reads run. SQL(ctx) itself returns the statement it rendered, not
+	// InsertAll, Update and Delete's Exec, Save, an upsert, DB.Exec (raw SQL)
+	// and Tx. Nothing was sent. Reads run. SQL(ctx) itself returns the statement it rendered, not
 	// this error, when it is a hook's write that was refused.
 	ErrDryRun = errors.New("write in a dry run")
 )

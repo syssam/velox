@@ -353,6 +353,13 @@ func TestRawPipeline(t *testing.T) {
 				t.Errorf("%q sent as %q", sql, e.SQL)
 			}
 		}
+		// After a line comment, the tag goes on a line of its own.
+		if _, err := db.Exec(ctx, "r", "DELETE FROM invoices -- old rows;"); err != nil {
+			t.Fatal(err)
+		}
+		if e.SQL != "DELETE FROM invoices -- old rows\n /*app='app'*/" {
+			t.Errorf("after a line comment, sent %q", e.SQL)
+		}
 		// Without a comment the SQL is sent as written.
 		plain := velox.OpenFake(velox.Postgres, e)
 		if _, err := plain.Exec(ctx, "r", "DELETE FROM invoices;"); err != nil || e.SQL != "DELETE FROM invoices;" {

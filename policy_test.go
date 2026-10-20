@@ -385,7 +385,8 @@ func TestPolicyMutualCycleIsRefused(t *testing.T) {
 func TestPolicyZeroPredFails(t *testing.T) {
 	e := &velox.FakeExec{Affected: 1}
 	db := velox.OpenFake(velox.Postgres, e)
-	const msg = "policy returned no predicate; return velox.Allow[E]() for no restriction"
+	const msg = "the Read policy returned the zero Pred; return velox.Allow[E]() for no restriction"
+	const writeMsg = "the Write policy returned the zero Pred; return velox.Allow[E]() for no restriction"
 	zeroRead := pnoteReading(velox.Pred[pnote]{}, nil)
 
 	calls := e.Calls
@@ -415,12 +416,38 @@ func TestPolicyZeroPredFails(t *testing.T) {
 
 	zeroWrite := pnoteWriting(velox.Pred[pnote]{}, nil)
 	_, err = db.Update[pnote]().Set(pn.Owner.Set("x")).Where(pn.ID.EQ(1)).Exec(zeroWrite)
-	if err == nil || err.Error() != "velox: velox_test.pnote: "+msg {
+	if err == nil || err.Error() != "velox: velox_test.pnote: "+writeMsg {
 		t.Errorf("Write on update: %v", err)
 	}
 	_, err = db.Delete[pnote]().Where(pn.ID.EQ(1)).Exec(zeroWrite)
-	if err == nil || !strings.Contains(err.Error(), msg) {
+	if err == nil || !strings.Contains(err.Error(), writeMsg) {
 		t.Errorf("Write on delete: %v", err)
+	}
+
+	// A With load reads its target under the target's Read policy.
+	boxes := velox.OpenFake(velox.Postgres, &velox.FakeExec{Rows: [][]any{{int64(1), int64(1)}}})
+	_, err = boxes.Query[pbox]().With(pboxNote).Limit(1).All(zeroRead)
+	if err == nil || !strings.Contains(err.Error(), msg) {
+		t.Errorf("With load: %v", err)
+	}
+
+	// An upsert's update branch gets both conditions.
+	up := func(ctx context.Context) error {
+		return db.Insert(&pnote{ID: 1, Owner: "x"}).OnConflict(pn.ID).Update(pn.Owner).Exec(ctx)
+	}
+	if err := up(zeroRead); err == nil || !strings.Contains(err.Error(), msg) {
+		t.Errorf("upsert with a zero Read: %v", err)
+	}
+	if err := up(zeroWrite); err == nil || !strings.Contains(err.Error(), writeMsg) {
+		t.Errorf("upsert with a zero Write: %v", err)
+	}
+
+	// The error comes first: a policy that returns the zero Pred with an error
+	// denies the statement with that error.
+	boom := errors.New("boom")
+	_, err = db.Delete[pnote]().Where(pn.ID.EQ(1)).Exec(pnoteWriting(velox.Pred[pnote]{}, boom))
+	if !errors.Is(err, boom) || !errors.Is(err, velox.ErrDenied) || strings.Contains(err.Error(), "zero Pred") {
+		t.Errorf("Write (zero, err): %v", err)
 	}
 	if e.Calls != calls {
 		t.Errorf("%d statements sent past a zero policy Pred", e.Calls-calls)
@@ -524,5 +551,29 @@ func TestAllowComposes(t *testing.T) {
 	want(t, err, velox.ErrNoWhere, "velox: velox_test.pnote: "+velox.ErrNoWhere.Error()+": its conditions match every row; add a condition, or All to change every row")
 	if _, err := db.Delete[pnote]().Where(velox.Not(allow)).Exec(skip); err != nil {
 		t.Errorf("Not(Allow) matches nothing, which is a condition: %v", err)
+	}
+
+	// An Allow does not hide a zero or invalid kid of Or: the statement still
+	// fails on it, as it does without the Allow.
+	calls := e.Calls
+	_, err = db.Query[pnote]().Where(velox.Or(allow, velox.Pred[pnote]{})).Limit(1).All(skip)
+	if err == nil || !strings.Contains(err.Error(), "a condition is the zero Predicate") {
+		t.Errorf("Or(Allow, zero): %v", err)
+	}
+	bad := velox.Rel[pnote, pnote]{I: 9}.Has()
+	_, wantErr := db.Query[pnote]().Where(bad).Limit(1).All(skip)
+	_, err = db.Query[pnote]().Where(velox.Or(allow, bad)).Limit(1).All(skip)
+	if wantErr == nil || err == nil || err.Error() != wantErr.Error() {
+		t.Errorf("Or(Allow, invalid): %v, want %v", err, wantErr)
+	}
+	if e.Calls != calls {
+		t.Errorf("%d statements sent past a zero or invalid kid", e.Calls-calls)
+	}
+	// A Has next to an Allow is kept, to resolve when the statement runs, and
+	// the Or still matches every row.
+	_, err = db.Delete[pnote]().Where(velox.Or(allow, pn.Parent.Has())).Exec(skip)
+	want(t, err, velox.ErrNoWhere, "velox: velox_test.pnote: "+velox.ErrNoWhere.Error()+": its conditions match every row; add a condition, or All to change every row")
+	if s, _ := sql(velox.Or(allow, pn.Parent.Has())); !strings.Contains(s, "1 = 1 OR EXISTS") {
+		t.Errorf("Or(Allow, Has): %s", s)
 	}
 }

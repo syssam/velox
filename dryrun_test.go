@@ -289,12 +289,11 @@ func TestDryRunReadsRun(t *testing.T) {
 		t.Errorf("Count: %d %v", n, err)
 	}
 	var got int
-	for x, err := range db.Query[dnote]().Limit(10).Iter(dry) {
+	for _, err := range db.Query[dnote]().Limit(10).Iter(dry) {
 		if err != nil {
 			t.Fatal(err)
 		}
 		got++
-		_ = x
 	}
 	if got != 1 {
 		t.Errorf("Iter read %d rows, want 1", got)
@@ -304,5 +303,166 @@ func TestDryRunReadsRun(t *testing.T) {
 	}
 	if w := sentWrites(e); len(w) != 0 {
 		t.Errorf("sent %q", w)
+	}
+}
+
+// TestDryRunInsertAllTakesNoTransaction: an InsertAll that would run in a
+// transaction of its own (more rows than one statement holds, or a
+// conditioned upsert of several rows) fails under a dry run with ErrDryRun
+// naming the entity, before any BEGIN.
+func TestDryRunInsertAllTakesNoTransaction(t *testing.T) {
+	e := &velox.FakeExec{Affected: 1, Rows: [][]any{{int64(1)}}}
+	dry, db := dryContext(t, e)
+	before := len(e.Log)
+
+	restore := velox.SetMaxParams(velox.Postgres, 2) // one row per statement
+	err := db.InsertAll([]dnote{{Owner: "a"}, {Owner: "b"}, {Owner: "c"}}).Exec(dry)
+	restore()
+	if !errors.Is(err, velox.ErrDryRun) || !strings.HasPrefix(err.Error(), "velox: velox_test.dnote: ") {
+		t.Errorf("large InsertAll: %v", err)
+	}
+
+	// pnote has a Read and a Write policy, so its upsert's update branch is
+	// conditioned.
+	err = db.InsertAll([]pnote{{ID: 1, Owner: "a"}, {ID: 2, Owner: "b"}}).OnConflict(pn.ID).Update(pn.Owner).Exec(dry)
+	if !errors.Is(err, velox.ErrDryRun) || !strings.HasPrefix(err.Error(), "velox: velox_test.pnote: ") {
+		t.Errorf("conditioned upsert: %v", err)
+	}
+	if len(e.Log) != before {
+		t.Errorf("sent %q", e.Log[before:])
+	}
+}
+
+// A dhooked's hook does what its context's dhookFunc says around next.
+type dhooked struct {
+	ID    int64
+	Owner string
+}
+
+type dhookKey struct{}
+
+type dhookFunc func(ctx context.Context, m *velox.Mutation[dhooked], next velox.Mutator[dhooked]) error
+
+func (*dhooked) Hooks() []velox.Hook[dhooked] {
+	return []velox.Hook[dhooked]{func(next velox.Mutator[dhooked]) velox.Mutator[dhooked] {
+		return velox.MutateFunc[dhooked](func(ctx context.Context, m *velox.Mutation[dhooked]) error {
+			return ctx.Value(dhookKey{}).(dhookFunc)(ctx, m, next)
+		})
+	}}
+}
+
+var dhookedMeta velox.MetaOnce[dhooked]
+
+func (*dhooked) VeloxMeta() *velox.Meta[dhooked] { return dhookedMeta.Load(dhookedDesc) }
+
+func dhookedDesc() velox.Desc[dhooked] {
+	return velox.Desc[dhooked]{
+		Hooks:      func() velox.BoundHooks { return velox.BindHooks((*dhooked)(nil).Hooks()) },
+		Table:      "dhooked",
+		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Owner", Name: "owner"}},
+		PrimaryKey: []int{0},
+		Tenant:     -1,
+		Addr: func(x *dhooked, i int) any {
+			if i == 0 {
+				return &x.ID
+			}
+			return &x.Owner
+		},
+	}
+}
+
+// TestDryRunHookErrors: SQL(ctx) returns the statement when a hook's write
+// after next is refused with ErrDryRun, and the hook's error in every other
+// case: a write before next (nothing was rendered yet), an error of its own
+// after next, and one that joins its own to ErrDryRun.
+func TestDryRunHookErrors(t *testing.T) {
+	boom := errors.New("boom")
+	audit := func(ctx context.Context, m *velox.Mutation[dhooked]) error {
+		return m.DB().Insert(&dnote{Owner: "audit"}).Exec(ctx)
+	}
+	for _, c := range []struct {
+		name string
+		hook dhookFunc
+		want error // nil: SQL(ctx) succeeds
+	}{
+		{"write after next", func(ctx context.Context, m *velox.Mutation[dhooked], next velox.Mutator[dhooked]) error {
+			if err := next.Mutate(ctx, m); err != nil {
+				return err
+			}
+			return audit(ctx, m)
+		}, nil},
+		{"write before next", func(ctx context.Context, m *velox.Mutation[dhooked], next velox.Mutator[dhooked]) error {
+			if err := audit(ctx, m); err != nil {
+				return err
+			}
+			return next.Mutate(ctx, m)
+		}, velox.ErrDryRun},
+		{"own error after next", func(ctx context.Context, m *velox.Mutation[dhooked], next velox.Mutator[dhooked]) error {
+			if err := next.Mutate(ctx, m); err != nil {
+				return err
+			}
+			return boom
+		}, boom},
+		{"joined error after next", func(ctx context.Context, m *velox.Mutation[dhooked], next velox.Mutator[dhooked]) error {
+			if err := next.Mutate(ctx, m); err != nil {
+				return err
+			}
+			return errors.Join(audit(ctx, m), boom)
+		}, boom},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := &velox.FakeExec{Affected: 1}
+			db := velox.OpenFake(velox.Postgres, e)
+			ctx := context.WithValue(context.Background(), dhookKey{}, c.hook)
+			for name, sql := range map[string]func() (string, error){
+				"Insert": func() (string, error) { s, _, err := db.Insert(&dhooked{Owner: "a"}).SQL(ctx); return s, err },
+				"Update": func() (string, error) {
+					s, _, err := db.Update[dhooked]().Set(velox.StringCol[dhooked, string]{I: 1}.Set("x")).
+						Where(velox.NumberCol[dhooked, int64]{I: 0}.EQ(1)).SQL(ctx)
+					return s, err
+				},
+			} {
+				s, err := sql()
+				switch {
+				case c.want == nil && (err != nil || s == ""):
+					t.Errorf("%s: %q, %v; want the statement", name, s, err)
+				case c.want != nil && !errors.Is(err, c.want):
+					t.Errorf("%s: %q, %v; want %v", name, s, err, c.want)
+				}
+			}
+			if w := sentWrites(e); len(w) != 0 {
+				t.Errorf("sent %q", w)
+			}
+		})
+	}
+}
+
+// TestDryRunBeforeOutsideTx: a write that is both under a dry run and outside
+// its context's transaction fails with ErrDryRun, with hooks (run) or without
+// (plain) alike.
+func TestDryRunBeforeOutsideTx(t *testing.T) {
+	e := &velox.FakeExec{Affected: 1, Rows: [][]any{{int64(1)}}}
+	var dry context.Context
+	hooked := velox.OpenFake(velox.Postgres, e, velox.WithRewrite(func(ctx context.Context, st *velox.Statement) error {
+		if st.DryRun {
+			dry = ctx
+		}
+		return nil
+	}))
+	plain := velox.OpenFake(velox.Postgres, e)
+	err := hooked.Tx(context.Background(), func(ctx context.Context, tx *velox.DB) error {
+		if _, _, err := tx.Query[dnote]().Limit(1).SQL(ctx); err != nil {
+			return err
+		}
+		for name, db := range map[string]*velox.DB{"hooks": hooked, "no hooks": plain} {
+			err := db.Insert(&dnote{Owner: "a"}).Exec(dry)
+			if !errors.Is(err, velox.ErrDryRun) || errors.Is(err, velox.ErrOutsideTx) {
+				t.Errorf("%s: %v, want ErrDryRun", name, err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }

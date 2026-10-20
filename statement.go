@@ -80,7 +80,8 @@ type ConflictClause struct {
 // see it, and its SQL, Args and Fingerprint are set when it is made. Its
 // Entity is the entity Raw scans into, or for Exec an EntityInfo named "Exec"
 // with no table or columns. Its TenantBypass and PolicyBypass both hold the
-// caller's reason.
+// caller's reason, as given, untrimmed (so does an AllTenants or SkipPolicy
+// reason).
 //
 // The EntityInfo that Entity points to is shared by every query on the
 // entity, in every goroutine: treat it as read-only. A rewrite hook may point

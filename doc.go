@@ -83,7 +83,9 @@
 // # Errors
 //
 // Errors are returned wrapped, in an error whose text starts
-// "velox: <Entity>: ". Test for the sentinels (ErrNotFound, ErrDenied, ...)
+// "velox: <Entity>: " (raw SQL's DB.Exec names its statement "Exec"), or for
+// a transaction "velox: transaction: " ("velox: begin: ", "velox: commit: "
+// and "velox: savepoint: " likewise). Test for the sentinels (ErrNotFound, ErrDenied, ...)
 // with errors.Is, and for a violated constraint (ConstraintUnique,
 // ConstraintForeignKey, ConstraintNotNull and ConstraintCheck) with
 // errors.As to a *ConstraintError.

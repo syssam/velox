@@ -328,6 +328,10 @@ func (db *DB) rollbackSavepoint(ctx context.Context, name string) error {
 // db runs outside the transaction, on its own connection, and a Tx on db
 // begins a transaction of its own. A statement on tx under it still runs in
 // the transaction. On a context without the mark it returns ctx.
+//
+// A statement on db under it needs a second connection while the
+// transaction holds one: on a pool of one connection, as SQLite often has,
+// it waits until the transaction ends or its deadline passes.
 func WithoutTx(ctx context.Context) context.Context {
 	if ctx.Value(txKey{}) == nil {
 		return ctx

@@ -183,16 +183,16 @@ func dbErr(info *EntityInfo, err error) error {
 // through run, or may take the shortcut of plain.
 func (db *DB) hooked() bool { return len(db.cfg.rewrites) > 0 || len(db.cfg.arounds) > 0 }
 
-// plain runs a statement on a DB with no hooks: the transaction check
-// (outsideTx), resolving relations, guard, scope, rendering (the SQL comment
-// included), routing and execution.
+// plain runs a statement on a DB with no hooks: the dry-run and transaction
+// checks (dryWrite, then outsideTx, in run's order), resolving relations,
+// guard, scope, rendering (the SQL comment included), routing and execution.
 // Unlike run's, its st and read do not escape, so a caller's state and
 // reading closure can stay on the stack.
 func (db *DB) plain(ctx context.Context, st *Statement, read func(rows) error, res *result) error {
-	if err := db.outsideTx(ctx, st); err != nil {
+	if err := db.dryWrite(ctx, st); err != nil {
 		return err
 	}
-	if err := db.dryWrite(ctx, st); err != nil {
+	if err := db.outsideTx(ctx, st); err != nil {
 		return err
 	}
 	if err := st.resolve(); err != nil {
@@ -532,6 +532,8 @@ func checkColumns(st *Statement) error {
 			return bad(l.ownerCol)
 		case opInvalid:
 			return nd.v.(error)
+		case opAllow:
+			return nil // it names no column
 		}
 		return bad(int(nd.col))
 	}

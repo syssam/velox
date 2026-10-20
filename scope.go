@@ -17,8 +17,9 @@ import (
 // scope runs after the guard and the Rewrite hooks, so neither sees what it
 // adds and no hook can remove it.
 //
-// Raw SQL (OpRawQuery and OpRawExec) is never scoped: prepare does not call scope for it, as its
-// SQL is the caller's, and its Statement.TenantBypass holds the reason.
+// Raw SQL (OpRawQuery and OpRawExec) is never scoped: prepare does not call
+// scope for it, as its SQL is the caller's, and its Statement.TenantBypass
+// holds the reason.
 //
 // st does not escape: scope passes it to no function value, and policy
 // functions are given only ctx, so plain's statement stays on the stack.
@@ -350,16 +351,15 @@ func (e *cycleError) Error() string {
 // returned for a statement of kind op: an error denies the statement, a zero
 // Pred fails it (a policy says Allow for no restriction), Allow is no
 // condition, and a condition is refused when it holds the zero Pred or is
-// invalid. An EXISTS
-// in the condition gets its target's tenant and Read condition, as one in the
-// statement's own conditions does: a policy that inherits another entity's
-// with Has sees only the rows that one lets through.
+// invalid. An EXISTS in the condition gets its target's tenant and Read
+// condition, as one in the statement's own conditions does: a policy that
+// inherits another entity's with Has sees only the rows that one lets through.
 func (sc *scoper) policyCond(t *EntityInfo, op Op, which string, p Predicate, err error) (Predicate, error) {
 	switch {
 	case err != nil:
 		return Predicate{}, &PolicyError{Entity: t.Name, Op: op, Err: err}
 	case p.n.op == 0:
-		return Predicate{}, fmt.Errorf("velox: %s: policy returned no predicate; return velox.Allow[E]() for no restriction", t.Name)
+		return Predicate{}, fmt.Errorf("velox: %s: the %s policy returned the zero Pred; return velox.Allow[E]() for no restriction", t.Name, which)
 	case p.n.op == opAllow:
 		return Predicate{}, nil // no restriction
 	case hasZero(p.n):

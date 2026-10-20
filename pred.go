@@ -68,13 +68,14 @@ func ColumnEQ(column int, v any) Predicate {
 	return Predicate{node{op: opEQ, col: int32(column), v: v}}
 }
 
-// Allow is the condition that matches every row and renders to nothing: what
-// a policy's Read or Write returns for a caller it does not restrict. A policy
-// that returns the zero Pred[E] instead fails the statement, so that no
-// restriction is said, never implied.
+// Allow is the condition that matches every row: what a policy's Read or
+// Write returns for a caller it does not restrict. In a policy it adds nothing
+// to the SQL; in a Where it is 1 = 1, which an Update or Delete's guard does
+// not count as a condition. A policy that returns the zero Pred[E] instead
+// fails the statement, so that no restriction is said, never implied.
 //
 // Allow composes as its meaning says: And drops it (And(Allow(), x) is x),
-// Or(Allow(), x) is Allow, and Not(Allow()) matches no row.
+// Or(Allow(), x) matches every row (see Or), and Not(Allow()) matches no row.
 func Allow[E any]() Pred[E] { return Pred[E]{node{op: opAllow}} }
 
 // And is true when every p is. And of nothing is true. An Allow among the ps
@@ -98,9 +99,12 @@ func And[E any](ps ...Pred[E]) Pred[E] {
 	return Pred[E]{node{op: opAnd, kids: kept}}
 }
 
-// Or is true when any p is. Or of nothing is false. Or of any Allow is Allow.
+// Or is true when any p is. Or of nothing is false. Or of any Allow is Allow,
+// unless another p is or holds the zero Pred, an invalid condition or a Has
+// (whose relation resolves only when the statement runs): that Or keeps every
+// p, so the statement still fails on a bad one, and matches every row.
 func Or[E any](ps ...Pred[E]) Pred[E] {
-	if hasAllow(ps) {
+	if hasAllow(ps) && allSound(ps) {
 		return Allow[E]()
 	}
 	return Pred[E]{node{op: opOr, kids: nodes(ps)}}
@@ -108,6 +112,32 @@ func Or[E any](ps ...Pred[E]) Pred[E] {
 
 // Not is true when p is false. Not(Allow()) is true for no row.
 func Not[E any](p Pred[E]) Pred[E] { return Pred[E]{node{op: opNot, kids: []node{p.n}}} }
+
+// allSound reports whether no p is or holds the zero Pred, an invalid
+// condition or an EXISTS, which an Or with an Allow would otherwise drop with
+// its error. An EXISTS's relation is not resolved here: that reads metadata,
+// which a Policy body may not wait on.
+func allSound[E any](ps []Pred[E]) bool {
+	for i := range ps {
+		if !sound(ps[i].n) {
+			return false
+		}
+	}
+	return true
+}
+
+func sound(n node) bool {
+	switch n.op {
+	case 0, opInvalid, opExists:
+		return false
+	}
+	for _, k := range n.kids {
+		if !sound(k) {
+			return false
+		}
+	}
+	return true
+}
 
 func hasAllow[E any](ps []Pred[E]) bool {
 	for i := range ps {
