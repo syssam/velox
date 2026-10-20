@@ -399,3 +399,61 @@ func TestLoadedConnection(t *testing.T) {
 		t.Errorf("TotalCount = %d, %v, want 3", n, err)
 	}
 }
+
+// TestPaginateUnderTheRowCap: a full page is read whatever the DB's row cap,
+// which may be at or below MaxPage: MaxPage bounds the page query.
+func TestPaginateUnderTheRowCap(t *testing.T) {
+	ctx := context.Background()
+	sqlDB, err := sql.Open("sqlite", "file::memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = sqlDB.Close() }()
+	sqlDB.SetMaxOpenConns(1)
+	if _, err := sqlDB.Exec(`CREATE TABLE people (id INTEGER PRIMARY KEY, name TEXT NOT NULL, age INTEGER NOT NULL)`); err != nil {
+		t.Fatal(err)
+	}
+	for id := 1; id <= 150; id++ {
+		if _, err := sqlDB.Exec(`INSERT INTO people (id, name, age) VALUES (?, 'p', ?)`, id, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	db := velox.Open(velox.SQLite, sqlDB, velox.WithMaxRows(100))
+	if _, err := db.Query[person]().Unbounded().All(ctx); !errors.Is(err, velox.ErrTooManyRows) {
+		t.Fatalf("the cap: %v, want ErrTooManyRows", err)
+	}
+	for name, args := range map[string]veloxgql.Args{"the default page": {}, "first 100": {First: intp(100)}, "last 100": {Last: intp(100)}} {
+		p, err := veloxgql.Paginate(ctx, db.Query[person](), "Person", args, nil, personKey())
+		if err != nil {
+			t.Errorf("%s under WithMaxRows(100): %v", name, err)
+			continue
+		}
+		if len(p.Rows) != 100 || (!p.Info.HasNextPage && !p.Info.HasPreviousPage) {
+			t.Errorf("%s under WithMaxRows(100): %d rows, %+v", name, len(p.Rows), p.Info)
+		}
+	}
+}
+
+// TestPaginateOrderTerms: an orderBy of more than MaxOrderTerms terms fails
+// before any query.
+func TestPaginateOrderTerms(t *testing.T) {
+	ctx := context.Background()
+	db, st := peopleDB(t)
+	order := func(n int) []veloxgql.OrderTerm[person] {
+		var o []veloxgql.OrderTerm[person]
+		for range n {
+			o = append(o, nameTerm(veloxgql.OrderDirectionAsc))
+		}
+		return o
+	}
+	st.take()
+	if _, err := veloxgql.Paginate(ctx, db.Query[person](), "Person", veloxgql.Args{}, order(veloxgql.MaxOrderTerms+1), personKey()); !errors.Is(err, veloxgql.ErrBadPagination) {
+		t.Errorf("%d terms: %v, want ErrBadPagination", veloxgql.MaxOrderTerms+1, err)
+	}
+	if ran := st.take(); len(ran) > 0 {
+		t.Errorf("ran %v", ran)
+	}
+	if _, err := veloxgql.Paginate(ctx, db.Query[person](), "Person", veloxgql.Args{}, order(veloxgql.MaxOrderTerms), personKey()); err != nil {
+		t.Errorf("%d terms: %v", veloxgql.MaxOrderTerms, err)
+	}
+}

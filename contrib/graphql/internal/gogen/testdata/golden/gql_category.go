@@ -159,5 +159,5 @@ type CategoryWhereInput struct {
 // does not write where filters yet: every w fails, so a connection given a
 // where argument fails before it runs a query.
 func (w *CategoryWhereInput) Pred(_ context.Context, _ int) (velox.Pred[Category], error) {
-	return velox.Pred[Category]{}, errors.New("CategoryWhereInput: where filters are not implemented in this build of velox-graphql")
+	return velox.Pred[Category]{}, errors.New("veloxgql: CategoryWhereInput: where filters are not implemented in this build of velox-graphql")
 }

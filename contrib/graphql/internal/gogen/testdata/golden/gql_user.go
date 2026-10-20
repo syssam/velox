@@ -233,5 +233,5 @@ type AccountWhereInput struct {
 // does not write where filters yet: every w fails, so a connection given a
 // where argument fails before it runs a query.
 func (w *AccountWhereInput) Pred(_ context.Context, _ int) (velox.Pred[User], error) {
-	return velox.Pred[User]{}, errors.New("AccountWhereInput: where filters are not implemented in this build of velox-graphql")
+	return velox.Pred[User]{}, errors.New("veloxgql: AccountWhereInput: where filters are not implemented in this build of velox-graphql")
 }

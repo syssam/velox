@@ -15,4 +15,8 @@ var (
 	// MaxFilterWidth is the most entries an and or an or list may have. More
 	// is ErrFilterTooWide, before any query runs.
 	MaxFilterWidth = 100
+	// MaxOrderTerms is the most terms an orderBy list may have, each an
+	// ORDER BY term and a term of every cursor. More is ErrBadPagination,
+	// before any query runs.
+	MaxOrderTerms = 5
 )

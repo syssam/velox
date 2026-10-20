@@ -426,7 +426,10 @@ func typesModel(t *testing.T) *plugin.Model {
 			Fields: []*plugin.Field{
 				{Name: "id", GoName: "ID", Type: "int64", GoType: "ids.UserID", ElemType: "ids.UserID", PkgPath: "example.com/app/ids", Kind: "int64", Annotations: where(graphql.OpEQ)},
 				{Name: "email", GoName: "Email", Type: "string", GoType: "*ids.Email", ElemType: "ids.Email", PkgPath: "example.com/app/ids", Kind: "string", Pointer: true, Nullable: true, Annotations: where(graphql.OpEQ)},
-				{Name: "code", GoName: "Code", Type: "string", GoType: "*ids.Code", ElemType: "ids.Code", PkgPath: "example.com/app/ids", Kind: "string", Pointer: true, Annotations: ann(graphql.OrderField("CODE"))},
+				{Name: "code", GoName: "Code", Type: "string", GoType: "ids.Code", ElemType: "ids.Code", PkgPath: "example.com/app/ids", Kind: "string"},
+				// A NOT NULL number with a literal Default, which velox-gen
+				// holds in a pointer.
+				{Name: "rank", GoName: "Rank", Type: "int32", GoType: "*ids.Rank", ElemType: "ids.Rank", PkgPath: "example.com/app/ids", Kind: "int32", Pointer: true, HasDefault: true, Annotations: ann(graphql.OrderField("RANK"))},
 			},
 		},
 	}}
@@ -469,12 +472,12 @@ func TestGoTypes(t *testing.T) {
 	for _, want := range []string{
 		`func (x *Owner) IDGQL() string { return veloxgql.EncodeID("Owner", int64(x.ID)) }`,
 		// A field of the application's own Go type binds through a getter.
-		"func (x *Owner) CodeGQL() *string { if x.Code == nil { return nil } v := string(*x.Code) return &v }",
+		"func (x *Owner) CodeGQL() string { return string(x.Code) }",
 		"func (x *Owner) EmailGQL() *string { if x.Email == nil { return nil } v := string(*x.Email) return &v }",
 		// The key's order term converts the key to and from its base type,
 		// and an order field held in a pointer to and from its value.
 		"func(x *Owner) int64 { return int64(x.ID) }, func(x *Owner, v int64) { x.ID = idspkg.UserID(v) }),",
-		"func(x *Owner) string { var v string if x.Code != nil { v = string(*x.Code) } return v }, func(x *Owner, v string) { c := idspkg.Code(v) x.Code = &c }), nil",
+		"func(x *Owner) int32 { var v int32 if x.Rank != nil { v = int32(*x.Rank) } return v }, func(x *Owner, v int32) { c := idspkg.Rank(v) x.Rank = &c }), nil",
 		// Its where predicates take the scalar's Go type.
 		" Email *string ",
 	} {
@@ -541,10 +544,29 @@ func TestRenderErrors(t *testing.T) {
 			e.Edges = []*plugin.Edge{{Name: "books", GoName: "Books", Target: "Book", Kind: "M2M", Join: "AuthorBook"}}
 			return e
 		}(), entity("Book", "int64")}}, "schema Author, edge books: velox-graphql finds the nodes of a many-to-many edge through its inverse edge, and Book has none"},
+		"an edge to a key of two columns": {&plugin.Model{Version: 1, Entities: []*plugin.Entity{func() *plugin.Entity {
+			e := entity("Author", "int64")
+			e.Edges = []*plugin.Edge{{Name: "pair", GoName: "Pair", Target: "Pair", Kind: "M2O", Unique: true, Field: "pair_a", FieldOn: "Author", OwnsKey: true}}
+			e.Fields = append(e.Fields, &plugin.Field{Name: "pair_a", GoName: "PairA", Type: "int64", GoType: "int64", ElemType: "int64", Implicit: "pair"})
+			return e
+		}(), func() *plugin.Entity {
+			e := entity("Pair", "int64")
+			e.PrimaryKey = []int{0, 1}
+			e.Fields[1] = &plugin.Field{Name: "b", GoName: "B", Type: "int64", GoType: "int64", ElemType: "int64"}
+			return e
+		}()}}, "schema Author, edge pair: velox-graphql finds its nodes by the key of Pair, which is 2 columns"},
+		"an edge from a key of two columns": {&plugin.Model{Version: 1, Entities: []*plugin.Entity{func() *plugin.Entity {
+			e := entity("Pair", "int64")
+			e.PrimaryKey = []int{0, 1}
+			e.Fields[1] = &plugin.Field{Name: "b", GoName: "B", Type: "int64", GoType: "int64", ElemType: "int64"}
+			e.Edges = []*plugin.Edge{{Name: "notes", GoName: "Notes", Target: "Note", Kind: "O2M", Field: "pair_notes", FieldOn: "Note"}}
+			return e
+		}(), withField(entity("Note", "int64"), &plugin.Field{Name: "pair_notes", GoName: "PairNotes", Type: "int64", GoType: "*int64", ElemType: "int64", Pointer: true, Nullable: true, Implicit: "notes"})}},
+			"schema Pair, edge notes: velox-graphql finds its nodes by the key of Pair, which is 2 columns"},
 		// The kind of the application's Go type tells what converts.
 		"a struct for a time": {&plugin.Model{Version: 1, Entities: []*plugin.Entity{withField(entity("Thing", "int64"),
 			&plugin.Field{Name: "at", GoName: "At", Type: "time", GoType: "types.Stamp", ElemType: "types.Stamp", PkgPath: "example.com/types", Kind: "struct"})}},
-			"schema Thing, field at: velox-graphql converts its Go type types.Stamp to veloxgql.Time, and a struct does not convert"},
+			"schema Thing, field at: velox-graphql converts a time field only from time.Time, and its Go type is types.Stamp"},
 		"a struct for a UUID key": {&plugin.Model{Version: 1, Entities: []*plugin.Entity{func() *plugin.Entity {
 			e := entity("Thing", "uuid")
 			e.Fields[0].ElemType, e.Fields[0].PkgPath, e.Fields[0].Kind = "types.ID", "example.com/types", "struct"

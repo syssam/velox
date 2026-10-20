@@ -57,7 +57,8 @@
 //
 // # Limits
 //
-// MaxPage, MaxFilterDepth and MaxFilterWidth cap what a client may ask for.
+// MaxPage, MaxFilterDepth, MaxFilterWidth and MaxOrderTerms cap what a
+// client may ask for.
 // They are variables an application may set at start-up, before it serves a
 // request.
 //

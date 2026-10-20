@@ -542,7 +542,7 @@ func (r *renderer) writeWhere(f *file, t *sdl.Type) error {
 	f.p("")
 	f.doc("", fmt.Sprintf("Pred is the condition w stands for, on %s nodes; depth is how deeply w is nested in the where argument, 0 at the top. This build of velox-graphql does not write where filters yet: every w fails, so a connection given a where argument fails before it runs a query.", n))
 	f.p("func (w *%s) Pred(_ %s.Context, _ int) (%s.Pred[%s], error) {", in, f.use("context", "context"), f.velox(), e.Name)
-	f.p("\treturn %s.Pred[%s]{}, %s.New(%q)", f.velox(), e.Name, f.use("errors", "errors"), in+": where filters are not implemented in this build of velox-graphql")
+	f.p("\treturn %s.Pred[%s]{}, %s.New(%q)", f.velox(), e.Name, f.use("errors", "errors"), "veloxgql: "+in+": where filters are not implemented in this build of velox-graphql")
 	f.p("}")
 	return nil
 }

@@ -113,6 +113,9 @@ func NewConnection[E any](q velox.Query[E], typ string, args Args, order, key []
 	if len(key) == 0 {
 		return nil, fmt.Errorf("veloxgql: %s connection: no key to order by last", typ)
 	}
+	if len(order) > MaxOrderTerms {
+		return nil, fmt.Errorf("veloxgql: %s connection: %w: orderBy has %d terms, and the most is %d", typ, ErrBadPagination, len(order), MaxOrderTerms)
+	}
 	c := &Connection[E]{query: q, typ: typ, n: n, back: back, key: len(order)}
 	c.terms = make([]OrderTerm[E], 0, len(order)+len(key))
 	for _, t := range slices.Concat(order, key) {
@@ -160,8 +163,12 @@ func LoadedConnection[E any](rows []E, typ string, key []OrderTerm[E]) *Connecti
 //     hasNextPage forward and hasPreviousPage backward. The other is false:
 //     Relay lets a server say false when it cannot tell cheaply.
 //
+// The page query reads at most n+1 rows whatever the DB's WithMaxRows cap:
+// MaxPage bounds it.
+//
 // It fails before any query runs: with ErrBadPagination for first and last
-// together, either below 0, or another combination Args refuses; with
+// together, either below 0, another combination Args refuses, or an order
+// of more than MaxOrderTerms terms; with
 // ErrPageTooLarge for either over MaxPage; and with ErrBadCursor for a cursor
 // of another type (ErrWrongIDType too), taken under another order, or whose
 // values are not of the order's types.
@@ -208,8 +215,10 @@ func (c *Connection[E]) run[_ velox.Lazy[E]](ctx context.Context) (*Page[E], err
 		if c.after != nil {
 			q = q.After(c.after)
 		}
+		// MaxRows: the page is bounded by MaxPage, and the DB's row cap,
+		// which may be below it, must not fail a full page.
 		var err error
-		if rows, err = q.Limit(c.n + 1).All(ctx); err != nil {
+		if rows, err = q.Limit(c.n + 1).MaxRows(c.n + 1).All(ctx); err != nil {
 			return nil, err
 		}
 	}

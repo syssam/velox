@@ -319,5 +319,5 @@ type PostWhereInput struct {
 // not write where filters yet: every w fails, so a connection given a where
 // argument fails before it runs a query.
 func (w *PostWhereInput) Pred(_ context.Context, _ int) (velox.Pred[Post], error) {
-	return velox.Pred[Post]{}, errors.New("PostWhereInput: where filters are not implemented in this build of velox-graphql")
+	return velox.Pred[Post]{}, errors.New("veloxgql: PostWhereInput: where filters are not implemented in this build of velox-graphql")
 }

@@ -222,6 +222,10 @@ func (r *renderer) term(f *file, e *plugin.Entity, fd *plugin.Field, field, dir,
 	handle := e.Handles + "." + fd.GoName
 	var get, set string
 	if fd.Pointer {
+		// velox-gen holds a NOT NULL number or bool with a literal Default in
+		// a pointer (its Ruling 4), and a key or an order field is never
+		// nullable (sdl refuses OrderField on one): a row the page query
+		// read has a value, and nil is only a row that was never read.
 		get = fmt.Sprintf("func(x *%s) %s {\n%s\tvar v %s\n%s\tif x.%s != nil {\n%s\t\tv = %s\n%s\t}\n%s\treturn v\n%s}",
 			e.Name, base, indent, base, indent, fd.GoName, indent, to(base, "*x."+fd.GoName), indent, indent, indent)
 		if conv {
@@ -288,7 +292,10 @@ func (r *renderer) converts(e *plugin.Entity, fd *plugin.Field, base string) err
 	default: // the integers, and veloxgql.Uint64
 		ok = integerKinds[fd.Kind]
 	}
-	if !ok {
+	switch {
+	case !ok && (base == "time.Time" || base == "veloxgql.Time"):
+		return fmt.Errorf("schema %s, field %s: velox-graphql converts a time field only from time.Time, and its Go type is %s; give the field time.Time", e.Name, fd.Name, fd.ElemType)
+	case !ok:
 		return fmt.Errorf("schema %s, field %s: velox-graphql converts its Go type %s to %s, and a %s does not convert; give the field velox's standard Go type, or one whose underlying type is it", e.Name, fd.Name, fd.ElemType, base, fd.Kind)
 	}
 	return nil
@@ -316,8 +323,18 @@ type edgeFilter struct {
 //   - A foreign key on the target's rows: it is the owner's key.
 //   - Many-to-many: the target's inverse edge (the edge Ref names) has the
 //     owner, through Rel.HasWhere.
+//
+// It fails when the key it compares, the target's, the owner's or both, is
+// not one column.
 func (r *renderer) filter(e *plugin.Entity, ed *plugin.Edge, tgt *plugin.Entity) (edgeFilter, error) {
 	where := "schema " + e.Name + ", edge " + ed.Name
+	// key is the one column of of's key, which the filter compares.
+	key := func(of *plugin.Entity) (*plugin.Field, error) {
+		if len(of.PrimaryKey) != 1 {
+			return nil, fmt.Errorf("%s: velox-graphql finds its nodes by the key of %s, which is %d columns; skip the edge with graphql.Skip()", where, of.Name, len(of.PrimaryKey))
+		}
+		return of.Fields[of.PrimaryKey[0]], nil
+	}
 	field := func(of *plugin.Entity, name string) (*plugin.Field, error) {
 		for _, fd := range of.Fields {
 			if fd.Name == name {
@@ -332,20 +349,35 @@ func (r *renderer) filter(e *plugin.Entity, ed *plugin.Edge, tgt *plugin.Entity)
 		if err != nil {
 			return edgeFilter{}, err
 		}
-		if fk.Pointer {
-			return edgeFilter{cond: fmt.Sprintf("%s.%s.EQ(*x.%s)", tgt.Handles, tgt.Fields[0].GoName, fk.GoName), nilKey: "x." + fk.GoName + " == nil"}, nil
+		tk, err := key(tgt)
+		if err != nil {
+			return edgeFilter{}, err
 		}
-		return edgeFilter{cond: fmt.Sprintf("%s.%s.EQ(x.%s)", tgt.Handles, tgt.Fields[0].GoName, fk.GoName)}, nil
+		if fk.Pointer {
+			return edgeFilter{cond: fmt.Sprintf("%s.%s.EQ(*x.%s)", tgt.Handles, tk.GoName, fk.GoName), nilKey: "x." + fk.GoName + " == nil"}, nil
+		}
+		return edgeFilter{cond: fmt.Sprintf("%s.%s.EQ(x.%s)", tgt.Handles, tk.GoName, fk.GoName)}, nil
 	case ed.Field != "":
 		fk, err := field(tgt, ed.Field)
 		if err != nil {
 			return edgeFilter{}, err
 		}
-		return edgeFilter{cond: fmt.Sprintf("%s.%s.EQ(x.%s)", tgt.Handles, fk.GoName, e.Fields[0].GoName)}, nil
+		ok, err := key(e)
+		if err != nil {
+			return edgeFilter{}, err
+		}
+		return edgeFilter{cond: fmt.Sprintf("%s.%s.EQ(x.%s)", tgt.Handles, fk.GoName, ok.GoName)}, nil
 	}
 	for _, inv := range tgt.Edges {
 		if ed.Ref != "" && inv.Name == ed.Ref && inv.Target == e.Name {
-			return edgeFilter{cond: fmt.Sprintf("%s.%s.HasWhere(%s.%s.EQ(x.%s))", tgt.Handles, inv.GoName, e.Handles, e.Fields[0].GoName, e.Fields[0].GoName)}, nil
+			ok, err := key(e)
+			if err != nil {
+				return edgeFilter{}, err
+			}
+			if _, err := key(tgt); err != nil {
+				return edgeFilter{}, err
+			}
+			return edgeFilter{cond: fmt.Sprintf("%s.%s.HasWhere(%s.%s.EQ(x.%s))", tgt.Handles, inv.GoName, e.Handles, ok.GoName, ok.GoName)}, nil
 		}
 	}
 	return edgeFilter{}, fmt.Errorf("%s: velox-graphql finds the nodes of a many-to-many edge through its inverse edge, and %s has none; declare one with Ref(%q), or skip the edge with graphql.Skip()", where, tgt.Name, ed.Name)
