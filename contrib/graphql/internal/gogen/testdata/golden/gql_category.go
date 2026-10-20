@@ -154,10 +154,22 @@ type CategoryWhereInput struct {
 	HasParentWith []*CategoryWhereInput
 }
 
-// Pred is the condition w stands for, on Category nodes; depth is how deeply w
-// is nested in the where argument, 0 at the top. This build of velox-graphql
-// does not write where filters yet: every w fails, so a connection given a
-// where argument fails before it runs a query.
-func (w *CategoryWhereInput) Pred(_ context.Context, _ int) (velox.Pred[Category], error) {
-	return velox.Pred[Category]{}, errors.New("veloxgql: CategoryWhereInput: where filters are not implemented in this build of velox-graphql")
+// Pred is the condition w stands for, on Category nodes: every predicate w sets
+// holds, and a w that sets none, or a nil w, holds for every node. depth is how
+// deeply w is nested in the where argument, 0 at the top. It fails, before any
+// query runs, on an ID of another type (veloxgql.ErrWrongIDType) or a malformed
+// one (veloxgql.ErrBadID), on a nesting deeper than veloxgql.MaxFilterDepth
+// (veloxgql.ErrFilterTooDeep), and on an and, an or or a has…With of more
+// than veloxgql.MaxFilterWidth inputs (veloxgql.ErrFilterTooWide).
+func (w *CategoryWhereInput) Pred(ctx context.Context, depth int) (velox.Pred[Category], error) {
+	f := veloxgql.NewFilter[Category](ctx, "CategoryWhereInput", depth)
+	if w == nil {
+		return f.Pred()
+	}
+	veloxgql.Not(f, w.Not)
+	veloxgql.And(f, w.And)
+	veloxgql.Or(f, w.Or)
+	veloxgql.Is(f, w.HasParent, Categories.Parent.Has)
+	veloxgql.HasWith(f, w.HasParentWith, Categories.Parent.HasWhere)
+	return f.Pred()
 }

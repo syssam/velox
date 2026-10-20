@@ -95,8 +95,9 @@ func Node(ctx context.Context, id string) (veloxgql.Noder, error) {
 // Nodes returns the nodes with the global IDs ids, in their order, with nil
 // for an ID no row has. It decodes every ID first, and then looks up each
 // type's nodes with one query, through the DB veloxgql.DBFrom reads from
-// ctx. It fails as Node does on an ID, before any query runs, and with
-// veloxgql.ErrPageTooLarge on more than veloxgql.MaxPage IDs.
+// ctx; the query reads at most one row for each of its IDs, whatever the
+// DB's WithMaxRows. It fails as Node does on an ID, before any query runs,
+// and with veloxgql.ErrPageTooLarge on more than veloxgql.MaxPage IDs.
 func Nodes(ctx context.Context, ids []string) ([]veloxgql.Noder, error) {
 	if len(ids) > veloxgql.MaxPage {
 		return nil, fmt.Errorf("nodes: %w: %d IDs, and the most is %d", veloxgql.ErrPageTooLarge, len(ids), veloxgql.MaxPage)
@@ -159,7 +160,7 @@ func Nodes(ctx context.Context, ids []string) ([]veloxgql.Noder, error) {
 		return nil, err
 	}
 	if len(keysCategory) > 0 {
-		rows, err := db.Query[Category]().Where(Categories.ID.In(keysCategory...)).All(ctx)
+		rows, err := db.Query[Category]().Where(Categories.ID.In(keysCategory...)).Unbounded().MaxRows(len(keysCategory)).All(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -174,7 +175,7 @@ func Nodes(ctx context.Context, ids []string) ([]veloxgql.Noder, error) {
 		}
 	}
 	if len(keysGroup) > 0 {
-		rows, err := db.Query[Group]().Where(Groups.ID.In(keysGroup...)).All(ctx)
+		rows, err := db.Query[Group]().Where(Groups.ID.In(keysGroup...)).Unbounded().MaxRows(len(keysGroup)).All(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -189,7 +190,7 @@ func Nodes(ctx context.Context, ids []string) ([]veloxgql.Noder, error) {
 		}
 	}
 	if len(keysPost) > 0 {
-		rows, err := db.Query[Post]().Where(Posts.ID.In(keysPost...)).All(ctx)
+		rows, err := db.Query[Post]().Where(Posts.ID.In(keysPost...)).Unbounded().MaxRows(len(keysPost)).All(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -204,7 +205,7 @@ func Nodes(ctx context.Context, ids []string) ([]veloxgql.Noder, error) {
 		}
 	}
 	if len(keysAccount) > 0 {
-		rows, err := db.Query[User]().Where(Users.ID.In(keysAccount...)).All(ctx)
+		rows, err := db.Query[User]().Where(Users.ID.In(keysAccount...)).Unbounded().MaxRows(len(keysAccount)).All(ctx)
 		if err != nil {
 			return nil, err
 		}

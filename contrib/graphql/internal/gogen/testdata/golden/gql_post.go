@@ -314,10 +314,51 @@ type PostWhereInput struct {
 	HasWriterWith []*AccountWhereInput
 }
 
-// Pred is the condition w stands for, on Post nodes; depth is how deeply w is
-// nested in the where argument, 0 at the top. This build of velox-graphql does
-// not write where filters yet: every w fails, so a connection given a where
-// argument fails before it runs a query.
-func (w *PostWhereInput) Pred(_ context.Context, _ int) (velox.Pred[Post], error) {
-	return velox.Pred[Post]{}, errors.New("veloxgql: PostWhereInput: where filters are not implemented in this build of velox-graphql")
+// Pred is the condition w stands for, on Post nodes: every predicate w sets
+// holds, and a w that sets none, or a nil w, holds for every node. depth is how
+// deeply w is nested in the where argument, 0 at the top. It fails, before any
+// query runs, on an ID of another type (veloxgql.ErrWrongIDType) or a malformed
+// one (veloxgql.ErrBadID), on a nesting deeper than veloxgql.MaxFilterDepth
+// (veloxgql.ErrFilterTooDeep), and on an and, an or or a has…With of more
+// than veloxgql.MaxFilterWidth inputs (veloxgql.ErrFilterTooWide).
+func (w *PostWhereInput) Pred(ctx context.Context, depth int) (velox.Pred[Post], error) {
+	f := veloxgql.NewFilter[Post](ctx, "PostWhereInput", depth)
+	if w == nil {
+		return f.Pred()
+	}
+	veloxgql.Not(f, w.Not)
+	veloxgql.And(f, w.And)
+	veloxgql.Or(f, w.Or)
+	veloxgql.ID(f, w.WriterID, "Account", Posts.AuthorID.EQ)
+	veloxgql.ID(f, w.WriterIDNEQ, "Account", Posts.AuthorID.NEQ)
+	veloxgql.IDList(f, w.WriterIDIn, "Account", Posts.AuthorID.In)
+	veloxgql.IDList(f, w.WriterIDNotIn, "Account", Posts.AuthorID.NotIn)
+	veloxgql.Value(f, w.Title, Posts.Title.EQ)
+	veloxgql.Value(f, w.TitleNEQ, Posts.Title.NEQ)
+	veloxgql.List(f, w.TitleIn, Posts.Title.In)
+	veloxgql.List(f, w.TitleNotIn, Posts.Title.NotIn)
+	veloxgql.Value(f, w.TitleContains, Posts.Title.Contains)
+	veloxgql.Value(f, w.TitleHasPrefix, Posts.Title.HasPrefix)
+	veloxgql.Value(f, w.TitleHasSuffix, Posts.Title.HasSuffix)
+	veloxgql.Value(f, w.Slug, Posts.Slug.EQ)
+	veloxgql.Value(f, w.SlugNEQ, Posts.Slug.NEQ)
+	veloxgql.List(f, w.SlugIn, Posts.Slug.In)
+	veloxgql.List(f, w.SlugNotIn, Posts.Slug.NotIn)
+	veloxgql.Value(f, w.Status, Posts.Status.EQ)
+	veloxgql.Value(f, w.StatusNEQ, Posts.Status.NEQ)
+	veloxgql.List(f, w.StatusIn, Posts.Status.In)
+	veloxgql.List(f, w.StatusNotIn, Posts.Status.NotIn)
+	veloxgql.Value(f, w.PublishedAt, Posts.PublishedAt.EQ)
+	veloxgql.Value(f, w.PublishedAtNEQ, Posts.PublishedAt.NEQ)
+	veloxgql.List(f, w.PublishedAtIn, Posts.PublishedAt.In)
+	veloxgql.List(f, w.PublishedAtNotIn, Posts.PublishedAt.NotIn)
+	veloxgql.Value(f, w.PublishedAtGT, Posts.PublishedAt.GT)
+	veloxgql.Value(f, w.PublishedAtGTE, Posts.PublishedAt.GTE)
+	veloxgql.Value(f, w.PublishedAtLT, Posts.PublishedAt.LT)
+	veloxgql.Value(f, w.PublishedAtLTE, Posts.PublishedAt.LTE)
+	veloxgql.Is(f, w.PublishedAtIsNil, Posts.PublishedAt.IsNull)
+	veloxgql.Is(f, w.PublishedAtNotNil, Posts.PublishedAt.NotNull)
+	veloxgql.Is(f, w.HasWriter, Posts.Author.Has)
+	veloxgql.HasWith(f, w.HasWriterWith, Posts.Author.HasWhere)
+	return f.Pred()
 }

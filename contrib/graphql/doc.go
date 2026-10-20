@@ -73,13 +73,18 @@
 //     GraphQL type, and the marshalers of velox-gen's enum types;
 //   - the <Edge>GQL edge methods: a connection, a list or the one node;
 //   - the root connection function <Entities>Connection (UsersConnection),
-//     which a Query field's resolver returns.
+//     which a Query field's resolver returns;
+//   - the where input's method Pred, which turns a where argument into a
+//     velox condition.
 //
 // They use the runtime package veloxgql: a connection is keyset-paged by its
 // cursors, and runs its page query and its COUNT only when gqlgen asks for
-// edges or pageInfo, and for totalCount. Where filters are not written yet:
-// a where argument fails, and until they are gqlgen cannot load the
-// application from this SDL alone (mutations neither).
+// edges or pageInfo, and for totalCount. A where argument's Pred is one
+// veloxgql helper call for each predicate the input sets; it decodes IDs as
+// their type's, and refuses an ID of another type and a filter nested deeper
+// than veloxgql.MaxFilterDepth or wider than veloxgql.MaxFilterWidth before
+// any query runs. Mutations are not written yet, and until they are gqlgen
+// cannot load the application from this SDL alone.
 //
 // # gqlgen.yml
 //

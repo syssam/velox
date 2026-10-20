@@ -410,7 +410,8 @@ func typesModel(t *testing.T) *plugin.Model {
 	where := func(ops graphql.WhereOp) map[string]json.RawMessage { return ann(graphql.Annotation{WhereOps: ops}) }
 	return &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{
 		{
-			Name: "Event", Label: "event", Handles: "Events", Tenant: -1, PrimaryKey: []int{0}, Edges: []*plugin.Edge{},
+			Name: "Event", Label: "event", Handles: "Events", Tenant: -1, PrimaryKey: []int{0},
+			Edges: []*plugin.Edge{{Name: "owner", GoName: "Owner", Target: "Owner", Kind: "M2O", Unique: true, Field: "owner_id", FieldOn: "Event", OwnsKey: true, Annotations: ann(graphql.Annotation{WhereEdge: true})}},
 			Fields: []*plugin.Field{
 				{Name: "id", GoName: "ID", Type: "uuid", GoType: "uuid.UUID", ElemType: "uuid.UUID", PkgPath: "github.com/google/uuid", Kind: "array", Annotations: where(graphql.OpsDefault)},
 				{Name: "level", GoName: "Level", Type: "enum", GoType: "levels.Level", ElemType: "levels.Level", PkgPath: "example.com/app/types/v2", Kind: "string", Enum: "Level", EnumValues: []string{"low", "high"}, Annotations: ann(graphql.Annotation{WhereOps: graphql.OpEQ, OrderField: "LEVEL"})},
@@ -419,6 +420,8 @@ func typesModel(t *testing.T) *plugin.Model {
 				{Name: "at", GoName: "At", Type: "time", GoType: "*time.Time", ElemType: "time.Time", PkgPath: "time", Nullable: true, Pointer: true, Annotations: where(graphql.OpLT | graphql.OpIsNil)},
 				{Name: "ref", GoName: "Ref", Type: "uuid", GoType: "uuid.UUID", ElemType: "uuid.UUID", PkgPath: "github.com/google/uuid", Kind: "array", Annotations: where(graphql.OpNEQ)},
 				{Name: "tags", GoName: "Tags", Type: "json", GoType: "[]string", ElemType: "[]string", Kind: "slice"},
+				// A foreign key of the application's own type, to Owner.
+				{Name: "owner_id", GoName: "OwnerID", Type: "int64", GoType: "*ids.UserID", ElemType: "ids.UserID", PkgPath: "example.com/app/ids", Kind: "int64", Pointer: true, Nullable: true, Annotations: where(graphql.OpsDefault)},
 			},
 		},
 		{
@@ -429,7 +432,10 @@ func typesModel(t *testing.T) *plugin.Model {
 				{Name: "code", GoName: "Code", Type: "string", GoType: "ids.Code", ElemType: "ids.Code", PkgPath: "example.com/app/ids", Kind: "string"},
 				// A NOT NULL number with a literal Default, which velox-gen
 				// holds in a pointer.
-				{Name: "rank", GoName: "Rank", Type: "int32", GoType: "*ids.Rank", ElemType: "ids.Rank", PkgPath: "example.com/app/ids", Kind: "int32", Pointer: true, HasDefault: true, Annotations: ann(graphql.OrderField("RANK"))},
+				{Name: "rank", GoName: "Rank", Type: "int32", GoType: "*ids.Rank", ElemType: "ids.Rank", PkgPath: "example.com/app/ids", Kind: "int32", Pointer: true, HasDefault: true, Annotations: ann(graphql.Annotation{OrderField: "RANK", WhereOps: graphql.OpIn})},
+				{Name: "ref", GoName: "Ref", Type: "uuid", GoType: "ids.Ref", ElemType: "ids.Ref", PkgPath: "example.com/app/ids", Kind: "array", Annotations: where(graphql.OpEQ)},
+				{Name: "ratio", GoName: "Ratio", Type: "float64", GoType: "ids.Ratio", ElemType: "ids.Ratio", PkgPath: "example.com/app/ids", Kind: "float64", Annotations: where(graphql.OpGT)},
+				{Name: "on", GoName: "On", Type: "bool", GoType: "ids.Flag", ElemType: "ids.Flag", PkgPath: "example.com/app/ids", Kind: "bool", Annotations: where(graphql.OpEQ)},
 			},
 		},
 	}}
@@ -458,6 +464,21 @@ func TestGoTypes(t *testing.T) {
 		"func(x *Event) string { return string(x.Level) }, func(x *Event, v string) { x.Level = levels.Level(v) }), nil",
 		// A JSON field binds through a getter.
 		"func (x *Event) TagsGQL() (veloxgql.JSON, error) { b, err := json.Marshal(x.Tags) return veloxgql.JSON(b), err }",
+		// Pred: one helper call for each predicate, converting the input's
+		// values to the column's Go type where they differ.
+		` f := veloxgql.NewFilter[Event](ctx, "EventWhereInput", depth) `,
+		` veloxgql.IDAs(f, w.ID, "Event", veloxgql.AsUUID[uuid.UUID, [16]byte], Events.ID.EQ) `,
+		` veloxgql.IDListAs(f, w.IDIn, "Event", veloxgql.AsUUID[uuid.UUID, [16]byte], Events.ID.In) `,
+		` veloxgql.Value(f, w.Level, Events.Level.EQ) `,
+		` veloxgql.Value(f, w.SizeGT, Events.Size.GT) `,
+		` veloxgql.List(f, w.RankIn, Events.Rank.In) `,
+		` veloxgql.Value(f, w.AtLT, Events.At.LT) `,
+		` veloxgql.Is(f, w.AtIsNil, Events.At.IsNull) `,
+		` veloxgql.Value(f, w.RefNEQ, Events.Ref.NEQ) `,
+		` veloxgql.IDAs(f, w.OwnerID, "Owner", veloxgql.AsInt[idspkg.UserID, int64], Events.OwnerID.EQ) `,
+		` veloxgql.IDListAs(f, w.OwnerIDNotIn, "Owner", veloxgql.AsInt[idspkg.UserID, int64], Events.OwnerID.NotIn) `,
+		` veloxgql.Is(f, w.HasOwner, Events.Owner.Has) `,
+		` veloxgql.HasWith(f, w.HasOwnerWith, Events.Owner.HasWhere) `,
 	} {
 		if !strings.Contains(ev, want) {
 			t.Errorf("no %q in\n%s", want, ev)
@@ -478,8 +499,14 @@ func TestGoTypes(t *testing.T) {
 		// and an order field held in a pointer to and from its value.
 		"func(x *Owner) int64 { return int64(x.ID) }, func(x *Owner, v int64) { x.ID = idspkg.UserID(v) }),",
 		"func(x *Owner) int32 { var v int32 if x.Rank != nil { v = int32(*x.Rank) } return v }, func(x *Owner, v int32) { c := idspkg.Rank(v) x.Rank = &c }), nil",
-		// Its where predicates take the scalar's Go type.
-		" Email *string ",
+		// Its where predicates take the scalar's Go type, and Pred converts.
+		" Email *string ", " RankIn []int32 ", " Ref *uuid.UUID ", " RatioGT *float64 ", " On *bool ",
+		` veloxgql.IDAs(f, w.ID, "Owner", veloxgql.AsInt[idspkg.UserID, int64], Owners.ID.EQ) `,
+		` veloxgql.ValueAs(f, w.Email, veloxgql.AsString[idspkg.Email, string], Owners.Email.EQ) `,
+		` veloxgql.ListAs(f, w.RankIn, veloxgql.AsInt[idspkg.Rank, int32], Owners.Rank.In) `,
+		` veloxgql.ValueAs(f, w.Ref, veloxgql.AsUUID[idspkg.Ref, uuid.UUID], Owners.Ref.EQ) `,
+		` veloxgql.ValueAs(f, w.RatioGT, veloxgql.AsFloat[idspkg.Ratio, float64], Owners.Ratio.GT) `,
+		` veloxgql.ValueAs(f, w.On, veloxgql.AsBool[idspkg.Flag, bool], Owners.On.EQ) `,
 	} {
 		if !strings.Contains(owner, want) {
 			t.Errorf("no %q in\n%s", want, owner)
@@ -577,6 +604,9 @@ func TestRenderErrors(t *testing.T) {
 			e.Fields[0].ElemType, e.Fields[0].PkgPath, e.Fields[0].Kind = "types.ID", "example.com/types", "string"
 			return e
 		}()}}, "schema Thing, field id: velox-graphql converts its Go type types.ID to int64, and a string does not convert"},
+		"a where on a time of another Go type": {&plugin.Model{Version: 1, Entities: []*plugin.Entity{withField(entity("Thing", "int64"),
+			&plugin.Field{Name: "at", GoName: "At", Type: "time", GoType: "types.Stamp", ElemType: "types.Stamp", PkgPath: "example.com/types", Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"where_ops":1}`)}})}},
+			"schema Thing, field at: velox-graphql converts a time field only from time.Time, and its Go type is types.Stamp"},
 		"a where field named Pred": {&plugin.Model{Version: 1, Entities: []*plugin.Entity{withField(entity("Thing", "int64"),
 			&plugin.Field{Name: "pred", GoName: "Pred", Type: "string", GoType: "string", ElemType: "string", Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"where_ops":1}`)}})}},
 			"schema Thing: the field pred of ThingWhereInput is the Go field Pred"},

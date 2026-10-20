@@ -1,6 +1,6 @@
 // Package veloxgql is the runtime the GraphQL code velox-graphql generates
-// binds to, through gqlgen: global IDs, connection cursors, the scalars, and
-// the limits on what a client may ask for.
+// binds to, through gqlgen: global IDs, connection cursors, where filters,
+// the scalars, and the limits on what a client may ask for.
 //
 // # IDs
 //
@@ -38,6 +38,29 @@
 // and reverse the rows read, and one row more than the page sets
 // hasNextPage or hasPreviousPage. Paginate is NewConnection and Page in one
 // call. LoadedConnection pages rows a With loaded, and runs no query.
+//
+// # Where
+//
+// A where input's generated method Pred turns it into a velox.Pred: a
+// Filter (NewFilter), one helper call for each field of the input, and
+// Filter.Pred, the And of what the helpers added. Each helper adds nothing
+// for a field the input does not set, and the first error stops the filter:
+//   - Not, And and Or nest inputs one level deeper, and HasWith through an
+//     edge (the relation's HasWhere); an empty and, or or has…With list adds
+//     nothing, and an input that sets nothing holds for every row;
+//   - Value and List add a predicate of the column's handle (EQ, In,
+//     Contains…), and ValueAs and ListAs convert the input's values to the
+//     column's Go type first, with AsString, AsInt, AsFloat, AsBool or
+//     AsUUID;
+//   - ID, IDList, IDAs and IDListAs decode IDs with DecodeID, so an ID of
+//     another type fails with ErrWrongIDType;
+//   - Is adds a Boolean predicate, or its negation: IsNil, NotNil and
+//     has<Edge>.
+//
+// A nesting deeper than MaxFilterDepth fails with ErrFilterTooDeep, and a
+// list of more than MaxFilterWidth inputs with ErrFilterTooWide (CheckDepth,
+// CheckWidth). None of it runs a query, so a refused filter fails before any
+// statement is built.
 //
 // # Scalars
 //

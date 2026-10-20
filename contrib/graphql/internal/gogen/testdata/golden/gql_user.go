@@ -228,10 +228,29 @@ type AccountWhereInput struct {
 	HasPostsWith []*PostWhereInput
 }
 
-// Pred is the condition w stands for, on Account nodes; depth is how deeply w
-// is nested in the where argument, 0 at the top. This build of velox-graphql
-// does not write where filters yet: every w fails, so a connection given a
-// where argument fails before it runs a query.
-func (w *AccountWhereInput) Pred(_ context.Context, _ int) (velox.Pred[User], error) {
-	return velox.Pred[User]{}, errors.New("veloxgql: AccountWhereInput: where filters are not implemented in this build of velox-graphql")
+// Pred is the condition w stands for, on Account nodes: every predicate w sets
+// holds, and a w that sets none, or a nil w, holds for every node. depth is how
+// deeply w is nested in the where argument, 0 at the top. It fails, before any
+// query runs, on an ID of another type (veloxgql.ErrWrongIDType) or a malformed
+// one (veloxgql.ErrBadID), on a nesting deeper than veloxgql.MaxFilterDepth
+// (veloxgql.ErrFilterTooDeep), and on an and, an or or a has…With of more
+// than veloxgql.MaxFilterWidth inputs (veloxgql.ErrFilterTooWide).
+func (w *AccountWhereInput) Pred(ctx context.Context, depth int) (velox.Pred[User], error) {
+	f := veloxgql.NewFilter[User](ctx, "AccountWhereInput", depth)
+	if w == nil {
+		return f.Pred()
+	}
+	veloxgql.Not(f, w.Not)
+	veloxgql.And(f, w.And)
+	veloxgql.Or(f, w.Or)
+	veloxgql.Value(f, w.DisplayName, Users.Name.EQ)
+	veloxgql.Value(f, w.DisplayNameNEQ, Users.Name.NEQ)
+	veloxgql.List(f, w.DisplayNameIn, Users.Name.In)
+	veloxgql.List(f, w.DisplayNameNotIn, Users.Name.NotIn)
+	veloxgql.Value(f, w.DisplayNameContains, Users.Name.Contains)
+	veloxgql.Value(f, w.DisplayNameHasPrefix, Users.Name.HasPrefix)
+	veloxgql.Value(f, w.DisplayNameHasSuffix, Users.Name.HasSuffix)
+	veloxgql.Is(f, w.HasPosts, Users.Posts.Has)
+	veloxgql.HasWith(f, w.HasPostsWith, Users.Posts.HasWhere)
+	return f.Pred()
 }

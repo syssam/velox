@@ -46,7 +46,10 @@ func Render(m *plugin.Model, outPath, outPkg string) ([]plugin.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := &renderer{m: m, outPath: outPath, outPkg: outPkg, veloxEnums: map[string]bool{}, names: map[string]string{}}
+	r := &renderer{m: m, outPath: outPath, outPkg: outPkg, veloxEnums: map[string]bool{}, names: map[string]string{}, types: map[string]*sdl.Type{}}
+	for _, t := range s.Types {
+		r.types[t.Name] = t
+	}
 	for _, en := range m.Enums {
 		r.veloxEnums[en.Type] = true
 	}
@@ -83,8 +86,9 @@ type renderer struct {
 	m          *plugin.Model
 	outPath    string
 	outPkg     string
-	veloxEnums map[string]bool   // the enum types velox-gen declares
-	names      map[string]string // Go name in the package → what declares it
+	veloxEnums map[string]bool      // the enum types velox-gen declares
+	names      map[string]string    // Go name in the package → what declares it
+	types      map[string]*sdl.Type // the GraphQL types by name
 }
 
 // reserve records the Go names velox-gen declares in the package that a name
@@ -309,7 +313,7 @@ func (r *renderer) writeGetter(f *file, t *sdl.Type, g sdl.Getter) error {
 var locals = map[string]bool{
 	"ctx": true, "id": true, "ids": true, "typ": true, "err": true, "k": true, "db": true, "x": true,
 	"rows": true, "by": true, "i": true, "j": true, "out": true, "c": true, "n": true, "e": true,
-	"s": true, "b": true, "w": true, "v": true, "o": true,
+	"s": true, "b": true, "w": true, "v": true, "o": true, "f": true, "depth": true,
 	"context": true, "json": true, "errors": true, "fmt": true, "io": true, "velox": true, "veloxgql": true,
 	"any": true, "bool": true, "string": true, "int": true, "len": true, "make": true, "append": true,
 	"nil": true, "error": true, "true": true, "false": true,
@@ -539,12 +543,7 @@ func (r *renderer) writeWhere(f *file, t *sdl.Type) error {
 		f.p("\t%s %s", w.GoName, typ)
 	}
 	f.p("}")
-	f.p("")
-	f.doc("", fmt.Sprintf("Pred is the condition w stands for, on %s nodes; depth is how deeply w is nested in the where argument, 0 at the top. This build of velox-graphql does not write where filters yet: every w fails, so a connection given a where argument fails before it runs a query.", n))
-	f.p("func (w *%s) Pred(_ %s.Context, _ int) (%s.Pred[%s], error) {", in, f.use("context", "context"), f.velox(), e.Name)
-	f.p("\treturn %s.Pred[%s]{}, %s.New(%q)", f.velox(), e.Name, f.use("errors", "errors"), "veloxgql: "+in+": where filters are not implemented in this build of velox-graphql")
-	f.p("}")
-	return nil
+	return r.writePred(f, t)
 }
 
 // whereType is the Go type of the where-input field w: an input for not and
@@ -683,8 +682,9 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 	f.p("// Nodes returns the nodes with the global IDs ids, in their order, with nil")
 	f.p("// for an ID no row has. It decodes every ID first, and then looks up each")
 	f.p("// type's nodes with one query, through the DB veloxgql.DBFrom reads from")
-	f.p("// ctx. It fails as Node does on an ID, before any query runs, and with")
-	f.p("// veloxgql.ErrPageTooLarge on more than veloxgql.MaxPage IDs.")
+	f.p("// ctx; the query reads at most one row for each of its IDs, whatever the")
+	f.p("// DB's WithMaxRows. It fails as Node does on an ID, before any query runs,")
+	f.p("// and with veloxgql.ErrPageTooLarge on more than veloxgql.MaxPage IDs.")
 	f.p("func Nodes(ctx %s.Context, ids []string) ([]%s.Noder, error) {", ctx, vgql)
 	tooMany()
 	f.p("\t// The keys of each type, and the indexes in ids of their IDs.")
@@ -725,7 +725,7 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 		e := nd.t.Entity
 		pk := e.Fields[e.PrimaryKey[0]].GoName
 		f.p("\tif len(keys%s) > 0 {", nd.t.Name)
-		f.p("\t\trows, err := db.Query[%s]().Where(%s.%s.In(keys%s...)).All(ctx)", e.Name, e.Handles, pk, nd.t.Name)
+		f.p("\t\trows, err := db.Query[%s]().Where(%s.%s.In(keys%s...)).Unbounded().MaxRows(len(keys%[4]s)).All(ctx)", e.Name, e.Handles, pk, nd.t.Name)
 		f.p("\t\tif err != nil {")
 		f.p("\t\t\treturn nil, err")
 		f.p("\t\t}")
