@@ -200,6 +200,7 @@ Left by the observability plan:
 - A connection method's parameters follow `connArgs` order, which varies by target.
 - A custom-Go-type enum binds with `@goModel` to the type's import path; `plugin.Field` needs the Go type's package path for it.
 - No test yet of a custom enum on a renamed entity; add it with the `@goModel` binding.
+- Plan 2 uses `@goModel` itself: refuse it as an application directive, as `@goField` is, or keep it in the copy velox-graphql validates.
 
 ## 1.0 release
 
