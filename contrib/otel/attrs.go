@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 
+	"go.opentelemetry.io/otel/attribute"
+
 	"github.com/syssam/velox2"
 )
 
@@ -65,7 +67,10 @@ func dbSystem(d velox.Dialect) string {
 	return "other_sql"
 }
 
-// operation is db.operation.name's value: the statement's SQL verb.
+// operation is db.operation.name's value: the statement's SQL verb. Raw SQL
+// (OpRaw) has none: velox does not parse it out of the text, as the semantic
+// conventions advise for a language whose one statement can hold several
+// operations, so the attribute is left off.
 func operation(st *velox.Statement) string {
 	switch st.Op {
 	case velox.OpSelect:
@@ -81,12 +86,48 @@ func operation(st *velox.Statement) string {
 }
 
 // collection is db.collection.name's value: the table, schema-qualified when
-// the entity declares a schema.
+// the entity declares a schema. Raw SQL has none either: the entity Raw scans
+// into need not be the table it reads.
 func collection(st *velox.Statement) string {
+	if st.Op == velox.OpRaw {
+		return ""
+	}
 	if st.Entity.Schema != "" {
 		return st.Entity.Schema + "." + st.Entity.Table
 	}
 	return st.Entity.Table
+}
+
+// spanName is a statement's span name, as the semantic conventions build it:
+// the operation and the table ("SELECT invoices"), or for raw SQL, which has
+// neither, the database system ("postgresql").
+func spanName(st *velox.Statement) string {
+	if st.Op == velox.OpRaw {
+		return dbSystem(st.Dialect)
+	}
+	return operation(st) + " " + collection(st)
+}
+
+// target appends to kv db.operation.name and db.collection.name, which raw
+// SQL has neither of.
+func target(kv []attribute.KeyValue, st *velox.Statement) []attribute.KeyValue {
+	if st.Op == velox.OpRaw {
+		return kv
+	}
+	return append(kv, attribute.String(attrDBOperation, operation(st)), attribute.String(attrDBCollection, collection(st)))
+}
+
+// returnsRows reports whether st's rows are reported as the rows it returned:
+// a SELECT's, and a Raw query's once it succeeded. Raw and Exec are both
+// OpRaw; a successful Exec sets Result.Affected, and Raw leaves it at -1.
+func returnsRows(st *velox.Statement, err error) bool {
+	switch st.Op {
+	case velox.OpSelect:
+		return true
+	case velox.OpRaw:
+		return err == nil && st.Result.Affected < 0
+	}
+	return false
 }
 
 // errorType is error.type's value for err, from a short fixed list (spec

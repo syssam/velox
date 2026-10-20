@@ -430,11 +430,12 @@ func (db *DB) shardForTx(ctx context.Context) (*shard, error) {
 // records the choice in st.Route.
 //
 // Writes, statements in a transaction, reads whose context is marked with
-// ReadPrimary and reads of a session within its pin window go to the primary. A
-// With load goes where its query went. Any other read goes to the next replica
-// in turn, skipping one in back-off, or to the primary when every replica is. A
-// dry run is routed as the read would be, but takes no replica's turn: it sends
-// nothing. exec, not route, falls a failed replica read over to the primary.
+// ReadPrimary and reads of a session within its pin window go to the primary.
+// Exec's raw SQL is a write, and Raw's a read. A With load goes where its
+// query went. Any other read goes to the next replica in turn, skipping one
+// in back-off, or to the primary when every replica is. A dry run is routed
+// as the read would be, but takes no replica's turn: it sends nothing. exec,
+// not route, falls a failed replica read over to the primary.
 //
 // On a sharded DB the statement's shard comes first: the one its context names
 // (shardOf), the pinned target's for a With load, the transaction's in a
@@ -469,7 +470,7 @@ func (db *DB) route(ctx context.Context, st *Statement) (target, error) {
 	t := target{ex: sh.primary, sh: sh, replica: -1}
 	fallback := false
 	switch {
-	case st.Op != OpSelect:
+	case !st.reads(): // a write, Exec's raw SQL included
 	case db.pin.ex != nil:
 		t = db.pin
 		if t.replica >= 0 && t.sh.replicas[t.replica].downUntil.Load() != 0 && !t.sh.replicas[t.replica].up(time.Now().UnixNano()) {

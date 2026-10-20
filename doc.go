@@ -36,6 +36,12 @@
 // primary. OpenShards runs each statement on one shard, chosen from the
 // context's tenant (WithShardFor) or OnShard. See example/routing.
 //
+// Raw SQL is the escape hatch for row locks, CTEs, aggregates and anything
+// else the builder cannot express: DB.Exec runs a statement, and DB.Raw scans
+// a query's rows into an entity by column name. velox applies neither the
+// tenant scope nor any policy to raw SQL, so tenant scoping is the caller's,
+// and both require a reason, which hooks see as Statement.TenantBypass.
+//
 // # Options
 //
 // An Option configures a DB, once, when it is opened (Open, OpenPgx, OpenShards).

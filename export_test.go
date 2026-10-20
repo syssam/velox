@@ -14,8 +14,10 @@ import (
 // it was sent. Queries may run on it concurrently; read its fields only when
 // none is running.
 type FakeExec struct {
-	mu      sync.Mutex
-	Rows    [][]any
+	mu   sync.Mutex
+	Rows [][]any
+	// Cols are the column names every query's rows report, which Raw reads.
+	Cols    []string
 	Results [][][]any // the rows of successive queries; Rows once they run out
 	SQL     string
 	Args    []any
@@ -99,7 +101,7 @@ func (e *FakeExec) query(ctx context.Context, sql string, args []any) (rows, err
 	if len(e.RowsErrs) > 0 {
 		rerr, e.RowsErrs = e.RowsErrs[0], e.RowsErrs[1:]
 	}
-	return &fakeRows{data: data, e: e, err: rerr}, nil
+	return &fakeRows{data: data, cols: e.Cols, e: e, err: rerr}, nil
 }
 
 func (e *FakeExec) exec(ctx context.Context, sql string, args []any) (result, error) {
@@ -205,6 +207,7 @@ func RawRows(db *DB, sql string, args []any) (interface {
 
 type fakeRows struct {
 	data [][]any
+	cols []string
 	i    int
 	e    *FakeExec
 	err  error // what Err reports
@@ -212,6 +215,8 @@ type fakeRows struct {
 
 func (r *fakeRows) Next() bool { r.i++; return r.i <= len(r.data) }
 func (r *fakeRows) Err() error { return r.err }
+
+func (r *fakeRows) Columns() ([]string, error) { return r.cols, nil }
 func (r *fakeRows) Close() {
 	r.e.mu.Lock()
 	r.e.Closed++

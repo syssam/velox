@@ -17,6 +17,9 @@ import (
 // scope runs after the guard and the Rewrite hooks, so neither sees what it
 // adds and no hook can remove it.
 //
+// Raw SQL (OpRaw) is never scoped: prepare does not call scope for it, as its
+// SQL is the caller's, and its Statement.TenantBypass holds the reason.
+//
 // st does not escape: scope passes it to no function value, and policy
 // functions are given only ctx, so plain's statement stays on the stack.
 func (db *DB) scope(ctx context.Context, st *Statement) error {

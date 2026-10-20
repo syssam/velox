@@ -11,10 +11,15 @@ const (
 	OpInsert
 	OpUpdate
 	OpDelete
+	// OpRaw is raw SQL, run by DB.Exec or DB.Raw: its SQL and Args are the
+	// caller's. Exec's statement is a write, Raw's a read; an Around hook
+	// tells them apart by Result.Affected once next has returned, as a
+	// successful Exec sets it and Raw leaves it -1.
+	OpRaw
 )
 
 // String returns the operation's SQL verb in lower case: "select", "insert",
-// "update" or "delete".
+// "update" or "delete"; "raw" for raw SQL.
 func (o Op) String() string {
 	switch o {
 	case OpSelect:
@@ -25,6 +30,8 @@ func (o Op) String() string {
 		return "update"
 	case OpDelete:
 		return "delete"
+	case OpRaw:
+		return "raw"
 	}
 	return "unknown"
 }
@@ -63,6 +70,11 @@ type ConflictClause struct {
 // one, and the pipeline's hooks see and may change it: rewrite hooks before it
 // is rendered, around hooks while it runs.
 //
+// Raw SQL (OpRaw) is not rendered: Rewrite hooks do not see it, and its SQL,
+// Args and Fingerprint are set when it is made. Its Entity is the entity Raw
+// scans into, or for Exec an EntityInfo named "Exec" with no table or columns.
+// Its TenantBypass and PolicyBypass both hold the caller's reason.
+//
 // The EntityInfo that Entity points to is shared by every query on the
 // entity, in every goroutine: treat it as read-only. A rewrite hook may point
 // Entity at an EntityInfo of its own (a copy with another Table, say), but
@@ -84,8 +96,8 @@ type Statement struct {
 	Returning    []int           // INSERT: columns read back (PostgreSQL and SQLite)
 	AllRows      bool            // UPDATE and DELETE: the statement said All
 	Tenant       any             // the tenant scope applied; nil when unscoped
-	TenantBypass string          // the AllTenants reason, when it applied
-	PolicyBypass string          // the SkipPolicy reason, when it applied
+	TenantBypass string          // the AllTenants reason, when it applied; raw SQL's reason
+	PolicyBypass string          // the SkipPolicy reason, when it applied; raw SQL's reason
 	DryRun       bool            // built for SQL(ctx), not sent
 	InTx         bool
 	Tx           *TxInfo // the transaction the statement runs in, when the DB has hooks; nil otherwise
@@ -117,7 +129,13 @@ type Statement struct {
 	// handed is set once Iter has handed the caller a row: a broken
 	// connection is then not failed over, as the read cannot start again.
 	handed bool
+	// rawRead marks Raw's statement, an OpRaw that velox treats as a read.
+	rawRead bool
 }
+
+// reads reports whether st is a read: a SELECT, or Raw's query. Everything
+// else writes: an INSERT, UPDATE or DELETE, or Exec's raw SQL.
+func (st *Statement) reads() bool { return st.Op == OpSelect || st.rawRead }
 
 // Result is what executing a statement did: a Statement's, which an Around
 // hook reads. Mutation.Result gives an entity hook one for the whole write,
@@ -136,7 +154,8 @@ type Result struct {
 // Rewrite is a hook that may change a statement before it is rendered, or
 // refuse it by returning an error. Rewrite hooks run in the order given to
 // Open. They run for the SQL(ctx) methods too, with the statement's DryRun
-// set, so a hook must change nothing but the statement.
+// set, so a hook must change nothing but the statement. They do not run for
+// raw SQL (OpRaw), which has nothing to rewrite; Around hooks see it.
 type Rewrite func(ctx context.Context, st *Statement) error
 
 // Around is a hook that wraps a statement's execution. next runs the

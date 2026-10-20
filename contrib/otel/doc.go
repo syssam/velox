@@ -19,7 +19,12 @@
 //
 // A statement's span is of kind client, named for its operation and table
 // ("SELECT invoices"), and covers sending it and reading every row; with
-// Iter, the loop body too. It carries the fingerprint, the call site and the
+// Iter, the loop body too. Raw SQL (velox.DB.Raw and Exec) has neither an
+// operation nor a table that velox knows: velox does not parse them out of
+// the SQL, as the semantic conventions advise, so its span is named for the
+// database system ("postgresql") and has no db.operation.name or
+// db.collection.name. Its reason is velox.tenant_bypass and
+// velox.policy_bypass. It carries the fingerprint, the call site and the
 // context's tags. An Around hook of the application's own that retries, given
 // before these options, gets one span per attempt.
 //
@@ -50,10 +55,10 @@
 // and velox.tx.duration (seconds) per transaction; and a counter,
 // velox.route.fallbacks, of the reads that fell over to the primary, once per
 // failover even when an outer hook retries the statement. Their attributes
-// are bounded: the database system, operation, table, entity, error type and,
-// on a sharded DB, shard for a statement; the outcome, read-only flag and
-// whether it retried for a transaction; and the shard alone for the fallback
-// counter. Tags, the tenant, the SQL text and the call site are on spans
+// are bounded: the database system, operation and table (none for raw SQL),
+// entity, error type and, on a sharded DB, shard for a statement; the
+// outcome, read-only flag and whether it retried for a transaction; and the
+// shard alone for the fallback counter. Tags, the tenant, the SQL text and the call site are on spans
 // only; the fingerprint is added to the statement metrics only with
 // Config.MetricFingerprint.
 //

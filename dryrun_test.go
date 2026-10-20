@@ -204,7 +204,7 @@ func TestDryRunSendsNoWrite(t *testing.T) {
 }
 
 // TestDryRunRefusesEveryWrite: under a dry-run context, Exec of an Insert,
-// an InsertAll, an upsert, an Update and a Delete, Save and Tx fail with
+// an InsertAll, an upsert, an Update and a Delete, Save, raw Exec and Tx fail with
 // ErrDryRun, and nothing is sent, not even BEGIN.
 func TestDryRunRefusesEveryWrite(t *testing.T) {
 	e := &velox.FakeExec{Affected: 1, Rows: [][]any{{int64(1)}}}
@@ -226,6 +226,10 @@ func TestDryRunRefusesEveryWrite(t *testing.T) {
 			return err
 		},
 		"Save": func() error { return db.Save(&dnote{ID: 1, Owner: "x"}, owner).Exec(dry) },
+		"raw Exec": func() error {
+			_, err := db.Exec(dry, "test", "DELETE FROM dnotes")
+			return err
+		},
 		"Tx": func() error {
 			return db.Tx(dry, func(context.Context, *velox.DB) error {
 				t.Error("fn of a Tx under a dry run ran")

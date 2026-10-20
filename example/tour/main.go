@@ -9,9 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"maps"
 	"os"
-	"slices"
 	"strings"
 	"time"
 
@@ -291,23 +289,27 @@ func run(ctx context.Context, w io.Writer) error {
 
 	// 8. AllTenants lifts the tenant scope for one context, and requires a
 	// reason. The policy still applies, so the report runs as an accountant.
-	say("\n== 8. AllTenants")
+	say("\n== 8. AllTenants and Raw")
 	report := gen.WithRole(velox.AllTenants(ctx, "monthly revenue report"), gen.Accountant)
-	revenue := db.Query[gen.Invoice]().Where(I.Status.NEQ(gen.InvoiceStatusDraft)).Unbounded()
-	text, _, err := revenue.SQL(report)
+	text, _, err := db.Query[gen.Invoice]().Where(I.Status.NEQ(gen.InvoiceStatusDraft)).Unbounded().SQL(report)
 	if err != nil {
 		return err
 	}
 	say("%s", text)
-	totals := map[int64]int64{}
-	for x, err := range revenue.Iter(report) {
-		if err != nil {
-			return err
-		}
-		totals[x.OrgID] += x.TotalCents
+	// Raw SQL is the escape hatch for what the builder cannot express, here
+	// a GROUP BY, so that the database sums rather than Go. velox applies
+	// neither the tenant scope nor the policy to it, so it requires a reason
+	// too, and its SQL says what they would: no drafts. Its rows scan into
+	// Invoice by column name; the fields of the columns it does not return
+	// stay zero.
+	totals, err := db.Raw[gen.Invoice]("monthly revenue report",
+		"SELECT org_id, SUM(total_cents) AS total_cents FROM invoices WHERE status <> ? GROUP BY org_id ORDER BY org_id",
+		gen.InvoiceStatusDraft).All(ctx)
+	if err != nil {
+		return err
 	}
-	for _, org := range slices.Sorted(maps.Keys(totals)) {
-		say("org %d: %s", org, money(totals[org]))
+	for _, x := range totals {
+		say("org %d: %s", x.OrgID, money(x.TotalCents))
 	}
 
 	// 9. Deadlines. TxTimeout bounds one transaction, within WithDeadlines'

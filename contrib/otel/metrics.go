@@ -51,12 +51,9 @@ func handle(err error) {
 // Config.MetricFingerprint.
 func (a *adapter) record(ctx context.Context, st *velox.Statement, seconds float64, err error, fellOver bool) {
 	kv := make([]attribute.KeyValue, 0, 7)
-	kv = append(kv,
-		attribute.String(attrDBSystem, dbSystem(st.Dialect)),
-		attribute.String(attrDBOperation, operation(st)),
-		attribute.String(attrDBCollection, collection(st)),
-		attribute.String(attrEntity, st.Entity.Name),
-	)
+	kv = append(kv, attribute.String(attrDBSystem, dbSystem(st.Dialect)))
+	kv = target(kv, st)
+	kv = append(kv, attribute.String(attrEntity, st.Entity.Name))
 	if st.Route.Shard != "" {
 		kv = append(kv, attribute.String(attrRouteShard, st.Route.Shard))
 	}
@@ -71,7 +68,7 @@ func (a *adapter) record(ctx context.Context, st *velox.Statement, seconds float
 	if fellOver {
 		a.fallbacks.Add(ctx, 1, shardSet(st.Route.Shard))
 	}
-	if st.Op == velox.OpSelect && err == nil {
+	if returnsRows(st, err) && err == nil {
 		a.returned.Record(ctx, st.Result.Rows, set)
 	}
 }

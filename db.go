@@ -279,10 +279,15 @@ func (db *DB) run(ctx context.Context, st *Statement, read func(rows) error, res
 // and for SQL(ctx): the transaction check (outsideTx), resolving the
 // relations in its conditions (HasWhere leaves them to the statement), guard,
 // observe, rewrite hooks and their checks, scope, the row cap, and rendering
-// into st.SQL (comment included) and st.Args.
+// into st.SQL (comment included) and st.Args. Raw SQL takes only the
+// transaction check and prepareRaw.
 func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	if err := db.outsideTx(ctx, st); err != nil {
 		return err
+	}
+	if st.Op == OpRaw {
+		db.prepareRaw(ctx, st)
+		return nil
 	}
 	if err := st.resolve(); err != nil {
 		return err
@@ -394,7 +399,7 @@ func (db *DB) outsideTx(ctx context.Context, st *Statement) error {
 // or run, Raw included, so this is the one place the rule is kept. Reads
 // pass without a context lookup.
 func (db *DB) dryWrite(ctx context.Context, st *Statement) error {
-	if st.Op != OpSelect && IsDryRun(ctx) {
+	if !st.reads() && IsDryRun(ctx) {
 		return stmtErr(st, ErrDryRun)
 	}
 	return nil
@@ -553,9 +558,9 @@ func checkColumns(st *Statement) error {
 }
 
 // rowCap is the most rows st may return: its own MaxRows, else the DB's; 0
-// for no cap.
+// for no cap. Raw's read is capped too, Exec not.
 func (db *DB) rowCap(st *Statement) int {
-	if st.Op != OpSelect || st.Count {
+	if !st.reads() || st.Count {
 		return 0
 	}
 	if st.MaxRows > 0 {
@@ -631,7 +636,7 @@ func (db *DB) exec(ctx context.Context, st *Statement, t target, read func(rows)
 		if res != nil {
 			*res = r
 		}
-		if st.Op != OpSelect {
+		if !st.reads() {
 			db.wrote(ctx)
 		}
 		return nil
@@ -695,12 +700,12 @@ func (db *DB) exec(ctx context.Context, st *Statement, t target, read func(rows)
 	}
 	if counted != nil {
 		st.Result.Rows = counted.n
-		if st.Op != OpSelect && err == nil {
+		if !st.reads() && err == nil {
 			// The rows a write returned are the rows it affected.
 			st.Result.Affected = counted.n
 		}
 	}
-	if st.Op != OpSelect && err == nil {
+	if !st.reads() && err == nil {
 		db.wrote(ctx)
 	}
 	return err

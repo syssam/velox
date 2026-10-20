@@ -1,8 +1,8 @@
 # tour
 
 One walkthrough that touches everything once: tenants, a policy, a hook, a
-mixin, relations, reads, writes, guards, transactions and deadlines, on
-invoices for two organizations. The other examples take one topic each.
+mixin, relations, reads, writes, guards, transactions, raw SQL and deadlines,
+on invoices for two organizations. The other examples take one topic each.
 
 ```sh
 cd example
@@ -41,7 +41,9 @@ go run ./tour
    tenant fails with `ErrNoTenant`.
 7. A transaction with `db.Tx`, and a nested `Tx` (a savepoint) that recovers
    from a unique-constraint violation.
-8. A report across tenants with `velox.AllTenants` and a reason.
+8. A report across tenants with `velox.AllTenants` and a reason, and its
+   totals summed by the database with raw SQL (`db.Raw`), which the
+   builder cannot express (a `GROUP BY`) and which also takes a reason.
 9. Deadlines set at `Open` with `velox.WithDeadlines`, and a transaction that
    runs past its `velox.TxTimeout`.
 

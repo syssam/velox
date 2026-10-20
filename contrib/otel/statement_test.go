@@ -612,3 +612,57 @@ func TestRouteShardAtStart(t *testing.T) {
 		t.Errorf("shards at start %q", sp.got)
 	}
 }
+
+// TestRawSpans: raw SQL's span is named for the database system, as the
+// semantic conventions name a span with neither an operation nor a table, and
+// carries neither db.operation.name nor db.collection.name: velox does not
+// parse them out of the SQL. It carries the reason as velox.tenant_bypass and
+// velox.policy_bypass, the SQL as sent, and Raw's returned rows or Exec's
+// affected rows.
+func TestRawSpans(t *testing.T) {
+	f := &fakeDB{cols: []string{"id", "number"}, rows: [][]driver.Value{{int64(1), "A"}, {int64(2), "B"}}, affected: 3}
+	db, exp, _ := traced(t, f, veloxotel.Config{})
+	bare := context.Background()
+	const q = "SELECT id, number FROM invoices FOR UPDATE"
+	if _, err := db.Raw[testmodel.Invoice]("locks the batch", q).All(bare); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(bare, "nightly cleanup", "DELETE FROM invoices WHERE paid"); err != nil {
+		t.Fatal(err)
+	}
+	spans := exp.GetSpans()
+	if len(spans) != 2 {
+		t.Fatalf("%d spans, want 2", len(spans))
+	}
+	for i, c := range []struct {
+		entity, reason, sql string
+		want, absent        attribute.Key
+		n                   int64
+	}{
+		{"testmodel.Invoice", "locks the batch", q, "db.response.returned_rows", "velox.affected_rows", 2},
+		{"Exec", "nightly cleanup", "DELETE FROM invoices WHERE paid", "velox.affected_rows", "db.response.returned_rows", 3},
+	} {
+		s := spans[i]
+		if s.Name != "postgresql" || s.SpanKind != trace.SpanKindClient || s.Status.Code != codes.Unset {
+			t.Errorf("span %d: %q kind %v status %v", i, s.Name, s.SpanKind, s.Status)
+		}
+		a := attrs(s)
+		for k, want := range map[attribute.Key]attribute.Value{
+			"db.system.name":      attribute.StringValue("postgresql"),
+			"velox.entity":        attribute.StringValue(c.entity),
+			"velox.tenant_bypass": attribute.StringValue(c.reason),
+			"velox.policy_bypass": attribute.StringValue(c.reason),
+			"db.query.text":       attribute.StringValue(c.sql),
+			c.want:                attribute.Int64Value(c.n),
+		} {
+			if a[k] != want {
+				t.Errorf("span %d: %s = %v, want %v", i, k, a[k].String(), want.String())
+			}
+		}
+		for _, k := range []attribute.Key{"db.operation.name", "db.collection.name", c.absent} {
+			if _, ok := a[k]; ok {
+				t.Errorf("span %d: unexpected %s = %v", i, k, a[k].String())
+			}
+		}
+	}
+}

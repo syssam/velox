@@ -432,3 +432,34 @@ func TestFallbackCountedOncePerFailover(t *testing.T) {
 		t.Errorf("points %v, want one of 1", pts)
 	}
 }
+
+// TestRawMetrics: raw SQL's points carry the database system and the entity,
+// and no operation or table; a Raw read's rows are returned rows, Exec's are
+// not.
+func TestRawMetrics(t *testing.T) {
+	f := &fakeDB{cols: []string{"id"}, rows: [][]driver.Value{{int64(1)}, {int64(2)}}, affected: 3}
+	db, r := metered(t, f, veloxotel.Config{})
+	if _, err := db.Raw[testmodel.Invoice]("report", "SELECT id FROM invoices").All(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(ctx, "cleanup", "DELETE FROM invoices"); err != nil {
+		t.Fatal(err)
+	}
+	var count uint64
+	for _, dp := range points(t, r, "db.client.operation.duration", "s", wantDurationBounds) {
+		count += dp.Count
+		if k := keys(dp.Attributes); !slices.Equal(k, []string{"db.system.name", "velox.entity"}) {
+			t.Errorf("attributes %v", k)
+		}
+	}
+	if count != 2 {
+		t.Errorf("%d durations, want 2", count)
+	}
+	dps := intPoints(t, r, "db.client.response.returned_rows", "{row}", wantRowBounds)
+	if len(dps) != 1 || dps[0].Sum != 2 || dps[0].Count != 1 {
+		t.Fatalf("returned rows %+v, want Raw's 2 alone", dps)
+	}
+	if e, _ := dps[0].Attributes.Value("velox.entity"); e.AsString() != "testmodel.Invoice" {
+		t.Errorf("returned rows of %s", e.AsString())
+	}
+}

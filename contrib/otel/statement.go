@@ -15,7 +15,7 @@ import (
 // around is the Around hook: one client span per execution of a statement,
 // from the call to next to its return, and its metric points.
 func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
-	sctx, span := a.tracer.Start(ctx, operation(st)+" "+collection(st),
+	sctx, span := a.tracer.Start(ctx, spanName(st),
 		trace.WithSpanKind(trace.SpanKindClient), trace.WithAttributes(a.attributes(st)...))
 	// A panic in next, such as Iter's loop body's, ends the span and goes on:
 	// the adapter never recovers one. runtime.Goexit in an Iter loop body is
@@ -37,13 +37,11 @@ func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(con
 	// The route is read after next returns: a fallback happens during it.
 	var buf [4]attribute.KeyValue
 	kv := routeAttributes(buf[:0], st)
-	switch st.Op {
-	case velox.OpSelect:
+	switch {
+	case returnsRows(st, err):
 		kv = append(kv, attribute.Int64(attrReturnedRows, st.Result.Rows))
-	default:
-		if st.Result.Affected >= 0 {
-			kv = append(kv, attribute.Int64(attrAffectedRows, st.Result.Affected))
-		}
+	case st.Result.Affected >= 0:
+		kv = append(kv, attribute.Int64(attrAffectedRows, st.Result.Affected))
 	}
 	span.SetAttributes(kv...)
 	if err != nil {
@@ -72,10 +70,9 @@ func routeAttributes(kv []attribute.KeyValue, st *velox.Statement) []attribute.K
 // attributes are a statement's span attributes known before it runs.
 func (a *adapter) attributes(st *velox.Statement) []attribute.KeyValue {
 	kv := make([]attribute.KeyValue, 0, 14+len(st.Tags))
+	kv = append(kv, attribute.String(attrDBSystem, dbSystem(st.Dialect)))
+	kv = target(kv, st)
 	kv = append(kv,
-		attribute.String(attrDBSystem, dbSystem(st.Dialect)),
-		attribute.String(attrDBOperation, operation(st)),
-		attribute.String(attrDBCollection, collection(st)),
 		attribute.String(attrEntity, st.Entity.Name),
 		attribute.String(attrFingerprint, st.Fingerprint),
 	)
