@@ -33,12 +33,20 @@ func request(t *testing.T, r plugin.Request) string {
 
 func TestRun(t *testing.T) {
 	m := &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
-		Name: "User", Tenant: -1, PrimaryKey: []int{0},
-		Fields: []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64"}, {Name: "name", GoName: "Name", Type: "string"}},
+		Name: "User", Label: "user", Handles: "Users", Tenant: -1, PrimaryKey: []int{0},
+		Fields: []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64", ElemType: "int64"}, {Name: "name", GoName: "Name", Type: "string", ElemType: "string"}},
 	}}}
-	resp := respond(t, request(t, plugin.Request{Protocol: plugin.ProtocolVersion, OutPackage: "gen", Model: m}))
-	if resp.Error != "" || len(resp.Files) != 1 || resp.Files[0].Path != "velox.graphqls" ||
-		!strings.Contains(resp.Files[0].Content, "type User implements Node {\n") || strings.Contains(resp.Files[0].Content, "DO NOT EDIT") {
+	resp := respond(t, request(t, plugin.Request{Protocol: plugin.ProtocolVersion, OutPackage: "gen", OutPath: "example.com/app/gen", Model: m}))
+	var paths []string
+	for _, f := range resp.Files {
+		paths = append(paths, f.Path)
+		if strings.Contains(f.Content, "DO NOT EDIT") {
+			t.Errorf("%s has the generated-file header, which velox-gen adds", f.Path)
+		}
+	}
+	if resp.Error != "" || strings.Join(paths, " ") != "velox.graphqls gql_node.go gql_user.go" ||
+		!strings.Contains(resp.Files[0].Content, "type User implements Node {\n") ||
+		!strings.HasPrefix(resp.Files[2].Content, "package gen\n") || !strings.Contains(resp.Files[2].Content, "type UserConnection struct {") {
 		t.Errorf("%+v", resp)
 	}
 
@@ -51,6 +59,10 @@ func TestRun(t *testing.T) {
 			Name: "User", Tenant: -1, PrimaryKey: []int{0},
 			Fields: []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64"}, {Name: "x", GoName: "X", Type: "other"}},
 		}}}}), "User"},
+		"go": {request(t, plugin.Request{Protocol: 1, OutPackage: "gen", Model: &plugin.Model{Version: 1, Entities: []*plugin.Entity{{
+			Name: "Clock", Label: "clock", Handles: "Clocks", Tenant: -1, PrimaryKey: []int{0},
+			Fields: []*plugin.Field{{Name: "id", GoName: "ID", Type: "float64"}, {Name: "x", GoName: "X", Type: "string"}},
+		}}}}), "cannot be a GraphQL ID"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			resp := respond(t, c.in)

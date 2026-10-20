@@ -189,6 +189,7 @@
           "type": "time",
           "go_type": "*time.Time",
           "elem_type": "time.Time",
+          "pkg_path": "time",
           "pointer": true,
           "nullable": true,
           "optional": true
@@ -261,6 +262,7 @@
           "type": "time",
           "go_type": "time.Time",
           "elem_type": "time.Time",
+          "pkg_path": "time",
           "immutable": true,
           "has_default": true
         },
@@ -271,6 +273,7 @@
           "type": "time",
           "go_type": "time.Time",
           "elem_type": "time.Time",
+          "pkg_path": "time",
           "has_default": true,
           "update_default": true
         },

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -113,13 +114,11 @@ func (Secret) Fields() []schema.Field { return []schema.Field{field.String("valu
 func (Secret) Annotations() []schema.Annotation { return []schema.Annotation{graphql.Skip()} }
 `
 
-// TestPluginThroughVeloxGen runs the plugin the way an application does: a
-// module with velox-gen and velox-graphql as tools, and a schema package with
-// annotations.
-func TestPluginThroughVeloxGen(t *testing.T) {
-	if testing.Short() {
-		t.Skip("builds a module")
-	}
+// app writes a module with velox-gen and velox-graphql as tools, and the
+// files (the schema package among them), and returns its directory and a
+// runner of go in it, offline.
+func app(t *testing.T, files map[string]string) (string, func(args ...string) (string, error)) {
+	t.Helper()
 	repo, err := filepath.Abs("../../../..")
 	if err != nil {
 		t.Fatal(err)
@@ -151,7 +150,9 @@ func TestPluginThroughVeloxGen(t *testing.T) {
 		"\tgithub.com/syssam/velox2/cmd/velox-gen => " + filepath.Join(repo, "cmd", "velox-gen") + "\n" +
 		"\tgithub.com/syssam/velox2/contrib/graphql => " + filepath.Join(repo, "contrib", "graphql") + "\n" +
 		")\n"
-	for name, src := range map[string]string{"go.mod": mod, "go.sum": string(sum), "schema/schema.go": e2eSchema} {
+	all := map[string]string{"go.mod": mod, "go.sum": string(sum)}
+	maps.Copy(all, files)
+	for name, src := range all {
 		p := filepath.Join(dir, name)
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			t.Fatal(err)
@@ -176,6 +177,17 @@ func TestPluginThroughVeloxGen(t *testing.T) {
 	if out, err := run("mod", "tidy", "-e"); err != nil {
 		t.Fatalf("go mod tidy: %v\n%s", err, out)
 	}
+	return dir, run
+}
+
+// TestPluginThroughVeloxGen runs the plugin the way an application does: a
+// module with velox-gen and velox-graphql as tools, and a schema package with
+// annotations.
+func TestPluginThroughVeloxGen(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a module")
+	}
+	dir, run := app(t, map[string]string{"schema/schema.go": e2eSchema})
 
 	if out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql", "./schema"); err != nil || !strings.Contains(out, "gen/velox.graphqls\n") {
 		t.Fatalf("generate: %v\n%s", err, out)
@@ -236,6 +248,89 @@ func TestPluginThroughVeloxGen(t *testing.T) {
 		}
 	}
 
+	if out, err := run("tool", "velox-gen", "-check", "-out", "gen", "-plugin", "velox-graphql", "./schema"); err != nil || out != "" {
+		t.Errorf("-check: %v\n%s", err, out)
+	}
+}
+
+// e2eEvent adds what e2eSchema has not to the Go the plugin writes: a UUID
+// key, an enum of the application's own Go type, a String enum, and a where
+// predicate on each scalar veloxgql binds.
+const e2eEvent = `package schema
+
+import (
+	"github.com/google/uuid"
+
+	"example.com/app/levels"
+	"github.com/syssam/velox2/contrib/graphql"
+	"github.com/syssam/velox2/schema"
+	"github.com/syssam/velox2/schema/field"
+)
+
+type Event struct{ schema.Schema }
+
+func (Event) Fields() []schema.Field {
+	return []schema.Field{
+		field.UUID("id", uuid.UUID{}).Default(uuid.New),
+		field.Enum("kind").Values("start", "in_flight").Annotations(graphql.WhereOps()),
+		field.Enum("level").GoType(levels.Level("")).Annotations(graphql.WhereOps()),
+		field.Enum("state").Values("on", "off").Default("on").Annotations(graphql.Skip(graphql.SkipEnumField), graphql.WhereOps()),
+		field.Int8("rank").Annotations(graphql.WhereOps(graphql.OpsAll), graphql.OrderField("RANK")),
+		field.Uint64("size").Annotations(graphql.WhereOps()),
+		field.Time("at").Optional().Annotations(graphql.WhereOps()),
+		field.Bool("done").Annotations(graphql.WhereOps()),
+		field.Float32("score").Annotations(graphql.WhereOps()),
+		field.UUID("ref", uuid.UUID{}).Annotations(graphql.WhereOps()),
+	}
+}
+
+func (Event) Annotations() []schema.Annotation {
+	return []schema.Annotation{graphql.QueryField("events")}
+}
+`
+
+// e2eLevels is the package of Event's own enum type.
+const e2eLevels = `package levels
+
+type Level string
+
+func (Level) Values() []string { return []string{"low", "high"} }
+`
+
+// TestGoCompiles runs velox-gen with the plugin and builds and vets the
+// generated package: the plugin's Go compiles with velox-gen's.
+func TestGoCompiles(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a module")
+	}
+	dir, run := app(t, map[string]string{"schema/schema.go": e2eSchema, "schema/event.go": e2eEvent, "levels/levels.go": e2eLevels})
+	out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql", "./schema")
+	if err != nil {
+		t.Fatalf("generate: %v\n%s", err, out)
+	}
+	for _, name := range []string{"gql_node.go", "gql_user.go", "gql_post.go", "gql_group.go", "gql_category.go", "gql_event.go"} {
+		if !strings.Contains(out, "gen/"+name+"\n") {
+			t.Errorf("no gen/%s in\n%s", name, out)
+		}
+		b, err := os.ReadFile(filepath.Join(dir, "gen", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := string(b); !strings.HasPrefix(got, "// Code generated by velox-gen. DO NOT EDIT.\n\npackage gen\n") || strings.Count(got, "DO NOT EDIT") != 1 {
+			t.Errorf("%s does not start with the one header:\n%s", name, got)
+		}
+	}
+	for _, name := range []string{"gql_secret.go", "gql_user_group.go"} {
+		if _, err := os.Stat(filepath.Join(dir, "gen", name)); !os.IsNotExist(err) {
+			t.Errorf("%s: %v, want none: the type is skipped, or a join entity", name, err)
+		}
+	}
+	if out, err := run("build", "./gen"); err != nil {
+		t.Fatalf("go build: %v\n%s", err, out)
+	}
+	if out, err := run("vet", "./gen"); err != nil {
+		t.Fatalf("go vet: %v\n%s", err, out)
+	}
 	if out, err := run("tool", "velox-gen", "-check", "-out", "gen", "-plugin", "velox-graphql", "./schema"); err != nil || out != "" {
 		t.Errorf("-check: %v\n%s", err, out)
 	}

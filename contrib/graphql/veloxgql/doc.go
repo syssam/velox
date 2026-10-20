@@ -9,7 +9,14 @@
 // key's canonical text (EncodeID). In Go an ID is a string, gqlgen's built-in
 // ID. Generated code decodes one with DecodeID[K](id, "<Type>"), which
 // returns the typed key, and fails with ErrWrongIDType for an ID of another
-// type, before anything is looked up. Every Node entity implements Noder.
+// type, before anything is looked up. IDType reads an ID's type, for a
+// lookup that does not know it, as Node's. Every Node entity implements
+// Noder.
+//
+// # The DB
+//
+// Generated code runs its queries on the DB that DBFrom reads from the
+// request's context, where WithDB puts it.
 //
 // # Cursors
 //

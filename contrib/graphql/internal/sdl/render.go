@@ -81,11 +81,12 @@ type object struct {
 	enums  []gqlEnum
 	fks    map[string]bool // the names of ent's foreign-key fields
 
-	order    *order     // nil for none
-	hasWhere bool       // it has a where input
-	where    []gqlField // the where input's fields
-	create   []gqlField // the create input's fields; nil for none
-	update   []gqlField // the update input's fields; nil for none
+	order    *order       // nil for none
+	hasWhere bool         // it has a where input
+	where    []gqlField   // the where input's fields
+	whereGo  []WhereField // the where input's fields, for the Go code
+	create   []gqlField   // the create input's fields; nil for none
+	update   []gqlField   // the update input's fields; nil for none
 }
 
 type gqlField struct {
@@ -102,9 +103,9 @@ type directive struct {
 }
 
 type gqlEnum struct {
-	name   string
-	values []string
-	field  string // the field it is the type of
+	name   string   // "" for a String: the field's graphql.Skip has SkipEnumField
+	values []string // nil for a String
+	field  string   // the field it is the type of
 }
 
 // reserveGoNames records the Go names velox-gen declares in the generated
@@ -448,7 +449,12 @@ func (g *graph) fieldType(o *object, f *plugin.Field, a graphql.Annotation, wher
 		return "JSON", nil
 	case "enum":
 		if a.Skip&graphql.SkipEnumField != 0 {
-			return "String", nil // no enum: the stored values, as they are
+			// No enum: the stored values, as they are. The Go code needs to
+			// know, as the Go enum type binds to the String.
+			if !slices.ContainsFunc(o.enums, func(en gqlEnum) bool { return en.field == f.Name }) {
+				o.enums = append(o.enums, gqlEnum{field: f.Name})
+			}
+			return "String", nil
 		}
 		values, err := enumValues(f, a, where)
 		if err != nil {
@@ -802,6 +808,9 @@ func (g *graph) writeObject(w *writer, o *object) {
 	w.at = ""
 
 	for _, en := range o.enums {
+		if en.name == "" {
+			continue // a String
+		}
 		w.line()
 		w.line("enum ", en.name, " {")
 		for _, v := range en.values {

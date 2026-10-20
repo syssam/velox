@@ -134,9 +134,14 @@ func (g *graph) whereOf(o *object) error {
 		return err
 	}
 	fs := newInputFields(in)
-	for _, n := range []string{"not: " + in, "and: [" + in + "!]", "or: [" + in + "!]"} {
-		name, typ, _ := strings.Cut(n, ": ")
-		fs.own(gqlField{name: name, typ: typ})
+	for _, n := range []struct {
+		name, typ, goName string
+		kind              WhereKind
+	}{
+		{"not", in, "Not", WhereNot}, {"and", "[" + in + "!]", "And", WhereAnd}, {"or", "[" + in + "!]", "Or", WhereOr},
+	} {
+		fs.own(gqlField{name: n.name, typ: n.typ})
+		o.whereGo = append(o.whereGo, WhereField{Name: n.name, GoName: n.goName, Type: n.typ, Kind: n.kind, Field: -1, Edge: -1, Target: o.name})
 	}
 	for i, f := range e.Fields {
 		a := o.fanns[i]
@@ -144,10 +149,11 @@ func (g *graph) whereOf(o *object) error {
 			continue
 		}
 		where := "schema " + e.Name + ", field " + f.Name
-		var name, typ, kind string
+		var name, typ, kind, goBase, target string
+		edge := -1
 		switch {
 		case o.node && i == e.PrimaryKey[0]:
-			name, typ, kind = "id", "ID", "ID"
+			name, typ, kind, goBase, target = "id", "ID", "ID", "ID", o.name
 		case o.fks[f.Name] || f.Implicit != "":
 			// A foreign key is never a raw scalar: its edge names it, and it
 			// takes the IDs of the edge's target.
@@ -159,7 +165,8 @@ func (g *graph) whereOf(o *object) error {
 			if err != nil {
 				return err
 			}
-			name, typ, kind = en+"ID", "ID", "ID"
+			ed := e.Edges[j]
+			name, typ, kind, goBase, target, edge = en+"ID", "ID", "ID", goOf(en, ed.GoName)+"ID", g.byName[ed.Target].name, j
 		default:
 			n, err := o.fieldName(i)
 			if err != nil {
@@ -169,7 +176,7 @@ func (g *graph) whereOf(o *object) error {
 			if err != nil {
 				return err
 			}
-			name, typ, kind = n, t, f.Type
+			name, typ, kind, goBase = n, t, f.Type, goOf(n, f.GoName)
 		}
 		ops, err := resolveOps(a.WhereOps, kind, f.Nullable, where)
 		if err != nil {
@@ -189,6 +196,9 @@ func (g *graph) whereOf(o *object) error {
 			if err := fs.add(pf); err != nil {
 				return err
 			}
+			o.whereGo = append(o.whereGo, WhereField{
+				Name: pf.name, GoName: goBase + p.suffix, Type: pf.typ, Kind: WherePred, Op: p.op, Field: i, Edge: edge, Target: target,
+			})
 		}
 	}
 	for i, ed := range e.Edges {
@@ -201,15 +211,20 @@ func (g *graph) whereOf(o *object) error {
 		if err != nil {
 			return err
 		}
-		if err := fs.add(gqlField{name: "has" + upper(name), typ: "Boolean", where: where}); err != nil {
+		has := gqlField{name: "has" + upper(name), typ: "Boolean", where: where}
+		if err := fs.add(has); err != nil {
 			return err
 		}
+		goHas := "Has" + goOf(name, ed.GoName)
+		o.whereGo = append(o.whereGo, WhereField{Name: has.name, GoName: goHas, Type: has.typ, Kind: WhereHas, Field: -1, Edge: i, Target: t.name})
 		// hasWith takes the target's where input; a target without one
 		// offers has alone.
 		if t.hasWhere {
-			if err := fs.add(gqlField{name: "has" + upper(name) + "With", typ: "[" + t.name + "WhereInput!]", where: where}); err != nil {
+			with := gqlField{name: "has" + upper(name) + "With", typ: "[" + t.name + "WhereInput!]", where: where}
+			if err := fs.add(with); err != nil {
 				return err
 			}
+			o.whereGo = append(o.whereGo, WhereField{Name: with.name, GoName: goHas + "With", Type: with.typ, Kind: WhereHasWith, Field: -1, Edge: i, Target: t.name})
 		}
 	}
 	o.where = fs.list

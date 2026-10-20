@@ -9,6 +9,7 @@ import (
 // order is an entity's order: input XOrder and enum XOrderField.
 type order struct {
 	values []string // the XOrderField values, in the model's field order
+	fields []int    // the index in the entity's Fields of each value's field
 	wheres []string // the field of each value, for errors
 }
 
@@ -32,6 +33,7 @@ func (g *graph) orderOf(o *object) error {
 		}
 		by[a.OrderField] = where
 		ord.values = append(ord.values, a.OrderField)
+		ord.fields = append(ord.fields, i)
 		ord.wheres = append(ord.wheres, where)
 	}
 	if len(ord.values) == 0 {

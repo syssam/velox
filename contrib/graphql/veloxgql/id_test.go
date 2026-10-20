@@ -182,3 +182,28 @@ func TestIDUnsupportedKey(t *testing.T) {
 	}()
 	veloxgql.EncodeID("User", struct{}{})
 }
+
+// TestIDType pins IDType: the type of a well-formed ID, whatever its key,
+// and ErrBadID with no type for anything else. Node reads it to pick the
+// entity, then DecodeID checks the key.
+func TestIDType(t *testing.T) {
+	for id, want := range map[string]string{
+		veloxgql.EncodeID("User", int64(7)): "User",
+		veloxgql.EncodeID("Post", "a:b"):    "Post",
+		raw("Tag:"):                         "Tag",
+		raw("Tag:not a number"):             "Tag", // the key is DecodeID's to check
+	} {
+		if got, err := veloxgql.IDType(id); err != nil || got != want {
+			t.Errorf("IDType(%q) = %q, %v, want %q", decoded(id), got, err, want)
+		}
+	}
+	for _, id := range []string{"", "!!", raw("User"), raw(":7"), raw("User:7") + "=", raw("User:7") + "\n"} {
+		got, err := veloxgql.IDType(id)
+		if !errors.Is(err, veloxgql.ErrBadID) || got != "" {
+			t.Errorf("IDType(%q) = %q, %v, want ErrBadID", id, got, err)
+		}
+		if err != nil && strings.Contains(err.Error(), "User") {
+			t.Errorf("IDType(%q): %v holds the ID's text", id, err)
+		}
+	}
+}

@@ -64,6 +64,7 @@ type Field struct {
 	Type          string                     `json:"type"`               // the schema field type, e.g. "string", "enum", "time"
 	GoType        string                     `json:"go_type"`            // as written in the entity's struct, e.g. "*time.Time"
 	ElemType      string                     `json:"elem_type"`          // GoType without the pointer
+	PkgPath       string                     `json:"pkg_path,omitempty"` // the import path of ElemType when it is a named type of another package, "time" for time.Time; "" for a builtin type, an unnamed one and velox-gen's own enum types
 	Pointer       bool                       `json:"pointer,omitempty"`  // the Go struct holds a pointer; this is about the struct, not nullability: use Nullable
 	Nullable      bool                       `json:"nullable,omitempty"` // Optional || Nillable: the flag a plugin uses for nullability
 	Optional      bool                       `json:"optional,omitempty"`

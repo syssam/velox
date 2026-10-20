@@ -50,7 +50,7 @@ func PluginModel(g *Graph, o *Out) *plugin.Model {
 			gf := ge.Field(of.Name)
 			pe.Fields = append(pe.Fields, &plugin.Field{
 				Name: of.Name, GoName: of.GoName, Column: of.Column,
-				Type: gf.Type, GoType: of.GoType, ElemType: of.ElemType,
+				Type: gf.Type, GoType: of.GoType, ElemType: of.ElemType, PkgPath: pkgPathOf(gf),
 				Pointer: of.Pointer, Nullable: gf.Optional || gf.Nillable, Optional: gf.Optional, Nillable: gf.Nillable,
 				Immutable: of.Immutable, Sensitive: of.Sensitive, Unique: gf.Unique,
 				AutoID: gf.AutoID, HasDefault: of.DefaultCode != "" || of.DefaultFuncCode != "",
@@ -83,6 +83,19 @@ func enumOf(gf *Field, of *OutField, enums map[string]bool) string {
 	case gf.GoType != nil:
 		_, name := cutLast(gf.GoType.Ident, ".")
 		return name
+	}
+	return ""
+}
+
+// pkgPathOf is the import path of the named Go type of gf, or "": the
+// schema's Go type's package, else time's for a time field, the one other
+// standard type with a package.
+func pkgPathOf(gf *Field) string {
+	switch {
+	case gf.GoType != nil:
+		return gf.GoType.PkgPath
+	case gf.Type == "time":
+		return "time"
 	}
 	return ""
 }

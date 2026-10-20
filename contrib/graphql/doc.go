@@ -65,9 +65,13 @@
 // load. Any other directive, @goTag for one, the application declares in its
 // own schema files.
 //
-// The SDL is valid GraphQL today, but the Go it binds to is not written yet:
-// the Go bindings (IDs, cursors, connections, the edge methods) and the
-// runtime package arrive with the next plans, and until then gqlgen cannot
+// The plugin also writes the Go that gqlgen's autobind binds the SDL's types
+// to, in the generated package: gen/gql_<label>.go for each entity with a
+// type (IsNode and IDGQL on a Node, the connection, edge, order and where
+// types, each named after its GraphQL type, and the marshalers of velox-gen's
+// enum types), and gen/gql_node.go with Node and Nodes. They use the runtime
+// package veloxgql. The connections' pages, the edge methods and the root
+// connection functions are not written yet, and until they are gqlgen cannot
 // load the application from this SDL alone.
 //
 // The annotation reaches the plugin as JSON under the key "graphql" of the

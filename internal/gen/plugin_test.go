@@ -121,8 +121,15 @@ func TestPluginModelGolden(t *testing.T) {
 	if pw := pluginField(t, user, "password_hash"); !pw.Sensitive {
 		t.Fatalf("password_hash %+v", pw)
 	}
-	if bio := pluginField(t, user, "bio"); !bio.Nillable || !bio.Pointer || bio.GoType != "*string" || bio.ElemType != "string" {
+	if bio := pluginField(t, user, "bio"); !bio.Nillable || !bio.Pointer || bio.GoType != "*string" || bio.ElemType != "string" || bio.PkgPath != "" {
 		t.Fatalf("bio %+v", bio)
+	}
+	// The package of a named Go type, which a plugin imports to write it.
+	if c := pluginField(t, user, "created_at"); c.ElemType != "time.Time" || c.PkgPath != "time" {
+		t.Fatalf("created_at %+v", c)
+	}
+	if role := pluginField(t, user, "role"); role.PkgPath != "" {
+		t.Fatalf("role %+v: velox-gen's own enum type is in the generated package", role)
 	}
 	if role := pluginField(t, user, "role"); strings.Join(role.EnumValues, ",") != "admin,editor,viewer" {
 		t.Fatalf("role values %v", role.EnumValues)
@@ -250,7 +257,7 @@ func TestPluginModelJoinTypesAndComments(t *testing.T) {
 	// An enum with a Go type declares no enum type: the field names the Go
 	// type, and holds the values.
 	st := pluginField(t, owner, "st")
-	if st.Enum != "lwStatus" || strings.Join(st.EnumValues, ",") != "on,off" || st.Nullable || st.ElemType != "gen.lwStatus" {
+	if st.Enum != "lwStatus" || strings.Join(st.EnumValues, ",") != "on,off" || st.Nullable || st.ElemType != "gen.lwStatus" || st.PkgPath != "github.com/syssam/velox2/internal/gen" {
 		t.Errorf("st %+v", st)
 	}
 	if len(owner.Imports) == 0 {

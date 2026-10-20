@@ -78,6 +78,23 @@ func DecodeID[K any](id, typ string) (K, error) {
 	return k, nil
 }
 
+// IDType returns the GraphQL type of id, so that generated code can tell
+// which entity to look it up in before DecodeID decodes its key. It fails
+// with ErrBadID when id is not canonical base64url without padding of
+// "<Type>:<key>" with a non-empty Type. It does not check the key, which is
+// DecodeID's to check, and its error holds neither the type nor the key.
+func IDType(id string) (string, error) {
+	b, ok := decodeBase64(id)
+	if !ok {
+		return "", fmt.Errorf("veloxgql: ID: %w: not canonical base64url without padding", ErrBadID)
+	}
+	t, _, ok := strings.Cut(string(b), ":")
+	if !ok || t == "" {
+		return "", fmt.Errorf("veloxgql: ID: %w: no type", ErrBadID)
+	}
+	return t, nil
+}
+
 func badID(typ, why string) error {
 	return fmt.Errorf("veloxgql: %s ID: %w: %s", typ, ErrBadID, why)
 }

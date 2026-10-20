@@ -1,6 +1,8 @@
 // Command velox-graphql is the velox-gen plugin that writes the GraphQL
-// schema of a velox schema package, gen/velox.graphqls. An application adds it
-// as a tool of its module and names it to velox-gen:
+// schema of a velox schema package, gen/velox.graphqls, and the Go code in the
+// generated package that gqlgen's autobind binds the schema's types to,
+// gen/gql_*.go. An application adds it as a tool of its module and names it
+// to velox-gen:
 //
 //	go get -tool github.com/syssam/velox2/contrib/graphql/cmd/velox-graphql
 //	go tool velox-gen -out gen -plugin velox-graphql ./schema
@@ -17,6 +19,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/syssam/velox2/contrib/graphql/internal/gogen"
 	"github.com/syssam/velox2/contrib/graphql/internal/sdl"
 	"github.com/syssam/velox2/plugin"
 )
@@ -54,5 +57,9 @@ func answer(in io.Reader) plugin.Response {
 	if err != nil {
 		return plugin.Response{Error: err.Error()}
 	}
-	return plugin.Response{Files: []plugin.File{{Path: "velox.graphqls", Content: s}}}
+	gofiles, err := gogen.Render(req.Model, req.OutPath, req.OutPackage)
+	if err != nil {
+		return plugin.Response{Error: err.Error()}
+	}
+	return plugin.Response{Files: append([]plugin.File{{Path: "velox.graphqls", Content: s}}, gofiles...)}
 }
