@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"time"
 
@@ -59,20 +60,80 @@ func (e *PostStatus) UnmarshalGQL(v any) error {
 	return nil
 }
 
+// AuthorGQL is the edge author: the Account it leads to, or nil when there is
+// none. It is x.Author when a With loaded it, and else one query.
+func (x *Post) AuthorGQL(ctx context.Context) (*User, error) {
+	if v, ok := x.Author.Get(); ok {
+		return v, nil
+	}
+	db, err := veloxgql.DBFrom(ctx)
+	if err != nil {
+		return nil, err
+	}
+	v, err := db.Query[User]().Where(Users.ID.EQ(x.AuthorID)).One(ctx)
+	if errors.Is(err, velox.ErrNotFound) {
+		return nil, nil
+	}
+	return v, err
+}
+
+// LikesGQL is the edge likes: the Like nodes it leads to, in key order. It is
+// x.Likes when a With loaded it, and else one query, which reads at most the
+// DB's WithMaxRows rows.
+func (x *Post) LikesGQL(ctx context.Context) ([]*Like, error) {
+	rows, ok := x.Likes.Get()
+	if !ok {
+		db, err := veloxgql.DBFrom(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if rows, err = db.Query[Like]().Where(Likes.PostID.EQ(x.ID)).OrderBy(Likes.UserID.Asc(), Likes.PostID.Asc()).Unbounded().All(ctx); err != nil {
+			return nil, err
+		}
+	}
+	out := make([]*Like, len(rows))
+	for i := range rows {
+		out[i] = &rows[i]
+	}
+	return out, nil
+}
+
 // PostConnection is the GraphQL type PostConnection, a connection to a list of
-// Post. It holds the query of the whole list; gqlgen calls its methods for the
-// fields a query selects, and each runs only then.
+// Post. It holds the query of the whole list and the page asked for; gqlgen
+// calls its methods for the fields a query selects, and each runs its query
+// only then: edges and pageInfo share one page query, and totalCount runs a
+// COUNT.
 type PostConnection struct {
-	query velox.Query[Post] // the whole list, before paging
+	c *veloxgql.Connection[Post]
+}
+
+// Edges are the edges of the page, in the connection's order. The first call of
+// Edges or PageInfo runs the page query, and the other reads its page.
+func (c *PostConnection) Edges(ctx context.Context) ([]*PostEdge, error) {
+	p, err := c.c.Page(ctx)
+	if err != nil {
+		return nil, err
+	}
+	edges := make([]*PostEdge, len(p.Rows))
+	for i, x := range p.Rows {
+		edges[i] = &PostEdge{Node: x, Cursor: p.Cursors[i]}
+	}
+	return edges, nil
+}
+
+// PageInfo is the page info of the page; see Edges.
+func (c *PostConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, error) {
+	p, err := c.c.Page(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &p.Info, nil
 }
 
 // TotalCount is the number of Post nodes in the whole connection, not only on
 // this page. It counts the rows when gqlgen asks for it, which is only when the
 // field totalCount is selected.
-func (c *PostConnection) TotalCount(ctx context.Context) (int, error) {
-	n, err := c.query.Count(ctx)
-	return int(n), err
-}
+func (c *PostConnection) TotalCount(ctx context.Context) (int, error) { return c.c.TotalCount(ctx) }
 
 // PostEdge is the GraphQL type PostEdge, an edge in a connection to a list of
 // Post.
@@ -81,6 +142,75 @@ type PostEdge struct {
 	Node *Post
 	// Cursor is the cursor of the edge, for paging.
 	Cursor veloxgql.Cursor
+}
+
+// PostsConnection is the connection to every Post node, through the DB
+// veloxgql.DBFrom reads from ctx, paged and ordered by the arguments of a
+// connection to Post: a Query field's resolver returns it. It fails before any
+// query runs on arguments veloxgql.NewConnection refuses.
+func PostsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
+	db, err := veloxgql.DBFrom(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return postConnectionGQL(ctx, db.Query[Post](), after, first, before, last, orderBy, where)
+}
+
+// postConnectionGQL is the connection to the Post nodes q returns, filtered by
+// where, ordered by orderBy and then the key, and paged by the other arguments.
+// It runs no query.
+func postConnectionGQL(ctx context.Context, q velox.Query[Post], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
+	if where != nil {
+		p, err := where.Pred(ctx, 0)
+		if err != nil {
+			return nil, err
+		}
+		q = q.Where(p)
+	}
+	var order []veloxgql.OrderTerm[Post]
+	for _, o := range orderBy {
+		term, err := postTermGQL(o)
+		if err != nil {
+			return nil, err
+		}
+		order = append(order, term)
+	}
+	c, err := veloxgql.NewConnection(q, "Post", veloxgql.Args{After: after, First: first, Before: before, Last: last}, order, postKeyGQL())
+	if err != nil {
+		return nil, err
+	}
+	return &PostConnection{c: c}, nil
+}
+
+// postKeyGQL is the order of Post's key, which ends every order of a connection
+// to Post.
+func postKeyGQL() []veloxgql.OrderTerm[Post] {
+	return []veloxgql.OrderTerm[Post]{
+		veloxgql.Term("id", veloxgql.OrderDirectionAsc, Posts.ID.Asc(), Posts.ID.Desc(),
+			func(x *Post) int64 { return x.ID },
+			func(x *Post, v int64) { x.ID = v }),
+	}
+}
+
+// postTermGQL is the order term o, an order of connections to Post.
+func postTermGQL(o *PostOrder) (veloxgql.OrderTerm[Post], error) {
+	switch o.Field {
+	case PostOrderFieldTitle:
+		return veloxgql.Term(string(o.Field), o.Direction, Posts.Title.Asc(), Posts.Title.Desc(),
+			func(x *Post) string { return x.Title },
+			func(x *Post, v string) { x.Title = v }), nil
+	case PostOrderFieldViews:
+		return veloxgql.Term(string(o.Field), o.Direction, Posts.Views.Asc(), Posts.Views.Desc(),
+			func(x *Post) int {
+				var v int
+				if x.Views != nil {
+					v = *x.Views
+				}
+				return v
+			},
+			func(x *Post, v int) { x.Views = &v }), nil
+	}
+	return veloxgql.OrderTerm[Post]{}, fmt.Errorf("PostOrder: %q is not a value of PostOrderField", o.Field)
 }
 
 // PostOrder is the GraphQL input PostOrder, an order of connections to Post.
@@ -182,4 +312,12 @@ type PostWhereInput struct {
 	// The edge author (writer): whether it has a node, or one that matches.
 	HasWriter     *bool
 	HasWriterWith []*AccountWhereInput
+}
+
+// Pred is the condition w stands for, on Post nodes; depth is how deeply w is
+// nested in the where argument, 0 at the top. This build of velox-graphql does
+// not write where filters yet: every w fails, so a connection given a where
+// argument fails before it runs a query.
+func (w *PostWhereInput) Pred(_ context.Context, _ int) (velox.Pred[Post], error) {
+	return velox.Pred[Post]{}, errors.New("PostWhereInput: where filters are not implemented in this build of velox-graphql")
 }

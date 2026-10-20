@@ -2,6 +2,7 @@ package gen
 
 import (
 	"context"
+	"errors"
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
@@ -15,20 +16,80 @@ func (*Category) IsNode() {}
 // Category and the key id, encoded.
 func (x *Category) IDGQL() string { return veloxgql.EncodeID("Category", x.ID) }
 
+// ChildrenGQL is the edge children: a connection to the Category nodes it leads
+// to, paged, ordered and filtered by the arguments. With no argument it is over
+// x.Children when a With loaded it, in the order loaded; else its queries are
+// on Category, filtered by the relation, and run when gqlgen asks for the
+// connection's fields.
+func (x *Category) ChildrenGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *CategoryWhereInput) (*CategoryConnection, error) {
+	if after == nil && first == nil && before == nil && last == nil && where == nil {
+		if rows, ok := x.Children.Get(); ok {
+			return &CategoryConnection{c: veloxgql.LoadedConnection(rows, "Category", categoryKeyGQL())}, nil
+		}
+	}
+	db, err := veloxgql.DBFrom(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return categoryConnectionGQL(ctx, db.Query[Category]().Where(Categories.CategoryChildren.EQ(x.ID)), after, first, before, last, where)
+}
+
+// ParentGQL is the edge parent: the Category it leads to, or nil when there is
+// none. It is x.Parent when a With loaded it, and else one query.
+func (x *Category) ParentGQL(ctx context.Context) (*Category, error) {
+	if v, ok := x.Parent.Get(); ok {
+		return v, nil
+	}
+	if x.CategoryChildren == nil {
+		return nil, nil
+	}
+	db, err := veloxgql.DBFrom(ctx)
+	if err != nil {
+		return nil, err
+	}
+	v, err := db.Query[Category]().Where(Categories.ID.EQ(*x.CategoryChildren)).One(ctx)
+	if errors.Is(err, velox.ErrNotFound) {
+		return nil, nil
+	}
+	return v, err
+}
+
 // CategoryConnection is the GraphQL type CategoryConnection, a connection to a
-// list of Category. It holds the query of the whole list; gqlgen calls its
-// methods for the fields a query selects, and each runs only then.
+// list of Category. It holds the query of the whole list and the page asked
+// for; gqlgen calls its methods for the fields a query selects, and each runs
+// its query only then: edges and pageInfo share one page query, and totalCount
+// runs a COUNT.
 type CategoryConnection struct {
-	query velox.Query[Category] // the whole list, before paging
+	c *veloxgql.Connection[Category]
+}
+
+// Edges are the edges of the page, in the connection's order. The first call of
+// Edges or PageInfo runs the page query, and the other reads its page.
+func (c *CategoryConnection) Edges(ctx context.Context) ([]*CategoryEdge, error) {
+	p, err := c.c.Page(ctx)
+	if err != nil {
+		return nil, err
+	}
+	edges := make([]*CategoryEdge, len(p.Rows))
+	for i, x := range p.Rows {
+		edges[i] = &CategoryEdge{Node: x, Cursor: p.Cursors[i]}
+	}
+	return edges, nil
+}
+
+// PageInfo is the page info of the page; see Edges.
+func (c *CategoryConnection) PageInfo(ctx context.Context) (*veloxgql.PageInfo, error) {
+	p, err := c.c.Page(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &p.Info, nil
 }
 
 // TotalCount is the number of Category nodes in the whole connection, not only
 // on this page. It counts the rows when gqlgen asks for it, which is only when
 // the field totalCount is selected.
-func (c *CategoryConnection) TotalCount(ctx context.Context) (int, error) {
-	n, err := c.query.Count(ctx)
-	return int(n), err
-}
+func (c *CategoryConnection) TotalCount(ctx context.Context) (int, error) { return c.c.TotalCount(ctx) }
 
 // CategoryEdge is the GraphQL type CategoryEdge, an edge in a connection to a
 // list of Category.
@@ -37,6 +98,46 @@ type CategoryEdge struct {
 	Node *Category
 	// Cursor is the cursor of the edge, for paging.
 	Cursor veloxgql.Cursor
+}
+
+// CategoriesConnection is the connection to every Category node, through the DB
+// veloxgql.DBFrom reads from ctx, paged and ordered by the arguments of a
+// connection to Category: a Query field's resolver returns it. It fails before
+// any query runs on arguments veloxgql.NewConnection refuses.
+func CategoriesConnection(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *CategoryWhereInput) (*CategoryConnection, error) {
+	db, err := veloxgql.DBFrom(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return categoryConnectionGQL(ctx, db.Query[Category](), after, first, before, last, where)
+}
+
+// categoryConnectionGQL is the connection to the Category nodes q returns,
+// filtered by where, ordered by the key, and paged by the other arguments. It
+// runs no query.
+func categoryConnectionGQL(ctx context.Context, q velox.Query[Category], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *CategoryWhereInput) (*CategoryConnection, error) {
+	if where != nil {
+		p, err := where.Pred(ctx, 0)
+		if err != nil {
+			return nil, err
+		}
+		q = q.Where(p)
+	}
+	c, err := veloxgql.NewConnection(q, "Category", veloxgql.Args{After: after, First: first, Before: before, Last: last}, nil, categoryKeyGQL())
+	if err != nil {
+		return nil, err
+	}
+	return &CategoryConnection{c: c}, nil
+}
+
+// categoryKeyGQL is the order of Category's key, which ends every order of a
+// connection to Category.
+func categoryKeyGQL() []veloxgql.OrderTerm[Category] {
+	return []veloxgql.OrderTerm[Category]{
+		veloxgql.Term("id", veloxgql.OrderDirectionAsc, Categories.ID.Asc(), Categories.ID.Desc(),
+			func(x *Category) int64 { return x.ID },
+			func(x *Category, v int64) { x.ID = v }),
+	}
 }
 
 // CategoryWhereInput is the GraphQL input CategoryWhereInput, a filter of
@@ -51,4 +152,12 @@ type CategoryWhereInput struct {
 	// The edge parent: whether it has a node, or one that matches.
 	HasParent     *bool
 	HasParentWith []*CategoryWhereInput
+}
+
+// Pred is the condition w stands for, on Category nodes; depth is how deeply w
+// is nested in the where argument, 0 at the top. This build of velox-graphql
+// does not write where filters yet: every w fails, so a connection given a
+// where argument fails before it runs a query.
+func (w *CategoryWhereInput) Pred(_ context.Context, _ int) (velox.Pred[Category], error) {
+	return velox.Pred[Category]{}, errors.New("CategoryWhereInput: where filters are not implemented in this build of velox-graphql")
 }

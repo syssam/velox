@@ -1,7 +1,9 @@
 // Package gogen writes the Go code velox.graphqls binds to: the Go types
 // gqlgen's autobind finds in the generated package, named after the SDL types
-// they bind to. It writes gql_<label>.go for each entity with a GraphQL
-// type, and gql_node.go with Node and Nodes.
+// they bind to, and the methods and functions their fields resolve through.
+// It writes gql_<label>.go for each entity with a GraphQL type (its types,
+// its edge methods, its root connection function), and gql_node.go with
+// Node and Nodes.
 //
 // Every name comes from sdl.Build, which the SDL is rendered from too, so the
 // Go and the SDL cannot drift.
@@ -222,29 +224,12 @@ func (r *renderer) typeFile(t *sdl.Type) (plugin.File, error) {
 			return plugin.File{}, err
 		}
 	}
-	for _, name := range []string{n + "Connection", n + "Edge"} {
-		if err := r.declare(name, what); err != nil {
-			return plugin.File{}, err
-		}
+	if err := r.writeEdges(f, t); err != nil {
+		return plugin.File{}, err
 	}
-	f.doc("", fmt.Sprintf("%sConnection is the GraphQL type %[1]sConnection, a connection to a list of %[1]s. It holds the query of the whole list; gqlgen calls its methods for the fields a query selects, and each runs only then.", n))
-	f.p("type %sConnection struct {", n)
-	f.p("\tquery %s.Query[%s] // the whole list, before paging", f.velox(), e.Name)
-	f.p("}")
-	f.p("")
-	f.doc("", fmt.Sprintf("TotalCount is the number of %s nodes in the whole connection, not only on this page. It counts the rows when gqlgen asks for it, which is only when the field totalCount is selected.", n))
-	f.p("func (c *%sConnection) TotalCount(ctx %s.Context) (int, error) {", n, f.use("context", "context"))
-	f.p("\tn, err := c.query.Count(ctx)")
-	f.p("\treturn int(n), err")
-	f.p("}")
-	f.p("")
-	f.doc("", fmt.Sprintf("%sEdge is the GraphQL type %[1]sEdge, an edge in a connection to a list of %[1]s.", n))
-	f.p("type %sEdge struct {", n)
-	f.p("\t// Node is the %s at the end of the edge.", n)
-	f.p("\tNode *%s", e.Name)
-	f.p("\t// Cursor is the cursor of the edge, for paging.")
-	f.p("\tCursor %s.Cursor", f.veloxgql())
-	f.p("}")
+	if err := r.writeConnection(f, t); err != nil {
+		return plugin.File{}, err
+	}
 	if t.Order != nil {
 		if err := r.writeOrder(f, t); err != nil {
 			return plugin.File{}, err
@@ -263,6 +248,9 @@ func (r *renderer) writeNode(f *file, t *sdl.Type) error {
 	k := e.Fields[e.PrimaryKey[0]]
 	v := "x." + k.GoName
 	if elem := cmp.Or(k.ElemType, t.Key); elem != t.Key {
+		if err := r.converts(e, k, t.Key); err != nil {
+			return err
+		}
 		v = t.Key + "(" + v + ")"
 	}
 	f.doc("", fmt.Sprintf("IsNode marks %s as a GraphQL Node: gqlgen binds the interface Node to veloxgql.Noder.", e.Name))
@@ -282,6 +270,11 @@ func (r *renderer) writeGetter(f *file, t *sdl.Type, g sdl.Getter) error {
 	ret, err := r.qualify(f, e, fd, g.Returns, g.Pkg)
 	if err != nil {
 		return err
+	}
+	if !g.JSON() {
+		if err := r.converts(e, fd, g.Returns); err != nil {
+			return err
+		}
 	}
 	if g.JSON() {
 		f.doc("", fmt.Sprintf("%s is the field %s as JSON, the GraphQL scalar it is: gqlgen binds the field to it.", g.Method, fd.Name))
@@ -509,6 +502,9 @@ func (r *renderer) writeWhere(f *file, t *sdl.Type) error {
 			return fmt.Errorf("schema %s: the fields %s and %s of %s are one Go field to gqlgen, which ignores case and underscores; rename one with graphql.FieldName", e.Name, prev, w.GoName, in)
 		}
 		seen[key] = w.GoName
+		if w.GoName == "Pred" {
+			return fmt.Errorf("schema %s: the field %s of %s is the Go field Pred, which is the input's method; rename it with graphql.FieldName", e.Name, w.Name, in)
+		}
 		typ, err := r.whereType(f, t, w)
 		if err != nil {
 			return err
@@ -542,6 +538,11 @@ func (r *renderer) writeWhere(f *file, t *sdl.Type) error {
 		}
 		f.p("\t%s %s", w.GoName, typ)
 	}
+	f.p("}")
+	f.p("")
+	f.doc("", fmt.Sprintf("Pred is the condition w stands for, on %s nodes; depth is how deeply w is nested in the where argument, 0 at the top. This build of velox-graphql does not write where filters yet: every w fails, so a connection given a where argument fails before it runs a query.", n))
+	f.p("func (w *%s) Pred(_ %s.Context, _ int) (%s.Pred[%s], error) {", in, f.use("context", "context"), f.velox(), e.Name)
+	f.p("\treturn %s.Pred[%s]{}, %s.New(%q)", f.velox(), e.Name, f.use("errors", "errors"), in+": where filters are not implemented in this build of velox-graphql")
 	f.p("}")
 	return nil
 }

@@ -251,3 +251,11 @@ func TestNameCollisions(t *testing.T) {
 	nIn.Annotations = ann(t, graphql.WhereOps(graphql.OpEQ))
 	renderErr(t, model(entity("User", n, nIn)), "schema User", "field name", "field name_in", "nameIn")
 }
+
+// Keyset paging cannot continue after a bytes value: velox's After refuses a
+// slice column, which a nil []byte stores as NULL.
+func TestOrderFieldOnBytes(t *testing.T) {
+	blob := field("blob", "bytes")
+	blob.Annotations = ann(t, graphql.OrderField("BLOB"))
+	renderErr(t, model(entity("Thing", blob)), "schema Thing, field blob", "graphql.OrderField", "bytes")
+}

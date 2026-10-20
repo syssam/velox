@@ -67,13 +67,19 @@
 //
 // The plugin also writes the Go that gqlgen's autobind binds the SDL's types
 // to, in the generated package: gen/gql_<label>.go for each entity with a
-// type (IsNode and IDGQL on a Node, the connection, edge, order and where
-// types, each named after its GraphQL type, the <Field>GQL getters, and the
-// marshalers of velox-gen's enum types), and gen/gql_node.go with Node and
-// Nodes. They use the runtime
-// package veloxgql. The connections' pages, the edge methods and the root
-// connection functions are not written yet, and until they are gqlgen cannot
-// load the application from this SDL alone.
+// type, and gen/gql_node.go with Node and Nodes. Each entity's file has:
+//   - IsNode and IDGQL on a Node, and the <Field>GQL getters;
+//   - the connection, edge, order and where types, each named after its
+//     GraphQL type, and the marshalers of velox-gen's enum types;
+//   - the <Edge>GQL edge methods: a connection, a list or the one node;
+//   - the root connection function <Entities>Connection (UsersConnection),
+//     which a Query field's resolver returns.
+//
+// They use the runtime package veloxgql: a connection is keyset-paged by its
+// cursors, and runs its page query and its COUNT only when gqlgen asks for
+// edges or pageInfo, and for totalCount. Where filters are not written yet:
+// a where argument fails, and until they are gqlgen cannot load the
+// application from this SDL alone (mutations neither).
 //
 // # gqlgen.yml
 //

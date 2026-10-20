@@ -125,7 +125,7 @@ func TestPluginModelGolden(t *testing.T) {
 		t.Fatalf("bio %+v", bio)
 	}
 	// The package of a named Go type, which a plugin imports to write it.
-	if c := pluginField(t, user, "created_at"); c.ElemType != "time.Time" || c.PkgPath != "time" {
+	if c := pluginField(t, user, "created_at"); c.ElemType != "time.Time" || c.PkgPath != "time" || c.Kind != "" {
 		t.Fatalf("created_at %+v", c)
 	}
 	if role := pluginField(t, user, "role"); role.PkgPath != "" {
@@ -257,7 +257,7 @@ func TestPluginModelJoinTypesAndComments(t *testing.T) {
 	// An enum with a Go type declares no enum type: the field names the Go
 	// type, and holds the values.
 	st := pluginField(t, owner, "st")
-	if st.Enum != "lwStatus" || strings.Join(st.EnumValues, ",") != "on,off" || st.Nullable || st.ElemType != "gen.lwStatus" || st.PkgPath != "github.com/syssam/velox2/internal/gen" {
+	if st.Enum != "lwStatus" || strings.Join(st.EnumValues, ",") != "on,off" || st.Nullable || st.ElemType != "gen.lwStatus" || st.PkgPath != "github.com/syssam/velox2/internal/gen" || st.Kind != "string" {
 		t.Errorf("st %+v", st)
 	}
 	if len(owner.Imports) == 0 {

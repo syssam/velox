@@ -28,6 +28,17 @@
 // another type or under another order with ErrBadCursor, and CursorValue
 // converts a decoded value back to its column's Go type.
 //
+// # Connections
+//
+// A Connection (NewConnection) holds a connection's query, its paging
+// arguments (Args) and its order (OrderTerm, made by Term), and runs nothing
+// until asked: Page runs the page query once, whoever calls it first, and
+// TotalCount the COUNT. The order always ends with the key. Paging is
+// keyset, through velox's Query.After: last and before reverse every term
+// and reverse the rows read, and one row more than the page sets
+// hasNextPage or hasPreviousPage. Paginate is NewConnection and Page in one
+// call. LoadedConnection pages rows a With loaded, and runs no query.
+//
 // # Scalars
 //
 // Time, UUID, Bytes, JSON, Uint64 and Cursor are the GraphQL scalars of

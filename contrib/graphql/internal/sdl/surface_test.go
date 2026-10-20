@@ -1,6 +1,7 @@
 package sdl
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/syssam/velox2/contrib/graphql"
@@ -83,5 +84,36 @@ func TestGetters(t *testing.T) {
 		if got[i] != want[i] {
 			t.Errorf("getter %d: %q, want %q", i, got[i], want[i])
 		}
+	}
+}
+
+// The edge fields of each type, with their kind, target and method; an edge
+// that is skipped, or leads to a skipped type, has none.
+func TestSurfaceEdges(t *testing.T) {
+	s, err := Build(testModel(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds := map[EdgeKind]string{EdgeUnique: "unique", EdgeList: "list", EdgeConnection: "connection"}
+	got := map[string][]string{}
+	for _, ty := range s.Types {
+		for _, ed := range ty.Edges {
+			got[ty.Name] = append(got[ty.Name], ty.Entity.Edges[ed.Edge].Name+" "+kinds[ed.Kind]+" "+ed.Target.Name+" "+ed.Method)
+		}
+	}
+	want := map[string][]string{
+		"Account":  {"posts connection Post PostsGQL", "groups list Group GroupsGQL", "likes connection Like LikesGQL"},
+		"Post":     {"author unique Account AuthorGQL", "likes list Like LikesGQL"},
+		"Category": {"children connection Category ChildrenGQL", "parent unique Category ParentGQL"},
+		"Group":    {"users connection Account UsersGQL"},
+		"Like":     {"user unique Account UserGQL", "post unique Post PostGQL"},
+	}
+	for name, w := range want {
+		if g := got[name]; !slices.Equal(g, w) {
+			t.Errorf("%s: edges %q, want %q", name, g, w)
+		}
+	}
+	if len(got) != len(want) {
+		t.Errorf("edges %q", got)
 	}
 }

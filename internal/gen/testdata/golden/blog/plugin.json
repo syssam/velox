@@ -201,6 +201,7 @@
           "type": "json",
           "go_type": "[]string",
           "elem_type": "[]string",
+          "kind": "slice",
           "has_default": true
         },
         {

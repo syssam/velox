@@ -50,7 +50,7 @@ func PluginModel(g *Graph, o *Out) *plugin.Model {
 			gf := ge.Field(of.Name)
 			pe.Fields = append(pe.Fields, &plugin.Field{
 				Name: of.Name, GoName: of.GoName, Column: of.Column,
-				Type: gf.Type, GoType: of.GoType, ElemType: of.ElemType, PkgPath: pkgPathOf(gf),
+				Type: gf.Type, GoType: of.GoType, ElemType: of.ElemType, PkgPath: pkgPathOf(gf), Kind: goKindOf(gf),
 				Pointer: of.Pointer, Nullable: gf.Optional || gf.Nillable, Optional: gf.Optional, Nillable: gf.Nillable,
 				Immutable: of.Immutable, Sensitive: of.Sensitive, Unique: gf.Unique,
 				AutoID: gf.AutoID, HasDefault: of.DefaultCode != "" || of.DefaultFuncCode != "",
@@ -98,6 +98,15 @@ func pkgPathOf(gf *Field) string {
 		return "time"
 	}
 	return ""
+}
+
+// goKindOf is the reflect kind of the schema's Go type of gf, or "" when the
+// schema gives none.
+func goKindOf(gf *Field) string {
+	if gf.GoType == nil {
+		return ""
+	}
+	return gf.GoType.Kind
 }
 
 // cutLast splits s around the last sep; before is "" when there is none.

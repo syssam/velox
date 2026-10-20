@@ -390,3 +390,251 @@ func TestGoCompiles(t *testing.T) {
 		t.Errorf("-check: %v\n%s", err, out)
 	}
 }
+
+// e2eRun is a test of the application's module that runs the generated
+// connections and edge methods of e2eSchema on SQLite.
+const e2eRun = `package app_test
+
+import (
+	"context"
+	"database/sql"
+	"slices"
+	"strings"
+	"sync/atomic"
+	"testing"
+
+	_ "modernc.org/sqlite"
+
+	"example.com/app/gen"
+	"github.com/syssam/velox2"
+	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+)
+
+const ddl = ` + "`" + `
+CREATE TABLE users (id INTEGER PRIMARY KEY, org_id INTEGER NOT NULL, name TEXT NOT NULL, role TEXT NOT NULL,
+	password_hash TEXT NOT NULL, quota INTEGER NOT NULL, seen_at DATETIME);
+CREATE TABLE posts (id INTEGER PRIMARY KEY, author_id INTEGER NOT NULL, title TEXT NOT NULL, draft TEXT NOT NULL);
+CREATE TABLE "groups" (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+CREATE TABLE user_groups (user_id INTEGER NOT NULL, group_id INTEGER NOT NULL, PRIMARY KEY (user_id, group_id));
+CREATE TABLE categories (id INTEGER PRIMARY KEY, title TEXT NOT NULL, mentor_id INTEGER, category_children INTEGER, category_twin INTEGER);
+INSERT INTO users VALUES (1, 7, 'ann', 'admin', '', 0, NULL), (2, 7, 'bob', 'admin', '', 0, NULL), (3, 8, 'cid', 'admin', '', 0, NULL);
+INSERT INTO posts VALUES (1, 1, 'b', ''), (2, 1, 'a', ''), (3, 2, 'c', ''), (4, 1, 'a', ''), (5, 3, 'z', '');
+INSERT INTO "groups" VALUES (1, 'g1'), (2, 'g2');
+INSERT INTO user_groups VALUES (1, 1), (1, 2), (2, 2);
+INSERT INTO categories VALUES (1, 'root', NULL, NULL, NULL), (2, 'kid', 1, 1, NULL), (3, 'kid2', NULL, 1, NULL);
+` + "`" + `
+
+func intp(n int) *int { return &n }
+
+// keys are the keys of a connection's page, and its page info.
+func keys[E any](t *testing.T, ctx context.Context, c interface {
+	PageInfo(context.Context) (*veloxgql.PageInfo, error)
+}, edges func(context.Context) ([]*E, error), key func(*E) int64) ([]int64, *veloxgql.PageInfo) {
+	t.Helper()
+	es, err := edges(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := c.PageInfo(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []int64
+	for _, e := range es {
+		out = append(out, key(e))
+	}
+	return out, info
+}
+
+func TestConnections(t *testing.T) {
+	sqlDB, err := sql.Open("sqlite", "file::memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sqlDB.Close()
+	sqlDB.SetMaxOpenConns(1)
+	if _, err := sqlDB.Exec(ddl); err != nil {
+		t.Fatal(err)
+	}
+	var ran atomic.Int64
+	db := velox.Open(velox.SQLite, sqlDB, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+		ran.Add(1)
+		return next(ctx)
+	}))
+	ctx := velox.WithTenant(veloxgql.WithDB(context.Background(), db), int64(7))
+	user := func(e *gen.AccountEdge) int64 { return e.Node.ID }
+	post := func(e *gen.PostEdge) int64 { return e.Node.ID }
+
+	// The root connection, in the tenant: ann and bob, not cid.
+	byName := &gen.AccountOrder{Direction: veloxgql.OrderDirectionDesc, Field: gen.AccountOrderFieldName}
+	us, err := gen.UsersConnection(ctx, nil, intp(1), nil, nil, byName, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, info := keys(t, ctx, us, us.Edges, user); !slices.Equal(got, []int64{2}) || !info.HasNextPage {
+		t.Errorf("users by name DESC, first 1: %v %+v", got, info)
+	}
+	if n, err := us.TotalCount(ctx); err != nil || n != 2 {
+		t.Errorf("users: totalCount %d %v", n, err)
+	}
+	// The last post, by key.
+	ps, err := gen.PostsConnection(ctx, nil, nil, nil, intp(1), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, info := keys(t, ctx, ps, ps.Edges, post); !slices.Equal(got, []int64{5}) || !info.HasPreviousPage {
+		t.Errorf("posts, last 1: %v %+v", got, info)
+	}
+	// A where argument fails before any query, in this build.
+	ran.Store(0)
+	if _, err := gen.PostsConnection(ctx, nil, nil, nil, nil, nil, &gen.PostWhereInput{}); err == nil || !strings.Contains(err.Error(), "not implemented") || ran.Load() != 0 {
+		t.Errorf("a where: %v, %d statements", err, ran.Load())
+	}
+
+	ann, err := db.Query[gen.User]().Where(gen.Users.ID.EQ(1)).One(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bob, err := db.Query[gen.User]().Where(gen.Users.ID.EQ(2)).One(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A connection edge, paged forward by title through a cursor off the wire.
+	byTitle := &gen.PostOrder{Direction: veloxgql.OrderDirectionAsc, Field: gen.PostOrderFieldTitle}
+	c, err := ann.PostsGQL(ctx, nil, intp(2), nil, nil, byTitle, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, info := keys(t, ctx, c, c.Edges, post)
+	if !slices.Equal(got, []int64{2, 4}) || !info.HasNextPage {
+		t.Errorf("ann's posts by title, first 2: %v %+v", got, info)
+	}
+	if n, err := c.TotalCount(ctx); err != nil || n != 3 {
+		t.Errorf("ann's posts: totalCount %d %v", n, err)
+	}
+	var after veloxgql.Cursor
+	if err := after.UnmarshalGQL(veloxgql.EncodeCursor(*info.EndCursor)); err != nil {
+		t.Fatal(err)
+	}
+	if c, err = ann.PostsGQL(ctx, &after, intp(2), nil, nil, byTitle, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got, info := keys(t, ctx, c, c.Edges, post); !slices.Equal(got, []int64{1}) || info.HasNextPage {
+		t.Errorf("ann's posts by title after 4: %v %+v", got, info)
+	}
+	// The cursor under another order fails.
+	if _, err := ann.PostsGQL(ctx, &after, intp(2), nil, nil, nil, nil); err == nil || !strings.Contains(err.Error(), "malformed cursor") {
+		t.Errorf("a title cursor under the key's order: %v", err)
+	}
+
+	// Unique edges: a key on the owner's row, and none.
+	p3, err := db.Query[gen.Post]().Where(gen.Posts.ID.EQ(3)).One(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a, err := p3.AuthorGQL(ctx); err != nil || a == nil || a.ID != 2 {
+		t.Errorf("post 3's author: %+v %v", a, err)
+	}
+	// Many-to-many, as a list and as a connection, through the inverse edge.
+	groupIDs := func(gs []*gen.Group) (out []int64) {
+		for _, g := range gs {
+			out = append(out, g.ID)
+		}
+		return out
+	}
+	if gs, err := ann.GroupsGQL(ctx); err != nil || !slices.Equal(groupIDs(gs), []int64{1, 2}) {
+		t.Errorf("ann's groups: %v %v", groupIDs(gs), err)
+	}
+	if gs, err := bob.GroupsGQL(ctx); err != nil || !slices.Equal(groupIDs(gs), []int64{2}) {
+		t.Errorf("bob's groups: %v %v", groupIDs(gs), err)
+	}
+	g2, err := db.Query[gen.Group]().Where(gen.Groups.ID.EQ(2)).One(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	members, err := g2.UsersGQL(ctx, nil, nil, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := keys(t, ctx, members, members.Edges, user); !slices.Equal(got, []int64{1, 2}) {
+		t.Errorf("g2's users: %v", got)
+	}
+
+	// Category's self-edges, each way round.
+	cat := func(id int64) *gen.Category {
+		x, err := db.Query[gen.Category]().Where(gen.Categories.ID.EQ(id)).One(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return x
+	}
+	root, kid := cat(1), cat(2)
+	ran.Store(0)
+	if p, err := root.ParentGQL(ctx); p != nil || err != nil || ran.Load() != 0 {
+		t.Errorf("root's parent: %+v %v, %d statements", p, err, ran.Load())
+	}
+	if p, err := kid.ParentGQL(ctx); err != nil || p == nil || p.ID != 1 {
+		t.Errorf("kid's parent: %+v %v", p, err)
+	}
+	if m, err := kid.MentorGQL(ctx); err != nil || m == nil || m.ID != 1 {
+		t.Errorf("kid's mentor: %+v %v", m, err)
+	}
+	if m, err := root.MenteeGQL(ctx); err != nil || m == nil || m.ID != 2 {
+		t.Errorf("root's mentee: %+v %v", m, err)
+	}
+	if m, err := kid.MenteeGQL(ctx); err != nil || m != nil {
+		t.Errorf("kid's mentee: %+v %v", m, err)
+	}
+	kids, err := root.ChildrenGQL(ctx, nil, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := keys(t, ctx, kids, kids.Edges, func(e *gen.CategoryEdge) int64 { return e.Node.ID }); !slices.Equal(got, []int64{2, 3}) {
+		t.Errorf("root's children: %v", got)
+	}
+
+	// A relation a With loaded: the edge method runs no query.
+	loaded, err := db.Query[gen.User]().Where(gen.Users.ID.EQ(1)).With(gen.Users.Posts).With(gen.Users.Groups).One(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ran.Store(0)
+	c, err = loaded.PostsGQL(ctx, nil, nil, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := keys(t, ctx, c, c.Edges, post); !slices.Equal(got, []int64{1, 2, 4}) {
+		t.Errorf("ann's loaded posts: %v", got)
+	}
+	if n, err := c.TotalCount(ctx); err != nil || n != 3 {
+		t.Errorf("ann's loaded posts: totalCount %d %v", n, err)
+	}
+	if gs, err := loaded.GroupsGQL(ctx); err != nil || !slices.Equal(groupIDs(gs), []int64{1, 2}) {
+		t.Errorf("ann's loaded groups: %v %v", groupIDs(gs), err)
+	}
+	if ran.Load() != 0 {
+		t.Errorf("the loaded relations ran %d statements", ran.Load())
+	}
+}
+`
+
+// TestConnectionsRun runs the generated connections and edge methods on
+// SQLite: paging and ordering through cursors off the wire, totalCount, each
+// way a relation holds its key (the owner's row, the target's, a join
+// table), the tenant scope, and the relations a With loaded.
+func TestConnectionsRun(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a module")
+	}
+	_, run := app(t, map[string]string{"schema/schema.go": e2eSchema, "app_test.go": e2eRun})
+	if out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql", "./schema"); err != nil {
+		t.Fatalf("generate: %v\n%s", err, out)
+	}
+	if out, err := run("mod", "tidy", "-e"); err != nil {
+		t.Fatalf("go mod tidy: %v\n%s", err, out)
+	}
+	out, err := run("test", "-count=1", "-v", "-run", "TestConnections$", ".")
+	if err != nil || !strings.Contains(out, "--- PASS: TestConnections") {
+		t.Fatalf("go test: %v\n%s", err, out)
+	}
+}

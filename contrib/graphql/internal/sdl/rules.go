@@ -116,6 +116,8 @@ func checkField(e *plugin.Entity, i int, a graphql.Annotation, fk bool, where st
 		return fmt.Errorf("%s: graphql.OrderField on a sensitive field: its values would be in the cursors", where)
 	case a.OrderField != "" && f.Type == "json":
 		return fmt.Errorf("%s: graphql.OrderField on a json field, which has no order", where)
+	case a.OrderField != "" && f.Type == "bytes":
+		return fmt.Errorf("%s: graphql.OrderField on a bytes field: keyset paging cannot page over a column that can be NULL, as a nil []byte is stored", where)
 	case a.OrderField != "" && a.Skip&graphql.SkipType != 0 && a.Skip&graphql.SkipOrderField == 0:
 		return fmt.Errorf("%s: graphql.OrderField on a field graphql.Skip leaves out of the type: its values would be in the cursors", where)
 	case a.WhereOps != 0 && f.Sensitive:

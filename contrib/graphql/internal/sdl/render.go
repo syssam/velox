@@ -83,12 +83,20 @@ type object struct {
 	fks    map[string]bool // the names of ent's foreign-key fields
 
 	getters  []Getter     // the getters gqlgen binds fields to
+	edges    []edgeField  // the edge fields, in the model's edge order
 	order    *order       // nil for none
 	hasWhere bool         // it has a where input
 	where    []gqlField   // the where input's fields
 	whereGo  []WhereField // the where input's fields, for the Go code
 	create   []gqlField   // the create input's fields; nil for none
 	update   []gqlField   // the update input's fields; nil for none
+}
+
+// edgeField is an edge field of an object.
+type edgeField struct {
+	edge   int // the index in the entity's Edges
+	kind   EdgeKind
+	target *object
 }
 
 type gqlField struct {
@@ -380,16 +388,17 @@ func (g *graph) fill(o *object) error {
 			return err
 		}
 		f := gqlField{name: name, desc: ed.Comment, where: where}
+		ef := edgeField{edge: i, target: t}
 		switch {
 		case ed.Unique:
-			f.typ = t.name
+			f.typ, ef.kind = t.name, EdgeUnique
 			if ed.Required {
 				f.typ += "!"
 			}
 		case a.Connection != nil && !*a.Connection:
-			f.typ = "[" + t.name + "!]!"
+			f.typ, ef.kind = "["+t.name+"!]!", EdgeList
 		default:
-			f.typ, f.conn = t.name+"Connection!", t
+			f.typ, f.conn, ef.kind = t.name+"Connection!", t, EdgeConnection
 		}
 		// The entity's struct has a field of the edge's name, so the edge's
 		// method is <Edge>GQL.
@@ -401,6 +410,7 @@ func (g *graph) fill(o *object) error {
 		if err := add(f, where); err != nil {
 			return err
 		}
+		o.edges = append(o.edges, ef)
 	}
 	if len(o.fields) == 0 {
 		return fmt.Errorf("schema %s: its type would have no fields: each field is skipped, sensitive, the tenant or a foreign key, and each edge is skipped or leads to a skipped schema; skip the schema with graphql.Skip()", e.Name)
