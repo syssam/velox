@@ -72,7 +72,7 @@ anything the examples use. In a module of your own, add the tool with
 `go get -tool github.com/syssam/velox2/cmd/velox-gen` (and, for GraphQL,
 `github.com/syssam/velox2/contrib/graphql/cmd/velox-graphql` and
 `github.com/99designs/gqlgen`). This module instead points
-`github.com/syssam/velox2`, its generator, `contrib/otel` and
+`github.com/syssam/velox2` (which holds the generator), `contrib/otel` and
 `contrib/graphql` at the directories beside it with `replace` lines, so it
 always builds against the code there. Only the otel example uses the
 OpenTelemetry SDK, and only the graphql example gqlgen.

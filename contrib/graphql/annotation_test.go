@@ -213,24 +213,18 @@ func TestThroughTheLoader(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var sum []byte
-	for _, p := range []string{"go.sum", "cmd/velox-gen/go.sum"} {
-		b, err := os.ReadFile(filepath.Join(repo, p))
-		if err != nil && !os.IsNotExist(err) {
-			t.Fatal(err)
-		}
-		sum = append(sum, b...)
+	sum, err := os.ReadFile(filepath.Join(repo, "go.sum"))
+	if err != nil {
+		t.Fatal(err)
 	}
 	mod := "module example.com/app\n\ngo 1.27.0\n\n" +
 		"tool github.com/syssam/velox2/cmd/velox-gen\n\n" +
 		"require (\n" +
 		"\tgithub.com/syssam/velox2 v0.0.0\n" +
-		"\tgithub.com/syssam/velox2/cmd/velox-gen v0.0.0\n" +
 		"\tgithub.com/syssam/velox2/contrib/graphql v0.0.0\n" +
 		")\n\n" +
 		"replace (\n" +
 		"\tgithub.com/syssam/velox2 => " + repo + "\n" +
-		"\tgithub.com/syssam/velox2/cmd/velox-gen => " + filepath.Join(repo, "cmd/velox-gen") + "\n" +
 		"\tgithub.com/syssam/velox2/contrib/graphql => " + filepath.Join(repo, "contrib/graphql") + "\n" +
 		")\n"
 	for name, src := range map[string]string{"go.mod": mod, "go.sum": string(sum), "schema/schema.go": loaderSchema} {

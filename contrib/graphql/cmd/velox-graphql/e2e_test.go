@@ -128,7 +128,7 @@ func app(t *testing.T, files map[string]string) (string, func(args ...string) (s
 		t.Fatal(err)
 	}
 	var sum []byte
-	for _, p := range []string{"go.sum", "cmd/velox-gen/go.sum", "contrib/graphql/go.sum"} {
+	for _, p := range []string{"go.sum", "contrib/graphql/go.sum"} {
 		b, err := os.ReadFile(filepath.Join(repo, p))
 		if err != nil && !os.IsNotExist(err) {
 			t.Fatal(err)
@@ -142,12 +142,10 @@ func app(t *testing.T, files map[string]string) (string, func(args ...string) (s
 		")\n\n" +
 		"require (\n" +
 		"\tgithub.com/syssam/velox2 v0.0.0\n" +
-		"\tgithub.com/syssam/velox2/cmd/velox-gen v0.0.0\n" +
 		"\tgithub.com/syssam/velox2/contrib/graphql v0.0.0\n" +
 		")\n\n" +
 		"replace (\n" +
 		"\tgithub.com/syssam/velox2 => " + repo + "\n" +
-		"\tgithub.com/syssam/velox2/cmd/velox-gen => " + filepath.Join(repo, "cmd", "velox-gen") + "\n" +
 		"\tgithub.com/syssam/velox2/contrib/graphql => " + filepath.Join(repo, "contrib", "graphql") + "\n" +
 		")\n"
 	all := map[string]string{"go.mod": mod, "go.sum": string(sum)}

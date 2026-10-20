@@ -110,7 +110,7 @@ func run(c config) (report, error) {
 		return r, err
 	}
 	gen := filepath.Join(tools, "velox-gen")
-	if out, err := exec.Command("go", "-C", filepath.Join(root, "cmd", "velox-gen"), "build", "-o", gen, ".").CombinedOutput(); err != nil {
+	if out, err := exec.Command("go", "-C", root, "build", "-o", gen, "./cmd/velox-gen").CombinedOutput(); err != nil {
 		return r, fmt.Errorf("building velox-gen: %v\n%s", err, out)
 	}
 	wrapper := filepath.Join(tools, "linkmem")

@@ -40,7 +40,6 @@ require (
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/sosodev/duration v1.3.1 // indirect
-	github.com/syssam/velox2/cmd/velox-gen v0.0.0-00010101000000-000000000000 // indirect
 	github.com/urfave/cli/v3 v3.6.1 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel/log v1.47.0 // indirect
@@ -56,8 +55,6 @@ require (
 )
 
 replace github.com/syssam/velox2 => ../
-
-replace github.com/syssam/velox2/cmd/velox-gen => ../cmd/velox-gen
 
 replace github.com/syssam/velox2/contrib/otel => ../contrib/otel
 

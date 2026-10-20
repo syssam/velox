@@ -25,16 +25,13 @@ if [ -n "$unformatted" ]; then
   echo "gofmt needed:"; echo "$unformatted"; exit 1
 fi
 go vet ./...
-go -C cmd/velox-gen vet ./...
 go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
-(cd cmd/velox-gen && go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...)
 go test -race -count=1 ./...
-go -C cmd/velox-gen test -race -count=1 ./...
 go test -run XXX -fuzz FuzzRender -fuzztime 20s .
 go test -run XXX -fuzz FuzzQuote -fuzztime 10s .
 go test -run XXX -fuzz FuzzScope -fuzztime 10s .
 
-go -C cmd/velox-gen build -o "$PWD/bin/velox-gen" .
+go build -o bin/velox-gen ./cmd/velox-gen
 bin/velox-gen -check -out internal/testmodel -package testmodel ./internal/testmodel/schema
 bin/velox-gen verify -out internal/testmodel ./internal/testmodel/schema
 
