@@ -58,9 +58,9 @@
 // are bounded: the database system, operation and table (none for raw SQL),
 // entity, error type and, on a sharded DB, shard for a statement; the
 // outcome, read-only flag and whether it retried for a transaction; and the
-// shard alone for the fallback counter. Tags, the tenant, the SQL text and the call site are on spans
-// only; the fingerprint is added to the statement metrics only with
-// Config.MetricFingerprint.
+// shard alone for the fallback counter. Tags, the tenant, the SQL text and
+// the call site are on spans only; the fingerprint is added to the statement
+// metrics only with Config.MetricFingerprint.
 //
 // A statement that velox refuses before it is sent (a guard, the tenant
 // scope, a policy or a hook) reaches no Around hook, so it makes no

@@ -11,15 +11,16 @@ const (
 	OpInsert
 	OpUpdate
 	OpDelete
-	// OpRaw is raw SQL, run by DB.Exec or DB.Raw: its SQL and Args are the
-	// caller's. Exec's statement is a write, Raw's a read; an Around hook
-	// tells them apart by Result.Affected once next has returned, as a
-	// successful Exec sets it and Raw leaves it -1.
-	OpRaw
+	// OpRawQuery is raw SQL run by DB.Raw, which velox treats as a read: its
+	// SQL and Args are the caller's.
+	OpRawQuery
+	// OpRawExec is raw SQL run by DB.Exec, which velox treats as a write: its
+	// SQL and Args are the caller's.
+	OpRawExec
 )
 
 // String returns the operation's SQL verb in lower case: "select", "insert",
-// "update" or "delete"; "raw" for raw SQL.
+// "update" or "delete"; "raw query" and "raw exec" for raw SQL.
 func (o Op) String() string {
 	switch o {
 	case OpSelect:
@@ -30,11 +31,16 @@ func (o Op) String() string {
 		return "update"
 	case OpDelete:
 		return "delete"
-	case OpRaw:
-		return "raw"
+	case OpRawQuery:
+		return "raw query"
+	case OpRawExec:
+		return "raw exec"
 	}
 	return "unknown"
 }
+
+// raw reports whether o is raw SQL: OpRawQuery or OpRawExec.
+func (o Op) raw() bool { return o == OpRawQuery || o == OpRawExec }
 
 // AssignOp is how an UPDATE assigns a column.
 type AssignOp uint8
@@ -70,10 +76,11 @@ type ConflictClause struct {
 // one, and the pipeline's hooks see and may change it: rewrite hooks before it
 // is rendered, around hooks while it runs.
 //
-// Raw SQL (OpRaw) is not rendered: Rewrite hooks do not see it, and its SQL,
-// Args and Fingerprint are set when it is made. Its Entity is the entity Raw
-// scans into, or for Exec an EntityInfo named "Exec" with no table or columns.
-// Its TenantBypass and PolicyBypass both hold the caller's reason.
+// Raw SQL (OpRawQuery and OpRawExec) is not rendered: Rewrite hooks do not
+// see it, and its SQL, Args and Fingerprint are set when it is made. Its
+// Entity is the entity Raw scans into, or for Exec an EntityInfo named "Exec"
+// with no table or columns. Its TenantBypass and PolicyBypass both hold the
+// caller's reason.
 //
 // The EntityInfo that Entity points to is shared by every query on the
 // entity, in every goroutine: treat it as read-only. A rewrite hook may point
@@ -89,7 +96,7 @@ type Statement struct {
 	Limit        int // 0: no limit; after the Rewrite hooks, velox lowers it to the row cap + 1
 	Offset       int
 	Unbounded    bool            // the query said Unbounded
-	MaxRows      int             // SELECT: the most rows it may return; 0: the DB's WithMaxRows
+	MaxRows      int             // SELECT and OpRawQuery: the most rows it may return; 0: the DB's WithMaxRows
 	Set          []Assignment    // UPDATE: the assignments
 	Rows         [][]any         // INSERT: the rows, one value per Columns entry
 	Conflict     *ConflictClause // INSERT: the upsert clause, if any
@@ -129,13 +136,11 @@ type Statement struct {
 	// handed is set once Iter has handed the caller a row: a broken
 	// connection is then not failed over, as the read cannot start again.
 	handed bool
-	// rawRead marks Raw's statement, an OpRaw that velox treats as a read.
-	rawRead bool
 }
 
-// reads reports whether st is a read: a SELECT, or Raw's query. Everything
-// else writes: an INSERT, UPDATE or DELETE, or Exec's raw SQL.
-func (st *Statement) reads() bool { return st.Op == OpSelect || st.rawRead }
+// reads reports whether st is a read: a SELECT, or Raw's query (OpRawQuery).
+// Everything else writes: an INSERT, UPDATE or DELETE, or Exec's raw SQL.
+func (st *Statement) reads() bool { return st.Op == OpSelect || st.Op == OpRawQuery }
 
 // Result is what executing a statement did: a Statement's, which an Around
 // hook reads. Mutation.Result gives an entity hook one for the whole write,
@@ -155,7 +160,8 @@ type Result struct {
 // refuse it by returning an error. Rewrite hooks run in the order given to
 // Open. They run for the SQL(ctx) methods too, with the statement's DryRun
 // set, so a hook must change nothing but the statement. They do not run for
-// raw SQL (OpRaw), which has nothing to rewrite; Around hooks see it.
+// raw SQL (OpRawQuery and OpRawExec), which has nothing to rewrite; Around
+// hooks see it.
 type Rewrite func(ctx context.Context, st *Statement) error
 
 // Around is a hook that wraps a statement's execution. next runs the

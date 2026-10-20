@@ -68,7 +68,7 @@ func dbSystem(d velox.Dialect) string {
 }
 
 // operation is db.operation.name's value: the statement's SQL verb. Raw SQL
-// (OpRaw) has none: velox does not parse it out of the text, as the semantic
+// (OpRawQuery and OpRawExec) has none: velox does not parse it out of the text, as the semantic
 // conventions advise for a language whose one statement can hold several
 // operations, so the attribute is left off.
 func operation(st *velox.Statement) string {
@@ -89,7 +89,7 @@ func operation(st *velox.Statement) string {
 // the entity declares a schema. Raw SQL has none either: the entity Raw scans
 // into need not be the table it reads.
 func collection(st *velox.Statement) string {
-	if st.Op == velox.OpRaw {
+	if raw(st) {
 		return ""
 	}
 	if st.Entity.Schema != "" {
@@ -102,7 +102,7 @@ func collection(st *velox.Statement) string {
 // the operation and the table ("SELECT invoices"), or for raw SQL, which has
 // neither, the database system ("postgresql").
 func spanName(st *velox.Statement) string {
-	if st.Op == velox.OpRaw {
+	if raw(st) {
 		return dbSystem(st.Dialect)
 	}
 	return operation(st) + " " + collection(st)
@@ -111,23 +111,19 @@ func spanName(st *velox.Statement) string {
 // target appends to kv db.operation.name and db.collection.name, which raw
 // SQL has neither of.
 func target(kv []attribute.KeyValue, st *velox.Statement) []attribute.KeyValue {
-	if st.Op == velox.OpRaw {
+	if raw(st) {
 		return kv
 	}
 	return append(kv, attribute.String(attrDBOperation, operation(st)), attribute.String(attrDBCollection, collection(st)))
 }
 
+// raw reports whether st is raw SQL, run by Raw or Exec.
+func raw(st *velox.Statement) bool { return st.Op == velox.OpRawQuery || st.Op == velox.OpRawExec }
+
 // returnsRows reports whether st's rows are reported as the rows it returned:
-// a SELECT's, and a Raw query's once it succeeded. Raw and Exec are both
-// OpRaw; a successful Exec sets Result.Affected, and Raw leaves it at -1.
-func returnsRows(st *velox.Statement, err error) bool {
-	switch st.Op {
-	case velox.OpSelect:
-		return true
-	case velox.OpRaw:
-		return err == nil && st.Result.Affected < 0
-	}
-	return false
+// a SELECT's and a Raw query's (OpRawQuery).
+func returnsRows(st *velox.Statement) bool {
+	return st.Op == velox.OpSelect || st.Op == velox.OpRawQuery
 }
 
 // errorType is error.type's value for err, from a short fixed list (spec

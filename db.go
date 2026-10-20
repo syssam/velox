@@ -285,7 +285,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	if err := db.outsideTx(ctx, st); err != nil {
 		return err
 	}
-	if st.Op == OpRaw {
+	if st.Op.raw() {
 		db.prepareRaw(ctx, st)
 		return nil
 	}

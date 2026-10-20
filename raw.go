@@ -22,20 +22,21 @@ func errNoReason(name string) error {
 
 // Exec runs query, raw SQL that returns no rows, with args, and returns the
 // number of rows it affected, as the driver counts them. reason says why the
-// statement may skip the tenant scope and the policy; it must not be empty,
-// or Exec fails before anything runs. See Raw for what raw SQL goes through,
-// and what it skips.
+// statement may skip the tenant scope and the policy; if it is empty or only
+// white space, Exec fails before anything runs. See Raw for what raw SQL goes
+// through, and what it skips.
 //
-// velox treats Exec as a write, whatever its SQL: it goes to the primary,
-// pins the session (WithSession), and fails with ErrDryRun under a dry run
-// (IsDryRun). Its errors, and the Around hooks, name its statement "Exec".
+// velox treats Exec as a write (OpRawExec), whatever its SQL: it goes to the
+// primary, pins the session (WithSession), and fails with ErrDryRun under a
+// dry run (IsDryRun). Its errors, and the Around hooks, name its statement
+// "Exec".
 //
 //	n, err := db.Exec(ctx, "nightly cleanup", "DELETE FROM sessions WHERE expires_at < $1", now)
 func (db *DB) Exec(ctx context.Context, reason, query string, args ...any) (int64, error) {
-	if reason == "" {
+	if noReason(reason) {
 		return 0, errNoReason(execInfo.Name)
 	}
-	st := &Statement{Op: OpRaw, Entity: &execInfo, SQL: query, Args: args, TenantBypass: reason, PolicyBypass: reason, InTx: db.inTx}
+	st := &Statement{Op: OpRawExec, Entity: &execInfo, SQL: query, Args: args, TenantBypass: reason, PolicyBypass: reason, InTx: db.inTx}
 	var res result
 	if err := db.run(ctx, st, nil, &res); err != nil {
 		return 0, err
@@ -56,14 +57,18 @@ type RawQuery[E any] struct {
 }
 
 // Raw returns query, raw SQL with args, as a query whose rows scan into
-// entity E. reason says why it may skip the tenant scope and the policy; it
-// must not be empty, or running the query fails before anything is sent.
+// entity E. reason says why it may skip the tenant scope and the policy; if
+// it is empty or only white space, running the query fails before anything
+// is sent.
 //
 // Each column the SQL returns is scanned, by name, into E's field of that
 // column name, through its codec when it has one; a column E has no field
-// for is an error naming it, and so is a column returned twice. The fields
-// whose columns the SQL does not return keep their zero values, so an
-// aggregate can scan into the entity it sums:
+// for is an error naming it, and so is a column returned twice. The names
+// must match exactly, case included, so alias a computed column to the
+// column name (SUM(total) AS total); PostgreSQL folds unquoted names to lower
+// case, while MySQL and SQLite return them as written. The fields whose
+// columns the SQL does not return keep their zero values, so an aggregate can
+// scan into the entity it sums:
 //
 //	totals, err := db.Raw[gen.Invoice]("revenue report",
 //		"SELECT org_id, SUM(total_cents) AS total_cents FROM invoices GROUP BY org_id").All(ctx)
@@ -72,18 +77,24 @@ type RawQuery[E any] struct {
 // builder cannot express. velox applies neither the tenant scope nor any
 // policy to it: tenant scoping is the caller's, written into the SQL, and the
 // Around hooks see reason as Statement.TenantBypass and PolicyBypass. It goes
-// through the transaction check, the Around hooks (as OpRaw), WithDeadlines,
-// routing (as a read), the SQL comment and the row cap; Rewrite hooks and the
-// entity's Hooks do not run, and it loads no relations. The SQL is sent as
-// written, in the dialect's placeholders ($1 on PostgreSQL, ? elsewhere), and
-// args are bound as given: no codec encodes them. With WithSQLComment the
-// comment is appended to the SQL, so it must not end with a semicolon. Raw
-// has no SQL(ctx) method: its SQL is the caller's already.
+// through the transaction check, the Around hooks (as OpRawQuery),
+// WithDeadlines, routing (as a read), the SQL comment and the row cap;
+// Rewrite hooks and the entity's Hooks do not run, and it loads no relations.
+// The SQL is sent as written, in the dialect's placeholders ($1 on
+// PostgreSQL, ? elsewhere), and args are bound as given: no codec encodes
+// them. With WithSQLComment, trailing semicolons and white space are trimmed
+// from the SQL before the comment is appended. Raw has no SQL(ctx) method:
+// its SQL is the caller's already.
 //
 // velox treats Raw as a read: it goes to a replica unless ReadPrimary or a
 // pinned session says otherwise, and runs under a dry run (IsDryRun). Run a
 // write that returns rows (UPDATE … RETURNING) in a transaction, or under
 // ReadPrimary, and never under a dry run.
+//
+// On a DB opened with OpenShards, Raw and Exec run on the shard the context
+// names, as every statement does: OnShard's, else the one WithShardFor gives
+// for the context's tenant (WithTenant), though the tenant scopes nothing.
+// With neither they fail with ErrNoShard, before anything is sent.
 func (db *DB) Raw[E any, PE Entity[E]](reason, query string, args ...any) RawQuery[E] {
 	return RawQuery[E]{db: db, meta: PE(nil).VeloxMeta(), reason: reason, query: query, args: args}
 }
@@ -102,11 +113,11 @@ func (q RawQuery[E]) statement[_ Lazy[E]]() (Statement, error) {
 	if q.meta.err != nil {
 		return Statement{}, q.meta.err
 	}
-	if q.reason == "" {
+	if noReason(q.reason) {
 		return Statement{}, errNoReason(q.meta.info.Name)
 	}
-	return Statement{Op: OpRaw, Entity: q.meta.info, SQL: q.query, Args: q.args, MaxRows: q.maxRows,
-		TenantBypass: q.reason, PolicyBypass: q.reason, InTx: q.db.inTx, rawRead: true}, nil
+	return Statement{Op: OpRawQuery, Entity: q.meta.info, SQL: q.query, Args: q.args, MaxRows: q.maxRows,
+		TenantBypass: q.reason, PolicyBypass: q.reason, InTx: q.db.inTx}, nil
 }
 
 // rawRun is the state of one run of a RawQuery: All's and One's rows go to
@@ -172,7 +183,7 @@ func rawColumns(in *EntityInfo, r rows) ([]int, error) {
 		switch {
 		case !ok:
 			unknown = append(unknown, strconv.Quote(name))
-		case seen[c]:
+		case seen[c] && !slices.Contains(twice, strconv.Quote(name)):
 			twice = append(twice, strconv.Quote(name))
 		}
 		seen[c], cols[i] = true, c
@@ -181,7 +192,7 @@ func rawColumns(in *EntityInfo, r rows) ([]int, error) {
 		return nil, fmt.Errorf("the raw SQL returned %s, which %s has no field for", strings.Join(unknown, ", "), in.Name)
 	}
 	if len(twice) > 0 {
-		return nil, fmt.Errorf("the raw SQL returned %s twice", strings.Join(slices.Compact(twice), ", "))
+		return nil, fmt.Errorf("the raw SQL returned %s more than once", strings.Join(twice, ", "))
 	}
 	return cols, nil
 }
@@ -210,7 +221,10 @@ func resultColumns(r rows) ([]string, error) {
 // prepareRaw is prepare's work for raw SQL, which is the caller's: there is
 // nothing to resolve, guard, rewrite, scope or render. It sets what the
 // Around hooks read (observe), gives them a copy of the arguments to change,
-// sets the fingerprint, of the caller's SQL, and appends the SQL comment.
+// sets the fingerprint, of the caller's SQL, and appends the SQL comment,
+// after trimming trailing semicolons and white space: a comment after a
+// statement's terminator would make a second, empty statement, which MySQL
+// without multiStatements refuses.
 func (db *DB) prepareRaw(ctx context.Context, st *Statement) {
 	db.observe(ctx, st)
 	if len(db.cfg.arounds) > 0 {
@@ -218,7 +232,7 @@ func (db *DB) prepareRaw(ctx context.Context, st *Statement) {
 	}
 	st.Fingerprint = fingerprint(st.SQL)
 	if db.cfg.comment != nil {
-		st.SQL += db.cfg.comment.text(st)
+		st.SQL = strings.TrimRight(st.SQL, "; \t\r\n") + db.cfg.comment.text(st)
 	}
 }
 

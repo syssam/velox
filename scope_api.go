@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 )
 
 // tenantKey is the context key of a tenantScope: WithTenant and AllTenants
@@ -32,26 +33,30 @@ func WithTenant(ctx context.Context, id any) context.Context {
 
 // AllTenants returns ctx unscoped: statements on a tenant-scoped entity reach
 // every tenant's rows. The reason is required and is shown to hooks as
-// Statement.TenantBypass; with an empty reason AllTenants returns ctx
-// unchanged, so a statement without a tenant still fails. It replaces an
-// earlier WithTenant or AllTenants on ctx.
+// Statement.TenantBypass; with a reason that is empty or only white space
+// AllTenants returns ctx unchanged, so a statement without a tenant still
+// fails. It replaces an earlier WithTenant or AllTenants on ctx.
 func AllTenants(ctx context.Context, reason string) context.Context {
-	if reason == "" {
+	if noReason(reason) {
 		return ctx
 	}
 	return context.WithValue(ctx, tenantKey{}, tenantScope{all: reason})
 }
 
 // SkipPolicy returns ctx with every entity's policy switched off. The reason
-// is required and is shown to hooks as Statement.PolicyBypass; with an empty
-// reason SkipPolicy returns ctx unchanged. It does not lift tenant scoping:
-// see AllTenants.
+// is required and is shown to hooks as Statement.PolicyBypass; with a reason
+// that is empty or only white space SkipPolicy returns ctx unchanged. It does
+// not lift tenant scoping: see AllTenants.
 func SkipPolicy(ctx context.Context, reason string) context.Context {
-	if reason == "" {
+	if noReason(reason) {
 		return ctx
 	}
 	return context.WithValue(ctx, policyKey{}, reason)
 }
+
+// noReason reports whether reason, a bypass's (AllTenants, SkipPolicy, Raw,
+// Exec), says nothing: it is empty or only white space.
+func noReason(reason string) bool { return strings.TrimSpace(reason) == "" }
 
 // dryRunKey is the context key the SQL(ctx) methods mark their context with.
 type dryRunKey struct{}

@@ -28,28 +28,30 @@ func (r *rawRecorder) around(ctx context.Context, st *velox.Statement, next func
 	return err
 }
 
-// TestRawNeedsAReason: Raw and Exec with an empty reason fail before
-// anything runs: no hook sees them and nothing is sent.
+// TestRawNeedsAReason: Raw and Exec with a reason that is empty or only white
+// space fail before anything runs: no hook sees them and nothing is sent.
 func TestRawNeedsAReason(t *testing.T) {
 	e := &velox.FakeExec{Rows: [][]any{{int64(1)}}, Cols: []string{"id"}, Affected: 1}
 	rec := &rawRecorder{}
 	db := velox.OpenFake(velox.Postgres, e, velox.WithAround(rec.around))
-	q := db.Raw[testmodel.Invoice]("", "SELECT id FROM invoices")
-	check := func(what string, err error) {
-		t.Helper()
-		if err == nil || !strings.Contains(err.Error(), "reason") || !strings.HasPrefix(err.Error(), "velox: ") {
-			t.Errorf("%s with no reason: %v", what, err)
+	for _, reason := range []string{"", " \t\n"} {
+		q := db.Raw[testmodel.Invoice](reason, "SELECT id FROM invoices")
+		check := func(what string, err error) {
+			t.Helper()
+			if err == nil || !strings.Contains(err.Error(), "reason") || !strings.HasPrefix(err.Error(), "velox: ") {
+				t.Errorf("%s with the reason %q: %v", what, reason, err)
+			}
 		}
+		_, err := q.All(ctx)
+		check("All", err)
+		_, err = q.One(ctx)
+		check("One", err)
+		for _, err := range q.Iter(ctx) {
+			check("Iter", err)
+		}
+		_, err = db.Exec(ctx, reason, "DELETE FROM invoices")
+		check("Exec", err)
 	}
-	_, err := q.All(ctx)
-	check("All", err)
-	_, err = q.One(ctx)
-	check("One", err)
-	for _, err := range q.Iter(ctx) {
-		check("Iter", err)
-	}
-	_, err = db.Exec(ctx, "", "DELETE FROM invoices")
-	check("Exec", err)
 	if e.Calls != 0 || len(rec.sts) != 0 {
 		t.Errorf("%d statements sent, %d seen by the hook; want none", e.Calls, len(rec.sts))
 	}
@@ -128,7 +130,8 @@ func TestRawScansByName(t *testing.T) {
 }
 
 // TestRawUnknownColumn: a result column that E has no field for is an error
-// naming every such column; so is a column returned twice.
+// naming every such column; so is a column returned more than once, named
+// once however often and wherever it repeats.
 func TestRawUnknownColumn(t *testing.T) {
 	e := &velox.FakeExec{Cols: []string{"id", "revenue", "number", "extra"}, Rows: [][]any{{int64(1), 5.0, "N", 1}}}
 	db := velox.OpenFake(velox.Postgres, e)
@@ -139,11 +142,16 @@ func TestRawUnknownColumn(t *testing.T) {
 	}
 	e.Cols = []string{"id", "number", "id"}
 	_, err = db.Raw[testmodel.Invoice]("r", "SELECT …").All(ctx)
-	if err == nil || !strings.Contains(err.Error(), `"id"`) || !strings.Contains(err.Error(), "twice") {
-		t.Errorf("a column twice: %v", err)
+	if want := `velox: testmodel.Invoice: the raw SQL returned "id" more than once`; err == nil || err.Error() != want {
+		t.Errorf("a column twice: %v, want %s", err, want)
+	}
+	e.Cols = []string{"id", "number", "id", "number", "id"}
+	_, err = db.Raw[testmodel.Invoice]("r", "SELECT …").All(ctx)
+	if want := `velox: testmodel.Invoice: the raw SQL returned "id", "number" more than once`; err == nil || err.Error() != want {
+		t.Errorf("columns repeated apart: %v, want %s", err, want)
 	}
 	for _, err := range db.Raw[testmodel.Invoice]("r", "SELECT …").Iter(ctx) {
-		if err == nil || !strings.Contains(err.Error(), "twice") {
+		if err == nil || !strings.Contains(err.Error(), "more than once") {
 			t.Errorf("Iter, a column twice: %v", err)
 		}
 	}
@@ -200,19 +208,25 @@ func TestRawRoutes(t *testing.T) {
 
 // TestRawShowsReason pins Review Focus 4: Raw and Exec skip the tenant scope
 // and the policy, so a context with no tenant runs them, unchanged; the
-// Around hooks see the reason as Statement.TenantBypass (and PolicyBypass).
-// Rewrite hooks, which rewrite what the builder made, do not see them.
+// Around hooks see the reason as Statement.TenantBypass (and PolicyBypass),
+// and Raw's statement as OpRawQuery, Exec's as OpRawExec, before next runs
+// them. Rewrite hooks, which rewrite what the builder made, do not see them.
 func TestRawShowsReason(t *testing.T) {
 	e := &velox.FakeExec{Rows: [][]any{{int64(1), "t"}}, Cols: []string{"id", "title"}, Affected: 2}
 	rec := &rawRecorder{}
 	rewrites := 0
+	var before []velox.Op // the Op each statement had before next ran
 	db := velox.OpenFake(velox.Postgres, e, velox.WithAround(rec.around),
+		velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+			before = append(before, st.Op)
+			return next(ctx)
+		}),
 		velox.WithRewrite(func(context.Context, *velox.Statement) error { rewrites++; return nil }))
 	bare := context.Background() // neither a tenant nor a user
 	if _, err := db.Query[testmodel.Ticket]().Limit(1).All(bare); !errors.Is(err, velox.ErrNoTenant) {
 		t.Fatalf("the builder's read without a tenant: %v", err)
 	}
-	rewrites = 0
+	rewrites, before = 0, nil
 	const q = "SELECT id, title FROM tickets WHERE id = $1"
 	got, err := db.Raw[testmodel.Ticket]("support looks up a ticket", q, int64(1)).All(bare)
 	if err != nil || len(got) != 1 || got[0].Title != "t" {
@@ -232,17 +246,20 @@ func TestRawShowsReason(t *testing.T) {
 		t.Fatalf("the Around hook saw %d statements", len(rec.sts))
 	}
 	r, x := rec.sts[0], rec.sts[1]
-	if r.Op != velox.OpRaw || r.TenantBypass != "support looks up a ticket" || r.PolicyBypass != r.TenantBypass ||
+	if !slices.Equal(before, []velox.Op{velox.OpRawQuery, velox.OpRawExec}) {
+		t.Errorf("Ops before next: %v", before)
+	}
+	if r.Op != velox.OpRawQuery || r.TenantBypass != "support looks up a ticket" || r.PolicyBypass != r.TenantBypass ||
 		r.Entity == nil || r.Entity.Name != "testmodel.Ticket" || r.SQL != q || !reflect.DeepEqual(r.Args, []any{int64(1)}) ||
 		r.Fingerprint == "" || r.Result.Rows != 1 || r.Result.Affected != -1 || r.Tenant != nil {
 		t.Errorf("Raw's statement: %+v", r)
 	}
-	if x.Op != velox.OpRaw || x.TenantBypass != "nightly cleanup" || x.PolicyBypass != x.TenantBypass ||
+	if x.Op != velox.OpRawExec || x.TenantBypass != "nightly cleanup" || x.PolicyBypass != x.TenantBypass ||
 		x.Entity == nil || x.Entity.Name == "" || x.SQL != "DELETE FROM tickets WHERE done" || x.Result.Affected != 2 {
 		t.Errorf("Exec's statement: %+v", x)
 	}
-	if velox.OpRaw.String() != "raw" {
-		t.Errorf("OpRaw.String() = %q", velox.OpRaw.String())
+	if velox.OpRawQuery.String() != "raw query" || velox.OpRawExec.String() != "raw exec" {
+		t.Errorf("String() = %q, %q", velox.OpRawQuery.String(), velox.OpRawExec.String())
 	}
 }
 
@@ -326,11 +343,59 @@ func TestRawPipeline(t *testing.T) {
 	t.Run("comment", func(t *testing.T) {
 		e := &velox.FakeExec{Affected: 1}
 		db := velox.OpenFake(velox.Postgres, e, velox.WithSQLComment("app"))
-		if _, err := db.Exec(ctx, "r", "DELETE FROM invoices"); err != nil {
+		// Trailing semicolons and white space go before the comment, which
+		// would otherwise follow the statement's terminator.
+		for _, sql := range []string{"DELETE FROM invoices", "DELETE FROM invoices;", "DELETE FROM invoices ;; \n\t"} {
+			if _, err := db.Exec(ctx, "r", sql); err != nil {
+				t.Fatal(err)
+			}
+			if e.SQL != "DELETE FROM invoices /*app='app'*/" {
+				t.Errorf("%q sent as %q", sql, e.SQL)
+			}
+		}
+		// Without a comment the SQL is sent as written.
+		plain := velox.OpenFake(velox.Postgres, e)
+		if _, err := plain.Exec(ctx, "r", "DELETE FROM invoices;"); err != nil || e.SQL != "DELETE FROM invoices;" {
+			t.Errorf("sent %q, %v", e.SQL, err)
+		}
+	})
+}
+
+// TestRawOnShards: on a sharded DB, Raw and Exec run on the shard the context
+// names, by OnShard or by its tenant through WithShardFor, though the tenant
+// scopes nothing; with neither they fail with ErrNoShard and send nothing.
+func TestRawOnShards(t *testing.T) {
+	bothPaths(t, func(t *testing.T, hooked bool) {
+		s := openShards(hooked)
+		for _, e := range []*velox.FakeExec{s.euP, s.euR, s.usP} {
+			e.Rows, e.Cols, e.Affected = [][]any{{int64(1)}}, []string{"id"}, 1
+		}
+		raw := s.db.Raw[testmodel.Invoice]("r", "SELECT id FROM invoices")
+		eu := velox.WithTenant(bg, int64(1))
+		if _, err := raw.All(eu); err != nil {
 			t.Fatal(err)
 		}
-		if e.SQL != "DELETE FROM invoices /*app='app'*/" {
-			t.Errorf("sent %q", e.SQL)
+		if _, err := s.db.Exec(eu, "r", "DELETE FROM invoices WHERE paid"); err != nil {
+			t.Fatal(err)
 		}
+		us := velox.OnShard(bg, "us")
+		if _, err := raw.All(us); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.db.Exec(us, "r", "DELETE FROM invoices WHERE paid"); err != nil {
+			t.Fatal(err)
+		}
+		if e := s.euP.Log[0]; e != "DELETE FROM invoices WHERE paid" {
+			t.Errorf("eu's primary ran %q, want it unscoped", e)
+		}
+		for _, c := range []context.Context{bg, velox.AllTenants(bg, "every tenant")} {
+			if _, err := raw.All(c); !errors.Is(err, velox.ErrNoShard) {
+				t.Errorf("Raw with no shard: %v", err)
+			}
+			if _, err := s.db.Exec(c, "r", "DELETE FROM invoices"); !errors.Is(err, velox.ErrNoShard) {
+				t.Errorf("Exec with no shard: %v", err)
+			}
+		}
+		s.check(t, hooked, [3]int{1, 1, 2}, euR0, euPrimary, usPrimary, usPrimary)
 	})
 }

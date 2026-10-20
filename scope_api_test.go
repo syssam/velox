@@ -26,8 +26,10 @@ func TestTenantContextLaterWins(t *testing.T) {
 
 func TestTenantBypassNeedsAReason(t *testing.T) {
 	ctx := velox.WithTenant(context.Background(), int64(7))
-	if velox.AllTenants(ctx, "") != ctx {
-		t.Error("AllTenants with no reason changed the context")
+	for _, reason := range []string{"", " \t\n"} {
+		if velox.AllTenants(ctx, reason) != ctx {
+			t.Errorf("AllTenants with the reason %q changed the context", reason)
+		}
 	}
 	if id, all := velox.TenantOf(velox.AllTenants(ctx, "")); id != int64(7) || all != "" {
 		t.Errorf("AllTenants with no reason: id %v, all %q", id, all)
@@ -36,8 +38,10 @@ func TestTenantBypassNeedsAReason(t *testing.T) {
 
 func TestSkipPolicyNeedsAReason(t *testing.T) {
 	ctx := context.Background()
-	if velox.SkipPolicy(ctx, "") != ctx {
-		t.Error("SkipPolicy with no reason changed the context")
+	for _, reason := range []string{"", " \t\n"} {
+		if velox.SkipPolicy(ctx, reason) != ctx {
+			t.Errorf("SkipPolicy with the reason %q changed the context", reason)
+		}
 	}
 	if got := velox.PolicyBypass(velox.SkipPolicy(ctx, "support tool")); got != "support tool" {
 		t.Errorf("PolicyBypass = %q", got)

@@ -38,7 +38,7 @@ func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(con
 	var buf [4]attribute.KeyValue
 	kv := routeAttributes(buf[:0], st)
 	switch {
-	case returnsRows(st, err):
+	case returnsRows(st):
 		kv = append(kv, attribute.Int64(attrReturnedRows, st.Result.Rows))
 	case st.Result.Affected >= 0:
 		kv = append(kv, attribute.Int64(attrAffectedRows, st.Result.Affected))
