@@ -74,7 +74,7 @@ The reviews also agreed on what stays:
    - A `Default` never changes the Go type.
    - These are refused:
      - a `Default` on a bool or number field that is not `Nillable`;
-     - an `Optional` enum that has neither a `Default` nor `Nillable`;
+     - an `Optional` enum, bytes or time field that has neither a `Default` nor `Nillable` (MySQL's strict mode refuses the zero time);
      - an `Optional` edge field that is not `Nillable`.
    - A field that is unique only when present needs `Nillable`.
    - In the plugin model, `Pointer` is Nillable, and `Nullable` is Nillable || (Optional && JSON).
