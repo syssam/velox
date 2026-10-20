@@ -65,9 +65,20 @@ type ColumnInfo struct {
 	// column; an insert does not (Default and DefaultFunc fill an insert's);
 	// nil when none.
 	UpdateDefault func() any
-	Immutable     bool    // an update may not assign the column
-	Sensitive     bool    // the column holds a secret (velox logs no values)
-	off           uintptr // the field's offset in the entity
+	Immutable     bool // an update may not assign the column
+	Sensitive     bool // the column holds a secret (velox logs no values)
+	// JSON says the column holds the field's value as JSON (ColumnDesc.JSON).
+	// Its value is bound as json.Marshal's bytes, and only there: hooks and
+	// policies see the Go value, and only Statement.Args holds the bytes. In
+	// a nullable (pointer) field, a nil pointer, or a nil slice or map it
+	// points to, binds NULL; in any other field a nil slice or map binds the
+	// JSON null, which reads back as nil. What is read
+	// is decoded with json.Unmarshal, from []byte or string; NULL leaves the
+	// field at its zero value (nil, for a pointer). A condition other than
+	// IsNull and NotNull on the column is refused when the statement runs:
+	// JSON equality differs by dialect.
+	JSON bool
+	off  uintptr // the field's offset in the entity
 }
 
 // GoType returns the Go type of column c's field. ColumnInfo.Type holds it

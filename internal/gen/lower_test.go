@@ -152,6 +152,44 @@ func TestLowerTypes(t *testing.T) {
 	}
 }
 
+// TestLowerJSONFlag: a json field, and only a json field, is lowered with
+// JSON set, which render writes into its ColumnDesc (Ruling 1 of the JSON
+// fields plan). A bytes field holds bytes, not JSON.
+func TestLowerJSONFlag(t *testing.T) {
+	o := mustLower(t, Config{Package: "gen", SchemaPath: lowerSchemaPath}, LwUser{}, LwPost{}, LwGroup{})
+	u := o.entity("LwUser")
+	for _, f := range u.Fields {
+		if want := f.Name == "tags"; f.JSON != want {
+			t.Errorf("%s: JSON %v, want %v", f.Name, f.JSON, want)
+		}
+	}
+	m := mustLower(t, Config{Package: "gen", SchemaPath: lowerSchemaPath}, LwMixed{}).entity("LwMixed")
+	if f := m.field("labels"); !f.JSON {
+		t.Errorf("labels (field.Strings) is not JSON")
+	}
+	if f := m.field("blob"); f.JSON {
+		t.Errorf("blob (field.Bytes) is JSON")
+	}
+	g, err := build(t, LwUser{}, LwPost{}, LwGroup{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err := Generate(g, Config{Package: "gen", SchemaPath: lowerSchemaPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var src string
+	for _, f := range files {
+		src += string(f.Data)
+	}
+	if want := `{Field: "Tags", Name: "tags", JSON: true},`; !strings.Contains(src, want) {
+		t.Errorf("the generated code lacks %s", want)
+	}
+	if n := strings.Count(src, "JSON: true"); n != 1 {
+		t.Errorf("the generated code sets JSON on %d columns, want 1", n)
+	}
+}
+
 func TestLowerRelationsAndJoin(t *testing.T) {
 	o := mustLower(t, Config{Package: "gen"}, LwUser{}, LwPost{}, LwGroup{})
 	u, p, j := o.entity("LwUser"), o.entity("LwPost"), o.entity("LwUserGroup")

@@ -367,7 +367,7 @@ func insertOne[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *Conflic
 			// A hook may have redirected Returning: then the row does not
 			// hold the key.
 			if len(st.Returning) == 1 && st.Returning[0] == gen {
-				return r.Scan(m.addr(p, gen))
+				return r.Scan(scanDst(m.info, gen, m.addr(p, gen)))
 			}
 			return nil
 		}

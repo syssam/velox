@@ -197,7 +197,10 @@ func (db *DB) plain(ctx context.Context, st *Statement, read func(rows) error, r
 	} else {
 		st.Dialect = db.d
 	}
-	e, args := db.cfg.cache.get(db.d, st)
+	e, args, err := db.cfg.cache.get(db.d, st)
+	if err != nil {
+		return err
+	}
 	st.SQL, st.Fingerprint, st.Args = e.text, e.fp, args
 	if db.cfg.comment != nil {
 		st.SQL += db.cfg.comment.text(st)
@@ -328,12 +331,19 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	}
 	db.capLimit(st)
 	if st.Entity == entity {
-		e, args := db.cfg.cache.get(db.d, st)
+		e, args, err := db.cfg.cache.get(db.d, st)
+		if err != nil {
+			return err
+		}
 		st.SQL, st.Fingerprint, st.Args = e.text, e.fp, args
 	} else {
 		// A hook pointed the statement at its own EntityInfo, likely one
 		// made for this statement alone; caching by it would fill the cache.
-		st.SQL, st.Args = render(db.d, st)
+		text, args, err := renderStmt(db.d, st)
+		if err != nil {
+			return err
+		}
+		st.SQL, st.Args = text, args
 		st.Fingerprint = fingerprint(st.SQL)
 	}
 	// After the fingerprint, which is of the text without the comment.

@@ -222,8 +222,8 @@ func TestFingerprintFormat(t *testing.T) {
 // miss, and a statement past the cache's bound gets the same one.
 func TestCacheStoresTheFingerprint(t *testing.T) {
 	var c renderCache
-	miss, _ := c.get(Postgres, stmt(hOrg.EQ(7)))
-	hit, _ := c.get(Postgres, stmt(hOrg.EQ(8)))
+	miss, _, _ := c.get(Postgres, stmt(hOrg.EQ(7)))
+	hit, _, _ := c.get(Postgres, stmt(hOrg.EQ(8)))
 	text, _ := render(Postgres, stmt(hOrg.EQ(7)))
 	if miss != hit || miss.text != text || miss.fp != fingerprint(text) {
 		t.Errorf("miss %+v, hit %+v, want text %s", miss, hit, text)
@@ -231,7 +231,7 @@ func TestCacheStoresTheFingerprint(t *testing.T) {
 	defer func(n int) { maxShapes = n }(maxShapes)
 	maxShapes = 0
 	var full renderCache
-	if over, _ := full.get(Postgres, stmt(hOrg.EQ(9))); over != miss || full.size() != 0 {
+	if over, _, _ := full.get(Postgres, stmt(hOrg.EQ(9))); over != miss || full.size() != 0 {
 		t.Errorf("past the bound: %+v, %d shapes held", over, full.size())
 	}
 }

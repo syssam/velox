@@ -249,14 +249,15 @@ func columnCount(st *Statement) int {
 	return len(st.Entity.Columns)
 }
 
-// scanRow scans the current row into p through the entity's scan plan.
+// scanRow scans the current row into p through the entity's scan plan; a
+// JSON column through a decoder (scanDst).
 func scanRow[E any](r rows, m *Meta[E], cols []int, dst []any, p *E) error {
 	for i := range dst {
 		c := i
 		if cols != nil {
 			c = cols[i]
 		}
-		dst[i] = m.addr(p, c)
+		dst[i] = scanDst(m.info, c, m.addr(p, c))
 	}
 	return r.Scan(dst...)
 }

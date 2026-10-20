@@ -65,6 +65,11 @@ type ColumnDesc struct {
 	UpdateDefault func() any
 	Immutable     bool
 	Sensitive     bool
+	// JSON says the column holds the field's value as JSON: velox binds
+	// json.Marshal's bytes for it and decodes what it reads with
+	// json.Unmarshal. velox-gen sets it for every json field; velox never
+	// guesses it from the Go type, as a []byte field holds bytes, not JSON.
+	JSON bool
 }
 
 // descFields are the fields of a Desc that do not depend on E, so that
@@ -176,7 +181,7 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 		}
 		ci := ColumnInfo{Field: c.Field, Name: c.Name, Type: ft, Nullable: ft.Kind() == reflect.Pointer, SQLType: c.SQLType,
 			HasDefault: c.Default != nil, DefaultFunc: c.DefaultFunc, UpdateDefault: c.UpdateDefault,
-			Immutable: c.Immutable, Sensitive: c.Sensitive, off: off}
+			Immutable: c.Immutable, Sensitive: c.Sensitive, JSON: c.JSON, off: off}
 		if c.Immutable && c.UpdateDefault != nil {
 			return fail(c.Field, "Immutable column %s has an UpdateDefault; every update would be refused", c.Field)
 		}

@@ -150,6 +150,24 @@ func (t fakeTx) rollback(ctx context.Context) error {
 	return t.e.RollbackErr
 }
 
+// render is renderStmt for the tests that render statements that cannot fail.
+func render(d Dialect, st *Statement) (string, []any) {
+	text, args, err := renderStmt(d, st)
+	if err != nil {
+		panic(err)
+	}
+	return text, args
+}
+
+// render is get for the tests that look only at the text.
+func (c *renderCache) render(d Dialect, st *Statement) (string, []any) {
+	e, args, err := c.get(d, st)
+	if err != nil {
+		panic(err)
+	}
+	return e.text, args
+}
+
 // FakeConn returns a Conn that runs statements on e.
 func FakeConn(e *FakeExec) Conn { return Conn{ex: e} }
 
@@ -218,6 +236,8 @@ func (r *fakeRows) Scan(dst ...any) error {
 
 func assign(dst, src any) error {
 	switch d := dst.(type) {
+	case sql.Scanner:
+		return d.Scan(src)
 	case *int64:
 		*d = src.(int64)
 	case *string:

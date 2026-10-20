@@ -21,6 +21,16 @@ type writer struct {
 	// subquery: an upsert's condition is on the existing row, and on
 	// PostgreSQL a bare column there may also be EXCLUDED's.
 	qualify bool
+	// err is the first error writing found: a JSON value that does not
+	// encode, or a condition comparing a JSON column. The text and
+	// arguments are then not used.
+	err error
+}
+
+func (w *writer) fail(err error) {
+	if w.err == nil {
+		w.err = err
+	}
 }
 
 func (w *writer) str(s string) {
@@ -51,6 +61,20 @@ func (w *writer) arg(v any) {
 	if !w.argsOnly {
 		w.d.placeholder(&w.b, len(w.args))
 	}
+}
+
+// colArg binds v, a value of column col: as it is, or as the bytes of its
+// JSON when the column holds JSON. Every value written to a column goes
+// through it, so that only the arguments hold the bytes (hooks see v).
+func (w *writer) colArg(col int, v any) {
+	if w.in.Columns[col].JSON {
+		b, err := encodeJSON(w.in, col, v)
+		if err != nil {
+			w.fail(err)
+		}
+		v = b
+	}
+	w.arg(v)
 }
 
 var cmpText = [...]string{opEQ: " = ", opNEQ: " <> ", opGT: " > ", opGTE: " >= ", opLT: " < ", opLTE: " <= "}
@@ -117,6 +141,10 @@ func isNilArg(v any) bool {
 }
 
 func (w *writer) pred(n node) {
+	if n.op >= opEQ && n.op <= opFold && w.in.Columns[n.col].JSON {
+		// Every condition that holds a value; IsNull and NotNull hold none.
+		w.fail(errJSONCondition(w.in, int(n.col)))
+	}
 	if (n.op == opEQ || n.op == opNEQ) && isNilArg(n.v) {
 		w.predCol(n.col)
 		if n.op == opEQ {
@@ -265,11 +293,16 @@ func (w *writer) subquery(in *EntityInfo, col int, from *EntityInfo, fromCol int
 	w.alias = alias
 }
 
-// render returns a statement's SQL and arguments.
-func render(d Dialect, st *Statement) (string, []any) {
+// renderStmt returns a statement's SQL and arguments, or why it cannot be
+// sent: a JSON value that does not encode, or a condition comparing a JSON
+// column.
+func renderStmt(d Dialect, st *Statement) (string, []any, error) {
 	w := writer{d: d, in: st.Entity}
 	w.statement(st)
-	return w.b.String(), w.args
+	if w.err != nil {
+		return "", nil, w.err
+	}
+	return w.b.String(), w.args, nil
 }
 
 // statement writes a statement of any kind.
@@ -332,7 +365,7 @@ func (w *writer) insertStmt(st *Statement) {
 			if i > 0 {
 				w.str(", ")
 			}
-			w.arg(v)
+			w.colArg(st.Columns[i], v)
 		}
 		w.str(")")
 	}
@@ -414,7 +447,10 @@ func (w *writer) updateStmt(st *Statement) {
 			w.col(int32(a.Column))
 			w.str(" - ")
 		}
-		w.arg(a.Value)
+		if a.Op != AssignSet && w.in.Columns[a.Column].JSON {
+			w.fail(fmt.Errorf("velox: %s: column %s holds JSON, which cannot be added to or subtracted from", w.in.Name, w.in.Columns[a.Column].Name))
+		}
+		w.colArg(a.Column, a.Value)
 	}
 	w.where(st.Where)
 }

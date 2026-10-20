@@ -57,6 +57,7 @@ type OutField struct {
 	Tag                  string // the struct tag, including backquotes
 	Comment              string
 	Sensitive, Immutable bool
+	JSON                 bool   // a json field: its ColumnDesc says JSON, and velox stores it as JSON
 	DefaultCode          string // "" or a Go expression for ColumnDesc.Default
 	DefaultFuncCode      string // "" or "func() any { … }"
 	UpdateDefaultCode    string // "" or "func() any { … }"

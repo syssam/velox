@@ -46,16 +46,11 @@ type renderCache struct {
 	bytes int                               // key, text and fingerprint bytes held
 }
 
-// render is get for the tests that look only at the text.
-func (c *renderCache) render(d Dialect, st *Statement) (string, []any) {
-	e, args := c.get(d, st)
-	return e.text, args
-}
-
 // get returns the shape's cached text and fingerprint, and the statement's
-// arguments. A shape past the cache's bounds is rendered each time, and gets
-// its fingerprint each time.
-func (c *renderCache) get(d Dialect, st *Statement) (cached, []any) {
+// arguments, or renderStmt's error. A shape past the cache's bounds is
+// rendered each time, and gets its fingerprint each time. A shape whose
+// rendering fails is not cached.
+func (c *renderCache) get(d Dialect, st *Statement) (cached, []any, error) {
 	var buf [256]byte
 	key := shapeKey(buf[:0], d, st)
 	c.mu.RLock()
@@ -64,9 +59,15 @@ func (c *renderCache) get(d Dialect, st *Statement) (cached, []any) {
 	if ok {
 		w := writer{d: d, in: st.Entity, argsOnly: true, args: make([]any, 0, 8)}
 		w.statement(st)
-		return e, w.args
+		if w.err != nil {
+			return cached{}, nil, w.err
+		}
+		return e, w.args, nil
 	}
-	text, args := render(d, st)
+	text, args, err := renderStmt(d, st)
+	if err != nil {
+		return cached{}, nil, err
+	}
 	e = cached{text, fingerprint(text)}
 	c.mu.Lock()
 	if c.n < maxShapes && c.bytes+len(key)+len(e.text)+len(e.fp) <= maxCacheBytes {
@@ -85,7 +86,7 @@ func (c *renderCache) get(d Dialect, st *Statement) (cached, []any) {
 		}
 	}
 	c.mu.Unlock()
-	return e, args
+	return e, args, nil
 }
 
 // size returns the number of shapes held.

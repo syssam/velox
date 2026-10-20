@@ -254,6 +254,9 @@ func entityDesc(w *writer, e *OutEntity) {
 		if f.Sensitive {
 			parts = append(parts, "Sensitive: true")
 		}
+		if f.JSON {
+			parts = append(parts, "JSON: true")
+		}
 		w.p("{%s},", strings.Join(parts, ", "))
 	}
 	w.p("},")
