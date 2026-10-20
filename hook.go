@@ -158,18 +158,18 @@ var (
 	errNextTwice = errors.New("a hook called next twice")
 )
 
-// BoundPolicy is an entity's Policy with E erased, made by BindPolicy for
+// For generated code. BoundPolicy is an entity's Policy with E erased, made by BindPolicy for
 // Desc.Policy. Its fields are not exported: only BindPolicy makes one.
 type BoundPolicy struct{ p *policy }
 
-// BoundHooks is an entity's hooks with E erased, made by BindHooks for
+// For generated code. BoundHooks is an entity's hooks with E erased, made by BindHooks for
 // Desc.Hooks. Its fields are not exported: only BindHooks makes one.
 type BoundHooks struct {
 	hs     []hookFn
 	nilAt1 int // 1 + the index of the first nil hook; 0 when none
 }
 
-// BindPolicy erases p's entity type, for Desc.Policy. velox-gen writes
+// For generated code. BindPolicy erases p's entity type, for Desc.Policy. velox-gen writes
 //
 //	Policy: func() velox.BoundPolicy { return velox.BindPolicy((*E)(nil).Policy()) },
 //
@@ -196,7 +196,7 @@ func policyOf[E any](p Policy[E]) *policy {
 	return pol
 }
 
-// BindHooks erases hs's entity type, for Desc.Hooks. velox-gen writes
+// For generated code. BindHooks erases hs's entity type, for Desc.Hooks. velox-gen writes
 //
 //	Hooks: func() velox.BoundHooks { return velox.BindHooks((*E)(nil).Hooks()) },
 //

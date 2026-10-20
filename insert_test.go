@@ -46,7 +46,7 @@ func TestInsertKeepsAGivenKeyAndCreatedAt(t *testing.T) {
 }
 
 // TestInsertFillsADefaultNotAnUpdateDefault: an UpdateDefault fills on update
-// only (Ruling 4). updated_at has both a DefaultFunc and an UpdateDefault, so
+// only. updated_at has both a DefaultFunc and an UpdateDefault, so
 // an insert fills it when it is zero and keeps a value the caller gave;
 // hFlex's Stamp has an UpdateDefault alone, so an insert leaves it as given.
 func TestInsertFillsADefaultNotAnUpdateDefault(t *testing.T) {

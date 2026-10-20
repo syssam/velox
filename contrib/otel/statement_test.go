@@ -532,7 +532,7 @@ func TestRouteAttributes(t *testing.T) {
 	t.Run("primary read", func(t *testing.T) {
 		p, r := &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}, &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}
 		db, exp, _ := traced(t, p, veloxotel.Config{}, velox.WithReplicas(velox.SQLConn(r.open())))
-		read(velox.Primary(ctx), db)
+		read(velox.ReadPrimary(ctx), db)
 		a := attrs(only(t, exp))
 		if a["velox.route.replica"] != attribute.BoolValue(false) {
 			t.Errorf("velox.route.replica = %v", a["velox.route.replica"].String())

@@ -43,6 +43,6 @@ go run ./tour
    from a unique-constraint violation.
 8. A report across tenants with `velox.AllTenants` and a reason.
 9. Deadlines set at `Open` with `velox.WithDeadlines`, and a transaction that
-   runs past its `velox.Timeout`.
+   runs past its `velox.TxTimeout`.
 
 The output is in `testdata/output.golden`.

@@ -8,7 +8,7 @@ import (
 	"github.com/syssam/velox2"
 )
 
-const _ = velox.GeneratedCodeIsVersion3
+const _ = velox.GeneratedCodeIsVersion4
 
 // UserGroup is the join entity of table user_groups.
 type UserGroup struct {

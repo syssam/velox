@@ -48,7 +48,7 @@ func TestUniqueViolation(t *testing.T) {
 		dup := newInvoice(1, "INV-1")
 		err := tg.db.Insert(&dup).Exec(ctx)
 		var ce *velox.ConstraintError
-		if !errors.As(err, &ce) || ce.Kind != velox.Unique || ce.Constraint != want[tg.d] || ce.Entity != "testmodel.Invoice" {
+		if !errors.As(err, &ce) || ce.Kind != velox.ConstraintUnique || ce.Constraint != want[tg.d] || ce.Entity != "testmodel.Invoice" {
 			t.Errorf("%v (%#v)", err, ce)
 		}
 	})

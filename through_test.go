@@ -182,7 +182,7 @@ func TestThroughCacheKey(t *testing.T) {
 }
 
 // TestThroughJoinRowsWrite: join rows are an entity's rows, written with
-// Insert and Delete (Ruling 10).
+// Insert and Delete.
 func TestThroughJoinRowsWrite(t *testing.T) {
 	e := &velox.FakeExec{Affected: 1}
 	db := velox.OpenFake(velox.Postgres, e)

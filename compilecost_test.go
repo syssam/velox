@@ -226,8 +226,8 @@ var genericObjects = []struct {
 	{"Statement", "velox.Statement", "", 5120},                      // measured 940
 	{"EntityInfo", "*velox.EntityInfo", "", 5120},                   // measured 956
 	{"ColumnInfo", "velox.ColumnInfo", "", 5120},                    // measured 20
-	// The entity packages, remeasured on 2026-10-19 when the old path went
-	// (schema plan 4, task 5), on darwin/arm64, Go 1.27.1. entityDesc is the
+	// The entity packages, remeasured on 2026-10-19 when the old path went,
+	// on darwin/arm64, Go 1.27.1. entityDesc is the
 	// minimal entity velox-gen writes: Load takes no Policy or Hook generic,
 	// and the Desc's Policy and Hooks fields hold E-erased BoundPolicy and
 	// BoundHooks that BindPolicy and BindHooks make in the entity's own
@@ -248,13 +248,13 @@ var genericObjects = []struct {
 
 // policyGrowthMax bounds the bytes a Policy and three hooks add to an entity's
 // package (entityDescHooks over entityDescUse): the measured growth plus
-// genericObjects' margin (policy design §7). Bodies barely count; the cost is
+// genericObjects' margin. Bodies barely count; the cost is
 // the generics velox instantiates for E (BindPolicy, BindHooks, On, the
 // Mutator and Mutation methods) and the export data of the types the
 // functions mention.
 const policyGrowthMax = 348160 // measured 282308
 
-// TestGenericTypesCompileSmall enforces design §3 rules 1, 3 and 7 for one
+// TestGenericTypesCompileSmall enforces the compile-cost rules for one
 // package: it measures each row's own object cost, the bytes its package
 // takes beyond a package that already imports velox, so an ordinary method on
 // a generic type, a method table, or a velox type or generic body reaching
@@ -299,7 +299,7 @@ func TestGenericTypesCompileSmall(t *testing.T) {
 			got := size(t, g.name) - base
 			t.Logf("%s: +%d bytes", g.name, got)
 			if got > g.max {
-				t.Errorf("%s adds %d bytes to its package, over the recorded %d (design §3)", what, got, g.max)
+				t.Errorf("%s adds %d bytes to its package, over the recorded %d", what, got, g.max)
 			}
 		})
 	}
@@ -308,13 +308,13 @@ func TestGenericTypesCompileSmall(t *testing.T) {
 		got := size(t, "entityDescHooks") - size(t, "entityDescUse")
 		t.Logf("policy and hooks: +%d bytes", got)
 		if got > policyGrowthMax {
-			t.Errorf("a Policy and the three entity hooks add %d bytes to an entity's package, over the recorded %d (policy design §7)", got, policyGrowthMax)
+			t.Errorf("a Policy and the three entity hooks add %d bytes to an entity's package, over the recorded %d", got, policyGrowthMax)
 		}
 	})
 }
 
-// TestObservabilityIsNotGeneric pins observability design success criterion
-// 5: nothing in Core's observability files is instantiated per entity.
+// TestObservabilityIsNotGeneric pins that nothing in Core's observability files
+// is instantiated per entity.
 func TestObservabilityIsNotGeneric(t *testing.T) {
 	fset := token.NewFileSet()
 	for _, name := range []string{"tags.go", "callers.go", "comment.go", "txhook.go"} {

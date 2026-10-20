@@ -8,7 +8,7 @@ import (
 	"github.com/syssam/velox2"
 )
 
-const _ = velox.GeneratedCodeIsVersion3
+const _ = velox.GeneratedCodeIsVersion4
 
 // Author is the entity of schema Author.
 type Author struct {

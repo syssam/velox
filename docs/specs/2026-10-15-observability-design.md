@@ -128,9 +128,9 @@ type TxInfo struct {
     ID        uint64             // unique within the process
     Isolation sql.IsolationLevel
     ReadOnly  bool
-    Attempt   int                // 1 for the first try; RetrySerializable increments it
+    Attempt   int                // 1 for the first try; TxRetrySerializable increments it
     Context   context.Context    // what the hooks passed to next; Tx's bounded context when there are none
-    Retries   []TxRetry          // the attempts RetrySerializable retried, in order
+    Retries   []TxRetry          // the attempts TxRetrySerializable retried, in order
     Outcome   TxOutcome          // how the last attempt ended; set before next returns
 }
 
@@ -142,7 +142,7 @@ type TxRetry struct {
 type TxOutcome uint8 // TxCommit, TxRollback or TxError; String gives "commit", "rollback", "error"
 ```
 
-- **What it wraps:** a `TxAround` hook is called once per `db.Tx` call. velox runs the attempts inside `next`: `next` runs every `RetrySerializable` attempt and the commit, and `TxInfo.Attempt` changes before each attempt. The first hook given is the outermost. A savepoint (a nested `Tx`) runs inside the enclosing transaction's hooks and does not call them again.
+- **What it wraps:** a `TxAround` hook is called once per `db.Tx` call. velox runs the attempts inside `next`: `next` runs every `TxRetrySerializable` attempt and the commit, and `TxInfo.Attempt` changes before each attempt. The first hook given is the outermost. A savepoint (a nested `Tx`) runs inside the enclosing transaction's hooks and does not call them again.
   - Why: §2.2 asks for one span per `db.Tx` call, with the final attempt count and an event per retry. A hook called per attempt could not know which attempt is the last.
 - **Retries:** velox appends a `TxRetry` before each retry. The retry events and `velox.tx.outcome` (§2.2) need what only velox knows; reading error text would be brittle.
 - **Outcome:**

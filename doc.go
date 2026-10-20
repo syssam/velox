@@ -35,18 +35,74 @@
 // short window after a write; a replica that fails a read falls over to the
 // primary. OpenShards runs each statement on one shard, chosen from the
 // context's tenant (WithShardFor) or OnShard. See example/routing.
+//
+// # Options
+//
+// An Option configures a DB, once, when it is opened (Open, OpenPgx, OpenShards).
+// What a DB checks and bounds:
+//
+//   - WithMaxLimit and WithMaxRows cap a query's Limit and the rows it reads.
+//   - WithDeadlines sets the time limits of statements and transactions.
+//
+// What runs around its statements:
+//
+//   - WithRewrite, WithAround and WithTxAround add hooks that see every
+//     statement, or every transaction.
+//   - WithCallers, WithCallerSkip and WithSQLComment annotate the SQL.
+//
+// Where its statements go:
+//
+//   - WithReplicas, WithPinWindow and WithReplicaBackoff set the replicas.
+//   - WithShardFor chooses a shard from the tenant.
+//
+// # Context decorators
+//
+// A context decorator returns a context that changes what the statements
+// run under it do. None of them changes the DB:
+//
+//   - WithTenant and AllTenants name the tenant a statement is scoped to, or
+//     lift the scope.
+//   - SkipPolicy lifts the entities' policies.
+//   - OnShard, ReadPrimary and WithSession route a statement.
+//   - WithTags adds tags to the SQL comment.
+//   - WithoutTx removes a transaction's mark from a context.
+//
+// # Transaction options
+//
+// A TxOption configures one call of DB.Tx: TxIsolation, TxReadOnly,
+// TxRetrySerializable and TxTimeout.
+//
+// # Errors
+//
+// Errors are returned wrapped, in an error whose text starts
+// "velox: <Entity>: ". Test for the sentinels (ErrNotFound, ErrDenied, ...)
+// with errors.Is, and for a violated constraint (ConstraintUnique,
+// ConstraintForeignKey, ConstraintNotNull and ConstraintCheck) with
+// errors.As to a *ConstraintError.
+//
+// # Generated code
+//
+// velox-gen writes code that uses part of this package, and nothing else
+// should: Desc, ColumnDesc, Relation, EdgeTo, EdgeThrough, Meta, MetaOnce,
+// BindPolicy, BindHooks, BoundPolicy, BoundHooks, Lazy and
+// GeneratedCodeIsVersion4. Each says "For generated code." in its
+// documentation. They are not part of velox's API: they change with
+// GeneratedCodeIsVersion, whose number changes when generated code must
+// change, and outside semantic versioning. Run velox-gen again after you
+// update velox; code generated for another version fails to compile.
 package velox
 
 //go:generate go run ./internal/handlegen/gen
 
-// GeneratedCodeIsVersion3 is referenced by every file velox-gen writes from a
-// schema package, so that generated code and this library fail to compile
-// together when they disagree. It is replaced by GeneratedCodeIsVersion4 when
-// generated code must change. (Version 3: Desc literals and switch-based Addr
-// and RelAddr, generated from a schema package.)
-const GeneratedCodeIsVersion3 = true
+// For generated code. GeneratedCodeIsVersion4 is referenced by every file
+// velox-gen writes from a schema package, so that generated code and this
+// library fail to compile together when they disagree. It is replaced by
+// GeneratedCodeIsVersion5 when generated code must change. (Version 4 is the
+// contract documented in the package documentation; version 3 was Desc
+// literals and switch-based Addr and RelAddr.)
+const GeneratedCodeIsVersion4 = true
 
-// Lazy is the constraint of the type parameter that every method of a
+// For generated code. Lazy is the constraint of the type parameter that every method of a
 // generic velox type carries, and that callers never write. A generic method
 // is compiled only where it is called; an ordinary method of a generic type is
 // compiled into every package that uses the type.

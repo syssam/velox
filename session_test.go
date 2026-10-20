@@ -115,12 +115,12 @@ func TestSessionsAreIndependent(t *testing.T) {
 // Primary and a session share one context key: each keeps the other's mark.
 func TestSessionAndPrimaryMarksCompose(t *testing.T) {
 	s := seeded(true)
-	sctx := velox.Primary(velox.WithSession(ctx))
+	sctx := velox.ReadPrimary(velox.WithSession(ctx))
 	writeOne(t, s.db, sctx)
 	if u := velox.PinnedUntil(sctx); u.IsZero() {
 		t.Error("the session under Primary is lost")
 	}
-	pctx := velox.WithSession(velox.Primary(ctx))
+	pctx := velox.WithSession(velox.ReadPrimary(ctx))
 	readOne(t, s.db, pctx)
 	s.check(t, true, [3]int{2, 0, 0}, onPrimary, onPrimary)
 }
@@ -231,7 +231,7 @@ func TestTxCommitPins(t *testing.T) {
 				return &pgconn.PgError{Code: "40001"}
 			}
 			return nil
-		}, velox.RetrySerializable(1))
+		}, velox.TxRetrySerializable(1))
 		if err != nil || attempt != 2 {
 			t.Fatalf("attempt %d, err %v; want the second attempt to commit", attempt, err)
 		}
@@ -242,15 +242,14 @@ func TestTxCommitPins(t *testing.T) {
 	})
 }
 
-// A read-only transaction runs on the primary, like every transaction
-// (Ruling 10).
+// A read-only transaction runs on the primary, like every transaction.
 func TestReadOnlyTxRunsOnThePrimary(t *testing.T) {
 	bothPaths(t, func(t *testing.T, hooked bool) {
 		s := seeded(hooked)
 		err := s.db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 			_, err := tx.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).One(ctx)
 			return err
-		}, velox.ReadOnly())
+		}, velox.TxReadOnly())
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -43,7 +43,7 @@ func TestTxAroundWrapsTheCall(t *testing.T) {
 			return err
 		}
 		return tx.Tx(ctx, touch) // a savepoint: no hook runs again
-	}, velox.ReadOnly())
+	}, velox.TxReadOnly())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestTxAroundSeesEveryAttempt(t *testing.T) {
 			attempts = append(attempts, st.Tx.Attempt)
 			return next(ctx)
 		}))
-	if err := db.Tx(ctx, touch, velox.RetrySerializable(2)); err != nil {
+	if err := db.Tx(ctx, touch, velox.TxRetrySerializable(2)); err != nil {
 		t.Fatal(err)
 	}
 	if calls != 1 || !reflect.DeepEqual(attempts, []int{1, 2}) || info.Attempt != 2 || info.Outcome != velox.TxCommit {
@@ -115,7 +115,7 @@ func TestStatementTx(t *testing.T) {
 	if err := touch(ctx, db); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Tx(ctx, touch, velox.RetrySerializable(1)); err != nil {
+	if err := db.Tx(ctx, touch, velox.TxRetrySerializable(1)); err != nil {
 		t.Fatal(err)
 	}
 	if len(seen) != 2 || seen[0] != nil || seen[1] == nil || seen[1].ID == 0 || seen[1].Attempt != 1 || seen[1].Outcome != velox.TxCommit {
@@ -220,7 +220,7 @@ func TestTxAroundRules(t *testing.T) {
 			name:    "deadline",
 			hook:    observe,
 			fn:      func(context.Context, *velox.DB) error { time.Sleep(20 * time.Millisecond); return nil },
-			opts:    []velox.TxOption{velox.Timeout(time.Millisecond)},
+			opts:    []velox.TxOption{velox.TxTimeout(time.Millisecond)},
 			check:   func(err error, _ *velox.FakeExec) bool { return errors.Is(err, velox.ErrTimeout) },
 			outcome: velox.TxError,
 		},
@@ -240,7 +240,7 @@ func TestTxAroundRules(t *testing.T) {
 			name: "deadline dropped",
 			hook: dropDeadline,
 			fn:   untilDeadline(nil),
-			opts: []velox.TxOption{velox.Timeout(time.Millisecond)},
+			opts: []velox.TxOption{velox.TxTimeout(time.Millisecond)},
 			check: func(err error, e *velox.FakeExec) bool {
 				return errors.Is(err, velox.ErrTimeout) && last(e) == "ROLLBACK"
 			},
@@ -250,7 +250,7 @@ func TestTxAroundRules(t *testing.T) {
 			name: "deadline dropped, fn fails",
 			hook: dropDeadline,
 			fn:   untilDeadline(boom),
-			opts: []velox.TxOption{velox.Timeout(time.Millisecond)},
+			opts: []velox.TxOption{velox.TxTimeout(time.Millisecond)},
 			check: func(err error, e *velox.FakeExec) bool {
 				return errors.Is(err, velox.ErrTimeout) && errors.Is(err, boom) && last(e) == "ROLLBACK"
 			},

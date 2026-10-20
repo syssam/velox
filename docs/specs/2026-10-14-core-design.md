@@ -477,11 +477,11 @@ n, err := db.Delete[billing.Line]().Where(L.InvoiceID.EQ(id)).Exec(ctx)
 ### 4.6 Transactions
 
 ```go
-err := db.Tx(ctx, func(tx *velox.DB) error { … }, velox.RetrySerializable(3))
+err := db.Tx(ctx, func(tx *velox.DB) error { … }, velox.TxRetrySerializable(3))
 ```
 
 The function's error rolls back; `nil` commits; a panic rolls back and
-re-panics. `RetrySerializable` re-runs the function on serialization failures
+re-panics. `TxRetrySerializable` re-runs the function on serialization failures
 and deadlocks, as classified per dialect. Nested `Tx` uses savepoints.
 
 ## 5. Execution pipeline
@@ -510,7 +510,7 @@ The pipeline is configured on `velox.Open` and immutable afterwards. Core
 ships the rewrite and around stages (`velox.WithRewrite`, `velox.WithAround`),
 and `velox.WithTxAround`, which wraps each `db.Tx` call the way an around hook
 wraps a statement: it runs once per call, and its `next` runs every
-`RetrySerializable` attempt and the commit (observability design §2.2). The
+`TxRetrySerializable` attempt and the commit (observability design §2.2). The
 route stage's option arrives with sub-project 4; adding an option breaks no
 caller.
 
@@ -591,7 +591,7 @@ Constraint violations are normalized into `*velox.ConstraintError` with a kind
 Sentinels for `errors.Is`: `ErrNotFound`, `ErrNotSingular`, `ErrUnbounded`,
 `ErrNoWhere`, `ErrLimitTooLarge`, `ErrTooManyRows`, `ErrTimeout`. Typed errors for
 `errors.As`: `*ConstraintError{Entity, Kind, Constraint, Err}` with `Kind` one
-of `Unique`, `ForeignKey`, `NotNull`, `Check`; `Constraint` is the
+of `ConstraintUnique`, `ConstraintForeignKey`, `ConstraintNotNull`, `ConstraintCheck`; `Constraint` is the
 constraint's name, except that SQLite reports the columns and a NOT NULL error
 the column. `*SchemaError` (an invalid `Schema` method,
 reported with the entity and field). Sentinels are bare phrases, always

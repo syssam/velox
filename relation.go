@@ -26,7 +26,7 @@ type kit struct {
 // loaded. The value is held as any so that an entity's type does not reach
 // the types of the entities it relates to: every package that uses an
 // instantiated generic type compiles its type descriptor and everything the
-// descriptor reaches (design §3 rule 2).
+// descriptor reaches.
 type One[T any] struct {
 	v      any // *T
 	loaded bool
@@ -61,7 +61,7 @@ type holder struct {
 	loaded bool
 }
 
-// Relation is one relation field of a generated Desc: its name and the
+// For generated code. Relation is one relation field of a generated Desc: its name and the
 // columns that key it. EdgeTo and EdgeThrough make it. It carries no target
 // entity: the use site supplies that (see EdgeTo).
 type Relation struct {
@@ -85,7 +85,7 @@ type relation struct {
 	name string
 	many bool
 	off  uintptr // the field's offset in the owner
-	typ  any     // the reflect.Type of One[T] or Many[T] (design §3 rule 7)
+	typ  any     // the reflect.Type of One[T] or Many[T]
 
 	// The key, as EdgeTo and EdgeThrough wrote it.
 	ownerCol  int
@@ -120,8 +120,8 @@ type useTarget struct {
 }
 
 // targetOf is the use site's target for a relation to entity T. It calls
-// elemType with a nil pointer where non-generic code would use reflect.TypeFor
-// (design §3 rule 7).
+// elemType with a nil pointer where non-generic code would use reflect.TypeFor,
+// so that no reflect.Type is compiled into the generic code.
 func targetOf[T any]() useTarget {
 	return useTarget{get: ownerOf[T], one: elemType((*One[T])(nil)), many: elemType((*Many[T])(nil))}
 }
@@ -310,8 +310,8 @@ func (r Rel[E, T]) spec[_ Lazy[T]]() loadSpec {
 
 // MarshalJSON writes the related entity, or null when there is none or it
 // was not loaded. Tag the field json:",omitzero" to leave a relation that was
-// not loaded out. (An ordinary method on a generic type, against design §3
-// rule 1, because encoding/json looks for it by name; its body is one call.)
+// not loaded out. (An ordinary method on a generic type, not a generic one,
+// because encoding/json looks for it by name; its body is one call.)
 func (o One[T]) MarshalJSON() ([]byte, error) { return json.Marshal(o.v) }
 
 // MarshalJSON writes the related entities, or null when they were not

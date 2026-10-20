@@ -35,7 +35,7 @@ var handleKinds = map[string]bool{
 
 // ordinaryMethod reports whether the method name of the generic type recv is
 // one of the exact exceptions: the handles' column, the MarshalJSON of One
-// and Many (encoding/json finds it by name, spec §3), and MutateFunc's Mutate
+// and Many (encoding/json finds it by name), and MutateFunc's Mutate
 // (interface satisfaction: Mutator's method set needs it).
 func ordinaryMethod(name, recv string) bool {
 	switch name {
@@ -50,7 +50,7 @@ func ordinaryMethod(name, recv string) bool {
 }
 
 // checkMethods returns one message per method of a generic type in f that
-// breaks design §3 rule 1.
+// is not a generic method.
 func checkMethods(fset *token.FileSet, f *ast.File) []string {
 	var bad []string
 	for _, d := range f.Decls {
@@ -74,7 +74,7 @@ func checkMethods(fset *token.FileSet, f *ast.File) []string {
 		case name == "column" || name == "MarshalJSON":
 			bad = append(bad, fmt.Sprintf("%s: method %s of %s is an ordinary method; only the handles' column and One/Many's MarshalJSON are allowed this name as ordinary methods", pos, name, recv))
 		case !genericOwnTypeParam(fd):
-			bad = append(bad, fmt.Sprintf("%s: method %s of a generic type is not a generic method; add [_ Lazy[...]] (design §3 rule 1)", pos, name))
+			bad = append(bad, fmt.Sprintf("%s: method %s of a generic type is not a generic method; add [_ Lazy[...]]", pos, name))
 		}
 	}
 	return bad
@@ -103,7 +103,7 @@ func genericOwnTypeParam(fd *ast.FuncDecl) bool {
 	return ok && id.Name == "Lazy"
 }
 
-// TestMethodsOfGenericTypesAreGeneric enforces design §3 rule 1: a method of
+// TestMethodsOfGenericTypesAreGeneric enforces that a method of
 // a generic type is a generic method, compiled only where it is called. The
 // exceptions are exact: column on the ten handle kinds, which makes a handle
 // a Column[E], MarshalJSON on One and Many, and Mutate on MutateFunc.

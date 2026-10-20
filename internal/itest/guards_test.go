@@ -74,7 +74,7 @@ func TestTxDeadlineOnRealDatabases(t *testing.T) {
 			lockRow(t, tg)
 			_, err := tx.Update[testmodel.Invoice]().Set(I.Total.Set(1)).Where(I.ID.EQ(1)).Exec(ctx)
 			return err
-		}, velox.Timeout(300*time.Millisecond))
+		}, velox.TxTimeout(300*time.Millisecond))
 		if !errors.Is(err, velox.ErrTimeout) {
 			t.Fatalf("%v", err)
 		}

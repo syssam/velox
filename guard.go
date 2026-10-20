@@ -2,9 +2,8 @@ package velox
 
 import "fmt"
 
-// guard checks a statement as the caller built it, before any hook sees it
-// (policy design §1): conditions velox or a hook adds later never count as
-// the caller's.
+// guard checks a statement as the caller built it, before any hook sees it:
+// conditions velox or a hook adds later never count as the caller's.
 func (db *DB) guard(st *Statement) error {
 	for _, p := range st.Where {
 		if hasZero(p.n) {

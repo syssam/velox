@@ -108,7 +108,7 @@ func TestCommentIsSafeForConcurrentUse(t *testing.T) {
 }
 
 // TestSQLCommentPanics: an empty app, and a tag that would give the comment
-// an empty or repeated key, are mistakes found at Open (Ruling 9).
+// an empty or repeated key, are mistakes found at Open.
 func TestSQLCommentPanics(t *testing.T) {
 	for _, args := range [][]string{{""}, {"billing", ""}, {"billing", "route", "route"}, {"billing", "app"}, {"billing", "caller"}} {
 		func() {

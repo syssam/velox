@@ -9,7 +9,7 @@ import (
 )
 
 // TxAround is a hook that wraps a transaction: a db.Tx call, every attempt
-// RetrySerializable makes and the commit included. It is called once per
+// TxRetrySerializable makes and the commit included. It is called once per
 // db.Tx call, not for a nested Tx (a savepoint). A multi-batch InsertAll
 // outside a transaction runs in one db.Tx, so the hooks see it too.
 //
@@ -29,12 +29,12 @@ type TxInfo struct {
 	ID        uint64 // unique within the process
 	Isolation sql.IsolationLevel
 	ReadOnly  bool
-	Attempt   int       // 1 for the first try; RetrySerializable increments it
-	Retries   []TxRetry // the attempts RetrySerializable retried, in order
+	Attempt   int       // 1 for the first try; TxRetrySerializable increments it
+	Retries   []TxRetry // the attempts TxRetrySerializable retried, in order
 	Outcome   TxOutcome // how the last attempt ended; set before next returns
 }
 
-// TxRetry is an attempt that RetrySerializable retried.
+// TxRetry is an attempt that TxRetrySerializable retried.
 type TxRetry struct {
 	Err error     // what the attempt failed with
 	At  time.Time // when velox decided to retry

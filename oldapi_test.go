@@ -6,8 +6,7 @@ import (
 	"testing"
 )
 
-// TestOldAPIIsGone: the struct-scanning path was removed in schema plan 4
-// (Review Focus 4). None of its exported names is declared any more, and the
+// TestOldAPIIsGone: the struct-scanning path is gone. None of its exported names is declared any more, and the
 // only way to give an entity metadata is a Desc (MetaOnce.Load). The check
 // reads the package documentation, which lists every exported declaration at
 // the start of a line.
@@ -23,7 +22,7 @@ func TestOldAPIIsGone(t *testing.T) {
 	}
 	doc := string(out)
 	// Not vacuous: the new API is listed.
-	for _, kept := range []string{`(?m)^type Desc\[E any\] struct`, `(?m)^func \(o \*MetaOnce\[E\]\) Load\[`, `(?m)^const GeneratedCodeIsVersion3 `, `(?m)^func EdgeTo\[`} {
+	for _, kept := range []string{`(?m)^type Desc\[E any\] struct`, `(?m)^func \(o \*MetaOnce\[E\]\) Load\[`, `(?m)^const GeneratedCodeIsVersion4 `, `(?m)^func EdgeTo\[`} {
 		if !regexp.MustCompile(kept).MatchString(doc) {
 			t.Errorf("go doc does not list %s: the check reads nothing", kept)
 		}

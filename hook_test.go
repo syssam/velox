@@ -101,7 +101,7 @@ func TestHooksUnderSQL(t *testing.T) {
 	}
 }
 
-// TestInsertAllRunsTheHooksOnce: once per call, over every row (Ruling 6).
+// TestInsertAllRunsTheHooksOnce: once per call, over every row.
 func TestInsertAllRunsTheHooksOnce(t *testing.T) {
 	trace = nil
 	e := &velox.FakeExec{Affected: 2}
@@ -409,7 +409,7 @@ func TestNextTwiceSendsOnce(t *testing.T) {
 }
 
 // TestValidatorsRunBeforeTheInsertPolicy: a row that fails both is a
-// *ValidationError (Ruling 5), and nothing is sent.
+// *ValidationError, and nothing is sent.
 func TestValidatorsRunBeforeTheInsertPolicy(t *testing.T) {
 	e := &velox.FakeExec{}
 	db := velox.OpenFake(velox.Postgres, e)
@@ -441,7 +441,7 @@ func TestMisuseWithoutNextIsReported(t *testing.T) {
 	}
 }
 
-// TestHooksDoNotSeeUpdateDefaults: next adds them (Ruling 5).
+// TestHooksDoNotSeeUpdateDefaults: next adds them.
 func TestHooksDoNotSeeUpdateDefaults(t *testing.T) {
 	var before, after bool
 	flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {

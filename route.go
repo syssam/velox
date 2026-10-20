@@ -48,7 +48,7 @@ func PgxConn(pool *pgxpool.Pool) Conn {
 
 // WithReplicas adds read replicas to a DB's primary, the connection Open or
 // OpenPgx was given. A read outside a transaction goes to a replica, each in
-// turn, unless its context is marked with Primary; a query's With loads go to
+// turn, unless its context is marked with ReadPrimary; a query's With loads go to
 // the replica the query read. Writes, and every statement in a transaction,
 // go to the primary. Statement.Route records the choice.
 //
@@ -84,7 +84,7 @@ type Shard struct {
 }
 
 // OpenShards returns a DB of dialect d whose statements each run on one of
-// shards, chosen from the statement's context (routing spec §5):
+// shards, chosen from the statement's context:
 //
 //  1. the shard OnShard names;
 //  2. otherwise, the one WithShardFor's function returns for the context's
@@ -170,9 +170,9 @@ func OnShard(ctx context.Context, name string) context.Context {
 	return context.WithValue(ctx, routeKey{}, rc)
 }
 
-// Primary returns a context whose reads go to the primary, on a DB with
+// ReadPrimary returns a context whose reads go to the primary, on a DB with
 // replicas: for a read that must see a write the replicas may not have yet.
-func Primary(ctx context.Context) context.Context {
+func ReadPrimary(ctx context.Context) context.Context {
 	rc, _ := ctx.Value(routeKey{}).(routeCtx)
 	rc.primary = true
 	return context.WithValue(ctx, routeKey{}, rc)
@@ -303,7 +303,7 @@ type Route struct {
 }
 
 // routeKey is the context key of the route marks. They share it, so that the
-// route stage reads them all in one lookup (Ruling 2).
+// route stage reads them all in one lookup.
 type routeKey struct{}
 
 // routeCtx is a context's route marks. Each function that sets one copies
@@ -311,7 +311,7 @@ type routeKey struct{}
 type routeCtx struct {
 	sess    *session // WithSession's; nil: none
 	shard   string   // OnShard's name, when onShard is set
-	primary bool     // Primary: reads go to the primary
+	primary bool     // ReadPrimary: reads go to the primary
 	onShard bool     // OnShard: statements go to the shard named shard
 }
 
@@ -374,7 +374,7 @@ func newShard(d Dialect, primary executor, replicas []Conn, what string) *shard 
 // rc: OnShard's, else the one WithShardFor gives for ctx's tenant. It returns
 // nil and no error when ctx names none, and an error wrapping ErrNoShard for
 // a name that is not a shard and for WithShardFor's error. Only without an
-// OnShard does it look the tenant up (Ruling 2).
+// OnShard does it look the tenant up.
 func (rt *router) shardOf(ctx context.Context, rc routeCtx) (*shard, error) {
 	if rc.onShard {
 		if sh := rt.shards[rc.shard]; sh != nil {
@@ -430,16 +430,16 @@ func (db *DB) shardForTx(ctx context.Context) (*shard, error) {
 // records the choice in st.Route.
 //
 // Writes, statements in a transaction, reads whose context is marked with
-// Primary and reads of a session within its pin window go to the primary. A
-// With load goes where its query went (Ruling 3). Any other read goes to the
+// ReadPrimary and reads of a session within its pin window go to the primary. A
+// With load goes where its query went. Any other read goes to the
 // next replica in turn, skipping one in back-off, or to the primary when
 // every replica is. A dry run is routed as the read would be, but takes no
 // replica's turn: it sends nothing. exec, not route, falls a failed replica
 // read over to the primary.
 //
-// On a sharded DB the statement's shard comes first (routing spec §5): the
+// On a sharded DB the statement's shard comes first: the
 // one its context names (shardOf), the pinned target's for a With load, the
-// transaction's in a transaction (Ruling 8). A statement whose shard cannot
+// transaction's in a transaction. A statement whose shard cannot
 // be found fails, with nothing sent.
 //
 // On a DB without a router it is one branch: no context lookup.
@@ -494,7 +494,7 @@ func (db *DB) route(ctx context.Context, st *Statement) (target, error) {
 
 // routeTx is route in a transaction on a sharded DB: the statement runs on
 // the transaction's connection, unless its context names another shard, or
-// names one that is not a shard, or WithShardFor fails (Ruling 8). A context
+// names one that is not a shard, or WithShardFor fails. A context
 // that names no shard is the transaction's.
 func (db *DB) routeTx(ctx context.Context, st *Statement) (target, error) {
 	rc, _ := ctx.Value(routeKey{}).(routeCtx)
@@ -595,8 +595,8 @@ func (r *replica) down(d time.Duration) {
 }
 
 // broken reports whether err, from a read on t, is a connection error on a
-// replica, with ctx still live: whether the read falls over (Ruling 5: a
-// context that ended says nothing about the replica).
+// replica, with ctx still live: whether the read falls over. A context
+// that ended says nothing about the replica.
 func (db *DB) broken(ctx context.Context, t target, err error) bool {
 	return t.replica >= 0 && ctx.Err() == nil && failoverable(err)
 }
@@ -604,7 +604,7 @@ func (db *DB) broken(ctx context.Context, t target, err error) bool {
 // fallBack records that st's read on replica t failed with a connection
 // error: the replica is put in back-off for the DB's WithReplicaBackoff, and
 // fallBack returns the shard's primary for exec to retry st on, with st.Route
-// (Ruling 6) and st.ran saying so.
+// and st.ran saying so.
 func (db *DB) fallBack(st *Statement, t target) target {
 	t.sh.replicas[t.replica].down(db.cfg.backoff)
 	p := target{ex: t.sh.primary, sh: t.sh, replica: -1}
@@ -614,12 +614,12 @@ func (db *DB) fallBack(st *Statement, t target) target {
 }
 
 // failoverable reports whether err, from a read on a replica (the query call
-// or its rows), is a connection error (routing spec §4) after which the read
+// or its rows), is a connection error after which the read
 // is retried on the primary: the replica was not reached, its connection is
 // gone, or its server is shutting down or starting up. A query error
 // (syntax, a constraint, a permission) is not. Neither is a context that
 // ended, which says nothing about the replica: exec checks the statement's
-// context before asking (Ruling 5), and context.DeadlineExceeded, itself a
+// context before asking, and context.DeadlineExceeded, itself a
 // net.Error, is ruled out here too. A net.Error that is a timeout counts only
 // from a dial: a read that timed out may be a slow query, not a dead replica.
 // A MySQL error that is the server refusing or ending the connection counts

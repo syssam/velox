@@ -9,7 +9,7 @@ import (
 )
 
 // scope applies the context's tenant and the entities' policies to a
-// statement (policy design §2.1, §2.2). On a tenant-scoped entity it adds the
+// statement. On a tenant-scoped entity it adds the
 // condition tenant = id, or fails the statement with ErrNoTenant when the
 // context has neither WithTenant nor AllTenants. Unless the context says
 // SkipPolicy, a SELECT gets the entity's Read policy and an UPDATE or DELETE

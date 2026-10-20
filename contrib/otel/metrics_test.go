@@ -275,7 +275,7 @@ func TestTxDurationMetric(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.errs = []error{nil, &pgconn.PgError{Code: "40001"}}
-	if err := db.Tx(ctx, fn, velox.RetrySerializable(1)); err != nil {
+	if err := db.Tx(ctx, fn, velox.TxRetrySerializable(1)); err != nil {
 		t.Fatal(err)
 	}
 	boom := errors.New("boom")
@@ -287,7 +287,7 @@ func TestTxDurationMetric(t *testing.T) {
 		t.Fatalf("commit fails: %v", err)
 	}
 	f.commitErr = nil
-	if err := db.Tx(ctx, fn, velox.ReadOnly()); err != nil {
+	if err := db.Tx(ctx, fn, velox.TxReadOnly()); err != nil {
 		t.Fatal(err)
 	}
 	func() {

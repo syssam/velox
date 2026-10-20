@@ -193,7 +193,7 @@ func TestRetrySerializable(t *testing.T) {
 	e := &velox.FakeExec{Errs: []error{serialization}}
 	db := velox.OpenFake(velox.Postgres, e)
 	runs := 0
-	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { runs++; return touch(ctx, tx) }, velox.RetrySerializable(2))
+	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { runs++; return touch(ctx, tx) }, velox.TxRetrySerializable(2))
 	if err != nil || runs != 2 {
 		t.Fatalf("%v, runs %d", err, runs)
 	}
@@ -204,12 +204,12 @@ func TestRetrySerializable(t *testing.T) {
 	e = &velox.FakeExec{Errs: []error{serialization}}
 	db = velox.OpenFake(velox.Postgres, e)
 	if err := db.Tx(ctx, touch); !errors.Is(err, serialization) {
-		t.Errorf("without RetrySerializable: %v", err)
+		t.Errorf("without TxRetrySerializable: %v", err)
 	}
 	e = &velox.FakeExec{Errs: []error{errors.New("not retryable")}}
 	db = velox.OpenFake(velox.Postgres, e)
 	runs = 0
-	if err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { runs++; return touch(ctx, tx) }, velox.RetrySerializable(3)); err == nil || runs != 1 {
+	if err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { runs++; return touch(ctx, tx) }, velox.TxRetrySerializable(3)); err == nil || runs != 1 {
 		t.Errorf("a non-retryable error: %v, runs %d", err, runs)
 	}
 }
@@ -219,7 +219,7 @@ func TestTxOptionsAndInTx(t *testing.T) {
 	spy := func(_ context.Context, st *velox.Statement) error { inTx = append(inTx, st.InTx); return nil }
 	e := &velox.FakeExec{}
 	db := velox.OpenFake(velox.Postgres, e, velox.WithRewrite(spy))
-	if err := db.Tx(ctx, touch, velox.Isolation(sql.LevelSerializable), velox.ReadOnly()); err != nil {
+	if err := db.Tx(ctx, touch, velox.TxIsolation(sql.LevelSerializable), velox.TxReadOnly()); err != nil {
 		t.Fatal(err)
 	}
 	if err := touch(ctx, db); err != nil {
@@ -236,9 +236,9 @@ func TestRetryBound(t *testing.T) {
 		e := &velox.FakeExec{Err: serialization}
 		db := velox.OpenFake(velox.Postgres, e)
 		runs := 0
-		err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { runs++; return touch(ctx, tx) }, velox.RetrySerializable(tc.n))
+		err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { runs++; return touch(ctx, tx) }, velox.TxRetrySerializable(tc.n))
 		if !errors.Is(err, serialization) || runs != tc.runs {
-			t.Errorf("RetrySerializable(%d): runs %d, want %d; err %v", tc.n, runs, tc.runs, err)
+			t.Errorf("TxRetrySerializable(%d): runs %d, want %d; err %v", tc.n, runs, tc.runs, err)
 		}
 	}
 }
@@ -254,7 +254,7 @@ func TestFailingCommit(t *testing.T) {
 			e.CommitErr = nil
 		}
 		return touch(ctx, tx)
-	}, velox.RetrySerializable(1))
+	}, velox.TxRetrySerializable(1))
 	want := []string{"BEGIN", touchSQL, "COMMIT", "BEGIN", touchSQL, "COMMIT"}
 	if err != nil || runs != 2 || !reflect.DeepEqual(e.Log, want) {
 		t.Errorf("%v, runs %d\n got %q\nwant %q", err, runs, e.Log, want)
@@ -263,7 +263,7 @@ func TestFailingCommit(t *testing.T) {
 	boom := errors.New("boom")
 	e = &velox.FakeExec{CommitErr: boom}
 	db = velox.OpenFake(velox.Postgres, e)
-	err = db.Tx(ctx, touch, velox.RetrySerializable(2))
+	err = db.Tx(ctx, touch, velox.TxRetrySerializable(2))
 	want = []string{"BEGIN", touchSQL, "COMMIT"}
 	if !errors.Is(err, boom) || !strings.HasPrefix(err.Error(), "velox: commit: ") || !reflect.DeepEqual(e.Log, want) {
 		t.Errorf("%v\n got %q\nwant %q", err, e.Log, want)
@@ -537,7 +537,7 @@ func TestWithoutTx(t *testing.T) {
 		}
 		_, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(free)
 		return err
-	}, velox.Timeout(time.Minute))
+	}, velox.TxTimeout(time.Minute))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -43,7 +43,7 @@ func TestTxSpanTree(t *testing.T) {
 		}
 		_, err := tx.Update[testmodel.Invoice]().Set(I.Paid.Set(true)).Where(I.ID.EQ(1)).Exec(ctx)
 		return err
-	}, velox.RetrySerializable(1))
+	}, velox.TxRetrySerializable(1))
 	root.End()
 	if err != nil {
 		t.Fatal(err)
@@ -83,7 +83,7 @@ func TestTxSpanTree(t *testing.T) {
 // transaction was given.
 func TestTxOptions(t *testing.T) {
 	db, exp, _ := traced(t, &fakeDB{}, veloxotel.Config{})
-	err := db.Tx(ctx, func(context.Context, *velox.DB) error { return nil }, velox.Isolation(sql.LevelSerializable), velox.ReadOnly())
+	err := db.Tx(ctx, func(context.Context, *velox.DB) error { return nil }, velox.TxIsolation(sql.LevelSerializable), velox.TxReadOnly())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -120,7 +120,7 @@ func run(ctx context.Context, w io.Writer) error {
 		acct := gen.Account{Name: "bob", Balance: 5}
 		err := tx.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { return tx.Insert(&acct).Exec(ctx) })
 		var ce *velox.ConstraintError
-		if errors.As(err, &ce) && ce.Kind == velox.Unique {
+		if errors.As(err, &ce) && ce.Kind == velox.ConstraintUnique {
 			say("savepoint: %s constraint on %s; opening bob2 instead", ce.Kind, ce.Constraint)
 			acct.Name = "bob2"
 			err = tx.Insert(&acct).Exec(ctx)
@@ -129,7 +129,7 @@ func run(ctx context.Context, w io.Writer) error {
 	})
 	say("nested:   %s (err=%v)", balances(), err)
 
-	// RetrySerializable runs fn again, up to n more times, after a
+	// TxRetrySerializable runs fn again, up to n more times, after a
 	// serialization failure or deadlock (SQLite: BUSY, LOCKED). fn must be
 	// safe to run again. This database has one connection, so no conflict
 	// happens and fn runs once.
@@ -137,16 +137,16 @@ func run(ctx context.Context, w io.Writer) error {
 	err = db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		attempts++
 		return transfer(ctx, tx, "bob2", "alice", 5)
-	}, velox.RetrySerializable(3))
+	}, velox.TxRetrySerializable(3))
 	say("retry:    %s (attempts=%d, err=%v)", balances(), attempts, err)
 
-	// Timeout bounds one transaction, within WithDeadlines' MaxTx. Every
+	// TxTimeout bounds one transaction, within WithDeadlines' MaxTx. Every
 	// statement in it gets the transaction's deadline, and a transaction
 	// past it is rolled back, never committed.
 	err = db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		time.Sleep(50 * time.Millisecond) // slow work while the transaction is open
 		return transfer(ctx, tx, "alice", "bob", 1)
-	}, velox.Timeout(10*time.Millisecond))
+	}, velox.TxTimeout(10*time.Millisecond))
 	say("timeout:  %s (ErrTimeout=%t, DeadlineExceeded=%t)",
 		balances(), errors.Is(err, velox.ErrTimeout), errors.Is(err, context.DeadlineExceeded))
 	return nil

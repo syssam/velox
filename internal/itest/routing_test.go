@@ -357,7 +357,7 @@ func TestRoutingSendsWhereItSays(t *testing.T) {
 		wantNumbers(t, "read with no session", readNumbers(t, db, ctx), []string{"REPLICA-SEED"})
 		wantRoute(t, "read with no session", log.last(t), velox.Route{Replica: 0})
 
-		wantNumbers(t, "read under Primary", readNumbers(t, db, velox.Primary(ctx)), []string{"PRIMARY-SEED", "WRITTEN"})
+		wantNumbers(t, "read under Primary", readNumbers(t, db, velox.ReadPrimary(ctx)), []string{"PRIMARY-SEED", "WRITTEN"})
 		wantRoute(t, "read under Primary", log.last(t), velox.Route{Replica: -1})
 
 		// Within a session, a read after a write reads the primary, the write

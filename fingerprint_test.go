@@ -18,7 +18,7 @@ func lastStatement(st *velox.Statement) velox.Option {
 	})
 }
 
-// TestFingerprintGolden pins observability design §1.1 for one statement on
+// TestFingerprintGolden pins the fingerprint for one statement on
 // each dialect: a change to rendering or to the hash shows here, and the
 // release notes must say so.
 func TestFingerprintGolden(t *testing.T) {

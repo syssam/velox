@@ -163,7 +163,7 @@ func (q Query[E]) After[_ Lazy[E]](x *E) Query[E] {
 }
 
 // sliceOrMap reports whether t, a reflect.Type, is a slice or map type. It is
-// not generic, so that prepare holds no reflect.Type (design §3 rule 7).
+// not generic, so that prepare holds no reflect.Type.
 func sliceOrMap(t any) bool {
 	k := rtype(t).Kind()
 	return k == reflect.Slice || k == reflect.Map
@@ -271,7 +271,7 @@ func scanRow[E any](r rows, m *Meta[E], cols []int, dst []any, p *E) error {
 // it. With hooks configured, the struct is allocated and run is used: hooks
 // may keep what they are given, so all that the reading reaches is on the
 // heap. With none, the struct is a local and plain is used, which keeps it,
-// and the closure reading the rows, on the stack (design §8).
+// and the closure reading the rows, on the stack.
 
 // allRun is the state of one All.
 type allRun[E any] struct {

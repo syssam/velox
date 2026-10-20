@@ -14,7 +14,7 @@ It is built into the core module, because executors are core internals. It adds 
 
 Made by the author during design (2026-10-15):
 
-- **Read-your-writes by session pinning.** `velox.WithSession(ctx)` marks a session, typically one request. After a write in it, its reads go to the primary for a configured window. `velox.Primary(ctx)` forces the primary. There is no replication-position tracking.
+- **Read-your-writes by session pinning.** `velox.WithSession(ctx)` marks a session, typically one request. After a write in it, its reads go to the primary for a configured window. `velox.ReadPrimary(ctx)` forces the primary. There is no replication-position tracking.
 - **Sharding routes by key, with no fan-out.** The shard comes from the context: the tenant mapped by an application function, or an explicitly named shard. A statement with neither fails closed. Nothing crosses shards, and a transaction stays on one shard.
 - **Replica failure falls over to the primary.** A read that fails on a replica with a connection or send error, before any row is returned, is retried once on the primary. The replica is then skipped for a back-off. There is no lag polling.
 
@@ -50,11 +50,11 @@ The route stage runs after render and before the `Around` hooks. It picks:
 |---|---|
 | INSERT, UPDATE, DELETE, an upsert | the primary |
 | any statement in `db.Tx` (and its savepoints) | the transaction's connection, on the primary |
-| a read whose context says `velox.Primary(ctx)` | the primary |
+| a read whose context says `velox.ReadPrimary(ctx)` | the primary |
 | a read in a session within its pin window (§3) | the primary |
 | any other read (SELECT, Count, a `With` load, `Iter`) | a replica, round-robin; the primary if none is available |
 
-`velox.Primary(ctx)` marks a context so that every read on it goes to the primary.
+`velox.ReadPrimary(ctx)` marks a context so that every read on it goes to the primary.
 
 `Statement.Route` records the choice before the `Around` hooks run:
 
@@ -136,14 +136,14 @@ Metrics keep their attributes; `velox.route.shard` is added to them because shar
 ## 8. Performance
 
 - **Nothing configured:** Core's budgets are unchanged. The route stage is one branch.
-- **With replicas, a cached one-row read:** at most one more context lookup, for the session and `Primary` marks, and no allocation. A budget test pins this.
+- **With replicas, a cached one-row read:** at most one more context lookup, for the session and `ReadPrimary` marks, and no allocation. A budget test pins this.
 
 ## 9. Testing
 
 - **Unit tests,** with one `FakeExec` per connection, asserting which connection each statement reached:
   - every row of §2's table;
   - pinning in and out of the window, and with no session;
-  - `Primary(ctx)`;
+  - `ReadPrimary(ctx)`;
   - failover on each error class, and its absence on query errors and cancelled contexts;
   - the back-off and its expiry;
   - `Iter` after a yielded row;
@@ -167,7 +167,7 @@ Made while building it (plan `2026-10-19-routing.md`, Rulings 1–11, as revised
 
 From the plan:
 1. `PgxConn` lives in the core beside `OpenPgx`; `Conn` is opaque, so the later dialect/pgx split can add constructors without changing a routing API.
-2. `WithSession`, `Primary` and `OnShard` share one context key, so a read on a DB with replicas makes one `ctx.Value` lookup for all three; `WithShardFor`'s tenant lookup is a second, made only on a sharded DB.
+2. `WithSession`, `ReadPrimary` and `OnShard` share one context key, so a read on a DB with replicas makes one `ctx.Value` lookup for all three; `WithShardFor`'s tenant lookup is a second, made only on a sharded DB.
 3. A query's `With` loads run on the connection the query ran on (the parent's replica, or the primary after a fallback), so parents and children never come from replicas with different lag.
 4. (Revised.) A connection-class error from the query call or from the rows, on a replica, is retried once on the primary unless the reader has already handed a row to the caller; the replica always goes into back-off; a net timeout falls over only from a dial, so a slow query is not moved to the primary.
 5. A context cancelled or past its deadline never puts a replica in back-off and is never retried (`ctx.Err()` is checked before the error is classified).
@@ -175,7 +175,7 @@ From the plan:
 7. `PinnedUntil(ctx)` is added, so an application can store the time to give `PinUntil` on a user's next request; a session stores its pin end, a write sets it to now plus the window and never lowers it, and `PinUntil` on a context without a session does nothing.
 8. In a transaction, a statement naming no shard runs on the transaction's shard; one naming another fails with `statement for shard "X" in a transaction on shard "Y"` (not `ErrNoShard`); a `WithShardFor` error fails the statement; a commit that made a write marks the session of the `Tx` context, and a rolled-back savepoint does not clear the mark.
 9. `SQL(ctx)` runs the route stage: it returns `ErrNoShard` and the transaction-shard error as a run would, sets `Statement.Route`, and never fails over.
-10. `db.Tx(ctx, fn, ReadOnly())` runs on the primary like every transaction; read-only transactions on replicas stay out of scope.
+10. `db.Tx(ctx, fn, TxReadOnly())` runs on the primary like every transaction; read-only transactions on replicas stay out of scope.
 11. Every DB sets `Route{Replica: -1}`, with `Shard` on a sharded DB, so a hook never reads `Replica: 0` as replica 0 on a DB without replicas.
 
 From the review rounds, where they change behaviour:

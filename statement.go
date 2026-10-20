@@ -61,7 +61,7 @@ type ConflictClause struct {
 
 // Statement is one operation on its way to the database. Every query becomes
 // one, and the pipeline's hooks see and may change it: rewrite hooks before it
-// is rendered, around hooks while it runs (design §5).
+// is rendered, around hooks while it runs.
 //
 // The EntityInfo that Entity points to is shared by every query on the
 // entity, in every goroutine: treat it as read-only. A rewrite hook may point
@@ -113,7 +113,7 @@ type Statement struct {
 	// last attempt's.
 	Result Result
 
-	ran target // where exec sent it; its With loads run there (Ruling 3)
+	ran target // where exec sent it; its With loads run there
 	// handed is set once Iter has handed the caller a row: a broken
 	// connection is then not failed over, as the read cannot start again.
 	handed bool

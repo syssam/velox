@@ -16,10 +16,10 @@ err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { // nil commits
 tx.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { … })  // nested: a savepoint
 
 var ce *velox.ConstraintError                                    // the same on every dialect
-errors.As(err, &ce) && ce.Kind == velox.Unique
+errors.As(err, &ce) && ce.Kind == velox.ConstraintUnique
 
-db.Tx(ctx, fn, velox.RetrySerializable(3))                       // re-run on serialization failure or deadlock
-db.Tx(ctx, fn, velox.Timeout(10*time.Millisecond))
+db.Tx(ctx, fn, velox.TxRetrySerializable(3))                       // re-run on serialization failure or deadlock
+db.Tx(ctx, fn, velox.TxTimeout(10*time.Millisecond))
 velox.Open(velox.SQLite, sqlDB, velox.WithDeadlines(velox.Deadlines{…}))
 ```
 
@@ -32,7 +32,7 @@ velox.Open(velox.SQLite, sqlDB, velox.WithDeadlines(velox.Deadlines{…}))
   account name is caught and the outer transaction opens `bob2` instead. On
   SQLite `ConstraintError.Constraint` holds the columns (`accounts.name`);
   PostgreSQL and MySQL give the constraint's name.
-- `RetrySerializable` runs `fn` again on PostgreSQL 40001/40P01, MySQL
+- `TxRetrySerializable` runs `fn` again on PostgreSQL 40001/40P01, MySQL
   1213/1205 and SQLite BUSY/LOCKED, so `fn` must be safe to repeat. This
   example's one-connection database never conflicts, so it runs once.
 - A transaction past its deadline is rolled back, never committed; the error

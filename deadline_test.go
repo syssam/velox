@@ -124,7 +124,7 @@ func TestStatementOnTheTxContextTimesOut(t *testing.T) {
 			e.Block = true
 			_, stmt = tx.Query[testmodel.Invoice]().Limit(1).All(ctx)
 			return stmt
-		}, velox.Timeout(20*time.Millisecond))
+		}, velox.TxTimeout(20*time.Millisecond))
 		want := "velox: testmodel.Invoice: deadline set by velox passed: context deadline exceeded"
 		if !errors.Is(stmt, velox.ErrTimeout) || !errors.Is(stmt, context.DeadlineExceeded) || stmt.Error() != want {
 			t.Errorf("hooked=%v: the statement failed with %v, want %q", hooked, stmt, want)
@@ -151,7 +151,7 @@ func TestTxPastItsDeadlineIsNotCommitted(t *testing.T) {
 	err := db.Tx(ctx, func(context.Context, *velox.DB) error {
 		time.Sleep(60 * time.Millisecond)
 		return nil
-	}, velox.Timeout(20*time.Millisecond))
+	}, velox.TxTimeout(20*time.Millisecond))
 	if !errors.Is(err, velox.ErrTimeout) || !strings.HasPrefix(err.Error(), "velox: transaction: ") {
 		t.Errorf("%v", err)
 	}
@@ -182,7 +182,7 @@ func TestTimedOutTxReportsNoRollbackError(t *testing.T) {
 		e.Block = true
 		_, err := tx.Query[testmodel.Invoice]().Limit(1).All(ctx)
 		return err
-	}, velox.Timeout(50*time.Millisecond))
+	}, velox.TxTimeout(50*time.Millisecond))
 	if !errors.Is(err, velox.ErrTimeout) || strings.Contains(err.Error(), "rollback") {
 		t.Errorf("transaction: %v", err)
 	}
@@ -196,7 +196,7 @@ func TestTimedOutTxReportsNoRollbackError(t *testing.T) {
 			e.Block, e.Err = false, conn // ROLLBACK TO SAVEPOINT fails
 			return err
 		})
-	}, velox.Timeout(50*time.Millisecond))
+	}, velox.TxTimeout(50*time.Millisecond))
 	if !errors.Is(err, velox.ErrTimeout) || strings.Contains(err.Error(), "rollback") {
 		t.Errorf("savepoint: %v", err)
 	}
@@ -215,7 +215,7 @@ func TestTimedOutTxReportsNoRollbackError(t *testing.T) {
 			e.Err = conn
 			return errors.New("boom")
 		})
-	}, velox.Timeout(time.Minute))
+	}, velox.TxTimeout(time.Minute))
 	if !errors.Is(err, conn) || !strings.Contains(err.Error(), "velox: rollback to savepoint: conn closed") {
 		t.Errorf("savepoint in time: %v", err)
 	}
@@ -308,7 +308,7 @@ func TestRetriesStopAtTheTxDeadline(t *testing.T) {
 		runs++
 		time.Sleep(20 * time.Millisecond)
 		return &pgconn.PgError{Code: "40001"}
-	}, velox.RetrySerializable(1000), velox.Timeout(100*time.Millisecond))
+	}, velox.TxRetrySerializable(1000), velox.TxTimeout(100*time.Millisecond))
 	if !errors.Is(err, velox.ErrTimeout) || runs < 2 || runs > 10 {
 		t.Errorf("%v after %d runs", err, runs)
 	}
@@ -319,7 +319,7 @@ func TestTimeoutReplacesTheTxDefault(t *testing.T) {
 	err := db.Tx(ctx, func(context.Context, *velox.DB) error {
 		time.Sleep(40 * time.Millisecond)
 		return nil
-	}, velox.Timeout(time.Minute))
+	}, velox.TxTimeout(time.Minute))
 	if err != nil {
 		t.Errorf("%v", err)
 	}
@@ -335,7 +335,7 @@ func TestStatementsInATxGetItsDeadline(t *testing.T) {
 			got = e.Deadline // before RELEASE SAVEPOINT records its own
 			return err
 		})
-	}, velox.Timeout(3*time.Second))
+	}, velox.TxTimeout(3*time.Second))
 	if err != nil {
 		t.Fatal(err)
 	}

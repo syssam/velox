@@ -12,25 +12,27 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// TxOption configures a transaction.
+// TxOption configures one call of DB.Tx: TxIsolation, TxReadOnly,
+// TxRetrySerializable and TxTimeout.
 type TxOption func(*txOptions)
 
-// Isolation sets the transaction's isolation level; the default is the
+// TxIsolation sets the transaction's isolation level; the default is the
 // database's.
-func Isolation(level sql.IsolationLevel) TxOption {
+func TxIsolation(level sql.IsolationLevel) TxOption {
 	return func(o *txOptions) { o.isolation = level }
 }
 
-// ReadOnly starts a read-only transaction.
-func ReadOnly() TxOption { return func(o *txOptions) { o.readOnly = true } }
+// TxReadOnly starts a read-only transaction.
+func TxReadOnly() TxOption { return func(o *txOptions) { o.readOnly = true } }
 
-// RetrySerializable runs the transaction again, up to n more times, when it
+// TxRetrySerializable runs the transaction again, up to n more times, when it
 // fails on a serialization failure or a deadlock: PostgreSQL 40001 and 40P01,
 // MySQL 1213 and 1205, SQLite BUSY and LOCKED. fn must be safe to run again.
-func RetrySerializable(n int) TxOption { return func(o *txOptions) { o.retries = n } }
+func TxRetrySerializable(n int) TxOption { return func(o *txOptions) { o.retries = n } }
 
 // Tx runs fn in a transaction. fn's error rolls it back and is returned; nil
-// commits it; a panic, or runtime.Goexit, rolls it back and carries on. tx is
+// commits it; a panic in fn rolls it back and then panics again with the same
+// value, and runtime.Goexit rolls it back and carries on. tx is
 // a *DB like any other, so a function that takes a *DB works inside a
 // transaction unchanged.
 //
@@ -58,7 +60,7 @@ func RetrySerializable(n int) TxOption { return func(o *txOptions) { o.retries =
 // Under a dry-run context (IsDryRun), such as the one SQL(ctx) gives a hook,
 // Tx fails with ErrDryRun before BEGIN, nested or not: it is a write.
 //
-// WithDeadlines' Tx and MaxTx, and Timeout, bound the whole call. The
+// WithDeadlines' Tx and MaxTx, and TxTimeout, bound the whole call. The
 // transaction's deadline, velox's or ctx's, whichever is earlier, bounds every
 // statement inside it, nested Tx included, whatever context the statement is
 // given. A transaction whose ctx has ended (past either deadline, or canceled)

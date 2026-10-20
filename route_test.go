@@ -76,7 +76,7 @@ func bothPaths(t *testing.T, f func(t *testing.T, hooked bool)) {
 	}
 }
 
-// TestRouteTable: every row of routing spec §2, on plain's path and run's.
+// TestRouteTable: every row of the routing table, on plain's path and run's.
 func TestRouteTable(t *testing.T) {
 	t.Run("writes go to the primary", func(t *testing.T) {
 		bothPaths(t, func(t *testing.T, hooked bool) {
@@ -129,7 +129,7 @@ func TestRouteTable(t *testing.T) {
 		bothPaths(t, func(t *testing.T, hooked bool) {
 			s := openReplicas(hooked)
 			s.p.Results = [][][]any{{invoiceRow(1)}, {invoiceRow(1)}, {{int64(1)}}, {invoiceRow(1)}}
-			pctx := velox.Primary(ctx)
+			pctx := velox.ReadPrimary(ctx)
 			readAll(t, s.db, pctx)
 			s.check(t, hooked, [3]int{4, 0, 0}, onPrimary, onPrimary, onPrimary, onPrimary)
 		})
@@ -232,7 +232,7 @@ func TestNoReplicasIsTheOldPath(t *testing.T) {
 	})
 }
 
-// TestWithLoadsRunWhereTheQueryRan pins Ruling 3: a query's With loads run on
+// TestWithLoadsRunWhereTheQueryRan pins that a query's With loads run on
 // the replica the query read, so parents and children agree.
 func TestWithLoadsRunWhereTheQueryRan(t *testing.T) {
 	bothPaths(t, func(t *testing.T, hooked bool) {

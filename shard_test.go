@@ -144,7 +144,7 @@ func TestShardWithLoads(t *testing.T) {
 }
 
 // TestShardFailoverStaysInShard: a replica's failed read falls over to its
-// own shard's primary (spec §5: §4 applies within a shard).
+// own shard's primary.
 func TestShardFailoverStaysInShard(t *testing.T) {
 	bothPaths(t, func(t *testing.T, hooked bool) {
 		s := openShards(hooked)
@@ -179,7 +179,7 @@ func TestOnShardWins(t *testing.T) {
 			t.Fatal(err)
 		}
 		// A later OnShard replaces an earlier one, and keeps the other marks.
-		pctx := velox.OnShard(velox.OnShard(velox.Primary(bg), "us"), "eu")
+		pctx := velox.OnShard(velox.OnShard(velox.ReadPrimary(bg), "us"), "eu")
 		if _, err := s.db.Query[testmodel.Item]().Limit(1).All(pctx); err != nil {
 			t.Fatal(err)
 		}
@@ -244,7 +244,7 @@ func TestNoShard(t *testing.T) {
 	}
 }
 
-// TestTxPinsItsShard pins Ruling 8: a transaction runs on the shard its
+// TestTxPinsItsShard pins that a transaction runs on the shard its
 // context names at begin, and refuses a statement for another.
 func TestTxPinsItsShard(t *testing.T) {
 	bothPaths(t, func(t *testing.T, hooked bool) {
@@ -341,7 +341,7 @@ func TestTxWithNoShard(t *testing.T) {
 	}
 }
 
-// TestDryRunIsRouted pins Ruling 9 and Review Focus 5: SQL(ctx) refuses a
+// TestDryRunIsRouted pins that SQL(ctx) refuses a
 // statement with no shard as a run would, calling WithShardFor once.
 func TestDryRunIsRouted(t *testing.T) {
 	s := openShards(true)

@@ -215,7 +215,7 @@ func TestNoFailoverOnQueryErrors(t *testing.T) {
 	}
 }
 
-// TestCancelledReadIsNotAFailover pins Review Focus 2 (Ruling 5): a read whose
+// TestCancelledReadIsNotAFailover pins that a read whose
 // context ends neither falls over nor puts the replica in back-off.
 func TestCancelledReadIsNotAFailover(t *testing.T) {
 	for name, c := range map[string]struct {
@@ -447,8 +447,8 @@ func TestRowsErrorFallsOver(t *testing.T) {
 	})
 }
 
-// TestPinnedLoadFallsOver: a With load pinned to its query's replica (Ruling
-// 3) falls over like any replica read when that replica fails.
+// TestPinnedLoadFallsOver: a With load pinned to its query's replica
+// falls over like any replica read when that replica fails.
 func TestPinnedLoadFallsOver(t *testing.T) {
 	bothPaths(t, func(t *testing.T, hooked bool) {
 		s := openFailover(hooked)
@@ -491,7 +491,7 @@ func TestLoadsSkipAReplicaThatFailed(t *testing.T) {
 }
 
 // TestLoadsFollowAFallback: a query that fell over to the primary loads its
-// With relations there too (Ruling 3).
+// With relations there too.
 func TestLoadsFollowAFallback(t *testing.T) {
 	bothPaths(t, func(t *testing.T, hooked bool) {
 		s := openFailover(hooked)

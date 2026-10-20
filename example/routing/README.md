@@ -20,7 +20,7 @@ db := velox.OpenShards(velox.SQLite, map[string]velox.Shard{
 ctx = velox.WithSession(ctx)                    // per request, in middleware
 db.Update[gen.Note]()…Exec(ctx)                 // a write: pins this session
 db.Query[gen.Note]()…One(ctx)                   // in the window: the primary; after: a replica
-db.Query[gen.Note]()…One(velox.Primary(ctx))    // always the primary
+db.Query[gen.Note]()…One(velox.ReadPrimary(ctx))    // always the primary
 velox.OnShard(ctx, "us")                        // name a shard without a tenant
 ```
 

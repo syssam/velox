@@ -7,64 +7,70 @@ import (
 )
 
 // Errors velox returns. Each is returned wrapped, in an error whose text
-// starts "velox: <Entity>: " (policy design §6), so a sentinel's own text is
-// a bare phrase; test for them with errors.Is.
+// starts "velox: <Entity>: ", so a sentinel's own text is a bare phrase; test
+// for them with errors.Is.
 var (
-	// ErrNotFound: One found no row, or Save no row with the key.
+	// ErrNotFound is returned by One when it finds no row, and by Save when
+	// no row has the key.
 	ErrNotFound = errors.New("not found")
-	// ErrNotSingular: One found more than one row.
+	// ErrNotSingular is returned by One when it finds more than one row.
 	ErrNotSingular = errors.New("more than one row")
-	// ErrUnbounded: a query with no Limit that did not say Unbounded.
+	// ErrUnbounded is returned by a query that has no Limit and did not say
+	// Unbounded, when it runs.
 	ErrUnbounded = errors.New("query has no Limit")
-	// ErrNoWhere: an update or delete with no Where that did not say All.
+	// ErrNoWhere is returned by an update or delete that has no Where and did
+	// not say All, when it runs.
 	ErrNoWhere = errors.New("update or delete has no Where")
-	// ErrLimitTooLarge: a query whose Limit is over the DB's WithMaxLimit.
+	// ErrLimitTooLarge is returned by a query whose Limit is over the DB's
+	// WithMaxLimit, when it runs.
 	ErrLimitTooLarge = errors.New("limit is over the maximum")
-	// ErrTooManyRows: a query returned more rows than WithMaxRows or the
-	// query's MaxRows allow.
+	// ErrTooManyRows is returned by a query when it reads more rows than
+	// WithMaxRows or the query's MaxRows allow.
 	ErrTooManyRows = errors.New("read more rows than the cap")
-	// ErrTimeout: a deadline velox set (WithDeadlines, Timeout) passed. The
-	// error also matches context.DeadlineExceeded; a deadline the caller set
-	// matches that alone.
+	// ErrTimeout is returned by a statement or transaction when a deadline
+	// velox set (WithDeadlines, TxTimeout) passes. The error also matches
+	// context.DeadlineExceeded; a deadline the caller set matches that alone.
 	ErrTimeout = errors.New("deadline set by velox passed")
-	// ErrNoTenant: a statement on a tenant-scoped entity whose context has
-	// neither WithTenant nor AllTenants.
+	// ErrNoTenant is returned by a statement on a tenant-scoped entity when
+	// its context has neither WithTenant nor AllTenants.
 	ErrNoTenant = errors.New("no tenant in the context")
-	// ErrTenantMismatch: the context's tenant is not of the tenant column's
-	// type, or an inserted row names another tenant.
+	// ErrTenantMismatch is returned by a statement when the context's tenant
+	// is not of the tenant column's type, or an inserted row names another
+	// tenant.
 	ErrTenantMismatch = errors.New("tenant does not match")
-	// ErrTenantImmutable: a statement assigns another tenant to the tenant
-	// column.
+	// ErrTenantImmutable is returned by an update when it assigns
+	// another tenant to the tenant column.
 	ErrTenantImmutable = errors.New("tenant column cannot change")
-	// ErrTenantUpsert: an upsert that updates could change another tenant's
-	// row.
+	// ErrTenantUpsert is returned by an upsert that updates, when the update
+	// could change another tenant's row.
 	ErrTenantUpsert = errors.New("upsert could cross tenants")
-	// ErrDenied: a policy refused the statement. Every *PolicyError matches
-	// it.
+	// ErrDenied is returned by a statement when a policy refuses it. Every
+	// *PolicyError matches it.
 	ErrDenied = errors.New("denied by policy")
-	// ErrPolicyUpsert: an upsert that updates, on MySQL, of an entity whose
-	// policy has a Read or Write predicate, which MySQL cannot apply to the
-	// update.
+	// ErrPolicyUpsert is returned by an upsert that updates, on MySQL, of an
+	// entity whose policy has a Read or Write predicate, because MySQL cannot
+	// apply the predicate to the update.
 	ErrPolicyUpsert = errors.New("upsert cannot apply the policy")
-	// ErrImmutable: an update, Save or upsert's Update list assigned an
-	// Immutable column, including one a hook adds. An insert may set one.
+	// ErrImmutable is returned by an update, Save or upsert when its Update
+	// list assigns an Immutable column, including one a hook adds. An insert
+	// may set one.
 	ErrImmutable = errors.New("column is immutable")
-	// ErrNoShard: on a DB opened with OpenShards, a statement or Tx whose
-	// context names no shard (neither OnShard nor a tenant; AllTenants names
-	// none), or names one the DB does not have, or whose WithShardFor
-	// function failed. Nothing was sent.
+	// ErrNoShard is returned, on a DB opened with OpenShards, by a statement
+	// or Tx when its context names no shard (neither OnShard nor a tenant;
+	// AllTenants names none), names one the DB does not have, or when the
+	// WithShardFor function failed. Nothing was sent.
 	ErrNoShard = errors.New("no shard for the statement")
-	// ErrOutsideTx: a statement, or a Tx, under the context a transaction's
-	// fn got (or one derived from it), on a DB that is neither that
-	// transaction nor one of its savepoints, while the transaction has not
+	// ErrOutsideTx is returned by a statement, or a Tx, under the context a
+	// transaction's fn got (or one derived from it), when its DB is neither
+	// that transaction nor one of its savepoints and the transaction has not
 	// ended: it was most likely meant for the transaction's DB. Nothing was
 	// sent. WithoutTx lifts the check.
 	ErrOutsideTx = errors.New("statement outside its transaction")
-	// ErrDryRun: a write, or a Tx, under a context IsDryRun reports true,
-	// such as the one SQL(ctx) gives a hook: Insert, InsertAll, Update and
-	// Delete's Exec, Save, an upsert and Tx. Nothing was sent. Reads run.
-	// SQL(ctx) itself returns the statement it rendered, not this error,
-	// when it is a hook's write that was refused.
+	// ErrDryRun is returned by a write, or a Tx, under a context IsDryRun
+	// reports true for, such as the one SQL(ctx) gives a hook: Insert,
+	// InsertAll, Update and Delete's Exec, Save, an upsert and Tx. Nothing was
+	// sent. Reads run. SQL(ctx) itself returns the statement it rendered, not
+	// this error, when it is a hook's write that was refused.
 	ErrDryRun = errors.New("write in a dry run")
 )
 
@@ -88,21 +94,21 @@ type ConstraintKind uint8
 
 // The kinds of constraint.
 const (
-	Unique ConstraintKind = iota + 1 // a unique index or primary key
-	ForeignKey
-	NotNull
-	Check
+	ConstraintUnique     ConstraintKind = iota + 1 // a unique index or primary key
+	ConstraintForeignKey                           // a foreign key
+	ConstraintNotNull                              // a NOT NULL column
+	ConstraintCheck                                // a CHECK constraint
 )
 
 func (k ConstraintKind) String() string {
 	switch k {
-	case Unique:
+	case ConstraintUnique:
 		return "unique"
-	case ForeignKey:
+	case ConstraintForeignKey:
 		return "foreign key"
-	case NotNull:
+	case ConstraintNotNull:
 		return "not null"
-	case Check:
+	case ConstraintCheck:
 		return "check"
 	}
 	return "unknown"

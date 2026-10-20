@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// Deadlines are the time limits velox gives statements and transactions
-// (policy design §5). A zero field is off.
+// Deadlines are the time limits velox gives statements and transactions. A
+// zero field is off.
 type Deadlines struct {
 	Statement    time.Duration // a statement whose context has no deadline gets this one
 	MaxStatement time.Duration // no statement runs longer: a later deadline is brought forward
@@ -18,7 +18,7 @@ type Deadlines struct {
 
 // WithDeadlines sets the DB's time limits. A statement's limit covers its
 // Around hooks and, with Iter, the caller's loop body. A transaction's covers
-// fn, every RetrySerializable attempt and the commit.
+// fn, every TxRetrySerializable attempt and the commit.
 //
 // A transaction's effective deadline is velox's or the one on the context
 // given to Tx, whichever is earlier. It bounds every statement inside the
@@ -28,12 +28,12 @@ type Deadlines struct {
 // passed; the caller's matches context.DeadlineExceeded alone.
 func WithDeadlines(d Deadlines) Option { return func(c *config) { c.deadlines = d } }
 
-// Timeout bounds the transaction to d, retries and commit included, in place
+// TxTimeout bounds the transaction to d, retries and commit included, in place
 // of the DB's Tx default and within its MaxTx. An earlier deadline on the
-// context still applies. Timeout(d) with d <= 0 is ignored, and so is Timeout
+// context still applies. TxTimeout(d) with d <= 0 is ignored, and so is TxTimeout
 // on a nested Tx, which ignores every option: a savepoint runs within the
 // enclosing transaction's deadline.
-func Timeout(d time.Duration) TxOption { return func(o *txOptions) { o.timeout = d } }
+func TxTimeout(d time.Duration) TxOption { return func(o *txOptions) { o.timeout = d } }
 
 // bound returns ctx with velox's limits applied: def when ctx has no
 // deadline, at most maxd from now, and no later than also unless it is zero.

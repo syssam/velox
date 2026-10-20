@@ -268,7 +268,7 @@ func run(ctx context.Context, w io.Writer) error {
 	err = db.Tx(acct, func(ctx context.Context, tx *velox.DB) error {
 		next := gen.Invoice{Number: "INV-003", Customer: "Initech", Status: gen.InvoiceStatusSent, TotalCents: 80000}
 		err := tx.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { return tx.Insert(&next).Exec(ctx) })
-		if ce := (*velox.ConstraintError)(nil); errors.As(err, &ce) && ce.Kind == velox.Unique {
+		if ce := (*velox.ConstraintError)(nil); errors.As(err, &ce) && ce.Kind == velox.ConstraintUnique {
 			say("%s is taken (%s constraint on %s); using INV-004", next.Number, ce.Kind, ce.Constraint)
 			next.Number = "INV-004"
 			err = tx.Insert(&next).Exec(ctx)
@@ -310,7 +310,7 @@ func run(ctx context.Context, w io.Writer) error {
 		say("org %d: %s", org, money(totals[org]))
 	}
 
-	// 9. Deadlines. Timeout bounds one transaction, within WithDeadlines'
+	// 9. Deadlines. TxTimeout bounds one transaction, within WithDeadlines'
 	// MaxTx; fn's ctx carries the transaction's deadline, and every statement
 	// in it gets that deadline, whatever context it is given.
 	say("\n== 9. Deadlines")
@@ -318,7 +318,7 @@ func run(ctx context.Context, w io.Writer) error {
 		time.Sleep(50 * time.Millisecond) // slow work while the transaction is open
 		_, err := tx.Query[gen.Invoice]().Count(ctx)
 		return err
-	}, velox.Timeout(10*time.Millisecond))
+	}, velox.TxTimeout(10*time.Millisecond))
 	say("transaction past its Timeout: ErrTimeout=%t, context.DeadlineExceeded=%t\n  %v",
 		errors.Is(err, velox.ErrTimeout), errors.Is(err, context.DeadlineExceeded), err)
 	return nil

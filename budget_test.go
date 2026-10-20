@@ -10,7 +10,7 @@ import (
 	"github.com/syssam/velox2/internal/testmodel"
 )
 
-// TestOneRowAllocationBudget pins design §8: a one-row query makes at most 8
+// TestOneRowAllocationBudget pins the one-row budget: a one-row query makes at most 8
 // more allocations than hand-written code scanning the same rows.
 func TestOneRowAllocationBudget(t *testing.T) {
 	e := &velox.FakeExec{Rows: [][]any{invoiceRow(1)}}
@@ -40,7 +40,7 @@ func TestOneRowAllocationBudget(t *testing.T) {
 	})
 	t.Logf("velox %.0f allocations, hand-written %.0f", vx, raw)
 	if vx > raw+8 {
-		t.Errorf("velox makes %.0f allocations for a one-row query and hand-written code %.0f: over the budget of +8 (design §8)", vx, raw)
+		t.Errorf("velox makes %.0f allocations for a one-row query and hand-written code %.0f: over the budget of +8", vx, raw)
 	}
 }
 
@@ -56,7 +56,7 @@ func BenchmarkOneRow(b *testing.B) {
 	}
 }
 
-// TestTenantScopedOneRowBudget pins policy design §7: a tenant-scoped
+// TestTenantScopedOneRowBudget pins the tenant budget: a tenant-scoped
 // one-row read makes at most one allocation more than Core's budget, the
 // append of the tenant condition.
 func TestTenantScopedOneRowBudget(t *testing.T) {
@@ -91,7 +91,7 @@ func TestTenantScopedOneRowBudget(t *testing.T) {
 	})
 	t.Logf("velox %.0f allocations, hand-written %.0f", vx, raw)
 	if vx > raw+9 {
-		t.Errorf("velox makes %.0f allocations for a tenant-scoped one-row query and hand-written code %.0f: over the budget of +9 (policy design §7)", vx, raw)
+		t.Errorf("velox makes %.0f allocations for a tenant-scoped one-row query and hand-written code %.0f: over the budget of +9", vx, raw)
 	}
 }
 
@@ -127,7 +127,7 @@ func hundredRows() [][]any {
 	return rows
 }
 
-// TestHundredRowAllocationBudget pins design §8: a 100-row query makes at
+// TestHundredRowAllocationBudget pins the hundred-row budget: a 100-row query makes at
 // most 16 more allocations than hand-written code.
 func TestHundredRowAllocationBudget(t *testing.T) {
 	e := &velox.FakeExec{Rows: hundredRows()}
@@ -157,7 +157,7 @@ func TestHundredRowAllocationBudget(t *testing.T) {
 	})
 	t.Logf("velox %.0f allocations, hand-written %.0f", vx, raw)
 	if vx > raw+16 {
-		t.Errorf("velox makes %.0f allocations for 100 rows and hand-written code %.0f: over the budget of +16 (design §8)", vx, raw)
+		t.Errorf("velox makes %.0f allocations for 100 rows and hand-written code %.0f: over the budget of +16", vx, raw)
 	}
 }
 
@@ -181,7 +181,7 @@ func BenchmarkOneRowWithDeadline(b *testing.B) {
 	}
 }
 
-// TestTxAllocationBudget pins observability Ruling 3: with nothing
+// TestTxAllocationBudget pins the transaction budget: with nothing
 // configured, a transaction makes no TxInfo. It is measured against the same
 // read outside a transaction, so that the read's allocations, which vary
 // between Go versions, cancel out. What is left is the transaction's own 3:
@@ -209,11 +209,11 @@ func TestTxAllocationBudget(t *testing.T) {
 	})
 	t.Logf("a one-row read makes %.0f allocations in a transaction, %.0f alone", inTx, alone)
 	if inTx > alone+3 {
-		t.Errorf("a transaction with nothing configured adds %.0f allocations to its read: over the budget of 3 (observability Ruling 3)", inTx-alone)
+		t.Errorf("a transaction with nothing configured adds %.0f allocations to its read: over the budget of 3", inTx-alone)
 	}
 }
 
-// TestObservedOneRowBudget pins observability design §6: WithCallers and
+// TestObservedOneRowBudget pins the observed budget: WithCallers and
 // WithSQLComment add at most one allocation, the comment's join, to a cached
 // one-row read. Its time is read from BenchmarkOneRowObserved against
 // BenchmarkOneRow.
@@ -237,7 +237,7 @@ func TestObservedOneRowBudget(t *testing.T) {
 	}
 	t.Logf("with callers and comments %.0f allocations, without %.0f", observed, plain)
 	if observed > plain+1 {
-		t.Errorf("callers and comments add %.0f allocations to a cached one-row read: over the budget of 1 (observability design §6)", observed-plain)
+		t.Errorf("callers and comments add %.0f allocations to a cached one-row read: over the budget of 1", observed-plain)
 	}
 }
 
@@ -254,7 +254,7 @@ func BenchmarkOneRowObserved(b *testing.B) {
 	}
 }
 
-// TestReplicaOneRowBudget pins routing design §8: on a DB with replicas, a
+// TestReplicaOneRowBudget pins the replica budget: on a DB with replicas, a
 // cached one-row read makes no allocation more than on a DB without them
 // (TestOneRowAllocationBudget's 6): the route stage adds one context lookup
 // and a counter's increment.
@@ -287,6 +287,6 @@ func TestReplicaOneRowBudget(t *testing.T) {
 		t.Fatal("no read reached replica 0")
 	}
 	if routed != plain {
-		t.Errorf("replicas change a cached one-row read's allocations from %.0f to %.0f (routing design §8)", plain, routed)
+		t.Errorf("replicas change a cached one-row read's allocations from %.0f to %.0f", plain, routed)
 	}
 }

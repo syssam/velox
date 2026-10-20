@@ -2,7 +2,7 @@
 // supplies a codec (Encode and Decode): velox-gen's json fields, with
 // encoding/json's. The core never imports encoding/json itself, so a program
 // whose entities hold no JSON does not link it. The nil handling uses
-// reflect, so none of this is generic (design §3 rule 7): the generic code
+// reflect, so none of this is generic: the generic code
 // calls scanDst, and the writer colArg.
 
 package velox

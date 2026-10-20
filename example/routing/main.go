@@ -182,8 +182,8 @@ func run(ctx context.Context, w io.Writer) error {
 		}
 		say("%-18s the stale read above is a stand-in for replication lag; replication is out of scope", "")
 
-		// Primary forces the primary for one read that must be current.
-		return read(velox.Primary(ctx), "read, Primary")
+		// ReadPrimary forces the primary for one read that must be current.
+		return read(velox.ReadPrimary(ctx), "read, Primary")
 	})
 	if err := edit(velox.WithTenant(ctx, acme)); err != nil {
 		return err

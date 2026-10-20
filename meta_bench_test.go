@@ -10,8 +10,8 @@ func buildOrder() {
 	}
 }
 
-// TestMetadataAllocationBudget pins design §8's first-use cost by its
-// allocations (36 measured in the design's simulation, budget 72); its time,
+// TestMetadataAllocationBudget pins the first-use cost by its
+// allocations (36 measured in simulation, budget 72); its time,
 // at most 20 µs, is BenchmarkMetadataFirstUse's to report.
 func TestMetadataAllocationBudget(t *testing.T) {
 	n := testing.AllocsPerRun(100, buildOrder)

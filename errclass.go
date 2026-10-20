@@ -36,13 +36,13 @@ func constraint(entity string, err error) *ConstraintError {
 func pgKind(pg *pgconn.PgError) (ConstraintKind, string) {
 	switch pg.Code {
 	case "23505":
-		return Unique, pg.ConstraintName
+		return ConstraintUnique, pg.ConstraintName
 	case "23503":
-		return ForeignKey, pg.ConstraintName
+		return ConstraintForeignKey, pg.ConstraintName
 	case "23502":
-		return NotNull, pg.ColumnName
+		return ConstraintNotNull, pg.ColumnName
 	case "23514":
-		return Check, pg.ConstraintName
+		return ConstraintCheck, pg.ConstraintName
 	}
 	return 0, ""
 }
@@ -98,13 +98,13 @@ func mysqlKind(n int, msg string) (ConstraintKind, string) {
 		if i := strings.LastIndexByte(name, '.'); i >= 0 {
 			name = name[i+1:] // MySQL 8 prefixes the table
 		}
-		return Unique, name
+		return ConstraintUnique, name
 	case 1451, 1452:
-		return ForeignKey, between(msg, "CONSTRAINT `", "`")
+		return ConstraintForeignKey, between(msg, "CONSTRAINT `", "`")
 	case 1048:
-		return NotNull, between(msg, "Column '", "'")
+		return ConstraintNotNull, between(msg, "Column '", "'")
 	case 3819:
-		return Check, between(msg, "Check constraint '", "'")
+		return ConstraintCheck, between(msg, "Check constraint '", "'")
 	}
 	return 0, ""
 }
@@ -133,13 +133,13 @@ func sqliteKind(code int, msg string) (ConstraintKind, string) {
 	}
 	switch code {
 	case 2067, 1555: // SQLITE_CONSTRAINT_UNIQUE, SQLITE_CONSTRAINT_PRIMARYKEY
-		return Unique, subject
+		return ConstraintUnique, subject
 	case 787: // SQLITE_CONSTRAINT_FOREIGNKEY
-		return ForeignKey, subject
+		return ConstraintForeignKey, subject
 	case 1299: // SQLITE_CONSTRAINT_NOTNULL
-		return NotNull, subject
+		return ConstraintNotNull, subject
 	case 275: // SQLITE_CONSTRAINT_CHECK
-		return Check, subject
+		return ConstraintCheck, subject
 	}
 	return 0, ""
 }

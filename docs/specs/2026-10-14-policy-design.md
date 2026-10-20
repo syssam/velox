@@ -401,9 +401,9 @@ velox.WithDeadlines(velox.Deadlines{
   fields are off. The deadline wraps the `Around` hooks and, with `Iter`, the
   caller's loop body.
 - **Transactions:** `Tx` and `MaxTx` apply the same way to the whole `db.Tx`
-  call: the function, every `RetrySerializable` attempt and the commit. The
+  call: the function, every `TxRetrySerializable` attempt and the commit. The
   `Tx` default applies only to a context with no deadline. The `Tx` option
-  `Timeout(d)` is a cap on the transaction: it replaces `Tx` for one call, is
+  `TxTimeout(d)` is a cap on the transaction: it replaces `Tx` for one call, is
   still subject to `MaxTx`, and an earlier deadline on the context still
   applies. A transaction's effective deadline is velox's or the one on the
   context given to `db.Tx`, whichever is earlier; it bounds every statement
@@ -419,7 +419,7 @@ velox.WithDeadlines(velox.Deadlines{
   matches `context.DeadlineExceeded`. Once the
   context has ended, a failed rollback is not reported: the driver may have
   closed the connection (pgx does), and the server aborts the transaction.
-  `Timeout(d)` with d ≤ 0 is ignored, and a nested `Tx` ignores it.
+  `TxTimeout(d)` with d ≤ 0 is ignored, and a nested `Tx` ignores it.
 - **Errors:** velox's deadlines carry a context cause. A statement that runs
   out of time returns an error for which `errors.Is(err,
   context.DeadlineExceeded)` holds; `errors.Is(err, velox.ErrTimeout)` holds

@@ -100,7 +100,7 @@ func TestHandlesFileIsCurrent(t *testing.T) {
 }
 
 // TestHandleMethodSets pins the method set of each handle kind, read from
-// handles.go's source, to spec §2's handle table: a method granted to the
+// handles.go's source, to the handle table: a method granted to the
 // wrong kind, or dropped from the right one, fails here.
 func TestHandleMethodSets(t *testing.T) {
 	want := map[string]string{

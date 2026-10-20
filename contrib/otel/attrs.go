@@ -110,13 +110,13 @@ func errorType(ctx context.Context, err error) string {
 	var ce *velox.ConstraintError
 	if errors.As(err, &ce) {
 		switch ce.Kind {
-		case velox.Unique:
+		case velox.ConstraintUnique:
 			return "constraint.unique"
-		case velox.ForeignKey:
+		case velox.ConstraintForeignKey:
 			return "constraint.foreign_key"
-		case velox.NotNull:
+		case velox.ConstraintNotNull:
 			return "constraint.not_null"
-		case velox.Check:
+		case velox.ConstraintCheck:
 			return "constraint.check"
 		}
 	}

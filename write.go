@@ -233,7 +233,7 @@ func (db *DB) Save[E any, PE Entity[E]](ctx context.Context, x PE, cols ...Colum
 //
 // The guard runs on st as the caller built it before the hooks see it, and
 // again inside next, in the pipeline: a condition a hook adds never stands in
-// for the caller's Where (policy design §1). Without hooks, the pipeline's
+// for the caller's Where. Without hooks, the pipeline's
 // guard is the only one.
 func write(ctx context.Context, db *DB, st *Statement, dry, save bool) (int64, string, []any, error) {
 	if len(st.Entity.hooks) == 0 {
@@ -350,7 +350,7 @@ func setField[E any](m *Meta[E], p *E, i int, v any) { setElem(m.addr(p, i), v) 
 // pointed-to type of a pointer field through a new pointer, and nothing when
 // the field cannot hold v (a Rewrite hook may assign any value). Like elem it
 // is not generic, so that the reflect.Value it uses is not compiled into every
-// package that writes (design §3 rule 7).
+// package that writes.
 func setElem(p, v any) {
 	dst := reflect.ValueOf(p).Elem()
 	if v == nil {
