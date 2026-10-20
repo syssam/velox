@@ -15,8 +15,8 @@ import (
 )
 
 func TestLimits(t *testing.T) {
-	if veloxgql.MaxPage != 100 || veloxgql.MaxFilterDepth != 5 || veloxgql.MaxFilterWidth != 100 || veloxgql.MaxOrderTerms != 5 || veloxgql.MaxFilterNodes != 1000 {
-		t.Errorf("limits = %d, %d, %d, %d, %d, want 100, 5, 100, 5, 1000", veloxgql.MaxPage, veloxgql.MaxFilterDepth, veloxgql.MaxFilterWidth, veloxgql.MaxOrderTerms, veloxgql.MaxFilterNodes)
+	if veloxgql.MaxPage != 100 || veloxgql.MaxFilterDepth != 5 || veloxgql.MaxFilterWidth != 100 || veloxgql.MaxOrderTerms != 5 || veloxgql.MaxFilterNodes != 1000 || veloxgql.MaxList != 1000 {
+		t.Errorf("limits = %d, %d, %d, %d, %d, %d, want 100, 5, 100, 5, 1000, 1000", veloxgql.MaxPage, veloxgql.MaxFilterDepth, veloxgql.MaxFilterWidth, veloxgql.MaxOrderTerms, veloxgql.MaxFilterNodes, veloxgql.MaxList)
 	}
 }
 

@@ -416,6 +416,7 @@ const e2eRun = `package app_test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -485,7 +486,7 @@ func TestConnections(t *testing.T) {
 
 	// The root connection, in the tenant: ann and bob, not cid.
 	byName := &gen.AccountOrder{Direction: veloxgql.OrderDirectionDesc, Field: gen.AccountOrderFieldName}
-	us, err := gen.UsersConnection(ctx, nil, intp(1), nil, nil, byName, nil)
+	us, err := gen.AccountsConnection(ctx, nil, intp(1), nil, nil, byName, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -567,6 +568,17 @@ func TestConnections(t *testing.T) {
 	}
 	if gs, err := bob.GroupsGQL(ctx); err != nil || !slices.Equal(groupIDs(gs), []int64{2}) {
 		t.Errorf("bob's groups: %v %v", groupIDs(gs), err)
+	}
+	// A list edge reads at most MaxList rows, the DB's cap being none: more
+	// fail with ErrTooManyRows, and the error names the edge.
+	veloxgql.MaxList = 1
+	_, err = ann.GroupsGQL(ctx)
+	if gs, err2 := bob.GroupsGQL(ctx); err2 != nil || !slices.Equal(groupIDs(gs), []int64{2}) {
+		t.Errorf("bob's groups under MaxList 1: %v %v", groupIDs(gs), err2)
+	}
+	veloxgql.MaxList = 1000
+	if !errors.Is(err, velox.ErrTooManyRows) || !strings.Contains(err.Error(), "veloxgql: Account.groups: ") {
+		t.Errorf("ann's two groups under MaxList 1: %v, want ErrTooManyRows naming Account.groups", err)
 	}
 	g2, err := db.Query[gen.Group]().Where(gen.Groups.ID.EQ(2)).One(ctx)
 	if err != nil {
@@ -765,7 +777,7 @@ func owners(ctx context.Context, w *gen.OwnerWhereInput) ([]int64, error) {
 }
 
 func accounts(ctx context.Context, w *gen.AccountWhereInput) ([]int64, error) {
-	c, err := gen.UsersConnection(ctx, nil, nil, nil, nil, nil, w)
+	c, err := gen.AccountsConnection(ctx, nil, nil, nil, nil, nil, w)
 	return page(ctx, c, err, func(e *gen.AccountEdge) int64 { return e.Node.ID })
 }
 

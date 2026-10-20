@@ -3,6 +3,7 @@ package veloxgql
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 
@@ -46,7 +47,22 @@ import (
 // A subscription runs in no transaction: each of its events' statements
 // run on db.
 //
-// Use panics when db is nil.
+// A mutation's transaction does not cover @defer: gqlgen resolves a deferred
+// fragment after the response with the main data has been made, which for a
+// mutation is after the commit, so its resolvers find the transaction done
+// and fail. @defer inside a mutation is unsupported; use it in queries.
+//
+// Every limit of this package (MaxPage, MaxList, MaxFilterDepth,
+// MaxFilterWidth, MaxFilterNodes and MaxOrderTerms) bounds one argument or
+// one edge, not a request: a query that nests connections reads up to
+// MaxPage to the power of its depth rows, and aliases repeat a field as many
+// times as the client writes it. A server needs a limit on the cost of the
+// whole request as well, such as gqlgen's extension.FixedComplexityLimit
+// (srv.Use(extension.FixedComplexityLimit(n))).
+//
+// Use panics when db is nil, or when a limit of this package is not
+// positive: Validate refuses it, naming the limit, since a limit of 0 would
+// fail every request that reaches it.
 func Handler(db *velox.DB) interface {
 	graphql.HandlerExtension
 	graphql.OperationInterceptor
@@ -84,11 +100,26 @@ var errRollback = errors.New("veloxgql: the response has errors")
 // ExtensionName implements graphql.HandlerExtension.
 func (dbHandler) ExtensionName() string { return "VeloxDB" }
 
-// Validate implements graphql.HandlerExtension: it refuses a nil DB when
-// the server takes the extension.
+// Validate implements graphql.HandlerExtension: it refuses a nil DB, and a
+// limit that is not positive, when the server takes the extension.
 func (h dbHandler) Validate(graphql.ExecutableSchema) error {
 	if h.db == nil {
 		return errors.New("veloxgql.Handler: nil DB")
+	}
+	for _, l := range []struct {
+		name string
+		n    int
+	}{
+		{"MaxPage", MaxPage},
+		{"MaxList", MaxList},
+		{"MaxFilterDepth", MaxFilterDepth},
+		{"MaxFilterWidth", MaxFilterWidth},
+		{"MaxFilterNodes", MaxFilterNodes},
+		{"MaxOrderTerms", MaxOrderTerms},
+	} {
+		if l.n <= 0 {
+			return fmt.Errorf("veloxgql.Handler: veloxgql.%s is %d, and a limit must be positive", l.name, l.n)
+		}
 	}
 	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 
 	"github.com/syssam/velox2"
@@ -82,7 +83,8 @@ func (x *User) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int,
 
 // GroupsGQL is the edge groups: the Group nodes it leads to, in key order. It
 // is x.Groups when a With loaded it, and else one query, which reads at most
-// the DB's WithMaxRows rows.
+// veloxgql.MaxList rows, whatever the DB's WithMaxRows: more fail it with
+// velox.ErrTooManyRows, in an error that names the edge.
 func (x *User) GroupsGQL(ctx context.Context) ([]*Group, error) {
 	rows, ok := x.Groups.Get()
 	if !ok {
@@ -90,8 +92,8 @@ func (x *User) GroupsGQL(ctx context.Context) ([]*Group, error) {
 		if err != nil {
 			return nil, err
 		}
-		if rows, err = db.Query[Group]().Where(Groups.Users.HasWhere(Users.ID.EQ(x.ID))).OrderBy(Groups.ID.Asc()).Unbounded().All(ctx); err != nil {
-			return nil, err
+		if rows, err = db.Query[Group]().Where(Groups.Users.HasWhere(Users.ID.EQ(x.ID))).OrderBy(Groups.ID.Asc()).Unbounded().MaxRows(veloxgql.MaxList).All(ctx); err != nil {
+			return nil, fmt.Errorf("veloxgql: Account.groups: %w", err)
 		}
 	}
 	out := make([]*Group, len(rows))
@@ -165,11 +167,11 @@ type AccountEdge struct {
 	Cursor veloxgql.Cursor
 }
 
-// UsersConnection is the connection to every Account node, through the DB
+// AccountsConnection is the connection to every Account node, through the DB
 // veloxgql.DBFrom reads from ctx, paged and ordered by the arguments of a
 // connection to Account: a Query field's resolver returns it. It fails before
 // any query runs on arguments veloxgql.NewConnection refuses.
-func UsersConnection(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *AccountWhereInput) (*AccountConnection, error) {
+func AccountsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *AccountWhereInput) (*AccountConnection, error) {
 	db, err := veloxgql.DBFrom(ctx)
 	if err != nil {
 		return nil, err
@@ -233,8 +235,10 @@ type AccountWhereInput struct {
 // deeply w is nested in the where argument, 0 at the top. It fails, before any
 // query runs, on an ID of another type (veloxgql.ErrWrongIDType) or a malformed
 // one (veloxgql.ErrBadID), on a nesting deeper than veloxgql.MaxFilterDepth
-// (veloxgql.ErrFilterTooDeep), and on an and, an or or a has…With of more
-// than veloxgql.MaxFilterWidth inputs (veloxgql.ErrFilterTooWide).
+// (veloxgql.ErrFilterTooDeep), on an and, an or, a has…With, an In or a NotIn
+// of more than veloxgql.MaxFilterWidth entries, and on a where argument of more
+// than veloxgql.MaxFilterNodes inputs, predicates and values in all (both
+// veloxgql.ErrFilterTooWide).
 func (w *AccountWhereInput) Pred(ctx context.Context, depth int) (velox.Pred[User], error) {
 	f := veloxgql.NewFilter[User](ctx, "AccountWhereInput", depth)
 	if w == nil {

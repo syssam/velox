@@ -97,12 +97,13 @@ func EncodeCursor(c Cursor) string {
 // term, nil; CursorValue converts them. Check it against the query before
 // using it.
 //
-// s must be exactly what EncodeCursor writes for some cursor: canonical
-// base64url without padding (no line breaks, no stray trailing bits) of a
-// version 1 document with a non-empty type, terms each with a non-empty
-// field, ASC or DESC and a number, string, bool or null, and a key that is a
-// number or a string, and no other field. Anything else fails with
-// ErrBadCursor.
+// s must be canonical base64url without padding (no line breaks, no stray
+// trailing bits) of a version 1 document with a non-empty type, terms each
+// with a non-empty field, ASC or DESC and a number, string, bool or null, and
+// a key that is a number or a string, and no other field. Anything else fails
+// with ErrBadCursor. Only the base64 is held to one spelling: the JSON may
+// differ from what EncodeCursor writes in white space, member order and how a
+// number is spelled, since a cursor is a position, not an identity.
 func DecodeCursor(s string) (Cursor, error) {
 	b, ok := decodeBase64(s)
 	if !ok {

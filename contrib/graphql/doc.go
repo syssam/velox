@@ -15,8 +15,10 @@
 //				graphql.OrderField("NAME"),
 //				graphql.WhereOps(graphql.OpsEquality, graphql.OpsString),
 //			),
-//			field.Time("created_at").Default(time.Now).Annotations(graphql.OrderField("CREATED_AT")),
-//			field.String("password_hash").Sensitive(), // in no type, where input or order
+//			field.Time("created_at").Default(time.Now).Annotations(
+//				graphql.OrderField("CREATED_AT"),
+//			),
+//			field.String("password_hash").Sensitive(), // in no type or input
 //		}
 //	}
 //
@@ -72,8 +74,9 @@
 //   - the connection, edge, order and where types, each named after its
 //     GraphQL type, and the marshalers of velox-gen's enum types;
 //   - the <Edge>GQL edge methods: a connection, a list or the one node;
-//   - the root connection function <Entities>Connection (UsersConnection),
-//     which a Query field's resolver returns;
+//   - the root connection function <Plural>Connection, named after the
+//     plural of the GraphQL type (UsersConnection for User, AccountsConnection
+//     for a User exposed as Account), which a Query field's resolver returns;
 //   - the where input's method Pred, which turns a where argument into a
 //     velox condition.
 //
@@ -83,7 +86,16 @@
 // veloxgql helper call for each predicate the input sets; it decodes IDs as
 // their type's, and refuses an ID of another type, and a filter nested
 // deeper than veloxgql.MaxFilterDepth, wider than veloxgql.MaxFilterWidth
-// or larger in all than veloxgql.MaxFilterNodes, before any query runs.
+// or larger in all than veloxgql.MaxFilterNodes, before any query runs. A list
+// edge (graphql.Connection(false)) reads at most veloxgql.MaxList rows and
+// fails with velox.ErrTooManyRows beyond them, whatever the DB's cap.
+//
+// Every one of these limits bounds one argument or one edge, not a request:
+// connections nested in connections multiply, and aliases repeat a field. A
+// server also needs a limit on the cost of the whole request, such as gqlgen's
+// extension.FixedComplexityLimit, which example/graphql sets. A mutation's
+// transaction does not cover @defer (see veloxgql.Handler): do not defer
+// fields of a mutation.
 //
 // The Go of mutations is not written yet. For an entity with Mutations,
 // gqlgen writes models of the mutation inputs in the application's package,

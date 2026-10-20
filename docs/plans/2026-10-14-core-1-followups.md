@@ -196,16 +196,24 @@ Left by the observability plan:
 - Resolved in GraphQL plan 2: `Node` binds to the Go interface `veloxgql.Noder` (`IsNode`, `IDGQL`), which every Node entity implements; gqlgen's type switch compiles (`example/graphql`).
 - Resolved in GraphQL plan 2: a JSON field binds through a generated `<Field>GQL` getter returning `veloxgql.JSON`, so one scalar serves `[]string`, map and struct fields.
 - Resolved in GraphQL plan 2: `Uint64` is a decimal string both ways (`veloxgql.MarshalUint64`), and `uint8`/`uint16`/`uint32` under `Int` bind to gqlgen's own marshalers, listed in the documented `gqlgen.yml`.
-- Resolved in GraphQL plan 2: the Go connection, edge, order and where types take the GraphQL names; a renamed entity gets `type <GraphQL name> = <Entity>`, which real gqlgen binds (`example/graphql`'s `Tag` is `Label`). The root connection function keeps the entity's name (`TagsConnection`).
+- Resolved in GraphQL plan 2: the Go connection, edge, order and where types take the GraphQL names; a renamed entity gets `type <GraphQL name> = <Entity>`, which real gqlgen binds (`example/graphql`'s `Tag` is `Label`). The root connection function takes the GraphQL type's plural too (`LabelsConnection`, not `TagsConnection`).
 - Resolved in GraphQL plan 2: a connection method's parameters follow the SDL's argument order, and gqlgen binds them (`example/graphql` compiles under `gqlgen generate`).
 - Resolved in GraphQL plan 2: `plugin.Field` carries the Go type's package path (`PkgPath`) and `Kind`.
 - Still open: a custom-Go-type (application) enum binds with `@goModel` to the type's import path; until then velox-gen-declared enums bind, and a custom-Go-type enum field gets a gqlgen-generated model the application converts by hand.
 - Still open: no test yet of a custom enum on a renamed entity; add it with the `@goModel` binding.
 - Still open: when plan 2's successors emit `@goModel` themselves, refuse it as an application directive, as `@goField` is, or keep it in the copy velox-graphql validates.
 
+## For GraphQL plan 3
+
+- Errors reach clients through gqlgen's default error presenter, verbatim. veloxgql's own errors are safe to show (they never echo an ID's key), but core's are not: `velox.ErrNoTenant` reads "velox: gen.Post: no tenant…", and once mutations make a `velox.ConstraintError` client-triggerable, its driver text and constraint names reach the client. Plan 3 ships an `ErrorPresenter` recipe (or a `veloxgql.ErrorPresenter`) for `srv.SetErrorPresenter`: pass `veloxgql`'s sentinels (`ErrBadID`, `ErrWrongIDType`, `ErrBadCursor`, `ErrPageTooLarge`, `ErrBadPagination`, `ErrFilterTooDeep`, `ErrFilterTooWide`), `velox.PolicyError`, `ErrNoTenant` and `velox.ValidationError` through, map a `ConstraintError` to a message built from its kind and not the driver's text, and replace everything else with a generic message after logging it.
+
 ## For GraphQL plan 4
 
 - `Paginate`'s page query sets `MaxRows(n+1)`, and a query's `With` loads share that cap: Plan 4, which adds `With` loading to connections, must give loads their own cap. The generated code adds no `With` today, so nothing hits it yet (documented on `Paginate`).
+- A request cost limit that is first/last-aware: gqlgen's `FixedComplexityLimit` counts fields, not rows, so `first: 100` costs the same as `first: 1`. Add a veloxgql limit (an `OperationContextMutator`, or complexity functions in `Handler`) that multiplies by `first`/`last` across nested connection fields, and set it in `example/graphql`.
+- `LoadedConnection` assumes the rows a `With` loaded are the unfiltered edge in key order, and ignores a connection's arguments (the generated edge method calls it only when it has none). Plan 4's loader must load them so, or the edge method must use the loaded rows only when the arguments are the ones loaded.
+- Every page query selects every column, `password_hash` included, until field collection selects only the columns asked for. Nothing returns the column (sensitive fields are in no type), but the row is read.
+- No waiting batcher (a dataloader that holds a field until others join it) may run inside a mutation: the handler runs a mutation's field resolvers one at a time under a lock, so a resolver that waits for another to join it deadlocks. Batch queries only, or load at once inside a mutation.
 
 ## Left by GraphQL plan 2
 
@@ -213,6 +221,13 @@ Left by the observability plan:
 - Custom time Go types are refused by velox-graphql in v1: `plugin.Field.Kind` cannot tell a defined type (`type Stamp time.Time`) from a wrapper, so such a field must expose the standard type. Support them with a conversion the model can describe.
 - Binding application enums with `@goModel` (see "For GraphQL plan 2").
 - `example/graphql` declares no mutations: they arrive with GraphQL plan 3, and the example gains them then.
+
+## Before 1.0 (veloxgql)
+
+- Limits are mutable package globals (`veloxgql.MaxPage`, `MaxList`, `MaxFilterDepth`, `MaxFilterWidth`, `MaxFilterNodes`, `MaxOrderTerms`). Two servers in one process cannot differ, tests that change them cannot run in parallel, and changing them after 1.0 breaks callers. Make them options of `Handler`, carried in the context, with the current values as the defaults; `Handler.Validate` already refuses a non-positive limit.
+- `Handler` returns an anonymous interface; a named type would read better in godoc. Settle its name and what it exposes.
+- Decide which exported helpers stay public: `CheckDepth`, `CheckWidth`, `Paginate` and `CursorOrder` are exported, but generated code does not need them. `AsInt` takes an unexported constraint.
+- `ErrFilterTooWide`'s text, "filter list is too long", is wrong for the node budget (`MaxFilterNodes`): give the budget its own text or error.
 
 ## 1.0 release
 

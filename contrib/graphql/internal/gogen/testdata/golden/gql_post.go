@@ -78,8 +78,9 @@ func (x *Post) AuthorGQL(ctx context.Context) (*User, error) {
 }
 
 // LikesGQL is the edge likes: the Like nodes it leads to, in key order. It is
-// x.Likes when a With loaded it, and else one query, which reads at most the
-// DB's WithMaxRows rows.
+// x.Likes when a With loaded it, and else one query, which reads at most
+// veloxgql.MaxList rows, whatever the DB's WithMaxRows: more fail it with
+// velox.ErrTooManyRows, in an error that names the edge.
 func (x *Post) LikesGQL(ctx context.Context) ([]*Like, error) {
 	rows, ok := x.Likes.Get()
 	if !ok {
@@ -87,8 +88,8 @@ func (x *Post) LikesGQL(ctx context.Context) ([]*Like, error) {
 		if err != nil {
 			return nil, err
 		}
-		if rows, err = db.Query[Like]().Where(Likes.PostID.EQ(x.ID)).OrderBy(Likes.UserID.Asc(), Likes.PostID.Asc()).Unbounded().All(ctx); err != nil {
-			return nil, err
+		if rows, err = db.Query[Like]().Where(Likes.PostID.EQ(x.ID)).OrderBy(Likes.UserID.Asc(), Likes.PostID.Asc()).Unbounded().MaxRows(veloxgql.MaxList).All(ctx); err != nil {
+			return nil, fmt.Errorf("veloxgql: Post.likes: %w", err)
 		}
 	}
 	out := make([]*Like, len(rows))
@@ -168,6 +169,9 @@ func postConnectionGQL(ctx context.Context, q velox.Query[Post], after *veloxgql
 		q = q.Where(p)
 	}
 	var order []veloxgql.OrderTerm[Post]
+	if len(orderBy) > veloxgql.MaxOrderTerms {
+		return nil, fmt.Errorf("veloxgql: Post connection: %w: orderBy has %d terms, and the most is %d", veloxgql.ErrBadPagination, len(orderBy), veloxgql.MaxOrderTerms)
+	}
 	for _, o := range orderBy {
 		term, err := postTermGQL(o)
 		if err != nil {
@@ -210,7 +214,7 @@ func postTermGQL(o *PostOrder) (veloxgql.OrderTerm[Post], error) {
 			},
 			func(x *Post, v int) { x.Views = &v }), nil
 	}
-	return veloxgql.OrderTerm[Post]{}, fmt.Errorf("PostOrder: %q is not a value of PostOrderField", o.Field)
+	return veloxgql.OrderTerm[Post]{}, fmt.Errorf("veloxgql: PostOrder: %q is not a value of PostOrderField", o.Field)
 }
 
 // PostOrder is the GraphQL input PostOrder, an order of connections to Post.
@@ -319,8 +323,10 @@ type PostWhereInput struct {
 // deeply w is nested in the where argument, 0 at the top. It fails, before any
 // query runs, on an ID of another type (veloxgql.ErrWrongIDType) or a malformed
 // one (veloxgql.ErrBadID), on a nesting deeper than veloxgql.MaxFilterDepth
-// (veloxgql.ErrFilterTooDeep), and on an and, an or or a has…With of more
-// than veloxgql.MaxFilterWidth inputs (veloxgql.ErrFilterTooWide).
+// (veloxgql.ErrFilterTooDeep), on an and, an or, a has…With, an In or a NotIn
+// of more than veloxgql.MaxFilterWidth entries, and on a where argument of more
+// than veloxgql.MaxFilterNodes inputs, predicates and values in all (both
+// veloxgql.ErrFilterTooWide).
 func (w *PostWhereInput) Pred(ctx context.Context, depth int) (velox.Pred[Post], error) {
 	f := veloxgql.NewFilter[Post](ctx, "PostWhereInput", depth)
 	if w == nil {

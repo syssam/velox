@@ -89,11 +89,11 @@ type LabelEdge struct {
 	Cursor veloxgql.Cursor
 }
 
-// TagsConnection is the connection to every Label node, through the DB
+// LabelsConnection is the connection to every Label node, through the DB
 // veloxgql.DBFrom reads from ctx, paged and ordered by the arguments of a
 // connection to Label: a Query field's resolver returns it. It fails before any
 // query runs on arguments veloxgql.NewConnection refuses.
-func TagsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *LabelOrder, where *LabelWhereInput) (*LabelConnection, error) {
+func LabelsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *LabelOrder, where *LabelWhereInput) (*LabelConnection, error) {
 	db, err := veloxgql.DBFrom(ctx)
 	if err != nil {
 		return nil, err
@@ -145,7 +145,7 @@ func tagTermGQL(o *LabelOrder) (veloxgql.OrderTerm[Tag], error) {
 			func(x *Tag) string { return x.Name },
 			func(x *Tag, v string) { x.Name = v }), nil
 	}
-	return veloxgql.OrderTerm[Tag]{}, fmt.Errorf("LabelOrder: %q is not a value of LabelOrderField", o.Field)
+	return veloxgql.OrderTerm[Tag]{}, fmt.Errorf("veloxgql: LabelOrder: %q is not a value of LabelOrderField", o.Field)
 }
 
 // LabelOrder is the GraphQL input LabelOrder, an order of connections to Label.
@@ -218,8 +218,10 @@ type LabelWhereInput struct {
 // deeply w is nested in the where argument, 0 at the top. It fails, before any
 // query runs, on an ID of another type (veloxgql.ErrWrongIDType) or a malformed
 // one (veloxgql.ErrBadID), on a nesting deeper than veloxgql.MaxFilterDepth
-// (veloxgql.ErrFilterTooDeep), and on an and, an or or a has…With of more
-// than veloxgql.MaxFilterWidth inputs (veloxgql.ErrFilterTooWide).
+// (veloxgql.ErrFilterTooDeep), on an and, an or, a has…With, an In or a NotIn
+// of more than veloxgql.MaxFilterWidth entries, and on a where argument of more
+// than veloxgql.MaxFilterNodes inputs, predicates and values in all (both
+// veloxgql.ErrFilterTooWide).
 func (w *LabelWhereInput) Pred(ctx context.Context, depth int) (velox.Pred[Tag], error) {
 	f := veloxgql.NewFilter[Tag](ctx, "LabelWhereInput", depth)
 	if w == nil {

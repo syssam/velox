@@ -159,8 +159,10 @@ type CategoryWhereInput struct {
 // deeply w is nested in the where argument, 0 at the top. It fails, before any
 // query runs, on an ID of another type (veloxgql.ErrWrongIDType) or a malformed
 // one (veloxgql.ErrBadID), on a nesting deeper than veloxgql.MaxFilterDepth
-// (veloxgql.ErrFilterTooDeep), and on an and, an or or a has…With of more
-// than veloxgql.MaxFilterWidth inputs (veloxgql.ErrFilterTooWide).
+// (veloxgql.ErrFilterTooDeep), on an and, an or, a has…With, an In or a NotIn
+// of more than veloxgql.MaxFilterWidth entries, and on a where argument of more
+// than veloxgql.MaxFilterNodes inputs, predicates and values in all (both
+// veloxgql.ErrFilterTooWide).
 func (w *CategoryWhereInput) Pred(ctx context.Context, depth int) (velox.Pred[Category], error) {
 	f := veloxgql.NewFilter[Category](ctx, "CategoryWhereInput", depth)
 	if w == nil {

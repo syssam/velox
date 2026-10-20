@@ -607,7 +607,7 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 		nodes = append(nodes, nd)
 	}
 	noType := func(fn, indent string) {
-		f.p("%sreturn nil, %s.Errorf(\"%s: %%w: the ID is of no Node type\", %s.ErrWrongIDType)", indent, f.use("fmt", "fmt"), fn, vgql)
+		f.p("%sreturn nil, %s.Errorf(\"veloxgql: %s: %%w: the ID is of no Node type\", %s.ErrWrongIDType)", indent, f.use("fmt", "fmt"), fn, vgql)
 	}
 
 	if len(nodes) == 0 {
@@ -618,7 +618,7 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 		f.p("\tif _, err := %s.IDType(id); err != nil {", vgql)
 		f.p("\t\treturn nil, err")
 		f.p("\t}")
-		noType("node", "\t")
+		noType("Node", "\t")
 		f.p("}")
 	} else {
 		f.p("// Node returns the node with the global ID id, or nil when no row has its")
@@ -653,14 +653,14 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 			f.p("\t\treturn x, nil")
 		}
 		f.p("\t}")
-		noType("node", "\t")
+		noType("Node", "\t")
 		f.p("}")
 	}
 
 	f.p("")
 	tooMany := func() {
 		f.p("\tif len(ids) > %s.MaxPage {", vgql)
-		f.p("\t\treturn nil, %s.Errorf(\"nodes: %%w: %%d IDs, and the most is %%d\", %s.ErrPageTooLarge, len(ids), %[2]s.MaxPage)", f.use("fmt", "fmt"), vgql)
+		f.p("\t\treturn nil, %s.Errorf(\"veloxgql: Nodes: %%w: %%d IDs, and the most is %%d\", %s.ErrPageTooLarge, len(ids), %[2]s.MaxPage)", f.use("fmt", "fmt"), vgql)
 		f.p("\t}")
 	}
 	if len(nodes) == 0 {
@@ -673,7 +673,7 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 		f.p("\t\tif _, err := %s.IDType(id); err != nil {", vgql)
 		f.p("\t\t\treturn nil, err")
 		f.p("\t\t}")
-		noType("nodes", "\t\t")
+		noType("Nodes", "\t\t")
 		f.p("\t}")
 		f.p("\treturn []%s.Noder{}, nil", vgql)
 		f.p("}")
@@ -710,7 +710,7 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 		f.p("\t\t\tat%s = append(at%[1]s, i)", nd.t.Name)
 	}
 	f.p("\t\tdefault:")
-	noType("nodes", "\t\t\t")
+	noType("Nodes", "\t\t\t")
 	f.p("\t\t}")
 	f.p("\t}")
 	f.p("\tout := make([]%s.Noder, len(ids))", vgql)

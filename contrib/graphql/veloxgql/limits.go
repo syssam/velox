@@ -3,12 +3,19 @@ package veloxgql
 // The limits on what a client may ask for. They are variables so that an
 // application can change them, but only at start-up, before the server
 // handles a request: nothing guards them, and a change while requests run is
-// a data race.
+// a data race. Each must be positive: a limit of 0 or less refuses every
+// request it bounds, and Handler refuses to serve with one.
 var (
 	// MaxPage is the largest first or last a connection takes, and the page
 	// size when neither is given. More is ErrPageTooLarge, not a shorter
 	// page.
 	MaxPage = 100
+	// MaxList is the most rows a list edge (graphql.Connection(false)) reads:
+	// the edge's query allows MaxList rows in place of the DB's WithMaxRows
+	// cap, which is no cap unless the application sets one. A node with more
+	// fails the edge with velox.ErrTooManyRows, in an error that names the
+	// edge, rather than reading them all.
+	MaxList = 1000
 	// MaxFilterDepth is how deep a where input may nest through not, and, or
 	// and has<Edge>With. Deeper is ErrFilterTooDeep, before any query runs.
 	MaxFilterDepth = 5

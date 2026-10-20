@@ -122,6 +122,8 @@ func checkField(e *plugin.Entity, i int, a graphql.Annotation, fk bool, where st
 		return fmt.Errorf("%s: graphql.OrderField on a field graphql.Skip leaves out of the type: its values would be in the cursors", where)
 	case a.WhereOps != 0 && f.Sensitive:
 		return fmt.Errorf("%s: graphql.WhereOps on a sensitive field: a filter would reveal its values", where)
+	case a.WhereOps != 0 && a.Skip&graphql.SkipType != 0 && a.Skip&graphql.SkipWhereInput == 0:
+		return fmt.Errorf("%s: graphql.WhereOps on a field graphql.Skip leaves out of the type: a filter would reveal its values", where)
 	case a.WhereOps != 0 && i == e.Tenant:
 		return fmt.Errorf("%s: graphql.WhereOps on the tenant: the tenant scope filters on it", where)
 	case a.CreateInput != nil && never != "":

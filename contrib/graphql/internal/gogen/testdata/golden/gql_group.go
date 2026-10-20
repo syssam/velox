@@ -149,7 +149,7 @@ func groupTermGQL(o *GroupOrder) (veloxgql.OrderTerm[Group], error) {
 			func(x *Group) string { return x.Name },
 			func(x *Group, v string) { x.Name = v }), nil
 	}
-	return veloxgql.OrderTerm[Group]{}, fmt.Errorf("GroupOrder: %q is not a value of GroupOrderField", o.Field)
+	return veloxgql.OrderTerm[Group]{}, fmt.Errorf("veloxgql: GroupOrder: %q is not a value of GroupOrderField", o.Field)
 }
 
 // GroupOrder is the GraphQL input GroupOrder, an order of connections to Group.

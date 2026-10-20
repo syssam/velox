@@ -156,6 +156,9 @@ func postConnectionGQL(ctx context.Context, q velox.Query[Post], after *veloxgql
 		q = q.Where(p)
 	}
 	var order []veloxgql.OrderTerm[Post]
+	if len(orderBy) > veloxgql.MaxOrderTerms {
+		return nil, fmt.Errorf("veloxgql: Post connection: %w: orderBy has %d terms, and the most is %d", veloxgql.ErrBadPagination, len(orderBy), veloxgql.MaxOrderTerms)
+	}
 	for _, o := range orderBy {
 		term, err := postTermGQL(o)
 		if err != nil {
@@ -192,7 +195,7 @@ func postTermGQL(o *PostOrder) (veloxgql.OrderTerm[Post], error) {
 			func(x *Post) int64 { return x.Views },
 			func(x *Post, v int64) { x.Views = v }), nil
 	}
-	return veloxgql.OrderTerm[Post]{}, fmt.Errorf("PostOrder: %q is not a value of PostOrderField", o.Field)
+	return veloxgql.OrderTerm[Post]{}, fmt.Errorf("veloxgql: PostOrder: %q is not a value of PostOrderField", o.Field)
 }
 
 // PostOrder is the GraphQL input PostOrder, an order of connections to Post.
@@ -295,8 +298,10 @@ type PostWhereInput struct {
 // deeply w is nested in the where argument, 0 at the top. It fails, before any
 // query runs, on an ID of another type (veloxgql.ErrWrongIDType) or a malformed
 // one (veloxgql.ErrBadID), on a nesting deeper than veloxgql.MaxFilterDepth
-// (veloxgql.ErrFilterTooDeep), and on an and, an or or a has…With of more
-// than veloxgql.MaxFilterWidth inputs (veloxgql.ErrFilterTooWide).
+// (veloxgql.ErrFilterTooDeep), on an and, an or, a has…With, an In or a NotIn
+// of more than veloxgql.MaxFilterWidth entries, and on a where argument of more
+// than veloxgql.MaxFilterNodes inputs, predicates and values in all (both
+// veloxgql.ErrFilterTooWide).
 func (w *PostWhereInput) Pred(ctx context.Context, depth int) (velox.Pred[Post], error) {
 	f := veloxgql.NewFilter[Post](ctx, "PostWhereInput", depth)
 	if w == nil {

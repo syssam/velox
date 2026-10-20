@@ -175,7 +175,7 @@ func userTermGQL(o *UserOrder) (veloxgql.OrderTerm[User], error) {
 			func(x *User) time.Time { return x.JoinedAt },
 			func(x *User, v time.Time) { x.JoinedAt = v }), nil
 	}
-	return veloxgql.OrderTerm[User]{}, fmt.Errorf("UserOrder: %q is not a value of UserOrderField", o.Field)
+	return veloxgql.OrderTerm[User]{}, fmt.Errorf("veloxgql: UserOrder: %q is not a value of UserOrderField", o.Field)
 }
 
 // UserOrder is the GraphQL input UserOrder, an order of connections to User.
@@ -260,8 +260,10 @@ type UserWhereInput struct {
 // deeply w is nested in the where argument, 0 at the top. It fails, before any
 // query runs, on an ID of another type (veloxgql.ErrWrongIDType) or a malformed
 // one (veloxgql.ErrBadID), on a nesting deeper than veloxgql.MaxFilterDepth
-// (veloxgql.ErrFilterTooDeep), and on an and, an or or a has…With of more
-// than veloxgql.MaxFilterWidth inputs (veloxgql.ErrFilterTooWide).
+// (veloxgql.ErrFilterTooDeep), on an and, an or, a has…With, an In or a NotIn
+// of more than veloxgql.MaxFilterWidth entries, and on a where argument of more
+// than veloxgql.MaxFilterNodes inputs, predicates and values in all (both
+// veloxgql.ErrFilterTooWide).
 func (w *UserWhereInput) Pred(ctx context.Context, depth int) (velox.Pred[User], error) {
 	f := veloxgql.NewFilter[User](ctx, "UserWhereInput", depth)
 	if w == nil {

@@ -58,8 +58,8 @@ The follow-ups list "For GraphQL plan 2" in `docs/plans/2026-10-14-core-1-follow
 - **No N+1 is promised in this plan.** Plan 4 adds batching. Tests may assert the per-parent queries.
 - **CI.**
   - `scripts/ci-local.sh` and `.github/workflows/ci.yml` match line for line.
-  - The example module's gqlgen output is checked to be up to date. The check reruns `go run github.com/99designs/gqlgen generate` and diffs the result.
-- **No machine-specific paths** in committed files. Set `GOCACHE=/private/tmp/claude-501/velox2-gocache` and `GOFLAGS=-p=2` only in your shell.
+  - The example module's gqlgen output is checked to be up to date. The check reruns `go tool gqlgen generate` and diffs the result.
+- **No machine-specific paths** in committed files. Set `GOCACHE=<a scratch directory>` and `GOFLAGS=-p=2` only in your shell.
 - **Commits** end with a blank line and `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Never push.
 
 ## Rulings this plan makes on the spec
@@ -332,6 +332,6 @@ The follow-ups list "For GraphQL plan 2" in `docs/plans/2026-10-14-core-1-follow
   - tenant isolation (Review Focus 3), with the tenant set by a test middleware;
   - a sensitive field absent from the schema (introspection).
   - Each test asserts the JSON response exactly, and asserts the statements sent, through an Around hook.
-- [ ] **Step 2: Generate.** Run `go -C example tool velox-gen -out ./graphql/gen -plugin velox-graphql ./graphql/schema`, then `go -C example/graphql run github.com/99designs/gqlgen generate`. Write the resolvers. Run the tests. Expected: PASS.
+- [ ] **Step 2: Generate.** Run `go -C example tool velox-gen -out ./graphql/gen -plugin velox-graphql ./graphql/schema`, then `go -C example/graphql tool gqlgen generate`. Write the resolvers. Run the tests. Expected: PASS.
 - [ ] **Step 3: Run the full gate** (`fix1.sh`, updated for the example and the gqlgen check). Expected: every step rc=0.
 - [ ] **Step 4: Commit** `example/graphql: a gqlgen server on the generated schema`.

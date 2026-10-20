@@ -246,7 +246,7 @@ The example (`example/graphql`) shows the whole of it:
    - `schema: gen/*.graphqls` plus the application's own schema files;
    - `autobind` to the `gen` package;
    - models for `ID`, `Cursor`, `Time`, `UUID`, `Uint64`, `Bytes` and `JSON`, bound to the scalars in `veloxgql`.
-4. `go run github.com/99designs/gqlgen generate`.
+4. `go tool gqlgen generate`.
 5. Resolvers:
    - the root query fields call `gen.UsersConnection(ctx, db, args…)`;
    - the mutations call `gen.CreateUser(…)`;
@@ -308,7 +308,7 @@ Plan 1 (plugins and the SDL, `docs/plans/2026-10-19-graphql-1-sdl.md`) settled t
 **Refusals.** Generation fails, naming the schema and element, for:
 - an annotation on the wrong kind of element (`OrderField` on an edge, `Mutations` on a field);
 - `OrderField` on an optional, sensitive, JSON or `Skip(SkipType)` field (keyset paging needs non-NULL columns, and order values are in the cursors);
-- `WhereOps` on a sensitive field or the tenant;
+- `WhereOps` on a sensitive field or the tenant (plan 2 adds `Skip(SkipType)` fields);
 - `CreateInput` or `UpdateInput` (either value) on a foreign key or the tenant, and `UpdateInput(true)` on an immutable field;
 - `QueryField` or `Mutations` on an entity whose type is skipped, an unknown mutation kind, and an update or delete mutation on an entity whose key is several columns;
 - `createX` for an entity whose key the caller supplies (no auto ID, no default): v1 has no raw-key field in the create input (a follow-up);
@@ -326,3 +326,23 @@ Plan 2 (the runtime, `docs/plans/2026-10-20-graphql-2-runtime.md`) settled these
 **No core `Before` (§3 Connections), 2026-10-20.** The core does not gain `Before`. For `last`/`before`, `veloxgql`'s paginator reverses every order term's direction, keysets with `After` on the reversed order, reads `n+1` rows, and reverses the page in memory, so the core's API is unchanged. `after` with `before`, `first` with `before` and `last` with `after` are refused with `ErrBadPagination`, since a keyset bounds one side; the opposite-direction flag (`hasPreviousPage` going forward, `hasNextPage` going backward) is false, as Relay allows.
 
 **Where inputs are Go structs (§3 Filtering), 2026-10-20.** gqlgen binds an input object to a Go struct, so each `XWhereInput` is a generated struct, and there is no table for the runtime to interpret. The struct's generated method `Pred(ctx, depth)` returns the `velox.Pred[X]`: one `veloxgql` helper call for each predicate the input sets (`Value`, `List`, `ID`, `IDList`, `Is`, `HasWith`…), with no logic of its own, plus the `and`/`or`/`not` assembly and the limits (`MaxFilterDepth`, `MaxFilterWidth` on every list, `MaxFilterNodes` across one argument) in the helpers. This is the smallest per-field code gqlgen's binding allows.
+
+**`totalCount` and the page are lazy (§3 Connections, §4), 2026-10-20.** A connection is a value that holds the prepared query. `TotalCount(ctx)` runs the `COUNT` when gqlgen calls it, which is only when `totalCount` is selected, and `Edges(ctx)` and `PageInfo(ctx)` run the page query once, shared through a `sync.Once` inside the connection. So a `totalCount`-only selection runs no page query, and nothing walks the selection set for it. Plan 4's field collection adds the eager `With` loads on top of this; it is not needed for correctness.
+
+**`Node` is bound to `veloxgql.Noder` (§3 Types), 2026-10-20.** The GraphQL interface `Node` binds, in `gqlgen.yml`, to the Go interface `veloxgql.Noder` (`IsNode()` and `IDGQL() string`), and every Node entity gets both methods, so `node` and `nodes` return `veloxgql.Noder` values that gqlgen resolves to their concrete types.
+
+**IDs are `string` in Go (§3 IDs), 2026-10-20.** There is no custom ID scalar: gqlgen's built-in `ID` stays `string`. `IDGQL()` encodes the key, and generated code decodes an ID with `veloxgql.DecodeID[K](id, "<Type>")`, which returns the typed key and fails with `ErrWrongIDType` for an ID of another type and `ErrBadID` for a malformed one, before anything is looked up. The spec's `gqlgen.yml` model for `ID` is therefore not needed.
+
+**Scalars are function marshalers with `<Field>GQL` getters (§3 Types), 2026-10-20.** gqlgen binds a field only to a scalar model of the field's own Go type, so each scalar (`Time`, `UUID`, `Bytes`, `Uint64`, `Int`, `Float`) lists several models in `gqlgen.yml`, among them `veloxgql`'s function marshalers (`MarshalTime`, `MarshalUUID`, `MarshalBytes`, `MarshalUint64`, `MarshalUint`, `MarshalFloat32`), and gqlgen's own for the narrow integers. `Uint64` is a decimal string on the wire both ways. One scalar cannot autobind every Go type, so a field of an application's own Go type, and every JSON field (which binds to `json.RawMessage`), goes through a generated `<Field>GQL` getter that converts to a type of the list.
+
+**The DB comes from the context (§3 Transactions and the DB, §5), 2026-10-20.** Generated functions do not take a `db` argument: `veloxgql.Handler(db)` stores the DB with `veloxgql.WithDB(ctx, db)`, and they read it with `veloxgql.DBFrom(ctx)`, which fails with `ErrNoDB` naming the handler when it is missing. So §5's `gen.UsersConnection(ctx, db, args…)` is `gen.UsersConnection(ctx, args…)`, and the mutations of §3 are `gen.CreateUser(ctx, input)`. For a `mutation` operation the handler stores the transaction's DB instead, runs the operation's resolvers one at a time (a transaction's DB is not safe for concurrent use), and commits when the response has no errors; a rolled-back response has `data` null. `@defer` inside a mutation is unsupported: a deferred fragment resolves after the commit, on a finished transaction, and fails.
+
+**The root connection function takes the GraphQL type's plural (§3 Types, §5), 2026-10-20.** Like every other generated name, the root function is named after the GraphQL type: `gen.UsersConnection` for `User`, and `gen.LabelsConnection` for an entity `Tag` exposed as `Label` (`graphql.Type`), where the entity's own plural, `Tags`, would not match the type.
+
+**Limits bound one argument, not a request (§4 Bounds), 2026-10-20.** Plan 2 adds these limits, all package variables of `veloxgql` with constant initialisers, settable at start-up and refused by `Handler` when not positive:
+- `MaxPage` (100): `first`, `last` and the IDs of `nodes`. More fails with `ErrPageTooLarge`.
+- `MaxList` (1000): the rows a list edge (`graphql.Connection(false)`) reads, in place of the DB's `WithMaxRows` cap, which is no cap by default. More fails with `velox.ErrTooManyRows`, in an error that names the edge. This replaces "every load keeps the DB's `WithMaxRows` cap" for list edges.
+- `MaxFilterDepth` (5), `MaxFilterWidth` (100) for every `and`/`or`/`has…With`/`In`/`NotIn` list, and `MaxFilterNodes` (1000), the budget of inputs, predicates and values across one `where` argument.
+- `MaxOrderTerms` (5): the terms of an `orderBy` list, checked before any term is built.
+
+Every one of them bounds one argument or one edge. Connections nested in connections multiply, and aliases repeat a field, so a server needs a limit on the cost of the whole request too: `example/graphql` sets gqlgen's `extension.FixedComplexityLimit`. A cost limit that multiplies by `first` and `last` across connection fields is for plan 4. `WhereOps` on a field that `Skip(SkipType)` leaves out of the type is refused like `OrderField`: a filter is a value oracle too (`GT`, `LT` and `HasPrefix` bisect the value).

@@ -56,13 +56,25 @@ func serve(ctx context.Context, addr string) error {
 	return srv.ListenAndServe()
 }
 
+// complexityLimit is the most a request may cost, in gqlgen's complexity: a
+// field costs 1 and its children's cost is added, so it is the number of
+// fields the request selects, aliases and nested connections included.
+// users, posts and tags nested, each with its edges and node, with a few
+// scalars (the deepest query of main_test.go) cost 13; gqlgen counts no
+// introspection field, so GraphiQL's schema query costs nothing. veloxgql's
+// limits each bound one argument (MaxPage rows of a connection, and so on),
+// so this one bounds the request as a whole. It does not multiply by first and
+// last: a cost that does is a later veloxgql feature.
+const complexityLimit = 200
+
 // server is the GraphQL endpoint: gqlgen's server on the generated schema,
 // with veloxgql.Handler first, so that every operation's context holds db,
-// where the generated code reads it.
+// where the generated code reads it, and a limit on the cost of a request.
 func server(db *velox.DB) http.Handler {
 	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
 	srv.Use(veloxgql.Handler(db))
 	srv.AddTransport(transport.POST{})
+	srv.Use(extension.FixedComplexityLimit(complexityLimit))
 	srv.Use(extension.Introspection{})
 	return srv
 }
@@ -70,8 +82,9 @@ func server(db *velox.DB) http.Handler {
 // orgFromHeader puts the tenant, the organization the X-Org-ID header names,
 // in the request's context. Every statement on Post is scoped to it, and
 // fails with velox.ErrNoTenant without it. This example lets the client
-// choose, to be tried with curl; a real server takes the tenant from what
-// authenticates the request.
+// choose, to be tried with curl, which is for this demo only: a client that
+// names its own tenant can read every tenant's rows. A real server takes the
+// tenant from what authenticates the request.
 func orgFromHeader(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if h := r.Header.Get("X-Org-ID"); h != "" {

@@ -60,7 +60,8 @@
 //   - Is adds a Boolean predicate, or its negation: IsNil, NotNil and
 //     has<Edge>.
 //
-// A nesting deeper than MaxFilterDepth fails with ErrFilterTooDeep (CheckDepth).
+// A nesting deeper than MaxFilterDepth fails with ErrFilterTooDeep
+// (CheckDepth).
 // A list of more than MaxFilterWidth entries, of inputs or of In or NotIn
 // values, fails with ErrFilterTooWide (CheckWidth), and so does a where
 // argument over its budget of MaxFilterNodes inputs, predicates and values
@@ -95,10 +96,17 @@
 //
 // # Limits
 //
-// MaxPage, MaxFilterDepth, MaxFilterWidth, MaxFilterNodes and MaxOrderTerms
-// cap what a client may ask for.
-// They are variables an application may set at start-up, before it serves a
-// request.
+// MaxPage, MaxList, MaxFilterDepth, MaxFilterWidth, MaxFilterNodes and
+// MaxOrderTerms cap what a client may ask for. They are variables an
+// application may set at start-up, before it serves a request; Handler
+// refuses a limit that is not positive. MaxList is how many rows a list edge
+// reads, and more fail with velox.ErrTooManyRows.
+//
+// Every one of them bounds one argument or one edge, not a whole request:
+// connections nested in connections multiply (MaxPage rows, and a query for
+// each, at every level), and aliases repeat a field as often as the client
+// writes it. A server needs a limit on the cost of the request as well, such
+// as gqlgen's extension.FixedComplexityLimit.
 //
 // Nothing in the package runs at program start.
 package veloxgql

@@ -61,7 +61,7 @@ The graphql example also runs the velox-graphql plugin, and gqlgen after it
 
 ```sh
 go tool velox-gen -out ./graphql/gen -plugin velox-graphql ./graphql/schema
-go -C graphql run github.com/99designs/gqlgen generate
+go -C graphql tool gqlgen generate
 ```
 
 CI checks both: velox-gen with `-check`, and gqlgen by running it and failing

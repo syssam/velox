@@ -52,8 +52,8 @@ bin/velox-gen verify -out internal/testmodel ./internal/testmodel/schema
   go tool velox-gen -check -out ./graphql/gen -plugin velox-graphql ./graphql/schema
   go tool velox-gen verify -out ./graphql/gen -plugin velox-graphql ./graphql/schema
   # gqlgen's output is checked in: regenerate it, and fail on any difference.
-  go -C graphql run github.com/99designs/gqlgen generate
-  git diff --exit-code -- graphql/graph
+  go -C graphql tool gqlgen generate
+  git diff --exit-code HEAD -- graphql/graph
   test -z "$(git ls-files --others --exclude-standard -- graphql/graph)"
 )
 

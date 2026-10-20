@@ -74,7 +74,7 @@ func Node(ctx context.Context, id string) (veloxgql.Noder, error) {
 		}
 		return x, nil
 	}
-	return nil, fmt.Errorf("node: %w: the ID is of no Node type", veloxgql.ErrWrongIDType)
+	return nil, fmt.Errorf("veloxgql: Node: %w: the ID is of no Node type", veloxgql.ErrWrongIDType)
 }
 
 // Nodes returns the nodes with the global IDs ids, in their order, with nil
@@ -85,7 +85,7 @@ func Node(ctx context.Context, id string) (veloxgql.Noder, error) {
 // and with veloxgql.ErrPageTooLarge on more than veloxgql.MaxPage IDs.
 func Nodes(ctx context.Context, ids []string) ([]veloxgql.Noder, error) {
 	if len(ids) > veloxgql.MaxPage {
-		return nil, fmt.Errorf("nodes: %w: %d IDs, and the most is %d", veloxgql.ErrPageTooLarge, len(ids), veloxgql.MaxPage)
+		return nil, fmt.Errorf("veloxgql: Nodes: %w: %d IDs, and the most is %d", veloxgql.ErrPageTooLarge, len(ids), veloxgql.MaxPage)
 	}
 	// The keys of each type, and the indexes in ids of their IDs.
 	var (
@@ -124,7 +124,7 @@ func Nodes(ctx context.Context, ids []string) ([]veloxgql.Noder, error) {
 			keysUser = append(keysUser, k)
 			atUser = append(atUser, i)
 		default:
-			return nil, fmt.Errorf("nodes: %w: the ID is of no Node type", veloxgql.ErrWrongIDType)
+			return nil, fmt.Errorf("veloxgql: Nodes: %w: the ID is of no Node type", veloxgql.ErrWrongIDType)
 		}
 	}
 	out := make([]veloxgql.Noder, len(ids))

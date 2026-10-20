@@ -29,7 +29,7 @@ func (r *queryResolver) Posts(ctx context.Context, after *veloxgql.Cursor, first
 
 // Labels is the resolver for the labels field.
 func (r *queryResolver) Labels(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.LabelOrder, where *gen.LabelWhereInput) (*gen.LabelConnection, error) {
-	return gen.TagsConnection(ctx, after, first, before, last, orderBy, where)
+	return gen.LabelsConnection(ctx, after, first, before, last, orderBy, where)
 }
 
 // Users is the resolver for the users field.

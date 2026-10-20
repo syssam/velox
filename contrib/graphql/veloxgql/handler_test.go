@@ -337,6 +337,44 @@ func TestHandlerNilDB(t *testing.T) {
 	handler.New(testSchema(nil)).Use(veloxgql.Handler(nil))
 }
 
+// TestHandlerRefusesNonPositiveLimits: a limit of 0 or less would fail every
+// request it bounds, so the extension refuses it when the server takes it.
+func TestHandlerRefusesNonPositiveLimits(t *testing.T) {
+	db, _ := handlerDB(t)
+	if err := veloxgql.Handler(db).Validate(nil); err != nil {
+		t.Fatalf("the defaults: %v", err)
+	}
+	for _, l := range []struct {
+		name string
+		p    *int
+	}{
+		{"MaxPage", &veloxgql.MaxPage},
+		{"MaxList", &veloxgql.MaxList},
+		{"MaxFilterDepth", &veloxgql.MaxFilterDepth},
+		{"MaxFilterWidth", &veloxgql.MaxFilterWidth},
+		{"MaxFilterNodes", &veloxgql.MaxFilterNodes},
+		{"MaxOrderTerms", &veloxgql.MaxOrderTerms},
+	} {
+		for _, bad := range []int{0, -1} {
+			func() {
+				old := *l.p
+				defer func() { *l.p = old }()
+				*l.p = bad
+				err := veloxgql.Handler(db).Validate(nil)
+				if err == nil || !strings.Contains(err.Error(), "veloxgql."+l.name+" is "+fmt.Sprint(bad)) {
+					t.Errorf("%s = %d: %v, want an error naming the limit", l.name, bad, err)
+				}
+				defer func() {
+					if p := recover(); p == nil || !strings.Contains(fmt.Sprint(p), l.name) {
+						t.Errorf("%s = %d: Use panicked with %v, want an error naming the limit", l.name, bad, p)
+					}
+				}()
+				handler.New(testSchema(nil)).Use(veloxgql.Handler(db))
+			}()
+		}
+	}
+}
+
 func TestMutationCommits(t *testing.T) {
 	db, l := handlerDB(t)
 	srv := handlerServer(t, db, nil)
@@ -483,13 +521,17 @@ func TestStreamedOperations(t *testing.T) {
 // TestMutationResolversRunOneAtATime: below a mutation's root, gqlgen
 // resolves an object's fields concurrently, but the transaction's DB is not
 // safe for concurrent use, so the handler runs a mutation's resolvers one at
-// a time. Pair.a and Pair.b each wait, up to a bound, for the other to be in
-// flight, and then count the people on the DB in their context. In a query
-// they overlap; in a mutation they never do, and both run in its
-// transaction.
+// a time. Pair.a and Pair.b each wait for the other to be in flight, and then
+// count the people on the DB in their context. In a query they overlap; in a
+// mutation they never do, and both run in its transaction. A query's wait
+// has a bound only to fail a test that would hang, and a long one, so that
+// load cannot make the two miss each other; a mutation's is short, since
+// there the wait is expected to run out.
 func TestMutationResolversRunOneAtATime(t *testing.T) {
 	db, l := handlerDB(t)
 	var inFlight, most atomic.Int64
+	var wait atomic.Int64 // how long a resolver waits for the other, in ns
+	wait.Store(int64(30 * time.Second))
 	seen := func() {
 		for n := inFlight.Load(); ; {
 			m := most.Load()
@@ -502,7 +544,7 @@ func TestMutationResolversRunOneAtATime(t *testing.T) {
 		inFlight.Add(1)
 		defer inFlight.Add(-1)
 		seen()
-		for end := time.Now().Add(100 * time.Millisecond); inFlight.Load() < 2 && time.Now().Before(end); {
+		for end := time.Now().Add(time.Duration(wait.Load())); inFlight.Load() < 2 && time.Now().Before(end); {
 			time.Sleep(time.Millisecond)
 		}
 		seen()
@@ -526,6 +568,7 @@ func TestMutationResolversRunOneAtATime(t *testing.T) {
 	}
 	l.take()
 
+	wait.Store(int64(100 * time.Millisecond))
 	if got, want := post(t, context.Background(), srv, `mutation { pair { a b } }`), `{"data":{"pair":{"a":0,"b":0}}}`; got != want {
 		t.Errorf("mutation: %s, want %s", got, want)
 	}

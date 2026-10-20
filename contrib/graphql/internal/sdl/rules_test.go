@@ -69,6 +69,7 @@ func TestAnnotationMisuse(t *testing.T) {
 		{"QueryField on a skipped type", anns{user: graphql.Annotation{QueryField: "users", Skip: graphql.SkipType}}, []string{"schema User", "graphql.QueryField", "Skip"}},
 		{"Mutations on a skipped type", anns{user: graphql.Annotation{Mutations: []graphql.MutationKind{"create"}, Skip: graphql.SkipType}}, []string{"schema User", "graphql.Mutations", "Skip"}},
 		{"OrderField on a field out of the type", anns{name: graphql.Annotation{OrderField: "NAME", Skip: graphql.SkipType}}, []string{"schema User, field name", "graphql.OrderField", "cursors"}},
+		{"WhereOps on a field out of the type", anns{name: graphql.Annotation{WhereOps: graphql.OpsEquality, Skip: graphql.SkipType}}, []string{"schema User, field name", "graphql.WhereOps", "reveal"}},
 		{"CreateInput(false) on the tenant", anns{org: graphql.CreateInput(false)}, []string{"schema User, field org_id", "graphql.CreateInput", "tenant"}},
 		{"UpdateInput(false) on the tenant", anns{org: graphql.UpdateInput(false)}, []string{"schema User, field org_id", "graphql.UpdateInput", "tenant"}},
 		{"UpdateInput(true) on the tenant", anns{org: graphql.UpdateInput(true)}, []string{"schema User, field org_id", "graphql.UpdateInput", "tenant"}},
@@ -86,6 +87,8 @@ func TestAnnotationMisuse(t *testing.T) {
 	// OrderField with the order skipped too, on a hidden field: no order, no
 	// cursor, no leak.
 	load(t, build(anns{name: graphql.Annotation{OrderField: "NAME", Skip: graphql.SkipType | graphql.SkipOrderField}}))
+	// And a filter likewise, with the where input skipped too.
+	load(t, build(anns{name: graphql.Annotation{WhereOps: graphql.OpsEquality, Skip: graphql.SkipType | graphql.SkipWhereInput}}))
 
 	t.Run("CreateInput or UpdateInput on a foreign key", func(t *testing.T) {
 		for _, a := range []graphql.Annotation{graphql.CreateInput(false), graphql.CreateInput(true), graphql.UpdateInput(false), graphql.UpdateInput(true)} {

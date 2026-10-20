@@ -420,3 +420,84 @@ func TestSensitiveFieldAbsent(t *testing.T) {
 		}}`,
 	})
 }
+
+// TestRequestCost: veloxgql's limits each bound one argument, so the server
+// also limits the cost of a whole request (extension.FixedComplexityLimit).
+// A request over complexityLimit fails before it runs a statement; the
+// introspection query GraphiQL sends is not counted, and still works.
+func TestRequestCost(t *testing.T) {
+	s := newServer(t)
+	var b strings.Builder
+	b.WriteString("{")
+	for i := range complexityLimit { // each alias costs 2: users and totalCount
+		fmt.Fprintf(&b, " u%d: users(first: 1) { totalCount }", i)
+	}
+	b.WriteString(" }")
+	s.do(t, request{
+		query: b.String(),
+		want: fmt.Sprintf(`{"errors": [{"message": "operation has complexity %d, which exceeds the limit of %d",
+			"extensions": {"code": "COMPLEXITY_LIMIT_EXCEEDED"}}], "data": null}`, 2*complexityLimit, complexityLimit),
+	})
+	s.do(t, request{
+		query: `{ users(first: 1) { totalCount } }`,
+		want:  `{"data": {"users": {"totalCount": 3}}}`,
+		stmts: []string{`SELECT COUNT(*) FROM "users" []`},
+	})
+	body, err := json.Marshal(map[string]any{"query": introspection})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, s.url, bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(got), `{"data":{"__schema"`) {
+		t.Errorf("the introspection query: %.300s", got)
+	}
+}
+
+// introspection is the query GraphiQL and most clients send for the schema.
+const introspection = `query IntrospectionQuery {
+	__schema {
+		queryType { name }
+		mutationType { name }
+		subscriptionType { name }
+		types { ...FullType }
+		directives { name description locations args { ...InputValue } }
+	}
+}
+fragment FullType on __Type {
+	kind name description
+	fields(includeDeprecated: true) { name description args { ...InputValue } type { ...TypeRef } isDeprecated deprecationReason }
+	inputFields { ...InputValue }
+	interfaces { ...TypeRef }
+	enumValues(includeDeprecated: true) { name description isDeprecated deprecationReason }
+	possibleTypes { ...TypeRef }
+}
+fragment InputValue on __InputValue { name description type { ...TypeRef } defaultValue }
+fragment TypeRef on __Type {
+	kind name
+	ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name } } } } } } }
+}`
+
+// TestOrderTermsLimit: an orderBy list over veloxgql.MaxOrderTerms fails
+// with the limit named, before any term is built or statement sent.
+func TestOrderTermsLimit(t *testing.T) {
+	s := newServer(t)
+	s.do(t, request{
+		org:   "1",
+		query: `{ posts(orderBy: [` + strings.Repeat(`{field: TITLE, direction: ASC}, `, veloxgql.MaxOrderTerms+1) + `]) { totalCount } }`,
+		want: `{"errors": [{"message": "veloxgql: Post connection: bad pagination arguments: orderBy has 6 terms, and the most is 5", "path": ["posts"]}],
+			"data": null}`,
+	})
+}
