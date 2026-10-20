@@ -155,7 +155,7 @@ The plugin writes one SDL file, `gen/velox.graphqls` (flat, in the package direc
   - The primary key is the type's `id: ID!`.
   - A foreign-key field bound to an edge is not a scalar field of the type or the inputs. The edge stands for it: the edge field in the type, `<edge>ID` in the inputs, and `<edge>ID`/`<edge>IDIn` (typed IDs) in a `where` input when the foreign-key field has `WhereOps`. So no raw key gets around the ID type check.
   - The tenant column is in no type or input. The tenant scope fills and checks it.
-- **Optional fields** are nullable; required fields are non-null.
+- **Optional fields** are nullable; required fields are non-null. *(Note 2026-10-20: a field is nullable in the schema when it is `Nillable`, or an `Optional` JSON field; an `Optional` value field is non-null and only optional on create. See the API cleanup spec §3.1.)*
 
 #### IDs (call)
 Every `ID` is opaque and global. It is base64url, without padding, of `<Type>:<key>`, the key written in its canonical text form.
@@ -188,7 +188,7 @@ Every `ID` is opaque and global. It is base64url, without padding, of `<Type>:<k
   | Enum | `EQ`, `NEQ`, `In`, `NotIn` |
   | String | the above plus `Contains`, `HasPrefix`, `HasSuffix` |
   | Numeric / Time | the above plus `GT`, `GTE`, `LT`, `LTE` |
-  | Optional fields | plus `IsNil`, `NotNil` |
+  | Optional fields | plus `IsNil`, `NotNil` *(note 2026-10-20: `Nillable` fields only; see the API cleanup spec §3.1)* |
 
 - **Depth:** nesting is capped by `veloxgql.MaxFilterDepth`, 5 by default.
 - **Translation:** a where input becomes a `velox.Pred[X]` through a table each entity's generated code supplies; the runtime in `contrib/graphql` interprets it (the old Track B's table design). No per-field code is written for predicates.
@@ -199,7 +199,7 @@ Every `ID` is opaque and global. It is base64url, without padding, of `<Type>:<k
   - `<edge>ID: ID` for a unique edge, and `<edge>IDs: [ID!]` for a to-many edge.
 - **Update:** `updateX(id: ID!, input: UpdateXInput!): X!`.
   - Every field optional. Immutable fields are left out.
-  - `clear<Field>: Boolean` for an optional field.
+  - `clear<Field>: Boolean` for an optional field. *(Note 2026-10-20: for a `Nillable` field only, since a value handle cannot write NULL; see the API cleanup spec §3.1.)*
   - `<edge>ID`/`clear<Edge>` for a unique edge.
   - `add<Edge>IDs`/`remove<Edge>IDs`/`clear<Edge>` for a to-many edge.
 - **Delete:** `deleteX(id: ID!): ID!`.
@@ -307,7 +307,7 @@ Plan 1 (plugins and the SDL, `docs/plans/2026-10-19-graphql-1-sdl.md`) settled t
 
 **Refusals.** Generation fails, naming the schema and element, for:
 - an annotation on the wrong kind of element (`OrderField` on an edge, `Mutations` on a field);
-- `OrderField` on an optional, sensitive, JSON or `Skip(SkipType)` field (keyset paging needs non-NULL columns, and order values are in the cursors);
+- `OrderField` on an optional *(note 2026-10-20: a `Nillable` or `Optional` JSON field, the NULL-able ones; API cleanup spec §3.1)*, sensitive, JSON or `Skip(SkipType)` field (keyset paging needs non-NULL columns, and order values are in the cursors);
 - `WhereOps` on a sensitive field or the tenant (plan 2 adds `Skip(SkipType)` fields);
 - `CreateInput` or `UpdateInput` (either value) on a foreign key or the tenant, and `UpdateInput(true)` on an immutable field;
 - `QueryField` or `Mutations` on an entity whose type is skipped, an unknown mutation kind, and an update or delete mutation on an entity whose key is several columns;

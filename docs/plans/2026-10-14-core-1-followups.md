@@ -96,10 +96,10 @@ API rough spots found while building `./example`:
 - `WithTenant` needs the tenant column's exact Go type: on an `int64` column, `WithTenant(ctx, 1)` (an untyped constant, so an `int`) fails at run time with `ErrTenantMismatch`; nothing catches it at compile time.
 - `InsertAll` reads no generated keys back, so code that inserts parents and then their children must read the parents' IDs again.
 - There is no `Sum`, `Avg` or `GROUP BY`: the example totals revenue per organization in Go, over `Iter`.
-- A policy function that only allows or denies must still return a zero `Pred[E]{}` beside its error.
+- Resolved in API plan 1: a policy says `velox.Allow[E]()` for no restriction, and a zero `Pred[E]{}` is an error naming the entity. A policy that only denies still returns a `Pred` beside its error, which is ignored.
 - The core package imports pgx, so an application that uses only SQLite or MySQL still links pgx.
 - On SQLite, `ConstraintError.Constraint` holds the columns (`invoices.org_id, invoices.number`), not the constraint's name.
-- The function given to `Tx` gets no context, so code inside it uses the outer one. `Statement.Tx` and `contrib/otel`'s parenting on `Tx.Context` work around it for spans only.
+- Resolved in API plan 1: `Tx` passes its context to `fn`, a statement on another `*DB` under it fails with `ErrOutsideTx`, and `TxInfo.Context` is gone.
 
 API rough spots found while splitting `./example` into one directory per topic:
 - A policy function gets no `*DB`, so an inherited policy cannot check on insert that the parent is visible: `example/policy`'s `Comment` inherits `Doc`'s `Read` through `Has`, which covers reads only.
@@ -147,7 +147,7 @@ Left by the observability plan:
 
 ## Left by schema plan 3
 
-- `Optional` means a pointer field (Ruling 2): the column is NULL-able and velox scans a NULL only into a pointer. Ent gives `T`, so a ported schema's `Optional()` fields become `*T`. This is an ent difference.
+- Resolved in API plan 1 (2026-10-20): `Optional` no longer means a pointer. Nullability is old velox's (API cleanup spec §3.1): `Optional` is not required on create and stays NOT NULL with a value field; `Nillable` is the pointer and the NULL-able column; an `Optional` JSON column is NULL-able. A ported ent schema's `Optional()` fields need no change, except that an `Optional` enum, bytes or time field needs a `Default` or `Nillable`.
 - Join entity naming: each many-to-many join table becomes an entity named `pascal(singular(table))` (`user_groups` gives `UserGroup`), which can collide with a schema of that name; the generator refuses the collision, and the only remedy is a different join table name (`edge.Table`).
 - The test model is generated from `internal/testmodel/schema`. A field's Go name comes from `pascal` of its name, so `SKU` is declared `field.String("SKU").StorageKey("sku")`: the name `sku` would give `Sku`. The named types `Status`, `Cents` and `Score` live in `internal/testmodel/kind` because the schema package names them in `GoType` and the generated package imports them; `testmodel` re-exports them as aliases.
 

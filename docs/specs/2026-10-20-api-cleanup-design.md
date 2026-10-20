@@ -1,6 +1,6 @@
 # velox2 API cleanup before 1.0 — design
 
-Status: draft · 2026-10-20
+Status: API plan 1 implemented · 2026-10-20
 
 The user asked for a review of the whole public API: is it clean, correct, complete, modern and easy to maintain. Three reviews were done, one each for the core package, the schema DSL with velox-gen and the plugin model, and the contrib modules. They are in `docs/reviews/2026-10-20-api-review-{core,schema,contrib}.md`.
 
@@ -46,7 +46,10 @@ The reviews also agreed on what stays:
 6. **Raw SQL with a reason (call).**
    - `db.Exec(ctx, reason, sql, args...) (int64, error)`.
    - `db.Raw[E](reason, sql, args...)`, run with `All`, `One` or `Iter`, scanned by column name.
-   - Both go through the Around hooks, deadlines and routing (Op `OpRaw`).
+   - Both go through the Around hooks, deadlines and routing. `Raw` runs as `OpRawQuery`, a read; `Exec` runs as `OpRawExec`, a write that goes to the primary, pins the session and fails under a dry run. Two Ops let a hook, the router and otel tell a raw write from a raw read before it runs.
+   - A reason that is only white space is refused, as an empty one is, by `Raw`, `Exec`, `AllTenants` and `SkipPolicy` alike.
+   - Both skip the tenant scope and the policy: `Statement.TenantBypass` and `Statement.PolicyBypass` hold the reason.
+   - `RawQuery.MaxRows` sets the row cap for a raw read.
    - Neither applies tenant scoping or policy, which is why a non-empty reason is required, as `AllTenants` and `SkipPolicy` require one.
    - They are the escape hatch for locking, CTEs and anything the builder cannot express.
 
@@ -155,6 +158,20 @@ The reviews also agreed on what stays:
 - A nested `Tx` given options returns an error.
 - Docs: `DB` is safe for concurrent use; `Tx` re-panics; sentinel docs follow the Go style.
 - `apidiff` in CI once 1.0 is cut.
+
+## 6a. Rulings made while implementing API plan 1
+
+Added 2026-10-20. Each is a decision taken during the plan, and it stands.
+
+1. `TxInfo.Context` is removed. A statement's span is parented on the statement's own context, which inside `Tx` is the transaction's.
+2. `db.Tx` on a non-transaction `*DB` under a context marked by a transaction fails with `ErrOutsideTx`: a nested transaction is `tx.Tx`. The check compares transactions, so a statement on transaction B's `*DB` under transaction A's context fails too. A savepoint shares its transaction's identity. A mark whose transaction has ended counts as no mark.
+3. `velox.WithoutTx(ctx)` returns a context without the mark, keeping tenant, tags and spans. It is the explicit way out for work that must not join the transaction, such as an audit row that survives a rollback.
+4. A zero `Pred` from a policy is a plain error naming the entity, not a `*PolicyError`, so it does not match `ErrDenied`: it is a programming error, not a denial.
+5. `SQL(ctx)` treats an `ErrDryRun` returned by a hook as success once the statement was rendered (an audit write after `next`), and returns it when nothing was rendered (a hook that wrote before `next`).
+6. Nullability follows old velox exactly (§3.1). Two earlier rulings that went the other way (a pointer for every `Optional`, then a NULL-able column for every `Optional`) were withdrawn.
+7. `GeneratedCodeIsVersion4` stays at 4: version 4 is not released, and the nullability rules are additive.
+8. GraphQL create inputs are not required when the field is `Optional` or `Nillable`. Update inputs offer `clear<Field>` and `IsNil` filters only for `Nillable` fields, because a value handle cannot write NULL.
+9. The documents' history is kept. Plans and reviews record what was decided then; older specs get a dated note where a rule changed.
 
 ## 7. Order and plans
 

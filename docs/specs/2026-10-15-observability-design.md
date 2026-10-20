@@ -129,7 +129,7 @@ type TxInfo struct {
     Isolation sql.IsolationLevel
     ReadOnly  bool
     Attempt   int                // 1 for the first try; TxRetrySerializable increments it
-    Context   context.Context    // what the hooks passed to next; Tx's bounded context when there are none
+    Context   context.Context    // what the hooks passed to next; Tx's bounded context when there are none (removed 2026-10-20, see the note below)
     Retries   []TxRetry          // the attempts TxRetrySerializable retried, in order
     Outcome   TxOutcome          // how the last attempt ended; set before next returns
 }
@@ -150,6 +150,7 @@ type TxOutcome uint8 // TxCommit, TxRollback or TxError; String gives "commit", 
   - begin or commit failing, or the deadline passing before commit, is `TxError`;
   - a panic or `runtime.Goexit` in `fn` is `TxRollback`.
 - **Statements inside:** each gets `Statement.Tx` pointing to the transaction's `TxInfo`. An adapter can then parent a statement's span on `Tx.Context`'s span even when the application passed its own context to the query.
+- *Note 2026-10-20 (API cleanup §1.1, §6a):* `TxInfo.Context` is removed. `Tx` passes the transaction's context to `fn`, so a statement run on it carries the transaction's span without the workaround, and an adapter parents a statement's span on the statement's own context.
 - **Cost:** a `TxInfo` is made only when the DB has a hook of any kind (`Rewrite`, `Around` or `TxAround`); otherwise `Statement.Tx` is nil. Nothing else can read it, so a DB with nothing configured allocates nothing more per transaction.
 - **Rules as for `Around`:** a `TxAround` hook must call `next` exactly once, or return an error of its own without calling it. Calling `next` a second time returns an error without running `fn`. Its errors are returned unchanged. If a hook recovers a panic from `next` and returns nil, `Tx` returns an error, since the transaction was rolled back; the outcome stays `TxRollback`. `WithTxAround(nil)` panics at `Open`.
 - **velox's deadline:** past it, a transaction is never committed and its error matches `ErrTimeout`, even when a hook passed on a context without the deadline.

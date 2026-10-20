@@ -104,6 +104,8 @@ and policy function that runs for it, and false when the statement is sent.
 An entity hook, which is given no `Statement`, reads `IsDryRun`; a `Rewrite`
 hook may read it or `Statement.DryRun`, which `SQL(ctx)` also sets.
 
+*Note 2026-10-20 (API cleanup §1.3):* a write (`Exec`, `Save`, `Tx`, `InsertAll`) on any `*DB` under a dry-run context fails with `ErrDryRun` before it is sent, so a hook's audit write does not happen; reads still run. If a hook returns `ErrDryRun` after `next` rendered the statement, `SQL(ctx)` still returns the statement. Raw SQL (`db.Raw`, `db.Exec`) skips the tenant scope and the policy, and needs a reason.
+
 For an insert, `SQL(ctx)` prepares the rows as `Exec` does: Core defaults, the
 tenant fill and `BeforeInsert` change the caller's structs, and the policy's
 Insert check runs. An `InsertAll` too large for one statement returns the

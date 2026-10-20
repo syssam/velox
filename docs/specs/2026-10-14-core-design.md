@@ -463,6 +463,8 @@ err = db.Save(&inv, I.Number, I.Total).Exec(ctx) // a loaded struct; columns nam
 
 On MySQL, `Save` needs `clientFoundRows=true` in the DSN.
 
+*Note 2026-10-20 (API cleanup §1.5):* `Save` is a builder: `db.Save(&inv, I.Number, I.Total).Where(…).SQL(ctx)` or `.Exec(ctx)`; naming no column does not compile, and `Where` gives optimistic locking.
+
 There is no `Save(&x)` that writes every column: writing back a stale struct
 silently loses concurrent updates. `UpdatedAt`-style columns are declared by a
 mixin (`s.Column(&t.UpdatedAt).OnUpdate(time.Now)` in its `Mixin` method), not
@@ -477,12 +479,14 @@ n, err := db.Delete[billing.Line]().Where(L.InvoiceID.EQ(id)).Exec(ctx)
 ### 4.6 Transactions
 
 ```go
-err := db.Tx(ctx, func(tx *velox.DB) error { … }, velox.TxRetrySerializable(3))
+err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { … }, velox.TxRetrySerializable(3))
 ```
 
 The function's error rolls back; `nil` commits; a panic rolls back and
 re-panics. `TxRetrySerializable` re-runs the function on serialization failures
 and deadlocks, as classified per dialect. Nested `Tx` uses savepoints.
+
+*Note 2026-10-20 (API cleanup §1.1):* the function is `func(ctx context.Context, tx *velox.DB) error`, and its `ctx` carries the transaction's deadline. A statement on another `*DB` under that ctx fails with `ErrOutsideTx`. The option names are `TxTimeout`, `TxReadOnly` and `TxIsolation`. Raw SQL is `db.Raw` and `db.Exec` with a reason (§1.6).
 
 ## 5. Execution pipeline
 

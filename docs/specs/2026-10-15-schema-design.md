@@ -80,8 +80,8 @@ Options, which carry their ent meanings:
 
 | Option | Effect |
 |---|---|
-| `Optional()` | not required on create, and the column is NULL-able |
-| `Nillable()` | the Go field is a pointer |
+| `Optional()` | not required on create, and the column is NULL-able *(note 2026-10-20: no longer so. `Optional` leaves the column NOT NULL and the field a value type; `Nillable` makes the column NULL-able; see the API cleanup spec §3.1)* |
+| `Nillable()` | the Go field is a pointer *(note 2026-10-20: also NULL-able column, per the API cleanup spec §3.1)* |
 | `Default(v)`, `DefaultFunc(f)` | the value of a column an insert does not set |
 | `UpdateDefault(f)` | the value an update sets when it does not set the column; **update only**, as in ent. `mixin.Time`'s `updated_at` has both a `Default` and an `UpdateDefault`, so an insert fills it too |
 | `Immutable()` | refused in `Update`, `Save` and upsert update lists |
