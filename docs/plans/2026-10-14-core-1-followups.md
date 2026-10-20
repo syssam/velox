@@ -193,14 +193,26 @@ Left by the observability plan:
 
 ## For GraphQL plan 2
 
-- Bind `Node` to a velox Go interface: gqlgen's type switch fails to compile without one.
-- One `JSON` scalar cannot autobind `[]string`, map and struct fields at once.
-- `Uint64` is documented as a decimal string, but gqlgen's built-in marshals a number; `uint8`/`uint16`/`uint32` under `Int` need marshalers.
-- The Go input and connection types take the GraphQL names (`CreateAccountInput`), not the entity's.
-- A connection method's parameters follow `connArgs` order, which varies by target.
-- A custom-Go-type enum binds with `@goModel` to the type's import path; `plugin.Field` needs the Go type's package path for it.
-- No test yet of a custom enum on a renamed entity; add it with the `@goModel` binding.
-- Plan 2 uses `@goModel` itself: refuse it as an application directive, as `@goField` is, or keep it in the copy velox-graphql validates.
+- Resolved in GraphQL plan 2: `Node` binds to the Go interface `veloxgql.Noder` (`IsNode`, `IDGQL`), which every Node entity implements; gqlgen's type switch compiles (`example/graphql`).
+- Resolved in GraphQL plan 2: a JSON field binds through a generated `<Field>GQL` getter returning `veloxgql.JSON`, so one scalar serves `[]string`, map and struct fields.
+- Resolved in GraphQL plan 2: `Uint64` is a decimal string both ways (`veloxgql.MarshalUint64`), and `uint8`/`uint16`/`uint32` under `Int` bind to gqlgen's own marshalers, listed in the documented `gqlgen.yml`.
+- Resolved in GraphQL plan 2: the Go connection, edge, order and where types take the GraphQL names; a renamed entity gets `type <GraphQL name> = <Entity>`, which real gqlgen binds (`example/graphql`'s `Tag` is `Label`). The root connection function keeps the entity's name (`TagsConnection`).
+- Resolved in GraphQL plan 2: a connection method's parameters follow the SDL's argument order, and gqlgen binds them (`example/graphql` compiles under `gqlgen generate`).
+- Resolved in GraphQL plan 2: `plugin.Field` carries the Go type's package path (`PkgPath`) and `Kind`.
+- Still open: a custom-Go-type (application) enum binds with `@goModel` to the type's import path; until then velox-gen-declared enums bind, and a custom-Go-type enum field gets a gqlgen-generated model the application converts by hand.
+- Still open: no test yet of a custom enum on a renamed entity; add it with the `@goModel` binding.
+- Still open: when plan 2's successors emit `@goModel` themselves, refuse it as an application directive, as `@goField` is, or keep it in the copy velox-graphql validates.
+
+## For GraphQL plan 4
+
+- `Paginate`'s page query sets `MaxRows(n+1)`, and a query's `With` loads share that cap: Plan 4, which adds `With` loading to connections, must give loads their own cap. The generated code adds no `With` today, so nothing hits it yet (documented on `Paginate`).
+
+## Left by GraphQL plan 2
+
+- JSON fields are broken in velox core: values are bound raw (a `[]string` as is) and scanned raw, with no `json.Marshal`/`Unmarshal`. It becomes its own small core plan right after GraphQL plan 2 merges: the write path marshals and the scan path unmarshals, per dialect (`jsonb`/`json`/`TEXT`), with itests on all three. Until then the GraphQL tests and `example/graphql` have no JSON field.
+- Custom time Go types are refused by velox-graphql in v1: `plugin.Field.Kind` cannot tell a defined type (`type Stamp time.Time`) from a wrapper, so such a field must expose the standard type. Support them with a conversion the model can describe.
+- Binding application enums with `@goModel` (see "For GraphQL plan 2").
+- `example/graphql` declares no mutations: they arrive with GraphQL plan 3, and the example gains them then.
 
 ## 1.0 release
 

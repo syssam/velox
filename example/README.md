@@ -2,7 +2,8 @@
 
 Small runnable programs, one topic each, on an in-memory SQLite database (routing uses SQLite files, one per database).
 Each directory is a `main` package with its own `schema/` and `gen/` packages,
-a README, and a golden test of its output.
+a README, and a golden test of its output (graphql's test checks the
+responses of its server instead).
 
 | Example | What it shows | Run |
 |---|---|---|
@@ -14,6 +15,7 @@ a README, and a golden test of its output.
 | [tx](tx) | `db.Tx` commit and rollback, a nested `Tx` savepoint, `ConstraintError`, `RetrySerializable`, `Timeout` and `WithDeadlines` | `go run ./tx` |
 | [routing](routing) | `OpenShards` with `WithShardFor` choosing a shard by tenant, a read replica, `WithSession` pinning a request's reads to the primary after its write, `Primary`, `OnShard`, `ErrNoShard`, and `Statement.Route`. SQLite files, one per database | `go run ./routing` |
 | [otel](otel) | Tracing and metrics with `contrib/otel` on an in-memory exporter: the span tree of a request and its transaction, fingerprints, call sites, the SQL comment sent, and the metric points | `go run ./otel` |
+| [graphql](graphql) | A gqlgen server on the schema velox-graphql generates: `node`/`nodes` by global ID, keyset-paged connections with `orderBy` and `where`, edges (a many-to-many among them), a renamed type, tenant scoping through all of them, and a sensitive field left out. Its test sends real GraphQL over HTTP and checks the responses and the SQL | `go run ./graphql` |
 | [tour](tour) | One walkthrough that touches everything once | `go run ./tour` |
 
 Run from this directory:
@@ -54,9 +56,23 @@ writes nothing and fails when a generated file is out of date, and
 schema and reports its mistakes. CI runs both for every example, with
 `go vet`, `gofmt`, golangci-lint and the tests.
 
+The graphql example also runs the velox-graphql plugin, and gqlgen after it
+(see [its README](graphql/README.md)):
+
+```sh
+go tool velox-gen -out ./graphql/gen -plugin velox-graphql ./graphql/schema
+go -C graphql run github.com/99designs/gqlgen generate
+```
+
+CI checks both: velox-gen with `-check`, and gqlgen by running it and failing
+when the checked-in `graphql/graph` differs.
+
 This directory is its own Go module, so the velox2 module does not depend on
 anything the examples use. In a module of your own, add the tool with
-`go get -tool github.com/syssam/velox2/cmd/velox-gen`. This module instead
-points `github.com/syssam/velox2`, its generator and `contrib/otel` at the
-directories beside it with `replace` lines, so it always builds against the
-code there. Only the otel example uses the OpenTelemetry SDK.
+`go get -tool github.com/syssam/velox2/cmd/velox-gen` (and, for GraphQL,
+`github.com/syssam/velox2/contrib/graphql/cmd/velox-graphql` and
+`github.com/99designs/gqlgen`). This module instead points
+`github.com/syssam/velox2`, its generator, `contrib/otel` and
+`contrib/graphql` at the directories beside it with `replace` lines, so it
+always builds against the code there. Only the otel example uses the
+OpenTelemetry SDK, and only the graphql example gqlgen.

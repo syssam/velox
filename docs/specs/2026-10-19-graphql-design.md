@@ -318,3 +318,11 @@ Plan 1 (plugins and the SDL, `docs/plans/2026-10-19-graphql-1-sdl.md`) settled t
 - a name that is not a GraphQL name, and an SDL that gqlparser does not accept.
 
 **Types.** `uint` fields map to `Uint64`, and `SkipEnumField` makes an enum field a `String`. Plan 2 needs a uint marshaler under `Uint64`, and the enum's `MarshalGQL` must agree with `SkipEnumField`.
+
+## Rulings made in plan 2
+
+Plan 2 (the runtime, `docs/plans/2026-10-20-graphql-2-runtime.md`) settled these points. As above, where one differs from the text, the ruling stands and the text is left as it was written.
+
+**No core `Before` (§3 Connections), 2026-10-20.** The core does not gain `Before`. For `last`/`before`, `veloxgql`'s paginator reverses every order term's direction, keysets with `After` on the reversed order, reads `n+1` rows, and reverses the page in memory, so the core's API is unchanged. `after` with `before`, `first` with `before` and `last` with `after` are refused with `ErrBadPagination`, since a keyset bounds one side; the opposite-direction flag (`hasPreviousPage` going forward, `hasNextPage` going backward) is false, as Relay allows.
+
+**Where inputs are Go structs (§3 Filtering), 2026-10-20.** gqlgen binds an input object to a Go struct, so each `XWhereInput` is a generated struct, and there is no table for the runtime to interpret. The struct's generated method `Pred(ctx, depth)` returns the `velox.Pred[X]`: one `veloxgql` helper call for each predicate the input sets (`Value`, `List`, `ID`, `IDList`, `Is`, `HasWith`…), with no logic of its own, plus the `and`/`or`/`not` assembly and the limits (`MaxFilterDepth`, `MaxFilterWidth` on every list, `MaxFilterNodes` across one argument) in the helpers. This is the smallest per-field code gqlgen's binding allows.

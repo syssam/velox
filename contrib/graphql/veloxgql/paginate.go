@@ -164,7 +164,8 @@ func LoadedConnection[E any](rows []E, typ string, key []OrderTerm[E]) *Connecti
 //     Relay lets a server say false when it cannot tell cheaply.
 //
 // The page query reads at most n+1 rows whatever the DB's WithMaxRows cap:
-// MaxPage bounds it.
+// MaxPage bounds it. The query's With loads share that cap of n+1 rows, until
+// GraphQL plan 4 gives loads their own; the generated code adds none yet.
 //
 // It fails before any query runs: with ErrBadPagination for first and last
 // together, either below 0, another combination Args refuses, or an order

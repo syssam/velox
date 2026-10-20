@@ -83,8 +83,16 @@
 // veloxgql helper call for each predicate the input sets; it decodes IDs as
 // their type's, and refuses an ID of another type, and a filter nested
 // deeper than veloxgql.MaxFilterDepth, wider than veloxgql.MaxFilterWidth
-// or larger in all than veloxgql.MaxFilterNodes, before any query runs. Mutations are not written yet, and until they are gqlgen
-// cannot load the application from this SDL alone.
+// or larger in all than veloxgql.MaxFilterNodes, before any query runs.
+//
+// The Go of mutations is not written yet. For an entity with Mutations,
+// gqlgen writes models of the mutation inputs in the application's package,
+// and the application resolves the mutation fields itself until it is.
+//
+// The application writes the root query's resolvers, one call each: Node
+// and Nodes for node and nodes, and the root connection function for each
+// QueryField. The example example/graphql in the velox2 repository is a
+// whole server: a schema, its gqlgen.yml and its resolvers.
 //
 // # gqlgen.yml
 //
