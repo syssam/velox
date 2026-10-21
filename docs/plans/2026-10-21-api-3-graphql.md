@@ -30,7 +30,7 @@
 - **The full gate passes at every task's commit:** `<scratchpad>/fix1.sh`, with Docker. If golangci-lint's lock is held, run it with `--allow-parallel-runners`.
 - **CI.** `scripts/ci-local.sh` and `.github/workflows/ci.yml` stay identical in what they run. Task 8 adds the `gqlgen@latest` job to both.
 - **No machine-specific paths** in committed files. Committed text says `<scratchpad>`.
-- **Shell only:** `GOCACHE=/private/tmp/claude-501/velox2-gocache GOFLAGS=-p=2`. The machine is short of memory and loaded: one heavy command at a time. Do not kill other processes.
+- **Shell only:** `GOCACHE=<tmp>/velox2-gocache GOFLAGS=-p=2`. The machine is short of memory and loaded: one heavy command at a time. Do not kill other processes.
 - **Regenerating the example** is `(cd example && go tool velox-gen -out ./graphql/gen -plugin velox-graphql ./graphql/schema && go -C graphql tool gqlgen generate)`. Commit `gen/` and `graph/` together.
 - **Commits** end with a blank line and `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Never push.
 
