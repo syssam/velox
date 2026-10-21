@@ -612,3 +612,20 @@ func TestWithoutTx(t *testing.T) {
 		return nil
 	})
 }
+
+func TestTxRetries(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		opts []velox.TxOption
+		want int
+	}{
+		{"none", nil, 0},
+		{"timeout then retry", []velox.TxOption{velox.TxTimeout(time.Second), velox.TxRetrySerializable(3)}, 3},
+		{"the last wins", []velox.TxOption{velox.TxRetrySerializable(3), velox.TxRetrySerializable(0)}, 0},
+		{"no retry option", []velox.TxOption{velox.TxReadOnly(), velox.TxIsolation(sql.LevelSerializable)}, 0},
+	} {
+		if got := velox.TxRetries(c.opts...); got != c.want {
+			t.Errorf("%s: velox.TxRetries = %d, want %d", c.name, got, c.want)
+		}
+	}
+}

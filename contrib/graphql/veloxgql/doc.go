@@ -27,6 +27,14 @@
 // puts the same in a context for generated code called outside a gqlgen
 // server, in a job or a test.
 //
+// WithTxOptions sets the options of a mutation's transaction (velox.TxIsolation,
+// velox.TxReadOnly, velox.TxTimeout). It refuses velox.TxRetrySerializable,
+// since gqlgen makes the response once and the operation cannot run again.
+// WithTxFilter decides for each mutation operation, from its context and
+// definition, whether it runs in a transaction; a nil filter means every
+// mutation does, and one the filter leaves out runs on the DB with its field
+// resolvers not serialized.
+//
 // # Cursors
 //
 // A cursor is base64url without padding of the versioned JSON document

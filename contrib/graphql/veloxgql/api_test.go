@@ -85,6 +85,8 @@ var publicAPI = []string{
 	"UnmarshalUint",
 	"UnmarshalUint64",
 	"WithLimits",
+	"WithTxFilter",
+	"WithTxOptions",
 }
 
 // parseDoc is the documentation of the non-test files of the package in dir.

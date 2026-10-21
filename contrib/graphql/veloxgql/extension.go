@@ -75,6 +75,11 @@ import (
 type Extension struct {
 	db     *velox.DB
 	limits Limits
+	// txOpts are the options of a mutation's transaction.
+	txOpts []velox.TxOption
+	// txFilter decides whether a mutation runs in a transaction; nil means
+	// every one does.
+	txFilter func(ctx context.Context, op *ast.OperationDefinition) bool
 }
 
 // Option configures an Extension.
@@ -94,6 +99,22 @@ func NewExtension(db *velox.DB, opts ...Option) *Extension {
 // from DefaultLimits(). Given twice, the last wins.
 func WithLimits(l Limits) Option {
 	return func(e *Extension) { e.limits = l.orDefault() }
+}
+
+// WithTxOptions sets the options of a mutation's transaction. Validate
+// refuses TxRetrySerializable: gqlgen makes the response once, so the
+// operation cannot run again. Given twice, the last wins.
+func WithTxOptions(opts ...velox.TxOption) Option {
+	return func(e *Extension) { e.txOpts = opts }
+}
+
+// WithTxFilter decides, for each mutation operation, whether it runs in a
+// transaction. f gets the operation's context and its definition, and runs
+// once per mutation operation. A nil f means every mutation does. A mutation
+// f leaves out runs on the extension's DB with no transaction, and its field
+// resolvers are not serialized, since no transaction's DB is shared.
+func WithTxFilter(f func(ctx context.Context, op *ast.OperationDefinition) bool) Option {
+	return func(e *Extension) { e.txFilter = f }
 }
 
 // Context returns ctx with the extension's DB and limits, as a query
@@ -124,6 +145,8 @@ type mutation struct {
 	started atomic.Bool
 	// mu is held while one of the operation's field resolvers runs.
 	mu sync.Mutex
+	// plain is set when the filter left the mutation out of a transaction.
+	plain bool
 }
 
 // errRollback is what the transaction's function returns to roll back a
@@ -144,6 +167,9 @@ func (e *Extension) Validate(graphql.ExecutableSchema) error {
 			return fmt.Errorf("veloxgql.NewExtension: Limits.%s is %d, and a limit must be positive", l.name, l.n)
 		}
 	}
+	if n := velox.TxRetries(e.txOpts...); n > 0 {
+		return fmt.Errorf("veloxgql.WithTxOptions: TxRetrySerializable(%d) would run the mutation again, and gqlgen makes its response once", n)
+	}
 	return nil
 }
 
@@ -152,7 +178,9 @@ func (e *Extension) Validate(graphql.ExecutableSchema) error {
 func (e *Extension) InterceptOperation(ctx context.Context, next graphql.OperationHandler) graphql.ResponseHandler {
 	ctx = withState(ctx, e.db, e.limits)
 	if op := graphql.GetOperationContext(ctx).Operation; op != nil && op.Operation == ast.Mutation {
-		ctx = context.WithValue(ctx, mutationKey{}, new(mutation))
+		m := new(mutation)
+		m.plain = e.txFilter != nil && !e.txFilter(ctx, op)
+		ctx = context.WithValue(ctx, mutationKey{}, m)
 	}
 	return next(ctx)
 }
@@ -163,7 +191,7 @@ func (e *Extension) InterceptOperation(ctx context.Context, next graphql.Operati
 // through.
 func (e *Extension) InterceptResponse(ctx context.Context, next graphql.ResponseHandler) *graphql.Response {
 	m, _ := ctx.Value(mutationKey{}).(*mutation)
-	if m == nil || m.started.Swap(true) {
+	if m == nil || m.plain || m.started.Swap(true) {
 		return next(ctx)
 	}
 	var resp *graphql.Response
@@ -173,7 +201,7 @@ func (e *Extension) InterceptResponse(ctx context.Context, next graphql.Response
 			return errRollback
 		}
 		return nil
-	})
+	}, e.txOpts...)
 	if err == nil {
 		return resp
 	}
@@ -200,7 +228,7 @@ func (e *Extension) InterceptResponse(ctx context.Context, next graphql.Response
 // children after they return.
 func (*Extension) InterceptField(ctx context.Context, next graphql.Resolver) (any, error) {
 	m, _ := ctx.Value(mutationKey{}).(*mutation)
-	if m == nil {
+	if m == nil || m.plain {
 		return next(ctx)
 	}
 	m.mu.Lock()

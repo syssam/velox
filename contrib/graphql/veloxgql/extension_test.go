@@ -744,3 +744,93 @@ func TestMutationResolversRunOneAtATime(t *testing.T) {
 		t.Errorf("mutation: statements %q, transactions %q; want two selects in one committed transaction", stmts, txs)
 	}
 }
+
+// TestTxOptionsRefuseRetry: a retry among the options is refused, since
+// gqlgen makes the response once and the operation cannot run again.
+func TestTxOptionsRefuseRetry(t *testing.T) {
+	db, _ := handlerDB(t)
+	err := veloxgql.NewExtension(db, veloxgql.WithTxOptions(velox.TxTimeout(time.Second), velox.TxRetrySerializable(3))).Validate(nil)
+	want := "veloxgql.WithTxOptions: TxRetrySerializable(3) would run the mutation again, and gqlgen makes its response once"
+	if err == nil || err.Error() != want {
+		t.Errorf("Validate = %v, want %q", err, want)
+	}
+	for name, opts := range map[string][]velox.TxOption{
+		"the last retry asks for none": {velox.TxRetrySerializable(3), velox.TxRetrySerializable(0)},
+		"isolation":                    {velox.TxIsolation(sql.LevelSerializable)},
+	} {
+		if err := veloxgql.NewExtension(db, veloxgql.WithTxOptions(opts...)).Validate(nil); err != nil {
+			t.Errorf("%s: Validate = %v, want nil", name, err)
+		}
+	}
+	// Given twice, the last wins.
+	e := veloxgql.NewExtension(db, veloxgql.WithTxOptions(velox.TxRetrySerializable(3)), veloxgql.WithTxOptions(velox.TxReadOnly()))
+	if err := e.Validate(nil); err != nil {
+		t.Errorf("the last WithTxOptions should win: %v", err)
+	}
+}
+
+// TestTxOptionsApply: the options reach the mutation's transaction.
+func TestTxOptionsApply(t *testing.T) {
+	var iso sql.IsolationLevel
+	sqlDB, err := sql.Open("sqlite", "file::memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	sqlDB.SetMaxOpenConns(1)
+	db := velox.Open(velox.SQLite, sqlDB, velox.WithTxAround(func(ctx context.Context, tx *velox.TxInfo, next func(context.Context) error) error {
+		iso = tx.Isolation
+		return next(ctx)
+	}))
+	var left time.Duration
+	var has bool
+	resolvers := map[string]resolver{
+		"add": func(ctx context.Context, args map[string]any) (any, error) {
+			var d time.Time
+			d, has = ctx.Deadline()
+			left = time.Until(d)
+			return args["id"], nil
+		},
+	}
+	srv := serve(db, resolvers, veloxgql.WithTxOptions(velox.TxIsolation(sql.LevelSerializable)))
+	_ = post(t, context.Background(), srv, `mutation { add(id: 1) }`)
+	if iso != sql.LevelSerializable {
+		t.Errorf("isolation %v, want serializable", iso)
+	}
+	srv = serve(db, resolvers, veloxgql.WithTxOptions(velox.TxTimeout(50*time.Millisecond)))
+	_ = post(t, context.Background(), srv, `mutation { add(id: 1) }`)
+	if !has || left > 50*time.Millisecond {
+		t.Errorf("deadline %v (set %v), want at most 50ms away", left, has)
+	}
+}
+
+// TestTxFilter: a mutation the filter leaves out runs with no transaction.
+func TestTxFilter(t *testing.T) {
+	db, l := handlerDB(t)
+	var names []string
+	srv := serve(db, handlerResolvers(db, nil), veloxgql.WithTxFilter(func(ctx context.Context, op *ast.OperationDefinition) bool {
+		names = append(names, op.Name)
+		return op.Name != "Login"
+	}))
+	if got, want := post(t, context.Background(), srv, `mutation Login { add(id: 1) }`), `{"data":{"add":1}}`; got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
+	stmts, txs := l.take()
+	if !slices.Equal(stmts, []string{"insert"}) || len(txs) != 0 {
+		t.Errorf("Login: statements %q, transactions %q; want one insert outside a transaction", stmts, txs)
+	}
+	_ = post(t, context.Background(), srv, `mutation Other { add(id: 2) }`)
+	stmts, txs = l.take()
+	if !slices.Equal(stmts, []string{"insert in tx"}) || !slices.Equal(txs, []string{"commit"}) {
+		t.Errorf("Other: statements %q, transactions %q; want one insert in one transaction", stmts, txs)
+	}
+	if !slices.Equal(names, []string{"Login", "Other"}) {
+		t.Errorf("the filter saw %q, want each operation once", names)
+	}
+	// A nil filter means every mutation runs in a transaction.
+	srv = serve(db, handlerResolvers(db, nil), veloxgql.WithTxFilter(nil))
+	_ = post(t, context.Background(), srv, `mutation Login { add(id: 3) }`)
+	if _, txs = l.take(); len(txs) != 1 {
+		t.Errorf("nil filter: transactions %q, want one", txs)
+	}
+}

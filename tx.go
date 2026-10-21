@@ -30,6 +30,17 @@ func TxReadOnly() TxOption { return func(o *txOptions) { o.readOnly = true } }
 // MySQL 1213 and 1205, SQLite BUSY and LOCKED. fn must be safe to run again.
 func TxRetrySerializable(n int) TxOption { return func(o *txOptions) { o.retries = n } }
 
+// TxRetries returns the n of the last TxRetrySerializable in opts, or 0 when
+// there is none. It is for code that runs a transaction's fn on an
+// application's behalf and cannot run it again.
+func TxRetries(opts ...TxOption) int {
+	var o txOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+	return o.retries
+}
+
 // Tx runs fn in a transaction. fn's error rolls it back and is returned; nil
 // commits it; a panic in fn rolls it back and then panics again with the same
 // value, and runtime.Goexit rolls it back and carries on. tx is a *DB like any
