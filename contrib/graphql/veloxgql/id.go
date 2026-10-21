@@ -28,7 +28,7 @@ type Noder interface {
 // UUID and its string form give the same ID. Any other key type is a mistake
 // in the generated code, and EncodeID panics.
 func EncodeID(typ string, key any) string {
-	k, ok := shared.KeyText(key)
+	k, ok := keyText(key)
 	if !ok {
 		panic(fmt.Sprintf("veloxgql: EncodeID: %T is not a supported key type", key))
 	}
@@ -64,13 +64,13 @@ func DecodeID[K any](id, typ string) (K, error) {
 		return zero, fmt.Errorf("veloxgql: %s ID: %w", typ, ErrWrongIDType)
 	}
 	var k K
-	switch err := shared.SetValue(&k, shared.Text(key)); {
+	switch err := shared.SetValue(basePtr(&k), shared.Text(key)); {
 	case errors.Is(err, shared.ErrUnsupported):
 		return zero, fmt.Errorf("veloxgql: DecodeID: %s is not a supported key type", shared.TypeName[K]())
 	case err != nil:
 		return zero, badID(typ, "the key does not parse")
 	}
-	canon, ok := shared.KeyText(k)
+	canon, ok := keyText(k)
 	switch {
 	case !ok:
 		return zero, fmt.Errorf("veloxgql: DecodeID: %s is not a supported key type", shared.TypeName[K]())
@@ -99,4 +99,13 @@ func IDType(id string) (string, error) {
 
 func badID(typ, why string) error {
 	return fmt.Errorf("veloxgql: %s ID: %w: %s", typ, ErrBadID, why)
+}
+
+// keyText is shared.KeyText of key, a UUID unwrapped to its [16]byte: the one
+// scalar of this package that is a key type.
+func keyText(key any) (string, bool) {
+	if u, ok := key.(UUID); ok {
+		key = [16]byte(u)
+	}
+	return shared.KeyText(key)
 }

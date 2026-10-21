@@ -3,6 +3,7 @@ package gqlimpl
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
@@ -45,7 +46,7 @@ func checkCursor(c veloxgql.Cursor, typ string, order []cursorOrder) error {
 // A v of another type fails with veloxgql.ErrBadCursor.
 func cursorValue[T any](v any) (T, error) {
 	var t T
-	switch err := shared.SetValue(&t, v); {
+	switch err := shared.SetValue(basePtr(&t), v); {
 	case errors.Is(err, shared.ErrUnsupported):
 		var zero T
 		return zero, fmt.Errorf("veloxgql: CursorValue: %s is not a supported type", shared.TypeName[T]())
@@ -54,4 +55,20 @@ func cursorValue[T any](v any) (T, error) {
 		return zero, fmt.Errorf("veloxgql: %w: a value is not a %s", veloxgql.ErrBadCursor, shared.TypeName[T]())
 	}
 	return t, nil
+}
+
+// basePtr is p, a pointer to a veloxgql scalar, as a pointer to its base type,
+// which is all package shared handles; any other p is returned as it is.
+func basePtr(p any) any {
+	switch x := p.(type) {
+	case *veloxgql.Time:
+		return (*time.Time)(x)
+	case *veloxgql.UUID:
+		return (*[16]byte)(x)
+	case *veloxgql.Uint64:
+		return (*uint64)(x)
+	case *veloxgql.Bytes:
+		return (*[]byte)(x)
+	}
+	return p
 }

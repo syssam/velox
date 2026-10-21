@@ -16,17 +16,17 @@ import (
 // one helper call, and returns Filter.Pred:
 //
 //	func (w *AccountWhereInput) Pred(ctx context.Context, depth int) (velox.Pred[User], error) {
-//		f := veloxgql.NewFilter[User](ctx, "AccountWhereInput", depth)
+//		f := gqlimpl.NewFilter[User](ctx, "AccountWhereInput", depth)
 //		if w == nil {
 //			return f.Pred()
 //		}
-//		veloxgql.Not(f, "not", w.Not)
-//		veloxgql.And(f, "and", w.And)
-//		veloxgql.Or(f, "or", w.Or)
-//		veloxgql.Value(f, "displayName", w.DisplayName, Users.Name.EQ)
-//		veloxgql.List(f, "displayNameIn", w.DisplayNameIn, Users.Name.In)
-//		veloxgql.Is(f, "hasPosts", w.HasPosts, Users.Posts.Has)
-//		veloxgql.HasWith(f, "hasPostsWith", w.HasPostsWith, Users.Posts.HasWhere)
+//		gqlimpl.Not(f, "not", w.Not)
+//		gqlimpl.And(f, "and", w.And)
+//		gqlimpl.Or(f, "or", w.Or)
+//		gqlimpl.Value(f, "displayName", w.DisplayName, Users.Name.EQ)
+//		gqlimpl.List(f, "displayNameIn", w.DisplayNameIn, Users.Name.In)
+//		gqlimpl.Is(f, "hasPosts", w.HasPosts, Users.Posts.Has)
+//		gqlimpl.HasWith(f, "hasPostsWith", w.HasPostsWith, Users.Posts.HasWhere)
 //		return f.Pred()
 //	}
 //
@@ -138,7 +138,7 @@ func add[E any](f *Filter[E], field string, n int, p velox.Pred[E]) {
 	}
 }
 
-// CheckDepth checks depth, how deeply a where input is nested, against
+// checkDepth checks depth, how deeply a where input is nested, against
 // MaxFilterDepth: deeper fails with ErrFilterTooDeep.
 func checkDepth(depth int) error {
 	if depth > veloxgql.MaxFilterDepth {

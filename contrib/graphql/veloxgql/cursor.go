@@ -78,9 +78,9 @@ func EncodeCursor(c Cursor) string {
 		if t.Field == "" || !t.Direction.IsValid() {
 			panic("veloxgql: EncodeCursor: term " + strconv.Itoa(i) + " has no field or an invalid direction")
 		}
-		o[i] = cursorTermDoc{F: &t.Field, D: &t.Direction, V: shared.JSONValue(t.Value)}
+		o[i] = cursorTermDoc{F: &t.Field, D: &t.Direction, V: shared.JSONValue(base(t.Value))}
 	}
-	b, err := json.Marshal(cursorDoc{V: &v, T: &c.Type, O: &o, K: shared.JSONValue(c.Key)})
+	b, err := json.Marshal(cursorDoc{V: &v, T: &c.Type, O: &o, K: shared.JSONValue(base(c.Key))})
 	if err != nil {
 		panic("veloxgql: EncodeCursor: " + err.Error())
 	}

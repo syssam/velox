@@ -86,8 +86,8 @@
 // the module fail to compile together when they disagree. A connection is
 // keyset-paged by its cursors, and runs its page query and its COUNT only
 // when gqlgen asks for edges or pageInfo, and for totalCount. A where
-// argument's Pred is one gqlimpl helper call for each predicate the input sets; it decodes IDs as
-// their type's, and refuses an ID of another type, and a filter nested
+// argument's Pred is one gqlimpl helper call for each predicate the input
+// sets; it decodes IDs as their type's, and refuses an ID of another type, and a filter nested
 // deeper than veloxgql.MaxFilterDepth, wider than veloxgql.MaxFilterWidth
 // or larger in all than veloxgql.MaxFilterNodes, before any query runs. A list
 // edge (graphql.Connection(false)) reads at most veloxgql.MaxList rows and

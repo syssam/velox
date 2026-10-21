@@ -151,3 +151,35 @@ func (u *Uint64) UnmarshalGQL(v any) error {
 	*u = Uint64(n)
 	return nil
 }
+
+// base is v with a scalar of this package unwrapped to its base type (Time to
+// time.Time, UUID to [16]byte, Uint64 to uint64, Bytes to []byte), which is
+// what package shared handles; any other v is returned as it is.
+func base(v any) any {
+	switch x := v.(type) {
+	case Time:
+		return time.Time(x)
+	case UUID:
+		return [16]byte(x)
+	case Uint64:
+		return uint64(x)
+	case Bytes:
+		return []byte(x)
+	}
+	return v
+}
+
+// basePtr is base for a pointer to set.
+func basePtr(p any) any {
+	switch x := p.(type) {
+	case *Time:
+		return (*time.Time)(x)
+	case *UUID:
+		return (*[16]byte)(x)
+	case *Uint64:
+		return (*uint64)(x)
+	case *Bytes:
+		return (*[]byte)(x)
+	}
+	return p
+}

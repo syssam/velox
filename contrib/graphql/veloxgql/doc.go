@@ -40,26 +40,29 @@
 // A gqlimpl.Connection (gqlimpl.NewConnection) holds a connection's query,
 // its paging arguments (gqlimpl.Args) and its order (gqlimpl.OrderTerm, made
 // by gqlimpl.Term), and runs nothing until asked: Page runs the page query
-// once, whoever calls it first, and TotalCount the COUNT. The order always ends with the key. Paging is
-// keyset, through velox's Query.After: last and before reverse every term
-// and reverse the rows read, and one row more than the page sets
-// hasNextPage or hasPreviousPage. gqlimpl.LoadedConnection pages rows a With
-// loaded, and runs no query.
+// once, whoever calls it first, and TotalCount the COUNT. The order always
+// ends with the key. Paging is keyset, through velox's Query.After: last and
+// before reverse every term and reverse the rows read, and one row more than
+// the page sets hasNextPage or hasPreviousPage. gqlimpl.LoadedConnection
+// pages rows a With loaded, and runs no query.
 //
 // # Where
 //
 // A where input's generated method Pred turns it into a velox.Pred: a
 // gqlimpl.Filter (gqlimpl.NewFilter), one helper call for each field of the
-// input, and Filter.Pred, the And of what the helpers added. Each helper adds nothing
-// for a field the input does not set, and the first error stops the filter:
-//   - gqlimpl.Not, And and Or nest inputs one level deeper, and HasWith through an
-//     edge (the relation's HasWhere); an empty and, or or has…With list adds
-//     nothing, and an input that sets nothing holds for every row;
+// input, and Filter.Pred, the And of what the helpers added. Each helper
+// adds nothing for a field the input does not set, and the first error stops
+// the filter:
+//   - gqlimpl.Not, And and Or nest inputs one level deeper, and HasWith
+//     through an edge (the relation's HasWhere); an empty and, or or
+//     has…With list adds nothing, and an input that sets nothing holds for
+//     every row;
 //   - gqlimpl.Value and List add a predicate of the column's handle (EQ, In,
 //     Contains…), and ValueAs and ListAs convert the input's values to the
 //     column's Go type first, with gqlimpl.AsString, AsInt, AsFloat, AsBool or
 //     AsUUID;
-//   - gqlimpl.ID, IDList, IDAs and IDListAs decode IDs with DecodeID, so an ID of
+//   - gqlimpl.ID, IDList, IDAs and IDListAs decode IDs with DecodeID, so an
+//     ID of
 //     another type fails with ErrWrongIDType;
 //   - gqlimpl.Is adds a Boolean predicate, or its negation: IsNil, NotNil and
 //     has<Edge>.

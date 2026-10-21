@@ -5,10 +5,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-
 	"math"
 	"strconv"
-
 	"testing"
 	"time"
 

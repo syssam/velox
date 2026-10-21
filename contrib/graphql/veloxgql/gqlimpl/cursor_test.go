@@ -70,6 +70,12 @@ func TestCursorValues(t *testing.T) {
 	}
 	expect(t, d.Key, u)
 
+	bigKey, err := veloxgql.DecodeCursor(veloxgql.EncodeCursor(veloxgql.Cursor{Type: "User", Key: int64(1<<62 + 3)}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	expect(t, bigKey.Key, int64(1<<62+3))
+
 	// Floats that JSON has no number for are strings.
 	for _, f := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
 		c := veloxgql.Cursor{Type: "User", Terms: []veloxgql.CursorTerm{{Field: "F", Direction: veloxgql.OrderDirectionAsc, Value: f}}, Key: 1}

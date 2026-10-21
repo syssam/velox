@@ -1,6 +1,8 @@
 // Package shared holds the conversions between a Go value and the JSON value
 // of a cursor, or the text of an ID, that veloxgql (IDs) and gqlimpl
-// (cursors) both need. It is not part of the API.
+// (cursors) both need. It knows base types only (time.Time, [16]byte, uint64,
+// []byte): the callers unwrap veloxgql's scalars first. It is not part of the
+// API.
 package shared
 
 import (
@@ -11,54 +13,9 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"reflect"
 	"strconv"
 	"time"
 )
-
-// The scalar types of veloxgql, which shared cannot name without importing
-// it: it recognizes them by package path and name, and converts them to
-// their base types.
-const veloxgqlPath = "github.com/syssam/velox2/contrib/graphql/veloxgql"
-
-var scalarBases = map[string]reflect.Type{
-	"Time":   reflect.TypeFor[time.Time](),
-	"UUID":   reflect.TypeFor[[16]byte](),
-	"Uint64": reflect.TypeFor[uint64](),
-	"Bytes":  reflect.TypeFor[[]byte](),
-}
-
-// scalarOf reports whether x is a veloxgql scalar (Time, UUID, Uint64 or
-// Bytes), and returns its name and x converted to its base type.
-func scalarOf(x any) (name string, base any, ok bool) {
-	t := reflect.TypeOf(x)
-	if t == nil || t.PkgPath() != veloxgqlPath {
-		return "", nil, false
-	}
-	b, ok := scalarBases[t.Name()]
-	if !ok {
-		return "", nil, false
-	}
-	return t.Name(), reflect.ValueOf(x).Convert(b).Interface(), true
-}
-
-// scalarPtr is scalarOf for a pointer to one: p as a pointer to its base
-// type.
-func scalarPtr(p any) (any, bool) {
-	t := reflect.TypeOf(p)
-	if t == nil || t.Kind() != reflect.Pointer {
-		return nil, false
-	}
-	e := t.Elem()
-	if e.PkgPath() != veloxgqlPath {
-		return nil, false
-	}
-	b, ok := scalarBases[e.Name()]
-	if !ok {
-		return nil, false
-	}
-	return reflect.ValueOf(p).Convert(reflect.PointerTo(b)).Interface(), true
-}
 
 // The ways SetValue fails.
 var (
@@ -74,9 +31,6 @@ type Text string
 // KeyText is key in its canonical text, the text of an ID; false when key's
 // type is not a key type.
 func KeyText(key any) (string, bool) {
-	if name, base, ok := scalarOf(key); ok && name == "UUID" {
-		key = base
-	}
 	switch k := key.(type) {
 	case int:
 		return strconv.FormatInt(int64(k), 10), true
@@ -114,9 +68,6 @@ func KeyText(key any) (string, bool) {
 // and the zone offset; UUIDs are strings; floats with no JSON number are the
 // strings NaN, +Inf and -Inf.
 func JSONValue(v any) any {
-	if _, base, ok := scalarOf(v); ok {
-		v = base
-	}
 	switch x := v.(type) {
 	case time.Time:
 		return x.Format(time.RFC3339Nano)
@@ -139,9 +90,6 @@ func JSONValue(v any) any {
 // ErrMismatch when v is not of *p's type, and ErrUnsupported when p's type is
 // none SetValue knows.
 func SetValue(p, v any) error {
-	if b, ok := scalarPtr(p); ok {
-		p = b
-	}
 	switch p := p.(type) {
 	case *int:
 		return setInt(p, v, strconv.IntSize)
