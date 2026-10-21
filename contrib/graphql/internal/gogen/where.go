@@ -11,9 +11,9 @@ import (
 
 // The kinds of value a predicate's helper takes.
 const (
-	takesValue = iota // one value: veloxgql.Value
-	takesList         // a list: veloxgql.List
-	takesBool         // a Boolean: veloxgql.Is
+	takesValue = iota // one value: gqlimpl.Value
+	takesList         // a list: gqlimpl.List
+	takesBool         // a Boolean: gqlimpl.Is
 )
 
 // predMethods are the column handle's method of each predicate, and the
@@ -38,16 +38,16 @@ var predMethods = map[graphql.WhereOp]struct {
 }
 
 // writePred writes the where input's method Pred, which turns it into a
-// velox.Pred: a veloxgql.Filter, and one call of a veloxgql helper for each
+// velox.Pred: a gqlimpl.Filter, and one call of a gqlimpl helper for each
 // field of the input, which adds the field's predicate when it is set.
 func (r *renderer) writePred(f *file, t *sdl.Type) error {
 	n, e := t.Name, t.Entity
 	in := n + "WhereInput"
-	ctx, velox, vgql := f.use("context", "context"), f.velox(), f.veloxgql()
+	ctx, velox, impl := f.use("context", "context"), f.velox(), f.gqlimpl()
 	f.p("")
 	f.doc("", fmt.Sprintf("Pred is the condition w stands for, on %s nodes: every predicate w sets holds, and a w that sets none, or a nil w, holds for every node. depth is how deeply w is nested in the where argument, 0 at the top. It fails, before any query runs, on an ID of another type (veloxgql.ErrWrongIDType) or a malformed one (veloxgql.ErrBadID), on a nesting deeper than veloxgql.MaxFilterDepth (veloxgql.ErrFilterTooDeep), on an and, an or, a has…With, an In or a NotIn of more than veloxgql.MaxFilterWidth entries, and on a where argument of more than veloxgql.MaxFilterNodes inputs, predicates and values in all (both veloxgql.ErrFilterTooWide).", n))
 	f.p("func (w *%s) Pred(ctx %s.Context, depth int) (%s.Pred[%s], error) {", in, ctx, velox, e.Name)
-	f.p("\tf := %s.NewFilter[%s](ctx, %q, depth)", vgql, e.Name, in)
+	f.p("\tf := %s.NewFilter[%s](ctx, %q, depth)", impl, e.Name, in)
 	f.p("\tif w == nil {")
 	f.p("\t\treturn f.Pred()")
 	f.p("\t}")
@@ -66,19 +66,19 @@ func (r *renderer) writePred(f *file, t *sdl.Type) error {
 // predCall is the helper call that adds the predicate of the where-input
 // field w of t.
 func (r *renderer) predCall(f *file, t *sdl.Type, w sdl.WhereField) (string, error) {
-	e, vgql := t.Entity, f.veloxgql()
+	e, impl := t.Entity, f.gqlimpl()
 	field := fmt.Sprintf("%q, w.%s", w.Name, w.GoName) // the GraphQL name, for errors, and the value
 	switch w.Kind {
 	case sdl.WhereNot:
-		return fmt.Sprintf("%s.Not(f, %s)", vgql, field), nil
+		return fmt.Sprintf("%s.Not(f, %s)", impl, field), nil
 	case sdl.WhereAnd:
-		return fmt.Sprintf("%s.And(f, %s)", vgql, field), nil
+		return fmt.Sprintf("%s.And(f, %s)", impl, field), nil
 	case sdl.WhereOr:
-		return fmt.Sprintf("%s.Or(f, %s)", vgql, field), nil
+		return fmt.Sprintf("%s.Or(f, %s)", impl, field), nil
 	case sdl.WhereHas:
-		return fmt.Sprintf("%s.Is(f, %s, %s.%s.Has)", vgql, field, e.Handles, e.Edges[w.Edge].GoName), nil
+		return fmt.Sprintf("%s.Is(f, %s, %s.%s.Has)", impl, field, e.Handles, e.Edges[w.Edge].GoName), nil
 	case sdl.WhereHasWith:
-		return fmt.Sprintf("%s.HasWith(f, %s, %s.%s.HasWhere)", vgql, field, e.Handles, e.Edges[w.Edge].GoName), nil
+		return fmt.Sprintf("%s.HasWith(f, %s, %s.%s.HasWhere)", impl, field, e.Handles, e.Edges[w.Edge].GoName), nil
 	}
 	pm, ok := predMethods[w.Op]
 	if !ok {
@@ -87,7 +87,7 @@ func (r *renderer) predCall(f *file, t *sdl.Type, w sdl.WhereField) (string, err
 	fd := e.Fields[w.Field]
 	op := e.Handles + "." + fd.GoName + "." + pm.method
 	if pm.takes == takesBool {
-		return fmt.Sprintf("%s.Is(f, %s, %s)", vgql, field, op), nil
+		return fmt.Sprintf("%s.Is(f, %s, %s)", impl, field, op), nil
 	}
 	if w.IDs() {
 		return r.idCall(f, t, w, fd, field, op, pm.takes)
@@ -101,9 +101,9 @@ func (r *renderer) predCall(f *file, t *sdl.Type, w sdl.WhereField) (string, err
 		helper = "List"
 	}
 	if conv == "" {
-		return fmt.Sprintf("%s.%s(f, %s, %s)", vgql, helper, field, op), nil
+		return fmt.Sprintf("%s.%s(f, %s, %s)", impl, helper, field, op), nil
 	}
-	return fmt.Sprintf("%s.%sAs(f, %s, %s, %s)", vgql, helper, field, conv, op), nil
+	return fmt.Sprintf("%s.%sAs(f, %s, %s, %s)", impl, helper, field, conv, op), nil
 }
 
 // idCall is the helper call of a predicate on IDs: of t's key, or of the
@@ -111,7 +111,7 @@ func (r *renderer) predCall(f *file, t *sdl.Type, w sdl.WhereField) (string, err
 // decoded with veloxgql.DecodeID as the target's Key and converted to fd's
 // Go type when that is not the Key.
 func (r *renderer) idCall(f *file, t *sdl.Type, w sdl.WhereField, fd *plugin.Field, field, op string, takes int) (string, error) {
-	e, vgql := t.Entity, f.veloxgql()
+	e, impl := t.Entity, f.gqlimpl()
 	tt := r.types[w.Target]
 	if tt == nil || !tt.Node {
 		return "", fmt.Errorf("schema %s, field %s: its predicates take IDs of %s, which is not a Node, which is a bug", e.Name, w.Name, w.Target)
@@ -122,7 +122,7 @@ func (r *renderer) idCall(f *file, t *sdl.Type, w sdl.WhereField, fd *plugin.Fie
 	}
 	elem := cmp.Or(fd.ElemType, tt.Key)
 	if elem == tt.Key {
-		return fmt.Sprintf("%s.%s(f, %s, %q, %s)", vgql, helper, field, w.Target, op), nil
+		return fmt.Sprintf("%s.%s(f, %s, %q, %s)", impl, helper, field, w.Target, op), nil
 	}
 	if err := r.converts(e, fd, tt.Key); err != nil {
 		return "", err
@@ -140,13 +140,13 @@ func (r *renderer) idCall(f *file, t *sdl.Type, w sdl.WhereField, fd *plugin.Fie
 	default:
 		as = "AsInt"
 	}
-	return fmt.Sprintf("%s.%sAs(f, %s, %q, %s.%s[%s, %s], %s)", vgql, helper, field, w.Target, vgql, as, col, tt.Key, op), nil
+	return fmt.Sprintf("%s.%sAs(f, %s, %q, %s.%s[%s, %s], %s)", impl, helper, field, w.Target, impl, as, col, tt.Key, op), nil
 }
 
 // whereConv is the conversion of the where-input field w's values to the Go
 // type of fd, its column, as a Go expression: "" when w holds fd's own Go
 // type, as when the field binds to its scalar as it is; else an instance of
-// a veloxgql conversion, as veloxgql.AsString[ids.Email, string], for a
+// a gqlimpl conversion, as gqlimpl.AsString[ids.Email, string], for a
 // field of the application's own Go type, whose values the input holds as
 // the base type the scalar binds to.
 func (r *renderer) whereConv(f *file, e *plugin.Entity, fd *plugin.Field, w sdl.WhereField) (string, error) {
@@ -189,5 +189,5 @@ func (r *renderer) whereConv(f *file, e *plugin.Entity, fd *plugin.Field, w sdl.
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%s.%s[%s, %s]", f.veloxgql(), as, col, from), nil
+	return fmt.Sprintf("%s.%s[%s, %s]", f.gqlimpl(), as, col, from), nil
 }

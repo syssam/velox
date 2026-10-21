@@ -2,7 +2,6 @@ package veloxgql
 
 import (
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -10,6 +9,8 @@ import (
 	"time"
 
 	"github.com/99designs/gqlgen/graphql"
+
+	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
 )
 
 // The scalars, the Cursor and the OrderDirection enum are gqlgen marshalers.
@@ -59,11 +60,11 @@ func (t *Time) UnmarshalGQL(v any) error {
 type UUID [16]byte
 
 // String is u's hyphenated lower-case form.
-func (u UUID) String() string { return formatUUID(u) }
+func (u UUID) String() string { return shared.FormatUUID(u) }
 
 // MarshalGQL writes u as its hyphenated lower-case string.
 func (u UUID) MarshalGQL(w io.Writer) {
-	_, _ = io.WriteString(w, `"`+formatUUID(u)+`"`)
+	_, _ = io.WriteString(w, `"`+shared.FormatUUID(u)+`"`)
 }
 
 // UnmarshalGQL sets u from v, a hyphenated hexadecimal string.
@@ -72,46 +73,12 @@ func (u *UUID) UnmarshalGQL(v any) error {
 	if !ok {
 		return errors.New("veloxgql: UUID must be a string")
 	}
-	x, ok := parseUUID(s)
+	x, ok := shared.ParseUUID(s)
 	if !ok {
 		return errors.New("veloxgql: UUID must be of the form xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
 	}
 	*u = x
 	return nil
-}
-
-// formatUUID is u's hyphenated lower-case form, 8-4-4-4-12 hexadecimal
-// digits.
-func formatUUID(u [16]byte) string {
-	var b [36]byte
-	hex.Encode(b[0:8], u[0:4])
-	b[8] = '-'
-	hex.Encode(b[9:13], u[4:6])
-	b[13] = '-'
-	hex.Encode(b[14:18], u[6:8])
-	b[18] = '-'
-	hex.Encode(b[19:23], u[8:10])
-	b[23] = '-'
-	hex.Encode(b[24:36], u[10:16])
-	return string(b[:])
-}
-
-// parseUUID parses the hyphenated form, in either case, and no other.
-func parseUUID(s string) ([16]byte, bool) {
-	var u [16]byte
-	if len(s) != 36 || s[8] != '-' || s[13] != '-' || s[18] != '-' || s[23] != '-' {
-		return u, false
-	}
-	var digits [32]byte
-	n := copy(digits[:], s[0:8])
-	n += copy(digits[n:], s[9:13])
-	n += copy(digits[n:], s[14:18])
-	n += copy(digits[n:], s[19:23])
-	copy(digits[n:], s[24:36])
-	if _, err := hex.Decode(u[:], digits[:]); err != nil {
-		return u, false
-	}
-	return u, true
 }
 
 // Bytes is the Bytes scalar: standard base64, with padding.

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
 )
 
 // Noder is the Go type of the GraphQL Node interface: gqlgen binds Node to
@@ -26,7 +28,7 @@ type Noder interface {
 // UUID and its string form give the same ID. Any other key type is a mistake
 // in the generated code, and EncodeID panics.
 func EncodeID(typ string, key any) string {
-	k, ok := keyText(key)
+	k, ok := shared.KeyText(key)
 	if !ok {
 		panic(fmt.Sprintf("veloxgql: EncodeID: %T is not a supported key type", key))
 	}
@@ -62,16 +64,16 @@ func DecodeID[K any](id, typ string) (K, error) {
 		return zero, fmt.Errorf("veloxgql: %s ID: %w", typ, ErrWrongIDType)
 	}
 	var k K
-	switch err := setValue(&k, text(key)); {
-	case errors.Is(err, errUnsupported):
-		return zero, fmt.Errorf("veloxgql: DecodeID: %s is not a supported key type", typeName[K]())
+	switch err := shared.SetValue(&k, shared.Text(key)); {
+	case errors.Is(err, shared.ErrUnsupported):
+		return zero, fmt.Errorf("veloxgql: DecodeID: %s is not a supported key type", shared.TypeName[K]())
 	case err != nil:
 		return zero, badID(typ, "the key does not parse")
 	}
-	canon, ok := keyText(k)
+	canon, ok := shared.KeyText(k)
 	switch {
 	case !ok:
-		return zero, fmt.Errorf("veloxgql: DecodeID: %s is not a supported key type", typeName[K]())
+		return zero, fmt.Errorf("veloxgql: DecodeID: %s is not a supported key type", shared.TypeName[K]())
 	case canon != key:
 		return zero, badID(typ, "the key is not in its canonical form")
 	}

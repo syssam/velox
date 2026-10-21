@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+
+	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
 )
 
 // Cursor is a connection cursor: where a row is in a query's order. It is
@@ -15,7 +17,7 @@ import (
 // the client passes back but does not read.
 //
 // A cursor is bound to the GraphQL type and the order it was taken under:
-// Check refuses it for another type or another order.
+// a connection refuses it for another type or another order.
 type Cursor struct {
 	// Type is the GraphQL type of the connection's nodes, such as "User".
 	Type string
@@ -23,7 +25,7 @@ type Cursor struct {
 	// primary key, which ends every order, is Key and not a term.
 	Terms []CursorTerm
 	// Key is the row's primary key. After DecodeCursor it is a JSON value, as
-	// each term's Value is; CursorValue converts them to their Go types.
+	// each term's Value is; a connection converts them to their Go types.
 	Key any
 }
 
@@ -33,13 +35,6 @@ type CursorTerm struct {
 	Field     string
 	Direction OrderDirection
 	Value     any
-}
-
-// CursorOrder is one term of a query's order, as Check compares it with a
-// cursor's.
-type CursorOrder struct {
-	Field     string
-	Direction OrderDirection
 }
 
 // cursorVersion is the version of the cursor's JSON document.
@@ -83,9 +78,9 @@ func EncodeCursor(c Cursor) string {
 		if t.Field == "" || !t.Direction.IsValid() {
 			panic("veloxgql: EncodeCursor: term " + strconv.Itoa(i) + " has no field or an invalid direction")
 		}
-		o[i] = cursorTermDoc{F: &t.Field, D: &t.Direction, V: jsonValue(t.Value)}
+		o[i] = cursorTermDoc{F: &t.Field, D: &t.Direction, V: shared.JSONValue(t.Value)}
 	}
-	b, err := json.Marshal(cursorDoc{V: &v, T: &c.Type, O: &o, K: jsonValue(c.Key)})
+	b, err := json.Marshal(cursorDoc{V: &v, T: &c.Type, O: &o, K: shared.JSONValue(c.Key)})
 	if err != nil {
 		panic("veloxgql: EncodeCursor: " + err.Error())
 	}
@@ -94,8 +89,8 @@ func EncodeCursor(c Cursor) string {
 
 // DecodeCursor decodes s, a cursor EncodeCursor wrote. Its terms' Values and
 // its Key are JSON values: json.Number for numbers, string, bool and, in a
-// term, nil; CursorValue converts them. Check it against the query before
-// using it.
+// term, nil; a connection converts them, and checks the cursor against its
+// type and order, before using it.
 //
 // s must be canonical base64url without padding (no line breaks, no stray
 // trailing bits) of a version 1 document with a non-empty type, terms each
@@ -160,52 +155,6 @@ func decodeBase64(s string) ([]byte, bool) {
 		return nil, false
 	}
 	return b, true
-}
-
-// Check reports whether c may be used on a connection of the GraphQL type
-// typ ordered by order, the query's terms without the primary key. A cursor
-// of another type fails with ErrBadCursor and, since its key is another
-// type's, ErrWrongIDType; one taken under another order (other fields, other
-// directions or another number of terms) with ErrBadCursor. Neither error's
-// text holds the cursor's type or fields.
-func (c Cursor) Check(typ string, order []CursorOrder) error {
-	if c.Type != typ {
-		return fmt.Errorf("veloxgql: %s cursor: %w: the key is an %w", typ, ErrBadCursor, ErrWrongIDType)
-	}
-	if len(c.Terms) != len(order) {
-		return fmt.Errorf("veloxgql: %s cursor: %w: taken under another order", typ, ErrBadCursor)
-	}
-	for i, t := range c.Terms {
-		if t.Field != order[i].Field || t.Direction != order[i].Direction {
-			return fmt.Errorf("veloxgql: %s cursor: %w: taken under another order", typ, ErrBadCursor)
-		}
-	}
-	return nil
-}
-
-// CursorValue converts v, a term's value or the key of a decoded cursor, to
-// T, the Go type of its column: a Go integer or Uint64 from a number, a float
-// from a number (or NaN, +Inf, -Inf), a string, a bool, a time.Time or Time
-// from an RFC 3339 string, a [16]byte or UUID from the UUID string form,
-// []byte or Bytes from standard base64, or a type whose pointer has
-// UnmarshalText from a string. A v of another type fails with ErrBadCursor.
-func CursorValue[T any](v any) (T, error) {
-	var t T
-	switch err := setValue(&t, v); {
-	case errors.Is(err, errUnsupported):
-		var zero T
-		return zero, fmt.Errorf("veloxgql: CursorValue: %s is not a supported type", typeName[T]())
-	case err != nil:
-		var zero T
-		return zero, badCursor("a value is not a " + typeName[T]())
-	}
-	return t, nil
-}
-
-// typeName is T's name, an interface type's too, which %T of a zero T would
-// print as <nil>.
-func typeName[T any]() string {
-	return fmt.Sprintf("%T", (*T)(nil))[1:]
 }
 
 func badCursor(why string) error {

@@ -9,6 +9,8 @@ import (
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
 )
 
+const _ = veloxgql.GeneratedCodeIsVersion1
+
 // Node returns the node with the global ID id, or nil when no row has its
 // key. It reads the ID's type, decodes the key as that type's, and looks
 // the row up with one query on that entity, through the DB veloxgql.DBFrom

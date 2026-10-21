@@ -80,10 +80,13 @@
 //   - the where input's method Pred, which turns a where argument into a
 //     velox condition.
 //
-// They use the runtime package veloxgql: a connection is keyset-paged by its
-// cursors, and runs its page query and its COUNT only when gqlgen asks for
-// edges or pageInfo, and for totalCount. A where argument's Pred is one
-// veloxgql helper call for each predicate the input sets; it decodes IDs as
+// They use the runtime package veloxgql, and its package gqlimpl for what
+// only generated code calls; every file carries
+// "const _ = veloxgql.GeneratedCodeIsVersion1", so that generated code and
+// the module fail to compile together when they disagree. A connection is
+// keyset-paged by its cursors, and runs its page query and its COUNT only
+// when gqlgen asks for edges or pageInfo, and for totalCount. A where
+// argument's Pred is one gqlimpl helper call for each predicate the input sets; it decodes IDs as
 // their type's, and refuses an ID of another type, and a filter nested
 // deeper than veloxgql.MaxFilterDepth, wider than veloxgql.MaxFilterWidth
 // or larger in all than veloxgql.MaxFilterNodes, before any query runs. A list

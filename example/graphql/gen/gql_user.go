@@ -12,7 +12,10 @@ import (
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+	"github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
 )
+
+const _ = veloxgql.GeneratedCodeIsVersion1
 
 // IsNode marks User as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -59,7 +62,7 @@ func (e *UserRole) UnmarshalGQL(v any) error {
 func (x *User) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
 	if after == nil && first == nil && before == nil && last == nil && orderBy == nil && where == nil {
 		if rows, ok := x.Posts.Get(); ok {
-			return &PostConnection{c: veloxgql.LoadedConnection(rows, "Post", postKeyGQL())}, nil
+			return &PostConnection{c: gqlimpl.LoadedConnection(rows, "Post", postKeyGQL())}, nil
 		}
 	}
 	db, err := veloxgql.DBFrom(ctx)
@@ -75,7 +78,7 @@ func (x *User) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int,
 // only then: edges and pageInfo share one page query, and totalCount runs a
 // COUNT.
 type UserConnection struct {
-	c *veloxgql.Connection[User]
+	c *gqlimpl.Connection[User]
 }
 
 // Edges are the edges of the page, in the connection's order. The first call of
@@ -118,7 +121,7 @@ type UserEdge struct {
 // UsersConnection is the connection to every User node, through the DB
 // veloxgql.DBFrom reads from ctx, paged and ordered by the arguments of a
 // connection to User: a Query field's resolver returns it. It fails before any
-// query runs on arguments veloxgql.NewConnection refuses.
+// query runs on arguments gqlimpl.NewConnection refuses.
 func UsersConnection(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *UserOrder, where *UserWhereInput) (*UserConnection, error) {
 	db, err := veloxgql.DBFrom(ctx)
 	if err != nil {
@@ -138,7 +141,7 @@ func userConnectionGQL(ctx context.Context, q velox.Query[User], after *veloxgql
 		}
 		q = q.Where(p)
 	}
-	var order []veloxgql.OrderTerm[User]
+	var order []gqlimpl.OrderTerm[User]
 	if o := orderBy; o != nil {
 		term, err := userTermGQL(o)
 		if err != nil {
@@ -146,7 +149,7 @@ func userConnectionGQL(ctx context.Context, q velox.Query[User], after *veloxgql
 		}
 		order = append(order, term)
 	}
-	c, err := veloxgql.NewConnection(q, "User", veloxgql.Args{After: after, First: first, Before: before, Last: last}, order, userKeyGQL())
+	c, err := gqlimpl.NewConnection(q, "User", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order, userKeyGQL())
 	if err != nil {
 		return nil, err
 	}
@@ -155,27 +158,27 @@ func userConnectionGQL(ctx context.Context, q velox.Query[User], after *veloxgql
 
 // userKeyGQL is the order of User's key, which ends every order of a connection
 // to User.
-func userKeyGQL() []veloxgql.OrderTerm[User] {
-	return []veloxgql.OrderTerm[User]{
-		veloxgql.Term("id", veloxgql.OrderDirectionAsc, Users.ID.Asc(), Users.ID.Desc(),
+func userKeyGQL() []gqlimpl.OrderTerm[User] {
+	return []gqlimpl.OrderTerm[User]{
+		gqlimpl.Term("id", veloxgql.OrderDirectionAsc, Users.ID.Asc(), Users.ID.Desc(),
 			func(x *User) int64 { return x.ID },
 			func(x *User, v int64) { x.ID = v }),
 	}
 }
 
 // userTermGQL is the order term o, an order of connections to User.
-func userTermGQL(o *UserOrder) (veloxgql.OrderTerm[User], error) {
+func userTermGQL(o *UserOrder) (gqlimpl.OrderTerm[User], error) {
 	switch o.Field {
 	case UserOrderFieldName:
-		return veloxgql.Term(string(o.Field), o.Direction, Users.Name.Asc(), Users.Name.Desc(),
+		return gqlimpl.Term(string(o.Field), o.Direction, Users.Name.Asc(), Users.Name.Desc(),
 			func(x *User) string { return x.Name },
 			func(x *User, v string) { x.Name = v }), nil
 	case UserOrderFieldJoinedAt:
-		return veloxgql.Term(string(o.Field), o.Direction, Users.JoinedAt.Asc(), Users.JoinedAt.Desc(),
+		return gqlimpl.Term(string(o.Field), o.Direction, Users.JoinedAt.Asc(), Users.JoinedAt.Desc(),
 			func(x *User) time.Time { return x.JoinedAt },
 			func(x *User, v time.Time) { x.JoinedAt = v }), nil
 	}
-	return veloxgql.OrderTerm[User]{}, fmt.Errorf("veloxgql: UserOrder: %q is not a value of UserOrderField", o.Field)
+	return gqlimpl.OrderTerm[User]{}, fmt.Errorf("veloxgql: UserOrder: %q is not a value of UserOrderField", o.Field)
 }
 
 // UserOrder is the GraphQL input UserOrder, an order of connections to User.
@@ -265,25 +268,25 @@ type UserWhereInput struct {
 // than veloxgql.MaxFilterNodes inputs, predicates and values in all (both
 // veloxgql.ErrFilterTooWide).
 func (w *UserWhereInput) Pred(ctx context.Context, depth int) (velox.Pred[User], error) {
-	f := veloxgql.NewFilter[User](ctx, "UserWhereInput", depth)
+	f := gqlimpl.NewFilter[User](ctx, "UserWhereInput", depth)
 	if w == nil {
 		return f.Pred()
 	}
-	veloxgql.Not(f, "not", w.Not)
-	veloxgql.And(f, "and", w.And)
-	veloxgql.Or(f, "or", w.Or)
-	veloxgql.Value(f, "name", w.Name, Users.Name.EQ)
-	veloxgql.Value(f, "nameNEQ", w.NameNEQ, Users.Name.NEQ)
-	veloxgql.List(f, "nameIn", w.NameIn, Users.Name.In)
-	veloxgql.List(f, "nameNotIn", w.NameNotIn, Users.Name.NotIn)
-	veloxgql.Value(f, "nameContains", w.NameContains, Users.Name.Contains)
-	veloxgql.Value(f, "nameHasPrefix", w.NameHasPrefix, Users.Name.HasPrefix)
-	veloxgql.Value(f, "nameHasSuffix", w.NameHasSuffix, Users.Name.HasSuffix)
-	veloxgql.Value(f, "role", w.Role, Users.Role.EQ)
-	veloxgql.Value(f, "roleNEQ", w.RoleNEQ, Users.Role.NEQ)
-	veloxgql.List(f, "roleIn", w.RoleIn, Users.Role.In)
-	veloxgql.List(f, "roleNotIn", w.RoleNotIn, Users.Role.NotIn)
-	veloxgql.Is(f, "hasPosts", w.HasPosts, Users.Posts.Has)
-	veloxgql.HasWith(f, "hasPostsWith", w.HasPostsWith, Users.Posts.HasWhere)
+	gqlimpl.Not(f, "not", w.Not)
+	gqlimpl.And(f, "and", w.And)
+	gqlimpl.Or(f, "or", w.Or)
+	gqlimpl.Value(f, "name", w.Name, Users.Name.EQ)
+	gqlimpl.Value(f, "nameNEQ", w.NameNEQ, Users.Name.NEQ)
+	gqlimpl.List(f, "nameIn", w.NameIn, Users.Name.In)
+	gqlimpl.List(f, "nameNotIn", w.NameNotIn, Users.Name.NotIn)
+	gqlimpl.Value(f, "nameContains", w.NameContains, Users.Name.Contains)
+	gqlimpl.Value(f, "nameHasPrefix", w.NameHasPrefix, Users.Name.HasPrefix)
+	gqlimpl.Value(f, "nameHasSuffix", w.NameHasSuffix, Users.Name.HasSuffix)
+	gqlimpl.Value(f, "role", w.Role, Users.Role.EQ)
+	gqlimpl.Value(f, "roleNEQ", w.RoleNEQ, Users.Role.NEQ)
+	gqlimpl.List(f, "roleIn", w.RoleIn, Users.Role.In)
+	gqlimpl.List(f, "roleNotIn", w.RoleNotIn, Users.Role.NotIn)
+	gqlimpl.Is(f, "hasPosts", w.HasPosts, Users.Posts.Has)
+	gqlimpl.HasWith(f, "hasPostsWith", w.HasPostsWith, Users.Posts.HasWhere)
 	return f.Pred()
 }

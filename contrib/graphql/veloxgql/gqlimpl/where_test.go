@@ -1,4 +1,4 @@
-package veloxgql_test
+package gqlimpl_test
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+	"github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
 )
 
 // The application's own Go types of person's columns, which a where input
@@ -69,36 +70,36 @@ type personWhere struct {
 }
 
 func (w *personWhere) Pred(ctx context.Context, depth int) (velox.Pred[person], error) {
-	f := veloxgql.NewFilter[person](ctx, "PersonWhereInput", depth)
+	f := gqlimpl.NewFilter[person](ctx, "PersonWhereInput", depth)
 	if w == nil {
 		return f.Pred()
 	}
-	veloxgql.Not(f, "not", w.Not)
-	veloxgql.And(f, "and", w.And)
-	veloxgql.Or(f, "or", w.Or)
-	veloxgql.ID(f, "id", w.ID, "Person", people.ID.EQ)
-	veloxgql.IDAs(f, "idNEQ", w.IDNEQ, "Person", veloxgql.AsInt[personID, int64], peopleAs.ID.NEQ)
-	veloxgql.IDList(f, "idIn", w.IDIn, "Person", people.ID.In)
-	veloxgql.IDListAs(f, "idNotIn", w.IDNotIn, "Person", veloxgql.AsInt[personID, int64], peopleAs.ID.NotIn)
-	veloxgql.Value(f, "name", w.Name, people.Name.EQ)
-	veloxgql.Value(f, "nameNEQ", w.NameNEQ, people.Name.NEQ)
-	veloxgql.List(f, "nameIn", w.NameIn, people.Name.In)
-	veloxgql.List(f, "nameNotIn", w.NameNotIn, people.Name.NotIn)
-	veloxgql.Value(f, "nameGT", w.NameGT, people.Name.GT)
-	veloxgql.Value(f, "nameContains", w.NameContains, people.Name.Contains)
-	veloxgql.Value(f, "nameHasPrefix", w.NameHasPrefix, people.Name.HasPrefix)
-	veloxgql.Value(f, "nameHasSuffix", w.NameHasSuffix, people.Name.HasSuffix)
-	veloxgql.ValueAs(f, "label", w.Label, veloxgql.AsString[personName, string], peopleAs.Name.EQ)
-	veloxgql.ListAs(f, "labelNotIn", w.LabelNotIn, veloxgql.AsString[personName, string], peopleAs.Name.NotIn)
-	veloxgql.Value(f, "age", w.Age, people.Age.EQ)
-	veloxgql.Value(f, "ageNEQ", w.AgeNEQ, people.Age.NEQ)
-	veloxgql.List(f, "ageIn", w.AgeIn, people.Age.In)
-	veloxgql.List(f, "ageNotIn", w.AgeNotIn, people.Age.NotIn)
-	veloxgql.Value(f, "ageGT", w.AgeGT, people.Age.GT)
-	veloxgql.Value(f, "ageGTE", w.AgeGTE, people.Age.GTE)
-	veloxgql.Value(f, "ageLT", w.AgeLT, people.Age.LT)
-	veloxgql.Value(f, "ageLTE", w.AgeLTE, people.Age.LTE)
-	veloxgql.Is(f, "isA", w.IsA, isA)
+	gqlimpl.Not(f, "not", w.Not)
+	gqlimpl.And(f, "and", w.And)
+	gqlimpl.Or(f, "or", w.Or)
+	gqlimpl.ID(f, "id", w.ID, "Person", people.ID.EQ)
+	gqlimpl.IDAs(f, "idNEQ", w.IDNEQ, "Person", gqlimpl.AsInt[personID, int64], peopleAs.ID.NEQ)
+	gqlimpl.IDList(f, "idIn", w.IDIn, "Person", people.ID.In)
+	gqlimpl.IDListAs(f, "idNotIn", w.IDNotIn, "Person", gqlimpl.AsInt[personID, int64], peopleAs.ID.NotIn)
+	gqlimpl.Value(f, "name", w.Name, people.Name.EQ)
+	gqlimpl.Value(f, "nameNEQ", w.NameNEQ, people.Name.NEQ)
+	gqlimpl.List(f, "nameIn", w.NameIn, people.Name.In)
+	gqlimpl.List(f, "nameNotIn", w.NameNotIn, people.Name.NotIn)
+	gqlimpl.Value(f, "nameGT", w.NameGT, people.Name.GT)
+	gqlimpl.Value(f, "nameContains", w.NameContains, people.Name.Contains)
+	gqlimpl.Value(f, "nameHasPrefix", w.NameHasPrefix, people.Name.HasPrefix)
+	gqlimpl.Value(f, "nameHasSuffix", w.NameHasSuffix, people.Name.HasSuffix)
+	gqlimpl.ValueAs(f, "label", w.Label, gqlimpl.AsString[personName, string], peopleAs.Name.EQ)
+	gqlimpl.ListAs(f, "labelNotIn", w.LabelNotIn, gqlimpl.AsString[personName, string], peopleAs.Name.NotIn)
+	gqlimpl.Value(f, "age", w.Age, people.Age.EQ)
+	gqlimpl.Value(f, "ageNEQ", w.AgeNEQ, people.Age.NEQ)
+	gqlimpl.List(f, "ageIn", w.AgeIn, people.Age.In)
+	gqlimpl.List(f, "ageNotIn", w.AgeNotIn, people.Age.NotIn)
+	gqlimpl.Value(f, "ageGT", w.AgeGT, people.Age.GT)
+	gqlimpl.Value(f, "ageGTE", w.AgeGTE, people.Age.GTE)
+	gqlimpl.Value(f, "ageLT", w.AgeLT, people.Age.LT)
+	gqlimpl.Value(f, "ageLTE", w.AgeLTE, people.Age.LTE)
+	gqlimpl.Is(f, "isA", w.IsA, isA)
 	return f.Pred()
 }
 
@@ -349,19 +350,19 @@ func TestWhereConversions(t *testing.T) {
 		flag  bool
 		ref   [16]byte
 	)
-	if got := veloxgql.AsString[code]("x"); got != code("x") {
+	if got := gqlimpl.AsString[code]("x"); got != code("x") {
 		t.Errorf("AsString: %v", got)
 	}
-	if got := veloxgql.AsInt[small](int64(7)); got != small(7) {
+	if got := gqlimpl.AsInt[small](int64(7)); got != small(7) {
 		t.Errorf("AsInt: %v", got)
 	}
-	if got := veloxgql.AsFloat[ratio](float32(1.5)); got != ratio(1.5) {
+	if got := gqlimpl.AsFloat[ratio](float32(1.5)); got != ratio(1.5) {
 		t.Errorf("AsFloat: %v", got)
 	}
-	if got := veloxgql.AsBool[flag](true); got != flag(true) {
+	if got := gqlimpl.AsBool[flag](true); got != flag(true) {
 		t.Errorf("AsBool: %v", got)
 	}
-	if got := veloxgql.AsUUID[ref]([16]byte{1, 2}); got != (ref{1, 2}) {
+	if got := gqlimpl.AsUUID[ref]([16]byte{1, 2}); got != (ref{1, 2}) {
 		t.Errorf("AsUUID: %v", got)
 	}
 }
@@ -436,12 +437,12 @@ func TestWhereBudget(t *testing.T) {
 	}
 	// Each where argument has its own budget, even under the context of
 	// another's nested input, which carries that one's.
-	f := veloxgql.NewFilter[person](ctx, "PersonWhereInput", 0)
+	f := gqlimpl.NewFilter[person](ctx, "PersonWhereInput", 0)
 	for range 9 {
-		veloxgql.List(f, "ageIn", in(100), people.Age.In) // 909 of 1000
+		gqlimpl.List(f, "ageIn", in(100), people.Age.In) // 909 of 1000
 	}
 	spy := &ctxSpy{}
-	veloxgql.Not(f, "not", spy)
+	gqlimpl.Not(f, "not", spy)
 	if _, err := f.Pred(); err != nil || spy.ctx == nil {
 		t.Fatalf("909: %v", err)
 	}

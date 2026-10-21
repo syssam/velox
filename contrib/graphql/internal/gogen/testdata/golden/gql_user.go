@@ -9,7 +9,10 @@ import (
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+	"github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
 )
+
+const _ = veloxgql.GeneratedCodeIsVersion1
 
 // Account is User under its GraphQL type name, so that gqlgen's autobind finds
 // the Go type of the GraphQL type Account.
@@ -71,7 +74,7 @@ func (e *UserRole) UnmarshalGQL(v any) error {
 func (x *User) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
 	if after == nil && first == nil && before == nil && last == nil && orderBy == nil && where == nil {
 		if rows, ok := x.Posts.Get(); ok {
-			return &PostConnection{c: veloxgql.LoadedConnection(rows, "Post", postKeyGQL())}, nil
+			return &PostConnection{c: gqlimpl.LoadedConnection(rows, "Post", postKeyGQL())}, nil
 		}
 	}
 	db, err := veloxgql.DBFrom(ctx)
@@ -111,7 +114,7 @@ func (x *User) GroupsGQL(ctx context.Context) ([]*Group, error) {
 func (x *User) LikesGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*LikeConnection, error) {
 	if after == nil && first == nil && before == nil && last == nil {
 		if rows, ok := x.Likes.Get(); ok {
-			return &LikeConnection{c: veloxgql.LoadedConnection(rows, "Like", likeKeyGQL())}, nil
+			return &LikeConnection{c: gqlimpl.LoadedConnection(rows, "Like", likeKeyGQL())}, nil
 		}
 	}
 	db, err := veloxgql.DBFrom(ctx)
@@ -127,7 +130,7 @@ func (x *User) LikesGQL(ctx context.Context, after *veloxgql.Cursor, first *int,
 // query only then: edges and pageInfo share one page query, and totalCount runs
 // a COUNT.
 type AccountConnection struct {
-	c *veloxgql.Connection[User]
+	c *gqlimpl.Connection[User]
 }
 
 // Edges are the edges of the page, in the connection's order. The first call of
@@ -170,7 +173,7 @@ type AccountEdge struct {
 // AccountsConnection is the connection to every Account node, through the DB
 // veloxgql.DBFrom reads from ctx, paged and ordered by the arguments of a
 // connection to Account: a Query field's resolver returns it. It fails before
-// any query runs on arguments veloxgql.NewConnection refuses.
+// any query runs on arguments gqlimpl.NewConnection refuses.
 func AccountsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *AccountWhereInput) (*AccountConnection, error) {
 	db, err := veloxgql.DBFrom(ctx)
 	if err != nil {
@@ -190,7 +193,7 @@ func userConnectionGQL(ctx context.Context, q velox.Query[User], after *veloxgql
 		}
 		q = q.Where(p)
 	}
-	c, err := veloxgql.NewConnection(q, "Account", veloxgql.Args{After: after, First: first, Before: before, Last: last}, nil, userKeyGQL())
+	c, err := gqlimpl.NewConnection(q, "Account", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, nil, userKeyGQL())
 	if err != nil {
 		return nil, err
 	}
@@ -199,9 +202,9 @@ func userConnectionGQL(ctx context.Context, q velox.Query[User], after *veloxgql
 
 // userKeyGQL is the order of User's key, which ends every order of a connection
 // to Account.
-func userKeyGQL() []veloxgql.OrderTerm[User] {
-	return []veloxgql.OrderTerm[User]{
-		veloxgql.Term("id", veloxgql.OrderDirectionAsc, Users.ID.Asc(), Users.ID.Desc(),
+func userKeyGQL() []gqlimpl.OrderTerm[User] {
+	return []gqlimpl.OrderTerm[User]{
+		gqlimpl.Term("id", veloxgql.OrderDirectionAsc, Users.ID.Asc(), Users.ID.Desc(),
 			func(x *User) int64 { return x.ID },
 			func(x *User, v int64) { x.ID = v }),
 	}
@@ -240,21 +243,21 @@ type AccountWhereInput struct {
 // than veloxgql.MaxFilterNodes inputs, predicates and values in all (both
 // veloxgql.ErrFilterTooWide).
 func (w *AccountWhereInput) Pred(ctx context.Context, depth int) (velox.Pred[User], error) {
-	f := veloxgql.NewFilter[User](ctx, "AccountWhereInput", depth)
+	f := gqlimpl.NewFilter[User](ctx, "AccountWhereInput", depth)
 	if w == nil {
 		return f.Pred()
 	}
-	veloxgql.Not(f, "not", w.Not)
-	veloxgql.And(f, "and", w.And)
-	veloxgql.Or(f, "or", w.Or)
-	veloxgql.Value(f, "displayName", w.DisplayName, Users.Name.EQ)
-	veloxgql.Value(f, "displayNameNEQ", w.DisplayNameNEQ, Users.Name.NEQ)
-	veloxgql.List(f, "displayNameIn", w.DisplayNameIn, Users.Name.In)
-	veloxgql.List(f, "displayNameNotIn", w.DisplayNameNotIn, Users.Name.NotIn)
-	veloxgql.Value(f, "displayNameContains", w.DisplayNameContains, Users.Name.Contains)
-	veloxgql.Value(f, "displayNameHasPrefix", w.DisplayNameHasPrefix, Users.Name.HasPrefix)
-	veloxgql.Value(f, "displayNameHasSuffix", w.DisplayNameHasSuffix, Users.Name.HasSuffix)
-	veloxgql.Is(f, "hasPosts", w.HasPosts, Users.Posts.Has)
-	veloxgql.HasWith(f, "hasPostsWith", w.HasPostsWith, Users.Posts.HasWhere)
+	gqlimpl.Not(f, "not", w.Not)
+	gqlimpl.And(f, "and", w.And)
+	gqlimpl.Or(f, "or", w.Or)
+	gqlimpl.Value(f, "displayName", w.DisplayName, Users.Name.EQ)
+	gqlimpl.Value(f, "displayNameNEQ", w.DisplayNameNEQ, Users.Name.NEQ)
+	gqlimpl.List(f, "displayNameIn", w.DisplayNameIn, Users.Name.In)
+	gqlimpl.List(f, "displayNameNotIn", w.DisplayNameNotIn, Users.Name.NotIn)
+	gqlimpl.Value(f, "displayNameContains", w.DisplayNameContains, Users.Name.Contains)
+	gqlimpl.Value(f, "displayNameHasPrefix", w.DisplayNameHasPrefix, Users.Name.HasPrefix)
+	gqlimpl.Value(f, "displayNameHasSuffix", w.DisplayNameHasSuffix, Users.Name.HasSuffix)
+	gqlimpl.Is(f, "hasPosts", w.HasPosts, Users.Posts.Has)
+	gqlimpl.HasWith(f, "hasPostsWith", w.HasPostsWith, Users.Posts.HasWhere)
 	return f.Pred()
 }

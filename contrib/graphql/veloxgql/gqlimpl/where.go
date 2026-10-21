@@ -1,4 +1,4 @@
-package veloxgql
+package gqlimpl
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/syssam/velox2"
+	"github.com/syssam/velox2/contrib/graphql/veloxgql"
 )
 
 // Filter is a where input of E's being turned into a condition: the
@@ -58,11 +59,11 @@ type Filter[E any] struct {
 func NewFilter[E any](ctx context.Context, input string, depth int) *Filter[E] {
 	b, _ := ctx.Value(budgetKey{}).(*budget)
 	if depth == 0 || b == nil {
-		b = &budget{left: MaxFilterNodes}
+		b = &budget{left: veloxgql.MaxFilterNodes}
 		ctx = context.WithValue(ctx, budgetKey{}, b)
 	}
 	f := &Filter[E]{ctx: ctx, input: input, depth: depth, budget: b}
-	if err := CheckDepth(depth); err != nil {
+	if err := checkDepth(depth); err != nil {
 		f.refuse("", err)
 		return f
 	}
@@ -95,7 +96,7 @@ type budgetKey struct{}
 func charge[E any](f *Filter[E], field string, n int) (ok bool) {
 	f.budget.left -= n
 	if f.budget.left < 0 {
-		f.refuse(field, fmt.Errorf("%w: the where argument has more than %d inputs, predicates and list values", ErrFilterTooWide, MaxFilterNodes))
+		f.refuse(field, fmt.Errorf("%w: the where argument has more than %d inputs, predicates and list values", veloxgql.ErrFilterTooWide, veloxgql.MaxFilterNodes))
 		return false
 	}
 	return true
@@ -139,19 +140,19 @@ func add[E any](f *Filter[E], field string, n int, p velox.Pred[E]) {
 
 // CheckDepth checks depth, how deeply a where input is nested, against
 // MaxFilterDepth: deeper fails with ErrFilterTooDeep.
-func CheckDepth(depth int) error {
-	if depth > MaxFilterDepth {
-		return fmt.Errorf("%w: it is nested %d deep, and the most is %d", ErrFilterTooDeep, depth, MaxFilterDepth)
+func checkDepth(depth int) error {
+	if depth > veloxgql.MaxFilterDepth {
+		return fmt.Errorf("%w: it is nested %d deep, and the most is %d", veloxgql.ErrFilterTooDeep, depth, veloxgql.MaxFilterDepth)
 	}
 	return nil
 }
 
-// CheckWidth checks n, the length of a list in a where input (of inputs, or
+// checkWidth checks n, the length of a list in a where input (of inputs, or
 // of In or NotIn values), against MaxFilterWidth: more fails with
 // ErrFilterTooWide.
-func CheckWidth(n int) error {
-	if n > MaxFilterWidth {
-		return fmt.Errorf("%w: it has %d entries, and the most is %d", ErrFilterTooWide, n, MaxFilterWidth)
+func checkWidth(n int) error {
+	if n > veloxgql.MaxFilterWidth {
+		return fmt.Errorf("%w: it has %d entries, and the most is %d", veloxgql.ErrFilterTooWide, n, veloxgql.MaxFilterWidth)
 	}
 	return nil
 }
@@ -179,10 +180,10 @@ func nested[E, U, T any, W Input[U, T]](f *Filter[E], field string, w W) (p velo
 }
 
 // list is the conditions of ws, the inputs nested in f's at field, after
-// CheckWidth; ok is false when one fails, and f has its error, which names
+// checkWidth; ok is false when one fails, and f has its error, which names
 // the entry, as "or[3]".
 func list[E, U, T any, W Input[U, T]](f *Filter[E], field string, ws []W) (ps []velox.Pred[U], ok bool) {
-	if err := CheckWidth(len(ws)); err != nil {
+	if err := checkWidth(len(ws)); err != nil {
 		f.refuse(field, err)
 		return nil, false
 	}
@@ -305,9 +306,9 @@ func ListAs[E, W, V any](f *Filter[E], field string, vs []W, conv func(W) V, op 
 	add(f, field, len(vs), op(out...))
 }
 
-// width is CheckWidth(n) of field's list, with its error recorded in f.
+// width is checkWidth(n) of field's list, with its error recorded in f.
 func width[E any](f *Filter[E], field string, n int) bool {
-	if err := CheckWidth(n); err != nil {
+	if err := checkWidth(n); err != nil {
 		f.refuse(field, err)
 		return false
 	}
@@ -362,7 +363,7 @@ func IDListAs[K, E, V any](f *Filter[E], field string, ids []string, typ string,
 
 // decode is DecodeID[K](id, typ), with its error recorded in f as field's.
 func decode[K, E any](f *Filter[E], field, id, typ string) (K, bool) {
-	k, err := DecodeID[K](id, typ)
+	k, err := veloxgql.DecodeID[K](id, typ)
 	if err != nil {
 		f.refuse(field, err)
 		return k, false
@@ -387,8 +388,8 @@ func decodeAll[K, E, V any](f *Filter[E], field string, ids []string, typ string
 // scalar binds to, to the column's Go type of the application's: generated
 // code passes them, instantiated, to ValueAs, ListAs, IDAs and IDListAs.
 
-// integer is the Go integer types, and the types defined on them.
-type integer interface {
+// Integer is the Go integer types, and the types defined on them.
+type Integer interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64
 }
 
@@ -396,7 +397,7 @@ type integer interface {
 func AsString[V, W ~string](w W) V { return V(w) }
 
 // AsInt converts an integer to the integer type V.
-func AsInt[V, W integer](w W) V { return V(w) }
+func AsInt[V, W Integer](w W) V { return V(w) }
 
 // AsFloat converts a float to the float type V.
 func AsFloat[V, W ~float32 | ~float64](w W) V { return V(w) }

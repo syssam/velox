@@ -17,13 +17,13 @@ var (
 	// up with it.
 	ErrWrongIDType = errors.New("ID of another type")
 	// ErrBadCursor: a cursor that does not decode, or one taken on another
-	// type or under another order than the query's (Cursor.Check), or whose
-	// values are not of the order's types (CursorValue).
+	// type or under another order than the query's or whose
+	// values are not of the order's types.
 	ErrBadCursor = errors.New("malformed cursor")
 	// ErrPageTooLarge: first or last over MaxPage.
 	ErrPageTooLarge = errors.New("page is over the maximum")
 	// ErrBadPagination: first or last below 0, both given, another
-	// combination Args refuses, or an orderBy over MaxOrderTerms.
+	// combination gqlimpl.Args refuses, or an orderBy over MaxOrderTerms.
 	ErrBadPagination = errors.New("bad pagination arguments")
 	// ErrFilterTooDeep: a where input nested deeper than MaxFilterDepth.
 	ErrFilterTooDeep = errors.New("filter is nested too deep")

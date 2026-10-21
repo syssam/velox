@@ -464,19 +464,19 @@ func TestGoTypes(t *testing.T) {
 		"func (x *Event) TagsGQL() (veloxgql.JSON, error) { b, err := json.Marshal(x.Tags) return veloxgql.JSON(b), err }",
 		// Pred: one helper call for each predicate, converting the input's
 		// values to the column's Go type where they differ.
-		` f := veloxgql.NewFilter[Event](ctx, "EventWhereInput", depth) `,
-		` veloxgql.IDAs(f, "id", w.ID, "Event", veloxgql.AsUUID[uuid.UUID, [16]byte], Events.ID.EQ) `,
-		` veloxgql.IDListAs(f, "idIn", w.IDIn, "Event", veloxgql.AsUUID[uuid.UUID, [16]byte], Events.ID.In) `,
-		` veloxgql.Value(f, "level", w.Level, Events.Level.EQ) `,
-		` veloxgql.Value(f, "sizeGT", w.SizeGT, Events.Size.GT) `,
-		` veloxgql.List(f, "rankIn", w.RankIn, Events.Rank.In) `,
-		` veloxgql.Value(f, "atLT", w.AtLT, Events.At.LT) `,
-		` veloxgql.Is(f, "atIsNil", w.AtIsNil, Events.At.IsNull) `,
-		` veloxgql.Value(f, "refNEQ", w.RefNEQ, Events.Ref.NEQ) `,
-		` veloxgql.IDAs(f, "ownerID", w.OwnerID, "Owner", veloxgql.AsInt[idspkg.UserID, int64], Events.OwnerID.EQ) `,
-		` veloxgql.IDListAs(f, "ownerIDNotIn", w.OwnerIDNotIn, "Owner", veloxgql.AsInt[idspkg.UserID, int64], Events.OwnerID.NotIn) `,
-		` veloxgql.Is(f, "hasOwner", w.HasOwner, Events.Owner.Has) `,
-		` veloxgql.HasWith(f, "hasOwnerWith", w.HasOwnerWith, Events.Owner.HasWhere) `,
+		` f := gqlimpl.NewFilter[Event](ctx, "EventWhereInput", depth) `,
+		` gqlimpl.IDAs(f, "id", w.ID, "Event", gqlimpl.AsUUID[uuid.UUID, [16]byte], Events.ID.EQ) `,
+		` gqlimpl.IDListAs(f, "idIn", w.IDIn, "Event", gqlimpl.AsUUID[uuid.UUID, [16]byte], Events.ID.In) `,
+		` gqlimpl.Value(f, "level", w.Level, Events.Level.EQ) `,
+		` gqlimpl.Value(f, "sizeGT", w.SizeGT, Events.Size.GT) `,
+		` gqlimpl.List(f, "rankIn", w.RankIn, Events.Rank.In) `,
+		` gqlimpl.Value(f, "atLT", w.AtLT, Events.At.LT) `,
+		` gqlimpl.Is(f, "atIsNil", w.AtIsNil, Events.At.IsNull) `,
+		` gqlimpl.Value(f, "refNEQ", w.RefNEQ, Events.Ref.NEQ) `,
+		` gqlimpl.IDAs(f, "ownerID", w.OwnerID, "Owner", gqlimpl.AsInt[idspkg.UserID, int64], Events.OwnerID.EQ) `,
+		` gqlimpl.IDListAs(f, "ownerIDNotIn", w.OwnerIDNotIn, "Owner", gqlimpl.AsInt[idspkg.UserID, int64], Events.OwnerID.NotIn) `,
+		` gqlimpl.Is(f, "hasOwner", w.HasOwner, Events.Owner.Has) `,
+		` gqlimpl.HasWith(f, "hasOwnerWith", w.HasOwnerWith, Events.Owner.HasWhere) `,
 	} {
 		if !strings.Contains(ev, want) {
 			t.Errorf("no %q in\n%s", want, ev)
@@ -499,12 +499,12 @@ func TestGoTypes(t *testing.T) {
 		"func(x *Owner) int32 { return int32(x.Rank) }, func(x *Owner, v int32) { x.Rank = idspkg.Rank(v) }), nil",
 		// Its where predicates take the scalar's Go type, and Pred converts.
 		" Email *string ", " RankIn []int32 ", " Ref *uuid.UUID ", " RatioGT *float64 ", " On *bool ",
-		` veloxgql.IDAs(f, "id", w.ID, "Owner", veloxgql.AsInt[idspkg.UserID, int64], Owners.ID.EQ) `,
-		` veloxgql.ValueAs(f, "email", w.Email, veloxgql.AsString[idspkg.Email, string], Owners.Email.EQ) `,
-		` veloxgql.ListAs(f, "rankIn", w.RankIn, veloxgql.AsInt[idspkg.Rank, int32], Owners.Rank.In) `,
-		` veloxgql.ValueAs(f, "ref", w.Ref, veloxgql.AsUUID[idspkg.Ref, uuid.UUID], Owners.Ref.EQ) `,
-		` veloxgql.ValueAs(f, "ratioGT", w.RatioGT, veloxgql.AsFloat[idspkg.Ratio, float64], Owners.Ratio.GT) `,
-		` veloxgql.ValueAs(f, "on", w.On, veloxgql.AsBool[idspkg.Flag, bool], Owners.On.EQ) `,
+		` gqlimpl.IDAs(f, "id", w.ID, "Owner", gqlimpl.AsInt[idspkg.UserID, int64], Owners.ID.EQ) `,
+		` gqlimpl.ValueAs(f, "email", w.Email, gqlimpl.AsString[idspkg.Email, string], Owners.Email.EQ) `,
+		` gqlimpl.ListAs(f, "rankIn", w.RankIn, gqlimpl.AsInt[idspkg.Rank, int32], Owners.Rank.In) `,
+		` gqlimpl.ValueAs(f, "ref", w.Ref, gqlimpl.AsUUID[idspkg.Ref, uuid.UUID], Owners.Ref.EQ) `,
+		` gqlimpl.ValueAs(f, "ratioGT", w.RatioGT, gqlimpl.AsFloat[idspkg.Ratio, float64], Owners.Ratio.GT) `,
+		` gqlimpl.ValueAs(f, "on", w.On, gqlimpl.AsBool[idspkg.Flag, bool], Owners.On.EQ) `,
 	} {
 		if !strings.Contains(owner, want) {
 			t.Errorf("no %q in\n%s", want, owner)
@@ -626,4 +626,23 @@ func TestRenderErrors(t *testing.T) {
 func withField(e *plugin.Entity, fd *plugin.Field) *plugin.Entity {
 	e.Fields = append(e.Fields, fd)
 	return e
+}
+
+// TestGeneratedFilesCarryTheGuard: every file carries the version guard once,
+// as the core's files carry theirs, whatever else it uses of veloxgql.
+func TestGeneratedFilesCarryTheGuard(t *testing.T) {
+	for label, m := range map[string]*plugin.Model{"testdata": testModel(t), "types": typesModel(t)} {
+		files := render(t, m)
+		if len(files) == 0 {
+			t.Fatalf("%s: no files", label)
+		}
+		for name, src := range files {
+			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion1\n"); n != 1 {
+				t.Errorf("%s: %s has the guard %d times, want once", label, name, n)
+			}
+			if !strings.Contains(src, `"github.com/syssam/velox2/contrib/graphql/veloxgql"`) {
+				t.Errorf("%s: %s does not import veloxgql", label, name)
+			}
+		}
+	}
 }

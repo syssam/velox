@@ -63,11 +63,11 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 			return err
 		}
 	}
-	ctx, vgql, velox := f.use("context", "context"), f.veloxgql(), f.velox()
+	ctx, vgql, impl, velox := f.use("context", "context"), f.veloxgql(), f.gqlimpl(), f.velox()
 
 	f.doc("", fmt.Sprintf("%sConnection is the GraphQL type %[1]sConnection, a connection to a list of %[1]s. It holds the query of the whole list and the page asked for; gqlgen calls its methods for the fields a query selects, and each runs its query only then: edges and pageInfo share one page query, and totalCount runs a COUNT.", n))
 	f.p("type %sConnection struct {", n)
-	f.p("\tc *%s.Connection[%s]", vgql, e.Name)
+	f.p("\tc *%s.Connection[%s]", impl, e.Name)
 	f.p("}")
 	f.p("")
 	f.doc("", "Edges are the edges of the page, in the connection's order. The first call of Edges or PageInfo runs the page query, and the other reads its page.")
@@ -104,7 +104,7 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	f.p("}")
 	f.p("")
 
-	f.doc("", fmt.Sprintf("%s is the connection to every %s node, through the DB veloxgql.DBFrom reads from ctx, paged and ordered by the arguments of a connection to %[2]s: a Query field's resolver returns it. It fails before any query runs on arguments veloxgql.NewConnection refuses.", root, n))
+	f.doc("", fmt.Sprintf("%s is the connection to every %s node, through the DB veloxgql.DBFrom reads from ctx, paged and ordered by the arguments of a connection to %[2]s: a Query field's resolver returns it. It fails before any query runs on arguments gqlimpl.NewConnection refuses.", root, n))
 	f.p("func %s(ctx %s.Context, %s) (*%sConnection, error) {", root, ctx, connParams(f, t), n)
 	f.p("\tdb, err := %s.DBFrom(ctx)", vgql)
 	f.p("\tif err != nil {")
@@ -137,7 +137,7 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	order := "nil"
 	if t.Order != nil {
 		order = "order"
-		f.p("\tvar order []%s.OrderTerm[%s]", vgql, e.Name)
+		f.p("\tvar order []%s.OrderTerm[%s]", impl, e.Name)
 		if t.MultiOrder {
 			f.p("\tif len(orderBy) > %s.MaxOrderTerms {", vgql)
 			f.p("\t\treturn nil, %s.Errorf(\"veloxgql: %s connection: %%w: orderBy has %%d terms, and the most is %%d\", %s.ErrBadPagination, len(orderBy), %[3]s.MaxOrderTerms)", f.use("fmt", "fmt"), n, vgql)
@@ -153,7 +153,7 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 		f.p("\t\torder = append(order, term)")
 		f.p("\t}")
 	}
-	f.p("\tc, err := %s.NewConnection(q, %q, %s.Args{After: after, First: first, Before: before, Last: last}, %s, %s())", vgql, n, vgql, order, keyFunc(t))
+	f.p("\tc, err := %s.NewConnection(q, %q, %s.Args{After: after, First: first, Before: before, Last: last}, %s, %s())", impl, n, impl, order, keyFunc(t))
 	f.p("\tif err != nil {")
 	f.p("\t\treturn nil, err")
 	f.p("\t}")
@@ -162,8 +162,8 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	f.p("")
 
 	f.doc("", fmt.Sprintf("%s is the order of %s's key, which ends every order of a connection to %s.", keyFunc(t), e.Name, n))
-	f.p("func %s() []%s.OrderTerm[%s] {", keyFunc(t), vgql, e.Name)
-	f.p("\treturn []%s.OrderTerm[%s]{", vgql, e.Name)
+	f.p("func %s() []%s.OrderTerm[%s] {", keyFunc(t), impl, e.Name)
+	f.p("\treturn []%s.OrderTerm[%s]{", impl, e.Name)
 	for _, i := range e.PrimaryKey {
 		fd := e.Fields[i]
 		term, err := r.term(f, e, fd, fmt.Sprintf("%q", fd.Name), vgql+".OrderDirectionAsc", "\t\t")
@@ -182,7 +182,7 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	}
 	f.p("")
 	f.doc("", fmt.Sprintf("%s is the order term o, an order of connections to %s.", termFunc(t), n))
-	f.p("func %s(o *%sOrder) (%s.OrderTerm[%s], error) {", termFunc(t), n, vgql, e.Name)
+	f.p("func %s(o *%sOrder) (%s.OrderTerm[%s], error) {", termFunc(t), n, impl, e.Name)
 	f.p("\tswitch o.Field {")
 	for _, v := range t.Order {
 		fd := e.Fields[v.Field]
@@ -194,12 +194,12 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 		f.p("\t\treturn %s, nil", term)
 	}
 	f.p("\t}")
-	f.p("\treturn %s.OrderTerm[%s]{}, %s.Errorf(\"veloxgql: %sOrder: %%q is not a value of %sOrderField\", o.Field)", vgql, e.Name, f.use("fmt", "fmt"), n, n)
+	f.p("\treturn %s.OrderTerm[%s]{}, %s.Errorf(\"veloxgql: %sOrder: %%q is not a value of %sOrderField\", o.Field)", impl, e.Name, f.use("fmt", "fmt"), n, n)
 	f.p("}")
 	return nil
 }
 
-// term is the expression of a veloxgql.Term of the field fd, named field
+// term is the expression of a gqlimpl.Term of the field fd, named field
 // and in the direction dir (Go expressions both), at indent.
 func (r *renderer) term(f *file, e *plugin.Entity, fd *plugin.Field, field, dir, indent string) (string, error) {
 	base, err := termBase(f, e, fd)
@@ -231,12 +231,12 @@ func (r *renderer) term(f *file, e *plugin.Entity, fd *plugin.Field, field, dir,
 	}
 	get := fmt.Sprintf("func(x *%s) %s { return %s }", e.Name, base, to(base, "x."+fd.GoName))
 	set := fmt.Sprintf("func(x *%s, v %s) { x.%s = %s }", e.Name, base, fd.GoName, to(elem, "v"))
-	return fmt.Sprintf("%s.Term(%s, %s, %s.Asc(), %s.Desc(),\n%s\t%s,\n%s\t%s)", f.veloxgql(), field, dir, handle, handle, indent, get, indent, set), nil
+	return fmt.Sprintf("%s.Term(%s, %s, %s.Asc(), %s.Desc(),\n%s\t%s,\n%s\t%s)", f.gqlimpl(), field, dir, handle, handle, indent, get, indent, set), nil
 }
 
-// termBase is the Go type veloxgql.Term takes the values of fd as: velox's
-// standard Go type of its column, which veloxgql.CursorValue converts a
-// cursor's values to.
+// termBase is the Go type gqlimpl.Term takes the values of fd as: velox's
+// standard Go type of its column, which the connection converts a cursor's
+// values to.
 func termBase(f *file, e *plugin.Entity, fd *plugin.Field) (string, error) {
 	switch fd.Type {
 	case "string", "enum":
@@ -449,7 +449,7 @@ func (r *renderer) writeEdge(f *file, t *sdl.Type, ed sdl.Edge) error {
 		none := strings.ReplaceAll(connArgs(tt), ", ", " == nil && ") + " == nil"
 		f.p("\tif %s {", none)
 		f.p("\t\tif rows, ok := x.%s.Get(); ok {", pe.GoName)
-		f.p("\t\t\treturn &%sConnection{c: %s.LoadedConnection(rows, %q, %s())}, nil", tt.Name, vgql, tt.Name, keyFunc(tt))
+		f.p("\t\t\treturn &%sConnection{c: %s.LoadedConnection(rows, %q, %s())}, nil", tt.Name, f.gqlimpl(), tt.Name, keyFunc(tt))
 		f.p("\t\t}")
 		f.p("\t}")
 		dbFrom("nil")

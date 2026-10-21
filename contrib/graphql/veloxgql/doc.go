@@ -2,6 +2,10 @@
 // binds to, through gqlgen: global IDs, connection cursors, where filters,
 // the scalars, and the limits on what a client may ask for.
 //
+// What only generated code calls is in package gqlimpl, whose names are
+// stable by GeneratedCodeIsVersion1 and not by semantic versioning. Where a
+// name below belongs to gqlimpl it is written gqlimpl.Name.
+//
 // # IDs
 //
 // Every GraphQL ID is opaque and global: base64url without padding of
@@ -27,43 +31,42 @@
 // {"v":1,"t":"<Type>","o":[{"f":"<FIELD>","d":"ASC","v":<value>}…],"k":<key>}
 // (EncodeCursor, DecodeCursor): the GraphQL type, the order terms with the
 // row's values, and the primary key. Integers keep every digit and times
-// their nanoseconds and zone offset. Cursor.Check refuses a cursor taken on
-// another type or under another order with ErrBadCursor, and CursorValue
-// converts a decoded value back to its column's Go type.
+// their nanoseconds and zone offset. A connection refuses a cursor taken on
+// another type or under another order with ErrBadCursor, and converts a
+// decoded value back to its column's Go type.
 //
 // # Connections
 //
-// A Connection (NewConnection) holds a connection's query, its paging
-// arguments (Args) and its order (OrderTerm, made by Term), and runs nothing
-// until asked: Page runs the page query once, whoever calls it first, and
-// TotalCount the COUNT. The order always ends with the key. Paging is
+// A gqlimpl.Connection (gqlimpl.NewConnection) holds a connection's query,
+// its paging arguments (gqlimpl.Args) and its order (gqlimpl.OrderTerm, made
+// by gqlimpl.Term), and runs nothing until asked: Page runs the page query
+// once, whoever calls it first, and TotalCount the COUNT. The order always ends with the key. Paging is
 // keyset, through velox's Query.After: last and before reverse every term
 // and reverse the rows read, and one row more than the page sets
-// hasNextPage or hasPreviousPage. Paginate is NewConnection and Page in one
-// call. LoadedConnection pages rows a With loaded, and runs no query.
+// hasNextPage or hasPreviousPage. gqlimpl.LoadedConnection pages rows a With
+// loaded, and runs no query.
 //
 // # Where
 //
 // A where input's generated method Pred turns it into a velox.Pred: a
-// Filter (NewFilter), one helper call for each field of the input, and
-// Filter.Pred, the And of what the helpers added. Each helper adds nothing
+// gqlimpl.Filter (gqlimpl.NewFilter), one helper call for each field of the
+// input, and Filter.Pred, the And of what the helpers added. Each helper adds nothing
 // for a field the input does not set, and the first error stops the filter:
-//   - Not, And and Or nest inputs one level deeper, and HasWith through an
+//   - gqlimpl.Not, And and Or nest inputs one level deeper, and HasWith through an
 //     edge (the relation's HasWhere); an empty and, or or has…With list adds
 //     nothing, and an input that sets nothing holds for every row;
-//   - Value and List add a predicate of the column's handle (EQ, In,
+//   - gqlimpl.Value and List add a predicate of the column's handle (EQ, In,
 //     Contains…), and ValueAs and ListAs convert the input's values to the
-//     column's Go type first, with AsString, AsInt, AsFloat, AsBool or
+//     column's Go type first, with gqlimpl.AsString, AsInt, AsFloat, AsBool or
 //     AsUUID;
-//   - ID, IDList, IDAs and IDListAs decode IDs with DecodeID, so an ID of
+//   - gqlimpl.ID, IDList, IDAs and IDListAs decode IDs with DecodeID, so an ID of
 //     another type fails with ErrWrongIDType;
-//   - Is adds a Boolean predicate, or its negation: IsNil, NotNil and
+//   - gqlimpl.Is adds a Boolean predicate, or its negation: IsNil, NotNil and
 //     has<Edge>.
 //
-// A nesting deeper than MaxFilterDepth fails with ErrFilterTooDeep
-// (CheckDepth).
+// A nesting deeper than MaxFilterDepth fails with ErrFilterTooDeep.
 // A list of more than MaxFilterWidth entries, of inputs or of In or NotIn
-// values, fails with ErrFilterTooWide (CheckWidth), and so does a where
+// values, fails with ErrFilterTooWide, and so does a where
 // argument over its budget of MaxFilterNodes inputs, predicates and values
 // in all. None of it runs a query, so a refused filter fails before any
 // statement is built. An error names the field that held its cause, through
@@ -110,3 +113,9 @@
 //
 // Nothing in the package runs at program start.
 package veloxgql
+
+// For generated code. GeneratedCodeIsVersion1 is referenced by every Go file
+// velox-graphql writes, so that generated code and this module fail to
+// compile together when they disagree. It is replaced by
+// GeneratedCodeIsVersion2 when generated code must change.
+const GeneratedCodeIsVersion1 = true

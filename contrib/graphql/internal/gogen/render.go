@@ -28,6 +28,7 @@ import (
 const (
 	veloxPath    = "github.com/syssam/velox2"
 	veloxgqlPath = "github.com/syssam/velox2/contrib/graphql/veloxgql"
+	gqlimplPath  = "github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
 )
 
 // Render returns the Go files of m's GraphQL types, for the generated
@@ -154,10 +155,13 @@ func (f *file) use(path, name string) string {
 
 func (f *file) velox() string    { return f.use(veloxPath, "velox") }
 func (f *file) veloxgql() string { return f.use(veloxgqlPath, "veloxgql") }
+func (f *file) gqlimpl() string  { return f.use(gqlimplPath, "gqlimpl") }
 
 // finish is the file's Go source, gofmt'd: the package clause, the imports
-// in two groups (the standard library, then the rest) and the body.
+// in two groups (the standard library, then the rest), the version guard
+// and the body.
 func (f *file) finish(name, pkg string) (plugin.File, error) {
+	guard := f.veloxgql() // the guard imports it, whatever the body uses
 	var src bytes.Buffer
 	fmt.Fprintf(&src, "package %s\n\n", pkg)
 	byName := map[string]string{}
@@ -190,6 +194,9 @@ func (f *file) finish(name, pkg string) (plugin.File, error) {
 		}
 		src.WriteString(")\n\n")
 	}
+	// Generated code and veloxgql fail to compile together when they
+	// disagree on the version, as the core's files do.
+	fmt.Fprintf(&src, "const _ = %s.GeneratedCodeIsVersion1\n\n", guard)
 	src.Write(f.Bytes())
 	out, err := format.Source(src.Bytes())
 	if err != nil {
@@ -314,7 +321,7 @@ var locals = map[string]bool{
 	"ctx": true, "id": true, "ids": true, "typ": true, "err": true, "k": true, "db": true, "x": true,
 	"rows": true, "by": true, "i": true, "j": true, "out": true, "c": true, "n": true, "e": true,
 	"s": true, "b": true, "w": true, "v": true, "o": true, "f": true, "depth": true,
-	"context": true, "json": true, "errors": true, "fmt": true, "io": true, "velox": true, "veloxgql": true,
+	"context": true, "json": true, "errors": true, "fmt": true, "io": true, "velox": true, "veloxgql": true, "gqlimpl": true,
 	"any": true, "bool": true, "string": true, "int": true, "len": true, "make": true, "append": true,
 	"nil": true, "error": true, "true": true, "false": true,
 }
@@ -349,7 +356,7 @@ func (r *renderer) qualify(f *file, e *plugin.Entity, fd *plugin.Field, typ, pkg
 	if prev, ok := f.imports[pkg]; ok {
 		return prev + "." + name, nil
 	}
-	if locals[q] && pkg != veloxPath && pkg != veloxgqlPath && !slices.Contains([]string{"context", "encoding/json", "errors", "fmt", "io"}, pkg) {
+	if locals[q] && pkg != veloxPath && pkg != veloxgqlPath && pkg != gqlimplPath && !slices.Contains([]string{"context", "encoding/json", "errors", "fmt", "io"}, pkg) {
 		q += "pkg"
 	}
 	return f.use(pkg, q) + "." + name, nil

@@ -6,7 +6,10 @@ import (
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+	"github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
 )
+
+const _ = veloxgql.GeneratedCodeIsVersion1
 
 // UserGQL is the edge user: the Account it leads to, or nil when there is none.
 // It is x.User when a With loaded it, and else one query.
@@ -48,7 +51,7 @@ func (x *Like) PostGQL(ctx context.Context) (*Post, error) {
 // only then: edges and pageInfo share one page query, and totalCount runs a
 // COUNT.
 type LikeConnection struct {
-	c *veloxgql.Connection[Like]
+	c *gqlimpl.Connection[Like]
 }
 
 // Edges are the edges of the page, in the connection's order. The first call of
@@ -91,7 +94,7 @@ type LikeEdge struct {
 // LikesConnection is the connection to every Like node, through the DB
 // veloxgql.DBFrom reads from ctx, paged and ordered by the arguments of a
 // connection to Like: a Query field's resolver returns it. It fails before any
-// query runs on arguments veloxgql.NewConnection refuses.
+// query runs on arguments gqlimpl.NewConnection refuses.
 func LikesConnection(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*LikeConnection, error) {
 	db, err := veloxgql.DBFrom(ctx)
 	if err != nil {
@@ -103,7 +106,7 @@ func LikesConnection(ctx context.Context, after *veloxgql.Cursor, first *int, be
 // likeConnectionGQL is the connection to the Like nodes q returns, ordered by
 // the key, and paged by the other arguments. It runs no query.
 func likeConnectionGQL(ctx context.Context, q velox.Query[Like], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*LikeConnection, error) {
-	c, err := veloxgql.NewConnection(q, "Like", veloxgql.Args{After: after, First: first, Before: before, Last: last}, nil, likeKeyGQL())
+	c, err := gqlimpl.NewConnection(q, "Like", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, nil, likeKeyGQL())
 	if err != nil {
 		return nil, err
 	}
@@ -112,12 +115,12 @@ func likeConnectionGQL(ctx context.Context, q velox.Query[Like], after *veloxgql
 
 // likeKeyGQL is the order of Like's key, which ends every order of a connection
 // to Like.
-func likeKeyGQL() []veloxgql.OrderTerm[Like] {
-	return []veloxgql.OrderTerm[Like]{
-		veloxgql.Term("user_id", veloxgql.OrderDirectionAsc, Likes.UserID.Asc(), Likes.UserID.Desc(),
+func likeKeyGQL() []gqlimpl.OrderTerm[Like] {
+	return []gqlimpl.OrderTerm[Like]{
+		gqlimpl.Term("user_id", veloxgql.OrderDirectionAsc, Likes.UserID.Asc(), Likes.UserID.Desc(),
 			func(x *Like) int64 { return x.UserID },
 			func(x *Like, v int64) { x.UserID = v }),
-		veloxgql.Term("post_id", veloxgql.OrderDirectionAsc, Likes.PostID.Asc(), Likes.PostID.Desc(),
+		gqlimpl.Term("post_id", veloxgql.OrderDirectionAsc, Likes.PostID.Asc(), Likes.PostID.Desc(),
 			func(x *Like) int64 { return x.PostID },
 			func(x *Like, v int64) { x.PostID = v }),
 	}

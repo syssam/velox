@@ -12,7 +12,10 @@ import (
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+	"github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
 )
+
+const _ = veloxgql.GeneratedCodeIsVersion1
 
 // IsNode marks Post as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -76,7 +79,7 @@ func (x *Post) AuthorGQL(ctx context.Context) (*User, error) {
 func (x *Post) TagsGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *LabelOrder, where *LabelWhereInput) (*LabelConnection, error) {
 	if after == nil && first == nil && before == nil && last == nil && orderBy == nil && where == nil {
 		if rows, ok := x.Tags.Get(); ok {
-			return &LabelConnection{c: veloxgql.LoadedConnection(rows, "Label", tagKeyGQL())}, nil
+			return &LabelConnection{c: gqlimpl.LoadedConnection(rows, "Label", tagKeyGQL())}, nil
 		}
 	}
 	db, err := veloxgql.DBFrom(ctx)
@@ -92,7 +95,7 @@ func (x *Post) TagsGQL(ctx context.Context, after *veloxgql.Cursor, first *int, 
 // only then: edges and pageInfo share one page query, and totalCount runs a
 // COUNT.
 type PostConnection struct {
-	c *veloxgql.Connection[Post]
+	c *gqlimpl.Connection[Post]
 }
 
 // Edges are the edges of the page, in the connection's order. The first call of
@@ -135,7 +138,7 @@ type PostEdge struct {
 // PostsConnection is the connection to every Post node, through the DB
 // veloxgql.DBFrom reads from ctx, paged and ordered by the arguments of a
 // connection to Post: a Query field's resolver returns it. It fails before any
-// query runs on arguments veloxgql.NewConnection refuses.
+// query runs on arguments gqlimpl.NewConnection refuses.
 func PostsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
 	db, err := veloxgql.DBFrom(ctx)
 	if err != nil {
@@ -155,7 +158,7 @@ func postConnectionGQL(ctx context.Context, q velox.Query[Post], after *veloxgql
 		}
 		q = q.Where(p)
 	}
-	var order []veloxgql.OrderTerm[Post]
+	var order []gqlimpl.OrderTerm[Post]
 	if len(orderBy) > veloxgql.MaxOrderTerms {
 		return nil, fmt.Errorf("veloxgql: Post connection: %w: orderBy has %d terms, and the most is %d", veloxgql.ErrBadPagination, len(orderBy), veloxgql.MaxOrderTerms)
 	}
@@ -166,7 +169,7 @@ func postConnectionGQL(ctx context.Context, q velox.Query[Post], after *veloxgql
 		}
 		order = append(order, term)
 	}
-	c, err := veloxgql.NewConnection(q, "Post", veloxgql.Args{After: after, First: first, Before: before, Last: last}, order, postKeyGQL())
+	c, err := gqlimpl.NewConnection(q, "Post", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order, postKeyGQL())
 	if err != nil {
 		return nil, err
 	}
@@ -175,27 +178,27 @@ func postConnectionGQL(ctx context.Context, q velox.Query[Post], after *veloxgql
 
 // postKeyGQL is the order of Post's key, which ends every order of a connection
 // to Post.
-func postKeyGQL() []veloxgql.OrderTerm[Post] {
-	return []veloxgql.OrderTerm[Post]{
-		veloxgql.Term("id", veloxgql.OrderDirectionAsc, Posts.ID.Asc(), Posts.ID.Desc(),
+func postKeyGQL() []gqlimpl.OrderTerm[Post] {
+	return []gqlimpl.OrderTerm[Post]{
+		gqlimpl.Term("id", veloxgql.OrderDirectionAsc, Posts.ID.Asc(), Posts.ID.Desc(),
 			func(x *Post) int64 { return x.ID },
 			func(x *Post, v int64) { x.ID = v }),
 	}
 }
 
 // postTermGQL is the order term o, an order of connections to Post.
-func postTermGQL(o *PostOrder) (veloxgql.OrderTerm[Post], error) {
+func postTermGQL(o *PostOrder) (gqlimpl.OrderTerm[Post], error) {
 	switch o.Field {
 	case PostOrderFieldTitle:
-		return veloxgql.Term(string(o.Field), o.Direction, Posts.Title.Asc(), Posts.Title.Desc(),
+		return gqlimpl.Term(string(o.Field), o.Direction, Posts.Title.Asc(), Posts.Title.Desc(),
 			func(x *Post) string { return x.Title },
 			func(x *Post, v string) { x.Title = v }), nil
 	case PostOrderFieldViews:
-		return veloxgql.Term(string(o.Field), o.Direction, Posts.Views.Asc(), Posts.Views.Desc(),
+		return gqlimpl.Term(string(o.Field), o.Direction, Posts.Views.Asc(), Posts.Views.Desc(),
 			func(x *Post) int64 { return x.Views },
 			func(x *Post, v int64) { x.Views = v }), nil
 	}
-	return veloxgql.OrderTerm[Post]{}, fmt.Errorf("veloxgql: PostOrder: %q is not a value of PostOrderField", o.Field)
+	return gqlimpl.OrderTerm[Post]{}, fmt.Errorf("veloxgql: PostOrder: %q is not a value of PostOrderField", o.Field)
 }
 
 // PostOrder is the GraphQL input PostOrder, an order of connections to Post.
@@ -303,39 +306,39 @@ type PostWhereInput struct {
 // than veloxgql.MaxFilterNodes inputs, predicates and values in all (both
 // veloxgql.ErrFilterTooWide).
 func (w *PostWhereInput) Pred(ctx context.Context, depth int) (velox.Pred[Post], error) {
-	f := veloxgql.NewFilter[Post](ctx, "PostWhereInput", depth)
+	f := gqlimpl.NewFilter[Post](ctx, "PostWhereInput", depth)
 	if w == nil {
 		return f.Pred()
 	}
-	veloxgql.Not(f, "not", w.Not)
-	veloxgql.And(f, "and", w.And)
-	veloxgql.Or(f, "or", w.Or)
-	veloxgql.ID(f, "authorID", w.AuthorID, "User", Posts.AuthorID.EQ)
-	veloxgql.ID(f, "authorIDNEQ", w.AuthorIDNEQ, "User", Posts.AuthorID.NEQ)
-	veloxgql.IDList(f, "authorIDIn", w.AuthorIDIn, "User", Posts.AuthorID.In)
-	veloxgql.IDList(f, "authorIDNotIn", w.AuthorIDNotIn, "User", Posts.AuthorID.NotIn)
-	veloxgql.Value(f, "title", w.Title, Posts.Title.EQ)
-	veloxgql.Value(f, "titleNEQ", w.TitleNEQ, Posts.Title.NEQ)
-	veloxgql.List(f, "titleIn", w.TitleIn, Posts.Title.In)
-	veloxgql.List(f, "titleNotIn", w.TitleNotIn, Posts.Title.NotIn)
-	veloxgql.Value(f, "titleContains", w.TitleContains, Posts.Title.Contains)
-	veloxgql.Value(f, "titleHasPrefix", w.TitleHasPrefix, Posts.Title.HasPrefix)
-	veloxgql.Value(f, "titleHasSuffix", w.TitleHasSuffix, Posts.Title.HasSuffix)
-	veloxgql.Value(f, "status", w.Status, Posts.Status.EQ)
-	veloxgql.Value(f, "statusNEQ", w.StatusNEQ, Posts.Status.NEQ)
-	veloxgql.List(f, "statusIn", w.StatusIn, Posts.Status.In)
-	veloxgql.List(f, "statusNotIn", w.StatusNotIn, Posts.Status.NotIn)
-	veloxgql.Value(f, "publishedAt", w.PublishedAt, Posts.PublishedAt.EQ)
-	veloxgql.Value(f, "publishedAtNEQ", w.PublishedAtNEQ, Posts.PublishedAt.NEQ)
-	veloxgql.List(f, "publishedAtIn", w.PublishedAtIn, Posts.PublishedAt.In)
-	veloxgql.List(f, "publishedAtNotIn", w.PublishedAtNotIn, Posts.PublishedAt.NotIn)
-	veloxgql.Value(f, "publishedAtGT", w.PublishedAtGT, Posts.PublishedAt.GT)
-	veloxgql.Value(f, "publishedAtGTE", w.PublishedAtGTE, Posts.PublishedAt.GTE)
-	veloxgql.Value(f, "publishedAtLT", w.PublishedAtLT, Posts.PublishedAt.LT)
-	veloxgql.Value(f, "publishedAtLTE", w.PublishedAtLTE, Posts.PublishedAt.LTE)
-	veloxgql.Is(f, "publishedAtIsNil", w.PublishedAtIsNil, Posts.PublishedAt.IsNull)
-	veloxgql.Is(f, "publishedAtNotNil", w.PublishedAtNotNil, Posts.PublishedAt.NotNull)
-	veloxgql.Is(f, "hasTags", w.HasTags, Posts.Tags.Has)
-	veloxgql.HasWith(f, "hasTagsWith", w.HasTagsWith, Posts.Tags.HasWhere)
+	gqlimpl.Not(f, "not", w.Not)
+	gqlimpl.And(f, "and", w.And)
+	gqlimpl.Or(f, "or", w.Or)
+	gqlimpl.ID(f, "authorID", w.AuthorID, "User", Posts.AuthorID.EQ)
+	gqlimpl.ID(f, "authorIDNEQ", w.AuthorIDNEQ, "User", Posts.AuthorID.NEQ)
+	gqlimpl.IDList(f, "authorIDIn", w.AuthorIDIn, "User", Posts.AuthorID.In)
+	gqlimpl.IDList(f, "authorIDNotIn", w.AuthorIDNotIn, "User", Posts.AuthorID.NotIn)
+	gqlimpl.Value(f, "title", w.Title, Posts.Title.EQ)
+	gqlimpl.Value(f, "titleNEQ", w.TitleNEQ, Posts.Title.NEQ)
+	gqlimpl.List(f, "titleIn", w.TitleIn, Posts.Title.In)
+	gqlimpl.List(f, "titleNotIn", w.TitleNotIn, Posts.Title.NotIn)
+	gqlimpl.Value(f, "titleContains", w.TitleContains, Posts.Title.Contains)
+	gqlimpl.Value(f, "titleHasPrefix", w.TitleHasPrefix, Posts.Title.HasPrefix)
+	gqlimpl.Value(f, "titleHasSuffix", w.TitleHasSuffix, Posts.Title.HasSuffix)
+	gqlimpl.Value(f, "status", w.Status, Posts.Status.EQ)
+	gqlimpl.Value(f, "statusNEQ", w.StatusNEQ, Posts.Status.NEQ)
+	gqlimpl.List(f, "statusIn", w.StatusIn, Posts.Status.In)
+	gqlimpl.List(f, "statusNotIn", w.StatusNotIn, Posts.Status.NotIn)
+	gqlimpl.Value(f, "publishedAt", w.PublishedAt, Posts.PublishedAt.EQ)
+	gqlimpl.Value(f, "publishedAtNEQ", w.PublishedAtNEQ, Posts.PublishedAt.NEQ)
+	gqlimpl.List(f, "publishedAtIn", w.PublishedAtIn, Posts.PublishedAt.In)
+	gqlimpl.List(f, "publishedAtNotIn", w.PublishedAtNotIn, Posts.PublishedAt.NotIn)
+	gqlimpl.Value(f, "publishedAtGT", w.PublishedAtGT, Posts.PublishedAt.GT)
+	gqlimpl.Value(f, "publishedAtGTE", w.PublishedAtGTE, Posts.PublishedAt.GTE)
+	gqlimpl.Value(f, "publishedAtLT", w.PublishedAtLT, Posts.PublishedAt.LT)
+	gqlimpl.Value(f, "publishedAtLTE", w.PublishedAtLTE, Posts.PublishedAt.LTE)
+	gqlimpl.Is(f, "publishedAtIsNil", w.PublishedAtIsNil, Posts.PublishedAt.IsNull)
+	gqlimpl.Is(f, "publishedAtNotNil", w.PublishedAtNotNil, Posts.PublishedAt.NotNull)
+	gqlimpl.Is(f, "hasTags", w.HasTags, Posts.Tags.Has)
+	gqlimpl.HasWith(f, "hasTagsWith", w.HasTagsWith, Posts.Tags.HasWhere)
 	return f.Pred()
 }

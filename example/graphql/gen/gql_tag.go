@@ -11,7 +11,10 @@ import (
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+	"github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
 )
+
+const _ = veloxgql.GeneratedCodeIsVersion1
 
 // Label is Tag under its GraphQL type name, so that gqlgen's autobind finds the
 // Go type of the GraphQL type Label.
@@ -33,7 +36,7 @@ func (x *Tag) IDGQL() string { return veloxgql.EncodeID("Label", x.ID) }
 func (x *Tag) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
 	if after == nil && first == nil && before == nil && last == nil && orderBy == nil && where == nil {
 		if rows, ok := x.Posts.Get(); ok {
-			return &PostConnection{c: veloxgql.LoadedConnection(rows, "Post", postKeyGQL())}, nil
+			return &PostConnection{c: gqlimpl.LoadedConnection(rows, "Post", postKeyGQL())}, nil
 		}
 	}
 	db, err := veloxgql.DBFrom(ctx)
@@ -49,7 +52,7 @@ func (x *Tag) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int, 
 // only then: edges and pageInfo share one page query, and totalCount runs a
 // COUNT.
 type LabelConnection struct {
-	c *veloxgql.Connection[Tag]
+	c *gqlimpl.Connection[Tag]
 }
 
 // Edges are the edges of the page, in the connection's order. The first call of
@@ -92,7 +95,7 @@ type LabelEdge struct {
 // LabelsConnection is the connection to every Label node, through the DB
 // veloxgql.DBFrom reads from ctx, paged and ordered by the arguments of a
 // connection to Label: a Query field's resolver returns it. It fails before any
-// query runs on arguments veloxgql.NewConnection refuses.
+// query runs on arguments gqlimpl.NewConnection refuses.
 func LabelsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *LabelOrder, where *LabelWhereInput) (*LabelConnection, error) {
 	db, err := veloxgql.DBFrom(ctx)
 	if err != nil {
@@ -112,7 +115,7 @@ func tagConnectionGQL(ctx context.Context, q velox.Query[Tag], after *veloxgql.C
 		}
 		q = q.Where(p)
 	}
-	var order []veloxgql.OrderTerm[Tag]
+	var order []gqlimpl.OrderTerm[Tag]
 	if o := orderBy; o != nil {
 		term, err := tagTermGQL(o)
 		if err != nil {
@@ -120,7 +123,7 @@ func tagConnectionGQL(ctx context.Context, q velox.Query[Tag], after *veloxgql.C
 		}
 		order = append(order, term)
 	}
-	c, err := veloxgql.NewConnection(q, "Label", veloxgql.Args{After: after, First: first, Before: before, Last: last}, order, tagKeyGQL())
+	c, err := gqlimpl.NewConnection(q, "Label", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order, tagKeyGQL())
 	if err != nil {
 		return nil, err
 	}
@@ -129,23 +132,23 @@ func tagConnectionGQL(ctx context.Context, q velox.Query[Tag], after *veloxgql.C
 
 // tagKeyGQL is the order of Tag's key, which ends every order of a connection
 // to Label.
-func tagKeyGQL() []veloxgql.OrderTerm[Tag] {
-	return []veloxgql.OrderTerm[Tag]{
-		veloxgql.Term("id", veloxgql.OrderDirectionAsc, Tags.ID.Asc(), Tags.ID.Desc(),
+func tagKeyGQL() []gqlimpl.OrderTerm[Tag] {
+	return []gqlimpl.OrderTerm[Tag]{
+		gqlimpl.Term("id", veloxgql.OrderDirectionAsc, Tags.ID.Asc(), Tags.ID.Desc(),
 			func(x *Tag) int64 { return x.ID },
 			func(x *Tag, v int64) { x.ID = v }),
 	}
 }
 
 // tagTermGQL is the order term o, an order of connections to Label.
-func tagTermGQL(o *LabelOrder) (veloxgql.OrderTerm[Tag], error) {
+func tagTermGQL(o *LabelOrder) (gqlimpl.OrderTerm[Tag], error) {
 	switch o.Field {
 	case LabelOrderFieldName:
-		return veloxgql.Term(string(o.Field), o.Direction, Tags.Name.Asc(), Tags.Name.Desc(),
+		return gqlimpl.Term(string(o.Field), o.Direction, Tags.Name.Asc(), Tags.Name.Desc(),
 			func(x *Tag) string { return x.Name },
 			func(x *Tag, v string) { x.Name = v }), nil
 	}
-	return veloxgql.OrderTerm[Tag]{}, fmt.Errorf("veloxgql: LabelOrder: %q is not a value of LabelOrderField", o.Field)
+	return gqlimpl.OrderTerm[Tag]{}, fmt.Errorf("veloxgql: LabelOrder: %q is not a value of LabelOrderField", o.Field)
 }
 
 // LabelOrder is the GraphQL input LabelOrder, an order of connections to Label.
@@ -223,19 +226,19 @@ type LabelWhereInput struct {
 // than veloxgql.MaxFilterNodes inputs, predicates and values in all (both
 // veloxgql.ErrFilterTooWide).
 func (w *LabelWhereInput) Pred(ctx context.Context, depth int) (velox.Pred[Tag], error) {
-	f := veloxgql.NewFilter[Tag](ctx, "LabelWhereInput", depth)
+	f := gqlimpl.NewFilter[Tag](ctx, "LabelWhereInput", depth)
 	if w == nil {
 		return f.Pred()
 	}
-	veloxgql.Not(f, "not", w.Not)
-	veloxgql.And(f, "and", w.And)
-	veloxgql.Or(f, "or", w.Or)
-	veloxgql.Value(f, "name", w.Name, Tags.Name.EQ)
-	veloxgql.Value(f, "nameNEQ", w.NameNEQ, Tags.Name.NEQ)
-	veloxgql.List(f, "nameIn", w.NameIn, Tags.Name.In)
-	veloxgql.List(f, "nameNotIn", w.NameNotIn, Tags.Name.NotIn)
-	veloxgql.Value(f, "nameContains", w.NameContains, Tags.Name.Contains)
-	veloxgql.Value(f, "nameHasPrefix", w.NameHasPrefix, Tags.Name.HasPrefix)
-	veloxgql.Value(f, "nameHasSuffix", w.NameHasSuffix, Tags.Name.HasSuffix)
+	gqlimpl.Not(f, "not", w.Not)
+	gqlimpl.And(f, "and", w.And)
+	gqlimpl.Or(f, "or", w.Or)
+	gqlimpl.Value(f, "name", w.Name, Tags.Name.EQ)
+	gqlimpl.Value(f, "nameNEQ", w.NameNEQ, Tags.Name.NEQ)
+	gqlimpl.List(f, "nameIn", w.NameIn, Tags.Name.In)
+	gqlimpl.List(f, "nameNotIn", w.NameNotIn, Tags.Name.NotIn)
+	gqlimpl.Value(f, "nameContains", w.NameContains, Tags.Name.Contains)
+	gqlimpl.Value(f, "nameHasPrefix", w.NameHasPrefix, Tags.Name.HasPrefix)
+	gqlimpl.Value(f, "nameHasSuffix", w.NameHasSuffix, Tags.Name.HasSuffix)
 	return f.Pred()
 }

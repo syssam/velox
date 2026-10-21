@@ -6,7 +6,10 @@ import (
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+	"github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
 )
+
+const _ = veloxgql.GeneratedCodeIsVersion1
 
 // IsNode marks Category as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -24,7 +27,7 @@ func (x *Category) IDGQL() string { return veloxgql.EncodeID("Category", x.ID) }
 func (x *Category) ChildrenGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *CategoryWhereInput) (*CategoryConnection, error) {
 	if after == nil && first == nil && before == nil && last == nil && where == nil {
 		if rows, ok := x.Children.Get(); ok {
-			return &CategoryConnection{c: veloxgql.LoadedConnection(rows, "Category", categoryKeyGQL())}, nil
+			return &CategoryConnection{c: gqlimpl.LoadedConnection(rows, "Category", categoryKeyGQL())}, nil
 		}
 	}
 	db, err := veloxgql.DBFrom(ctx)
@@ -60,7 +63,7 @@ func (x *Category) ParentGQL(ctx context.Context) (*Category, error) {
 // its query only then: edges and pageInfo share one page query, and totalCount
 // runs a COUNT.
 type CategoryConnection struct {
-	c *veloxgql.Connection[Category]
+	c *gqlimpl.Connection[Category]
 }
 
 // Edges are the edges of the page, in the connection's order. The first call of
@@ -103,7 +106,7 @@ type CategoryEdge struct {
 // CategoriesConnection is the connection to every Category node, through the DB
 // veloxgql.DBFrom reads from ctx, paged and ordered by the arguments of a
 // connection to Category: a Query field's resolver returns it. It fails before
-// any query runs on arguments veloxgql.NewConnection refuses.
+// any query runs on arguments gqlimpl.NewConnection refuses.
 func CategoriesConnection(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *CategoryWhereInput) (*CategoryConnection, error) {
 	db, err := veloxgql.DBFrom(ctx)
 	if err != nil {
@@ -123,7 +126,7 @@ func categoryConnectionGQL(ctx context.Context, q velox.Query[Category], after *
 		}
 		q = q.Where(p)
 	}
-	c, err := veloxgql.NewConnection(q, "Category", veloxgql.Args{After: after, First: first, Before: before, Last: last}, nil, categoryKeyGQL())
+	c, err := gqlimpl.NewConnection(q, "Category", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, nil, categoryKeyGQL())
 	if err != nil {
 		return nil, err
 	}
@@ -132,9 +135,9 @@ func categoryConnectionGQL(ctx context.Context, q velox.Query[Category], after *
 
 // categoryKeyGQL is the order of Category's key, which ends every order of a
 // connection to Category.
-func categoryKeyGQL() []veloxgql.OrderTerm[Category] {
-	return []veloxgql.OrderTerm[Category]{
-		veloxgql.Term("id", veloxgql.OrderDirectionAsc, Categories.ID.Asc(), Categories.ID.Desc(),
+func categoryKeyGQL() []gqlimpl.OrderTerm[Category] {
+	return []gqlimpl.OrderTerm[Category]{
+		gqlimpl.Term("id", veloxgql.OrderDirectionAsc, Categories.ID.Asc(), Categories.ID.Desc(),
 			func(x *Category) int64 { return x.ID },
 			func(x *Category, v int64) { x.ID = v }),
 	}
@@ -164,14 +167,14 @@ type CategoryWhereInput struct {
 // than veloxgql.MaxFilterNodes inputs, predicates and values in all (both
 // veloxgql.ErrFilterTooWide).
 func (w *CategoryWhereInput) Pred(ctx context.Context, depth int) (velox.Pred[Category], error) {
-	f := veloxgql.NewFilter[Category](ctx, "CategoryWhereInput", depth)
+	f := gqlimpl.NewFilter[Category](ctx, "CategoryWhereInput", depth)
 	if w == nil {
 		return f.Pred()
 	}
-	veloxgql.Not(f, "not", w.Not)
-	veloxgql.And(f, "and", w.And)
-	veloxgql.Or(f, "or", w.Or)
-	veloxgql.Is(f, "hasParent", w.HasParent, Categories.Parent.Has)
-	veloxgql.HasWith(f, "hasParentWith", w.HasParentWith, Categories.Parent.HasWhere)
+	gqlimpl.Not(f, "not", w.Not)
+	gqlimpl.And(f, "and", w.And)
+	gqlimpl.Or(f, "or", w.Or)
+	gqlimpl.Is(f, "hasParent", w.HasParent, Categories.Parent.Has)
+	gqlimpl.HasWith(f, "hasParentWith", w.HasParentWith, Categories.Parent.HasWhere)
 	return f.Pred()
 }
