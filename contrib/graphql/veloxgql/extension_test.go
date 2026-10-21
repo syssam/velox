@@ -771,6 +771,10 @@ func TestTxOptionsRefuseRetry(t *testing.T) {
 
 // TestTxOptionsApply: the options reach the mutation's transaction.
 func TestTxOptionsApply(t *testing.T) {
+	// post returns when the response is written, after the resolvers and the
+	// hooks have returned, so these are read from the test's goroutine only
+	// once the server's are done; the mutex states it for the race detector.
+	var mu sync.Mutex
 	var iso sql.IsolationLevel
 	sqlDB, err := sql.Open("sqlite", "file::memory:")
 	if err != nil {
@@ -779,26 +783,33 @@ func TestTxOptionsApply(t *testing.T) {
 	t.Cleanup(func() { _ = sqlDB.Close() })
 	sqlDB.SetMaxOpenConns(1)
 	db := velox.Open(velox.SQLite, sqlDB, velox.WithTxAround(func(ctx context.Context, tx *velox.TxInfo, next func(context.Context) error) error {
+		mu.Lock()
 		iso = tx.Isolation
+		mu.Unlock()
 		return next(ctx)
 	}))
 	var left time.Duration
 	var has bool
 	resolvers := map[string]resolver{
 		"add": func(ctx context.Context, args map[string]any) (any, error) {
-			var d time.Time
-			d, has = ctx.Deadline()
-			left = time.Until(d)
+			d, ok := ctx.Deadline()
+			mu.Lock()
+			has, left = ok, time.Until(d)
+			mu.Unlock()
 			return args["id"], nil
 		},
 	}
 	srv := serve(db, resolvers, veloxgql.WithTxOptions(velox.TxIsolation(sql.LevelSerializable)))
 	_ = post(t, context.Background(), srv, `mutation { add(id: 1) }`)
+	mu.Lock()
+	defer mu.Unlock()
 	if iso != sql.LevelSerializable {
 		t.Errorf("isolation %v, want serializable", iso)
 	}
 	srv = serve(db, resolvers, veloxgql.WithTxOptions(velox.TxTimeout(50*time.Millisecond)))
+	mu.Unlock()
 	_ = post(t, context.Background(), srv, `mutation { add(id: 1) }`)
+	mu.Lock()
 	if !has || left > 50*time.Millisecond {
 		t.Errorf("deadline %v (set %v), want at most 50ms away", left, has)
 	}
@@ -832,5 +843,57 @@ func TestTxFilter(t *testing.T) {
 	_ = post(t, context.Background(), srv, `mutation Login { add(id: 3) }`)
 	if _, txs = l.take(); len(txs) != 1 {
 		t.Errorf("nil filter: transactions %q, want one", txs)
+	}
+}
+
+// TestTxFilterReadsItsOwnWrites: a mutation the filter leaves out runs in a
+// session, so that on a DB with replicas its read after its write goes to the
+// primary, not to a replica that does not have the row yet.
+func TestTxFilterReadsItsOwnWrites(t *testing.T) {
+	replica, err := sql.Open("sqlite", "file:replica?mode=memory&cache=private")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = replica.Close() })
+	replica.SetMaxOpenConns(1)
+	if _, err := replica.Exec(`CREATE TABLE people (id INTEGER PRIMARY KEY, name TEXT NOT NULL, age INTEGER NOT NULL)`); err != nil {
+		t.Fatal(err)
+	}
+	db, _ := handlerDB(t, velox.WithReplicas(velox.SQLConn(replica)))
+	resolvers := handlerResolvers(db, nil)
+	addCount := func(ctx context.Context, args map[string]any) (any, error) {
+		if _, err := resolvers["add"](ctx, args); err != nil {
+			return nil, err
+		}
+		return resolvers["count"](ctx, nil)
+	}
+	srv := serve(db, map[string]resolver{
+		"add": addCount,
+	}, veloxgql.WithTxFilter(func(context.Context, *ast.OperationDefinition) bool { return false }))
+	if got, want := post(t, context.Background(), srv, `mutation { add(id: 1) }`), `{"data":{"add":1}}`; got != want {
+		t.Errorf("got %s, want %s: the read after the write did not go to the primary", got, want)
+	}
+}
+
+// TestTxFilterSkipsTheFieldLock: the resolvers of a mutation the filter
+// leaves out run concurrently, as a query's do, since no transaction's DB is
+// shared.
+func TestTxFilterSkipsTheFieldLock(t *testing.T) {
+	db, _ := handlerDB(t)
+	var arrived atomic.Int64
+	side := func(context.Context, map[string]any) (any, error) {
+		arrived.Add(1)
+		for end := time.Now().Add(10 * time.Second); arrived.Load() < 2 && time.Now().Before(end); {
+			time.Sleep(time.Millisecond)
+		}
+		return arrived.Load(), nil
+	}
+	srv := serve(db, map[string]resolver{
+		"pair":   func(context.Context, map[string]any) (any, error) { return struct{}{}, nil },
+		"Pair.a": side,
+		"Pair.b": side,
+	}, veloxgql.WithTxFilter(func(context.Context, *ast.OperationDefinition) bool { return false }))
+	if got, want := post(t, context.Background(), srv, `mutation { pair { a b } }`), `{"data":{"pair":{"a":2,"b":2}}}`; got != want {
+		t.Errorf("got %s, want %s: both resolvers should be in flight together", got, want)
 	}
 }

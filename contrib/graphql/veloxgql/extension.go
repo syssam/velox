@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"sync/atomic"
 
@@ -24,8 +25,8 @@ import (
 // extension's limits, which LimitsFrom reads, so queries and subscriptions
 // run on the DB, and a DB with replicas routes their reads to them.
 //
-// A mutation operation runs in one db.Tx, on the primary, and its
-// resolvers get the transaction's DB and context, so every statement of the
+// A mutation operation runs in one db.Tx, on the primary, unless WithTxFilter
+// leaves it out, and its resolvers get the transaction's DB and context, so every statement of the
 // operation, its nested fields' too, is in the transaction. A statement a
 // mutation's resolver runs on db itself, not on the DB DBFrom reads, fails
 // with velox.ErrOutsideTx; under velox.WithoutTx(ctx) it runs outside the
@@ -37,6 +38,13 @@ import (
 // the extension runs a mutation's field resolvers one at a time; queries'
 // and subscriptions' still run concurrently. A resolver of a mutation must
 // not itself use the DB from more than one goroutine.
+//
+// A mutation WithTxFilter leaves out runs on db with no transaction: its
+// statements are not atomic, and its field resolvers run concurrently as a
+// query's do. It runs in a velox session (velox.WithSession), so on a DB
+// with replicas its reads after its own writes go to the primary. Use the
+// filter for mutations that only call other services, which would hold a
+// pooled connection for no statement.
 //
 // The transaction commits when the response has no errors. It rolls back
 // when the response has any,
@@ -105,14 +113,22 @@ func WithLimits(l Limits) Option {
 // refuses TxRetrySerializable: gqlgen makes the response once, so the
 // operation cannot run again. Given twice, the last wins.
 func WithTxOptions(opts ...velox.TxOption) Option {
+	opts = slices.Clone(opts)
 	return func(e *Extension) { e.txOpts = opts }
 }
 
 // WithTxFilter decides, for each mutation operation, whether it runs in a
 // transaction. f gets the operation's context and its definition, and runs
-// once per mutation operation. A nil f means every mutation does. A mutation
-// f leaves out runs on the extension's DB with no transaction, and its field
-// resolvers are not serialized, since no transaction's DB is shared.
+// once per mutation operation. A nil f means every mutation does.
+//
+// Use it for mutations that only call other services: in a transaction they
+// would hold a pooled connection while they wait, for no statement. A
+// mutation f leaves out runs on the extension's DB with no transaction, so
+// its statements are not atomic, and its field resolvers are not serialized,
+// since no transaction's DB is shared. It keeps read-your-writes: it runs in
+// a velox session (velox.WithSession), so on a DB with replicas a read after
+// its own write goes to the primary. A session of the request's context is
+// replaced, with its pin kept.
 func WithTxFilter(f func(ctx context.Context, op *ast.OperationDefinition) bool) Option {
 	return func(e *Extension) { e.txFilter = f }
 }
@@ -180,6 +196,11 @@ func (e *Extension) InterceptOperation(ctx context.Context, next graphql.Operati
 	if op := graphql.GetOperationContext(ctx).Operation; op != nil && op.Operation == ast.Mutation {
 		m := new(mutation)
 		m.plain = e.txFilter != nil && !e.txFilter(ctx, op)
+		if m.plain {
+			pin := velox.PinnedUntil(ctx)
+			ctx = velox.WithSession(ctx)
+			velox.PinUntil(ctx, pin)
+		}
 		ctx = context.WithValue(ctx, mutationKey{}, m)
 	}
 	return next(ctx)

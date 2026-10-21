@@ -32,8 +32,12 @@
 // since gqlgen makes the response once and the operation cannot run again.
 // WithTxFilter decides for each mutation operation, from its context and
 // definition, whether it runs in a transaction; a nil filter means every
-// mutation does, and one the filter leaves out runs on the DB with its field
-// resolvers not serialized.
+// mutation does. Use it for mutations that only call other services, which
+// would hold a pooled connection in a transaction for no statement. One the
+// filter leaves out runs on the DB: its statements are not atomic and its
+// field resolvers are not serialized, but it keeps read-your-writes, since it
+// runs in a velox session (velox.WithSession) and a DB with replicas reads
+// its own writes from the primary.
 //
 // # Cursors
 //
