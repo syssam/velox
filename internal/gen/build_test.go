@@ -18,6 +18,7 @@ import (
 	"github.com/syssam/velox2/schema/field"
 	"github.com/syssam/velox2/schema/index"
 	"github.com/syssam/velox2/schema/load"
+	"github.com/syssam/velox2/schema/mixin"
 )
 
 func build(t *testing.T, ss ...schema.Interface) (*Graph, error) {
@@ -1001,5 +1002,127 @@ func TestFieldJSONHasNoPos(t *testing.T) {
 	}
 	if f.Field.Pos == "" {
 		t.Fatal("MarshalJSON changed the field")
+	}
+}
+
+// optionalUnset breaks rules 37, 39 and 40 once each, beside the fields of
+// those types that pass: Nillable, or with a Default, or with a DefaultFunc
+// where the type has one.
+type optionalUnset struct{ schema.Schema }
+
+func (optionalUnset) Fields() []schema.Field {
+	return []schema.Field{
+		field.Enum("mood").Values("calm", "busy").Optional(),
+		field.Enum("mood_n").Values("calm").Optional().Nillable(),
+		field.Enum("mood_d").Values("calm").Optional().Default("calm"),
+		field.Bytes("blob").Optional(),
+		field.Bytes("blob_n").Optional().Nillable(),
+		field.Bytes("blob_d").Optional().Default([]byte("x")),
+		field.Bytes("blob_f").Optional().DefaultFunc(func() []byte { return nil }),
+		field.Time("seen").Optional(),
+		field.Time("seen_n").Optional().Nillable(),
+		field.Time("seen_d").Optional().Default(time.Now),
+		field.Bytes("blob_r"), // required: no rule applies
+	}
+}
+
+// Rules 37, 39 and 40 are one table; their messages are as they were.
+func TestOptionalNeedsTable(t *testing.T) {
+	_, err := build(t, optionalUnset{})
+	want := `schema optionalUnset: field "mood": an Optional enum needs a Default or Nillable
+schema optionalUnset: field "blob": an Optional bytes field needs a Default or Nillable
+schema optionalUnset: field "seen": an Optional time field needs a Default or Nillable`
+	if got := plain(err); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+	rules := map[int]bool{}
+	for _, r := range optionalNeeds {
+		rules[r.rule] = true
+	}
+	if len(rules) != 3 || !rules[37] || !rules[39] || !rules[40] {
+		t.Fatalf("rules %v, want 37, 39 and 40", rules)
+	}
+}
+
+type uniqueJSON struct{ schema.Schema }
+
+func (uniqueJSON) Fields() []schema.Field { return []schema.Field{field.Strings("tags").Unique()} }
+
+type indexJSON struct{ schema.Schema }
+
+func (indexJSON) Fields() []schema.Field {
+	return []schema.Field{field.String("name"), field.Strings("tags").StorageKey("tag_list")}
+}
+func (indexJSON) Indexes() []schema.Index {
+	return []schema.Index{index.Fields("name", "tags"), index.Fields("name")}
+}
+
+// Rules 41 and 42: no index covers a JSON column, the unique one of a field
+// or a declared one.
+func TestJSONIndexRefused(t *testing.T) {
+	for _, c := range []struct {
+		s    schema.Interface
+		want string
+	}{
+		{uniqueJSON{}, `schema uniqueJSON: field "tags": a JSON field cannot be Unique`},
+		{indexJSON{}, `schema indexJSON: index 0: field "tags" is JSON, which no index can cover`},
+	} {
+		_, err := build(t, c.s)
+		if got := plain(err); got != c.want {
+			t.Errorf("got\n%s\nwant\n%s", got, c.want)
+		}
+	}
+}
+
+type dupIndexes struct{ schema.Schema }
+
+func (dupIndexes) Fields() []schema.Field {
+	return []schema.Field{field.String("a"), field.String("b").Unique()}
+}
+func (dupIndexes) Indexes() []schema.Index {
+	return []schema.Index{
+		index.Fields("a", "b"),
+		index.Fields("b", "a"),            // another order
+		index.Fields("a", "b"),            // rule 43
+		index.Fields("a", "b").Unique(),   // unique
+		index.Fields("a", "b").Where("x"), // partial
+		index.Fields("a", "b").Where("y"), // another predicate
+		index.Fields("b"),                 // b's Unique is not compared
+		index.Fields("a").StorageKey("dup"),
+		index.Fields("b", "a").Unique().StorageKey("dup"), // rule 44
+	}
+}
+
+// ixMix declares an index its schemas repeat.
+type ixMix struct{ mixin.Schema }
+
+func (ixMix) Indexes() []schema.Index { return []schema.Index{index.Fields("a")} }
+
+type mixedDup struct{ schema.Schema }
+
+var mixedDupLine int
+
+func (mixedDup) Mixin() []schema.Mixin  { return []schema.Mixin{ixMix{}} }
+func (mixedDup) Fields() []schema.Field { return []schema.Field{field.String("a")} }
+func (mixedDup) Indexes() []schema.Index {
+	ix, l := index.Fields("a"), here()
+	mixedDupLine = l
+	return []schema.Index{ix}
+}
+
+// Rules 43 and 44: declared indexes, mixins' included, neither repeat one
+// another nor share a name.
+func TestDuplicateIndexes(t *testing.T) {
+	_, err := build(t, dupIndexes{})
+	want := `schema dupIndexes: index 2: repeats index 0
+schema dupIndexes: index 8: name "dup" is also index 7's`
+	if got := plain(err); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+	_, err = build(t, mixedDup{})
+	var ge *Error
+	if got := plain(err); got != `schema mixedDup: index 1: repeats index 0` || !errors.As(err, &ge) ||
+		!strings.HasSuffix(ge.Pos, fmt.Sprintf("/build_test.go:%d", mixedDupLine)) {
+		t.Fatalf("got %v", err)
 	}
 }

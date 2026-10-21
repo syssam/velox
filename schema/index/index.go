@@ -14,7 +14,10 @@ import (
 // Builder builds an index.
 type Builder struct{ d *desc.Index }
 
-// Fields starts an index over the named fields.
+// Fields starts an index over the named fields. velox-gen refuses a JSON
+// field, which no index can cover, and an index that repeats another of the
+// schema or its mixins: the same columns in order, the same Unique and the
+// same Where.
 func Fields(fields ...string) *Builder { return newBuilder(desc.Caller()).Fields(fields...) }
 
 // Edges starts an index over the foreign keys of the named edges.
@@ -38,7 +41,7 @@ func (b *Builder) Edges(edges ...string) *Builder {
 // Unique makes the index unique.
 func (b *Builder) Unique() *Builder { b.d.Unique = true; return b }
 
-// StorageKey sets the index name.
+// StorageKey sets the index name, which no other index of the schema may have.
 func (b *Builder) StorageKey(name string) *Builder { b.d.StorageKey = name; return b }
 
 // Where sets the predicate of a partial index, in SQL. PostgreSQL and SQLite

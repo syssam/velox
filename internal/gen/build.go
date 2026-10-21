@@ -510,6 +510,7 @@ func sameType(f, id *loadjson.Field) bool {
 func (b *builder) indexes() {
 	for _, n := range b.nodes {
 		e := n.ent
+		var resolved []bool
 		for i, li := range n.schema.Indexes {
 			ix := &Index{Columns: []string{}, Unique: li.Unique, Where: li.Where, Annotations: li.Annotations, Pos: li.Pos}
 			if len(li.Fields) == 0 && len(li.Edges) == 0 {
@@ -520,6 +521,9 @@ func (b *builder) indexes() {
 				if f == nil {
 					b.fail(23, e.Name, indexLoc(i, ix), "names unknown field %q", name)
 					continue
+				}
+				if f.Type == "json" {
+					b.fail(42, e.Name, indexLoc(i, ix), "field %q is JSON, which no index can cover", name)
 				}
 				ix.Columns = append(ix.Columns, f.Column)
 			}
@@ -537,6 +541,33 @@ func (b *builder) indexes() {
 			}
 			ix.Name = cmp.Or(li.StorageKey, strings.Join(append([]string{e.Table}, ix.Columns...), "_"))
 			e.Indexes = append(e.Indexes, ix)
+			resolved = append(resolved, len(ix.Columns) > 0 && len(ix.Columns) == len(li.Fields)+len(li.Edges))
+		}
+		b.duplicateIndexes(e, n.schema.Indexes, resolved)
+	}
+}
+
+// duplicateIndexes reports a declared index, mixins' included, that repeats
+// an earlier one (rule 43): the same columns in order, the same Unique and
+// the same Where. A field's Unique is not compared. It also reports two
+// indexes with one StorageKey (rule 44). resolved tells the indexes whose
+// columns all resolved; the others have errors already.
+func (b *builder) duplicateIndexes(e *Entity, lis []*loadjson.Index, resolved []bool) {
+	for i, ix := range e.Indexes {
+		for j, prev := range e.Indexes[:i] {
+			if resolved[i] && resolved[j] && ix.Unique == prev.Unique && ix.Where == prev.Where && slices.Equal(ix.Columns, prev.Columns) {
+				b.fail(43, e.Name, indexLoc(i, ix), "repeats index %d", j)
+				break
+			}
+		}
+		if lis[i].StorageKey == "" {
+			continue
+		}
+		for j := range i {
+			if lis[j].StorageKey == lis[i].StorageKey {
+				b.fail(44, e.Name, indexLoc(i, ix), "name %q is also index %d's", lis[i].StorageKey, j)
+				break
+			}
 		}
 	}
 }
@@ -610,6 +641,18 @@ func (b *builder) validateNames(e *Entity) {
 // added nor an implicit foreign key.
 func isDeclared(f *Field) bool { return !f.AutoID && f.Implicit == "" }
 
+// optionalNeeds lists the field types whose unset value cannot be stored, so
+// an Optional field of the type that is not Nillable needs a Default.
+var optionalNeeds = []struct {
+	typ, noun string
+	rule      int
+	funcOK    bool // a DefaultFunc counts as a Default
+}{
+	{"enum", "enum", 37, false},        // unset, an enum is "", which is no value
+	{"bytes", "bytes field", 39, true}, // unset, a bytes field is nil, which binds NULL
+	{"time", "time field", 40, true},   // unset, a time is the zero time, which MySQL's strict mode refuses
+}
+
 func (b *builder) validateFields(e *Entity) {
 	seen := map[string]bool{}
 	for _, f := range e.Fields {
@@ -664,18 +707,14 @@ func (b *builder) validateFields(e *Entity) {
 		if (len(f.Default) > 0 || f.DefaultFunc) && !f.Nillable && !f.Tenant && (f.Type == "bool" || numeric[f.Type]) {
 			b.fail(36, e.Name, fieldLoc(f), "a Default or DefaultFunc on a bool or number that is not Nillable cannot be told from unset; make the field Nillable or drop the Default")
 		}
-		// Unset, an Optional enum would write "", which is no value.
-		if f.Type == "enum" && f.Optional && !f.Nillable && len(f.Default) == 0 {
-			b.fail(37, e.Name, fieldLoc(f), "an Optional enum needs a Default or Nillable")
+		for _, r := range optionalNeeds {
+			if f.Type == r.typ && f.Optional && !f.Nillable && len(f.Default) == 0 && (!r.funcOK || !f.DefaultFunc) {
+				b.fail(r.rule, e.Name, fieldLoc(f), "an Optional %s needs a Default or Nillable", r.noun)
+			}
 		}
-		// Unset, an Optional bytes field is nil, which binds NULL.
-		if f.Type == "bytes" && f.Optional && !f.Nillable && len(f.Default) == 0 && !f.DefaultFunc {
-			b.fail(39, e.Name, fieldLoc(f), "an Optional bytes field needs a Default or Nillable")
-		}
-		// Unset, an Optional time is the zero time, which MySQL's strict
-		// mode refuses.
-		if f.Type == "time" && f.Optional && !f.Nillable && len(f.Default) == 0 && !f.DefaultFunc {
-			b.fail(40, e.Name, fieldLoc(f), "an Optional time field needs a Default or Nillable")
+		// No index covers a JSON column (rule 42 is a declared index's).
+		if f.Type == "json" && f.Unique {
+			b.fail(41, e.Name, fieldLoc(f), "a JSON field cannot be Unique")
 		}
 		switch f.Type {
 		case "enum":

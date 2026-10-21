@@ -39,12 +39,14 @@ func (c common[B]) Optional() B { c.d.Optional = true; return c.self }
 // create, and NULL as nil.
 func (c common[B]) Nillable() B { c.d.Nillable = true; return c.self }
 
-// Immutable refuses the field in updates.
+// Immutable refuses the field in updates. An Immutable field cannot have an
+// UpdateDefault, which no update would call.
 func (c common[B]) Immutable() B { c.d.Immutable = true; return c.self }
 
 // Unique adds a single-column unique index. A field that is unique only when
 // present needs Nillable: NULLs do not collide, but the zero values of unset
-// Optional fields do.
+// Optional fields do. velox-gen refuses a Unique JSON field: no index covers
+// a JSON column.
 func (c common[B]) Unique() B { c.d.Unique = true; return c.self }
 
 // Sensitive leaves the field out of String(), JSON, logs and spans.
@@ -181,6 +183,7 @@ func sameKind(t, base reflect.Type) bool {
 // finish checks the options that depend on one another. It runs on every
 // Descriptor call and records each error only once.
 func finish(d *desc.Field) {
+	contradictions(d)
 	if d.Default != nil && d.DefaultFunc != nil {
 		failOnce(d, "Default and DefaultFunc are both set")
 	}
@@ -233,5 +236,67 @@ func checkFunc(d *desc.Field, option string, fn any) {
 	t := reflect.TypeOf(fn)
 	if t.Kind() != reflect.Func || reflect.ValueOf(fn).IsNil() || t.NumIn() != 0 || t.NumOut() != 1 || (rt != nil && !t.Out(0).AssignableTo(rt)) {
 		failOnce(d, "%s must be a func() %v", option, rt)
+	}
+}
+
+// contradictions records the options of d that contradict one another: a
+// bound given twice, a lower bound above the upper one, and an Immutable
+// field with an UpdateDefault, which no update would call. Range gives both
+// bounds, so a Min beside it is a lower bound given twice.
+func contradictions(d *desc.Field) {
+	if d.Immutable && d.UpdateDefault != nil {
+		failOnce(d, "an Immutable field cannot have an UpdateDefault")
+	}
+	bounds(d, "Min", "Max")
+	bounds(d, "MinLen", "MaxLen")
+}
+
+// bounds checks the checks of d that set the lower bound, lo, and the upper
+// one, hi. A Range sets both.
+func bounds(d *desc.Field, lo, hi string) {
+	var low, high any
+	var lowBy, highBy string
+	for _, c := range d.Checks {
+		switch c.Kind {
+		case lo:
+			if lowBy != "" {
+				failOnce(d, "%s is given twice", lo)
+			}
+			low, lowBy = c.Args[0], lo
+		case hi:
+			if highBy != "" {
+				failOnce(d, "%s is given twice", hi)
+			}
+			high, highBy = c.Args[0], hi
+		case "Range":
+			switch {
+			case lowBy == "Range":
+				failOnce(d, "Range is given twice")
+			case lowBy != "":
+				failOnce(d, "%s is given twice", lo)
+			case highBy != "":
+				failOnce(d, "%s is given twice", hi)
+			}
+			low, high, lowBy, highBy = c.Args[0], c.Args[1], "Range", "Range"
+			if above(low, high) {
+				failOnce(d, "Range %v..%v is empty", low, high)
+			}
+		}
+	}
+	if lowBy != "" && highBy != "" && (lowBy != "Range" || highBy != "Range") && above(low, high) {
+		failOnce(d, "%s %v is above %s %v", lo, low, hi, high)
+	}
+}
+
+// above reports whether a > b, two values of one integer or float type.
+func above(a, b any) bool {
+	x, y := reflect.ValueOf(a), reflect.ValueOf(b)
+	switch {
+	case x.CanInt():
+		return x.Int() > y.Int()
+	case x.CanUint():
+		return x.Uint() > y.Uint()
+	default:
+		return x.Float() > y.Float()
 	}
 }

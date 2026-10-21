@@ -102,7 +102,7 @@ func TestGoType(t *testing.T) {
 }
 
 func TestDefaultFuncs(t *testing.T) {
-	d := field.Time("created_at").Default(time.Now).UpdateDefault(time.Now).Immutable().Descriptor()
+	d := field.Time("created_at").Default(time.Now).UpdateDefault(time.Now).Descriptor()
 	if len(d.Errs) != 0 || d.Default == nil || d.UpdateDefault == nil {
 		t.Fatalf("%+v", d)
 	}
@@ -410,5 +410,58 @@ func TestSchemaTypeDialects(t *testing.T) {
 	d = field.String("s").SchemaType(map[string]string{"postgress": "citext", field.Postgres: "citext"}).Descriptor()
 	if err := errors.Join(d.Errs...); err == nil || err.Error() != `SchemaType: unknown dialect "postgress"; the keys are field.Postgres, field.MySQL and field.SQLite` {
 		t.Fatalf("got %v", err)
+	}
+}
+
+// Options that contradict one another are builder errors, found once all are
+// set, each reported once however often Descriptor is called.
+func TestContradictions(t *testing.T) {
+	now := func() int64 { return 0 }
+	for _, c := range []struct {
+		name string
+		f    interface{ Descriptor() *desc.Field }
+		want []string
+	}{
+		{"Min above Max", field.Int("n").Min(10).Max(1), []string{"Min 10 is above Max 1"}},
+		{"Max before Min", field.Number[cents]("n").Max(1).Min(10), []string{"Min 10 is above Max 1"}},
+		{"Min above Max, float", field.Float("n").Min(1.5).Max(0.5), []string{"Min 1.5 is above Max 0.5"}},
+		{"Min above Max, uint64", field.Uint64("n").Min(math.MaxUint64).Max(1), []string{"Min 18446744073709551615 is above Max 1"}},
+		{"empty Range", field.Int64("n").Range(10, 1), []string{"Range 10..1 is empty"}},
+		{"Min twice", field.Int("n").Min(1).Min(2), []string{"Min is given twice"}},
+		{"Max twice", field.Int("n").Max(1).Max(2), []string{"Max is given twice"}},
+		{"Range twice", field.Int("n").Range(1, 2).Range(1, 3), []string{"Range is given twice"}},
+		{"Min and Range", field.Int("n").Range(1, 5).Min(2), []string{"Min is given twice"}},
+		{"Max and Range", field.Int("n").Max(5).Range(1, 4), []string{"Max is given twice"}},
+		{"MinLen twice", field.String("s").MinLen(1).MinLen(2), []string{"MinLen is given twice"}},
+		{"MaxLen twice", field.String("s").MaxLen(5).MaxLen(9), []string{"MaxLen is given twice"}},
+		{"bytes MaxLen twice", field.Bytes("b").MaxLen(5).MaxLen(9), []string{"MaxLen is given twice"}},
+		{"MinLen above MaxLen", field.String("s").MinLen(10).MaxLen(5), []string{"MinLen 10 is above MaxLen 5"}},
+		{"bytes MinLen above MaxLen", field.Bytes("b").MaxLen(5).MinLen(10), []string{"MinLen 10 is above MaxLen 5"}},
+		{"Immutable with UpdateDefault", field.Int64("n").UpdateDefault(now).Immutable(), []string{"an Immutable field cannot have an UpdateDefault"}},
+		{"Immutable time with UpdateDefault", field.Time("t").Immutable().UpdateDefault(time.Now), []string{"an Immutable field cannot have an UpdateDefault"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			c.f.Descriptor()
+			var got []string
+			for _, err := range c.f.Descriptor().Errs {
+				got = append(got, err.Error())
+			}
+			if !reflect.DeepEqual(got, c.want) {
+				t.Fatalf("got %q, want %q", got, c.want)
+			}
+		})
+	}
+	for name, f := range map[string]interface{ Descriptor() *desc.Field }{
+		"Min equal to Max":     field.Int("n").Min(3).Max(3),
+		"one-value Range":      field.Int("n").Range(3, 3),
+		"MinLen equal MaxLen":  field.String("s").MinLen(4).MaxLen(4),
+		"Immutable Default":    field.Time("t").Default(time.Now).Immutable(),
+		"UpdateDefault alone":  field.Time("t").UpdateDefault(time.Now),
+		"bounds of each kind":  field.Int("n").Min(1).Max(9).Positive(),
+		"negative Min and Max": field.Int8("n").Min(-9).Max(-1),
+	} {
+		if errs := f.Descriptor().Errs; len(errs) != 0 {
+			t.Errorf("%s: %v", name, errs)
+		}
 	}
 }
