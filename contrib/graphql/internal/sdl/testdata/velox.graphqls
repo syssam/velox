@@ -419,7 +419,6 @@ input CreateAccountInput {
   quota: Uint64!
   active: Boolean
   settings: JSON
-  postIDs: [ID!] @cost(meta: {cached: true, ttl: null}, tags: ["list", "paged"], weight: 2.5)
   membershipIDs: [ID!]
   bestFriendID: ID
 }

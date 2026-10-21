@@ -84,13 +84,13 @@ func TestInputs(t *testing.T) {
 			// fills it on insert, so it is required. touched is nullable: out.
 			"editedBy: String!",
 			"secret: String!", "handle: String!", "notes: String", "hidden: String!", "createOnly: String!",
-			"postIDs: [ID!]", "membershipIDs: [ID!]", "profileID: ID", "bestFriendID: ID",
+			// Post.author_id is required: a post always has an author, so
+			// User has no input that takes one; it is linked by its authorID.
+			"membershipIDs: [ID!]", "profileID: ID", "bestFriendID: ID",
 		}},
 		{"UpdateUserInput", []string{
 			"name: String", "nickname: String", "clearNickname: Boolean", "role: UserRole", "updatedAt: Time",
 			"secret: String", "views: Int", "hidden: String",
-			// Post.author_id is required: posts can be added, not removed.
-			"addPostIDs: [ID!]",
 			"addMembershipIDs: [ID!]", "removeMembershipIDs: [ID!]", "clearMemberships: Boolean",
 			"profileID: ID", "clearProfile: Boolean",
 			"addCategoryIDs: [ID!]", "removeCategoryIDs: [ID!]", "clearCategories: Boolean",
@@ -251,9 +251,11 @@ func TestEdgeInputsFollowTheKey(t *testing.T) {
 			[]string{"name: String", "addPostIDs: [ID!]", "removePostIDs: [ID!]", "clearPosts: Boolean"},
 			[]string{"title: String!", "authorID: ID"},
 			[]string{"title: String", "authorID: ID", "clearAuthor: Boolean"}},
+		// A required author_id: a post always has an author, so User has no
+		// input that would take one from it; Post sets it.
 		{"required", func(f *plugin.Field) {},
-			[]string{"name: String!", "postIDs: [ID!]"},
-			[]string{"name: String", "addPostIDs: [ID!]"},
+			[]string{"name: String!"},
+			[]string{"name: String"},
 			[]string{"title: String!", "authorID: ID!"},
 			[]string{"title: String", "authorID: ID"}},
 		// The reviewer's example: an immutable author_id moves on no write,
@@ -303,8 +305,10 @@ func TestEdgeInputsFollowTheKey(t *testing.T) {
 	}{
 		{"O2O nullable", func(f *plugin.Field) { f.Nullable, f.Optional = true, true },
 			[]string{"name: String!", "profileID: ID"}, []string{"name: String", "profileID: ID", "clearProfile: Boolean"}},
+		// A required key always holds a user, whom profileID could only take
+		// the profile from: no input; the profile is linked by its userID.
 		{"O2O required", func(f *plugin.Field) {},
-			[]string{"name: String!", "profileID: ID"}, []string{"name: String", "profileID: ID"}},
+			[]string{"name: String!"}, []string{"name: String"}},
 		{"O2O immutable", func(f *plugin.Field) { f.Immutable = true },
 			[]string{"name: String!"}, []string{"name: String"}},
 		// A required edge whose key is on the target's row: create must give

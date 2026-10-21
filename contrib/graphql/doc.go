@@ -159,6 +159,15 @@
 // application's package, and the application resolves them itself until it
 // is.
 //
+// An edge's inputs follow its foreign key. A key on the entity's own row is
+// set by <edge>ID. A key on the target's rows is re-pointed from the owner
+// by <edge>ID, <edge>IDs or add<Edge>IDs, but only a key that is nullable
+// and mutable: one that is never NULL always holds an owner, and one that is
+// immutable cannot move, so the owner's inputs have no such field, and the
+// child is linked from its own side, by its <edge>ID. Create<T> re-points
+// only a child no owner holds: one that another owner holds is refused with
+// BAD_USER_INPUT, "already linked", and not taken from it.
+//
 // The application writes the root query's resolvers, one call each: Node
 // and Nodes for node and nodes, and the root connection function for each
 // QueryField. The example example/graphql in the velox2 repository is a

@@ -220,10 +220,10 @@ type edgeInput struct {
 //   - an edge whose key is on the target's rows (O2M, and an O2O whose key
 //     the other entity holds) re-points those rows: <edge>IDs, or
 //     add/remove/clear on update; an O2O sets <edge>ID, and clears it on
-//     update. A required (non-null) key cannot be cleared, so remove and
-//     clear are left out, and so is clear<Edge> of a required edge; an
-//     immutable key cannot be moved, so the edge has no input at all, on
-//     create too, where it would re-point existing rows;
+//     update. Only a nullable key that can move gets them: a required
+//     (non-null) key always holds an owner, from whom a write would only
+//     take the row, and an immutable one cannot move, so the edge has no
+//     input at all, on create too; the child is linked from its side;
 //   - an immutable key on o's row is set on create only;
 //   - an M2M edge writes join rows: <edge>IDs, add/remove/clear;
 //   - an edge to a type that is not a Node has no ID and no input. When that
@@ -309,24 +309,26 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]edgeInput, error) {
 				clearEdge()
 			}
 		}
-	case immutable: // the key is on the target's rows, and cannot move
+	case immutable || !nullable:
+		// The key is on the target's rows. An immutable one cannot move; a
+		// required one always holds an owner, whom a write could only take
+		// the row from, so the input could never succeed: the child is
+		// linked by its own <edge>ID.
 	case ed.Unique:
 		typ := "ID"
 		if create && ed.Required {
 			typ = "ID!"
 		}
 		edgeID(typ)
-		if !create && nullable && !ed.Required {
+		if !create && !ed.Required {
 			clearEdge()
 		}
 	case create:
 		add(many+"IDs", "[ID!]", goOne+"IDs", InputEdgeIDs)
 	default:
 		add("add"+one+"IDs", "[ID!]", "Add"+goOne+"IDs", InputAddIDs)
-		if nullable {
-			add("remove"+one+"IDs", "[ID!]", "Remove"+goOne+"IDs", InputRemoveIDs)
-			clearEdge()
-		}
+		add("remove"+one+"IDs", "[ID!]", "Remove"+goOne+"IDs", InputRemoveIDs)
+		clearEdge()
 	}
 	return out, nil
 }

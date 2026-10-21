@@ -495,26 +495,22 @@ func (r *renderer) writeCreate(f *file, t *sdl.Type, in string) error {
 		// leave out a row the caller may not change; Repointed tells a child
 		// the caller may read that another owner holds from one it may not
 		// change: it counts, after the UPDATE, the rows of the IDs whose key
-		// is another owner's. A key that is never NULL is held by an owner
-		// on every row.
+		// is another owner's. sdl gives a key that is never NULL no such
+		// input: it is an owner's on every row.
+		if !tfk.Nullable {
+			return fmt.Errorf("schema %s, edge %s: an input re-points %s's rows, whose key %s is never NULL, which is a bug", e.Name, ed.Name, tgt.Name, tfk.Name)
+		}
 		indent, end := given(i)
 		ids, n := pk+".In("+d.v+"...)", "len("+d.v+")"
 		if fi.Kind == sdl.InputEdgeID {
 			ids, n = pk+".EQ("+d.v+")", "1"
 		}
 		fkh := tgt.Handles + "." + tfk.GoName
-		repointed := func(got, linked string) string {
-			return fmt.Sprintf("%s.Repointed(ctx, %s, %s, db.Query[%s]().Where(%s), %s, %q, %q)", impl, got, n, tgt.Name, linked, at(fi), fi.Target, t.Name)
-		}
-		if !tfk.Nullable {
-			ret(indent, repointed("0", ids))
-		} else {
-			f.p("%sif n, err := db.Update[%s]().Set(%s.Set(%s)).Where(%s, %s.IsNull()).Exec(ctx); err != nil {", indent, tgt.Name, fkh, v, ids, fkh)
-			f.p("%s\treturn err", indent)
-			f.p("%s} else if err := %s; err != nil {", indent, repointed("n", ids+", "+fkh+".NotNull(), "+fkh+".NEQ("+v+")"))
-			f.p("%s\treturn err", indent)
-			f.p("%s}", indent)
-		}
+		f.p("%sif n, err := db.Update[%s]().Set(%s.Set(%s)).Where(%s, %s.IsNull()).Exec(ctx); err != nil {", indent, tgt.Name, fkh, v, ids, fkh)
+		f.p("%s\treturn err", indent)
+		f.p("%s} else if err := %s.Repointed(ctx, n, %s, db.Query[%s]().Where(%s, %s.NotNull(), %[6]s.NEQ(%s)), %s, %q, %q); err != nil {", indent, impl, n, tgt.Name, ids, fkh, v, at(fi), fi.Target, t.Name)
+		f.p("%s\treturn err", indent)
+		f.p("%s}", indent)
 		end()
 	}
 	f.p("\t\tout = &x")

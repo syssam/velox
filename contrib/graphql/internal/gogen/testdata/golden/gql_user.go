@@ -330,8 +330,6 @@ type CreateAccountInput struct {
 	Quota        uint64
 	Active       *bool
 	Settings     *veloxgql.JSON
-	// PostIDs are the IDs of the Post nodes the edge posts leads to.
-	PostIDs []string
 	// MembershipIDs are the IDs of the Group nodes the edge groups leads to.
 	MembershipIDs []string
 	// BestFriendID is the ID of the Account the edge best_friend leads to.
@@ -384,11 +382,11 @@ func (in CreateAccountInput) String() string {
 	if in.Settings != nil {
 		p14 = string(*in.Settings)
 	}
-	var p17 any
+	var p16 any
 	if in.BestFriendID != nil {
-		p17 = *in.BestFriendID
+		p16 = *in.BestFriendID
 	}
-	return fmt.Sprintf("CreateAccountInput(CreatedAt=%v, UpdatedAt=%v, DisplayName=%v, Email=%v, Role=%v, Nickname=%v, Bio=%v, Age=%v, Score=%v, ExternalID=%v, Avatar=%v, Quota=%v, Active=%v, Settings=%v, PostIDs=%v, MembershipIDs=%v, BestFriendID=%v)", p0, p1, in.DisplayName, in.Email, p4, p5, p6, p7, p9, p10, p11, in.Quota, p13, p14, in.PostIDs, in.MembershipIDs, p17)
+	return fmt.Sprintf("CreateAccountInput(CreatedAt=%v, UpdatedAt=%v, DisplayName=%v, Email=%v, Role=%v, Nickname=%v, Bio=%v, Age=%v, Score=%v, ExternalID=%v, Avatar=%v, Quota=%v, Active=%v, Settings=%v, MembershipIDs=%v, BestFriendID=%v)", p0, p1, in.DisplayName, in.Email, p4, p5, p6, p7, p9, p10, p11, in.Quota, p13, p14, in.MembershipIDs, p16)
 }
 
 // GoString is String, so that %#v does not print the sensitive fields either.
@@ -408,8 +406,7 @@ func CreateAccount(ctx context.Context, input CreateAccountInput) (*User, error)
 	var (
 		j14 map[string]any
 		k15 []int64
-		k16 []int64
-		k17 int64
+		k16 int64
 		err error
 	)
 	if input.Settings != nil {
@@ -417,30 +414,27 @@ func CreateAccount(ctx context.Context, input CreateAccountInput) (*User, error)
 			return nil, err
 		}
 	}
-	if k15, err = gqlimpl.DecodeIDs[int64](ctx, "CreateAccountInput.postIDs", input.PostIDs, "Post"); err != nil {
-		return nil, err
-	}
-	if k16, err = gqlimpl.DecodeIDs[int64](ctx, "CreateAccountInput.membershipIDs", input.MembershipIDs, "Group"); err != nil {
+	if k15, err = gqlimpl.DecodeIDs[int64](ctx, "CreateAccountInput.membershipIDs", input.MembershipIDs, "Group"); err != nil {
 		return nil, err
 	}
 	if input.BestFriendID != nil {
-		if k17, err = gqlimpl.DecodeID[int64]("CreateAccountInput.bestFriendID", *input.BestFriendID, "Account"); err != nil {
+		if k16, err = gqlimpl.DecodeID[int64]("CreateAccountInput.bestFriendID", *input.BestFriendID, "Account"); err != nil {
 			return nil, err
 		}
 	}
 	var out *User
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
 		var x User
-		if len(k16) > 0 {
-			if err := gqlimpl.Exist(ctx, db.Query[Group]().Where(Groups.ID.In(k16...)), len(k16), "CreateAccountInput.membershipIDs", "Group"); err != nil {
+		if len(k15) > 0 {
+			if err := gqlimpl.Exist(ctx, db.Query[Group]().Where(Groups.ID.In(k15...)), len(k15), "CreateAccountInput.membershipIDs", "Group"); err != nil {
 				return err
 			}
 		}
 		if input.BestFriendID != nil {
-			if err := gqlimpl.Exist(ctx, db.Query[User]().Where(Users.ID.In(k17)), 1, "CreateAccountInput.bestFriendID", "Account"); err != nil {
+			if err := gqlimpl.Exist(ctx, db.Query[User]().Where(Users.ID.In(k16)), 1, "CreateAccountInput.bestFriendID", "Account"); err != nil {
 				return err
 			}
-			x.UserBestFriend = &k17
+			x.UserBestFriend = &k16
 		}
 		if input.CreatedAt != nil {
 			x.CreatedAt = *input.CreatedAt
@@ -483,13 +477,8 @@ func CreateAccount(ctx context.Context, input CreateAccountInput) (*User, error)
 			return gqlimpl.WriteError(err, "CreateAccountInput", "gen.User", userFieldGQL)
 		}
 		if len(k15) > 0 {
-			if err := gqlimpl.Repointed(ctx, 0, len(k15), db.Query[Post]().Where(Posts.ID.In(k15...)), "CreateAccountInput.postIDs", "Post", "Account"); err != nil {
-				return err
-			}
-		}
-		if len(k16) > 0 {
-			rows := make([]UserGroup, len(k16))
-			for i, k := range k16 {
+			rows := make([]UserGroup, len(k15))
+			for i, k := range k15 {
 				rows[i] = UserGroup{UserID: x.ID, GroupID: k}
 			}
 			if err := db.InsertAll(rows).OnConflict(UserGroups.UserID, UserGroups.GroupID).DoNothing().Exec(ctx); err != nil {
