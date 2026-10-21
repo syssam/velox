@@ -3,6 +3,7 @@ package gen
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
@@ -183,4 +184,93 @@ func (w *CategoryWhereInput) Pred(ctx context.Context) (velox.Pred[Category], er
 	gqlimpl.Is(f, "hasParent", w.HasParent, Categories.Parent.Has)
 	gqlimpl.HasWith(f, "hasParentWith", w.HasParentWith, Categories.Parent.HasWhere)
 	return f.Pred()
+}
+
+// categoryFieldGQL is the GraphQL name of the mutation-input field that sets
+// the Category field whose Go name is goField, for the errors of its
+// validators: "" for a field no input sets.
+func categoryFieldGQL(goField string) string {
+	switch goField {
+	case "Title":
+		return "title"
+	case "CategoryChildren":
+		return "parentID"
+	}
+	return ""
+}
+
+// CreateCategoryInput is the GraphQL input CreateCategoryInput, the input of
+// createCategory. A field that is a pointer, or a list, is optional: nil means
+// not given.
+type CreateCategoryInput struct {
+	Title string
+	// ChildrenIDs are the IDs of the Category nodes the edge children leads to.
+	ChildrenIDs []string
+	// ParentID is the ID of the Category the edge parent leads to.
+	ParentID *string
+}
+
+// String returns the input's fields except its sensitive ones.
+func (in CreateCategoryInput) String() string {
+	var p2 any
+	if in.ParentID != nil {
+		p2 = *in.ParentID
+	}
+	return fmt.Sprintf("CreateCategoryInput(Title=%v, ChildrenIDs=%v, ParentID=%v)", in.Title, in.ChildrenIDs, p2)
+}
+
+// GoString is String, so that %#v does not print the sensitive fields either.
+func (in CreateCategoryInput) GoString() string { return in.String() }
+
+// CreateCategory creates one Category from input, with its edges, and returns
+// it, as the mutation createCategory does. It first decodes every ID and JSON
+// value of input, and fails before any statement on one it cannot decode
+// (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFrom reads from
+// ctx, in one transaction (gqlimpl.Atomic): the operation's, or one of its own.
+// The tenant scope and the policies apply as to any write: each ID must name a
+// row the caller may read, and a row it re-points one the caller may change, or
+// CreateCategory fails with NOT_FOUND and keeps nothing. A validator's refusal
+// is BAD_USER_INPUT, naming the input field; velox's other errors are returned
+// as they are.
+func CreateCategory(ctx context.Context, input CreateCategoryInput) (*Category, error) {
+	var (
+		k1  []int64
+		k2  int64
+		err error
+	)
+	if k1, err = gqlimpl.DecodeIDs[int64](ctx, "CreateCategoryInput.childrenIDs", input.ChildrenIDs, "Category"); err != nil {
+		return nil, err
+	}
+	if input.ParentID != nil {
+		if k2, err = gqlimpl.DecodeID[int64]("CreateCategoryInput.parentID", *input.ParentID, "Category"); err != nil {
+			return nil, err
+		}
+	}
+	var out *Category
+	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
+		var x Category
+		if input.ParentID != nil {
+			if err := gqlimpl.Exist(ctx, db.Query[Category]().Where(Categories.ID.In(k2)), 1, "CreateCategoryInput.parentID", "Category"); err != nil {
+				return err
+			}
+			x.CategoryChildren = &k2
+		}
+		x.Title = input.Title
+		if err := db.Insert(&x).Exec(ctx); err != nil {
+			return gqlimpl.WriteError(err, "CreateCategoryInput", "gen.Category", categoryFieldGQL)
+		}
+		if len(k1) > 0 {
+			if n, err := db.Update[Category]().Set(Categories.CategoryChildren.Set(x.ID)).Where(Categories.ID.In(k1...)).Exec(ctx); err != nil {
+				return err
+			} else if err := gqlimpl.Matched(n, len(k1), "CreateCategoryInput.childrenIDs", "Category"); err != nil {
+				return err
+			}
+		}
+		out = &x
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }

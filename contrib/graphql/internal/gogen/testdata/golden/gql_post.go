@@ -368,3 +368,128 @@ func (w *PostWhereInput) Pred(ctx context.Context) (velox.Pred[Post], error) {
 	gqlimpl.HasWith(f, "hasWriterWith", w.HasWriterWith, Posts.Author.HasWhere)
 	return f.Pred()
 }
+
+// postFieldGQL is the GraphQL name of the mutation-input field that sets the
+// Post field whose Go name is goField, for the errors of its validators: "" for
+// a field no input sets.
+func postFieldGQL(goField string) string {
+	switch goField {
+	case "Title":
+		return "title"
+	case "Slug":
+		return "slug"
+	case "Status":
+		return "status"
+	case "PublishedAt":
+		return "publishedAt"
+	case "Tags":
+		return "tags"
+	case "Rating":
+		return "rating"
+	case "EditedBy":
+		return "editedBy"
+	case "AuthorID":
+		return "writerID"
+	case "Views":
+		return "views"
+	}
+	return ""
+}
+
+// CreatePostInput is the GraphQL input CreatePostInput, the input of
+// createPost. A field that is a pointer, or a list, is optional: nil means not
+// given.
+type CreatePostInput struct {
+	Title       string
+	Slug        string
+	Status      *PostStatus
+	PublishedAt *time.Time
+	Tags        *veloxgql.JSON
+	Rating      *float64
+	// Who last edited the post; the update default fills it.
+	EditedBy string
+	// WriterID is the ID of the Account the edge author leads to.
+	WriterID string
+}
+
+// String returns the input's fields except its sensitive ones.
+func (in CreatePostInput) String() string {
+	var p2 any
+	if in.Status != nil {
+		p2 = *in.Status
+	}
+	var p3 any
+	if in.PublishedAt != nil {
+		p3 = *in.PublishedAt
+	}
+	var p4 any
+	if in.Tags != nil {
+		p4 = string(*in.Tags)
+	}
+	var p5 any
+	if in.Rating != nil {
+		p5 = *in.Rating
+	}
+	return fmt.Sprintf("CreatePostInput(Title=%v, Slug=%v, Status=%v, PublishedAt=%v, Tags=%v, Rating=%v, EditedBy=%v, WriterID=%v)", in.Title, in.Slug, p2, p3, p4, p5, in.EditedBy, in.WriterID)
+}
+
+// GoString is String, so that %#v does not print the sensitive fields either.
+func (in CreatePostInput) GoString() string { return in.String() }
+
+// CreatePost creates one Post from input, with its edges, and returns it, as
+// the mutation createPost does. It first decodes every ID and JSON value of
+// input, and fails before any statement on one it cannot decode
+// (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFrom reads from
+// ctx, in one transaction (gqlimpl.Atomic): the operation's, or one of its own.
+// The tenant scope and the policies apply as to any write: each ID must name a
+// row the caller may read, and a row it re-points one the caller may change, or
+// CreatePost fails with NOT_FOUND and keeps nothing. A validator's refusal is
+// BAD_USER_INPUT, naming the input field; velox's other errors are returned as
+// they are.
+func CreatePost(ctx context.Context, input CreatePostInput) (*Post, error) {
+	var (
+		j4  []string
+		k7  int64
+		err error
+	)
+	if input.Tags != nil {
+		if j4, err = gqlimpl.FromJSON[[]string]("CreatePostInput.tags", *input.Tags); err != nil {
+			return nil, err
+		}
+	}
+	if k7, err = gqlimpl.DecodeID[int64]("CreatePostInput.writerID", input.WriterID, "Account"); err != nil {
+		return nil, err
+	}
+	var out *Post
+	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
+		var x Post
+		if err := gqlimpl.Exist(ctx, db.Query[User]().Where(Users.ID.In(k7)), 1, "CreatePostInput.writerID", "Account"); err != nil {
+			return err
+		}
+		x.AuthorID = k7
+		x.Title = input.Title
+		x.Slug = input.Slug
+		if input.Status != nil {
+			x.Status = *input.Status
+		}
+		if input.PublishedAt != nil {
+			x.PublishedAt = input.PublishedAt
+		}
+		if input.Tags != nil {
+			x.Tags = j4
+		}
+		if input.Rating != nil {
+			x.Rating = input.Rating
+		}
+		x.EditedBy = input.EditedBy
+		if err := db.Insert(&x).Exec(ctx); err != nil {
+			return gqlimpl.WriteError(err, "CreatePostInput", "gen.Post", postFieldGQL)
+		}
+		out = &x
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}

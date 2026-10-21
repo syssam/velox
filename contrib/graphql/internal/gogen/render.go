@@ -2,8 +2,9 @@
 // gqlgen's autobind finds in the generated package, named after the SDL types
 // they bind to, and the methods and functions their fields resolve through.
 // It writes gql_<label>.go for each entity with a GraphQL type (its types,
-// its edge methods, its root connection function), and gql_node.go with
-// Node and Nodes.
+// its edge methods, its root connection function, and its mutation inputs
+// and mutations, which mutation.go writes), and gql_node.go with Node and
+// Nodes.
 //
 // Every name comes from sdl.Build, which the SDL is rendered from too, so the
 // Go and the SDL cannot drift.
@@ -47,7 +48,10 @@ func Render(m *plugin.Model, outPath, outPkg string) ([]plugin.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := &renderer{m: m, outPath: outPath, outPkg: outPkg, veloxEnums: map[string]bool{}, names: map[string]string{}, types: map[string]*sdl.Type{}}
+	r := &renderer{m: m, outPath: outPath, outPkg: outPkg, veloxEnums: map[string]bool{}, names: map[string]string{}, types: map[string]*sdl.Type{}, ents: map[string]*plugin.Entity{}}
+	for _, e := range m.Entities {
+		r.ents[e.Name] = e
+	}
 	for _, t := range s.Types {
 		r.types[t.Name] = t
 	}
@@ -90,6 +94,7 @@ type renderer struct {
 	veloxEnums map[string]bool      // the enum types velox-gen declares
 	names      map[string]string    // Go name in the package → what declares it
 	types      map[string]*sdl.Type // the GraphQL types by name
+	ents       map[string]*plugin.Entity
 }
 
 // reserve records the Go names velox-gen declares in the package that a name
@@ -251,6 +256,9 @@ func (r *renderer) typeFile(t *sdl.Type) (plugin.File, error) {
 			return plugin.File{}, err
 		}
 	}
+	if err := r.writeMutations(f, t); err != nil {
+		return plugin.File{}, err
+	}
 	return f.finish("gql_"+e.Label+".go", r.outPkg)
 }
 
@@ -318,12 +326,22 @@ func (r *renderer) writeGetter(f *file, t *sdl.Type, g sdl.Getter) error {
 // application's named one of them is imported under another name, so that
 // none shadows the other.
 var locals = map[string]bool{
-	"ctx": true, "id": true, "ids": true, "typ": true, "err": true, "k": true, "db": true, "x": true,
+	"ctx": true, "id": true, "ids": true, "typ": true, "err": true, "k": true, "db": true, "x": true, "input": true, "in": true,
 	"rows": true, "by": true, "i": true, "j": true, "out": true, "c": true, "n": true, "e": true,
 	"s": true, "b": true, "w": true, "v": true, "o": true, "f": true,
 	"context": true, "json": true, "errors": true, "fmt": true, "io": true, "velox": true, "veloxgql": true, "gqlimpl": true,
 	"any": true, "bool": true, "string": true, "int": true, "len": true, "make": true, "append": true,
 	"nil": true, "error": true, "true": true, "false": true,
+}
+
+// indexedLocal reports whether name is one of the locals the generated code
+// numbers by an input field's index: k3, j3, p3, v3.
+func indexedLocal(name string) bool {
+	if len(name) < 2 || !strings.ContainsRune("kjpv", rune(name[0])) {
+		return false
+	}
+	_, err := strconv.Atoi(name[1:])
+	return err == nil
 }
 
 // qualify is the Go type typ of the package at pkg, as the generated file
@@ -356,7 +374,7 @@ func (r *renderer) qualify(f *file, e *plugin.Entity, fd *plugin.Field, typ, pkg
 	if prev, ok := f.imports[pkg]; ok {
 		return prev + "." + name, nil
 	}
-	if locals[q] && pkg != veloxPath && pkg != veloxgqlPath && pkg != gqlimplPath && !slices.Contains([]string{"context", "encoding/json", "errors", "fmt", "io"}, pkg) {
+	if (locals[q] || indexedLocal(q)) && pkg != veloxPath && pkg != veloxgqlPath && pkg != gqlimplPath && !slices.Contains([]string{"context", "encoding/json", "errors", "fmt", "io"}, pkg) {
 		q += "pkg"
 	}
 	return f.use(pkg, q) + "." + name, nil

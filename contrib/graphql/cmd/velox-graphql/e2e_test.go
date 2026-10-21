@@ -253,8 +253,9 @@ func TestPluginThroughVeloxGen(t *testing.T) {
 }
 
 // e2eEvent adds what e2eSchema has not to the Go the plugin writes: a UUID
-// key, an enum of the application's own Go type, a String enum, and a where
-// predicate on each scalar veloxgql binds.
+// key, an enum of the application's own Go type, a String enum, a where
+// predicate on each scalar veloxgql binds, and createEvent, whose input
+// converts to the application's own Go types.
 const e2eEvent = `package schema
 
 import (
@@ -295,7 +296,7 @@ func (Event) Edges() []schema.Edge {
 }
 
 func (Event) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.QueryField("events")}
+	return []schema.Annotation{graphql.QueryField("events"), graphql.Mutations(graphql.Create())}
 }
 
 // Owner's key is of a type from a package named ids, as Nodes's parameter

@@ -153,9 +153,11 @@
 // transaction does not cover @defer (see veloxgql.Extension): do not defer
 // fields of a mutation.
 //
-// The Go of mutations is not written yet. For an entity with Mutations,
-// gqlgen writes models of the mutation inputs in the application's package,
-// and the application resolves the mutation fields itself until it is.
+// For an entity with graphql.Create(), its file also has Create<T>Input and
+// Create<T>(ctx, input), which createX's resolver returns. The Go of updateX
+// and deleteX is not written yet: gqlgen writes models of their inputs in the
+// application's package, and the application resolves them itself until it
+// is.
 //
 // The application writes the root query's resolvers, one call each: Node
 // and Nodes for node and nodes, and the root connection function for each

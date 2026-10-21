@@ -3,6 +3,8 @@ package gen
 import (
 	"context"
 	"errors"
+	"fmt"
+	"time"
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
@@ -130,4 +132,100 @@ func likeKeyGQL() []gqlimpl.OrderTerm[Like] {
 			func(x *Like) int64 { return x.PostID },
 			func(x *Like, v int64) { x.PostID = v }),
 	}
+}
+
+// likeFieldGQL is the GraphQL name of the mutation-input field that sets the
+// Like field whose Go name is goField, for the errors of its validators: "" for
+// a field no input sets.
+func likeFieldGQL(goField string) string {
+	switch goField {
+	case "Weight":
+		return "weight"
+	case "CreatedAt":
+		return "createdAt"
+	case "UserID":
+		return "userID"
+	case "PostID":
+		return "postID"
+	}
+	return ""
+}
+
+// CreateLikeInput is the GraphQL input CreateLikeInput, the input of
+// createLike. A field that is a pointer, or a list, is optional: nil means not
+// given.
+type CreateLikeInput struct {
+	Weight    *int8
+	CreatedAt *time.Time
+	// UserID is the ID of the Account the edge user leads to.
+	UserID string
+	// PostID is the ID of the Post the edge post leads to.
+	PostID string
+}
+
+// String returns the input's fields except its sensitive ones.
+func (in CreateLikeInput) String() string {
+	var p0 any
+	if in.Weight != nil {
+		p0 = *in.Weight
+	}
+	var p1 any
+	if in.CreatedAt != nil {
+		p1 = *in.CreatedAt
+	}
+	return fmt.Sprintf("CreateLikeInput(Weight=%v, CreatedAt=%v, UserID=%v, PostID=%v)", p0, p1, in.UserID, in.PostID)
+}
+
+// GoString is String, so that %#v does not print the sensitive fields either.
+func (in CreateLikeInput) GoString() string { return in.String() }
+
+// CreateLike creates one Like from input, with its edges, and returns it, as
+// the mutation createLike does. It first decodes every ID and JSON value of
+// input, and fails before any statement on one it cannot decode
+// (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFrom reads from
+// ctx, in one transaction (gqlimpl.Atomic): the operation's, or one of its own.
+// The tenant scope and the policies apply as to any write: each ID must name a
+// row the caller may read, and a row it re-points one the caller may change, or
+// CreateLike fails with NOT_FOUND and keeps nothing. A validator's refusal is
+// BAD_USER_INPUT, naming the input field; velox's other errors are returned as
+// they are.
+func CreateLike(ctx context.Context, input CreateLikeInput) (*Like, error) {
+	var (
+		k2  int64
+		k3  int64
+		err error
+	)
+	if k2, err = gqlimpl.DecodeID[int64]("CreateLikeInput.userID", input.UserID, "Account"); err != nil {
+		return nil, err
+	}
+	if k3, err = gqlimpl.DecodeID[int64]("CreateLikeInput.postID", input.PostID, "Post"); err != nil {
+		return nil, err
+	}
+	var out *Like
+	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
+		var x Like
+		if err := gqlimpl.Exist(ctx, db.Query[User]().Where(Users.ID.In(k2)), 1, "CreateLikeInput.userID", "Account"); err != nil {
+			return err
+		}
+		x.UserID = k2
+		if err := gqlimpl.Exist(ctx, db.Query[Post]().Where(Posts.ID.In(k3)), 1, "CreateLikeInput.postID", "Post"); err != nil {
+			return err
+		}
+		x.PostID = k3
+		if input.Weight != nil {
+			x.Weight = *input.Weight
+		}
+		if input.CreatedAt != nil {
+			x.CreatedAt = *input.CreatedAt
+		}
+		if err := db.Insert(&x).Exec(ctx); err != nil {
+			return gqlimpl.WriteError(err, "CreateLikeInput", "gen.Like", likeFieldGQL)
+		}
+		out = &x
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }

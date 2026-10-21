@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/parser"
+	"go/printer"
 	"go/token"
 	"os"
 	"path/filepath"
@@ -271,9 +272,8 @@ func checkNames(t *testing.T, m *plugin.Model, others ...string) {
 			return "the root types: gqlgen generates their resolvers, which the application writes"
 		case def.Name == "PageInfo" || def.Name == "OrderDirection":
 			return "veloxgql's, mapped in gqlgen.yml"
-		case strings.HasPrefix(def.Name, "Create") && strings.HasSuffix(def.Name, "Input"),
-			strings.HasPrefix(def.Name, "Update") && strings.HasSuffix(def.Name, "Input"):
-			return "the mutation inputs: plan 3 writes their Go types"
+		case strings.HasPrefix(def.Name, "Update") && strings.HasSuffix(def.Name, "Input"):
+			return "the update inputs: a later task of plan 3 writes their Go types"
 		case def.Kind == gqlast.Enum && appEnums[def.Name]:
 			return "the application's own enum type, which a later task binds with @goModel"
 		}
@@ -612,6 +612,15 @@ func TestRenderErrors(t *testing.T) {
 		"a pointer order field": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{withField(entity("Thing", "int64"),
 			&plugin.Field{Name: "n", GoName: "N", Type: "int64", GoType: "*int64", ElemType: "int64", Pointer: true, Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"order_field":"N"}`)}})}},
 			"schema Thing, field n: a connection orders by it, and its Go field is a pointer, which only a Nillable field is"},
+		"a create-input field named String": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{creatable(withField(entity("Thing", "int64"),
+			&plugin.Field{Name: "text", GoName: "Text", Type: "string", GoType: "string", ElemType: "string", Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"field_name":"string"}`)}}))}},
+			"schema Thing: the field string of CreateThingInput is the Go field String, which is the input's method"},
+		"create-input fields one to gqlgen": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{creatable(withField(entity("Thing", "int64"),
+			&plugin.Field{Name: "ab", GoName: "Ab", Type: "string", GoType: "string", ElemType: "string"},
+			&plugin.Field{Name: "other", GoName: "Other", Type: "string", GoType: "string", ElemType: "string", Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"field_name":"aB"}`)}}))}},
+			"schema Thing: the fields Ab and AB of CreateThingInput are one Go field to gqlgen"},
+		"CreateX is velox-gen's": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{creatable(entity("Thing", "int64")), entity("CreateThing", "int64")}},
+			"schema Thing: its Go name CreateThing is also velox-gen's type of schema CreateThing"},
 		"a where field named Pred": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{withField(entity("Thing", "int64"),
 			&plugin.Field{Name: "pred", GoName: "Pred", Type: "string", GoType: "string", ElemType: "string", Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"where_ops":1}`)}})}},
 			"schema Thing: the field pred of ThingWhereInput is the Go field Pred"},
@@ -624,9 +633,16 @@ func TestRenderErrors(t *testing.T) {
 	}
 }
 
-// withField is e with fd added.
-func withField(e *plugin.Entity, fd *plugin.Field) *plugin.Entity {
-	e.Fields = append(e.Fields, fd)
+// creatable is e with createX, and an auto ID.
+func creatable(e *plugin.Entity) *plugin.Entity {
+	e.Fields[0].AutoID = true
+	e.Annotations = map[string]json.RawMessage{"graphql": json.RawMessage(`{"mutations":["create"]}`)}
+	return e
+}
+
+// withField is e with fds added.
+func withField(e *plugin.Entity, fds ...*plugin.Field) *plugin.Entity {
+	e.Fields = append(e.Fields, fds...)
 	return e
 }
 
@@ -701,5 +717,203 @@ func TestConnectionOfEveryNode(t *testing.T) {
 		if total == 0 {
 			t.Errorf("%s: no ConnectionOf at all", label)
 		}
+	}
+}
+
+// mutationsModel is typesModel with createX on both types: Event's key is a
+// UUID with a default, and Owner's an auto ID of the application's own Go
+// type, whose other fields are of its own Go types too.
+func mutationsModel(t *testing.T) *plugin.Model {
+	t.Helper()
+	m := typesModel(t)
+	b, err := json.Marshal(graphql.Mutations(graphql.Create()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range m.Entities {
+		e.Annotations = map[string]json.RawMessage{"graphql": b}
+		switch e.Name {
+		case "Event":
+			e.Fields[0].HasDefault = true
+		case "Owner":
+			e.Fields[0].AutoID = true
+		}
+	}
+	return m
+}
+
+// TestCreateInputs: each type with createX has Create<T>Input, with one Go
+// field for each of the Surface's InputFields, in order, a pointer exactly
+// when not Required (an ID a string, an ID list a []string), and
+// Create<T>, which takes it and returns the entity.
+func TestCreateInputs(t *testing.T) {
+	for label, m := range map[string]*plugin.Model{"testdata": testModel(t), "mutations": mutationsModel(t)} {
+		t.Run(label, func(t *testing.T) {
+			surf, err := sdl.Build(m)
+			if err != nil {
+				t.Fatal(err)
+			}
+			files := render(t, m)
+			fset := token.NewFileSet()
+			structs, funcs := map[string]*ast.StructType{}, map[string]*ast.FuncDecl{}
+			for name, src := range files {
+				f, err := parser.ParseFile(fset, name, src, 0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, decl := range f.Decls {
+					switch decl := decl.(type) {
+					case *ast.FuncDecl:
+						if decl.Recv == nil {
+							funcs[decl.Name.Name] = decl
+						}
+					case *ast.GenDecl:
+						for _, spec := range decl.Specs {
+							if ts, ok := spec.(*ast.TypeSpec); ok {
+								if st, ok := ts.Type.(*ast.StructType); ok {
+									structs[ts.Name.Name] = st
+								}
+							}
+						}
+					}
+				}
+			}
+			expr := func(e ast.Expr) string {
+				var b strings.Builder
+				if err := printer.Fprint(&b, fset, e); err != nil {
+					t.Fatal(err)
+				}
+				return b.String()
+			}
+			n := 0
+			for _, ty := range surf.Types {
+				in := "Create" + ty.Name + "Input"
+				st := structs[in]
+				if ty.Create == nil {
+					if st != nil || funcs["Create"+ty.Name] != nil {
+						t.Errorf("%s has no createX, and %s or Create%s is declared", ty.Name, in, ty.Name)
+					}
+					continue
+				}
+				n++
+				if st == nil {
+					t.Errorf("no type %s struct", in)
+					continue
+				}
+				var got []string
+				for _, fl := range st.Fields.List {
+					for _, name := range fl.Names {
+						got = append(got, name.Name+" "+expr(fl.Type))
+					}
+				}
+				var want []string
+				for _, f := range ty.Create {
+					switch f.Kind {
+					case sdl.InputEdgeIDs:
+						want = append(want, f.GoName+" []string")
+					case sdl.InputEdgeID:
+						want = append(want, f.GoName+" "+ptrUnless(f.Required, "string"))
+					default:
+						// No GoType of these models names a package imported
+						// under another name, or the generated one.
+						want = append(want, f.GoName+" "+ptrUnless(f.Required, f.GoType))
+					}
+				}
+				if !slices.Equal(got, want) {
+					t.Errorf("%s: fields\n %v\nwant\n %v", in, got, want)
+				}
+				fn := funcs["Create"+ty.Name]
+				if fn == nil {
+					t.Errorf("no func Create%s", ty.Name)
+					continue
+				}
+				sig := expr(fn.Type)
+				if want := "func(ctx context.Context, input " + in + ") (*" + ty.Entity.Name + ", error)"; sig != want {
+					t.Errorf("Create%s: %s, want %s", ty.Name, sig, want)
+				}
+			}
+			if n == 0 {
+				t.Error("no type has createX")
+			}
+		})
+	}
+}
+
+// ptrUnless is typ, as a pointer unless required.
+func ptrUnless(required bool, typ string) string {
+	if required {
+		return typ
+	}
+	return "*" + typ
+}
+
+// TestCreateConversions pins how CreateX turns its input into the entity
+// for mutationsModel's Go types: IDs decoded as the target's key and
+// converted to the application's key type, JSON decoded before any
+// statement, the application's own Go types converted from the scalar's.
+func TestCreateConversions(t *testing.T) {
+	files := render(t, mutationsModel(t))
+	squash := func(s string) string { return " " + strings.Join(strings.Fields(s), " ") + " " }
+	ev, owner := squash(files["gql_event.go"]), squash(files["gql_owner.go"])
+	for _, want := range []string{
+		` OwnerID *string `,
+		` Tags veloxgql.JSON `,
+		`gqlimpl.DecodeIDAs[int64, idspkg.UserID]("CreateEventInput.ownerID", *input.OwnerID, "Owner", gqlimpl.AsInt[idspkg.UserID, int64])`,
+		`gqlimpl.FromJSON[[]string]("CreateEventInput.tags", input.Tags)`,
+		`gqlimpl.Exist(ctx, db.Query[Owner]().Where(Owners.ID.In(k`,
+		`), 1, "CreateEventInput.ownerID", "Owner")`,
+		`return gqlimpl.WriteError(err, "CreateEventInput", "gen.Event", eventFieldGQL)`,
+		`case "Tags": return "tags"`,
+	} {
+		if !strings.Contains(ev, want) {
+			t.Errorf("no %q in\n%s", want, ev)
+		}
+	}
+	for _, want := range []string{
+		` Email *string `, ` Code string `, ` Rank int32 `,
+		`x.Code = idspkg.Code(input.Code)`,
+		`v0 := idspkg.Email(*input.Email) x.Email = &v0`,
+		`x.Rank = idspkg.Rank(input.Rank)`,
+		`x.Ref = idspkg.Ref(input.Ref)`,
+	} {
+		if !strings.Contains(owner, want) {
+			t.Errorf("no %q in\n%s", want, owner)
+		}
+	}
+}
+
+// TestInputStringHidesSensitive: an input's String, and so GoString and
+// fmt's %v and %#v, leaves out its sensitive fields.
+func TestInputStringHidesSensitive(t *testing.T) {
+	m := testModel(t)
+	surf, err := sdl.Build(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := render(t, m)
+	n := 0
+	for _, ty := range surf.Types {
+		for _, f := range ty.Create {
+			if f.Field < 0 || !ty.Entity.Fields[f.Field].Sensitive {
+				continue
+			}
+			n++
+			src := files["gql_"+ty.Entity.Label+".go"]
+			sig := "func (in Create" + ty.Name + "Input) String() string {"
+			_, body, ok := strings.Cut(src, sig)
+			if !ok {
+				t.Fatalf("no %q in\n%s", sig, src)
+			}
+			body, _, _ = strings.Cut(body, "\n}\n")
+			if strings.Contains(body, f.GoName) {
+				t.Errorf("Create%sInput's String names the sensitive field %s:\n%s", ty.Name, f.GoName, body)
+			}
+			if !strings.Contains(src, "func (in Create"+ty.Name+"Input) GoString() string { return in.String() }") {
+				t.Errorf("Create%sInput has no GoString that is String", ty.Name)
+			}
+		}
+	}
+	if n == 0 {
+		t.Fatal("no create input has a sensitive field")
 	}
 }

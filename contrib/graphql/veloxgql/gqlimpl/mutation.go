@@ -97,17 +97,27 @@ func DecodeIDsAs[K comparable, V any](ctx context.Context, at string, ids []stri
 // Exist fails with NOT_FOUND, naming at and typ, unless q counts n rows:
 // q selects the rows the IDs of at name, under the caller's tenant and
 // Read policy. Its text is "veloxgql: <at>: <missing> of the <n> IDs name
-// no <typ>", or NotFound's for n 1, and echoes no ID. n is the number of distinct IDs; for n 0,
-// Exist runs no query. The query's own error is returned as it is. For
-// generated code only.
+// no <typ>", or NotFound's for n 1, and echoes no ID. n is the number of
+// distinct IDs; for n 0, Exist runs no query. The query's own error is
+// returned as it is. For generated code only.
 func Exist[E any](ctx context.Context, q velox.Query[E], n int, at, typ string) error {
 	if n == 0 {
 		return nil
 	}
 	got, err := q.Count(ctx)
-	switch {
-	case err != nil:
+	if err != nil {
 		return err
+	}
+	return Matched(got, n, at, typ)
+}
+
+// Matched fails as Exist does unless got, the rows a statement counted or
+// changed, is n, the number of distinct IDs of at that it names: for an
+// UPDATE that re-points the rows of a to-many edge, which the tenant and
+// the Write policy scope. More rows than IDs is an internal error: the IDs
+// were not distinct keys. For generated code only.
+func Matched(got int64, n int, at, typ string) error {
+	switch {
 	case got < int64(n) && n == 1:
 		return NotFound(at, typ)
 	case got < int64(n):
