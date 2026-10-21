@@ -869,7 +869,7 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 		if clear < 0 && rm < 0 && add < 0 && one < 0 {
 			continue
 		}
-		tt := r.types[ed.Target]
+		tt := r.typeOf[ed.Target]
 		if tt == nil {
 			return fmt.Errorf("schema %s, edge %s: its target %s has no GraphQL type, which is a bug", e.Name, ed.Name, ed.Target)
 		}

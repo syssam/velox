@@ -48,12 +48,13 @@ func Render(m *plugin.Model, outPath, outPkg string) ([]plugin.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := &renderer{m: m, outPath: outPath, outPkg: outPkg, veloxEnums: map[string]bool{}, names: map[string]string{}, types: map[string]*sdl.Type{}, ents: map[string]*plugin.Entity{}}
+	r := &renderer{m: m, outPath: outPath, outPkg: outPkg, veloxEnums: map[string]bool{}, names: map[string]string{}, types: map[string]*sdl.Type{}, typeOf: map[string]*sdl.Type{}, ents: map[string]*plugin.Entity{}}
 	for _, e := range m.Entities {
 		r.ents[e.Name] = e
 	}
 	for _, t := range s.Types {
 		r.types[t.Name] = t
+		r.typeOf[t.Entity.Name] = t
 	}
 	for _, en := range m.Enums {
 		r.veloxEnums[en.Type] = true
@@ -94,6 +95,7 @@ type renderer struct {
 	veloxEnums map[string]bool      // the enum types velox-gen declares
 	names      map[string]string    // Go name in the package → what declares it
 	types      map[string]*sdl.Type // the GraphQL types by name
+	typeOf     map[string]*sdl.Type // the GraphQL types by their entity's name
 	ents       map[string]*plugin.Entity
 }
 

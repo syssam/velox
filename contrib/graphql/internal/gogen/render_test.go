@@ -1078,20 +1078,8 @@ func TestDeleteJoinRows(t *testing.T) {
 			group = e
 		}
 	}
-	setMutations := func(e *plugin.Entity, kinds ...string) {
-		var a map[string]any
-		if err := json.Unmarshal(e.Annotations["graphql"], &a); err != nil {
-			t.Fatal(err)
-		}
-		a["mutations"] = kinds
-		b, err := json.Marshal(a)
-		if err != nil {
-			t.Fatal(err)
-		}
-		e.Annotations["graphql"] = b
-	}
-	setMutations(user, "create", "delete")
-	setMutations(group, "delete")
+	setMutations(t, user, "create", "delete")
+	setMutations(t, group, "delete")
 	// Follow joins User to itself: follows and its inverse, followers.
 	m.Entities = append(m.Entities, &plugin.Entity{
 		Name: "Follow", Label: "follow", Handles: "Follows", Table: "follows", Join: true, Tenant: -1, PrimaryKey: []int{0, 1},
@@ -1137,6 +1125,43 @@ func TestDeleteJoinRows(t *testing.T) {
 			if strings.HasPrefix(w, "db.") && strings.Count(src, w) != 1 {
 				t.Errorf("%s: %q %d times, want once", file, w, strings.Count(src, w))
 			}
+		}
+	}
+}
+
+// setMutations sets the mutations e's graphql annotation lists.
+func setMutations(t *testing.T, e *plugin.Entity, kinds ...string) {
+	t.Helper()
+	var a map[string]any
+	if err := json.Unmarshal(e.Annotations["graphql"], &a); err != nil {
+		t.Fatal(err)
+	}
+	a["mutations"] = kinds
+	b, err := json.Marshal(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Annotations["graphql"] = b
+}
+
+// TestUpdateEdgeToRenamedType: UpdateX writes the edges of an M2M edge
+// whose target's GraphQL type is renamed (Group.users to User, the type
+// Account), finding the target by its entity, not by its type's name.
+func TestUpdateEdgeToRenamedType(t *testing.T) {
+	m := testModel(t)
+	for _, e := range m.Entities {
+		if e.Name == "Group" {
+			setMutations(t, e, "update")
+		}
+	}
+	src := strings.Join(strings.Fields(render(t, m)["gql_group.go"]), " ")
+	for _, w := range []string{
+		`func UpdateGroup(ctx context.Context, id string, input UpdateGroupInput) (*Group, error) {`,
+		`db.Delete[UserGroup]().Where(UserGroups.GroupID.EQ(key), UserGroups.UserID.In(`,
+		`db.Query[User]().Where(Users.ID.In(`,
+	} {
+		if !strings.Contains(src, w) {
+			t.Errorf("gql_group.go: no %q in\n%s", w, src)
 		}
 	}
 }
