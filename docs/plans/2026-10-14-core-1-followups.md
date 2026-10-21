@@ -177,9 +177,9 @@ Left by the observability plan:
 
 ## Left by GraphQL plan 1
 
-- A plugin's stderr is dropped when it succeeds, so a plugin cannot warn.
-- A plugin takes no options (protoc's `--x_opt`).
-- The extension allowlist (`.go`, `.graphqls`) will need `.proto` for the gRPC plugin.
+- Resolved in API plan 2: a plugin warns through the response's `warnings`.
+- Resolved in API plan 2: `-plugin name:key=value,...`.
+- The extension allowlist (`.go`, `.graphqls`) needed `.proto` for the gRPC plugin. Resolved in API plan 2: `.proto` is allowed.
 - An entity with an auto ID gets no `id`/`idIn` filters: there is no field to annotate.
 - `Create()`, `Update()` and `Delete()` read oddly as package-level calls; `MutationCreate()` or constants would match entgql.
 - File names that Go ignores or build-constrains (`_x.go`, `x_linux.go`) pass the plugin path check.
@@ -229,7 +229,7 @@ Left by the observability plan:
 - `Handler` returns an anonymous interface; a named type would read better in godoc. Settle its name and what it exposes.
 - Decide which exported helpers stay public: `CheckDepth`, `CheckWidth`, `Paginate` and `CursorOrder` are exported, but generated code does not need them. `AsInt` takes an unexported constraint.
 - `ErrFilterTooWide`'s text, "filter list is too long", is wrong for the node budget (`MaxFilterNodes`): give the budget its own text or error.
-- Move velox-gen's plural rule into the stdlib-only `plugin` package as `plugin.Plural`, frozen like `plugin.Singular`; gogen's root connection functions use a copy that no test pins to velox-gen's `Handles`.
+- Resolved in API plan 2: move velox-gen's plural rule into the stdlib-only `plugin` package as `plugin.Plural`, frozen like `plugin.Singular`; gogen's root connection functions use a copy that no test pins to velox-gen's `Handles`.
 - The example README and main.go say introspection is free under the complexity limit; only `__Schema` is, `__type(name:)` costs a few points.
 - Generated enum `UnmarshalGQL` errors lack the `veloxgql: ` prefix the docs promise.
 
@@ -237,13 +237,22 @@ Left by the observability plan:
 
 From the final review of API plan 1 (2026-10-20). Each item names the plan that takes it.
 
-- **API plan 2 (DSL and velox-gen):** rules 37, 39 and 40 are three copies of one check (an `Optional`, non-`Nillable` field of a type whose unset value cannot be stored needs a `Default`). Make them one table of `{type, rule, noun}`, so that a rule 41 is one line.
-- **API plan 2:** `internal/gen` comments cite "Ruling N" of old plans (`lower.go`, `build.go`, `methods.go`). They are not public, but they rot; the velox-gen rewrite should drop them. The citation test scans only public packages.
+- [x] **API plan 2 (DSL and velox-gen):** rules 37, 39 and 40 are three copies of one check (an `Optional`, non-`Nillable` field of a type whose unset value cannot be stored needs a `Default`). Make them one table of `{type, rule, noun}`, so that a rule 41 is one line.
+- [x] **API plan 2:** `internal/gen` comments cite "Ruling N" of old plans (`lower.go`, `build.go`, `methods.go`). They are not public, but they rot; the velox-gen rewrite should drop them. The citation test scans only public packages.
 - **API plan 3 (dialects):** `SQL(ctx)` of a statement with a policy `Allow` or a zero-Pred failure is tested on PostgreSQL only; add it to the dialect test sweep.
 - **API plans 3–4:** the citation scan (`TestGodocCitesNoSpec`) does not cover the contrib modules. `contrib/otel/metrics.go` and `attrs.go` still say "spec §2.x".
 - **API plan 4 (otel):** `contrib/otel/attrs.go` re-implements the core's unexported `Op.raw()` and `Statement.reads()`. Export `Op.Raw()` and `Op.Reads()` (additive), so hooks and adapters share one definition.
 - **Perf pass with the pgx split:** `Save` allocates its `cols` slice. No API impact, and no budget pins Save.
 - Accepted, no change: an empty `InsertAll` skips the transaction and dry-run checks (it sends nothing; documented on `Exec`); the Save compile test's cgo note.
+
+## Left by API plan 2
+
+From the final tasks of API plan 2 (2026-10-21). The plan's own items are done: one table for the rules, the "Ruling N" comments dropped, plugin options, warnings, `.proto`, and `plugin.Plural`.
+
+- `Lower`'s rule errors carry no position: only builder errors have `file:line`, so a rule error names the schema and the field and no more.
+- Errors inside velox2's own mixins (`mixin.Time` and the like) print module-cache paths, since the position is where the constructor ran.
+- A plugin panic's stack trace is dropped, as the response's error holds the value only. Make it available behind an environment variable.
+- The case fold of plugin paths does no Unicode normalization: two spellings that differ only by normalization form are two files, and collide on a file system that normalizes.
 
 ## 1.0 release
 

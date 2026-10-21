@@ -1,6 +1,6 @@
 # velox2 API cleanup before 1.0 — design
 
-Status: API plan 1 implemented · 2026-10-20
+Status: API plans 1–2 implemented · 2026-10-21
 
 The user asked for a review of the whole public API: is it clean, correct, complete, modern and easy to maintain. Three reviews were done, one each for the core package, the schema DSL with velox-gen and the plugin model, and the contrib modules. They are in `docs/reviews/2026-10-20-api-review-{core,schema,contrib}.md`.
 
@@ -170,9 +170,32 @@ Added 2026-10-20. Each is a decision taken during the plan, and it stands.
 5. `SQL(ctx)` treats an `ErrDryRun` returned by a hook as success once the statement was rendered (an audit write after `next`), and returns it when nothing was rendered (a hook that wrote before `next`). An error that joins another error to `ErrDryRun` is returned. A write that is both under a dry run and outside its transaction fails with `ErrDryRun`, with hooks or without.
 6. Nullability follows old velox exactly (§3.1). Two earlier rulings that went the other way (a pointer for every `Optional`, then a NULL-able column for every `Optional`) were withdrawn.
 7. `GeneratedCodeIsVersion4` stays at 4: version 4 is not released, and the nullability rules are additive.
-8. GraphQL create inputs are not required when the field is `Optional` or `Nillable`. Update inputs offer `clear<Field>` and `IsNil` filters only for `Nillable` fields, because a value handle cannot write NULL.
+8. GraphQL create inputs are not required when the field is `Optional` or `Nillable`. Update inputs offer `clear<Field>` for a *nullable* field, and the `IsNil`/`NotNil` filters follow the same flag, because a value handle cannot write NULL. *(Corrected 2026-10-21 by API plan 2: the first wording said `Nillable` only. `clear<Field>` follows the model's `Nullable`, so an `Optional` JSON field, whose column is NULL-able, gets it too; its handle is `NullJSONCol`, which has `SetNull`. `IsNil` and `NotNil` follow `Nullable` too, but a JSON field has no predicates at all, so in practice they appear on `Nillable` fields only. See `contrib/graphql/internal/sdl/where.go` and `input.go`.)*
 9. The documents' history is kept. Plans and reviews record what was decided then; older specs get a dated note where a rule changed.
 10. `Or(Allow(), x)` is `Allow` only when no other kid is or holds the zero `Pred`, an invalid condition or a `Has`; otherwise the `Or` keeps every kid, so the statement still fails on a bad one (a `Has`'s relation resolves only when the statement runs). It matches every row either way.
+
+## 6b. Rulings made while implementing API plan 2
+
+Added 2026-10-21. Each is a decision taken in the plan or while executing it, and it stands.
+
+1. Model 2 drops `Nillable` and keeps `Optional`. Since §3.1, `Optional` is no nullability flag: it says a field need not be given on create, which GraphQL's create input and gRPC's create request need. `Pointer` and `Nullable` are the nullability flags. This departs from §3.3's "only `Pointer` and `Nullable` remain of the four".
+2. The load model's types live in `internal/gen/loadjson` (version 2); `schema/load` exports only `Marshal`.
+3. Builder misuse travels in the model's `Errors`, all of it, not the first, and prints in the format of rule errors, with positions relative to the working directory. Positions stay out of the Graph's JSON, so the model hash, every generated file and `describe -json` never depend on the checkout path.
+4. `DefaultFunc` and `UpdateDefault` keep taking `any`. The typed forms are `Number[T]`, `EnumOf[T]`, `UUIDOf[T]` and `Time.Default`. A time GoType's default must convert from `time.Time`, and the generated code converts it.
+5. Contradictions inside one builder are builder errors; contradictions across elements are numbered rules 41–47, and rules 37, 39 and 40 are one table.
+6. A duplicate index means the same columns in order, the same `Unique` and the same `Where`. Rule 44 compares every index's effective name (the explicit `StorageKey` or the derived one) across the whole graph, because PostgreSQL index names share one namespace per schema. Derived names are `<table>_<cols>[_unique][_<fnv32 of Where>]`: `_unique`, not `_key`, which PostgreSQL uses for a column's UNIQUE constraint. This changed the model hash lines of generated code, which compiles unchanged (the version stays 4).
+7. `OnDelete` is a method on both edge builders (`Cascade`, `SetNull`, `Restrict`), refused on M2M; `SetNull` needs a NULL-able key; both sides of a pair must agree. It is recorded for the migration planner and stays out of the plugin model.
+8. Dialect keys equal the core's names (`postgres`, `mysql`, `sqlite`); an unknown key is a builder error. Refusing `Where` on MySQL waits for the migration planner.
+9. `clear<Field>` follows `Nullable` (see §6a ruling 8).
+10. Model 2's `Field.Default` is set only for bool, number, string and enum fields (the JSON of the base value). Bytes, JSON, other, and any type with its own `MarshalJSON` or `MarshalText` get none, and a plugin treats the database default as unknown.
+11. Model convention: named elements (`Entity`, `Field`, `Edge`, `Index`) are pointers; small leaf records (`Check`) are values.
+12. A response echoes `plugin_protocol`, which is how velox-gen tells a protocol-1 plugin apart and names it in the error. `plugin.Run` is exported beside `Main`, so plugins test without a subprocess; `GenerateFunc` returns files, warnings and an error; a panic in it becomes the response's error, without the stack. `Request.Generator` is `velox-gen <velox2 module version>`.
+13. Plugin options are `-plugin name:key=value,key=value`; a malformed option is a usage error (exit 2).
+14. Plugin output: paths fold case over the whole path; the stale-file sweep is recursive, skips `.`- and `_`-prefixed directories and removes only the directories it emptied. velox-gen never renames a directory: a case-only clash with a directory it does not empty stops the run and names both spellings. Symbolic links are refused. Warnings print on one line with control characters escaped and never fail a run. A write that fails part-way leaves `-out` partly updated, and running again restores it.
+15. Exit codes: 0 success, 1 error, 2 misuse, 3 stale (verify's stale plugin file included). No subcommand means `generate`. `version` prints `velox-gen <v> (generated code 4, plugin protocol 2, model 2)`.
+16. A flag after the package is accepted (velox-gen re-parses the remaining arguments, as `go test` does); a second positional exits 2. A bare first word that is no subcommand exits 2, and the message says to write `./word` when a directory of that name exists.
+17. The naming golden has no `-update` flag: editing it by hand is the deliberate act a frozen table needs.
+18. Left out, as §3.3–3.6 do not ask for them: "did you mean" for names; `Through`, `Deprecated` and `SchemaDefault`; `schema.Handles`; dropping the model hash; enum `String()`/`Valid()`. The review's Could list keeps them.
 
 ## 7. Order and plans
 

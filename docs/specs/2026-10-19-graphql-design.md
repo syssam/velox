@@ -81,7 +81,7 @@ velox-gen gains a repeated flag, `-plugin name`.
 
 **Errors.** A plugin's error or non-zero exit fails the run, and nothing is written.
 
-**The protocol** is versioned in the JSON (`"plugin_protocol": 1`). The request also names the generated package: `"out_package"` (its name) and `"out_path"` (its import path).
+**The protocol** is versioned in the JSON (`"plugin_protocol": 1`; *note 2026-10-21: protocol 2 and model 2 since API plan 2. The request adds `generator` and `options`, the response adds `warnings`, and a response must echo `plugin_protocol`. A plugin is written with `plugin.Main(plugin.Supports{Protocol: 2, Model: 2}, gen)`, or `plugin.Run` to test it without a subprocess, and a plugin of protocol 1 is told to update. `Nillable` leaves the model for `Pointer` and `Nullable`; velox-graphql reads `Nullable`. See the API cleanup spec §3.3 and §6b*). The request also names the generated package: `"out_package"` (its name) and `"out_path"` (its import path).
 
 **What a plugin receives (call).** It gets the resolved model, not the raw `schema/load` model. That is everything velox-gen's own generator works from:
 - each entity's Go name, table and primary key;
@@ -188,7 +188,7 @@ Every `ID` is opaque and global. It is base64url, without padding, of `<Type>:<k
   | Enum | `EQ`, `NEQ`, `In`, `NotIn` |
   | String | the above plus `Contains`, `HasPrefix`, `HasSuffix` |
   | Numeric / Time | the above plus `GT`, `GTE`, `LT`, `LTE` |
-  | Optional fields | plus `IsNil`, `NotNil` *(note 2026-10-20: `Nillable` fields only; see the API cleanup spec §3.1)* |
+  | Optional fields | plus `IsNil`, `NotNil` *(note 2026-10-20: `Nillable` fields only; see the API cleanup spec §3.1. Note 2026-10-21: the code offers them on a nullable field that has predicates, which means `Nillable`, as a JSON field has none)* |
 
 - **Depth:** nesting is capped by `veloxgql.MaxFilterDepth`, 5 by default.
 - **Translation:** a where input becomes a `velox.Pred[X]` through a table each entity's generated code supplies; the runtime in `contrib/graphql` interprets it (the old Track B's table design). No per-field code is written for predicates.
@@ -199,7 +199,7 @@ Every `ID` is opaque and global. It is base64url, without padding, of `<Type>:<k
   - `<edge>ID: ID` for a unique edge, and `<edge>IDs: [ID!]` for a to-many edge.
 - **Update:** `updateX(id: ID!, input: UpdateXInput!): X!`.
   - Every field optional. Immutable fields are left out.
-  - `clear<Field>: Boolean` for an optional field. *(Note 2026-10-20: for a `Nillable` field only, since a value handle cannot write NULL; see the API cleanup spec §3.1.)*
+  - `clear<Field>: Boolean` for an optional field. *(Note 2026-10-20: for a nullable field, since a value handle cannot write NULL: `Nillable`, or an `Optional` JSON field (note 2026-10-21). See the API cleanup spec §3.1 and §6a ruling 8.)*
   - `<edge>ID`/`clear<Edge>` for a unique edge.
   - `add<Edge>IDs`/`remove<Edge>IDs`/`clear<Edge>` for a to-many edge.
 - **Delete:** `deleteX(id: ID!): ID!`.
@@ -286,7 +286,7 @@ Plan 1 (plugins and the SDL, `docs/plans/2026-10-19-graphql-1-sdl.md`) settled t
 
 **The plugin protocol and model (§1).**
 - velox-gen adds the header to a plugin's files (`#` for `.graphqls`, `//` for `.go`), so a plugin cannot forget it. A path with a directory part, `..`, another extension, a name velox-gen or another plugin writes, or an existing file without the header fails the run with nothing written.
-- A plugin runs in the application's module (`go tool <name>`, with `go get -tool` to declare it). The model is `plugin.Model`, versioned (`plugin.ModelVersion = 1`; the protocol is versioned apart, `plugin.ProtocolVersion = 1`), built from velox-gen's own graph and pinned by a golden JSON test.
+- A plugin runs in the application's module (`go tool <name>`, with `go get -tool` to declare it). The model is `plugin.Model`, versioned (`plugin.ModelVersion = 1`; the protocol is versioned apart, `plugin.ProtocolVersion = 1`; *note 2026-10-21: both are 2 since API plan 2*), built from velox-gen's own graph and pinned by a golden JSON test.
 - The model carries what the SDL and the Go files need beyond names and types:
   - `Edge.OwnsKey`: the edge's own entity holds the foreign key on its row. The plugin never re-derives which side holds it, and the where predicates, the edge inputs and the refusals below follow it.
   - `Edge.FieldOn`: the entity that holds the key field, which finds the key field.

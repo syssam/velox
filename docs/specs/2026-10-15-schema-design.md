@@ -72,7 +72,7 @@ func (User) Annotations() []schema.Annotation { return []schema.Annotation{schem
 ### 1.1 Fields
 
 The field types follow the old velox (`field` package):
-- `Bool`, `Int`, `Int8`–`Int64`, `Uint`–`Uint64`, `Float32`, `Float64`;
+- `Bool`, `Int`, `Int8`–`Int64`, `Uint`–`Uint64`, `Float32`, `Float64` *(note 2026-10-21: `Float64` is gone; `Float` declares a float64 field, as in ent. Typed constructors were added: `Number[T]`, `EnumOf[T]` and `UUIDOf[T]`, equal to their ent spellings `Int64(..).GoType(T(0))` and the like. Builder types are exported, `field.StringBuilder` and the rest. `SchemaType` keys are `field.Postgres`, `field.MySQL` and `field.SQLite`, equal to the core's dialect names, and an unknown key is an error. See the API cleanup spec §3.6 and §6b.)*;
 - `String`, `Text`, `Bytes`, `Time`, `UUID`, `JSON`, `Enum`;
 - `Other` for a custom Go type, with explicit SQL types.
 
@@ -116,12 +116,13 @@ A failure is a `*ValidationError{Entity, Field, Err}`.
 - `Required()` and `Field(fk)` bind an edge to a declared foreign-key field.
 - `StorageKey(...)` names the foreign-key column or join table.
 - Many-to-many edges use a join table.
+- `OnDelete(edge.Cascade|SetNull|Restrict)` on either edge of a one-to-many or one-to-one relation sets what the database does to the rows holding the foreign key *(note 2026-10-21, API plan 2)*. `SetNull` needs a NULL-able key, both edges of a pair must agree, and an M2M edge refuses it. It reaches `describe` and the migration planner, not the plugin model.
 
 The generated struct holds the edges as `velox.Many[T]` and `velox.One[T]`, with the semantics of Core §1: never loaded lazily, and the zero value means not loaded. `With`, `Has` and `HasWhere` use generated relation handles, `gen.Users.Posts`, a `velox.Rel[User, Post]`. How a relation names its target is in §2.
 
 ### 1.3 Indexes, mixins, annotations
 
-- **Indexes:** `index.Fields(...)` with `Unique()`, `StorageKey(...)` and, on PostgreSQL, `Where(sql)`.
+- **Indexes:** `index.Fields(...)` with `Unique()`, `StorageKey(...)` and, on PostgreSQL, `Where(sql)` *(note 2026-10-21: SQLite has partial indexes too and MySQL does not; the dialect keys of `Where` are `field.Postgres`, `field.MySQL` and `field.SQLite`. Two indexes with the same columns, `Unique` and `Where` are refused, and index names, explicit or derived, must be unique across the graph)*.
 - **Mixins:** these contribute fields, edges, indexes and annotations. `mixin.Time` adds `created_at` and `updated_at`. A mixin carries no behaviour.
 - **Annotations:**
   - `schema.Table`, and `schema.TableIn(schema, table)`;
@@ -235,10 +236,21 @@ velox-gen describe [-json] [./schema]
 
 - The package is one schema package, `./schema` by default; `./...` and a pattern that names no schemas are errors.
 - `-out` is the generated package's directory (default `./gen`), `-package` its name.
-- `-check` writes nothing and exits 1 when a generated file is out of date, missing or left over. This is the stale check of §2.
+- `-check` writes nothing and exits 1 *(note 2026-10-21: 3)* when a generated file is out of date, missing or left over. This is the stale check of §2.
 - `-plugin tool` (repeatable) names a generator plugin: a tool of the application's module that `go tool` runs with the resolved model as JSON on stdin and that answers with files for `-out`. velox-gen adds the header to those files and owns them like its own (`-check`, rewrite, stale removal). The protocol and the GraphQL plugin are in `2026-10-19-graphql-design.md`.
 - `verify` builds a program that imports the generated package and reports what `velox.CheckEntity` finds for every entity and `velox.CheckRelation` for every relation.
 - `describe` prints the resolved model; `-json` prints it as JSON.
+
+*Note 2026-10-21 (API plan 2).* The commands are now:
+
+```
+velox-gen [generate] [-out dir] [-package name] [-plugin tool[:key=value,...]]... [-check] [package]
+velox-gen verify [-out dir] [-package name] [-plugin tool[:key=value,...]]... [package]
+velox-gen describe [-json] [package]
+velox-gen version
+```
+
+`generate` is the default subcommand, and each has its own flags, which may follow the package. Exit codes: 0 success, 1 error, 2 misuse, 3 stale (`-check`, and `verify` for a plugin's Go file). `describe -json` prints `plugin.Model`, the model a plugin receives. Plugin protocol 2 adds options, warnings, files in directories below `-out` and `.proto` files; see the GraphQL design's note and the `plugin` package doc.
 
 Flags remain all the configuration there is; there is no `velox.yaml`.
 
