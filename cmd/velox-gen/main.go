@@ -59,8 +59,11 @@
 // "plugin_protocol": 2 (a plugin of protocol 1 is told to update), a
 // non-empty error, a non-zero exit, a path that is refused, one that velox-gen
 // or another plugin writes (paths that differ only in case are one, over the
-// whole path), or a file of yours at it, fails the run before anything is
-// written.
+// whole path), a file of yours or a symbolic link at it or at a directory of
+// it, or a directory of yours whose name differs from one of the path's only
+// in case (rename it), fails the run before anything is written. A write that
+// fails part-way, such as on a full disk, leaves -out partly updated; running
+// velox-gen again restores it.
 //
 // verify builds a program in a temporary .velox-verify-* directory of your
 // module, imports the generated package and reports, for every entity, the

@@ -172,7 +172,11 @@ func runPlugin(name, modDir string, req []byte, env []string, stderr io.Writer) 
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = bytes.NewReader(req), &so, &se
 	if err := cmd.Run(); err != nil {
 		if msg := strings.TrimSpace(se.String()); msg != "" {
-			return nil, fmt.Errorf("%w\n%s", err, msg)
+			lines := strings.Split(msg, "\n")
+			for i, l := range lines {
+				lines[i] = oneLine(strings.TrimSuffix(l, "\r"))
+			}
+			return nil, fmt.Errorf("%w\n%s", err, strings.Join(lines, "\n"))
 		}
 		return nil, err
 	}
@@ -192,18 +196,20 @@ func runPlugin(name, modDir string, req []byte, env []string, stderr io.Writer) 
 		_, _ = fmt.Fprintf(stderr, "velox-gen: plugin %s: warning: %s\n", name, oneLine(w))
 	}
 	if resp.Error != "" {
-		return nil, fmt.Errorf("%s", resp.Error)
+		return nil, fmt.Errorf("%s", oneLine(resp.Error))
 	}
 	return &resp, nil
 }
 
-// oneLine is s with each control character, newlines among them, escaped as
-// in a Go string literal, so that a warning is one line that cannot pass for
-// velox-gen's own output or move the terminal's cursor.
+// oneLine is s with each control character (newlines among them), each line
+// or paragraph separator (U+2028, U+2029) and each bidirectional control
+// (U+202E and its kin) escaped as in a Go string literal, so that a plugin's
+// text is one line that cannot pass for velox-gen's own output, reorder what
+// the terminal shows, or move its cursor.
 func oneLine(s string) string {
 	var b strings.Builder
 	for _, r := range s {
-		if unicode.IsControl(r) {
+		if unicode.IsControl(r) || r == '\u2028' || r == '\u2029' || unicode.Is(unicode.Bidi_Control, r) {
 			q := strconv.QuoteRune(r)
 			b.WriteString(q[1 : len(q)-1])
 			continue

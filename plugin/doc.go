@@ -82,10 +82,21 @@
 // writes, or when a file of the user's, one without the header, is at it.
 // Paths are compared as a case-insensitive file system does, over the whole
 // path: pb/X.go and PB/x.go are one file, and pb/a.go and PB/b.go are in one
-// directory, which is refused too. velox-gen then owns the files, as it owns
-// its own: -check reports one that is out of date, and a run deletes one that
-// no plugin writes any more, with each directory below the output directory
-// that this leaves empty.
+// directory, which is refused too. A symbolic link at a path, or at any
+// directory of one below the output directory, is refused too: velox-gen
+// writes only regular files below real directories.
+//
+// velox-gen then owns the files, as it owns its own: -check reports one that
+// is out of date, and a run deletes one that no plugin writes any more, with
+// each directory below the output directory that this leaves empty. The sweep
+// skips directories whose name starts with "." or "_", and ignores symbolic
+// links: it neither follows nor removes one. A file whose path changes only in
+// case is deleted and written under its new spelling, and so is a directory
+// that holds only such files; velox-gen never renames a directory, so one of
+// the user's whose spelling differs only in case from a path's directory
+// fails the run, before anything is written, with "rename it". Old files are
+// removed before new ones are written: a write that fails part-way leaves the
+// output directory partly updated, and running velox-gen again restores it.
 //
 // # Versions
 //

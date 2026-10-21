@@ -215,7 +215,7 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 			return fail(fmt.Errorf("%s was not written by velox-gen; move it", relPath(dir, p)))
 		}
 	}
-	sw, err := staleFiles(out, want)
+	sw, err := staleFiles(out, want, owners)
 	if err != nil {
 		return fail(err)
 	}
@@ -232,13 +232,10 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 		}
 		return 0
 	}
-	// Respell, remove, then write: on a case-insensitive file system a file
-	// whose name changed only in case is the old file, which goes first.
-	for _, r := range sw.respell {
-		if err := os.Rename(r[0], r[1]); err != nil {
-			return fail(err)
-		}
-	}
+	// Remove, then write: on a case-insensitive file system a file whose
+	// name changed only in case is the old file, which goes first. A write
+	// that fails part-way leaves the output partly updated; the next run
+	// restores it.
 	for _, p := range remove {
 		if err := os.Remove(p); err != nil {
 			return fail(err)
@@ -283,10 +280,9 @@ func checkEntry(dir, p string, isDir bool) error {
 
 // sweep is what staleFiles finds to do in the output directory.
 type sweep struct {
-	write   []string    // the files of want that are missing or hold other content
-	remove  []string    // the generated files nothing produces now, under their spelling on disk
-	emptied []string    // the directories the removals empty, deepest first
-	respell [][2]string // directories to rename to the spelling want gives them, where the file system takes both for one
+	write   []string // the files of want that are missing or hold other content
+	remove  []string // the generated files nothing produces now, under their spelling on disk
+	emptied []string // the directories the removals empty, deepest first
 }
 
 // staleFiles compares want, the files that must be in out, with the disk.
@@ -303,9 +299,12 @@ type sweep struct {
 // differs from a path of want only in case is removed; when the file system
 // takes the two for one file, that path of want is written again, after the
 // removal, so that it ends up under its new spelling. A directory that differs
-// from one of want only in case, and that the file system takes for it, is
-// renamed when it is not emptied (it holds a file of yours).
-func staleFiles(out string, want map[string][]byte) (sweep, error) {
+// from one of want only in case is removed when the removals empty it, and
+// want's spelling is then created; any other such directory (one that holds a
+// file of yours, or nothing) is an error, on every file system, because
+// velox-gen never renames a directory it did not empty. owners names the
+// plugin that wrote each path of want.
+func staleFiles(out string, want map[string][]byte, owners map[string]string) (sweep, error) {
 	var sw sweep
 	write := map[string]bool{}
 	for p, data := range want {
@@ -317,10 +316,13 @@ func staleFiles(out string, want map[string][]byte) (sweep, error) {
 	for p := range want {
 		wantFold[fold(p)] = p
 	}
-	keep := map[string]string{} // folded directory a file of want goes into → its spelling
-	for p := range want {
+	keep := map[string]string{}   // folded directory a file of want goes into → its spelling
+	keepBy := map[string]string{} // folded directory → the first path of want in it
+	for _, p := range slices.Sorted(maps.Keys(want)) {
 		for d := filepath.Dir(p); within(out, d) && d != out; d = filepath.Dir(d) {
-			keep[fold(d)] = d
+			if _, ok := keep[fold(d)]; !ok {
+				keep[fold(d)], keepBy[fold(d)] = d, p
+			}
 		}
 	}
 	// held counts each directory's entries, gone those that go.
@@ -377,12 +379,12 @@ func staleFiles(out string, want map[string][]byte) (sweep, error) {
 			sw.emptied = append(sw.emptied, d)
 			gone[filepath.Dir(d)]++
 		case kept && !exact:
-			// Only the last segment is renamed: the parent's old spelling
-			// still finds it on the file system that takes both for one.
-			to := filepath.Join(filepath.Dir(d), filepath.Base(k))
-			if filepath.Base(k) != filepath.Base(d) && sameEntry(d, to) {
-				sw.respell = append(sw.respell, [2]string{d, to})
+			p := keepBy[fold(d)]
+			rel := func(q string) string {
+				r, _ := filepath.Rel(out, q)
+				return filepath.ToSlash(r)
 			}
+			return sweep{}, fmt.Errorf("plugin %s: path %q: the directory %q differs only in case; rename it", owners[p], rel(p), rel(d))
 		}
 	}
 	sw.write = slices.Sorted(maps.Keys(write))

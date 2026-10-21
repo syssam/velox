@@ -674,30 +674,61 @@ func TestPluginCaseRename(t *testing.T) {
 		generate(files())
 	})
 
-	t.Run("directory with a file of yours", func(t *testing.T) {
-		generate(files(plugin.File{Path: "Pb/X.go", Content: "package pb\n"}))
-		writeFile(t, filepath.Join(gen, "Pb", "notes.txt"), "mine\n")
-		env := files(plugin.File{Path: "pb/x.go", Content: "package pb\n"})
-		generate(env)
-		if folds {
-			// One directory, renamed to the new spelling, the file of yours in it.
-			if got := names(t, gen); !slices.Contains(got, "pb") || slices.Contains(got, "Pb") {
+	// A directory of yours is never renamed: one that differs only in case
+	// from a directory the plugin writes into, and holds a file of yours, or
+	// nothing, fails the run, on every file system, and nothing changes.
+	for _, c := range []struct{ name, mine string }{
+		{"directory with a file of yours", "Pb/notes.txt"},
+		{"empty directory of yours", "Pb/"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			generate(files(plugin.File{Path: "Pb/X.go", Content: "package pb\n"}))
+			if strings.HasSuffix(c.mine, "/") {
+				generate(files()) // Pb goes with its file
+				if err := os.Mkdir(filepath.Join(gen, "Pb"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				writeFile(t, filepath.Join(gen, filepath.FromSlash(c.mine)), "mine\n")
+			}
+			before := names(t, filepath.Join(gen, "Pb"))
+			env := files(plugin.File{Path: "pb/x.go", Content: "package pb\n"})
+			want := "velox-gen: plugin fakeplugin: path \"pb/x.go\": the directory \"Pb\" differs only in case; rename it\n"
+			for _, check := range []bool{false, true} {
+				args := []string{"-plugin", "fakeplugin", "./schema"}
+				if check {
+					args = append([]string{"-check"}, args...)
+				}
+				if code, out, errs := veloxEnv(t, dir, env, args...); code != 1 || out != "" || errs != want {
+					t.Errorf("-check %v: %d %q %q, want %q", check, code, out, errs, want)
+				}
+			}
+			if got := names(t, gen); !slices.Contains(got, "Pb") || (!folds && slices.Contains(got, "pb")) {
 				t.Errorf("gen holds %v", got)
 			}
-			if got := names(t, filepath.Join(gen, "pb")); !slices.Equal(got, []string{"notes.txt", "x.go"}) {
-				t.Errorf("pb holds %v", got)
+			if got := names(t, filepath.Join(gen, "Pb")); !slices.Equal(got, before) {
+				t.Errorf("Pb holds %v, held %v", got, before)
 			}
-		} else {
-			// Two directories: yours keeps your file.
-			if got := names(t, filepath.Join(gen, "Pb")); !slices.Equal(got, []string{"notes.txt"}) {
-				t.Errorf("Pb holds %v", got)
+			if err := os.RemoveAll(filepath.Join(gen, "Pb")); err != nil {
+				t.Fatal(err)
 			}
-			if got := names(t, filepath.Join(gen, "pb")); !slices.Equal(got, []string{"x.go"}) {
-				t.Errorf("pb holds %v", got)
-			}
+		})
+	}
+}
+
+func TestOneLine(t *testing.T) {
+	for in, want := range map[string]string{
+		"plain text, ünïcode":      "plain text, ünïcode",
+		"a\nb\r\tc":                `a\nb\r\tc`,
+		"\x1b[2J":                  `\x1b[2J`,
+		"x\u2028y\u2029z":          `x\u2028y\u2029z`,
+		"user\u202etxt.go":         `user\u202etxt.go`,
+		"\u2066\u2069\u200e\u061c": `\u2066\u2069\u200e\u061c`,
+	} {
+		if got := oneLine(in); got != want {
+			t.Errorf("oneLine(%q) = %q, want %q", in, got, want)
 		}
-		steady(env)
-	})
+	}
 }
 
 // TestPluginSymlinks pins that velox-gen neither writes through a symbolic
