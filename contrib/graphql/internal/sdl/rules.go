@@ -125,6 +125,10 @@ func checkField(e *plugin.Entity, i int, a graphql.Annotation, fk bool, where st
 		return fmt.Errorf("%s: graphql.OrderField on a field with the directive @%s: its values would be in the cursors and its order would reveal them, which no directive guards; add graphql.OrderUnguarded() to allow it", where, appDirective(a))
 	case a.OrderUnguarded && a.OrderField == "":
 		return fmt.Errorf("%s: graphql.OrderUnguarded without graphql.OrderField says nothing", where)
+	case (fk || f.Implicit != "") && appDirective(a) != "":
+		return fmt.Errorf("%s: graphql.Directives with the directive @%s on a foreign key, which its edge stands for in GraphQL; put the directive on the edge, which guards the edge's field, its has and hasWith filters and the key's predicates", where, appDirective(a))
+	case pk && keyBase(e) != "" && appDirective(a) != "":
+		return fmt.Errorf("%s: graphql.Directives with the directive @%s on the primary key: the id is readable through node, nodes and the cursors, so the directive would guard nothing", where, appDirective(a))
 	case a.WhereOps != 0 && f.Sensitive:
 		return fmt.Errorf("%s: graphql.WhereOps on a sensitive field: a filter would reveal its values", where)
 	case a.WhereOps != 0 && a.Skip&graphql.SkipType != 0 && a.Skip&graphql.SkipWhereInput == 0:
@@ -144,10 +148,11 @@ func checkField(e *plugin.Entity, i int, a graphql.Annotation, fk bool, where st
 }
 
 // appDirective is the name of a's first application directive, one other
-// than GraphQL's own and @goField: "" for none. GraphQL's own guard nothing.
+// than GraphQL's own: "" for none. GraphQL's own guard nothing. (@goField,
+// velox-graphql's own, is refused in graphql.Directives.)
 func appDirective(a graphql.Annotation) string {
 	for _, d := range a.Directives {
-		if d.Name != "goField" && !prelude[d.Name] {
+		if !prelude[d.Name] {
 			return d.Name
 		}
 	}

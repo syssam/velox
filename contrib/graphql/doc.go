@@ -52,7 +52,16 @@
 // has<Edge>With, and a foreign key's <edge>ID and <edge>IDIn, which carry the
 // key field's directives, then the edge's, each name once. So a directive
 // that guards a field guards its filters too, by which a client could
-// otherwise find its value a bisection at a time. The application declares
+// otherwise find its value a bisection at a time.
+//
+// A key field takes GraphQL's own directives only (@deprecated…). A foreign
+// key is in no type: its edge stands for it, so a directive that guards it
+// goes on the edge, which carries it to the edge's field, its has and
+// hasWith filters and the key's predicates. A Node's id is readable through
+// node, nodes and the cursors, so a directive on the primary key would guard
+// nothing. The plugin refuses an application directive on either.
+//
+// The application declares
 // such a directive on FIELD_DEFINITION | INPUT_FIELD_DEFINITION, or gqlgen
 // refuses the schema:
 //

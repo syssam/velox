@@ -279,8 +279,14 @@ func TestOrderFieldUnderDirective(t *testing.T) {
 		t.Errorf("got  %v\nwant %s", err, want)
 	}
 	load(t, user(admin, graphql.OrderField("SALARY"), graphql.OrderUnguarded()), appDirectives)
-	// GraphQL's own directives guard nothing.
-	load(t, user(graphql.Directives(graphql.Directive{Name: "deprecated"}), graphql.OrderField("SALARY")))
+	// GraphQL's own directives guard nothing; one is copied onto the
+	// predicates like any other.
+	s, _ := load(t, user(graphql.Directives(graphql.Directive{Name: "deprecated"}), graphql.OrderField("SALARY"), graphql.WhereOps(graphql.OpEQ, graphql.OpGT)))
+	for _, name := range []string{"salary", "salaryGT"} {
+		if d := dirsOf(s, "UserWhereInput", name); !slices.Equal(d, []string{"@deprecated"}) {
+			t.Errorf("%s: %v, want [@deprecated]", name, d)
+		}
+	}
 
 	_, err = Render(user(graphql.OrderUnguarded()))
 	want = "schema User, field salary: graphql.OrderUnguarded without graphql.OrderField says nothing"
@@ -293,4 +299,39 @@ func TestOrderFieldUnderDirective(t *testing.T) {
 	posts.Annotations = ann(t, graphql.OrderUnguarded())
 	u.Edges = []*plugin.Edge{posts}
 	renderErr(t, model(u), "schema User, edge posts", "graphql.OrderUnguarded")
+}
+
+// An application directive on a key field would guard nothing: a foreign
+// key's edge stands for it, and a Node's id is readable through node, nodes
+// and the cursors. GraphQL's own directives are allowed on both.
+func TestDirectiveOnKey(t *testing.T) {
+	admin := graphql.Directives(graphql.Directive{Name: "admin"})
+	dep := graphql.Directives(graphql.Directive{Name: "deprecated"})
+	post := func(a graphql.Annotation) *plugin.Model {
+		aid := field("author_id", "int64")
+		aid.Annotations = ann(t, a, graphql.WhereOps())
+		p := entity("Post", aid)
+		author := edge("author", plugin.M2O, "User")
+		author.Field, author.FieldOn = "author_id", "Post"
+		p.Edges = []*plugin.Edge{author}
+		return model(p, entity("User"))
+	}
+	_, err := Render(post(admin))
+	want := "schema Post, field author_id: graphql.Directives with the directive @admin on a foreign key, which its edge stands for in GraphQL; put the directive on the edge, which guards the edge's field, its has and hasWith filters and the key's predicates"
+	if err == nil || err.Error() != want {
+		t.Errorf("foreign key:\n got  %v\nwant %s", err, want)
+	}
+	load(t, post(dep))
+
+	user := func(a graphql.Annotation) *plugin.Model {
+		u := entity("User")
+		u.Fields[0].Annotations = ann(t, a, graphql.WhereOps())
+		return model(u)
+	}
+	_, err = Render(user(admin))
+	want = "schema User, field id: graphql.Directives with the directive @admin on the primary key: the id is readable through node, nodes and the cursors, so the directive would guard nothing"
+	if err == nil || err.Error() != want {
+		t.Errorf("primary key:\n got  %v\nwant %s", err, want)
+	}
+	load(t, user(dep))
 }

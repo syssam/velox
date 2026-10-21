@@ -274,21 +274,24 @@ func TestWhereCarriesDirectives(t *testing.T) {
 		}
 	})
 
+	// A foreign key's predicates carry the key field's directives, GraphQL's
+	// own only, then the edge's, each name once.
 	t.Run("foreign key", func(t *testing.T) {
+		dep := graphql.Directives(graphql.Directive{Name: "deprecated", Args: map[string]any{"reason": "old"}})
 		aid := field("author_id", "int64")
-		aid.Annotations = ann(t, admin, graphql.WhereOps(graphql.OpEQ, graphql.OpIn))
+		aid.Annotations = ann(t, dep, graphql.WhereOps(graphql.OpEQ, graphql.OpIn))
 		post := entity("Post", aid)
 		author := edge("author", plugin.M2O, "User")
 		author.Required, author.Field, author.FieldOn = true, "author_id", "Post"
-		author.Annotations = ann(t, admin, audit)
+		author.Annotations = ann(t, admin, dep, audit)
 		post.Edges = []*plugin.Edge{author}
 		s, sdl := load(t, model(post, entity("User")), appDirectives)
 		for _, name := range []string{"authorID", "authorIDIn"} {
-			if d := dirsOf(s, "PostWhereInput", name); !slices.Equal(d, []string{"@admin", "@audit"}) {
-				t.Errorf("%s: %v, want [@admin @audit]\n%s", name, d, sdl)
+			if d := dirsOf(s, "PostWhereInput", name); !slices.Equal(d, []string{"@deprecated", "@admin", "@audit"}) {
+				t.Errorf("%s: %v, want [@deprecated @admin @audit]\n%s", name, d, sdl)
 			}
 		}
-		if !strings.Contains(sdl, "authorID: ID @admin @audit(level: 2)") {
+		if !strings.Contains(sdl, `authorID: ID @deprecated(reason: "old") @admin @audit(level: 2)`) {
 			t.Errorf("the arguments are lost:\n%s", sdl)
 		}
 	})

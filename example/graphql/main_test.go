@@ -563,6 +563,17 @@ func TestFieldDirective(t *testing.T) {
 			query: filter,
 			want:  `{"errors": [{` + forbidden + `, "path": ["users", "where", "emailHasPrefix"]}], "data": null}`,
 		})
+		// Nested in not or in or, the predicate is guarded alike.
+		s.do(t, request{
+			role:  role,
+			query: `{ users(where: {not: {emailHasPrefix: "a"}}) { totalCount } }`,
+			want:  `{"errors": [{` + forbidden + `, "path": ["users", "where", "not", "emailHasPrefix"]}], "data": null}`,
+		})
+		s.do(t, request{
+			role:  role,
+			query: `{ users(where: {or: [{role: ADMIN}, {emailHasSuffix: "@example.com"}]}) { totalCount } }`,
+			want:  `{"errors": [{` + forbidden + `, "path": ["users", "where", "or", 1, "emailHasSuffix"]}], "data": null}`,
+		})
 		s.do(t, request{
 			role:  role,
 			query: read,
