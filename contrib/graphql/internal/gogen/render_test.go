@@ -464,7 +464,7 @@ func TestGoTypes(t *testing.T) {
 		"func (x *Event) TagsGQL() (veloxgql.JSON, error) { b, err := json.Marshal(x.Tags) return veloxgql.JSON(b), err }",
 		// Pred: one helper call for each predicate, converting the input's
 		// values to the column's Go type where they differ.
-		` f := gqlimpl.NewFilter[Event](ctx, "EventWhereInput", depth) `,
+		` f := gqlimpl.NewFilter[Event](ctx, "EventWhereInput") `,
 		` gqlimpl.IDAs(f, "id", w.ID, "Event", gqlimpl.AsUUID[uuid.UUID, [16]byte], Events.ID.EQ) `,
 		` gqlimpl.IDListAs(f, "idIn", w.IDIn, "Event", gqlimpl.AsUUID[uuid.UUID, [16]byte], Events.ID.In) `,
 		` gqlimpl.Value(f, "level", w.Level, Events.Level.EQ) `,

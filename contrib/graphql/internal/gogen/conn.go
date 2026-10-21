@@ -127,7 +127,7 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	f.p("func %s(ctx %s.Context, q %s.Query[%s], %s) (*%sConnection, error) {", connFunc(t), ctx, velox, e.Name, connParams(f, t), n)
 	if t.Where != nil {
 		f.p("\tif where != nil {")
-		f.p("\t\tp, err := where.Pred(ctx, 0)")
+		f.p("\t\tp, err := where.Pred(ctx)")
 		f.p("\t\tif err != nil {")
 		f.p("\t\t\treturn nil, err")
 		f.p("\t\t}")

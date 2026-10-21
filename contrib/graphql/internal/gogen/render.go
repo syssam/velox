@@ -320,7 +320,7 @@ func (r *renderer) writeGetter(f *file, t *sdl.Type, g sdl.Getter) error {
 var locals = map[string]bool{
 	"ctx": true, "id": true, "ids": true, "typ": true, "err": true, "k": true, "db": true, "x": true,
 	"rows": true, "by": true, "i": true, "j": true, "out": true, "c": true, "n": true, "e": true,
-	"s": true, "b": true, "w": true, "v": true, "o": true, "f": true, "depth": true,
+	"s": true, "b": true, "w": true, "v": true, "o": true, "f": true,
 	"context": true, "json": true, "errors": true, "fmt": true, "io": true, "velox": true, "veloxgql": true, "gqlimpl": true,
 	"any": true, "bool": true, "string": true, "int": true, "len": true, "make": true, "append": true,
 	"nil": true, "error": true, "true": true, "false": true,

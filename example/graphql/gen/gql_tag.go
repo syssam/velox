@@ -109,7 +109,7 @@ func LabelsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, b
 // It runs no query.
 func tagConnectionGQL(ctx context.Context, q velox.Query[Tag], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *LabelOrder, where *LabelWhereInput) (*LabelConnection, error) {
 	if where != nil {
-		p, err := where.Pred(ctx, 0)
+		p, err := where.Pred(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -217,17 +217,16 @@ type LabelWhereInput struct {
 }
 
 // Pred is the condition w stands for, on Label nodes: every predicate w sets
-// holds, and a w that sets none, or a nil w, holds for every node. depth is how
-// deeply w is nested in the where argument, 0 at the top. It fails, before any
-// query runs, on an ID of another type (veloxgql.ErrWrongIDType) or a malformed
-// one (veloxgql.ErrBadID), on a nesting deeper than the MaxFilterDepth of
-// veloxgql.LimitsFrom(ctx) (veloxgql.ErrFilterTooDeep), on an and, an or, a
-// has…With, an In or a NotIn of more than its MaxFilterWidth entries
-// (veloxgql.ErrFilterTooWide), and on a where argument of more than its
+// holds, and a w that sets none, or a nil w, holds for every node. It fails,
+// before any query runs, on an ID of another type (veloxgql.ErrWrongIDType) or
+// a malformed one (veloxgql.ErrBadID), on a nesting deeper than the
+// MaxFilterDepth of veloxgql.LimitsFrom(ctx) (veloxgql.ErrFilterTooDeep), on an
+// and, an or, a has…With, an In or a NotIn of more than its MaxFilterWidth
+// entries (veloxgql.ErrFilterTooWide), and on a where argument of more than its
 // MaxFilterNodes inputs, predicates and values in all
 // (veloxgql.ErrFilterTooLarge).
-func (w *LabelWhereInput) Pred(ctx context.Context, depth int) (velox.Pred[Tag], error) {
-	f := gqlimpl.NewFilter[Tag](ctx, "LabelWhereInput", depth)
+func (w *LabelWhereInput) Pred(ctx context.Context) (velox.Pred[Tag], error) {
+	f := gqlimpl.NewFilter[Tag](ctx, "LabelWhereInput")
 	if w == nil {
 		return f.Pred()
 	}

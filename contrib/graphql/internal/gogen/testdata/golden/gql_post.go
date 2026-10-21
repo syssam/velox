@@ -165,7 +165,7 @@ func PostsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, be
 // It runs no query.
 func postConnectionGQL(ctx context.Context, q velox.Query[Post], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
 	if where != nil {
-		p, err := where.Pred(ctx, 0)
+		p, err := where.Pred(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -316,17 +316,16 @@ type PostWhereInput struct {
 }
 
 // Pred is the condition w stands for, on Post nodes: every predicate w sets
-// holds, and a w that sets none, or a nil w, holds for every node. depth is how
-// deeply w is nested in the where argument, 0 at the top. It fails, before any
-// query runs, on an ID of another type (veloxgql.ErrWrongIDType) or a malformed
-// one (veloxgql.ErrBadID), on a nesting deeper than the MaxFilterDepth of
-// veloxgql.LimitsFrom(ctx) (veloxgql.ErrFilterTooDeep), on an and, an or, a
-// has…With, an In or a NotIn of more than its MaxFilterWidth entries
-// (veloxgql.ErrFilterTooWide), and on a where argument of more than its
+// holds, and a w that sets none, or a nil w, holds for every node. It fails,
+// before any query runs, on an ID of another type (veloxgql.ErrWrongIDType) or
+// a malformed one (veloxgql.ErrBadID), on a nesting deeper than the
+// MaxFilterDepth of veloxgql.LimitsFrom(ctx) (veloxgql.ErrFilterTooDeep), on an
+// and, an or, a has…With, an In or a NotIn of more than its MaxFilterWidth
+// entries (veloxgql.ErrFilterTooWide), and on a where argument of more than its
 // MaxFilterNodes inputs, predicates and values in all
 // (veloxgql.ErrFilterTooLarge).
-func (w *PostWhereInput) Pred(ctx context.Context, depth int) (velox.Pred[Post], error) {
-	f := gqlimpl.NewFilter[Post](ctx, "PostWhereInput", depth)
+func (w *PostWhereInput) Pred(ctx context.Context) (velox.Pred[Post], error) {
+	f := gqlimpl.NewFilter[Post](ctx, "PostWhereInput")
 	if w == nil {
 		return f.Pred()
 	}

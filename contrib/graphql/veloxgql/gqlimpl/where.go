@@ -15,8 +15,8 @@ import (
 // generated method Pred makes one, adds each predicate the input sets with
 // one helper call, and returns Filter.Pred:
 //
-//	func (w *AccountWhereInput) Pred(ctx context.Context, depth int) (velox.Pred[User], error) {
-//		f := gqlimpl.NewFilter[User](ctx, "AccountWhereInput", depth)
+//	func (w *AccountWhereInput) Pred(ctx context.Context) (velox.Pred[User], error) {
+//		f := gqlimpl.NewFilter[User](ctx, "AccountWhereInput")
 //		if w == nil {
 //			return f.Pred()
 //		}
@@ -44,29 +44,32 @@ type Filter[E any] struct {
 }
 
 // NewFilter returns the Filter of a where input of the GraphQL type input,
-// on E, at depth, how deeply it is nested in the where argument: 0 at the
-// top, one more inside each not, and, or and has<Edge>With.
+// on E.
 //
-// At depth 0 it reads the where argument's limits, veloxgql.LimitsFrom(ctx),
-// and starts its budget of MaxFilterNodes, and puts both in the context
-// nested inputs' Pred is called with, where their NewFilter finds them, so
-// every input of the argument has the same limits. A depth over
-// MaxFilterDepth fails the filter with ErrFilterTooDeep. The input, each
-// input nested in it, each predicate they set and each value of their In
-// and NotIn lists count one against the budget, and over it the filter
-// fails with ErrFilterTooLarge. So the whole argument
-// is bounded, even when it holds one input many times over, as a GraphQL
-// variable used at many places does. One where argument's Pred calls run on
-// one goroutine.
-func NewFilter[E any](ctx context.Context, input string, depth int) *Filter[E] {
-	b, _ := ctx.Value(budgetKey{}).(*budget)
-	if depth == 0 || b == nil {
+// The depth, how deeply the input is nested in the where argument, and the
+// argument's node budget travel in ctx, under one unexported key. A context
+// without them starts a where argument: depth 0, a full budget of
+// MaxFilterNodes, and the limits of veloxgql.LimitsFrom(ctx). So each call
+// of a where input's Pred with a context of the application's has its own
+// budget, however often the context is used. A nested input's Pred is called
+// with a context of the helpers', one level deeper (inside each not, and,
+// or and has<Edge>With) and with the same budget and limits, so that every
+// input of the argument has them; that context never leaves the helpers. A
+// depth over MaxFilterDepth fails the filter with ErrFilterTooDeep. The
+// input, each input nested in it, each predicate they set and each value of
+// their In and NotIn lists count one against the budget, and over it the
+// filter fails with ErrFilterTooLarge. So the whole argument is bounded,
+// even when it holds one input many times over, as a GraphQL variable used
+// at many places does. One where argument's Pred calls run on one
+// goroutine.
+func NewFilter[E any](ctx context.Context, input string) *Filter[E] {
+	st, ok := ctx.Value(stateKey{}).(*state)
+	if !ok {
 		lim := veloxgql.LimitsFrom(ctx)
-		b = &budget{left: lim.MaxFilterNodes, limits: lim}
-		ctx = context.WithValue(ctx, budgetKey{}, b)
+		st = &state{budget: &budget{left: lim.MaxFilterNodes, limits: lim}}
 	}
-	f := &Filter[E]{ctx: ctx, input: input, depth: depth, budget: b}
-	if err := checkDepth(depth, b.limits.MaxFilterDepth); err != nil {
+	f := &Filter[E]{ctx: ctx, input: input, depth: st.depth, budget: st.budget}
+	if err := checkDepth(f.depth, f.budget.limits.MaxFilterDepth); err != nil {
 		f.refuse("", err)
 		return f
 	}
@@ -95,8 +98,15 @@ type budget struct {
 	limits veloxgql.Limits
 }
 
-// budgetKey is the context key of a where argument's budget.
-type budgetKey struct{}
+// state is what a where argument's context carries to a nested input: its
+// depth and the argument's budget.
+type state struct {
+	depth  int
+	budget *budget
+}
+
+// stateKey is the context key of a state.
+type stateKey struct{}
 
 // charge counts n against the where argument's budget, for the field of
 // f's input; ok is false when that is over it, and f has the error.
@@ -165,20 +175,20 @@ func checkWidth(n, most int) error {
 }
 
 // Input is a where input of the GraphQL code: a pointer to the generated
-// struct T, whose Pred is its condition on E at a depth.
+// struct T, whose Pred is its condition on E.
 type Input[E, T any] interface {
 	*T
-	Pred(ctx context.Context, depth int) (velox.Pred[E], error)
+	Pred(ctx context.Context) (velox.Pred[E], error)
 }
 
 // nested is the condition of w, an input nested in f's at field, one level
-// deeper; a nil w is an input that sets nothing, which holds for every row.
+// deeper (in the context Pred is called with); a nil w is an input that sets nothing, which holds for every row.
 // ok is false when w fails, and f has its error.
 func nested[E, U, T any, W Input[U, T]](f *Filter[E], field string, w W) (p velox.Pred[U], ok bool) {
 	if w == nil {
 		return velox.And[U](), true
 	}
-	p, err := w.Pred(f.ctx, f.depth+1)
+	p, err := w.Pred(context.WithValue(f.ctx, stateKey{}, &state{depth: f.depth + 1, budget: f.budget}))
 	if err != nil {
 		f.refuse(field, err)
 		return p, false
