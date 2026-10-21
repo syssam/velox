@@ -10,6 +10,10 @@ import (
 // veloxgql exports as CodeBadUserInput.
 const CodeBadUserInput = "BAD_USER_INPUT"
 
+// CodeNotFound is the code of a mutation's ID that names no row the caller
+// may see or change, which veloxgql exports as CodeNotFound.
+const CodeNotFound = "NOT_FOUND"
+
 // Error is an error with a code for the client, which veloxgql's
 // ErrorPresenter writes as extensions.code, and a message safe to show it.
 type Error struct {
@@ -38,8 +42,19 @@ func (e *Error) Extensions() map[string]any {
 // format and args must be safe to show it: what the server expected, and
 // no error but a coded one.
 func InputErrorf(format string, args ...any) error {
+	return codedf(CodeBadUserInput, format, args...)
+}
+
+// NotFoundf is a NOT_FOUND error, built as InputErrorf builds its error.
+func NotFoundf(format string, args ...any) error {
+	return codedf(CodeNotFound, format, args...)
+}
+
+// codedf is an error with code whose text is "veloxgql: " and fmt.Sprintf of
+// format and args, and which wraps what %w wraps.
+func codedf(code, format string, args ...any) error {
 	err := fmt.Errorf(format, args...)
-	e := &Error{Code: CodeBadUserInput, Msg: err.Error()}
+	e := &Error{Code: code, Msg: err.Error()}
 	switch u := err.(type) {
 	case interface{ Unwrap() error }:
 		e.Err = u.Unwrap()

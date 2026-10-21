@@ -25,9 +25,9 @@ const (
 	CodeForbidden = "FORBIDDEN"
 	// CodeUnauthenticated: the request has no tenant (velox.ErrNoTenant).
 	CodeUnauthenticated = "UNAUTHENTICATED"
-	// CodeNotFound: the row a mutation names does not exist, for the
-	// generated mutations; nothing returns it yet.
-	CodeNotFound = "NOT_FOUND"
+	// CodeNotFound: the generated mutations return it for an ID that names
+	// no row the caller may see or change.
+	CodeNotFound = shared.CodeNotFound
 	// CodeInternal: anything else, which the client cannot fix, such as a
 	// driver's error, a timeout, a list edge over MaxList or ErrNoDB.
 	CodeInternal = "INTERNAL_SERVER_ERROR"

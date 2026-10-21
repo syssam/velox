@@ -12,6 +12,7 @@ import (
 	"github.com/vektah/gqlparser/v2/ast"
 
 	"github.com/syssam/velox2"
+	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
 )
 
 // Extension is the gqlgen handler extension that serves a schema on a DB.
@@ -226,7 +227,9 @@ func (e *Extension) InterceptResponse(ctx context.Context, next graphql.Response
 	}
 	var resp *graphql.Response
 	err := e.db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
-		resp = next(withState(ctx, tx, e.limits)) // the transaction's ctx: its deadline, and the TxAround hooks' values
+		// The transaction's ctx: its deadline, and the TxAround hooks' values.
+		// It marks tx as the operation's, so gqlimpl.Atomic runs in it.
+		resp = next(shared.WithOperationTx(withState(ctx, tx, e.limits), tx))
 		if resp != nil && len(resp.Errors) > 0 {
 			return errRollback
 		}

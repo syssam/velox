@@ -298,6 +298,19 @@ func TestErrorPresenter(t *testing.T) {
 	}
 }
 
+// TestNotFoundPresented: a mutation's NOT_FOUND reaches the client with its
+// code and its text, and is not logged.
+func TestNotFoundPresented(t *testing.T) {
+	l := &logged{}
+	got := veloxgql.ErrorPresenter(l.log)(context.Background(), fmt.Errorf("resolver: %w", gqlimpl.NotFound("updatePost", "Post")))
+	if got.Message != "updatePost: no Post has this ID" || got.Extensions["code"] != veloxgql.CodeNotFound {
+		t.Errorf("got %q %v, want NOT_FOUND and the message", got.Message, got.Extensions)
+	}
+	if errs := l.take(); len(errs) != 0 {
+		t.Errorf("logged %v, want nothing", errs)
+	}
+}
+
 // TestCommitErrorIsInternal: the commit's error the extension adds goes
 // through the server's presenter, which shows "internal error". The test's
 // commit fails because the request is canceled, which is not logged.

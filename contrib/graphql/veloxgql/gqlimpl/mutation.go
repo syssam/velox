@@ -1,0 +1,157 @@
+package gqlimpl
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+
+	"github.com/syssam/velox2"
+	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
+)
+
+// Atomic runs fn with the DB veloxgql.DBFrom(ctx) reads. When that DB is the
+// transaction the Extension opened for a mutation operation, fn runs in it;
+// otherwise fn runs in db.Tx(ctx, fn), so a mutation's writes are kept or
+// dropped together outside a server too. For generated code only.
+//
+// In the Extension's transaction fn gets ctx and that DB as they are: no
+// savepoint is made, and fn's error fails the operation, whose transaction
+// then rolls back. Without a DB in ctx, Atomic fails with veloxgql.ErrNoDB
+// and fn does not run.
+func Atomic(ctx context.Context, fn func(ctx context.Context, db *velox.DB) error) error {
+	db, err := veloxgql.DBFrom(ctx)
+	if err != nil {
+		return err
+	}
+	if db == shared.OperationTx(ctx) {
+		return fn(ctx, db)
+	}
+	return db.Tx(ctx, fn)
+}
+
+// DecodeID decodes id, an ID of the GraphQL type typ, for the input field
+// at ("CreatePostInput.authorID", "updatePost.id"). Its error is
+// BAD_USER_INPUT, names at, and wraps veloxgql.ErrBadID or ErrWrongIDType.
+// For generated code only.
+func DecodeID[K any](at, id, typ string) (K, error) {
+	k, err := veloxgql.DecodeID[K](id, typ)
+	if err != nil {
+		return k, shared.Within(at, err)
+	}
+	return k, nil
+}
+
+// DecodeIDAs is DecodeID of a K, converted to V by conv: for a key field
+// whose Go type is a named type DecodeID does not take. For generated code
+// only.
+func DecodeIDAs[K, V any](at, id, typ string, conv func(K) V) (V, error) {
+	k, err := DecodeID[K](at, id, typ)
+	if err != nil {
+		var zero V
+		return zero, err
+	}
+	return conv(k), nil
+}
+
+// DecodeIDs decodes ids as DecodeID does, keeps the first of each repeated
+// key, and refuses more than the MaxPage of veloxgql.LimitsFrom(ctx) IDs
+// with BAD_USER_INPUT wrapping veloxgql.ErrPageTooLarge, before decoding any.
+// An ID's error names its place in the list, as "<at>[2]". For generated
+// code only.
+func DecodeIDs[K comparable](ctx context.Context, at string, ids []string, typ string) ([]K, error) {
+	if most := veloxgql.LimitsFrom(ctx).MaxPage; len(ids) > most {
+		return nil, InputErrorf("%s: %w: %d IDs, and the most is %d", at, veloxgql.ErrPageTooLarge, len(ids), most)
+	}
+	out := make([]K, 0, len(ids))
+	seen := make(map[K]struct{}, len(ids))
+	for i, id := range ids {
+		k, err := DecodeID[K](fmt.Sprintf("%s[%d]", at, i), id, typ)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := seen[k]; ok {
+			continue
+		}
+		seen[k] = struct{}{}
+		out = append(out, k)
+	}
+	return out, nil
+}
+
+// DecodeIDsAs is DecodeIDs of K keys, each converted to V by conv. For
+// generated code only.
+func DecodeIDsAs[K comparable, V any](ctx context.Context, at string, ids []string, typ string, conv func(K) V) ([]V, error) {
+	ks, err := DecodeIDs[K](ctx, at, ids, typ)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]V, len(ks))
+	for i, k := range ks {
+		out[i] = conv(k)
+	}
+	return out, nil
+}
+
+// Exist fails with NOT_FOUND, naming at and typ, unless q counts n rows:
+// q selects the rows the IDs of at name, under the caller's tenant and
+// Read policy. Its text is "veloxgql: <at>: <missing> of the <n> IDs name
+// no <typ>", and echoes no ID. n is the number of distinct IDs; for n 0,
+// Exist runs no query. The query's own error is returned as it is. For
+// generated code only.
+func Exist[E any](ctx context.Context, q velox.Query[E], n int, at, typ string) error {
+	if n == 0 {
+		return nil
+	}
+	got, err := q.Count(ctx)
+	switch {
+	case err != nil:
+		return err
+	case got < int64(n):
+		return shared.NotFoundf("%s: %d of the %d IDs name no %s", at, int64(n)-got, n, typ)
+	case got > int64(n):
+		return fmt.Errorf("veloxgql: %s: %d rows for %d IDs: the IDs are not distinct keys", at, got, n)
+	}
+	return nil
+}
+
+// NotFound is the NOT_FOUND error of a mutation whose ID names no row of
+// typ the caller may change: "veloxgql: <at>: no <typ> has this ID". For
+// generated code only.
+func NotFound(at, typ string) error {
+	return shared.NotFoundf("%s: no %s has this ID", at, typ)
+}
+
+// WriteError is err from a write of entity (the name velox reports, as
+// "gen.Post") made from the input named input. A *velox.ValidationError of
+// entity on a field name gives a GraphQL name for becomes BAD_USER_INPUT
+// "<input>.<name>: invalid value: <the validator's text>", wrapping err.
+// Every other error is returned as it is. For generated code only.
+func WriteError(err error, input, entity string, name func(goField string) string) error {
+	var v *velox.ValidationError
+	if !errors.As(err, &v) || v.Entity != entity {
+		return err
+	}
+	field := name(v.Field)
+	if field == "" {
+		return err
+	}
+	msg := input + "." + field + ": invalid value"
+	if v.Err != nil {
+		msg += ": " + v.Err.Error()
+	}
+	return &shared.Error{Code: shared.CodeBadUserInput, Msg: msg, Err: err}
+}
+
+// FromJSON decodes j into a T for the input field at; on failure, a
+// BAD_USER_INPUT error naming at, which does not echo the decoder's text
+// (it names Go types). For generated code only.
+func FromJSON[T any](at string, j veloxgql.JSON) (T, error) {
+	var t T
+	if err := json.Unmarshal(j, &t); err != nil {
+		var zero T
+		return zero, InputErrorf("%s: invalid value: not a JSON value of the field's type", at)
+	}
+	return t, nil
+}

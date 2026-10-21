@@ -28,6 +28,7 @@ import (
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
 )
 
 // handlerSDL is the schema of the extension's tests.
@@ -356,6 +357,42 @@ func TestExtensionPutsTheDB(t *testing.T) {
 	}
 	if name := veloxgql.NewExtension(db).ExtensionName(); name != "VeloxDB" {
 		t.Errorf("ExtensionName() = %q, want VeloxDB", name)
+	}
+}
+
+// TestExtensionMarksItsTx: the context of a mutation the extension runs in a
+// transaction marks that transaction's DB as the operation's, which
+// gqlimpl.Atomic then runs in; a query's, a mutation's WithTxFilter leaves
+// out and Context's mark nothing.
+func TestExtensionMarksItsTx(t *testing.T) {
+	db, _ := handlerDB(t)
+	var marked, got *velox.DB
+	mark := func(ctx context.Context, args map[string]any) (any, error) {
+		var err error
+		got, err = veloxgql.DBFrom(ctx)
+		marked = shared.OperationTx(ctx)
+		return args["id"], err
+	}
+	srv := serve(db, map[string]resolver{"add": mark, "count": func(ctx context.Context, _ map[string]any) (any, error) {
+		return mark(ctx, map[string]any{"id": 0})
+	}}, veloxgql.WithTxFilter(func(_ context.Context, op *ast.OperationDefinition) bool { return op.Name != "Plain" }))
+
+	_ = post(t, context.Background(), srv, `mutation { add(id: 1) }`)
+	if marked == nil || marked != got || got == db {
+		t.Errorf("mutation: marked %p, DBFrom %p, db %p; want the transaction's DB marked", marked, got, db)
+	}
+	for name, query := range map[string]string{
+		"query":                   `{ count }`,
+		"mutation left out of tx": `mutation Plain { add(id: 2) }`,
+	} {
+		marked = db
+		_ = post(t, context.Background(), srv, query)
+		if marked != nil {
+			t.Errorf("%s: marked %p, want nothing", name, marked)
+		}
+	}
+	if m := shared.OperationTx(veloxgql.NewExtension(db).Context(context.Background())); m != nil {
+		t.Errorf("Context: marked %p, want nothing", m)
 	}
 }
 
