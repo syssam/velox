@@ -1001,6 +1001,28 @@ func TestUpdateWriteScope(t *testing.T) {
 	})
 }
 
+// TestUpdateReadBack: an update that moves its row out of the caller's Read
+// view succeeds and returns the row as written: Circle's Read policy hides
+// the circle named "hidden".
+func TestUpdateReadBack(t *testing.T) {
+	each(t, func(t *testing.T, e *env) {
+		c := &gen.Circle{Name: "c"}
+		insert(t, e.ctx, e.db, c)
+		got, err := gen.UpdateCircle(e.ctx, circleID(c.ID), gen.UpdateCircleInput{Name: ptr("hidden")})
+		if err != nil || got == nil || got.ID != c.ID || got.Name != "hidden" {
+			t.Fatalf("UpdateCircle = %v, %v: want the circle, named hidden", got, err)
+		}
+		if n := count(t, e.ctx, e.db.Query[gen.Circle]()); n != 0 {
+			t.Errorf("%d circles the caller may read, want 0", n)
+		}
+		// Hidden now, it is NOT_FOUND to the next update.
+		_, err = gen.UpdateCircle(e.ctx, circleID(c.ID), gen.UpdateCircleInput{Name: ptr("back")})
+		if code(err) != veloxgql.CodeNotFound || err.Error() != "veloxgql: updateCircle: no Circle has this ID" {
+			t.Errorf("updating the hidden circle: %v (code %q), want NOT_FOUND", err, code(err))
+		}
+	})
+}
+
 // TestUpdateEmpty: an input that sets nothing sends no write: one COUNT
 // checks the row, and one SELECT reads it.
 func TestUpdateEmpty(t *testing.T) {
@@ -1070,7 +1092,7 @@ func TestMutationsRun(t *testing.T) {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
 	for _, name := range []string{"TestCreate", "TestCreateM2MBothSides", "TestRepeatedIDs", "TestEdgeScope", "TestAtomic", "TestCreateErrors", "TestRepoint",
-		"TestUpdate", "TestUpdateConflicts", "TestUpdatePolicy", "TestUpdateWriteScope", "TestUpdateEmpty", "TestUpdateErrors"} {
+		"TestUpdate", "TestUpdateConflicts", "TestUpdatePolicy", "TestUpdateWriteScope", "TestUpdateReadBack", "TestUpdateEmpty", "TestUpdateErrors"} {
 		if !strings.Contains(out, "--- PASS: "+name+" ") {
 			t.Errorf("no PASS of %s in\n%s", name, out)
 		}

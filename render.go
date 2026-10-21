@@ -66,10 +66,14 @@ func (w *writer) arg(v any) {
 
 // colArg binds v, a value of column col: as it is, or when the column is an
 // encoded one, as the bytes its codec returns, which on SQLite and MySQL are
-// bound as a string when they are valid UTF-8 (textArg). Every value written
-// to a column goes through it, so that only the arguments hold the bytes
-// (hooks see v).
+// bound as a string when they are valid UTF-8 (textArg). A nil []byte in a
+// nullable column binds an untyped nil, NULL whatever the driver makes of a
+// nil []byte. Every value written to a column goes through it, so that only
+// the arguments hold the bytes (hooks see v).
 func (w *writer) colArg(col int, v any) {
+	if bs, ok := v.([]byte); ok && bs == nil && w.in.Columns[col].Nullable {
+		v = nil
+	}
 	if w.in.Columns[col].Codec {
 		b, err := encodeCol(w.in, col, v)
 		if err != nil {

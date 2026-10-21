@@ -533,6 +533,52 @@ func (optionalTimeOK) Fields() []schema.Field {
 	return []schema.Field{field.Time("a").Optional().Default(time.Now), field.Time("b").Optional().Nillable()}
 }
 
+// optionalJSONStruct has an Optional JSON field of a struct: its column holds
+// NULL, which its Go field cannot (rule 48).
+type optionalJSONStruct struct{ schema.Schema }
+
+func (optionalJSONStruct) Fields() []schema.Field {
+	return []schema.Field{field.JSON("shape", jsonShape{}).Optional()}
+}
+
+// optionalJSONScalar has an Optional JSON field of a scalar type (rule 48).
+type optionalJSONScalar struct{ schema.Schema }
+
+func (optionalJSONScalar) Fields() []schema.Field {
+	return []schema.Field{field.JSON("n", 0).Optional()}
+}
+
+// jsonShape is a struct a json field holds.
+type jsonShape struct{ W, H int }
+
+// optionalJSONOK has the Optional JSON fields that pass: of a slice, a map
+// or a pointer, which nil holds, and of a struct that is Nillable.
+type optionalJSONOK struct{ schema.Schema }
+
+func (optionalJSONOK) Fields() []schema.Field {
+	return []schema.Field{
+		field.Strings("tags").Optional(),
+		field.JSON("attrs", map[string]any{}).Optional(),
+		field.JSON("ptr", &jsonShape{}).Optional(),
+		field.JSON("shape", jsonShape{}).Optional().Nillable(),
+		field.JSON("req", jsonShape{}),
+	}
+}
+
+func TestBuildOptionalJSONNeedsNilable(t *testing.T) {
+	mustBuild(t, optionalJSONOK{})
+	for _, s := range []schema.Interface{optionalJSONStruct{}, optionalJSONScalar{}} {
+		_, err := build(t, s)
+		if err == nil || !strings.Contains(err.Error(), `: an Optional JSON field of a non-nil-able type needs Nillable`) {
+			t.Errorf("%T: %v", s, err)
+		}
+	}
+	_, err := build(t, optionalJSONStruct{})
+	if err == nil || !strings.Contains(err.Error(), `schema optionalJSONStruct: field "shape": an Optional JSON field of a non-nil-able type needs Nillable`) {
+		t.Errorf("the message: %v", err)
+	}
+}
+
 // optionalFK binds an Optional edge field that is not Nillable.
 type optionalFK struct{ schema.Schema }
 
@@ -856,6 +902,7 @@ func TestBuildRulesAreSingle(t *testing.T) {
 		{fkUnbound{}}, {fieldStringFK{}}, {immutableEdge{}}, {immutableField{}}, {loop{}}, {cycle{}},
 		{odM2M{}, odM2M2{}}, {odSetNullRequired{}}, {odDiffOwner{}, odDiffPet{}},
 		{defaultBool{}}, {defaultNumber{}}, {defaultFuncNumber{}}, {optionalEnum{}}, {optionalFK{}}, {optionalBytes{}}, {optionalTime{}},
+		{optionalJSONStruct{}},
 	} {
 		_, err := build(t, ss...)
 		if n := len(err.(interface{ Unwrap() []error }).Unwrap()); n != 1 {

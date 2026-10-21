@@ -54,7 +54,7 @@ func PluginModel(g *Graph, o *Out) *plugin.Model {
 			pe.Fields = append(pe.Fields, &plugin.Field{
 				Name: of.Name, GoName: of.GoName, Column: of.Column,
 				Type: gf.Type, GoType: of.GoType, ElemType: of.ElemType, PkgPath: pkgPathOf(gf), Imports: importsOf(gf), Kind: goKindOf(gf),
-				Pointer: of.Pointer, Nullable: gf.Nillable || gf.Optional && gf.Type == "json", Optional: gf.Optional,
+				Pointer: of.Pointer, Nullable: nullable(gf), Optional: gf.Optional,
 				Immutable: of.Immutable, Sensitive: of.Sensitive, Unique: gf.Unique,
 				AutoID: gf.AutoID, Size: gf.Size, HasDefault: of.DefaultCode != "" || of.DefaultFuncCode != "", Default: literalDefault(gf),
 				UpdateDefault: gf.UpdateDefault, Implicit: gf.Implicit,
@@ -250,4 +250,11 @@ func joinFields(g *Graph, oe *OutEntity) []*plugin.Field {
 		fields = append(fields, pf)
 	}
 	return fields
+}
+
+// nullable reports whether the column of gf holds NULL: a Nillable field's,
+// and an Optional JSON field's whose Go type holds nil (rule 48 refuses one
+// of another type), as the core's ColumnDesc.Nullable and pointers say.
+func nullable(gf *Field) bool {
+	return gf.Nillable || gf.Optional && gf.Type == "json" && gf.GoType != nil && nilKinds[gf.GoType.Kind]
 }

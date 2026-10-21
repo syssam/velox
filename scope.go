@@ -13,9 +13,9 @@ import (
 // statement with ErrNoTenant when the context has neither WithTenant nor
 // AllTenants. Unless the context says SkipPolicy, a SELECT gets the entity's
 // Read policy and an UPDATE or DELETE, or a Writable SELECT, its Read and
-// Write policies, after the tenant. Every EXISTS gets its target's tenant and Read policy the same way.
-// scope runs after the guard and the Rewrite hooks, so neither sees what it
-// adds and no hook can remove it.
+// Write policies, after the tenant. Every EXISTS gets its target's tenant
+// and Read policy the same way. scope runs after the guard and the Rewrite
+// hooks, so neither sees what it adds and no hook can remove it.
 //
 // Raw SQL (OpRawQuery and OpRawExec) is never scoped: prepare does not call
 // scope for it, as its SQL is the caller's, and its Statement.TenantBypass

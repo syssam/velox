@@ -588,6 +588,13 @@ func TestRenderErrors(t *testing.T) {
 			return e
 		}(), withField(entity("Note", "int64"), &plugin.Field{Name: "pair_notes", GoName: "PairNotes", Type: "int64", GoType: "*int64", ElemType: "int64", Pointer: true, Nullable: true, Implicit: "notes"})}},
 			"schema Pair, edge notes: velox-graphql finds its nodes by the key of Pair, which is 2 columns"},
+		// clear<Field> sets NULL: a nullable field whose Go field holds no
+		// nil cannot be cleared (velox-gen's rule 48 refuses such a model).
+		"a nullable JSON struct that is no pointer": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{func() *plugin.Entity {
+			e := withField(entity("Thing", "int64"), &plugin.Field{Name: "shape", GoName: "Shape", Type: "json", GoType: "types.Shape", ElemType: "types.Shape", PkgPath: "example.com/types", Kind: "struct", Optional: true, Nullable: true})
+			e.Annotations = map[string]json.RawMessage{"graphql": json.RawMessage(`{"mutations":["update"]}`)}
+			return e
+		}()}}, "schema Thing, field shape: the model says its column holds NULL, and its Go type types.Shape holds no nil; make the field Nillable"},
 		// The kind of the application's Go type tells what converts.
 		"a struct for a time": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{withField(entity("Thing", "int64"),
 			&plugin.Field{Name: "at", GoName: "At", Type: "time", GoType: "types.Stamp", ElemType: "types.Stamp", PkgPath: "example.com/types", Kind: "struct"})}},

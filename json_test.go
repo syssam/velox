@@ -976,12 +976,14 @@ func TestEncodedKeyRefused(t *testing.T) {
 
 // jOpt has the JSON columns of Optional fields, as velox-gen writes them: a
 // slice and a map whose ColumnDesc says Nullable, as their columns can hold
-// NULL though the fields are no pointers; and a slice that is not.
+// NULL though the fields are no pointers; and a slice that is not. Blob is a
+// Nillable bytes field: no codec, and Nullable.
 type jOpt struct {
 	ID    int64
 	Tags  []string
 	Attrs map[string]any
 	Fixed []string
+	Blob  []byte
 }
 
 var jOpts = struct {
@@ -989,7 +991,8 @@ var jOpts = struct {
 	Tags  velox.JSONCol[jOpt, []string]
 	Attrs velox.JSONCol[jOpt, map[string]any]
 	Fixed velox.JSONCol[jOpt, []string]
-}{velox.NumberCol[jOpt, int64]{I: 0}, velox.JSONCol[jOpt, []string]{I: 1}, velox.JSONCol[jOpt, map[string]any]{I: 2}, velox.JSONCol[jOpt, []string]{I: 3}}
+	Blob  velox.Col[jOpt, []byte]
+}{velox.NumberCol[jOpt, int64]{I: 0}, velox.JSONCol[jOpt, []string]{I: 1}, velox.JSONCol[jOpt, map[string]any]{I: 2}, velox.JSONCol[jOpt, []string]{I: 3}, velox.Col[jOpt, []byte]{I: 4}}
 
 var jOptMeta velox.MetaOnce[jOpt]
 
@@ -1003,6 +1006,7 @@ func jOptDesc() velox.Desc[jOpt] {
 			{Field: "Tags", Name: "tags", Nullable: true, Encode: json.Marshal, Decode: json.Unmarshal},
 			{Field: "Attrs", Name: "attrs", Nullable: true, Encode: json.Marshal, Decode: json.Unmarshal},
 			{Field: "Fixed", Name: "fixed", Encode: json.Marshal, Decode: json.Unmarshal},
+			{Field: "Blob", Name: "blob", Nullable: true},
 		},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
@@ -1014,18 +1018,22 @@ func jOptDesc() velox.Desc[jOpt] {
 				return &x.Tags
 			case 2:
 				return &x.Attrs
+			case 3:
+				return &x.Fixed
 			}
-			return &x.Fixed
+			return &x.Blob
 		},
 	}
 }
 
 // TestJSONNullableNoPointer: in a column whose ColumnDesc says Nullable, a nil
 // slice or map binds NULL, on insert and on update, and NULL reads back as
-// nil; in one that does not, nil binds the JSON null, as before.
+// nil; in one that does not, nil binds the JSON null, as before. A nil
+// []byte in a Nullable column without a codec binds an untyped nil: NULL,
+// whatever the driver makes of a nil []byte.
 func TestJSONNullableNoPointer(t *testing.T) {
 	info := velox.InfoOf[jOpt]()
-	if !info.Columns[1].Nullable || !info.Columns[2].Nullable || info.Columns[3].Nullable {
+	if !info.Columns[1].Nullable || !info.Columns[2].Nullable || info.Columns[3].Nullable || !info.Columns[4].Nullable {
 		t.Errorf("Nullable: %v %v %v, want true true false", info.Columns[1].Nullable, info.Columns[2].Nullable, info.Columns[3].Nullable)
 	}
 	e := &velox.FakeExec{Affected: 1}
@@ -1033,22 +1041,28 @@ func TestJSONNullableNoPointer(t *testing.T) {
 	if err := db.Insert(&jOpt{ID: 1}).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
-	sameArgs(t, "Insert of nil values", e.Args, []any{int64(1), nil, nil, []byte("null")})
-	if err := db.Insert(&jOpt{ID: 2, Tags: []string{}, Attrs: map[string]any{"k": 1}}).Exec(ctx); err != nil {
+	sameArgs(t, "Insert of nil values", e.Args, []any{int64(1), nil, nil, []byte("null"), nil})
+	if e.Args[4] != nil {
+		t.Errorf("the nil blob binds a %T, want an untyped nil", e.Args[4])
+	}
+	if err := db.Insert(&jOpt{ID: 2, Tags: []string{}, Attrs: map[string]any{"k": 1}, Blob: []byte{}}).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
-	sameArgs(t, "Insert of values", e.Args, []any{int64(2), []byte(`[]`), []byte(`{"k":1}`), []byte("null")})
-	if _, err := db.Update[jOpt]().Set(jOpts.Tags.Set(nil), jOpts.Attrs.Set(nil), jOpts.Fixed.Set(nil)).Where(jOpts.ID.EQ(1)).Exec(ctx); err != nil {
+	sameArgs(t, "Insert of values", e.Args, []any{int64(2), []byte(`[]`), []byte(`{"k":1}`), []byte("null"), []byte{}})
+	if _, err := db.Update[jOpt]().Set(jOpts.Tags.Set(nil), jOpts.Attrs.Set(nil), jOpts.Fixed.Set(nil), jOpts.Blob.Set(nil)).Where(jOpts.ID.EQ(1)).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
-	sameArgs(t, "Update to nil", e.Args, []any{nil, nil, []byte("null"), int64(1)})
+	sameArgs(t, "Update to nil", e.Args, []any{nil, nil, []byte("null"), nil, int64(1)})
+	if e.Args[3] != nil {
+		t.Errorf("the nil blob binds a %T, want an untyped nil", e.Args[3])
+	}
 
-	e.Rows = [][]any{{int64(1), nil, nil, []byte("null")}}
+	e.Rows = [][]any{{int64(1), nil, nil, []byte("null"), []byte(nil)}}
 	x, err := db.Query[jOpt]().Where(jOpts.ID.EQ(1)).One(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if x.Tags != nil || x.Attrs != nil || x.Fixed != nil {
+	if x.Tags != nil || x.Attrs != nil || x.Fixed != nil || x.Blob != nil {
 		t.Errorf("read %+v, want nil values", x)
 	}
 }

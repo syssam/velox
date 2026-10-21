@@ -160,8 +160,15 @@
 // as it is, clear<Field> sets a nullable one to NULL, and an edge is
 // cleared, then its remove<Edge>IDs removed, then its add<Edge>IDs added; a
 // field given with its clear, or an ID both to add and to remove, is refused
-// with BAD_USER_INPUT. The Go of deleteX is not written yet: the application
-// resolves it itself until it is.
+// with BAD_USER_INPUT. An update with no field to set checks its row under
+// the same scope as one with fields: the tenant, and the Read and Write
+// policies. Clearing or removing children unlinks only those the caller may
+// change; one the tenant scope or the child's Write policy hides stays
+// linked. Update<T> returns the row it wrote, read under the tenant scope
+// without the Read policy, as Create<T> returns the row it inserted: an
+// update that takes the row out of what the caller may read succeeds. The Go
+// of deleteX is not written yet: the application resolves it itself until it
+// is.
 //
 // An edge's inputs follow its foreign key. A key on the entity's own row is
 // set by <edge>ID. A key on the target's rows is re-pointed from the owner

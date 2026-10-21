@@ -753,6 +753,12 @@ func (b *builder) validateFields(e *Entity) {
 				b.fail(r.rule, e.Name, fieldLoc(f), "an Optional %s needs a Default or Nillable", r.noun)
 			}
 		}
+		// An Optional JSON field's column holds NULL, so its Go field must
+		// hold nil: a slice, a map, a pointer or an interface, or a pointer
+		// that Nillable makes.
+		if f.Type == "json" && f.Optional && !f.Nillable && f.GoType != nil && !nilKinds[f.GoType.Kind] {
+			b.fail(48, e.Name, fieldLoc(f), "an Optional JSON field of a non-nil-able type needs Nillable")
+		}
 		// No index covers a JSON column (rule 42 is a declared index's).
 		if f.Type == "json" && f.Unique {
 			b.fail(41, e.Name, fieldLoc(f), "a JSON field cannot be Unique")

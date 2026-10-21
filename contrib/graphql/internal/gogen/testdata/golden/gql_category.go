@@ -324,12 +324,17 @@ func (in UpdateCategoryInput) GoString() string { return in.String() }
 // so that no edge of a row the caller may not change is written. The edges
 // follow, each cleared, then its IDs removed, then its IDs added: an ID to
 // remove the edge does not lead to is ignored, and one to add it already leads
-// to is kept. Each ID must name a row the caller may read, and a row it
-// re-points one the caller may change; a child another node holds is refused
-// (BAD_USER_INPUT). An id that names no row the caller may change, or an ID no
-// row it may read, fails with NOT_FOUND and keeps nothing. A validator's
-// refusal is BAD_USER_INPUT, naming the input field; velox's other errors are
-// returned as they are. On MySQL the UPDATE's row count needs
+// to is kept. Clearing an edge whose key is on the targets' rows, or removing
+// from it, unlinks only the children the tenant scope and the target's Write
+// policy let the caller change; one they hide stays linked. Each ID must name a
+// row the caller may read, and a row it re-points one the caller may change; a
+// child another node holds is refused (BAD_USER_INPUT). An id that names no row
+// the caller may change, or an ID no row it may read, fails with NOT_FOUND and
+// keeps nothing. A validator's refusal is BAD_USER_INPUT, naming the input
+// field; velox's other errors are returned as they are. The row is read back as
+// written, under the tenant scope and without the Read policy
+// (velox.SkipPolicy): an update that takes the row out of what the caller may
+// read still returns it. On MySQL the UPDATE's row count needs
 // clientFoundRows=true, as velox's Update does.
 func UpdateCategory(ctx context.Context, id string, input UpdateCategoryInput) (*Category, error) {
 	var (
@@ -407,7 +412,7 @@ func UpdateCategory(ctx context.Context, id string, input UpdateCategoryInput) (
 				return err
 			}
 		}
-		x, err := db.Query[Category]().Where(Categories.ID.EQ(key)).One(ctx)
+		x, err := db.Query[Category]().Where(Categories.ID.EQ(key)).One(velox.SkipPolicy(ctx, "graphql: the row this update wrote"))
 		if errors.Is(err, velox.ErrNotFound) {
 			return gqlimpl.NotFound("updateCategory", "Category")
 		}

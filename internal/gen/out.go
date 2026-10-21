@@ -59,7 +59,7 @@ type OutField struct {
 	Comment              string
 	Sensitive, Immutable bool
 	JSON                 bool   // a json field: its ColumnDesc's codec is encoding/json's, which the file imports
-	NilIsNull            bool   // a json field of an Optional or Nillable schema field that is a slice or a map: its column holds NULL, which nil binds; its ColumnDesc says Nullable
+	NilIsNull            bool   // a slice or map field whose column holds NULL (an Optional or Nillable json field, a Nillable bytes field), which nil binds: its ColumnDesc says Nullable
 	DefaultCode          string // "" or a Go expression for ColumnDesc.Default
 	DefaultFuncCode      string // "" or "func() any { … }"
 	UpdateDefaultCode    string // "" or "func() any { … }"

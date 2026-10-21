@@ -67,11 +67,12 @@ type ColumnDesc struct {
 	Sensitive     bool
 	// Nullable says the column holds NULL though the field is no pointer:
 	// a slice or a map, whose nil velox binds as NULL and reads NULL back
-	// into. velox-gen sets it on the json field of an Optional or Nillable
-	// schema field that is a slice or a map. Without it, a nil slice or map
-	// in an encoded column binds what Encode makes of it (json.Marshal's
-	// null). A pointer field is nullable without it; on a field of any other
-	// type it is refused.
+	// into. velox-gen sets it on a json field of an Optional or Nillable
+	// schema field that is a slice or a map, and on a Nillable bytes field.
+	// Without it, a nil slice or map in an encoded column binds what Encode
+	// makes of it (json.Marshal's null), and a nil []byte is handed to the
+	// driver as it is. A pointer field is nullable without it; on a field of
+	// any other type it is refused.
 	Nullable bool
 	// Encode and Decode are the column's codec, both or neither: with them,
 	// velox binds the bytes Encode returns for the field's value, and decodes

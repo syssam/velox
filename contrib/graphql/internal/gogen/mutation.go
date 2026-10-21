@@ -712,12 +712,12 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 	}
 
 	f.p("")
-	f.doc("", fmt.Sprintf("%s updates the %s with the ID id from input, as the mutation %s does, and returns it as it is afterwards: a field input does not give is left as it is, and a clear field sets a field to NULL or empties an edge. It first decodes id and every ID and JSON value of input, and refuses a field given with its clear field, or an ID both to add and to remove, before any statement (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFrom reads from ctx, in one transaction (gqlimpl.Atomic): the operation's, or one of its own. The fields go in one UPDATE, which the tenant scope and the Read and Write policies scope; an input that sets none sends no UPDATE, and a COUNT under the same scope (Writable) checks the row instead, so that no edge of a row the caller may not change is written. The edges follow, each cleared, then its IDs removed, then its IDs added: an ID to remove the edge does not lead to is ignored, and one to add it already leads to is kept. Each ID must name a row the caller may read, and a row it re-points one the caller may change; a child another node holds is refused (BAD_USER_INPUT). An id that names no row the caller may change, or an ID no row it may read, fails with NOT_FOUND and keeps nothing. A validator's refusal is BAD_USER_INPUT, naming the input field; velox's other errors are returned as they are. On MySQL the UPDATE's row count needs clientFoundRows=true, as velox's Update does.", fn, n, mutation))
+	f.doc("", fmt.Sprintf("%s updates the %s with the ID id from input, as the mutation %s does, and returns it as it is afterwards: a field input does not give is left as it is, and a clear field sets a field to NULL or empties an edge. It first decodes id and every ID and JSON value of input, and refuses a field given with its clear field, or an ID both to add and to remove, before any statement (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFrom reads from ctx, in one transaction (gqlimpl.Atomic): the operation's, or one of its own. The fields go in one UPDATE, which the tenant scope and the Read and Write policies scope; an input that sets none sends no UPDATE, and a COUNT under the same scope (Writable) checks the row instead, so that no edge of a row the caller may not change is written. The edges follow, each cleared, then its IDs removed, then its IDs added: an ID to remove the edge does not lead to is ignored, and one to add it already leads to is kept. Clearing an edge whose key is on the targets' rows, or removing from it, unlinks only the children the tenant scope and the target's Write policy let the caller change; one they hide stays linked. Each ID must name a row the caller may read, and a row it re-points one the caller may change; a child another node holds is refused (BAD_USER_INPUT). An id that names no row the caller may change, or an ID no row it may read, fails with NOT_FOUND and keeps nothing. A validator's refusal is BAD_USER_INPUT, naming the input field; velox's other errors are returned as they are. The row is read back as written, under the tenant scope and without the Read policy (velox.SkipPolicy): an update that takes the row out of what the caller may read still returns it. On MySQL the UPDATE's row count needs clientFoundRows=true, as velox's Update does.", fn, n, mutation))
 	f.p("func %s(ctx %s.Context, id string, input %s) (*%s, error) {", fn, ctx, in, e.Name)
 	writeDecodes(f, fs, dec, order, selfDec)
 
 	// The inputs with no single meaning.
-	for _, fi := range fs {
+	for i, fi := range fs {
 		var other int
 		switch fi.Kind {
 		case sdl.InputClear:
@@ -729,7 +729,7 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 			if add < 0 {
 				continue
 			}
-			f.p("\tif err = %s.Disjoint(%q, %q, %q, %s, %s); err != nil {", impl, in, fs[add].Name, fi.Name, dec[add].v, dec[slices.Index(fs, fi)].v)
+			f.p("\tif err = %s.Disjoint(%q, %q, %q, %s, %s); err != nil {", impl, in, fs[add].Name, fi.Name, dec[add].v, dec[i].v)
 			f.p("\t\treturn nil, err")
 			f.p("\t}")
 			continue
@@ -780,8 +780,12 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 			f.p("\t\t\tset = append(set, %s.Set(%s))", h, v)
 			f.p("\t\t}")
 		case sdl.InputClear:
+			null, err := setNull(e, e.Fields[fi.Field])
+			if err != nil {
+				return err
+			}
 			f.p("\t\tif input.%s {", fi.GoName)
-			f.p("\t\t\tset = append(set, %s)", setNull(e, e.Fields[fi.Field]))
+			f.p("\t\t\tset = append(set, %s)", null)
 			f.p("\t\t}")
 		case sdl.InputEdgeID, sdl.InputClearEdge:
 			ed := e.Edges[fi.Edge]
@@ -794,8 +798,12 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 			}
 			h := e.Handles + "." + fk.GoName
 			if fi.Kind == sdl.InputClearEdge {
+				null, err := setNull(e, fk)
+				if err != nil {
+					return err
+				}
 				f.p("\t\tif input.%s {", fi.GoName)
-				f.p("\t\t\tset = append(set, %s)", setNull(e, fk))
+				f.p("\t\t\tset = append(set, %s)", null)
 				f.p("\t\t}")
 				continue
 			}
@@ -926,6 +934,16 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 			v = conv + "(key)"
 		}
 		fkh := tgt.Handles + "." + tfk.GoName
+		tnull, err := setNull(tgt, tfk)
+		if err != nil {
+			return err
+		}
+		// The count of the IDs linked to this row after the UPDATE is under
+		// the tenant and the Read policy, not the Write policy: a child
+		// already linked here that the Write policy hides is a link that
+		// exists, and adding it again changes nothing. A child with a NULL
+		// key the Write policy hides is not linked by the UPDATE, counts 0,
+		// and is NOT_FOUND.
 		link := func(indent string, fi sdl.InputField, ids, cnt string) {
 			exec(indent, fmt.Sprintf("db.Update[%s]().Set(%s.Set(%s)).Where(%s, %s.IsNull()).Exec(ctx)", tgt.Name, fkh, v, ids, fkh))
 			f.p("%sif n, err := db.Query[%s]().Where(%s, %s.EQ(%s)).Count(ctx); err != nil {", indent, tgt.Name, ids, fkh, v)
@@ -936,13 +954,13 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 		}
 		if clear >= 0 {
 			f.p("\t\tif input.%s {", fs[clear].GoName)
-			exec("\t\t\t", fmt.Sprintf("db.Update[%s]().Set(%s).Where(%s.EQ(%s)).Exec(ctx)", tgt.Name, setNull(tgt, tfk), fkh, v))
+			exec("\t\t\t", fmt.Sprintf("db.Update[%s]().Set(%s).Where(%s.EQ(%s)).Exec(ctx)", tgt.Name, tnull, fkh, v))
 			f.p("\t\t}")
 		}
 		if rm >= 0 {
 			d := dec[rm].v
 			f.p("\t\tif len(%s) > 0 {", d)
-			exec("\t\t\t", fmt.Sprintf("db.Update[%s]().Set(%s).Where(%s.In(%s...), %s.EQ(%s)).Exec(ctx)", tgt.Name, setNull(tgt, tfk), tpk, d, fkh, v))
+			exec("\t\t\t", fmt.Sprintf("db.Update[%s]().Set(%s).Where(%s.In(%s...), %s.EQ(%s)).Exec(ctx)", tgt.Name, tnull, tpk, d, fkh, v))
 			f.p("\t\t}")
 		}
 		if add >= 0 {
@@ -956,15 +974,18 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 			// let go first: the key is unique.
 			d := dec[one].v
 			f.p("\t\tif input.%s != nil {", fs[one].GoName)
-			exec("\t\t\t", fmt.Sprintf("db.Update[%s]().Set(%s).Where(%s.EQ(%s), %s.NEQ(%s)).Exec(ctx)", tgt.Name, setNull(tgt, tfk), fkh, v, tpk, d))
+			exec("\t\t\t", fmt.Sprintf("db.Update[%s]().Set(%s).Where(%s.EQ(%s), %s.NEQ(%s)).Exec(ctx)", tgt.Name, tnull, fkh, v, tpk, d))
 			link("\t\t\t", fs[one], tpk+".EQ("+d+")", "1")
 			f.p("\t\t}")
 		}
 	}
 
-	// The row as it is afterwards.
+	// The row as it is afterwards: the row this update wrote, which the
+	// caller could read before it, so read back under the tenant scope
+	// without the Read policy, as CreateX returns the row it inserted. An
+	// update that moves the row out of the caller's Read view succeeds.
 	errs := f.use("errors", "errors")
-	f.p("\t\tx, err := db.Query[%s]().Where(%s.EQ(key)).One(ctx)", e.Name, pk)
+	f.p("\t\tx, err := db.Query[%s]().Where(%s.EQ(key)).One(%s.SkipPolicy(ctx, %q))", e.Name, pk, velox, "graphql: the row this update wrote")
 	f.p("\t\tif %s.Is(err, %s.ErrNotFound) {", errs, velox)
 	f.p("\t\t\treturn %s.NotFound(%q, %q)", impl, mutation, n)
 	f.p("\t\t}")
@@ -984,12 +1005,18 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 
 // setNull is the setter that sets the nullable field fd of e to NULL: its
 // handle's SetNull when the Go field is a pointer, and else Set(nil), for a
-// field whose Go type is a slice or a map, whose handle has no SetNull: its
-// ColumnDesc says Nullable, so the core binds that nil as SQL NULL.
-func setNull(e *plugin.Entity, fd *plugin.Field) string {
+// field whose Go type holds nil (a slice, a map, a pointer or an interface),
+// whose handle has no SetNull: its ColumnDesc says Nullable, or its Go type
+// is a pointer, so the core binds that nil as SQL NULL. A field of another
+// Go type cannot be cleared: an error, which velox-gen's rule 48 keeps from
+// its models.
+func setNull(e *plugin.Entity, fd *plugin.Field) (string, error) {
 	h := e.Handles + "." + fd.GoName
-	if fd.Pointer {
-		return h + ".SetNull()"
+	switch {
+	case fd.Pointer:
+		return h + ".SetNull()", nil
+	case fd.Kind == "slice" || fd.Kind == "map" || fd.Kind == "ptr" || fd.Kind == "interface" || fd.Type == "bytes":
+		return h + ".Set(nil)", nil
 	}
-	return h + ".Set(nil)"
+	return "", fmt.Errorf("schema %s, field %s: the model says its column holds NULL, and its Go type %s holds no nil; make the field Nillable", e.Name, fd.Name, cmp.Or(fd.ElemType, fd.GoType))
 }

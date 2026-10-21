@@ -1051,3 +1051,56 @@ func TestLowerTimeDefaultConverts(t *testing.T) {
 		t.Errorf("imports %v", e.Imports)
 	}
 }
+
+// LwNull has a field of each way a column can hold NULL, or not.
+type LwNull struct{ schema.Schema }
+
+func (LwNull) Fields() []schema.Field {
+	return []schema.Field{
+		field.Strings("tags").Optional(),
+		field.JSON("attrs", map[string]any{}).Optional(),
+		field.JSON("box", lwBox{}).Optional().Nillable(),
+		field.JSON("shape", lwBox{}),
+		field.Bytes("blob").Nillable(),
+		field.Bytes("raw").Optional().Default([]byte("r")),
+		field.String("bio").Optional(),
+	}
+}
+
+// TestLowerNullable: the plugin model's Nullable is a column that holds
+// NULL: Nillable, or an Optional JSON slice or map; and the ColumnDesc of a
+// NULL-able field that is a slice or a map, no pointer, says Nullable.
+func TestLowerNullable(t *testing.T) {
+	g := mustBuild(t, LwNull{})
+	o, err := Lower(g, Config{Package: "gen", SchemaPath: lowerSchemaPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pe := pluginEntity(t, PluginModel(g, o), "LwNull")
+	e := o.entity("LwNull")
+	for _, c := range []struct {
+		name               string
+		nullable, nilIsNil bool
+	}{
+		{"tags", true, true}, {"attrs", true, true}, {"box", true, false}, {"shape", false, false},
+		{"blob", true, true}, {"raw", false, false}, {"bio", false, false},
+	} {
+		if got := pluginField(t, pe, c.name).Nullable; got != c.nullable {
+			t.Errorf("%s: plugin Nullable %v, want %v", c.name, got, c.nullable)
+		}
+		if got := e.field(c.name).NilIsNull; got != c.nilIsNil {
+			t.Errorf("%s: NilIsNull %v, want %v", c.name, got, c.nilIsNil)
+		}
+	}
+	files, err := Generate(g, Config{Package: "gen", SchemaPath: lowerSchemaPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var src string
+	for _, f := range files {
+		src += string(f.Data)
+	}
+	if want := `{Field: "Blob", Name: "blob", Nullable: true},`; !strings.Contains(src, want) {
+		t.Errorf("the generated code lacks %s", want)
+	}
+}
