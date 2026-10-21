@@ -169,8 +169,9 @@ type Input[E, T any] interface {
 }
 
 // nested is the condition of w, an input nested in f's at field, one level
-// deeper (in the context Pred is called with); a nil w is an input that sets nothing, which holds for every row.
-// ok is false when w fails, and f has its error.
+// deeper (in the context Pred is called with); a nil w is an input that sets
+// nothing, which holds for every row. ok is false when w fails, and f has its
+// error.
 func nested[E, U, T any, W Input[U, T]](f *Filter[E], field string, w W) (p velox.Pred[U], ok bool) {
 	if w == nil {
 		return velox.And[U](), true

@@ -187,7 +187,7 @@ func (e *Extension) Validate(graphql.ExecutableSchema) error {
 	}
 	for _, l := range e.limits.fields() {
 		if l.n < 0 {
-			return fmt.Errorf("veloxgql.NewExtension: Limits.%s is %d, and a limit must be positive", l.name, l.n)
+			return fmt.Errorf("veloxgql.NewExtension: Limits.%s is %d, and a limit must not be negative (zero is the default)", l.name, l.n)
 		}
 	}
 	if n := velox.TxRetries(e.txOpts...); n > 0 {

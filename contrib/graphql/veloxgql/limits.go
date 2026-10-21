@@ -15,32 +15,37 @@ type Limits struct {
 	// MaxPage is the largest first or last a connection takes, and the page
 	// size when neither is given. More is ErrPageTooLarge, not a shorter
 	// page. It bounds the IDs of the root field nodes too.
-	//
+	MaxPage int
+
 	// MaxList is the most rows a list edge (graphql.Connection(false))
 	// reads: the edge's query allows MaxList rows in place of the DB's
 	// WithMaxRows cap, which is no cap unless the application sets one. A
 	// node with more fails the edge with velox.ErrTooManyRows, in an error
 	// that names the edge, rather than reading them all.
-	//
+	MaxList int
+
 	// MaxFilterDepth is how deep a where input may nest through not, and,
 	// or and has<Edge>With. Deeper is ErrFilterTooDeep, before any query
 	// runs.
-	//
+	MaxFilterDepth int
+
 	// MaxFilterWidth is the most entries a list in a where input may have:
 	// an and, an or or a has<Edge>With list of inputs, or an In or a NotIn
 	// list of values. More is ErrFilterTooWide, before any query runs.
-	//
+	MaxFilterWidth int
+
 	// MaxFilterNodes is the budget of one where argument: its inputs, the
 	// inputs nested in them, the predicates they set and the values of their
 	// In and NotIn lists each count one, across the whole argument. More is
 	// ErrFilterTooLarge, before any query runs. Depth and width alone do not
 	// bound an argument that holds one input many times over, as a GraphQL
 	// variable used at many places does.
-	//
+	MaxFilterNodes int
+
 	// MaxOrderTerms is the most terms an orderBy list may have, each an
 	// ORDER BY term and a term of every cursor. More is ErrBadPagination,
 	// before any query runs.
-	MaxPage, MaxList, MaxFilterDepth, MaxFilterWidth, MaxFilterNodes, MaxOrderTerms int
+	MaxOrderTerms int
 }
 
 // DefaultLimits returns MaxPage 100, MaxList 1000, MaxFilterDepth 5,

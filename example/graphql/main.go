@@ -62,11 +62,12 @@ func serve(ctx context.Context, addr string) error {
 // field costs 1 and its children's cost is added, so it is the number of
 // fields the request selects, aliases and nested connections included.
 // users, posts and tags nested, each with its edges and node, with a few
-// scalars (the deepest query of main_test.go) cost 13; gqlgen counts no
-// introspection field, so GraphiQL's schema query costs nothing. veloxgql's
-// Limits each bound one argument (MaxPage rows of a connection, and so on),
-// so this one bounds the request as a whole. It does not multiply by first and
-// last: a cost that does is a later veloxgql feature.
+// scalars (the deepest query of main_test.go) cost 13. gqlgen counts no
+// __schema field, so GraphiQL's schema query costs nothing; __type(name:)
+// costs a few points, as any field does. veloxgql's Limits each bound one
+// argument (MaxPage rows of a connection, and so on), so this one bounds the
+// request as a whole. It does not multiply by first and last: a cost that
+// does is a later veloxgql feature.
 const complexityLimit = 200
 
 // server is the GraphQL endpoint: gqlgen's server on the generated schema,

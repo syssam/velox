@@ -87,16 +87,26 @@ directives onto its `where` predicates (`email`, `emailHasPrefix`…), so the
 directive guards those too: without it, a client could find an email it may
 not read by filtering on it, a prefix at a time. That is why the directive is
 declared `on FIELD_DEFINITION | INPUT_FIELD_DEFINITION`: gqlgen refuses the
-schema otherwise. `email` has no `OrderField`: the order and the cursors
-would reveal its values, which no directive guards, so velox-graphql refuses
-`OrderField` on a field with an application directive unless
-`graphql.OrderUnguarded()` says so.
+schema otherwise.
+
+`email` has no `OrderField`: the order and the cursors would reveal its
+values, which no directive guards, so velox-graphql refuses `OrderField` on a
+field with an application directive unless `graphql.OrderUnguarded()` says
+so.
 
 Like `X-Org-ID`, `X-Role` is for this demo only: a client that names its own
 role is whoever it says. A real server takes the role from what
 authenticates the request. A directive is field-level access, as is gqlgen's
 `srv.AroundFields`; row-level access, which rows a caller may read, is the
 entity's `velox.Policy`.
+
+**Upgrading.** An application whose schema has a directive on a filterable
+field or edge must now also declare that directive on
+`INPUT_FIELD_DEFINITION` (`on FIELD_DEFINITION | INPUT_FIELD_DEFINITION`), as
+`@admin` does here: velox-graphql copies it onto the `where` inputs, and
+gqlgen refuses to load a schema where a directive is used on a location it
+is not declared on. This is a breaking change, made before the first
+release, because those filters were unguarded before.
 
 ### What a client sees of an error
 
@@ -121,17 +131,23 @@ Pass your own function to log internal errors elsewhere.
 
 Every `veloxgql.Limits` field (`MaxPage`, `MaxList`, `MaxFilterDepth`,
 `MaxFilterWidth`, `MaxFilterNodes`, `MaxOrderTerms`) bounds one argument or
-one edge. The server takes the defaults; `veloxgql.WithLimits` sets others,
-as `veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 50}))`. They do not bound a request: connections nested in connections
-multiply (each level reads up to `MaxPage` rows, and runs a query for each
-parent), and aliases repeat a field as often as the client writes it. So the
-server also sets gqlgen's `extension.FixedComplexityLimit(200)`. gqlgen
-counts 1 for each field selected, children included, aliases included,
-introspection excluded: the deepest query in `main_test.go` costs 13, and 200
-leaves room for real queries while a request that repeats a field a hundred
-times fails before it runs a statement. The count does not multiply by
-`first` and `last`; a cost limit that does is planned. Choose the limit for
-your schema and clients.
+one edge. The server takes the defaults; `veloxgql.WithLimits` sets others:
+
+```go
+veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 50}))
+```
+
+A zero field is the default; a negative one is refused. They do not bound a
+request: connections nested in connections multiply (each level reads up to
+`MaxPage` rows, and runs a query for each parent), and aliases repeat a field
+as often as the client writes it. So the server also sets gqlgen's
+`extension.FixedComplexityLimit(200)`. gqlgen counts 1 for each field
+selected, children included, aliases included: the deepest query in
+`main_test.go` costs 13, and 200 leaves room for real queries while a request
+that repeats a field a hundred times fails before it runs a statement. Of
+introspection, only `__schema` is free; `__type(name:)` costs a few points,
+as any field does. The count does not multiply by `first` and `last`; a cost
+limit that does is planned. Choose the limit for your schema and clients.
 
 ## What it shows
 
@@ -147,26 +163,28 @@ your schema and clients.
 | `email`, or a `where` on it, without `X-Role: admin` | a `FORBIDDEN` error; the filter runs no statement |
 | `Post` with tenant 1, 2 or none | only that organization's posts, through `node`, connections, edges and `where`; `unauthenticated` without one |
 
-6. The application's own field, `graph/app.graphqls`, which extends `Query`
-   with `publishedPosts`. Its resolver composes the connection from a query
-   it writes, with `gen.PostsConnectionOf` (every Node entity has one):
+### A connection over the application's own query
 
-   ```go
-   func (r *queryResolver) PublishedPosts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*gen.PostOrder, where *gen.PostWhereInput) (*gen.PostConnection, error) {
-   	db, err := veloxgql.DBFrom(ctx)
-   	if err != nil {
-   		return nil, err
-   	}
-   	return gen.PostsConnectionOf(ctx, db.Query[gen.Post]().Where(gen.Posts.Status.EQ(gen.PostStatusPublished)), after, first, before, last, orderBy, where)
-   }
-   ```
+`graph/app.graphqls` extends `Query` with `publishedPosts`. Its resolver
+composes the connection from a query it writes, with `gen.PostsConnectionOf`
+(every Node entity has one):
 
-   The query keeps its filters, its `With` loads and the tenant scope. Its
-   `Offset` is cleared and its `Limit` replaced: the page is the
-   connection's. It must have no `OrderBy`, which `ConnectionOf` refuses with
-   an internal error (`velox.Query.Ordered`), since the connection orders it.
-   It must also select the key and the columns `orderBy` names: a `Columns`
-   or `Omit` that drops them breaks the cursors, and nothing refuses it.
+```go
+func (r *queryResolver) PublishedPosts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*gen.PostOrder, where *gen.PostWhereInput) (*gen.PostConnection, error) {
+	db, err := veloxgql.DBFrom(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return gen.PostsConnectionOf(ctx, db.Query[gen.Post]().Where(gen.Posts.Status.EQ(gen.PostStatusPublished)), after, first, before, last, orderBy, where)
+}
+```
+
+The query keeps its filters, its `With` loads and the tenant scope. Its
+`Offset` is cleared and its `Limit` replaced: the page is the
+connection's. It must have no `OrderBy`, which `ConnectionOf` refuses with
+an internal error (`velox.Query.Ordered`), since the connection orders it.
+It must also select the key and the columns `orderBy` names: a `Columns`
+or `Omit` that drops them breaks the cursors, and nothing refuses it.
 
 `main_test.go` sends each over HTTP and checks the JSON response and the
 statements sent exactly.

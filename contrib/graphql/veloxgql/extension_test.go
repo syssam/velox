@@ -401,7 +401,7 @@ func TestExtensionRefusesNegativeLimits(t *testing.T) {
 		var l veloxgql.Limits
 		set(&l)
 		ext := veloxgql.NewExtension(db, veloxgql.WithLimits(l))
-		want := "veloxgql.NewExtension: Limits." + name + " is -1, and a limit must be positive"
+		want := "veloxgql.NewExtension: Limits." + name + " is -1, and a limit must not be negative (zero is the default)"
 		if err := ext.Validate(nil); err == nil || err.Error() != want {
 			t.Errorf("%s -1: Validate: %v, want %q", name, err, want)
 		}

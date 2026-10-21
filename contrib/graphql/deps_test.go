@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// TestAnnotationsImportOnlySchema pins spec §2: the annotations package
+// TestAnnotationsImportOnlySchema pins that the annotations package
 // compiles no GraphQL library. Its dependencies are the standard library,
 // velox2/schema and what schema itself imports.
 func TestAnnotationsImportOnlySchema(t *testing.T) {

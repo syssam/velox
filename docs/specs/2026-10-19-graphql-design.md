@@ -172,6 +172,7 @@ Every `ID` is opaque and global. It is base64url, without padding, of `<Type>:<k
 - **Cursor:** opaque. It holds the order values and the key, encoded as versioned JSON (call) then base64url. A cursor that does not decode, or does not match the query's order, is an error.
 - **Paging:** keyset, through velox's `After` (and a `Before` the core gains for `last`/`before`). The order always ends with the primary key as a tiebreaker. The page query reads `n+1` rows to set `hasNextPage`/`hasPreviousPage`.
 - **`totalCount`** runs a `Count` only when it is selected; a count-only selection runs no page query.
+- *Note, 2026-10-21 (API plan 3):* the cap is the `MaxPage` of `veloxgql.Limits`, read from the request's context (`LimitsFrom`), not a package variable. Every Node entity also gets `<Plural>ConnectionOf(ctx, q, …)`, which composes a connection from the application's own query: it clears the query's Offset, replaces its Limit and refuses one with an `OrderBy` (`velox.Query.Ordered`).
 
 #### Ordering
 - `XOrder { direction: OrderDirection! = ASC, field: XOrderField! }`.
@@ -213,6 +214,7 @@ Every `ID` is opaque and global. It is base64url, without padding, of `<Type>:<k
 - `veloxgql.Handler(db)` is a gqlgen handler extension (call). It puts the `*velox.DB` in the request context for the generated resolvers.
 - For a `mutation` operation it opens one `db.Tx` and puts the transaction's DB in the context instead. It commits when the response has no errors, and rolls back otherwise or on a panic.
 - Queries are not wrapped, so they keep routing to replicas.
+- *Note, 2026-10-21 (API plan 3):* `veloxgql.Handler(db)` is now `veloxgql.NewExtension(db, opts...)`, a named `*Extension`. Its options are `WithLimits`, `WithTxOptions` (which refuses `velox.TxRetrySerializable`: gqlgen builds the response once) and `WithTxFilter(func(ctx, *ast.OperationDefinition) bool)`; a mutation the filter leaves out runs on the DB under `velox.WithSession`, so it reads its own writes. `WithDB` is gone: `Extension.Context(ctx)` puts the DB and the limits in a context for generated code called outside a server. See the API cleanup design, §6c.
 
 ### 4. Field collection and loading
 
@@ -327,6 +329,8 @@ Plan 2 (the runtime, `docs/plans/2026-10-20-graphql-2-runtime.md`) settled these
 
 **Where inputs are Go structs (§3 Filtering), 2026-10-20.** gqlgen binds an input object to a Go struct, so each `XWhereInput` is a generated struct, and there is no table for the runtime to interpret. The struct's generated method `Pred(ctx, depth)` returns the `velox.Pred[X]`: one `veloxgql` helper call for each predicate the input sets (`Value`, `List`, `ID`, `IDList`, `Is`, `HasWith`…), with no logic of its own, plus the `and`/`or`/`not` assembly and the limits (`MaxFilterDepth`, `MaxFilterWidth` on every list, `MaxFilterNodes` across one argument) in the helpers. This is the smallest per-field code gqlgen's binding allows.
 
+*Note, 2026-10-21 (API plan 3):* the generated method is `Pred(ctx)`, not `Pred(ctx, depth)`: the depth travels in the context with the node budget, which a context without them starts at depth 0 with a full budget, so two calls on one context do not spend each other's. The helpers are in `contrib/graphql/veloxgql/gqlimpl`, which only generated code calls, and the limits are `veloxgql.Limits`, set with `WithLimits` and read with `LimitsFrom(ctx)`, not the package variables below. The generated code is versioned by `veloxgql.GeneratedCodeIsVersion1`.
+
 **`totalCount` and the page are lazy (§3 Connections, §4), 2026-10-20.** A connection is a value that holds the prepared query. `TotalCount(ctx)` runs the `COUNT` when gqlgen calls it, which is only when `totalCount` is selected, and `Edges(ctx)` and `PageInfo(ctx)` run the page query once, shared through a `sync.Once` inside the connection. So a `totalCount`-only selection runs no page query, and nothing walks the selection set for it. Plan 4's field collection adds the eager `With` loads on top of this; it is not needed for correctness.
 
 **`Node` is bound to `veloxgql.Noder` (§3 Types), 2026-10-20.** The GraphQL interface `Node` binds, in `gqlgen.yml`, to the Go interface `veloxgql.Noder` (`IsNode()` and `IDGQL() string`), and every Node entity gets both methods, so `node` and `nodes` return `veloxgql.Noder` values that gqlgen resolves to their concrete types.
@@ -337,6 +341,8 @@ Plan 2 (the runtime, `docs/plans/2026-10-20-graphql-2-runtime.md`) settled these
 
 **The DB comes from the context (§3 Transactions and the DB, §5), 2026-10-20.** Generated functions do not take a `db` argument: `veloxgql.Handler(db)` stores the DB with `veloxgql.WithDB(ctx, db)`, and they read it with `veloxgql.DBFrom(ctx)`, which fails with `ErrNoDB` naming the handler when it is missing. So §5's `gen.UsersConnection(ctx, db, args…)` is `gen.UsersConnection(ctx, args…)`, and the mutations of §3 are `gen.CreateUser(ctx, input)`. For a `mutation` operation the handler stores the transaction's DB instead, runs the operation's resolvers one at a time (a transaction's DB is not safe for concurrent use), and commits when the response has no errors; a rolled-back response has `data` null. `@defer` inside a mutation is unsupported: a deferred fragment resolves after the commit, on a finished transaction, and fails.
 
+*Note, 2026-10-21 (API plan 3):* `veloxgql.Handler(db)` and `WithDB` are `veloxgql.NewExtension(db)` and `(*Extension).Context(ctx)`; the transaction filter and options are on the extension. `DBFrom(ctx)` is unchanged.
+
 **The root connection function takes the GraphQL type's plural (§3 Types, §5), 2026-10-20.** Like every other generated name, the root function is named after the GraphQL type: `gen.UsersConnection` for `User`, and `gen.LabelsConnection` for an entity `Tag` exposed as `Label` (`graphql.Type`), where the entity's own plural, `Tags`, would not match the type.
 
 **Limits bound one argument, not a request (§4 Bounds), 2026-10-20.** Plan 2 adds these limits, all package variables of `veloxgql` with constant initialisers, settable at start-up and refused by `Handler` when not positive:
@@ -344,5 +350,7 @@ Plan 2 (the runtime, `docs/plans/2026-10-20-graphql-2-runtime.md`) settled these
 - `MaxList` (1000): the rows a list edge (`graphql.Connection(false)`) reads, in place of the DB's `WithMaxRows` cap, which is no cap by default. More fails with `velox.ErrTooManyRows`, in an error that names the edge. This replaces "every load keeps the DB's `WithMaxRows` cap" for list edges.
 - `MaxFilterDepth` (5), `MaxFilterWidth` (100) for every `and`/`or`/`has…With`/`In`/`NotIn` list, and `MaxFilterNodes` (1000), the budget of inputs, predicates and values across one `where` argument.
 - `MaxOrderTerms` (5): the terms of an `orderBy` list, checked before any term is built.
+
+*Note, 2026-10-21 (API plan 3):* they are fields of `veloxgql.Limits`, not package variables: `WithLimits` sets them on the extension, `LimitsFrom(ctx)` reads them (the defaults in a context without them), a zero field means the default, and `Validate` refuses a negative one. Two servers in one process can differ.
 
 Every one of them bounds one argument or one edge. Connections nested in connections multiply, and aliases repeat a field, so a server needs a limit on the cost of the whole request too: `example/graphql` sets gqlgen's `extension.FixedComplexityLimit`. A cost limit that multiplies by `first` and `last` across connection fields is for plan 4. `WhereOps` on a field that `Skip(SkipType)` leaves out of the type is refused like `OrderField`: a filter is a value oracle too (`GT`, `LT` and `HasPrefix` bisect the value).

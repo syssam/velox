@@ -205,7 +205,7 @@ Left by the observability plan:
 
 ## For GraphQL plan 3
 
-- Errors reach clients through gqlgen's default error presenter, verbatim. veloxgql's own errors are safe to show (they never echo an ID's key), but core's are not: `velox.ErrNoTenant` reads "velox: gen.Post: no tenant…", and once mutations make a `velox.ConstraintError` client-triggerable, its driver text and constraint names reach the client. Plan 3 ships an `ErrorPresenter` recipe (or a `veloxgql.ErrorPresenter`) for `srv.SetErrorPresenter`: pass `veloxgql`'s sentinels (`ErrBadID`, `ErrWrongIDType`, `ErrBadCursor`, `ErrPageTooLarge`, `ErrBadPagination`, `ErrFilterTooDeep`, `ErrFilterTooWide`), `velox.PolicyError`, `ErrNoTenant` and `velox.ValidationError` through, map a `ConstraintError` to a message built from its kind and not the driver's text, and replace everything else with a generic message after logging it.
+- Resolved in API plan 3 (`veloxgql.ErrorPresenter`, `Extensions()` codes, fixed messages for core errors; the API cleanup design, §6c). Errors reach clients through gqlgen's default error presenter, verbatim. veloxgql's own errors are safe to show (they never echo an ID's key), but core's are not: `velox.ErrNoTenant` reads "velox: gen.Post: no tenant…", and once mutations make a `velox.ConstraintError` client-triggerable, its driver text and constraint names reach the client. Plan 3 ships an `ErrorPresenter` recipe (or a `veloxgql.ErrorPresenter`) for `srv.SetErrorPresenter`: pass `veloxgql`'s sentinels (`ErrBadID`, `ErrWrongIDType`, `ErrBadCursor`, `ErrPageTooLarge`, `ErrBadPagination`, `ErrFilterTooDeep`, `ErrFilterTooWide`), `velox.PolicyError`, `ErrNoTenant` and `velox.ValidationError` through, map a `ConstraintError` to a message built from its kind and not the driver's text, and replace everything else with a generic message after logging it.
 
 ## For GraphQL plan 4
 
@@ -225,13 +225,13 @@ Left by the observability plan:
 
 ## Before 1.0 (veloxgql)
 
-- Limits are mutable package globals (`veloxgql.MaxPage`, `MaxList`, `MaxFilterDepth`, `MaxFilterWidth`, `MaxFilterNodes`, `MaxOrderTerms`). Two servers in one process cannot differ, tests that change them cannot run in parallel, and changing them after 1.0 breaks callers. Make them options of `Handler`, carried in the context, with the current values as the defaults; `Handler.Validate` already refuses a non-positive limit.
-- `Handler` returns an anonymous interface; a named type would read better in godoc. Settle its name and what it exposes.
-- Decide which exported helpers stay public: `CheckDepth`, `CheckWidth`, `Paginate` and `CursorOrder` are exported, but generated code does not need them. `AsInt` takes an unexported constraint.
-- `ErrFilterTooWide`'s text, "filter list is too long", is wrong for the node budget (`MaxFilterNodes`): give the budget its own text or error.
+- Resolved in API plan 3 (`veloxgql.Limits`, `WithLimits`, `LimitsFrom(ctx)`; zero means the default, negative is refused). Limits are mutable package globals (`veloxgql.MaxPage`, `MaxList`, `MaxFilterDepth`, `MaxFilterWidth`, `MaxFilterNodes`, `MaxOrderTerms`). Two servers in one process cannot differ, tests that change them cannot run in parallel, and changing them after 1.0 breaks callers. Make them options of `Handler`, carried in the context, with the current values as the defaults; `Handler.Validate` already refuses a non-positive limit.
+- Resolved in API plan 3 (`veloxgql.NewExtension` returns a named `*Extension`). `Handler` returns an anonymous interface; a named type would read better in godoc. Settle its name and what it exposes.
+- Resolved in API plan 3 (they moved to `gqlimpl`, unexported or for generated code only). Decide which exported helpers stay public: `CheckDepth`, `CheckWidth`, `Paginate` and `CursorOrder` are exported, but generated code does not need them. `AsInt` takes an unexported constraint.
+- Resolved in API plan 3 (`ErrFilterTooLarge`, "filter is too large"). `ErrFilterTooWide`'s text, "filter list is too long", is wrong for the node budget (`MaxFilterNodes`): give the budget its own text or error.
 - Resolved in API plan 2: move velox-gen's plural rule into the stdlib-only `plugin` package as `plugin.Plural`, frozen like `plugin.Singular`; gogen's root connection functions use a copy that no test pins to velox-gen's `Handles`.
-- The example README and main.go say introspection is free under the complexity limit; only `__Schema` is, `__type(name:)` costs a few points.
-- Generated enum `UnmarshalGQL` errors lack the `veloxgql: ` prefix the docs promise.
+- Resolved in API plan 3 (the README and main.go say only `__schema` is free). The example README and main.go say introspection is free under the complexity limit; only `__Schema` is, `__type(name:)` costs a few points.
+- Resolved in API plan 3 (they use `gqlimpl.InputErrorf`, which writes the prefix and the code). Generated enum `UnmarshalGQL` errors lack the `veloxgql: ` prefix the docs promise.
 
 ## Left by API plan 1
 
@@ -239,8 +239,9 @@ From the final review of API plan 1 (2026-10-20). Each item names the plan that 
 
 - [x] **API plan 2 (DSL and velox-gen):** rules 37, 39 and 40 are three copies of one check (an `Optional`, non-`Nillable` field of a type whose unset value cannot be stored needs a `Default`). Make them one table of `{type, rule, noun}`, so that a rule 41 is one line.
 - [x] **API plan 2:** `internal/gen` comments cite "Ruling N" of old plans (`lower.go`, `build.go`, `methods.go`). They are not public, but they rot; the velox-gen rewrite should drop them. The citation test scans only public packages.
-- **API plan 3 (dialects):** `SQL(ctx)` of a statement with a policy `Allow` or a zero-Pred failure is tested on PostgreSQL only; add it to the dialect test sweep.
-- **API plans 3–4:** the citation scan (`TestGodocCitesNoSpec`) does not cover the contrib modules. `contrib/otel/metrics.go` and `attrs.go` still say "spec §2.x".
+- **API plan 5 (dialects):** `SQL(ctx)` of a statement with a policy `Allow` or a zero-Pred failure is tested on PostgreSQL only; add it to the dialect test sweep.
+- [x] **API plan 3:** the citation scan (`TestGodocCitesNoSpec`) did not cover the contrib modules. `contrib/graphql` has its own, over `graphql`, `veloxgql` and `gqlimpl`.
+- **API plan 4:** the same for `contrib/otel`, whose `metrics.go` and `attrs.go` still say "spec §2.x".
 - **API plan 4 (otel):** `contrib/otel/attrs.go` re-implements the core's unexported `Op.raw()` and `Statement.reads()`. Export `Op.Raw()` and `Op.Reads()` (additive), so hooks and adapters share one definition.
 - **Perf pass with the pgx split:** `Save` allocates its `cols` slice. No API impact, and no budget pins Save.
 - Accepted, no change: an empty `InsertAll` skips the transaction and dry-run checks (it sends nothing; documented on `Exec`); the Save compile test's cgo note.
@@ -256,6 +257,17 @@ From the final tasks of API plan 2 (2026-10-21). The plan's own items are done: 
 - **1.0 blocker, for the migrations plan:** derived index names (`<table>_<cols>[_unique][_<hash>]`) have no length cap. PostgreSQL truncates identifiers to 63 bytes and MySQL refuses names over 64, so two long derived names that differ only after byte 63 collide in the database while rule 44 passes them. Cap derived names with a hash suffix, and run rule 44 on the capped names. No database holds these names until the migration planner exists.
 - Linux CI never runs the case-respell path of the stale-file sweep (a generated file whose name changed only in case, on a case-insensitive file system): the tests take it on macOS only. Run CI on a case-insensitive volume, or add a test hook that folds case on Linux.
 - Since the final review's fix of `Number[T]`, every stored literal `Default` is its kind's base value, so the `Marshaler` exemption of model 2's `Field.Default` (§6b ruling 10) has no case left to protect for numbers. The ruling stands; it could be loosened later, additively.
+
+## Left by API plan 3
+
+From the final tasks of API plan 3 (2026-10-21). The plan's own items are done: `gqlimpl` and the version guard, limits from the context, the extension's options, `Pred(ctx)`, coded errors and `ErrorPresenter`, `XConnectionOf`, directives on where inputs, and the `gqlgen@latest` job.
+
+- GraphQL plan 3: GraphQL validation messages (gqlgen's own, for a variable or an argument of the wrong shape) do not name the field. Where inputs name theirs (`OwnerWhereInput.hasEventsWith[0]: …`); the rest are gqlgen's text. Decide with the mutation inputs whether to wrap them.
+- `Columns` or `Omit` on a `ConnectionOf` base query is documented, not refused: one that drops the key or an order column breaks the cursors. `velox.Query.Ordered` made the `OrderBy` check possible; an accessor for the selected columns would make this one possible.
+- `TestPredTwiceOnOneContext` asserts that the second call does not spend the first's budget, but not that the second call costs nothing extra (no allocation or context growth per call). Add that if it ever matters.
+- GraphQL plan 4: the first/last-aware cost limit; `LoadedConnection` and the arguments it ignores. Unchanged by this plan.
+- `NOT_FOUND` (`CodeNotFound`) is defined and nothing returns it yet: mutations (GraphQL plan 3) use it.
+- The `gqlgen@latest` job fails red when a new gqlgen breaks velox-graphql, by design. The example's tests ignore error `locations` (gqlgen v0.17.97 adds them); a later gqlgen may change something else they compare.
 
 ## 1.0 release
 

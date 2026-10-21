@@ -39,10 +39,9 @@
 // The annotations of an entity are Skip, Type, QueryField, Mutations,
 // MultiOrder and Directives; of a field, FieldName, Skip, OrderField,
 // OrderUnguarded, WhereOps, CreateInput, UpdateInput, EnumValues and
-// Directives; of an edge,
-// Skip, FieldName, WhereEdge, Connection and Directives. One on an element it
-// does not apply to makes the generator fail, naming the schema and the
-// element.
+// Directives; of an edge, Skip, FieldName, WhereEdge, Connection and
+// Directives. One on an element it does not apply to makes the generator
+// fail, naming the schema and the element.
 //
 // # Directives
 //
@@ -52,7 +51,7 @@
 // has<Edge>With, and a foreign key's <edge>ID and <edge>IDIn, which carry the
 // key field's directives, then the edge's, each name once. So a directive
 // that guards a field guards its filters too, by which a client could
-// otherwise find its value a bisection at a time.
+// otherwise find its value a prefix or a bisection at a time.
 //
 // A key field takes GraphQL's own directives only (@deprecated…). A foreign
 // key is in no type: its edge stands for it, so a directive that guards it
@@ -61,11 +60,15 @@
 // node, nodes and the cursors, so a directive on the primary key would guard
 // nothing. The plugin refuses an application directive on either.
 //
-// The application declares
-// such a directive on FIELD_DEFINITION | INPUT_FIELD_DEFINITION, or gqlgen
-// refuses the schema:
+// The application declares such a directive on FIELD_DEFINITION |
+// INPUT_FIELD_DEFINITION, or gqlgen refuses the schema:
 //
 //	directive @admin on FIELD_DEFINITION | INPUT_FIELD_DEFINITION
+//
+// Upgrading: this is a breaking change for an application that has a
+// directive on a filterable field or edge. It must also declare that
+// directive on INPUT_FIELD_DEFINITION, since the where inputs now carry it.
+// Before, those filters were unguarded.
 //
 // An order is not guarded: the cursors hold the field's values and the order
 // of the nodes reveals them. So OrderField on a field with an application

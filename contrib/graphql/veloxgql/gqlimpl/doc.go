@@ -11,6 +11,6 @@
 // and this module fail to compile together when they disagree.
 //
 // What an application sees stays in package veloxgql: the IDs, the cursor
-// scalar, the limits, the errors and the handler. See its documentation for
+// scalar, the limits, the errors and the extension. See its documentation for
 // how a where input, a connection and a cursor behave.
 package gqlimpl

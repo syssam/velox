@@ -76,8 +76,7 @@
 //     column's Go type first, with gqlimpl.AsString, AsInt, AsFloat, AsBool or
 //     AsUUID;
 //   - gqlimpl.ID, IDList, IDAs and IDListAs decode IDs with DecodeID, so an
-//     ID of
-//     another type fails with ErrWrongIDType;
+//     ID of another type fails with ErrWrongIDType;
 //   - gqlimpl.Is adds a Boolean predicate, or its negation: IsNil, NotNil and
 //     has<Edge>.
 //
@@ -86,8 +85,8 @@
 // A list of more than MaxFilterWidth entries, of inputs or of In or NotIn
 // values, fails with ErrFilterTooWide, and a where argument over its budget
 // of MaxFilterNodes inputs, predicates and values in all with
-// ErrFilterTooLarge. None of it runs a query, so a refused filter fails before any
-// statement is built. An error names the field that held its cause, through
+// ErrFilterTooLarge. None of it runs a query, so a refused filter fails
+// before any statement is built. An error names the field that held its cause, through
 // the nesting: "veloxgql: OwnerWhereInput.hasEventsWith[0]:
 // EventWhereInput.ownerID: Owner ID: ID of another type".
 //
