@@ -645,6 +645,75 @@ func TestConnections(t *testing.T) {
 		t.Errorf("the loaded relations ran %d statements", ran.Load())
 	}
 }
+
+// TestConnectionOf composes a connection from the application's own query.
+func TestConnectionOf(t *testing.T) {
+	sqlDB, err := sql.Open("sqlite", "file::memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sqlDB.Close()
+	sqlDB.SetMaxOpenConns(1)
+	if _, err := sqlDB.Exec(ddl); err != nil {
+		t.Fatal(err)
+	}
+	db := velox.Open(velox.SQLite, sqlDB)
+	ctx := velox.WithTenant(veloxgql.NewExtension(db).Context(context.Background()), int64(7))
+	post := func(e *gen.PostEdge) int64 { return e.Node.ID }
+
+	c, err := gen.PostsConnectionOf(ctx, db.Query[gen.Post]().Where(gen.Posts.Title.EQ("a")), nil, nil, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := keys(t, ctx, c, c.Edges, post); !slices.Equal(got, []int64{2, 4}) {
+		t.Errorf("posts titled a: %v", got)
+	}
+	if n, err := c.TotalCount(ctx); err != nil || n != 2 {
+		t.Errorf("totalCount %d %v", n, err)
+	}
+}
+
+// TestConnectionOfLimitOffset: the page is the connection's. A base query's
+// Offset is cleared and its Limit replaced, so paging through the whole list
+// neither skips nor repeats a row.
+func TestConnectionOfLimitOffset(t *testing.T) {
+	sqlDB, err := sql.Open("sqlite", "file::memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sqlDB.Close()
+	sqlDB.SetMaxOpenConns(1)
+	if _, err := sqlDB.Exec(ddl); err != nil {
+		t.Fatal(err)
+	}
+	db := velox.Open(velox.SQLite, sqlDB)
+	ctx := velox.WithTenant(veloxgql.NewExtension(db).Context(context.Background()), int64(7))
+	post := func(e *gen.PostEdge) int64 { return e.Node.ID }
+
+	var all []int64
+	var after *veloxgql.Cursor
+	for range 5 {
+		c, err := gen.PostsConnectionOf(ctx, db.Query[gen.Post]().Limit(1).Offset(1), after, intp(2), nil, nil, nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, info := keys(t, ctx, c, c.Edges, post)
+		all = append(all, got...)
+		if n, err := c.TotalCount(ctx); err != nil || n != 5 {
+			t.Fatalf("totalCount %d %v", n, err)
+		}
+		if !info.HasNextPage {
+			break
+		}
+		after = new(veloxgql.Cursor)
+		if err := after.UnmarshalGQL(veloxgql.EncodeCursor(*info.EndCursor)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !slices.Equal(all, []int64{1, 2, 3, 4, 5}) {
+		t.Errorf("paged through a base query with a Limit and an Offset: %v", all)
+	}
+}
 `
 
 // e2eWhere is a test of the application's module that runs the generated
@@ -1274,8 +1343,8 @@ func TestConnectionsRun(t *testing.T) {
 	if out, err := run("mod", "tidy", "-e"); err != nil {
 		t.Fatalf("go mod tidy: %v\n%s", err, out)
 	}
-	out, err := run("test", "-count=1", "-v", "-run", "TestConnections$", ".")
-	if err != nil || !strings.Contains(out, "--- PASS: TestConnections") {
+	out, err := run("test", "-count=1", "-v", "-run", "TestConnections$|TestConnectionOf", ".")
+	if err != nil || !strings.Contains(out, "--- PASS: TestConnections") || !strings.Contains(out, "--- PASS: TestConnectionOfLimitOffset") {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
 }

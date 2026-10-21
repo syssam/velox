@@ -41,7 +41,7 @@ func (x *Tag) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int, 
 	if err != nil {
 		return nil, err
 	}
-	return postConnectionGQL(ctx, db.Query[Post]().Where(Posts.Tags.HasWhere(Tags.ID.EQ(x.ID))), after, first, before, last, orderBy, where)
+	return PostsConnectionOf(ctx, db.Query[Post]().Where(Posts.Tags.HasWhere(Tags.ID.EQ(x.ID))), after, first, before, last, orderBy, where)
 }
 
 // LabelConnection is the GraphQL type LabelConnection, a connection to a list
@@ -99,13 +99,17 @@ func LabelsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, b
 	if err != nil {
 		return nil, err
 	}
-	return tagConnectionGQL(ctx, db.Query[Tag](), after, first, before, last, orderBy, where)
+	return LabelsConnectionOf(ctx, db.Query[Tag](), after, first, before, last, orderBy, where)
 }
 
-// tagConnectionGQL is the connection to the Label nodes q returns, filtered by
-// where, ordered by orderBy and then the key, and paged by the other arguments.
-// It runs no query.
-func tagConnectionGQL(ctx context.Context, q velox.Query[Tag], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *LabelOrder, where *LabelWhereInput) (*LabelConnection, error) {
+// LabelsConnectionOf is the connection to the Label nodes q returns, filtered
+// by where, ordered by orderBy and then the key, and paged by the other
+// arguments. q keeps its filters and With loads, and the scope the application
+// gave it; its Offset is cleared and its Limit replaced, since the page is the
+// connection's. q must have no OrderBy: the connection orders it, by the key at
+// last, and an OrderBy of q would come first and break the cursors. It runs no
+// query.
+func LabelsConnectionOf(ctx context.Context, q velox.Query[Tag], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *LabelOrder, where *LabelWhereInput) (*LabelConnection, error) {
 	if where != nil {
 		p, err := where.Pred(ctx)
 		if err != nil {

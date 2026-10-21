@@ -5,6 +5,7 @@ package graph
 import (
 	"bytes"
 	"context"
+	"embed"
 	"errors"
 	"fmt"
 	"strconv"
@@ -93,11 +94,12 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
-		Labels func(childComplexity int, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.LabelOrder, where *gen.LabelWhereInput) int
-		Node   func(childComplexity int, id string) int
-		Nodes  func(childComplexity int, ids []string) int
-		Posts  func(childComplexity int, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*gen.PostOrder, where *gen.PostWhereInput) int
-		Users  func(childComplexity int, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.UserOrder, where *gen.UserWhereInput) int
+		Labels         func(childComplexity int, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.LabelOrder, where *gen.LabelWhereInput) int
+		Node           func(childComplexity int, id string) int
+		Nodes          func(childComplexity int, ids []string) int
+		Posts          func(childComplexity int, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*gen.PostOrder, where *gen.PostWhereInput) int
+		PublishedPosts func(childComplexity int, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*gen.PostOrder, where *gen.PostWhereInput) int
+		Users          func(childComplexity int, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.UserOrder, where *gen.UserWhereInput) int
 	}
 
 	User struct {
@@ -127,6 +129,7 @@ type QueryResolver interface {
 	Posts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*gen.PostOrder, where *gen.PostWhereInput) (*gen.PostConnection, error)
 	Labels(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.LabelOrder, where *gen.LabelWhereInput) (*gen.LabelConnection, error)
 	Users(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.UserOrder, where *gen.UserWhereInput) (*gen.UserConnection, error)
+	PublishedPosts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*gen.PostOrder, where *gen.PostWhereInput) (*gen.PostConnection, error)
 }
 
 type executableSchema struct {
@@ -353,6 +356,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Query.Posts(childComplexity, args["after"].(*veloxgql.Cursor), args["first"].(*int), args["before"].(*veloxgql.Cursor), args["last"].(*int), args["orderBy"].([]*gen.PostOrder), args["where"].(*gen.PostWhereInput)), true
+	case "Query.publishedPosts":
+		if e.complexity.Query.PublishedPosts == nil {
+			break
+		}
+
+		args, err := ec.field_Query_publishedPosts_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.PublishedPosts(childComplexity, args["after"].(*veloxgql.Cursor), args["first"].(*int), args["before"].(*veloxgql.Cursor), args["last"].(*int), args["orderBy"].([]*gen.PostOrder), args["where"].(*gen.PostWhereInput)), true
 	case "Query.users":
 		if e.complexity.Query.Users == nil {
 			break
@@ -532,6 +546,17 @@ func (ec *executionContext) introspectType(name string) (*introspection.Type, er
 		return nil, errors.New("introspection disabled")
 	}
 	return introspection.WrapTypeFromDef(ec.Schema(), ec.Schema().Types[name]), nil
+}
+
+//go:embed "app.graphqls"
+var sourcesFS embed.FS
+
+func sourceData(filename string) string {
+	data, err := sourcesFS.ReadFile(filename)
+	if err != nil {
+		panic(fmt.Sprintf("codegen problem: %s not available", filename))
+	}
+	return string(data)
 }
 
 var sources = []*ast.Source{
@@ -803,6 +828,7 @@ input UserWhereInput {
   hasPostsWith: [PostWhereInput!]
 }
 `, BuiltIn: false},
+	{Name: "app.graphqls", Input: sourceData("app.graphqls"), BuiltIn: false},
 }
 var parsedSchema = gqlparser.MustLoadSchema(sources...)
 
@@ -952,6 +978,42 @@ func (ec *executionContext) field_Query_nodes_args(ctx context.Context, rawArgs 
 }
 
 func (ec *executionContext) field_Query_posts_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
+	if err != nil {
+		return nil, err
+	}
+	args["after"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["first"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
+	if err != nil {
+		return nil, err
+	}
+	args["before"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["last"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOPostOrder2ᚕᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexampleᚋgraphqlᚋgenᚐPostOrderᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["orderBy"] = arg4
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOPostWhereInput2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexampleᚋgraphqlᚋgenᚐPostWhereInput)
+	if err != nil {
+		return nil, err
+	}
+	args["where"] = arg5
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_publishedPosts_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
@@ -2140,6 +2202,55 @@ func (ec *executionContext) fieldContext_Query_users(ctx context.Context, field 
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_users_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_publishedPosts(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_publishedPosts,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.resolvers.Query().PublishedPosts(ctx, fc.Args["after"].(*veloxgql.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*veloxgql.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].([]*gen.PostOrder), fc.Args["where"].(*gen.PostWhereInput))
+		},
+		nil,
+		ec.marshalNPostConnection2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexampleᚋgraphqlᚋgenᚐPostConnection,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_publishedPosts(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "edges":
+				return ec.fieldContext_PostConnection_edges(ctx, field)
+			case "pageInfo":
+				return ec.fieldContext_PostConnection_pageInfo(ctx, field)
+			case "totalCount":
+				return ec.fieldContext_PostConnection_totalCount(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PostConnection", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_publishedPosts_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -5413,6 +5524,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_users(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "publishedPosts":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_publishedPosts(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}

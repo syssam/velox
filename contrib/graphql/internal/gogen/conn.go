@@ -15,8 +15,9 @@ func lowerFirst(name string) string {
 	return strings.ToLower(name[:1]) + name[1:]
 }
 
-// The unexported functions of t's connections.
-func connFunc(t *sdl.Type) string { return lowerFirst(t.Entity.Name) + "ConnectionGQL" }
+// The functions of t's connections: the exported one the application composes
+// a connection with, and the unexported ones of its key's and its terms.
+func connFunc(t *sdl.Type) string { return plugin.Plural(t.Name) + "ConnectionOf" }
 func keyFunc(t *sdl.Type) string  { return lowerFirst(t.Entity.Name) + "KeyGQL" }
 func termFunc(t *sdl.Type) string { return lowerFirst(t.Entity.Name) + "TermGQL" }
 
@@ -123,7 +124,7 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	} else {
 		how = append(how, "ordered by the key")
 	}
-	f.doc("", fmt.Sprintf("%s is the connection to the %s nodes q returns, %s, and paged by the other arguments. It runs no query.", connFunc(t), n, strings.Join(how, ", ")))
+	f.doc("", fmt.Sprintf("%s is the connection to the %s nodes q returns, %s, and paged by the other arguments. q keeps its filters and With loads, and the scope the application gave it; its Offset is cleared and its Limit replaced, since the page is the connection's. q must have no OrderBy: the connection orders it, by the key at last, and an OrderBy of q would come first and break the cursors. It runs no query.", connFunc(t), n, strings.Join(how, ", ")))
 	f.p("func %s(ctx %s.Context, q %s.Query[%s], %s) (*%sConnection, error) {", connFunc(t), ctx, velox, e.Name, connParams(f, t), n)
 	if t.Where != nil {
 		f.p("\tif where != nil {")

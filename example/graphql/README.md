@@ -122,6 +122,25 @@ your schema and clients.
 | an `orderBy` list of more than `MaxOrderTerms` terms | an error before any term is built, and no statement |
 | `Post` with tenant 1, 2 or none | only that organization's posts, through `node`, connections, edges and `where`; `unauthenticated` without one |
 
+6. The application's own field, `graph/app.graphqls`, which extends `Query`
+   with `publishedPosts`. Its resolver composes the connection from a query
+   it writes, with `gen.PostsConnectionOf` (every Node entity has one):
+
+   ```go
+   func (r *queryResolver) PublishedPosts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*gen.PostOrder, where *gen.PostWhereInput) (*gen.PostConnection, error) {
+   	db, err := veloxgql.DBFrom(ctx)
+   	if err != nil {
+   		return nil, err
+   	}
+   	return gen.PostsConnectionOf(ctx, db.Query[gen.Post]().Where(gen.Posts.Status.EQ(gen.PostStatusPublished)), after, first, before, last, orderBy, where)
+   }
+   ```
+
+   The query keeps its filters, its `With` loads and the tenant scope. Its
+   `Offset` is cleared and its `Limit` replaced: the page is the
+   connection's. It must have no `OrderBy`, since the connection orders it
+   (the core has no accessor to refuse one, so this is a rule, not a check).
+
 `main_test.go` sends each over HTTP and checks the JSON response and the
 statements sent exactly.
 

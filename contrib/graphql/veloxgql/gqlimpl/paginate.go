@@ -106,7 +106,8 @@ type Connection[E any] struct {
 // NewConnection is the connection to the nodes of the GraphQL type typ that q
 // returns, paged by args, in the order order and then key, the columns of
 // the primary key (each ASC). q holds the connection's filters and no order:
-// the connection orders it. The limits are veloxgql.LimitsFrom(ctx)'s. It
+// the connection orders it; its Offset is cleared and its Limit replaced, as
+// the page is the connection's. The limits are veloxgql.LimitsFrom(ctx)'s. It
 // checks the arguments and decodes the cursor, and fails as paginate does,
 // before any query runs; it runs none.
 func NewConnection[E any](ctx context.Context, q velox.Query[E], typ string, args Args, order, key []OrderTerm[E]) (*Connection[E], error) {
@@ -121,7 +122,7 @@ func NewConnection[E any](ctx context.Context, q velox.Query[E], typ string, arg
 	if len(order) > lim.MaxOrderTerms {
 		return nil, InputErrorf("%s connection: %w: orderBy has %d terms, and the most is %d", typ, veloxgql.ErrBadPagination, len(order), lim.MaxOrderTerms)
 	}
-	c := &Connection[E]{query: q, typ: typ, n: n, back: back, key: len(order)}
+	c := &Connection[E]{query: q.Offset(0), typ: typ, n: n, back: back, key: len(order)}
 	c.terms = make([]OrderTerm[E], 0, len(order)+len(key))
 	for _, t := range slices.Concat(order, key) {
 		switch t.Direction {

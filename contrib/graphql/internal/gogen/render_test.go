@@ -680,3 +680,26 @@ func TestEnumErrorPercent(t *testing.T) {
 		t.Errorf("the error reads %q", got)
 	}
 }
+
+// TestConnectionOfEveryNode: every Node entity's file declares its
+// <Plural>ConnectionOf, and no file declares or calls a ConnectionGQL.
+func TestConnectionOfEveryNode(t *testing.T) {
+	const decl = "ConnectionOf(ctx context.Context, q velox.Query["
+	for label, m := range map[string]*plugin.Model{"testdata": testModel(t), "types": typesModel(t)} {
+		files := render(t, m)
+		total := 0
+		for name, src := range files {
+			if strings.Contains(src, "ConnectionGQL(") {
+				t.Errorf("%s: %s declares or calls a ConnectionGQL", label, name)
+			}
+			n, of := strings.Count(src, "Connection struct {"), strings.Count(src, decl)
+			total += of
+			if n != of {
+				t.Errorf("%s: %s has %d connections and %d ConnectionOf functions", label, name, n, of)
+			}
+		}
+		if total == 0 {
+			t.Errorf("%s: no ConnectionOf at all", label)
+		}
+	}
+}

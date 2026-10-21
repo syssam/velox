@@ -37,6 +37,15 @@ func (r *queryResolver) Users(ctx context.Context, after *veloxgql.Cursor, first
 	return gen.UsersConnection(ctx, after, first, before, last, orderBy, where)
 }
 
+// PublishedPosts is the resolver for the publishedPosts field.
+func (r *queryResolver) PublishedPosts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*gen.PostOrder, where *gen.PostWhereInput) (*gen.PostConnection, error) {
+	db, err := veloxgql.DBFrom(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return gen.PostsConnectionOf(ctx, db.Query[gen.Post]().Where(gen.Posts.Status.EQ(gen.PostStatusPublished)), after, first, before, last, orderBy, where)
+}
+
 // Query returns QueryResolver implementation.
 func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
 

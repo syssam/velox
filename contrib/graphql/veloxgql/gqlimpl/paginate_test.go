@@ -498,3 +498,22 @@ func TestConnectionWithoutExtension(t *testing.T) {
 		t.Fatalf("LoadedConnection under context.Background(): %v, %d rows, %+v; want 100 and a next page", err, len(lp.Rows), lp.Info)
 	}
 }
+
+// TestPaginateClearsOffset: a base query's Offset is the application's, not
+// the connection's: the page and the count start at the first row.
+func TestPaginateClearsOffset(t *testing.T) {
+	db, _ := peopleDB(t)
+	ctx := veloxgql.NewExtension(db).Context(context.Background())
+	q := db.Query[person]().Limit(1).Offset(3)
+	c, err := gqlimpl.NewConnection(ctx, q, "Person", gqlimpl.Args{First: intp(2)}, nil, personKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := c.Page(ctx)
+	if err != nil || !slices.Equal(ids(p.Rows), []int64{1, 2}) || !p.Info.HasNextPage {
+		t.Fatalf("%v %+v, want 1 and 2 and a next page", err, p)
+	}
+	if n, err := c.TotalCount(ctx); err != nil || n != 10 {
+		t.Errorf("totalCount %d %v, want 10", n, err)
+	}
+}

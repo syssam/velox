@@ -67,7 +67,7 @@ func (x *User) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int,
 	if err != nil {
 		return nil, err
 	}
-	return postConnectionGQL(ctx, db.Query[Post]().Where(Posts.AuthorID.EQ(x.ID)), after, first, before, last, orderBy, where)
+	return PostsConnectionOf(ctx, db.Query[Post]().Where(Posts.AuthorID.EQ(x.ID)), after, first, before, last, orderBy, where)
 }
 
 // UserConnection is the GraphQL type UserConnection, a connection to a list of
@@ -125,13 +125,17 @@ func UsersConnection(ctx context.Context, after *veloxgql.Cursor, first *int, be
 	if err != nil {
 		return nil, err
 	}
-	return userConnectionGQL(ctx, db.Query[User](), after, first, before, last, orderBy, where)
+	return UsersConnectionOf(ctx, db.Query[User](), after, first, before, last, orderBy, where)
 }
 
-// userConnectionGQL is the connection to the User nodes q returns, filtered by
+// UsersConnectionOf is the connection to the User nodes q returns, filtered by
 // where, ordered by orderBy and then the key, and paged by the other arguments.
-// It runs no query.
-func userConnectionGQL(ctx context.Context, q velox.Query[User], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *UserOrder, where *UserWhereInput) (*UserConnection, error) {
+// q keeps its filters and With loads, and the scope the application gave it;
+// its Offset is cleared and its Limit replaced, since the page is the
+// connection's. q must have no OrderBy: the connection orders it, by the key at
+// last, and an OrderBy of q would come first and break the cursors. It runs no
+// query.
+func UsersConnectionOf(ctx context.Context, q velox.Query[User], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *UserOrder, where *UserWhereInput) (*UserConnection, error) {
 	if where != nil {
 		p, err := where.Pred(ctx)
 		if err != nil {

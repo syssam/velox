@@ -100,12 +100,16 @@ func LikesConnection(ctx context.Context, after *veloxgql.Cursor, first *int, be
 	if err != nil {
 		return nil, err
 	}
-	return likeConnectionGQL(ctx, db.Query[Like](), after, first, before, last)
+	return LikesConnectionOf(ctx, db.Query[Like](), after, first, before, last)
 }
 
-// likeConnectionGQL is the connection to the Like nodes q returns, ordered by
-// the key, and paged by the other arguments. It runs no query.
-func likeConnectionGQL(ctx context.Context, q velox.Query[Like], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*LikeConnection, error) {
+// LikesConnectionOf is the connection to the Like nodes q returns, ordered by
+// the key, and paged by the other arguments. q keeps its filters and With
+// loads, and the scope the application gave it; its Offset is cleared and its
+// Limit replaced, since the page is the connection's. q must have no OrderBy:
+// the connection orders it, by the key at last, and an OrderBy of q would come
+// first and break the cursors. It runs no query.
+func LikesConnectionOf(ctx context.Context, q velox.Query[Like], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*LikeConnection, error) {
 	c, err := gqlimpl.NewConnection(ctx, q, "Like", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, nil, likeKeyGQL())
 	if err != nil {
 		return nil, err

@@ -53,7 +53,7 @@ func (x *Group) UsersGQL(ctx context.Context, after *veloxgql.Cursor, first *int
 	if err != nil {
 		return nil, err
 	}
-	return userConnectionGQL(ctx, db.Query[User]().Where(Users.Groups.HasWhere(Groups.ID.EQ(x.ID))), after, first, before, last, where)
+	return AccountsConnectionOf(ctx, db.Query[User]().Where(Users.Groups.HasWhere(Groups.ID.EQ(x.ID))), after, first, before, last, where)
 }
 
 // GroupConnection is the GraphQL type GroupConnection, a connection to a list
@@ -111,12 +111,16 @@ func GroupsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, b
 	if err != nil {
 		return nil, err
 	}
-	return groupConnectionGQL(ctx, db.Query[Group](), after, first, before, last, orderBy)
+	return GroupsConnectionOf(ctx, db.Query[Group](), after, first, before, last, orderBy)
 }
 
-// groupConnectionGQL is the connection to the Group nodes q returns, ordered by
-// orderBy and then the key, and paged by the other arguments. It runs no query.
-func groupConnectionGQL(ctx context.Context, q velox.Query[Group], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *GroupOrder) (*GroupConnection, error) {
+// GroupsConnectionOf is the connection to the Group nodes q returns, ordered by
+// orderBy and then the key, and paged by the other arguments. q keeps its
+// filters and With loads, and the scope the application gave it; its Offset is
+// cleared and its Limit replaced, since the page is the connection's. q must
+// have no OrderBy: the connection orders it, by the key at last, and an OrderBy
+// of q would come first and break the cursors. It runs no query.
+func GroupsConnectionOf(ctx context.Context, q velox.Query[Group], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *GroupOrder) (*GroupConnection, error) {
 	var order []gqlimpl.OrderTerm[Group]
 	if o := orderBy; o != nil {
 		term, err := groupTermGQL(o)

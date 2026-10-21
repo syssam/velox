@@ -157,13 +157,17 @@ func PostsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, be
 	if err != nil {
 		return nil, err
 	}
-	return postConnectionGQL(ctx, db.Query[Post](), after, first, before, last, orderBy, where)
+	return PostsConnectionOf(ctx, db.Query[Post](), after, first, before, last, orderBy, where)
 }
 
-// postConnectionGQL is the connection to the Post nodes q returns, filtered by
+// PostsConnectionOf is the connection to the Post nodes q returns, filtered by
 // where, ordered by orderBy and then the key, and paged by the other arguments.
-// It runs no query.
-func postConnectionGQL(ctx context.Context, q velox.Query[Post], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
+// q keeps its filters and With loads, and the scope the application gave it;
+// its Offset is cleared and its Limit replaced, since the page is the
+// connection's. q must have no OrderBy: the connection orders it, by the key at
+// last, and an OrderBy of q would come first and break the cursors. It runs no
+// query.
+func PostsConnectionOf(ctx context.Context, q velox.Query[Post], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
 	if where != nil {
 		p, err := where.Pred(ctx)
 		if err != nil {

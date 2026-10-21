@@ -34,7 +34,7 @@ func (x *Category) ChildrenGQL(ctx context.Context, after *veloxgql.Cursor, firs
 	if err != nil {
 		return nil, err
 	}
-	return categoryConnectionGQL(ctx, db.Query[Category]().Where(Categories.CategoryChildren.EQ(x.ID)), after, first, before, last, where)
+	return CategoriesConnectionOf(ctx, db.Query[Category]().Where(Categories.CategoryChildren.EQ(x.ID)), after, first, before, last, where)
 }
 
 // ParentGQL is the edge parent: the Category it leads to, or nil when there is
@@ -112,13 +112,16 @@ func CategoriesConnection(ctx context.Context, after *veloxgql.Cursor, first *in
 	if err != nil {
 		return nil, err
 	}
-	return categoryConnectionGQL(ctx, db.Query[Category](), after, first, before, last, where)
+	return CategoriesConnectionOf(ctx, db.Query[Category](), after, first, before, last, where)
 }
 
-// categoryConnectionGQL is the connection to the Category nodes q returns,
-// filtered by where, ordered by the key, and paged by the other arguments. It
-// runs no query.
-func categoryConnectionGQL(ctx context.Context, q velox.Query[Category], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *CategoryWhereInput) (*CategoryConnection, error) {
+// CategoriesConnectionOf is the connection to the Category nodes q returns,
+// filtered by where, ordered by the key, and paged by the other arguments. q
+// keeps its filters and With loads, and the scope the application gave it; its
+// Offset is cleared and its Limit replaced, since the page is the connection's.
+// q must have no OrderBy: the connection orders it, by the key at last, and an
+// OrderBy of q would come first and break the cursors. It runs no query.
+func CategoriesConnectionOf(ctx context.Context, q velox.Query[Category], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *CategoryWhereInput) (*CategoryConnection, error) {
 	if where != nil {
 		p, err := where.Pred(ctx)
 		if err != nil {

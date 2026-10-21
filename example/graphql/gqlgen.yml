@@ -2,7 +2,7 @@
 # reads it and writes graph/.
 #
 # The GraphQL schema is velox-graphql's gen/velox.graphqls plus the
-# application's own files in graph/ (this example has none).
+# application's own files in graph/ (app.graphqls adds publishedPosts).
 schema:
   - gen/*.graphqls
   - graph/*.graphqls

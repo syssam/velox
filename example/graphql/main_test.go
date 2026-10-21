@@ -507,3 +507,20 @@ func TestOrderTermsLimit(t *testing.T) {
 			"data": null}`,
 	})
 }
+
+// TestPublishedPosts is the application's own connection, composed from a
+// query it wrote (app.graphqls): under tenant 1 the published posts are
+// Alpha, Gamma and Delta, and the connection keeps the base query's filter
+// and the tenant scope.
+func TestPublishedPosts(t *testing.T) {
+	s := newServer(t)
+	s.do(t, request{
+		org:   "1",
+		query: `{ publishedPosts { totalCount edges { node { title } } } }`,
+		want:  `{"data": {"publishedPosts": {"totalCount": 3, "edges": [{"node": {"title": "Alpha"}}, {"node": {"title": "Gamma"}}, {"node": {"title": "Delta"}}]}}}`,
+		stmts: []string{
+			selPosts + ` WHERE "status" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [published 1 101]`,
+			`SELECT COUNT(*) FROM "posts" WHERE "status" = ? AND "org_id" = ? [published 1]`,
+		},
+	})
+}
