@@ -1,6 +1,7 @@
 package gen
 
 import (
+	"bytes"
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
@@ -981,5 +982,24 @@ func TestOutputIgnoresPositionsInGraph(t *testing.T) {
 	}
 	if out1.Hash != out2.Hash {
 		t.Fatal("the model hash depends on the positions")
+	}
+}
+
+// No Field marshals a position, however it was built: neither the embedded
+// loadjson.Field's Pos nor its own. The rest of the JSON is as it was, HTML
+// unescaped for describe.
+func TestFieldJSONHasNoPos(t *testing.T) {
+	f := &Field{Field: loadjson.Field{Name: "a<b", Type: "string", Pos: "/x/user.go:3"}, Pos: "/x/user.go:3", GoName: "A"}
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(f); err != nil {
+		t.Fatal(err)
+	}
+	if got := b.String(); strings.Contains(got, `"pos"`) || strings.Contains(got, "user.go") || !strings.Contains(got, `"name":"a<b"`) || !strings.Contains(got, `"go_name":"A"`) {
+		t.Fatalf("got %s", got)
+	}
+	if f.Field.Pos == "" {
+		t.Fatal("MarshalJSON changed the field")
 	}
 }

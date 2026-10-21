@@ -228,7 +228,7 @@ func TestPos(t *testing.T) {
 		field.Other("a", id{}),
 		field.Enum("a"),
 	} {
-		if got, want := f.Descriptor().Pos, fmt.Sprintf("%s:%d", file, line+2+i); got != want {
+		if got, want := desc.PosOf(f.Descriptor().PC), fmt.Sprintf("%s:%d", file, line+2+i); got != want {
 			t.Errorf("%d: pos %q, want %q", i, got, want)
 		}
 	}

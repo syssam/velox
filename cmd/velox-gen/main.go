@@ -20,7 +20,11 @@
 // that names no package, several, or a package that declares no schemas is an
 // error ("no schemas in ..."). -out is the directory of the generated package
 // (default ./gen) and -package its name (default: the base name of -out).
-// velox-gen writes nothing when any entity has a problem. -check writes
+// velox-gen writes nothing when any entity has a problem. Each problem is
+// printed as file:line: schema User: field "name": reason, with the file
+// relative to the working directory. A misuse of a builder, such as a
+// DefaultFunc that is not a func, is reported first, alone; the rules across
+// fields, edges and schemas are checked once it is fixed. -check writes
 // nothing and exits 1 when a generated file is out of date, missing or left
 // over; CI runs it, and it is the check that the generated package matches
 // the schema. A run rewrites the files that changed, deletes the generated

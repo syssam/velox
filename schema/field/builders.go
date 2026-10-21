@@ -11,10 +11,10 @@ import (
 )
 
 // newField makes the descriptor of a field whose standard Go type is rt,
-// declared at pos. Each exported constructor passes desc.Caller(), called in
-// its own body, so that pos is the line of the schema that calls it.
-func newField(name, typ string, rt reflect.Type, pos string) *desc.Field {
-	return &desc.Field{Name: name, Type: typ, RType: rt, Pos: pos}
+// declared at pc. Each exported constructor passes desc.Caller(), called in
+// its own body, so that pc is the call in the schema.
+func newField(name, typ string, rt reflect.Type, pc uintptr) *desc.Field {
+	return &desc.Field{Name: name, Type: typ, RType: rt, PC: pc}
 }
 
 // --- bool
@@ -36,10 +36,10 @@ type number interface {
 
 type numberBuilder[T number] struct{ typed[*numberBuilder[T], T] }
 
-func newNumber[T number](name, pos string) *numberBuilder[T] {
+func newNumber[T number](name string, pc uintptr) *numberBuilder[T] {
 	b := &numberBuilder[T]{}
 	rt := reflect.TypeFor[T]()
-	b.typed = typed[*numberBuilder[T], T]{common[*numberBuilder[T]]{d: newField(name, rt.Kind().String(), rt, pos), self: b}}
+	b.typed = typed[*numberBuilder[T], T]{common[*numberBuilder[T]]{d: newField(name, rt.Kind().String(), rt, pc), self: b}}
 	return b
 }
 
@@ -120,9 +120,9 @@ type stringBuilder struct{ typed[*stringBuilder, string] }
 // String declares a string field.
 func String(name string) *stringBuilder { return newString(name, desc.Caller()) }
 
-func newString(name, pos string) *stringBuilder {
+func newString(name string, pc uintptr) *stringBuilder {
 	b := &stringBuilder{}
-	b.typed = typed[*stringBuilder, string]{common[*stringBuilder]{d: newField(name, "string", reflect.TypeFor[string](), pos), self: b}}
+	b.typed = typed[*stringBuilder, string]{common[*stringBuilder]{d: newField(name, "string", reflect.TypeFor[string](), pc), self: b}}
 	return b
 }
 
@@ -247,9 +247,9 @@ type jsonBuilder struct{ common[*jsonBuilder] }
 // JSON declares a field stored as JSON, of the type of typ.
 func JSON(name string, typ any) *jsonBuilder { return newJSON(name, typ, desc.Caller()) }
 
-func newJSON(name string, typ any, pos string) *jsonBuilder {
+func newJSON(name string, typ any, pc uintptr) *jsonBuilder {
 	b := &jsonBuilder{}
-	b.common = common[*jsonBuilder]{d: newField(name, "json", nil, pos), self: b}
+	b.common = common[*jsonBuilder]{d: newField(name, "json", nil, pc), self: b}
 	withType(b.d, typ)
 	return b
 }

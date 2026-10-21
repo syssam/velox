@@ -5,6 +5,7 @@
 package gen
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
 
@@ -39,7 +40,8 @@ type Entity struct {
 //
 // Pos is the file:line that declares the field, for errors. It is kept out of
 // the JSON, so that the model hash and the generated files do not depend on
-// the checkout's path; the embedded loadjson.Field's Pos is always "".
+// the checkout's path. MarshalJSON leaves out the embedded loadjson.Field's
+// Pos too, which a json:"-" tag here would not hide.
 type Field struct {
 	loadjson.Field
 	Pos      string `json:"-"`
@@ -67,6 +69,22 @@ type Edge struct {
 	Comment     string                     `json:"comment,omitempty"`
 	Annotations map[string]json.RawMessage `json:"annotations,omitempty"`
 	Pos         string                     `json:"-"` // the file:line that declares the edge, for errors
+}
+
+// MarshalJSON encodes f without a position: the embedded loadjson.Field's Pos
+// is left out, whoever built f. As the Graph's encoders do not escape HTML,
+// neither does it; json.Marshal of the Graph escapes the result anyway.
+func (f Field) MarshalJSON() ([]byte, error) {
+	type plain Field // without this method
+	p := plain(f)
+	p.Field.Pos = ""
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(p); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSuffix(b.Bytes(), []byte("\n")), nil
 }
 
 // Rel is the relation an edge stands for, and where it is stored.

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/syssam/velox2/schema/index"
+	"github.com/syssam/velox2/schema/internal/desc"
 )
 
 func TestIndex(t *testing.T) {
@@ -26,10 +27,10 @@ func TestPos(t *testing.T) {
 	_, file, line, _ := runtime.Caller(0)
 	a := index.Fields("x")
 	b := index.Edges("y")
-	if want := fmt.Sprintf("%s:%d", file, line+1); a.Descriptor().Pos != want {
-		t.Errorf("Fields: %q, want %q", a.Descriptor().Pos, want)
+	if want := fmt.Sprintf("%s:%d", file, line+1); desc.PosOf(a.Descriptor().PC) != want {
+		t.Errorf("Fields: %q, want %q", desc.PosOf(a.Descriptor().PC), want)
 	}
-	if want := fmt.Sprintf("%s:%d", file, line+2); b.Descriptor().Pos != want {
-		t.Errorf("Edges: %q, want %q", b.Descriptor().Pos, want)
+	if want := fmt.Sprintf("%s:%d", file, line+2); desc.PosOf(b.Descriptor().PC) != want {
+		t.Errorf("Edges: %q, want %q", desc.PosOf(b.Descriptor().PC), want)
 	}
 }

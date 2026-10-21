@@ -20,8 +20,8 @@ func Fields(fields ...string) *Builder { return newBuilder(desc.Caller()).Fields
 // Edges starts an index over the foreign keys of the named edges.
 func Edges(edges ...string) *Builder { return newBuilder(desc.Caller()).Edges(edges...) }
 
-// newBuilder starts an index declared at pos.
-func newBuilder(pos string) *Builder { return &Builder{d: &desc.Index{Pos: pos}} }
+// newBuilder starts an index declared at pc.
+func newBuilder(pc uintptr) *Builder { return &Builder{d: &desc.Index{PC: pc}} }
 
 // Fields adds the named fields to the index.
 func (b *Builder) Fields(fields ...string) *Builder {

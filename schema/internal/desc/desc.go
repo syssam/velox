@@ -11,15 +11,33 @@ import (
 	"strconv"
 )
 
-// Caller returns the file:line that calls the function that calls Caller: a
-// DSL constructor calls it, directly, to record the line of the schema that
-// declares the element. It returns "" when the stack does not say.
-func Caller() string {
-	_, file, line, ok := runtime.Caller(2)
-	if !ok {
+// Caller returns the program counter of the call to the function that calls
+// Caller: a DSL constructor calls it, directly, to record the line of the
+// schema that declares the element. It returns 0 when the stack does not say.
+//
+// It only captures the counter. PosOf turns it into file:line, which only the
+// loader needs: the generated code also calls the constructors, to read their
+// functions, and pays for no file lookup and no string.
+func Caller() uintptr {
+	var pc [1]uintptr
+	// Skip runtime.Callers, Caller and the constructor. runtime.Callers counts
+	// inlined frames, so this holds whatever the compiler inlines.
+	if runtime.Callers(3, pc[:]) == 0 {
+		return 0
+	}
+	return pc[0]
+}
+
+// PosOf returns the file:line of a counter that Caller returned, or "" for 0.
+func PosOf(pc uintptr) string {
+	if pc == 0 {
 		return ""
 	}
-	return file + ":" + strconv.Itoa(line)
+	f, _ := runtime.CallersFrames([]uintptr{pc}).Next()
+	if f.File == "" {
+		return ""
+	}
+	return f.File + ":" + strconv.Itoa(f.Line)
 }
 
 // Annotation is extra data a schema attaches to itself, a field, an edge or an
@@ -102,7 +120,7 @@ type Field struct {
 	Comment       string
 	StructTag     string
 	Annotations   []Annotation
-	Pos           string  // the file:line of the constructor's call
+	PC            uintptr // the constructor's call, for PosOf
 	Errs          []error // every misuse of the builder, each a reason without the field's name
 }
 
@@ -121,7 +139,7 @@ type Edge struct {
 	Symbols             []string
 	Comment             string
 	Annotations         []Annotation
-	Pos                 string  // the file:line of the constructor's call
+	PC                  uintptr // the constructor's call, for PosOf
 	Errs                []error // every misuse of the builder, each a reason without the edge's name
 }
 
@@ -132,5 +150,5 @@ type Index struct {
 	StorageKey    string // the index name
 	Where         string // a partial index's predicate, on PostgreSQL
 	Annotations   []Annotation
-	Pos           string // the file:line of the constructor's call
+	PC            uintptr // the constructor's call, for PosOf
 }

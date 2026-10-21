@@ -7,6 +7,7 @@ import (
 
 	"github.com/syssam/velox2/schema"
 	"github.com/syssam/velox2/schema/edge"
+	"github.com/syssam/velox2/schema/internal/desc"
 )
 
 type User struct{ schema.Schema }
@@ -57,13 +58,13 @@ func TestPos(t *testing.T) {
 	to := edge.To("a", Post.Type)
 	from := edge.From("b", User.Type)
 	inline := edge.To("c", User.Type).From("d")
-	if want := fmt.Sprintf("%s:%d", file, line+1); to.Descriptor().Pos != want {
-		t.Errorf("To: %q, want %q", to.Descriptor().Pos, want)
+	if want := fmt.Sprintf("%s:%d", file, line+1); desc.PosOf(to.Descriptor().PC) != want {
+		t.Errorf("To: %q, want %q", desc.PosOf(to.Descriptor().PC), want)
 	}
-	if want := fmt.Sprintf("%s:%d", file, line+2); from.Descriptor().Pos != want {
-		t.Errorf("From: %q, want %q", from.Descriptor().Pos, want)
+	if want := fmt.Sprintf("%s:%d", file, line+2); desc.PosOf(from.Descriptor().PC) != want {
+		t.Errorf("From: %q, want %q", desc.PosOf(from.Descriptor().PC), want)
 	}
-	if d, want := inline.Descriptor(), fmt.Sprintf("%s:%d", file, line+3); d.Pos != want || d.Ref.Pos != want {
-		t.Errorf("inline: %q %q, want %q", d.Pos, d.Ref.Pos, want)
+	if d, want := inline.Descriptor(), fmt.Sprintf("%s:%d", file, line+3); desc.PosOf(d.PC) != want || desc.PosOf(d.Ref.PC) != want {
+		t.Errorf("inline: %q %q, want %q", desc.PosOf(d.PC), desc.PosOf(d.Ref.PC), want)
 	}
 }

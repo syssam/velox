@@ -32,10 +32,10 @@ func typ(t any) (name, pkg string, ok bool) {
 }
 
 // newEdge returns the descriptor of an edge to the schema t names, declared
-// at pos. A t that is not a schema's Type method expression is a misuse, in
+// at pc. A t that is not a schema's Type method expression is a misuse, in
 // the descriptor's Errs.
-func newEdge(name string, t any, inverse bool, pos string) *desc.Edge {
-	d := &desc.Edge{Name: name, Inverse: inverse, Pos: pos}
+func newEdge(name string, t any, inverse bool, pc uintptr) *desc.Edge {
+	d := &desc.Edge{Name: name, Inverse: inverse, PC: pc}
 	typeName, pkg, ok := typ(t)
 	if !ok {
 		d.Errs = append(d.Errs, errors.New("the type must be a schema's Type method expression, such as Post.Type"))
@@ -116,7 +116,7 @@ func (b *assocBuilder) Annotations(as ...schema.Annotation) *assocBuilder {
 // schema. The options that follow configure the inverse, and Descriptor still
 // returns the whole edge, with the inverse in its Ref.
 func (b *assocBuilder) From(name string) *inverseBuilder {
-	b.d.Ref = &desc.Edge{Name: name, Type: b.d.Type, TypePkg: b.d.TypePkg, Inverse: true, RefName: b.d.Name, Pos: b.d.Pos}
+	b.d.Ref = &desc.Edge{Name: name, Type: b.d.Type, TypePkg: b.d.TypePkg, Inverse: true, RefName: b.d.Name, PC: b.d.PC}
 	return &inverseBuilder{d: b.d.Ref, root: b.d}
 }
 

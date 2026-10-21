@@ -268,7 +268,7 @@ func (l *loader) buildField(f schema.Field, prefix string, j int, pos loadjson.P
 	}
 	where := fmt.Sprintf("field %q", d.Name)
 	for _, err := range d.Errs {
-		l.fail(d.Pos, where, "%v", err)
+		l.fail(desc.PosOf(d.PC), where, "%v", err)
 	}
 	if len(d.Errs) > 0 {
 		return nil
@@ -281,7 +281,7 @@ func (l *loader) buildField(f schema.Field, prefix string, j int, pos loadjson.P
 		UpdateDefault: d.UpdateDefault != nil,
 		Validators:    len(d.Validators),
 		StorageKey:    d.StorageKey, SchemaType: d.SchemaType, Comment: d.Comment, StructTag: d.StructTag,
-		Position: pos, Pos: d.Pos,
+		Position: pos, Pos: desc.PosOf(d.PC),
 	}
 	if d.GoType != nil {
 		g := loadjson.GoType(*d.GoType)
@@ -295,7 +295,7 @@ func (l *loader) buildField(f schema.Field, prefix string, j int, pos loadjson.P
 	default:
 		b, err := json.Marshal(d.Default)
 		if err != nil {
-			l.fail(d.Pos, where, "Default does not marshal: %v", err)
+			l.fail(desc.PosOf(d.PC), where, "Default does not marshal: %v", err)
 			ok = false
 		}
 		out.Default = b
@@ -308,7 +308,7 @@ func (l *loader) buildField(f schema.Field, prefix string, j int, pos loadjson.P
 		for _, a := range c.Args {
 			b, err := json.Marshal(a)
 			if err != nil {
-				l.fail(d.Pos, where, "%s argument does not marshal: %v", c.Kind, err)
+				l.fail(desc.PosOf(d.PC), where, "%s argument does not marshal: %v", c.Kind, err)
 				ok = false
 			}
 			lc.Args = append(lc.Args, b)
@@ -316,7 +316,7 @@ func (l *loader) buildField(f schema.Field, prefix string, j int, pos loadjson.P
 		out.Checks = append(out.Checks, lc)
 	}
 	if out.Annotations, err = listAnnotations(d.Annotations); err != nil {
-		l.fail(d.Pos, where, "%v", err)
+		l.fail(desc.PosOf(d.PC), where, "%v", err)
 		ok = false
 	}
 	if !ok {
@@ -343,11 +343,11 @@ func (l *loader) buildEdge(e schema.Edge, prefix string, j int, pos loadjson.Pos
 	}
 	n := len(l.errs)
 	for _, err := range d.Errs {
-		l.fail(d.Pos, fmt.Sprintf("edge %q", d.Name), "%v", err)
+		l.fail(desc.PosOf(d.PC), fmt.Sprintf("edge %q", d.Name), "%v", err)
 	}
 	if d.Ref != nil {
 		for _, err := range d.Ref.Errs {
-			l.fail(cmp.Or(d.Ref.Pos, d.Pos), fmt.Sprintf("edge %q", d.Ref.Name), "%v", err)
+			l.fail(desc.PosOf(cmp.Or(d.Ref.PC, d.PC)), fmt.Sprintf("edge %q", d.Ref.Name), "%v", err)
 		}
 	}
 	first := l.edgeOf(d, pos)
@@ -368,11 +368,11 @@ func (l *loader) edgeOf(d *desc.Edge, pos loadjson.Position) *loadjson.Edge {
 		Name: d.Name, Type: d.Type, TypePkg: d.TypePkg, Inverse: d.Inverse, Ref: d.RefName,
 		Unique: d.Unique, Required: d.Required, Immutable: d.Immutable,
 		Field: d.Field, Table: d.Table, Columns: d.Columns, Symbols: d.Symbols, Comment: d.Comment,
-		Position: pos, Pos: d.Pos,
+		Position: pos, Pos: desc.PosOf(d.PC),
 	}
 	var err error
 	if out.Annotations, err = listAnnotations(d.Annotations); err != nil {
-		l.fail(d.Pos, fmt.Sprintf("edge %q", d.Name), "%v", err)
+		l.fail(desc.PosOf(d.PC), fmt.Sprintf("edge %q", d.Name), "%v", err)
 	}
 	return out
 }
@@ -394,10 +394,10 @@ func (l *loader) buildIndex(x schema.Index, prefix string, j int, pos loadjson.P
 	}
 	out := &loadjson.Index{
 		Fields: d.Fields, Edges: d.Edges, Unique: d.Unique, StorageKey: d.StorageKey, Where: d.Where,
-		Position: pos, Pos: d.Pos,
+		Position: pos, Pos: desc.PosOf(d.PC),
 	}
 	if out.Annotations, err = listAnnotations(d.Annotations); err != nil {
-		l.fail(d.Pos, "", "%sIndexes()[%d]: %v", prefix, j, err)
+		l.fail(desc.PosOf(d.PC), "", "%sIndexes()[%d]: %v", prefix, j, err)
 		return nil
 	}
 	return out

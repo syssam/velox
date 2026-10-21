@@ -108,12 +108,9 @@ var idTypes = map[string]bool{
 	"string": true, "uuid": true,
 }
 
-// newField resolves a field of the model. Its position moves out of the
-// embedded loadjson.Field, whose Pos would be in the Graph's JSON.
+// newField resolves a field of the model.
 func newField(lf *loadjson.Field) *Field {
-	f := &Field{Field: *lf, Pos: lf.Pos, GoName: plugin.GoName(lf.Name), Column: cmp.Or(lf.StorageKey, lf.Name), Pointer: lf.Nillable}
-	f.Field.Pos = ""
-	return f
+	return &Field{Field: *lf, Pos: lf.Pos, GoName: plugin.GoName(lf.Name), Column: cmp.Or(lf.StorageKey, lf.Name), Pointer: lf.Nillable}
 }
 
 // entities makes one Entity per schema, with its table, its fields and its ID
