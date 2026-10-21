@@ -16,21 +16,24 @@ func runDescribe(args []string, dir string, env []string, stdout, stderr io.Writ
 	if done {
 		return code
 	}
-	pattern := "./schema"
-	switch len(rest) {
-	case 0:
-	case 1:
-		pattern = rest[0]
-	default:
+	if len(rest) > 1 {
 		return tooMany("describe", fs, stderr)
 	}
-	m, err := gen.Load(dir, pattern, env)
-	if err == nil {
-		var g *gen.Graph
-		if g, err = gen.Build(m); err == nil {
-			err = gen.Describe(stdout, g, *asJSON)
+	err := func() error {
+		pattern, err := schemaPackage(dir, rest, env)
+		if err != nil {
+			return err
 		}
-	}
+		m, err := gen.Load(dir, pattern, env)
+		if err != nil {
+			return err
+		}
+		g, err := gen.Build(m)
+		if err != nil {
+			return err
+		}
+		return gen.Describe(stdout, g, *asJSON)
+	}()
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", relErrors(dir, err))
 		return 1

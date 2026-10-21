@@ -11,13 +11,19 @@ type Annotation = desc.Annotation
 // same name on one element, such as one from a mixin and one from the schema.
 type Merger interface{ Merge(Annotation) Annotation }
 
-// Field is implemented by the builders of the field package.
+// Field is implemented only by the builders of the field package. Descriptor
+// is for velox-gen: the descriptor's type is internal to velox2, and neither
+// its fields nor their values are covered by velox2's compatibility promise.
 type Field interface{ Descriptor() *desc.Field }
 
-// Edge is implemented by the builders of the edge package.
+// Edge is implemented only by the builders of the edge package. As with
+// [Field], the descriptor's type is internal to velox2 and outside its
+// compatibility promise.
 type Edge interface{ Descriptor() *desc.Edge }
 
-// Index is implemented by the builders of the index package.
+// Index is implemented only by the builders of the index package. As with
+// [Field], the descriptor's type is internal to velox2 and outside its
+// compatibility promise.
 type Index interface{ Descriptor() *desc.Index }
 
 // Mixin contributes fields, edges, indexes and annotations to the schemas that

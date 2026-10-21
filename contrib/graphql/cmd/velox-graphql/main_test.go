@@ -67,6 +67,7 @@ func TestRun(t *testing.T) {
 		"version":   {request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: 1}}), "model is version 1"},
 		"no model":  {request(t, plugin.Request{Protocol: 2}), "no model"},
 		"malformed": {"{", "request"},
+		"options":   {request(t, plugin.Request{Protocol: 2, Options: map[string]string{"x": "y", "a": ""}, Model: m}), "velox-graphql takes no options; it is given a, x"},
 		"render": {request(t, plugin.Request{Protocol: 2, Model: &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
 			Name: "User", Tenant: -1, PrimaryKey: []int{0},
 			Fields: []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64"}, {Name: "x", GoName: "X", Type: "other"}},

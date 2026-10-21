@@ -10,10 +10,16 @@
 // velox-gen runs it with the request, the resolved model as JSON, on its
 // standard input, and it answers with the files on its standard output (see
 // package github.com/syssam/velox2/plugin). velox-gen writes them, with the
-// generated-file header, and owns them from then on.
+// generated-file header, and owns them from then on. It takes no options:
+// -plugin velox-graphql:key=value fails the run.
 package main
 
 import (
+	"fmt"
+	"maps"
+	"slices"
+	"strings"
+
 	"github.com/syssam/velox2/contrib/graphql/internal/gogen"
 	"github.com/syssam/velox2/contrib/graphql/internal/sdl"
 	"github.com/syssam/velox2/plugin"
@@ -24,8 +30,13 @@ func main() {
 }
 
 // generate answers a request: the schema, velox.graphqls, and the Go files
-// gqlgen binds it to.
+// gqlgen binds it to. velox-graphql takes no options, and refuses any it is
+// given, as the plugin protocol asks.
 func generate(req *plugin.Request) ([]plugin.File, []string, error) {
+	if len(req.Options) > 0 {
+		keys := slices.Sorted(maps.Keys(req.Options))
+		return nil, nil, fmt.Errorf("velox-graphql takes no options; it is given %s", strings.Join(keys, ", "))
+	}
 	s, err := sdl.Render(req.Model)
 	if err != nil {
 		return nil, nil, err

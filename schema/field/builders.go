@@ -148,19 +148,57 @@ func ofKind[T Numeric](fn func(T) error) any {
 	}
 }
 
+// Default sets the value a new row gets when the field is not set. It never
+// changes the Go type. A field that is not a pointer is unset when it holds its
+// zero value, so velox-gen refuses a Default on a number that is not Nillable,
+// which could then never store 0: make the field Nillable or drop the Default.
+func (b *NumberBuilder[T]) Default(v T) *NumberBuilder[T] { b.d.Default = base(v); return b }
+
+// base returns v as a value of T's kind, such as an int for a slog.Level, so
+// that Default, Min, Max and Range record what Int().GoType(T(0)) records,
+// and a T with its own JSON or text encoding stores its number.
+func base[T Numeric](v T) any {
+	switch reflect.TypeFor[T]().Kind() {
+	case reflect.Int:
+		return int(v)
+	case reflect.Int8:
+		return int8(v)
+	case reflect.Int16:
+		return int16(v)
+	case reflect.Int32:
+		return int32(v)
+	case reflect.Int64:
+		return int64(v)
+	case reflect.Uint:
+		return uint(v)
+	case reflect.Uint8:
+		return uint8(v)
+	case reflect.Uint16:
+		return uint16(v)
+	case reflect.Uint32:
+		return uint32(v)
+	case reflect.Uint64:
+		return uint64(v)
+	case reflect.Float32:
+		return float32(v)
+	default: // reflect.Float64, the last kind Numeric allows
+		return float64(v)
+	}
+}
+
 // Range requires lo <= value <= hi.
 // An Optional field's zero value means unset, and is not validated.
 func (b *NumberBuilder[T]) Range(lo, hi T) *NumberBuilder[T] {
-	return b.check("Range", lo, hi)
+	return b.check("Range", base(lo), base(hi))
 }
 
 // Min requires value >= v.
 // An Optional field's zero value means unset, and is not validated.
-func (b *NumberBuilder[T]) Min(v T) *NumberBuilder[T] { return b.check("Min", v) }
+func (b *NumberBuilder[T]) Min(v T) *NumberBuilder[T] { return b.check("Min", base(v)) }
 
 // Max requires value <= v.
 // An Optional field's zero value means unset, and is not validated.
-func (b *NumberBuilder[T]) Max(v T) *NumberBuilder[T] { return b.check("Max", v) }
+func (b *NumberBuilder[T]) Max(v T) *NumberBuilder[T] { return b.check("Max", base(v)) }
 
 // Positive requires value > 0.
 // An Optional field's zero value means unset, and is not validated.

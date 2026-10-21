@@ -62,17 +62,13 @@ func isGenerated(path string) bool {
 }
 
 // schemaPackage is the schema package the command works on: the one pattern
-// named, or defaultSchema when none is. The package must declare schemas; an
-// error is a package that cannot be read, as go list says it, or one that
-// declares none.
+// named, or defaultSchema when none is; the caller refuses more than one, as
+// a usage error. The package must declare schemas; an error is a package that
+// cannot be read, as go list says it, or one that declares none.
 func schemaPackage(dir string, patterns, env []string) (string, error) {
 	pattern := defaultSchema
-	switch len(patterns) {
-	case 0:
-	case 1:
+	if len(patterns) == 1 {
 		pattern = patterns[0]
-	default:
-		return "", fmt.Errorf("takes one package, not %d", len(patterns))
 	}
 	importPath, schemas, err := gen.Inspect(dir, pattern, env)
 	if err != nil {
@@ -289,7 +285,9 @@ type sweep struct {
 // A generated file (.go, .graphqls or .proto: a regular file that starts with
 // the header of its kind) in out or below it that is not a path of want is
 // removed. The walk skips the directories whose name starts with "." or "_"
-// (.git, .velox-verify-*, testdata's kin). A directory is emptied only when
+// (.git, .velox-verify-*, testdata's kin), and those that hold a go.mod
+// (another module) or a velox.go with the header (another run's output, such
+// as -out ./gen/b beside -out ./gen). A directory is emptied only when
 // it held something, everything it held is removed, and no file of want goes
 // into it.
 //
@@ -343,7 +341,7 @@ func staleFiles(out string, want map[string][]byte, owners map[string]string) (s
 			p := filepath.Join(d, de.Name())
 			switch {
 			case de.IsDir():
-				if n := de.Name(); n[0] == '.' || n[0] == '_' {
+				if n := de.Name(); n[0] == '.' || n[0] == '_' || ownRoot(p) {
 					continue
 				}
 				dirs = append(dirs, p)
@@ -389,6 +387,18 @@ func staleFiles(out string, want map[string][]byte, owners map[string]string) (s
 	sw.write = slices.Sorted(maps.Keys(write))
 	slices.Sort(sw.remove)
 	return sw, nil
+}
+
+// ownRoot reports whether the directory d is the root of output the sweep
+// leaves alone: another generate run's, which holds velox-gen's own velox.go
+// with the header, or another module's, which holds a go.mod.
+func ownRoot(d string) bool {
+	if fi, err := os.Lstat(filepath.Join(d, "go.mod")); err == nil && !fi.IsDir() {
+		return true
+	}
+	v := filepath.Join(d, "velox.go")
+	fi, err := os.Lstat(v)
+	return err == nil && fi.Mode().IsRegular() && isGenerated(v)
 }
 
 // sameEntry reports whether the paths a and b, which differ, name one entry of
@@ -454,8 +464,21 @@ func runGenerateVerify(f genFlags, pattern, dir string, env []string, stdout, st
 	}
 	// The plugins' Go files are compiled with the package, as they are on
 	// disk; they must be the files the plugins write now.
-	pfiles, _, err := pluginFiles(f, gm, pattern, dir, pkg, env, stderr)
+	pfiles, owners, err := pluginFiles(f, gm, pattern, dir, pkg, env, stderr)
 	if err != nil {
+		return fail(err)
+	}
+	// A plugin path that collides with a file of velox-gen's fails as it does
+	// in generate.
+	files, err := gen.Generate(gm.graph, gen.Config{Package: pkg, SchemaPath: gm.importPath})
+	if err != nil {
+		return fail(err)
+	}
+	own := make(map[string][]byte, len(files))
+	for _, file := range files {
+		own[filepath.Join(out, file.Name)] = file.Data
+	}
+	if err := mergePluginFiles(dir, out, own, pfiles, owners); err != nil {
 		return fail(err)
 	}
 	for _, p := range slices.Sorted(maps.Keys(pfiles)) {

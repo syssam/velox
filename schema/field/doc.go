@@ -23,7 +23,11 @@
 // field's Go type T. Number[Cents] is Int64 with GoType(Cents(0)), UUIDOf[T]
 // is UUID(name, T's zero value), and EnumOf[T] is Enum with GoType(T("")).
 //
-// A builder never panics. A misuse, such as a GoType of the wrong kind or a
-// DefaultFunc of the wrong signature, is recorded in the descriptor's Errs,
-// and the loader reports every one.
+// A builder never panics. velox-gen reports every misuse, such as a GoType of
+// the wrong kind or a DefaultFunc of the wrong signature, with its file:line.
+//
+// The builders share their options through embedded generic types, so godoc
+// lists some options with type parameters: in "Optional() B" B is the builder,
+// and in "Default(v V) B" V is the field's value type. Each option returns the
+// builder it is called on.
 package field

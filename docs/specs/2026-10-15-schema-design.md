@@ -122,7 +122,7 @@ The generated struct holds the edges as `velox.Many[T]` and `velox.One[T]`, with
 
 ### 1.3 Indexes, mixins, annotations
 
-- **Indexes:** `index.Fields(...)` with `Unique()`, `StorageKey(...)` and, on PostgreSQL, `Where(sql)` *(note 2026-10-21: SQLite has partial indexes too and MySQL does not; the dialect keys of `Where` are `field.Postgres`, `field.MySQL` and `field.SQLite`. Two indexes with the same columns, `Unique` and `Where` are refused, and index names, explicit or derived, must be unique across the graph)*.
+- **Indexes:** `index.Fields(...)` with `Unique()`, `StorageKey(...)` and, on PostgreSQL, `Where(sql)` *(note 2026-10-21: SQLite has partial indexes too and MySQL does not. `Where` takes plain SQL and has no dialect keys; the dialect keys `field.Postgres`, `field.MySQL` and `field.SQLite` belong to a field's `SchemaType`. Two indexes with the same columns, `Unique` and `Where` are refused, and index names, explicit or derived, must be unique within one database schema (`schema.TableIn`), as PostgreSQL requires)*.
 - **Mixins:** these contribute fields, edges, indexes and annotations. `mixin.Time` adds `created_at` and `updated_at`. A mixin carries no behaviour.
 - **Annotations:**
   - `schema.Table`, and `schema.TableIn(schema, table)`;

@@ -5,10 +5,13 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/syssam/velox2/internal/gen"
 	"github.com/syssam/velox2/internal/gen/loadjson"
 	"github.com/syssam/velox2/schema"
 	"github.com/syssam/velox2/schema/edge"
@@ -380,12 +383,28 @@ type pair struct {
 
 func (p pair) Fields() []schema.Field { return []schema.Field{p.f} }
 
-// A typed constructor loads to the JSON of its ent spelling (Review Focus 4).
+// level is an int with its own JSON encoding, which a Default or a check
+// argument of Number[level] must not use.
+type level int
+
+func (l level) MarshalJSON() ([]byte, error) { return json.Marshal(fmt.Sprintf("L%d", int(l))) }
+
+// A typed constructor loads to the JSON of its ent spelling, and lowers to the
+// same output (Review Focus 4). A T with its own JSON or text encoding, such
+// as slog.Level, stores its Default and check arguments as numbers too.
 func TestTypedConstructorsEqualGoType(t *testing.T) {
 	for name, c := range map[string][2]schema.Field{
 		"Number": {
 			field.Number[cents]("p").Nillable().Default(5).Min(1),
 			field.Int64("p").GoType(cents(0)).Nillable().Default(5).Min(1),
+		},
+		"Number slog.Level": {
+			field.Number[slog.Level]("lvl").Optional().Nillable().Default(slog.LevelInfo).Min(slog.LevelDebug).Max(slog.LevelError),
+			field.Int("lvl").GoType(slog.Level(0)).Optional().Nillable().Default(0).Min(-4).Max(8),
+		},
+		"Number MarshalJSON": {
+			field.Number[level]("lvl").Nillable().Default(3).Range(1, 9),
+			field.Int("lvl").GoType(level(0)).Nillable().Default(3).Range(1, 9),
 		},
 		"EnumOf": {
 			field.EnumOf[status]("s").Default("closed"),
@@ -397,11 +416,19 @@ func TestTypedConstructorsEqualGoType(t *testing.T) {
 		},
 	} {
 		var out [2]string
+		var lowered [2]*gen.Out
 		for i, f := range c {
 			m := marshal(t, pair{f: f})
 			lf := m.Schemas[0].Fields[0]
 			if lf.Pos == "" {
 				t.Fatalf("%s: no position", name)
+			}
+			g, err := gen.Build(m)
+			if err != nil {
+				t.Fatalf("%s: build: %v", name, err)
+			}
+			if lowered[i], err = gen.Lower(g, gen.Config{}); err != nil {
+				t.Fatalf("%s: lower: %v", name, err)
 			}
 			lf.Pos = ""
 			b, err := json.Marshal(lf)
@@ -412,6 +439,11 @@ func TestTypedConstructorsEqualGoType(t *testing.T) {
 		}
 		if out[0] != out[1] {
 			t.Errorf("%s:\n typed %s\n   ent %s", name, out[0], out[1])
+		}
+		if !reflect.DeepEqual(lowered[0], lowered[1]) {
+			a, _ := json.Marshal(lowered[0])
+			b, _ := json.Marshal(lowered[1])
+			t.Errorf("%s: lowered\n typed %s\n   ent %s", name, a, b)
 		}
 	}
 }

@@ -16,20 +16,20 @@ const ModelVersion = 2
 // Request is what velox-gen writes to a plugin's standard input.
 type Request struct {
 	Protocol   int    `json:"plugin_protocol"` // the protocol version, [ProtocolVersion]; a plugin checks it
-	Generator  string `json:"generator"`       // "velox-gen " and the version of the velox2 module, e.g. "velox-gen v2.0.0", "velox-gen (devel)"; for messages, not for output
+	Generator  string `json:"generator"`       // "velox-gen " and the version of the velox2 module, e.g. "velox-gen v1.2.3", "velox-gen (devel)"; for messages, not for output
 	OutPackage string `json:"out_package"`     // the generated package's name
 	OutPath    string `json:"out_path"`        // the generated package's import path
 	// Options are the plugin's options from the command line,
 	// -plugin name:key=value,key=value; absent when there are none. Keys are
 	// non-empty and distinct, a value may be empty, and neither holds a comma.
 	Options map[string]string `json:"options,omitempty"`
-	Model   *Model            `json:"model"`
+	Model   *Model            `json:"model"` // the resolved model of the schema package
 }
 
 // Response is what a plugin writes to its standard output.
 type Response struct {
-	Protocol int      `json:"plugin_protocol"` // the protocol the plugin speaks, [ProtocolVersion]; velox-gen refuses a response without it
-	Files    []File   `json:"files"`
+	Protocol int      `json:"plugin_protocol"`    // the protocol the plugin speaks, [ProtocolVersion]; velox-gen refuses a response without it
+	Files    []File   `json:"files"`              // written below the output directory; see [File]
 	Warnings []string `json:"warnings,omitempty"` // shown to the user; they never fail the run
 	Error    string   `json:"error,omitempty"`    // a non-empty Error fails the run
 }
@@ -54,10 +54,10 @@ type Model struct {
 
 // Entity is a schema, or a many-to-many join entity.
 type Entity struct {
-	Name        string   `json:"name"`
-	Label       string   `json:"label"`   // snake_case of Name
-	Handles     string   `json:"handles"` // the plural of Name, e.g. "Users"
-	Table       string   `json:"table"`
+	Name        string   `json:"name"`                   // the Go type name, e.g. "User": the schema's struct name, or for a join entity the one velox-gen gives it
+	Label       string   `json:"label"`                  // snake_case of Name
+	Handles     string   `json:"handles"`                // the plural of Name, e.g. "Users"
+	Table       string   `json:"table"`                  // the table's name
 	TableSchema string   `json:"table_schema,omitempty"` // the database schema that holds Table, from schema.TableIn; "" for the connection's default
 	Join        bool     `json:"join,omitempty"`         // a many-to-many join entity
 	Comment     string   `json:"comment,omitempty"`      // the Comment annotation's text, for descriptions
@@ -67,17 +67,17 @@ type Entity struct {
 	// first); a field's Unique is no index here. A join entity has none: its
 	// PrimaryKey is what makes its rows unique.
 	Indexes     []*Index                   `json:"indexes"`
-	PrimaryKey  []int                      `json:"primary_key"` // indexes into Fields
-	Tenant      int                        `json:"tenant"`      // the index in Fields of the tenant field, -1 for none
-	Annotations map[string]json.RawMessage `json:"annotations,omitempty"`
+	PrimaryKey  []int                      `json:"primary_key"`           // indexes into Fields
+	Tenant      int                        `json:"tenant"`                // the index in Fields of the tenant field, -1 for none
+	Annotations map[string]json.RawMessage `json:"annotations,omitempty"` // the schema's annotations by name, each the JSON of its value; absent on a join entity
 }
 
 // Index is an index of an entity's table.
 type Index struct {
-	Name   string   `json:"name"`   // the name the database gets: the StorageKey, else <table>_<columns>[_unique][_<hash of Where>]
-	Fields []string `json:"fields"` // the Names of the fields it covers, in order; an edge's foreign key is its field, implicit or not
-	Unique bool     `json:"unique,omitempty"`
-	Where  string   `json:"where,omitempty"` // a partial index's predicate, as SQL
+	Name   string   `json:"name"`             // the name the database gets: the StorageKey, else <table>_<columns>[_unique][_<hash of Where>]
+	Fields []string `json:"fields"`           // the Names of the fields it covers, in order; an edge's foreign key is its field, implicit or not
+	Unique bool     `json:"unique,omitempty"` // a unique index
+	Where  string   `json:"where,omitempty"`  // a partial index's predicate, as SQL
 }
 
 // Check is a built-in validator on a field, as the schema declares it.
@@ -87,25 +87,45 @@ type Check struct {
 }
 
 // Field is a column of an entity.
+//
+// Type is the schema field type, one of:
+//
+//   - "bool";
+//   - "int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16",
+//     "uint32", "uint64", "float32", "float64": a number, by its Go kind
+//     (field.Number[T] and a GoType of a defined number type keep their
+//     kind's Type);
+//   - "string", from field.String and field.Text;
+//   - "bytes": a []byte;
+//   - "time": a time.Time;
+//   - "uuid": a UUID type of the schema's, which implements driver.Valuer;
+//   - "json": a Go value stored as JSON;
+//   - "enum": a string stored as one of EnumValues;
+//   - "other": a type of the schema's with its own SQL type (SchemaType).
+//
+// When the schema gives the field a Go type, ElemType is that type, Kind its
+// reflect kind and PkgPath its package; Type stays the schema type. A later
+// model may add a Type value without a new [ModelVersion]: a plugin refuses a
+// Type it does not know with an error, or skips the field with a warning.
 type Field struct {
-	Name       string   `json:"name"`
-	GoName     string   `json:"go_name"`
-	Column     string   `json:"column"`
-	Type       string   `json:"type"`               // the schema field type, e.g. "string", "enum", "time"
-	GoType     string   `json:"go_type"`            // as written in the entity's struct, e.g. "*time.Time"
-	ElemType   string   `json:"elem_type"`          // GoType without the pointer
-	PkgPath    string   `json:"pkg_path,omitempty"` // the import path of ElemType when it is a named type of another package, "time" for time.Time; "" for a builtin type, an unnamed one and velox-gen's own enum types
-	Imports    []string `json:"imports,omitempty"`  // every import path ElemType mentions (map[string]x.T's x too), sorted; "time" for a time field without a Go type; nil for a builtin type and velox-gen's own enum types
-	Kind       string   `json:"kind,omitempty"`     // the reflect kind of the schema's GoType ("string", "int64", "struct", "array", "slice", "ptr"…) when the schema gives one; "" for velox's standard type and velox-gen's own enum types
-	Pointer    bool     `json:"pointer,omitempty"`  // Nillable, unless the Go type can already be nil (a slice, a map): the Go struct holds a pointer. This is about the struct: use Nullable for nullability
-	Nullable   bool     `json:"nullable,omitempty"` // Nillable || (Optional && Type == "json"): the column is NULL-able; the flag a plugin uses for nullability. An Optional field that is not Nillable stays NOT NULL, and unset is its zero value
-	Optional   bool     `json:"optional,omitempty"` // the field need not be given on create; it says nothing of nullability
-	Immutable  bool     `json:"immutable,omitempty"`
-	Sensitive  bool     `json:"sensitive,omitempty"`
-	Unique     bool     `json:"unique,omitempty"`
-	AutoID     bool     `json:"auto_id,omitempty"` // the ID velox added, as the schema declares none
-	Size       int      `json:"size,omitempty"`    // the column's size, from MaxLen (bytes, string), or math.MaxInt32 for field.Text; 0 for none
-	HasDefault bool     `json:"has_default,omitempty"`
+	Name       string   `json:"name"`                  // the schema's field name, e.g. "created_at"
+	GoName     string   `json:"go_name"`               // the struct field's name, e.g. "CreatedAt"
+	Column     string   `json:"column"`                // the column's name: the StorageKey, else Name
+	Type       string   `json:"type"`                  // the schema field type, one of those listed above
+	GoType     string   `json:"go_type"`               // as written in the entity's struct, e.g. "*time.Time"
+	ElemType   string   `json:"elem_type"`             // GoType without the pointer
+	PkgPath    string   `json:"pkg_path,omitempty"`    // the import path of ElemType when it is a named type of another package, "time" for time.Time; "" for a builtin type, an unnamed one and velox-gen's own enum types
+	Imports    []string `json:"imports,omitempty"`     // every import path ElemType mentions (map[string]x.T's x too), sorted; "time" for a time field without a Go type; nil for a builtin type and velox-gen's own enum types
+	Kind       string   `json:"kind,omitempty"`        // the reflect kind of the schema's GoType ("string", "int64", "struct", "array", "slice", "ptr"…) when the schema gives one; "" for velox's standard type and velox-gen's own enum types
+	Pointer    bool     `json:"pointer,omitempty"`     // Nillable, unless the Go type can already be nil (a slice, a map): the Go struct holds a pointer. This is about the struct: use Nullable for nullability
+	Nullable   bool     `json:"nullable,omitempty"`    // Nillable || (Optional && Type == "json"): the column is NULL-able; the flag a plugin uses for nullability. An Optional field that is not Nillable stays NOT NULL, and unset is its zero value
+	Optional   bool     `json:"optional,omitempty"`    // the field need not be given on create; it says nothing of nullability
+	Immutable  bool     `json:"immutable,omitempty"`   // refused in updates: set only on create
+	Sensitive  bool     `json:"sensitive,omitempty"`   // left out of String(), JSON, logs and spans; a plugin keeps it out of what it exposes
+	Unique     bool     `json:"unique,omitempty"`      // a single-column unique index, which Entity.Indexes does not list
+	AutoID     bool     `json:"auto_id,omitempty"`     // the ID velox added, as the schema declares none
+	Size       int      `json:"size,omitempty"`        // the column's size, from MaxLen (bytes, string), or math.MaxInt32 for field.Text; 0 for none
+	HasDefault bool     `json:"has_default,omitempty"` // an insert that does not set the field gets a value: a literal Default or a func
 	// Default is the field's literal Default, as the JSON of its base value,
 	// for these Types only:
 	//   - "bool": a JSON bool;
@@ -118,29 +138,31 @@ type Field struct {
 	// be its base value. A plugin treats the database default of a field
 	// without a Default as unknown.
 	Default       json.RawMessage            `json:"default,omitempty"`
-	UpdateDefault bool                       `json:"update_default,omitempty"`
-	Implicit      string                     `json:"implicit,omitempty"`    // the edge whose foreign key this field is, when velox added it
-	Enum          string                     `json:"enum,omitempty"`        // the enum type's name: the type velox-gen declares, or for a custom Go type that type's name without its package; "" when not an enum
-	EnumValues    []string                   `json:"enum_values,omitempty"` // the stored values in declaration order, for every field of Type "enum"
-	Checks        []Check                    `json:"checks,omitempty"`      // the built-in validators, in declaration order; custom validators are not in the model
-	SchemaType    map[string]string          `json:"schema_type,omitempty"` // the column type per dialect ("postgres", "mysql", "sqlite"), when the schema sets one
-	Comment       string                     `json:"comment,omitempty"`     // for descriptions
-	Annotations   map[string]json.RawMessage `json:"annotations,omitempty"`
+	UpdateDefault bool                       `json:"update_default,omitempty"` // an update that does not set the field gets a value from a func
+	Implicit      string                     `json:"implicit,omitempty"`       // the edge whose foreign key this field is, when velox added it
+	Enum          string                     `json:"enum,omitempty"`           // the enum type's name: the type velox-gen declares, or for a custom Go type that type's name without its package; "" when not an enum
+	EnumValues    []string                   `json:"enum_values,omitempty"`    // the stored values in declaration order, for every field of Type "enum"
+	Checks        []Check                    `json:"checks,omitempty"`         // the built-in validators, in declaration order; custom validators are not in the model
+	SchemaType    map[string]string          `json:"schema_type,omitempty"`    // the column type per dialect ("postgres", "mysql", "sqlite"), when the schema sets one
+	Comment       string                     `json:"comment,omitempty"`        // for descriptions
+	Annotations   map[string]json.RawMessage `json:"annotations,omitempty"`    // the field's annotations by name, each the JSON of its value
 }
 
-// Edge is an edge of an entity.
+// Edge is an edge of an entity. An edge declared with edge.To and the inverse
+// edge.From(...).Ref(...) that mirrors it are a pair: one relation, which each
+// entity lists from its own side, with the other's Name in Ref.
 type Edge struct {
-	Name      string   `json:"name"`
-	GoName    string   `json:"go_name"`
-	Target    string   `json:"target"` // the target entity's Name
-	Ref       string   `json:"ref,omitempty"`
-	Kind      EdgeKind `json:"kind"`
-	Unique    bool     `json:"unique,omitempty"`
-	Required  bool     `json:"required,omitempty"`
-	Inverse   bool     `json:"inverse,omitempty"`
-	Immutable bool     `json:"immutable,omitempty"`
-	Field     string   `json:"field,omitempty"`    // the foreign-key field's Name, on whichever entity holds it; "" for M2M
-	FieldOn   string   `json:"field_on,omitempty"` // the Name of the entity whose table holds Field; "" for M2M
+	Name      string   `json:"name"`                // the schema's edge name, e.g. "posts"
+	GoName    string   `json:"go_name"`             // its Go name, e.g. "Posts"
+	Target    string   `json:"target"`              // the target entity's Name
+	Ref       string   `json:"ref,omitempty"`       // the Name of the paired edge on Target, set on both edges of a pair; "" for an edge without an inverse
+	Kind      EdgeKind `json:"kind"`                // the relation, seen from this edge's entity
+	Unique    bool     `json:"unique,omitempty"`    // the edge points to at most one row (O2O, M2O)
+	Required  bool     `json:"required,omitempty"`  // the foreign key (Field, on FieldOn's table) is NOT NULL: such a row is created with it set
+	Inverse   bool     `json:"inverse,omitempty"`   // the edge is the inverse of a pair, declared with edge.From
+	Immutable bool     `json:"immutable,omitempty"` // the edge is set on create and refused in updates
+	Field     string   `json:"field,omitempty"`     // the foreign-key field's Name, on whichever entity holds it; "" for M2M
+	FieldOn   string   `json:"field_on,omitempty"`  // the Name of the entity whose table holds Field; "" for M2M
 	// OwnsKey is true when the edge's own entity holds the foreign key on its
 	// own row: an M2O edge, an inverse O2O edge, or a bidirectional O2O edge
 	// (an O2O from an entity to itself with no inverse). Writing such an edge
@@ -149,9 +171,9 @@ type Edge struct {
 	// rows (M2M). For an edge from an entity to itself FieldOn names the
 	// entity either way, so only OwnsKey tells.
 	OwnsKey     bool                       `json:"owns_key,omitempty"`
-	Comment     string                     `json:"comment,omitempty"` // for descriptions
-	Join        string                     `json:"join,omitempty"`    // the join entity's Name for M2M, else ""
-	Annotations map[string]json.RawMessage `json:"annotations,omitempty"`
+	Comment     string                     `json:"comment,omitempty"`     // for descriptions
+	Join        string                     `json:"join,omitempty"`        // the join entity's Name for M2M, else ""
+	Annotations map[string]json.RawMessage `json:"annotations,omitempty"` // the edge's annotations by name, each the JSON of its value
 }
 
 // EdgeKind is the kind of relation an edge stands for.
@@ -167,6 +189,6 @@ const (
 
 // Enum is an enum type velox-gen declares.
 type Enum struct {
-	Type   string   `json:"type"`
+	Type   string   `json:"type"`   // the Go type's name in the generated package, e.g. "UserRole"; a Field's Enum names it
 	Values []string `json:"values"` // stored values, in declaration order
 }

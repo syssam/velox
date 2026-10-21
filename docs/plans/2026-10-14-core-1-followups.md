@@ -253,6 +253,9 @@ From the final tasks of API plan 2 (2026-10-21). The plan's own items are done: 
 - Errors inside velox2's own mixins (`mixin.Time` and the like) print module-cache paths, since the position is where the constructor ran.
 - A plugin panic's stack trace is dropped, as the response's error holds the value only. Make it available behind an environment variable.
 - The case fold of plugin paths does no Unicode normalization: two spellings that differ only by normalization form are two files, and collide on a file system that normalizes.
+- **1.0 blocker, for the migrations plan:** derived index names (`<table>_<cols>[_unique][_<hash>]`) have no length cap. PostgreSQL truncates identifiers to 63 bytes and MySQL refuses names over 64, so two long derived names that differ only after byte 63 collide in the database while rule 44 passes them. Cap derived names with a hash suffix, and run rule 44 on the capped names. No database holds these names until the migration planner exists.
+- Linux CI never runs the case-respell path of the stale-file sweep (a generated file whose name changed only in case, on a case-insensitive file system): the tests take it on macOS only. Run CI on a case-insensitive volume, or add a test hook that folds case on Linux.
+- Since the final review's fix of `Number[T]`, every stored literal `Default` is its kind's base value, so the `Marshaler` exemption of model 2's `Field.Default` (§6b ruling 10) has no case left to protect for numbers. The ruling stands; it could be loosened later, additively.
 
 ## 1.0 release
 

@@ -225,7 +225,9 @@ var pluginExts = []string{".go", ".graphqls", ".proto"}
 // checkPluginPath accepts a slash path below the output directory: not
 // absolute, no empty, "." or ".." segment, no backslash or NUL, no directory
 // that starts with "." or "_" (the stale-file sweep skips those, and go
-// ignores them), and a file name ending in .go, .graphqls or .proto.
+// ignores them), and a file name ending in .go, .graphqls or .proto that is
+// not velox.go in a directory below the output directory (which marks another
+// run's output, which the sweep leaves alone).
 func checkPluginPath(p string) error {
 	bad := func(why string) error { return fmt.Errorf("invalid path %q: %s", p, why) }
 	switch {
@@ -254,6 +256,8 @@ func checkPluginPath(p string) error {
 		return bad("a path needs a name before the extension")
 	case !filepath.IsLocal(filepath.FromSlash(p)):
 		return bad("a path is a local file name")
+	case len(segs) > 1 && strings.EqualFold(base, "velox.go"):
+		return bad("a velox.go below the output directory marks another velox-gen run's output; name the file otherwise")
 	}
 	return nil
 }

@@ -90,8 +90,9 @@ func (c common[B]) Annotations(as ...schema.Annotation) B {
 	return c.self
 }
 
-// Descriptor returns the field's descriptor. It checks the options that depend
-// on one another, so it may be called more than once.
+// Descriptor returns the field's descriptor, for velox-gen; its type is
+// internal to velox2 (see schema.Field). It checks the options that depend on
+// one another, so it may be called more than once.
 func (c common[B]) Descriptor() *desc.Field { finish(c.d); return c.d }
 
 // fail records a misuse of a builder. The loader names the field.

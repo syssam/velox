@@ -1264,6 +1264,20 @@ func (odM2M2) Edges() []schema.Edge {
 	return []schema.Edge{edge.From("others", odM2M.Type).Ref("peers")}
 }
 
+// odM2MInv and odM2MInv2 are a many-to-many pair with OnDelete on the
+// inverse only.
+type odM2MInv struct{ schema.Schema }
+
+func (odM2MInv) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("peers", odM2MInv2.Type)}
+}
+
+type odM2MInv2 struct{ schema.Schema }
+
+func (odM2MInv2) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("others", odM2MInv.Type).Ref("peers").OnDelete(edge.Cascade)}
+}
+
 type odSetNullRequired struct{ schema.Schema }
 
 func (odSetNullRequired) Edges() []schema.Edge {
@@ -1307,6 +1321,7 @@ func TestOnDelete(t *testing.T) {
 		want string
 	}{
 		{"45 many-to-many", []schema.Interface{odM2M{}, odM2M2{}}, `schema odM2M: edge "peers": OnDelete has no foreign key to act on in a many-to-many edge; join rows are deleted with either end`},
+		{"45 many-to-many on the inverse only", []schema.Interface{odM2MInv{}, odM2MInv2{}}, `schema odM2MInv2: edge "others": OnDelete has no foreign key to act on in a many-to-many edge; join rows are deleted with either end`},
 		{"46 required", []schema.Interface{odSetNullRequired{}}, `schema odSetNullRequired: edge "parent": SET NULL needs a NULL-able foreign key`},
 		{"47 pair differs", []schema.Interface{odDiffOwner{}, odDiffPet{}}, `schema odDiffPet: edge "owner": OnDelete CASCADE differs from edge "pets"'s RESTRICT on odDiffOwner`},
 	} {

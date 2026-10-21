@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -148,6 +149,20 @@ func TestPluginFilesAreOwned(t *testing.T) {
 	}
 }
 
+// verify refuses a plugin path that collides with a file of velox-gen's, as
+// generate does.
+func TestVerifyRefusesAPluginPathOfVeloxGen(t *testing.T) {
+	dir := pluginModule(t)
+	if code, _, errs := velox(t, dir, "./schema"); code != 0 {
+		t.Fatalf("generate: %d %q", code, errs)
+	}
+	env := fakeEnv(filesEnv(t, plugin.File{Path: "User_velox.go", Content: "package gen\n"}))
+	code, out, errs := veloxEnv(t, dir, env, "verify", "-plugin", "fakeplugin", "./schema")
+	if want := "velox-gen verify: plugin fakeplugin: gen/User_velox.go collides with gen/user_velox.go, which velox-gen writes\n"; code != 1 || out != "" || errs != want {
+		t.Errorf("%d %q %q", code, out, errs)
+	}
+}
+
 func TestPluginPathsAreChecked(t *testing.T) {
 	dir := pluginModule(t)
 	gen := filepath.Join(dir, "gen")
@@ -176,13 +191,18 @@ func TestPluginPathsAreChecked(t *testing.T) {
 		{"velox-gen's package file", "velox.go"},
 		{"velox-gen's own file in another case", "User_velox.go"},
 		{"velox-gen's package file in another case", "Velox.go"},
+		{"velox.go below, the mark of another run's output", "pb/velox.go"},
+		{"velox.go below in another case", "pb/Velox.go"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			env := fakeEnv(filesEnv(t, plugin.File{Path: c.path, Content: "package gen\n"}))
 			code, out, errs := veloxEnv(t, dir, env, "-plugin", "fakeplugin", "./schema")
 			want := "velox-gen: plugin fakeplugin: "
-			if strings.HasSuffix(strings.ToLower(c.path), "velox.go") { // a collision, found after the plugins ran
+			if strings.HasPrefix(c.path, "pb/") && strings.EqualFold(path.Base(c.path), "velox.go") {
+				want += `invalid path "` + c.path + `": a velox.go below the output directory`
+			}
+			if !strings.Contains(c.path, "/") && strings.HasSuffix(strings.ToLower(c.path), "velox.go") { // a collision, found after the plugins ran
 				want += "gen/" + c.path + " collides with gen/" + strings.ToLower(c.path) + ", which velox-gen writes"
 			}
 			if code != 1 || out != "" || !strings.HasPrefix(errs, want) {

@@ -314,14 +314,16 @@ func TestBuildersAreDocumented(t *testing.T) {
 }
 
 // field.Number[Cents] is field.Int64 with the GoType Cents, whose options
-// take a Cents.
+// take a Cents and record its int64.
 func TestNumberValidateTakesT(t *testing.T) {
 	var got cents
 	d := field.Number[cents]("p").Nillable().Default(5).Min(1).Validate(func(c cents) error { got = c; return nil }).Descriptor()
 	if len(d.Errs) != 0 || d.Type != "int64" || d.GoType == nil || d.GoType.Ident != "field_test.cents" || d.RType != reflect.TypeFor[cents]() {
 		t.Fatalf("%+v %v", d, d.Errs)
 	}
-	if d.Default != cents(5) || d.Checks[0].Args[0] != cents(1) {
+	// Default and the check arguments are stored as the kind's value, as
+	// Int64("p").GoType(Cents(0)).Default(5).Min(1) stores them.
+	if d.Default != int64(5) || d.Checks[0].Args[0] != int64(1) {
 		t.Fatalf("default %#v, min %#v", d.Default, d.Checks[0].Args)
 	}
 	// The generated code calls a validator with the field's kind, as it does for

@@ -106,6 +106,48 @@ func TestGenerateWritesThenNothingChanges(t *testing.T) {
 	}
 }
 
+// The sweep of -out ./gen leaves alone a nested -out ./gen/b, another run's
+// output, and a directory that holds a go.mod, another module's: each run
+// keeps the other's files, and -check passes for both.
+func TestStaleSweepSkipsNestedGenPackage(t *testing.T) {
+	const itemSchema = `package schemab
+
+import (
+	"github.com/syssam/velox2/schema"
+	"github.com/syssam/velox2/schema/field"
+)
+
+type Item struct{ schema.Schema }
+
+func (Item) Fields() []schema.Field { return []schema.Field{field.String("sku")} }
+`
+	other := header + "\n\npackage other\n"
+	dir := genModule(t, map[string]string{
+		"schemab/item.go":    itemSchema,
+		"gen/mod/go.mod":     "module example.com/other\n",
+		"gen/mod/other.go":   other,
+		"gen/mod/x/other.go": other,
+	})
+	b := []string{"-out", "./gen/b", "-package", "b", "./schemab"}
+	if code, out, errs := velox(t, dir, b...); code != 0 || out != "gen/b/item_velox.go\ngen/b/velox.go\n" {
+		t.Fatalf("gen/b: %d %q %q", code, out, errs)
+	}
+	if code, out, errs := velox(t, dir, "./schema"); code != 0 || out != "gen/tag_velox.go\ngen/user_velox.go\ngen/velox.go\n" {
+		t.Fatalf("gen: %d %q %q", code, out, errs)
+	}
+	for _, f := range []string{"b/item_velox.go", "b/velox.go", "mod/other.go", "mod/x/other.go"} {
+		if _, err := os.Stat(filepath.Join(dir, "gen", f)); err != nil {
+			t.Errorf("gen/%s: %v", f, err)
+		}
+	}
+	if code, out, errs := velox(t, dir, append([]string{"-check"}, b...)...); code != 0 {
+		t.Errorf("-check gen/b: %d %q %q", code, out, errs)
+	}
+	if code, out, errs := velox(t, dir, "-check", "./schema"); code != 0 {
+		t.Errorf("-check gen: %d %q %q", code, out, errs)
+	}
+}
+
 func TestGenerateDefaults(t *testing.T) {
 	dir := genModule(t, nil)
 	// No arguments: the package is ./schema and the output ./gen.
@@ -339,6 +381,8 @@ func TestNoSchemasIsAnError(t *testing.T) {
 		{[]string{"-check", "./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is a struct that embeds schema.Schema\n"},
 		{[]string{"verify", "./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is a struct that embeds schema.Schema\n"},
 		{[]string{"example.com/app/plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is a struct that embeds schema.Schema\n"},
+		{[]string{"describe", "./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is a struct that embeds schema.Schema\n"},
+		{[]string{"describe", "-json", "./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is a struct that embeds schema.Schema\n"},
 	} {
 		if code, out, errs := velox(t, dir, c.args...); code != 1 || out != "" || errs != c.want {
 			t.Errorf("%v: %d %q %q, want %q", c.args, code, out, errs, c.want)
