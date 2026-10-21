@@ -2,8 +2,8 @@
 // velox-graphql writes calls: the where filter and its helpers, the
 // conversions between a where input's Go types and a column's, the
 // connection with its paging, the runtime of the mutations (Atomic, which
-// runs one in the operation's transaction or in one of its own, the
-// decoding of input IDs, Exist, Matched, Repointed, Disjoint and
+// runs one in the operation's transaction or in one of its own, with no
+// savepoint in the first, the decoding of input IDs, Exist, Matched, Repointed, Disjoint and
 // NotFound, WriteError and FromJSON), and InputErrorf, the coded error of a
 // client's input. An application does not call it.
 //

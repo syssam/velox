@@ -222,6 +222,14 @@ Added 2026-10-21. Each is a decision taken in the plan or while executing it, an
 19. `ErrorPresenter` presents gqlgen's integer range errors (a `*graphql.IntegerError`, which `NumberOverflowError` and `UintSignError` wrap) as `BAD_USER_INPUT` with gqlgen's text, and does not log them. A coded error's own tree (a join of its sentinels) is not searched for a hidden internal error, so a cursor of another type is not logged either.
 20. An error that is only the cancellation of the request (the client went away) is not logged at ERROR: the request's context is canceled and every internal leaf of the error's tree, through wraps and joins, is `context.Canceled`. It is not passed to the application's `log`, and the default records it with `slog` at level debug. A driver's error, a panic or any other internal error at the same moment, joined with the cancellation or not, is logged at ERROR as before. The client sees what it would otherwise. An application's coded error that wraps an internal one shows its own text and is logged; what veloxgql's coded errors wrap (their sentinels) is not searched.
 
+## 6d. Notes made while implementing GraphQL plan 3
+
+*Note, 2026-10-22 (GraphQL plan 3):* two additions to the core, both additive, with `GeneratedCodeIsVersion4` unchanged, and one rule.
+
+- **`Query.Writable()`.** It limits a query to the rows an Update or a Delete of the entity may change: the tenant and the Read policy, then the entity's Write policy. A `Count` of it checks a row before writes that do not go through the entity's own `UPDATE` (an edge-only update's join rows and children, a delete's join rows). Without it such an update would check the row under Read alone, and change edges of a row the caller may not write. It stays a read, and does not reach a `With` load.
+- **`ColumnDesc.Nullable`.** The column holds NULL though the field is no pointer: velox-gen sets it on the JSON column of an `Optional` or `Nillable` field that is a slice or a map, and on a `Nillable` bytes field. Such a nil binds SQL NULL, not the JSON text `null`, and NULL reads back as nil; `clear<Field>` stores SQL NULL. On a field of any other type the flag is refused. This corrects §3.1's plugin rule: `Nullable` is `Nillable || (Optional && JSON slice or map)`, matching the core's `NilIsNull`; there is no `NullJSONCol`.
+- **Rule 48.** An `Optional` JSON field of a type that cannot be nil (a struct or a scalar) needs `Nillable`: its column would be NULL-able and Go could not hold the NULL. The message is "an Optional JSON field of a non-nil-able type needs Nillable". Rules 41–47 and this one are the numbered cross-element rules (`internal/gen/build.go`).
+
 ## 7. Order and plans
 
 1. **API plan 1, core:** §1, §2.1–2.2, velox-gen into the root (§3.2), the nullability rule (§3.1), and the Go 1.27 doc pass. Generated code moves to version 4, and every example and golden is regenerated.

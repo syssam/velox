@@ -166,9 +166,51 @@
 // change; one the tenant scope or the child's Write policy hides stays
 // linked. Update<T> returns the row it wrote, read under the tenant scope
 // without the Read policy, as Create<T> returns the row it inserted: an
-// update that takes the row out of what the caller may read succeeds. The Go
-// of deleteX is not written yet: the application resolves it itself until it
-// is.
+// update that takes the row out of what the caller may read succeeds. With
+// graphql.Delete(), Delete<T>(ctx, id) deletes the row and its rows in the
+// join tables of its many-to-many edges, and returns the ID encoded again
+// from the key; deleteX's resolver returns it. The join rows, which neither
+// the tenant nor a policy scopes, go only after a COUNT under the DELETE's
+// own scope (the tenant and the Read and Write policies) has found the row,
+// so a row the caller may not delete keeps them. Rows of other entities that
+// hold the row's key are left to the database's foreign keys: one that
+// refuses the DELETE gives a *velox.ConstraintError, shown as BAD_USER_INPUT.
+//
+// The generated functions read the DB from the context, as the root query's
+// do (veloxgql.DBFrom), and each is atomic: gqlimpl.Atomic runs it in the
+// transaction the Extension opened for the operation, or in a db.Tx of its
+// own where there is none (outside a server, with Extension.Context, or in an
+// operation WithTxFilter leaves out). There is no savepoint inside the
+// extension's transaction, so a resolver must return a mutation's error: one
+// that swallows it commits the partial writes. In a Go input a required field
+// is a value, an optional one a pointer (nil means not given), an ID a
+// string, a list of IDs a []string and a clear field a bool.
+//
+// Errors are coded before the presenter sees them. A malformed or mistyped
+// ID, a conflicting input, too many IDs (more than veloxgql.Limits.MaxPage,
+// veloxgql.ErrPageTooLarge) and a child another owner holds are
+// BAD_USER_INPUT, naming the input field. A validator's refusal is
+// BAD_USER_INPUT too, "UpdatePostInput.title: invalid value: ..."; validators
+// run before any statement. An ID that names no row the caller may read, or
+// change, is NOT_FOUND (veloxgql.CodeNotFound), whether the row is missing,
+// another tenant's or hidden by a policy, so that a client cannot tell. Other
+// errors of velox are returned as they are, and ErrorPresenter maps them as
+// it does elsewhere. gqlgen's own validation errors (a variable of the wrong
+// shape) are left as gqlgen writes them, GRAPHQL_VALIDATION_FAILED with a
+// path or locations.
+//
+// Limits of the mutations:
+//   - An update that sets no field checks its row, then writes the edges: a
+//     time-of-check race, the same one ent has.
+//   - On MySQL the DSN needs clientFoundRows=true: UpdateX counts the rows
+//     its UPDATE matched, and MySQL counts only changed rows without it.
+//   - A created row is returned as written, not read again through the Read
+//     policy; so is an updated one.
+//   - A self-edge is written one way, as the core's loads read it.
+//   - Clearing or removing children skips those the Write policy or the
+//     tenant hides.
+//   - Not written: a key the caller supplies in a create input, JSON append,
+//     and application enums bound with @goModel.
 //
 // An edge's inputs follow its foreign key. A key on the entity's own row is
 // set by <edge>ID. A key on the target's rows is re-pointed from the owner

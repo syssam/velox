@@ -205,6 +205,8 @@ Every `ID` is opaque and global. It is base64url, without padding, of `<Type>:<k
   - `add<Edge>IDs`/`remove<Edge>IDs`/`clear<Edge>` for a to-many edge.
 - **Delete:** `deleteX(id: ID!): ID!`.
 - **Implementation:** each mutation is a generated function in `gen`, for example `gen.CreateUser(ctx, db, input) (*User, error)`. The application's gqlgen resolver calls it in one line.
+  - *Note, 2026-10-22 (plan 3):* the signatures take no `db`, which comes from the context (`veloxgql.DBFrom`): `gen.CreateUser(ctx, input) (*User, error)`, `gen.UpdateUser(ctx, id, input) (*User, error)` and `gen.DeleteUser(ctx, id) (string, error)`. Each is atomic: `gqlimpl.Atomic` runs it in the extension's transaction, or in a `db.Tx` of its own where there is none.
+- *Note, 2026-10-22 (plan 3), the edge order:* an update applies an edge's `clear`, then its `remove…IDs`, then its `add…IDs`, so `clearTags` with `addTagIDs` replaces the set.
 - **Edges:**
   - Unique edges set their foreign key.
   - To-many edges update the children's foreign keys (O2M), or insert and delete join rows (M2M, through the generated join entity).
@@ -266,6 +268,7 @@ The example (`example/graphql`) shows the whole of it:
   - a nested connection with `first` is one windowed query;
   - mutations commit or roll back as one transaction.
 - **itest:** connections, `LimitEach` and mutations on PostgreSQL and MySQL.
+  - *Note, 2026-10-22 (plan 3):* the mutation itest lives in `contrib/graphql`'s e2e app module, not in `internal/itest`: the root module may not depend on `contrib/graphql`. It runs on SQLite always, and on PostgreSQL and MySQL when their variables are set.
 - **bench/scale:** the GraphQL variant (Constraints).
 
 ## What is left to the builder
@@ -356,3 +359,46 @@ Plan 2 (the runtime, `docs/plans/2026-10-20-graphql-2-runtime.md`) settled these
 *Note, 2026-10-21 (API plan 3):* they are fields of `veloxgql.Limits`, not package variables: `WithLimits` sets them on the extension, `LimitsFrom(ctx)` reads them (the defaults in a context without them), a zero field means the default, and `Validate` refuses a negative one. Two servers in one process can differ.
 
 Every one of them bounds one argument or one edge. Connections nested in connections multiply, and aliases repeat a field, so a server needs a limit on the cost of the whole request too: `example/graphql` sets gqlgen's `extension.FixedComplexityLimit`. A cost limit that multiplies by `first` and `last` across connection fields is for plan 4. `WhereOps` on a field that `Skip(SkipType)` leaves out of the type is refused like `OrderField`: a filter is a value oracle too (`GT`, `LT` and `HasPrefix` bisect the value).
+
+## Rulings made in plan 3
+
+Plan 3 (mutations, `docs/plans/2026-10-21-graphql-3-mutations.md`) settled these points. As above, where one differs from the text, the ruling stands. Those marked *(changed)* were first written otherwise in the plan and changed while it was executed; those marked *(pending)* wait for the final wave.
+
+**Calls made in the plan.**
+1. The Go of the inputs and mutations goes in each entity's `gql_<label>.go`, written by `internal/gogen/mutation.go`: no new generated file kind.
+2. Input Go types: a required field is a value, an optional one a pointer (nil means not given, bytes and JSON included), an ID a `string`, an ID list a `[]string`, a `clear…` field a `bool`. Go names follow `goOf`, which gqlgen matches ignoring case.
+3. Each mutation is atomic. `gqlimpl.Atomic` runs it in the extension's transaction, or in a `db.Tx` of its own outside a server (`Extension.Context`) and in an operation `WithTxFilter` leaves out, as ent does. No savepoint is made inside the extension's transaction, so a resolver must return a mutation's error: one that swallows it commits the partial writes.
+4. Every ID an input names is checked against what the caller may read before it is written: a unique key and an M2M target by one `COUNT`, an O2M add by the `UPDATE`'s row count. `velox.EdgeThrough` leaves both endpoints to the application.
+5. An ID that names no row the caller may see or change is `NOT_FOUND`: missing, another tenant's, or hidden by a policy. A policy's `Insert` refusal stays `FORBIDDEN`.
+6. Update: `nil` leaves a field alone. Edges apply clear, then remove, then add. Three inputs are refused with `BAD_USER_INPUT` before any statement: a field with its `clear…`, a unique edge's ID with its `clear…`, and an ID in both `add…IDs` and `remove…IDs`.
+7. Repeated IDs count once; adding a link that exists is not an error (`OnConflict(…).DoNothing()`); removing one that is not there is ignored.
+8. An ID list is capped by `MaxPage` of `veloxgql.LimitsFrom(ctx)` (`ErrPageTooLarge`), before any statement.
+9. An update that sets no column sends no `UPDATE`: it checks the row with a `COUNT`, applies the edges and returns the row.
+10. `deleteX` returns the canonical ID. It deletes the row's join rows after a `COUNT` that checks the row is the caller's. Rows of other entities that point at the row are left to the database's foreign keys.
+11. The owner's join column is the join entity's `Fields[0]` for an edge declared with `edge.To` and `Fields[1]` for its inverse; a test pins it from both sides.
+12. A field's `graphql.Directives` reach its mutation input fields, and an edge's its edge inputs. **Breaking** for an application whose directive is on a field with no where predicates: declare it `on FIELD_DEFINITION | INPUT_FIELD_DEFINITION`. `@deprecated` is not copied onto a required input field, which GraphQL forbids.
+13. *(changed)* Validation errors name the input field: `UpdatePostInput.title: invalid value: must not be empty`, `BAD_USER_INPUT`, by `gqlimpl.WriteError`. The plan also meant to name the field in gqlgen's own errors; that was narrowed (below).
+14. A mutation returns velox's errors unchanged except validation errors, so `errors.Is` and `errors.As` keep working; `ErrorPresenter` maps them as before.
+15. A non-`Nillable` bool or number with a `Default` is refused by velox-graphql for a hand-written model, as velox-gen refuses it.
+16. The mutation itest lives in `contrib/graphql`'s e2e app module, on SQLite always and on PostgreSQL and MySQL when set; the `gqlgen@latest` job runs it with `CI` unset.
+17. `veloxgql`'s public API does not change; `CodeNotFound`'s doc says what returns it. New names are in `gqlimpl`; `GeneratedCodeIsVersion1` stays 1.
+18. Left out: a caller-supplied key in a create input, JSON append, `@goModel` enums, and plan 4's items.
+
+**Rulings that changed while the plan ran.**
+- *(changed, re-point)* An O2M/O2O re-point takes only children not linked to another owner, as old velox's `sqlgraph` does: the `UPDATE` adds `fk IS NULL` (on update, `fk IS NULL OR fk = owner`), and a child another owner holds is `BAD_USER_INPUT` "<path>: a <Target> is already linked to another <Owner>" (the caller can read it, so nothing leaks). On update, the children already linked to this owner are counted separately, so `add` succeeds for them and nothing relies on MySQL's rows-affected count.
+- *(changed, owner-side edge inputs)* The SDL offers no `<edge>IDs` (create, or add/remove on update) for an O2M/O2O edge whose key on the target is `NOT NULL`: such a child always has an owner, so the input could never succeed. The child is linked from its own side, by `<edge>ID` on its input. The same holds for an immutable key.
+- *(changed, write scope)* An edge-only update checks its row under the same scope a row `UPDATE` gets: the tenant, the Read policy and the Write policy. That needed one core addition, `Query.Writable()` (API cleanup design, §6d). The same scope checks `deleteX`'s row before the join rows go.
+- *(changed, Optional JSON)* An `Optional` JSON field's column is NULL-able, so a nil binds SQL NULL, not the JSON text `null`: core `ColumnDesc.Nullable`, and `clear<Field>` stores SQL NULL. A NULL-able column must be representable in Go, so velox-gen refuses an `Optional` JSON field of a struct or scalar type unless it is `Nillable` (rule 48). The plugin's `Nullable` is `Nillable || (Optional && JSON slice or map)`.
+- *(changed, read-back)* `UpdateX` reads its row back under the tenant scope but without the Read policy (`velox.SkipPolicy`), so an update that moves the row out of what the caller may read still succeeds, consistent with `CreateX` returning the row as written.
+- *(changed, delete's check)* `deleteX`'s row check uses the write scope, not Read: a readable but unwritable row is `NOT_FOUND`, with the text of a missing one, and its join rows are never touched.
+- *(changed, ruling 13 narrowed)* velox leaves gqlgen's own validation errors alone. They carry `GRAPHQL_VALIDATION_FAILED` and a `path` (a variable) or `locations` (an inline literal), as GraphQL prescribes; velox names fields only in its own validation errors. gqlgen's coercion of an int to a `String` variable stays gqlgen's.
+- *(pending, final wave)* `CreateX` runs the entity's validators before any statement, as `UpdateX` does, so an invalid field costs no query and create and update agree. Until it lands, validators run inside `Insert`, after the ID existence check.
+- *(pending, final wave)* The example's `Post.views` is `Optional` (zero means unset), so `createPost` needs no `views: 0`.
+
+**Limits, documented in `contrib/graphql`'s doc and the generated functions.**
+- There is no savepoint inside the extension's transaction (call 3).
+- An edge-only update has a time-of-check race between its `COUNT` and its writes, the same one ent has.
+- On MySQL the DSN needs `clientFoundRows=true`: `UpdateX` counts matched rows, which MySQL reports only with it.
+- Created rows are returned as written.
+- Self-edges are written one way, as the core's loads read them (the plugin model has no `Bidi`).
+- Clearing or removing children skips those the Write policy or the tenant hides.

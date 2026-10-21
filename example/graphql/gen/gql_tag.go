@@ -307,7 +307,10 @@ func (in CreateLabelInput) GoString() string { return in.String() }
 // row the caller may read, and a row it re-points one the caller may change, or
 // CreateLabel fails with NOT_FOUND and keeps nothing. A validator's refusal is
 // BAD_USER_INPUT, naming the input field; velox's other errors are returned as
-// they are.
+// they are. The row is returned as written, not read again through the Read
+// policy. There is no savepoint inside the extension's transaction, so a
+// resolver must return this function's error: one that swallows it commits the
+// partial writes. A self-edge is written one way, as the core's loads read it.
 func CreateLabel(ctx context.Context, input CreateLabelInput) (*Tag, error) {
 	var (
 		k2  []int64
@@ -404,7 +407,10 @@ func (in UpdateLabelInput) GoString() string { return in.String() }
 // written, under the tenant scope and without the Read policy
 // (velox.SkipPolicy): an update that takes the row out of what the caller may
 // read still returns it. On MySQL the UPDATE's row count needs
-// clientFoundRows=true, as velox's Update does.
+// clientFoundRows=true, as velox's Update does. An update that sets no field
+// checks its row and then writes the edges, so a row changed in between is a
+// time-of-check race, the same one ent has. There is no savepoint inside the
+// extension's transaction, so a resolver must return this function's error.
 func UpdateLabel(ctx context.Context, id string, input UpdateLabelInput) (*Tag, error) {
 	var (
 		key int64

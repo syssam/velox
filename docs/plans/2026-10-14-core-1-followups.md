@@ -221,7 +221,7 @@ Left by the observability plan:
 - JSON path predicates: a condition on a JSON column other than `IsNull`/`NotNull` is refused; querying inside a document (`->`, `JSON_EXTRACT`, `json_extract`) is a follow-up, per dialect.
 - Custom time Go types are refused by velox-graphql in v1: `plugin.Field.Kind` cannot tell a defined type (`type Stamp time.Time`) from a wrapper, so such a field must expose the standard type. Support them with a conversion the model can describe.
 - Binding application enums with `@goModel` (see "For GraphQL plan 2").
-- `example/graphql` declares no mutations: they arrive with GraphQL plan 3, and the example gains them then.
+- [x] Resolved in GraphQL plan 3: `example/graphql` declares no mutations: it now declares create, update and delete for its entities, one transaction per operation.
 
 ## Before 1.0 (veloxgql)
 
@@ -262,15 +262,30 @@ From the final tasks of API plan 2 (2026-10-21). The plan's own items are done: 
 
 From the final tasks of API plan 3 (2026-10-21). The plan's own items are done: `gqlimpl` and the version guard, limits from the context, the extension's options, `Pred(ctx)`, coded errors and `ErrorPresenter`, `XConnectionOf`, directives on where inputs, and the `gqlgen@latest` job.
 
-- GraphQL plan 3: GraphQL validation messages (gqlgen's own, for a variable or an argument of the wrong shape) do not name the field. Where inputs name theirs (`OwnerWhereInput.hasEventsWith[0]: …`); the rest are gqlgen's text. Decide with the mutation inputs whether to wrap them.
+- [x] Resolved in GraphQL plan 3 (velox's validation errors name the input field, `UpdatePostInput.title: invalid value: …`; gqlgen's own carry the code `GRAPHQL_VALIDATION_FAILED` and name it through their `path`, or give `locations` for an inline literal, and are left as gqlgen writes them): GraphQL validation messages (gqlgen's own, for a variable or an argument of the wrong shape) do not name the field. Where inputs name theirs (`OwnerWhereInput.hasEventsWith[0]: …`); the rest are gqlgen's text. Decide with the mutation inputs whether to wrap them.
 - `Columns` or `Omit` on a `ConnectionOf` base query is documented, not refused: one that drops the key or an order column breaks the cursors. `velox.Query.Ordered` made the `OrderBy` check possible; an accessor for the selected columns would make this one possible.
 - `TestPredTwiceOnOneContext` asserts that the second call does not spend the first's budget, but not that the second call costs nothing extra (no allocation or context growth per call). Add that if it ever matters.
 - GraphQL plan 4: the first/last-aware cost limit; `LoadedConnection` and the arguments it ignores. Unchanged by this plan.
-- `NOT_FOUND` (`CodeNotFound`) is defined and nothing returns it yet: mutations (GraphQL plan 3) use it.
+- [x] Resolved in GraphQL plan 3: `NOT_FOUND` (`CodeNotFound`) is defined and nothing returns it yet: the generated mutations return it for an ID that names no row the caller may see or change.
 - The `gqlgen@latest` job fails red when a new gqlgen breaks velox-graphql, by design. The example's tests ignore error `locations` (gqlgen v0.17.97 adds them); a later gqlgen may change something else they compare.
 - Type-level directives (e.g. federation) need an explicit opt-in. velox-graphql refuses an application directive on an entity, since gqlgen runs it on the type's objects only and the rows' values stay readable through cursors, filters, order and `totalCount`. If one is wanted (federation's `@key`, or a guard), add an opt-in then: either an annotation that marks the directive as not a guard, or copying a guard onto `XConnection`, `XEdge` and `XWhereInput` (declared `on OBJECT | INPUT_OBJECT`) and counting it for the `OrderField` rule.
 - `ErrorPresenter` does not pass an error that is only the cancellation of the request to the application's `log` (the default records it at debug). An application that wants to count client disconnects has no hook for it; add an option if one asks.
 - The root module's citation test (`TestGodocCitesNoSpec`) checks each comment line alone and does not match internal plans ("GraphQL plan 3"); `contrib/graphql`'s now checks each comment group and matches them. Align the two.
+
+## Left by GraphQL plan 3
+
+From the mutations (2026-10-22). The plan's items are done: the inputs with their directives, `gqlimpl`'s runtime, `CreateX`, `UpdateX` and `DeleteX` with their edges, the itest on every dialect, and the example's mutations.
+
+- A core check of the MySQL DSN at `Open`: a DSN without `clientFoundRows=true` makes the `UPDATE`'s rows-affected count the rows changed, not matched, so `UpdateX` of an unchanged row can fail with NOT_FOUND. Documented now (`contrib/graphql` doc, `UpdatePost`); the core could refuse or warn at `Open`, since velox's own `Update` needs it too.
+- Self-edges are written one way, as the core's loads read them (the plugin model has no `Bidi`). A symmetric edge (`friends`) needs both directions written: add `Bidi` to the model and write the inverse row.
+- A key the caller supplies is not in a create input (plan 1's refusal stands): an entity whose key is not generated cannot be created through GraphQL.
+- JSON append and other partial updates of a JSON field (old velox's `Append…`).
+- `@goModel` binding of application enums (also under "For GraphQL plan 2").
+- An update with only edge inputs checks its row (`Writable` `COUNT`), then writes the edges: a time-of-check race, the same one ent has. A `FOR UPDATE` read would close it.
+- Clearing or removing children skips those the tenant scope or the target's Write policy hides, silently. A mutation that must report them needs a count of what was skipped.
+- A created row is returned as written, and an updated one is read back without the Read policy (a tenant-scoped `velox.SkipPolicy` read). Neither is checked against what the caller may then read.
+- There is no savepoint inside the extension's transaction: a resolver that swallows a mutation's error commits its partial writes. A core savepoint API would let `Atomic` roll back one mutation of several.
+- Pending until the final wave lands: `CreateX` runs the entity's validators before any statement, and the example's `Post.views` is `Optional`. Confirm both in the final review's notes.
 
 ## 1.0 release
 
