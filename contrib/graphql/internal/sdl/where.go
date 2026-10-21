@@ -95,9 +95,9 @@ func resolveOps(ops graphql.WhereOp, typ string, nullable bool, where string) (g
 		return has, nil
 	}
 	if bad := ops &^ has; bad != 0 {
-		kind := "a non-Nillable"
+		kind := "a non-nullable"
 		if nullable {
-			kind = "a Nillable"
+			kind = "a nullable"
 		}
 		return 0, fmt.Errorf("%s: graphql.WhereOps(%s): not a predicate of %s %s field, which has %s", where, opNames(bad), kind, typ, opNames(has))
 	}

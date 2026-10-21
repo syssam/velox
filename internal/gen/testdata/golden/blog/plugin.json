@@ -217,10 +217,7 @@
           "go_type": "[]string",
           "elem_type": "[]string",
           "kind": "slice",
-          "has_default": true,
-          "default": [
-            "new"
-          ]
+          "has_default": true
         },
         {
           "name": "views",

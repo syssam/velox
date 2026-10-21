@@ -119,13 +119,20 @@ func importsOf(gf *Field) []string {
 	return nil
 }
 
-// literalDefault is the literal Default of gf as compact JSON, or nil: a func
-// default has none, and a DefaultFunc replaces a literal.
+// literalDefault is the literal Default of gf as compact JSON, or nil. Only
+// a bool, number, string or enum field has one, whose JSON is then that of
+// its base value, unless its Go type has its own encoding. A func default
+// has none, and a DefaultFunc replaces a literal.
 func literalDefault(gf *Field) json.RawMessage {
-	if gf.DefaultFunc || len(gf.Default) == 0 {
+	switch {
+	case gf.DefaultFunc || len(gf.Default) == 0:
 		return nil
+	case gf.GoType != nil && gf.GoType.Marshaler:
+		return nil
+	case gf.Type == "bool", numeric[gf.Type], gf.Type == "string", gf.Type == "enum":
+		return json.RawMessage(compact(gf.Default))
 	}
-	return json.RawMessage(compact(gf.Default))
+	return nil
 }
 
 // checks are the built-in validators of gf, in declaration order.
@@ -238,7 +245,7 @@ func joinFields(g *Graph, oe *OutEntity) []*plugin.Field {
 			Pointer: of.Pointer, Immutable: of.Immutable, Sensitive: of.Sensitive, Comment: of.Comment,
 		}
 		if id := ids[i]; id != nil {
-			pf.Type, pf.Imports = id.Type, importsOf(id)
+			pf.Type, pf.PkgPath, pf.Imports, pf.Kind = id.Type, pkgPathOf(id), importsOf(id), goKindOf(id)
 		}
 		fields = append(fields, pf)
 	}

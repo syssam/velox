@@ -80,7 +80,7 @@ The reviews also agreed on what stays:
      - an `Optional` enum, bytes or time field that has neither a `Default` nor `Nillable` (MySQL's strict mode refuses the zero time);
      - an `Optional` edge field that is not `Nillable`.
    - A field that is unique only when present needs `Nillable`.
-   - In the plugin model, `Pointer` is Nillable, and `Nullable` is Nillable || (Optional && JSON).
+   - In the plugin model, `Pointer` is Nillable, unless the Go type can already be nil (a slice, a map), and `Nullable` is Nillable || (Optional && JSON).
    - Two earlier versions were withdrawn:
      - the first tied Nillable to Optional;
      - the second made every Optional column NULL-able, which is ent's rule but not old velox's.

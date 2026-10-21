@@ -5,6 +5,8 @@
 package desc
 
 import (
+	"encoding"
+	"encoding/json"
 	"reflect"
 	"runtime"
 	"slices"
@@ -52,9 +54,16 @@ type GoType struct {
 	PkgPath string   // the named type's package; "" for builtin and unnamed composites of builtins
 	Kind    string   // reflect.Kind's String(), of the type itself: "slice", "ptr", "struct", "string"…
 	Imports []string // every package path the type mentions, sorted, without duplicates
+
+	// Marshaler reports that the type, or a pointer to it, has its own JSON
+	// or text encoding (json.Marshaler, encoding.TextMarshaler), so that its
+	// JSON need not be that of its underlying type.
+	Marshaler bool
 }
 
 // GoTypeOf describes t. Ident is t.String() and Kind is t.Kind().String().
+// Marshaler says whether t or *t implements json.Marshaler or
+// encoding.TextMarshaler.
 // PkgPath is t.PkgPath(), or for a pointer the PkgPath of its element. Imports
 // is the sorted, deduplicated list of the package paths of the named types t
 // mentions, found by walking pointers, slices, arrays, maps (key and element)
@@ -68,7 +77,13 @@ func GoTypeOf(t reflect.Type) *GoType {
 	g.Imports = collectImports(t, nil)
 	slices.Sort(g.Imports)
 	g.Imports = slices.Compact(g.Imports)
+	g.Marshaler = marshals(t) || t.Kind() != reflect.Pointer && marshals(reflect.PointerTo(t))
 	return g
+}
+
+// marshals reports whether t has its own JSON or text encoding.
+func marshals(t reflect.Type) bool {
+	return t.Implements(reflect.TypeFor[json.Marshaler]()) || t.Implements(reflect.TypeFor[encoding.TextMarshaler]())
 }
 
 func collectImports(t reflect.Type, out []string) []string {

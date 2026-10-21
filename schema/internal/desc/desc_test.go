@@ -18,7 +18,7 @@ func TestGoTypeOf(t *testing.T) {
 	}{
 		{"", GoType{Ident: "string", Kind: "string"}},
 		{[]string{}, GoType{Ident: "[]string", Kind: "slice"}},
-		{time.Time{}, GoType{Ident: "time.Time", PkgPath: "time", Kind: "struct", Imports: []string{"time"}}},
+		{time.Time{}, GoType{Ident: "time.Time", PkgPath: "time", Kind: "struct", Imports: []string{"time"}, Marshaler: true}},
 		{map[string]*http.Request{}, GoType{Ident: "map[string]*http.Request", Kind: "map", Imports: []string{"net/http"}}},
 		{&local{}, GoType{Ident: "*desc.local", PkgPath: "github.com/syssam/velox2/schema/internal/desc", Kind: "ptr",
 			Imports: []string{"github.com/syssam/velox2/schema/internal/desc"}}},

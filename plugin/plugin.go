@@ -42,16 +42,19 @@ type Model struct {
 
 // Entity is a schema, or a many-to-many join entity.
 type Entity struct {
-	Name        string                     `json:"name"`
-	Label       string                     `json:"label"`   // snake_case of Name
-	Handles     string                     `json:"handles"` // the plural of Name, e.g. "Users"
-	Table       string                     `json:"table"`
-	TableSchema string                     `json:"table_schema,omitempty"` // the database schema that holds Table, from schema.TableIn; "" for the connection's default
-	Join        bool                       `json:"join,omitempty"`         // a many-to-many join entity
-	Comment     string                     `json:"comment,omitempty"`      // the Comment annotation's text, for descriptions
-	Fields      []*Field                   `json:"fields"`                 // Fields[0] is the ID
-	Edges       []*Edge                    `json:"edges"`
-	Indexes     []*Index                   `json:"indexes"`     // the declared indexes, in declaration order (mixins' first); a field's Unique is no index here
+	Name        string   `json:"name"`
+	Label       string   `json:"label"`   // snake_case of Name
+	Handles     string   `json:"handles"` // the plural of Name, e.g. "Users"
+	Table       string   `json:"table"`
+	TableSchema string   `json:"table_schema,omitempty"` // the database schema that holds Table, from schema.TableIn; "" for the connection's default
+	Join        bool     `json:"join,omitempty"`         // a many-to-many join entity
+	Comment     string   `json:"comment,omitempty"`      // the Comment annotation's text, for descriptions
+	Fields      []*Field `json:"fields"`                 // Fields[0] is the ID
+	Edges       []*Edge  `json:"edges"`
+	// Indexes are the declared indexes, in declaration order (mixins'
+	// first); a field's Unique is no index here. A join entity has none: its
+	// PrimaryKey is what makes its rows unique.
+	Indexes     []*Index                   `json:"indexes"`
 	PrimaryKey  []int                      `json:"primary_key"` // indexes into Fields
 	Tenant      int                        `json:"tenant"`      // the index in Fields of the tenant field, -1 for none
 	Annotations map[string]json.RawMessage `json:"annotations,omitempty"`
@@ -73,25 +76,36 @@ type Check struct {
 
 // Field is a column of an entity.
 type Field struct {
-	Name          string                     `json:"name"`
-	GoName        string                     `json:"go_name"`
-	Column        string                     `json:"column"`
-	Type          string                     `json:"type"`               // the schema field type, e.g. "string", "enum", "time"
-	GoType        string                     `json:"go_type"`            // as written in the entity's struct, e.g. "*time.Time"
-	ElemType      string                     `json:"elem_type"`          // GoType without the pointer
-	PkgPath       string                     `json:"pkg_path,omitempty"` // the import path of ElemType when it is a named type of another package, "time" for time.Time; "" for a builtin type, an unnamed one and velox-gen's own enum types
-	Imports       []string                   `json:"imports,omitempty"`  // every import path ElemType mentions (map[string]x.T's x too), sorted; "time" for a time field without a Go type; nil for a builtin type and velox-gen's own enum types
-	Kind          string                     `json:"kind,omitempty"`     // the reflect kind of the schema's GoType ("string", "int64", "struct", "array", "slice", "ptr"…) when the schema gives one; "" for velox's standard type and velox-gen's own enum types
-	Pointer       bool                       `json:"pointer,omitempty"`  // the Go struct holds a pointer: the schema's Nillable, unless the Go type is nil-able already (a slice, a map); this is about the struct: use Nullable for nullability
-	Nullable      bool                       `json:"nullable,omitempty"` // Nillable || (Optional && Type == "json"): the column is NULL-able; the flag a plugin uses for nullability. An Optional field that is not Nillable stays NOT NULL, and unset is its zero value
-	Optional      bool                       `json:"optional,omitempty"` // the field need not be given on create; it says nothing of nullability
-	Immutable     bool                       `json:"immutable,omitempty"`
-	Sensitive     bool                       `json:"sensitive,omitempty"`
-	Unique        bool                       `json:"unique,omitempty"`
-	AutoID        bool                       `json:"auto_id,omitempty"` // the ID velox added, as the schema declares none
-	Size          int                        `json:"size,omitempty"`    // the column's size, from MaxLen; 0 for none
-	HasDefault    bool                       `json:"has_default,omitempty"`
-	Default       json.RawMessage            `json:"default,omitempty"` // the literal Default as JSON, an enum's stored value; absent for none and for a func default
+	Name       string   `json:"name"`
+	GoName     string   `json:"go_name"`
+	Column     string   `json:"column"`
+	Type       string   `json:"type"`               // the schema field type, e.g. "string", "enum", "time"
+	GoType     string   `json:"go_type"`            // as written in the entity's struct, e.g. "*time.Time"
+	ElemType   string   `json:"elem_type"`          // GoType without the pointer
+	PkgPath    string   `json:"pkg_path,omitempty"` // the import path of ElemType when it is a named type of another package, "time" for time.Time; "" for a builtin type, an unnamed one and velox-gen's own enum types
+	Imports    []string `json:"imports,omitempty"`  // every import path ElemType mentions (map[string]x.T's x too), sorted; "time" for a time field without a Go type; nil for a builtin type and velox-gen's own enum types
+	Kind       string   `json:"kind,omitempty"`     // the reflect kind of the schema's GoType ("string", "int64", "struct", "array", "slice", "ptr"…) when the schema gives one; "" for velox's standard type and velox-gen's own enum types
+	Pointer    bool     `json:"pointer,omitempty"`  // Nillable, unless the Go type can already be nil (a slice, a map): the Go struct holds a pointer. This is about the struct: use Nullable for nullability
+	Nullable   bool     `json:"nullable,omitempty"` // Nillable || (Optional && Type == "json"): the column is NULL-able; the flag a plugin uses for nullability. An Optional field that is not Nillable stays NOT NULL, and unset is its zero value
+	Optional   bool     `json:"optional,omitempty"` // the field need not be given on create; it says nothing of nullability
+	Immutable  bool     `json:"immutable,omitempty"`
+	Sensitive  bool     `json:"sensitive,omitempty"`
+	Unique     bool     `json:"unique,omitempty"`
+	AutoID     bool     `json:"auto_id,omitempty"` // the ID velox added, as the schema declares none
+	Size       int      `json:"size,omitempty"`    // the column's size, from MaxLen (bytes, string), or math.MaxInt32 for field.Text; 0 for none
+	HasDefault bool     `json:"has_default,omitempty"`
+	// Default is the field's literal Default, as the JSON of its base value,
+	// for these Types only:
+	//   - "bool": a JSON bool;
+	//   - a number type ("int", "int64", "float64", ...): a JSON number;
+	//   - "string": a JSON string;
+	//   - "enum": the stored value, a JSON string.
+	// It is absent for every other Type (bytes, json, other; time and uuid
+	// defaults are always funcs), for a func default (HasDefault tells), and
+	// for a Go type with its own JSON or text encoding, whose JSON need not
+	// be its base value. A plugin treats the database default of a field
+	// without a Default as unknown.
+	Default       json.RawMessage            `json:"default,omitempty"`
 	UpdateDefault bool                       `json:"update_default,omitempty"`
 	Implicit      string                     `json:"implicit,omitempty"`    // the edge whose foreign key this field is, when velox added it
 	Enum          string                     `json:"enum,omitempty"`        // the enum type's name: the type velox-gen declares, or for a custom Go type that type's name without its package; "" when not an enum

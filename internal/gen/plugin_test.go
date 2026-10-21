@@ -2,10 +2,12 @@ package gen
 
 import (
 	"bytes"
+	"database/sql/driver"
 	"encoding/json"
 	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -240,11 +242,12 @@ func TestPluginModel2(t *testing.T) {
 		t.Errorf("sizes: name %d, bio %d", n.Size, b.Size)
 	}
 
-	// Default: the literal, as JSON; absent for a func default.
+	// Default: the literal, as JSON; absent for a func default and a json
+	// field.
 	for f, want := range map[*plugin.Field]string{
 		pluginField(t, user, "role"):       `"viewer"`,
 		pluginField(t, user, "score"):      `1.5`,
-		pluginField(t, post, "tags"):       `["new"]`,
+		pluginField(t, post, "tags"):       ``, // json: no Default
 		pluginField(t, post, "status"):     `"draft"`,
 		pluginField(t, group, "token"):     ``,
 		pluginField(t, user, "created_at"): ``,
@@ -354,6 +357,99 @@ func TestPluginModel2Imports(t *testing.T) {
 	join := pluginEntity(t, m, pluginEdge(t, pluginEntity(t, m, "PlReader"), "docs").Join)
 	if join.Fields[0].Imports != nil || strings.Join(join.Fields[1].Imports, ",") != self {
 		t.Errorf("join imports %v, %v", join.Fields[0].Imports, join.Fields[1].Imports)
+	}
+}
+
+// Join fields hold the IDs of the entities they join, typed as those are: a
+// uuid ID and a named string ID through many-to-many joins.
+type plUUID [16]byte
+
+func (plUUID) Value() (driver.Value, error) { return nil, nil }
+
+type PlBadge struct{ schema.Schema }
+
+func (PlBadge) Fields() []schema.Field { return []schema.Field{field.UUID("id", plUUID{})} }
+func (PlBadge) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("holders", PlHolder.Type).Ref("badges")}
+}
+
+type PlHolder struct{ schema.Schema }
+
+func (PlHolder) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("badges", PlBadge.Type)}
+}
+
+func TestPluginModel2JoinFieldsTyped(t *testing.T) {
+	g := mustBuild(t, PlBadge{}, PlHolder{}, PlDoc{}, PlReader{})
+	o, err := Lower(g, Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := PluginModel(g, o)
+	const self = "github.com/syssam/velox2/internal/gen"
+	for _, c := range []struct{ owner, edge, want string }{{"PlHolder", "badges", "uuid array"}, {"PlReader", "docs", "string string"}} {
+		holder, edge, want := pluginEntity(t, m, c.owner), c.edge, c.want
+		j := pluginEntity(t, m, pluginEdge(t, holder, edge).Join)
+		owner, target := j.Fields[0], j.Fields[1]
+		if owner.Type != "int64" || owner.PkgPath != "" || owner.Kind != "" || owner.Imports != nil {
+			t.Errorf("%s: owner column %+v", edge, owner)
+		}
+		if got := target.Type + " " + target.Kind; got != want || target.PkgPath != self || strings.Join(target.Imports, ",") != self {
+			t.Errorf("%s: target column %+v, want type and kind %s of %s", edge, target, want, self)
+		}
+		// As the target's own ID field is.
+		id := pluginEntity(t, m, pluginEdge(t, holder, edge).Target).Fields[0]
+		if id.PkgPath != target.PkgPath || id.Kind != target.Kind || id.ElemType != target.ElemType {
+			t.Errorf("%s: join column %+v, the ID %+v", edge, target, id)
+		}
+	}
+}
+
+// Defaults are in the model only where their JSON is unambiguous: bool,
+// number, string and enum, as their base value.
+type plCount int32
+
+type plLevel int
+
+func (l plLevel) MarshalJSON() ([]byte, error) { return []byte(strconv.Itoa(int(l))), nil }
+
+type PlDefaults struct{ schema.Schema }
+
+func (PlDefaults) Fields() []schema.Field {
+	return []schema.Field{
+		field.Number[plCount]("count").Nillable().Default(5),
+		field.Number[plLevel]("level").Nillable().Default(2),
+		field.Bool("on").Nillable().Default(true),
+		field.String("s").Default("x"),
+		field.Bytes("b").Default([]byte("hi")),
+		field.JSON("doc", map[string]int{}).Default(map[string]int{"a": 1}),
+		field.Strings("tags").Default([]string{"new"}),
+	}
+}
+
+func TestPluginModel2Defaults(t *testing.T) {
+	g := mustBuild(t, PlDefaults{})
+	o, err := Lower(g, Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := pluginEntity(t, PluginModel(g, o), "PlDefaults")
+	for name, want := range map[string]string{
+		"count": `5`,    // a named int: a number
+		"level": ``,     // its own MarshalJSON: no Default
+		"on":    `true`, // a bool
+		"s":     `"x"`,
+		"b":     ``, // bytes: no Default, not base64
+		"doc":   ``, // json: no Default
+		"tags":  ``,
+	} {
+		f := pluginField(t, e, name)
+		if string(f.Default) != want {
+			t.Errorf("%s default %s, want %q", name, f.Default, want)
+		}
+		if !f.HasDefault {
+			t.Errorf("%s has a default", name)
+		}
 	}
 }
 

@@ -62,10 +62,11 @@ type Enum struct {
 
 // GoType is the Go type a field is stored as, when it is not the standard one.
 type GoType struct {
-	Ident   string   `json:"ident"`
-	PkgPath string   `json:"pkg_path,omitempty"`
-	Kind    string   `json:"kind"`
-	Imports []string `json:"imports,omitempty"`
+	Ident     string   `json:"ident"`
+	PkgPath   string   `json:"pkg_path,omitempty"`
+	Kind      string   `json:"kind"`
+	Imports   []string `json:"imports,omitempty"`
+	Marshaler bool     `json:"marshaler,omitempty"` // the type, or a pointer to it, has its own JSON or text encoding
 }
 
 // Field describes one field.

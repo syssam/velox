@@ -13,6 +13,9 @@
 // to each file, so a plugin's content does not include it. A non-empty Error
 // fails the run, and nothing is written.
 //
+// In the model, the named elements, [Entity], [Field], [Edge] and [Index],
+// are held by pointer, and small leaf records, such as [Check], by value.
+//
 // The package imports only the standard library, so that a plugin depends on
 // nothing else of velox.
 //
