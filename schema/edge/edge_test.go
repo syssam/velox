@@ -2,7 +2,15 @@ package edge_test
 
 import (
 	"fmt"
+	"go/ast"
+	"go/doc"
+	"go/parser"
+	"go/token"
+	"os"
+	"path/filepath"
 	"runtime"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/syssam/velox2/schema"
@@ -66,5 +74,51 @@ func TestPos(t *testing.T) {
 	}
 	if d, want := inline.Descriptor(), fmt.Sprintf("%s:%d", file, line+3); desc.PosOf(d.PC) != want || desc.PosOf(d.Ref.PC) != want {
 		t.Errorf("inline: %q %q, want %q", desc.PosOf(d.PC), desc.PosOf(d.Ref.PC), want)
+	}
+}
+
+// Each exported builder lists its options in the package's documentation.
+func TestBuildersAreDocumented(t *testing.T) {
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fset := token.NewFileSet()
+	var parsed []*ast.File
+	for _, name := range files {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		src, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		f, err := parser.ParseFile(fset, name, src, parser.ParseComments)
+		if err != nil {
+			t.Fatal(err)
+		}
+		parsed = append(parsed, f)
+	}
+	pkg, err := doc.NewFromFiles(fset, parsed, "github.com/syssam/velox2/schema/edge")
+	if err != nil {
+		t.Fatal(err)
+	}
+	methods := map[string][]string{}
+	for _, typ := range pkg.Types {
+		for _, m := range typ.Methods {
+			methods[typ.Name] = append(methods[typ.Name], m.Name)
+		}
+	}
+	for _, b := range []string{"AssocBuilder", "InverseBuilder"} {
+		got, ok := methods[b]
+		if !ok {
+			t.Errorf("%s is not documented", b)
+			continue
+		}
+		for _, m := range []string{"Unique", "Required", "Field", "StorageKey"} {
+			if !slices.Contains(got, m) {
+				t.Errorf("%s: the doc lacks %s; it lists %v", b, m, got)
+			}
+		}
 	}
 }

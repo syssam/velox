@@ -19,115 +19,186 @@ func newField(name, typ string, rt reflect.Type, pc uintptr) *desc.Field {
 
 // --- bool
 
-type boolBuilder struct{ typed[*boolBuilder, bool] }
+// BoolBuilder builds a bool field.
+type BoolBuilder struct {
+	common[*BoolBuilder]
+	typed[*BoolBuilder, bool]
+}
 
 // Bool declares a bool field.
-func Bool(name string) *boolBuilder {
-	b := &boolBuilder{}
-	b.typed = typed[*boolBuilder, bool]{common[*boolBuilder]{d: newField(name, "bool", reflect.TypeFor[bool](), desc.Caller()), self: b}}
+func Bool(name string) *BoolBuilder {
+	b := &BoolBuilder{}
+	b.common = common[*BoolBuilder]{d: newField(name, "bool", reflect.TypeFor[bool](), desc.Caller()), self: b}
+	b.typed = newTyped[*BoolBuilder, bool](&b.common)
 	return b
 }
 
 // --- numbers
 
-type number interface {
-	int | int8 | int16 | int32 | int64 | uint | uint8 | uint16 | uint32 | uint64 | float32 | float64
+// Numeric is the Go types of a number field: the builtin integer and float
+// types, and the types defined on them.
+type Numeric interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~float32 | ~float64
 }
 
-type numberBuilder[T number] struct{ typed[*numberBuilder[T], T] }
+// NumberBuilder builds a number field whose values are of the Go type T.
+type NumberBuilder[T Numeric] struct {
+	common[*NumberBuilder[T]]
+	typed[*NumberBuilder[T], T]
+}
 
-func newNumber[T number](name string, pc uintptr) *numberBuilder[T] {
-	b := &numberBuilder[T]{}
+// Number declares a number field of the Go type T. The field's type is T's
+// kind, so that Number[int64] is Int64. A T that is a defined type, such as
+// type Cents int64, is the field's GoType, as GoType(Cents(0)) makes it, and
+// Default, Validate, Min and the other options take a T.
+func Number[T Numeric](name string) *NumberBuilder[T] { return newNumber[T](name, desc.Caller()) }
+
+func newNumber[T Numeric](name string, pc uintptr) *NumberBuilder[T] {
+	b := &NumberBuilder[T]{}
 	rt := reflect.TypeFor[T]()
-	b.typed = typed[*numberBuilder[T], T]{common[*numberBuilder[T]]{d: newField(name, rt.Kind().String(), rt, pc), self: b}}
+	d := newField(name, rt.Kind().String(), rt, pc)
+	if rt.PkgPath() != "" {
+		d.GoType = desc.GoTypeOf(rt)
+	}
+	b.common = common[*NumberBuilder[T]]{d: d, self: b}
+	b.typed = newTyped[*NumberBuilder[T], T](&b.common)
 	return b
 }
 
 // Int declares an int field.
-func Int(name string) *numberBuilder[int] { return newNumber[int](name, desc.Caller()) }
+func Int(name string) *NumberBuilder[int] { return newNumber[int](name, desc.Caller()) }
 
 // Int8 declares an int8 field.
-func Int8(name string) *numberBuilder[int8] { return newNumber[int8](name, desc.Caller()) }
+func Int8(name string) *NumberBuilder[int8] { return newNumber[int8](name, desc.Caller()) }
 
 // Int16 declares an int16 field.
-func Int16(name string) *numberBuilder[int16] { return newNumber[int16](name, desc.Caller()) }
+func Int16(name string) *NumberBuilder[int16] { return newNumber[int16](name, desc.Caller()) }
 
 // Int32 declares an int32 field.
-func Int32(name string) *numberBuilder[int32] { return newNumber[int32](name, desc.Caller()) }
+func Int32(name string) *NumberBuilder[int32] { return newNumber[int32](name, desc.Caller()) }
 
 // Int64 declares an int64 field.
-func Int64(name string) *numberBuilder[int64] { return newNumber[int64](name, desc.Caller()) }
+func Int64(name string) *NumberBuilder[int64] { return newNumber[int64](name, desc.Caller()) }
 
 // Uint declares a uint field.
-func Uint(name string) *numberBuilder[uint] { return newNumber[uint](name, desc.Caller()) }
+func Uint(name string) *NumberBuilder[uint] { return newNumber[uint](name, desc.Caller()) }
 
 // Uint8 declares a uint8 field.
-func Uint8(name string) *numberBuilder[uint8] { return newNumber[uint8](name, desc.Caller()) }
+func Uint8(name string) *NumberBuilder[uint8] { return newNumber[uint8](name, desc.Caller()) }
 
 // Uint16 declares a uint16 field.
-func Uint16(name string) *numberBuilder[uint16] { return newNumber[uint16](name, desc.Caller()) }
+func Uint16(name string) *NumberBuilder[uint16] { return newNumber[uint16](name, desc.Caller()) }
 
 // Uint32 declares a uint32 field.
-func Uint32(name string) *numberBuilder[uint32] { return newNumber[uint32](name, desc.Caller()) }
+func Uint32(name string) *NumberBuilder[uint32] { return newNumber[uint32](name, desc.Caller()) }
 
 // Uint64 declares a uint64 field.
-func Uint64(name string) *numberBuilder[uint64] { return newNumber[uint64](name, desc.Caller()) }
+func Uint64(name string) *NumberBuilder[uint64] { return newNumber[uint64](name, desc.Caller()) }
 
 // Float declares a float64 field.
-func Float(name string) *numberBuilder[float64] { return newNumber[float64](name, desc.Caller()) }
+func Float(name string) *NumberBuilder[float64] { return newNumber[float64](name, desc.Caller()) }
 
 // Float32 declares a float32 field.
-func Float32(name string) *numberBuilder[float32] { return newNumber[float32](name, desc.Caller()) }
+func Float32(name string) *NumberBuilder[float32] { return newNumber[float32](name, desc.Caller()) }
 
-// Float64 declares a float64 field.
-func Float64(name string) *numberBuilder[float64] { return newNumber[float64](name, desc.Caller()) }
+// Validate adds a function that checks the field's value.
+// An Optional field's zero value means unset, and is not validated.
+func (b *NumberBuilder[T]) Validate(fn func(T) error) *NumberBuilder[T] {
+	if fn == nil {
+		fail(b.d, "Validate is given a nil function")
+		return b
+	}
+	b.d.Validators = append(b.d.Validators, ofKind(fn))
+	return b
+}
+
+// ofKind returns fn as a function of T's kind, which the generated code calls
+// with the field's value converted, as it calls the validator of a field
+// spelled Int64("p").GoType(Cents(0)). fn still receives a T.
+func ofKind[T Numeric](fn func(T) error) any {
+	rt := reflect.TypeFor[T]()
+	if rt.PkgPath() == "" {
+		return fn
+	}
+	switch rt.Kind() {
+	case reflect.Int:
+		return func(x int) error { return fn(T(x)) }
+	case reflect.Int8:
+		return func(x int8) error { return fn(T(x)) }
+	case reflect.Int16:
+		return func(x int16) error { return fn(T(x)) }
+	case reflect.Int32:
+		return func(x int32) error { return fn(T(x)) }
+	case reflect.Int64:
+		return func(x int64) error { return fn(T(x)) }
+	case reflect.Uint:
+		return func(x uint) error { return fn(T(x)) }
+	case reflect.Uint8:
+		return func(x uint8) error { return fn(T(x)) }
+	case reflect.Uint16:
+		return func(x uint16) error { return fn(T(x)) }
+	case reflect.Uint32:
+		return func(x uint32) error { return fn(T(x)) }
+	case reflect.Uint64:
+		return func(x uint64) error { return fn(T(x)) }
+	case reflect.Float32:
+		return func(x float32) error { return fn(T(x)) }
+	default: // reflect.Float64, the last kind Numeric allows
+		return func(x float64) error { return fn(T(x)) }
+	}
+}
 
 // Range requires lo <= value <= hi.
 // An Optional field's zero value means unset, and is not validated.
-func (b *numberBuilder[T]) Range(lo, hi T) *numberBuilder[T] {
+func (b *NumberBuilder[T]) Range(lo, hi T) *NumberBuilder[T] {
 	return b.check("Range", lo, hi)
 }
 
 // Min requires value >= v.
 // An Optional field's zero value means unset, and is not validated.
-func (b *numberBuilder[T]) Min(v T) *numberBuilder[T] { return b.check("Min", v) }
+func (b *NumberBuilder[T]) Min(v T) *NumberBuilder[T] { return b.check("Min", v) }
 
 // Max requires value <= v.
 // An Optional field's zero value means unset, and is not validated.
-func (b *numberBuilder[T]) Max(v T) *numberBuilder[T] { return b.check("Max", v) }
+func (b *NumberBuilder[T]) Max(v T) *NumberBuilder[T] { return b.check("Max", v) }
 
 // Positive requires value > 0.
 // An Optional field's zero value means unset, and is not validated.
-func (b *numberBuilder[T]) Positive() *numberBuilder[T] { return b.check("Positive") }
+func (b *NumberBuilder[T]) Positive() *NumberBuilder[T] { return b.check("Positive") }
 
 // Negative requires value < 0.
 // An Optional field's zero value means unset, and is not validated.
-func (b *numberBuilder[T]) Negative() *numberBuilder[T] { return b.check("Negative") }
+func (b *NumberBuilder[T]) Negative() *NumberBuilder[T] { return b.check("Negative") }
 
 // NonNegative requires value >= 0.
 // An Optional field's zero value means unset, and is not validated.
-func (b *numberBuilder[T]) NonNegative() *numberBuilder[T] { return b.check("NonNegative") }
+func (b *NumberBuilder[T]) NonNegative() *NumberBuilder[T] { return b.check("NonNegative") }
 
-func (b *numberBuilder[T]) check(kind string, args ...any) *numberBuilder[T] {
+func (b *NumberBuilder[T]) check(kind string, args ...any) *NumberBuilder[T] {
 	b.d.Checks = append(b.d.Checks, desc.Check{Kind: kind, Args: args})
 	return b
 }
 
 // --- string
 
-type stringBuilder struct{ typed[*stringBuilder, string] }
+// StringBuilder builds a string field.
+type StringBuilder struct {
+	common[*StringBuilder]
+	typed[*StringBuilder, string]
+}
 
 // String declares a string field.
-func String(name string) *stringBuilder { return newString(name, desc.Caller()) }
+func String(name string) *StringBuilder { return newString(name, desc.Caller()) }
 
-func newString(name string, pc uintptr) *stringBuilder {
-	b := &stringBuilder{}
-	b.typed = typed[*stringBuilder, string]{common[*stringBuilder]{d: newField(name, "string", reflect.TypeFor[string](), pc), self: b}}
+func newString(name string, pc uintptr) *StringBuilder {
+	b := &StringBuilder{}
+	b.common = common[*StringBuilder]{d: newField(name, "string", reflect.TypeFor[string](), pc), self: b}
+	b.typed = newTyped[*StringBuilder, string](&b.common)
 	return b
 }
 
 // Text declares a string field with no length limit (Size is math.MaxInt32).
-func Text(name string) *stringBuilder {
+func Text(name string) *StringBuilder {
 	b := newString(name, desc.Caller())
 	b.d.Size = math.MaxInt32
 	return b
@@ -135,22 +206,22 @@ func Text(name string) *stringBuilder {
 
 // NotEmpty requires a non-empty string.
 // An Optional field's zero value means unset, and is not validated.
-func (b *stringBuilder) NotEmpty() *stringBuilder { return b.check("NotEmpty") }
+func (b *StringBuilder) NotEmpty() *StringBuilder { return b.check("NotEmpty") }
 
 // MinLen requires at least n bytes.
 // An Optional field's zero value means unset, and is not validated.
-func (b *stringBuilder) MinLen(n int) *stringBuilder { return b.check("MinLen", n) }
+func (b *StringBuilder) MinLen(n int) *StringBuilder { return b.check("MinLen", n) }
 
 // MaxLen requires at most n bytes, and sets the column's size to n.
 // An Optional field's zero value means unset, and is not validated.
-func (b *stringBuilder) MaxLen(n int) *stringBuilder {
+func (b *StringBuilder) MaxLen(n int) *StringBuilder {
 	b.d.Size = n
 	return b.check("MaxLen", n)
 }
 
 // Match requires the string to match re.
 // An Optional field's zero value means unset, and is not validated.
-func (b *stringBuilder) Match(re *regexp.Regexp) *stringBuilder {
+func (b *StringBuilder) Match(re *regexp.Regexp) *StringBuilder {
 	if re == nil {
 		fail(b.d, "Match is given a nil regexp")
 		return b
@@ -158,59 +229,76 @@ func (b *stringBuilder) Match(re *regexp.Regexp) *stringBuilder {
 	return b.check("Match", re.String())
 }
 
-func (b *stringBuilder) check(kind string, args ...any) *stringBuilder {
+func (b *StringBuilder) check(kind string, args ...any) *StringBuilder {
 	b.d.Checks = append(b.d.Checks, desc.Check{Kind: kind, Args: args})
 	return b
 }
 
 // --- bytes
 
-type bytesBuilder struct{ typed[*bytesBuilder, []byte] }
+// BytesBuilder builds a []byte field.
+type BytesBuilder struct {
+	common[*BytesBuilder]
+	typed[*BytesBuilder, []byte]
+}
 
 // Bytes declares a []byte field.
-func Bytes(name string) *bytesBuilder {
-	b := &bytesBuilder{}
-	b.typed = typed[*bytesBuilder, []byte]{common[*bytesBuilder]{d: newField(name, "bytes", reflect.TypeFor[[]byte](), desc.Caller()), self: b}}
+func Bytes(name string) *BytesBuilder {
+	b := &BytesBuilder{}
+	b.common = common[*BytesBuilder]{d: newField(name, "bytes", reflect.TypeFor[[]byte](), desc.Caller()), self: b}
+	b.typed = newTyped[*BytesBuilder, []byte](&b.common)
 	return b
 }
 
 // NotEmpty requires a non-empty value.
 // An Optional field's zero value means unset, and is not validated.
-func (b *bytesBuilder) NotEmpty() *bytesBuilder { return b.check("NotEmpty") }
+func (b *BytesBuilder) NotEmpty() *BytesBuilder { return b.check("NotEmpty") }
 
 // MinLen requires at least n bytes.
 // An Optional field's zero value means unset, and is not validated.
-func (b *bytesBuilder) MinLen(n int) *bytesBuilder { return b.check("MinLen", n) }
+func (b *BytesBuilder) MinLen(n int) *BytesBuilder { return b.check("MinLen", n) }
 
-// MaxLen requires at most n bytes.
+// MaxLen requires at most n bytes, and sets the column's size to n.
 // An Optional field's zero value means unset, and is not validated.
-func (b *bytesBuilder) MaxLen(n int) *bytesBuilder { return b.check("MaxLen", n) }
+func (b *BytesBuilder) MaxLen(n int) *BytesBuilder {
+	b.d.Size = n
+	return b.check("MaxLen", n)
+}
 
-func (b *bytesBuilder) check(kind string, args ...any) *bytesBuilder {
+func (b *BytesBuilder) check(kind string, args ...any) *BytesBuilder {
 	b.d.Checks = append(b.d.Checks, desc.Check{Kind: kind, Args: args})
 	return b
 }
 
 // --- time
 
-type timeBuilder struct{ common[*timeBuilder] }
+// TimeBuilder builds a time.Time field.
+type TimeBuilder struct{ common[*TimeBuilder] }
 
 // Time declares a time.Time field.
-func Time(name string) *timeBuilder {
-	b := &timeBuilder{}
-	b.common = common[*timeBuilder]{d: newField(name, "time", reflect.TypeFor[time.Time](), desc.Caller()), self: b}
+func Time(name string) *TimeBuilder {
+	b := &TimeBuilder{}
+	b.common = common[*TimeBuilder]{d: newField(name, "time", reflect.TypeFor[time.Time](), desc.Caller()), self: b}
 	return b
 }
 
-// Default sets a func() time.Time, called when a new row does not set the field.
-func (b *timeBuilder) Default(fn any) *timeBuilder { b.d.Default = fn; return b }
+// Default sets a function, such as time.Now, called when a new row does not
+// set the field. With a GoType, the GoType must convert from time.Time, and
+// the generated code converts what fn returns.
+func (b *TimeBuilder) Default(fn func() time.Time) *TimeBuilder { b.d.Default = fn; return b }
 
-// UpdateDefault sets a func() time.Time, called on every update that does not
-// set the field.
-func (b *timeBuilder) UpdateDefault(fn any) *timeBuilder { b.d.UpdateDefault = fn; return b }
+// UpdateDefault sets a function, such as time.Now, called on every update that
+// does not set the field. With a GoType, the GoType must convert from
+// time.Time, and the generated code converts what fn returns.
+func (b *TimeBuilder) UpdateDefault(fn func() time.Time) *TimeBuilder {
+	b.d.UpdateDefault = fn
+	return b
+}
 
-// GoType makes the field's Go type that of typ, which must be a struct.
-func (b *timeBuilder) GoType(typ any) *timeBuilder {
+// GoType makes the field's Go type that of typ, which must be a struct. A
+// Default or UpdateDefault needs one that converts from time.Time, such as
+// type Stamp time.Time.
+func (b *TimeBuilder) GoType(typ any) *TimeBuilder {
 	setGoType(b.d, typ, reflect.TypeFor[time.Time]())
 	return b
 }
@@ -228,74 +316,102 @@ func withType(d *desc.Field, typ any) {
 	d.RType = t
 }
 
-type uuidBuilder struct{ common[*uuidBuilder] }
+// UUIDBuilder builds a UUID field declared with UUID.
+type UUIDBuilder struct{ common[*UUIDBuilder] }
 
-// UUID declares a field of the UUID type of typ, such as uuid.UUID.
-func UUID(name string, typ driver.Valuer) *uuidBuilder {
-	b := &uuidBuilder{}
-	b.common = common[*uuidBuilder]{d: newField(name, "uuid", nil, desc.Caller()), self: b}
-	withType(b.d, typ)
+// UUID declares a field of the UUID type of typ, such as uuid.UUID. UUIDOf is
+// the typed form.
+func UUID(name string, typ driver.Valuer) *UUIDBuilder {
+	b := &UUIDBuilder{}
+	b.common = common[*UUIDBuilder]{d: newUUID(name, typ, desc.Caller()), self: b}
 	return b
 }
 
-// Default sets a func() returning the UUID type, called when a new row does
-// not set the field.
-func (b *uuidBuilder) Default(fn any) *uuidBuilder { b.d.Default = fn; return b }
+func newUUID(name string, typ driver.Valuer, pc uintptr) *desc.Field {
+	d := newField(name, "uuid", nil, pc)
+	withType(d, typ)
+	return d
+}
 
-type jsonBuilder struct{ common[*jsonBuilder] }
+// Default sets a func() returning the UUID type, such as uuid.New, called when
+// a new row does not set the field.
+func (b *UUIDBuilder) Default(fn any) *UUIDBuilder { b.d.Default = fn; return b }
+
+// UUIDOfBuilder builds a UUID field of the Go type T, declared with UUIDOf.
+type UUIDOfBuilder[T driver.Valuer] struct{ common[*UUIDOfBuilder[T]] }
+
+// UUIDOf declares a field of the UUID type T, such as uuid.UUID. It is
+// UUID(name, T's zero value), with a typed Default.
+func UUIDOf[T driver.Valuer](name string) *UUIDOfBuilder[T] {
+	b := &UUIDOfBuilder[T]{}
+	var zero T
+	b.common = common[*UUIDOfBuilder[T]]{d: newUUID(name, zero, desc.Caller()), self: b}
+	return b
+}
+
+// Default sets a function, such as uuid.New, called when a new row does not
+// set the field.
+func (b *UUIDOfBuilder[T]) Default(fn func() T) *UUIDOfBuilder[T] { b.d.Default = fn; return b }
+
+// JSONBuilder builds a field stored as JSON.
+type JSONBuilder struct{ common[*JSONBuilder] }
 
 // JSON declares a field stored as JSON, of the type of typ.
-func JSON(name string, typ any) *jsonBuilder { return newJSON(name, typ, desc.Caller()) }
+func JSON(name string, typ any) *JSONBuilder { return newJSON(name, typ, desc.Caller()) }
 
-func newJSON(name string, typ any, pc uintptr) *jsonBuilder {
-	b := &jsonBuilder{}
-	b.common = common[*jsonBuilder]{d: newField(name, "json", nil, pc), self: b}
+func newJSON(name string, typ any, pc uintptr) *JSONBuilder {
+	b := &JSONBuilder{}
+	b.common = common[*JSONBuilder]{d: newField(name, "json", nil, pc), self: b}
 	withType(b.d, typ)
 	return b
 }
 
 // Strings declares a []string field stored as JSON.
-func Strings(name string) *jsonBuilder { return newJSON(name, []string{}, desc.Caller()) }
+func Strings(name string) *JSONBuilder { return newJSON(name, []string{}, desc.Caller()) }
 
 // Ints declares an []int field stored as JSON.
-func Ints(name string) *jsonBuilder { return newJSON(name, []int{}, desc.Caller()) }
+func Ints(name string) *JSONBuilder { return newJSON(name, []int{}, desc.Caller()) }
 
 // Floats declares a []float64 field stored as JSON.
-func Floats(name string) *jsonBuilder { return newJSON(name, []float64{}, desc.Caller()) }
+func Floats(name string) *JSONBuilder { return newJSON(name, []float64{}, desc.Caller()) }
 
 // Default sets the value a new row gets, of the JSON type.
-func (b *jsonBuilder) Default(v any) *jsonBuilder { b.d.Default = v; return b }
+func (b *JSONBuilder) Default(v any) *JSONBuilder { b.d.Default = v; return b }
 
-type otherBuilder struct{ common[*otherBuilder] }
+// OtherBuilder builds a field of a type the DSL does not know.
+type OtherBuilder struct{ common[*OtherBuilder] }
 
 // Other declares a field of a type the DSL does not know, of the type of typ.
 // Use SchemaType to give its column type.
-func Other(name string, typ driver.Valuer) *otherBuilder {
-	b := &otherBuilder{}
-	b.common = common[*otherBuilder]{d: newField(name, "other", nil, desc.Caller()), self: b}
+func Other(name string, typ driver.Valuer) *OtherBuilder {
+	b := &OtherBuilder{}
+	b.common = common[*OtherBuilder]{d: newField(name, "other", nil, desc.Caller()), self: b}
 	withType(b.d, typ)
 	return b
 }
 
 // Default sets the value a new row gets, of the field's type.
-func (b *otherBuilder) Default(v any) *otherBuilder { b.d.Default = v; return b }
+func (b *OtherBuilder) Default(v any) *OtherBuilder { b.d.Default = v; return b }
 
 // --- enum
 
 // EnumValues is implemented by a string type that lists its enum values.
 type EnumValues interface{ Values() []string }
 
-type enumBuilder struct{ common[*enumBuilder] }
+// EnumBuilder builds an enum field declared with Enum.
+type EnumBuilder struct{ common[*EnumBuilder] }
 
-// Enum declares an enum field, stored as a string.
-func Enum(name string) *enumBuilder {
-	b := &enumBuilder{}
-	b.common = common[*enumBuilder]{d: newField(name, "enum", reflect.TypeFor[string](), desc.Caller()), self: b}
+// Enum declares an enum field, stored as a string. EnumOf is the typed form.
+func Enum(name string) *EnumBuilder { return newEnum(name, desc.Caller()) }
+
+func newEnum(name string, pc uintptr) *EnumBuilder {
+	b := &EnumBuilder{}
+	b.common = common[*EnumBuilder]{d: newField(name, "enum", reflect.TypeFor[string](), pc), self: b}
 	return b
 }
 
 // Values adds enum values whose Go name suffix is the value itself.
-func (b *enumBuilder) Values(vs ...string) *enumBuilder {
+func (b *EnumBuilder) Values(vs ...string) *EnumBuilder {
 	for _, v := range vs {
 		b.d.Enums = append(b.d.Enums, desc.Enum{Name: v, Value: v})
 	}
@@ -304,7 +420,7 @@ func (b *enumBuilder) Values(vs ...string) *enumBuilder {
 
 // NamedValues adds enum values as pairs of the Go name suffix and the stored
 // value: NamedValues("InProgress", "in-progress", "Done", "done").
-func (b *enumBuilder) NamedValues(pairs ...string) *enumBuilder {
+func (b *EnumBuilder) NamedValues(pairs ...string) *EnumBuilder {
 	if len(pairs)%2 != 0 {
 		fail(b.d, "NamedValues needs name and value pairs, got %d arguments", len(pairs))
 		return b
@@ -316,10 +432,10 @@ func (b *enumBuilder) NamedValues(pairs ...string) *enumBuilder {
 }
 
 // Default sets the value a new row gets, one of the enum values.
-func (b *enumBuilder) Default(v string) *enumBuilder { b.d.Default = v; return b }
+func (b *EnumBuilder) Default(v string) *EnumBuilder { b.d.Default = v; return b }
 
 // GoType makes the field's Go type that of ev, and adds the values it lists.
-func (b *enumBuilder) GoType(ev EnumValues) *enumBuilder {
+func (b *EnumBuilder) GoType(ev EnumValues) *EnumBuilder {
 	if ev == nil {
 		fail(b.d, "GoType is given a nil type")
 		return b
@@ -329,3 +445,26 @@ func (b *enumBuilder) GoType(ev EnumValues) *enumBuilder {
 	}
 	return b
 }
+
+// EnumOfBuilder builds an enum field of the Go type T, declared with EnumOf.
+type EnumOfBuilder[T interface {
+	~string
+	Values() []string
+}] struct {
+	common[*EnumOfBuilder[T]]
+}
+
+// EnumOf declares an enum field of the Go type T, whose Values method lists
+// the values. It is Enum(name).GoType(T("")), with a typed Default.
+func EnumOf[T interface {
+	~string
+	Values() []string
+}](name string) *EnumOfBuilder[T] {
+	e := newEnum(name, desc.Caller()).GoType(T(""))
+	b := &EnumOfBuilder[T]{}
+	b.common = common[*EnumOfBuilder[T]]{d: e.d, self: b}
+	return b
+}
+
+// Default sets the value a new row gets, one of the enum values.
+func (b *EnumOfBuilder[T]) Default(v T) *EnumOfBuilder[T] { b.d.Default = string(v); return b }

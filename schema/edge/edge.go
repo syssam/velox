@@ -74,29 +74,30 @@ func Symbols(to, from string) StorageOption {
 	return func(d *desc.Edge) { d.Symbols = []string{to, from} }
 }
 
-// assocBuilder builds an edge declared with To.
-type assocBuilder struct{ d *desc.Edge }
+// AssocBuilder builds an edge declared with To. Its From declares the inverse
+// inline, and returns an InverseBuilder.
+type AssocBuilder struct{ d *desc.Edge }
 
 // To declares an edge named name from the schema that lists it to the schema t
 // names, where t is that schema's Type method expression: Post.Type.
-func To(name string, t any) *assocBuilder {
-	return &assocBuilder{d: newEdge(name, t, false, desc.Caller())}
+func To(name string, t any) *AssocBuilder {
+	return &AssocBuilder{d: newEdge(name, t, false, desc.Caller())}
 }
 
 // Unique makes the edge point to at most one row.
-func (b *assocBuilder) Unique() *assocBuilder { b.d.Unique = true; return b }
+func (b *AssocBuilder) Unique() *AssocBuilder { b.d.Unique = true; return b }
 
 // Required makes the edge's foreign key NOT NULL.
-func (b *assocBuilder) Required() *assocBuilder { b.d.Required = true; return b }
+func (b *AssocBuilder) Required() *AssocBuilder { b.d.Required = true; return b }
 
 // Immutable refuses changes to the edge after create.
-func (b *assocBuilder) Immutable() *assocBuilder { b.d.Immutable = true; return b }
+func (b *AssocBuilder) Immutable() *AssocBuilder { b.d.Immutable = true; return b }
 
 // Field binds the edge to the foreign-key field of that name.
-func (b *assocBuilder) Field(name string) *assocBuilder { b.d.Field = name; return b }
+func (b *AssocBuilder) Field(name string) *AssocBuilder { b.d.Field = name; return b }
 
 // StorageKey sets where the edge is stored.
-func (b *assocBuilder) StorageKey(opts ...StorageOption) *assocBuilder {
+func (b *AssocBuilder) StorageKey(opts ...StorageOption) *AssocBuilder {
 	for _, o := range opts {
 		o(b.d)
 	}
@@ -104,10 +105,10 @@ func (b *assocBuilder) StorageKey(opts ...StorageOption) *assocBuilder {
 }
 
 // Comment sets the edge's documentation.
-func (b *assocBuilder) Comment(s string) *assocBuilder { b.d.Comment = s; return b }
+func (b *AssocBuilder) Comment(s string) *AssocBuilder { b.d.Comment = s; return b }
 
 // Annotations attaches annotations to the edge.
-func (b *assocBuilder) Annotations(as ...schema.Annotation) *assocBuilder {
+func (b *AssocBuilder) Annotations(as ...schema.Annotation) *AssocBuilder {
 	b.d.Annotations = append(b.d.Annotations, as...)
 	return b
 }
@@ -115,46 +116,46 @@ func (b *assocBuilder) Annotations(as ...schema.Annotation) *assocBuilder {
 // From declares the inverse of the edge inline, under name, on the target
 // schema. The options that follow configure the inverse, and Descriptor still
 // returns the whole edge, with the inverse in its Ref.
-func (b *assocBuilder) From(name string) *inverseBuilder {
+func (b *AssocBuilder) From(name string) *InverseBuilder {
 	b.d.Ref = &desc.Edge{Name: name, Type: b.d.Type, TypePkg: b.d.TypePkg, Inverse: true, RefName: b.d.Name, PC: b.d.PC}
-	return &inverseBuilder{d: b.d.Ref, root: b.d}
+	return &InverseBuilder{d: b.d.Ref, root: b.d}
 }
 
 // Descriptor returns the edge's descriptor.
-func (b *assocBuilder) Descriptor() *desc.Edge { return b.d }
+func (b *AssocBuilder) Descriptor() *desc.Edge { return b.d }
 
-// inverseBuilder builds an edge declared with From, or the inverse of an edge
+// InverseBuilder builds an edge declared with From, or the inverse of an edge
 // declared with To(...).From(...).
-type inverseBuilder struct {
+type InverseBuilder struct {
 	d    *desc.Edge // what the options change
 	root *desc.Edge // what Descriptor returns; d itself unless the inverse is inline
 }
 
 // From declares the edge named name on the schema t names as the inverse of
 // the edge that schema declares with To. Ref names that edge.
-func From(name string, t any) *inverseBuilder {
+func From(name string, t any) *InverseBuilder {
 	d := newEdge(name, t, true, desc.Caller())
-	return &inverseBuilder{d: d, root: d}
+	return &InverseBuilder{d: d, root: d}
 }
 
 // Ref names the edge the inverse mirrors, as declared with To on the target
 // schema.
-func (b *inverseBuilder) Ref(name string) *inverseBuilder { b.d.RefName = name; return b }
+func (b *InverseBuilder) Ref(name string) *InverseBuilder { b.d.RefName = name; return b }
 
 // Unique makes the edge point to at most one row.
-func (b *inverseBuilder) Unique() *inverseBuilder { b.d.Unique = true; return b }
+func (b *InverseBuilder) Unique() *InverseBuilder { b.d.Unique = true; return b }
 
 // Required makes the edge's foreign key NOT NULL.
-func (b *inverseBuilder) Required() *inverseBuilder { b.d.Required = true; return b }
+func (b *InverseBuilder) Required() *InverseBuilder { b.d.Required = true; return b }
 
 // Immutable refuses changes to the edge after create.
-func (b *inverseBuilder) Immutable() *inverseBuilder { b.d.Immutable = true; return b }
+func (b *InverseBuilder) Immutable() *InverseBuilder { b.d.Immutable = true; return b }
 
 // Field binds the edge to the foreign-key field of that name.
-func (b *inverseBuilder) Field(name string) *inverseBuilder { b.d.Field = name; return b }
+func (b *InverseBuilder) Field(name string) *InverseBuilder { b.d.Field = name; return b }
 
 // StorageKey sets where the edge is stored.
-func (b *inverseBuilder) StorageKey(opts ...StorageOption) *inverseBuilder {
+func (b *InverseBuilder) StorageKey(opts ...StorageOption) *InverseBuilder {
 	for _, o := range opts {
 		o(b.d)
 	}
@@ -162,14 +163,14 @@ func (b *inverseBuilder) StorageKey(opts ...StorageOption) *inverseBuilder {
 }
 
 // Comment sets the edge's documentation.
-func (b *inverseBuilder) Comment(s string) *inverseBuilder { b.d.Comment = s; return b }
+func (b *InverseBuilder) Comment(s string) *InverseBuilder { b.d.Comment = s; return b }
 
 // Annotations attaches annotations to the edge.
-func (b *inverseBuilder) Annotations(as ...schema.Annotation) *inverseBuilder {
+func (b *InverseBuilder) Annotations(as ...schema.Annotation) *InverseBuilder {
 	b.d.Annotations = append(b.d.Annotations, as...)
 	return b
 }
 
 // Descriptor returns the edge's descriptor: for an inverse declared inline, the
 // edge declared with To, whose Ref is the inverse.
-func (b *inverseBuilder) Descriptor() *desc.Edge { return b.root }
+func (b *InverseBuilder) Descriptor() *desc.Edge { return b.root }

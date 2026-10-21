@@ -4,10 +4,17 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
+	"go/ast"
+	"go/doc"
+	"go/parser"
+	"go/token"
 	"math"
+	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -26,6 +33,11 @@ type role string
 func (role) Values() []string { return []string{"viewer", "admin"} }
 
 type celsius float64
+
+type cents int64
+
+// stamp is a time type that converts from time.Time.
+type stamp time.Time
 
 var _ schema.Field = field.String("x") // every builder is a schema.Field
 
@@ -65,8 +77,8 @@ func TestNumberTypes(t *testing.T) {
 	}{
 		{field.Int("a"), "int"}, {field.Int8("a"), "int8"}, {field.Int16("a"), "int16"}, {field.Int32("a"), "int32"},
 		{field.Int64("a"), "int64"}, {field.Uint("a"), "uint"}, {field.Uint8("a"), "uint8"}, {field.Uint16("a"), "uint16"},
-		{field.Uint32("a"), "uint32"}, {field.Uint64("a"), "uint64"}, {field.Float32("a"), "float32"}, {field.Float64("a"), "float64"},
-		{field.Float("a"), "float64"},
+		{field.Uint32("a"), "uint32"}, {field.Uint64("a"), "uint64"}, {field.Float32("a"), "float32"}, {field.Float("a"), "float64"},
+		{field.Number[int16]("a"), "int16"}, {field.Number[cents]("a"), "int64"}, {field.Number[celsius]("a"), "float64"},
 	} {
 		if got := c.f.Descriptor().Type; got != c.want {
 			t.Errorf("got %s, want %s", got, c.want)
@@ -79,7 +91,7 @@ func TestNumberTypes(t *testing.T) {
 }
 
 func TestGoType(t *testing.T) {
-	d := field.Float64("temp").GoType(celsius(0)).Descriptor()
+	d := field.Float("temp").GoType(celsius(0)).Descriptor()
 	if len(d.Errs) != 0 || d.GoType.Ident != "field_test.celsius" {
 		t.Fatalf("%+v %v", d.GoType, d.Errs)
 	}
@@ -94,7 +106,6 @@ func TestDefaultFuncs(t *testing.T) {
 		t.Fatalf("%+v", d)
 	}
 	for name, f := range map[string]schema.Field{
-		"time default not a func":   field.Time("t").Default(time.Time{}),
 		"wrong result type":         field.String("s").DefaultFunc(func() int { return 0 }),
 		"func with an argument":     field.Int64("n").DefaultFunc(func(int) int64 { return 0 }),
 		"update default not a func": field.Int64("n").UpdateDefault(3),
@@ -215,7 +226,7 @@ func TestPos(t *testing.T) {
 		field.Uint64("a"),
 		field.Float("a"),
 		field.Float32("a"),
-		field.Float64("a"),
+		field.Number[cents]("a"),
 		field.String("a"),
 		field.Text("a"),
 		field.Bytes("a"),
@@ -227,6 +238,8 @@ func TestPos(t *testing.T) {
 		field.Floats("a"),
 		field.Other("a", id{}),
 		field.Enum("a"),
+		field.EnumOf[role]("a"),
+		field.UUIDOf[id]("a"),
 	} {
 		if got, want := desc.PosOf(f.Descriptor().PC), fmt.Sprintf("%s:%d", file, line+2+i); got != want {
 			t.Errorf("%d: pos %q, want %q", i, got, want)
@@ -245,5 +258,152 @@ func TestEveryMisuse(t *testing.T) {
 	want := []string{"Validate is given a nil function", "GoType string has kind string; the field needs int64", "DefaultFunc must be a func() int64"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+// Each exported builder lists its options in the package's documentation,
+// also those it has from the embedded, unexported common and typed.
+func TestBuildersAreDocumented(t *testing.T) {
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fset := token.NewFileSet()
+	var parsed []*ast.File
+	for _, name := range files {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		src, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		f, err := parser.ParseFile(fset, name, src, parser.ParseComments)
+		if err != nil {
+			t.Fatal(err)
+		}
+		parsed = append(parsed, f)
+	}
+	pkg, err := doc.NewFromFiles(fset, parsed, "github.com/syssam/velox2/schema/field")
+	if err != nil {
+		t.Fatal(err)
+	}
+	methods := map[string][]string{}
+	for _, typ := range pkg.Types {
+		for _, m := range typ.Methods {
+			methods[typ.Name] = append(methods[typ.Name], m.Name)
+		}
+	}
+	common := []string{"Optional", "Nillable", "Unique", "Comment", "StorageKey", "SchemaType", "Annotations", "Default"}
+	for _, b := range []string{
+		"BoolBuilder", "NumberBuilder", "StringBuilder", "BytesBuilder", "TimeBuilder",
+		"UUIDBuilder", "UUIDOfBuilder", "JSONBuilder", "OtherBuilder", "EnumBuilder", "EnumOfBuilder",
+	} {
+		got, ok := methods[b]
+		if !ok {
+			t.Errorf("%s is not documented", b)
+			continue
+		}
+		for _, m := range common {
+			if !slices.Contains(got, m) {
+				t.Errorf("%s: the doc lacks %s; it lists %v", b, m, got)
+			}
+		}
+	}
+}
+
+// field.Number[Cents] is field.Int64 with the GoType Cents, whose options
+// take a Cents.
+func TestNumberValidateTakesT(t *testing.T) {
+	var got cents
+	d := field.Number[cents]("p").Nillable().Default(5).Min(1).Validate(func(c cents) error { got = c; return nil }).Descriptor()
+	if len(d.Errs) != 0 || d.Type != "int64" || d.GoType == nil || d.GoType.Ident != "field_test.cents" || d.RType != reflect.TypeFor[cents]() {
+		t.Fatalf("%+v %v", d, d.Errs)
+	}
+	if d.Default != cents(5) || d.Checks[0].Args[0] != cents(1) {
+		t.Fatalf("default %#v, min %#v", d.Default, d.Checks[0].Args)
+	}
+	// The generated code calls a validator with the field's kind, as it does for
+	// Int64("p").GoType(Cents(0)); the validator still receives a Cents.
+	fn, ok := d.Validators[0].(func(int64) error)
+	if !ok {
+		t.Fatalf("validator %T, want func(int64) error", d.Validators[0])
+	}
+	if err := fn(7); err != nil || got != 7 {
+		t.Fatalf("validator ran with %v: %v", got, err)
+	}
+	// A builtin T is that constructor, with no GoType.
+	if d := field.Number[int64]("n").Validate(func(int64) error { return nil }).Descriptor(); d.GoType != nil || d.Type != "int64" {
+		t.Fatalf("%+v", d)
+	}
+	if d := field.Number[cents]("p").Validate(nil).Descriptor(); len(d.Errs) != 1 || d.Errs[0].Error() != "Validate is given a nil function" {
+		t.Fatalf("%v", d.Errs)
+	}
+}
+
+func TestEnumOf(t *testing.T) {
+	d := field.EnumOf[role]("r").Default("admin").Descriptor()
+	if len(d.Errs) != 0 || d.Type != "enum" || d.GoType.Ident != "field_test.role" || len(d.Enums) != 2 || d.Default != "admin" {
+		t.Fatalf("%+v %v", d, d.Errs)
+	}
+	if d := field.EnumOf[role]("r").Default("owner").Descriptor(); len(d.Errs) == 0 {
+		t.Fatal("a default outside the values is an error")
+	}
+}
+
+func TestUUIDOf(t *testing.T) {
+	d := field.UUIDOf[id]("id").Default(func() id { return id{1} }).Descriptor()
+	if len(d.Errs) != 0 || d.Type != "uuid" || d.GoType.Ident != "field_test.id" || d.Default.(func() id)() != (id{1}) {
+		t.Fatalf("%+v %v", d, d.Errs)
+	}
+	if d := field.UUIDOf[id]("id").Default(nil).Descriptor(); len(d.Errs) == 0 {
+		t.Fatal("a nil Default is an error")
+	}
+}
+
+func TestTimeDefaultTyped(t *testing.T) {
+	d := field.Time("t").Default(time.Now).UpdateDefault(time.Now).Descriptor()
+	if len(d.Errs) != 0 || d.Default == nil || d.UpdateDefault == nil {
+		t.Fatalf("%+v %v", d, d.Errs)
+	}
+	if d := field.Time("t").GoType(stamp{}).Default(time.Now).UpdateDefault(time.Now).Descriptor(); len(d.Errs) != 0 {
+		t.Fatalf("a GoType convertible from time.Time: %v", d.Errs)
+	}
+	type wrapped struct{ time.Time }
+	d = field.Time("t").GoType(wrapped{}).Default(time.Now).UpdateDefault(time.Now).Descriptor()
+	var got []string
+	for _, err := range d.Errs {
+		got = append(got, err.Error())
+	}
+	want := []string{
+		"Default on a time field needs a GoType convertible from time.Time",
+		"UpdateDefault on a time field needs a GoType convertible from time.Time",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	if d := field.Time("t").GoType(wrapped{}).Descriptor(); len(d.Errs) != 0 {
+		t.Fatalf("a GoType with no default is not checked: %v", d.Errs)
+	}
+}
+
+func TestBytesMaxLenSetsSize(t *testing.T) {
+	d := field.Bytes("b").MaxLen(16).Descriptor()
+	if d.Size != 16 || len(d.Checks) != 1 || d.Checks[0].Kind != "MaxLen" {
+		t.Fatalf("%+v", d)
+	}
+}
+
+func TestSchemaTypeDialects(t *testing.T) {
+	if field.Postgres != "postgres" || field.MySQL != "mysql" || field.SQLite != "sqlite" {
+		t.Fatal("the keys are the core's dialect names")
+	}
+	d := field.String("s").SchemaType(map[string]string{field.Postgres: "citext", field.MySQL: "varchar(10)", field.SQLite: "text"}).Descriptor()
+	if len(d.Errs) != 0 {
+		t.Fatal(d.Errs)
+	}
+	d = field.String("s").SchemaType(map[string]string{"postgress": "citext", field.Postgres: "citext"}).Descriptor()
+	if err := errors.Join(d.Errs...); err == nil || err.Error() != `SchemaType: unknown dialect "postgress"; the keys are field.Postgres, field.MySQL and field.SQLite` {
+		t.Fatalf("got %v", err)
 	}
 }

@@ -376,6 +376,13 @@ func (s *entState) defaults(e *Entity, f *Field, o *OutField, where string) {
 	}
 	// call reads a function from the descriptor once and calls it per row.
 	call := func(member string) string {
+		if f.Type == "time" && elem != "time.Time" {
+			// A time default is a func() time.Time, which the builder let
+			// through only for a GoType that converts from time.Time.
+			s.use("time", "time", where)
+			d := hoist(fmt.Sprintf("%s.%s.(func() time.Time)", s.descriptor(e, f), member))
+			return fmt.Sprintf("func() any { return %s(%s()) }", elem, d)
+		}
 		d := hoist(fmt.Sprintf("%s.%s.(func() %s)", s.descriptor(e, f), member, elem))
 		return fmt.Sprintf("func() any { return %s() }", d)
 	}

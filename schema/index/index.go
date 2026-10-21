@@ -41,8 +41,8 @@ func (b *Builder) Unique() *Builder { b.d.Unique = true; return b }
 // StorageKey sets the index name.
 func (b *Builder) StorageKey(name string) *Builder { b.d.StorageKey = name; return b }
 
-// Where sets the predicate of a partial index, in SQL. Only PostgreSQL has
-// partial indexes.
+// Where sets the predicate of a partial index, in SQL. PostgreSQL and SQLite
+// have partial indexes; MySQL does not.
 func (b *Builder) Where(sql string) *Builder { b.d.Where = sql; return b }
 
 // Annotations attaches annotations to the index.

@@ -148,7 +148,7 @@ type Index struct {
 	Fields, Edges []string // the columns and the edges whose foreign keys the index covers
 	Unique        bool
 	StorageKey    string // the index name
-	Where         string // a partial index's predicate, on PostgreSQL
+	Where         string // a partial index's predicate, on PostgreSQL and SQLite
 	Annotations   []Annotation
 	PC            uintptr // the constructor's call, for PosOf
 }

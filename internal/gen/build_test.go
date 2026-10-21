@@ -578,7 +578,7 @@ func (optionalID) Fields() []schema.Field { return []schema.Field{field.Int64("i
 
 type floatID struct{ schema.Schema }
 
-func (floatID) Fields() []schema.Field { return []schema.Field{field.Float64("id")} }
+func (floatID) Fields() []schema.Field { return []schema.Field{field.Float("id")} }
 
 type unknownIndexField struct{ schema.Schema }
 

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"maps"
 	"reflect"
+	"slices"
+	"time"
 
 	"github.com/syssam/velox2/schema"
 	"github.com/syssam/velox2/schema/internal/desc"
@@ -57,8 +59,22 @@ func (c common[B]) Comment(s string) B { c.d.Comment = s; return c.self }
 // StorageKey sets the column name.
 func (c common[B]) StorageKey(s string) B { c.d.StorageKey = s; return c.self }
 
-// SchemaType sets the column type per dialect, such as {"postgres": "citext"}.
+// The dialects SchemaType knows, by the names the core gives them.
+const (
+	Postgres = "postgres"
+	MySQL    = "mysql"
+	SQLite   = "sqlite"
+)
+
+// SchemaType sets the column type per dialect, such as
+// {field.Postgres: "citext"}. The keys are Postgres, MySQL and SQLite; any
+// other is a misuse.
 func (c common[B]) SchemaType(m map[string]string) B {
+	for _, k := range slices.Sorted(maps.Keys(m)) {
+		if k != Postgres && k != MySQL && k != SQLite {
+			fail(c.d, "SchemaType: unknown dialect %q; the keys are field.Postgres, field.MySQL and field.SQLite", k)
+		}
+	}
 	c.d.SchemaType = maps.Clone(m)
 	return c.self
 }
@@ -93,41 +109,47 @@ func failOnce(d *desc.Field, format string, args ...any) {
 	d.Errs = append(d.Errs, err)
 }
 
-// typed holds the options of a field whose values are of the Go type V.
-type typed[B, V any] struct{ common[B] }
+// typed holds the options of a field whose values are of the Go type V. A
+// builder embeds it beside its common, which c points to: go/doc lists the
+// options of both under the builder, as it would not those of a common that
+// typed embedded.
+type typed[B, V any] struct{ c *common[B] }
+
+// newTyped returns the typed options of the builder whose common is c.
+func newTyped[B, V any](c *common[B]) typed[B, V] { return typed[B, V]{c: c} }
 
 // Default sets the value a new row gets when the field is not set. It never
 // changes the Go type. A field that is not a pointer is unset when it holds its
 // zero value, so velox-gen refuses a Default on a bool or number that is not
 // Nillable, which could then never store false or 0: make the field Nillable
 // or drop the Default.
-func (t typed[B, V]) Default(v V) B { t.d.Default = v; return t.self }
+func (t typed[B, V]) Default(v V) B { t.c.d.Default = v; return t.c.self }
 
 // DefaultFunc sets a func() returning the field's Go type, called when a new
 // row does not set the field. As with Default, a field that is not a pointer
 // is unset when it holds its zero value, so velox-gen refuses a DefaultFunc on
 // a bool or number that is not Nillable.
-func (t typed[B, V]) DefaultFunc(fn any) B { t.d.DefaultFunc = fn; return t.self }
+func (t typed[B, V]) DefaultFunc(fn any) B { t.c.d.DefaultFunc = fn; return t.c.self }
 
 // UpdateDefault sets a func() returning the field's Go type, called on every
 // update that does not set the field.
-func (t typed[B, V]) UpdateDefault(fn any) B { t.d.UpdateDefault = fn; return t.self }
+func (t typed[B, V]) UpdateDefault(fn any) B { t.c.d.UpdateDefault = fn; return t.c.self }
 
 // Validate adds a function that checks the field's value.
 // An Optional field's zero value means unset, and is not validated.
 func (t typed[B, V]) Validate(fn func(V) error) B {
 	if fn == nil {
-		fail(t.d, "Validate is given a nil function")
+		fail(t.c.d, "Validate is given a nil function")
 	} else {
-		t.d.Validators = append(t.d.Validators, fn)
+		t.c.d.Validators = append(t.c.d.Validators, fn)
 	}
-	return t.self
+	return t.c.self
 }
 
 // GoType makes the field's Go type that of typ, which must have the field's kind.
 func (t typed[B, V]) GoType(typ any) B {
-	setGoType(t.d, typ, reflect.TypeFor[V]())
-	return t.self
+	setGoType(t.c.d, typ, reflect.TypeFor[V]())
+	return t.c.self
 }
 
 // setGoType makes the Go type of d that of typ, if typ has the kind of base,
@@ -163,9 +185,14 @@ func finish(d *desc.Field) {
 		failOnce(d, "Default and DefaultFunc are both set")
 	}
 	checkFunc(d, "DefaultFunc", d.DefaultFunc)
+	if d.Type == "time" {
+		checkTimeFunc(d, "Default", d.Default)
+		checkTimeFunc(d, "UpdateDefault", d.UpdateDefault)
+		return
+	}
 	checkFunc(d, "UpdateDefault", d.UpdateDefault)
 	switch d.Type {
-	case "time", "uuid":
+	case "uuid":
 		checkFunc(d, "Default", d.Default)
 	case "enum":
 		if d.Default == nil {
@@ -177,6 +204,22 @@ func finish(d *desc.Field) {
 			}
 		}
 		failOnce(d, "Default %v is not one of the enum values", d.Default)
+	}
+}
+
+// checkTimeFunc fails unless fn, when set, is a non-nil func() time.Time, and
+// the field's Go type converts from time.Time, as the generated code converts
+// what fn returns.
+func checkTimeFunc(d *desc.Field, option string, fn any) {
+	if fn == nil {
+		return
+	}
+	if f, ok := fn.(func() time.Time); !ok || f == nil {
+		failOnce(d, "%s must be a func() time.Time", option)
+		return
+	}
+	if rt, ok := d.RType.(reflect.Type); ok && !reflect.TypeFor[time.Time]().ConvertibleTo(rt) {
+		failOnce(d, "%s on a time field needs a GoType convertible from time.Time", option)
 	}
 }
 

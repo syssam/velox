@@ -7,6 +7,7 @@ import (
 	randv2 "math/rand/v2"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -949,5 +950,93 @@ func TestLowerChecksConvertOnlyWhenTypesDiffer(t *testing.T) {
 	}
 	if strings.Count(e.CheckCode, "string(x)") != 2 {
 		t.Errorf("want string(x) twice (the GoType field only):\n%s", e.CheckCode)
+	}
+}
+
+// lwTypedSpelling picks how LwPriced spells its fields: with the typed
+// constructors, or as in ent.
+var lwTypedSpelling bool
+
+type LwPriced struct{ schema.Schema }
+
+func (LwPriced) Fields() []schema.Field {
+	if lwTypedSpelling {
+		return []schema.Field{
+			field.Number[lwCents]("price").Nillable().Default(5).Min(1).Validate(func(lwCents) error { return nil }),
+			field.EnumOf[lwStatus]("st").Default("off"),
+			field.UUIDOf[uuidValue]("ref").Default(func() uuidValue { return uuidValue{1} }),
+		}
+	}
+	return []schema.Field{
+		field.Int64("price").GoType(lwCents(0)).Nillable().Default(5).Min(1).Validate(func(int64) error { return nil }),
+		field.Enum("st").GoType(lwStatus("")).Default("off"),
+		field.UUID("ref", uuidValue{}).Default(func() uuidValue { return uuidValue{1} }),
+	}
+}
+
+// A typed constructor generates the code of its ent spelling (Review Focus
+// 4), and a Number's validator, which takes the GoType, is called with the
+// field's kind: the builder converts.
+func TestLowerTypedConstructors(t *testing.T) {
+	t.Cleanup(func() { lwTypedSpelling = false })
+	var outs [2]*Out
+	for i, typed := range []bool{true, false} {
+		lwTypedSpelling = typed
+		outs[i] = mustLower(t, Config{SchemaPath: lowerSchemaPath}, LwPriced{})
+	}
+	if !reflect.DeepEqual(outs[0], outs[1]) {
+		t.Fatalf("typed %+v\nent %+v", outs[0].entity("LwPriced"), outs[1].entity("LwPriced"))
+	}
+	e := outs[0].entity("LwPriced")
+	for _, want := range []string{
+		`v0 := (&sch.LwPriced{}).Fields()[0].Descriptor().Validators[0].(func(int64) error)`,
+	} {
+		if !strings.Contains(e.CheckSetup, want) {
+			t.Errorf("setup lacks %s:\n%s", want, e.CheckSetup)
+		}
+	}
+	for _, want := range []string{"case 1:", "x := v.(gen.lwCents)", "if x < gen.lwCents(1) {", "if err := v0(int64(x)); err != nil {"} {
+		if !strings.Contains(e.CheckCode, want) {
+			t.Errorf("CheckCode lacks %s:\n%s", want, e.CheckCode)
+		}
+	}
+	if f := e.field("price"); f.DefaultCode != "gen.lwCents(5)" || f.GoType != "*gen.lwCents" {
+		t.Errorf("price %+v", f)
+	}
+}
+
+// lwStamp is a time type that converts from time.Time.
+type lwStamp time.Time
+
+type LwStamped struct{ schema.Schema }
+
+func (LwStamped) Fields() []schema.Field {
+	return []schema.Field{
+		field.Time("at").GoType(lwStamp{}).Default(time.Now).UpdateDefault(time.Now),
+		field.Time("plain").Default(time.Now),
+	}
+}
+
+// A time default is a func() time.Time; with a GoType, the generated code
+// converts what it returns.
+func TestLowerTimeDefaultConverts(t *testing.T) {
+	e := mustLower(t, Config{SchemaPath: lowerSchemaPath}, LwStamped{}).entity("LwStamped")
+	for _, want := range []string{
+		`d0 := (&sch.LwStamped{}).Fields()[0].Descriptor().Default.(func() time.Time)`,
+		`d1 := (&sch.LwStamped{}).Fields()[0].Descriptor().UpdateDefault.(func() time.Time)`,
+		`d2 := (&sch.LwStamped{}).Fields()[1].Descriptor().Default.(func() time.Time)`,
+	} {
+		if !strings.Contains(e.CheckSetup, want) {
+			t.Errorf("setup lacks %s:\n%s", want, e.CheckSetup)
+		}
+	}
+	if f := e.field("at"); f.DefaultFuncCode != "func() any { return gen.lwStamp(d0()) }" || f.UpdateDefaultCode != "func() any { return gen.lwStamp(d1()) }" {
+		t.Errorf("at %+v", f)
+	}
+	if f := e.field("plain"); f.DefaultFuncCode != "func() any { return d2() }" {
+		t.Errorf("plain %+v", f)
+	}
+	if !slices.Contains(e.Imports, "time") {
+		t.Errorf("imports %v", e.Imports)
 	}
 }

@@ -2,6 +2,7 @@ package load_test
 
 import (
 	"bytes"
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"runtime"
@@ -356,5 +357,61 @@ func TestMarshalPositions(t *testing.T) {
 func TestMarshalDuplicateSchema(t *testing.T) {
 	if got := errorText(decode(t, Post{}, Post{})); got != "schema Post: declared twice\n" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+type cents int64
+
+type status string
+
+func (status) Values() []string { return []string{"active", "closed"} }
+
+type uid [16]byte
+
+func (uid) Value() (driver.Value, error) { return nil, nil }
+
+func newUID() uid { return uid{1} }
+
+// pair is a schema of one field.
+type pair struct {
+	schema.Schema
+	f schema.Field
+}
+
+func (p pair) Fields() []schema.Field { return []schema.Field{p.f} }
+
+// A typed constructor loads to the JSON of its ent spelling (Review Focus 4).
+func TestTypedConstructorsEqualGoType(t *testing.T) {
+	for name, c := range map[string][2]schema.Field{
+		"Number": {
+			field.Number[cents]("p").Nillable().Default(5).Min(1),
+			field.Int64("p").GoType(cents(0)).Nillable().Default(5).Min(1),
+		},
+		"EnumOf": {
+			field.EnumOf[status]("s").Default("closed"),
+			field.Enum("s").GoType(status("")).Default("closed"),
+		},
+		"UUIDOf": {
+			field.UUIDOf[uid]("id").Default(newUID),
+			field.UUID("id", uid{}).Default(newUID),
+		},
+	} {
+		var out [2]string
+		for i, f := range c {
+			m := marshal(t, pair{f: f})
+			lf := m.Schemas[0].Fields[0]
+			if lf.Pos == "" {
+				t.Fatalf("%s: no position", name)
+			}
+			lf.Pos = ""
+			b, err := json.Marshal(lf)
+			if err != nil {
+				t.Fatal(err)
+			}
+			out[i] = string(b)
+		}
+		if out[0] != out[1] {
+			t.Errorf("%s:\n typed %s\n   ent %s", name, out[0], out[1])
+		}
 	}
 }
