@@ -41,6 +41,17 @@ func (Tag) Fields() []schema.Field { return []schema.Field{field.String("label")
 // genModule is a module whose schema package declares User and Tag.
 func genModule(t *testing.T, extra map[string]string) string {
 	t.Helper()
+	return genModuleWith(t, extra, tempModule)
+}
+
+// genModuleSerial is genModule for a test that must not run in parallel.
+func genModuleSerial(t *testing.T, extra map[string]string) string {
+	t.Helper()
+	return genModuleWith(t, extra, tempModuleSerial)
+}
+
+func genModuleWith(t *testing.T, extra map[string]string, mk func(*testing.T, map[string]string) string) string {
+	t.Helper()
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
@@ -48,7 +59,7 @@ func genModule(t *testing.T, extra map[string]string) string {
 	for k, v := range extra {
 		files[k] = v
 	}
-	return tempModule(t, files)
+	return mk(t, files)
 }
 
 func mtimes(t *testing.T, dir string) map[string]time.Time {
@@ -334,7 +345,7 @@ func TestNoSchemasIsAnError(t *testing.T) {
 		}
 	}
 	// Patterns that name no package, several, or the old `./...` form.
-	for _, args := range [][]string{{"./nothing"}, {"./..."}, {"-check", "./..."}, {"verify", "./..."}, {"./plain", "./other"}} {
+	for _, args := range [][]string{{"./nothing"}, {"./..."}, {"-check", "./..."}, {"verify", "./..."}} {
 		if code, out, errs := velox(t, dir, args...); code != 1 || out != "" || !strings.HasPrefix(errs, "velox-gen: ") {
 			t.Errorf("%v: %d %q %q", args, code, out, errs)
 		}
@@ -388,7 +399,7 @@ func TestVerifyGeneratedNeedsTheOutputPackage(t *testing.T) {
 // TestRelativeDirAsTheBinaryRuns runs the command as main does, with dir "."
 // and the working directory in the module, and a relative -out.
 func TestRelativeDirAsTheBinaryRuns(t *testing.T) {
-	dir := genModule(t, nil)
+	dir := genModuleSerial(t, nil)
 	old, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)

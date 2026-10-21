@@ -18,20 +18,22 @@
 //	velox-gen version
 //
 // Each subcommand has its own flags; a flag it does not take is a usage
-// error. The exit code is 0 for success, 1 for an error, 2 for misuse and 3
+// error. Flags may follow the package, as in "go test ./x -v"; "--" ends them.
+// A word that is not a subcommand, or a second package, is a usage error; for
+// a word that names a directory the message says to write ./word. The exit code is 0 for success, 1 for an error, 2 for misuse and 3
 // when generated files are stale (-check, and verify when a plugin's Go file
 // is out of date).
 //
 // The package is one schema package, ./schema when none is named; a pattern
-// that names no package, several, or a package that declares no schemas is an
-// error ("no schemas in ..."). -out is the directory of the generated package
+// that names no package, or a package that declares no schemas, is an error
+// ("no schemas in ..."), and several packages are a usage error. -out is the directory of the generated package
 // (default ./gen) and -package its name (default: the base name of -out).
 // velox-gen writes nothing when any entity has a problem. Each problem is
 // printed as file:line: schema User: field "name": reason, with the file
 // relative to the working directory. A misuse of a builder, such as a
 // DefaultFunc that is not a func, is reported first, alone; the rules across
 // fields, edges and schemas are checked once it is fixed. -check writes
-// nothing and exits 1 when a generated file is out of date, missing or left
+// nothing and exits 3 when a generated file is out of date, missing or left
 // over; CI runs it, and it is the check that the generated package matches
 // the schema. A run rewrites the files that changed, deletes the generated
 // files that no entity produces any more, and prints each path it wrote or
@@ -117,7 +119,11 @@ func run(args []string, dir string, env []string, stdout, stderr io.Writer) int 
 		case "version":
 			return runVersion(args[1:], stdout, stderr)
 		default:
-			_, _ = fmt.Fprintf(stderr, "velox-gen: unknown subcommand %q\n", args[0])
+			hint := ""
+			if fi, err := os.Stat(filepath.Join(dir, args[0])); err == nil && fi.IsDir() {
+				hint = fmt.Sprintf("; for the package write ./%s", args[0])
+			}
+			_, _ = fmt.Fprintf(stderr, "velox-gen: unknown subcommand %q%s\n", args[0], hint)
 			printUsage(stderr)
 			return 2
 		}
@@ -143,10 +149,13 @@ func runGenCommand(name string, args []string, dir string, env []string, stdout,
 	pkgName := fs.String("package", "", "the generated package's name (default: the base name of -out)")
 	var plugins pluginFlag
 	fs.Var(&plugins, "plugin", "run the generator plugin `tool[:key=value,...]` (a tool of your module, as go tool names it, with its options) on the model; repeat for several")
-	if code, done := parseFlags(fs, args); done {
+	patterns, code, done := parseFlags(fs, args)
+	if done {
 		return code
 	}
-	patterns := fs.Args()
+	if len(patterns) > 1 {
+		return tooMany(name, fs, stderr)
+	}
 	var rerun []string
 	fs.Visit(func(f *flag.Flag) {
 		switch f.Name {
@@ -183,26 +192,46 @@ func newFlagSet(name string, stderr io.Writer) *flag.FlagSet {
 	return fs
 }
 
-// parseFlags parses args. It reports done, with the exit code, when the
-// command must stop: -h exits 0, a bad flag 2.
-func parseFlags(fs *flag.FlagSet, args []string) (code int, done bool) {
-	switch err := fs.Parse(args); {
-	case err == nil:
-		return 0, false
-	case errors.Is(err, flag.ErrHelp):
-		return 0, true
-	default:
-		return 2, true
+// parseFlags parses args and returns the arguments that are not flags. As
+// "go test ./x -v" does, flags may follow the positional arguments; "--" ends
+// the flags. It reports done, with the exit code, when the command must stop:
+// -h exits 0, a bad flag 2.
+func parseFlags(fs *flag.FlagSet, args []string) (rest []string, code int, done bool) {
+	for {
+		if err := fs.Parse(args); err != nil {
+			if errors.Is(err, flag.ErrHelp) {
+				return nil, 0, true
+			}
+			return nil, 2, true
+		}
+		left := fs.Args()
+		if n := len(args) - len(left); n > 0 && args[n-1] == "--" {
+			return append(rest, left...), 0, false
+		}
+		if len(left) == 0 {
+			return rest, 0, false
+		}
+		rest = append(rest, left[0])
+		args = left[1:]
 	}
+}
+
+// tooMany is the usage error of a command that was given more arguments than
+// it takes.
+func tooMany(name string, fs *flag.FlagSet, stderr io.Writer) int {
+	_, _ = fmt.Fprintf(stderr, "velox-gen: %s takes one package\n", name)
+	fs.Usage()
+	return 2
 }
 
 // runVersion is velox-gen version.
 func runVersion(args []string, stdout, stderr io.Writer) int {
 	fs := newFlagSet("version", stderr)
-	if code, done := parseFlags(fs, args); done {
+	rest, code, done := parseFlags(fs, args)
+	if done {
 		return code
 	}
-	if fs.NArg() > 0 {
+	if len(rest) > 0 {
 		_, _ = fmt.Fprintln(stderr, "velox-gen: version takes no arguments")
 		printUsage(stderr)
 		return 2

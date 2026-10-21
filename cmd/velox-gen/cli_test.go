@@ -3,12 +3,16 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/syssam/velox2/plugin"
@@ -24,9 +28,41 @@ func offlineEnv() []string {
 	return append(os.Environ(), "GOFLAGS=-mod=mod", "GOPROXY=off", "GOTOOLCHAIN=local")
 }
 
+// moduleSlots bounds the module tests that run at once: each runs go
+// commands, and the machine is short of memory.
+var moduleSlots = make(chan struct{}, 3)
+
+var slotted sync.Map // *testing.T that already hold a slot
+
+// parallel makes t a parallel test that holds one of moduleSlots until it
+// ends. Calling it twice for one test does nothing.
+func parallel(t *testing.T) {
+	t.Helper()
+	if _, dup := slotted.LoadOrStore(t, true); dup {
+		return
+	}
+	t.Parallel()
+	moduleSlots <- struct{}{}
+	t.Cleanup(func() {
+		<-moduleSlots
+		slotted.Delete(t)
+	})
+}
+
 // tempModule writes files into a new module, example.com/app, that uses this
-// checkout's library, and returns its directory.
+// checkout's library, and returns its directory. The test runs in parallel
+// with others (see parallel); a test that changes the working directory uses
+// tempModuleSerial.
 func tempModule(t *testing.T, files map[string]string) string {
+	t.Helper()
+	if !testing.Short() {
+		parallel(t)
+	}
+	return tempModuleSerial(t, files)
+}
+
+// tempModuleSerial is tempModule for a test that must not run in parallel.
+func tempModuleSerial(t *testing.T, files map[string]string) string {
 	t.Helper()
 	dir, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
@@ -34,6 +70,17 @@ func tempModule(t *testing.T, files map[string]string) string {
 	}
 	tempModuleAt(t, dir, files)
 	return dir
+}
+
+// tidied is what go mod tidy made of a set of files: tidying is the slow part
+// of a test module, and the same files always tidy the same, so it is done
+// once per set.
+var tidied sync.Map // key -> *tidyResult
+
+type tidyResult struct {
+	once         sync.Once
+	gomod, gosum []byte
+	err          string
 }
 
 // tempModuleAt is tempModule in the directory dir, which it creates.
@@ -49,14 +96,30 @@ func tempModuleAt(t *testing.T, dir string, files map[string]string) {
 	}
 	files["go.mod"] = "module example.com/app\n\ngo 1.27.0\n\nrequire github.com/syssam/velox2 v0.0.0\n\nreplace github.com/syssam/velox2 => " + lib + "\n"
 	files["go.sum"] = string(sum)
+	var key strings.Builder
+	for _, name := range slices.Sorted(maps.Keys(files)) {
+		fmt.Fprintf(&key, "%q:%q;", name, files[name])
+	}
 	for name, src := range files {
 		writeFile(t, filepath.Join(dir, name), src)
 	}
-	cmd := exec.Command("go", "mod", "tidy")
-	cmd.Dir, cmd.Env = dir, offlineEnv()
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("go mod tidy: %v\n%s", err, out)
+	v, _ := tidied.LoadOrStore(key.String(), new(tidyResult))
+	r := v.(*tidyResult)
+	r.once.Do(func() {
+		cmd := exec.Command("go", "mod", "tidy")
+		cmd.Dir, cmd.Env = dir, offlineEnv()
+		if out, err := cmd.CombinedOutput(); err != nil {
+			r.err = fmt.Sprintf("go mod tidy: %v\n%s", err, out)
+			return
+		}
+		r.gomod, _ = os.ReadFile(filepath.Join(dir, "go.mod"))
+		r.gosum, _ = os.ReadFile(filepath.Join(dir, "go.sum"))
+	})
+	if r.err != "" {
+		t.Fatal(r.err)
 	}
+	writeFile(t, filepath.Join(dir, "go.mod"), string(r.gomod))
+	writeFile(t, filepath.Join(dir, "go.sum"), string(r.gosum))
 }
 
 func writeFile(t *testing.T, path, src string) {
@@ -106,26 +169,60 @@ func (User) Fields() []schema.Field { return []schema.Field{field.String("name")
 	}
 }
 
+// One module serves the generate forms: the optional word, flags after the
+// package, "--", the stale exit code.
 func TestGenerateSubcommand(t *testing.T) {
-	a := genModule(t, nil)
-	b := genModule(t, nil)
-	if code, _, errs := velox(t, a, "-out", "x", "./schema"); code != 0 {
-		t.Fatalf("%d %q", code, errs)
+	dir := genModule(t, nil)
+	files := []string{"user_velox.go", "tag_velox.go", "velox.go"}
+	gens := func(out string) map[string]string {
+		m := map[string]string{}
+		for _, f := range files {
+			// The package is named for -out; compare the rest.
+			m[f] = regexp.MustCompile(`(?m)^package \w+$`).ReplaceAllString(read(t, filepath.Join(dir, out, f)), "package gen")
+		}
+		return m
 	}
-	if code, _, errs := velox(t, b, "generate", "-out", "x", "./schema"); code != 0 {
-		t.Fatalf("%d %q", code, errs)
-	}
-	for _, f := range []string{"user_velox.go", "tag_velox.go", "velox.go"} {
-		if read(t, filepath.Join(a, "x", f)) != read(t, filepath.Join(b, "x", f)) {
-			t.Errorf("%s differs", f)
+	for _, c := range []struct {
+		out  string
+		args []string
+	}{
+		{"a", []string{"-out", "a", "./schema"}},
+		{"b", []string{"generate", "-out", "b", "./schema"}},
+		{"c", []string{"./schema", "-out", "c"}},
+		{"d", []string{"generate", "./schema", "-out", "d"}},
+		{"e", []string{"-out", "e", "--", "./schema"}},
+	} {
+		if code, _, errs := velox(t, dir, c.args...); code != 0 {
+			t.Fatalf("%v: %d %q", c.args, code, errs)
 		}
 	}
-	if code, _, errs := velox(t, b, "generate", "-check", "-out", "x", "./schema"); code != 0 {
-		t.Fatalf("generate -check: %d %q", code, errs)
+	for _, out := range []string{"b", "c", "d", "e"} {
+		if !reflect.DeepEqual(gens("a"), gens(out)) {
+			t.Errorf("%s differs from a", out)
+		}
 	}
-	// No subcommand and no flags is generate too.
-	if code, _, errs := velox(t, b); code != 0 {
-		t.Fatalf("bare: %d %q", code, errs)
+	// A flag after the package is a flag of the same subcommand.
+	if code, _, errs := velox(t, dir, "./schema", "-check", "-out", "a"); code != 0 {
+		t.Fatalf("check after the package: %d %q", code, errs)
+	}
+	if code, out, errs := velox(t, dir, "verify", "./schema", "-out", "a"); code != 0 || !strings.Contains(out, "2 entities") {
+		t.Fatalf("verify: %d %q %q", code, out, errs)
+	}
+	if code, out, errs := velox(t, dir, "describe", "./schema", "-json"); code != 0 || !strings.HasPrefix(out, "{") {
+		t.Fatalf("describe: %d %q %q", code, out, errs)
+	}
+	// A flag the subcommand does not take stays misuse after the package.
+	if code, _, _ := velox(t, dir, "verify", "./schema", "-check"); code != 2 {
+		t.Errorf("verify ./schema -check: %d", code)
+	}
+	// Stale is 3, an error 1.
+	writeFile(t, filepath.Join(dir, "a", "user_velox.go"), "// Code generated by velox-gen. DO NOT EDIT.\n\npackage a\n")
+	code, _, errs := velox(t, dir, "generate", "-check", "-out", "a", "./schema")
+	if code != 3 || !strings.Contains(errs, "user_velox.go is out of date") {
+		t.Fatalf("%d %q", code, errs)
+	}
+	if code, _, _ := velox(t, dir, "-check", "./nothing"); code != 1 {
+		t.Errorf("error: %d", code)
 	}
 }
 
@@ -141,23 +238,33 @@ func TestSubcommandFlags(t *testing.T) {
 		{"-json"},
 		{"frobnicate"},
 		{"verify", "-bogus"},
+		{"./schema", "-json"},
+		{"./a", "./b"},
+		{"generate", "./a", "./b"},
+		{"verify", "-out", "x", "./schema", "extra"},
+		{"describe", "a", "b"},
+		{"describe", "./a", "-json", "./b"},
+		{"--", "./a", "./b"},
 	} {
 		code, out, errs := velox(t, dir, args...)
-		if code != 2 || out != "" || errs == "" {
+		if code != 2 || out != "" || !strings.Contains(errs, "Usage:") {
 			t.Errorf("%v: %d %q %q", args, code, out, errs)
 		}
 	}
 	// generate -h lists generate's flags only.
 	code, _, errs := velox(t, dir, "generate", "-h")
-	if code != 0 && code != 2 {
+	if code != 0 {
 		t.Fatalf("-h: %d", code)
 	}
-	flags := errs[strings.Index(errs, "Flags of"):]
+	flags := flagsOf(t, errs)
 	if !strings.Contains(flags, "-check") || !strings.Contains(flags, "-plugin") || strings.Contains(flags, "-json") {
 		t.Errorf("generate -h:\n%s", errs)
 	}
-	_, _, errs = velox(t, dir, "describe", "-h")
-	flags = errs[strings.Index(errs, "Flags of"):]
+	code, _, errs = velox(t, dir, "describe", "-h")
+	if code != 0 {
+		t.Fatalf("-h: %d", code)
+	}
+	flags = flagsOf(t, errs)
 	if !strings.Contains(flags, "-json") || strings.Contains(flags, "-check") || strings.Contains(flags, "-plugin") {
 		t.Errorf("describe -h:\n%s", errs)
 	}
@@ -168,22 +275,29 @@ func TestSubcommandFlags(t *testing.T) {
 	}
 }
 
-func TestCheckExits3(t *testing.T) {
-	dir := genModule(t, nil)
-	if code, _, errs := velox(t, dir, "./schema"); code != 0 {
-		t.Fatalf("%d %q", code, errs)
+// flagsOf is the flags section of a usage text.
+func flagsOf(t *testing.T, usage string) string {
+	t.Helper()
+	i := strings.Index(usage, "Flags of")
+	if i < 0 {
+		t.Fatalf("no flags section in\n%s", usage)
 	}
-	if code, _, errs := velox(t, dir, "-check", "./schema"); code != 0 {
-		t.Fatalf("fresh: %d %q", code, errs)
+	return usage[i:]
+}
+
+// A bare word that names a directory is probably a package.
+func TestBareWordHint(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "schema"), 0o755); err != nil {
+		t.Fatal(err)
 	}
-	writeFile(t, filepath.Join(dir, "gen", "user_velox.go"), "// Code generated by velox-gen. DO NOT EDIT.\n\npackage gen\n")
-	code, _, errs := velox(t, dir, "generate", "-check", "./schema")
-	if code != 3 || !strings.Contains(errs, "user_velox.go is out of date") {
-		t.Fatalf("%d %q", code, errs)
+	code, out, errs := velox(t, dir, "schema")
+	if want := "velox-gen: unknown subcommand \"schema\"; for the package write ./schema\n"; code != 2 || out != "" || !strings.HasPrefix(errs, want) {
+		t.Errorf("directory: %d %q %q", code, out, errs)
 	}
-	// An error stays 1.
-	if code, _, _ := velox(t, dir, "-check", "./nothing"); code != 1 {
-		t.Errorf("error: %d", code)
+	code, out, errs = velox(t, dir, "nothing")
+	if want := "velox-gen: unknown subcommand \"nothing\"\n"; code != 2 || out != "" || !strings.HasPrefix(errs, want) || strings.Contains(errs, "for the package") {
+		t.Errorf("no directory: %d %q %q", code, out, errs)
 	}
 }
 
