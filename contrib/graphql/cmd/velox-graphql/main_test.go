@@ -52,14 +52,14 @@ func TestRun(t *testing.T) {
 
 	for name, c := range map[string]struct{ in, want string }{
 		"protocol":  {request(t, plugin.Request{Protocol: 2, Model: m}), "protocol 2"},
-		"version":   {request(t, plugin.Request{Protocol: 1, Model: &plugin.Model{Version: 2}}), "model version 2"},
+		"version":   {request(t, plugin.Request{Protocol: 1, Model: &plugin.Model{Version: 1}}), "model version 1"},
 		"no model":  {request(t, plugin.Request{Protocol: 1}), "no model"},
 		"malformed": {"{", "request"},
-		"render": {request(t, plugin.Request{Protocol: 1, Model: &plugin.Model{Version: 1, Entities: []*plugin.Entity{{
+		"render": {request(t, plugin.Request{Protocol: 1, Model: &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
 			Name: "User", Tenant: -1, PrimaryKey: []int{0},
 			Fields: []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64"}, {Name: "x", GoName: "X", Type: "other"}},
 		}}}}), "User"},
-		"go": {request(t, plugin.Request{Protocol: 1, OutPackage: "gen", Model: &plugin.Model{Version: 1, Entities: []*plugin.Entity{{
+		"go": {request(t, plugin.Request{Protocol: 1, OutPackage: "gen", Model: &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
 			Name: "Node", Label: "node", Handles: "Nodes", Tenant: -1, PrimaryKey: []int{0},
 			Fields:      []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64"}, {Name: "x", GoName: "X", Type: "string"}},
 			Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"type":"Vertex"}`)},

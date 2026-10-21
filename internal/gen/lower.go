@@ -127,7 +127,9 @@ func (l *lowerer) entities() {
 			Tenant: -1, Bound: l.cfg.Bound[e.Name],
 		}
 		if raw, ok := e.Annotations["Comment"]; ok {
-			var c struct{ Text string }
+			var c struct {
+				Text string `json:"text"`
+			}
 			if err := json.Unmarshal(raw, &c); err != nil {
 				s.fail("", "its Comment annotation is not a comment: %v", err)
 			}

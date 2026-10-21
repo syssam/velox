@@ -184,9 +184,9 @@ func (g *graph) whereOf(o *object) error {
 			on = strings.TrimSuffix(name, "ID")
 		}
 		// IsNil and NotNil are the handle's IsNull and NotNull, which only a
-		// Nillable field's Null* handle has; only its column holds NULL (an
-		// Optional JSON field's too, but JSON has no predicates).
-		ops, err := resolveOps(a.WhereOps, kind, f.Nillable, where)
+		// nullable field's Null* handle has: a Nillable field's. An Optional
+		// JSON field's column holds NULL too, but JSON has no predicates.
+		ops, err := resolveOps(a.WhereOps, kind, f.Nullable, where)
 		if err != nil {
 			return err
 		}

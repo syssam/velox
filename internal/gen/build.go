@@ -124,7 +124,10 @@ func (b *builder) entities(m *loadjson.Model) {
 		e := &Entity{Name: s.Name, Label: plugin.Snake(s.Name), Fields: []*Field{}, Edges: []*Edge{}, Annotations: s.Annotations}
 		e.Table = plugin.Plural(e.Label)
 		if raw, ok := s.Annotations["Table"]; ok {
-			var t struct{ Schema, Table string }
+			var t struct {
+				Schema string `json:"schema"`
+				Table  string `json:"table"`
+			}
 			if err := json.Unmarshal(raw, &t); err == nil {
 				e.Table, e.TableSchema = cmp.Or(t.Table, e.Table), t.Schema
 			}

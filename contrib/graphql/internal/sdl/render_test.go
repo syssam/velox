@@ -161,8 +161,8 @@ func entity(name string, fields ...*plugin.Field) *plugin.Entity {
 
 // edge is an edge as velox-gen gives it: an M2O holds its key on its own
 // row; set OwnsKey on an inverse or bidirectional O2O.
-func edge(name, kind, target string) *plugin.Edge {
-	return &plugin.Edge{Name: name, GoName: goName(name), Kind: kind, Target: target, Unique: kind == "M2O" || kind == "O2O", OwnsKey: kind == "M2O"}
+func edge(name string, kind plugin.EdgeKind, target string) *plugin.Edge {
+	return &plugin.Edge{Name: name, GoName: goName(name), Kind: kind, Target: target, Unique: kind == plugin.M2O || kind == plugin.O2O, OwnsKey: kind == plugin.M2O}
 }
 
 func model(es ...*plugin.Entity) *plugin.Model {
@@ -279,13 +279,13 @@ func TestTypeMapping(t *testing.T) {
 		{field("raw", "bytes"), "Bytes!"},
 		{field("doc", "json"), "JSON!"},
 		{&plugin.Field{Name: "opt", GoName: "Opt", Type: "string", Optional: true}, "String!"}, // Optional alone: a NOT NULL column
-		{&plugin.Field{Name: "nil_str", GoName: "NilStr", Type: "string", Nullable: true, Nillable: true, Pointer: true}, "String"},
-		{&plugin.Field{Name: "nil_time", GoName: "NilTime", Type: "time", Pointer: true, Nullable: true, Optional: true, Nillable: true}, "Time"},
+		{&plugin.Field{Name: "nil_str", GoName: "NilStr", Type: "string", Nullable: true, Pointer: true}, "String"},
+		{&plugin.Field{Name: "nil_time", GoName: "NilTime", Type: "time", Pointer: true, Nullable: true, Optional: true}, "Time"},
 		{&plugin.Field{Name: "opt_doc", GoName: "OptDoc", Type: "json", Nullable: true, Optional: true}, "JSON"}, // Optional JSON: a NULL-able column, though no pointer
 		{&plugin.Field{Name: "secret", GoName: "Secret", Type: "string", Sensitive: true}, ""},
 		{field("org_id", "int64"), ""}, // the tenant column
 		{&plugin.Field{Name: "level", GoName: "Level", Type: "enum", EnumValues: []string{"low", "high"}}, "UserLevel!"},
-		{&plugin.Field{Name: "mood", GoName: "Mood", Type: "enum", EnumValues: []string{"ok"}, Nullable: true, Nillable: true}, "UserMood"},
+		{&plugin.Field{Name: "mood", GoName: "Mood", Type: "enum", EnumValues: []string{"ok"}, Nullable: true}, "UserMood"},
 	}
 	u := entity("User")
 	for _, c := range cases {
@@ -318,15 +318,15 @@ func TestTypeMapping(t *testing.T) {
 
 	t.Run("foreign keys", func(t *testing.T) {
 		post := entity("Post", field("author_id", "int64"), field("title", "string"))
-		author := edge("author", "M2O", "User")
+		author := edge("author", plugin.M2O, "User")
 		author.Required, author.Field, author.FieldOn = true, "author_id", "Post"
 		post.Edges = []*plugin.Edge{author}
-		cat := entity("Category", &plugin.Field{Name: "category_parent", GoName: "CategoryParent", Type: "int64", Nullable: true, Nillable: true, Implicit: "parent"})
-		parent := edge("parent", "M2O", "Category")
+		cat := entity("Category", &plugin.Field{Name: "category_parent", GoName: "CategoryParent", Type: "int64", Nullable: true, Implicit: "parent"})
+		parent := edge("parent", plugin.M2O, "Category")
 		parent.Field, parent.FieldOn = "category_parent", "Category"
 		cat.Edges = []*plugin.Edge{parent}
 		user := entity("User")
-		posts := edge("posts", "O2M", "Post")
+		posts := edge("posts", plugin.O2M, "Post")
 		posts.Field, posts.FieldOn = "author_id", "Post"
 		user.Edges = []*plugin.Edge{posts}
 		s, _ := load(t, model(cat, post, user))
@@ -403,14 +403,14 @@ func TestTypeMapping(t *testing.T) {
 	t.Run("Type renames", func(t *testing.T) {
 		user := entity("User", &plugin.Field{Name: "role", GoName: "Role", Type: "enum", Enum: "UserRole", EnumValues: []string{"admin"}})
 		user.Annotations = ann(t, graphql.Type("Account"), graphql.QueryField("accounts"))
-		posts := edge("posts", "O2M", "Post")
+		posts := edge("posts", plugin.O2M, "Post")
 		user.Edges = []*plugin.Edge{posts}
 		post := entity("Post")
-		author := edge("author", "M2O", "User")
+		author := edge("author", plugin.M2O, "User")
 		author.Required = true
 		post.Edges = []*plugin.Edge{author}
 		group := entity("Group")
-		group.Edges = []*plugin.Edge{edge("users", "M2M", "User")}
+		group.Edges = []*plugin.Edge{edge("users", plugin.M2M, "User")}
 		m := model(group, post, user)
 		m.Enums = []*plugin.Enum{{Type: "UserRole", Values: []string{"admin"}}}
 		s, sdl := load(t, m)
@@ -455,7 +455,7 @@ func TestTypeMapping(t *testing.T) {
 		name := field("name", "string")
 		name.Annotations = ann(t, graphql.FieldName("displayName"))
 		user := entity("User", name, field("created_at", "time"))
-		posts := edge("posts", "O2M", "User")
+		posts := edge("posts", plugin.O2M, "User")
 		posts.Annotations = ann(t, graphql.FieldName("articles"))
 		user.Edges = []*plugin.Edge{posts}
 		s, _ := load(t, model(user))
@@ -483,15 +483,15 @@ func TestSkip(t *testing.T) {
 		if userAnn.Skip&graphql.SkipType == 0 {
 			user.Annotations = ann(t, userAnn, graphql.QueryField("users"))
 		}
-		posts := edge("posts", "O2M", "Post")
+		posts := edge("posts", plugin.O2M, "Post")
 		posts.Annotations = ann(t, postsAnn)
-		user.Edges = []*plugin.Edge{posts, edge("groups", "M2M", "Group")}
+		user.Edges = []*plugin.Edge{posts, edge("groups", plugin.M2M, "Group")}
 		post := entity("Post", field("author_id", "int64"))
-		author := edge("author", "M2O", "User")
+		author := edge("author", plugin.M2O, "User")
 		author.Field, author.FieldOn = "author_id", "Post"
 		post.Edges = []*plugin.Edge{author}
 		group := entity("Group")
-		group.Edges = []*plugin.Edge{edge("users", "M2M", "User")}
+		group.Edges = []*plugin.Edge{edge("users", plugin.M2M, "User")}
 		return model(group, post, user)
 	}
 
@@ -539,16 +539,16 @@ func TestSkip(t *testing.T) {
 
 func TestEdges(t *testing.T) {
 	cat := entity("Category")
-	parent := edge("parent", "M2O", "Category")
-	children := edge("children", "O2M", "Category")
+	parent := edge("parent", plugin.M2O, "Category")
+	children := edge("children", plugin.O2M, "Category")
 	cat.Edges = []*plugin.Edge{parent, children}
 	user := entity("User")
-	user.Edges = []*plugin.Edge{edge("posts", "O2M", "Post"), edge("groups", "M2M", "Group"), edge("profile", "O2O", "Profile")}
-	plain := edge("tags", "M2M", "Group")
+	user.Edges = []*plugin.Edge{edge("posts", plugin.O2M, "Post"), edge("groups", plugin.M2M, "Group"), edge("profile", plugin.O2O, "Profile")}
+	plain := edge("tags", plugin.M2M, "Group")
 	plain.Annotations = ann(t, graphql.Connection(false))
 	user.Edges = append(user.Edges, plain)
 	post := entity("Post")
-	author := edge("author", "M2O", "User")
+	author := edge("author", plugin.M2O, "User")
 	author.Required = true
 	post.Edges = []*plugin.Edge{author}
 	s, _ := load(t, model(cat, entity("Group"), post, entity("Profile"), user))
@@ -608,11 +608,11 @@ func TestCompositeKey(t *testing.T) {
 		Name: "Like", Tenant: -1, PrimaryKey: []int{0, 1},
 		Fields: []*plugin.Field{field("user_id", "int64"), field("day", "string"), field("weight", "int")},
 	}
-	user := edge("user", "M2O", "User")
+	user := edge("user", plugin.M2O, "User")
 	user.Required, user.Field, user.FieldOn = true, "user_id", "Like"
 	like.Edges = []*plugin.Edge{user}
 	u := entity("User")
-	likes := edge("likes", "O2M", "Like")
+	likes := edge("likes", plugin.O2M, "Like")
 	likes.Field, likes.FieldOn = "user_id", "Like"
 	u.Edges = []*plugin.Edge{likes}
 	u.Annotations = ann(t, graphql.QueryField("users"))
@@ -650,7 +650,7 @@ func TestDescriptions(t *testing.T) {
 	name.Comment = `Says """hello""".`
 	user := entity("User", name)
 	user.Comment = "A user.\n\nTwo paragraphs, the second \"quoted\""
-	posts := edge("posts", "O2M", "User")
+	posts := edge("posts", plugin.O2M, "User")
 	posts.Comment = `The posts, in C:\`
 	user.Edges = []*plugin.Edge{posts}
 	s, _ := load(t, model(user))
@@ -676,7 +676,7 @@ input Opts { a: Boolean, b: String }
 	}}))
 	user := entity("User", name)
 	user.Annotations = ann(t, graphql.Directives(graphql.Directive{Name: "key", Args: map[string]any{"fields": "id"}}))
-	posts := edge("posts", "O2M", "User")
+	posts := edge("posts", plugin.O2M, "User")
 	posts.Annotations = ann(t, graphql.Directives(graphql.Directive{Name: "auth"}))
 	user.Edges = []*plugin.Edge{posts}
 	s, sdl := load(t, model(user), decl)
@@ -714,7 +714,7 @@ func TestDirectiveValidation(t *testing.T) {
 		name.Annotations = ann(t, graphql.Directives(fld...))
 		user := entity("User", name)
 		user.Annotations = ann(t, graphql.Directives(ent...))
-		posts := edge("posts", "O2M", "User")
+		posts := edge("posts", plugin.O2M, "User")
 		posts.Annotations = ann(t, graphql.Directives(edg...))
 		user.Edges = []*plugin.Edge{posts}
 		return model(user)
@@ -827,7 +827,7 @@ func TestNames(t *testing.T) {
 	load(t, model(cafe))
 	renderErr(t, model(entity("Doc", field("naïve", "string"))), "schema Doc, field naïve", `"naïve"`, "graphql.FieldName")
 	e := entity("Doc")
-	e.Edges = []*plugin.Edge{edge("crème", "O2M", "Doc")}
+	e.Edges = []*plugin.Edge{edge("crème", plugin.O2M, "Doc")}
 	renderErr(t, model(e), "schema Doc, edge crème", "graphql.FieldName")
 }
 

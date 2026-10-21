@@ -2,7 +2,10 @@ package schema
 
 // TableAnnotation names the table a schema is stored in, and optionally the
 // database schema that holds it.
-type TableAnnotation struct{ Schema, Table string }
+type TableAnnotation struct {
+	Schema string `json:"schema,omitempty"` // the database schema; "" for the connection's default
+	Table  string `json:"table"`
+}
 
 // Name returns "Table".
 func (*TableAnnotation) Name() string { return "Table" }
@@ -17,7 +20,9 @@ func TableIn(schema, table string) *TableAnnotation {
 
 // CommentAnnotation is the comment of a schema, written to the table where the
 // dialect has table comments and to the generated entity's doc comment.
-type CommentAnnotation struct{ Text string }
+type CommentAnnotation struct {
+	Text string `json:"text"`
+}
 
 // Name returns "Comment".
 func (*CommentAnnotation) Name() string { return "Comment" }

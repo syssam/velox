@@ -122,7 +122,7 @@ func TestMarshal(t *testing.T) {
 	if len(u.Edges) != 3 || u.Edges[2].Name != "parent" || !u.Edges[2].Inline || !u.Edges[2].Inverse || u.Edges[2].Ref != "children" {
 		t.Fatalf("edges %+v", u.Edges)
 	}
-	if compact(u.Annotations["Table"]) != `{"Schema":"","Table":"users"}` {
+	if compact(u.Annotations["Table"]) != `{"table":"users"}` {
 		t.Fatalf("annotations %s", u.Annotations["Table"])
 	}
 	if !u.Indexes[0].Unique || u.Indexes[0].Fields[1] != "name" {
@@ -196,7 +196,7 @@ func (withMerge) Annotations() []schema.Annotation {
 
 func TestAnnotationsMerge(t *testing.T) {
 	a := marshal(t, withMerge{}).Schemas[0].Annotations
-	if compact(a["M"]) != `{"N":3}` || compact(a["Table"]) != `{"Schema":"","Table":"b"}` {
+	if compact(a["M"]) != `{"N":3}` || compact(a["Table"]) != `{"table":"b"}` {
 		t.Fatalf("%s %s", a["M"], a["Table"])
 	}
 }

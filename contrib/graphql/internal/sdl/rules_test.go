@@ -19,7 +19,7 @@ func TestAnnotationMisuse(t *testing.T) {
 	build := func(a anns) *plugin.Model {
 		name := field("name", "string")
 		name.Annotations = ann(t, a.name)
-		nickname := &plugin.Field{Name: "nickname", GoName: "Nickname", Type: "string", Nullable: true, Nillable: true, Optional: true}
+		nickname := &plugin.Field{Name: "nickname", GoName: "Nickname", Type: "string", Nullable: true, Optional: true}
 		nickname.Annotations = ann(t, a.nickname)
 		secret := &plugin.Field{Name: "secret", GoName: "Secret", Type: "string", Sensitive: true}
 		secret.Annotations = ann(t, a.secret)
@@ -32,7 +32,7 @@ func TestAnnotationMisuse(t *testing.T) {
 		user := entity("User", name, nickname, secret, status, handle, org)
 		user.Tenant = 6
 		user.Annotations = ann(t, a.user)
-		posts := edge("posts", "O2M", "User")
+		posts := edge("posts", plugin.O2M, "User")
 		posts.Annotations = ann(t, a.posts)
 		user.Edges = []*plugin.Edge{posts}
 		return model(user)
@@ -95,7 +95,7 @@ func TestAnnotationMisuse(t *testing.T) {
 			aid := field("author_id", "int64")
 			aid.Annotations = ann(t, a)
 			post := entity("Post", aid)
-			author := edge("author", "M2O", "User")
+			author := edge("author", plugin.M2O, "User")
 			author.Field, author.FieldOn = "author_id", "Post"
 			post.Edges = []*plugin.Edge{author}
 			renderErr(t, model(post, entity("User")), "schema Post, field author_id", "foreign key")
@@ -110,7 +110,7 @@ func TestAnnotationMisuse(t *testing.T) {
 			{Name: "User", Tenant: -1, PrimaryKey: []int{0, 1}, Fields: []*plugin.Field{field("a", "string"), field("b", "string")}},
 		} {
 			post := entity("Post", field("title", "string"))
-			author := edge("author", "M2O", "User")
+			author := edge("author", plugin.M2O, "User")
 			author.Required = true
 			post.Edges = []*plugin.Edge{author}
 			post.Annotations = ann(t, graphql.Mutations(graphql.Create()))
@@ -123,7 +123,7 @@ func TestAnnotationMisuse(t *testing.T) {
 		// A required O2O whose key the target's row holds: createUser writes
 		// no key of its own, so it can succeed without the edge.
 		user := entity("User", field("name", "string"))
-		profile := edge("profile", "O2O", "Profile")
+		profile := edge("profile", plugin.O2O, "Profile")
 		profile.Required, profile.Field, profile.FieldOn = true, "user_id", "Profile"
 		user.Edges = []*plugin.Edge{profile}
 		user.Annotations = ann(t, graphql.Mutations(graphql.Create()))

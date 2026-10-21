@@ -16,7 +16,7 @@ func logic(typ string) []string {
 
 func TestWhere(t *testing.T) {
 	t.Run("defaults", func(t *testing.T) {
-		opt := func(f *plugin.Field) *plugin.Field { f.Nullable, f.Nillable, f.Pointer = true, true, true; return f }
+		opt := func(f *plugin.Field) *plugin.Field { f.Nullable, f.Pointer = true, true; return f }
 		// An Optional value: its column is NOT NULL, and its handle has no
 		// IsNull.
 		val := func(f *plugin.Field) *plugin.Field { f.Optional = true; return f }
@@ -61,17 +61,17 @@ func TestWhere(t *testing.T) {
 	t.Run("foreign key", func(t *testing.T) {
 		aid := field("author_id", "int64")
 		aid.Annotations = ann(t, graphql.WhereOps())
-		eid := &plugin.Field{Name: "editor_id", GoName: "EditorID", Type: "int64", Pointer: true, Nullable: true, Optional: true, Nillable: true}
+		eid := &plugin.Field{Name: "editor_id", GoName: "EditorID", Type: "int64", Pointer: true, Nullable: true, Optional: true}
 		eid.Annotations = ann(t, graphql.WhereOps(graphql.OpEQ, graphql.OpIsNil))
 		post := entity("Post", aid, eid)
-		author := edge("author", "M2O", "User")
+		author := edge("author", plugin.M2O, "User")
 		author.Required, author.Field, author.FieldOn = true, "author_id", "Post"
 		author.Annotations = ann(t, graphql.FieldName("writer"))
-		editor := edge("editor", "M2O", "User")
+		editor := edge("editor", plugin.M2O, "User")
 		editor.Field, editor.FieldOn = "editor_id", "Post"
 		post.Edges = []*plugin.Edge{author, editor}
 		user := entity("User")
-		posts := edge("posts", "O2M", "Post")
+		posts := edge("posts", plugin.O2M, "Post")
 		posts.Field, posts.FieldOn = "author_id", "Post"
 		user.Edges = []*plugin.Edge{posts}
 		s, sdl := load(t, model(post, user))
@@ -102,7 +102,7 @@ func TestWhere(t *testing.T) {
 			{graphql.OpIsNil, "nIsNil: Boolean"}, {graphql.OpNotNil, "nNotNil: Boolean"},
 		}
 		for _, c := range ops {
-			n := &plugin.Field{Name: "n", GoName: "N", Type: "string", Pointer: true, Nullable: true, Optional: true, Nillable: true}
+			n := &plugin.Field{Name: "n", GoName: "N", Type: "string", Pointer: true, Nullable: true, Optional: true}
 			n.Annotations = ann(t, graphql.WhereOps(c.op))
 			s, _ := load(t, model(entity("User", n)))
 			want := append(logic("UserWhereInput"), c.want)
@@ -140,16 +140,16 @@ func TestWhere(t *testing.T) {
 
 	t.Run("WhereEdge", func(t *testing.T) {
 		user := entity("User")
-		posts := edge("posts", "O2M", "Post")
+		posts := edge("posts", plugin.O2M, "Post")
 		posts.Annotations = ann(t, graphql.WhereEdge())
-		groups := edge("groups", "M2M", "Group")
+		groups := edge("groups", plugin.M2M, "Group")
 		groups.Annotations = ann(t, graphql.WhereEdge(), graphql.FieldName("memberships"))
-		user.Edges = []*plugin.Edge{posts, groups, edge("profile", "O2O", "Group")}
+		user.Edges = []*plugin.Edge{posts, groups, edge("profile", plugin.O2O, "Group")}
 		user.Annotations = ann(t, graphql.QueryField("users"))
 		title := field("title", "string")
 		title.Annotations = ann(t, graphql.WhereOps())
 		post := entity("Post", title)
-		post.Edges = []*plugin.Edge{edge("author", "M2O", "User")}
+		post.Edges = []*plugin.Edge{edge("author", plugin.M2O, "User")}
 		s, sdl := load(t, model(entity("Group"), post, user))
 		// Group has no where input: memberships gets has, not hasWith.
 		want := append(logic("UserWhereInput"), "hasPosts: Boolean", "hasPostsWith: [PostWhereInput!]", "hasMemberships: Boolean")

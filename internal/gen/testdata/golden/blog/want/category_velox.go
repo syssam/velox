@@ -50,6 +50,9 @@ func categoryDesc() velox.Desc[Category] {
 		},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
+		Indexes: []velox.IndexInfo{
+			{Columns: []int{1, 2}},
+		},
 		Relations: []velox.Relation{
 			velox.EdgeTo[Category]("Children", 0, 2),
 			velox.EdgeTo[Category]("Parent", 2, 0),

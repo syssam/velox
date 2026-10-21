@@ -1,6 +1,9 @@
 package gen
 
 import (
+	"encoding/json"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/syssam/velox2/plugin"
@@ -34,9 +37,8 @@ func PluginModel(g *Graph, o *Out) *plugin.Model {
 	}
 	for _, oe := range o.Entities {
 		pe := &plugin.Entity{
-			Name: oe.Name, Label: oe.Label, Handles: oe.Handles, Table: oe.Table, Join: oe.Join,
-			Comment: oe.Comment, Imports: append([]string{}, oe.Imports...),
-			Fields: make([]*plugin.Field, 0, len(oe.Fields)), Edges: []*plugin.Edge{},
+			Name: oe.Name, Label: oe.Label, Handles: oe.Handles, Table: oe.Table, TableSchema: oe.TableSchema, Join: oe.Join,
+			Comment: oe.Comment, Fields: make([]*plugin.Field, 0, len(oe.Fields)), Edges: []*plugin.Edge{}, Indexes: []*plugin.Index{},
 			PrimaryKey: append([]int{}, oe.PrimaryKey...), Tenant: oe.Tenant,
 		}
 		if oe.Join {
@@ -46,23 +48,24 @@ func PluginModel(g *Graph, o *Out) *plugin.Model {
 		}
 		ge := g.Entity(oe.Name)
 		pe.Annotations = ge.Annotations
+		pe.Indexes = indexes(ge)
 		for _, of := range oe.Fields {
 			gf := ge.Field(of.Name)
 			pe.Fields = append(pe.Fields, &plugin.Field{
 				Name: of.Name, GoName: of.GoName, Column: of.Column,
-				Type: gf.Type, GoType: of.GoType, ElemType: of.ElemType, PkgPath: pkgPathOf(gf), Kind: goKindOf(gf),
-				Pointer: of.Pointer, Nullable: gf.Nillable || gf.Optional && gf.Type == "json", Optional: gf.Optional, Nillable: gf.Nillable,
+				Type: gf.Type, GoType: of.GoType, ElemType: of.ElemType, PkgPath: pkgPathOf(gf), Imports: importsOf(gf), Kind: goKindOf(gf),
+				Pointer: of.Pointer, Nullable: gf.Nillable || gf.Optional && gf.Type == "json", Optional: gf.Optional,
 				Immutable: of.Immutable, Sensitive: of.Sensitive, Unique: gf.Unique,
-				AutoID: gf.AutoID, HasDefault: of.DefaultCode != "" || of.DefaultFuncCode != "",
+				AutoID: gf.AutoID, Size: gf.Size, HasDefault: of.DefaultCode != "" || of.DefaultFuncCode != "", Default: literalDefault(gf),
 				UpdateDefault: gf.UpdateDefault, Implicit: gf.Implicit,
-				Enum: enumOf(gf, of, enums), EnumValues: enumValues(gf), Comment: gf.Comment,
-				Annotations: gf.Annotations,
+				Enum: enumOf(gf, of, enums), EnumValues: enumValues(gf), Checks: checks(gf), SchemaType: maps.Clone(gf.SchemaType),
+				Comment: gf.Comment, Annotations: gf.Annotations,
 			})
 		}
 		for _, ed := range ge.Edges {
 			pe.Edges = append(pe.Edges, &plugin.Edge{
 				Name: ed.Name, GoName: ed.GoName, Target: ed.Target, Ref: ed.Ref,
-				Kind: ed.Rel.Kind, Unique: ed.Unique, Required: ed.Required, Inverse: ed.Inverse,
+				Kind: plugin.EdgeKind(ed.Rel.Kind), Unique: ed.Unique, Required: ed.Required, Inverse: ed.Inverse,
 				Immutable: ed.Immutable, Field: ed.Field, FieldOn: fieldOn(ge, ed), OwnsKey: ed.Field != "" && ownFK(ed), Join: joinOf(ed, joins),
 				Comment: ed.Comment, Annotations: ed.Annotations,
 			})
@@ -98,6 +101,67 @@ func pkgPathOf(gf *Field) string {
 		return "time"
 	}
 	return ""
+}
+
+// importsOf are the import paths the Go type of gf mentions, sorted: the
+// schema's Go type's, else time's for a time field; nil for a builtin type
+// and velox-gen's own enum types.
+func importsOf(gf *Field) []string {
+	switch {
+	case gf.GoType != nil:
+		if len(gf.GoType.Imports) == 0 {
+			return nil
+		}
+		return slices.Sorted(slices.Values(gf.GoType.Imports))
+	case gf.Type == "time":
+		return []string{"time"}
+	}
+	return nil
+}
+
+// literalDefault is the literal Default of gf as compact JSON, or nil: a func
+// default has none, and a DefaultFunc replaces a literal.
+func literalDefault(gf *Field) json.RawMessage {
+	if gf.DefaultFunc || len(gf.Default) == 0 {
+		return nil
+	}
+	return json.RawMessage(compact(gf.Default))
+}
+
+// checks are the built-in validators of gf, in declaration order.
+func checks(gf *Field) []plugin.Check {
+	if len(gf.Checks) == 0 {
+		return nil
+	}
+	cs := make([]plugin.Check, 0, len(gf.Checks))
+	for _, c := range gf.Checks {
+		var args []json.RawMessage
+		for _, a := range c.Args {
+			args = append(args, json.RawMessage(compact(a)))
+		}
+		cs = append(cs, plugin.Check{Kind: c.Kind, Args: args})
+	}
+	return cs
+}
+
+// indexes are the declared indexes of e, by the Names of the fields that hold
+// their columns, with the names Build gave them.
+func indexes(e *Entity) []*plugin.Index {
+	byColumn := make(map[string]string, len(e.Fields))
+	for _, f := range e.Fields {
+		if _, ok := byColumn[f.Column]; !ok {
+			byColumn[f.Column] = f.Name
+		}
+	}
+	out := make([]*plugin.Index, 0, len(e.Indexes))
+	for _, ix := range e.Indexes {
+		pi := &plugin.Index{Name: ix.Name, Fields: make([]string, 0, len(ix.Columns)), Unique: ix.Unique, Where: ix.Where}
+		for _, c := range ix.Columns {
+			pi.Fields = append(pi.Fields, byColumn[c])
+		}
+		out = append(out, pi)
+	}
+	return out
 }
 
 // goKindOf is the reflect kind of the schema's Go type of gf, or "" when the
@@ -154,25 +218,29 @@ func joinOf(ed *Edge, joins map[string]string) string {
 // found through the many-to-many edge that makes the join entity. That edge's
 // owner side lists the columns in the join entity's order.
 func joinFields(g *Graph, oe *OutEntity) []*plugin.Field {
-	types := make([]string, len(oe.Fields))
+	ids := make([]*Field, len(oe.Fields))
 	for _, e := range g.Entities {
 		for _, ed := range e.Edges {
-			if ed.Rel.Kind != "M2M" || ed.Inverse || ed.Rel.Table != oe.Table || types[0] != "" {
+			if ed.Rel.Kind != "M2M" || ed.Inverse || ed.Rel.Table != oe.Table || ids[0] != nil {
 				continue
 			}
-			types[0] = e.Fields[0].Type
+			ids[0] = e.Fields[0]
 			if t := g.Entity(ed.Target); t != nil {
-				types[1] = t.Fields[0].Type
+				ids[1] = t.Fields[0]
 			}
 		}
 	}
 	fields := make([]*plugin.Field, 0, len(oe.Fields))
 	for i, of := range oe.Fields {
-		fields = append(fields, &plugin.Field{
+		pf := &plugin.Field{
 			Name: of.Name, GoName: of.GoName, Column: of.Column,
-			Type: types[i], GoType: of.GoType, ElemType: of.ElemType,
+			GoType: of.GoType, ElemType: of.ElemType,
 			Pointer: of.Pointer, Immutable: of.Immutable, Sensitive: of.Sensitive, Comment: of.Comment,
-		})
+		}
+		if id := ids[i]; id != nil {
+			pf.Type, pf.Imports = id.Type, importsOf(id)
+		}
+		fields = append(fields, pf)
 	}
 	return fields
 }

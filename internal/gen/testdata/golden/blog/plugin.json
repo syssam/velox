@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "schema_path": "example.com/tmp/schema",
   "entities": [
     {
@@ -7,7 +7,7 @@
       "label": "category",
       "handles": "Categories",
       "table": "categories",
-      "imports": [],
+      "table_schema": "blog",
       "fields": [
         {
           "name": "id",
@@ -24,7 +24,10 @@
           "column": "title",
           "type": "string",
           "go_type": "string",
-          "elem_type": "string"
+          "elem_type": "string",
+          "schema_type": {
+            "postgres": "varchar(200)"
+          }
         },
         {
           "name": "category_children",
@@ -36,7 +39,6 @@
           "pointer": true,
           "nullable": true,
           "optional": true,
-          "nillable": true,
           "implicit": "parent"
         }
       ],
@@ -63,14 +65,23 @@
           "owns_key": true
         }
       ],
+      "indexes": [
+        {
+          "name": "categories_title_category_children",
+          "fields": [
+            "title",
+            "category_children"
+          ]
+        }
+      ],
       "primary_key": [
         0
       ],
       "tenant": -1,
       "annotations": {
         "Table": {
-          "Schema": "blog",
-          "Table": "categories"
+          "schema": "blog",
+          "table": "categories"
         }
       }
     },
@@ -79,7 +90,6 @@
       "label": "group",
       "handles": "Groups",
       "table": "groups",
-      "imports": [],
       "fields": [
         {
           "name": "id",
@@ -119,6 +129,7 @@
           "join": "UserGroup"
         }
       ],
+      "indexes": [],
       "primary_key": [
         0
       ],
@@ -129,11 +140,6 @@
       "label": "post",
       "handles": "Posts",
       "table": "posts",
-      "imports": [
-        "encoding/json",
-        "errors",
-        "time"
-      ],
       "fields": [
         {
           "name": "id",
@@ -158,7 +164,12 @@
           "column": "title",
           "type": "string",
           "go_type": "string",
-          "elem_type": "string"
+          "elem_type": "string",
+          "checks": [
+            {
+              "kind": "NotEmpty"
+            }
+          ]
         },
         {
           "name": "slug",
@@ -176,6 +187,7 @@
           "go_type": "PostStatus",
           "elem_type": "PostStatus",
           "has_default": true,
+          "default": "draft",
           "enum": "PostStatus",
           "enum_values": [
             "draft",
@@ -190,10 +202,12 @@
           "go_type": "*time.Time",
           "elem_type": "time.Time",
           "pkg_path": "time",
+          "imports": [
+            "time"
+          ],
           "pointer": true,
           "nullable": true,
-          "optional": true,
-          "nillable": true
+          "optional": true
         },
         {
           "name": "tags",
@@ -203,7 +217,10 @@
           "go_type": "[]string",
           "elem_type": "[]string",
           "kind": "slice",
-          "has_default": true
+          "has_default": true,
+          "default": [
+            "new"
+          ]
         },
         {
           "name": "views",
@@ -211,7 +228,15 @@
           "column": "views",
           "type": "int",
           "go_type": "int",
-          "elem_type": "int"
+          "elem_type": "int",
+          "checks": [
+            {
+              "kind": "Min",
+              "args": [
+                0
+              ]
+            }
+          ]
         }
       ],
       "edges": [
@@ -229,6 +254,7 @@
           "owns_key": true
         }
       ],
+      "indexes": [],
       "primary_key": [
         0
       ],
@@ -240,11 +266,6 @@
       "handles": "Users",
       "table": "users",
       "comment": "User is a person who writes posts.",
-      "imports": [
-        "errors",
-        "regexp",
-        "time"
-      ],
       "fields": [
         {
           "name": "id",
@@ -263,6 +284,9 @@
           "go_type": "time.Time",
           "elem_type": "time.Time",
           "pkg_path": "time",
+          "imports": [
+            "time"
+          ],
           "immutable": true,
           "has_default": true
         },
@@ -274,6 +298,9 @@
           "go_type": "time.Time",
           "elem_type": "time.Time",
           "pkg_path": "time",
+          "imports": [
+            "time"
+          ],
           "has_default": true,
           "update_default": true
         },
@@ -283,7 +310,15 @@
           "column": "created_by",
           "type": "string",
           "go_type": "string",
-          "elem_type": "string"
+          "elem_type": "string",
+          "checks": [
+            {
+              "kind": "MinLen",
+              "args": [
+                2
+              ]
+            }
+          ]
         },
         {
           "name": "org_id",
@@ -300,6 +335,18 @@
           "type": "string",
           "go_type": "string",
           "elem_type": "string",
+          "size": 50,
+          "checks": [
+            {
+              "kind": "NotEmpty"
+            },
+            {
+              "kind": "MaxLen",
+              "args": [
+                50
+              ]
+            }
+          ],
           "comment": "The display name."
         },
         {
@@ -309,7 +356,15 @@
           "type": "string",
           "go_type": "string",
           "elem_type": "string",
-          "unique": true
+          "unique": true,
+          "checks": [
+            {
+              "kind": "Match",
+              "args": [
+                "^[^@]+@[^@]+$"
+              ]
+            }
+          ]
         },
         {
           "name": "role",
@@ -319,6 +374,7 @@
           "go_type": "UserRole",
           "elem_type": "UserRole",
           "has_default": true,
+          "default": "viewer",
           "enum": "UserRole",
           "enum_values": [
             "admin",
@@ -344,7 +400,7 @@
           "elem_type": "string",
           "pointer": true,
           "nullable": true,
-          "nillable": true
+          "size": 2147483647
         },
         {
           "name": "age",
@@ -353,7 +409,16 @@
           "type": "int",
           "go_type": "int",
           "elem_type": "int",
-          "optional": true
+          "optional": true,
+          "checks": [
+            {
+              "kind": "Range",
+              "args": [
+                0,
+                150
+              ]
+            }
+          ]
         },
         {
           "name": "password_hash",
@@ -373,8 +438,8 @@
           "elem_type": "float64",
           "pointer": true,
           "nullable": true,
-          "nillable": true,
-          "has_default": true
+          "has_default": true,
+          "default": 1.5
         }
       ],
       "edges": [
@@ -396,13 +461,23 @@
           "join": "UserGroup"
         }
       ],
+      "indexes": [
+        {
+          "name": "users_org_id_name_unique",
+          "fields": [
+            "org_id",
+            "name"
+          ],
+          "unique": true
+        }
+      ],
       "primary_key": [
         0
       ],
       "tenant": 4,
       "annotations": {
         "Comment": {
-          "Text": "User is a person who writes posts."
+          "text": "User is a person who writes posts."
         }
       }
     },
@@ -412,7 +487,6 @@
       "handles": "UserGroups",
       "table": "user_groups",
       "join": true,
-      "imports": [],
       "fields": [
         {
           "name": "user_id",
@@ -432,6 +506,7 @@
         }
       ],
       "edges": [],
+      "indexes": [],
       "primary_key": [
         0,
         1

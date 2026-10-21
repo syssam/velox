@@ -20,15 +20,15 @@ func TestOrder(t *testing.T) {
 		rank.Annotations = ann(t, graphql.OrderField("RANK"), graphql.Skip(graphql.SkipOrderField))
 		user := entity("User", name, field("email", "string"), created, rank)
 		user.Annotations = ann(t, graphql.QueryField("users"), userAnn)
-		user.Edges = []*plugin.Edge{edge("posts", "O2M", "Post"), edge("tags", "M2M", "Tag")}
+		user.Edges = []*plugin.Edge{edge("posts", plugin.O2M, "Post"), edge("tags", plugin.M2M, "Tag")}
 		title := field("title", "string")
 		title.Annotations = ann(t, graphql.OrderField("TITLE"))
 		post := entity("Post", title)
 		post.Annotations = ann(t, graphql.QueryField("posts"), graphql.MultiOrder())
-		post.Edges = []*plugin.Edge{edge("author", "M2O", "User")}
+		post.Edges = []*plugin.Edge{edge("author", plugin.M2O, "User")}
 		tag := entity("Tag", field("label", "string"))
 		tag.Annotations = ann(t, graphql.QueryField("tags"))
-		tag.Edges = []*plugin.Edge{edge("users", "M2M", "User")}
+		tag.Edges = []*plugin.Edge{edge("users", plugin.M2M, "User")}
 		return model(post, tag, user)
 	}
 

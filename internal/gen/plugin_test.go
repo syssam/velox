@@ -3,10 +3,12 @@ package gen
 import (
 	"bytes"
 	"encoding/json"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/syssam/velox2/plugin"
 	"github.com/syssam/velox2/schema"
@@ -121,7 +123,7 @@ func TestPluginModelGolden(t *testing.T) {
 	if pw := pluginField(t, user, "password_hash"); !pw.Sensitive {
 		t.Fatalf("password_hash %+v", pw)
 	}
-	if bio := pluginField(t, user, "bio"); bio.Optional || !bio.Nillable || !bio.Pointer || !bio.Nullable || bio.GoType != "*string" || bio.ElemType != "string" || bio.PkgPath != "" {
+	if bio := pluginField(t, user, "bio"); bio.Optional || !bio.Pointer || !bio.Nullable || bio.GoType != "*string" || bio.ElemType != "string" || bio.PkgPath != "" {
 		t.Fatalf("bio %+v", bio)
 	}
 	// The package of a named Go type, which a plugin imports to write it.
@@ -177,6 +179,181 @@ func TestPluginModelGolden(t *testing.T) {
 	}
 	if !bytes.Equal(got, want) {
 		t.Errorf("plugin.json differs at line %d; run with -update", firstDiff(string(got), string(want)))
+	}
+}
+
+// TestPluginModel2 pins what model 2 adds to the blog's model and what it
+// drops: the table's schema, the indexes with their names, a field's imports,
+// size, literal default, checks and schema types; Nillable and the entity's
+// imports are gone.
+func TestPluginModel2(t *testing.T) {
+	g, o := blogModel(t)
+	m := PluginModel(g, o)
+	if m.Version != 2 {
+		t.Fatalf("model version %d, want 2", m.Version)
+	}
+	user, post, cat, group := pluginEntity(t, m, "User"), pluginEntity(t, m, "Post"), pluginEntity(t, m, "Category"), pluginEntity(t, m, "Group")
+	if cat.TableSchema != "blog" || cat.Table != "categories" || user.TableSchema != "" {
+		t.Errorf("table schema %q.%q, user %q", cat.TableSchema, cat.Table, user.TableSchema)
+	}
+
+	// Indexes: by field Names, implicit foreign keys included, with the
+	// name the database gets.
+	if len(user.Indexes) != 1 {
+		t.Fatalf("user indexes %+v", user.Indexes)
+	}
+	if ix := user.Indexes[0]; ix.Name != "users_org_id_name_unique" || strings.Join(ix.Fields, ",") != "org_id,name" || !ix.Unique || ix.Where != "" {
+		t.Errorf("user index %+v", ix)
+	}
+	parent := pluginEdge(t, cat, "parent")
+	if pluginField(t, cat, parent.Field).Implicit != "parent" {
+		t.Fatalf("parent's key %q is not implicit", parent.Field)
+	}
+	if len(cat.Indexes) != 1 {
+		t.Fatalf("category indexes %+v", cat.Indexes)
+	}
+	if ix := cat.Indexes[0]; ix.Name != "categories_title_"+parent.Field || strings.Join(ix.Fields, ",") != "title,"+parent.Field || ix.Unique {
+		t.Errorf("category index %+v", ix)
+	}
+	if post.Indexes == nil || len(post.Indexes) != 0 {
+		t.Errorf("post indexes %#v: want an empty list", post.Indexes)
+	}
+
+	// Imports: the paths a field's Go type mentions; none for a builtin type
+	// or velox-gen's own enum, nor for a join entity's int64 IDs.
+	if c := pluginField(t, user, "created_at"); strings.Join(c.Imports, ",") != "time" {
+		t.Errorf("created_at imports %v", c.Imports)
+	}
+	for _, f := range []*plugin.Field{pluginField(t, user, "name"), pluginField(t, user, "role"), pluginField(t, post, "tags"), pluginField(t, user, "id")} {
+		if f.Imports != nil {
+			t.Errorf("%s imports %v, want none", f.Name, f.Imports)
+		}
+	}
+	for _, f := range pluginEntity(t, m, "UserGroup").Fields {
+		if f.Imports != nil {
+			t.Errorf("join field %s imports %v", f.Name, f.Imports)
+		}
+	}
+
+	// Size, from MaxLen; Text's is the largest.
+	if n, b := pluginField(t, user, "name"), pluginField(t, user, "bio"); n.Size != 50 || b.Size != math.MaxInt32 || pluginField(t, user, "email").Size != 0 {
+		t.Errorf("sizes: name %d, bio %d", n.Size, b.Size)
+	}
+
+	// Default: the literal, as JSON; absent for a func default.
+	for f, want := range map[*plugin.Field]string{
+		pluginField(t, user, "role"):       `"viewer"`,
+		pluginField(t, user, "score"):      `1.5`,
+		pluginField(t, post, "tags"):       `["new"]`,
+		pluginField(t, post, "status"):     `"draft"`,
+		pluginField(t, group, "token"):     ``,
+		pluginField(t, user, "created_at"): ``,
+		pluginField(t, user, "nickname"):   ``,
+	} {
+		if string(f.Default) != want {
+			t.Errorf("%s default %s, want %s", f.Name, f.Default, want)
+		}
+	}
+	if !pluginField(t, group, "token").HasDefault {
+		t.Error("token has a func default")
+	}
+
+	// Checks, in declaration order.
+	kinds := func(f *plugin.Field) string {
+		var ks []string
+		for _, c := range f.Checks {
+			ks = append(ks, c.Kind)
+		}
+		return strings.Join(ks, ",")
+	}
+	if n := pluginField(t, user, "name"); kinds(n) != "NotEmpty,MaxLen" || len(n.Checks[1].Args) != 1 || string(n.Checks[1].Args[0]) != "50" || n.Checks[0].Args != nil {
+		t.Errorf("name checks %+v", n.Checks)
+	}
+	if a := pluginField(t, user, "age"); kinds(a) != "Range" || len(a.Checks[0].Args) != 2 {
+		t.Errorf("age checks %+v", a.Checks)
+	}
+	if kinds(pluginField(t, user, "nickname")) != "" {
+		t.Error("nickname has checks")
+	}
+
+	// SchemaType, per dialect.
+	if st := pluginField(t, cat, "title").SchemaType; len(st) != 1 || st["postgres"] != "varchar(200)" {
+		t.Errorf("title schema type %v", st)
+	}
+
+	// Edge kinds are the constants.
+	if pluginEdge(t, user, "groups").Kind != plugin.M2M || pluginEdge(t, user, "posts").Kind != plugin.O2M || parent.Kind != plugin.M2O {
+		t.Error("edge kinds")
+	}
+
+	// Nillable and the entity's imports are gone from the JSON.
+	b, err := json.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw struct {
+		Entities []map[string]json.RawMessage `json:"entities"`
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range raw.Entities {
+		if _, ok := e["imports"]; ok {
+			t.Errorf("entity %s has imports", e["name"])
+		}
+		if _, ok := e["indexes"]; !ok {
+			t.Errorf("entity %s has no indexes key", e["name"])
+		}
+	}
+	if bytes.Contains(b, []byte(`"nillable"`)) {
+		t.Error("the model has a nillable key")
+	}
+}
+
+// A many-to-many edge to an entity whose ID has a Go type: the join entity's
+// field holds that ID, and imports its package.
+type plDocID string
+
+type PlDoc struct{ schema.Schema }
+
+func (PlDoc) Fields() []schema.Field {
+	return []schema.Field{
+		field.String("id").GoType(plDocID("")).MaxLen(36),
+		field.JSON("stamps", map[string][]time.Time{}).Optional(),
+		field.Time("at").GoType(plStamp{}).Default(func() time.Time { return time.Time{} }),
+	}
+}
+func (PlDoc) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("readers", PlReader.Type).Ref("docs")}
+}
+
+type plStamp time.Time
+
+type PlReader struct{ schema.Schema }
+
+func (PlReader) Edges() []schema.Edge { return []schema.Edge{edge.To("docs", PlDoc.Type)} }
+
+func TestPluginModel2Imports(t *testing.T) {
+	g := mustBuild(t, PlDoc{}, PlReader{})
+	o, err := Lower(g, Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := PluginModel(g, o)
+	doc := pluginEntity(t, m, "PlDoc")
+	const self = "github.com/syssam/velox2/internal/gen"
+	// A time GoType's own package alone: its type mentions no other.
+	for name, want := range map[string]string{"id": self, "stamps": "time", "at": self} {
+		if got := strings.Join(pluginField(t, doc, name).Imports, ","); got != want {
+			t.Errorf("%s imports %s, want %s", name, got, want)
+		}
+	}
+	if d := pluginField(t, doc, "at"); d.Default != nil || !d.HasDefault {
+		t.Errorf("at: a func default has no literal: %s", d.Default)
+	}
+	join := pluginEntity(t, m, pluginEdge(t, pluginEntity(t, m, "PlReader"), "docs").Join)
+	if join.Fields[0].Imports != nil || strings.Join(join.Fields[1].Imports, ",") != self {
+		t.Errorf("join imports %v, %v", join.Fields[0].Imports, join.Fields[1].Imports)
 	}
 }
 
@@ -271,8 +448,8 @@ func TestPluginModelJoinTypesAndComments(t *testing.T) {
 	if st.Enum != "lwStatus" || strings.Join(st.EnumValues, ",") != "on,off" || st.Nullable || st.ElemType != "gen.lwStatus" || st.PkgPath != "github.com/syssam/velox2/internal/gen" || st.Kind != "string" {
 		t.Errorf("st %+v", st)
 	}
-	if len(owner.Imports) == 0 {
-		t.Errorf("imports %v", owner.Imports)
+	if strings.Join(st.Imports, ",") != "github.com/syssam/velox2/internal/gen" {
+		t.Errorf("st imports %v", st.Imports)
 	}
 	// The foreign key of an O2M is in the target's table; of an M2M, none.
 	if pets := pluginEdge(t, owner, "pets"); pets.FieldOn != "PlPet" || pets.Field == "" {
@@ -307,14 +484,14 @@ func TestPluginModelOwnsKey(t *testing.T) {
 	m := PluginModel(g, o)
 	tree := pluginEntity(t, m, "PlTree")
 	for name, want := range map[string]struct {
-		kind string
+		kind plugin.EdgeKind
 		owns bool
 	}{
-		"children": {"O2M", false}, // the children's rows hold it
-		"parent":   {"M2O", true},
-		"mentee":   {"O2O", false}, // the mentee's row holds it, through mentor
-		"mentor":   {"O2O", true},  // the inverse side holds it
-		"twin":     {"O2O", true},  // bidirectional: the one key is on the row
+		"children": {plugin.O2M, false}, // the children's rows hold it
+		"parent":   {plugin.M2O, true},
+		"mentee":   {plugin.O2O, false}, // the mentee's row holds it, through mentor
+		"mentor":   {plugin.O2O, true},  // the inverse side holds it
+		"twin":     {plugin.O2O, true},  // bidirectional: the one key is on the row
 	} {
 		ed := pluginEdge(t, tree, name)
 		if ed.Kind != want.kind || ed.OwnsKey != want.owns || ed.FieldOn != "PlTree" || ed.Field == "" {

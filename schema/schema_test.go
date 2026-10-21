@@ -17,15 +17,17 @@ func TestSchemaDefaults(t *testing.T) {
 	_ = User.Type // the method expression edges use
 }
 
-func TestTableAnnotations(t *testing.T) {
+// TestAnnotationJSON pins the annotations' lower-case JSON keys, which
+// velox-gen and plugins read.
+func TestAnnotationJSON(t *testing.T) {
 	for _, c := range []struct {
 		a    schema.Annotation
 		name string
 		js   string
 	}{
-		{schema.Table("users"), "Table", `{"Schema":"","Table":"users"}`},
-		{schema.TableIn("billing", "invoices"), "Table", `{"Schema":"billing","Table":"invoices"}`},
-		{schema.Comment("a user"), "Comment", `{"Text":"a user"}`},
+		{schema.Table("users"), "Table", `{"table":"users"}`},
+		{schema.TableIn("s", "t"), "Table", `{"schema":"s","table":"t"}`},
+		{schema.Comment("a user"), "Comment", `{"text":"a user"}`},
 	} {
 		b, err := json.Marshal(c.a)
 		if err != nil || string(b) != c.js || c.a.Name() != c.name {

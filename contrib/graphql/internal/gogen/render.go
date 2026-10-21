@@ -323,8 +323,8 @@ var locals = map[string]bool{
 // names it: typ as it is when it names no package, unqualified when pkg is
 // the generated package, else with pkg imported. The qualifier is typ's own,
 // the package's name, unless it is one of locals, when the import is named
-// <qualifier>pkg. With no pkg, the qualifier names one of the entity's
-// imports, as in a model from before plugin.Field.PkgPath.
+// <qualifier>pkg. With no pkg, the qualifier names one of the field's
+// imports, as for a join entity's field, which holds another entity's ID.
 func (r *renderer) qualify(f *file, e *plugin.Entity, fd *plugin.Field, typ, pkg string) (string, error) {
 	q, name, ok := strings.Cut(typ, ".")
 	switch {
@@ -334,7 +334,7 @@ func (r *renderer) qualify(f *file, e *plugin.Entity, fd *plugin.Field, typ, pkg
 		return "", fmt.Errorf("schema %s, field %s: velox-graphql cannot name the Go type %s", e.Name, fd.Name, typ)
 	}
 	if pkg == "" {
-		for _, imp := range e.Imports {
+		for _, imp := range fd.Imports {
 			if path.Base(imp) == q {
 				pkg = imp
 			}

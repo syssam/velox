@@ -114,8 +114,8 @@ func (g *graph) mutationsOf(o *object) error {
 //     a Default (or DefaultFunc), so an UpdateDefault alone does not make it
 //     optional;
 //     a unique edge's ID is required when the edge is;
-//   - on update, every field is optional, and a Nillable field, which alone
-//     has a Null* handle to set NULL, can be cleared;
+//   - on update, every field is optional, and a nullable field, whose column
+//     holds NULL, can be cleared;
 //   - an edge to a type that is not a Node has no ID and is in neither;
 //   - an edge's inputs follow its foreign key's flags, on whichever entity
 //     holds it (see edgeInputs).
@@ -158,7 +158,7 @@ func (g *graph) inputFields(o *object, typ string, create bool) ([]gqlField, err
 		if err := fs.add(gqlField{name: name, typ: t, desc: f.Comment, where: where}); err != nil {
 			return nil, err
 		}
-		if !create && f.Nillable {
+		if !create && f.Nullable {
 			if err := fs.add(gqlField{name: "clear" + upper(name), typ: "Boolean", where: where}); err != nil {
 				return nil, err
 			}
@@ -224,7 +224,7 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]gqlField, error) {
 	one, many := upper(plugin.Singular(name)), plugin.Singular(name)
 	var out []gqlField
 	switch {
-	case ed.Kind == "M2M":
+	case ed.Kind == plugin.M2M:
 		if immutable && !create {
 			break
 		}
