@@ -517,3 +517,25 @@ func TestPaginateClearsOffset(t *testing.T) {
 		t.Errorf("totalCount %d %v, want 10", n, err)
 	}
 }
+
+// TestConnectionRefusesOrderedQuery: a base query with an OrderBy would put
+// its order before the connection's and break every cursor after the first
+// page. It is the application's bug, so the error is internal (uncoded), and
+// nothing is queried.
+func TestConnectionRefusesOrderedQuery(t *testing.T) {
+	db, st := peopleDB(t)
+	ctx := veloxgql.NewExtension(db).Context(context.Background())
+	q := db.Query[person]().OrderBy(people.Age.Asc())
+	c, err := gqlimpl.NewConnection(ctx, q, "Person", gqlimpl.Args{First: intp(2)}, nil, personKey())
+	want := "veloxgql: PersonsConnectionOf: the base query has an OrderBy; the connection orders by its orderBy argument"
+	if c != nil || err == nil || err.Error() != want {
+		t.Fatalf("%v %v, want no connection and %q", c, err, want)
+	}
+	var coded interface{ Extensions() map[string]any }
+	if errors.As(err, &coded) {
+		t.Errorf("the error is coded: %v", coded.Extensions())
+	}
+	if ran := st.take(); len(ran) != 0 {
+		t.Errorf("ran %v", ran)
+	}
+}

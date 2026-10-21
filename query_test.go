@@ -366,3 +366,24 @@ func TestABrokenRelationIsAnError(t *testing.T) {
 		}
 	}
 }
+
+func TestQueryOrdered(t *testing.T) {
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{})
+	q := db.Query[testmodel.Invoice]()
+	if q.Ordered() {
+		t.Error("a new query is ordered")
+	}
+	if q.Where(I.OrgID.EQ(1)).Limit(1).Ordered() {
+		t.Error("a query with no OrderBy is ordered")
+	}
+	o := q.OrderBy(I.ID.Asc())
+	if !o.Ordered() || !o.Limit(1).Ordered() {
+		t.Error("a query with an OrderBy is not ordered")
+	}
+	if q.Ordered() {
+		t.Error("OrderBy changed the query it was called on")
+	}
+	if q.OrderBy().Ordered() {
+		t.Error("OrderBy with no orderings makes the query ordered")
+	}
+}

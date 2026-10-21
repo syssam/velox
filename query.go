@@ -75,6 +75,11 @@ func (q Query[E]) OrderBy[_ Lazy[E]](os ...Order[E]) Query[E] {
 	return q
 }
 
+// Ordered reports whether OrderBy was called on the query with at least one
+// ordering. A caller that must order the query itself, such as a paginator,
+// uses it to refuse a query already ordered.
+func (q Query[E]) Ordered[_ Lazy[E]]() bool { return len(q.st.OrderBy) > 0 }
+
 // Limit returns the query returning at most n rows. n <= 0 removes the limit;
 // a query with no limit fails with ErrUnbounded unless it says Unbounded.
 func (q Query[E]) Limit[_ Lazy[E]](n int) Query[E] {

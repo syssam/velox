@@ -138,8 +138,10 @@ your schema and clients.
 
    The query keeps its filters, its `With` loads and the tenant scope. Its
    `Offset` is cleared and its `Limit` replaced: the page is the
-   connection's. It must have no `OrderBy`, since the connection orders it
-   (the core has no accessor to refuse one, so this is a rule, not a check).
+   connection's. It must have no `OrderBy`, which `ConnectionOf` refuses with
+   an internal error (`velox.Query.Ordered`), since the connection orders it.
+   It must also select the key and the columns `orderBy` names: a `Columns`
+   or `Omit` that drops them breaks the cursors, and nothing refuses it.
 
 `main_test.go` sends each over HTTP and checks the JSON response and the
 statements sent exactly.

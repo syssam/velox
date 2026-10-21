@@ -9,6 +9,7 @@ import (
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
+	"github.com/syssam/velox2/plugin"
 )
 
 // Args are a connection's paging arguments, as the client gave them.
@@ -106,11 +107,18 @@ type Connection[E any] struct {
 // NewConnection is the connection to the nodes of the GraphQL type typ that q
 // returns, paged by args, in the order order and then key, the columns of
 // the primary key (each ASC). q holds the connection's filters and no order:
-// the connection orders it; its Offset is cleared and its Limit replaced, as
+// the connection orders it, and a q with an OrderBy is refused with an
+// internal error, since its order would come first and break the cursors. q
+// must also select the key and the order's columns (no Columns or Omit that
+// drops them): a cursor is taken from the rows. Its Offset is cleared and its Limit replaced, as
 // the page is the connection's. The limits are veloxgql.LimitsFrom(ctx)'s. It
 // checks the arguments and decodes the cursor, and fails as paginate does,
 // before any query runs; it runs none.
 func NewConnection[E any](ctx context.Context, q velox.Query[E], typ string, args Args, order, key []OrderTerm[E]) (*Connection[E], error) {
+	if q.Ordered() {
+		// The application's bug, not the client's: an uncoded error.
+		return nil, fmt.Errorf("veloxgql: %sConnectionOf: the base query has an OrderBy; the connection orders by its orderBy argument", plugin.Plural(typ))
+	}
 	lim := veloxgql.LimitsFrom(ctx)
 	n, back, err := pageSize(args, lim.MaxPage)
 	if err != nil {

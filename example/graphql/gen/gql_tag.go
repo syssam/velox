@@ -106,9 +106,11 @@ func LabelsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, b
 // by where, ordered by orderBy and then the key, and paged by the other
 // arguments. q keeps its filters and With loads, and the scope the application
 // gave it; its Offset is cleared and its Limit replaced, since the page is the
-// connection's. q must have no OrderBy: the connection orders it, by the key at
-// last, and an OrderBy of q would come first and break the cursors. It runs no
-// query.
+// connection's. q must have no OrderBy: the connection orders it, and a q with
+// one is refused with an internal error, since its order would come first and
+// break the cursors. q must also select the key and the columns orderBy names:
+// a Columns or Omit that drops them breaks the cursors, and nothing refuses it.
+// It runs no query.
 func LabelsConnectionOf(ctx context.Context, q velox.Query[Tag], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *LabelOrder, where *LabelWhereInput) (*LabelConnection, error) {
 	if where != nil {
 		p, err := where.Pred(ctx)
