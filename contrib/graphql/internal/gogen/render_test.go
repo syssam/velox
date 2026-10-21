@@ -1024,3 +1024,119 @@ func TestInputStringHidesSensitive(t *testing.T) {
 		t.Fatal("no create input has a sensitive field")
 	}
 }
+
+// TestDeleteFunc: each type with deleteX has DeleteX, taking the ID and
+// returning it; a type without it has none.
+func TestDeleteFunc(t *testing.T) {
+	for label, m := range map[string]*plugin.Model{"testdata": testModel(t), "update-only": updateOnlyModel(t), "mutations": mutationsModel(t)} {
+		t.Run(label, func(t *testing.T) {
+			surf, err := sdl.Build(m)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, funcs, expr := mutationDecls(t, render(t, m))
+			with, without := 0, 0
+			for _, ty := range surf.Types {
+				fn := "Delete" + ty.Name
+				d := funcs[fn]
+				if !ty.Delete {
+					without++
+					if d != nil {
+						t.Errorf("%s has no deleteX, and %s is declared", ty.Name, fn)
+					}
+					continue
+				}
+				with++
+				if d == nil {
+					t.Errorf("no func %s", fn)
+					continue
+				}
+				if sig, want := expr(d.Type), "func(ctx context.Context, id string) (string, error)"; sig != want {
+					t.Errorf("%s: %s, want %s", fn, sig, want)
+				}
+			}
+			t.Logf("%d types with deleteX, %d without", with, without)
+			if label == "testdata" && (with == 0 || without == 0) {
+				t.Errorf("%d types with deleteX, %d without: want some of each", with, without)
+			}
+		})
+	}
+}
+
+// TestDeleteJoinRows pins the join rows DeleteX deletes: those of each M2M
+// edge's join entity, from either side of a pair, once per join entity, and
+// both columns of a join of the entity to itself; each after a COUNT under
+// the DELETE's scope (Writable), and before the DELETE of the row.
+func TestDeleteJoinRows(t *testing.T) {
+	m := testModel(t)
+	var user, group *plugin.Entity
+	for _, e := range m.Entities {
+		switch e.Name {
+		case "User":
+			user = e
+		case "Group":
+			group = e
+		}
+	}
+	setMutations := func(e *plugin.Entity, kinds ...string) {
+		var a map[string]any
+		if err := json.Unmarshal(e.Annotations["graphql"], &a); err != nil {
+			t.Fatal(err)
+		}
+		a["mutations"] = kinds
+		b, err := json.Marshal(a)
+		if err != nil {
+			t.Fatal(err)
+		}
+		e.Annotations["graphql"] = b
+	}
+	setMutations(user, "create", "delete")
+	setMutations(group, "delete")
+	// Follow joins User to itself: follows and its inverse, followers.
+	m.Entities = append(m.Entities, &plugin.Entity{
+		Name: "Follow", Label: "follow", Handles: "Follows", Table: "follows", Join: true, Tenant: -1, PrimaryKey: []int{0, 1},
+		Fields: []*plugin.Field{
+			{Name: "follower_id", GoName: "FollowerID", Column: "follower_id", Type: "int64", GoType: "int64", ElemType: "int64"},
+			{Name: "followee_id", GoName: "FolloweeID", Column: "followee_id", Type: "int64", GoType: "int64", ElemType: "int64"},
+		},
+	})
+	user.Edges = append(user.Edges,
+		&plugin.Edge{Name: "follows", GoName: "Follows", Target: "User", Ref: "followers", Kind: plugin.M2M, Join: "Follow"},
+		&plugin.Edge{Name: "followers", GoName: "Followers", Target: "User", Ref: "follows", Kind: plugin.M2M, Join: "Follow", Inverse: true},
+	)
+	files := render(t, m)
+	squash := func(s string) string { return " " + strings.Join(strings.Fields(s), " ") + " " }
+	for file, wants := range map[string][]string{
+		"gql_user.go": {
+			`func DeleteAccount(ctx context.Context, id string) (string, error) {`,
+			`db.Query[User]().Where(Users.ID.EQ(key)).Writable().Count(ctx)`,
+			`return gqlimpl.NotFound("deleteAccount", "Account")`,
+			`db.Delete[UserGroup]().Where(UserGroups.UserID.EQ(key)).Exec(ctx)`,
+			`db.Delete[Follow]().Where(velox.Or(Follows.FollowerID.EQ(key), Follows.FolloweeID.EQ(key))).Exec(ctx)`,
+			`db.Delete[User]().Where(Users.ID.EQ(key)).Exec(ctx)`,
+			`return veloxgql.EncodeID("Account", key), nil`,
+		},
+		"gql_group.go": {
+			`db.Query[Group]().Where(Groups.ID.EQ(key)).Writable().Count(ctx)`,
+			`db.Delete[UserGroup]().Where(UserGroups.GroupID.EQ(key)).Exec(ctx)`,
+			`db.Delete[Group]().Where(Groups.ID.EQ(key)).Exec(ctx)`,
+		},
+	} {
+		src := squash(files[file])
+		at := -1
+		for _, w := range wants {
+			i := strings.Index(src, w)
+			if i < 0 {
+				t.Errorf("%s: no %q in\n%s", file, w, src)
+				continue
+			}
+			if i < at {
+				t.Errorf("%s: %q is out of order", file, w)
+			}
+			at = i
+			if strings.HasPrefix(w, "db.") && strings.Count(src, w) != 1 {
+				t.Errorf("%s: %q %d times, want once", file, w, strings.Count(src, w))
+			}
+		}
+	}
+}

@@ -661,3 +661,34 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 	}
 	return out, nil
 }
+
+// DeletePost deletes the Post with the ID id, as the mutation deletePost does,
+// and returns the ID, encoded again from the key. It first decodes id, before
+// any statement (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFrom
+// reads from ctx, in one transaction (gqlimpl.Atomic): the operation's, or one
+// of its own. The DELETE is scoped by the tenant and the Read and Write
+// policies. An id that names no row the caller may change fails with NOT_FOUND
+// and deletes nothing. The rows of other entities whose key holds the row's are
+// not touched: the database's foreign keys decide, and a key that refuses the
+// DELETE fails it with a *velox.ConstraintError, which veloxgql.ErrorPresenter
+// shows as BAD_USER_INPUT. velox's errors are returned as they are.
+func DeletePost(ctx context.Context, id string) (string, error) {
+	key, err := gqlimpl.DecodeID[int64]("deletePost.id", id, "Post")
+	if err != nil {
+		return "", err
+	}
+	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
+		n, err := db.Delete[Post]().Where(Posts.ID.EQ(key)).Exec(ctx)
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return gqlimpl.NotFound("deletePost", "Post")
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return veloxgql.EncodeID("Post", key), nil
+}

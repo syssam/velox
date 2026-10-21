@@ -168,8 +168,8 @@ func (*Circle) Policy() velox.Policy[Circle] {
 }
 `
 
-// e2eMutRun is the application's test of the generated create and update
-// mutations, run on each of targets' databases.
+// e2eMutRun is the application's test of the generated create, update and
+// delete mutations, run on each of targets' databases.
 const e2eMutRun = `package app_test
 
 import (
@@ -188,11 +188,14 @@ import (
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
 )
 
-// A target is a database the tests run on: how to open it, and its DDL.
+// A target is a database the tests run on: how to open it, and its DDL;
+// fkDDL is the same tables with foreign keys the database enforces, for
+// the tests of what they refuse.
 type target struct {
 	name    string
 	dialect velox.Dialect
 	ddl     []string
+	fkDDL   []string
 	open    func(t *testing.T) *sql.DB
 }
 
@@ -200,9 +203,10 @@ type target struct {
 func targets(t *testing.T) []target {
 	t.Helper()
 	return []target{{
-		name: "sqlite", dialect: velox.SQLite, ddl: sqliteDDL,
+		name: "sqlite", dialect: velox.SQLite, ddl: sqliteDDL, fkDDL: sqliteFKDDL,
 		open: func(t *testing.T) *sql.DB {
-			db, err := sql.Open("sqlite", "file::memory:")
+			// Foreign keys are on: only fkDDL declares any.
+			db, err := sql.Open("sqlite", "file::memory:?_pragma=foreign_keys(1)")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -218,6 +222,16 @@ var sqliteDDL = []string{
 	"CREATE TABLE circles (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE)",
 	"CREATE TABLE profiles (id INTEGER PRIMARY KEY, handle TEXT NOT NULL, writer_id INTEGER UNIQUE)",
 	"CREATE TABLE writer_circles (writer_id INTEGER NOT NULL, circle_id INTEGER NOT NULL, PRIMARY KEY (writer_id, circle_id))",
+}
+
+// sqliteFKDDL is sqliteDDL with foreign keys from articles and the join
+// rows to writers and circles, which refuse a DELETE of a row they point at.
+var sqliteFKDDL = []string{
+	sqliteDDL[0],
+	"CREATE TABLE articles (id INTEGER PRIMARY KEY, title TEXT NOT NULL, writer_id INTEGER REFERENCES writers (id))",
+	sqliteDDL[2],
+	sqliteDDL[3],
+	"CREATE TABLE writer_circles (writer_id INTEGER NOT NULL REFERENCES writers (id), circle_id INTEGER NOT NULL REFERENCES circles (id), PRIMARY KEY (writer_id, circle_id))",
 }
 
 // env is a test's database: ctx is under tenant 7, with the DB put there by
@@ -244,12 +258,21 @@ func (e *env) stmts() []string {
 }
 
 // each runs fn on each target, with a fresh database.
-func each(t *testing.T, fn func(t *testing.T, e *env)) {
+func each(t *testing.T, fn func(t *testing.T, e *env)) { run(t, false, fn) }
+
+// eachFK runs fn on each target, with a fresh database of its fkDDL.
+func eachFK(t *testing.T, fn func(t *testing.T, e *env)) { run(t, true, fn) }
+
+func run(t *testing.T, fk bool, fn func(t *testing.T, e *env)) {
 	for _, tg := range targets(t) {
 		t.Run(tg.name, func(t *testing.T) {
+			ddl := tg.ddl
+			if fk {
+				ddl = tg.fkDDL
+			}
 			sqlDB := tg.open(t)
 			t.Cleanup(func() { _ = sqlDB.Close() })
-			for _, s := range tg.ddl {
+			for _, s := range ddl {
 				if _, err := sqlDB.Exec(s); err != nil {
 					t.Fatalf("%s: %v", s, err)
 				}
@@ -554,6 +577,27 @@ func TestEdgeScope(t *testing.T) {
 		}
 		if got, err := e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(w7.ID)).One(e.ctx); err != nil || got.MentorID != nil {
 			t.Errorf("w7: %v, %v: want no mentor", got, err)
+		}
+
+		// On delete: tenant 8's writer is NOT_FOUND, and its join rows,
+		// which no tenant scopes, are all still there.
+		insert(t, e.ctx, e.db, &gen.WriterCircle{WriterID: other.ID, CircleID: visible.ID})
+		insert(t, e.ctx, e.db, &gen.WriterCircle{WriterID: other.ID, CircleID: hidden.ID})
+		e.reset()
+		_, err = gen.DeleteWriter(e.ctx, writerID(other.ID))
+		if code(err) != veloxgql.CodeNotFound || err.Error() != "veloxgql: deleteWriter: no Writer has this ID" {
+			t.Errorf("deleting tenant 8's writer: %v (code %q), want NOT_FOUND", err, code(err))
+		}
+		for _, s := range e.stmts() {
+			if strings.HasPrefix(s, "DELETE") {
+				t.Errorf("sent %s", s)
+			}
+		}
+		if n := count(t, e.ctx, e.db.Query[gen.WriterCircle]().Where(gen.WriterCircles.WriterID.EQ(other.ID))); n != 2 {
+			t.Errorf("%d join rows of tenant 8's writer, want 2", n)
+		}
+		if got, err := e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(other.ID)).One(ctx8); err != nil || got.Name != "other" {
+			t.Errorf("tenant 8's writer: %v, %v: want it kept", got, err)
 		}
 	})
 }
@@ -1068,10 +1112,159 @@ func TestUpdateErrors(t *testing.T) {
 		}
 	})
 }
+
+// TestDelete: DeleteWriter returns the writer's ID and deletes it and its
+// join rows, and no other's; DeleteCircle, the M2M's other side, deletes its
+// own. A second delete, or of an ID of no row, is NOT_FOUND.
+func TestDelete(t *testing.T) {
+	each(t, func(t *testing.T, e *env) {
+		w, keep := &gen.Writer{Name: "w", Password: "x"}, &gen.Writer{Name: "keep", Password: "x"}
+		insert(t, e.ctx, e.db, w)
+		insert(t, e.ctx, e.db, keep)
+		c1, c2 := &gen.Circle{Name: "c1"}, &gen.Circle{Name: "c2"}
+		insert(t, e.ctx, e.db, c1)
+		insert(t, e.ctx, e.db, c2)
+		for _, j := range []*gen.WriterCircle{{WriterID: w.ID, CircleID: c1.ID}, {WriterID: w.ID, CircleID: c2.ID}, {WriterID: keep.ID, CircleID: c1.ID}, {WriterID: keep.ID, CircleID: c2.ID}} {
+			insert(t, e.ctx, e.db, j)
+		}
+		got, err := gen.DeleteWriter(e.ctx, writerID(w.ID))
+		if err != nil || got != writerID(w.ID) {
+			t.Fatalf("DeleteWriter = %q, %v: want %q", got, err, writerID(w.ID))
+		}
+		if n := count(t, e.ctx, e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(w.ID))); n != 0 {
+			t.Errorf("%d writers w, want 0", n)
+		}
+		if n := count(t, e.ctx, e.db.Query[gen.WriterCircle]().Where(gen.WriterCircles.WriterID.EQ(w.ID))); n != 0 {
+			t.Errorf("%d join rows of w, want 0", n)
+		}
+		if got := circlesOf(t, e, keep.ID); len(got) != 2 {
+			t.Errorf("keep's circles: %v, want c1 and c2", got)
+		}
+		_, err = gen.DeleteWriter(e.ctx, writerID(w.ID))
+		if code(err) != veloxgql.CodeNotFound || err.Error() != "veloxgql: deleteWriter: no Writer has this ID" {
+			t.Errorf("deleting w again: %v (code %q), want NOT_FOUND", err, code(err))
+		}
+
+		got, err = gen.DeleteCircle(e.ctx, circleID(c1.ID))
+		if err != nil || got != circleID(c1.ID) {
+			t.Fatalf("DeleteCircle = %q, %v: want %q", got, err, circleID(c1.ID))
+		}
+		if got := circlesOf(t, e, keep.ID); len(got) != 1 || got[0] != "c2" {
+			t.Errorf("keep's circles: %v, want c2", got)
+		}
+		_, err = gen.DeleteCircle(e.ctx, circleID(999))
+		if code(err) != veloxgql.CodeNotFound || err.Error() != "veloxgql: deleteCircle: no Circle has this ID" {
+			t.Errorf("deleting no circle: %v (code %q), want NOT_FOUND", err, code(err))
+		}
+
+		// An article, of no M2M edge, is one DELETE.
+		a := &gen.Article{Title: "a"}
+		insert(t, e.ctx, e.db, a)
+		e.reset()
+		if got, err := gen.DeleteArticle(e.ctx, articleID(a.ID)); err != nil || got != articleID(a.ID) {
+			t.Errorf("DeleteArticle = %q, %v", got, err)
+		}
+		var dels int
+		for _, s := range e.stmts() {
+			if strings.HasPrefix(s, "DELETE") {
+				dels++
+			}
+		}
+		if dels != 1 {
+			t.Errorf("sent %q, want one DELETE", e.stmts())
+		}
+
+		// A malformed ID or one of another type sends nothing.
+		e.reset()
+		_, err = gen.DeleteWriter(e.ctx, circleID(keep.ID))
+		if code(err) != veloxgql.CodeBadUserInput || !errors.Is(err, veloxgql.ErrWrongIDType) || !strings.Contains(err.Error(), "deleteWriter.id") {
+			t.Errorf("a circle's ID for a writer: %v (code %q)", err, code(err))
+		}
+		_, err = gen.DeleteWriter(e.ctx, "not an ID")
+		if code(err) != veloxgql.CodeBadUserInput || !errors.Is(err, veloxgql.ErrBadID) {
+			t.Errorf("a malformed ID: %v (code %q)", err, code(err))
+		}
+		if s := e.stmts(); len(s) != 0 {
+			t.Errorf("input errors sent %v", s)
+		}
+	})
+}
+
+// TestDeletePolicy: a row the Write policy keeps from changing is NOT_FOUND
+// to a delete, as a missing one is, and is kept: the locked article, of no
+// M2M edge, and the frozen writer, whose join rows are kept too.
+func TestDeletePolicy(t *testing.T) {
+	each(t, func(t *testing.T, e *env) {
+		locked := &gen.Article{Title: "locked"}
+		insert(t, e.ctx, e.db, locked)
+		_, err := gen.DeleteArticle(e.ctx, articleID(locked.ID))
+		if code(err) != veloxgql.CodeNotFound || err.Error() != "veloxgql: deleteArticle: no Article has this ID" {
+			t.Errorf("the locked article: %v (code %q), want NOT_FOUND", err, code(err))
+		}
+		if n := count(t, e.ctx, e.db.Query[gen.Article]().Where(gen.Articles.ID.EQ(locked.ID))); n != 1 {
+			t.Errorf("%d locked articles, want 1", n)
+		}
+
+		frozen, c := &gen.Writer{Name: "frozen", Password: "x"}, &gen.Circle{Name: "c"}
+		insert(t, e.ctx, e.db, frozen)
+		insert(t, e.ctx, e.db, c)
+		insert(t, e.ctx, e.db, &gen.WriterCircle{WriterID: frozen.ID, CircleID: c.ID})
+		e.reset()
+		_, err = gen.DeleteWriter(e.ctx, writerID(frozen.ID))
+		if code(err) != veloxgql.CodeNotFound || err.Error() != "veloxgql: deleteWriter: no Writer has this ID" {
+			t.Errorf("the frozen writer: %v (code %q), want NOT_FOUND", err, code(err))
+		}
+		for _, s := range e.stmts() {
+			if strings.HasPrefix(s, "DELETE") {
+				t.Errorf("sent %s", s)
+			}
+		}
+		if got := circlesOf(t, e, frozen.ID); len(got) != 1 {
+			t.Errorf("the frozen writer's circles: %v, want c", got)
+		}
+	})
+}
+
+// TestDeleteConstraint: the database's foreign key refuses to delete a
+// writer an article points at; the error is a *velox.ConstraintError of
+// kind ConstraintForeignKey, which the presenter shows without the driver's
+// text, and the writer's join rows, deleted first, are back.
+func TestDeleteConstraint(t *testing.T) {
+	eachFK(t, func(t *testing.T, e *env) {
+		w, c := &gen.Writer{Name: "w", Password: "x"}, &gen.Circle{Name: "c"}
+		insert(t, e.ctx, e.db, w)
+		insert(t, e.ctx, e.db, c)
+		insert(t, e.ctx, e.db, &gen.WriterCircle{WriterID: w.ID, CircleID: c.ID})
+		a := &gen.Article{Title: "a", WriterID: ptr(w.ID)}
+		insert(t, e.ctx, e.db, a)
+		_, err := gen.DeleteWriter(e.ctx, writerID(w.ID))
+		var ce *velox.ConstraintError
+		if !errors.As(err, &ce) || ce.Kind != velox.ConstraintForeignKey {
+			t.Fatalf("DeleteWriter = %v, want a foreign key's ConstraintError", err)
+		}
+		ge := veloxgql.ErrorPresenter(nil)(e.ctx, err)
+		if ge.Message != "foreign key constraint violated" || ge.Extensions["code"] != veloxgql.CodeBadUserInput {
+			t.Errorf("presented as %q %v", ge.Message, ge.Extensions)
+		}
+		if n := count(t, e.ctx, e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(w.ID))); n != 1 {
+			t.Errorf("%d writers w, want 1", n)
+		}
+		if got := circlesOf(t, e, w.ID); len(got) != 1 || got[0] != "c" {
+			t.Errorf("w's circles: %v, want c", got)
+		}
+		// With the article gone, the delete goes through.
+		if _, err := gen.DeleteArticle(e.ctx, articleID(a.ID)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := gen.DeleteWriter(e.ctx, writerID(w.ID)); err != nil {
+			t.Errorf("DeleteWriter, with no article: %v", err)
+		}
+	})
+}
 `
 
 // TestMutationsRun generates e2eMutSchema's Go and runs e2eMutRun on it:
-// createX and updateX with each kind of edge, the tenant and policy scope of
+// createX, updateX and deleteX with each kind of edge, the tenant and policy scope of
 // the IDs they name, atomicity, and their errors.
 func TestMutationsRun(t *testing.T) {
 	if testing.Short() {
@@ -1092,7 +1285,8 @@ func TestMutationsRun(t *testing.T) {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
 	for _, name := range []string{"TestCreate", "TestCreateM2MBothSides", "TestRepeatedIDs", "TestEdgeScope", "TestAtomic", "TestCreateErrors", "TestRepoint",
-		"TestUpdate", "TestUpdateConflicts", "TestUpdatePolicy", "TestUpdateWriteScope", "TestUpdateReadBack", "TestUpdateEmpty", "TestUpdateErrors"} {
+		"TestUpdate", "TestUpdateConflicts", "TestUpdatePolicy", "TestUpdateWriteScope", "TestUpdateReadBack", "TestUpdateEmpty", "TestUpdateErrors",
+		"TestDelete", "TestDeletePolicy", "TestDeleteConstraint"} {
 		if !strings.Contains(out, "--- PASS: "+name+" ") {
 			t.Errorf("no PASS of %s in\n%s", name, out)
 		}

@@ -21,13 +21,12 @@ func fieldGQLFunc(t *sdl.Type) string { return lowerFirst(t.Entity.Name) + "Fiel
 
 // writeMutations writes t's mutation inputs and mutations: CreateXInput and
 // CreateX, UpdateXInput and UpdateX, and the function they name input fields
-// with, which a type with either has.
+// with, which a type with either has; and DeleteX.
 func (r *renderer) writeMutations(f *file, t *sdl.Type) error {
-	if t.Create == nil && t.Update == nil {
-		return nil
-	}
-	if err := r.writeFieldGQL(f, t); err != nil {
-		return err
+	if t.Create != nil || t.Update != nil {
+		if err := r.writeFieldGQL(f, t); err != nil {
+			return err
+		}
 	}
 	if t.Create != nil {
 		in := "Create" + t.Name + "Input"
@@ -46,6 +45,9 @@ func (r *renderer) writeMutations(f *file, t *sdl.Type) error {
 		if err := r.writeUpdate(f, t, in); err != nil {
 			return err
 		}
+	}
+	if t.Delete {
+		return r.writeDelete(f, t)
 	}
 	return nil
 }
@@ -999,6 +1001,134 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 	f.p("\t\treturn nil, err")
 	f.p("\t}")
 	f.p("\treturn out, nil")
+	f.p("}")
+	return nil
+}
+
+// writeDelete writes DeleteX, which decodes the ID of the row and, in one
+// transaction, deletes the row's join rows, after a COUNT under the scope of
+// its DELETE has found it, then the row, and returns the ID.
+func (r *renderer) writeDelete(f *file, t *sdl.Type) error {
+	e, n := t.Entity, t.Name
+	what := "schema " + e.Name
+	fn, mutation := "Delete"+n, "delete"+n
+	if err := r.declare(fn, what); err != nil {
+		return err
+	}
+	if len(e.PrimaryKey) != 1 {
+		return fmt.Errorf("%s: deleteX takes the ID of a key of one column, and %s's is %d columns, which is a bug", what, e.Name, len(e.PrimaryKey))
+	}
+	self, err := r.idKeyOf(f, e, t)
+	if err != nil {
+		return err
+	}
+	ok := self.fd
+	pk := e.Handles + "." + ok.GoName
+
+	// The join entities of e's M2M edges, from either side of a pair, each
+	// once, with the columns of each that hold e's key: both of them for an
+	// edge from e to e.
+	type join struct {
+		ent  *plugin.Entity
+		cols []*plugin.Field
+	}
+	var joins []*join
+	for _, ed := range e.Edges {
+		if ed.Kind != plugin.M2M {
+			continue
+		}
+		j := r.ents[ed.Join]
+		if j == nil || len(j.Fields) != 2 {
+			return fmt.Errorf("schema %s, edge %s: the model has no join entity %s of two fields", e.Name, ed.Name, ed.Join)
+		}
+		// As in writeCreate: an inverse edge's owner is the join entity's
+		// second field.
+		own, other := j.Fields[0], j.Fields[1]
+		if ed.Inverse {
+			own, other = other, own
+		}
+		cols := []*plugin.Field{own}
+		if ed.Target == e.Name {
+			cols = append(cols, other)
+		}
+		i := slices.IndexFunc(joins, func(x *join) bool { return x.ent == j })
+		if i < 0 {
+			joins = append(joins, &join{ent: j})
+			i = len(joins) - 1
+		}
+		for _, c := range cols {
+			if !slices.Contains(joins[i].cols, c) {
+				joins[i].cols = append(joins[i].cols, c)
+			}
+		}
+	}
+
+	ctx, velox, impl := f.use("context", "context"), f.velox(), f.gqlimpl()
+	idv := "key"
+	if self.conv != "" {
+		idv = t.Key + "(key)"
+	}
+	f.p("")
+	joinRows := ""
+	if len(joins) > 0 {
+		joinRows = ", and its rows in the join tables of its many-to-many edges"
+	}
+	doc := fmt.Sprintf("%s deletes the %s with the ID id%s, as the mutation %s does, and returns the ID, encoded again from the key. It first decodes id, before any statement (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFrom reads from ctx, in one transaction (gqlimpl.Atomic): the operation's, or one of its own. The DELETE is scoped by the tenant and the Read and Write policies. ", fn, n, joinRows, mutation)
+	if len(joins) > 0 {
+		doc += "The join rows, which neither scopes, go first, after a COUNT under the DELETE's scope (Writable) has found the row: those of a row the caller may not delete are never touched. "
+	}
+	doc += "An id that names no row the caller may change fails with NOT_FOUND and deletes nothing. The rows of other entities whose key holds the row's are not touched: the database's foreign keys decide, and a key that refuses the DELETE fails it with a *velox.ConstraintError, which veloxgql.ErrorPresenter shows as BAD_USER_INPUT. velox's errors are returned as they are."
+	f.doc("", doc)
+	f.p("func %s(ctx %s.Context, id string) (string, error) {", fn, ctx)
+	f.p("\tkey, err := %s.DecodeID%s(%q, id, %q%s)", impl, self.args, mutation+".id", n, self.conv)
+	f.p("\tif err != nil {")
+	f.p("\t\treturn \"\", err")
+	f.p("\t}")
+	f.p("\terr = %s.Atomic(ctx, func(ctx %s.Context, db *%s.DB) error {", impl, ctx, velox)
+	if len(joins) > 0 {
+		// The row is checked under the DELETE's scope before its join rows,
+		// which no tenant or policy scopes, are touched: those of a row the
+		// caller may not delete are never deleted.
+		f.p("\t\tif n, err := db.Query[%s]().Where(%s.EQ(key)).Writable().Count(ctx); err != nil {", e.Name, pk)
+		f.p("\t\t\treturn err")
+		f.p("\t\t} else if n == 0 {")
+		f.p("\t\t\treturn %s.NotFound(%q, %q)", impl, mutation, n)
+		f.p("\t\t}")
+		for _, j := range joins {
+			var ps []string
+			for _, c := range j.cols {
+				conv, err := r.keyConv(f, j.ent, c, ok, t.Key)
+				if err != nil {
+					return err
+				}
+				v := "key"
+				if conv != "" {
+					v = conv + "(key)"
+				}
+				ps = append(ps, fmt.Sprintf("%s.%s.EQ(%s)", j.ent.Handles, c.GoName, v))
+			}
+			where := ps[0]
+			if len(ps) > 1 {
+				where = fmt.Sprintf("%s.Or(%s)", velox, strings.Join(ps, ", "))
+			}
+			f.p("\t\tif _, err := db.Delete[%s]().Where(%s).Exec(ctx); err != nil {", j.ent.Name, where)
+			f.p("\t\t\treturn err")
+			f.p("\t\t}")
+		}
+	}
+	f.p("\t\tn, err := db.Delete[%s]().Where(%s.EQ(key)).Exec(ctx)", e.Name, pk)
+	f.p("\t\tif err != nil {")
+	f.p("\t\t\treturn err")
+	f.p("\t\t}")
+	f.p("\t\tif n == 0 {")
+	f.p("\t\t\treturn %s.NotFound(%q, %q)", impl, mutation, n)
+	f.p("\t\t}")
+	f.p("\t\treturn nil")
+	f.p("\t})")
+	f.p("\tif err != nil {")
+	f.p("\t\treturn \"\", err")
+	f.p("\t}")
+	f.p("\treturn %s.EncodeID(%q, %s), nil", f.veloxgql(), n, idv)
 	f.p("}")
 	return nil
 }
