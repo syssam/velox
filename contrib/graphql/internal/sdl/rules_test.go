@@ -1,7 +1,12 @@
 package sdl
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -387,4 +392,50 @@ func TestDefaultOnNonNillableNumber(t *testing.T) {
 	s := field("s", "string")
 	s.HasDefault, s.Optional = true, true
 	load(t, model(entity("Thing", s)))
+}
+
+// zeroIsUnset's kinds are those of velox-gen's rule 36: bool, and the types
+// of its numeric set, read from its source so that the two cannot drift.
+func TestZeroIsUnsetMatchesVeloxGen(t *testing.T) {
+	path := filepath.Join("..", "..", "..", "..", "internal", "gen", "build.go")
+	f, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"bool"}
+	ast.Inspect(f, func(n ast.Node) bool {
+		vs, ok := n.(*ast.ValueSpec)
+		if !ok || len(vs.Names) != 1 || vs.Names[0].Name != "numeric" {
+			return true
+		}
+		for _, el := range vs.Values[0].(*ast.CompositeLit).Elts {
+			k, err := strconv.Unquote(el.(*ast.KeyValueExpr).Key.(*ast.BasicLit).Value)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want = append(want, k)
+		}
+		return false
+	})
+	if len(want) == 1 {
+		t.Fatalf("no numeric set in %s", path)
+	}
+	types := []string{"bool", "string", "time", "uuid", "bytes", "json", "enum", "other",
+		"int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16", "uint32", "uint64", "float32", "float64"}
+	var got []string
+	for _, typ := range types {
+		if zeroIsUnset(typ) {
+			got = append(got, typ)
+		}
+	}
+	slices.Sort(got)
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Errorf("zeroIsUnset is true of %v; velox-gen's rule 36 covers %v", got, want)
+	}
+	for _, typ := range want {
+		if !slices.Contains(types, typ) {
+			t.Errorf("velox-gen's rule 36 covers %s, which this test does not try", typ)
+		}
+	}
 }

@@ -57,7 +57,8 @@
 // <field> and clear<Field> in CreateXInput and UpdateXInput, and an edge's
 // <edge>ID, <edge>IDs, add<Edge>IDs, remove<Edge>IDs and clear<Edge>, which
 // carry the key field's directives first when the key is on the row. A
-// directive that guards a field's value guards its writes too.
+// directive that guards a field's value guards its writes too. @deprecated
+// stays off a required input field, where GraphQL forbids it.
 //
 // A key field takes GraphQL's own directives only (@deprecated…). A foreign
 // key is in no type: its edge stands for it, so a directive that guards it

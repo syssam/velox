@@ -405,3 +405,38 @@ func TestInputsCarryDirectives(t *testing.T) {
 		t.Errorf("an input field has @goField:\n%s", sdl)
 	}
 }
+
+// GraphQL forbids @deprecated on a required input field: a client could not
+// stop sending it. A required input leaves it out; the type's field, an
+// optional input and a clear keep it, and so do the other directives.
+func TestNoDeprecatedOnRequiredInput(t *testing.T) {
+	dep := graphql.Directive{Name: "deprecated", Args: map[string]any{"reason": "old"}}
+	title := field("title", "string")
+	title.Annotations = ann(t, graphql.Directives(dep, graphql.Directive{Name: "admin"}))
+	note := &plugin.Field{Name: "note", GoName: "Note", Type: "string", Pointer: true, Nullable: true, Optional: true}
+	note.Annotations = ann(t, graphql.Directives(dep))
+	post := entity("Post", field("author_id", "int64"), title, note)
+	author := edge("author", plugin.M2O, "User")
+	author.Required, author.Field, author.FieldOn = true, "author_id", "Post"
+	author.Annotations = ann(t, graphql.Directives(dep))
+	post.Edges = []*plugin.Edge{author}
+	post.Annotations = ann(t, graphql.Mutations(graphql.Create(), graphql.Update()))
+	s, sdl := load(t, model(post, entity("User")), appDirectives)
+	for _, c := range []struct {
+		typ, field string
+		want       []string
+	}{
+		{"Post", "title", []string{"@deprecated", "@admin"}},
+		{"CreatePostInput", "title", []string{"@admin"}},
+		{"CreatePostInput", "authorID", []string{}},
+		{"CreatePostInput", "note", []string{"@deprecated"}},
+		{"UpdatePostInput", "title", []string{"@deprecated", "@admin"}},
+		{"UpdatePostInput", "authorID", []string{"@deprecated"}},
+		{"UpdatePostInput", "note", []string{"@deprecated"}},
+		{"UpdatePostInput", "clearNote", []string{"@deprecated"}},
+	} {
+		if got := dirsOf(s, c.typ, c.field); !slices.Equal(got, c.want) {
+			t.Errorf("%s.%s: %v, want %v\n%s", c.typ, c.field, got, c.want, sdl)
+		}
+	}
+}

@@ -168,7 +168,7 @@ func (g *graph) inputFields(o *object, typ string, create bool) ([]gqlField, []I
 		if err != nil {
 			return nil, nil, err
 		}
-		if err := fs.add(gqlField{name: name, typ: t, desc: f.Comment, dirs: dirs, where: where}); err != nil {
+		if err := fs.add(gqlField{name: name, typ: t, desc: f.Comment, dirs: inputDirs(dirs, t), where: where}); err != nil {
 			return nil, nil, err
 		}
 		v := g.goValue(f, a)
@@ -278,7 +278,7 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]edgeInput, error) {
 	var out []edgeInput
 	add := func(name, typ, goName string, kind InputKind) {
 		out = append(out, edgeInput{
-			gqlField: gqlField{name: name, typ: typ, dirs: dirs, where: where},
+			gqlField: gqlField{name: name, typ: typ, dirs: inputDirs(dirs, typ), where: where},
 			goField:  InputField{Name: name, GoName: goName, Type: typ, Kind: kind, Field: -1, Edge: i, Target: t.name, Required: strings.HasSuffix(typ, "!")},
 		})
 	}
@@ -347,6 +347,16 @@ func (g *graph) keyField(ed *plugin.Edge) *plugin.Field {
 		}
 	}
 	return nil
+}
+
+// inputDirs are the directives ds of an input field of the type typ: all of
+// them, except @deprecated on a required field, which GraphQL forbids, since
+// a client cannot stop sending it. The output field keeps it.
+func inputDirs(ds []directive, typ string) []directive {
+	if !strings.HasSuffix(typ, "!") {
+		return ds
+	}
+	return slices.DeleteFunc(slices.Clone(ds), func(d directive) bool { return d.name == "deprecated" })
 }
 
 // inputDesc is the description of o's create or update input.
