@@ -90,6 +90,9 @@ type object struct {
 	whereGo  []WhereField // the where input's fields, for the Go code
 	create   []gqlField   // the create input's fields; nil for none
 	update   []gqlField   // the update input's fields; nil for none
+	createGo []InputField // the create input's fields, for the Go code
+	updateGo []InputField // the update input's fields, for the Go code
+	del      bool         // it has deleteX
 }
 
 // edgeField is an edge field of an object.

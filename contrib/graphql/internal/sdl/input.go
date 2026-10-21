@@ -2,6 +2,8 @@ package sdl
 
 import (
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/syssam/velox2/contrib/graphql"
 	"github.com/syssam/velox2/plugin"
@@ -56,7 +58,7 @@ func (g *graph) mutationsOf(o *object) error {
 	}
 	if create {
 		in := "Create" + o.name + "Input"
-		fs, err := g.inputFields(o, in, true)
+		fs, gos, err := g.inputFields(o, in, true)
 		if err != nil {
 			return err
 		}
@@ -66,7 +68,7 @@ func (g *graph) mutationsOf(o *object) error {
 		if err := g.types.add(in, where); err != nil {
 			return err
 		}
-		o.create = fs
+		o.create, o.createGo = fs, gos
 		g.mutation = append(g.mutation, gqlField{
 			name: "create" + o.name, args: "(input: " + in + "!)", typ: o.name + "!",
 			desc: "Creates one " + o.name + ".", where: where,
@@ -75,7 +77,7 @@ func (g *graph) mutationsOf(o *object) error {
 	if update {
 		// An update input with no fields gets no type, and no updateX.
 		in := "Update" + o.name + "Input"
-		fs, err := g.inputFields(o, in, false)
+		fs, gos, err := g.inputFields(o, in, false)
 		if err != nil {
 			return err
 		}
@@ -83,7 +85,7 @@ func (g *graph) mutationsOf(o *object) error {
 			if err := g.types.add(in, where); err != nil {
 				return err
 			}
-			o.update = fs
+			o.update, o.updateGo = fs, gos
 			g.mutation = append(g.mutation, gqlField{
 				name: "update" + o.name, args: "(id: ID!, input: " + in + "!)", typ: o.name + "!",
 				desc: "Updates the " + o.name + " with this ID: only the fields given change.", where: where,
@@ -91,6 +93,7 @@ func (g *graph) mutationsOf(o *object) error {
 		}
 	}
 	if del {
+		o.del = true
 		g.mutation = append(g.mutation, gqlField{
 			name: "delete" + o.name, args: "(id: ID!)", typ: "ID!",
 			desc: "Deletes the " + o.name + " with this ID, and returns the ID.", where: where,
@@ -118,14 +121,20 @@ func (g *graph) mutationsOf(o *object) error {
 //     holds NULL, can be cleared;
 //   - an edge to a type that is not a Node has no ID and is in neither;
 //   - an edge's inputs follow its foreign key's flags, on whichever entity
-//     holds it (see edgeInputs).
-func (g *graph) inputFields(o *object, typ string, create bool) ([]gqlField, error) {
+//     holds it (see edgeInputs);
+//   - a field's inputs carry its directives, and an edge's its directives,
+//     as the where input's do: a directive that guards a value guards its
+//     writes too.
+//
+// It returns the fields for the SDL and, in the same order, for the Go code.
+func (g *graph) inputFields(o *object, typ string, create bool) ([]gqlField, []InputField, error) {
 	e := o.ent
 	skip, explicit := graphql.SkipMutationUpdateInput, func(a graphql.Annotation) *bool { return a.UpdateInput }
 	if create {
 		skip, explicit = graphql.SkipMutationCreateInput, func(a graphql.Annotation) *bool { return a.CreateInput }
 	}
 	fs := newInputFields(typ)
+	var gos []InputField
 	for i, f := range e.Fields {
 		a := o.fanns[i]
 		switch {
@@ -146,22 +155,37 @@ func (g *graph) inputFields(o *object, typ string, create bool) ([]gqlField, err
 		where := "schema " + e.Name + ", field " + f.Name
 		name, err := o.fieldName(i)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		t, err := g.fieldType(o, f, a, where)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if create && required && !f.HasDefault {
 			t += "!"
 		}
-		if err := fs.add(gqlField{name: name, typ: t, desc: f.Comment, where: where}); err != nil {
-			return nil, err
+		dirs, err := directives(a.Directives, where)
+		if err != nil {
+			return nil, nil, err
 		}
+		if err := fs.add(gqlField{name: name, typ: t, desc: f.Comment, dirs: dirs, where: where}); err != nil {
+			return nil, nil, err
+		}
+		v := g.goValue(f, a)
+		if f.Type == "json" {
+			v.typ, v.pkg = v.getter, v.getterPkg
+		}
+		goName := goOf(name, f.GoName)
+		gos = append(gos, InputField{
+			Name: name, GoName: goName, Type: t, Kind: InputValue, Field: i, Edge: -1,
+			GoType: v.typ, GoPkg: v.pkg, Required: strings.HasSuffix(t, "!"),
+		})
 		if !create && f.Nullable {
-			if err := fs.add(gqlField{name: "clear" + upper(name), typ: "Boolean", where: where}); err != nil {
-				return nil, err
+			cl := gqlField{name: "clear" + upper(name), typ: "Boolean", dirs: dirs, where: where}
+			if err := fs.add(cl); err != nil {
+				return nil, nil, err
 			}
+			gos = append(gos, InputField{Name: cl.name, GoName: "Clear" + goName, Type: cl.typ, Kind: InputClear, Field: i, Edge: -1})
 		}
 	}
 	for i := range e.Edges {
@@ -170,15 +194,22 @@ func (g *graph) inputFields(o *object, typ string, create bool) ([]gqlField, err
 		}
 		add, err := g.edgeInputs(o, i, create)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		for _, f := range add {
-			if err := fs.add(f); err != nil {
-				return nil, err
+			if err := fs.add(f.gqlField); err != nil {
+				return nil, nil, err
 			}
+			gos = append(gos, f.goField)
 		}
 	}
-	return fs.list, nil
+	return fs.list, gos, nil
+}
+
+// edgeInput is an input field of an edge, for the SDL and for the Go code.
+type edgeInput struct {
+	gqlField
+	goField InputField
 }
 
 // edgeInputs are the input fields of o's edge i, on create or on update.
@@ -198,7 +229,10 @@ func (g *graph) inputFields(o *object, typ string, create bool) ([]gqlField, err
 //   - an edge to a type that is not a Node has no ID and no input. When that
 //     edge is required and holds its key on o's row, createX could never
 //     succeed: an error.
-func (g *graph) edgeInputs(o *object, i int, create bool) ([]gqlField, error) {
+//
+// Each input carries the edge's directives, after those of its key when the
+// key is on o's row.
+func (g *graph) edgeInputs(o *object, i int, create bool) ([]edgeInput, error) {
 	ed := o.ent.Edges[i]
 	t := g.byName[ed.Target]
 	where := "schema " + o.ent.Name + ", edge " + ed.Name
@@ -221,29 +255,58 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]gqlField, error) {
 	fk := g.keyField(ed)
 	immutable := ed.Immutable || fk != nil && fk.Immutable
 	nullable := fk == nil || fk.Nullable
+	dirs, err := directives(o.eanns[i].Directives, where)
+	if err != nil {
+		return nil, err
+	}
+	// A key on o's row brings its own directives first, as to its where
+	// predicates.
+	if ed.OwnsKey && ed.FieldOn == o.ent.Name {
+		if k := slices.IndexFunc(o.ent.Fields, func(f *plugin.Field) bool { return f.Name == ed.Field }); k >= 0 {
+			kds, err := directives(o.fanns[k].Directives, "schema "+o.ent.Name+", field "+ed.Field)
+			if err != nil {
+				return nil, err
+			}
+			dirs = unite(kds, dirs)
+		}
+	}
+	// The Go names follow the GraphQL names' parts: the edge's Go name, when
+	// the GraphQL name was made from it, and its singular.
+	goEdge := goOf(name, ed.GoName)
+	goOne := upper(plugin.Singular(goEdge))
 	one, many := upper(plugin.Singular(name)), plugin.Singular(name)
-	var out []gqlField
+	var out []edgeInput
+	add := func(name, typ, goName string, kind InputKind) {
+		out = append(out, edgeInput{
+			gqlField: gqlField{name: name, typ: typ, dirs: dirs, where: where},
+			goField:  InputField{Name: name, GoName: goName, Type: typ, Kind: kind, Field: -1, Edge: i, Target: t.name, Required: strings.HasSuffix(typ, "!")},
+		})
+	}
+	edgeID := func(typ string) { add(name+"ID", typ, goEdge+"ID", InputEdgeID) }
+	clearEdge := func() { add("clear"+upper(name), "Boolean", "Clear"+goEdge, InputClearEdge) }
 	switch {
 	case ed.Kind == plugin.M2M:
 		if immutable && !create {
 			break
 		}
 		if create {
-			out = []gqlField{{name: many + "IDs", typ: "[ID!]"}}
+			add(many+"IDs", "[ID!]", goOne+"IDs", InputEdgeIDs)
 		} else {
-			out = []gqlField{{name: "add" + one + "IDs", typ: "[ID!]"}, {name: "remove" + one + "IDs", typ: "[ID!]"}, {name: "clear" + upper(name), typ: "Boolean"}}
+			add("add"+one+"IDs", "[ID!]", "Add"+goOne+"IDs", InputAddIDs)
+			add("remove"+one+"IDs", "[ID!]", "Remove"+goOne+"IDs", InputRemoveIDs)
+			clearEdge()
 		}
 	case ed.Unique && ed.OwnsKey:
 		switch {
 		case create && ed.Required:
-			out = []gqlField{{name: name + "ID", typ: "ID!"}}
+			edgeID("ID!")
 		case create:
-			out = []gqlField{{name: name + "ID", typ: "ID"}}
+			edgeID("ID")
 		case immutable:
 		default:
-			out = []gqlField{{name: name + "ID", typ: "ID"}}
+			edgeID("ID")
 			if !ed.Required && nullable {
-				out = append(out, gqlField{name: "clear" + upper(name), typ: "Boolean"})
+				clearEdge()
 			}
 		}
 	case immutable: // the key is on the target's rows, and cannot move
@@ -252,20 +315,18 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]gqlField, error) {
 		if create && ed.Required {
 			typ = "ID!"
 		}
-		out = []gqlField{{name: name + "ID", typ: typ}}
+		edgeID(typ)
 		if !create && nullable && !ed.Required {
-			out = append(out, gqlField{name: "clear" + upper(name), typ: "Boolean"})
+			clearEdge()
 		}
 	case create:
-		out = []gqlField{{name: many + "IDs", typ: "[ID!]"}}
+		add(many+"IDs", "[ID!]", goOne+"IDs", InputEdgeIDs)
 	default:
-		out = []gqlField{{name: "add" + one + "IDs", typ: "[ID!]"}}
+		add("add"+one+"IDs", "[ID!]", "Add"+goOne+"IDs", InputAddIDs)
 		if nullable {
-			out = append(out, gqlField{name: "remove" + one + "IDs", typ: "[ID!]"}, gqlField{name: "clear" + upper(name), typ: "Boolean"})
+			add("remove"+one+"IDs", "[ID!]", "Remove"+goOne+"IDs", InputRemoveIDs)
+			clearEdge()
 		}
-	}
-	for j := range out {
-		out[j].where = where
 	}
 	return out, nil
 }

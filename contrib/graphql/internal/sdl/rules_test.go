@@ -367,3 +367,24 @@ func TestDirectiveOnEntity(t *testing.T) {
 		t.Errorf("GraphQL's own directive: %v", err)
 	}
 }
+
+// A Default on a bool or number that is not nullable could never store its
+// zero value, which unset reads as: velox-gen refuses it, and so does the
+// plugin, for a model written by hand.
+func TestDefaultOnNonNillableNumber(t *testing.T) {
+	for _, typ := range []string{"int", "uint64", "float32", "bool"} {
+		n := field("n", typ)
+		n.HasDefault = true
+		_, err := Render(model(entity("Thing", n)))
+		want := "schema Thing, field n: a Default on a bool or number that is not Nillable cannot be told from unset; velox-gen refuses it too"
+		if err == nil || err.Error() != want {
+			t.Errorf("%s:\n got  %v\nwant %s", typ, err, want)
+		}
+		n.Pointer, n.Nullable, n.Optional = true, true, true
+		load(t, model(entity("Thing", n)))
+	}
+	// A string's empty value is unset, so Insert writes the Default.
+	s := field("s", "string")
+	s.HasDefault, s.Optional = true, true
+	load(t, model(entity("Thing", s)))
+}

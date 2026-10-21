@@ -45,6 +45,43 @@ type Type struct {
 	// Edges are the type's edge fields, in the model's edge order: the edges
 	// that are neither skipped nor to a type that is.
 	Edges []Edge
+	// Create and Update are the fields of CreateXInput and UpdateXInput, in
+	// the SDL's order; nil when the type has no createX or no updateX.
+	Create, Update []InputField
+	// Delete reports whether the type has deleteX.
+	Delete bool
+}
+
+// InputKind is what a field of a mutation input does.
+type InputKind int
+
+// The kinds of mutation-input field.
+const (
+	InputValue     InputKind = iota // <field>: the field's value
+	InputClear                      // clear<Field>: the field's column to NULL
+	InputEdgeID                     // <edge>ID: a unique edge's node
+	InputEdgeIDs                    // <edge>IDs, on create: a to-many edge's nodes
+	InputAddIDs                     // add<Edge>IDs
+	InputRemoveIDs                  // remove<Edge>IDs
+	InputClearEdge                  // clear<Edge>
+)
+
+// InputField is a field of a mutation input.
+type InputField struct {
+	Name string // the GraphQL name, as "publishedAt"
+	// GoName is the Go struct field gqlgen binds it to, which gqlgen matches
+	// to Name ignoring case: goOf's rule, as "PublishedAt".
+	GoName string
+	Type   string // the GraphQL type, as "Time" or "[ID!]"
+	Kind   InputKind
+	Field  int    // InputValue, InputClear: the index in Entity.Fields; else -1
+	Edge   int    // the edge kinds: the index in Entity.Edges; else -1
+	Target string // the edge kinds: the GraphQL type of the IDs; else ""
+	// GoType is an InputValue's Go type, as WhereField.GoType gives it, and
+	// "veloxgql.JSON" for a JSON field; "" for the other kinds.
+	GoType   string
+	GoPkg    string // the import path GoType names; "" for none
+	Required bool   // non-null in GraphQL: a value in Go, not a pointer
 }
 
 // EdgeKind is how an edge is in GraphQL.
@@ -170,7 +207,8 @@ func Build(m *plugin.Model) (*Surface, error) {
 	}
 	for _, o := range g.objects {
 		t := types[o]
-		*t = Type{Entity: o.ent, Name: o.name, Node: o.node, Key: o.key, Getters: o.getters, MultiOrder: o.ann.MultiOrder, Where: o.whereGo}
+		*t = Type{Entity: o.ent, Name: o.name, Node: o.node, Key: o.key, Getters: o.getters, MultiOrder: o.ann.MultiOrder, Where: o.whereGo,
+			Create: o.createGo, Update: o.updateGo, Delete: o.del}
 		for _, en := range o.enums {
 			i := slices.IndexFunc(o.ent.Fields, func(f *plugin.Field) bool { return f.Name == en.field })
 			t.Enums = append(t.Enums, Enum{Name: en.name, Field: i, Values: en.values})

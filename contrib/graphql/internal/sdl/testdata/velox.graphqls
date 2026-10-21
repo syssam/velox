@@ -409,7 +409,7 @@ input CreateAccountInput {
   displayName: String!
   email: String!
   role: UserRole
-  nickname: String
+  nickname: String @deprecated(reason: "Use \"displayName\".")
   bio: String
   age: Int
   passwordHash: String!
@@ -419,7 +419,7 @@ input CreateAccountInput {
   quota: Uint64!
   active: Boolean
   settings: JSON
-  postIDs: [ID!]
+  postIDs: [ID!] @cost(meta: {cached: true, ttl: null}, tags: ["list", "paged"], weight: 2.5)
   membershipIDs: [ID!]
   bestFriendID: ID
 }

@@ -99,7 +99,7 @@ func (Category) Edges() []schema.Edge {
 		edge.From("parent", Category.Type).Ref("children").Unique().Immutable(),
 		edge.To("mentee", Category.Type).Unique(),
 		edge.From("mentor", Category.Type).Ref("mentee").Unique().Immutable().Field("mentor_id"),
-		edge.To("twin", Category.Type).Unique().Immutable(),
+		edge.To("twin", Category.Type).Unique().Immutable().Annotations(graphql.Directives(graphql.Directive{Name: "deprecated", Args: map[string]any{"reason": "Use mentor."}})),
 	}
 }
 
@@ -230,8 +230,9 @@ func TestPluginThroughVeloxGen(t *testing.T) {
 		// Category's self-edges, read through OwnsKey: parent, mentor and the
 		// bidirectional twin hold their immutable keys on the row, so they are
 		// set on create only; children and mentee would re-point other rows'
-		// immutable keys, so they have no input.
-		"input CreateCategoryInput {\n  title: String!\n  parentID: ID\n  mentorID: ID\n  twinID: ID\n}\n",
+		// immutable keys, so they have no input. An edge's directives reach
+		// its inputs.
+		"input CreateCategoryInput {\n  title: String!\n  parentID: ID\n  mentorID: ID\n  twinID: ID @deprecated(reason: \"Use mentor.\")\n}\n",
 		"input UpdateCategoryInput {\n  title: String\n}\n",
 		// The key's where predicates are named after the edge that owns it.
 		"  or: [CategoryWhereInput!]\n  mentorID: ID\n  mentorIDNEQ: ID\n  mentorIDIn: [ID!]\n  mentorIDNotIn: [ID!]\n}\n",

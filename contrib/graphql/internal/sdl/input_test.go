@@ -23,8 +23,7 @@ func blogInputs(t *testing.T) *plugin.Model {
 	org := field("org_id", "int64")
 	secret := &plugin.Field{Name: "secret", GoName: "Secret", Type: "string", Sensitive: true}
 	handle := &plugin.Field{Name: "handle", GoName: "Handle", Type: "string", Immutable: true}
-	views := field("views", "int")
-	views.HasDefault = true
+	views := field("views", "int") // a hook fills it on create
 	views.Annotations = ann(t, graphql.CreateInput(false))
 	notes := &plugin.Field{Name: "notes", GoName: "Notes", Type: "string", Nullable: true, Optional: true}
 	notes.Annotations = ann(t, graphql.UpdateInput(false))
@@ -346,5 +345,63 @@ func TestInputsOptionalAndNullable(t *testing.T) {
 		if got := fieldsOf(s, typ); !slices.Equal(got, want) {
 			t.Errorf("%s:\n got %v\nwant %v\n%s", typ, got, want, sdl)
 		}
+	}
+}
+
+// A mutation input's fields carry the directives of the field or edge they
+// set, as the where input's do: a directive that guards a field's value
+// guards its writes too.
+func TestInputsCarryDirectives(t *testing.T) {
+	admin := graphql.Directives(graphql.Directive{Name: "admin"})
+	audit := graphql.Directives(graphql.Directive{Name: "audit", Args: map[string]any{"level": 2}})
+	name := &plugin.Field{Name: "name", GoName: "Name", Type: "string", Pointer: true, Nullable: true, Optional: true}
+	name.Annotations = ann(t, admin)
+	title := field("title", "string")
+	title.Annotations = ann(t, audit)
+	plain := field("plain", "string")
+	user := entity("User", name, title, plain)
+	user.Annotations = ann(t, graphql.Mutations(graphql.Create(), graphql.Update()))
+	groups := edge("groups", plugin.M2M, "Group")
+	groups.Annotations = ann(t, admin)
+	best := edge("best", plugin.M2O, "User")
+	best.Field, best.FieldOn = "best_id", "User"
+	best.Annotations = ann(t, admin, audit)
+	// The key's own directives come first, as on its where predicates;
+	// GraphQL's own only, since an application directive on a foreign key is
+	// refused.
+	bestID := &plugin.Field{Name: "best_id", GoName: "BestID", Type: "int64", Pointer: true, Nullable: true, Optional: true}
+	bestID.Annotations = ann(t, graphql.Directives(graphql.Directive{Name: "deprecated", Args: map[string]any{"reason": "old"}}))
+	user.Fields = append(user.Fields, bestID)
+	user.Edges = []*plugin.Edge{groups, best}
+	s, sdl := load(t, model(entity("Group"), user), appDirectives)
+
+	for _, c := range []struct {
+		typ, field string
+		want       []string
+	}{
+		{"CreateUserInput", "name", []string{"@admin"}},
+		{"CreateUserInput", "title", []string{"@audit"}},
+		{"CreateUserInput", "plain", nil},
+		{"CreateUserInput", "groupIDs", []string{"@admin"}},
+		{"CreateUserInput", "bestID", []string{"@deprecated", "@admin", "@audit"}},
+		{"UpdateUserInput", "name", []string{"@admin"}},
+		{"UpdateUserInput", "clearName", []string{"@admin"}},
+		{"UpdateUserInput", "title", []string{"@audit"}},
+		{"UpdateUserInput", "plain", nil},
+		{"UpdateUserInput", "addGroupIDs", []string{"@admin"}},
+		{"UpdateUserInput", "removeGroupIDs", []string{"@admin"}},
+		{"UpdateUserInput", "clearGroups", []string{"@admin"}},
+		{"UpdateUserInput", "bestID", []string{"@deprecated", "@admin", "@audit"}},
+		{"UpdateUserInput", "clearBest", []string{"@deprecated", "@admin", "@audit"}},
+	} {
+		if got := dirsOf(s, c.typ, c.field); !slices.Equal(got, c.want) && (len(got) > 0 || len(c.want) > 0) {
+			t.Errorf("%s.%s: %v, want %v\n%s", c.typ, c.field, got, c.want, sdl)
+		}
+	}
+	if !strings.Contains(sdl, "  bestID: ID @deprecated(reason: \"old\") @admin @audit(level: 2)\n") {
+		t.Errorf("the arguments are lost:\n%s", sdl)
+	}
+	if strings.Contains(sdl[strings.Index(sdl, "input CreateUserInput"):], "@goField") {
+		t.Errorf("an input field has @goField:\n%s", sdl)
 	}
 }

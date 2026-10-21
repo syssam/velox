@@ -52,7 +52,7 @@
       "fields": [
         {"name": "user_id", "go_name": "UserID", "column": "user_id", "type": "int64", "go_type": "int64", "elem_type": "int64", "immutable": true},
         {"name": "post_id", "go_name": "PostID", "column": "post_id", "type": "int64", "go_type": "int64", "elem_type": "int64", "immutable": true},
-        {"name": "weight", "go_name": "Weight", "column": "weight", "type": "int8", "go_type": "int8", "elem_type": "int8", "has_default": true},
+        {"name": "weight", "go_name": "Weight", "column": "weight", "type": "int8", "go_type": "int8", "elem_type": "int8", "optional": true},
         {"name": "created_at", "go_name": "CreatedAt", "column": "created_at", "type": "time", "go_type": "time.Time", "elem_type": "time.Time", "imports": ["time"], "immutable": true, "has_default": true}
       ],
       "edges": [
@@ -81,7 +81,7 @@
         {"name": "published_at", "go_name": "PublishedAt", "column": "published_at", "type": "time", "go_type": "*time.Time", "elem_type": "time.Time", "imports": ["time"], "pointer": true, "nullable": true, "optional": true,
           "annotations": {"graphql": {"where_ops": 2147483648}}},
         {"name": "tags", "go_name": "Tags", "column": "tags", "type": "json", "go_type": "[]string", "elem_type": "[]string", "has_default": true},
-        {"name": "views", "go_name": "Views", "column": "views", "type": "int", "go_type": "int", "elem_type": "int", "has_default": true,
+        {"name": "views", "go_name": "Views", "column": "views", "type": "int", "go_type": "int", "elem_type": "int",
           "annotations": {"graphql": {"order_field": "VIEWS", "create_input": false}}},
         {"name": "rating", "go_name": "Rating", "column": "rating", "type": "float64", "go_type": "*float64", "elem_type": "float64", "pointer": true, "nullable": true, "optional": true},
         {"name": "edited_by", "go_name": "EditedBy", "column": "edited_by", "type": "string", "go_type": "string", "elem_type": "string", "update_default": true,
@@ -137,11 +137,11 @@
         {"name": "bio", "go_name": "Bio", "column": "bio", "type": "string", "go_type": "*string", "elem_type": "string", "pointer": true, "nullable": true},
         {"name": "age", "go_name": "Age", "column": "age", "type": "int", "go_type": "*int", "elem_type": "int", "pointer": true, "nullable": true, "optional": true},
         {"name": "password_hash", "go_name": "PasswordHash", "column": "password_hash", "type": "string", "go_type": "string", "elem_type": "string", "sensitive": true},
-        {"name": "score", "go_name": "Score", "column": "score", "type": "float64", "go_type": "float64", "elem_type": "float64", "has_default": true},
+        {"name": "score", "go_name": "Score", "column": "score", "type": "float64", "go_type": "float64", "elem_type": "float64", "optional": true},
         {"name": "external_id", "go_name": "ExternalID", "column": "external_id", "type": "uuid", "go_type": "uuid.UUID", "elem_type": "uuid.UUID", "imports": ["github.com/google/uuid"], "unique": true, "has_default": true},
         {"name": "avatar", "go_name": "Avatar", "column": "avatar", "type": "bytes", "go_type": "[]byte", "elem_type": "[]byte", "nullable": true, "optional": true},
         {"name": "quota", "go_name": "Quota", "column": "quota", "type": "uint64", "go_type": "uint64", "elem_type": "uint64"},
-        {"name": "active", "go_name": "Active", "column": "active", "type": "bool", "go_type": "bool", "elem_type": "bool", "has_default": true},
+        {"name": "active", "go_name": "Active", "column": "active", "type": "bool", "go_type": "bool", "elem_type": "bool", "optional": true},
         {"name": "settings", "go_name": "Settings", "column": "settings", "type": "json", "go_type": "map[string]any", "elem_type": "map[string]any", "nullable": true, "optional": true},
         {"name": "user_best_friend", "go_name": "UserBestFriend", "column": "user_best_friend", "type": "int64", "go_type": "*int64", "elem_type": "int64", "pointer": true, "nullable": true, "optional": true, "implicit": "best_friend"}
       ],

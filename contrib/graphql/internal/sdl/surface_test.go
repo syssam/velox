@@ -1,8 +1,13 @@
 package sdl
 
 import (
+	"maps"
+	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
+
+	"github.com/vektah/gqlparser/v2/ast"
 
 	"github.com/syssam/velox2/contrib/graphql"
 	"github.com/syssam/velox2/plugin"
@@ -115,5 +120,186 @@ func TestSurfaceEdges(t *testing.T) {
 	}
 	if len(got) != len(want) {
 		t.Errorf("edges %q", got)
+	}
+}
+
+// inputKinds names the InputKinds, for test output.
+var inputKinds = map[InputKind]string{
+	InputValue: "value", InputClear: "clear", InputEdgeID: "edgeID", InputEdgeIDs: "edgeIDs",
+	InputAddIDs: "add", InputRemoveIDs: "remove", InputClearEdge: "clearEdge",
+}
+
+// typeNamed is the Type of s named name, failing the test without one.
+func typeNamed(t *testing.T, s *Surface, name string) *Type {
+	t.Helper()
+	for _, ty := range s.Types {
+		if ty.Name == name {
+			return ty
+		}
+	}
+	t.Fatalf("no type %s", name)
+	return nil
+}
+
+// The mutation inputs of each type, as the SDL declares them, with what each
+// field does and the field or edge it is about.
+func TestSurfaceInputs(t *testing.T) {
+	m := testModel(t)
+	s, err := Build(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sch, sdl := load(t, m, readFile(t, filepath.Join("testdata", "app.graphqls")))
+
+	for _, c := range []struct {
+		name                   string
+		create, update, delete bool
+	}{
+		{"Post", true, true, true}, {"Category", true, true, false}, {"Like", true, false, false},
+		{"Account", true, false, false}, {"Group", false, false, false},
+	} {
+		ty := typeNamed(t, s, c.name)
+		if (ty.Create != nil) != c.create || (ty.Update != nil) != c.update || ty.Delete != c.delete {
+			t.Errorf("%s: Create %v, Update %v, Delete %v; want %v %v %v", c.name, ty.Create != nil, ty.Update != nil, ty.Delete, c.create, c.update, c.delete)
+		}
+	}
+
+	// Each field is the SDL's line, in its order; Required is its "!".
+	for _, ty := range s.Types {
+		for _, in := range []struct {
+			typ    string
+			fields []InputField
+		}{{"Create" + ty.Name + "Input", ty.Create}, {"Update" + ty.Name + "Input", ty.Update}} {
+			var got []string
+			for _, f := range in.fields {
+				got = append(got, f.Name+": "+f.Type)
+				if f.Required != strings.HasSuffix(f.Type, "!") {
+					t.Errorf("%s.%s: Required %v", in.typ, f.Name, f.Required)
+				}
+				if !strings.EqualFold(f.GoName, f.Name) {
+					t.Errorf("%s.%s: GoName %q, which gqlgen does not bind", in.typ, f.Name, f.GoName)
+				}
+			}
+			if want := fieldsOf(sch, in.typ); !slices.Equal(got, want) && (len(got) > 0 || want != nil) {
+				t.Errorf("%s:\n got %v\nwant %v\n%s", in.typ, got, want, sdl)
+			}
+		}
+	}
+
+	describe := func(ty *Type, fs []InputField) []string {
+		var out []string
+		for _, f := range fs {
+			d := f.Name + " " + inputKinds[f.Kind]
+			if f.Field >= 0 {
+				d += " field " + ty.Entity.Fields[f.Field].Name
+			}
+			if f.Edge >= 0 {
+				d += " edge " + ty.Entity.Edges[f.Edge].Name + " " + f.Target
+			}
+			if f.GoType != "" {
+				d += " " + f.GoType
+			}
+			if f.GoPkg != "" {
+				d += " (" + f.GoPkg + ")"
+			}
+			out = append(out, f.GoName+": "+d)
+		}
+		return out
+	}
+	post := typeNamed(t, s, "Post")
+	// A nullable field gives a value and a clear, of one field; a JSON
+	// value is veloxgql's.
+	if got, want := describe(post, post.Update), []string{
+		"Title: title value field title string",
+		"Status: status value field status PostStatus",
+		"PublishedAt: publishedAt value field published_at time.Time (time)",
+		"ClearPublishedAt: clearPublishedAt clear field published_at",
+		"Tags: tags value field tags veloxgql.JSON (" + veloxgqlPath + ")",
+		"Views: views value field views int",
+		"Rating: rating value field rating float64",
+		"ClearRating: clearRating clear field rating",
+		"WriterID: writerID edgeID edge author Account",
+	}; !slices.Equal(got, want) {
+		t.Errorf("UpdatePostInput:\n got %q\nwant %q", got, want)
+	}
+	cat := typeNamed(t, s, "Category")
+	if got, want := describe(cat, cat.Create), []string{
+		"Title: title value field title string",
+		"ChildrenIDs: childrenIDs edgeIDs edge children Category",
+		"ParentID: parentID edgeID edge parent Category",
+	}; !slices.Equal(got, want) {
+		t.Errorf("CreateCategoryInput:\n got %q\nwant %q", got, want)
+	}
+	if got, want := describe(cat, cat.Update), []string{
+		"Title: title value field title string",
+		"AddChildrenIDs: addChildrenIDs add edge children Category",
+		"RemoveChildrenIDs: removeChildrenIDs remove edge children Category",
+		"ClearChildren: clearChildren clearEdge edge children Category",
+		"ParentID: parentID edgeID edge parent Category",
+		"ClearParent: clearParent clearEdge edge parent Category",
+	}; !slices.Equal(got, want) {
+		t.Errorf("UpdateCategoryInput:\n got %q\nwant %q", got, want)
+	}
+
+	// An M2M edge: its IDs on create; add, remove and clear on update.
+	b, err := Build(blogInputs(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := typeNamed(t, b, "User")
+	var got []string
+	for _, f := range append(slices.Clone(user.Create), user.Update...) {
+		if f.Edge >= 0 && user.Entity.Edges[f.Edge].Name == "groups" {
+			got = append(got, describe(user, []InputField{f})...)
+		}
+	}
+	if want := []string{
+		"MembershipIDs: membershipIDs edgeIDs edge groups Group",
+		"AddMembershipIDs: addMembershipIDs add edge groups Group",
+		"RemoveMembershipIDs: removeMembershipIDs remove edge groups Group",
+		"ClearMemberships: clearMemberships clearEdge edge groups Group",
+	}; !slices.Equal(got, want) {
+		t.Errorf("User's groups:\n got %q\nwant %q", got, want)
+	}
+}
+
+// Every input object velox.graphqls declares for a type is the Surface's:
+// its create, update and where inputs, field by field.
+func TestSurfaceMatchesSDL(t *testing.T) {
+	m := testModel(t)
+	s, err := Build(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sch, _ := load(t, m, readFile(t, filepath.Join("testdata", "app.graphqls")))
+	surface := map[string][]string{}
+	for _, ty := range s.Types {
+		for _, in := range []struct {
+			typ    string
+			fields []InputField
+		}{{"Create" + ty.Name + "Input", ty.Create}, {"Update" + ty.Name + "Input", ty.Update}} {
+			if in.fields == nil {
+				continue
+			}
+			for _, f := range in.fields {
+				surface[in.typ] = append(surface[in.typ], f.Name+": "+f.Type)
+			}
+		}
+		for _, f := range ty.Where {
+			surface[ty.Name+"WhereInput"] = append(surface[ty.Name+"WhereInput"], f.Name+": "+f.Type)
+		}
+	}
+	n := 0
+	for name, def := range sch.Types {
+		if def.Kind != ast.InputObject || def.BuiltIn || !strings.HasSuffix(name, "Input") {
+			continue
+		}
+		n++
+		if got, want := surface[name], fieldsOf(sch, name); !slices.Equal(got, want) {
+			t.Errorf("%s:\n Surface %v\n     SDL %v", name, got, want)
+		}
+	}
+	if n != len(surface) {
+		t.Errorf("the SDL declares %d inputs, the Surface %d: %v", n, len(surface), slices.Sorted(maps.Keys(surface)))
 	}
 }

@@ -151,8 +151,22 @@ func checkField(e *plugin.Entity, i int, a graphql.Annotation, fk bool, where st
 		return fmt.Errorf("%s: graphql.CreateInput(true) or UpdateInput(true): the primary key is never an input", where)
 	case isTrue(a.UpdateInput) && f.Immutable:
 		return fmt.Errorf("%s: graphql.UpdateInput(true) on an immutable field, which no update may set", where)
+	case f.HasDefault && !f.Nullable && zeroIsUnset(f.Type):
+		// An insert fills the Default into a zero value, so the field could
+		// never store false or 0, and a create input could not set it.
+		return fmt.Errorf("%s: a Default on a bool or number that is not Nillable cannot be told from unset; velox-gen refuses it too", where)
 	}
 	return nil
+}
+
+// zeroIsUnset reports whether a field of the type typ is a bool or a number,
+// whose zero value an insert reads as unset when the field is not nullable.
+func zeroIsUnset(typ string) bool {
+	switch typ {
+	case "bool", "int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16", "uint32", "uint64", "float32", "float64":
+		return true
+	}
+	return false
 }
 
 // appDirective is the name of a's first application directive, one other

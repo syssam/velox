@@ -53,6 +53,12 @@
 // that guards a field guards its filters too, by which a client could
 // otherwise find its value a prefix or a bisection at a time.
 //
+// They also go on every mutation-input field that sets it: a field's
+// <field> and clear<Field> in CreateXInput and UpdateXInput, and an edge's
+// <edge>ID, <edge>IDs, add<Edge>IDs, remove<Edge>IDs and clear<Edge>, which
+// carry the key field's directives first when the key is on the row. A
+// directive that guards a field's value guards its writes too.
+//
 // A key field takes GraphQL's own directives only (@deprecated…). A foreign
 // key is in no type: its edge stands for it, so a directive that guards it
 // goes on the edge, which carries it to the edge's field, its has and
@@ -73,9 +79,10 @@
 //	directive @admin on FIELD_DEFINITION | INPUT_FIELD_DEFINITION
 //
 // Upgrading: this is a breaking change for an application that has a
-// directive on a filterable field or edge. It must also declare that
-// directive on INPUT_FIELD_DEFINITION, since the where inputs now carry it.
-// Before, those filters were unguarded.
+// directive on a filterable field or edge, or on one a mutation input sets.
+// It must also declare that directive on INPUT_FIELD_DEFINITION, since the
+// where and mutation inputs now carry it. Before, those filters and writes
+// were unguarded.
 //
 // An order is not guarded: the cursors hold the field's values and the order
 // of the nodes reveals them. So OrderField on a field with an application
