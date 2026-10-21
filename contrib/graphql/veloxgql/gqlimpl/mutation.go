@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
@@ -126,6 +127,38 @@ func Matched(got int64, n int, at, typ string) error {
 		return fmt.Errorf("veloxgql: %s: %d rows for %d IDs: the IDs are not distinct keys", at, got, n)
 	}
 	return nil
+}
+
+// Repointed checks an UPDATE that re-pointed the children the n distinct
+// IDs of at name to a new owner of the GraphQL type owner, and changed got
+// rows: it re-points only children that no owner holds, so a child another
+// owner holds is not taken from it. When got is under n, linked counts the
+// children of those IDs the caller may read that an owner holds; one or more
+// is BAD_USER_INPUT "veloxgql: <at>: a <typ> is already linked to another
+// <owner>", which tells the caller nothing it may not read. Otherwise the
+// error is Matched's: NOT_FOUND for a child the caller may not change, or
+// that does not exist. The count's own error is returned as it is. For
+// generated code only.
+func Repointed[E any](ctx context.Context, got int64, n int, linked velox.Query[E], at, typ, owner string) error {
+	if got >= int64(n) {
+		return Matched(got, n, at, typ)
+	}
+	c, err := linked.Count(ctx)
+	switch {
+	case err != nil:
+		return err
+	case c > 0:
+		return InputErrorf("%s: %s %s is already linked to another %s", at, article(typ), typ, owner)
+	}
+	return Matched(got, n, at, typ)
+}
+
+// article is the indefinite article of the name: "an" before a vowel.
+func article(name string) string {
+	if name != "" && strings.ContainsRune("AEIOUaeiou", rune(name[0])) {
+		return "an"
+	}
+	return "a"
 }
 
 // NotFound is the NOT_FOUND error of a mutation whose ID names no row of

@@ -260,9 +260,9 @@ func CreateCategory(ctx context.Context, input CreateCategoryInput) (*Category, 
 			return gqlimpl.WriteError(err, "CreateCategoryInput", "gen.Category", categoryFieldGQL)
 		}
 		if len(k1) > 0 {
-			if n, err := db.Update[Category]().Set(Categories.CategoryChildren.Set(x.ID)).Where(Categories.ID.In(k1...)).Exec(ctx); err != nil {
+			if n, err := db.Update[Category]().Set(Categories.CategoryChildren.Set(x.ID)).Where(Categories.ID.In(k1...), Categories.CategoryChildren.IsNull()).Exec(ctx); err != nil {
 				return err
-			} else if err := gqlimpl.Matched(n, len(k1), "CreateCategoryInput.childrenIDs", "Category"); err != nil {
+			} else if err := gqlimpl.Repointed(ctx, n, len(k1), db.Query[Category]().Where(Categories.ID.In(k1...), Categories.CategoryChildren.NotNull(), Categories.CategoryChildren.NEQ(x.ID)), "CreateCategoryInput.childrenIDs", "Category", "Category"); err != nil {
 				return err
 			}
 		}

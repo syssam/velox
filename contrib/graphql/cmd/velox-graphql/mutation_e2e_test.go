@@ -11,12 +11,14 @@ import (
 //   - Writer is tenant-scoped, with a validator (name), a Nillable field
 //     (bio), an Optional one with a Default (nick), an Optional number
 //     without one (score), a sensitive field (password) and an Optional JSON
-//     field (meta); its edges are an O2M (articles), an M2M (circles) and an
-//     O2O whose key Profile holds (profile).
+//     field (meta); its edges are an O2M (articles), an M2M (circles), an
+//     O2O whose key Profile holds (profile), and a tenant-scoped O2M to
+//     itself (mentees, whose inverse is mentor).
 //   - Article's writer is an M2O whose nullable key is on its own row; its
 //     policy, in gen/article_policy.go, refuses the title "forbidden" on
 //     insert and lets no "locked" row change.
-//   - Circle is the M2M's other side, with a unique name.
+//   - Circle is the M2M's other side, with a unique name; its policy, in
+//     gen/circle_policy.go, hides the circle named "hidden".
 //   - Profile holds the O2O's key.
 const e2eMutSchema = `package schema
 
@@ -38,6 +40,7 @@ func (Writer) Fields() []schema.Field {
 		field.Int("score").Optional(),
 		field.String("password").Sensitive(),
 		field.JSON("meta", map[string]any{}).Optional(),
+		field.Int64("mentor_id").Optional().Nillable(),
 	}
 }
 
@@ -46,6 +49,8 @@ func (Writer) Edges() []schema.Edge {
 		edge.To("articles", Article.Type),
 		edge.To("circles", Circle.Type),
 		edge.To("profile", Profile.Type).Unique(),
+		edge.To("mentees", Writer.Type),
+		edge.From("mentor", Writer.Type).Ref("mentees").Unique().Field("mentor_id"),
 	}
 }
 
@@ -126,6 +131,24 @@ func (*Article) Policy() velox.Policy[Article] {
 }
 `
 
+// e2eMutCirclePolicy is Circle's policy: its Read hides the circle named
+// "hidden".
+const e2eMutCirclePolicy = `package gen
+
+import (
+	"context"
+
+	"github.com/syssam/velox2"
+)
+
+// Policy hides the circle named "hidden".
+func (*Circle) Policy() velox.Policy[Circle] {
+	return velox.Policy[Circle]{
+		Read: func(context.Context) (velox.Pred[Circle], error) { return Circles.Name.NEQ("hidden"), nil },
+	}
+}
+`
+
 // e2eMutRun is the application's test of the generated create mutations,
 // run on each of targets' databases.
 const e2eMutRun = `package app_test
@@ -171,7 +194,7 @@ func targets(t *testing.T) []target {
 }
 
 var sqliteDDL = []string{
-	"CREATE TABLE writers (id INTEGER PRIMARY KEY, org_id INTEGER NOT NULL, name TEXT NOT NULL, bio TEXT, nick TEXT NOT NULL, score INTEGER NOT NULL, password TEXT NOT NULL, meta TEXT)",
+	"CREATE TABLE writers (id INTEGER PRIMARY KEY, org_id INTEGER NOT NULL, name TEXT NOT NULL, bio TEXT, nick TEXT NOT NULL, score INTEGER NOT NULL, password TEXT NOT NULL, meta TEXT, mentor_id INTEGER)",
 	"CREATE TABLE articles (id INTEGER PRIMARY KEY, title TEXT NOT NULL, writer_id INTEGER)",
 	"CREATE TABLE circles (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE)",
 	"CREATE TABLE profiles (id INTEGER PRIMARY KEY, handle TEXT NOT NULL, writer_id INTEGER UNIQUE)",
@@ -408,6 +431,115 @@ func TestEdgeScope(t *testing.T) {
 		if n := count(t, e.ctx, e.db.Query[gen.Writer]()); n != 0 {
 			t.Errorf("%d writers of tenant 7, want 0", n)
 		}
+
+		// The Read policy hides a circle from the COUNT that checks the
+		// M2M's IDs.
+		hidden := &gen.Circle{Name: "hidden"}
+		insert(t, e.ctx, e.db, hidden)
+		_, err = gen.CreateWriter(e.ctx, gen.CreateWriterInput{Name: "w", Password: "x", CircleIDs: []string{circleID(hidden.ID)}})
+		if code(err) != veloxgql.CodeNotFound || err.Error() != "veloxgql: CreateWriterInput.circleIDs: no Circle has this ID" {
+			t.Errorf("the hidden circle: %v (code %q), want NOT_FOUND", err, code(err))
+		}
+		if n := count(t, e.ctx, e.db.Query[gen.Writer]()); n != 0 {
+			t.Errorf("%d writers of tenant 7, want 0", n)
+		}
+		if n := count(t, e.ctx, e.db.Query[gen.WriterCircle]()); n != 0 {
+			t.Errorf("%d join rows, want 0", n)
+		}
+
+		// The tenant scope hides tenant 8's writer from the UPDATE that
+		// re-points a mentee, and from the count of linked mentees: it has
+		// a mentor, and still reads as missing.
+		ctx8 := velox.WithTenant(e.ctx, int64(8))
+		mentor8 := &gen.Writer{Name: "mentor8", Password: "x"}
+		insert(t, ctx8, e.db, mentor8)
+		mentee8 := &gen.Writer{Name: "mentee8", Password: "x", MentorID: ptr(mentor8.ID)}
+		insert(t, ctx8, e.db, mentee8)
+		for _, id := range []int64{other.ID, mentee8.ID} {
+			_, err = gen.CreateWriter(e.ctx, gen.CreateWriterInput{Name: "w", Password: "x", MenteeIDs: []string{writerID(id)}})
+			if code(err) != veloxgql.CodeNotFound || err.Error() != "veloxgql: CreateWriterInput.menteeIDs: no Writer has this ID" {
+				t.Errorf("tenant 8's writer %d as a mentee: %v (code %q), want NOT_FOUND", id, err, code(err))
+			}
+		}
+		if n := count(t, e.ctx, e.db.Query[gen.Writer]()); n != 0 {
+			t.Errorf("%d writers of tenant 7, want 0", n)
+		}
+		got, err := e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(mentee8.ID)).One(ctx8)
+		if err != nil || got.MentorID == nil || *got.MentorID != mentor8.ID {
+			t.Errorf("tenant 8's mentee: %v, %v: want its mentor kept", got, err)
+		}
+		if n := count(t, ctx8, e.db.Query[gen.Writer]().Where(gen.Writers.MentorID.IsNull())); n != 2 {
+			t.Errorf("%d writers of tenant 8 without a mentor, want 2", n)
+		}
+	})
+}
+
+// TestRepoint: a child that another owner holds is refused, not taken from
+// it, and nothing is kept; a child no owner holds is taken; a missing one is
+// NOT_FOUND.
+func TestRepoint(t *testing.T) {
+	each(t, func(t *testing.T, e *env) {
+		w0 := &gen.Writer{Name: "w0", Password: "x"}
+		insert(t, e.ctx, e.db, w0)
+		held, free := &gen.Article{Title: "held", WriterID: ptr(w0.ID)}, &gen.Article{Title: "free"}
+		heldP, freeP := &gen.Profile{Handle: "held", WriterID: ptr(w0.ID)}, &gen.Profile{Handle: "free"}
+		insert(t, e.ctx, e.db, held)
+		insert(t, e.ctx, e.db, free)
+		insert(t, e.ctx, e.db, heldP)
+		insert(t, e.ctx, e.db, freeP)
+		writerOf := func(id int64) *int64 {
+			t.Helper()
+			a, err := e.db.Query[gen.Article]().Where(gen.Articles.ID.EQ(id)).One(e.ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return a.WriterID
+		}
+
+		for _, c := range []struct {
+			name string
+			in   gen.CreateWriterInput
+			code string
+			want string
+		}{
+			{"an article another writer holds", gen.CreateWriterInput{ArticleIDs: []string{articleID(free.ID), articleID(held.ID)}},
+				veloxgql.CodeBadUserInput, "veloxgql: CreateWriterInput.articleIDs: an Article is already linked to another Writer"},
+			{"a profile another writer holds", gen.CreateWriterInput{ProfileID: ptr(profileID(heldP.ID))},
+				veloxgql.CodeBadUserInput, "veloxgql: CreateWriterInput.profileID: a Profile is already linked to another Writer"},
+			{"a missing profile", gen.CreateWriterInput{ProfileID: ptr(profileID(999))},
+				veloxgql.CodeNotFound, "veloxgql: CreateWriterInput.profileID: no Profile has this ID"},
+			{"a missing article", gen.CreateWriterInput{ArticleIDs: []string{articleID(free.ID), articleID(999)}},
+				veloxgql.CodeNotFound, "veloxgql: CreateWriterInput.articleIDs: 1 of the 2 IDs name no Article"},
+		} {
+			c.in.Name, c.in.Password = "w", "x"
+			_, err := gen.CreateWriter(e.ctx, c.in)
+			if code(err) != c.code || err.Error() != c.want {
+				t.Errorf("%s: %v (code %q), want %q, %s", c.name, err, code(err), c.want, c.code)
+			}
+			if n := count(t, e.ctx, e.db.Query[gen.Writer]()); n != 1 {
+				t.Errorf("%s: %d writers, want 1: w0", c.name, n)
+			}
+			if w := writerOf(held.ID); w == nil || *w != w0.ID {
+				t.Errorf("%s: the held article's writer is %v, want w0", c.name, w)
+			}
+			if w := writerOf(free.ID); w != nil {
+				t.Errorf("%s: the free article's writer is %d, want none", c.name, *w)
+			}
+			if n := count(t, e.ctx, e.db.Query[gen.Profile]().Where(gen.Profiles.WriterID.EQ(w0.ID))); n != 1 {
+				t.Errorf("%s: w0 has %d profiles, want 1", c.name, n)
+			}
+		}
+
+		w, err := gen.CreateWriter(e.ctx, gen.CreateWriterInput{Name: "w", Password: "x", ArticleIDs: []string{articleID(free.ID)}, ProfileID: ptr(profileID(freeP.ID))})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := writerOf(free.ID); got == nil || *got != w.ID {
+			t.Errorf("the free article's writer is %v, want %d", got, w.ID)
+		}
+		if n := count(t, e.ctx, e.db.Query[gen.Profile]().Where(gen.Profiles.WriterID.EQ(w.ID))); n != 1 {
+			t.Errorf("the new writer has %d profiles, want 1", n)
+		}
 	})
 }
 
@@ -502,7 +634,7 @@ func TestMutationsRun(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
-	_, run := app(t, map[string]string{"schema/schema.go": e2eMutSchema, "gen/article_policy.go": e2eMutPolicy, "mutation_test.go": e2eMutRun})
+	_, run := app(t, map[string]string{"schema/schema.go": e2eMutSchema, "gen/article_policy.go": e2eMutPolicy, "gen/circle_policy.go": e2eMutCirclePolicy, "mutation_test.go": e2eMutRun})
 	if out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql", "./schema"); err != nil {
 		t.Fatalf("generate: %v\n%s", err, out)
 	}
@@ -516,7 +648,7 @@ func TestMutationsRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
-	for _, name := range []string{"TestCreate", "TestCreateM2MBothSides", "TestRepeatedIDs", "TestEdgeScope", "TestAtomic", "TestCreateErrors"} {
+	for _, name := range []string{"TestCreate", "TestCreateM2MBothSides", "TestRepeatedIDs", "TestEdgeScope", "TestAtomic", "TestCreateErrors", "TestRepoint"} {
 		if !strings.Contains(out, "--- PASS: "+name+" ") {
 			t.Errorf("no PASS of %s in\n%s", name, out)
 		}

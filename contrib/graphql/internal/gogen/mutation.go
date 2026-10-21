@@ -489,21 +489,29 @@ func (r *renderer) writeCreate(f *file, t *sdl.Type, in string) error {
 		if conv != "" {
 			v = conv + "(" + v + ")"
 		}
-		// The UPDATE's count checks the IDs: the tenant scope and the
-		// target's Read and Write policies leave out a row the caller may
-		// not change.
+		// Only a child no owner holds is re-pointed, as in ent: one another
+		// owner holds is not taken from it. The UPDATE's count checks the
+		// IDs, as the tenant scope and the target's Read and Write policies
+		// leave out a row the caller may not change; Repointed tells a child
+		// the caller may read that another owner holds from one it may not
+		// change: it counts, after the UPDATE, the rows of the IDs whose key
+		// is another owner's. A key that is never NULL is held by an owner
+		// on every row.
 		indent, end := given(i)
-		set := fmt.Sprintf("db.Update[%s]().Set(%s.%s.Set(%s))", tgt.Name, tgt.Handles, tfk.GoName, v)
+		ids, n := pk+".In("+d.v+"...)", "len("+d.v+")"
 		if fi.Kind == sdl.InputEdgeID {
-			f.p("%sif n, err := %s.Where(%s.EQ(%s)).Exec(ctx); err != nil {", indent, set, pk, d.v)
-			f.p("%s\treturn err", indent)
-			f.p("%s} else if n == 0 {", indent)
-			f.p("%s\treturn %s.NotFound(%s, %q)", indent, impl, at(fi), fi.Target)
-			f.p("%s}", indent)
+			ids, n = pk+".EQ("+d.v+")", "1"
+		}
+		fkh := tgt.Handles + "." + tfk.GoName
+		repointed := func(got, linked string) string {
+			return fmt.Sprintf("%s.Repointed(ctx, %s, %s, db.Query[%s]().Where(%s), %s, %q, %q)", impl, got, n, tgt.Name, linked, at(fi), fi.Target, t.Name)
+		}
+		if !tfk.Nullable {
+			ret(indent, repointed("0", ids))
 		} else {
-			f.p("%sif n, err := %s.Where(%s.In(%s...)).Exec(ctx); err != nil {", indent, set, pk, d.v)
+			f.p("%sif n, err := db.Update[%s]().Set(%s.Set(%s)).Where(%s, %s.IsNull()).Exec(ctx); err != nil {", indent, tgt.Name, fkh, v, ids, fkh)
 			f.p("%s\treturn err", indent)
-			f.p("%s} else if err := %s.Matched(n, len(%s), %s, %q); err != nil {", indent, impl, d.v, at(fi), fi.Target)
+			f.p("%s} else if err := %s; err != nil {", indent, repointed("n", ids+", "+fkh+".NotNull(), "+fkh+".NEQ("+v+")"))
 			f.p("%s\treturn err", indent)
 			f.p("%s}", indent)
 		}

@@ -503,6 +503,44 @@ func TestMatched(t *testing.T) {
 	}
 }
 
+// TestRepointed: an UPDATE that re-pointed fewer children than its IDs
+// fails with BAD_USER_INPUT when linked counts a child another owner holds,
+// and as Matched otherwise; one that re-pointed them all runs no query.
+func TestRepointed(t *testing.T) {
+	db, _ := mutationDB(t)
+	ctx := veloxgql.NewExtension(db).Context(context.Background())
+	ann := velox.WithTenant(ctx, "ann")
+	if err := db.Insert(&post{ID: 1, Title: "linked"}).Exec(ann); err != nil {
+		t.Fatal(err)
+	}
+	const at = "CreateAccountInput.postIDs"
+	linked, none := db.Query[post]().Where(posts.ID.In(1)), db.Query[post]().Where(posts.ID.In(2))
+	// No tenant: the query would fail, so none runs.
+	if err := gqlimpl.Repointed(ctx, 2, 2, linked, at, "Post", "Account"); err != nil {
+		t.Errorf("all re-pointed: %v", err)
+	}
+	for _, c := range []struct {
+		got        int64
+		n          int
+		q          velox.Query[post]
+		typ, owner string
+		code, want string
+	}{
+		{0, 2, linked, "Post", "Account", veloxgql.CodeBadUserInput, "veloxgql: " + at + ": a Post is already linked to another Account"},
+		{0, 1, linked, "Article", "Writer", veloxgql.CodeBadUserInput, "veloxgql: " + at + ": an Article is already linked to another Writer"},
+		{1, 2, none, "Post", "Account", veloxgql.CodeNotFound, "veloxgql: " + at + ": 1 of the 2 IDs name no Post"},
+		{0, 1, none, "Post", "Account", veloxgql.CodeNotFound, "veloxgql: " + at + ": no Post has this ID"},
+	} {
+		err := gqlimpl.Repointed(ann, c.got, c.n, c.q, at, c.typ, c.owner)
+		if err == nil || err.Error() != c.want || codeOf(err) != c.code {
+			t.Errorf("Repointed(%d, %d) = %v (code %q), want %q, %s", c.got, c.n, err, codeOf(err), c.want, c.code)
+		}
+	}
+	if err := gqlimpl.Repointed(ctx, 0, 1, linked, at, "Post", "Account"); !errors.Is(err, velox.ErrNoTenant) {
+		t.Errorf("the count's error: %v, want ErrNoTenant", err)
+	}
+}
+
 func TestWriteError(t *testing.T) {
 	name := func(goField string) string {
 		if goField == "Title" {

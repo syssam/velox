@@ -483,9 +483,7 @@ func CreateAccount(ctx context.Context, input CreateAccountInput) (*User, error)
 			return gqlimpl.WriteError(err, "CreateAccountInput", "gen.User", userFieldGQL)
 		}
 		if len(k15) > 0 {
-			if n, err := db.Update[Post]().Set(Posts.AuthorID.Set(x.ID)).Where(Posts.ID.In(k15...)).Exec(ctx); err != nil {
-				return err
-			} else if err := gqlimpl.Matched(n, len(k15), "CreateAccountInput.postIDs", "Post"); err != nil {
+			if err := gqlimpl.Repointed(ctx, 0, len(k15), db.Query[Post]().Where(Posts.ID.In(k15...)), "CreateAccountInput.postIDs", "Post", "Account"); err != nil {
 				return err
 			}
 		}
