@@ -197,6 +197,13 @@
 // uint64; veloxgql.Uint and veloxgql.Float32 to MarshalUint and
 // MarshalFloat32.
 //
+// # Supported gqlgen versions
+//
+// velox-graphql supports gqlgen v0.17.86 and later. CI tests v0.17.86 and the
+// latest release. The @goField and @goModel declarations, and the mutation
+// lock (gqlgen calls field interceptors around the resolver alone), are what
+// a new gqlgen could break.
+//
 // The annotation reaches the plugin as JSON under the key "graphql" of the
 // element's annotations; the plugin decodes an Annotation from it. The JSON
 // field names are therefore a contract.

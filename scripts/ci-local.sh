@@ -75,3 +75,6 @@ bin/velox-gen verify -out internal/testmodel ./internal/testmodel/schema
 )
 
 go run ./bench/scale -n 500 -s 100 -check bench/scale/thresholds.json
+
+# velox-graphql against the newest gqlgen, in a copy of the tree.
+scripts/gqlgen-latest.sh

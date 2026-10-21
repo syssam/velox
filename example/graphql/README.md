@@ -188,3 +188,12 @@ go -C graphql tool gqlgen generate
 gqlgen keeps the resolvers' bodies in `graph/schema.resolvers.go`, and moves
 those of fields that are gone into a comment at its end. CI reruns both and
 fails when a checked-in file differs.
+
+## Newer gqlgen
+
+The go.mod files pin gqlgen v0.17.86, which `ci-local.sh` and the `test` job
+use. velox-graphql supports v0.17.86 and later, so CI has a second job,
+`gqlgen-latest`, that runs `scripts/gqlgen-latest.sh`. It copies the tree,
+upgrades gqlgen to the latest release, regenerates the example, then builds
+and tests it. The job is red when a new gqlgen breaks velox-graphql. The script
+needs only Go and git, and never touches the checkout.
