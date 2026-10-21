@@ -269,7 +269,7 @@ From the final tasks of API plan 3 (2026-10-21). The plan's own items are done: 
 - `NOT_FOUND` (`CodeNotFound`) is defined and nothing returns it yet: mutations (GraphQL plan 3) use it.
 - The `gqlgen@latest` job fails red when a new gqlgen breaks velox-graphql, by design. The example's tests ignore error `locations` (gqlgen v0.17.97 adds them); a later gqlgen may change something else they compare.
 - Type-level directives (e.g. federation) need an explicit opt-in. velox-graphql refuses an application directive on an entity, since gqlgen runs it on the type's objects only and the rows' values stay readable through cursors, filters, order and `totalCount`. If one is wanted (federation's `@key`, or a guard), add an opt-in then: either an annotation that marks the directive as not a guard, or copying a guard onto `XConnection`, `XEdge` and `XWhereInput` (declared `on OBJECT | INPUT_OBJECT`) and counting it for the `OrderField` rule.
-- `ErrorPresenter` does not pass a canceled request's error to the application's `log` (the default records it at debug). An application that wants to count client disconnects has no hook for it; add an option if one asks.
+- `ErrorPresenter` does not pass an error that is only the cancellation of the request to the application's `log` (the default records it at debug). An application that wants to count client disconnects has no hook for it; add an option if one asks.
 - The root module's citation test (`TestGodocCitesNoSpec`) checks each comment line alone and does not match internal plans ("GraphQL plan 3"); `contrib/graphql`'s now checks each comment group and matches them. Align the two.
 
 ## 1.0 release

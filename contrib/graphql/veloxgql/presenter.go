@@ -76,7 +76,10 @@ const (
 // An error that joins one the client may see (a coded error, an
 // application's gqlerror) with one it may not, as errors.Join(coded,
 // driverErr) does, shows the client the first, and is logged as well, for
-// the second.
+// the second. So is an application's coded error that wraps one the client
+// may not see: the client sees the coded error's text, and log gets the
+// whole. What veloxgql's own coded errors and velox's policy, validation and
+// constraint errors wrap is not searched: it is never shown.
 //
 // So no entity, constraint, tenant or driver text reaches a client. A
 // *gqlerror.Error that wraps an error is presented as its error is, with its
@@ -85,10 +88,13 @@ const (
 // the Extension adds when a mutation's transaction does not commit is
 // presented like any other.
 //
-// A request whose context is canceled, as when the client went away, is
-// not passed to log: the error is the cancellation's, not the server's. A
-// nil log records it with slog.DebugContext, at level debug, as
-// "veloxgql: request canceled" with the same attributes. The client, if
+// An error that is only the cancellation of the request, as when the client
+// went away, is not passed to log: the request's context is canceled, and
+// every error in the error's tree that the client is not shown is
+// context.Canceled (errors.Is). A nil log records it with
+// slog.DebugContext, at level debug, as "veloxgql: request canceled" with
+// the same attributes. Anything else that fails at the same moment, a
+// driver's error or a panic, is logged as an internal error. The client, if
 // still there, sees what it would otherwise.
 //
 // A panic in a resolver does not reach the presenter as a panic: gqlgen
@@ -113,8 +119,9 @@ func ErrorPresenter(log func(ctx context.Context, err error)) graphql.ErrorPrese
 		if err == nil {
 			return nil
 		}
+		leaves := internalLeaves(err, nil)
 		log := log
-		if errors.Is(ctx.Err(), context.Canceled) {
+		if errors.Is(ctx.Err(), context.Canceled) && canceledOnly(leaves) {
 			log = canceled
 		}
 		out := &gqlerror.Error{Path: graphql.GetPath(ctx)}
@@ -122,7 +129,7 @@ func ErrorPresenter(log func(ctx context.Context, err error)) graphql.ErrorPrese
 		if errors.As(err, &gqlErr) {
 			if gqlErr.Err == nil {
 				if c, _ := shared.Coded(err); c == nil {
-					if hidden(err) {
+					if len(leaves) > 0 {
 						log(ctx, err)
 					}
 					return gqlErr
@@ -131,7 +138,7 @@ func ErrorPresenter(log func(ctx context.Context, err error)) graphql.ErrorPrese
 			out.Path, out.Locations, out.Rule = gqlErr.Path, gqlErr.Locations, gqlErr.Rule
 		}
 		code, msg := present(err)
-		if code == CodeInternal || hidden(err) {
+		if code == CodeInternal || len(leaves) > 0 {
 			log(ctx, err)
 		}
 		out.Message, out.Extensions = msg, map[string]any{"code": code}
@@ -144,8 +151,8 @@ func slogInternal(ctx context.Context, err error) {
 	slog.ErrorContext(ctx, "veloxgql: internal error", logAttrs(ctx, err)...)
 }
 
-// slogCanceled is ErrorPresenter's log, when it is given none, for a request
-// whose context is canceled.
+// slogCanceled is ErrorPresenter's log, when it is given none, for an error
+// that is only the cancellation of the request.
 func slogCanceled(ctx context.Context, err error) {
 	slog.DebugContext(ctx, "veloxgql: request canceled", logAttrs(ctx, err)...)
 }
@@ -167,33 +174,51 @@ func logAttrs(ctx context.Context, err error) []any {
 	return append(attrs, "err", err)
 }
 
-// hidden reports whether err's tree holds an error the client is not shown
-// and that is not otherwise logged: a branch of a join that, presented
-// alone, would be an internal error. A coded error's own tree is not
-// searched: what it wraps (a join of its sentinels, as ErrBadCursor and
-// ErrWrongIDType) is there for errors.Is, and its text is the coded error's.
-func hidden(err error) bool {
-	for err != nil {
-		if c, ok := err.(shared.Coding); ok {
-			if code, _ := c.Extensions()["code"].(string); code != "" {
-				return false
-			}
+// internalLeaves appends to out the internal leaves of err's tree: the
+// errors that end a branch, through wraps and joins, and that presented
+// alone would be internal errors. A client is not shown them, so they are
+// logged. The tree is not searched below an error whose wrapped errors are
+// known and never shown: one of veloxgql's coded errors (what it wraps, as
+// the join of ErrBadCursor and ErrWrongIDType, is there for errors.Is), and
+// velox's policy, validation and constraint errors. An application's coded
+// error is searched, so one that wraps a driver's error is logged.
+func internalLeaves(err error, out []error) []error {
+	switch e := err.(type) {
+	case nil:
+		return out
+	case *shared.Error:
+		if e.Code != "" {
+			return out
 		}
-		switch u := err.(type) {
-		case interface{ Unwrap() []error }:
-			for _, e := range u.Unwrap() {
-				if internal(e) || hidden(e) {
-					return true
-				}
-			}
-			return false
-		case interface{ Unwrap() error }:
-			err = u.Unwrap()
-		default:
+	case *velox.PolicyError, *velox.ValidationError, *velox.ConstraintError:
+		return out
+	}
+	switch u := err.(type) {
+	case interface{ Unwrap() []error }:
+		for _, e := range u.Unwrap() {
+			out = internalLeaves(e, out)
+		}
+		return out
+	case interface{ Unwrap() error }:
+		if next := u.Unwrap(); next != nil {
+			return internalLeaves(next, out)
+		}
+	}
+	if internal(err) {
+		out = append(out, err)
+	}
+	return out
+}
+
+// canceledOnly reports whether leaves, an error's internal leaves, are all
+// the cancellation of a context: the error is only the cancellation.
+func canceledOnly(leaves []error) bool {
+	for _, l := range leaves {
+		if !errors.Is(l, context.Canceled) {
 			return false
 		}
 	}
-	return false
+	return len(leaves) > 0
 }
 
 // internal reports whether err, presented alone, is an internal error.

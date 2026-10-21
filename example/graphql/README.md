@@ -126,9 +126,10 @@ tenant, a client would read `velox: gen.Post: no tenant in the context`.
 | an `Int` out of range for the field's Go type (`300` for `Label.rank`, an `int8`) | `BAD_USER_INPUT` | gqlgen's, as `300 overflows signed 8-bit integer` |
 | anything else: the driver's errors, a timeout | `INTERNAL_SERVER_ERROR` | `internal error`, and the error is logged with `slog` |
 
-Pass your own function to log internal errors elsewhere. A request whose
-client went away (its context canceled) is not logged as an internal error:
-`slog` records it at level debug, and your function does not get it.
+Pass your own function to log internal errors elsewhere. An error that is
+only the cancellation of a request whose client went away is not logged as
+an internal error: `slog` records it at level debug, and your function does
+not get it. Anything else that fails at the same moment is logged.
 
 ### The cost of a request
 

@@ -131,9 +131,9 @@
 // validator or a violated constraint (CodeBadUserInput); gqlgen's text for an
 // integer that an Int8…Uint32 argument cannot hold (CodeBadUserInput); and
 // "internal error" (CodeInternal) for anything else, which it logs: a
-// driver's error, a timeout, a list edge over MaxList, ErrNoDB. A request
-// whose context is canceled, the client gone, is not logged as an internal
-// error. So no driver text, SQL, tenant, entity or constraint name reaches a
+// driver's error, a timeout, a list edge over MaxList, ErrNoDB. An error
+// that is only the cancellation of the request, the client gone, is not
+// logged as an internal error. So no driver text, SQL, tenant, entity or constraint name reaches a
 // client. gqlgen's default presenter shows every error's text, and no code.
 //
 // # Limits

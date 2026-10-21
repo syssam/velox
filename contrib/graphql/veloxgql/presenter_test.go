@@ -153,6 +153,17 @@ type presented struct {
 	Extensions map[string]any `json:"extensions"`
 }
 
+// appCoded is an application's coded error, with the code APP, which may
+// wrap an error the client is not shown.
+type appCoded struct {
+	msg string
+	err error
+}
+
+func (e *appCoded) Error() string              { return e.msg }
+func (e *appCoded) Unwrap() error              { return e.err }
+func (e *appCoded) Extensions() map[string]any { return map[string]any{"code": "APP"} }
+
 // logged records what an ErrorPresenter logs.
 type logged struct {
 	mu   sync.Mutex
@@ -209,6 +220,9 @@ func TestErrorPresenter(t *testing.T) {
 		{"gqlerror over a coded error", gqlerror.WrapPath(path, codedBadID), "BAD_USER_INPUT", "User ID: malformed ID: not canonical base64url without padding", `["posts",0,"author"]`, false},
 		{"join", errors.Join(codedBadID, driverErr), "BAD_USER_INPUT", "User ID: malformed ID: not canonical base64url without padding", `["node"]`, true},
 		{"join, driver first", errors.Join(driverErr, codedBadID), "BAD_USER_INPUT", "User ID: malformed ID: not canonical base64url without padding", `["node"]`, true},
+		{"an application's coded error over a driver error", gqlerror.WrapPath(path, &appCoded{msg: "app says no", err: driverErr}), "APP", "app says no", `["posts",0,"author"]`, true},
+		{"a gqlerror with an application code over a driver error", &gqlerror.Error{Message: "app says no", Path: path, Extensions: map[string]any{"code": "APP"}, Err: driverErr}, "INTERNAL_SERVER_ERROR", "internal error", `["posts",0,"author"]`, true},
+		{"an application's coded error alone", &appCoded{msg: "app says no"}, "APP", "app says no", `["node"]`, false},
 		{"coded over two sentinels", gqlerror.WrapPath(path, gqlimpl.InputErrorf("User cursor: %w: the key is an %w", veloxgql.ErrBadCursor, veloxgql.ErrWrongIDType)), "BAD_USER_INPUT", "User cursor: malformed cursor: the key is an ID of another type", `["posts",0,"author"]`, false},
 		{"int8 overflow", gqlerror.WrapPath(path, int8Err), "BAD_USER_INPUT", "300 overflows signed 8-bit integer", `["posts",0,"author"]`, false},
 		{"uint16 overflow", uint16Err, "BAD_USER_INPUT", "70000 overflows unsigned 16-bit integer", `["node"]`, false},
@@ -305,10 +319,35 @@ func TestCommitErrorIsInternal(t *testing.T) {
 	}
 }
 
-// TestErrorPresenterCanceled: a request whose context is canceled, the
-// client gone, is not logged as an internal error: log does not get it, and
-// a nil log records it at level debug. The client sees what it would
-// otherwise; a timeout is still an internal error, and logged.
+// TestCommitErrorOnLiveRequest: a transaction that fails to commit on a
+// request still alive (here a TxAround hook fails it after the commit, as a
+// lost connection would) is an internal error, and logged once.
+func TestCommitErrorOnLiveRequest(t *testing.T) {
+	commitErr := errors.New("sqlite: disk I/O error")
+	db, _ := handlerDB(t, velox.WithTxAround(func(ctx context.Context, _ *velox.TxInfo, next func(context.Context) error) error {
+		if err := next(ctx); err != nil {
+			return err
+		}
+		return commitErr
+	}))
+	srv := handlerServer(t, db, nil)
+	l := &logged{}
+	srv.SetErrorPresenter(veloxgql.ErrorPresenter(l.log))
+	got := post(t, context.Background(), srv, `mutation { add(id: 1) }`)
+	if want := `{"errors":[{"message":"internal error","extensions":{"code":"INTERNAL_SERVER_ERROR"}}],"data":null}`; got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
+	if errs := l.take(); len(errs) != 1 || !errors.Is(errs[0], commitErr) {
+		t.Errorf("logged %v, want the commit's error once", errs)
+	}
+}
+
+// TestErrorPresenterCanceled: an error that is only the cancellation of
+// the request, the client gone, is not logged as an internal error: log
+// does not get it, and a nil log records it at level debug. Anything else on
+// a canceled request (a driver's error, a panic, either joined with the
+// cancellation) is logged, as a timeout is. The client sees what it would
+// otherwise.
 func TestErrorPresenterCanceled(t *testing.T) {
 	driverErr := errors.New("sqlite: interrupted")
 	canceled, cancel := context.WithCancel(context.Background())
@@ -317,14 +356,40 @@ func TestErrorPresenterCanceled(t *testing.T) {
 	expired, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
 	defer cancel()
 
+	// The recover function's error for a panic, as an application writes
+	// one (serve's returns a gqlerror without Err, which is not logged).
+	panicErr := fmt.Errorf("panic: %v", "boom")
+	coded := gqlimpl.InputErrorf("User cursor: %w", veloxgql.ErrBadCursor)
 	l := &logged{}
-	for _, err := range []error{driverErr, context.Canceled, errors.Join(context.Canceled, driverErr)} {
-		if got := veloxgql.ErrorPresenter(l.log)(canceled, err); got.Message != "internal error" || got.Extensions["code"] != "INTERNAL_SERVER_ERROR" {
-			t.Errorf("%v: presented %v", err, got)
+	for _, c := range []struct {
+		name   string
+		err    error
+		logged bool
+	}{
+		{"bare cancellation", context.Canceled, false},
+		{"wrapped cancellation", fmt.Errorf("velox: transaction: %w", context.Canceled), false},
+		{"wrapped in a gqlerror", gqlerror.WrapPath(ast.Path{ast.PathName("posts")}, fmt.Errorf("sqlite: %w", context.Canceled)), false},
+		{"cancellation joined with a coded error", errors.Join(coded, context.Canceled), false},
+		{"driver error", driverErr, true},
+		{"panic", panicErr, true},
+		{"cancellation joined with a driver error", errors.Join(context.Canceled, driverErr), true},
+		{"cancellation joined with a panic", errors.Join(fmt.Errorf("velox: %w", context.Canceled), panicErr), true},
+	} {
+		got := veloxgql.ErrorPresenter(l.log)(canceled, c.err)
+		if code := got.Extensions["code"]; code != "INTERNAL_SERVER_ERROR" && code != "BAD_USER_INPUT" {
+			t.Errorf("%s: presented %v", c.name, got)
+		}
+		errs := l.take()
+		switch {
+		case c.logged && (len(errs) != 1 || errs[0] != c.err):
+			t.Errorf("%s: logged %v, want the error once", c.name, errs)
+		case !c.logged && len(errs) != 0:
+			t.Errorf("%s: logged %v, want nothing: it is only the cancellation", c.name, errs)
 		}
 	}
-	if errs := l.take(); len(errs) != 0 {
-		t.Errorf("canceled: logged %v, want nothing", errs)
+	// On a live request a cancellation of the application's own is logged.
+	if got := veloxgql.ErrorPresenter(l.log)(context.Background(), context.Canceled); got.Message != "internal error" || len(l.take()) != 1 {
+		t.Errorf("a live request's cancellation: presented %q, want it logged", got.Message)
 	}
 	if got := veloxgql.ErrorPresenter(l.log)(expired, context.DeadlineExceeded); got.Message != "internal error" {
 		t.Errorf("timed out: presented %q", got.Message)
@@ -346,6 +411,14 @@ func TestErrorPresenterCanceled(t *testing.T) {
 	}
 	if rec["level"] != "DEBUG" || rec["msg"] != "veloxgql: request canceled" || rec["path"] != "posts" || rec["err"] != "context canceled" {
 		t.Errorf("logged %v, want a debug record", rec)
+	}
+	// A driver's error on a canceled request is logged at level error.
+	buf.Reset()
+	if got := veloxgql.ErrorPresenter(nil)(canceled, errors.Join(context.Canceled, driverErr)); got.Message != "internal error" {
+		t.Errorf("a driver error on a canceled request: presented %q", got.Message)
+	}
+	if err := json.Unmarshal(buf.Bytes(), &rec); err != nil || rec["level"] != "ERROR" || rec["msg"] != "veloxgql: internal error" {
+		t.Errorf("a driver error on a canceled request: logged %v (%v), want an error record", rec, err)
 	}
 }
 
