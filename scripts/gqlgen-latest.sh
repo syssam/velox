@@ -18,7 +18,9 @@ trap 'chmod -R u+w "$tmp" 2>/dev/null || true; rm -rf "$tmp"' EXIT
   go get github.com/99designs/gqlgen@latest
   go mod tidy
   go vet ./...
-  go test -count=1 ./...
+  # CI unset: this job has no databases, and the mutation itest's TestMain
+  # fails a CI run without them. It runs on SQLite here.
+  env -u CI go test -count=1 ./...
 )
 
 cd "$tmp/example"

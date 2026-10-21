@@ -228,6 +228,9 @@ type Post implements Node {
   """The user who wrote the post."""
   writer: Account! @goField(name: "AuthorGQL")
   likes: [Like!]! @goField(name: "LikesGQL")
+  """Posts this post links to; a join of Post to itself."""
+  related(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection! @goField(name: "RelatedGQL")
+  relatedBy(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection! @goField(name: "RelatedByGQL")
 }
 
 enum PostStatus {
@@ -317,6 +320,8 @@ input CreatePostInput {
   """Who last edited the post; the update default fills it."""
   editedBy: String!
   writerID: ID!
+  relatedIDs: [ID!]
+  relatedByIDs: [ID!]
 }
 
 """The input of updatePost: a field not given is left as it is."""
@@ -330,6 +335,12 @@ input UpdatePostInput {
   rating: Float
   clearRating: Boolean
   writerID: ID
+  addRelatedIDs: [ID!]
+  removeRelatedIDs: [ID!]
+  clearRelated: Boolean
+  addRelatedByIDs: [ID!]
+  removeRelatedByIDs: [ID!]
+  clearRelatedBy: Boolean
 }
 
 # User, as the type Account

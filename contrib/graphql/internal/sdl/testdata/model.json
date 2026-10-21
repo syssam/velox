@@ -92,7 +92,10 @@
           "comment": "The user who wrote the post.",
           "annotations": {"graphql": {"field_name": "writer", "where_edge": true}}},
         {"name": "likes", "go_name": "Likes", "target": "Like", "ref": "post", "kind": "O2M", "field": "post_id", "field_on": "Like",
-          "annotations": {"graphql": {"connection": false}}}
+          "annotations": {"graphql": {"connection": false}}},
+        {"name": "related", "go_name": "Related", "target": "Post", "ref": "related_by", "kind": "M2M", "join": "PostRelated",
+          "comment": "Posts this post links to; a join of Post to itself."},
+        {"name": "related_by", "go_name": "RelatedBy", "target": "Post", "ref": "related", "kind": "M2M", "inverse": true, "join": "PostRelated"}
       ],
       "primary_key": [0],
       "tenant": -1,
@@ -159,6 +162,20 @@
       "primary_key": [0],
       "tenant": 4,
       "annotations": {"graphql": {"type": "Account", "query_field": "accounts", "mutations": ["create"], "skip": 4}}
+    },
+    {
+      "name": "PostRelated",
+      "label": "post_related",
+      "handles": "PostRelateds",
+      "table": "post_related",
+      "join": true,
+      "fields": [
+        {"name": "post_id", "go_name": "PostID", "column": "post_id", "type": "int64", "go_type": "int64", "elem_type": "int64"},
+        {"name": "related_id", "go_name": "RelatedID", "column": "related_id", "type": "int64", "go_type": "int64", "elem_type": "int64"}
+      ],
+      "edges": [],
+      "primary_key": [0, 1],
+      "tenant": -1
     },
     {
       "name": "UserGroup",

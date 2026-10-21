@@ -108,7 +108,7 @@ func TestSurfaceEdges(t *testing.T) {
 	}
 	want := map[string][]string{
 		"Account":  {"posts connection Post PostsGQL", "groups list Group GroupsGQL", "likes connection Like LikesGQL"},
-		"Post":     {"author unique Account AuthorGQL", "likes list Like LikesGQL"},
+		"Post":     {"author unique Account AuthorGQL", "likes list Like LikesGQL", "related connection Post RelatedGQL", "related_by connection Post RelatedByGQL"},
 		"Category": {"children connection Category ChildrenGQL", "parent unique Category ParentGQL"},
 		"Group":    {"users connection Account UsersGQL"},
 		"Like":     {"user unique Account UserGQL", "post unique Post PostGQL"},
@@ -219,6 +219,13 @@ func TestSurfaceInputs(t *testing.T) {
 		"Rating: rating value field rating float64",
 		"ClearRating: clearRating clear field rating",
 		"WriterID: writerID edgeID edge author Account",
+		// An M2M to its own type, from both sides.
+		"AddRelatedIDs: addRelatedIDs add edge related Post",
+		"RemoveRelatedIDs: removeRelatedIDs remove edge related Post",
+		"ClearRelated: clearRelated clearEdge edge related Post",
+		"AddRelatedByIDs: addRelatedByIDs add edge related_by Post",
+		"RemoveRelatedByIDs: removeRelatedByIDs remove edge related_by Post",
+		"ClearRelatedBy: clearRelatedBy clearEdge edge related_by Post",
 	}; !slices.Equal(got, want) {
 		t.Errorf("UpdatePostInput:\n got %q\nwant %q", got, want)
 	}

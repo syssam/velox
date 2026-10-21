@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -12,8 +13,10 @@ import (
 //     (bio), an Optional one with a Default (nick), an Optional number
 //     without one (score), a sensitive field (password) and an Optional JSON
 //     field (meta); its edges are an O2M (articles), an M2M (circles), an
-//     O2O whose key Profile holds (profile), and a tenant-scoped O2M to
-//     itself (mentees, whose inverse is mentor); its policy, in
+//     O2O whose key Profile holds (profile), a tenant-scoped O2M to itself
+//     (mentees, whose inverse is mentor) and an M2M to itself (friends,
+//     whose inverse is friended_by: a join row holds the writer in either
+//     column); its policy, in
 //     gen/writer_policy.go, lets no "frozen" writer change.
 //   - Article's writer is an M2O whose nullable key is on its own row; its
 //     policy, in gen/article_policy.go, refuses the title "forbidden" on
@@ -52,6 +55,7 @@ func (Writer) Edges() []schema.Edge {
 		edge.To("profile", Profile.Type).Unique(),
 		edge.To("mentees", Writer.Type),
 		edge.From("mentor", Writer.Type).Ref("mentees").Unique().Field("mentor_id"),
+		edge.To("friends", Writer.Type).StorageKey(edge.Columns("writer_id", "friend_id")).From("friended_by"),
 	}
 }
 
@@ -177,10 +181,15 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 
 	"example.com/app/gen"
@@ -188,40 +197,107 @@ import (
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
 )
 
+// TestMain refuses to run on a CI runner (CI=true) that was not given both
+// databases: a missing variable there would leave out the PostgreSQL or the
+// MySQL subtests without a failure.
+func TestMain(m *testing.M) {
+	if os.Getenv("CI") == "true" {
+		var missing []string
+		for _, v := range []string{"VELOX_TEST_POSTGRES", "VELOX_TEST_MYSQL"} {
+			if os.Getenv(v) == "" {
+				missing = append(missing, v)
+			}
+		}
+		if len(missing) > 0 {
+			fmt.Fprintf(os.Stderr, "app: CI=true but %s unset: the PostgreSQL and MySQL tests would be left out\n", strings.Join(missing, ", "))
+			os.Exit(1)
+		}
+	}
+	os.Exit(m.Run())
+}
+
 // A target is a database the tests run on: how to open it, and its DDL;
 // fkDDL is the same tables with foreign keys the database enforces, for
-// the tests of what they refuse.
+// the tests of what they refuse. drop drops the tables, in an order their
+// foreign keys allow, before either is run: the server databases outlive a
+// test.
 type target struct {
-	name    string
-	dialect velox.Dialect
-	ddl     []string
-	fkDDL   []string
-	open    func(t *testing.T) *sql.DB
+	name  string
+	ddl   []string
+	fkDDL []string
+	drop  []string
+	// open opens the database: raw, through database/sql, for the DDL and
+	// what velox does not read, and db, through which the tests write.
+	open func(t *testing.T, opts ...velox.Option) (raw *sql.DB, db *velox.DB)
 }
 
-// targets are the databases the tests run on: SQLite.
+// targets are the databases the tests run on: SQLite always; PostgreSQL,
+// through native pgx and through database/sql, when VELOX_TEST_POSTGRES
+// names it; and MySQL when VELOX_TEST_MYSQL does. Its DSN needs
+// clientFoundRows=true, as velox's Open says.
 func targets(t *testing.T) []target {
 	t.Helper()
-	return []target{{
-		name: "sqlite", dialect: velox.SQLite, ddl: sqliteDDL, fkDDL: sqliteFKDDL,
-		open: func(t *testing.T) *sql.DB {
+	ts := []target{{
+		name: "sqlite", ddl: sqliteDDL, fkDDL: sqliteFKDDL,
+		open: func(t *testing.T, opts ...velox.Option) (*sql.DB, *velox.DB) {
 			// Foreign keys are on: only fkDDL declares any.
-			db, err := sql.Open("sqlite", "file::memory:?_pragma=foreign_keys(1)")
-			if err != nil {
-				t.Fatal(err)
-			}
+			db := sqlOpen(t, "sqlite", "file::memory:?_pragma=foreign_keys(1)")
 			db.SetMaxOpenConns(1)
-			return db
+			return db, velox.Open(velox.SQLite, db, opts...)
 		},
 	}}
+	if dsn := os.Getenv("VELOX_TEST_POSTGRES"); dsn != "" {
+		ts = append(ts, target{
+			name: "pgx", ddl: pgDDL, fkDDL: pgFKDDL, drop: dropDDL,
+			open: func(t *testing.T, opts ...velox.Option) (*sql.DB, *velox.DB) {
+				pool, err := pgxpool.New(context.Background(), dsn)
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(pool.Close)
+				return sqlOpen(t, "pgx", dsn), velox.OpenPgx(pool, opts...)
+			},
+		}, target{
+			name: "postgres", ddl: pgDDL, fkDDL: pgFKDDL, drop: dropDDL,
+			open: func(t *testing.T, opts ...velox.Option) (*sql.DB, *velox.DB) {
+				db := sqlOpen(t, "pgx", dsn)
+				return db, velox.Open(velox.Postgres, db, opts...)
+			},
+		})
+	}
+	if dsn := os.Getenv("VELOX_TEST_MYSQL"); dsn != "" {
+		ts = append(ts, target{
+			name: "mysql", ddl: mysqlDDL, fkDDL: mysqlFKDDL, drop: dropDDL,
+			open: func(t *testing.T, opts ...velox.Option) (*sql.DB, *velox.DB) {
+				db := sqlOpen(t, "mysql", dsn)
+				return db, velox.Open(velox.MySQL, db, opts...)
+			},
+		})
+	}
+	return ts
 }
 
+// sqlOpen opens a database/sql handle, closed when the test ends.
+func sqlOpen(t *testing.T, driver, dsn string) *sql.DB {
+	t.Helper()
+	db, err := sql.Open(driver, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	return db
+}
+
+// The tables of gen: writer_circles is Writer.circles' join table, and
+// writer_friends Writer.friends', as gen/writer_circle_velox.go and
+// gen/writer_friend_velox.go name them.
 var sqliteDDL = []string{
 	"CREATE TABLE writers (id INTEGER PRIMARY KEY, org_id INTEGER NOT NULL, name TEXT NOT NULL, bio TEXT, nick TEXT NOT NULL, score INTEGER NOT NULL, password TEXT NOT NULL, meta TEXT, mentor_id INTEGER)",
 	"CREATE TABLE articles (id INTEGER PRIMARY KEY, title TEXT NOT NULL, writer_id INTEGER)",
 	"CREATE TABLE circles (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE)",
 	"CREATE TABLE profiles (id INTEGER PRIMARY KEY, handle TEXT NOT NULL, writer_id INTEGER UNIQUE)",
 	"CREATE TABLE writer_circles (writer_id INTEGER NOT NULL, circle_id INTEGER NOT NULL, PRIMARY KEY (writer_id, circle_id))",
+	"CREATE TABLE writer_friends (writer_id INTEGER NOT NULL, friend_id INTEGER NOT NULL, PRIMARY KEY (writer_id, friend_id))",
 }
 
 // sqliteFKDDL is sqliteDDL with foreign keys from articles and the join
@@ -232,6 +308,56 @@ var sqliteFKDDL = []string{
 	sqliteDDL[2],
 	sqliteDDL[3],
 	"CREATE TABLE writer_circles (writer_id INTEGER NOT NULL REFERENCES writers (id), circle_id INTEGER NOT NULL REFERENCES circles (id), PRIMARY KEY (writer_id, circle_id))",
+	"CREATE TABLE writer_friends (writer_id INTEGER NOT NULL REFERENCES writers (id), friend_id INTEGER NOT NULL REFERENCES writers (id), PRIMARY KEY (writer_id, friend_id))",
+}
+
+var pgDDL = []string{
+	"CREATE TABLE writers (id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, org_id bigint NOT NULL, name text NOT NULL, bio text, nick text NOT NULL, score bigint NOT NULL, password text NOT NULL, meta jsonb, mentor_id bigint)",
+	"CREATE TABLE articles (id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, title text NOT NULL, writer_id bigint)",
+	"CREATE TABLE circles (id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, name text NOT NULL UNIQUE)",
+	"CREATE TABLE profiles (id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, handle text NOT NULL, writer_id bigint UNIQUE)",
+	"CREATE TABLE writer_circles (writer_id bigint NOT NULL, circle_id bigint NOT NULL, PRIMARY KEY (writer_id, circle_id))",
+	"CREATE TABLE writer_friends (writer_id bigint NOT NULL, friend_id bigint NOT NULL, PRIMARY KEY (writer_id, friend_id))",
+}
+
+// pgFKDDL is pgDDL with sqliteFKDDL's foreign keys.
+var pgFKDDL = []string{
+	pgDDL[0],
+	"CREATE TABLE articles (id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, title text NOT NULL, writer_id bigint REFERENCES writers (id))",
+	pgDDL[2],
+	pgDDL[3],
+	"CREATE TABLE writer_circles (writer_id bigint NOT NULL REFERENCES writers (id), circle_id bigint NOT NULL REFERENCES circles (id), PRIMARY KEY (writer_id, circle_id))",
+	"CREATE TABLE writer_friends (writer_id bigint NOT NULL REFERENCES writers (id), friend_id bigint NOT NULL REFERENCES writers (id), PRIMARY KEY (writer_id, friend_id))",
+}
+
+var mysqlDDL = []string{
+	"CREATE TABLE writers (id BIGINT AUTO_INCREMENT PRIMARY KEY, org_id BIGINT NOT NULL, name VARCHAR(255) NOT NULL, bio TEXT NULL, nick VARCHAR(255) NOT NULL, score BIGINT NOT NULL, password VARCHAR(255) NOT NULL, meta JSON NULL, mentor_id BIGINT NULL)",
+	"CREATE TABLE articles (id BIGINT AUTO_INCREMENT PRIMARY KEY, title VARCHAR(255) NOT NULL, writer_id BIGINT NULL)",
+	"CREATE TABLE circles (id BIGINT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL UNIQUE)",
+	"CREATE TABLE profiles (id BIGINT AUTO_INCREMENT PRIMARY KEY, handle VARCHAR(255) NOT NULL, writer_id BIGINT NULL UNIQUE)",
+	"CREATE TABLE writer_circles (writer_id BIGINT NOT NULL, circle_id BIGINT NOT NULL, PRIMARY KEY (writer_id, circle_id))",
+	"CREATE TABLE writer_friends (writer_id BIGINT NOT NULL, friend_id BIGINT NOT NULL, PRIMARY KEY (writer_id, friend_id))",
+}
+
+// mysqlFKDDL is mysqlDDL with sqliteFKDDL's foreign keys.
+var mysqlFKDDL = []string{
+	mysqlDDL[0],
+	"CREATE TABLE articles (id BIGINT AUTO_INCREMENT PRIMARY KEY, title VARCHAR(255) NOT NULL, writer_id BIGINT NULL, FOREIGN KEY (writer_id) REFERENCES writers (id))",
+	mysqlDDL[2],
+	mysqlDDL[3],
+	"CREATE TABLE writer_circles (writer_id BIGINT NOT NULL, circle_id BIGINT NOT NULL, PRIMARY KEY (writer_id, circle_id), FOREIGN KEY (writer_id) REFERENCES writers (id), FOREIGN KEY (circle_id) REFERENCES circles (id))",
+	"CREATE TABLE writer_friends (writer_id BIGINT NOT NULL, friend_id BIGINT NOT NULL, PRIMARY KEY (writer_id, friend_id), FOREIGN KEY (writer_id) REFERENCES writers (id), FOREIGN KEY (friend_id) REFERENCES writers (id))",
+}
+
+// dropDDL drops the tables of a server database, those whose foreign keys
+// point at another first.
+var dropDDL = []string{
+	"DROP TABLE IF EXISTS writer_friends",
+	"DROP TABLE IF EXISTS writer_circles",
+	"DROP TABLE IF EXISTS articles",
+	"DROP TABLE IF EXISTS profiles",
+	"DROP TABLE IF EXISTS circles",
+	"DROP TABLE IF EXISTS writers",
 }
 
 // env is a test's database: ctx is under tenant 7, with the DB put there by
@@ -270,20 +396,19 @@ func run(t *testing.T, fk bool, fn func(t *testing.T, e *env)) {
 			if fk {
 				ddl = tg.fkDDL
 			}
-			sqlDB := tg.open(t)
-			t.Cleanup(func() { _ = sqlDB.Close() })
-			for _, s := range ddl {
-				if _, err := sqlDB.Exec(s); err != nil {
-					t.Fatalf("%s: %v", s, err)
-				}
-			}
-			e := &env{raw: sqlDB}
-			e.db = velox.Open(tg.dialect, sqlDB, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+			e := &env{}
+			raw, db := tg.open(t, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
 				e.mu.Lock()
 				e.sql = append(e.sql, st.SQL)
 				e.mu.Unlock()
 				return next(ctx)
 			}))
+			for _, s := range append(slices.Clone(tg.drop), ddl...) {
+				if _, err := raw.Exec(s); err != nil {
+					t.Fatalf("%s: %v", s, err)
+				}
+			}
+			e.raw, e.db = raw, db
 			e.ctx = velox.WithTenant(veloxgql.NewExtension(e.db).Context(context.Background()), int64(7))
 			fn(t, e)
 		})
@@ -845,6 +970,13 @@ func TestUpdate(t *testing.T) {
 		insert(t, e.ctx, e.db, &gen.WriterCircle{WriterID: w.ID, CircleID: c1.ID})
 		id := writerID(w.ID)
 
+		// A value the row already holds: the UPDATE matches the row, and
+		// changes nothing. MySQL counts it only with clientFoundRows=true,
+		// which velox's Open asks of its DSN.
+		if got, err := gen.UpdateWriter(e.ctx, id, gen.UpdateWriterInput{Name: ptr("w")}); err != nil || got.Name != "w" {
+			t.Errorf("setting the name w holds: %v, %v", got, err)
+		}
+
 		// Fields: nil leaves one, a value sets it, clear sets NULL.
 		in := gen.UpdateWriterInput{Bio: ptr("hi"), Password: ptr("n3w-s3cret"), Score: ptr(3), Meta: ptr(veloxgql.JSON(` + "`" + `{"k":"v"}` + "`" + `))}
 		got, err := gen.UpdateWriter(e.ctx, id, in)
@@ -1225,6 +1357,84 @@ func TestDeletePolicy(t *testing.T) {
 	})
 }
 
+// friendsOf are the IDs of writer id's friends, loaded through the edge
+// Writer.friends: the writers its join rows name in friend_id.
+func friendsOf(t *testing.T, e *env, id int64) []int64 {
+	t.Helper()
+	w, err := e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(id)).With(gen.Writers.Friends).One(e.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fs, _ := w.Friends.Get()
+	var out []int64
+	for _, f := range fs {
+		out = append(out, f.ID)
+	}
+	slices.Sort(out)
+	return out
+}
+
+// TestSelfM2M: Writer.friends joins Writer to itself. Create and update
+// write its join rows one way, the writer in writer_id; adding a friend
+// already linked changes nothing; DeleteWriter, after the COUNT under the
+// DELETE's scope, deletes the rows that hold the writer in either column,
+// which the foreign keys of fkDDL would otherwise refuse, and no other.
+func TestSelfM2M(t *testing.T) {
+	eachFK(t, func(t *testing.T, e *env) {
+		w1, w2, w3 := &gen.Writer{Name: "w1", Password: "x"}, &gen.Writer{Name: "w2", Password: "x"}, &gen.Writer{Name: "w3", Password: "x"}
+		for _, w := range []*gen.Writer{w1, w2, w3} {
+			insert(t, e.ctx, e.db, w)
+		}
+		insert(t, e.ctx, e.db, &gen.WriterFriend{WriterID: w1.ID, FriendID: w2.ID})
+		w, err := gen.CreateWriter(e.ctx, gen.CreateWriterInput{Name: "w", Password: "x", FriendIDs: []string{writerID(w1.ID), writerID(w2.ID), writerID(w1.ID)}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := friendsOf(t, e, w.ID); !slices.Equal(got, []int64{w1.ID, w2.ID}) {
+			t.Errorf("w's friends: %v, want %d and %d", got, w1.ID, w2.ID)
+		}
+		if _, err := gen.UpdateWriter(e.ctx, writerID(w3.ID), gen.UpdateWriterInput{AddFriendIDs: []string{writerID(w.ID)}}); err != nil {
+			t.Fatal(err)
+		}
+		// Already linked: succeeds, and changes nothing.
+		if _, err := gen.UpdateWriter(e.ctx, writerID(w.ID), gen.UpdateWriterInput{AddFriendIDs: []string{writerID(w1.ID)}}); err != nil {
+			t.Errorf("adding w1 again: %v", err)
+		}
+		if n := count(t, e.ctx, e.db.Query[gen.WriterFriend]()); n != 4 {
+			t.Errorf("%d join rows, want 4", n)
+		}
+		if got := friendsOf(t, e, w3.ID); !slices.Equal(got, []int64{w.ID}) {
+			t.Errorf("w3's friends: %v, want %d", got, w.ID)
+		}
+
+		e.reset()
+		if got, err := gen.DeleteWriter(e.ctx, writerID(w.ID)); err != nil || got != writerID(w.ID) {
+			t.Fatalf("DeleteWriter = %q, %v: want %q", got, err, writerID(w.ID))
+		}
+		var count1, or int
+		for _, s := range e.stmts() {
+			if strings.HasPrefix(s, "SELECT COUNT") {
+				count1++
+			}
+			if strings.HasPrefix(s, "DELETE") && strings.Contains(s, "writer_friends") && strings.Contains(s, " OR ") {
+				or++
+			}
+		}
+		if count1 != 1 || or != 1 {
+			t.Errorf("sent %q, want a SELECT COUNT and one DELETE of writer_friends by either column", e.stmts())
+		}
+		if n := count(t, e.ctx, e.db.Query[gen.WriterFriend]().Where(velox.Or(gen.WriterFriends.WriterID.EQ(w.ID), gen.WriterFriends.FriendID.EQ(w.ID)))); n != 0 {
+			t.Errorf("%d join rows of w, want 0", n)
+		}
+		if got := friendsOf(t, e, w1.ID); !slices.Equal(got, []int64{w2.ID}) {
+			t.Errorf("w1's friends: %v, want %d: its own row kept", got, w2.ID)
+		}
+		if got := friendsOf(t, e, w3.ID); len(got) != 0 {
+			t.Errorf("w3's friends: %v, want none", got)
+		}
+	})
+}
+
 // TestDeleteConstraint: the database's foreign key refuses to delete a
 // writer an article points at; the error is a *velox.ConstraintError of
 // kind ConstraintForeignKey, which the presenter shows without the driver's
@@ -1264,8 +1474,11 @@ func TestDeleteConstraint(t *testing.T) {
 `
 
 // TestMutationsRun generates e2eMutSchema's Go and runs e2eMutRun on it:
-// createX, updateX and deleteX with each kind of edge, the tenant and policy scope of
-// the IDs they name, atomicity, and their errors.
+// createX, updateX and deleteX with each kind of edge, the tenant and policy
+// scope of the IDs they name, atomicity, and their errors. Each test passes
+// on SQLite, and on PostgreSQL (through pgx and database/sql) and MySQL when
+// VELOX_TEST_POSTGRES and VELOX_TEST_MYSQL name them; with CI=true, the
+// application's TestMain fails unless both do.
 func TestMutationsRun(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
@@ -1280,15 +1493,36 @@ func TestMutationsRun(t *testing.T) {
 	if out, err := run("vet", "./gen"); err != nil {
 		t.Fatalf("go vet: %v\n%s", err, out)
 	}
+	// The databases each test runs on: the server ones when their
+	// variables name them, which run passes on, as it does CI.
+	targets := []string{"sqlite"}
+	if os.Getenv("VELOX_TEST_POSTGRES") != "" {
+		targets = append(targets, "pgx", "postgres")
+	}
+	if os.Getenv("VELOX_TEST_MYSQL") != "" {
+		targets = append(targets, "mysql")
+	}
+	t.Logf("targets: %v", targets)
 	out, err := run("test", "-count=1", "-v", ".")
 	if err != nil {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
 	for _, name := range []string{"TestCreate", "TestCreateM2MBothSides", "TestRepeatedIDs", "TestEdgeScope", "TestAtomic", "TestCreateErrors", "TestRepoint",
 		"TestUpdate", "TestUpdateConflicts", "TestUpdatePolicy", "TestUpdateWriteScope", "TestUpdateReadBack", "TestUpdateEmpty", "TestUpdateErrors",
-		"TestDelete", "TestDeletePolicy", "TestDeleteConstraint"} {
+		"TestDelete", "TestDeletePolicy", "TestDeleteConstraint", "TestSelfM2M"} {
 		if !strings.Contains(out, "--- PASS: "+name+" ") {
 			t.Errorf("no PASS of %s in\n%s", name, out)
 		}
+		for _, tg := range targets {
+			if !strings.Contains(out, "--- PASS: "+name+"/"+tg+" (") {
+				t.Errorf("no PASS of %s/%s in\n%s", name, tg, out)
+			}
+		}
+	}
+	for _, tg := range targets {
+		t.Logf("%s: %d tests passed", tg, strings.Count(out, "/"+tg+" ("))
+	}
+	if strings.Contains(out, "--- SKIP") {
+		t.Errorf("a test skipped:\n%s", out)
 	}
 }
