@@ -16,3 +16,6 @@ type Cents = kind.Cents
 
 // Score is a named integer type: its handle is a NumberCol.
 type Score = kind.Score
+
+// Moment is a time type defined on time.Time: a time default converts to it.
+type Moment = kind.Moment

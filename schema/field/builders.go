@@ -446,20 +446,23 @@ func (b *EnumBuilder) GoType(ev EnumValues) *EnumBuilder {
 	return b
 }
 
-// EnumOfBuilder builds an enum field of the Go type T, declared with EnumOf.
-type EnumOfBuilder[T interface {
+// EnumType is the Go type of an enum field declared with EnumOf: a string
+// type whose Values method lists the enum's values, such as
+//
+//	type Status string
+//
+//	func (Status) Values() []string { return []string{"active", "closed"} }
+type EnumType interface {
 	~string
 	Values() []string
-}] struct {
-	common[*EnumOfBuilder[T]]
 }
+
+// EnumOfBuilder builds an enum field of the Go type T, declared with EnumOf.
+type EnumOfBuilder[T EnumType] struct{ common[*EnumOfBuilder[T]] }
 
 // EnumOf declares an enum field of the Go type T, whose Values method lists
 // the values. It is Enum(name).GoType(T("")), with a typed Default.
-func EnumOf[T interface {
-	~string
-	Values() []string
-}](name string) *EnumOfBuilder[T] {
+func EnumOf[T EnumType](name string) *EnumOfBuilder[T] {
 	e := newEnum(name, desc.Caller()).GoType(T(""))
 	b := &EnumOfBuilder[T]{}
 	b.common = common[*EnumOfBuilder[T]]{d: e.d, self: b}

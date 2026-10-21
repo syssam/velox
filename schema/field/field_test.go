@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/schema"
 	"github.com/syssam/velox2/schema/field"
 	"github.com/syssam/velox2/schema/internal/desc"
@@ -395,8 +396,12 @@ func TestBytesMaxLenSetsSize(t *testing.T) {
 }
 
 func TestSchemaTypeDialects(t *testing.T) {
-	if field.Postgres != "postgres" || field.MySQL != "mysql" || field.SQLite != "sqlite" {
-		t.Fatal("the keys are the core's dialect names")
+	// The keys are the core's dialect names; the external test package can
+	// import the core, which the field package must not.
+	for key, d := range map[string]velox.Dialect{field.Postgres: velox.Postgres, field.MySQL: velox.MySQL, field.SQLite: velox.SQLite} {
+		if key != d.String() {
+			t.Errorf("key %q, the core's name %q", key, d.String())
+		}
 	}
 	d := field.String("s").SchemaType(map[string]string{field.Postgres: "citext", field.MySQL: "varchar(10)", field.SQLite: "text"}).Descriptor()
 	if len(d.Errs) != 0 {
