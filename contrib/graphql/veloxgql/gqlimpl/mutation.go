@@ -3,7 +3,6 @@ package gqlimpl
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/syssam/velox2"
@@ -18,7 +17,8 @@ import (
 //
 // In the Extension's transaction fn gets ctx and that DB as they are: no
 // savepoint is made, and fn's error fails the operation, whose transaction
-// then rolls back. Without a DB in ctx, Atomic fails with veloxgql.ErrNoDB
+// then rolls back, as long as the resolver returns it: one that swallows
+// the error commits fn's partial writes with the operation. Without a DB in ctx, Atomic fails with veloxgql.ErrNoDB
 // and fn does not run.
 func Atomic(ctx context.Context, fn func(ctx context.Context, db *velox.DB) error) error {
 	db, err := veloxgql.DBFrom(ctx)
@@ -97,7 +97,7 @@ func DecodeIDsAs[K comparable, V any](ctx context.Context, at string, ids []stri
 // Exist fails with NOT_FOUND, naming at and typ, unless q counts n rows:
 // q selects the rows the IDs of at name, under the caller's tenant and
 // Read policy. Its text is "veloxgql: <at>: <missing> of the <n> IDs name
-// no <typ>", and echoes no ID. n is the number of distinct IDs; for n 0,
+// no <typ>", or NotFound's for n 1, and echoes no ID. n is the number of distinct IDs; for n 0,
 // Exist runs no query. The query's own error is returned as it is. For
 // generated code only.
 func Exist[E any](ctx context.Context, q velox.Query[E], n int, at, typ string) error {
@@ -108,6 +108,8 @@ func Exist[E any](ctx context.Context, q velox.Query[E], n int, at, typ string) 
 	switch {
 	case err != nil:
 		return err
+	case got < int64(n) && n == 1:
+		return NotFound(at, typ)
 	case got < int64(n):
 		return shared.NotFoundf("%s: %d of the %d IDs name no %s", at, int64(n)-got, n, typ)
 	case got > int64(n):
@@ -127,10 +129,23 @@ func NotFound(at, typ string) error {
 // "gen.Post") made from the input named input. A *velox.ValidationError of
 // entity on a field name gives a GraphQL name for becomes BAD_USER_INPUT
 // "<input>.<name>: invalid value: <the validator's text>", wrapping err.
-// Every other error is returned as it is. For generated code only.
+// Every other error is returned as it is. So is a validation error joined
+// with another error (errors.Join): only err itself and the chain of errors
+// it wraps one by one are searched, so that ErrorPresenter still logs an
+// internal error joined with the validation error. For generated code only.
 func WriteError(err error, input, entity string, name func(goField string) string) error {
 	var v *velox.ValidationError
-	if !errors.As(err, &v) || v.Entity != entity {
+	for e := err; e != nil && v == nil; {
+		switch x := e.(type) {
+		case *velox.ValidationError:
+			v = x
+		case interface{ Unwrap() error }:
+			e = x.Unwrap()
+		default:
+			e = nil
+		}
+	}
+	if v == nil || v.Entity != entity {
 		return err
 	}
 	field := name(v.Field)

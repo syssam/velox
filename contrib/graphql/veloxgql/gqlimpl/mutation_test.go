@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -25,7 +26,8 @@ import (
 )
 
 // post is a hand-written tenant-scoped entity, as velox-gen would write it,
-// for Exist: a key, a tenant and a title.
+// for Exist: a key, a tenant and a title. Its Read policy hides the posts
+// titled "hidden".
 type post struct {
 	ID     int64
 	Tenant string
@@ -33,9 +35,17 @@ type post struct {
 }
 
 var posts = struct {
-	ID velox.NumberCol[post, int64]
+	ID    velox.NumberCol[post, int64]
+	Title velox.StringCol[post, string]
 }{
-	ID: velox.NumberCol[post, int64]{I: 0},
+	ID:    velox.NumberCol[post, int64]{I: 0},
+	Title: velox.StringCol[post, string]{I: 2},
+}
+
+func (*post) Policy() velox.Policy[post] {
+	return velox.Policy[post]{
+		Read: func(context.Context) (velox.Pred[post], error) { return posts.Title.NEQ("hidden"), nil },
+	}
 }
 
 var postMeta velox.MetaOnce[post]
@@ -48,6 +58,7 @@ func postDesc() velox.Desc[post] {
 		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Tenant", Name: "tenant"}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},
 		Tenant:     1,
+		Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*post)(nil).Policy()) },
 		Addr: func(x *post, i int) any {
 			switch i {
 			case 0:
@@ -417,7 +428,7 @@ func TestExist(t *testing.T) {
 	for _, p := range []struct {
 		ctx context.Context
 		p   post
-	}{{ann, post{ID: 1, Title: "a"}}, {bob, post{ID: 2, Title: "b"}}} {
+	}{{ann, post{ID: 1, Title: "a"}}, {bob, post{ID: 2, Title: "b"}}, {ann, post{ID: 4, Title: "hidden"}}} {
 		if err := db.Insert(&p.p).Exec(p.ctx); err != nil {
 			t.Fatal(err)
 		}
@@ -432,6 +443,7 @@ func TestExist(t *testing.T) {
 	}{
 		"missing":          {ann, []int64{1, 3}},
 		"another tenant's": {ann, []int64{1, 2}},
+		"hidden by policy": {ann, []int64{1, 4}},
 	} {
 		err := gqlimpl.Exist(c.ctx, db.Query[post]().Where(posts.ID.In(c.ids...)), len(c.ids), at, "Post")
 		if codeOf(err) != veloxgql.CodeNotFound {
@@ -439,6 +451,16 @@ func TestExist(t *testing.T) {
 		}
 		if want := "veloxgql: " + at + ": 1 of the 2 IDs name no Post"; err == nil || err.Error() != want {
 			t.Errorf("%s: %v, want %q", name, err, want)
+		}
+	}
+	// One ID that names no row reads as NotFound does.
+	for name, id := range map[string]int64{"missing": 3, "another tenant's": 2, "hidden by policy": 4} {
+		err := gqlimpl.Exist(ann, db.Query[post]().Where(posts.ID.In(id)), 1, at, "Post")
+		if codeOf(err) != veloxgql.CodeNotFound {
+			t.Errorf("one ID, %s: %v, want NOT_FOUND", name, err)
+		}
+		if want := "veloxgql: " + at + ": no Post has this ID"; err == nil || err.Error() != want {
+			t.Errorf("one ID, %s: %v, want %q", name, err, want)
 		}
 	}
 	// The query's own error is returned as it is.
@@ -474,9 +496,15 @@ func TestWriteError(t *testing.T) {
 		t.Error("errors.As does not find the *velox.ValidationError")
 	}
 
-	// Wrapped, as velox returns it from Exec.
-	if err := gqlimpl.WriteError(errors.Join(errors.New("x"), ve), "CreatePostInput", "gen.Post", name); codeOf(err) != veloxgql.CodeBadUserInput {
+	// Wrapped directly, as by fmt.Errorf("...: %w", ve).
+	if err := gqlimpl.WriteError(fmt.Errorf("insert: %w", ve), "CreatePostInput", "gen.Post", name); codeOf(err) != veloxgql.CodeBadUserInput {
 		t.Errorf("a wrapped validation error: %v, want BAD_USER_INPUT", err)
+	}
+	// Joined with an internal error, it is returned as it is, so that the
+	// presenter still logs the internal part.
+	joined := errors.Join(errors.New("driver: connection reset"), ve)
+	if got := gqlimpl.WriteError(joined, "CreatePostInput", "gen.Post", name); got != joined {
+		t.Errorf("a validation error joined with an internal one: %v, want it unchanged", got)
 	}
 
 	for label, e := range map[string]error{
