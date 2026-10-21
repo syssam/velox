@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"path"
 	"slices"
 	"strings"
@@ -508,22 +509,30 @@ func sameType(f, id *loadjson.Field) bool {
 
 // indexes resolves the indexes of every entity (step 5).
 func (b *builder) indexes() {
+	type owner struct {
+		e *Entity
+		i int
+	}
+	names := map[[2]string]owner{} // by the table's schema and the index name
 	for _, n := range b.nodes {
 		e := n.ent
-		var resolved []bool
+		var ok []bool // the indexes no earlier rule refuses
 		for i, li := range n.schema.Indexes {
 			ix := &Index{Columns: []string{}, Unique: li.Unique, Where: li.Where, Annotations: li.Annotations, Pos: li.Pos}
-			if len(li.Fields) == 0 && len(li.Edges) == 0 {
+			good := len(li.Fields)+len(li.Edges) > 0
+			if !good {
 				b.fail(25, e.Name, indexLoc(i, ix), "names no fields or edges")
 			}
 			for _, name := range li.Fields {
 				f := e.Field(name)
 				if f == nil {
 					b.fail(23, e.Name, indexLoc(i, ix), "names unknown field %q", name)
+					good = false
 					continue
 				}
 				if f.Type == "json" {
 					b.fail(42, e.Name, indexLoc(i, ix), "field %q is JSON, which no index can cover", name)
+					good = false
 				}
 				ix.Columns = append(ix.Columns, f.Column)
 			}
@@ -532,44 +541,72 @@ func (b *builder) indexes() {
 				switch {
 				case s == nil:
 					b.fail(23, e.Name, indexLoc(i, ix), "names unknown edge %q", name)
+					good = false
 				case s.ed.Rel.Kind == "":
+					good = false // unresolved: an error is recorded
 				case !ownFK(s.ed):
 					b.fail(24, e.Name, indexLoc(i, ix), "edge %q has no column in table %s", name, e.Table)
+					good = false
 				default:
 					ix.Columns = append(ix.Columns, s.ed.Rel.Columns[0])
 				}
 			}
-			ix.Name = cmp.Or(li.StorageKey, strings.Join(append([]string{e.Table}, ix.Columns...), "_"))
+			ix.Name = cmp.Or(li.StorageKey, indexName(e.Table, ix))
 			e.Indexes = append(e.Indexes, ix)
-			resolved = append(resolved, len(ix.Columns) > 0 && len(ix.Columns) == len(li.Fields)+len(li.Edges))
+			ok = append(ok, good)
+			if b.repeats(e, i, ok) || !good && li.StorageKey == "" {
+				continue // its name is rule 43's, or its derived name is partial
+			}
+			k := [2]string{e.TableSchema, ix.Name}
+			if o, dup := names[k]; dup {
+				by := fmt.Sprintf("index %d's", o.i)
+				if o.e != e {
+					by = fmt.Sprintf("schema %s's index %d", o.e.Name, o.i)
+				}
+				b.fail(44, e.Name, indexLoc(i, ix), "name %q is also %s", ix.Name, by)
+				continue
+			}
+			names[k] = owner{e, i}
 		}
-		b.duplicateIndexes(e, n.schema.Indexes, resolved)
 	}
 }
 
-// duplicateIndexes reports a declared index, mixins' included, that repeats
-// an earlier one (rule 43): the same columns in order, the same Unique and
-// the same Where. A field's Unique is not compared. It also reports two
-// indexes with one StorageKey (rule 44). resolved tells the indexes whose
-// columns all resolved; the others have errors already.
-func (b *builder) duplicateIndexes(e *Entity, lis []*loadjson.Index, resolved []bool) {
-	for i, ix := range e.Indexes {
-		for j, prev := range e.Indexes[:i] {
-			if resolved[i] && resolved[j] && ix.Unique == prev.Unique && ix.Where == prev.Where && slices.Equal(ix.Columns, prev.Columns) {
-				b.fail(43, e.Name, indexLoc(i, ix), "repeats index %d", j)
-				break
-			}
-		}
-		if lis[i].StorageKey == "" {
-			continue
-		}
-		for j := range i {
-			if lis[j].StorageKey == lis[i].StorageKey {
-				b.fail(44, e.Name, indexLoc(i, ix), "name %q is also index %d's", lis[i].StorageKey, j)
-				break
-			}
+// indexName derives the name of an index with no StorageKey: the table and
+// the columns, then _unique for a unique index and, for a partial one, the
+// FNV-1a hash of its Where, so that indexes that differ only in Unique or
+// Where have distinct names. Index names share one namespace per schema of
+// the database. _unique stays clear of _key, PostgreSQL's name for a column's
+// UNIQUE constraint.
+func indexName(table string, ix *Index) string {
+	name := strings.Join(append([]string{table}, ix.Columns...), "_")
+	if ix.Unique {
+		name += "_unique"
+	}
+	if ix.Where != "" {
+		h := fnv.New32a()
+		h.Write([]byte(ix.Where))
+		name += fmt.Sprintf("_%08x", h.Sum32())
+	}
+	return name
+}
+
+// repeats reports whether the index i of e repeats an earlier one (rule 43),
+// and reports it: the same columns in order, the same Unique and the same
+// Where, among the declared indexes, mixins' included. A field's Unique is not
+// compared. ok tells the indexes no earlier rule refuses; the others are
+// skipped.
+func (b *builder) repeats(e *Entity, i int, ok []bool) bool {
+	ix := e.Indexes[i]
+	if !ok[i] {
+		return false
+	}
+	for j, prev := range e.Indexes[:i] {
+		if ok[j] && ix.Unique == prev.Unique && ix.Where == prev.Where && slices.Equal(ix.Columns, prev.Columns) {
+			b.fail(43, e.Name, indexLoc(i, ix), "repeats index %d", j)
+			return true
 		}
 	}
+	return false
 }
 
 // validate checks the rules the earlier steps do not (step 6).

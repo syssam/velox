@@ -110,7 +110,7 @@ func TestBuildBlog(t *testing.T) {
 		users.Rel.Table != "user_groups" || users.Rel.Columns[0] != "group_id" || users.Rel.Columns[1] != "user_id" {
 		t.Fatalf("groups %+v users %+v", groups, users)
 	}
-	if ix := u.Indexes[0]; ix.Name != "users_org_id_name" || !ix.Unique || ix.Columns[1] != "name" {
+	if ix := u.Indexes[0]; ix.Name != "users_org_id_name_unique" || !ix.Unique || ix.Columns[1] != "name" {
 		t.Fatalf("index %+v", ix)
 	}
 }
@@ -1039,6 +1039,9 @@ schema optionalUnset: field "seen": an Optional time field needs a Default or Ni
 	for _, r := range optionalNeeds {
 		rules[r.rule] = true
 	}
+	if len(rules) != len(optionalNeeds) {
+		t.Fatalf("two rows of optionalNeeds share a rule number: %+v", optionalNeeds)
+	}
 	if len(rules) != 3 || !rules[37] || !rules[39] || !rules[40] {
 		t.Fatalf("rules %v, want 37, 39 and 40", rules)
 	}
@@ -1077,7 +1080,7 @@ func TestJSONIndexRefused(t *testing.T) {
 type dupIndexes struct{ schema.Schema }
 
 func (dupIndexes) Fields() []schema.Field {
-	return []schema.Field{field.String("a"), field.String("b").Unique()}
+	return []schema.Field{field.String("a"), field.String("b").Unique(), field.Strings("tags")}
 }
 func (dupIndexes) Indexes() []schema.Index {
 	return []schema.Index{
@@ -1090,6 +1093,9 @@ func (dupIndexes) Indexes() []schema.Index {
 		index.Fields("b"),                 // b's Unique is not compared
 		index.Fields("a").StorageKey("dup"),
 		index.Fields("b", "a").Unique().StorageKey("dup"), // rule 44
+		index.Fields("b").Unique(),                        // beside b's Unique
+		index.Fields("tags"),                              // rule 42
+		index.Fields("tags"),                              // rule 42, and not 43
 	}
 }
 
@@ -1114,7 +1120,9 @@ func (mixedDup) Indexes() []schema.Index {
 // another nor share a name.
 func TestDuplicateIndexes(t *testing.T) {
 	_, err := build(t, dupIndexes{})
-	want := `schema dupIndexes: index 2: repeats index 0
+	want := `schema dupIndexes: index 10: field "tags" is JSON, which no index can cover
+schema dupIndexes: index 11: field "tags" is JSON, which no index can cover
+schema dupIndexes: index 2: repeats index 0
 schema dupIndexes: index 8: name "dup" is also index 7's`
 	if got := plain(err); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
@@ -1123,6 +1131,92 @@ schema dupIndexes: index 8: name "dup" is also index 7's`
 	var ge *Error
 	if got := plain(err); got != `schema mixedDup: index 1: repeats index 0` || !errors.As(err, &ge) ||
 		!strings.HasSuffix(ge.Pos, fmt.Sprintf("/build_test.go:%d", mixedDupLine)) {
+		t.Fatalf("got %v", err)
+	}
+}
+
+// indexNames has the indexes on one column whose derived names must differ.
+type indexNames struct{ schema.Schema }
+
+func (indexNames) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.Table("names")}
+}
+func (indexNames) Fields() []schema.Field { return []schema.Field{field.String("a").Unique()} }
+func (indexNames) Indexes() []schema.Index {
+	return []schema.Index{
+		index.Fields("a"),
+		index.Fields("a").Unique(),
+		index.Fields("a").Where("x"),
+		index.Fields("a").Where("y"),
+		index.Fields("a").Unique().Where("x"),
+		index.Fields("a").Unique().Where("y").StorageKey("names_a_key"),
+	}
+}
+
+// A derived index name tells Unique and Where apart, deterministically.
+func TestIndexNames(t *testing.T) {
+	var got []string
+	for _, ix := range mustBuild(t, indexNames{}).Entity("indexNames").Indexes {
+		got = append(got, ix.Name)
+	}
+	want := []string{"names_a", "names_a_unique", "names_a_fd0c5087", "names_a_fc0c4ef4", "names_a_unique_fd0c5087", "names_a_key"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+type keyShareA struct{ schema.Schema }
+
+func (keyShareA) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.Table("share_a")}
+}
+func (keyShareA) Fields() []schema.Field { return []schema.Field{field.String("a")} }
+func (keyShareA) Indexes() []schema.Index {
+	return []schema.Index{index.Fields("a").StorageKey("shared"), index.Fields("a").Unique()}
+}
+
+type keyShareB struct{ schema.Schema }
+
+func (keyShareB) Fields() []schema.Field { return []schema.Field{field.String("b")} }
+func (keyShareB) Indexes() []schema.Index {
+	return []schema.Index{index.Fields("b").StorageKey("shared"), index.Fields("b").Unique().StorageKey("share_a_a_unique")}
+}
+
+// keyShareC holds its table in another database schema, whose index names
+// are its own.
+type keyShareC struct{ schema.Schema }
+
+func (keyShareC) Fields() []schema.Field { return []schema.Field{field.String("c")} }
+func (keyShareC) Indexes() []schema.Index {
+	return []schema.Index{index.Fields("c").StorageKey("shared")}
+}
+func (keyShareC) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.TableIn("other", "key_share_cs")}
+}
+
+type keyMix struct{ mixin.Schema }
+
+func (keyMix) Indexes() []schema.Index { return []schema.Index{index.Fields("a").StorageKey("k")} }
+
+type keyMixed struct{ schema.Schema }
+
+func (keyMixed) Mixin() []schema.Mixin  { return []schema.Mixin{keyMix{}} }
+func (keyMixed) Fields() []schema.Field { return []schema.Field{field.String("a"), field.String("b")} }
+func (keyMixed) Indexes() []schema.Index {
+	return []schema.Index{index.Fields("b").StorageKey("k")}
+}
+
+// Rule 44 compares every index's name, a StorageKey or a derived one, across
+// the graph, within one database schema.
+func TestIndexNamesAcrossGraph(t *testing.T) {
+	_, err := build(t, keyShareA{}, keyShareB{}, keyShareC{})
+	want := `schema keyShareB: index 0: name "shared" is also schema keyShareA's index 0
+schema keyShareB: index 1: name "share_a_a_unique" is also schema keyShareA's index 1`
+	if got := plain(err); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+	_, err = build(t, keyMixed{})
+	if got := plain(err); got != `schema keyMixed: index 1: name "k" is also index 0's` {
 		t.Fatalf("got %v", err)
 	}
 }

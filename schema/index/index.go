@@ -41,7 +41,9 @@ func (b *Builder) Edges(edges ...string) *Builder {
 // Unique makes the index unique.
 func (b *Builder) Unique() *Builder { b.d.Unique = true; return b }
 
-// StorageKey sets the index name, which no other index of the schema may have.
+// StorageKey sets the index name. Without one, velox-gen derives it from the
+// table and the columns, with _unique for a unique index and a hash of Where
+// for a partial one. No two indexes of one database schema may share a name.
 func (b *Builder) StorageKey(name string) *Builder { b.d.StorageKey = name; return b }
 
 // Where sets the predicate of a partial index, in SQL. PostgreSQL and SQLite

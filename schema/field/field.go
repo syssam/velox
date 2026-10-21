@@ -242,49 +242,50 @@ func checkFunc(d *desc.Field, option string, fn any) {
 // contradictions records the options of d that contradict one another: a
 // bound given twice, a lower bound above the upper one, and an Immutable
 // field with an UpdateDefault, which no update would call. Range gives both
-// bounds, so a Min beside it is a lower bound given twice.
+// Min and Max, so a Min beside it is a lower bound given twice.
 func contradictions(d *desc.Field) {
 	if d.Immutable && d.UpdateDefault != nil {
 		failOnce(d, "an Immutable field cannot have an UpdateDefault")
 	}
-	bounds(d, "Min", "Max")
-	bounds(d, "MinLen", "MaxLen")
-}
-
-// bounds checks the checks of d that set the lower bound, lo, and the upper
-// one, hi. A Range sets both.
-func bounds(d *desc.Field, lo, hi string) {
-	var low, high any
-	var lowBy, highBy string
+	type bound struct {
+		n       int // how many checks give it
+		v       any // the last value given
+		byRange bool
+	}
+	bs := map[string]*bound{"Min": {}, "Max": {}, "MinLen": {}, "MaxLen": {}}
+	set := func(kind string, v any, byRange bool) {
+		x := bs[kind]
+		x.n, x.v, x.byRange = x.n+1, v, byRange
+	}
+	ranges := 0
 	for _, c := range d.Checks {
 		switch c.Kind {
-		case lo:
-			if lowBy != "" {
-				failOnce(d, "%s is given twice", lo)
-			}
-			low, lowBy = c.Args[0], lo
-		case hi:
-			if highBy != "" {
-				failOnce(d, "%s is given twice", hi)
-			}
-			high, highBy = c.Args[0], hi
+		case "Min", "Max", "MinLen", "MaxLen":
+			set(c.Kind, c.Args[0], false)
 		case "Range":
-			switch {
-			case lowBy == "Range":
-				failOnce(d, "Range is given twice")
-			case lowBy != "":
-				failOnce(d, "%s is given twice", lo)
-			case highBy != "":
-				failOnce(d, "%s is given twice", hi)
-			}
-			low, high, lowBy, highBy = c.Args[0], c.Args[1], "Range", "Range"
-			if above(low, high) {
-				failOnce(d, "Range %v..%v is empty", low, high)
+			ranges++
+			set("Min", c.Args[0], true)
+			set("Max", c.Args[1], true)
+			if above(c.Args[0], c.Args[1]) {
+				failOnce(d, "Range %v..%v is empty", c.Args[0], c.Args[1])
 			}
 		}
 	}
-	if lowBy != "" && highBy != "" && (lowBy != "Range" || highBy != "Range") && above(low, high) {
-		failOnce(d, "%s %v is above %s %v", lo, low, hi, high)
+	if ranges > 1 {
+		failOnce(d, "Range is given twice")
+	}
+	for _, k := range []string{"Min", "Max", "MinLen", "MaxLen"} {
+		// The bounds of a repeated Range alone are Range's error.
+		if n := bs[k].n; n > 1 && (ranges < 2 || n != ranges || k == "MinLen" || k == "MaxLen") {
+			failOnce(d, "%s is given twice", k)
+		}
+	}
+	for _, p := range [][2]string{{"Min", "Max"}, {"MinLen", "MaxLen"}} {
+		lo, hi := bs[p[0]], bs[p[1]]
+		// A bound given twice is reported already; one Range is "empty".
+		if lo.n == 1 && hi.n == 1 && (!lo.byRange || !hi.byRange) && above(lo.v, hi.v) {
+			failOnce(d, "%s %v is above %s %v", p[0], lo.v, p[1], hi.v)
+		}
 	}
 }
 
