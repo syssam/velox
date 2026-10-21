@@ -11,6 +11,7 @@ package edge
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 
 	"github.com/syssam/velox2/schema"
@@ -43,6 +44,28 @@ func newEdge(name string, t any, inverse bool, pc uintptr) *desc.Edge {
 	}
 	d.Type, d.TypePkg = typeName, pkg
 	return d
+}
+
+// Action is what the database does to the rows that hold a foreign key when the
+// row it references is deleted.
+type Action string
+
+// The actions OnDelete takes. An edge that sets none has the dialect's default,
+// NO ACTION.
+const (
+	Cascade  Action = "CASCADE"
+	SetNull  Action = "SET NULL"
+	Restrict Action = "RESTRICT"
+)
+
+// setOnDelete records a on d, or the misuse.
+func setOnDelete(d *desc.Edge, a Action) {
+	switch a {
+	case Cascade, SetNull, Restrict:
+		d.OnDelete = string(a)
+	default:
+		d.Errs = append(d.Errs, fmt.Errorf("OnDelete(%q) is not edge.Cascade, edge.SetNull or edge.Restrict", string(a)))
+	}
 }
 
 // StorageOption sets where an edge is stored: the table, the columns and the
@@ -104,6 +127,12 @@ func (b *AssocBuilder) StorageKey(opts ...StorageOption) *AssocBuilder {
 	return b
 }
 
+// OnDelete sets what the database does to the rows holding the edge's foreign
+// key when the row they reference is deleted. SetNull needs a NULL-able key:
+// the edge not Required, and its field Nillable. A many-to-many edge has no
+// foreign key to act on. Both edges of a relation must agree.
+func (b *AssocBuilder) OnDelete(a Action) *AssocBuilder { setOnDelete(b.d, a); return b }
+
 // Comment sets the edge's documentation.
 func (b *AssocBuilder) Comment(s string) *AssocBuilder { b.d.Comment = s; return b }
 
@@ -161,6 +190,11 @@ func (b *InverseBuilder) StorageKey(opts ...StorageOption) *InverseBuilder {
 	}
 	return b
 }
+
+// OnDelete sets what the database does to the rows holding the edge's foreign
+// key when the row they reference is deleted. On an inverse declared inline
+// with To(...).From(...), it sets the inverse's side. See AssocBuilder.OnDelete.
+func (b *InverseBuilder) OnDelete(a Action) *InverseBuilder { setOnDelete(b.d, a); return b }
 
 // Comment sets the edge's documentation.
 func (b *InverseBuilder) Comment(s string) *InverseBuilder { b.d.Comment = s; return b }

@@ -854,6 +854,7 @@ func TestBuildRulesAreSingle(t *testing.T) {
 		{enumGoNames{}}, {clashOwner{}, clashPet{}}, {columnFieldMismatch{}}, {keyA{}, keyB{}}, {oneColumnM2M{}},
 		{twoColumnsO2M{}, Pet{}}, {invAssoc{}, invItem{}}, {enumGoTypeDup{}},
 		{fkUnbound{}}, {fieldStringFK{}}, {immutableEdge{}}, {immutableField{}}, {loop{}}, {cycle{}},
+		{odM2M{}, odM2M2{}}, {odSetNullRequired{}}, {odDiffOwner{}, odDiffPet{}},
 		{defaultBool{}}, {defaultNumber{}}, {defaultFuncNumber{}}, {optionalEnum{}}, {optionalFK{}}, {optionalBytes{}}, {optionalTime{}},
 	} {
 		_, err := build(t, ss...)
@@ -1219,4 +1220,157 @@ schema keyShareB: index 1: name "share_a_a_unique" is also schema keyShareA's in
 	if got := plain(err); got != `schema keyMixed: index 1: name "k" is also index 0's` {
 		t.Fatalf("got %v", err)
 	}
+}
+
+type odOwner struct{ schema.Schema }
+
+func (odOwner) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("pets", odPet.Type).OnDelete(edge.Cascade)}
+}
+
+type odPet struct{ schema.Schema }
+
+func (odPet) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("owner", odOwner.Type).Ref("pets").Unique()}
+}
+
+type odInverseOnly struct{ schema.Schema }
+
+func (odInverseOnly) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("pets", odPet2.Type)}
+}
+
+type odPet2 struct{ schema.Schema }
+
+func (odPet2) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("owner", odInverseOnly.Type).Ref("pets").Unique().OnDelete(edge.SetNull)}
+}
+
+type odInline struct{ schema.Schema }
+
+func (odInline) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("children", odInline.Type).From("parent").Unique().OnDelete(edge.Restrict)}
+}
+
+type odM2M struct{ schema.Schema }
+
+func (odM2M) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("peers", odM2M2.Type).OnDelete(edge.Cascade)}
+}
+
+type odM2M2 struct{ schema.Schema }
+
+func (odM2M2) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("others", odM2M.Type).Ref("peers")}
+}
+
+type odSetNullRequired struct{ schema.Schema }
+
+func (odSetNullRequired) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("parent", odSetNullRequired.Type).Unique().Required().OnDelete(edge.SetNull)}
+}
+
+type odSetNullField struct{ schema.Schema }
+
+func (odSetNullField) Fields() []schema.Field {
+	return []schema.Field{field.Int64("parent_id").Optional()}
+}
+func (odSetNullField) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("parent", odSetNullField.Type).Unique().Field("parent_id").OnDelete(edge.SetNull)}
+}
+
+type odSetNullOK struct{ schema.Schema }
+
+func (odSetNullOK) Fields() []schema.Field {
+	return []schema.Field{field.Int64("parent_id").Optional().Nillable()}
+}
+func (odSetNullOK) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("parent", odSetNullOK.Type).Unique().Field("parent_id").OnDelete(edge.SetNull)}
+}
+
+type odDiffOwner struct{ schema.Schema }
+
+func (odDiffOwner) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("pets", odDiffPet.Type).OnDelete(edge.Restrict)}
+}
+
+type odDiffPet struct{ schema.Schema }
+
+func (odDiffPet) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("owner", odDiffOwner.Type).Ref("pets").Unique().OnDelete(edge.Cascade)}
+}
+
+func TestOnDelete(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		ss   []schema.Interface
+		want string
+	}{
+		{"45 many-to-many", []schema.Interface{odM2M{}, odM2M2{}}, `schema odM2M: edge "peers": OnDelete has no foreign key to act on in a many-to-many edge; join rows are deleted with either end`},
+		{"46 required", []schema.Interface{odSetNullRequired{}}, `schema odSetNullRequired: edge "parent": SET NULL needs a NULL-able foreign key`},
+		{"47 pair differs", []schema.Interface{odDiffOwner{}, odDiffPet{}}, `schema odDiffPet: edge "owner": OnDelete CASCADE differs from edge "pets"'s RESTRICT on odDiffOwner`},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := build(t, c.ss...)
+			if err == nil || !strings.Contains(err.Error(), c.want) {
+				t.Fatalf("got %v, want %q", err, c.want)
+			}
+			if n := len(err.(interface{ Unwrap() []error }).Unwrap()); n != 1 {
+				t.Fatalf("%d errors, want 1:\n%v", n, err)
+			}
+		})
+	}
+
+	t.Run("46 field not Nillable", func(t *testing.T) {
+		_, err := build(t, odSetNullField{})
+		if err == nil || !strings.Contains(err.Error(), "SET NULL needs a NULL-able foreign key") {
+			t.Fatalf("got %v", err)
+		}
+	})
+	t.Run("46 Nillable field passes", func(t *testing.T) {
+		if got := mustBuild(t, odSetNullOK{}).Entity("odSetNullOK").Edges[0].Rel.OnDelete; got != "SET NULL" {
+			t.Fatalf("got %q", got)
+		}
+	})
+	t.Run("either side sets the relation's action", func(t *testing.T) {
+		g := mustBuild(t, odOwner{}, odPet{})
+		for _, n := range []string{"odOwner", "odPet"} {
+			if got := g.Entity(n).Edges[0].Rel.OnDelete; got != "CASCADE" {
+				t.Errorf("%s: got %q", n, got)
+			}
+		}
+		g = mustBuild(t, odInverseOnly{}, odPet2{})
+		for _, n := range []string{"odInverseOnly", "odPet2"} {
+			if got := g.Entity(n).Edges[0].Rel.OnDelete; got != "SET NULL" {
+				t.Errorf("%s: got %q", n, got)
+			}
+		}
+	})
+	t.Run("inline sets the inverse side", func(t *testing.T) {
+		e := mustBuild(t, odInline{}).Entity("odInline")
+		for _, ed := range e.Edges {
+			if ed.Rel.OnDelete != "RESTRICT" {
+				t.Errorf("%s: got %q", ed.Name, ed.Rel.OnDelete)
+			}
+		}
+	})
+	t.Run("unset stays empty", func(t *testing.T) {
+		if got := mustBuild(t, Owner{}, Pet{}).Entity("Owner").Edges[0].Rel.OnDelete; got != "" {
+			t.Fatalf("got %q", got)
+		}
+	})
+	t.Run("describe", func(t *testing.T) {
+		var b bytes.Buffer
+		if err := Describe(&b, mustBuild(t, odOwner{}, odPet{}), false); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(b.String(), "od_pets.od_owner_pets on delete CASCADE") {
+			t.Fatalf("got\n%s", b.String())
+		}
+		b.Reset()
+		_ = Describe(&b, mustBuild(t, Owner{}, Pet{}), false)
+		if strings.Contains(b.String(), "on delete") {
+			t.Fatalf("an unset action is shown:\n%s", b.String())
+		}
+	})
 }

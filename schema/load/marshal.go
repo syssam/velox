@@ -367,7 +367,7 @@ func (l *loader) edgeOf(d *desc.Edge, pos loadjson.Position) *loadjson.Edge {
 	out := &loadjson.Edge{
 		Name: d.Name, Type: d.Type, TypePkg: d.TypePkg, Inverse: d.Inverse, Ref: d.RefName,
 		Unique: d.Unique, Required: d.Required, Immutable: d.Immutable,
-		Field: d.Field, Table: d.Table, Columns: d.Columns, Symbols: d.Symbols, Comment: d.Comment,
+		Field: d.Field, OnDelete: d.OnDelete, Table: d.Table, Columns: d.Columns, Symbols: d.Symbols, Comment: d.Comment,
 		Position: pos, Pos: desc.PosOf(d.PC),
 	}
 	var err error

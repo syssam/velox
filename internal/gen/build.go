@@ -25,6 +25,7 @@ func Build(m *loadjson.Model) (*Graph, error) {
 	b.entities(m)
 	b.resolveEdges()
 	b.foreignKeys()
+	b.onDeletes()
 	b.indexes()
 	b.validate()
 	if len(b.errs) > 0 {
@@ -814,4 +815,56 @@ func (b *builder) validateEdges(n *node) {
 			}
 		}
 	}
+}
+
+// onDeletes checks the actions of the foreign keys (rules 45-47) and gives both
+// edges of a relation its action: the one that is set, since a pair that sets
+// two must agree.
+func (b *builder) onDeletes() {
+	for _, n := range b.nodes {
+		for _, s := range n.edges {
+			le, ed := s.le, s.ed
+			if ed.Rel.Kind == "" {
+				continue // unresolved: an error is recorded
+			}
+			act := le.OnDelete
+			if p := s.pair; p != nil && p.le.OnDelete != "" {
+				switch {
+				case act == "":
+					act = p.le.OnDelete
+				case act != p.le.OnDelete && le.Inverse:
+					b.fail(47, n.ent.Name, edgeLoc(ed), "OnDelete %s differs from edge %q's %s on %s", act, p.le.Name, p.le.OnDelete, p.owner.ent.Name)
+				}
+			}
+			ed.Rel.OnDelete = act
+			if le.OnDelete == "" {
+				continue
+			}
+			if ed.Rel.Kind == "M2M" {
+				b.fail(45, n.ent.Name, edgeLoc(ed), "OnDelete has no foreign key to act on in a many-to-many edge; join rows are deleted with either end")
+				continue
+			}
+			if le.OnDelete == "SET NULL" && b.notNullable(s) {
+				b.fail(46, n.ent.Name, edgeLoc(ed), "SET NULL needs a NULL-able foreign key")
+			}
+		}
+	}
+}
+
+// notNullable reports whether the foreign key of the relation of s cannot be
+// NULL: either edge is Required, or the field that holds the key is not Nillable.
+func (b *builder) notNullable(s *edgeState) bool {
+	if s.le.Required || (s.pair != nil && s.pair.le.Required) {
+		return true
+	}
+	holder := s.owner
+	if !ownFK(s.ed) && s.target != nil {
+		holder = s.target
+	}
+	for _, f := range holder.ent.Fields {
+		if f.Name == s.ed.Field {
+			return !f.Nillable
+		}
+	}
+	return false
 }

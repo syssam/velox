@@ -41,13 +41,21 @@ func describeEntity(buf *bytes.Buffer, e *Entity) {
 		_, _ = fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\n", f.Name, f.Type, f.Column, strings.Join(fieldFlags(f), ", "))
 	}
 	for _, ed := range e.Edges {
-		_, _ = fmt.Fprintf(tw, "  %s\t%s → %s\t%s\n", ed.Name, ed.Rel.Kind, ed.Target, relStorage(ed.Rel))
+		_, _ = fmt.Fprintf(tw, "  %s\t%s → %s\t%s\n", ed.Name, ed.Rel.Kind, ed.Target, relStorage(ed.Rel)+onDelete(ed.Rel))
 	}
 	_ = tw.Flush() // writes to a bytes.Buffer
 	for line := range strings.Lines(tab.String()) {
 		buf.WriteString(strings.TrimRight(line, " \n"))
 		buf.WriteByte('\n')
 	}
+}
+
+// onDelete is the text after a relation's storage: its action, when it has one.
+func onDelete(r Rel) string {
+	if r.OnDelete == "" {
+		return ""
+	}
+	return " on delete " + r.OnDelete
 }
 
 // relStorage says where a relation is stored: table.column for a foreign key,

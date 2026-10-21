@@ -89,9 +89,10 @@ func (f Field) MarshalJSON() ([]byte, error) {
 
 // Rel is the relation an edge stands for, and where it is stored.
 type Rel struct {
-	Kind    string   `json:"kind"`    // "O2O", "O2M", "M2O", "M2M"
-	Table   string   `json:"table"`   // the table holding the foreign key, or the join table
-	Columns []string `json:"columns"` // the foreign key; for M2M the join table's owner and target columns
+	Kind     string   `json:"kind"`                // "O2O", "O2M", "M2O", "M2M"
+	Table    string   `json:"table"`               // the table holding the foreign key, or the join table
+	Columns  []string `json:"columns"`             // the foreign key; for M2M the join table's owner and target columns
+	OnDelete string   `json:"on_delete,omitempty"` // the foreign key's action; "" is the dialect's default (NO ACTION). Recorded for the migration planner, not in the plugin model
 }
 
 // Index is an index of an entity's table.

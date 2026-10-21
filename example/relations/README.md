@@ -16,10 +16,19 @@ and `Field` names the column that holds the key:
 
 ```go
 // Author:  edge.To("posts", Post.Type)
-// Post:    edge.From("author", Author.Type).Ref("posts").Unique().Required().Field("author_id")
+// Post:    edge.From("author", Author.Type).Ref("posts").Unique().Required().Field("author_id").OnDelete(edge.Cascade)
 //          edge.To("comments", Comment.Type)
 // Comment: edge.From("post", Post.Type).Ref("comments").Unique().Required().Field("post_id")
 ```
+
+`OnDelete(edge.Cascade)` on `Post.author` records what the database does to a
+post when its author is deleted: delete it. The choices are `edge.Cascade`,
+`edge.SetNull` (the key must be NULL-able: the edge not `Required`, its field
+`Nillable`) and `edge.Restrict`; left unset, the dialect's default (NO ACTION)
+applies. Either edge of a relation may carry it, and two edges that both do must
+agree. velox-gen records the action, and `describe` shows it as `on delete
+CASCADE`; the migration planner applies it. A many-to-many edge has no foreign
+key, so it refuses `OnDelete`.
 
 The key is a field like any other (`Post.AuthorID`, `Comment.PostID`): you
 set it when you insert a row that belongs to another.

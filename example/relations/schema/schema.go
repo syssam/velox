@@ -33,11 +33,12 @@ func (Post) Fields() []schema.Field {
 }
 
 // Edges returns Author, the inverse of Author.Posts, and Comments. Unique makes
-// Author a belongs-to (a velox.One), Required makes its key NOT NULL, and Field
-// names the column that holds the key.
+// Author a belongs-to (a velox.One), Required makes its key NOT NULL, Field
+// names the column that holds the key, and OnDelete(edge.Cascade) says the
+// database deletes an Author's posts with it.
 func (Post) Edges() []schema.Edge {
 	return []schema.Edge{
-		edge.From("author", Author.Type).Ref("posts").Unique().Required().Field("author_id"),
+		edge.From("author", Author.Type).Ref("posts").Unique().Required().Field("author_id").OnDelete(edge.Cascade),
 		edge.To("comments", Comment.Type),
 	}
 }

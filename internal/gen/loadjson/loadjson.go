@@ -107,6 +107,7 @@ type Edge struct {
 	Required    bool                       `json:"required,omitempty"`
 	Immutable   bool                       `json:"immutable,omitempty"`
 	Field       string                     `json:"field,omitempty"`
+	OnDelete    string                     `json:"on_delete,omitempty"`
 	Table       string                     `json:"table,omitempty"`
 	Columns     []string                   `json:"columns,omitempty"`
 	Symbols     []string                   `json:"symbols,omitempty"`
