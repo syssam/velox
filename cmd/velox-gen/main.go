@@ -12,8 +12,8 @@
 //
 // Usage:
 //
-//	velox-gen [-out dir] [-package name] [-plugin tool]... [-check] [package]
-//	velox-gen verify [-out dir] [-plugin tool]... [package]
+//	velox-gen [-out dir] [-package name] [-plugin tool[:key=value,...]]... [-check] [package]
+//	velox-gen verify [-out dir] [-plugin tool[:key=value,...]]... [package]
 //	velox-gen describe [-json] [package]
 //
 // The package is one schema package, ./schema when none is named; a pattern
@@ -40,18 +40,27 @@
 //
 // -plugin names a generator plugin, a tool of your module that "go tool" runs
 // in the module directory (go get -tool example.com/some/velox-graphql, then
-// -plugin velox-graphql); repeat it for several. A plugin reads a JSON request
-// on standard input, {"plugin_protocol": 1, "out_package": name, "out_path": the
-// package's import path, "model": the resolved model, see package
-// github.com/syssam/velox2/plugin}, and writes
-// {"files": [{"path": name, "content": text}], "error": text} to standard
-// output. Each path is a file name, no directory, ending in .go or .graphqls,
-// in -out; velox-gen puts its header in front of the content, so the plugin's
-// files are checked, rewritten and, when the plugin is dropped from the
-// command, deleted like its own. A non-empty error, a non-zero exit, a path
-// that is not a file name of those kinds, one that velox-gen or another plugin
-// writes (names that differ only in case are one file), or a file of yours at
-// it, fails the run before anything is written.
+// -plugin velox-graphql); repeat it for several. Options for the plugin follow
+// a colon, -plugin velox-grpc:go_package=x/pb,mode=a; an option without "=",
+// with an empty key, or a key given twice is a usage error (exit 2). velox-gen
+// speaks plugin protocol 2, which package github.com/syssam/velox2/plugin
+// documents: a plugin reads a JSON request on standard input,
+// {"plugin_protocol": 2, "generator": "velox-gen <version>", "out_package":
+// name, "out_path": the package's import path, "options": {key: value},
+// "model": the resolved model}, and writes {"plugin_protocol": 2, "files":
+// [{"path": path, "content": text}], "warnings": [text], "error": text} to
+// standard output. A path is a slash path below -out, such as pb/user.proto,
+// with no "..", "." or empty segment, no directory that starts with "." or
+// "_", and ending in .go, .graphqls or .proto. velox-gen puts its header in
+// front of the content, so the plugin's files are checked, rewritten and, when
+// the plugin is dropped from the command, deleted like its own, with the
+// directories that leaves empty. Each warning is printed as "velox-gen: plugin
+// name: warning: text" and never fails the run. A response without
+// "plugin_protocol": 2 (a plugin of protocol 1 is told to update), a
+// non-empty error, a non-zero exit, a path that is refused, one that velox-gen
+// or another plugin writes (paths that differ only in case are one, over the
+// whole path), or a file of yours at it, fails the run before anything is
+// written.
 //
 // verify builds a program in a temporary .velox-verify-* directory of your
 // module, imports the generated package and reports, for every entity, the
@@ -59,8 +68,8 @@
 // velox.CheckRelation, whose target the generated metadata does not name. It
 // removes the directory, but a killed process leaves it behind; ignore
 // .velox-verify-*/ in git. With -plugin it runs the plugins and fails when a
-// Go file of theirs on disk is not what they write now; it compiles with the
-// rest of the package.
+// Go file of theirs on disk is not what they write now; one in -out itself
+// compiles with the rest of the package.
 //
 // describe prints the entities, columns and relations that the schema package
 // (default ./schema) declares.
@@ -99,7 +108,7 @@ func run(args []string, dir string, env []string, stdout, stderr io.Writer) int 
 	outDir := fs.String("out", "./gen", "the directory of the generated package")
 	pkgName := fs.String("package", "", "the generated package's name (default: the base name of -out)")
 	var plugins pluginFlag
-	fs.Var(&plugins, "plugin", "run the generator plugin `tool` (a tool of your module, as go tool names it) on the model; repeat for several")
+	fs.Var(&plugins, "plugin", "run the generator plugin `tool[:key=value,...]` (a tool of your module, as go tool names it, with its options) on the model; repeat for several")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -110,8 +119,8 @@ func run(args []string, dir string, env []string, stdout, stderr io.Writer) int 
 		case "out", "package":
 			rerun = append(rerun, "-"+f.Name, f.Value.String())
 		case "plugin":
-			for _, name := range plugins {
-				rerun = append(rerun, "-plugin", name)
+			for _, spec := range plugins {
+				rerun = append(rerun, "-plugin", spec.raw)
 			}
 		}
 	})

@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"maps"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
+	"runtime/debug"
 	"slices"
 	"strings"
 
@@ -15,37 +18,99 @@ import (
 	"github.com/syssam/velox2/plugin"
 )
 
-// pluginFlag is the repeated -plugin flag: tool names, in command-line order.
-type pluginFlag []string
+// pluginSpec is one -plugin flag: name[:key=value[,key=value]...].
+type pluginSpec struct {
+	name    string            // the tool name
+	options map[string]string // nil for none
+	raw     string            // the flag as given, for the -check hint
+}
 
-func (p *pluginFlag) String() string { return strings.Join(*p, ",") }
+// pluginFlag is the repeated -plugin flag, in command-line order.
+type pluginFlag []pluginSpec
 
-func (p *pluginFlag) Set(name string) error {
+func (p *pluginFlag) String() string {
+	raws := make([]string, len(*p))
+	for i, s := range *p {
+		raws[i] = s.raw
+	}
+	return strings.Join(raws, ",")
+}
+
+// Set parses name[:key=value[,key=value]...]. A key is not empty, has an =,
+// and is given once; a value may be empty, or hold an =.
+func (p *pluginFlag) Set(raw string) error {
+	name, opts, hasOpts := strings.Cut(raw, ":")
 	if strings.TrimSpace(name) == "" {
 		return fmt.Errorf("a plugin needs a tool name")
 	}
-	*p = append(*p, name)
+	spec := pluginSpec{name: name, raw: raw}
+	if hasOpts {
+		spec.options = map[string]string{}
+		for opt := range strings.SplitSeq(opts, ",") {
+			k, v, ok := strings.Cut(opt, "=")
+			switch {
+			case !ok:
+				return fmt.Errorf("plugin %s: option %q is not key=value", name, opt)
+			case k == "":
+				return fmt.Errorf("plugin %s: option %q has no key", name, opt)
+			}
+			if _, dup := spec.options[k]; dup {
+				return fmt.Errorf("plugin %s: option %s is given twice", name, k)
+			}
+			spec.options[k] = v
+		}
+	}
+	*p = append(*p, spec)
 	return nil
 }
 
-// runPlugins runs each plugin, in order, as "go tool name" in modDir with the
-// request on its standard input, and returns their files by path relative to
-// the output directory, with the header of their kind in front, and the plugin
-// that wrote each. The run fails, naming the plugin, when a plugin cannot be
-// run, exits non-zero, answers something that is not a response, reports an
-// error, or names a path that is not a file of the output directory (a bare
-// name ending in .go or .graphqls), or one that another plugin has written;
-// two names that differ only in case are one file, as they are on a
-// case-insensitive file system. A plugin's stderr is shown only when it fails.
-func runPlugins(names []string, modDir string, req plugin.Request, env []string) (files map[string][]byte, owners map[string]string, err error) {
-	body, err := json.Marshal(req)
-	if err != nil {
-		return nil, nil, err
+// generator is Request.Generator: velox-gen and the version of the velox2
+// module it is built from, "(devel)" when the build does not say.
+func generator() string {
+	v := ""
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		if bi.Main.Path == veloxPath {
+			v = bi.Main.Version
+		}
+		for _, d := range bi.Deps {
+			if d.Path == veloxPath {
+				v = d.Version
+				if d.Replace != nil && d.Replace.Version != "" {
+					v = d.Replace.Version
+				}
+			}
+		}
 	}
+	if v == "" {
+		v = "(devel)"
+	}
+	return "velox-gen " + v
+}
+
+// runPlugins runs each plugin, in order, as "go tool name" in modDir with the
+// request, and its options, on its standard input, and returns their files by
+// path relative to the output directory, with the header of their kind in
+// front, and the plugin that wrote each. Each plugin's warnings are printed to
+// stderr as it answers. The run fails, naming the plugin, when a plugin cannot
+// be run, exits non-zero, answers something that is not a response of
+// protocol 2, reports an error, or names a path that checkPluginPath refuses,
+// or one that another plugin, or itself, has written. Paths that differ only
+// in case are one file, or one directory, as they are on a case-insensitive
+// file system; a path is not both a file and a directory. A plugin's stderr is
+// shown only when it fails.
+func runPlugins(specs []pluginSpec, modDir string, req plugin.Request, env []string, stderr io.Writer) (files map[string][]byte, owners map[string]string, err error) {
 	files, owners = map[string][]byte{}, map[string]string{}
-	by := map[string]string{} // folded name → the path that took it
-	for _, name := range names {
-		resp, err := runPlugin(name, modDir, body, env)
+	by := map[string]string{}   // folded file path → the path that took it
+	dirs := map[string]string{} // folded directory path → the spelling that took it
+	dirOwner := map[string]string{}
+	for _, spec := range specs {
+		name := spec.name
+		req.Options = spec.options
+		body, err := json.Marshal(req)
+		if err != nil {
+			return nil, nil, err
+		}
+		resp, err := runPlugin(name, modDir, body, env, stderr)
 		if err != nil {
 			return nil, nil, fmt.Errorf("plugin %s: %w", name, err)
 		}
@@ -59,6 +124,19 @@ func runPlugins(names []string, modDir string, req plugin.Request, env []string)
 				}
 				return nil, nil, fmt.Errorf("plugin %s: %s is also written by plugin %s as %s: names that differ only in case are one file", name, f.Path, owners[other], other)
 			}
+			if other, ok := dirs[fold(f.Path)]; ok {
+				return nil, nil, fmt.Errorf("plugin %s: %s: %s is a directory of plugin %s, not a file", name, f.Path, other, dirOwner[other])
+			}
+			for _, d := range parents(f.Path) {
+				if other, ok := by[fold(d)]; ok {
+					return nil, nil, fmt.Errorf("plugin %s: %s: %s is a file of plugin %s, not a directory", name, f.Path, other, owners[other])
+				}
+				if other, ok := dirs[fold(d)]; !ok {
+					dirs[fold(d)], dirOwner[d] = d, name
+				} else if other != d {
+					return nil, nil, fmt.Errorf("plugin %s: %s: directory %s is also written by plugin %s as %s: names that differ only in case are one directory", name, f.Path, d, dirOwner[other], other)
+				}
+			}
 			by[fold(f.Path)] = f.Path
 			owners[f.Path] = name
 			files[f.Path] = withHeader(f.Path, f.Content)
@@ -67,12 +145,25 @@ func runPlugins(names []string, modDir string, req plugin.Request, env []string)
 	return files, owners, nil
 }
 
-// fold is the key two file names share when a case-insensitive file system
-// takes them for one.
-func fold(path string) string { return strings.ToLower(filepath.Base(path)) }
+// parents are the directories of the slash path p, outermost first: "a" and
+// "a/b" for "a/b/c.go".
+func parents(p string) []string {
+	var ds []string
+	for i := range len(p) {
+		if p[i] == '/' {
+			ds = append(ds, p[:i])
+		}
+	}
+	return ds
+}
 
-// runPlugin runs one plugin and decodes its response.
-func runPlugin(name, modDir string, req []byte, env []string) (*plugin.Response, error) {
+// fold is the key two paths share when a case-insensitive file system takes
+// them for one.
+func fold(path string) string { return strings.ToLower(path) }
+
+// runPlugin runs one plugin and decodes its response, and prints its
+// warnings.
+func runPlugin(name, modDir string, req []byte, env []string, stderr io.Writer) (*plugin.Response, error) {
 	cmd := exec.Command("go", "tool", name)
 	cmd.Dir, cmd.Env = modDir, env
 	var so, se bytes.Buffer
@@ -87,23 +178,58 @@ func runPlugin(name, modDir string, req []byte, env []string) (*plugin.Response,
 	if err := json.Unmarshal(so.Bytes(), &resp); err != nil {
 		return nil, fmt.Errorf("malformed response: %w", err)
 	}
+	// Protocol 1's responses had no plugin_protocol: whatever such a plugin
+	// answers, its files or its refusal of this request, it is told to update.
+	switch n := resp.Protocol; {
+	case n < plugin.ProtocolVersion:
+		return nil, fmt.Errorf("it speaks plugin protocol %d (or does not say); velox-gen speaks %d: update the plugin", max(n, 1), plugin.ProtocolVersion)
+	case n > plugin.ProtocolVersion:
+		return nil, fmt.Errorf("it speaks plugin protocol %d; velox-gen speaks %d: update velox-gen", n, plugin.ProtocolVersion)
+	}
+	for _, w := range resp.Warnings {
+		_, _ = fmt.Fprintf(stderr, "velox-gen: plugin %s: warning: %s\n", name, w)
+	}
 	if resp.Error != "" {
 		return nil, fmt.Errorf("%s", resp.Error)
 	}
 	return &resp, nil
 }
 
-// checkPluginPath accepts a bare file name, ending in .go or .graphqls, that
-// stays in the output directory.
-func checkPluginPath(path string) error {
-	ext := filepath.Ext(path)
+// pluginExts are the extensions of the files a plugin writes.
+var pluginExts = []string{".go", ".graphqls", ".proto"}
+
+// checkPluginPath accepts a slash path below the output directory: not
+// absolute, no empty, "." or ".." segment, no backslash or NUL, no directory
+// that starts with "." or "_" (the stale-file sweep skips those, and go
+// ignores them), and a file name ending in .go, .graphqls or .proto.
+func checkPluginPath(p string) error {
+	bad := func(why string) error { return fmt.Errorf("invalid path %q: %s", p, why) }
 	switch {
-	case strings.ContainsAny(path, `/\`) || path == "." || path == ".." || strings.Contains(path, "\x00"):
-		return fmt.Errorf("invalid path %q: a path is a file name, with no directory", path)
-	case ext != ".go" && ext != ".graphqls":
-		return fmt.Errorf("invalid path %q: a path ends in .go or .graphqls", path)
-	case ext == path:
-		return fmt.Errorf("invalid path %q: a path needs a name before the extension", path)
+	case p == "":
+		return bad("a path is not empty")
+	case strings.HasPrefix(p, "/"):
+		return bad("a path is relative to the output directory")
+	case strings.ContainsAny(p, "\\\x00"):
+		return bad("a path holds no backslash or NUL; it is slash-separated")
+	}
+	segs := strings.Split(p, "/")
+	for i, seg := range segs {
+		switch {
+		case seg == "" || seg == "." || seg == "..":
+			return bad("a path has no empty, . or .. segment; it stays below the output directory")
+		case i < len(segs)-1 && (seg[0] == '.' || seg[0] == '_'):
+			return bad("a directory of a path does not start with . or _")
+		}
+	}
+	base := segs[len(segs)-1]
+	ext := path.Ext(base)
+	switch {
+	case !slices.Contains(pluginExts, ext):
+		return bad("a path ends in .go, .graphqls or .proto")
+	case ext == base:
+		return bad("a path needs a name before the extension")
+	case !filepath.IsLocal(filepath.FromSlash(p)):
+		return bad("a path is a local file name")
 	}
 	return nil
 }
@@ -116,7 +242,7 @@ func withHeader(path, content string) []byte {
 // pluginFiles runs f's plugins on the model of gm and returns their files by
 // absolute path, and the plugin that wrote each. It runs them in the module of
 // the schema package at pattern.
-func pluginFiles(f genFlags, gm *genModel, pattern, dir, pkg string, env []string) (files map[string][]byte, owners map[string]string, err error) {
+func pluginFiles(f genFlags, gm *genModel, pattern, dir, pkg string, env []string, stderr io.Writer) (files map[string][]byte, owners map[string]string, err error) {
 	if len(f.plugins) == 0 {
 		return nil, nil, nil
 	}
@@ -129,15 +255,15 @@ func pluginFiles(f genFlags, gm *genModel, pattern, dir, pkg string, env []strin
 	if err != nil {
 		return nil, nil, err
 	}
-	req := plugin.Request{Protocol: plugin.ProtocolVersion, OutPackage: pkg, OutPath: outPath, Model: gen.PluginModel(gm.graph, gm.out)}
-	rel, byPlugin, err := runPlugins(f.plugins, mod, req, env)
+	req := plugin.Request{Protocol: plugin.ProtocolVersion, Generator: generator(), OutPackage: pkg, OutPath: outPath, Model: gen.PluginModel(gm.graph, gm.out)}
+	rel, byPlugin, err := runPlugins(f.plugins, mod, req, env, stderr)
 	if err != nil {
 		return nil, nil, err
 	}
 	files, owners = make(map[string][]byte, len(rel)), make(map[string]string, len(rel))
 	for name, data := range rel {
-		files[filepath.Join(out, name)] = data
-		owners[filepath.Join(out, name)] = byPlugin[name]
+		files[filepath.Join(out, filepath.FromSlash(name))] = data
+		owners[filepath.Join(out, filepath.FromSlash(name))] = byPlugin[name]
 	}
 	return files, owners, nil
 }
@@ -204,18 +330,20 @@ func within(root, dir string) bool {
 }
 
 // mergePluginFiles adds the plugins' files to want and refuses one at a path
-// velox-gen writes itself, whatever the case of its name. owners names the
-// plugin that wrote each file.
-func mergePluginFiles(dir string, want, files map[string][]byte, owners map[string]string) error {
+// velox-gen writes itself, or below it, whatever the case of its name. owners
+// names the plugin that wrote each file.
+func mergePluginFiles(dir, out string, want, files map[string][]byte, owners map[string]string) error {
 	mine := make(map[string]string, len(want)) // folded path → the path velox-gen writes
 	for p := range want {
 		mine[fold(p)] = p
 	}
 	for _, p := range slices.Sorted(maps.Keys(files)) {
-		if own, ok := mine[fold(p)]; ok {
-			return fmt.Errorf("plugin %s: %s collides with %s, which velox-gen writes", owners[p], relPath(dir, p), relPath(dir, own))
+		for q := p; within(out, q) && q != out; q = filepath.Dir(q) {
+			if own, ok := mine[fold(q)]; ok {
+				return fmt.Errorf("plugin %s: %s collides with %s, which velox-gen writes", owners[p], relPath(dir, p), relPath(dir, own))
+			}
 		}
-		want[p] = files[p]
 	}
+	maps.Copy(want, files)
 	return nil
 }

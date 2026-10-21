@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -154,11 +155,23 @@ func TestPluginPathsAreChecked(t *testing.T) {
 		name, path string
 	}{
 		{"parent", "../x.go"},
-		{"directory", "sub/x.go"},
+		{"parent below", "a/../x.go"},
+		{"absolute", "/x.go"},
+		{"empty segment", "a//x.go"},
+		{"dot segment", "a/./x.go"},
+		{"leading dot segment", "./x.go"},
+		{"trailing slash", "a/"},
 		{"backslash", `sub\x.go`},
+		{"nul", "a\x00.go"},
 		{"extension", "x.txt"},
+		{"extension below", "pb/x.txt"},
 		{"no name", ".go"},
+		{"no name below", "pb/.proto"},
 		{"empty", ""},
+		{"dot directory", ".git/x.go"},
+		{"underscore directory", "pb/_x/x.go"},
+		{"velox-gen's file as a directory", "velox.go/x.go"},
+		{"velox-gen's file as a directory in another case", "User_Velox.go/x.go"},
 		{"velox-gen's own file", "user_velox.go"},
 		{"velox-gen's package file", "velox.go"},
 		{"velox-gen's own file in another case", "User_velox.go"},
@@ -188,6 +201,41 @@ func TestPluginPathsAreChecked(t *testing.T) {
 			t.Errorf("%d %q %q", code, out, errs)
 		}
 		if got := names(t, gen); len(got) != 0 {
+			t.Errorf("wrote %v", got)
+		}
+	})
+
+	// One plugin's paths that a case-insensitive file system takes for one
+	// file or one directory, or a path that is a file and a directory.
+	for _, c := range []struct {
+		name, first, second, want string
+	}{
+		{"file case", "pb/X.go", "PB/x.go", "velox-gen: plugin fakeplugin: PB/x.go is also written by plugin fakeplugin as pb/X.go: names that differ only in case are one file\n"},
+		{"directory case", "pb/a.go", "PB/b.go", "velox-gen: plugin fakeplugin: PB/b.go: directory PB is also written by plugin fakeplugin as pb: names that differ only in case are one directory\n"},
+		{"file and directory", "a.go", "a.go/b.go", "velox-gen: plugin fakeplugin: a.go/b.go: a.go is a file of plugin fakeplugin, not a directory\n"},
+		{"directory and file", "A.go/b.go", "a.go", "velox-gen: plugin fakeplugin: a.go: A.go is a directory of plugin fakeplugin, not a file\n"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			env := fakeEnv(filesEnv(t, plugin.File{Path: c.first, Content: "x\n"}, plugin.File{Path: c.second, Content: "x\n"}))
+			code, out, errs := veloxEnv(t, dir, env, "-plugin", "fakeplugin", "./schema")
+			if code != 1 || out != "" || errs != c.want {
+				t.Errorf("%d %q %q", code, out, errs)
+			}
+			if got := names(t, gen); len(got) != 0 {
+				t.Errorf("wrote %v", got)
+			}
+		})
+	}
+
+	t.Run("a file of yours where a directory goes", func(t *testing.T) {
+		writeFile(t, filepath.Join(gen, "pb"), "mine\n")
+		defer func() { _ = os.Remove(filepath.Join(gen, "pb")) }()
+		env := fakeEnv(filesEnv(t, plugin.File{Path: "pb/x.go", Content: "package pb\n"}))
+		code, out, errs := veloxEnv(t, dir, env, "-plugin", "fakeplugin", "./schema")
+		if code != 1 || out != "" || !strings.Contains(errs, "gen/pb is not a directory") {
+			t.Errorf("%d %q %q", code, out, errs)
+		}
+		if got := names(t, gen); !slices.Equal(got, []string{"pb"}) {
 			t.Errorf("wrote %v", got)
 		}
 	})
@@ -274,7 +322,7 @@ func TestPluginRequest(t *testing.T) {
 	if err := json.Unmarshal([]byte(read(t, dump)), &raw); err != nil {
 		t.Fatal(err)
 	}
-	for _, k := range []string{"plugin_protocol", "out_package", "out_path", "model"} {
+	for _, k := range []string{"plugin_protocol", "generator", "out_package", "out_path", "model"} {
 		if _, ok := raw[k]; !ok {
 			t.Errorf("the request has no %q: %v", k, raw)
 		}
@@ -283,7 +331,10 @@ func TestPluginRequest(t *testing.T) {
 	if err := json.Unmarshal([]byte(read(t, dump)), &req); err != nil {
 		t.Fatal(err)
 	}
-	if req.Protocol != 1 || req.OutPackage != "gen" || req.OutPath != "example.com/app/gen" || req.Model == nil {
+	if _, ok := raw["options"]; ok {
+		t.Errorf("options without -plugin options: %s", raw["options"])
+	}
+	if req.Protocol != 2 || !strings.HasPrefix(req.Generator, "velox-gen ") || req.OutPackage != "gen" || req.OutPath != "example.com/app/gen" || req.Model == nil {
 		t.Fatalf("request: %+v", req)
 	}
 	// The import path is of the output directory, which does not exist yet.
@@ -341,5 +392,212 @@ func TestPluginFlagRepeats(t *testing.T) {
 	}
 	if got := p.String(); got != "a,b" {
 		t.Errorf("String: %q", got)
+	}
+}
+
+// TestPluginNestedPaths pins that a plugin writes below -out, and .proto
+// files, each with the header of its kind.
+func TestPluginNestedPaths(t *testing.T) {
+	dir := pluginModule(t)
+	env := fakeEnv(filesEnv(t,
+		plugin.File{Path: "pb/user.pb.go", Content: "package pb\n"},
+		plugin.File{Path: "pb/user.proto", Content: "syntax = \"proto3\";\n"},
+		plugin.File{Path: "pb/v1/deep.proto", Content: "syntax = \"proto3\";\n"},
+	))
+	code, out, errs := veloxEnv(t, dir, env, "-plugin", "fakeplugin", "./schema")
+	if code != 0 || !strings.Contains(out, "gen/pb/user.pb.go\n") || !strings.Contains(out, "gen/pb/user.proto\n") || !strings.Contains(out, "gen/pb/v1/deep.proto\n") {
+		t.Fatalf("%d %q %q", code, out, errs)
+	}
+	if got, want := read(t, filepath.Join(dir, "gen", "pb", "user.pb.go")), "// Code generated by velox-gen. DO NOT EDIT.\n\npackage pb\n"; got != want {
+		t.Errorf("user.pb.go %q, want %q", got, want)
+	}
+	if got, want := read(t, filepath.Join(dir, "gen", "pb", "user.proto")), "// Code generated by velox-gen. DO NOT EDIT.\n\nsyntax = \"proto3\";\n"; got != want {
+		t.Errorf("user.proto %q, want %q", got, want)
+	}
+	if code, out, errs := veloxEnv(t, dir, env, "-plugin", "fakeplugin", "./schema"); code != 0 || out != "" || errs != "" {
+		t.Errorf("second run: %d %q %q", code, out, errs)
+	}
+	if code, out, errs := veloxEnv(t, dir, env, "-check", "-plugin", "fakeplugin", "./schema"); code != 0 || out != "" || errs != "" {
+		t.Errorf("-check: %d %q %q", code, out, errs)
+	}
+	if code, out, errs := veloxEnv(t, dir, env, "verify", "-plugin", "fakeplugin", "./schema"); code != 0 {
+		t.Errorf("verify: %d %q %q", code, out, errs)
+	}
+}
+
+// TestStaleNestedFiles pins the sweep below -out: it removes the generated
+// files nothing writes now, and the directories that left empty, and
+// nothing else.
+func TestStaleNestedFiles(t *testing.T) {
+	dir := pluginModule(t)
+	gen := filepath.Join(dir, "gen")
+	env := fakeEnv(filesEnv(t,
+		plugin.File{Path: "pb/a.go", Content: "package pb\n"},
+		plugin.File{Path: "pb/sub/b.proto", Content: "syntax = \"proto3\";\n"},
+	))
+	generate := func(args ...string) {
+		t.Helper()
+		if code, out, errs := veloxEnv(t, dir, env, append(args, "./schema")...); code != 0 {
+			t.Fatalf("%v: %d %q %q", args, code, out, errs)
+		}
+	}
+	generate("-plugin", "fakeplugin")
+
+	// Directories the sweep never enters, and one it did not empty.
+	hdr := "// Code generated by velox-gen. DO NOT EDIT.\n\npackage x\n"
+	for _, p := range []string{".hidden/x.go", "_skip/x.go", "pb/.git/x.go"} {
+		writeFile(t, filepath.Join(gen, p), hdr)
+	}
+	if err := os.Mkdir(filepath.Join(gen, "empty"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// -check without the plugin names the left-over files.
+	code, _, errs := velox(t, dir, "-check", "./schema")
+	if code != 1 || !strings.Contains(errs, "gen/pb/a.go is out of date") || !strings.Contains(errs, "gen/pb/sub/b.proto is out of date") {
+		t.Fatalf("-check: %d %q", code, errs)
+	}
+
+	// pb/sub held only the plugin's file and goes; pb holds .git and stays.
+	code, out, errs := velox(t, dir, "./schema")
+	if code != 0 || out != "gen/pb/a.go\ngen/pb/sub/b.proto\n" {
+		t.Fatalf("without the plugin: %d %q %q", code, out, errs)
+	}
+	if got := names(t, filepath.Join(gen, "pb")); !slices.Equal(got, []string{".git"}) {
+		t.Errorf("pb holds %v", got)
+	}
+	for _, p := range []string{".hidden/x.go", "_skip/x.go", "pb/.git/x.go"} {
+		if read(t, filepath.Join(gen, p)) != hdr {
+			t.Errorf("%s changed", p)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(gen, "empty")); err != nil {
+		t.Errorf("the empty directory went: %v", err)
+	}
+
+	// With only the plugin's files, the whole directory goes.
+	if err := os.RemoveAll(filepath.Join(gen, "pb")); err != nil {
+		t.Fatal(err)
+	}
+	generate("-plugin", "fakeplugin")
+	generate()
+	if _, err := os.Stat(filepath.Join(gen, "pb")); !os.IsNotExist(err) {
+		t.Errorf("pb is still there: %v", names(t, filepath.Join(gen, "pb")))
+	}
+
+	// A file of yours in pb keeps it, and itself.
+	generate("-plugin", "fakeplugin")
+	writeFile(t, filepath.Join(gen, "pb", "mine.go"), "package pb\n")
+	writeFile(t, filepath.Join(gen, "pb", "sub", "notes.txt"), "notes\n")
+	generate()
+	if got := names(t, filepath.Join(gen, "pb")); !slices.Equal(got, []string{"mine.go", "sub"}) {
+		t.Errorf("pb holds %v", got)
+	}
+	if got := names(t, filepath.Join(gen, "pb", "sub")); !slices.Equal(got, []string{"notes.txt"}) {
+		t.Errorf("pb/sub holds %v", got)
+	}
+
+	// A file the plugin writes now, in a directory whose other files go.
+	writeFile(t, filepath.Join(gen, "pb", "sub", "old.go"), hdr)
+	if err := os.Remove(filepath.Join(gen, "pb", "sub", "notes.txt")); err != nil {
+		t.Fatal(err)
+	}
+	generate("-plugin", "fakeplugin")
+	if got := names(t, filepath.Join(gen, "pb", "sub")); !slices.Equal(got, []string{"b.proto"}) {
+		t.Errorf("pb/sub holds %v", got)
+	}
+}
+
+func TestPluginOptions(t *testing.T) {
+	dir := pluginModule(t)
+	dump := filepath.Join(t.TempDir(), "request.json")
+	code, _, errs := veloxEnv(t, dir, fakeEnv("FAKEPLUGIN_DUMP="+dump, "FAKEPLUGIN2_NAME=2"), "-plugin", "fakeplugin:go_package=x/pb,mode=a=b", "-plugin", "fakeplugin2:k=", "./schema")
+	if code != 0 {
+		t.Fatalf("%d %q", code, errs)
+	}
+	var req plugin.Request
+	if err := json.Unmarshal([]byte(read(t, dump)), &req); err != nil {
+		t.Fatal(err)
+	}
+	// The dump is the last plugin's request: fakeplugin2's.
+	if len(req.Options) != 1 || req.Options["k"] != "" {
+		t.Errorf("fakeplugin2's options %v", req.Options)
+	}
+	if code, _, errs := veloxEnv(t, dir, fakeEnv("FAKEPLUGIN_DUMP="+dump), "-plugin", "fakeplugin:go_package=x/pb,mode=a=b", "./schema"); code != 0 {
+		t.Fatalf("%d %q", code, errs)
+	}
+	req = plugin.Request{}
+	if err := json.Unmarshal([]byte(read(t, dump)), &req); err != nil {
+		t.Fatal(err)
+	}
+	if len(req.Options) != 2 || req.Options["go_package"] != "x/pb" || req.Options["mode"] != "a=b" {
+		t.Errorf("options %v", req.Options)
+	}
+
+	for _, spec := range []string{"fakeplugin:x", "fakeplugin:", "fakeplugin:=v", "fakeplugin:a=1,a=2", "fakeplugin:a=1,", ":a=1"} {
+		t.Run(spec, func(t *testing.T) {
+			code, out, errs := veloxEnv(t, dir, fakeEnv(), "-plugin", spec, "./schema")
+			if code != 2 || out != "" || !strings.Contains(errs, "-plugin") {
+				t.Errorf("%d %q %q", code, out, errs)
+			}
+		})
+	}
+}
+
+// TestPluginProtocol1 pins the error a plugin built with a velox2 of protocol
+// 1 gets: its responses say no protocol.
+func TestPluginProtocol1(t *testing.T) {
+	dir := pluginModule(t)
+	for _, mode := range []string{"protocol1", "protocol1error"} {
+		t.Run(mode, func(t *testing.T) {
+			code, out, errs := veloxEnv(t, dir, fakeEnv("FAKEPLUGIN_MODE="+mode), "-plugin", "fakeplugin", "./schema")
+			if want := "velox-gen: plugin fakeplugin: it speaks plugin protocol 1 (or does not say); velox-gen speaks 2: update the plugin\n"; code != 1 || out != "" || errs != want {
+				t.Errorf("%d %q %q, want %q", code, out, errs, want)
+			}
+			if got := names(t, filepath.Join(dir, "gen")); len(got) != 0 {
+				t.Errorf("wrote %v", got)
+			}
+		})
+	}
+}
+
+func TestPluginWarnings(t *testing.T) {
+	dir := pluginModule(t)
+	env := fakeEnv(`FAKEPLUGIN_WARNINGS=["field x: skipped","y"]`)
+	want := "velox-gen: plugin fakeplugin: warning: field x: skipped\nvelox-gen: plugin fakeplugin: warning: y\n"
+	code, out, errs := veloxEnv(t, dir, env, "-plugin", "fakeplugin", "./schema")
+	if code != 0 || !strings.Contains(out, "gen/fake_gql.go\n") || errs != want {
+		t.Fatalf("%d %q %q", code, out, errs)
+	}
+	if code, out, errs := veloxEnv(t, dir, env, "-check", "-plugin", "fakeplugin", "./schema"); code != 0 || out != "" || errs != want {
+		t.Errorf("-check: %d %q %q", code, out, errs)
+	}
+	// With an error, the warnings show too.
+	code, _, errs = veloxEnv(t, dir, fakeEnv(`FAKEPLUGIN_WARNINGS=["w"]`, "FAKEPLUGIN_MODE=error"), "-plugin", "fakeplugin", "./schema")
+	if code != 1 || errs != "velox-gen: plugin fakeplugin: warning: w\nvelox-gen: plugin fakeplugin: the fake plugin refuses\n" {
+		t.Errorf("error: %d %q", code, errs)
+	}
+}
+
+// TestRerunQuoted pins that -check's command is one a POSIX shell runs as
+// given.
+func TestRerunQuoted(t *testing.T) {
+	for _, arg := range []string{"", "a", "x/pb", "velox-grpc:go_package=x/pb", "a b", "it's", "$HOME", "*.go", "~/x", "a;b", "a\"b", "a\\b", "a\nb", "-out", "a,b=c", "'"} {
+		q := shellQuote(arg)
+		got, err := exec.Command("sh", "-c", "printf '%s' "+q).Output()
+		if err != nil || string(got) != arg {
+			t.Errorf("shellQuote(%q) = %s, which sh reads as %q (%v)", arg, q, got, err)
+		}
+	}
+	for arg, want := range map[string]string{"velox-grpc:go_package=x/pb": "velox-grpc:go_package=x/pb", "./schema": "./schema", "a b": "'a b'", "it's": `'it'\''s'`, "": "''"} {
+		if got := shellQuote(arg); got != want {
+			t.Errorf("shellQuote(%q) = %s, want %s", arg, got, want)
+		}
+	}
+
+	dir := pluginModule(t)
+	code, _, errs := veloxEnv(t, dir, fakeEnv(), "-check", "-out", "my gen", "-package", "gen", "-plugin", "fakeplugin:go_package=x/pb y", "./schema")
+	if want := "velox-gen: run go tool velox-gen -out 'my gen' -package gen -plugin 'fakeplugin:go_package=x/pb y' ./schema\n"; code != 1 || !strings.HasSuffix(errs, want) {
+		t.Errorf("%d %q, want the suffix %q", code, errs, want)
 	}
 }

@@ -2,10 +2,11 @@ package plugin
 
 import "encoding/json"
 
-// ProtocolVersion is the version of the plugin protocol, Request.Protocol: the
-// shape of the request and the response, and the rules for a plugin's files. A
-// plugin refuses a request whose Protocol it does not know.
-const ProtocolVersion = 1
+// ProtocolVersion is the version of the plugin protocol, Request.Protocol and
+// Response.Protocol: the shape of the request and the response, and the rules
+// for a plugin's files. A plugin refuses a request whose Protocol it does not
+// know, and velox-gen a response whose Protocol it does not know.
+const ProtocolVersion = 2
 
 // ModelVersion is the version of the model's JSON, Model.Version. It changes
 // only when a field is removed or changes meaning; added fields do not change
@@ -15,20 +16,31 @@ const ModelVersion = 2
 // Request is what velox-gen writes to a plugin's standard input.
 type Request struct {
 	Protocol   int    `json:"plugin_protocol"` // the protocol version, [ProtocolVersion]; a plugin checks it
+	Generator  string `json:"generator"`       // "velox-gen " and the version of the velox2 module, e.g. "velox-gen v2.0.0", "velox-gen (devel)"; for messages, not for output
 	OutPackage string `json:"out_package"`     // the generated package's name
 	OutPath    string `json:"out_path"`        // the generated package's import path
-	Model      *Model `json:"model"`
+	// Options are the plugin's options from the command line,
+	// -plugin name:key=value,key=value; absent when there are none. Keys are
+	// non-empty and distinct, a value may be empty, and neither holds a comma.
+	Options map[string]string `json:"options,omitempty"`
+	Model   *Model            `json:"model"`
 }
 
 // Response is what a plugin writes to its standard output.
 type Response struct {
-	Files []File `json:"files"`
-	Error string `json:"error,omitempty"` // a non-empty Error fails the run
+	Protocol int      `json:"plugin_protocol"` // the protocol the plugin speaks, [ProtocolVersion]; velox-gen refuses a response without it
+	Files    []File   `json:"files"`
+	Warnings []string `json:"warnings,omitempty"` // shown to the user; they never fail the run
+	Error    string   `json:"error,omitempty"`    // a non-empty Error fails the run
 }
 
 // File is one file of a plugin's output.
 type File struct {
-	Path    string `json:"path"`    // relative to the output directory, no directory part
+	// Path is a slash-separated path relative to the output directory, such
+	// as "velox.graphqls" or "pb/user.proto". Its segments are not empty, ".",
+	// or "..", its directories do not start with "." or "_", it holds no
+	// backslash or NUL, and it ends in .go, .graphqls or .proto.
+	Path    string `json:"path"`
 	Content string `json:"content"` // without the generated-file header
 }
 
