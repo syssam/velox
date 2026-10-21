@@ -97,6 +97,7 @@ type Statement struct {
 	Limit        int // 0: no limit; after the Rewrite hooks, velox lowers it to the row cap + 1
 	Offset       int
 	Unbounded    bool            // the query said Unbounded
+	Writable     bool            // SELECT: the query said Writable; the scope adds the Write policy
 	MaxRows      int             // SELECT and OpRawQuery: the most rows it may return; 0: the DB's WithMaxRows
 	Set          []Assignment    // UPDATE: the assignments
 	Rows         [][]any         // INSERT: the rows, one value per Columns entry

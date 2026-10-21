@@ -197,6 +197,10 @@ func (s *entState) field(e *Entity, i int, f *Field) *OutField {
 	o.ElemType = elem
 	// Only Nillable makes a pointer: a Default never changes the Go type.
 	o.Pointer = f.Nillable && i != 0 && !nilKinds[kind]
+	// A json field's column holds NULL when it is Optional or Nillable (the
+	// plugin model's Nullable). A pointer says so itself; a slice or a map,
+	// whose nil is NULL there, says it in its ColumnDesc.
+	o.NilIsNull = o.JSON && i != 0 && (f.Optional || f.Nillable) && (kind == "slice" || kind == "map")
 	// An Optional field that is a value is unset at its zero value, which
 	// its validators let pass.
 	// A bytes field is a slice, never a pointer, and nil is unset.

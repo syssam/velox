@@ -556,17 +556,19 @@ func (in UpdatePostInput) GoString() string { return in.String() }
 // field given with its clear field, or an ID both to add and to remove, before
 // any statement (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFrom
 // reads from ctx, in one transaction (gqlimpl.Atomic): the operation's, or one
-// of its own. The fields go in one UPDATE, which the tenant scope and the Write
-// policy scope; an input that sets none sends no UPDATE, and a COUNT checks the
-// row instead. The edges follow, each cleared, then its IDs removed, then its
-// IDs added: an ID to remove the edge does not lead to is ignored, and one to
-// add it already leads to is kept. Each ID must name a row the caller may read,
-// and a row it re-points one the caller may change; a child another node holds
-// is refused (BAD_USER_INPUT). An id that names no row the caller may change,
-// or an ID no row it may read, fails with NOT_FOUND and keeps nothing. A
-// validator's refusal is BAD_USER_INPUT, naming the input field; velox's other
-// errors are returned as they are. On MySQL the UPDATE's row count needs
-// clientFoundRows=true, as velox's Update does.
+// of its own. The fields go in one UPDATE, which the tenant scope and the Read
+// and Write policies scope; an input that sets none sends no UPDATE, and a
+// COUNT under the same scope (Writable) checks the row instead, so that no edge
+// of a row the caller may not change is written. The edges follow, each
+// cleared, then its IDs removed, then its IDs added: an ID to remove the edge
+// does not lead to is ignored, and one to add it already leads to is kept. Each
+// ID must name a row the caller may read, and a row it re-points one the caller
+// may change; a child another node holds is refused (BAD_USER_INPUT). An id
+// that names no row the caller may change, or an ID no row it may read, fails
+// with NOT_FOUND and keeps nothing. A validator's refusal is BAD_USER_INPUT,
+// naming the input field; velox's other errors are returned as they are. On
+// MySQL the UPDATE's row count needs clientFoundRows=true, as velox's Update
+// does.
 func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, error) {
 	var (
 		key int64
@@ -634,7 +636,7 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 			if n == 0 {
 				return gqlimpl.NotFound("updatePost", "Post")
 			}
-		} else if n, err := db.Query[Post]().Where(Posts.ID.EQ(key)).Count(ctx); err != nil {
+		} else if n, err := db.Query[Post]().Where(Posts.ID.EQ(key)).Writable().Count(ctx); err != nil {
 			return err
 		} else if n == 0 {
 			return gqlimpl.NotFound("updatePost", "Post")

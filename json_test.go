@@ -973,3 +973,103 @@ func TestEncodedKeyRefused(t *testing.T) {
 		t.Errorf("a target's encoded key: got %v", err)
 	}
 }
+
+// jOpt has the JSON columns of Optional fields, as velox-gen writes them: a
+// slice and a map whose ColumnDesc says Nullable, as their columns can hold
+// NULL though the fields are no pointers; and a slice that is not.
+type jOpt struct {
+	ID    int64
+	Tags  []string
+	Attrs map[string]any
+	Fixed []string
+}
+
+var jOpts = struct {
+	ID    velox.NumberCol[jOpt, int64]
+	Tags  velox.JSONCol[jOpt, []string]
+	Attrs velox.JSONCol[jOpt, map[string]any]
+	Fixed velox.JSONCol[jOpt, []string]
+}{velox.NumberCol[jOpt, int64]{I: 0}, velox.JSONCol[jOpt, []string]{I: 1}, velox.JSONCol[jOpt, map[string]any]{I: 2}, velox.JSONCol[jOpt, []string]{I: 3}}
+
+var jOptMeta velox.MetaOnce[jOpt]
+
+func (*jOpt) VeloxMeta() *velox.Meta[jOpt] { return jOptMeta.Load(jOptDesc) }
+
+func jOptDesc() velox.Desc[jOpt] {
+	return velox.Desc[jOpt]{
+		Table: "j_opts",
+		Columns: []velox.ColumnDesc{
+			{Field: "ID", Name: "id"},
+			{Field: "Tags", Name: "tags", Nullable: true, Encode: json.Marshal, Decode: json.Unmarshal},
+			{Field: "Attrs", Name: "attrs", Nullable: true, Encode: json.Marshal, Decode: json.Unmarshal},
+			{Field: "Fixed", Name: "fixed", Encode: json.Marshal, Decode: json.Unmarshal},
+		},
+		PrimaryKey: []int{0},
+		Tenant:     -1,
+		Addr: func(x *jOpt, i int) any {
+			switch i {
+			case 0:
+				return &x.ID
+			case 1:
+				return &x.Tags
+			case 2:
+				return &x.Attrs
+			}
+			return &x.Fixed
+		},
+	}
+}
+
+// TestJSONNullableNoPointer: in a column whose ColumnDesc says Nullable, a nil
+// slice or map binds NULL, on insert and on update, and NULL reads back as
+// nil; in one that does not, nil binds the JSON null, as before.
+func TestJSONNullableNoPointer(t *testing.T) {
+	info := velox.InfoOf[jOpt]()
+	if !info.Columns[1].Nullable || !info.Columns[2].Nullable || info.Columns[3].Nullable {
+		t.Errorf("Nullable: %v %v %v, want true true false", info.Columns[1].Nullable, info.Columns[2].Nullable, info.Columns[3].Nullable)
+	}
+	e := &velox.FakeExec{Affected: 1}
+	db := velox.OpenFake(velox.Postgres, e)
+	if err := db.Insert(&jOpt{ID: 1}).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	sameArgs(t, "Insert of nil values", e.Args, []any{int64(1), nil, nil, []byte("null")})
+	if err := db.Insert(&jOpt{ID: 2, Tags: []string{}, Attrs: map[string]any{"k": 1}}).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	sameArgs(t, "Insert of values", e.Args, []any{int64(2), []byte(`[]`), []byte(`{"k":1}`), []byte("null")})
+	if _, err := db.Update[jOpt]().Set(jOpts.Tags.Set(nil), jOpts.Attrs.Set(nil), jOpts.Fixed.Set(nil)).Where(jOpts.ID.EQ(1)).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	sameArgs(t, "Update to nil", e.Args, []any{nil, nil, []byte("null"), int64(1)})
+
+	e.Rows = [][]any{{int64(1), nil, nil, []byte("null")}}
+	x, err := db.Query[jOpt]().Where(jOpts.ID.EQ(1)).One(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if x.Tags != nil || x.Attrs != nil || x.Fixed != nil {
+		t.Errorf("read %+v, want nil values", x)
+	}
+}
+
+// TestNullableNeedsNil: Nullable on a column whose field cannot be nil, nor
+// is a pointer, is refused when the metadata is built, naming the column.
+func TestNullableNeedsNil(t *testing.T) {
+	_, err := velox.LoadDesc(velox.Desc[jList]{
+		Table:      "j_lists",
+		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id", Nullable: true}, {Field: "Words", Name: "words"}},
+		PrimaryKey: []int{0},
+		Tenant:     -1,
+		Addr: func(x *jList, i int) any {
+			if i == 0 {
+				return &x.ID
+			}
+			return &x.Words
+		},
+	})
+	var se *velox.SchemaError
+	if !errors.As(err, &se) || se.Field != "ID" || !strings.Contains(err.Error(), "Nullable") {
+		t.Errorf("got %v, want a *SchemaError naming the column", err)
+	}
+}

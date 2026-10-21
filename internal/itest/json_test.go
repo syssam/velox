@@ -477,3 +477,118 @@ func TestJSONDecodeError(t *testing.T) {
 		}
 	})
 }
+
+// jopt is the record of an Optional JSON slice and map, as velox-gen writes
+// their Desc: Nullable, as their columns hold NULL though the fields are no
+// pointers; and fixed, a required slice, whose column does not.
+type jopt struct {
+	ID    int64
+	Tags  []string
+	Attrs map[string]any
+	Fixed []string
+}
+
+var JO = struct {
+	ID    velox.NumberCol[jopt, int64]
+	Tags  velox.JSONCol[jopt, []string]
+	Attrs velox.JSONCol[jopt, map[string]any]
+	Fixed velox.JSONCol[jopt, []string]
+}{velox.NumberCol[jopt, int64]{I: 0}, velox.JSONCol[jopt, []string]{I: 1}, velox.JSONCol[jopt, map[string]any]{I: 2}, velox.JSONCol[jopt, []string]{I: 3}}
+
+var joptMeta velox.MetaOnce[jopt]
+
+func (*jopt) VeloxMeta() *velox.Meta[jopt] {
+	return joptMeta.Load(func() velox.Desc[jopt] {
+		return velox.Desc[jopt]{
+			Table: "json_opts",
+			Columns: []velox.ColumnDesc{
+				{Field: "ID", Name: "id"},
+				{Field: "Tags", Name: "tags", Nullable: true, Encode: json.Marshal, Decode: json.Unmarshal},
+				{Field: "Attrs", Name: "attrs", Nullable: true, Encode: json.Marshal, Decode: json.Unmarshal},
+				{Field: "Fixed", Name: "fixed", Encode: json.Marshal, Decode: json.Unmarshal},
+			},
+			PrimaryKey: []int{0},
+			Tenant:     -1,
+			Addr: func(x *jopt, i int) any {
+				switch i {
+				case 0:
+					return &x.ID
+				case 1:
+					return &x.Tags
+				case 2:
+					return &x.Attrs
+				}
+				return &x.Fixed
+			},
+		}
+	})
+}
+
+// optNull reports whether column col of json_opts' row id is SQL NULL, read
+// without velox; and its text when it is not.
+func optNull(t *testing.T, tg target, col string, id int64) (bool, string) {
+	t.Helper()
+	var v any
+	q := rebind(tg.d, fmt.Sprintf("SELECT %s FROM json_opts WHERE id = ?", col))
+	if err := tg.direct.QueryRowContext(ctx, q, id).Scan(&v); err != nil {
+		t.Fatalf("%s: %v", q, err)
+	}
+	switch x := v.(type) {
+	case nil:
+		return true, ""
+	case []byte:
+		return false, string(x)
+	default:
+		return false, fmt.Sprint(x)
+	}
+}
+
+// TestJSONOptionalNil: an Optional JSON slice or map set to nil stores SQL
+// NULL, on insert and on update, and reads back as nil; a required one
+// stores the JSON null, as before.
+func TestJSONOptionalNil(t *testing.T) {
+	eachJSON(t, func(t *testing.T, tg target) {
+		typ := map[velox.Dialect]string{velox.Postgres: "jsonb", velox.MySQL: "JSON", velox.SQLite: "TEXT"}[tg.d]
+		id := "BIGINT"
+		if tg.d == velox.SQLite {
+			id = "INTEGER"
+		}
+		tg.exec(t, "DROP TABLE IF EXISTS json_opts")
+		tg.exec(t, fmt.Sprintf("CREATE TABLE json_opts (id %s PRIMARY KEY, tags %[2]s NULL, attrs %[2]s NULL, fixed %[2]s NOT NULL)", id, typ))
+		t.Cleanup(func() { tg.exec(t, "DROP TABLE IF EXISTS json_opts") })
+
+		check := func(what string, id int64) {
+			t.Helper()
+			for _, col := range []string{"tags", "attrs"} {
+				if null, text := optNull(t, tg, col, id); !null {
+					t.Errorf("%s: %s of %d holds %q, want SQL NULL", what, col, id, text)
+				}
+			}
+			if null, text := optNull(t, tg, "fixed", id); null || strings.TrimSpace(text) != "null" {
+				t.Errorf("%s: fixed of %d holds %q (NULL %v), want the JSON null", what, id, text, null)
+			}
+			got, err := tg.db.Query[jopt]().Where(JO.ID.EQ(id)).One(ctx)
+			if err != nil || got.Tags != nil || got.Attrs != nil || got.Fixed != nil {
+				t.Errorf("%s: read %+v, %v: want nil values", what, got, err)
+			}
+		}
+		if err := tg.db.Insert(&jopt{ID: 1}).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		check("insert", 1)
+
+		if err := tg.db.Insert(&jopt{ID: 2, Tags: []string{"a"}, Attrs: map[string]any{"k": "v"}, Fixed: []string{}}).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if null, _ := optNull(t, tg, "tags", 2); null {
+			t.Error("tags of 2 is SQL NULL, want [\"a\"]")
+		}
+		if _, err := tg.db.Update[jopt]().Set(JO.Tags.Set(nil), JO.Attrs.Set(nil), JO.Fixed.Set(nil)).Where(JO.ID.EQ(2)).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		check("update", 2)
+		if n, err := tg.db.Query[jopt]().Where(JO.ID.EQ(2)).Count(ctx); err != nil || n != 1 {
+			t.Errorf("count %d, %v", n, err)
+		}
+	})
+}

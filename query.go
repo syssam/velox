@@ -101,6 +101,18 @@ func (q Query[E]) Unbounded[_ Lazy[E]]() Query[E] {
 	return q
 }
 
+// Writable returns the query limited to the rows an Update or a Delete of E
+// may change: after the tenant and the Read policy, the scope adds the
+// entity's Write policy, as it does to an UPDATE. A Count or Exists of it
+// checks a row before writes that do not go through E's own UPDATE, such as
+// another entity's rows that point at it. The query stays a read: a Write
+// policy's denial is a select's, and SkipPolicy skips it as it skips Read.
+// It does not reach the queries of a With load.
+func (q Query[E]) Writable[_ Lazy[E]]() Query[E] {
+	q.st.Writable = true
+	return q
+}
+
 // MaxRows returns the query allowed to return up to n rows, in place of the
 // DB's WithMaxRows cap; n <= 0 restores the DB's cap. It covers the
 // statements of the query's With loads too, nested ones included. Say it where

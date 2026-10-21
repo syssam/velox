@@ -65,6 +65,14 @@ type ColumnDesc struct {
 	UpdateDefault func() any
 	Immutable     bool
 	Sensitive     bool
+	// Nullable says the column holds NULL though the field is no pointer:
+	// a slice or a map, whose nil velox binds as NULL and reads NULL back
+	// into. velox-gen sets it on the json field of an Optional or Nillable
+	// schema field that is a slice or a map. Without it, a nil slice or map
+	// in an encoded column binds what Encode makes of it (json.Marshal's
+	// null). A pointer field is nullable without it; on a field of any other
+	// type it is refused.
+	Nullable bool
 	// Encode and Decode are the column's codec, both or neither: with them,
 	// velox binds the bytes Encode returns for the field's value, and decodes
 	// what it reads with Decode, into a pointer to the field. velox-gen sets
@@ -191,11 +199,14 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 			// every scan writes through it: anything else is no column.
 			return fail(c.Field, "Addr does not return a pointer into the entity for column %d", i)
 		}
-		ci := ColumnInfo{Field: c.Field, Name: c.Name, Type: ft, Nullable: ft.Kind() == reflect.Pointer, SQLType: c.SQLType,
+		ci := ColumnInfo{Field: c.Field, Name: c.Name, Type: ft, Nullable: ft.Kind() == reflect.Pointer || c.Nullable, SQLType: c.SQLType,
 			HasDefault: c.Default != nil, DefaultFunc: c.DefaultFunc, UpdateDefault: c.UpdateDefault,
 			Immutable: c.Immutable, Sensitive: c.Sensitive, Codec: c.Encode != nil, encode: c.Encode, decode: c.Decode, off: off}
 		if (c.Encode == nil) != (c.Decode == nil) {
 			return fail(c.Field, "column %s has one of Encode and Decode; a codec needs both", c.Name)
+		}
+		if k := ft.Kind(); c.Nullable && k != reflect.Pointer && k != reflect.Slice && k != reflect.Map {
+			return fail(c.Field, "column %s says Nullable, and its field is a %v, which cannot be nil: make it a pointer", c.Name, ft)
 		}
 		if c.Immutable && c.UpdateDefault != nil {
 			return fail(c.Field, "Immutable column %s has an UpdateDefault; every update would be refused", c.Field)

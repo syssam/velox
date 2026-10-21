@@ -577,3 +577,36 @@ func TestAllowComposes(t *testing.T) {
 		t.Errorf("Or(Allow, Has): %s", s)
 	}
 }
+
+// TestPolicyWritable: a Writable query gets the Write condition after the
+// tenant and Read ones, as an UPDATE does, so a Count checks what an Update
+// may change; it is a read still: Write's denial is a select's.
+func TestPolicyWritable(t *testing.T) {
+	e := &velox.FakeExec{Rows: [][]any{{int64(1)}}}
+	db := velox.OpenFake(velox.Postgres, e)
+	q := db.Query[pnote]().Where(pn.ID.EQ(1))
+	if _, err := q.Writable().Count(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	wantSent(t, e, `SELECT COUNT(*) FROM "pnotes" WHERE "id" = $1 AND "owner" = $2 AND "locked" = $3`, int64(1), "ann", false)
+	// q is a value: Writable left it as it was.
+	if _, err := q.Count(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	wantSent(t, e, `SELECT COUNT(*) FROM "pnotes" WHERE "id" = $1 AND "owner" = $2`, int64(1), "ann")
+
+	calls := e.Calls
+	_, err := q.Writable().Count(pnoteWriting(velox.Pred[pnote]{}, velox.Deny("read-only")))
+	var pe *velox.PolicyError
+	if !errors.As(err, &pe) || pe.Op != velox.OpSelect || !errors.Is(err, velox.ErrDenied) {
+		t.Errorf("a denied Write: %v", err)
+	}
+	if e.Calls != calls {
+		t.Errorf("%d denied statements sent", e.Calls-calls)
+	}
+	// SkipPolicy skips Write too.
+	if _, err := q.Writable().Count(velox.SkipPolicy(context.Background(), "test")); err != nil {
+		t.Fatal(err)
+	}
+	wantSent(t, e, `SELECT COUNT(*) FROM "pnotes" WHERE "id" = $1`, int64(1))
+}

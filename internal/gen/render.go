@@ -256,6 +256,9 @@ func entityDesc(w *writer, e *OutEntity) {
 		if f.Sensitive {
 			parts = append(parts, "Sensitive: true")
 		}
+		if f.NilIsNull {
+			parts = append(parts, "Nullable: true")
+		}
 		if f.JSON {
 			parts = append(parts, "Encode: json.Marshal", "Decode: json.Unmarshal")
 		}

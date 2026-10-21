@@ -56,7 +56,7 @@ type ColumnInfo struct {
 	Field       string // the Go field name
 	Name        string // the column name
 	Type        any    // the field's Go type, a reflect.Type: read it with GoType
-	Nullable    bool   // the field is a pointer
+	Nullable    bool   // the column holds NULL: the field is a pointer, or its ColumnDesc says Nullable
 	SQLType     string // empty: the dialect's default for Type
 	Default     any
 	HasDefault  bool
@@ -75,8 +75,9 @@ type ColumnInfo struct {
 	// string: SQLite stores a []byte as a BLOB, not TEXT, and MySQL's driver
 	// with interpolateParams=true writes a []byte as a binary string, which a
 	// JSON column refuses. Bytes that are not valid UTF-8, which only a binary
-	// codec returns, stay []byte. In a nullable (pointer) field, a nil pointer,
-	// or a nil slice or map it points to, binds NULL; in any other field a nil
+	// codec returns, stay []byte. In a nullable column (Nullable: a pointer
+	// field, or a slice or map field whose ColumnDesc says Nullable), a nil
+	// pointer, or a nil slice or map, binds NULL; in any other column a nil
 	// slice or map is encoded (the JSON null, which reads back as nil). An
 	// untyped nil, which only a hook-built value can be, binds NULL in either.
 	// What is read, as []byte or string, is decoded with Decode; NULL leaves the

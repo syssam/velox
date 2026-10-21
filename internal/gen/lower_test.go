@@ -192,8 +192,19 @@ func TestLowerJSONFlag(t *testing.T) {
 	for _, f := range files {
 		src += string(f.Data)
 	}
-	if want := `{Field: "Tags", Name: "tags", Encode: json.Marshal, Decode: json.Unmarshal},`; !strings.Contains(src, want) {
+	// tags is Optional and a slice: its column holds NULL, which a nil
+	// slice binds.
+	if want := `{Field: "Tags", Name: "tags", Nullable: true, Encode: json.Marshal, Decode: json.Unmarshal},`; !strings.Contains(src, want) {
 		t.Errorf("the generated code lacks %s", want)
+	}
+	if f := m.field("labels"); f.NilIsNull {
+		t.Errorf("labels (a required slice) is NilIsNull")
+	}
+	if f := m.field("box"); f.NilIsNull {
+		t.Errorf("box (a pointer) is NilIsNull: the pointer makes it nullable")
+	}
+	if f := u.field("tags"); !f.NilIsNull {
+		t.Errorf("tags (an Optional slice) is not NilIsNull")
 	}
 	if n := strings.Count(src, "Encode: json.Marshal"); n != 1 {
 		t.Errorf("the generated code gives %d columns a codec, want 1", n)

@@ -12,8 +12,8 @@ import (
 // On a tenant-scoped entity it adds the condition tenant = id, or fails the
 // statement with ErrNoTenant when the context has neither WithTenant nor
 // AllTenants. Unless the context says SkipPolicy, a SELECT gets the entity's
-// Read policy and an UPDATE or DELETE its Read and Write policies, after the
-// tenant. Every EXISTS gets its target's tenant and Read policy the same way.
+// Read policy and an UPDATE or DELETE, or a Writable SELECT, its Read and
+// Write policies, after the tenant. Every EXISTS gets its target's tenant and Read policy the same way.
 // scope runs after the guard and the Rewrite hooks, so neither sees what it
 // adds and no hook can remove it.
 //
@@ -51,7 +51,7 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 				return err
 			}
 		}
-		if st.Op != OpSelect && pol.write != nil && sc.policyOn() {
+		if (st.Op != OpSelect || st.Writable) && pol.write != nil && sc.policyOn() {
 			p, err := pol.write(ctx)
 			if write, err = sc.policyCond(in, st.Op, "Write", p, err); err != nil {
 				return err

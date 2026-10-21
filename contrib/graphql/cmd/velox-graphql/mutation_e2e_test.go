@@ -13,7 +13,8 @@ import (
 //     without one (score), a sensitive field (password) and an Optional JSON
 //     field (meta); its edges are an O2M (articles), an M2M (circles), an
 //     O2O whose key Profile holds (profile), and a tenant-scoped O2M to
-//     itself (mentees, whose inverse is mentor).
+//     itself (mentees, whose inverse is mentor); its policy, in
+//     gen/writer_policy.go, lets no "frozen" writer change.
 //   - Article's writer is an M2O whose nullable key is on its own row; its
 //     policy, in gen/article_policy.go, refuses the title "forbidden" on
 //     insert and lets no "locked" row change.
@@ -131,6 +132,24 @@ func (*Article) Policy() velox.Policy[Article] {
 }
 `
 
+// e2eMutWriterPolicy is Writer's policy: its Write lets no "frozen" writer
+// change, though every writer may be read.
+const e2eMutWriterPolicy = `package gen
+
+import (
+	"context"
+
+	"github.com/syssam/velox2"
+)
+
+// Policy lets no "frozen" writer change.
+func (*Writer) Policy() velox.Policy[Writer] {
+	return velox.Policy[Writer]{
+		Write: func(context.Context) (velox.Pred[Writer], error) { return Writers.Name.NEQ("frozen"), nil },
+	}
+}
+`
+
 // e2eMutCirclePolicy is Circle's policy: its Read hides the circle named
 // "hidden".
 const e2eMutCirclePolicy = `package gen
@@ -207,6 +226,7 @@ var sqliteDDL = []string{
 type env struct {
 	ctx context.Context
 	db  *velox.DB
+	raw *sql.DB // the database under db, for what velox does not read
 	mu  sync.Mutex
 	sql []string
 }
@@ -234,7 +254,7 @@ func each(t *testing.T, fn func(t *testing.T, e *env)) {
 					t.Fatalf("%s: %v", s, err)
 				}
 			}
-			e := &env{}
+			e := &env{raw: sqlDB}
 			e.db = velox.Open(tg.dialect, sqlDB, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
 				e.mu.Lock()
 				e.sql = append(e.sql, st.SQL)
@@ -805,8 +825,10 @@ func TestUpdate(t *testing.T) {
 		if st := writer(t, e, w.ID); st.Bio != nil || got.Bio != nil || st.Meta != nil || st.Nick != "nick" || st.Score != 3 {
 			t.Errorf("after clearBio and clearMeta: stored %v, returned %v: want no bio, no meta, nick nick, score 3", st, got)
 		}
-		if n := count(t, e.ctx, e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(w.ID), gen.Writers.Bio.IsNull())); n != 1 {
-			t.Errorf("w's bio IS NULL: %d rows, want 1", n)
+		// Both columns hold SQL NULL: meta, an Optional JSON map, too.
+		var nulls int
+		if err := e.raw.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM writers WHERE id = %d AND bio IS NULL AND meta IS NULL", w.ID)).Scan(&nulls); err != nil || nulls != 1 {
+			t.Errorf("w's bio and meta are SQL NULL: %d rows, %v; want 1", nulls, err)
 		}
 
 		// A unique edge whose key is on the row: set, then cleared.
@@ -938,6 +960,47 @@ func TestUpdatePolicy(t *testing.T) {
 	})
 }
 
+// TestUpdateWriteScope: an update that sets no field checks its row under
+// the Write policy, as the UPDATE of a field would: a writer the caller may
+// read but not change is NOT_FOUND, as a missing one is, and no edge of it
+// changes.
+func TestUpdateWriteScope(t *testing.T) {
+	each(t, func(t *testing.T, e *env) {
+		frozen := &gen.Writer{Name: "frozen", Password: "x"}
+		insert(t, e.ctx, e.db, frozen)
+		p := &gen.Profile{Handle: "p", WriterID: ptr(frozen.ID)}
+		insert(t, e.ctx, e.db, p)
+		a, c := &gen.Article{Title: "a"}, &gen.Circle{Name: "c"}
+		insert(t, e.ctx, e.db, a)
+		insert(t, e.ctx, e.db, c)
+		const want = "veloxgql: updateWriter: no Writer has this ID"
+		for _, in := range []gen.UpdateWriterInput{
+			{},
+			{AddCircleIDs: []string{circleID(c.ID)}},
+			{AddArticleIDs: []string{articleID(a.ID)}},
+			{ClearProfile: true},
+			{Name: ptr("thawed")},
+		} {
+			_, err := gen.UpdateWriter(e.ctx, writerID(frozen.ID), in)
+			if code(err) != veloxgql.CodeNotFound || err.Error() != want {
+				t.Errorf("%v: %v (code %q), want %q", in, err, code(err), want)
+			}
+		}
+		if n := count(t, e.ctx, e.db.Query[gen.WriterCircle]()); n != 0 {
+			t.Errorf("%d join rows, want 0", n)
+		}
+		if w := writerOfArticle(t, e, a.ID); w != nil {
+			t.Errorf("the article's writer is %d, want none", *w)
+		}
+		if w := writerOfProfile(t, e, p.ID); !is(w, frozen.ID) {
+			t.Errorf("the profile's writer is %v, want the frozen writer", w)
+		}
+		if st := writer(t, e, frozen.ID); st.Name != "frozen" {
+			t.Errorf("the frozen writer is now %q", st.Name)
+		}
+	})
+}
+
 // TestUpdateEmpty: an input that sets nothing sends no write: one COUNT
 // checks the row, and one SELECT reads it.
 func TestUpdateEmpty(t *testing.T) {
@@ -992,7 +1055,7 @@ func TestMutationsRun(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
-	_, run := app(t, map[string]string{"schema/schema.go": e2eMutSchema, "gen/article_policy.go": e2eMutPolicy, "gen/circle_policy.go": e2eMutCirclePolicy, "mutation_test.go": e2eMutRun})
+	_, run := app(t, map[string]string{"schema/schema.go": e2eMutSchema, "gen/article_policy.go": e2eMutPolicy, "gen/circle_policy.go": e2eMutCirclePolicy, "gen/writer_policy.go": e2eMutWriterPolicy, "mutation_test.go": e2eMutRun})
 	if out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql", "./schema"); err != nil {
 		t.Fatalf("generate: %v\n%s", err, out)
 	}
@@ -1007,7 +1070,7 @@ func TestMutationsRun(t *testing.T) {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
 	for _, name := range []string{"TestCreate", "TestCreateM2MBothSides", "TestRepeatedIDs", "TestEdgeScope", "TestAtomic", "TestCreateErrors", "TestRepoint",
-		"TestUpdate", "TestUpdateConflicts", "TestUpdatePolicy", "TestUpdateEmpty", "TestUpdateErrors"} {
+		"TestUpdate", "TestUpdateConflicts", "TestUpdatePolicy", "TestUpdateWriteScope", "TestUpdateEmpty", "TestUpdateErrors"} {
 		if !strings.Contains(out, "--- PASS: "+name+" ") {
 			t.Errorf("no PASS of %s in\n%s", name, out)
 		}
