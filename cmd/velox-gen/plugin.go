@@ -12,7 +12,9 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"slices"
+	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/syssam/velox2/internal/gen"
 	"github.com/syssam/velox2/plugin"
@@ -187,12 +189,28 @@ func runPlugin(name, modDir string, req []byte, env []string, stderr io.Writer) 
 		return nil, fmt.Errorf("it speaks plugin protocol %d; velox-gen speaks %d: update velox-gen", n, plugin.ProtocolVersion)
 	}
 	for _, w := range resp.Warnings {
-		_, _ = fmt.Fprintf(stderr, "velox-gen: plugin %s: warning: %s\n", name, w)
+		_, _ = fmt.Fprintf(stderr, "velox-gen: plugin %s: warning: %s\n", name, oneLine(w))
 	}
 	if resp.Error != "" {
 		return nil, fmt.Errorf("%s", resp.Error)
 	}
 	return &resp, nil
+}
+
+// oneLine is s with each control character, newlines among them, escaped as
+// in a Go string literal, so that a warning is one line that cannot pass for
+// velox-gen's own output or move the terminal's cursor.
+func oneLine(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if unicode.IsControl(r) {
+			q := strconv.QuoteRune(r)
+			b.WriteString(q[1 : len(q)-1])
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // pluginExts are the extensions of the files a plugin writes.

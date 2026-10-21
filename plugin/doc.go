@@ -10,8 +10,9 @@
 //	go tool velox-gen -out gen -plugin velox-foo:mode=strict,out=pb ./schema
 //
 // velox-gen writes one [Request] as JSON to the plugin's standard input,
-// closes it, and reads one [Response] as JSON from its standard output. The
-// plugin's standard error is shown only when it exits non-zero. Repeated
+// closes it, and reads one [Response] as JSON from its standard output. A
+// plugin that exits with a non-zero status fails the run, and nothing is
+// written; its standard error is shown then, and only then. Repeated
 // -plugin flags run several plugins, one after the other, each with its own
 // request.
 //
@@ -70,7 +71,9 @@
 //     ("# ..." for .graphqls), followed by a blank line, so a plugin's
 //     content does not include it.
 //   - warnings are printed, one line each, as
-//     "velox-gen: plugin <name>: warning: <text>". They never fail the run.
+//     "velox-gen: plugin <name>: warning: <text>", with control characters,
+//     newlines among them, escaped as in a Go string literal ("\n"). They
+//     never fail the run.
 //   - a non-empty error fails the run, and nothing is written. The plugin
 //     still exits 0: a non-zero exit is for a plugin that cannot answer.
 //
@@ -93,6 +96,9 @@
 //	}
 //
 //	func generate(req *plugin.Request) ([]plugin.File, []string, error) { ... }
+//
+// [Run] recovers a panic of the GenerateFunc into the response's error, "the
+// plugin panicked: " and the panic's value, without the stack.
 //
 // [Supports] holds the versions the plugin was written for, as literals.
 // Built with a velox2 of another protocol or model, the plugin answers with

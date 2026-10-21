@@ -200,22 +200,26 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 	if err := mergePluginFiles(dir, out, want, pfiles, owners); err != nil {
 		return fail(err)
 	}
-	// Nothing is written before every path is known to be velox-gen's, and
-	// every directory of one to be a directory.
+	// Nothing is written before every path is known to be velox-gen's: a
+	// regular file with its header, below real directories.
 	for _, p := range slices.Sorted(maps.Keys(want)) {
 		for d := filepath.Dir(p); d != out && within(out, d); d = filepath.Dir(d) {
-			if fi, err := os.Lstat(d); err == nil && !fi.IsDir() {
-				return fail(fmt.Errorf("%s is not a directory; move it", relPath(dir, d)))
+			if err := checkEntry(dir, d, true); err != nil {
+				return fail(err)
 			}
 		}
-		if _, err := os.Stat(p); err == nil && !isGenerated(p) {
+		if err := checkEntry(dir, p, false); err != nil {
+			return fail(err)
+		}
+		if _, err := os.Lstat(p); err == nil && !isGenerated(p) {
 			return fail(fmt.Errorf("%s was not written by velox-gen; move it", relPath(dir, p)))
 		}
 	}
-	stale, remove, emptied, err := staleFiles(out, want)
+	sw, err := staleFiles(out, want)
 	if err != nil {
 		return fail(err)
 	}
+	stale, remove := sw.write, sw.remove
 	changed := append(slices.Clone(stale), remove...)
 	slices.Sort(changed)
 	if f.check {
@@ -228,11 +232,10 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 		}
 		return 0
 	}
-	for _, p := range stale {
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-			return fail(err)
-		}
-		if err := os.WriteFile(p, want[p], 0o644); err != nil {
+	// Respell, remove, then write: on a case-insensitive file system a file
+	// whose name changed only in case is the old file, which goes first.
+	for _, r := range sw.respell {
+		if err := os.Rename(r[0], r[1]); err != nil {
 			return fail(err)
 		}
 	}
@@ -241,8 +244,16 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 			return fail(err)
 		}
 	}
-	for _, d := range emptied {
+	for _, d := range sw.emptied {
 		if err := os.Remove(d); err != nil {
+			return fail(err)
+		}
+	}
+	for _, p := range stale {
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			return fail(err)
+		}
+		if err := os.WriteFile(p, want[p], 0o644); err != nil {
 			return fail(err)
 		}
 	}
@@ -252,25 +263,64 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 	return 0
 }
 
-// staleFiles compares want, the files that must be in out, with the disk. It
-// returns the paths to write (missing, or with other content), the generated
-// files (.go, .graphqls and .proto) in out or below it that nothing produces
-// now, to remove, and the directories below out that removing them empties,
-// deepest first. Only a regular file that starts with the header of its kind
-// is ever on the second list. The walk skips the directories whose name
-// starts with "." or "_" (.git, .velox-verify-*, testdata's kin), and a
-// directory is on the third list only when it held something and everything
-// it held is removed, and no file of want goes into it.
-func staleFiles(out string, want map[string][]byte) (write, remove, emptied []string, err error) {
+// checkEntry refuses what is at p, when anything is, unless it is a directory
+// (dir) or a regular file (!dir). A symbolic link is refused either way: what
+// velox-gen writes or removes stays below -out.
+func checkEntry(dir, p string, isDir bool) error {
+	fi, err := os.Lstat(p)
+	switch {
+	case err != nil:
+		return nil
+	case fi.Mode()&os.ModeSymlink != 0:
+		return fmt.Errorf("%s is a symbolic link; velox-gen writes only regular files below real directories; move it", relPath(dir, p))
+	case isDir && !fi.IsDir():
+		return fmt.Errorf("%s is not a directory; move it", relPath(dir, p))
+	case !isDir && !fi.Mode().IsRegular():
+		return fmt.Errorf("%s is not a regular file; move it", relPath(dir, p))
+	}
+	return nil
+}
+
+// sweep is what staleFiles finds to do in the output directory.
+type sweep struct {
+	write   []string    // the files of want that are missing or hold other content
+	remove  []string    // the generated files nothing produces now, under their spelling on disk
+	emptied []string    // the directories the removals empty, deepest first
+	respell [][2]string // directories to rename to the spelling want gives them, where the file system takes both for one
+}
+
+// staleFiles compares want, the files that must be in out, with the disk.
+//
+// A generated file (.go, .graphqls or .proto: a regular file that starts with
+// the header of its kind) in out or below it that is not a path of want is
+// removed. The walk skips the directories whose name starts with "." or "_"
+// (.git, .velox-verify-*, testdata's kin). A directory is emptied only when
+// it held something, everything it held is removed, and no file of want goes
+// into it.
+//
+// Paths are matched to want by their spelling, and also folded, as a
+// case-insensitive file system matches them. A generated file whose name
+// differs from a path of want only in case is removed; when the file system
+// takes the two for one file, that path of want is written again, after the
+// removal, so that it ends up under its new spelling. A directory that differs
+// from one of want only in case, and that the file system takes for it, is
+// renamed when it is not emptied (it holds a file of yours).
+func staleFiles(out string, want map[string][]byte) (sweep, error) {
+	var sw sweep
+	write := map[string]bool{}
 	for p, data := range want {
 		if got, err := os.ReadFile(p); err != nil || !bytes.Equal(got, data) {
-			write = append(write, p)
+			write[p] = true
 		}
 	}
-	keep := map[string]bool{} // the directories a file of want goes into
+	wantFold := make(map[string]string, len(want)) // folded path → the path of want
+	for p := range want {
+		wantFold[fold(p)] = p
+	}
+	keep := map[string]string{} // folded directory a file of want goes into → its spelling
 	for p := range want {
 		for d := filepath.Dir(p); within(out, d) && d != out; d = filepath.Dir(d) {
-			keep[d] = true
+			keep[fold(d)] = d
 		}
 	}
 	// held counts each directory's entries, gone those that go.
@@ -300,30 +350,55 @@ func staleFiles(out string, want map[string][]byte) (write, remove, emptied []st
 					return err
 				}
 			case de.Type().IsRegular():
-				if _, ok := want[p]; !ok && headerFor(p) != "" && isGenerated(p) {
-					remove = append(remove, p)
-					gone[d]++
+				if _, ok := want[p]; ok || headerFor(p) == "" || !isGenerated(p) {
+					continue
+				}
+				sw.remove = append(sw.remove, p)
+				gone[d]++
+				if q, ok := wantFold[fold(p)]; ok && sameEntry(p, q) {
+					write[q] = true
 				}
 			}
 		}
 		return nil
 	}
 	if err := walk(out); err != nil {
-		return nil, nil, nil, err
+		return sweep{}, err
 	}
 	// Deepest first, so that a directory's emptied children count as gone.
 	slices.SortFunc(dirs, func(a, b string) int {
 		return cmp.Or(cmp.Compare(strings.Count(b, string(filepath.Separator)), strings.Count(a, string(filepath.Separator))), cmp.Compare(a, b))
 	})
 	for _, d := range dirs {
-		if !keep[d] && held[d] > 0 && gone[d] == held[d] {
-			emptied = append(emptied, d)
+		k, kept := keep[fold(d)]
+		exact := kept && k == d
+		switch {
+		case !exact && held[d] > 0 && gone[d] == held[d]:
+			sw.emptied = append(sw.emptied, d)
 			gone[filepath.Dir(d)]++
+		case kept && !exact:
+			// Only the last segment is renamed: the parent's old spelling
+			// still finds it on the file system that takes both for one.
+			to := filepath.Join(filepath.Dir(d), filepath.Base(k))
+			if filepath.Base(k) != filepath.Base(d) && sameEntry(d, to) {
+				sw.respell = append(sw.respell, [2]string{d, to})
+			}
 		}
 	}
-	slices.Sort(write)
-	slices.Sort(remove)
-	return write, remove, emptied, nil
+	sw.write = slices.Sorted(maps.Keys(write))
+	slices.Sort(sw.remove)
+	return sw, nil
+}
+
+// sameEntry reports whether the paths a and b, which differ, name one entry of
+// the file system: one that folds case.
+func sameEntry(a, b string) bool {
+	fa, err := os.Lstat(a)
+	if err != nil {
+		return false
+	}
+	fb, err := os.Lstat(b)
+	return err == nil && os.SameFile(fa, fb)
 }
 
 // rerunCommand is the command that regenerates with the flags args, each

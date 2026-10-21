@@ -155,3 +155,12 @@ func TestRunWriteError(t *testing.T) {
 		t.Error("no error for an output that cannot be written")
 	}
 }
+
+func TestRunRecoversPanic(t *testing.T) {
+	resp, _ := run(t, current, good(t), func(*plugin.Request) ([]plugin.File, []string, error) {
+		panic("index out of range")
+	})
+	if resp.Error != "the plugin panicked: index out of range" || len(resp.Files) != 0 || resp.Protocol != plugin.ProtocolVersion {
+		t.Errorf("%+v", resp)
+	}
+}
