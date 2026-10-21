@@ -7,9 +7,13 @@ import (
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
 )
 
-// Paginate is paginate for the tests: NewConnection and Page in one call.
+// Paginate is NewConnection and Page in one call, for the tests.
 func Paginate[E any](ctx context.Context, q velox.Query[E], typ string, args Args, order, key []OrderTerm[E]) (*Page[E], error) {
-	return paginate(ctx, q, typ, args, order, key)
+	c, err := NewConnection(ctx, q, typ, args, order, key)
+	if err != nil {
+		return nil, err
+	}
+	return c.Page(ctx)
 }
 
 // CursorOrder, CheckCursor and CursorValue export the cursor's unexported

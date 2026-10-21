@@ -218,6 +218,16 @@ type LabelWhereInput struct {
 	NameContains  *string
 	NameHasPrefix *string
 	NameHasSuffix *string
+
+	// Predicates on the field rank.
+	Rank      *int8
+	RankNEQ   *int8
+	RankIn    []int8
+	RankNotIn []int8
+	RankGT    *int8
+	RankGTE   *int8
+	RankLT    *int8
+	RankLTE   *int8
 }
 
 // Pred is the condition w stands for, on Label nodes: every predicate w sets
@@ -244,5 +254,13 @@ func (w *LabelWhereInput) Pred(ctx context.Context) (velox.Pred[Tag], error) {
 	gqlimpl.Value(f, "nameContains", w.NameContains, Tags.Name.Contains)
 	gqlimpl.Value(f, "nameHasPrefix", w.NameHasPrefix, Tags.Name.HasPrefix)
 	gqlimpl.Value(f, "nameHasSuffix", w.NameHasSuffix, Tags.Name.HasSuffix)
+	gqlimpl.Value(f, "rank", w.Rank, Tags.Rank.EQ)
+	gqlimpl.Value(f, "rankNEQ", w.RankNEQ, Tags.Rank.NEQ)
+	gqlimpl.List(f, "rankIn", w.RankIn, Tags.Rank.In)
+	gqlimpl.List(f, "rankNotIn", w.RankNotIn, Tags.Rank.NotIn)
+	gqlimpl.Value(f, "rankGT", w.RankGT, Tags.Rank.GT)
+	gqlimpl.Value(f, "rankGTE", w.RankGTE, Tags.Rank.GTE)
+	gqlimpl.Value(f, "rankLT", w.RankLT, Tags.Rank.LT)
+	gqlimpl.Value(f, "rankLTE", w.RankLTE, Tags.Rank.LTE)
 	return f.Pred()
 }

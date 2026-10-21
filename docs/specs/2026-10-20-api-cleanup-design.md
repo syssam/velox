@@ -218,6 +218,9 @@ Added 2026-10-21. Each is a decision taken in the plan or while executing it, an
 15. The `gqlgen@latest` job is `scripts/gqlgen-latest.sh`, which works in a copy of the tree; CI runs it as its own job and `ci-local.sh` runs it last. It fails red rather than `continue-on-error`. The supported range is "v0.17.86 and later". The example's tests ignore the `locations` of an error, which gqlgen v0.17.97 adds: `ErrorPresenter` keeps them, since a client can use them.
 16. Left out: mutations (GraphQL plan 3); the first/last-aware cost limit and `LoadedConnection`'s argument rule (GraphQL plan 4); the dialect sweep of `SQL(ctx)` with a policy, which moves to API plan 5; renaming the module to `contrib/veloxgql`.
 17. `contrib/graphql`'s public packages (`graphql`, `veloxgql`, `gqlimpl`) are under the citation test (`TestGodocCitesNoSpec`), as the root module's are. `contrib/otel` stays open for API plan 4.
+18. An application directive is refused on an entity too ("put it on the fields and edges it guards, or use a policy for row access"): gqlgen runs a type's directives on the fields that return the type only, so the rows' values would stay readable through the cursors, the where inputs, the order and `totalCount`. GraphQL's own directives stay allowed. Type-level directives (federation's `@key`) would need an explicit opt-in, which is a followup.
+19. `ErrorPresenter` presents gqlgen's integer range errors (a `*graphql.IntegerError`, which `NumberOverflowError` and `UintSignError` wrap) as `BAD_USER_INPUT` with gqlgen's text, and does not log them. A coded error's own tree (a join of its sentinels) is not searched for a hidden internal error, so a cursor of another type is not logged either.
+20. A request whose context is canceled (the client went away) is not logged at ERROR: its error is not passed to the application's `log`, and the default records it with `slog` at level debug. The client sees what it would otherwise.
 
 ## 7. Order and plans
 

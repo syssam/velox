@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/vektah/gqlparser/v2/ast"
@@ -183,6 +184,9 @@ func TestErrorPresenter(t *testing.T) {
 		Field: graphql.CollectedField{Field: &ast.Field{Alias: "node"}},
 	})
 	app := &gqlerror.Error{Message: "app says no", Path: path, Extensions: map[string]any{"code": "X"}}
+	_, int8Err := graphql.UnmarshalInt8(300)
+	_, uint16Err := graphql.UnmarshalUint16(70000)
+	_, uintSignErr := graphql.UnmarshalUint32(-1)
 	secret := []string{"sqlite", "posts (", "users_email_key", "tenant 7", "/srv/app", "gen.Post", "gen.User", "Email", "velox: ", "veloxgql: "}
 	for _, c := range []struct {
 		name   string
@@ -205,6 +209,10 @@ func TestErrorPresenter(t *testing.T) {
 		{"gqlerror over a coded error", gqlerror.WrapPath(path, codedBadID), "BAD_USER_INPUT", "User ID: malformed ID: not canonical base64url without padding", `["posts",0,"author"]`, false},
 		{"join", errors.Join(codedBadID, driverErr), "BAD_USER_INPUT", "User ID: malformed ID: not canonical base64url without padding", `["node"]`, true},
 		{"join, driver first", errors.Join(driverErr, codedBadID), "BAD_USER_INPUT", "User ID: malformed ID: not canonical base64url without padding", `["node"]`, true},
+		{"coded over two sentinels", gqlerror.WrapPath(path, gqlimpl.InputErrorf("User cursor: %w: the key is an %w", veloxgql.ErrBadCursor, veloxgql.ErrWrongIDType)), "BAD_USER_INPUT", "User cursor: malformed cursor: the key is an ID of another type", `["posts",0,"author"]`, false},
+		{"int8 overflow", gqlerror.WrapPath(path, int8Err), "BAD_USER_INPUT", "300 overflows signed 8-bit integer", `["posts",0,"author"]`, false},
+		{"uint16 overflow", uint16Err, "BAD_USER_INPUT", "70000 overflows unsigned 16-bit integer", `["node"]`, false},
+		{"negative uint32", fmt.Errorf("input: %w", uintSignErr), "BAD_USER_INPUT", "-1 is an invalid unsigned integer: includes sign", `["node"]`, false},
 	} {
 		l := &logged{}
 		got := veloxgql.ErrorPresenter(l.log)(fieldCtx, c.err)
@@ -277,7 +285,8 @@ func TestErrorPresenter(t *testing.T) {
 }
 
 // TestCommitErrorIsInternal: the commit's error the extension adds goes
-// through the server's presenter, which logs it and shows "internal error".
+// through the server's presenter, which shows "internal error". The test's
+// commit fails because the request is canceled, which is not logged.
 func TestCommitErrorIsInternal(t *testing.T) {
 	db, _ := handlerDB(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -289,8 +298,54 @@ func TestCommitErrorIsInternal(t *testing.T) {
 	if want := `{"errors":[{"message":"internal error","extensions":{"code":"INTERNAL_SERVER_ERROR"}}],"data":null}`; got != want {
 		t.Errorf("got %s, want %s", got, want)
 	}
-	if errs := l.take(); len(errs) != 1 || !errors.Is(errs[0], context.Canceled) {
-		t.Errorf("logged %v, want the commit's error", errs)
+	// The request's context is canceled, so the commit's error is the
+	// cancellation's, and not logged.
+	if errs := l.take(); len(errs) != 0 {
+		t.Errorf("logged %v, want nothing for a canceled request", errs)
+	}
+}
+
+// TestErrorPresenterCanceled: a request whose context is canceled, the
+// client gone, is not logged as an internal error: log does not get it, and
+// a nil log records it at level debug. The client sees what it would
+// otherwise; a timeout is still an internal error, and logged.
+func TestErrorPresenterCanceled(t *testing.T) {
+	driverErr := errors.New("sqlite: interrupted")
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	canceled = graphql.WithFieldContext(canceled, &graphql.FieldContext{Field: graphql.CollectedField{Field: &ast.Field{Alias: "posts"}}})
+	expired, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+
+	l := &logged{}
+	for _, err := range []error{driverErr, context.Canceled, errors.Join(context.Canceled, driverErr)} {
+		if got := veloxgql.ErrorPresenter(l.log)(canceled, err); got.Message != "internal error" || got.Extensions["code"] != "INTERNAL_SERVER_ERROR" {
+			t.Errorf("%v: presented %v", err, got)
+		}
+	}
+	if errs := l.take(); len(errs) != 0 {
+		t.Errorf("canceled: logged %v, want nothing", errs)
+	}
+	if got := veloxgql.ErrorPresenter(l.log)(expired, context.DeadlineExceeded); got.Message != "internal error" {
+		t.Errorf("timed out: presented %q", got.Message)
+	}
+	if errs := l.take(); len(errs) != 1 {
+		t.Errorf("timed out: logged %v, want the error", errs)
+	}
+
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	if got := veloxgql.ErrorPresenter(nil)(canceled, context.Canceled); got.Message != "internal error" {
+		t.Errorf("a nil log: presented %q", got.Message)
+	}
+	var rec map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &rec); err != nil {
+		t.Fatalf("the log is not one JSON record: %v\n%s", err, buf.Bytes())
+	}
+	if rec["level"] != "DEBUG" || rec["msg"] != "veloxgql: request canceled" || rec["path"] != "posts" || rec["err"] != "context canceled" {
+		t.Errorf("logged %v, want a debug record", rec)
 	}
 }
 

@@ -335,3 +335,35 @@ func TestDirectiveOnKey(t *testing.T) {
 	}
 	load(t, user(dep))
 }
+
+// An application directive on an entity would guard its objects only: gqlgen
+// runs a type's directives on the fields that return the type, so the rows'
+// values stay readable through the cursors, the where inputs, the order and
+// totalCount. It is refused, on a join entity too; GraphQL's own directives
+// are not, and reach the SDL's validation.
+func TestDirectiveOnEntity(t *testing.T) {
+	admin := graphql.Directives(graphql.Directive{Name: "admin"})
+	u := entity("User")
+	u.Annotations = ann(t, admin)
+	_, err := Render(model(u))
+	want := "schema User: graphql.Directives with the directive @admin on a schema, which GraphQL runs on the type's objects only: its rows' values stay readable through the cursors, the filters, the order and totalCount; put the directive on the fields and edges it guards, or use a policy for row access"
+	if err == nil || err.Error() != want {
+		t.Errorf("entity:\n got  %v\nwant %s", err, want)
+	}
+	// The first application directive is named, after GraphQL's own.
+	u.Annotations = ann(t, graphql.Directives(graphql.Directive{Name: "deprecated"}, graphql.Directive{Name: "key", Args: map[string]any{"fields": "id"}}))
+	renderErr(t, model(u), "schema User:", "@key on a schema")
+
+	join := entity("UserGroup")
+	join.Join = true
+	join.Annotations = ann(t, admin)
+	renderErr(t, model(entity("User"), join), "schema UserGroup:", "@admin on a schema")
+
+	// GraphQL's own directive passes this rule; @deprecated does not apply
+	// to an object, which the SDL's validation says.
+	u.Annotations = ann(t, graphql.Directives(graphql.Directive{Name: "deprecated"}))
+	_, err = Render(model(u))
+	if err == nil || strings.Contains(err.Error(), "on a schema") || !strings.Contains(err.Error(), "OBJECT") {
+		t.Errorf("GraphQL's own directive: %v", err)
+	}
+}

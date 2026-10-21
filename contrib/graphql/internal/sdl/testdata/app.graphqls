@@ -2,7 +2,6 @@
 # gen/velox.graphqls: it declares the directives the test model's annotations
 # use, and extends the Query.
 
-directive @key(fields: String!) on OBJECT
 directive @cost(weight: Float, tags: [String!], meta: CostMeta) on FIELD_DEFINITION | INPUT_FIELD_DEFINITION
 
 input CostMeta {

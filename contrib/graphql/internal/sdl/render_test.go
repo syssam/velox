@@ -66,8 +66,8 @@ func TestRenderGolden(t *testing.T) {
 }
 
 // TestSDLIsValid loads the golden SDL with gqlparser. The test model puts the
-// application's own directives (@key, @cost) on elements; the application
-// declares those in its own schema file, testdata/app.graphqls, which gqlgen
+// application's own directive (@cost) on elements; the application
+// declares it in its own schema file, testdata/app.graphqls, which gqlgen
 // loads beside velox.graphqls. Without those directives the SDL is valid on
 // its own: everything else it uses, it declares.
 func TestSDLIsValid(t *testing.T) {
@@ -666,8 +666,7 @@ func TestDescriptions(t *testing.T) {
 }
 
 func TestDirectives(t *testing.T) {
-	const decl = `directive @key(fields: String!) on OBJECT
-directive @auth(role: String, any: [Int!], opts: Opts, off: Boolean, n: Float) on FIELD_DEFINITION
+	const decl = `directive @auth(role: String, any: [Int!], opts: Opts, off: Boolean, n: Float) on FIELD_DEFINITION
 input Opts { a: Boolean, b: String }
 `
 	name := field("name", "string")
@@ -675,14 +674,10 @@ input Opts { a: Boolean, b: String }
 		"role": "a \"b\"\n\\c", "any": []any{1, 2}, "opts": map[string]any{"b": "x", "a": true}, "off": false, "n": nil,
 	}}))
 	user := entity("User", name)
-	user.Annotations = ann(t, graphql.Directives(graphql.Directive{Name: "key", Args: map[string]any{"fields": "id"}}))
 	posts := edge("posts", plugin.O2M, "User")
 	posts.Annotations = ann(t, graphql.Directives(graphql.Directive{Name: "auth"}))
 	user.Edges = []*plugin.Edge{posts}
 	s, sdl := load(t, model(user), decl)
-	if d := s.Types["User"].Directives.ForName("key"); d == nil || d.Arguments.ForName("fields").Value.Raw != "id" {
-		t.Errorf("type directive:\n%s", sdl)
-	}
 	d := s.Types["User"].Fields.ForName("name").Directives.ForName("auth")
 	if d == nil {
 		t.Fatalf("field directive:\n%s", sdl)
@@ -697,9 +692,9 @@ input Opts { a: Boolean, b: String }
 		t.Errorf("edge directives:\n%s", sdl)
 	}
 
-	user.Annotations = ann(t, graphql.Directives(graphql.Directive{Name: "bad name"}))
-	renderErr(t, model(user), "User", `"bad name"`)
-	user.Annotations = nil
+	posts.Annotations = ann(t, graphql.Directives(graphql.Directive{Name: "bad name"}))
+	renderErr(t, model(user), "User", "posts", `"bad name"`)
+	posts.Annotations = nil
 	name.Annotations = ann(t, graphql.Directives(graphql.Directive{Name: "auth", Args: map[string]any{"1": 1}}))
 	renderErr(t, model(user), "User", "name", `"1"`)
 }

@@ -164,7 +164,8 @@ CREATE TABLE posts (
 );
 CREATE TABLE tags (
 	id   INTEGER PRIMARY KEY,
-	name TEXT NOT NULL
+	name TEXT NOT NULL,
+	rank INTEGER NOT NULL
 );
 CREATE TABLE post_tags (
 	post_id INTEGER NOT NULL REFERENCES posts (id),
@@ -217,7 +218,7 @@ func seed(ctx context.Context, db *velox.DB) error {
 			return err
 		}
 	}
-	tags := []gen.Tag{{ID: 1, Name: "go"}, {ID: 2, Name: "sql"}, {ID: 3, Name: "graphql"}}
+	tags := []gen.Tag{{ID: 1, Name: "go", Rank: 1}, {ID: 2, Name: "sql", Rank: 2}, {ID: 3, Name: "graphql", Rank: 3}}
 	if err := db.InsertAll(tags).Exec(ctx); err != nil {
 		return err
 	}

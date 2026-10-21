@@ -338,7 +338,7 @@ input UpdatePostInput {
 User is a person who writes posts.
 Its GraphQL type is Account.
 """
-type Account implements Node @key(fields: "id") {
+type Account implements Node {
   id: ID! @goField(name: "IDGQL")
   createdAt: Time!
   updatedAt: Time!

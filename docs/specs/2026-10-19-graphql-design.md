@@ -111,7 +111,7 @@ The plugin itself is `contrib/graphql/cmd/velox-graphql`. Annotations reach the 
 - `graphql.QueryField(name)`: a root `Query` field returning the entity's connection.
 - `graphql.Mutations(graphql.Create(), graphql.Update(), graphql.Delete())`.
 - `graphql.MultiOrder()`.
-- `graphql.Directives(...)`.
+- `graphql.Directives(...)`. *(Note 2026-10-21 (API plan 3): GraphQL's own directives only; an application directive on an entity is refused, since it would guard the objects and not the rows' values in cursors, filters, order and counts. See the API cleanup design, §6c.)*
 
 **Field:**
 - `graphql.FieldName(name)`, `graphql.Skip()`.
@@ -191,7 +191,7 @@ Every `ID` is opaque and global. It is base64url, without padding, of `<Type>:<k
   | Numeric / Time | the above plus `GT`, `GTE`, `LT`, `LTE` |
   | Optional fields | plus `IsNil`, `NotNil` *(note 2026-10-20: `Nillable` fields only; see the API cleanup spec §3.1. Note 2026-10-21: the code offers them on a nullable field that has predicates, which means `Nillable`, as a JSON field has none)* |
 
-- **Depth:** nesting is capped by `veloxgql.MaxFilterDepth`, 5 by default.
+- **Depth:** nesting is capped by `veloxgql.MaxFilterDepth`, 5 by default. *(Note 2026-10-21 (API plan 3): the cap is the `MaxFilterDepth` field of `veloxgql.Limits`, read with `LimitsFrom(ctx)`, not a package variable.)*
 - **Translation:** a where input becomes a `velox.Pred[X]` through a table each entity's generated code supplies; the runtime in `contrib/graphql` interprets it (the old Track B's table design). No per-field code is written for predicates.
 
 #### Mutations
@@ -254,6 +254,8 @@ The example (`example/graphql`) shows the whole of it:
    - the mutations call `gen.CreateUser(…)`;
    - `node`/`nodes` call `gen.Node(ctx, id)`.
 6. `srv.Use(veloxgql.Handler(db))`.
+
+*Note, 2026-10-21 (API plan 3):* step 5's root fields take no `db`: they call `gen.UsersConnection(ctx, args…)`, which reads the DB from the context. Step 6 is `srv.Use(veloxgql.NewExtension(db))` and `srv.SetErrorPresenter(veloxgql.ErrorPresenter(nil))`, which shows a client only coded errors and fixed messages. See the API cleanup design, §6c.
 
 ### 6. Testing
 

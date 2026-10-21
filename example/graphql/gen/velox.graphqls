@@ -150,6 +150,7 @@ input PostWhereInput {
 type Label implements Node {
   id: ID! @goField(name: "IDGQL")
   name: String!
+  rank: Int!
   posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection! @goField(name: "PostsGQL")
 }
 
@@ -196,6 +197,14 @@ input LabelWhereInput {
   nameContains: String
   nameHasPrefix: String
   nameHasSuffix: String
+  rank: Int
+  rankNEQ: Int
+  rankIn: [Int!]
+  rankNotIn: [Int!]
+  rankGT: Int
+  rankGTE: Int
+  rankLT: Int
+  rankLTE: Int
 }
 
 # User

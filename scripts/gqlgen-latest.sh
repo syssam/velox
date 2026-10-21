@@ -6,7 +6,8 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 
 tmp=$(mktemp -d)
-# The module cache is read-only; make the copy writable before removing it.
+# Remove the copy on exit. The module cache is not in it (GOMODCACHE is the
+# user's); chmod only makes any read-only file the tree holds removable.
 trap 'chmod -R u+w "$tmp" 2>/dev/null || true; rm -rf "$tmp"' EXIT
 
 # Tracked and untracked files, not ignored ones.

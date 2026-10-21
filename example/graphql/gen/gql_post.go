@@ -164,9 +164,6 @@ func PostsConnectionOf(ctx context.Context, q velox.Query[Post], after *veloxgql
 		q = q.Where(p)
 	}
 	var order []gqlimpl.OrderTerm[Post]
-	if most := veloxgql.LimitsFrom(ctx).MaxOrderTerms; len(orderBy) > most {
-		return nil, gqlimpl.InputErrorf("Post connection: %w: orderBy has %d terms, and the most is %d", veloxgql.ErrBadPagination, len(orderBy), most)
-	}
 	for _, o := range orderBy {
 		term, err := postTermGQL(o)
 		if err != nil {

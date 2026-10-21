@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -168,7 +169,7 @@ func canon(t *testing.T, s string) string {
 const (
 	selUsers = `SELECT "id", "name", "email", "role", "joined_at", "password_hash" FROM "users"`
 	selPosts = `SELECT "id", "org_id", "author_id", "title", "status", "views", "published_at" FROM "posts"`
-	selTags  = `SELECT "id", "name" FROM "tags"`
+	selTags  = `SELECT "id", "name", "rank" FROM "tags"`
 )
 
 // TestNode looks up one node of each type by its global ID: one query on its
@@ -216,8 +217,9 @@ func TestNodes(t *testing.T) {
 
 // TestBadIDs: an ID of another type where a User ID is expected, a
 // malformed ID, and a cursor taken on another type each fail before any
-// query runs.
+// query runs. They are the client's errors, and none is logged.
 func TestBadIDs(t *testing.T) {
+	logged := captureLog(t)
 	s := newServer(t)
 	s.do(t, request{
 		org:   "1",
@@ -236,6 +238,9 @@ func TestBadIDs(t *testing.T) {
 		vars:  map[string]any{"c": postCursor},
 		want:  `{"errors": [{"message": "User cursor: malformed cursor: the key is an ID of another type", "path": ["users"], "extensions": {"code": "BAD_USER_INPUT"}}], "data": null}`,
 	})
+	if logged.Len() != 0 {
+		t.Errorf("logged:\n%s", logged)
+	}
 }
 
 // TestPaging pages the root connection to User forward, then backward, in
@@ -526,7 +531,7 @@ fragment TypeRef on __Type {
 }`
 
 // TestOrderTermsLimit: an orderBy list over the default MaxOrderTerms fails
-// with the limit named, before any term is built or statement sent.
+// with the limit named, before any statement is sent.
 func TestOrderTermsLimit(t *testing.T) {
 	s := newServer(t)
 	s.do(t, request{
@@ -605,4 +610,45 @@ func TestFieldDirective(t *testing.T) {
 		]}}}`,
 		stmts: []string{selUsers + ` ORDER BY "id" LIMIT ? [101]`},
 	})
+}
+
+// TestIntegerRange: Label.rank is an int8, and gqlgen's Int8 refuses an Int
+// it cannot hold. The client sees gqlgen's text with BAD_USER_INPUT, its own
+// input's error, before any statement; nothing is logged.
+func TestIntegerRange(t *testing.T) {
+	logged := captureLog(t)
+	s := newServer(t)
+	const tooBig = `"extensions": {"code": "BAD_USER_INPUT"}, "path": ["labels", "where", `
+	s.do(t, request{
+		query: `{ labels(where: {rankGT: 300}) { totalCount } }`,
+		want:  `{"errors": [{"message": "300 overflows signed 8-bit integer", ` + tooBig + `"rankGT"]}], "data": null}`,
+	})
+	s.do(t, request{
+		query: `query($r: Int) { labels(where: {rankGT: $r}) { totalCount } }`,
+		vars:  map[string]any{"r": -129},
+		want:  `{"errors": [{"message": "-129 overflows signed 8-bit integer", ` + tooBig + `"rankGT"]}], "data": null}`,
+	})
+	s.do(t, request{
+		query: `{ labels(where: {rankIn: [1, 128]}) { totalCount } }`,
+		want:  `{"errors": [{"message": "128 overflows signed 8-bit integer", ` + tooBig + `"rankIn", 1]}], "data": null}`,
+	})
+	s.do(t, request{
+		query: `{ labels(where: {rankGT: 1}) { totalCount } }`,
+		want:  `{"data": {"labels": {"totalCount": 2}}}`,
+		stmts: []string{`SELECT COUNT(*) FROM "tags" WHERE "rank" > ? [1]`},
+	})
+	if logged.Len() != 0 {
+		t.Errorf("logged:\n%s", logged)
+	}
+}
+
+// captureLog makes slog's default logger write to the buffer it returns,
+// at level info and above, until the test ends.
+func captureLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
 }

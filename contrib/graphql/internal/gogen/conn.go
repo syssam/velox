@@ -140,9 +140,7 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 		order = "order"
 		f.p("\tvar order []%s.OrderTerm[%s]", impl, e.Name)
 		if t.MultiOrder {
-			f.p("\tif most := %s.LimitsFrom(ctx).MaxOrderTerms; len(orderBy) > most {", vgql)
-			f.p("\t\treturn nil, %s.InputErrorf(\"%s connection: %%w: orderBy has %%d terms, and the most is %%d\", %s.ErrBadPagination, len(orderBy), most)", impl, n, vgql)
-			f.p("\t}")
+			// NewConnection refuses more than MaxOrderTerms terms.
 			f.p("\tfor _, o := range orderBy {")
 		} else {
 			f.p("\tif o := orderBy; o != nil {")

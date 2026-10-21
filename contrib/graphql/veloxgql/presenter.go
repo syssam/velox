@@ -17,16 +17,16 @@ import (
 // NOT_FOUND.
 const (
 	// CodeBadUserInput: the client's input is wrong, and says how: an ID,
-	// a cursor, paging arguments, a filter or a scalar that veloxgql or
-	// generated code refused, a value a validator refused, or a violated
-	// constraint.
+	// a cursor, paging arguments, a filter or a scalar that veloxgql,
+	// generated code or gqlgen's integer types refused, a value a validator
+	// refused, or a violated constraint.
 	CodeBadUserInput = shared.CodeBadUserInput
 	// CodeForbidden: a policy denied the statement (velox.ErrDenied).
 	CodeForbidden = "FORBIDDEN"
 	// CodeUnauthenticated: the request has no tenant (velox.ErrNoTenant).
 	CodeUnauthenticated = "UNAUTHENTICATED"
-	// CodeNotFound: the row a mutation names does not exist, for GraphQL
-	// plan 3's mutations.
+	// CodeNotFound: the row a mutation names does not exist, for the
+	// generated mutations; nothing returns it yet.
 	CodeNotFound = "NOT_FOUND"
 	// CodeInternal: anything else, which the client cannot fix, such as a
 	// driver's error, a timeout, a list edge over MaxList or ErrNoDB.
@@ -65,6 +65,11 @@ const (
 //     validator's text.
 //   - A *velox.ConstraintError: BAD_USER_INPUT, "<kind> constraint
 //     violated", such as "unique constraint violated".
+//   - gqlgen's error for an integer the argument's Go type cannot hold (a
+//     *graphql.IntegerError, which *graphql.NumberOverflowError and
+//     *graphql.UintSignError wrap), as Int8…Uint32 return for 300 or -1:
+//     BAD_USER_INPUT, gqlgen's text, such as "300 overflows signed 8-bit
+//     integer", which holds only the client's own number.
 //   - Anything else: INTERNAL_SERVER_ERROR, "internal error", after
 //     log(ctx, err).
 //
@@ -80,6 +85,12 @@ const (
 // the Extension adds when a mutation's transaction does not commit is
 // presented like any other.
 //
+// A request whose context is canceled, as when the client went away, is
+// not passed to log: the error is the cancellation's, not the server's. A
+// nil log records it with slog.DebugContext, at level debug, as
+// "veloxgql: request canceled" with the same attributes. The client, if
+// still there, sees what it would otherwise.
+//
 // A panic in a resolver does not reach the presenter as a panic: gqlgen
 // turns it into an error with the server's recover function first. gqlgen's
 // default one prints the panic and the stack to stderr and returns a
@@ -94,12 +105,17 @@ const (
 //
 // gqlgen's default presenter shows every error's text, and no codes.
 func ErrorPresenter(log func(ctx context.Context, err error)) graphql.ErrorPresenterFunc {
+	canceled := func(context.Context, error) {}
 	if log == nil {
-		log = slogInternal
+		log, canceled = slogInternal, slogCanceled
 	}
 	return func(ctx context.Context, err error) *gqlerror.Error {
 		if err == nil {
 			return nil
+		}
+		log := log
+		if errors.Is(ctx.Err(), context.Canceled) {
+			log = canceled
 		}
 		out := &gqlerror.Error{Path: graphql.GetPath(ctx)}
 		var gqlErr *gqlerror.Error
@@ -125,6 +141,18 @@ func ErrorPresenter(log func(ctx context.Context, err error)) graphql.ErrorPrese
 
 // slogInternal is ErrorPresenter's log when it is given none.
 func slogInternal(ctx context.Context, err error) {
+	slog.ErrorContext(ctx, "veloxgql: internal error", logAttrs(ctx, err)...)
+}
+
+// slogCanceled is ErrorPresenter's log, when it is given none, for a request
+// whose context is canceled.
+func slogCanceled(ctx context.Context, err error) {
+	slog.DebugContext(ctx, "veloxgql: request canceled", logAttrs(ctx, err)...)
+}
+
+// logAttrs are the attributes the default log records: the path, the
+// operation's name if any, and err.
+func logAttrs(ctx context.Context, err error) []any {
 	path := graphql.GetPath(ctx)
 	var gqlErr *gqlerror.Error
 	if errors.As(err, &gqlErr) && gqlErr.Path != nil {
@@ -136,14 +164,21 @@ func slogInternal(ctx context.Context, err error) {
 			attrs = append(attrs, "operation", op)
 		}
 	}
-	slog.ErrorContext(ctx, "veloxgql: internal error", append(attrs, "err", err)...)
+	return append(attrs, "err", err)
 }
 
 // hidden reports whether err's tree holds an error the client is not shown
 // and that is not otherwise logged: a branch of a join that, presented
-// alone, would be an internal error.
+// alone, would be an internal error. A coded error's own tree is not
+// searched: what it wraps (a join of its sentinels, as ErrBadCursor and
+// ErrWrongIDType) is there for errors.Is, and its text is the coded error's.
 func hidden(err error) bool {
 	for err != nil {
+		if c, ok := err.(shared.Coding); ok {
+			if code, _ := c.Extensions()["code"].(string); code != "" {
+				return false
+			}
+		}
 		switch u := err.(type) {
 		case interface{ Unwrap() []error }:
 			for _, e := range u.Unwrap() {
@@ -182,6 +217,7 @@ func present(err error) (code, msg string) {
 	var (
 		validation *velox.ValidationError
 		constraint *velox.ConstraintError
+		integer    *graphql.IntegerError
 	)
 	switch {
 	case errors.Is(err, velox.ErrNoTenant):
@@ -195,6 +231,8 @@ func present(err error) (code, msg string) {
 		return CodeBadUserInput, "invalid value: " + validation.Err.Error()
 	case errors.As(err, &constraint):
 		return CodeBadUserInput, constraint.Kind.String() + " constraint violated"
+	case errors.As(err, &integer):
+		return CodeBadUserInput, integer.Message
 	}
 	return CodeInternal, "internal error"
 }

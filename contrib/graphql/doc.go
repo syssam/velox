@@ -60,6 +60,13 @@
 // node, nodes and the cursors, so a directive on the primary key would guard
 // nothing. The plugin refuses an application directive on either.
 //
+// An entity takes GraphQL's own directives only, too. gqlgen runs a type's
+// directives on the fields that return the type, so one on an entity would
+// guard its objects and leave its rows' values readable through the cursors,
+// the where inputs, the order and totalCount. The plugin refuses an
+// application directive on an entity: put it on the fields and edges it
+// guards, or use the entity's policy for row access.
+//
 // The application declares such a directive on FIELD_DEFINITION |
 // INPUT_FIELD_DEFINITION, or gqlgen refuses the schema:
 //
@@ -198,7 +205,9 @@
 // veloxgql.UUID, veloxgql.Bytes and veloxgql.Uint64 resolve to the function
 // marshalers of those names, which bind time.Time, uuid.UUID, []byte and
 // uint64; veloxgql.Uint and veloxgql.Float32 to MarshalUint and
-// MarshalFloat32.
+// MarshalFloat32. gqlgen's narrow integers refuse an Int their Go type
+// cannot hold (300 for an int8), and veloxgql.ErrorPresenter shows the
+// client gqlgen's text with BAD_USER_INPUT.
 //
 // # Supported gqlgen versions
 //

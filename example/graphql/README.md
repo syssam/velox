@@ -123,9 +123,12 @@ tenant, a client would read `velox: gen.Post: no tenant in the context`.
 | no tenant (`velox.ErrNoTenant`) | `UNAUTHENTICATED` | `unauthenticated` |
 | a policy's denial | `FORBIDDEN` | `forbidden` |
 | a validator's refusal, a violated constraint | `BAD_USER_INPUT` | `invalid value: …`, `unique constraint violated` |
+| an `Int` out of range for the field's Go type (`300` for `Label.rank`, an `int8`) | `BAD_USER_INPUT` | gqlgen's, as `300 overflows signed 8-bit integer` |
 | anything else: the driver's errors, a timeout | `INTERNAL_SERVER_ERROR` | `internal error`, and the error is logged with `slog` |
 
-Pass your own function to log internal errors elsewhere.
+Pass your own function to log internal errors elsewhere. A request whose
+client went away (its context canceled) is not logged as an internal error:
+`slog` records it at level debug, and your function does not get it.
 
 ### The cost of a request
 
@@ -159,7 +162,7 @@ limit that does is planned. Choose the limit for your schema and clients.
 | `orderBy`, `where` (`and`/`or`/`not`, `hasPostsWith`) | `ORDER BY … "id"`, `WHERE …`, `EXISTS (…)` |
 | nested edges, `Post.tags` many-to-many | one query per parent (batching comes with GraphQL plan 4) |
 | a request over `complexityLimit` fields | an error naming the cost, and no statement |
-| an `orderBy` list of more than `MaxOrderTerms` terms | an error before any term is built, and no statement |
+| an `orderBy` list of more than `MaxOrderTerms` terms | an error naming the limit, and no statement |
 | `email`, or a `where` on it, without `X-Role: admin` | a `FORBIDDEN` error; the filter runs no statement |
 | `Post` with tenant 1, 2 or none | only that organization's posts, through `node`, connections, edges and `where`; `unauthenticated` without one |
 

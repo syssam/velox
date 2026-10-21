@@ -53,6 +53,7 @@ type ComplexityRoot struct {
 		IDGQL    func(childComplexity int) int
 		Name     func(childComplexity int) int
 		PostsGQL func(childComplexity int, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*gen.PostOrder, where *gen.PostWhereInput) int
+		Rank     func(childComplexity int) int
 	}
 
 	LabelConnection struct {
@@ -175,6 +176,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Label.PostsGQL(childComplexity, args["after"].(*veloxgql.Cursor), args["first"].(*int), args["before"].(*veloxgql.Cursor), args["last"].(*int), args["orderBy"].([]*gen.PostOrder), args["where"].(*gen.PostWhereInput)), true
+	case "Label.rank":
+		if e.complexity.Label.Rank == nil {
+			break
+		}
+
+		return e.complexity.Label.Rank(childComplexity), true
 
 	case "LabelConnection.edges":
 		if e.complexity.LabelConnection.Edges == nil {
@@ -713,6 +720,7 @@ input PostWhereInput {
 type Label implements Node {
   id: ID! @goField(name: "IDGQL")
   name: String!
+  rank: Int!
   posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection! @goField(name: "PostsGQL")
 }
 
@@ -759,6 +767,14 @@ input LabelWhereInput {
   nameContains: String
   nameHasPrefix: String
   nameHasSuffix: String
+  rank: Int
+  rankNEQ: Int
+  rankIn: [Int!]
+  rankNotIn: [Int!]
+  rankGT: Int
+  rankGTE: Int
+  rankLT: Int
+  rankLTE: Int
 }
 
 # User
@@ -1239,6 +1255,35 @@ func (ec *executionContext) fieldContext_Label_name(_ context.Context, field gra
 	return fc, nil
 }
 
+func (ec *executionContext) _Label_rank(ctx context.Context, field graphql.CollectedField, obj *gen.Tag) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Label_rank,
+		func(ctx context.Context) (any, error) {
+			return obj.Rank, nil
+		},
+		nil,
+		ec.marshalNInt2int8,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Label_rank(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Label",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Label_posts(ctx context.Context, field graphql.CollectedField, obj *gen.Tag) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -1419,6 +1464,8 @@ func (ec *executionContext) fieldContext_LabelEdge_node(_ context.Context, field
 				return ec.fieldContext_Label_id(ctx, field)
 			case "name":
 				return ec.fieldContext_Label_name(ctx, field)
+			case "rank":
+				return ec.fieldContext_Label_rank(ctx, field)
 			case "posts":
 				return ec.fieldContext_Label_posts(ctx, field)
 			}
@@ -4246,7 +4293,7 @@ func (ec *executionContext) unmarshalInputLabelWhereInput(ctx context.Context, o
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"not", "and", "or", "name", "nameNEQ", "nameIn", "nameNotIn", "nameContains", "nameHasPrefix", "nameHasSuffix"}
+	fieldsInOrder := [...]string{"not", "and", "or", "name", "nameNEQ", "nameIn", "nameNotIn", "nameContains", "nameHasPrefix", "nameHasSuffix", "rank", "rankNEQ", "rankIn", "rankNotIn", "rankGT", "rankGTE", "rankLT", "rankLTE"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -4323,6 +4370,62 @@ func (ec *executionContext) unmarshalInputLabelWhereInput(ctx context.Context, o
 				return it, err
 			}
 			it.NameHasSuffix = data
+		case "rank":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("rank"))
+			data, err := ec.unmarshalOInt2ᚖint8(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Rank = data
+		case "rankNEQ":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("rankNEQ"))
+			data, err := ec.unmarshalOInt2ᚖint8(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RankNEQ = data
+		case "rankIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("rankIn"))
+			data, err := ec.unmarshalOInt2ᚕint8ᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RankIn = data
+		case "rankNotIn":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("rankNotIn"))
+			data, err := ec.unmarshalOInt2ᚕint8ᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RankNotIn = data
+		case "rankGT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("rankGT"))
+			data, err := ec.unmarshalOInt2ᚖint8(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RankGT = data
+		case "rankGTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("rankGTE"))
+			data, err := ec.unmarshalOInt2ᚖint8(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RankGTE = data
+		case "rankLT":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("rankLT"))
+			data, err := ec.unmarshalOInt2ᚖint8(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RankLT = data
+		case "rankLTE":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("rankLTE"))
+			data, err := ec.unmarshalOInt2ᚖint8(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RankLTE = data
 		}
 	}
 
@@ -4989,6 +5092,11 @@ func (ec *executionContext) _Label(ctx context.Context, sel ast.SelectionSet, ob
 			}
 		case "name":
 			out.Values[i] = ec._Label_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "rank":
+			out.Values[i] = ec._Label_rank(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
@@ -6498,6 +6606,22 @@ func (ec *executionContext) marshalNInt2int64(ctx context.Context, sel ast.Selec
 	return res
 }
 
+func (ec *executionContext) unmarshalNInt2int8(ctx context.Context, v any) (int8, error) {
+	res, err := graphql.UnmarshalInt8(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNInt2int8(ctx context.Context, sel ast.SelectionSet, v int8) graphql.Marshaler {
+	_ = sel
+	res := graphql.MarshalInt8(v)
+	if res == graphql.Null {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+	}
+	return res
+}
+
 func (ec *executionContext) marshalNLabel2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexampleᚋgraphqlᚋgenᚐTag(ctx context.Context, sel ast.SelectionSet, v *gen.Tag) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
@@ -7245,6 +7369,42 @@ func (ec *executionContext) marshalOID2ᚖstring(ctx context.Context, sel ast.Se
 	return res
 }
 
+func (ec *executionContext) unmarshalOInt2ᚕint8ᚄ(ctx context.Context, v any) ([]int8, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]int8, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNInt2int8(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalOInt2ᚕint8ᚄ(ctx context.Context, sel ast.SelectionSet, v []int8) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	ret := make(graphql.Array, len(v))
+	for i := range v {
+		ret[i] = ec.marshalNInt2int8(ctx, sel, v[i])
+	}
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
 func (ec *executionContext) unmarshalOInt2ᚖint(ctx context.Context, v any) (*int, error) {
 	if v == nil {
 		return nil, nil
@@ -7260,6 +7420,24 @@ func (ec *executionContext) marshalOInt2ᚖint(ctx context.Context, sel ast.Sele
 	_ = sel
 	_ = ctx
 	res := graphql.MarshalInt(*v)
+	return res
+}
+
+func (ec *executionContext) unmarshalOInt2ᚖint8(ctx context.Context, v any) (*int8, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := graphql.UnmarshalInt8(v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOInt2ᚖint8(ctx context.Context, sel ast.SelectionSet, v *int8) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	_ = sel
+	_ = ctx
+	res := graphql.MarshalInt8(*v)
 	return res
 }
 

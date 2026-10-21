@@ -158,8 +158,7 @@
       ],
       "primary_key": [0],
       "tenant": 4,
-      "annotations": {"graphql": {"type": "Account", "query_field": "accounts", "mutations": ["create"], "skip": 4,
-        "directives": [{"name": "key", "args": {"fields": "id"}}]}}
+      "annotations": {"graphql": {"type": "Account", "query_field": "accounts", "mutations": ["create"], "skip": 4}}
     },
     {
       "name": "UserGroup",

@@ -27,11 +27,12 @@ import (
 // run on the DB, and a DB with replicas routes their reads to them.
 //
 // A mutation operation runs in one db.Tx, on the primary, unless WithTxFilter
-// leaves it out, and its resolvers get the transaction's DB and context, so every statement of the
-// operation, its nested fields' too, is in the transaction. A statement a
-// mutation's resolver runs on db itself, not on the DB DBFrom reads, fails
-// with velox.ErrOutsideTx; under velox.WithoutTx(ctx) it runs outside the
-// transaction, as an audit row that must survive a rollback does.
+// leaves it out, and its resolvers get the transaction's DB and context, so
+// every statement of the operation, its nested fields' too, is in the
+// transaction. A statement a mutation's resolver runs on db itself, not on
+// the DB DBFrom reads, fails with velox.ErrOutsideTx; under
+// velox.WithoutTx(ctx) it runs outside the transaction, as an audit row that
+// must survive a rollback does.
 //
 // A transaction's DB is not safe for concurrent use, and gqlgen runs only
 // the mutation's root fields one after another: below the root it resolves
@@ -47,16 +48,15 @@ import (
 // filter for mutations that only call other services, which would hold a
 // pooled connection for no statement.
 //
-// The transaction commits when the response has no errors. It rolls back
-// when the response has any,
-// even a field's error under data the other fields filled, and when the
-// operation panics, whether gqlgen recovered the panic into an error or the
-// panic carries on. A response whose transaction did not commit, rolled
-// back or failed to commit, has data null, since nothing it reports was
-// kept, and the commit's error, if any, is added to its errors through the
-// server's error presenter, which ErrorPresenter makes "internal error".
-// WithDeadlines' Tx and MaxTx bound the whole operation: its resolvers'
-// context carries the transaction's deadline.
+// The transaction commits when the response has no errors. It rolls back when
+// the response has any, even a field's error under data the other fields
+// filled, and when the operation panics, whether gqlgen recovered the panic
+// into an error or the panic carries on. A response whose transaction did not
+// commit, rolled back or failed to commit, has data null, since nothing it
+// reports was kept, and the commit's error, if any, is added to its errors
+// through the server's error presenter, which ErrorPresenter makes "internal
+// error". WithDeadlines' Tx and MaxTx bound the whole operation: its
+// resolvers' context carries the transaction's deadline.
 //
 // A subscription runs in no transaction: each of its events' statements
 // run on db.
@@ -73,8 +73,9 @@ import (
 // gqlgen's extension.FixedComplexityLimit
 // (srv.Use(extension.FixedComplexityLimit(n))).
 //
-// The server's Use panics when the DB is nil, or when a limit is negative:
-// Validate refuses it, naming the limit.
+// The server's Use panics when the DB is nil, when a limit is negative, or
+// when WithTxOptions asks for velox.TxRetrySerializable: Validate refuses
+// it, naming the limit or the option.
 //
 // The extension intercepts the operation, to put the DB and the limits in
 // its context, which the executable schema runs in; the response, because a
@@ -179,8 +180,9 @@ var errRollback = errors.New("veloxgql: the response has errors")
 // ExtensionName implements graphql.HandlerExtension.
 func (*Extension) ExtensionName() string { return "VeloxDB" }
 
-// Validate implements graphql.HandlerExtension: it refuses a nil DB, and a
-// negative limit, when the server takes the extension.
+// Validate implements graphql.HandlerExtension: it refuses a nil DB, a
+// negative limit, and transaction options that ask for
+// velox.TxRetrySerializable, when the server takes the extension.
 func (e *Extension) Validate(graphql.ExecutableSchema) error {
 	if e.db == nil {
 		return errors.New("veloxgql.NewExtension: nil DB")

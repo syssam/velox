@@ -82,10 +82,13 @@ func (Post) Annotations() []schema.Annotation {
 // LabelWhereInput…), with Label an alias of the entity Tag.
 type Tag struct{ schema.Schema }
 
-// Fields returns the column after the ID.
+// Fields returns the columns after the ID. Rank is an int8, so its where
+// predicates take an Int that gqlgen's Int8 must hold: a client's 300 is
+// refused as its input, with BAD_USER_INPUT.
 func (Tag) Fields() []schema.Field {
 	return []schema.Field{
 		field.String("name").Annotations(graphql.OrderField("NAME"), graphql.WhereOps()),
+		field.Int8("rank").Annotations(graphql.WhereOps()),
 	}
 }
 

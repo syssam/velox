@@ -14,6 +14,7 @@ const _ = velox.GeneratedCodeIsVersion4
 type Tag struct {
 	ID    int64            `json:"id,omitempty"`
 	Name  string           `json:"name,omitempty"`
+	Rank  int8             `json:"rank,omitempty"`
 	Posts velox.Many[Post] `json:"posts,omitzero"`
 }
 
@@ -21,10 +22,12 @@ type Tag struct {
 var Tags = struct {
 	ID    velox.NumberCol[Tag, int64]
 	Name  velox.StringCol[Tag, string]
+	Rank  velox.NumberCol[Tag, int8]
 	Posts velox.Rel[Tag, Post]
 }{
 	ID:    velox.NumberCol[Tag, int64]{I: 0},
 	Name:  velox.StringCol[Tag, string]{I: 1},
+	Rank:  velox.NumberCol[Tag, int8]{I: 2},
 	Posts: velox.Rel[Tag, Post]{I: 0},
 }
 
@@ -39,6 +42,7 @@ func tagDesc() velox.Desc[Tag] {
 		Columns: []velox.ColumnDesc{
 			{Field: "ID", Name: "id"},
 			{Field: "Name", Name: "name"},
+			{Field: "Rank", Name: "rank"},
 		},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
@@ -51,6 +55,8 @@ func tagDesc() velox.Desc[Tag] {
 				return &x.ID
 			case 1:
 				return &x.Name
+			case 2:
+				return &x.Rank
 			}
 			return nil
 		},
@@ -66,7 +72,7 @@ func tagDesc() velox.Desc[Tag] {
 
 // String returns the entity's fields except its sensitive ones.
 func (x Tag) String() string {
-	return fmt.Sprintf("Tag(ID=%v, Name=%v)", x.ID, x.Name)
+	return fmt.Sprintf("Tag(ID=%v, Name=%v, Rank=%v)", x.ID, x.Name, x.Rank)
 }
 
 // GoString is String, so that %#v does not print the sensitive fields either.

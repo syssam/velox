@@ -572,12 +572,24 @@ func TestPredDepthFromContext(t *testing.T) {
 	}
 }
 
-// TestPredTwiceOnOneContext is Review Focus 4: an application calls Pred
-// twice with one context, and each call has a full budget at depth 0.
+// TestPredTwiceOnOneContext: an application calls Pred twice with one
+// context, and each call has a full budget at depth 0. The input costs 510
+// nodes (1 + 101 + 101 + 3×102 + 1), more than half of the budget of 600
+// the context gives, so a second call that spent the first's would fail.
 func TestPredTwiceOnOneContext(t *testing.T) {
-	ctx := context.Background()
+	limits := func(nodes int) context.Context {
+		return veloxgql.NewExtension(&velox.DB{}, veloxgql.WithLimits(veloxgql.Limits{MaxFilterNodes: nodes})).Context(context.Background())
+	}
 	in := func(n int) []int64 { return make([]int64, n) }
-	w := &personWhere{AgeIn: in(100), AgeNotIn: in(100), Or: []*personWhere{{AgeIn: in(100)}, {AgeIn: in(100)}, {AgeIn: in(100)}}} // about 600 nodes of 1000
+	w := &personWhere{AgeIn: in(100), AgeNotIn: in(100), Or: []*personWhere{{AgeIn: in(100)}, {AgeIn: in(100)}, {AgeIn: in(100)}}}
+	// The cost is what the comment says: it fits 510, not 509.
+	if _, err := w.Pred(limits(510)); err != nil {
+		t.Fatalf("under a budget of 510: %v", err)
+	}
+	if _, err := w.Pred(limits(509)); !errors.Is(err, veloxgql.ErrFilterTooLarge) {
+		t.Fatalf("under a budget of 509: %v, want ErrFilterTooLarge", err)
+	}
+	ctx := limits(600)
 	for i := range 3 {
 		if _, err := w.Pred(ctx); err != nil {
 			t.Fatalf("call %d: %v", i+1, err)

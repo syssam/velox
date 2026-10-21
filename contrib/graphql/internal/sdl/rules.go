@@ -56,12 +56,20 @@ func article(kind string) string {
 	return "a " + kind
 }
 
-// checkSchema checks the annotation of an entity. A join entity has no
-// type, so nothing that needs one applies to it; a schema whose type is
-// skipped has no root field and no mutation, so asking for one is an error.
+// checkSchema checks the annotation of an entity. It refuses an application
+// directive; GraphQL's own are allowed. A join entity has no type, so nothing
+// that needs one applies to it; a schema whose type is skipped has no root
+// field and no mutation, so asking for one is an error.
 func checkSchema(e *plugin.Entity, a graphql.Annotation, where string) error {
 	if err := misplaced(a, onSchema, where); err != nil {
 		return err
+	}
+	// gqlgen runs a type's directives only on fields that return the type,
+	// so one on an entity guards its objects and leaves its rows' values
+	// readable through the cursors, the where inputs, the order and
+	// totalCount: a guard that guards nothing.
+	if d := appDirective(a); d != "" {
+		return fmt.Errorf("%s: graphql.Directives with the directive @%s on a schema, which GraphQL runs on the type's objects only: its rows' values stay readable through the cursors, the filters, the order and totalCount; put the directive on the fields and edges it guards, or use a policy for row access", where, d)
 	}
 	if !e.Join {
 		switch {

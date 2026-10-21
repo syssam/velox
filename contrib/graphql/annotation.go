@@ -281,7 +281,9 @@ func EnumValues(m map[string]string) Annotation {
 	return Annotation{EnumValues: maps.Clone(m)}
 }
 
-// Directives puts these directives on the generated element.
+// Directives puts these directives on the generated element: a field or an
+// edge. An entity takes GraphQL's own directives only; the package doc's
+// Directives section says why.
 func Directives(ds ...Directive) Annotation {
 	return Annotation{Directives: slices.Clone(ds)}
 }

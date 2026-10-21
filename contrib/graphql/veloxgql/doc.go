@@ -27,17 +27,18 @@
 // puts the same in a context for generated code called outside a gqlgen
 // server, in a job or a test.
 //
-// WithTxOptions sets the options of a mutation's transaction (velox.TxIsolation,
-// velox.TxReadOnly, velox.TxTimeout). It refuses velox.TxRetrySerializable,
-// since gqlgen makes the response once and the operation cannot run again.
-// WithTxFilter decides for each mutation operation, from its context and
-// definition, whether it runs in a transaction; a nil filter means every
-// mutation does. Use it for mutations that only call other services, which
-// would hold a pooled connection in a transaction for no statement. One the
-// filter leaves out runs on the DB: its statements are not atomic and its
-// field resolvers are not serialized, but it keeps read-your-writes, since it
-// runs in a velox session (velox.WithSession) and a DB with replicas reads
-// its own writes from the primary.
+// WithTxOptions sets the options of a mutation's transaction
+// (velox.TxIsolation, velox.TxReadOnly, velox.TxTimeout). It refuses
+// velox.TxRetrySerializable, since gqlgen makes the response once and the
+// operation cannot run again. WithTxFilter decides for each mutation
+// operation, from its context and definition, whether it runs in a
+// transaction; a nil filter means every mutation does. Use it for mutations
+// that only call other services, which would hold a pooled connection in a
+// transaction for no statement. One the filter leaves out runs on the DB: its
+// statements are not atomic and its field resolvers are not serialized, but
+// it keeps read-your-writes, since it runs in a velox session
+// (velox.WithSession) and a DB with replicas reads its own writes from the
+// primary.
 //
 // # Cursors
 //
@@ -80,15 +81,15 @@
 //   - gqlimpl.Is adds a Boolean predicate, or its negation: IsNil, NotNil and
 //     has<Edge>.
 //
-// The limits are LimitsFrom(ctx)'s, read at the top of the where argument.
-// A nesting deeper than MaxFilterDepth fails with ErrFilterTooDeep.
-// A list of more than MaxFilterWidth entries, of inputs or of In or NotIn
-// values, fails with ErrFilterTooWide, and a where argument over its budget
-// of MaxFilterNodes inputs, predicates and values in all with
-// ErrFilterTooLarge. None of it runs a query, so a refused filter fails
-// before any statement is built. An error names the field that held its cause, through
-// the nesting: "veloxgql: OwnerWhereInput.hasEventsWith[0]:
-// EventWhereInput.ownerID: Owner ID: ID of another type".
+// The limits are LimitsFrom(ctx)'s, read at the top of the where argument. A
+// nesting deeper than MaxFilterDepth fails with ErrFilterTooDeep. A list of
+// more than MaxFilterWidth entries, of inputs or of In or NotIn values, fails
+// with ErrFilterTooWide, and a where argument over its budget of
+// MaxFilterNodes inputs, predicates and values in all with ErrFilterTooLarge.
+// None of it runs a query, so a refused filter fails before any statement is
+// built. An error names the field that held its cause, through the nesting:
+// "veloxgql: OwnerWhereInput.hasEventsWith[0]: EventWhereInput.ownerID: Owner
+// ID: ID of another type".
 //
 // The predicates are SQL's, with its three-valued logic, as entgql's are:
 // on a nullable column, NEQ and NotIn leave out the rows whose column is
@@ -124,15 +125,16 @@
 // sentinel. gqlimpl.InputErrorf makes one, for generated code.
 //
 // ErrorPresenter is the presenter to give the server
-// (srv.SetErrorPresenter(veloxgql.ErrorPresenter(nil))). It shows a client
-// a coded error's message and code; a fixed message for velox's errors
-// without a tenant (CodeUnauthenticated), denied by a policy
-// (CodeForbidden), of a validator or a violated constraint
-// (CodeBadUserInput); and "internal error" (CodeInternal) for anything
-// else, which it logs: a driver's error, a timeout, a list edge over
-// MaxList, ErrNoDB. So no driver text, SQL, tenant, entity or constraint
-// name reaches a client. gqlgen's default presenter shows every error's
-// text, and no code.
+// (srv.SetErrorPresenter(veloxgql.ErrorPresenter(nil))). It shows a client a
+// coded error's message and code; a fixed message for velox's errors without
+// a tenant (CodeUnauthenticated), denied by a policy (CodeForbidden), of a
+// validator or a violated constraint (CodeBadUserInput); gqlgen's text for an
+// integer that an Int8…Uint32 argument cannot hold (CodeBadUserInput); and
+// "internal error" (CodeInternal) for anything else, which it logs: a
+// driver's error, a timeout, a list edge over MaxList, ErrNoDB. A request
+// whose context is canceled, the client gone, is not logged as an internal
+// error. So no driver text, SQL, tenant, entity or constraint name reaches a
+// client. gqlgen's default presenter shows every error's text, and no code.
 //
 // # Limits
 //

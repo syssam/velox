@@ -16,10 +16,10 @@ import (
 //
 // first (with or without after) pages forward and last (with or without
 // before) backward; with neither, the page is the MaxPage of
-// veloxgql.LimitsFrom(ctx) rows forward, or
-// backward from before when before is given. first and last together, after
-// and before together, first with before and last with after all fail with
-// ErrBadPagination: keyset paging bounds a page on one side only.
+// veloxgql.LimitsFrom(ctx) rows forward, or backward from before when before
+// is given. first and last together, after and before together, first with
+// before and last with after all fail with ErrBadPagination: keyset paging
+// bounds a page on one side only.
 type Args struct {
 	After, Before *veloxgql.Cursor
 	First, Last   *int
@@ -105,15 +105,21 @@ type Connection[E any] struct {
 }
 
 // NewConnection is the connection to the nodes of the GraphQL type typ that q
-// returns, paged by args, in the order order and then key, the columns of
-// the primary key (each ASC). q holds the connection's filters and no order:
-// the connection orders it, and a q with an OrderBy is refused with an
-// internal error, since its order would come first and break the cursors. q
-// must also select the key and the order's columns (no Columns or Omit that
-// drops them): a cursor is taken from the rows. Its Offset is cleared and its Limit replaced, as
-// the page is the connection's. The limits are veloxgql.LimitsFrom(ctx)'s. It
-// checks the arguments and decodes the cursor, and fails as paginate does,
-// before any query runs; it runs none.
+// returns, paged by args, in the order order and then key, the columns of the
+// primary key (each ASC). q holds the connection's filters and no order: the
+// connection orders it, and a q with an OrderBy is refused with an internal
+// error, since its order would come first and break the cursors. q must also
+// select the key and the order's columns (no Columns or Omit that drops
+// them): a cursor is taken from the rows. Its Offset is cleared and its Limit
+// replaced, as the page is the connection's. It checks the arguments and
+// decodes the cursor, and runs no query.
+//
+// It fails with ErrBadPagination for first and last together, either below
+// 0, another combination Args refuses, or an order of more than
+// MaxOrderTerms terms; with ErrPageTooLarge for either over MaxPage (both
+// the limits of veloxgql.LimitsFrom(ctx)); and with ErrBadCursor for a
+// cursor of another type (ErrWrongIDType too), taken under another order,
+// or whose values are not of the order's types.
 func NewConnection[E any](ctx context.Context, q velox.Query[E], typ string, args Args, order, key []OrderTerm[E]) (*Connection[E], error) {
 	if q.Ordered() {
 		// The application's bug, not the client's: an uncoded error.
@@ -168,8 +174,7 @@ func LoadedConnection[E any](ctx context.Context, rows []E, typ string, key []Or
 	return &Connection[E]{typ: typ, n: veloxgql.LimitsFrom(ctx).MaxPage, terms: terms, loaded: rows, isLoaded: true}
 }
 
-// paginate runs the page query of the connection NewConnection makes, and
-// returns the page:
+// Page returns the connection's page, running its query on the first call:
 //   - The order always ends with the key, so that it is total.
 //   - Paging backward (last or before) reverses every term's direction,
 //     continues after the cursor with velox's Query.After on that order, and
@@ -180,24 +185,8 @@ func LoadedConnection[E any](ctx context.Context, rows []E, typ string, key []Or
 //
 // The page query reads at most n+1 rows whatever the DB's WithMaxRows cap:
 // the MaxPage of veloxgql.LimitsFrom(ctx) bounds it. The query's With loads
-// share that cap of n+1 rows, until GraphQL plan 4 gives loads their own;
-// the generated code adds none yet.
-//
-// It fails before any query runs: with ErrBadPagination for first and last
-// together, either below 0, another combination Args refuses, or an order
-// of more than MaxOrderTerms terms; with ErrPageTooLarge for either over
-// MaxPage (both the limits of veloxgql.LimitsFrom(ctx)); and with
-// ErrBadCursor for a cursor of another type (ErrWrongIDType too), taken
-// under another order, or whose values are not of the order's types.
-func paginate[E any](ctx context.Context, q velox.Query[E], typ string, args Args, order, key []OrderTerm[E]) (*Page[E], error) {
-	c, err := NewConnection(ctx, q, typ, args, order, key)
-	if err != nil {
-		return nil, err
-	}
-	return c.Page(ctx)
-}
-
-// Page returns the connection's page, running its query on the first call.
+// share that cap of n+1 rows, until loads get their own cap; the generated
+// code adds none yet.
 func (c *Connection[E]) Page[_ velox.Lazy[E]](ctx context.Context) (*Page[E], error) {
 	c.pageOnce.Do(func() { c.page, c.pageErr = c.run(ctx) })
 	return c.page, c.pageErr
