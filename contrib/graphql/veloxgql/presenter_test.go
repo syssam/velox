@@ -1,10 +1,12 @@
 package veloxgql_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"testing"
@@ -201,8 +203,8 @@ func TestErrorPresenter(t *testing.T) {
 		{"too many rows", fmt.Errorf("veloxgql: Post.likes: %w", velox.ErrTooManyRows), "INTERNAL_SERVER_ERROR", "internal error", `["node"]`, true},
 		{"gqlerror over a driver error", &gqlerror.Error{Message: driverErr.Error(), Path: path, Err: driverErr}, "INTERNAL_SERVER_ERROR", "internal error", `["posts",0,"author"]`, true},
 		{"gqlerror over a coded error", gqlerror.WrapPath(path, codedBadID), "BAD_USER_INPUT", "User ID: malformed ID: not canonical base64url without padding", `["posts",0,"author"]`, false},
-		{"join", errors.Join(codedBadID, driverErr), "BAD_USER_INPUT", "User ID: malformed ID: not canonical base64url without padding", `["node"]`, false},
-		{"join, driver first", errors.Join(driverErr, codedBadID), "BAD_USER_INPUT", "User ID: malformed ID: not canonical base64url without padding", `["node"]`, false},
+		{"join", errors.Join(codedBadID, driverErr), "BAD_USER_INPUT", "User ID: malformed ID: not canonical base64url without padding", `["node"]`, true},
+		{"join, driver first", errors.Join(driverErr, codedBadID), "BAD_USER_INPUT", "User ID: malformed ID: not canonical base64url without padding", `["node"]`, true},
 	} {
 		l := &logged{}
 		got := veloxgql.ErrorPresenter(l.log)(fieldCtx, c.err)
@@ -246,6 +248,15 @@ func TestErrorPresenter(t *testing.T) {
 	if errs := l.take(); len(errs) != 0 {
 		t.Errorf("logged %v, want nothing", errs)
 	}
+	// An application's gqlerror joined with a driver's error is shown as it
+	// is, and the driver's error is logged.
+	joined := errors.Join(driverErr, app)
+	if got := present(fieldCtx, joined); got != app {
+		t.Errorf("an application gqlerror joined with a driver error: got %#v, want it unchanged", got)
+	}
+	if errs := l.take(); len(errs) != 1 || !errors.Is(errs[0], driverErr) {
+		t.Errorf("logged %v, want the joined error once", errs)
+	}
 	// The input error presented keeps its path through the filter's fields.
 	_, err := (&personName{Not: &personName{NameIn: make([]string, veloxgql.DefaultLimits().MaxFilterWidth+1)}}).Pred(context.Background())
 	if got := present(fieldCtx, err); got.Message != "PersonWhereInput.not: PersonWhereInput.nameIn: filter list is too long: it has 101 entries, and the most is 100" {
@@ -280,5 +291,50 @@ func TestCommitErrorIsInternal(t *testing.T) {
 	}
 	if errs := l.take(); len(errs) != 1 || !errors.Is(errs[0], context.Canceled) {
 		t.Errorf("logged %v, want the commit's error", errs)
+	}
+}
+
+// TestErrorPresenterSlog: with no log, an internal error is logged with
+// slog, with the field's path, the operation's name and the error.
+func TestErrorPresenterSlog(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	driverErr := errors.New("sqlite: no such table: posts")
+	ctx := graphql.WithOperationContext(context.Background(), &graphql.OperationContext{OperationName: "Feed"})
+	ctx = graphql.WithFieldContext(ctx, &graphql.FieldContext{Field: graphql.CollectedField{Field: &ast.Field{Alias: "posts"}}})
+	present := veloxgql.ErrorPresenter(nil)
+	for _, c := range []struct {
+		name string
+		ctx  context.Context
+		err  error
+		want map[string]any
+	}{
+		{"the field's path", ctx, driverErr, map[string]any{"path": "posts", "operation": "Feed"}},
+		{"a gqlerror's path", ctx, gqlerror.WrapPath(ast.Path{ast.PathName("users"), ast.PathIndex(2), ast.PathName("posts")}, driverErr),
+			map[string]any{"path": "users[2].posts", "operation": "Feed"}},
+		{"no operation", context.Background(), driverErr, map[string]any{"path": ""}},
+	} {
+		buf.Reset()
+		if got := present(c.ctx, c.err); got.Message != "internal error" {
+			t.Errorf("%s: presented %q", c.name, got.Message)
+		}
+		var rec map[string]any
+		if err := json.Unmarshal(buf.Bytes(), &rec); err != nil {
+			t.Fatalf("%s: the log is not one JSON record: %v\n%s", c.name, err, buf.Bytes())
+		}
+		if rec["level"] != "ERROR" || rec["msg"] != "veloxgql: internal error" || !strings.Contains(fmt.Sprint(rec["err"]), "sqlite: no such table: posts") {
+			t.Errorf("%s: logged %v", c.name, rec)
+		}
+		for k, v := range c.want {
+			if rec[k] != v {
+				t.Errorf("%s: logged %s=%v, want %v", c.name, k, rec[k], v)
+			}
+		}
+		if _, ok := c.want["operation"]; !ok && rec["operation"] != nil {
+			t.Errorf("%s: logged operation=%v, want none", c.name, rec["operation"])
+		}
 	}
 }

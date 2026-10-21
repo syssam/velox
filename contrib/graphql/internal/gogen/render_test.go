@@ -3,12 +3,14 @@ package gogen
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -644,5 +646,37 @@ func TestGeneratedFilesCarryTheGuard(t *testing.T) {
 				t.Errorf("%s: %s does not import veloxgql", label, name)
 			}
 		}
+	}
+}
+
+// TestEnumErrorPercent: a stored enum value with a % in it is text in the
+// generated error, never a format verb of gqlimpl.InputErrorf.
+func TestEnumErrorPercent(t *testing.T) {
+	m := testModel(t)
+	for _, e := range m.Entities {
+		for _, f := range e.Fields {
+			if f.Enum == "GroupVisibility" {
+				f.EnumValues = []string{"public", "50% off"}
+			}
+		}
+	}
+	for _, en := range m.Enums {
+		if en.Type == "GroupVisibility" {
+			en.Values = []string{"public", "50% off"}
+		}
+	}
+	src := render(t, m)["gql_group.go"]
+	_, rest, ok := strings.Cut(src, "gqlimpl.InputErrorf(")
+	if !ok {
+		t.Fatalf("gql_group.go calls no gqlimpl.InputErrorf:\n%s", src)
+	}
+	lit, _, _ := strings.Cut(rest, ")\n")
+	format, err := strconv.Unquote(lit)
+	if err != nil {
+		t.Fatalf("the format %s: %v", lit, err)
+	}
+	// As InputErrorf formats it, with no arguments.
+	if got := fmt.Sprintf(format, []any{}...); got != "GroupVisibility must be public or 50% off" {
+		t.Errorf("the error reads %q", got)
 	}
 }

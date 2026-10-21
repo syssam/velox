@@ -20,6 +20,7 @@ import (
 //
 //	srv := handler.New(graph.NewExecutableSchema(cfg))
 //	srv.Use(veloxgql.NewExtension(db))
+//	srv.SetErrorPresenter(veloxgql.ErrorPresenter(nil))
 //
 // Every operation's context gets the DB, which DBFrom reads, and the
 // extension's limits, which LimitsFrom reads, so queries and subscriptions
@@ -96,6 +97,11 @@ type Option func(*Extension)
 
 // NewExtension returns the extension that serves a schema on db, with
 // DefaultLimits() unless WithLimits says otherwise.
+//
+// Set ErrorPresenter on the server too
+// (srv.SetErrorPresenter(veloxgql.ErrorPresenter(nil))): without it, gqlgen's
+// default presenter shows a client every error's text, velox's and the
+// driver's, which name entities, tables, constraints and tenants.
 func NewExtension(db *velox.DB, opts ...Option) *Extension {
 	e := &Extension{db: db, limits: DefaultLimits()}
 	for _, o := range opts {
