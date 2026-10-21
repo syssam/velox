@@ -135,7 +135,8 @@ func (s *testServer) do(t *testing.T, r request) string {
 }
 
 // canon is s, a response's JSON, compacted, with its object keys sorted and
-// its errors sorted by their JSON.
+// its errors sorted by their JSON. An error's "locations" are gqlgen's, and
+// differ between its versions, so they are dropped before the comparison.
 func canon(t *testing.T, s string) string {
 	t.Helper()
 	d := json.NewDecoder(strings.NewReader(s))
@@ -146,6 +147,11 @@ func canon(t *testing.T, s string) string {
 	}
 	if m, ok := v.(map[string]any); ok {
 		if errs, ok := m["errors"].([]any); ok {
+			for _, e := range errs {
+				if em, ok := e.(map[string]any); ok {
+					delete(em, "locations")
+				}
+			}
 			key := func(e any) string { b, _ := json.Marshal(e); return string(b) }
 			slices.SortFunc(errs, func(a, b any) int { return strings.Compare(key(a), key(b)) })
 		}
