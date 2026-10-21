@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"cmp"
 	"errors"
-	"flag"
 	"fmt"
 	"go/token"
 	"io"
@@ -228,7 +227,7 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 		}
 		if len(changed) > 0 {
 			_, _ = fmt.Fprintf(stderr, "velox-gen: run %s\n", rerunCommand(f.rerun))
-			return 1
+			return 3
 		}
 		return 0
 	}
@@ -464,7 +463,8 @@ func runGenerateVerify(f genFlags, pattern, dir string, env []string, stdout, st
 			continue
 		}
 		if got, err := os.ReadFile(p); err != nil || !bytes.Equal(got, pfiles[p]) {
-			return fail(fmt.Errorf("%s is out of date; run velox-gen", relPath(dir, p)))
+			_, _ = fmt.Fprintf(stderr, "velox-gen verify: %s is out of date; run velox-gen\n", relPath(dir, p))
+			return 3
 		}
 	}
 	types := make([]string, len(gm.names))
@@ -495,22 +495,4 @@ func moduleDir(dir, pattern string, env []string) (string, error) {
 		return "", fmt.Errorf("%s is not in a module", pattern)
 	}
 	return mod, nil
-}
-
-// usage prints the synopsis and the flags of velox-gen.
-func usage(fs *flag.FlagSet) func() {
-	return func() {
-		w := fs.Output()
-		_, _ = fmt.Fprint(w, `Usage:
-  velox-gen [-out dir] [-package name] [-plugin tool[:key=value,...]]... [-check] [package]
-        generate the gen package of a schema package (default ./schema)
-  velox-gen verify [-out dir] [-plugin tool[:key=value,...]]... [package]
-        check every generated entity's metadata
-  velox-gen describe [-json] [package]
-        print the entities, columns and relations of a schema package
-
-Flags:
-`)
-		fs.PrintDefaults()
-	}
 }

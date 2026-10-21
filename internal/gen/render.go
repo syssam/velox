@@ -93,7 +93,7 @@ func renderPackage(o *Out) string {
 	w.p(`import "github.com/syssam/velox2"`)
 	w.p("")
 	w.p("// Model: sha256:%s", o.Hash)
-	w.p("const _ = velox.GeneratedCodeIsVersion4")
+	w.p("const _ = velox.GeneratedCodeIsVersion%d", GeneratedCodeVersion)
 	for _, en := range o.Enums {
 		w.p("")
 		w.p("// %s is an enum of the model.", en.Type)
@@ -126,7 +126,7 @@ func renderEntity(o *Out, e *OutEntity) string {
 	w.p("package %s", o.Package)
 	w.p("")
 	entityImports(&w, o, e)
-	w.p("const _ = velox.GeneratedCodeIsVersion4")
+	w.p("const _ = velox.GeneratedCodeIsVersion%d", GeneratedCodeVersion)
 	w.p("")
 	entityStruct(&w, e)
 	w.p("")

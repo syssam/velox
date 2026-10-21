@@ -9,15 +9,20 @@ import (
 	"text/tabwriter"
 )
 
-// Describe writes the graph: as indented JSON when asJSON, otherwise as text,
-// one block per entity with its fields, then its edges.
+// Describe writes the graph: when asJSON, as the indented JSON of the model a
+// plugin receives (PluginModel of the graph lowered with the default Config),
+// otherwise as text, one block per entity with its fields, then its edges.
 func Describe(w io.Writer, g *Graph, asJSON bool) error {
 	if asJSON {
 		// Not HTML-escaped: a partial index's Where shows "a < b" as written.
+		o, err := Lower(g, Config{})
+		if err != nil {
+			return err
+		}
 		enc := json.NewEncoder(w)
 		enc.SetEscapeHTML(false)
 		enc.SetIndent("", "  ")
-		return enc.Encode(g)
+		return enc.Encode(PluginModel(g, o))
 	}
 	var buf bytes.Buffer
 	for i, e := range g.Entities {

@@ -51,7 +51,7 @@ go tool velox-gen -out ./<x>/gen ./<x>/schema
 ```
 
 `go tool velox-gen -check -out ./<x>/gen ./<x>/schema`
-writes nothing and fails when a generated file is out of date, and
+writes nothing and exits 3 when a generated file is out of date, and
 `go tool velox-gen verify -out ./<x>/gen ./<x>/schema` builds every entity's
 schema and reports its mistakes. CI runs both for every example, with
 `go vet`, `gofmt`, golangci-lint and the tests.

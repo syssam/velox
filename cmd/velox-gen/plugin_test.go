@@ -120,7 +120,7 @@ func TestPluginFilesAreOwned(t *testing.T) {
 	// A changed output: -check fails and names both files, and writes nothing.
 	before := read(t, filepath.Join(gen, "fake.graphqls"))
 	code, out, errs := veloxEnv(t, dir, fakeEnv("FAKEPLUGIN_V=2"), "-check", "-plugin", "fakeplugin", "./schema")
-	if code != 1 || out != "" || !strings.Contains(errs, "velox-gen: gen/fake.graphqls is out of date\n") ||
+	if code != 3 || out != "" || !strings.Contains(errs, "velox-gen: gen/fake.graphqls is out of date\n") ||
 		!strings.Contains(errs, "velox-gen: gen/fake_gql.go is out of date\n") ||
 		!strings.Contains(errs, "run go tool velox-gen -plugin fakeplugin ./schema\n") || strings.Contains(errs, "mine.graphqls") {
 		t.Fatalf("-check: %d %q %q", code, out, errs)
@@ -131,7 +131,7 @@ func TestPluginFilesAreOwned(t *testing.T) {
 
 	// -check without -plugin: the plugin's files are left over.
 	code, _, errs = velox(t, dir, "-check", "./schema")
-	if code != 1 || !strings.Contains(errs, "gen/fake.graphqls is out of date") || !strings.Contains(errs, "gen/fake_gql.go is out of date") {
+	if code != 3 || !strings.Contains(errs, "gen/fake.graphqls is out of date") || !strings.Contains(errs, "gen/fake_gql.go is out of date") {
 		t.Fatalf("-check without the plugin: %d %q", code, errs)
 	}
 
@@ -365,7 +365,7 @@ func TestVerifyCompilesPluginGo(t *testing.T) {
 
 	// The plugin's files on disk are not what it writes now: verify says so.
 	code, _, errs := veloxEnv(t, dir, fakeEnv("FAKEPLUGIN_V=2"), "verify", "-plugin", "fakeplugin", "./schema")
-	if code != 1 || !strings.Contains(errs, "gen/fake_gql.go is out of date") {
+	if code != 3 || !strings.Contains(errs, "gen/fake_gql.go is out of date") {
 		t.Errorf("stale: %d %q", code, errs)
 	}
 
@@ -454,7 +454,7 @@ func TestStaleNestedFiles(t *testing.T) {
 
 	// -check without the plugin names the left-over files.
 	code, _, errs := velox(t, dir, "-check", "./schema")
-	if code != 1 || !strings.Contains(errs, "gen/pb/a.go is out of date") || !strings.Contains(errs, "gen/pb/sub/b.proto is out of date") {
+	if code != 3 || !strings.Contains(errs, "gen/pb/a.go is out of date") || !strings.Contains(errs, "gen/pb/sub/b.proto is out of date") {
 		t.Fatalf("-check: %d %q", code, errs)
 	}
 
@@ -602,7 +602,7 @@ func TestRerunQuoted(t *testing.T) {
 
 	dir := pluginModule(t)
 	code, _, errs := veloxEnv(t, dir, fakeEnv(), "-check", "-out", "my gen", "-package", "gen", "-plugin", "fakeplugin:go_package=x/pb y", "./schema")
-	if want := "velox-gen: run go tool velox-gen -out 'my gen' -package gen -plugin 'fakeplugin:go_package=x/pb y' ./schema\n"; code != 1 || !strings.HasSuffix(errs, want) {
+	if want := "velox-gen: run go tool velox-gen -out 'my gen' -package gen -plugin 'fakeplugin:go_package=x/pb y' ./schema\n"; code != 3 || !strings.HasSuffix(errs, want) {
 		t.Errorf("%d %q, want the suffix %q", code, errs, want)
 	}
 }
@@ -645,7 +645,7 @@ func TestPluginCaseRename(t *testing.T) {
 		generate(files(plugin.File{Path: "Fake.go", Content: "package gen\n"}))
 		env := files(plugin.File{Path: "fake.go", Content: "package gen\n"})
 		// -check sees the old spelling as out of date.
-		if code, _, errs := veloxEnv(t, dir, env, "-check", "-plugin", "fakeplugin", "./schema"); code != 1 || !strings.Contains(errs, "gen/Fake.go is out of date") {
+		if code, _, errs := veloxEnv(t, dir, env, "-check", "-plugin", "fakeplugin", "./schema"); code != 3 || !strings.Contains(errs, "gen/Fake.go is out of date") {
 			t.Errorf("-check: %d %q", code, errs)
 		}
 		generate(env)

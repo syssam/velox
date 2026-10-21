@@ -133,7 +133,7 @@ func TestCheckAndRewrite(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "schema", "user.go"), strings.Replace(genUserSchema, `field.String("name"),`, `field.String("name"), field.Int("age"),`, 1))
 	before, _ := os.ReadFile(filepath.Join(dir, "gen", "user_velox.go"))
 	code, out, errs := velox(t, dir, "-check", "./schema")
-	if code != 1 || out != "" || !strings.Contains(errs, "velox-gen: gen/user_velox.go is out of date\n") ||
+	if code != 3 || out != "" || !strings.Contains(errs, "velox-gen: gen/user_velox.go is out of date\n") ||
 		!strings.Contains(errs, "velox-gen: run go tool velox-gen ./schema\n") || strings.Contains(errs, "tag_velox.go") {
 		t.Fatalf("-check: %d %q %q", code, out, errs)
 	}
@@ -157,7 +157,7 @@ func TestCheckAndRewrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, _, errs = velox(t, dir, "-check", "./schema")
-	if code != 1 || !strings.Contains(errs, "velox-gen: gen/tag_velox.go is out of date") {
+	if code != 3 || !strings.Contains(errs, "velox-gen: gen/tag_velox.go is out of date") {
 		t.Fatalf("-check after removal: %d %q", code, errs)
 	}
 	code, out, errs = velox(t, dir, "./schema")
@@ -203,7 +203,7 @@ func TestPolicyAddedAfterGenerationFailsCheckAndVerify(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "gen", "user_policy.go"), "package gen\n\nimport \"github.com/syssam/velox2\"\n\nfunc (*User) Policy() velox.Policy[User] { return velox.Policy[User]{} }\n"+
 		"func (*User) Hooks() []velox.Hook[User] { return nil }\n")
 	code, out, errs := velox(t, dir, "-check", "./schema")
-	if code != 1 || out != "" || !strings.Contains(errs, "velox-gen: gen/user_velox.go is out of date\n") || strings.Contains(errs, "tag_velox.go") {
+	if code != 3 || out != "" || !strings.Contains(errs, "velox-gen: gen/user_velox.go is out of date\n") || strings.Contains(errs, "tag_velox.go") {
 		t.Errorf("-check: %d %q %q", code, out, errs)
 	}
 	code, out, errs = velox(t, dir, "verify", "./schema")
@@ -224,7 +224,7 @@ func TestPolicyAddedAfterGenerationFailsCheckAndVerify(t *testing.T) {
 // -check fails for a generated file that is missing, as for one that is stale.
 func TestCheckFindsAMissingFile(t *testing.T) {
 	dir := genModule(t, nil)
-	if code, _, errs := velox(t, dir, "-check", "./schema"); code != 1 || !strings.Contains(errs, "velox-gen: gen/user_velox.go is out of date\n") {
+	if code, _, errs := velox(t, dir, "-check", "./schema"); code != 3 || !strings.Contains(errs, "velox-gen: gen/user_velox.go is out of date\n") {
 		t.Errorf("-check before any generation: %d %q", code, errs)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "gen")); !os.IsNotExist(err) {
@@ -237,7 +237,7 @@ func TestCheckFindsAMissingFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, out, errs := velox(t, dir, "-check", "./schema")
-	if code != 1 || out != "" || !strings.Contains(errs, "velox-gen: gen/tag_velox.go is out of date\n") || strings.Contains(errs, "user_velox.go") {
+	if code != 3 || out != "" || !strings.Contains(errs, "velox-gen: gen/tag_velox.go is out of date\n") || strings.Contains(errs, "user_velox.go") {
 		t.Errorf("-check with a missing file: %d %q %q", code, out, errs)
 	}
 }

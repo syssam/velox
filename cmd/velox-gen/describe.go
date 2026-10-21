@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"io"
 
@@ -11,11 +10,10 @@ import (
 // runDescribe is velox-gen describe: it loads the schema package, builds its
 // graph and prints it.
 func runDescribe(args []string, dir string, env []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("velox-gen describe", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	asJSON := fs.Bool("json", false, "print the graph as JSON")
-	if err := fs.Parse(args); err != nil {
-		return 2
+	fs := newFlagSet("describe", stderr)
+	asJSON := fs.Bool("json", false, "print the model that a plugin receives, as JSON")
+	if code, done := parseFlags(fs, args); done {
+		return code
 	}
 	pattern := "./schema"
 	switch fs.NArg() {

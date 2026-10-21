@@ -12,9 +12,15 @@
 //
 // Usage:
 //
-//	velox-gen [-out dir] [-package name] [-plugin tool[:key=value,...]]... [-check] [package]
-//	velox-gen verify [-out dir] [-plugin tool[:key=value,...]]... [package]
+//	velox-gen [generate] [-out dir] [-package name] [-plugin tool[:key=value,...]]... [-check] [package]
+//	velox-gen verify [-out dir] [-package name] [-plugin tool[:key=value,...]]... [package]
 //	velox-gen describe [-json] [package]
+//	velox-gen version
+//
+// Each subcommand has its own flags; a flag it does not take is a usage
+// error. The exit code is 0 for success, 1 for an error, 2 for misuse and 3
+// when generated files are stale (-check, and verify when a plugin's Go file
+// is out of date).
 //
 // The package is one schema package, ./schema when none is named; a pattern
 // that names no package, several, or a package that declares no schemas is an
@@ -75,7 +81,9 @@
 // compiles with the rest of the package.
 //
 // describe prints the entities, columns and relations that the schema package
-// (default ./schema) declares.
+// (default ./schema) declares; with -json, the model that a plugin receives as
+// "model", indented. version prints one line, such as
+// "velox-gen v1.2.3 (generated code 4, plugin protocol 2, model 2)".
 package main
 
 import (
@@ -88,6 +96,7 @@ import (
 	"strings"
 
 	"github.com/syssam/velox2/internal/gen"
+	"github.com/syssam/velox2/plugin"
 )
 
 func main() {
@@ -97,23 +106,45 @@ func main() {
 // run is the command, with its directory, environment and output passed in
 // so that tests can run it.
 func run(args []string, dir string, env []string, stdout, stderr io.Writer) int {
-	if len(args) > 0 && args[0] == "describe" {
-		return runDescribe(args[1:], dir, env, stdout, stderr)
+	if len(args) > 0 && isWord(args[0]) {
+		switch args[0] {
+		case "generate":
+			return runGenCommand("generate", args[1:], dir, env, stdout, stderr)
+		case "verify":
+			return runGenCommand("verify", args[1:], dir, env, stdout, stderr)
+		case "describe":
+			return runDescribe(args[1:], dir, env, stdout, stderr)
+		case "version":
+			return runVersion(args[1:], stdout, stderr)
+		default:
+			_, _ = fmt.Fprintf(stderr, "velox-gen: unknown subcommand %q\n", args[0])
+			printUsage(stderr)
+			return 2
+		}
 	}
-	verify := len(args) > 0 && args[0] == "verify"
-	if verify {
-		args = args[1:]
+	return runGenCommand("generate", args, dir, env, stdout, stderr)
+}
+
+// isWord reports whether the first argument is meant as a subcommand: a word,
+// not a flag and not a package pattern (which has a "/" or a ".").
+func isWord(a string) bool {
+	return a != "" && !strings.ContainsAny(a, "-/.\\")
+}
+
+// runGenCommand is generate or verify, which take the same flags but -check.
+func runGenCommand(name string, args []string, dir string, env []string, stdout, stderr io.Writer) int {
+	verify := name == "verify"
+	fs := newFlagSet(name, stderr)
+	var checkOnly *bool
+	if !verify {
+		checkOnly = fs.Bool("check", false, "write nothing; exit 3 when a generated file is out of date, missing or left over")
 	}
-	fs := flag.NewFlagSet("velox-gen", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	fs.Usage = usage(fs)
-	checkOnly := fs.Bool("check", false, "write nothing; exit 1 when a generated file is out of date")
 	outDir := fs.String("out", "./gen", "the directory of the generated package")
 	pkgName := fs.String("package", "", "the generated package's name (default: the base name of -out)")
 	var plugins pluginFlag
 	fs.Var(&plugins, "plugin", "run the generator plugin `tool[:key=value,...]` (a tool of your module, as go tool names it, with its options) on the model; repeat for several")
-	if err := fs.Parse(args); err != nil {
-		return 2
+	if code, done := parseFlags(fs, args); done {
+		return code
 	}
 	patterns := fs.Args()
 	var rerun []string
@@ -132,11 +163,75 @@ func run(args []string, dir string, env []string, stdout, stderr io.Writer) int 
 		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", err)
 		return 1
 	}
-	f := genFlags{out: *outDir, pkg: *pkgName, check: *checkOnly, plugins: plugins, rerun: append(rerun, patterns...)}
+	f := genFlags{out: *outDir, pkg: *pkgName, plugins: plugins, rerun: append(rerun, patterns...)}
 	if verify {
 		return runGenerateVerify(f, pattern, dir, env, stdout, stderr)
 	}
+	f.check = *checkOnly
 	return runGenerate(f, pattern, dir, env, stdout, stderr)
+}
+
+// newFlagSet is the flag set of one subcommand, whose usage lists its flags.
+func newFlagSet(name string, stderr io.Writer) *flag.FlagSet {
+	fs := flag.NewFlagSet("velox-gen "+name, flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	fs.Usage = func() {
+		printUsage(stderr)
+		_, _ = fmt.Fprintf(stderr, "\nFlags of %s:\n", name)
+		fs.PrintDefaults()
+	}
+	return fs
+}
+
+// parseFlags parses args. It reports done, with the exit code, when the
+// command must stop: -h exits 0, a bad flag 2.
+func parseFlags(fs *flag.FlagSet, args []string) (code int, done bool) {
+	switch err := fs.Parse(args); {
+	case err == nil:
+		return 0, false
+	case errors.Is(err, flag.ErrHelp):
+		return 0, true
+	default:
+		return 2, true
+	}
+}
+
+// runVersion is velox-gen version.
+func runVersion(args []string, stdout, stderr io.Writer) int {
+	fs := newFlagSet("version", stderr)
+	if code, done := parseFlags(fs, args); done {
+		return code
+	}
+	if fs.NArg() > 0 {
+		_, _ = fmt.Fprintln(stderr, "velox-gen: version takes no arguments")
+		printUsage(stderr)
+		return 2
+	}
+	_, _ = fmt.Fprintf(stdout, "%s (generated code %d, plugin protocol %d, model %d)\n",
+		generator(), gen.GeneratedCodeVersion, plugin.ProtocolVersion, plugin.ModelVersion)
+	return 0
+}
+
+// printUsage prints the forms of the command and its exit codes.
+func printUsage(w io.Writer) {
+	_, _ = fmt.Fprint(w, `Usage:
+  velox-gen [generate] [-out dir] [-package name] [-plugin tool[:key=value,...]]... [-check] [package]
+        generate the gen package of a schema package (default ./schema)
+  velox-gen verify [-out dir] [-package name] [-plugin tool[:key=value,...]]... [package]
+        check every generated entity's metadata
+  velox-gen describe [-json] [package]
+        print the entities, columns and relations of a schema package;
+        with -json, the model that a plugin receives
+  velox-gen version
+        print the version of velox-gen, of the generated code, of the plugin
+        protocol and of the model
+
+Exit codes:
+  0  success
+  1  an error
+  2  misuse: an unknown subcommand or flag, a malformed option
+  3  generated files are stale (generate -check; verify, for a plugin's Go file)
+`)
 }
 
 // relPath shows a path relative to dir when it is inside dir.
