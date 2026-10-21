@@ -140,7 +140,7 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 		f.p("\tvar order []%s.OrderTerm[%s]", impl, e.Name)
 		if t.MultiOrder {
 			f.p("\tif most := %s.LimitsFrom(ctx).MaxOrderTerms; len(orderBy) > most {", vgql)
-			f.p("\t\treturn nil, %s.Errorf(\"veloxgql: %s connection: %%w: orderBy has %%d terms, and the most is %%d\", %s.ErrBadPagination, len(orderBy), most)", f.use("fmt", "fmt"), n, vgql)
+			f.p("\t\treturn nil, %s.InputErrorf(\"%s connection: %%w: orderBy has %%d terms, and the most is %%d\", %s.ErrBadPagination, len(orderBy), most)", impl, n, vgql)
 			f.p("\t}")
 			f.p("\tfor _, o := range orderBy {")
 		} else {
@@ -194,7 +194,7 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 		f.p("\t\treturn %s, nil", term)
 	}
 	f.p("\t}")
-	f.p("\treturn %s.OrderTerm[%s]{}, %s.Errorf(\"veloxgql: %sOrder: %%q is not a value of %sOrderField\", o.Field)", impl, e.Name, f.use("fmt", "fmt"), n, n)
+	f.p("\treturn %s.OrderTerm[%s]{}, %s.InputErrorf(\"%sOrder: %%q is not a value of %sOrderField\", o.Field)", impl, e.Name, impl, n, n)
 	f.p("}")
 	return nil
 }

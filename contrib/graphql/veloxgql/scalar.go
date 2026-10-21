@@ -3,7 +3,6 @@ package veloxgql
 import (
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"io"
 	"strconv"
 	"time"
@@ -45,11 +44,11 @@ func (t Time) MarshalGQL(w io.Writer) {
 func (t *Time) UnmarshalGQL(v any) error {
 	s, ok := v.(string)
 	if !ok {
-		return errors.New("veloxgql: Time must be an RFC 3339 string")
+		return shared.InputErrorf("Time must be an RFC 3339 string")
 	}
 	x, err := time.Parse(time.RFC3339Nano, s)
 	if err != nil {
-		return errors.New("veloxgql: Time must be an RFC 3339 string")
+		return shared.InputErrorf("Time must be an RFC 3339 string")
 	}
 	*t = Time(x)
 	return nil
@@ -71,11 +70,11 @@ func (u UUID) MarshalGQL(w io.Writer) {
 func (u *UUID) UnmarshalGQL(v any) error {
 	s, ok := v.(string)
 	if !ok {
-		return errors.New("veloxgql: UUID must be a string")
+		return shared.InputErrorf("UUID must be a string")
 	}
 	x, ok := shared.ParseUUID(s)
 	if !ok {
-		return errors.New("veloxgql: UUID must be of the form xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+		return shared.InputErrorf("UUID must be of the form xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
 	}
 	*u = x
 	return nil
@@ -93,11 +92,11 @@ func (b Bytes) MarshalGQL(w io.Writer) {
 func (b *Bytes) UnmarshalGQL(v any) error {
 	s, ok := v.(string)
 	if !ok {
-		return errors.New("veloxgql: Bytes must be a base64 string")
+		return shared.InputErrorf("Bytes must be a base64 string")
 	}
 	x, err := base64.StdEncoding.DecodeString(s)
 	if err != nil {
-		return errors.New("veloxgql: Bytes must be a standard base64 string with padding")
+		return shared.InputErrorf("Bytes must be a standard base64 string with padding")
 	}
 	*b = x
 	return nil
@@ -122,7 +121,7 @@ func (j JSON) MarshalGQL(w io.Writer) {
 func (j *JSON) UnmarshalGQL(v any) error {
 	b, err := json.Marshal(v)
 	if err != nil {
-		return errors.New("veloxgql: JSON is not a JSON value")
+		return shared.InputErrorf("JSON is not a JSON value")
 	}
 	*j = b
 	return nil
@@ -142,11 +141,11 @@ func (u Uint64) MarshalGQL(w io.Writer) {
 func (u *Uint64) UnmarshalGQL(v any) error {
 	s, ok := v.(string)
 	if !ok {
-		return errors.New("veloxgql: Uint64 must be a decimal string")
+		return shared.InputErrorf("Uint64 must be a decimal string")
 	}
 	n, err := strconv.ParseUint(s, 10, 64)
 	if err != nil {
-		return errors.New("veloxgql: Uint64 must be a decimal string of at most 2^64-1")
+		return shared.InputErrorf("Uint64 must be a decimal string of at most 2^64-1")
 	}
 	*u = Uint64(n)
 	return nil

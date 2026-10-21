@@ -3,8 +3,6 @@ package gen
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"io"
 
 	"github.com/syssam/velox2"
@@ -37,7 +35,7 @@ func (e *GroupVisibility) UnmarshalGQL(v any) error {
 		*e = GroupVisibility(s)
 		return nil
 	}
-	return errors.New("GroupVisibility must be public or private")
+	return gqlimpl.InputErrorf("GroupVisibility must be public or private")
 }
 
 // UsersGQL is the edge users: a connection to the Account nodes it leads to,
@@ -152,7 +150,7 @@ func groupTermGQL(o *GroupOrder) (gqlimpl.OrderTerm[Group], error) {
 			func(x *Group) string { return x.Name },
 			func(x *Group, v string) { x.Name = v }), nil
 	}
-	return gqlimpl.OrderTerm[Group]{}, fmt.Errorf("veloxgql: GroupOrder: %q is not a value of GroupOrderField", o.Field)
+	return gqlimpl.OrderTerm[Group]{}, gqlimpl.InputErrorf("GroupOrder: %q is not a value of GroupOrderField", o.Field)
 }
 
 // GroupOrder is the GraphQL input GroupOrder, an order of connections to Group.
@@ -195,7 +193,7 @@ func (o GroupOrderField) MarshalGQL(w io.Writer) {
 func (o *GroupOrderField) UnmarshalGQL(v any) error {
 	s, _ := v.(string)
 	if !GroupOrderField(s).IsValid() {
-		return errors.New("GroupOrderField must be NAME")
+		return gqlimpl.InputErrorf("GroupOrderField must be NAME")
 	}
 	*o = GroupOrderField(s)
 	return nil

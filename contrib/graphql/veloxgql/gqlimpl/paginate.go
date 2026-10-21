@@ -8,6 +8,7 @@ import (
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
 )
 
 // Args are a connection's paging arguments, as the client gave them.
@@ -112,13 +113,13 @@ func NewConnection[E any](ctx context.Context, q velox.Query[E], typ string, arg
 	lim := veloxgql.LimitsFrom(ctx)
 	n, back, err := pageSize(args, lim.MaxPage)
 	if err != nil {
-		return nil, fmt.Errorf("veloxgql: %s connection: %w", typ, err)
+		return nil, shared.Within(typ+" connection", err)
 	}
 	if len(key) == 0 {
 		return nil, fmt.Errorf("veloxgql: %s connection: no key to order by last", typ)
 	}
 	if len(order) > lim.MaxOrderTerms {
-		return nil, fmt.Errorf("veloxgql: %s connection: %w: orderBy has %d terms, and the most is %d", typ, veloxgql.ErrBadPagination, len(order), lim.MaxOrderTerms)
+		return nil, InputErrorf("%s connection: %w: orderBy has %d terms, and the most is %d", typ, veloxgql.ErrBadPagination, len(order), lim.MaxOrderTerms)
 	}
 	c := &Connection[E]{query: q, typ: typ, n: n, back: back, key: len(order)}
 	c.terms = make([]OrderTerm[E], 0, len(order)+len(key))
@@ -128,7 +129,7 @@ func NewConnection[E any](ctx context.Context, q velox.Query[E], typ string, arg
 			t.Direction = veloxgql.OrderDirectionAsc
 		case veloxgql.OrderDirectionAsc, veloxgql.OrderDirectionDesc:
 		default:
-			return nil, fmt.Errorf("veloxgql: %s connection: %w: the order %s has the direction %q, not ASC or DESC", typ, veloxgql.ErrBadPagination, t.Field, t.Direction)
+			return nil, InputErrorf("%s connection: %w: the order %s has the direction %q, not ASC or DESC", typ, veloxgql.ErrBadPagination, t.Field, t.Direction)
 		}
 		c.terms = append(c.terms, t)
 	}
@@ -286,11 +287,11 @@ func (c *Connection[E]) row[_ velox.Lazy[E]](cur veloxgql.Cursor) (*E, error) {
 	x := new(E)
 	for i, t := range c.terms[:last] {
 		if err := t.set(x, cur.Terms[i].Value); err != nil {
-			return nil, fmt.Errorf("veloxgql: %s cursor: %w", c.typ, err)
+			return nil, shared.Within(c.typ+" cursor", err)
 		}
 	}
 	if err := c.terms[last].set(x, cur.Key); err != nil {
-		return nil, fmt.Errorf("veloxgql: %s cursor: %w", c.typ, err)
+		return nil, shared.Within(c.typ+" cursor", err)
 	}
 	return x, nil
 }
@@ -300,13 +301,13 @@ func (c *Connection[E]) row[_ velox.Lazy[E]](cur veloxgql.Cursor) (*E, error) {
 func pageSize(args Args, maxPage int) (int, bool, error) {
 	switch {
 	case args.First != nil && args.Last != nil:
-		return 0, false, fmt.Errorf("%w: first and last given together", veloxgql.ErrBadPagination)
+		return 0, false, InputErrorf("%w: first and last given together", veloxgql.ErrBadPagination)
 	case args.After != nil && args.Before != nil:
-		return 0, false, fmt.Errorf("%w: after and before given together", veloxgql.ErrBadPagination)
+		return 0, false, InputErrorf("%w: after and before given together", veloxgql.ErrBadPagination)
 	case args.First != nil && args.Before != nil:
-		return 0, false, fmt.Errorf("%w: first pages forward, and before goes with last", veloxgql.ErrBadPagination)
+		return 0, false, InputErrorf("%w: first pages forward, and before goes with last", veloxgql.ErrBadPagination)
 	case args.Last != nil && args.After != nil:
-		return 0, false, fmt.Errorf("%w: last pages backward, and after goes with first", veloxgql.ErrBadPagination)
+		return 0, false, InputErrorf("%w: last pages backward, and after goes with first", veloxgql.ErrBadPagination)
 	}
 	back := args.Last != nil || args.Before != nil
 	n, name := args.First, "first"
@@ -317,9 +318,9 @@ func pageSize(args Args, maxPage int) (int, bool, error) {
 	case n == nil:
 		return maxPage, back, nil
 	case *n < 0:
-		return 0, false, fmt.Errorf("%w: %s is %d, below 0", veloxgql.ErrBadPagination, name, *n)
+		return 0, false, InputErrorf("%w: %s is %d, below 0", veloxgql.ErrBadPagination, name, *n)
 	case *n > maxPage:
-		return 0, false, fmt.Errorf("%w: %s is %d, and the most is %d", veloxgql.ErrPageTooLarge, name, *n, maxPage)
+		return 0, false, InputErrorf("%w: %s is %d, and the most is %d", veloxgql.ErrPageTooLarge, name, *n, maxPage)
 	}
 	return *n, back, nil
 }

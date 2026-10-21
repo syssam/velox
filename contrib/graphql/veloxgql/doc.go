@@ -115,6 +115,26 @@
 // Uint64 is a decimal string on the wire both ways, since a JSON number loses
 // precision above 2^53 in many clients.
 //
+// # Errors
+//
+// Every error veloxgql, gqlimpl and generated code return for a client's
+// input (an ID, a cursor, paging arguments, a filter, a scalar or an enum)
+// has the code CodeBadUserInput: a method Extensions() map[string]any,
+// which gives {"code": "BAD_USER_INPUT"}, in the shape of gqlgen's former
+// ExtendedError. Its text starts "veloxgql: ", and errors.Is finds its
+// sentinel. gqlimpl.InputErrorf makes one, for generated code.
+//
+// ErrorPresenter is the presenter to give the server
+// (srv.SetErrorPresenter(veloxgql.ErrorPresenter(nil))). It shows a client
+// a coded error's message and code; a fixed message for velox's errors
+// without a tenant (CodeUnauthenticated), denied by a policy
+// (CodeForbidden), of a validator or a violated constraint
+// (CodeBadUserInput); and "internal error" (CodeInternal) for anything
+// else, which it logs: a driver's error, a timeout, a list edge over
+// MaxList, ErrNoDB. So no driver text, SQL, tenant, entity or constraint
+// name reaches a client. gqlgen's default presenter shows every error's
+// text, and no code.
+//
 // # Limits
 //
 // Limits caps what a client may ask for: MaxPage, MaxList, MaxFilterDepth,

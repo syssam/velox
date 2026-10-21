@@ -85,10 +85,11 @@ type request struct {
 	stmts []string // the statements sent, "<SQL> [<args>]", sorted
 }
 
-// do sends r and checks the response and the statements. The statements are
+// do sends r, checks the response and the statements, and returns the
+// response's body. The statements are
 // compared sorted: gqlgen resolves sibling fields concurrently, so the
 // per-parent queries of an edge run in no fixed order.
-func (s *testServer) do(t *testing.T, r request) {
+func (s *testServer) do(t *testing.T, r request) string {
 	t.Helper()
 	body, err := json.Marshal(map[string]any{"query": r.query, "variables": r.vars})
 	if err != nil {
@@ -124,6 +125,7 @@ func (s *testServer) do(t *testing.T, r request) {
 	if !slices.Equal(stmts, want) {
 		t.Errorf("%s\nstatements:\n got  %s\n want %s", r.query, strings.Join(stmts, "\n      "), strings.Join(want, "\n      "))
 	}
+	return string(got)
 }
 
 func compact(t *testing.T, s string) string {
@@ -193,19 +195,19 @@ func TestBadIDs(t *testing.T) {
 	s.do(t, request{
 		org:   "1",
 		query: `{ posts(where: {authorID: "` + post1 + `"}) { totalCount } }`,
-		want: `{"errors": [{"message": "veloxgql: PostWhereInput.authorID: User ID: ID of another type", "path": ["posts"]}],
+		want: `{"errors": [{"message": "PostWhereInput.authorID: User ID: ID of another type", "path": ["posts"], "extensions": {"code": "BAD_USER_INPUT"}}],
 			"data": null}`,
 	})
 	s.do(t, request{
 		query: `{ node(id: "VXNlcjox!") { id } }`,
-		want: `{"errors": [{"message": "veloxgql: ID: malformed ID: not canonical base64url without padding", "path": ["node"]}],
+		want: `{"errors": [{"message": "ID: malformed ID: not canonical base64url without padding", "path": ["node"], "extensions": {"code": "BAD_USER_INPUT"}}],
 			"data": {"node": null}}`,
 	})
 	postCursor := veloxgql.EncodeCursor(veloxgql.Cursor{Type: "Post", Key: int64(1)})
 	s.do(t, request{
 		query: `query($c: Cursor) { users(first: 1, after: $c) { totalCount } }`,
 		vars:  map[string]any{"c": postCursor},
-		want:  `{"errors": [{"message": "veloxgql: User cursor: malformed cursor: the key is an ID of another type", "path": ["users"]}], "data": null}`,
+		want:  `{"errors": [{"message": "User cursor: malformed cursor: the key is an ID of another type", "path": ["users"], "extensions": {"code": "BAD_USER_INPUT"}}], "data": null}`,
 	})
 }
 
@@ -376,18 +378,22 @@ func TestTenantIsolation(t *testing.T) {
 		stmts: stmts(globex),
 	})
 	// Without a tenant, every statement on Post fails before it is sent. A
-	// failed non-null field nulls its parent, up to data.
-	const noTenant = "velox: gen.Post: no tenant in the context"
+	// failed non-null field nulls its parent, up to data. The client is told
+	// unauthenticated, with no entity named (velox.ErrNoTenant's text holds
+	// gen.Post).
+	const noTenant = `"message": "unauthenticated", "path": %s, "extensions": {"code": "UNAUTHENTICATED"}`
 	for _, c := range []struct{ query, want string }{
-		{`{ node(id: "` + post1 + `") { id } }`, `{"errors": [{"message": "` + noTenant + `", "path": ["node"]}], "data": {"node": null}}`},
-		{`{ posts { edges { node { title } } } }`, `{"errors": [{"message": "` + noTenant + `", "path": ["posts", "edges"]}], "data": null}`},
-		{`{ labels(where: {name: "go"}) { edges { node { posts { totalCount } } } } }`, `{"errors": [{"message": "` + noTenant + `", "path": ["labels", "edges", 0, "node", "posts", "totalCount"]}], "data": null}`},
+		{`{ node(id: "` + post1 + `") { id } }`, `{"errors": [{` + fmt.Sprintf(noTenant, `["node"]`) + `}], "data": {"node": null}}`},
+		{`{ posts { edges { node { title } } } }`, `{"errors": [{` + fmt.Sprintf(noTenant, `["posts", "edges"]`) + `}], "data": null}`},
+		{`{ labels(where: {name: "go"}) { edges { node { posts { totalCount } } } } }`, `{"errors": [{` + fmt.Sprintf(noTenant, `["labels", "edges", 0, "node", "posts", "totalCount"]`) + `}], "data": null}`},
 	} {
 		var stmts []string
 		if strings.HasPrefix(c.query, "{ labels") {
 			stmts = []string{selTags + ` WHERE "name" = ? ORDER BY "id" LIMIT ? [go 101]`}
 		}
-		s.do(t, request{query: c.query, want: c.want, stmts: stmts})
+		if body := s.do(t, request{query: c.query, want: c.want, stmts: stmts}); strings.Contains(body, "velox:") {
+			t.Errorf("%s: the client sees velox's text: %s", c.query, body)
+		}
 	}
 }
 
@@ -497,7 +503,7 @@ func TestOrderTermsLimit(t *testing.T) {
 	s.do(t, request{
 		org:   "1",
 		query: `{ posts(orderBy: [` + strings.Repeat(`{field: TITLE, direction: ASC}, `, veloxgql.DefaultLimits().MaxOrderTerms+1) + `]) { totalCount } }`,
-		want: `{"errors": [{"message": "veloxgql: Post connection: bad pagination arguments: orderBy has 6 terms, and the most is 5", "path": ["posts"]}],
+		want: `{"errors": [{"message": "Post connection: bad pagination arguments: orderBy has 6 terms, and the most is 5", "path": ["posts"], "extensions": {"code": "BAD_USER_INPUT"}}],
 			"data": null}`,
 	})
 }

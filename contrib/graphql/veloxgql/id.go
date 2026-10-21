@@ -61,7 +61,7 @@ func DecodeID[K any](id, typ string) (K, error) {
 	case t == "":
 		return zero, badID(typ, "an empty type")
 	case t != typ:
-		return zero, fmt.Errorf("veloxgql: %s ID: %w", typ, ErrWrongIDType)
+		return zero, shared.InputErrorf("%s ID: %w", typ, ErrWrongIDType)
 	}
 	var k K
 	switch err := shared.SetValue(basePtr(&k), shared.Text(key)); {
@@ -88,17 +88,17 @@ func DecodeID[K any](id, typ string) (K, error) {
 func IDType(id string) (string, error) {
 	b, ok := decodeBase64(id)
 	if !ok {
-		return "", fmt.Errorf("veloxgql: ID: %w: not canonical base64url without padding", ErrBadID)
+		return "", shared.InputErrorf("ID: %w: not canonical base64url without padding", ErrBadID)
 	}
 	t, _, ok := strings.Cut(string(b), ":")
 	if !ok || t == "" {
-		return "", fmt.Errorf("veloxgql: ID: %w: no type", ErrBadID)
+		return "", shared.InputErrorf("ID: %w: no type", ErrBadID)
 	}
 	return t, nil
 }
 
 func badID(typ, why string) error {
-	return fmt.Errorf("veloxgql: %s ID: %w: %s", typ, ErrBadID, why)
+	return shared.InputErrorf("%s ID: %w: %s", typ, ErrBadID, why)
 }
 
 // keyText is shared.KeyText of key, a UUID unwrapped to its [16]byte: the one

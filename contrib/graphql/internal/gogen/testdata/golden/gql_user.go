@@ -3,7 +3,6 @@ package gen
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 
@@ -61,7 +60,7 @@ func (e *UserRole) UnmarshalGQL(v any) error {
 	case "VIEWER":
 		*e = "viewer"
 	default:
-		return errors.New("UserRole must be ADMIN, EDITOR or VIEWER")
+		return gqlimpl.InputErrorf("UserRole must be ADMIN, EDITOR or VIEWER")
 	}
 	return nil
 }

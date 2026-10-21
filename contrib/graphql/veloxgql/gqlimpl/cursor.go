@@ -24,14 +24,14 @@ type cursorOrder struct {
 // Neither error's text holds the cursor's type or fields.
 func checkCursor(c veloxgql.Cursor, typ string, order []cursorOrder) error {
 	if c.Type != typ {
-		return fmt.Errorf("veloxgql: %s cursor: %w: the key is an %w", typ, veloxgql.ErrBadCursor, veloxgql.ErrWrongIDType)
+		return InputErrorf("%s cursor: %w: the key is an %w", typ, veloxgql.ErrBadCursor, veloxgql.ErrWrongIDType)
 	}
 	if len(c.Terms) != len(order) {
-		return fmt.Errorf("veloxgql: %s cursor: %w: taken under another order", typ, veloxgql.ErrBadCursor)
+		return InputErrorf("%s cursor: %w: taken under another order", typ, veloxgql.ErrBadCursor)
 	}
 	for i, t := range c.Terms {
 		if t.Field != order[i].Field || t.Direction != order[i].Direction {
-			return fmt.Errorf("veloxgql: %s cursor: %w: taken under another order", typ, veloxgql.ErrBadCursor)
+			return InputErrorf("%s cursor: %w: taken under another order", typ, veloxgql.ErrBadCursor)
 		}
 	}
 	return nil
@@ -49,10 +49,10 @@ func cursorValue[T any](v any) (T, error) {
 	switch err := shared.SetValue(basePtr(&t), v); {
 	case errors.Is(err, shared.ErrUnsupported):
 		var zero T
-		return zero, fmt.Errorf("veloxgql: CursorValue: %s is not a supported type", shared.TypeName[T]())
+		return zero, fmt.Errorf("veloxgql: a cursor value of the Go type %s, which is not supported", shared.TypeName[T]())
 	case err != nil:
 		var zero T
-		return zero, fmt.Errorf("veloxgql: %w: a value is not a %s", veloxgql.ErrBadCursor, shared.TypeName[T]())
+		return zero, InputErrorf("%w: a value is not a %s", veloxgql.ErrBadCursor, shared.TypeName[T]())
 	}
 	return t, nil
 }

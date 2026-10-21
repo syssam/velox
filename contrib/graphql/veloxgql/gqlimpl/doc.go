@@ -1,7 +1,8 @@
 // Package gqlimpl is for generated code. It holds what the Go that
 // velox-graphql writes calls: the where filter and its helpers, the
-// conversions between a where input's Go types and a column's, and the
-// connection with its paging. An application does not call it.
+// conversions between a where input's Go types and a column's, the
+// connection with its paging, and InputErrorf, the coded error of a
+// client's input. An application does not call it.
 //
 // Compatibility is by veloxgql.GeneratedCodeIsVersion1, which every
 // generated file references, and not by semantic versioning, as protobuf's

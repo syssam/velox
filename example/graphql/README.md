@@ -63,8 +63,8 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' \
    `COUNT`, and no page query).
 6. `main.go`: gqlgen's server with `veloxgql.NewExtension(db)` first, which
    puts the DB and the limits in each operation's context (and runs a
-   mutation in one transaction), a limit on the cost of a request, and a middleware that puts
-   the tenant in the context.
+   mutation in one transaction), `veloxgql.ErrorPresenter`, a limit on the
+   cost of a request, and a middleware that puts the tenant in the context.
 
 ### The tenant comes from a header only in this demo
 
@@ -73,6 +73,25 @@ that you can try tenants with `curl`. That is for this demo only: a client
 that chooses its own tenant can read every tenant's rows. A real server
 derives the tenant from what authenticates the request (a verified session
 or token), and ignores any header the client sets for it.
+
+### What a client sees of an error
+
+The server sets `srv.SetErrorPresenter(veloxgql.ErrorPresenter(nil))`.
+gqlgen's default presenter shows the client every error's text, and velox's
+and the driver's name entities, tables, constraints and columns: without a
+tenant, a client would read `velox: gen.Post: no tenant in the context`.
+`ErrorPresenter` shows only what is safe, with a code in
+`extensions.code`:
+
+| The error | `extensions.code` | `message` |
+|---|---|---|
+| a bad ID, cursor, paging argument, filter or scalar | `BAD_USER_INPUT` | what was expected, as `ID: malformed ID: not canonical base64url without padding` |
+| no tenant (`velox.ErrNoTenant`) | `UNAUTHENTICATED` | `unauthenticated` |
+| a policy's denial | `FORBIDDEN` | `forbidden` |
+| a validator's refusal, a violated constraint | `BAD_USER_INPUT` | `invalid value: …`, `unique constraint violated` |
+| anything else: the driver's errors, a timeout | `INTERNAL_SERVER_ERROR` | `internal error`, and the error is logged with `slog` |
+
+Pass your own function to log internal errors elsewhere.
 
 ### The cost of a request
 
@@ -95,13 +114,13 @@ your schema and clients.
 | Request | Result |
 |---|---|
 | `node(id:)`, `nodes(ids:)` | one query per type; `null` for an ID with no row, or a row of another tenant |
-| an ID of another type (a `Post` ID in `authorID`) | an error naming the expected type, and no query |
+| an ID of another type (a `Post` ID in `authorID`) | a `BAD_USER_INPUT` error naming the expected type, and no query |
 | `first`/`after`, `last`/`before` | keyset pages, `n+1` rows read for `hasNextPage`/`hasPreviousPage` |
 | `orderBy`, `where` (`and`/`or`/`not`, `hasPostsWith`) | `ORDER BY … "id"`, `WHERE …`, `EXISTS (…)` |
 | nested edges, `Post.tags` many-to-many | one query per parent (batching comes with GraphQL plan 4) |
 | a request over `complexityLimit` fields | an error naming the cost, and no statement |
 | an `orderBy` list of more than `MaxOrderTerms` terms | an error before any term is built, and no statement |
-| `Post` with tenant 1, 2 or none | only that organization's posts, through `node`, connections, edges and `where`; `velox.ErrNoTenant` without one |
+| `Post` with tenant 1, 2 or none | only that organization's posts, through `node`, connections, edges and `where`; `unauthenticated` without one |
 
 `main_test.go` sends each over HTTP and checks the JSON response and the
 statements sent exactly.

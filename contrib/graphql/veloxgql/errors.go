@@ -7,6 +7,11 @@ import "errors"
 // a bare phrase; test for them with errors.Is. None of them echoes the key of
 // an ID: the client sent it, and the message names only what the server
 // wanted.
+//
+// Each but ErrNoDB is an error in the client's input, and is returned in an
+// error with the code CodeBadUserInput, which ErrorPresenter shows the
+// client. ErrNoDB is a programming error, which has no code: ErrorPresenter
+// logs it and shows "internal error".
 var (
 	// ErrBadID: an ID that is not base64url without padding of
 	// "<Type>:<key>", or whose key is not the canonical text of a key of the

@@ -375,7 +375,7 @@ func (r *renderer) writeEnum(f *file, t *sdl.Type, en sdl.Enum) error {
 	if err := r.declare(typ+".MarshalGQL", "schema "+t.Entity.Name+", field "+fd.Name); err != nil {
 		return err
 	}
-	json, errs, io := f.use("encoding/json", "json"), f.use("errors", "errors"), f.use("io", "io")
+	json, io := f.use("encoding/json", "json"), f.use("io", "io")
 	if en.Name == "" {
 		// A String: graphql.Skip(SkipEnumField) shows the stored values.
 		f.doc("", fmt.Sprintf("MarshalGQL writes e as a GraphQL String, its stored value: the field %s of %s is a String, as graphql.Skip(graphql.SkipEnumField) asks.", fd.Name, t.Entity.Name))
@@ -392,7 +392,7 @@ func (r *renderer) writeEnum(f *file, t *sdl.Type, en sdl.Enum) error {
 		f.p("\t\t*e = %s(s)", typ)
 		f.p("\t\treturn nil")
 		f.p("\t}")
-		f.p("\treturn %s.New(%q)", errs, typ+" must be "+orList(fd.EnumValues))
+		f.p("\treturn %s.InputErrorf(%q)", f.gqlimpl(), strings.ReplaceAll(typ+" must be "+orList(fd.EnumValues), "%", "%%"))
 		f.p("}")
 		f.p("")
 		return nil
@@ -421,7 +421,7 @@ func (r *renderer) writeEnum(f *file, t *sdl.Type, en sdl.Enum) error {
 		f.p("\t\t*e = %q", v)
 	}
 	f.p("\tdefault:")
-	f.p("\t\treturn %s.New(%q)", errs, typ+" must be "+orList(en.Values))
+	f.p("\t\treturn %s.InputErrorf(%q)", f.gqlimpl(), strings.ReplaceAll(typ+" must be "+orList(en.Values), "%", "%%"))
 	f.p("\t}")
 	f.p("\treturn nil")
 	f.p("}")
@@ -488,7 +488,7 @@ func (r *renderer) writeOrder(f *file, t *sdl.Type) error {
 	f.p("func (o *%sOrderField) UnmarshalGQL(v any) error {", n)
 	f.p("\ts, _ := v.(string)")
 	f.p("\tif !%sOrderField(s).IsValid() {", n)
-	f.p("\t\treturn %s.New(%q)", f.use("errors", "errors"), n+"OrderField must be "+orList(values))
+	f.p("\t\treturn %s.InputErrorf(%q)", f.gqlimpl(), strings.ReplaceAll(n+"OrderField must be "+orList(values), "%", "%%"))
 	f.p("\t}")
 	f.p("\t*o = %sOrderField(s)", n)
 	f.p("\treturn nil")
@@ -614,7 +614,7 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 		nodes = append(nodes, nd)
 	}
 	noType := func(fn, indent string) {
-		f.p("%sreturn nil, %s.Errorf(\"veloxgql: %s: %%w: the ID is of no Node type\", %s.ErrWrongIDType)", indent, f.use("fmt", "fmt"), fn, vgql)
+		f.p("%sreturn nil, %s.InputErrorf(\"%s: %%w: the ID is of no Node type\", %s.ErrWrongIDType)", indent, f.gqlimpl(), fn, vgql)
 	}
 
 	if len(nodes) == 0 {
@@ -667,7 +667,7 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 	f.p("")
 	tooMany := func() {
 		f.p("\tif most := %s.LimitsFrom(ctx).MaxPage; len(ids) > most {", vgql)
-		f.p("\t\treturn nil, %s.Errorf(\"veloxgql: Nodes: %%w: %%d IDs, and the most is %%d\", %s.ErrPageTooLarge, len(ids), most)", f.use("fmt", "fmt"), vgql)
+		f.p("\t\treturn nil, %s.InputErrorf(\"Nodes: %%w: %%d IDs, and the most is %%d\", %s.ErrPageTooLarge, len(ids), most)", f.gqlimpl(), vgql)
 		f.p("\t}")
 	}
 	if len(nodes) == 0 {

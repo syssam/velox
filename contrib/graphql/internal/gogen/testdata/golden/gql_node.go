@@ -3,10 +3,10 @@ package gen
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+	"github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
 )
 
 const _ = veloxgql.GeneratedCodeIsVersion1
@@ -91,7 +91,7 @@ func Node(ctx context.Context, id string) (veloxgql.Noder, error) {
 		}
 		return x, nil
 	}
-	return nil, fmt.Errorf("veloxgql: Node: %w: the ID is of no Node type", veloxgql.ErrWrongIDType)
+	return nil, gqlimpl.InputErrorf("Node: %w: the ID is of no Node type", veloxgql.ErrWrongIDType)
 }
 
 // Nodes returns the nodes with the global IDs ids, in their order, with nil
@@ -103,7 +103,7 @@ func Node(ctx context.Context, id string) (veloxgql.Noder, error) {
 // veloxgql.LimitsFrom(ctx).
 func Nodes(ctx context.Context, ids []string) ([]veloxgql.Noder, error) {
 	if most := veloxgql.LimitsFrom(ctx).MaxPage; len(ids) > most {
-		return nil, fmt.Errorf("veloxgql: Nodes: %w: %d IDs, and the most is %d", veloxgql.ErrPageTooLarge, len(ids), most)
+		return nil, gqlimpl.InputErrorf("Nodes: %w: %d IDs, and the most is %d", veloxgql.ErrPageTooLarge, len(ids), most)
 	}
 	// The keys of each type, and the indexes in ids of their IDs.
 	var (
@@ -151,7 +151,7 @@ func Nodes(ctx context.Context, ids []string) ([]veloxgql.Noder, error) {
 			keysAccount = append(keysAccount, k)
 			atAccount = append(atAccount, i)
 		default:
-			return nil, fmt.Errorf("veloxgql: Nodes: %w: the ID is of no Node type", veloxgql.ErrWrongIDType)
+			return nil, gqlimpl.InputErrorf("Nodes: %w: the ID is of no Node type", veloxgql.ErrWrongIDType)
 		}
 	}
 	out := make([]veloxgql.Noder, len(ids))

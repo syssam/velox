@@ -1,0 +1,284 @@
+package veloxgql_test
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+	"sync"
+	"testing"
+
+	"github.com/99designs/gqlgen/graphql"
+	"github.com/vektah/gqlparser/v2/ast"
+	"github.com/vektah/gqlparser/v2/gqlerror"
+
+	"github.com/syssam/velox2"
+	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+	"github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
+)
+
+// codeOf is the code err carries for ErrorPresenter, "" for none.
+func codeOf(err error) string {
+	var c interface{ Extensions() map[string]any }
+	if !errors.As(err, &c) {
+		return ""
+	}
+	s, _ := c.Extensions()["code"].(string)
+	return s
+}
+
+// personName is a where input of person with a name list, and and not, for
+// the filter errors.
+type personName struct {
+	Not    *personName
+	And    []*personName
+	NameIn []string
+}
+
+func (w *personName) Pred(ctx context.Context) (velox.Pred[person], error) {
+	f := gqlimpl.NewFilter[person](ctx, "PersonWhereInput")
+	if w == nil {
+		return f.Pred()
+	}
+	gqlimpl.Not(f, "not", w.Not)
+	gqlimpl.And(f, "and", w.And)
+	gqlimpl.List(f, "nameIn", w.NameIn, people.Name.In)
+	return f.Pred()
+}
+
+// leaky is a where input whose nested input fails with a coded error that
+// an uncoded error wraps, as an application's Pred might.
+type leaky struct {
+	Not  *leaky
+	Leak bool
+}
+
+func (w *leaky) Pred(ctx context.Context) (velox.Pred[person], error) {
+	if w != nil && w.Leak {
+		return velox.Pred[person]{}, fmt.Errorf("sqlite: secret: %w", gqlimpl.InputErrorf("bad name"))
+	}
+	f := gqlimpl.NewFilter[person](ctx, "LeakyWhereInput")
+	if w != nil {
+		gqlimpl.Not(f, "not", w.Not)
+	}
+	return f.Pred()
+}
+
+// TestErrorsAreCoded: every error veloxgql and gqlimpl return for a client's
+// input is coded BAD_USER_INPUT, and errors.Is still finds its sentinel.
+func TestErrorsAreCoded(t *testing.T) {
+	db, _ := handlerDB(t)
+	ctx := context.Background()
+	key := []gqlimpl.OrderTerm[person]{gqlimpl.Term("id", veloxgql.OrderDirectionAsc, people.ID.Asc(), people.ID.Desc(),
+		func(x *person) int64 { return x.ID }, func(x *person, v int64) { x.ID = v })}
+	conn := func(args gqlimpl.Args) error {
+		_, err := gqlimpl.NewConnection(ctx, db.Query[person](), "Person", args, nil, key)
+		return err
+	}
+	pred := func(w *personName) error {
+		_, err := w.Pred(ctx)
+		return err
+	}
+	deep := &personName{}
+	for range veloxgql.DefaultLimits().MaxFilterDepth + 1 {
+		deep = &personName{Not: deep}
+	}
+	wide := &personName{NameIn: make([]string, veloxgql.DefaultLimits().MaxFilterWidth+1)}
+	large := &personName{}
+	for range 30 {
+		large.And = append(large.And, &personName{NameIn: make([]string, 40)})
+	}
+	one, two := 1, 2
+	over := veloxgql.DefaultLimits().MaxPage + 1
+	badKey := veloxgql.Cursor{Type: "Person", Key: "abc"}
+	for _, c := range []struct {
+		name string
+		err  error
+		is   error
+	}{
+		{"DecodeID malformed", func() error { _, err := veloxgql.DecodeID[int64]("!", "Person"); return err }(), veloxgql.ErrBadID},
+		{"DecodeID of another type", func() error {
+			_, err := veloxgql.DecodeID[int64](veloxgql.EncodeID("Post", 1), "Person")
+			return err
+		}(), veloxgql.ErrWrongIDType},
+		{"IDType", func() error { _, err := veloxgql.IDType("!"); return err }(), veloxgql.ErrBadID},
+		{"DecodeCursor", func() error { _, err := veloxgql.DecodeCursor("!"); return err }(), veloxgql.ErrBadCursor},
+		{"Cursor.UnmarshalGQL", new(veloxgql.Cursor).UnmarshalGQL(1), veloxgql.ErrBadCursor},
+		{"cursor of another type", conn(gqlimpl.Args{After: &veloxgql.Cursor{Type: "Post", Key: int64(1)}}), veloxgql.ErrWrongIDType},
+		{"cursor value", conn(gqlimpl.Args{After: &badKey}), veloxgql.ErrBadCursor},
+		{"over MaxPage", conn(gqlimpl.Args{First: &over}), veloxgql.ErrPageTooLarge},
+		{"first with last", conn(gqlimpl.Args{First: &one, Last: &two}), veloxgql.ErrBadPagination},
+		{"filter too deep", pred(deep), veloxgql.ErrFilterTooDeep},
+		{"filter too wide", pred(wide), veloxgql.ErrFilterTooWide},
+		{"filter too large", pred(large), veloxgql.ErrFilterTooLarge},
+		{"UnmarshalUUID", func() error { _, err := veloxgql.UnmarshalUUID("x"); return err }(), nil},
+		{"UnmarshalTime", func() error { _, err := veloxgql.UnmarshalTime(1); return err }(), nil},
+		{"UnmarshalUint", func() error { _, err := veloxgql.UnmarshalUint64("-1"); return err }(), nil},
+		{"UnmarshalFloat32", func() error { _, err := veloxgql.UnmarshalFloat32("x"); return err }(), nil},
+		{"Bytes", new(veloxgql.Bytes).UnmarshalGQL(1), nil},
+		{"JSON", new(veloxgql.JSON).UnmarshalGQL(func() {}), nil},
+		{"OrderDirection", new(veloxgql.OrderDirection).UnmarshalGQL("UP"), nil},
+		{"InputErrorf", gqlimpl.InputErrorf("X must be %s: %w", "Y", veloxgql.ErrBadID), veloxgql.ErrBadID},
+	} {
+		switch {
+		case c.err == nil:
+			t.Errorf("%s: no error", c.name)
+		case codeOf(c.err) != veloxgql.CodeBadUserInput:
+			t.Errorf("%s: code %q, want BAD_USER_INPUT: %v", c.name, codeOf(c.err), c.err)
+		case c.is != nil && !errors.Is(c.err, c.is):
+			t.Errorf("%s: %v is not %v", c.name, c.err, c.is)
+		case !strings.HasPrefix(c.err.Error(), "veloxgql: ") || strings.Count(c.err.Error(), "veloxgql: ") != 1:
+			t.Errorf("%s: the text %q does not start veloxgql: once", c.name, c.err)
+		}
+	}
+	if got := gqlimpl.InputErrorf("X must be %s: %w", "Y", veloxgql.ErrBadID).Error(); got != "veloxgql: X must be Y: malformed ID" {
+		t.Errorf("InputErrorf's text is %q", got)
+	}
+	if err := veloxgql.ErrNoDB; codeOf(err) != "" {
+		t.Errorf("ErrNoDB has the code %q", codeOf(err))
+	}
+	if _, err := veloxgql.DBFrom(ctx); codeOf(err) != "" {
+		t.Errorf("DBFrom's error has the code %q", codeOf(err))
+	}
+}
+
+// presented is the JSON of an error the presenter made.
+type presented struct {
+	Message    string         `json:"message"`
+	Path       []any          `json:"path"`
+	Extensions map[string]any `json:"extensions"`
+}
+
+// logged records what an ErrorPresenter logs.
+type logged struct {
+	mu   sync.Mutex
+	errs []error
+}
+
+func (l *logged) log(_ context.Context, err error) {
+	l.mu.Lock()
+	l.errs = append(l.errs, err)
+	l.mu.Unlock()
+}
+
+func (l *logged) take() []error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	errs := l.errs
+	l.errs = nil
+	return errs
+}
+
+// TestErrorPresenter: a client sees a coded error's message and code, a
+// core error's fixed message, and "internal error" for everything else,
+// which is logged; never the text of a driver, an entity or a constraint.
+func TestErrorPresenter(t *testing.T) {
+	driverErr := errors.New(`sqlite: no such table: posts (users_email_key, tenant 7, /srv/app/db.go)`)
+	_, codedBadID := veloxgql.DecodeID[int64]("!", "User")
+	path := ast.Path{ast.PathName("posts"), ast.PathIndex(0), ast.PathName("author")}
+	fieldCtx := graphql.WithFieldContext(context.Background(), &graphql.FieldContext{
+		Field: graphql.CollectedField{Field: &ast.Field{Alias: "node"}},
+	})
+	app := &gqlerror.Error{Message: "app says no", Path: path, Extensions: map[string]any{"code": "X"}}
+	secret := []string{"sqlite", "posts (", "users_email_key", "tenant 7", "/srv/app", "gen.Post", "gen.User", "Email", "velox: ", "veloxgql: "}
+	for _, c := range []struct {
+		name   string
+		err    error
+		code   string
+		msg    string
+		path   string // the path's JSON
+		logged bool
+	}{
+		{"wrapped ErrBadID", fmt.Errorf("resolver: %w", codedBadID), "BAD_USER_INPUT", "User ID: malformed ID: not canonical base64url without padding", `["node"]`, false},
+		{"no tenant", fmt.Errorf("velox: gen.Post: %w", velox.ErrNoTenant), "UNAUTHENTICATED", "unauthenticated", `["node"]`, false},
+		{"denied", fmt.Errorf("velox: gen.Post: %w", velox.ErrDenied), "FORBIDDEN", "forbidden", `["node"]`, false},
+		{"policy", &velox.PolicyError{Entity: "gen.Post", Op: velox.OpSelect, Err: errors.New("tenant 7 may not")}, "FORBIDDEN", "forbidden", `["node"]`, false},
+		{"validation", &velox.ValidationError{Entity: "gen.User", Field: "Email", Err: errors.New("must hold an @")}, "BAD_USER_INPUT", "invalid value: must hold an @", `["node"]`, false},
+		{"constraint", &velox.ConstraintError{Entity: "gen.User", Kind: velox.ConstraintUnique, Constraint: "users_email_key", Err: driverErr}, "BAD_USER_INPUT", "unique constraint violated", `["node"]`, false},
+		{"driver", driverErr, "INTERNAL_SERVER_ERROR", "internal error", `["node"]`, true},
+		{"no DB", fmt.Errorf("veloxgql: %w", veloxgql.ErrNoDB), "INTERNAL_SERVER_ERROR", "internal error", `["node"]`, true},
+		{"too many rows", fmt.Errorf("veloxgql: Post.likes: %w", velox.ErrTooManyRows), "INTERNAL_SERVER_ERROR", "internal error", `["node"]`, true},
+		{"gqlerror over a driver error", &gqlerror.Error{Message: driverErr.Error(), Path: path, Err: driverErr}, "INTERNAL_SERVER_ERROR", "internal error", `["posts",0,"author"]`, true},
+		{"gqlerror over a coded error", gqlerror.WrapPath(path, codedBadID), "BAD_USER_INPUT", "User ID: malformed ID: not canonical base64url without padding", `["posts",0,"author"]`, false},
+		{"join", errors.Join(codedBadID, driverErr), "BAD_USER_INPUT", "User ID: malformed ID: not canonical base64url without padding", `["node"]`, false},
+		{"join, driver first", errors.Join(driverErr, codedBadID), "BAD_USER_INPUT", "User ID: malformed ID: not canonical base64url without padding", `["node"]`, false},
+	} {
+		l := &logged{}
+		got := veloxgql.ErrorPresenter(l.log)(fieldCtx, c.err)
+		b, err := json.Marshal(got)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var p presented
+		if err := json.Unmarshal(b, &p); err != nil {
+			t.Fatal(err)
+		}
+		pathJSON, _ := json.Marshal(p.Path)
+		if p.Message != c.msg || p.Extensions["code"] != c.code || string(pathJSON) != c.path || len(p.Extensions) != 1 {
+			t.Errorf("%s: got %s, want the message %q, the code %s and the path %s", c.name, b, c.msg, c.code, c.path)
+		}
+		for _, s := range secret {
+			if strings.Contains(string(b), s) {
+				t.Errorf("%s: the client sees %q: %s", c.name, s, b)
+			}
+		}
+		errs := l.take()
+		switch {
+		case c.logged && (len(errs) != 1 || !errors.Is(errs[0], c.err) && !errors.Is(c.err, errs[0])):
+			t.Errorf("%s: logged %v, want the error once", c.name, errs)
+		case !c.logged && len(errs) != 0:
+			t.Errorf("%s: logged %v, want nothing", c.name, errs)
+		}
+	}
+
+	l := &logged{}
+	present := veloxgql.ErrorPresenter(l.log)
+	if got := present(fieldCtx, nil); got != nil {
+		t.Errorf("nil: got %v", got)
+	}
+	if got := present(fieldCtx, app); got != app || got.Message != "app says no" || got.Extensions["code"] != "X" || len(got.Path) != 3 {
+		t.Errorf("an application's gqlerror: got %#v, want it unchanged", got)
+	}
+	if got := present(fieldCtx, fmt.Errorf("wrapped: %w", app)); got != app {
+		t.Errorf("a wrapped application gqlerror: got %#v, want it unchanged", got)
+	}
+	if errs := l.take(); len(errs) != 0 {
+		t.Errorf("logged %v, want nothing", errs)
+	}
+	// The input error presented keeps its path through the filter's fields.
+	_, err := (&personName{Not: &personName{NameIn: make([]string, veloxgql.DefaultLimits().MaxFilterWidth+1)}}).Pred(context.Background())
+	if got := present(fieldCtx, err); got.Message != "PersonWhereInput.not: PersonWhereInput.nameIn: filter list is too long: it has 101 entries, and the most is 100" {
+		t.Errorf("a filter's error: got %q", got.Message)
+	}
+
+	// The path of a filter's fields is not shown over an uncoded error, whose
+	// text is not known to be safe: the coded error's own text is.
+	_, err = (&leaky{Not: &leaky{Leak: true}}).Pred(context.Background())
+	if got := present(fieldCtx, err); got.Message != "bad name" || got.Extensions["code"] != "BAD_USER_INPUT" {
+		t.Errorf("a filter's error over an uncoded one: got %q %v", got.Message, got.Extensions)
+	}
+
+	// A nil log logs with slog, and still presents.
+	if got := veloxgql.ErrorPresenter(nil)(fieldCtx, driverErr); got.Message != "internal error" {
+		t.Errorf("a nil log: got %q", got.Message)
+	}
+}
+
+// TestCommitErrorIsInternal: the commit's error the extension adds goes
+// through the server's presenter, which logs it and shows "internal error".
+func TestCommitErrorIsInternal(t *testing.T) {
+	db, _ := handlerDB(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	srv := handlerServer(t, db, &cancel)
+	l := &logged{}
+	srv.SetErrorPresenter(veloxgql.ErrorPresenter(l.log))
+	got := post(t, ctx, srv, `mutation { cancel(id: 1) }`)
+	if want := `{"errors":[{"message":"internal error","extensions":{"code":"INTERNAL_SERVER_ERROR"}}],"data":null}`; got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
+	if errs := l.take(); len(errs) != 1 || !errors.Is(errs[0], context.Canceled) {
+		t.Errorf("logged %v, want the commit's error", errs)
+	}
+}

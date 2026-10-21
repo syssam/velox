@@ -2,12 +2,11 @@ package gqlimpl
 
 import (
 	"context"
-	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
 )
 
 // Filter is a where input of E's being turned into a condition: the
@@ -113,29 +112,17 @@ type stateKey struct{}
 func charge[E any](f *Filter[E], field string, n int) (ok bool) {
 	f.budget.left -= n
 	if f.budget.left < 0 {
-		f.refuse(field, fmt.Errorf("%w: the where argument has more than %d inputs, predicates and list values", veloxgql.ErrFilterTooLarge, f.budget.limits.MaxFilterNodes))
+		f.refuse(field, InputErrorf("%w: the where argument has more than %d inputs, predicates and list values", veloxgql.ErrFilterTooLarge, f.budget.limits.MaxFilterNodes))
 		return false
 	}
 	return true
 }
 
-// fieldError is an error of the field at of a where input, at being
-// "<Input>.<field>", or "<Input>" for the input itself: its text is
-// "veloxgql: <at>: <err>", err's own "veloxgql: " left out, so that the
-// error of an input nested in a field names the path to it.
-type fieldError struct {
-	at  string
-	err error
-}
-
-func (e *fieldError) Error() string {
-	return "veloxgql: " + e.at + ": " + strings.TrimPrefix(e.err.Error(), "veloxgql: ")
-}
-
-func (e *fieldError) Unwrap() error { return e.err }
-
 // refuse records err, an error of field of the filter's input ("" for the
-// input itself), as the filter's error, unless it has one already.
+// input itself), as the filter's error, unless it has one already. The
+// error's text is "veloxgql: <Input>.<field>: <err>", err's own "veloxgql: "
+// left out, so that the error of an input nested in a field names the path
+// to it, and it keeps err's code.
 func (f *Filter[E]) refuse[_ velox.Lazy[E]](field string, err error) {
 	if f.err != nil {
 		return
@@ -144,7 +131,7 @@ func (f *Filter[E]) refuse[_ velox.Lazy[E]](field string, err error) {
 	if field != "" {
 		at += "." + field
 	}
-	f.err = &fieldError{at: at, err: err}
+	f.err = shared.Within(at, err)
 }
 
 // add adds p to the filter's conditions, a predicate of field, which counts
@@ -159,7 +146,7 @@ func add[E any](f *Filter[E], field string, n int, p velox.Pred[E]) {
 // most, the MaxFilterDepth: deeper fails with ErrFilterTooDeep.
 func checkDepth(depth, most int) error {
 	if depth > most {
-		return fmt.Errorf("%w: it is nested %d deep, and the most is %d", veloxgql.ErrFilterTooDeep, depth, most)
+		return InputErrorf("%w: it is nested %d deep, and the most is %d", veloxgql.ErrFilterTooDeep, depth, most)
 	}
 	return nil
 }
@@ -169,7 +156,7 @@ func checkDepth(depth, most int) error {
 // ErrFilterTooWide.
 func checkWidth(n, most int) error {
 	if n > most {
-		return fmt.Errorf("%w: it has %d entries, and the most is %d", veloxgql.ErrFilterTooWide, n, most)
+		return InputErrorf("%w: it has %d entries, and the most is %d", veloxgql.ErrFilterTooWide, n, most)
 	}
 	return nil
 }

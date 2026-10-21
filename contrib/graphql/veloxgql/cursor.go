@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"strconv"
 
@@ -158,7 +157,7 @@ func decodeBase64(s string) ([]byte, bool) {
 }
 
 func badCursor(why string) error {
-	return fmt.Errorf("veloxgql: %w: %s", ErrBadCursor, why)
+	return shared.InputErrorf("%w: %s", ErrBadCursor, why)
 }
 
 // MarshalGQL writes c as a JSON string, EncodeCursor's text.
@@ -219,7 +218,7 @@ func (d OrderDirection) MarshalGQL(w io.Writer) {
 func (d *OrderDirection) UnmarshalGQL(v any) error {
 	s, ok := v.(string)
 	if !ok || !OrderDirection(s).IsValid() {
-		return errors.New("veloxgql: OrderDirection must be ASC or DESC")
+		return shared.InputErrorf("OrderDirection must be ASC or DESC")
 	}
 	*d = OrderDirection(s)
 	return nil

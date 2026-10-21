@@ -58,7 +58,7 @@ func (e *PostStatus) UnmarshalGQL(v any) error {
 	case "LIVE":
 		*e = "published"
 	default:
-		return errors.New("PostStatus must be DRAFT, IN_REVIEW or LIVE")
+		return gqlimpl.InputErrorf("PostStatus must be DRAFT, IN_REVIEW or LIVE")
 	}
 	return nil
 }
@@ -173,7 +173,7 @@ func postConnectionGQL(ctx context.Context, q velox.Query[Post], after *veloxgql
 	}
 	var order []gqlimpl.OrderTerm[Post]
 	if most := veloxgql.LimitsFrom(ctx).MaxOrderTerms; len(orderBy) > most {
-		return nil, fmt.Errorf("veloxgql: Post connection: %w: orderBy has %d terms, and the most is %d", veloxgql.ErrBadPagination, len(orderBy), most)
+		return nil, gqlimpl.InputErrorf("Post connection: %w: orderBy has %d terms, and the most is %d", veloxgql.ErrBadPagination, len(orderBy), most)
 	}
 	for _, o := range orderBy {
 		term, err := postTermGQL(o)
@@ -211,7 +211,7 @@ func postTermGQL(o *PostOrder) (gqlimpl.OrderTerm[Post], error) {
 			func(x *Post) int { return x.Views },
 			func(x *Post, v int) { x.Views = v }), nil
 	}
-	return gqlimpl.OrderTerm[Post]{}, fmt.Errorf("veloxgql: PostOrder: %q is not a value of PostOrderField", o.Field)
+	return gqlimpl.OrderTerm[Post]{}, gqlimpl.InputErrorf("PostOrder: %q is not a value of PostOrderField", o.Field)
 }
 
 // PostOrder is the GraphQL input PostOrder, an order of connections to Post.
@@ -256,7 +256,7 @@ func (o PostOrderField) MarshalGQL(w io.Writer) {
 func (o *PostOrderField) UnmarshalGQL(v any) error {
 	s, _ := v.(string)
 	if !PostOrderField(s).IsValid() {
-		return errors.New("PostOrderField must be TITLE or VIEWS")
+		return gqlimpl.InputErrorf("PostOrderField must be TITLE or VIEWS")
 	}
 	*o = PostOrderField(s)
 	return nil

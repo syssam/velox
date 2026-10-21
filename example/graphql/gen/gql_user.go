@@ -5,8 +5,6 @@ package gen
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"io"
 	"time"
 
@@ -49,7 +47,7 @@ func (e *UserRole) UnmarshalGQL(v any) error {
 	case "MEMBER":
 		*e = "member"
 	default:
-		return errors.New("UserRole must be ADMIN or MEMBER")
+		return gqlimpl.InputErrorf("UserRole must be ADMIN or MEMBER")
 	}
 	return nil
 }
@@ -178,7 +176,7 @@ func userTermGQL(o *UserOrder) (gqlimpl.OrderTerm[User], error) {
 			func(x *User) time.Time { return x.JoinedAt },
 			func(x *User, v time.Time) { x.JoinedAt = v }), nil
 	}
-	return gqlimpl.OrderTerm[User]{}, fmt.Errorf("veloxgql: UserOrder: %q is not a value of UserOrderField", o.Field)
+	return gqlimpl.OrderTerm[User]{}, gqlimpl.InputErrorf("UserOrder: %q is not a value of UserOrderField", o.Field)
 }
 
 // UserOrder is the GraphQL input UserOrder, an order of connections to User.
@@ -223,7 +221,7 @@ func (o UserOrderField) MarshalGQL(w io.Writer) {
 func (o *UserOrderField) UnmarshalGQL(v any) error {
 	s, _ := v.(string)
 	if !UserOrderField(s).IsValid() {
-		return errors.New("UserOrderField must be NAME or JOINED_AT")
+		return gqlimpl.InputErrorf("UserOrderField must be NAME or JOINED_AT")
 	}
 	*o = UserOrderField(s)
 	return nil

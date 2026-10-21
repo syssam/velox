@@ -70,10 +70,14 @@ const complexityLimit = 200
 // server is the GraphQL endpoint: gqlgen's server on the generated schema,
 // with veloxgql.NewExtension first, so that every operation's context holds
 // db and the default limits, where the generated code reads them, and a
-// limit on the cost of a request.
+// limit on the cost of a request. veloxgql.ErrorPresenter shows a client
+// only what is safe, with a code: gqlgen's default presenter would show it
+// every error's text, the driver's and velox's, which name tables, entities
+// and constraints. It logs the rest with slog, and says "internal error".
 func server(db *velox.DB) http.Handler {
 	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
 	srv.Use(veloxgql.NewExtension(db))
+	srv.SetErrorPresenter(veloxgql.ErrorPresenter(nil))
 	srv.AddTransport(transport.POST{})
 	srv.Use(extension.FixedComplexityLimit(complexityLimit))
 	srv.Use(extension.Introspection{})

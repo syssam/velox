@@ -5,8 +5,6 @@ package gen
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"io"
 
 	"github.com/syssam/velox2"
@@ -148,7 +146,7 @@ func tagTermGQL(o *LabelOrder) (gqlimpl.OrderTerm[Tag], error) {
 			func(x *Tag) string { return x.Name },
 			func(x *Tag, v string) { x.Name = v }), nil
 	}
-	return gqlimpl.OrderTerm[Tag]{}, fmt.Errorf("veloxgql: LabelOrder: %q is not a value of LabelOrderField", o.Field)
+	return gqlimpl.OrderTerm[Tag]{}, gqlimpl.InputErrorf("LabelOrder: %q is not a value of LabelOrderField", o.Field)
 }
 
 // LabelOrder is the GraphQL input LabelOrder, an order of connections to Label.
@@ -191,7 +189,7 @@ func (o LabelOrderField) MarshalGQL(w io.Writer) {
 func (o *LabelOrderField) UnmarshalGQL(v any) error {
 	s, _ := v.(string)
 	if !LabelOrderField(s).IsValid() {
-		return errors.New("LabelOrderField must be NAME")
+		return gqlimpl.InputErrorf("LabelOrderField must be NAME")
 	}
 	*o = LabelOrderField(s)
 	return nil

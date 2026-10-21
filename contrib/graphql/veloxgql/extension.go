@@ -53,8 +53,9 @@ import (
 // panic carries on. A response whose transaction did not commit, rolled
 // back or failed to commit, has data null, since nothing it reports was
 // kept, and the commit's error, if any, is added to its errors through the
-// server's error presenter. WithDeadlines' Tx and MaxTx bound the whole
-// operation: its resolvers' context carries the transaction's deadline.
+// server's error presenter, which ErrorPresenter makes "internal error".
+// WithDeadlines' Tx and MaxTx bound the whole operation: its resolvers'
+// context carries the transaction's deadline.
 //
 // A subscription runs in no transaction: each of its events' statements
 // run on db.
