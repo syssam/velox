@@ -20,10 +20,12 @@
 // # The DB
 //
 // Generated code runs its queries on the DB that DBFrom reads from the
-// request's context, where WithDB puts it. Handler is the gqlgen handler
-// extension that does so for every operation, and runs a mutation operation
-// in one transaction: it commits when the response has no errors, and rolls
-// back otherwise or on a panic.
+// request's context. The Extension (NewExtension) is the gqlgen handler
+// extension that puts it there, with the limits, for every operation, and
+// runs a mutation operation in one transaction: it commits when the response
+// has no errors, and rolls back otherwise or on a panic. Extension.Context
+// puts the same in a context for generated code called outside a gqlgen
+// server, in a job or a test.
 //
 // # Cursors
 //
@@ -67,11 +69,12 @@
 //   - gqlimpl.Is adds a Boolean predicate, or its negation: IsNil, NotNil and
 //     has<Edge>.
 //
+// The limits are LimitsFrom(ctx)'s, read at the top of the where argument.
 // A nesting deeper than MaxFilterDepth fails with ErrFilterTooDeep.
 // A list of more than MaxFilterWidth entries, of inputs or of In or NotIn
-// values, fails with ErrFilterTooWide, and so does a where
-// argument over its budget of MaxFilterNodes inputs, predicates and values
-// in all. None of it runs a query, so a refused filter fails before any
+// values, fails with ErrFilterTooWide, and a where argument over its budget
+// of MaxFilterNodes inputs, predicates and values in all with
+// ErrFilterTooLarge. None of it runs a query, so a refused filter fails before any
 // statement is built. An error names the field that held its cause, through
 // the nesting: "veloxgql: OwnerWhereInput.hasEventsWith[0]:
 // EventWhereInput.ownerID: Owner ID: ID of another type".
@@ -102,11 +105,13 @@
 //
 // # Limits
 //
-// MaxPage, MaxList, MaxFilterDepth, MaxFilterWidth, MaxFilterNodes and
-// MaxOrderTerms cap what a client may ask for. They are variables an
-// application may set at start-up, before it serves a request; Handler
-// refuses a limit that is not positive. MaxList is how many rows a list edge
-// reads, and more fail with velox.ErrTooManyRows.
+// Limits caps what a client may ask for: MaxPage, MaxList, MaxFilterDepth,
+// MaxFilterWidth, MaxFilterNodes and MaxOrderTerms. An Extension has its
+// own (WithLimits; a zero field is the default), which it puts in each
+// operation's context, and generated code reads them with LimitsFrom, which
+// gives DefaultLimits() in a context without them. The Extension refuses a
+// negative limit. MaxList is how many rows a list edge reads, and more fail
+// with velox.ErrTooManyRows.
 //
 // Every one of them bounds one argument or one edge, not a whole request:
 // connections nested in connections multiply (MaxPage rows, and a query for

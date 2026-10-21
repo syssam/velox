@@ -84,10 +84,11 @@ func Node(ctx context.Context, id string) (veloxgql.Noder, error) {
 // type's nodes with one query, through the DB veloxgql.DBFrom reads from
 // ctx; the query reads at most one row for each of its IDs, whatever the
 // DB's WithMaxRows. It fails as Node does on an ID, before any query runs,
-// and with veloxgql.ErrPageTooLarge on more than veloxgql.MaxPage IDs.
+// and with veloxgql.ErrPageTooLarge on more IDs than the MaxPage of
+// veloxgql.LimitsFrom(ctx).
 func Nodes(ctx context.Context, ids []string) ([]veloxgql.Noder, error) {
-	if len(ids) > veloxgql.MaxPage {
-		return nil, fmt.Errorf("veloxgql: Nodes: %w: %d IDs, and the most is %d", veloxgql.ErrPageTooLarge, len(ids), veloxgql.MaxPage)
+	if most := veloxgql.LimitsFrom(ctx).MaxPage; len(ids) > most {
+		return nil, fmt.Errorf("veloxgql: Nodes: %w: %d IDs, and the most is %d", veloxgql.ErrPageTooLarge, len(ids), most)
 	}
 	// The keys of each type, and the indexes in ids of their IDs.
 	var (

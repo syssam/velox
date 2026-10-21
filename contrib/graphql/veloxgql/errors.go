@@ -20,18 +20,22 @@ var (
 	// type or under another order than the query's, or whose values are not
 	// of the order's types.
 	ErrBadCursor = errors.New("malformed cursor")
-	// ErrPageTooLarge: first or last over MaxPage.
+	// ErrPageTooLarge: first or last over the MaxPage of LimitsFrom(ctx).
 	ErrPageTooLarge = errors.New("page is over the maximum")
 	// ErrBadPagination: first or last below 0, both given, another
-	// combination gqlimpl.Args refuses, or an orderBy over MaxOrderTerms.
+	// combination gqlimpl.Args refuses, or an orderBy over the MaxOrderTerms
+	// of LimitsFrom(ctx).
 	ErrBadPagination = errors.New("bad pagination arguments")
-	// ErrFilterTooDeep: a where input nested deeper than MaxFilterDepth.
+	// ErrFilterTooDeep: a where input nested deeper than the MaxFilterDepth
+	// of LimitsFrom(ctx).
 	ErrFilterTooDeep = errors.New("filter is nested too deep")
 	// ErrFilterTooWide: a list of a where input (and, or, has<Edge>With, In,
-	// NotIn) with more than MaxFilterWidth entries, or a where argument over
-	// its budget of MaxFilterNodes.
+	// NotIn) with more than the MaxFilterWidth of LimitsFrom(ctx) entries.
 	ErrFilterTooWide = errors.New("filter list is too long")
-	// ErrNoDB: a resolver ran with no DB in its context, which the handler
-	// puts there.
+	// ErrFilterTooLarge: a where argument over its budget of the
+	// MaxFilterNodes of LimitsFrom(ctx) inputs, predicates and values.
+	ErrFilterTooLarge = errors.New("filter is too large")
+	// ErrNoDB: a resolver ran with no DB in its context, which the
+	// Extension puts there.
 	ErrNoDB = errors.New("no DB in the context")
 )

@@ -27,16 +27,19 @@ import (
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+	"github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
 )
 
-// handlerSDL is the schema of the handler's tests.
+// handlerSDL is the schema of the extension's tests.
 const handlerSDL = `
 type Query {
 	count: Int!
 	hasDB: Boolean!
 	pair: Pair!
+	page(first: Int): Int!
 }
 type Mutation {
+	page(first: Int): Int!
 	add(id: Int!): Int!
 	fail(id: Int!): Int
 	boom(id: Int!): Int
@@ -207,12 +210,13 @@ func handlerDB(t *testing.T, opts ...velox.Option) (*velox.DB, *txLog) {
 // errFail is the error of the fail field.
 var errFail = errors.New("fail failed")
 
-// handlerServer serves testSchema through veloxgql.Handler(db). Its
+// handlerServer serves testSchema through veloxgql.NewExtension(db). Its
 // resolvers read the DB with DBFrom: add inserts a person and returns its
 // id; fail and boom insert one and then fail with errFail or panic; cancel
 // inserts one, calls the cancel function set in *cancel, and returns its
 // id; count counts the people; hasDB reports whether the context holds db
-// itself.
+// itself; page returns the number of rows of the people connection's page
+// paged by first.
 func handlerServer(t *testing.T, db *velox.DB, cancel *context.CancelFunc) *handler.Server {
 	t.Helper()
 	return serve(db, handlerResolvers(db, cancel))
@@ -235,8 +239,30 @@ func handlerResolvers(db *velox.DB, cancel *context.CancelFunc) map[string]resol
 		}
 		return db.Query[person]().Count(ctx)
 	}
+	page := func(ctx context.Context, args map[string]any) (any, error) {
+		db, err := veloxgql.DBFrom(ctx)
+		if err != nil {
+			return nil, err
+		}
+		var first *int
+		if n, ok := args["first"].(int64); ok {
+			first = new(int(n))
+		}
+		key := []gqlimpl.OrderTerm[person]{gqlimpl.Term("id", veloxgql.OrderDirectionAsc, people.ID.Asc(), people.ID.Desc(),
+			func(x *person) int64 { return x.ID }, func(x *person, v int64) { x.ID = v })}
+		c, err := gqlimpl.NewConnection(ctx, db.Query[person](), "Person", gqlimpl.Args{First: first}, nil, key)
+		if err != nil {
+			return nil, err
+		}
+		p, err := c.Page(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return len(p.Rows), nil
+	}
 	return map[string]resolver{
 		"count": count,
+		"page":  page,
 		"hasDB": func(ctx context.Context, _ map[string]any) (any, error) {
 			got, err := veloxgql.DBFrom(ctx)
 			return got == db, err
@@ -264,13 +290,14 @@ func handlerResolvers(db *velox.DB, cancel *context.CancelFunc) map[string]resol
 	}
 }
 
-// serve serves testSchema with resolvers through veloxgql.Handler(db).
-func serve(db *velox.DB, resolvers map[string]resolver) *handler.Server {
+// serve serves testSchema with resolvers through
+// veloxgql.NewExtension(db, opts...).
+func serve(db *velox.DB, resolvers map[string]resolver, opts ...veloxgql.Option) *handler.Server {
 	srv := handler.New(testSchema(resolvers))
 	srv.AddTransport(transport.SSE{})
 	srv.AddTransport(transport.POST{})
 	srv.SetRecoverFunc(func(context.Context, any) error { return gqlerror.Errorf("internal system error") })
-	srv.Use(veloxgql.Handler(db))
+	srv.Use(veloxgql.NewExtension(db, opts...))
 	return srv
 }
 
@@ -301,7 +328,7 @@ func peopleIDs(t *testing.T, db *velox.DB, l *txLog) []int64 {
 	return out
 }
 
-func TestHandlerPutsTheDB(t *testing.T) {
+func TestExtensionPutsTheDB(t *testing.T) {
 	db, l := handlerDB(t)
 	srv := handlerServer(t, db, nil)
 	if got, want := post(t, context.Background(), srv, `{ hasDB }`), `{"data":{"hasDB":true}}`; got != want {
@@ -315,64 +342,121 @@ func TestHandlerPutsTheDB(t *testing.T) {
 		t.Errorf("mutation statements %q, want one insert in a transaction", stmts)
 	}
 
-	// Without the handler, a resolver fails with ErrNoDB.
+	// Without the extension, a resolver fails with ErrNoDB.
 	bare := handler.New(testSchema(map[string]resolver{"hasDB": func(ctx context.Context, _ map[string]any) (any, error) {
 		_, err := veloxgql.DBFrom(ctx)
 		if !errors.Is(err, veloxgql.ErrNoDB) {
-			t.Errorf("DBFrom without the handler: %v, want ErrNoDB", err)
+			t.Errorf("DBFrom without the extension: %v, want ErrNoDB", err)
 		}
 		return nil, err
 	}}))
 	bare.AddTransport(transport.POST{})
-	if got := post(t, context.Background(), bare, `{ hasDB }`); !strings.Contains(got, "veloxgql.Handler") {
-		t.Errorf("without the handler: %s, want an error naming veloxgql.Handler", got)
+	if got := post(t, context.Background(), bare, `{ hasDB }`); !strings.Contains(got, "veloxgql.NewExtension") {
+		t.Errorf("without the extension: %s, want an error naming veloxgql.NewExtension", got)
+	}
+	if name := veloxgql.NewExtension(db).ExtensionName(); name != "VeloxDB" {
+		t.Errorf("ExtensionName() = %q, want VeloxDB", name)
 	}
 }
 
-func TestHandlerNilDB(t *testing.T) {
-	defer func() {
-		if p := recover(); p == nil || !strings.Contains(fmt.Sprint(p), "nil DB") {
-			t.Errorf("Use(Handler(nil)) panicked with %v, want an error naming the nil DB", p)
-		}
-	}()
-	handler.New(testSchema(nil)).Use(veloxgql.Handler(nil))
+func TestExtensionNilDB(t *testing.T) {
+	const want = "veloxgql.NewExtension: nil DB"
+	if err := veloxgql.NewExtension(nil).Validate(nil); err == nil || err.Error() != want {
+		t.Errorf("Validate: %v, want %q", err, want)
+	}
+	for name, use := range map[string]func(){
+		"Use":     func() { handler.New(testSchema(nil)).Use(veloxgql.NewExtension(nil)) },
+		"Context": func() { veloxgql.NewExtension(nil).Context(context.Background()) },
+	} {
+		func() {
+			defer func() {
+				if p := recover(); p == nil || fmt.Sprint(p) != want {
+					t.Errorf("%s with a nil DB panicked with %v, want %q", name, p, want)
+				}
+			}()
+			use()
+		}()
+	}
 }
 
-// TestHandlerRefusesNonPositiveLimits: a limit of 0 or less would fail every
-// request it bounds, so the extension refuses it when the server takes it.
-func TestHandlerRefusesNonPositiveLimits(t *testing.T) {
+// TestExtensionRefusesNegativeLimits: a negative limit would fail every
+// request it bounds, so Validate refuses it, naming the field, and so do the
+// server's Use and Context, with the same text. A zero field is the default.
+func TestExtensionRefusesNegativeLimits(t *testing.T) {
 	db, _ := handlerDB(t)
-	if err := veloxgql.Handler(db).Validate(nil); err != nil {
+	if err := veloxgql.NewExtension(db).Validate(nil); err != nil {
 		t.Fatalf("the defaults: %v", err)
 	}
-	for _, l := range []struct {
-		name string
-		p    *int
-	}{
-		{"MaxPage", &veloxgql.MaxPage},
-		{"MaxList", &veloxgql.MaxList},
-		{"MaxFilterDepth", &veloxgql.MaxFilterDepth},
-		{"MaxFilterWidth", &veloxgql.MaxFilterWidth},
-		{"MaxFilterNodes", &veloxgql.MaxFilterNodes},
-		{"MaxOrderTerms", &veloxgql.MaxOrderTerms},
+	if err := veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{})).Validate(nil); err != nil {
+		t.Fatalf("zero limits: %v", err)
+	}
+	for name, set := range map[string]func(*veloxgql.Limits){
+		"MaxPage":        func(l *veloxgql.Limits) { l.MaxPage = -1 },
+		"MaxList":        func(l *veloxgql.Limits) { l.MaxList = -1 },
+		"MaxFilterDepth": func(l *veloxgql.Limits) { l.MaxFilterDepth = -1 },
+		"MaxFilterWidth": func(l *veloxgql.Limits) { l.MaxFilterWidth = -1 },
+		"MaxFilterNodes": func(l *veloxgql.Limits) { l.MaxFilterNodes = -1 },
+		"MaxOrderTerms":  func(l *veloxgql.Limits) { l.MaxOrderTerms = -1 },
 	} {
-		for _, bad := range []int{0, -1} {
+		var l veloxgql.Limits
+		set(&l)
+		ext := veloxgql.NewExtension(db, veloxgql.WithLimits(l))
+		want := "veloxgql.NewExtension: Limits." + name + " is -1, and a limit must be positive"
+		if err := ext.Validate(nil); err == nil || err.Error() != want {
+			t.Errorf("%s -1: Validate: %v, want %q", name, err, want)
+		}
+		for how, use := range map[string]func(){
+			"Use":     func() { handler.New(testSchema(nil)).Use(ext) },
+			"Context": func() { ext.Context(context.Background()) },
+		} {
 			func() {
-				old := *l.p
-				defer func() { *l.p = old }()
-				*l.p = bad
-				err := veloxgql.Handler(db).Validate(nil)
-				if err == nil || !strings.Contains(err.Error(), "veloxgql."+l.name+" is "+fmt.Sprint(bad)) {
-					t.Errorf("%s = %d: %v, want an error naming the limit", l.name, bad, err)
-				}
 				defer func() {
-					if p := recover(); p == nil || !strings.Contains(fmt.Sprint(p), l.name) {
-						t.Errorf("%s = %d: Use panicked with %v, want an error naming the limit", l.name, bad, p)
+					if p := recover(); p == nil || !strings.Contains(fmt.Sprint(p), want) {
+						t.Errorf("%s -1: %s panicked with %v, want %q", name, how, p, want)
 					}
 				}()
-				handler.New(testSchema(nil)).Use(veloxgql.Handler(db))
+				use()
 			}()
 		}
+	}
+}
+
+// TestTwoServersDiffer: the limits are each server's, in its operations'
+// contexts, not the process's. Two servers, MaxPage 2 and 3, serve
+// requests in parallel: first 3 fails with ErrPageTooLarge on the first and
+// passes on the second. A mutation's transaction keeps its server's limits.
+func TestTwoServersDiffer(t *testing.T) {
+	db, _ := handlerDB(t)
+	for id := int64(1); id <= 5; id++ {
+		if err := db.Insert(&person{ID: id, Name: "p", Age: 1}).Exec(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	two := serve(db, handlerResolvers(db, nil), veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2}))
+	three := serve(db, handlerResolvers(db, nil), veloxgql.WithLimits(veloxgql.Limits{MaxPage: 3}))
+	const tooLarge = `"message":"veloxgql: Person connection: page is over the maximum: first is 3, and the most is 2","path":["page"]`
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() {
+			for _, q := range []string{`{ page(first: 3) }`, `mutation { page(first: 3) }`} {
+				if got := post(t, context.Background(), two, q); !strings.Contains(got, tooLarge) {
+					t.Errorf("MaxPage 2: %s: %s, want the error %s", q, got, tooLarge)
+				}
+				if got, want := post(t, context.Background(), three, q), `{"data":{"page":3}}`; got != want {
+					t.Errorf("MaxPage 3: %s: %s, want %s", q, got, want)
+				}
+			}
+			// With no first, the page is the server's MaxPage.
+			if got, want := post(t, context.Background(), two, `{ page }`), `{"data":{"page":2}}`; got != want {
+				t.Errorf("MaxPage 2, no first: %s, want %s", got, want)
+			}
+		})
+	}
+	wg.Wait()
+	// The error is ErrPageTooLarge.
+	ctx := veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).Context(context.Background())
+	if _, err := handlerResolvers(db, nil)["page"](ctx, map[string]any{"first": int64(3)}); !errors.Is(err, veloxgql.ErrPageTooLarge) {
+		t.Errorf("first 3 under MaxPage 2: %v, want ErrPageTooLarge", err)
 	}
 }
 
@@ -395,7 +479,7 @@ func TestMutationCommits(t *testing.T) {
 
 // TestMutationGetsTheTxContext: a mutation's resolvers get the transaction's
 // context. It has the transaction's deadline, and under it a statement on the
-// DB given to Handler, not the transaction's, fails with ErrOutsideTx, before
+// DB given to NewExtension, not the transaction's, fails with ErrOutsideTx, before
 // it waits for the connection the transaction holds.
 func TestMutationGetsTheTxContext(t *testing.T) {
 	db, _ := handlerDB(t, velox.WithDeadlines(velox.Deadlines{Tx: 30 * time.Second}))
@@ -415,14 +499,14 @@ func TestMutationGetsTheTxContext(t *testing.T) {
 		t.Error("the resolver's context has no deadline")
 	}
 	if !errors.Is(outside, velox.ErrOutsideTx) {
-		t.Errorf("a statement on the handler's DB: %v, want ErrOutsideTx", outside)
+		t.Errorf("a statement on the extension's DB: %v, want ErrOutsideTx", outside)
 	}
 }
 
 // TestMutationWithoutTx: a mutation's resolver holds only the transaction's
-// context. Under velox.WithoutTx it, its statement on the DB given to Handler
-// runs outside the transaction: the audit row survives the mutation's
-// rollback. Once the mutation has ended, the context the resolver kept marks
+// context. Under velox.WithoutTx it, its statement on the DB given to
+// NewExtension runs outside the transaction: the audit row survives the
+// mutation's rollback. Once the mutation has ended, the context the resolver kept marks
 // nothing, and a statement on the DB runs under it.
 func TestMutationWithoutTx(t *testing.T) {
 	// A file, so that a second connection sees the same database.
@@ -526,7 +610,7 @@ func TestMutationCommitFails(t *testing.T) {
 }
 
 // TestMutationPanicRollsBack: a panic gqlgen does not recover, here in a
-// response interceptor inside the handler's, rolls the transaction back and
+// response interceptor inside the extension's, rolls the transaction back and
 // carries on to the server, which reports it.
 func TestMutationPanicRollsBack(t *testing.T) {
 	db, l := handlerDB(t)
@@ -595,8 +679,8 @@ func TestStreamedOperations(t *testing.T) {
 
 // TestMutationResolversRunOneAtATime: below a mutation's root, gqlgen
 // resolves an object's fields concurrently, but the transaction's DB is not
-// safe for concurrent use, so the handler runs a mutation's resolvers one at
-// a time. Pair.a and Pair.b each wait for the other to be in flight, and then
+// safe for concurrent use, so the extension runs a mutation's resolvers one
+// at a time. Pair.a and Pair.b each wait for the other to be in flight, and then
 // count the people on the DB in their context. In a query they overlap; in a
 // mutation they never do, and both run in its transaction. A query's wait
 // has a bound only to fail a test that would hang, and a long one, so that

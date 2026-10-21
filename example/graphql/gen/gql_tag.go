@@ -36,7 +36,7 @@ func (x *Tag) IDGQL() string { return veloxgql.EncodeID("Label", x.ID) }
 func (x *Tag) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
 	if after == nil && first == nil && before == nil && last == nil && orderBy == nil && where == nil {
 		if rows, ok := x.Posts.Get(); ok {
-			return &PostConnection{c: gqlimpl.LoadedConnection(rows, "Post", postKeyGQL())}, nil
+			return &PostConnection{c: gqlimpl.LoadedConnection(ctx, rows, "Post", postKeyGQL())}, nil
 		}
 	}
 	db, err := veloxgql.DBFrom(ctx)
@@ -123,7 +123,7 @@ func tagConnectionGQL(ctx context.Context, q velox.Query[Tag], after *veloxgql.C
 		}
 		order = append(order, term)
 	}
-	c, err := gqlimpl.NewConnection(q, "Label", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order, tagKeyGQL())
+	c, err := gqlimpl.NewConnection(ctx, q, "Label", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order, tagKeyGQL())
 	if err != nil {
 		return nil, err
 	}
@@ -220,11 +220,12 @@ type LabelWhereInput struct {
 // holds, and a w that sets none, or a nil w, holds for every node. depth is how
 // deeply w is nested in the where argument, 0 at the top. It fails, before any
 // query runs, on an ID of another type (veloxgql.ErrWrongIDType) or a malformed
-// one (veloxgql.ErrBadID), on a nesting deeper than veloxgql.MaxFilterDepth
-// (veloxgql.ErrFilterTooDeep), on an and, an or, a has…With, an In or a NotIn
-// of more than veloxgql.MaxFilterWidth entries, and on a where argument of more
-// than veloxgql.MaxFilterNodes inputs, predicates and values in all (both
-// veloxgql.ErrFilterTooWide).
+// one (veloxgql.ErrBadID), on a nesting deeper than the MaxFilterDepth of
+// veloxgql.LimitsFrom(ctx) (veloxgql.ErrFilterTooDeep), on an and, an or, a
+// has…With, an In or a NotIn of more than its MaxFilterWidth entries
+// (veloxgql.ErrFilterTooWide), and on a where argument of more than its
+// MaxFilterNodes inputs, predicates and values in all
+// (veloxgql.ErrFilterTooLarge).
 func (w *LabelWhereInput) Pred(ctx context.Context, depth int) (velox.Pred[Tag], error) {
 	f := gqlimpl.NewFilter[Tag](ctx, "LabelWhereInput", depth)
 	if w == nil {

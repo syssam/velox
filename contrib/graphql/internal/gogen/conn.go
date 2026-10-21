@@ -139,8 +139,8 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 		order = "order"
 		f.p("\tvar order []%s.OrderTerm[%s]", impl, e.Name)
 		if t.MultiOrder {
-			f.p("\tif len(orderBy) > %s.MaxOrderTerms {", vgql)
-			f.p("\t\treturn nil, %s.Errorf(\"veloxgql: %s connection: %%w: orderBy has %%d terms, and the most is %%d\", %s.ErrBadPagination, len(orderBy), %[3]s.MaxOrderTerms)", f.use("fmt", "fmt"), n, vgql)
+			f.p("\tif most := %s.LimitsFrom(ctx).MaxOrderTerms; len(orderBy) > most {", vgql)
+			f.p("\t\treturn nil, %s.Errorf(\"veloxgql: %s connection: %%w: orderBy has %%d terms, and the most is %%d\", %s.ErrBadPagination, len(orderBy), most)", f.use("fmt", "fmt"), n, vgql)
 			f.p("\t}")
 			f.p("\tfor _, o := range orderBy {")
 		} else {
@@ -153,7 +153,7 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 		f.p("\t\torder = append(order, term)")
 		f.p("\t}")
 	}
-	f.p("\tc, err := %s.NewConnection(q, %q, %s.Args{After: after, First: first, Before: before, Last: last}, %s, %s())", impl, n, impl, order, keyFunc(t))
+	f.p("\tc, err := %s.NewConnection(ctx, q, %q, %s.Args{After: after, First: first, Before: before, Last: last}, %s, %s())", impl, n, impl, order, keyFunc(t))
 	f.p("\tif err != nil {")
 	f.p("\t\treturn nil, err")
 	f.p("\t}")
@@ -421,7 +421,7 @@ func (r *renderer) writeEdge(f *file, t *sdl.Type, ed sdl.Edge) error {
 		f.p("\treturn v, err")
 		f.p("}")
 	case sdl.EdgeList:
-		f.doc("", fmt.Sprintf("%s is the edge %s: the %s nodes it leads to, in key order. It is x.%s when a With loaded it, and else one query, which reads at most veloxgql.MaxList rows, whatever the DB's WithMaxRows: more fail it with velox.ErrTooManyRows, in an error that names the edge.", ed.Method, pe.Name, tt.Name, pe.GoName))
+		f.doc("", fmt.Sprintf("%s is the edge %s: the %s nodes it leads to, in key order. It is x.%s when a With loaded it, and else one query, which reads at most the MaxList of veloxgql.LimitsFrom(ctx) rows, whatever the DB's WithMaxRows: more fail it with velox.ErrTooManyRows, in an error that names the edge.", ed.Method, pe.Name, tt.Name, pe.GoName))
 		f.p("func (x *%s) %s(ctx %s.Context) ([]*%s, error) {", e.Name, ed.Method, ctx, tgt.Name)
 		f.p("\trows, ok := x.%s.Get()", pe.GoName)
 		f.p("\tif !ok {")
@@ -433,7 +433,7 @@ func (r *renderer) writeEdge(f *file, t *sdl.Type, ed sdl.Edge) error {
 		for _, i := range tgt.PrimaryKey {
 			order = append(order, tgt.Handles+"."+tgt.Fields[i].GoName+".Asc()")
 		}
-		f.p("\t\tif rows, err = db.Query[%s]().Where(%s).OrderBy(%s).Unbounded().MaxRows(%s.MaxList).All(ctx); err != nil {", tgt.Name, flt.cond, strings.Join(order, ", "), vgql)
+		f.p("\t\tif rows, err = db.Query[%s]().Where(%s).OrderBy(%s).Unbounded().MaxRows(%s.LimitsFrom(ctx).MaxList).All(ctx); err != nil {", tgt.Name, flt.cond, strings.Join(order, ", "), vgql)
 		f.p("\t\t\treturn nil, %s.Errorf(\"veloxgql: %s.%s: %%w\", err)", f.use("fmt", "fmt"), t.Name, pe.Name)
 		f.p("\t\t}")
 		f.p("\t}")
@@ -449,7 +449,7 @@ func (r *renderer) writeEdge(f *file, t *sdl.Type, ed sdl.Edge) error {
 		none := strings.ReplaceAll(connArgs(tt), ", ", " == nil && ") + " == nil"
 		f.p("\tif %s {", none)
 		f.p("\t\tif rows, ok := x.%s.Get(); ok {", pe.GoName)
-		f.p("\t\t\treturn &%sConnection{c: %s.LoadedConnection(rows, %q, %s())}, nil", tt.Name, f.gqlimpl(), tt.Name, keyFunc(tt))
+		f.p("\t\t\treturn &%sConnection{c: %s.LoadedConnection(ctx, rows, %q, %s())}, nil", tt.Name, f.gqlimpl(), tt.Name, keyFunc(tt))
 		f.p("\t\t}")
 		f.p("\t}")
 		dbFrom("nil")

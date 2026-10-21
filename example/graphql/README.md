@@ -61,9 +61,9 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' \
    Every other field binds to `gen`'s methods: edges are `<Edge>GQL`
    methods on the entities, connections are lazy (`totalCount` alone runs one
    `COUNT`, and no page query).
-6. `main.go`: gqlgen's server with `veloxgql.Handler(db)` first, which puts
-   the DB in each operation's context (and runs a mutation in one
-   transaction), a limit on the cost of a request, and a middleware that puts
+6. `main.go`: gqlgen's server with `veloxgql.NewExtension(db)` first, which
+   puts the DB and the limits in each operation's context (and runs a
+   mutation in one transaction), a limit on the cost of a request, and a middleware that puts
    the tenant in the context.
 
 ### The tenant comes from a header only in this demo
@@ -76,9 +76,10 @@ or token), and ignores any header the client sets for it.
 
 ### The cost of a request
 
-Every `veloxgql` limit (`MaxPage`, `MaxList`, `MaxFilterDepth`,
+Every `veloxgql.Limits` field (`MaxPage`, `MaxList`, `MaxFilterDepth`,
 `MaxFilterWidth`, `MaxFilterNodes`, `MaxOrderTerms`) bounds one argument or
-one edge. They do not bound a request: connections nested in connections
+one edge. The server takes the defaults; `veloxgql.WithLimits` sets others,
+as `veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 50}))`. They do not bound a request: connections nested in connections
 multiply (each level reads up to `MaxPage` rows, and runs a query for each
 parent), and aliases repeat a field as often as the client writes it. So the
 server also sets gqlgen's `extension.FixedComplexityLimit(200)`. gqlgen

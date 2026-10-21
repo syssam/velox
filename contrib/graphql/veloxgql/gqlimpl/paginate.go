@@ -13,7 +13,8 @@ import (
 // Args are a connection's paging arguments, as the client gave them.
 //
 // first (with or without after) pages forward and last (with or without
-// before) backward; with neither, the page is MaxPage rows forward, or
+// before) backward; with neither, the page is the MaxPage of
+// veloxgql.LimitsFrom(ctx) rows forward, or
 // backward from before when before is given. first and last together, after
 // and before together, first with before and last with after all fail with
 // ErrBadPagination: keyset paging bounds a page on one side only.
@@ -104,18 +105,20 @@ type Connection[E any] struct {
 // NewConnection is the connection to the nodes of the GraphQL type typ that q
 // returns, paged by args, in the order order and then key, the columns of
 // the primary key (each ASC). q holds the connection's filters and no order:
-// the connection orders it. It checks the arguments and decodes the cursor,
-// and fails as paginate does, before any query runs; it runs none.
-func NewConnection[E any](q velox.Query[E], typ string, args Args, order, key []OrderTerm[E]) (*Connection[E], error) {
-	n, back, err := pageSize(args)
+// the connection orders it. The limits are veloxgql.LimitsFrom(ctx)'s. It
+// checks the arguments and decodes the cursor, and fails as paginate does,
+// before any query runs; it runs none.
+func NewConnection[E any](ctx context.Context, q velox.Query[E], typ string, args Args, order, key []OrderTerm[E]) (*Connection[E], error) {
+	lim := veloxgql.LimitsFrom(ctx)
+	n, back, err := pageSize(args, lim.MaxPage)
 	if err != nil {
 		return nil, fmt.Errorf("veloxgql: %s connection: %w", typ, err)
 	}
 	if len(key) == 0 {
 		return nil, fmt.Errorf("veloxgql: %s connection: no key to order by last", typ)
 	}
-	if len(order) > veloxgql.MaxOrderTerms {
-		return nil, fmt.Errorf("veloxgql: %s connection: %w: orderBy has %d terms, and the most is %d", typ, veloxgql.ErrBadPagination, len(order), veloxgql.MaxOrderTerms)
+	if len(order) > lim.MaxOrderTerms {
+		return nil, fmt.Errorf("veloxgql: %s connection: %w: orderBy has %d terms, and the most is %d", typ, veloxgql.ErrBadPagination, len(order), lim.MaxOrderTerms)
 	}
 	c := &Connection[E]{query: q, typ: typ, n: n, back: back, key: len(order)}
 	c.terms = make([]OrderTerm[E], 0, len(order)+len(key))
@@ -143,15 +146,16 @@ func NewConnection[E any](q velox.Query[E], typ string, args Args, order, key []
 
 // LoadedConnection is a connection over rows, the related rows a With
 // loaded, in key order (With's default) under the GraphQL type typ: its page
-// is the first MaxPage rows, its cursors are taken under the key's order,
-// and its TotalCount is the number of rows. It runs no query.
-func LoadedConnection[E any](rows []E, typ string, key []OrderTerm[E]) *Connection[E] {
+// is the first rows, the MaxPage of veloxgql.LimitsFrom(ctx), its cursors
+// are taken under the key's order, and its TotalCount is the number of rows.
+// It runs no query.
+func LoadedConnection[E any](ctx context.Context, rows []E, typ string, key []OrderTerm[E]) *Connection[E] {
 	terms := make([]OrderTerm[E], len(key))
 	for i, t := range key {
 		t.Direction = veloxgql.OrderDirectionAsc
 		terms[i] = t
 	}
-	return &Connection[E]{typ: typ, n: veloxgql.MaxPage, terms: terms, loaded: rows, isLoaded: true}
+	return &Connection[E]{typ: typ, n: veloxgql.LimitsFrom(ctx).MaxPage, terms: terms, loaded: rows, isLoaded: true}
 }
 
 // paginate runs the page query of the connection NewConnection makes, and
@@ -165,17 +169,18 @@ func LoadedConnection[E any](rows []E, typ string, key []OrderTerm[E]) *Connecti
 //     Relay lets a server say false when it cannot tell cheaply.
 //
 // The page query reads at most n+1 rows whatever the DB's WithMaxRows cap:
-// MaxPage bounds it. The query's With loads share that cap of n+1 rows, until
-// GraphQL plan 4 gives loads their own; the generated code adds none yet.
+// the MaxPage of veloxgql.LimitsFrom(ctx) bounds it. The query's With loads
+// share that cap of n+1 rows, until GraphQL plan 4 gives loads their own;
+// the generated code adds none yet.
 //
 // It fails before any query runs: with ErrBadPagination for first and last
 // together, either below 0, another combination Args refuses, or an order
-// of more than MaxOrderTerms terms; with
-// ErrPageTooLarge for either over MaxPage; and with ErrBadCursor for a cursor
-// of another type (ErrWrongIDType too), taken under another order, or whose
-// values are not of the order's types.
+// of more than MaxOrderTerms terms; with ErrPageTooLarge for either over
+// MaxPage (both the limits of veloxgql.LimitsFrom(ctx)); and with
+// ErrBadCursor for a cursor of another type (ErrWrongIDType too), taken
+// under another order, or whose values are not of the order's types.
 func paginate[E any](ctx context.Context, q velox.Query[E], typ string, args Args, order, key []OrderTerm[E]) (*Page[E], error) {
-	c, err := NewConnection(q, typ, args, order, key)
+	c, err := NewConnection(ctx, q, typ, args, order, key)
 	if err != nil {
 		return nil, err
 	}
@@ -290,8 +295,9 @@ func (c *Connection[E]) row[_ velox.Lazy[E]](cur veloxgql.Cursor) (*E, error) {
 	return x, nil
 }
 
-// pageSize is the page size args ask for, and whether they page backward.
-func pageSize(args Args) (int, bool, error) {
+// pageSize is the page size args ask for, and whether they page backward;
+// maxPage is the most, and the size when args give none.
+func pageSize(args Args, maxPage int) (int, bool, error) {
 	switch {
 	case args.First != nil && args.Last != nil:
 		return 0, false, fmt.Errorf("%w: first and last given together", veloxgql.ErrBadPagination)
@@ -309,11 +315,11 @@ func pageSize(args Args) (int, bool, error) {
 	}
 	switch {
 	case n == nil:
-		return veloxgql.MaxPage, back, nil
+		return maxPage, back, nil
 	case *n < 0:
 		return 0, false, fmt.Errorf("%w: %s is %d, below 0", veloxgql.ErrBadPagination, name, *n)
-	case *n > veloxgql.MaxPage:
-		return 0, false, fmt.Errorf("%w: %s is %d, and the most is %d", veloxgql.ErrPageTooLarge, name, *n, veloxgql.MaxPage)
+	case *n > maxPage:
+		return 0, false, fmt.Errorf("%w: %s is %d, and the most is %d", veloxgql.ErrPageTooLarge, name, *n, maxPage)
 	}
 	return *n, back, nil
 }

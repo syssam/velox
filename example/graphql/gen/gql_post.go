@@ -79,7 +79,7 @@ func (x *Post) AuthorGQL(ctx context.Context) (*User, error) {
 func (x *Post) TagsGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *LabelOrder, where *LabelWhereInput) (*LabelConnection, error) {
 	if after == nil && first == nil && before == nil && last == nil && orderBy == nil && where == nil {
 		if rows, ok := x.Tags.Get(); ok {
-			return &LabelConnection{c: gqlimpl.LoadedConnection(rows, "Label", tagKeyGQL())}, nil
+			return &LabelConnection{c: gqlimpl.LoadedConnection(ctx, rows, "Label", tagKeyGQL())}, nil
 		}
 	}
 	db, err := veloxgql.DBFrom(ctx)
@@ -159,8 +159,8 @@ func postConnectionGQL(ctx context.Context, q velox.Query[Post], after *veloxgql
 		q = q.Where(p)
 	}
 	var order []gqlimpl.OrderTerm[Post]
-	if len(orderBy) > veloxgql.MaxOrderTerms {
-		return nil, fmt.Errorf("veloxgql: Post connection: %w: orderBy has %d terms, and the most is %d", veloxgql.ErrBadPagination, len(orderBy), veloxgql.MaxOrderTerms)
+	if most := veloxgql.LimitsFrom(ctx).MaxOrderTerms; len(orderBy) > most {
+		return nil, fmt.Errorf("veloxgql: Post connection: %w: orderBy has %d terms, and the most is %d", veloxgql.ErrBadPagination, len(orderBy), most)
 	}
 	for _, o := range orderBy {
 		term, err := postTermGQL(o)
@@ -169,7 +169,7 @@ func postConnectionGQL(ctx context.Context, q velox.Query[Post], after *veloxgql
 		}
 		order = append(order, term)
 	}
-	c, err := gqlimpl.NewConnection(q, "Post", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order, postKeyGQL())
+	c, err := gqlimpl.NewConnection(ctx, q, "Post", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order, postKeyGQL())
 	if err != nil {
 		return nil, err
 	}
@@ -300,11 +300,12 @@ type PostWhereInput struct {
 // holds, and a w that sets none, or a nil w, holds for every node. depth is how
 // deeply w is nested in the where argument, 0 at the top. It fails, before any
 // query runs, on an ID of another type (veloxgql.ErrWrongIDType) or a malformed
-// one (veloxgql.ErrBadID), on a nesting deeper than veloxgql.MaxFilterDepth
-// (veloxgql.ErrFilterTooDeep), on an and, an or, a has…With, an In or a NotIn
-// of more than veloxgql.MaxFilterWidth entries, and on a where argument of more
-// than veloxgql.MaxFilterNodes inputs, predicates and values in all (both
-// veloxgql.ErrFilterTooWide).
+// one (veloxgql.ErrBadID), on a nesting deeper than the MaxFilterDepth of
+// veloxgql.LimitsFrom(ctx) (veloxgql.ErrFilterTooDeep), on an and, an or, a
+// has…With, an In or a NotIn of more than its MaxFilterWidth entries
+// (veloxgql.ErrFilterTooWide), and on a where argument of more than its
+// MaxFilterNodes inputs, predicates and values in all
+// (veloxgql.ErrFilterTooLarge).
 func (w *PostWhereInput) Pred(ctx context.Context, depth int) (velox.Pred[Post], error) {
 	f := gqlimpl.NewFilter[Post](ctx, "PostWhereInput", depth)
 	if w == nil {

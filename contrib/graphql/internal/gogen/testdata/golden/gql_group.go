@@ -48,7 +48,7 @@ func (e *GroupVisibility) UnmarshalGQL(v any) error {
 func (x *Group) UsersGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *AccountWhereInput) (*AccountConnection, error) {
 	if after == nil && first == nil && before == nil && last == nil && where == nil {
 		if rows, ok := x.Users.Get(); ok {
-			return &AccountConnection{c: gqlimpl.LoadedConnection(rows, "Account", userKeyGQL())}, nil
+			return &AccountConnection{c: gqlimpl.LoadedConnection(ctx, rows, "Account", userKeyGQL())}, nil
 		}
 	}
 	db, err := veloxgql.DBFrom(ctx)
@@ -127,7 +127,7 @@ func groupConnectionGQL(ctx context.Context, q velox.Query[Group], after *veloxg
 		}
 		order = append(order, term)
 	}
-	c, err := gqlimpl.NewConnection(q, "Group", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order, groupKeyGQL())
+	c, err := gqlimpl.NewConnection(ctx, q, "Group", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, order, groupKeyGQL())
 	if err != nil {
 		return nil, err
 	}

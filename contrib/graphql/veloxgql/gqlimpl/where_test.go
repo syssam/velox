@@ -252,11 +252,11 @@ func TestWhereDepthAndWidth(t *testing.T) {
 		if kind == "not" {
 			want = except(2, 4) // five nots
 		}
-		if got := where(t, db, nest(&personWhere{Name: strp("a")}, veloxgql.MaxFilterDepth, kind)); !slices.Equal(got, want) {
+		if got := where(t, db, nest(&personWhere{Name: strp("a")}, veloxgql.DefaultLimits().MaxFilterDepth, kind)); !slices.Equal(got, want) {
 			t.Errorf("%s at depth 5: %v, want %v", kind, got, want)
 		}
 		st.take()
-		_, err := nest(&personWhere{Name: strp("a")}, veloxgql.MaxFilterDepth+1, kind).Pred(ctx, 0)
+		_, err := nest(&personWhere{Name: strp("a")}, veloxgql.DefaultLimits().MaxFilterDepth+1, kind).Pred(ctx, 0)
 		if !errors.Is(err, veloxgql.ErrFilterTooDeep) || !strings.HasPrefix(err.Error(), "veloxgql: PersonWhereInput") {
 			t.Errorf("%s at depth 6: %v, want ErrFilterTooDeep", kind, err)
 		}
@@ -265,10 +265,10 @@ func TestWhereDepthAndWidth(t *testing.T) {
 		}
 	}
 	// Pred's depth is where the input is.
-	if _, err := (&personWhere{}).Pred(ctx, veloxgql.MaxFilterDepth); err != nil {
+	if _, err := (&personWhere{}).Pred(ctx, veloxgql.DefaultLimits().MaxFilterDepth); err != nil {
 		t.Errorf("Pred at depth 5: %v", err)
 	}
-	if _, err := (&personWhere{}).Pred(ctx, veloxgql.MaxFilterDepth+1); !errors.Is(err, veloxgql.ErrFilterTooDeep) {
+	if _, err := (&personWhere{}).Pred(ctx, veloxgql.DefaultLimits().MaxFilterDepth+1); !errors.Is(err, veloxgql.ErrFilterTooDeep) {
 		t.Errorf("Pred at depth 6: %v, want ErrFilterTooDeep", err)
 	}
 
@@ -279,17 +279,17 @@ func TestWhereDepthAndWidth(t *testing.T) {
 		}
 		return ws
 	}
-	if got := where(t, db, &personWhere{Or: list(veloxgql.MaxFilterWidth)}); !slices.Equal(got, []int64{2, 4}) {
+	if got := where(t, db, &personWhere{Or: list(veloxgql.DefaultLimits().MaxFilterWidth)}); !slices.Equal(got, []int64{2, 4}) {
 		t.Errorf("or of 100: %v", got)
 	}
-	if got := where(t, db, &personWhere{And: list(veloxgql.MaxFilterWidth)}); !slices.Equal(got, []int64{2, 4}) {
+	if got := where(t, db, &personWhere{And: list(veloxgql.DefaultLimits().MaxFilterWidth)}); !slices.Equal(got, []int64{2, 4}) {
 		t.Errorf("and of 100: %v", got)
 	}
 	st.take()
 	for name, w := range map[string]*personWhere{
-		"or":        {Or: list(veloxgql.MaxFilterWidth + 1)},
-		"and":       {And: list(veloxgql.MaxFilterWidth + 1)},
-		"nested or": {Not: &personWhere{Or: list(veloxgql.MaxFilterWidth + 1)}},
+		"or":        {Or: list(veloxgql.DefaultLimits().MaxFilterWidth + 1)},
+		"and":       {And: list(veloxgql.DefaultLimits().MaxFilterWidth + 1)},
+		"nested or": {Not: &personWhere{Or: list(veloxgql.DefaultLimits().MaxFilterWidth + 1)}},
 	} {
 		_, err := w.Pred(ctx, 0)
 		if !errors.Is(err, veloxgql.ErrFilterTooWide) || !strings.HasPrefix(err.Error(), "veloxgql: PersonWhereInput") {
@@ -373,7 +373,7 @@ func TestWhereConversions(t *testing.T) {
 func shared(leaf *personWhere, depth int) *personWhere {
 	w := leaf
 	for range depth {
-		ws := make([]*personWhere, veloxgql.MaxFilterWidth)
+		ws := make([]*personWhere, veloxgql.DefaultLimits().MaxFilterWidth)
 		for i := range ws {
 			ws[i] = w
 		}
@@ -385,16 +385,16 @@ func shared(leaf *personWhere, depth int) *personWhere {
 // TestWhereBudget is Review Focus 4 for the whole argument: MaxFilterNodes
 // bounds the inputs, predicates and In and NotIn values of one where
 // argument, however its lists and depth multiply, and over it the filter
-// fails with ErrFilterTooWide at once, before any statement runs.
+// fails with ErrFilterTooLarge at once, before any statement runs.
 func TestWhereBudget(t *testing.T) {
 	db, st := peopleDB(t)
 	ctx := context.Background()
 	st.take()
-	w := shared(&personWhere{NameIn: []string{"a", "b"}, AgeGT: i64p(1)}, veloxgql.MaxFilterDepth)
+	w := shared(&personWhere{NameIn: []string{"a", "b"}, AgeGT: i64p(1)}, veloxgql.DefaultLimits().MaxFilterDepth)
 	start := time.Now()
 	_, err := w.Pred(ctx, 0)
-	if !errors.Is(err, veloxgql.ErrFilterTooWide) || !strings.Contains(err.Error(), "more than 1000") {
-		t.Fatalf("100^5 inputs: %v, want ErrFilterTooWide over the budget", err)
+	if !errors.Is(err, veloxgql.ErrFilterTooLarge) || !strings.Contains(err.Error(), "more than 1000") {
+		t.Fatalf("100^5 inputs: %v, want ErrFilterTooLarge over the budget", err)
 	}
 	if d := time.Since(start); d > time.Second {
 		t.Errorf("100^5 inputs took %v to refuse", d)
@@ -403,7 +403,7 @@ func TestWhereBudget(t *testing.T) {
 		t.Errorf("the refused filter ran %v", ran)
 	}
 	// It stops after about MaxFilterNodes nodes: a few allocations each.
-	if n := testing.AllocsPerRun(5, func() { _, _ = w.Pred(ctx, 0) }); n > 20*float64(veloxgql.MaxFilterNodes) {
+	if n := testing.AllocsPerRun(5, func() { _, _ = w.Pred(ctx, 0) }); n > 20*float64(veloxgql.DefaultLimits().MaxFilterNodes) {
 		t.Errorf("refusing 100^5 inputs allocates %v times", n)
 	}
 
@@ -432,8 +432,8 @@ func TestWhereBudget(t *testing.T) {
 	if got := where(t, db, budget(97)); !slices.Equal(got, all) {
 		t.Errorf("a budget of 1000: %v", got)
 	}
-	if _, err := budget(98).Pred(ctx, 0); !errors.Is(err, veloxgql.ErrFilterTooWide) {
-		t.Errorf("1001: %v, want ErrFilterTooWide", err)
+	if _, err := budget(98).Pred(ctx, 0); !errors.Is(err, veloxgql.ErrFilterTooLarge) {
+		t.Errorf("1001: %v, want ErrFilterTooLarge", err)
 	}
 	// Each where argument has its own budget, even under the context of
 	// another's nested input, which carries that one's.
@@ -450,8 +450,8 @@ func TestWhereBudget(t *testing.T) {
 		t.Errorf("a second argument of 1000: %v", err)
 	}
 	// A nested input shares it.
-	if _, err := budget(97).Pred(spy.ctx, 1); !errors.Is(err, veloxgql.ErrFilterTooWide) {
-		t.Errorf("a nested input of 1000 after 909: %v, want ErrFilterTooWide", err)
+	if _, err := budget(97).Pred(spy.ctx, 1); !errors.Is(err, veloxgql.ErrFilterTooLarge) {
+		t.Errorf("a nested input of 1000 after 909: %v, want ErrFilterTooLarge", err)
 	}
 }
 
@@ -470,11 +470,11 @@ func TestWhereValueLists(t *testing.T) {
 	_, st := peopleDB(t)
 	ctx := context.Background()
 	st.take()
-	many := make([]string, veloxgql.MaxFilterWidth+1)
+	many := make([]string, veloxgql.DefaultLimits().MaxFilterWidth+1)
 	for i := range many {
 		many[i] = personID64(int64(i + 1))
 	}
-	ages := make([]int64, veloxgql.MaxFilterWidth+1)
+	ages := make([]int64, veloxgql.DefaultLimits().MaxFilterWidth+1)
 	for name, c := range map[string]struct {
 		w     *personWhere
 		field string
@@ -494,7 +494,7 @@ func TestWhereValueLists(t *testing.T) {
 		t.Errorf("the refused lists ran %v", ran)
 	}
 	// 100 is the most.
-	if _, err := (&personWhere{IDIn: many[:veloxgql.MaxFilterWidth]}).Pred(ctx, 0); err != nil {
+	if _, err := (&personWhere{IDIn: many[:veloxgql.DefaultLimits().MaxFilterWidth]}).Pred(ctx, 0); err != nil {
 		t.Errorf("100 IDs: %v", err)
 	}
 }
@@ -511,10 +511,56 @@ func TestWhereErrorsNameTheField(t *testing.T) {
 		{&personWhere{ID: &post}, "veloxgql: PersonWhereInput.id: Person ID: ID of another type"},
 		{&personWhere{Or: []*personWhere{{}, {IDNotIn: []string{post}}}}, "veloxgql: PersonWhereInput.or[1]: PersonWhereInput.idNotIn: Person ID: ID of another type"},
 		{&personWhere{Not: &personWhere{And: []*personWhere{{IDNEQ: strp("x")}}}}, "veloxgql: PersonWhereInput.not: PersonWhereInput.and[0]: PersonWhereInput.idNEQ: Person ID: malformed ID: not canonical base64url without padding"},
-		{nest(&personWhere{}, veloxgql.MaxFilterDepth+1, "not"), "veloxgql: PersonWhereInput.not: PersonWhereInput.not: PersonWhereInput.not: PersonWhereInput.not: PersonWhereInput.not: PersonWhereInput.not: PersonWhereInput: filter is nested too deep: it is nested 6 deep, and the most is 5"},
+		{nest(&personWhere{}, veloxgql.DefaultLimits().MaxFilterDepth+1, "not"), "veloxgql: PersonWhereInput.not: PersonWhereInput.not: PersonWhereInput.not: PersonWhereInput.not: PersonWhereInput.not: PersonWhereInput.not: PersonWhereInput: filter is nested too deep: it is nested 6 deep, and the most is 5"},
 	} {
 		if _, err := c.w.Pred(ctx, 0); err == nil || err.Error() != c.want {
 			t.Errorf("%v, want %q", err, c.want)
 		}
+	}
+}
+
+// TestFilterBudgetError: a where argument over its MaxFilterNodes fails
+// with ErrFilterTooLarge, "filter is too large", and a list over
+// MaxFilterWidth still with ErrFilterTooWide. The limits are the
+// extension's, read at the top of the argument, and its nested inputs have
+// the same.
+func TestFilterBudgetError(t *testing.T) {
+	ctx := context.Background()
+	names := func(n int) []string { return make([]string, n) }
+	ws := make([]*personWhere, 10)
+	for i := range ws {
+		ws[i] = &personWhere{NameIn: names(99)}
+	}
+	_, err := (&personWhere{Or: ws}).Pred(ctx, 0) // 1 + 1 + 10*(1+1+99) > 1000
+	if !errors.Is(err, veloxgql.ErrFilterTooLarge) || !strings.Contains(err.Error(), "filter is too large") {
+		t.Errorf("over MaxFilterNodes: %v, want ErrFilterTooLarge", err)
+	}
+	if errors.Is(err, veloxgql.ErrFilterTooWide) {
+		t.Errorf("over MaxFilterNodes: %v, is ErrFilterTooWide too", err)
+	}
+	_, err = (&personWhere{NameIn: names(101)}).Pred(ctx, 0)
+	if !errors.Is(err, veloxgql.ErrFilterTooWide) || errors.Is(err, veloxgql.ErrFilterTooLarge) {
+		t.Errorf("a list over MaxFilterWidth: %v, want ErrFilterTooWide alone", err)
+	}
+
+	// Under an extension's limits, at the top and in a nested input.
+	small := veloxgql.NewExtension(&velox.DB{}, veloxgql.WithLimits(veloxgql.Limits{MaxFilterWidth: 2, MaxFilterDepth: 1, MaxFilterNodes: 5})).Context(ctx)
+	if _, err := (&personWhere{NameIn: names(3)}).Pred(small, 0); !errors.Is(err, veloxgql.ErrFilterTooWide) {
+		t.Errorf("3 values under MaxFilterWidth 2: %v, want ErrFilterTooWide", err)
+	}
+	if _, err := (&personWhere{Not: &personWhere{Not: &personWhere{}}}).Pred(small, 0); !errors.Is(err, veloxgql.ErrFilterTooDeep) {
+		t.Errorf("depth 2 under MaxFilterDepth 1: %v, want ErrFilterTooDeep", err)
+	}
+	if _, err := (&personWhere{NameIn: names(2), AgeIn: []int64{1, 2}}).Pred(small, 0); !errors.Is(err, veloxgql.ErrFilterTooLarge) {
+		t.Errorf("7 nodes under MaxFilterNodes 5: %v, want ErrFilterTooLarge", err)
+	}
+	f := gqlimpl.NewFilter[person](small, "PersonWhereInput", 0)
+	spy := &ctxSpy{}
+	gqlimpl.Not(f, "not", spy)
+	if _, err := f.Pred(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (&personWhere{NameIn: names(3)}).Pred(spy.ctx, 1); !errors.Is(err, veloxgql.ErrFilterTooWide) {
+		t.Errorf("a nested input's 3 values under MaxFilterWidth 2: %v, want ErrFilterTooWide", err)
 	}
 }

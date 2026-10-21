@@ -106,7 +106,7 @@ func LikesConnection(ctx context.Context, after *veloxgql.Cursor, first *int, be
 // likeConnectionGQL is the connection to the Like nodes q returns, ordered by
 // the key, and paged by the other arguments. It runs no query.
 func likeConnectionGQL(ctx context.Context, q velox.Query[Like], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*LikeConnection, error) {
-	c, err := gqlimpl.NewConnection(q, "Like", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, nil, likeKeyGQL())
+	c, err := gqlimpl.NewConnection(ctx, q, "Like", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, nil, likeKeyGQL())
 	if err != nil {
 		return nil, err
 	}

@@ -45,25 +45,28 @@ type Filter[E any] struct {
 
 // NewFilter returns the Filter of a where input of the GraphQL type input,
 // on E, at depth, how deeply it is nested in the where argument: 0 at the
-// top, one more inside each not, and, or and has<Edge>With. A depth over
-// MaxFilterDepth fails the filter with ErrFilterTooDeep.
+// top, one more inside each not, and, or and has<Edge>With.
 //
-// At depth 0 it starts the where argument's budget of MaxFilterNodes, and
-// puts it in the context nested inputs' Pred is called with, where their
-// NewFilter finds it: the input, each input nested in it, each predicate
-// they set and each value of their In and NotIn lists count one against it,
-// and over it the filter fails with ErrFilterTooWide. So the whole argument
+// At depth 0 it reads the where argument's limits, veloxgql.LimitsFrom(ctx),
+// and starts its budget of MaxFilterNodes, and puts both in the context
+// nested inputs' Pred is called with, where their NewFilter finds them, so
+// every input of the argument has the same limits. A depth over
+// MaxFilterDepth fails the filter with ErrFilterTooDeep. The input, each
+// input nested in it, each predicate they set and each value of their In
+// and NotIn lists count one against the budget, and over it the filter
+// fails with ErrFilterTooLarge. So the whole argument
 // is bounded, even when it holds one input many times over, as a GraphQL
 // variable used at many places does. One where argument's Pred calls run on
 // one goroutine.
 func NewFilter[E any](ctx context.Context, input string, depth int) *Filter[E] {
 	b, _ := ctx.Value(budgetKey{}).(*budget)
 	if depth == 0 || b == nil {
-		b = &budget{left: veloxgql.MaxFilterNodes}
+		lim := veloxgql.LimitsFrom(ctx)
+		b = &budget{left: lim.MaxFilterNodes, limits: lim}
 		ctx = context.WithValue(ctx, budgetKey{}, b)
 	}
 	f := &Filter[E]{ctx: ctx, input: input, depth: depth, budget: b}
-	if err := checkDepth(depth); err != nil {
+	if err := checkDepth(depth, b.limits.MaxFilterDepth); err != nil {
 		f.refuse("", err)
 		return f
 	}
@@ -85,8 +88,12 @@ func (f *Filter[E]) Pred[_ velox.Lazy[E]]() (velox.Pred[E], error) {
 	return velox.And(f.ps...), nil
 }
 
-// budget is what is left of a where argument's MaxFilterNodes.
-type budget struct{ left int }
+// budget is what is left of a where argument's MaxFilterNodes, and the
+// argument's limits.
+type budget struct {
+	left   int
+	limits veloxgql.Limits
+}
 
 // budgetKey is the context key of a where argument's budget.
 type budgetKey struct{}
@@ -96,7 +103,7 @@ type budgetKey struct{}
 func charge[E any](f *Filter[E], field string, n int) (ok bool) {
 	f.budget.left -= n
 	if f.budget.left < 0 {
-		f.refuse(field, fmt.Errorf("%w: the where argument has more than %d inputs, predicates and list values", veloxgql.ErrFilterTooWide, veloxgql.MaxFilterNodes))
+		f.refuse(field, fmt.Errorf("%w: the where argument has more than %d inputs, predicates and list values", veloxgql.ErrFilterTooLarge, f.budget.limits.MaxFilterNodes))
 		return false
 	}
 	return true
@@ -139,20 +146,20 @@ func add[E any](f *Filter[E], field string, n int, p velox.Pred[E]) {
 }
 
 // checkDepth checks depth, how deeply a where input is nested, against
-// MaxFilterDepth: deeper fails with ErrFilterTooDeep.
-func checkDepth(depth int) error {
-	if depth > veloxgql.MaxFilterDepth {
-		return fmt.Errorf("%w: it is nested %d deep, and the most is %d", veloxgql.ErrFilterTooDeep, depth, veloxgql.MaxFilterDepth)
+// most, the MaxFilterDepth: deeper fails with ErrFilterTooDeep.
+func checkDepth(depth, most int) error {
+	if depth > most {
+		return fmt.Errorf("%w: it is nested %d deep, and the most is %d", veloxgql.ErrFilterTooDeep, depth, most)
 	}
 	return nil
 }
 
 // checkWidth checks n, the length of a list in a where input (of inputs, or
-// of In or NotIn values), against MaxFilterWidth: more fails with
+// of In or NotIn values), against most, the MaxFilterWidth: more fails with
 // ErrFilterTooWide.
-func checkWidth(n int) error {
-	if n > veloxgql.MaxFilterWidth {
-		return fmt.Errorf("%w: it has %d entries, and the most is %d", veloxgql.ErrFilterTooWide, n, veloxgql.MaxFilterWidth)
+func checkWidth(n, most int) error {
+	if n > most {
+		return fmt.Errorf("%w: it has %d entries, and the most is %d", veloxgql.ErrFilterTooWide, n, most)
 	}
 	return nil
 }
@@ -183,7 +190,7 @@ func nested[E, U, T any, W Input[U, T]](f *Filter[E], field string, w W) (p velo
 // checkWidth; ok is false when one fails, and f has its error, which names
 // the entry, as "or[3]".
 func list[E, U, T any, W Input[U, T]](f *Filter[E], field string, ws []W) (ps []velox.Pred[U], ok bool) {
-	if err := checkWidth(len(ws)); err != nil {
+	if err := checkWidth(len(ws), f.budget.limits.MaxFilterWidth); err != nil {
 		f.refuse(field, err)
 		return nil, false
 	}
@@ -306,9 +313,9 @@ func ListAs[E, W, V any](f *Filter[E], field string, vs []W, conv func(W) V, op 
 	add(f, field, len(vs), op(out...))
 }
 
-// width is checkWidth(n) of field's list, with its error recorded in f.
+// width is checkWidth of field's list of n, with its error recorded in f.
 func width[E any](f *Filter[E], field string, n int) bool {
-	if err := checkWidth(n); err != nil {
+	if err := checkWidth(n, f.budget.limits.MaxFilterWidth); err != nil {
 		f.refuse(field, err)
 		return false
 	}

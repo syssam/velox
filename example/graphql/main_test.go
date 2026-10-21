@@ -490,13 +490,13 @@ fragment TypeRef on __Type {
 	ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name } } } } } } }
 }`
 
-// TestOrderTermsLimit: an orderBy list over veloxgql.MaxOrderTerms fails
+// TestOrderTermsLimit: an orderBy list over the default MaxOrderTerms fails
 // with the limit named, before any term is built or statement sent.
 func TestOrderTermsLimit(t *testing.T) {
 	s := newServer(t)
 	s.do(t, request{
 		org:   "1",
-		query: `{ posts(orderBy: [` + strings.Repeat(`{field: TITLE, direction: ASC}, `, veloxgql.MaxOrderTerms+1) + `]) { totalCount } }`,
+		query: `{ posts(orderBy: [` + strings.Repeat(`{field: TITLE, direction: ASC}, `, veloxgql.DefaultLimits().MaxOrderTerms+1) + `]) { totalCount } }`,
 		want: `{"errors": [{"message": "veloxgql: Post connection: bad pagination arguments: orderBy has 6 terms, and the most is 5", "path": ["posts"]}],
 			"data": null}`,
 	})

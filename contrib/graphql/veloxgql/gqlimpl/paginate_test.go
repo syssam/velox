@@ -259,8 +259,7 @@ func TestPaginate(t *testing.T) {
 func TestPaginateDefaultPage(t *testing.T) {
 	ctx := context.Background()
 	db, _ := peopleDB(t)
-	defer func(n int) { veloxgql.MaxPage = n }(veloxgql.MaxPage)
-	veloxgql.MaxPage = 4
+	ctx = veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 4})).Context(ctx)
 	p, err := gqlimpl.Paginate(ctx, db.Query[person](), "Person", gqlimpl.Args{}, nil, personKey())
 	if err != nil || !slices.Equal(ids(p.Rows), []int64{1, 2, 3, 4}) || !p.Info.HasNextPage {
 		t.Fatalf("%v %+v, want 1 to 4 and a next page", err, p)
@@ -341,7 +340,7 @@ func TestConnectionIsLazy(t *testing.T) {
 	ctx := context.Background()
 	db, st := peopleDB(t)
 	q := db.Query[person]().Where(people.Name.NEQ("b"))
-	c, err := gqlimpl.NewConnection(q, "Person", gqlimpl.Args{First: intp(2)}, nil, personKey())
+	c, err := gqlimpl.NewConnection(ctx, q, "Person", gqlimpl.Args{First: intp(2)}, nil, personKey())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -387,11 +386,9 @@ func TestConnectionIsLazy(t *testing.T) {
 
 // TestLoadedConnection: a connection over rows a With loaded runs no query.
 func TestLoadedConnection(t *testing.T) {
-	ctx := context.Background()
-	defer func(n int) { veloxgql.MaxPage = n }(veloxgql.MaxPage)
-	veloxgql.MaxPage = 2
+	ctx := veloxgql.NewExtension(&velox.DB{}, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).Context(context.Background())
 	rows := []person{{ID: 1, Name: "c"}, {ID: 2, Name: "a"}, {ID: 3, Name: "b"}}
-	c := gqlimpl.LoadedConnection(rows, "Person", personKey())
+	c := gqlimpl.LoadedConnection(ctx, rows, "Person", personKey())
 	p, err := c.Page(ctx)
 	if err != nil || !slices.Equal(ids(p.Rows), []int64{1, 2}) || !p.Info.HasNextPage || p.Info.HasPreviousPage || p.Cursors[1].Key != int64(2) {
 		t.Errorf("page %v %+v", err, p)
@@ -448,13 +445,56 @@ func TestPaginateOrderTerms(t *testing.T) {
 		return o
 	}
 	st.take()
-	if _, err := gqlimpl.Paginate(ctx, db.Query[person](), "Person", gqlimpl.Args{}, order(veloxgql.MaxOrderTerms+1), personKey()); !errors.Is(err, veloxgql.ErrBadPagination) {
-		t.Errorf("%d terms: %v, want ErrBadPagination", veloxgql.MaxOrderTerms+1, err)
+	if _, err := gqlimpl.Paginate(ctx, db.Query[person](), "Person", gqlimpl.Args{}, order(veloxgql.DefaultLimits().MaxOrderTerms+1), personKey()); !errors.Is(err, veloxgql.ErrBadPagination) {
+		t.Errorf("%d terms: %v, want ErrBadPagination", veloxgql.DefaultLimits().MaxOrderTerms+1, err)
 	}
 	if ran := st.take(); len(ran) > 0 {
 		t.Errorf("ran %v", ran)
 	}
-	if _, err := gqlimpl.Paginate(ctx, db.Query[person](), "Person", gqlimpl.Args{}, order(veloxgql.MaxOrderTerms), personKey()); err != nil {
-		t.Errorf("%d terms: %v", veloxgql.MaxOrderTerms, err)
+	if _, err := gqlimpl.Paginate(ctx, db.Query[person](), "Person", gqlimpl.Args{}, order(veloxgql.DefaultLimits().MaxOrderTerms), personKey()); err != nil {
+		t.Errorf("%d terms: %v", veloxgql.DefaultLimits().MaxOrderTerms, err)
+	}
+}
+
+// TestConnectionWithoutExtension is Review Focus 2: generated code may run
+// outside a gqlgen server, in a job or a test, with no limits in its
+// context. It then pages by the defaults, not by zeros: a connection with no
+// first over 150 rows is a page of 100, with a next page.
+func TestConnectionWithoutExtension(t *testing.T) {
+	ctx := context.Background()
+	sqlDB, err := sql.Open("sqlite", "file::memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = sqlDB.Close() }()
+	sqlDB.SetMaxOpenConns(1)
+	if _, err := sqlDB.Exec(`CREATE TABLE people (id INTEGER PRIMARY KEY, name TEXT NOT NULL, age INTEGER NOT NULL)`); err != nil {
+		t.Fatal(err)
+	}
+	for id := 1; id <= 150; id++ {
+		if _, err := sqlDB.Exec(`INSERT INTO people (id, name, age) VALUES (?, 'p', ?)`, id, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	db := velox.Open(velox.SQLite, sqlDB)
+	c, err := gqlimpl.NewConnection(ctx, db.Query[person](), "Person", gqlimpl.Args{}, nil, personKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := c.Page(ctx)
+	if err != nil || len(p.Rows) != 100 || !p.Info.HasNextPage {
+		t.Fatalf("NewConnection under context.Background(): %v, %d rows, %+v; want 100 and a next page", err, len(p.Rows), p.Info)
+	}
+	if _, err := gqlimpl.NewConnection(ctx, db.Query[person](), "Person", gqlimpl.Args{First: intp(101)}, nil, personKey()); !errors.Is(err, veloxgql.ErrPageTooLarge) {
+		t.Errorf("first 101 under context.Background(): %v, want ErrPageTooLarge", err)
+	}
+
+	rows, err := db.Query[person]().OrderBy(people.ID.Asc()).Unbounded().All(ctx)
+	if err != nil || len(rows) != 150 {
+		t.Fatalf("the rows: %d, %v", len(rows), err)
+	}
+	lp, err := gqlimpl.LoadedConnection(ctx, rows, "Person", personKey()).Page(ctx)
+	if err != nil || len(lp.Rows) != 100 || !lp.Info.HasNextPage {
+		t.Fatalf("LoadedConnection under context.Background(): %v, %d rows, %+v; want 100 and a next page", err, len(lp.Rows), lp.Info)
 	}
 }

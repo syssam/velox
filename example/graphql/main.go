@@ -62,17 +62,18 @@ func serve(ctx context.Context, addr string) error {
 // users, posts and tags nested, each with its edges and node, with a few
 // scalars (the deepest query of main_test.go) cost 13; gqlgen counts no
 // introspection field, so GraphiQL's schema query costs nothing. veloxgql's
-// limits each bound one argument (MaxPage rows of a connection, and so on),
+// Limits each bound one argument (MaxPage rows of a connection, and so on),
 // so this one bounds the request as a whole. It does not multiply by first and
 // last: a cost that does is a later veloxgql feature.
 const complexityLimit = 200
 
 // server is the GraphQL endpoint: gqlgen's server on the generated schema,
-// with veloxgql.Handler first, so that every operation's context holds db,
-// where the generated code reads it, and a limit on the cost of a request.
+// with veloxgql.NewExtension first, so that every operation's context holds
+// db and the default limits, where the generated code reads them, and a
+// limit on the cost of a request.
 func server(db *velox.DB) http.Handler {
 	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
-	srv.Use(veloxgql.Handler(db))
+	srv.Use(veloxgql.NewExtension(db))
 	srv.AddTransport(transport.POST{})
 	srv.Use(extension.FixedComplexityLimit(complexityLimit))
 	srv.Use(extension.Introspection{})

@@ -478,7 +478,7 @@ func TestConnections(t *testing.T) {
 		ran.Add(1)
 		return next(ctx)
 	}))
-	ctx := velox.WithTenant(veloxgql.WithDB(context.Background(), db), int64(7))
+	ctx := velox.WithTenant(veloxgql.NewExtension(db).Context(context.Background()), int64(7))
 	user := func(e *gen.AccountEdge) int64 { return e.Node.ID }
 	post := func(e *gen.PostEdge) int64 { return e.Node.ID }
 
@@ -569,12 +569,11 @@ func TestConnections(t *testing.T) {
 	}
 	// A list edge reads at most MaxList rows, the DB's cap being none: more
 	// fail with ErrTooManyRows, and the error names the edge.
-	veloxgql.MaxList = 1
-	_, err = ann.GroupsGQL(ctx)
-	if gs, err2 := bob.GroupsGQL(ctx); err2 != nil || !slices.Equal(groupIDs(gs), []int64{2}) {
+	one := veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxList: 1})).Context(ctx)
+	_, err = ann.GroupsGQL(one)
+	if gs, err2 := bob.GroupsGQL(one); err2 != nil || !slices.Equal(groupIDs(gs), []int64{2}) {
 		t.Errorf("bob's groups under MaxList 1: %v %v", groupIDs(gs), err2)
 	}
-	veloxgql.MaxList = 1000
 	if !errors.Is(err, velox.ErrTooManyRows) || !strings.Contains(err.Error(), "veloxgql: Account.groups: ") {
 		t.Errorf("ann's two groups under MaxList 1: %v, want ErrTooManyRows naming Account.groups", err)
 	}
@@ -712,7 +711,7 @@ func open(t *testing.T, opts ...velox.Option) (context.Context, *velox.DB) {
 		return next(ctx)
 	}))
 	db := velox.Open(velox.SQLite, sqlDB, opts...)
-	ctx := velox.WithTenant(veloxgql.WithDB(context.Background(), db), int64(7))
+	ctx := velox.WithTenant(veloxgql.NewExtension(db).Context(context.Background()), int64(7))
 	return ctx, db
 }
 
@@ -1073,9 +1072,10 @@ func chain(n int, not bool) *gen.OwnerWhereInput {
 	return o
 }
 
-// TestWhereDepthAndWidth is Review Focus 4: a where nested deeper than
-// veloxgql.MaxFilterDepth, and an and, or or has…With list of more than
-// veloxgql.MaxFilterWidth inputs, fail before any statement runs.
+// TestWhereDepthAndWidth is Review Focus 4: a where nested deeper than the
+// MaxFilterDepth of veloxgql.LimitsFrom(ctx), an and, or or has…With list
+// of more than its MaxFilterWidth inputs, and a where argument over its
+// MaxFilterNodes, fail before any statement runs.
 func TestWhereDepthAndWidth(t *testing.T) {
 	ctx, db := open(t)
 	seed(t, ctx, db)
@@ -1110,9 +1110,11 @@ func TestWhereDepthAndWidth(t *testing.T) {
 		}
 		shared = &gen.EventWhereInput{Or: ws}
 	}
+	if _, err := events(ctx, shared); !errors.Is(err, veloxgql.ErrFilterTooLarge) {
+		t.Errorf("a variable 100^5 times: %v, want ErrFilterTooLarge", err)
+	}
 	for name, w := range map[string]*gen.EventWhereInput{
-		"a variable 100^5 times": shared,
-		"rankIn of 101":          {RankIn: make([]int8, 101)},
+		"rankIn of 101":  {RankIn: make([]int8, 101)},
 		"idNotIn of 101":         {IDNotIn: make([]string, 101)},
 		"or of 101":              {Or: many(101)},
 		"and of 101":             {And: many(101)},

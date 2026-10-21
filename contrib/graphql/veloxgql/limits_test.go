@@ -1,6 +1,7 @@
 package veloxgql_test
 
 import (
+	"context"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -11,12 +12,48 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
 )
 
-func TestLimits(t *testing.T) {
-	if veloxgql.MaxPage != 100 || veloxgql.MaxFilterDepth != 5 || veloxgql.MaxFilterWidth != 100 || veloxgql.MaxOrderTerms != 5 || veloxgql.MaxFilterNodes != 1000 || veloxgql.MaxList != 1000 {
-		t.Errorf("limits = %d, %d, %d, %d, %d, %d, want 100, 5, 100, 5, 1000, 1000", veloxgql.MaxPage, veloxgql.MaxFilterDepth, veloxgql.MaxFilterWidth, veloxgql.MaxOrderTerms, veloxgql.MaxFilterNodes, veloxgql.MaxList)
+func TestDefaultLimits(t *testing.T) {
+	want := veloxgql.Limits{MaxPage: 100, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 5}
+	if got := veloxgql.DefaultLimits(); got != want {
+		t.Errorf("DefaultLimits() = %+v, want %+v", got, want)
+	}
+	if got := veloxgql.LimitsFrom(context.Background()); got != want {
+		t.Errorf("LimitsFrom(context.Background()) = %+v, want %+v", got, want)
+	}
+	// DefaultLimits is a function: changing what it returned changes no one
+	// else's.
+	d := veloxgql.DefaultLimits()
+	d.MaxPage = 1
+	if got := veloxgql.DefaultLimits(); got != want {
+		t.Errorf("after a change to a copy, DefaultLimits() = %+v", got)
+	}
+}
+
+// TestWithLimitsZeroIsDefault: a zero field of WithLimits' Limits is the
+// default, and the last WithLimits wins.
+func TestWithLimitsZeroIsDefault(t *testing.T) {
+	db := &velox.DB{}
+	ctx := context.Background()
+	got := veloxgql.LimitsFrom(veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).Context(ctx))
+	if want := (veloxgql.Limits{MaxPage: 2, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 5}); got != want {
+		t.Errorf("WithLimits(Limits{MaxPage: 2}): %+v, want %+v", got, want)
+	}
+	if got := veloxgql.LimitsFrom(veloxgql.NewExtension(db).Context(ctx)); got != veloxgql.DefaultLimits() {
+		t.Errorf("no WithLimits: %+v, want the defaults", got)
+	}
+	got = veloxgql.LimitsFrom(veloxgql.NewExtension(db,
+		veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2, MaxList: 3}),
+		veloxgql.WithLimits(veloxgql.Limits{MaxOrderTerms: 4}),
+	).Context(ctx))
+	if want := (veloxgql.Limits{MaxPage: 100, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 4}); got != want {
+		t.Errorf("WithLimits twice: %+v, want the last's, %+v", got, want)
+	}
+	if d, err := veloxgql.DBFrom(veloxgql.NewExtension(db).Context(ctx)); d != db || err != nil {
+		t.Errorf("DBFrom(Context) = %p, %v, want %p", d, err, db)
 	}
 }
 

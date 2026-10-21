@@ -666,15 +666,15 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 
 	f.p("")
 	tooMany := func() {
-		f.p("\tif len(ids) > %s.MaxPage {", vgql)
-		f.p("\t\treturn nil, %s.Errorf(\"veloxgql: Nodes: %%w: %%d IDs, and the most is %%d\", %s.ErrPageTooLarge, len(ids), %[2]s.MaxPage)", f.use("fmt", "fmt"), vgql)
+		f.p("\tif most := %s.LimitsFrom(ctx).MaxPage; len(ids) > most {", vgql)
+		f.p("\t\treturn nil, %s.Errorf(\"veloxgql: Nodes: %%w: %%d IDs, and the most is %%d\", %s.ErrPageTooLarge, len(ids), most)", f.use("fmt", "fmt"), vgql)
 		f.p("\t}")
 	}
 	if len(nodes) == 0 {
 		f.p("// Nodes is the root field nodes. No type of the schema is a Node, so an")
-		f.p("// ID fails as in Node, and so do more than veloxgql.MaxPage IDs, with")
-		f.p("// veloxgql.ErrPageTooLarge.")
-		f.p("func Nodes(_ %s.Context, ids []string) ([]%s.Noder, error) {", ctx, vgql)
+		f.p("// ID fails as in Node, and so do more IDs than the MaxPage of")
+		f.p("// veloxgql.LimitsFrom(ctx), with veloxgql.ErrPageTooLarge.")
+		f.p("func Nodes(ctx %s.Context, ids []string) ([]%s.Noder, error) {", ctx, vgql)
 		tooMany()
 		f.p("\tfor _, id := range ids {")
 		f.p("\t\tif _, err := %s.IDType(id); err != nil {", vgql)
@@ -691,7 +691,8 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 	f.p("// type's nodes with one query, through the DB veloxgql.DBFrom reads from")
 	f.p("// ctx; the query reads at most one row for each of its IDs, whatever the")
 	f.p("// DB's WithMaxRows. It fails as Node does on an ID, before any query runs,")
-	f.p("// and with veloxgql.ErrPageTooLarge on more than veloxgql.MaxPage IDs.")
+	f.p("// and with veloxgql.ErrPageTooLarge on more IDs than the MaxPage of")
+	f.p("// veloxgql.LimitsFrom(ctx).")
 	f.p("func Nodes(ctx %s.Context, ids []string) ([]%s.Noder, error) {", ctx, vgql)
 	tooMany()
 	f.p("\t// The keys of each type, and the indexes in ids of their IDs.")

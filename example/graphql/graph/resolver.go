@@ -5,5 +5,6 @@
 package graph
 
 // Resolver is the root resolver. It holds nothing: the generated code reads
-// the *velox.DB from the request context, where veloxgql.Handler puts it.
+// the *velox.DB from the request context, where veloxgql.NewExtension puts
+// it.
 type Resolver struct{}

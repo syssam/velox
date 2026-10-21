@@ -27,7 +27,7 @@ func (x *Category) IDGQL() string { return veloxgql.EncodeID("Category", x.ID) }
 func (x *Category) ChildrenGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *CategoryWhereInput) (*CategoryConnection, error) {
 	if after == nil && first == nil && before == nil && last == nil && where == nil {
 		if rows, ok := x.Children.Get(); ok {
-			return &CategoryConnection{c: gqlimpl.LoadedConnection(rows, "Category", categoryKeyGQL())}, nil
+			return &CategoryConnection{c: gqlimpl.LoadedConnection(ctx, rows, "Category", categoryKeyGQL())}, nil
 		}
 	}
 	db, err := veloxgql.DBFrom(ctx)
@@ -126,7 +126,7 @@ func categoryConnectionGQL(ctx context.Context, q velox.Query[Category], after *
 		}
 		q = q.Where(p)
 	}
-	c, err := gqlimpl.NewConnection(q, "Category", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, nil, categoryKeyGQL())
+	c, err := gqlimpl.NewConnection(ctx, q, "Category", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, nil, categoryKeyGQL())
 	if err != nil {
 		return nil, err
 	}
@@ -161,11 +161,12 @@ type CategoryWhereInput struct {
 // holds, and a w that sets none, or a nil w, holds for every node. depth is how
 // deeply w is nested in the where argument, 0 at the top. It fails, before any
 // query runs, on an ID of another type (veloxgql.ErrWrongIDType) or a malformed
-// one (veloxgql.ErrBadID), on a nesting deeper than veloxgql.MaxFilterDepth
-// (veloxgql.ErrFilterTooDeep), on an and, an or, a has…With, an In or a NotIn
-// of more than veloxgql.MaxFilterWidth entries, and on a where argument of more
-// than veloxgql.MaxFilterNodes inputs, predicates and values in all (both
-// veloxgql.ErrFilterTooWide).
+// one (veloxgql.ErrBadID), on a nesting deeper than the MaxFilterDepth of
+// veloxgql.LimitsFrom(ctx) (veloxgql.ErrFilterTooDeep), on an and, an or, a
+// has…With, an In or a NotIn of more than its MaxFilterWidth entries
+// (veloxgql.ErrFilterTooWide), and on a where argument of more than its
+// MaxFilterNodes inputs, predicates and values in all
+// (veloxgql.ErrFilterTooLarge).
 func (w *CategoryWhereInput) Pred(ctx context.Context, depth int) (velox.Pred[Category], error) {
 	f := gqlimpl.NewFilter[Category](ctx, "CategoryWhereInput", depth)
 	if w == nil {

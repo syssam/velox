@@ -87,17 +87,19 @@
 // keyset-paged by its cursors, and runs its page query and its COUNT only
 // when gqlgen asks for edges or pageInfo, and for totalCount. A where
 // argument's Pred is one gqlimpl helper call for each predicate the input
-// sets; it decodes IDs as their type's, and refuses an ID of another type, and a filter nested
-// deeper than veloxgql.MaxFilterDepth, wider than veloxgql.MaxFilterWidth
-// or larger in all than veloxgql.MaxFilterNodes, before any query runs. A list
-// edge (graphql.Connection(false)) reads at most veloxgql.MaxList rows and
-// fails with velox.ErrTooManyRows beyond them, whatever the DB's cap.
+// sets; it decodes IDs as their type's, and refuses an ID of another type,
+// and a filter nested deeper than MaxFilterDepth, wider than MaxFilterWidth
+// or larger in all than MaxFilterNodes, before any query runs. A list edge
+// (graphql.Connection(false)) reads at most MaxList rows and fails with
+// velox.ErrTooManyRows beyond them, whatever the DB's cap. The limits are
+// veloxgql.LimitsFrom(ctx): the ones given to veloxgql.NewExtension with
+// veloxgql.WithLimits, or veloxgql.DefaultLimits().
 //
 // Every one of these limits bounds one argument or one edge, not a request:
 // connections nested in connections multiply, and aliases repeat a field. A
 // server also needs a limit on the cost of the whole request, such as gqlgen's
 // extension.FixedComplexityLimit, which example/graphql sets. A mutation's
-// transaction does not cover @defer (see veloxgql.Handler): do not defer
+// transaction does not cover @defer (see veloxgql.Extension): do not defer
 // fields of a mutation.
 //
 // The Go of mutations is not written yet. For an entity with Mutations,
