@@ -652,3 +652,179 @@ func captureLog(t *testing.T) *bytes.Buffer {
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	return &buf
 }
+
+// TestCreatePost creates an acme post with an author and two tags, one of
+// them named twice, which links once. Each ID is checked against what the
+// caller may read before anything is written: one COUNT per edge. status
+// takes its Default, and the post is returned as written.
+func TestCreatePost(t *testing.T) {
+	s := newServer(t)
+	s.do(t, request{
+		org: "1",
+		query: `mutation { createPost(input: {title: "Epsilon", views: 0, authorID: "` + user2 + `", tagIDs: ["` + label1 + `", "` + label2 + `", "` + label1 + `"]}) {
+			title status author { name } tags { totalCount }
+		} }`,
+		want: `{"data": {"createPost": {"title": "Epsilon", "status": "DRAFT", "author": {"name": "Brian"}, "tags": {"totalCount": 2}}}}`,
+		stmts: []string{
+			`SELECT COUNT(*) FROM "users" WHERE "id" IN (?) [2]`,
+			`SELECT COUNT(*) FROM "tags" WHERE "id" IN (?, ?) [1 2]`,
+			`INSERT INTO "posts" ("org_id", "author_id", "title", "status", "views", "published_at") VALUES (?, ?, ?, ?, ?, ?) RETURNING "id" [1 2 Epsilon draft 0 <nil>]`,
+			`INSERT INTO "post_tags" ("post_id", "tag_id") VALUES (?, ?), (?, ?) ON CONFLICT ("post_id", "tag_id") DO NOTHING [6 1 6 2]`,
+			// The selection: the author, and the tags' count.
+			selUsers + ` WHERE "id" = ? LIMIT ? [2 2]`,
+			`SELECT COUNT(*) FROM "tags" WHERE EXISTS (SELECT 1 FROM "post_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND EXISTS (SELECT 1 FROM "posts" AS "vx2" WHERE "vx2"."id" = "vx1"."post_id" AND "id" = ? AND "org_id" = ?)) [6 1]`,
+		},
+	})
+}
+
+// TestUpdatePost clears a post's publishedAt and removes one of its two
+// tags. An empty title fails Post's NotEmpty validator, named by its input
+// field, before any statement.
+func TestUpdatePost(t *testing.T) {
+	s := newServer(t)
+	s.do(t, request{
+		org:   "1",
+		query: `mutation { updatePost(id: "` + post1 + `", input: {clearPublishedAt: true, removeTagIDs: ["` + label1 + `"]}) { title publishedAt tags { edges { node { name } } } } }`,
+		want:  `{"data": {"updatePost": {"title": "Alpha", "publishedAt": null, "tags": {"edges": [{"node": {"name": "graphql"}}]}}}}`,
+		stmts: []string{
+			`UPDATE "posts" SET "published_at" = ? WHERE "id" = ? AND "org_id" = ? [<nil> 1 1]`,
+			`DELETE FROM "post_tags" WHERE "post_id" = ? AND "tag_id" IN (?) [1 1]`,
+			// The row read back, as written, and the selection's tags.
+			selPosts + ` WHERE "id" = ? AND "org_id" = ? LIMIT ? [1 1 2]`,
+			fmt.Sprintf(selTags+` WHERE EXISTS (SELECT 1 FROM "post_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND EXISTS (SELECT 1 FROM "posts" AS "vx2" WHERE "vx2"."id" = "vx1"."post_id" AND "id" = ? AND "org_id" = ?)) ORDER BY "id" LIMIT ? [%s 101]`, "1 1"),
+		},
+	})
+	s.do(t, request{
+		org:   "1",
+		query: `mutation { updatePost(id: "` + post1 + `", input: {title: ""}) { title } }`,
+		want: `{"errors": [{"message": "UpdatePostInput.title: invalid value: must not be empty", "path": ["updatePost"], "extensions": {"code": "BAD_USER_INPUT"}}],
+			"data": null}`,
+	})
+}
+
+// TestDeleteOtherTenant: acme cannot delete globex's post 5, which it cannot
+// see: NOT_FOUND, as for a post that does not exist, and the post keeps its
+// join row, which is not tenant-scoped.
+func TestDeleteOtherTenant(t *testing.T) {
+	s := newServer(t)
+	s.do(t, request{
+		org:   "1",
+		query: `mutation { deletePost(id: "` + post5 + `") }`,
+		want: `{"errors": [{"message": "deletePost: no Post has this ID", "path": ["deletePost"], "extensions": {"code": "NOT_FOUND"}}],
+			"data": null}`,
+		stmts: []string{`SELECT COUNT(*) FROM "posts" WHERE "id" = ? AND "org_id" = ? [5 1]`},
+	})
+	s.do(t, request{
+		org:   "2",
+		query: `{ node(id: "` + post5 + `") { ... on Post { title tags { edges { node { name } } } } } }`,
+		want:  `{"data": {"node": {"title": "Globex plans", "tags": {"edges": [{"node": {"name": "go"}}]}}}}`,
+		stmts: []string{
+			selPosts + ` WHERE "id" = ? AND "org_id" = ? LIMIT ? [5 2 2]`,
+			fmt.Sprintf(selTags+` WHERE EXISTS (SELECT 1 FROM "post_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND EXISTS (SELECT 1 FROM "posts" AS "vx2" WHERE "vx2"."id" = "vx1"."post_id" AND "id" = ? AND "org_id" = ?)) ORDER BY "id" LIMIT ? [%s 101]`, "5 2"),
+		},
+	})
+}
+
+// TestDeletePost deletes acme's post 1, its join rows first, and returns its
+// ID; the post is then gone.
+func TestDeletePost(t *testing.T) {
+	s := newServer(t)
+	s.do(t, request{
+		org:   "1",
+		query: `mutation { deletePost(id: "` + post1 + `") }`,
+		want:  `{"data": {"deletePost": "` + post1 + `"}}`,
+		stmts: []string{
+			`SELECT COUNT(*) FROM "posts" WHERE "id" = ? AND "org_id" = ? [1 1]`,
+			`DELETE FROM "post_tags" WHERE "post_id" = ? [1]`,
+			`DELETE FROM "posts" WHERE "id" = ? AND "org_id" = ? [1 1]`,
+		},
+	})
+	s.do(t, request{
+		org:   "1",
+		query: `{ node(id: "` + post1 + `") { id } }`,
+		want:  `{"data": {"node": null}}`,
+		stmts: []string{selPosts + ` WHERE "id" = ? AND "org_id" = ? LIMIT ? [1 1 2]`},
+	})
+}
+
+// TestMutationTransaction: an operation's mutations run in one transaction.
+// The second label's name is taken, so the operation fails, and the first
+// label, written before, is rolled back with it.
+func TestMutationTransaction(t *testing.T) {
+	s := newServer(t)
+	s.do(t, request{
+		query: `mutation { a: createLabel(input: {name: "rust", rank: 4}) { id } b: createLabel(input: {name: "go", rank: 5}) { id } }`,
+		want: `{"errors": [{"message": "unique constraint violated", "path": ["b"], "extensions": {"code": "BAD_USER_INPUT"}}],
+			"data": null}`,
+		stmts: []string{
+			`INSERT INTO "tags" ("name", "rank") VALUES (?, ?) RETURNING "id" [rust 4]`,
+			`INSERT INTO "tags" ("name", "rank") VALUES (?, ?) RETURNING "id" [go 5]`,
+		},
+	})
+	s.do(t, request{
+		query: `{ labels(where: {name: "rust"}) { totalCount } }`,
+		want:  `{"data": {"labels": {"totalCount": 0}}}`,
+		stmts: []string{`SELECT COUNT(*) FROM "tags" WHERE "name" = ? [rust]`},
+	})
+}
+
+// TestCreateUserDirective: email is @admin, and the directive guards its
+// input field as it guards the field: without X-Role: admin, a createUser
+// that sets it is FORBIDDEN, and nothing is written. passwordHash, Sensitive,
+// is an input only: no query can select it.
+func TestCreateUserDirective(t *testing.T) {
+	s := newServer(t)
+	const create = `mutation { createUser(input: {name: "Dana", email: "dana@example.com", joinedAt: "2026-07-01T09:00:00Z", passwordHash: "y"}) { name role } }`
+	s.do(t, request{
+		query: create,
+		want: `{"errors": [{"message": "the admin role is required", "path": ["createUser", "input", "email"], "extensions": {"code": "FORBIDDEN"}}],
+			"data": null}`,
+	})
+	s.do(t, request{
+		role:  "admin",
+		query: create,
+		want:  `{"data": {"createUser": {"name": "Dana", "role": "MEMBER"}}}`,
+		stmts: []string{`INSERT INTO "users" ("name", "email", "role", "joined_at", "password_hash") VALUES (?, ?, ?, ?, ?) RETURNING "id" [Dana dana@example.com member 2026-07-01 09:00:00 +0000 UTC y]`},
+	})
+	s.do(t, request{
+		role:  "admin",
+		query: `{ users(where: {name: "Dana"}) { edges { node { email passwordHash } } } }`,
+		want:  `{"errors": [{"message": "Cannot query field \"passwordHash\" on type \"User\".", "extensions": {"code": "GRAPHQL_VALIDATION_FAILED"}}], "data": null}`,
+	})
+}
+
+// TestMutationInputShape: an input of the wrong shape is gqlgen's error,
+// left as gqlgen writes it, code GRAPHQL_VALIDATION_FAILED, pointing at the
+// field as the GraphQL spec has it: a variable's by its path, an inline
+// literal's by its locations. Only velox's own validation errors name the
+// input field in their message, with BAD_USER_INPUT. gqlgen's run no
+// statement; velox's validator runs in Insert, after the IDs are checked, and
+// before the INSERT. (gqlgen accepts a number for a String variable, as "3": its leniency.)
+func TestMutationInputShape(t *testing.T) {
+	s := newServer(t)
+	s.do(t, request{
+		org:   "1",
+		query: `mutation($input: CreatePostInput!) { createPost(input: $input) { title } }`,
+		vars:  map[string]any{"input": map[string]any{"title": true, "views": 0, "authorID": user2}},
+		want: `{"errors": [{"message": "cannot use bool as String", "path": ["variable", "input", "title"],
+			"extensions": {"code": "GRAPHQL_VALIDATION_FAILED"}}], "data": null}`,
+	})
+	// canon drops locations, so the body is checked for them.
+	body := s.do(t, request{
+		org:   "1",
+		query: `mutation { createPost(input: {title: 3, views: 0, authorID: "` + user2 + `"}) { title } }`,
+		want: `{"errors": [{"message": "String cannot represent a non string value: 3",
+			"extensions": {"code": "GRAPHQL_VALIDATION_FAILED"}}], "data": null}`,
+	})
+	if !strings.Contains(body, `"locations":[{"line":1,"column":38}]`) {
+		t.Errorf("the inline literal's error has no locations pointing at title: %s", body)
+	}
+	s.do(t, request{
+		org:   "1",
+		query: `mutation($input: CreatePostInput!) { createPost(input: $input) { title } }`,
+		vars:  map[string]any{"input": map[string]any{"title": "", "views": 0, "authorID": user2}},
+		want: `{"errors": [{"message": "CreatePostInput.title: invalid value: must not be empty", "path": ["createPost"],
+			"extensions": {"code": "BAD_USER_INPUT"}}], "data": null}`,
+		stmts: []string{`SELECT COUNT(*) FROM "users" WHERE "id" IN (?) [2]`},
+	})
+}

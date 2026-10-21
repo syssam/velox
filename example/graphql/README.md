@@ -19,9 +19,13 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' \
    `github.com/syssam/velox2/contrib/graphql`: `QueryField` makes a root
    connection, `OrderField` an `orderBy` value, `WhereOps` and `WhereEdge`
    the predicates of the `where` input, `MultiOrder` a list `orderBy`, and
-   `Type` renames an entity's GraphQL type (`Tag` is `Label`). A
-   `Sensitive` field (`password_hash`) and the tenant column are in no type
-   or input. `published_at` is `Optional().Nillable()`: `Optional` makes it
+   `Type` renames an entity's GraphQL type (`Tag` is `Label`), and
+   `Mutations` the root mutations (`createPost`, `updatePost`, `deletePost`,
+   `createLabel`, `updateLabel`, `createUser`, `updateUser`). A `Sensitive`
+   field (`password_hash`) is in no type, where input or order: it is an
+   input only, `passwordHash` on `createUser` and `updateUser`. The tenant
+   column is in no type or input. `title` is `NotEmpty()`, a validator the
+   mutations run, and the tag's `name` is `Unique()`. `published_at` is `Optional().Nillable()`: `Optional` makes it
    optional on create, and `Nillable` makes its column NULL-able and the Go
    field a `*time.Time` with a `Null*` handle, so a draft's `publishedAt` is
    `null` and `publishedAtIsNil` filters on it. velox-gen refuses `Optional()`
@@ -44,7 +48,8 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' \
    ```sh
    cd graphql && go tool gqlgen generate
    ```
-5. The root query's resolvers in `graph/schema.resolvers.go`, one call each:
+5. The root query's and mutations' resolvers in `graph/schema.resolvers.go`,
+   one call each:
 
    ```go
    func (r *queryResolver) Node(ctx context.Context, id string) (veloxgql.Noder, error) {
@@ -53,6 +58,18 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' \
 
    func (r *queryResolver) Users(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.UserOrder, where *gen.UserWhereInput) (*gen.UserConnection, error) {
    	return gen.UsersConnection(ctx, after, first, before, last, orderBy, where)
+   }
+
+   func (r *mutationResolver) CreatePost(ctx context.Context, input gen.CreatePostInput) (*gen.Post, error) {
+   	return gen.CreatePost(ctx, input)
+   }
+
+   func (r *mutationResolver) UpdatePost(ctx context.Context, id string, input gen.UpdatePostInput) (*gen.Post, error) {
+   	return gen.UpdatePost(ctx, id, input)
+   }
+
+   func (r *mutationResolver) DeletePost(ctx context.Context, id string) (string, error) {
+   	return gen.DeletePost(ctx, id)
    }
    ```
 
@@ -68,6 +85,47 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' \
    mutation in one transaction), `veloxgql.ErrorPresenter`, a limit on the
    cost of a request, middlewares that put the tenant and the role in the
    context, and the directive `@admin`.
+
+### Mutations
+
+`createX(input:)` inserts a row and links the edges its input names
+(`authorID`, `tagIDs`). `updateX(id:, input:)` changes only the fields
+given: a field left out, or `null`, is unchanged, `clearPublishedAt: true`
+sets a NULL-able column to NULL, and an edge is cleared, then has its
+`remove…IDs` removed, then its `add…IDs` added. `deleteX(id:)` deletes the
+row's join rows, then the row, and returns its ID. Repeated IDs count once,
+and adding a link that exists changes nothing.
+
+Every ID an input names is checked, before anything is written, against
+what the caller may read: the tenant scope and the entity's Read policy. An
+ID of another tenant's row, or of one a policy hides, is `NOT_FOUND`, as a
+missing one is, so a client cannot tell that a row exists. `deletePost` of
+another tenant's post is `NOT_FOUND`, and its join rows, which are not
+tenant-scoped, are left alone.
+
+**One transaction per operation.** `veloxgql.NewExtension` runs a mutation
+operation in one transaction, and rolls it back when the response has any
+error. In `mutation { a: createLabel(…) b: createLabel(…) }`, when `b` fails
+(its name is taken), `a`'s row is rolled back too, and `data` is `null`. A
+generated mutation called outside a server, or in an operation
+`WithTxFilter` leaves out, runs in a transaction of its own, so it is never
+half-written either.
+
+**The row returned.** `createX` returns the row as written. `updateX`
+reads its row back under the tenant scope but without the Read policy: the
+caller just wrote it, so an update that moves the row out of the caller's
+Read view still returns it.
+
+**Write permission.** An update that changes only edges (`addTagIDs` and
+nothing else) still needs permission to write the row: it is checked under
+the same scope as an `UPDATE` of it, the tenant and the Read and Write
+policies, so no edge changes on a row the caller cannot write.
+
+**MySQL** needs `clientFoundRows=true` in its DSN
+(`user:pass@tcp(host)/db?parseTime=true&clientFoundRows=true`). `updateX`
+checks the `UPDATE`'s row count, and without it MySQL counts only the rows
+whose values changed, so an update that sets a field to its current value
+would read as `NOT_FOUND`.
 
 ### The tenant comes from a header only in this demo
 
@@ -88,6 +146,11 @@ directive guards those too: without it, a client could find an email it may
 not read by filtering on it, a prefix at a time. That is why the directive is
 declared `on FIELD_DEFINITION | INPUT_FIELD_DEFINITION`: gqlgen refuses the
 schema otherwise.
+
+It guards the mutations' input fields as well: velox-graphql copies it onto
+`CreateUserInput.email` and `UpdateUserInput.email`, so a `createUser` that
+sets `email` without `X-Role: admin` fails with `FORBIDDEN`, at the path
+`["createUser", "input", "email"]`, and writes nothing.
 
 `email` has no `OrderField`: the order and the cursors would reveal its
 values, which no directive guards, so velox-graphql refuses `OrderField` on a
@@ -120,9 +183,13 @@ tenant, a client would read `velox: gen.Post: no tenant in the context`.
 | The error | `extensions.code` | `message` |
 |---|---|---|
 | a bad ID, cursor, paging argument, filter or scalar | `BAD_USER_INPUT` | what was expected, as `ID: malformed ID: not canonical base64url without padding` |
+| an ID in a mutation that names no row the caller may see or change | `NOT_FOUND` | `deletePost: no Post has this ID` |
+| a conflicting update input (`publishedAt` with `clearPublishedAt`), too many IDs | `BAD_USER_INPUT` | naming the input field |
 | no tenant (`velox.ErrNoTenant`) | `UNAUTHENTICATED` | `unauthenticated` |
 | a policy's denial | `FORBIDDEN` | `forbidden` |
-| a validator's refusal, a violated constraint | `BAD_USER_INPUT` | `invalid value: …`, `unique constraint violated` |
+| a validator's refusal | `BAD_USER_INPUT` | naming the input field: `UpdatePostInput.title: invalid value: must not be empty` |
+| a violated constraint | `BAD_USER_INPUT` | `unique constraint violated` |
+| an input of the wrong shape, an unknown field (gqlgen's validation) | `GRAPHQL_VALIDATION_FAILED` | gqlgen's, left as it is: a variable's error points at the field by its `path` (`["variable", "input", "title"]`), an inline literal's by its `locations` |
 | an `Int` out of range for the field's Go type (`300` for `Label.rank`, an `int8`) | `BAD_USER_INPUT` | gqlgen's, as `300 overflows signed 8-bit integer` |
 | anything else: the driver's errors, a timeout | `INTERNAL_SERVER_ERROR` | `internal error`, and the error is logged with `slog` |
 
@@ -166,6 +233,10 @@ limit that does is planned. Choose the limit for your schema and clients.
 | an `orderBy` list of more than `MaxOrderTerms` terms | an error naming the limit, and no statement |
 | `email`, or a `where` on it, without `X-Role: admin` | a `FORBIDDEN` error; the filter runs no statement |
 | `Post` with tenant 1, 2 or none | only that organization's posts, through `node`, connections, edges and `where`; `unauthenticated` without one |
+| `createPost`, `updatePost`, `deletePost` | a `COUNT` per edge's IDs, then the writes; the row as written |
+| `deletePost` of another tenant's post | `NOT_FOUND`, one `COUNT`, nothing deleted |
+| two mutations, the second failing | both rolled back, `data` `null` |
+| `createUser` setting `email` without `X-Role: admin` | `FORBIDDEN`, nothing written |
 
 ### A connection over the application's own query
 
@@ -193,9 +264,8 @@ or `Omit` that drops them breaks the cursors, and nothing refuses it.
 `main_test.go` sends each over HTTP and checks the JSON response and the
 statements sent exactly.
 
-The schema declares no JSON field, as it teaches queries (contrib/graphql's
-end-to-end test covers a JSON field's getter), and has no mutations yet: the
-generated mutations come with GraphQL plan 3.
+The schema declares no JSON field (contrib/graphql's end-to-end test covers
+a JSON field's getter and inputs).
 
 ## Regenerate
 

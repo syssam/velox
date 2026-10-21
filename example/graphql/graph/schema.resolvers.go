@@ -12,6 +12,41 @@ import (
 	"github.com/syssam/velox2/example/graphql/gen"
 )
 
+// CreatePost is the resolver for the createPost field.
+func (r *mutationResolver) CreatePost(ctx context.Context, input gen.CreatePostInput) (*gen.Post, error) {
+	return gen.CreatePost(ctx, input)
+}
+
+// UpdatePost is the resolver for the updatePost field.
+func (r *mutationResolver) UpdatePost(ctx context.Context, id string, input gen.UpdatePostInput) (*gen.Post, error) {
+	return gen.UpdatePost(ctx, id, input)
+}
+
+// DeletePost is the resolver for the deletePost field.
+func (r *mutationResolver) DeletePost(ctx context.Context, id string) (string, error) {
+	return gen.DeletePost(ctx, id)
+}
+
+// CreateLabel is the resolver for the createLabel field.
+func (r *mutationResolver) CreateLabel(ctx context.Context, input gen.CreateLabelInput) (*gen.Tag, error) {
+	return gen.CreateLabel(ctx, input)
+}
+
+// UpdateLabel is the resolver for the updateLabel field.
+func (r *mutationResolver) UpdateLabel(ctx context.Context, id string, input gen.UpdateLabelInput) (*gen.Tag, error) {
+	return gen.UpdateLabel(ctx, id, input)
+}
+
+// CreateUser is the resolver for the createUser field.
+func (r *mutationResolver) CreateUser(ctx context.Context, input gen.CreateUserInput) (*gen.User, error) {
+	return gen.CreateUser(ctx, input)
+}
+
+// UpdateUser is the resolver for the updateUser field.
+func (r *mutationResolver) UpdateUser(ctx context.Context, id string, input gen.UpdateUserInput) (*gen.User, error) {
+	return gen.UpdateUser(ctx, id, input)
+}
+
 // Node is the resolver for the node field.
 func (r *queryResolver) Node(ctx context.Context, id string) (veloxgql.Noder, error) {
 	return gen.Node(ctx, id)
@@ -46,7 +81,11 @@ func (r *queryResolver) PublishedPosts(ctx context.Context, after *veloxgql.Curs
 	return gen.PostsConnectionOf(ctx, db.Query[gen.Post]().Where(gen.Posts.Status.EQ(gen.PostStatusPublished)), after, first, before, last, orderBy, where)
 }
 
+// Mutation returns MutationResolver implementation.
+func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
+
 // Query returns QueryResolver implementation.
 func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
 
+type mutationResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }

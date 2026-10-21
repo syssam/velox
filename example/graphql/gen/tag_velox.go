@@ -46,6 +46,9 @@ func tagDesc() velox.Desc[Tag] {
 		},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
+		Indexes: []velox.IndexInfo{
+			{Columns: []int{1}, Unique: true},
+		},
 		Relations: []velox.Relation{
 			velox.EdgeThrough[PostTag, Post]("Posts", 0, 1, 0, 0),
 		},

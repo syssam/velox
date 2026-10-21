@@ -2,5 +2,8 @@
 
 package graph
 
+type Mutation struct {
+}
+
 type Query struct {
 }

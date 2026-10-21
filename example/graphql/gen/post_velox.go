@@ -101,6 +101,11 @@ func postDesc() velox.Desc[Post] {
 		},
 		Check: func(col int, v any) error {
 			switch col {
+			case 3:
+				x := v.(string)
+				if x == "" {
+					return errors.New("must not be empty")
+				}
 			case 4:
 				x := v.(PostStatus)
 				switch x {

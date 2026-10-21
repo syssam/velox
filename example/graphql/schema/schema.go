@@ -42,7 +42,7 @@ func (User) Edges() []schema.Edge {
 
 // Annotations names the root query field.
 func (User) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.QueryField("users")}
+	return []schema.Annotation{graphql.QueryField("users"), graphql.Mutations(graphql.Create(), graphql.Update())}
 }
 
 // Post belongs to an organization, the tenant, and to its author.
@@ -56,7 +56,7 @@ func (Post) Fields() []schema.Field {
 	return []schema.Field{
 		field.Int64("org_id").Tenant(),
 		field.Int64("author_id").Annotations(graphql.WhereOps(graphql.OpsEquality)),
-		field.String("title").Annotations(graphql.OrderField("TITLE"), graphql.WhereOps()),
+		field.String("title").NotEmpty().Annotations(graphql.OrderField("TITLE"), graphql.WhereOps()),
 		field.Enum("status").Values("draft", "published").Default("draft").Annotations(graphql.WhereOps()),
 		field.Int64("views").Annotations(graphql.OrderField("VIEWS")),
 		field.Time("published_at").Optional().Nillable().Annotations(graphql.WhereOps()),
@@ -74,7 +74,11 @@ func (Post) Edges() []schema.Edge {
 
 // Annotations names the root query field. MultiOrder makes orderBy a list.
 func (Post) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.QueryField("posts"), graphql.MultiOrder()}
+	return []schema.Annotation{
+		graphql.QueryField("posts"),
+		graphql.MultiOrder(),
+		graphql.Mutations(graphql.Create(), graphql.Update(), graphql.Delete()),
+	}
 }
 
 // Tag labels posts. Its GraphQL type is Label: graphql.Type renames it, and
@@ -87,7 +91,7 @@ type Tag struct{ schema.Schema }
 // refused as its input, with BAD_USER_INPUT.
 func (Tag) Fields() []schema.Field {
 	return []schema.Field{
-		field.String("name").Annotations(graphql.OrderField("NAME"), graphql.WhereOps()),
+		field.String("name").Unique().Annotations(graphql.OrderField("NAME"), graphql.WhereOps()),
 		field.Int8("rank").Annotations(graphql.WhereOps()),
 	}
 }
@@ -99,5 +103,5 @@ func (Tag) Edges() []schema.Edge {
 
 // Annotations names the GraphQL type and the root query field.
 func (Tag) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.Type("Label"), graphql.QueryField("labels")}
+	return []schema.Annotation{graphql.Type("Label"), graphql.QueryField("labels"), graphql.Mutations(graphql.Create(), graphql.Update())}
 }

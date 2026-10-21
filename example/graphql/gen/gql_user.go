@@ -5,6 +5,8 @@ package gen
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"time"
 
@@ -309,4 +311,194 @@ func (w *UserWhereInput) Pred(ctx context.Context) (velox.Pred[User], error) {
 	gqlimpl.Is(f, "hasPosts", w.HasPosts, Users.Posts.Has)
 	gqlimpl.HasWith(f, "hasPostsWith", w.HasPostsWith, Users.Posts.HasWhere)
 	return f.Pred()
+}
+
+// userFieldGQL is the GraphQL name of the mutation-input field that sets the
+// User field whose Go name is goField, for the errors of its validators: "" for
+// a field no input sets.
+func userFieldGQL(goField string) string {
+	switch goField {
+	case "Name":
+		return "name"
+	case "Email":
+		return "email"
+	case "Role":
+		return "role"
+	case "JoinedAt":
+		return "joinedAt"
+	case "PasswordHash":
+		return "passwordHash"
+	}
+	return ""
+}
+
+// CreateUserInput is the GraphQL input CreateUserInput, the input of
+// createUser. A field that is a pointer, or a list, is optional: nil means not
+// given.
+type CreateUserInput struct {
+	Name         string
+	Email        string
+	Role         *UserRole
+	JoinedAt     time.Time
+	PasswordHash string
+}
+
+// String returns the input's fields except its sensitive ones.
+func (in CreateUserInput) String() string {
+	var p2 any
+	if in.Role != nil {
+		p2 = *in.Role
+	}
+	return fmt.Sprintf("CreateUserInput(Name=%v, Email=%v, Role=%v, JoinedAt=%v)", in.Name, in.Email, p2, in.JoinedAt)
+}
+
+// GoString is String, so that %#v does not print the sensitive fields either.
+func (in CreateUserInput) GoString() string { return in.String() }
+
+// CreateUser creates one User from input, with its edges, and returns it, as
+// the mutation createUser does. It first decodes every ID and JSON value of
+// input, and fails before any statement on one it cannot decode
+// (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFrom reads from
+// ctx, in one transaction (gqlimpl.Atomic): the operation's, or one of its own.
+// The tenant scope and the policies apply as to any write: each ID must name a
+// row the caller may read, and a row it re-points one the caller may change, or
+// CreateUser fails with NOT_FOUND and keeps nothing. A validator's refusal is
+// BAD_USER_INPUT, naming the input field; velox's other errors are returned as
+// they are.
+func CreateUser(ctx context.Context, input CreateUserInput) (*User, error) {
+	var out *User
+	err := gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
+		var x User
+		x.Name = input.Name
+		x.Email = input.Email
+		if input.Role != nil {
+			x.Role = *input.Role
+		}
+		x.JoinedAt = input.JoinedAt
+		x.PasswordHash = input.PasswordHash
+		if err := db.Insert(&x).Exec(ctx); err != nil {
+			return gqlimpl.WriteError(err, "CreateUserInput", "gen.User", userFieldGQL)
+		}
+		out = &x
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// UpdateUserInput is the GraphQL input UpdateUserInput, the input of
+// updateUser. A field that is a pointer, or a list, is optional: nil means not
+// given.
+type UpdateUserInput struct {
+	Name         *string
+	Email        *string
+	Role         *UserRole
+	JoinedAt     *time.Time
+	PasswordHash *string
+}
+
+// String returns the input's fields except its sensitive ones.
+func (in UpdateUserInput) String() string {
+	var p0 any
+	if in.Name != nil {
+		p0 = *in.Name
+	}
+	var p1 any
+	if in.Email != nil {
+		p1 = *in.Email
+	}
+	var p2 any
+	if in.Role != nil {
+		p2 = *in.Role
+	}
+	var p3 any
+	if in.JoinedAt != nil {
+		p3 = *in.JoinedAt
+	}
+	return fmt.Sprintf("UpdateUserInput(Name=%v, Email=%v, Role=%v, JoinedAt=%v)", p0, p1, p2, p3)
+}
+
+// GoString is String, so that %#v does not print the sensitive fields either.
+func (in UpdateUserInput) GoString() string { return in.String() }
+
+// UpdateUser updates the User with the ID id from input, as the mutation
+// updateUser does, and returns it as it is afterwards: a field input does not
+// give is left as it is, and a clear field sets a field to NULL or empties an
+// edge. It first decodes id and every ID and JSON value of input, and refuses a
+// field given with its clear field, or an ID both to add and to remove, before
+// any statement (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFrom
+// reads from ctx, in one transaction (gqlimpl.Atomic): the operation's, or one
+// of its own. The fields go in one UPDATE, which the tenant scope and the Read
+// and Write policies scope; an input that sets none sends no UPDATE, and a
+// COUNT under the same scope (Writable) checks the row instead, so that no edge
+// of a row the caller may not change is written. The edges follow, each
+// cleared, then its IDs removed, then its IDs added: an ID to remove the edge
+// does not lead to is ignored, and one to add it already leads to is kept.
+// Clearing an edge whose key is on the targets' rows, or removing from it,
+// unlinks only the children the tenant scope and the target's Write policy let
+// the caller change; one they hide stays linked. Each ID must name a row the
+// caller may read, and a row it re-points one the caller may change; a child
+// another node holds is refused (BAD_USER_INPUT). An id that names no row the
+// caller may change, or an ID no row it may read, fails with NOT_FOUND and
+// keeps nothing. A validator's refusal is BAD_USER_INPUT, naming the input
+// field; velox's other errors are returned as they are. The row is read back as
+// written, under the tenant scope and without the Read policy
+// (velox.SkipPolicy): an update that takes the row out of what the caller may
+// read still returns it. On MySQL the UPDATE's row count needs
+// clientFoundRows=true, as velox's Update does.
+func UpdateUser(ctx context.Context, id string, input UpdateUserInput) (*User, error) {
+	var (
+		key int64
+		err error
+	)
+	if key, err = gqlimpl.DecodeID[int64]("updateUser.id", id, "User"); err != nil {
+		return nil, err
+	}
+	var out *User
+	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
+		var set []velox.Setter[User]
+		if input.Name != nil {
+			set = append(set, Users.Name.Set(*input.Name))
+		}
+		if input.Email != nil {
+			set = append(set, Users.Email.Set(*input.Email))
+		}
+		if input.Role != nil {
+			set = append(set, Users.Role.Set(*input.Role))
+		}
+		if input.JoinedAt != nil {
+			set = append(set, Users.JoinedAt.Set(*input.JoinedAt))
+		}
+		if input.PasswordHash != nil {
+			set = append(set, Users.PasswordHash.Set(*input.PasswordHash))
+		}
+		if len(set) > 0 {
+			n, err := db.Update[User]().Set(set...).Where(Users.ID.EQ(key)).Exec(ctx)
+			if err != nil {
+				return gqlimpl.WriteError(err, "UpdateUserInput", "gen.User", userFieldGQL)
+			}
+			if n == 0 {
+				return gqlimpl.NotFound("updateUser", "User")
+			}
+		} else if n, err := db.Query[User]().Where(Users.ID.EQ(key)).Writable().Count(ctx); err != nil {
+			return err
+		} else if n == 0 {
+			return gqlimpl.NotFound("updateUser", "User")
+		}
+		x, err := db.Query[User]().Where(Users.ID.EQ(key)).One(velox.SkipPolicy(ctx, "graphql: the row this update wrote"))
+		if errors.Is(err, velox.ErrNotFound) {
+			return gqlimpl.NotFound("updateUser", "User")
+		}
+		if err != nil {
+			return err
+		}
+		out = x
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }

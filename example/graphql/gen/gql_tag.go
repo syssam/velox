@@ -5,6 +5,8 @@ package gen
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 
 	"github.com/syssam/velox2"
@@ -263,4 +265,221 @@ func (w *LabelWhereInput) Pred(ctx context.Context) (velox.Pred[Tag], error) {
 	gqlimpl.Value(f, "rankLT", w.RankLT, Tags.Rank.LT)
 	gqlimpl.Value(f, "rankLTE", w.RankLTE, Tags.Rank.LTE)
 	return f.Pred()
+}
+
+// tagFieldGQL is the GraphQL name of the mutation-input field that sets the Tag
+// field whose Go name is goField, for the errors of its validators: "" for a
+// field no input sets.
+func tagFieldGQL(goField string) string {
+	switch goField {
+	case "Name":
+		return "name"
+	case "Rank":
+		return "rank"
+	}
+	return ""
+}
+
+// CreateLabelInput is the GraphQL input CreateLabelInput, the input of
+// createLabel. A field that is a pointer, or a list, is optional: nil means not
+// given.
+type CreateLabelInput struct {
+	Name string
+	Rank int8
+	// PostIDs are the IDs of the Post nodes the edge posts leads to.
+	PostIDs []string
+}
+
+// String returns the input's fields except its sensitive ones.
+func (in CreateLabelInput) String() string {
+	return fmt.Sprintf("CreateLabelInput(Name=%v, Rank=%v, PostIDs=%v)", in.Name, in.Rank, in.PostIDs)
+}
+
+// GoString is String, so that %#v does not print the sensitive fields either.
+func (in CreateLabelInput) GoString() string { return in.String() }
+
+// CreateLabel creates one Label from input, with its edges, and returns it, as
+// the mutation createLabel does. It first decodes every ID and JSON value of
+// input, and fails before any statement on one it cannot decode
+// (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFrom reads from
+// ctx, in one transaction (gqlimpl.Atomic): the operation's, or one of its own.
+// The tenant scope and the policies apply as to any write: each ID must name a
+// row the caller may read, and a row it re-points one the caller may change, or
+// CreateLabel fails with NOT_FOUND and keeps nothing. A validator's refusal is
+// BAD_USER_INPUT, naming the input field; velox's other errors are returned as
+// they are.
+func CreateLabel(ctx context.Context, input CreateLabelInput) (*Tag, error) {
+	var (
+		k2  []int64
+		err error
+	)
+	if k2, err = gqlimpl.DecodeIDs[int64](ctx, "CreateLabelInput.postIDs", input.PostIDs, "Post"); err != nil {
+		return nil, err
+	}
+	var out *Tag
+	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
+		var x Tag
+		if len(k2) > 0 {
+			if err := gqlimpl.Exist(ctx, db.Query[Post]().Where(Posts.ID.In(k2...)), len(k2), "CreateLabelInput.postIDs", "Post"); err != nil {
+				return err
+			}
+		}
+		x.Name = input.Name
+		x.Rank = input.Rank
+		if err := db.Insert(&x).Exec(ctx); err != nil {
+			return gqlimpl.WriteError(err, "CreateLabelInput", "gen.Tag", tagFieldGQL)
+		}
+		if len(k2) > 0 {
+			rows := make([]PostTag, len(k2))
+			for i, k := range k2 {
+				rows[i] = PostTag{TagID: x.ID, PostID: k}
+			}
+			if err := db.InsertAll(rows).OnConflict(PostTags.TagID, PostTags.PostID).DoNothing().Exec(ctx); err != nil {
+				return err
+			}
+		}
+		out = &x
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// UpdateLabelInput is the GraphQL input UpdateLabelInput, the input of
+// updateLabel. A field that is a pointer, or a list, is optional: nil means not
+// given. A clear field that is true clears a field or an edge, and is refused
+// with the field or the edge's ID given too.
+type UpdateLabelInput struct {
+	Name *string
+	Rank *int8
+	// AddPostIDs are the IDs of Post nodes to add to the edge posts.
+	AddPostIDs []string
+	// RemovePostIDs are the IDs of Post nodes to remove from the edge posts; an
+	// ID the edge does not lead to is ignored.
+	RemovePostIDs []string
+	// ClearPosts removes every Post from the edge posts, before the IDs to
+	// remove and to add.
+	ClearPosts bool
+}
+
+// String returns the input's fields except its sensitive ones.
+func (in UpdateLabelInput) String() string {
+	var p0 any
+	if in.Name != nil {
+		p0 = *in.Name
+	}
+	var p1 any
+	if in.Rank != nil {
+		p1 = *in.Rank
+	}
+	return fmt.Sprintf("UpdateLabelInput(Name=%v, Rank=%v, AddPostIDs=%v, RemovePostIDs=%v, ClearPosts=%v)", p0, p1, in.AddPostIDs, in.RemovePostIDs, in.ClearPosts)
+}
+
+// GoString is String, so that %#v does not print the sensitive fields either.
+func (in UpdateLabelInput) GoString() string { return in.String() }
+
+// UpdateLabel updates the Label with the ID id from input, as the mutation
+// updateLabel does, and returns it as it is afterwards: a field input does not
+// give is left as it is, and a clear field sets a field to NULL or empties an
+// edge. It first decodes id and every ID and JSON value of input, and refuses a
+// field given with its clear field, or an ID both to add and to remove, before
+// any statement (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFrom
+// reads from ctx, in one transaction (gqlimpl.Atomic): the operation's, or one
+// of its own. The fields go in one UPDATE, which the tenant scope and the Read
+// and Write policies scope; an input that sets none sends no UPDATE, and a
+// COUNT under the same scope (Writable) checks the row instead, so that no edge
+// of a row the caller may not change is written. The edges follow, each
+// cleared, then its IDs removed, then its IDs added: an ID to remove the edge
+// does not lead to is ignored, and one to add it already leads to is kept.
+// Clearing an edge whose key is on the targets' rows, or removing from it,
+// unlinks only the children the tenant scope and the target's Write policy let
+// the caller change; one they hide stays linked. Each ID must name a row the
+// caller may read, and a row it re-points one the caller may change; a child
+// another node holds is refused (BAD_USER_INPUT). An id that names no row the
+// caller may change, or an ID no row it may read, fails with NOT_FOUND and
+// keeps nothing. A validator's refusal is BAD_USER_INPUT, naming the input
+// field; velox's other errors are returned as they are. The row is read back as
+// written, under the tenant scope and without the Read policy
+// (velox.SkipPolicy): an update that takes the row out of what the caller may
+// read still returns it. On MySQL the UPDATE's row count needs
+// clientFoundRows=true, as velox's Update does.
+func UpdateLabel(ctx context.Context, id string, input UpdateLabelInput) (*Tag, error) {
+	var (
+		key int64
+		k2  []int64
+		k3  []int64
+		err error
+	)
+	if key, err = gqlimpl.DecodeID[int64]("updateLabel.id", id, "Label"); err != nil {
+		return nil, err
+	}
+	if k2, err = gqlimpl.DecodeIDs[int64](ctx, "UpdateLabelInput.addPostIDs", input.AddPostIDs, "Post"); err != nil {
+		return nil, err
+	}
+	if k3, err = gqlimpl.DecodeIDs[int64](ctx, "UpdateLabelInput.removePostIDs", input.RemovePostIDs, "Post"); err != nil {
+		return nil, err
+	}
+	if err = gqlimpl.Disjoint("UpdateLabelInput", "addPostIDs", "removePostIDs", k2, k3); err != nil {
+		return nil, err
+	}
+	var out *Tag
+	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
+		var set []velox.Setter[Tag]
+		if input.Name != nil {
+			set = append(set, Tags.Name.Set(*input.Name))
+		}
+		if input.Rank != nil {
+			set = append(set, Tags.Rank.Set(*input.Rank))
+		}
+		if len(set) > 0 {
+			n, err := db.Update[Tag]().Set(set...).Where(Tags.ID.EQ(key)).Exec(ctx)
+			if err != nil {
+				return gqlimpl.WriteError(err, "UpdateLabelInput", "gen.Tag", tagFieldGQL)
+			}
+			if n == 0 {
+				return gqlimpl.NotFound("updateLabel", "Label")
+			}
+		} else if n, err := db.Query[Tag]().Where(Tags.ID.EQ(key)).Writable().Count(ctx); err != nil {
+			return err
+		} else if n == 0 {
+			return gqlimpl.NotFound("updateLabel", "Label")
+		}
+		if input.ClearPosts {
+			if _, err := db.Delete[PostTag]().Where(PostTags.TagID.EQ(key)).Exec(ctx); err != nil {
+				return err
+			}
+		}
+		if len(k3) > 0 {
+			if _, err := db.Delete[PostTag]().Where(PostTags.TagID.EQ(key), PostTags.PostID.In(k3...)).Exec(ctx); err != nil {
+				return err
+			}
+		}
+		if len(k2) > 0 {
+			if err := gqlimpl.Exist(ctx, db.Query[Post]().Where(Posts.ID.In(k2...)), len(k2), "UpdateLabelInput.addPostIDs", "Post"); err != nil {
+				return err
+			}
+			rows := make([]PostTag, len(k2))
+			for i, c := range k2 {
+				rows[i] = PostTag{TagID: key, PostID: c}
+			}
+			if err := db.InsertAll(rows).OnConflict(PostTags.TagID, PostTags.PostID).DoNothing().Exec(ctx); err != nil {
+				return err
+			}
+		}
+		x, err := db.Query[Tag]().Where(Tags.ID.EQ(key)).One(velox.SkipPolicy(ctx, "graphql: the row this update wrote"))
+		if errors.Is(err, velox.ErrNotFound) {
+			return gqlimpl.NotFound("updateLabel", "Label")
+		}
+		if err != nil {
+			return err
+		}
+		out = x
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }

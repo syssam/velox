@@ -1,6 +1,6 @@
 """
-Restricts a field to admins, and a where predicate on it too, since
-velox-graphql copies a field's directives onto its predicates. main.go
+Restricts a field to admins, and its where predicates and mutation input
+fields too, since velox-graphql copies a field's directives onto them. main.go
 implements it from the X-Role header. It is declared on input fields as well
 as fields, or gqlgen refuses the schema.
 """
