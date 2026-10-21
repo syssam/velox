@@ -262,3 +262,35 @@ func TestOrderFieldOnBytes(t *testing.T) {
 	blob.Annotations = ann(t, graphql.OrderField("BLOB"))
 	renderErr(t, model(entity("Thing", blob)), "schema Thing, field blob", "graphql.OrderField", "bytes")
 }
+
+// A field an application directive guards cannot be ordered unless
+// OrderUnguarded says so: its values would be in the cursors, and its order
+// would reveal them, which no directive guards.
+func TestOrderFieldUnderDirective(t *testing.T) {
+	user := func(as ...graphql.Annotation) *plugin.Model {
+		salary := field("salary", "int")
+		salary.Annotations = ann(t, as...)
+		return model(entity("User", salary))
+	}
+	admin := graphql.Directives(graphql.Directive{Name: "admin"})
+	_, err := Render(user(admin, graphql.OrderField("SALARY")))
+	want := "schema User, field salary: graphql.OrderField on a field with the directive @admin: its values would be in the cursors and its order would reveal them, which no directive guards; add graphql.OrderUnguarded() to allow it"
+	if err == nil || err.Error() != want {
+		t.Errorf("got  %v\nwant %s", err, want)
+	}
+	load(t, user(admin, graphql.OrderField("SALARY"), graphql.OrderUnguarded()), appDirectives)
+	// GraphQL's own directives guard nothing.
+	load(t, user(graphql.Directives(graphql.Directive{Name: "deprecated"}), graphql.OrderField("SALARY")))
+
+	_, err = Render(user(graphql.OrderUnguarded()))
+	want = "schema User, field salary: graphql.OrderUnguarded without graphql.OrderField says nothing"
+	if err == nil || err.Error() != want {
+		t.Errorf("got  %v\nwant %s", err, want)
+	}
+	// It applies to fields only.
+	u := entity("User")
+	posts := edge("posts", plugin.O2M, "User")
+	posts.Annotations = ann(t, graphql.OrderUnguarded())
+	u.Edges = []*plugin.Edge{posts}
+	renderErr(t, model(u), "schema User, edge posts", "graphql.OrderUnguarded")
+}

@@ -27,6 +27,8 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' \
    `null` and `publishedAtIsNil` filters on it. velox-gen refuses `Optional()`
    alone on a time field without a Default: its unset value, the zero time,
    would go into a NOT NULL column, which MySQL's strict mode refuses.
+   `email` has `graphql.Directives(graphql.Directive{Name: "admin"})`: see
+   below.
 2. velox-gen with the plugin, which writes `gen/`: the entities, the GraphQL
    schema `gen/velox.graphqls`, and the `gql_*.go` files it binds to (IDs,
    connections, edges, orders, where inputs, `Node` and `Nodes`):
@@ -64,7 +66,8 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' \
 6. `main.go`: gqlgen's server with `veloxgql.NewExtension(db)` first, which
    puts the DB and the limits in each operation's context (and runs a
    mutation in one transaction), `veloxgql.ErrorPresenter`, a limit on the
-   cost of a request, and a middleware that puts the tenant in the context.
+   cost of a request, middlewares that put the tenant and the role in the
+   context, and the directive `@admin`.
 
 ### The tenant comes from a header only in this demo
 
@@ -73,6 +76,27 @@ that you can try tenants with `curl`. That is for this demo only: a client
 that chooses its own tenant can read every tenant's rows. A real server
 derives the tenant from what authenticates the request (a verified session
 or token), and ignores any header the client sets for it.
+
+### A field for admins only
+
+`User.email` carries the application's directive `@admin`, which
+`graph/app.graphqls` declares and `main.go` implements: it lets the field
+through when the request's `X-Role` header is `admin`, and otherwise fails
+with an application error, code `FORBIDDEN`. velox-graphql copies a field's
+directives onto its `where` predicates (`email`, `emailHasPrefix`…), so the
+directive guards those too: without it, a client could find an email it may
+not read by filtering on it, a prefix at a time. That is why the directive is
+declared `on FIELD_DEFINITION | INPUT_FIELD_DEFINITION`: gqlgen refuses the
+schema otherwise. `email` has no `OrderField`: the order and the cursors
+would reveal its values, which no directive guards, so velox-graphql refuses
+`OrderField` on a field with an application directive unless
+`graphql.OrderUnguarded()` says so.
+
+Like `X-Org-ID`, `X-Role` is for this demo only: a client that names its own
+role is whoever it says. A real server takes the role from what
+authenticates the request. A directive is field-level access, as is gqlgen's
+`srv.AroundFields`; row-level access, which rows a caller may read, is the
+entity's `velox.Policy`.
 
 ### What a client sees of an error
 
@@ -120,6 +144,7 @@ your schema and clients.
 | nested edges, `Post.tags` many-to-many | one query per parent (batching comes with GraphQL plan 4) |
 | a request over `complexityLimit` fields | an error naming the cost, and no statement |
 | an `orderBy` list of more than `MaxOrderTerms` terms | an error before any term is built, and no statement |
+| `email`, or a `where` on it, without `X-Role: admin` | a `FORBIDDEN` error; the filter runs no statement |
 | `Post` with tenant 1, 2 or none | only that organization's posts, through `node`, connections, edges and `where`; `unauthenticated` without one |
 
 6. The application's own field, `graph/app.graphqls`, which extends `Query`

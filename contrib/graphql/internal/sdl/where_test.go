@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/vektah/gqlparser/v2/ast"
+
 	"github.com/syssam/velox2/contrib/graphql"
 	"github.com/syssam/velox2/plugin"
 )
@@ -198,5 +200,96 @@ func TestWhere(t *testing.T) {
 		j := field("doc", "json")
 		j.Annotations = ann(t, graphql.WhereOps())
 		renderErr(t, model(entity("User", j)), "schema User, field doc", "json")
+	})
+}
+
+// appDirectives declares the application directives the tests below put on
+// elements, where gqlgen needs them: on the type's fields and on the where
+// input's.
+const appDirectives = `
+directive @admin on FIELD_DEFINITION | INPUT_FIELD_DEFINITION
+directive @audit(level: Int) on FIELD_DEFINITION | INPUT_FIELD_DEFINITION
+`
+
+// dirsOf lists the directives on typ.name, an input's field, as written
+// without arguments: "@goField", "@admin".
+func dirsOf(s *ast.Schema, typ, name string) []string {
+	f := s.Types[typ].Fields.ForName(name)
+	if f == nil {
+		return []string{"<no field " + name + ">"}
+	}
+	out := []string{}
+	for _, d := range f.Directives {
+		out = append(out, "@"+d.Name)
+	}
+	return out
+}
+
+// A where input's fields carry the directives of what they filter, so that
+// a directive guarding a field guards its filters too: otherwise a client
+// could bisect a protected field's value with them.
+func TestWhereCarriesDirectives(t *testing.T) {
+	admin := graphql.Directives(graphql.Directive{Name: "admin"})
+	audit := graphql.Directives(graphql.Directive{Name: "audit", Args: map[string]any{"level": 2}})
+
+	t.Run("field", func(t *testing.T) {
+		salary := &plugin.Field{Name: "salary", GoName: "Salary", Type: "int", Pointer: true, Nullable: true, Optional: true}
+		salary.Annotations = ann(t, admin, graphql.WhereOps(graphql.OpsAll))
+		s, sdl := load(t, model(entity("User", salary)), appDirectives)
+		got := fieldsOf(s, "UserWhereInput")[3:]
+		if len(got) != 10 { // equality, comparison and nullable
+			t.Fatalf("predicates %v\n%s", got, sdl)
+		}
+		for _, f := range got {
+			name := strings.SplitN(f, ":", 2)[0]
+			if d := dirsOf(s, "UserWhereInput", name); !slices.Equal(d, []string{"@admin"}) {
+				t.Errorf("%s: %v, want [@admin]\n%s", name, d, sdl)
+			}
+		}
+		// The type's field keeps it, and the logic fields carry none.
+		if d := dirsOf(s, "User", "salary"); !slices.Equal(d, []string{"@admin"}) {
+			t.Errorf("User.salary: %v", d)
+		}
+		if d := dirsOf(s, "UserWhereInput", "not"); len(d) != 0 {
+			t.Errorf("not: %v", d)
+		}
+	})
+
+	t.Run("edge", func(t *testing.T) {
+		title := field("title", "string")
+		title.Annotations = ann(t, graphql.WhereOps())
+		post := entity("Post", title)
+		user := entity("User")
+		posts := edge("posts", plugin.O2M, "Post")
+		posts.Annotations = ann(t, admin, graphql.WhereEdge())
+		user.Edges = []*plugin.Edge{posts}
+		s, sdl := load(t, model(post, user), appDirectives)
+		for _, name := range []string{"hasPosts", "hasPostsWith"} {
+			if d := dirsOf(s, "UserWhereInput", name); !slices.Equal(d, []string{"@admin"}) {
+				t.Errorf("%s: %v, want [@admin]\n%s", name, d, sdl)
+			}
+		}
+		if d := dirsOf(s, "User", "posts"); !slices.Equal(d, []string{"@goField", "@admin"}) {
+			t.Errorf("User.posts: %v", d)
+		}
+	})
+
+	t.Run("foreign key", func(t *testing.T) {
+		aid := field("author_id", "int64")
+		aid.Annotations = ann(t, admin, graphql.WhereOps(graphql.OpEQ, graphql.OpIn))
+		post := entity("Post", aid)
+		author := edge("author", plugin.M2O, "User")
+		author.Required, author.Field, author.FieldOn = true, "author_id", "Post"
+		author.Annotations = ann(t, admin, audit)
+		post.Edges = []*plugin.Edge{author}
+		s, sdl := load(t, model(post, entity("User")), appDirectives)
+		for _, name := range []string{"authorID", "authorIDIn"} {
+			if d := dirsOf(s, "PostWhereInput", name); !slices.Equal(d, []string{"@admin", "@audit"}) {
+				t.Errorf("%s: %v, want [@admin @audit]\n%s", name, d, sdl)
+			}
+		}
+		if !strings.Contains(sdl, "authorID: ID @admin @audit(level: 2)") {
+			t.Errorf("the arguments are lost:\n%s", sdl)
+		}
 	})
 }

@@ -18,11 +18,14 @@ import (
 type User struct{ schema.Schema }
 
 // Fields returns the columns after the ID. PasswordHash is Sensitive, so it
-// is in no GraphQL type, input or order.
+// is in no GraphQL type, input or order. Email is for admins only: the
+// application's directive @admin guards the field and, since velox-graphql
+// copies it onto them, its where predicates, by which a client could
+// otherwise find an email a prefix at a time.
 func (User) Fields() []schema.Field {
 	return []schema.Field{
 		field.String("name").Annotations(graphql.OrderField("NAME"), graphql.WhereOps()),
-		field.String("email"),
+		field.String("email").Annotations(graphql.WhereOps(), graphql.Directives(graphql.Directive{Name: "admin"})),
 		field.Enum("role").Values("admin", "member").Default("member").Annotations(graphql.WhereOps()),
 		field.Time("joined_at").Annotations(graphql.OrderField("JOINED_AT")),
 		field.String("password_hash").Sensitive(),

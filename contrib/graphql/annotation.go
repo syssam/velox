@@ -99,6 +99,9 @@ type Annotation struct {
 	FieldName string `json:"field_name,omitempty"`
 	// OrderField makes a field orderable, under this enum value name.
 	OrderField string `json:"order_field,omitempty"`
+	// OrderUnguarded allows OrderField on a field with an application
+	// directive, which guards neither the cursors nor the order.
+	OrderUnguarded bool `json:"order_unguarded,omitempty"`
 	// WhereOps is the predicates the field offers.
 	WhereOps WhereOp `json:"where_ops,omitempty"`
 	// WhereEdge allows the has and hasWith filters on an edge.
@@ -143,17 +146,18 @@ func (a Annotation) Merge(other schema.Annotation) schema.Annotation {
 		panic(fmt.Sprintf("graphql: cannot merge an annotation named \"graphql\" of type %T", other))
 	}
 	out := Annotation{
-		Skip:        o.Skip | a.Skip,
-		Type:        pick(a.Type, o.Type),
-		QueryField:  pick(a.QueryField, o.QueryField),
-		MultiOrder:  o.MultiOrder || a.MultiOrder,
-		FieldName:   pick(a.FieldName, o.FieldName),
-		OrderField:  pick(a.OrderField, o.OrderField),
-		WhereOps:    o.WhereOps | a.WhereOps,
-		WhereEdge:   o.WhereEdge || a.WhereEdge,
-		Connection:  pickPtr(a.Connection, o.Connection),
-		CreateInput: pickPtr(a.CreateInput, o.CreateInput),
-		UpdateInput: pickPtr(a.UpdateInput, o.UpdateInput),
+		Skip:           o.Skip | a.Skip,
+		Type:           pick(a.Type, o.Type),
+		QueryField:     pick(a.QueryField, o.QueryField),
+		MultiOrder:     o.MultiOrder || a.MultiOrder,
+		FieldName:      pick(a.FieldName, o.FieldName),
+		OrderField:     pick(a.OrderField, o.OrderField),
+		OrderUnguarded: o.OrderUnguarded || a.OrderUnguarded,
+		WhereOps:       o.WhereOps | a.WhereOps,
+		WhereEdge:      o.WhereEdge || a.WhereEdge,
+		Connection:     pickPtr(a.Connection, o.Connection),
+		CreateInput:    pickPtr(a.CreateInput, o.CreateInput),
+		UpdateInput:    pickPtr(a.UpdateInput, o.UpdateInput),
 	}
 	for _, k := range slices.Concat(o.Mutations, a.Mutations) {
 		if !slices.Contains(out.Mutations, k) {
@@ -237,6 +241,13 @@ func FieldName(name string) Annotation { return Annotation{FieldName: name} }
 
 // OrderField makes a field orderable, with this name for its order enum value.
 func OrderField(name string) Annotation { return Annotation{OrderField: name} }
+
+// OrderUnguarded allows OrderField on a field with an application directive,
+// one other than GraphQL's own. Such a directive guards the field and its
+// filters, but not the order: the field's values would be in the cursors, and
+// the order of the nodes would reveal them. Without OrderUnguarded the plugin
+// refuses the pair. It applies to a field with OrderField only.
+func OrderUnguarded() Annotation { return Annotation{OrderUnguarded: true} }
 
 // WhereOps offers the field these predicates in the entity's where input; with
 // no arguments, the defaults for the field's type. Two WhereOps annotations on

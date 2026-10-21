@@ -1,3 +1,11 @@
+"""
+Restricts a field to admins, and a where predicate on it too, since
+velox-graphql copies a field's directives onto its predicates. main.go
+implements it from the X-Role header. It is declared on input fields as well
+as fields, or gqlgen refuses the schema.
+"""
+directive @admin on FIELD_DEFINITION | INPUT_FIELD_DEFINITION
+
 extend type Query {
   """
   The published posts, composed by the application from its own query with

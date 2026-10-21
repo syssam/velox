@@ -251,6 +251,15 @@ type UserWhereInput struct {
 	NameHasPrefix *string
 	NameHasSuffix *string
 
+	// Predicates on the field email.
+	Email          *string
+	EmailNEQ       *string
+	EmailIn        []string
+	EmailNotIn     []string
+	EmailContains  *string
+	EmailHasPrefix *string
+	EmailHasSuffix *string
+
 	// Predicates on the field role.
 	Role      *UserRole
 	RoleNEQ   *UserRole
@@ -286,6 +295,13 @@ func (w *UserWhereInput) Pred(ctx context.Context) (velox.Pred[User], error) {
 	gqlimpl.Value(f, "nameContains", w.NameContains, Users.Name.Contains)
 	gqlimpl.Value(f, "nameHasPrefix", w.NameHasPrefix, Users.Name.HasPrefix)
 	gqlimpl.Value(f, "nameHasSuffix", w.NameHasSuffix, Users.Name.HasSuffix)
+	gqlimpl.Value(f, "email", w.Email, Users.Email.EQ)
+	gqlimpl.Value(f, "emailNEQ", w.EmailNEQ, Users.Email.NEQ)
+	gqlimpl.List(f, "emailIn", w.EmailIn, Users.Email.In)
+	gqlimpl.List(f, "emailNotIn", w.EmailNotIn, Users.Email.NotIn)
+	gqlimpl.Value(f, "emailContains", w.EmailContains, Users.Email.Contains)
+	gqlimpl.Value(f, "emailHasPrefix", w.EmailHasPrefix, Users.Email.HasPrefix)
+	gqlimpl.Value(f, "emailHasSuffix", w.EmailHasSuffix, Users.Email.HasSuffix)
 	gqlimpl.Value(f, "role", w.Role, Users.Role.EQ)
 	gqlimpl.Value(f, "roleNEQ", w.RoleNEQ, Users.Role.NEQ)
 	gqlimpl.List(f, "roleIn", w.RoleIn, Users.Role.In)

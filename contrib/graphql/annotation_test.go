@@ -29,6 +29,7 @@ func TestAnnotationJSON(t *testing.T) {
 		{"MultiOrder", graphql.MultiOrder(), `{"multi_order":true}`},
 		{"FieldName", graphql.FieldName("fullName"), `{"field_name":"fullName"}`},
 		{"OrderField", graphql.OrderField("CREATED_AT"), `{"order_field":"CREATED_AT"}`},
+		{"OrderUnguarded", graphql.OrderUnguarded(), `{"order_unguarded":true}`},
 		{"WhereOps()", graphql.WhereOps(), `{"where_ops":2147483648}`},
 		{"WhereOps(preset)", graphql.WhereOps(graphql.OpsEquality), `{"where_ops":15}`},
 		{"WhereOps(mixed)", graphql.WhereOps(graphql.OpEQ, graphql.OpsNullable), `{"where_ops":6145}`},
@@ -127,9 +128,11 @@ func TestMerge(t *testing.T) {
 		d1, d2 := graphql.Directive{Name: "a"}, graphql.Directive{Name: "b"}
 		got := merge(t, graphql.Directives(d1), graphql.Directives(d2))
 		got = merge(t, got, graphql.MultiOrder())
+		got = merge(t, got, graphql.OrderUnguarded())
+		got = merge(t, got, graphql.FieldName("x")) // an unset bool does not erase
 		got = merge(t, got, graphql.EnumValues(map[string]string{"x": "X", "y": "Y1"}))
 		got = merge(t, got, graphql.EnumValues(map[string]string{"y": "Y2"}))
-		if !reflect.DeepEqual(got.Directives, []graphql.Directive{d1, d2}) || !got.MultiOrder ||
+		if !reflect.DeepEqual(got.Directives, []graphql.Directive{d1, d2}) || !got.MultiOrder || !got.OrderUnguarded ||
 			!reflect.DeepEqual(got.EnumValues, map[string]string{"x": "X", "y": "Y2"}) {
 			t.Errorf("got %+v", got)
 		}

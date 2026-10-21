@@ -397,8 +397,8 @@ input AccountWhereInput {
   displayNameContains: String
   displayNameHasPrefix: String
   displayNameHasSuffix: String
-  hasPosts: Boolean
-  hasPostsWith: [PostWhereInput!]
+  hasPosts: Boolean @cost(meta: {cached: true, ttl: null}, tags: ["list", "paged"], weight: 2.5)
+  hasPostsWith: [PostWhereInput!] @cost(meta: {cached: true, ttl: null}, tags: ["list", "paged"], weight: 2.5)
 }
 
 """The input of createAccount."""

@@ -2,6 +2,7 @@ package sdl
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/syssam/velox2/contrib/graphql"
@@ -152,6 +153,12 @@ func (g *graph) whereOf(o *object) error {
 		where := "schema " + e.Name + ", field " + f.Name
 		var name, typ, kind, goBase, target string
 		edge, v := -1, goValue{typ: "string"} // an ID is a string
+		// The predicates carry the field's directives, and a foreign key's
+		// its edge's too, so that what guards the field guards its filters.
+		dirs, err := directives(a.Directives, where)
+		if err != nil {
+			return err
+		}
 		switch {
 		case o.node && i == e.PrimaryKey[0]:
 			name, typ, kind, goBase, target = "id", "ID", "ID", "ID", o.name
@@ -168,6 +175,11 @@ func (g *graph) whereOf(o *object) error {
 			}
 			ed := e.Edges[j]
 			name, typ, kind, goBase, target, edge = en+"ID", "ID", "ID", goOf(en, ed.GoName)+"ID", g.byName[ed.Target].name, j
+			eds, err := directives(o.eanns[j].Directives, "schema "+e.Name+", edge "+ed.Name)
+			if err != nil {
+				return err
+			}
+			dirs = unite(dirs, eds)
 		default:
 			n, err := o.fieldName(i)
 			if err != nil {
@@ -194,7 +206,7 @@ func (g *graph) whereOf(o *object) error {
 			if ops&p.op == 0 {
 				continue
 			}
-			pf := gqlField{name: name + p.suffix, typ: typ, where: where}
+			pf := gqlField{name: name + p.suffix, typ: typ, dirs: dirs, where: where}
 			switch p.takes {
 			case takesList:
 				pf.typ = "[" + typ + "!]"
@@ -224,7 +236,11 @@ func (g *graph) whereOf(o *object) error {
 		if err != nil {
 			return err
 		}
-		has := gqlField{name: "has" + upper(name), typ: "Boolean", where: where}
+		dirs, err := directives(a.Directives, where)
+		if err != nil {
+			return err
+		}
+		has := gqlField{name: "has" + upper(name), typ: "Boolean", dirs: dirs, where: where}
 		if err := fs.add(has); err != nil {
 			return err
 		}
@@ -233,7 +249,7 @@ func (g *graph) whereOf(o *object) error {
 		// hasWith takes the target's where input; a target without one
 		// offers has alone.
 		if t.hasWhere {
-			with := gqlField{name: "has" + upper(name) + "With", typ: "[" + t.name + "WhereInput!]", where: where}
+			with := gqlField{name: "has" + upper(name) + "With", typ: "[" + t.name + "WhereInput!]", dirs: dirs, where: where}
 			if err := fs.add(with); err != nil {
 				return err
 			}
@@ -242,6 +258,19 @@ func (g *graph) whereOf(o *object) error {
 	}
 	o.where = fs.list
 	return nil
+}
+
+// unite is ds followed by those of more whose names ds lacks: GraphQL allows
+// a directive once where it is, unless it is repeatable, and the plugin
+// cannot tell which are.
+func unite(ds, more []directive) []directive {
+	out := slices.Clone(ds)
+	for _, d := range more {
+		if !slices.ContainsFunc(out, func(x directive) bool { return x.name == d.name }) {
+			out = append(out, d)
+		}
+	}
+	return out
 }
 
 // keyEdge is the index in o.ent.Edges of the unique edge that f, a foreign

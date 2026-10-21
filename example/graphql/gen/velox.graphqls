@@ -203,7 +203,7 @@ input LabelWhereInput {
 type User implements Node {
   id: ID! @goField(name: "IDGQL")
   name: String!
-  email: String!
+  email: String! @admin
   role: UserRole!
   joinedAt: Time!
   posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection! @goField(name: "PostsGQL")
@@ -258,6 +258,13 @@ input UserWhereInput {
   nameContains: String
   nameHasPrefix: String
   nameHasSuffix: String
+  email: String @admin
+  emailNEQ: String @admin
+  emailIn: [String!] @admin
+  emailNotIn: [String!] @admin
+  emailContains: String @admin
+  emailHasPrefix: String @admin
+  emailHasSuffix: String @admin
   role: UserRole
   roleNEQ: UserRole
   roleIn: [UserRole!]

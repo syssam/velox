@@ -38,10 +38,34 @@
 //
 // The annotations of an entity are Skip, Type, QueryField, Mutations,
 // MultiOrder and Directives; of a field, FieldName, Skip, OrderField,
-// WhereOps, CreateInput, UpdateInput, EnumValues and Directives; of an edge,
+// OrderUnguarded, WhereOps, CreateInput, UpdateInput, EnumValues and
+// Directives; of an edge,
 // Skip, FieldName, WhereEdge, Connection and Directives. One on an element it
 // does not apply to makes the generator fail, naming the schema and the
 // element.
+//
+// # Directives
+//
+// Directives puts the application's directives on the element's GraphQL
+// field, and on every where-input field that filters on it: a field's
+// predicates (salary, salaryGT, salaryIsNil…), an edge's has<Edge> and
+// has<Edge>With, and a foreign key's <edge>ID and <edge>IDIn, which carry the
+// key field's directives, then the edge's, each name once. So a directive
+// that guards a field guards its filters too, by which a client could
+// otherwise find its value a bisection at a time. The application declares
+// such a directive on FIELD_DEFINITION | INPUT_FIELD_DEFINITION, or gqlgen
+// refuses the schema:
+//
+//	directive @admin on FIELD_DEFINITION | INPUT_FIELD_DEFINITION
+//
+// An order is not guarded: the cursors hold the field's values and the order
+// of the nodes reveals them. So OrderField on a field with an application
+// directive, any but GraphQL's own (@deprecated…), fails generation unless
+// OrderUnguarded allows it.
+//
+// A directive is field-level access, as is gqlgen's srv.AroundFields;
+// row-level access, which rows a caller may read, is the entity's
+// velox.Policy, which every query applies.
 //
 // # Generating the SDL
 //

@@ -16,9 +16,11 @@ import (
 	"strconv"
 	"time"
 
+	gqlgen "github.com/99designs/gqlgen/graphql"
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/handler/extension"
 	"github.com/99designs/gqlgen/graphql/handler/transport"
+	"github.com/vektah/gqlparser/v2/gqlerror"
 	_ "modernc.org/sqlite"
 
 	"github.com/syssam/velox2"
@@ -50,8 +52,8 @@ func serve(ctx context.Context, addr string) error {
 		return err
 	}
 	mux := http.NewServeMux()
-	mux.Handle("/graphql", orgFromHeader(server(db)))
-	fmt.Printf("POST GraphQL to http://%s/graphql, with X-Org-ID: 1 or 2 for posts\n", addr)
+	mux.Handle("/graphql", orgFromHeader(roleFromHeader(server(db))))
+	fmt.Printf("POST GraphQL to http://%s/graphql, with X-Org-ID: 1 or 2 for posts, and X-Role: admin for emails\n", addr)
 	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	return srv.ListenAndServe()
 }
@@ -74,8 +76,12 @@ const complexityLimit = 200
 // only what is safe, with a code: gqlgen's default presenter would show it
 // every error's text, the driver's and velox's, which name tables, entities
 // and constraints. It logs the rest with slog, and says "internal error".
+// The directive @admin is the function admin.
 func server(db *velox.DB) http.Handler {
-	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
+	srv := handler.New(graph.NewExecutableSchema(graph.Config{
+		Resolvers:  &graph.Resolver{},
+		Directives: graph.DirectiveRoot{Admin: admin},
+	}))
 	srv.Use(veloxgql.NewExtension(db))
 	srv.SetErrorPresenter(veloxgql.ErrorPresenter(nil))
 	srv.AddTransport(transport.POST{})
@@ -102,6 +108,37 @@ func orgFromHeader(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// roleKey is the context key of the request's role.
+type roleKey struct{}
+
+// roleFromHeader puts the role the X-Role header names in the request's
+// context, where admin reads it. Like X-Org-ID, it is for this demo only: a
+// client that names its own role is whoever it says. A real server takes the
+// role from what authenticates the request.
+func roleFromHeader(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if h := r.Header.Get("X-Role"); h != "" {
+			r = r.WithContext(context.WithValue(r.Context(), roleKey{}, h))
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// admin implements the directive @admin, on a field or on a where input's
+// field: it resolves the field, or reads the predicate, only when the role is
+// admin. Otherwise it fails with an error of the application's, which
+// veloxgql.ErrorPresenter shows the client as it is, code and all.
+func admin(ctx context.Context, _ any, next gqlgen.Resolver) (any, error) {
+	if role, _ := ctx.Value(roleKey{}).(string); role != "admin" {
+		return nil, &gqlerror.Error{
+			Path:       gqlgen.GetPath(ctx),
+			Message:    "the admin role is required",
+			Extensions: map[string]any{"code": veloxgql.CodeForbidden},
+		}
+	}
+	return next(ctx)
 }
 
 // ddl creates the tables by hand: planning migrations from the schemas is a

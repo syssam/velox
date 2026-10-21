@@ -29,6 +29,7 @@ func misplaced(a graphql.Annotation, on, where string) error {
 		{"graphql.MultiOrder", a.MultiOrder, onSchema},
 		{"graphql.FieldName", a.FieldName != "", onField + " " + onEdge},
 		{"graphql.OrderField", a.OrderField != "", onField},
+		{"graphql.OrderUnguarded", a.OrderUnguarded, onField},
 		{"graphql.WhereOps", a.WhereOps != 0, onField},
 		{"graphql.WhereEdge", a.WhereEdge, onEdge},
 		{"graphql.Connection", a.Connection != nil, onEdge},
@@ -120,6 +121,10 @@ func checkField(e *plugin.Entity, i int, a graphql.Annotation, fk bool, where st
 		return fmt.Errorf("%s: graphql.OrderField on a bytes field: keyset paging cannot continue after a bytes value, since velox's After refuses a slice column, which a nil []byte stores as NULL", where)
 	case a.OrderField != "" && a.Skip&graphql.SkipType != 0 && a.Skip&graphql.SkipOrderField == 0:
 		return fmt.Errorf("%s: graphql.OrderField on a field graphql.Skip leaves out of the type: its values would be in the cursors", where)
+	case a.OrderField != "" && a.Skip&graphql.SkipOrderField == 0 && !a.OrderUnguarded && appDirective(a) != "":
+		return fmt.Errorf("%s: graphql.OrderField on a field with the directive @%s: its values would be in the cursors and its order would reveal them, which no directive guards; add graphql.OrderUnguarded() to allow it", where, appDirective(a))
+	case a.OrderUnguarded && a.OrderField == "":
+		return fmt.Errorf("%s: graphql.OrderUnguarded without graphql.OrderField says nothing", where)
 	case a.WhereOps != 0 && f.Sensitive:
 		return fmt.Errorf("%s: graphql.WhereOps on a sensitive field: a filter would reveal its values", where)
 	case a.WhereOps != 0 && a.Skip&graphql.SkipType != 0 && a.Skip&graphql.SkipWhereInput == 0:
@@ -136,4 +141,15 @@ func checkField(e *plugin.Entity, i int, a graphql.Annotation, fk bool, where st
 		return fmt.Errorf("%s: graphql.UpdateInput(true) on an immutable field, which no update may set", where)
 	}
 	return nil
+}
+
+// appDirective is the name of a's first application directive, one other
+// than GraphQL's own and @goField: "" for none. GraphQL's own guard nothing.
+func appDirective(a graphql.Annotation) string {
+	for _, d := range a.Directives {
+		if d.Name != "goField" && !prelude[d.Name] {
+			return d.Name
+		}
+	}
+	return ""
 }

@@ -69,26 +69,29 @@ func newServer(t *testing.T) *testServer {
 		t.Fatal(err)
 	}
 	recording = true
-	srv := httptest.NewServer(orgFromHeader(server(db)))
+	srv := httptest.NewServer(orgFromHeader(roleFromHeader(server(db))))
 	t.Cleanup(srv.Close)
 	s.url = srv.URL
 	return s
 }
 
 // request is one GraphQL request and what it must give: the response, and
-// the statements it sends. org is the X-Org-ID header, none when empty.
+// the statements it sends. org is the X-Org-ID header and role the X-Role
+// header, none when empty.
 type request struct {
 	org   string
+	role  string
 	query string
 	vars  map[string]any
-	want  string   // the response's JSON, compared after compacting
+	want  string   // the response's JSON, compared as canon gives it
 	stmts []string // the statements sent, "<SQL> [<args>]", sorted
 }
 
 // do sends r, checks the response and the statements, and returns the
-// response's body. The statements are
+// response's body. The statements, and the response's errors, are
 // compared sorted: gqlgen resolves sibling fields concurrently, so the
-// per-parent queries of an edge run in no fixed order.
+// per-parent queries of an edge run, and their errors arrive, in no fixed
+// order.
 func (s *testServer) do(t *testing.T, r request) string {
 	t.Helper()
 	body, err := json.Marshal(map[string]any{"query": r.query, "variables": r.vars})
@@ -103,6 +106,9 @@ func (s *testServer) do(t *testing.T, r request) string {
 	if r.org != "" {
 		req.Header.Set("X-Org-ID", r.org)
 	}
+	if r.role != "" {
+		req.Header.Set("X-Role", r.role)
+	}
 	s.mu.Lock()
 	s.stmts = nil
 	s.mu.Unlock()
@@ -115,7 +121,7 @@ func (s *testServer) do(t *testing.T, r request) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if g, w := compact(t, string(got)), compact(t, r.want); g != w {
+	if g, w := canon(t, string(got)), canon(t, r.want); g != w {
 		t.Errorf("%s\nresponse:\n got  %s\n want %s", r.query, g, w)
 	}
 	s.mu.Lock()
@@ -128,13 +134,27 @@ func (s *testServer) do(t *testing.T, r request) string {
 	return string(got)
 }
 
-func compact(t *testing.T, s string) string {
+// canon is s, a response's JSON, compacted, with its object keys sorted and
+// its errors sorted by their JSON.
+func canon(t *testing.T, s string) string {
 	t.Helper()
-	var b bytes.Buffer
-	if err := json.Compact(&b, []byte(s)); err != nil {
+	d := json.NewDecoder(strings.NewReader(s))
+	d.UseNumber()
+	var v any
+	if err := d.Decode(&v); err != nil {
 		t.Fatalf("not JSON: %v\n%s", err, s)
 	}
-	return b.String()
+	if m, ok := v.(map[string]any); ok {
+		if errs, ok := m["errors"].([]any); ok {
+			key := func(e any) string { b, _ := json.Marshal(e); return string(b) }
+			slices.SortFunc(errs, func(a, b any) int { return strings.Compare(key(a), key(b)) })
+		}
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
 }
 
 // The SELECTs of each entity, up to WHERE: velox reads every column (Plan 4
@@ -150,7 +170,8 @@ const (
 func TestNode(t *testing.T) {
 	s := newServer(t)
 	s.do(t, request{
-		org: "1",
+		org:  "1",
+		role: "admin", // email is @admin
 		query: `{
 			u: node(id: "` + user1 + `") { id ... on User { name email role joinedAt } }
 			p: node(id: "` + post1 + `") { id ... on Post { title status views publishedAt author { name } } }
@@ -417,6 +438,8 @@ func TestSensitiveFieldAbsent(t *testing.T) {
 				{"name": "not"}, {"name": "and"}, {"name": "or"},
 				{"name": "name"}, {"name": "nameNEQ"}, {"name": "nameIn"}, {"name": "nameNotIn"},
 				{"name": "nameContains"}, {"name": "nameHasPrefix"}, {"name": "nameHasSuffix"},
+				{"name": "email"}, {"name": "emailNEQ"}, {"name": "emailIn"}, {"name": "emailNotIn"},
+				{"name": "emailContains"}, {"name": "emailHasPrefix"}, {"name": "emailHasSuffix"},
 				{"name": "role"}, {"name": "roleNEQ"}, {"name": "roleIn"}, {"name": "roleNotIn"},
 				{"name": "hasPosts"}, {"name": "hasPostsWith"}
 			]},
@@ -522,5 +545,47 @@ func TestPublishedPosts(t *testing.T) {
 			selPosts + ` WHERE "status" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [published 1 101]`,
 			`SELECT COUNT(*) FROM "posts" WHERE "status" = ? AND "org_id" = ? [published 1]`,
 		},
+	})
+}
+
+// TestFieldDirective: User.email is @admin, which main.go implements from the
+// X-Role header. The directive guards the field and its where predicates
+// alike: without it, a client could find an email it may not read by
+// filtering on it, a prefix at a time. Refused, neither runs a statement.
+func TestFieldDirective(t *testing.T) {
+	s := newServer(t)
+	const filter = `{ users(where: {emailHasPrefix: "a"}) { totalCount } }`
+	const read = `{ users { edges { node { email } } } }`
+	const forbidden = `"message": "the admin role is required", "extensions": {"code": "FORBIDDEN"}`
+	for _, role := range []string{"", "member"} {
+		s.do(t, request{
+			role:  role,
+			query: filter,
+			want:  `{"errors": [{` + forbidden + `, "path": ["users", "where", "emailHasPrefix"]}], "data": null}`,
+		})
+		s.do(t, request{
+			role:  role,
+			query: read,
+			want: `{"errors": [
+				{` + forbidden + `, "path": ["users", "edges", 0, "node", "email"]},
+				{` + forbidden + `, "path": ["users", "edges", 1, "node", "email"]},
+				{` + forbidden + `, "path": ["users", "edges", 2, "node", "email"]}
+			], "data": null}`,
+			stmts: []string{selUsers + ` ORDER BY "id" LIMIT ? [101]`},
+		})
+	}
+	s.do(t, request{
+		role:  "admin",
+		query: filter,
+		want:  `{"data": {"users": {"totalCount": 1}}}`,
+		stmts: []string{`SELECT COUNT(*) FROM "users" WHERE "email" LIKE ? ESCAPE '\' [a%]`},
+	})
+	s.do(t, request{
+		role:  "admin",
+		query: read,
+		want: `{"data": {"users": {"edges": [
+			{"node": {"email": "ada@example.com"}}, {"node": {"email": "brian@example.com"}}, {"node": {"email": "chen@example.com"}}
+		]}}}`,
+		stmts: []string{selUsers + ` ORDER BY "id" LIMIT ? [101]`},
 	})
 }
