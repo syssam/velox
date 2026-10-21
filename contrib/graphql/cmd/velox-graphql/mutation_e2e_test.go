@@ -149,8 +149,8 @@ func (*Circle) Policy() velox.Policy[Circle] {
 }
 `
 
-// e2eMutRun is the application's test of the generated create mutations,
-// run on each of targets' databases.
+// e2eMutRun is the application's test of the generated create and update
+// mutations, run on each of targets' databases.
 const e2eMutRun = `package app_test
 
 import (
@@ -385,6 +385,25 @@ func TestRepeatedIDs(t *testing.T) {
 		if n := count(t, e.ctx, e.db.Query[gen.Article]().Where(gen.Articles.WriterID.EQ(w.ID))); n != 1 {
 			t.Errorf("%d articles of the writer, want 1", n)
 		}
+
+		// On update, a circle or an article already linked to the writer
+		// succeeds and changes nothing, given once or twice: the article's
+		// UPDATE matches no row, and the count of its rows that are the
+		// writer's finds it.
+		for _, in := range []gen.UpdateWriterInput{
+			{AddCircleIDs: []string{circleID(c.ID)}, AddArticleIDs: []string{articleID(a.ID)}},
+			{AddCircleIDs: []string{circleID(c.ID), circleID(c.ID)}, AddArticleIDs: []string{articleID(a.ID), articleID(a.ID)}},
+		} {
+			if _, err := gen.UpdateWriter(e.ctx, writerID(w.ID), in); err != nil {
+				t.Errorf("%v: %v", in, err)
+			}
+			if n := count(t, e.ctx, e.db.Query[gen.WriterCircle]().Where(gen.WriterCircles.WriterID.EQ(w.ID))); n != 1 {
+				t.Errorf("%v: %d join rows, want 1", in, n)
+			}
+			if n := count(t, e.ctx, e.db.Query[gen.Article]().Where(gen.Articles.WriterID.EQ(w.ID))); n != 1 {
+				t.Errorf("%v: %d articles of the writer, want 1", in, n)
+			}
+		}
 	})
 }
 
@@ -471,6 +490,51 @@ func TestEdgeScope(t *testing.T) {
 		if n := count(t, ctx8, e.db.Query[gen.Writer]().Where(gen.Writers.MentorID.IsNull())); n != 2 {
 			t.Errorf("%d writers of tenant 8 without a mentor, want 2", n)
 		}
+
+		// On update: tenant 8's writer is NOT_FOUND, whether the input sets
+		// a field or none, and no join row of it is written; and so is a
+		// mentee of tenant 8, or the locked article, which the Write policy
+		// hides from the UPDATE that adds it. Nothing moves.
+		visible := &gen.Circle{Name: "visible"}
+		insert(t, e.ctx, e.db, visible)
+		for _, in := range []gen.UpdateWriterInput{{Name: ptr("x")}, {}, {AddCircleIDs: []string{circleID(visible.ID)}}} {
+			_, err = gen.UpdateWriter(e.ctx, writerID(other.ID), in)
+			if code(err) != veloxgql.CodeNotFound || err.Error() != "veloxgql: updateWriter: no Writer has this ID" {
+				t.Errorf("updating tenant 8's writer with %v: %v (code %q), want NOT_FOUND", in, err, code(err))
+			}
+		}
+		if got, err := e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(other.ID)).One(ctx8); err != nil || got.Name != "other" {
+			t.Errorf("tenant 8's writer: %v, %v: want it unchanged", got, err)
+		}
+		w7 := &gen.Writer{Name: "w7", Password: "x"}
+		insert(t, e.ctx, e.db, w7)
+		for _, c := range []struct {
+			in   gen.UpdateWriterInput
+			want string
+		}{
+			{gen.UpdateWriterInput{AddMenteeIDs: []string{writerID(mentee8.ID)}}, "veloxgql: UpdateWriterInput.addMenteeIDs: no Writer has this ID"},
+			{gen.UpdateWriterInput{AddMenteeIDs: []string{writerID(other.ID)}}, "veloxgql: UpdateWriterInput.addMenteeIDs: no Writer has this ID"},
+			{gen.UpdateWriterInput{AddArticleIDs: []string{articleID(locked.ID)}}, "veloxgql: UpdateWriterInput.addArticleIDs: no Article has this ID"},
+			{gen.UpdateWriterInput{AddCircleIDs: []string{circleID(hidden.ID)}}, "veloxgql: UpdateWriterInput.addCircleIDs: no Circle has this ID"},
+			{gen.UpdateWriterInput{MentorID: ptr(writerID(other.ID))}, "veloxgql: UpdateWriterInput.mentorID: no Writer has this ID"},
+		} {
+			_, err = gen.UpdateWriter(e.ctx, writerID(w7.ID), c.in)
+			if code(err) != veloxgql.CodeNotFound || err.Error() != c.want {
+				t.Errorf("%v: %v (code %q), want %q", c.in, err, code(err), c.want)
+			}
+		}
+		if got, err := e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(mentee8.ID)).One(ctx8); err != nil || got.MentorID == nil || *got.MentorID != mentor8.ID {
+			t.Errorf("tenant 8's mentee: %v, %v: want its mentor kept", got, err)
+		}
+		if n := count(t, e.ctx, e.db.Query[gen.Article]().Where(gen.Articles.WriterID.NotNull())); n != 0 {
+			t.Errorf("%d articles with a writer, want 0", n)
+		}
+		if n := count(t, e.ctx, e.db.Query[gen.WriterCircle]()); n != 0 {
+			t.Errorf("%d join rows, want 0", n)
+		}
+		if got, err := e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(w7.ID)).One(e.ctx); err != nil || got.MentorID != nil {
+			t.Errorf("w7: %v, %v: want no mentor", got, err)
+		}
 	})
 }
 
@@ -539,6 +603,46 @@ func TestRepoint(t *testing.T) {
 		}
 		if n := count(t, e.ctx, e.db.Query[gen.Profile]().Where(gen.Profiles.WriterID.EQ(w.ID))); n != 1 {
 			t.Errorf("the new writer has %d profiles, want 1", n)
+		}
+
+		// On update, add<Edge>IDs and <edge>ID take a child no owner holds,
+		// or w's own; one w0 holds is refused, and nothing is kept.
+		for _, c := range []struct {
+			name string
+			in   gen.UpdateWriterInput
+			want string
+		}{
+			{"an article w0 holds", gen.UpdateWriterInput{Bio: ptr("b"), AddArticleIDs: []string{articleID(free.ID), articleID(held.ID)}},
+				"veloxgql: UpdateWriterInput.addArticleIDs: an Article is already linked to another Writer"},
+			{"a profile w0 holds", gen.UpdateWriterInput{Bio: ptr("b"), ProfileID: ptr(profileID(heldP.ID))},
+				"veloxgql: UpdateWriterInput.profileID: a Profile is already linked to another Writer"},
+		} {
+			_, err := gen.UpdateWriter(e.ctx, writerID(w.ID), c.in)
+			if code(err) != veloxgql.CodeBadUserInput || err.Error() != c.want {
+				t.Errorf("%s: %v (code %q), want %q", c.name, err, code(err), c.want)
+			}
+			if w := writerOf(held.ID); w == nil || *w != w0.ID {
+				t.Errorf("%s: the held article's writer is %v, want w0", c.name, w)
+			}
+			if n := count(t, e.ctx, e.db.Query[gen.Profile]().Where(gen.Profiles.WriterID.EQ(w0.ID))); n != 1 {
+				t.Errorf("%s: w0 has %d profiles, want 1", c.name, n)
+			}
+			if n := count(t, e.ctx, e.db.Query[gen.Profile]().Where(gen.Profiles.WriterID.EQ(w.ID))); n != 1 {
+				t.Errorf("%s: w has %d profiles, want 1: its own kept", c.name, n)
+			}
+			if got, err := e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(w.ID)).One(e.ctx); err != nil || got.Bio != nil {
+				t.Errorf("%s: w: %v, %v: want no bio", c.name, got, err)
+			}
+		}
+		// w's own profile, and its own article, again: nothing changes.
+		if _, err := gen.UpdateWriter(e.ctx, writerID(w.ID), gen.UpdateWriterInput{ProfileID: ptr(profileID(freeP.ID)), AddArticleIDs: []string{articleID(free.ID)}}); err != nil {
+			t.Errorf("w's own profile and article: %v", err)
+		}
+		if got := writerOf(free.ID); got == nil || *got != w.ID {
+			t.Errorf("the free article's writer is %v, want %d", got, w.ID)
+		}
+		if n := count(t, e.ctx, e.db.Query[gen.Profile]().Where(gen.Profiles.WriterID.EQ(w.ID))); n != 1 {
+			t.Errorf("w has %d profiles, want 1", n)
 		}
 	})
 }
@@ -625,11 +729,265 @@ func TestCreateErrors(t *testing.T) {
 		}
 	})
 }
+
+// writer is the stored writer id.
+func writer(t *testing.T, e *env, id int64) *gen.Writer {
+	t.Helper()
+	w, err := e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(id)).One(e.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return w
+}
+
+// writerOfArticle is the writer_id of article id.
+func writerOfArticle(t *testing.T, e *env, id int64) *int64 {
+	t.Helper()
+	a, err := e.db.Query[gen.Article]().Where(gen.Articles.ID.EQ(id)).One(e.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return a.WriterID
+}
+
+// writerOfProfile is the writer_id of profile id.
+func writerOfProfile(t *testing.T, e *env, id int64) *int64 {
+	t.Helper()
+	p, err := e.db.Query[gen.Profile]().Where(gen.Profiles.ID.EQ(id)).One(e.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p.WriterID
+}
+
+func is(p *int64, v int64) bool { return p != nil && *p == v }
+
+func TestUpdate(t *testing.T) {
+	each(t, func(t *testing.T, e *env) {
+		w := &gen.Writer{Name: "w", Password: "old"}
+		insert(t, e.ctx, e.db, w)
+		mentor := &gen.Writer{Name: "mentor", Password: "x"}
+		insert(t, e.ctx, e.db, mentor)
+		a1, a2, a3 := &gen.Article{Title: "a1", WriterID: ptr(w.ID)}, &gen.Article{Title: "a2"}, &gen.Article{Title: "a3"}
+		c1, c2 := &gen.Circle{Name: "c1"}, &gen.Circle{Name: "c2"}
+		p1, p2 := &gen.Profile{Handle: "p1", WriterID: ptr(w.ID)}, &gen.Profile{Handle: "p2"}
+		for _, x := range []*gen.Article{a1, a2, a3} {
+			insert(t, e.ctx, e.db, x)
+		}
+		insert(t, e.ctx, e.db, c1)
+		insert(t, e.ctx, e.db, c2)
+		insert(t, e.ctx, e.db, p1)
+		insert(t, e.ctx, e.db, p2)
+		insert(t, e.ctx, e.db, &gen.WriterCircle{WriterID: w.ID, CircleID: c1.ID})
+		id := writerID(w.ID)
+
+		// Fields: nil leaves one, a value sets it, clear sets NULL.
+		in := gen.UpdateWriterInput{Bio: ptr("hi"), Password: ptr("n3w-s3cret"), Score: ptr(3), Meta: ptr(veloxgql.JSON(` + "`" + `{"k":"v"}` + "`" + `))}
+		got, err := gen.UpdateWriter(e.ctx, id, in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Bio == nil || *got.Bio != "hi" || got.Nick != "anon" || got.Name != "w" || got.Score != 3 || got.Password != "n3w-s3cret" || got.Meta["k"] != "v" || got.OrgID != 7 {
+			t.Errorf("UpdateWriter = %v (password %q, meta %v), want bio hi, nick anon, score 3", got, got.Password, got.Meta)
+		}
+		for _, s := range []string{fmt.Sprint(in), fmt.Sprintf("%#v", in), fmt.Sprint(got), fmt.Sprintf("%+v", got)} {
+			if strings.Contains(s, "n3w-s3cret") {
+				t.Errorf("prints the password: %s", s)
+			}
+		}
+		if st := writer(t, e, w.ID); st.Bio == nil || *st.Bio != "hi" || st.Password != "n3w-s3cret" || st.Nick != "anon" {
+			t.Errorf("the stored writer: %v", st)
+		}
+		got, err = gen.UpdateWriter(e.ctx, id, gen.UpdateWriterInput{ClearBio: true, ClearMeta: true, Nick: ptr("nick")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if st := writer(t, e, w.ID); st.Bio != nil || got.Bio != nil || st.Meta != nil || st.Nick != "nick" || st.Score != 3 {
+			t.Errorf("after clearBio and clearMeta: stored %v, returned %v: want no bio, no meta, nick nick, score 3", st, got)
+		}
+		if n := count(t, e.ctx, e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(w.ID), gen.Writers.Bio.IsNull())); n != 1 {
+			t.Errorf("w's bio IS NULL: %d rows, want 1", n)
+		}
+
+		// A unique edge whose key is on the row: set, then cleared.
+		if _, err := gen.UpdateWriter(e.ctx, id, gen.UpdateWriterInput{MentorID: ptr(writerID(mentor.ID))}); err != nil {
+			t.Fatal(err)
+		}
+		if st := writer(t, e, w.ID); !is(st.MentorID, mentor.ID) {
+			t.Errorf("mentor %v, want %d", st.MentorID, mentor.ID)
+		}
+		if _, err := gen.UpdateWriter(e.ctx, id, gen.UpdateWriterInput{ClearMentor: true}); err != nil {
+			t.Fatal(err)
+		}
+		if st := writer(t, e, w.ID); st.MentorID != nil {
+			t.Errorf("mentor %v after clearMentor, want none", *st.MentorID)
+		}
+
+		// O2M: remove and add move the articles' writer_id; clear then add
+		// replaces the set.
+		if _, err := gen.UpdateWriter(e.ctx, id, gen.UpdateWriterInput{AddArticleIDs: []string{articleID(a2.ID)}, RemoveArticleIDs: []string{articleID(a1.ID), articleID(a3.ID)}}); err != nil {
+			t.Fatal(err)
+		}
+		if a, b, c := writerOfArticle(t, e, a1.ID), writerOfArticle(t, e, a2.ID), writerOfArticle(t, e, a3.ID); a != nil || !is(b, w.ID) || c != nil {
+			t.Errorf("articles' writers %v %v %v, want none, %d, none", a, b, c, w.ID)
+		}
+		if _, err := gen.UpdateWriter(e.ctx, id, gen.UpdateWriterInput{ClearArticles: true, AddArticleIDs: []string{articleID(a3.ID)}}); err != nil {
+			t.Fatal(err)
+		}
+		if a, b, c := writerOfArticle(t, e, a1.ID), writerOfArticle(t, e, a2.ID), writerOfArticle(t, e, a3.ID); a != nil || b != nil || !is(c, w.ID) {
+			t.Errorf("articles' writers %v %v %v, want none, none, %d", a, b, c, w.ID)
+		}
+		if _, err := gen.UpdateWriter(e.ctx, id, gen.UpdateWriterInput{ClearArticles: true}); err != nil {
+			t.Fatal(err)
+		}
+		if n := count(t, e.ctx, e.db.Query[gen.Article]().Where(gen.Articles.WriterID.NotNull())); n != 0 {
+			t.Errorf("%d articles with a writer after clearArticles, want 0", n)
+		}
+
+		// M2M: add and remove change the join rows; clear removes them.
+		if _, err := gen.UpdateWriter(e.ctx, id, gen.UpdateWriterInput{AddCircleIDs: []string{circleID(c2.ID)}, RemoveCircleIDs: []string{circleID(c1.ID)}}); err != nil {
+			t.Fatal(err)
+		}
+		if got := circlesOf(t, e, w.ID); len(got) != 1 || got[0] != "c2" {
+			t.Errorf("circles %v, want [c2]", got)
+		}
+		if _, err := gen.UpdateWriter(e.ctx, id, gen.UpdateWriterInput{ClearCircles: true, AddCircleIDs: []string{circleID(c1.ID)}}); err != nil {
+			t.Fatal(err)
+		}
+		if got := circlesOf(t, e, w.ID); len(got) != 1 || got[0] != "c1" {
+			t.Errorf("circles %v, want [c1]", got)
+		}
+		// From the M2M's other side.
+		if _, err := gen.UpdateCircle(e.ctx, circleID(c2.ID), gen.UpdateCircleInput{AddWriterIDs: []string{id}}); err != nil {
+			t.Fatal(err)
+		}
+		if got := circlesOf(t, e, w.ID); len(got) != 2 {
+			t.Errorf("circles %v, want c1 and c2", got)
+		}
+		if _, err := gen.UpdateWriter(e.ctx, id, gen.UpdateWriterInput{ClearCircles: true}); err != nil {
+			t.Fatal(err)
+		}
+		if n := count(t, e.ctx, e.db.Query[gen.WriterCircle]()); n != 0 {
+			t.Errorf("%d join rows after clearCircles, want 0", n)
+		}
+
+		// O2O whose key the profile holds: profileID moves it and clears the
+		// one before; clearProfile clears it.
+		if _, err := gen.UpdateWriter(e.ctx, id, gen.UpdateWriterInput{ProfileID: ptr(profileID(p2.ID))}); err != nil {
+			t.Fatal(err)
+		}
+		if a, b := writerOfProfile(t, e, p1.ID), writerOfProfile(t, e, p2.ID); a != nil || !is(b, w.ID) {
+			t.Errorf("profiles' writers %v %v, want none, %d", a, b, w.ID)
+		}
+		if _, err := gen.UpdateWriter(e.ctx, id, gen.UpdateWriterInput{ClearProfile: true}); err != nil {
+			t.Fatal(err)
+		}
+		if a, b := writerOfProfile(t, e, p1.ID), writerOfProfile(t, e, p2.ID); a != nil || b != nil {
+			t.Errorf("profiles' writers %v %v after clearProfile, want none", a, b)
+		}
+	})
+}
+
+// TestUpdateConflicts: an input with no single meaning is BAD_USER_INPUT,
+// before any statement.
+func TestUpdateConflicts(t *testing.T) {
+	each(t, func(t *testing.T, e *env) {
+		w := &gen.Writer{Name: "w", Password: "x"}
+		insert(t, e.ctx, e.db, w)
+		c := &gen.Circle{Name: "c"}
+		insert(t, e.ctx, e.db, c)
+		e.reset()
+		for _, x := range []struct {
+			in   gen.UpdateWriterInput
+			want string
+		}{
+			{gen.UpdateWriterInput{Bio: ptr("b"), ClearBio: true}, "veloxgql: UpdateWriterInput: bio and clearBio together"},
+			{gen.UpdateWriterInput{MentorID: ptr(writerID(w.ID)), ClearMentor: true}, "veloxgql: UpdateWriterInput: mentorID and clearMentor together"},
+			{gen.UpdateWriterInput{ProfileID: ptr(profileID(1)), ClearProfile: true}, "veloxgql: UpdateWriterInput: profileID and clearProfile together"},
+			{gen.UpdateWriterInput{AddCircleIDs: []string{circleID(c.ID)}, RemoveCircleIDs: []string{circleID(c.ID)}}, "veloxgql: UpdateWriterInput: an ID is in both addCircleIDs and removeCircleIDs"},
+		} {
+			_, err := gen.UpdateWriter(e.ctx, writerID(w.ID), x.in)
+			if code(err) != veloxgql.CodeBadUserInput || err.Error() != x.want {
+				t.Errorf("%v: %v (code %q), want %q", x.in, err, code(err), x.want)
+			}
+		}
+		if s := e.stmts(); len(s) != 0 {
+			t.Errorf("conflicts sent %v", s)
+		}
+	})
+}
+
+// TestUpdatePolicy: the Write policy scopes the UPDATE: a row it leaves out
+// is NOT_FOUND.
+func TestUpdatePolicy(t *testing.T) {
+	each(t, func(t *testing.T, e *env) {
+		locked, open := &gen.Article{Title: "locked"}, &gen.Article{Title: "open"}
+		insert(t, e.ctx, e.db, locked)
+		insert(t, e.ctx, e.db, open)
+		_, err := gen.UpdateArticle(e.ctx, articleID(locked.ID), gen.UpdateArticleInput{Title: ptr("free")})
+		if code(err) != veloxgql.CodeNotFound || err.Error() != "veloxgql: updateArticle: no Article has this ID" {
+			t.Errorf("the locked article: %v (code %q), want NOT_FOUND", err, code(err))
+		}
+		if n := count(t, e.ctx, e.db.Query[gen.Article]().Where(gen.Articles.Title.EQ("locked"))); n != 1 {
+			t.Errorf("%d locked articles, want 1", n)
+		}
+		got, err := gen.UpdateArticle(e.ctx, articleID(open.ID), gen.UpdateArticleInput{Title: ptr("renamed")})
+		if err != nil || got.Title != "renamed" || got.ID != open.ID {
+			t.Errorf("UpdateArticle = %v, %v: want it renamed", got, err)
+		}
+	})
+}
+
+// TestUpdateEmpty: an input that sets nothing sends no write: one COUNT
+// checks the row, and one SELECT reads it.
+func TestUpdateEmpty(t *testing.T) {
+	each(t, func(t *testing.T, e *env) {
+		w := &gen.Writer{Name: "w", Password: "x", Bio: ptr("b")}
+		insert(t, e.ctx, e.db, w)
+		e.reset()
+		got, err := gen.UpdateWriter(e.ctx, writerID(w.ID), gen.UpdateWriterInput{})
+		if err != nil || got.ID != w.ID || got.Name != "w" || got.Bio == nil || *got.Bio != "b" {
+			t.Errorf("UpdateWriter = %v, %v: want w unchanged", got, err)
+		}
+		s := e.stmts()
+		if len(s) != 2 || !strings.HasPrefix(s[0], "SELECT COUNT") || !strings.HasPrefix(s[1], "SELECT ") || strings.HasPrefix(s[1], "SELECT COUNT") {
+			t.Errorf("sent %q, want a SELECT COUNT and a SELECT", s)
+		}
+		_, err = gen.UpdateWriter(e.ctx, writerID(999), gen.UpdateWriterInput{})
+		if code(err) != veloxgql.CodeNotFound || err.Error() != "veloxgql: updateWriter: no Writer has this ID" {
+			t.Errorf("an unknown writer: %v (code %q), want NOT_FOUND", err, code(err))
+		}
+	})
+}
+
+func TestUpdateErrors(t *testing.T) {
+	each(t, func(t *testing.T, e *env) {
+		w := &gen.Writer{Name: "w", Password: "x"}
+		insert(t, e.ctx, e.db, w)
+		_, err := gen.UpdateWriter(e.ctx, writerID(w.ID), gen.UpdateWriterInput{Name: ptr("")})
+		var ve *velox.ValidationError
+		if code(err) != veloxgql.CodeBadUserInput || err == nil || !strings.HasPrefix(err.Error(), "veloxgql: UpdateWriterInput.name: invalid value: ") || !errors.As(err, &ve) {
+			t.Errorf("an empty name: %v (code %q)", err, code(err))
+		}
+		e.reset()
+		_, err = gen.UpdateWriter(e.ctx, circleID(w.ID), gen.UpdateWriterInput{})
+		if code(err) != veloxgql.CodeBadUserInput || !errors.Is(err, veloxgql.ErrWrongIDType) || !strings.Contains(err.Error(), "updateWriter.id") {
+			t.Errorf("a circle's ID for a writer: %v (code %q)", err, code(err))
+		}
+		_, err = gen.UpdateWriter(e.ctx, writerID(w.ID), gen.UpdateWriterInput{RemoveCircleIDs: []string{"not an ID"}})
+		if code(err) != veloxgql.CodeBadUserInput || !errors.Is(err, veloxgql.ErrBadID) || !strings.Contains(err.Error(), "UpdateWriterInput.removeCircleIDs[0]") {
+			t.Errorf("a malformed ID: %v (code %q)", err, code(err))
+		}
+		if s := e.stmts(); len(s) != 0 {
+			t.Errorf("input errors sent %v", s)
+		}
+	})
+}
 `
 
 // TestMutationsRun generates e2eMutSchema's Go and runs e2eMutRun on it:
-// createX with each kind of edge, the tenant and policy scope of the IDs it
-// names, atomicity, and its errors.
+// createX and updateX with each kind of edge, the tenant and policy scope of
+// the IDs they name, atomicity, and their errors.
 func TestMutationsRun(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
@@ -648,7 +1006,8 @@ func TestMutationsRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
-	for _, name := range []string{"TestCreate", "TestCreateM2MBothSides", "TestRepeatedIDs", "TestEdgeScope", "TestAtomic", "TestCreateErrors", "TestRepoint"} {
+	for _, name := range []string{"TestCreate", "TestCreateM2MBothSides", "TestRepeatedIDs", "TestEdgeScope", "TestAtomic", "TestCreateErrors", "TestRepoint",
+		"TestUpdate", "TestUpdateConflicts", "TestUpdatePolicy", "TestUpdateEmpty", "TestUpdateErrors"} {
 		if !strings.Contains(out, "--- PASS: "+name+" ") {
 			t.Errorf("no PASS of %s in\n%s", name, out)
 		}

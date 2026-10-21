@@ -274,3 +274,149 @@ func CreateCategory(ctx context.Context, input CreateCategoryInput) (*Category, 
 	}
 	return out, nil
 }
+
+// UpdateCategoryInput is the GraphQL input UpdateCategoryInput, the input of
+// updateCategory. A field that is a pointer, or a list, is optional: nil means
+// not given. A clear field that is true clears a field or an edge, and is
+// refused with the field or the edge's ID given too.
+type UpdateCategoryInput struct {
+	Title *string
+	// AddChildrenIDs are the IDs of Category nodes to add to the edge children.
+	AddChildrenIDs []string
+	// RemoveChildrenIDs are the IDs of Category nodes to remove from the edge
+	// children; an ID the edge does not lead to is ignored.
+	RemoveChildrenIDs []string
+	// ClearChildren removes every Category from the edge children, before the
+	// IDs to remove and to add.
+	ClearChildren bool
+	// ParentID is the ID of the Category the edge parent leads to.
+	ParentID *string
+	// ClearParent unlinks the edge parent: it leads to no Category afterwards.
+	ClearParent bool
+}
+
+// String returns the input's fields except its sensitive ones.
+func (in UpdateCategoryInput) String() string {
+	var p0 any
+	if in.Title != nil {
+		p0 = *in.Title
+	}
+	var p4 any
+	if in.ParentID != nil {
+		p4 = *in.ParentID
+	}
+	return fmt.Sprintf("UpdateCategoryInput(Title=%v, AddChildrenIDs=%v, RemoveChildrenIDs=%v, ClearChildren=%v, ParentID=%v, ClearParent=%v)", p0, in.AddChildrenIDs, in.RemoveChildrenIDs, in.ClearChildren, p4, in.ClearParent)
+}
+
+// GoString is String, so that %#v does not print the sensitive fields either.
+func (in UpdateCategoryInput) GoString() string { return in.String() }
+
+// UpdateCategory updates the Category with the ID id from input, as the
+// mutation updateCategory does, and returns it as it is afterwards: a field
+// input does not give is left as it is, and a clear field sets a field to NULL
+// or empties an edge. It first decodes id and every ID and JSON value of input,
+// and refuses a field given with its clear field, or an ID both to add and to
+// remove, before any statement (BAD_USER_INPUT). It then writes through the DB
+// veloxgql.DBFrom reads from ctx, in one transaction (gqlimpl.Atomic): the
+// operation's, or one of its own. The fields go in one UPDATE, which the tenant
+// scope and the Write policy scope; an input that sets none sends no UPDATE,
+// and a COUNT checks the row instead. The edges follow, each cleared, then its
+// IDs removed, then its IDs added: an ID to remove the edge does not lead to is
+// ignored, and one to add it already leads to is kept. Each ID must name a row
+// the caller may read, and a row it re-points one the caller may change; a
+// child another node holds is refused (BAD_USER_INPUT). An id that names no row
+// the caller may change, or an ID no row it may read, fails with NOT_FOUND and
+// keeps nothing. A validator's refusal is BAD_USER_INPUT, naming the input
+// field; velox's other errors are returned as they are. On MySQL the UPDATE's
+// row count needs clientFoundRows=true, as velox's Update does.
+func UpdateCategory(ctx context.Context, id string, input UpdateCategoryInput) (*Category, error) {
+	var (
+		key int64
+		k1  []int64
+		k2  []int64
+		k4  int64
+		err error
+	)
+	if key, err = gqlimpl.DecodeID[int64]("updateCategory.id", id, "Category"); err != nil {
+		return nil, err
+	}
+	if k1, err = gqlimpl.DecodeIDs[int64](ctx, "UpdateCategoryInput.addChildrenIDs", input.AddChildrenIDs, "Category"); err != nil {
+		return nil, err
+	}
+	if k2, err = gqlimpl.DecodeIDs[int64](ctx, "UpdateCategoryInput.removeChildrenIDs", input.RemoveChildrenIDs, "Category"); err != nil {
+		return nil, err
+	}
+	if input.ParentID != nil {
+		if k4, err = gqlimpl.DecodeID[int64]("UpdateCategoryInput.parentID", *input.ParentID, "Category"); err != nil {
+			return nil, err
+		}
+	}
+	if err = gqlimpl.Disjoint("UpdateCategoryInput", "addChildrenIDs", "removeChildrenIDs", k1, k2); err != nil {
+		return nil, err
+	}
+	if input.ParentID != nil && input.ClearParent {
+		return nil, gqlimpl.InputErrorf("UpdateCategoryInput: parentID and clearParent together")
+	}
+	var out *Category
+	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
+		var set []velox.Setter[Category]
+		if input.Title != nil {
+			set = append(set, Categories.Title.Set(*input.Title))
+		}
+		if input.ParentID != nil {
+			if err := gqlimpl.Exist(ctx, db.Query[Category]().Where(Categories.ID.In(k4)), 1, "UpdateCategoryInput.parentID", "Category"); err != nil {
+				return err
+			}
+			set = append(set, Categories.CategoryChildren.Set(k4))
+		}
+		if input.ClearParent {
+			set = append(set, Categories.CategoryChildren.SetNull())
+		}
+		if len(set) > 0 {
+			n, err := db.Update[Category]().Set(set...).Where(Categories.ID.EQ(key)).Exec(ctx)
+			if err != nil {
+				return gqlimpl.WriteError(err, "UpdateCategoryInput", "gen.Category", categoryFieldGQL)
+			}
+			if n == 0 {
+				return gqlimpl.NotFound("updateCategory", "Category")
+			}
+		} else if n, err := db.Query[Category]().Where(Categories.ID.EQ(key)).Count(ctx); err != nil {
+			return err
+		} else if n == 0 {
+			return gqlimpl.NotFound("updateCategory", "Category")
+		}
+		if input.ClearChildren {
+			if _, err := db.Update[Category]().Set(Categories.CategoryChildren.SetNull()).Where(Categories.CategoryChildren.EQ(key)).Exec(ctx); err != nil {
+				return err
+			}
+		}
+		if len(k2) > 0 {
+			if _, err := db.Update[Category]().Set(Categories.CategoryChildren.SetNull()).Where(Categories.ID.In(k2...), Categories.CategoryChildren.EQ(key)).Exec(ctx); err != nil {
+				return err
+			}
+		}
+		if len(k1) > 0 {
+			if _, err := db.Update[Category]().Set(Categories.CategoryChildren.Set(key)).Where(Categories.ID.In(k1...), Categories.CategoryChildren.IsNull()).Exec(ctx); err != nil {
+				return err
+			}
+			if n, err := db.Query[Category]().Where(Categories.ID.In(k1...), Categories.CategoryChildren.EQ(key)).Count(ctx); err != nil {
+				return err
+			} else if err := gqlimpl.Repointed(ctx, n, len(k1), db.Query[Category]().Where(Categories.ID.In(k1...), Categories.CategoryChildren.NotNull(), Categories.CategoryChildren.NEQ(key)), "UpdateCategoryInput.addChildrenIDs", "Category", "Category"); err != nil {
+				return err
+			}
+		}
+		x, err := db.Query[Category]().Where(Categories.ID.EQ(key)).One(ctx)
+		if errors.Is(err, velox.ErrNotFound) {
+			return gqlimpl.NotFound("updateCategory", "Category")
+		}
+		if err != nil {
+			return err
+		}
+		out = x
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}

@@ -493,3 +493,164 @@ func CreatePost(ctx context.Context, input CreatePostInput) (*Post, error) {
 	}
 	return out, nil
 }
+
+// UpdatePostInput is the GraphQL input UpdatePostInput, the input of
+// updatePost. A field that is a pointer, or a list, is optional: nil means not
+// given. A clear field that is true clears a field or an edge, and is refused
+// with the field or the edge's ID given too.
+type UpdatePostInput struct {
+	Title       *string
+	Status      *PostStatus
+	PublishedAt *time.Time
+	// ClearPublishedAt sets the field published_at to NULL.
+	ClearPublishedAt bool
+	Tags             *veloxgql.JSON
+	Views            *int
+	Rating           *float64
+	// ClearRating sets the field rating to NULL.
+	ClearRating bool
+	// WriterID is the ID of the Account the edge author leads to.
+	WriterID *string
+}
+
+// String returns the input's fields except its sensitive ones.
+func (in UpdatePostInput) String() string {
+	var p0 any
+	if in.Title != nil {
+		p0 = *in.Title
+	}
+	var p1 any
+	if in.Status != nil {
+		p1 = *in.Status
+	}
+	var p2 any
+	if in.PublishedAt != nil {
+		p2 = *in.PublishedAt
+	}
+	var p4 any
+	if in.Tags != nil {
+		p4 = string(*in.Tags)
+	}
+	var p5 any
+	if in.Views != nil {
+		p5 = *in.Views
+	}
+	var p6 any
+	if in.Rating != nil {
+		p6 = *in.Rating
+	}
+	var p8 any
+	if in.WriterID != nil {
+		p8 = *in.WriterID
+	}
+	return fmt.Sprintf("UpdatePostInput(Title=%v, Status=%v, PublishedAt=%v, ClearPublishedAt=%v, Tags=%v, Views=%v, Rating=%v, ClearRating=%v, WriterID=%v)", p0, p1, p2, in.ClearPublishedAt, p4, p5, p6, in.ClearRating, p8)
+}
+
+// GoString is String, so that %#v does not print the sensitive fields either.
+func (in UpdatePostInput) GoString() string { return in.String() }
+
+// UpdatePost updates the Post with the ID id from input, as the mutation
+// updatePost does, and returns it as it is afterwards: a field input does not
+// give is left as it is, and a clear field sets a field to NULL or empties an
+// edge. It first decodes id and every ID and JSON value of input, and refuses a
+// field given with its clear field, or an ID both to add and to remove, before
+// any statement (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFrom
+// reads from ctx, in one transaction (gqlimpl.Atomic): the operation's, or one
+// of its own. The fields go in one UPDATE, which the tenant scope and the Write
+// policy scope; an input that sets none sends no UPDATE, and a COUNT checks the
+// row instead. The edges follow, each cleared, then its IDs removed, then its
+// IDs added: an ID to remove the edge does not lead to is ignored, and one to
+// add it already leads to is kept. Each ID must name a row the caller may read,
+// and a row it re-points one the caller may change; a child another node holds
+// is refused (BAD_USER_INPUT). An id that names no row the caller may change,
+// or an ID no row it may read, fails with NOT_FOUND and keeps nothing. A
+// validator's refusal is BAD_USER_INPUT, naming the input field; velox's other
+// errors are returned as they are. On MySQL the UPDATE's row count needs
+// clientFoundRows=true, as velox's Update does.
+func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, error) {
+	var (
+		key int64
+		j4  []string
+		k8  int64
+		err error
+	)
+	if key, err = gqlimpl.DecodeID[int64]("updatePost.id", id, "Post"); err != nil {
+		return nil, err
+	}
+	if input.Tags != nil {
+		if j4, err = gqlimpl.FromJSON[[]string]("UpdatePostInput.tags", *input.Tags); err != nil {
+			return nil, err
+		}
+	}
+	if input.WriterID != nil {
+		if k8, err = gqlimpl.DecodeID[int64]("UpdatePostInput.writerID", *input.WriterID, "Account"); err != nil {
+			return nil, err
+		}
+	}
+	if input.PublishedAt != nil && input.ClearPublishedAt {
+		return nil, gqlimpl.InputErrorf("UpdatePostInput: publishedAt and clearPublishedAt together")
+	}
+	if input.Rating != nil && input.ClearRating {
+		return nil, gqlimpl.InputErrorf("UpdatePostInput: rating and clearRating together")
+	}
+	var out *Post
+	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
+		var set []velox.Setter[Post]
+		if input.Title != nil {
+			set = append(set, Posts.Title.Set(*input.Title))
+		}
+		if input.Status != nil {
+			set = append(set, Posts.Status.Set(*input.Status))
+		}
+		if input.PublishedAt != nil {
+			set = append(set, Posts.PublishedAt.Set(*input.PublishedAt))
+		}
+		if input.ClearPublishedAt {
+			set = append(set, Posts.PublishedAt.SetNull())
+		}
+		if input.Tags != nil {
+			set = append(set, Posts.Tags.Set(j4))
+		}
+		if input.Views != nil {
+			set = append(set, Posts.Views.Set(*input.Views))
+		}
+		if input.Rating != nil {
+			set = append(set, Posts.Rating.Set(*input.Rating))
+		}
+		if input.ClearRating {
+			set = append(set, Posts.Rating.SetNull())
+		}
+		if input.WriterID != nil {
+			if err := gqlimpl.Exist(ctx, db.Query[User]().Where(Users.ID.In(k8)), 1, "UpdatePostInput.writerID", "Account"); err != nil {
+				return err
+			}
+			set = append(set, Posts.AuthorID.Set(k8))
+		}
+		if len(set) > 0 {
+			n, err := db.Update[Post]().Set(set...).Where(Posts.ID.EQ(key)).Exec(ctx)
+			if err != nil {
+				return gqlimpl.WriteError(err, "UpdatePostInput", "gen.Post", postFieldGQL)
+			}
+			if n == 0 {
+				return gqlimpl.NotFound("updatePost", "Post")
+			}
+		} else if n, err := db.Query[Post]().Where(Posts.ID.EQ(key)).Count(ctx); err != nil {
+			return err
+		} else if n == 0 {
+			return gqlimpl.NotFound("updatePost", "Post")
+		}
+		x, err := db.Query[Post]().Where(Posts.ID.EQ(key)).One(ctx)
+		if errors.Is(err, velox.ErrNotFound) {
+			return gqlimpl.NotFound("updatePost", "Post")
+		}
+		if err != nil {
+			return err
+		}
+		out = x
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}

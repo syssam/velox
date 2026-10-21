@@ -272,8 +272,6 @@ func checkNames(t *testing.T, m *plugin.Model, others ...string) {
 			return "the root types: gqlgen generates their resolvers, which the application writes"
 		case def.Name == "PageInfo" || def.Name == "OrderDirection":
 			return "veloxgql's, mapped in gqlgen.yml"
-		case strings.HasPrefix(def.Name, "Update") && strings.HasSuffix(def.Name, "Input"):
-			return "the update inputs: a later task of plan 3 writes their Go types"
 		case def.Kind == gqlast.Enum && appEnums[def.Name]:
 			return "the application's own enum type, which a later task binds with @goModel"
 		}
@@ -753,38 +751,7 @@ func TestCreateInputs(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			files := render(t, m)
-			fset := token.NewFileSet()
-			structs, funcs := map[string]*ast.StructType{}, map[string]*ast.FuncDecl{}
-			for name, src := range files {
-				f, err := parser.ParseFile(fset, name, src, 0)
-				if err != nil {
-					t.Fatal(err)
-				}
-				for _, decl := range f.Decls {
-					switch decl := decl.(type) {
-					case *ast.FuncDecl:
-						if decl.Recv == nil {
-							funcs[decl.Name.Name] = decl
-						}
-					case *ast.GenDecl:
-						for _, spec := range decl.Specs {
-							if ts, ok := spec.(*ast.TypeSpec); ok {
-								if st, ok := ts.Type.(*ast.StructType); ok {
-									structs[ts.Name.Name] = st
-								}
-							}
-						}
-					}
-				}
-			}
-			expr := func(e ast.Expr) string {
-				var b strings.Builder
-				if err := printer.Fprint(&b, fset, e); err != nil {
-					t.Fatal(err)
-				}
-				return b.String()
-			}
+			structs, funcs, expr := mutationDecls(t, render(t, m))
 			n := 0
 			for _, ty := range surf.Types {
 				in := "Create" + ty.Name + "Input"
@@ -834,6 +801,139 @@ func TestCreateInputs(t *testing.T) {
 			}
 			if n == 0 {
 				t.Error("no type has createX")
+			}
+		})
+	}
+}
+
+// mutationDecls are files' struct types and funcs, by name, and how to
+// print an expression of them.
+func mutationDecls(t *testing.T, files map[string]string) (map[string]*ast.StructType, map[string]*ast.FuncDecl, func(ast.Expr) string) {
+	t.Helper()
+	fset := token.NewFileSet()
+	structs, funcs := map[string]*ast.StructType{}, map[string]*ast.FuncDecl{}
+	for name, src := range files {
+		f, err := parser.ParseFile(fset, name, src, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, decl := range f.Decls {
+			switch decl := decl.(type) {
+			case *ast.FuncDecl:
+				if decl.Recv == nil {
+					funcs[decl.Name.Name] = decl
+				}
+			case *ast.GenDecl:
+				for _, spec := range decl.Specs {
+					if ts, ok := spec.(*ast.TypeSpec); ok {
+						if st, ok := ts.Type.(*ast.StructType); ok {
+							structs[ts.Name.Name] = st
+						}
+					}
+				}
+			}
+		}
+	}
+	expr := func(e ast.Expr) string {
+		var b strings.Builder
+		if err := printer.Fprint(&b, fset, e); err != nil {
+			t.Fatal(err)
+		}
+		return b.String()
+	}
+	return structs, funcs, expr
+}
+
+// updateOnlyModel is typesModel with updateX and no createX on both types:
+// the update input names its fields' validation errors too.
+func updateOnlyModel(t *testing.T) *plugin.Model {
+	t.Helper()
+	m := typesModel(t)
+	b, err := json.Marshal(graphql.Mutations(graphql.Update()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range m.Entities {
+		e.Annotations = map[string]json.RawMessage{"graphql": b}
+	}
+	return m
+}
+
+// TestUpdateInputs: each type with updateX has Update<T>Input, with one Go
+// field for each of the Surface's InputFields, in order: a pointer for a
+// value or a unique edge's ID, a []string for an ID list and a bool for a
+// clear; and Update<T>, which takes the ID and the input and returns the
+// entity. A type with updateX and no createX still has <entity>FieldGQL,
+// which its UpdateX names.
+func TestUpdateInputs(t *testing.T) {
+	for label, m := range map[string]*plugin.Model{"testdata": testModel(t), "update-only": updateOnlyModel(t)} {
+		t.Run(label, func(t *testing.T) {
+			surf, err := sdl.Build(m)
+			if err != nil {
+				t.Fatal(err)
+			}
+			files := render(t, m)
+			structs, funcs, expr := mutationDecls(t, files)
+			n := 0
+			for _, ty := range surf.Types {
+				in, fn := "Update"+ty.Name+"Input", "Update"+ty.Name
+				st := structs[in]
+				if ty.Update == nil {
+					if st != nil || funcs[fn] != nil {
+						t.Errorf("%s has no updateX, and %s or %s is declared", ty.Name, in, fn)
+					}
+					continue
+				}
+				n++
+				if st == nil {
+					t.Errorf("no type %s struct", in)
+					continue
+				}
+				var got []string
+				for _, fl := range st.Fields.List {
+					for _, name := range fl.Names {
+						got = append(got, name.Name+" "+expr(fl.Type))
+					}
+				}
+				var want []string
+				for _, f := range ty.Update {
+					switch f.Kind {
+					case sdl.InputAddIDs, sdl.InputRemoveIDs:
+						want = append(want, f.GoName+" []string")
+					case sdl.InputClear, sdl.InputClearEdge:
+						want = append(want, f.GoName+" bool")
+					case sdl.InputEdgeID:
+						want = append(want, f.GoName+" *string")
+					case sdl.InputValue:
+						if f.Required {
+							t.Errorf("%s.%s is required", in, f.Name)
+						}
+						want = append(want, f.GoName+" *"+f.GoType)
+					default:
+						t.Errorf("%s.%s is of kind %d", in, f.Name, f.Kind)
+					}
+				}
+				if !slices.Equal(got, want) {
+					t.Errorf("%s: fields\n %v\nwant\n %v", in, got, want)
+				}
+				d := funcs[fn]
+				if d == nil {
+					t.Errorf("no func %s", fn)
+					continue
+				}
+				if sig, want := expr(d.Type), "func(ctx context.Context, id string, input "+in+") (*"+ty.Entity.Name+", error)"; sig != want {
+					t.Errorf("%s: %s, want %s", fn, sig, want)
+				}
+				gql := strings.ToLower(ty.Entity.Name[:1]) + ty.Entity.Name[1:] + "FieldGQL"
+				if funcs[gql] == nil {
+					t.Errorf("no func %s, which %s names", gql, fn)
+				}
+				if src := files["gql_"+ty.Entity.Label+".go"]; !strings.Contains(src, ", "+gql+")") {
+					t.Errorf("%s does not name %s", fn, gql)
+				}
+			}
+			if n == 0 {
+				t.Error("no type has updateX")
 			}
 		})
 	}

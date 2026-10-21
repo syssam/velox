@@ -154,19 +154,24 @@
 // fields of a mutation.
 //
 // For an entity with graphql.Create(), its file also has Create<T>Input and
-// Create<T>(ctx, input), which createX's resolver returns. The Go of updateX
-// and deleteX is not written yet: gqlgen writes models of their inputs in the
-// application's package, and the application resolves them itself until it
-// is.
+// Create<T>(ctx, input), which createX's resolver returns; with
+// graphql.Update(), Update<T>Input and Update<T>(ctx, id, input), which
+// updateX's resolver returns. In an update input a field not given is left
+// as it is, clear<Field> sets a nullable one to NULL, and an edge is
+// cleared, then its remove<Edge>IDs removed, then its add<Edge>IDs added; a
+// field given with its clear, or an ID both to add and to remove, is refused
+// with BAD_USER_INPUT. The Go of deleteX is not written yet: the application
+// resolves it itself until it is.
 //
 // An edge's inputs follow its foreign key. A key on the entity's own row is
 // set by <edge>ID. A key on the target's rows is re-pointed from the owner
 // by <edge>ID, <edge>IDs or add<Edge>IDs, but only a key that is nullable
 // and mutable: one that is never NULL always holds an owner, and one that is
 // immutable cannot move, so the owner's inputs have no such field, and the
-// child is linked from its own side, by its <edge>ID. Create<T> re-points
-// only a child no owner holds: one that another owner holds is refused with
-// BAD_USER_INPUT, "already linked", and not taken from it.
+// child is linked from its own side, by its <edge>ID. Create<T> and
+// Update<T> re-point only a child no owner holds, or one the row already
+// holds: one that another owner holds is refused with BAD_USER_INPUT,
+// "already linked", and not taken from it.
 //
 // The application writes the root query's resolvers, one call each: Node
 // and Nodes for node and nodes, and the root connection function for each

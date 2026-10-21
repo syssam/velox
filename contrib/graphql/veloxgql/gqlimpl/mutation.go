@@ -153,6 +153,26 @@ func Repointed[E any](ctx context.Context, got int64, n int, linked velox.Query[
 	return Matched(got, n, at, typ)
 }
 
+// Disjoint fails with BAD_USER_INPUT "veloxgql: <input>: an ID is in both
+// <add> and <remove>" when a key is in both a and b, the decoded IDs of the
+// fields add and remove of the input named input: the input has no single
+// meaning. It echoes no ID. For generated code only.
+func Disjoint[K comparable](input, add, remove string, a, b []K) error {
+	if len(a) == 0 || len(b) == 0 {
+		return nil
+	}
+	in := make(map[K]struct{}, len(a))
+	for _, k := range a {
+		in[k] = struct{}{}
+	}
+	for _, k := range b {
+		if _, ok := in[k]; ok {
+			return InputErrorf("%s: an ID is in both %s and %s", input, add, remove)
+		}
+	}
+	return nil
+}
+
 // article is the indefinite article of the name: "an" before a vowel.
 func article(name string) string {
 	if name != "" && strings.ContainsRune("AEIOUaeiou", rune(name[0])) {
