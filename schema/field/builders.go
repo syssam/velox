@@ -10,9 +10,11 @@ import (
 	"github.com/syssam/velox2/schema/internal/desc"
 )
 
-// newField makes the descriptor of a field whose standard Go type is rt.
-func newField(name, typ string, rt reflect.Type) *desc.Field {
-	return &desc.Field{Name: name, Type: typ, RType: rt}
+// newField makes the descriptor of a field whose standard Go type is rt,
+// declared at pos. Each exported constructor passes desc.Caller(), called in
+// its own body, so that pos is the line of the schema that calls it.
+func newField(name, typ string, rt reflect.Type, pos string) *desc.Field {
+	return &desc.Field{Name: name, Type: typ, RType: rt, Pos: pos}
 }
 
 // --- bool
@@ -22,7 +24,7 @@ type boolBuilder struct{ typed[*boolBuilder, bool] }
 // Bool declares a bool field.
 func Bool(name string) *boolBuilder {
 	b := &boolBuilder{}
-	b.typed = typed[*boolBuilder, bool]{common[*boolBuilder]{d: newField(name, "bool", reflect.TypeFor[bool]()), self: b}}
+	b.typed = typed[*boolBuilder, bool]{common[*boolBuilder]{d: newField(name, "bool", reflect.TypeFor[bool](), desc.Caller()), self: b}}
 	return b
 }
 
@@ -34,51 +36,51 @@ type number interface {
 
 type numberBuilder[T number] struct{ typed[*numberBuilder[T], T] }
 
-func newNumber[T number](name string) *numberBuilder[T] {
+func newNumber[T number](name, pos string) *numberBuilder[T] {
 	b := &numberBuilder[T]{}
 	rt := reflect.TypeFor[T]()
-	b.typed = typed[*numberBuilder[T], T]{common[*numberBuilder[T]]{d: newField(name, rt.Kind().String(), rt), self: b}}
+	b.typed = typed[*numberBuilder[T], T]{common[*numberBuilder[T]]{d: newField(name, rt.Kind().String(), rt, pos), self: b}}
 	return b
 }
 
 // Int declares an int field.
-func Int(name string) *numberBuilder[int] { return newNumber[int](name) }
+func Int(name string) *numberBuilder[int] { return newNumber[int](name, desc.Caller()) }
 
 // Int8 declares an int8 field.
-func Int8(name string) *numberBuilder[int8] { return newNumber[int8](name) }
+func Int8(name string) *numberBuilder[int8] { return newNumber[int8](name, desc.Caller()) }
 
 // Int16 declares an int16 field.
-func Int16(name string) *numberBuilder[int16] { return newNumber[int16](name) }
+func Int16(name string) *numberBuilder[int16] { return newNumber[int16](name, desc.Caller()) }
 
 // Int32 declares an int32 field.
-func Int32(name string) *numberBuilder[int32] { return newNumber[int32](name) }
+func Int32(name string) *numberBuilder[int32] { return newNumber[int32](name, desc.Caller()) }
 
 // Int64 declares an int64 field.
-func Int64(name string) *numberBuilder[int64] { return newNumber[int64](name) }
+func Int64(name string) *numberBuilder[int64] { return newNumber[int64](name, desc.Caller()) }
 
 // Uint declares a uint field.
-func Uint(name string) *numberBuilder[uint] { return newNumber[uint](name) }
+func Uint(name string) *numberBuilder[uint] { return newNumber[uint](name, desc.Caller()) }
 
 // Uint8 declares a uint8 field.
-func Uint8(name string) *numberBuilder[uint8] { return newNumber[uint8](name) }
+func Uint8(name string) *numberBuilder[uint8] { return newNumber[uint8](name, desc.Caller()) }
 
 // Uint16 declares a uint16 field.
-func Uint16(name string) *numberBuilder[uint16] { return newNumber[uint16](name) }
+func Uint16(name string) *numberBuilder[uint16] { return newNumber[uint16](name, desc.Caller()) }
 
 // Uint32 declares a uint32 field.
-func Uint32(name string) *numberBuilder[uint32] { return newNumber[uint32](name) }
+func Uint32(name string) *numberBuilder[uint32] { return newNumber[uint32](name, desc.Caller()) }
 
 // Uint64 declares a uint64 field.
-func Uint64(name string) *numberBuilder[uint64] { return newNumber[uint64](name) }
+func Uint64(name string) *numberBuilder[uint64] { return newNumber[uint64](name, desc.Caller()) }
 
 // Float declares a float64 field.
-func Float(name string) *numberBuilder[float64] { return newNumber[float64](name) }
+func Float(name string) *numberBuilder[float64] { return newNumber[float64](name, desc.Caller()) }
 
 // Float32 declares a float32 field.
-func Float32(name string) *numberBuilder[float32] { return newNumber[float32](name) }
+func Float32(name string) *numberBuilder[float32] { return newNumber[float32](name, desc.Caller()) }
 
 // Float64 declares a float64 field.
-func Float64(name string) *numberBuilder[float64] { return newNumber[float64](name) }
+func Float64(name string) *numberBuilder[float64] { return newNumber[float64](name, desc.Caller()) }
 
 // Range requires lo <= value <= hi.
 // An Optional field's zero value means unset, and is not validated.
@@ -116,15 +118,17 @@ func (b *numberBuilder[T]) check(kind string, args ...any) *numberBuilder[T] {
 type stringBuilder struct{ typed[*stringBuilder, string] }
 
 // String declares a string field.
-func String(name string) *stringBuilder {
+func String(name string) *stringBuilder { return newString(name, desc.Caller()) }
+
+func newString(name, pos string) *stringBuilder {
 	b := &stringBuilder{}
-	b.typed = typed[*stringBuilder, string]{common[*stringBuilder]{d: newField(name, "string", reflect.TypeFor[string]()), self: b}}
+	b.typed = typed[*stringBuilder, string]{common[*stringBuilder]{d: newField(name, "string", reflect.TypeFor[string](), pos), self: b}}
 	return b
 }
 
 // Text declares a string field with no length limit (Size is math.MaxInt32).
 func Text(name string) *stringBuilder {
-	b := String(name)
+	b := newString(name, desc.Caller())
 	b.d.Size = math.MaxInt32
 	return b
 }
@@ -166,7 +170,7 @@ type bytesBuilder struct{ typed[*bytesBuilder, []byte] }
 // Bytes declares a []byte field.
 func Bytes(name string) *bytesBuilder {
 	b := &bytesBuilder{}
-	b.typed = typed[*bytesBuilder, []byte]{common[*bytesBuilder]{d: newField(name, "bytes", reflect.TypeFor[[]byte]()), self: b}}
+	b.typed = typed[*bytesBuilder, []byte]{common[*bytesBuilder]{d: newField(name, "bytes", reflect.TypeFor[[]byte](), desc.Caller()), self: b}}
 	return b
 }
 
@@ -194,7 +198,7 @@ type timeBuilder struct{ common[*timeBuilder] }
 // Time declares a time.Time field.
 func Time(name string) *timeBuilder {
 	b := &timeBuilder{}
-	b.common = common[*timeBuilder]{d: newField(name, "time", reflect.TypeFor[time.Time]()), self: b}
+	b.common = common[*timeBuilder]{d: newField(name, "time", reflect.TypeFor[time.Time](), desc.Caller()), self: b}
 	return b
 }
 
@@ -229,7 +233,7 @@ type uuidBuilder struct{ common[*uuidBuilder] }
 // UUID declares a field of the UUID type of typ, such as uuid.UUID.
 func UUID(name string, typ driver.Valuer) *uuidBuilder {
 	b := &uuidBuilder{}
-	b.common = common[*uuidBuilder]{d: newField(name, "uuid", nil), self: b}
+	b.common = common[*uuidBuilder]{d: newField(name, "uuid", nil, desc.Caller()), self: b}
 	withType(b.d, typ)
 	return b
 }
@@ -241,21 +245,23 @@ func (b *uuidBuilder) Default(fn any) *uuidBuilder { b.d.Default = fn; return b 
 type jsonBuilder struct{ common[*jsonBuilder] }
 
 // JSON declares a field stored as JSON, of the type of typ.
-func JSON(name string, typ any) *jsonBuilder {
+func JSON(name string, typ any) *jsonBuilder { return newJSON(name, typ, desc.Caller()) }
+
+func newJSON(name string, typ any, pos string) *jsonBuilder {
 	b := &jsonBuilder{}
-	b.common = common[*jsonBuilder]{d: newField(name, "json", nil), self: b}
+	b.common = common[*jsonBuilder]{d: newField(name, "json", nil, pos), self: b}
 	withType(b.d, typ)
 	return b
 }
 
 // Strings declares a []string field stored as JSON.
-func Strings(name string) *jsonBuilder { return JSON(name, []string{}) }
+func Strings(name string) *jsonBuilder { return newJSON(name, []string{}, desc.Caller()) }
 
 // Ints declares an []int field stored as JSON.
-func Ints(name string) *jsonBuilder { return JSON(name, []int{}) }
+func Ints(name string) *jsonBuilder { return newJSON(name, []int{}, desc.Caller()) }
 
 // Floats declares a []float64 field stored as JSON.
-func Floats(name string) *jsonBuilder { return JSON(name, []float64{}) }
+func Floats(name string) *jsonBuilder { return newJSON(name, []float64{}, desc.Caller()) }
 
 // Default sets the value a new row gets, of the JSON type.
 func (b *jsonBuilder) Default(v any) *jsonBuilder { b.d.Default = v; return b }
@@ -266,7 +272,7 @@ type otherBuilder struct{ common[*otherBuilder] }
 // Use SchemaType to give its column type.
 func Other(name string, typ driver.Valuer) *otherBuilder {
 	b := &otherBuilder{}
-	b.common = common[*otherBuilder]{d: newField(name, "other", nil), self: b}
+	b.common = common[*otherBuilder]{d: newField(name, "other", nil, desc.Caller()), self: b}
 	withType(b.d, typ)
 	return b
 }
@@ -284,7 +290,7 @@ type enumBuilder struct{ common[*enumBuilder] }
 // Enum declares an enum field, stored as a string.
 func Enum(name string) *enumBuilder {
 	b := &enumBuilder{}
-	b.common = common[*enumBuilder]{d: newField(name, "enum", reflect.TypeFor[string]()), self: b}
+	b.common = common[*enumBuilder]{d: newField(name, "enum", reflect.TypeFor[string](), desc.Caller()), self: b}
 	return b
 }
 

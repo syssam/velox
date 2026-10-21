@@ -34,7 +34,7 @@ func runDescribe(args []string, dir string, env []string, stdout, stderr io.Writ
 		}
 	}
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", relErrors(dir, err))
 		return 1
 	}
 	return 0

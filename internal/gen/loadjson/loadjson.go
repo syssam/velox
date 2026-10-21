@@ -1,13 +1,13 @@
-// Package load turns the schemas of a package into a Model, the versioned,
-// JSON-encodable description the generator reads. The program velox-gen writes
-// imports the schema package, calls Marshal and prints the result; the
-// generator reads it back with encoding/json.
-package load
+// Package loadjson holds the load model: the versioned JSON that schema/load's
+// Marshal writes and velox-gen reads back. The program velox-gen writes imports
+// the schema package, calls Marshal and prints the model. The format is
+// internal to velox2: it changes with Version, and only velox-gen reads it.
+package loadjson
 
 import "encoding/json"
 
 // Version is the version of the Model's JSON format.
-const Version = 1
+const Version = 2
 
 // SchemaPath is the import path of the schema DSL package. velox-gen uses it
 // to find the schemas of a package by their embedding of schema.Schema.
@@ -16,8 +16,19 @@ const SchemaPath = "github.com/syssam/velox2/schema"
 // Model describes the schemas of one package.
 type Model struct {
 	Version int       `json:"version"`
-	Package string    `json:"package"` // the schema package's import path
-	Schemas []*Schema `json:"schemas"` // sorted by Name
+	Package string    `json:"package"`          // the schema package's import path
+	Schemas []*Schema `json:"schemas"`          // sorted by Name
+	Errors  []Error   `json:"errors,omitempty"` // every misuse Marshal found, sorted by Schema
+}
+
+// Error is one misuse of the DSL: a builder's, a schema declared twice, or a
+// method a schema must not have. Pos is the file:line of the element, or "".
+// Where is `field "name"`, `edge "posts"`, or "".
+type Error struct {
+	Pos    string `json:"pos,omitempty"`
+	Schema string `json:"schema"`
+	Where  string `json:"where,omitempty"`
+	Reason string `json:"reason"`
 }
 
 // Position says where an element was declared: its index in the list that
@@ -81,6 +92,7 @@ type Field struct {
 	StructTag     string                     `json:"struct_tag,omitempty"`
 	Annotations   map[string]json.RawMessage `json:"annotations,omitempty"`
 	Position      Position                   `json:"position"`
+	Pos           string                     `json:"pos,omitempty"` // file:line of the constructor's call
 }
 
 // Edge describes one edge. An inverse declared inline, with To(...).From(...),
@@ -102,6 +114,7 @@ type Edge struct {
 	Annotations map[string]json.RawMessage `json:"annotations,omitempty"`
 	Position    Position                   `json:"position"`
 	Inline      bool                       `json:"inline,omitempty"` // an inverse declared with To(...).From(...)
+	Pos         string                     `json:"pos,omitempty"`    // file:line of the constructor's call
 }
 
 // Index describes one index.
@@ -113,4 +126,5 @@ type Index struct {
 	Where       string                     `json:"where,omitempty"`
 	Annotations map[string]json.RawMessage `json:"annotations,omitempty"`
 	Position    Position                   `json:"position"`
+	Pos         string                     `json:"pos,omitempty"` // file:line of the constructor's call
 }

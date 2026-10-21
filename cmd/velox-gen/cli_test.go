@@ -27,6 +27,13 @@ func tempModule(t *testing.T, files map[string]string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
+	tempModuleAt(t, dir, files)
+	return dir
+}
+
+// tempModuleAt is tempModule in the directory dir, which it creates.
+func tempModuleAt(t *testing.T, dir string, files map[string]string) {
+	t.Helper()
 	lib, err := filepath.Abs(root)
 	if err != nil {
 		t.Fatal(err)
@@ -45,7 +52,6 @@ func tempModule(t *testing.T, files map[string]string) string {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("go mod tidy: %v\n%s", err, out)
 	}
-	return dir
 }
 
 func writeFile(t *testing.T, path, src string) {

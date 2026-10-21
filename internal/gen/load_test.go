@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -141,4 +142,58 @@ func TestLoadLeavesNoDirectory(t *testing.T) {
 	if len(left) != 0 {
 		t.Fatalf("left behind %v", left)
 	}
+}
+
+func TestLoadErrorsHaveNoExitStatus(t *testing.T) {
+	panics := strings.Replace(userSchema, `return []schema.Field{field.String("name")}`, `_ = field.String; panic("boom")`, 1)
+	initPanics := userSchema + "\nvar _ = func() int { panic(\"init boom\") }()\n"
+	for name, src := range map[string]string{"Fields panics": panics, "init panics": initPanics} {
+		dir := module(t, map[string]string{"schema/user.go": src})
+		_, err := Load(dir, "./schema", offline())
+		if err == nil || strings.Contains(err.Error(), "exit status") || !strings.Contains(err.Error(), "boom") {
+			t.Errorf("%s: got %v", name, err)
+		}
+	}
+}
+
+func TestLoadReturnsModelErrors(t *testing.T) {
+	src := strings.Replace(userSchema, `field.String("name")}`, "field.String(\"name\"),\n\t\tfield.Int64(\"n\").DefaultFunc(1),\n\t\tfield.Enum(\"e\").NamedValues(\"X\"),\n\t}", 1)
+	dir := module(t, map[string]string{"schema/user.go": src})
+	_, err := Load(dir, "./schema", offline())
+	var errs []*Error
+	if j, ok := err.(interface{ Unwrap() []error }); ok {
+		for _, e := range j.Unwrap() {
+			if ge, ok := e.(*Error); ok {
+				errs = append(errs, ge)
+			}
+		}
+	}
+	if len(errs) != 2 {
+		t.Fatalf("got %v", err)
+	}
+	for i, line := range []int{11, 12} {
+		e := errs[i]
+		if want := filepath.Join(dir, "schema", "user.go") + ":" + strconv.Itoa(line); !samePos(e.Pos, want) || e.Schema != "User" {
+			t.Errorf("error %d: %+v, want pos %s", i, e, want)
+		}
+	}
+	if got := errs[0].Error(); !strings.HasSuffix(got, `user.go:11: schema User: field "n": DefaultFunc must be a func() int64`) {
+		t.Errorf("text %q", got)
+	}
+}
+
+// samePos reports whether two file:line positions name one line of one file,
+// whatever symbolic links the paths go through.
+func samePos(a, b string) bool {
+	resolve := func(p string) string {
+		i := strings.LastIndexByte(p, ':')
+		if i < 0 {
+			return p
+		}
+		if r, err := filepath.EvalSymlinks(p[:i]); err == nil {
+			return r + p[i:]
+		}
+		return p
+	}
+	return resolve(a) == resolve(b)
 }

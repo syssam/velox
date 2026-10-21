@@ -12,11 +12,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 
-	"github.com/syssam/velox2/schema/load"
+	"github.com/syssam/velox2/internal/gen/loadjson"
 )
 
 // listed is the part of a go list package that Load reads.
@@ -70,7 +71,11 @@ func inspect(dir, pattern string, env []string) (*listed, []string, error) {
 // Load loads the schema package that pattern names, from the module that
 // holds dir, by compiling and running a program that marshals its schemas.
 // env is the environment of the go commands it runs; nil means os.Environ().
-func Load(dir, pattern string, env []string) (*load.Model, error) {
+//
+// The misuses of the DSL the model reports, such as a builder's, are returned
+// as *Error values joined with errors.Join, each with the position of the
+// element when it has one.
+func Load(dir, pattern string, env []string) (*loadjson.Model, error) {
 	pkg, names, err := inspect(dir, pattern, env)
 	if err != nil {
 		return nil, err
@@ -90,6 +95,9 @@ func Load(dir, pattern string, env []string) (*load.Model, error) {
 	if err != nil {
 		msg := strings.ReplaceAll(stderr, tmp, "velox-gen")
 		msg = strings.ReplaceAll(msg, filepath.Base(tmp), "velox-gen")
+		// go run's own last line says how the program exited, which the
+		// lines before it already explain.
+		msg = exitStatus.ReplaceAllString(strings.TrimRight(msg, "\n"), "")
 		if strings.TrimSpace(msg) == "" {
 			msg = err.Error()
 		}
@@ -99,21 +107,31 @@ func Load(dir, pattern string, env []string) (*load.Model, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loading %s: %w", pkg.ImportPath, err)
 	}
+	if len(m.Errors) > 0 {
+		errs := make([]error, len(m.Errors))
+		for i, e := range m.Errors {
+			errs[i] = &Error{Pos: e.Pos, Schema: e.Schema, Where: e.Where, Reason: e.Reason}
+		}
+		return nil, errors.Join(errs...)
+	}
 	return m, nil
 }
+
+// exitStatus matches the line go run writes last when the program fails.
+var exitStatus = regexp.MustCompile(`(^|\n)exit status \d+$`)
 
 // decodeModel decodes the loader's output. It checks the version before it
 // decodes the rest, so a model whose shape changed with its version reports
 // the version.
-func decodeModel(b []byte) (*load.Model, error) {
+func decodeModel(b []byte) (*loadjson.Model, error) {
 	var v struct{ Version int }
 	if err := json.Unmarshal(b, &v); err != nil {
 		return nil, fmt.Errorf("decoding the model: %w", err)
 	}
-	if v.Version != load.Version {
-		return nil, fmt.Errorf("the loader wrote model version %d; velox-gen reads version %d: update velox-gen and the velox2 module together", v.Version, load.Version)
+	if v.Version != loadjson.Version {
+		return nil, fmt.Errorf("the loader wrote model version %d; velox-gen reads version %d: update velox-gen and the velox2 module together", v.Version, loadjson.Version)
 	}
-	var m load.Model
+	var m loadjson.Model
 	if err := json.Unmarshal(b, &m); err != nil {
 		return nil, fmt.Errorf("decoding the model: %w", err)
 	}
@@ -248,7 +266,7 @@ func discover(files map[string][]byte) ([]string, error) {
 // not import it by a usable name: a dot or underscore import does not count.
 func schemaName(f *ast.File) string {
 	for _, imp := range f.Imports {
-		if p, err := strconv.Unquote(imp.Path.Value); err != nil || p != load.SchemaPath {
+		if p, err := strconv.Unquote(imp.Path.Value); err != nil || p != loadjson.SchemaPath {
 			continue
 		}
 		switch {

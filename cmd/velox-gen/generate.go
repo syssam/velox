@@ -139,11 +139,11 @@ func loadModel(dir, pattern, pkg string, env []string) (*genModel, error) {
 	}
 	m, err := gen.Load(dir, pattern, env)
 	if err != nil {
-		return nil, err
+		return nil, relErrors(dir, err)
 	}
 	g, err := gen.Build(m)
 	if err != nil {
-		return nil, err
+		return nil, relErrors(dir, err)
 	}
 	o, err := gen.Lower(g, gen.Config{Package: pkg, SchemaPath: importPath})
 	if err != nil {

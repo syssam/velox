@@ -76,11 +76,21 @@ func (c common[B]) Annotations(as ...schema.Annotation) B {
 // on one another, so it may be called more than once.
 func (c common[B]) Descriptor() *desc.Field { finish(c.d); return c.d }
 
-// fail records the first misuse of a builder.
+// fail records a misuse of a builder. The loader names the field.
 func fail(d *desc.Field, format string, args ...any) {
-	if d.Err == nil {
-		d.Err = fmt.Errorf("field %q: "+format, append([]any{d.Name}, args...)...)
+	d.Errs = append(d.Errs, fmt.Errorf(format, args...))
+}
+
+// failOnce records a misuse that finish finds, unless an earlier Descriptor
+// call recorded it already.
+func failOnce(d *desc.Field, format string, args ...any) {
+	err := fmt.Errorf(format, args...)
+	for _, e := range d.Errs {
+		if e.Error() == err.Error() {
+			return
+		}
 	}
+	d.Errs = append(d.Errs, err)
 }
 
 // typed holds the options of a field whose values are of the Go type V.
@@ -147,10 +157,10 @@ func sameKind(t, base reflect.Type) bool {
 }
 
 // finish checks the options that depend on one another. It runs on every
-// Descriptor call and records an error only once.
+// Descriptor call and records each error only once.
 func finish(d *desc.Field) {
 	if d.Default != nil && d.DefaultFunc != nil {
-		fail(d, "Default and DefaultFunc are both set")
+		failOnce(d, "Default and DefaultFunc are both set")
 	}
 	checkFunc(d, "DefaultFunc", d.DefaultFunc)
 	checkFunc(d, "UpdateDefault", d.UpdateDefault)
@@ -166,7 +176,7 @@ func finish(d *desc.Field) {
 				return
 			}
 		}
-		fail(d, "Default %v is not one of the enum values", d.Default)
+		failOnce(d, "Default %v is not one of the enum values", d.Default)
 	}
 }
 
@@ -179,6 +189,6 @@ func checkFunc(d *desc.Field, option string, fn any) {
 	rt, _ := d.RType.(reflect.Type)
 	t := reflect.TypeOf(fn)
 	if t.Kind() != reflect.Func || reflect.ValueOf(fn).IsNil() || t.NumIn() != 0 || t.NumOut() != 1 || (rt != nil && !t.Out(0).AssignableTo(rt)) {
-		fail(d, "%s must be a func() %v", option, rt)
+		failOnce(d, "%s must be a func() %v", option, rt)
 	}
 }

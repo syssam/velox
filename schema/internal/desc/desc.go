@@ -6,8 +6,21 @@ package desc
 
 import (
 	"reflect"
+	"runtime"
 	"slices"
+	"strconv"
 )
+
+// Caller returns the file:line that calls the function that calls Caller: a
+// DSL constructor calls it, directly, to record the line of the schema that
+// declares the element. It returns "" when the stack does not say.
+func Caller() string {
+	_, file, line, ok := runtime.Caller(2)
+	if !ok {
+		return ""
+	}
+	return file + ":" + strconv.Itoa(line)
+}
 
 // Annotation is extra data a schema attaches to itself, a field, an edge or an
 // index. Name identifies the annotation; two annotations of one name on one
@@ -89,7 +102,8 @@ type Field struct {
 	Comment       string
 	StructTag     string
 	Annotations   []Annotation
-	Err           error // the first misuse of the builder
+	Pos           string  // the file:line of the constructor's call
+	Errs          []error // every misuse of the builder, each a reason without the field's name
 }
 
 // Edge is the descriptor of one edge. The edge package's builders fill it.
@@ -107,7 +121,8 @@ type Edge struct {
 	Symbols             []string
 	Comment             string
 	Annotations         []Annotation
-	Err                 error // the first misuse of the builder
+	Pos                 string  // the file:line of the constructor's call
+	Errs                []error // every misuse of the builder, each a reason without the edge's name
 }
 
 // Index is the descriptor of one index. The index package's builders fill it.
@@ -117,4 +132,5 @@ type Index struct {
 	StorageKey    string // the index name
 	Where         string // a partial index's predicate, on PostgreSQL
 	Annotations   []Annotation
+	Pos           string // the file:line of the constructor's call
 }

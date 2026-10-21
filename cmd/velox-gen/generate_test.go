@@ -685,3 +685,138 @@ func TestVerifyGeneratedChecksThroughRelations(t *testing.T) {
 	}
 	noVerifyDirs(t, dir)
 }
+
+const dupFieldSchema = `package schema
+
+import (
+	"github.com/syssam/velox2/schema"
+	"github.com/syssam/velox2/schema/field"
+)
+
+type User struct{ schema.Schema }
+
+func (User) Fields() []schema.Field {
+	return []schema.Field{
+		field.String("name"),
+		field.String("name"),
+		field.Int64("n").DefaultFunc(1),
+	}
+}
+`
+
+// Errors start with the position of the element, relative to the working
+// directory when the file is inside it.
+func TestRuleErrorHasPos(t *testing.T) {
+	dir := tempModule(t, map[string]string{"schema/user.go": dupFieldSchema})
+	// A builder misuse is reported first, by itself: the rules run on a
+	// model that loaded.
+	code, _, errs := velox(t, dir, "./schema")
+	if want := `velox-gen: schema/user.go:14: schema User: field "n": DefaultFunc must be a func() int64`; code != 1 || !strings.Contains(errs, want) {
+		t.Fatalf("misuse: %d %q, want %q", code, errs, want)
+	}
+	writeFile(t, filepath.Join(dir, "schema", "user.go"), strings.Replace(dupFieldSchema, "\t\tfield.Int64(\"n\").DefaultFunc(1),\n", "", 1))
+	code, _, errs = velox(t, dir, "./schema")
+	if want := `schema/user.go:13: schema User: field "name": declared twice`; code != 1 || !strings.Contains(errs, want) {
+		t.Fatalf("rule: %d %q, want %q", code, errs, want)
+	}
+	code, _, errs = velox(t, dir, "describe")
+	if want := `schema/user.go:13: schema User: field "name": declared twice`; code != 1 || !strings.Contains(errs, want) {
+		t.Fatalf("describe: %d %q, want %q", code, errs, want)
+	}
+	code, _, errs = velox(t, filepath.Join(dir, "schema"), "-check", ".")
+	if want := "velox-gen: user.go:13: schema User:"; code != 1 || !strings.Contains(errs, want) {
+		t.Fatalf("in the schema directory: %d %q, want %q", code, errs, want)
+	}
+	if strings.Contains(errs, dir) {
+		t.Errorf("an absolute path is printed: %q", errs)
+	}
+}
+
+const posSchema = `package schema
+
+import (
+	"github.com/syssam/velox2/schema"
+	"github.com/syssam/velox2/schema/edge"
+	"github.com/syssam/velox2/schema/field"
+	"github.com/syssam/velox2/schema/index"
+	"github.com/syssam/velox2/schema/mixin"
+)
+
+type User struct{ schema.Schema }
+
+func (User) Mixin() []schema.Mixin { return []schema.Mixin{mixin.Time{}} }
+
+func (User) Fields() []schema.Field {
+	return []schema.Field{
+		field.String("name"),
+		field.Enum("role").Values("viewer", "admin").Default("viewer"),
+	}
+}
+
+func (User) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("posts", Post.Type), edge.To("friends", User.Type)}
+}
+
+func (User) Indexes() []schema.Index { return []schema.Index{index.Fields("name").Unique()} }
+
+type Post struct{ schema.Schema }
+
+func (Post) Fields() []schema.Field { return []schema.Field{field.Text("body")} }
+
+func (Post) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("author", User.Type).Ref("posts").Unique()}
+}
+`
+
+// Review Focus 1: one schema package in two modules at different depths gives
+// byte-identical output, velox.go's model hash and describe -json included.
+func TestOutputIgnoresPositions(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a module")
+	}
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	dirs := []string{filepath.Join(base, "a"), filepath.Join(base, "deeper", "x", "y", "b")}
+	var gens []map[string]string
+	var described []string
+	for _, dir := range dirs {
+		tempModuleAt(t, dir, map[string]string{"schema/user.go": posSchema})
+		if code, _, errs := velox(t, dir, "./schema"); code != 0 {
+			t.Fatalf("%s: %d %q", dir, code, errs)
+		}
+		files := map[string]string{}
+		des, err := os.ReadDir(filepath.Join(dir, "gen"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, de := range des {
+			b, err := os.ReadFile(filepath.Join(dir, "gen", de.Name()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(b), base) || strings.Contains(string(b), "user.go:") {
+				t.Errorf("%s holds a path", de.Name())
+			}
+			files[de.Name()] = string(b)
+		}
+		gens = append(gens, files)
+		code, out, errs := velox(t, dir, "describe", "-json")
+		if code != 0 || strings.Contains(out, base) {
+			t.Fatalf("describe: %d %q", code, errs)
+		}
+		described = append(described, out)
+	}
+	if _, ok := gens[0]["velox.go"]; !ok || len(gens[0]) != len(gens[1]) {
+		t.Fatalf("files %d and %d", len(gens[0]), len(gens[1]))
+	}
+	for name, a := range gens[0] {
+		if b, ok := gens[1][name]; !ok || a != b {
+			t.Errorf("%s differs between the two checkouts", name)
+		}
+	}
+	if described[0] != described[1] {
+		t.Error("describe -json differs between the two checkouts")
+	}
+}

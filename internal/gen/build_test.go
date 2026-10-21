@@ -4,11 +4,14 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/syssam/velox2/internal/gen/internal/other"
+	"github.com/syssam/velox2/internal/gen/loadjson"
 	"github.com/syssam/velox2/schema"
 	"github.com/syssam/velox2/schema/edge"
 	"github.com/syssam/velox2/schema/field"
@@ -22,11 +25,38 @@ func build(t *testing.T, ss ...schema.Interface) (*Graph, error) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var m load.Model
+	var m loadjson.Model
 	if err := json.Unmarshal(b, &m); err != nil {
 		t.Fatal(err)
 	}
+	if len(m.Errors) > 0 {
+		t.Fatalf("builder errors %+v", m.Errors)
+	}
 	return Build(&m)
+}
+
+// plain is the text of err, a join of *Error values, without their positions.
+func plain(err error) string {
+	j, ok := err.(interface{ Unwrap() []error })
+	if !ok {
+		return fmt.Sprint(err)
+	}
+	var lines []string
+	for _, e := range j.Unwrap() {
+		if ge, ok := e.(*Error); ok {
+			c := *ge
+			c.Pos = ""
+			e = &c
+		}
+		lines = append(lines, e.Error())
+	}
+	return strings.Join(lines, "\n")
+}
+
+// here returns the line it is called on.
+func here() int {
+	_, _, line, _ := runtime.Caller(1)
+	return line
 }
 
 func mustBuild(t *testing.T, ss ...schema.Interface) *Graph {
@@ -854,11 +884,102 @@ func (manyErrors) Indexes() []schema.Index { return []schema.Index{index.Fields(
 
 func TestBuildErrorsFollowRuleOrder(t *testing.T) {
 	_, err := build(t, manyErrors{})
+	got := plain(err)
 	want := `schema manyErrors: field "a": declared twice
 schema manyErrors: edge "x": an inverse edge needs Ref(name)
 schema manyErrors: field "s": an enum needs Values
 schema manyErrors: index 0: names no fields or edges`
-	if err == nil || err.Error() != want {
-		t.Fatalf("got\n%v\nwant\n%s", err, want)
+	if err == nil || got != want {
+		t.Fatalf("got\n%v\nwant\n%s", got, want)
+	}
+}
+
+// posErrors breaks rules on a field, an edge and an index, each declared on a
+// line of its own.
+type posErrors struct{ schema.Schema }
+
+var posLines [3]int
+
+func (posErrors) Fields() []schema.Field {
+	a := field.String("a")
+	b, l := field.String("a"), here()
+	posLines[0] = l
+	return []schema.Field{a, b}
+}
+
+func (posErrors) Edges() []schema.Edge {
+	e, l := edge.From("x", posErrors.Type), here()
+	posLines[1] = l
+	return []schema.Edge{e}
+}
+
+func (posErrors) Indexes() []schema.Index {
+	ix, l := index.Fields(), here()
+	posLines[2] = l
+	return []schema.Index{ix}
+}
+
+func TestRuleErrorPos(t *testing.T) {
+	_, err := build(t, posErrors{})
+	errs := err.(interface{ Unwrap() []error }).Unwrap()
+	if len(errs) != 3 {
+		t.Fatalf("got %v", err)
+	}
+	for i, want := range []string{`field "a": declared twice`, `edge "x": an inverse edge needs Ref(name)`, `index 0: names no fields or edges`} {
+		suffix := fmt.Sprintf("/build_test.go:%d", posLines[i])
+		e := errs[i].(*Error)
+		if !strings.HasSuffix(e.Pos, suffix) || e.Error() != e.Pos+": schema posErrors: "+want {
+			t.Errorf("error %d: %q (pos %q), want pos ...%s", i, e.Error(), e.Pos, suffix)
+		}
+	}
+	// An implicit foreign key has no position.
+	_, err = build(t, clashOwner{}, clashPet{})
+	var ge *Error
+	if !errors.As(err, &ge) || ge.Pos != "" || !strings.HasPrefix(ge.Error(), "schema clashPet: ") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+// Positions are kept out of the Graph's JSON: the model hash, describe -json
+// and the generated files do not depend on where the schema was declared.
+func TestOutputIgnoresPositionsInGraph(t *testing.T) {
+	g := mustBuild(t, User{}, Post{}, Group{})
+	var hasPos bool
+	for _, e := range g.Entities {
+		for _, f := range e.Fields {
+			hasPos = hasPos || f.Pos != ""
+		}
+	}
+	if !hasPos || g.Entity("User").Edge("posts").Pos == "" || g.Entity("User").Indexes[0].Pos == "" {
+		t.Fatal("Build fills the positions of declared elements")
+	}
+	b, err := json.Marshal(g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "build_test.go") || strings.Contains(string(b), `"pos"`) {
+		t.Fatalf("a position is in the graph's JSON:\n%s", b)
+	}
+	out1, err := Lower(g, Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range g.Entities {
+		for _, f := range e.Fields {
+			f.Pos = "/elsewhere/user.go:1"
+		}
+		for _, ed := range e.Edges {
+			ed.Pos = "/elsewhere/user.go:2"
+		}
+		for _, ix := range e.Indexes {
+			ix.Pos = "/elsewhere/user.go:3"
+		}
+	}
+	out2, err := Lower(g, Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out1.Hash != out2.Hash {
+		t.Fatal("the model hash depends on the positions")
 	}
 }

@@ -14,8 +14,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/syssam/velox2/internal/gen/loadjson"
 	"github.com/syssam/velox2/plugin"
-	"github.com/syssam/velox2/schema/load"
 )
 
 // reserved are the Go names of the methods an entity has, which no field or
@@ -291,7 +291,7 @@ func (s *entState) elemType(f *Field, where string) (elem, kind string) {
 // importNames pairs each import path of g with the name the type's Ident
 // refers to it by: the Ident's qualifier that is the path's last element, or
 // else the one qualifier left over.
-func importNames(g *load.GoType) []struct{ path, name string } {
+func importNames(g *loadjson.GoType) []struct{ path, name string } {
 	qs := qualifiers(g.Ident)
 	names := make([]string, len(g.Imports))
 	var restP []int
@@ -746,7 +746,7 @@ func (l *lowerer) through(s *entState, e, t *Entity, ed *Edge) string {
 		}
 		for i, ent := range []*Entity{owner, target} {
 			id := ent.Fields[0]
-			f := &Field{Field: load.Field{Name: cols[i], Type: id.Type, GoType: id.GoType}, GoName: plugin.GoName(cols[i]), Column: cols[i]}
+			f := &Field{Field: loadjson.Field{Name: cols[i], Type: id.Type, GoType: id.GoType}, GoName: plugin.GoName(cols[i]), Column: cols[i]}
 			js.out.Fields = append(js.out.Fields, js.field(nil, i, f))
 		}
 		// Errors name the assoc edge, whichever of the pair makes the entity first.

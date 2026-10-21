@@ -63,12 +63,15 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/syssam/velox2/internal/gen"
 )
 
 func main() {
@@ -133,4 +136,44 @@ func relPath(dir, path string) string {
 		return r
 	}
 	return path
+}
+
+// relErrors shows the positions of err's *gen.Error values, as errors.Join
+// joined them, relative to dir when their files are inside it.
+func relErrors(dir string, err error) error {
+	errs := []error{err}
+	if j, ok := err.(interface{ Unwrap() []error }); ok {
+		errs = j.Unwrap()
+	}
+	out := make([]error, len(errs))
+	changed := false
+	for i, e := range errs {
+		out[i] = e
+		if ge, ok := e.(*gen.Error); ok && ge.Pos != "" {
+			c := *ge
+			c.Pos = relPos(dir, ge.Pos)
+			out[i], changed = &c, true
+		}
+	}
+	if !changed {
+		return err
+	}
+	return errors.Join(out...)
+}
+
+// relPos shows a file:line position relative to dir when the file is inside
+// it.
+func relPos(dir, pos string) string {
+	i := strings.LastIndexByte(pos, ':')
+	if i < 0 {
+		return pos
+	}
+	file := filepath.FromSlash(pos[:i])
+	if !filepath.IsAbs(file) {
+		return pos
+	}
+	if r, err := filepath.EvalSymlinks(file); err == nil {
+		file = r
+	}
+	return relPath(dir, file) + pos[i:]
 }

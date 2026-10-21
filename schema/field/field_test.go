@@ -3,9 +3,11 @@ package field_test
 import (
 	"database/sql/driver"
 	"errors"
+	"fmt"
 	"math"
 	"reflect"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -31,8 +33,8 @@ func TestStringOptions(t *testing.T) {
 	d := field.String("name").NotEmpty().MaxLen(100).Match(regexp.MustCompile(`^[a-z]+$`)).
 		Optional().Nillable().Immutable().Unique().Sensitive().Comment("c").StorageKey("nm").
 		SchemaType(map[string]string{"postgres": "citext"}).StructTag(`json:"-"`).Tenant().Default("x").Descriptor()
-	if d.Err != nil {
-		t.Fatal(d.Err)
+	if len(d.Errs) != 0 {
+		t.Fatal(d.Errs)
 	}
 	if d.Name != "name" || d.Type != "string" || d.Size != 100 || !d.Optional || !d.Nillable || !d.Immutable ||
 		!d.Unique || !d.Sensitive || !d.Tenant || d.Comment != "c" || d.StorageKey != "nm" ||
@@ -78,17 +80,17 @@ func TestNumberTypes(t *testing.T) {
 
 func TestGoType(t *testing.T) {
 	d := field.Float64("temp").GoType(celsius(0)).Descriptor()
-	if d.Err != nil || d.GoType.Ident != "field_test.celsius" {
-		t.Fatalf("%+v %v", d.GoType, d.Err)
+	if len(d.Errs) != 0 || d.GoType.Ident != "field_test.celsius" {
+		t.Fatalf("%+v %v", d.GoType, d.Errs)
 	}
-	if d := field.String("x").GoType(0).Descriptor(); d.Err == nil {
+	if d := field.String("x").GoType(0).Descriptor(); len(d.Errs) == 0 {
 		t.Fatal("an int GoType on a string field is an error")
 	}
 }
 
 func TestDefaultFuncs(t *testing.T) {
 	d := field.Time("created_at").Default(time.Now).UpdateDefault(time.Now).Immutable().Descriptor()
-	if d.Err != nil || d.Default == nil || d.UpdateDefault == nil {
+	if len(d.Errs) != 0 || d.Default == nil || d.UpdateDefault == nil {
 		t.Fatalf("%+v", d)
 	}
 	for name, f := range map[string]schema.Field{
@@ -97,19 +99,19 @@ func TestDefaultFuncs(t *testing.T) {
 		"func with an argument":     field.Int64("n").DefaultFunc(func(int) int64 { return 0 }),
 		"update default not a func": field.Int64("n").UpdateDefault(3),
 	} {
-		if f.Descriptor().Err == nil {
+		if errors.Join(f.Descriptor().Errs...) == nil {
 			t.Errorf("%s: no error", name)
 		}
 	}
 	type name string
-	if d := field.String("s").GoType(name("")).DefaultFunc(func() name { return "x" }).Descriptor(); d.Err != nil {
-		t.Errorf("a DefaultFunc of the GoType is allowed: %v", d.Err)
+	if d := field.String("s").GoType(name("")).DefaultFunc(func() name { return "x" }).Descriptor(); len(d.Errs) != 0 {
+		t.Errorf("a DefaultFunc of the GoType is allowed: %v", d.Errs)
 	}
 }
 
 func TestDefaultAndDefaultFunc(t *testing.T) {
-	err := field.Int64("n").Default(1).DefaultFunc(func() int64 { return 2 }).Descriptor().Err
-	if err == nil || err.Error() != `field "n": Default and DefaultFunc are both set` {
+	err := errors.Join(field.Int64("n").Default(1).DefaultFunc(func() int64 { return 2 }).Descriptor().Errs...)
+	if err == nil || err.Error() != "Default and DefaultFunc are both set" {
 		t.Fatalf("got %v", err)
 	}
 	// A time or uuid field's Default is a func and counts as the default. Their
@@ -120,11 +122,11 @@ func TestDefaultAndDefaultFunc(t *testing.T) {
 		"uuid": field.UUID("t", id{}).Default(func() id { return id{} }),
 	} {
 		d := f.Descriptor()
-		if d.Err != nil {
-			t.Fatalf("%s: %v", name, d.Err)
+		if len(d.Errs) != 0 {
+			t.Fatalf("%s: %v", name, d.Errs)
 		}
 		d.DefaultFunc = d.Default
-		if err := f.Descriptor().Err; err == nil || err.Error() != `field "t": Default and DefaultFunc are both set` {
+		if err := errors.Join(f.Descriptor().Errs...); err == nil || err.Error() != "Default and DefaultFunc are both set" {
 			t.Errorf("%s: got %v", name, err)
 		}
 	}
@@ -140,7 +142,7 @@ func TestTypedNilFuncs(t *testing.T) {
 		"time Default":  {field.Time("t").Default((func() time.Time)(nil)), "Default"},
 		"uuid Default":  {field.UUID("u", id{}).Default((func() id)(nil)), "Default"},
 	} {
-		err := c.f.Descriptor().Err
+		err := errors.Join(c.f.Descriptor().Errs...)
 		if err == nil || !strings.Contains(err.Error(), c.option+" must be a func() ") {
 			t.Errorf("%s: got %v", name, err)
 		}
@@ -149,20 +151,20 @@ func TestTypedNilFuncs(t *testing.T) {
 
 func TestEnum(t *testing.T) {
 	d := field.Enum("role").Values("viewer", "admin").Default("viewer").Descriptor()
-	if d.Err != nil || d.Type != "enum" || !reflect.DeepEqual(d.Enums, []desc.Enum{{Name: "viewer", Value: "viewer"}, {Name: "admin", Value: "admin"}}) || d.Default != "viewer" {
+	if len(d.Errs) != 0 || d.Type != "enum" || !reflect.DeepEqual(d.Enums, []desc.Enum{{Name: "viewer", Value: "viewer"}, {Name: "admin", Value: "admin"}}) || d.Default != "viewer" {
 		t.Fatalf("%+v", d)
 	}
 	if d := field.Enum("s").NamedValues("InProgress", "in-progress").Descriptor(); d.Enums[0].Name != "InProgress" || d.Enums[0].Value != "in-progress" {
 		t.Fatalf("%+v", d.Enums)
 	}
-	if d := field.Enum("r").Values("a").Default("b").Descriptor(); d.Err == nil {
+	if d := field.Enum("r").Values("a").Default("b").Descriptor(); len(d.Errs) == 0 {
 		t.Fatal("a default outside the values is an error")
 	}
-	if d := field.Enum("r").NamedValues("A").Descriptor(); d.Err == nil {
+	if d := field.Enum("r").NamedValues("A").Descriptor(); len(d.Errs) == 0 {
 		t.Fatal("odd NamedValues is an error")
 	}
-	if d := field.Enum("r").GoType(role("")).Descriptor(); d.Err != nil || len(d.Enums) != 2 || d.GoType.Ident != "field_test.role" {
-		t.Fatalf("%+v %v", d, d.Err)
+	if d := field.Enum("r").GoType(role("")).Descriptor(); len(d.Errs) != 0 || len(d.Enums) != 2 || d.GoType.Ident != "field_test.role" {
+		t.Fatalf("%+v %v", d, d.Errs)
 	}
 }
 
@@ -170,13 +172,13 @@ func TestTypedConstructors(t *testing.T) {
 	if d := field.UUID("id", id{}).Descriptor(); d.Type != "uuid" || d.GoType.Ident != "field_test.id" {
 		t.Fatalf("%+v", d)
 	}
-	if d := field.UUID("id", nil).Descriptor(); d.Err == nil {
+	if d := field.UUID("id", nil).Descriptor(); len(d.Errs) == 0 {
 		t.Fatal("a nil UUID type is an error")
 	}
 	if d := field.Strings("tags").Descriptor(); d.Type != "json" || d.GoType.Ident != "[]string" {
 		t.Fatalf("%+v", d)
 	}
-	if d := field.Other("link", id{}).SchemaType(map[string]string{"postgres": "bytea"}).Descriptor(); d.Type != "other" || d.Err != nil {
+	if d := field.Other("link", id{}).SchemaType(map[string]string{"postgres": "bytea"}).Descriptor(); d.Type != "other" || len(d.Errs) != 0 {
 		t.Fatalf("%+v", d)
 	}
 }
@@ -189,8 +191,59 @@ func TestValidate(t *testing.T) {
 	}
 }
 
-func TestErrorNamesField(t *testing.T) {
-	if err := field.Int64("n").DefaultFunc(1).Descriptor().Err; err == nil || !strings.Contains(err.Error(), "DefaultFunc") {
+func TestErrorNamesOption(t *testing.T) {
+	if err := errors.Join(field.Int64("n").DefaultFunc(1).Descriptor().Errs...); err == nil || !strings.Contains(err.Error(), "DefaultFunc") {
 		t.Fatalf("%v", err)
+	}
+}
+
+// Every constructor records the line that calls it, also one that calls
+// another constructor, such as Text, which calls String.
+func TestPos(t *testing.T) {
+	_, file, line, _ := runtime.Caller(0)
+	for i, f := range []interface{ Descriptor() *desc.Field }{
+		field.Bool("a"),
+		field.Int("a"),
+		field.Int8("a"),
+		field.Int16("a"),
+		field.Int32("a"),
+		field.Int64("a"),
+		field.Uint("a"),
+		field.Uint8("a"),
+		field.Uint16("a"),
+		field.Uint32("a"),
+		field.Uint64("a"),
+		field.Float("a"),
+		field.Float32("a"),
+		field.Float64("a"),
+		field.String("a"),
+		field.Text("a"),
+		field.Bytes("a"),
+		field.Time("a"),
+		field.UUID("a", id{}),
+		field.JSON("a", map[string]int{}),
+		field.Strings("a"),
+		field.Ints("a"),
+		field.Floats("a"),
+		field.Other("a", id{}),
+		field.Enum("a"),
+	} {
+		if got, want := f.Descriptor().Pos, fmt.Sprintf("%s:%d", file, line+2+i); got != want {
+			t.Errorf("%d: pos %q, want %q", i, got, want)
+		}
+	}
+}
+
+// A builder records every misuse, and Descriptor, called again, adds none.
+func TestEveryMisuse(t *testing.T) {
+	b := field.Int64("n").Validate(nil).DefaultFunc(1).GoType("x")
+	b.Descriptor()
+	var got []string
+	for _, err := range b.Descriptor().Errs {
+		got = append(got, err.Error())
+	}
+	want := []string{"Validate is given a nil function", "GoType string has kind string; the field needs int64", "DefaultFunc must be a func() int64"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %q, want %q", got, want)
 	}
 }

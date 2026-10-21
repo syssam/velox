@@ -15,12 +15,13 @@ import (
 type Builder struct{ d *desc.Index }
 
 // Fields starts an index over the named fields.
-func Fields(fields ...string) *Builder { return newBuilder().Fields(fields...) }
+func Fields(fields ...string) *Builder { return newBuilder(desc.Caller()).Fields(fields...) }
 
 // Edges starts an index over the foreign keys of the named edges.
-func Edges(edges ...string) *Builder { return newBuilder().Edges(edges...) }
+func Edges(edges ...string) *Builder { return newBuilder(desc.Caller()).Edges(edges...) }
 
-func newBuilder() *Builder { return &Builder{d: new(desc.Index)} }
+// newBuilder starts an index declared at pos.
+func newBuilder(pos string) *Builder { return &Builder{d: &desc.Index{Pos: pos}} }
 
 // Fields adds the named fields to the index.
 func (b *Builder) Fields(fields ...string) *Builder {

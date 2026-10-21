@@ -3,9 +3,12 @@ package load_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/syssam/velox2/internal/gen/loadjson"
 	"github.com/syssam/velox2/schema"
 	"github.com/syssam/velox2/schema/edge"
 	"github.com/syssam/velox2/schema/field"
@@ -43,22 +46,53 @@ func compact(raw json.RawMessage) string {
 	return b.String()
 }
 
-func marshal(t *testing.T, ss ...schema.Interface) *load.Model {
+// decode marshals ss and decodes the model, errors included.
+func decode(t *testing.T, ss ...schema.Interface) *loadjson.Model {
 	t.Helper()
 	b, err := load.Marshal("example.com/app/schema", ss...)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var m load.Model
+	var m loadjson.Model
 	if err := json.Unmarshal(b, &m); err != nil {
 		t.Fatal(err)
 	}
 	return &m
 }
 
+// marshal is decode for a model that must have no errors.
+func marshal(t *testing.T, ss ...schema.Interface) *loadjson.Model {
+	t.Helper()
+	m := decode(t, ss...)
+	if len(m.Errors) > 0 {
+		t.Fatalf("errors %+v", m.Errors)
+	}
+	return m
+}
+
+// errorText is the model's errors, one per line, as velox-gen prints them
+// without the position.
+func errorText(m *loadjson.Model) string {
+	var b strings.Builder
+	for _, e := range m.Errors {
+		b.WriteString("schema " + e.Schema + ": ")
+		if e.Where != "" {
+			b.WriteString(e.Where + ": ")
+		}
+		b.WriteString(e.Reason + "\n")
+	}
+	return b.String()
+}
+
+// here returns the line it is called on.
+func here() int {
+	_, _, line, _ := runtime.Caller(1)
+	return line
+}
+
 func TestMarshal(t *testing.T) {
 	m := marshal(t, User{}, Post{})
-	if m.Version != load.Version || m.Package != "example.com/app/schema" || len(m.Schemas) != 2 || m.Schemas[0].Name != "Post" {
+	if m.Version != loadjson.Version || m.Package != "example.com/app/schema" || len(m.Schemas) != 2 || m.Schemas[0].Name != "Post" {
 		t.Fatalf("model %+v", m)
 	}
 	u := m.Schemas[1]
@@ -97,12 +131,18 @@ func TestMarshal(t *testing.T) {
 
 type hooked struct{ schema.Schema }
 
+var hookedLine = here() + 2 // the line of Hooks
+
 func (hooked) Hooks() []any { return nil }
 
 func TestMarshalRefusesBehaviour(t *testing.T) {
-	_, err := load.Marshal("p", hooked{})
-	if err == nil || !strings.Contains(err.Error(), "schema hooked: has a Hooks method") {
-		t.Fatalf("got %v", err)
+	m := decode(t, hooked{})
+	if got := errorText(m); !strings.Contains(got, "schema hooked: has a Hooks method") {
+		t.Fatalf("got %q", got)
+	}
+	// The error is at the method.
+	if p := m.Errors[0].Pos; !strings.HasSuffix(p, fmt.Sprintf("/marshal_test.go:%d", hookedLine)) {
+		t.Errorf("pos %q, want line %d", p, hookedLine)
 	}
 }
 
@@ -127,8 +167,8 @@ func TestMarshalErrors(t *testing.T) {
 		{nilField{}, "schema nilField: Fields()[0] is nil"},
 		{badField{}, `schema badField: field "n": DefaultFunc`},
 	} {
-		if _, err := load.Marshal("p", c.s); err == nil || !strings.Contains(err.Error(), c.want) {
-			t.Errorf("got %v, want %q", err, c.want)
+		if got := errorText(decode(t, c.s)); !strings.Contains(got, c.want) {
+			t.Errorf("got %q, want %q", got, c.want)
 		}
 	}
 }
@@ -190,8 +230,8 @@ func TestMarshalRefusesBehaviourVariants(t *testing.T) {
 		{policed{}, "schema policed: has a Policy method; hooks and policies"},
 		{intercepted{}, "schema intercepted: has a Interceptors method; hooks and policies"},
 	} {
-		if _, err := load.Marshal("p", c.s); err == nil || !strings.Contains(err.Error(), c.want) {
-			t.Errorf("got %v, want %q", err, c.want)
+		if got := errorText(decode(t, c.s)); !strings.Contains(got, c.want) {
+			t.Errorf("got %q, want %q", got, c.want)
 		}
 	}
 }
@@ -231,8 +271,90 @@ func TestMarshalRecoversAnnotationPanics(t *testing.T) {
 		{jsonPanics{}, "schema jsonPanics: panicked: json boom"},
 		{nilAnno{}, "schema nilAnno: Annotations()[0] is nil"},
 	} {
-		if _, err := load.Marshal("p", c.s); err == nil || !strings.Contains(err.Error(), c.want) {
-			t.Errorf("got %v, want %q", err, c.want)
+		if got := errorText(decode(t, c.s)); !strings.Contains(got, c.want) {
+			t.Errorf("got %q, want %q", got, c.want)
 		}
+	}
+}
+
+type misused struct{ schema.Schema }
+
+// misusedLines are the lines of misused's broken constructors.
+var misusedLines [3]int
+
+func (misused) Fields() []schema.Field {
+	a, la := field.Int64("a").DefaultFunc(1).Validate(nil), here()
+	b, lb := field.Enum("b").NamedValues("X"), here()
+	misusedLines[0], misusedLines[1] = la, lb
+	return []schema.Field{a, field.String("ok"), b}
+}
+
+func (misused) Edges() []schema.Edge {
+	e, le := edge.To("x", 42), here()
+	misusedLines[2] = le
+	return []schema.Edge{e}
+}
+
+func TestMarshalReportsEveryMisuse(t *testing.T) {
+	m := decode(t, misused{}, Post{})
+	if len(m.Schemas) != 2 {
+		t.Fatalf("the JSON is still written: %+v", m.Schemas)
+	}
+	want := []struct {
+		where, reason string
+		line          int
+	}{
+		{`field "a"`, "Validate is given a nil function", misusedLines[0]},
+		{`field "a"`, "DefaultFunc must be a func() int64", misusedLines[0]},
+		{`field "b"`, "NamedValues needs name and value pairs, got 1 arguments", misusedLines[1]},
+		{`edge "x"`, "the type must be a schema's Type method expression, such as Post.Type", misusedLines[2]},
+	}
+	if len(m.Errors) != len(want) {
+		t.Fatalf("errors %+v", m.Errors)
+	}
+	for i, w := range want {
+		e := m.Errors[i]
+		if e.Schema != "misused" || e.Where != w.where || e.Reason != w.reason || !strings.HasSuffix(e.Pos, fmt.Sprintf("/marshal_test.go:%d", w.line)) {
+			t.Errorf("error %d: %+v, want %+v", i, e, w)
+		}
+	}
+}
+
+type wrapped struct{ schema.Schema }
+
+var wrappedLine int
+
+func (wrapped) Fields() []schema.Field {
+	f, l := field.Text("bio"), here()
+	wrappedLine = l
+	return []schema.Field{f}
+}
+
+func TestPosOfWrappedConstructor(t *testing.T) {
+	m := marshal(t, wrapped{})
+	if p := m.Schemas[0].Fields[0].Pos; !strings.HasSuffix(p, fmt.Sprintf("/marshal_test.go:%d", wrappedLine)) {
+		t.Fatalf("pos %q, want the line of field.Text, %d", p, wrappedLine)
+	}
+}
+
+func TestMarshalPositions(t *testing.T) {
+	u := marshal(t, User{}, Post{}).Schemas[1]
+	for _, f := range u.Fields {
+		if !strings.Contains(f.Pos, ".go:") {
+			t.Errorf("field %s: pos %q", f.Name, f.Pos)
+		}
+	}
+	if !strings.Contains(u.Fields[0].Pos, "/mixin/mixin.go:") || !strings.Contains(u.Fields[3].Pos, "/marshal_test.go:") {
+		t.Errorf("a mixin's field is at the mixin's line: %q %q", u.Fields[0].Pos, u.Fields[3].Pos)
+	}
+	// The inline inverse is declared on the line of its assoc edge.
+	if e := u.Edges; e[1].Pos == "" || e[2].Pos != e[1].Pos || u.Indexes[0].Pos == "" {
+		t.Errorf("edges %q %q, index %q", e[1].Pos, e[2].Pos, u.Indexes[0].Pos)
+	}
+}
+
+func TestMarshalDuplicateSchema(t *testing.T) {
+	if got := errorText(decode(t, Post{}, Post{})); got != "schema Post: declared twice\n" {
+		t.Fatalf("got %q", got)
 	}
 }

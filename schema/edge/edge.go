@@ -10,7 +10,7 @@
 package edge
 
 import (
-	"fmt"
+	"errors"
 	"reflect"
 
 	"github.com/syssam/velox2/schema"
@@ -31,13 +31,14 @@ func typ(t any) (name, pkg string, ok bool) {
 	return in.Name(), in.PkgPath(), true
 }
 
-// newEdge returns the descriptor of an edge to the schema t names. A t that is
-// not a schema's Type method expression sets the descriptor's Err.
-func newEdge(name string, t any, inverse bool) *desc.Edge {
-	d := &desc.Edge{Name: name, Inverse: inverse}
+// newEdge returns the descriptor of an edge to the schema t names, declared
+// at pos. A t that is not a schema's Type method expression is a misuse, in
+// the descriptor's Errs.
+func newEdge(name string, t any, inverse bool, pos string) *desc.Edge {
+	d := &desc.Edge{Name: name, Inverse: inverse, Pos: pos}
 	typeName, pkg, ok := typ(t)
 	if !ok {
-		d.Err = fmt.Errorf("edge %q: the type must be a schema's Type method expression, such as Post.Type", name)
+		d.Errs = append(d.Errs, errors.New("the type must be a schema's Type method expression, such as Post.Type"))
 		return d
 	}
 	d.Type, d.TypePkg = typeName, pkg
@@ -78,7 +79,9 @@ type assocBuilder struct{ d *desc.Edge }
 
 // To declares an edge named name from the schema that lists it to the schema t
 // names, where t is that schema's Type method expression: Post.Type.
-func To(name string, t any) *assocBuilder { return &assocBuilder{d: newEdge(name, t, false)} }
+func To(name string, t any) *assocBuilder {
+	return &assocBuilder{d: newEdge(name, t, false, desc.Caller())}
+}
 
 // Unique makes the edge point to at most one row.
 func (b *assocBuilder) Unique() *assocBuilder { b.d.Unique = true; return b }
@@ -113,7 +116,7 @@ func (b *assocBuilder) Annotations(as ...schema.Annotation) *assocBuilder {
 // schema. The options that follow configure the inverse, and Descriptor still
 // returns the whole edge, with the inverse in its Ref.
 func (b *assocBuilder) From(name string) *inverseBuilder {
-	b.d.Ref = &desc.Edge{Name: name, Type: b.d.Type, TypePkg: b.d.TypePkg, Inverse: true, RefName: b.d.Name}
+	b.d.Ref = &desc.Edge{Name: name, Type: b.d.Type, TypePkg: b.d.TypePkg, Inverse: true, RefName: b.d.Name, Pos: b.d.Pos}
 	return &inverseBuilder{d: b.d.Ref, root: b.d}
 }
 
@@ -130,7 +133,7 @@ type inverseBuilder struct {
 // From declares the edge named name on the schema t names as the inverse of
 // the edge that schema declares with To. Ref names that edge.
 func From(name string, t any) *inverseBuilder {
-	d := newEdge(name, t, true)
+	d := newEdge(name, t, true, desc.Caller())
 	return &inverseBuilder{d: d, root: d}
 }
 

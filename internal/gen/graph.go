@@ -6,8 +6,9 @@ package gen
 
 import (
 	"encoding/json"
+	"strings"
 
-	"github.com/syssam/velox2/schema/load"
+	"github.com/syssam/velox2/internal/gen/loadjson"
 )
 
 // Graph is the resolved model of one schema package.
@@ -32,11 +33,16 @@ type Entity struct {
 // Field is a field of an entity: a field of the model, the ID velox adds when
 // the schema declares none, or a foreign key velox adds for an edge.
 //
-// Position, from load.Field, is meaningful only for a declared field: one with
-// !AutoID && Implicit == "". The ID velox adds and the implicit foreign keys
-// have no position in the schema and leave it zero.
+// Position, from loadjson.Field, is meaningful only for a declared field: one
+// with !AutoID && Implicit == "". The ID velox adds and the implicit foreign
+// keys have no position in the schema and leave it zero, and Pos "".
+//
+// Pos is the file:line that declares the field, for errors. It is kept out of
+// the JSON, so that the model hash and the generated files do not depend on
+// the checkout's path; the embedded loadjson.Field's Pos is always "".
 type Field struct {
-	load.Field
+	loadjson.Field
+	Pos      string `json:"-"`
 	GoName   string `json:"go_name"`
 	Column   string `json:"column"`
 	Pointer  bool   `json:"pointer,omitempty"`  // Nillable: the Go field is a pointer, unless its type's zero value is nil already
@@ -60,6 +66,7 @@ type Edge struct {
 	Symbols     []string                   `json:"symbols,omitempty"`   // the foreign-key constraint names: one, or two for M2M
 	Comment     string                     `json:"comment,omitempty"`
 	Annotations map[string]json.RawMessage `json:"annotations,omitempty"`
+	Pos         string                     `json:"-"` // the file:line that declares the edge, for errors
 }
 
 // Rel is the relation an edge stands for, and where it is stored.
@@ -76,22 +83,34 @@ type Index struct {
 	Unique      bool                       `json:"unique,omitempty"`
 	Where       string                     `json:"where,omitempty"`
 	Annotations map[string]json.RawMessage `json:"annotations,omitempty"`
+	Pos         string                     `json:"-"` // the file:line that declares the index, for errors
 }
 
-// Error is one rule a schema breaks. Build joins every Error it finds.
+// Error is one rule a schema breaks, or one misuse of the DSL. Build joins
+// every Error it finds; Load, every misuse.
 type Error struct {
-	Schema string // the schema type's name
+	Pos    string // the file:line of the element, or ""
+	Schema string // the schema type's name; "" for no schema
 	Where  string // `field "name"`, `edge "posts"`, `index 0`, or ""
 	Reason string
 }
 
-// Error returns `schema User: field "name": reason`, or `schema User: reason`
-// when Where is "".
+// Error returns `<pos>: schema User: field "name": reason`. The position is
+// left out when Pos is "", the schema when Schema is "", and the element when
+// Where is "".
 func (e *Error) Error() string {
-	if e.Where == "" {
-		return "schema " + e.Schema + ": " + e.Reason
+	var b strings.Builder
+	if e.Pos != "" {
+		b.WriteString(e.Pos + ": ")
 	}
-	return "schema " + e.Schema + ": " + e.Where + ": " + e.Reason
+	if e.Schema != "" {
+		b.WriteString("schema " + e.Schema + ": ")
+	}
+	if e.Where != "" {
+		b.WriteString(e.Where + ": ")
+	}
+	b.WriteString(e.Reason)
+	return b.String()
 }
 
 // Entity returns the entity named name, or nil.

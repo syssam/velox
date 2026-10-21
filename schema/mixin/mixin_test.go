@@ -15,10 +15,10 @@ func TestTime(t *testing.T) {
 		t.Fatalf("%d fields", len(fs))
 	}
 	c, u := fs[0].Descriptor(), fs[1].Descriptor()
-	if c.Name != "created_at" || !c.Immutable || c.DefaultFunc == nil && c.Default == nil || c.Err != nil {
+	if c.Name != "created_at" || !c.Immutable || c.DefaultFunc == nil && c.Default == nil || len(c.Errs) != 0 {
 		t.Fatalf("created_at %+v", c)
 	}
-	if u.Name != "updated_at" || u.UpdateDefault == nil || u.Err != nil {
+	if u.Name != "updated_at" || u.UpdateDefault == nil || len(u.Errs) != 0 {
 		t.Fatalf("updated_at %+v", u)
 	}
 	if len(mixin.CreateTime{}.Fields()) != 1 || len(mixin.UpdateTime{}.Fields()) != 1 {

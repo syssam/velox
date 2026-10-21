@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/syssam/velox2/internal/gen/loadjson"
 	"github.com/syssam/velox2/schema"
 	"github.com/syssam/velox2/schema/edge"
 	"github.com/syssam/velox2/schema/field"
 	"github.com/syssam/velox2/schema/index"
-	"github.com/syssam/velox2/schema/load"
 	"github.com/syssam/velox2/schema/mixin"
 
 	errpkg "github.com/syssam/velox2/internal/gen/internal/errors"
@@ -720,9 +720,9 @@ func TestLowerNumbersFit(t *testing.T) {
 		{"default overflows", func(f *Field) { f.Default = []byte("300") }, "n", `field "n": its Default 300 is not a int8`},
 		{"default negative unsigned", func(f *Field) { f.Default = []byte("-1") }, "u", `field "u": its Default -1 is not a uint8`},
 		{"default float32 overflow", func(f *Field) { f.Default = []byte("1e300") }, "f", `field "f": its Default 1e300 is not a float32`},
-		{"check negative unsigned", func(f *Field) { f.Checks = []load.Check{{Kind: "Min", Args: []json.RawMessage{[]byte("-1")}}} }, "u", `field "u": check Min: -1 is not a uint8`},
-		{"check overflow", func(f *Field) { f.Checks = []load.Check{{Kind: "Max", Args: []json.RawMessage{[]byte("128")}}} }, "n", `field "n": check Max: 128 is not a int8`},
-		{"check fraction", func(f *Field) { f.Checks = []load.Check{{Kind: "Min", Args: []json.RawMessage{[]byte("1.5")}}} }, "n", `field "n": check Min: 1.5 is not a int8`},
+		{"check negative unsigned", func(f *Field) { f.Checks = []loadjson.Check{{Kind: "Min", Args: []json.RawMessage{[]byte("-1")}}} }, "u", `field "u": check Min: -1 is not a uint8`},
+		{"check overflow", func(f *Field) { f.Checks = []loadjson.Check{{Kind: "Max", Args: []json.RawMessage{[]byte("128")}}} }, "n", `field "n": check Max: 128 is not a int8`},
+		{"check fraction", func(f *Field) { f.Checks = []loadjson.Check{{Kind: "Min", Args: []json.RawMessage{[]byte("1.5")}}} }, "n", `field "n": check Min: 1.5 is not a int8`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			g := mustBuild(t, LwNumbers{})

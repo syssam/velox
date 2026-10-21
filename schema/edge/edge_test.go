@@ -1,6 +1,8 @@
 package edge_test
 
 import (
+	"fmt"
+	"runtime"
 	"testing"
 
 	"github.com/syssam/velox2/schema"
@@ -12,7 +14,7 @@ type Post struct{ schema.Schema }
 
 func TestTo(t *testing.T) {
 	d := edge.To("posts", Post.Type).Required().StorageKey(edge.Column("author_id"), edge.Symbol("posts_author")).Comment("c").Descriptor()
-	if d.Err != nil || d.Name != "posts" || d.Type != "Post" || d.TypePkg != "github.com/syssam/velox2/schema/edge_test" ||
+	if len(d.Errs) != 0 || d.Name != "posts" || d.Type != "Post" || d.TypePkg != "github.com/syssam/velox2/schema/edge_test" ||
 		d.Inverse || !d.Required || d.Columns[0] != "author_id" || d.Symbols[0] != "posts_author" || d.Comment != "c" {
 		t.Fatalf("%+v", d)
 	}
@@ -20,24 +22,24 @@ func TestTo(t *testing.T) {
 
 func TestFrom(t *testing.T) {
 	d := edge.From("author", User.Type).Ref("posts").Unique().Field("author_id").Descriptor()
-	if d.Err != nil || !d.Inverse || d.RefName != "posts" || !d.Unique || d.Field != "author_id" || d.Type != "User" {
+	if len(d.Errs) != 0 || !d.Inverse || d.RefName != "posts" || !d.Unique || d.Field != "author_id" || d.Type != "User" {
 		t.Fatalf("%+v", d)
 	}
 }
 
 func TestInlineInverse(t *testing.T) {
 	d := edge.To("children", User.Type).From("parent").Unique().Descriptor()
-	if d.Err != nil || d.Name != "children" || d.Ref == nil || d.Ref.Name != "parent" || !d.Ref.Unique || !d.Ref.Inverse || d.Ref.Type != "User" {
+	if len(d.Errs) != 0 || d.Name != "children" || d.Ref == nil || d.Ref.Name != "parent" || !d.Ref.Unique || !d.Ref.Inverse || d.Ref.Type != "User" {
 		t.Fatalf("%+v ref %+v", d, d.Ref)
 	}
 }
 
 func TestBadType(t *testing.T) {
 	for _, v := range []any{nil, "User", func() {}, func(int) {}} {
-		if d := edge.To("x", v).Descriptor(); d.Err == nil {
+		if d := edge.To("x", v).Descriptor(); len(d.Errs) == 0 {
 			t.Errorf("edge.To with %T: no error", v)
 		}
-		if d := edge.From("x", v).Descriptor(); d.Err == nil {
+		if d := edge.From("x", v).Descriptor(); len(d.Errs) == 0 {
 			t.Errorf("edge.From with %T: no error", v)
 		}
 	}
@@ -47,5 +49,21 @@ func TestM2MStorage(t *testing.T) {
 	d := edge.To("groups", User.Type).StorageKey(edge.Table("memberships"), edge.Columns("user_id", "group_id"), edge.Symbols("fk_user", "fk_group")).Descriptor()
 	if d.Table != "memberships" || len(d.Columns) != 2 || d.Columns[1] != "group_id" || len(d.Symbols) != 2 || d.Symbols[1] != "fk_group" {
 		t.Fatalf("%+v", d)
+	}
+}
+
+func TestPos(t *testing.T) {
+	_, file, line, _ := runtime.Caller(0)
+	to := edge.To("a", Post.Type)
+	from := edge.From("b", User.Type)
+	inline := edge.To("c", User.Type).From("d")
+	if want := fmt.Sprintf("%s:%d", file, line+1); to.Descriptor().Pos != want {
+		t.Errorf("To: %q, want %q", to.Descriptor().Pos, want)
+	}
+	if want := fmt.Sprintf("%s:%d", file, line+2); from.Descriptor().Pos != want {
+		t.Errorf("From: %q, want %q", from.Descriptor().Pos, want)
+	}
+	if d, want := inline.Descriptor(), fmt.Sprintf("%s:%d", file, line+3); d.Pos != want || d.Ref.Pos != want {
+		t.Errorf("inline: %q %q, want %q", d.Pos, d.Ref.Pos, want)
 	}
 }
