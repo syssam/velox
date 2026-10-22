@@ -73,6 +73,18 @@
 // limit, so neither the owner query's MaxRows nor the DB's cap applies to it;
 // Rel.MaxRows gives any load a cap of its own.
 //
+// LoadEach and CountEach read the same pages, and count them, for owners
+// already in hand, with a Query of the target that gives the conditions,
+// the order, the columns and After:
+//
+//	pages, err := velox.LoadEach(ctx, db.Query[gen.Post]().OrderBy(gen.Posts.CreatedAt.Desc()), gen.Users.Posts.LimitEach(3), users)
+//	counts, err := velox.CountEach(ctx, db.Query[gen.Post](), gen.Users.Posts, users)
+//
+// A many-to-many page or count joins the join table in the target's
+// statement: no statement is sent for the join entity, and a link held twice
+// counts once. A per-owner page names its rank vx_rn and, through a join, the
+// owner's key vx_owner, so a target column cannot have either name.
+//
 // # Writes
 //
 // DB.Insert and DB.InsertAll insert entities: Exec fills their defaults and

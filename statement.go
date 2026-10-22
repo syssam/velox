@@ -107,7 +107,8 @@ type ConflictClause struct {
 // EachClause makes a SELECT read, or count, the rows of each owner apart: the
 // rows whose owner column holds one of Keys. velox sets it for a With load
 // with Rel.LimitEach, for LoadEach and for CountEach; a Rewrite hook may not
-// change it.
+// change it. With Count, the statement reads each owner's key and its count,
+// one row per owner that has rows.
 type EachClause struct {
 	Keys   []any // the owners' keys, distinct
 	Column int   // without Join: the column of Entity that holds an owner's key
@@ -163,7 +164,7 @@ type Statement struct {
 	Offset       int
 	Unbounded    bool            // the query said Unbounded
 	Writable     bool            // SELECT: the query said Writable; the scope adds the Write policy, and a Rewrite hook may not change it
-	MaxRows      int             // SELECT and OpRawQuery: the most rows it may return; 0: the DB's WithMaxRows, or a per-owner read's bound (Rel.MaxRows)
+	MaxRows      int             // SELECT and OpRawQuery: the most rows it may return; 0: the DB's WithMaxRows, or, with Each, its bound by construction (Rel.MaxRows sets it)
 	Set          []Assignment    // UPDATE: the assignments
 	Rows         [][]any         // INSERT: the rows, one value per Columns entry
 	Conflict     *ConflictClause // INSERT: the upsert clause, if any

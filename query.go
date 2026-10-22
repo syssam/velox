@@ -156,7 +156,7 @@ func (q Query[E]) NoWait[_ Lazy[E]]() Query[E] {
 
 // MaxRows returns the query allowed to return up to n rows, in place of the
 // DB's WithMaxRows cap; n <= 0 restores the DB's cap. It covers the
-// statements of the query's With loads too, nested ones included, but for a
+// statements of the query's With loads too, nested ones included, except a
 // load with Rel.LimitEach or Rel.MaxRows (see Rel.MaxRows). Say it where
 // reading many rows is meant, so the exception is visible where the query is
 // written. One reads up to 2 rows, so under MaxRows(1) a second matching row
@@ -179,6 +179,20 @@ func (q Query[E]) Columns[_ Lazy[E]](cs ...Column[E]) Query[E] {
 		q.st.Columns[i] = int(c.column(nil))
 	}
 	return q
+}
+
+// Selects reports whether the query reads every one of cs: true for a query
+// with no Columns or Omit.
+func (q Query[E]) Selects[_ Lazy[E]](cs ...Column[E]) bool {
+	if q.st.Columns == nil {
+		return true
+	}
+	for _, c := range cs {
+		if !slices.Contains(q.st.Columns, int(c.column(nil))) {
+			return false
+		}
+	}
+	return true
 }
 
 // Omit returns the query selecting every column except the given ones.
@@ -234,22 +248,28 @@ func (q Query[E]) prepare[_ Lazy[E]]() (Statement, error) {
 	if q.after == nil {
 		return st, nil
 	}
-	in := q.meta.info
+	return st, addAfter(&st, q.meta.info, unsafe.Pointer(q.after))
+}
+
+// addAfter adds to st, a statement on entity in, After's condition for the
+// row at after: its rows past that row in st's OrderBy. It is not generic, so
+// that it is compiled once; the row's values are read through in's kit.
+func addAfter(st *Statement, in *EntityInfo, after unsafe.Pointer) error {
 	if len(st.OrderBy) == 0 {
-		return st, fmt.Errorf("velox: %s: After needs an OrderBy", in.Name)
+		return fmt.Errorf("velox: %s: After needs an OrderBy", in.Name)
 	}
 	ordered := make(map[int]bool, len(st.OrderBy))
 	for _, o := range st.OrderBy {
 		col := in.Columns[o.Column]
 		if col.Codec {
-			return st, errCodecOrder(in, o.Column)
+			return errCodecOrder(in, o.Column)
 		}
 		if col.Nullable {
-			return st, fmt.Errorf("velox: %s: After cannot page over the nullable column %s", in.Name, col.Name)
+			return fmt.Errorf("velox: %s: After cannot page over the nullable column %s", in.Name, col.Name)
 		}
 		// A nil slice or map is stored as NULL, which no comparison matches.
 		if sliceOrMap(col.Type) {
-			return st, fmt.Errorf("velox: %s: After cannot page over the column %s, which can be NULL", in.Name, col.Name)
+			return fmt.Errorf("velox: %s: After cannot page over the column %s, which can be NULL", in.Name, col.Name)
 		}
 		ordered[o.Column] = true
 	}
@@ -266,20 +286,20 @@ func (q Query[E]) prepare[_ Lazy[E]]() (Statement, error) {
 		unique = unique || (ix.Unique && covers(ix.Columns))
 	}
 	if !unique {
-		return st, fmt.Errorf("velox: %s: After needs an OrderBy that includes the primary key or a unique index", in.Name)
+		return fmt.Errorf("velox: %s: After needs an OrderBy that includes the primary key or a unique index", in.Name)
 	}
 	// (o1 > v1) OR (o1 = v1 AND o2 > v2) OR …, with < for descending columns.
 	var or []node
 	for i, o := range st.OrderBy {
 		var and []node
 		for _, prev := range st.OrderBy[:i] {
-			and = append(and, node{op: opEQ, col: int32(prev.Column), v: fieldValue(q.meta, q.after, prev.Column)})
+			and = append(and, node{op: opEQ, col: int32(prev.Column), v: in.kit.value(after, prev.Column)})
 		}
 		cmp := opGT
 		if o.Desc {
 			cmp = opLT
 		}
-		and = append(and, node{op: cmp, col: int32(o.Column), v: fieldValue(q.meta, q.after, o.Column)})
+		and = append(and, node{op: cmp, col: int32(o.Column), v: in.kit.value(after, o.Column)})
 		if len(and) == 1 {
 			or = append(or, and[0])
 		} else {
@@ -287,7 +307,7 @@ func (q Query[E]) prepare[_ Lazy[E]]() (Statement, error) {
 		}
 	}
 	st.Where = append(st.Where, Predicate{node{op: opOr, kids: or}})
-	return st, nil
+	return nil
 }
 
 // cloneStatement copies a query's statement for one run, with its slices

@@ -301,10 +301,18 @@ func (r Rel[E, T]) OrderBy[_ Lazy[T]](os ...Order[T]) Rel[E, T] {
 // dialect's parameter limit), which ranks each owner's rows with
 // ROW_NUMBER() on every dialect; ties in the order are broken by the target's
 // primary key. The tenant scope and the Read policy apply before the ranking,
-// so a row they hide takes no place in a page. A many-to-many relation is
-// read through its join entity in that one statement. A to-one relation
-// read by the target's one-column primary key has at most one entity per
-// owner, and needs no ranking.
+// so a row they hide takes no place in a page. A to-one relation read by the
+// target's one-column primary key has at most one entity per owner, and
+// needs no ranking.
+//
+// A many-to-many relation is read through its join entity in that one
+// statement, which is the target's. A load without LimitEach reads the join
+// rows in a statement of the join entity's own; with it, no statement is sent
+// for the join entity, so a Rewrite or Around hook that acts on the join
+// entity's statements does not see the read. A link the join table holds
+// twice relates its target to the owner once, as a plain load reads it. The ranking names its rank vx_rn and, through a join,
+// the owner's key vx_owner: a target column of either name cannot be read
+// with LimitEach.
 func (r Rel[E, T]) LimitEach[_ Lazy[T]](n int) Rel[E, T] {
 	r.each = max(n, 0)
 	return r

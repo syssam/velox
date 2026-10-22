@@ -178,12 +178,14 @@ func TestOfOnRealDatabases(t *testing.T) {
 type shelf struct {
 	ID    int64
 	Notes velox.Many[note]
+	Tags  velox.Many[tag]
 }
 
 var Shelves = struct {
 	ID    velox.NumberCol[shelf, int64]
 	Notes velox.Rel[shelf, note]
-}{velox.NumberCol[shelf, int64]{I: 0}, velox.Rel[shelf, note]{I: 0}}
+	Tags  velox.Rel[shelf, tag]
+}{velox.NumberCol[shelf, int64]{I: 0}, velox.Rel[shelf, note]{I: 0}, velox.Rel[shelf, tag]{I: 1}}
 
 var shelfMeta velox.MetaOnce[shelf]
 
@@ -195,9 +197,36 @@ func shelfDesc() velox.Desc[shelf] {
 		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Relations:  []velox.Relation{velox.EdgeTo[note]("Notes", 0, 1)},
+		Relations:  []velox.Relation{velox.EdgeTo[note]("Notes", 0, 1), velox.EdgeThrough[shelfTag, tag]("Tags", 0, 1, 2, 0)},
 		Addr:       func(x *shelf, i int) any { return &x.ID },
-		RelAddr:    func(x *shelf, i int) any { return &x.Notes },
+		RelAddr: func(x *shelf, i int) any {
+			if i == 0 {
+				return &x.Notes
+			}
+			return &x.Tags
+		},
+	}
+}
+
+// shelfTag is the join entity of shelf.Tags. Its key is an id of its own, so
+// a link between a shelf and a tag may repeat.
+type shelfTag struct {
+	ID      int64
+	ShelfID int64
+	TagID   int64
+}
+
+var shelfTagMeta velox.MetaOnce[shelfTag]
+
+func (*shelfTag) VeloxMeta() *velox.Meta[shelfTag] { return shelfTagMeta.Load(shelfTagDesc) }
+
+func shelfTagDesc() velox.Desc[shelfTag] {
+	return velox.Desc[shelfTag]{
+		Table:      "shelf_tags",
+		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "ShelfID", Name: "shelf_id"}, {Field: "TagID", Name: "tag_id"}},
+		PrimaryKey: []int{0},
+		Tenant:     -1,
+		Addr:       func(x *shelfTag, i int) any { return [...]any{&x.ID, &x.ShelfID, &x.TagID}[i] },
 	}
 }
 
@@ -257,6 +286,27 @@ func (l *stmtLog) take() map[string]int {
 	return n
 }
 
+// shelfSetup creates shelves 1–4 and their notes, which are (id: shelf, org,
+// pos, secret) 1: 1, 2, 0; 2: 1, 1, 1; 3: 1, 1, 1; 4: 1, 1, 0, secret; 5: 1,
+// 1, 2; 6: 2, 1, 5; 7: 2, 1, 5; 8: 4, 1, 3, secret.
+func shelfSetup(t *testing.T, tg target) {
+	t.Helper()
+	tg.exec(t, "DROP TABLE IF EXISTS notes")
+	tg.exec(t, "DROP TABLE IF EXISTS shelves")
+	tg.exec(t, "CREATE TABLE shelves (id BIGINT PRIMARY KEY)")
+	tg.exec(t, "CREATE TABLE notes (id BIGINT PRIMARY KEY, shelf_id BIGINT NOT NULL, org_id BIGINT NOT NULL, pos BIGINT NOT NULL, secret BOOLEAN NOT NULL)")
+	for id := range int64(4) {
+		tg.exec(t, "INSERT INTO shelves (id) VALUES (?)", id+1)
+	}
+	for _, r := range []struct {
+		id, shelf, org, pos int64
+		secret              bool
+	}{{1, 1, 2, 0, false}, {2, 1, 1, 1, false}, {3, 1, 1, 1, false}, {4, 1, 1, 0, true}, {5, 1, 1, 2, false},
+		{6, 2, 1, 5, false}, {7, 2, 1, 5, false}, {8, 4, 1, 3, true}} {
+		tg.exec(t, "INSERT INTO notes (id, shelf_id, org_id, pos, secret) VALUES (?, ?, ?, ?, ?)", r.id, r.shelf, r.org, r.pos, r.secret)
+	}
+}
+
 // TestLimitEachOnRealDatabases pages a one-to-many relation per owner. The
 // notes are (id: shelf, org, pos, secret) 1: 1, 2, 0; 2: 1, 1, 1; 3: 1, 1, 1;
 // 4: 1, 1, 0, secret; 5: 1, 1, 2; 6: 2, 1, 5; 7: 2, 1, 5; 8: 4, 1, 3, secret.
@@ -266,20 +316,7 @@ func (l *stmtLog) take() map[string]int {
 func TestLimitEachOnRealDatabases(t *testing.T) {
 	log := &stmtLog{n: map[string]int{}}
 	each(t, func(t *testing.T, tg target) {
-		tg.exec(t, "DROP TABLE IF EXISTS notes")
-		tg.exec(t, "DROP TABLE IF EXISTS shelves")
-		tg.exec(t, "CREATE TABLE shelves (id BIGINT PRIMARY KEY)")
-		tg.exec(t, "CREATE TABLE notes (id BIGINT PRIMARY KEY, shelf_id BIGINT NOT NULL, org_id BIGINT NOT NULL, pos BIGINT NOT NULL, secret BOOLEAN NOT NULL)")
-		for id := range int64(4) {
-			tg.exec(t, "INSERT INTO shelves (id) VALUES (?)", id+1)
-		}
-		for _, r := range []struct {
-			id, shelf, org, pos int64
-			secret              bool
-		}{{1, 1, 2, 0, false}, {2, 1, 1, 1, false}, {3, 1, 1, 1, false}, {4, 1, 1, 0, true}, {5, 1, 1, 2, false},
-			{6, 2, 1, 5, false}, {7, 2, 1, 5, false}, {8, 4, 1, 3, true}} {
-			tg.exec(t, "INSERT INTO notes (id, shelf_id, org_id, pos, secret) VALUES (?, ?, ?, ?, ?)", r.id, r.shelf, r.org, r.pos, r.secret)
-		}
+		shelfSetup(t, tg)
 		acme := velox.WithTenant(ctx, int64(1))
 		notes := func(qctx context.Context, rel velox.Rel[shelf, note], ps ...velox.Pred[shelf]) map[int64][]int64 {
 			t.Helper()
@@ -345,5 +382,154 @@ func TestLimitEachOnRealDatabases(t *testing.T) {
 			}
 			wantStrings(t, skus, want[inv.ID])
 		}
+	}, velox.WithAround(log.around))
+}
+
+// shelves returns shelves with ids, in that order.
+func shelves(ids ...int64) []*shelf {
+	out := make([]*shelf, len(ids))
+	for i, id := range ids {
+		out[i] = &shelf{ID: id}
+	}
+	return out
+}
+
+// noteIDs is each list of notes' ids.
+func noteIDs(lists [][]note) [][]int64 {
+	out := [][]int64{}
+	for _, ns := range lists {
+		ids := []int64{}
+		for _, n := range ns {
+			ids = append(ids, n.ID)
+		}
+		out = append(out, ids)
+	}
+	return out
+}
+
+// tagIDLists is each list of tags' ids.
+func tagIDLists(lists [][]tag) [][]int64 {
+	out := [][]int64{}
+	for _, ts := range lists {
+		ids := []int64{}
+		for _, g := range ts {
+			ids = append(ids, g.ID)
+		}
+		out = append(out, ids)
+	}
+	return out
+}
+
+func wantIDLists(t *testing.T, got, want [][]int64) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("%d lists %v, want %d %v", len(got), got, len(want), want)
+	}
+	for i := range want {
+		wantIDs(t, got[i], want[i])
+	}
+}
+
+// TestLoadEachOnRealDatabases reads each owner's page with LoadEach: the notes
+// of shelfSetup (one-to-many, with the tenant and a Read policy) and the tags
+// of throughSetup (many-to-many, with the tenant), aligned with the owners,
+// zero-child owners included, in one statement each.
+func TestLoadEachOnRealDatabases(t *testing.T) {
+	log := &stmtLog{n: map[string]int{}}
+	each(t, func(t *testing.T, tg target) {
+		shelfSetup(t, tg)
+		throughSetup(t, tg)
+		acme := velox.WithTenant(ctx, int64(1))
+		notes := func(qctx context.Context, q velox.Query[note], r velox.Rel[shelf, note], owners ...int64) [][]int64 {
+			t.Helper()
+			log.take()
+			got, err := velox.LoadEach(qctx, q, r, shelves(owners...))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if n := log.take()["itest.note"]; n != 1 {
+				t.Errorf("%d statements for the notes, want 1", n)
+			}
+			return noteIDs(got)
+		}
+		byPos := tg.db.Query[note]().OrderBy(Notes.Pos.Asc())
+		// Under org 1, note 1 is another tenant's and note 4 secret; shelf 3
+		// has no notes, and shelf 4 only a secret one.
+		wantIDLists(t, notes(acme, byPos, Shelves.Notes.LimitEach(2), 1, 2, 3, 4), [][]int64{{2, 3}, {6, 7}, {}, {}})
+		wantIDLists(t, notes(acme, byPos, Shelves.Notes.LimitEach(3), 4, 1, 1), [][]int64{{}, {2, 3, 5}, {2, 3, 5}})
+		wantIDLists(t, notes(ctx, byPos, Shelves.Notes.LimitEach(2), 1, 2, 3, 4), [][]int64{{1, 2}, {6, 7}, {}, {}})
+		wantIDLists(t, notes(acme, byPos, Shelves.Notes, 1, 3), [][]int64{{2, 3, 5}, {}})
+		// After a row, inside the window: shelf 1's page after note 2.
+		x, err := tg.db.Query[note]().Where(Notes.ID.EQ(2)).One(acme)
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantIDLists(t, notes(acme, tg.db.Query[note]().OrderBy(Notes.Pos.Asc(), Notes.ID.Asc()).After(x), Shelves.Notes.LimitEach(2), 1, 2),
+			[][]int64{{3, 5}, {6, 7}})
+		// Only the position asked: the owner's key is read too.
+		ns, err := velox.LoadEach(acme, byPos.Columns(Notes.Pos), Shelves.Notes.LimitEach(1), shelves(1, 2))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(ns) != 2 || len(ns[0]) != 1 || ns[0][0].ShelfID != 1 || ns[0][0].Pos != 1 || ns[0][0].ID != 0 || len(ns[1]) != 1 || ns[1][0].Pos != 5 {
+			t.Errorf("only Pos: %+v", ns)
+		}
+
+		// Many-to-many: book 4's tag is org 2's.
+		books := []*book{{ID: 1}, {ID: 2}, {ID: 3}, {ID: 4}}
+		byName := tg.db.Query[tag]().OrderBy(Tags.Name.Asc())
+		for _, c := range []struct {
+			qctx context.Context
+			r    velox.Rel[book, tag]
+			want [][]int64
+		}{
+			{acme, Books.Tags.LimitEach(1), [][]int64{{2}, {2}, {}, {}}},
+			{acme, Books.Tags.LimitEach(2), [][]int64{{2, 1}, {2}, {}, {}}},
+			{ctx, Books.Tags.LimitEach(1), [][]int64{{2}, {2}, {}, {3}}},
+			{ctx, Books.Tags, [][]int64{{2, 1}, {2}, {}, {3}}},
+		} {
+			log.take()
+			got, err := velox.LoadEach(c.qctx, byName, c.r, books)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if n := log.take(); n["itest.tag"] != 1 || n["itest.bookTag"] != 0 {
+				t.Errorf("statements %v, want one for the tags and none for the join rows", n)
+			}
+			wantIDLists(t, tagIDLists(got), c.want)
+		}
+	}, velox.WithAround(log.around))
+}
+
+// TestCountEachOnRealDatabases counts each owner's rows with CountEach, as
+// TestLoadEachOnRealDatabases reads them: 0 for an owner with none.
+func TestCountEachOnRealDatabases(t *testing.T) {
+	log := &stmtLog{n: map[string]int{}}
+	each(t, func(t *testing.T, tg target) {
+		shelfSetup(t, tg)
+		throughSetup(t, tg)
+		acme := velox.WithTenant(ctx, int64(1))
+		count := func(got []int64, err error) []int64 {
+			t.Helper()
+			if err != nil {
+				t.Fatal(err)
+			}
+			total := 0
+			for _, k := range log.take() {
+				total += k
+			}
+			if total != 1 {
+				t.Errorf("%d statements, want one", total)
+			}
+			return got
+		}
+		log.take()
+		q := tg.db.Query[note]()
+		wantIDs(t, count(velox.CountEach(acme, q, Shelves.Notes, shelves(1, 2, 3, 4))), []int64{3, 2, 0, 0})
+		wantIDs(t, count(velox.CountEach(ctx, q, Shelves.Notes, shelves(4, 1, 3, 1))), []int64{0, 4, 0, 4})
+		wantIDs(t, count(velox.CountEach(acme, q.Where(Notes.Pos.GT(1)), Shelves.Notes, shelves(1, 2))), []int64{1, 2})
+		books := []*book{{ID: 1}, {ID: 2}, {ID: 3}, {ID: 4}}
+		wantIDs(t, count(velox.CountEach(acme, tg.db.Query[tag](), Books.Tags, books)), []int64{2, 1, 0, 0})
+		wantIDs(t, count(velox.CountEach(ctx, tg.db.Query[tag](), Books.Tags, books)), []int64{2, 1, 0, 1})
 	}, velox.WithAround(log.around))
 }

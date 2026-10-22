@@ -373,8 +373,7 @@ func tieBreak(t *EntityInfo, order []OrderTerm) []OrderTerm {
 }
 
 // fetchPlan returns the order a relation's rows are read in, and how many
-// keys one statement holds. 64 parameters are left for conditions that
-// rewrite hooks add, such as a tenant's.
+// keys one statement holds (keysPer).
 func fetchPlan(db *DB, t *EntityInfo, sp loadSpec) ([]OrderTerm, int) {
 	order := sp.order
 	if len(order) == 0 {
@@ -382,13 +381,26 @@ func fetchPlan(db *DB, t *EntityInfo, sp loadSpec) ([]OrderTerm, int) {
 			order = append(order, OrderTerm{Column: k})
 		}
 	}
+	return order, keysPer(db.d, t, sp.where)
+}
+
+// keysPer is how many keys one statement on t holds beside the conditions
+// ps: 64 parameters are left for conditions that rewrite hooks add, such as a
+// tenant's.
+func keysPer(d Dialect, t *EntityInfo, ps []Predicate) int {
+	// The relations in ps resolve with the statement; one that does not
+	// fails it there. Writing needs them resolved.
+	ps, err := resolvePreds(ps)
+	if err != nil {
+		return 1
+	}
 	fixed := 0 // the parameters of the filter
-	for _, p := range sp.where {
-		w := writer{d: db.d, in: t, argsOnly: true}
+	for _, p := range ps {
+		w := writer{d: d, in: t, argsOnly: true}
 		w.pred(p.n)
 		fixed += len(w.args)
 	}
-	return order, max(1, maxParams[db.d]-fixed-64)
+	return max(1, maxParams[d]-fixed-64)
 }
 
 // fetchPart reads, in one statement, t's rows whose column cols[0] holds one
@@ -408,6 +420,15 @@ func fetchPart(ctx context.Context, db *DB, t *EntityInfo, cols []int, sp loadSp
 	} else {
 		st.Where = append([]Predicate{{node{op: opIn, col: int32(cols[0]), v: keys}}}, sp.where...)
 	}
+	return readPart(ctx, db, &st, t, cols, sp.with)
+}
+
+// readPart runs st, a read of t's rows, and scans them. A Rewrite hook may
+// not leave out any of cols, the columns the caller reads, nor a column the
+// loads with need. When st's Each has a Join, readPart returns each row's
+// owner key too, read from the join entity. st holds, once it returns, where
+// it ran.
+func readPart(ctx context.Context, db *DB, st *Statement, t *EntityInfo, cols []int, with []loadSpec) (any, []any, error) {
 	var part any
 	var owners []any
 	read := func(r rows) (err error) {
@@ -419,12 +440,12 @@ func fetchPart(ctx context.Context, db *DB, t *EntityInfo, cols []int, sp loadSp
 				}
 			}
 		}
-		if len(sp.with) > 0 && st.Columns != nil {
-			if err := checkLoads(t, st.Columns, sp.with); err != nil {
+		if len(with) > 0 && st.Columns != nil {
+			if err := checkLoads(t, st.Columns, with); err != nil {
 				return err
 			}
 		}
-		if ec != nil && ec.Join != nil {
+		if ec := st.Each; ec != nil && ec.Join != nil {
 			or := &ownerRows{rows: r, typ: GoType(ec.Join.Columns[ec.JoinOwner])}
 			part, err = t.kit.scan(or, st.Columns)
 			owners = or.keys
@@ -435,9 +456,9 @@ func fetchPart(ctx context.Context, db *DB, t *EntityInfo, cols []int, sp loadSp
 	}
 	var err error
 	if db.hooked() {
-		err = db.run(ctx, &st, read, nil)
+		err = db.run(ctx, st, read, nil)
 	} else {
-		err = db.plain(ctx, &st, read, nil)
+		err = db.plain(ctx, st, read, nil)
 	}
 	return part, owners, err
 }

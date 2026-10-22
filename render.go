@@ -201,7 +201,9 @@ func (w *writer) selectTail(st *Statement) {
 }
 
 // The aliases of a per-owner read: the join entity, the owner's key read
-// through it, the row's rank within its owner, and the ranked rows.
+// through it, the row's rank within its owner, and the ranked rows. The rank
+// and the owner's key share the outer query's names with the target's
+// columns, so a windowed read refuses a target column of either name.
 const (
 	eachJoin  = "vx_j"
 	eachOwner = "vx_owner"
@@ -215,15 +217,21 @@ const (
 // Limit of each; every condition, the scope's included, is inside it, so a
 // row they leave out takes no rank. A many-to-many read joins the join entity
 // and reads the owner's key from it, last; its columns are qualified by the
-// target's table, as are the top-level columns of its conditions.
+// target's table, as are the top-level columns of its conditions. With
+// Count, it counts each owner's rows instead (eachCount).
 func (w *writer) eachSelect(st *Statement) {
 	c := st.Each
-	if st.Count || st.Exists || st.Aggregate != 0 {
-		w.fail(fmt.Errorf("velox: %s: a per-owner read cannot count or aggregate", w.in.Name))
+	if st.Exists || st.Aggregate != 0 {
+		w.fail(fmt.Errorf("velox: %s: a per-owner read cannot test for a row or aggregate", w.in.Name))
+		return
+	}
+	if st.Count {
+		w.eachCount(st)
 		return
 	}
 	window, join := c.windowed(w.in), c.Join != nil
 	if window {
+		w.reserved(st.Columns)
 		w.str("SELECT ")
 		w.selectColumns(st.Columns, false)
 		if join {
@@ -247,45 +255,7 @@ func (w *writer) eachSelect(st *Statement) {
 		w.str(") AS ")
 		w.ident(eachRank)
 	}
-	w.str(" FROM ")
-	w.table()
-	if join {
-		w.str(" JOIN ")
-		in := w.in
-		w.in = c.Join
-		w.table()
-		w.in = in
-		w.str(" AS ")
-		w.ident(eachJoin)
-		w.str(" ON ")
-		w.ident(eachJoin)
-		w.str(".")
-		w.ident(c.Join.Columns[c.JoinTarget].Name)
-		w.str(" = ")
-		w.table()
-		w.str(".")
-		w.col(int32(c.Target))
-	}
-	w.str(" WHERE ")
-	if len(c.Keys) == 0 {
-		w.str("1 = 0")
-	} else {
-		w.eachKey(c)
-		w.str(" IN (")
-		for i, k := range c.Keys {
-			if i > 0 {
-				w.str(", ")
-			}
-			w.arg(k)
-		}
-		w.str(")")
-	}
-	w.qualify = join
-	for _, p := range st.Where {
-		w.str(" AND ")
-		w.pred(p.n)
-	}
-	w.qualify = false
+	w.eachFrom(st)
 	if window {
 		w.str(") AS ")
 		w.ident(eachRows)
@@ -299,6 +269,137 @@ func (w *writer) eachSelect(st *Statement) {
 		w.orderBy(st.OrderBy, join)
 	}
 	w.selectTail(st)
+}
+
+// eachCount writes CountEach's statement: SELECT <owner key>, COUNT(*) …
+// GROUP BY <owner key>, a row for each owner with rows. An ordering a Rewrite
+// hook sets is not written: the rows are counts, one per owner.
+func (w *writer) eachCount(st *Statement) {
+	w.str("SELECT ")
+	w.eachKey(st.Each)
+	w.str(", COUNT(*)")
+	w.eachFrom(st)
+	w.str(" GROUP BY ")
+	w.eachKey(st.Each)
+	w.selectTail(st)
+}
+
+// reserved refuses a selected column (every column when cs is nil) named as
+// one of the window's aliases.
+func (w *writer) reserved(cs []int) {
+	n := len(cs)
+	if cs == nil {
+		n = len(w.in.Columns)
+	}
+	for i := range n {
+		c := i
+		if cs != nil {
+			c = cs[i]
+		}
+		if name := w.in.Columns[c].Name; name == eachRank || name == eachOwner {
+			w.fail(fmt.Errorf("velox: %s: the column %q has the name of an alias velox gives a per-owner read; it cannot be read with Rel.LimitEach", w.in.Name, name))
+		}
+	}
+}
+
+// eachFrom writes a per-owner read's FROM and WHERE: the statement's table,
+// joined to the join entity for a many-to-many read, its rows limited to the
+// owners' keys, and the statement's conditions, qualified by the table when
+// it joins.
+//
+// A join entity that is unique on its owner and target columns (its primary
+// key, or a unique index, holds only them) is joined as it is. Any other may
+// hold a link twice; it is joined as SELECT DISTINCT over the two columns of
+// the owners' rows, so that a target is each owner's once, as a plain With
+// loads it, and takes one rank or one count.
+func (w *writer) eachFrom(st *Statement) {
+	c := st.Each
+	w.str(" FROM ")
+	w.table()
+	keysWritten := false
+	if c.Join != nil {
+		w.str(" JOIN ")
+		in := w.in
+		w.in = c.Join
+		if pairUnique(c.Join, c.JoinOwner, c.JoinTarget) {
+			w.table()
+		} else {
+			w.str("(SELECT DISTINCT ")
+			w.col(int32(c.JoinOwner))
+			w.str(", ")
+			w.col(int32(c.JoinTarget))
+			w.str(" FROM ")
+			w.table()
+			w.str(" WHERE ")
+			w.eachKeys(c, func() { w.col(int32(c.JoinOwner)) })
+			w.str(")")
+			keysWritten = true
+		}
+		w.in = in
+		w.str(" AS ")
+		w.ident(eachJoin)
+		w.str(" ON ")
+		w.ident(eachJoin)
+		w.str(".")
+		w.ident(c.Join.Columns[c.JoinTarget].Name)
+		w.str(" = ")
+		w.table()
+		w.str(".")
+		w.col(int32(c.Target))
+	}
+	sep := " WHERE "
+	if !keysWritten {
+		w.str(sep)
+		w.eachKeys(c, func() { w.eachKey(c) })
+		sep = " AND "
+	}
+	w.qualify = c.Join != nil
+	for _, p := range st.Where {
+		w.str(sep)
+		w.pred(p.n)
+		sep = " AND "
+	}
+	w.qualify = false
+}
+
+// eachKeys writes the condition that a row is an owner's: the column key
+// writes IN the owners' keys, or 1 = 0 when there are none.
+func (w *writer) eachKeys(c *EachClause, key func()) {
+	if len(c.Keys) == 0 {
+		w.str("1 = 0")
+		return
+	}
+	key()
+	w.str(" IN (")
+	for i, k := range c.Keys {
+		if i > 0 {
+			w.str(", ")
+		}
+		w.arg(k)
+	}
+	w.str(")")
+}
+
+// pairUnique reports whether no two of j's rows can hold one pair of values
+// in columns a and b: j's primary key, or a unique index, is made of them.
+func pairUnique(j *EntityInfo, a, b int) bool {
+	within := func(cols []int) bool {
+		for _, c := range cols {
+			if c != a && c != b {
+				return false
+			}
+		}
+		return len(cols) > 0
+	}
+	if within(j.PrimaryKey) {
+		return true
+	}
+	for _, ix := range j.Indexes {
+		if ix.Unique && within(ix.Columns) {
+			return true
+		}
+	}
+	return false
 }
 
 // eachKey writes the column that holds a row's owner's key: the join

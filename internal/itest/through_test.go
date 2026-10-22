@@ -253,3 +253,58 @@ func TestLimitEachThroughOnRealDatabases(t *testing.T) {
 		check(tagIDs(ctx, byName.Where(Tags.Name.NEQ("aa")).LimitEach(1)), map[int64][]int64{1: {2}, 2: {2}, 3: {}, 4: {3}})
 	}, velox.WithAround(log.around))
 }
+
+// TestEachThroughRepeatedLinksOnRealDatabases: a link that repeats in a join
+// table whose key is an id of its own relates its target to the owner once,
+// in a per-owner page and a count as in a plain With. Shelf 1 links tag 1
+// "go" twice and tag 2 "db" once, and tag 3 "x" of org 2; shelf 2 links tag 2
+// twice; shelf 3 none.
+func TestEachThroughRepeatedLinksOnRealDatabases(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		throughSetup(t, tg)
+		shelfSetup(t, tg)
+		tg.exec(t, "DROP TABLE IF EXISTS shelf_tags")
+		tg.exec(t, "CREATE TABLE shelf_tags (id BIGINT PRIMARY KEY, shelf_id BIGINT NOT NULL, tag_id BIGINT NOT NULL)")
+		for i, r := range [][2]int64{{1, 1}, {1, 1}, {1, 2}, {1, 3}, {2, 2}, {2, 2}} {
+			tg.exec(t, "INSERT INTO shelf_tags (id, shelf_id, tag_id) VALUES (?, ?, ?)", int64(i+1), r[0], r[1])
+		}
+		acme := velox.WithTenant(ctx, int64(1))
+		owners := shelves(1, 2, 3)
+		byName := Shelves.Tags.OrderBy(Tags.Name.Asc())
+		for _, c := range []struct {
+			qctx context.Context
+			r    velox.Rel[shelf, tag]
+			want [][]int64
+		}{
+			{acme, byName.LimitEach(2), [][]int64{{2, 1}, {2}, {}}},
+			{acme, byName, [][]int64{{2, 1}, {2}, {}}},
+			{ctx, byName.LimitEach(3), [][]int64{{2, 1, 3}, {2}, {}}},
+		} {
+			got, err := velox.LoadEach(c.qctx, tg.db.Query[tag](), c.r, owners)
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantIDLists(t, tagIDLists(got), c.want)
+			// A With load of the same relation agrees.
+			ss, err := tg.db.Query[shelf]().Where(Shelves.ID.In(1, 2, 3)).OrderBy(Shelves.ID.Asc()).With(c.r).Limit(10).All(c.qctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var with [][]tag
+			for _, s := range ss {
+				ts, _ := s.Tags.Get()
+				with = append(with, ts)
+			}
+			wantIDLists(t, tagIDLists(with), c.want)
+		}
+		n, err := velox.CountEach(acme, tg.db.Query[tag](), Shelves.Tags, owners)
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantIDs(t, n, []int64{2, 1, 0})
+		if n, err = velox.CountEach(ctx, tg.db.Query[tag](), Shelves.Tags, owners); err != nil {
+			t.Fatal(err)
+		}
+		wantIDs(t, n, []int64{3, 1, 0})
+	})
+}

@@ -29,6 +29,9 @@ func TestRowCapAppliesToSelectsOnly(t *testing.T) {
 		{"each, through, no limit", Statement{Op: OpSelect, Entity: tagInfo, Each: &EachClause{Keys: []any{1, 2}, Join: bookTagInfo, JoinTarget: 1}}, 2},
 		{"each with MaxRows", Statement{Op: OpSelect, Entity: itemInfo, MaxRows: 7, Each: &EachClause{Keys: []any{1, 2, 3}, Column: 1, Limit: 4}}, 7},
 		{"each, an overflowing limit", Statement{Op: OpSelect, Entity: itemInfo, Each: &EachClause{Keys: []any{1, 2, 3}, Column: 1, Limit: math.MaxInt}}, math.MaxInt},
+		// A grouped count returns a row per owner at most.
+		{"count each", Statement{Op: OpSelect, Entity: itemInfo, Count: true, Each: &EachClause{Keys: []any{1, 2, 3}, Column: 1}}, 3},
+		{"count each, through", Statement{Op: OpSelect, Entity: tagInfo, Count: true, Each: &EachClause{Keys: []any{1, 2}, Join: bookTagInfo, JoinTarget: 1}}, 2},
 	} {
 		if got := db.rowCap(&c.st); got != c.want {
 			t.Errorf("%s: rowCap = %d, want %d", c.name, got, c.want)

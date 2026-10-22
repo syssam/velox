@@ -636,9 +636,10 @@ func sameEach(a, b *EachClause) bool {
 
 // rowCap is the most rows st may return: its own MaxRows, else, for a
 // per-owner read bounded by construction, that bound (eachBound), else the
-// DB's; 0 for no cap. Raw's read is capped too, Exec not.
+// DB's; 0 for no cap. Raw's read is capped too, Exec not; so is a per-owner
+// count, by its owners, but not Count.
 func (db *DB) rowCap(st *Statement) int {
-	if !st.Op.Reads() || st.Count || st.Exists || st.Aggregate != 0 {
+	if !st.Op.Reads() || (st.Count && st.Each == nil) || st.Exists || st.Aggregate != 0 {
 		return 0
 	}
 	if st.MaxRows > 0 {
@@ -652,13 +653,14 @@ func (db *DB) rowCap(st *Statement) int {
 
 // eachBound is the most rows a per-owner read can return by construction, and
 // whether it has such a bound: Limit for each owner of a windowed read, one
-// for each key of a read by the target's one-column primary key.
+// for each key of a count or of a read by the target's one-column primary
+// key.
 func eachBound(st *Statement) (int, bool) {
 	c := st.Each
 	switch {
 	case c == nil:
 		return 0, false
-	case c.keyed(st.Entity):
+	case st.Count || c.keyed(st.Entity):
 		return max(len(c.Keys), 1), true
 	case c.Limit > 0:
 		if c.Limit > math.MaxInt/max(len(c.Keys), 1) {
