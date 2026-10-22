@@ -100,30 +100,56 @@ func renderCases() []renderCase {
 		}, []any{int64(7), float64(10), 50}},
 		{"in and not in", func() *Statement { return stmt(hID.In(1, 2, 3), hNumber.NotIn("x")) }, map[Dialect]string{
 			Postgres: `SELECT ` + pgCols + ` FROM "invoices" WHERE "id" IN ($1, $2, $3) AND "number" NOT IN ($4)`,
+			MySQL:    "SELECT " + mysqlCols + " FROM `invoices` WHERE `id` IN (?, ?, ?) AND `number` NOT IN (?)",
+			SQLite:   `SELECT ` + pgCols + ` FROM "invoices" WHERE "id" IN (?, ?, ?) AND "number" NOT IN (?)`,
 		}, []any{int64(1), int64(2), int64(3), "x"}},
 		{"empty in and not in", func() *Statement { return stmt(hID.In(), hID.NotIn()) }, map[Dialect]string{
 			Postgres: `SELECT ` + pgCols + ` FROM "invoices" WHERE 1 = 0 AND 1 = 1`,
+			MySQL:    "SELECT " + mysqlCols + " FROM `invoices` WHERE 1 = 0 AND 1 = 1",
+			SQLite:   `SELECT ` + pgCols + ` FROM "invoices" WHERE 1 = 0 AND 1 = 1`,
 		}, nil},
 		{"like escape clause", func() *Statement { return stmt(hNumber.HasPrefix("a")) }, map[Dialect]string{
-			Postgres: `SELECT ` + pgCols + ` FROM "invoices" WHERE "number" LIKE $1 ESCAPE '\'`,
-			MySQL:    "SELECT " + mysqlCols + " FROM `invoices` WHERE `number` LIKE ? ESCAPE '\\\\'",
-			SQLite:   `SELECT ` + pgCols + ` FROM "invoices" WHERE "number" LIKE ? ESCAPE '\'`,
+			Postgres: `SELECT ` + pgCols + ` FROM "invoices" WHERE "number" LIKE $1 ESCAPE '!'`,
+			MySQL:    "SELECT " + mysqlCols + " FROM `invoices` WHERE `number` LIKE ? ESCAPE '!'",
+			SQLite:   `SELECT ` + pgCols + ` FROM "invoices" WHERE "number" LIKE ? ESCAPE '!'`,
 		}, []any{"a%"}},
 		{"and, or, not", func() *Statement {
 			return stmt(Or(hID.EQ(1), And(hOrg.EQ(2), Not(hPaidAt.IsNull()))))
 		}, map[Dialect]string{
 			Postgres: `SELECT ` + pgCols + ` FROM "invoices" WHERE ("id" = $1 OR ("org_id" = $2 AND NOT ("paid_at" IS NULL)))`,
+			MySQL:    "SELECT " + mysqlCols + " FROM `invoices` WHERE (`id` = ? OR (`org_id` = ? AND NOT (`paid_at` IS NULL)))",
+			SQLite:   `SELECT ` + pgCols + ` FROM "invoices" WHERE ("id" = ? OR ("org_id" = ? AND NOT ("paid_at" IS NULL)))`,
 		}, []any{int64(1), int64(2)}},
+		{"or beside a sibling", func() *Statement {
+			return stmt(Or(hID.EQ(1), hID.EQ(2)), hOrg.EQ(3))
+		}, map[Dialect]string{
+			Postgres: `SELECT ` + pgCols + ` FROM "invoices" WHERE ("id" = $1 OR "id" = $2) AND "org_id" = $3`,
+			MySQL:    "SELECT " + mysqlCols + " FROM `invoices` WHERE (`id` = ? OR `id` = ?) AND `org_id` = ?",
+			SQLite:   `SELECT ` + pgCols + ` FROM "invoices" WHERE ("id" = ? OR "id" = ?) AND "org_id" = ?`,
+		}, []any{int64(1), int64(2), int64(3)}},
+		{"neq, gte, lt, lte", func() *Statement {
+			return stmt(hOrg.NEQ(1), hTotal.GTE(2), hTotal.LT(3), hID.LTE(4))
+		}, map[Dialect]string{
+			Postgres: `SELECT ` + pgCols + ` FROM "invoices" WHERE "org_id" <> $1 AND "total" >= $2 AND "total" < $3 AND "id" <= $4`,
+			MySQL:    "SELECT " + mysqlCols + " FROM `invoices` WHERE `org_id` <> ? AND `total` >= ? AND `total` < ? AND `id` <= ?",
+			SQLite:   `SELECT ` + pgCols + ` FROM "invoices" WHERE "org_id" <> ? AND "total" >= ? AND "total" < ? AND "id" <= ?`,
+		}, []any{int64(1), float64(2), float64(3), int64(4)}},
 		{"empty and, empty or", func() *Statement { return stmt(And[inv](), Or[inv]()) }, map[Dialect]string{
 			Postgres: `SELECT ` + pgCols + ` FROM "invoices" WHERE 1 = 1 AND 1 = 0`,
+			MySQL:    "SELECT " + mysqlCols + " FROM `invoices` WHERE 1 = 1 AND 1 = 0",
+			SQLite:   `SELECT ` + pgCols + ` FROM "invoices" WHERE 1 = 1 AND 1 = 0`,
 		}, nil},
 		{"between, equal fold, not null", func() *Statement {
 			return stmt(hTotal.Between(1, 2), hNumber.EqualFold("Ab"), hPaidAt.NotNull())
 		}, map[Dialect]string{
 			Postgres: `SELECT ` + pgCols + ` FROM "invoices" WHERE "total" BETWEEN $1 AND $2 AND LOWER("number") = LOWER($3) AND "paid_at" IS NOT NULL`,
+			MySQL:    "SELECT " + mysqlCols + " FROM `invoices` WHERE `total` BETWEEN ? AND ? AND LOWER(`number`) = LOWER(?) AND `paid_at` IS NOT NULL",
+			SQLite:   `SELECT ` + pgCols + ` FROM "invoices" WHERE "total" BETWEEN ? AND ? AND LOWER("number") = LOWER(?) AND "paid_at" IS NOT NULL`,
 		}, []any{float64(1), float64(2), "Ab"}},
 		{"count", func() *Statement { st := stmt(hOrg.EQ(1)); st.Count = true; return st }, map[Dialect]string{
 			Postgres: `SELECT COUNT(*) FROM "invoices" WHERE "org_id" = $1`,
+			MySQL:    "SELECT COUNT(*) FROM `invoices` WHERE `org_id` = ?",
+			SQLite:   `SELECT COUNT(*) FROM "invoices" WHERE "org_id" = ?`,
 		}, []any{int64(1)}},
 		{"sum", func() *Statement {
 			st := stmt(hOrg.EQ(1))
@@ -145,6 +171,8 @@ func renderCases() []renderCase {
 			return st
 		}, map[Dialect]string{
 			Postgres: `SELECT "number", "id" FROM "invoices" LIMIT $1 OFFSET $2`,
+			MySQL:    "SELECT `number`, `id` FROM `invoices` LIMIT ? OFFSET ?",
+			SQLite:   `SELECT "number", "id" FROM "invoices" LIMIT ? OFFSET ?`,
 		}, []any{1, 5}},
 		{"insert one row", func() *Statement { return ins([]int{1, 2}, [][]any{{int64(7), "A"}}) }, map[Dialect]string{
 			Postgres: `INSERT INTO "invoices" ("org_id", "number") VALUES ($1, $2)`,
@@ -204,6 +232,9 @@ func argsEqual(a, b []any) bool { return len(a) == len(b) && (len(a) == 0 || ref
 
 func TestRender(t *testing.T) {
 	for _, c := range renderCases() {
+		if len(c.sql) != 3 {
+			t.Errorf("%s: goldens for %d dialects, want all 3", c.name, len(c.sql))
+		}
 		for d, want := range c.sql {
 			got, args := render(d, c.st())
 			if got != want {
@@ -280,6 +311,77 @@ func TestLockRenders(t *testing.T) {
 			st.Lock, st.LockWait, st.Limit, st.Offset = c.lock, c.wait, c.limit, c.offset
 			if got, _ := render(d, st); got != c.want {
 				t.Errorf("%v %d %d:\n got %s\nwant %s", d, c.lock, c.wait, got, c.want)
+			}
+		}
+	}
+}
+
+// TestNewClausesOnEveryDialect: Exists, Sum, Of through a join entity and a
+// locking read with SKIP LOCKED, side by side on each dialect. SQLite has no
+// locking reads, and the guard refuses one there.
+func TestNewClausesOnEveryDialect(t *testing.T) {
+	join := &EntityInfo{Name: "velox.join", Table: "joins", Tenant: -1, Columns: []ColumnInfo{{Name: "inv_id"}, {Name: "tag_id"}}}
+	cases := []struct {
+		name string
+		st   func() *Statement
+		sql  map[Dialect]string
+		args []any
+	}{
+		{"exists", func() *Statement {
+			st := stmt(hOrg.EQ(1))
+			st.Exists, st.Limit = true, 1
+			return st
+		}, map[Dialect]string{
+			Postgres: `SELECT 1 FROM "invoices" WHERE "org_id" = $1 LIMIT $2`,
+			MySQL:    "SELECT 1 FROM `invoices` WHERE `org_id` = ? LIMIT ?",
+			SQLite:   `SELECT 1 FROM "invoices" WHERE "org_id" = ? LIMIT ?`,
+		}, []any{int64(1), 1}},
+		{"sum", func() *Statement {
+			st := stmt(hOrg.EQ(1))
+			st.Aggregate, st.Columns = AggregateSum, []int{3}
+			return st
+		}, map[Dialect]string{
+			Postgres: `SELECT SUM("total") FROM "invoices" WHERE "org_id" = $1`,
+			MySQL:    "SELECT SUM(`total`) FROM `invoices` WHERE `org_id` = ?",
+			SQLite:   `SELECT SUM("total") FROM "invoices" WHERE "org_id" = ?`,
+		}, []any{int64(1)}},
+		{"of through a join", func() *Statement {
+			st := stmt(hOrg.EQ(1))
+			st.Where = append(st.Where, Predicate{node{op: opThrough, col: 0, v: join, w: 0,
+				kids: []node{{op: opIn, col: 1, v: []any{int64(7), int64(8)}}}}})
+			st.Limit = 5
+			return st
+		}, map[Dialect]string{
+			Postgres: `SELECT ` + pgCols + ` FROM "invoices" WHERE "org_id" = $1 AND EXISTS (SELECT 1 FROM "joins" AS "vx1" WHERE "vx1"."inv_id" = "invoices"."id" AND "tag_id" IN ($2, $3)) LIMIT $4`,
+			MySQL:    "SELECT " + mysqlCols + " FROM `invoices` WHERE `org_id` = ? AND EXISTS (SELECT 1 FROM `joins` AS `vx1` WHERE `vx1`.`inv_id` = `invoices`.`id` AND `tag_id` IN (?, ?)) LIMIT ?",
+			SQLite:   `SELECT ` + pgCols + ` FROM "invoices" WHERE "org_id" = ? AND EXISTS (SELECT 1 FROM "joins" AS "vx1" WHERE "vx1"."inv_id" = "invoices"."id" AND "tag_id" IN (?, ?)) LIMIT ?`,
+		}, []any{int64(1), int64(7), int64(8), 5}},
+		{"for update skip locked", func() *Statement {
+			st := stmt(hID.EQ(1))
+			st.Lock, st.LockWait, st.Limit, st.InTx = LockForUpdate, LockSkipLocked, 1, true
+			return st
+		}, map[Dialect]string{
+			Postgres: `SELECT ` + pgCols + ` FROM "invoices" WHERE "id" = $1 LIMIT $2 FOR UPDATE SKIP LOCKED`,
+			MySQL:    "SELECT " + mysqlCols + " FROM `invoices` WHERE `id` = ? LIMIT ? FOR UPDATE SKIP LOCKED",
+		}, []any{int64(1), 1}},
+	}
+	for _, c := range cases {
+		for _, d := range []Dialect{Postgres, MySQL, SQLite} {
+			want, ok := c.sql[d]
+			err := OpenFake(d, &FakeExec{}).guard(c.st())
+			if !ok {
+				const refusal = "velox: velox.inv: SQLite has no locking reads; its transactions lock the whole database"
+				if err == nil || err.Error() != refusal {
+					t.Errorf("%s, %v: the guard gives %v, want %s", c.name, d, err, refusal)
+				}
+				continue
+			}
+			if err != nil {
+				t.Errorf("%s, %v: the guard refuses it: %v", c.name, d, err)
+			}
+			got, args := render(d, c.st())
+			if got != want || !argsEqual(args, c.args) {
+				t.Errorf("%s, %v:\n got %s %#v\nwant %s %#v", c.name, d, got, args, want, c.args)
 			}
 		}
 	}

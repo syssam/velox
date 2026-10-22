@@ -148,7 +148,7 @@ func TestSQLNeedsNoDatabase(t *testing.T) {
 	e := &velox.FakeExec{}
 	db := velox.OpenFake(velox.MySQL, e)
 	text, args := sqlOK(t)(db.Query[testmodel.Invoice]().Where(I.Number.HasPrefix("A")).Limit(3).SQL(ctx))
-	want := "SELECT `id`, `created_at`, `updated_at`, `org_id`, `number`, `total`, `paid`, `paid_at`, `note`, `data` FROM `invoices` WHERE `number` LIKE ? ESCAPE '\\\\' LIMIT ?"
+	want := "SELECT `id`, `created_at`, `updated_at`, `org_id`, `number`, `total`, `paid`, `paid_at`, `note`, `data` FROM `invoices` WHERE `number` LIKE ? ESCAPE '!' LIMIT ?"
 	if text != want || !reflect.DeepEqual(args, []any{"A%", 3}) || e.Calls != 0 {
 		t.Errorf("%s %v calls %d", text, args, e.Calls)
 	}

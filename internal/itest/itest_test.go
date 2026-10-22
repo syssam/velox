@@ -18,9 +18,9 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5/pgxpool"
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 
 	"github.com/syssam/velox2"
@@ -357,16 +357,125 @@ func TestFirstAndExistsOnRealDatabases(t *testing.T) {
 	})
 }
 
-// TestLikeTakesTextLiterally is Review Focus 1.
+// TestLikeTakesTextLiterally: HasPrefix, HasSuffix and Contains match %, _,
+// ! and \ as themselves, and Like takes % and _ as wildcards and ! as its
+// escape, while \ is an ordinary character.
 func TestLikeTakesTextLiterally(t *testing.T) {
-	each(t, func(t *testing.T, tg target) {
-		wantIDs(t, query(t, tg, I.Number.HasPrefix("50%")), []int64{3})
-		wantIDs(t, query(t, tg, I.Number.HasSuffix("_OFF")), []int64{3})
-		wantIDs(t, query(t, tg, I.Number.HasSuffix("_1")), nil) // unescaped, "%_1" would match INV-1
-		wantIDs(t, query(t, tg, I.Number.Contains("_")), []int64{3})
-		wantIDs(t, query(t, tg, I.Number.Contains(`\`)), []int64{5})
-		wantIDs(t, query(t, tg, I.Number.Like("INV-_")), []int64{1, 2})
-	})
+	each(t, likeChecks)
+}
+
+// TestLikeIgnoresServerSettings runs the LIKE checks on sessions whose
+// settings change what a backslash means in a string literal: MySQL with
+// NO_BACKSLASH_ESCAPES in sql_mode, and PostgreSQL with
+// standard_conforming_strings off. The ESCAPE character is not a backslash,
+// so neither changes a match.
+func TestLikeIgnoresServerSettings(t *testing.T) {
+	var ts []target
+	if dsn := os.Getenv("VELOX_TEST_POSTGRES"); dsn != "" {
+		ts = append(ts, nonStandardPostgres(t, dsn)...)
+	}
+	if dsn := os.Getenv("VELOX_TEST_MYSQL"); dsn != "" {
+		ts = append(ts, noBackslashMySQL(t, dsn))
+	}
+	if len(ts) == 0 {
+		t.Skip("needs VELOX_TEST_POSTGRES or VELOX_TEST_MYSQL")
+	}
+	for _, tg := range ts {
+		t.Run(tg.name, func(t *testing.T) {
+			setup(t, tg)
+			likeChecks(t, tg)
+		})
+	}
+}
+
+// likeChecks adds invoices 6 (x!y) and 7 (x!%y) to setup's rows, whose
+// numbers already hold 50%_OFF and back\slash, and matches them.
+func likeChecks(t *testing.T, tg target) {
+	for _, r := range []struct {
+		id     int64
+		number string
+	}{{6, "x!y"}, {7, "x!%y"}} {
+		tg.exec(t, "INSERT INTO invoices (created_at, updated_at, id, org_id, number, total, paid, paid_at, note, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			t0, t0, r.id, 2, r.number, 1.0, false, nil, "", []byte("d"))
+	}
+	wantIDs(t, query(t, tg, I.Number.HasPrefix("50%")), []int64{3})
+	wantIDs(t, query(t, tg, I.Number.HasSuffix("_OFF")), []int64{3})
+	wantIDs(t, query(t, tg, I.Number.HasSuffix("_1")), nil) // unescaped, "%_1" would match INV-1
+	wantIDs(t, query(t, tg, I.Number.Contains("_")), []int64{3})
+	wantIDs(t, query(t, tg, I.Number.Contains(`\`)), []int64{5})
+	wantIDs(t, query(t, tg, I.Number.HasPrefix(`back\`)), []int64{5})
+	wantIDs(t, query(t, tg, I.Number.HasSuffix(`\slash`)), []int64{5})
+	wantIDs(t, query(t, tg, I.Number.Contains("!")), []int64{6, 7})
+	wantIDs(t, query(t, tg, I.Number.HasPrefix("x!%")), []int64{7})
+	wantIDs(t, query(t, tg, I.Number.HasSuffix("!y")), []int64{6})
+	wantIDs(t, query(t, tg, I.Number.Contains("!%")), []int64{7})
+	wantIDs(t, query(t, tg, I.Number.Like("INV-_")), []int64{1, 2})
+	wantIDs(t, query(t, tg, I.Number.Like("50!%!_OFF")), []int64{3})
+	wantIDs(t, query(t, tg, I.Number.Like("x!!%")), []int64{6, 7})
+	wantIDs(t, query(t, tg, I.Number.Like("x!!!%y")), []int64{7})
+	wantIDs(t, query(t, tg, I.Number.Like(`back\slash`)), []int64{5})
+	wantIDs(t, query(t, tg, I.Number.Like(`back\_lash`)), []int64{5})
+}
+
+// nonStandardPostgres returns PostgreSQL through pgx and database/sql, each
+// session opened with standard_conforming_strings off, which makes a
+// backslash an escape in an ordinary string literal.
+func nonStandardPostgres(t *testing.T, dsn string) []target {
+	t.Helper()
+	cfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.ConnConfig.RuntimeParams["standard_conforming_strings"] = "off"
+	sqlDB := stdlib.OpenDB(*cfg.ConnConfig.Copy())
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	var scs string
+	if err := sqlDB.QueryRowContext(ctx, "SHOW standard_conforming_strings").Scan(&scs); err != nil {
+		t.Fatal(err)
+	}
+	if scs != "off" {
+		t.Fatalf("standard_conforming_strings is %q, want off", scs)
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+	exec := sqlExec(sqlDB, velox.Postgres)
+	return []target{
+		{name: "postgres-pgx-nonstandard", d: velox.Postgres, db: velox.OpenPgx(pool), exec: exec, ddl: pgDDL, items: pgItems, tickets: pgTickets, raw: sqlDB, direct: sqlDB},
+		{name: "postgres-sql-nonstandard", d: velox.Postgres, db: velox.Open(velox.Postgres, sqlDB), exec: exec, ddl: pgDDL, items: pgItems, tickets: pgTickets, raw: sqlDB, direct: sqlDB},
+	}
+}
+
+// noBackslashMySQL returns MySQL with NO_BACKSLASH_ESCAPES added to the
+// session's sql_mode, which makes a backslash an ordinary character in a
+// string literal.
+func noBackslashMySQL(t *testing.T, dsn string) target {
+	t.Helper()
+	cfg, err := mysql.ParseDSN(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Params == nil {
+		cfg.Params = map[string]string{}
+	}
+	cfg.Params["sql_mode"] = "CONCAT(@@sql_mode, ',NO_BACKSLASH_ESCAPES')"
+	conn, err := mysql.NewConnector(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db := sql.OpenDB(conn)
+	t.Cleanup(func() { _ = db.Close() })
+	var mode string
+	if err := db.QueryRowContext(ctx, "SELECT @@SESSION.sql_mode").Scan(&mode); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(mode, "NO_BACKSLASH_ESCAPES") {
+		t.Fatalf("sql_mode is %q, want NO_BACKSLASH_ESCAPES in it", mode)
+	}
+	return target{name: "mysql-no-backslash-escapes", d: velox.MySQL, db: velox.Open(velox.MySQL, db), exec: sqlExec(db, velox.MySQL), ddl: mysqlDDL, items: mysqlItems,
+		tickets: mysqlTickets, raw: db, direct: db}
 }
 
 // TestTextMatchingFollowsTheDatabase is Review Focus 2: whether LIKE ignores

@@ -627,3 +627,39 @@ func TestPolicyWritable(t *testing.T) {
 		}
 	}
 }
+
+// TestPolicySQLOnEveryDialect: SQL(ctx) applies the policy as execution does,
+// on every dialect. Allow leaves the unscoped text; a zero Pred, from Read or
+// from Write, fails SQL(ctx) with the message execution gives.
+func TestPolicySQLOnEveryDialect(t *testing.T) {
+	const (
+		readMsg  = "velox: velox_test.pnote: the Read policy returned the zero Pred; return velox.Allow[E]() for no restriction"
+		writeMsg = "velox: velox_test.pnote: the Write policy returned the zero Pred; return velox.Allow[E]() for no restriction"
+	)
+	for _, c := range []struct {
+		d    velox.Dialect
+		want string
+	}{
+		{velox.Postgres, `SELECT "id", "owner", "locked", "parent_id", "invoice_id" FROM "pnotes" WHERE "id" > $1 LIMIT $2`},
+		{velox.MySQL, "SELECT `id`, `owner`, `locked`, `parent_id`, `invoice_id` FROM `pnotes` WHERE `id` > ? LIMIT ?"},
+		{velox.SQLite, `SELECT "id", "owner", "locked", "parent_id", "invoice_id" FROM "pnotes" WHERE "id" > ? LIMIT ?`},
+	} {
+		db := velox.OpenFake(c.d, &velox.FakeExec{})
+		q := db.Query[pnote]().Where(pn.ID.GT(0)).Limit(3)
+		unscoped, uargs, err := q.SQL(velox.SkipPolicy(context.Background(), "test"))
+		if err != nil || unscoped != c.want {
+			t.Errorf("%v: unscoped\n got %s, %v\nwant %s", c.d, unscoped, err, c.want)
+		}
+		got, args, err := q.SQL(pnoteReading(velox.Allow[pnote](), nil))
+		if err != nil || got != c.want || !slices.Equal(args, uargs) || !slices.Equal(args, []any{int64(0), 3}) {
+			t.Errorf("%v: Allow\n got %s %v, %v\nwant %s %v", c.d, got, args, err, c.want, uargs)
+		}
+		if _, _, err := q.SQL(pnoteReading(velox.Pred[pnote]{}, nil)); err == nil || err.Error() != readMsg {
+			t.Errorf("%v: a zero Read: %v", c.d, err)
+		}
+		u := db.Update[pnote]().Set(pn.Owner.Set("x")).Where(pn.ID.EQ(1))
+		if _, _, err := u.SQL(pnoteWriting(velox.Pred[pnote]{}, nil)); err == nil || err.Error() != writeMsg {
+			t.Errorf("%v: a zero Write: %v", c.d, err)
+		}
+	}
+}

@@ -317,7 +317,7 @@ func TestOrderAndWhere(t *testing.T) {
 		) { edges { node { name } } } }`,
 		want: `{"data": {"users": {"edges": [{"node": {"name": "Brian"}}, {"node": {"name": "Ada"}}]}}}`,
 		stmts: []string{
-			selUsers + ` WHERE (EXISTS (SELECT 1 FROM "posts" AS "vx1" WHERE "vx1"."author_id" = "users"."id" AND "title" LIKE ? ESCAPE '\' AND "org_id" = ?) OR "role" = ?) ORDER BY "name" DESC, "id" LIMIT ? [G% 1 admin 101]`,
+			selUsers + ` WHERE (EXISTS (SELECT 1 FROM "posts" AS "vx1" WHERE "vx1"."author_id" = "users"."id" AND "title" LIKE ? ESCAPE '!' AND "org_id" = ?) OR "role" = ?) ORDER BY "name" DESC, "id" LIMIT ? [G% 1 admin 101]`,
 		},
 	})
 }
@@ -600,7 +600,7 @@ func TestFieldDirective(t *testing.T) {
 		role:  "admin",
 		query: filter,
 		want:  `{"data": {"users": {"totalCount": 1}}}`,
-		stmts: []string{`SELECT COUNT(*) FROM "users" WHERE "email" LIKE ? ESCAPE '\' [a%]`},
+		stmts: []string{`SELECT COUNT(*) FROM "users" WHERE "email" LIKE ? ESCAPE '!' [a%]`},
 	})
 	s.do(t, request{
 		role:  "admin",

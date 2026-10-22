@@ -293,8 +293,8 @@ func list[V any](vs []V) []any {
 
 // likeEscaper is built on first use, not at program start.
 var likeEscaper = sync.OnceValue(func() *strings.Replacer {
-	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return strings.NewReplacer(`!`, `!!`, `%`, `!%`, `_`, `!_`)
 })
 
-// escapeLike makes s match itself in a LIKE pattern whose escape is \.
+// escapeLike makes s match itself in a LIKE pattern whose escape is !.
 func escapeLike(s string) string { return likeEscaper().Replace(s) }

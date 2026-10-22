@@ -235,7 +235,10 @@ func (w *writer) pred(n node) {
 		w.predCol(n.col)
 		w.str(" LIKE ")
 		w.arg(n.v)
-		w.str(w.d.likeEscape())
+		// ! escapes on every dialect: a backslash would read differently
+		// under MySQL's NO_BACKSLASH_ESCAPES and PostgreSQL's
+		// standard_conforming_strings, and ! means the same under both.
+		w.str(" ESCAPE '!'")
 	case opFold:
 		w.str("LOWER(")
 		w.predCol(n.col)

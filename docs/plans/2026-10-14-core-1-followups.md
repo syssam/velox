@@ -4,8 +4,8 @@ Findings from the reviews of Core 1 and of the plans after it that were delibera
 
 ## Still open from before core plan 3
 
-- The LIKE escape depends on server settings: MySQL's `ESCAPE '\\'` assumes `NO_BACKSLASH_ESCAPES` is off, and PostgreSQL's `ESCAPE '\'` assumes `standard_conforming_strings` is on. A non-backslash escape character (e.g. `!`) removes both dependencies.
-- Golden SQL for MySQL and SQLite on the read-path render cases that still assert PostgreSQL only (writes cover all three since core plan 3), an OR-between-siblings case, and the NEQ/GTE/LT/LTE operators.
+- Resolved in API plan 5 (`ESCAPE '!'` on every dialect; `Like`'s doc says `!` escapes; `TestLikeIgnoresServerSettings` runs MySQL with `NO_BACKSLASH_ESCAPES` and PostgreSQL with `standard_conforming_strings` off). The LIKE escape depended on server settings: MySQL's `ESCAPE '\\'` assumes `NO_BACKSLASH_ESCAPES` is off, and PostgreSQL's `ESCAPE '\'` assumes `standard_conforming_strings` is on. A non-backslash escape character (e.g. `!`) removes both dependencies.
+- Resolved in API plan 5 (`TestRender` holds all three dialects for every case, and `TestNewClausesOnEveryDialect`). Golden SQL for MySQL and SQLite on the read-path render cases that still assert PostgreSQL only (writes cover all three since core plan 3), an OR-between-siblings case, and the NEQ/GTE/LT/LTE operators.
 
 ## Left by core plan 4 (relations)
 
@@ -239,7 +239,7 @@ From the final review of API plan 1 (2026-10-20). Each item names the plan that 
 
 - [x] **API plan 2 (DSL and velox-gen):** rules 37, 39 and 40 are three copies of one check (an `Optional`, non-`Nillable` field of a type whose unset value cannot be stored needs a `Default`). Make them one table of `{type, rule, noun}`, so that a rule 41 is one line.
 - [x] **API plan 2:** `internal/gen` comments cite "Ruling N" of old plans (`lower.go`, `build.go`, `methods.go`). They are not public, but they rot; the velox-gen rewrite should drop them. The citation test scans only public packages.
-- **API plan 5 (dialects):** `SQL(ctx)` of a statement with a policy `Allow` or a zero-Pred failure is tested on PostgreSQL only; add it to the dialect test sweep.
+- [x] **API plan 5 (dialects):** resolved in API plan 5 (`TestPolicySQLOnEveryDialect`). `SQL(ctx)` of a statement with a policy `Allow` or a zero-Pred failure is tested on PostgreSQL only; add it to the dialect test sweep.
 - [x] **API plan 3:** the citation scan (`TestGodocCitesNoSpec`) did not cover the contrib modules. `contrib/graphql` has its own, over `graphql`, `veloxgql` and `gqlimpl`.
 - [x] **API plan 4:** the same for `contrib/veloxotel`, whose `metrics.go` and `attrs.go` still say "spec §2.x". Resolved in API plan 4: `TestGodocCitesNoSpec` scans the module's package, tests included.
 - **API plan 5 (moved from API plan 4, which kept the core to what it needs):** `contrib/veloxotel/attrs.go` re-implements the core's unexported `Op.raw()` and `Statement.reads()`. Export `Op.Raw()` and `Op.Reads()` (additive), so hooks and adapters share one definition.

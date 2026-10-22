@@ -53,15 +53,6 @@ func (d Dialect) placeholder(b *strings.Builder, n int) {
 	b.WriteByte('?')
 }
 
-// likeEscape is the ESCAPE clause that makes \ the LIKE escape character. In
-// MySQL a backslash in a string literal is itself escaped.
-func (d Dialect) likeEscape() string {
-	if d == MySQL {
-		return ` ESCAPE '\\'`
-	}
-	return ` ESCAPE '\'`
-}
-
 // noLimit is what goes after LIMIT when a query has an offset and no limit:
 // MySQL and SQLite accept OFFSET only after LIMIT.
 func (d Dialect) noLimit() string {

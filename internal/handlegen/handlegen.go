@@ -40,7 +40,7 @@ var (
 			"return Pred[E]{node{op: opBetween, col: c.I, v: lo, w: hi}}"},
 	}
 	text = []method{
-		{"Like", "is column LIKE pattern: % and _ are wildcards and \\ escapes." + caseNote, "(pattern string) Pred[E]",
+		{"Like", "is column LIKE pattern: % and _ are wildcards, and ! escapes them and itself (\\ is an ordinary character)." + caseNote, "(pattern string) Pred[E]",
 			"return Pred[E]{node{op: opLike, col: c.I, v: pattern}}"},
 		{"HasPrefix", "is true when the column starts with s, taken literally." + caseNote, "(s V) Pred[E]",
 			`return Pred[E]{node{op: opLike, col: c.I, v: escapeLike(string(s)) + "%"}}`},
