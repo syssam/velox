@@ -728,8 +728,10 @@ func TestConds(t *testing.T) {
 	}
 }
 
-// hSoft is tenant-scoped, with a Read policy, and its delete hook updates
-// Deleted instead of deleting: it does not call next.
+// hSoft is tenant-scoped, with a Read policy. Its delete hook updates Deleted
+// instead of deleting: it does not call next, and reports the update's count
+// with SetAffected unless the context holds noCount. Its update hook records
+// Conds once next has returned in softConds.
 type hSoft struct {
 	ID, OrgID int64
 	Deleted   bool
@@ -744,19 +746,35 @@ func (*hSoft) Policy() velox.Policy[hSoft] {
 	return velox.Policy[hSoft]{Read: func(context.Context) (velox.Pred[hSoft], error) { return hSofts.ID.GT(0), nil }}
 }
 
+type noCount struct{}
+
+var softConds []velox.Pred[hSoft]
+
 func (*hSoft) Hooks() []velox.Hook[hSoft] {
-	return []velox.Hook[hSoft]{velox.On(func(next velox.Mutator[hSoft]) velox.Mutator[hSoft] {
-		return velox.MutateFunc[hSoft](func(ctx context.Context, m *velox.Mutation[hSoft]) error {
-			q := m.DB().Update[hSoft]().Set(hSofts.Deleted.Set(true))
-			if cs := m.Conds(); len(cs) > 0 {
-				q = q.Where(cs...)
-			} else {
-				q = q.All()
-			}
-			_, err := q.Exec(ctx)
-			return err
-		})
-	}, velox.OpDelete)}
+	return []velox.Hook[hSoft]{
+		velox.On(func(next velox.Mutator[hSoft]) velox.Mutator[hSoft] {
+			return velox.MutateFunc[hSoft](func(ctx context.Context, m *velox.Mutation[hSoft]) error {
+				q := m.DB().Update[hSoft]().Set(hSofts.Deleted.Set(true))
+				if cs := m.Conds(); len(cs) > 0 {
+					q = q.Where(cs...)
+				} else {
+					q = q.All()
+				}
+				n, err := q.Exec(ctx)
+				if ctx.Value(noCount{}) == nil {
+					m.SetAffected(n)
+				}
+				return err
+			})
+		}, velox.OpDelete),
+		velox.On(func(next velox.Mutator[hSoft]) velox.Mutator[hSoft] {
+			return velox.MutateFunc[hSoft](func(ctx context.Context, m *velox.Mutation[hSoft]) error {
+				err := next.Mutate(ctx, m)
+				softConds = m.Conds()
+				return err
+			})
+		}, velox.OpUpdate),
+	}
 }
 
 var hSoftMeta velox.MetaOnce[hSoft]
@@ -777,26 +795,129 @@ func (*hSoft) VeloxMeta() *velox.Meta[hSoft] {
 
 // TestSoftDeleteThroughConds: a delete hook rewrites the delete into an
 // update through Conds. The update adds the tenant and the policy once, as
-// they are not in Conds; the delete sends nothing itself and reports 0 rows.
-// A delete of All gives no Conds, and the update says All.
+// they are not in Conds, and the delete sends nothing itself. It reports the
+// update's count, which the hook gave SetAffected, and 0 without it. A
+// delete of All gives no Conds, and the update says All.
 func TestSoftDeleteThroughConds(t *testing.T) {
 	e := &velox.FakeExec{Affected: 4}
 	db := velox.OpenFake(velox.Postgres, e)
 	tctx := velox.WithTenant(ctx, int64(7))
 	n, err := db.Delete[hSoft]().Where(hSofts.ID.EQ(1)).Exec(tctx)
-	if err != nil || n != 0 || e.Calls != 1 {
+	if err != nil || n != 4 || e.Calls != 1 {
 		t.Fatalf("%v, %d rows, %d statements", err, n, e.Calls)
 	}
 	const one = `UPDATE "softs" SET "deleted" = $1 WHERE "id" = $2 AND "org_id" = $3 AND "id" > $4`
 	if e.SQL != one || !reflect.DeepEqual(e.Args, []any{true, int64(1), int64(7), int64(0)}) {
 		t.Errorf("SQL %s %v, want %s", e.SQL, e.Args, one)
 	}
+	// The update's hook, after next, saw the delete's conditions only.
+	if want := []velox.Pred[hSoft]{hSofts.ID.EQ(1)}; !reflect.DeepEqual(softConds, want) {
+		t.Errorf("Conds after next %v, want %v", softConds, want)
+	}
 	n, err = db.Delete[hSoft]().All().Exec(tctx)
-	if err != nil || n != 0 || e.Calls != 2 {
+	if err != nil || n != 4 || e.Calls != 2 {
 		t.Fatalf("All: %v, %d rows, %d statements", err, n, e.Calls)
 	}
 	const all = `UPDATE "softs" SET "deleted" = $1 WHERE "org_id" = $2 AND "id" > $3`
 	if e.SQL != all || !reflect.DeepEqual(e.Args, []any{true, int64(7), int64(0)}) {
 		t.Errorf("All: SQL %s %v, want %s", e.SQL, e.Args, all)
+	}
+	if len(softConds) != 0 {
+		t.Errorf("All: Conds after next %v", softConds)
+	}
+	n, err = db.Delete[hSoft]().Where(hSofts.ID.EQ(1)).Exec(context.WithValue(tctx, noCount{}, true))
+	if err != nil || n != 0 || e.Calls != 3 {
+		t.Errorf("without SetAffected: %v, %d rows, %d statements", err, n, e.Calls)
+	}
+	// Under SQL(ctx) the hook's update is a write, refused.
+	if _, _, err := db.Delete[hSoft]().Where(hSofts.ID.EQ(1)).SQL(tctx); !errors.Is(err, velox.ErrDryRun) || e.Calls != 3 {
+		t.Errorf("SQL: %v, %d statements", err, e.Calls)
+	}
+}
+
+// TestCondsAfterNext: once next has returned, Conds is still the conditions
+// as given, without the tenant's, the policy's or a Rewrite hook's, which
+// the statement sent.
+func TestCondsAfterNext(t *testing.T) {
+	e := &velox.FakeExec{Affected: 1}
+	rw := velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+		st.Where = append(st.Where, velox.ColumnEQ(2, false))
+		return nil
+	})
+	db := velox.OpenFake(velox.Postgres, e, rw)
+	softConds = nil
+	if _, err := db.Update[hSoft]().Set(hSofts.Deleted.Set(true)).Where(hSofts.ID.EQ(1), hSofts.ID.LT(9)).Exec(velox.WithTenant(ctx, int64(7))); err != nil {
+		t.Fatal(err)
+	}
+	if want := []velox.Pred[hSoft]{hSofts.ID.EQ(1), hSofts.ID.LT(9)}; !reflect.DeepEqual(softConds, want) {
+		t.Errorf("Conds after next %v, want %v", softConds, want)
+	}
+	if !strings.Contains(e.SQL, `"org_id" = `) || !strings.Contains(e.SQL, `"id" > `) || strings.Count(e.SQL, `"deleted" = `) != 2 {
+		t.Errorf("SQL %s", e.SQL)
+	}
+}
+
+// TestSetAffected: a hook that makes the write itself reports its count
+// with SetAffected, and Exec returns it. With next, in either order, or a
+// negative count, it is a misuse.
+func TestSetAffected(t *testing.T) {
+	e := &velox.FakeExec{Affected: 1}
+	db := velox.OpenFake(velox.Postgres, e)
+	flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
+		m.SetAffected(5)
+		return nil
+	}
+	if n, err := db.Update[hFlex]().Set(hfTitle.Set("x")).All().Exec(ctx); err != nil || n != 5 || e.Calls != 0 {
+		t.Errorf("own write: %v, %d rows, %d statements", err, n, e.Calls)
+	}
+	const both = "velox: velox_test.hFlex: hook: SetAffected is for a hook that makes the write itself; it called next too"
+	flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
+		m.SetAffected(5)
+		return next.Mutate(ctx, m)
+	}
+	if n, err := db.Delete[hFlex]().All().Exec(ctx); err == nil || err.Error() != both || n != 0 || e.Calls != 0 {
+		t.Errorf("SetAffected, then next: %v, %d rows, %d statements", err, n, e.Calls)
+	}
+	flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
+		err := next.Mutate(ctx, m)
+		m.SetAffected(5)
+		return err
+	}
+	if n, err := db.Delete[hFlex]().All().Exec(ctx); err == nil || err.Error() != both || n != 0 {
+		t.Errorf("next, then SetAffected: %v, %d rows", err, n)
+	}
+	flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
+		m.SetAffected(-1)
+		return nil
+	}
+	if n, err := db.Delete[hFlex]().All().Exec(ctx); err == nil || !strings.HasSuffix(err.Error(), "hook: SetAffected of a negative count") || n != 0 {
+		t.Errorf("negative: %v, %d rows", err, n)
+	}
+}
+
+// TestValueInOfAnotherType: a value the handle's type cannot hold, here a
+// Rewrite hook's, fails the write once the hook returns, naming the column
+// and both types.
+func TestValueInOfAnotherType(t *testing.T) {
+	rw := velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+		for i := range st.Set {
+			if st.Set[i].Column == 1 {
+				st.Set[i].Value = 5
+			}
+		}
+		return nil
+	})
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Affected: 1}, rw)
+	var v string
+	var ok bool
+	flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
+		err := next.Mutate(ctx, m)
+		v, ok = hfTitle.ValueIn(m)
+		return err
+	}
+	_, err := db.Update[hFlex]().Set(hfTitle.Set("x")).All().Exec(ctx)
+	const text = `velox: velox_test.hFlex: hook: column "title" is assigned a value of type int, not string`
+	if err == nil || err.Error() != text || v != "" || ok {
+		t.Errorf("got %v, %q, %v; want %q", err, v, ok, text)
 	}
 }

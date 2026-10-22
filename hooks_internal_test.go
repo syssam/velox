@@ -186,6 +186,36 @@ func TestValueIn(t *testing.T) {
 	}
 }
 
+// TestValueInRecordsAnotherType: a value of another type gives no value and
+// records an error naming the column and both types; the first one recorded
+// wins, as for every misuse.
+func TestValueInRecordsAnotherType(t *testing.T) {
+	info, err := loadDesc(hnoteDesc())
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := Statement{Op: OpUpdate, Entity: info, Set: []Assignment{{Column: 4, Op: AssignSet, Value: "x"}, {Column: 1, Op: AssignSet, Value: 5}}}
+	m := &Mutation[hnote]{st: &st}
+	if v, ok := hn.Due.ValueIn(m); v != nil || ok {
+		t.Errorf("Due: %v, %v", v, ok)
+	}
+	const first = `column "due" is assigned a value of type string, not int64`
+	if m.err == nil || m.err.Error() != first {
+		t.Fatalf("recorded %v, want %q", m.err, first)
+	}
+	if v, ok := hn.Title.ValueIn(m); v != "" || ok {
+		t.Errorf("Title: %q, %v", v, ok)
+	}
+	if m.err.Error() != first {
+		t.Errorf("the second replaced the first: %v", m.err)
+	}
+	m = &Mutation[hnote]{st: &st}
+	hn.Title.ValueIn(m)
+	if want := `column "title" is assigned a value of type int, not string`; m.err == nil || m.err.Error() != want {
+		t.Errorf("recorded %v, want %q", m.err, want)
+	}
+}
+
 type hstatus string
 
 // TestValueInEveryKind: each handle kind's ValueIn, over what its own Set

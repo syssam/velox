@@ -194,7 +194,7 @@ func (*User) Hooks() []velox.Hook[User] {
 - `DB()`, the database the write runs on: the transaction's inside `db.Tx`, else the database's. A hook that writes or reads other rows uses `m.DB().Insert(&audit).Exec(ctx)`, so its work commits or rolls back with the write inside a transaction (ent's `m.Client()`). It is set for the writes of entities that have hooks, which are the only ones that see a `Mutation`;
 - `Result()` after `next`: its `Affected` is the rows inserted, matched or deleted. A generated key is written back into its row, so after `next` an `Insert`'s `m.Rows()[0].ID` holds it; `InsertAll` reads no keys back.
 
-*(Note of 2026-10-22, API plan 5: `Mutation.Value(col)` and `Mutation.Result()` are removed. A column handle's `ValueIn(m)` reads an assignment, typed to the handle's value (a nullable handle gives `*V`, nil for `SetNull`); `m.Affected()` is the rows written once `next` has returned; `m.Conds()` returns the caller's and the earlier hooks' conditions, which a soft-delete hook passes to an update instead of calling `next`, and the delete then reports 0 rows.)*
+*(Note of 2026-10-22, API plan 5: `Mutation.Value(col)` and `Mutation.Result()` are removed. A column handle's `ValueIn(m)` reads an assignment, typed to the handle's value (a nullable handle gives `*V`, nil for `SetNull`); `m.Affected()` is the rows written once `next` has returned; `m.Conds()` returns the caller's and the earlier hooks' conditions as given (never the tenant's, the policy's or a Rewrite hook's, before or after `next`), which a soft-delete hook passes to an update instead of calling `next`; the hook reports the update's count with `m.SetAffected(n)`, which the delete's `Exec` returns (0 without it). A `ValueIn` of a value of another type is a recorded misuse.)*
 
 **Order of a write:**
 1. For an update or delete, the guard (`ErrNoWhere` and the like), on the statement as the caller built it: a condition a hook adds never stands in for the caller's `Where`.
@@ -205,7 +205,7 @@ func (*User) Hooks() []velox.Hook[User] {
    - then the pipeline: the guard again, the Rewrite hooks, the scope, render, and execute.
 4. The hooks' code after `next` runs.
 
-Validators therefore see what hooks set. In a transaction, the code after `next` runs before the commit; hooks after commit are out of scope. A write a hook makes through `m.DB()` is part of the caller's transaction; through any other `*DB` it is not. Under `SQL(ctx)`, `next` does not execute: `Result()` is empty and `velox.IsDryRun(ctx)` is true.
+Validators therefore see what hooks set. In a transaction, the code after `next` runs before the commit; hooks after commit are out of scope. A write a hook makes through `m.DB()` is part of the caller's transaction; through any other `*DB` it is not. Under `SQL(ctx)`, `next` does not execute: `Result()` is empty and `velox.IsDryRun(ctx)` is true. *(Note of 2026-10-22: `Result()` is removed; `m.Affected()` is 0. A soft-delete hook's update is a write, so `SQL(ctx)` on such a delete fails with `ErrDryRun`.)*
 
 **Detection:** velox-gen binds `Policy()` and `Hooks()` in the generated metadata (`velox.BindPolicy` and `velox.BindHooks`) when the entity declares them; a wrong signature does not compile, and an entity whose method the metadata does not bind is refused at first use. Nothing runs at program start.
 

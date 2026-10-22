@@ -3,7 +3,10 @@ package velox
 import (
 	"context"
 	"errors"
+	"fmt"
+	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -170,11 +173,30 @@ func (d denial) Is(target error) bool { return target == ErrDenied }
 
 // Mutation is the write that an entity's hooks (Hooks) see and may change.
 // A misuse (Set on a delete, a zero or invalid condition, a handle's
-// ValueIn, Set or Where on an insert) is recorded and fails the write: before
-// next sends it, or once the hook returns. A hook reads an assignment with
-// the column handle's ValueIn, the conditions with Conds, and once next has
-// returned the rows written with Affected. A delete hook that updates
-// through DB and Conds instead of calling next is a soft delete (see Conds).
+// ValueIn, Set or Where on an insert, ValueIn of a value of another type,
+// SetAffected with next) is recorded and fails the write: before next sends
+// it, or once the hook returns. A hook reads an assignment with the column
+// handle's ValueIn, the conditions with Conds, and once next has returned
+// the rows written with Affected.
+//
+// A hook may make the write itself instead of calling next. A soft delete
+// is a delete hook that updates the rows the delete would remove, and
+// reports the update's count with SetAffected, which the delete's Exec then
+// returns:
+//
+//	q := m.DB().Update[Task]().Set(Tasks.DeletedAt.Set(now))
+//	if cs := m.Conds(); len(cs) > 0 {
+//		q = q.Where(cs...)
+//	} else {
+//		q = q.All()
+//	}
+//	n, err := q.Exec(ctx)
+//	m.SetAffected(n)
+//	return err
+//
+// The update adds the tenant's and the policy's conditions itself. Under
+// SQL(ctx) such a delete fails with ErrDryRun: the hook's update is a write,
+// and there is no DELETE to render.
 type Mutation[E any] mutation
 
 // errInsertMutation is the misuse of ValueIn, Set or Where on an insert.
@@ -214,39 +236,57 @@ func (m *Mutation[E]) DB[_ Lazy[E]]() *DB {
 	return db
 }
 
-// Conds returns the conditions of an update or a delete: the caller's Where
-// and those the hooks before this one added, in order, as copies (changing
-// the slice changes nothing). It holds neither the tenant's nor the
-// policy's conditions, which next adds. It is empty only when the
-// statement said All, and nil for an insert. A soft delete is a delete hook
-// that does not call next:
-//
-//	q := m.DB().Update[Task]().Set(Tasks.DeletedAt.Set(now))
-//	if cs := m.Conds(); len(cs) > 0 {
-//		q = q.Where(cs...)
-//	} else {
-//		q = q.All()
-//	}
-//	_, err := q.Exec(ctx)
-//	return err
-//
-// The delete then reports 0 rows: it sent nothing.
+// Conds returns the conditions of an update or a delete as the caller and
+// the hooks gave them: the caller's Where and those the hooks before this one
+// added, in order, as copies (changing the slice changes nothing). Once next
+// has been called it returns them as they were then. It never holds the
+// tenant's, the policy's or a Rewrite hook's conditions, which next adds. It
+// is empty only when the statement said All, and nil for an insert. Mutation
+// shows a soft delete built on it.
 func (m *Mutation[E]) Conds[_ Lazy[E]]() []Pred[E] {
 	if m.st == nil {
 		return nil
 	}
-	out := make([]Pred[E], len(m.st.Where))
-	for i, p := range m.st.Where {
+	w := m.st.Where
+	if m.called {
+		w = m.where
+	}
+	out := make([]Pred[E], len(w))
+	for i, p := range w {
 		out[i] = Pred[E](p)
 	}
 	return out
 }
 
 // Affected returns the rows the write inserted, matched or deleted, once
-// next has returned. It is 0 before then, after next returned an error (an
-// insert sets it only when every statement succeeded and no upsert was
-// denied), and under SQL(ctx), which sends nothing.
+// next has returned, or the count the hook gave SetAffected. It is 0 before
+// then, after next returned an error (an insert sets it only when every
+// statement succeeded and no upsert was denied), under SQL(ctx), which sends
+// nothing, and when a hook skipped next without calling SetAffected.
 func (m *Mutation[E]) Affected[_ Lazy[E]]() int64 { return m.affected }
+
+// SetAffected is for a hook that makes the write itself instead of calling
+// next, such as a soft delete (see Mutation): n is the rows its own write
+// affected, which the update's or delete's Exec returns. Calling it and next
+// both, in either order, or with a negative n, is a misuse.
+func (m *Mutation[E]) SetAffected[_ Lazy[E]](n int64) {
+	(*mutation)(m).setAffected(n)
+}
+
+// setAffected is SetAffected's work, not generic.
+func (mu *mutation) setAffected(n int64) {
+	switch {
+	case mu.called:
+		mu.record(errOwnAndNext)
+	case n < 0:
+		mu.record(errNegativeAffected)
+	default:
+		mu.affected, mu.own = n, true
+	}
+}
+
+// errNegativeAffected is the misuse of SetAffected with a negative count.
+var errNegativeAffected = errors.New("SetAffected of a negative count")
 
 // Set adds assignments to an update; each replaces the statement's
 // assignment of the same column, if there is one. Set on a delete or an
@@ -275,14 +315,19 @@ func (m *Mutation[E]) Where[_ Lazy[E]](ps ...Pred[E]) {
 
 // misuse records the error of ValueIn, Set or Where on an insert, keeping
 // the first.
-func (m *Mutation[E]) misuse[_ Lazy[E]]() {
-	if m.err == nil {
-		m.err = errInsertMutation
+func (m *Mutation[E]) misuse[_ Lazy[E]]() { (*mutation)(m).record(errInsertMutation) }
+
+// record records err as the mutation's misuse, keeping the first.
+func (mu *mutation) record(err error) {
+	if mu.err == nil {
+		mu.err = err
 	}
 }
 
 // valueIn is a handle's ValueIn: the value m's update assigns to column col
-// with AssignSet, as a V. On an insert it records the misuse.
+// with AssignSet, as a V. On an insert it records the misuse; a value of
+// another type (an untyped UpdateDefault, a Rewrite hook's) it records as
+// one too, and reports no value.
 func valueIn[E, V any](m *Mutation[E], col int32) (V, bool) {
 	var zero V
 	if m.st == nil {
@@ -293,12 +338,17 @@ func valueIn[E, V any](m *Mutation[E], col int32) (V, bool) {
 	if !ok {
 		return zero, false
 	}
-	v, _ := a.(V)
+	v, ok := a.(V)
+	if !ok {
+		(*mutation)(m).wrongType(int(col), a, (*V)(nil))
+		return zero, false
+	}
 	return v, true
 }
 
 // nullValueIn is a nullable handle's ValueIn: nil for SetNull, and else a
 // pointer to a copy of the value, which Set gives as a V and Save as a *V.
+// Any other value it records as valueIn does.
 func nullValueIn[E, V any](m *Mutation[E], col int32) (*V, bool) {
 	if m.st == nil {
 		m.misuse()
@@ -309,6 +359,8 @@ func nullValueIn[E, V any](m *Mutation[E], col int32) (*V, bool) {
 		return nil, false
 	}
 	switch v := a.(type) {
+	case nil:
+		return nil, true
 	case V:
 		return &v, true
 	case *V:
@@ -318,7 +370,19 @@ func nullValueIn[E, V any](m *Mutation[E], col int32) (*V, bool) {
 		c := *v
 		return &c, true
 	}
-	return nil, true
+	(*mutation)(m).wrongType(int(col), a, (*V)(nil))
+	return nil, false
+}
+
+// wrongType records that column col is assigned got, which is not of the
+// type want points to. It is not generic, so that fmt and reflect are not
+// compiled into every package that calls ValueIn.
+func (mu *mutation) wrongType(col int, got, want any) {
+	name := fmt.Sprintf("%d", col)
+	if in := mu.st.Entity; in != nil && col < len(in.Columns) {
+		name = strconv.Quote(in.Columns[col].Name)
+	}
+	mu.record(fmt.Errorf("column %s is assigned a value of type %T, not %v", name, got, reflect.TypeOf(want).Elem()))
 }
 
 // assigned returns the value st assigns to column col with AssignSet.

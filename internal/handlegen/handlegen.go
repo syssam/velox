@@ -75,7 +75,9 @@ var (
 
 const (
 	addNote    = "; an Add or Sub assigns no value"
-	insertNote = ". On an insert it records an error, as Mutation's Set does: read Rows."
+	insertNote = ". A delete assigns none. Once next has run it also sees the UpdateDefault assignments." +
+		" On an insert it records an error, as Mutation's Set does: read Rows." +
+		" A value of another type (a Rewrite hook's, an untyped UpdateDefault's) it records as an error too, and reports none."
 )
 
 func valueInMethod(add string) method {

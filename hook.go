@@ -87,7 +87,9 @@ type mutation struct {
 	st       *Statement       // the update or delete; nil for an insert
 	rows     []unsafe.Pointer // an insert's rows
 	affected int64            // the rows the write affected, for Mutation.Affected
-	err      error            // a misuse recorded by ValueIn, Set or Where
+	where    []Predicate      // st.Where when next was called, for Mutation.Conds
+	own      bool             // the hook called SetAffected: it made the write itself
+	err      error            // a misuse recorded by ValueIn, Set, Where or SetAffected
 	core     error            // the error next returned, to pass through unwrapped
 	called   bool             // next has been called
 	dry      bool             // under SQL(ctx): the core renders and does not send
@@ -119,6 +121,14 @@ func mutate(ctx context.Context, db *DB, in *EntityInfo, mu *mutation, core muta
 			return mu.core
 		}
 		mu.called = true
+		if mu.st != nil {
+			// The conditions as the caller and the hooks gave them: prepare
+			// only appends to st.Where, or replaces it with a copy.
+			mu.where = mu.st.Where
+		}
+		if mu.own && mu.err == nil {
+			mu.err = errOwnAndNext
+		}
 		if mu.err != nil {
 			// Refuse before sending: the misuse would otherwise be
 			// reported only after the write was made.
@@ -156,6 +166,9 @@ var (
 	errNilMutator = errors.New("a hook returned a nil Mutator")
 	// errNextTwice is the error of a hook that called next twice.
 	errNextTwice = errors.New("a hook called next twice")
+	// errOwnAndNext is the error of a hook that called both SetAffected and
+	// next.
+	errOwnAndNext = errors.New("SetAffected is for a hook that makes the write itself; it called next too")
 )
 
 // For generated code. BoundPolicy is an entity's Policy with E erased, made by

@@ -156,7 +156,7 @@ The reviews also agreed on what stays:
 - `Sum`/`Avg`/`Min`/`Max` as functions over a `Query` and a number handle.
 - Locking reads: `ForUpdate`/`ForShare`/`SkipLocked`/`NoWait`, refused outside a `Tx` and on SQLite.
 - `Mutation.Conds()` and typed `Handle.ValueIn(m)`, for soft delete and audit.
-- `m.Affected()`. *(Note, 2026-10-22 (API plan 5): `ValueIn` and `Affected` replace `Mutation.Value` and `Mutation.Result`, which are removed rather than kept beside them: the no-alias rule. A soft-delete hook does not call `next`, so the delete reports 0 rows.)*
+- `m.Affected()`. *(Note, 2026-10-22 (API plan 5): `ValueIn` and `Affected` replace `Mutation.Value` and `Mutation.Result`, which are removed rather than kept beside them: the no-alias rule. A soft-delete hook does not call `next`; it reports its update's count with `Mutation.SetAffected`, which the delete's `Exec` returns, and without it the delete reports 0 rows. `Conds` is the conditions as given, before and after `next`.)*
 - A nested `Tx` given options returns an error.
 - Docs: `DB` is safe for concurrent use; `Tx` re-panics; sentinel docs follow the Go style.
 - `apidiff` in CI once 1.0 is cut.
