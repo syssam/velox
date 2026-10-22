@@ -27,6 +27,10 @@ const (
 	attrCodeLine       = "code.line.number"
 	attrCodeFunction   = "code.function.name"
 	attrErrorType      = "error.type"
+	attrDBNamespace    = "db.namespace"
+	attrServerAddress  = "server.address"
+	attrServerPort     = "server.port"
+	attrStatusCode     = "db.response.status_code"
 
 	// errorTypeOther is error.type's value when no other fits.
 	errorTypeOther = "_OTHER"
@@ -145,8 +149,9 @@ func returnsRows(st *velox.Statement) bool {
 }
 
 // errorType is error.type's value for err, from a short fixed list (spec
-// §2.1), so it can key metrics. ctx is the context the statement ran on: a
-// deadline velox set is velox.timeout even when the driver reports it as
+// §2.1) or, where none fits, the driver's code (velox.DriverCode), so it can
+// key metrics. ctx is the context the statement ran on: a deadline velox set
+// is velox.timeout even when the driver reports it as
 // context.DeadlineExceeded.
 func errorType(ctx context.Context, err error) string {
 	switch {
@@ -181,5 +186,25 @@ func errorType(ctx context.Context, err error) string {
 	case errors.Is(err, context.DeadlineExceeded):
 		return "context.deadline_exceeded"
 	}
+	// The conventions prefer the database's code to _OTHER. SQLSTATE codes
+	// and MySQL's and SQLite's error numbers are a bounded set too.
+	if code, ok := velox.DriverCode(err); ok {
+		return code
+	}
 	return errorTypeOther
+}
+
+// appendTo appends t's attributes to kv: those of its fields that are set,
+// and server.port only with an address.
+func (t Target) appendTo(kv []attribute.KeyValue) []attribute.KeyValue {
+	if t.Namespace != "" {
+		kv = append(kv, attribute.String(attrDBNamespace, t.Namespace))
+	}
+	if t.Address != "" {
+		kv = append(kv, attribute.String(attrServerAddress, t.Address))
+		if t.Port != 0 {
+			kv = append(kv, attribute.Int(attrServerPort, t.Port))
+		}
+	}
+	return kv
 }

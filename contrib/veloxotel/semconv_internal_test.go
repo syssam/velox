@@ -31,6 +31,10 @@ func TestNamesMatchSemconv(t *testing.T) {
 		{attrCodeLine, string(semconv.CodeLineNumberKey)},
 		{attrCodeFunction, string(semconv.CodeFunctionNameKey)},
 		{attrErrorType, string(semconv.ErrorTypeKey)},
+		{attrDBNamespace, string(semconv.DBNamespaceKey)},
+		{attrServerAddress, string(semconv.ServerAddressKey)},
+		{attrServerPort, string(semconv.ServerPortKey)},
+		{attrStatusCode, string(semconv.DBResponseStatusCodeKey)},
 		{errorTypeOther, semconv.ErrorTypeOther.Value.AsString()},
 
 		{dbSystem(velox.Postgres), semconv.DBSystemNamePostgreSQL.Value.AsString()},

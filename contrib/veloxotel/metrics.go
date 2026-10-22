@@ -46,19 +46,24 @@ func handle(err error) {
 }
 
 // record records a statement's duration, and a successful read's rows,
-// after it ran (not on a panic); sum is its summary (see summary). Its attributes are bounded: never the tags,
-// tenant, SQL or call site, and the fingerprint only with
+// after it ran (not on a panic); sum is its summary (see summary), tkv its
+// server's (see targetOf) and f its failure. Its attributes are bounded:
+// never the tags, tenant, SQL or call site, and the fingerprint only with
 // Config.RecordMetricFingerprint.
-func (a *adapter) record(ctx context.Context, st *velox.Statement, sum string, seconds float64, err error, fellOver bool) {
-	kv := make([]attribute.KeyValue, 0, 8)
+func (a *adapter) record(ctx context.Context, st *velox.Statement, sum string, tkv []attribute.KeyValue, seconds float64, f failure, fellOver bool) {
+	kv := make([]attribute.KeyValue, 0, 9+len(tkv))
 	kv = append(kv, attribute.String(attrDBSystem, dbSystem(st.Dialect)))
 	kv = target(kv, st, sum)
 	kv = append(kv, attribute.String(attrEntity, st.Entity.Name))
+	kv = append(kv, tkv...)
 	if st.Route.Shard != "" {
 		kv = append(kv, attribute.String(attrRouteShard, st.Route.Shard))
 	}
-	if err != nil {
-		kv = append(kv, attribute.String(attrErrorType, errorType(ctx, err)))
+	if f.errType != "" {
+		kv = append(kv, attribute.String(attrErrorType, f.errType))
+	}
+	if f.code != "" {
+		kv = append(kv, attribute.String(attrStatusCode, f.code))
 	}
 	if a.cfg.RecordMetricFingerprint {
 		kv = append(kv, attribute.String(attrFingerprint, st.Fingerprint))
@@ -68,7 +73,7 @@ func (a *adapter) record(ctx context.Context, st *velox.Statement, sum string, s
 	if fellOver {
 		a.fallbacks.Add(ctx, 1, shardSet(st.Route.Shard))
 	}
-	if returnsRows(st) && err == nil {
+	if returnsRows(st) && f.errType == "" {
 		a.returned.Record(ctx, st.Result.Rows, set)
 	}
 }

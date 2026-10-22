@@ -27,21 +27,20 @@
 // A statement's span is of kind client, named for its operation and table
 // ("SELECT invoices"), which db.query.summary repeats, and covers sending it
 // and reading every row; with Iter, the loop body too, as the connection is
-// held for it. It carries the SQL as
-// db.query.text (velox's SQL is parameterized: no argument's value is in
-// it), unless Config.OmitQueryText is set. Raw SQL (velox.DB.Raw and Exec)
-// has neither an operation nor a table that velox knows: velox does not
-// parse them out of the SQL, as the semantic conventions advise, so its span
-// is named for the database system ("postgresql") and has no
-// db.operation.name, db.collection.name or db.query.summary. Its reason is
-// velox.tenant_bypass and velox.policy_bypass. Its text is recorded only
-// when it has arguments: the conventions say text that is not
-// parameterized should not be collected by default, and velox cannot tell
-// whether raw text without arguments holds literals. A read's span gets
-// db.response.returned_rows, which the conventions make opt-in, only with
-// Config.RecordReturnedRows. A span carries the fingerprint, the call site
-// and the context's tags. An Around hook of the application's own that
-// retries, given before these options, gets one span per attempt.
+// held for it. It carries the SQL as db.query.text (velox's SQL is
+// parameterized: no argument's value is in it), unless Config.OmitQueryText is
+// set. Raw SQL (velox.DB.Raw and Exec) has neither an operation nor a table
+// that velox knows: velox does not parse them out of the SQL, as the semantic
+// conventions advise, so its span is named for the database system
+// ("postgresql") and has no db.operation.name, db.collection.name or
+// db.query.summary. Its reason is velox.tenant_bypass and velox.policy_bypass.
+// Its text is recorded only when it has arguments: the conventions say text
+// that is not parameterized should not be collected by default, and velox
+// cannot tell whether raw text without arguments holds literals. A read's span
+// gets db.response.returned_rows, which the conventions make opt-in, only with
+// Config.RecordReturnedRows. A span carries the fingerprint, the call site and
+// the context's tags. An Around hook of the application's own that retries,
+// given before these options, gets one span per attempt.
 //
 // A statement's span is a child of the span on the statement's context.
 // Inside db.Tx, fn's ctx carries the transaction's span (velox.tx, once the
@@ -66,20 +65,39 @@
 // when true) are set when the statement ends, because they can change while
 // it runs.
 //
-// The metrics are three histograms: db.client.operation.duration (seconds)
-// and db.client.response.returned_rows (reads that succeeded) per statement,
-// and velox.tx.duration (seconds) per transaction; and a counter,
+// The adapter sees no connection string, so the application names the
+// server: Config.Target gives every statement's db.namespace (PostgreSQL's
+// "{database}|{schema}", MySQL's database), server.address and server.port,
+// and Config.TargetFor, when set, gives them per shard and replica from the
+// statement's velox.Route. They are start attributes, and are on the
+// statement's duration point too. TargetFor is called again when the
+// statement ends only if its route changed: a read that fell over to the
+// primary then names the primary, on its span and its point. The
+// transaction's span, which is no database client span, has none of them.
+//
+// A failed statement's span and duration point carry error.type and, when
+// the driver gave one, its code as db.response.status_code (see
+// velox.DriverCode): PostgreSQL's SQLSTATE, MySQL's error number or SQLite's
+// extended result code. error.type is velox's own value, such as
+// velox.denied or constraint.unique, where one fits, and otherwise the
+// driver's code, or _OTHER when there is none; a retry event on the
+// transaction's span gets the same. The code names the database's
+// internals: it is for spans and metrics, not for a message a client sees.
+//
+// The metrics are three histograms: db.client.operation.duration (seconds) and
+// db.client.response.returned_rows (reads that succeeded) per statement, and
+// velox.tx.duration (seconds) per transaction; and a counter,
 // velox.route.fallbacks, of the reads that fell over to the primary, once per
 // failover even when an outer hook retries the statement. A statement's
 // duration is the database's time: with Iter it leaves out the loop body
 // (velox.Result.LoopBody), which the span covers, also when the loop breaks
 // early. Their attributes are bounded: the database system, operation, table
-// and summary (none for raw SQL), entity, error type and, on a sharded DB,
-// shard for a statement; the outcome, read-only flag and whether it retried
-// for a transaction; and the shard alone for the fallback counter. Tags, the
-// tenant, the SQL text and the call site are on spans only; the fingerprint
-// is added to the statement metrics only with
-// Config.RecordMetricFingerprint.
+// and summary (none for raw SQL), entity, the server Config.Target or TargetFor
+// names, error type and status code and, on a sharded DB, shard for a
+// statement; the outcome, read-only flag and whether it retried for a
+// transaction; and the shard alone for the fallback counter. Tags, the tenant,
+// the SQL text and the call site are on spans only; the fingerprint is added to
+// the statement metrics only with Config.RecordMetricFingerprint.
 //
 // A statement that velox refuses before it is sent (a guard, the tenant
 // scope, a policy or a hook) reaches no Around hook, so it makes no
@@ -93,10 +111,9 @@
 //
 // With Config.App set and call sites recorded (the default), the comment
 // carries the call site too: each call site of a shape is then a distinct
-// text, and
-// pgx prepares one statement per call site per connection. A shape called
-// from many sites multiplies statements against pgx's per-connection cache,
-// 512 by default. Size pgxpool.Config.ConnConfig's StatementCacheCapacity
-// for it, or set Config.OmitCallers (the spans then carry no call
-// site, and the comment is one text per shape).
+// text, and pgx prepares one statement per call site per connection. A shape
+// called from many sites multiplies statements against pgx's per-connection
+// cache, 512 by default. Size pgxpool.Config.ConnConfig's
+// StatementCacheCapacity for it, or set Config.OmitCallers (the spans then
+// carry no call site, and the comment is one text per shape).
 package veloxotel

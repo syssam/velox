@@ -1,6 +1,7 @@
 package velox
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5/pgconn"
+	_ "modernc.org/sqlite"
 )
 
 func myErr(n uint16, msg string) error {
@@ -127,5 +129,60 @@ func TestConstraintErrorIsNotWrappedTwice(t *testing.T) {
 	wrapped := fmt.Errorf("velox: commit: %w", once)
 	if got := dbErr(invInfo, wrapped); got != wrapped {
 		t.Errorf("%v became %v", wrapped, got)
+	}
+}
+
+// sqliteUnique returns modernc.org/sqlite's error for a UNIQUE violation on
+// an in-memory database.
+func sqliteUnique(t *testing.T) error {
+	t.Helper()
+	db, err := sql.Open("sqlite", "file::memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	db.SetMaxOpenConns(1) // one connection: one in-memory database
+	for _, q := range []string{"CREATE TABLE p (code TEXT UNIQUE)", "INSERT INTO p VALUES ('a')"} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	_, err = db.Exec("INSERT INTO p VALUES ('a')")
+	if err == nil {
+		t.Fatal("the duplicate insert succeeded")
+	}
+	return err
+}
+
+// TestDriverCode: the database's code is found under velox's wrapping, a
+// *ConstraintError and errors.Join, and not in a look-alike type.
+func TestDriverCode(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"PostgreSQL", &pgconn.PgError{Code: "40001"}, "40001"},
+		{"MySQL", myErr(1062, "Duplicate entry 'a' for key 'p.p_code_uq'"), "1062"},
+		{"SQLite", sqliteUnique(t), "2067"},
+	} {
+		for _, w := range []struct {
+			name string
+			err  error
+		}{
+			{"bare", c.err},
+			{"commit", fmt.Errorf("velox: commit: %w", c.err)},
+			{"constraint", &ConstraintError{Entity: "velox.inv", Kind: ConstraintUnique, Err: c.err}},
+			{"joined", errors.Join(io.EOF, c.err)},
+		} {
+			if got, ok := DriverCode(w.err); got != c.want || !ok {
+				t.Errorf("%s, %s: DriverCode = %q, %v; want %q, true", c.name, w.name, got, ok, c.want)
+			}
+		}
+	}
+	for _, err := range []error{io.EOF, ErrDenied, nil, coder{2067}, fmt.Errorf("x: %w", coder{5})} {
+		if got, ok := DriverCode(err); got != "" || ok {
+			t.Errorf("DriverCode(%v) = %q, %v; want none", err, got, ok)
+		}
 	}
 }

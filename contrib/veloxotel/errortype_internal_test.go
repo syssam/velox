@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
+
 	"github.com/syssam/velox2"
 )
 
@@ -42,6 +44,11 @@ func TestErrorType(t *testing.T) {
 		{bg, wrap(velox.ErrTenantMismatch), "_OTHER"},
 		{bg, wrap(velox.ErrNotFound), "_OTHER"},
 		{bg, errors.New("boom"), "_OTHER"},
+		// Where it would be _OTHER, the driver's code, as the conventions
+		// prefer.
+		{bg, &pgconn.PgError{Code: "40001"}, "40001"},
+		{bg, wrap(&pgconn.PgError{Code: "40P01"}), "40P01"},
+		{bg, wrap(&velox.ConstraintError{Entity: "X", Kind: velox.ConstraintUnique, Err: &pgconn.PgError{Code: "23505"}}), "constraint.unique"},
 	}
 	for _, c := range cases {
 		if got := errorType(c.ctx, c.err); got != c.want {

@@ -64,7 +64,7 @@ func TestPublicAPI(t *testing.T) {
 		got = append(got, f.Name)
 	}
 	slices.Sort(got)
-	want := []string{"Config", "Options"}
+	want := []string{"Config", "Options", "Target"}
 	if !slices.Equal(got, want) {
 		t.Errorf("exported names %v, want %v", got, want)
 	}

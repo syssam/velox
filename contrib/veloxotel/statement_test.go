@@ -706,3 +706,196 @@ func TestRawSpans(t *testing.T) {
 		}
 	}
 }
+
+// startAttrs records each span's attributes as a span processor sees them
+// when it starts.
+type startAttrs struct {
+	sdktrace.SpanProcessor
+	got []map[attribute.Key]attribute.Value
+}
+
+func (s *startAttrs) OnStart(_ context.Context, sp sdktrace.ReadWriteSpan) {
+	m := map[attribute.Key]attribute.Value{}
+	for _, kv := range sp.Attributes() {
+		m[kv.Key] = kv.Value
+	}
+	s.got = append(s.got, m)
+}
+func (*startAttrs) OnEnd(sdktrace.ReadOnlySpan)      {}
+func (*startAttrs) Shutdown(context.Context) error   { return nil }
+func (*startAttrs) ForceFlush(context.Context) error { return nil }
+
+// observed returns a DB on p, with opts, traced into exp and seen at start
+// by sp, and measured into r.
+func observed(t *testing.T, p *fakeDB, cfg veloxotel.Config, opts ...velox.Option) (db *velox.DB, sp *startAttrs, exp *tracetest.InMemoryExporter, r *sdkmetric.ManualReader) {
+	t.Helper()
+	sp, exp, r = &startAttrs{}, tracetest.NewInMemoryExporter(), sdkmetric.NewManualReader()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sp), sdktrace.WithSyncer(exp))
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(r))
+	t.Cleanup(func() {
+		_ = tp.Shutdown(context.Background())
+		_ = mp.Shutdown(context.Background())
+	})
+	cfg.TracerProvider, cfg.MeterProvider = tp, mp
+	return velox.Open(velox.Postgres, p.open(), append(opts, veloxotel.Options(cfg)...)...), sp, exp, r
+}
+
+// durationPoint returns the one db.client.operation.duration point r holds.
+func durationPoint(t *testing.T, r *sdkmetric.ManualReader) attribute.Set {
+	t.Helper()
+	dps := points(t, r, "db.client.operation.duration", "s", wantDurationBounds)
+	if len(dps) != 1 {
+		t.Fatalf("%d duration points, want 1", len(dps))
+	}
+	return dps[0].Attributes
+}
+
+var targetKeys = []attribute.Key{"db.namespace", "server.address", "server.port"}
+
+// TestTargetAttributes: Config.Target's db.namespace, server.address and
+// server.port are on a statement's span from its start, and on its duration
+// point; a zero field leaves its attribute off. The transaction's span, which
+// is no database client span, has none.
+func TestTargetAttributes(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		target veloxotel.Target
+		want   map[attribute.Key]attribute.Value
+	}{
+		{"all three", veloxotel.Target{Namespace: "billing|public", Address: "db.internal", Port: 6432}, map[attribute.Key]attribute.Value{
+			"db.namespace":   attribute.StringValue("billing|public"),
+			"server.address": attribute.StringValue("db.internal"),
+			"server.port":    attribute.Int64Value(6432),
+		}},
+		{"no port", veloxotel.Target{Address: "db.internal"}, map[attribute.Key]attribute.Value{
+			"server.address": attribute.StringValue("db.internal"),
+		}},
+		{"a port without an address", veloxotel.Target{Port: 6432}, map[attribute.Key]attribute.Value{}},
+		{"zero", veloxotel.Target{}, map[attribute.Key]attribute.Value{}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			db, sp, exp, r := observed(t, &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}, veloxotel.Config{Target: c.target})
+			if _, err := db.Query[testmodel.Invoice]().Limit(1).All(ctx); err != nil {
+				t.Fatal(err)
+			}
+			point := durationPoint(t, r)
+			if err := db.Tx(ctx, func(context.Context, *velox.DB) error { return nil }); err != nil {
+				t.Fatal(err)
+			}
+			spans := byName(exp.GetSpans())
+			if len(sp.got) != 2 || len(spans["SELECT invoices"]) != 1 || len(spans["velox.tx"]) != 1 {
+				t.Fatalf("%d spans started, ended %v", len(sp.got), spans)
+			}
+			end, tx := attrs(spans["SELECT invoices"][0]), attrs(spans["velox.tx"][0])
+			for _, k := range targetKeys {
+				want, ok := c.want[k]
+				if got, has := sp.got[0][k]; has != ok || got != want {
+					t.Errorf("at start, %s = %v (%v), want %v (%v)", k, got.String(), has, want.String(), ok)
+				}
+				if got, has := end[k]; has != ok || got != want {
+					t.Errorf("at end, %s = %v (%v), want %v (%v)", k, got.String(), has, want.String(), ok)
+				}
+				if got, has := point.Value(k); has != ok || got != want {
+					t.Errorf("duration point: %s = %v (%v), want %v (%v)", k, got.String(), has, want.String(), ok)
+				}
+				if _, has := tx[k]; has {
+					t.Errorf("velox.tx has %s", k)
+				}
+			}
+		})
+	}
+}
+
+// TestTargetForFallback is Review Focus 3: TargetFor names the server per
+// route. A read that fell over from a failed replica to the primary names
+// the primary on its span and its duration point, not the replica.
+func TestTargetForFallback(t *testing.T) {
+	var routes []velox.Route
+	cfg := veloxotel.Config{
+		Target: veloxotel.Target{Address: "unused"}, // TargetFor is used instead
+		TargetFor: func(r velox.Route) veloxotel.Target {
+			routes = append(routes, r)
+			if r.Replica >= 0 {
+				return veloxotel.Target{Address: "replica", Port: 5433}
+			}
+			return veloxotel.Target{Address: "primary", Port: 5432}
+		},
+	}
+	read := func(t *testing.T, r *fakeDB) (map[attribute.Key]attribute.Value, map[attribute.Key]attribute.Value, attribute.Set) {
+		t.Helper()
+		routes = nil
+		p := &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}
+		db, sp, exp, mr := observed(t, p, cfg, velox.WithReplicas(velox.SQLConn(r.open())))
+		if _, err := db.Query[testmodel.Invoice]().Limit(1).All(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if len(sp.got) != 1 {
+			t.Fatalf("%d spans started", len(sp.got))
+		}
+		return sp.got[0], attrs(only(t, exp)), durationPoint(t, mr)
+	}
+	t.Run("fallback", func(t *testing.T) {
+		start, end, point := read(t, &fakeDB{errs: badConn()})
+		if start["server.address"] != attribute.StringValue("replica") {
+			t.Errorf("at start, server.address = %v, want replica", start["server.address"].String())
+		}
+		if end["server.address"] != attribute.StringValue("primary") || end["server.port"] != attribute.Int64Value(5432) ||
+			end["velox.route.fallback"] != attribute.BoolValue(true) {
+			t.Errorf("at end, server %v:%v, fallback %v; want primary:5432, true",
+				end["server.address"].String(), end["server.port"].String(), end["velox.route.fallback"].String())
+		}
+		if v, _ := point.Value("server.address"); v != attribute.StringValue("primary") {
+			t.Errorf("duration point: server.address = %v, want primary", v.String())
+		}
+		if len(routes) != 2 || routes[0].Replica != 0 || routes[1].Replica != -1 || !routes[1].Fallback {
+			t.Errorf("TargetFor was called with %+v, want the replica, then the primary's fallback", routes)
+		}
+	})
+	t.Run("replica", func(t *testing.T) {
+		_, end, point := read(t, &fakeDB{rows: [][]driver.Value{invoiceRow(1)}})
+		if end["server.address"] != attribute.StringValue("replica") || end["server.port"] != attribute.Int64Value(5433) {
+			t.Errorf("at end, server %v:%v, want replica:5433", end["server.address"].String(), end["server.port"].String())
+		}
+		if v, _ := point.Value("server.address"); v != attribute.StringValue("replica") {
+			t.Errorf("duration point: server.address = %v, want replica", v.String())
+		}
+		if len(routes) != 1 {
+			t.Errorf("TargetFor was called %d times, want once: the route did not change", len(routes))
+		}
+	})
+}
+
+// TestStatusCode: a failed statement's span and duration point carry the
+// driver's code as db.response.status_code, and error.type is velox's value,
+// or the code where velox's would be _OTHER. A success carries no code.
+func TestStatusCode(t *testing.T) {
+	for _, c := range []struct {
+		name    string
+		err     error
+		code    string // "": none
+		errType string
+	}{
+		{"serialization failure", &pgconn.PgError{Code: "40001"}, "40001", "40001"},
+		{"unique violation", &pgconn.PgError{Code: "23505", ConstraintName: "invoices_uq"}, "23505", "constraint.unique"},
+		{"no driver code", errors.New("boom"), "", "_OTHER"},
+		{"success", nil, "", ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			db, _, exp, r := observed(t, &fakeDB{rows: [][]driver.Value{invoiceRow(1)}, errs: []error{c.err}}, veloxotel.Config{})
+			if _, err := db.Query[testmodel.Invoice]().Limit(1).All(ctx); (err != nil) != (c.err != nil) {
+				t.Fatalf("err %v, want %v", err, c.err)
+			}
+			span, point := attrs(only(t, exp)), durationPoint(t, r)
+			for k, want := range map[attribute.Key]string{"db.response.status_code": c.code, "error.type": c.errType} {
+				got, has := span[k]
+				if has != (want != "") || got.AsString() != want {
+					t.Errorf("span: %s = %q (%v), want %q", k, got.AsString(), has, want)
+				}
+				got, has = point.Value(k)
+				if has != (want != "") || got.AsString() != want {
+					t.Errorf("duration point: %s = %q (%v), want %q", k, got.AsString(), has, want)
+				}
+			}
+		})
+	}
+}

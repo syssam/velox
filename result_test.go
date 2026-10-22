@@ -159,7 +159,9 @@ func sleepIter(t *testing.T, seq func(func(testmodel.Invoice, error) bool), d ti
 // caller's loop body, summed over the rows yielded, the row a loop broke on
 // or panicked in included; every other method leaves it 0.
 func TestResultLoopBody(t *testing.T) {
-	const body = 20 * time.Millisecond
+	// 50 ms leaves the upper bounds room for time.Sleep's overshoot on a
+	// loaded machine.
+	const body = 50 * time.Millisecond
 	t.Run("three rows", func(t *testing.T) {
 		var got velox.Result
 		db := resultOf(&velox.FakeExec{Rows: threeInvoices()}, &got)
@@ -245,6 +247,35 @@ func TestResultLoopBody(t *testing.T) {
 		sleepIter(t, db.Query[testmodel.Invoice]().Unbounded().Iter(ctx), body, -1)
 		if first.LoopBody != 0 || second.Rows != 3 || second.LoopBody < 3*body {
 			t.Errorf("first %+v, retry %+v; want LoopBody 0, then 3 rows and >= %v", first, second, 3*body)
+		}
+	})
+	t.Run("a retry after rows were yielded starts from 0", func(t *testing.T) {
+		var first, second velox.Result
+		var again error
+		retry := velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+			err := next(ctx)
+			first = st.Result
+			if err == nil {
+				err = next(ctx) // Iter refuses it: its rows were yielded
+				again = err
+			}
+			second = st.Result
+			return err
+		})
+		db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Rows: threeInvoices()}, retry)
+		var last error
+		for _, err := range db.Query[testmodel.Invoice]().Unbounded().Iter(ctx) {
+			if err != nil {
+				last = err
+				continue
+			}
+			time.Sleep(body)
+		}
+		if again == nil || !errors.Is(last, again) {
+			t.Errorf("the second next returned %v and Iter %v, want an error from both", again, last)
+		}
+		if first.Rows != 3 || first.LoopBody < 3*body || second.LoopBody != 0 {
+			t.Errorf("first %+v, retry %+v; want 3 rows and >= %v, then LoopBody 0", first, second, 3*body)
 		}
 	})
 	t.Run("a read that fell over", func(t *testing.T) {

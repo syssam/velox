@@ -63,7 +63,7 @@ func TestTxSpanTree(t *testing.T) {
 	}
 	if ev := tx[0].Events; len(ev) != 1 || ev[0].Name != "retry" || !ev[0].Time.Before(tx[0].EndTime) {
 		t.Errorf("events %v", ev)
-	} else if len(ev[0].Attributes) != 1 || ev[0].Attributes[0] != attribute.String("error.type", "_OTHER") {
+	} else if len(ev[0].Attributes) != 1 || ev[0].Attributes[0] != attribute.String("error.type", "40001") {
 		t.Errorf("retry event attributes %v", ev[0].Attributes)
 	}
 	if len(spans["SELECT invoices"]) != 2 || len(spans["UPDATE invoices"]) != 2 {
@@ -74,8 +74,9 @@ func TestTxSpanTree(t *testing.T) {
 			t.Errorf("%s's parent is not velox.tx", s.Name)
 		}
 	}
-	if failed := spans["UPDATE invoices"][0]; attrs(failed)["error.type"] != attribute.StringValue("_OTHER") {
-		t.Errorf("the failed UPDATE: %v", failed.Attributes)
+	if failed := attrs(spans["UPDATE invoices"][0]); failed["error.type"] != attribute.StringValue("40001") ||
+		failed["db.response.status_code"] != attribute.StringValue("40001") {
+		t.Errorf("the failed UPDATE: %v", spans["UPDATE invoices"][0].Attributes)
 	}
 }
 

@@ -2,6 +2,7 @@ package veloxotel
 
 import (
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
@@ -29,6 +30,27 @@ type Config struct {
 	RecordTenant            bool // add velox.tenant to spans
 	RecordMetricFingerprint bool // add velox.fingerprint to the statement metrics
 	RecordReturnedRows      bool // add db.response.returned_rows to spans
+
+	// Target names the server every statement runs on, for its span and
+	// its duration point. The adapter sees no connection string: give it
+	// in the database system's form.
+	Target Target
+	// TargetFor names the server per route, for a DB with shards or
+	// replicas; when set, it is used instead of Target. It is called when
+	// a statement's span starts, with the route velox chose, and again
+	// after the statement ran only when the route changed: a read that
+	// fell over from a failed replica then names the primary. A span keeps
+	// a start attribute that the second Target leaves off, so give every
+	// route the same fields. It must be safe for concurrent use.
+	TargetFor func(r velox.Route) Target
+}
+
+// Target names the database server a statement ran on. A zero field
+// leaves its attribute off.
+type Target struct {
+	Namespace string // db.namespace: PostgreSQL "{database}|{schema}", MySQL the database
+	Address   string // server.address: the host name, IP address or socket
+	Port      int    // server.port, set only with Address
 }
 
 // Options returns the velox options that trace and measure every statement
@@ -54,6 +76,7 @@ func Options(cfg Config) []velox.Option {
 type adapter struct {
 	cfg    Config
 	tracer trace.Tracer
+	target []attribute.KeyValue // Config.Target's, built once
 
 	duration   metric.Float64Histogram // db.client.operation.duration, s
 	returned   metric.Int64Histogram   // db.client.response.returned_rows, {row}
@@ -71,7 +94,8 @@ func newAdapter(cfg Config) *adapter {
 		mp = otel.GetMeterProvider()
 	}
 	a := &adapter{cfg: cfg, tracer: tp.Tracer(modulePath,
-		trace.WithInstrumentationVersion(version()), trace.WithSchemaURL(schemaURL))}
+		trace.WithInstrumentationVersion(version()), trace.WithSchemaURL(schemaURL)),
+		target: cfg.Target.appendTo(nil)}
 	a.instruments(mp.Meter(modulePath,
 		metric.WithInstrumentationVersion(version()), metric.WithSchemaURL(schemaURL)))
 	return a

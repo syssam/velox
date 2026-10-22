@@ -78,6 +78,25 @@ func TestUniqueViolation(t *testing.T) {
 	})
 }
 
+// TestDriverCodeOfUniqueViolation: velox.DriverCode reads each driver's
+// code from a real unique violation, under velox's *ConstraintError:
+// SQLSTATE on PostgreSQL (pgx and database/sql), the error number on MySQL,
+// and the extended result code on SQLite.
+func TestDriverCodeOfUniqueViolation(t *testing.T) {
+	want := map[velox.Dialect]string{
+		velox.Postgres: "23505",
+		velox.MySQL:    "1062",
+		velox.SQLite:   "2067",
+	}
+	each(t, func(t *testing.T, tg target) {
+		dup := newInvoice(1, "INV-1")
+		err := tg.db.Insert(&dup).Exec(ctx)
+		if code, ok := velox.DriverCode(err); code != want[tg.d] || !ok {
+			t.Errorf("DriverCode(%v) = %q, %v; want %q", err, code, ok, want[tg.d])
+		}
+	})
+}
+
 func TestUpsert(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
 		keep := newInvoice(1, "INV-1")

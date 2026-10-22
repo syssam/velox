@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -156,6 +157,31 @@ func between(s, from, to string) string {
 		return ""
 	}
 	return s[:j]
+}
+
+// DriverCode returns the database's code for err, as text, when err or an
+// error it wraps came from the database: PostgreSQL's SQLSTATE ("23505"),
+// MySQL's error number ("1062"), or SQLite's extended result code
+// ("2067"). It looks through wrapping and errors.Join, as errors.As does.
+//
+// The code is for logs, traces and metrics, and for telling one database
+// error from another, such as a serialization failure ("40001") from a
+// deadlock ("40P01"). It names the database's internals, so it is not for a
+// message an end user sees. velox reads the errors of pgx (natively or
+// through database/sql), github.com/go-sql-driver/mysql and
+// modernc.org/sqlite; another driver's error has no code here.
+func DriverCode(err error) (string, bool) {
+	var pg *pgconn.PgError
+	if errors.As(err, &pg) {
+		return pg.Code, pg.Code != ""
+	}
+	if n, _, ok := mysqlError(err); ok {
+		return strconv.Itoa(n), true
+	}
+	if code, _, ok := sqliteError(err); ok {
+		return strconv.Itoa(code), true
+	}
+	return "", false
 }
 
 // retryable reports a serialization failure or a deadlock, after which

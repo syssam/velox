@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/99designs/gqlgen/graphql"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 
@@ -198,7 +199,10 @@ func TestErrorPresenter(t *testing.T) {
 	_, int8Err := graphql.UnmarshalInt8(300)
 	_, uint16Err := graphql.UnmarshalUint16(70000)
 	_, uintSignErr := graphql.UnmarshalUint32(-1)
-	secret := []string{"sqlite", "posts (", "users_email_key", "tenant 7", "/srv/app", "gen.Post", "gen.User", "Email", "velox: ", "veloxgql: "}
+	// A PostgreSQL error's text holds its SQLSTATE, which velox.DriverCode
+	// reads for traces only.
+	pgErr := &pgconn.PgError{Severity: "ERROR", Code: "23505", Message: `duplicate key value violates unique constraint "users_email_key"`}
+	secret := []string{"sqlite", "posts (", "users_email_key", "tenant 7", "/srv/app", "gen.Post", "gen.User", "Email", "velox: ", "veloxgql: ", "SQLSTATE", "23505"}
 	for _, c := range []struct {
 		name   string
 		err    error
@@ -213,7 +217,9 @@ func TestErrorPresenter(t *testing.T) {
 		{"policy", &velox.PolicyError{Entity: "gen.Post", Op: velox.OpSelect, Err: errors.New("tenant 7 may not")}, "FORBIDDEN", "forbidden", `["node"]`, false},
 		{"validation", &velox.ValidationError{Entity: "gen.User", Field: "Email", Err: errors.New("must hold an @")}, "BAD_USER_INPUT", "invalid value: must hold an @", `["node"]`, false},
 		{"constraint", &velox.ConstraintError{Entity: "gen.User", Kind: velox.ConstraintUnique, Constraint: "users_email_key", Err: driverErr}, "BAD_USER_INPUT", "unique constraint violated", `["node"]`, false},
+		{"constraint with a SQLSTATE", &velox.ConstraintError{Entity: "gen.User", Kind: velox.ConstraintUnique, Constraint: "users_email_key", Err: pgErr}, "BAD_USER_INPUT", "unique constraint violated", `["node"]`, false},
 		{"driver", driverErr, "INTERNAL_SERVER_ERROR", "internal error", `["node"]`, true},
+		{"driver with a SQLSTATE", pgErr, "INTERNAL_SERVER_ERROR", "internal error", `["node"]`, true},
 		{"no DB", fmt.Errorf("veloxgql: %w", veloxgql.ErrNoDB), "INTERNAL_SERVER_ERROR", "internal error", `["node"]`, true},
 		{"too many rows", fmt.Errorf("veloxgql: Post.likes: %w", velox.ErrTooManyRows), "INTERNAL_SERVER_ERROR", "internal error", `["node"]`, true},
 		{"gqlerror over a driver error", &gqlerror.Error{Message: driverErr.Error(), Path: path, Err: driverErr}, "INTERNAL_SERVER_ERROR", "internal error", `["posts",0,"author"]`, true},

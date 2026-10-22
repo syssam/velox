@@ -160,9 +160,10 @@ type Result struct {
 	// for a read and for a failed statement.
 	Affected int64
 	// LoopBody is the time Iter's caller spent in the loop body, summed over
-	// the rows it yielded, the last one included when the loop broke. It is
-	// measured only when the DB has an Around hook, and is 0 otherwise and
-	// for every method but Iter.
+	// the rows it yielded, the last one included when the loop broke or the
+	// body panicked on it. It grows while next runs and is final once next
+	// returns or panics. It is measured only when the DB has an Around hook,
+	// and is 0 otherwise and for every method but Iter.
 	LoopBody time.Duration
 }
 

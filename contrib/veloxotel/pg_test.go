@@ -7,7 +7,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/veloxotel"
@@ -137,5 +139,59 @@ func TestPgxOmitCallersPreparesOnce(t *testing.T) {
 	}
 	if n != 1 {
 		t.Errorf("two call sites prepared %d statements, want 1", n)
+	}
+}
+
+// TestPgStatusCode: a duplicate insert on PostgreSQL gives the span
+// db.response.status_code 23505, the SQLSTATE of a unique violation.
+func TestPgStatusCode(t *testing.T) {
+	dsn := os.Getenv("VELOX_TEST_POSTGRES")
+	if dsn == "" {
+		t.Skip("VELOX_TEST_POSTGRES is not set")
+	}
+	bg := context.Background()
+	admin, err := pgx.Connect(bg, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = admin.Close(bg) }()
+	for _, q := range []string{"DROP SCHEMA IF EXISTS velox_otel CASCADE", "CREATE SCHEMA velox_otel", pgInvoices} {
+		if _, err := admin.Exec(bg, q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	t.Cleanup(func() { _, _ = admin.Exec(bg, "DROP SCHEMA IF EXISTS velox_otel CASCADE") })
+
+	cfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.ConnConfig.RuntimeParams["search_path"] = "velox_otel"
+	pool, err := pgxpool.NewWithConfig(bg, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	exp := tracetest.NewInMemoryExporter()
+	db := velox.OpenPgx(pool, veloxotel.Options(veloxotel.Config{
+		TracerProvider: sdktrace.NewTracerProvider(sdktrace.WithSyncer(exp)),
+	})...)
+	c := velox.WithTenant(bg, int64(1))
+	first := testmodel.Invoice{OrgID: 1, Number: "INV-1", Data: []byte("d")}
+	if err := db.Insert(&first).Exec(c); err != nil {
+		t.Fatal(err)
+	}
+	dup := testmodel.Invoice{ID: first.ID, OrgID: 1, Number: "INV-2", Data: []byte("d")}
+	if err := db.Insert(&dup).Exec(c); err == nil {
+		t.Fatal("the duplicate insert succeeded")
+	}
+	spans := exp.GetSpans()
+	if len(spans) != 2 {
+		t.Fatalf("%d spans, want 2", len(spans))
+	}
+	a := attrs(spans[1])
+	if a["db.response.status_code"] != attribute.StringValue("23505") || a["error.type"] != attribute.StringValue("constraint.unique") {
+		t.Errorf("db.response.status_code %v, error.type %v; want 23505, constraint.unique",
+			a["db.response.status_code"].String(), a["error.type"].String())
 	}
 }
