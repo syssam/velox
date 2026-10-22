@@ -1,6 +1,6 @@
 # velox2 API cleanup before 1.0 — design
 
-Status: API plans 1–3 implemented · 2026-10-21
+Status: API plans 1–4 implemented · 2026-10-22
 
 The user asked for a review of the whole public API: is it clean, correct, complete, modern and easy to maintain. Three reviews were done, one each for the core package, the schema DSL with velox-gen and the plugin model, and the contrib modules. They are in `docs/reviews/2026-10-20-api-review-{core,schema,contrib}.md`.
 
@@ -147,6 +147,8 @@ The reviews also agreed on what stays:
 4. **Attributes:** `db.namespace`, `server.address`/`server.port`, and `db.response.status_code` (the core exposes the driver's code on its errors).
 5. **The module path becomes `contrib/veloxotel`,** matching the package name.
 
+*Note, 2026-10-22 (API plan 4):* item 1 is `Config.OmitCallers bool`, not `Config.Callers`; §6e has the rulings.
+
 ## 6. Additions (not breaking)
 
 - `First(ctx)` and `Exists(ctx)`.
@@ -231,6 +233,27 @@ Added 2026-10-21. Each is a decision taken in the plan or while executing it, an
 - **`velox.Validate` and `velox.ValidateSet`** *(the final review, 2026-10-22)*. For generated code: `Validate(x, cols...)` runs the validators of the given columns of a row, as `Insert` would, and `ValidateSet(set...)` those of an update's `Set` values (refusing an `Immutable` column), as `Update` would, with no DB and no statement. The generated `Check` is reachable only through `Desc`, so velox-graphql's `CreateX` and `UpdateX` need them to refuse an invalid field before the ID checks. Additive; `GeneratedCodeIsVersion4` stays.
 - **`Statement.Writable` is guarded** *(the final review)*. `prepare` refuses a Rewrite hook that changes it, as it refuses one that changes `Op`, `Entity` or the policy: the scope reads it, so a hook could otherwise drop the Write policy from a `Writable` count.
 - **Rule 48.** An `Optional` JSON field of a type that cannot be nil (a struct or a scalar) needs `Nillable`: its column would be NULL-able and Go could not hold the NULL. The message is "an Optional JSON field of a non-nil-able type needs Nillable". Rules 41–47 and this one are the numbered cross-element rules (`internal/gen/build.go`).
+
+## 6e. Rulings made while implementing API plan 4
+
+Added 2026-10-22. Each is a decision taken in the plan or while executing it, and it stands. Where one differs from §5, it is the rule.
+
+1. **One way to configure.** `veloxotel.Options(cfg)` is the only way in. `Around` and `TxAround` are not exported; an application that wants `WithCallerSkip` passes it after `Options`. The booleans are `OmitCallers`, `OmitQueryText`, `RecordTenant`, `RecordMetricFingerprint` and `RecordReturnedRows`: `Omit` turns off a default, `Record` turns on an extra.
+2. **`OmitCallers bool` replaced the `Callers` type.** The plan made `Callers` a type with `CallersOn` as its zero value, to leave room for a mode that put call sites on spans only. Review found one name better than three and no second mode in sight; a second can be added when one is wanted. This supersedes the plan's ruling 3 and §5.1's `Config.Callers`.
+3. **The module is `contrib/veloxotel`,** with no alias at the old path. Every caller, the example, CI and the scripts moved in the same commit; plans and reviews keep their history.
+4. **The pinned release is semconv v1.43.0,** the newest that `go.opentelemetry.io/otel@v1.47.0` carries. The adapter writes its names out and imports no `semconv` package; a test-only import of `semconv/v1.43.0` and `dbconv` (`TestNamesMatchSemconv`) checks every name, unit, description and the schema URL. The adapter is brought to v1.43.0 where it differed: `db.query.summary` is added (not for raw SQL); `db.response.returned_rows` on spans is opt-in (`RecordReturnedRows`); the rows histogram has the advised boundaries and `dbconv`'s description.
+5. **The scope's version** is read from `debug.ReadBuildInfo`, since velox tags no releases. `(devel)` and a module replaced by a directory give none, not a placeholder.
+6. **Raw SQL's `db.query.text`** is recorded only when it has arguments: the conventions say text that is not parameterized should not be collected by default, and velox cannot see literals in raw text.
+7. **The query summary is built once per statement,** in the Around hook, and passed to the attributes and the metric. There is no cache.
+8. **The core gains `Result.LoopBody` and `velox.DriverCode`, and nothing else.** Both are additive and `GeneratedCodeIsVersion4` stays 4. `LoopBody` is the time `Iter`'s caller spent in the loop body, measured only when the DB has an Around hook, with no allocation; it is the only way to time `Iter` without its loop body, as no hook sees a row being yielded. The budgets did not move.
+9. **`db.client.operation.duration` is the database's time,** the loop body subtracted, also when the loop breaks. The span keeps covering the loop body, as it shows how long the connection was held.
+10. **`DriverCode(err) (string, bool)` is a function,** not a field of `ConstraintError`: serialization failures, deadlocks and timeouts carry codes and are no constraint error. The codes are PostgreSQL's SQLSTATE, MySQL's error number and SQLite's extended result code. Within an `errors.Join` of errors from more than one driver, PostgreSQL's wins, then MySQL's, then SQLite's.
+11. **`error.type` keeps velox's own values** (`velox.denied`, `constraint.unique`, …) and becomes the driver's code where it would have been `_OTHER`. The code is also `db.response.status_code`. A retried serialization failure is therefore no longer `_OTHER`.
+12. **`Config.Target` and `Config.TargetFor`** name `db.namespace`, `server.address` and `server.port`, as the adapter sees no connection string. The namespace is written in the system's form (PostgreSQL's `{database}|{schema}`); `server.port` is set whenever it is given with an address.
+13. **TargetFor's attributes are set once, at the final route,** before the span ends and on the duration point. This replaces the plan's "at span start, and again after a fallback", which left a replica's field on a span the primary ran: OpenTelemetry cannot remove an attribute. A static `Target` stays a start attribute, as it cannot change. Samplers therefore see the sharding but not the target of a `TargetFor`.
+14. **The transaction span has no namespace or server:** it is velox's own internal span, and `TxInfo` has no route.
+15. **Left out:** `Op.Raw()` and `Op.Reads()` (to API plan 5); the review's `Config.Filter` and `Config.Attributes`; `network.peer.address`; a nested test module for the SDK and pgx; skipping the attribute set under a no-op `MeterProvider`.
+16. **Documents.** The adapter's package is under a citation test (`TestGodocCitesNoSpec`), as the other public packages are. The observability design carries dated notes for the changes above.
 
 ## 7. Order and plans
 

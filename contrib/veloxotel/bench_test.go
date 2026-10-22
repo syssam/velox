@@ -14,9 +14,9 @@ import (
 	"github.com/syssam/velox2/internal/testmodel"
 )
 
-// The adapter's own cost (spec §6: reported, not budgeted) is
-// BenchmarkAdapter's time less BenchmarkBareSpan's: the same one-row read,
-// with one span on the same provider made by a minimal hook.
+// The adapter's own cost (reported, not budgeted) is BenchmarkAdapter's time
+// less BenchmarkBareSpan's: the same one-row read, with one span on the same
+// provider made by a minimal hook.
 
 // providers returns an SDK tracer provider exporting synchronously to a
 // discarding exporter, and a meter provider read by a manual reader.

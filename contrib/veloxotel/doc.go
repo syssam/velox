@@ -33,14 +33,25 @@
 // that velox knows: velox does not parse them out of the SQL, as the semantic
 // conventions advise, so its span is named for the database system
 // ("postgresql") and has no db.operation.name, db.collection.name or
-// db.query.summary. Its reason is velox.tenant_bypass and velox.policy_bypass.
-// Its text is recorded only when it has arguments: the conventions say text
+// db.query.summary. Its span carries velox.tenant_bypass and
+// velox.policy_bypass, the reasons for a bypass. Its text is recorded only when it has arguments: the conventions say text
 // that is not parameterized should not be collected by default, and velox
 // cannot tell whether raw text without arguments holds literals. A read's span
 // gets db.response.returned_rows, which the conventions make opt-in, only with
 // Config.RecordReturnedRows. A span carries the fingerprint, the call site and
-// the context's tags. An Around hook of the application's own that retries,
-// given before these options, gets one span per attempt.
+// the context's tags.
+//
+// An Around hook of the application's own that retries goes before Options,
+// as velox.WithAround makes the first one given the outermost:
+//
+//	opts := []velox.Option{velox.WithAround(retryOnDeadlock)} // the outer one
+//	opts = append(opts, veloxotel.Options(cfg)...)            // inside it
+//	db := velox.OpenPgx(pool, opts...)
+//
+// The adapter is then inside it and makes one span and one duration point per
+// attempt. Given outside a retrying hook, it sees the whole retry as one
+// statement, and an Iter that is run again after it yielded rows records a
+// duration that still holds the first attempt's loop body.
 //
 // A statement's span is a child of the span on the statement's context.
 // Inside db.Tx, fn's ctx carries the transaction's span (velox.tx, once the

@@ -42,7 +42,17 @@ ctx = velox.WithTags(ctx, "route", "POST /invoices/{number}/pay") // in middlewa
   not, is a `velox.tag.<key>` span attribute.
 - **Metrics.** `db.client.operation.duration`, `db.client.response.returned_rows`
   (reads only) and `velox.tx.duration`. Their attributes are bounded: no SQL,
-  tag, tenant or, by default, fingerprint.
+  tag, tenant or, by default, fingerprint. With `Iter`, the duration is the
+  database's time: it leaves out the loop body (`velox.Result.LoopBody`),
+  which the span still covers.
+- **Server and errors.** The adapter sees no connection string, so
+  `Config.Target` (or `Config.TargetFor`, per shard and replica) names
+  `db.namespace`, `server.address` and `server.port`; this example sets
+  neither. A failed statement carries `error.type` and, when the driver gave
+  one, its code as `db.response.status_code` (`velox.DriverCode`).
+- **Order.** Give an `Around` hook of your own that retries before
+  `veloxotel.Options`, as `velox.WithAround` makes the first one outermost:
+  the adapter then makes one span and one duration point per attempt.
 
 The printed output leaves out span IDs, times and durations, which change
 between runs. A service exports to a collector instead, through its own

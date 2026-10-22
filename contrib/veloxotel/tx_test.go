@@ -28,7 +28,7 @@ func byName(spans tracetest.SpanStubs) map[string][]tracetest.SpanStub {
 	return m
 }
 
-// TestTxSpanTree: spec success criterion 1. fn runs its statements on its
+// TestTxSpanTree: fn runs its statements on its
 // ctx, the transaction's: they nest under velox.tx, and velox.tx under the
 // request.
 func TestTxSpanTree(t *testing.T) {
@@ -146,9 +146,9 @@ func TestTxOutcomes(t *testing.T) {
 	}
 }
 
-// TestPanicsEndTheSpans is Review Focus 3: a panic in fn, or in an Iter loop
-// body inside fn, ends every open span with status Error and the
-// description "panic", and reaches the caller unchanged.
+// TestPanicsEndTheSpans pins that a panic in fn, or in an Iter loop body inside
+// fn, ends every open span with status Error and the description "panic", and
+// reaches the caller unchanged.
 func TestPanicsEndTheSpans(t *testing.T) {
 	t.Run("fn", func(t *testing.T) {
 		db, exp, _ := traced(t, &fakeDB{}, veloxotel.Config{})

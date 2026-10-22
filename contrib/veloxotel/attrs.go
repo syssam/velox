@@ -13,9 +13,9 @@ import (
 const schemaURL = "https://opentelemetry.io/schemas/1.43.0"
 
 // The attribute names, from OpenTelemetry's semantic conventions where they
-// have one: those of semconv v1.43.0, written out so that the package
-// imports no semconv package (spec §2.4), and checked against it by
-// TestNamesMatchSemconv.
+// have one: those of semconv v1.43.0, written out so that the package imports
+// no semconv package, which keeps the dependency to the stable API, and checked
+// against it by TestNamesMatchSemconv.
 const (
 	attrDBSystem       = "db.system.name"
 	attrDBOperation    = "db.operation.name"
@@ -55,8 +55,8 @@ const (
 	attrTxRetried   = "velox.tx.retried"
 )
 
-// The span, event and instrument names (spec §2.2 and §2.3), and the
-// statement instruments' units and descriptions, which are v1.43.0's too.
+// The span, event and instrument names, and the statement instruments' units
+// and descriptions, which are v1.43.0's too.
 const (
 	spanTx     = "velox.tx"
 	eventRetry = "retry"
@@ -166,10 +166,9 @@ func failureOf(ctx context.Context, err error) failure {
 func errorType(ctx context.Context, err error) string { return failureOf(ctx, err).errType }
 
 // errorTypeOf is error.type's value for err, whose driver code is code ("":
-// none), from a short fixed list (spec §2.1) or, where none fits, the code,
-// so it can key metrics. ctx is the context the statement ran on: a deadline
-// velox set is velox.timeout even when the driver reports it as
-// context.DeadlineExceeded.
+// none), from a short fixed list or, where none fits, the code, so it can key
+// metrics. ctx is the context the statement ran on: a deadline velox set is
+// velox.timeout even when the driver reports it as context.DeadlineExceeded.
 func errorTypeOf(ctx context.Context, err error, code string) string {
 	switch {
 	case errors.Is(err, velox.ErrDenied):

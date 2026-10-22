@@ -446,9 +446,8 @@ func TestParent(t *testing.T) {
 	}
 }
 
-// TestIterPanicEndsTheSpan is Review Focus 3: a loop body's panic ends the
-// span with status Error and the description "panic", and reaches the
-// caller unchanged.
+// TestIterPanicEndsTheSpan pins that a loop body's panic ends the span with
+// status Error and the description "panic", and reaches the caller unchanged.
 func TestIterPanicEndsTheSpan(t *testing.T) {
 	db, exp, _ := traced(t, &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}, veloxotel.Config{})
 	got := func() (v any) {
@@ -815,10 +814,10 @@ func TestTargetAttributes(t *testing.T) {
 	}
 }
 
-// TestTargetForFallback is Review Focus 3: TargetFor names the server per
-// route, once the route is final. A read that fell over from a failed
-// replica to the primary names only the primary on its span and its
-// duration point: none of the replica's fields.
+// TestTargetForFallback pins that TargetFor names the server per route, once
+// the route is final. A read that fell over from a failed replica to the
+// primary names only the primary on its span and its duration point: none of
+// the replica's fields.
 func TestTargetForFallback(t *testing.T) {
 	var routes []velox.Route
 	cfg := veloxotel.Config{

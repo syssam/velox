@@ -5,9 +5,9 @@ import (
 	"testing"
 )
 
-// TestModuleVersion is Review Focus 5: the scope's version is the module's
-// as the build records it, and "" where the build has none: "(devel)", or a
-// replacement by a directory. Never a placeholder.
+// TestModuleVersion pins that the scope's version is the module's as the build
+// records it, and "" where the build has none: "(devel)", or a replacement by a
+// directory. Never a placeholder.
 func TestModuleVersion(t *testing.T) {
 	dep := func(v string, r *debug.Module) *debug.BuildInfo {
 		return &debug.BuildInfo{

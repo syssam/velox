@@ -163,6 +163,9 @@ func between(s, from, to string) string {
 // error it wraps came from the database: PostgreSQL's SQLSTATE ("23505"),
 // MySQL's error number ("1062"), or SQLite's extended result code
 // ("2067"). It looks through wrapping and errors.Join, as errors.As does.
+// When an errors.Join holds database errors of more than one driver, which
+// is unusual, PostgreSQL's wins, then MySQL's, then SQLite's, whatever their
+// order in the join; within one driver the first in errors.As's order wins.
 //
 // The code is for logs, traces and metrics, and for telling one database
 // error from another, such as a serialization failure ("40001") from a

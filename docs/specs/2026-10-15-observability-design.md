@@ -31,6 +31,8 @@ Made by the author during design (2026-10-15):
 - **Metric keys have bounded cardinality.** They are the database system, operation, table, entity and error type. The fingerprint is on every span; it is added to metrics only when the application asks.
 - **`./example` is a runnable example module.** It shows velox2's API end to end and gains a tracing section when `contrib/veloxotel` exists. CI runs it.
 
+> **Note, 2026-10-22 (API plan 4).** The module path is `github.com/syssam/velox2/contrib/veloxotel`, matching its package name; it was `contrib/otel`, and no alias is left at the old path. The API cleanup design (§6e) has the plan's rulings, which the notes below summarize.
+
 ## Success criteria
 
 1. **Spans:** every statement velox sends can appear as a span under the caller's trace. Inside `db.Tx` it nests under the transaction's span, even when the code passes its own context to a query.
@@ -176,7 +178,9 @@ db := velox.OpenPgx(pool, veloxotel.Options(veloxotel.Config{
 
 `Options` returns the `velox.Option`s: `WithAround`, `WithTxAround`, `WithCallers` (unless `Config.OmitCallers` is set), and `WithSQLComment` when `App` is set. An application that wants `WithCallerSkip` passes it itself after `Options`.
 
-The tracer and the meter are both named `github.com/syssam/velox2/contrib/veloxotel`, with no version until velox tags releases. An error creating an instrument goes to `otel.Handle`, and the instrument the API returned is used.
+The tracer and the meter are both named `github.com/syssam/velox2/contrib/veloxotel`. An error creating an instrument goes to `otel.Handle`, and the instrument the API returned is used.
+
+> **Note, 2026-10-22 (API plan 4).** `Options` and `Config` are the adapter's whole public API: `Around` and `TxAround` are not exported. `Config` is `TracerProvider`, `MeterProvider`, `App`, `CommentTags`, the booleans `OmitCallers`, `OmitQueryText`, `RecordTenant`, `RecordMetricFingerprint` and `RecordReturnedRows`, and `Target` and `TargetFor`. `OmitCallers bool` (call sites are on unless it is set) replaced a `Callers` type the plan first had. The scope carries the schema URL of the pinned semantic-convention release (§2.4) and the module's version as the build records it (`debug.ReadBuildInfo`): none for a main module at `(devel)` or a module replaced by a directory, never a placeholder, since velox tags no releases. An application that gives its own retrying `Around` hook gives it before `Options`, so the adapter is inside it and makes one span per attempt.
 
 The adapter never recovers a panic. Its spans are ended in deferred functions, so a panic in `fn` or in an `Iter` loop body ends them, with status Error and the description `panic`, and goes on unchanged.
 
@@ -194,7 +198,7 @@ There is one span per statement, of kind client. It starts when `next` is called
 | `db.operation.name` | `SELECT`, `INSERT`, `UPDATE`, `DELETE` | always |
 | `db.collection.name` | the table, schema-qualified when declared | always |
 | `db.query.text` | `Statement.SQL`, placeholders only | unless `Config.OmitQueryText` |
-| `db.response.returned_rows` | `Result.Rows` | reads |
+| `db.response.returned_rows` | `Result.Rows` | reads, only with `Config.RecordReturnedRows` (opt-in in the conventions) |
 | `velox.affected_rows` | `Result.Affected` | writes |
 | `velox.entity` | the Go type | always |
 | `velox.fingerprint` | §1.1 | always |
@@ -203,9 +207,18 @@ There is one span per statement, of kind client. It starts when `next` is called
 | `velox.tenant_bypass`, `velox.policy_bypass` | the reasons | when set |
 | `velox.tenant` | `Statement.Tenant`, formatted | only with `Config.RecordTenant` |
 
+> **Note, 2026-10-22 (API plan 4).** The table gains these, and one change.
+> - `db.query.summary`, `<operation> <table>` (the span's name), is set on spans and on both statement metrics. Raw SQL has none: velox does not parse its SQL.
+> - `db.query.text` of raw SQL is recorded only when the statement has arguments. The conventions say text that is not parameterized should not be collected by default, and velox cannot see literals in raw text. A raw span keeps `velox.tenant_bypass` and `velox.policy_bypass`, and is named for the database system.
+> - `db.namespace`, `server.address` and `server.port` come from `Config.Target`, or from `Config.TargetFor` per route; the adapter sees no connection string. They are start attributes when static. `TargetFor` runs once, after the statement, with its final route, and sets them before the span ends: a read that fell over from a failed replica names only the primary. A transaction's span has none.
+> - `db.response.status_code`, on a failed statement, is the driver's code (`velox.DriverCode`): SQLSTATE for PostgreSQL, the error number for MySQL, SQLite's extended result code.
+> - `error.type` keeps the values below, which are velox's own, and where it would be `_OTHER` it is the driver's code when there is one. A retried serialization failure or deadlock is therefore `40001` or `40P01`, not `_OTHER`; a retry event gets the same.
+
 The `code.*` names are those of the semantic-convention release whose `db.*` names this table uses; that release deprecated `code.filepath`, `code.lineno` and `code.function`.
 
 `SQL(ctx)` does not execute, so it makes no span.
+
+> **Note, 2026-10-22 (API plan 4).** The span still covers `Iter`'s loop body, as it shows how long the connection was held; only the duration metric leaves it out (§2.3).
 
 **Errors:**
 - The span's status is Error.
@@ -246,13 +259,21 @@ The instruments follow OpenTelemetry's database semantic conventions where they 
 
 A transaction whose function panics, or calls `runtime.Goexit`, still records its `velox.tx.duration` point, with the outcome `rollback`.
 
-Histogram boundaries are the conventions' recommended ones for durations (from 0.001 s to 10 s), and powers of 4 up to 65,536 for rows. Cardinality is bounded by entities × 4 operations × the error-type values. With `RecordMetricFingerprint`, it is bounded by the render cache's 4,096 shapes per process.
+Histogram boundaries are the conventions' recommended ones for durations (from 0.001 s to 10 s), and, for rows, the ones semconv v1.43.0 advises: 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000. *(Powers of 4 up to 65,536, which this text first gave, were replaced on 2026-10-22: see the note below.)* Cardinality is bounded by entities × 4 operations × the error-type values. With `RecordMetricFingerprint`, it is bounded by the render cache's 4,096 shapes per process.
+
+> **Note, 2026-10-22 (API plan 4).** Changes to the table:
+> - **The loop body.** `db.client.operation.duration` under `Iter` is the database's time: the loop body, which `velox.Result.LoopBody` measures, is subtracted. This also holds when the loop breaks after its first row. The point is never negative. A loop that panics records no point.
+> - **Row bounds** are the advised ones above, and the description is `dbconv`'s.
+> - **New attributes.** `db.query.summary` (none for raw SQL), `db.namespace`, `server.address` and `server.port` (from `Target`, or `TargetFor` at the final route), and `db.response.status_code` and `error.type` as in §2.1, on a failed statement. The attributes stay bounded: SQLSTATE codes and error numbers are a finite set.
+> - **`velox.route.fallbacks`,** a counter of the reads that fell over to the primary (attribute: the shard), counts once per failover even when an outer hook retries the statement.
 
 ### 2.4 Versions
 
 `contrib/veloxotel` tracks the OpenTelemetry Go API's stable `v1` line, pinned at `v1.47.0`, the latest stable release on 2026-10-15. Semantic-convention attribute names are written out as constants in the adapter (`attrs.go`), not imported from a `semconv` package version. That keeps the dependency to the stable API, and the names change only with a velox release that says so.
 
 The rule is about `contrib/veloxotel`'s own imports: its package imports the OpenTelemetry API (`otel`, `attribute`, `codes`, `trace`, `metric`), velox and the standard library, and no SDK or `semconv` package. The API's own `trace` package imports a `semconv` package, which `contrib/veloxotel` does not control, so `TestNoSDKDependency` checks the package's imports for `semconv` and its whole dependency graph for the SDK.
+
+> **Note, 2026-10-22 (API plan 4).** The pinned semantic-convention release is v1.43.0, the newest that `go.opentelemetry.io/otel@v1.47.0` carries. Every `db.*`, `server.*`, `code.*` and `error.*` name, every metric name, unit and description and the schema URL are written out in `attrs.go` and match `go.opentelemetry.io/otel/semconv/v1.43.0` and its `dbconv`. `TestNamesMatchSemconv`, which imports both in a test file, checks it, so a later bump is a compile-checked change. A name not in that release is not used. The "no `semconv` package" rule above is unchanged for the package itself.
 
 ## 3. Example
 

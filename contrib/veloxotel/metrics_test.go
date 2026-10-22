@@ -168,9 +168,9 @@ func TestStatementMetrics(t *testing.T) {
 	}
 }
 
-// TestMetricsAttributesAreBounded is Review Focus 5: whatever the spans
-// carry, a metric point carries only the bounded keys. Tenants, tags, the
-// SQL comment and call sites make no new points.
+// TestMetricsAttributesAreBounded pins that whatever the spans carry, a metric
+// point carries only the bounded keys. Tenants, tags, the SQL comment and call
+// sites make no new points.
 func TestMetricsAttributesAreBounded(t *testing.T) {
 	db, r := metered(t, &fakeDB{}, veloxotel.Config{RecordTenant: true, App: "billing", CommentTags: []string{"route"}})
 	for _, tenant := range []int64{1, 2} {
@@ -523,10 +523,10 @@ func TestRawMetrics(t *testing.T) {
 	}
 }
 
-// TestIterDurationExcludesLoopBody is Review Focus 1: an Iter's duration
-// point is the database's time, without the loop body's, also when the loop
-// breaks after its first row, while its span covers the loop. A loop that
-// panics, or an Iter never ranged over, records no point.
+// TestIterDurationExcludesLoopBody pins that an Iter's duration point is the
+// database's time, without the loop body's, also when the loop breaks after its
+// first row, while its span covers the loop. A loop that panics, or an Iter
+// never ranged over, records no point.
 func TestIterDurationExcludesLoopBody(t *testing.T) {
 	const body = 100 * time.Millisecond
 	run := func(t *testing.T, n int, panics bool) (*sdkmetric.ManualReader, []time.Duration) {

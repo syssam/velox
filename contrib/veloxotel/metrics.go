@@ -10,8 +10,8 @@ import (
 	"github.com/syssam/velox2"
 )
 
-// The histograms' boundaries (spec §2.3): those semconv v1.43.0 advises, for
-// durations in seconds and for rows.
+// The histograms' boundaries: those semconv v1.43.0 advises, for durations in
+// seconds and for rows.
 var (
 	durationBounds = []float64{0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10}
 	rowBounds      = []float64{1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000}

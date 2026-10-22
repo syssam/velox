@@ -109,7 +109,7 @@ API rough spots found while splitting `./example` into one directory per topic:
 
 Left by the observability plan:
 - §6's 300 ns is read from benchmarks and recorded, not asserted.
-- A serialization failure or deadlock that `RetrySerializable` retries has `error.type` `_OTHER`; there is no value of its own.
+- [x] Resolved in API plan 4 (`error.type` is the driver's code where it would be `_OTHER`: `40001`, `40P01`, a MySQL error number). A serialization failure or deadlock that `RetrySerializable` retries has `error.type` `_OTHER`; there is no value of its own.
 - A statement refused before execution (guard, scope, policy, hooks) makes no statement span and no metric point; it shows only as the error of a transaction it ends.
 - Inside a transaction, a statement span's parent is always `velox.tx`, even when the application started a span of its own inside `fn` and passed its context (a spec choice).
 - A statement with no application frame within 64 frames (an `Iter` driven through `iter.Pull`, say) has a zero `Caller`.
@@ -241,8 +241,8 @@ From the final review of API plan 1 (2026-10-20). Each item names the plan that 
 - [x] **API plan 2:** `internal/gen` comments cite "Ruling N" of old plans (`lower.go`, `build.go`, `methods.go`). They are not public, but they rot; the velox-gen rewrite should drop them. The citation test scans only public packages.
 - **API plan 5 (dialects):** `SQL(ctx)` of a statement with a policy `Allow` or a zero-Pred failure is tested on PostgreSQL only; add it to the dialect test sweep.
 - [x] **API plan 3:** the citation scan (`TestGodocCitesNoSpec`) did not cover the contrib modules. `contrib/graphql` has its own, over `graphql`, `veloxgql` and `gqlimpl`.
-- **API plan 4:** the same for `contrib/veloxotel`, whose `metrics.go` and `attrs.go` still say "spec §2.x".
-- **API plan 4 (otel):** `contrib/veloxotel/attrs.go` re-implements the core's unexported `Op.raw()` and `Statement.reads()`. Export `Op.Raw()` and `Op.Reads()` (additive), so hooks and adapters share one definition.
+- [x] **API plan 4:** the same for `contrib/veloxotel`, whose `metrics.go` and `attrs.go` still say "spec §2.x". Resolved in API plan 4: `TestGodocCitesNoSpec` scans the module's package, tests included.
+- **API plan 5 (moved from API plan 4, which kept the core to what it needs):** `contrib/veloxotel/attrs.go` re-implements the core's unexported `Op.raw()` and `Statement.reads()`. Export `Op.Raw()` and `Op.Reads()` (additive), so hooks and adapters share one definition.
 - **Perf pass with the pgx split:** `Save` allocates its `cols` slice. No API impact, and no budget pins Save.
 - Accepted, no change: an empty `InsertAll` skips the transaction and dry-run checks (it sends nothing; documented on `Exec`); the Save compile test's cgo note.
 
@@ -293,6 +293,21 @@ From the mutations (2026-10-22). The plan's items are done: the inputs with thei
 - The generated owner-key check is `Users.ID.In(k)` on one key; `EQ(k)` reads better and renders `= ?`. Cosmetic; it changes the goldens.
 - The generated godoc is long: `UpdateX`'s is one paragraph of about 350 words on every entity. Move the shared semantics to `contrib/graphql/doc.go`, where most of it already is, and keep each function's doc to its own contract with a pointer.
 - 1.0 design note: on an M2M add, binding ruling 4 checks only Read on the target, as ent does. So `updateCircle(addWriterIDs: [a frozen writer])` succeeds while `updateWriter(frozen, addCircleIDs)` is NOT_FOUND, and `updateArticle(writerID: frozen)` links to a writer the caller may not write. Decide knowingly before 1.0 whether a link needs Write on both ends.
+
+## Left by API plan 4
+
+From the final tasks of API plan 4 (2026-10-22), the OpenTelemetry module. The plan's own items are done: the rename to `contrib/veloxotel`, `Options` alone with `OmitCallers`, the scope's version and schema URL, semconv v1.43.0 and its test, the duration without `Iter`'s loop body (`Result.LoopBody`), `db.namespace`, `server.*` and `db.response.status_code` (`velox.DriverCode`), and the citation scan.
+
+- A transaction's span has no namespace or server, and no `velox.route.shard`: `TxInfo` has no route. Adding one to the core would let `TargetFor` name it.
+- An adapter given outside a retrying `Around` hook records, for an `Iter` that is run again after it yielded rows, a duration that includes the first attempt's loop body: the retry resets `Result`. It happens on an error only, and the documented order (the application's hook before `Options`) avoids it.
+- `TargetFor`'s attributes are not known when a sampler runs, as the route is final only after the statement. A sampler cannot sample by server, replica or shard target (`velox.route.shard` is a start attribute).
+- `velox.DriverCode` reads pgx first, then MySQL, then SQLite, whatever the order of an `errors.Join` that holds errors of more than one driver. This is documented there and harmless in practice.
+- `Config.Filter` and `Config.Attributes` (the review's finding 16, a Could) are not built. Nor is `network.peer.address`: the adapter does not see the peer.
+- The adapter's tests that need the SDK and pgx live in the module itself, so the adapter's `go.mod` lists both. A nested test module would keep them out of an application's `go mod graph` (the review's finding 18, a Could).
+- `contrib/veloxotel`'s `record` still allocates its attribute set under a no-op `MeterProvider` (the entry under "Left by observability").
+- `collection(st)` runs twice per statement, once for the span and once for the metric, and for an entity with a schema it concatenates strings. A summary built once was asked for; the collection is a smaller saving.
+- The duration timing tests (`Result.LoopBody`, the adapter's loop-body points) use sleeps and wall-clock bounds. A loaded machine may need wider bounds.
+- Each statement on a hooked DB with `Iter` costs two clock reads per yielded row for `LoopBody`. It is cheap beside a row scan, and 0 on a DB with no Around hook.
 
 ## 1.0 release
 
