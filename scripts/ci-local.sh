@@ -65,11 +65,13 @@ bin/velox-gen verify -out internal/testmodel ./internal/testmodel/schema
 )
 
 # contrib/graphql is its own module too: the annotations package, the
-# velox-graphql plugin and the runtime. Its mutation itest (TestMutationsRun)
-# runs on SQLite, and on PostgreSQL and MySQL under VELOX_TEST_POSTGRES and
-# VELOX_TEST_MYSQL, exported above.
+# velox-graphql plugin and the runtime. Its mutation and collection itests
+# (TestMutationsRun, TestCollectRun) run on SQLite, and on PostgreSQL and MySQL
+# under VELOX_TEST_POSTGRES and VELOX_TEST_MYSQL, exported above.
 (
   cd contrib/graphql
+  # The collection itest builds an application offline, with gqlgen as a tool.
+  go mod download
   test -z "$(gofmt -l .)" || { echo "gofmt needed in contrib/graphql:"; gofmt -l .; exit 1; }
   go vet ./...
   go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...

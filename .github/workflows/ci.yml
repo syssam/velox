@@ -77,11 +77,14 @@ jobs:
           go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
           go test -race -count=1 ./...
       # The annotations package, the velox-graphql plugin and the runtime. Its
-      # mutation itest (TestMutationsRun) runs on SQLite, and on PostgreSQL and
-      # MySQL under the job's VELOX_TEST_POSTGRES and VELOX_TEST_MYSQL.
+      # mutation and collection itests (TestMutationsRun, TestCollectRun) run on
+      # SQLite, and on PostgreSQL and MySQL under the job's VELOX_TEST_POSTGRES
+      # and VELOX_TEST_MYSQL.
       - name: contrib/graphql
         working-directory: contrib/graphql
         run: |
+          # The collection itest builds an application offline, with gqlgen as a tool.
+          go mod download
           test -z "$(gofmt -l .)"
           go vet ./...
           go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...

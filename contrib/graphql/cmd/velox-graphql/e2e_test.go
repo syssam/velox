@@ -121,8 +121,12 @@ func (Secret) Annotations() []schema.Annotation { return []schema.Annotation{gra
 // app writes a module with velox-gen and velox-graphql as tools, and the
 // files (the schema package among them), and returns its directory and a
 // runner of go in it, offline.
-func app(t *testing.T, files map[string]string) (string, func(args ...string) (string, error)) {
+//
+// withGqlgen also makes gqlgen a tool of the module and gives it the go.sum of
+// example, which holds gqlgen's own dependencies.
+func app(t *testing.T, files map[string]string, withGqlgen ...bool) (string, func(args ...string) (string, error)) {
 	t.Helper()
+	gql := len(withGqlgen) > 0 && withGqlgen[0]
 	repo, err := filepath.Abs("../../../..")
 	if err != nil {
 		t.Fatal(err)
@@ -132,7 +136,16 @@ func app(t *testing.T, files map[string]string) (string, func(args ...string) (s
 		t.Fatal(err)
 	}
 	var sum []byte
-	for _, p := range []string{"go.sum", "contrib/graphql/go.sum"} {
+	sums := []string{"go.sum", "contrib/graphql/go.sum"}
+	tools := "\tgithub.com/syssam/velox2/cmd/velox-gen\n" +
+		"\tgithub.com/syssam/velox2/contrib/graphql/cmd/velox-graphql\n"
+	pins := ""
+	if gql {
+		sums = append(sums, "example/go.sum")
+		tools += "\tgithub.com/99designs/gqlgen\n"
+		pins = gqlgenPins(t, repo)
+	}
+	for _, p := range sums {
 		b, err := os.ReadFile(filepath.Join(repo, p))
 		if err != nil && !os.IsNotExist(err) {
 			t.Fatal(err)
@@ -140,14 +153,11 @@ func app(t *testing.T, files map[string]string) (string, func(args ...string) (s
 		sum = append(sum, b...)
 	}
 	mod := "module example.com/app\n\ngo 1.27.0\n\n" +
-		"tool (\n" +
-		"\tgithub.com/syssam/velox2/cmd/velox-gen\n" +
-		"\tgithub.com/syssam/velox2/contrib/graphql/cmd/velox-graphql\n" +
-		")\n\n" +
+		"tool (\n" + tools + ")\n\n" +
 		"require (\n" +
 		"\tgithub.com/syssam/velox2 v0.0.0\n" +
 		"\tgithub.com/syssam/velox2/contrib/graphql v0.0.0\n" +
-		")\n\n" +
+		")\n\n" + pins +
 		"replace (\n" +
 		"\tgithub.com/syssam/velox2 => " + repo + "\n" +
 		"\tgithub.com/syssam/velox2/contrib/graphql => " + filepath.Join(repo, "contrib", "graphql") + "\n" +
@@ -180,6 +190,23 @@ func app(t *testing.T, files map[string]string) (string, func(args ...string) (s
 		t.Fatalf("go mod tidy: %v\n%s", err, out)
 	}
 	return dir, run
+}
+
+// gqlgenPins are requirements that pin golang.org/x/tools and golang.org/x/mod,
+// which gqlgen's tool packages import, to the versions contrib/graphql's own
+// module graph selects, as a require block. Left alone, the module would ask
+// for the older ones gqlgen's go.mod names, whose sources the module cache
+// holds only if something else fetched them, and an offline build cannot.
+func gqlgenPins(t *testing.T, repo string) string {
+	t.Helper()
+	cmd := exec.Command("go", "list", "-m", "-f", "\t{{.Path}} {{.Version}}", "golang.org/x/tools", "golang.org/x/mod")
+	cmd.Dir = filepath.Join(repo, "contrib", "graphql")
+	cmd.Env = append(os.Environ(), "GOFLAGS=-mod=mod", "GOPROXY=off", "GOTOOLCHAIN=local", "GOWORK=off")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go list -m: %v\n%s%s", err, out, tempmod.Hint(string(out)))
+	}
+	return "require (\n" + string(out) + ")\n\n"
 }
 
 // TestPluginThroughVeloxGen runs the plugin the way an application does: a
