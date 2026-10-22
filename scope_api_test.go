@@ -113,4 +113,10 @@ func TestRowScopeOf(t *testing.T) {
 	if got := velox.RowScopeOf(velox.AllTenants(ctx, "nightly")); got.Tenant != nil || got.AllTenants != "nightly" || got.SkipPolicy != "audit" {
 		t.Errorf("all tenants: %+v", got)
 	}
+	if got, want := velox.RowScopeOf(velox.OnShard(ctx, "eu")), (velox.RowScope{Tenant: int64(7), SkipPolicy: "audit", Shard: "eu", OnShard: true}); got != want {
+		t.Errorf("on a shard: %+v, want %+v", got, want)
+	}
+	if got := velox.RowScopeOf(velox.OnShard(ctx, "")); !got.OnShard || got == velox.RowScopeOf(ctx) {
+		t.Errorf("OnShard(\"\"): %+v, want it told from no shard", got)
+	}
 }

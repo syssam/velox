@@ -21,8 +21,8 @@ import (
 //
 // A batch is keyed by its group, the edge's field
 // (graphql.GetFieldContext(ctx).Field.Field) and its callers' row scope
-// (velox.RowScopeOf: the tenant, and the AllTenants and SkipPolicy reasons,
-// of the context each passes to the edge function). So its arguments are
+// (velox.RowScopeOf: the tenant, the AllTenants and SkipPolicy reasons and
+// the OnShard shard, of the context each passes to the edge function). So its arguments are
 // the same for every row (one field, one set of variables), two aliases are
 // two batches, and a row whose resolver's context a field middleware or a
 // directive scopes otherwise is in a batch of its own scope. The first
@@ -163,7 +163,8 @@ func batchOf[E any](ctx context.Context, x *E) (*shared.Batch, []*E, int) {
 	}
 	scope := velox.RowScopeOf(ctx)
 	if scope.Tenant != nil && !reflect.TypeOf(scope.Tenant).Comparable() {
-		// Never equal to another's: a batch of its own.
+		// A tenant id == would panic on, which a statement refuses: never
+		// equal to another's, a batch of its own.
 		scope.Tenant = new(byte)
 	}
 	return g.Batch(fc.Field.Field, fc.Field.Selections, scope), rows, i

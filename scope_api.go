@@ -58,19 +58,31 @@ func SkipPolicy(ctx context.Context, reason string) context.Context {
 }
 
 // RowScope is what a context scopes statements by: WithTenant's id (nil
-// when none), and the reasons of AllTenants and SkipPolicy ("" when none).
-// A batcher that reads for several callers in one statement compares their
-// scopes, so that callers of different scopes never share a read.
+// when none), the reasons of AllTenants and SkipPolicy ("" when none), and
+// OnShard's shard, which holds other rows than another shard. A batcher
+// that reads for several callers in one statement compares their scopes,
+// so that callers of different scopes never share a read.
+//
+// RowScopes are compared with ==, which panics when Tenant holds a value of
+// a type that cannot be compared. A tenant column's type is comparable
+// (its metadata is refused otherwise), but WithTenant takes any id, and an
+// id of another type, which a statement refuses, may not be: a caller that
+// compares guards against it (reflect.TypeOf(Tenant).Comparable()).
 type RowScope struct {
 	Tenant     any
 	AllTenants string
 	SkipPolicy string
+	// Shard is OnShard's name, and OnShard whether OnShard was called: a
+	// shard named "" is told from none.
+	Shard   string
+	OnShard bool
 }
 
 // RowScopeOf returns ctx's row scope.
 func RowScopeOf(ctx context.Context) RowScope {
 	id, all := tenantOf(ctx)
-	return RowScope{Tenant: id, AllTenants: all, SkipPolicy: policyBypass(ctx)}
+	rc, _ := ctx.Value(routeKey{}).(routeCtx)
+	return RowScope{Tenant: id, AllTenants: all, SkipPolicy: policyBypass(ctx), Shard: rc.shard, OnShard: rc.onShard}
 }
 
 // noReason reports whether reason, a bypass's (AllTenants, SkipPolicy, Raw,

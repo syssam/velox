@@ -561,13 +561,29 @@ func TestEdgeAliases(t *testing.T) {
 }
 
 // TestEdgeScopes: rows of one group whose edge resolvers' contexts have
-// different row scopes are batched apart, one statement per scope.
+// different row scopes (policy bypasses, shards) are batched apart, one
+// statement per scope.
 func TestEdgeScopes(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		scope func(context.Context, string) context.Context
+		loads int
+	}{
+		{"SkipPolicy", func(ctx context.Context, s string) context.Context { return velox.SkipPolicy(ctx, s) }, 2},
+		{"OnShard", velox.OnShard, 2},
+		// A tenant id == cannot compare: no panic, and a batch of its own.
+		{"incomparable tenant", func(ctx context.Context, s string) context.Context { return velox.WithTenant(ctx, []byte(s)) }, 3},
+	} {
+		t.Run(c.name, func(t *testing.T) { testEdgeScopes(t, c.scope, c.loads) })
+	}
+}
+
+func testEdgeScopes(t *testing.T, scope func(context.Context, string) context.Context, n int) {
 	db, _, log := edgeDB(t)
 	ctx := operation(t, db, childrenQuery)
 	xs := ownersPage(t, ctx, db, db.Query[owner](), gqlimpl.Args{})
 	ectx := field(t, ctx, "owners", "edges", "node", "children")
-	scoped := map[int64]context.Context{1: velox.SkipPolicy(ectx, "a"), 2: velox.SkipPolicy(ectx, "b"), 3: velox.SkipPolicy(ectx, "a")}
+	scoped := map[int64]context.Context{1: scope(ectx, "a"), 2: scope(ectx, "b"), 3: scope(ectx, "a")}
 	log.take("")
 	var loads []string
 	for _, x := range xs {
@@ -584,8 +600,8 @@ func TestEdgeScopes(t *testing.T) {
 		log.take("")
 		samePage(t, x.Name, got, want)
 	}
-	if len(loads) != 2 {
-		t.Errorf("%d statements, want one per scope: %q", len(loads), loads)
+	if len(loads) != n {
+		t.Errorf("%d statements, want %d: %q", len(loads), n, loads)
 	}
 }
 
