@@ -160,13 +160,14 @@ func WithTxFilter(f func(ctx context.Context, op *ast.OperationDefinition) bool)
 // edge calls whose contexts give different values never share a read. f
 // gets the context of each call of a generated edge method (its field's
 // resolver's), and returns a comparable value; a caller whose value cannot
-// be compared (reflect.Value.Comparable) reads alone. Given twice, the last
-// wins.
+// be compared (reflect.Value.Comparable) reads alone. f is called from
+// concurrent resolvers, so it must be safe for concurrent use. Given twice,
+// the last wins.
 //
 // A batch reads every row's edge under its first caller's context. velox's
 // row scope (velox.RowScopeOf: the tenant, the AllTenants and SkipPolicy
-// bypasses, the shard) is always in the key, and so are the DB and the
-// limits. Any other context value that a Read policy or a Rewrite or Around
+// bypasses, the shard) is always in the key, and so are the DB and a list
+// edge's MaxList. Any other context value that a Read policy or a Rewrite or Around
 // hook reads, such as the viewer or a role, must be the same for every row
 // of a field, or be in f's value: a directive or a field middleware that
 // gives an edge field's resolver another context for some parent rows
