@@ -17,9 +17,50 @@ import (
 // requirements from the module cache only. files is not changed.
 func Write(dir, repo string, files map[string]string) error {
 	mod := fmt.Sprintf("module example.com/tmp\n\ngo 1.27.0\n\nrequire github.com/syssam/velox2 v0.0.0\n\nreplace github.com/syssam/velox2 => %s\n", repo)
-	sum, err := os.ReadFile(filepath.Join(repo, "go.sum"))
-	if err != nil {
-		return err
+	return write(dir, mod, []string{"go.sum"}, repo, files, "mod", "tidy")
+}
+
+// WriteGraphQL is Write for an application that also generates GraphQL: the
+// module example.com/tmp requires contrib/graphql from repo by replace too,
+// declares velox-gen and velox-graphql as tools, and its go.sum is the root
+// module's and contrib/graphql's, concatenated. The requirements are resolved
+// from the module cache only. files is not changed.
+func WriteGraphQL(dir, repo string, files map[string]string) error {
+	mod := fmt.Sprintf(`module example.com/tmp
+
+go 1.27.0
+
+tool (
+	github.com/syssam/velox2/cmd/velox-gen
+	github.com/syssam/velox2/contrib/graphql/cmd/velox-graphql
+)
+
+require (
+	github.com/syssam/velox2 v0.0.0
+	github.com/syssam/velox2/contrib/graphql v0.0.0
+)
+
+replace (
+	github.com/syssam/velox2 => %[1]s
+	github.com/syssam/velox2/contrib/graphql => %[2]s
+)
+`, repo, filepath.Join(repo, "contrib", "graphql"))
+	// -e: tidy also looks for the test dependencies of gqlparser's levenshtein,
+	// whose go.mod predates module graph pruning, and an offline module cache
+	// that holds only what builds need lacks them. Nothing here builds them.
+	return write(dir, mod, []string{"go.sum", filepath.Join("contrib", "graphql", "go.sum")}, repo, files, "mod", "tidy", "-e")
+}
+
+// write writes go.mod (mod), go.sum (the sums, paths relative to repo, joined)
+// and files into dir, and runs the go command with tidy.
+func write(dir, mod string, sums []string, repo string, files map[string]string, tidy ...string) error {
+	var sum []byte
+	for _, p := range sums {
+		b, err := os.ReadFile(filepath.Join(repo, p))
+		if err != nil {
+			return err
+		}
+		sum = append(sum, b...)
 	}
 	all := maps.Clone(files)
 	if all == nil {
@@ -35,7 +76,7 @@ func Write(dir, repo string, files map[string]string) error {
 			return err
 		}
 	}
-	_, err = Go(dir, "mod", "tidy")
+	_, err := Go(dir, tidy...)
 	return err
 }
 

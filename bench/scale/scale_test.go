@@ -32,7 +32,7 @@ func TestScaleHarnessSmall(t *testing.T) {
 	if err := os.WriteFile(th, b, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if problems := check(r, 20, th); len(problems) == 0 {
+	if problems := check(r, "20", th); len(problems) == 0 {
 		t.Error("check passed a measurement 1000 times over its threshold")
 	}
 }
@@ -47,12 +47,28 @@ func TestServiceLinksOnlyItsEntities(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds an application; run without -short")
 	}
+	linksOnlyItsEntities(t, false)
+}
+
+// TestGraphQLServiceLinksOnlyItsEntities is the same guard for the GraphQL
+// variant: the generated GraphQL code (the connections, edges, where inputs and
+// order terms, named E<k>…, e<k>…) of an entity is linked by the service that
+// calls it or that reaches it by one relation, and not otherwise. A GraphQL
+// type that named every neighbour's code would link the whole connected model.
+func TestGraphQLServiceLinksOnlyItsEntities(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds an application; run without -short")
+	}
+	linksOnlyItsEntities(t, true)
+}
+
+func linksOnlyItsEntities(t *testing.T, graphql bool) {
 	const n, s = 60, 2
 	dir := t.TempDir()
-	if _, err := run(config{n: n, services: s, dir: dir}); err != nil {
+	if _, err := run(config{n: n, services: s, graphql: graphql, dir: dir}); err != nil {
 		t.Fatal(err)
 	}
-	schemas, services := generate(n, s)
+	schemas, services := generate(n, s, graphql)
 	src := services[filepath.Join("s0", "main.go")]
 	entity := regexp.MustCompile(`gen\.E(\d+)\b`)
 	ref := regexp.MustCompile(`\bE(\d+)\.Type\b`)
@@ -78,6 +94,11 @@ func TestServiceLinksOnlyItsEntities(t *testing.T) {
 	// mention E<k> (the field Many[E<k>] of a neighbour's struct) are data
 	// about a type and do not link its code, so they are not counted.
 	sym := regexp.MustCompile(`(?m)^\s*\S+ [A-Za-z] example\.com/tmp/gen\.\(?\*?[Ee](\d+)(?:s|Meta|Desc)?(?:\.|$)`)
+	if graphql {
+		// Also the GraphQL code: E<k>sConnection, (*E<k>).NextGQL,
+		// (*E<k>WhereInput).Pred, e<k>TermGQL and the like.
+		sym = regexp.MustCompile(`(?m)^\s*\S+ [A-Za-z] example\.com/tmp/gen\.\(?\*?[Ee](\d+)[A-Za-z]*\)?(?:\.|$)`)
+	}
 	present := map[string]bool{}
 	for _, m := range sym.FindAllStringSubmatch(string(out), -1) {
 		present[m[1]] = true
@@ -95,6 +116,38 @@ func TestServiceLinksOnlyItsEntities(t *testing.T) {
 	t.Logf("%d of %d entities have symbols in s0: %d used, %d allowed", len(present), n, len(used), len(allowed))
 }
 
+// TestScaleHarnessSmallGraphQL: the GraphQL variant generates, builds and
+// measures a small application, and its schemas and services carry what the
+// variant promises.
+func TestScaleHarnessSmallGraphQL(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds an application; run without -short")
+	}
+	r, err := run(config{n: 20, services: 2, graphql: true, dir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.ColdBuildS <= 0 || r.SchemaEditRebuildS <= 0 || r.ServiceBinaryMB <= 0 || r.LinkPeakMB <= 0 {
+		t.Fatalf("a measurement is missing: %+v", r)
+	}
+	schemas, services := generate(20, 2, true)
+	for _, want := range []string{`graphql.QueryField("e7s")`, `graphql.OrderField("NAME"), graphql.WhereOps()`} {
+		if src := schemas[filepath.Join("schema", "e7.go")]; !strings.Contains(src, want) {
+			t.Errorf("e7 lacks %s", want)
+		}
+	}
+	src := services[filepath.Join("s0", "main.go")]
+	if got := strings.Count(src, "Connection(ctx"); got != 5 {
+		t.Errorf("s0 calls %d root connection functions, want 5", got)
+	}
+	if got := strings.Count(src, ".NextGQL(ctx"); got != 5 {
+		t.Errorf("s0 calls %d edge methods, want 5", got)
+	}
+	if plain, _ := generate(20, 2, false); strings.Contains(plain[filepath.Join("schema", "e7.go")], "graphql") {
+		t.Error("the plain variant mentions graphql")
+	}
+}
+
 // TestCheckPassesAGenerousThreshold: check reports nothing when every
 // measurement is under its threshold, and ignores comment keys.
 func TestCheckPassesAGenerousThreshold(t *testing.T) {
@@ -108,10 +161,10 @@ func TestCheckPassesAGenerousThreshold(t *testing.T) {
 	if err := os.WriteFile(th, b, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if problems := check(r, 20, th); len(problems) != 0 {
+	if problems := check(r, "20", th); len(problems) != 0 {
 		t.Errorf("a generous threshold produced problems: %v", problems)
 	}
-	if problems := check(r, 30, th); len(problems) != 1 || !strings.Contains(problems[0], "no thresholds for n=30") {
+	if problems := check(r, "30", th); len(problems) != 1 || !strings.Contains(problems[0], "no thresholds for n=30") {
 		t.Errorf("an n with no thresholds: %v", problems)
 	}
 }
@@ -128,17 +181,17 @@ func TestCheckRefusesAMissingOrUnknownKey(t *testing.T) {
 		return p
 	}
 	all := map[string]any{"cold_build_s": 1.0, "schema_edit_rebuild_s": 1.0, "service_binary_mb": 1.0, "link_peak_mb": 1.0}
-	if problems := check(r, 20, write(all)); len(problems) != 0 {
+	if problems := check(r, "20", write(all)); len(problems) != 0 {
 		t.Errorf("a complete file: %v", problems)
 	}
 	missing := maps.Clone(all)
 	delete(missing, "link_peak_mb")
-	if problems := check(r, 20, write(missing)); len(problems) != 1 || !strings.Contains(problems[0], "missing threshold link_peak_mb") {
+	if problems := check(r, "20", write(missing)); len(problems) != 1 || !strings.Contains(problems[0], "missing threshold link_peak_mb") {
 		t.Errorf("a missing key: %v", problems)
 	}
 	unknown := maps.Clone(all)
 	unknown["leaf_rebuild_s"] = 1.0
-	if problems := check(r, 20, write(unknown)); len(problems) != 1 || !strings.Contains(problems[0], "unknown measurement leaf_rebuild_s") {
+	if problems := check(r, "20", write(unknown)); len(problems) != 1 || !strings.Contains(problems[0], "unknown measurement leaf_rebuild_s") {
 		t.Errorf("an unknown key: %v", problems)
 	}
 }
@@ -147,7 +200,7 @@ func TestCheckRefusesAMissingOrUnknownKey(t *testing.T) {
 // To edge it names on its target, which Build requires.
 func TestGenerateShape(t *testing.T) {
 	const n, s = 60, 7
-	schemas, services := generate(n, s)
+	schemas, services := generate(n, s, false)
 	if len(schemas) != n || len(services) != s {
 		t.Fatalf("got %d schemas and %d services, want %d and %d", len(schemas), len(services), n, s)
 	}
@@ -182,8 +235,10 @@ func TestCommittedThresholds(t *testing.T) {
 	if err := json.Unmarshal(b, &all); err != nil {
 		t.Fatalf("thresholds.json does not parse: %v", err)
 	}
-	if _, ok := all["500"]; !ok {
-		t.Error("no thresholds for n=500, the size CI checks")
+	for _, key := range []string{"500", "500-graphql"} {
+		if _, ok := all[key]; !ok {
+			t.Errorf("no thresholds for %s, which CI checks", key)
+		}
 	}
 	known := []string{"cold_build_s", "schema_edit_rebuild_s", "service_binary_mb", "link_peak_mb"}
 	for n, th := range all {
@@ -200,8 +255,16 @@ func TestCommittedThresholds(t *testing.T) {
 		}
 	}
 	// A run that meets every recorded threshold exactly passes check.
+	for _, key := range []string{"500", "500-graphql"} {
+		checkAtThresholds(t, all[key], key)
+	}
+}
+
+// checkAtThresholds: a run exactly at th, the thresholds under key, passes.
+func checkAtThresholds(t *testing.T, th map[string]any, key string) {
+	t.Helper()
 	r := report{N: 500}
-	for k, v := range all["500"] {
+	for k, v := range th {
 		f, _ := v.(float64)
 		switch k {
 		case "cold_build_s":
@@ -214,8 +277,8 @@ func TestCommittedThresholds(t *testing.T) {
 			r.LinkPeakMB = f
 		}
 	}
-	if problems := check(r, 500, "thresholds.json"); len(problems) != 0 {
-		t.Errorf("a run exactly at the thresholds: %v", problems)
+	if problems := check(r, key, "thresholds.json"); len(problems) != 0 {
+		t.Errorf("%s: a run exactly at the thresholds: %v", key, problems)
 	}
 }
 

@@ -91,6 +91,8 @@ jobs:
           go test -race -count=1 ./...
       - name: scale (n=500)
         run: go run ./bench/scale -n 500 -s 100 -check bench/scale/thresholds.json
+      - name: scale (n=500, GraphQL)
+        run: go run ./bench/scale -n 500 -s 100 -graphql -check bench/scale/thresholds.json
   # velox-graphql against the newest gqlgen. A red job says gqlgen moved.
   gqlgen-latest:
     runs-on: ubuntu-latest

@@ -5,5 +5,12 @@
     "schema_edit_rebuild_s": 89.8,
     "service_binary_mb": 8.5,
     "link_peak_mb": 420
+  },
+  "500-graphql": {
+    "_measured": "2026-10-22 on darwin/arm64, Apple M3 Max (14 cores), the -graphql variant: n=500 schemas that also carry velox-graphql's annotations (a root query field, OrderField and WhereOps on name), generated with -plugin velox-graphql into one gen package, s=100 services that each call the root connection function and the next edge's method of five entities. Three runs started at 1-minute load averages of 3.19, 3.87 and 3.11 (under 4; the load rose to 10 to 25 during runs 2 and 3, the machine being shared). Cold build 78.8, 74.9, 81.5 s; schema edit + regenerate + rebuild 75.9, 76.0, 77.4 s; service binary 11.11 MB in all three (and 11.1 MB at n=20, so it is flat in n); link peak 636.6, 662.2, 625.7 MB. The largest of each: cold 81.51 s, schema edit 77.40 s, service 11.11 MB, link 662.2 MB. Two earlier runs, run at once at load averages of 70 to 80, took 474 and 510 s cold and 396 and 351 s for the edit (and 633.9 and 636.3 MB, 11.11 MB): they say the times follow the machine's load, and are not used. Thresholds by the rule of the 500 entry: times 4x the largest, sizes and memory 1.5x. The service is twice the plain variant's 5.66 MB because it links the GraphQL runtime, which does not grow with n. A later -check run at load averages of 10 to 34 measured cold 171.9 s and schema edit 461.7 s, over the edit threshold: under that load the time thresholds fail, as the runs at load 70 did. Recalibrate the times from the first Linux CI run, and re-measure on an idle machine (followups, 1.0 release)",
+    "cold_build_s": 326.1,
+    "schema_edit_rebuild_s": 309.6,
+    "service_binary_mb": 16.7,
+    "link_peak_mb": 993
   }
 }

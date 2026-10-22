@@ -3,7 +3,9 @@
 // what velox costs it to build: a cold build, the rebuild after adding a field
 // to one schema and regenerating, a service's binary size and the linker's
 // peak memory. With -check it compares the measurements with
-// recorded thresholds and exits 1 when one is exceeded.
+// recorded thresholds and exits 1 when one is exceeded. With -graphql the
+// schemas also carry the velox-graphql annotations, velox-gen runs with that
+// plugin, and each service calls the GraphQL code of its five entities too.
 //
 // Every build runs under a -toolexec wrapper that reads the linker's peak
 // memory, so the times include that wrapper's overhead. The overhead is the
@@ -28,6 +30,7 @@ import (
 
 type config struct {
 	n, services int
+	graphql     bool   // generate the GraphQL code too, with the velox-graphql plugin
 	dir         string // where the application is written: empty or missing; a temporary directory when empty
 }
 
@@ -44,6 +47,7 @@ func main() {
 	var c config
 	flag.IntVar(&c.n, "n", 500, "entities (a multiple of 10)")
 	flag.IntVar(&c.services, "s", 100, "services")
+	flag.BoolVar(&c.graphql, "graphql", false, "also generate and link the GraphQL code (velox-graphql)")
 	thresholds := flag.String("check", "", "a thresholds file to check against")
 	asJSON := flag.Bool("json", false, "print the report as JSON")
 	flag.Parse()
@@ -60,13 +64,22 @@ func main() {
 			r.N, r.Services, r.ColdBuildS, r.SchemaEditRebuildS, r.ServiceBinaryMB, r.LinkPeakMB)
 	}
 	if *thresholds != "" {
-		if problems := check(r, c.n, *thresholds); len(problems) > 0 {
+		if problems := check(r, c.thresholdsKey(), *thresholds); len(problems) > 0 {
 			for _, p := range problems {
 				fmt.Fprintln(os.Stderr, "scale: over threshold:", p)
 			}
 			os.Exit(1)
 		}
 	}
+}
+
+// thresholdsKey is the key of thresholds.json that holds this configuration's
+// thresholds: the entities, and "-graphql" after them for the GraphQL variant.
+func (c config) thresholdsKey() string {
+	if c.graphql {
+		return strconv.Itoa(c.n) + "-graphql"
+	}
+	return strconv.Itoa(c.n)
 }
 
 // repo is the root of this repository: bench/scale's grandparent.
@@ -102,11 +115,15 @@ func run(c config) (report, error) {
 			return r, err
 		}
 	}
-	schemas, services := generate(c.n, c.services)
+	schemas, services := generate(c.n, c.services, c.graphql)
 	// The services import gen, which does not exist until velox-gen has run, and
 	// go mod tidy cannot resolve an import of a missing package: the module is
 	// written and tidied with the schemas alone, and the services follow gen.
-	if err := tempmod.Write(app, root, schemas); err != nil {
+	write := tempmod.Write
+	if c.graphql {
+		write = tempmod.WriteGraphQL
+	}
+	if err := write(app, root, schemas); err != nil {
 		return r, err
 	}
 	gen := filepath.Join(tools, "velox-gen")
@@ -118,8 +135,16 @@ func run(c config) (report, error) {
 		return r, err
 	}
 	velox := func() error {
-		cmd := exec.Command(gen, "-out", "gen", "./schema")
+		args := []string{"-out", "gen"}
+		if c.graphql {
+			args = append(args, "-plugin", "velox-graphql")
+		}
+		cmd := exec.Command(gen, append(args, "./schema")...)
 		cmd.Dir = app
+		if c.graphql {
+			// The plugin is a tool of the module, built by go tool, offline.
+			cmd.Env = append(os.Environ(), "GOFLAGS=-mod=mod", "GOPROXY=off", "GOWORK=off")
+		}
 		if out, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("velox-gen: %v\n%s", err, out)
 		}
@@ -206,10 +231,15 @@ const noteField = `field.String("note").Optional(),`
 //     twice on one schema, which Build refuses; the child's number makes the
 //     name unique.
 //
+// With graphql, the schemas also carry the annotations of velox-graphql: a
+// root query field (e<i>s), OrderField and WhereOps on name, and each service
+// calls the root connection function and the next edge's method of each of its
+// five entities. Every entity E<j> with j%10 < 5 has a next edge.
+//
 // Every foreign key is a plain field of the schema that holds it, as an inverse
 // edge needs one to bind with Field, and the edge is Required because Build
 // wants the field Optional exactly when the edge is not Required.
-func generate(n, services int) (schemas, svc map[string]string) {
+func generate(n, services int, graphql bool) (schemas, svc map[string]string) {
 	groups := n / 10
 	parent := func(k int) int { return 10 * ((k - 1) / 2) } // the head a group head k > 0 belongs to
 	downs := map[int][]int{}                                // head → the group heads that belong to it
@@ -219,7 +249,13 @@ func generate(n, services int) (schemas, svc map[string]string) {
 	schemas = map[string]string{}
 	for i := range n {
 		var fields, edges strings.Builder
-		fields.WriteString("\t\tfield.String(\"name\"),\n\t\tfield.Float(\"amount\"),\n\t\tfield.Time(\"created_at\"),\n\t\t" + noteField + "\n")
+		nameField, annotations, gqlImport := `field.String("name")`, "", ""
+		if graphql {
+			nameField = `field.String("name").Annotations(graphql.OrderField("NAME"), graphql.WhereOps())`
+			annotations = fmt.Sprintf("\nfunc (E%[1]d) Annotations() []schema.Annotation {\n\treturn []schema.Annotation{graphql.QueryField(\"e%[1]ds\")}\n}\n", i)
+			gqlImport = "\t\"github.com/syssam/velox2/contrib/graphql\"\n"
+		}
+		fields.WriteString("\t\t" + nameField + ",\n\t\tfield.Float(\"amount\"),\n\t\tfield.Time(\"created_at\"),\n\t\t" + noteField + "\n")
 		switch {
 		case i%10 != 0:
 			fields.WriteString("\t\tfield.Int64(\"prev_id\"),\n")
@@ -237,7 +273,7 @@ func generate(n, services int) (schemas, svc map[string]string) {
 		schemas[filepath.Join("schema", fmt.Sprintf("e%d.go", i))] = fmt.Sprintf(`package schema
 
 import (
-	"github.com/syssam/velox2/schema"
+%[4]s	"github.com/syssam/velox2/schema"
 	"github.com/syssam/velox2/schema/edge"
 	"github.com/syssam/velox2/schema/field"
 )
@@ -254,7 +290,7 @@ func (E%[1]d) Edges() []schema.Edge {
 	return []schema.Edge{
 %[3]s	}
 }
-`, i, fields.String(), edges.String())
+%[5]s`, i, fields.String(), edges.String(), gqlImport, annotations)
 	}
 	svc = map[string]string{}
 	for s := range services {
@@ -262,10 +298,17 @@ func (E%[1]d) Edges() []schema.Edge {
 		for m := range 5 {
 			e := 10*((s*7+m)%groups) + m
 			fmt.Fprintf(&use, "\tsink(db.Query[gen.E%d]().Where(gen.E%ds.ID.EQ(1)).Limit(1).SQL(ctx))\n", e, e)
+			if graphql {
+				fmt.Fprintf(&use, "\tgqlSink(gen.E%[1]dsConnection(ctx, nil, nil, nil, nil, nil, nil))\n\tgqlSink((&gen.E%[1]d{}).NextGQL(ctx, nil, nil, nil, nil, nil, nil))\n", e)
+			}
+		}
+		helper := ""
+		if graphql {
+			helper = "\nfunc gqlSink(v any, err error) { fmt.Println(v == nil, err) }\n"
 		}
 		svc[filepath.Join(fmt.Sprintf("s%d", s), "main.go")] = fmt.Sprintf(
-			"package main\n\nimport (\n\t\"context\"\n\t\"fmt\"\n\n\t\"github.com/syssam/velox2\"\n\t\"example.com/tmp/gen\"\n)\n\nfunc sink(s string, _ []any, _ error) { fmt.Println(len(s)) }\n\nfunc main() {\n\tctx := context.Background()\n\tdb := velox.Open(velox.Postgres, nil)\n%s}\n",
-			use.String())
+			"package main\n\nimport (\n\t\"context\"\n\t\"fmt\"\n\n\t\"github.com/syssam/velox2\"\n\t\"example.com/tmp/gen\"\n)\n\nfunc sink(s string, _ []any, _ error) { fmt.Println(len(s)) }\n%s\nfunc main() {\n\tctx := context.Background()\n\tdb := velox.Open(velox.Postgres, nil)\n%s}\n",
+			helper, use.String())
 	}
 	return schemas, svc
 }
@@ -343,21 +386,22 @@ func peakMB(file string) (float64, error) {
 	return float64(peak) / (1 << 20), nil
 }
 
-// check compares r with the thresholds recorded for n entities.
-func check(r report, n int, path string) []string {
+// check compares r with the thresholds recorded under key ("500", or
+// "500-graphql" for the GraphQL variant).
+func check(r report, key, path string) []string {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return []string{err.Error()}
 	}
-	// A key starting with _ inside an n object is a comment. A top-level _ key
+	// A key starting with _ inside a thresholds object is a comment. A top-level _ key
 	// is not supported: its value is not an object, and parsing fails.
 	var all map[string]map[string]any
 	if err := json.Unmarshal(b, &all); err != nil {
 		return []string{err.Error()}
 	}
-	th, ok := all[strconv.Itoa(n)]
+	th, ok := all[key]
 	if !ok {
-		return []string{fmt.Sprintf("no thresholds for n=%d in %s", n, path)}
+		return []string{fmt.Sprintf("no thresholds for n=%s in %s", key, path)}
 	}
 	got := map[string]float64{
 		"cold_build_s": r.ColdBuildS, "schema_edit_rebuild_s": r.SchemaEditRebuildS,
