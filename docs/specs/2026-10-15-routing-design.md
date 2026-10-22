@@ -126,7 +126,7 @@ Fail closed:
 
 ## 7. Observability
 
-`contrib/otel` (observability design §2) adds three span attributes:
+`contrib/veloxotel` (observability design §2) adds three span attributes:
 - `velox.route.shard`;
 - `velox.route.replica`, a bool;
 - `velox.route.fallback`.

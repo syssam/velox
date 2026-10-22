@@ -1,4 +1,4 @@
-module github.com/syssam/velox2/contrib/otel
+module github.com/syssam/velox2/contrib/veloxotel
 
 go 1.27.0
 

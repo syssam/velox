@@ -114,7 +114,7 @@ Left by the observability plan:
 - Inside a transaction, a statement span's parent is always `velox.tx`, even when the application started a span of its own inside `fn` and passed its context (a spec choice).
 - A statement with no application frame within 64 frames (an `Iter` driven through `iter.Pull`, say) has a zero `Caller`.
 - The `TxInfo` allocated per transaction when hooks are configured has no budget of its own; `TestTxAllocationBudget` pins only that a DB with nothing configured makes none.
-- `contrib/otel`'s `go.mod` requires velox2 at a placeholder version, with a `replace` to the repository root, until velox tags releases.
+- `contrib/veloxotel`'s `go.mod` requires velox2 at a placeholder version, with a `replace` to the repository root, until velox tags releases.
 - Test gaps left by the task reviews:
   - fingerprints: no test asserts that the render cache's byte bound counts the fingerprint's bytes;
   - call sites: no concurrent test of the program-counter cache at the cache's bound;
@@ -123,7 +123,7 @@ Left by the observability plan:
   - transactions: no test of `RetrySerializable` exhausted with a `TxAround` hook.
 - Doc and cost nits:
   - `render` stays in non-test code only for the tests.
-  - `contrib/otel`'s `record` allocates its attribute set even under a no-op `MeterProvider`; an instrument-enabled check would skip it.
+  - `contrib/veloxotel`'s `record` allocates its attribute set even under a no-op `MeterProvider`; an instrument-enabled check would skip it.
 
 ## Left by schema plan 1
 
@@ -159,7 +159,7 @@ Left by the observability plan:
 ## Left by routing
 
 - Read-only transactions on replicas: `db.Tx(ctx, fn, ReadOnly())` runs on the primary, like every transaction.
-- `TxInfo` has no shard, so `contrib/otel`'s transaction spans carry no `velox.route.shard`; their statements' spans do.
+- `TxInfo` has no shard, so `contrib/veloxotel`'s transaction spans carry no `velox.route.shard`; their statements' spans do.
 - The session pin covers every shard and every DB the context is used with, not one shard: it errs toward the primary.
 - A savepoint (nested `Tx`) does not check its context's shard; its statements do.
 - An Around hook that replaces `*st` after `next` unpins the query's `With` loads, which run where `st.ran` says.
@@ -241,8 +241,8 @@ From the final review of API plan 1 (2026-10-20). Each item names the plan that 
 - [x] **API plan 2:** `internal/gen` comments cite "Ruling N" of old plans (`lower.go`, `build.go`, `methods.go`). They are not public, but they rot; the velox-gen rewrite should drop them. The citation test scans only public packages.
 - **API plan 5 (dialects):** `SQL(ctx)` of a statement with a policy `Allow` or a zero-Pred failure is tested on PostgreSQL only; add it to the dialect test sweep.
 - [x] **API plan 3:** the citation scan (`TestGodocCitesNoSpec`) did not cover the contrib modules. `contrib/graphql` has its own, over `graphql`, `veloxgql` and `gqlimpl`.
-- **API plan 4:** the same for `contrib/otel`, whose `metrics.go` and `attrs.go` still say "spec §2.x".
-- **API plan 4 (otel):** `contrib/otel/attrs.go` re-implements the core's unexported `Op.raw()` and `Statement.reads()`. Export `Op.Raw()` and `Op.Reads()` (additive), so hooks and adapters share one definition.
+- **API plan 4:** the same for `contrib/veloxotel`, whose `metrics.go` and `attrs.go` still say "spec §2.x".
+- **API plan 4 (otel):** `contrib/veloxotel/attrs.go` re-implements the core's unexported `Op.raw()` and `Statement.reads()`. Export `Op.Raw()` and `Op.Reads()` (additive), so hooks and adapters share one definition.
 - **Perf pass with the pgx split:** `Save` allocates its `cols` slice. No API impact, and no budget pins Save.
 - Accepted, no change: an empty `InsertAll` skips the transaction and dry-run checks (it sends nothing; documented on `Exec`); the Save compile test's cgo note.
 

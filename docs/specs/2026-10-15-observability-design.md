@@ -12,22 +12,24 @@ It adds:
 - statement results for hooks;
 - a transaction hook.
 
+> **Note, 2026-10-22 (API plan 4).** The adapter's module path is `github.com/syssam/velox2/contrib/veloxotel`, matching its package name; it was `contrib/otel`. The paths below say so.
+
 The rulings made while planning and building it (`docs/plans/2026-10-15-observability.md`, "Rulings this plan makes on the spec", and the task reviews) are written into the sections below.
 
-Core gains these with no new dependency. A separate module, `contrib/otel`, turns them into OpenTelemetry spans and metrics. It plugs into Core's pipeline (Core §5) and into the policy design's statement fields (`2026-10-14-policy-design.md` §2.3), and nothing else.
+Core gains these with no new dependency. A separate module, `contrib/veloxotel`, turns them into OpenTelemetry spans and metrics. It plugs into Core's pipeline (Core §5) and into the policy design's statement fields (`2026-10-14-policy-design.md` §2.3), and nothing else.
 
 ## Decisions
 
 Made by the author during design (2026-10-15):
 
-- **The OpenTelemetry adapter lives in `./contrib/otel`,** as its own Go module (`github.com/syssam/velox2/contrib/otel`). The core module keeps no OpenTelemetry dependency. Core exposes vendor-neutral data; any other vendor's adapter can use it.
+- **The OpenTelemetry adapter lives in `./contrib/veloxotel`,** as its own Go module (`github.com/syssam/velox2/contrib/veloxotel`). The core module keeps no OpenTelemetry dependency. Core exposes vendor-neutral data; any other vendor's adapter can use it.
 - **1.0 ships spans and metrics.** A slow-query log and log records are out of scope.
 - **The SQL comment carries stable values only:** the application, the call site, and context tags the application lists. It never carries a trace ID or a tenant.
   - pgx caches prepared statements by SQL text, so a per-request value would defeat its cache.
   - `pg_stat_activity` shows the text, which a per-request value makes hard to read.
   - PostgreSQL's `pg_stat_statements` and MySQL's digest normalise comments away, so a comment does not split their statistics. (This design first said it would; the final review corrected it.)
 - **Metric keys have bounded cardinality.** They are the database system, operation, table, entity and error type. The fingerprint is on every span; it is added to metrics only when the application asks.
-- **`./example` is a runnable example module.** It shows velox2's API end to end and gains a tracing section when `contrib/otel` exists. CI runs it.
+- **`./example` is a runnable example module.** It shows velox2's API end to end and gains a tracing section when `contrib/veloxotel` exists. CI runs it.
 
 ## Success criteria
 
@@ -92,7 +94,7 @@ SELECT … FROM "invoices" WHERE … /*app='billing',caller='billing%2Finvoice.g
 - **`SQL(ctx)`** includes the comment, with the call site of the `SQL` call: it returns the text that would be sent from there.
 - **Misuse:** `WithSQLComment` panics when it is called, in `Open`'s argument list, as `WithAround(nil)` does: with an empty `app`, or a listed tag name that is empty, repeated, `app` or `caller`.
 - **Cache safety:** applications must list only tags whose values are stable per code path, such as a route template, never an ID. The documentation says so with the reasons: pgx caches prepared statements by their text, so a per-request value would prepare a statement per request, and it would make `pg_stat_activity` hard to read. `pg_stat_statements` and MySQL's digest normalise comments away, so their statistics are not split.
-- **Call sites and pgx's statement cache:** with `WithCallers` on, each call site of a shape is a distinct statement text, so pgx prepares one statement per call site per connection. One shape called from many sites multiplies statements against pgx's per-connection cache, which holds 512 by default. The documentation (`WithSQLComment`, and `contrib/otel`'s `Config` and package doc) says to size `pgxpool.Config.ConnConfig.StatementCacheCapacity` for it, or to use `WithSQLComment` without callers.
+- **Call sites and pgx's statement cache:** with `WithCallers` on, each call site of a shape is a distinct statement text, so pgx prepares one statement per call site per connection. One shape called from many sites multiplies statements against pgx's per-connection cache, which holds 512 by default. The documentation (`WithSQLComment`, and `contrib/veloxotel`'s `Config` and package doc) says to size `pgxpool.Config.ConnConfig.StatementCacheCapacity` for it, or to use `WithSQLComment` without callers.
 
 ### 1.4 Tags
 
@@ -159,9 +161,9 @@ type TxOutcome uint8 // TxCommit, TxRollback or TxError; String gives "commit", 
 
 `Statement` gains `Fingerprint string`, `Caller Caller`, `Tags []Tag` (with `Tag{Key, Value string}`), `Result Result`, `Tx *TxInfo` and `Dialect Dialect`. An `Around` hook has only the statement, and §2.1's `db.system.name` needs the dialect.
 
-## 2. contrib/otel
+## 2. contrib/veloxotel
 
-Module `github.com/syssam/velox2/contrib/otel`, package `veloxotel`. It requires `go.opentelemetry.io/otel` and its `trace` and `metric` APIs, but no SDK.
+Module `github.com/syssam/velox2/contrib/veloxotel`, package `veloxotel`. It requires `go.opentelemetry.io/otel` and its `trace` and `metric` APIs, but no SDK.
 
 ```go
 db := velox.OpenPgx(pool, veloxotel.Options(veloxotel.Config{
@@ -174,7 +176,7 @@ db := velox.OpenPgx(pool, veloxotel.Options(veloxotel.Config{
 
 `Options` returns the `velox.Option`s: `WithAround`, `WithTxAround`, `WithCallers`, and `WithSQLComment` when `App` is set. An application that wants only part of this can use `veloxotel.Around(cfg)` and `veloxotel.TxAround(cfg)` alone.
 
-The tracer and the meter are both named `github.com/syssam/velox2/contrib/otel`, with no version until velox tags releases. An error creating an instrument goes to `otel.Handle`, and the instrument the API returned is used.
+The tracer and the meter are both named `github.com/syssam/velox2/contrib/veloxotel`, with no version until velox tags releases. An error creating an instrument goes to `otel.Handle`, and the instrument the API returned is used.
 
 The adapter never recovers a panic. Its spans are ended in deferred functions, so a panic in `fn` or in an `Iter` loop body ends them, with status Error and the description `panic`, and goes on unchanged.
 
@@ -248,9 +250,9 @@ Histogram boundaries are the conventions' recommended ones for durations (from 0
 
 ### 2.4 Versions
 
-`contrib/otel` tracks the OpenTelemetry Go API's stable `v1` line, pinned at `v1.47.0`, the latest stable release on 2026-10-15. Semantic-convention attribute names are written out as constants in the adapter (`attrs.go`), not imported from a `semconv` package version. That keeps the dependency to the stable API, and the names change only with a velox release that says so.
+`contrib/veloxotel` tracks the OpenTelemetry Go API's stable `v1` line, pinned at `v1.47.0`, the latest stable release on 2026-10-15. Semantic-convention attribute names are written out as constants in the adapter (`attrs.go`), not imported from a `semconv` package version. That keeps the dependency to the stable API, and the names change only with a velox release that says so.
 
-The rule is about `contrib/otel`'s own imports: its package imports the OpenTelemetry API (`otel`, `attribute`, `codes`, `trace`, `metric`), velox and the standard library, and no SDK or `semconv` package. The API's own `trace` package imports a `semconv` package, which `contrib/otel` does not control, so `TestNoSDKDependency` checks the package's imports for `semconv` and its whole dependency graph for the SDK.
+The rule is about `contrib/veloxotel`'s own imports: its package imports the OpenTelemetry API (`otel`, `attribute`, `codes`, `trace`, `metric`), velox and the standard library, and no SDK or `semconv` package. The API's own `trace` package imports a `semconv` package, which `contrib/veloxotel` does not control, so `TestNoSDKDependency` checks the package's imports for `semconv` and its whole dependency graph for the SDK.
 
 ## 3. Example
 
@@ -263,12 +265,12 @@ A golden-output test keeps it in step with the API, and CI runs it.
 
 This sub-project adds a tracing example. The example module was split after this design was written into one directory per topic (`start`, `relations`, `tenant`, `policy`, `hooks`, `tx`, `tour`), each a `main` package with its own entity package, README and golden test, indexed by `example/README.md`. The tracing example is one more of them, `example/otel`:
 - its entity package (`otel/model`) is the billing team's `Invoice`, with its generated file;
-- it configures `contrib/otel` with the SDK's in-memory span exporter and a manual metric reader;
+- it configures `contrib/veloxotel` with the SDK's in-memory span exporter and a manual metric reader;
 - a request span, carrying the `route` tag, pays an invoice in a transaction;
 - it prints the span tree, with each statement's fingerprint, call site (`otel/main.go:<line>`) and the SQL comment sent, then the metric points recorded;
 - it prints no span ID, time or duration, so its golden output is deterministic.
 
-The example module requires `contrib/otel` (with a `replace` to `../contrib/otel`) and the OpenTelemetry SDK; only the otel example imports them.
+The example module requires `contrib/veloxotel` (with a `replace` to `../contrib/veloxotel`) and the OpenTelemetry SDK; only the otel example imports them.
 
 ## 4. Errors
 
@@ -284,15 +286,15 @@ Observability never changes what a statement returns. A panic in the adapter is 
   - **Statement fields:** `Result` for reads and writes, and `Tx` on statements inside `db.Tx` and its savepoints.
   - **`TxAround`:** ordering, retries and errors.
   - **Budgets:** the tests unchanged with nothing configured, and a new budget test with callers and comments on.
-- **`contrib/otel`,** with OpenTelemetry's in-memory span exporter and a manual metric reader, on a `database/sql` fake driver in its test files (velox's fake executor is in the root package's test files, which another module cannot import):
+- **`contrib/veloxotel`,** with OpenTelemetry's in-memory span exporter and a manual metric reader, on a `database/sql` fake driver in its test files (velox's fake executor is in the root package's test files, which another module cannot import):
   - span names and attributes for every operation;
   - error types;
   - the transaction span tree when the application passes its own context;
   - one span per retried attempt;
   - metric instruments and their attribute sets;
   - fingerprints excluded from metrics by default.
-- **Real database:** PostgreSQL under pgx in `contrib/otel`'s tests, run by `scripts/ci-local.sh` under `VELOX_TEST_POSTGRES`. The commented statement uses pgx's statement cache: `TestPgxPreparesACommentedStatementOnce` runs one call site three times, each with another tag the comment does not list, and finds one statement in `pg_prepared_statements`; a second call site makes two.
-- **CI:** `scripts/ci-local.sh` and the GitHub workflow run `contrib/otel`'s and `example`'s tests, vet and lint.
+- **Real database:** PostgreSQL under pgx in `contrib/veloxotel`'s tests, run by `scripts/ci-local.sh` under `VELOX_TEST_POSTGRES`. The commented statement uses pgx's statement cache: `TestPgxPreparesACommentedStatementOnce` runs one call site three times, each with another tag the comment does not list, and finds one statement in `pg_prepared_statements`; a second call site makes two.
+- **CI:** `scripts/ci-local.sh` and the GitHub workflow run `contrib/veloxotel`'s and `example`'s tests, vet and lint.
 
 ## 6. Performance
 
@@ -300,7 +302,7 @@ Observability never changes what a statement returns. A panic in the adapter is 
 - **`WithCallers` and `WithSQLComment` on, cached statement:** velox adds at most 1 allocation per statement over the same statement without them, and aims at 300 ns; measured above it, see below.
   - The allocation is asserted: `TestObservedOneRowBudget` (7 allocations against 6).
   - The time is measured, not asserted, as Core §8 does for its own times, because times vary between machines and under `-race`. It is read from `BenchmarkOneRow` against `BenchmarkOneRowObserved`.
-- **`contrib/otel`:** its cost beyond OpenTelemetry's SDK is benchmarked and reported, not budgeted: `BenchmarkAdapter` (a one-row read with `Options`, on an SDK tracer provider with a discarding exporter and a manual metric reader) against `BenchmarkBareSpan` (the same read, with an `Around` hook that only starts and ends one span).
+- **`contrib/veloxotel`:** its cost beyond OpenTelemetry's SDK is benchmarked and reported, not budgeted: `BenchmarkAdapter` (a one-row read with `Options`, on an SDK tracer provider with a discarding exporter and a manual metric reader) against `BenchmarkBareSpan` (the same read, with an `Around` hook that only starts and ends one span).
 
 Measured on 2026-10-15, darwin/arm64 (Apple M3 Max, 14 cores), against the fake driver. The machine was never quiet while this sub-project was built, so each row gives its load average (1 minute):
 
@@ -315,7 +317,7 @@ Measured on 2026-10-15, darwin/arm64 (Apple M3 Max, 14 cores), against the fake 
 - **The 300 ns aim is exceeded.** The medians put velox's added time at about 480 to 520 ns; the minimum, the figure least affected by the load, at 340 ns. A profile taken with that minimum split the 340 ns into the comment's join (about 80 ns) and one `runtime.Callers` (about 260 ns; unwinding costs about 60 ns a frame, the two skipped ones included). The first unwind is already sized to the last call site's depth (§1.2), so most of what remains is the unwinder's own cost. A quiet machine should re-measure before the number is cut further or the aim changed.
 - **Runs at a load average of 39 to 52,** earlier the same day and while the transaction metrics were built, are not in the table: their medians moved by up to 4x between runs, and in one `-count 10` run the observed read's median was below the plain one's.
 - **The allocations are stable** in every run: the observed read makes 1 more than the plain one, and the adapter 16 more than a bare span. The adapter's 16 are its metric attribute set (3), the span's attribute slice and start options, the SDK's handling of the extra attributes, and the call-site lookup.
-- **`contrib/otel`'s time** is the SDK's as much as the adapter's: most of the difference is the SDK storing the span's attributes and recording two histogram points. For scale, a database round trip is typically 100 µs or more.
+- **`contrib/veloxotel`'s time** is the SDK's as much as the adapter's: most of the difference is the SDK storing the span's attributes and recording two histogram points. For scale, a database round trip is typically 100 µs or more.
 
 ## 7. Out of scope
 

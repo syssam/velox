@@ -69,8 +69,8 @@ jobs:
           go -C graphql tool gqlgen generate
           git diff --exit-code HEAD -- graphql/graph
           test -z "$(git ls-files --others --exclude-standard -- graphql/graph)"
-      - name: contrib/otel
-        working-directory: contrib/otel
+      - name: contrib/veloxotel
+        working-directory: contrib/veloxotel
         run: |
           test -z "$(gofmt -l .)"
           go vet ./...

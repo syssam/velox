@@ -1,4 +1,4 @@
-// Command otel traces velox with contrib/otel. A request pays an invoice in
+// Command otel traces velox with contrib/veloxotel. A request pays an invoice in
 // a transaction; the program prints the spans that made, with each
 // statement's fingerprint, Go call site and the SQL comment sent, and the
 // metric points recorded. It exports to memory, so it needs no collector.
@@ -18,7 +18,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/syssam/velox2"
-	veloxotel "github.com/syssam/velox2/contrib/otel"
+	"github.com/syssam/velox2/contrib/veloxotel"
 	"github.com/syssam/velox2/example/otel/gen"
 )
 

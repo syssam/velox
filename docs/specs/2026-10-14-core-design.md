@@ -509,7 +509,7 @@ build ─▶ rewrite ─▶ render ─▶ route ─▶ execute ─▶ scan
 | rewrite | Ordered hooks may add predicates, set assignments, or refuse the statement | Tenant scoping, row-level policy, guardrails (sub-project 2) |
 | render | The dialect turns the statement into SQL and arguments, and the fingerprint, stored in the render cache; observability appends the SQL comment after rendering | Dialects; observability (sub-project 3) |
 | route | Picks the executor: primary, replica, shard | Routing (sub-project 4); default: the `DB`'s own connection |
-| execute | Ordered `around` hooks wrap running the statement and reading its rows: the innermost `next` sends it through the executor (`database/sql` or pgx), scans every row (the scan stage) and closes the rows before it returns, so a span or a deadline covers the whole query; with `Iter`, the caller's loop body runs inside it too | Spans and metrics (`contrib/otel`), retries |
+| execute | Ordered `around` hooks wrap running the statement and reading its rows: the innermost `next` sends it through the executor (`database/sql` or pgx), scans every row (the scan stage) and closes the rows before it returns, so a span or a deadline covers the whole query; with `Iter`, the caller's loop body runs inside it too | Spans and metrics (`contrib/veloxotel`), retries |
 | scan | Rows into entities through the generated scan plan, inside execute's `next` | — |
 
 The pipeline is configured on `velox.Open` and immutable afterwards. Core

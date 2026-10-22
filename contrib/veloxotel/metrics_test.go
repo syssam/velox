@@ -14,7 +14,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/syssam/velox2"
-	veloxotel "github.com/syssam/velox2/contrib/otel"
+	"github.com/syssam/velox2/contrib/veloxotel"
 	"github.com/syssam/velox2/internal/testmodel"
 )
 
@@ -46,7 +46,7 @@ func collect(t *testing.T, r *sdkmetric.ManualReader) map[string]metricdata.Metr
 	}
 	m := map[string]metricdata.Metrics{}
 	for _, sm := range rm.ScopeMetrics {
-		if sm.Scope.Name != "github.com/syssam/velox2/contrib/otel" {
+		if sm.Scope.Name != "github.com/syssam/velox2/contrib/veloxotel" {
 			t.Errorf("scope %q", sm.Scope.Name)
 		}
 		for _, x := range sm.Metrics {

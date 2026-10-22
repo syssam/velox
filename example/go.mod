@@ -12,7 +12,7 @@ require (
 	github.com/99designs/gqlgen v0.17.86
 	github.com/syssam/velox2 v0.0.0-00010101000000-000000000000
 	github.com/syssam/velox2/contrib/graphql v0.0.0-00010101000000-000000000000
-	github.com/syssam/velox2/contrib/otel v0.0.0-00010101000000-000000000000
+	github.com/syssam/velox2/contrib/veloxotel v0.0.0-00010101000000-000000000000
 	github.com/vektah/gqlparser/v2 v2.5.59
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/sdk v1.47.0
@@ -56,6 +56,6 @@ require (
 
 replace github.com/syssam/velox2 => ../
 
-replace github.com/syssam/velox2/contrib/otel => ../contrib/otel
+replace github.com/syssam/velox2/contrib/veloxotel => ../contrib/veloxotel
 
 replace github.com/syssam/velox2/contrib/graphql => ../contrib/graphql

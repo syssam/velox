@@ -266,7 +266,7 @@ velox2/
   dialect/sql/     the database/sql executor
   cmd/velox-gen/   the generator command
   internal/gen/    the generator: load, model, validate, write
-  contrib/otel/ contrib/graphql/ contrib/grpc/
+  contrib/veloxotel/ contrib/graphql/ contrib/grpc/
   example/ docs/ scripts/ bench/
 ```
 

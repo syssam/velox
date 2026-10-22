@@ -50,7 +50,7 @@ func Around(cfg Config) velox.Around { return newAdapter(cfg).around }
 func TxAround(cfg Config) velox.TxAround { return newAdapter(cfg).txAround }
 
 // scope is the instrumentation scope: the tracer's and meter's name.
-const scope = "github.com/syssam/velox2/contrib/otel"
+const scope = "github.com/syssam/velox2/contrib/veloxotel"
 
 // adapter turns velox's statements and transactions into spans and metric
 // points, for one Config.

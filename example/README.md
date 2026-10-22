@@ -14,7 +14,7 @@ responses of its server instead).
 | [hooks](hooks) | The typed `Hooks()` of an entity: an insert hook deriving a field, an update hook that reads and sets values through a `Mutation` and writes an audit row on the write's DB (`m.DB()`; inside `db.Tx` it commits or rolls back with the write), a delete hook narrowing with `Where`, `On`, a generic hook any entity can list, `Save` writing back, a dry run that refuses the hook's audit write | `go run ./hooks` |
 | [tx](tx) | `db.Tx` commit and rollback, a nested `Tx` savepoint, `ConstraintError`, `TxRetrySerializable`, `TxTimeout` and `WithDeadlines` | `go run ./tx` |
 | [routing](routing) | `OpenShards` with `WithShardFor` choosing a shard by tenant, a read replica, `WithSession` pinning a request's reads to the primary after its write, `ReadPrimary`, `OnShard`, `ErrNoShard`, and `Statement.Route`. SQLite files, one per database | `go run ./routing` |
-| [otel](otel) | Tracing and metrics with `contrib/otel` on an in-memory exporter: the span tree of a request and its transaction, fingerprints, call sites, the SQL comment sent, and the metric points | `go run ./otel` |
+| [otel](otel) | Tracing and metrics with `contrib/veloxotel` on an in-memory exporter: the span tree of a request and its transaction, fingerprints, call sites, the SQL comment sent, and the metric points | `go run ./otel` |
 | [graphql](graphql) | A gqlgen server on the schema velox-graphql generates: `node`/`nodes` by global ID, keyset-paged connections with `orderBy` and `where`, edges (a many-to-many among them), a renamed type, tenant scoping through all of them, and a sensitive field left out. Its test sends real GraphQL over HTTP and checks the responses and the SQL | `go run ./graphql` |
 | [tour](tour) | One walkthrough that touches everything once | `go run ./tour` |
 
@@ -72,7 +72,7 @@ anything the examples use. In a module of your own, add the tool with
 `go get -tool github.com/syssam/velox2/cmd/velox-gen` (and, for GraphQL,
 `github.com/syssam/velox2/contrib/graphql/cmd/velox-graphql` and
 `github.com/99designs/gqlgen`). This module instead points
-`github.com/syssam/velox2` (which holds the generator), `contrib/otel` and
+`github.com/syssam/velox2` (which holds the generator), `contrib/veloxotel` and
 `contrib/graphql` at the directories beside it with `replace` lines, so it
 always builds against the code there. Only the otel example uses the
 OpenTelemetry SDK, and only the graphql example gqlgen.

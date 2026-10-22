@@ -10,7 +10,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	"github.com/syssam/velox2"
-	veloxotel "github.com/syssam/velox2/contrib/otel"
+	"github.com/syssam/velox2/contrib/veloxotel"
 	"github.com/syssam/velox2/internal/testmodel"
 )
 

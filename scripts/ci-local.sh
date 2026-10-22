@@ -54,11 +54,11 @@ bin/velox-gen verify -out internal/testmodel ./internal/testmodel/schema
   test -z "$(git ls-files --others --exclude-standard -- graphql/graph)"
 )
 
-# contrib/otel is its own module: its own vet, lint and tests. Its PostgreSQL
+# contrib/veloxotel is its own module: its own vet, lint and tests. Its PostgreSQL
 # test runs under VELOX_TEST_POSTGRES, exported above.
 (
-  cd contrib/otel
-  test -z "$(gofmt -l .)" || { echo "gofmt needed in contrib/otel:"; gofmt -l .; exit 1; }
+  cd contrib/veloxotel
+  test -z "$(gofmt -l .)" || { echo "gofmt needed in contrib/veloxotel:"; gofmt -l .; exit 1; }
   go vet ./...
   go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
   go test -race -count=1 ./...
