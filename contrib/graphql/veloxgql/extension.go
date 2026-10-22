@@ -219,7 +219,8 @@ func (e *Extension) MutateOperationContext(_ context.Context, rc *graphql.Operat
 		return nil
 	}
 	cost := Cost(e.schema, rc.Operation, rc.Variables, e.limits)
-	if cost <= e.limits.MaxCost {
+	// A negative cost cannot come from Cost; it is refused as saturated.
+	if cost >= 0 && cost <= e.limits.MaxCost {
 		return nil
 	}
 	err := &shared.Error{

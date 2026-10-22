@@ -1,14 +1,18 @@
 package veloxgql_test
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/99designs/gqlgen/graphql"
 	"github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/validator"
 
+	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
 )
 
@@ -177,6 +181,83 @@ func TestCostNodesAndLists(t *testing.T) {
 	} {
 		if got := costOf(t, c.query, c.vars, l); got != c.want {
 			t.Errorf("%s: cost %d, want %d", c.name, got, c.want)
+		}
+	}
+}
+
+// saturating is a query whose cost saturates by itself.
+const saturating = `users(first: 1000000) { edges { node { posts(first: 1000000) { edges { node { author { posts(first: 1000000) { edges { node { author { posts(first: 1000000) { edges { node { author { posts(first: 1000000) { totalCount } } } } } } } } } } } } } } } }`
+
+// saturatingUser is a selection on a User whose cost saturates by itself.
+const saturatingUser = `posts(first: 1000000) { edges { node { author { posts(first: 1000000) { edges { node { author { posts(first: 1000000) { edges { node { author { posts(first: 1000000) { totalCount } } } } } } } } } } } } }`
+
+// TestCostSaturationAdds: sums of saturated costs stay saturated and never
+// wrap to a negative cost, which would pass any MaxCost.
+func TestCostSaturationAdds(t *testing.T) {
+	l := veloxgql.DefaultLimits()
+	for _, c := range []struct{ name, query string }{
+		{"two aliases", `{ a: ` + saturating + ` b: ` + saturating + ` }`},
+		{"three aliases", `{ a: ` + saturating + ` b: ` + saturating + ` c: ` + saturating + ` }`},
+		{"four aliases", `{ a: ` + saturating + ` b: ` + saturating + ` c: ` + saturating + ` d: ` + saturating + ` }`},
+		{"under a multiplier", `{ users(first: 100) { edges { node { posts(first: 100) { edges { node { author { a: ` + saturatingUser + ` b: ` + saturatingUser + ` } } } } } } } }`},
+		{"a saturated fragment spread twice", `{ ...F ...F } fragment F on Query { ` + saturating + ` }`},
+	} {
+		if got := costOf(t, c.query, nil, l); got != 1<<62 {
+			t.Errorf("%s: cost %d, want 1<<62", c.name, got)
+		}
+	}
+}
+
+// TestCostJSONNumber: variables as gqlgen decodes them over HTTP are
+// json.Number, and are read.
+func TestCostJSONNumber(t *testing.T) {
+	l := veloxgql.DefaultLimits()
+	const q = `query ($n: Int) { users(first: $n) { edges { node { name } } } }`
+	if got, want := costOf(t, q, map[string]any{"n": json.Number("7")}, l), 1+7*3; got != want {
+		t.Errorf("json.Number 7: cost %d, want %d", got, want)
+	}
+}
+
+// TestCostNegativeFirst: a negative first is refused by the resolver, and
+// counts as 0 here.
+func TestCostNegativeFirst(t *testing.T) {
+	l := veloxgql.DefaultLimits()
+	if got := costOf(t, `{ users(first: -5) { edges { node { name } } } }`, nil, l); got != 1 {
+		t.Errorf("first: -5: cost %d, want 1", got)
+	}
+}
+
+// TestCostConnectionWithoutArguments: a field of a connection type that has
+// no first and last arguments costs MaxPage, the safer value.
+func TestCostConnectionWithoutArguments(t *testing.T) {
+	schema := gqlparser.MustLoadSchema(&ast.Source{Input: costSDL + `extend type User { allPosts: PostConnection! }`})
+	doc, errs := gqlparser.LoadQueryWithRules(schema, `{ users(first: 1) { edges { node { allPosts { totalCount } } } } }`, nil)
+	if len(errs) > 0 {
+		t.Fatal(errs)
+	}
+	l := veloxgql.DefaultLimits()
+	if got, want := veloxgql.Cost(schema, doc.Operations[0], nil, l), 1+1*(1+1+(1+100*1)); got != want {
+		t.Errorf("cost %d, want %d", got, want)
+	}
+}
+
+// TestCostSelectsOperation: the Extension costs the operation gqlgen
+// selected, not the first of the document, and refuses a saturated one.
+func TestCostSelectsOperation(t *testing.T) {
+	ext := veloxgql.NewExtension(&velox.DB{}, veloxgql.WithLimits(veloxgql.Limits{MaxCost: 50}))
+	schema := gqlparser.MustLoadSchema(&ast.Source{Input: costSDL})
+	if err := ext.Validate(&graphql.ExecutableSchemaMock{SchemaFunc: func() *ast.Schema { return schema }}); err != nil {
+		t.Fatal(err)
+	}
+	doc, errs := gqlparser.LoadQueryWithRules(schema, `query Cheap { users(first: 1) { totalCount } } query Dear { users(first: 100) { totalCount } } query Huge { a: `+saturating+` b: `+saturating+` }`, nil)
+	if len(errs) > 0 {
+		t.Fatal(errs)
+	}
+	for name, refused := range map[string]bool{"Cheap": false, "Dear": true, "Huge": true} {
+		op := doc.Operations.ForName(name)
+		err := ext.MutateOperationContext(context.Background(), &graphql.OperationContext{Operation: op, Doc: doc, OperationName: name})
+		if (err != nil) != refused {
+			t.Errorf("%s: error %v, refused want %v", name, err, refused)
 		}
 	}
 }

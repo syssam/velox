@@ -9,21 +9,24 @@ import (
 	"github.com/vektah/gqlparser/v2/ast"
 )
 
-// maxCost is where a cost saturates: far past any limit, and far enough
-// from the int range that adding two saturated costs cannot wrap.
+// maxCost is where a cost saturates: far past any limit. add and mul check
+// before they compute, so no sum or product of costs in [0, maxCost] wraps.
 const maxCost = 1 << 62
 
 // Cost is what op costs under l, with vars its variables:
 //   - each field costs 1, plus its children's cost times its multiplier;
-//   - a connection field (one with first and last arguments whose type has
-//     edges and pageInfo) multiplies by first or last, or by l.MaxPage when
-//     neither is given; the edges field of a connection type multiplies by 1;
+//   - a connection field (one whose type has edges and pageInfo) multiplies
+//     by first or last, or by l.MaxPage when neither is given or the field
+//     has no such arguments, the safer count; the edges field of a
+//     connection type multiplies by 1;
 //   - the root field nodes multiplies by the number of its ids;
 //   - any other field of a list of objects multiplies by l.MaxList;
 //   - every branch of a fragment counts, @skip and @include are not read,
 //     and __schema and __type cost nothing.
 //
-// The sum saturates at 1<<62, so huge arguments cannot wrap it. A named
+// Sums and products saturate at 1<<62 (math.MaxInt where int is smaller),
+// checked before they are computed, so huge arguments and many aliases cannot
+// wrap the cost to a small or negative number. A named
 // fragment is costed once, however often it is spread, so the walk is linear
 // in the document. schema is the server's; op is a parsed and validated
 // operation. Extension refuses a request whose Cost is over Limits.MaxCost
@@ -32,7 +35,7 @@ func Cost(schema *ast.Schema, op *ast.OperationDefinition, vars map[string]any, 
 	if schema == nil || op == nil {
 		return 0
 	}
-	c := &coster{schema: schema, vars: vars, l: l, frags: map[string]int{}}
+	c := &coster{schema: schema, vars: vars, l: l, frags: map[string]int64{}}
 	var root *ast.Definition
 	switch op.Operation {
 	case ast.Mutation:
@@ -42,7 +45,9 @@ func Cost(schema *ast.Schema, op *ast.OperationDefinition, vars map[string]any, 
 	default:
 		root = schema.Query
 	}
-	return int(c.set(op.SelectionSet, root, true))
+	// On a platform whose int is 32 bits a cost over math.MaxInt is
+	// math.MaxInt, which is over any limit.
+	return int(min(c.set(op.SelectionSet, root, true), math.MaxInt))
 }
 
 // coster is one Cost call's state.
@@ -52,7 +57,7 @@ type coster struct {
 	l      Limits
 	// frags are the costs of the fragments costed so far, by name; a
 	// fragment in progress is 0, so a cycle (which validation refuses) ends.
-	frags map[string]int
+	frags map[string]int64
 }
 
 // set is the cost of the selections of sels on a value of type parent.
@@ -80,7 +85,7 @@ func (c *coster) set(sels ast.SelectionSet, parent *ast.Definition, root bool) i
 // spread is the cost of a named fragment's selections, computed once.
 func (c *coster) spread(s *ast.FragmentSpread) int64 {
 	if n, ok := c.frags[s.Name]; ok {
-		return int64(n)
+		return n
 	}
 	c.frags[s.Name] = 0
 	def := s.Definition
@@ -89,7 +94,7 @@ func (c *coster) spread(s *ast.FragmentSpread) int64 {
 	}
 	p := c.schema.Types[def.TypeCondition]
 	n := c.set(def.SelectionSet, p, false)
-	c.frags[s.Name] = int(n)
+	c.frags[s.Name] = n
 	return n
 }
 
@@ -118,7 +123,7 @@ func (c *coster) field(f *ast.Field, parent *ast.Definition, root bool) int64 {
 // multiplier is how many times f's children are read.
 func (c *coster) multiplier(f *ast.Field, def *ast.FieldDefinition, parent, child *ast.Definition, root bool) int64 {
 	switch {
-	case isConnection(child) && def.Arguments.ForName("first") != nil && def.Arguments.ForName("last") != nil:
+	case isConnection(child):
 		for _, name := range []string{"first", "last"} {
 			if n, ok := c.intArg(f, name); ok {
 				return n
@@ -205,14 +210,19 @@ func boolInt(b bool) int64 {
 }
 
 // add is a+b, saturating at maxCost. Both are in [0, maxCost].
-func add(a, b int64) int64 { return min(a+b, maxCost) }
+func add(a, b int64) int64 {
+	if a > maxCost-b {
+		return maxCost
+	}
+	return a + b
+}
 
 // mul is a*b, saturating at maxCost. Both are in [0, maxCost].
 func mul(a, b int64) int64 {
 	if a == 0 || b == 0 {
 		return 0
 	}
-	if a > math.MaxInt64/b || a*b > maxCost {
+	if a > maxCost/b {
 		return maxCost
 	}
 	return a * b

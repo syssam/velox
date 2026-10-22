@@ -470,7 +470,7 @@ func TestRequestCost(t *testing.T) {
 	// 100 users, each with 100 posts, each with 100 tags: a million rows.
 	// users(first: 100) { edges { node { posts(first: 100) { edges { node {
 	// tags(first: 100) { totalCount } } } } } } } costs
-	// 1 + 100*(1+1+(1+100*(1+1+(1+100*1)))) = 1 + 100*(2+(1+100*103)) = 1031301.
+	// tags 1+100 = 101; its node 102 and edges 103; posts 1+100*103 = 10301; the user node 10302, edges 10303; users 1+100*10303 = 1030301.
 	s.do(t, request{
 		query: `{ users(first: 100) { edges { node { posts(first: 100) { edges { node { tags(first: 100) { totalCount } } } } } } } }`,
 		want: `{"errors": [{"message": "request is too costly: it costs 1030301, and the most is 100000",
