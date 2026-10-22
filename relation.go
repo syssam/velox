@@ -310,9 +310,10 @@ func (r Rel[E, T]) OrderBy[_ Lazy[T]](os ...Order[T]) Rel[E, T] {
 // rows in a statement of the join entity's own; with it, no statement is sent
 // for the join entity, so a Rewrite or Around hook that acts on the join
 // entity's statements does not see the read. A link the join table holds
-// twice relates its target to the owner once, as a plain load reads it. The ranking names its rank vx_rn and, through a join,
-// the owner's key vx_owner: a target column of either name cannot be read
-// with LimitEach.
+// twice relates its target to the owner once, as a plain load reads it.
+//
+// The ranking names its rank vx_rn and, through a join, the owner's key
+// vx_owner: a target column of either name cannot be read with LimitEach.
 func (r Rel[E, T]) LimitEach[_ Lazy[T]](n int) Rel[E, T] {
 	r.each = max(n, 0)
 	return r

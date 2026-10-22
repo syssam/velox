@@ -139,18 +139,25 @@
 // # Limits
 //
 // Limits caps what a client may ask for: MaxPage, MaxList, MaxFilterDepth,
-// MaxFilterWidth, MaxFilterNodes and MaxOrderTerms. An Extension has its
+// MaxFilterWidth, MaxFilterNodes, MaxOrderTerms and MaxCost. An Extension has its
 // own (WithLimits; a zero field is the default), which it puts in each
 // operation's context, and generated code reads them with LimitsFrom, which
 // gives DefaultLimits() in a context without them. The Extension refuses a
 // negative limit. MaxList is how many rows a list edge reads, and more fail
 // with velox.ErrTooManyRows.
 //
-// Every one of them bounds one argument or one edge, not a whole request:
-// connections nested in connections multiply (MaxPage rows, and a query for
-// each, at every level), and aliases repeat a field as often as the client
-// writes it. A server needs a limit on the cost of the request as well, such
-// as gqlgen's extension.FixedComplexityLimit.
+// Every one of them but MaxCost bounds one argument or one edge, not a whole
+// request: connections nested in connections multiply (MaxPage rows, and a
+// query for each, at every level), and aliases repeat a field as often as the
+// client writes it. MaxCost bounds the request. Cost computes what an
+// operation costs, as gqlgen's complexity recipe does: a field costs 1 plus
+// its children's cost times its multiplier, which is first or last for a
+// connection, the number of ids for nodes and MaxList for another list of
+// objects; every alias and every branch of a fragment counts, @skip and
+// @include are not read, and introspection is free. The Extension refuses a
+// request over MaxCost with ErrTooCostly (CodeTooCostly, COST_LIMIT_EXCEEDED),
+// before any resolver, so before any statement. The default MaxCost, 100000,
+// lets two levels of full pages through (about 30000) and not three.
 //
 // Nothing in the package runs at program start.
 package veloxgql

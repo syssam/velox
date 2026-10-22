@@ -43,11 +43,13 @@ func LoadEach[E, T any](ctx context.Context, q Query[T], r Rel[E, T], owners []*
 // CountEach returns, for each of owners in order, the number of q's rows
 // related to it through r, as LoadEach would read them without a limit:
 // SELECT <owner key>, COUNT(*) … GROUP BY <owner key>, one statement per
-// chunk of owners. An owner with none gets 0.
+// chunk of owners. An owner with none gets 0, and so does an owner whose key
+// is NULL. A nil owner fails the call, with an error naming the entity.
 //
-// r's LimitEach, OrderBy and With do not apply, nor q's order and columns;
-// q's Limit, Offset or a lock is refused, as by LoadEach. A many-to-many
-// relation counts each target once per owner, as LoadEach reads it.
+// r's LimitEach, OrderBy and With do not apply, nor q's order and columns.
+// q's Limit, Offset or a lock is refused, as by LoadEach, unlike Query.Count,
+// which ignores Limit and Offset. A many-to-many relation counts each target
+// once per owner, as LoadEach reads it.
 func CountEach[E, T any](ctx context.Context, q Query[T], r Rel[E, T], owners []*E) ([]int64, error) {
 	owner, err := ownerOf[E]()
 	ps := unsafe.Slice((*unsafe.Pointer)(unsafe.Pointer(unsafe.SliceData(owners))), len(owners))

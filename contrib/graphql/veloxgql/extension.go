@@ -10,6 +10,7 @@ import (
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/vektah/gqlparser/v2/ast"
+	"github.com/vektah/gqlparser/v2/gqlerror"
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
@@ -67,18 +68,23 @@ import (
 // mutation is after the commit, so its resolvers find the transaction done
 // and fail. @defer inside a mutation is unsupported; use it in queries.
 //
-// Every limit (Limits) bounds one argument or one edge, not a request: a
+// Every limit but MaxCost bounds one argument or one edge, not a request: a
 // query that nests connections reads up to MaxPage to the power of its depth
-// rows, and aliases repeat a field as many times as the client writes it. A
-// server needs a limit on the cost of the whole request as well, such as
-// gqlgen's extension.FixedComplexityLimit
-// (srv.Use(extension.FixedComplexityLimit(n))).
+// rows, and aliases repeat a field as many times as the client writes it.
+// Limits.MaxCost bounds the whole request. Before any resolver runs, the
+// extension computes the operation's Cost, which multiplies by first and
+// last, counts every alias and every branch of a fragment, and makes
+// introspection free; a request over MaxCost fails with ErrTooCostly, the
+// code CodeTooCostly and data null, and sends no statement. It reads the
+// schema the server's Use gives Validate; gqlgen's extension.
+// FixedComplexityLimit counts fields, not rows, and is not needed with it.
 //
 // The server's Use panics when the DB is nil, when a limit is negative, or
 // when WithTxOptions asks for velox.TxRetrySerializable: Validate refuses
 // it, naming the limit or the option.
 //
-// The extension intercepts the operation, to put the DB and the limits in
+// The extension mutates the operation's context, to refuse a request over
+// MaxCost; intercepts the operation, to put the DB and the limits in
 // its context, which the executable schema runs in; the response, because a
 // mutation's resolvers run while gqlgen makes its response (inside the
 // response interceptors), and the response is where their errors collect,
@@ -87,6 +93,8 @@ import (
 type Extension struct {
 	db     *velox.DB
 	limits Limits
+	// schema is the server's, which Validate stores; nil for Validate(nil).
+	schema *ast.Schema
 	// txOpts are the options of a mutation's transaction.
 	txOpts []velox.TxOption
 	// txFilter decides whether a mutation runs in a transaction; nil means
@@ -153,10 +161,11 @@ func (e *Extension) Context(ctx context.Context) context.Context {
 }
 
 var (
-	_ graphql.HandlerExtension     = (*Extension)(nil)
-	_ graphql.OperationInterceptor = (*Extension)(nil)
-	_ graphql.ResponseInterceptor  = (*Extension)(nil)
-	_ graphql.FieldInterceptor     = (*Extension)(nil)
+	_ graphql.HandlerExtension        = (*Extension)(nil)
+	_ graphql.OperationContextMutator = (*Extension)(nil)
+	_ graphql.OperationInterceptor    = (*Extension)(nil)
+	_ graphql.ResponseInterceptor     = (*Extension)(nil)
+	_ graphql.FieldInterceptor        = (*Extension)(nil)
 )
 
 // mutationKey is the context key of a mutation operation's *mutation.
@@ -184,7 +193,10 @@ func (*Extension) ExtensionName() string { return "VeloxDB" }
 // Validate implements graphql.HandlerExtension: it refuses a nil DB, a
 // negative limit, and transaction options that ask for
 // velox.TxRetrySerializable, when the server takes the extension.
-func (e *Extension) Validate(graphql.ExecutableSchema) error {
+func (e *Extension) Validate(es graphql.ExecutableSchema) error {
+	if es != nil {
+		e.schema = es.Schema()
+	}
 	if e.db == nil {
 		return errors.New("veloxgql.NewExtension: nil DB")
 	}
@@ -197,6 +209,25 @@ func (e *Extension) Validate(graphql.ExecutableSchema) error {
 		return fmt.Errorf("veloxgql.WithTxOptions: TxRetrySerializable(%d) would run the mutation again, and gqlgen makes its response once", n)
 	}
 	return nil
+}
+
+// MutateOperationContext implements graphql.OperationContextMutator: it
+// refuses a request whose Cost is over MaxCost with ErrTooCostly. gqlgen runs
+// it after validation and before any resolver, so no statement is sent.
+func (e *Extension) MutateOperationContext(_ context.Context, rc *graphql.OperationContext) *gqlerror.Error {
+	if e.schema == nil || rc.Operation == nil {
+		return nil
+	}
+	cost := Cost(e.schema, rc.Operation, rc.Variables, e.limits)
+	if cost <= e.limits.MaxCost {
+		return nil
+	}
+	err := &shared.Error{
+		Code: CodeTooCostly,
+		Msg:  fmt.Sprintf("%v: it costs %d, and the most is %d", ErrTooCostly, cost, e.limits.MaxCost),
+		Err:  ErrTooCostly,
+	}
+	return &gqlerror.Error{Err: err, Message: err.Error(), Extensions: err.Extensions()}
 }
 
 // InterceptOperation implements graphql.OperationInterceptor: it puts the

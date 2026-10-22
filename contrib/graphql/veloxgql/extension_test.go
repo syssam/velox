@@ -38,6 +38,18 @@ type Query {
 	hasDB: Boolean!
 	pair: Pair!
 	page(first: Int): Int!
+	people(first: Int, last: Int): PeopleConnection!
+}
+type PeopleConnection {
+	totalCount: Int!
+	edges: [PeopleEdge!]!
+	pageInfo: PeoplePageInfo!
+}
+type PeopleEdge {
+	cursor: String!
+}
+type PeoplePageInfo {
+	hasNextPage: Boolean!
 }
 type Mutation {
 	page(first: Int): Int!
@@ -262,6 +274,10 @@ func handlerResolvers(db *velox.DB, cancel *context.CancelFunc) map[string]resol
 		return len(p.Rows), nil
 	}
 	return map[string]resolver{
+		"people": func(context.Context, map[string]any) (any, error) { return struct{}{}, nil },
+		"PeopleConnection.totalCount": func(ctx context.Context, args map[string]any) (any, error) {
+			return count(ctx, args)
+		},
 		"count": count,
 		"page":  page,
 		"hasDB": func(ctx context.Context, _ map[string]any) (any, error) {
@@ -434,6 +450,7 @@ func TestExtensionRefusesNegativeLimits(t *testing.T) {
 		"MaxFilterWidth": func(l *veloxgql.Limits) { l.MaxFilterWidth = -1 },
 		"MaxFilterNodes": func(l *veloxgql.Limits) { l.MaxFilterNodes = -1 },
 		"MaxOrderTerms":  func(l *veloxgql.Limits) { l.MaxOrderTerms = -1 },
+		"MaxCost":        func(l *veloxgql.Limits) { l.MaxCost = -1 },
 	} {
 		var l veloxgql.Limits
 		set(&l)
@@ -932,5 +949,41 @@ func TestTxFilterSkipsTheFieldLock(t *testing.T) {
 	}, veloxgql.WithTxFilter(func(context.Context, *ast.OperationDefinition) bool { return false }))
 	if got, want := post(t, context.Background(), srv, `mutation { pair { a b } }`), `{"data":{"pair":{"a":2,"b":2}}}`; got != want {
 		t.Errorf("got %s, want %s: both resolvers should be in flight together", got, want)
+	}
+}
+
+// TestTooCostlyRunsNothing: a request over MaxCost is refused before any
+// resolver runs, with COST_LIMIT_EXCEEDED and data null (the server's
+// presenter is gqlgen's here, which shows the message as it is; see
+// TestTooCostlyPresented for ErrorPresenter); one at the limit runs (Review Focus 4).
+func TestTooCostlyRunsNothing(t *testing.T) {
+	db, l := handlerDB(t)
+	srv := serve(db, handlerResolvers(db, nil), veloxgql.WithLimits(veloxgql.Limits{MaxCost: 30}))
+
+	// people(first: 30) { totalCount } costs 1 + 30 * 1.
+	got := post(t, context.Background(), srv, `{ people(first: 30) { totalCount } }`)
+	const want = `{"errors":[{"message":"veloxgql: request is too costly: it costs 31, and the most is 30","extensions":{"code":"COST_LIMIT_EXCEEDED"}}],"data":null}`
+	if got != want {
+		t.Errorf("cost 31:\n got %s\nwant %s", got, want)
+	}
+	if stmts, _ := l.take(); len(stmts) != 0 {
+		t.Errorf("cost 31 ran statements: %v", stmts)
+	}
+
+	got = post(t, context.Background(), srv, `{ people(first: 29) { totalCount } }`)
+	if want := `{"data":{"people":{"totalCount":0}}}`; got != want {
+		t.Errorf("cost 30:\n got %s\nwant %s", got, want)
+	}
+	if stmts, _ := l.take(); len(stmts) != 1 {
+		t.Errorf("cost 30 ran %v, want one select", stmts)
+	}
+
+	// A mutation is checked as well, before its transaction.
+	got = post(t, context.Background(), srv, `mutation { a: page(first: 1) b: page(first: 1) c: page(first: 1) d: page(first: 1) e: page(first: 1) f: page(first: 1) g: page(first: 1) h: page(first: 1) i: page(first: 1) j: page(first: 1) k: page(first: 1) l: page(first: 1) m: page(first: 1) n: page(first: 1) o: page(first: 1) p: page(first: 1) q: page(first: 1) r: page(first: 1) s: page(first: 1) t: page(first: 1) u: page(first: 1) v: page(first: 1) w: page(first: 1) x: page(first: 1) y: page(first: 1) z: page(first: 1) a1: page(first: 1) b1: page(first: 1) c1: page(first: 1) d1: page(first: 1) e1: page(first: 1) }`)
+	if !strings.Contains(got, `COST_LIMIT_EXCEEDED`) {
+		t.Errorf("a mutation of cost 31: %s", got)
+	}
+	if stmts, txs := l.take(); len(stmts) != 0 || len(txs) != 0 {
+		t.Errorf("a refused mutation ran %v, %v", stmts, txs)
 	}
 }

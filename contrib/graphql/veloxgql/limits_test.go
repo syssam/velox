@@ -17,7 +17,7 @@ import (
 )
 
 func TestDefaultLimits(t *testing.T) {
-	want := veloxgql.Limits{MaxPage: 100, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 5}
+	want := veloxgql.Limits{MaxPage: 100, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 5, MaxCost: 100000}
 	if got := veloxgql.DefaultLimits(); got != want {
 		t.Errorf("DefaultLimits() = %+v, want %+v", got, want)
 	}
@@ -33,13 +33,32 @@ func TestDefaultLimits(t *testing.T) {
 	}
 }
 
+// TestMaxCostDefault: MaxCost is 100000 by default, and a zero MaxCost takes
+// it; a negative one is refused by Validate, naming the field.
+func TestMaxCostDefault(t *testing.T) {
+	if got := veloxgql.DefaultLimits().MaxCost; got != 100000 {
+		t.Errorf("DefaultLimits().MaxCost = %d, want 100000", got)
+	}
+	db := &velox.DB{}
+	if got := veloxgql.LimitsFrom(veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).Context(context.Background())).MaxCost; got != 100000 {
+		t.Errorf("a zero MaxCost became %d, want 100000", got)
+	}
+	if got := veloxgql.LimitsFrom(veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxCost: 5})).Context(context.Background())).MaxCost; got != 5 {
+		t.Errorf("MaxCost 5 became %d", got)
+	}
+	const want = "veloxgql.NewExtension: Limits.MaxCost is -1, and a limit must not be negative (zero is the default)"
+	if err := veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxCost: -1})).Validate(nil); err == nil || err.Error() != want {
+		t.Errorf("Validate: %v, want %q", err, want)
+	}
+}
+
 // TestWithLimitsZeroIsDefault: a zero field of WithLimits' Limits is the
 // default, and the last WithLimits wins.
 func TestWithLimitsZeroIsDefault(t *testing.T) {
 	db := &velox.DB{}
 	ctx := context.Background()
 	got := veloxgql.LimitsFrom(veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).Context(ctx))
-	if want := (veloxgql.Limits{MaxPage: 2, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 5}); got != want {
+	if want := (veloxgql.Limits{MaxPage: 2, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 5, MaxCost: 100000}); got != want {
 		t.Errorf("WithLimits(Limits{MaxPage: 2}): %+v, want %+v", got, want)
 	}
 	if got := veloxgql.LimitsFrom(veloxgql.NewExtension(db).Context(ctx)); got != veloxgql.DefaultLimits() {
@@ -47,9 +66,9 @@ func TestWithLimitsZeroIsDefault(t *testing.T) {
 	}
 	got = veloxgql.LimitsFrom(veloxgql.NewExtension(db,
 		veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2, MaxList: 3}),
-		veloxgql.WithLimits(veloxgql.Limits{MaxOrderTerms: 4}),
+		veloxgql.WithLimits(veloxgql.Limits{MaxOrderTerms: 4, MaxCost: 100000}),
 	).Context(ctx))
-	if want := (veloxgql.Limits{MaxPage: 100, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 4}); got != want {
+	if want := (veloxgql.Limits{MaxPage: 100, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 4, MaxCost: 100000}); got != want {
 		t.Errorf("WithLimits twice: %+v, want the last's, %+v", got, want)
 	}
 	if d, err := veloxgql.DBFrom(veloxgql.NewExtension(db).Context(ctx)); d != db || err != nil {

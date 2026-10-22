@@ -14,6 +14,7 @@ import (
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 
@@ -311,6 +312,36 @@ func TestNotFoundPresented(t *testing.T) {
 	got := veloxgql.ErrorPresenter(l.log)(context.Background(), fmt.Errorf("resolver: %w", gqlimpl.NotFound("updatePost", "Post")))
 	if got.Message != "updatePost: no Post has this ID" || got.Extensions["code"] != veloxgql.CodeNotFound {
 		t.Errorf("got %q %v, want NOT_FOUND and the message", got.Message, got.Extensions)
+	}
+	if errs := l.take(); len(errs) != 0 {
+		t.Errorf("logged %v, want nothing", errs)
+	}
+}
+
+// TestTooCostlyPresented: the extension's cost error reaches the client with
+// its code COST_LIMIT_EXCEEDED and its text, wraps ErrTooCostly, and is not
+// logged.
+func TestTooCostlyPresented(t *testing.T) {
+	l := &logged{}
+	ext := veloxgql.NewExtension(&velox.DB{}, veloxgql.WithLimits(veloxgql.Limits{MaxCost: 2}))
+	schema := gqlparser.MustLoadSchema(&ast.Source{Input: costSDL})
+	if err := ext.Validate(&graphql.ExecutableSchemaMock{SchemaFunc: func() *ast.Schema { return schema }}); err != nil {
+		t.Fatal(err)
+	}
+	doc, errs := gqlparser.LoadQueryWithRules(schema, `{ users(first: 2) { totalCount } }`, nil)
+	if len(errs) > 0 {
+		t.Fatal(errs)
+	}
+	gerr := ext.MutateOperationContext(context.Background(), &graphql.OperationContext{Operation: doc.Operations[0], Doc: doc})
+	if gerr == nil {
+		t.Fatal("no error for cost 3 over MaxCost 2")
+	}
+	if !errors.Is(gerr, veloxgql.ErrTooCostly) || codeOf(gerr) != veloxgql.CodeTooCostly {
+		t.Errorf("error %v: is ErrTooCostly %v, code %q", gerr, errors.Is(gerr, veloxgql.ErrTooCostly), codeOf(gerr))
+	}
+	got := veloxgql.ErrorPresenter(l.log)(context.Background(), gerr)
+	if want := "request is too costly: it costs 3, and the most is 2"; got.Message != want || got.Extensions["code"] != "COST_LIMIT_EXCEEDED" {
+		t.Errorf("got %q %v, want %q and COST_LIMIT_EXCEEDED", got.Message, got.Extensions, want)
 	}
 	if errs := l.take(); len(errs) != 0 {
 		t.Errorf("logged %v, want nothing", errs)

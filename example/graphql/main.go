@@ -58,22 +58,11 @@ func serve(ctx context.Context, addr string) error {
 	return srv.ListenAndServe()
 }
 
-// complexityLimit is the most a request may cost, in gqlgen's complexity: a
-// field costs 1 and its children's cost is added, so it is the number of
-// fields the request selects, aliases and nested connections included.
-// users, posts and tags nested, each with its edges and node, with a few
-// scalars (the deepest query of main_test.go) cost 13. gqlgen counts no
-// __schema field, so GraphiQL's schema query costs nothing; __type(name:)
-// costs a few points, as any field does. veloxgql's Limits each bound one
-// argument (MaxPage rows of a connection, and so on), so this one bounds the
-// request as a whole. It does not multiply by first and last: a cost that
-// does is a later veloxgql feature.
-const complexityLimit = 200
-
 // server is the GraphQL endpoint: gqlgen's server on the generated schema,
 // with veloxgql.NewExtension first, so that every operation's context holds
 // db and the default limits, where the generated code reads them, and a
-// limit on the cost of a request. veloxgql.ErrorPresenter shows a client
+// limit on the cost of a request (Limits.MaxCost, 100000 by default).
+// veloxgql.ErrorPresenter shows a client
 // only what is safe, with a code: gqlgen's default presenter would show it
 // every error's text, the driver's and velox's, which name tables, entities
 // and constraints. It logs the rest with slog, and says "internal error".
@@ -86,7 +75,6 @@ func server(db *velox.DB) http.Handler {
 	srv.Use(veloxgql.NewExtension(db))
 	srv.SetErrorPresenter(veloxgql.ErrorPresenter(nil))
 	srv.AddTransport(transport.POST{})
-	srv.Use(extension.FixedComplexityLimit(complexityLimit))
 	srv.Use(extension.Introspection{})
 	return srv
 }

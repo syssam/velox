@@ -248,7 +248,8 @@ func (q Query[E]) prepare[_ Lazy[E]]() (Statement, error) {
 	if q.after == nil {
 		return st, nil
 	}
-	return st, addAfter(&st, q.meta.info, unsafe.Pointer(q.after))
+	err := addAfter(&st, q.meta.info, unsafe.Pointer(q.after))
+	return st, err
 }
 
 // addAfter adds to st, a statement on entity in, After's condition for the

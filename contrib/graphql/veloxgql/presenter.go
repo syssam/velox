@@ -13,8 +13,8 @@ import (
 	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
 )
 
-// The codes ErrorPresenter writes as extensions.code: Apollo's, and
-// NOT_FOUND.
+// The codes ErrorPresenter writes as extensions.code: Apollo's, NOT_FOUND
+// and COST_LIMIT_EXCEEDED.
 const (
 	// CodeBadUserInput: the client's input is wrong, and says how: an ID,
 	// a cursor, paging arguments, a filter or a scalar that veloxgql,
@@ -28,6 +28,9 @@ const (
 	// CodeNotFound: the generated mutations return it for an ID that names
 	// no row the caller may see or change.
 	CodeNotFound = shared.CodeNotFound
+	// CodeTooCostly: the request costs more than Limits.MaxCost allows
+	// (ErrTooCostly). It is not a bad argument: the client can ask for less.
+	CodeTooCostly = "COST_LIMIT_EXCEEDED"
 	// CodeInternal: anything else, which the client cannot fix, such as a
 	// driver's error, a timeout, a list edge over MaxList or ErrNoDB.
 	CodeInternal = "INTERNAL_SERVER_ERROR"

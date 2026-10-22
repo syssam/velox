@@ -223,14 +223,18 @@ veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 50}))
 A zero field is the default; a negative one is refused. They do not bound a
 request: connections nested in connections multiply (each level reads up to
 `MaxPage` rows, and runs a query for each parent), and aliases repeat a field
-as often as the client writes it. So the server also sets gqlgen's
-`extension.FixedComplexityLimit(200)`. gqlgen counts 1 for each field
-selected, children included, aliases included: the deepest query in
-`main_test.go` costs 13, and 200 leaves room for real queries while a request
-that repeats a field a hundred times fails before it runs a statement. Of
-introspection, only `__schema` is free; `__type(name:)` costs a few points,
-as any field does. The count does not multiply by `first` and `last`; a cost
-limit that does is planned. Choose the limit for your schema and clients.
+as often as the client writes it. So `Limits.MaxCost` (100000 by default)
+bounds the whole request. The extension computes the request's cost before
+any resolver runs: a field costs 1 plus its children's cost times its
+multiplier, which is `first` or `last` for a connection (`MaxPage` when
+neither is given), the number of ids for `nodes`, and `MaxList` for another
+list of objects. Every alias and every branch of a fragment counts, `@skip`
+and `@include` are not read, and introspection costs nothing. A request over
+the limit fails with `COST_LIMIT_EXCEEDED` and runs no statement. Two levels
+of full pages (about 30000) pass; three do not (about a million). `main_test.go`'s
+`TestRequestCost` shows both. gqlgen's `extension.FixedComplexityLimit` counted
+fields, not rows, and is not used. Choose the limit for your schema and
+clients.
 
 ## What it shows
 
@@ -241,7 +245,7 @@ limit that does is planned. Choose the limit for your schema and clients.
 | `first`/`after`, `last`/`before` | keyset pages, `n+1` rows read for `hasNextPage`/`hasPreviousPage` |
 | `orderBy`, `where` (`and`/`or`/`not`, `hasPostsWith`) | `ORDER BY … "id"`, `WHERE …`, `EXISTS (…)` |
 | nested edges, `Post.tags` many-to-many | one query per parent (batching comes with GraphQL plan 4) |
-| a request over `complexityLimit` fields | an error naming the cost, and no statement |
+| a request over `MaxCost` | a `COST_LIMIT_EXCEEDED` error naming the cost, and no statement |
 | an `orderBy` list of more than `MaxOrderTerms` terms | an error naming the limit, and no statement |
 | `email`, or a `where` on it, without `X-Role: admin` | a `FORBIDDEN` error; the filter runs no statement |
 | `Post` with tenant 1, 2 or none | only that organization's posts, through `node`, connections, edges and `where`; `unauthenticated` without one |

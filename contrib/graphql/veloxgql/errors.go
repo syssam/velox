@@ -8,9 +8,9 @@ import "errors"
 // an ID: the client sent it, and the message names only what the server
 // wanted.
 //
-// Each but ErrNoDB is an error in the client's input, and is returned in an
-// error with the code CodeBadUserInput, which ErrorPresenter shows the
-// client. ErrNoDB is a programming error, which has no code: ErrorPresenter
+// Each but ErrNoDB and ErrTooCostly is an error in the client's input, and is
+// returned in an error with the code CodeBadUserInput, which ErrorPresenter
+// shows the client. ErrTooCostly has its own code, CodeTooCostly. ErrNoDB is a programming error, which has no code: ErrorPresenter
 // logs it and shows "internal error".
 var (
 	// ErrBadID: an ID that is not base64url without padding of
@@ -40,6 +40,10 @@ var (
 	// ErrFilterTooLarge: a where argument over its budget of the
 	// MaxFilterNodes of LimitsFrom(ctx) inputs, predicates and values.
 	ErrFilterTooLarge = errors.New("filter is too large")
+	// ErrTooCostly: a request whose Cost is over the MaxCost of the
+	// Extension's limits. It is returned with the code CodeTooCostly, before
+	// any statement runs.
+	ErrTooCostly = errors.New("request is too costly")
 	// ErrNoDB: a resolver ran with no DB in its context, which the
 	// Extension puts there.
 	ErrNoDB = errors.New("no DB in the context")

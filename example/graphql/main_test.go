@@ -461,27 +461,39 @@ func TestSensitiveFieldAbsent(t *testing.T) {
 	})
 }
 
-// TestRequestCost: veloxgql's limits each bound one argument, so the server
-// also limits the cost of a whole request (extension.FixedComplexityLimit).
-// A request over complexityLimit fails before it runs a statement; the
-// introspection query GraphiQL sends is not counted, and still works.
+// TestRequestCost: veloxgql's limits each bound one argument, so
+// Limits.MaxCost bounds a whole request. A request over it fails with
+// COST_LIMIT_EXCEEDED before it runs a statement; the same shape with smaller
+// pages runs; the introspection query GraphiQL sends costs nothing.
 func TestRequestCost(t *testing.T) {
 	s := newServer(t)
-	var b strings.Builder
-	b.WriteString("{")
-	for i := range complexityLimit { // each alias costs 2: users and totalCount
-		fmt.Fprintf(&b, " u%d: users(first: 1) { totalCount }", i)
-	}
-	b.WriteString(" }")
+	// 100 users, each with 100 posts, each with 100 tags: a million rows.
+	// users(first: 100) { edges { node { posts(first: 100) { edges { node {
+	// tags(first: 100) { totalCount } } } } } } } costs
+	// 1 + 100*(1+1+(1+100*(1+1+(1+100*1)))) = 1 + 100*(2+(1+100*103)) = 1031301.
 	s.do(t, request{
-		query: b.String(),
-		want: fmt.Sprintf(`{"errors": [{"message": "operation has complexity %d, which exceeds the limit of %d",
-			"extensions": {"code": "COMPLEXITY_LIMIT_EXCEEDED"}}], "data": null}`, 2*complexityLimit, complexityLimit),
+		query: `{ users(first: 100) { edges { node { posts(first: 100) { edges { node { tags(first: 100) { totalCount } } } } } } } }`,
+		want: `{"errors": [{"message": "request is too costly: it costs 1030301, and the most is 100000",
+			"extensions": {"code": "COST_LIMIT_EXCEEDED"}}], "data": null}`,
 	})
+	// With first: 5 at each level: 1 + 5*(2+(1+5*(2+(1+5*1)))) = 1 + 5*(2+1+5*8) = 216.
 	s.do(t, request{
-		query: `{ users(first: 1) { totalCount } }`,
-		want:  `{"data": {"users": {"totalCount": 3}}}`,
-		stmts: []string{`SELECT COUNT(*) FROM "users" []`},
+		org:   "1",
+		query: `{ users(first: 5) { edges { node { posts(first: 5) { edges { node { tags(first: 5) { totalCount } } } } } } } }`,
+		want: `{"data": {"users": {"edges": [
+			{"node": {"posts": {"edges": [{"node": {"tags": {"totalCount": 2}}}, {"node": {"tags": {"totalCount": 0}}}]}}},
+			{"node": {"posts": {"edges": [{"node": {"tags": {"totalCount": 1}}}]}}},
+			{"node": {"posts": {"edges": [{"node": {"tags": {"totalCount": 0}}}]}}}]}}}`,
+		stmts: []string{
+			`SELECT "id", "name", "email", "role", "joined_at", "password_hash" FROM "users" ORDER BY "id" LIMIT ? [6]`,
+			`SELECT "id", "org_id", "author_id", "title", "status", "views", "published_at" FROM "posts" WHERE "author_id" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [1 1 6]`,
+			`SELECT "id", "org_id", "author_id", "title", "status", "views", "published_at" FROM "posts" WHERE "author_id" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [2 1 6]`,
+			`SELECT "id", "org_id", "author_id", "title", "status", "views", "published_at" FROM "posts" WHERE "author_id" = ? AND "org_id" = ? ORDER BY "id" LIMIT ? [3 1 6]`,
+			`SELECT COUNT(*) FROM "tags" WHERE EXISTS (SELECT 1 FROM "post_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND EXISTS (SELECT 1 FROM "posts" AS "vx2" WHERE "vx2"."id" = "vx1"."post_id" AND "id" = ? AND "org_id" = ?)) [1 1]`,
+			`SELECT COUNT(*) FROM "tags" WHERE EXISTS (SELECT 1 FROM "post_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND EXISTS (SELECT 1 FROM "posts" AS "vx2" WHERE "vx2"."id" = "vx1"."post_id" AND "id" = ? AND "org_id" = ?)) [2 1]`,
+			`SELECT COUNT(*) FROM "tags" WHERE EXISTS (SELECT 1 FROM "post_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND EXISTS (SELECT 1 FROM "posts" AS "vx2" WHERE "vx2"."id" = "vx1"."post_id" AND "id" = ? AND "org_id" = ?)) [3 1]`,
+			`SELECT COUNT(*) FROM "tags" WHERE EXISTS (SELECT 1 FROM "post_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND EXISTS (SELECT 1 FROM "posts" AS "vx2" WHERE "vx2"."id" = "vx1"."post_id" AND "id" = ? AND "org_id" = ?)) [4 1]`,
+		},
 	})
 	body, err := json.Marshal(map[string]any{"query": introspection})
 	if err != nil {

@@ -46,12 +46,18 @@ type Limits struct {
 	// ORDER BY term and a term of every cursor. More is ErrBadPagination,
 	// before any query runs.
 	MaxOrderTerms int
+
+	// MaxCost is the most a request may cost (Cost): the bound on a whole
+	// request that the other limits, each of one argument, do not give. More
+	// is ErrTooCostly, before any statement runs.
+	MaxCost int
 }
 
 // DefaultLimits returns MaxPage 100, MaxList 1000, MaxFilterDepth 5,
-// MaxFilterWidth 100, MaxFilterNodes 1000 and MaxOrderTerms 5.
+// MaxFilterWidth 100, MaxFilterNodes 1000, MaxOrderTerms 5 and MaxCost
+// 100000.
 func DefaultLimits() Limits {
-	return Limits{MaxPage: 100, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 5}
+	return Limits{MaxPage: 100, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 5, MaxCost: 100000}
 }
 
 // LimitsFrom returns the limits the extension put in ctx, or
@@ -73,6 +79,7 @@ func (l Limits) orDefault() Limits {
 		MaxFilterWidth: cmp.Or(l.MaxFilterWidth, d.MaxFilterWidth),
 		MaxFilterNodes: cmp.Or(l.MaxFilterNodes, d.MaxFilterNodes),
 		MaxOrderTerms:  cmp.Or(l.MaxOrderTerms, d.MaxOrderTerms),
+		MaxCost:        cmp.Or(l.MaxCost, d.MaxCost),
 	}
 }
 
@@ -91,5 +98,6 @@ func (l Limits) fields() []struct {
 		{"MaxFilterWidth", l.MaxFilterWidth},
 		{"MaxFilterNodes", l.MaxFilterNodes},
 		{"MaxOrderTerms", l.MaxOrderTerms},
+		{"MaxCost", l.MaxCost},
 	}
 }
