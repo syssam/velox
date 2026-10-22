@@ -491,15 +491,15 @@ func TestRewriteCannotChangeCount(t *testing.T) {
 			return err
 		}},
 		"set on Sum": {set, func(db *velox.DB) error {
-			_, err := db.Query[testmodel.Invoice]().Sum(ctx, I.Total)
+			_, err := velox.Sum(ctx, db.Query[testmodel.Invoice](), I.Total)
 			return err
 		}},
 		"set on Min": {set, func(db *velox.DB) error {
-			_, _, err := db.Query[testmodel.Invoice]().Min(ctx, I.Total)
+			_, _, err := velox.Min(ctx, db.Query[testmodel.Invoice](), I.Total)
 			return err
 		}},
 		"set on Max": {set, func(db *velox.DB) error {
-			_, _, err := db.Query[testmodel.Invoice]().Max(ctx, I.Total)
+			_, _, err := velox.Max(ctx, db.Query[testmodel.Invoice](), I.Total)
 			return err
 		}},
 		"cleared on Count, with Columns set": {clear, func(db *velox.DB) error {

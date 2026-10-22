@@ -50,50 +50,50 @@ func TestAggregatesOnRealDatabases(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
 		I, It, S := testmodel.Invoices, testmodel.Items, testmodel.Samples
 		paid := tg.db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true))
-		if v, err := paid.Sum(ctx, I.Total); err != nil || v != 90 {
+		if v, err := velox.Sum(ctx, paid, I.Total); err != nil || v != 90 {
 			t.Errorf("Sum: %v, %v", v, err)
 		}
-		if v, ok, err := paid.Avg(ctx, I.Total); err != nil || !ok || v != 30 {
+		if v, ok, err := velox.Avg(ctx, paid, I.Total); err != nil || !ok || v != 30 {
 			t.Errorf("Avg: %v, %v, %v", v, ok, err)
 		}
-		if v, ok, err := paid.Min(ctx, I.Total); err != nil || !ok || v != 10 {
+		if v, ok, err := velox.Min(ctx, paid, I.Total); err != nil || !ok || v != 10 {
 			t.Errorf("Min: %v, %v, %v", v, ok, err)
 		}
-		if v, ok, err := paid.Max(ctx, I.Total); err != nil || !ok || v != 50 {
+		if v, ok, err := velox.Max(ctx, paid, I.Total); err != nil || !ok || v != 50 {
 			t.Errorf("Max: %v, %v, %v", v, ok, err)
 		}
 		// The ordering, limit and columns of the query do not matter.
-		if v, err := paid.OrderBy(I.ID.Desc()).Limit(1).Columns(I.Number).Sum(ctx, I.Total); err != nil || v != 90 {
+		if v, err := velox.Sum(ctx, paid.OrderBy(I.ID.Desc()).Limit(1).Columns(I.Number), I.Total); err != nil || v != 90 {
 			t.Errorf("Sum of an ordered, limited query: %v, %v", v, err)
 		}
 
 		// An int64 column: numeric on PostgreSQL, DECIMAL on MySQL.
 		items := tg.db.Query[testmodel.Item]()
-		if v, err := items.Sum(ctx, It.Qty); err != nil || v != 7 {
+		if v, err := velox.Sum(ctx, items, It.Qty); err != nil || v != 7 {
 			t.Errorf("Sum of qty: %v, %v", v, err)
 		}
-		if v, ok, err := items.Avg(ctx, It.Qty); err != nil || !ok || math.Abs(v-7.0/3) > 1e-3 {
+		if v, ok, err := velox.Avg(ctx, items, It.Qty); err != nil || !ok || math.Abs(v-7.0/3) > 1e-3 {
 			t.Errorf("Avg of qty: %v, %v, %v", v, ok, err)
 		}
-		if v, ok, err := items.Max(ctx, It.Qty); err != nil || !ok || v != 5 {
+		if v, ok, err := velox.Max(ctx, items, It.Qty); err != nil || !ok || v != 5 {
 			t.Errorf("Max of qty: %v, %v, %v", v, ok, err)
 		}
 
 		// No matching row.
 		none := tg.db.Query[testmodel.Invoice]().Where(I.ID.EQ(99))
-		if v, err := none.Sum(ctx, I.Total); err != nil || v != 0 {
+		if v, err := velox.Sum(ctx, none, I.Total); err != nil || v != 0 {
 			t.Errorf("empty Sum: %v, %v", v, err)
 		}
-		if v, ok, err := none.Avg(ctx, I.Total); err != nil || ok || v != 0 {
+		if v, ok, err := velox.Avg(ctx, none, I.Total); err != nil || ok || v != 0 {
 			t.Errorf("empty Avg: %v, %v, %v", v, ok, err)
 		}
-		if v, ok, err := none.Min(ctx, I.Total); err != nil || ok || v != 0 {
+		if v, ok, err := velox.Min(ctx, none, I.Total); err != nil || ok || v != 0 {
 			t.Errorf("empty Min: %v, %v, %v", v, ok, err)
 		}
-		if v, ok, err := none.Max(ctx, I.Total); err != nil || ok || v != 0 {
+		if v, ok, err := velox.Max(ctx, none, I.Total); err != nil || ok || v != 0 {
 			t.Errorf("empty Max: %v, %v, %v", v, ok, err)
 		}
-		if v, err := tg.db.Query[testmodel.Item]().Where(It.ID.EQ(99)).Sum(ctx, It.Qty); err != nil || v != 0 {
+		if v, err := velox.Sum(ctx, tg.db.Query[testmodel.Item]().Where(It.ID.EQ(99)), It.Qty); err != nil || v != 0 {
 			t.Errorf("empty Sum of an int64 column: %v, %v", v, err)
 		}
 
@@ -102,47 +102,47 @@ func TestAggregatesOnRealDatabases(t *testing.T) {
 		tg.exec(t, sampleDDL(tg.d))
 		t.Cleanup(func() { tg.exec(t, "DROP TABLE IF EXISTS samples") })
 		samples := tg.db.Query[testmodel.Sample]()
-		if v, err := samples.Sum(ctx, S.Price); err != nil || v != 0 {
+		if v, err := velox.Sum(ctx, samples, S.Price); err != nil || v != 0 {
 			t.Errorf("empty Sum of a Cents: %v, %v", v, err)
 		}
-		if _, ok, err := samples.Max(ctx, S.Price); err != nil || ok {
+		if _, ok, err := velox.Max(ctx, samples, S.Price); err != nil || ok {
 			t.Errorf("empty Max of a Cents: %v, %v", ok, err)
 		}
 		seedSample(t, tg, 100, nil)
 		seedSample(t, tg, 250, nil)
-		if v, err := samples.Sum(ctx, S.Price); err != nil || v != kind.Cents(350) {
+		if v, err := velox.Sum(ctx, samples, S.Price); err != nil || v != kind.Cents(350) {
 			t.Errorf("Sum of a Cents: %v, %v", v, err)
 		}
-		if v, ok, err := samples.Min(ctx, S.Price); err != nil || !ok || v != kind.Cents(100) {
+		if v, ok, err := velox.Min(ctx, samples, S.Price); err != nil || !ok || v != kind.Cents(100) {
 			t.Errorf("Min of a Cents: %v, %v, %v", v, ok, err)
 		}
-		if v, ok, err := samples.Avg(ctx, S.Price); err != nil || !ok || v != 175 {
+		if v, ok, err := velox.Avg(ctx, samples, S.Price); err != nil || !ok || v != 175 {
 			t.Errorf("Avg of a Cents: %v, %v, %v", v, ok, err)
 		}
 
 		// A column of NULLs: Sum is 0, the others are false. Once a value is
 		// there, the NULLs are skipped.
-		if v, err := samples.Sum(ctx, S.Score); err != nil || v != 0 {
+		if v, err := velox.Sum(ctx, samples, S.Score); err != nil || v != 0 {
 			t.Errorf("Sum of NULLs: %v, %v", v, err)
 		}
-		if _, ok, err := samples.Avg(ctx, S.Score); err != nil || ok {
+		if _, ok, err := velox.Avg(ctx, samples, S.Score); err != nil || ok {
 			t.Errorf("Avg of NULLs: %v, %v", ok, err)
 		}
-		if _, ok, err := samples.Min(ctx, S.Score); err != nil || ok {
+		if _, ok, err := velox.Min(ctx, samples, S.Score); err != nil || ok {
 			t.Errorf("Min of NULLs: %v, %v", ok, err)
 		}
-		if _, ok, err := samples.Max(ctx, S.Score); err != nil || ok {
+		if _, ok, err := velox.Max(ctx, samples, S.Score); err != nil || ok {
 			t.Errorf("Max of NULLs: %v, %v", ok, err)
 		}
 		seedSample(t, tg, 1, int64(4))
 		seedSample(t, tg, 1, int64(8))
-		if v, err := samples.Sum(ctx, S.Score); err != nil || v != kind.Score(12) {
+		if v, err := velox.Sum(ctx, samples, S.Score); err != nil || v != kind.Score(12) {
 			t.Errorf("Sum beside NULLs: %v, %v", v, err)
 		}
-		if v, ok, err := samples.Avg(ctx, S.Score); err != nil || !ok || v != 6 {
+		if v, ok, err := velox.Avg(ctx, samples, S.Score); err != nil || !ok || v != 6 {
 			t.Errorf("Avg beside NULLs: %v, %v, %v", v, ok, err)
 		}
-		if v, ok, err := samples.Max(ctx, S.Score); err != nil || !ok || v != kind.Score(8) {
+		if v, ok, err := velox.Max(ctx, samples, S.Score); err != nil || !ok || v != kind.Score(8) {
 			t.Errorf("Max beside NULLs: %v, %v, %v", v, ok, err)
 		}
 
@@ -151,26 +151,26 @@ func TestAggregatesOnRealDatabases(t *testing.T) {
 		tg.exec(t, "DELETE FROM samples")
 		seedSample(t, tg, math.MaxInt64-10, nil)
 		seedSample(t, tg, 5, nil)
-		if v, err := samples.Sum(ctx, S.Price); err != nil || v != kind.Cents(math.MaxInt64-5) {
+		if v, err := velox.Sum(ctx, samples, S.Price); err != nil || v != kind.Cents(math.MaxInt64-5) {
 			t.Errorf("Sum near MaxInt64: %v, %v", v, err)
 		}
-		if v, ok, err := samples.Max(ctx, S.Price); err != nil || !ok || v != kind.Cents(math.MaxInt64-10) {
+		if v, ok, err := velox.Max(ctx, samples, S.Price); err != nil || !ok || v != kind.Cents(math.MaxInt64-10) {
 			t.Errorf("Max near MaxInt64: %v, %v, %v", v, ok, err)
 		}
 		seedSample(t, tg, 100, nil)
-		if v, err := samples.Sum(ctx, S.Price); err == nil {
+		if v, err := velox.Sum(ctx, samples, S.Price); err == nil {
 			t.Errorf("Sum past MaxInt64 gave %v", v)
 		}
-		if v, ok, err := samples.Avg(ctx, S.Price); err != nil || !ok || math.Abs(v-float64(math.MaxInt64)/3) > float64(math.MaxInt64)*1e-9 {
+		if v, ok, err := velox.Avg(ctx, samples, S.Price); err != nil || !ok || math.Abs(v-float64(math.MaxInt64)/3) > float64(math.MaxInt64)*1e-9 {
 			t.Errorf("Avg near MaxInt64: %v, %v, %v", v, ok, err)
 		}
 		tg.exec(t, "DELETE FROM samples")
 		seedSample(t, tg, math.MinInt64, nil)
 		seedSample(t, tg, -1, nil)
-		if v, err := samples.Sum(ctx, S.Price); err == nil {
+		if v, err := velox.Sum(ctx, samples, S.Price); err == nil {
 			t.Errorf("Sum past MinInt64 gave %v", v)
 		}
-		if v, ok, err := samples.Min(ctx, S.Price); err != nil || !ok || v != kind.Cents(math.MinInt64) {
+		if v, ok, err := velox.Min(ctx, samples, S.Price); err != nil || !ok || v != kind.Cents(math.MinInt64) {
 			t.Errorf("Min at MinInt64: %v, %v, %v", v, ok, err)
 		}
 	})
@@ -181,10 +181,10 @@ func TestAggregateIsTenantScoped(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
 		I := testmodel.Invoices
 		q := tg.db.Query[testmodel.Invoice]()
-		if v, err := q.Sum(velox.WithTenant(velox.SkipPolicy(ctx, "test"), int64(1)), I.Total); err != nil || v != 100 {
+		if v, err := velox.Sum(velox.WithTenant(velox.SkipPolicy(ctx, "test"), int64(1)), q, I.Total); err != nil || v != 100 {
 			t.Errorf("org 1: %v, %v", v, err)
 		}
-		if v, err := q.Sum(velox.WithTenant(velox.SkipPolicy(ctx, "test"), int64(2)), I.Total); err != nil || v != 50 {
+		if v, err := velox.Sum(velox.WithTenant(velox.SkipPolicy(ctx, "test"), int64(2)), q, I.Total); err != nil || v != 50 {
 			t.Errorf("org 2: %v, %v", v, err)
 		}
 	})

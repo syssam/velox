@@ -298,7 +298,7 @@ func run(ctx context.Context, w io.Writer) error {
 	say("%s", text)
 	// Sum adds up one column in the database, under the same scope as any
 	// query: here all tenants, and the accountant's policy.
-	paidTotal, err := db.Query[gen.Invoice]().Where(I.Status.EQ(gen.InvoiceStatusPaid)).Sum(report, I.TotalCents)
+	paidTotal, err := velox.Sum(report, db.Query[gen.Invoice]().Where(I.Status.EQ(gen.InvoiceStatusPaid)), I.TotalCents)
 	if err != nil {
 		return err
 	}

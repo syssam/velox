@@ -39,9 +39,9 @@
 // the database instead of loading rows, and need no Limit; Exists is a
 // SELECT 1 … LIMIT 1.
 //
-// Sum, Avg, Min and Max are methods of a query that take a number column:
+// Sum, Avg, Min and Max take a query and a number column:
 //
-//	paid, err := db.Query[gen.Invoice]().Where(gen.Invoices.Status.EQ(gen.InvoiceStatusPaid)).Sum(ctx, gen.Invoices.TotalCents)
+//	paid, err := velox.Sum(ctx, db.Query[gen.Invoice]().Where(gen.Invoices.Status.EQ(gen.InvoiceStatusPaid)), gen.Invoices.TotalCents)
 //
 // The tenant scope and the policy apply to them as to Count. Sum is 0 when
 // no row matches; Avg, Min and Max also return false then, as there is no

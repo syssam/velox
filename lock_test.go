@@ -64,7 +64,7 @@ func TestLockRefusals(t *testing.T) {
 				return err
 			}, pre + "Count, Sum, Avg, Min and Max cannot lock rows; lock them with All, One, First, Iter or Exists"},
 			{"Sum", velox.Postgres, func(ctx context.Context, tx *velox.DB) error {
-				_, err := tx.Query[testmodel.Invoice]().ForShare().Sum(ctx, I.Total)
+				_, err := velox.Sum(ctx, tx.Query[testmodel.Invoice]().ForShare(), I.Total)
 				return err
 			}, pre + "Count, Sum, Avg, Min and Max cannot lock rows; lock them with All, One, First, Iter or Exists"},
 			{"With", velox.Postgres, func(ctx context.Context, tx *velox.DB) error {

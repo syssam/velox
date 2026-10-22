@@ -250,20 +250,20 @@ var genericObjects = []struct {
 	// 2026-10-22, darwin/arm64, Go 1.27.1, after the locking reads (about
 	// +8 KiB here and in entityDescHooks), after Mutation's Conds, Affected
 	// and SetAffected and the handles' ValueIn (+350 bytes; the bound held),
-	// and again when Sum, Avg, Min and Max became Query methods (+17898
-	// bytes: 782738 under 792576 before). A method of Query whose signature
-	// names NumberCol[E, V] puts that in the export data of every package
-	// that uses a Query, whether or not it calls the method.
-	{"entityDescUse", "", entityDescUseSrc, 811008}, // measured 800636
+	// and again after the final review's fixes (782738 before). Sum, Avg,
+	// Min and Max stay functions: as Query methods they measured 800636,
+	// since a method of Query whose signature names NumberCol[E, V] puts that
+	// in the export data of every package that uses a Query, called or not.
+	{"entityDescUse", "", entityDescUseSrc, 792576}, // measured 782716
 	// entityDescHooks is held tighter than the rule above: a quarter of it
 	// would let it grow by 64 KiB unseen. Its bound is the measurement plus
 	// about 1.2%, rounded up to the next KiB, the headroom it had before
 	// (1046660 under 1058816); remeasured on 2026-10-22, darwin/arm64, Go
 	// 1.27.1, after Mutation's Conds, Affected and SetAffected and the
 	// handles' ValueIn (+5022 bytes: 1068930 under 1082368 before them),
-	// and again when the aggregates became Query methods and Mutation a
-	// struct (+8390 bytes: 1073952 under 1087488 before).
-	{"entityDescHooks", "", entityDescHooksBound, 1095680}, // measured 1082342
+	// and again when Mutation became a struct holding the mutation (-2708
+	// bytes: 1073952 under 1087488 before).
+	{"entityDescHooks", "", entityDescHooksBound, 1084416}, // measured 1071244
 	{"Policy", "velox.Policy[E]", "", 8192},                // measured 4050
 	// Mutation was remeasured on 2026-10-22, when it became a struct
 	// holding the mutation instead of a defined type of it (4692 before),
@@ -277,7 +277,7 @@ var genericObjects = []struct {
 // the generics velox instantiates for E (BindPolicy, BindHooks, On, the
 // Mutator and Mutation methods) and the export data of the types the
 // functions mention.
-const policyGrowthMax = 348160 // measured 281706
+const policyGrowthMax = 348160 // measured 288528
 
 // TestGenericTypesCompileSmall enforces the compile-cost rules for one
 // package: it measures each row's own object cost, the bytes its package
