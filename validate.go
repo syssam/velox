@@ -26,6 +26,39 @@ func (e *ValidationError) Error() string {
 
 func (e *ValidationError) Unwrap() error { return e.Err }
 
+// For generated code. Validate runs the validators of the columns cs of x,
+// as Insert would, before any statement: velox-graphql's CreateX checks the
+// fields its input sets this way, so that an invalid one costs no query.
+// What it checks and what it returns are Insert's (see ValidationError).
+func Validate[E any, PE Entity[E]](x PE, cs ...Column[E]) error {
+	m := x.VeloxMeta()
+	if m.err != nil {
+		return m.err
+	}
+	cols := make([]int, len(cs))
+	for i, c := range cs {
+		cols[i] = int(c.column(nil))
+	}
+	return validateRow(m.info, unsafe.Pointer(x), cols)
+}
+
+// For generated code. ValidateSet runs the validators of the Set values of
+// set, and refuses an Immutable column among them, as Update would, before
+// any statement: velox-graphql's UpdateX checks the fields its input sets
+// this way. What it checks and what it returns are Update's (see
+// ValidationError).
+func ValidateSet[E any, PE Entity[E]](set ...Setter[E]) error {
+	m := PE(nil).VeloxMeta()
+	if m.err != nil {
+		return m.err
+	}
+	as := make([]Assignment, len(set))
+	for i, s := range set {
+		as[i] = s.a
+	}
+	return validateSet(m.info, as)
+}
+
 // validateRow checks the row of in at p: every column in cols whose value is
 // not a nil pointer. Non-generic.
 func validateRow(in *EntityInfo, p unsafe.Pointer, cols []int) error {

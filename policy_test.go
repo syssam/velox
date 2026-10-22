@@ -609,4 +609,21 @@ func TestPolicyWritable(t *testing.T) {
 		t.Fatal(err)
 	}
 	wantSent(t, e, `SELECT COUNT(*) FROM "pnotes" WHERE "id" = $1`, int64(1))
+
+	// A Rewrite hook cannot drop Writable, which the scope reads, nor set it.
+	for name, w := range map[string]bool{"cleared": true, "set": false} {
+		re := &velox.FakeExec{Rows: [][]any{{int64(1)}}}
+		rdb := velox.OpenFake(velox.Postgres, re, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+			st.Writable = !st.Writable
+			return nil
+		}))
+		rq := rdb.Query[pnote]().Where(pn.ID.EQ(1))
+		if w {
+			rq = rq.Writable()
+		}
+		_, err := rq.Count(context.Background())
+		if err == nil || !strings.Contains(err.Error(), "a Rewrite hook changed the statement's Writable") || re.Calls != 0 {
+			t.Errorf("Writable %s by a Rewrite hook: %v, %d sent", name, err, re.Calls)
+		}
+	}
 }

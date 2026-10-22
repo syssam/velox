@@ -319,7 +319,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 			st.Conflict = &cf
 		}
 	}
-	entity, op := st.Entity, st.Op
+	entity, op, writable := st.Entity, st.Op, st.Writable
 	for _, rw := range db.cfg.rewrites {
 		if err := rw(ctx, st); err != nil {
 			return fmt.Errorf("velox: %s: rewrite: %w", entity.Name, err)
@@ -327,6 +327,11 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	}
 	if st.Op != op {
 		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's kind", entity.Name)
+	}
+	if st.Writable != writable {
+		// The scope reads it: without it, a Writable query drops the
+		// Write policy.
+		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's Writable", entity.Name)
 	}
 	switch {
 	case st.Entity == nil:

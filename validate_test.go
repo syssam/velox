@@ -83,3 +83,39 @@ func TestUpdateSetNullIsNotValidated(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestValidateBeforeAStatement: Validate checks the given columns of a row,
+// and ValidateSet the Set values of an update's assignments, as Insert and
+// Update would, without a DB or a statement: a nil pointer and SetNull are
+// not checked, an unnamed column is not, and an Immutable column is refused.
+func TestValidateBeforeAStatement(t *testing.T) {
+	var ve *velox.ValidationError
+	bad := "ada"
+	err := velox.Validate(&dAuthor{Name: "", Email: &bad}, dAuthors.Email)
+	if !errors.As(err, &ve) || ve.Field != "Email" || err.Error() != "velox: velox_test.dAuthor: Email: not an email" {
+		t.Errorf("Validate(Email): %v", err)
+	}
+	if err := velox.Validate(&dAuthor{Name: ""}, dAuthors.Name); !errors.As(err, &ve) || !errors.Is(err, errEmptyName) {
+		t.Errorf("Validate(Name): %v", err)
+	}
+	// An empty name not named, and a nil Email, are not checked.
+	if err := velox.Validate(&dAuthor{Name: ""}, dAuthors.Email); err != nil {
+		t.Errorf("Validate of a nil pointer: %v", err)
+	}
+	if err := velox.Validate(&dAuthor{Name: "ada"}, dAuthors.Name, dAuthors.Email); err != nil {
+		t.Errorf("Validate of a valid row: %v", err)
+	}
+
+	if err := velox.ValidateSet(dAuthors.Name.Set("")); !errors.As(err, &ve) || ve.Field != "Name" {
+		t.Errorf("ValidateSet(Name): %v", err)
+	}
+	if err := velox.ValidateSet(dAuthors.Name.Set("ada"), dAuthors.Email.SetNull()); err != nil {
+		t.Errorf("ValidateSet of valid values: %v", err)
+	}
+	if err := velox.ValidateSet(dAuthors.CreatedAt.Set(time.Now())); !errors.Is(err, velox.ErrImmutable) {
+		t.Errorf("ValidateSet(CreatedAt): %v", err)
+	}
+	if err := velox.ValidateSet[dAuthor](); err != nil {
+		t.Errorf("ValidateSet(): %v", err)
+	}
+}
