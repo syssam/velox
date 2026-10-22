@@ -183,7 +183,10 @@ func AccountsConnection(ctx context.Context, after *veloxgql.Cursor, first *int,
 // cursors. q must also select the key and the columns orderBy names, which the
 // cursors hold: a q whose Columns or Omit drops one is refused with an internal
 // error. In a gqlgen field, the page reads only the columns the selection needs
-// (userColumnsGQL), of those q selects. It runs no query.
+// (userColumnsGQL), of those q selects; a column the selection does not need is
+// left zero in the nodes, except the key, the foreign keys, the order columns
+// and the tenant, so an application's resolver must not read one it did not ask
+// for. It runs no query.
 func AccountsConnectionOf(ctx context.Context, q velox.Query[User], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *AccountWhereInput) (*AccountConnection, error) {
 	if !q.Selects(Users.ID) {
 		return nil, fmt.Errorf("veloxgql: AccountsConnectionOf: the base query does not select the key, which the cursors hold")
@@ -216,11 +219,11 @@ func userKeyGQL() []gqlimpl.OrderTerm[User] {
 }
 
 // userColumnsGQL is the columns a selection of the Account fields fields reads:
-// the key, every foreign key on the row, every order field's column, and the
-// column of each field. It is nil, every column, when a field is not one
-// velox-graphql wrote, such as an application's own.
+// the key, every foreign key on the row, every order field's column, the tenant
+// column, and the column of each field. It is nil, every column, when a field
+// is not one velox-graphql wrote, such as an application's own.
 func userColumnsGQL(fields []string) []velox.Column[User] {
-	cols := []velox.Column[User]{Users.ID, Users.UserBestFriend}
+	cols := []velox.Column[User]{Users.ID, Users.UserBestFriend, Users.OrgID}
 	for _, f := range fields {
 		switch f {
 		case "id", "posts", "memberships", "likes":

@@ -137,7 +137,10 @@ func UsersConnection(ctx context.Context, after *veloxgql.Cursor, first *int, be
 // break the cursors. q must also select the key and the columns orderBy names,
 // which the cursors hold: a q whose Columns or Omit drops one is refused with
 // an internal error. In a gqlgen field, the page reads only the columns the
-// selection needs (userColumnsGQL), of those q selects. It runs no query.
+// selection needs (userColumnsGQL), of those q selects; a column the selection
+// does not need is left zero in the nodes, except the key, the foreign keys,
+// the order columns and the tenant, so an application's resolver must not read
+// one it did not ask for. It runs no query.
 func UsersConnectionOf(ctx context.Context, q velox.Query[User], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *UserOrder, where *UserWhereInput) (*UserConnection, error) {
 	if !q.Selects(Users.ID) {
 		return nil, fmt.Errorf("veloxgql: UsersConnectionOf: the base query does not select the key, which the cursors hold")
@@ -185,9 +188,9 @@ func userKeyGQL() []gqlimpl.OrderTerm[User] {
 }
 
 // userColumnsGQL is the columns a selection of the User fields fields reads:
-// the key, every foreign key on the row, every order field's column, and the
-// column of each field. It is nil, every column, when a field is not one
-// velox-graphql wrote, such as an application's own.
+// the key, every foreign key on the row, every order field's column, the tenant
+// column, and the column of each field. It is nil, every column, when a field
+// is not one velox-graphql wrote, such as an application's own.
 func userColumnsGQL(fields []string) []velox.Column[User] {
 	cols := []velox.Column[User]{Users.ID, Users.Name, Users.JoinedAt}
 	for _, f := range fields {
@@ -472,29 +475,29 @@ func (in UpdateUserInput) GoString() string { return in.String() }
 // any statement (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFrom
 // reads from ctx, in one transaction (gqlimpl.Atomic): the operation's, or one
 // of its own. The fields go in one UPDATE, which the tenant scope and the Read
-// and Write policies scope; an input that sets none sends no UPDATE, and a
-// COUNT under the same scope (Writable) checks the row instead, so that no edge
-// of a row the caller may not change is written. The edges follow, each
-// cleared, then its IDs removed, then its IDs added: an ID to remove the edge
-// does not lead to is ignored, and one to add it already leads to is kept.
-// Clearing an edge whose key is on the targets' rows, or removing from it,
-// unlinks only the children the tenant scope and the target's Write policy let
-// the caller change; one they hide stays linked. Clearing a many-to-many edge,
-// or removing from it, deletes only the links to targets the tenant scope and
-// the target's Read policy let the caller read; a link to one they hide stays.
-// Each ID must name a row the caller may read, and a row it re-points one the
-// caller may change; a child another node holds is refused (BAD_USER_INPUT). An
-// id that names no row the caller may change, or an ID no row it may read,
-// fails with NOT_FOUND and keeps nothing. A validator's refusal is
-// BAD_USER_INPUT, naming the input field, and comes before any statement;
-// velox's other errors are returned as they are. The row is read back as
-// written, under the tenant scope and without the Read policy
-// (velox.SkipPolicy): an update that takes the row out of what the caller may
-// read still returns it. On MySQL the UPDATE's row count needs
-// clientFoundRows=true, as velox's Update does. An update that sets no field
-// checks its row and then writes the edges, so a row changed in between is a
-// time-of-check race, the same one ent has. There is no savepoint inside the
-// extension's transaction, so a resolver must return this function's error.
+// and Write policies scope; an input that sets none sends no UPDATE, and an
+// Exists under the same scope (Writable) checks the row instead, so that no
+// edge of a row the caller may not change is written. That check locks the row
+// (FOR UPDATE) wherever the dialect has locking reads, which is every one but
+// SQLite (whose transactions lock the database), so the row stays the caller's
+// until the edges are written. The edges follow, each cleared, then its IDs
+// removed, then its IDs added: an ID to remove the edge does not lead to is
+// ignored, and one to add it already leads to is kept. Clearing an edge whose
+// key is on the targets' rows, or removing from it, unlinks only the children
+// the tenant scope and the target's Write policy let the caller change; one
+// they hide stays linked. Clearing a many-to-many edge, or removing from it,
+// deletes only the links to targets the tenant scope and the target's Read
+// policy let the caller read; a link to one they hide stays. Each ID must name
+// a row the caller may read, and a row it re-points one the caller may change;
+// a child another node holds is refused (BAD_USER_INPUT). An id that names no
+// row the caller may change, or an ID no row it may read, fails with NOT_FOUND
+// and keeps nothing. A validator's refusal is BAD_USER_INPUT, naming the input
+// field, and comes before any statement; velox's other errors are returned as
+// they are. The row is read back as written, under the tenant scope and without
+// the Read policy (velox.SkipPolicy): an update that takes the row out of what
+// the caller may read still returns it. On MySQL the UPDATE's row count needs
+// clientFoundRows=true, as velox's Update does. There is no savepoint inside
+// the extension's transaction, so a resolver must return this function's error.
 func UpdateUser(ctx context.Context, id string, input UpdateUserInput) (*User, error) {
 	var (
 		key int64
@@ -532,10 +535,16 @@ func UpdateUser(ctx context.Context, id string, input UpdateUserInput) (*User, e
 			if n == 0 {
 				return gqlimpl.NotFound("updateUser", "User")
 			}
-		} else if n, err := db.Query[User]().Where(Users.ID.EQ(key)).Writable().Count(ctx); err != nil {
-			return err
-		} else if n == 0 {
-			return gqlimpl.NotFound("updateUser", "User")
+		} else {
+			chk := db.Query[User]().Where(Users.ID.EQ(key)).Writable()
+			if db.Dialect() != velox.SQLite {
+				chk = chk.ForUpdate()
+			}
+			if ok, err := chk.Exists(ctx); err != nil {
+				return err
+			} else if !ok {
+				return gqlimpl.NotFound("updateUser", "User")
+			}
 		}
 		x, err := db.Query[User]().Where(Users.ID.EQ(key)).One(velox.SkipPolicy(ctx, "graphql: the row this update wrote"))
 		if errors.Is(err, velox.ErrNotFound) {

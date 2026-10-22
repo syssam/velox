@@ -122,7 +122,10 @@ func GroupsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, b
 // must also select the key and the columns orderBy names, which the cursors
 // hold: a q whose Columns or Omit drops one is refused with an internal error.
 // In a gqlgen field, the page reads only the columns the selection needs
-// (groupColumnsGQL), of those q selects. It runs no query.
+// (groupColumnsGQL), of those q selects; a column the selection does not need
+// is left zero in the nodes, except the key, the foreign keys, the order
+// columns and the tenant, so an application's resolver must not read one it did
+// not ask for. It runs no query.
 func GroupsConnectionOf(ctx context.Context, q velox.Query[Group], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *GroupOrder) (*GroupConnection, error) {
 	if !q.Selects(Groups.ID) {
 		return nil, fmt.Errorf("veloxgql: GroupsConnectionOf: the base query does not select the key, which the cursors hold")
@@ -162,9 +165,9 @@ func groupKeyGQL() []gqlimpl.OrderTerm[Group] {
 }
 
 // groupColumnsGQL is the columns a selection of the Group fields fields reads:
-// the key, every foreign key on the row, every order field's column, and the
-// column of each field. It is nil, every column, when a field is not one
-// velox-graphql wrote, such as an application's own.
+// the key, every foreign key on the row, every order field's column, the tenant
+// column, and the column of each field. It is nil, every column, when a field
+// is not one velox-graphql wrote, such as an application's own.
 func groupColumnsGQL(fields []string) []velox.Column[Group] {
 	cols := []velox.Column[Group]{Groups.ID, Groups.Name}
 	for _, f := range fields {

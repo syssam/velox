@@ -107,7 +107,10 @@ func LikesConnection(ctx context.Context, after *veloxgql.Cursor, first *int, be
 // the key and the columns orderBy names, which the cursors hold: a q whose
 // Columns or Omit drops one is refused with an internal error. In a gqlgen
 // field, the page reads only the columns the selection needs (likeColumnsGQL),
-// of those q selects. It runs no query.
+// of those q selects; a column the selection does not need is left zero in the
+// nodes, except the key, the foreign keys, the order columns and the tenant, so
+// an application's resolver must not read one it did not ask for. It runs no
+// query.
 func LikesConnectionOf(ctx context.Context, q velox.Query[Like], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*LikeConnection, error) {
 	if !q.Selects(Likes.UserID, Likes.PostID) {
 		return nil, fmt.Errorf("veloxgql: LikesConnectionOf: the base query does not select the key, which the cursors hold")
@@ -136,9 +139,9 @@ func likeKeyGQL() []gqlimpl.OrderTerm[Like] {
 }
 
 // likeColumnsGQL is the columns a selection of the Like fields fields reads:
-// the key, every foreign key on the row, every order field's column, and the
-// column of each field. It is nil, every column, when a field is not one
-// velox-graphql wrote, such as an application's own.
+// the key, every foreign key on the row, every order field's column, the tenant
+// column, and the column of each field. It is nil, every column, when a field
+// is not one velox-graphql wrote, such as an application's own.
 func likeColumnsGQL(fields []string) []velox.Column[Like] {
 	cols := []velox.Column[Like]{Likes.UserID, Likes.PostID}
 	for _, f := range fields {

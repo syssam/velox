@@ -214,8 +214,11 @@
 // or locations.
 //
 // Limits of the mutations:
-//   - An update that sets no field checks its row, then writes the edges: a
-//     time-of-check race, the same one ent has.
+//   - An update that sets no field, and a delete, check their row before they
+//     write its edges or join rows, with a locking read (FOR UPDATE) wherever
+//     the dialect has one: the row stays the caller's for the rest of the
+//     mutation's transaction, so there is no time-of-check race. SQLite has
+//     no locking reads, and its transactions lock the database.
 //   - On MySQL the DSN needs clientFoundRows=true: UpdateX counts the rows
 //     its UPDATE matched, and MySQL counts only changed rows without it.
 //   - A created row is returned as written, not read again through the Read

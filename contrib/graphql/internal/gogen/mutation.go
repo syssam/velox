@@ -734,7 +734,7 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 	}
 
 	f.p("")
-	f.doc("", fmt.Sprintf("%s updates the %s with the ID id from input, as the mutation %s does, and returns it as it is afterwards: a field input does not give is left as it is, and a clear field sets a field to NULL or empties an edge. It first decodes id and every ID and JSON value of input, and refuses a field given with its clear field, or an ID both to add and to remove, before any statement (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFrom reads from ctx, in one transaction (gqlimpl.Atomic): the operation's, or one of its own. The fields go in one UPDATE, which the tenant scope and the Read and Write policies scope; an input that sets none sends no UPDATE, and a COUNT under the same scope (Writable) checks the row instead, so that no edge of a row the caller may not change is written. The edges follow, each cleared, then its IDs removed, then its IDs added: an ID to remove the edge does not lead to is ignored, and one to add it already leads to is kept. Clearing an edge whose key is on the targets' rows, or removing from it, unlinks only the children the tenant scope and the target's Write policy let the caller change; one they hide stays linked. Clearing a many-to-many edge, or removing from it, deletes only the links to targets the tenant scope and the target's Read policy let the caller read; a link to one they hide stays. Each ID must name a row the caller may read, and a row it re-points one the caller may change; a child another node holds is refused (BAD_USER_INPUT). An id that names no row the caller may change, or an ID no row it may read, fails with NOT_FOUND and keeps nothing. A validator's refusal is BAD_USER_INPUT, naming the input field, and comes before any statement; velox's other errors are returned as they are. The row is read back as written, under the tenant scope and without the Read policy (velox.SkipPolicy): an update that takes the row out of what the caller may read still returns it. On MySQL the UPDATE's row count needs clientFoundRows=true, as velox's Update does. An update that sets no field checks its row and then writes the edges, so a row changed in between is a time-of-check race, the same one ent has. There is no savepoint inside the extension's transaction, so a resolver must return this function's error.", fn, n, mutation))
+	f.doc("", fmt.Sprintf("%s updates the %s with the ID id from input, as the mutation %s does, and returns it as it is afterwards: a field input does not give is left as it is, and a clear field sets a field to NULL or empties an edge. It first decodes id and every ID and JSON value of input, and refuses a field given with its clear field, or an ID both to add and to remove, before any statement (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFrom reads from ctx, in one transaction (gqlimpl.Atomic): the operation's, or one of its own. The fields go in one UPDATE, which the tenant scope and the Read and Write policies scope; an input that sets none sends no UPDATE, and an Exists under the same scope (Writable) checks the row instead, so that no edge of a row the caller may not change is written. That check locks the row (FOR UPDATE) wherever the dialect has locking reads, which is every one but SQLite (whose transactions lock the database), so the row stays the caller's until the edges are written. The edges follow, each cleared, then its IDs removed, then its IDs added: an ID to remove the edge does not lead to is ignored, and one to add it already leads to is kept. Clearing an edge whose key is on the targets' rows, or removing from it, unlinks only the children the tenant scope and the target's Write policy let the caller change; one they hide stays linked. Clearing a many-to-many edge, or removing from it, deletes only the links to targets the tenant scope and the target's Read policy let the caller read; a link to one they hide stays. Each ID must name a row the caller may read, and a row it re-points one the caller may change; a child another node holds is refused (BAD_USER_INPUT). An id that names no row the caller may change, or an ID no row it may read, fails with NOT_FOUND and keeps nothing. A validator's refusal is BAD_USER_INPUT, naming the input field, and comes before any statement; velox's other errors are returned as they are. The row is read back as written, under the tenant scope and without the Read policy (velox.SkipPolicy): an update that takes the row out of what the caller may read still returns it. On MySQL the UPDATE's row count needs clientFoundRows=true, as velox's Update does. There is no savepoint inside the extension's transaction, so a resolver must return this function's error.", fn, n, mutation))
 	f.p("func %s(ctx %s.Context, id string, input %s) (*%s, error) {", fn, ctx, in, e.Name)
 	writeDecodes(f, fs, dec, order, selfDec)
 
@@ -856,9 +856,10 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 		}
 	}
 
-	// The row: the UPDATE, or, when there is nothing to set, a COUNT under
-	// the same scope, the Write policy's too (Writable): no edge of a row
-	// the caller may read but not change is written.
+	// The row: the UPDATE, or, when there is nothing to set, a locking
+	// existence check under the same scope, the Write policy's too
+	// (Writable): no edge of a row the caller may read but not change is
+	// written.
 	f.p("\t\tif len(set) > 0 {")
 	f.p("\t\t\tn, err := db.Update[%s]().Set(set...).Where(%s.EQ(key)).Exec(ctx)", e.Name, pk)
 	f.p("\t\t\tif err != nil {")
@@ -867,10 +868,8 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 	f.p("\t\t\tif n == 0 {")
 	f.p("\t\t\t\treturn %s.NotFound(%q, %q)", impl, mutation, n)
 	f.p("\t\t\t}")
-	f.p("\t\t} else if n, err := db.Query[%s]().Where(%s.EQ(key)).Writable().Count(ctx); err != nil {", e.Name, pk)
-	f.p("\t\t\treturn err")
-	f.p("\t\t} else if n == 0 {")
-	f.p("\t\t\treturn %s.NotFound(%q, %q)", impl, mutation, n)
+	f.p("\t\t} else {")
+	r.lockedCheck(f, e, pk, mutation, n, impl, velox, "\t\t\t")
 	f.p("\t\t}")
 
 	// The edges whose key is on the targets' rows, and the join rows: each
@@ -1055,7 +1054,7 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 }
 
 // writeDelete writes DeleteX, which decodes the ID of the row and, in one
-// transaction, deletes the row's join rows, after a COUNT under the scope of
+// transaction, deletes the row's join rows, after a locking Exists under the scope of
 // its DELETE has found it, then the row, and returns the ID.
 func (r *renderer) writeDelete(f *file, t *sdl.Type) error {
 	e, n := t.Entity, t.Name
@@ -1124,7 +1123,7 @@ func (r *renderer) writeDelete(f *file, t *sdl.Type) error {
 	}
 	doc := fmt.Sprintf("%s deletes the %s with the ID id%s, as the mutation %s does, and returns the ID, encoded again from the key. It first decodes id, before any statement (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFrom reads from ctx, in one transaction (gqlimpl.Atomic): the operation's, or one of its own. The DELETE is scoped by the tenant and the Read and Write policies. ", fn, n, joinRows, mutation)
 	if len(joins) > 0 {
-		doc += "The join rows, which neither scopes, go first, after a COUNT under the DELETE's scope (Writable) has found the row: those of a row the caller may not delete are never touched. Every join row of the row goes, whatever the tenant of the row at its other end: the row is gone, and a row of no tenant is unlinked from every tenant's rows. "
+		doc += "The join rows, which neither scopes, go first, after an Exists under the DELETE's scope (Writable), locking the row (FOR UPDATE) wherever the dialect can, has found the row: those of a row the caller may not delete are never touched. Every join row of the row goes, whatever the tenant of the row at its other end: the row is gone, and a row of no tenant is unlinked from every tenant's rows. "
 	}
 	doc += "An id that names no row the caller may change fails with NOT_FOUND and deletes nothing. The rows of other entities whose key holds the row's are not touched: the database's foreign keys decide, and a key that refuses the DELETE fails it with a *velox.ConstraintError, which veloxgql.ErrorPresenter shows as BAD_USER_INPUT. velox's errors are returned as they are."
 	f.doc("", doc)
@@ -1138,11 +1137,7 @@ func (r *renderer) writeDelete(f *file, t *sdl.Type) error {
 		// The row is checked under the DELETE's scope before its join rows,
 		// which no tenant or policy scopes, are touched: those of a row the
 		// caller may not delete are never deleted.
-		f.p("\t\tif n, err := db.Query[%s]().Where(%s.EQ(key)).Writable().Count(ctx); err != nil {", e.Name, pk)
-		f.p("\t\t\treturn err")
-		f.p("\t\t} else if n == 0 {")
-		f.p("\t\t\treturn %s.NotFound(%q, %q)", impl, mutation, n)
-		f.p("\t\t}")
+		r.lockedCheck(f, e, pk, mutation, n, impl, velox, "\t\t")
 		for _, j := range joins {
 			var ps []string
 			for _, c := range j.cols {
@@ -1198,4 +1193,23 @@ func setNull(e *plugin.Entity, fd *plugin.Field) (string, error) {
 		return h + ".Set(nil)", nil
 	}
 	return "", fmt.Errorf("schema %s, field %s: the model says its column holds NULL, and its Go type %s holds no nil; make the field Nillable", e.Name, fd.Name, cmp.Or(fd.ElemType, fd.GoType))
+}
+
+// lockedCheck writes the check of an update's or a delete's row: a Writable
+// Exists, under the scope of the write, which finds no row the caller may not
+// change. Where the dialect has locking reads (everywhere but SQLite) it
+// locks the row with ForUpdate, which Atomic's transaction lets it do, so the
+// row stays the caller's until the edges are written. SQLite has none, and
+// its transactions lock the database. The dialect is read at run time, from
+// the DB the operation runs on.
+func (r *renderer) lockedCheck(f *file, e *plugin.Entity, pk, mutation, n, impl, velox, ind string) {
+	f.p("%schk := db.Query[%s]().Where(%s.EQ(key)).Writable()", ind, e.Name, pk)
+	f.p("%sif db.Dialect() != %s.SQLite {", ind, velox)
+	f.p("%s\tchk = chk.ForUpdate()", ind)
+	f.p("%s}", ind)
+	f.p("%sif ok, err := chk.Exists(ctx); err != nil {", ind)
+	f.p("%s\treturn err", ind)
+	f.p("%s} else if !ok {", ind)
+	f.p("%s\treturn %s.NotFound(%q, %q)", ind, impl, mutation, n)
+	f.p("%s}", ind)
 }

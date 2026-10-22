@@ -399,7 +399,7 @@ Plan 3 (mutations, `docs/plans/2026-10-21-graphql-3-mutations.md`) settled these
 
 **Limits, documented in `contrib/graphql`'s doc and the generated functions.**
 - There is no savepoint inside the extension's transaction (call 3).
-- An edge-only update has a time-of-check race between its `COUNT` and its writes, the same one ent has.
+- An edge-only update had a time-of-check race between its `COUNT` and its writes; GraphQL plan 4 closes it: the check is a `Writable().ForUpdate().Exists` read (not on SQLite, whose transactions lock the database), and the lock holds for the rest of the mutation's transaction.
 - On MySQL the DSN needs `clientFoundRows=true`: `UpdateX` counts matched rows, which MySQL reports only with it.
 - Created rows are returned as written.
 - Self-edges are written one way, as the core's loads read them (the plugin model has no `Bidi`).

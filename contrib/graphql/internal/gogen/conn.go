@@ -126,11 +126,9 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	} else {
 		how = append(how, "ordered by the key")
 	}
-	f.doc("", fmt.Sprintf("%s is the connection to the %s nodes q returns, %s, and paged by the other arguments. q keeps its filters and With loads, and the scope the application gave it; its Offset is cleared and its Limit replaced, since the page is the connection's. q must have no OrderBy: the connection orders it, and a q with one is refused with an internal error, since its order would come first and break the cursors. q must also select the key and the columns orderBy names, which the cursors hold: a q whose Columns or Omit drops one is refused with an internal error. In a gqlgen field, the page reads only the columns the selection needs (%s), of those q selects. It runs no query.", connFunc(t), n, strings.Join(how, ", "), colsFunc(t)))
+	f.doc("", fmt.Sprintf("%s is the connection to the %s nodes q returns, %s, and paged by the other arguments. q keeps its filters and With loads, and the scope the application gave it; its Offset is cleared and its Limit replaced, since the page is the connection's. q must have no OrderBy: the connection orders it, and a q with one is refused with an internal error, since its order would come first and break the cursors. q must also select the key and the columns orderBy names, which the cursors hold: a q whose Columns or Omit drops one is refused with an internal error. In a gqlgen field, the page reads only the columns the selection needs (%s), of those q selects; a column the selection does not need is left zero in the nodes, except the key, the foreign keys, the order columns and the tenant, so an application's resolver must not read one it did not ask for. It runs no query.", connFunc(t), n, strings.Join(how, ", "), colsFunc(t)))
 	f.p("func %s(ctx %s.Context, q %s.Query[%s], %s) (*%sConnection, error) {", connFunc(t), ctx, velox, e.Name, connParams(f, t), n)
-	if err := r.writeSelects(f, t); err != nil {
-		return err
-	}
+	r.writeSelects(f, t)
 	f.p("\tif fields, ok := %s.Selected(ctx, %q); ok {", impl, n)
 	f.p("\t\tq = %s.Narrow(q, %s(fields))", impl, colsFunc(t))
 	f.p("\t}")
@@ -305,7 +303,7 @@ func (r *renderer) converts(e *plugin.Entity, fd *plugin.Field, base string) err
 
 // writeSelects writes the refusal, in XConnectionOf, of a q that does not
 // select the key or a column of an orderBy term: the cursors hold them.
-func (r *renderer) writeSelects(f *file, t *sdl.Type) error {
+func (r *renderer) writeSelects(f *file, t *sdl.Type) {
 	e, n := t.Entity, t.Name
 	errorf := f.use("fmt", "fmt") + ".Errorf"
 	var keys []string
@@ -316,7 +314,7 @@ func (r *renderer) writeSelects(f *file, t *sdl.Type) error {
 	f.p("\t\treturn nil, %s(\"veloxgql: %s: the base query does not select the key, which the cursors hold\")", errorf, connFunc(t))
 	f.p("\t}")
 	if t.Order == nil {
-		return nil
+		return
 	}
 	if t.MultiOrder {
 		f.p("\tfor _, o := range orderBy {")
@@ -333,7 +331,7 @@ func (r *renderer) writeSelects(f *file, t *sdl.Type) error {
 	f.p("\t\t\treturn nil, %s(\"veloxgql: %s: the base query does not select the column of %%s, which orderBy names and the cursors hold\", o.Field)", errorf, connFunc(t))
 	f.p("\t\t}")
 	f.p("\t}")
-	return nil
+
 }
 
 // foreignKey reports whether e's field fd is a foreign key on e's rows: a
@@ -356,7 +354,8 @@ func (r *renderer) foreignKey(e *plugin.Entity, fd *plugin.Field) bool {
 // writeColumns writes <entity>ColumnsGQL, the columns a selection of t's
 // fields reads: the key, every foreign key on the
 // row (an edge, the application's With loads, and mutations' checks read
-// them) and every order field's column (a cursor holds them), always; and
+// them), every order field's column (a cursor holds them) and the tenant
+// column (an application's resolver reads it), always; and
 // each selected field's column. A field it does not know, an application's
 // own, may read any column: then all of them.
 func (r *renderer) writeColumns(f *file, t *sdl.Type) {
@@ -373,6 +372,11 @@ func (r *renderer) writeColumns(f *file, t *sdl.Type) {
 			base = append(base, v.Field)
 		}
 	}
+	// The tenant column too: a row handed to an application's resolver, which
+	// reads its tenant, never has a zero one.
+	if e.Tenant >= 0 && !in(e.Tenant) {
+		base = append(base, e.Tenant)
+	}
 	cols := make([]string, len(base))
 	for k, i := range base {
 		cols[k] = e.Handles + "." + e.Fields[i].GoName
@@ -387,7 +391,7 @@ func (r *renderer) writeColumns(f *file, t *sdl.Type) {
 		none = append(none, ed.Name)
 	}
 	f.p("")
-	f.doc("", fmt.Sprintf("%s is the columns a selection of the %s fields fields reads: the key, every foreign key on the row, every order field's column, and the column of each field. It is nil, every column, when a field is not one velox-graphql wrote, such as an application's own.", colsFunc(t), t.Name))
+	f.doc("", fmt.Sprintf("%s is the columns a selection of the %s fields fields reads: the key, every foreign key on the row, every order field's column, the tenant column, and the column of each field. It is nil, every column, when a field is not one velox-graphql wrote, such as an application's own.", colsFunc(t), t.Name))
 	f.p("func %s(fields []string) []%s.Column[%s] {", colsFunc(t), velox, e.Name)
 	f.p("\tcols := []%s.Column[%s]{%s}", velox, e.Name, strings.Join(cols, ", "))
 	f.p("\tfor _, f := range fields {")

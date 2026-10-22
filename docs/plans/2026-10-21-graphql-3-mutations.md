@@ -308,7 +308,7 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
   3. In `gqlimpl.Atomic`:
      - collect the setters: `<H>.<Field>.Set(*v)` for a given field, `<H>.<Field>.SetNull()` for a clear; for a unique edge that `OwnsKey`, `Exist` on the new ID and then set the key, or `SetNull` for a clear;
      - with setters: `db.Update[E]().Set(set...).Where(E.ID.EQ(k)).Exec(ctx)`, its error through `WriteError(err, "UpdatePostInput", …)`, and `NotFound("updatePost", "Post")` when it matched 0 rows (missing, another tenant's, or excluded by the Write policy);
-     - without setters: `db.Query[E]().Where(E.ID.EQ(k)).Count(ctx)`, and `NotFound` when 0;
+     - without setters: `db.Query[E]().Where(E.ID.EQ(k)).Count(ctx)`, and `NotFound` when 0 (GraphQL plan 4 makes this a locking `Writable().ForUpdate().Exists` read, which closes the time-of-check race);
      - an O2O edge whose key the target holds: with a NULL-able key, first `SetNull` on the target row that holds `k` now and is not the new one, then set the new one; a clear sets NULL where the key is `k`;
      - an O2M edge: clear, then remove, then add. Clear sets the key NULL where it is `k`. Remove sets it NULL where it is `k` and the ID is among the removed; an ID not on the edge is ignored. Add sets it to `k` where the ID is among the added, and `Exist`'s error when fewer rows matched;
      - an M2M edge: clear, then remove, then add. Clear and remove delete join rows; add checks the targets with `Exist`, then inserts with `DoNothing`;

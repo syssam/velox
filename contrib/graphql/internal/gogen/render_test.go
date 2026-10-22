@@ -10,6 +10,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -1060,8 +1061,9 @@ func TestDeleteFunc(t *testing.T) {
 
 // TestDeleteJoinRows pins the join rows DeleteX deletes: those of each M2M
 // edge's join entity, from either side of a pair, once per join entity, and
-// both columns of a join of the entity to itself; each after a COUNT under
-// the DELETE's scope (Writable), and before the DELETE of the row.
+// both columns of a join of the entity to itself; each after a locking
+// existence check under the DELETE's scope (Writable), and before the
+// DELETE of the row.
 func TestDeleteJoinRows(t *testing.T) {
 	m := testModel(t)
 	var user, group *plugin.Entity
@@ -1092,7 +1094,7 @@ func TestDeleteJoinRows(t *testing.T) {
 	for file, wants := range map[string][]string{
 		"gql_user.go": {
 			`func DeleteAccount(ctx context.Context, id string) (string, error) {`,
-			`db.Query[User]().Where(Users.ID.EQ(key)).Writable().Count(ctx)`,
+			`chk := db.Query[User]().Where(Users.ID.EQ(key)).Writable() if db.Dialect() != velox.SQLite { chk = chk.ForUpdate() } if ok, err := chk.Exists(ctx);`,
 			`return gqlimpl.NotFound("deleteAccount", "Account")`,
 			`db.Delete[UserGroup]().Where(UserGroups.UserID.EQ(key)).Exec(ctx)`,
 			`db.Delete[Follow]().Where(velox.Or(Follows.FollowerID.EQ(key), Follows.FolloweeID.EQ(key))).Exec(ctx)`,
@@ -1100,7 +1102,7 @@ func TestDeleteJoinRows(t *testing.T) {
 			`return veloxgql.EncodeID("Account", key), nil`,
 		},
 		"gql_group.go": {
-			`db.Query[Group]().Where(Groups.ID.EQ(key)).Writable().Count(ctx)`,
+			`chk := db.Query[Group]().Where(Groups.ID.EQ(key)).Writable() if db.Dialect() != velox.SQLite { chk = chk.ForUpdate() } if ok, err := chk.Exists(ctx);`,
 			`db.Delete[UserGroup]().Where(UserGroups.GroupID.EQ(key)).Exec(ctx)`,
 			`db.Delete[Group]().Where(Groups.ID.EQ(key)).Exec(ctx)`,
 		},
@@ -1159,6 +1161,78 @@ func TestUpdateEdgeToRenamedType(t *testing.T) {
 			t.Errorf("gql_group.go: no %q in\n%s", w, src)
 		}
 	}
+}
+
+// TestUpdateLocksTheRow: UpdateX and DeleteX of an entity with an M2M edge
+// check their row with a Writable Exists, locked with ForUpdate unless the
+// dialect is SQLite, and no longer with a Count, which cannot lock.
+func TestUpdateLocksTheRow(t *testing.T) {
+	m := testModel(t)
+	for _, e := range m.Entities {
+		switch e.Name {
+		case "Group":
+			setMutations(t, e, "update", "delete")
+		case "User":
+			setMutations(t, e, "delete")
+		}
+	}
+	files := render(t, m)
+	const lock = `if db.Dialect() != velox.SQLite { chk = chk.ForUpdate() } if ok, err := chk.Exists(ctx); err != nil {`
+	for _, fn := range []string{"UpdateGroup", "DeleteGroup", "DeleteAccount"} {
+		src := funcSrc(t, files, fn)
+		if src == "" {
+			t.Errorf("no %s", fn)
+			continue
+		}
+		if !strings.Contains(src, lock) || !strings.Contains(src, ".Writable() ") {
+			t.Errorf("%s does not lock its row before its edges:\n%s", fn, src)
+		}
+		if strings.Contains(src, "Writable().Count") {
+			t.Errorf("%s still checks its row with a Count:\n%s", fn, src)
+		}
+	}
+}
+
+// colsLiteral is the elements of the cols literal of the function name in
+// files, as source: Posts.ID, Posts.AuthorID, ...; nil when it has none.
+func colsLiteral(t *testing.T, files map[string]string, name string) []string {
+	t.Helper()
+	fset := token.NewFileSet()
+	for fname, src := range files {
+		f, err := parser.ParseFile(fset, fname, src, 0)
+		if err != nil {
+			t.Fatalf("%s: %v", fname, err)
+		}
+		for _, decl := range f.Decls {
+			fd, ok := decl.(*ast.FuncDecl)
+			if !ok || fd.Name.Name != name || fd.Recv != nil {
+				continue
+			}
+			for _, st := range fd.Body.List {
+				as, ok := st.(*ast.AssignStmt)
+				if !ok || len(as.Lhs) != 1 || len(as.Rhs) != 1 {
+					continue
+				}
+				if id, ok := as.Lhs[0].(*ast.Ident); !ok || id.Name != "cols" {
+					continue
+				}
+				lit, ok := as.Rhs[0].(*ast.CompositeLit)
+				if !ok {
+					continue
+				}
+				var out []string
+				for _, el := range lit.Elts {
+					var b strings.Builder
+					if err := printer.Fprint(&b, fset, el); err != nil {
+						t.Fatal(err)
+					}
+					out = append(out, b.String())
+				}
+				return out
+			}
+		}
+	}
+	return nil
 }
 
 // funcSrc is the source of the function or method name in files (a method
@@ -1300,10 +1374,22 @@ func TestColumnsGQL(t *testing.T) {
 			if !strings.Contains(src, "default: return nil") {
 				t.Errorf("%s: %s: another field does not read every column:\n%s", label, name, src)
 			}
+			cols := colsLiteral(t, files, name)
+			if len(cols) == 0 {
+				t.Errorf("%s: %s: no cols literal:\n%s", label, name, src)
+			}
+			for _, k := range e.PrimaryKey {
+				if !slices.Contains(cols, e.Handles+"."+e.Fields[k].GoName) {
+					t.Errorf("%s: %s: cols %v lack the key %s", label, name, cols, e.Fields[k].Name)
+				}
+			}
+			if e.Tenant >= 0 && !slices.Contains(cols, e.Handles+"."+e.Fields[e.Tenant].GoName) {
+				t.Errorf("%s: %s: cols %v lack the tenant column %s", label, name, cols, e.Fields[e.Tenant].Name)
+			}
 			for _, fd := range e.Fields {
 				if fd.Sensitive {
 					sensitive++
-					if strings.Contains(src, e.Handles+"."+fd.GoName+",") || strings.Contains(src, e.Handles+"."+fd.GoName+")") || strings.Contains(src, e.Handles+"."+fd.GoName+"}") {
+					if slices.Contains(cols, e.Handles+"."+fd.GoName) || regexp.MustCompile(`\b`+e.Handles+`\.`+fd.GoName+`\b`).MatchString(src) {
 						t.Errorf("%s: %s reads the sensitive %s:\n%s", label, name, fd.Name, src)
 					}
 				}
@@ -1313,14 +1399,12 @@ func TestColumnsGQL(t *testing.T) {
 			t.Error("the testdata model has no sensitive field")
 		}
 	}
-	src := funcSrc(t, render(t, testModel(t)), "postColumnsGQL")
-	for _, w := range []string{
-		// The key, the foreign keys on the row and the order columns, always.
-		"cols := []velox.Column[Post]{Posts.ID, Posts.AuthorID, ",
-	} {
-		if !strings.Contains(src, w) {
-			t.Errorf("postColumnsGQL: no %q in\n%s", w, src)
-		}
+	// The key, the foreign keys on the row and the order columns, always, in
+	// this order; a tenant column too, so that a row handed to an
+	// application's resolver never has a zero tenant.
+	cols := colsLiteral(t, render(t, testModel(t)), "postColumnsGQL")
+	if len(cols) < 2 || cols[0] != "Posts.ID" || cols[1] != "Posts.AuthorID" {
+		t.Errorf("postColumnsGQL's cols %v, want the key and then the foreign keys", cols)
 	}
 }
 

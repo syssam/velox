@@ -186,6 +186,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -364,7 +365,8 @@ var dropDDL = []string{
 // the extension's Context, as for a job outside a server; stmts are the
 // statements sent since the last reset.
 type env struct {
-	ctx context.Context
+	target string // the target's name
+	ctx    context.Context
 	db  *velox.DB
 	raw *sql.DB // the database under db, for what velox does not read
 	mu  sync.Mutex
@@ -396,7 +398,7 @@ func run(t *testing.T, fk bool, fn func(t *testing.T, e *env)) {
 			if fk {
 				ddl = tg.fkDDL
 			}
-			e := &env{}
+			e := &env{target: tg.name}
 			raw, db := tg.open(t, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
 				e.mu.Lock()
 				e.sql = append(e.sql, st.SQL)
@@ -1199,7 +1201,14 @@ func TestUpdateReadBack(t *testing.T) {
 	})
 }
 
-// TestUpdateEmpty: an input that sets nothing sends no write: one COUNT
+// isExists reports whether s is the existence check of a write: SELECT 1,
+// locked with FOR UPDATE except on SQLite, which has no locking reads.
+func (e *env) isExists(s string) bool {
+	return strings.HasPrefix(s, "SELECT 1 ") && strings.HasSuffix(s, " FOR UPDATE") == (e.target != "sqlite")
+}
+
+// TestUpdateEmpty: an input that sets nothing sends no write: one locking
+// existence check (SELECT 1 ... FOR UPDATE, without the lock on SQLite)
 // checks the row, and one SELECT reads it.
 func TestUpdateEmpty(t *testing.T) {
 	each(t, func(t *testing.T, e *env) {
@@ -1211,12 +1220,73 @@ func TestUpdateEmpty(t *testing.T) {
 			t.Errorf("UpdateWriter = %v, %v: want w unchanged", got, err)
 		}
 		s := e.stmts()
-		if len(s) != 2 || !strings.HasPrefix(s[0], "SELECT COUNT") || !strings.HasPrefix(s[1], "SELECT ") || strings.HasPrefix(s[1], "SELECT COUNT") {
-			t.Errorf("sent %q, want a SELECT COUNT and a SELECT", s)
+		if len(s) != 2 || !e.isExists(s[0]) || !strings.HasPrefix(s[1], "SELECT ") || strings.HasPrefix(s[1], "SELECT 1 ") {
+			t.Errorf("sent %q, want an existence check (locking, except on SQLite) and a SELECT", s)
 		}
 		_, err = gen.UpdateWriter(e.ctx, writerID(999), gen.UpdateWriterInput{})
 		if code(err) != veloxgql.CodeNotFound || err.Error() != "veloxgql: updateWriter: no Writer has this ID" {
 			t.Errorf("an unknown writer: %v (code %q), want NOT_FOUND", err, code(err))
+		}
+	})
+}
+
+// TestMutationWaitsOnTheLock: on PostgreSQL and MySQL a transaction holding
+// the writer's row (FOR UPDATE) keeps UpdateWriter without setters and
+// DeleteWriter waiting until it ends: their checks lock the row too. SQLite
+// has no locking reads, and its writers lock the database, so it is not tested.
+func TestMutationWaitsOnTheLock(t *testing.T) {
+	each(t, func(t *testing.T, e *env) {
+		if e.target == "sqlite" {
+			return // no locking reads there; its writers lock the database
+		}
+		w := &gen.Writer{Name: "w", Password: "x"}
+		insert(t, e.ctx, e.db, w)
+		for _, c := range []struct {
+			name   string
+			mutate func() error
+		}{
+			{"update", func() error {
+				_, err := gen.UpdateWriter(e.ctx, writerID(w.ID), gen.UpdateWriterInput{})
+				return err
+			}},
+			{"delete", func() error {
+				_, err := gen.DeleteWriter(e.ctx, writerID(w.ID))
+				return err
+			}},
+		} {
+			name, mutate := c.name, c.mutate
+			held, release, done := make(chan struct{}), make(chan struct{}), make(chan error, 1)
+			go func() {
+				done <- e.db.Tx(e.ctx, func(ctx context.Context, tx *velox.DB) error {
+					if ok, err := tx.Query[gen.Writer]().Where(gen.Writers.ID.EQ(w.ID)).ForUpdate().Exists(ctx); err != nil || !ok {
+						return fmt.Errorf("locking the writer: %v, %v", ok, err)
+					}
+					close(held)
+					<-release
+					return nil
+				})
+			}()
+			<-held
+			res := make(chan error, 1)
+			go func() { res <- mutate() }()
+			select {
+			case err := <-res:
+				close(release)
+				t.Fatalf("%s: finished while the row was locked: %v", name, err)
+			case <-time.After(500 * time.Millisecond):
+			}
+			close(release)
+			if err := <-done; err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case err := <-res:
+				if err != nil {
+					t.Errorf("%s after the lock: %v", name, err)
+				}
+			case <-time.After(10 * time.Second):
+				t.Fatalf("%s: still waiting after the lock ended", name)
+			}
 		}
 	})
 }
@@ -1259,9 +1329,15 @@ func TestDelete(t *testing.T) {
 		for _, j := range []*gen.WriterCircle{{WriterID: w.ID, CircleID: c1.ID}, {WriterID: w.ID, CircleID: c2.ID}, {WriterID: keep.ID, CircleID: c1.ID}, {WriterID: keep.ID, CircleID: c2.ID}} {
 			insert(t, e.ctx, e.db, j)
 		}
+		e.reset()
 		got, err := gen.DeleteWriter(e.ctx, writerID(w.ID))
 		if err != nil || got != writerID(w.ID) {
 			t.Fatalf("DeleteWriter = %q, %v: want %q", got, err, writerID(w.ID))
+		}
+		// The row is checked, locked where the dialect can, before its join
+		// rows go.
+		if s := e.stmts(); len(s) < 2 || !e.isExists(s[0]) || !strings.HasPrefix(s[1], "DELETE") {
+			t.Errorf("sent %q, want an existence check (locking, except on SQLite) and then the DELETEs", s)
 		}
 		if n := count(t, e.ctx, e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(w.ID))); n != 0 {
 			t.Errorf("%d writers w, want 0", n)
@@ -1376,7 +1452,7 @@ func friendsOf(t *testing.T, e *env, id int64) []int64 {
 
 // TestSelfM2M: Writer.friends joins Writer to itself. Create and update
 // write its join rows one way, the writer in writer_id; adding a friend
-// already linked changes nothing; DeleteWriter, after the COUNT under the
+// already linked changes nothing; DeleteWriter, after the locking Exists under the
 // DELETE's scope, deletes the rows that hold the writer in either column,
 // which the foreign keys of fkDDL would otherwise refuse, and no other.
 func TestSelfM2M(t *testing.T) {
@@ -1413,7 +1489,7 @@ func TestSelfM2M(t *testing.T) {
 		}
 		var count1, or int
 		for _, s := range e.stmts() {
-			if strings.HasPrefix(s, "SELECT COUNT") {
+			if e.isExists(s) {
 				count1++
 			}
 			if strings.HasPrefix(s, "DELETE") && strings.Contains(s, "writer_friends") && strings.Contains(s, " OR ") {
@@ -1421,7 +1497,7 @@ func TestSelfM2M(t *testing.T) {
 			}
 		}
 		if count1 != 1 || or != 1 {
-			t.Errorf("sent %q, want a SELECT COUNT and one DELETE of writer_friends by either column", e.stmts())
+			t.Errorf("sent %q, want an existence check and one DELETE of writer_friends by either column", e.stmts())
 		}
 		if n := count(t, e.ctx, e.db.Query[gen.WriterFriend]().Where(velox.Or(gen.WriterFriends.WriterID.EQ(w.ID), gen.WriterFriends.FriendID.EQ(w.ID)))); n != 0 {
 			t.Errorf("%d join rows of w, want 0", n)
@@ -1615,7 +1691,7 @@ func TestMutationsRun(t *testing.T) {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
 	for _, name := range []string{"TestCreate", "TestCreateM2MBothSides", "TestRepeatedIDs", "TestEdgeScope", "TestAtomic", "TestCreateErrors", "TestRepoint",
-		"TestUpdate", "TestUpdateConflicts", "TestUpdatePolicy", "TestUpdateWriteScope", "TestUpdateReadBack", "TestUpdateEmpty", "TestUpdateErrors",
+		"TestUpdate", "TestUpdateConflicts", "TestUpdatePolicy", "TestUpdateWriteScope", "TestUpdateReadBack", "TestUpdateEmpty", "TestUpdateErrors", "TestMutationWaitsOnTheLock",
 		"TestDelete", "TestDeletePolicy", "TestDeleteConstraint", "TestSelfM2M", "TestUnlinkScope", "TestValidateFirst"} {
 		if !strings.Contains(out, "--- PASS: "+name+" ") {
 			t.Errorf("no PASS of %s in\n%s", name, out)

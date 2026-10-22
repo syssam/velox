@@ -85,9 +85,9 @@ func (r *queryResolver) PublishedPosts(ctx context.Context, after *veloxgql.Curs
 }
 
 // Initials is the resolver for the initials field: the first letter of each
-// word of the user's name, upper-cased. It reads obj.Name, a column a page
-// reads only when asked for name, which velox-graphql cannot see here: a
-// page that selects initials reads every column.
+// word of the user's name, upper-cased. It reads obj.Name, which a page that
+// does not select name leaves zero. velox-graphql cannot see what a resolver
+// reads, so a page that selects initials reads every column.
 func (r *userResolver) Initials(ctx context.Context, obj *gen.User) (string, error) {
 	var b strings.Builder
 	for _, w := range strings.Fields(obj.Name) {

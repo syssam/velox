@@ -176,7 +176,7 @@ const (
 	selPosts = `SELECT "id", "org_id", "author_id", "title", "status", "views", "published_at" FROM "posts"`
 	selTags  = `SELECT "id", "name", "rank" FROM "tags"`
 	users    = `SELECT "id", "name", "joined_at" FROM "users"`
-	posts    = `SELECT "id", "author_id", "title", "views" FROM "posts"`
+	posts    = `SELECT "id", "author_id", "title", "views", "org_id" FROM "posts"`
 	tags     = `SELECT "id", "name" FROM "tags"`
 )
 
@@ -184,7 +184,7 @@ const (
 // SQL), at most n of each; in is the users' placeholders. Its arguments
 // are the users' keys, the tenant and n.
 func postsOf(in, order string) string {
-	return `SELECT "id", "author_id", "title", "views" FROM (SELECT "id", "author_id", "title", "views", ROW_NUMBER() OVER (PARTITION BY "author_id" ORDER BY ` + order + `) AS "vx_rn" FROM "posts" WHERE "author_id" IN (` + in + `) AND "org_id" = ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn"`
+	return `SELECT "id", "author_id", "title", "views", "org_id" FROM (SELECT "id", "author_id", "title", "views", "org_id", ROW_NUMBER() OVER (PARTITION BY "author_id" ORDER BY ` + order + `) AS "vx_rn" FROM "posts" WHERE "author_id" IN (` + in + `) AND "org_id" = ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn"`
 }
 
 // tagsOf is the windowed load of the name of the tags of posts, through the
@@ -214,7 +214,7 @@ func TestNode(t *testing.T) {
 		}}`,
 		stmts: []string{
 			`SELECT "id", "name", "joined_at", "email", "role" FROM "users" WHERE "id" = ? LIMIT ? [1 2]`,
-			`SELECT "id", "author_id", "title", "views", "status", "published_at" FROM "posts" WHERE "id" = ? AND "org_id" = ? LIMIT ? [1 1 2]`,
+			`SELECT "id", "author_id", "title", "views", "org_id", "status", "published_at" FROM "posts" WHERE "id" = ? AND "org_id" = ? LIMIT ? [1 1 2]`,
 			users + ` WHERE "id" IN (?) ORDER BY "id" [1]`, // the author
 			tags + ` WHERE "id" = ? LIMIT ? [1 2]`,
 		},
@@ -447,7 +447,7 @@ func TestAliasesBatch(t *testing.T) {
 			users + ` ORDER BY "id" LIMIT ? [101]`,
 			// a, its first post each; b, the posts titled Beta.
 			postsOf("?, ?, ?", `"id"`) + ` [1 2 3 1 2]`,
-			`SELECT "id", "author_id", "title", "views" FROM (SELECT "id", "author_id", "title", "views", ROW_NUMBER() OVER (PARTITION BY "author_id" ORDER BY "id") AS "vx_rn" FROM "posts" WHERE "author_id" IN (?, ?, ?) AND "title" = ? AND "org_id" = ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn" [1 2 3 Beta 1 101]`,
+			`SELECT "id", "author_id", "title", "views", "org_id" FROM (SELECT "id", "author_id", "title", "views", "org_id", ROW_NUMBER() OVER (PARTITION BY "author_id" ORDER BY "id") AS "vx_rn" FROM "posts" WHERE "author_id" IN (?, ?, ?) AND "title" = ? AND "org_id" = ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn" [1 2 3 Beta 1 101]`,
 		},
 	})
 }
@@ -544,7 +544,7 @@ func TestTenantIsolation(t *testing.T) {
 			tags + ` WHERE "name" = ? ORDER BY "id" LIMIT ? [go 101]`,
 			// The label's posts, through the join table: the tenant's
 			// condition is inside the window.
-			fmt.Sprintf(`SELECT "id", "author_id", "title", "views", "vx_owner" FROM (SELECT "posts"."id", "posts"."author_id", "posts"."title", "posts"."views", "vx_j"."tag_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."tag_id" ORDER BY "posts"."id") AS "vx_rn" FROM "posts" JOIN "post_tags" AS "vx_j" ON "vx_j"."post_id" = "posts"."id" WHERE "vx_j"."tag_id" IN (?) AND "posts"."org_id" = ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn" [1 %d 101]`, org),
+			fmt.Sprintf(`SELECT "id", "author_id", "title", "views", "org_id", "vx_owner" FROM (SELECT "posts"."id", "posts"."author_id", "posts"."title", "posts"."views", "posts"."org_id", "vx_j"."tag_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."tag_id" ORDER BY "posts"."id") AS "vx_rn" FROM "posts" JOIN "post_tags" AS "vx_j" ON "vx_j"."post_id" = "posts"."id" WHERE "vx_j"."tag_id" IN (?) AND "posts"."org_id" = ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn" [1 %d 101]`, org),
 		}
 	}
 	s.do(t, request{
@@ -886,7 +886,7 @@ func TestUnlinkOtherTenant(t *testing.T) {
 		query: `mutation { updateLabel(id: "` + label1 + `", input: {removePostIDs: ["` + post5 + `"]}) { name } }`,
 		want:  `{"data": {"updateLabel": {"name": "go"}}}`,
 		stmts: []string{
-			`SELECT COUNT(*) FROM "tags" WHERE "id" = ? [1]`,
+			`SELECT 1 FROM "tags" WHERE "id" = ? LIMIT ? [1 1]`,
 			// Post 5 is not acme's: no join row is deleted.
 			`SELECT "id" FROM "posts" WHERE "id" IN (?) AND "org_id" = ? LIMIT ? [5 1 1]`,
 			selTags + ` WHERE "id" = ? LIMIT ? [1 2]`,
@@ -897,7 +897,7 @@ func TestUnlinkOtherTenant(t *testing.T) {
 		query: `mutation { updateLabel(id: "` + label1 + `", input: {clearPosts: true}) { name } }`,
 		want:  `{"data": {"updateLabel": {"name": "go"}}}`,
 		stmts: []string{
-			`SELECT COUNT(*) FROM "tags" WHERE "id" = ? [1]`,
+			`SELECT 1 FROM "tags" WHERE "id" = ? LIMIT ? [1 1]`,
 			// The label's join rows a page at a time, the posts of them
 			// acme may read, and only their join rows.
 			`SELECT "post_id", "tag_id" FROM "post_tags" WHERE "tag_id" = ? ORDER BY "tag_id", "post_id" LIMIT ? [1 100]`,
@@ -936,7 +936,7 @@ func TestDeleteOtherTenant(t *testing.T) {
 		query: `mutation { deletePost(id: "` + post5 + `") }`,
 		want: `{"errors": [{"message": "deletePost: no Post has this ID", "path": ["deletePost"], "extensions": {"code": "NOT_FOUND"}}],
 			"data": null}`,
-		stmts: []string{`SELECT COUNT(*) FROM "posts" WHERE "id" = ? AND "org_id" = ? [5 1]`},
+		stmts: []string{`SELECT 1 FROM "posts" WHERE "id" = ? AND "org_id" = ? LIMIT ? [5 1 1]`},
 	})
 	s.do(t, request{
 		org:   "2",
@@ -958,7 +958,7 @@ func TestDeletePost(t *testing.T) {
 		query: `mutation { deletePost(id: "` + post1 + `") }`,
 		want:  `{"data": {"deletePost": "` + post1 + `"}}`,
 		stmts: []string{
-			`SELECT COUNT(*) FROM "posts" WHERE "id" = ? AND "org_id" = ? [1 1]`,
+			`SELECT 1 FROM "posts" WHERE "id" = ? AND "org_id" = ? LIMIT ? [1 1 1]`,
 			`DELETE FROM "post_tags" WHERE "post_id" = ? [1]`,
 			`DELETE FROM "posts" WHERE "id" = ? AND "org_id" = ? [1 1]`,
 		},
