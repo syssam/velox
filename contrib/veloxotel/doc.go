@@ -68,12 +68,25 @@
 // The adapter sees no connection string, so the application names the
 // server: Config.Target gives every statement's db.namespace (PostgreSQL's
 // "{database}|{schema}", MySQL's database), server.address and server.port,
-// and Config.TargetFor, when set, gives them per shard and replica from the
-// statement's velox.Route. They are start attributes, and are on the
-// statement's duration point too. TargetFor is called again when the
-// statement ends only if its route changed: a read that fell over to the
-// primary then names the primary, on its span and its point. The
-// transaction's span, which is no database client span, has none of them.
+// as start attributes and on its duration point. Config.TargetFor, when set,
+// gives them per shard and replica from the statement's velox.Route. A
+// route is final only once the statement ran, as a read on a failed replica
+// falls over to the primary, so TargetFor is called then, once, and its
+// attributes are set on the span before it ends and on the duration point:
+// a read that fell over names only the primary. The transaction's span,
+// which is no database client span, has none of them. With the hosts of
+// each shard's primary and replicas in two maps:
+//
+//	TargetFor: func(r velox.Route) veloxotel.Target {
+//		t := veloxotel.Target{Namespace: "billing|public", Port: 5432}
+//		switch {
+//		case r.Replica >= 0: // replica r.Replica of shard r.Shard
+//			t.Address = replicaHosts[r.Shard][r.Replica]
+//		default: // -1: the primary; r.Shard is "" on an unsharded DB
+//			t.Address = primaryHosts[r.Shard]
+//		}
+//		return t
+//	},
 //
 // A failed statement's span and duration point carry error.type and, when
 // the driver gave one, its code as db.response.status_code (see

@@ -47,7 +47,7 @@ func handle(err error) {
 
 // record records a statement's duration, and a successful read's rows,
 // after it ran (not on a panic); sum is its summary (see summary), tkv its
-// server's (see targetOf) and f its failure. Its attributes are bounded:
+// server's (Config.Target's or TargetFor's) and f its failure. Its attributes are bounded:
 // never the tags, tenant, SQL or call site, and the fingerprint only with
 // Config.RecordMetricFingerprint.
 func (a *adapter) record(ctx context.Context, st *velox.Statement, sum string, tkv []attribute.KeyValue, seconds float64, f failure, fellOver bool) {

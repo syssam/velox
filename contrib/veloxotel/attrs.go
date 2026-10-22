@@ -148,12 +148,29 @@ func returnsRows(st *velox.Statement) bool {
 	return st.Op == velox.OpSelect || st.Op == velox.OpRawQuery
 }
 
-// errorType is error.type's value for err, from a short fixed list (spec
-// §2.1) or, where none fits, the driver's code (velox.DriverCode), so it can
-// key metrics. ctx is the context the statement ran on: a deadline velox set
-// is velox.timeout even when the driver reports it as
+// failure is what a failed statement adds to its span and duration point:
+// error.type, and db.response.status_code when the driver gave a code. A
+// statement that succeeded has the zero failure.
+type failure struct {
+	errType string // "": the statement succeeded
+	code    string // "": no driver code
+}
+
+// failureOf is err's failure, reading the driver's code once.
+func failureOf(ctx context.Context, err error) failure {
+	code, _ := velox.DriverCode(err)
+	return failure{errType: errorTypeOf(ctx, err, code), code: code}
+}
+
+// errorType is error.type's value for err (see errorTypeOf).
+func errorType(ctx context.Context, err error) string { return failureOf(ctx, err).errType }
+
+// errorTypeOf is error.type's value for err, whose driver code is code ("":
+// none), from a short fixed list (spec §2.1) or, where none fits, the code,
+// so it can key metrics. ctx is the context the statement ran on: a deadline
+// velox set is velox.timeout even when the driver reports it as
 // context.DeadlineExceeded.
-func errorType(ctx context.Context, err error) string {
+func errorTypeOf(ctx context.Context, err error, code string) string {
 	switch {
 	case errors.Is(err, velox.ErrDenied):
 		return "velox.denied"
@@ -188,7 +205,7 @@ func errorType(ctx context.Context, err error) string {
 	}
 	// The conventions prefer the database's code to _OTHER. SQLSTATE codes
 	// and MySQL's and SQLite's error numbers are a bounded set too.
-	if code, ok := velox.DriverCode(err); ok {
+	if code != "" {
 		return code
 	}
 	return errorTypeOther

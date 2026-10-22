@@ -754,8 +754,9 @@ var targetKeys = []attribute.Key{"db.namespace", "server.address", "server.port"
 
 // TestTargetAttributes: Config.Target's db.namespace, server.address and
 // server.port are on a statement's span from its start, and on its duration
-// point; a zero field leaves its attribute off. The transaction's span, which
-// is no database client span, has none.
+// point; a zero field leaves its attribute off. TargetFor's are set once the
+// route is final, so not at the start, and are on the point too. The
+// transaction's span, which is no database client span, has neither.
 func TestTargetAttributes(t *testing.T) {
 	for _, c := range []struct {
 		name   string
@@ -773,42 +774,51 @@ func TestTargetAttributes(t *testing.T) {
 		{"a port without an address", veloxotel.Target{Port: 6432}, map[attribute.Key]attribute.Value{}},
 		{"zero", veloxotel.Target{}, map[attribute.Key]attribute.Value{}},
 	} {
-		t.Run(c.name, func(t *testing.T) {
-			db, sp, exp, r := observed(t, &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}, veloxotel.Config{Target: c.target})
-			if _, err := db.Query[testmodel.Invoice]().Limit(1).All(ctx); err != nil {
-				t.Fatal(err)
+		for _, perRoute := range []bool{false, true} {
+			name, cfg := c.name+", Target", veloxotel.Config{Target: c.target}
+			if perRoute {
+				name, cfg = c.name+", TargetFor", veloxotel.Config{TargetFor: func(velox.Route) veloxotel.Target { return c.target }}
 			}
-			point := durationPoint(t, r)
-			if err := db.Tx(ctx, func(context.Context, *velox.DB) error { return nil }); err != nil {
-				t.Fatal(err)
-			}
-			spans := byName(exp.GetSpans())
-			if len(sp.got) != 2 || len(spans["SELECT invoices"]) != 1 || len(spans["velox.tx"]) != 1 {
-				t.Fatalf("%d spans started, ended %v", len(sp.got), spans)
-			}
-			end, tx := attrs(spans["SELECT invoices"][0]), attrs(spans["velox.tx"][0])
-			for _, k := range targetKeys {
-				want, ok := c.want[k]
-				if got, has := sp.got[0][k]; has != ok || got != want {
-					t.Errorf("at start, %s = %v (%v), want %v (%v)", k, got.String(), has, want.String(), ok)
+			t.Run(name, func(t *testing.T) {
+				db, sp, exp, r := observed(t, &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}, cfg)
+				if _, err := db.Query[testmodel.Invoice]().Limit(1).All(ctx); err != nil {
+					t.Fatal(err)
 				}
-				if got, has := end[k]; has != ok || got != want {
-					t.Errorf("at end, %s = %v (%v), want %v (%v)", k, got.String(), has, want.String(), ok)
+				point := durationPoint(t, r)
+				if err := db.Tx(ctx, func(context.Context, *velox.DB) error { return nil }); err != nil {
+					t.Fatal(err)
 				}
-				if got, has := point.Value(k); has != ok || got != want {
-					t.Errorf("duration point: %s = %v (%v), want %v (%v)", k, got.String(), has, want.String(), ok)
+				spans := byName(exp.GetSpans())
+				if len(sp.got) != 2 || len(spans["SELECT invoices"]) != 1 || len(spans["velox.tx"]) != 1 {
+					t.Fatalf("%d spans started, ended %v", len(sp.got), spans)
 				}
-				if _, has := tx[k]; has {
-					t.Errorf("velox.tx has %s", k)
+				end, tx := attrs(spans["SELECT invoices"][0]), attrs(spans["velox.tx"][0])
+				for _, k := range targetKeys {
+					want, ok := c.want[k]
+					if got, has := sp.got[0][k]; perRoute && has {
+						t.Errorf("TargetFor: at start, %s = %v, want none until the route is final", k, got.String())
+					} else if !perRoute && (has != ok || got != want) {
+						t.Errorf("at start, %s = %v (%v), want %v (%v)", k, got.String(), has, want.String(), ok)
+					}
+					if got, has := end[k]; has != ok || got != want {
+						t.Errorf("at end, %s = %v (%v), want %v (%v)", k, got.String(), has, want.String(), ok)
+					}
+					if got, has := point.Value(k); has != ok || got != want {
+						t.Errorf("duration point: %s = %v (%v), want %v (%v)", k, got.String(), has, want.String(), ok)
+					}
+					if _, has := tx[k]; has {
+						t.Errorf("velox.tx has %s", k)
+					}
 				}
-			}
-		})
+			})
+		}
 	}
 }
 
 // TestTargetForFallback is Review Focus 3: TargetFor names the server per
-// route. A read that fell over from a failed replica to the primary names
-// the primary on its span and its duration point, not the replica.
+// route, once the route is final. A read that fell over from a failed
+// replica to the primary names only the primary on its span and its
+// duration point: none of the replica's fields.
 func TestTargetForFallback(t *testing.T) {
 	var routes []velox.Route
 	cfg := veloxotel.Config{
@@ -816,9 +826,9 @@ func TestTargetForFallback(t *testing.T) {
 		TargetFor: func(r velox.Route) veloxotel.Target {
 			routes = append(routes, r)
 			if r.Replica >= 0 {
-				return veloxotel.Target{Address: "replica", Port: 5433}
+				return veloxotel.Target{Namespace: "replica-only", Address: "replica", Port: 5433}
 			}
-			return veloxotel.Target{Address: "primary", Port: 5432}
+			return veloxotel.Target{Address: "primary"}
 		},
 	}
 	read := func(t *testing.T, r *fakeDB) (map[attribute.Key]attribute.Value, map[attribute.Key]attribute.Value, attribute.Set) {
@@ -836,19 +846,28 @@ func TestTargetForFallback(t *testing.T) {
 	}
 	t.Run("fallback", func(t *testing.T) {
 		start, end, point := read(t, &fakeDB{errs: badConn()})
-		if start["server.address"] != attribute.StringValue("replica") {
-			t.Errorf("at start, server.address = %v, want replica", start["server.address"].String())
+		for _, k := range targetKeys {
+			if v, has := start[k]; has {
+				t.Errorf("at start, %s = %v, want none", k, v.String())
+			}
 		}
-		if end["server.address"] != attribute.StringValue("primary") || end["server.port"] != attribute.Int64Value(5432) ||
-			end["velox.route.fallback"] != attribute.BoolValue(true) {
-			t.Errorf("at end, server %v:%v, fallback %v; want primary:5432, true",
-				end["server.address"].String(), end["server.port"].String(), end["velox.route.fallback"].String())
+		if end["server.address"] != attribute.StringValue("primary") || end["velox.route.fallback"] != attribute.BoolValue(true) {
+			t.Errorf("at end, server.address %v, fallback %v; want primary, true",
+				end["server.address"].String(), end["velox.route.fallback"].String())
+		}
+		for _, k := range []attribute.Key{"db.namespace", "server.port"} {
+			if v, has := end[k]; has {
+				t.Errorf("at end, the replica's %s = %v", k, v.String())
+			}
+			if v, has := point.Value(k); has {
+				t.Errorf("duration point: the replica's %s = %v", k, v.String())
+			}
 		}
 		if v, _ := point.Value("server.address"); v != attribute.StringValue("primary") {
 			t.Errorf("duration point: server.address = %v, want primary", v.String())
 		}
-		if len(routes) != 2 || routes[0].Replica != 0 || routes[1].Replica != -1 || !routes[1].Fallback {
-			t.Errorf("TargetFor was called with %+v, want the replica, then the primary's fallback", routes)
+		if len(routes) != 1 || routes[0].Replica != -1 || !routes[0].Fallback {
+			t.Errorf("TargetFor was called with %+v, want once, with the primary's fallback", routes)
 		}
 	})
 	t.Run("replica", func(t *testing.T) {

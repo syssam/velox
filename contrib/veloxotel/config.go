@@ -36,12 +36,11 @@ type Config struct {
 	// in the database system's form.
 	Target Target
 	// TargetFor names the server per route, for a DB with shards or
-	// replicas; when set, it is used instead of Target. It is called when
-	// a statement's span starts, with the route velox chose, and again
-	// after the statement ran only when the route changed: a read that
-	// fell over from a failed replica then names the primary. A span keeps
-	// a start attribute that the second Target leaves off, so give every
-	// route the same fields. It must be safe for concurrent use.
+	// replicas; when set, it is used instead of Target. It is called once
+	// per statement, after it ran, with its final route: a read that fell
+	// over from a failed replica names the primary. Its attributes are
+	// therefore not start attributes. The package doc has an example. It
+	// must be safe for concurrent use.
 	TargetFor func(r velox.Route) Target
 }
 
@@ -76,7 +75,7 @@ func Options(cfg Config) []velox.Option {
 type adapter struct {
 	cfg    Config
 	tracer trace.Tracer
-	target []attribute.KeyValue // Config.Target's, built once
+	target []attribute.KeyValue // Config.Target's, built once; nil with TargetFor
 
 	duration   metric.Float64Histogram // db.client.operation.duration, s
 	returned   metric.Int64Histogram   // db.client.response.returned_rows, {row}
@@ -94,8 +93,10 @@ func newAdapter(cfg Config) *adapter {
 		mp = otel.GetMeterProvider()
 	}
 	a := &adapter{cfg: cfg, tracer: tp.Tracer(modulePath,
-		trace.WithInstrumentationVersion(version()), trace.WithSchemaURL(schemaURL)),
-		target: cfg.Target.appendTo(nil)}
+		trace.WithInstrumentationVersion(version()), trace.WithSchemaURL(schemaURL))}
+	if cfg.TargetFor == nil {
+		a.target = cfg.Target.appendTo(nil)
+	}
 	a.instruments(mp.Meter(modulePath,
 		metric.WithInstrumentationVersion(version()), metric.WithSchemaURL(schemaURL)))
 	return a
