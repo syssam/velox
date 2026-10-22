@@ -30,14 +30,51 @@
 // A method with a wrong signature does not compile. Hooks are a method
 // Hooks() []velox.Hook[User] in the same way.
 //
+// # Reads
+//
+// Query.All returns the rows, One exactly one (ErrNotFound for none,
+// ErrNotSingular for several) and First the first in the query's order,
+// without One's check for a second. Count and Exists ask the database
+// instead of loading rows; Exists is a SELECT 1 … LIMIT 1.
+//
+// Sum, Avg, Min and Max take a query and a number column:
+//
+//	paid, err := velox.Sum(ctx, db.Query[gen.Invoice]().Where(gen.Invoices.Status.EQ(gen.InvoiceStatusPaid)), gen.Invoices.TotalCents)
+//
+// The tenant scope and the policy apply to them as to Count. Sum is 0 when
+// no row matches; Avg, Min and Max also return false then, as there is no
+// value to give.
+//
+// Rel.Of is a condition on the rows related to given owners, which loading
+// the relation for them would load:
+//
+//	db.Query[gen.Post]().Where(gen.Users.Posts.Of(&ada)).All(ctx)
+//
+// ForUpdate and ForShare lock the rows a query reads, until the transaction
+// ends, and SkipLocked and NoWait change what the query does with a row that
+// another transaction holds. A locking read runs inside Tx only, on
+// PostgreSQL and MySQL. On MySQL every row the read scans is locked, so the
+// filter wants an index.
+//
+// # Hooks
+//
+// A Hook wraps an entity's writes and receives each as a Mutation. For an
+// update or a delete, Conds returns the conditions the caller and the
+// earlier hooks gave, before and after next alike, and not the tenant's or
+// the policy's; it is empty when the statement said All. ValueIn, a method of
+// each column handle, returns the value an update assigns to the column, and
+// whether it assigns one. Affected returns the rows the write changed once
+// next has returned. A hook that makes the write itself, such as a soft
+// delete, reports its count with SetAffected. Mutation shows the pattern.
+//
 // A DB can route its statements. WithReplicas sends reads to replicas in turn;
 // WithSession keeps a request reading its own writes from the primary for a
 // short window after a write; a replica that fails a read falls over to the
 // primary. OpenShards runs each statement on one shard, chosen from the
 // context's tenant (WithShardFor) or OnShard. See example/routing.
 //
-// Raw SQL is the escape hatch for row locks, CTEs, aggregates and anything
-// else the builder cannot express: DB.Exec runs a statement, and DB.Raw scans
+// Raw SQL is the escape hatch for CTEs, GROUP BY and anything else the
+// builder cannot express: DB.Exec runs a statement, and DB.Raw scans
 // a query's rows into an entity by column name. velox applies neither the
 // tenant scope nor any policy to raw SQL, so tenant scoping is the caller's,
 // and both require a reason, which hooks see as Statement.TenantBypass.

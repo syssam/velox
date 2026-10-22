@@ -894,3 +894,5 @@ keeps only what the service reaches. The CI thresholds for N=500 were
 re-baselined from the 2026-10-19 runs: times 4x the largest run, sizes and
 memory 1.5x (they were identical across loads; a 2x margin would pass the
 404 MB link peak of the build before the fix).
+
+**Note, 2026-10-22: the LIKE escape is `!`.** `HasPrefix`, `HasSuffix`, `Contains` and `Like` render `ESCAPE '!'` on every dialect. The backslash escape depended on server settings (MySQL's `NO_BACKSLASH_ESCAPES`, PostgreSQL's `standard_conforming_strings`) that velox cannot see; `!` does not. Behavior changes for `Like` only: a `\` in a pattern now matches a backslash, where it used to escape the next character, and `!` escapes `%`, `_` and itself. The other three escape their argument themselves and match as before. `TestLikeIgnoresServerSettings` runs both servers with the settings flipped.

@@ -119,6 +119,11 @@ func (q Query[E]) Writable[_ Lazy[E]]() Query[E] {
 // change or lock them. A locking read runs only inside Tx, on PostgreSQL
 // and MySQL; SQLite has none, as its transactions lock the database. It
 // loads no relations, and Count, Sum, Avg, Min and Max refuse it.
+//
+// MySQL's InnoDB locks every row a locking read scans, not only those it
+// returns, so on MySQL the filter wants an index: without one the read locks
+// the table. One with ForUpdate locks up to 2 rows, the two it reads to tell
+// a single row from several.
 func (q Query[E]) ForUpdate[_ Lazy[E]]() Query[E] {
 	q.st.Lock = LockForUpdate
 	return q
@@ -134,7 +139,8 @@ func (q Query[E]) ForShare[_ Lazy[E]]() Query[E] {
 
 // SkipLocked returns the locking query leaving out the rows another
 // transaction has locked, as SKIP LOCKED: a queue's workers each take rows
-// no other worker holds. It needs ForUpdate or ForShare.
+// no other worker holds. It needs ForUpdate or ForShare. On MySQL the
+// rows the read scans are locked, so the filter wants an index here too.
 func (q Query[E]) SkipLocked[_ Lazy[E]]() Query[E] {
 	q.st.LockWait = LockSkipLocked
 	return q

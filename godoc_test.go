@@ -16,7 +16,7 @@ import (
 // numbered ruling. A reader of the godoc has none of them; what a comment or
 // a message needs from them, it says. It does not match the ordinary words
 // "design" and "spec".
-var citation = regexp.MustCompile(`\x{00a7}|\bRuling \d|\b(design|spec) (section|note)\b|\bsection \d|\b(schema|policy|routing|observability|core|graphql) (design|spec)\b|\bdocs/(specs|plans|reviews)\b`)
+var citation = regexp.MustCompile(`\x{00a7}|\bRuling \d|\b(design|spec) (section|note)\b|\bsection \d|\b(schema|policy|routing|observability|core|graphql) (design|spec)\b|\bdocs/(specs|plans|reviews)\b|\b(GraphQL|API|core|policy|schema)\s+plan\s+\d`)
 
 // TestGodocCitesNoSpec: no comment in the public packages of this module (the
 // root package, tests included; schema and its subpackages; plugin; and
@@ -57,10 +57,10 @@ func TestGodocCitesNoSpec(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, cg := range f.Comments {
-			for _, c := range cg.List {
-				if m := citation.FindString(c.Text); m != "" {
-					t.Errorf("%s: comment cites %q", fset.Position(c.Pos()), m)
-				}
+			// The group's text, so that a citation across a line break
+			// is found.
+			if m := citation.FindString(cg.Text()); m != "" {
+				t.Errorf("%s: comment cites %q", fset.Position(cg.Pos()), m)
 			}
 		}
 		ast.Inspect(f, func(n ast.Node) bool {

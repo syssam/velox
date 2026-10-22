@@ -15,6 +15,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/syssam/velox2/internal/tempmod"
 	"github.com/syssam/velox2/plugin"
 )
 
@@ -109,7 +110,7 @@ func tempModuleAt(t *testing.T, dir string, files map[string]string) {
 		cmd := exec.Command("go", "mod", "tidy")
 		cmd.Dir, cmd.Env = dir, offlineEnv()
 		if out, err := cmd.CombinedOutput(); err != nil {
-			r.err = fmt.Sprintf("go mod tidy: %v\n%s", err, out)
+			r.err = fmt.Sprintf("go mod tidy: %v\n%s%s", err, out, tempmod.Hint(string(out)))
 			return
 		}
 		r.gomod, _ = os.ReadFile(filepath.Join(dir, "go.mod"))

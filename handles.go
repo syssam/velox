@@ -209,7 +209,7 @@ func (c StringCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E] {
 	return Pred[E]{node{op: opBetween, col: c.I, v: lo, w: hi}}
 }
 
-// Like is column LIKE pattern: % and _ are wildcards, and ! escapes them and itself (\ is an ordinary character). Whether case is ignored follows the database: PostgreSQL's LIKE does not ignore it; MySQL's default collations and SQLite (for ASCII) do.
+// Like is column LIKE pattern: % and _ are wildcards, and ! escapes them and itself (\ is an ordinary character: a \ in a pattern matches a backslash). Whether case is ignored follows the database: PostgreSQL's LIKE does not ignore it; MySQL's default collations and SQLite (for ASCII) do.
 func (c StringCol[E, V]) Like[_ Lazy[V]](pattern string) Pred[E] {
 	return Pred[E]{node{op: opLike, col: c.I, v: pattern}}
 }
@@ -526,7 +526,7 @@ func (c NullStringCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E] {
 	return Pred[E]{node{op: opBetween, col: c.I, v: lo, w: hi}}
 }
 
-// Like is column LIKE pattern: % and _ are wildcards, and ! escapes them and itself (\ is an ordinary character). Whether case is ignored follows the database: PostgreSQL's LIKE does not ignore it; MySQL's default collations and SQLite (for ASCII) do.
+// Like is column LIKE pattern: % and _ are wildcards, and ! escapes them and itself (\ is an ordinary character: a \ in a pattern matches a backslash). Whether case is ignored follows the database: PostgreSQL's LIKE does not ignore it; MySQL's default collations and SQLite (for ASCII) do.
 func (c NullStringCol[E, V]) Like[_ Lazy[V]](pattern string) Pred[E] {
 	return Pred[E]{node{op: opLike, col: c.I, v: pattern}}
 }

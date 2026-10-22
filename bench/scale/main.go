@@ -143,7 +143,7 @@ func run(c config) (report, error) {
 		cmd.Dir = app
 		cmd.Env = append(os.Environ(), "GOCACHE="+cache, "GOFLAGS=-mod=mod", "GOPROXY=off", "GOWORK=off", "VELOX_LINKMEM="+memFile)
 		if out, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("go build: %v\n%s", err, out)
+			return fmt.Errorf("go build: %v\n%s%s", err, out, tempmod.Hint(string(out)))
 		}
 		return nil
 	}

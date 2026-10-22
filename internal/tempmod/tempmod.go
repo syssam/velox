@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 // Write creates a module example.com/tmp in dir that requires velox2 from
@@ -50,7 +51,23 @@ func Go(dir string, args ...string) (string, error) {
 	cmd.Stdout, cmd.Stderr = &out, &out
 	err := cmd.Run()
 	if err != nil {
-		err = fmt.Errorf("go %v: %w\n%s", args, err, out.String())
+		err = fmt.Errorf("go %v: %w\n%s%s", args, err, out.String(), Hint(out.String()))
 	}
 	return out.String(), err
+}
+
+// offlineMessage is what the go command prints when a module is missing from
+// the module cache and GOPROXY=off forbids fetching it.
+const offlineMessage = "module lookup disabled by GOPROXY=off"
+
+// Hint explains the output of a go command that ran with GOPROXY=off: when it
+// failed on a module the cache lacks, it says how to fill the cache, and
+// otherwise it is empty. The test modules take their dependencies from the
+// cache and fetch nothing, so a pruned cache fails them with a bare lookup
+// error.
+func Hint(out string) string {
+	if !strings.Contains(out, offlineMessage) {
+		return ""
+	}
+	return "\nthe module cache lacks a dependency of the test modules (it is read offline): run go mod download in the repository's root module and in contrib/graphql\n"
 }

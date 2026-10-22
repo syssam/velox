@@ -28,6 +28,11 @@ velox.Open(velox.SQLite, sqlDB, velox.WithDeadlines(velox.Deadlines{…}))
   fails with `velox.ErrOutsideTx` before anything is sent, until the
   transaction ends. `velox.WithoutTx(ctx)` lifts that for work that must not
   join the transaction, such as an audit row that survives a rollback.
+- A locking read, `tx.Query[gen.Account]().Where(…).ForUpdate().One(ctx)`,
+  runs inside a transaction only, on PostgreSQL and MySQL. MySQL's
+  InnoDB locks every row the read scans, not only those it returns, so
+  `SkipLocked` and `ForUpdate` want an index on the filter; a `One` with
+  `ForUpdate` locks up to 2 rows.
 - A nested `Tx` that fails undoes only its own work; here a duplicate
   account name is caught and the outer transaction opens `bob2` instead. On
   SQLite `ConstraintError.Constraint` holds the columns (`accounts.name`);

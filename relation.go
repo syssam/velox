@@ -396,7 +396,8 @@ func (r Rel[E, T]) HasWhere[_ Lazy[T]](ps ...Pred[T]) Pred[E] {
 // or Hooks body, outside the functions it returns, use HasWhere. A nil
 // owner fails the statement that holds the condition; an owner whose key is
 // NULL relates to nothing; with no owners Of is false. Each owner is one
-// parameter, under the dialect's limit.
+// parameter, under the dialect's limit: a statement with more owners than
+// that is refused.
 func (r Rel[E, T]) Of[_ Lazy[T]](owners ...*E) Pred[T] {
 	// A []*E has the layout of a []unsafe.Pointer; the work is not generic,
 	// so that it is compiled once, not into every package that uses a Rel.

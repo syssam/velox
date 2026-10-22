@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/syssam/velox2/contrib/graphql/internal/sdl"
+	"github.com/syssam/velox2/internal/tempmod"
 )
 
 const e2eSchema = `package schema
@@ -165,7 +166,7 @@ func app(t *testing.T, files map[string]string) (string, func(args ...string) (s
 		cmd.Dir = dir
 		cmd.Env = append(os.Environ(), "GOFLAGS=-mod=mod", "GOPROXY=off", "GOTOOLCHAIN=local", "GOWORK=off")
 		out, err := cmd.CombinedOutput()
-		return string(out), err
+		return string(out) + tempmod.Hint(string(out)), err
 	}
 	// -e: tidy also looks for the test dependencies of gqlparser's
 	// levenshtein, whose go.mod predates module graph pruning; offline, with a

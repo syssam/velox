@@ -53,6 +53,13 @@ and works on a `*velox.Mutation[Task]`.
   an entity that has hooks.
 - **Delete hook.** `onlyDone` narrows with `m.Where(Tasks.Done.EQ(true))`: even
   `Delete().All()` removes only finished tasks.
+- **Conditions and counts.** `m.Conds()` returns the conditions the caller and
+  the earlier hooks gave an update or a delete, as given: never the tenant's
+  or the policy's, and empty after `All()`. A hook that makes the write
+  itself, as a soft delete does, passes them to an update instead of calling
+  `next`, and reports that update's count with `m.SetAffected(n)`; the
+  delete's `Exec` returns it. `m.Affected()` is the count once `next` has
+  returned.
 - **Dry runs.** `SQL(ctx)` runs the hooks too, with `next` rendering the
   statement instead of sending it. A write under that context fails with
   `velox.ErrDryRun`, so `renamed`'s audit insert is refused and printing a

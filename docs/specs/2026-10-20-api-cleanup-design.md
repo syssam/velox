@@ -1,6 +1,6 @@
 # velox2 API cleanup before 1.0 — design
 
-Status: API plans 1–4 implemented · 2026-10-22
+Status: API plans 1–5 implemented · 2026-10-22
 
 The user asked for a review of the whole public API: is it clean, correct, complete, modern and easy to maintain. Three reviews were done, one each for the core package, the schema DSL with velox-gen and the plugin model, and the contrib modules. They are in `docs/reviews/2026-10-20-api-review-{core,schema,contrib}.md`.
 
@@ -254,6 +254,31 @@ Added 2026-10-22. Each is a decision taken in the plan or while executing it, an
 14. **The transaction span has no namespace or server:** it is velox's own internal span, and `TxInfo` has no route.
 15. **Left out:** `Op.Raw()` and `Op.Reads()` (to API plan 5); the review's `Config.Filter` and `Config.Attributes`; `network.peer.address`; a nested test module for the SDK and pgx; skipping the attribute set under a no-op `MeterProvider`.
 16. **Documents.** The adapter's package is under a citation test (`TestGodocCitesNoSpec`), as the other public packages are. The observability design carries dated notes for the changes above.
+
+## 6f. Rulings made while implementing API plan 5
+
+Added 2026-10-22. Each is a decision taken in the plan or while executing it, and it stands. Where one differs from §6, it is the rule. The plan's numbering is kept; "changed" says what execution did to a call.
+
+1. **`Exists` is a `Statement` field,** rendered `SELECT 1 … LIMIT 1`, not a one-column `All`, so a hook and the adapter see what the statement is. `First` adds no ordering: an unordered `First` is any matching row, as ent's is.
+2. **`One` checks its row count before it loads relations.** Its results do not change.
+3. **`Rel.Of` resolves its relation and reads the owners' keys when called,** and holds its own copy, like `In`. Unlike `HasWhere` it reads metadata, so its doc says to use `HasWhere` in Policy and Hooks bodies. `r.Where` applies; `r.OrderBy` and `r.With` do not. A many-to-many `Of` is the node `opThrough`, keyed in the render cache by its join entity. A nil owner fails the statement, naming the entity; a NULL key is skipped; no owners match no row; each owner is a parameter, so too many owners are refused by the dialect's parameter limit.
+4. **The aggregates take `NumberCol` only.** A Go function cannot take either of two struct types and still infer `V`. A nullable column's aggregate goes through `Raw` until one is asked for. `GroupBy` stays out; the tour keeps its `Raw` `GROUP BY`.
+5. **`Sum` returns `(V, error)`, 0 on no row;** `Avg`, `Min` and `Max` return `(…, bool, error)`, false on no row. `Avg` is a `float64`, which holds integers exactly up to 2^53. NULL is handled in Go through a `**V` scan, not `COALESCE`, so the SQL is one shape on every dialect, and a named number type scans into itself.
+6. **Locks are two fields,** `Lock` and `LockWait`, with typed constants, so an invalid combination cannot be written; the last call of each pair wins. A wait without a lock, SQLite, a read outside `Tx`, and `Count` or an aggregate are refused by the guard with plain errors. `With` is refused, since the loads would not be locked. A lock failure has no sentinel: `DriverCode` gives `55P03` and `3572`. MySQL's InnoDB locks every row a locking read scans, so `SkipLocked` and `ForUpdate` want an index on the filter, and a `One` with `ForUpdate` locks up to 2 rows; both are in the godoc.
+7. **A Rewrite hook may not change `Exists`, `Aggregate`, `Lock` or `LockWait`.** Changed: on a `Count`, `Exists` or aggregate statement it may not change `Columns` either, since the scan depends on them.
+8. **`Mutation.Value` and `Mutation.Result` are removed;** `ValueIn` and `Affected` replace them, and every caller moved in the same commit. Changed: `ValueIn` on a value of another type records an error on the mutation (the first wins, as with other misuse), naming the column and both types, and returns the zero value and false. `Conds` returns nil on an insert without recording a misuse.
+9. **A soft-delete hook does not call `next`.** Changed: it reports its own update's count with `Mutation.SetAffected(n)`, which the delete's `Exec` returns; without it a skipped `next` still reports 0. Calling both `SetAffected` and `next`, or a negative count, is a misuse. This amends the plan's ruling 9, which left the delete reporting 0 rows, a trap.
+10. **No `clientFoundRows` check at `Open`.** `Open` takes a `*sql.DB`, and neither database/sql nor go-sql-driver/mysql exposes the DSN or the client flags behind it. The pgx split reshapes `Open(d, Conn)`, so it can take the MySQL configuration and refuse a missing flag; the item moved there.
+11. **`apidiff` is not wired now.** There is no tag to compare with, and a check against `main` would fail on the breaking changes still planned. After the first `v1.0.0` tag, CI runs `golang.org/x/exp/cmd/apidiff`, pinned, for the root module, `contrib/veloxotel` and `contrib/graphql` against the latest `v1` tag, and fails on an incompatible change; the generated-only names are reported, not failed.
+12. **The follow-ups the plan took and left.** Taken: `Op.Raw()`/`Op.Reads()`, the `SQL(ctx)` dialect sweep, the read-path goldens, `One`'s loads and the root citation scan's alignment. Left to their plans, as the follow-ups say: GraphQL plan 4, the migration planner, the pgx split, velox-gen and otel. Changed: the plan left the LIKE escape's dependency on server settings "with no plan"; that is superseded by ruling 16.
+13. **The four new read fields are the only `Statement` changes.** The exported types `Aggregate`, `Lock` and `LockWait` give hooks and adapters typed values. None is "For generated code", and none touches generated files, so `GeneratedCodeIsVersion4` stays 4.
+14. **Only `First` and `Exists` get budget lines,** each held to the one-row `All`'s count, measured in the same test.
+15. **A nested `Tx` refuses every option,** `TxRetrySerializable(0)` included.
+16. **The LIKE escape is `!`** (added while executing). `HasPrefix`, `HasSuffix`, `Contains` and `Like` use `ESCAPE '!'` on every dialect, so neither MySQL's `NO_BACKSLASH_ESCAPES` nor PostgreSQL's `standard_conforming_strings` changes a match; `Like`'s doc says `!` escapes. A `\` in a pattern now matches a backslash, where it escaped the next character before. The core design carries a dated note.
+17. **`Conds` returns the caller's conditions as given** (changed): a snapshot taken before `prepare`, the same before and after `next`, never the tenant's, the policy's or a Rewrite hook's; changing the returned slice changes nothing. It relies on `prepare` never editing a condition in place (`TestCondsAfterNext`).
+18. **The compile-cost bounds keep their margin.** A measured size moved by a task gets a bound of the new size plus the same margin of about 1.2% that the old bounds had, not a looser one that stops guarding; the test's comment says so.
+19. **The MySQL lock itests need `VELOX_TEST_MYSQL_ADMIN`,** the CI MySQL's root, which CI and the local mirror set: the check that a second `ForUpdate` is waiting reads `performance_schema` instead of sleeping a fixed time. PostgreSQL's check uses `pg_blocking_pids`.
+20. **The `velox.aggregate` span attribute** is optional and not built; it is in the follow-ups.
 
 ## 7. Order and plans
 

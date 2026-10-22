@@ -10,7 +10,7 @@ Findings from the reviews of Core 1 and of the plans after it that were delibera
 ## Left by core plan 4 (relations)
 
 - A rewrite hook that points a statement at another table (tenancy, sharding) does not redirect the tables inside `EXISTS` subqueries; relation loads do go through the hooks.
-- `One` loads relations for the two rows it reads before returning `ErrNotSingular`.
+- Resolved in API plan 5 (`One` checks its row count before it loads relations; its results do not change). `One` loaded relations for the two rows it reads before returning `ErrNotSingular`.
 - A has-one relation with several matching rows loads the first in the relation's order.
 - On MySQL, an `UPDATE` or `DELETE` whose `EXISTS` reads the table being changed fails with error 1093 (documented on `Has`).
 - A `time.Time` cursor made in memory, finer than the column's precision, can skip or repeat a row with `After` (documented: `x` must be a row a query returned).
@@ -22,7 +22,7 @@ Findings from the reviews of Core 1 and of the plans after it that were delibera
 - The spec's "98 lines per entity" (the generated code's size, §2) was not re-measured for the schema DSL's generated `Desc` literals.
 - `TestRewriteCanReplaceTheEntity` can only catch a regression when the allocator reuses an address, and the bypass that renders uncached when a hook replaced the entity has no test pinning that the cache stays flat. The hook-replaced-entity cache check was not mutation-tested.
 - `TestCacheKeepsShapesApart` does not pin limit/offset presence, order or nesting as separate shapes (`FuzzRender` compares the cached path with the uncached one, which covers them only for the inputs it generates).
-- `Sum` and `Avg` on `NumberCol` await aggregates (sub-project 2 or later).
+- Resolved in API plan 5 (`Sum`, `Avg`, `Min` and `Max` take a `NumberCol`; a `NullNumberCol` goes through `Raw` until one is asked for). `Sum` and `Avg` on `NumberCol` awaited aggregates (sub-project 2 or later).
 
 ## Sub-project 2 (guardrails and policy)
 
@@ -95,7 +95,7 @@ Findings from the reviews of Core 1 and of the plans after it that were delibera
 API rough spots found while building `./example`:
 - `WithTenant` needs the tenant column's exact Go type: on an `int64` column, `WithTenant(ctx, 1)` (an untyped constant, so an `int`) fails at run time with `ErrTenantMismatch`; nothing catches it at compile time.
 - `InsertAll` reads no generated keys back, so code that inserts parents and then their children must read the parents' IDs again.
-- There is no `Sum`, `Avg` or `GROUP BY`: the example totals revenue per organization in Go, over `Iter`.
+- Resolved in API plan 5 but for `GROUP BY` (`Sum`, `Avg`, `Min` and `Max`; the tour sums the paid invoices with `velox.Sum`). `GROUP BY` stays `Raw`, as the tour's per-tenant totals show. There was no `Sum`, `Avg` or `GROUP BY`: the example totalled revenue per organization in Go, over `Iter`.
 - Resolved in API plan 1: a policy says `velox.Allow[E]()` for no restriction, and a zero `Pred[E]{}` is an error naming the entity. A policy that only denies still returns a `Pred` beside its error, which is ignored.
 - The core package imports pgx, so an application that uses only SQLite or MySQL still links pgx.
 - On SQLite, `ConstraintError.Constraint` holds the columns (`invoices.org_id, invoices.number`), not the constraint's name.
@@ -104,7 +104,7 @@ API rough spots found while building `./example`:
 API rough spots found while splitting `./example` into one directory per topic:
 - A policy function gets no `*DB`, so an inherited policy cannot check on insert that the parent is visible: `example/policy`'s `Comment` inherits `Doc`'s `Read` through `Has`, which covers reads only.
 - A `Write` policy filters rather than denies, so a forbidden update returns 0 rows, not an error.
-- `Mutation.Value` returns `any`, so an update hook type-asserts the value of a column it named through a typed handle.
+- Resolved in API plan 5 (`Mutation.Value` is removed; a column handle's `ValueIn(m)` returns the handle's value type, `*V` for a nullable one). `Mutation.Value` returned `any`, so an update hook type-asserted the value of a column it named through a typed handle.
 - `RetrySerializable` cannot be shown retrying on single-connection SQLite: `example/tx`'s retry runs once.
 
 Left by the observability plan:
@@ -242,7 +242,7 @@ From the final review of API plan 1 (2026-10-20). Each item names the plan that 
 - [x] **API plan 5 (dialects):** resolved in API plan 5 (`TestPolicySQLOnEveryDialect`). `SQL(ctx)` of a statement with a policy `Allow` or a zero-Pred failure is tested on PostgreSQL only; add it to the dialect test sweep.
 - [x] **API plan 3:** the citation scan (`TestGodocCitesNoSpec`) did not cover the contrib modules. `contrib/graphql` has its own, over `graphql`, `veloxgql` and `gqlimpl`.
 - [x] **API plan 4:** the same for `contrib/veloxotel`, whose `metrics.go` and `attrs.go` still say "spec §2.x". Resolved in API plan 4: `TestGodocCitesNoSpec` scans the module's package, tests included.
-- **API plan 5 (moved from API plan 4, which kept the core to what it needs):** `contrib/veloxotel/attrs.go` re-implements the core's unexported `Op.raw()` and `Statement.reads()`. Export `Op.Raw()` and `Op.Reads()` (additive), so hooks and adapters share one definition.
+- [x] Resolved in API plan 5 (`Op.Raw()` and `Op.Reads()`, which `contrib/veloxotel` uses). **Moved from API plan 4, which kept the core to what it needs:** `contrib/veloxotel/attrs.go` re-implements the core's unexported `Op.raw()` and `Statement.reads()`. Export `Op.Raw()` and `Op.Reads()` (additive), so hooks and adapters share one definition.
 - **Perf pass with the pgx split:** `Save` allocates its `cols` slice. No API impact, and no budget pins Save.
 - Accepted, no change: an empty `InsertAll` skips the transaction and dry-run checks (it sends nothing; documented on `Exec`); the Save compile test's cgo note.
 
@@ -270,18 +270,18 @@ From the final tasks of API plan 3 (2026-10-21). The plan's own items are done: 
 - The `gqlgen@latest` job fails red when a new gqlgen breaks velox-graphql, by design. The example's tests ignore error `locations` (gqlgen v0.17.97 adds them); a later gqlgen may change something else they compare.
 - Type-level directives (e.g. federation) need an explicit opt-in. velox-graphql refuses an application directive on an entity, since gqlgen runs it on the type's objects only and the rows' values stay readable through cursors, filters, order and `totalCount`. If one is wanted (federation's `@key`, or a guard), add an opt-in then: either an annotation that marks the directive as not a guard, or copying a guard onto `XConnection`, `XEdge` and `XWhereInput` (declared `on OBJECT | INPUT_OBJECT`) and counting it for the `OrderField` rule.
 - `ErrorPresenter` does not pass an error that is only the cancellation of the request to the application's `log` (the default records it at debug). An application that wants to count client disconnects has no hook for it; add an option if one asks.
-- The root module's citation test (`TestGodocCitesNoSpec`) checks each comment line alone and does not match internal plans ("GraphQL plan 3"); `contrib/graphql`'s now checks each comment group and matches them. Align the two.
+- [x] Resolved in API plan 5 (the root test checks each comment group and matches "GraphQL plan 3" and the like). The root module's citation test (`TestGodocCitesNoSpec`) checked each comment line alone and did not match internal plans ("GraphQL plan 3"); `contrib/graphql`'s checks each comment group and matches them.
 
 ## Left by GraphQL plan 3
 
 From the mutations (2026-10-22). The plan's items are done: the inputs with their directives, `gqlimpl`'s runtime, `CreateX`, `UpdateX` and `DeleteX` with their edges, the itest on every dialect, and the example's mutations. So are the final review's fixes: M2M `remove…IDs` and `clear…` scoped by the target's tenant and Read policy, the validators run before any statement (core `velox.Validate` and `ValidateSet`), `Statement.Writable` guarded against Rewrite hooks, and the example's `Post.views` `Optional`.
 
-- A core check of the MySQL DSN at `Open`: a DSN without `clientFoundRows=true` makes the `UPDATE`'s rows-affected count the rows changed, not matched, so `UpdateX` of an unchanged row can fail with NOT_FOUND. Documented now (`contrib/graphql` doc, `UpdatePost`); the core could refuse or warn at `Open`, since velox's own `Update` needs it too.
+- Moved to the pgx split (API plan 5 ruling 10: `Open` takes a `*sql.DB`, and neither database/sql nor go-sql-driver/mysql exposes the DSN or the client flags behind it; the split reshapes `Open(d, Conn)`, which can then take the MySQL configuration and refuse a missing flag). `Open`'s doc already says to set it. A core check of the MySQL DSN at `Open`: a DSN without `clientFoundRows=true` makes the `UPDATE`'s rows-affected count the rows changed, not matched, so `UpdateX` of an unchanged row can fail with NOT_FOUND. Documented now (`contrib/graphql` doc, `UpdatePost`); the core could refuse or warn at `Open`, since velox's own `Update` needs it too.
 - Self-edges are written one way, as the core's loads read them (the plugin model has no `Bidi`). A symmetric edge (`friends`) needs both directions written: add `Bidi` to the model and write the inverse row.
 - A key the caller supplies is not in a create input (plan 1's refusal stands): an entity whose key is not generated cannot be created through GraphQL.
 - JSON append and other partial updates of a JSON field (old velox's `Append…`).
 - `@goModel` binding of application enums (also under "For GraphQL plan 2").
-- An update with only edge inputs checks its row (`Writable` `COUNT`), then writes the edges: a time-of-check race, the same one ent has. A `FOR UPDATE` read would close it.
+- An update with only edge inputs checks its row (`Writable` `COUNT`), then writes the edges: a time-of-check race, the same one ent has. A `FOR UPDATE` read would close it: the core has `Query.ForUpdate` now (API plan 5), for GraphQL plan 4 to adopt in `UpdateX` where the dialect has it (not SQLite).
 - Clearing or removing children skips, silently, those the caller may not change: an O2M or O2O child the tenant scope or the child's Write policy hides, and an M2M link to a target the tenant or the target's Read policy hides (the final review's C1). A mutation that must report them needs a count of what was skipped.
 - A created row is returned as written, and an updated one is read back without the Read policy (a tenant-scoped `velox.SkipPolicy` read). Neither is checked against what the caller may then read.
 - There is no savepoint inside the extension's transaction (binding call 3): a resolver that swallows a mutation's error commits its partial writes. `Atomic` could call `db.Tx` inside the extension's transaction too, which makes a savepoint (two extra statements per mutation). A swallowed error would then roll back only that mutation, and on PostgreSQL a failed mutation would not abort the operation's transaction for the mutations after it. `Atomic` would then be just `db.Tx(ctx, fn)`, and `shared.OperationTx` could go. Worth reconsidering before 1.0.
@@ -309,8 +309,30 @@ From the final tasks of API plan 4 (2026-10-22), the OpenTelemetry module. The p
 - The duration timing tests (`Result.LoopBody`, the adapter's loop-body points) use sleeps and wall-clock bounds. A loaded machine may need wider bounds.
 - Each statement on a hooked DB with `Iter` costs two clock reads per yielded row for `LoopBody`. It is cheap beside a row scan, and 0 on a DB with no Around hook.
 
+## Left by API plan 5
+
+From the core additions (2026-10-22): `First` and `Exists`, `Sum`, `Avg`, `Min` and `Max`, `Rel.Of`, the locking reads, `Mutation.Conds`, `ValueIn`, `Affected` and `SetAffected`, `Op.Raw` and `Op.Reads`, the nested `Tx`'s refusal of options, and the `ESCAPE '!'` of LIKE. Execution changed three of the plan's calls: `Conds` returns the caller's conditions as given, before and after `next`; `Mutation.SetAffected` exists for a hook that makes the write itself (it amends the soft-delete call of the plan, which reported 0); and `ValueIn` records an error for a value of another type. It added a rule: on `Count`, `Exists` and aggregate statements `prepare` refuses a Rewrite hook that changes `Columns`.
+
+- The `velox.aggregate` span attribute (optional): `contrib/veloxotel` could name the aggregate function (`SUM`, `AVG`, `MIN`, `MAX`) on a statement with `Statement.Aggregate`. Nothing asks for it.
+- The `clientFoundRows` check at `Open` moves to the pgx split (see "Left by GraphQL plan 3").
+- Left to GraphQL plan 4: the first/last-aware cost limit, `LoadedConnection`, a selected-columns accessor for `ConnectionOf`, `Bidi` self-edges, and adopting `ForUpdate` in `UpdateX`.
+- Left to the migration planner: the derived index-name cap, `ColumnInfo.Nullable` for interface JSON fields, and MySQL's `Index.Where`.
+- Left to the pgx split: `Save`'s `cols` allocation and the core's pgx dependency.
+- Left to velox-gen: rule errors without positions, mixin paths, plugin panic stacks, Unicode case folding.
+- Left to otel: `TxInfo`'s route (see "Left by API plan 4").
+- The review's godoc nits: `type Mutation[E any] mutation`, `Option func(*config)` and `ColumnInfo.Codec`'s long doc.
+- The aggregates take `NumberCol` only. A nullable column's aggregate goes through `Raw` until one is asked for; a sealed interface over both column types would need explicit type arguments.
+- `Avg` is a `float64`, which holds integers exactly up to 2^53.
+- A locking read has no sentinel for a failed lock: `DriverCode` gives `55P03` and `3572`. MySQL's InnoDB locks every row a locking read scans, so `SkipLocked` and `ForUpdate` want an index on the filter.
+- A Rewrite hook may not change `Exists`, `Aggregate`, `Lock` or `LockWait`, nor `Columns` of a `Count`, `Exists` or aggregate statement.
+- The LIKE escape no longer depends on server settings (it is `!`), so plan ruling 12's "left with no plan" is superseded. A `\` in a `Like` pattern now matches a backslash, where before it escaped the next character (core-design's note of 2026-10-22).
+- The compile-cost bounds (`TestGenericTypesCompileSmall`) keep a margin of about 1.2% over the measured size, as the old ones did; a task that grows a measured entity re-measures and moves its bound by that rule. `entityDescUse` is near its bound.
+- The MySQL lock itests read `performance_schema` through `VELOX_TEST_MYSQL_ADMIN` (the CI MySQL's root; CI and `scripts/ci-local.sh` set it); without it they wait a fixed time.
+- A temp-module test that fails with "module lookup disabled by GOPROXY=off" now says "run go mod download" (`internal/tempmod`, `bench/scale`, and the tests that run `go` offline).
+
 ## 1.0 release
 
+- `apidiff` (API plan 5 ruling 11) is not wired: there is no tag to compare with, and a check against `main` would fail on the breaking changes still planned (the pgx split reshapes `Open`). After the first `v1.0.0` tag, CI runs `golang.org/x/exp/cmd/apidiff`, pinned, for the root module, `contrib/veloxotel` and `contrib/graphql` against the latest `v1` tag, and fails on an incompatible change. The generated-only names (`Desc`, `ColumnDesc`, …, `gqlimpl`) are outside semver and are reported, not failed.
 - The repo needs a `README.md` and a `LICENSE`.
 - bench/scale's thresholds were measured on darwin only. Recalibrate them from the first Linux CI run.
 - **GraphQL plan 3 (final re-review):** CreateX's `x` and UpdateX's `set` are declared outside the `Atomic` closure that mutates them. Safe while Atomic never retries and a TxAround calls `next` once; if either changes, copy them at the top of the closure.

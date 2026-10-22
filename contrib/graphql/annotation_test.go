@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/syssam/velox2/contrib/graphql"
+	"github.com/syssam/velox2/internal/tempmod"
 	"github.com/syssam/velox2/schema"
 )
 
@@ -246,7 +247,7 @@ func TestThroughTheLoader(t *testing.T) {
 		cmd.Env = append(os.Environ(), "GOFLAGS=-mod=mod", "GOPROXY=off", "GOTOOLCHAIN=local", "GOWORK=off")
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			t.Fatalf("go %v: %v\n%s", args, err, out)
+			t.Fatalf("go %v: %v\n%s%s", args, err, out, tempmod.Hint(string(out)))
 		}
 		return string(out)
 	}
