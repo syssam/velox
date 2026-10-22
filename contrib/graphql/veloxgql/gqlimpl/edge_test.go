@@ -16,6 +16,7 @@ import (
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
+	gqlshared "github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
 )
 
 // owner, child, tag and ownerTag are hand-written entities, as velox-gen
@@ -157,15 +158,18 @@ func titleOrder() []gqlimpl.OrderTerm[child] {
 // edgeSDL is the schema the edges' operations are parsed against.
 const edgeSDL = `
 interface Node { id: ID! }
+interface Named { name: String! }
+union Thing = Owner | Tag
 type Query {
 	owners(first: Int): OwnerConnection!
 	owner: Owner
 	children: ChildConnection!
 	node(id: ID!): Node
 	nodes(ids: [ID!]!): [Node]!
+	things: [Thing!]!
 	other: Other
 }
-type Owner implements Node {
+type Owner implements Node & Named {
 	id: ID!
 	name: String!
 	age: Int!
@@ -182,8 +186,8 @@ type Tag implements Node {
 	name: String!
 }
 type Other { name: String! }
-type OwnerConnection { edges: [OwnerEdge!]! pageInfo: PageInfo! totalCount: Int! }
-type OwnerEdge { node: Owner! cursor: String! }
+type OwnerConnection { edges: [OwnerEdge!]! pageInfo: PageInfo! totalCount: Int! nodes: [Owner!]! }
+type OwnerEdge { node: Owner! cursor: String! extra: String }
 type ChildConnection { edges: [ChildEdge!]! pageInfo: PageInfo! totalCount: Int! }
 type ChildEdge { node: Child! cursor: String! }
 type PageInfo { hasNextPage: Boolean! hasPreviousPage: Boolean! }
@@ -255,15 +259,21 @@ func edgeDB(t *testing.T) (*velox.DB, *sql.DB, *edgeLog) {
 }
 
 // operation returns ctx inside the operation query, parsed against
-// edgeSchema, with the extension's state for db: the context gqlgen gives
-// the operation's resolvers.
+// edgeSchema, with the extension's state for db and a response's table of
+// rows: the context gqlgen gives the operation's resolvers.
 func operation(t *testing.T, db *velox.DB, query string, opts ...veloxgql.Option) context.Context {
+	t.Helper()
+	return operationIn(t, db, query, edgeSchema, opts...)
+}
+
+// operationIn is operation with schema, which may be nil, as the server's.
+func operationIn(t *testing.T, db *velox.DB, query string, schema *ast.Schema, opts ...veloxgql.Option) context.Context {
 	t.Helper()
 	doc, errs := gqlparser.LoadQueryWithRules(edgeSchema, query, nil)
 	if errs != nil {
 		t.Fatal(errs)
 	}
-	ctx := veloxgql.NewExtension(db, opts...).Context(context.Background())
+	ctx := gqlshared.WithTable(veloxgql.NewExtension(db, opts...).Context(context.Background()), schema)
 	return graphql.WithOperationContext(ctx, &graphql.OperationContext{RawQuery: query, Doc: doc, Operation: doc.Operations[0], Variables: map[string]any{}})
 }
 
@@ -550,6 +560,35 @@ func TestEdgeAliases(t *testing.T) {
 	}
 }
 
+// TestEdgeScopes: rows of one group whose edge resolvers' contexts have
+// different row scopes are batched apart, one statement per scope.
+func TestEdgeScopes(t *testing.T) {
+	db, _, log := edgeDB(t)
+	ctx := operation(t, db, childrenQuery)
+	xs := ownersPage(t, ctx, db, db.Query[owner](), gqlimpl.Args{})
+	ectx := field(t, ctx, "owners", "edges", "node", "children")
+	scoped := map[int64]context.Context{1: velox.SkipPolicy(ectx, "a"), 2: velox.SkipPolicy(ectx, "b"), 3: velox.SkipPolicy(ectx, "a")}
+	log.take("")
+	var loads []string
+	for _, x := range xs {
+		c, err := gqlimpl.NewConnection(scoped[x.ID], db.Query[child](), "Child", gqlimpl.Args{}, nil, childKey())
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := gqlimpl.EdgeConnection(scoped[x.ID], c, x, owners.Children).Page(ectx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		loads = append(loads, log.take("children")...)
+		want, _ := ownPage(t, db, x, db.Query[child](), gqlimpl.Args{}, nil)
+		log.take("")
+		samePage(t, x.Name, got, want)
+	}
+	if len(loads) != 2 {
+		t.Errorf("%d statements, want one per scope: %q", len(loads), loads)
+	}
+}
+
 // TestEdgeOneBatches: the owners of a page of children are one statement,
 // keyed by the owners' key with no window; a child of no owner has none;
 // a group whose children have no owner sends no statement; and a child in no
@@ -588,7 +627,7 @@ func TestEdgeOneBatches(t *testing.T) {
 	}
 
 	orphan := *p.Rows[6]
-	veloxgql.Batch(ctx, []*child{&orphan})
+	veloxgql.Batch(cctx, []*child{&orphan})
 	if o, err := gqlimpl.EdgeOne(octx, db.Query[owner](), &orphan, children.Owner); o != nil || err != nil {
 		t.Errorf("the orphan's owner: %v, %v", o, err)
 	}
@@ -775,5 +814,52 @@ func TestBatchRace(t *testing.T) {
 	}
 	if sql := log.take("children"); len(sql) != 2 {
 		t.Errorf("%d statements, want one load and one count: %q", len(sql), sql)
+	}
+}
+
+// TestNoFieldNoGroup: a page read outside a gqlgen field, where nothing
+// batches, is no group: a context kept long keeps no rows.
+func TestNoFieldNoGroup(t *testing.T) {
+	db, _, _ := edgeDB(t)
+	ctx := operation(t, db, childrenQuery)
+	c, err := gqlimpl.NewConnection(ctx, db.Query[owner](), "Owner", gqlimpl.Args{}, nil, ownerKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := c.Page(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, ok := gqlshared.Find(gqlshared.TableFrom(ctx), p.Rows[0]); ok {
+		t.Error("a page outside a field is a group")
+	}
+	if xs := ownersPage(t, ctx, db, db.Query[owner](), gqlimpl.Args{}); len(xs) == 0 {
+		t.Fatal("no owners")
+	} else if _, _, _, ok := gqlshared.Find(gqlshared.TableFrom(ctx), xs[0]); !ok {
+		t.Error("a page in a field is no group")
+	}
+}
+
+// TestPagePanicShared: when a connection's Page or TotalCount panics, its
+// other callers get an error, not a nil page.
+func TestPagePanicShared(t *testing.T) {
+	db, _, log := edgeDB(t)
+	log.fail = func(*velox.Statement) error { panic("boom") }
+	c, err := gqlimpl.NewConnection(context.Background(), db.Query[owner](), "Owner", gqlimpl.Args{}, nil, ownerKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, call := range []func() error{
+		func() error { _, err := c.Page(context.Background()); return err },
+		func() error { _, err := c.TotalCount(context.Background()); return err },
+	} {
+		func() {
+			defer func() { _ = recover() }()
+			_ = call()
+			t.Error("no panic")
+		}()
+		if err := call(); err == nil || !strings.Contains(err.Error(), "panicked") {
+			t.Errorf("the next call: %v, want the panic as an error", err)
+		}
 	}
 }

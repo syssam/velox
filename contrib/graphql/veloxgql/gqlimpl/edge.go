@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 
 	"github.com/99designs/gqlgen/graphql"
 
@@ -18,22 +19,29 @@ import (
 // reads are a group in turn. So a nested query sends one statement per edge
 // per level, whatever its rows.
 //
-// A batch is keyed by its group and the edge's field
-// (graphql.GetFieldContext(ctx).Field.Field), so its arguments are the same
-// for every row (one field, one set of variables), and two aliases are two
-// batches. The first caller reads for all, under its context, on the DB of
-// its query (the one veloxgql.DBFrom reads); the others wait on the batch's
-// sync.Once, never for one another, so a mutation's resolvers, which the
-// extension runs one at a time, batch too. A batch's error is every row's.
+// A batch is keyed by its group, the edge's field
+// (graphql.GetFieldContext(ctx).Field.Field) and its callers' row scope
+// (velox.RowScopeOf: the tenant, and the AllTenants and SkipPolicy reasons,
+// of the context each passes to the edge function). So its arguments are
+// the same for every row (one field, one set of variables), two aliases are
+// two batches, and a row whose resolver's context a field middleware or a
+// directive scopes otherwise is in a batch of its own scope. The first
+// caller reads for all, under the context it passed to the edge function,
+// on the DB of its query (the one veloxgql.DBFrom reads); the others wait
+// on the batch's sync.Once, never for one another, so a mutation's
+// resolvers, which the extension runs one at a time, batch too. A waiter
+// does not watch its own context's cancellation, only the load's: every
+// resolver of a response has the request's. A batch's error is every row's.
 
 // EdgeConnection returns c, a connection over a query of every T that
 // XConnectionOf made with the edge's arguments, as the connection of x's
 // edge r. When x is in a group, its page is read with the pages of every
 // row of the group in one statement (velox.LoadEach, with LimitEach of the
 // page size + 1 and c's order and cursor), and its totalCount with theirs
-// (velox.CountEach), on the first call of either for any row; the rows
-// read become a group. Otherwise its queries are c's, filtered by r.Of(x).
-// A LoadedConnection, which runs no query, is returned as it is.
+// (velox.CountEach), on the first call of either for any row, under the
+// context its EdgeConnection was given; the rows read become a group.
+// Otherwise its queries are c's, filtered by r.Of(x). A LoadedConnection,
+// which runs no query, is returned as it is.
 func EdgeConnection[E, T any](ctx context.Context, c *Connection[T], x *E, r velox.Rel[E, T]) *Connection[T] {
 	if c.isLoaded {
 		return c
@@ -43,9 +51,11 @@ func EdgeConnection[E, T any](ctx context.Context, c *Connection[T], x *E, r vel
 		c.query = c.query.Where(r.Of(x))
 		return c
 	}
+	// The batch reads under the context of the edge's field, whose row scope
+	// keys it.
 	n := c.n
 	c.edge = &edge[T]{
-		rows: func(ctx context.Context, q velox.Query[T]) ([]T, error) {
+		rows: func(q velox.Query[T]) ([]T, error) {
 			// The page size and the cursor are the field's: the same in the
 			// connection of every row of the group.
 			parts, err := loadBatch(ctx, b, q.Limit(0).MaxRows(0), r.LimitEach(n+1), owners, func(rows []T) int { return min(len(rows), n) })
@@ -54,7 +64,7 @@ func EdgeConnection[E, T any](ctx context.Context, c *Connection[T], x *E, r vel
 			}
 			return parts[i], nil
 		},
-		count: func(ctx context.Context, q velox.Query[T]) (int, error) {
+		count: func(q velox.Query[T]) (int, error) {
 			counts, err := b.Counts(func() ([]int64, error) { return velox.CountEach(ctx, q.Limit(0), r, owners) })
 			if err != nil {
 				return 0, err
@@ -81,7 +91,7 @@ func EdgeOne[E, T any](ctx context.Context, q velox.Query[T], x *E, r velox.Rel[
 		if err != nil {
 			return nil, err
 		}
-		shared.Add(shared.TableFrom(ctx), []*T{v})
+		shared.Add(ctx, []*T{v})
 		return v, nil
 	}
 	parts, err := loadBatch(ctx, b, q, r.LimitEach(1), owners, func(rows []T) int { return len(rows) })
@@ -134,14 +144,14 @@ func EdgeList[E, T any](ctx context.Context, q velox.Query[T], x *E, r velox.Rel
 type edge[T any] struct {
 	// rows returns the connection's rows, q being its query in its order,
 	// after its cursor.
-	rows func(ctx context.Context, q velox.Query[T]) ([]T, error)
+	rows func(q velox.Query[T]) ([]T, error)
 	// count returns the connection's totalCount, q being its query.
-	count func(ctx context.Context, q velox.Query[T]) (int, error)
+	count func(q velox.Query[T]) (int, error)
 }
 
-// batchOf returns the batch of the edge field of ctx for x's group, the
-// group's rows and x's index in them; a nil batch when ctx is in no gqlgen
-// field or x is in no group of ctx's table.
+// batchOf returns the batch of the edge field of ctx, for x's group and
+// ctx's row scope, the group's rows and x's index in them; a nil batch when
+// ctx is in no gqlgen field or x is in no group of ctx's table.
 func batchOf[E any](ctx context.Context, x *E) (*shared.Batch, []*E, int) {
 	fc := graphql.GetFieldContext(ctx)
 	if fc == nil || fc.Field.Field == nil {
@@ -151,7 +161,12 @@ func batchOf[E any](ctx context.Context, x *E) (*shared.Batch, []*E, int) {
 	if !ok {
 		return nil, nil, 0
 	}
-	return g.Batch(fc.Field.Field, fc.Field.Selections), rows, i
+	scope := velox.RowScopeOf(ctx)
+	if scope.Tenant != nil && !reflect.TypeOf(scope.Tenant).Comparable() {
+		// Never equal to another's: a batch of its own.
+		scope.Tenant = new(byte)
+	}
+	return g.Batch(fc.Field.Field, fc.Field.Selections, scope), rows, i
 }
 
 // loadBatch returns b's rows: each owner's, read by velox.LoadEach(ctx, q,
@@ -174,7 +189,7 @@ func loadBatch[E, T any](ctx context.Context, b *shared.Batch, q velox.Query[T],
 				}
 			}
 		}
-		shared.Add(shared.TableFrom(ctx), group)
+		shared.Add(ctx, group)
 		return parts, nil
 	})
 	if err != nil {

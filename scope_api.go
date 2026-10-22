@@ -57,6 +57,22 @@ func SkipPolicy(ctx context.Context, reason string) context.Context {
 	return context.WithValue(ctx, policyKey{}, reason)
 }
 
+// RowScope is what a context scopes statements by: WithTenant's id (nil
+// when none), and the reasons of AllTenants and SkipPolicy ("" when none).
+// A batcher that reads for several callers in one statement compares their
+// scopes, so that callers of different scopes never share a read.
+type RowScope struct {
+	Tenant     any
+	AllTenants string
+	SkipPolicy string
+}
+
+// RowScopeOf returns ctx's row scope.
+func RowScopeOf(ctx context.Context) RowScope {
+	id, all := tenantOf(ctx)
+	return RowScope{Tenant: id, AllTenants: all, SkipPolicy: policyBypass(ctx)}
+}
+
 // noReason reports whether reason, a bypass's (AllTenants, SkipPolicy, Raw,
 // Exec), says nothing: it is empty or only white space.
 func noReason(reason string) bool { return strings.TrimSpace(reason) == "" }

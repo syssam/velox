@@ -152,6 +152,7 @@ func WithTxFilter(f func(ctx context.Context, op *ast.OperationDefinition) bool)
 
 // Context returns ctx with the extension's DB and limits, as a query
 // operation gets them: for generated code called outside a gqlgen server.
+// Outside a server nothing batches, so the context holds no table of rows.
 // It panics with the error Validate would return.
 func (e *Extension) Context(ctx context.Context) context.Context {
 	if err := e.Validate(nil); err != nil {
@@ -248,11 +249,14 @@ func (e *Extension) InterceptOperation(ctx context.Context, next graphql.Operati
 	return next(ctx)
 }
 
-// InterceptResponse implements graphql.ResponseInterceptor: it makes a
-// mutation's first response in a transaction. Every other response, and an
-// error response gqlgen makes without running the operation, passes
-// through.
+// InterceptResponse implements graphql.ResponseInterceptor: it gives each
+// response a table of the rows it reads, whose edges batch (Batch), and
+// makes a mutation's first response in a transaction. Every other
+// response, and an error response gqlgen makes without running the
+// operation, passes through. A subscription's event is a response: its
+// rows are let go of when it is made.
 func (e *Extension) InterceptResponse(ctx context.Context, next graphql.ResponseHandler) *graphql.Response {
+	ctx = shared.WithTable(ctx, e.schema)
 	m, _ := ctx.Value(mutationKey{}).(*mutation)
 	if m == nil || m.plain || m.started.Swap(true) {
 		return next(ctx)

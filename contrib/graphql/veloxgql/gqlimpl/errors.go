@@ -1,6 +1,14 @@
 package gqlimpl
 
-import "github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
+import (
+	"errors"
+
+	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
+)
+
+// errPanicked is a connection's error, for the callers of Page or
+// TotalCount but the one whose call panicked.
+var errPanicked = errors.New("veloxgql: reading this connection panicked")
 
 // InputErrorf is an error in the client's input, which
 // veloxgql.ErrorPresenter shows the client with the code

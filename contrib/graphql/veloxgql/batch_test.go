@@ -3,8 +3,10 @@ package veloxgql_test
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
 	"sync"
@@ -16,6 +18,7 @@ import (
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
 )
 
 // keeper and pet are hand-written entities, as velox-gen would write them,
@@ -88,9 +91,14 @@ type Query {
 type Mutation {
 	addPet(id: Int!, keeper: Int!): [Keeper!]!
 }
+type Subscription {
+	keepers: [Keeper!]!
+}
 type Keeper {
 	name: String!
 	pets: PetConnection!
+	"""The pets of org 1 for odd keepers, of org 2 for even ones."""
+	orgPets: PetConnection!
 }
 type PetConnection {
 	totalCount: Int!
@@ -129,8 +137,11 @@ func batchDB(t *testing.T) (*velox.DB, *txLog) {
 
 // batchServer serves batchSDL on db. keepers passes its rows to
 // veloxgql.Batch, and loose does not; a keeper's pets is
-// gqlimpl.EdgeConnection, as the generated code's edges are.
-func batchServer(db *velox.DB) http.Handler {
+// gqlimpl.EdgeConnection, as the generated code's edges are, and orgPets
+// too under a tenant of its own, as a directive could set. The keepers
+// subscription's events each read the keepers, and call seen, if set, with
+// the event's context and its rows.
+func batchServer(db *velox.DB, seen ...func(ctx context.Context, rows []*keeper)) http.Handler {
 	parent := func(ctx context.Context) any { return graphql.GetFieldContext(ctx).Parent.Result }
 	read := func(batch bool) resolver {
 		return func(ctx context.Context, _ map[string]any) (any, error) {
@@ -150,11 +161,25 @@ func batchServer(db *velox.DB) http.Handler {
 			if batch {
 				veloxgql.Batch(ctx, ptrs)
 			}
+			for _, f := range seen {
+				f(ctx, ptrs)
+			}
 			return out, nil
 		}
 	}
 	key := []gqlimpl.OrderTerm[pet]{gqlimpl.Term("id", veloxgql.OrderDirectionAsc, pets.ID.Asc(), pets.ID.Desc(),
 		func(x *pet) int64 { return x.ID }, func(x *pet, v int64) { x.ID = v })}
+	petConn := func(ctx context.Context, _ map[string]any) (any, error) {
+		db, err := veloxgql.DBFrom(ctx)
+		if err != nil {
+			return nil, err
+		}
+		c, err := gqlimpl.NewConnection(ctx, db.Query[pet](), "Pet", gqlimpl.Args{}, nil, key)
+		if err != nil {
+			return nil, err
+		}
+		return gqlimpl.EdgeConnection(ctx, c, parent(ctx).(*keeper), keepers.Pets), nil
+	}
 	return serveSchema(testSchemaOf(batchSDL, map[string]resolver{
 		"keepers": read(true),
 		"loose":   read(false),
@@ -170,16 +195,9 @@ func batchServer(db *velox.DB) http.Handler {
 			return read(true)(ctx, nil)
 		},
 		"Keeper.name": func(ctx context.Context, _ map[string]any) (any, error) { return parent(ctx).(*keeper).Name, nil },
-		"Keeper.pets": func(ctx context.Context, _ map[string]any) (any, error) {
-			db, err := veloxgql.DBFrom(ctx)
-			if err != nil {
-				return nil, err
-			}
-			c, err := gqlimpl.NewConnection(ctx, db.Query[pet](), "Pet", gqlimpl.Args{}, nil, key)
-			if err != nil {
-				return nil, err
-			}
-			return gqlimpl.EdgeConnection(ctx, c, parent(ctx).(*keeper), keepers.Pets), nil
+		"Keeper.pets": petConn,
+		"Keeper.orgPets": func(ctx context.Context, args map[string]any) (any, error) {
+			return petConn(velox.WithTenant(ctx, 2-parent(ctx).(*keeper).ID%2), args)
 		},
 		"PetConnection.totalCount": func(ctx context.Context, _ map[string]any) (any, error) {
 			return parent(ctx).(*gqlimpl.Connection[pet]).TotalCount(ctx)
@@ -282,5 +300,56 @@ func TestRequestsIsolated(t *testing.T) {
 	wg.Wait()
 	if stmts, _ := log.take(); len(stmts) != 2*rounds*3 {
 		t.Errorf("%d statements, want three per request", len(stmts))
+	}
+}
+
+// TestBatchScopes: in one request, keepers whose edge resolvers scope their
+// contexts to different tenants read in batches of their own, each its
+// tenant's pets: never one load for both.
+func TestBatchScopes(t *testing.T) {
+	db, log := batchDB(t)
+	srv := batchServer(db)
+	got := post(t, velox.WithTenant(context.Background(), int64(1)), srv, `{ keepers { name orgPets { totalCount nodes { name } } } }`)
+	want := strings.ReplaceAll(petsOf("keepers", "ann:rex", "bob:kit", "cy:"), `"pets"`, `"orgPets"`)
+	if got != want {
+		t.Errorf("\n got %s\nwant %s", got, want)
+	}
+	// The keepers, then a load and a count for each of the two tenants.
+	if stmts, _ := log.take(); len(stmts) != 5 {
+		t.Errorf("%d statements, want 5: %q", len(stmts), stmts)
+	}
+}
+
+// TestSubscriptionEventsLetGo: each event of a subscription is a response
+// with a table of its own: the second event's rows batch, and the first
+// event's are no longer in the table.
+func TestSubscriptionEventsLetGo(t *testing.T) {
+	db, log := batchDB(t)
+	var events [][]*keeper
+	var found []bool // per event: whether its own rows, then the event before's, are in its table
+	srv := batchServer(db, func(ctx context.Context, rows []*keeper) {
+		_, _, _, own := shared.Find(shared.TableFrom(ctx), rows[0])
+		found = append(found, own)
+		if len(events) > 0 {
+			_, _, _, old := shared.Find(shared.TableFrom(ctx), events[len(events)-1][0])
+			found = append(found, old)
+		}
+		events = append(events, rows)
+	})
+	body, _ := json.Marshal(map[string]string{"query": `subscription { keepers { name pets { totalCount nodes { name } } } }`})
+	r := httptest.NewRequestWithContext(velox.WithTenant(context.Background(), int64(1)), http.MethodPost, "/", strings.NewReader(string(body)))
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Accept", "text/event-stream")
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, r)
+	event := "event: next\ndata: " + petsOf("keepers", "ann:rex", "bob:fifi", "cy:") + "\n\n"
+	if got := w.Body.String(); strings.Count(got, event) != 2 {
+		t.Errorf("%q, want two events %q", got, event)
+	}
+	if !slices.Equal(found, []bool{true, true, false}) {
+		t.Errorf("found %v, want each event's rows in its table and not the event before's", found)
+	}
+	if stmts, _ := log.take(); len(stmts) != 6 {
+		t.Errorf("%d statements, want three per event: %q", len(stmts), stmts)
 	}
 }

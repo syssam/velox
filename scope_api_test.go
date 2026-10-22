@@ -100,3 +100,17 @@ func TestTicketMetadata(t *testing.T) {
 		t.Errorf("tenant %d, org_id is %d (%v)", info.Tenant, i, ok)
 	}
 }
+
+func TestRowScopeOf(t *testing.T) {
+	ctx := context.Background()
+	if got := velox.RowScopeOf(ctx); got != (velox.RowScope{}) {
+		t.Errorf("no scope: %+v", got)
+	}
+	ctx = velox.SkipPolicy(velox.WithTenant(ctx, int64(7)), "audit")
+	if got, want := velox.RowScopeOf(ctx), (velox.RowScope{Tenant: int64(7), SkipPolicy: "audit"}); got != want {
+		t.Errorf("%+v, want %+v", got, want)
+	}
+	if got := velox.RowScopeOf(velox.AllTenants(ctx, "nightly")); got.Tenant != nil || got.AllTenants != "nightly" || got.SkipPolicy != "audit" {
+		t.Errorf("all tenants: %+v", got)
+	}
+}

@@ -194,7 +194,10 @@ func LoadedConnection[E any](ctx context.Context, rows []E, typ string, key []Or
 // (EdgeConnection) the page is the connection's part of the batch, which
 // may return n+1 rows per owner.
 func (c *Connection[E]) Page[_ velox.Lazy[E]](ctx context.Context) (*Page[E], error) {
-	c.pageOnce.Do(func() { c.page, c.pageErr = c.run(ctx) })
+	c.pageOnce.Do(func() {
+		c.pageErr = errPanicked // the other callers' error, when run panics
+		c.page, c.pageErr = c.run(ctx)
+	})
 	return c.page, c.pageErr
 }
 
@@ -202,12 +205,14 @@ func (c *Connection[E]) Page[_ velox.Lazy[E]](ctx context.Context) (*Page[E], er
 // on its page, running a COUNT on the first call.
 func (c *Connection[E]) TotalCount[_ velox.Lazy[E]](ctx context.Context) (int, error) {
 	c.countOnce.Do(func() {
+		c.countErr = errPanicked // the other callers' error, when the count panics
 		if c.isLoaded {
+			c.countErr = nil
 			c.count = len(c.loaded)
 			return
 		}
 		if c.edge != nil {
-			c.count, c.countErr = c.edge.count(ctx, c.query)
+			c.count, c.countErr = c.edge.count(c.query)
 			return
 		}
 		n, err := c.query.Count(ctx)
@@ -233,7 +238,7 @@ func (c *Connection[E]) run[_ velox.Lazy[E]](ctx context.Context) (*Page[E], err
 		}
 		var err error
 		if c.edge != nil {
-			rows, err = c.edge.rows(ctx, q)
+			rows, err = c.edge.rows(q)
 		} else {
 			// MaxRows: the page is bounded by MaxPage, and the DB's row
 			// cap, which may be below it, must not fail a full page.
@@ -260,7 +265,7 @@ func (c *Connection[E]) run[_ velox.Lazy[E]](ctx context.Context) (*Page[E], err
 	}
 	if c.edge == nil {
 		// A batch made its rows a group already.
-		shared.Add(shared.TableFrom(ctx), p.Rows)
+		shared.Add(ctx, p.Rows)
 	}
 	if c.back {
 		p.Info.HasPreviousPage = more

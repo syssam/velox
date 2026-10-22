@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/vektah/gqlparser/v2/ast"
+
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
 )
@@ -75,6 +77,55 @@ func TestSelectedNotOurs(t *testing.T) {
 	} {
 		if got, ok := gqlimpl.Selected(c.ctx, c.typ); ok {
 			t.Errorf("%s: %q, ok; want not ok", c.name, got)
+		}
+	}
+}
+
+// TestSelectedAppFields: a field of the connection or of its edge that
+// velox-graphql does not write, which an application's resolver may read
+// the nodes for, gives ok false.
+func TestSelectedAppFields(t *testing.T) {
+	db, _, _ := edgeDB(t)
+	for _, c := range []struct {
+		query string
+		want  []string // nil: not ok
+	}{
+		{`{ owners { __typename totalCount pageInfo { hasNextPage } edges { __typename cursor node { name } } } }`, []string{"name"}},
+		{`{ owners { nodes { name } } }`, nil},
+		{`{ owners { edges { extra node { name } } } }`, nil},
+	} {
+		got, ok := gqlimpl.Selected(field(t, operation(t, db, c.query), "owners"), "Owner")
+		if ok != (c.want != nil) || (ok && !reflect.DeepEqual(got, c.want)) {
+			t.Errorf("%s: %q, %v; want %q", c.query, got, ok, c.want)
+		}
+	}
+}
+
+// TestSelectedInterfaces: fragments on every interface and union of the
+// type count, read from the server's schema; without the schema, a
+// fragment on an interface or a union other than Node gives ok false.
+func TestSelectedInterfaces(t *testing.T) {
+	db, _, _ := edgeDB(t)
+	for _, c := range []struct {
+		query, field string
+		withSchema   []string // nil: not ok
+		without      []string
+	}{
+		{`{ owner { ... on Named { name } } }`, "owner", []string{"name"}, nil},
+		{`{ owners { edges { node { ... on Named { name } } } } }`, "owners", []string{"name"}, nil},
+		{`{ owner { ...T } } fragment T on Thing { ... on Owner { age } }`, "owner", []string{"age"}, nil},
+		{`{ owner { id ... on Node { id } } }`, "owner", []string{"id"}, []string{"id"}},
+		{`{ node(id: "1") { ... on Child { title } ... on Owner { name } } }`, "node", []string{"name"}, []string{"name"}},
+	} {
+		for _, s := range []struct {
+			name   string
+			schema *ast.Schema
+			want   []string
+		}{{"with the schema", edgeSchema, c.withSchema}, {"without", nil, c.without}} {
+			got, ok := gqlimpl.Selected(field(t, operationIn(t, db, c.query, s.schema), c.field), "Owner")
+			if ok != (s.want != nil) || (ok && !reflect.DeepEqual(got, s.want)) {
+				t.Errorf("%s %s: %q, %v; want %q", c.query, s.name, got, ok, s.want)
+			}
 		}
 	}
 }
