@@ -68,11 +68,16 @@
 // resolves on any of them reads that edge for all of them in one statement,
 // so a nested query sends one statement per edge per level. Generated pages,
 // node and nodes make their rows a batch; Batch does so for the rows an
-// application's own resolver returns. A batch is per response and per field,
-// so each alias of an edge is its own batch, and it holds the caller's
-// velox.RowScope, so callers with different tenants, bypasses or shards never
-// share a read. Nothing waits for other resolvers, which a mutation could not
-// allow. Outside a gqlgen field Batch does nothing.
+// application's own resolver returns. A batch is per response, per field and
+// per edge, so each alias of an edge is its own batch; a call joins it only
+// from the edge's own field and with its first caller's arguments, and
+// reads alone otherwise. It is read under its first caller's context, and
+// keyed by the callers' velox.RowScope, DB and limits, so callers with
+// different tenants, bypasses or shards never share a read; any other
+// context value a policy or a hook reads must be the same for every row of a
+// field, or be returned by WithBatchScope. Nothing waits for other
+// resolvers, which a mutation could not allow. Outside a gqlgen field Batch
+// does nothing.
 //
 // # Where
 //
@@ -170,7 +175,10 @@
 // @include are not read, and introspection is free. The Extension refuses a
 // request over MaxCost with ErrTooCostly (CodeTooCostly, COST_LIMIT_EXCEEDED),
 // before any resolver, so before any statement. The default MaxCost, 100000,
-// lets two levels of full pages through (about 30000) and not three.
+// lets two levels of full connection pages through (about 30000) and not
+// three. A list edge costs MaxList for each parent: under the defaults,
+// posts(first: 100) { edges { node { likes { id } } } } costs 100301 and is
+// refused; raise MaxCost, or lower MaxList, to let it through.
 //
 // Nothing in the package runs at program start.
 package veloxgql

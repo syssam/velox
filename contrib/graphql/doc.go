@@ -249,14 +249,30 @@
 // batch is read by the first caller, under its context, on the DB DBFrom
 // reads; its error is every row's.
 //
-// A batch is keyed by the field, so the same edge under two aliases, or with
-// two sets of arguments, is two batches, each with its own page. The
-// arguments are the field's, the same for every row: a nested last, after
-// and before batch too. The batch also holds the caller's row scope
-// (velox.RowScopeOf: the tenant, a bypass, the shard), so callers that
-// differ in it never share a read. Batches belong to one response: a
-// subscription's event starts new ones, and outside a gqlgen field there is
-// no batch, so a row read alone resolves its edges one row at a time.
+// A call joins a batch only when it is the same read: the same edge, called
+// from the edge's own field, with the same arguments. So the same edge under
+// two aliases, or with two sets of arguments, is two batches, each with its
+// own page, and a nested last, after and before batch too. An edge method
+// called from any other field (an application's resolver calling
+// x.ChildrenGQL, or two edges from one field) reads alone, one statement
+// for its row; so does a call whose arguments are not its batch's first
+// caller's (a forceResolver that computes them per row).
+//
+// A batch is read under its first caller's context. Its key holds the
+// callers' row scope (velox.RowScopeOf: the tenant, a bypass, the shard),
+// the DB and the limits, so callers that differ in them never share a read.
+// Any other context value a Read policy or a Rewrite or Around hook reads,
+// such as the viewer or a role, must be the same for every row of a field,
+// or be returned by veloxgql.WithBatchScope, whose value joins the key: a
+// directive or a field middleware that gives an edge field's resolver
+// another context for some parent rows needs it. Batches belong to one
+// response: a subscription's event starts new ones, and outside a gqlgen
+// field there is no batch, so a row read alone resolves its edges one row at
+// a time.
+//
+// A generated many-to-many edge reads the join table inside the target's
+// statement, so the join entity's hooks and policy do not see the edge's
+// reads.
 //
 // veloxgql.Batch makes the rows an application's own resolver returns a
 // batch, so their edges batch too. Rows from anywhere else, such as a
@@ -273,8 +289,10 @@
 // tenant column and the columns of the order fields. The foreign keys let an
 // edge or an application's With work; the order columns keep every cursor
 // valid. The columns of the other fields are left unread, so a row handed to
-// an application's resolver has them zero: a resolver that reads such a
-// field must select it. Narrowing is turned off for a page, and every column
+// an application's resolver or directive has them zero: a resolver or a
+// directive that reads such a field must select it. A generated field with
+// @goField(forceResolver: true) is still a generated field: its selection
+// reads its own column only. Narrowing is turned off for a page, and every column
 // is read, when the selection holds a field the plugin did not write (an
 // application's own, in an extend type, whose resolver may read anything), or
 // one of a connection or an edge that gqlimpl.Selected cannot see through
@@ -299,8 +317,11 @@
 // @skip and @include are not read. __schema and __type cost nothing, so
 // introspection works. Variables are read; sums and products saturate, so
 // huge arguments cannot wrap the cost, and a named fragment is costed once
-// however often it is spread. Two levels of full pages cost about 30000 and
-// pass the default; three do not. gqlgen's extension.FixedComplexityLimit
+// however often it is spread. Two levels of full connection pages cost about
+// 30000 and pass the default; three do not. A list edge costs MaxList (1000)
+// for each parent, so posts(first: 100) { edges { node { likes { id } } } }
+// costs 100301 and is refused by default: raise MaxCost, or lower MaxList.
+// gqlgen's extension.FixedComplexityLimit
 // counts fields, not rows, and is not needed with it.
 //
 // # gqlgen.yml

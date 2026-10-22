@@ -63,11 +63,13 @@ func SkipPolicy(ctx context.Context, reason string) context.Context {
 // that reads for several callers in one statement compares their scopes,
 // so that callers of different scopes never share a read.
 //
-// RowScopes are compared with ==, which panics when Tenant holds a value of
-// a type that cannot be compared. A tenant column's type is comparable
-// (its metadata is refused otherwise), but WithTenant takes any id, and an
-// id of another type, which a statement refuses, may not be: a caller that
-// compares guards against it (reflect.TypeOf(Tenant).Comparable()).
+// RowScopes are compared with ==, which panics when Tenant holds a value
+// that cannot be compared. A tenant column's type is comparable (its
+// metadata is refused otherwise), but WithTenant takes any id, and an id of
+// another type, which a statement refuses, may not be: a caller that
+// compares guards against it with reflect.ValueOf(Tenant).Comparable(),
+// which checks the value, since a struct or an array of a comparable type
+// may hold an interface whose value is a slice or a map.
 type RowScope struct {
 	Tenant     any
 	AllTenants string
