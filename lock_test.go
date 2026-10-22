@@ -174,6 +174,16 @@ func TestLockInsideAndOutsideTx(t *testing.T) {
 			if !errors.Is(err, velox.ErrOutsideTx) || e.Calls != calls {
 				t.Errorf("built on db (hooked %v): %v", hooked, err)
 			}
+			// WithoutTx lifts the context's mark, not the handle's
+			// transaction: the tx handle still locks, on its connection,
+			// and the db handle is outside Tx.
+			if got, err := q.Limit(1).ForUpdate().All(velox.WithoutTx(ctx)); err != nil || len(got) != 1 || e.SQL != one || e.Calls != calls+1 {
+				t.Errorf("tx under WithoutTx (hooked %v): %v, %v, %s", hooked, got, err, e.SQL)
+			}
+			_, err = db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).ForUpdate().All(velox.WithoutTx(ctx))
+			if want := "velox: testmodel.Invoice: a locking read (ForUpdate or ForShare) runs only inside Tx"; err == nil || err.Error() != want || e.Calls != calls+1 {
+				t.Errorf("db under WithoutTx (hooked %v): %v", hooked, err)
+			}
 			return nil
 		})
 		if err != nil {
