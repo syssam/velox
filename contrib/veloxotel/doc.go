@@ -12,7 +12,7 @@
 //		CommentTags:    []string{"route"},
 //	})...)
 //
-// They are velox.WithCallers (unless Config.Callers is CallersOff),
+// They are velox.WithCallers (unless Config.OmitCallers is set),
 // velox.WithAround with a hook that makes one span per statement,
 // velox.WithTxAround with a hook that makes one span per transaction, and
 // velox.WithSQLComment when Config.App is set. An application that wants
@@ -73,11 +73,11 @@
 // ID: pgx caches prepared statements by their text, so a per-request value
 // would prepare a statement per request (see velox.WithSQLComment).
 //
-// With Config.App set and Callers on (the default), the comment carries the
+// With Config.App set and call sites recorded (the default), the comment carries the
 // call site too: each call site of a shape is then a distinct text, and
 // pgx prepares one statement per call site per connection. A shape called
 // from many sites multiplies statements against pgx's per-connection cache,
 // 512 by default. Size pgxpool.Config.ConnConfig's StatementCacheCapacity
-// for it, or set Config.Callers to CallersOff (the spans then carry no call
+// for it, or set Config.OmitCallers (the spans then carry no call
 // site, and the comment is one text per shape).
 package veloxotel

@@ -222,8 +222,8 @@ func TestMetricsAttributesAreBounded(t *testing.T) {
 	}
 }
 
-// TestMetricFingerprint: with RecordMetricFingerprint, both statement instruments
-// key their points by shape too.
+// TestMetricFingerprint: with RecordMetricFingerprint, both statement
+// instruments key their points by shape too.
 func TestMetricFingerprint(t *testing.T) {
 	db, r := metered(t, &fakeDB{}, veloxotel.Config{RecordMetricFingerprint: true})
 	for range 2 {

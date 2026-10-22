@@ -94,7 +94,7 @@ SELECT … FROM "invoices" WHERE … /*app='billing',caller='billing%2Finvoice.g
 - **`SQL(ctx)`** includes the comment, with the call site of the `SQL` call: it returns the text that would be sent from there.
 - **Misuse:** `WithSQLComment` panics when it is called, in `Open`'s argument list, as `WithAround(nil)` does: with an empty `app`, or a listed tag name that is empty, repeated, `app` or `caller`.
 - **Cache safety:** applications must list only tags whose values are stable per code path, such as a route template, never an ID. The documentation says so with the reasons: pgx caches prepared statements by their text, so a per-request value would prepare a statement per request, and it would make `pg_stat_activity` hard to read. `pg_stat_statements` and MySQL's digest normalise comments away, so their statistics are not split.
-- **Call sites and pgx's statement cache:** with `WithCallers` on, each call site of a shape is a distinct statement text, so pgx prepares one statement per call site per connection. One shape called from many sites multiplies statements against pgx's per-connection cache, which holds 512 by default. The documentation (`WithSQLComment`, and `contrib/veloxotel`'s `Config` and package doc) says to size `pgxpool.Config.ConnConfig.StatementCacheCapacity` for it, or to set `Config.Callers` to `CallersOff`.
+- **Call sites and pgx's statement cache:** with `WithCallers` on, each call site of a shape is a distinct statement text, so pgx prepares one statement per call site per connection. One shape called from many sites multiplies statements against pgx's per-connection cache, which holds 512 by default. The documentation (`WithSQLComment`, and `contrib/veloxotel`'s `Config` and package doc) says to size `pgxpool.Config.ConnConfig.StatementCacheCapacity` for it, or to set `Config.OmitCallers`.
 
 ### 1.4 Tags
 
@@ -174,7 +174,7 @@ db := velox.OpenPgx(pool, veloxotel.Options(veloxotel.Config{
 })...)
 ```
 
-`Options` returns the `velox.Option`s: `WithAround`, `WithTxAround`, `WithCallers` (unless `Config.Callers` is `CallersOff`), and `WithSQLComment` when `App` is set. An application that wants `WithCallerSkip` passes it itself after `Options`.
+`Options` returns the `velox.Option`s: `WithAround`, `WithTxAround`, `WithCallers` (unless `Config.OmitCallers` is set), and `WithSQLComment` when `App` is set. An application that wants `WithCallerSkip` passes it itself after `Options`.
 
 The tracer and the meter are both named `github.com/syssam/velox2/contrib/veloxotel`, with no version until velox tags releases. An error creating an instrument goes to `otel.Handle`, and the instrument the API returned is used.
 

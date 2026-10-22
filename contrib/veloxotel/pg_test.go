@@ -85,9 +85,9 @@ func TestPgxPreparesACommentedStatementOnce(t *testing.T) {
 	}
 }
 
-// TestPgxCallersOffPreparesOnce: with App and CallersOff, one shape run from
-// two call sites is one SQL text, so pgx prepares one statement.
-func TestPgxCallersOffPreparesOnce(t *testing.T) {
+// TestPgxOmitCallersPreparesOnce: with App and OmitCallers, one shape run
+// from two call sites is one SQL text, so pgx prepares one statement.
+func TestPgxOmitCallersPreparesOnce(t *testing.T) {
 	dsn := os.Getenv("VELOX_TEST_POSTGRES")
 	if dsn == "" {
 		t.Skip("VELOX_TEST_POSTGRES is not set")
@@ -119,7 +119,7 @@ func TestPgxCallersOffPreparesOnce(t *testing.T) {
 	db := velox.OpenPgx(pool, veloxotel.Options(veloxotel.Config{
 		TracerProvider: sdktrace.NewTracerProvider(),
 		App:            "otel-test",
-		Callers:        veloxotel.CallersOff,
+		OmitCallers:    true,
 	})...)
 	c := velox.WithTenant(bg, int64(1))
 	if _, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(c); err != nil { // call site one

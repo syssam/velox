@@ -64,7 +64,7 @@ func TestPublicAPI(t *testing.T) {
 		got = append(got, f.Name)
 	}
 	slices.Sort(got)
-	want := []string{"Callers", "CallersOff", "CallersOn", "Config", "Options"}
+	want := []string{"Config", "Options"}
 	if !slices.Equal(got, want) {
 		t.Errorf("exported names %v, want %v", got, want)
 	}
@@ -85,7 +85,7 @@ func TestConfigBooleans(t *testing.T) {
 }
 
 // TestOptionsCount: velox.WithAround and WithTxAround always, WithCallers
-// unless CallersOff, WithSQLComment when App is set.
+// unless OmitCallers, WithSQLComment when App is set.
 func TestOptionsCount(t *testing.T) {
 	for _, c := range []struct {
 		cfg  veloxotel.Config
@@ -93,8 +93,8 @@ func TestOptionsCount(t *testing.T) {
 	}{
 		{veloxotel.Config{}, 3},
 		{veloxotel.Config{App: "a"}, 4},
-		{veloxotel.Config{Callers: veloxotel.CallersOff}, 2},
-		{veloxotel.Config{App: "a", Callers: veloxotel.CallersOff}, 3},
+		{veloxotel.Config{OmitCallers: true}, 2},
+		{veloxotel.Config{App: "a", OmitCallers: true}, 3},
 	} {
 		if n := len(veloxotel.Options(c.cfg)); n != c.want {
 			t.Errorf("Options(%+v) has %d options, want %d", c.cfg, n, c.want)
@@ -102,9 +102,9 @@ func TestOptionsCount(t *testing.T) {
 	}
 }
 
-// TestCallersOff: with App set, CallersOff leaves the call site out of the
+// TestOmitCallers: with App set, OmitCallers leaves the call site out of the
 // spans and out of the SQL comment, so one shape is one text.
-func TestCallersOff(t *testing.T) {
+func TestOmitCallers(t *testing.T) {
 	run := func(cfg veloxotel.Config) map[attribute.Key]attribute.Value {
 		f := &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}
 		db, exp, _ := traced(t, f, cfg)
@@ -113,15 +113,15 @@ func TestCallersOff(t *testing.T) {
 		}
 		return attrs(only(t, exp))
 	}
-	off := run(veloxotel.Config{App: "billing", Callers: veloxotel.CallersOff})
+	off := run(veloxotel.Config{App: "billing", OmitCallers: true})
 	for _, k := range []attribute.Key{"code.file.path", "code.line.number", "code.function.name"} {
 		if _, ok := off[k]; ok {
-			t.Errorf("CallersOff: span has %s", k)
+			t.Errorf("OmitCallers: span has %s", k)
 		}
 	}
 	text := off["db.query.text"].AsString()
 	if !strings.HasSuffix(text, "/*app='billing'*/") || strings.Contains(text, "caller=") {
-		t.Errorf("CallersOff: db.query.text %q", text)
+		t.Errorf("OmitCallers: db.query.text %q", text)
 	}
 	if text := run(veloxotel.Config{App: "billing"})["db.query.text"].AsString(); !strings.Contains(text, "caller='") {
 		t.Errorf("default: db.query.text %q has no caller", text)

@@ -31,7 +31,7 @@ ctx = velox.WithTags(ctx, "route", "POST /invoices/{number}/pay") // in middlewa
   for every argument value, in every process running the same velox version.
 - **Call site.** `code.file.path` and `code.line.number` are the line of the
   application that ran the statement, here inside `pay`, relative to the
-  module root. `Options` turns on `velox.WithCallers` (`Callers: veloxotel.CallersOff`
+  module root. `Options` turns on `velox.WithCallers` (`OmitCallers: true`
   leaves it out); packages of your own that wrap velox are skipped with
   `velox.WithCallerSkip`.
 - **SQL comment.** The text sent ends with a sqlcommenter comment holding the

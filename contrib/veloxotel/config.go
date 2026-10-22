@@ -8,49 +8,37 @@ import (
 	"github.com/syssam/velox2"
 )
 
-// Callers says whether statements record their call site.
-type Callers uint8
-
-const (
-	// CallersOn turns on velox.WithCallers: spans carry code.* attributes,
-	// and with App the SQL comment carries the call site. The default.
-	CallersOn Callers = iota
-	// CallersOff leaves velox.WithCallers out: no code.* attributes, and
-	// one SQL comment, so one prepared statement, per shape.
-	CallersOff
-)
-
 // Config configures the adapter. The zero Config traces into the global
 // TracerProvider and measures into the global MeterProvider, with call sites
-// on and no SQL comment.
+// recorded and no SQL comment.
 type Config struct {
 	TracerProvider trace.TracerProvider // nil: otel.GetTracerProvider()
 	MeterProvider  metric.MeterProvider // nil: otel.GetMeterProvider()
 	// App names the application in the SQL comment; empty: no comment. With
-	// Callers on, the comment carries the call site, so pgx prepares a
-	// statement per call site per connection: see the package doc on sizing
-	// its cache.
+	// call sites recorded (the default), the comment carries the call site, so
+	// pgx prepares a statement per call site per connection: see the package
+	// doc on sizing its cache.
 	App string
 	// CommentTags are the velox.WithTags keys the SQL comment carries, in
 	// this order. List only tags whose values are stable per code path (a
 	// route template, never an ID): see velox.WithSQLComment.
 	CommentTags []string
-	Callers     Callers // CallersOn by default
 
+	OmitCallers             bool // leave call sites out: no code.* attributes, one SQL comment per shape
 	OmitQueryText           bool // leave db.query.text off spans
 	RecordTenant            bool // add velox.tenant to spans
 	RecordMetricFingerprint bool // add velox.fingerprint to the statement metrics
 }
 
 // Options returns the velox options that trace and measure every statement
-// and transaction: velox.WithCallers unless Callers is CallersOff,
+// and transaction: velox.WithCallers unless OmitCallers is set,
 // velox.WithAround, velox.WithTxAround, and velox.WithSQLComment when App is
 // set. Place them after an Around hook of your own that retries, to get one
 // span per attempt.
 func Options(cfg Config) []velox.Option {
 	a := newAdapter(cfg)
 	opts := make([]velox.Option, 0, 4)
-	if cfg.Callers != CallersOff {
+	if !cfg.OmitCallers {
 		opts = append(opts, velox.WithCallers())
 	}
 	opts = append(opts, velox.WithAround(a.around), velox.WithTxAround(a.txAround))
