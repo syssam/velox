@@ -15,8 +15,15 @@ import (
 // around is the Around hook: one client span per execution of a statement,
 // from the call to next to its return, and its metric points.
 func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
-	sctx, span := a.tracer.Start(ctx, spanName(st),
-		trace.WithSpanKind(trace.SpanKindClient), trace.WithAttributes(a.attributes(st)...))
+	// The summary is built once, for the span's name, its attributes and
+	// the metric points.
+	sum := summary(st)
+	name := sum
+	if name == "" {
+		name = dbSystem(st.Dialect) // raw SQL
+	}
+	sctx, span := a.tracer.Start(ctx, name,
+		trace.WithSpanKind(trace.SpanKindClient), trace.WithAttributes(a.attributes(st, sum)...))
 	// A panic in next, such as Iter's loop body's, ends the span and goes on:
 	// the adapter never recovers one. runtime.Goexit in an Iter loop body is
 	// reported the same way, with the description "panic".
@@ -33,7 +40,9 @@ func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(con
 	wasFallback := st.Route.Fallback
 	start := time.Now()
 	err := next(sctx)
-	seconds := time.Since(start).Seconds()
+	// The span covers Iter's loop body, as the connection is held for it;
+	// the duration point is the database's time, without it.
+	seconds := max(0, time.Since(start)-st.Result.LoopBody).Seconds()
 	// The route is read after next returns: a fallback happens during it.
 	var buf [4]attribute.KeyValue
 	kv := routeAttributes(buf[:0], st)
@@ -54,7 +63,7 @@ func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(con
 	}
 	ended = true
 	span.End()
-	a.record(sctx, st, seconds, err, st.Route.Fallback && !wasFallback)
+	a.record(sctx, st, sum, seconds, err, st.Route.Fallback && !wasFallback)
 	return err
 }
 
@@ -79,11 +88,12 @@ func (a *adapter) queryText(st *velox.Statement) bool {
 	return !a.cfg.OmitQueryText && (!raw(st) || len(st.Args) > 0)
 }
 
-// attributes are a statement's span attributes known before it runs.
-func (a *adapter) attributes(st *velox.Statement) []attribute.KeyValue {
+// attributes are a statement's span attributes known before it runs; sum is
+// its summary (see summary).
+func (a *adapter) attributes(st *velox.Statement, sum string) []attribute.KeyValue {
 	kv := make([]attribute.KeyValue, 0, 15+len(st.Tags))
 	kv = append(kv, attribute.String(attrDBSystem, dbSystem(st.Dialect)))
-	kv = target(kv, st)
+	kv = target(kv, st, sum)
 	kv = append(kv,
 		attribute.String(attrEntity, st.Entity.Name),
 		attribute.String(attrFingerprint, st.Fingerprint),

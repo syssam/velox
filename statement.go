@@ -1,6 +1,9 @@
 package velox
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Op is the kind of a Statement.
 type Op uint8
@@ -156,6 +159,11 @@ type Result struct {
 	// without RETURNING, the rows returned for one sent with it. It is -1
 	// for a read and for a failed statement.
 	Affected int64
+	// LoopBody is the time Iter's caller spent in the loop body, summed over
+	// the rows it yielded, the last one included when the loop broke. It is
+	// measured only when the DB has an Around hook, and is 0 otherwise and
+	// for every method but Iter.
+	LoopBody time.Duration
 }
 
 // Rewrite is a hook that may change a statement before it is rendered, or
@@ -168,7 +176,8 @@ type Rewrite func(ctx context.Context, st *Statement) error
 
 // Around is a hook that wraps a statement's execution. next runs the
 // statement and reads all its rows, so the hook wraps everything from sending
-// it to its last row; with Iter, that includes the body of the caller's loop.
+// it to its last row; with Iter, that includes the body of the caller's loop,
+// and Result.LoopBody says how much of next was the loop body.
 // The context passed to next must stay valid until next returns: a hook may
 // set a deadline and cancel it once next has returned. A write pins the
 // session (WithSession) found in the context the hook passes to next.

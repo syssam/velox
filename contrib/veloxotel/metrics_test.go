@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"go.opentelemetry.io/otel/attribute"
@@ -520,4 +521,79 @@ func TestRawMetrics(t *testing.T) {
 	if e, _ := dps[0].Attributes.Value("velox.entity"); e.AsString() != "testmodel.Invoice" {
 		t.Errorf("returned rows of %s", e.AsString())
 	}
+}
+
+// TestIterDurationExcludesLoopBody is Review Focus 1: an Iter's duration
+// point is the database's time, without the loop body's, also when the loop
+// breaks after its first row, while its span covers the loop. A loop that
+// panics, or an Iter never ranged over, records no point.
+func TestIterDurationExcludesLoopBody(t *testing.T) {
+	const body = 100 * time.Millisecond
+	run := func(t *testing.T, n int, panics bool) (*sdkmetric.ManualReader, []time.Duration) {
+		t.Helper()
+		r := sdkmetric.NewManualReader()
+		mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(r))
+		t.Cleanup(func() { _ = mp.Shutdown(context.Background()) })
+		f := &fakeDB{rows: [][]driver.Value{invoiceRow(1), invoiceRow(2), invoiceRow(3)}}
+		db, exp, _ := traced(t, f, veloxotel.Config{MeterProvider: mp})
+		_ = db.Query[testmodel.Invoice]().Limit(5).Iter(ctx) // never ranged
+		func() {
+			defer func() {
+				if r := recover(); (r != nil) != panics {
+					t.Errorf("recovered %v", r)
+				}
+			}()
+			i := 0
+			for _, err := range db.Query[testmodel.Invoice]().Limit(5).Iter(ctx) {
+				if err != nil {
+					t.Fatal(err)
+				}
+				time.Sleep(body)
+				if panics {
+					panic("boom")
+				}
+				if i++; i == n {
+					break
+				}
+			}
+		}()
+		var spans []time.Duration
+		for _, s := range exp.GetSpans() {
+			spans = append(spans, s.EndTime.Sub(s.StartTime))
+		}
+		return r, spans
+	}
+	check := func(t *testing.T, r *sdkmetric.ManualReader, max float64) {
+		t.Helper()
+		dps := points(t, r, "db.client.operation.duration", "s", wantDurationBounds)
+		if len(dps) != 1 || dps[0].Count != 1 {
+			t.Fatalf("%d points, want 1 of one statement", len(dps))
+		}
+		if sum := dps[0].Sum; sum < 0 || sum >= max {
+			t.Errorf("duration %v s, want 0 <= it < %v", sum, max)
+		}
+	}
+	t.Run("three rows", func(t *testing.T) {
+		r, spans := run(t, -1, false)
+		check(t, r, 0.15)
+		if len(spans) != 1 || spans[0] < 3*body {
+			t.Errorf("spans %v, want one of >= %v", spans, 3*body)
+		}
+	})
+	t.Run("broken after the first row", func(t *testing.T) {
+		r, spans := run(t, 1, false)
+		check(t, r, 0.05)
+		if len(spans) != 1 || spans[0] < body {
+			t.Errorf("spans %v, want one of >= %v", spans, body)
+		}
+	})
+	t.Run("a panicking loop body", func(t *testing.T) {
+		r, spans := run(t, -1, true)
+		if _, ok := collect(t, r)["db.client.operation.duration"]; ok {
+			t.Error("a panicking loop recorded a duration")
+		}
+		if len(spans) != 1 || spans[0] < body {
+			t.Errorf("spans %v, want one of >= %v", spans, body)
+		}
+	})
 }

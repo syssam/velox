@@ -7,6 +7,7 @@ import (
 	"iter"
 	"reflect"
 	"slices"
+	"time"
 	"unsafe"
 )
 
@@ -388,6 +389,7 @@ type iterRun[E any] struct {
 	st      Statement
 	m       *Meta[E]
 	yield   func(E, error) bool
+	timed   bool // the DB has an Around hook: time the loop body
 	yielded bool // a row was yielded
 	stopped bool // the loop over Iter ended early
 }
@@ -408,13 +410,26 @@ func readIter[E any](it *iterRun[E], r rows) error {
 			return err
 		}
 		it.yielded, it.st.handed = true, true
-		if !it.yield(e, nil) {
+		if !yieldRow(it.yield, e, it.timed, &it.st.Result.LoopBody) {
 			it.stopped = true
 			return nil
 		}
 	}
 	return nil
 }
+
+// yieldRow yields e and, when timed, adds the time the loop body took to
+// *body, also when the loop body panics.
+func yieldRow[E any](yield func(E, error) bool, e E, timed bool, body *time.Duration) bool {
+	if !timed {
+		return yield(e, nil)
+	}
+	defer addSince(body, time.Now())
+	return yield(e, nil)
+}
+
+// addSince adds the time since start to *d.
+func addSince(d *time.Duration, start time.Time) { *d += time.Since(start) }
 
 // Iter runs the query and yields one row at a time; only the current row is
 // held in memory.
@@ -447,7 +462,7 @@ func (q Query[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error] {
 		}
 		var stopped bool
 		if q.db.hooked() {
-			it := &iterRun[E]{st: st, m: q.meta, yield: yield}
+			it := &iterRun[E]{st: st, m: q.meta, yield: yield, timed: len(q.db.cfg.arounds) > 0}
 			err = q.db.run(ctx, &it.st, func(r rows) error { return readIter(it, r) }, nil)
 			stopped = it.stopped
 		} else {

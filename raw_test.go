@@ -406,3 +406,20 @@ func TestRawOnShards(t *testing.T) {
 		s.check(t, hooked, [3]int{1, 1, 2}, euR0, euPrimary, usPrimary, usPrimary)
 	})
 }
+
+// TestRawIterLoopBody: Raw's Iter measures its loop body as Query's does.
+func TestRawIterLoopBody(t *testing.T) {
+	const body = 20 * time.Millisecond
+	rec := &rawRecorder{}
+	e := &velox.FakeExec{Cols: []string{"id"}, Rows: [][]any{{int64(1)}, {int64(2)}}}
+	db := velox.OpenFake(velox.Postgres, e, velox.WithAround(rec.around))
+	for _, err := range db.Raw[testmodel.Invoice]("r", "SELECT id FROM invoices").Iter(ctx) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(body)
+	}
+	if len(rec.sts) != 1 || rec.sts[0].Result.LoopBody < 2*body {
+		t.Fatalf("%d statements, want 1 with LoopBody >= %v", len(rec.sts), 2*body)
+	}
+}

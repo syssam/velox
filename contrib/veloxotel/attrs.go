@@ -111,28 +111,27 @@ func collection(st *velox.Statement) string {
 	return st.Entity.Table
 }
 
-// spanName is a statement's span name, as the semantic conventions build it:
-// the operation and the table ("SELECT invoices"), or for raw SQL, which has
-// neither, the database system ("postgresql").
-func spanName(st *velox.Statement) string {
+// summary is a statement's db.query.summary and span name, as the semantic
+// conventions build it: the operation and the table ("SELECT invoices"). Raw
+// SQL, which has neither, has none: its span is named for the database
+// system ("postgresql").
+func summary(st *velox.Statement) string {
 	if raw(st) {
-		return dbSystem(st.Dialect)
+		return ""
 	}
 	return operation(st) + " " + collection(st)
 }
 
 // target appends to kv db.operation.name, db.collection.name and
-// db.query.summary (the span's name, "SELECT invoices"), which raw SQL has
-// none of.
-func target(kv []attribute.KeyValue, st *velox.Statement) []attribute.KeyValue {
+// db.query.summary, sum (see summary), which raw SQL has none of.
+func target(kv []attribute.KeyValue, st *velox.Statement, sum string) []attribute.KeyValue {
 	if raw(st) {
 		return kv
 	}
-	op, coll := operation(st), collection(st)
 	return append(kv,
-		attribute.String(attrDBOperation, op),
-		attribute.String(attrDBCollection, coll),
-		attribute.String(attrDBQuerySummary, op+" "+coll),
+		attribute.String(attrDBOperation, operation(st)),
+		attribute.String(attrDBCollection, collection(st)),
+		attribute.String(attrDBQuerySummary, sum),
 	)
 }
 

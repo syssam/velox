@@ -46,13 +46,13 @@ func handle(err error) {
 }
 
 // record records a statement's duration, and a successful read's rows,
-// after it ran (not on a panic). Its attributes are bounded: never the tags,
+// after it ran (not on a panic); sum is its summary (see summary). Its attributes are bounded: never the tags,
 // tenant, SQL or call site, and the fingerprint only with
 // Config.RecordMetricFingerprint.
-func (a *adapter) record(ctx context.Context, st *velox.Statement, seconds float64, err error, fellOver bool) {
+func (a *adapter) record(ctx context.Context, st *velox.Statement, sum string, seconds float64, err error, fellOver bool) {
 	kv := make([]attribute.KeyValue, 0, 8)
 	kv = append(kv, attribute.String(attrDBSystem, dbSystem(st.Dialect)))
-	kv = target(kv, st)
+	kv = target(kv, st, sum)
 	kv = append(kv, attribute.String(attrEntity, st.Entity.Name))
 	if st.Route.Shard != "" {
 		kv = append(kv, attribute.String(attrRouteShard, st.Route.Shard))

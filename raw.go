@@ -129,6 +129,7 @@ type rawRun[E any] struct {
 	limit   int // One's: stop after this many rows; 0: read them all
 	out     []E
 	yield   func(E, error) bool // Iter's; nil for All and One
+	timed   bool                // Iter's, on a DB with an Around hook: time the loop body
 	yielded bool                // a row was yielded
 	stopped bool                // the loop over Iter ended early
 }
@@ -160,7 +161,7 @@ func readRaw[E any](a *rawRun[E], r rows) error {
 			return err
 		}
 		a.yielded, a.st.handed = true, true
-		if !a.yield(e, nil) {
+		if !yieldRow(a.yield, e, a.timed, &a.st.Result.LoopBody) {
 			a.stopped = true
 			return nil
 		}
@@ -287,7 +288,7 @@ func (q RawQuery[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error] {
 			yield(zero, err)
 			return
 		}
-		a := &rawRun[E]{st: st, m: q.meta, yield: yield}
+		a := &rawRun[E]{st: st, m: q.meta, yield: yield, timed: len(q.db.cfg.arounds) > 0}
 		err = q.db.run(ctx, &a.st, func(r rows) error { return readRaw(a, r) }, nil)
 		if err != nil && !a.stopped {
 			var zero E
