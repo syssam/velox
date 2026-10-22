@@ -242,14 +242,15 @@ var genericObjects = []struct {
 	{"entityDesc", "", entityDescSrc, 153600}, // measured 122196
 	// entityDescUse is held like entityDescHooks: its bound is the
 	// measurement plus about 1.2%, rounded up to the next KiB; remeasured on
-	// 2026-10-22, darwin/arm64, Go 1.27.1.
-	{"entityDescUse", "", entityDescUseSrc, 784384}, // measured 774178
+	// 2026-10-22, darwin/arm64, Go 1.27.1, after the locking reads (about
+	// +8 KiB here and in entityDescHooks).
+	{"entityDescUse", "", entityDescUseSrc, 792576}, // measured 782388
 	// entityDescHooks is held tighter than the rule above: a quarter of it
 	// would let it grow by 64 KiB unseen. Its bound is the measurement plus
 	// about 1.2%, rounded up to the next KiB, the headroom it had before
 	// (1046660 under 1058816); remeasured on 2026-10-22, darwin/arm64, Go
 	// 1.27.1.
-	{"entityDescHooks", "", entityDescHooksBound, 1074176}, // measured 1060472
+	{"entityDescHooks", "", entityDescHooksBound, 1082368}, // measured 1068930
 	{"Policy", "velox.Policy[E]", "", 8192},                // measured 4050
 	{"Mutation", "velox.Mutation[E]", "", 8192},            // measured 3750
 }

@@ -81,7 +81,8 @@ func Sum[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (V, error
 
 // Avg returns the average of column c over the rows Sum would add up, and
 // false when there is none. The database computes it: an integer column's
-// average is a decimal that MySQL rounds to four places.
+// average is a decimal that MySQL rounds to four places. A float64 holds
+// integers exactly only up to 2^53, so an average above that loses precision.
 func Avg[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (float64, bool, error) {
 	v, err := aggregate[E, float64](ctx, q, AggregateAvg, c.I)
 	if err != nil || v == nil {

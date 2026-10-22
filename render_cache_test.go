@@ -310,3 +310,28 @@ func TestAggregateShapes(t *testing.T) {
 		t.Errorf("a hit changed: %s, %d shapes", again, c.size())
 	}
 }
+
+// A read and its four locked forms are five shapes, and the cache never
+// returns one's text for another.
+func TestLockShapes(t *testing.T) {
+	var c renderCache
+	forms := []struct {
+		lock Lock
+		wait LockWait
+	}{{0, 0}, {LockForUpdate, 0}, {LockForShare, 0}, {LockForUpdate, LockSkipLocked}, {LockForUpdate, LockNoWait}}
+	texts := make(map[string]bool)
+	for range 2 {
+		for _, f := range forms {
+			st := stmt(hID.EQ(1))
+			st.Limit, st.Lock, st.LockWait = 1, f.lock, f.wait
+			want, _ := render(MySQL, st)
+			if got, _ := c.render(MySQL, st); got != want {
+				t.Errorf("cached %s, want %s", got, want)
+			}
+			texts[want] = true
+		}
+	}
+	if len(texts) != 5 || c.size() != 5 {
+		t.Errorf("%d texts, %d shapes, want 5", len(texts), c.size())
+	}
+}

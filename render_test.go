@@ -250,3 +250,37 @@ func TestExistsRenders(t *testing.T) {
 		}
 	}
 }
+
+// The lock clause follows LIMIT and OFFSET, with the same text on PostgreSQL
+// and MySQL.
+func TestLockRenders(t *testing.T) {
+	for d, base := range map[Dialect][2]string{
+		Postgres: {`SELECT ` + pgCols + ` FROM "invoices" WHERE "id" = $1`, `$2`},
+		MySQL:    {"SELECT " + mysqlCols + " FROM `invoices` WHERE `id` = ?", "?"},
+	} {
+		where, p2 := base[0], base[1]
+		p3 := "$3"
+		if d == MySQL {
+			p3 = "?"
+		}
+		for _, c := range []struct {
+			lock          Lock
+			wait          LockWait
+			limit, offset int
+			want          string
+		}{
+			{LockForUpdate, 0, 1, 0, where + " LIMIT " + p2 + " FOR UPDATE"},
+			{LockForShare, LockSkipLocked, 1, 0, where + " LIMIT " + p2 + " FOR SHARE SKIP LOCKED"},
+			{LockForUpdate, LockNoWait, 1, 0, where + " LIMIT " + p2 + " FOR UPDATE NOWAIT"},
+			{LockForUpdate, LockSkipLocked, 1, 5, where + " LIMIT " + p2 + " OFFSET " + p3 + " FOR UPDATE SKIP LOCKED"},
+			{LockForShare, 0, 0, 5, map[Dialect]string{Postgres: where + " OFFSET $2 FOR SHARE", MySQL: where + " LIMIT 18446744073709551615 OFFSET ? FOR SHARE"}[d]},
+			{0, 0, 1, 0, where + " LIMIT " + p2},
+		} {
+			st := stmt(hID.EQ(1))
+			st.Lock, st.LockWait, st.Limit, st.Offset = c.lock, c.wait, c.limit, c.offset
+			if got, _ := render(d, st); got != c.want {
+				t.Errorf("%v %d %d:\n got %s\nwant %s", d, c.lock, c.wait, got, c.want)
+			}
+		}
+	}
+}

@@ -13,6 +13,11 @@ func (db *DB) guard(st *Statement) error {
 	if st.Op == OpSelect && !st.Count && !st.Exists && st.Aggregate == 0 && st.Columns != nil && len(st.Columns) == 0 {
 		return fmt.Errorf("velox: %s: the query selects no columns", st.Entity.Name)
 	}
+	if st.Op == OpSelect && (st.Lock != 0 || st.LockWait != 0) {
+		if err := db.guardLock(st); err != nil {
+			return err
+		}
+	}
 	switch st.Op {
 	case OpSelect:
 		if st.Count || st.Exists || st.Aggregate != 0 {
@@ -39,6 +44,23 @@ func (db *DB) guard(st *Statement) error {
 			// And(conds...) of an empty conds renders WHERE 1 = 1.
 			return fmt.Errorf("velox: %s: %w: its conditions match every row; add a condition, or All to change every row", st.Entity.Name, ErrNoWhere)
 		}
+	}
+	return nil
+}
+
+// guardLock checks a locking read: it needs a lock to wait on, a database
+// with locking reads, a transaction to hold the locks, and rows to lock.
+func (db *DB) guardLock(st *Statement) error {
+	name := st.Entity.Name
+	switch {
+	case st.Lock == 0:
+		return fmt.Errorf("velox: %s: SkipLocked and NoWait need ForUpdate or ForShare", name)
+	case db.d == SQLite:
+		return fmt.Errorf("velox: %s: SQLite has no locking reads; its transactions lock the whole database", name)
+	case !st.InTx:
+		return fmt.Errorf("velox: %s: a locking read (ForUpdate or ForShare) runs only inside Tx", name)
+	case st.Count || st.Aggregate != 0:
+		return fmt.Errorf("velox: %s: Count, Sum, Avg, Min and Max cannot lock rows; lock them with All, One, First, Iter or Exists", name)
 	}
 	return nil
 }

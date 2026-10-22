@@ -114,9 +114,57 @@ func TestAggregateRefusals(t *testing.T) {
 	if _, err := velox.Sum(ctx, velox.OpenFake(velox.Postgres, e, nop).Query[testmodel.Invoice](), I.Total); err != nil {
 		t.Errorf("a harmless hook: %v", err)
 	}
-	cols := velox.WithRewrite(func(_ context.Context, st *velox.Statement) error { st.Columns = nil; return nil })
-	if _, err := velox.Sum(ctx, velox.OpenFake(velox.Postgres, e, cols).Query[testmodel.Invoice](), I.Total); err == nil || !strings.Contains(err.Error(), "aggregate reads one column") {
-		t.Errorf("a hook that drops the column: %v", err)
+}
+
+// On a Count, Exists or aggregate statement a Rewrite hook may not change
+// Columns, which its scan depends on: drop, add, swap or edit in place.
+func TestRewriteMayNotChangeAReadsColumns(t *testing.T) {
+	const want = "velox: testmodel.Invoice: a Rewrite hook changed the statement's Columns"
+	hooks := map[string]velox.Rewrite{
+		"drops": func(_ context.Context, st *velox.Statement) error { st.Columns = nil; return nil },
+		"adds":  func(_ context.Context, st *velox.Statement) error { st.Columns = append(st.Columns, 0); return nil },
+		"swaps": func(_ context.Context, st *velox.Statement) error { st.Columns = []int{1}; return nil },
+		"edits": func(_ context.Context, st *velox.Statement) error {
+			if len(st.Columns) > 0 {
+				st.Columns[0] = 1
+			} else {
+				st.Columns = []int{1}
+			}
+			return nil
+		},
+	}
+	for name, rw := range hooks {
+		e := &velox.FakeExec{Rows: [][]any{{int64(1)}}}
+		q := velox.OpenFake(velox.Postgres, e, velox.WithRewrite(rw)).Query[testmodel.Invoice]()
+		if _, err := velox.Sum(ctx, q, I.Total); err == nil || err.Error() != want {
+			t.Errorf("Sum, a hook that %s: %v", name, err)
+		}
+		if name != "drops" { // a Count's and an Exists' Columns are nil already
+			if _, err := q.Count(ctx); err == nil || err.Error() != want {
+				t.Errorf("Count, a hook that %s: %v", name, err)
+			}
+			if _, err := q.Exists(ctx); err == nil || err.Error() != want {
+				t.Errorf("Exists, a hook that %s: %v", name, err)
+			}
+		}
+		if e.Calls != 0 {
+			t.Errorf("a hook that %s: %d statements sent", name, e.Calls)
+		}
+	}
+	// A hook that leaves the columns as they were passes, and a read that
+	// is not a Count, Exists or aggregate may still have them narrowed.
+	same := velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+		st.Columns = append([]int(nil), st.Columns...)
+		return nil
+	})
+	e := &velox.FakeExec{Rows: [][]any{{1.0}}}
+	if _, err := velox.Sum(ctx, velox.OpenFake(velox.Postgres, e, same).Query[testmodel.Invoice](), I.Total); err != nil {
+		t.Errorf("an unchanged copy: %v", err)
+	}
+	narrow := velox.WithRewrite(func(_ context.Context, st *velox.Statement) error { st.Columns = []int{0}; return nil })
+	e = &velox.FakeExec{Rows: [][]any{{int64(1)}}}
+	if _, err := velox.OpenFake(velox.Postgres, e, narrow).Query[testmodel.Invoice]().Limit(1).All(ctx); err != nil {
+		t.Errorf("All, narrowed: %v", err)
 	}
 }
 

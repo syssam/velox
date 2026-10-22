@@ -296,6 +296,8 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 		return err
 	}
 	db.observe(ctx, st)
+	// The query's own Columns: the hooks get a copy of them.
+	cols := st.Columns
 	if db.hooked() {
 		// Hooks may edit the statement in place; give them copies so that
 		// the query the statement came from stays as it was. With no hooks
@@ -319,7 +321,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 			st.Conflict = &cf
 		}
 	}
-	entity, op, writable, exists, agg := st.Entity, st.Op, st.Writable, st.Exists, st.Aggregate
+	entity, op, writable, exists, agg, lock, wait := st.Entity, st.Op, st.Writable, st.Exists, st.Aggregate, st.Lock, st.LockWait
 	for _, rw := range db.cfg.rewrites {
 		if err := rw(ctx, st); err != nil {
 			return fmt.Errorf("velox: %s: rewrite: %w", entity.Name, err)
@@ -339,6 +341,14 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	}
 	if st.Aggregate != agg {
 		return errAggregateChanged(entity.Name)
+	}
+	if (st.Count || st.Exists || st.Aggregate != 0) && !slices.Equal(st.Columns, cols) {
+		// The scan depends on them: one value, of the column's type.
+		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's Columns", entity.Name)
+	}
+	if st.Lock != lock || st.LockWait != wait {
+		// The guard checked them.
+		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's lock", entity.Name)
 	}
 	switch {
 	case st.Entity == nil:

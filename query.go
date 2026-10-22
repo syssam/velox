@@ -114,6 +114,40 @@ func (q Query[E]) Writable[_ Lazy[E]]() Query[E] {
 	return q
 }
 
+// ForUpdate returns the query locking the rows it reads until the
+// transaction ends, as SELECT … FOR UPDATE: another transaction cannot
+// change or lock them. A locking read runs only inside Tx, on PostgreSQL
+// and MySQL; SQLite has none, as its transactions lock the database. It
+// loads no relations, and Count, Sum, Avg, Min and Max refuse it.
+func (q Query[E]) ForUpdate[_ Lazy[E]]() Query[E] {
+	q.st.Lock = LockForUpdate
+	return q
+}
+
+// ForShare returns the query taking a shared lock on the rows it reads, as
+// SELECT … FOR SHARE: other transactions may read and share-lock them, but
+// not change them. The rules of ForUpdate apply.
+func (q Query[E]) ForShare[_ Lazy[E]]() Query[E] {
+	q.st.Lock = LockForShare
+	return q
+}
+
+// SkipLocked returns the locking query leaving out the rows another
+// transaction has locked, as SKIP LOCKED: a queue's workers each take rows
+// no other worker holds. It needs ForUpdate or ForShare.
+func (q Query[E]) SkipLocked[_ Lazy[E]]() Query[E] {
+	q.st.LockWait = LockSkipLocked
+	return q
+}
+
+// NoWait returns the locking query failing at once, rather than waiting,
+// when a row it reads is locked, as NOWAIT. DriverCode gives the failure's
+// code: PostgreSQL's 55P03, MySQL's 3572. It needs ForUpdate or ForShare.
+func (q Query[E]) NoWait[_ Lazy[E]]() Query[E] {
+	q.st.LockWait = LockNoWait
+	return q
+}
+
 // MaxRows returns the query allowed to return up to n rows, in place of the
 // DB's WithMaxRows cap; n <= 0 restores the DB's cap. It covers the
 // statements of the query's With loads too, nested ones included. Say it where
@@ -328,6 +362,9 @@ func (q Query[E]) read[_ Lazy[E]](ctx context.Context) (out []E, ran []int, at t
 		return nil, nil, at, q.err
 	}
 	if len(q.loads) > 0 {
+		if err := q.lockedLoads(); err != nil {
+			return nil, nil, at, err
+		}
 		if err := checkLoads(q.meta.info, q.st.Columns, q.loads); err != nil {
 			return nil, nil, at, err
 		}
@@ -349,6 +386,15 @@ func (q Query[E]) read[_ Lazy[E]](ctx context.Context) (out []E, ran []int, at t
 		return nil, nil, at, err
 	}
 	return out, ran, at, nil
+}
+
+// lockedLoads refuses a locking query with With: the loads' rows would not
+// be locked.
+func (q Query[E]) lockedLoads[_ Lazy[E]]() error {
+	if q.st.Lock != 0 {
+		return fmt.Errorf("velox: %s: a locking read loads no relations; load them in another query", q.meta.info.Name)
+	}
+	return nil
 }
 
 // load loads the query's relations for rows, which ran on at with the columns
@@ -617,6 +663,9 @@ func (q Query[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error) {
 		return "", nil, q.err
 	}
 	if len(q.loads) > 0 {
+		if err := q.lockedLoads(); err != nil {
+			return "", nil, err
+		}
 		if err := checkLoads(q.meta.info, q.st.Columns, q.loads); err != nil {
 			return "", nil, err
 		}

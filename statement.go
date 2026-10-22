@@ -49,6 +49,31 @@ func (o Op) Raw() bool { return o == OpRawQuery || o == OpRawExec }
 // Every other Op writes, Exec's raw SQL included.
 func (o Op) Reads() bool { return o == OpSelect || o == OpRawQuery }
 
+// Lock is the lock a locking read takes on the rows it reads.
+type Lock uint8
+
+// The locks.
+const (
+	LockForUpdate Lock = iota + 1 // FOR UPDATE
+	LockForShare                  // FOR SHARE
+)
+
+// LockWait is what a locking read does about rows another transaction has
+// locked. The zero value waits for them.
+type LockWait uint8
+
+// The ways of not waiting.
+const (
+	LockSkipLocked LockWait = iota + 1 // SKIP LOCKED: leave them out
+	LockNoWait                         // NOWAIT: fail at once
+)
+
+// lockSQL and lockWaitSQL are the clauses, after LIMIT and OFFSET.
+var (
+	lockSQL     = [...]string{LockForUpdate: " FOR UPDATE", LockForShare: " FOR SHARE"}
+	lockWaitSQL = [...]string{LockSkipLocked: " SKIP LOCKED", LockNoWait: " NOWAIT"}
+)
+
 // AssignOp is how an UPDATE assigns a column.
 type AssignOp uint8
 
@@ -97,9 +122,11 @@ type ConflictClause struct {
 type Statement struct {
 	Op           Op
 	Entity       *EntityInfo // shared and read-only: replace it, never edit it
-	Count        bool        // SELECT COUNT(*): Count clears Columns, OrderBy, Limit and Offset; a Rewrite hook that sets them gets them rendered
-	Exists       bool        // SELECT 1 … LIMIT 1: Exists clears Columns, OrderBy and Offset and sets Limit to 1; a Rewrite hook may not change it
-	Aggregate    Aggregate   // SELECT SUM(c) …: Columns holds c alone; like Count, it clears OrderBy, Limit and Offset; a Rewrite hook may not change it
+	Count        bool        // SELECT COUNT(*): Count clears Columns, OrderBy, Limit and Offset; a Rewrite hook may not set Columns, and one that sets the others gets them rendered
+	Exists       bool        // SELECT 1 … LIMIT 1: Exists clears Columns, OrderBy and Offset and sets Limit to 1; a Rewrite hook may not change it, or set Columns
+	Aggregate    Aggregate   // SELECT SUM(c) …: Columns holds c alone; like Count, it clears OrderBy, Limit and Offset; a Rewrite hook may not change it, or Columns
+	Lock         Lock        // SELECT: ForUpdate or ForShare; 0 for a read that locks nothing; a Rewrite hook may not change it
+	LockWait     LockWait    // SELECT: SkipLocked or NoWait; a Rewrite hook may not change it
 	Columns      []int       // SELECT: the selected columns, nil selects all; INSERT: the columns written
 	Where        []Predicate // all must hold
 	OrderBy      []OrderTerm

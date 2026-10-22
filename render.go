@@ -162,6 +162,12 @@ func (w *writer) selectStmt(st *Statement) {
 		w.str(" OFFSET ")
 		w.arg(st.Offset)
 	}
+	if st.Lock != 0 {
+		w.str(lockSQL[st.Lock])
+		if st.LockWait != 0 {
+			w.str(lockWaitSQL[st.LockWait])
+		}
+	}
 }
 
 // isNilArg reports a value that SQL compares with IS NULL, not =. It
