@@ -33,7 +33,7 @@ func (x *Category) ChildrenGQL(ctx context.Context, after *veloxgql.Cursor, firs
 	if err != nil {
 		return nil, err
 	}
-	return &CategoryConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Categories.Children)}, nil
+	return &CategoryConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Categories.Children, "Category.children", []any{after, first, before, last, where})}, nil
 }
 
 // ParentGQL is the edge parent: the Category it leads to, or nil when there is
@@ -50,7 +50,7 @@ func (x *Category) ParentGQL(ctx context.Context) (*Category, error) {
 	if fields, ok := gqlimpl.Selected(ctx, "Category"); ok {
 		q = gqlimpl.Narrow(q, categoryColumnsGQL(fields))
 	}
-	return gqlimpl.EdgeOne(ctx, q, x, Categories.Parent)
+	return gqlimpl.EdgeOne(ctx, q, x, Categories.Parent, "Category.parent")
 }
 
 // CategoryConnection is the GraphQL type CategoryConnection, a connection to a

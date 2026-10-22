@@ -65,7 +65,7 @@ func (x *Post) AuthorGQL(ctx context.Context) (*User, error) {
 	if fields, ok := gqlimpl.Selected(ctx, "User"); ok {
 		q = gqlimpl.Narrow(q, userColumnsGQL(fields))
 	}
-	return gqlimpl.EdgeOne(ctx, q, x, Posts.Author)
+	return gqlimpl.EdgeOne(ctx, q, x, Posts.Author, "Post.author")
 }
 
 // TagsGQL is the edge tags: a connection to the Label nodes it leads to, paged,
@@ -81,7 +81,7 @@ func (x *Post) TagsGQL(ctx context.Context, after *veloxgql.Cursor, first *int, 
 	if err != nil {
 		return nil, err
 	}
-	return &LabelConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Posts.Tags)}, nil
+	return &LabelConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Posts.Tags, "Post.tags", []any{after, first, before, last, orderBy, where})}, nil
 }
 
 // PostConnection is the GraphQL type PostConnection, a connection to a list of

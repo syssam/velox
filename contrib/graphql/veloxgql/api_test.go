@@ -95,6 +95,7 @@ var publicAPI = []string{
 	"UnmarshalUUID",
 	"UnmarshalUint",
 	"UnmarshalUint64",
+	"WithBatchScope",
 	"WithLimits",
 	"WithTxFilter",
 	"WithTxOptions",

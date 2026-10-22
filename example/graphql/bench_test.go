@@ -45,12 +45,16 @@ const (
 // Nested -benchmem, three runs (load average 5 to 6): at n=50, 5 statements
 // and 158525, 158397 and 158460 allocations for 3550 nodes (44.6 per node);
 // at n=10, 5 statements and 32041, 32037 and 32041 for 710 nodes (45.1 per
-// node). The budget is the largest, 158525, plus 10%, rounded up.
+// node). Remeasured the same way after the final review's fixes, which key
+// each batch by its edge and keep its arguments (load average about 40): at
+// n=50, 5 statements and 159615, 159756 and 159653 allocations (45.0 per
+// node); at n=10, 5 statements and 32265, 32259 and 32252. The budget is the
+// largest, 159756, plus 10%, rounded up.
 // The same request before the edges were batched, at cafc372, the commit
 // before plan 4's Task 5: 221 statements at n=10 and 1101 at n=50, which
 // grew with the users, and 197807, 197889 and 197783 allocations at n=50.
-// Batching makes the statements flat and takes 20% off the allocations.
-const nestedAllocsBudget = 174400
+// Batching makes the statements flat and takes 19% off the allocations.
+const nestedAllocsBudget = 175800
 
 // pinnedGqlgen is the gqlgen version the allocation budget was measured under;
 // scripts/gqlgen-latest.sh runs the tests under a newer one, where the

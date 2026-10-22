@@ -100,6 +100,8 @@ type Extension struct {
 	// txFilter decides whether a mutation runs in a transaction; nil means
 	// every one does.
 	txFilter func(ctx context.Context, op *ast.OperationDefinition) bool
+	// batchScope is WithBatchScope's function, or nil.
+	batchScope func(context.Context) any
 }
 
 // Option configures an Extension.
@@ -107,6 +109,10 @@ type Option func(*Extension)
 
 // NewExtension returns the extension that serves a schema on db, with
 // DefaultLimits() unless WithLimits says otherwise.
+//
+// Make one Extension per server: the server's Use gives it the server's
+// schema (Validate stores it), which costs every request, so one Extension
+// used by two servers would cost both against the last one's schema.
 //
 // Set ErrorPresenter on the server too
 // (srv.SetErrorPresenter(veloxgql.ErrorPresenter(nil))): without it, gqlgen's
@@ -148,6 +154,26 @@ func WithTxOptions(opts ...velox.TxOption) Option {
 // replaced, with its pin kept.
 func WithTxFilter(f func(ctx context.Context, op *ast.OperationDefinition) bool) Option {
 	return func(e *Extension) { e.txFilter = f }
+}
+
+// WithBatchScope adds f's value to what the edges' batches are keyed by:
+// edge calls whose contexts give different values never share a read. f
+// gets the context of each call of a generated edge method (its field's
+// resolver's), and returns a comparable value; a caller whose value cannot
+// be compared (reflect.Value.Comparable) reads alone. Given twice, the last
+// wins.
+//
+// A batch reads every row's edge under its first caller's context. velox's
+// row scope (velox.RowScopeOf: the tenant, the AllTenants and SkipPolicy
+// bypasses, the shard) is always in the key, and so are the DB and the
+// limits. Any other context value that a Read policy or a Rewrite or Around
+// hook reads, such as the viewer or a role, must be the same for every row
+// of a field, or be in f's value: a directive or a field middleware that
+// gives an edge field's resolver another context for some parent rows
+// (acting as the row's owner, raising a role) needs WithBatchScope, or the
+// rows of the field are read under whichever context comes first.
+func WithBatchScope(f func(context.Context) any) Option {
+	return func(e *Extension) { e.batchScope = f }
 }
 
 // Context returns ctx with the extension's DB and limits, as a query
@@ -256,7 +282,7 @@ func (e *Extension) InterceptOperation(ctx context.Context, next graphql.Operati
 // operation, passes through. A subscription's event is a response: its
 // rows are let go of when it is made.
 func (e *Extension) InterceptResponse(ctx context.Context, next graphql.ResponseHandler) *graphql.Response {
-	ctx = shared.WithTable(ctx, e.schema)
+	ctx = shared.WithTable(ctx, e.schema, e.batchScope)
 	m, _ := ctx.Value(mutationKey{}).(*mutation)
 	if m == nil || m.plain || m.started.Swap(true) {
 		return next(ctx)

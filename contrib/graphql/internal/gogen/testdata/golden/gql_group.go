@@ -52,7 +52,7 @@ func (x *Group) UsersGQL(ctx context.Context, after *veloxgql.Cursor, first *int
 	if err != nil {
 		return nil, err
 	}
-	return &AccountConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Groups.Users)}, nil
+	return &AccountConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Groups.Users, "Group.users", []any{after, first, before, last, where})}, nil
 }
 
 // GroupConnection is the GraphQL type GroupConnection, a connection to a list

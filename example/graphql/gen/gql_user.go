@@ -67,7 +67,7 @@ func (x *User) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int,
 	if err != nil {
 		return nil, err
 	}
-	return &PostConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Users.Posts)}, nil
+	return &PostConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Users.Posts, "User.posts", []any{after, first, before, last, orderBy, where})}, nil
 }
 
 // UserConnection is the GraphQL type UserConnection, a connection to a list of

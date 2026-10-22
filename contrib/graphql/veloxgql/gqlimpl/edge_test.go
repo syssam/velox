@@ -67,18 +67,25 @@ func ownerDesc() velox.Desc[owner] {
 }
 
 type child struct {
-	ID      int64
-	OwnerID *int64
-	Title   string
-	Owner   velox.One[owner]
+	ID       int64
+	OwnerID  *int64
+	Title    string
+	EditorID *int64
+	Owner    velox.One[owner]
+	Editor   velox.One[owner]
 }
 
 var children = struct {
-	ID      velox.NumberCol[child, int64]
-	OwnerID velox.NullNumberCol[child, int64]
-	Title   velox.StringCol[child, string]
-	Owner   velox.Rel[child, owner]
-}{velox.NumberCol[child, int64]{I: 0}, velox.NullNumberCol[child, int64]{I: 1}, velox.StringCol[child, string]{I: 2}, velox.Rel[child, owner]{I: 0}}
+	ID       velox.NumberCol[child, int64]
+	OwnerID  velox.NullNumberCol[child, int64]
+	Title    velox.StringCol[child, string]
+	EditorID velox.NullNumberCol[child, int64]
+	Owner    velox.Rel[child, owner]
+	Editor   velox.Rel[child, owner]
+}{
+	velox.NumberCol[child, int64]{I: 0}, velox.NullNumberCol[child, int64]{I: 1}, velox.StringCol[child, string]{I: 2}, velox.NullNumberCol[child, int64]{I: 3},
+	velox.Rel[child, owner]{I: 0}, velox.Rel[child, owner]{I: 1},
+}
 
 var childMeta velox.MetaOnce[child]
 
@@ -87,14 +94,17 @@ func (*child) VeloxMeta() *velox.Meta[child] { return childMeta.Load(childDesc) 
 func childDesc() velox.Desc[child] {
 	return velox.Desc[child]{
 		Table:      "children",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "OwnerID", Name: "owner_id"}, {Field: "Title", Name: "title"}},
+		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "OwnerID", Name: "owner_id"}, {Field: "Title", Name: "title"}, {Field: "EditorID", Name: "editor_id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Relations:  []velox.Relation{velox.EdgeTo[owner]("Owner", 1, 0)},
-		Addr:       func(x *child, i int) any { return [...]any{&x.ID, &x.OwnerID, &x.Title}[i] },
+		Relations:  []velox.Relation{velox.EdgeTo[owner]("Owner", 1, 0), velox.EdgeTo[owner]("Editor", 3, 0)},
+		Addr:       func(x *child, i int) any { return [...]any{&x.ID, &x.OwnerID, &x.Title, &x.EditorID}[i] },
 		RelAddr: func(x *child, i int) any {
-			if i == 0 {
+			switch i {
+			case 0:
 				return &x.Owner
+			case 1:
+				return &x.Editor
 			}
 			return nil
 		},
@@ -180,6 +190,7 @@ type Child implements Node {
 	id: ID!
 	title: String!
 	owner: Owner
+	editor: Owner
 }
 type Tag implements Node {
 	id: ID!
@@ -229,7 +240,8 @@ func (l *edgeLog) take(table string) []string {
 // edgeDB opens an in-memory SQLite database holding:
 //   - owners 1 "a", 2 "b" and 3 "c";
 //   - children (id: owner, title) 1: 1 "d", 2: 1 "a", 3: 1 "c", 4: 1 "b",
-//     5: 2 "b", 6: 2 "a", and 7 of no owner, "z";
+//     5: 2 "b", 6: 2 "a", and 7 of no owner, "z"; children 1 to 4 have the
+//     editor 3, 5 and 6 the editor 1, and 7 none;
 //   - tags 1 "go", 2 "db" and 3 "zz"; owner 1 has tags 1 and 2, owner 2 tag
 //     2, owner 3 none.
 func edgeDB(t *testing.T) (*velox.DB, *sql.DB, *edgeLog) {
@@ -242,13 +254,14 @@ func edgeDB(t *testing.T) (*velox.DB, *sql.DB, *edgeLog) {
 	t.Cleanup(func() { _ = raw.Close() })
 	for _, s := range []string{
 		`CREATE TABLE owners (id INTEGER PRIMARY KEY, name TEXT NOT NULL, age INTEGER NOT NULL)`,
-		`CREATE TABLE children (id INTEGER PRIMARY KEY, owner_id INTEGER, title TEXT NOT NULL)`,
+		`CREATE TABLE children (id INTEGER PRIMARY KEY, owner_id INTEGER, title TEXT NOT NULL, editor_id INTEGER)`,
 		`CREATE TABLE tags (id INTEGER PRIMARY KEY, name TEXT NOT NULL)`,
 		`CREATE TABLE owner_tags (owner_id INTEGER NOT NULL, tag_id INTEGER NOT NULL, PRIMARY KEY (owner_id, tag_id))`,
 		`INSERT INTO owners (id, name, age) VALUES (1, 'a', 30), (2, 'b', 20), (3, 'c', 10)`,
 		`INSERT INTO children (id, owner_id, title) VALUES (1, 1, 'd'), (2, 1, 'a'), (3, 1, 'c'), (4, 1, 'b'), (5, 2, 'b'), (6, 2, 'a'), (7, NULL, 'z')`,
 		`INSERT INTO tags (id, name) VALUES (1, 'go'), (2, 'db'), (3, 'zz')`,
 		`INSERT INTO owner_tags (owner_id, tag_id) VALUES (1, 1), (1, 2), (2, 2)`,
+		`UPDATE children SET editor_id = CASE WHEN owner_id = 1 THEN 3 ELSE 1 END WHERE owner_id IS NOT NULL`,
 	} {
 		if _, err := raw.Exec(s); err != nil {
 			t.Fatalf("%s: %v", s, err)
@@ -273,7 +286,7 @@ func operationIn(t *testing.T, db *velox.DB, query string, schema *ast.Schema, o
 	if errs != nil {
 		t.Fatal(errs)
 	}
-	ctx := gqlshared.WithTable(veloxgql.NewExtension(db, opts...).Context(context.Background()), schema)
+	ctx := gqlshared.WithTable(veloxgql.NewExtension(db, opts...).Context(context.Background()), schema, nil)
 	return graphql.WithOperationContext(ctx, &graphql.OperationContext{RawQuery: query, Doc: doc, Operation: doc.Operations[0], Variables: map[string]any{}})
 }
 
@@ -318,14 +331,15 @@ func ownersPage(t *testing.T, ctx context.Context, db *velox.DB, q velox.Query[o
 }
 
 // childPage is x's page of the edge children, made at ctx (a field of the
-// edge, or not), and its totalCount.
-func childPage(t *testing.T, ctx context.Context, db *velox.DB, x *owner, q velox.Query[child], args gqlimpl.Args, order []gqlimpl.OrderTerm[child]) (*gqlimpl.Page[child], int) {
+// edge, or not), and its totalCount. The edge's arguments are args, and
+// those of q are in more, if any.
+func childPage(t *testing.T, ctx context.Context, db *velox.DB, x *owner, q velox.Query[child], args gqlimpl.Args, order []gqlimpl.OrderTerm[child], more ...any) (*gqlimpl.Page[child], int) {
 	t.Helper()
 	c, err := gqlimpl.NewConnection(ctx, q, "Child", args, order, childKey())
 	if err != nil {
 		t.Fatal(err)
 	}
-	c = gqlimpl.EdgeConnection(ctx, c, x, owners.Children)
+	c = gqlimpl.EdgeConnection(ctx, c, x, owners.Children, "Owner.children", []any{args, more})
 	p, err := c.Page(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -438,7 +452,7 @@ func TestEdgeConnectionBatches(t *testing.T) {
 	// The pages' rows are one group: each child's owner is one statement.
 	octx := field(t, ctx, "owners", "edges", "node", "children", "edges", "node", "owner")
 	for _, x := range rows {
-		o, err := gqlimpl.EdgeOne(octx, db.Query[owner](), x, children.Owner)
+		o, err := gqlimpl.EdgeOne(octx, db.Query[owner](), x, children.Owner, "Child.owner")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -545,7 +559,7 @@ func TestEdgeAliases(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			got, err := gqlimpl.EdgeConnection(c.ctx, pc, x, owners.Children).Page(c.ctx)
+			got, err := gqlimpl.EdgeConnection(c.ctx, pc, x, owners.Children, "Owner.children", c.args).Page(c.ctx)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -571,8 +585,12 @@ func TestEdgeScopes(t *testing.T) {
 	}{
 		{"SkipPolicy", func(ctx context.Context, s string) context.Context { return velox.SkipPolicy(ctx, s) }, 2},
 		{"OnShard", velox.OnShard, 2},
-		// A tenant id == cannot compare: no panic, and a batch of its own.
+		// A tenant id == cannot compare: no panic, and a read of its own.
 		{"incomparable tenant", func(ctx context.Context, s string) context.Context { return velox.WithTenant(ctx, []byte(s)) }, 3},
+		// A comparable type whose value is not (the review's M2): the same.
+		{"struct tenant holding a slice", func(ctx context.Context, s string) context.Context {
+			return velox.WithTenant(ctx, struct{ ID any }{[]byte(s)})
+		}, 3},
 	} {
 		t.Run(c.name, func(t *testing.T) { testEdgeScopes(t, c.scope, c.loads) })
 	}
@@ -591,7 +609,7 @@ func testEdgeScopes(t *testing.T, scope func(context.Context, string) context.Co
 		if err != nil {
 			t.Fatal(err)
 		}
-		got, err := gqlimpl.EdgeConnection(scoped[x.ID], c, x, owners.Children).Page(ectx)
+		got, err := gqlimpl.EdgeConnection(scoped[x.ID], c, x, owners.Children, "Owner.children", nil).Page(ectx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -602,6 +620,109 @@ func testEdgeScopes(t *testing.T, scope func(context.Context, string) context.Co
 	}
 	if len(loads) != n {
 		t.Errorf("%d statements, want %d: %q", len(loads), n, loads)
+	}
+}
+
+// TestEdgeFromAppField is the final review's C1: an application's field on
+// a generated type (Owner.name here), whose resolver calls edge methods,
+// reads each call alone, by its own arguments: two pages of the children
+// with different arguments, then the tags, an edge of another target type.
+func TestEdgeFromAppField(t *testing.T) {
+	db, _, log := edgeDB(t)
+	ctx := operation(t, db, `{ owners { edges { node { name } } } }`)
+	xs := ownersPage(t, ctx, db, db.Query[owner](), gqlimpl.Args{})
+	nctx := field(t, ctx, "owners", "edges", "node", "name")
+	log.take("")
+	wantTags := map[int64][]int64{1: {1, 2}, 2: {2}, 3: {}}
+	for _, x := range xs {
+		for _, c := range []struct {
+			name  string
+			q     velox.Query[child]
+			args  gqlimpl.Args
+			order []gqlimpl.OrderTerm[child]
+		}{
+			{"first 1 by title", db.Query[child](), gqlimpl.Args{First: intp(1)}, titleOrder()},
+			{"title d, first 3", db.Query[child]().Where(children.Title.EQ("d")), gqlimpl.Args{First: intp(3)}, nil},
+		} {
+			got, n := childPage(t, nctx, db, x, c.q, c.args, c.order)
+			want, wn := ownPage(t, db, x, c.q, c.args, c.order)
+			samePage(t, x.Name+" "+c.name, got, want)
+			if n != wn {
+				t.Errorf("%s %s: totalCount %d, want %d", x.Name, c.name, n, wn)
+			}
+		}
+		rows, err := gqlimpl.EdgeList(nctx, db.Query[tag](), x, owners.Tags, "Owner.tags")
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := []int64{}
+		for _, r := range rows {
+			got = append(got, r.ID)
+		}
+		if !reflect.DeepEqual(got, wantTags[x.ID]) {
+			t.Errorf("%s: tags %v, want %v", x.Name, got, wantTags[x.ID])
+		}
+	}
+}
+
+// TestEdgeOneOwnerAndEditor: two to-one edges of one target type never share
+// a read: called from an application's field (Child.title here) each reads
+// alone, and two relations under one edge's name, from its field, are two
+// batches.
+func TestEdgeOneOwnerAndEditor(t *testing.T) {
+	db, _, _ := edgeDB(t)
+	ctx := operation(t, db, `{ children { edges { node { title owner { name } } } } }`)
+	cctx := field(t, ctx, "children")
+	c, err := gqlimpl.NewConnection(cctx, db.Query[child]().Where(children.OwnerID.NotNull()), "Child", gqlimpl.Args{}, nil, childKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := c.Page(cctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		path   []string
+		editor string
+	}{
+		{[]string{"children", "edges", "node", "title"}, "Child.editor"},
+		{[]string{"children", "edges", "node", "owner"}, "Child.owner"},
+	} {
+		path, editor := c.path, c.editor
+		fctx := field(t, ctx, path...)
+		for _, x := range p.Rows {
+			o, err := gqlimpl.EdgeOne(fctx, db.Query[owner](), x, children.Owner, "Child.owner")
+			if err != nil {
+				t.Fatal(err)
+			}
+			e, err := gqlimpl.EdgeOne(fctx, db.Query[owner](), x, children.Editor, editor)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if o == nil || e == nil || o.ID != *x.OwnerID || e.ID != *x.EditorID {
+				t.Errorf("%s: child %d: owner %+v and editor %+v, want %d and %d", path[3], x.ID, o, e, *x.OwnerID, *x.EditorID)
+			}
+		}
+	}
+}
+
+// TestEdgePerRowArguments: a resolver of the edge's own field that computes
+// the arguments from its row (a forceResolver) gets each row's page: a row
+// whose arguments are not the batch's reads alone. Here each owner's
+// children are those not titled its name.
+func TestEdgePerRowArguments(t *testing.T) {
+	db, _, _ := edgeDB(t)
+	ctx := operation(t, db, childrenQuery)
+	xs := ownersPage(t, ctx, db, db.Query[owner](), gqlimpl.Args{})
+	ectx := field(t, ctx, "owners", "edges", "node", "children")
+	for _, x := range xs {
+		q, args := db.Query[child]().Where(children.Title.NEQ(x.Name)), gqlimpl.Args{First: intp(int(x.ID))}
+		got, n := childPage(t, ectx, db, x, q, args, titleOrder(), x.Name)
+		want, wn := ownPage(t, db, x, q, args, titleOrder())
+		samePage(t, x.Name, got, want)
+		if n != wn {
+			t.Errorf("%s: totalCount %d, want %d", x.Name, n, wn)
+		}
 	}
 }
 
@@ -625,7 +746,7 @@ func TestEdgeOneBatches(t *testing.T) {
 	log.take("")
 	got := map[int64]string{}
 	for _, x := range p.Rows {
-		o, err := gqlimpl.EdgeOne(octx, db.Query[owner](), x, children.Owner)
+		o, err := gqlimpl.EdgeOne(octx, db.Query[owner](), x, children.Owner, "Child.owner")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -644,7 +765,7 @@ func TestEdgeOneBatches(t *testing.T) {
 
 	orphan := *p.Rows[6]
 	veloxgql.Batch(cctx, []*child{&orphan})
-	if o, err := gqlimpl.EdgeOne(octx, db.Query[owner](), &orphan, children.Owner); o != nil || err != nil {
+	if o, err := gqlimpl.EdgeOne(octx, db.Query[owner](), &orphan, children.Owner, "Child.owner"); o != nil || err != nil {
 		t.Errorf("the orphan's owner: %v, %v", o, err)
 	}
 	if sql := log.take("owners"); len(sql) != 0 {
@@ -652,7 +773,7 @@ func TestEdgeOneBatches(t *testing.T) {
 	}
 
 	alone := child{ID: 9, OwnerID: new(int64(2))}
-	if o, err := gqlimpl.EdgeOne(octx, db.Query[owner](), &alone, children.Owner); err != nil || o == nil || o.Name != "b" {
+	if o, err := gqlimpl.EdgeOne(octx, db.Query[owner](), &alone, children.Owner, "Child.owner"); err != nil || o == nil || o.Name != "b" {
 		t.Errorf("alone: %v, %v", o, err)
 	}
 	if sql := log.take("owners"); len(sql) != 1 {
@@ -725,7 +846,7 @@ func TestBatchErrorShared(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		c = gqlimpl.EdgeConnection(ectx, c, x, owners.Children)
+		c = gqlimpl.EdgeConnection(ectx, c, x, owners.Children, "Owner.children", nil)
 		if _, err := c.Page(ectx); !errors.Is(err, boom) {
 			t.Errorf("%s: page error %v, want boom", x.Name, err)
 		}
@@ -759,7 +880,7 @@ func TestBatchPanicShared(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		c = gqlimpl.EdgeConnection(ectx, c, x, owners.Children)
+		c = gqlimpl.EdgeConnection(ectx, c, x, owners.Children, "Owner.children", nil)
 		var p any
 		func() {
 			defer func() { p = recover() }()
@@ -809,7 +930,7 @@ func TestBatchRace(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			c = gqlimpl.EdgeConnection(ectx, c, x, owners.Children)
+			c = gqlimpl.EdgeConnection(ectx, c, x, owners.Children, "Owner.children", nil)
 			p, err := c.Page(ectx)
 			if err != nil {
 				t.Error(err)

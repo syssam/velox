@@ -1288,10 +1288,13 @@ func TestEdgesBatch(t *testing.T) {
 				n++
 				pe := e.Edges[ed.Edge]
 				src := funcSrc(t, files, e.Name+"."+ed.Method)
+				// The edge's GraphQL field, which batches it, and a
+				// connection's arguments, which its batch keeps.
+				field := "\"" + ty.Name + "." + ed.Name + "\""
 				want := map[sdl.EdgeKind]string{
-					sdl.EdgeConnection: "gqlimpl.EdgeConnection(ctx, c.c, x, " + e.Handles + "." + pe.GoName + ")",
-					sdl.EdgeUnique:     "gqlimpl.EdgeOne(ctx, q, x, " + e.Handles + "." + pe.GoName + ")",
-					sdl.EdgeList:       "gqlimpl.EdgeList(ctx, q, x, " + e.Handles + "." + pe.GoName + ", \"" + ty.Name + "." + pe.Name + "\")",
+					sdl.EdgeConnection: "gqlimpl.EdgeConnection(ctx, c.c, x, " + e.Handles + "." + pe.GoName + ", " + field + ", []any{" + connArgs(ed.Target) + "})",
+					sdl.EdgeUnique:     "gqlimpl.EdgeOne(ctx, q, x, " + e.Handles + "." + pe.GoName + ", " + field + ")",
+					sdl.EdgeList:       "gqlimpl.EdgeList(ctx, q, x, " + e.Handles + "." + pe.GoName + ", " + field + ")",
 				}[ed.Kind]
 				if !strings.Contains(src, want) {
 					t.Errorf("%s: %s.%s: no %q in\n%s", label, e.Name, ed.Method, want, src)
@@ -1450,7 +1453,7 @@ func TestM2MWithoutInverse(t *testing.T) {
 	author.Edges = []*plugin.Edge{{Name: "books", GoName: "Books", Target: "Book", Kind: plugin.M2M, Join: "AuthorBook"}}
 	files := render(t, &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{author, entity("Book")}})
 	src := funcSrc(t, files, "Author.BooksGQL")
-	if !strings.Contains(src, "gqlimpl.EdgeConnection(ctx, c.c, x, Authors.Books)") {
+	if !strings.Contains(src, "gqlimpl.EdgeConnection(ctx, c.c, x, Authors.Books, \"Author.books\", []any{after, first, before, last") {
 		t.Errorf("Author.BooksGQL:\n%s", src)
 	}
 }

@@ -41,7 +41,7 @@ func (x *Tag) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int, 
 	if err != nil {
 		return nil, err
 	}
-	return &PostConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Tags.Posts)}, nil
+	return &PostConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Tags.Posts, "Label.posts", []any{after, first, before, last, orderBy, where})}, nil
 }
 
 // LabelConnection is the GraphQL type LabelConnection, a connection to a list

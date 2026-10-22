@@ -80,7 +80,7 @@ func (x *User) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int,
 	if err != nil {
 		return nil, err
 	}
-	return &PostConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Users.Posts)}, nil
+	return &PostConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Users.Posts, "Account.posts", []any{after, first, before, last, orderBy, where})}, nil
 }
 
 // GroupsGQL is the edge groups: the Group nodes it leads to, in key order. It
@@ -97,7 +97,7 @@ func (x *User) GroupsGQL(ctx context.Context) ([]*Group, error) {
 	if fields, ok := gqlimpl.Selected(ctx, "Group"); ok {
 		q = gqlimpl.Narrow(q, groupColumnsGQL(fields))
 	}
-	return gqlimpl.EdgeList(ctx, q, x, Users.Groups, "Account.groups")
+	return gqlimpl.EdgeList(ctx, q, x, Users.Groups, "Account.memberships")
 }
 
 // LikesGQL is the edge likes: a connection to the Like nodes it leads to,
@@ -113,7 +113,7 @@ func (x *User) LikesGQL(ctx context.Context, after *veloxgql.Cursor, first *int,
 	if err != nil {
 		return nil, err
 	}
-	return &LikeConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Users.Likes)}, nil
+	return &LikeConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Users.Likes, "Account.likes", []any{after, first, before, last})}, nil
 }
 
 // AccountConnection is the GraphQL type AccountConnection, a connection to a

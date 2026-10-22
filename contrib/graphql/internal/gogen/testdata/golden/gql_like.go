@@ -23,7 +23,7 @@ func (x *Like) UserGQL(ctx context.Context) (*User, error) {
 	if fields, ok := gqlimpl.Selected(ctx, "Account"); ok {
 		q = gqlimpl.Narrow(q, userColumnsGQL(fields))
 	}
-	return gqlimpl.EdgeOne(ctx, q, x, Likes.User)
+	return gqlimpl.EdgeOne(ctx, q, x, Likes.User, "Like.user")
 }
 
 // PostGQL is the edge post: the Post it leads to, or nil when there is none. It
@@ -37,7 +37,7 @@ func (x *Like) PostGQL(ctx context.Context) (*Post, error) {
 	if fields, ok := gqlimpl.Selected(ctx, "Post"); ok {
 		q = gqlimpl.Narrow(q, postColumnsGQL(fields))
 	}
-	return gqlimpl.EdgeOne(ctx, q, x, Likes.Post)
+	return gqlimpl.EdgeOne(ctx, q, x, Likes.Post, "Like.post")
 }
 
 // LikeConnection is the GraphQL type LikeConnection, a connection to a list of

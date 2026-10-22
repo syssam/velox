@@ -67,6 +67,10 @@ var pets = struct {
 	ID velox.NumberCol[pet, int64]
 }{velox.NumberCol[pet, int64]{I: 0}}
 
+// viewerKey is the context key of a viewer: an int64, the highest pet id it
+// may see, which pet's Read policy reads. Without one every pet is seen.
+type viewerKey struct{}
+
 var petMeta velox.MetaOnce[pet]
 
 func (*pet) VeloxMeta() *velox.Meta[pet] { return petMeta.Load(petDesc) }
@@ -78,6 +82,14 @@ func petDesc() velox.Desc[pet] {
 		PrimaryKey: []int{0},
 		Tenant:     2,
 		Addr:       func(x *pet, i int) any { return [...]any{&x.ID, &x.KeeperID, &x.OrgID, &x.Name}[i] },
+		Policy: func() velox.BoundPolicy {
+			return velox.BindPolicy(velox.Policy[pet]{Read: func(ctx context.Context) (velox.Pred[pet], error) {
+				if v, ok := ctx.Value(viewerKey{}).(int64); ok {
+					return pets.ID.LTE(v), nil
+				}
+				return velox.Allow[pet](), nil
+			}})
+		},
 	}
 }
 
@@ -99,6 +111,8 @@ type Keeper {
 	pets: PetConnection!
 	"""The pets of org 1 for odd keepers, of org 2 for even ones."""
 	orgPets: PetConnection!
+	"""The pets of a viewer of id 1 for odd keepers, of id 3 for even ones."""
+	viewerPets: PetConnection!
 }
 type PetConnection {
 	totalCount: Int!
@@ -138,10 +152,16 @@ func batchDB(t *testing.T) (*velox.DB, *txLog) {
 // batchServer serves batchSDL on db. keepers passes its rows to
 // veloxgql.Batch, and loose does not; a keeper's pets is
 // gqlimpl.EdgeConnection, as the generated code's edges are, and orgPets
-// too under a tenant of its own, as a directive could set. The keepers
-// subscription's events each read the keepers, and call seen, if set, with
-// the event's context and its rows.
+// too under a tenant of its own, as a directive could set, and viewerPets
+// under a viewer of its own. The keepers subscription's events each read
+// the keepers, and call seen, if set, with the event's context and its rows.
 func batchServer(db *velox.DB, seen ...func(ctx context.Context, rows []*keeper)) http.Handler {
+	return batchServerWith(db, nil, seen...)
+}
+
+// batchServerWith is batchServer with the extension's options opts, after
+// its limits.
+func batchServerWith(db *velox.DB, opts []veloxgql.Option, seen ...func(ctx context.Context, rows []*keeper)) http.Handler {
 	parent := func(ctx context.Context) any { return graphql.GetFieldContext(ctx).Parent.Result }
 	read := func(batch bool) resolver {
 		return func(ctx context.Context, _ map[string]any) (any, error) {
@@ -169,16 +189,18 @@ func batchServer(db *velox.DB, seen ...func(ctx context.Context, rows []*keeper)
 	}
 	key := []gqlimpl.OrderTerm[pet]{gqlimpl.Term("id", veloxgql.OrderDirectionAsc, pets.ID.Asc(), pets.ID.Desc(),
 		func(x *pet) int64 { return x.ID }, func(x *pet, v int64) { x.ID = v })}
-	petConn := func(ctx context.Context, _ map[string]any) (any, error) {
-		db, err := veloxgql.DBFrom(ctx)
-		if err != nil {
-			return nil, err
+	petConn := func(edge string) resolver {
+		return func(ctx context.Context, _ map[string]any) (any, error) {
+			db, err := veloxgql.DBFrom(ctx)
+			if err != nil {
+				return nil, err
+			}
+			c, err := gqlimpl.NewConnection(ctx, db.Query[pet](), "Pet", gqlimpl.Args{}, nil, key)
+			if err != nil {
+				return nil, err
+			}
+			return gqlimpl.EdgeConnection(ctx, c, parent(ctx).(*keeper), keepers.Pets, edge, nil), nil
 		}
-		c, err := gqlimpl.NewConnection(ctx, db.Query[pet](), "Pet", gqlimpl.Args{}, nil, key)
-		if err != nil {
-			return nil, err
-		}
-		return gqlimpl.EdgeConnection(ctx, c, parent(ctx).(*keeper), keepers.Pets), nil
 	}
 	return serveSchema(testSchemaOf(batchSDL, map[string]resolver{
 		"keepers": read(true),
@@ -195,9 +217,12 @@ func batchServer(db *velox.DB, seen ...func(ctx context.Context, rows []*keeper)
 			return read(true)(ctx, nil)
 		},
 		"Keeper.name": func(ctx context.Context, _ map[string]any) (any, error) { return parent(ctx).(*keeper).Name, nil },
-		"Keeper.pets": petConn,
+		"Keeper.pets": petConn("Keeper.pets"),
 		"Keeper.orgPets": func(ctx context.Context, args map[string]any) (any, error) {
-			return petConn(velox.WithTenant(ctx, 2-parent(ctx).(*keeper).ID%2), args)
+			return petConn("Keeper.orgPets")(velox.WithTenant(ctx, 2-parent(ctx).(*keeper).ID%2), args)
+		},
+		"Keeper.viewerPets": func(ctx context.Context, args map[string]any) (any, error) {
+			return petConn("Keeper.viewerPets")(context.WithValue(ctx, viewerKey{}, 3-2*(parent(ctx).(*keeper).ID%2)), args)
 		},
 		"PetConnection.totalCount": func(ctx context.Context, _ map[string]any) (any, error) {
 			return parent(ctx).(*gqlimpl.Connection[pet]).TotalCount(ctx)
@@ -214,7 +239,7 @@ func batchServer(db *velox.DB, seen ...func(ctx context.Context, rows []*keeper)
 			return out, nil
 		},
 		"Pet.name": func(ctx context.Context, _ map[string]any) (any, error) { return parent(ctx).(*pet).Name, nil },
-	}), db, veloxgql.WithLimits(veloxgql.Limits{MaxList: 10})) // lists cost MaxList each
+	}), db, append([]veloxgql.Option{veloxgql.WithLimits(veloxgql.Limits{MaxList: 10})}, opts...)...) // lists cost MaxList each
 }
 
 // petsOf is the response to field { name pets { totalCount nodes { name } } }
@@ -317,6 +342,42 @@ func TestBatchScopes(t *testing.T) {
 	// The keepers, then a load and a count for each of the two tenants.
 	if stmts, _ := log.take(); len(stmts) != 5 {
 		t.Errorf("%d statements, want 5: %q", len(stmts), stmts)
+	}
+}
+
+// TestBatchScopeOption is the final review's I1: keepers whose edge
+// resolvers give their contexts different viewers, which the pets' Read
+// policy reads but velox's row scope does not hold, share one read without
+// WithBatchScope, under whichever context comes first. With WithBatchScope
+// returning the viewer, each viewer's keepers read in a batch of their own,
+// and each keeper sees its viewer's pets.
+func TestBatchScopeOption(t *testing.T) {
+	db, log := batchDB(t)
+	const query = `{ keepers { name viewerPets { totalCount nodes { name } } } }`
+	ctx := velox.WithTenant(context.Background(), int64(1))
+	post(t, ctx, batchServer(db), query)
+	// The keepers, then one load and one count for all.
+	if stmts, _ := log.take(); len(stmts) != 3 {
+		t.Errorf("without WithBatchScope: %d statements, want 3: %q", len(stmts), stmts)
+	}
+	srv := batchServerWith(db, []veloxgql.Option{veloxgql.WithBatchScope(func(ctx context.Context) any { return ctx.Value(viewerKey{}) })})
+	got := post(t, ctx, srv, query)
+	want := strings.ReplaceAll(petsOf("keepers", "ann:rex", "bob:fifi", "cy:"), `"pets"`, `"viewerPets"`)
+	if got != want {
+		t.Errorf("\n got %s\nwant %s", got, want)
+	}
+	// The keepers, then a load and a count for each of the two viewers.
+	if stmts, _ := log.take(); len(stmts) != 5 {
+		t.Errorf("with WithBatchScope: %d statements, want 5: %q", len(stmts), stmts)
+	}
+	// A value that cannot be compared reads alone: a load and a count for
+	// each keeper.
+	srv = batchServerWith(db, []veloxgql.Option{veloxgql.WithBatchScope(func(ctx context.Context) any { return []any{ctx.Value(viewerKey{})} })})
+	if got := post(t, ctx, srv, query); got != want {
+		t.Errorf("an incomparable scope:\n got %s\nwant %s", got, want)
+	}
+	if stmts, _ := log.take(); len(stmts) != 7 {
+		t.Errorf("an incomparable scope: %d statements, want 7: %q", len(stmts), stmts)
 	}
 }
 

@@ -3,6 +3,7 @@ package shared
 import (
 	"context"
 	"errors"
+	"reflect"
 	"slices"
 	"sync"
 
@@ -29,6 +30,8 @@ type Table struct {
 	// schema is the server's schema, nil when unknown: Selected reads the
 	// interfaces of a type from it.
 	schema *ast.Schema
+	// scope is veloxgql.WithBatchScope's function, or nil.
+	scope func(context.Context) any
 
 	mu sync.Mutex
 	// rows maps a row's pointer (a *E, in an any) to its group and its
@@ -65,8 +68,9 @@ type Group struct {
 // Batch is one edge field's read for a group: its rows, read once, and its
 // counts, read once, each with its error, which is every row's.
 type Batch struct {
-	sels  ast.SelectionSet
-	scope any // the callers' row scope, comparable
+	sels ast.SelectionSet
+	key  any // what its callers share: the edge, their row scope…; comparable
+	args any // its first caller's arguments
 
 	rowsOnce sync.Once
 	rows     any
@@ -85,9 +89,10 @@ var errPanicked = errors.New("veloxgql: the batch of this edge panicked")
 type tableKey struct{}
 
 // WithTable returns ctx with a new, empty Table of the server's schema,
-// which may be nil.
-func WithTable(ctx context.Context, schema *ast.Schema) context.Context {
-	return context.WithValue(ctx, tableKey{}, &Table{schema: schema})
+// which may be nil, and of veloxgql.WithBatchScope's function scope, which
+// may be nil too.
+func WithTable(ctx context.Context, schema *ast.Schema, scope func(context.Context) any) context.Context {
+	return context.WithValue(ctx, tableKey{}, &Table{schema: schema, scope: scope})
 }
 
 // Schema returns the server's schema; nil when t is nil or the schema is
@@ -97,6 +102,15 @@ func (t *Table) Schema() *ast.Schema {
 		return nil
 	}
 	return t.schema
+}
+
+// Scope returns the value veloxgql.WithBatchScope's function gives ctx; nil
+// when t is nil or has no function.
+func (t *Table) Scope(ctx context.Context) any {
+	if t == nil || t.scope == nil {
+		return nil
+	}
+	return t.scope(ctx)
 }
 
 // TableFrom returns ctx's Table, or nil.
@@ -146,20 +160,26 @@ func Find[E any](t *Table, x *E) (g *Group, rows []*E, i int, ok bool) {
 
 // Batch returns the group's batch of the edge field f with the selections
 // sels, the merged selections of the field, which decide the batch's
-// columns, for callers of the row scope scope, a comparable value: a new
-// one on the first call. Callers of different scopes never share a batch.
-func (g *Group) Batch(f *ast.Field, sels ast.SelectionSet, scope any) *Batch {
+// columns, for callers of key, a comparable value (the edge, the callers'
+// row scope…), with the arguments args: a new one on the first call.
+// Callers of different keys never share a batch. A caller of a batch's key
+// whose args are not its first caller's (reflect.DeepEqual) gets nil: its
+// read is not the batch's, and it reads alone.
+func (g *Group) Batch(f *ast.Field, sels ast.SelectionSet, key, args any) *Batch {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	for _, b := range g.batches[f] {
-		if b.scope == scope && slices.Equal(b.sels, sels) {
+		if b.key == key && slices.Equal(b.sels, sels) {
+			if !reflect.DeepEqual(b.args, args) {
+				return nil
+			}
 			return b
 		}
 	}
 	if g.batches == nil {
 		g.batches = map[*ast.Field][]*Batch{}
 	}
-	b := &Batch{sels: sels, scope: scope}
+	b := &Batch{sels: sels, key: key, args: args}
 	g.batches[f] = append(g.batches[f], b)
 	return b
 }

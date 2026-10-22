@@ -74,7 +74,7 @@ func (x *Post) AuthorGQL(ctx context.Context) (*User, error) {
 	if fields, ok := gqlimpl.Selected(ctx, "Account"); ok {
 		q = gqlimpl.Narrow(q, userColumnsGQL(fields))
 	}
-	return gqlimpl.EdgeOne(ctx, q, x, Posts.Author)
+	return gqlimpl.EdgeOne(ctx, q, x, Posts.Author, "Post.writer")
 }
 
 // LikesGQL is the edge likes: the Like nodes it leads to, in key order. It is
@@ -107,7 +107,7 @@ func (x *Post) RelatedGQL(ctx context.Context, after *veloxgql.Cursor, first *in
 	if err != nil {
 		return nil, err
 	}
-	return &PostConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Posts.Related)}, nil
+	return &PostConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Posts.Related, "Post.related", []any{after, first, before, last, orderBy, where})}, nil
 }
 
 // RelatedByGQL is the edge related_by: a connection to the Post nodes it leads
@@ -123,7 +123,7 @@ func (x *Post) RelatedByGQL(ctx context.Context, after *veloxgql.Cursor, first *
 	if err != nil {
 		return nil, err
 	}
-	return &PostConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Posts.RelatedBy)}, nil
+	return &PostConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Posts.RelatedBy, "Post.relatedBy", []any{after, first, before, last, orderBy, where})}, nil
 }
 
 // PostConnection is the GraphQL type PostConnection, a connection to a list of
