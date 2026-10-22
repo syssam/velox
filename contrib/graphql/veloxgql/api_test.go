@@ -15,6 +15,7 @@ import (
 // the API edits this list: a name that generated code alone calls lives in
 // package gqlimpl.
 var publicAPI = []string{
+	"Batch",
 	"Bytes",
 	"Bytes.MarshalGQL",
 	"Bytes.UnmarshalGQL",

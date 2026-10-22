@@ -95,6 +95,9 @@ type Connection[E any] struct {
 	// loaded are the rows of a LoadedConnection, which runs no query.
 	loaded   []E
 	isLoaded bool
+	// edge is set by EdgeConnection when the connection is its part of a
+	// batch.
+	edge *edge[E]
 
 	pageOnce  sync.Once
 	page      *Page[E]
@@ -184,9 +187,12 @@ func LoadedConnection[E any](ctx context.Context, rows []E, typ string, key []Or
 //     Relay lets a server say false when it cannot tell cheaply.
 //
 // The page query reads at most n+1 rows whatever the DB's WithMaxRows cap:
-// the MaxPage of veloxgql.LimitsFrom(ctx) bounds it. The query's With loads
-// share that cap of n+1 rows, until loads get their own cap; the generated
-// code adds none yet.
+// the MaxPage of veloxgql.LimitsFrom(ctx) bounds it. The base query's With
+// loads share that cap of n+1 rows, unless they have Rel.MaxRows or
+// Rel.LimitEach. The page's rows become a group of the operation, whose
+// edges batch (see EdgeConnection); in the connection of an edge
+// (EdgeConnection) the page is the connection's part of the batch, which
+// may return n+1 rows per owner.
 func (c *Connection[E]) Page[_ velox.Lazy[E]](ctx context.Context) (*Page[E], error) {
 	c.pageOnce.Do(func() { c.page, c.pageErr = c.run(ctx) })
 	return c.page, c.pageErr
@@ -198,6 +204,10 @@ func (c *Connection[E]) TotalCount[_ velox.Lazy[E]](ctx context.Context) (int, e
 	c.countOnce.Do(func() {
 		if c.isLoaded {
 			c.count = len(c.loaded)
+			return
+		}
+		if c.edge != nil {
+			c.count, c.countErr = c.edge.count(ctx, c.query)
 			return
 		}
 		n, err := c.query.Count(ctx)
@@ -221,10 +231,15 @@ func (c *Connection[E]) run[_ velox.Lazy[E]](ctx context.Context) (*Page[E], err
 		if c.after != nil {
 			q = q.After(c.after)
 		}
-		// MaxRows: the page is bounded by MaxPage, and the DB's row cap,
-		// which may be below it, must not fail a full page.
 		var err error
-		if rows, err = q.Limit(c.n + 1).MaxRows(c.n + 1).All(ctx); err != nil {
+		if c.edge != nil {
+			rows, err = c.edge.rows(ctx, q)
+		} else {
+			// MaxRows: the page is bounded by MaxPage, and the DB's row
+			// cap, which may be below it, must not fail a full page.
+			rows, err = q.Limit(c.n + 1).MaxRows(c.n + 1).All(ctx)
+		}
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -232,13 +247,20 @@ func (c *Connection[E]) run[_ velox.Lazy[E]](ctx context.Context) (*Page[E], err
 	if more {
 		rows = rows[:c.n]
 	}
-	if c.back {
-		slices.Reverse(rows)
-	}
 	p := &Page[E]{Rows: make([]*E, len(rows)), Cursors: make([]veloxgql.Cursor, len(rows))}
 	for i := range rows {
 		p.Rows[i] = &rows[i]
-		p.Cursors[i] = c.cursor(&rows[i])
+	}
+	if c.back {
+		// The pointers, not the rows: a batch's rows are shared.
+		slices.Reverse(p.Rows)
+	}
+	for i, x := range p.Rows {
+		p.Cursors[i] = c.cursor(x)
+	}
+	if c.edge == nil {
+		// A batch made its rows a group already.
+		shared.Add(shared.TableFrom(ctx), p.Rows)
 	}
 	if c.back {
 		p.Info.HasPreviousPage = more

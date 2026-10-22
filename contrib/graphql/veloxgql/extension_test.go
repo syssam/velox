@@ -82,8 +82,16 @@ type resolver func(ctx context.Context, args map[string]any) (any, error)
 // sends two events, each resolving its fields again, and ends.
 //
 // A root field's resolver is resolvers[name], another's resolvers["Type.name"].
+// A resolver finds its object in its field context's Parent.Result, as
+// gqlgen's field functions give it obj; a []any result with a selection is
+// a list of objects.
 func testSchema(resolvers map[string]resolver) graphql.ExecutableSchema {
-	schema := gqlparser.MustLoadSchema(&ast.Source{Input: handlerSDL})
+	return testSchemaOf(handlerSDL, resolvers)
+}
+
+// testSchemaOf is testSchema of the schema sdl.
+func testSchemaOf(sdl string, resolvers map[string]resolver) graphql.ExecutableSchema {
+	schema := gqlparser.MustLoadSchema(&ast.Source{Input: sdl})
 	return &graphql.ExecutableSchemaMock{
 		SchemaFunc: func() *ast.Schema { return schema },
 		ComplexityFunc: func(context.Context, string, string, int, map[string]any) (int, bool) {
@@ -154,7 +162,16 @@ func resolveField(ctx context.Context, opCtx *graphql.OperationContext, f graphq
 		graphql.AddError(ctx, err)
 		return graphql.Null
 	}
+	fc.Result = res
 	if len(f.Selections) > 0 {
+		if list, ok := res.([]any); ok {
+			out := make(graphql.Array, len(list))
+			for i, v := range list {
+				ctx := graphql.WithFieldContext(ctx, &graphql.FieldContext{Index: &i, Result: v})
+				out[i] = resolveSet(ctx, opCtx, f.Selections, false, true, resolvers)
+			}
+			return out
+		}
 		return resolveSet(ctx, opCtx, f.Selections, false, true, resolvers)
 	}
 	b, _ := json.Marshal(res)
@@ -310,7 +327,12 @@ func handlerResolvers(db *velox.DB, cancel *context.CancelFunc) map[string]resol
 // serve serves testSchema with resolvers through
 // veloxgql.NewExtension(db, opts...).
 func serve(db *velox.DB, resolvers map[string]resolver, opts ...veloxgql.Option) *handler.Server {
-	srv := handler.New(testSchema(resolvers))
+	return serveSchema(testSchema(resolvers), db, opts...)
+}
+
+// serveSchema serves es through veloxgql.NewExtension(db, opts...).
+func serveSchema(es graphql.ExecutableSchema, db *velox.DB, opts ...veloxgql.Option) *handler.Server {
+	srv := handler.New(es)
 	srv.AddTransport(transport.SSE{})
 	srv.AddTransport(transport.POST{})
 	srv.SetRecoverFunc(func(context.Context, any) error { return gqlerror.Errorf("internal system error") })

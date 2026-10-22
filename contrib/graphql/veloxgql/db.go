@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/syssam/velox2"
+	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
 )
 
 // state is what the extension puts in an operation's context: the DB and
@@ -18,9 +19,10 @@ type state struct {
 // stateKey is the context key of the *state.
 type stateKey struct{}
 
-// withState returns ctx with db and limits.
+// withState returns ctx with db and limits, and a new table of the rows
+// the operation reads, whose edges batch (Batch).
 func withState(ctx context.Context, db *velox.DB, limits Limits) context.Context {
-	return context.WithValue(ctx, stateKey{}, &state{db: db, limits: limits})
+	return context.WithValue(shared.WithTable(ctx), stateKey{}, &state{db: db, limits: limits})
 }
 
 // DBFrom returns the DB the extension put in ctx. It fails with ErrNoDB when

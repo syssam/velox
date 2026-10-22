@@ -1,0 +1,779 @@
+package gqlimpl_test
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"reflect"
+	"strings"
+	"sync"
+	"testing"
+
+	"github.com/99designs/gqlgen/graphql"
+	"github.com/vektah/gqlparser/v2"
+	"github.com/vektah/gqlparser/v2/ast"
+
+	"github.com/syssam/velox2"
+	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+	"github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
+)
+
+// owner, child, tag and ownerTag are hand-written entities, as velox-gen
+// would write them, for the edges' tests: an owner has children (its
+// one-to-many edge, whose inverse is a child's owner) and tags, through
+// ownerTag (many-to-many).
+type owner struct {
+	ID       int64
+	Name     string
+	Age      int64
+	Children velox.Many[child]
+	Tags     velox.Many[tag]
+}
+
+var owners = struct {
+	ID       velox.NumberCol[owner, int64]
+	Name     velox.StringCol[owner, string]
+	Age      velox.NumberCol[owner, int64]
+	Children velox.Rel[owner, child]
+	Tags     velox.Rel[owner, tag]
+}{
+	velox.NumberCol[owner, int64]{I: 0}, velox.StringCol[owner, string]{I: 1}, velox.NumberCol[owner, int64]{I: 2},
+	velox.Rel[owner, child]{I: 0}, velox.Rel[owner, tag]{I: 1},
+}
+
+var ownerMeta velox.MetaOnce[owner]
+
+func (*owner) VeloxMeta() *velox.Meta[owner] { return ownerMeta.Load(ownerDesc) }
+
+func ownerDesc() velox.Desc[owner] {
+	return velox.Desc[owner]{
+		Table:      "owners",
+		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}, {Field: "Age", Name: "age"}},
+		PrimaryKey: []int{0},
+		Tenant:     -1,
+		Relations:  []velox.Relation{velox.EdgeTo[child]("Children", 0, 1), velox.EdgeThrough[ownerTag, tag]("Tags", 0, 0, 1, 0)},
+		Addr:       func(x *owner, i int) any { return [...]any{&x.ID, &x.Name, &x.Age}[i] },
+		RelAddr: func(x *owner, i int) any {
+			switch i {
+			case 0:
+				return &x.Children
+			case 1:
+				return &x.Tags
+			}
+			return nil
+		},
+	}
+}
+
+type child struct {
+	ID      int64
+	OwnerID *int64
+	Title   string
+	Owner   velox.One[owner]
+}
+
+var children = struct {
+	ID      velox.NumberCol[child, int64]
+	OwnerID velox.NullNumberCol[child, int64]
+	Title   velox.StringCol[child, string]
+	Owner   velox.Rel[child, owner]
+}{velox.NumberCol[child, int64]{I: 0}, velox.NullNumberCol[child, int64]{I: 1}, velox.StringCol[child, string]{I: 2}, velox.Rel[child, owner]{I: 0}}
+
+var childMeta velox.MetaOnce[child]
+
+func (*child) VeloxMeta() *velox.Meta[child] { return childMeta.Load(childDesc) }
+
+func childDesc() velox.Desc[child] {
+	return velox.Desc[child]{
+		Table:      "children",
+		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "OwnerID", Name: "owner_id"}, {Field: "Title", Name: "title"}},
+		PrimaryKey: []int{0},
+		Tenant:     -1,
+		Relations:  []velox.Relation{velox.EdgeTo[owner]("Owner", 1, 0)},
+		Addr:       func(x *child, i int) any { return [...]any{&x.ID, &x.OwnerID, &x.Title}[i] },
+		RelAddr: func(x *child, i int) any {
+			if i == 0 {
+				return &x.Owner
+			}
+			return nil
+		},
+	}
+}
+
+type tag struct {
+	ID   int64
+	Name string
+}
+
+var tagMeta velox.MetaOnce[tag]
+
+func (*tag) VeloxMeta() *velox.Meta[tag] { return tagMeta.Load(tagDesc) }
+
+func tagDesc() velox.Desc[tag] {
+	return velox.Desc[tag]{
+		Table:      "tags",
+		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
+		PrimaryKey: []int{0},
+		Tenant:     -1,
+		Addr:       func(x *tag, i int) any { return [...]any{&x.ID, &x.Name}[i] },
+	}
+}
+
+type ownerTag struct {
+	OwnerID int64
+	TagID   int64
+}
+
+var ownerTagMeta velox.MetaOnce[ownerTag]
+
+func (*ownerTag) VeloxMeta() *velox.Meta[ownerTag] { return ownerTagMeta.Load(ownerTagDesc) }
+
+func ownerTagDesc() velox.Desc[ownerTag] {
+	return velox.Desc[ownerTag]{
+		Table:      "owner_tags",
+		Columns:    []velox.ColumnDesc{{Field: "OwnerID", Name: "owner_id"}, {Field: "TagID", Name: "tag_id"}},
+		PrimaryKey: []int{0, 1},
+		Tenant:     -1,
+		Addr:       func(x *ownerTag, i int) any { return [...]any{&x.OwnerID, &x.TagID}[i] },
+	}
+}
+
+// The order terms, as the generated code makes them.
+func ownerKey() []gqlimpl.OrderTerm[owner] {
+	return []gqlimpl.OrderTerm[owner]{gqlimpl.Term("id", veloxgql.OrderDirectionAsc, owners.ID.Asc(), owners.ID.Desc(),
+		func(x *owner) int64 { return x.ID }, func(x *owner, v int64) { x.ID = v })}
+}
+
+func childKey() []gqlimpl.OrderTerm[child] {
+	return []gqlimpl.OrderTerm[child]{gqlimpl.Term("id", veloxgql.OrderDirectionAsc, children.ID.Asc(), children.ID.Desc(),
+		func(x *child) int64 { return x.ID }, func(x *child, v int64) { x.ID = v })}
+}
+
+func titleOrder() []gqlimpl.OrderTerm[child] {
+	return []gqlimpl.OrderTerm[child]{gqlimpl.Term("TITLE", veloxgql.OrderDirectionAsc, children.Title.Asc(), children.Title.Desc(),
+		func(x *child) string { return x.Title }, func(x *child, v string) { x.Title = v })}
+}
+
+// edgeSDL is the schema the edges' operations are parsed against.
+const edgeSDL = `
+interface Node { id: ID! }
+type Query {
+	owners(first: Int): OwnerConnection!
+	owner: Owner
+	children: ChildConnection!
+	node(id: ID!): Node
+	nodes(ids: [ID!]!): [Node]!
+	other: Other
+}
+type Owner implements Node {
+	id: ID!
+	name: String!
+	age: Int!
+	children(first: Int, last: Int, after: String, before: String, title: String): ChildConnection!
+	tags: [Tag!]!
+}
+type Child implements Node {
+	id: ID!
+	title: String!
+	owner: Owner
+}
+type Tag implements Node {
+	id: ID!
+	name: String!
+}
+type Other { name: String! }
+type OwnerConnection { edges: [OwnerEdge!]! pageInfo: PageInfo! totalCount: Int! }
+type OwnerEdge { node: Owner! cursor: String! }
+type ChildConnection { edges: [ChildEdge!]! pageInfo: PageInfo! totalCount: Int! }
+type ChildEdge { node: Child! cursor: String! }
+type PageInfo { hasNextPage: Boolean! hasPreviousPage: Boolean! }
+`
+
+var edgeSchema = gqlparser.MustLoadSchema(&ast.Source{Name: "edge.graphqls", Input: edgeSDL})
+
+// edgeLog records the statements a DB runs, by table, and fails those fail
+// returns an error for.
+type edgeLog struct {
+	mu   sync.Mutex
+	sql  map[string][]string
+	fail func(*velox.Statement) error
+}
+
+func (l *edgeLog) around(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+	l.mu.Lock()
+	l.sql[st.Entity.Table] = append(l.sql[st.Entity.Table], st.SQL)
+	fail := l.fail
+	l.mu.Unlock()
+	if fail != nil {
+		if err := fail(st); err != nil {
+			return err
+		}
+	}
+	return next(ctx)
+}
+
+// take returns the SQL of table's statements since the last take, and
+// forgets every table's.
+func (l *edgeLog) take(table string) []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	s := l.sql[table]
+	l.sql = map[string][]string{}
+	return s
+}
+
+// edgeDB opens an in-memory SQLite database holding:
+//   - owners 1 "a", 2 "b" and 3 "c";
+//   - children (id: owner, title) 1: 1 "d", 2: 1 "a", 3: 1 "c", 4: 1 "b",
+//     5: 2 "b", 6: 2 "a", and 7 of no owner, "z";
+//   - tags 1 "go", 2 "db" and 3 "zz"; owner 1 has tags 1 and 2, owner 2 tag
+//     2, owner 3 none.
+func edgeDB(t *testing.T) (*velox.DB, *sql.DB, *edgeLog) {
+	t.Helper()
+	raw, err := sql.Open("sqlite", "file::memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw.SetMaxOpenConns(1)
+	t.Cleanup(func() { _ = raw.Close() })
+	for _, s := range []string{
+		`CREATE TABLE owners (id INTEGER PRIMARY KEY, name TEXT NOT NULL, age INTEGER NOT NULL)`,
+		`CREATE TABLE children (id INTEGER PRIMARY KEY, owner_id INTEGER, title TEXT NOT NULL)`,
+		`CREATE TABLE tags (id INTEGER PRIMARY KEY, name TEXT NOT NULL)`,
+		`CREATE TABLE owner_tags (owner_id INTEGER NOT NULL, tag_id INTEGER NOT NULL, PRIMARY KEY (owner_id, tag_id))`,
+		`INSERT INTO owners (id, name, age) VALUES (1, 'a', 30), (2, 'b', 20), (3, 'c', 10)`,
+		`INSERT INTO children (id, owner_id, title) VALUES (1, 1, 'd'), (2, 1, 'a'), (3, 1, 'c'), (4, 1, 'b'), (5, 2, 'b'), (6, 2, 'a'), (7, NULL, 'z')`,
+		`INSERT INTO tags (id, name) VALUES (1, 'go'), (2, 'db'), (3, 'zz')`,
+		`INSERT INTO owner_tags (owner_id, tag_id) VALUES (1, 1), (1, 2), (2, 2)`,
+	} {
+		if _, err := raw.Exec(s); err != nil {
+			t.Fatalf("%s: %v", s, err)
+		}
+	}
+	l := &edgeLog{sql: map[string][]string{}}
+	return velox.Open(velox.SQLite, raw, velox.WithAround(l.around)), raw, l
+}
+
+// operation returns ctx inside the operation query, parsed against
+// edgeSchema, with the extension's state for db: the context gqlgen gives
+// the operation's resolvers.
+func operation(t *testing.T, db *velox.DB, query string, opts ...veloxgql.Option) context.Context {
+	t.Helper()
+	doc, errs := gqlparser.LoadQueryWithRules(edgeSchema, query, nil)
+	if errs != nil {
+		t.Fatal(errs)
+	}
+	ctx := veloxgql.NewExtension(db, opts...).Context(context.Background())
+	return graphql.WithOperationContext(ctx, &graphql.OperationContext{RawQuery: query, Doc: doc, Operation: doc.Operations[0], Variables: map[string]any{}})
+}
+
+// field returns ctx inside the field at path, each step a response key, as
+// gqlgen makes a field's context: the fields collected through fragments of
+// every type.
+func field(t *testing.T, ctx context.Context, path ...string) context.Context {
+	t.Helper()
+	oc := graphql.GetOperationContext(ctx)
+	sels := oc.Operation.SelectionSet
+	for i, key := range path {
+		var found *graphql.CollectedField
+		for _, f := range graphql.CollectFields(oc, sels, nil) {
+			if f.Alias == key {
+				found = &f
+				break
+			}
+		}
+		if found == nil {
+			t.Fatalf("the operation has no field %s", strings.Join(path[:i+1], "."))
+		}
+		ctx = graphql.WithFieldContext(ctx, &graphql.FieldContext{Object: found.ObjectDefinition.Name, Field: *found, IsMethod: true, IsResolver: true})
+		sels = found.Selections
+	}
+	return ctx
+}
+
+// ownersPage reads the page of every owner as the root field owners does:
+// the rows become a group.
+func ownersPage(t *testing.T, ctx context.Context, db *velox.DB, q velox.Query[owner], args gqlimpl.Args) []*owner {
+	t.Helper()
+	ctx = field(t, ctx, "owners")
+	c, err := gqlimpl.NewConnection(ctx, q, "Owner", args, nil, ownerKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := c.Page(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p.Rows
+}
+
+// childPage is x's page of the edge children, made at ctx (a field of the
+// edge, or not), and its totalCount.
+func childPage(t *testing.T, ctx context.Context, db *velox.DB, x *owner, q velox.Query[child], args gqlimpl.Args, order []gqlimpl.OrderTerm[child]) (*gqlimpl.Page[child], int) {
+	t.Helper()
+	c, err := gqlimpl.NewConnection(ctx, q, "Child", args, order, childKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	c = gqlimpl.EdgeConnection(ctx, c, x, owners.Children)
+	p, err := c.Page(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := c.TotalCount(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p, n
+}
+
+// ownPage is x's page of the children of q, read alone: the query of the
+// connection filtered by Of, as before batching.
+func ownPage(t *testing.T, db *velox.DB, x *owner, q velox.Query[child], args gqlimpl.Args, order []gqlimpl.OrderTerm[child]) (*gqlimpl.Page[child], int) {
+	t.Helper()
+	ctx := context.Background()
+	c, err := gqlimpl.NewConnection(ctx, q.Where(owners.Children.Of(x)), "Child", args, order, childKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := c.Page(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := c.TotalCount(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p, n
+}
+
+func childIDs(rows []*child) []int64 {
+	out := []int64{}
+	for _, r := range rows {
+		out = append(out, r.ID)
+	}
+	return out
+}
+
+// samePage fails t when got is not want: its rows, cursors and page info.
+func samePage(t *testing.T, name string, got, want *gqlimpl.Page[child]) {
+	t.Helper()
+	if g, w := childIDs(got.Rows), childIDs(want.Rows); !reflect.DeepEqual(g, w) {
+		t.Errorf("%s: rows %v, want %v", name, g, w)
+	}
+	for i := range min(len(got.Rows), len(want.Rows)) {
+		if !reflect.DeepEqual(*got.Rows[i], *want.Rows[i]) {
+			t.Errorf("%s: row %d is %+v, want %+v", name, i, *got.Rows[i], *want.Rows[i])
+		}
+	}
+	if !reflect.DeepEqual(got.Cursors, want.Cursors) {
+		t.Errorf("%s: cursors %+v, want %+v", name, got.Cursors, want.Cursors)
+	}
+	if !reflect.DeepEqual(got.Info, want.Info) {
+		t.Errorf("%s: page info %+v, want %+v", name, got.Info, want.Info)
+	}
+}
+
+// oneEach checks that sql is one statement that contains each of has.
+func oneEach(t *testing.T, name string, sql []string, has ...string) {
+	t.Helper()
+	if len(sql) != 1 {
+		t.Fatalf("%s: %d statements, want 1: %q", name, len(sql), sql)
+	}
+	for _, h := range has {
+		if !strings.Contains(sql[0], h) {
+			t.Errorf("%s: %s, want it to contain %s", name, sql[0], h)
+		}
+	}
+}
+
+const childrenQuery = `{ owners { edges { node { children(first: 2) { totalCount edges { node { title owner { name } } } } } } } }`
+
+// TestEdgeConnectionBatches: the edge of a page's three owners is one
+// windowed load and one grouped count, each owner's page and totalCount
+// those of its own query, and the rows read are a group: their own edge is
+// one more statement.
+func TestEdgeConnectionBatches(t *testing.T) {
+	db, _, log := edgeDB(t)
+	ctx := operation(t, db, childrenQuery)
+	xs := ownersPage(t, ctx, db, db.Query[owner](), gqlimpl.Args{})
+	log.take("owners")
+	ectx := field(t, ctx, "owners", "edges", "node", "children")
+	args := gqlimpl.Args{First: intp(2)}
+	var loads, counts []string
+	var rows []*child
+	for _, x := range xs {
+		got, n := childPage(t, ectx, db, x, db.Query[child](), args, titleOrder())
+		sql := log.take("children")
+		for _, s := range sql {
+			if strings.Contains(s, "COUNT(") {
+				counts = append(counts, s)
+			} else {
+				loads = append(loads, s)
+			}
+		}
+		want, wn := ownPage(t, db, x, db.Query[child](), args, titleOrder())
+		log.take("children")
+		samePage(t, x.Name, got, want)
+		if n != wn {
+			t.Errorf("%s: totalCount %d, want %d", x.Name, n, wn)
+		}
+		rows = append(rows, got.Rows...)
+	}
+	oneEach(t, "the load", loads, "ROW_NUMBER()")
+	oneEach(t, "the count", counts, "GROUP BY")
+	if got := childIDs(rows); !reflect.DeepEqual(got, []int64{2, 4, 6, 5}) {
+		t.Fatalf("rows %v", got)
+	}
+	// The pages' rows are one group: each child's owner is one statement.
+	octx := field(t, ctx, "owners", "edges", "node", "children", "edges", "node", "owner")
+	for _, x := range rows {
+		o, err := gqlimpl.EdgeOne(octx, db.Query[owner](), x, children.Owner)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if o == nil || o.ID != *x.OwnerID {
+			t.Errorf("child %d: owner %+v", x.ID, o)
+		}
+	}
+	if sql := log.take("owners"); len(sql) != 1 {
+		t.Errorf("the owners of the children: %d statements, want 1: %q", len(sql), sql)
+	}
+}
+
+// TestEdgeConnectionBackwardAndAfter: last, after and before batch too,
+// each owner's page that of its own query.
+func TestEdgeConnectionBackwardAndAfter(t *testing.T) {
+	db, _, log := edgeDB(t)
+	first, _ := ownPage(t, db, &owner{ID: 1}, db.Query[child](), gqlimpl.Args{}, titleOrder())
+	// a(2), b(4), c(3), d(1) for owner 1.
+	for _, c := range []struct {
+		name string
+		args gqlimpl.Args
+	}{
+		{"last", gqlimpl.Args{Last: intp(2)}},
+		{"after", gqlimpl.Args{First: intp(2), After: wire(t, first.Cursors[0])}},
+		{"before", gqlimpl.Args{Last: intp(1), Before: wire(t, first.Cursors[2])}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			ctx := operation(t, db, childrenQuery)
+			xs := ownersPage(t, ctx, db, db.Query[owner](), gqlimpl.Args{})
+			ectx := field(t, ctx, "owners", "edges", "node", "children")
+			log.take("")
+			var loads []string
+			for _, x := range xs {
+				got, _ := childPage(t, ectx, db, x, db.Query[child](), c.args, titleOrder())
+				for _, s := range log.take("children") {
+					if !strings.Contains(s, "COUNT(") {
+						loads = append(loads, s)
+					}
+				}
+				want, _ := ownPage(t, db, x, db.Query[child](), c.args, titleOrder())
+				log.take("")
+				samePage(t, x.Name, got, want)
+			}
+			oneEach(t, "the load", loads, "ROW_NUMBER()")
+		})
+	}
+}
+
+// TestEdgeConnectionAlone: an owner in no group, or a context without the
+// table or without a field, runs the connection's own queries, filtered by
+// Of.
+func TestEdgeConnectionAlone(t *testing.T) {
+	db, _, log := edgeDB(t)
+	args := gqlimpl.Args{First: intp(2)}
+	want, wn := ownPage(t, db, &owner{ID: 1}, db.Query[child](), args, titleOrder())
+	op := operation(t, db, childrenQuery)
+	grouped := ownersPage(t, op, db, db.Query[owner](), gqlimpl.Args{})[0]
+	noTable := graphql.WithOperationContext(context.Background(), graphql.GetOperationContext(op))
+	for _, c := range []struct {
+		name string
+		ctx  context.Context
+		x    *owner
+	}{
+		{"no table", field(t, noTable, "owners", "edges", "node", "children"), &owner{ID: 1}},
+		{"no group", field(t, op, "owners", "edges", "node", "children"), &owner{ID: 1}},
+		{"no field", op, grouped},
+	} {
+		log.take("")
+		got, n := childPage(t, c.ctx, db, c.x, db.Query[child](), args, titleOrder())
+		samePage(t, c.name, got, want)
+		if n != wn {
+			t.Errorf("%s: totalCount %d, want %d", c.name, n, wn)
+		}
+		sql := log.take("children")
+		if len(sql) != 2 || strings.Contains(sql[0]+sql[1], "ROW_NUMBER") || strings.Contains(sql[0]+sql[1], "GROUP BY") {
+			t.Errorf("%s: %q, want a page and a count of the owner's own", c.name, sql)
+		}
+	}
+}
+
+// TestEdgeAliases is Review Focus 2: two aliases of an edge, with different
+// arguments, are two batches, and neither's rows are in the other's pages.
+func TestEdgeAliases(t *testing.T) {
+	db, _, log := edgeDB(t)
+	ctx := operation(t, db, `{ owners { edges { node {
+		a: children(first: 1) { edges { node { title } } }
+		b: children(title: "b") { edges { node { title } } }
+	} } } }`)
+	xs := ownersPage(t, ctx, db, db.Query[owner](), gqlimpl.Args{})
+	actx := field(t, ctx, "owners", "edges", "node", "a")
+	bctx := field(t, ctx, "owners", "edges", "node", "b")
+	aq, aargs := db.Query[child](), gqlimpl.Args{First: intp(1)}
+	bq, bargs := db.Query[child]().Where(children.Title.EQ("b")), gqlimpl.Args{}
+	log.take("")
+	var sql []string
+	for _, x := range xs {
+		for _, c := range []struct {
+			name string
+			ctx  context.Context
+			q    velox.Query[child]
+			args gqlimpl.Args
+		}{{"a", actx, aq, aargs}, {"b", bctx, bq, bargs}} {
+			pc, err := gqlimpl.NewConnection(c.ctx, c.q, "Child", c.args, nil, childKey())
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := gqlimpl.EdgeConnection(c.ctx, pc, x, owners.Children).Page(c.ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sql = append(sql, log.take("children")...)
+			want, _ := ownPage(t, db, x, c.q, c.args, nil)
+			log.take("")
+			samePage(t, x.Name+" "+c.name, got, want)
+		}
+	}
+	if len(sql) != 2 {
+		t.Fatalf("%d statements, want one per alias: %q", len(sql), sql)
+	}
+}
+
+// TestEdgeOneBatches: the owners of a page of children are one statement,
+// keyed by the owners' key with no window; a child of no owner has none;
+// a group whose children have no owner sends no statement; and a child in no
+// group reads its own.
+func TestEdgeOneBatches(t *testing.T) {
+	db, _, log := edgeDB(t)
+	ctx := operation(t, db, `{ children { edges { node { owner { name } } } } }`)
+	cctx := field(t, ctx, "children")
+	c, err := gqlimpl.NewConnection(cctx, db.Query[child](), "Child", gqlimpl.Args{}, nil, childKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := c.Page(cctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	octx := field(t, ctx, "children", "edges", "node", "owner")
+	log.take("")
+	got := map[int64]string{}
+	for _, x := range p.Rows {
+		o, err := gqlimpl.EdgeOne(octx, db.Query[owner](), x, children.Owner)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if o != nil {
+			got[x.ID] = o.Name
+		}
+	}
+	if want := map[int64]string{1: "a", 2: "a", 3: "a", 4: "a", 5: "b", 6: "b"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("owners %v, want %v", got, want)
+	}
+	sql := log.take("owners")
+	oneEach(t, "the owners", sql)
+	if strings.Contains(sql[0], "ROW_NUMBER") {
+		t.Errorf("%s: a load by the owners' key needs no window", sql[0])
+	}
+
+	orphan := *p.Rows[6]
+	veloxgql.Batch(ctx, []*child{&orphan})
+	if o, err := gqlimpl.EdgeOne(octx, db.Query[owner](), &orphan, children.Owner); o != nil || err != nil {
+		t.Errorf("the orphan's owner: %v, %v", o, err)
+	}
+	if sql := log.take("owners"); len(sql) != 0 {
+		t.Errorf("the orphan's owner: %q, want no statement", sql)
+	}
+
+	alone := child{ID: 9, OwnerID: new(int64(2))}
+	if o, err := gqlimpl.EdgeOne(octx, db.Query[owner](), &alone, children.Owner); err != nil || o == nil || o.Name != "b" {
+		t.Errorf("alone: %v, %v", o, err)
+	}
+	if sql := log.take("owners"); len(sql) != 1 {
+		t.Errorf("alone: %q, want one statement", sql)
+	}
+}
+
+// TestEdgeListCap: a list edge is one statement for the group, in key
+// order; an owner with more than MaxList fails naming the edge, and the
+// others do not.
+func TestEdgeListCap(t *testing.T) {
+	db, _, log := edgeDB(t)
+	const query = `{ owners { edges { node { tags { name } } } } }`
+	list := func(t *testing.T, opts ...veloxgql.Option) (map[int64][]int64, map[int64]error) {
+		t.Helper()
+		ctx := operation(t, db, query, opts...)
+		xs := ownersPage(t, ctx, db, db.Query[owner](), gqlimpl.Args{})
+		tctx := field(t, ctx, "owners", "edges", "node", "tags")
+		log.take("")
+		got, errs := map[int64][]int64{}, map[int64]error{}
+		for _, x := range xs {
+			rows, err := gqlimpl.EdgeList(tctx, db.Query[tag](), x, owners.Tags, "Owner.tags")
+			if err != nil {
+				errs[x.ID] = err
+				continue
+			}
+			got[x.ID] = []int64{}
+			for _, r := range rows {
+				got[x.ID] = append(got[x.ID], r.ID)
+			}
+		}
+		oneEach(t, "the tags", log.take("tags"))
+		return got, errs
+	}
+	got, errs := list(t)
+	if want := map[int64][]int64{1: {1, 2}, 2: {2}, 3: {}}; !reflect.DeepEqual(got, want) || len(errs) > 0 {
+		t.Errorf("tags %v, %v; want %v", got, errs, want)
+	}
+	got, errs = list(t, veloxgql.WithLimits(veloxgql.Limits{MaxList: 1}))
+	if want := map[int64][]int64{2: {2}, 3: {}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("tags under MaxList 1: %v, want %v", got, want)
+	}
+	if err := errs[1]; !errors.Is(err, velox.ErrTooManyRows) || !strings.Contains(err.Error(), "Owner.tags") {
+		t.Errorf("owner 1 under MaxList 1: %v, want ErrTooManyRows naming Owner.tags", err)
+	}
+	if len(errs) != 1 {
+		t.Errorf("errors %v, want owner 1's alone", errs)
+	}
+}
+
+// TestBatchErrorShared: a batch that fails gives every row of the group its
+// error, and runs once.
+func TestBatchErrorShared(t *testing.T) {
+	db, _, log := edgeDB(t)
+	boom := errors.New("boom")
+	ctx := operation(t, db, childrenQuery)
+	xs := ownersPage(t, ctx, db, db.Query[owner](), gqlimpl.Args{})
+	ectx := field(t, ctx, "owners", "edges", "node", "children")
+	log.take("")
+	log.mu.Lock()
+	log.fail = func(st *velox.Statement) error {
+		if st.Entity.Table == "children" {
+			return boom
+		}
+		return nil
+	}
+	log.mu.Unlock()
+	for _, x := range xs {
+		c, err := gqlimpl.NewConnection(ectx, db.Query[child](), "Child", gqlimpl.Args{}, nil, childKey())
+		if err != nil {
+			t.Fatal(err)
+		}
+		c = gqlimpl.EdgeConnection(ectx, c, x, owners.Children)
+		if _, err := c.Page(ectx); !errors.Is(err, boom) {
+			t.Errorf("%s: page error %v, want boom", x.Name, err)
+		}
+		if _, err := c.TotalCount(ectx); !errors.Is(err, boom) {
+			t.Errorf("%s: totalCount error %v, want boom", x.Name, err)
+		}
+	}
+	if sql := log.take("children"); len(sql) != 2 {
+		t.Errorf("%d statements, want one load and one count: %q", len(sql), sql)
+	}
+}
+
+// TestBatchPanicShared: a batch whose load panics panics in the resolver
+// that ran it, and fails the others; it runs once.
+func TestBatchPanicShared(t *testing.T) {
+	db, _, log := edgeDB(t)
+	ctx := operation(t, db, childrenQuery)
+	xs := ownersPage(t, ctx, db, db.Query[owner](), gqlimpl.Args{})
+	ectx := field(t, ctx, "owners", "edges", "node", "children")
+	log.take("")
+	log.mu.Lock()
+	log.fail = func(st *velox.Statement) error {
+		if st.Entity.Table == "children" {
+			panic("boom")
+		}
+		return nil
+	}
+	log.mu.Unlock()
+	for i, x := range xs {
+		c, err := gqlimpl.NewConnection(ectx, db.Query[child](), "Child", gqlimpl.Args{}, nil, childKey())
+		if err != nil {
+			t.Fatal(err)
+		}
+		c = gqlimpl.EdgeConnection(ectx, c, x, owners.Children)
+		var p any
+		func() {
+			defer func() { p = recover() }()
+			_, err = c.Page(ectx)
+		}()
+		switch {
+		case i == 0 && p == nil:
+			t.Errorf("%s: no panic", x.Name)
+		case i > 0 && (p != nil || err == nil || !strings.Contains(err.Error(), "panicked")):
+			t.Errorf("%s: panic %v and error %v, want the batch's panic as an error", x.Name, p, err)
+		}
+	}
+	if sql := log.take("children"); len(sql) != 1 {
+		t.Errorf("%d statements, want one: %q", len(sql), sql)
+	}
+}
+
+// TestBatchRace: 50 goroutines resolve the edge of the 50 rows of one
+// group, concurrently, as gqlgen does: one load and one count, and each row
+// its own page. Run it with -race.
+func TestBatchRace(t *testing.T) {
+	db, raw, log := edgeDB(t)
+	for id := 101; id <= 150; id++ {
+		if _, err := raw.Exec(`INSERT INTO owners (id, name, age) VALUES (?, 'x', 1)`, id); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := raw.Exec(`INSERT INTO children (id, owner_id, title) VALUES (?, ?, 'p'), (?, ?, 'q')`, id*10, id, id*10+1, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ctx := operation(t, db, childrenQuery)
+	xs := ownersPage(t, ctx, db, db.Query[owner]().Where(owners.ID.GTE(101)), gqlimpl.Args{First: intp(50)})
+	if len(xs) != 50 {
+		t.Fatalf("%d owners", len(xs))
+	}
+	ectx := field(t, ctx, "owners", "edges", "node", "children")
+	log.take("")
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	got := make([][]int64, len(xs))
+	counts := make([]int, len(xs))
+	for i, x := range xs {
+		wg.Go(func() {
+			<-start
+			c, err := gqlimpl.NewConnection(ectx, db.Query[child](), "Child", gqlimpl.Args{First: intp(1)}, nil, childKey())
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			c = gqlimpl.EdgeConnection(ectx, c, x, owners.Children)
+			p, err := c.Page(ectx)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			got[i] = childIDs(p.Rows)
+			if counts[i], err = c.TotalCount(ectx); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	close(start)
+	wg.Wait()
+	for i, x := range xs {
+		if want := []int64{x.ID * 10}; !reflect.DeepEqual(got[i], want) || counts[i] != 2 {
+			t.Errorf("owner %d: page %v and count %d, want %v and 2", x.ID, got[i], counts[i], want)
+		}
+	}
+	if sql := log.take("children"); len(sql) != 2 {
+		t.Errorf("%d statements, want one load and one count: %q", len(sql), sql)
+	}
+}
