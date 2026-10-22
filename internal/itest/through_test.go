@@ -194,3 +194,62 @@ func TestOfThroughOnRealDatabases(t *testing.T) {
 		wantStrings(t, tagNames(ctx, &book{ID: 1}), []string{"go", "db2"})
 	})
 }
+
+// TestLimitEachThroughOnRealDatabases pages a many-to-many relation per
+// owner, in one statement that joins the join table. To throughSetup's tags
+// it adds 4 "aa" of org 2 and 5 "go" of org 1, both on book 1: "aa" sorts
+// first and is another tenant's, and the two "go" tie, and break by id.
+func TestLimitEachThroughOnRealDatabases(t *testing.T) {
+	log := &stmtLog{n: map[string]int{}}
+	each(t, func(t *testing.T, tg target) {
+		throughSetup(t, tg)
+		tg.exec(t, "INSERT INTO tags (id, org_id, name) VALUES (?, ?, ?)", int64(4), int64(2), "aa")
+		tg.exec(t, "INSERT INTO tags (id, org_id, name) VALUES (?, ?, ?)", int64(5), int64(1), "go")
+		tg.exec(t, "INSERT INTO book_tags (book_id, tag_id) VALUES (?, ?)", int64(1), int64(4))
+		tg.exec(t, "INSERT INTO book_tags (book_id, tag_id) VALUES (?, ?)", int64(1), int64(5))
+		tagIDs := func(qctx context.Context, rel velox.Rel[book, tag], ps ...velox.Pred[book]) map[int64][]int64 {
+			t.Helper()
+			log.take()
+			bs, err := tg.db.Query[book]().Where(ps...).OrderBy(Books.ID.Asc()).With(rel).Limit(10).All(qctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if n := log.take(); n["itest.tag"] != 1 || n["itest.bookTag"] != 0 {
+				t.Errorf("statements %v, want one for the tags and none for the join rows", n)
+			}
+			got := map[int64][]int64{}
+			for _, b := range bs {
+				tags, ok := b.Tags.Get()
+				if !ok || tags == nil {
+					t.Fatalf("book %d: tags not loaded", b.ID)
+				}
+				got[b.ID] = []int64{}
+				for _, g := range tags {
+					got[b.ID] = append(got[b.ID], g.ID)
+				}
+			}
+			return got
+		}
+		check := func(got, want map[int64][]int64) {
+			t.Helper()
+			for id, w := range want {
+				wantIDs(t, got[id], w)
+			}
+			if len(got) != len(want) {
+				t.Errorf("owners %v, want %v", got, want)
+			}
+		}
+		acme := velox.WithTenant(ctx, int64(1))
+		byName := Books.Tags.OrderBy(Tags.Name.Asc())
+		// Tag 2 is books 1's and 2's, and the first of both.
+		check(tagIDs(acme, byName.LimitEach(1)), map[int64][]int64{1: {2}, 2: {2}, 3: {}, 4: {}})
+		check(tagIDs(acme, byName.LimitEach(2)), map[int64][]int64{1: {2, 1}, 2: {2}, 3: {}, 4: {}})
+		check(tagIDs(acme, byName.LimitEach(4)), map[int64][]int64{1: {2, 1, 5}, 2: {2}, 3: {}, 4: {}})
+		check(tagIDs(acme, Books.Tags.OrderBy(Tags.Name.Desc()).LimitEach(2)), map[int64][]int64{1: {1, 5}, 2: {2}, 3: {}, 4: {}})
+		check(tagIDs(acme, byName.LimitEach(2), Books.ID.EQ(1)), map[int64][]int64{1: {2, 1}})
+		// Every tenant: "aa" ranks first on book 1, and "x" is book 4's.
+		check(tagIDs(ctx, byName.LimitEach(1)), map[int64][]int64{1: {4}, 2: {2}, 3: {}, 4: {3}})
+		// The relation's condition is inside the window too.
+		check(tagIDs(ctx, byName.Where(Tags.Name.NEQ("aa")).LimitEach(1)), map[int64][]int64{1: {2}, 2: {2}, 3: {}, 4: {3}})
+	}, velox.WithAround(log.around))
+}

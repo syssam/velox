@@ -104,6 +104,34 @@ type ConflictClause struct {
 	policy bool // the scope added the policy's conditions to Where
 }
 
+// EachClause makes a SELECT read, or count, the rows of each owner apart: the
+// rows whose owner column holds one of Keys. velox sets it for a With load
+// with Rel.LimitEach, for LoadEach and for CountEach; a Rewrite hook may not
+// change it.
+type EachClause struct {
+	Keys   []any // the owners' keys, distinct
+	Column int   // without Join: the column of Entity that holds an owner's key
+	// Join is the join entity of a many-to-many relation; nil otherwise. The
+	// statement joins it on Join.Columns[JoinTarget] = Entity.Columns[Target]
+	// and partitions by Join.Columns[JoinOwner].
+	Join                  *EntityInfo
+	JoinOwner, JoinTarget int
+	Target                int
+	// Limit is the most rows per owner, in the statement's OrderBy; 0 is no
+	// limit, and is always 0 on a Count.
+	Limit int
+}
+
+// keyed reports whether, on entity in, c reads rows by in's one-column
+// primary key: each owner then has at most one row, and needs no window.
+func (c *EachClause) keyed(in *EntityInfo) bool {
+	return c.Join == nil && len(in.PrimaryKey) == 1 && in.PrimaryKey[0] == c.Column
+}
+
+// windowed reports whether c's statement, on entity in, ranks each owner's
+// rows with ROW_NUMBER() and keeps the first Limit of them.
+func (c *EachClause) windowed(in *EntityInfo) bool { return c.Limit > 0 && !c.keyed(in) }
+
 // Statement is one operation on its way to the database. Every query becomes
 // one, and the pipeline's hooks see and may change it: rewrite hooks before it
 // is rendered, around hooks while it runs.
@@ -125,6 +153,7 @@ type Statement struct {
 	Count        bool        // SELECT COUNT(*): Count clears Columns, OrderBy, Limit and Offset; a Rewrite hook may not change it, or set Columns, and one that sets the others gets them rendered
 	Exists       bool        // SELECT 1 … LIMIT 1: Exists clears Columns, OrderBy and Offset and sets Limit to 1; a Rewrite hook may not change it, or set Columns
 	Aggregate    Aggregate   // SELECT SUM(c) …: Columns holds c alone; like Count, it clears OrderBy, Limit and Offset; a Rewrite hook may not change it, or Columns
+	Each         *EachClause // SELECT: a relation read or counted per owner; a Rewrite hook may not change it
 	Lock         Lock        // SELECT: ForUpdate or ForShare; 0 for a read that locks nothing; a Rewrite hook may not change it
 	LockWait     LockWait    // SELECT: SkipLocked or NoWait; a Rewrite hook may not change it
 	Columns      []int       // SELECT: the selected columns, nil selects all; INSERT: the columns written
@@ -134,7 +163,7 @@ type Statement struct {
 	Offset       int
 	Unbounded    bool            // the query said Unbounded
 	Writable     bool            // SELECT: the query said Writable; the scope adds the Write policy, and a Rewrite hook may not change it
-	MaxRows      int             // SELECT and OpRawQuery: the most rows it may return; 0: the DB's WithMaxRows
+	MaxRows      int             // SELECT and OpRawQuery: the most rows it may return; 0: the DB's WithMaxRows, or a per-owner read's bound (Rel.MaxRows)
 	Set          []Assignment    // UPDATE: the assignments
 	Rows         [][]any         // INSERT: the rows, one value per Columns entry
 	Conflict     *ConflictClause // INSERT: the upsert clause, if any

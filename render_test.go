@@ -32,6 +32,35 @@ func stmt(where ...Pred[inv]) *Statement {
 	return st
 }
 
+// The entities of the per-owner goldens: items keyed to invoices, and tags
+// keyed to books through book_tags, a tag having notes.
+var (
+	itemInfo = &EntityInfo{Name: "velox.item", Table: "items", Tenant: -1, PrimaryKey: []int{0},
+		Columns: []ColumnInfo{{Name: "id"}, {Name: "invoice_id"}, {Name: "sku"}}}
+	tagInfo = &EntityInfo{Name: "velox.tag", Table: "tags", Tenant: -1, PrimaryKey: []int{0},
+		Columns: []ColumnInfo{{Name: "id"}, {Name: "org_id"}, {Name: "name"}}}
+	bookTagInfo = &EntityInfo{Name: "velox.bookTag", Table: "book_tags", Tenant: -1, PrimaryKey: []int{0, 1},
+		Columns: []ColumnInfo{{Name: "book_id"}, {Name: "tag_id"}}}
+	noteInfo = &EntityInfo{Name: "velox.note", Table: "notes", Tenant: -1, PrimaryKey: []int{0},
+		Columns: []ColumnInfo{{Name: "id"}, {Name: "tag_id"}, {Name: "body"}}}
+)
+
+// eachItems is a per-owner read of the items of invoices 1 and 2, with sku
+// <> "x", in sku order, keyed by column col.
+func eachItems(col, limit int) *Statement {
+	return &Statement{Op: OpSelect, Entity: itemInfo, Where: []Predicate{{node{op: opNEQ, col: 2, v: "x"}}},
+		OrderBy: []OrderTerm{{Column: 2, Desc: true}, {Column: 0}},
+		Each:    &EachClause{Keys: []any{int64(1), int64(2)}, Column: col, Limit: limit}}
+}
+
+// eachTags is a per-owner read of the tags of books 1 and 2 through
+// book_tags, in name order, with the condition where.
+func eachTags(limit int, where Predicate) *Statement {
+	return &Statement{Op: OpSelect, Entity: tagInfo, Where: []Predicate{where},
+		OrderBy: []OrderTerm{{Column: 2}, {Column: 0}},
+		Each:    &EachClause{Keys: []any{int64(1), int64(2)}, Join: bookTagInfo, JoinOwner: 0, JoinTarget: 1, Target: 0, Limit: limit}}
+}
+
 func ins(cols []int, rows [][]any) *Statement {
 	return &Statement{Op: OpInsert, Entity: invInfo, Columns: cols, Rows: rows}
 }
@@ -216,6 +245,34 @@ func renderCases() []renderCase {
 			MySQL:    "UPDATE `invoices` SET `total` = `total` + ?, `paid_at` = ?, `number` = `number` - ? WHERE `org_id` = ?",
 			SQLite:   `UPDATE "invoices" SET "total" = "total" + ?, "paid_at" = ?, "number" = "number" - ? WHERE "org_id" = ?`,
 		}, []any{2.0, nil, "x", int64(7)}},
+		{"each: window", func() *Statement { return eachItems(1, 2) }, map[Dialect]string{
+			Postgres: `SELECT "id", "invoice_id", "sku" FROM (SELECT "id", "invoice_id", "sku", ROW_NUMBER() OVER (PARTITION BY "invoice_id" ORDER BY "sku" DESC, "id") AS "vx_rn" FROM "items" WHERE "invoice_id" IN ($1, $2) AND "sku" <> $3) AS "vx" WHERE "vx_rn" <= $4 ORDER BY "vx_rn"`,
+			MySQL:    "SELECT `id`, `invoice_id`, `sku` FROM (SELECT `id`, `invoice_id`, `sku`, ROW_NUMBER() OVER (PARTITION BY `invoice_id` ORDER BY `sku` DESC, `id`) AS `vx_rn` FROM `items` WHERE `invoice_id` IN (?, ?) AND `sku` <> ?) AS `vx` WHERE `vx_rn` <= ? ORDER BY `vx_rn`",
+			SQLite:   `SELECT "id", "invoice_id", "sku" FROM (SELECT "id", "invoice_id", "sku", ROW_NUMBER() OVER (PARTITION BY "invoice_id" ORDER BY "sku" DESC, "id") AS "vx_rn" FROM "items" WHERE "invoice_id" IN (?, ?) AND "sku" <> ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn"`,
+		}, []any{int64(1), int64(2), "x", 2}},
+		{"each: keyed by the target key", func() *Statement { return eachItems(0, 1) }, map[Dialect]string{
+			Postgres: `SELECT "id", "invoice_id", "sku" FROM "items" WHERE "id" IN ($1, $2) AND "sku" <> $3 ORDER BY "sku" DESC, "id"`,
+			MySQL:    "SELECT `id`, `invoice_id`, `sku` FROM `items` WHERE `id` IN (?, ?) AND `sku` <> ? ORDER BY `sku` DESC, `id`",
+			SQLite:   `SELECT "id", "invoice_id", "sku" FROM "items" WHERE "id" IN (?, ?) AND "sku" <> ? ORDER BY "sku" DESC, "id"`,
+		}, []any{int64(1), int64(2), "x"}},
+		{"each: through", func() *Statement { return eachTags(1, Predicate{node{op: opEQ, col: 1, v: int64(7)}}) }, map[Dialect]string{
+			Postgres: `SELECT "id", "org_id", "name", "vx_owner" FROM (SELECT "tags"."id", "tags"."org_id", "tags"."name", "vx_j"."book_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."book_id" ORDER BY "tags"."name", "tags"."id") AS "vx_rn" FROM "tags" JOIN "book_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."book_id" IN ($1, $2) AND "tags"."org_id" = $3) AS "vx" WHERE "vx_rn" <= $4 ORDER BY "vx_rn"`,
+			MySQL:    "SELECT `id`, `org_id`, `name`, `vx_owner` FROM (SELECT `tags`.`id`, `tags`.`org_id`, `tags`.`name`, `vx_j`.`book_id` AS `vx_owner`, ROW_NUMBER() OVER (PARTITION BY `vx_j`.`book_id` ORDER BY `tags`.`name`, `tags`.`id`) AS `vx_rn` FROM `tags` JOIN `book_tags` AS `vx_j` ON `vx_j`.`tag_id` = `tags`.`id` WHERE `vx_j`.`book_id` IN (?, ?) AND `tags`.`org_id` = ?) AS `vx` WHERE `vx_rn` <= ? ORDER BY `vx_rn`",
+			SQLite:   `SELECT "id", "org_id", "name", "vx_owner" FROM (SELECT "tags"."id", "tags"."org_id", "tags"."name", "vx_j"."book_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."book_id" ORDER BY "tags"."name", "tags"."id") AS "vx_rn" FROM "tags" JOIN "book_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."book_id" IN (?, ?) AND "tags"."org_id" = ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn"`,
+		}, []any{int64(1), int64(2), int64(7), 1}},
+		{"each: through, no limit", func() *Statement { return eachTags(0, Predicate{node{op: opEQ, col: 1, v: int64(7)}}) }, map[Dialect]string{
+			Postgres: `SELECT "tags"."id", "tags"."org_id", "tags"."name", "vx_j"."book_id" AS "vx_owner" FROM "tags" JOIN "book_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."book_id" IN ($1, $2) AND "tags"."org_id" = $3 ORDER BY "tags"."name", "tags"."id"`,
+			MySQL:    "SELECT `tags`.`id`, `tags`.`org_id`, `tags`.`name`, `vx_j`.`book_id` AS `vx_owner` FROM `tags` JOIN `book_tags` AS `vx_j` ON `vx_j`.`tag_id` = `tags`.`id` WHERE `vx_j`.`book_id` IN (?, ?) AND `tags`.`org_id` = ? ORDER BY `tags`.`name`, `tags`.`id`",
+			SQLite:   `SELECT "tags"."id", "tags"."org_id", "tags"."name", "vx_j"."book_id" AS "vx_owner" FROM "tags" JOIN "book_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."book_id" IN (?, ?) AND "tags"."org_id" = ? ORDER BY "tags"."name", "tags"."id"`,
+		}, []any{int64(1), int64(2), int64(7)}},
+		{"each: through, a condition with EXISTS", func() *Statement {
+			notes := link{target: noteInfo, ownerCol: 0, targetCol: 1}
+			return eachTags(2, Predicate{node{op: opExists, v: notes, kids: []node{{op: opEQ, col: 2, v: "hi"}}}})
+		}, map[Dialect]string{
+			Postgres: `SELECT "id", "org_id", "name", "vx_owner" FROM (SELECT "tags"."id", "tags"."org_id", "tags"."name", "vx_j"."book_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."book_id" ORDER BY "tags"."name", "tags"."id") AS "vx_rn" FROM "tags" JOIN "book_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."book_id" IN ($1, $2) AND EXISTS (SELECT 1 FROM "notes" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "body" = $3)) AS "vx" WHERE "vx_rn" <= $4 ORDER BY "vx_rn"`,
+			MySQL:    "SELECT `id`, `org_id`, `name`, `vx_owner` FROM (SELECT `tags`.`id`, `tags`.`org_id`, `tags`.`name`, `vx_j`.`book_id` AS `vx_owner`, ROW_NUMBER() OVER (PARTITION BY `vx_j`.`book_id` ORDER BY `tags`.`name`, `tags`.`id`) AS `vx_rn` FROM `tags` JOIN `book_tags` AS `vx_j` ON `vx_j`.`tag_id` = `tags`.`id` WHERE `vx_j`.`book_id` IN (?, ?) AND EXISTS (SELECT 1 FROM `notes` AS `vx1` WHERE `vx1`.`tag_id` = `tags`.`id` AND `body` = ?)) AS `vx` WHERE `vx_rn` <= ? ORDER BY `vx_rn`",
+			SQLite:   `SELECT "id", "org_id", "name", "vx_owner" FROM (SELECT "tags"."id", "tags"."org_id", "tags"."name", "vx_j"."book_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."book_id" ORDER BY "tags"."name", "tags"."id") AS "vx_rn" FROM "tags" JOIN "book_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."book_id" IN (?, ?) AND EXISTS (SELECT 1 FROM "notes" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "body" = ?)) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn"`,
+		}, []any{int64(1), int64(2), "hi", 2}},
 		{"delete", func() *Statement {
 			st := stmt(hID.In(1, 2))
 			st.Op = OpDelete

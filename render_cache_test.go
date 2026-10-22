@@ -48,6 +48,26 @@ func TestCacheKeepsShapesApart(t *testing.T) {
 	if o, _ := c.render(Postgres, st); o == b {
 		t.Error("entities share SQL")
 	}
+	// Each nil, Each with a per-owner Limit and without, and Each through a
+	// join are four shapes, each rendered as it renders uncached.
+	var ec renderCache
+	plain := eachItems(1, 0)
+	plain.Each = nil
+	shapes := []*Statement{plain, eachItems(1, 2), eachItems(1, 0), eachTags(2, Predicate{node{op: opEQ, col: 1, v: int64(7)}})}
+	seen := map[string]bool{}
+	for range 2 {
+		for i, st := range shapes {
+			want, _ := render(Postgres, st)
+			got, _ := ec.render(Postgres, st)
+			if got != want {
+				t.Errorf("shape %d: cached\n %s\nwant %s", i, got, want)
+			}
+			seen[got] = true
+		}
+	}
+	if len(seen) != 4 || ec.size() != 4 {
+		t.Errorf("%d texts, %d shapes cached; want 4 of each", len(seen), ec.size())
+	}
 }
 
 // TestCacheKeepsNilApartFromAValue: EQ(nil) renders IS NULL and EQ(1) renders

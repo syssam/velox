@@ -137,6 +137,32 @@ func shapeKey(k []byte, d Dialect, st *Statement) []byte {
 		k = append(k, 0)
 	}
 	k = appendInts(k, st.Returning)
+	return eachKey(k, st.Each)
+}
+
+// eachKey encodes a statement's Each: its presence, its columns, whether it
+// has a Limit, the number of its keys (an In list's length, as nodeKey keys
+// it) and its join entity, by name, schema and table as nodeKey keys an
+// opThrough's. The keys and the Limit are arguments.
+func eachKey(k []byte, c *EachClause) []byte {
+	if c == nil {
+		return append(k, 0)
+	}
+	k = append(k, 1, flag(c.Limit > 0))
+	k = binary.AppendUvarint(k, uint64(c.Column))
+	k = binary.AppendUvarint(k, uint64(len(c.Keys)))
+	if j := c.Join; j != nil {
+		k = append(k, 1)
+		for _, s := range [...]string{j.Name, j.Schema, j.Table} {
+			k = binary.AppendUvarint(k, uint64(len(s)))
+			k = append(k, s...)
+		}
+		k = binary.AppendUvarint(k, uint64(c.JoinOwner))
+		k = binary.AppendUvarint(k, uint64(c.JoinTarget))
+		k = binary.AppendUvarint(k, uint64(c.Target))
+	} else {
+		k = append(k, 0)
+	}
 	return k
 }
 

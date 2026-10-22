@@ -156,7 +156,8 @@ func (q Query[E]) NoWait[_ Lazy[E]]() Query[E] {
 
 // MaxRows returns the query allowed to return up to n rows, in place of the
 // DB's WithMaxRows cap; n <= 0 restores the DB's cap. It covers the
-// statements of the query's With loads too, nested ones included. Say it where
+// statements of the query's With loads too, nested ones included, but for a
+// load with Rel.LimitEach or Rel.MaxRows (see Rel.MaxRows). Say it where
 // reading many rows is meant, so the exception is visible where the query is
 // written. One reads up to 2 rows, so under MaxRows(1) a second matching row
 // fails One with ErrTooManyRows rather than ErrNotSingular.

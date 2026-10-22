@@ -58,6 +58,21 @@
 // PostgreSQL and MySQL. On MySQL every row the read scans is locked, so the
 // filter wants an index.
 //
+// # Per-owner pages
+//
+// Rel.LimitEach loads at most n related entities for each owner, the first in
+// the relation's order, in one statement for all of them:
+//
+//	db.Query[gen.User]().With(gen.Users.Posts.OrderBy(gen.Posts.CreatedAt.Desc()).LimitEach(3)).Limit(20).All(ctx)
+//
+// The statement ranks each owner's rows with ROW_NUMBER() OVER (PARTITION BY
+// …), on PostgreSQL, MySQL 8 and SQLite 3.25 or later; ties break by the
+// target's primary key. The tenant scope and the Read policy apply inside the
+// ranking, so a row they hide takes no place in a page. A many-to-many page
+// joins the join table in the same statement. Such a load is bounded by its
+// limit, so neither the owner query's MaxRows nor the DB's cap applies to it;
+// Rel.MaxRows gives any load a cap of its own.
+//
 // # Writes
 //
 // DB.Insert and DB.InsertAll insert entities: Exec fills their defaults and

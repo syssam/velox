@@ -95,7 +95,9 @@ func WithMaxLimit(n int) Option {
 // when that is lower), so the database stops early: the extra row is the one
 // that trips the cap. The cap counts per statement, so a With load that is
 // split into chunks to stay under the parameter limit is counted chunk by
-// chunk. A query's MaxRows overrides it, for the query and its With loads.
+// chunk. A query's MaxRows overrides it, for the query and its With loads; a
+// load with Rel.LimitEach is bounded by its limit instead, and Rel.MaxRows
+// gives a load a cap of its own.
 // n <= 0 sets no cap; n must otherwise be at least 2, the rows One reads, and
 // n = 1 panics.
 func WithMaxRows(n int) Option {
@@ -298,6 +300,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	db.observe(ctx, st)
 	// The query's own Columns: the hooks get a copy of them.
 	cols := st.Columns
+	was := st.Each
 	if db.hooked() {
 		// Hooks may edit the statement in place; give them copies so that
 		// the query the statement came from stays as it was. With no hooks
@@ -320,8 +323,16 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 			cf.Columns, cf.Update, cf.Where = slices.Clone(cf.Columns), slices.Clone(cf.Update), slices.Clone(cf.Where)
 			st.Conflict = &cf
 		}
+		if st.Each != nil {
+			ec := *st.Each
+			ec.Keys = slices.Clone(ec.Keys)
+			st.Each = &ec
+		}
 	}
 	entity, op, writable, count, exists, agg, lock, wait := st.Entity, st.Op, st.Writable, st.Count, st.Exists, st.Aggregate, st.Lock, st.LockWait
+	// each is the Each the hooks get, a copy of velox's (was) when there are
+	// hooks: a hook may not replace it or change it.
+	each := st.Each
 	for _, rw := range db.cfg.rewrites {
 		if err := rw(ctx, st); err != nil {
 			return fmt.Errorf("velox: %s: rewrite: %w", entity.Name, err)
@@ -354,6 +365,10 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	if st.Lock != lock || st.LockWait != wait {
 		// The guard checked them.
 		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's lock", entity.Name)
+	}
+	if st.Each != each || (each != nil && !sameEach(each, was)) {
+		// The load reads the rows by it: each owner's, in its order.
+		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's Each", entity.Name)
 	}
 	switch {
 	case st.Entity == nil:
@@ -604,8 +619,24 @@ func checkColumns(st *Statement) error {
 	return nil
 }
 
-// rowCap is the most rows st may return: its own MaxRows, else the DB's; 0
-// for no cap. Raw's read is capped too, Exec not.
+// sameEach reports whether a hook's Each, a, holds what velox's, b, does. A
+// key velox set is comparable, so comparing it with any value cannot panic.
+func sameEach(a, b *EachClause) bool {
+	if a.Column != b.Column || a.Join != b.Join || a.JoinOwner != b.JoinOwner || a.JoinTarget != b.JoinTarget ||
+		a.Target != b.Target || a.Limit != b.Limit || len(a.Keys) != len(b.Keys) {
+		return false
+	}
+	for i, k := range b.Keys {
+		if a.Keys[i] != k {
+			return false
+		}
+	}
+	return true
+}
+
+// rowCap is the most rows st may return: its own MaxRows, else, for a
+// per-owner read bounded by construction, that bound (eachBound), else the
+// DB's; 0 for no cap. Raw's read is capped too, Exec not.
 func (db *DB) rowCap(st *Statement) int {
 	if !st.Op.Reads() || st.Count || st.Exists || st.Aggregate != 0 {
 		return 0
@@ -613,15 +644,44 @@ func (db *DB) rowCap(st *Statement) int {
 	if st.MaxRows > 0 {
 		return st.MaxRows
 	}
+	if n, ok := eachBound(st); ok {
+		return n
+	}
 	return db.cfg.maxRows
+}
+
+// eachBound is the most rows a per-owner read can return by construction, and
+// whether it has such a bound: Limit for each owner of a windowed read, one
+// for each key of a read by the target's one-column primary key.
+func eachBound(st *Statement) (int, bool) {
+	c := st.Each
+	switch {
+	case c == nil:
+		return 0, false
+	case c.keyed(st.Entity):
+		return max(len(c.Keys), 1), true
+	case c.Limit > 0:
+		if c.Limit > math.MaxInt/max(len(c.Keys), 1) {
+			return math.MaxInt, true
+		}
+		return max(c.Limit*len(c.Keys), 1), true
+	}
+	return 0, false
 }
 
 // capLimit lowers st's Limit to its row cap plus one, so that the database
 // stops at the row that trips the cap instead of sending every row; exec's
 // countedRows still does the counting. It runs just before rendering: the
-// guard and the Rewrite hooks have seen the caller's Limit.
+// guard and the Rewrite hooks have seen the caller's Limit. A per-owner read
+// whose cap is its bound by construction needs no LIMIT, and gets none.
 func (db *DB) capLimit(st *Statement) {
-	if n := db.rowCap(st); n > 0 && n < math.MaxInt && (st.Limit == 0 || st.Limit > n) {
+	n := db.rowCap(st)
+	if st.Each != nil && st.MaxRows == 0 {
+		if _, ok := eachBound(st); ok {
+			return
+		}
+	}
+	if n > 0 && n < math.MaxInt && (st.Limit == 0 || st.Limit > n) {
 		st.Limit = n + 1
 	}
 }

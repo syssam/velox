@@ -223,7 +223,7 @@ var genericObjects = []struct {
 	{"UpdateQuery", "velox.UpdateQuery[E]", "", 9216},               // measured 5208
 	{"DeleteQuery", "velox.DeleteQuery[E]", "", 9216},               // measured 5208
 	{"InsertQuery", "velox.InsertQuery[E]", "", 10240},              // measured 6076
-	{"Rel", "velox.Rel[E, E]", "", 9216},                            // measured 4556 (3528 before the use site named the target)
+	{"Rel", "velox.Rel[E, E]", "", 9216},                            // measured 4880 (4556 before LimitEach and MaxRows; 3528 before the use site named the target)
 	{"One", "velox.One[E]", "", 20480},                              // measured 15972
 	{"Many", "velox.Many[E]", "", 20480},                            // measured 16044
 	{"MetaOnce", "velox.MetaOnce[E]", "", 10240},                    // measured 6274
@@ -243,18 +243,21 @@ var genericObjects = []struct {
 	// through the fields; the generics it instantiates are the cost of having
 	// a policy and hooks (policyGrowthMax). The rows of the old struct-scanning
 	// path (entity, entityUse, Shape, ColumnDef, RelDef, Schema) are gone with
-	// it.
-	{"entityDesc", "", entityDescSrc, 153600}, // measured 130782
+	// it. entityDesc was remeasured on 2026-10-22 after Rel.LimitEach and
+	// Rel.MaxRows (+518 bytes: 130782 before); its bound was kept.
+	{"entityDesc", "", entityDescSrc, 153600}, // measured 131300
 	// entityDescUse is held like entityDescHooks: its bound is the
 	// measurement plus about 1.2%, rounded up to the next KiB; remeasured on
 	// 2026-10-22, darwin/arm64, Go 1.27.1, after the locking reads (about
 	// +8 KiB here and in entityDescHooks), after Mutation's Conds, Affected
 	// and SetAffected and the handles' ValueIn (+350 bytes; the bound held),
-	// and again after the final review's fixes (782738 before). Sum, Avg,
-	// Min and Max stay functions: as Query methods they measured 800636,
-	// since a method of Query whose signature names NumberCol[E, V] puts that
-	// in the export data of every package that uses a Query, called or not.
-	{"entityDescUse", "", entityDescUseSrc, 792576}, // measured 782716
+	// and again after the final review's fixes (782738 before), and after
+	// Rel.LimitEach and Rel.MaxRows (+1404 bytes: 782716 under 792576
+	// before). Sum, Avg, Min and Max stay functions: as Query methods they
+	// measured 800636, since a method of Query whose signature names
+	// NumberCol[E, V] puts that in the export data of every package that
+	// uses a Query, called or not.
+	{"entityDescUse", "", entityDescUseSrc, 793600}, // measured 784120
 	// entityDescHooks is held tighter than the rule above: a quarter of it
 	// would let it grow by 64 KiB unseen. Its bound is the measurement plus
 	// about 1.2%, rounded up to the next KiB, the headroom it had before
@@ -262,8 +265,9 @@ var genericObjects = []struct {
 	// 1.27.1, after Mutation's Conds, Affected and SetAffected and the
 	// handles' ValueIn (+5022 bytes: 1068930 under 1082368 before them),
 	// and again when Mutation became a struct holding the mutation (-2708
-	// bytes: 1073952 under 1087488 before).
-	{"entityDescHooks", "", entityDescHooksBound, 1084416}, // measured 1071244
+	// bytes: 1073952 under 1087488 before), and after Rel.LimitEach and
+	// Rel.MaxRows (+1398 bytes: 1071244 under 1084416 before).
+	{"entityDescHooks", "", entityDescHooksBound, 1086464}, // measured 1072642
 	{"Policy", "velox.Policy[E]", "", 8192},                // measured 4050
 	// Mutation was remeasured on 2026-10-22, when it became a struct
 	// holding the mutation instead of a defined type of it (4692 before),

@@ -103,6 +103,10 @@ func textArg(d Dialect, bs []byte) bool {
 var cmpText = [...]string{opEQ: " = ", opNEQ: " <> ", opGT: " > ", opGTE: " >= ", opLT: " < ", opLTE: " <= "}
 
 func (w *writer) selectStmt(st *Statement) {
+	if st.Each != nil {
+		w.eachSelect(st)
+		return
+	}
 	w.str("SELECT ")
 	switch {
 	case st.Count:
@@ -118,25 +122,43 @@ func (w *writer) selectStmt(st *Statement) {
 			w.col(int32(st.Columns[0]))
 		}
 		w.str(")")
-	case st.Columns == nil:
-		for i := range w.in.Columns {
-			if i > 0 {
-				w.str(", ")
-			}
-			w.col(int32(i))
-		}
 	default:
-		for i, c := range st.Columns {
-			if i > 0 {
-				w.str(", ")
-			}
-			w.col(int32(c))
-		}
+		w.selectColumns(st.Columns, false)
 	}
 	w.str(" FROM ")
 	w.table()
 	w.where(st.Where)
-	for i, o := range st.OrderBy {
+	w.orderBy(st.OrderBy, false)
+	w.selectTail(st)
+}
+
+// selectColumns writes the columns cs of a SELECT, every column when cs is
+// nil, each qualified by the table when qualified says so.
+func (w *writer) selectColumns(cs []int, qualified bool) {
+	n := len(cs)
+	if cs == nil {
+		n = len(w.in.Columns)
+	}
+	for i := range n {
+		if i > 0 {
+			w.str(", ")
+		}
+		if qualified {
+			w.table()
+			w.str(".")
+		}
+		if cs == nil {
+			w.col(int32(i))
+		} else {
+			w.col(int32(cs[i]))
+		}
+	}
+}
+
+// orderBy writes ORDER BY os, when there are any, each column qualified by
+// the table when qualified says so.
+func (w *writer) orderBy(os []OrderTerm, qualified bool) {
+	for i, o := range os {
 		if i == 0 {
 			w.str(" ORDER BY ")
 		} else {
@@ -145,11 +167,19 @@ func (w *writer) selectStmt(st *Statement) {
 		if w.in.Columns[o.Column].Codec {
 			w.fail(errCodecOrderBy(w.in, o.Column))
 		}
+		if qualified {
+			w.table()
+			w.str(".")
+		}
 		w.col(int32(o.Column))
 		if o.Desc {
 			w.str(" DESC")
 		}
 	}
+}
+
+// selectTail writes a SELECT's LIMIT, OFFSET and lock.
+func (w *writer) selectTail(st *Statement) {
 	if st.Limit > 0 {
 		w.str(" LIMIT ")
 		w.arg(st.Limit)
@@ -168,6 +198,119 @@ func (w *writer) selectStmt(st *Statement) {
 			w.str(lockWaitSQL[st.LockWait])
 		}
 	}
+}
+
+// The aliases of a per-owner read: the join entity, the owner's key read
+// through it, the row's rank within its owner, and the ranked rows.
+const (
+	eachJoin  = "vx_j"
+	eachOwner = "vx_owner"
+	eachRank  = "vx_rn"
+	eachRows  = "vx"
+)
+
+// eachSelect writes a SELECT with Each: the rows of each owner apart. With
+// a per-owner Limit, a derived table ranks each owner's rows with
+// ROW_NUMBER() in the statement's order, and the outer query keeps the first
+// Limit of each; every condition, the scope's included, is inside it, so a
+// row they leave out takes no rank. A many-to-many read joins the join entity
+// and reads the owner's key from it, last; its columns are qualified by the
+// target's table, as are the top-level columns of its conditions.
+func (w *writer) eachSelect(st *Statement) {
+	c := st.Each
+	if st.Count || st.Exists || st.Aggregate != 0 {
+		w.fail(fmt.Errorf("velox: %s: a per-owner read cannot count or aggregate", w.in.Name))
+		return
+	}
+	window, join := c.windowed(w.in), c.Join != nil
+	if window {
+		w.str("SELECT ")
+		w.selectColumns(st.Columns, false)
+		if join {
+			w.str(", ")
+			w.ident(eachOwner)
+		}
+		w.str(" FROM (")
+	}
+	w.str("SELECT ")
+	w.selectColumns(st.Columns, join)
+	if join {
+		w.str(", ")
+		w.eachKey(c)
+		w.str(" AS ")
+		w.ident(eachOwner)
+	}
+	if window {
+		w.str(", ROW_NUMBER() OVER (PARTITION BY ")
+		w.eachKey(c)
+		w.orderBy(st.OrderBy, join)
+		w.str(") AS ")
+		w.ident(eachRank)
+	}
+	w.str(" FROM ")
+	w.table()
+	if join {
+		w.str(" JOIN ")
+		in := w.in
+		w.in = c.Join
+		w.table()
+		w.in = in
+		w.str(" AS ")
+		w.ident(eachJoin)
+		w.str(" ON ")
+		w.ident(eachJoin)
+		w.str(".")
+		w.ident(c.Join.Columns[c.JoinTarget].Name)
+		w.str(" = ")
+		w.table()
+		w.str(".")
+		w.col(int32(c.Target))
+	}
+	w.str(" WHERE ")
+	if len(c.Keys) == 0 {
+		w.str("1 = 0")
+	} else {
+		w.eachKey(c)
+		w.str(" IN (")
+		for i, k := range c.Keys {
+			if i > 0 {
+				w.str(", ")
+			}
+			w.arg(k)
+		}
+		w.str(")")
+	}
+	w.qualify = join
+	for _, p := range st.Where {
+		w.str(" AND ")
+		w.pred(p.n)
+	}
+	w.qualify = false
+	if window {
+		w.str(") AS ")
+		w.ident(eachRows)
+		w.str(" WHERE ")
+		w.ident(eachRank)
+		w.str(" <= ")
+		w.arg(c.Limit)
+		w.str(" ORDER BY ")
+		w.ident(eachRank)
+	} else {
+		w.orderBy(st.OrderBy, join)
+	}
+	w.selectTail(st)
+}
+
+// eachKey writes the column that holds a row's owner's key: the join
+// entity's, through its alias, or the statement's entity's own.
+func (w *writer) eachKey(c *EachClause) {
+	if c.Join != nil {
+		w.ident(eachJoin)
+		w.str(".")
+		w.ident(c.Join.Columns[c.JoinOwner].Name)
+		return
+	}
+	w.col(int32(c.Column))
 }
 
 // isNilArg reports a value that SQL compares with IS NULL, not =. It

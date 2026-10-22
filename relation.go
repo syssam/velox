@@ -262,11 +262,13 @@ func targetName(t reflect.Type) string {
 // loads the relation; its Where, OrderBy and With say what to load. Like a
 // Query it is a value: each method returns a new Rel.
 type Rel[E, T any] struct {
-	I     int32
-	where []Predicate
-	order []OrderTerm
-	with  []loadSpec
-	err   error
+	I       int32
+	where   []Predicate
+	order   []OrderTerm
+	with    []loadSpec
+	each    int // LimitEach's n; 0: no limit
+	maxRows int // MaxRows's n; 0: the owner's cap
+	err     error
 }
 
 // Where returns the relation loading only the related entities that meet
@@ -292,6 +294,35 @@ func (r Rel[E, T]) OrderBy[_ Lazy[T]](os ...Order[T]) Rel[E, T] {
 	return r
 }
 
+// LimitEach returns the relation loading at most n entities for each owner,
+// the first in its order: each owner's own page. n <= 0 removes the limit.
+//
+// The load is one statement for every owner (per chunk of owners, under the
+// dialect's parameter limit), which ranks each owner's rows with
+// ROW_NUMBER() on every dialect; ties in the order are broken by the target's
+// primary key. The tenant scope and the Read policy apply before the ranking,
+// so a row they hide takes no place in a page. A many-to-many relation is
+// read through its join entity in that one statement. A to-one relation
+// read by the target's one-column primary key has at most one entity per
+// owner, and needs no ranking.
+func (r Rel[E, T]) LimitEach[_ Lazy[T]](n int) Rel[E, T] {
+	r.each = max(n, 0)
+	return r
+}
+
+// MaxRows returns the relation's load allowed up to n rows per statement, in
+// place of the owner query's MaxRows and the DB's cap, for its nested loads
+// too. n <= 0 restores the owner's.
+//
+// Without it, a load with LimitEach(n) may return n rows for each owner (one,
+// when it reads by the target's one-column primary key), whatever the owner's
+// cap: it is bounded by construction. Any other load shares the owner
+// query's cap.
+func (r Rel[E, T]) MaxRows[_ Lazy[T]](n int) Rel[E, T] {
+	r.maxRows = max(n, 0)
+	return r
+}
+
 // With returns the relation also loading a relation of each loaded entity.
 func (r Rel[E, T]) With[U any](next Rel[T, U]) Rel[E, T] {
 	sp := next.spec()
@@ -304,7 +335,7 @@ func (r Rel[E, T]) With[U any](next Rel[T, U]) Rel[E, T] {
 
 // spec is the relation's load options, without types.
 func (r Rel[E, T]) spec[_ Lazy[T]]() loadSpec {
-	return loadSpec{rel: r.I, target: targetOf[T](), where: r.where, order: r.order, with: r.with, err: r.err}
+	return loadSpec{rel: r.I, target: targetOf[T](), where: r.where, order: r.order, with: r.with, each: r.each, maxRows: r.maxRows, err: r.err}
 }
 
 // MarshalJSON writes the related entity, or null when there is none or it was
