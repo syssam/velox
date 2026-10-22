@@ -82,17 +82,17 @@ func On[E any](h Hook[E], ops ...Op) Hook[E] {
 // any, converted by Mutation.DB: EntityInfo reaches mutation, and a *DB field
 // made every Desc entity's package 79 KiB larger (compilecost_test.go).
 type mutation struct {
-	db     any              // the *DB the write runs on; set only when in has hooks
-	op     Op               // set before the hooks run: Mutation.Op reads it, since an insert has no st
-	st     *Statement       // the update or delete; nil for an insert
-	rows   []unsafe.Pointer // an insert's rows
-	res    Result
-	err    error // a misuse recorded by Value, Set or Where
-	core   error // the error next returned, to pass through unwrapped
-	called bool  // next has been called
-	dry    bool  // under SQL(ctx): the core renders and does not send
-	sql    string
-	args   []any // what the core rendered under SQL(ctx)
+	db       any              // the *DB the write runs on; set only when in has hooks
+	op       Op               // set before the hooks run: Mutation.Op reads it, since an insert has no st
+	st       *Statement       // the update or delete; nil for an insert
+	rows     []unsafe.Pointer // an insert's rows
+	affected int64            // the rows the write affected, for Mutation.Affected
+	err      error            // a misuse recorded by ValueIn, Set or Where
+	core     error            // the error next returned, to pass through unwrapped
+	called   bool             // next has been called
+	dry      bool             // under SQL(ctx): the core renders and does not send
+	sql      string
+	args     []any // what the core rendered under SQL(ctx)
 }
 
 type mutateFn func(ctx context.Context, mu *mutation) error

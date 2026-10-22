@@ -334,7 +334,7 @@ s.BeforeDelete(func(ctx context.Context, m *velox.Mutation[Invoice]) error { …
   the tenant check and the policy's Insert check run on the result, so a hook
   cannot swap the tenant. Then the row's values are read from the struct.
 - **BeforeUpdate** runs for set-based `Update` and for `Save`. `Mutation[E]`:
-  - `Value(c Column[E]) (any, bool)` reads an assignment;
+  - `Value(c Column[E]) (any, bool)` reads an assignment *(note of 2026-10-22: removed; a column handle's typed `ValueIn(m)` replaces it, and `Conds()` and `Affected()` are added; see the schema design)*;
   - `Set(ss ...Setter[E])` adds or replaces assignments;
   - `Where(ps ...Pred[E])` narrows the rows.
 

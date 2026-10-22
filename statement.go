@@ -177,8 +177,8 @@ type Statement struct {
 }
 
 // Result is what executing a statement did: a Statement's, which an Around
-// hook reads. Mutation.Result gives an entity hook one for the whole write,
-// with only Affected set; see there.
+// hook reads. An entity hook reads the rows its whole write affected from
+// Mutation.Affected instead.
 type Result struct {
 	// Rows counts the rows read, an INSERT … RETURNING's and Count's single
 	// row included. Rows are counted only when the DB has an Around hook or

@@ -3,6 +3,7 @@ package velox_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -231,25 +232,6 @@ var (
 	hfStamp = velox.NumberCol[hFlex, int64]{I: 2}
 )
 
-func TestMutationResult(t *testing.T) {
-	var got int64 = -1
-	flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
-		err := next.Mutate(ctx, m)
-		got = m.Result().Affected
-		return err
-	}
-	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Affected: 3})
-	if _, err := db.Update[hFlex]().Set(hfTitle.Set("x")).All().Exec(ctx); err != nil || got != 3 {
-		t.Fatalf("%v, Result().Affected %d", err, got)
-	}
-	if err := db.InsertAll([]hFlex{{ID: 1}, {ID: 2}}).Exec(ctx); err != nil || got != 3 {
-		t.Fatalf("%v, Result().Affected %d", err, got)
-	}
-	if _, _, err := db.Update[hFlex]().Set(hfTitle.Set("x")).All().SQL(ctx); err != nil || got != 0 {
-		t.Fatalf("%v, under SQL Result().Affected %d", err, got)
-	}
-}
-
 func TestMutationMisuseOnAnInsert(t *testing.T) {
 	flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
 		if m.Rows() == nil {
@@ -445,9 +427,9 @@ func TestMisuseWithoutNextIsReported(t *testing.T) {
 func TestHooksDoNotSeeUpdateDefaults(t *testing.T) {
 	var before, after bool
 	flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
-		_, before = m.Value(hfStamp)
+		_, before = hfStamp.ValueIn(m)
 		err := next.Mutate(ctx, m)
-		_, after = m.Value(hfStamp)
+		_, after = hfStamp.ValueIn(m)
 		return err
 	}
 	e := &velox.FakeExec{Affected: 1}
@@ -588,7 +570,7 @@ func TestUnboundMethodsAreRefused(t *testing.T) {
 }
 
 // hUp has a Read policy, so that an upsert's update branch is conditioned on
-// it, and a hook that reads the Result of the write once next returns.
+// it, and a hook that reads the rows the write affected once next returns.
 type hUp struct{ ID, N int64 }
 
 var hUps = struct {
@@ -605,7 +587,7 @@ func (*hUp) Hooks() []velox.Hook[hUp] {
 	return []velox.Hook[hUp]{func(next velox.Mutator[hUp]) velox.Mutator[hUp] {
 		return velox.MutateFunc[hUp](func(ctx context.Context, m *velox.Mutation[hUp]) error {
 			err := next.Mutate(ctx, m)
-			hUpAffected = m.Result().Affected
+			hUpAffected = m.Affected()
 			return err
 		})
 	}}
@@ -623,22 +605,198 @@ func (*hUp) VeloxMeta() *velox.Meta[hUp] {
 	})
 }
 
-// A write's Result.Affected is 0 after an error: an upsert whose existing row
-// the policy hides fails after the statement ran, and reports none of the
-// rows it affected.
-func TestMutationResultAfterAnError(t *testing.T) {
+// TestMutationAffected: Affected is the rows the write inserted or matched
+// once next has returned, and 0 under SQL(ctx). It is 0 after an error: an
+// upsert whose existing row the policy hides fails after the statement ran,
+// and reports none of the rows it affected.
+func TestMutationAffected(t *testing.T) {
+	var got int64 = -1
+	flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
+		if m.Affected() != 0 {
+			t.Errorf("before next Affected is %d", m.Affected())
+		}
+		err := next.Mutate(ctx, m)
+		got = m.Affected()
+		return err
+	}
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Affected: 3})
+	if _, err := db.Update[hFlex]().Set(hfTitle.Set("x")).All().Exec(ctx); err != nil || got != 3 {
+		t.Fatalf("%v, Affected %d", err, got)
+	}
+	if err := db.InsertAll([]hFlex{{ID: 1}, {ID: 2}}).Exec(ctx); err != nil || got != 3 {
+		t.Fatalf("%v, Affected %d", err, got)
+	}
+	if _, _, err := db.Update[hFlex]().Set(hfTitle.Set("x")).All().SQL(ctx); err != nil || got != 0 {
+		t.Fatalf("%v, under SQL Affected %d", err, got)
+	}
+
 	for _, affected := range []int64{0, 1} {
 		hUpAffected = -1
 		e := &velox.FakeExec{Affected: affected}
 		db := velox.OpenFake(velox.Postgres, e)
 		err := db.InsertAll([]hUp{{ID: 1, N: 1}, {ID: 2, N: 1}}).OnConflict(hUps.ID).Update(hUps.N).Exec(ctx)
 		if !errors.Is(err, velox.ErrDenied) || hUpAffected != 0 {
-			t.Errorf("affected %d: %v, Result().Affected %d", affected, err, hUpAffected)
+			t.Errorf("affected %d: %v, Affected %d", affected, err, hUpAffected)
+		}
+	}
+	e := &velox.FakeExec{Affected: 1}
+	db = velox.OpenFake(velox.Postgres, e)
+	if err := db.Insert(&hUp{ID: 1, N: 1}).OnConflict(hUps.ID).Update(hUps.N).Exec(ctx); err != nil || hUpAffected != 1 {
+		t.Errorf("%v, Affected %d", err, hUpAffected)
+	}
+}
+
+// hCond's first hook adds hcStamp.EQ(2) to an update or a delete; its second
+// runs condsHook.
+type hCond struct{ ID, Stamp int64 }
+
+var (
+	hcID    = velox.NumberCol[hCond, int64]{I: 0}
+	hcStamp = velox.NumberCol[hCond, int64]{I: 1}
+)
+
+var condsHook func(m *velox.Mutation[hCond])
+
+func (*hCond) Hooks() []velox.Hook[hCond] {
+	return []velox.Hook[hCond]{
+		func(next velox.Mutator[hCond]) velox.Mutator[hCond] {
+			return velox.MutateFunc[hCond](func(ctx context.Context, m *velox.Mutation[hCond]) error {
+				if m.Op() != velox.OpInsert {
+					m.Where(hcStamp.EQ(2))
+				}
+				return next.Mutate(ctx, m)
+			})
+		},
+		func(next velox.Mutator[hCond]) velox.Mutator[hCond] {
+			return velox.MutateFunc[hCond](func(ctx context.Context, m *velox.Mutation[hCond]) error {
+				condsHook(m)
+				return next.Mutate(ctx, m)
+			})
+		},
+	}
+}
+
+var hCondMeta velox.MetaOnce[hCond]
+
+func (*hCond) VeloxMeta() *velox.Meta[hCond] {
+	return hCondMeta.Load(func() velox.Desc[hCond] {
+		return velox.Desc[hCond]{
+			Hooks: func() velox.BoundHooks { return velox.BindHooks((*hCond)(nil).Hooks()) },
+			Table: "conds", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Stamp", Name: "stamp"}},
+			PrimaryKey: []int{0}, Tenant: -1,
+			Addr: func(x *hCond, i int) any { return [...]any{&x.ID, &x.Stamp}[i] },
+		}
+	})
+}
+
+// TestConds: Conds is the caller's Where and the earlier hooks' conditions,
+// in order, as a copy; nil for an insert.
+func TestConds(t *testing.T) {
+	want := []velox.Pred[hCond]{hcID.EQ(1), hcStamp.GT(0), hcStamp.EQ(2)}
+	var got, again []velox.Pred[hCond]
+	condsHook = func(m *velox.Mutation[hCond]) {
+		got = m.Conds()
+		if len(got) > 0 {
+			cs := m.Conds()
+			cs[0] = hcID.EQ(9)
+			_ = append(cs[:1], hcID.EQ(8))
+			_ = append(cs, hcID.EQ(7))
+			again = m.Conds()
 		}
 	}
 	e := &velox.FakeExec{Affected: 1}
 	db := velox.OpenFake(velox.Postgres, e)
-	if err := db.Insert(&hUp{ID: 1, N: 1}).OnConflict(hUps.ID).Update(hUps.N).Exec(ctx); err != nil || hUpAffected != 1 {
-		t.Errorf("%v, Result().Affected %d", err, hUpAffected)
+	if _, err := db.Update[hCond]().Set(hcStamp.Set(5)).Where(hcID.EQ(1), hcStamp.GT(0)).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, want) || !reflect.DeepEqual(again, want) {
+		t.Errorf("Conds %v, after changing a copy %v; want %v", got, again, want)
+	}
+	if e.SQL != `UPDATE "conds" SET "stamp" = $1 WHERE "id" = $2 AND "stamp" > $3 AND "stamp" = $4` {
+		t.Errorf("SQL %s", e.SQL)
+	}
+	if _, err := db.Delete[hCond]().Where(hcID.EQ(1), hcStamp.GT(0)).Exec(ctx); err != nil || !reflect.DeepEqual(got, want) {
+		t.Errorf("on a delete: %v, Conds %v", err, got)
+	}
+	// All: only the hook's condition.
+	if _, err := db.Delete[hCond]().All().Exec(ctx); err != nil || !reflect.DeepEqual(got, want[2:]) {
+		t.Errorf("on a delete of All: %v, Conds %v", err, got)
+	}
+	got = []velox.Pred[hCond]{}
+	if err := db.Insert(&hCond{ID: 1}).Exec(ctx); err != nil || got != nil {
+		t.Errorf("on an insert: %v, Conds %v", err, got)
+	}
+}
+
+// hSoft is tenant-scoped, with a Read policy, and its delete hook updates
+// Deleted instead of deleting: it does not call next.
+type hSoft struct {
+	ID, OrgID int64
+	Deleted   bool
+}
+
+var hSofts = struct {
+	ID, OrgID velox.NumberCol[hSoft, int64]
+	Deleted   velox.Col[hSoft, bool]
+}{velox.NumberCol[hSoft, int64]{I: 0}, velox.NumberCol[hSoft, int64]{I: 1}, velox.Col[hSoft, bool]{I: 2}}
+
+func (*hSoft) Policy() velox.Policy[hSoft] {
+	return velox.Policy[hSoft]{Read: func(context.Context) (velox.Pred[hSoft], error) { return hSofts.ID.GT(0), nil }}
+}
+
+func (*hSoft) Hooks() []velox.Hook[hSoft] {
+	return []velox.Hook[hSoft]{velox.On(func(next velox.Mutator[hSoft]) velox.Mutator[hSoft] {
+		return velox.MutateFunc[hSoft](func(ctx context.Context, m *velox.Mutation[hSoft]) error {
+			q := m.DB().Update[hSoft]().Set(hSofts.Deleted.Set(true))
+			if cs := m.Conds(); len(cs) > 0 {
+				q = q.Where(cs...)
+			} else {
+				q = q.All()
+			}
+			_, err := q.Exec(ctx)
+			return err
+		})
+	}, velox.OpDelete)}
+}
+
+var hSoftMeta velox.MetaOnce[hSoft]
+
+func (*hSoft) VeloxMeta() *velox.Meta[hSoft] {
+	return hSoftMeta.Load(func() velox.Desc[hSoft] {
+		return velox.Desc[hSoft]{
+			Policy: func() velox.BoundPolicy { return velox.BindPolicy((*hSoft)(nil).Policy()) },
+			Hooks:  func() velox.BoundHooks { return velox.BindHooks((*hSoft)(nil).Hooks()) },
+			Table:  "softs",
+			Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"},
+				{Field: "Deleted", Name: "deleted"}},
+			PrimaryKey: []int{0}, Tenant: 1,
+			Addr: func(x *hSoft, i int) any { return [...]any{&x.ID, &x.OrgID, &x.Deleted}[i] },
+		}
+	})
+}
+
+// TestSoftDeleteThroughConds: a delete hook rewrites the delete into an
+// update through Conds. The update adds the tenant and the policy once, as
+// they are not in Conds; the delete sends nothing itself and reports 0 rows.
+// A delete of All gives no Conds, and the update says All.
+func TestSoftDeleteThroughConds(t *testing.T) {
+	e := &velox.FakeExec{Affected: 4}
+	db := velox.OpenFake(velox.Postgres, e)
+	tctx := velox.WithTenant(ctx, int64(7))
+	n, err := db.Delete[hSoft]().Where(hSofts.ID.EQ(1)).Exec(tctx)
+	if err != nil || n != 0 || e.Calls != 1 {
+		t.Fatalf("%v, %d rows, %d statements", err, n, e.Calls)
+	}
+	const one = `UPDATE "softs" SET "deleted" = $1 WHERE "id" = $2 AND "org_id" = $3 AND "id" > $4`
+	if e.SQL != one || !reflect.DeepEqual(e.Args, []any{true, int64(1), int64(7), int64(0)}) {
+		t.Errorf("SQL %s %v, want %s", e.SQL, e.Args, one)
+	}
+	n, err = db.Delete[hSoft]().All().Exec(tctx)
+	if err != nil || n != 0 || e.Calls != 2 {
+		t.Fatalf("All: %v, %d rows, %d statements", err, n, e.Calls)
+	}
+	const all = `UPDATE "softs" SET "deleted" = $1 WHERE "org_id" = $2 AND "id" > $3`
+	if e.SQL != all || !reflect.DeepEqual(e.Args, []any{true, int64(7), int64(0)}) {
+		t.Errorf("All: SQL %s %v, want %s", e.SQL, e.Args, all)
 	}
 }

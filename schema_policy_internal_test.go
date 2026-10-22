@@ -95,11 +95,11 @@ func TestMutation(t *testing.T) {
 	if m.Op() != OpUpdate {
 		t.Errorf("Op %v", m.Op())
 	}
-	if v, ok := m.Value(hookedTitle); !ok || v != "t" {
-		t.Errorf("Value(Title) = %v, %v", v, ok)
+	if v, ok := hookedTitle.ValueIn(m); !ok || v != "t" {
+		t.Errorf("Title.ValueIn = %v, %v", v, ok)
 	}
-	if v, ok := m.Value(hookedTag); ok || v != nil {
-		t.Errorf("Value of a column assigned by Add = %v, %v; want nothing", v, ok)
+	if v, ok := hookedTag.ValueIn(m); ok || v != "" {
+		t.Errorf("ValueIn of a column assigned by Add = %v, %v; want nothing", v, ok)
 	}
 	m.Set(hookedTitle.Set("u"), hookedTag.Set("a"))
 	if want := []Assignment{{2, AssignSet, "u"}, {1, AssignSet, "a"}}; !reflect.DeepEqual(st.Set, want) {

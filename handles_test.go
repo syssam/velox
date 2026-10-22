@@ -104,16 +104,16 @@ func TestHandlesFileIsCurrent(t *testing.T) {
 // wrong kind, or dropped from the right one, fails here.
 func TestHandleMethodSets(t *testing.T) {
 	want := map[string]string{
-		"Col":            "Asc Desc EQ In NEQ NotIn Set column",
-		"OrderedCol":     "Asc Between Desc EQ GT GTE In LT LTE NEQ NotIn Set column",
-		"NumberCol":      "Add Asc Between Desc EQ GT GTE In LT LTE NEQ NotIn Set Sub column",
-		"StringCol":      "Asc Between Contains Desc EQ EqualFold GT GTE HasPrefix HasSuffix In LT LTE Like NEQ NotIn Set column",
-		"NullCol":        "Asc Desc EQ In IsNull NEQ NotIn NotNull Set SetNull column",
-		"NullOrderedCol": "Asc Between Desc EQ GT GTE In IsNull LT LTE NEQ NotIn NotNull Set SetNull column",
-		"NullNumberCol":  "Add Asc Between Desc EQ GT GTE In IsNull LT LTE NEQ NotIn NotNull Set SetNull Sub column",
-		"NullStringCol":  "Asc Between Contains Desc EQ EqualFold GT GTE HasPrefix HasSuffix In IsNull LT LTE Like NEQ NotIn NotNull Set SetNull column",
-		"JSONCol":        "Set column",
-		"NullJSONCol":    "IsNull NotNull Set SetNull column",
+		"Col":            "Asc Desc EQ In NEQ NotIn Set ValueIn column",
+		"OrderedCol":     "Asc Between Desc EQ GT GTE In LT LTE NEQ NotIn Set ValueIn column",
+		"NumberCol":      "Add Asc Between Desc EQ GT GTE In LT LTE NEQ NotIn Set Sub ValueIn column",
+		"StringCol":      "Asc Between Contains Desc EQ EqualFold GT GTE HasPrefix HasSuffix In LT LTE Like NEQ NotIn Set ValueIn column",
+		"NullCol":        "Asc Desc EQ In IsNull NEQ NotIn NotNull Set SetNull ValueIn column",
+		"NullOrderedCol": "Asc Between Desc EQ GT GTE In IsNull LT LTE NEQ NotIn NotNull Set SetNull ValueIn column",
+		"NullNumberCol":  "Add Asc Between Desc EQ GT GTE In IsNull LT LTE NEQ NotIn NotNull Set SetNull Sub ValueIn column",
+		"NullStringCol":  "Asc Between Contains Desc EQ EqualFold GT GTE HasPrefix HasSuffix In IsNull LT LTE Like NEQ NotIn NotNull Set SetNull ValueIn column",
+		"JSONCol":        "Set ValueIn column",
+		"NullJSONCol":    "IsNull NotNull Set SetNull ValueIn column",
 	}
 	f, err := parser.ParseFile(token.NewFileSet(), "handles.go", nil, parser.SkipObjectResolution)
 	if err != nil {

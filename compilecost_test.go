@@ -244,20 +244,22 @@ var genericObjects = []struct {
 	// a policy and hooks (policyGrowthMax). The rows of the old struct-scanning
 	// path (entity, entityUse, Shape, ColumnDef, RelDef, Schema) are gone with
 	// it.
-	{"entityDesc", "", entityDescSrc, 153600}, // measured 130388
+	{"entityDesc", "", entityDescSrc, 153600}, // measured 130380
 	// entityDescUse is held like entityDescHooks: its bound is the
 	// measurement plus about 1.2%, rounded up to the next KiB; remeasured on
 	// 2026-10-22, darwin/arm64, Go 1.27.1, after the locking reads (about
-	// +8 KiB here and in entityDescHooks).
-	{"entityDescUse", "", entityDescUseSrc, 792576}, // measured 782388
+	// +8 KiB here and in entityDescHooks), and again after Mutation's Conds
+	// and Affected and the handles' ValueIn (12 bytes less; the bound holds).
+	{"entityDescUse", "", entityDescUseSrc, 792576}, // measured 782376
 	// entityDescHooks is held tighter than the rule above: a quarter of it
 	// would let it grow by 64 KiB unseen. Its bound is the measurement plus
 	// about 1.2%, rounded up to the next KiB, the headroom it had before
 	// (1046660 under 1058816); remeasured on 2026-10-22, darwin/arm64, Go
-	// 1.27.1.
-	{"entityDescHooks", "", entityDescHooksBound, 1082368}, // measured 1068930
+	// 1.27.1, after Mutation's Conds and Affected and the handles' ValueIn
+	// (+956 bytes: 1068930 under 1082368 before them).
+	{"entityDescHooks", "", entityDescHooksBound, 1083392}, // measured 1069886
 	{"Policy", "velox.Policy[E]", "", 8192},                // measured 4050
-	{"Mutation", "velox.Mutation[E]", "", 8192},            // measured 3842
+	{"Mutation", "velox.Mutation[E]", "", 8192},            // measured 3800
 }
 
 // policyGrowthMax bounds the bytes a Policy and three hooks add to an entity's
@@ -266,7 +268,7 @@ var genericObjects = []struct {
 // the generics velox instantiates for E (BindPolicy, BindHooks, On, the
 // Mutator and Mutation methods) and the export data of the types the
 // functions mention.
-const policyGrowthMax = 348160 // measured 286542
+const policyGrowthMax = 348160 // measured 287510
 
 // TestGenericTypesCompileSmall enforces the compile-cost rules for one
 // package: it measures each row's own object cost, the bytes its package

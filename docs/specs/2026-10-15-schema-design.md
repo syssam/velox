@@ -170,9 +170,9 @@ func (*User) Hooks() []velox.Hook[User] {
         velox.On(auditHook[User](), velox.OpInsert, velox.OpUpdate, velox.OpDelete),
         func(next velox.Mutator[User]) velox.Mutator[User] {
             return velox.MutateFunc[User](func(ctx context.Context, m *velox.Mutation[User]) error {
-                // before: m.Rows() on insert (mutable); m.Value/Set/Where on update and delete
+                // before: m.Rows() on insert (mutable); m.Value/Set/Where on update and delete (since 2026-10-22: Col.ValueIn(m))
                 err := next.Mutate(ctx, m)
-                // after: m.Result().Affected — rows affected; generated IDs are in m.Rows()
+                // after: m.Result().Affected — rows affected; generated IDs are in m.Rows() (since 2026-10-22: m.Affected())
                 return err
             })
         },
@@ -193,6 +193,8 @@ func (*User) Hooks() []velox.Hook[User] {
 - `Value(col)`, `Set(...)` and `Where(...)` for an update or delete, as in the policy design §3;
 - `DB()`, the database the write runs on: the transaction's inside `db.Tx`, else the database's. A hook that writes or reads other rows uses `m.DB().Insert(&audit).Exec(ctx)`, so its work commits or rolls back with the write inside a transaction (ent's `m.Client()`). It is set for the writes of entities that have hooks, which are the only ones that see a `Mutation`;
 - `Result()` after `next`: its `Affected` is the rows inserted, matched or deleted. A generated key is written back into its row, so after `next` an `Insert`'s `m.Rows()[0].ID` holds it; `InsertAll` reads no keys back.
+
+*(Note of 2026-10-22, API plan 5: `Mutation.Value(col)` and `Mutation.Result()` are removed. A column handle's `ValueIn(m)` reads an assignment, typed to the handle's value (a nullable handle gives `*V`, nil for `SetNull`); `m.Affected()` is the rows written once `next` has returned; `m.Conds()` returns the caller's and the earlier hooks' conditions, which a soft-delete hook passes to an update instead of calling `next`, and the delete then reports 0 rows.)*
 
 **Order of a write:**
 1. For an update or delete, the guard (`ErrNoWhere` and the like), on the statement as the caller built it: a condition a hook adds never stands in for the caller's `Where`.

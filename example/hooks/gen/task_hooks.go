@@ -35,17 +35,17 @@ func deriveSlug(next velox.Mutator[Task]) velox.Mutator[Task] {
 }
 
 // renamed sees the assignments of an Update or a Save through the Mutation:
-// Value reads one, Set adds or replaces one. It derives the new slug before
-// the statement is sent, and when the statement succeeded it writes an Audit
-// row. Under SQL(ctx) that write is refused with velox.ErrDryRun, so printing
-// the statement records nothing; the hook needs no check for it.
+// a handle's ValueIn reads one, typed, and Set adds or replaces one. It
+// derives the new slug before the statement is sent, and when the statement
+// succeeded it writes an Audit row. Under SQL(ctx) that write is refused
+// with velox.ErrDryRun, so printing the statement records nothing; the hook
+// needs no check for it.
 func renamed(next velox.Mutator[Task]) velox.Mutator[Task] {
 	return velox.MutateFunc[Task](func(ctx context.Context, m *velox.Mutation[Task]) error {
-		v, ok := m.Value(Tasks.Title)
+		title, ok := Tasks.Title.ValueIn(m)
 		if !ok {
 			return next.Mutate(ctx, m) // an update of other columns
 		}
-		title, _ := v.(string)
 		if title == "" {
 			return errors.New("a task needs a title")
 		}

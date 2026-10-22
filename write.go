@@ -313,7 +313,7 @@ func write(ctx context.Context, db *DB, st *Statement, dry, save bool) (int64, s
 		} else {
 			err = writeCore(ctx, db, &mu)
 		}
-		return mu.res.Affected, mu.sql, mu.args, err
+		return mu.affected, mu.sql, mu.args, err
 	}
 	if err := db.guard(st); err != nil {
 		return 0, "", nil, err
@@ -326,7 +326,7 @@ func write(ctx context.Context, db *DB, st *Statement, dry, save bool) (int64, s
 	if err := mutate(ctx, db, st.Entity, mu, core); err != nil && !dryRefused(mu, err) {
 		return 0, "", nil, err
 	}
-	return mu.res.Affected, mu.sql, mu.args, nil
+	return mu.affected, mu.sql, mu.args, nil
 }
 
 // dryRefused reports whether err, from the hooks of a statement under SQL(ctx),
@@ -363,7 +363,7 @@ func onlyDryRun(err error) bool {
 // For an update it adds the UpdateDefault assignments, refuses a column
 // assigned twice or an Immutable one and runs the validators; then it sends
 // the statement through the pipeline, whose guard runs first, or under
-// SQL(ctx) renders it into mu.sql and mu.args. It sets mu.res.
+// SQL(ctx) renders it into mu.sql and mu.args. It sets mu.affected.
 func writeCore(ctx context.Context, db *DB, mu *mutation) error {
 	st := mu.st
 	if st.Op == OpUpdate {
@@ -385,7 +385,7 @@ func writeCore(ctx context.Context, db *DB, mu *mutation) error {
 	if err != nil {
 		return err
 	}
-	mu.res.Affected = res.affected
+	mu.affected = res.affected
 	return nil
 }
 
@@ -396,7 +396,7 @@ func saveCore(ctx context.Context, db *DB, mu *mutation) error {
 	if err := writeCore(ctx, db, mu); err != nil {
 		return err
 	}
-	if !mu.dry && mu.res.Affected == 0 {
+	if !mu.dry && mu.affected == 0 {
 		return fmt.Errorf("velox: %s: %w", mu.st.Entity.Name, ErrNotFound)
 	}
 	return nil

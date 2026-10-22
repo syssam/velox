@@ -190,9 +190,9 @@ func (q InsertQuery[E]) mutation[_ Lazy[E]](dry bool) *mutation {
 
 // send is Exec's work inside the hooks, their next: it prepares every row
 // (defaults, tenant, the validators and the
-// policy's Insert) and sends the statements. It sets mu.res only when they
-// all succeeded, so that Mutation.Result is 0 after an error whatever order
-// insertOne sets Affected and checks an upsert in.
+// policy's Insert) and sends the statements. It sets mu.affected only when
+// they all succeeded, so that Mutation.Affected is 0 after an error whatever
+// order insertOne sets Affected and checks an upsert in.
 func (q InsertQuery[E]) send[_ Lazy[E]](ctx context.Context, mu *mutation) error {
 	var res Result
 	var err error
@@ -202,7 +202,7 @@ func (q InsertQuery[E]) send[_ Lazy[E]](ctx context.Context, mu *mutation) error
 		err = insertMany(ctx, q.db, q.meta, q.many, q.conflict, &res)
 	}
 	if err == nil {
-		mu.res = res
+		mu.affected = res.Affected
 	}
 	return err
 }

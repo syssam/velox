@@ -3,7 +3,9 @@ package velox
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
+	"time"
 )
 
 // withHook returns a context whose hnote hooks run f.
@@ -98,20 +100,25 @@ func TestMutationSetOnADelete(t *testing.T) {
 	}
 }
 
-func TestMutationValue(t *testing.T) {
+// TestValueIn: a handle's ValueIn reads the value an update's Set assigns,
+// typed to the handle's value; an Add assigns none. A nullable handle gives a
+// copy: SetNull is (nil, true), and changing the pointee changes nothing sent.
+// On an insert ValueIn fails the write, as Set does.
+func TestValueIn(t *testing.T) {
 	e := &FakeExec{Affected: 1}
 	db := OpenFake(Postgres, e)
 	type seen struct {
-		op           Op
-		title, note  any
-		okT, okN, ok bool
+		op            Op
+		title, note   string
+		n             int64
+		okT, okN, okX bool
 	}
 	var s seen
 	ctx := withHook(func(m *Mutation[hnote]) error {
 		s.op = m.Op()
-		s.title, s.okT = m.Value(hn.Title)
-		s.note, s.okN = m.Value(hn.Note)
-		_, s.ok = m.Value(hn.N) // an Add assigns no value
+		s.title, s.okT = hn.Title.ValueIn(m)
+		s.note, s.okN = hn.Note.ValueIn(m)
+		s.n, s.okX = hn.N.ValueIn(m) // an Add assigns no value
 		return nil
 	})
 	if _, err := db.Update[hnote]().Set(hn.Title.Set("t"), hn.N.Add(1)).Where(hn.ID.EQ(1)).Exec(ctx); err != nil {
@@ -123,8 +130,151 @@ func TestMutationValue(t *testing.T) {
 	if _, err := db.Delete[hnote]().Where(hn.ID.EQ(1)).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if s.op != OpDelete || s.okT {
+	if s != (seen{op: OpDelete}) {
 		t.Errorf("on a delete the hook saw %+v", s)
+	}
+
+	// A nullable handle.
+	var due *int64
+	var ok bool
+	ctx = withHook(func(m *Mutation[hnote]) error {
+		due, ok = hn.Due.ValueIn(m)
+		if due != nil {
+			*due = 8 // a copy: the statement still sends 7
+		}
+		return nil
+	})
+	if _, err := db.Update[hnote]().Set(hn.Due.SetNull()).Where(hn.ID.EQ(1)).Exec(ctx); err != nil || due != nil || !ok {
+		t.Errorf("SetNull: %v, %v, %v", err, due, ok)
+	}
+	if _, err := db.Update[hnote]().Set(hn.Due.Set(7)).Where(hn.ID.EQ(1)).Exec(ctx); err != nil || due == nil || !ok || e.Args[0] != int64(7) {
+		t.Errorf("Set(7): %v, %v, %v, args %v", err, due, ok, e.Args)
+	}
+	if _, err := db.Update[hnote]().Set(hn.Title.Set("t")).Where(hn.ID.EQ(1)).Exec(ctx); err != nil || due != nil || ok {
+		t.Errorf("no assignment: %v, %v, %v", err, due, ok)
+	}
+	// Save assigns the field's own value, a *int64 here.
+	seven := int64(7)
+	x := hnote{ID: 1, Due: &seven}
+	if err := db.Save(&x, hn.Due).Exec(ctx); err != nil || due == nil || !ok || seven != 7 || *x.Due != 7 {
+		t.Errorf("Save: %v, %v, %v, field %d", err, due, ok, seven)
+	}
+	x.Due = nil
+	if err := db.Save(&x, hn.Due).Exec(ctx); err != nil || due != nil || !ok {
+		t.Errorf("Save of a nil: %v, %v, %v", err, due, ok)
+	}
+
+	// On an insert.
+	calls := e.Calls
+	ctx = withHook(func(m *Mutation[hnote]) error {
+		if v, ok := hn.Due.ValueIn(m); v != nil || ok {
+			t.Errorf("on an insert: %v, %v", v, ok)
+		}
+		return nil
+	})
+	err := db.Insert(&hnote{ID: 2}).Exec(ctx)
+	const text = "velox: velox.hnote: hook: Set and Where are for updates and deletes; change Rows"
+	if err == nil || err.Error() != text || e.Calls != calls {
+		t.Errorf("got %v, want %q; %d statements sent", err, text, e.Calls-calls)
+	}
+	ctx = withHook(func(m *Mutation[hnote]) error {
+		hn.Title.ValueIn(m)
+		return nil
+	})
+	if err := db.Insert(&hnote{ID: 2}).Exec(ctx); err == nil || err.Error() != text {
+		t.Errorf("got %v, want %q", err, text)
+	}
+}
+
+type hstatus string
+
+// TestValueInEveryKind: each handle kind's ValueIn, over what its own Set
+// and SetNull assign.
+func TestValueInEveryKind(t *testing.T) {
+	type doc struct{ A int }
+	at := time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)
+	var (
+		b  = Col[hnote, bool]{I: 0}
+		o  = OrderedCol[hnote, time.Time]{I: 1}
+		n  = NumberCol[hnote, int64]{I: 2}
+		s  = StringCol[hnote, hstatus]{I: 3}
+		j  = JSONCol[hnote, doc]{I: 4}
+		nb = NullCol[hnote, bool]{I: 5}
+		no = NullOrderedCol[hnote, time.Time]{I: 6}
+		nn = NullNumberCol[hnote, int64]{I: 7}
+		ns = NullStringCol[hnote, hstatus]{I: 8}
+		nj = NullJSONCol[hnote, []string]{I: 9}
+		nk = NullJSONCol[hnote, doc]{I: 10}
+	)
+	var set []Assignment
+	for _, x := range []Setter[hnote]{b.Set(true), o.Set(at), n.Set(3), s.Set("open"), j.Set(doc{A: 1}),
+		nb.Set(true), no.Set(at), nn.Set(4), ns.SetNull(), nj.Set([]string{"a"}), nk.SetNull()} {
+		set = append(set, x.a)
+	}
+	m := &Mutation[hnote]{st: &Statement{Op: OpUpdate, Set: set}}
+	if v, ok := b.ValueIn(m); !v || !ok {
+		t.Errorf("Col: %v, %v", v, ok)
+	}
+	if v, ok := o.ValueIn(m); !v.Equal(at) || !ok {
+		t.Errorf("OrderedCol: %v, %v", v, ok)
+	}
+	if v, ok := n.ValueIn(m); v != 3 || !ok {
+		t.Errorf("NumberCol: %v, %v", v, ok)
+	}
+	if v, ok := s.ValueIn(m); v != "open" || !ok {
+		t.Errorf("StringCol of an enum: %v, %v", v, ok)
+	}
+	if v, ok := j.ValueIn(m); v != (doc{A: 1}) || !ok {
+		t.Errorf("JSONCol: %v, %v", v, ok)
+	}
+	if v, ok := nb.ValueIn(m); v == nil || !*v || !ok {
+		t.Errorf("NullCol: %v, %v", v, ok)
+	}
+	if v, ok := no.ValueIn(m); v == nil || !v.Equal(at) || !ok {
+		t.Errorf("NullOrderedCol: %v, %v", v, ok)
+	}
+	if v, ok := nn.ValueIn(m); v == nil || *v != 4 || !ok {
+		t.Errorf("NullNumberCol: %v, %v", v, ok)
+	}
+	if v, ok := ns.ValueIn(m); v != nil || !ok {
+		t.Errorf("NullStringCol after SetNull: %v, %v", v, ok)
+	}
+	if v, ok := nj.ValueIn(m); v == nil || !slices.Equal(*v, []string{"a"}) || !ok {
+		t.Errorf("NullJSONCol: %v, %v", v, ok)
+	}
+	if v, ok := nk.ValueIn(m); v != nil || !ok {
+		t.Errorf("NullJSONCol after SetNull: %v, %v", v, ok)
+	}
+	if m.err != nil {
+		t.Errorf("recorded %v", m.err)
+	}
+	// Unassigned, and an Add.
+	m = &Mutation[hnote]{st: &Statement{Op: OpUpdate, Set: []Assignment{n.Add(1).a, nn.Add(1).a}}}
+	if v, ok := n.ValueIn(m); v != 0 || ok {
+		t.Errorf("NumberCol after Add: %v, %v", v, ok)
+	}
+	if v, ok := nn.ValueIn(m); v != nil || ok {
+		t.Errorf("NullNumberCol after Add: %v, %v", v, ok)
+	}
+	if v, ok := j.ValueIn(m); v != (doc{}) || ok {
+		t.Errorf("JSONCol unassigned: %v, %v", v, ok)
+	}
+	if v, ok := nj.ValueIn(m); v != nil || ok {
+		t.Errorf("NullJSONCol unassigned: %v, %v", v, ok)
+	}
+	// On an insert, each kind records the misuse.
+	for _, f := range []func(*Mutation[hnote]){
+		func(m *Mutation[hnote]) { b.ValueIn(m) }, func(m *Mutation[hnote]) { o.ValueIn(m) },
+		func(m *Mutation[hnote]) { n.ValueIn(m) }, func(m *Mutation[hnote]) { s.ValueIn(m) },
+		func(m *Mutation[hnote]) { j.ValueIn(m) }, func(m *Mutation[hnote]) { nb.ValueIn(m) },
+		func(m *Mutation[hnote]) { no.ValueIn(m) }, func(m *Mutation[hnote]) { nn.ValueIn(m) },
+		func(m *Mutation[hnote]) { ns.ValueIn(m) }, func(m *Mutation[hnote]) { nj.ValueIn(m) },
+	} {
+		m := &Mutation[hnote]{op: OpInsert}
+		f(m)
+		if m.err != errInsertMutation {
+			t.Errorf("on an insert recorded %v", m.err)
+		}
 	}
 }
 

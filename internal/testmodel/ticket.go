@@ -75,7 +75,7 @@ func needsTitle(next velox.Mutator[Ticket]) velox.Mutator[Ticket] {
 					return errors.New("a ticket needs a title")
 				}
 			}
-		} else if v, ok := m.Value(Tickets.Title); ok && v == "" {
+		} else if v, ok := Tickets.Title.ValueIn(m); ok && v == "" {
 			return errors.New("a ticket needs a title")
 		}
 		return next.Mutate(ctx, m)

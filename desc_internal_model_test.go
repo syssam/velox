@@ -16,7 +16,7 @@ func loadDesc[E any](d Desc[E]) (*EntityInfo, error) {
 	return m.info, m.err
 }
 
-// hnote's hooks, for updates and deletes, run the function in the context
+// hnote's hooks, for every write, run the function in the context
 // under hnoteKey, if any, before the write.
 type hnote struct {
 	ID    int64
@@ -36,14 +36,14 @@ func hnoteHook(ctx context.Context, m *Mutation[hnote]) error {
 }
 
 func (*hnote) Hooks() []Hook[hnote] {
-	return []Hook[hnote]{On(func(next Mutator[hnote]) Mutator[hnote] {
+	return []Hook[hnote]{func(next Mutator[hnote]) Mutator[hnote] {
 		return MutateFunc[hnote](func(ctx context.Context, m *Mutation[hnote]) error {
 			if err := hnoteHook(ctx, m); err != nil {
 				return err
 			}
 			return next.Mutate(ctx, m)
 		})
-	}, OpUpdate, OpDelete)}
+	}}
 }
 
 var hnoteMeta MetaOnce[hnote]
