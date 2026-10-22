@@ -857,7 +857,7 @@ input PostWhereInput {
 input CreatePostInput {
   title: String!
   status: PostStatus
-  views: Int!
+  views: Int
   publishedAt: Time
   authorID: ID!
   tagIDs: [ID!]
@@ -4973,7 +4973,7 @@ func (ec *executionContext) unmarshalInputCreatePostInput(ctx context.Context, o
 			it.Status = data
 		case "views":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("views"))
-			data, err := ec.unmarshalNInt2int64(ctx, v)
+			data, err := ec.unmarshalOInt2ᚖint64(ctx, v)
 			if err != nil {
 				return it, err
 			}

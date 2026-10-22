@@ -19,8 +19,8 @@ import (
 // In the Extension's transaction fn gets ctx and that DB as they are: no
 // savepoint is made, and fn's error fails the operation, whose transaction
 // then rolls back, as long as the resolver returns it: one that swallows
-// the error commits fn's partial writes with the operation. Without a DB in ctx, Atomic fails with veloxgql.ErrNoDB
-// and fn does not run.
+// the error commits fn's partial writes with the operation. Without a DB in
+// ctx, Atomic fails with veloxgql.ErrNoDB and fn does not run.
 func Atomic(ctx context.Context, fn func(ctx context.Context, db *velox.DB) error) error {
 	db, err := veloxgql.DBFrom(ctx)
 	if err != nil {
@@ -109,15 +109,13 @@ func Exist[E any](ctx context.Context, q velox.Query[E], n int, at, typ string) 
 	if err != nil {
 		return err
 	}
-	return Matched(got, n, at, typ)
+	return matched(got, n, at, typ)
 }
 
-// Matched fails as Exist does unless got, the rows a statement counted or
-// changed, is n, the number of distinct IDs of at that it names: for an
-// UPDATE that re-points the rows of a to-many edge, which the tenant and
-// the Write policy scope. More rows than IDs is an internal error: the IDs
-// were not distinct keys. For generated code only.
-func Matched(got int64, n int, at, typ string) error {
+// matched fails as Exist does unless got, the rows a statement counted or
+// changed, is n, the number of distinct IDs of at that it names. More rows
+// than IDs is an internal error: the IDs were not distinct keys.
+func matched(got int64, n int, at, typ string) error {
 	switch {
 	case got < int64(n) && n == 1:
 		return NotFound(at, typ)
@@ -136,12 +134,12 @@ func Matched(got int64, n int, at, typ string) error {
 // children of those IDs the caller may read that an owner holds; one or more
 // is BAD_USER_INPUT "veloxgql: <at>: a <typ> is already linked to another
 // <owner>", which tells the caller nothing it may not read. Otherwise the
-// error is Matched's: NOT_FOUND for a child the caller may not change, or
+// error is Exist's: NOT_FOUND for a child the caller may not change, or
 // that does not exist. The count's own error is returned as it is. For
 // generated code only.
 func Repointed[E any](ctx context.Context, got int64, n int, linked velox.Query[E], at, typ, owner string) error {
 	if got >= int64(n) {
-		return Matched(got, n, at, typ)
+		return matched(got, n, at, typ)
 	}
 	c, err := linked.Count(ctx)
 	switch {
@@ -150,7 +148,58 @@ func Repointed[E any](ctx context.Context, got int64, n int, linked velox.Query[
 	case c > 0:
 		return InputErrorf("%s: %s %s is already linked to another %s", at, article(typ), typ, owner)
 	}
-	return Matched(got, n, at, typ)
+	return matched(got, n, at, typ)
+}
+
+// Readable returns the keys, which key reads from a row, of the rows q
+// selects: q names at most n distinct keys, under the caller's tenant and
+// Read policy, so its rows are those of the keys the caller may read. For
+// n 0, Readable runs no query. The query's own error is returned as it is.
+// remove<Edge>IDs and clear<Edge> of a many-to-many edge delete only the
+// join rows of these keys. For generated code only.
+func Readable[T, K any](ctx context.Context, q velox.Query[T], n int, key func(*T) K) ([]K, error) {
+	if n == 0 {
+		return nil, nil
+	}
+	ts, err := q.Limit(n).MaxRows(n).All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ks := make([]K, len(ts))
+	for i := range ts {
+		ks[i] = key(&ts[i])
+	}
+	return ks, nil
+}
+
+// UnlinkAll is clear<Edge> of a many-to-many edge. links selects the join
+// rows of the row the mutation changes, ordered by their primary key;
+// UnlinkAll reads them the MaxPage of veloxgql.LimitsFrom(ctx) at a time,
+// and gives unlink the target keys of each page, which other reads from a
+// join row. unlink deletes the join rows of the keys whose target the
+// caller may read (Readable), and leaves the others: each page starts after
+// the last row of the one before, so a join row left is not read again.
+// The first error is returned as it is. For generated code only.
+func UnlinkAll[J, K any](ctx context.Context, links velox.Query[J], other func(*J) K, unlink func(ks []K) error) error {
+	page := veloxgql.LimitsFrom(ctx).MaxPage
+	q := links.Limit(page).MaxRows(page)
+	for {
+		js, err := q.All(ctx)
+		if err != nil || len(js) == 0 {
+			return err
+		}
+		ks := make([]K, len(js))
+		for i := range js {
+			ks[i] = other(&js[i])
+		}
+		if err := unlink(ks); err != nil {
+			return err
+		}
+		if len(js) < page {
+			return nil
+		}
+		q = q.After(&js[len(js)-1])
+	}
 }
 
 // Disjoint fails with BAD_USER_INPUT "veloxgql: <input>: an ID is in both

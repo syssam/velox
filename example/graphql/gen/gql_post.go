@@ -371,7 +371,7 @@ func postFieldGQL(goField string) string {
 type CreatePostInput struct {
 	Title       string
 	Status      *PostStatus
-	Views       int64
+	Views       *int64
 	PublishedAt *time.Time
 	// AuthorID is the ID of the User the edge author leads to.
 	AuthorID string
@@ -385,11 +385,15 @@ func (in CreatePostInput) String() string {
 	if in.Status != nil {
 		p1 = *in.Status
 	}
+	var p2 any
+	if in.Views != nil {
+		p2 = *in.Views
+	}
 	var p3 any
 	if in.PublishedAt != nil {
 		p3 = *in.PublishedAt
 	}
-	return fmt.Sprintf("CreatePostInput(Title=%v, Status=%v, Views=%v, PublishedAt=%v, AuthorID=%v, TagIDs=%v)", in.Title, p1, in.Views, p3, in.AuthorID, in.TagIDs)
+	return fmt.Sprintf("CreatePostInput(Title=%v, Status=%v, Views=%v, PublishedAt=%v, AuthorID=%v, TagIDs=%v)", in.Title, p1, p2, p3, in.AuthorID, in.TagIDs)
 }
 
 // GoString is String, so that %#v does not print the sensitive fields either.
@@ -403,11 +407,12 @@ func (in CreatePostInput) GoString() string { return in.String() }
 // The tenant scope and the policies apply as to any write: each ID must name a
 // row the caller may read, and a row it re-points one the caller may change, or
 // CreatePost fails with NOT_FOUND and keeps nothing. A validator's refusal is
-// BAD_USER_INPUT, naming the input field; velox's other errors are returned as
-// they are. The row is returned as written, not read again through the Read
-// policy. There is no savepoint inside the extension's transaction, so a
-// resolver must return this function's error: one that swallows it commits the
-// partial writes. A self-edge is written one way, as the core's loads read it.
+// BAD_USER_INPUT, naming the input field, and comes before any statement;
+// velox's other errors are returned as they are. The row is returned as
+// written, not read again through the Read policy. There is no savepoint inside
+// the extension's transaction, so a resolver must return this function's error:
+// one that swallows it commits the partial writes. A self-edge is written one
+// way, as the core's loads read it.
 func CreatePost(ctx context.Context, input CreatePostInput) (*Post, error) {
 	var (
 		k4  int64
@@ -420,9 +425,26 @@ func CreatePost(ctx context.Context, input CreatePostInput) (*Post, error) {
 	if k5, err = gqlimpl.DecodeIDs[int64](ctx, "CreatePostInput.tagIDs", input.TagIDs, "Label"); err != nil {
 		return nil, err
 	}
+	var x Post
+	cols := []velox.Column[Post]{Posts.Title}
+	x.Title = input.Title
+	if input.Status != nil {
+		x.Status = *input.Status
+		cols = append(cols, Posts.Status)
+	}
+	if input.Views != nil {
+		x.Views = *input.Views
+		cols = append(cols, Posts.Views)
+	}
+	if input.PublishedAt != nil {
+		x.PublishedAt = input.PublishedAt
+		cols = append(cols, Posts.PublishedAt)
+	}
+	if err := velox.Validate(&x, cols...); err != nil {
+		return nil, gqlimpl.WriteError(err, "CreatePostInput", "gen.Post", postFieldGQL)
+	}
 	var out *Post
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
-		var x Post
 		if err := gqlimpl.Exist(ctx, db.Query[User]().Where(Users.ID.In(k4)), 1, "CreatePostInput.authorID", "User"); err != nil {
 			return err
 		}
@@ -431,14 +453,6 @@ func CreatePost(ctx context.Context, input CreatePostInput) (*Post, error) {
 			if err := gqlimpl.Exist(ctx, db.Query[Tag]().Where(Tags.ID.In(k5...)), len(k5), "CreatePostInput.tagIDs", "Label"); err != nil {
 				return err
 			}
-		}
-		x.Title = input.Title
-		if input.Status != nil {
-			x.Status = *input.Status
-		}
-		x.Views = input.Views
-		if input.PublishedAt != nil {
-			x.PublishedAt = input.PublishedAt
 		}
 		if err := db.Insert(&x).Exec(ctx); err != nil {
 			return gqlimpl.WriteError(err, "CreatePostInput", "gen.Post", postFieldGQL)
@@ -527,12 +541,15 @@ func (in UpdatePostInput) GoString() string { return in.String() }
 // does not lead to is ignored, and one to add it already leads to is kept.
 // Clearing an edge whose key is on the targets' rows, or removing from it,
 // unlinks only the children the tenant scope and the target's Write policy let
-// the caller change; one they hide stays linked. Each ID must name a row the
-// caller may read, and a row it re-points one the caller may change; a child
-// another node holds is refused (BAD_USER_INPUT). An id that names no row the
-// caller may change, or an ID no row it may read, fails with NOT_FOUND and
-// keeps nothing. A validator's refusal is BAD_USER_INPUT, naming the input
-// field; velox's other errors are returned as they are. The row is read back as
+// the caller change; one they hide stays linked. Clearing a many-to-many edge,
+// or removing from it, deletes only the links to targets the tenant scope and
+// the target's Read policy let the caller read; a link to one they hide stays.
+// Each ID must name a row the caller may read, and a row it re-points one the
+// caller may change; a child another node holds is refused (BAD_USER_INPUT). An
+// id that names no row the caller may change, or an ID no row it may read,
+// fails with NOT_FOUND and keeps nothing. A validator's refusal is
+// BAD_USER_INPUT, naming the input field, and comes before any statement;
+// velox's other errors are returned as they are. The row is read back as
 // written, under the tenant scope and without the Read policy
 // (velox.SkipPolicy): an update that takes the row out of what the caller may
 // read still returns it. On MySQL the UPDATE's row count needs
@@ -568,24 +585,27 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 	if err = gqlimpl.Disjoint("UpdatePostInput", "addTagIDs", "removeTagIDs", k6, k7); err != nil {
 		return nil, err
 	}
+	var set []velox.Setter[Post]
+	if input.Title != nil {
+		set = append(set, Posts.Title.Set(*input.Title))
+	}
+	if input.Status != nil {
+		set = append(set, Posts.Status.Set(*input.Status))
+	}
+	if input.Views != nil {
+		set = append(set, Posts.Views.Set(*input.Views))
+	}
+	if input.PublishedAt != nil {
+		set = append(set, Posts.PublishedAt.Set(*input.PublishedAt))
+	}
+	if input.ClearPublishedAt {
+		set = append(set, Posts.PublishedAt.SetNull())
+	}
+	if err = velox.ValidateSet(set...); err != nil {
+		return nil, gqlimpl.WriteError(err, "UpdatePostInput", "gen.Post", postFieldGQL)
+	}
 	var out *Post
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
-		var set []velox.Setter[Post]
-		if input.Title != nil {
-			set = append(set, Posts.Title.Set(*input.Title))
-		}
-		if input.Status != nil {
-			set = append(set, Posts.Status.Set(*input.Status))
-		}
-		if input.Views != nil {
-			set = append(set, Posts.Views.Set(*input.Views))
-		}
-		if input.PublishedAt != nil {
-			set = append(set, Posts.PublishedAt.Set(*input.PublishedAt))
-		}
-		if input.ClearPublishedAt {
-			set = append(set, Posts.PublishedAt.SetNull())
-		}
 		if input.AuthorID != nil {
 			if err := gqlimpl.Exist(ctx, db.Query[User]().Where(Users.ID.In(k5)), 1, "UpdatePostInput.authorID", "User"); err != nil {
 				return err
@@ -605,13 +625,21 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 		} else if n == 0 {
 			return gqlimpl.NotFound("updatePost", "Post")
 		}
+		unlink1 := func(ks []int64) error {
+			vs, err := gqlimpl.Readable(ctx, db.Query[Tag]().Where(Tags.ID.In(ks...)).Columns(Tags.ID), len(ks), func(x *Tag) int64 { return x.ID })
+			if err != nil || len(vs) == 0 {
+				return err
+			}
+			_, err = db.Delete[PostTag]().Where(PostTags.PostID.EQ(key), PostTags.TagID.In(vs...)).Exec(ctx)
+			return err
+		}
 		if input.ClearTags {
-			if _, err := db.Delete[PostTag]().Where(PostTags.PostID.EQ(key)).Exec(ctx); err != nil {
+			if err := gqlimpl.UnlinkAll(ctx, db.Query[PostTag]().Where(PostTags.PostID.EQ(key)).OrderBy(PostTags.PostID.Asc(), PostTags.TagID.Asc()), func(j *PostTag) int64 { return j.TagID }, unlink1); err != nil {
 				return err
 			}
 		}
 		if len(k7) > 0 {
-			if _, err := db.Delete[PostTag]().Where(PostTags.PostID.EQ(key), PostTags.TagID.In(k7...)).Exec(ctx); err != nil {
+			if err := unlink1(k7); err != nil {
 				return err
 			}
 		}
@@ -651,7 +679,9 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 // The DELETE is scoped by the tenant and the Read and Write policies. The join
 // rows, which neither scopes, go first, after a COUNT under the DELETE's scope
 // (Writable) has found the row: those of a row the caller may not delete are
-// never touched. An id that names no row the caller may change fails with
+// never touched. Every join row of the row goes, whatever the tenant of the row
+// at its other end: the row is gone, and a row of no tenant is unlinked from
+// every tenant's rows. An id that names no row the caller may change fails with
 // NOT_FOUND and deletes nothing. The rows of other entities whose key holds the
 // row's are not touched: the database's foreign keys decide, and a key that
 // refuses the DELETE fails it with a *velox.ConstraintError, which

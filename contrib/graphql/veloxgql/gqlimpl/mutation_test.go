@@ -476,36 +476,87 @@ func TestNotFound(t *testing.T) {
 	}
 }
 
-// TestMatched: a write that matched fewer rows than its distinct IDs fails
-// as Exist does; one that matched them all, or more, does not fail as
-// NOT_FOUND.
-func TestMatched(t *testing.T) {
-	for _, c := range []struct {
-		got  int64
-		n    int
-		want string
-	}{
-		{2, 2, ""},
-		{0, 0, ""},
-		{0, 1, "veloxgql: CreateUserInput.postIDs: no Post has this ID"},
-		{1, 3, "veloxgql: CreateUserInput.postIDs: 2 of the 3 IDs name no Post"},
-	} {
-		err := gqlimpl.Matched(c.got, c.n, "CreateUserInput.postIDs", "Post")
-		switch {
-		case c.want == "" && err != nil:
-			t.Errorf("Matched(%d, %d) = %v, want nil", c.got, c.n, err)
-		case c.want != "" && (err == nil || err.Error() != c.want || codeOf(err) != veloxgql.CodeNotFound):
-			t.Errorf("Matched(%d, %d) = %v (code %q), want %q, NOT_FOUND", c.got, c.n, err, codeOf(err), c.want)
+// TestReadable: Readable returns the keys of the rows its query selects
+// under the tenant and the Read policy, and runs no query for no keys.
+func TestReadable(t *testing.T) {
+	db, r := mutationDB(t)
+	ctx := veloxgql.NewExtension(db).Context(context.Background())
+	ann, bob := velox.WithTenant(ctx, "ann"), velox.WithTenant(ctx, "bob")
+	for _, p := range []struct {
+		ctx context.Context
+		p   post
+	}{{ann, post{ID: 1, Title: "a"}}, {bob, post{ID: 2, Title: "b"}}, {ann, post{ID: 3, Title: "c"}}, {ann, post{ID: 4, Title: "hidden"}}} {
+		if err := db.Insert(&p.p).Exec(p.ctx); err != nil {
+			t.Fatal(err)
 		}
 	}
-	if err := gqlimpl.Matched(3, 2, "at", "Post"); err == nil || codeOf(err) != "" {
-		t.Errorf("Matched(3, 2) = %v (code %q), want an internal error", err, codeOf(err))
+	id := func(x *post) int64 { return x.ID }
+	ids := []int64{1, 2, 3, 4, 5}
+	got, err := gqlimpl.Readable(ann, db.Query[post]().Where(posts.ID.In(ids...)).Columns(posts.ID).OrderBy(posts.ID.Asc()), len(ids), id)
+	if err != nil || !slices.Equal(got, []int64{1, 3}) {
+		t.Errorf("Readable = %v, %v: want 1 and 3, without bob's and the hidden one", got, err)
+	}
+	r.take()
+	if got, err := gqlimpl.Readable(ann, db.Query[post]().Where(posts.ID.In()), 0, id); err != nil || len(got) != 0 {
+		t.Errorf("Readable of no keys = %v, %v", got, err)
+	}
+	if _, stmts := r.take(); len(stmts) != 0 {
+		t.Errorf("Readable of no keys sent %v", stmts)
+	}
+	if _, err := gqlimpl.Readable(ctx, db.Query[post]().Where(posts.ID.In(1)), 1, id); !errors.Is(err, velox.ErrNoTenant) {
+		t.Errorf("no tenant: %v, want ErrNoTenant", err)
+	}
+}
+
+// TestUnlinkAll: UnlinkAll pages through its links MaxPage rows at a time,
+// after the last row of each page, so that a link unlink leaves is not read
+// again, and stops at a short page; unlink's error stops it.
+func TestUnlinkAll(t *testing.T) {
+	db, _ := mutationDB(t)
+	ctx := veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).Context(context.Background())
+	for i := int64(1); i <= 5; i++ {
+		if err := db.Insert(&person{ID: i, Name: "p", Age: i}).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	links := db.Query[person]().OrderBy(people.ID.Asc())
+	age := func(x *person) int64 { return x.Age }
+	var pages [][]int64
+	// unlink deletes the odd ones, and leaves the even ones.
+	unlink := func(ks []int64) error {
+		pages = append(pages, ks)
+		for _, k := range ks {
+			if k%2 == 1 {
+				if _, err := db.Delete[person]().Where(people.ID.EQ(k)).Exec(ctx); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+	if err := gqlimpl.UnlinkAll(ctx, links, age, unlink); err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprint(pages) != "[[1 2] [3 4] [5]]" {
+		t.Errorf("pages %v, want [[1 2] [3 4] [5]]", pages)
+	}
+	if n := countPeople(t, db); n != 2 {
+		t.Errorf("%d people left, want 2", n)
+	}
+	// A full last page reads one more, empty, page.
+	pages = nil
+	if err := gqlimpl.UnlinkAll(ctx, links, age, unlink); err != nil || fmt.Sprint(pages) != "[[2 4]]" {
+		t.Errorf("pages %v, %v: want [[2 4]]", pages, err)
+	}
+	errStop := errors.New("stop")
+	if err := gqlimpl.UnlinkAll(ctx, links, age, func([]int64) error { return errStop }); !errors.Is(err, errStop) {
+		t.Errorf("unlink's error: %v", err)
 	}
 }
 
 // TestRepointed: an UPDATE that re-pointed fewer children than its IDs
 // fails with BAD_USER_INPUT when linked counts a child another owner holds,
-// and as Matched otherwise; one that re-pointed them all runs no query.
+// and as Exist does otherwise; one that re-pointed them all runs no query.
 func TestRepointed(t *testing.T) {
 	db, _ := mutationDB(t)
 	ctx := veloxgql.NewExtension(db).Context(context.Background())

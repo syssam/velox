@@ -484,11 +484,12 @@ func (in CreatePostInput) GoString() string { return in.String() }
 // The tenant scope and the policies apply as to any write: each ID must name a
 // row the caller may read, and a row it re-points one the caller may change, or
 // CreatePost fails with NOT_FOUND and keeps nothing. A validator's refusal is
-// BAD_USER_INPUT, naming the input field; velox's other errors are returned as
-// they are. The row is returned as written, not read again through the Read
-// policy. There is no savepoint inside the extension's transaction, so a
-// resolver must return this function's error: one that swallows it commits the
-// partial writes. A self-edge is written one way, as the core's loads read it.
+// BAD_USER_INPUT, naming the input field, and comes before any statement;
+// velox's other errors are returned as they are. The row is returned as
+// written, not read again through the Read policy. There is no savepoint inside
+// the extension's transaction, so a resolver must return this function's error:
+// one that swallows it commits the partial writes. A self-edge is written one
+// way, as the core's loads read it.
 func CreatePost(ctx context.Context, input CreatePostInput) (*Post, error) {
 	var (
 		j4  []string
@@ -511,9 +512,32 @@ func CreatePost(ctx context.Context, input CreatePostInput) (*Post, error) {
 	if k9, err = gqlimpl.DecodeIDs[int64](ctx, "CreatePostInput.relatedByIDs", input.RelatedByIDs, "Post"); err != nil {
 		return nil, err
 	}
+	var x Post
+	cols := []velox.Column[Post]{Posts.Title, Posts.Slug, Posts.EditedBy}
+	x.Title = input.Title
+	x.Slug = input.Slug
+	if input.Status != nil {
+		x.Status = *input.Status
+		cols = append(cols, Posts.Status)
+	}
+	if input.PublishedAt != nil {
+		x.PublishedAt = input.PublishedAt
+		cols = append(cols, Posts.PublishedAt)
+	}
+	if input.Tags != nil {
+		x.Tags = j4
+		cols = append(cols, Posts.Tags)
+	}
+	if input.Rating != nil {
+		x.Rating = input.Rating
+		cols = append(cols, Posts.Rating)
+	}
+	x.EditedBy = input.EditedBy
+	if err := velox.Validate(&x, cols...); err != nil {
+		return nil, gqlimpl.WriteError(err, "CreatePostInput", "gen.Post", postFieldGQL)
+	}
 	var out *Post
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
-		var x Post
 		if err := gqlimpl.Exist(ctx, db.Query[User]().Where(Users.ID.In(k7)), 1, "CreatePostInput.writerID", "Account"); err != nil {
 			return err
 		}
@@ -528,21 +552,6 @@ func CreatePost(ctx context.Context, input CreatePostInput) (*Post, error) {
 				return err
 			}
 		}
-		x.Title = input.Title
-		x.Slug = input.Slug
-		if input.Status != nil {
-			x.Status = *input.Status
-		}
-		if input.PublishedAt != nil {
-			x.PublishedAt = input.PublishedAt
-		}
-		if input.Tags != nil {
-			x.Tags = j4
-		}
-		if input.Rating != nil {
-			x.Rating = input.Rating
-		}
-		x.EditedBy = input.EditedBy
 		if err := db.Insert(&x).Exec(ctx); err != nil {
 			return gqlimpl.WriteError(err, "CreatePostInput", "gen.Post", postFieldGQL)
 		}
@@ -659,12 +668,15 @@ func (in UpdatePostInput) GoString() string { return in.String() }
 // does not lead to is ignored, and one to add it already leads to is kept.
 // Clearing an edge whose key is on the targets' rows, or removing from it,
 // unlinks only the children the tenant scope and the target's Write policy let
-// the caller change; one they hide stays linked. Each ID must name a row the
-// caller may read, and a row it re-points one the caller may change; a child
-// another node holds is refused (BAD_USER_INPUT). An id that names no row the
-// caller may change, or an ID no row it may read, fails with NOT_FOUND and
-// keeps nothing. A validator's refusal is BAD_USER_INPUT, naming the input
-// field; velox's other errors are returned as they are. The row is read back as
+// the caller change; one they hide stays linked. Clearing a many-to-many edge,
+// or removing from it, deletes only the links to targets the tenant scope and
+// the target's Read policy let the caller read; a link to one they hide stays.
+// Each ID must name a row the caller may read, and a row it re-points one the
+// caller may change; a child another node holds is refused (BAD_USER_INPUT). An
+// id that names no row the caller may change, or an ID no row it may read,
+// fails with NOT_FOUND and keeps nothing. A validator's refusal is
+// BAD_USER_INPUT, naming the input field, and comes before any statement;
+// velox's other errors are returned as they are. The row is read back as
 // written, under the tenant scope and without the Read policy
 // (velox.SkipPolicy): an update that takes the row out of what the caller may
 // read still returns it. On MySQL the UPDATE's row count needs
@@ -720,33 +732,36 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 	if err = gqlimpl.Disjoint("UpdatePostInput", "addRelatedByIDs", "removeRelatedByIDs", k12, k13); err != nil {
 		return nil, err
 	}
+	var set []velox.Setter[Post]
+	if input.Title != nil {
+		set = append(set, Posts.Title.Set(*input.Title))
+	}
+	if input.Status != nil {
+		set = append(set, Posts.Status.Set(*input.Status))
+	}
+	if input.PublishedAt != nil {
+		set = append(set, Posts.PublishedAt.Set(*input.PublishedAt))
+	}
+	if input.ClearPublishedAt {
+		set = append(set, Posts.PublishedAt.SetNull())
+	}
+	if input.Tags != nil {
+		set = append(set, Posts.Tags.Set(j4))
+	}
+	if input.Views != nil {
+		set = append(set, Posts.Views.Set(*input.Views))
+	}
+	if input.Rating != nil {
+		set = append(set, Posts.Rating.Set(*input.Rating))
+	}
+	if input.ClearRating {
+		set = append(set, Posts.Rating.SetNull())
+	}
+	if err = velox.ValidateSet(set...); err != nil {
+		return nil, gqlimpl.WriteError(err, "UpdatePostInput", "gen.Post", postFieldGQL)
+	}
 	var out *Post
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
-		var set []velox.Setter[Post]
-		if input.Title != nil {
-			set = append(set, Posts.Title.Set(*input.Title))
-		}
-		if input.Status != nil {
-			set = append(set, Posts.Status.Set(*input.Status))
-		}
-		if input.PublishedAt != nil {
-			set = append(set, Posts.PublishedAt.Set(*input.PublishedAt))
-		}
-		if input.ClearPublishedAt {
-			set = append(set, Posts.PublishedAt.SetNull())
-		}
-		if input.Tags != nil {
-			set = append(set, Posts.Tags.Set(j4))
-		}
-		if input.Views != nil {
-			set = append(set, Posts.Views.Set(*input.Views))
-		}
-		if input.Rating != nil {
-			set = append(set, Posts.Rating.Set(*input.Rating))
-		}
-		if input.ClearRating {
-			set = append(set, Posts.Rating.SetNull())
-		}
 		if input.WriterID != nil {
 			if err := gqlimpl.Exist(ctx, db.Query[User]().Where(Users.ID.In(k8)), 1, "UpdatePostInput.writerID", "Account"); err != nil {
 				return err
@@ -766,13 +781,21 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 		} else if n == 0 {
 			return gqlimpl.NotFound("updatePost", "Post")
 		}
+		unlink2 := func(ks []int64) error {
+			vs, err := gqlimpl.Readable(ctx, db.Query[Post]().Where(Posts.ID.In(ks...)).Columns(Posts.ID), len(ks), func(x *Post) int64 { return x.ID })
+			if err != nil || len(vs) == 0 {
+				return err
+			}
+			_, err = db.Delete[PostRelated]().Where(PostRelateds.PostID.EQ(key), PostRelateds.RelatedID.In(vs...)).Exec(ctx)
+			return err
+		}
 		if input.ClearRelated {
-			if _, err := db.Delete[PostRelated]().Where(PostRelateds.PostID.EQ(key)).Exec(ctx); err != nil {
+			if err := gqlimpl.UnlinkAll(ctx, db.Query[PostRelated]().Where(PostRelateds.PostID.EQ(key)).OrderBy(PostRelateds.PostID.Asc(), PostRelateds.RelatedID.Asc()), func(j *PostRelated) int64 { return j.RelatedID }, unlink2); err != nil {
 				return err
 			}
 		}
 		if len(k10) > 0 {
-			if _, err := db.Delete[PostRelated]().Where(PostRelateds.PostID.EQ(key), PostRelateds.RelatedID.In(k10...)).Exec(ctx); err != nil {
+			if err := unlink2(k10); err != nil {
 				return err
 			}
 		}
@@ -788,13 +811,21 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 				return err
 			}
 		}
+		unlink3 := func(ks []int64) error {
+			vs, err := gqlimpl.Readable(ctx, db.Query[Post]().Where(Posts.ID.In(ks...)).Columns(Posts.ID), len(ks), func(x *Post) int64 { return x.ID })
+			if err != nil || len(vs) == 0 {
+				return err
+			}
+			_, err = db.Delete[PostRelated]().Where(PostRelateds.RelatedID.EQ(key), PostRelateds.PostID.In(vs...)).Exec(ctx)
+			return err
+		}
 		if input.ClearRelatedBy {
-			if _, err := db.Delete[PostRelated]().Where(PostRelateds.RelatedID.EQ(key)).Exec(ctx); err != nil {
+			if err := gqlimpl.UnlinkAll(ctx, db.Query[PostRelated]().Where(PostRelateds.RelatedID.EQ(key)).OrderBy(PostRelateds.RelatedID.Asc(), PostRelateds.PostID.Asc()), func(j *PostRelated) int64 { return j.PostID }, unlink3); err != nil {
 				return err
 			}
 		}
 		if len(k13) > 0 {
-			if _, err := db.Delete[PostRelated]().Where(PostRelateds.RelatedID.EQ(key), PostRelateds.PostID.In(k13...)).Exec(ctx); err != nil {
+			if err := unlink3(k13); err != nil {
 				return err
 			}
 		}
@@ -834,7 +865,9 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 // The DELETE is scoped by the tenant and the Read and Write policies. The join
 // rows, which neither scopes, go first, after a COUNT under the DELETE's scope
 // (Writable) has found the row: those of a row the caller may not delete are
-// never touched. An id that names no row the caller may change fails with
+// never touched. Every join row of the row goes, whatever the tenant of the row
+// at its other end: the row is gone, and a row of no tenant is unlinked from
+// every tenant's rows. An id that names no row the caller may change fails with
 // NOT_FOUND and deletes nothing. The rows of other entities whose key holds the
 // row's are not touched: the database's foreign keys decide, and a key that
 // refuses the DELETE fails it with a *velox.ConstraintError, which

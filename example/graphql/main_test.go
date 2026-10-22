@@ -656,12 +656,13 @@ func captureLog(t *testing.T) *bytes.Buffer {
 // TestCreatePost creates an acme post with an author and two tags, one of
 // them named twice, which links once. Each ID is checked against what the
 // caller may read before anything is written: one COUNT per edge. status
-// takes its Default, and the post is returned as written.
+// takes its Default, views, Optional, its zero value, and the post is
+// returned as written.
 func TestCreatePost(t *testing.T) {
 	s := newServer(t)
 	s.do(t, request{
 		org: "1",
-		query: `mutation { createPost(input: {title: "Epsilon", views: 0, authorID: "` + user2 + `", tagIDs: ["` + label1 + `", "` + label2 + `", "` + label1 + `"]}) {
+		query: `mutation { createPost(input: {title: "Epsilon", authorID: "` + user2 + `", tagIDs: ["` + label1 + `", "` + label2 + `", "` + label1 + `"]}) {
 			title status author { name } tags { totalCount }
 		} }`,
 		want: `{"data": {"createPost": {"title": "Epsilon", "status": "DRAFT", "author": {"name": "Brian"}, "tags": {"totalCount": 2}}}}`,
@@ -678,7 +679,7 @@ func TestCreatePost(t *testing.T) {
 }
 
 // TestUpdatePost clears a post's publishedAt and removes one of its two
-// tags. An empty title fails Post's NotEmpty validator, named by its input
+// tags, which it may read. An empty title fails Post's NotEmpty validator, named by its input
 // field, before any statement.
 func TestUpdatePost(t *testing.T) {
 	s := newServer(t)
@@ -688,6 +689,8 @@ func TestUpdatePost(t *testing.T) {
 		want:  `{"data": {"updatePost": {"title": "Alpha", "publishedAt": null, "tags": {"edges": [{"node": {"name": "graphql"}}]}}}}`,
 		stmts: []string{
 			`UPDATE "posts" SET "published_at" = ? WHERE "id" = ? AND "org_id" = ? [<nil> 1 1]`,
+			// The tags to remove the caller may read, then their join rows.
+			`SELECT "id" FROM "tags" WHERE "id" IN (?) LIMIT ? [1 1]`,
 			`DELETE FROM "post_tags" WHERE "post_id" = ? AND "tag_id" IN (?) [1 1]`,
 			// The row read back, as written, and the selection's tags.
 			selPosts + ` WHERE "id" = ? AND "org_id" = ? LIMIT ? [1 1 2]`,
@@ -699,6 +702,57 @@ func TestUpdatePost(t *testing.T) {
 		query: `mutation { updatePost(id: "` + post1 + `", input: {title: ""}) { title } }`,
 		want: `{"errors": [{"message": "UpdatePostInput.title: invalid value: must not be empty", "path": ["updatePost"], "extensions": {"code": "BAD_USER_INPUT"}}],
 			"data": null}`,
+	})
+}
+
+// TestUnlinkOtherTenant: the label go is linked to acme's post 1 and to
+// globex's post 5. Acme's removePostIDs and clearPosts unlink only the posts
+// acme may read: the join rows, which are not tenant-scoped, are deleted
+// only for the posts the tenant scope selects, and globex's link stays.
+func TestUnlinkOtherTenant(t *testing.T) {
+	s := newServer(t)
+	s.do(t, request{
+		org:   "1",
+		query: `mutation { updateLabel(id: "` + label1 + `", input: {removePostIDs: ["` + post5 + `"]}) { name } }`,
+		want:  `{"data": {"updateLabel": {"name": "go"}}}`,
+		stmts: []string{
+			`SELECT COUNT(*) FROM "tags" WHERE "id" = ? [1]`,
+			// Post 5 is not acme's: no join row is deleted.
+			`SELECT "id" FROM "posts" WHERE "id" IN (?) AND "org_id" = ? LIMIT ? [5 1 1]`,
+			selTags + ` WHERE "id" = ? LIMIT ? [1 2]`,
+		},
+	})
+	s.do(t, request{
+		org:   "1",
+		query: `mutation { updateLabel(id: "` + label1 + `", input: {clearPosts: true}) { name } }`,
+		want:  `{"data": {"updateLabel": {"name": "go"}}}`,
+		stmts: []string{
+			`SELECT COUNT(*) FROM "tags" WHERE "id" = ? [1]`,
+			// The label's join rows a page at a time, the posts of them
+			// acme may read, and only their join rows.
+			`SELECT "post_id", "tag_id" FROM "post_tags" WHERE "tag_id" = ? ORDER BY "tag_id", "post_id" LIMIT ? [1 100]`,
+			`SELECT "id" FROM "posts" WHERE "id" IN (?, ?) AND "org_id" = ? LIMIT ? [1 5 1 2]`,
+			`DELETE FROM "post_tags" WHERE "tag_id" = ? AND "post_id" IN (?) [1 1]`,
+			selTags + ` WHERE "id" = ? LIMIT ? [1 2]`,
+		},
+	})
+	s.do(t, request{
+		org:   "2",
+		query: `{ node(id: "` + post5 + `") { ... on Post { tags { edges { node { name } } } } } }`,
+		want:  `{"data": {"node": {"tags": {"edges": [{"node": {"name": "go"}}]}}}}`,
+		stmts: []string{
+			selPosts + ` WHERE "id" = ? AND "org_id" = ? LIMIT ? [5 2 2]`,
+			fmt.Sprintf(selTags+` WHERE EXISTS (SELECT 1 FROM "post_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND EXISTS (SELECT 1 FROM "posts" AS "vx2" WHERE "vx2"."id" = "vx1"."post_id" AND "id" = ? AND "org_id" = ?)) ORDER BY "id" LIMIT ? [%s 101]`, "5 2"),
+		},
+	})
+	s.do(t, request{
+		org:   "1",
+		query: `{ node(id: "` + post1 + `") { ... on Post { tags { edges { node { name } } } } } }`,
+		want:  `{"data": {"node": {"tags": {"edges": [{"node": {"name": "graphql"}}]}}}}`,
+		stmts: []string{
+			selPosts + ` WHERE "id" = ? AND "org_id" = ? LIMIT ? [1 1 2]`,
+			fmt.Sprintf(selTags+` WHERE EXISTS (SELECT 1 FROM "post_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND EXISTS (SELECT 1 FROM "posts" AS "vx2" WHERE "vx2"."id" = "vx1"."post_id" AND "id" = ? AND "org_id" = ?)) ORDER BY "id" LIMIT ? [%s 101]`, "1 1"),
+		},
 	})
 }
 
@@ -797,22 +851,24 @@ func TestCreateUserDirective(t *testing.T) {
 // left as gqlgen writes it, code GRAPHQL_VALIDATION_FAILED, pointing at the
 // field as the GraphQL spec has it: a variable's by its path, an inline
 // literal's by its locations. Only velox's own validation errors name the
-// input field in their message, with BAD_USER_INPUT. gqlgen's run no
-// statement; velox's validator runs in Insert, after the IDs are checked, and
-// before the INSERT. (gqlgen accepts a number for a String variable, as "3": its leniency.)
+// input field in their message, with BAD_USER_INPUT. Neither runs a
+// statement: velox's validators run on the fields an input sets before any
+// statement, so an empty title with an author that does not exist is the
+// validator's error. (gqlgen accepts a number for a String variable, as
+// "3": its leniency.)
 func TestMutationInputShape(t *testing.T) {
 	s := newServer(t)
 	s.do(t, request{
 		org:   "1",
 		query: `mutation($input: CreatePostInput!) { createPost(input: $input) { title } }`,
-		vars:  map[string]any{"input": map[string]any{"title": true, "views": 0, "authorID": user2}},
+		vars:  map[string]any{"input": map[string]any{"title": true, "authorID": user2}},
 		want: `{"errors": [{"message": "cannot use bool as String", "path": ["variable", "input", "title"],
 			"extensions": {"code": "GRAPHQL_VALIDATION_FAILED"}}], "data": null}`,
 	})
 	// canon drops locations, so the body is checked for them.
 	body := s.do(t, request{
 		org:   "1",
-		query: `mutation { createPost(input: {title: 3, views: 0, authorID: "` + user2 + `"}) { title } }`,
+		query: `mutation { createPost(input: {title: 3, authorID: "` + user2 + `"}) { title } }`,
 		want: `{"errors": [{"message": "String cannot represent a non string value: 3",
 			"extensions": {"code": "GRAPHQL_VALIDATION_FAILED"}}], "data": null}`,
 	})
@@ -822,9 +878,8 @@ func TestMutationInputShape(t *testing.T) {
 	s.do(t, request{
 		org:   "1",
 		query: `mutation($input: CreatePostInput!) { createPost(input: $input) { title } }`,
-		vars:  map[string]any{"input": map[string]any{"title": "", "views": 0, "authorID": user2}},
+		vars:  map[string]any{"input": map[string]any{"title": "", "authorID": user9}},
 		want: `{"errors": [{"message": "CreatePostInput.title: invalid value: must not be empty", "path": ["createPost"],
 			"extensions": {"code": "BAD_USER_INPUT"}}], "data": null}`,
-		stmts: []string{`SELECT COUNT(*) FROM "users" WHERE "id" IN (?) [2]`},
 	})
 }

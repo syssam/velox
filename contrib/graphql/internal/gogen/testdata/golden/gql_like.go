@@ -187,11 +187,12 @@ func (in CreateLikeInput) GoString() string { return in.String() }
 // The tenant scope and the policies apply as to any write: each ID must name a
 // row the caller may read, and a row it re-points one the caller may change, or
 // CreateLike fails with NOT_FOUND and keeps nothing. A validator's refusal is
-// BAD_USER_INPUT, naming the input field; velox's other errors are returned as
-// they are. The row is returned as written, not read again through the Read
-// policy. There is no savepoint inside the extension's transaction, so a
-// resolver must return this function's error: one that swallows it commits the
-// partial writes. A self-edge is written one way, as the core's loads read it.
+// BAD_USER_INPUT, naming the input field, and comes before any statement;
+// velox's other errors are returned as they are. The row is returned as
+// written, not read again through the Read policy. There is no savepoint inside
+// the extension's transaction, so a resolver must return this function's error:
+// one that swallows it commits the partial writes. A self-edge is written one
+// way, as the core's loads read it.
 func CreateLike(ctx context.Context, input CreateLikeInput) (*Like, error) {
 	var (
 		k2  int64
@@ -204,9 +205,21 @@ func CreateLike(ctx context.Context, input CreateLikeInput) (*Like, error) {
 	if k3, err = gqlimpl.DecodeID[int64]("CreateLikeInput.postID", input.PostID, "Post"); err != nil {
 		return nil, err
 	}
+	var x Like
+	cols := []velox.Column[Like]{}
+	if input.Weight != nil {
+		x.Weight = *input.Weight
+		cols = append(cols, Likes.Weight)
+	}
+	if input.CreatedAt != nil {
+		x.CreatedAt = *input.CreatedAt
+		cols = append(cols, Likes.CreatedAt)
+	}
+	if err := velox.Validate(&x, cols...); err != nil {
+		return nil, gqlimpl.WriteError(err, "CreateLikeInput", "gen.Like", likeFieldGQL)
+	}
 	var out *Like
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
-		var x Like
 		if err := gqlimpl.Exist(ctx, db.Query[User]().Where(Users.ID.In(k2)), 1, "CreateLikeInput.userID", "Account"); err != nil {
 			return err
 		}
@@ -215,12 +228,6 @@ func CreateLike(ctx context.Context, input CreateLikeInput) (*Like, error) {
 			return err
 		}
 		x.PostID = k3
-		if input.Weight != nil {
-			x.Weight = *input.Weight
-		}
-		if input.CreatedAt != nil {
-			x.CreatedAt = *input.CreatedAt
-		}
 		if err := db.Insert(&x).Exec(ctx); err != nil {
 			return gqlimpl.WriteError(err, "CreateLikeInput", "gen.Like", likeFieldGQL)
 		}

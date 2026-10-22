@@ -400,11 +400,12 @@ func (in CreateAccountInput) GoString() string { return in.String() }
 // The tenant scope and the policies apply as to any write: each ID must name a
 // row the caller may read, and a row it re-points one the caller may change, or
 // CreateAccount fails with NOT_FOUND and keeps nothing. A validator's refusal
-// is BAD_USER_INPUT, naming the input field; velox's other errors are returned
-// as they are. The row is returned as written, not read again through the Read
-// policy. There is no savepoint inside the extension's transaction, so a
-// resolver must return this function's error: one that swallows it commits the
-// partial writes. A self-edge is written one way, as the core's loads read it.
+// is BAD_USER_INPUT, naming the input field, and comes before any statement;
+// velox's other errors are returned as they are. The row is returned as
+// written, not read again through the Read policy. There is no savepoint inside
+// the extension's transaction, so a resolver must return this function's error:
+// one that swallows it commits the partial writes. A self-edge is written one
+// way, as the core's loads read it.
 func CreateAccount(ctx context.Context, input CreateAccountInput) (*User, error) {
 	var (
 		j14 map[string]any
@@ -425,9 +426,61 @@ func CreateAccount(ctx context.Context, input CreateAccountInput) (*User, error)
 			return nil, err
 		}
 	}
+	var x User
+	cols := []velox.Column[User]{Users.Name, Users.Email, Users.PasswordHash, Users.Quota}
+	if input.CreatedAt != nil {
+		x.CreatedAt = *input.CreatedAt
+		cols = append(cols, Users.CreatedAt)
+	}
+	if input.UpdatedAt != nil {
+		x.UpdatedAt = *input.UpdatedAt
+		cols = append(cols, Users.UpdatedAt)
+	}
+	x.Name = input.DisplayName
+	x.Email = input.Email
+	if input.Role != nil {
+		x.Role = *input.Role
+		cols = append(cols, Users.Role)
+	}
+	if input.Nickname != nil {
+		x.Nickname = input.Nickname
+		cols = append(cols, Users.Nickname)
+	}
+	if input.Bio != nil {
+		x.Bio = input.Bio
+		cols = append(cols, Users.Bio)
+	}
+	if input.Age != nil {
+		x.Age = input.Age
+		cols = append(cols, Users.Age)
+	}
+	x.PasswordHash = input.PasswordHash
+	if input.Score != nil {
+		x.Score = *input.Score
+		cols = append(cols, Users.Score)
+	}
+	if input.ExternalID != nil {
+		x.ExternalID = *input.ExternalID
+		cols = append(cols, Users.ExternalID)
+	}
+	if input.Avatar != nil {
+		x.Avatar = *input.Avatar
+		cols = append(cols, Users.Avatar)
+	}
+	x.Quota = input.Quota
+	if input.Active != nil {
+		x.Active = *input.Active
+		cols = append(cols, Users.Active)
+	}
+	if input.Settings != nil {
+		x.Settings = j14
+		cols = append(cols, Users.Settings)
+	}
+	if err := velox.Validate(&x, cols...); err != nil {
+		return nil, gqlimpl.WriteError(err, "CreateAccountInput", "gen.User", userFieldGQL)
+	}
 	var out *User
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
-		var x User
 		if len(k15) > 0 {
 			if err := gqlimpl.Exist(ctx, db.Query[Group]().Where(Groups.ID.In(k15...)), len(k15), "CreateAccountInput.membershipIDs", "Group"); err != nil {
 				return err
@@ -438,43 +491,6 @@ func CreateAccount(ctx context.Context, input CreateAccountInput) (*User, error)
 				return err
 			}
 			x.UserBestFriend = &k16
-		}
-		if input.CreatedAt != nil {
-			x.CreatedAt = *input.CreatedAt
-		}
-		if input.UpdatedAt != nil {
-			x.UpdatedAt = *input.UpdatedAt
-		}
-		x.Name = input.DisplayName
-		x.Email = input.Email
-		if input.Role != nil {
-			x.Role = *input.Role
-		}
-		if input.Nickname != nil {
-			x.Nickname = input.Nickname
-		}
-		if input.Bio != nil {
-			x.Bio = input.Bio
-		}
-		if input.Age != nil {
-			x.Age = input.Age
-		}
-		x.PasswordHash = input.PasswordHash
-		if input.Score != nil {
-			x.Score = *input.Score
-		}
-		if input.ExternalID != nil {
-			x.ExternalID = *input.ExternalID
-		}
-		if input.Avatar != nil {
-			x.Avatar = *input.Avatar
-		}
-		x.Quota = input.Quota
-		if input.Active != nil {
-			x.Active = *input.Active
-		}
-		if input.Settings != nil {
-			x.Settings = j14
 		}
 		if err := db.Insert(&x).Exec(ctx); err != nil {
 			return gqlimpl.WriteError(err, "CreateAccountInput", "gen.User", userFieldGQL)

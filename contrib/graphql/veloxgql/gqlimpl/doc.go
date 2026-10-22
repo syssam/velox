@@ -3,9 +3,10 @@
 // conversions between a where input's Go types and a column's, the
 // connection with its paging, the runtime of the mutations (Atomic, which
 // runs one in the operation's transaction or in one of its own, with no
-// savepoint in the first, the decoding of input IDs, Exist, Matched, Repointed, Disjoint and
-// NotFound, WriteError and FromJSON), and InputErrorf, the coded error of a
-// client's input. An application does not call it.
+// savepoint in the first, the decoding of input IDs, Exist, Repointed,
+// Readable, UnlinkAll, Disjoint and NotFound, WriteError and FromJSON), and
+// InputErrorf, the coded error of a client's input. An application does not
+// call it.
 //
 // Compatibility is by veloxgql.GeneratedCodeIsVersion1, which every
 // generated file references, and not by semantic versioning, as protobuf's

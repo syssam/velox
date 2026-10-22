@@ -168,7 +168,7 @@ input PostWhereInput {
 input CreatePostInput {
   title: String!
   status: PostStatus
-  views: Int!
+  views: Int
   publishedAt: Time
   authorID: ID!
   tagIDs: [ID!]

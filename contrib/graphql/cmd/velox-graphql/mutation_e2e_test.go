@@ -974,7 +974,7 @@ func TestUpdate(t *testing.T) {
 		// changes nothing. MySQL counts it only with clientFoundRows=true,
 		// which velox's Open asks of its DSN.
 		if got, err := gen.UpdateWriter(e.ctx, id, gen.UpdateWriterInput{Name: ptr("w")}); err != nil || got.Name != "w" {
-			t.Errorf("setting the name w holds: %v, %v", got, err)
+			t.Errorf("setting the name w holds: %v, %v (MySQL: does the DSN have clientFoundRows=true?)", got, err)
 		}
 
 		// Fields: nil leaves one, a value sets it, clear sets NULL.
@@ -1435,6 +1435,113 @@ func TestSelfM2M(t *testing.T) {
 	})
 }
 
+// TestUnlinkScope: removeXIDs and clearX of an M2M edge delete only the
+// join rows to rows the caller may read, under the tenant scope and the
+// target's Read policy, which no join row has: a link to tenant 8's writer,
+// or to the circle the Read policy hides, stays. clearX reads the join rows
+// a page at a time, and the links it leaves do not stop it.
+func TestUnlinkScope(t *testing.T) {
+	each(t, func(t *testing.T, e *env) {
+		ctx8 := velox.WithTenant(e.ctx, int64(8))
+		linked := func(w, c int64) bool {
+			t.Helper()
+			return count(t, e.ctx, e.db.Query[gen.WriterCircle]().Where(gen.WriterCircles.WriterID.EQ(w), gen.WriterCircles.CircleID.EQ(c))) == 1
+		}
+		link := func(w, c int64) { t.Helper(); insert(t, e.ctx, e.db, &gen.WriterCircle{WriterID: w, CircleID: c}) }
+
+		// From the shared circle: tenant 8's writer keeps its link.
+		c := &gen.Circle{Name: "c"}
+		insert(t, e.ctx, e.db, c)
+		mine, other := &gen.Writer{Name: "mine", Password: "x"}, &gen.Writer{Name: "other", Password: "x"}
+		insert(t, e.ctx, e.db, mine)
+		insert(t, ctx8, e.db, other)
+		link(mine.ID, c.ID)
+		link(other.ID, c.ID)
+		if _, err := gen.UpdateCircle(e.ctx, circleID(c.ID), gen.UpdateCircleInput{RemoveWriterIDs: []string{writerID(other.ID), writerID(mine.ID)}}); err != nil {
+			t.Fatal(err)
+		}
+		if linked(mine.ID, c.ID) || !linked(other.ID, c.ID) {
+			t.Errorf("after removeWriterIDs: mine linked %v, tenant 8's %v; want false, true", linked(mine.ID, c.ID), linked(other.ID, c.ID))
+		}
+		link(mine.ID, c.ID)
+		if _, err := gen.UpdateCircle(e.ctx, circleID(c.ID), gen.UpdateCircleInput{ClearWriters: true}); err != nil {
+			t.Fatal(err)
+		}
+		if linked(mine.ID, c.ID) || !linked(other.ID, c.ID) {
+			t.Errorf("after clearWriters: mine linked %v, tenant 8's %v; want false, true", linked(mine.ID, c.ID), linked(other.ID, c.ID))
+		}
+
+		// From the writer: the hidden circle keeps its link.
+		hidden, visible := &gen.Circle{Name: "hidden"}, &gen.Circle{Name: "visible"}
+		insert(t, e.ctx, e.db, hidden)
+		insert(t, e.ctx, e.db, visible)
+		link(mine.ID, hidden.ID)
+		link(mine.ID, visible.ID)
+		if _, err := gen.UpdateWriter(e.ctx, writerID(mine.ID), gen.UpdateWriterInput{RemoveCircleIDs: []string{circleID(hidden.ID), circleID(visible.ID)}}); err != nil {
+			t.Fatal(err)
+		}
+		if !linked(mine.ID, hidden.ID) || linked(mine.ID, visible.ID) {
+			t.Errorf("after removeCircleIDs: hidden linked %v, visible %v; want true, false", linked(mine.ID, hidden.ID), linked(mine.ID, visible.ID))
+		}
+		link(mine.ID, visible.ID)
+		if _, err := gen.UpdateWriter(e.ctx, writerID(mine.ID), gen.UpdateWriterInput{ClearCircles: true}); err != nil {
+			t.Fatal(err)
+		}
+		if !linked(mine.ID, hidden.ID) || linked(mine.ID, visible.ID) {
+			t.Errorf("after clearCircles: hidden linked %v, visible %v; want true, false", linked(mine.ID, hidden.ID), linked(mine.ID, visible.ID))
+		}
+
+		// Pages of 2: five writers, of tenants 7 and 8 in turn, in one
+		// circle; clearWriters unlinks tenant 7's three.
+		paged := velox.WithTenant(veloxgql.NewExtension(e.db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).Context(context.Background()), int64(7))
+		big := &gen.Circle{Name: "big"}
+		insert(t, e.ctx, e.db, big)
+		for i := range 5 {
+			w, in := &gen.Writer{Name: fmt.Sprint("w", i), Password: "x"}, e.ctx
+			if i%2 == 1 {
+				in = ctx8
+			}
+			insert(t, in, e.db, w)
+			link(w.ID, big.ID)
+		}
+		if _, err := gen.UpdateCircle(paged, circleID(big.ID), gen.UpdateCircleInput{ClearWriters: true}); err != nil {
+			t.Fatal(err)
+		}
+		if n := count(t, e.ctx, e.db.Query[gen.WriterCircle]().Where(gen.WriterCircles.CircleID.EQ(big.ID))); n != 2 {
+			t.Errorf("%d join rows of the big circle after clearWriters, want tenant 8's 2", n)
+		}
+		if n := count(t, ctx8, e.db.Query[gen.Writer]().Where(gen.Writers.Circles.Has())); n != 3 {
+			t.Errorf("%d of tenant 8's writers in a circle, want 3", n)
+		}
+	})
+}
+
+// TestValidateFirst: CreateX and UpdateX run the validators of the fields
+// their input sets before any statement, so an invalid field with IDs that
+// name no row is the validator's BAD_USER_INPUT, and nothing is sent.
+func TestValidateFirst(t *testing.T) {
+	each(t, func(t *testing.T, e *env) {
+		w := &gen.Writer{Name: "w", Password: "x"}
+		insert(t, e.ctx, e.db, w)
+		e.reset()
+		bogus := writerID(999)
+		var ve *velox.ValidationError
+		_, err := gen.CreateWriter(e.ctx, gen.CreateWriterInput{Name: "", Password: "x", MentorID: &bogus, CircleIDs: []string{circleID(999)}})
+		if code(err) != veloxgql.CodeBadUserInput || err == nil || !strings.HasPrefix(err.Error(), "veloxgql: CreateWriterInput.name: invalid value: ") || !errors.As(err, &ve) {
+			t.Errorf("create, an empty name and a bogus mentor: %v (code %q)", err, code(err))
+		}
+		for _, id := range []string{writerID(w.ID), writerID(998)} {
+			_, err = gen.UpdateWriter(e.ctx, id, gen.UpdateWriterInput{Name: ptr(""), MentorID: &bogus, AddCircleIDs: []string{circleID(999)}})
+			if code(err) != veloxgql.CodeBadUserInput || err == nil || !strings.HasPrefix(err.Error(), "veloxgql: UpdateWriterInput.name: invalid value: ") || !errors.As(err, &ve) {
+				t.Errorf("update %s, an empty name and a bogus mentor: %v (code %q)", id, err, code(err))
+			}
+		}
+		if s := e.stmts(); len(s) != 0 {
+			t.Errorf("an invalid field sent %q, want nothing", s)
+		}
+	})
+}
+
 // TestDeleteConstraint: the database's foreign key refuses to delete a
 // writer an article points at; the error is a *velox.ConstraintError of
 // kind ConstraintForeignKey, which the presenter shows without the driver's
@@ -1509,7 +1616,7 @@ func TestMutationsRun(t *testing.T) {
 	}
 	for _, name := range []string{"TestCreate", "TestCreateM2MBothSides", "TestRepeatedIDs", "TestEdgeScope", "TestAtomic", "TestCreateErrors", "TestRepoint",
 		"TestUpdate", "TestUpdateConflicts", "TestUpdatePolicy", "TestUpdateWriteScope", "TestUpdateReadBack", "TestUpdateEmpty", "TestUpdateErrors",
-		"TestDelete", "TestDeletePolicy", "TestDeleteConstraint", "TestSelfM2M"} {
+		"TestDelete", "TestDeletePolicy", "TestDeleteConstraint", "TestSelfM2M", "TestUnlinkScope", "TestValidateFirst"} {
 		if !strings.Contains(out, "--- PASS: "+name+" ") {
 			t.Errorf("no PASS of %s in\n%s", name, out)
 		}

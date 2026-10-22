@@ -230,11 +230,12 @@ func (in CreateCategoryInput) GoString() string { return in.String() }
 // The tenant scope and the policies apply as to any write: each ID must name a
 // row the caller may read, and a row it re-points one the caller may change, or
 // CreateCategory fails with NOT_FOUND and keeps nothing. A validator's refusal
-// is BAD_USER_INPUT, naming the input field; velox's other errors are returned
-// as they are. The row is returned as written, not read again through the Read
-// policy. There is no savepoint inside the extension's transaction, so a
-// resolver must return this function's error: one that swallows it commits the
-// partial writes. A self-edge is written one way, as the core's loads read it.
+// is BAD_USER_INPUT, naming the input field, and comes before any statement;
+// velox's other errors are returned as they are. The row is returned as
+// written, not read again through the Read policy. There is no savepoint inside
+// the extension's transaction, so a resolver must return this function's error:
+// one that swallows it commits the partial writes. A self-edge is written one
+// way, as the core's loads read it.
 func CreateCategory(ctx context.Context, input CreateCategoryInput) (*Category, error) {
 	var (
 		k1  []int64
@@ -249,16 +250,20 @@ func CreateCategory(ctx context.Context, input CreateCategoryInput) (*Category, 
 			return nil, err
 		}
 	}
+	var x Category
+	cols := []velox.Column[Category]{Categories.Title}
+	x.Title = input.Title
+	if err := velox.Validate(&x, cols...); err != nil {
+		return nil, gqlimpl.WriteError(err, "CreateCategoryInput", "gen.Category", categoryFieldGQL)
+	}
 	var out *Category
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
-		var x Category
 		if input.ParentID != nil {
 			if err := gqlimpl.Exist(ctx, db.Query[Category]().Where(Categories.ID.In(k2)), 1, "CreateCategoryInput.parentID", "Category"); err != nil {
 				return err
 			}
 			x.CategoryChildren = &k2
 		}
-		x.Title = input.Title
 		if err := db.Insert(&x).Exec(ctx); err != nil {
 			return gqlimpl.WriteError(err, "CreateCategoryInput", "gen.Category", categoryFieldGQL)
 		}
@@ -329,13 +334,16 @@ func (in UpdateCategoryInput) GoString() string { return in.String() }
 // remove the edge does not lead to is ignored, and one to add it already leads
 // to is kept. Clearing an edge whose key is on the targets' rows, or removing
 // from it, unlinks only the children the tenant scope and the target's Write
-// policy let the caller change; one they hide stays linked. Each ID must name a
-// row the caller may read, and a row it re-points one the caller may change; a
-// child another node holds is refused (BAD_USER_INPUT). An id that names no row
-// the caller may change, or an ID no row it may read, fails with NOT_FOUND and
-// keeps nothing. A validator's refusal is BAD_USER_INPUT, naming the input
-// field; velox's other errors are returned as they are. The row is read back as
-// written, under the tenant scope and without the Read policy
+// policy let the caller change; one they hide stays linked. Clearing a
+// many-to-many edge, or removing from it, deletes only the links to targets the
+// tenant scope and the target's Read policy let the caller read; a link to one
+// they hide stays. Each ID must name a row the caller may read, and a row it
+// re-points one the caller may change; a child another node holds is refused
+// (BAD_USER_INPUT). An id that names no row the caller may change, or an ID no
+// row it may read, fails with NOT_FOUND and keeps nothing. A validator's
+// refusal is BAD_USER_INPUT, naming the input field, and comes before any
+// statement; velox's other errors are returned as they are. The row is read
+// back as written, under the tenant scope and without the Read policy
 // (velox.SkipPolicy): an update that takes the row out of what the caller may
 // read still returns it. On MySQL the UPDATE's row count needs
 // clientFoundRows=true, as velox's Update does. An update that sets no field
@@ -370,12 +378,15 @@ func UpdateCategory(ctx context.Context, id string, input UpdateCategoryInput) (
 	if input.ParentID != nil && input.ClearParent {
 		return nil, gqlimpl.InputErrorf("UpdateCategoryInput: parentID and clearParent together")
 	}
+	var set []velox.Setter[Category]
+	if input.Title != nil {
+		set = append(set, Categories.Title.Set(*input.Title))
+	}
+	if err = velox.ValidateSet(set...); err != nil {
+		return nil, gqlimpl.WriteError(err, "UpdateCategoryInput", "gen.Category", categoryFieldGQL)
+	}
 	var out *Category
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
-		var set []velox.Setter[Category]
-		if input.Title != nil {
-			set = append(set, Categories.Title.Set(*input.Title))
-		}
 		if input.ParentID != nil {
 			if err := gqlimpl.Exist(ctx, db.Query[Category]().Where(Categories.ID.In(k4)), 1, "UpdateCategoryInput.parentID", "Category"); err != nil {
 				return err

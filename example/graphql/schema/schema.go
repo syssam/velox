@@ -18,7 +18,8 @@ import (
 type User struct{ schema.Schema }
 
 // Fields returns the columns after the ID. PasswordHash is Sensitive, so it
-// is in no GraphQL type, input or order. Email is for admins only: the
+// is in no GraphQL type, where input or order: it is an input only, of
+// createUser and updateUser, and never output. Email is for admins only: the
 // application's directive @admin guards the field and, since velox-graphql
 // copies it onto them, its where predicates, by which a client could
 // otherwise find an email a prefix at a time.
@@ -51,14 +52,15 @@ type Post struct{ schema.Schema }
 // Fields returns the columns after the ID. OrgID is the tenant column: it is
 // in no GraphQL type or input, and every statement on Post is scoped to the
 // context's tenant. AuthorID is the key of the Author edge, which stands for
-// it in GraphQL.
+// it in GraphQL. Views is Optional: createPost may leave it out, and it is
+// then 0.
 func (Post) Fields() []schema.Field {
 	return []schema.Field{
 		field.Int64("org_id").Tenant(),
 		field.Int64("author_id").Annotations(graphql.WhereOps(graphql.OpsEquality)),
 		field.String("title").NotEmpty().Annotations(graphql.OrderField("TITLE"), graphql.WhereOps()),
 		field.Enum("status").Values("draft", "published").Default("draft").Annotations(graphql.WhereOps()),
-		field.Int64("views").Annotations(graphql.OrderField("VIEWS")),
+		field.Int64("views").Optional().Annotations(graphql.OrderField("VIEWS")),
 		field.Time("published_at").Optional().Nillable().Annotations(graphql.WhereOps()),
 	}
 }

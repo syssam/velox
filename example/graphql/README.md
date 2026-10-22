@@ -25,10 +25,12 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' \
    field (`password_hash`) is in no type, where input or order: it is an
    input only, `passwordHash` on `createUser` and `updateUser`. The tenant
    column is in no type or input. `title` is `NotEmpty()`, a validator the
-   mutations run, and the tag's `name` is `Unique()`. `published_at` is `Optional().Nillable()`: `Optional` makes it
-   optional on create, and `Nillable` makes its column NULL-able and the Go
-   field a `*time.Time` with a `Null*` handle, so a draft's `publishedAt` is
-   `null` and `publishedAtIsNil` filters on it. velox-gen refuses `Optional()`
+   mutations run before any statement, and the tag's `name` is `Unique()`.
+   `views` is `Optional()`: `createPost` may leave it out, and it is then 0,
+   its zero value. `published_at` is `Optional().Nillable()`: `Optional`
+   makes it optional on create, and `Nillable` makes its column NULL-able and
+   the Go field a `*time.Time` with a `Null*` handle, so a draft's
+   `publishedAt` is `null` and `publishedAtIsNil` filters on it. velox-gen refuses `Optional()`
    alone on a time field without a Default: its unset value, the zero time,
    would go into a NOT NULL column, which MySQL's strict mode refuses.
    `email` has `graphql.Directives(graphql.Directive{Name: "admin"})`: see
@@ -96,12 +98,22 @@ sets a NULL-able column to NULL, and an edge is cleared, then has its
 row's join rows, then the row, and returns its ID. Repeated IDs count once,
 and adding a link that exists changes nothing.
 
-Every ID an input names is checked, before anything is written, against
-what the caller may read: the tenant scope and the entity's Read policy. An
-ID of another tenant's row, or of one a policy hides, is `NOT_FOUND`, as a
-missing one is, so a client cannot tell that a row exists. `deletePost` of
-another tenant's post is `NOT_FOUND`, and its join rows, which are not
-tenant-scoped, are left alone.
+Every ID to set or add is checked against what the caller may read: the
+tenant scope and the entity's Read policy. An ID of another tenant's row, or
+of one a policy hides, is `NOT_FOUND`, as a missing one is, so a client
+cannot tell that a row exists. An ID to remove is not checked, and neither
+it nor `clearTags` or `clearPosts` touches a link to a row the caller may
+not read: `updateLabel(id:, input: {clearPosts: true})` unlinks the
+caller's organization's posts from the label, and another organization's
+stay linked. `deletePost` of another tenant's post is `NOT_FOUND`, and its
+join rows, which are not tenant-scoped, are left alone. A row's own delete
+removes all its join rows, whatever the tenant at their other end: the row
+is gone, and a shared row, as a label is, is unlinked from every
+organization's posts.
+
+The validators (`title`'s `NotEmpty()`) run on the fields an input sets
+before any statement: `createPost` with an empty title is `BAD_USER_INPUT`,
+naming `title`, whatever its IDs name.
 
 **One transaction per operation.** `veloxgql.NewExtension` runs a mutation
 operation in one transaction, and rolls it back when the response has any

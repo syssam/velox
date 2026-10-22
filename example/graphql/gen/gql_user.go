@@ -363,22 +363,28 @@ func (in CreateUserInput) GoString() string { return in.String() }
 // The tenant scope and the policies apply as to any write: each ID must name a
 // row the caller may read, and a row it re-points one the caller may change, or
 // CreateUser fails with NOT_FOUND and keeps nothing. A validator's refusal is
-// BAD_USER_INPUT, naming the input field; velox's other errors are returned as
-// they are. The row is returned as written, not read again through the Read
-// policy. There is no savepoint inside the extension's transaction, so a
-// resolver must return this function's error: one that swallows it commits the
-// partial writes. A self-edge is written one way, as the core's loads read it.
+// BAD_USER_INPUT, naming the input field, and comes before any statement;
+// velox's other errors are returned as they are. The row is returned as
+// written, not read again through the Read policy. There is no savepoint inside
+// the extension's transaction, so a resolver must return this function's error:
+// one that swallows it commits the partial writes. A self-edge is written one
+// way, as the core's loads read it.
 func CreateUser(ctx context.Context, input CreateUserInput) (*User, error) {
+	var x User
+	cols := []velox.Column[User]{Users.Name, Users.Email, Users.JoinedAt, Users.PasswordHash}
+	x.Name = input.Name
+	x.Email = input.Email
+	if input.Role != nil {
+		x.Role = *input.Role
+		cols = append(cols, Users.Role)
+	}
+	x.JoinedAt = input.JoinedAt
+	x.PasswordHash = input.PasswordHash
+	if err := velox.Validate(&x, cols...); err != nil {
+		return nil, gqlimpl.WriteError(err, "CreateUserInput", "gen.User", userFieldGQL)
+	}
 	var out *User
 	err := gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
-		var x User
-		x.Name = input.Name
-		x.Email = input.Email
-		if input.Role != nil {
-			x.Role = *input.Role
-		}
-		x.JoinedAt = input.JoinedAt
-		x.PasswordHash = input.PasswordHash
 		if err := db.Insert(&x).Exec(ctx); err != nil {
 			return gqlimpl.WriteError(err, "CreateUserInput", "gen.User", userFieldGQL)
 		}
@@ -441,12 +447,15 @@ func (in UpdateUserInput) GoString() string { return in.String() }
 // does not lead to is ignored, and one to add it already leads to is kept.
 // Clearing an edge whose key is on the targets' rows, or removing from it,
 // unlinks only the children the tenant scope and the target's Write policy let
-// the caller change; one they hide stays linked. Each ID must name a row the
-// caller may read, and a row it re-points one the caller may change; a child
-// another node holds is refused (BAD_USER_INPUT). An id that names no row the
-// caller may change, or an ID no row it may read, fails with NOT_FOUND and
-// keeps nothing. A validator's refusal is BAD_USER_INPUT, naming the input
-// field; velox's other errors are returned as they are. The row is read back as
+// the caller change; one they hide stays linked. Clearing a many-to-many edge,
+// or removing from it, deletes only the links to targets the tenant scope and
+// the target's Read policy let the caller read; a link to one they hide stays.
+// Each ID must name a row the caller may read, and a row it re-points one the
+// caller may change; a child another node holds is refused (BAD_USER_INPUT). An
+// id that names no row the caller may change, or an ID no row it may read,
+// fails with NOT_FOUND and keeps nothing. A validator's refusal is
+// BAD_USER_INPUT, naming the input field, and comes before any statement;
+// velox's other errors are returned as they are. The row is read back as
 // written, under the tenant scope and without the Read policy
 // (velox.SkipPolicy): an update that takes the row out of what the caller may
 // read still returns it. On MySQL the UPDATE's row count needs
@@ -462,24 +471,27 @@ func UpdateUser(ctx context.Context, id string, input UpdateUserInput) (*User, e
 	if key, err = gqlimpl.DecodeID[int64]("updateUser.id", id, "User"); err != nil {
 		return nil, err
 	}
+	var set []velox.Setter[User]
+	if input.Name != nil {
+		set = append(set, Users.Name.Set(*input.Name))
+	}
+	if input.Email != nil {
+		set = append(set, Users.Email.Set(*input.Email))
+	}
+	if input.Role != nil {
+		set = append(set, Users.Role.Set(*input.Role))
+	}
+	if input.JoinedAt != nil {
+		set = append(set, Users.JoinedAt.Set(*input.JoinedAt))
+	}
+	if input.PasswordHash != nil {
+		set = append(set, Users.PasswordHash.Set(*input.PasswordHash))
+	}
+	if err = velox.ValidateSet(set...); err != nil {
+		return nil, gqlimpl.WriteError(err, "UpdateUserInput", "gen.User", userFieldGQL)
+	}
 	var out *User
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
-		var set []velox.Setter[User]
-		if input.Name != nil {
-			set = append(set, Users.Name.Set(*input.Name))
-		}
-		if input.Email != nil {
-			set = append(set, Users.Email.Set(*input.Email))
-		}
-		if input.Role != nil {
-			set = append(set, Users.Role.Set(*input.Role))
-		}
-		if input.JoinedAt != nil {
-			set = append(set, Users.JoinedAt.Set(*input.JoinedAt))
-		}
-		if input.PasswordHash != nil {
-			set = append(set, Users.PasswordHash.Set(*input.PasswordHash))
-		}
 		if len(set) > 0 {
 			n, err := db.Update[User]().Set(set...).Where(Users.ID.EQ(key)).Exec(ctx)
 			if err != nil {
