@@ -55,21 +55,19 @@ func (e *UserRole) UnmarshalGQL(v any) error {
 }
 
 // PostsGQL is the edge posts: a connection to the Post nodes it leads to,
-// paged, ordered and filtered by the arguments. With no argument it is over
-// x.Posts when a With loaded it, in the order loaded; else its queries are on
-// Post, filtered by the relation, and run when gqlgen asks for the connection's
-// fields.
+// paged, ordered and filtered by the arguments. Its queries run when gqlgen
+// asks for the connection's fields, each with those of every row read with x,
+// in one query.
 func (x *User) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
-	if after == nil && first == nil && before == nil && last == nil && orderBy == nil && where == nil {
-		if rows, ok := x.Posts.Get(); ok {
-			return &PostConnection{c: gqlimpl.LoadedConnection(ctx, rows, "Post", postKeyGQL())}, nil
-		}
-	}
 	db, err := veloxgql.DBFrom(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return PostsConnectionOf(ctx, db.Query[Post]().Where(Posts.AuthorID.EQ(x.ID)), after, first, before, last, orderBy, where)
+	c, err := PostsConnectionOf(ctx, db.Query[Post](), after, first, before, last, orderBy, where)
+	if err != nil {
+		return nil, err
+	}
+	return &PostConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Users.Posts)}, nil
 }
 
 // UserConnection is the GraphQL type UserConnection, a connection to a list of
@@ -136,10 +134,24 @@ func UsersConnection(ctx context.Context, after *veloxgql.Cursor, first *int, be
 // its Offset is cleared and its Limit replaced, since the page is the
 // connection's. q must have no OrderBy: the connection orders it, and a q with
 // one is refused with an internal error, since its order would come first and
-// break the cursors. q must also select the key and the columns orderBy names:
-// a Columns or Omit that drops them breaks the cursors, and nothing refuses it.
-// It runs no query.
+// break the cursors. q must also select the key and the columns orderBy names,
+// which the cursors hold: a q whose Columns or Omit drops one is refused with
+// an internal error. In a gqlgen field, the page reads only the columns the
+// selection needs (userColumnsGQL), of those q selects. It runs no query.
 func UsersConnectionOf(ctx context.Context, q velox.Query[User], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *UserOrder, where *UserWhereInput) (*UserConnection, error) {
+	if !q.Selects(Users.ID) {
+		return nil, fmt.Errorf("veloxgql: UsersConnectionOf: the base query does not select the key, which the cursors hold")
+	}
+	if o := orderBy; o != nil {
+		switch {
+		case o.Field == UserOrderFieldName && !q.Selects(Users.Name),
+			o.Field == UserOrderFieldJoinedAt && !q.Selects(Users.JoinedAt):
+			return nil, fmt.Errorf("veloxgql: UsersConnectionOf: the base query does not select the column of %s, which orderBy names and the cursors hold", o.Field)
+		}
+	}
+	if fields, ok := gqlimpl.Selected(ctx, "User"); ok {
+		q = gqlimpl.Narrow(q, userColumnsGQL(fields))
+	}
 	if where != nil {
 		p, err := where.Pred(ctx)
 		if err != nil {
@@ -170,6 +182,26 @@ func userKeyGQL() []gqlimpl.OrderTerm[User] {
 			func(x *User) int64 { return x.ID },
 			func(x *User, v int64) { x.ID = v }),
 	}
+}
+
+// userColumnsGQL is the columns a selection of the User fields fields reads:
+// the key, every foreign key on the row, every order field's column, and the
+// column of each field. It is nil, every column, when a field is not one
+// velox-graphql wrote, such as an application's own.
+func userColumnsGQL(fields []string) []velox.Column[User] {
+	cols := []velox.Column[User]{Users.ID, Users.Name, Users.JoinedAt}
+	for _, f := range fields {
+		switch f {
+		case "id", "name", "joinedAt", "posts":
+		case "email":
+			cols = append(cols, Users.Email)
+		case "role":
+			cols = append(cols, Users.Role)
+		default:
+			return nil
+		}
+	}
+	return cols
 }
 
 // userTermGQL is the order term o, an order of connections to User.

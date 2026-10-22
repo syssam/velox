@@ -2,7 +2,6 @@ package gen
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -14,37 +13,31 @@ import (
 const _ = veloxgql.GeneratedCodeIsVersion1
 
 // UserGQL is the edge user: the Account it leads to, or nil when there is none.
-// It is x.User when a With loaded it, and else one query.
+// It is read with the edge of every row read with x, in one query.
 func (x *Like) UserGQL(ctx context.Context) (*User, error) {
-	if v, ok := x.User.Get(); ok {
-		return v, nil
-	}
 	db, err := veloxgql.DBFrom(ctx)
 	if err != nil {
 		return nil, err
 	}
-	v, err := db.Query[User]().Where(Users.ID.EQ(x.UserID)).One(ctx)
-	if errors.Is(err, velox.ErrNotFound) {
-		return nil, nil
+	q := db.Query[User]()
+	if fields, ok := gqlimpl.Selected(ctx, "Account"); ok {
+		q = gqlimpl.Narrow(q, userColumnsGQL(fields))
 	}
-	return v, err
+	return gqlimpl.EdgeOne(ctx, q, x, Likes.User)
 }
 
 // PostGQL is the edge post: the Post it leads to, or nil when there is none. It
-// is x.Post when a With loaded it, and else one query.
+// is read with the edge of every row read with x, in one query.
 func (x *Like) PostGQL(ctx context.Context) (*Post, error) {
-	if v, ok := x.Post.Get(); ok {
-		return v, nil
-	}
 	db, err := veloxgql.DBFrom(ctx)
 	if err != nil {
 		return nil, err
 	}
-	v, err := db.Query[Post]().Where(Posts.ID.EQ(x.PostID)).One(ctx)
-	if errors.Is(err, velox.ErrNotFound) {
-		return nil, nil
+	q := db.Query[Post]()
+	if fields, ok := gqlimpl.Selected(ctx, "Post"); ok {
+		q = gqlimpl.Narrow(q, postColumnsGQL(fields))
 	}
-	return v, err
+	return gqlimpl.EdgeOne(ctx, q, x, Likes.Post)
 }
 
 // LikeConnection is the GraphQL type LikeConnection, a connection to a list of
@@ -111,9 +104,17 @@ func LikesConnection(ctx context.Context, after *veloxgql.Cursor, first *int, be
 // Limit replaced, since the page is the connection's. q must have no OrderBy:
 // the connection orders it, and a q with one is refused with an internal error,
 // since its order would come first and break the cursors. q must also select
-// the key and the columns orderBy names: a Columns or Omit that drops them
-// breaks the cursors, and nothing refuses it. It runs no query.
+// the key and the columns orderBy names, which the cursors hold: a q whose
+// Columns or Omit drops one is refused with an internal error. In a gqlgen
+// field, the page reads only the columns the selection needs (likeColumnsGQL),
+// of those q selects. It runs no query.
 func LikesConnectionOf(ctx context.Context, q velox.Query[Like], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*LikeConnection, error) {
+	if !q.Selects(Likes.UserID, Likes.PostID) {
+		return nil, fmt.Errorf("veloxgql: LikesConnectionOf: the base query does not select the key, which the cursors hold")
+	}
+	if fields, ok := gqlimpl.Selected(ctx, "Like"); ok {
+		q = gqlimpl.Narrow(q, likeColumnsGQL(fields))
+	}
 	c, err := gqlimpl.NewConnection(ctx, q, "Like", gqlimpl.Args{After: after, First: first, Before: before, Last: last}, nil, likeKeyGQL())
 	if err != nil {
 		return nil, err
@@ -132,6 +133,26 @@ func likeKeyGQL() []gqlimpl.OrderTerm[Like] {
 			func(x *Like) int64 { return x.PostID },
 			func(x *Like, v int64) { x.PostID = v }),
 	}
+}
+
+// likeColumnsGQL is the columns a selection of the Like fields fields reads:
+// the key, every foreign key on the row, every order field's column, and the
+// column of each field. It is nil, every column, when a field is not one
+// velox-graphql wrote, such as an application's own.
+func likeColumnsGQL(fields []string) []velox.Column[Like] {
+	cols := []velox.Column[Like]{Likes.UserID, Likes.PostID}
+	for _, f := range fields {
+		switch f {
+		case "user", "post":
+		case "weight":
+			cols = append(cols, Likes.Weight)
+		case "createdAt":
+			cols = append(cols, Likes.CreatedAt)
+		default:
+			return nil
+		}
+	}
+	return cols
 }
 
 // likeFieldGQL is the GraphQL name of the mutation-input field that sets the

@@ -79,6 +79,7 @@ type object struct {
 	key    string               // the Go type veloxgql encodes the key of a Node as; "" for none
 	dirs   []directive          // the type's directives
 	fields []gqlField           // fields, then edges
+	plain  []Field              // the fields that are not edges, for the Go code
 	enums  []gqlEnum
 	fks    map[string]bool // the names of ent's foreign-key fields
 
@@ -97,7 +98,8 @@ type object struct {
 
 // edgeField is an edge field of an object.
 type edgeField struct {
-	edge   int // the index in the entity's Edges
+	edge   int    // the index in the entity's Edges
+	name   string // the GraphQL field's name
 	kind   EdgeKind
 	target *object
 }
@@ -340,6 +342,7 @@ func (g *graph) fill(o *object) error {
 		if err := add(id, where); err != nil {
 			return err
 		}
+		o.plain = append(o.plain, Field{Name: "id", Field: e.PrimaryKey[0]})
 	}
 	for i, f := range e.Fields {
 		a := o.fanns[i]
@@ -378,6 +381,7 @@ func (g *graph) fill(o *object) error {
 		if err := add(gqlField{name: name, typ: typ, desc: f.Comment, dirs: append(dirs, ds...), where: where}, where); err != nil {
 			return err
 		}
+		o.plain = append(o.plain, Field{Name: name, Field: i})
 	}
 	for i, ed := range e.Edges {
 		a := o.eanns[i]
@@ -391,7 +395,7 @@ func (g *graph) fill(o *object) error {
 			return err
 		}
 		f := gqlField{name: name, desc: ed.Comment, where: where}
-		ef := edgeField{edge: i, target: t}
+		ef := edgeField{edge: i, name: name, target: t}
 		switch {
 		case ed.Unique:
 			f.typ, ef.kind = t.name, EdgeUnique

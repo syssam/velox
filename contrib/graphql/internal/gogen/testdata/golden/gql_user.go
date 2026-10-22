@@ -68,61 +68,52 @@ func (e *UserRole) UnmarshalGQL(v any) error {
 }
 
 // PostsGQL is the edge posts: a connection to the Post nodes it leads to,
-// paged, ordered and filtered by the arguments. With no argument it is over
-// x.Posts when a With loaded it, in the order loaded; else its queries are on
-// Post, filtered by the relation, and run when gqlgen asks for the connection's
-// fields.
+// paged, ordered and filtered by the arguments. Its queries run when gqlgen
+// asks for the connection's fields, each with those of every row read with x,
+// in one query.
 func (x *User) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
-	if after == nil && first == nil && before == nil && last == nil && orderBy == nil && where == nil {
-		if rows, ok := x.Posts.Get(); ok {
-			return &PostConnection{c: gqlimpl.LoadedConnection(ctx, rows, "Post", postKeyGQL())}, nil
-		}
-	}
 	db, err := veloxgql.DBFrom(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return PostsConnectionOf(ctx, db.Query[Post]().Where(Posts.AuthorID.EQ(x.ID)), after, first, before, last, orderBy, where)
+	c, err := PostsConnectionOf(ctx, db.Query[Post](), after, first, before, last, orderBy, where)
+	if err != nil {
+		return nil, err
+	}
+	return &PostConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Users.Posts)}, nil
 }
 
 // GroupsGQL is the edge groups: the Group nodes it leads to, in key order. It
-// is x.Groups when a With loaded it, and else one query, which reads at most
-// the MaxList of veloxgql.LimitsFrom(ctx) rows, whatever the DB's WithMaxRows:
-// more fail it with velox.ErrTooManyRows, in an error that names the edge.
+// is read with the edge of every row read with x, in one query, which reads at
+// most the MaxList of veloxgql.LimitsFrom(ctx) rows for each, whatever the DB's
+// WithMaxRows: more fail x's with velox.ErrTooManyRows, in an error that names
+// the edge.
 func (x *User) GroupsGQL(ctx context.Context) ([]*Group, error) {
-	rows, ok := x.Groups.Get()
-	if !ok {
-		db, err := veloxgql.DBFrom(ctx)
-		if err != nil {
-			return nil, err
-		}
-		if rows, err = db.Query[Group]().Where(Groups.Users.HasWhere(Users.ID.EQ(x.ID))).OrderBy(Groups.ID.Asc()).Unbounded().MaxRows(veloxgql.LimitsFrom(ctx).MaxList).All(ctx); err != nil {
-			return nil, fmt.Errorf("veloxgql: Account.groups: %w", err)
-		}
-	}
-	out := make([]*Group, len(rows))
-	for i := range rows {
-		out[i] = &rows[i]
-	}
-	return out, nil
-}
-
-// LikesGQL is the edge likes: a connection to the Like nodes it leads to,
-// paged, ordered and filtered by the arguments. With no argument it is over
-// x.Likes when a With loaded it, in the order loaded; else its queries are on
-// Like, filtered by the relation, and run when gqlgen asks for the connection's
-// fields.
-func (x *User) LikesGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*LikeConnection, error) {
-	if after == nil && first == nil && before == nil && last == nil {
-		if rows, ok := x.Likes.Get(); ok {
-			return &LikeConnection{c: gqlimpl.LoadedConnection(ctx, rows, "Like", likeKeyGQL())}, nil
-		}
-	}
 	db, err := veloxgql.DBFrom(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return LikesConnectionOf(ctx, db.Query[Like]().Where(Likes.UserID.EQ(x.ID)), after, first, before, last)
+	q := db.Query[Group]()
+	if fields, ok := gqlimpl.Selected(ctx, "Group"); ok {
+		q = gqlimpl.Narrow(q, groupColumnsGQL(fields))
+	}
+	return gqlimpl.EdgeList(ctx, q, x, Users.Groups, "Account.groups")
+}
+
+// LikesGQL is the edge likes: a connection to the Like nodes it leads to,
+// paged, ordered and filtered by the arguments. Its queries run when gqlgen
+// asks for the connection's fields, each with those of every row read with x,
+// in one query.
+func (x *User) LikesGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*LikeConnection, error) {
+	db, err := veloxgql.DBFrom(ctx)
+	if err != nil {
+		return nil, err
+	}
+	c, err := LikesConnectionOf(ctx, db.Query[Like](), after, first, before, last)
+	if err != nil {
+		return nil, err
+	}
+	return &LikeConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Users.Likes)}, nil
 }
 
 // AccountConnection is the GraphQL type AccountConnection, a connection to a
@@ -189,10 +180,17 @@ func AccountsConnection(ctx context.Context, after *veloxgql.Cursor, first *int,
 // Offset is cleared and its Limit replaced, since the page is the connection's.
 // q must have no OrderBy: the connection orders it, and a q with one is refused
 // with an internal error, since its order would come first and break the
-// cursors. q must also select the key and the columns orderBy names: a Columns
-// or Omit that drops them breaks the cursors, and nothing refuses it. It runs
-// no query.
+// cursors. q must also select the key and the columns orderBy names, which the
+// cursors hold: a q whose Columns or Omit drops one is refused with an internal
+// error. In a gqlgen field, the page reads only the columns the selection needs
+// (userColumnsGQL), of those q selects. It runs no query.
 func AccountsConnectionOf(ctx context.Context, q velox.Query[User], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *AccountWhereInput) (*AccountConnection, error) {
+	if !q.Selects(Users.ID) {
+		return nil, fmt.Errorf("veloxgql: AccountsConnectionOf: the base query does not select the key, which the cursors hold")
+	}
+	if fields, ok := gqlimpl.Selected(ctx, "Account"); ok {
+		q = gqlimpl.Narrow(q, userColumnsGQL(fields))
+	}
 	if where != nil {
 		p, err := where.Pred(ctx)
 		if err != nil {
@@ -215,6 +213,50 @@ func userKeyGQL() []gqlimpl.OrderTerm[User] {
 			func(x *User) int64 { return x.ID },
 			func(x *User, v int64) { x.ID = v }),
 	}
+}
+
+// userColumnsGQL is the columns a selection of the Account fields fields reads:
+// the key, every foreign key on the row, every order field's column, and the
+// column of each field. It is nil, every column, when a field is not one
+// velox-graphql wrote, such as an application's own.
+func userColumnsGQL(fields []string) []velox.Column[User] {
+	cols := []velox.Column[User]{Users.ID, Users.UserBestFriend}
+	for _, f := range fields {
+		switch f {
+		case "id", "posts", "memberships", "likes":
+		case "createdAt":
+			cols = append(cols, Users.CreatedAt)
+		case "updatedAt":
+			cols = append(cols, Users.UpdatedAt)
+		case "displayName":
+			cols = append(cols, Users.Name)
+		case "email":
+			cols = append(cols, Users.Email)
+		case "role":
+			cols = append(cols, Users.Role)
+		case "nickname":
+			cols = append(cols, Users.Nickname)
+		case "bio":
+			cols = append(cols, Users.Bio)
+		case "age":
+			cols = append(cols, Users.Age)
+		case "score":
+			cols = append(cols, Users.Score)
+		case "externalID":
+			cols = append(cols, Users.ExternalID)
+		case "avatar":
+			cols = append(cols, Users.Avatar)
+		case "quota":
+			cols = append(cols, Users.Quota)
+		case "active":
+			cols = append(cols, Users.Active)
+		case "settings":
+			cols = append(cols, Users.Settings)
+		default:
+			return nil
+		}
+	}
+	return cols
 }
 
 // AccountWhereInput is the GraphQL input AccountWhereInput, a filter of Account

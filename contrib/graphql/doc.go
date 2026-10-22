@@ -124,7 +124,8 @@
 //   - IsNode and IDGQL on a Node, and the <Field>GQL getters;
 //   - the connection, edge, order and where types, each named after its
 //     GraphQL type, and the marshalers of velox-gen's enum types;
-//   - the <Edge>GQL edge methods: a connection, a list or the one node;
+//   - the <Edge>GQL edge methods: a connection, a list or the one node,
+//     each read for every row of its batch in one statement;
 //   - the root connection function <Plural>Connection, named after the
 //     plural of the GraphQL type (UsersConnection for User, AccountsConnection
 //     for a User exposed as Account), which a Query field's resolver returns;
@@ -136,7 +137,15 @@
 // "const _ = veloxgql.GeneratedCodeIsVersion1", so that generated code and
 // the module fail to compile together when they disagree. A connection is
 // keyset-paged by its cursors, and runs its page query and its COUNT only
-// when gqlgen asks for edges or pageInfo, and for totalCount. A where
+// when gqlgen asks for edges or pageInfo, and for totalCount. A page, a node
+// and an edge's nodes read only the columns their selection needs: the key,
+// the foreign keys on the row, the order fields' columns and the selected
+// fields'; all of them when the selection holds a field the plugin did not
+// write, such as an application's own. The rows one statement reads are a
+// batch: the first edge field gqlgen resolves on any of them reads that edge
+// for all of them, in one statement, so a nested query sends one statement
+// per edge per level, whatever its rows (veloxgql.Batch makes the rows of an
+// application's own resolver one). A where
 // argument's Pred is one gqlimpl helper call for each predicate the input
 // sets; it decodes IDs as their type's, and refuses an ID of another type,
 // and a filter nested deeper than MaxFilterDepth, wider than MaxFilterWidth

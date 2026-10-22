@@ -64,78 +64,66 @@ func (e *PostStatus) UnmarshalGQL(v any) error {
 }
 
 // AuthorGQL is the edge author: the Account it leads to, or nil when there is
-// none. It is x.Author when a With loaded it, and else one query.
+// none. It is read with the edge of every row read with x, in one query.
 func (x *Post) AuthorGQL(ctx context.Context) (*User, error) {
-	if v, ok := x.Author.Get(); ok {
-		return v, nil
-	}
 	db, err := veloxgql.DBFrom(ctx)
 	if err != nil {
 		return nil, err
 	}
-	v, err := db.Query[User]().Where(Users.ID.EQ(x.AuthorID)).One(ctx)
-	if errors.Is(err, velox.ErrNotFound) {
-		return nil, nil
+	q := db.Query[User]()
+	if fields, ok := gqlimpl.Selected(ctx, "Account"); ok {
+		q = gqlimpl.Narrow(q, userColumnsGQL(fields))
 	}
-	return v, err
+	return gqlimpl.EdgeOne(ctx, q, x, Posts.Author)
 }
 
 // LikesGQL is the edge likes: the Like nodes it leads to, in key order. It is
-// x.Likes when a With loaded it, and else one query, which reads at most the
-// MaxList of veloxgql.LimitsFrom(ctx) rows, whatever the DB's WithMaxRows: more
-// fail it with velox.ErrTooManyRows, in an error that names the edge.
+// read with the edge of every row read with x, in one query, which reads at
+// most the MaxList of veloxgql.LimitsFrom(ctx) rows for each, whatever the DB's
+// WithMaxRows: more fail x's with velox.ErrTooManyRows, in an error that names
+// the edge.
 func (x *Post) LikesGQL(ctx context.Context) ([]*Like, error) {
-	rows, ok := x.Likes.Get()
-	if !ok {
-		db, err := veloxgql.DBFrom(ctx)
-		if err != nil {
-			return nil, err
-		}
-		if rows, err = db.Query[Like]().Where(Likes.PostID.EQ(x.ID)).OrderBy(Likes.UserID.Asc(), Likes.PostID.Asc()).Unbounded().MaxRows(veloxgql.LimitsFrom(ctx).MaxList).All(ctx); err != nil {
-			return nil, fmt.Errorf("veloxgql: Post.likes: %w", err)
-		}
+	db, err := veloxgql.DBFrom(ctx)
+	if err != nil {
+		return nil, err
 	}
-	out := make([]*Like, len(rows))
-	for i := range rows {
-		out[i] = &rows[i]
+	q := db.Query[Like]()
+	if fields, ok := gqlimpl.Selected(ctx, "Like"); ok {
+		q = gqlimpl.Narrow(q, likeColumnsGQL(fields))
 	}
-	return out, nil
+	return gqlimpl.EdgeList(ctx, q, x, Posts.Likes, "Post.likes")
 }
 
 // RelatedGQL is the edge related: a connection to the Post nodes it leads to,
-// paged, ordered and filtered by the arguments. With no argument it is over
-// x.Related when a With loaded it, in the order loaded; else its queries are on
-// Post, filtered by the relation, and run when gqlgen asks for the connection's
-// fields.
+// paged, ordered and filtered by the arguments. Its queries run when gqlgen
+// asks for the connection's fields, each with those of every row read with x,
+// in one query.
 func (x *Post) RelatedGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
-	if after == nil && first == nil && before == nil && last == nil && orderBy == nil && where == nil {
-		if rows, ok := x.Related.Get(); ok {
-			return &PostConnection{c: gqlimpl.LoadedConnection(ctx, rows, "Post", postKeyGQL())}, nil
-		}
-	}
 	db, err := veloxgql.DBFrom(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return PostsConnectionOf(ctx, db.Query[Post]().Where(Posts.RelatedBy.HasWhere(Posts.ID.EQ(x.ID))), after, first, before, last, orderBy, where)
+	c, err := PostsConnectionOf(ctx, db.Query[Post](), after, first, before, last, orderBy, where)
+	if err != nil {
+		return nil, err
+	}
+	return &PostConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Posts.Related)}, nil
 }
 
 // RelatedByGQL is the edge related_by: a connection to the Post nodes it leads
-// to, paged, ordered and filtered by the arguments. With no argument it is over
-// x.RelatedBy when a With loaded it, in the order loaded; else its queries are
-// on Post, filtered by the relation, and run when gqlgen asks for the
-// connection's fields.
+// to, paged, ordered and filtered by the arguments. Its queries run when gqlgen
+// asks for the connection's fields, each with those of every row read with x,
+// in one query.
 func (x *Post) RelatedByGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
-	if after == nil && first == nil && before == nil && last == nil && orderBy == nil && where == nil {
-		if rows, ok := x.RelatedBy.Get(); ok {
-			return &PostConnection{c: gqlimpl.LoadedConnection(ctx, rows, "Post", postKeyGQL())}, nil
-		}
-	}
 	db, err := veloxgql.DBFrom(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return PostsConnectionOf(ctx, db.Query[Post]().Where(Posts.Related.HasWhere(Posts.ID.EQ(x.ID))), after, first, before, last, orderBy, where)
+	c, err := PostsConnectionOf(ctx, db.Query[Post](), after, first, before, last, orderBy, where)
+	if err != nil {
+		return nil, err
+	}
+	return &PostConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Posts.RelatedBy)}, nil
 }
 
 // PostConnection is the GraphQL type PostConnection, a connection to a list of
@@ -202,10 +190,24 @@ func PostsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, be
 // its Offset is cleared and its Limit replaced, since the page is the
 // connection's. q must have no OrderBy: the connection orders it, and a q with
 // one is refused with an internal error, since its order would come first and
-// break the cursors. q must also select the key and the columns orderBy names:
-// a Columns or Omit that drops them breaks the cursors, and nothing refuses it.
-// It runs no query.
+// break the cursors. q must also select the key and the columns orderBy names,
+// which the cursors hold: a q whose Columns or Omit drops one is refused with
+// an internal error. In a gqlgen field, the page reads only the columns the
+// selection needs (postColumnsGQL), of those q selects. It runs no query.
 func PostsConnectionOf(ctx context.Context, q velox.Query[Post], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
+	if !q.Selects(Posts.ID) {
+		return nil, fmt.Errorf("veloxgql: PostsConnectionOf: the base query does not select the key, which the cursors hold")
+	}
+	for _, o := range orderBy {
+		switch {
+		case o.Field == PostOrderFieldTitle && !q.Selects(Posts.Title),
+			o.Field == PostOrderFieldViews && !q.Selects(Posts.Views):
+			return nil, fmt.Errorf("veloxgql: PostsConnectionOf: the base query does not select the column of %s, which orderBy names and the cursors hold", o.Field)
+		}
+	}
+	if fields, ok := gqlimpl.Selected(ctx, "Post"); ok {
+		q = gqlimpl.Narrow(q, postColumnsGQL(fields))
+	}
 	if where != nil {
 		p, err := where.Pred(ctx)
 		if err != nil {
@@ -236,6 +238,34 @@ func postKeyGQL() []gqlimpl.OrderTerm[Post] {
 			func(x *Post) int64 { return x.ID },
 			func(x *Post, v int64) { x.ID = v }),
 	}
+}
+
+// postColumnsGQL is the columns a selection of the Post fields fields reads:
+// the key, every foreign key on the row, every order field's column, and the
+// column of each field. It is nil, every column, when a field is not one
+// velox-graphql wrote, such as an application's own.
+func postColumnsGQL(fields []string) []velox.Column[Post] {
+	cols := []velox.Column[Post]{Posts.ID, Posts.AuthorID, Posts.Title, Posts.Views}
+	for _, f := range fields {
+		switch f {
+		case "id", "title", "views", "writer", "likes", "related", "relatedBy":
+		case "slug":
+			cols = append(cols, Posts.Slug)
+		case "status":
+			cols = append(cols, Posts.Status)
+		case "publishedAt":
+			cols = append(cols, Posts.PublishedAt)
+		case "tags":
+			cols = append(cols, Posts.Tags)
+		case "rating":
+			cols = append(cols, Posts.Rating)
+		case "editedBy":
+			cols = append(cols, Posts.EditedBy)
+		default:
+			return nil
+		}
+	}
+	return cols
 }
 
 // postTermGQL is the order term o, an order of connections to Post.

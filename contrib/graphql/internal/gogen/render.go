@@ -330,7 +330,7 @@ func (r *renderer) writeGetter(f *file, t *sdl.Type, g sdl.Getter) error {
 var locals = map[string]bool{
 	"ctx": true, "id": true, "ids": true, "typ": true, "err": true, "k": true, "db": true, "x": true, "input": true, "in": true,
 	"rows": true, "by": true, "i": true, "j": true, "out": true, "c": true, "n": true, "e": true,
-	"s": true, "b": true, "w": true, "v": true, "o": true, "f": true,
+	"s": true, "b": true, "w": true, "v": true, "o": true, "f": true, "q": true, "ok": true, "fields": true, "cols": true, "batch": true,
 	"context": true, "json": true, "errors": true, "fmt": true, "io": true, "velox": true, "veloxgql": true, "gqlimpl": true,
 	"any": true, "bool": true, "string": true, "int": true, "len": true, "make": true, "append": true,
 	"nil": true, "error": true, "true": true, "false": true,
@@ -633,6 +633,14 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 		}
 		nodes = append(nodes, nd)
 	}
+	// narrow writes q, the query of t's entity, reading only the columns the
+	// field's selection needs.
+	narrow := func(t *sdl.Type, indent string) {
+		f.p("%sq := db.Query[%s]()", indent, t.Entity.Name)
+		f.p("%sif fields, ok := %s.Selected(ctx, %q); ok {", indent, f.gqlimpl(), t.Name)
+		f.p("%s\tq = %s.Narrow(q, %s(fields))", indent, f.gqlimpl(), colsFunc(t))
+		f.p("%s}", indent)
+	}
 	noType := func(fn, indent string) {
 		f.p("%sreturn nil, %s.InputErrorf(\"%s: %%w: the ID is of no Node type\", %s.ErrWrongIDType)", indent, f.gqlimpl(), fn, vgql)
 	}
@@ -651,8 +659,10 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 		f.p("// Node returns the node with the global ID id, or nil when no row has its")
 		f.p("// key. It reads the ID's type, decodes the key as that type's, and looks")
 		f.p("// the row up with one query on that entity, through the DB veloxgql.DBFrom")
-		f.p("// reads from ctx. An ID of no Node type fails with veloxgql.ErrWrongIDType")
-		f.p("// and a malformed one with veloxgql.ErrBadID; neither runs a query.")
+		f.p("// reads from ctx, reading only the columns the field's selection needs; its")
+		f.p("// edges batch (veloxgql.Batch). An ID of no Node type fails with")
+		f.p("// veloxgql.ErrWrongIDType and a malformed one with veloxgql.ErrBadID;")
+		f.p("// neither runs a query.")
 		f.p("func Node(ctx %s.Context, id string) (%s.Noder, error) {", ctx, vgql)
 		f.p("\ttyp, err := %s.IDType(id)", vgql)
 		f.p("\tif err != nil {")
@@ -670,13 +680,15 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 			f.p("\t\tif err != nil {")
 			f.p("\t\t\treturn nil, err")
 			f.p("\t\t}")
-			f.p("\t\tx, err := db.Query[%s]().Where(%s.%s.EQ(%s)).One(ctx)", e.Name, e.Handles, e.Fields[e.PrimaryKey[0]].GoName, nd.conv)
+			narrow(nd.t, "\t\t")
+			f.p("\t\tx, err := q.Where(%s.%s.EQ(%s)).One(ctx)", e.Handles, e.Fields[e.PrimaryKey[0]].GoName, nd.conv)
 			f.p("\t\tswitch {")
 			f.p("\t\tcase %s.Is(err, %s.ErrNotFound):", f.use("errors", "errors"), f.velox())
 			f.p("\t\t\treturn nil, nil")
 			f.p("\t\tcase err != nil:")
 			f.p("\t\t\treturn nil, err")
 			f.p("\t\t}")
+			f.p("\t\t%s.Batch(ctx, []*%s{x})", vgql, e.Name)
 			f.p("\t\treturn x, nil")
 		}
 		f.p("\t}")
@@ -710,7 +722,9 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 	f.p("// for an ID no row has. It decodes every ID first, and then looks up each")
 	f.p("// type's nodes with one query, through the DB veloxgql.DBFrom reads from")
 	f.p("// ctx; the query reads at most one row for each of its IDs, whatever the")
-	f.p("// DB's WithMaxRows. It fails as Node does on an ID, before any query runs,")
+	f.p("// DB's WithMaxRows, and only the columns the field's selection needs. The")
+	f.p("// nodes of a type are one batch for their edges (veloxgql.Batch).")
+	f.p("// It fails as Node does on an ID, before any query runs,")
 	f.p("// and with veloxgql.ErrPageTooLarge on more IDs than the MaxPage of")
 	f.p("// veloxgql.LimitsFrom(ctx).")
 	f.p("func Nodes(ctx %s.Context, ids []string) ([]%s.Noder, error) {", ctx, vgql)
@@ -753,14 +767,18 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 		e := nd.t.Entity
 		pk := e.Fields[e.PrimaryKey[0]].GoName
 		f.p("\tif len(keys%s) > 0 {", nd.t.Name)
-		f.p("\t\trows, err := db.Query[%s]().Where(%s.%s.In(keys%s...)).Unbounded().MaxRows(len(keys%[4]s)).All(ctx)", e.Name, e.Handles, pk, nd.t.Name)
+		narrow(nd.t, "\t\t")
+		f.p("\t\trows, err := q.Where(%s.%s.In(keys%s...)).Unbounded().MaxRows(len(keys%[3]s)).All(ctx)", e.Handles, pk, nd.t.Name)
 		f.p("\t\tif err != nil {")
 		f.p("\t\t\treturn nil, err")
 		f.p("\t\t}")
 		f.p("\t\tby := make(map[%s]*%s, len(rows))", nd.key, e.Name)
+		f.p("\t\tbatch := make([]*%s, len(rows))", e.Name)
 		f.p("\t\tfor i := range rows {")
 		f.p("\t\t\tby[rows[i].%s] = &rows[i]", pk)
+		f.p("\t\t\tbatch[i] = &rows[i]")
 		f.p("\t\t}")
+		f.p("\t\t%s.Batch(ctx, batch)", vgql)
 		f.p("\t\tfor j, k := range keys%s {", nd.t.Name)
 		f.p("\t\t\tif x := by[k]; x != nil {")
 		f.p("\t\t\t\tout[at%s[j]] = x", nd.t.Name)

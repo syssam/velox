@@ -21,29 +21,24 @@ func (*Category) IsNode() {}
 func (x *Category) IDGQL() string { return veloxgql.EncodeID("Category", x.ID) }
 
 // ChildrenGQL is the edge children: a connection to the Category nodes it leads
-// to, paged, ordered and filtered by the arguments. With no argument it is over
-// x.Children when a With loaded it, in the order loaded; else its queries are
-// on Category, filtered by the relation, and run when gqlgen asks for the
-// connection's fields.
+// to, paged, ordered and filtered by the arguments. Its queries run when gqlgen
+// asks for the connection's fields, each with those of every row read with x,
+// in one query.
 func (x *Category) ChildrenGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *CategoryWhereInput) (*CategoryConnection, error) {
-	if after == nil && first == nil && before == nil && last == nil && where == nil {
-		if rows, ok := x.Children.Get(); ok {
-			return &CategoryConnection{c: gqlimpl.LoadedConnection(ctx, rows, "Category", categoryKeyGQL())}, nil
-		}
-	}
 	db, err := veloxgql.DBFrom(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return CategoriesConnectionOf(ctx, db.Query[Category]().Where(Categories.CategoryChildren.EQ(x.ID)), after, first, before, last, where)
+	c, err := CategoriesConnectionOf(ctx, db.Query[Category](), after, first, before, last, where)
+	if err != nil {
+		return nil, err
+	}
+	return &CategoryConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Categories.Children)}, nil
 }
 
 // ParentGQL is the edge parent: the Category it leads to, or nil when there is
-// none. It is x.Parent when a With loaded it, and else one query.
+// none. It is read with the edge of every row read with x, in one query.
 func (x *Category) ParentGQL(ctx context.Context) (*Category, error) {
-	if v, ok := x.Parent.Get(); ok {
-		return v, nil
-	}
 	if x.CategoryChildren == nil {
 		return nil, nil
 	}
@@ -51,11 +46,11 @@ func (x *Category) ParentGQL(ctx context.Context) (*Category, error) {
 	if err != nil {
 		return nil, err
 	}
-	v, err := db.Query[Category]().Where(Categories.ID.EQ(*x.CategoryChildren)).One(ctx)
-	if errors.Is(err, velox.ErrNotFound) {
-		return nil, nil
+	q := db.Query[Category]()
+	if fields, ok := gqlimpl.Selected(ctx, "Category"); ok {
+		q = gqlimpl.Narrow(q, categoryColumnsGQL(fields))
 	}
-	return v, err
+	return gqlimpl.EdgeOne(ctx, q, x, Categories.Parent)
 }
 
 // CategoryConnection is the GraphQL type CategoryConnection, a connection to a
@@ -122,10 +117,17 @@ func CategoriesConnection(ctx context.Context, after *veloxgql.Cursor, first *in
 // Offset is cleared and its Limit replaced, since the page is the connection's.
 // q must have no OrderBy: the connection orders it, and a q with one is refused
 // with an internal error, since its order would come first and break the
-// cursors. q must also select the key and the columns orderBy names: a Columns
-// or Omit that drops them breaks the cursors, and nothing refuses it. It runs
-// no query.
+// cursors. q must also select the key and the columns orderBy names, which the
+// cursors hold: a q whose Columns or Omit drops one is refused with an internal
+// error. In a gqlgen field, the page reads only the columns the selection needs
+// (categoryColumnsGQL), of those q selects. It runs no query.
 func CategoriesConnectionOf(ctx context.Context, q velox.Query[Category], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *CategoryWhereInput) (*CategoryConnection, error) {
+	if !q.Selects(Categories.ID) {
+		return nil, fmt.Errorf("veloxgql: CategoriesConnectionOf: the base query does not select the key, which the cursors hold")
+	}
+	if fields, ok := gqlimpl.Selected(ctx, "Category"); ok {
+		q = gqlimpl.Narrow(q, categoryColumnsGQL(fields))
+	}
 	if where != nil {
 		p, err := where.Pred(ctx)
 		if err != nil {
@@ -148,6 +150,24 @@ func categoryKeyGQL() []gqlimpl.OrderTerm[Category] {
 			func(x *Category) int64 { return x.ID },
 			func(x *Category, v int64) { x.ID = v }),
 	}
+}
+
+// categoryColumnsGQL is the columns a selection of the Category fields fields
+// reads: the key, every foreign key on the row, every order field's column, and
+// the column of each field. It is nil, every column, when a field is not one
+// velox-graphql wrote, such as an application's own.
+func categoryColumnsGQL(fields []string) []velox.Column[Category] {
+	cols := []velox.Column[Category]{Categories.ID, Categories.CategoryChildren}
+	for _, f := range fields {
+		switch f {
+		case "id", "children", "parent":
+		case "title":
+			cols = append(cols, Categories.Title)
+		default:
+			return nil
+		}
+	}
+	return cols
 }
 
 // CategoryWhereInput is the GraphQL input CategoryWhereInput, a filter of

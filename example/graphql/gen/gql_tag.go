@@ -29,21 +29,19 @@ func (*Tag) IsNode() {}
 func (x *Tag) IDGQL() string { return veloxgql.EncodeID("Label", x.ID) }
 
 // PostsGQL is the edge posts: a connection to the Post nodes it leads to,
-// paged, ordered and filtered by the arguments. With no argument it is over
-// x.Posts when a With loaded it, in the order loaded; else its queries are on
-// Post, filtered by the relation, and run when gqlgen asks for the connection's
-// fields.
+// paged, ordered and filtered by the arguments. Its queries run when gqlgen
+// asks for the connection's fields, each with those of every row read with x,
+// in one query.
 func (x *Tag) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
-	if after == nil && first == nil && before == nil && last == nil && orderBy == nil && where == nil {
-		if rows, ok := x.Posts.Get(); ok {
-			return &PostConnection{c: gqlimpl.LoadedConnection(ctx, rows, "Post", postKeyGQL())}, nil
-		}
-	}
 	db, err := veloxgql.DBFrom(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return PostsConnectionOf(ctx, db.Query[Post]().Where(Posts.Tags.HasWhere(Tags.ID.EQ(x.ID))), after, first, before, last, orderBy, where)
+	c, err := PostsConnectionOf(ctx, db.Query[Post](), after, first, before, last, orderBy, where)
+	if err != nil {
+		return nil, err
+	}
+	return &PostConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Tags.Posts)}, nil
 }
 
 // LabelConnection is the GraphQL type LabelConnection, a connection to a list
@@ -110,10 +108,23 @@ func LabelsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, b
 // gave it; its Offset is cleared and its Limit replaced, since the page is the
 // connection's. q must have no OrderBy: the connection orders it, and a q with
 // one is refused with an internal error, since its order would come first and
-// break the cursors. q must also select the key and the columns orderBy names:
-// a Columns or Omit that drops them breaks the cursors, and nothing refuses it.
-// It runs no query.
+// break the cursors. q must also select the key and the columns orderBy names,
+// which the cursors hold: a q whose Columns or Omit drops one is refused with
+// an internal error. In a gqlgen field, the page reads only the columns the
+// selection needs (tagColumnsGQL), of those q selects. It runs no query.
 func LabelsConnectionOf(ctx context.Context, q velox.Query[Tag], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *LabelOrder, where *LabelWhereInput) (*LabelConnection, error) {
+	if !q.Selects(Tags.ID) {
+		return nil, fmt.Errorf("veloxgql: LabelsConnectionOf: the base query does not select the key, which the cursors hold")
+	}
+	if o := orderBy; o != nil {
+		switch {
+		case o.Field == LabelOrderFieldName && !q.Selects(Tags.Name):
+			return nil, fmt.Errorf("veloxgql: LabelsConnectionOf: the base query does not select the column of %s, which orderBy names and the cursors hold", o.Field)
+		}
+	}
+	if fields, ok := gqlimpl.Selected(ctx, "Label"); ok {
+		q = gqlimpl.Narrow(q, tagColumnsGQL(fields))
+	}
 	if where != nil {
 		p, err := where.Pred(ctx)
 		if err != nil {
@@ -144,6 +155,24 @@ func tagKeyGQL() []gqlimpl.OrderTerm[Tag] {
 			func(x *Tag) int64 { return x.ID },
 			func(x *Tag, v int64) { x.ID = v }),
 	}
+}
+
+// tagColumnsGQL is the columns a selection of the Label fields fields reads:
+// the key, every foreign key on the row, every order field's column, and the
+// column of each field. It is nil, every column, when a field is not one
+// velox-graphql wrote, such as an application's own.
+func tagColumnsGQL(fields []string) []velox.Column[Tag] {
+	cols := []velox.Column[Tag]{Tags.ID, Tags.Name}
+	for _, f := range fields {
+		switch f {
+		case "id", "name", "posts":
+		case "rank":
+			cols = append(cols, Tags.Rank)
+		default:
+			return nil
+		}
+	}
+	return cols
 }
 
 // tagTermGQL is the order term o, an order of connections to Label.

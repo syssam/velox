@@ -3,6 +3,7 @@ package gen
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 
 	"github.com/syssam/velox2"
@@ -39,21 +40,19 @@ func (e *GroupVisibility) UnmarshalGQL(v any) error {
 }
 
 // UsersGQL is the edge users: a connection to the Account nodes it leads to,
-// paged, ordered and filtered by the arguments. With no argument it is over
-// x.Users when a With loaded it, in the order loaded; else its queries are on
-// User, filtered by the relation, and run when gqlgen asks for the connection's
-// fields.
+// paged, ordered and filtered by the arguments. Its queries run when gqlgen
+// asks for the connection's fields, each with those of every row read with x,
+// in one query.
 func (x *Group) UsersGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *AccountWhereInput) (*AccountConnection, error) {
-	if after == nil && first == nil && before == nil && last == nil && where == nil {
-		if rows, ok := x.Users.Get(); ok {
-			return &AccountConnection{c: gqlimpl.LoadedConnection(ctx, rows, "Account", userKeyGQL())}, nil
-		}
-	}
 	db, err := veloxgql.DBFrom(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return AccountsConnectionOf(ctx, db.Query[User]().Where(Users.Groups.HasWhere(Groups.ID.EQ(x.ID))), after, first, before, last, where)
+	c, err := AccountsConnectionOf(ctx, db.Query[User](), after, first, before, last, where)
+	if err != nil {
+		return nil, err
+	}
+	return &AccountConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Groups.Users)}, nil
 }
 
 // GroupConnection is the GraphQL type GroupConnection, a connection to a list
@@ -120,9 +119,23 @@ func GroupsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, b
 // cleared and its Limit replaced, since the page is the connection's. q must
 // have no OrderBy: the connection orders it, and a q with one is refused with
 // an internal error, since its order would come first and break the cursors. q
-// must also select the key and the columns orderBy names: a Columns or Omit
-// that drops them breaks the cursors, and nothing refuses it. It runs no query.
+// must also select the key and the columns orderBy names, which the cursors
+// hold: a q whose Columns or Omit drops one is refused with an internal error.
+// In a gqlgen field, the page reads only the columns the selection needs
+// (groupColumnsGQL), of those q selects. It runs no query.
 func GroupsConnectionOf(ctx context.Context, q velox.Query[Group], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *GroupOrder) (*GroupConnection, error) {
+	if !q.Selects(Groups.ID) {
+		return nil, fmt.Errorf("veloxgql: GroupsConnectionOf: the base query does not select the key, which the cursors hold")
+	}
+	if o := orderBy; o != nil {
+		switch {
+		case o.Field == GroupOrderFieldName && !q.Selects(Groups.Name):
+			return nil, fmt.Errorf("veloxgql: GroupsConnectionOf: the base query does not select the column of %s, which orderBy names and the cursors hold", o.Field)
+		}
+	}
+	if fields, ok := gqlimpl.Selected(ctx, "Group"); ok {
+		q = gqlimpl.Narrow(q, groupColumnsGQL(fields))
+	}
 	var order []gqlimpl.OrderTerm[Group]
 	if o := orderBy; o != nil {
 		term, err := groupTermGQL(o)
@@ -146,6 +159,24 @@ func groupKeyGQL() []gqlimpl.OrderTerm[Group] {
 			func(x *Group) int64 { return x.ID },
 			func(x *Group, v int64) { x.ID = v }),
 	}
+}
+
+// groupColumnsGQL is the columns a selection of the Group fields fields reads:
+// the key, every foreign key on the row, every order field's column, and the
+// column of each field. It is nil, every column, when a field is not one
+// velox-graphql wrote, such as an application's own.
+func groupColumnsGQL(fields []string) []velox.Column[Group] {
+	cols := []velox.Column[Group]{Groups.ID, Groups.Name}
+	for _, f := range fields {
+		switch f {
+		case "id", "name", "users":
+		case "visibility":
+			cols = append(cols, Groups.Visibility)
+		default:
+			return nil
+		}
+	}
+	return cols
 }
 
 // groupTermGQL is the order term o, an order of connections to Group.

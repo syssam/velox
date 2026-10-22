@@ -564,11 +564,6 @@ func TestRenderErrors(t *testing.T) {
 			return e
 		}()}}, "schema Node: its Go file would be gql_node.go"},
 		"sdl": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{entity("Query", "int64")}}, "Query"},
-		"many-to-many with no inverse": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{func() *plugin.Entity {
-			e := entity("Author", "int64")
-			e.Edges = []*plugin.Edge{{Name: "books", GoName: "Books", Target: "Book", Kind: plugin.M2M, Join: "AuthorBook"}}
-			return e
-		}(), entity("Book", "int64")}}, "schema Author, edge books: velox-graphql finds the nodes of a many-to-many edge through its inverse edge, and Book has none"},
 		"an edge to a key of two columns": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{func() *plugin.Entity {
 			e := entity("Author", "int64")
 			e.Edges = []*plugin.Edge{{Name: "pair", GoName: "Pair", Target: "Pair", Kind: plugin.M2O, Unique: true, Field: "pair_a", FieldOn: "Author", OwnsKey: true}}
@@ -1163,5 +1158,215 @@ func TestUpdateEdgeToRenamedType(t *testing.T) {
 		if !strings.Contains(src, w) {
 			t.Errorf("gql_group.go: no %q in\n%s", w, src)
 		}
+	}
+}
+
+// funcSrc is the source of the function or method name in files (a method
+// as "Recv.Name"), with its whitespace collapsed; "" when none declares it.
+func funcSrc(t *testing.T, files map[string]string, name string) string {
+	t.Helper()
+	fset := token.NewFileSet()
+	for fname, src := range files {
+		f, err := parser.ParseFile(fset, fname, src, 0)
+		if err != nil {
+			t.Fatalf("%s: %v", fname, err)
+		}
+		for _, decl := range f.Decls {
+			fd, ok := decl.(*ast.FuncDecl)
+			if !ok {
+				continue
+			}
+			n := fd.Name.Name
+			if fd.Recv != nil {
+				rt := fd.Recv.List[0].Type
+				if s, ok := rt.(*ast.StarExpr); ok {
+					rt = s.X
+				}
+				n = rt.(*ast.Ident).Name + "." + n
+			}
+			if n == name {
+				var b strings.Builder
+				if err := printer.Fprint(&b, fset, fd); err != nil {
+					t.Fatal(err)
+				}
+				return strings.Join(strings.Fields(b.String()), " ")
+			}
+		}
+	}
+	return ""
+}
+
+// TestEdgesBatch: every edge method reads its edge through gqlimpl's
+// batching (EdgeConnection, EdgeOne or EdgeList, by its kind, with the
+// owner's relation handle), and none reads the relation's field, which an
+// application's With may have loaded filtered or limited.
+func TestEdgesBatch(t *testing.T) {
+	for label, m := range map[string]*plugin.Model{"testdata": testModel(t), "types": typesModel(t)} {
+		surf, err := sdl.Build(m)
+		if err != nil {
+			t.Fatal(err)
+		}
+		files := render(t, m)
+		n := 0
+		for _, ty := range surf.Types {
+			e := ty.Entity
+			for _, ed := range ty.Edges {
+				n++
+				pe := e.Edges[ed.Edge]
+				src := funcSrc(t, files, e.Name+"."+ed.Method)
+				want := map[sdl.EdgeKind]string{
+					sdl.EdgeConnection: "gqlimpl.EdgeConnection(ctx, c.c, x, " + e.Handles + "." + pe.GoName + ")",
+					sdl.EdgeUnique:     "gqlimpl.EdgeOne(ctx, q, x, " + e.Handles + "." + pe.GoName + ")",
+					sdl.EdgeList:       "gqlimpl.EdgeList(ctx, q, x, " + e.Handles + "." + pe.GoName + ", \"" + ty.Name + "." + pe.Name + "\")",
+				}[ed.Kind]
+				if !strings.Contains(src, want) {
+					t.Errorf("%s: %s.%s: no %q in\n%s", label, e.Name, ed.Method, want, src)
+				}
+				if strings.Contains(src, ".Get()") || strings.Contains(src, "LoadedConnection") {
+					t.Errorf("%s: %s.%s reads the relation's field:\n%s", label, e.Name, ed.Method, src)
+				}
+				if ed.Kind != sdl.EdgeConnection {
+					// The target's query reads only the columns selected.
+					tt := ed.Target
+					sel := "if fields, ok := gqlimpl.Selected(ctx, \"" + tt.Name + "\"); ok { q = gqlimpl.Narrow(q, " + lowerFirst(tt.Entity.Name) + "ColumnsGQL(fields)) }"
+					if !strings.Contains(src, sel) {
+						t.Errorf("%s: %s.%s: no %q in\n%s", label, e.Name, ed.Method, sel, src)
+					}
+				}
+			}
+		}
+		if n == 0 {
+			t.Errorf("%s: no edge", label)
+		}
+	}
+	// A key held in a pointer on the owner's row: a NULL sends no statement.
+	src := funcSrc(t, render(t, typesModel(t)), "Event.OwnerGQL")
+	if i, j := strings.Index(src, "if x.OwnerID == nil { return nil, nil }"), strings.Index(src, "gqlimpl.EdgeOne("); i < 0 || j < i {
+		t.Errorf("Event.OwnerGQL does not return nil for a NULL key before EdgeOne:\n%s", src)
+	}
+}
+
+// TestColumnsGQL: each type has <label>ColumnsGQL, whose switch lists every
+// field of its GraphQL type, getters and edges included, and whose columns
+// include no sensitive field's.
+func TestColumnsGQL(t *testing.T) {
+	for label, m := range map[string]*plugin.Model{"testdata": testModel(t), "types": typesModel(t)} {
+		sdlText, err := sdl.Render(m)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var others []string
+		if label == "testdata" {
+			others = append(others, readFile(t, filepath.Join("..", "sdl", "testdata", "app.graphqls")))
+		}
+		schema, err := sdl.Check(sdlText, others...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		surf, err := sdl.Build(m)
+		if err != nil {
+			t.Fatal(err)
+		}
+		files := render(t, m)
+		sensitive := 0
+		for _, ty := range surf.Types {
+			e := ty.Entity
+			name := lowerFirst(e.Name) + "ColumnsGQL"
+			src := funcSrc(t, files, name)
+			if !strings.HasPrefix(src, "func "+name+"(fields []string) []velox.Column["+e.Name+"] {") {
+				t.Errorf("%s: %s: no %s:\n%s", label, ty.Name, name, src)
+				continue
+			}
+			var cases []string
+			for _, c := range strings.Split(src, "case ")[1:] {
+				list, _, _ := strings.Cut(c, ":")
+				for _, q := range strings.Split(list, ", ") {
+					v, err := strconv.Unquote(q)
+					if err != nil {
+						t.Fatalf("%s: %s: a case %q", label, name, q)
+					}
+					cases = append(cases, v)
+				}
+			}
+			var want []string
+			for _, f := range schema.Types[ty.Name].Fields {
+				want = append(want, f.Name)
+			}
+			slices.Sort(cases)
+			slices.Sort(want)
+			if !slices.Equal(cases, want) {
+				t.Errorf("%s: %s's cases %v, want the fields of %s %v", label, name, cases, ty.Name, want)
+			}
+			if !strings.Contains(src, "default: return nil") {
+				t.Errorf("%s: %s: another field does not read every column:\n%s", label, name, src)
+			}
+			for _, fd := range e.Fields {
+				if fd.Sensitive {
+					sensitive++
+					if strings.Contains(src, e.Handles+"."+fd.GoName+",") || strings.Contains(src, e.Handles+"."+fd.GoName+")") || strings.Contains(src, e.Handles+"."+fd.GoName+"}") {
+						t.Errorf("%s: %s reads the sensitive %s:\n%s", label, name, fd.Name, src)
+					}
+				}
+			}
+		}
+		if label == "testdata" && sensitive == 0 {
+			t.Error("the testdata model has no sensitive field")
+		}
+	}
+	src := funcSrc(t, render(t, testModel(t)), "postColumnsGQL")
+	for _, w := range []string{
+		// The key, the foreign keys on the row and the order columns, always.
+		"cols := []velox.Column[Post]{Posts.ID, Posts.AuthorID, ",
+	} {
+		if !strings.Contains(src, w) {
+			t.Errorf("postColumnsGQL: no %q in\n%s", w, src)
+		}
+	}
+}
+
+// TestConnectionOfChecksSelects: XConnectionOf refuses a base query that
+// does not select the key or an orderBy column, and narrows its columns to
+// the selection, before anything else.
+func TestConnectionOfChecksSelects(t *testing.T) {
+	for label, m := range map[string]*plugin.Model{"testdata": testModel(t), "types": typesModel(t)} {
+		surf, err := sdl.Build(m)
+		if err != nil {
+			t.Fatal(err)
+		}
+		files := render(t, m)
+		for _, ty := range surf.Types {
+			src := funcSrc(t, files, connFunc(ty))
+			sel, narrow, conn := strings.Index(src, "q.Selects("), strings.Index(src, "gqlimpl.Narrow(q, "+lowerFirst(ty.Entity.Name)+"ColumnsGQL(fields))"), strings.Index(src, "gqlimpl.NewConnection(")
+			if sel < 0 || narrow < sel || conn < narrow {
+				t.Errorf("%s: %s does not check q.Selects, then narrow, before NewConnection:\n%s", label, connFunc(ty), src)
+			}
+			if w := strings.Index(src, "where.Pred("); w >= 0 && w < narrow {
+				t.Errorf("%s: %s: the where input before the check:\n%s", label, connFunc(ty), src)
+			}
+			if ty.Order != nil && !strings.Contains(src, "which orderBy names") {
+				t.Errorf("%s: %s does not check orderBy's columns:\n%s", label, connFunc(ty), src)
+			}
+		}
+	}
+}
+
+// TestM2MWithoutInverse: a many-to-many edge needs no inverse edge, since
+// the edge method reads the join table through the relation.
+func TestM2MWithoutInverse(t *testing.T) {
+	entity := func(name string) *plugin.Entity {
+		return &plugin.Entity{
+			Name: name, Label: strings.ToLower(name), Handles: name + "s", Tenant: -1, PrimaryKey: []int{0}, Edges: []*plugin.Edge{},
+			Fields: []*plugin.Field{
+				{Name: "id", GoName: "ID", Type: "int64", GoType: "int64", ElemType: "int64"},
+				{Name: "x", GoName: "X", Type: "string", GoType: "string", ElemType: "string"},
+			},
+		}
+	}
+	author := entity("Author")
+	author.Edges = []*plugin.Edge{{Name: "books", GoName: "Books", Target: "Book", Kind: plugin.M2M, Join: "AuthorBook"}}
+	files := render(t, &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{author, entity("Book")}})
+	src := funcSrc(t, files, "Author.BooksGQL")
+	if !strings.Contains(src, "gqlimpl.EdgeConnection(ctx, c.c, x, Authors.Books)") {
+		t.Errorf("Author.BooksGQL:\n%s", src)
 	}
 }

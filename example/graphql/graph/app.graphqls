@@ -21,3 +21,12 @@ extend type Query {
     where: PostWhereInput
   ): PostConnection!
 }
+
+# The application's own field on a generated type, resolved by graph's
+# userResolver from the user's name. velox-graphql did not write it, so it
+# cannot know which columns its resolver reads: a page that selects it reads
+# every column.
+extend type User {
+  "The initials of the user's name."
+  initials: String!
+}

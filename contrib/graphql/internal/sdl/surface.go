@@ -35,6 +35,9 @@ type Type struct {
 	Getters []Getter
 	// Enums are the enum fields in GraphQL, in the model's field order.
 	Enums []Enum
+	// Fields are the type's fields that are not edges, in the SDL's order:
+	// id first for a Node, then the entity's fields in the model's order.
+	Fields []Field
 	// Order are the values of XOrderField, in the model's field order; nil
 	// when the type has no order. With MultiOrder, orderBy takes a list.
 	Order      []OrderValue
@@ -94,12 +97,20 @@ const (
 	EdgeConnection                 // a connection to the edge's nodes
 )
 
+// Field is a field of a type that is not an edge: id, whose value is the
+// key's, or one of the entity's fields, through a getter or not.
+type Field struct {
+	Name  string // the GraphQL name
+	Field int    // the index in Entity.Fields: the key's for id
+}
+
 // Edge is an edge field of a type, which gqlgen binds to the entity's method
 // Method, as the SDL's @goField says. A connection's arguments are its
 // Target's: paging, then orderBy when Target has an Order and where when it
 // has a where input.
 type Edge struct {
-	Edge   int // the index of the edge in Entity.Edges
+	Edge   int    // the index of the edge in Entity.Edges
+	Name   string // the GraphQL name of the field
 	Kind   EdgeKind
 	Target *Type  // the type of the edge's nodes
 	Method string // <GoName>GQL
@@ -208,7 +219,7 @@ func Build(m *plugin.Model) (*Surface, error) {
 	for _, o := range g.objects {
 		t := types[o]
 		*t = Type{Entity: o.ent, Name: o.name, Node: o.node, Key: o.key, Getters: o.getters, MultiOrder: o.ann.MultiOrder, Where: o.whereGo,
-			Create: o.createGo, Update: o.updateGo, Delete: o.del}
+			Create: o.createGo, Update: o.updateGo, Delete: o.del, Fields: o.plain}
 		for _, en := range o.enums {
 			i := slices.IndexFunc(o.ent.Fields, func(f *plugin.Field) bool { return f.Name == en.field })
 			t.Enums = append(t.Enums, Enum{Name: en.name, Field: i, Values: en.values})
@@ -222,7 +233,7 @@ func Build(m *plugin.Model) (*Surface, error) {
 			}
 		}
 		for _, ef := range o.edges {
-			t.Edges = append(t.Edges, Edge{Edge: ef.edge, Kind: ef.kind, Target: types[ef.target], Method: o.ent.Edges[ef.edge].GoName + "GQL"})
+			t.Edges = append(t.Edges, Edge{Edge: ef.edge, Name: ef.name, Kind: ef.kind, Target: types[ef.target], Method: o.ent.Edges[ef.edge].GoName + "GQL"})
 		}
 		s.Types = append(s.Types, t)
 	}

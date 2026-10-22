@@ -3,6 +3,7 @@ package gogen
 import (
 	"cmp"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/syssam/velox2/contrib/graphql/internal/sdl"
@@ -20,6 +21,7 @@ func lowerFirst(name string) string {
 func connFunc(t *sdl.Type) string { return plugin.Plural(t.Name) + "ConnectionOf" }
 func keyFunc(t *sdl.Type) string  { return lowerFirst(t.Entity.Name) + "KeyGQL" }
 func termFunc(t *sdl.Type) string { return lowerFirst(t.Entity.Name) + "TermGQL" }
+func colsFunc(t *sdl.Type) string { return lowerFirst(t.Entity.Name) + "ColumnsGQL" }
 
 // connParams are the parameters of a connection to t's nodes, in the SDL's
 // argument order (sdl's connArgs): paging, and orderBy and where when t has
@@ -59,7 +61,7 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	e, n := t.Entity, t.Name
 	what := "schema " + e.Name
 	root := plugin.Plural(n) + "Connection"
-	for _, name := range []string{n + "Connection", n + "Edge", root, connFunc(t), keyFunc(t)} {
+	for _, name := range []string{n + "Connection", n + "Edge", root, connFunc(t), keyFunc(t), colsFunc(t)} {
 		if err := r.declare(name, what); err != nil {
 			return err
 		}
@@ -124,8 +126,14 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	} else {
 		how = append(how, "ordered by the key")
 	}
-	f.doc("", fmt.Sprintf("%s is the connection to the %s nodes q returns, %s, and paged by the other arguments. q keeps its filters and With loads, and the scope the application gave it; its Offset is cleared and its Limit replaced, since the page is the connection's. q must have no OrderBy: the connection orders it, and a q with one is refused with an internal error, since its order would come first and break the cursors. q must also select the key and the columns orderBy names: a Columns or Omit that drops them breaks the cursors, and nothing refuses it. It runs no query.", connFunc(t), n, strings.Join(how, ", ")))
+	f.doc("", fmt.Sprintf("%s is the connection to the %s nodes q returns, %s, and paged by the other arguments. q keeps its filters and With loads, and the scope the application gave it; its Offset is cleared and its Limit replaced, since the page is the connection's. q must have no OrderBy: the connection orders it, and a q with one is refused with an internal error, since its order would come first and break the cursors. q must also select the key and the columns orderBy names, which the cursors hold: a q whose Columns or Omit drops one is refused with an internal error. In a gqlgen field, the page reads only the columns the selection needs (%s), of those q selects. It runs no query.", connFunc(t), n, strings.Join(how, ", "), colsFunc(t)))
 	f.p("func %s(ctx %s.Context, q %s.Query[%s], %s) (*%sConnection, error) {", connFunc(t), ctx, velox, e.Name, connParams(f, t), n)
+	if err := r.writeSelects(f, t); err != nil {
+		return err
+	}
+	f.p("\tif fields, ok := %s.Selected(ctx, %q); ok {", impl, n)
+	f.p("\t\tq = %s.Narrow(q, %s(fields))", impl, colsFunc(t))
+	f.p("\t}")
 	if t.Where != nil {
 		f.p("\tif where != nil {")
 		f.p("\t\tp, err := where.Pred(ctx)")
@@ -173,6 +181,7 @@ func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	}
 	f.p("\t}")
 	f.p("}")
+	r.writeColumns(f, t)
 	if t.Order == nil {
 		return nil
 	}
@@ -294,6 +303,112 @@ func (r *renderer) converts(e *plugin.Entity, fd *plugin.Field, base string) err
 	return nil
 }
 
+// writeSelects writes the refusal, in XConnectionOf, of a q that does not
+// select the key or a column of an orderBy term: the cursors hold them.
+func (r *renderer) writeSelects(f *file, t *sdl.Type) error {
+	e, n := t.Entity, t.Name
+	errorf := f.use("fmt", "fmt") + ".Errorf"
+	var keys []string
+	for _, i := range e.PrimaryKey {
+		keys = append(keys, e.Handles+"."+e.Fields[i].GoName)
+	}
+	f.p("\tif !q.Selects(%s) {", strings.Join(keys, ", "))
+	f.p("\t\treturn nil, %s(\"veloxgql: %s: the base query does not select the key, which the cursors hold\")", errorf, connFunc(t))
+	f.p("\t}")
+	if t.Order == nil {
+		return nil
+	}
+	if t.MultiOrder {
+		f.p("\tfor _, o := range orderBy {")
+	} else {
+		f.p("\tif o := orderBy; o != nil {")
+	}
+	var cases []string
+	for _, v := range t.Order {
+		fd := e.Fields[v.Field]
+		cases = append(cases, fmt.Sprintf("o.Field == %sOrderField%s && !q.Selects(%s.%s)", n, fd.GoName, e.Handles, fd.GoName))
+	}
+	f.p("\t\tswitch {")
+	f.p("\t\tcase %s:", strings.Join(cases, ",\n\t\t\t"))
+	f.p("\t\t\treturn nil, %s(\"veloxgql: %s: the base query does not select the column of %%s, which orderBy names and the cursors hold\", o.Field)", errorf, connFunc(t))
+	f.p("\t\t}")
+	f.p("\t}")
+	return nil
+}
+
+// foreignKey reports whether e's field fd is a foreign key on e's rows: a
+// field velox added for an edge, or the field an edge of any entity names
+// on e.
+func (r *renderer) foreignKey(e *plugin.Entity, fd *plugin.Field) bool {
+	if fd.Implicit != "" {
+		return true
+	}
+	for _, x := range r.m.Entities {
+		for _, ed := range x.Edges {
+			if ed.FieldOn == e.Name && ed.Field == fd.Name {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// writeColumns writes <entity>ColumnsGQL, the columns a selection of t's
+// fields reads: the key, every foreign key on the
+// row (an edge, the application's With loads, and mutations' checks read
+// them) and every order field's column (a cursor holds them), always; and
+// each selected field's column. A field it does not know, an application's
+// own, may read any column: then all of them.
+func (r *renderer) writeColumns(f *file, t *sdl.Type) {
+	e, velox := t.Entity, f.velox()
+	base := slices.Clone(e.PrimaryKey) // the indexes in e.Fields of the columns always read
+	in := func(i int) bool { return slices.Contains(base, i) }
+	for i, fd := range e.Fields {
+		if !in(i) && r.foreignKey(e, fd) {
+			base = append(base, i)
+		}
+	}
+	for _, v := range t.Order {
+		if !in(v.Field) {
+			base = append(base, v.Field)
+		}
+	}
+	cols := make([]string, len(base))
+	for k, i := range base {
+		cols[k] = e.Handles + "." + e.Fields[i].GoName
+	}
+	var none []string // the fields whose columns are read always, and the edges
+	for _, fd := range t.Fields {
+		if in(fd.Field) {
+			none = append(none, fd.Name)
+		}
+	}
+	for _, ed := range t.Edges {
+		none = append(none, ed.Name)
+	}
+	f.p("")
+	f.doc("", fmt.Sprintf("%s is the columns a selection of the %s fields fields reads: the key, every foreign key on the row, every order field's column, and the column of each field. It is nil, every column, when a field is not one velox-graphql wrote, such as an application's own.", colsFunc(t), t.Name))
+	f.p("func %s(fields []string) []%s.Column[%s] {", colsFunc(t), velox, e.Name)
+	f.p("\tcols := []%s.Column[%s]{%s}", velox, e.Name, strings.Join(cols, ", "))
+	f.p("\tfor _, f := range fields {")
+	f.p("\t\tswitch f {")
+	if len(none) > 0 {
+		f.p("\t\tcase %s:", quoteList(none))
+	}
+	for _, fd := range t.Fields {
+		if !in(fd.Field) {
+			f.p("\t\tcase %q:", fd.Name)
+			f.p("\t\t\tcols = append(cols, %s.%s)", e.Handles, e.Fields[fd.Field].GoName)
+		}
+	}
+	f.p("\t\tdefault:")
+	f.p("\t\t\treturn nil")
+	f.p("\t\t}")
+	f.p("\t}")
+	f.p("\treturn cols")
+	f.p("}")
+}
+
 // writeEdges writes the methods gqlgen binds t's edge fields to.
 func (r *renderer) writeEdges(f *file, t *sdl.Type) error {
 	for _, ed := range t.Edges {
@@ -304,155 +419,102 @@ func (r *renderer) writeEdges(f *file, t *sdl.Type) error {
 	return nil
 }
 
-// edgeFilter is how the edge's nodes are found: cond, a condition on the
-// target's query, Go code of x, the owner; and nilKey, when the owner holds
-// the key in a pointer, the condition under which the edge has no node.
-type edgeFilter struct {
-	cond, nilKey string
-}
-
-// filter is the edgeFilter of ed, an edge of e to the entity tgt:
-//   - A foreign key on the owner's row (OwnsKey): the target's key is it.
-//   - A foreign key on the target's rows: it is the owner's key.
-//   - Many-to-many: the target's inverse edge (the edge Ref names) has the
-//     owner, through Rel.HasWhere.
-//
-// It fails when the key it compares, the target's, the owner's or both, is
-// not one column.
-func (r *renderer) filter(e *plugin.Entity, ed *plugin.Edge, tgt *plugin.Entity) (edgeFilter, error) {
+// nilKey is, for the edge ed of e to tgt when e's row holds its key in a
+// pointer, the condition under which the edge has no node, a Go expression
+// of x, the owner; "" otherwise. It fails when the key the relation
+// compares, the target's or the owner's, is not one column.
+func (r *renderer) nilKey(e *plugin.Entity, ed *plugin.Edge, tgt *plugin.Entity) (string, error) {
 	where := "schema " + e.Name + ", edge " + ed.Name
-	// key is the one column of of's key, which the filter compares.
-	key := func(of *plugin.Entity) (*plugin.Field, error) {
+	oneKey := func(of *plugin.Entity) error {
 		if len(of.PrimaryKey) != 1 {
-			return nil, fmt.Errorf("%s: velox-graphql finds its nodes by the key of %s, which is %d columns; skip the edge with graphql.Skip()", where, of.Name, len(of.PrimaryKey))
+			return fmt.Errorf("%s: velox-graphql finds its nodes by the key of %s, which is %d columns; skip the edge with graphql.Skip()", where, of.Name, len(of.PrimaryKey))
 		}
-		return of.Fields[of.PrimaryKey[0]], nil
-	}
-	field := func(of *plugin.Entity, name string) (*plugin.Field, error) {
-		for _, fd := range of.Fields {
-			if fd.Name == name {
-				return fd, nil
-			}
-		}
-		return nil, fmt.Errorf("%s: its foreign key %s is no field of %s", where, name, of.Name)
+		return nil
 	}
 	switch {
 	case ed.Field != "" && ed.OwnsKey:
-		fk, err := field(e, ed.Field)
-		if err != nil {
-			return edgeFilter{}, err
+		if err := oneKey(tgt); err != nil {
+			return "", err
 		}
-		tk, err := key(tgt)
-		if err != nil {
-			return edgeFilter{}, err
+		for _, fd := range e.Fields {
+			if fd.Name == ed.Field {
+				if fd.Pointer {
+					return "x." + fd.GoName + " == nil", nil
+				}
+				return "", nil
+			}
 		}
-		if fk.Pointer {
-			return edgeFilter{cond: fmt.Sprintf("%s.%s.EQ(*x.%s)", tgt.Handles, tk.GoName, fk.GoName), nilKey: "x." + fk.GoName + " == nil"}, nil
-		}
-		return edgeFilter{cond: fmt.Sprintf("%s.%s.EQ(x.%s)", tgt.Handles, tk.GoName, fk.GoName)}, nil
+		return "", fmt.Errorf("%s: its foreign key %s is no field of %s", where, ed.Field, e.Name)
 	case ed.Field != "":
-		fk, err := field(tgt, ed.Field)
-		if err != nil {
-			return edgeFilter{}, err
-		}
-		ok, err := key(e)
-		if err != nil {
-			return edgeFilter{}, err
-		}
-		return edgeFilter{cond: fmt.Sprintf("%s.%s.EQ(x.%s)", tgt.Handles, fk.GoName, ok.GoName)}, nil
+		return "", oneKey(e)
 	}
-	for _, inv := range tgt.Edges {
-		if ed.Ref != "" && inv.Name == ed.Ref && inv.Target == e.Name {
-			ok, err := key(e)
-			if err != nil {
-				return edgeFilter{}, err
-			}
-			if _, err := key(tgt); err != nil {
-				return edgeFilter{}, err
-			}
-			return edgeFilter{cond: fmt.Sprintf("%s.%s.HasWhere(%s.%s.EQ(x.%s))", tgt.Handles, inv.GoName, e.Handles, ok.GoName, ok.GoName)}, nil
-		}
+	if err := oneKey(e); err != nil {
+		return "", err
 	}
-	return edgeFilter{}, fmt.Errorf("%s: velox-graphql finds the nodes of a many-to-many edge through its inverse edge, and %s has none; declare one with Ref(%q), or skip the edge with graphql.Skip()", where, tgt.Name, ed.Name)
+	return "", oneKey(tgt)
 }
 
 // writeEdge writes the method of the edge field ed of t: the edge's node or
-// nodes, from the relation's field when a With loaded it, else with one
-// query on the target, filtered by the relation, through the DB
-// veloxgql.DBFrom reads from ctx.
+// nodes, read through gqlimpl's batches (EdgeConnection, EdgeOne, EdgeList)
+// on the DB veloxgql.DBFrom reads from ctx. It never reads the relation's
+// field: an application's With may have loaded it filtered or limited.
 func (r *renderer) writeEdge(f *file, t *sdl.Type, ed sdl.Edge) error {
 	e, pe := t.Entity, t.Entity.Edges[ed.Edge]
 	tt, tgt := ed.Target, ed.Target.Entity
 	if err := r.declare(e.Name+"."+ed.Method, "schema "+e.Name+", edge "+pe.Name); err != nil {
 		return err
 	}
-	flt, err := r.filter(e, pe, tgt)
+	nilKey, err := r.nilKey(e, pe, tgt)
 	if err != nil {
 		return err
 	}
-	if flt.nilKey != "" && ed.Kind != sdl.EdgeUnique {
+	if nilKey != "" && ed.Kind != sdl.EdgeUnique {
 		return fmt.Errorf("schema %s, edge %s: a to-many edge whose key is on the owner's row, which velox-gen does not write", e.Name, pe.Name)
 	}
-	ctx, vgql := f.use("context", "context"), f.veloxgql()
-	dbFrom := func(fail string) {
+	ctx, vgql, impl := f.use("context", "context"), f.veloxgql(), f.gqlimpl()
+	rel := e.Handles + "." + pe.GoName
+	dbFrom := func() {
 		f.p("\tdb, err := %s.DBFrom(ctx)", vgql)
 		f.p("\tif err != nil {")
-		f.p("\t\treturn %s, err", fail)
+		f.p("\t\treturn nil, err")
+		f.p("\t}")
+	}
+	// query writes q, the target's query, reading only the columns the
+	// field's selection needs.
+	query := func() {
+		dbFrom()
+		f.p("\tq := db.Query[%s]()", tgt.Name)
+		f.p("\tif fields, ok := %s.Selected(ctx, %q); ok {", impl, tt.Name)
+		f.p("\t\tq = %s.Narrow(q, %s(fields))", impl, colsFunc(tt))
 		f.p("\t}")
 	}
 	switch ed.Kind {
 	case sdl.EdgeUnique:
-		f.doc("", fmt.Sprintf("%s is the edge %s: the %s it leads to, or nil when there is none. It is x.%s when a With loaded it, and else one query.", ed.Method, pe.Name, tt.Name, pe.GoName))
+		f.doc("", fmt.Sprintf("%s is the edge %s: the %s it leads to, or nil when there is none. It is read with the edge of every row read with x, in one query.", ed.Method, pe.Name, tt.Name))
 		f.p("func (x *%s) %s(ctx %s.Context) (*%s, error) {", e.Name, ed.Method, ctx, tgt.Name)
-		f.p("\tif v, ok := x.%s.Get(); ok {", pe.GoName)
-		f.p("\t\treturn v, nil")
-		f.p("\t}")
-		if flt.nilKey != "" {
-			f.p("\tif %s {", flt.nilKey)
+		if nilKey != "" {
+			f.p("\tif %s {", nilKey)
 			f.p("\t\treturn nil, nil")
 			f.p("\t}")
 		}
-		dbFrom("nil")
-		f.p("\tv, err := db.Query[%s]().Where(%s).One(ctx)", tgt.Name, flt.cond)
-		f.p("\tif %s.Is(err, %s.ErrNotFound) {", f.use("errors", "errors"), f.velox())
-		f.p("\t\treturn nil, nil")
-		f.p("\t}")
-		f.p("\treturn v, err")
+		query()
+		f.p("\treturn %s.EdgeOne(ctx, q, x, %s)", impl, rel)
 		f.p("}")
 	case sdl.EdgeList:
-		f.doc("", fmt.Sprintf("%s is the edge %s: the %s nodes it leads to, in key order. It is x.%s when a With loaded it, and else one query, which reads at most the MaxList of veloxgql.LimitsFrom(ctx) rows, whatever the DB's WithMaxRows: more fail it with velox.ErrTooManyRows, in an error that names the edge.", ed.Method, pe.Name, tt.Name, pe.GoName))
+		f.doc("", fmt.Sprintf("%s is the edge %s: the %s nodes it leads to, in key order. It is read with the edge of every row read with x, in one query, which reads at most the MaxList of veloxgql.LimitsFrom(ctx) rows for each, whatever the DB's WithMaxRows: more fail x's with velox.ErrTooManyRows, in an error that names the edge.", ed.Method, pe.Name, tt.Name))
 		f.p("func (x *%s) %s(ctx %s.Context) ([]*%s, error) {", e.Name, ed.Method, ctx, tgt.Name)
-		f.p("\trows, ok := x.%s.Get()", pe.GoName)
-		f.p("\tif !ok {")
-		f.p("\t\tdb, err := %s.DBFrom(ctx)", vgql)
-		f.p("\t\tif err != nil {")
-		f.p("\t\t\treturn nil, err")
-		f.p("\t\t}")
-		var order []string
-		for _, i := range tgt.PrimaryKey {
-			order = append(order, tgt.Handles+"."+tgt.Fields[i].GoName+".Asc()")
-		}
-		f.p("\t\tif rows, err = db.Query[%s]().Where(%s).OrderBy(%s).Unbounded().MaxRows(%s.LimitsFrom(ctx).MaxList).All(ctx); err != nil {", tgt.Name, flt.cond, strings.Join(order, ", "), vgql)
-		f.p("\t\t\treturn nil, %s.Errorf(\"veloxgql: %s.%s: %%w\", err)", f.use("fmt", "fmt"), t.Name, pe.Name)
-		f.p("\t\t}")
-		f.p("\t}")
-		f.p("\tout := make([]*%s, len(rows))", tgt.Name)
-		f.p("\tfor i := range rows {")
-		f.p("\t\tout[i] = &rows[i]")
-		f.p("\t}")
-		f.p("\treturn out, nil")
+		query()
+		f.p("\treturn %s.EdgeList(ctx, q, x, %s, %q)", impl, rel, t.Name+"."+pe.Name)
 		f.p("}")
 	case sdl.EdgeConnection:
-		f.doc("", fmt.Sprintf("%s is the edge %s: a connection to the %s nodes it leads to, paged, ordered and filtered by the arguments. With no argument it is over x.%s when a With loaded it, in the order loaded; else its queries are on %s, filtered by the relation, and run when gqlgen asks for the connection's fields.", ed.Method, pe.Name, tt.Name, pe.GoName, tgt.Name))
+		f.doc("", fmt.Sprintf("%s is the edge %s: a connection to the %s nodes it leads to, paged, ordered and filtered by the arguments. Its queries run when gqlgen asks for the connection's fields, each with those of every row read with x, in one query.", ed.Method, pe.Name, tt.Name))
 		f.p("func (x *%s) %s(ctx %s.Context, %s) (*%sConnection, error) {", e.Name, ed.Method, ctx, connParams(f, tt), tt.Name)
-		none := strings.ReplaceAll(connArgs(tt), ", ", " == nil && ") + " == nil"
-		f.p("\tif %s {", none)
-		f.p("\t\tif rows, ok := x.%s.Get(); ok {", pe.GoName)
-		f.p("\t\t\treturn &%sConnection{c: %s.LoadedConnection(ctx, rows, %q, %s())}, nil", tt.Name, f.gqlimpl(), tt.Name, keyFunc(tt))
-		f.p("\t\t}")
+		dbFrom()
+		f.p("\tc, err := %s(ctx, db.Query[%s](), %s)", connFunc(tt), tgt.Name, connArgs(tt))
+		f.p("\tif err != nil {")
+		f.p("\t\treturn nil, err")
 		f.p("\t}")
-		dbFrom("nil")
-		f.p("\treturn %s(ctx, db.Query[%s]().Where(%s), %s)", connFunc(tt), tgt.Name, flt.cond, connArgs(tt))
+		f.p("\treturn &%sConnection{c: %s.EdgeConnection(ctx, c.c, x, %s)}, nil", tt.Name, impl, rel)
 		f.p("}")
 	}
 	f.p("")

@@ -76,8 +76,11 @@ type Group struct{ schema.Schema }
 
 func (Group) Fields() []schema.Field { return []schema.Field{field.String("name")} }
 
+// peers is many-to-many with no inverse edge (an edge to its own schema
+// without edge.From): the edge method reads the join table through the
+// relation.
 func (Group) Edges() []schema.Edge {
-	return []schema.Edge{edge.From("users", User.Type).Ref("groups")}
+	return []schema.Edge{edge.From("users", User.Type).Ref("groups"), edge.To("peers", Group.Type)}
 }
 
 // Category's self-edges: FieldOn names Category for each, so only OwnsKey
@@ -371,7 +374,7 @@ func TestGoCompiles(t *testing.T) {
 			t.Errorf("%s does not start with the one header:\n%s", name, got)
 		}
 	}
-	for _, name := range []string{"gql_secret.go", "gql_user_group.go"} {
+	for _, name := range []string{"gql_secret.go", "gql_user_group.go", "gql_group_peer.go"} {
 		if _, err := os.Stat(filepath.Join(dir, "gen", name)); !os.IsNotExist(err) {
 			t.Errorf("%s: %v, want none: the type is skipped, or a join entity", name, err)
 		}
@@ -438,8 +441,10 @@ CREATE TABLE "groups" (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
 CREATE TABLE user_groups (user_id INTEGER NOT NULL, group_id INTEGER NOT NULL, PRIMARY KEY (user_id, group_id));
 CREATE TABLE categories (id INTEGER PRIMARY KEY, title TEXT NOT NULL, mentor_id INTEGER, category_children INTEGER, category_twin INTEGER);
 INSERT INTO users VALUES (1, 7, 'ann', 'admin', '', 0, NULL), (2, 7, 'bob', 'admin', '', 0, NULL), (3, 8, 'cid', 'admin', '', 0, NULL);
+CREATE TABLE group_peers (group_id INTEGER NOT NULL, peer_id INTEGER NOT NULL, PRIMARY KEY (group_id, peer_id));
+INSERT INTO group_peers VALUES (1, 2), (2, 1), (2, 3);
 INSERT INTO posts VALUES (1, 1, 'b', ''), (2, 1, 'a', ''), (3, 2, 'c', ''), (4, 1, 'a', ''), (5, 3, 'z', '');
-INSERT INTO "groups" VALUES (1, 'g1'), (2, 'g2');
+INSERT INTO "groups" VALUES (1, 'g1'), (2, 'g2'), (3, 'g3');
 INSERT INTO user_groups VALUES (1, 1), (1, 2), (2, 2);
 INSERT INTO categories VALUES (1, 'root', NULL, NULL, NULL), (2, 'kid', 1, 1, NULL), (3, 'kid2', NULL, 1, NULL);
 ` + "`" + `
@@ -557,7 +562,7 @@ func TestConnections(t *testing.T) {
 	if a, err := p3.AuthorGQL(ctx); err != nil || a == nil || a.ID != 2 {
 		t.Errorf("post 3's author: %+v %v", a, err)
 	}
-	// Many-to-many, as a list and as a connection, through the inverse edge.
+	// Many-to-many, as a list and as a connection, through the join table.
 	groupIDs := func(gs []*gen.Group) (out []int64) {
 		for _, g := range gs {
 			out = append(out, g.ID)
@@ -590,6 +595,17 @@ func TestConnections(t *testing.T) {
 	}
 	if got, _ := keys(t, ctx, members, members.Edges, user); !slices.Equal(got, []int64{1, 2}) {
 		t.Errorf("g2's users: %v", got)
+	}
+	// Many-to-many with no inverse edge, through the join table.
+	peers, err := g2.PeersGQL(ctx, nil, intp(1), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, info := keys(t, ctx, peers, peers.Edges, func(e *gen.GroupEdge) int64 { return e.Node.ID }); !slices.Equal(got, []int64{1}) || !info.HasNextPage {
+		t.Errorf("g2's peers, first 1: %v %+v", got, info)
+	}
+	if n, err := peers.TotalCount(ctx); err != nil || n != 2 {
+		t.Errorf("g2's peers: totalCount %d %v", n, err)
 	}
 
 	// Category's self-edges, each way round.
@@ -625,8 +641,9 @@ func TestConnections(t *testing.T) {
 		t.Errorf("root's children: %v", got)
 	}
 
-	// A relation a With loaded: the edge method runs no query.
-	loaded, err := db.Query[gen.User]().Where(gen.Users.ID.EQ(1)).With(gen.Users.Posts).With(gen.Users.Groups).One(ctx)
+	// A relation a With loaded, filtered: the edge methods read the edge,
+	// not the loaded page.
+	loaded, err := db.Query[gen.User]().Where(gen.Users.ID.EQ(1)).With(gen.Users.Posts.Where(gen.Posts.Title.EQ("b"))).With(gen.Users.Groups.Where(gen.Groups.ID.EQ(2))).One(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -644,8 +661,8 @@ func TestConnections(t *testing.T) {
 	if gs, err := loaded.GroupsGQL(ctx); err != nil || !slices.Equal(groupIDs(gs), []int64{1, 2}) {
 		t.Errorf("ann's loaded groups: %v %v", groupIDs(gs), err)
 	}
-	if ran.Load() != 0 {
-		t.Errorf("the loaded relations ran %d statements", ran.Load())
+	if ran.Load() != 3 {
+		t.Errorf("the edges of loaded relations ran %d statements, want 3: the page, the count and the list", ran.Load())
 	}
 }
 
@@ -1334,7 +1351,7 @@ func TestWhereRun(t *testing.T) {
 // TestConnectionsRun runs the generated connections and edge methods on
 // SQLite: paging and ordering through cursors off the wire, totalCount, each
 // way a relation holds its key (the owner's row, the target's, a join
-// table), the tenant scope, and the relations a With loaded.
+// table), the tenant scope, and that a relation a With loaded is not read.
 func TestConnectionsRun(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")

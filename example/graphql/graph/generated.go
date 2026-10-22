@@ -43,6 +43,7 @@ type Config struct {
 type ResolverRoot interface {
 	Mutation() MutationResolver
 	Query() QueryResolver
+	User() UserResolver
 }
 
 type DirectiveRoot struct {
@@ -118,6 +119,7 @@ type ComplexityRoot struct {
 	User struct {
 		Email    func(childComplexity int) int
 		IDGQL    func(childComplexity int) int
+		Initials func(childComplexity int) int
 		JoinedAt func(childComplexity int) int
 		Name     func(childComplexity int) int
 		PostsGQL func(childComplexity int, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*gen.PostOrder, where *gen.PostWhereInput) int
@@ -152,6 +154,9 @@ type QueryResolver interface {
 	Labels(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.LabelOrder, where *gen.LabelWhereInput) (*gen.LabelConnection, error)
 	Users(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *gen.UserOrder, where *gen.UserWhereInput) (*gen.UserConnection, error)
 	PublishedPosts(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*gen.PostOrder, where *gen.PostWhereInput) (*gen.PostConnection, error)
+}
+type UserResolver interface {
+	Initials(ctx context.Context, obj *gen.User) (string, error)
 }
 
 type executableSchema struct {
@@ -497,6 +502,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.User.IDGQL(childComplexity), true
+	case "User.initials":
+		if e.complexity.User.Initials == nil {
+			break
+		}
+
+		return e.complexity.User.Initials(childComplexity), true
 	case "User.joinedAt":
 		if e.complexity.User.JoinedAt == nil {
 			break
@@ -2085,6 +2096,8 @@ func (ec *executionContext) fieldContext_Mutation_createUser(ctx context.Context
 				return ec.fieldContext_User_joinedAt(ctx, field)
 			case "posts":
 				return ec.fieldContext_User_posts(ctx, field)
+			case "initials":
+				return ec.fieldContext_User_initials(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -2140,6 +2153,8 @@ func (ec *executionContext) fieldContext_Mutation_updateUser(ctx context.Context
 				return ec.fieldContext_User_joinedAt(ctx, field)
 			case "posts":
 				return ec.fieldContext_User_posts(ctx, field)
+			case "initials":
+				return ec.fieldContext_User_initials(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -2455,6 +2470,8 @@ func (ec *executionContext) fieldContext_Post_author(_ context.Context, field gr
 				return ec.fieldContext_User_joinedAt(ctx, field)
 			case "posts":
 				return ec.fieldContext_User_posts(ctx, field)
+			case "initials":
+				return ec.fieldContext_User_initials(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -3281,6 +3298,35 @@ func (ec *executionContext) fieldContext_User_posts(ctx context.Context, field g
 	return fc, nil
 }
 
+func (ec *executionContext) _User_initials(ctx context.Context, field graphql.CollectedField, obj *gen.User) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_User_initials,
+		func(ctx context.Context) (any, error) {
+			return ec.resolvers.User().Initials(ctx, obj)
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_User_initials(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "User",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _UserConnection_edges(ctx context.Context, field graphql.CollectedField, obj *gen.UserConnection) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -3420,6 +3466,8 @@ func (ec *executionContext) fieldContext_UserEdge_node(_ context.Context, field 
 				return ec.fieldContext_User_joinedAt(ctx, field)
 			case "posts":
 				return ec.fieldContext_User_posts(ctx, field)
+			case "initials":
+				return ec.fieldContext_User_initials(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
@@ -7060,6 +7108,42 @@ func (ec *executionContext) _User(ctx context.Context, sel ast.SelectionSet, obj
 					}
 				}()
 				res = ec._User_posts(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "initials":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._User_initials(ctx, field, obj)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}

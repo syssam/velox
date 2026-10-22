@@ -7,6 +7,9 @@ package graph
 
 import (
 	"context"
+	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
 	"github.com/syssam/velox2/example/graphql/gen"
@@ -81,11 +84,28 @@ func (r *queryResolver) PublishedPosts(ctx context.Context, after *veloxgql.Curs
 	return gen.PostsConnectionOf(ctx, db.Query[gen.Post]().Where(gen.Posts.Status.EQ(gen.PostStatusPublished)), after, first, before, last, orderBy, where)
 }
 
+// Initials is the resolver for the initials field: the first letter of each
+// word of the user's name, upper-cased. It reads obj.Name, a column a page
+// reads only when asked for name, which velox-graphql cannot see here: a
+// page that selects initials reads every column.
+func (r *userResolver) Initials(ctx context.Context, obj *gen.User) (string, error) {
+	var b strings.Builder
+	for _, w := range strings.Fields(obj.Name) {
+		first, _ := utf8.DecodeRuneInString(w)
+		b.WriteRune(unicode.ToUpper(first))
+	}
+	return b.String(), nil
+}
+
 // Mutation returns MutationResolver implementation.
 func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
 
 // Query returns QueryResolver implementation.
 func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
 
+// User returns UserResolver implementation.
+func (r *Resolver) User() UserResolver { return &userResolver{r} }
+
 type mutationResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }
+type userResolver struct{ *Resolver }

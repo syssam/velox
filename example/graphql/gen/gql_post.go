@@ -55,38 +55,33 @@ func (e *PostStatus) UnmarshalGQL(v any) error {
 }
 
 // AuthorGQL is the edge author: the User it leads to, or nil when there is
-// none. It is x.Author when a With loaded it, and else one query.
+// none. It is read with the edge of every row read with x, in one query.
 func (x *Post) AuthorGQL(ctx context.Context) (*User, error) {
-	if v, ok := x.Author.Get(); ok {
-		return v, nil
-	}
 	db, err := veloxgql.DBFrom(ctx)
 	if err != nil {
 		return nil, err
 	}
-	v, err := db.Query[User]().Where(Users.ID.EQ(x.AuthorID)).One(ctx)
-	if errors.Is(err, velox.ErrNotFound) {
-		return nil, nil
+	q := db.Query[User]()
+	if fields, ok := gqlimpl.Selected(ctx, "User"); ok {
+		q = gqlimpl.Narrow(q, userColumnsGQL(fields))
 	}
-	return v, err
+	return gqlimpl.EdgeOne(ctx, q, x, Posts.Author)
 }
 
 // TagsGQL is the edge tags: a connection to the Label nodes it leads to, paged,
-// ordered and filtered by the arguments. With no argument it is over x.Tags
-// when a With loaded it, in the order loaded; else its queries are on Tag,
-// filtered by the relation, and run when gqlgen asks for the connection's
-// fields.
+// ordered and filtered by the arguments. Its queries run when gqlgen asks for
+// the connection's fields, each with those of every row read with x, in one
+// query.
 func (x *Post) TagsGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *LabelOrder, where *LabelWhereInput) (*LabelConnection, error) {
-	if after == nil && first == nil && before == nil && last == nil && orderBy == nil && where == nil {
-		if rows, ok := x.Tags.Get(); ok {
-			return &LabelConnection{c: gqlimpl.LoadedConnection(ctx, rows, "Label", tagKeyGQL())}, nil
-		}
-	}
 	db, err := veloxgql.DBFrom(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return LabelsConnectionOf(ctx, db.Query[Tag]().Where(Tags.Posts.HasWhere(Posts.ID.EQ(x.ID))), after, first, before, last, orderBy, where)
+	c, err := LabelsConnectionOf(ctx, db.Query[Tag](), after, first, before, last, orderBy, where)
+	if err != nil {
+		return nil, err
+	}
+	return &LabelConnection{c: gqlimpl.EdgeConnection(ctx, c.c, x, Posts.Tags)}, nil
 }
 
 // PostConnection is the GraphQL type PostConnection, a connection to a list of
@@ -153,10 +148,24 @@ func PostsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, be
 // its Offset is cleared and its Limit replaced, since the page is the
 // connection's. q must have no OrderBy: the connection orders it, and a q with
 // one is refused with an internal error, since its order would come first and
-// break the cursors. q must also select the key and the columns orderBy names:
-// a Columns or Omit that drops them breaks the cursors, and nothing refuses it.
-// It runs no query.
+// break the cursors. q must also select the key and the columns orderBy names,
+// which the cursors hold: a q whose Columns or Omit drops one is refused with
+// an internal error. In a gqlgen field, the page reads only the columns the
+// selection needs (postColumnsGQL), of those q selects. It runs no query.
 func PostsConnectionOf(ctx context.Context, q velox.Query[Post], after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
+	if !q.Selects(Posts.ID) {
+		return nil, fmt.Errorf("veloxgql: PostsConnectionOf: the base query does not select the key, which the cursors hold")
+	}
+	for _, o := range orderBy {
+		switch {
+		case o.Field == PostOrderFieldTitle && !q.Selects(Posts.Title),
+			o.Field == PostOrderFieldViews && !q.Selects(Posts.Views):
+			return nil, fmt.Errorf("veloxgql: PostsConnectionOf: the base query does not select the column of %s, which orderBy names and the cursors hold", o.Field)
+		}
+	}
+	if fields, ok := gqlimpl.Selected(ctx, "Post"); ok {
+		q = gqlimpl.Narrow(q, postColumnsGQL(fields))
+	}
 	if where != nil {
 		p, err := where.Pred(ctx)
 		if err != nil {
@@ -187,6 +196,26 @@ func postKeyGQL() []gqlimpl.OrderTerm[Post] {
 			func(x *Post) int64 { return x.ID },
 			func(x *Post, v int64) { x.ID = v }),
 	}
+}
+
+// postColumnsGQL is the columns a selection of the Post fields fields reads:
+// the key, every foreign key on the row, every order field's column, and the
+// column of each field. It is nil, every column, when a field is not one
+// velox-graphql wrote, such as an application's own.
+func postColumnsGQL(fields []string) []velox.Column[Post] {
+	cols := []velox.Column[Post]{Posts.ID, Posts.AuthorID, Posts.Title, Posts.Views}
+	for _, f := range fields {
+		switch f {
+		case "id", "title", "views", "author", "tags":
+		case "status":
+			cols = append(cols, Posts.Status)
+		case "publishedAt":
+			cols = append(cols, Posts.PublishedAt)
+		default:
+			return nil
+		}
+	}
+	return cols
 }
 
 // postTermGQL is the order term o, an order of connections to Post.

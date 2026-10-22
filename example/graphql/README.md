@@ -79,6 +79,21 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' \
    name `gen` declares is: `gen.LabelsConnection` for the `labels` field of
    the type `Label` (the entity `Tag`).
 
+   And `User.initials`, the application's own field (`graph/app.graphqls`
+   extends `User`), from the name. velox-graphql cannot see what its
+   resolver reads, so a page that selects it reads every column:
+
+   ```go
+   func (r *userResolver) Initials(ctx context.Context, obj *gen.User) (string, error) {
+   	var b strings.Builder
+   	for _, w := range strings.Fields(obj.Name) {
+   		first, _ := utf8.DecodeRuneInString(w)
+   		b.WriteRune(unicode.ToUpper(first))
+   	}
+   	return b.String(), nil
+   }
+   ```
+
    Every other field binds to `gen`'s methods: edges are `<Edge>GQL`
    methods on the entities, connections are lazy (`totalCount` alone runs one
    `COUNT`, and no page query).
@@ -222,7 +237,7 @@ veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 50}))
 
 A zero field is the default; a negative one is refused. They do not bound a
 request: connections nested in connections multiply (each level reads up to
-`MaxPage` rows, and runs a query for each parent), and aliases repeat a field
+`MaxPage` rows for each parent), and aliases repeat a field
 as often as the client writes it. So `Limits.MaxCost` (100000 by default)
 bounds the whole request. The extension computes the request's cost before
 any resolver runs: a field costs 1 plus its children's cost times its
@@ -240,11 +255,14 @@ clients.
 
 | Request | Result |
 |---|---|
-| `node(id:)`, `nodes(ids:)` | one query per type; `null` for an ID with no row, or a row of another tenant |
+| `node(id:)`, `nodes(ids:)` | one query per type, of the columns selected; `null` for an ID with no row, or a row of another tenant |
 | an ID of another type (a `Post` ID in `authorID`) | a `BAD_USER_INPUT` error naming the expected type, and no query |
 | `first`/`after`, `last`/`before` | keyset pages, `n+1` rows read for `hasNextPage`/`hasPreviousPage` |
 | `orderBy`, `where` (`and`/`or`/`not`, `hasPostsWith`) | `ORDER BY … "id"`, `WHERE …`, `EXISTS (…)` |
-| nested edges, `Post.tags` many-to-many | one query per parent (batching comes with GraphQL plan 4) |
+| nested edges, `Post.tags` many-to-many | one statement per edge per level, whatever the parents: a `ROW_NUMBER()` window for the pages, a `GROUP BY` for `totalCount` |
+| a page's fields | only their columns, the key, the foreign keys and the order fields' columns: never `password_hash` |
+| `initials`, the application's own field on `User` (`graph/app.graphqls`) | every column, since velox-graphql cannot see what its resolver reads |
+| the same edge twice under aliases, with different arguments | one statement each, each alias its own page |
 | a request over `MaxCost` | a `COST_LIMIT_EXCEEDED` error naming the cost, and no statement |
 | an `orderBy` list of more than `MaxOrderTerms` terms | an error naming the limit, and no statement |
 | `email`, or a `where` on it, without `X-Role: admin` | a `FORBIDDEN` error; the filter runs no statement |
@@ -274,8 +292,10 @@ The query keeps its filters, its `With` loads and the tenant scope. Its
 `Offset` is cleared and its `Limit` replaced: the page is the
 connection's. It must have no `OrderBy`, which `ConnectionOf` refuses with
 an internal error (`velox.Query.Ordered`), since the connection orders it.
-It must also select the key and the columns `orderBy` names: a `Columns`
-or `Omit` that drops them breaks the cursors, and nothing refuses it.
+It must also select the key and the columns `orderBy` names, which the
+cursors hold: a `Columns` or `Omit` that drops one is refused with an
+internal error. The page reads only the columns its selection needs, of
+those the query selects.
 
 `main_test.go` sends each over HTTP and checks the JSON response and the
 statements sent exactly.
