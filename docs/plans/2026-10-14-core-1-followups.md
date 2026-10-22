@@ -337,3 +337,4 @@ From the core additions (2026-10-22): `First` and `Exists`, `Sum`, `Avg`, `Min` 
 - The repo needs a `README.md` and a `LICENSE`.
 - bench/scale's thresholds were measured on darwin only. Recalibrate them from the first Linux CI run.
 - **GraphQL plan 3 (final re-review):** CreateX's `x` and UpdateX's `set` are declared outside the `Atomic` closure that mutates them. Safe while Atomic never retries and a TxAround calls `next` once; if either changes, copy them at the top of the closure.
+- **Before 1.0 (API plan 5 final review):** `Query.With[T]` is a method with a type parameter beyond `E`, against §6f ruling 21. Measure what it costs every entity package (the compile-cost rows); if it is material, give it the function form the aggregates have, or record why it stays.
