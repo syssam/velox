@@ -48,7 +48,7 @@ func handle(err error) {
 // record records a statement's duration, and a successful read's rows,
 // after it ran (not on a panic). Its attributes are bounded: never the tags,
 // tenant, SQL or call site, and the fingerprint only with
-// Config.MetricFingerprint.
+// Config.RecordMetricFingerprint.
 func (a *adapter) record(ctx context.Context, st *velox.Statement, seconds float64, err error, fellOver bool) {
 	kv := make([]attribute.KeyValue, 0, 7)
 	kv = append(kv, attribute.String(attrDBSystem, dbSystem(st.Dialect)))
@@ -60,7 +60,7 @@ func (a *adapter) record(ctx context.Context, st *velox.Statement, seconds float
 	if err != nil {
 		kv = append(kv, attribute.String(attrErrorType, errorType(ctx, err)))
 	}
-	if a.cfg.MetricFingerprint {
+	if a.cfg.RecordMetricFingerprint {
 		kv = append(kv, attribute.String(attrFingerprint, st.Fingerprint))
 	}
 	set := metric.WithAttributeSet(attribute.NewSet(kv...))

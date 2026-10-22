@@ -12,10 +12,11 @@
 //		CommentTags:    []string{"route"},
 //	})...)
 //
-// They are velox.WithCallers, velox.WithAround with a hook that makes one span
-// per statement, velox.WithTxAround with a hook that makes one span per
-// transaction, and velox.WithSQLComment when Config.App is set. Around and
-// TxAround return those hooks alone, for an application that wants only part.
+// They are velox.WithCallers (unless Config.Callers is CallersOff),
+// velox.WithAround with a hook that makes one span per statement,
+// velox.WithTxAround with a hook that makes one span per transaction, and
+// velox.WithSQLComment when Config.App is set. An application that wants
+// velox.WithCallerSkip passes it itself after Options; it turns call sites on.
 //
 // A statement's span is of kind client, named for its operation and table
 // ("SELECT invoices"), and covers sending it and reading every row; with
@@ -60,7 +61,7 @@
 // outcome, read-only flag and whether it retried for a transaction; and the
 // shard alone for the fallback counter. Tags, the tenant, the SQL text and
 // the call site are on spans only; the fingerprint is added to the statement
-// metrics only with Config.MetricFingerprint.
+// metrics only with Config.RecordMetricFingerprint.
 //
 // A statement that velox refuses before it is sent (a guard, the tenant
 // scope, a policy or a hook) reaches no Around hook, so it makes no
@@ -72,11 +73,11 @@
 // ID: pgx caches prepared statements by their text, so a per-request value
 // would prepare a statement per request (see velox.WithSQLComment).
 //
-// With Config.App set, the comment carries the call site too, since Options
-// turns callers on: each call site of a shape is then a distinct text, and
+// With Config.App set and Callers on (the default), the comment carries the
+// call site too: each call site of a shape is then a distinct text, and
 // pgx prepares one statement per call site per connection. A shape called
 // from many sites multiplies statements against pgx's per-connection cache,
 // 512 by default. Size pgxpool.Config.ConnConfig's StatementCacheCapacity
-// for it, or install Around and TxAround with velox.WithSQLComment and
-// without velox.WithCallers (the spans then carry no call site).
+// for it, or set Config.Callers to CallersOff (the spans then carry no call
+// site, and the comment is one text per shape).
 package veloxotel

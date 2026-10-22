@@ -383,7 +383,7 @@ func TestParent(t *testing.T) {
 		defer s.End()
 		return next(ctx)
 	})
-	db := velox.Open(velox.Postgres, (&fakeDB{}).open(), txSpan, velox.WithAround(veloxotel.Around(veloxotel.Config{TracerProvider: tp})))
+	db := velox.Open(velox.Postgres, (&fakeDB{}).open(), txSpan, velox.WithAround(veloxotel.AroundOf(veloxotel.Config{TracerProvider: tp})))
 
 	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		if _, err := tx.Query[testmodel.Invoice]().Limit(1).All(ctx); err != nil { // fn's ctx: the tx span

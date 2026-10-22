@@ -227,13 +227,13 @@ func TestSavepointNoSpan(t *testing.T) {
 	}
 }
 
-// TestTxAroundAlone: TxAround gives the transaction span without the
+// TestTxAroundAlone: TxAroundOf gives the transaction span without the
 // statement hook.
 func TestTxAroundAlone(t *testing.T) {
 	exp := tracetest.NewInMemoryExporter()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exp))
 	t.Cleanup(func() { _ = tp.Shutdown(context.Background()) })
-	db := velox.Open(velox.Postgres, (&fakeDB{}).open(), velox.WithTxAround(veloxotel.TxAround(veloxotel.Config{TracerProvider: tp})))
+	db := velox.Open(velox.Postgres, (&fakeDB{}).open(), velox.WithTxAround(veloxotel.TxAroundOf(veloxotel.Config{TracerProvider: tp})))
 	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		_, err := tx.Query[testmodel.Invoice]().Limit(1).All(ctx)
 		return err

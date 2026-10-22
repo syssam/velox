@@ -84,3 +84,58 @@ func TestPgxPreparesACommentedStatementOnce(t *testing.T) {
 		t.Errorf("two call sites prepared %d statements, want 2", n)
 	}
 }
+
+// TestPgxCallersOffPreparesOnce: with App and CallersOff, one shape run from
+// two call sites is one SQL text, so pgx prepares one statement.
+func TestPgxCallersOffPreparesOnce(t *testing.T) {
+	dsn := os.Getenv("VELOX_TEST_POSTGRES")
+	if dsn == "" {
+		t.Skip("VELOX_TEST_POSTGRES is not set")
+	}
+	bg := context.Background()
+	admin, err := pgx.Connect(bg, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = admin.Close(bg) }()
+	for _, q := range []string{"DROP SCHEMA IF EXISTS velox_otel CASCADE", "CREATE SCHEMA velox_otel", pgInvoices} {
+		if _, err := admin.Exec(bg, q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	t.Cleanup(func() { _, _ = admin.Exec(bg, "DROP SCHEMA IF EXISTS velox_otel CASCADE") })
+
+	cfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.MaxConns = 1 // pg_prepared_statements is per session
+	cfg.ConnConfig.RuntimeParams["search_path"] = "velox_otel"
+	pool, err := pgxpool.NewWithConfig(bg, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	db := velox.OpenPgx(pool, veloxotel.Options(veloxotel.Config{
+		TracerProvider: sdktrace.NewTracerProvider(),
+		App:            "otel-test",
+		Callers:        veloxotel.CallersOff,
+	})...)
+	c := velox.WithTenant(bg, int64(1))
+	if _, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(c); err != nil { // call site one
+		t.Fatal(err)
+	}
+	if _, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(c); err != nil { // call site two
+		t.Fatal(err)
+	}
+	var n int
+	// The simple protocol, so that this query is not prepared itself.
+	err = pool.QueryRow(bg, `SELECT count(*) FROM pg_prepared_statements WHERE statement LIKE '%FROM "invoices"%/*app=%'`,
+		pgx.QueryExecModeSimpleProtocol).Scan(&n)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Errorf("two call sites prepared %d statements, want 1", n)
+	}
+}

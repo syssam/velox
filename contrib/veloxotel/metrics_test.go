@@ -222,10 +222,10 @@ func TestMetricsAttributesAreBounded(t *testing.T) {
 	}
 }
 
-// TestMetricFingerprint: with MetricFingerprint, both statement instruments
+// TestMetricFingerprint: with RecordMetricFingerprint, both statement instruments
 // key their points by shape too.
 func TestMetricFingerprint(t *testing.T) {
-	db, r := metered(t, &fakeDB{}, veloxotel.Config{MetricFingerprint: true})
+	db, r := metered(t, &fakeDB{}, veloxotel.Config{RecordMetricFingerprint: true})
 	for range 2 {
 		if _, err := db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).Limit(1).All(ctx); err != nil {
 			t.Fatal(err)
