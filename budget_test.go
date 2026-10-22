@@ -290,3 +290,47 @@ func TestReplicaOneRowBudget(t *testing.T) {
 		t.Errorf("replicas change a cached one-row read's allocations from %.0f to %.0f", plain, routed)
 	}
 }
+
+// oneRowAllocs is the allocations of the one-row All the First and Exists
+// budgets are held to, on a fake with one row.
+func oneRowAllocs(db *velox.DB) float64 {
+	run := func() {
+		if _, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(ctx); err != nil {
+			panic(err)
+		}
+	}
+	run()
+	return testing.AllocsPerRun(200, run)
+}
+
+// TestFirstAllocationBudget pins First to the allocations of the one-row All.
+func TestFirstAllocationBudget(t *testing.T) {
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Rows: [][]any{invoiceRow(1)}})
+	run := func() {
+		if _, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).First(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run()
+	first, all := testing.AllocsPerRun(200, run), oneRowAllocs(db)
+	t.Logf("First %.0f allocations, one-row All %.0f", first, all)
+	if first > all {
+		t.Errorf("First makes %.0f allocations, the one-row All %.0f", first, all)
+	}
+}
+
+// TestExistsAllocationBudget pins Exists to the allocations of the one-row All.
+func TestExistsAllocationBudget(t *testing.T) {
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Rows: [][]any{invoiceRow(1)}})
+	run := func() {
+		if _, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Exists(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run()
+	exists, all := testing.AllocsPerRun(200, run), oneRowAllocs(db)
+	t.Logf("Exists %.0f allocations, one-row All %.0f", exists, all)
+	if exists > all {
+		t.Errorf("Exists makes %.0f allocations, the one-row All %.0f", exists, all)
+	}
+}

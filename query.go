@@ -317,26 +317,25 @@ func readAll[E any](a *allRun[E], r rows) error {
 	return nil
 }
 
-// All runs the query and returns every row.
-func (q Query[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error) {
+// read runs the query for its rows, without loading their relations. It
+// returns the rows, the columns the statement ran with, as the hooks left
+// them, and the connection it ran on.
+func (q Query[E]) read[_ Lazy[E]](ctx context.Context) (out []E, ran []int, at target, err error) {
 	if q.meta.err != nil {
-		return nil, q.meta.err
+		return nil, nil, at, q.meta.err
 	}
 	if q.err != nil {
-		return nil, q.err
+		return nil, nil, at, q.err
 	}
 	if len(q.loads) > 0 {
 		if err := checkLoads(q.meta.info, q.st.Columns, q.loads); err != nil {
-			return nil, err
+			return nil, nil, at, err
 		}
 	}
 	st, err := q.prepare()
 	if err != nil {
-		return nil, err
+		return nil, nil, at, err
 	}
-	var out []E
-	var ran []int // the columns the statement was run with, as the hooks left it
-	var at target // the connection it ran on
 	if q.db.hooked() {
 		a := &allRun[E]{st: st, m: q.meta}
 		err = q.db.run(ctx, &a.st, func(r rows) error { return readAll(a, r) }, nil)
@@ -347,31 +346,48 @@ func (q Query[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error) {
 		out, ran, at = a.out, a.st.Columns, a.st.ran
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, at, err
+	}
+	return out, ran, at, nil
+}
+
+// load loads the query's relations for rows, which ran on at with the columns
+// ran.
+func (q Query[E]) load[_ Lazy[E]](ctx context.Context, rows []E, ran []int, at target) error {
+	if len(q.loads) == 0 || len(rows) == 0 {
+		return nil
 	}
 	// A Rewrite hook may have narrowed the columns after the loads were checked.
-	if len(q.loads) > 0 && ran != nil {
+	if ran != nil {
 		if err := checkLoads(q.meta.info, ran, q.loads); err != nil {
-			return nil, err
+			return err
 		}
 	}
-	if len(q.loads) > 0 && len(out) > 0 {
-		ptrs := make([]unsafe.Pointer, len(out))
-		for i := range out {
-			ptrs[i] = unsafe.Pointer(&out[i])
-		}
-		if err := loadRelations(ctx, q.db.pinnedTo(at), q.meta.info, ptrs, q.loads, q.st.MaxRows); err != nil {
-			return nil, err
-		}
+	ptrs := make([]unsafe.Pointer, len(rows))
+	for i := range rows {
+		ptrs[i] = unsafe.Pointer(&rows[i])
+	}
+	return loadRelations(ctx, q.db.pinnedTo(at), q.meta.info, ptrs, q.loads, q.st.MaxRows)
+}
+
+// All runs the query and returns every row.
+func (q Query[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error) {
+	out, ran, at, err := q.read(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := q.load(ctx, out, ran, at); err != nil {
+		return nil, err
 	}
 	return out, nil
 }
 
 // One runs the query for exactly one row. Its error wraps ErrNotFound when no
-// row matches and ErrNotSingular when more than one does.
+// row matches and ErrNotSingular when more than one does; it loads the
+// query's relations only for a single row.
 func (q Query[E]) One[_ Lazy[E]](ctx context.Context) (*E, error) {
 	q.st.Limit = 2
-	out, err := q.All(ctx)
+	out, ran, at, err := q.read(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -379,9 +395,30 @@ func (q Query[E]) One[_ Lazy[E]](ctx context.Context) (*E, error) {
 	case 0:
 		return nil, fmt.Errorf("velox: %s: %w", q.meta.info.Name, ErrNotFound)
 	case 1:
+		if err := q.load(ctx, out, ran, at); err != nil {
+			return nil, err
+		}
 		return &out[0], nil
 	}
 	return nil, fmt.Errorf("velox: %s: %w", q.meta.info.Name, ErrNotSingular)
+}
+
+// First runs the query for its first row, in the query's order: a query
+// without OrderBy returns any row that matches. It loads the query's
+// relations for that row. Its error wraps ErrNotFound when no row matches.
+func (q Query[E]) First[_ Lazy[E]](ctx context.Context) (*E, error) {
+	q.st.Limit = 1
+	out, ran, at, err := q.read(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("velox: %s: %w", q.meta.info.Name, ErrNotFound)
+	}
+	if err := q.load(ctx, out, ran, at); err != nil {
+		return nil, err
+	}
+	return &out[0], nil
 }
 
 // iterRun is the state of one Iter.
@@ -519,6 +556,49 @@ func (q Query[E]) Count[_ Lazy[E]](ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	return n, nil
+}
+
+// existsRun is the state of one Exists.
+type existsRun struct {
+	st    Statement
+	found bool
+}
+
+// readExists reads no column: a row is the answer.
+func readExists(x *existsRun, r rows) error {
+	x.found = r.Next()
+	return nil
+}
+
+// Exists reports whether a row matches the query's conditions, After's
+// among them, with SELECT 1 … LIMIT 1. Like Count it ignores the query's
+// ordering, limit, offset, columns and relations.
+func (q Query[E]) Exists[_ Lazy[E]](ctx context.Context) (bool, error) {
+	if q.meta.err != nil {
+		return false, q.meta.err
+	}
+	if q.err != nil {
+		return false, q.err
+	}
+	st, err := q.prepare()
+	if err != nil {
+		return false, err
+	}
+	st.Exists, st.Columns, st.OrderBy, st.Limit, st.Offset = true, nil, nil, 1, 0
+	var found bool
+	if q.db.hooked() {
+		x := &existsRun{st: st}
+		err = q.db.run(ctx, &x.st, func(r rows) error { return readExists(x, r) }, nil)
+		found = x.found
+	} else {
+		x := existsRun{st: st}
+		err = q.db.plain(ctx, &x.st, func(r rows) error { return readExists(&x, r) }, nil)
+		found = x.found
+	}
+	if err != nil {
+		return false, err
+	}
+	return found, nil
 }
 
 // SQL returns the statement and arguments All would send for ctx, or the

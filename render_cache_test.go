@@ -245,3 +245,18 @@ func TestCacheStoresTheFingerprint(t *testing.T) {
 		t.Errorf("past the bound: %+v, %d shapes held", over, full.size())
 	}
 }
+
+func TestExistsHasItsOwnShape(t *testing.T) {
+	var c renderCache
+	for range 2 { // the second pass is served from the cache
+		ex := stmt(hOrg.EQ(1))
+		ex.Exists, ex.Limit = true, 1
+		all := stmt(hOrg.EQ(1))
+		all.Limit = 1
+		a, _ := c.render(Postgres, ex)
+		b, _ := c.render(Postgres, all)
+		if a == b || fingerprint(a) == fingerprint(b) {
+			t.Errorf("Exists and Limit(1).All share a shape: %s / %s", a, b)
+		}
+	}
+}

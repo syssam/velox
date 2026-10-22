@@ -107,6 +107,8 @@ func (w *writer) selectStmt(st *Statement) {
 	switch {
 	case st.Count:
 		w.str("COUNT(*)")
+	case st.Exists:
+		w.str("1")
 	case st.Columns == nil:
 		for i := range w.in.Columns {
 			if i > 0 {

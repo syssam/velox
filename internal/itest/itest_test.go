@@ -338,6 +338,25 @@ func TestOneErrors(t *testing.T) {
 	})
 }
 
+func TestFirstAndExistsOnRealDatabases(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		q := tg.db.Query[testmodel.Invoice]()
+		last, err := q.OrderBy(I.ID.Desc()).First(ctx)
+		if err != nil || last.ID != 5 {
+			t.Fatalf("First: %+v, %v", last, err)
+		}
+		if _, err := q.Where(I.ID.EQ(99)).First(ctx); !errors.Is(err, velox.ErrNotFound) {
+			t.Errorf("First, no row: %v", err)
+		}
+		if ok, err := q.Where(I.Paid.EQ(true)).Exists(ctx); err != nil || !ok {
+			t.Errorf("Exists, a row: %v, %v", ok, err)
+		}
+		if ok, err := q.Where(I.ID.EQ(99)).Exists(ctx); err != nil || ok {
+			t.Errorf("Exists, no row: %v, %v", ok, err)
+		}
+	})
+}
+
 // TestLikeTakesTextLiterally is Review Focus 1.
 func TestLikeTakesTextLiterally(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {

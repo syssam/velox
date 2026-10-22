@@ -226,3 +226,18 @@ func TestDialectString(t *testing.T) {
 		t.Error(Postgres, MySQL, SQLite)
 	}
 }
+
+func TestExistsRenders(t *testing.T) {
+	for d, want := range map[Dialect]string{
+		Postgres: `SELECT 1 FROM "invoices" WHERE "org_id" = $1 LIMIT $2`,
+		MySQL:    "SELECT 1 FROM `invoices` WHERE `org_id` = ? LIMIT ?",
+		SQLite:   `SELECT 1 FROM "invoices" WHERE "org_id" = ? LIMIT ?`,
+	} {
+		st := stmt(hOrg.EQ(1))
+		st.Exists, st.Limit = true, 1
+		got, args := render(d, st)
+		if got != want || !argsEqual(args, []any{int64(1), 1}) {
+			t.Errorf("%v: %s %v, want %s", d, got, args, want)
+		}
+	}
+}

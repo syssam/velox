@@ -367,3 +367,25 @@ func TestWithRewriteCannotDropOwnerKeys(t *testing.T) {
 		}
 	})
 }
+
+// TestOneLoadsNothingWhenNotSingular: One reads its rows before it loads, so
+// a result it refuses costs no load statement.
+func TestOneLoadsNothingWhenNotSingular(t *testing.T) {
+	e := &velox.FakeExec{Results: [][][]any{{invoiceRow(1), invoiceRow(2)}, {itemRow(10, 1, "A", 1)}}}
+	db := velox.OpenFake(velox.Postgres, e)
+	if _, err := db.Query[testmodel.Invoice]().With(I.Items).One(ctx); !errors.Is(err, velox.ErrNotSingular) {
+		t.Fatalf("two rows: %v", err)
+	}
+	if len(e.Log) != 1 {
+		t.Errorf("%d statements sent, want 1: %v", len(e.Log), e.Log)
+	}
+	e = &velox.FakeExec{Results: [][][]any{{invoiceRow(1)}, {itemRow(10, 1, "A", 1)}}}
+	db = velox.OpenFake(velox.Postgres, e)
+	inv, err := db.Query[testmodel.Invoice]().With(I.Items).One(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if items, loaded := inv.Items.Get(); !loaded || len(items) != 1 || len(e.Log) != 2 {
+		t.Errorf("items %v loaded %v, %d statements", items, loaded, len(e.Log))
+	}
+}

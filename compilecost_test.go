@@ -241,7 +241,7 @@ var genericObjects = []struct {
 	// it.
 	{"entityDesc", "", entityDescSrc, 153600},              // measured 122196
 	{"entityDescUse", "", entityDescUseSrc, 777216},        // measured 710722
-	{"entityDescHooks", "", entityDescHooksBound, 1058816}, // measured 993030
+	{"entityDescHooks", "", entityDescHooksBound, 1114112}, // measured 1059338
 	{"Policy", "velox.Policy[E]", "", 8192},                // measured 4050
 	{"Mutation", "velox.Mutation[E]", "", 8192},            // measured 3750
 }

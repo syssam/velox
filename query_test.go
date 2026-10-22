@@ -387,3 +387,82 @@ func TestQueryOrdered(t *testing.T) {
 		t.Error("OrderBy with no orderings makes the query ordered")
 	}
 }
+
+func TestFirst(t *testing.T) {
+	e := &velox.FakeExec{Rows: [][]any{invoiceRow(5)}}
+	db := velox.OpenFake(velox.Postgres, e)
+	got, err := db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).OrderBy(I.ID.Desc()).First(ctx)
+	if err != nil || got == nil || got.ID != 5 {
+		t.Fatalf("%+v, %v", got, err)
+	}
+	if want := `ORDER BY "id" DESC LIMIT $2`; !strings.HasSuffix(e.SQL, want) {
+		t.Errorf("SQL %s", e.SQL)
+	}
+	if want := []any{true, 1}; !reflect.DeepEqual(e.Args, want) {
+		t.Errorf("args %v, want %v", e.Args, want)
+	}
+	e.Rows = nil
+	_, err = db.Query[testmodel.Invoice]().First(ctx)
+	if !errors.Is(err, velox.ErrNotFound) || err.Error() != "velox: testmodel.Invoice: not found" {
+		t.Errorf("no rows: %v", err)
+	}
+	// With loads the relations of the row it found.
+	le := &velox.FakeExec{Results: [][][]any{{invoiceRow(1)}, {itemRow(10, 1, "A", 1)}}}
+	ldb := velox.OpenFake(velox.Postgres, le)
+	inv, err := ldb.Query[testmodel.Invoice]().With(I.Items).First(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if items, loaded := inv.Items.Get(); !loaded || len(items) != 1 || len(le.Log) != 2 {
+		t.Errorf("items %v loaded %v, %d statements", items, loaded, len(le.Log))
+	}
+}
+
+func TestExists(t *testing.T) {
+	e := &velox.FakeExec{Rows: [][]any{{int64(1)}}}
+	db := velox.OpenFake(velox.Postgres, e)
+	q := db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).OrderBy(I.ID.Asc()).Limit(50).Offset(5).Columns(I.Number)
+	ok, err := q.Exists(ctx)
+	if err != nil || !ok {
+		t.Fatalf("%v, %v", ok, err)
+	}
+	if want := `SELECT 1 FROM "invoices" WHERE "paid" = $1 LIMIT $2`; e.SQL != want {
+		t.Errorf("SQL %s", e.SQL)
+	}
+	if want := []any{true, 1}; !reflect.DeepEqual(e.Args, want) {
+		t.Errorf("args %v, want %v", e.Args, want)
+	}
+	e.Rows = nil
+	if ok, err := q.Exists(ctx); err != nil || ok {
+		t.Errorf("no rows: %v, %v", ok, err)
+	}
+	// No Limit needed, as for Count.
+	if _, err := db.Query[testmodel.Invoice]().Exists(ctx); err != nil {
+		t.Errorf("unbounded Exists: %v", err)
+	}
+	// After's rules apply, as for Count.
+	after := &testmodel.Invoice{ID: 3}
+	if _, err := db.Query[testmodel.Invoice]().After(after).Exists(ctx); err == nil || !strings.Contains(err.Error(), "After needs an OrderBy") {
+		t.Errorf("unordered After: %v", err)
+	}
+}
+
+func TestRewriteCannotChangeExists(t *testing.T) {
+	flip := func(_ context.Context, st *velox.Statement) error { st.Exists = !st.Exists; return nil }
+	for name, run := range map[string]func(db *velox.DB) error{
+		"set on All": func(db *velox.DB) error {
+			_, err := db.Query[testmodel.Invoice]().Unbounded().All(ctx)
+			return err
+		},
+		"cleared on Exists": func(db *velox.DB) error {
+			_, err := db.Query[testmodel.Invoice]().Exists(ctx)
+			return err
+		},
+	} {
+		e := &velox.FakeExec{Rows: [][]any{invoiceRow(1)}}
+		err := run(velox.OpenFake(velox.Postgres, e, velox.WithRewrite(flip)))
+		if err == nil || err.Error() != "velox: testmodel.Invoice: a Rewrite hook changed the statement's Exists" || e.Calls != 0 {
+			t.Errorf("%s: %v, %d sent", name, err, e.Calls)
+		}
+	}
+}

@@ -319,7 +319,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 			st.Conflict = &cf
 		}
 	}
-	entity, op, writable := st.Entity, st.Op, st.Writable
+	entity, op, writable, exists := st.Entity, st.Op, st.Writable, st.Exists
 	for _, rw := range db.cfg.rewrites {
 		if err := rw(ctx, st); err != nil {
 			return fmt.Errorf("velox: %s: rewrite: %w", entity.Name, err)
@@ -332,6 +332,10 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 		// The scope reads it: without it, a Writable query drops the
 		// Write policy.
 		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's Writable", entity.Name)
+	}
+	if st.Exists != exists {
+		// The scan depends on it: Exists reads no column.
+		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's Exists", entity.Name)
 	}
 	switch {
 	case st.Entity == nil:
@@ -567,7 +571,7 @@ func checkColumns(st *Statement) error {
 // rowCap is the most rows st may return: its own MaxRows, else the DB's; 0
 // for no cap. Raw's read is capped too, Exec not.
 func (db *DB) rowCap(st *Statement) int {
-	if !st.Op.Reads() || st.Count {
+	if !st.Op.Reads() || st.Count || st.Exists {
 		return 0
 	}
 	if st.MaxRows > 0 {
