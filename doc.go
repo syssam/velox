@@ -96,10 +96,10 @@
 // nothing else should: Desc, ColumnDesc, Relation, EdgeTo, EdgeThrough,
 // Meta, MetaOnce, BindPolicy, BindHooks, BoundPolicy, BoundHooks, Lazy,
 // Validate, ValidateSet and GeneratedCodeIsVersion4. Each says "For
-// generated code." in its documentation. They are not part of velox's API: they change only when
-// GeneratedCodeIsVersion4 is replaced by the next version, which is outside
-// semantic versioning. Run velox-gen again after you update velox; code
-// generated for another version fails to compile.
+// generated code." in its documentation. They are not part of velox's API:
+// they change only when GeneratedCodeIsVersion4 is replaced by the next
+// version, which is outside semantic versioning. Run velox-gen again after
+// you update velox; code generated for another version fails to compile.
 package velox
 
 //go:generate go run ./internal/handlegen/gen

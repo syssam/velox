@@ -298,3 +298,4 @@ From the mutations (2026-10-22). The plan's items are done: the inputs with thei
 
 - The repo needs a `README.md` and a `LICENSE`.
 - bench/scale's thresholds were measured on darwin only. Recalibrate them from the first Linux CI run.
+- **GraphQL plan 3 (final re-review):** CreateX's `x` and UpdateX's `set` are declared outside the `Atomic` closure that mutates them. Safe while Atomic never retries and a TxAround calls `next` once; if either changes, copy them at the top of the closure.
