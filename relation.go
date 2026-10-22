@@ -383,3 +383,62 @@ func (r Rel[E, T]) HasWhere[_ Lazy[T]](ps ...Pred[T]) Pred[E] {
 	// here: see relRef.
 	return Pred[E]{node{op: opExists, col: r.I, v: relRef{owner: ownerOf[E], target: targetOf[T](), i: r.I}, kids: nodes(ps)}}
 }
+
+// Of is true for the entities related through r to any of owners: the
+// rows of T that loading r for owners would load, without r's ordering.
+// r's Where conditions apply too; its OrderBy and With, which say how to
+// load, do not.
+//
+//	db.Query[gen.Post]().Where(gen.Users.Posts.Of(&ada)).Limit(20).All(ctx)
+//
+// Of reads the owners' keys when it is called, so later changes to them do
+// not change the condition. It reads E's and T's metadata: inside a Policy
+// or Hooks body, outside the functions it returns, use HasWhere. A nil
+// owner fails the statement that holds the condition; an owner whose key is
+// NULL relates to nothing; with no owners Of is false. Each owner is one
+// parameter, under the dialect's limit.
+func (r Rel[E, T]) Of[_ Lazy[T]](owners ...*E) Pred[T] {
+	// A []*E has the layout of a []unsafe.Pointer; the work is not generic,
+	// so that it is compiled once, not into every package that uses a Rel.
+	ps := unsafe.Slice((*unsafe.Pointer)(unsafe.Pointer(unsafe.SliceData(owners))), len(owners))
+	return Pred[T]{ofNode(relRef{owner: ownerOf[E], target: targetOf[T](), i: r.I}, r.where, r.err, ps)}
+}
+
+// ofNode is Rel.Of's condition for the relation ref names, with its Where
+// conditions where and their error err, for the owners at ps.
+func ofNode(ref relRef, where []Predicate, err error, ps []unsafe.Pointer) node {
+	if err != nil {
+		return node{op: opInvalid, v: err}
+	}
+	l, err := ref.link()
+	if err != nil {
+		return node{op: opInvalid, v: err}
+	}
+	owner, _ := ref.owner() // link read it without an error
+	keys := make([]any, 0, len(ps))
+	for _, p := range ps {
+		if p == nil {
+			return node{op: opInvalid, v: fmt.Errorf("velox: %s: Of was given a nil owner", owner.Name)}
+		}
+		if k, ok := keyOf(owner.kit.value(p, l.ownerCol)); ok {
+			keys = append(keys, k)
+		}
+	}
+	n := node{op: opIn, col: int32(l.targetCol), v: keys}
+	if l.join != nil {
+		// The join rows are not scoped: a join entity has neither a tenant
+		// column nor a Read policy (buildThrough). The target's own scope
+		// applies to the statement that holds the condition.
+		n = node{op: opThrough, col: int32(l.targetCol), v: l.join, w: l.joinTarget,
+			kids: []node{{op: opIn, col: int32(l.joinOwner), v: keys}}}
+	}
+	if len(where) == 0 {
+		return n
+	}
+	kids := make([]node, 0, 1+len(where))
+	kids = append(kids, n)
+	for _, p := range where {
+		kids = append(kids, p.n)
+	}
+	return node{op: opAnd, kids: kids}
+}

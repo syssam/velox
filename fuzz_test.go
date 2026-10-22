@@ -61,7 +61,11 @@ func fuzzStatement(ops []byte, s string) *Statement {
 		case 0:
 			preds = append(preds, node{op: opEQ, col: col, v: v})
 		case 1:
-			preds = append(preds, node{op: opIn, col: col, v: []any{v, s}})
+			in := node{op: opIn, col: col, v: []any{v, s}}
+			if b&2 == 2 { // Of through a join entity, invInfo itself
+				in = node{op: opThrough, col: col, v: invInfo, w: int(b>>5) % n, kids: []node{in}}
+			}
+			preds = append(preds, in)
 		case 2:
 			preds = append(preds, node{op: opLike, col: col, v: s})
 		case 3:
@@ -123,6 +127,7 @@ func FuzzRender(f *testing.F) {
 	// Values equal to parts of the statement itself.
 	f.Add([]byte{0, 1, 2, 3, 6, 64}, `FROM "invoices" WHERE`)
 	f.Add([]byte{0, 1, 2, 3, 6, 64}, "invoices")
+	f.Add([]byte{15, 43, 4}, "j") // Of through a join entity, in an Or
 	f.Fuzz(func(t *testing.T, ops []byte, s string) {
 		if len(ops) > 64 {
 			ops = ops[:64]

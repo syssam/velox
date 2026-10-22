@@ -44,7 +44,8 @@ func (db *DB) guard(st *Statement) error {
 }
 
 // alwaysTrue reports whether n holds for every row, judged by its structure
-// alone, as render writes it: an empty And, or NotIn of nothing, is 1 = 1.
+// alone, as render writes it: an empty And, or NotIn of nothing, is 1 = 1. An
+// opThrough never is: a row without a join row does not meet it.
 func alwaysTrue(n node) bool {
 	switch n.op {
 	case opAllow:
@@ -93,6 +94,10 @@ func alwaysFalse(n node) bool {
 		return alwaysTrue(n.kids[0])
 	case opIn:
 		return len(n.v.([]any)) == 0
+	case opThrough:
+		// EXISTS on join rows that meet the kid, which Of makes the one
+		// condition on them.
+		return alwaysFalse(n.kids[0])
 	}
 	return false
 }

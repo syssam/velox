@@ -150,15 +150,25 @@ func appendInts(k []byte, xs []int) []byte {
 
 // nodeKey encodes a condition. For opExists, op, col (the relation index) and
 // the kids are enough: the outer entity keys the map, and the relation index
-// then fixes the target.
+// then fixes the target. An opThrough names its join entity, which the outer
+// entity does not fix: two relations to one target may go through different
+// joins. The entity's Name is its Go type without the package path, so its
+// schema and table are keyed too.
 func nodeKey(k []byte, n node) []byte {
 	k = append(k, byte(n.op))
 	k = binary.AppendUvarint(k, uint64(n.col))
-	if n.op == opEQ || n.op == opNEQ {
+	switch n.op {
+	case opEQ, opNEQ:
 		k = append(k, flag(isNilArg(n.v)))
-	}
-	if n.op == opIn || n.op == opNotIn {
+	case opIn, opNotIn:
 		k = binary.AppendUvarint(k, uint64(len(n.v.([]any))))
+	case opThrough:
+		j := n.v.(*EntityInfo)
+		for _, s := range [...]string{j.Name, j.Schema, j.Table} {
+			k = binary.AppendUvarint(k, uint64(len(s)))
+			k = append(k, s...)
+		}
+		k = binary.AppendUvarint(k, uint64(n.w.(int)))
 	}
 	k = binary.AppendUvarint(k, uint64(len(n.kids)))
 	for _, c := range n.kids {

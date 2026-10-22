@@ -543,6 +543,24 @@ func checkColumns(st *Statement) error {
 			return nd.v.(error)
 		case opAllow:
 			return nil // it names no column
+		case opThrough:
+			// col is the statement's entity's; the join column and the
+			// kids' columns are the join entity's.
+			j := nd.v.(*EntityInfo)
+			bad := func(c int) error {
+				if c < 0 || c >= len(j.Columns) {
+					return fmt.Errorf("velox: %s: a condition names column %d of %s, which has %d", st.Entity.Name, c, j.Name, len(j.Columns))
+				}
+				return nil
+			}
+			if err := bad(nd.w.(int)); err != nil {
+				return err
+			}
+			for _, k := range nd.kids {
+				if err := bad(int(k.col)); err != nil {
+					return err
+				}
+			}
 		}
 		return bad(int(nd.col))
 	}

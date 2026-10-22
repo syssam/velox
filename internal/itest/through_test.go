@@ -134,3 +134,63 @@ func TestThroughHas(t *testing.T) {
 		}
 	})
 }
+
+// TestOfThroughOnRealDatabases: the tags of books, and the books of tags,
+// through Of are what With loads for the same owners, the target's tenant
+// included.
+func TestOfThroughOnRealDatabases(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		throughSetup(t, tg)
+		tagNames := func(qctx context.Context, owners ...*book) []string {
+			t.Helper()
+			got, err := tg.db.Query[tag]().Where(Books.Tags.Of(owners...)).OrderBy(Tags.ID.Asc()).Limit(10).All(qctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			names := []string{}
+			for _, g := range got {
+				names = append(names, g.Name)
+			}
+			return names
+		}
+		for _, qctx := range []context.Context{ctx, velox.WithTenant(ctx, int64(1))} {
+			loaded := bookTags(t, tg, qctx, Books.Tags)
+			for id := int64(1); id <= 4; id++ {
+				wantStrings(t, tagNames(qctx, &book{ID: id}), loaded[id])
+			}
+		}
+		// Tag 2 is book 1's and book 2's, and comes once.
+		wantStrings(t, tagNames(ctx, &book{ID: 1}, &book{ID: 2}), []string{"go", "db"})
+		wantStrings(t, tagNames(ctx), []string{})
+
+		// The books of each tag, against With the other way.
+		tags, err := tg.db.Query[tag]().With(Tags.Books).OrderBy(Tags.ID.Asc()).Limit(10).All(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := range tags {
+			loaded, _ := tags[i].Books.Get()
+			var want []int64
+			for _, b := range loaded {
+				want = append(want, b.ID)
+			}
+			got, err := tg.db.Query[book]().Where(Tags.Books.Of(&tags[i])).OrderBy(Books.ID.Asc()).Limit(10).All(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var gotIDs []int64
+			for _, b := range got {
+				gotIDs = append(gotIDs, b.ID)
+			}
+			wantIDs(t, gotIDs, want)
+		}
+
+		// A write on the target through Of: its EXISTS reads the join table,
+		// not the table being changed, so MySQL takes it too.
+		n, err := tg.db.Update[tag]().Set(Tags.Name.Set("db2")).Where(Books.Tags.Of(&book{ID: 2})).Exec(ctx)
+		if err != nil || n != 1 {
+			t.Fatalf("update through Of: %d, %v", n, err)
+		}
+		wantStrings(t, tagNames(ctx, &book{ID: 1}), []string{"go", "db2"})
+	})
+}

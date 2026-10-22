@@ -264,7 +264,24 @@ func (w *writer) pred(n node) {
 		w.str(")")
 	case opExists:
 		w.exists(n)
+	case opThrough:
+		w.through(n)
 	}
+}
+
+// through writes Of on a many-to-many relation: an EXISTS on the join entity,
+// correlated with the current table's column n.col, holding the conditions on
+// the join's rows.
+func (w *writer) through(n node) {
+	join := n.v.(*EntityInfo)
+	in, outer, depth := w.in, w.alias, w.depth
+	w.subquery(join, n.w.(int), in, int(n.col))
+	for _, k := range n.kids {
+		w.str(" AND ")
+		w.pred(k)
+	}
+	w.str(")")
+	w.in, w.alias, w.depth = in, outer, depth
 }
 
 // exists writes EXISTS over a relation. The subquery's table is aliased

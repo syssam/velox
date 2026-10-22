@@ -28,6 +28,7 @@ const (
 	opAllow   // matches every row and renders to nothing in a policy
 	opExists  // col is the relation index, v its relRef, or its link once resolved, kids the target's conditions
 	opInvalid // v is the error
+	opThrough // col is the target's column, v the join *EntityInfo, w the join's column equal to it, kids the join's conditions
 )
 
 // node is a condition, typed by nothing: the generic API wraps it.
@@ -184,7 +185,7 @@ func existsLink(n node) (link, error) {
 func resolveNode(n node) (node, bool, error) {
 	switch n.op {
 	case opAnd, opOr, opNot, opExists:
-	default:
+	default: // an opThrough is resolved already: Of resolves its relation
 		return n, false, nil
 	}
 	var kids []node // nil until a kid changes

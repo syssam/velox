@@ -466,3 +466,22 @@ func TestRewriteCannotChangeExists(t *testing.T) {
 		}
 	}
 }
+
+// TestAroundSeesExists: an Around hook sees Statement.Exists on an Exists
+// query, and not on All.
+func TestAroundSeesExists(t *testing.T) {
+	var seen []bool
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{}, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+		seen = append(seen, st.Exists)
+		return next(ctx)
+	}))
+	if _, err := db.Query[testmodel.Invoice]().Exists(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Query[testmodel.Invoice]().Limit(1).All(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(seen, []bool{true, false}) {
+		t.Errorf("Exists seen %v, want [true false]", seen)
+	}
+}

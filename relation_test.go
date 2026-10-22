@@ -2,6 +2,7 @@ package velox
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -114,5 +115,28 @@ func TestInvalidTargetIsNamed(t *testing.T) {
 func TestEdgeThroughKeepsItsJoin(t *testing.T) {
 	if r := EdgeThrough[company, employee]("Through", 0, 0, 0, 0); r.through == nil || r.through.join == nil {
 		t.Error("EdgeThrough lost its join entity")
+	}
+}
+
+// TestCheckColumnsChecksTheJoin: an opThrough's join column and its kids'
+// columns index the join entity's columns, not the statement's.
+func TestCheckColumnsChecksTheJoin(t *testing.T) {
+	join := &EntityInfo{Name: "velox.join", Table: "joins", Tenant: -1, Columns: []ColumnInfo{{Name: "a"}, {Name: "b"}}}
+	st := func(w int, kid int32) *Statement {
+		return &Statement{Op: OpSelect, Entity: invInfo, Where: []Predicate{{node{op: opThrough, col: 4, v: join, w: w,
+			kids: []node{{op: opIn, col: kid, v: []any{int64(1)}}}}}}}
+	}
+	if err := checkColumns(st(1, 0)); err != nil {
+		t.Errorf("valid: %v", err)
+	}
+	for _, c := range []struct {
+		w   int
+		kid int32
+		bad int
+	}{{2, 0, 2}, {0, 2, 2}, {-1, 0, -1}} {
+		want := fmt.Sprintf("velox: velox.inv: a condition names column %d of velox.join, which has 2", c.bad)
+		if err := checkColumns(st(c.w, c.kid)); err == nil || err.Error() != want {
+			t.Errorf("%+v: %v", c, err)
+		}
 	}
 }

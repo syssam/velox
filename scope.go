@@ -456,6 +456,8 @@ func (sc *scoper) node(n node) (node, bool, error) {
 	switch n.op {
 	case opAnd, opOr, opNot, opExists:
 	default:
+		// An opThrough reads only join rows, which are never scoped: a join
+		// entity has neither a tenant column nor a Read policy.
 		return n, false, nil
 	}
 	var kids []node // nil until a kid changes

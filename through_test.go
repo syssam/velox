@@ -181,6 +181,63 @@ func TestThroughCacheKey(t *testing.T) {
 	}
 }
 
+// TestOfThroughRenders: Of on a many-to-many relation is an EXISTS on the join
+// entity, correlated with the target, holding the owners' keys; nested in a
+// HasWhere, the correlation names the outer alias.
+func TestOfThroughRenders(t *testing.T) {
+	b1, b2 := dBook{ID: 1}, dBook{ID: 2}
+	for _, c := range []struct {
+		d    velox.Dialect
+		want string
+	}{
+		{velox.Postgres, `SELECT "id", "org_id", "name" FROM "tags" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "book_id" IN ($1, $2)) LIMIT $3`},
+		{velox.MySQL, "SELECT `id`, `org_id`, `name` FROM `tags` WHERE EXISTS (SELECT 1 FROM `book_tags` AS `vx1` WHERE `vx1`.`tag_id` = `tags`.`id` AND `book_id` IN (?, ?)) LIMIT ?"},
+	} {
+		got, args, err := velox.OpenFake(c.d, &velox.FakeExec{}).Query[dTag]().Where(dBooks.Tags.Of(&b1, &b2)).Limit(5).SQL(ctx)
+		if err != nil || got != c.want {
+			t.Errorf("%v:\n got %s, %v\nwant %s", c.d, got, err, c.want)
+		}
+		if want := []any{int64(1), int64(2), 5}; !reflect.DeepEqual(args, want) {
+			t.Errorf("%v: args %v, want %v", c.d, args, want)
+		}
+	}
+	// The other way, with the target's tenant at the top, outside the EXISTS.
+	g := dTag{ID: 7}
+	got, args, err := velox.OpenFake(velox.Postgres, &velox.FakeExec{}).Query[dBook]().Where(dTags.Books.Of(&g)).Limit(1).SQL(velox.WithTenant(ctx, int64(3)))
+	want := `SELECT "id", "author_id", "title" FROM "books" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND "tag_id" IN ($1)) LIMIT $2`
+	if err != nil || got != want || !reflect.DeepEqual(args, []any{int64(7), 1}) {
+		t.Errorf("tag to books:\n got %s %v, %v\nwant %s", got, args, err, want)
+	}
+	got, args, err = velox.OpenFake(velox.Postgres, &velox.FakeExec{}).Query[dTag]().Where(dTags.Name.EQ("go"), dBooks.Tags.Of(&b1)).Limit(1).SQL(velox.WithTenant(ctx, int64(3)))
+	want = `SELECT "id", "org_id", "name" FROM "tags" WHERE "name" = $1 AND EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "book_id" IN ($2)) AND "org_id" = $3 LIMIT $4`
+	if err != nil || got != want || !reflect.DeepEqual(args, []any{"go", int64(1), int64(3), 1}) {
+		t.Errorf("tenant:\n got %s %v, %v\nwant %s", got, args, err, want)
+	}
+	got, _, err = velox.OpenFake(velox.Postgres, &velox.FakeExec{}).Query[dBook]().Where(dBooks.Tags.HasWhere(dBooks.Picks.Of(&b2))).Limit(1).SQL(ctx)
+	want = `SELECT "id", "author_id", "title" FROM "books" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND EXISTS (SELECT 1 FROM "tags" AS "vx2" WHERE "vx2"."id" = "vx1"."tag_id" AND EXISTS (SELECT 1 FROM "picks" AS "vx3" WHERE "vx3"."tag_id" = "vx2"."id" AND "book_id" IN ($1)))) LIMIT $2`
+	if err != nil || got != want {
+		t.Errorf("nested:\n got %s, %v\nwant %s", got, err, want)
+	}
+}
+
+// TestOfThroughCacheKey: Of on two relations through different join entities
+// to one target, with as many owners, render different SQL through one DB's
+// render cache, either one first.
+func TestOfThroughCacheKey(t *testing.T) {
+	b := dBook{ID: 1}
+	for _, order := range [][2]velox.Rel[dBook, dTag]{{dBooks.Tags, dBooks.Picks}, {dBooks.Picks, dBooks.Tags}} {
+		db := velox.OpenFake(velox.Postgres, &velox.FakeExec{})
+		a, _, errA := db.Query[dTag]().Where(order[0].Of(&b)).Limit(1).SQL(ctx)
+		c, _, errC := db.Query[dTag]().Where(order[1].Of(&b)).Limit(1).SQL(ctx)
+		if errA != nil || errC != nil || a == c {
+			t.Fatalf("one SQL for two relations: %s, %v, %v", a, errA, errC)
+		}
+		if !strings.Contains(a+c, `FROM "picks" AS "vx1"`) || !strings.Contains(a+c, `FROM "book_tags" AS "vx1"`) {
+			t.Errorf("%s\n%s", a, c)
+		}
+	}
+}
+
 // TestThroughJoinRowsWrite: join rows are an entity's rows, written with
 // Insert and Delete.
 func TestThroughJoinRowsWrite(t *testing.T) {

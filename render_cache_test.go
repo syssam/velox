@@ -260,3 +260,31 @@ func TestExistsHasItsOwnShape(t *testing.T) {
 		}
 	}
 }
+
+// TestCacheKeysTheJoin: two Of conditions through join entities differ in
+// their shape when the join entity or its column differs, though their
+// target column and owners agree.
+func TestCacheKeysTheJoin(t *testing.T) {
+	join := &EntityInfo{Name: "velox.join", Table: "joins", Tenant: -1, Columns: []ColumnInfo{{Name: "a"}, {Name: "b"}}}
+	other := &EntityInfo{Name: "velox.other", Table: "others", Tenant: -1, Columns: join.Columns}
+	through := func(j *EntityInfo, col int) *Statement {
+		return &Statement{Op: OpSelect, Entity: invInfo, Where: []Predicate{{node{op: opThrough, col: 0, v: j, w: col,
+			kids: []node{{op: opIn, col: 1, v: []any{int64(1)}}}}}}}
+	}
+	var c renderCache
+	seen := map[string]string{}
+	for range 2 { // the second pass is served from the cache
+		for name, st := range map[string]*Statement{"joins.a": through(join, 0), "joins.b": through(join, 1), "others.a": through(other, 0)} {
+			got, args := c.render(Postgres, st)
+			if want, wantArgs := render(Postgres, st); got != want || !argsEqual(args, wantArgs) {
+				t.Errorf("%s: the cache renders %s %v, not %s %v", name, got, args, want, wantArgs)
+			}
+			for n, s := range seen {
+				if n != name && s == got {
+					t.Errorf("%s and %s share SQL %s", n, name, got)
+				}
+			}
+			seen[name] = got
+		}
+	}
+}
