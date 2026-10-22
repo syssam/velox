@@ -9,19 +9,27 @@ import (
 	"github.com/syssam/velox2"
 )
 
+// schemaURL is the semantic-conventions release whose names this file holds.
+const schemaURL = "https://opentelemetry.io/schemas/1.43.0"
+
 // The attribute names, from OpenTelemetry's semantic conventions where they
-// have one (spec §2.4: written out, never imported from a semconv package).
-// The code.* names are those of the release whose db.* names these are.
+// have one: those of semconv v1.43.0, written out so that the package
+// imports no semconv package (spec §2.4), and checked against it by
+// TestNamesMatchSemconv.
 const (
-	attrDBSystem     = "db.system.name"
-	attrDBOperation  = "db.operation.name"
-	attrDBCollection = "db.collection.name"
-	attrDBQueryText  = "db.query.text"
-	attrReturnedRows = "db.response.returned_rows"
-	attrCodeFile     = "code.file.path"
-	attrCodeLine     = "code.line.number"
-	attrCodeFunction = "code.function.name"
-	attrErrorType    = "error.type"
+	attrDBSystem       = "db.system.name"
+	attrDBOperation    = "db.operation.name"
+	attrDBCollection   = "db.collection.name"
+	attrDBQueryText    = "db.query.text"
+	attrDBQuerySummary = "db.query.summary"
+	attrReturnedRows   = "db.response.returned_rows"
+	attrCodeFile       = "code.file.path"
+	attrCodeLine       = "code.line.number"
+	attrCodeFunction   = "code.function.name"
+	attrErrorType      = "error.type"
+
+	// errorTypeOther is error.type's value when no other fits.
+	errorTypeOther = "_OTHER"
 
 	attrAffectedRows = "velox.affected_rows"
 	attrEntity       = "velox.entity"
@@ -43,13 +51,18 @@ const (
 	attrTxRetried   = "velox.tx.retried"
 )
 
-// The span, event and instrument names (spec §2.2 and §2.3).
+// The span, event and instrument names (spec §2.2 and §2.3), and the
+// statement instruments' units and descriptions, which are v1.43.0's too.
 const (
 	spanTx     = "velox.tx"
 	eventRetry = "retry"
 
 	metricDuration     = "db.client.operation.duration"
+	unitDuration       = "s"
+	descDuration       = "Duration of database client operations."
 	metricReturnedRows = "db.client.response.returned_rows"
+	unitReturnedRows   = "{row}"
+	descReturnedRows   = "The actual number of records returned by the database operation."
 	metricTxDuration   = "velox.tx.duration"
 	metricFallbacks    = "velox.route.fallbacks"
 )
@@ -108,13 +121,19 @@ func spanName(st *velox.Statement) string {
 	return operation(st) + " " + collection(st)
 }
 
-// target appends to kv db.operation.name and db.collection.name, which raw
-// SQL has neither of.
+// target appends to kv db.operation.name, db.collection.name and
+// db.query.summary (the span's name, "SELECT invoices"), which raw SQL has
+// none of.
 func target(kv []attribute.KeyValue, st *velox.Statement) []attribute.KeyValue {
 	if raw(st) {
 		return kv
 	}
-	return append(kv, attribute.String(attrDBOperation, operation(st)), attribute.String(attrDBCollection, collection(st)))
+	op, coll := operation(st), collection(st)
+	return append(kv,
+		attribute.String(attrDBOperation, op),
+		attribute.String(attrDBCollection, coll),
+		attribute.String(attrDBQuerySummary, op+" "+coll),
+	)
 }
 
 // raw reports whether st is raw SQL, run by Raw or Exec.
@@ -163,5 +182,5 @@ func errorType(ctx context.Context, err error) string {
 	case errors.Is(err, context.DeadlineExceeded):
 		return "context.deadline_exceeded"
 	}
-	return "_OTHER"
+	return errorTypeOther
 }

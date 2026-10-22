@@ -18,11 +18,10 @@ import (
 	"github.com/syssam/velox2/internal/testmodel"
 )
 
-// The boundaries spec §2.3 sets: the conventions' durations, and powers of 4
-// for rows.
+// The boundaries semconv v1.43.0 advises, for durations and for rows.
 var (
 	wantDurationBounds = []float64{0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10}
-	wantRowBounds      = []float64{1, 4, 16, 64, 256, 1024, 4096, 16384, 65536}
+	wantRowBounds      = []float64{1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000}
 )
 
 // metered returns a DB on f traced and measured, its metrics read by the
@@ -108,7 +107,7 @@ func keys(s attribute.Set) []string {
 	return k
 }
 
-var statementKeys = []string{"db.collection.name", "db.operation.name", "db.system.name", "velox.entity"}
+var statementKeys = []string{"db.collection.name", "db.operation.name", "db.query.summary", "db.system.name", "velox.entity"}
 
 func TestStatementMetrics(t *testing.T) {
 	f := &fakeDB{rows: [][]driver.Value{invoiceRow(1), invoiceRow(2)}, affected: 3}
@@ -135,7 +134,7 @@ func TestStatementMetrics(t *testing.T) {
 		k := keys(dp.Attributes)
 		if et, ok := dp.Attributes.Value("error.type"); ok {
 			failed++
-			if et.AsString() != "_OTHER" || !slices.Equal(k, slices.Insert(slices.Clone(statementKeys), 3, "error.type")) {
+			if et.AsString() != "_OTHER" || !slices.Equal(k, slices.Insert(slices.Clone(statementKeys), 4, "error.type")) {
 				t.Errorf("failed statement's attributes %v", dp.Attributes.ToSlice())
 			}
 		} else if !slices.Equal(k, statementKeys) {
@@ -189,7 +188,7 @@ func TestMetricsAttributesAreBounded(t *testing.T) {
 		}
 	}
 	allowed := []string{
-		"db.system.name", "db.operation.name", "db.collection.name", "velox.entity", "error.type",
+		"db.system.name", "db.operation.name", "db.collection.name", "db.query.summary", "velox.entity", "error.type",
 		"velox.tx.outcome", "velox.tx.read_only", "velox.tx.retried",
 	}
 	check := func(name string, s attribute.Set) {
@@ -218,6 +217,65 @@ func TestMetricsAttributesAreBounded(t *testing.T) {
 		}
 		if n != 1 {
 			t.Errorf("%s: %d points, want 1", name, n)
+		}
+	}
+}
+
+// TestStatementMetricsSummary: a builder statement's points carry
+// db.query.summary, the span's name.
+func TestStatementMetricsSummary(t *testing.T) {
+	f := &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}
+	db, r := metered(t, f, veloxotel.Config{})
+	if _, err := db.Query[testmodel.Invoice]().Limit(1).All(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, dp := range points(t, r, "db.client.operation.duration", "s", wantDurationBounds) {
+		if v, _ := dp.Attributes.Value("db.query.summary"); v.AsString() != "SELECT invoices" {
+			t.Errorf("duration: db.query.summary %q", v.AsString())
+		}
+	}
+	for _, dp := range intPoints(t, r, "db.client.response.returned_rows", "{row}", wantRowBounds) {
+		if v, _ := dp.Attributes.Value("db.query.summary"); v.AsString() != "SELECT invoices" {
+			t.Errorf("returned rows: db.query.summary %q", v.AsString())
+		}
+	}
+}
+
+// TestScope: every span and metric is under the module's instrumentation
+// scope, with the pinned release's schema URL. The test binary's main module
+// is this one at "(devel)", so the version is "".
+func TestScope(t *testing.T) {
+	r := sdkmetric.NewManualReader()
+	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(r))
+	t.Cleanup(func() { _ = mp.Shutdown(context.Background()) })
+	db, exp, _ := traced(t, &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}, veloxotel.Config{MeterProvider: mp})
+	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		_, err := tx.Query[testmodel.Invoice]().Limit(1).All(ctx)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const name, schema = "github.com/syssam/velox2/contrib/veloxotel", "https://opentelemetry.io/schemas/1.43.0"
+	spans := exp.GetSpans()
+	if len(spans) != 2 {
+		t.Fatalf("%d spans, want 2", len(spans))
+	}
+	for _, s := range spans {
+		if sc := s.InstrumentationScope; sc.Name != name || sc.SchemaURL != schema || sc.Version != "" {
+			t.Errorf("span %q: scope %+v", s.Name, sc)
+		}
+	}
+	var rm metricdata.ResourceMetrics
+	if err := r.Collect(context.Background(), &rm); err != nil {
+		t.Fatal(err)
+	}
+	if len(rm.ScopeMetrics) == 0 {
+		t.Fatal("no metrics")
+	}
+	for _, sm := range rm.ScopeMetrics {
+		if sc := sm.Scope; sc.Name != name || sc.SchemaURL != schema || sc.Version != "" {
+			t.Errorf("metrics: scope %+v", sc)
 		}
 	}
 }
@@ -333,7 +391,7 @@ func TestShardedMetrics(t *testing.T) {
 	got := map[string]uint64{}
 	for _, dp := range points(t, r, "db.client.operation.duration", "s", wantDurationBounds) {
 		sh, ok := dp.Attributes.Value("velox.route.shard")
-		if !ok || !slices.Equal(keys(dp.Attributes), slices.Insert(slices.Clone(statementKeys), 4, "velox.route.shard")) {
+		if !ok || !slices.Equal(keys(dp.Attributes), slices.Insert(slices.Clone(statementKeys), 5, "velox.route.shard")) {
 			t.Errorf("attributes %v", dp.Attributes.ToSlice())
 		}
 		got[sh.AsString()] += dp.Count

@@ -18,15 +18,28 @@
 // velox.WithSQLComment when Config.App is set. An application that wants
 // velox.WithCallerSkip passes it itself after Options; it turns call sites on.
 //
+// The names follow OpenTelemetry's semantic conventions v1.43.0. The
+// tracer's and meter's instrumentation scope is the module's path, with the
+// release's schema URL and the module's version as the build records it:
+// none when the module is the main one at "(devel)" or is replaced by a
+// directory.
+//
 // A statement's span is of kind client, named for its operation and table
-// ("SELECT invoices"), and covers sending it and reading every row; with
-// Iter, the loop body too. Raw SQL (velox.DB.Raw and Exec) has neither an
-// operation nor a table that velox knows: velox does not parse them out of
-// the SQL, as the semantic conventions advise, so its span is named for the
-// database system ("postgresql") and has no db.operation.name or
-// db.collection.name. Its reason is velox.tenant_bypass and
-// velox.policy_bypass. It carries the fingerprint, the call site and the
-// context's tags. An Around hook of the application's own that retries, given
+// ("SELECT invoices"), which db.query.summary repeats, and covers sending it
+// and reading every row; with Iter, the loop body too. It carries the SQL as
+// db.query.text (velox's SQL is parameterized: no argument's value is in
+// it), unless Config.OmitQueryText is set. Raw SQL (velox.DB.Raw and Exec)
+// has neither an operation nor a table that velox knows: velox does not
+// parse them out of the SQL, as the semantic conventions advise, so its span
+// is named for the database system ("postgresql") and has no
+// db.operation.name, db.collection.name or db.query.summary. Its reason is
+// velox.tenant_bypass and velox.policy_bypass. Its text is recorded only
+// when it has arguments: the conventions say text that is not
+// parameterized should not be collected by default, and velox cannot tell
+// whether raw text without arguments holds literals. A read's span gets
+// db.response.returned_rows, which the conventions make opt-in, only with
+// Config.RecordReturnedRows. A span carries the fingerprint, the call site
+// and the context's tags. An Around hook of the application's own that retries, given
 // before these options, gets one span per attempt.
 //
 // A statement's span is a child of the span on the statement's context.
@@ -56,8 +69,8 @@
 // and velox.tx.duration (seconds) per transaction; and a counter,
 // velox.route.fallbacks, of the reads that fell over to the primary, once per
 // failover even when an outer hook retries the statement. Their attributes
-// are bounded: the database system, operation and table (none for raw SQL),
-// entity, error type and, on a sharded DB, shard for a statement; the
+// are bounded: the database system, operation, table and summary (none for
+// raw SQL), entity, error type and, on a sharded DB, shard for a statement; the
 // outcome, read-only flag and whether it retried for a transaction; and the
 // shard alone for the fallback counter. Tags, the tenant, the SQL text and
 // the call site are on spans only; the fingerprint is added to the statement

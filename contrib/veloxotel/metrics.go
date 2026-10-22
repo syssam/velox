@@ -10,11 +10,11 @@ import (
 	"github.com/syssam/velox2"
 )
 
-// The histograms' boundaries (spec §2.3): the semantic conventions'
-// recommended ones for durations, in seconds, and powers of 4 for rows.
+// The histograms' boundaries (spec §2.3): those semconv v1.43.0 advises, for
+// durations in seconds and for rows.
 var (
 	durationBounds = []float64{0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5, 10}
-	rowBounds      = []float64{1, 4, 16, 64, 256, 1024, 4096, 16384, 65536}
+	rowBounds      = []float64{1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000}
 )
 
 // instruments creates a's histograms on m. An error goes to otel.Handle, and
@@ -22,12 +22,12 @@ var (
 func (a *adapter) instruments(m metric.Meter) {
 	var err error
 	a.duration, err = m.Float64Histogram(metricDuration,
-		metric.WithDescription("Duration of database client operations."),
-		metric.WithUnit("s"), metric.WithExplicitBucketBoundaries(durationBounds...))
+		metric.WithDescription(descDuration),
+		metric.WithUnit(unitDuration), metric.WithExplicitBucketBoundaries(durationBounds...))
 	handle(err)
 	a.returned, err = m.Int64Histogram(metricReturnedRows,
-		metric.WithDescription("Number of rows returned by the operation."),
-		metric.WithUnit("{row}"), metric.WithExplicitBucketBoundaries(rowBounds...))
+		metric.WithDescription(descReturnedRows),
+		metric.WithUnit(unitReturnedRows), metric.WithExplicitBucketBoundaries(rowBounds...))
 	handle(err)
 	a.txDuration, err = m.Float64Histogram(metricTxDuration,
 		metric.WithDescription("Duration of velox transactions, every attempt and the commit included."),
@@ -50,7 +50,7 @@ func handle(err error) {
 // tenant, SQL or call site, and the fingerprint only with
 // Config.RecordMetricFingerprint.
 func (a *adapter) record(ctx context.Context, st *velox.Statement, seconds float64, err error, fellOver bool) {
-	kv := make([]attribute.KeyValue, 0, 7)
+	kv := make([]attribute.KeyValue, 0, 8)
 	kv = append(kv, attribute.String(attrDBSystem, dbSystem(st.Dialect)))
 	kv = target(kv, st)
 	kv = append(kv, attribute.String(attrEntity, st.Entity.Name))

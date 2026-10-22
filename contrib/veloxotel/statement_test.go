@@ -72,17 +72,17 @@ func TestSelectSpan(t *testing.T) {
 	}
 	a := attrs(s)
 	for k, want := range map[attribute.Key]attribute.Value{
-		"db.system.name":            attribute.StringValue("postgresql"),
-		"db.operation.name":         attribute.StringValue("SELECT"),
-		"db.collection.name":        attribute.StringValue("invoices"),
-		"db.response.returned_rows": attribute.Int64Value(2),
-		"velox.entity":              attribute.StringValue("testmodel.Invoice"),
-		"velox.tenant_bypass":       attribute.StringValue("otel tests"),
-		"velox.tag.route":           attribute.StringValue("GET /invoices"),
-		"velox.tag.team":            attribute.StringValue("billing"),
-		"code.file.path":            attribute.StringValue("statement_test.go"),
-		"code.line.number":          attribute.Int64Value(int64(line)),
-		"code.function.name":        attribute.StringValue("github.com/syssam/velox2/contrib/veloxotel_test.TestSelectSpan"),
+		"db.system.name":      attribute.StringValue("postgresql"),
+		"db.operation.name":   attribute.StringValue("SELECT"),
+		"db.collection.name":  attribute.StringValue("invoices"),
+		"db.query.summary":    attribute.StringValue("SELECT invoices"),
+		"velox.entity":        attribute.StringValue("testmodel.Invoice"),
+		"velox.tenant_bypass": attribute.StringValue("otel tests"),
+		"velox.tag.route":     attribute.StringValue("GET /invoices"),
+		"velox.tag.team":      attribute.StringValue("billing"),
+		"code.file.path":      attribute.StringValue("statement_test.go"),
+		"code.line.number":    attribute.Int64Value(int64(line)),
+		"code.function.name":  attribute.StringValue("github.com/syssam/velox2/contrib/veloxotel_test.TestSelectSpan"),
 	} {
 		if a[k] != want {
 			t.Errorf("%s = %v, want %v", k, a[k].String(), want.String())
@@ -94,10 +94,24 @@ func TestSelectSpan(t *testing.T) {
 	if q := a["db.query.text"].AsString(); q != f.log[0] {
 		t.Errorf("db.query.text %q, sent %q", q, f.log[0])
 	}
-	for _, k := range []attribute.Key{"velox.affected_rows", "velox.count", "velox.tenant", "velox.policy_bypass", "error.type"} {
+	// db.response.returned_rows is Opt-In on spans in v1.43.0.
+	for _, k := range []attribute.Key{"db.response.returned_rows", "velox.affected_rows", "velox.count", "velox.tenant", "velox.policy_bypass", "error.type"} {
 		if _, ok := a[k]; ok {
 			t.Errorf("unexpected %s", k)
 		}
+	}
+}
+
+// TestRecordReturnedRows: with RecordReturnedRows, a read's span has
+// db.response.returned_rows.
+func TestRecordReturnedRows(t *testing.T) {
+	f := &fakeDB{rows: [][]driver.Value{invoiceRow(1), invoiceRow(2)}}
+	db, exp, _ := traced(t, f, veloxotel.Config{RecordReturnedRows: true})
+	if _, err := db.Query[testmodel.Invoice]().Limit(5).All(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := attrs(only(t, exp))["db.response.returned_rows"]; got != attribute.Int64Value(2) {
+		t.Errorf("db.response.returned_rows = %v, want 2", got.String())
 	}
 }
 
@@ -171,7 +185,7 @@ func TestEveryOperation(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			db, exp, _ := traced(t, c.f, veloxotel.Config{})
+			db, exp, _ := traced(t, c.f, veloxotel.Config{RecordReturnedRows: true})
 			if err := c.run(db); err != nil {
 				t.Fatal(err)
 			}
@@ -180,6 +194,9 @@ func TestEveryOperation(t *testing.T) {
 				t.Errorf("span %q kind %v, want %q", s.Name, s.SpanKind, c.span)
 			}
 			a := attrs(s)
+			if got := a["db.query.summary"].AsString(); got != c.span {
+				t.Errorf("db.query.summary %q, want %q", got, c.span)
+			}
 			for k, want := range c.want {
 				if a[k] != want {
 					t.Errorf("%s = %v, want %v", k, a[k].String(), want.String())
@@ -615,16 +632,18 @@ func TestRouteShardAtStart(t *testing.T) {
 
 // TestRawSpans: raw SQL's span is named for the database system, as the
 // semantic conventions name a span with neither an operation nor a table, and
-// carries neither db.operation.name nor db.collection.name: velox does not
-// parse them out of the SQL. It carries the reason as velox.tenant_bypass and
-// velox.policy_bypass, the SQL as sent, and Raw's returned rows or Exec's
-// affected rows.
+// carries neither db.operation.name, db.collection.name nor db.query.summary:
+// velox does not parse them out of the SQL. It carries the reason as
+// velox.tenant_bypass and velox.policy_bypass, and Raw's returned rows or
+// Exec's affected rows. It carries the SQL as sent only when the statement
+// has arguments: v1.43.0 says non-parameterized text SHOULD NOT be collected
+// by default, and velox cannot tell whether raw text holds literals.
 func TestRawSpans(t *testing.T) {
 	f := &fakeDB{cols: []string{"id", "number"}, rows: [][]driver.Value{{int64(1), "A"}, {int64(2), "B"}}, affected: 3}
-	db, exp, _ := traced(t, f, veloxotel.Config{})
+	db, exp, _ := traced(t, f, veloxotel.Config{RecordReturnedRows: true})
 	bare := context.Background()
-	const q = "SELECT id, number FROM invoices FOR UPDATE"
-	if _, err := db.Raw[testmodel.Invoice]("locks the batch", q).All(bare); err != nil {
+	const q = "SELECT id, number FROM invoices WHERE org_id = $1 FOR UPDATE"
+	if _, err := db.Raw[testmodel.Invoice]("locks the batch", q, int64(1)).All(bare); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec(bare, "nightly cleanup", "DELETE FROM invoices WHERE paid"); err != nil {
@@ -635,31 +654,34 @@ func TestRawSpans(t *testing.T) {
 		t.Fatalf("%d spans, want 2", len(spans))
 	}
 	for i, c := range []struct {
-		entity, reason, sql string
-		want, absent        attribute.Key
-		n                   int64
+		entity, reason string
+		want, absent   []attribute.Key
+		n              int64
 	}{
-		{"testmodel.Invoice", "locks the batch", q, "db.response.returned_rows", "velox.affected_rows", 2},
-		{"Exec", "nightly cleanup", "DELETE FROM invoices WHERE paid", "velox.affected_rows", "db.response.returned_rows", 3},
+		{"testmodel.Invoice", "locks the batch", []attribute.Key{"db.response.returned_rows", "db.query.text"}, []attribute.Key{"velox.affected_rows"}, 2},
+		{"Exec", "nightly cleanup", []attribute.Key{"velox.affected_rows"}, []attribute.Key{"db.response.returned_rows", "db.query.text"}, 3},
 	} {
 		s := spans[i]
 		if s.Name != "postgresql" || s.SpanKind != trace.SpanKindClient || s.Status.Code != codes.Unset {
 			t.Errorf("span %d: %q kind %v status %v", i, s.Name, s.SpanKind, s.Status)
 		}
 		a := attrs(s)
-		for k, want := range map[attribute.Key]attribute.Value{
+		want := map[attribute.Key]attribute.Value{
 			"db.system.name":      attribute.StringValue("postgresql"),
 			"velox.entity":        attribute.StringValue(c.entity),
 			"velox.tenant_bypass": attribute.StringValue(c.reason),
 			"velox.policy_bypass": attribute.StringValue(c.reason),
-			"db.query.text":       attribute.StringValue(c.sql),
-			c.want:                attribute.Int64Value(c.n),
-		} {
+			c.want[0]:             attribute.Int64Value(c.n),
+		}
+		if slices.Contains(c.want, "db.query.text") {
+			want["db.query.text"] = attribute.StringValue(q)
+		}
+		for k, want := range want {
 			if a[k] != want {
 				t.Errorf("span %d: %s = %v, want %v", i, k, a[k].String(), want.String())
 			}
 		}
-		for _, k := range []attribute.Key{"db.operation.name", "db.collection.name", c.absent} {
+		for _, k := range append([]attribute.Key{"db.operation.name", "db.collection.name", "db.query.summary"}, c.absent...) {
 			if _, ok := a[k]; ok {
 				t.Errorf("span %d: unexpected %s = %v", i, k, a[k].String())
 			}
@@ -670,7 +692,7 @@ func TestRawSpans(t *testing.T) {
 	// or collection.
 	failing := &fakeDB{errs: []error{errors.New("boom")}}
 	db, exp, _ = traced(t, failing, veloxotel.Config{})
-	if _, err := db.Raw[testmodel.Invoice]("locks the batch", q).All(bare); err == nil {
+	if _, err := db.Raw[testmodel.Invoice]("locks the batch", q, int64(1)).All(bare); err == nil {
 		t.Fatal("no error")
 	}
 	s := only(t, exp)

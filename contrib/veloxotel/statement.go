@@ -39,7 +39,10 @@ func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(con
 	kv := routeAttributes(buf[:0], st)
 	switch {
 	case returnsRows(st):
-		kv = append(kv, attribute.Int64(attrReturnedRows, st.Result.Rows))
+		// db.response.returned_rows is Opt-In on spans in v1.43.0.
+		if a.cfg.RecordReturnedRows {
+			kv = append(kv, attribute.Int64(attrReturnedRows, st.Result.Rows))
+		}
 	case st.Result.Affected >= 0:
 		kv = append(kv, attribute.Int64(attrAffectedRows, st.Result.Affected))
 	}
@@ -67,16 +70,25 @@ func routeAttributes(kv []attribute.KeyValue, st *velox.Statement) []attribute.K
 	return kv
 }
 
+// queryText reports whether st's span carries db.query.text. v1.43.0 says
+// non-parameterized text SHOULD NOT be collected by default, since it may
+// hold literals. A builder statement is always parameterized; raw SQL is
+// taken as parameterized only when it has arguments, as velox cannot see
+// literals in its text. The text never carries the arguments' values.
+func (a *adapter) queryText(st *velox.Statement) bool {
+	return !a.cfg.OmitQueryText && (!raw(st) || len(st.Args) > 0)
+}
+
 // attributes are a statement's span attributes known before it runs.
 func (a *adapter) attributes(st *velox.Statement) []attribute.KeyValue {
-	kv := make([]attribute.KeyValue, 0, 14+len(st.Tags))
+	kv := make([]attribute.KeyValue, 0, 15+len(st.Tags))
 	kv = append(kv, attribute.String(attrDBSystem, dbSystem(st.Dialect)))
 	kv = target(kv, st)
 	kv = append(kv,
 		attribute.String(attrEntity, st.Entity.Name),
 		attribute.String(attrFingerprint, st.Fingerprint),
 	)
-	if !a.cfg.OmitQueryText {
+	if a.queryText(st) {
 		kv = append(kv, attribute.String(attrDBQueryText, st.SQL))
 	}
 	if st.Count {

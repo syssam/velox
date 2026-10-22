@@ -28,6 +28,7 @@ type Config struct {
 	OmitQueryText           bool // leave db.query.text off spans
 	RecordTenant            bool // add velox.tenant to spans
 	RecordMetricFingerprint bool // add velox.fingerprint to the statement metrics
+	RecordReturnedRows      bool // add db.response.returned_rows to spans
 }
 
 // Options returns the velox options that trace and measure every statement
@@ -47,9 +48,6 @@ func Options(cfg Config) []velox.Option {
 	}
 	return opts
 }
-
-// scope is the instrumentation scope: the tracer's and meter's name.
-const scope = "github.com/syssam/velox2/contrib/veloxotel"
 
 // adapter turns velox's statements and transactions into spans and metric
 // points, for one Config.
@@ -72,7 +70,9 @@ func newAdapter(cfg Config) *adapter {
 	if mp == nil {
 		mp = otel.GetMeterProvider()
 	}
-	a := &adapter{cfg: cfg, tracer: tp.Tracer(scope)}
-	a.instruments(mp.Meter(scope))
+	a := &adapter{cfg: cfg, tracer: tp.Tracer(modulePath,
+		trace.WithInstrumentationVersion(version()), trace.WithSchemaURL(schemaURL))}
+	a.instruments(mp.Meter(modulePath,
+		metric.WithInstrumentationVersion(version()), metric.WithSchemaURL(schemaURL)))
 	return a
 }
