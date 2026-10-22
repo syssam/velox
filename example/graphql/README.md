@@ -251,6 +251,50 @@ of full pages (about 30000) pass; three do not (about a million). `main_test.go`
 fields, not rows, and is not used. Choose the limit for your schema and
 clients.
 
+### A nested request
+
+A request that nests edges sends one statement per edge per level, however
+many rows each level has. This one reads three users, the first post of each
+(by title) with its count, and the tags of that post:
+
+```graphql
+query($n: Int) { users(first: $n, orderBy: {field: NAME}) { edges { node {
+  name
+  posts(first: 1, orderBy: [{field: TITLE}]) { totalCount edges { node { title tags { edges { node { name } } } } } }
+} } } }
+```
+
+Its statements, with `n` = 3 (placeholders shown as `?`; `TestNestedEdges` and
+`TestNoNPlusOne` assert them exactly, and that one user sends the same four):
+
+```sql
+-- the users page: n+1 rows, the columns asked for
+SELECT "id", "name", "joined_at" FROM "users" ORDER BY "name", "id" LIMIT ?
+-- the posts page of every user at once: a window per author
+SELECT "id", "author_id", "title", "views", "org_id" FROM (
+  SELECT "id", "author_id", "title", "views", "org_id",
+         ROW_NUMBER() OVER (PARTITION BY "author_id" ORDER BY "title", "id") AS "vx_rn"
+  FROM "posts" WHERE "author_id" IN (?, ?, ?) AND "org_id" = ?
+) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn"
+-- totalCount of every user's posts: one grouped count
+SELECT "author_id", COUNT(*) FROM "posts" WHERE "author_id" IN (?, ?, ?) AND "org_id" = ? GROUP BY "author_id"
+-- the tags page of every post read, through the join table
+SELECT "id", "name", "vx_owner" FROM (
+  SELECT "tags"."id", "tags"."name", "vx_j"."post_id" AS "vx_owner",
+         ROW_NUMBER() OVER (PARTITION BY "vx_j"."post_id" ORDER BY "tags"."id") AS "vx_rn"
+  FROM "tags" JOIN "post_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id"
+  WHERE "vx_j"."post_id" IN (?, ?, ?)
+) AS "vx" WHERE "vx_rn" <= ?
+```
+
+(The listing is laid out for reading; the statements are one line each.) The
+tenant condition is inside the window, so a post of another organization
+takes no rank. `BenchmarkNestedRequest` runs a request of this shape over 50
+users: 5 statements at 10 users and at 50, where the edges resolved one parent
+at a time sent 221 and 1101. `TestNestedRequestBudget` pins the statements and
+the allocations (about 45 per node returned; its budget holds under the pinned
+gqlgen only).
+
 ## What it shows
 
 | Request | Result |

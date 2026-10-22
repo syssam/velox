@@ -61,7 +61,9 @@ An application declares its entities once in the schema package and gets a worki
   - An application without GraphQL compiles and links exactly as today.
 - **The GraphQL generator is a separate module,** `contrib/graphql`. It may depend on gqlparser, to check the SDL it writes, and on gqlgen, for the runtime pieces gqlgen's interfaces need. The core and `cmd/velox-gen` do not depend on it.
 - **Compile cost.** The generated GraphQL Go lives in the `gen` package. bench/scale gains a GraphQL variant; its thresholds are set by the existing rule and recorded.
+  - *Note, 2026-10-22 (plan 4):* `go run ./bench/scale -graphql` is that variant, with thresholds under the key `500-graphql`, measured on darwin only (the Linux re-measure is in the follow-ups). The service binary with GraphQL is 11.1 MB, flat in the number of entities.
 - **Every dialect.** PostgreSQL (pgx and database/sql), MySQL 8 and SQLite 3.25+. The per-parent limit uses window functions, which all three have.
+  - *Note, 2026-10-22 (plan 4):* it is `ROW_NUMBER() OVER (PARTITION BY …)` in a derived table on every dialect, with a golden on all three in `TestRender` and an itest on all three.
 
 ## Design
 
@@ -172,6 +174,7 @@ Every `ID` is opaque and global. It is base64url, without padding, of `<Type>:<k
 - **Cursor:** opaque. It holds the order values and the key, encoded as versioned JSON (call) then base64url. A cursor that does not decode, or does not match the query's order, is an error.
 - **Paging:** keyset, through velox's `After` (and a `Before` the core gains for `last`/`before`). The order always ends with the primary key as a tiebreaker. The page query reads `n+1` rows to set `hasNextPage`/`hasPreviousPage`.
 - **`totalCount`** runs a `Count` only when it is selected; a count-only selection runs no page query.
+- *Note, 2026-10-22 (plan 4):* a request is also bounded as a whole, by `Limits.MaxCost` (100000 by default), which multiplies by `first` and `last` down the connections (rulings 10 and 11 of plan 4). A request over it fails with `ErrTooCostly`, code `COST_LIMIT_EXCEEDED`, before any statement.
 - *Note, 2026-10-21 (API plan 3):* the cap is the `MaxPage` of `veloxgql.Limits`, read from the request's context (`LimitsFrom`), not a package variable. Every Node entity also gets `<Plural>ConnectionOf(ctx, q, …)`, which composes a connection from the application's own query: it clears the query's Offset, replaces its Limit and refuses one with an `OrderBy` (`velox.Query.Ordered`).
 
 #### Ordering
@@ -241,6 +244,13 @@ The edge method uses the loaded rows only when its arguments are the ones loaded
 
 **Bounds:** every load keeps the DB's `WithMaxRows` cap, so a selection never reads without bound.
 
+*Note, 2026-10-22 (plan 4):* this section is not how plan 4 built it. Where it differs, the rulings of plan 4 stand:
+- **Batching is at the edge** (ruling 1), not in a `With` walk. Each generated edge method reads its edge for every row of its group in one statement, with the typed arguments gqlgen gave it. The selection set is walked for the columns only (ruling 9).
+- **The rows live in the request's table of groups,** not in `Many[T]` (ruling 2). The edge methods no longer read `x.<Edge>`; the core's structs are as before.
+- **Every alias batches,** each as its own load (ruling 3), and **nested `last`, `after` and `before` batch too** (ruling 4): "only the first is batched" and "cannot be batched" above are superseded.
+- **The count** is a grouped `CountEach`, one per edge per level, as written.
+- **Bounds** are those of ruling 8: a per-owner limit bounds its own statement, and a list edge reads `MaxList + 1` rows per owner.
+
 ### 5. What the application writes
 
 The example (`example/graphql`) shows the whole of it:
@@ -269,6 +279,7 @@ The example (`example/graphql`) shows the whole of it:
   - mutations commit or roll back as one transaction.
 - **itest:** connections, `LimitEach` and mutations on PostgreSQL and MySQL.
   - *Note, 2026-10-22 (plan 3):* the mutation itest lives in `contrib/graphql`'s e2e app module, not in `internal/itest`: the root module may not depend on `contrib/graphql`. It runs on SQLite always, and on PostgreSQL and MySQL when their variables are set.
+  - *Note, 2026-10-22 (plan 4):* the collection itest lives in the same e2e app, through real gqlgen, on SQLite always and on PostgreSQL and MySQL when their variables are set (ruling 16). The core's new SQL has its own itests in `internal/itest`. `example/graphql` asserts the statements of a nested request, and `BenchmarkNestedRequest` with `TestNestedRequestBudget` pins them: 5 statements at 10 and at 50 users, where the edges read one parent at a time sent 221 and 1101.
 - **bench/scale:** the GraphQL variant (Constraints).
 
 ## What is left to the builder
@@ -358,7 +369,7 @@ Plan 2 (the runtime, `docs/plans/2026-10-20-graphql-2-runtime.md`) settled these
 
 *Note, 2026-10-21 (API plan 3):* they are fields of `veloxgql.Limits`, not package variables: `WithLimits` sets them on the extension, `LimitsFrom(ctx)` reads them (the defaults in a context without them), a zero field means the default, and `Validate` refuses a negative one. Two servers in one process can differ.
 
-Every one of them bounds one argument or one edge. Connections nested in connections multiply, and aliases repeat a field, so a server needs a limit on the cost of the whole request too: `example/graphql` sets gqlgen's `extension.FixedComplexityLimit`. A cost limit that multiplies by `first` and `last` across connection fields is for plan 4. `WhereOps` on a field that `Skip(SkipType)` leaves out of the type is refused like `OrderField`: a filter is a value oracle too (`GT`, `LT` and `HasPrefix` bisect the value).
+Every one of them bounds one argument or one edge. Connections nested in connections multiply, and aliases repeat a field, so a server needs a limit on the cost of the whole request too. *(Note, 2026-10-22 (plan 4): `Limits.MaxCost` is that limit, and `example/graphql` uses it in place of gqlgen's `extension.FixedComplexityLimit`, which counted fields, not rows. See ruling 10 of plan 4.)* `WhereOps` on a field that `Skip(SkipType)` leaves out of the type is refused like `OrderField`: a filter is a value oracle too (`GT`, `LT` and `HasPrefix` bisect the value).
 
 ## Rulings made in plan 3
 
@@ -404,3 +415,43 @@ Plan 3 (mutations, `docs/plans/2026-10-21-graphql-3-mutations.md`) settled these
 - Created rows are returned as written.
 - Self-edges are written one way, as the core's loads read them (the plugin model has no `Bidi`).
 - Clearing or removing children skips those the caller may not change: for an O2M or O2O edge, those the tenant or the child's Write policy hides (the `UPDATE` of the child is scoped); for an M2M edge, the links to targets the tenant or the target's Read policy hides.
+
+## Rulings made in plan 4
+
+Plan 4 (collection and loading, `docs/plans/2026-10-22-graphql-4-collection.md`) settled these points. As above, where one differs from the text, the ruling stands. The first 19 were made in the plan; 20 and after were found while it was executed. The core additions among them are in the API cleanup design, §6g.
+
+**Calls made in the plan.**
+1. **Batch at the edge, not a With walk.** §4 had the root's collect function walk the selection set and add `With` loads with each nested connection's `where` and `orderBy`. Generated code cannot decode those arguments: gqlgen decodes them in the application's `graph` package, for the resolver only, and a second decoder for every where input would be large generated code. So each edge method batches on its first call: it gets the typed arguments from gqlgen, and reads the edge for every row of its group in one statement. This gives the same bound, one statement per edge per level, with no second decoder and no lookahead. The selection set is still walked, for the columns only.
+2. **The rows live in the request's table, not in the entity.** §4 put the eager-loaded page in `Many[T]`. Batched rows stay in the request's table of groups, and the generated edge methods no longer read `x.<Edge>`: once `Rel.LimitEach` exists, an application's With load may hold a filtered or limited page, which an edge field must not show as the edge. An application's own loads are not needed for batching any more. `gqlimpl.LoadedConnection` stays, for code generated before this plan.
+3. **Every alias batches.** §4's call batched only the first of two uses of one edge. With batches keyed by the field, each alias is its own batch: one statement per alias per level, which the cost limit bounds.
+4. **Nested `last`, `after` and `before` batch too.** §4 left a nested cursor to one query per parent. A field's cursor is one value for every parent (one field, one set of variables), so it is one more condition of the batch: `q.After(x)` inside the window. `last` reverses the order as the root does.
+5. **A window function on every dialect.** `ROW_NUMBER() OVER (PARTITION BY …)` in a derived table, on PostgreSQL, MySQL 8 and SQLite 3.25+. A lateral join was rejected: SQLite has none, and one shape on all three keeps one golden per case. A load keyed by the target's one-column primary key (many-to-one) needs no window. A many-to-many page joins the join table, so the window partitions by the join's owner column in one statement.
+6. **`Statement.Each`.** The per-owner shape is a field of the statement, so hooks and adapters see it, and the scope's conditions render inside the window: a row the tenant or a policy hides takes no rank. A Rewrite hook may not change it, as with `Lock` (§6f ruling 7).
+7. **The core API.** `Rel.LimitEach` and `Rel.MaxRows` are methods, and `Query.Selects` too: none needs a type parameter beyond the receiver's. `LoadEach` and `CountEach` are functions: they take both `E` and `T` (§6f ruling 21). `Query.With[T]` stays as it is: it is the "Before 1.0" follow-up's, not GraphQL's.
+8. **Caps.** A statement with a per-owner limit `n` may return `n` rows per owner in it, in place of the DB's and the owner query's cap: it is bounded by construction. A load keyed by the target's primary key may return one row per key. `Rel.MaxRows` gives any load its own cap. A connection's base query keeps sharing the page's cap of `n+1` with its With loads unless they set one of these; `Paginate`'s doc says so. List edges read `MaxList + 1` rows per owner, and an owner with more fails alone.
+9. **The columns collected.** A page reads the selected fields' columns, the key, every foreign key on the row and every order field's column. The foreign keys are cheap and let any edge or an application's With work; the order columns keep every cursor valid. A field velox-graphql did not write (an application's `extend type`) turns narrowing off for that page. Narrowing never adds a column the base query left out (`Selects`), and a base query that drops the key or a requested order column is refused with an internal error, which closes the `ConnectionOf` follow-up. A mutation's returned row is not narrowed.
+10. **The cost.** gqlgen's recipe, multiplying by `first`/`last`, as entgql and GitHub do: a field costs 1 plus its children's cost times its multiplier. A connection multiplies by `first` or `last` or `MaxPage`; `nodes` by its IDs; any other list of objects by `MaxList`. Fragments all count, as an upper bound; `@skip` and `@include` are not read; `__schema` and `__type` cost nothing, so introspection works. Named fragments are costed once each, and the sum saturates, so neither a fragment DAG nor huge arguments can make the check itself expensive or wrap. The default `MaxCost` is 100000: two levels of full pages pass (about 30000), three do not. The example drops gqlgen's `FixedComplexityLimit`, which counted fields, not rows.
+11. **The error.** `ErrTooCostly`, code `COST_LIMIT_EXCEEDED` (a new `CodeTooCostly`), returned by the extension's `MutateOperationContext`, which gqlgen runs before any resolver. A client can tell it from a bad argument.
+12. **`veloxgql.Batch`.** Rows an application's own resolver returns join batching through one public function; the generated pages, `node` and `nodes` batch theirs. Rows from anywhere else (a mutation's result) resolve their edges one row at a time, which is one row.
+13. **A batch's error and context.** The batch runs once, under the first caller's context, on the DB `DBFrom` reads; its error is every row's. On a DB with replicas a batch may read a replica other than its parents', as the per-parent queries did before.
+14. **A many-to-many edge needs no inverse.** The edge methods find nodes with `Rel.Of`, which reads the join table, so velox-graphql no longer refuses a many-to-many edge without an inverse edge. The where input's `has` filters keep using `HasWhere`.
+15. **`FOR UPDATE` in `UpdateX` and `DeleteX`.** The check before an edge-only update, and before a delete's join rows, becomes a `Writable().ForUpdate().Exists` read on PostgreSQL and MySQL, which closes the time-of-check race the follow-ups name. SQLite keeps the plain read: its transactions lock the database. `Exists` replaces `Count`, which cannot lock.
+16. **The collection itest runs real gqlgen,** in a `contrib/graphql` e2e app, on SQLite always and PostgreSQL and MySQL when their variables are set: batching needs gqlgen's field contexts, which only a server makes. The core's new SQL has its own itests in `internal/itest`.
+17. **The bench.** A request-level benchmark in `example/graphql`, whose test pins the target: the statements of a nested request do not grow with its parents, and its allocations grow with its rows only. Its allocation budget holds under the pinned gqlgen only, with 10% for the jitter of gqlgen's concurrent resolvers; the 1.2% rule stays for the core's budgets and compile-cost bounds. `bench/scale` gains the GraphQL variant the spec's Constraints ask for, with thresholds by the existing rule.
+18. **Versions.** `GeneratedCodeIsVersion4` stays 4 (velox-gen's output is unchanged) and `veloxgql.GeneratedCodeIsVersion1` stays 1 (every `gqlimpl` name stays, so old generated code compiles; the new code only adds calls).
+19. **Left out:** `Bidi` self-edges (a plugin model change, for mutations); the function form of `Query.With`; JSON append; `@goModel` enums; a caller-supplied key in create inputs; the hidden O2O child on re-point; the one-sided M2M's join rows on delete; and gRPC, migrations and the pgx split, which have their own plans.
+
+**Rulings found while executing the plan.**
+20. Repeated links in a non-unique join table count once: a many-to-many per-owner page and `CountEach` dedupe (owner, target) before ranking or counting.
+21. `vx_rn` and `vx_owner` are reserved aliases of a per-owner page, and a target column of either name is refused.
+22. A per-owner load through a join sends no statement for the join entity, so the join entity's hooks and policy do not see it (the target's do).
+23. `Query.Count` keeps ignoring `Limit` and `Offset` (`totalCount` relies on it); `CountEach` refuses them, and its doc says "unlike Query.Count". A nil owner fails naming the entity; an owner with a NULL key gets 0.
+24. `After` moved out of the generic prepare path: about 26.8 KB less per entity package, and the compile-cost bounds were lowered. Fixed in passing: `With(rel.Where(x.Has()))` no longer panics.
+25. The cost's sums and products saturate before they overflow, and a negative cost never passes. Costs are clamped before conversion to `int`, so 32-bit platforms are right (checked as a linux/386 binary). A connection with neither `first` nor `last` costs `MaxPage`.
+26. The batch table is per response, so a subscription's table does not grow without bound, and no batch is added without a gqlgen field context. `Selected` and narrowing give ok=false for fields outside the known connection and edge fields, and fragments are matched by the type's real interfaces.
+27. The batch key includes the caller's row scope, core `velox.RowScope` (`RowScopeOf(ctx)`: the tenant, `AllTenants`, `SkipPolicy`, the shard), so callers with a different tenant, bypass or shard never share a load. A tenant that is not comparable gets its own batch.
+28. Narrowing always reads the tenant column, so a narrowed row handed to an application resolver never has a zero tenant. The docs of `Node`, `Nodes` and `<Plural>ConnectionOf` warn that unselected columns are zero.
+29. A generated edge keeps its nil-key check before `EdgeOne`: a NULL foreign key sends no statement.
+30. `UpdateX` and `DeleteX` choose their lock (`ForUpdate().Exists`) by the dialect at run time; SQLite keeps the plain read. A lock-wait itest runs on PostgreSQL and MySQL.
+31. CI runs `go mod download` before the `contrib/graphql` step, since the e2e app builds offline, in `ci.yml` and `scripts/ci-local.sh` alike.
+32. Bench numbers (measured on darwin/arm64, a loaded machine): a nested request is 5 statements at 10 and at 50 users (221 and 1101 before this plan). Allocations are about 44.6 per node, and the budget is the measured figure plus 10%. `bench/scale -graphql` has thresholds under the key `500-graphql`; the service binary with GraphQL is 11.1 MB, flat in the number of entities. The time thresholds were set under load and are in the Linux re-measure follow-up.

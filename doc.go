@@ -187,6 +187,12 @@
 //   - WithTags adds tags to the SQL comment.
 //   - WithoutTx removes a transaction's mark from a context.
 //
+// RowScopeOf reads back what a context scopes statements by (the tenant, the
+// reasons of AllTenants and SkipPolicy, the shard) as a RowScope, which
+// compares with == (see its documentation for a tenant that cannot be
+// compared): code that reads for several callers in one statement keeps
+// callers of different scopes apart by it.
+//
 // # Transaction options
 //
 // A TxOption configures one call of DB.Tx: TxIsolation, TxReadOnly,

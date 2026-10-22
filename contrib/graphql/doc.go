@@ -137,15 +137,8 @@
 // "const _ = veloxgql.GeneratedCodeIsVersion1", so that generated code and
 // the module fail to compile together when they disagree. A connection is
 // keyset-paged by its cursors, and runs its page query and its COUNT only
-// when gqlgen asks for edges or pageInfo, and for totalCount. A page, a node
-// and an edge's nodes read only the columns their selection needs: the key,
-// the foreign keys on the row, the order fields' columns and the selected
-// fields'; all of them when the selection holds a field the plugin did not
-// write, such as an application's own. The rows one statement reads are a
-// batch: the first edge field gqlgen resolves on any of them reads that edge
-// for all of them, in one statement, so a nested query sends one statement
-// per edge per level, whatever its rows (veloxgql.Batch makes the rows of an
-// application's own resolver one). A where
+// when gqlgen asks for edges or pageInfo, and for totalCount; see "Loading"
+// below for how it reads its rows and their edges. A where
 // argument's Pred is one gqlimpl helper call for each predicate the input
 // sets; it decodes IDs as their type's, and refuses an ID of another type,
 // and a filter nested deeper than MaxFilterDepth, wider than MaxFilterWidth
@@ -155,12 +148,9 @@
 // veloxgql.LimitsFrom(ctx): the ones given to veloxgql.NewExtension with
 // veloxgql.WithLimits, or veloxgql.DefaultLimits().
 //
-// Every one of these limits bounds one argument or one edge, not a request:
-// connections nested in connections multiply, and aliases repeat a field. A
-// server also needs a limit on the cost of the whole request, such as gqlgen's
-// extension.FixedComplexityLimit, which example/graphql sets. A mutation's
-// transaction does not cover @defer (see veloxgql.Extension): do not defer
-// fields of a mutation.
+// Every one of these limits bounds one argument or one edge, not a request;
+// see "The cost limit" below. A mutation's transaction does not cover @defer
+// (see veloxgql.Extension): do not defer fields of a mutation.
 //
 // For an entity with graphql.Create(), its file also has Create<T>Input and
 // Create<T>(ctx, input), which createX's resolver returns; with
@@ -244,6 +234,74 @@
 // and Nodes for node and nodes, and the root connection function for each
 // QueryField. The example example/graphql in the velox2 repository is a
 // whole server: a schema, its gqlgen.yml and its resolvers.
+//
+// # Loading
+//
+// The rows one statement reads are a batch: a page's rows, the nodes of node
+// and nodes, and the rows an edge read. The first edge field gqlgen resolves
+// on any row of a batch reads that edge for every row of it, in one
+// statement, and the rows read become a batch in their turn. So a nested
+// query sends one statement per edge per level, whatever its rows: a page
+// with a window function (velox.LoadEach, with LimitEach of the page size and
+// one more), a totalCount with a grouped count (velox.CountEach), a to-one
+// edge by the target's key. Nothing waits for other resolvers to join a batch
+// (a mutation runs its resolvers one at a time, and would deadlock), so a
+// batch is read by the first caller, under its context, on the DB DBFrom
+// reads; its error is every row's.
+//
+// A batch is keyed by the field, so the same edge under two aliases, or with
+// two sets of arguments, is two batches, each with its own page. The
+// arguments are the field's, the same for every row: a nested last, after
+// and before batch too. The batch also holds the caller's row scope
+// (velox.RowScopeOf: the tenant, a bypass, the shard), so callers that
+// differ in it never share a read. Batches belong to one response: a
+// subscription's event starts new ones, and outside a gqlgen field there is
+// no batch, so a row read alone resolves its edges one row at a time.
+//
+// veloxgql.Batch makes the rows an application's own resolver returns a
+// batch, so their edges batch too. Rows from anywhere else, such as a
+// mutation's result, are one row each.
+//
+// The edge methods read the edge from the database, in the batch, for the
+// arguments of the field. They do not read the row's With load (x.Posts):
+// an application's With may hold a page its own query chose, which is not the
+// edge. A With is not needed for batching, and the edge methods ignore it.
+// gqlimpl.LoadedConnection stays for code generated before.
+//
+// A page, a node and an edge's nodes read only the columns their selection
+// needs: the selected fields', the key, every foreign key on the row, the
+// tenant column and the columns of the order fields. The foreign keys let an
+// edge or an application's With work; the order columns keep every cursor
+// valid. The columns of the other fields are left unread, so a row handed to
+// an application's resolver has them zero: a resolver that reads such a
+// field must select it. Narrowing is turned off for a page, and every column
+// is read, when the selection holds a field the plugin did not write (an
+// application's own, in an extend type, whose resolver may read anything), or
+// one of a connection or an edge that gqlimpl.Selected cannot see through
+// (see its documentation). It never adds a column the application's query
+// left out (velox.Query.Selects), and a <Plural>ConnectionOf whose base query
+// drops the key or a column an orderBy names is refused with an internal
+// error. A mutation's returned row is not narrowed.
+//
+// # The cost limit
+//
+// The limits above each bound one argument. Connections nested in
+// connections multiply, and aliases repeat a field, so a server also limits
+// the cost of the whole request: veloxgql.Limits.MaxCost, 100000 by default.
+// veloxgql.Cost computes it, and the Extension refuses a request over it,
+// before any resolver runs, with veloxgql.ErrTooCostly (the code
+// COST_LIMIT_EXCEEDED, veloxgql.CodeTooCostly) and no statement.
+//
+// A field costs 1 plus its children's cost times its multiplier. A connection
+// multiplies by its first or last, or by MaxPage when it has neither; nodes
+// by the number of its ids; any other list of objects by MaxList. Every
+// alias counts, and so does every branch of a fragment (an upper bound):
+// @skip and @include are not read. __schema and __type cost nothing, so
+// introspection works. Variables are read; sums and products saturate, so
+// huge arguments cannot wrap the cost, and a named fragment is costed once
+// however often it is spread. Two levels of full pages cost about 30000 and
+// pass the default; three do not. gqlgen's extension.FixedComplexityLimit
+// counts fields, not rows, and is not needed with it.
 //
 // # gqlgen.yml
 //

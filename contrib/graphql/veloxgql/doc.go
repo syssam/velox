@@ -59,7 +59,20 @@
 // ends with the key. Paging is keyset, through velox's Query.After: last and
 // before reverse every term and reverse the rows read, and one row more than
 // the page sets hasNextPage or hasPreviousPage. gqlimpl.LoadedConnection
-// pages rows a With loaded, and runs no query.
+// pages rows a With loaded, and runs no query; it is for code generated
+// before edges batched.
+//
+// # Batches
+//
+// The rows one statement reads are a batch, and the first edge field gqlgen
+// resolves on any of them reads that edge for all of them in one statement,
+// so a nested query sends one statement per edge per level. Generated pages,
+// node and nodes make their rows a batch; Batch does so for the rows an
+// application's own resolver returns. A batch is per response and per field,
+// so each alias of an edge is its own batch, and it holds the caller's
+// velox.RowScope, so callers with different tenants, bypasses or shards never
+// share a read. Nothing waits for other resolvers, which a mutation could not
+// allow. Outside a gqlgen field Batch does nothing.
 //
 // # Where
 //

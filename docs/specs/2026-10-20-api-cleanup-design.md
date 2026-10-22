@@ -283,6 +283,26 @@ Added 2026-10-22. Each is a decision taken in the plan or while executing it, an
 22. **The godoc nits are done, not deferred** (final review): `Mutation`, `Option` and `TxOption` are structs with unexported fields, so their documentation names no unexported type, and `ColumnInfo.Codec`'s rules moved to the package documentation's `JSON fields` section.
 23. **`SetAffected` is for updates and deletes** (final review). On an insert it is a recorded misuse, as `Set` and `Where` are: an insert's count is its rows, and its `Exec` returns none. A `Save` whose hook makes the write itself stores nothing in its entity, as velox wrote nothing; `Save`'s doc and `SetAffected`'s say so. The `Hook` doc's "next exactly once" allows not calling it to make the write itself, and `Conds` says that an outer hook whose `next` has returned also sees the inner hooks' conditions.
 
+## 6g. Notes made while implementing GraphQL plan 4
+
+*Note, 2026-10-22 (GraphQL plan 4):* additions to the core, all additive, with `GeneratedCodeIsVersion4` unchanged and the budgets and the escape check as they were. The rest of the plan's rulings are in the GraphQL design, "Rulings made in plan 4".
+
+- **`Statement.Each`** (`*EachClause`). The per-owner shape is a field of the statement, so hooks and adapters see what it is, and the scope's conditions (the tenant, the Read policy) render inside the window: a row they hide takes no rank. A Rewrite hook may not change it, as with `Lock` (§6f ruling 7). It is set for a `With` load with `LimitEach`, for `LoadEach` and for `CountEach`.
+- **`Rel.LimitEach(n)`.** At most `n` related entities for each owner, the first in the relation's order, in one statement for every owner: `ROW_NUMBER() OVER (PARTITION BY …)` in a derived table on PostgreSQL, MySQL 8 and SQLite 3.25 or later. Ties break by the target's primary key. A to-one relation read by the target's one-column primary key needs no window. A many-to-many page joins the join table in the target's one statement.
+- **`Rel.MaxRows(n)`.** A cap of its own for any load, in place of the owner query's `MaxRows` and the DB's cap. A load with `LimitEach(n)` is bounded by its limit, and one read by the target's primary key by one row per key; any other load shares the owner's cap.
+- **`LoadEach(ctx, q, r, owners)` and `CountEach(ctx, q, r, owners)`.** The per-owner page and its count for owners already in hand, with a `Query` of the target that gives the conditions, the order, the columns and `After`. One statement per chunk of owners, under the dialect's parameter limit.
+- **`Query.Selects(cols...)`.** Whether the query reads every one of the columns; true for a query with no `Columns` or `Omit`. It is what lets generated code narrow a query without adding a column the application's query left out.
+- **`RowScope` and `RowScopeOf(ctx)`.** A method-free struct and a function, read-only: the tenant, the reasons of `AllTenants` and `SkipPolicy`, and `OnShard`'s shard. It is for code that caches or batches by scope, which compares scopes with `==`. A tenant that cannot be compared panics there, and the doc says how to guard.
+
+The rules they follow:
+- **A method when it needs no type parameter beyond the receiver's; a function when it does** (§6f ruling 21). `LimitEach`, `MaxRows` and `Selects` are methods (`[_ Lazy[…]]` is allowed); `LoadEach` and `CountEach` take both `E` and `T`, so they are functions. `Query.With[T]` stays as it is: it is the "Before 1.0" follow-up's.
+- **Every statement goes through the pipeline.** The windowed and grouped statements are `Statement`s on the target entity: the tenant scope, the Read policy, the Rewrite and Around hooks and the guards see them.
+- **A link held twice counts once.** In a non-unique join table, a many-to-many page and `CountEach` dedupe (owner, target) before ranking or counting.
+- **No statement for the join entity.** A per-owner load through a join reads the join table inside the target's statement, so the join entity's hooks and policy do not see it (the target's do). A load without `LimitEach` still reads the join rows apart.
+- **Reserved aliases.** `vx_rn` and `vx_owner` name the rank and the owner's key of a per-owner page, and a target column of either name is refused.
+- **`Query.Count` keeps ignoring `Limit` and `Offset`,** which `totalCount` relies on. `CountEach` refuses them, and its doc says so. A nil owner fails naming the entity; an owner with a NULL key gets no rows, or 0.
+- **`After` left the generic prepare path,** which took about 26.8 KB off every entity package, and the compile-cost bounds were lowered by §6f ruling 18's rule. `With(rel.Where(x.Has()))` no longer panics.
+
 ## 7. Order and plans
 
 1. **API plan 1, core:** §1, §2.1–2.2, velox-gen into the root (§3.2), the nullability rule (§3.1), and the Go 1.27 doc pass. Generated code moves to version 4, and every example and golden is regenerated.
