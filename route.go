@@ -470,7 +470,7 @@ func (db *DB) route(ctx context.Context, st *Statement) (target, error) {
 	t := target{ex: sh.primary, sh: sh, replica: -1}
 	fallback := false
 	switch {
-	case !st.reads(): // a write, Exec's raw SQL included
+	case !st.Op.Reads(): // a write, Exec's raw SQL included
 	case db.pin.ex != nil:
 		t = db.pin
 		if t.replica >= 0 && t.sh.replicas[t.replica].downUntil.Load() != 0 && !t.sh.replicas[t.replica].up(time.Now().UnixNano()) {

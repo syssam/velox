@@ -109,7 +109,7 @@ func operation(st *velox.Statement) string {
 // the entity declares a schema. Raw SQL has none either: the entity Raw scans
 // into need not be the table it reads.
 func collection(st *velox.Statement) string {
-	if raw(st) {
+	if st.Op.Raw() {
 		return ""
 	}
 	if st.Entity.Schema != "" {
@@ -123,7 +123,7 @@ func collection(st *velox.Statement) string {
 // SQL, which has neither, has none: its span is named for the database
 // system, or its server (see rawName).
 func summary(st *velox.Statement, coll string) string {
-	if raw(st) {
+	if st.Op.Raw() {
 		return ""
 	}
 	return operation(st) + " " + coll
@@ -149,7 +149,7 @@ func rawName(st *velox.Statement, t Target) string {
 // db.query.summary, coll and sum (see collection and summary), which raw SQL
 // has none of.
 func target(kv []attribute.KeyValue, st *velox.Statement, coll, sum string) []attribute.KeyValue {
-	if raw(st) {
+	if st.Op.Raw() {
 		return kv
 	}
 	return append(kv,
@@ -157,15 +157,6 @@ func target(kv []attribute.KeyValue, st *velox.Statement, coll, sum string) []at
 		attribute.String(attrDBCollection, coll),
 		attribute.String(attrDBQuerySummary, sum),
 	)
-}
-
-// raw reports whether st is raw SQL, run by Raw or Exec.
-func raw(st *velox.Statement) bool { return st.Op == velox.OpRawQuery || st.Op == velox.OpRawExec }
-
-// returnsRows reports whether st's rows are reported as the rows it returned:
-// a SELECT's and a Raw query's (OpRawQuery).
-func returnsRows(st *velox.Statement) bool {
-	return st.Op == velox.OpSelect || st.Op == velox.OpRawQuery
 }
 
 // failure is what a failed statement adds to its span and duration point:

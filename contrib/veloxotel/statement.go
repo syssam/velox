@@ -61,7 +61,7 @@ func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(con
 		}
 	}
 	switch {
-	case returnsRows(st):
+	case st.Op.Reads():
 		// db.response.returned_rows is Opt-In on spans in v1.43.0.
 		if a.cfg.RecordReturnedRows {
 			kv = append(kv, attribute.Int64(attrReturnedRows, st.Result.Rows))
@@ -106,7 +106,7 @@ func routeAttributes(kv []attribute.KeyValue, st *velox.Statement) []attribute.K
 // taken as parameterized only when it has arguments, as velox cannot see
 // literals in its text. The text never carries the arguments' values.
 func (a *adapter) queryText(st *velox.Statement) bool {
-	return !a.cfg.OmitQueryText && (!raw(st) || len(st.Args) > 0)
+	return !a.cfg.OmitQueryText && (!st.Op.Raw() || len(st.Args) > 0)
 }
 
 // attributes are a statement's span attributes known before it runs; sum is

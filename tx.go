@@ -87,8 +87,8 @@ func TxRetries(opts ...TxOption) int {
 // shard too, and one whose context names another fails.
 //
 // Inside a transaction, Tx makes a savepoint instead, so an error in a nested
-// fn rolls back only that fn's work. A nested Tx (a savepoint) ignores
-// options, and passes fn the ctx it is given, marked as the transaction's.
+// fn rolls back only that fn's work. A nested Tx (a savepoint) takes no
+// options and returns an error when given any, and passes fn the ctx it is given, marked as the transaction's.
 //
 // tx is valid only inside fn: after Tx returns, statements on it fail (or, for
 // a nested tx, run in the enclosing transaction). tx is not safe for
@@ -101,6 +101,9 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error
 		return fmt.Errorf("velox: transaction: %w", ErrDryRun)
 	}
 	if db.inTx {
+		if len(opts) > 0 {
+			return errors.New("velox: transaction: a nested Tx (a savepoint) takes no options; give them to the outermost Tx")
+		}
 		return db.savepoint(ctx, fn)
 	}
 	sh, err := db.shardForTx(ctx)

@@ -42,8 +42,12 @@ func (o Op) String() string {
 	return "unknown"
 }
 
-// raw reports whether o is raw SQL: OpRawQuery or OpRawExec.
-func (o Op) raw() bool { return o == OpRawQuery || o == OpRawExec }
+// Raw reports whether o is raw SQL: OpRawQuery or OpRawExec.
+func (o Op) Raw() bool { return o == OpRawQuery || o == OpRawExec }
+
+// Reads reports whether o reads: OpSelect, or Raw's query (OpRawQuery).
+// Every other Op writes, Exec's raw SQL included.
+func (o Op) Reads() bool { return o == OpSelect || o == OpRawQuery }
 
 // AssignOp is how an UPDATE assigns a column.
 type AssignOp uint8
@@ -142,10 +146,6 @@ type Statement struct {
 	// connection is then not failed over, as the read cannot start again.
 	handed bool
 }
-
-// reads reports whether st is a read: a SELECT, or Raw's query (OpRawQuery).
-// Everything else writes: an INSERT, UPDATE or DELETE, or Exec's raw SQL.
-func (st *Statement) reads() bool { return st.Op == OpSelect || st.Op == OpRawQuery }
 
 // Result is what executing a statement did: a Statement's, which an Around
 // hook reads. Mutation.Result gives an entity hook one for the whole write,

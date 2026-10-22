@@ -285,7 +285,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	if err := db.outsideTx(ctx, st); err != nil {
 		return err
 	}
-	if st.Op.raw() {
+	if st.Op.Raw() {
 		db.prepareRaw(ctx, st)
 		return nil
 	}
@@ -404,7 +404,7 @@ func (db *DB) outsideTx(ctx context.Context, st *Statement) error {
 // or run, Raw included, so this is the one place the rule is kept. Reads
 // pass without a context lookup.
 func (db *DB) dryWrite(ctx context.Context, st *Statement) error {
-	if !st.reads() && IsDryRun(ctx) {
+	if !st.Op.Reads() && IsDryRun(ctx) {
 		return stmtErr(st, ErrDryRun)
 	}
 	return nil
@@ -567,7 +567,7 @@ func checkColumns(st *Statement) error {
 // rowCap is the most rows st may return: its own MaxRows, else the DB's; 0
 // for no cap. Raw's read is capped too, Exec not.
 func (db *DB) rowCap(st *Statement) int {
-	if !st.reads() || st.Count {
+	if !st.Op.Reads() || st.Count {
 		return 0
 	}
 	if st.MaxRows > 0 {
@@ -643,7 +643,7 @@ func (db *DB) exec(ctx context.Context, st *Statement, t target, read func(rows)
 		if res != nil {
 			*res = r
 		}
-		if !st.reads() {
+		if !st.Op.Reads() {
 			db.wrote(ctx)
 		}
 		return nil
@@ -707,12 +707,12 @@ func (db *DB) exec(ctx context.Context, st *Statement, t target, read func(rows)
 	}
 	if counted != nil {
 		st.Result.Rows = counted.n
-		if !st.reads() && err == nil {
+		if !st.Op.Reads() && err == nil {
 			// The rows a write returned are the rows it affected.
 			st.Result.Affected = counted.n
 		}
 	}
-	if !st.reads() && err == nil {
+	if !st.Op.Reads() && err == nil {
 		db.wrote(ctx)
 	}
 	return err

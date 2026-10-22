@@ -74,7 +74,7 @@ func (a *adapter) record(ctx context.Context, st *velox.Statement, coll, sum str
 	if fellOver {
 		a.fallbacks.Add(ctx, 1, shardSet(st.Route.Shard))
 	}
-	if returnsRows(st) && f.errType == "" {
+	if st.Op.Reads() && f.errType == "" {
 		a.returned.Record(ctx, st.Result.Rows, set)
 	}
 }

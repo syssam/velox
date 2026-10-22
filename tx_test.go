@@ -629,3 +629,40 @@ func TestTxRetries(t *testing.T) {
 		}
 	}
 }
+
+func TestNestedTxRefusesOptions(t *testing.T) {
+	const want = "velox: transaction: a nested Tx (a savepoint) takes no options; give them to the outermost Tx"
+	for name, opt := range map[string]velox.TxOption{
+		"readonly":  velox.TxReadOnly(),
+		"isolation": velox.TxIsolation(sql.LevelSerializable),
+		"timeout":   velox.TxTimeout(time.Second),
+		"retry0":    velox.TxRetrySerializable(0),
+	} {
+		e := &velox.FakeExec{}
+		db := velox.OpenFake(velox.Postgres, e)
+		ran := false
+		err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+			err := tx.Tx(ctx, func(context.Context, *velox.DB) error { ran = true; return nil }, opt)
+			if err == nil || err.Error() != want {
+				t.Errorf("%s: got %v, want %q", name, err, want)
+			}
+			return nil
+		})
+		if err != nil || ran {
+			t.Errorf("%s: err %v, nested fn ran %v", name, err, ran)
+		}
+		for _, q := range e.Log {
+			if strings.Contains(q, "SAVEPOINT") {
+				t.Errorf("%s: sent %q", name, q)
+			}
+		}
+	}
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e)
+	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		return tx.Tx(ctx, func(context.Context, *velox.DB) error { return nil })
+	})
+	if want := []string{"BEGIN", "SAVEPOINT velox_1", "RELEASE SAVEPOINT velox_1", "COMMIT"}; err != nil || !reflect.DeepEqual(e.Log, want) {
+		t.Errorf("%v %q", err, e.Log)
+	}
+}
