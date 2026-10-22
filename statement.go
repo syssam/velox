@@ -99,6 +99,7 @@ type Statement struct {
 	Entity       *EntityInfo // shared and read-only: replace it, never edit it
 	Count        bool        // SELECT COUNT(*): Count clears Columns, OrderBy, Limit and Offset; a Rewrite hook that sets them gets them rendered
 	Exists       bool        // SELECT 1 … LIMIT 1: Exists clears Columns, OrderBy and Offset and sets Limit to 1; a Rewrite hook may not change it
+	Aggregate    Aggregate   // SELECT SUM(c) …: Columns holds c alone; like Count, it clears OrderBy, Limit and Offset; a Rewrite hook may not change it
 	Columns      []int       // SELECT: the selected columns, nil selects all; INSERT: the columns written
 	Where        []Predicate // all must hold
 	OrderBy      []OrderTerm

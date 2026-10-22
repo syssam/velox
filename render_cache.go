@@ -105,7 +105,7 @@ func flag(b bool) byte {
 // shapeKey encodes everything about a statement's shape except its entity,
 // which keys the outer map.
 func shapeKey(k []byte, d Dialect, st *Statement) []byte {
-	k = append(k, byte(d), byte(st.Op), flag(st.Count), flag(st.Exists), flag(st.Columns != nil), flag(st.Limit > 0), flag(st.Offset > 0))
+	k = append(k, byte(d), byte(st.Op), flag(st.Count), flag(st.Exists), byte(st.Aggregate), flag(st.Columns != nil), flag(st.Limit > 0), flag(st.Offset > 0))
 	k = binary.AppendUvarint(k, uint64(len(st.Columns)))
 	for _, c := range st.Columns {
 		k = binary.AppendUvarint(k, uint64(c))

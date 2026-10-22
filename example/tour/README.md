@@ -41,9 +41,10 @@ go run ./tour
    tenant fails with `ErrNoTenant`.
 7. A transaction with `db.Tx`, and a nested `Tx` (a savepoint) that recovers
    from a unique-constraint violation.
-8. A report across tenants with `velox.AllTenants` and a reason, and its
-   totals summed by the database with raw SQL (`db.Raw`), which the
-   builder cannot express (a `GROUP BY`) and which also takes a reason.
+8. A report across tenants with `velox.AllTenants` and a reason: the paid
+   invoices summed by the database with `velox.Sum`, and its per-tenant
+   totals with raw SQL (`db.Raw`), which the builder cannot express (a
+   `GROUP BY`) and which also takes a reason.
 9. Deadlines set at `Open` with `velox.WithDeadlines`, and a transaction that
    runs past its `velox.TxTimeout`.
 

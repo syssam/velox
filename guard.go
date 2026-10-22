@@ -10,12 +10,12 @@ func (db *DB) guard(st *Statement) error {
 			return errZeroPredicate(st.Entity.Name)
 		}
 	}
-	if st.Op == OpSelect && !st.Count && !st.Exists && st.Columns != nil && len(st.Columns) == 0 {
+	if st.Op == OpSelect && !st.Count && !st.Exists && st.Aggregate == 0 && st.Columns != nil && len(st.Columns) == 0 {
 		return fmt.Errorf("velox: %s: the query selects no columns", st.Entity.Name)
 	}
 	switch st.Op {
 	case OpSelect:
-		if st.Count || st.Exists {
+		if st.Count || st.Exists || st.Aggregate != 0 {
 			break
 		}
 		if st.Limit <= 0 && !st.Unbounded {

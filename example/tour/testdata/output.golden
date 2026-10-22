@@ -46,6 +46,7 @@ committed: org 1 has 4 invoices
 
 == 8. AllTenants and Raw
 SELECT "id", "created_at", "updated_at", "org_id", "number", "customer", "status", "total_cents" FROM "invoices" WHERE "status" <> ?
+paid in all: 1950.00
 org 1: 2750.00
 org 2: 990.00
 

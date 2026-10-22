@@ -192,6 +192,7 @@ func TestOfThroughRenders(t *testing.T) {
 	}{
 		{velox.Postgres, `SELECT "id", "org_id", "name" FROM "tags" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "book_id" IN ($1, $2)) LIMIT $3`},
 		{velox.MySQL, "SELECT `id`, `org_id`, `name` FROM `tags` WHERE EXISTS (SELECT 1 FROM `book_tags` AS `vx1` WHERE `vx1`.`tag_id` = `tags`.`id` AND `book_id` IN (?, ?)) LIMIT ?"},
+		{velox.SQLite, `SELECT "id", "org_id", "name" FROM "tags" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "book_id" IN (?, ?)) LIMIT ?`},
 	} {
 		got, args, err := velox.OpenFake(c.d, &velox.FakeExec{}).Query[dTag]().Where(dBooks.Tags.Of(&b1, &b2)).Limit(5).SQL(ctx)
 		if err != nil || got != c.want {
@@ -217,6 +218,33 @@ func TestOfThroughRenders(t *testing.T) {
 	want = `SELECT "id", "author_id", "title" FROM "books" WHERE EXISTS (SELECT 1 FROM "book_tags" AS "vx1" WHERE "vx1"."book_id" = "books"."id" AND EXISTS (SELECT 1 FROM "tags" AS "vx2" WHERE "vx2"."id" = "vx1"."tag_id" AND EXISTS (SELECT 1 FROM "picks" AS "vx3" WHERE "vx3"."tag_id" = "vx2"."id" AND "book_id" IN ($1)))) LIMIT $2`
 	if err != nil || got != want {
 		t.Errorf("nested:\n got %s, %v\nwant %s", got, err, want)
+	}
+}
+
+// TestOfSelfManyToMany: Of through a relation from an entity to itself names
+// the join's far column in the correlation and its near column in the owners'
+// IN, on every dialect.
+func TestOfSelfManyToMany(t *testing.T) {
+	skip := velox.SkipPolicy(ctx, "self many-to-many test")
+	p1, p2 := dPeer{ID: 1}, dPeer{ID: 2}
+	for _, c := range []struct {
+		d    velox.Dialect
+		want string
+	}{
+		{velox.Postgres, `SELECT "id" FROM "peers" WHERE EXISTS (SELECT 1 FROM "friends" AS "vx1" WHERE "vx1"."friend_id" = "peers"."id" AND "peer_id" IN ($1, $2)) LIMIT $3`},
+		{velox.MySQL, "SELECT `id` FROM `peers` WHERE EXISTS (SELECT 1 FROM `friends` AS `vx1` WHERE `vx1`.`friend_id` = `peers`.`id` AND `peer_id` IN (?, ?)) LIMIT ?"},
+		{velox.SQLite, `SELECT "id" FROM "peers" WHERE EXISTS (SELECT 1 FROM "friends" AS "vx1" WHERE "vx1"."friend_id" = "peers"."id" AND "peer_id" IN (?, ?)) LIMIT ?`},
+	} {
+		db := velox.OpenFake(c.d, &velox.FakeExec{})
+		got, args, err := db.Query[dPeer]().Where(dPeers.Friends.Of(&p1, &p2)).Limit(5).SQL(skip)
+		if err != nil || got != c.want || !reflect.DeepEqual(args, []any{int64(1), int64(2), 5}) {
+			t.Errorf("%v:\n got %s %v, %v\nwant %s", c.d, got, args, err, c.want)
+		}
+		// One owner is another shape from two, through the same cache.
+		one, _, err := db.Query[dPeer]().Where(dPeers.Friends.Of(&p1)).Limit(5).SQL(skip)
+		if err != nil || one == got {
+			t.Errorf("%v: one owner renders as two: %s, %v", c.d, one, err)
+		}
 	}
 }
 

@@ -125,6 +125,15 @@ func renderCases() []renderCase {
 		{"count", func() *Statement { st := stmt(hOrg.EQ(1)); st.Count = true; return st }, map[Dialect]string{
 			Postgres: `SELECT COUNT(*) FROM "invoices" WHERE "org_id" = $1`,
 		}, []any{int64(1)}},
+		{"sum", func() *Statement {
+			st := stmt(hOrg.EQ(1))
+			st.Aggregate, st.Columns = AggregateSum, []int{3}
+			return st
+		}, map[Dialect]string{
+			Postgres: `SELECT SUM("total") FROM "invoices" WHERE "org_id" = $1`,
+			MySQL:    "SELECT SUM(`total`) FROM `invoices` WHERE `org_id` = ?",
+			SQLite:   `SELECT SUM("total") FROM "invoices" WHERE "org_id" = ?`,
+		}, []any{int64(1)}},
 		{"offset without limit", func() *Statement { st := stmt(); st.Offset = 20; return st }, map[Dialect]string{
 			Postgres: `SELECT ` + pgCols + ` FROM "invoices" OFFSET $1`,
 			MySQL:    "SELECT " + mysqlCols + " FROM `invoices` LIMIT 18446744073709551615 OFFSET ?",

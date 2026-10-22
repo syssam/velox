@@ -239,8 +239,11 @@ var genericObjects = []struct {
 	// a policy and hooks (policyGrowthMax). The rows of the old struct-scanning
 	// path (entity, entityUse, Shape, ColumnDef, RelDef, Schema) are gone with
 	// it.
-	{"entityDesc", "", entityDescSrc, 153600},       // measured 122196
-	{"entityDescUse", "", entityDescUseSrc, 777216}, // measured 710722
+	{"entityDesc", "", entityDescSrc, 153600}, // measured 122196
+	// entityDescUse is held like entityDescHooks: its bound is the
+	// measurement plus about 1.2%, rounded up to the next KiB; remeasured on
+	// 2026-10-22, darwin/arm64, Go 1.27.1.
+	{"entityDescUse", "", entityDescUseSrc, 784384}, // measured 774178
 	// entityDescHooks is held tighter than the rule above: a quarter of it
 	// would let it grow by 64 KiB unseen. Its bound is the measurement plus
 	// about 1.2%, rounded up to the next KiB, the headroom it had before

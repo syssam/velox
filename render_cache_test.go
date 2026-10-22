@@ -288,3 +288,25 @@ func TestCacheKeysTheJoin(t *testing.T) {
 		}
 	}
 }
+
+// TestAggregateShapes: an aggregate's function and column are part of its
+// shape, so none shares cached SQL with another.
+func TestAggregateShapes(t *testing.T) {
+	var c renderCache
+	agg := func(fn Aggregate, col int) string {
+		st := stmt()
+		st.Aggregate, st.Columns = fn, []int{col}
+		sql, _ := c.render(Postgres, st)
+		return sql
+	}
+	sum, max, other := agg(AggregateSum, 3), agg(AggregateMax, 3), agg(AggregateSum, 1)
+	if sum == max || sum == other || max == other {
+		t.Errorf("shapes share SQL: %s, %s, %s", sum, max, other)
+	}
+	if c.size() != 3 {
+		t.Errorf("cache holds %d shapes, want 3", c.size())
+	}
+	if again := agg(AggregateSum, 3); again != sum || c.size() != 3 {
+		t.Errorf("a hit changed: %s, %d shapes", again, c.size())
+	}
+}

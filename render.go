@@ -109,6 +109,15 @@ func (w *writer) selectStmt(st *Statement) {
 		w.str("COUNT(*)")
 	case st.Exists:
 		w.str("1")
+	case st.Aggregate != 0:
+		w.str(aggregateSQL[st.Aggregate])
+		w.str("(")
+		if len(st.Columns) != 1 {
+			w.fail(fmt.Errorf("velox: %s: an aggregate reads one column, not %d", w.in.Name, len(st.Columns)))
+		} else {
+			w.col(int32(st.Columns[0]))
+		}
+		w.str(")")
 	case st.Columns == nil:
 		for i := range w.in.Columns {
 			if i > 0 {

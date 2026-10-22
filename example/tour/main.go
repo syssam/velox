@@ -296,9 +296,16 @@ func run(ctx context.Context, w io.Writer) error {
 		return err
 	}
 	say("%s", text)
+	// Sum adds up one column in the database, under the same scope as any
+	// query: here all tenants, and the accountant's policy.
+	paidTotal, err := velox.Sum(report, db.Query[gen.Invoice]().Where(I.Status.EQ(gen.InvoiceStatusPaid)), I.TotalCents)
+	if err != nil {
+		return err
+	}
+	say("paid in all: %s", money(paidTotal))
 	// Raw SQL is the escape hatch for what the builder cannot express, here
-	// a GROUP BY, so that the database sums rather than Go. velox applies
-	// neither the tenant scope nor the policy to it, so it requires a reason
+	// a GROUP BY, per tenant. velox applies neither the tenant scope nor the
+	// policy to it, so it requires a reason
 	// too, and its SQL says what they would: no drafts. Its rows scan into
 	// Invoice by column name; the fields of the columns it does not return
 	// stay zero.
