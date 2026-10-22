@@ -320,11 +320,12 @@ From the core additions (2026-10-22): `First` and `Exists`, `Sum`, `Avg`, `Min` 
 - Left to the pgx split: `Save`'s `cols` allocation and the core's pgx dependency.
 - Left to velox-gen: rule errors without positions, mixin paths, plugin panic stacks, Unicode case folding.
 - Left to otel: `TxInfo`'s route (see "Left by API plan 4").
-- The review's godoc nits: `type Mutation[E any] mutation`, `Option func(*config)` and `ColumnInfo.Codec`'s long doc.
+- ~~The review's godoc nits: `type Mutation[E any] mutation`, `Option func(*config)` and `ColumnInfo.Codec`'s long doc.~~ Done in the final review's fixes: `Mutation`, `Option` and `TxOption` are structs with unexported fields, and the codec's rules are doc.go's `# JSON fields` section.
 - The aggregates take `NumberCol` only. A nullable column's aggregate goes through `Raw` until one is asked for; a sealed interface over both column types would need explicit type arguments.
 - `Avg` is a `float64`, which holds integers exactly up to 2^53.
 - A locking read has no sentinel for a failed lock: `DriverCode` gives `55P03` and `3572`. MySQL's InnoDB locks every row a locking read scans, so `SkipLocked` and `ForUpdate` want an index on the filter.
-- A Rewrite hook may not change `Exists`, `Aggregate`, `Lock` or `LockWait`, nor `Columns` of a `Count`, `Exists` or aggregate statement.
+- A Rewrite hook may not change `Count`, `Exists`, `Aggregate`, `Lock` or `LockWait`, nor `Columns` of a `Count`, `Exists` or aggregate statement (`Count` added by the final review: it renders first, so a flip changed what the others returned).
+- `Sum`, `Avg`, `Min` and `Max` are `Query` methods (`q.Sum(ctx, col)`), not functions, as `Count` and `Exists` are (§6f ruling 21). `SetAffected` on an insert is a misuse, and a `Save` whose hook calls it stores nothing in its entity.
 - The LIKE escape no longer depends on server settings (it is `!`), so plan ruling 12's "left with no plan" is superseded. A `\` in a `Like` pattern now matches a backslash, where before it escaped the next character (core-design's note of 2026-10-22).
 - The compile-cost bounds (`TestGenericTypesCompileSmall`) keep a margin of about 1.2% over the measured size, as the old ones did; a task that grows a measured entity re-measures and moves its bound by that rule. `entityDescUse` is near its bound.
 - The MySQL lock itests read `performance_schema` through `VELOX_TEST_MYSQL_ADMIN` (the CI MySQL's root; CI and `scripts/ci-local.sh` set it); without it they wait a fixed time.

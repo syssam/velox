@@ -173,8 +173,8 @@ func (d denial) Is(target error) bool { return target == ErrDenied }
 
 // Mutation is the write that an entity's hooks (Hooks) see and may change.
 // A misuse (Set on a delete, a zero or invalid condition, a handle's
-// ValueIn, Set or Where on an insert, ValueIn of a value of another type,
-// SetAffected with next) is recorded and fails the write: before next sends
+// ValueIn, Set, Where or SetAffected on an insert, ValueIn of a value of
+// another type, SetAffected with next) is recorded and fails the write: before next sends
 // it, or once the hook returns. A hook reads an assignment with the column
 // handle's ValueIn, the conditions with Conds, and once next has returned
 // the rows written with Affected.
@@ -197,27 +197,27 @@ func (d denial) Is(target error) bool { return target == ErrDenied }
 // The update adds the tenant's and the policy's conditions itself. Under
 // SQL(ctx) such a delete fails with ErrDryRun: the hook's update is a write,
 // and there is no DELETE to render.
-type Mutation[E any] mutation
+type Mutation[E any] struct{ mu mutation }
 
 // errInsertMutation is the misuse of ValueIn, Set or Where on an insert.
 var errInsertMutation = errors.New("Set and Where are for updates and deletes; change Rows")
 
 // Op returns the write's kind: OpInsert, OpUpdate or OpDelete.
 func (m *Mutation[E]) Op[_ Lazy[E]]() Op {
-	if m.op != 0 {
-		return m.op
+	if m.mu.op != 0 {
+		return m.mu.op
 	}
-	return m.st.Op
+	return m.mu.st.Op
 }
 
 // Rows returns an insert's rows, which a hook may change before next; nil
 // for an update or delete.
 func (m *Mutation[E]) Rows[_ Lazy[E]]() []*E {
-	if m.rows == nil {
+	if m.mu.rows == nil {
 		return nil
 	}
-	out := make([]*E, len(m.rows))
-	for i, p := range m.rows {
+	out := make([]*E, len(m.mu.rows))
+	for i, p := range m.mu.rows {
 		out[i] = (*E)(p)
 	}
 	return out
@@ -232,24 +232,25 @@ func (m *Mutation[E]) Rows[_ Lazy[E]]() []*E {
 // It is set only for the writes of entities that have hooks, which are the
 // only ones that see a Mutation.
 func (m *Mutation[E]) DB[_ Lazy[E]]() *DB {
-	db, _ := m.db.(*DB)
+	db, _ := m.mu.db.(*DB)
 	return db
 }
 
 // Conds returns the conditions of an update or a delete as the caller and
 // the hooks gave them: the caller's Where and those the hooks before this one
-// added, in order, as copies (changing the slice changes nothing). Once next
-// has been called it returns them as they were then. It never holds the
-// tenant's, the policy's or a Rewrite hook's conditions, which next adds. It
-// is empty only when the statement said All, and nil for an insert. Mutation
-// shows a soft delete built on it.
+// added, in order, as copies (changing the slice changes nothing). Once the
+// innermost hook has called next, it returns them as they were then, so an
+// outer hook whose next has returned also sees the conditions the hooks
+// inside it added. It never holds the tenant's, the policy's or a Rewrite
+// hook's conditions, which next adds. It is empty only when the statement
+// said All, and nil for an insert. Mutation shows a soft delete built on it.
 func (m *Mutation[E]) Conds[_ Lazy[E]]() []Pred[E] {
-	if m.st == nil {
+	if m.mu.st == nil {
 		return nil
 	}
-	w := m.st.Where
-	if m.called {
-		w = m.where
+	w := m.mu.st.Where
+	if m.mu.called {
+		w = m.mu.where
 	}
 	out := make([]Pred[E], len(w))
 	for i, p := range w {
@@ -263,19 +264,23 @@ func (m *Mutation[E]) Conds[_ Lazy[E]]() []Pred[E] {
 // then, after next returned an error (an insert sets it only when every
 // statement succeeded and no upsert was denied), under SQL(ctx), which sends
 // nothing, and when a hook skipped next without calling SetAffected.
-func (m *Mutation[E]) Affected[_ Lazy[E]]() int64 { return m.affected }
+func (m *Mutation[E]) Affected[_ Lazy[E]]() int64 { return m.mu.affected }
 
-// SetAffected is for a hook that makes the write itself instead of calling
-// next, such as a soft delete (see Mutation): n is the rows its own write
-// affected, which the update's or delete's Exec returns. Calling it and next
-// both, in either order, or with a negative n, is a misuse.
+// SetAffected is for a hook that makes an update or a delete itself instead
+// of calling next, such as a soft delete (see Mutation): n is the rows its
+// own write affected, which the update's or delete's Exec returns. A Save's
+// Exec returns no count and stores nothing in its entity, as velox wrote
+// nothing. Calling it and next both, in either order, with a negative n, or
+// on an insert, whose count is its rows, is a misuse.
 func (m *Mutation[E]) SetAffected[_ Lazy[E]](n int64) {
-	(*mutation)(m).setAffected(n)
+	m.mu.setAffected(n)
 }
 
 // setAffected is SetAffected's work, not generic.
 func (mu *mutation) setAffected(n int64) {
 	switch {
+	case mu.st == nil:
+		mu.record(errInsertAffected)
 	case mu.called:
 		mu.record(errOwnAndNext)
 	case n < 0:
@@ -285,6 +290,9 @@ func (mu *mutation) setAffected(n int64) {
 	}
 }
 
+// errInsertAffected is the misuse of SetAffected on an insert.
+var errInsertAffected = errors.New("SetAffected is for updates and deletes; an insert's count is its rows")
+
 // errNegativeAffected is the misuse of SetAffected with a negative count.
 var errNegativeAffected = errors.New("SetAffected of a negative count")
 
@@ -292,30 +300,30 @@ var errNegativeAffected = errors.New("SetAffected of a negative count")
 // assignment of the same column, if there is one. Set on a delete or an
 // insert is an error.
 func (m *Mutation[E]) Set[_ Lazy[E]](ss ...Setter[E]) {
-	if m.st == nil {
+	if m.mu.st == nil {
 		m.misuse()
 		return
 	}
 	for _, s := range ss {
-		mutateSet(m.st, &m.err, s.a)
+		mutateSet(m.mu.st, &m.mu.err, s.a)
 	}
 }
 
 // Where narrows the rows the statement changes: all of the conditions must
 // hold, with the statement's own. Where on an insert is an error.
 func (m *Mutation[E]) Where[_ Lazy[E]](ps ...Pred[E]) {
-	if m.st == nil {
+	if m.mu.st == nil {
 		m.misuse()
 		return
 	}
 	for _, p := range ps {
-		mutateWhere(m.st, &m.err, Predicate(p))
+		mutateWhere(m.mu.st, &m.mu.err, Predicate(p))
 	}
 }
 
 // misuse records the error of ValueIn, Set or Where on an insert, keeping
 // the first.
-func (m *Mutation[E]) misuse[_ Lazy[E]]() { (*mutation)(m).record(errInsertMutation) }
+func (m *Mutation[E]) misuse[_ Lazy[E]]() { m.mu.record(errInsertMutation) }
 
 // record records err as the mutation's misuse, keeping the first.
 func (mu *mutation) record(err error) {
@@ -330,17 +338,17 @@ func (mu *mutation) record(err error) {
 // one too, and reports no value.
 func valueIn[E, V any](m *Mutation[E], col int32) (V, bool) {
 	var zero V
-	if m.st == nil {
+	if m.mu.st == nil {
 		m.misuse()
 		return zero, false
 	}
-	a, ok := assigned(m.st, int(col))
+	a, ok := assigned(m.mu.st, int(col))
 	if !ok {
 		return zero, false
 	}
 	v, ok := a.(V)
 	if !ok {
-		(*mutation)(m).wrongType(int(col), a, (*V)(nil))
+		m.mu.wrongType(int(col), a, (*V)(nil))
 		return zero, false
 	}
 	return v, true
@@ -350,11 +358,11 @@ func valueIn[E, V any](m *Mutation[E], col int32) (V, bool) {
 // pointer to a copy of the value, which Set gives as a V and Save as a *V.
 // Any other value it records as valueIn does.
 func nullValueIn[E, V any](m *Mutation[E], col int32) (*V, bool) {
-	if m.st == nil {
+	if m.mu.st == nil {
 		m.misuse()
 		return nil, false
 	}
-	a, ok := assigned(m.st, int(col))
+	a, ok := assigned(m.mu.st, int(col))
 	if !ok {
 		return nil, false
 	}
@@ -370,7 +378,7 @@ func nullValueIn[E, V any](m *Mutation[E], col int32) (*V, bool) {
 		c := *v
 		return &c, true
 	}
-	(*mutation)(m).wrongType(int(col), a, (*V)(nil))
+	m.mu.wrongType(int(col), a, (*V)(nil))
 	return nil, false
 }
 

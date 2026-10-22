@@ -70,7 +70,7 @@ func aggregate[E, T any](ctx context.Context, q Query[E], fn Aggregate, c int32)
 // ignored. With no row, or only NULLs, it is 0.
 //
 // A sum that does not fit V is an error, not a wrapped value.
-func Sum[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (V, error) {
+func (q Query[E]) Sum[V any](ctx context.Context, c NumberCol[E, V]) (V, error) {
 	v, err := aggregate[E, V](ctx, q, AggregateSum, c.I)
 	if err != nil || v == nil {
 		var zero V
@@ -83,7 +83,7 @@ func Sum[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (V, error
 // false when there is none. The database computes it: an integer column's
 // average is a decimal that MySQL rounds to four places. A float64 holds
 // integers exactly only up to 2^53, so an average above that loses precision.
-func Avg[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (float64, bool, error) {
+func (q Query[E]) Avg[V any](ctx context.Context, c NumberCol[E, V]) (float64, bool, error) {
 	v, err := aggregate[E, float64](ctx, q, AggregateAvg, c.I)
 	if err != nil || v == nil {
 		return 0, false, err
@@ -93,12 +93,12 @@ func Avg[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (float64,
 
 // Min returns the least value of column c over the rows Sum would add up,
 // and false when there is none.
-func Min[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (V, bool, error) {
+func (q Query[E]) Min[V any](ctx context.Context, c NumberCol[E, V]) (V, bool, error) {
 	return extreme[E, V](ctx, q, AggregateMin, c)
 }
 
 // Max returns the greatest value of column c, as Min does.
-func Max[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (V, bool, error) {
+func (q Query[E]) Max[V any](ctx context.Context, c NumberCol[E, V]) (V, bool, error) {
 	return extreme[E, V](ctx, q, AggregateMax, c)
 }
 

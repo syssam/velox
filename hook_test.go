@@ -895,6 +895,45 @@ func TestSetAffected(t *testing.T) {
 	}
 }
 
+// SetAffected on an insert is a misuse, as Set and Where are: an insert's
+// count is its rows, and its Exec returns none.
+func TestSetAffectedOnAnInsert(t *testing.T) {
+	e := &velox.FakeExec{Affected: 1}
+	db := velox.OpenFake(velox.Postgres, e)
+	flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
+		m.SetAffected(1)
+		return nil
+	}
+	err := db.Insert(&hFlex{ID: 1, Title: "a"}).Exec(ctx)
+	if want := "velox: velox_test.hFlex: hook: SetAffected is for updates and deletes; an insert's count is its rows"; err == nil || err.Error() != want {
+		t.Errorf("SetAffected on an insert: %v", err)
+	}
+	if e.Calls != 0 {
+		t.Errorf("%d statements sent", e.Calls)
+	}
+}
+
+// A Save whose hook makes the write itself, with SetAffected, leaves *x as
+// it was, the hook's assignments not stored: velox wrote nothing.
+func TestSaveWithAHooksOwnWrite(t *testing.T) {
+	e := &velox.FakeExec{Affected: 1}
+	db := velox.OpenFake(velox.Postgres, e)
+	for _, n := range []int64{0, 1} {
+		flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
+			m.Set(hfTitle.Set("hooked"))
+			m.SetAffected(n)
+			return nil
+		}
+		x := hFlex{ID: 1, Title: "new"}
+		if err := db.Save(&x, hfTitle).Exec(ctx); err != nil {
+			t.Fatalf("SetAffected(%d): %v", n, err)
+		}
+		if x != (hFlex{ID: 1, Title: "new"}) || e.Calls != 0 {
+			t.Errorf("SetAffected(%d): *x %+v, %d statements", n, x, e.Calls)
+		}
+	}
+}
+
 // TestValueInOfAnotherType: a value the handle's type cannot hold, here a
 // Rewrite hook's, fails the write once the hook returns, naming the column
 // and both types.

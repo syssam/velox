@@ -25,23 +25,23 @@ type Caller struct {
 // program counters are cached: each is resolved once per DB, for up to 4,096
 // of them.
 func WithCallers() Option {
-	return func(c *config) {
+	return Option{func(c *config) {
 		if c.callers == nil {
 			c.callers = &callers{}
 		}
-	}
+	}}
 }
 
 // WithCallerSkip names packages, by import path, whose frames are not the
 // caller either, such as the application's own repository layer: the call
 // site is then the frame that called into them. It implies WithCallers.
 func WithCallerSkip(pkgPath ...string) Option {
-	return func(c *config) {
+	return Option{func(c *config) {
 		if c.callers == nil {
 			c.callers = &callers{}
 		}
 		c.callers.skip = append(c.callers.skip, pkgPath...)
-	}
+	}}
 }
 
 // callers finds statements' call sites for one DB, and caches what each

@@ -45,8 +45,8 @@ func (o Op) String() string {
 // Raw reports whether o is raw SQL: OpRawQuery or OpRawExec.
 func (o Op) Raw() bool { return o == OpRawQuery || o == OpRawExec }
 
-// Reads reports whether o reads: OpSelect, or Raw's query (OpRawQuery).
-// Every other Op writes, Exec's raw SQL included.
+// Reads reports whether o reads: OpSelect, or DB.Raw's query (OpRawQuery).
+// Every other Op writes, DB.Exec's raw SQL included.
 func (o Op) Reads() bool { return o == OpSelect || o == OpRawQuery }
 
 // Lock is the lock a locking read takes on the rows it reads.
@@ -122,7 +122,7 @@ type ConflictClause struct {
 type Statement struct {
 	Op           Op
 	Entity       *EntityInfo // shared and read-only: replace it, never edit it
-	Count        bool        // SELECT COUNT(*): Count clears Columns, OrderBy, Limit and Offset; a Rewrite hook may not set Columns, and one that sets the others gets them rendered
+	Count        bool        // SELECT COUNT(*): Count clears Columns, OrderBy, Limit and Offset; a Rewrite hook may not change it, or set Columns, and one that sets the others gets them rendered
 	Exists       bool        // SELECT 1 … LIMIT 1: Exists clears Columns, OrderBy and Offset and sets Limit to 1; a Rewrite hook may not change it, or set Columns
 	Aggregate    Aggregate   // SELECT SUM(c) …: Columns holds c alone; like Count, it clears OrderBy, Limit and Offset; a Rewrite hook may not change it, or Columns
 	Lock         Lock        // SELECT: ForUpdate or ForShare; 0 for a read that locks nothing; a Rewrite hook may not change it

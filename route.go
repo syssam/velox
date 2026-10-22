@@ -68,7 +68,7 @@ func WithReplicas(conns ...Conn) Option {
 		}
 	}
 	conns = slices.Clone(conns)
-	return func(c *config) { c.replicas = append(c.replicas, conns...) }
+	return Option{func(c *config) { c.replicas = append(c.replicas, conns...) }}
 }
 
 // Shard is one shard of a DB opened with OpenShards: a primary and its read
@@ -157,7 +157,7 @@ func WithShardFor(f func(ctx context.Context, tenant any) (string, error)) Optio
 	if f == nil {
 		panic("velox: WithShardFor(nil)")
 	}
-	return func(c *config) { c.shardFor = f }
+	return Option{func(c *config) { c.shardFor = f }}
 }
 
 // OnShard returns a context whose statements, on a DB opened with
@@ -232,7 +232,7 @@ func WithPinWindow(d time.Duration) Option {
 	if d < 0 {
 		panic(fmt.Sprintf("velox: WithPinWindow(%v): the window must not be negative", d))
 	}
-	return func(c *config) { c.pinWindow = d }
+	return Option{func(c *config) { c.pinWindow = d }}
 }
 
 // WithReplicaBackoff sets how long a replica is skipped after a read sent to
@@ -246,7 +246,7 @@ func WithReplicaBackoff(d time.Duration) Option {
 	if d < 0 {
 		panic(fmt.Sprintf("velox: WithReplicaBackoff(%v): the back-off must not be negative", d))
 	}
-	return func(c *config) { c.backoff = d }
+	return Option{func(c *config) { c.backoff = d }}
 }
 
 // session is a context's record of when its reads may leave the primary

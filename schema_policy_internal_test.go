@@ -91,7 +91,7 @@ func TestMutation(t *testing.T) {
 	}
 	set := []Assignment{{Column: 2, Op: AssignSet, Value: "t"}, {Column: 1, Op: AssignAdd, Value: "z"}}
 	st := Statement{Op: OpUpdate, Entity: info, Set: set[:2:2]}
-	m := &Mutation[hooked]{st: &st}
+	m := &Mutation[hooked]{mu: mutation{st: &st}}
 	if m.Op() != OpUpdate {
 		t.Errorf("Op %v", m.Op())
 	}
@@ -109,24 +109,24 @@ func TestMutation(t *testing.T) {
 		t.Error("Set changed the query's own assignments")
 	}
 	m.Where(hookedTitle.EQ("u"))
-	if m.err != nil || len(st.Where) != 1 {
-		t.Fatalf("Where: err %v, %d conditions", m.err, len(st.Where))
+	if m.mu.err != nil || len(st.Where) != 1 {
+		t.Fatalf("Where: err %v, %d conditions", m.mu.err, len(st.Where))
 	}
 	m.Where(Pred[hooked]{})
-	if m.err == nil || !strings.Contains(m.err.Error(), "zero Predicate") || len(st.Where) != 1 {
-		t.Errorf("a zero condition: err %v, %d conditions", m.err, len(st.Where))
+	if m.mu.err == nil || !strings.Contains(m.mu.err.Error(), "zero Predicate") || len(st.Where) != 1 {
+		t.Errorf("a zero condition: err %v, %d conditions", m.mu.err, len(st.Where))
 	}
 	bad := errors.New("unresolved")
-	m = &Mutation[hooked]{st: &st}
+	m = &Mutation[hooked]{mu: mutation{st: &st}}
 	m.Where(Pred[hooked]{node{op: opInvalid, v: bad}})
-	if !errors.Is(m.err, bad) || len(st.Where) != 1 {
-		t.Errorf("an invalid condition: err %v, %d conditions", m.err, len(st.Where))
+	if !errors.Is(m.mu.err, bad) || len(st.Where) != 1 {
+		t.Errorf("an invalid condition: err %v, %d conditions", m.mu.err, len(st.Where))
 	}
 	del := Statement{Op: OpDelete, Entity: info}
-	m = &Mutation[hooked]{st: &del}
+	m = &Mutation[hooked]{mu: mutation{st: &del}}
 	m.Set(hookedTag.Set("x"))
-	if m.err == nil || del.Set != nil {
-		t.Errorf("Set on a delete: err %v, set %+v", m.err, del.Set)
+	if m.mu.err == nil || del.Set != nil {
+		t.Errorf("Set on a delete: err %v, set %+v", m.mu.err, del.Set)
 	}
 }
 

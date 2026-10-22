@@ -255,7 +255,7 @@ func (s SaveQuery[E]) statement[_ Lazy[E]]() (Statement, error) {
 // assigned, the UpdateDefault values and those a hook (Hooks or Rewrite) set
 // included, when the field can hold it; after an error, including
 // ErrNotFound, *x is as it was, and so it is when a hook returns nil without
-// calling next.
+// calling next, whether or not it called Mutation.SetAffected.
 // Its error wraps ErrNotFound when no row has that key and meets the
 // conditions. On MySQL, open the database with clientFoundRows=true:
 // otherwise a row whose values did not change counts as not found.
@@ -325,6 +325,12 @@ func write(ctx context.Context, db *DB, st *Statement, dry, save bool) (int64, s
 	mu := &mutation{op: st.Op, st: st, dry: dry}
 	if err := mutate(ctx, db, st.Entity, mu, core); err != nil && !dryRefused(mu, err) {
 		return 0, "", nil, err
+	}
+	if save && mu.own {
+		// A hook made the write itself (SetAffected): velox wrote nothing,
+		// so Save's Exec, which returns no count, must not store st.Set in
+		// *x. 0 tells it so, as for a hook that skipped next.
+		return 0, "", nil, nil
 	}
 	return mu.affected, mu.sql, mu.args, nil
 }

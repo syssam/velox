@@ -34,12 +34,14 @@
 //
 // Query.All returns the rows, One exactly one (ErrNotFound for none,
 // ErrNotSingular for several) and First the first in the query's order,
-// without One's check for a second. Count and Exists ask the database
-// instead of loading rows; Exists is a SELECT 1 … LIMIT 1.
+// without One's check for a second. A query that reads rows needs a Limit,
+// or fails with ErrUnbounded, unless it says Unbounded. Count and Exists ask
+// the database instead of loading rows, and need no Limit; Exists is a
+// SELECT 1 … LIMIT 1.
 //
-// Sum, Avg, Min and Max take a query and a number column:
+// Sum, Avg, Min and Max are methods of a query that take a number column:
 //
-//	paid, err := velox.Sum(ctx, db.Query[gen.Invoice]().Where(gen.Invoices.Status.EQ(gen.InvoiceStatusPaid)), gen.Invoices.TotalCents)
+//	paid, err := db.Query[gen.Invoice]().Where(gen.Invoices.Status.EQ(gen.InvoiceStatusPaid)).Sum(ctx, gen.Invoices.TotalCents)
 //
 // The tenant scope and the policy apply to them as to Count. Sum is 0 when
 // no row matches; Avg, Min and Max also return false then, as there is no
@@ -56,16 +58,60 @@
 // PostgreSQL and MySQL. On MySQL every row the read scans is locked, so the
 // filter wants an index.
 //
+// # Writes
+//
+// DB.Insert and DB.InsertAll insert entities: Exec fills their defaults and
+// the tenant, and reads the generated keys back. OnConflict, followed by
+// Update or DoNothing, makes an insert an upsert. DB.Update and DB.Delete
+// change the rows their conditions match, and Exec returns how many; one
+// with no Where fails with ErrNoWhere, unless it says All. DB.Save writes
+// the named columns of an entity to the row with its primary key, and fails
+// with ErrNotFound when there is none:
+//
+//	err := db.Insert(&inv).Exec(ctx)
+//	n, err := db.Update[gen.Invoice]().Set(gen.Invoices.Status.Set(gen.InvoiceStatusPaid)).Where(gen.Invoices.ID.EQ(id)).Exec(ctx)
+//	err = db.Save(&inv, gen.Invoices.Number, gen.Invoices.TotalCents).Exec(ctx)
+//
+// The tenant scope and the entity's policy apply to writes as to reads.
+//
+// # JSON fields
+//
+// velox-gen gives every json field's ColumnDesc a codec, encoding/json's
+// Encode and Decode, and its ColumnInfo says Codec. The value is bound as the
+// bytes Encode returns, and only there: hooks and policies see the Go value,
+// and only Statement.Args holds the bytes. On SQLite and MySQL bytes that
+// are valid UTF-8 are bound as a string: SQLite stores a []byte as a BLOB,
+// not TEXT, and MySQL's driver with interpolateParams=true writes a []byte
+// as a binary string, which a JSON column refuses. Bytes that are not valid
+// UTF-8, which only a binary codec returns, stay []byte.
+//
+// In a nullable column (a pointer field, or a slice or map field whose
+// ColumnDesc says Nullable), a nil pointer, or a nil slice or map, binds
+// NULL; in any other column a nil slice or map is encoded (the JSON null,
+// which reads back as nil). An untyped nil, which only a hook-built value can
+// be, binds NULL in either. What is read, as []byte or string, is decoded
+// with Decode; NULL leaves the field at its zero value (nil, for a pointer).
+//
+// A condition other than IsNull and NotNull on an encoded column, and
+// ordering by it, are refused when the statement runs, as equality and order
+// of encoded values differ by dialect; JSONCol and NullJSONCol have no such
+// methods, so generated code refuses them at compile time. A primary-key,
+// tenant or relation-key column cannot be encoded: the metadata is refused.
+// Codec says nothing of the database type, which the migration planner takes
+// from the schema's field type.
+//
 // # Hooks
 //
 // A Hook wraps an entity's writes and receives each as a Mutation. For an
 // update or a delete, Conds returns the conditions the caller and the
-// earlier hooks gave, before and after next alike, and not the tenant's or
-// the policy's; it is empty when the statement said All. ValueIn, a method of
-// each column handle, returns the value an update assigns to the column, and
-// whether it assigns one. Affected returns the rows the write changed once
-// next has returned. A hook that makes the write itself, such as a soft
-// delete, reports its count with SetAffected. Mutation shows the pattern.
+// earlier hooks gave, and not the tenant's or the policy's; it is empty when
+// the statement said All. ValueIn, a method of each column handle, returns
+// the value an update assigns to the column, and whether it assigns one.
+// Affected returns the rows the write changed once next has returned. A hook
+// that makes an update or delete itself, such as a soft delete, reports its
+// count with SetAffected. Mutation shows the pattern.
+//
+// # Routing
 //
 // A DB can route its statements. WithReplicas sends reads to replicas in turn;
 // WithSession keeps a request reading its own writes from the primary for a
@@ -73,9 +119,11 @@
 // primary. OpenShards runs each statement on one shard, chosen from the
 // context's tenant (WithShardFor) or OnShard. See example/routing.
 //
+// # Raw SQL
+//
 // Raw SQL is the escape hatch for CTEs, GROUP BY and anything else the
-// builder cannot express: DB.Exec runs a statement, and DB.Raw scans
-// a query's rows into an entity by column name. velox applies neither the
+// builder cannot express: DB.Exec runs a statement, and DB.Raw scans a
+// query's rows into an entity by column name. velox applies neither the
 // tenant scope nor any policy to raw SQL, so tenant scoping is the caller's,
 // and both require a reason, which hooks see as Statement.TenantBypass.
 //

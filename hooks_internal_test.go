@@ -195,24 +195,24 @@ func TestValueInRecordsAnotherType(t *testing.T) {
 		t.Fatal(err)
 	}
 	st := Statement{Op: OpUpdate, Entity: info, Set: []Assignment{{Column: 4, Op: AssignSet, Value: "x"}, {Column: 1, Op: AssignSet, Value: 5}}}
-	m := &Mutation[hnote]{st: &st}
+	m := &Mutation[hnote]{mu: mutation{st: &st}}
 	if v, ok := hn.Due.ValueIn(m); v != nil || ok {
 		t.Errorf("Due: %v, %v", v, ok)
 	}
 	const first = `column "due" is assigned a value of type string, not int64`
-	if m.err == nil || m.err.Error() != first {
-		t.Fatalf("recorded %v, want %q", m.err, first)
+	if m.mu.err == nil || m.mu.err.Error() != first {
+		t.Fatalf("recorded %v, want %q", m.mu.err, first)
 	}
 	if v, ok := hn.Title.ValueIn(m); v != "" || ok {
 		t.Errorf("Title: %q, %v", v, ok)
 	}
-	if m.err.Error() != first {
-		t.Errorf("the second replaced the first: %v", m.err)
+	if m.mu.err.Error() != first {
+		t.Errorf("the second replaced the first: %v", m.mu.err)
 	}
-	m = &Mutation[hnote]{st: &st}
+	m = &Mutation[hnote]{mu: mutation{st: &st}}
 	hn.Title.ValueIn(m)
-	if want := `column "title" is assigned a value of type int, not string`; m.err == nil || m.err.Error() != want {
-		t.Errorf("recorded %v, want %q", m.err, want)
+	if want := `column "title" is assigned a value of type int, not string`; m.mu.err == nil || m.mu.err.Error() != want {
+		t.Errorf("recorded %v, want %q", m.mu.err, want)
 	}
 }
 
@@ -241,7 +241,7 @@ func TestValueInEveryKind(t *testing.T) {
 		nb.Set(true), no.Set(at), nn.Set(4), ns.SetNull(), nj.Set([]string{"a"}), nk.SetNull()} {
 		set = append(set, x.a)
 	}
-	m := &Mutation[hnote]{st: &Statement{Op: OpUpdate, Set: set}}
+	m := &Mutation[hnote]{mu: mutation{st: &Statement{Op: OpUpdate, Set: set}}}
 	if v, ok := b.ValueIn(m); !v || !ok {
 		t.Errorf("Col: %v, %v", v, ok)
 	}
@@ -275,11 +275,11 @@ func TestValueInEveryKind(t *testing.T) {
 	if v, ok := nk.ValueIn(m); v != nil || !ok {
 		t.Errorf("NullJSONCol after SetNull: %v, %v", v, ok)
 	}
-	if m.err != nil {
-		t.Errorf("recorded %v", m.err)
+	if m.mu.err != nil {
+		t.Errorf("recorded %v", m.mu.err)
 	}
 	// Unassigned, and an Add.
-	m = &Mutation[hnote]{st: &Statement{Op: OpUpdate, Set: []Assignment{n.Add(1).a, nn.Add(1).a}}}
+	m = &Mutation[hnote]{mu: mutation{st: &Statement{Op: OpUpdate, Set: []Assignment{n.Add(1).a, nn.Add(1).a}}}}
 	if v, ok := n.ValueIn(m); v != 0 || ok {
 		t.Errorf("NumberCol after Add: %v, %v", v, ok)
 	}
@@ -300,10 +300,10 @@ func TestValueInEveryKind(t *testing.T) {
 		func(m *Mutation[hnote]) { no.ValueIn(m) }, func(m *Mutation[hnote]) { nn.ValueIn(m) },
 		func(m *Mutation[hnote]) { ns.ValueIn(m) }, func(m *Mutation[hnote]) { nj.ValueIn(m) },
 	} {
-		m := &Mutation[hnote]{op: OpInsert}
+		m := &Mutation[hnote]{mu: mutation{op: OpInsert}}
 		f(m)
-		if m.err != errInsertMutation {
-			t.Errorf("on an insert recorded %v", m.err)
+		if m.mu.err != errInsertMutation {
+			t.Errorf("on an insert recorded %v", m.mu.err)
 		}
 	}
 }

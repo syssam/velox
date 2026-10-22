@@ -219,17 +219,17 @@ var genericObjects = []struct {
 	{"Pred", "velox.Pred[E]", "", 5120},                             // measured 1014
 	{"Order", "velox.Order[E]", "", 6144},                           // measured 1114
 	{"Setter", "velox.Setter[E]", "", 8192},                         // measured 3168
-	{"Query", "velox.Query[E]", "", 10240},                          // measured 5884
-	{"UpdateQuery", "velox.UpdateQuery[E]", "", 9216},               // measured 5160
-	{"DeleteQuery", "velox.DeleteQuery[E]", "", 9216},               // measured 5160
-	{"InsertQuery", "velox.InsertQuery[E]", "", 10240},              // measured 6028
-	{"Rel", "velox.Rel[E, E]", "", 9216},                            // measured 4508 (3528 before the use site named the target)
+	{"Query", "velox.Query[E]", "", 10240},                          // measured 5932
+	{"UpdateQuery", "velox.UpdateQuery[E]", "", 9216},               // measured 5208
+	{"DeleteQuery", "velox.DeleteQuery[E]", "", 9216},               // measured 5208
+	{"InsertQuery", "velox.InsertQuery[E]", "", 10240},              // measured 6076
+	{"Rel", "velox.Rel[E, E]", "", 9216},                            // measured 4556 (3528 before the use site named the target)
 	{"One", "velox.One[E]", "", 20480},                              // measured 15972
 	{"Many", "velox.Many[E]", "", 20480},                            // measured 16044
-	{"MetaOnce", "velox.MetaOnce[E]", "", 10240},                    // measured 6226
-	{"Meta", "velox.Meta[E]", "", 7168},                             // measured 3070
-	{"Statement", "velox.Statement", "", 5120},                      // measured 1032
-	{"EntityInfo", "*velox.EntityInfo", "", 5120},                   // measured 1048
+	{"MetaOnce", "velox.MetaOnce[E]", "", 10240},                    // measured 6274
+	{"Meta", "velox.Meta[E]", "", 7168},                             // measured 3118
+	{"Statement", "velox.Statement", "", 5120},                      // measured 1080
+	{"EntityInfo", "*velox.EntityInfo", "", 5120},                   // measured 1096
 	{"ColumnInfo", "velox.ColumnInfo", "", 5120},                    // measured 20
 	// The entity packages, remeasured on 2026-10-19 when the old path went,
 	// on darwin/arm64, Go 1.27.1. entityDesc is the
@@ -244,23 +244,31 @@ var genericObjects = []struct {
 	// a policy and hooks (policyGrowthMax). The rows of the old struct-scanning
 	// path (entity, entityUse, Shape, ColumnDef, RelDef, Schema) are gone with
 	// it.
-	{"entityDesc", "", entityDescSrc, 153600}, // measured 130838
+	{"entityDesc", "", entityDescSrc, 153600}, // measured 130782
 	// entityDescUse is held like entityDescHooks: its bound is the
 	// measurement plus about 1.2%, rounded up to the next KiB; remeasured on
 	// 2026-10-22, darwin/arm64, Go 1.27.1, after the locking reads (about
-	// +8 KiB here and in entityDescHooks), and again after Mutation's Conds,
-	// Affected and SetAffected and the handles' ValueIn (+350 bytes; the
-	// bound holds).
-	{"entityDescUse", "", entityDescUseSrc, 792576}, // measured 782738
+	// +8 KiB here and in entityDescHooks), after Mutation's Conds, Affected
+	// and SetAffected and the handles' ValueIn (+350 bytes; the bound held),
+	// and again when Sum, Avg, Min and Max became Query methods (+17898
+	// bytes: 782738 under 792576 before). A method of Query whose signature
+	// names NumberCol[E, V] puts that in the export data of every package
+	// that uses a Query, whether or not it calls the method.
+	{"entityDescUse", "", entityDescUseSrc, 811008}, // measured 800636
 	// entityDescHooks is held tighter than the rule above: a quarter of it
 	// would let it grow by 64 KiB unseen. Its bound is the measurement plus
 	// about 1.2%, rounded up to the next KiB, the headroom it had before
 	// (1046660 under 1058816); remeasured on 2026-10-22, darwin/arm64, Go
 	// 1.27.1, after Mutation's Conds, Affected and SetAffected and the
-	// handles' ValueIn (+5022 bytes: 1068930 under 1082368 before them).
-	{"entityDescHooks", "", entityDescHooksBound, 1087488}, // measured 1073952
+	// handles' ValueIn (+5022 bytes: 1068930 under 1082368 before them),
+	// and again when the aggregates became Query methods and Mutation a
+	// struct (+8390 bytes: 1073952 under 1087488 before).
+	{"entityDescHooks", "", entityDescHooksBound, 1095680}, // measured 1082342
 	{"Policy", "velox.Policy[E]", "", 8192},                // measured 4050
-	{"Mutation", "velox.Mutation[E]", "", 8192},            // measured 4692
+	// Mutation was remeasured on 2026-10-22, when it became a struct
+	// holding the mutation instead of a defined type of it (4692 before),
+	// and its bound moved down by the rule above.
+	{"Mutation", "velox.Mutation[E]", "", 7168}, // measured 2182
 }
 
 // policyGrowthMax bounds the bytes a Policy and three hooks add to an entity's
@@ -269,7 +277,7 @@ var genericObjects = []struct {
 // the generics velox instantiates for E (BindPolicy, BindHooks, On, the
 // Mutator and Mutation methods) and the export data of the types the
 // functions mention.
-const policyGrowthMax = 348160 // measured 291214
+const policyGrowthMax = 348160 // measured 281706
 
 // TestGenericTypesCompileSmall enforces the compile-cost rules for one
 // package: it measures each row's own object cost, the bytes its package

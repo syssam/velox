@@ -22,7 +22,8 @@ type MutateFunc[E any] func(ctx context.Context, m *Mutation[E]) error
 func (f MutateFunc[E]) Mutate(ctx context.Context, m *Mutation[E]) error { return f(ctx, m) }
 
 // Hook is middleware over an entity's writes: it returns a Mutator that does
-// its work and calls next.Mutate exactly once (or not at all, to refuse).
+// its work and calls next.Mutate exactly once, or not at all, to refuse or to
+// make the write itself (see Mutation.SetAffected).
 //
 // An entity declares its hooks with a method on its pointer type,
 //
@@ -30,9 +31,9 @@ func (f MutateFunc[E]) Mutate(ctx context.Context, m *Mutation[E]) error { retur
 //
 // which velox-gen binds in the generated metadata (Desc.Hooks calls
 // BindHooks on it): a method with another signature does not compile, and one
-// the metadata does not bind is refused at the entity's first use. velox calls it once, when it
-// builds the entity's metadata, on a nil *E: the method must not read its
-// receiver. Nor may its body, outside the hooks it returns, read the entity's
+// the metadata does not bind is refused at the entity's first use. velox
+// calls it once, when it builds the entity's metadata, on a nil *E: the
+// method must not read its receiver. Nor may its body, outside the hooks it returns, read the entity's
 // own metadata (a query on it, say): that waits on the build in progress and
 // deadlocks. A Has or HasWhere reads none, so the body may build them: a
 // relation resolves when a statement holding the condition runs.
@@ -78,7 +79,7 @@ func On[E any](h Hook[E], ops ...Op) Hook[E] {
 	}
 }
 
-// mutation is a write in flight, without E: what Mutation[E] is. Its db is an
+// mutation is a write in flight, without E: what Mutation[E] holds. Its db is an
 // any, converted by Mutation.DB: EntityInfo reaches mutation, and a *DB field
 // made every Desc entity's package 79 KiB larger (compilecost_test.go).
 type mutation struct {
@@ -234,12 +235,13 @@ func BindHooks[E any](hs []Hook[E]) BoundHooks {
 // erase returns h with E erased.
 func erase[E any](h Hook[E]) hookFn {
 	return func(next mutateFn) mutateFn {
-		typed := h(MutateFunc[E](func(ctx context.Context, m *Mutation[E]) error { return next(ctx, (*mutation)(m)) }))
+		typed := h(MutateFunc[E](func(ctx context.Context, m *Mutation[E]) error { return next(ctx, &m.mu) }))
 		return func(ctx context.Context, mu *mutation) error {
 			if typed == nil {
 				return errNilMutator
 			}
-			return typed.Mutate(ctx, (*Mutation[E])(mu))
+			// A Mutation[E] is a mutation and nothing else, so mu is one.
+			return typed.Mutate(ctx, (*Mutation[E])(unsafe.Pointer(mu)))
 		}
 	}
 }

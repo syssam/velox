@@ -14,21 +14,21 @@ import (
 
 // TxOption configures one call of DB.Tx: TxIsolation, TxReadOnly,
 // TxRetrySerializable and TxTimeout.
-type TxOption func(*txOptions)
+type TxOption struct{ apply func(*txOptions) }
 
 // TxIsolation sets the transaction's isolation level; the default is the
 // database's.
 func TxIsolation(level sql.IsolationLevel) TxOption {
-	return func(o *txOptions) { o.isolation = level }
+	return TxOption{func(o *txOptions) { o.isolation = level }}
 }
 
 // TxReadOnly starts a read-only transaction.
-func TxReadOnly() TxOption { return func(o *txOptions) { o.readOnly = true } }
+func TxReadOnly() TxOption { return TxOption{func(o *txOptions) { o.readOnly = true }} }
 
 // TxRetrySerializable runs the transaction again, up to n more times, when it
 // fails on a serialization failure or a deadlock: PostgreSQL 40001 and 40P01,
 // MySQL 1213 and 1205, SQLite BUSY and LOCKED. fn must be safe to run again.
-func TxRetrySerializable(n int) TxOption { return func(o *txOptions) { o.retries = n } }
+func TxRetrySerializable(n int) TxOption { return TxOption{func(o *txOptions) { o.retries = n }} }
 
 // TxRetries returns the n of the last TxRetrySerializable in opts, or 0 when
 // there is none. It is for code that runs a transaction's fn on an
@@ -36,7 +36,7 @@ func TxRetrySerializable(n int) TxOption { return func(o *txOptions) { o.retries
 func TxRetries(opts ...TxOption) int {
 	var o txOptions
 	for _, opt := range opts {
-		opt(&o)
+		opt.apply(&o)
 	}
 	return o.retries
 }
@@ -113,7 +113,7 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error
 	}
 	var o txOptions
 	for _, opt := range opts {
-		opt(&o)
+		opt.apply(&o)
 	}
 	def, maxd := db.cfg.deadlines.Tx, db.cfg.deadlines.MaxTx
 	if o.timeout > 0 {

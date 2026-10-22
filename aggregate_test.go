@@ -23,19 +23,19 @@ func TestAggregateSQL(t *testing.T) {
 			t.Errorf("%s sent %s %v, want %s", fn, e.SQL, e.Args, want)
 		}
 	}
-	if v, err := velox.Sum(ctx, q, I.Total); err != nil || v != 30 {
+	if v, err := q.Sum(ctx, I.Total); err != nil || v != 30 {
 		t.Fatalf("Sum: %v, %v", v, err)
 	}
 	check("SUM")
-	if v, ok, err := velox.Avg(ctx, q, I.Total); err != nil || !ok || v != 30 {
+	if v, ok, err := q.Avg(ctx, I.Total); err != nil || !ok || v != 30 {
 		t.Fatalf("Avg: %v, %v, %v", v, ok, err)
 	}
 	check("AVG")
-	if v, ok, err := velox.Min(ctx, q, I.Total); err != nil || !ok || v != 30 {
+	if v, ok, err := q.Min(ctx, I.Total); err != nil || !ok || v != 30 {
 		t.Fatalf("Min: %v, %v, %v", v, ok, err)
 	}
 	check("MIN")
-	if v, ok, err := velox.Max(ctx, q, I.Total); err != nil || !ok || v != 30 {
+	if v, ok, err := q.Max(ctx, I.Total); err != nil || !ok || v != 30 {
 		t.Fatalf("Max: %v, %v, %v", v, ok, err)
 	}
 	check("MAX")
@@ -48,22 +48,22 @@ func TestAggregateNull(t *testing.T) {
 		e := &velox.FakeExec{Rows: rows}
 		db := velox.OpenFake(velox.Postgres, e)
 		q := db.Query[testmodel.Invoice]()
-		if v, err := velox.Sum(ctx, q, I.Total); err != nil || v != 0 {
+		if v, err := q.Sum(ctx, I.Total); err != nil || v != 0 {
 			t.Errorf("%s: Sum %v, %v", name, v, err)
 		}
-		if v, ok, err := velox.Avg(ctx, q, I.Total); err != nil || ok || v != 0 {
+		if v, ok, err := q.Avg(ctx, I.Total); err != nil || ok || v != 0 {
 			t.Errorf("%s: Avg %v, %v, %v", name, v, ok, err)
 		}
-		if v, ok, err := velox.Min(ctx, q, I.Total); err != nil || ok || v != 0 {
+		if v, ok, err := q.Min(ctx, I.Total); err != nil || ok || v != 0 {
 			t.Errorf("%s: Min %v, %v, %v", name, v, ok, err)
 		}
-		if v, ok, err := velox.Max(ctx, q, I.Total); err != nil || ok || v != 0 {
+		if v, ok, err := q.Max(ctx, I.Total); err != nil || ok || v != 0 {
 			t.Errorf("%s: Max %v, %v, %v", name, v, ok, err)
 		}
 	}
 	e := &velox.FakeExec{Rows: [][]any{{int64(350)}}}
 	db := velox.OpenFake(velox.Postgres, e)
-	if v, ok, err := velox.Max(ctx, db.Query[testmodel.Sample](), testmodel.Samples.Price); err != nil || !ok || v != kind.Cents(350) {
+	if v, ok, err := db.Query[testmodel.Sample]().Max(ctx, testmodel.Samples.Price); err != nil || !ok || v != kind.Cents(350) {
 		t.Errorf("a named type: %v, %v, %v", v, ok, err)
 	}
 }
@@ -72,10 +72,10 @@ func TestAggregateRefusals(t *testing.T) {
 	e := &velox.FakeExec{Rows: [][]any{{1.0}}}
 	db := velox.OpenFake(velox.Postgres, e)
 	after := db.Query[testmodel.Invoice]().After(&testmodel.Invoice{ID: 3})
-	if _, err := velox.Sum(ctx, after, I.Total); err == nil || !strings.Contains(err.Error(), "After needs an OrderBy") {
+	if _, err := after.Sum(ctx, I.Total); err == nil || !strings.Contains(err.Error(), "After needs an OrderBy") {
 		t.Errorf("Sum: %v", err)
 	}
-	if _, _, err := velox.Avg(ctx, after, I.Total); err == nil {
+	if _, _, err := after.Avg(ctx, I.Total); err == nil {
 		t.Error("Avg: no error")
 	}
 	if e.Calls != 0 {
@@ -83,10 +83,10 @@ func TestAggregateRefusals(t *testing.T) {
 	}
 	for _, opts := range [][]velox.Option{nil, {velox.WithAround(func(c context.Context, _ *velox.Statement, next func(context.Context) error) error { return next(c) })}} {
 		db := velox.OpenFake(velox.Postgres, e, opts...)
-		if _, err := velox.Sum(context.Background(), db.Query[testmodel.Invoice](), I.Total); !errors.Is(err, velox.ErrNoTenant) {
+		if _, err := db.Query[testmodel.Invoice]().Sum(context.Background(), I.Total); !errors.Is(err, velox.ErrNoTenant) {
 			t.Errorf("no tenant (hooks %d): %v", len(opts), err)
 		}
-		if _, _, err := velox.Max(context.Background(), db.Query[testmodel.Invoice](), I.Total); !errors.Is(err, velox.ErrNoTenant) {
+		if _, _, err := db.Query[testmodel.Invoice]().Max(context.Background(), I.Total); !errors.Is(err, velox.ErrNoTenant) {
 			t.Errorf("no tenant, Max (hooks %d): %v", len(opts), err)
 		}
 	}
@@ -94,7 +94,7 @@ func TestAggregateRefusals(t *testing.T) {
 		t.Errorf("%d statements sent", e.Calls)
 	}
 	// The tenant scope applies.
-	if _, err := velox.Sum(tenant(int64(7)), velox.OpenFake(velox.Postgres, e).Query[testmodel.Invoice](), I.Total); err != nil {
+	if _, err := velox.OpenFake(velox.Postgres, e).Query[testmodel.Invoice]().Sum(tenant(int64(7)), I.Total); err != nil {
 		t.Fatal(err)
 	}
 	if want := `SELECT SUM("total") FROM "invoices" WHERE "org_id" = $1`; e.SQL != want || !reflect.DeepEqual(e.Args, []any{int64(7)}) {
@@ -105,13 +105,13 @@ func TestAggregateRefusals(t *testing.T) {
 	clear := velox.WithRewrite(func(_ context.Context, st *velox.Statement) error { st.Aggregate = 0; return nil })
 	rdb := velox.OpenFake(velox.Postgres, e, clear)
 	calls := e.Calls
-	_, err := velox.Sum(ctx, rdb.Query[testmodel.Invoice](), I.Total)
+	_, err := rdb.Query[testmodel.Invoice]().Sum(ctx, I.Total)
 	if err == nil || err.Error() != "velox: testmodel.Invoice: a Rewrite hook changed the statement's Aggregate" || e.Calls != calls {
 		t.Errorf("Rewrite: %v", err)
 	}
 	// Count and the other reads are unaffected by an unrelated hook.
 	nop := velox.WithRewrite(func(context.Context, *velox.Statement) error { return nil })
-	if _, err := velox.Sum(ctx, velox.OpenFake(velox.Postgres, e, nop).Query[testmodel.Invoice](), I.Total); err != nil {
+	if _, err := velox.OpenFake(velox.Postgres, e, nop).Query[testmodel.Invoice]().Sum(ctx, I.Total); err != nil {
 		t.Errorf("a harmless hook: %v", err)
 	}
 }
@@ -136,7 +136,7 @@ func TestRewriteMayNotChangeAReadsColumns(t *testing.T) {
 	for name, rw := range hooks {
 		e := &velox.FakeExec{Rows: [][]any{{int64(1)}}}
 		q := velox.OpenFake(velox.Postgres, e, velox.WithRewrite(rw)).Query[testmodel.Invoice]()
-		if _, err := velox.Sum(ctx, q, I.Total); err == nil || err.Error() != want {
+		if _, err := q.Sum(ctx, I.Total); err == nil || err.Error() != want {
 			t.Errorf("Sum, a hook that %s: %v", name, err)
 		}
 		if name != "drops" { // a Count's and an Exists' Columns are nil already
@@ -158,7 +158,7 @@ func TestRewriteMayNotChangeAReadsColumns(t *testing.T) {
 		return nil
 	})
 	e := &velox.FakeExec{Rows: [][]any{{1.0}}}
-	if _, err := velox.Sum(ctx, velox.OpenFake(velox.Postgres, e, same).Query[testmodel.Invoice](), I.Total); err != nil {
+	if _, err := velox.OpenFake(velox.Postgres, e, same).Query[testmodel.Invoice]().Sum(ctx, I.Total); err != nil {
 		t.Errorf("an unchanged copy: %v", err)
 	}
 	narrow := velox.WithRewrite(func(_ context.Context, st *velox.Statement) error { st.Columns = []int{0}; return nil })
@@ -172,7 +172,7 @@ func TestRewriteMayNotChangeAReadsColumns(t *testing.T) {
 func TestAggregateIsNotRowCapped(t *testing.T) {
 	e := &velox.FakeExec{Rows: [][]any{{3.0}}}
 	db := velox.OpenFake(velox.Postgres, e, velox.WithMaxRows(2))
-	if v, err := velox.Sum(ctx, db.Query[testmodel.Invoice](), I.Total); err != nil || v != 3 {
+	if v, err := db.Query[testmodel.Invoice]().Sum(ctx, I.Total); err != nil || v != 3 {
 		t.Fatalf("%v, %v", v, err)
 	}
 	if strings.Contains(e.SQL, "LIMIT") {
@@ -184,7 +184,7 @@ func TestAggregateIsNotRowCapped(t *testing.T) {
 func TestAggregateIsPolicyScoped(t *testing.T) {
 	e := &velox.FakeExec{Rows: [][]any{{int64(3)}}}
 	db := velox.OpenFake(velox.Postgres, e)
-	if v, err := velox.Sum(asUser("ann"), db.Query[testmodel.Ticket](), Tk.InvoiceID); err != nil || v != 3 {
+	if v, err := db.Query[testmodel.Ticket]().Sum(asUser("ann"), Tk.InvoiceID); err != nil || v != 3 {
 		t.Fatalf("%v, %v", v, err)
 	}
 	wantSent(t, e, `SELECT SUM("invoice_id") FROM "tickets" WHERE "org_id" = $1 AND "owner" = $2`, int64(1), "ann")

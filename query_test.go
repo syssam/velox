@@ -467,6 +467,65 @@ func TestRewriteCannotChangeExists(t *testing.T) {
 	}
 }
 
+// A Rewrite hook may not set or clear Count: it renders before Exists and an
+// aggregate, so a flip would make Exists true on no row, an aggregate return
+// a count, and a Count return a column; on a locking read it would skip the
+// guard's Count refusal.
+func TestRewriteCannotChangeCount(t *testing.T) {
+	const want = "velox: testmodel.Invoice: a Rewrite hook changed the statement's Count"
+	set := velox.WithRewrite(func(_ context.Context, st *velox.Statement) error { st.Count = true; return nil })
+	clear := velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+		st.Count, st.Columns = false, []int{0}
+		return nil
+	})
+	for name, c := range map[string]struct {
+		opt velox.Option
+		run func(db *velox.DB) error
+	}{
+		"set on All": {set, func(db *velox.DB) error {
+			_, err := db.Query[testmodel.Invoice]().Unbounded().All(ctx)
+			return err
+		}},
+		"set on Exists": {set, func(db *velox.DB) error {
+			_, err := db.Query[testmodel.Invoice]().Exists(ctx)
+			return err
+		}},
+		"set on Sum": {set, func(db *velox.DB) error {
+			_, err := db.Query[testmodel.Invoice]().Sum(ctx, I.Total)
+			return err
+		}},
+		"set on Min": {set, func(db *velox.DB) error {
+			_, _, err := db.Query[testmodel.Invoice]().Min(ctx, I.Total)
+			return err
+		}},
+		"set on Max": {set, func(db *velox.DB) error {
+			_, _, err := db.Query[testmodel.Invoice]().Max(ctx, I.Total)
+			return err
+		}},
+		"cleared on Count, with Columns set": {clear, func(db *velox.DB) error {
+			_, err := db.Query[testmodel.Invoice]().Count(ctx)
+			return err
+		}},
+		"set on a locking read": {set, func(db *velox.DB) error {
+			var err error
+			_ = db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+				_, err = tx.Query[testmodel.Invoice]().Limit(1).ForUpdate().All(ctx)
+				return err
+			})
+			return err
+		}},
+	} {
+		e := &velox.FakeExec{Rows: [][]any{{int64(42)}}}
+		err := c.run(velox.OpenFake(velox.Postgres, e, c.opt))
+		if err == nil || err.Error() != want {
+			t.Errorf("%s: %v", name, err)
+		}
+		if s := sentStatements(e); len(s) != 0 {
+			t.Errorf("%s: sent %q", name, s)
+		}
+	}
+}
+
 // TestAroundSeesExists: an Around hook sees Statement.Exists on an Exists
 // query, and not on All.
 func TestAroundSeesExists(t *testing.T) {

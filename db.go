@@ -68,8 +68,8 @@ type config struct {
 	shardFor func(ctx context.Context, tenant any) (string, error)
 }
 
-// Option configures a DB's pipeline.
-type Option func(*config)
+// Option configures a DB's pipeline. The With functions make them.
+type Option struct{ apply func(*config) }
 
 // WithRewrite adds a rewrite hook. Rewrite hooks run in the order given. A
 // nil hook panics.
@@ -77,7 +77,7 @@ func WithRewrite(r Rewrite) Option {
 	if r == nil {
 		panic("velox: WithRewrite(nil)")
 	}
-	return func(c *config) { c.rewrites = append(c.rewrites, r) }
+	return Option{func(c *config) { c.rewrites = append(c.rewrites, r) }}
 }
 
 // WithMaxLimit refuses, with ErrLimitTooLarge, a query whose Limit is over n.
@@ -86,7 +86,7 @@ func WithMaxLimit(n int) Option {
 	if n < 2 {
 		panic(fmt.Sprintf("velox: WithMaxLimit(%d): the maximum must be at least 2, the limit One uses", n))
 	}
-	return func(c *config) { c.maxLimit = n }
+	return Option{func(c *config) { c.maxLimit = n }}
 }
 
 // WithMaxRows fails, with ErrTooManyRows, a query that returns more than n
@@ -102,7 +102,7 @@ func WithMaxRows(n int) Option {
 	if n == 1 {
 		panic("velox: WithMaxRows(1): the cap must be at least 2, the rows One reads")
 	}
-	return func(c *config) { c.maxRows = max(n, 0) }
+	return Option{func(c *config) { c.maxRows = max(n, 0) }}
 }
 
 // WithAround adds an around hook. The first one given is the outermost. A nil
@@ -111,7 +111,7 @@ func WithAround(a Around) Option {
 	if a == nil {
 		panic("velox: WithAround(nil)")
 	}
-	return func(c *config) { c.arounds = append(c.arounds, a) }
+	return Option{func(c *config) { c.arounds = append(c.arounds, a) }}
 }
 
 // Open returns a DB that runs statements through db, a *sql.DB the
@@ -147,7 +147,7 @@ const (
 func newConfig(opts []Option) *config {
 	cfg := &config{pinWindow: defaultPinWindow, backoff: defaultBackoff}
 	for _, o := range opts {
-		o(cfg)
+		o.apply(cfg)
 	}
 	return cfg
 }
@@ -321,7 +321,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 			st.Conflict = &cf
 		}
 	}
-	entity, op, writable, exists, agg, lock, wait := st.Entity, st.Op, st.Writable, st.Exists, st.Aggregate, st.Lock, st.LockWait
+	entity, op, writable, count, exists, agg, lock, wait := st.Entity, st.Op, st.Writable, st.Count, st.Exists, st.Aggregate, st.Lock, st.LockWait
 	for _, rw := range db.cfg.rewrites {
 		if err := rw(ctx, st); err != nil {
 			return fmt.Errorf("velox: %s: rewrite: %w", entity.Name, err)
@@ -335,6 +335,11 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 		// Write policy.
 		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's Writable", entity.Name)
 	}
+	if st.Count != count {
+		// The scan depends on it, and it renders before Exists and an
+		// aggregate: a flip would read a count as a column, or the reverse.
+		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's Count", entity.Name)
+	}
 	if st.Exists != exists {
 		// The scan depends on it: Exists reads no column.
 		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's Exists", entity.Name)
@@ -342,7 +347,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	if st.Aggregate != agg {
 		return errAggregateChanged(entity.Name)
 	}
-	if (st.Count || st.Exists || st.Aggregate != 0) && !slices.Equal(st.Columns, cols) {
+	if (count || exists || agg != 0) && !slices.Equal(st.Columns, cols) {
 		// The scan depends on them: one value, of the column's type.
 		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's Columns", entity.Name)
 	}

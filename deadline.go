@@ -26,14 +26,14 @@ type Deadlines struct {
 // and a transaction whose context has ended by commit time is rolled back.
 // The error matches ErrTimeout only when velox's deadline was the one that
 // passed; the caller's matches context.DeadlineExceeded alone.
-func WithDeadlines(d Deadlines) Option { return func(c *config) { c.deadlines = d } }
+func WithDeadlines(d Deadlines) Option { return Option{func(c *config) { c.deadlines = d }} }
 
 // TxTimeout bounds the transaction to d, retries and commit included, in place
 // of the DB's Tx default and within its MaxTx. An earlier deadline on the
-// context still applies. TxTimeout(d) with d <= 0 is ignored, and so is
-// TxTimeout on a nested Tx, which ignores every option: a savepoint runs within
-// the enclosing transaction's deadline.
-func TxTimeout(d time.Duration) TxOption { return func(o *txOptions) { o.timeout = d } }
+// context still applies. TxTimeout(d) with d <= 0 is ignored. A nested Tx
+// refuses it, as it refuses every option: a savepoint runs within the
+// enclosing transaction's deadline.
+func TxTimeout(d time.Duration) TxOption { return TxOption{func(o *txOptions) { o.timeout = d }} }
 
 // bound returns ctx with velox's limits applied: def when ctx has no
 // deadline, at most maxd from now, and no later than also unless it is zero.

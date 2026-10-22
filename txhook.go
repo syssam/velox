@@ -68,7 +68,7 @@ func WithTxAround(h TxAround) Option {
 	if h == nil {
 		panic("velox: WithTxAround(nil)")
 	}
-	return func(c *config) { c.txArounds = append(c.txArounds, h) }
+	return Option{func(c *config) { c.txArounds = append(c.txArounds, h) }}
 }
 
 // txIDs numbers transactions; the first is 1.
