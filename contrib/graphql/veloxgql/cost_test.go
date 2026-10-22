@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 
@@ -15,6 +16,9 @@ import (
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
 )
+
+// saturated is the most Cost returns: 1<<62, clamped to the platform's int.
+var saturated = int(min(int64(1)<<62, int64(math.MaxInt)))
 
 // costSDL is a schema of connections, a list and the Node interface.
 const costSDL = `
@@ -135,15 +139,17 @@ func TestCostDodges(t *testing.T) {
 	}
 	dag.WriteString(`fragment F40 on User { name }`)
 	got := costOf(t, `{ users(first: 1) { edges { node { ...F0 } } } } `+dag.String(), nil, l)
-	if want := 1 + 1*(1+1+(int64Pow2(41)-1)); got != want {
+	// The cost is over 2^41, so on a platform whose int is 32 bits it is
+	// clamped to math.MaxInt.
+	if want := int(min(1+1*(1+1+(int64(1)<<41-1)), int64(math.MaxInt))); got != want {
 		t.Errorf("fragment DAG: cost %d, want %d", got, want)
 	}
 
 	// Huge first at five levels saturates, and does not wrap.
 	const huge = 1000000
 	deep := fmt.Sprintf(`{ users(first: %[1]d) { edges { node { posts(first: %[1]d) { edges { node { author { posts(first: %[1]d) { edges { node { author { posts(first: %[1]d) { edges { node { author { posts(first: %[1]d) { totalCount } } } } } } } } } } } } } } } } }`, huge)
-	if got := costOf(t, deep, nil, l); got != 1<<62 {
-		t.Errorf("five levels of first: %d: cost %d, want 1<<62", huge, got)
+	if got := costOf(t, deep, nil, l); got != saturated {
+		t.Errorf("five levels of first: %d: cost %d, want %d", huge, got, saturated)
 	}
 	if got := costOf(t, `query ($n: Int) { users(first: $n) { totalCount } }`, map[string]any{"n": 1 << 30}, l); got != 1+1<<30 {
 		t.Errorf("first: 1<<30: cost %d", got)
@@ -159,8 +165,6 @@ func TestCostDodges(t *testing.T) {
 		t.Errorf("@skip: cost %d, want %d", got, want)
 	}
 }
-
-func int64Pow2(n int) int { return 1 << n }
 
 func TestCostNodesAndLists(t *testing.T) {
 	l := veloxgql.DefaultLimits()
@@ -202,8 +206,8 @@ func TestCostSaturationAdds(t *testing.T) {
 		{"under a multiplier", `{ users(first: 100) { edges { node { posts(first: 100) { edges { node { author { a: ` + saturatingUser + ` b: ` + saturatingUser + ` } } } } } } } }`},
 		{"a saturated fragment spread twice", `{ ...F ...F } fragment F on Query { ` + saturating + ` }`},
 	} {
-		if got := costOf(t, c.query, nil, l); got != 1<<62 {
-			t.Errorf("%s: cost %d, want 1<<62", c.name, got)
+		if got := costOf(t, c.query, nil, l); got != saturated {
+			t.Errorf("%s: cost %d, want %d", c.name, got, saturated)
 		}
 	}
 }
