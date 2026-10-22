@@ -305,7 +305,7 @@ From the final tasks of API plan 4 (2026-10-22), the OpenTelemetry module. The p
 - `Config.Filter` and `Config.Attributes` (the review's finding 16, a Could) are not built. Nor is `network.peer.address`: the adapter does not see the peer.
 - The adapter's tests that need the SDK and pgx live in the module itself, so the adapter's `go.mod` lists both. A nested test module would keep them out of an application's `go mod graph` (the review's finding 18, a Could).
 - `contrib/veloxotel`'s `record` still allocates its attribute set under a no-op `MeterProvider` (the entry under "Left by observability").
-- `collection(st)` runs twice per statement, once for the span and once for the metric, and for an entity with a schema it concatenates strings. A summary built once was asked for; the collection is a smaller saving.
+- `collection(st)` ran three times per statement (the summary, the span's attributes and the metric's) and, for an entity with a schema, concatenates strings. Fixed in the API plan 4 final review: it is computed once in `around` and passed along with the summary. `operation(st)` still runs three times; it is a switch and allocates nothing.
 - The duration timing tests (`Result.LoopBody`, the adapter's loop-body points) use sleeps and wall-clock bounds. A loaded machine may need wider bounds.
 - Each statement on a hooked DB with `Iter` costs two clock reads per yielded row for `LoopBody`. It is cheap beside a row scan, and 0 on a DB with no Around hook.
 

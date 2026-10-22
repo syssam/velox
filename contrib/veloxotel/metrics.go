@@ -17,7 +17,7 @@ var (
 	rowBounds      = []float64{1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000}
 )
 
-// instruments creates a's histograms on m. An error goes to otel.Handle, and
+// instruments creates a's instruments on m. An error goes to otel.Handle, and
 // the instrument the API returned with it, which still works, is kept.
 func (a *adapter) instruments(m metric.Meter) {
 	var err error
@@ -31,7 +31,7 @@ func (a *adapter) instruments(m metric.Meter) {
 	handle(err)
 	a.txDuration, err = m.Float64Histogram(metricTxDuration,
 		metric.WithDescription("Duration of velox transactions, every attempt and the commit included."),
-		metric.WithUnit("s"), metric.WithExplicitBucketBoundaries(durationBounds...))
+		metric.WithUnit(unitDuration), metric.WithExplicitBucketBoundaries(durationBounds...))
 	handle(err)
 	a.fallbacks, err = m.Int64Counter(metricFallbacks,
 		metric.WithDescription("Reads that fell over from a failed replica to the primary."),
@@ -46,14 +46,15 @@ func handle(err error) {
 }
 
 // record records a statement's duration, and a successful read's rows,
-// after it ran (not on a panic); sum is its summary (see summary), tkv its
-// server's (Config.Target's or TargetFor's) and f its failure. Its attributes are bounded:
-// never the tags, tenant, SQL or call site, and the fingerprint only with
+// after it ran (not on a panic); coll and sum are its collection and
+// summary (see collection and summary), tkv its server's (Config.Target's
+// or TargetFor's) and f its failure. Its attributes are bounded: never the
+// tags, tenant, SQL or call site, and the fingerprint only with
 // Config.RecordMetricFingerprint.
-func (a *adapter) record(ctx context.Context, st *velox.Statement, sum string, tkv []attribute.KeyValue, seconds float64, f failure, fellOver bool) {
+func (a *adapter) record(ctx context.Context, st *velox.Statement, coll, sum string, tkv []attribute.KeyValue, seconds float64, f failure, fellOver bool) {
 	kv := make([]attribute.KeyValue, 0, 9+len(tkv))
 	kv = append(kv, attribute.String(attrDBSystem, dbSystem(st.Dialect)))
-	kv = target(kv, st, sum)
+	kv = target(kv, st, coll, sum)
 	kv = append(kv, attribute.String(attrEntity, st.Entity.Name))
 	kv = append(kv, tkv...)
 	if st.Route.Shard != "" {

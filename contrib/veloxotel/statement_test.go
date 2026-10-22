@@ -467,6 +467,9 @@ func TestIterPanicEndsTheSpan(t *testing.T) {
 	if s.Status.Code != codes.Error || s.Status.Description != "panic" {
 		t.Errorf("status %v", s.Status)
 	}
+	if got := attrs(s)["error.type"].AsString(); got != "_OTHER" {
+		t.Errorf("error.type %q, want _OTHER", got)
+	}
 }
 
 // shardOf maps the tenants 1 and 2 to the shards "a" and "b".
@@ -916,4 +919,43 @@ func TestStatusCode(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestRawSpanNames pins the name of a raw SQL span, which has no summary:
+// semconv v1.43.0's {target}, that is db.namespace, else
+// server.address:server.port, else the database system.
+func TestRawSpanNames(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		target veloxotel.Target
+		want   string
+	}{
+		{"none", veloxotel.Target{}, "postgresql"},
+		{"namespace", veloxotel.Target{Namespace: "billing", Address: "db", Port: 5432}, "billing"},
+		{"address and port", veloxotel.Target{Address: "db.internal", Port: 5432}, "db.internal:5432"},
+		{"address", veloxotel.Target{Address: "db.internal"}, "db.internal"},
+		{"port only", veloxotel.Target{Port: 5432}, "postgresql"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			db, exp, _ := traced(t, &fakeDB{affected: 1}, veloxotel.Config{Target: c.target})
+			if _, err := db.Exec(context.Background(), "cleanup", "DELETE FROM invoices"); err != nil {
+				t.Fatal(err)
+			}
+			if got := only(t, exp).Name; got != c.want {
+				t.Errorf("span %q, want %q", got, c.want)
+			}
+		})
+	}
+
+	t.Run("TargetFor", func(t *testing.T) {
+		db, exp, _ := traced(t, &fakeDB{affected: 1}, veloxotel.Config{
+			TargetFor: func(velox.Route) veloxotel.Target { return veloxotel.Target{Namespace: "primary-db"} },
+		})
+		if _, err := db.Exec(context.Background(), "cleanup", "DELETE FROM invoices"); err != nil {
+			t.Fatal(err)
+		}
+		if got := only(t, exp).Name; got != "primary-db" {
+			t.Errorf("span %q, want primary-db", got)
+		}
+	})
 }

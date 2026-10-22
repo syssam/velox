@@ -164,6 +164,9 @@ func TestPanicsEndTheSpans(t *testing.T) {
 		if s.Name != "velox.tx" || s.Status.Code != codes.Error || s.Status.Description != "panic" {
 			t.Errorf("span %q status %v", s.Name, s.Status)
 		}
+		if got := attrs(s)["error.type"].AsString(); got != "_OTHER" {
+			t.Errorf("error.type %q, want _OTHER", got)
+		}
 		if a := attrs(s); a["velox.tx.outcome"] != attribute.StringValue("rollback") || a["velox.tx.attempts"] != attribute.IntValue(1) {
 			t.Errorf("velox.tx attributes %v", s.Attributes)
 		}
@@ -194,6 +197,9 @@ func TestPanicsEndTheSpans(t *testing.T) {
 		for _, s := range []tracetest.SpanStub{stmt[0], tx[0]} {
 			if s.Status.Code != codes.Error || s.Status.Description != "panic" {
 				t.Errorf("%s: status %v", s.Name, s.Status)
+			}
+			if got := attrs(s)["error.type"].AsString(); got != "_OTHER" {
+				t.Errorf("%s: error.type %q, want _OTHER", s.Name, got)
 			}
 		}
 		if stmt[0].Parent.SpanID() != tx[0].SpanContext.SpanID() {

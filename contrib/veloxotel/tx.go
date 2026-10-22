@@ -25,11 +25,13 @@ func (a *adapter) txAround(ctx context.Context, tx *velox.TxInfo, next func(cont
 	))
 	// A panic in fn ends the span, records the duration and goes on: the
 	// adapter never recovers one. velox rolled the transaction back.
-	// runtime.Goexit in fn is reported the same way, as "panic".
+	// runtime.Goexit in fn is reported the same way, as "panic", with
+	// error.type _OTHER.
 	ended := false
 	defer func() {
 		if !ended {
 			txEnd(ctx, span, tx, velox.TxRollback)
+			span.SetAttributes(attribute.String(attrErrorType, errorTypeOther))
 			span.SetStatus(codes.Error, "panic")
 			span.End()
 			a.txRecord(sctx, start, tx, velox.TxRollback)

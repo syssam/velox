@@ -31,12 +31,15 @@
 // parameterized: no argument's value is in it), unless Config.OmitQueryText is
 // set. Raw SQL (velox.DB.Raw and Exec) has neither an operation nor a table
 // that velox knows: velox does not parse them out of the SQL, as the semantic
-// conventions advise, so its span is named for the database system
-// ("postgresql") and has no db.operation.name, db.collection.name or
-// db.query.summary. Its span carries velox.tenant_bypass and
-// velox.policy_bypass, the reasons for a bypass. Its text is recorded only when it has arguments: the conventions say text
-// that is not parameterized should not be collected by default, and velox
-// cannot tell whether raw text without arguments holds literals. A read's span
+// conventions advise, so its span has no db.operation.name,
+// db.collection.name or db.query.summary, and is named as the conventions
+// name a span without a summary: for Config.Target's (or TargetFor's)
+// Namespace, else its Address and Port ("db.internal:5432"), else the
+// database system ("postgresql"). Its span carries velox.tenant_bypass and
+// velox.policy_bypass, the reasons for a bypass. Its text is recorded only
+// when it has arguments: the conventions say text that is not parameterized
+// should not be collected by default, and velox cannot tell whether raw text
+// without arguments holds literals. A read's span
 // gets db.response.returned_rows, which the conventions make opt-in, only with
 // Config.RecordReturnedRows. A span carries the fingerprint, the call site and
 // the context's tags.
@@ -67,7 +70,9 @@
 // A panic in the transaction's function, or in an Iter loop body, ends the
 // open spans with the status Error and the description "panic", records the
 // transaction's duration with the outcome rollback, and goes on: the adapter
-// never recovers one. runtime.Goexit is reported the same way.
+// never recovers one. runtime.Goexit is reported the same way. Those spans
+// get error.type "_OTHER", the conventions' fallback: a panic value's Go type
+// is not a bounded set, and Goexit has no value.
 //
 // A statement's span says where it ran. velox.route.shard, on a sharded DB,
 // is a start attribute, so samplers and span processors see it.

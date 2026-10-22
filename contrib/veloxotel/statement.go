@@ -15,24 +15,27 @@ import (
 // around is the Around hook: one client span per execution of a statement,
 // from the call to next to its return, and its metric points.
 func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
-	// The summary is built once, for the span's name, its attributes and
-	// the metric points.
-	sum := summary(st)
+	// The collection and the summary are built once, for the span's name,
+	// its attributes and the metric points.
+	coll := collection(st)
+	sum := summary(st, coll)
 	name := sum
-	if name == "" {
-		name = dbSystem(st.Dialect) // raw SQL
+	if name == "" { // raw SQL
+		name = rawName(st, a.cfg.Target)
 	}
 	// Config.Target cannot change, so it is a start attribute, for
 	// samplers. TargetFor's depends on the route, which is final only once
 	// next has returned: it is set then (see below).
 	sctx, span := a.tracer.Start(ctx, name,
-		trace.WithSpanKind(trace.SpanKindClient), trace.WithAttributes(a.attributes(st, sum, a.target)...))
+		trace.WithSpanKind(trace.SpanKindClient), trace.WithAttributes(a.attributes(st, coll, sum, a.target)...))
 	// A panic in next, such as Iter's loop body's, ends the span and goes on:
 	// the adapter never recovers one. runtime.Goexit in an Iter loop body is
-	// reported the same way, with the description "panic".
+	// reported the same way, with the description "panic". error.type is
+	// _OTHER, the conventions' fallback (see errorTypeOther).
 	ended := false
 	defer func() {
 		if !ended {
+			span.SetAttributes(attribute.String(attrErrorType, errorTypeOther))
 			span.SetStatus(codes.Error, "panic")
 			span.End()
 		}
@@ -53,6 +56,9 @@ func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(con
 	if a.cfg.TargetFor != nil {
 		tkv = a.cfg.TargetFor(st.Route).appendTo(make([]attribute.KeyValue, 0, 3))
 		kv = append(kv, tkv...)
+		if sum == "" { // raw SQL: the span is named for the final route's server
+			span.SetName(rawName(st, a.cfg.TargetFor(st.Route)))
+		}
 	}
 	switch {
 	case returnsRows(st):
@@ -78,7 +84,7 @@ func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(con
 	}
 	ended = true
 	span.End()
-	a.record(sctx, st, sum, tkv, seconds, f, st.Route.Fallback && !wasFallback)
+	a.record(sctx, st, coll, sum, tkv, seconds, f, st.Route.Fallback && !wasFallback)
 	return err
 }
 
@@ -104,11 +110,11 @@ func (a *adapter) queryText(st *velox.Statement) bool {
 }
 
 // attributes are a statement's span attributes known before it runs; sum is
-// its summary (see summary), and tkv Config.Target's (nil with TargetFor).
-func (a *adapter) attributes(st *velox.Statement, sum string, tkv []attribute.KeyValue) []attribute.KeyValue {
+// its collection and summary (see collection and summary), and tkv Config.Target's (nil with TargetFor).
+func (a *adapter) attributes(st *velox.Statement, coll, sum string, tkv []attribute.KeyValue) []attribute.KeyValue {
 	kv := make([]attribute.KeyValue, 0, 15+len(st.Tags)+len(tkv))
 	kv = append(kv, attribute.String(attrDBSystem, dbSystem(st.Dialect)))
-	kv = target(kv, st, sum)
+	kv = target(kv, st, coll, sum)
 	kv = append(kv, tkv...)
 	kv = append(kv,
 		attribute.String(attrEntity, st.Entity.Name),

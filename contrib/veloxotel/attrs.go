@@ -3,6 +3,7 @@ package veloxotel
 import (
 	"context"
 	"errors"
+	"strconv"
 
 	"go.opentelemetry.io/otel/attribute"
 
@@ -32,7 +33,9 @@ const (
 	attrServerPort     = "server.port"
 	attrStatusCode     = "db.response.status_code"
 
-	// errorTypeOther is error.type's value when no other fits.
+	// errorTypeOther is error.type's value when no other fits, and the one a
+	// span that ends on a panic gets: the convention's fallback, as a panic
+	// value's Go type is unbounded and Goexit has none.
 	errorTypeOther = "_OTHER"
 
 	attrAffectedRows = "velox.affected_rows"
@@ -118,23 +121,40 @@ func collection(st *velox.Statement) string {
 // summary is a statement's db.query.summary and span name, as the semantic
 // conventions build it: the operation and the table ("SELECT invoices"). Raw
 // SQL, which has neither, has none: its span is named for the database
-// system ("postgresql").
-func summary(st *velox.Statement) string {
+// system, or its server (see rawName).
+func summary(st *velox.Statement, coll string) string {
 	if raw(st) {
 		return ""
 	}
-	return operation(st) + " " + collection(st)
+	return operation(st) + " " + coll
+}
+
+// rawName is the name of a raw SQL span, which has no summary, operation or
+// collection. semconv v1.43.0 names such a span {target}: db.namespace, else
+// {server.address}:{server.port} (the address alone without a port), else
+// db.system.name. t is the Target that names the server (zero: none).
+func rawName(st *velox.Statement, t Target) string {
+	switch {
+	case t.Namespace != "":
+		return t.Namespace
+	case t.Address != "" && t.Port != 0:
+		return t.Address + ":" + strconv.Itoa(t.Port)
+	case t.Address != "":
+		return t.Address
+	}
+	return dbSystem(st.Dialect)
 }
 
 // target appends to kv db.operation.name, db.collection.name and
-// db.query.summary, sum (see summary), which raw SQL has none of.
-func target(kv []attribute.KeyValue, st *velox.Statement, sum string) []attribute.KeyValue {
+// db.query.summary, coll and sum (see collection and summary), which raw SQL
+// has none of.
+func target(kv []attribute.KeyValue, st *velox.Statement, coll, sum string) []attribute.KeyValue {
 	if raw(st) {
 		return kv
 	}
 	return append(kv,
 		attribute.String(attrDBOperation, operation(st)),
-		attribute.String(attrDBCollection, collection(st)),
+		attribute.String(attrDBCollection, coll),
 		attribute.String(attrDBQuerySummary, sum),
 	)
 }
