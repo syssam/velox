@@ -900,7 +900,6 @@ func (tbPartialUniq) Indexes() []schema.Index {
 func TestTablesPartialUniqueKeepsFieldIndex(t *testing.T) {
 	partial := indexName("accounts", &Index{Columns: []string{"email"}, Unique: true, Where: "active"})
 	for _, d := range []velox.Dialect{velox.Postgres, velox.SQLite} { // MySQL has no partial indexes
-
 		tb := table(t, tables(t, d, tbPartialUniq{}), "accounts")
 		want := []migrate.Index{
 			{Name: "accounts_email_unique", Columns: []string{"email"}, Unique: true},
@@ -958,6 +957,14 @@ func (tbRfLongValue) Fields() []schema.Field {
 	f, l := field.Enum("e").NamedValues("Long", strings.Repeat("a", 256)), here()
 	refusalLines["long value"] = l
 	return []schema.Field{f}
+}
+
+type tbRfPGLongValue struct{ schema.Schema }
+
+func (tbRfPGLongValue) Fields() []schema.Field {
+	f, l := field.Enum("e").Values(strings.Repeat("b", 64)), here()
+	refusalLines["pg long value"] = l
+	return []schema.Field{f, field.Enum("ok").Values(strings.Repeat("é", 31) + "b")} // 63 bytes
 }
 
 type tbRfEnumType struct{ schema.Schema }
@@ -1081,22 +1088,25 @@ func TestTablesRefusals(t *testing.T) {
 		s      schema.Interface
 		where  string
 		reason string
+		also   velox.Dialect // another dialect that refuses the schema, in its own case
 	}{
-		{"partial", velox.MySQL, tbRfPartial{}, "index 0", "MySQL has no partial indexes (Where); drop Where or use a separate MySQL schema"},
-		{"text index", velox.MySQL, tbRfTextIndex{}, "index 0", "column bio is longtext on MySQL, which an index covers only by a prefix; give the field a MaxLen or a SchemaType"},
-		{"json unique", velox.MySQL, tbRfJSONUnique{}, `field "doc"`, "column doc is json on MySQL, which an index covers only by a prefix; give the field a MaxLen or a SchemaType"},
-		{"long value", velox.MySQL, tbRfLongValue{}, `field "e"`, "enum value 0 is 256 characters on MySQL, over its 255"},
-		{"mysql enum type", velox.MySQL, tbRfEnumType{}, `field "e"`, "its MySQL SchemaType int is not a string type"},
-		{"column comment", velox.MySQL, tbRfColumnComment{}, `field "s"`, "its comment is 1025 characters on MySQL, over its 1024"},
-		{"table comment", velox.MySQL, tbRfTableComment{}, "", "the table comment is 2049 characters on MySQL, over its 2048"},
-		{"pg enum type", velox.Postgres, tbRfPGEnumType{}, `field "e"`, "its PostgreSQL SchemaType integer is neither a string type nor an enum type name"},
-		{"pg enum name", velox.Postgres, tbRfPGEnumBadName{}, `field "e"`, "its PostgreSQL SchemaType My Mood is neither a string type nor an enum type name"},
-		{"nul default", velox.Postgres, tbRfNULDefault{}, `field "s"`, "PostgreSQL text cannot hold a NUL byte"},
-		{"nul value", velox.Postgres, tbRfNULValue{}, `field "e"`, "PostgreSQL text cannot hold a NUL byte"},
-		{"table in", velox.SQLite, tbRfTableIn{}, "", "schema.TableIn puts the table in database schema billing, which SQLite does not have"},
-		{"other", velox.MySQL, tbRfOther{}, `field "o"`, "an Other field needs a SchemaType for MySQL"},
-		{"id type", velox.MySQL, tbRfIDType{}, `field "id"`, "the ID is an integer, but its SchemaType varchar(20) is not an integer type on MySQL"},
-		{"sqlite id type", velox.SQLite, tbRfIDTypeSQLite{}, `field "id"`, "the ID is an integer, but its SchemaType text is not an integer type on SQLite"},
+		{"partial", velox.MySQL, tbRfPartial{}, "index 0", "MySQL has no partial indexes (Where); drop Where or use a separate MySQL schema", 0},
+		{"text index", velox.MySQL, tbRfTextIndex{}, "index 0", "column bio is longtext on MySQL, which an index covers only by a prefix; give the field a MaxLen or a SchemaType", 0},
+		{"json unique", velox.MySQL, tbRfJSONUnique{}, `field "doc"`, "column doc is json on MySQL, which an index covers only by a prefix; give the field a MaxLen or a SchemaType", 0},
+		{"long value", velox.MySQL, tbRfLongValue{}, `field "e"`, "enum value Long is 256 characters on MySQL, over its 255", velox.Postgres},
+		{"long value", velox.Postgres, tbRfLongValue{}, `field "e"`, "enum value Long is 256 bytes, over PostgreSQL's 63", velox.MySQL},
+		{"pg long value", velox.Postgres, tbRfPGLongValue{}, `field "e"`, `enum value "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb…" is 64 bytes, over PostgreSQL's 63`, 0},
+		{"mysql enum type", velox.MySQL, tbRfEnumType{}, `field "e"`, "its MySQL SchemaType int is not a string type; drop it to get an enum(…) column, or give a string type to get a CHECK constraint", 0},
+		{"column comment", velox.MySQL, tbRfColumnComment{}, `field "s"`, "its comment is 1025 characters on MySQL, over its 1024", 0},
+		{"table comment", velox.MySQL, tbRfTableComment{}, "", "the table comment is 2049 characters on MySQL, over its 2048", 0},
+		{"pg enum type", velox.Postgres, tbRfPGEnumType{}, `field "e"`, "integer is a built-in PostgreSQL type, not an enum type name", 0},
+		{"pg enum name", velox.Postgres, tbRfPGEnumBadName{}, `field "e"`, "My Mood is not a lower-case identifier", 0},
+		{"nul default", velox.Postgres, tbRfNULDefault{}, `field "s"`, "PostgreSQL text cannot hold a NUL byte", 0},
+		{"nul value", velox.Postgres, tbRfNULValue{}, `field "e"`, "PostgreSQL text cannot hold a NUL byte", 0},
+		{"table in", velox.SQLite, tbRfTableIn{}, "", "schema.TableIn puts the table in database schema billing, which SQLite does not have", 0},
+		{"other", velox.MySQL, tbRfOther{}, `field "o"`, "an Other field needs a SchemaType for MySQL", 0},
+		{"id type", velox.MySQL, tbRfIDType{}, `field "id"`, "the ID is an integer, but its SchemaType varchar(20) is not an integer type on MySQL; Tables makes the column an identity itself", 0},
+		{"sqlite id type", velox.SQLite, tbRfIDTypeSQLite{}, `field "id"`, "the ID is an integer, but its SchemaType text is not an integer type on SQLite; Tables makes the column an identity itself", 0},
 	} {
 		t.Run(c.line, func(t *testing.T) {
 			g := mustBuild(t, c.s)
@@ -1109,7 +1119,7 @@ func TestTablesRefusals(t *testing.T) {
 				t.Errorf("%v: pos %q, want line %d", c.d, e.Pos, line)
 			}
 			for _, d := range allDialects {
-				if d == c.d {
+				if d == c.d || d == c.also {
 					continue
 				}
 				if _, err := Tables(g, d); err != nil {
@@ -1126,6 +1136,9 @@ type tbRfOrderA struct{ schema.Schema }
 func (tbRfOrderA) Fields() []schema.Field {
 	return []schema.Field{field.Text("a").Unique(), field.String("b").Comment(strings.Repeat("c", 1025))}
 }
+func (tbRfOrderA) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("bs", tbRfOrderB.Type).Comment(strings.Repeat("c", 1025))}
+}
 func (tbRfOrderA) Indexes() []schema.Index {
 	return []schema.Index{index.Fields("b").Where("b <> ''")}
 }
@@ -1141,9 +1154,10 @@ func TestTablesRefusalsOrder(t *testing.T) {
 	}
 	got := plain(err)
 	want := strings.Join([]string{
-		`schema tbRfOrderA: field "b": its comment is 1025 characters on MySQL, over its 1024`,
-		`schema tbRfOrderA: index 0: MySQL has no partial indexes (Where); drop Where or use a separate MySQL schema`,
 		`schema tbRfOrderA: field "a": column a is longtext on MySQL, which an index covers only by a prefix; give the field a MaxLen or a SchemaType`,
+		`schema tbRfOrderA: field "b": its comment is 1025 characters on MySQL, over its 1024`,
+		`schema tbRfOrderA: edge "bs": its comment is 1025 characters on MySQL, over its 1024`,
+		`schema tbRfOrderA: index 0: MySQL has no partial indexes (Where); drop Where or use a separate MySQL schema`,
 		`schema tbRfOrderB: field "a": column a is longtext on MySQL, which an index covers only by a prefix; give the field a MaxLen or a SchemaType`,
 	}, "\n")
 	if got != want {
@@ -1242,5 +1256,204 @@ func TestTablesKeyLimit(t *testing.T) {
 	e = refusal(t, func() error { _, err := Tables(mustBuild(t, tbRfKeyMixed{}), velox.MySQL); return err }())
 	if e.Reason != "the key is 3081 bytes on MySQL, over its 3072" || e.Where != "index 1" {
 		t.Errorf("mixed key: %+v", e)
+	}
+}
+
+// An implicit foreign key's comment is its edge's, so a long one is the
+// edge's schema's error, at the edge.
+type tbRfFKCommentOwner struct{ schema.Schema }
+
+func (tbRfFKCommentOwner) Edges() []schema.Edge {
+	ed, l := edge.To("pets", tbRfFKCommentPet.Type).Comment(strings.Repeat("c", 1025)), here()
+	refusalLines["fk comment"] = l
+	return []schema.Edge{ed}
+}
+
+type tbRfFKCommentPet struct{ schema.Schema }
+
+func TestTablesRefusalsImplicitComment(t *testing.T) {
+	e := refusal(t, func() error {
+		_, err := Tables(mustBuild(t, tbRfFKCommentOwner{}, tbRfFKCommentPet{}), velox.MySQL)
+		return err
+	}())
+	if e.Schema != "tbRfFKCommentOwner" || e.Where != `edge "pets"` || e.Reason != "its comment is 1025 characters on MySQL, over its 1024" ||
+		!strings.HasSuffix(e.Pos, "tables_test.go:"+strconv.Itoa(refusalLines["fk comment"])) {
+		t.Errorf("error %+v", e)
+	}
+}
+
+// refusals is every *Error of err, a join.
+func refusals(t *testing.T, err error) []*Error {
+	t.Helper()
+	if err == nil {
+		t.Fatal("no error")
+	}
+	var out []*Error
+	for _, e := range err.(interface{ Unwrap() []error }).Unwrap() {
+		out = append(out, e.(*Error))
+	}
+	return out
+}
+
+// Primary keys and foreign-key indexes are keys too; a key refusal on a
+// foreign-key index is its edge's.
+type tbRfKeyRef struct{ schema.Schema }
+
+func (tbRfKeyRef) Fields() []schema.Field {
+	f, l := field.String("id").MaxLen(1000), here()
+	refusalLines["key ref id"] = l
+	return []schema.Field{f}
+}
+func (tbRfKeyRef) Edges() []schema.Edge {
+	ed, l := edge.To("kids", tbRfKeyKid.Type), here()
+	refusalLines["key ref kids"] = l
+	return []schema.Edge{ed}
+}
+
+type tbRfKeyKid struct{ schema.Schema }
+
+type tbRfTextRef struct{ schema.Schema }
+
+func (tbRfTextRef) Fields() []schema.Field {
+	f, l := field.Text("id"), here()
+	refusalLines["text ref id"] = l
+	return []schema.Field{f}
+}
+func (tbRfTextRef) Edges() []schema.Edge {
+	ed, l := edge.To("kids", tbRfTextKid.Type), here()
+	refusalLines["text ref kids"] = l
+	return []schema.Edge{ed}
+}
+
+type tbRfTextKid struct{ schema.Schema }
+
+type tbRfUniqueWide struct{ schema.Schema }
+
+func (tbRfUniqueWide) Fields() []schema.Field {
+	f, l := field.String("u").MaxLen(800).Unique(), here()
+	refusalLines["unique wide"] = l
+	return []schema.Field{f}
+}
+
+func TestTablesKeyRefusals(t *testing.T) {
+	type want struct{ schema, where, line, reason string }
+	for _, c := range []struct {
+		ss   []schema.Interface
+		want []want
+	}{
+		{[]schema.Interface{tbRfKeyRef{}, tbRfKeyKid{}}, []want{
+			{"tbRfKeyRef", `field "id"`, "key ref id", "the key is 4000 bytes on MySQL, over its 3072"},
+			{"tbRfKeyRef", `edge "kids"`, "key ref kids", "the key is 4000 bytes on MySQL, over its 3072"},
+		}},
+		{[]schema.Interface{tbRfTextRef{}, tbRfTextKid{}}, []want{
+			{"tbRfTextRef", `field "id"`, "text ref id", "column id is longtext on MySQL, which an index covers only by a prefix; give the field a MaxLen or a SchemaType"},
+			{"tbRfTextRef", `edge "kids"`, "text ref kids", "column tb_rf_text_ref_kids is longtext on MySQL, which an index covers only by a prefix; give the field a MaxLen or a SchemaType"},
+		}},
+		{[]schema.Interface{tbRfUniqueWide{}}, []want{
+			{"tbRfUniqueWide", `field "u"`, "unique wide", "the key is 3200 bytes on MySQL, over its 3072"},
+		}},
+	} {
+		g := mustBuild(t, c.ss...)
+		_, err := Tables(g, velox.MySQL)
+		got := refusals(t, err)
+		if len(got) != len(c.want) {
+			t.Fatalf("%d errors, want %d:\n%v", len(got), len(c.want), err)
+		}
+		for i, w := range c.want {
+			e := got[i]
+			if e.Schema != w.schema || e.Where != w.where || e.Reason != w.reason ||
+				!strings.HasSuffix(e.Pos, "tables_test.go:"+strconv.Itoa(refusalLines[w.line])) {
+				t.Errorf("error %d: %+v, want %+v at line %d", i, e, w, refusalLines[w.line])
+			}
+		}
+		for _, d := range []velox.Dialect{velox.Postgres, velox.SQLite} {
+			if _, err := Tables(g, d); err != nil {
+				t.Errorf("%v: %v", d, err)
+			}
+		}
+	}
+}
+
+// A join table's refusals are its assoc edge's: its key, and its row.
+type tbRfJoinUser struct{ schema.Schema }
+
+func (tbRfJoinUser) Fields() []schema.Field { return []schema.Field{field.String("id").MaxLen(700)} }
+func (tbRfJoinUser) Edges() []schema.Edge {
+	ed, l := edge.To("groups", tbRfJoinGroup.Type), here()
+	refusalLines["join groups"] = l
+	return []schema.Edge{ed}
+}
+
+type tbRfJoinGroup struct{ schema.Schema }
+
+func (tbRfJoinGroup) Fields() []schema.Field { return []schema.Field{field.String("id").MaxLen(100)} }
+func (tbRfJoinGroup) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("users", tbRfJoinUser.Type).Ref("groups")}
+}
+
+type tbRfJoinRowUser struct{ schema.Schema }
+
+func (tbRfJoinRowUser) Fields() []schema.Field {
+	return []schema.Field{field.String("id").MaxLen(9000)}
+}
+func (tbRfJoinRowUser) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("groups", tbRfJoinRowGroup.Type)}
+}
+
+type tbRfJoinRowGroup struct{ schema.Schema }
+
+func (tbRfJoinRowGroup) Fields() []schema.Field {
+	return []schema.Field{field.String("id").MaxLen(9000)}
+}
+func (tbRfJoinRowGroup) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("users", tbRfJoinRowUser.Type).Ref("groups")}
+}
+
+func TestTablesJoinTableRefusals(t *testing.T) {
+	// 700*4 + 100*4 is 3200 bytes; each ID alone fits.
+	e := refusal(t, func() error { _, err := Tables(mustBuild(t, tbRfJoinUser{}, tbRfJoinGroup{}), velox.MySQL); return err }())
+	if e.Schema != "tbRfJoinUser" || e.Where != `edge "groups"` || e.Reason != "the key is 3200 bytes on MySQL, over its 3072" ||
+		!strings.HasSuffix(e.Pos, "tables_test.go:"+strconv.Itoa(refusalLines["join groups"])) {
+		t.Errorf("join key: %+v", e)
+	}
+	// Each ID is over the key limit, and the join row is 2*36002 bytes.
+	_, err := Tables(mustBuild(t, tbRfJoinRowUser{}, tbRfJoinRowGroup{}), velox.MySQL)
+	var row *Error
+	for _, e := range refusals(t, err) {
+		if strings.HasPrefix(e.Reason, "MySQL rows hold") {
+			row = e
+		}
+	}
+	if row == nil || row.Schema != "tbRfJoinRowUser" || row.Where != `edge "groups"` ||
+		!strings.Contains(row.Reason, "these need 72004:") || !strings.Contains(row.Reason, `: column "tb_rf_join_row_group_id": varchar(9000), 36002 bytes`) {
+		t.Errorf("join row: %v", err)
+	}
+}
+
+// The length bytes: a varchar of 63 characters (252 bytes) has 1, of 64
+// (256 bytes) 2; and a row of 65536 bytes is refused.
+type tbRfRowBounds struct{ schema.Schema }
+
+func (tbRfRowBounds) Fields() []schema.Field {
+	return []schema.Field{field.String("a").MaxLen(16320), field.String("b").MaxLen(63), field.String("c").MaxLen(64)}
+}
+
+// 16320*4+2 + 253+1 is 65536 bytes.
+type tbRfRowOver struct{ schema.Schema }
+
+func (tbRfRowOver) Fields() []schema.Field {
+	return []schema.Field{field.String("a").MaxLen(16320), field.Bytes("b").MaxLen(253)}
+}
+
+func TestTablesRowLimitBounds(t *testing.T) {
+	e := refusal(t, func() error { _, err := Tables(mustBuild(t, tbRfRowBounds{}), velox.MySQL); return err }())
+	for _, s := range []string{"these need 65793:", `field "b": varchar(63), 253 bytes`, `field "c": varchar(64), 258 bytes`} {
+		if !strings.Contains(e.Reason, s) {
+			t.Errorf("reason lacks %q:\n%s", s, e.Reason)
+		}
+	}
+	e = refusal(t, func() error { _, err := Tables(mustBuild(t, tbRfRowOver{}), velox.MySQL); return err }())
+	if !strings.Contains(e.Reason, "these need 65536:") || !strings.Contains(e.Reason, `field "b": varbinary(253), 254 bytes`) {
+		t.Errorf("reason %s", e.Reason)
 	}
 }

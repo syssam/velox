@@ -50,7 +50,14 @@ func Tables(g *Graph, d velox.Dialect) (*migrate.Schema, error) {
 		slices.SortStableFunc(tb.Checks, func(a, b migrate.Check) int { return strings.Compare(a.Name, b.Name) })
 	}
 	if len(t.errs) > 0 {
-		return nil, errors.Join(t.errs...)
+		slices.SortStableFunc(t.errs, func(a, b refused) int {
+			return cmp.Or(strings.Compare(a.at.e.Name, b.at.e.Name), cmp.Compare(a.at.rank, b.at.rank), cmp.Compare(a.at.i, b.at.i))
+		})
+		errs := make([]error, len(t.errs))
+		for i, r := range t.errs {
+			errs[i] = r.err
+		}
+		return nil, errors.Join(errs...)
 	}
 	return s, nil
 }
@@ -62,7 +69,7 @@ type tabler struct {
 	fks      map[[3]string]foreignKey // by (schema, table, column)
 	enums    map[[2]string]bool       // the PostgreSQL enum types listed, by (schema, name)
 	enumList []migrate.Enum
-	errs     []error
+	errs     []refused
 }
 
 // comment is c, or "" on SQLite, which keeps no comments.
@@ -119,7 +126,7 @@ func (t *tabler) entity(e *Entity) migrate.Table {
 			Text string `json:"text"`
 		}
 		if err := json.Unmarshal(raw, &c); err != nil {
-			t.errs = append(t.errs, &Error{Pos: tb.Pos, Schema: e.Name, Reason: "its Comment annotation is not a comment: " + err.Error()})
+			t.fail(place{e, rankTable, 0, loc{pos: tb.Pos}}, "its Comment annotation is not a comment: %v", err)
 		}
 		tb.Comment = t.comment(c.Text)
 	}
@@ -128,10 +135,10 @@ func (t *tabler) entity(e *Entity) migrate.Table {
 	}
 
 	var keys [][]string // the leading columns of the non-partial indexes, for fkIndexed
-	var at []loc        // the element that makes each index, for the checks
+	var at []place      // the element that makes each index, for the checks
 	for i, ix := range e.Indexes {
 		tb.Indexes = append(tb.Indexes, migrate.Index{Name: ix.Name, Columns: slices.Clone(ix.Columns), Unique: ix.Unique, Where: ix.Where, Pos: ix.Pos})
-		at = append(at, indexLoc(i, ix))
+		at = append(at, place{e, rankIndex, i, indexLoc(i, ix)})
 		if ix.Where == "" {
 			keys = append(keys, ix.Columns)
 		}
@@ -139,7 +146,7 @@ func (t *tabler) entity(e *Entity) migrate.Table {
 	ixs, fs := fieldIndexes(e, nil)
 	for i, ix := range ixs {
 		tb.Indexes = append(tb.Indexes, migrate.Index{Name: ix.Name, Columns: ix.Columns, Unique: true, Pos: fs[i].Pos})
-		at = append(at, fieldLoc(fs[i]))
+		at = append(at, place{e, rankField, slices.Index(e.Fields, fs[i]), fieldLoc(fs[i])})
 		keys = append(keys, ix.Columns)
 	}
 	for _, f := range e.Fields {
@@ -148,7 +155,7 @@ func (t *tabler) entity(e *Entity) migrate.Table {
 			continue
 		}
 		if t.foreignKey(&tb, fk, keys) {
-			at = append(at, edgeLoc(fk.Edge))
+			at = append(at, edgePlace(fk.Owner, fk.Edge))
 		}
 	}
 	t.check(e, &tb, at)
@@ -173,6 +180,7 @@ func (t *tabler) joinTable(jt joinTable) migrate.Table {
 			t.foreignKey(&tb, fk, nil)
 		}
 	}
+	t.checkJoin(&tb, edgePlace(jt.Owner, jt.Edge))
 	return tb
 }
 

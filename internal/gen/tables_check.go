@@ -4,22 +4,25 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/internal/ddl"
+	"github.com/syssam/velox2/internal/gen/loadjson"
 	"github.com/syssam/velox2/migrate"
 )
 
-// MySQL's limits.
+// MySQL's limits, and PostgreSQL's.
 const (
 	mysqlKeyBytes      = 3072
 	mysqlRowBytes      = 65535
 	mysqlEnumChars     = 255
 	mysqlColumnComment = 1024
 	mysqlTableComment  = 2048
+	pgEnumBytes        = 63 // an enum label's
 )
 
 // dialectName is d as its users write it.
@@ -33,88 +36,165 @@ func dialectName(d velox.Dialect) string {
 	return "SQLite"
 }
 
-// check records what tb, the table of e, holds that the dialect cannot: the
-// table's, then each column's, then each index's, then the row's. at is the
-// element that makes each of tb's indexes.
-func (t *tabler) check(e *Entity, tb *migrate.Table, at []loc) {
-	fail := func(l loc, format string, args ...any) {
-		t.errs = append(t.errs, &Error{Pos: l.pos, Schema: e.Name, Where: l.where, Reason: fmt.Sprintf(format, args...)})
-	}
-	table := loc{pos: tb.Pos}
+// The ranks of a schema's elements, in the order Tables reports their errors.
+const (
+	rankTable = iota
+	rankField
+	rankEdge
+	rankIndex
+	rankRow
+)
+
+// place is where an error goes: the schema e, the rank and the i-th element
+// of that rank, and the element's loc.
+type place struct {
+	e       *Entity
+	rank, i int
+	loc     loc
+}
+
+// refused is an error and its place, which orders it.
+type refused struct {
+	at  place
+	err *Error
+}
+
+// edgePlace is the place of e's edge ed.
+func edgePlace(e *Entity, ed *Edge) place {
+	return place{e, rankEdge, slices.Index(e.Edges, ed), edgeLoc(ed)}
+}
+
+// fail records an error at p.
+func (t *tabler) fail(p place, format string, args ...any) {
+	t.errs = append(t.errs, refused{p, &Error{Pos: p.loc.pos, Schema: p.e.Name, Where: p.loc.where, Reason: fmt.Sprintf(format, args...)}})
+}
+
+// check records what tb, the table of e, holds that the dialect cannot. at is
+// the place of each of tb's indexes. Tables orders the errors of a schema:
+// the table's, then each field's (its column's, then its Unique index's),
+// then each edge's (its foreign key's column and index, or its join table's),
+// then each declared index's, then the row's.
+func (t *tabler) check(e *Entity, tb *migrate.Table, at []place) {
+	table := place{e, rankTable, 0, loc{pos: tb.Pos}}
 	if t.d == velox.SQLite && e.TableSchema != "" {
-		fail(table, "schema.TableIn puts the table in database schema %s, which SQLite does not have", e.TableSchema)
+		t.fail(table, "schema.TableIn puts the table in database schema %s, which SQLite does not have", e.TableSchema)
 	}
 	if n := utf8.RuneCountInString(tb.Comment); t.d == velox.MySQL && n > mysqlTableComment {
-		fail(table, "the table comment is %d characters on MySQL, over its %d", n, mysqlTableComment)
+		t.fail(table, "the table comment is %d characters on MySQL, over its %d", n, mysqlTableComment)
 	}
 	for i, f := range e.Fields {
-		t.checkColumn(i, f, &tb.Columns[i], fail)
+		t.checkColumn(e, i, f, &tb.Columns[i])
 	}
 	if t.d != velox.MySQL {
 		return
 	}
+	t.checkKey(tb, tb.PrimaryKey, place{e, rankField, 0, fieldLoc(e.Fields[0])})
 	for i, ix := range tb.Indexes {
 		if ix.Where != "" {
-			fail(at[i], "MySQL has no partial indexes (Where); drop Where or use a separate MySQL schema")
+			t.fail(at[i], "MySQL has no partial indexes (Where); drop Where or use a separate MySQL schema")
 		}
-		n := 0
-		for _, c := range ix.Columns {
-			typ := columnType(tb, c)
-			if mysqlExprDefault[typ] {
-				fail(at[i], "column %s is %s on MySQL, which an index covers only by a prefix; give the field a MaxLen or a SchemaType", c, typ)
-			}
-			n += mysqlKeySize(typ)
-		}
-		if n > mysqlKeyBytes {
-			fail(at[i], "the key is %d bytes on MySQL, over its %d", n, mysqlKeyBytes)
-		}
+		t.checkKey(tb, ix.Columns, at[i])
 	}
-	t.checkRow(e, tb, fail)
+	file := tb.Pos
+	if i := strings.LastIndexByte(file, ':'); i >= 0 {
+		file = file[:i]
+	}
+	t.checkRow(tb, place{e, rankRow, 0, loc{pos: file}}, func(i int) string { return fieldAt(e.Fields[i].Name) })
 }
 
-// checkColumn records what the column c of f, the i-th field, holds that the
-// dialect cannot.
-func (t *tabler) checkColumn(i int, f *Field, c *migrate.Column, fail func(loc, string, ...any)) {
-	at := fieldLoc(f)
+// checkJoin records what the join table tb holds that MySQL cannot, at the
+// place of its assoc edge: its key and its row.
+func (t *tabler) checkJoin(tb *migrate.Table, at place) {
+	if t.d != velox.MySQL {
+		return
+	}
+	t.checkKey(tb, tb.PrimaryKey, at)
+	t.checkRow(tb, at, func(i int) string { return fmt.Sprintf("column %q", tb.Columns[i].Name) })
+}
+
+// checkKey records a MySQL key over tb's columns cols that holds a column
+// an index covers only by a prefix, or that is over 3072 bytes.
+func (t *tabler) checkKey(tb *migrate.Table, cols []string, at place) {
+	n := 0
+	for _, c := range cols {
+		typ := columnType(tb, c)
+		if mysqlExprDefault[typ] {
+			t.fail(at, "column %s is %s on MySQL, which an index covers only by a prefix; give the field a MaxLen or a SchemaType", c, typ)
+		}
+		n += mysqlKeySize(typ)
+	}
+	if n > mysqlKeyBytes {
+		t.fail(at, "the key is %d bytes on MySQL, over its %d", n, mysqlKeyBytes)
+	}
+}
+
+// checkColumn records what the column c of e's field f, the i-th, holds that
+// the dialect cannot.
+func (t *tabler) checkColumn(e *Entity, i int, f *Field, c *migrate.Column) {
+	at := place{e, rankField, i, fieldLoc(f)}
 	st := f.SchemaType[t.d.String()]
 	if f.Type == "other" && st == "" {
-		fail(at, "an Other field needs a SchemaType for %s", dialectName(t.d))
+		t.fail(at, "an Other field needs a SchemaType for %s", dialectName(t.d))
 	}
 	if i == 0 && integer(f.Type) && st != "" && !integerType(t.d, ddl.NormalizeType(t.d, st)) {
-		fail(at, "the ID is an integer, but its SchemaType %s is not an integer type on %s", st, dialectName(t.d))
+		t.fail(at, "the ID is an integer, but its SchemaType %s is not an integer type on %s; Tables makes the column an identity itself", st, dialectName(t.d))
 	}
 	switch t.d {
 	case velox.Postgres:
-		if f.Type == "enum" && st != "" && !ddl.StringType(t.d, st) && !pgTypeName(st) {
-			fail(at, "its PostgreSQL SchemaType %s is neither a string type nor an enum type name", st)
+		if f.Type == "enum" && st != "" && !ddl.StringType(t.d, st) {
+			switch {
+			case !pgIdent.MatchString(st):
+				t.fail(at, "SchemaType %s is not a lower-case identifier", st)
+			case pgBuiltin[st]:
+				t.fail(at, "SchemaType %s is a built-in PostgreSQL type, not an enum type name", st)
+			}
+		}
+		if _, native := enumType(e, f); f.Type == "enum" && native {
+			for _, v := range f.Enums {
+				if n := len(v.Value); n > pgEnumBytes {
+					t.fail(at, "enum value %s is %d bytes, over PostgreSQL's %d", enumValueName(v), n, pgEnumBytes)
+				}
+			}
 		}
 		if hasNUL(f) {
-			fail(at, "PostgreSQL text cannot hold a NUL byte")
+			t.fail(at, "PostgreSQL text cannot hold a NUL byte")
 		}
 	case velox.MySQL:
 		if f.Type == "enum" {
-			for j, v := range f.Enums {
+			for _, v := range f.Enums {
 				if n := utf8.RuneCountInString(v.Value); n > mysqlEnumChars {
-					fail(at, "enum value %d is %d characters on MySQL, over its %d", j, n, mysqlEnumChars)
+					t.fail(at, "enum value %s is %d characters on MySQL, over its %d", enumValueName(v), n, mysqlEnumChars)
 				}
 			}
 			if st != "" && !ddl.StringType(t.d, st) {
-				fail(at, "its MySQL SchemaType %s is not a string type; drop it for an enum(…) column, or give a string type for a check", st)
+				t.fail(at, "its MySQL SchemaType %s is not a string type; drop it to get an enum(…) column, or give a string type to get a CHECK constraint", st)
 			}
 		}
 		if n := utf8.RuneCountInString(c.Comment); n > mysqlColumnComment {
-			if f.Implicit != "" {
-				at = loc{edgeAt(f.Implicit), c.Pos} // the comment is its edge's
+			if fk, ok := t.fks[[3]string{e.TableSchema, e.Table, f.Column}]; ok && f.Implicit != "" {
+				at = edgePlace(fk.Owner, fk.Edge) // the comment is its edge's
 			}
-			fail(at, "its comment is %d characters on MySQL, over its %d", n, mysqlColumnComment)
+			t.fail(at, "its comment is %d characters on MySQL, over its %d", n, mysqlColumnComment)
 		}
 	}
 }
 
-// checkRow records a MySQL row whose varchar and varbinary columns need more
-// than MySQL's 65535 bytes, counting 4 bytes per varchar character and each
-// column's 1 or 2 length bytes.
-func (t *tabler) checkRow(e *Entity, tb *migrate.Table, fail func(loc, string, ...any)) {
+// enumValueName names the enum value v in an error: its Go name when
+// NamedValues gave one, else its value, quoted and cut to 32 characters.
+func enumValueName(v loadjson.Enum) string {
+	if v.Name != v.Value {
+		return v.Name
+	}
+	if r := []rune(v.Value); len(r) > 32 {
+		return strconv.Quote(string(r[:32]) + "…")
+	}
+	return strconv.Quote(v.Value)
+}
+
+// checkRow records a MySQL row of tb whose varchar and varbinary columns need
+// more than MySQL's 65535 bytes, counting 4 bytes per varchar character and
+// each column's 1 or 2 length bytes. name names the i-th column's element.
+func (t *tabler) checkRow(tb *migrate.Table, at place, name func(i int) string) {
 	total := 0
 	var lines []string
 	for i, c := range tb.Columns {
@@ -131,17 +211,12 @@ func (t *tabler) checkRow(e *Entity, tb *migrate.Table, fail func(loc, string, .
 			n += 2
 		}
 		total += n
-		lines = append(lines, fmt.Sprintf("  %s: %s: %s, %d bytes", c.Pos, fieldAt(e.Fields[i].Name), c.Type, n))
+		lines = append(lines, fmt.Sprintf("  %s: %s: %s, %d bytes", c.Pos, name(i), c.Type, n))
 	}
-	if total <= mysqlRowBytes {
-		return
+	if total > mysqlRowBytes {
+		t.fail(at, "MySQL rows hold at most %d bytes in varchar and varbinary columns; these need %d:\n%s\n  use Text() or a smaller MaxLen",
+			mysqlRowBytes, total, strings.Join(lines, "\n"))
 	}
-	file := tb.Pos
-	if i := strings.LastIndexByte(file, ':'); i >= 0 {
-		file = file[:i]
-	}
-	fail(loc{pos: file}, "MySQL rows hold at most %d bytes in varchar and varbinary columns; these need %d:\n%s\n  use Text() or a smaller MaxLen",
-		mysqlRowBytes, total, strings.Join(lines, "\n"))
 }
 
 // columnType is the type of tb's column name.
@@ -221,10 +296,6 @@ var pgBuiltin = map[string]bool{
 	"varchar": true, "char": true, "int4": true, "int8": true, "float8": true, "bool": true,
 	"timestamptz": true, "decimal": true, "int": true,
 }
-
-// pgTypeName reports whether st names an enum type of its own on PostgreSQL:
-// a lower-case identifier that is not a built-in type.
-func pgTypeName(st string) bool { return pgIdent.MatchString(st) && !pgBuiltin[st] }
 
 // hasNUL reports whether f's string or enum default, or one of its enum
 // values, holds a NUL byte.
