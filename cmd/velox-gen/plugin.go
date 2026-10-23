@@ -10,12 +10,12 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
-	"runtime/debug"
 	"slices"
 	"strconv"
 	"strings"
 	"unicode"
 
+	"github.com/syssam/velox2/internal/buildinfo"
 	"github.com/syssam/velox2/internal/gen"
 	"github.com/syssam/velox2/plugin"
 )
@@ -68,26 +68,7 @@ func (p *pluginFlag) Set(raw string) error {
 
 // generator is Request.Generator: velox-gen and the version of the velox2
 // module it is built from, "(devel)" when the build does not say.
-func generator() string {
-	v := ""
-	if bi, ok := debug.ReadBuildInfo(); ok {
-		if bi.Main.Path == veloxPath {
-			v = bi.Main.Version
-		}
-		for _, d := range bi.Deps {
-			if d.Path == veloxPath {
-				v = d.Version
-				if d.Replace != nil && d.Replace.Version != "" {
-					v = d.Replace.Version
-				}
-			}
-		}
-	}
-	if v == "" {
-		v = "(devel)"
-	}
-	return "velox-gen " + v
-}
+func generator() string { return buildinfo.Generator() }
 
 // runPlugins runs each plugin, in order, as "go tool name" in modDir with the
 // request, and its options, on its standard input, and returns their files by

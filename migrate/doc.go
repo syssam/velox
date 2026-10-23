@@ -42,7 +42,7 @@
 //     not an identifier of at most 63 bytes, a lock timeout that is not a
 //     duration or is negative.
 //   - "directory": ReadDir was given a directory that does not hang
-//     together: two files of one version, schema.json missing beside files,
+//     together: a velox.json key given twice or null, two files of one version, schema.json missing beside files,
 //     present beside none, or of another dialect, or a file that cannot be
 //     read; or Dir.Add was given a plan with no script, a schema of another
 //     dialect, or a name outside a-z, 0-9 and _ or over 40 bytes.

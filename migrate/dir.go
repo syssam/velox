@@ -6,15 +6,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"maps"
 	"regexp"
-	"runtime/debug"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/syssam/velox2"
+	"github.com/syssam/velox2/internal/buildinfo"
 )
 
 // Config is a directory's settings, the content of velox.json.
@@ -97,15 +98,55 @@ func (c Config) marshal() []byte {
 	return append(b, '\n')
 }
 
+// configKeys is the members of velox.json's object. It refuses what is not
+// one object, a key given twice and a null value.
+func configKeys(data []byte) (map[string]json.RawMessage, error) {
+	bad := func(code, format string, args ...any) error {
+		return &Error{Code: code, Pos: "velox.json", Reason: fmt.Sprintf(format, args...)}
+	}
+	dec := json.NewDecoder(bytes.NewReader(data))
+	if tok, err := dec.Token(); err != nil {
+		return nil, bad("config", "%v", err)
+	} else if tok != json.Delim('{') {
+		return nil, bad("config", "the content is not a JSON object")
+	}
+	out := map[string]json.RawMessage{}
+	for dec.More() {
+		tok, err := dec.Token()
+		if err != nil {
+			return nil, bad("config", "%v", err)
+		}
+		key := tok.(string)
+		var v json.RawMessage
+		if err := dec.Decode(&v); err != nil {
+			return nil, bad("config", "%s: %v", key, err)
+		}
+		switch _, dup := out[key]; {
+		case dup:
+			return nil, bad("directory", "the key %q is given twice", key)
+		case string(v) == "null":
+			return nil, bad("directory", "the key %q is null; leave it out for its default", key)
+		}
+		out[key] = v
+	}
+	if _, err := dec.Token(); err != nil { // the closing brace
+		return nil, bad("config", "%v", err)
+	}
+	if _, err := dec.Token(); err != io.EOF {
+		return nil, bad("config", "text after the JSON object")
+	}
+	return out, nil
+}
+
 // parseConfig reads velox.json: the version and the dialect are required, an
 // unknown key is an error, and the table and lock timeout default.
 func parseConfig(data []byte) (Config, error) {
 	bad := func(format string, args ...any) error {
 		return &Error{Code: "config", Pos: "velox.json", Reason: fmt.Sprintf(format, args...)}
 	}
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return Config{}, bad("%v", err)
+	raw, err := configKeys(bytes.TrimPrefix(data, bom))
+	if err != nil {
+		return Config{}, err
 	}
 	for _, k := range slices.Sorted(maps.Keys(raw)) {
 		switch k {
@@ -162,7 +203,7 @@ func parseConfig(data []byte) (Config, error) {
 		}
 		c.LockTimeout = t
 	}
-	c, err := c.check(false)
+	c, err = c.check(false)
 	if err != nil {
 		e := err.(*Error)
 		e.Pos = "velox.json"
@@ -277,7 +318,7 @@ func ReadDir(fsys fs.FS) (*Dir, error) {
 		return nil, &Error{Code: "directory", Pos: "schema.json", Reason: "the directory has no migration files, so it has no snapshot"}
 	case haveSnap:
 		var s Schema
-		if err := s.UnmarshalJSON(snap); err != nil {
+		if err := s.UnmarshalJSON(bytes.TrimPrefix(snap, bom)); err != nil {
 			return nil, err
 		}
 		if s.Dialect != cfg.Dialect {
@@ -304,27 +345,7 @@ func ReadDir(fsys fs.FS) (*Dir, error) {
 // generator is "velox-gen" and the version of the velox2 module the program
 // is built from, "(devel)" when the build does not say, as velox-gen version
 // prints it.
-func generator() string {
-	const modulePath = "github.com/syssam/velox2"
-	v := ""
-	if bi, ok := debug.ReadBuildInfo(); ok {
-		if bi.Main.Path == modulePath {
-			v = bi.Main.Version
-		}
-		for _, d := range bi.Deps {
-			if d.Path == modulePath {
-				v = d.Version
-				if d.Replace != nil && d.Replace.Version != "" {
-					v = d.Replace.Version
-				}
-			}
-		}
-	}
-	if v == "" {
-		v = "(devel)"
-	}
-	return "velox-gen " + v
-}
+func generator() string { return buildinfo.Generator() }
 
 // maxName is the longest name of a plan's files.
 const maxName = 40
@@ -332,8 +353,9 @@ const maxName = 40
 // fileLabel is a plan file's name beyond its version.
 var fileLabel = regexp.MustCompile(`^[a-z0-9_]+$`)
 
-// defaultName is a plan's file name when Add is given none: the first change's
-// kind up to its first "-", its table ("<schema>_<name>" when qualified), and
+// defaultName is a plan's file name when Add is given none: the kind of the
+// first change that is not about an enum type (the first change when all are),
+// up to its first "-", its table ("<schema>_<name>" when qualified), and
 // for a column change the column: create_users, add_users_email,
 // drop_posts_legacy. It is lower-cased with every other byte an underscore,
 // cut to 40 bytes with no trailing underscore.
@@ -342,6 +364,12 @@ func defaultName(changes []Change) string {
 		return ""
 	}
 	c := changes[0]
+	for _, ch := range changes {
+		if !strings.HasSuffix(string(ch.Kind()), "-enum") {
+			c = ch
+			break
+		}
+	}
 	kind, _, _ := strings.Cut(string(c.Kind()), "-")
 	parts := []string{kind}
 	if t := c.Target(); t.Schema != "" {
@@ -388,7 +416,9 @@ func header() string {
 // file starts with a header line saying velox-gen wrote it, then the script as
 // Render wrote it, but an enum script without a lock timeout of its own takes
 // the Config's: it runs outside a transaction, where nothing else would
-// bound its wait.
+// bound its wait. A Config lock timeout of 0s still writes
+// "-- velox:lock-timeout 0s" into the enum file, which turns the timeout off
+// explicitly.
 //
 // Add refuses, with an *Error of Code "directory", a nil plan or one with no
 // script, a schema of another dialect than the directory's, and a name that

@@ -633,6 +633,9 @@ func TestDefaultName(t *testing.T) {
 		{"capitals and dashes", []migrate.Change{migrate.CreateTable{Table: migrate.Table{Name: "Users-X"}}}, "create_users_x"},
 		{"drop-table", []migrate.Change{migrate.DropTable{Table: migrate.Table{Name: "posts"}}}, "drop_posts"},
 		{"rename-column", []migrate.Change{migrate.RenameColumn{Table: users, From: "a", To: "b"}}, "rename_users_b"},
+		{"enum then table", []migrate.Change{migrate.CreateEnum{Enum: migrate.Enum{Name: "role"}}, migrate.CreateTable{Table: migrate.Table{Name: "orgs"}}}, "create_orgs"},
+		{"enum then column", []migrate.Change{migrate.AlterEnum{To: migrate.Enum{Name: "role"}}, migrate.CreateEnum{Enum: migrate.Enum{Name: "x"}}, migrate.AddColumn{Table: users, Column: migrate.Column{Name: "age"}}}, "add_users_age"},
+		{"enums only", []migrate.Change{migrate.AlterEnum{To: migrate.Enum{Name: "role"}}, migrate.CreateEnum{Enum: migrate.Enum{Name: "x"}}}, "alter_role"},
 		{"create-enum", []migrate.Change{migrate.CreateEnum{Enum: migrate.Enum{Name: "role"}}}, "create_role"},
 		{"set-table-comment", []migrate.Change{migrate.SetTableComment{Table: users}}, "set_users"},
 		{"non-ASCII", []migrate.Change{migrate.CreateTable{Table: migrate.Table{Name: "café"}}}, "create_caf"},
@@ -822,5 +825,41 @@ func TestDirOfSteps(t *testing.T) {
 	}
 	if !slices.Equal(paths, []string{"0001_hand.sql", "0002_create_orgs.sql", "0009_backfill.sql"}) || !dir.Snapshot.Equal(to) {
 		t.Errorf("paths = %v", paths)
+	}
+}
+
+func TestConfigStrict(t *testing.T) {
+	for _, c := range []struct{ name, json, key string }{
+		{"duplicate table", `{"version":1,"dialect":"postgres","table":"a","table":"b"}`, "table"},
+		{"duplicate version", `{"version":1,"version":1,"dialect":"postgres"}`, "version"},
+		{"null table", `{"version":1,"dialect":"postgres","table":null}`, "table"},
+		{"null lock_timeout", `{"version":1,"dialect":"postgres","lock_timeout":null}`, "lock_timeout"},
+		{"null version", `{"version":null,"dialect":"postgres"}`, "version"},
+	} {
+		_, err := migrate.ReadDir(sumFS(t, map[string]string{"velox.json": c.json}))
+		e := asError(t, err, "directory")
+		if !strings.Contains(err.Error(), `"`+c.key+`"`) || e.Pos != "velox.json" {
+			t.Errorf("%s: %v", c.name, err)
+		}
+	}
+	// Trailing text is still refused.
+	_, err := migrate.ReadDir(sumFS(t, map[string]string{"velox.json": velox0 + `{}`}))
+	_ = asError(t, err, "config")
+}
+
+// TestJSONFilesBOM: a byte order mark does not stop velox.json or schema.json
+// from being read, as velox.sum already ignores it.
+func TestJSONFilesBOM(t *testing.T) {
+	const bom = "\xEF\xBB\xBF"
+	got, err := migrate.ReadDir(sumFS(t, map[string]string{
+		"velox.json":  bom + `{"version":1,"dialect":"postgres","table":"m"}`,
+		"schema.json": bom + schemaPg,
+		"0001_a.sql":  createA,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Config.Table != "m" || len(got.Files) != 1 || !got.Snapshot.Equal(&migrate.Schema{Dialect: velox.Postgres}) {
+		t.Errorf("Config = %+v, Files = %d, Snapshot = %+v", got.Config, len(got.Files), got.Snapshot)
 	}
 }

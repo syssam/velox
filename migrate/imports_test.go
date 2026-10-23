@@ -9,8 +9,8 @@ import (
 	"testing"
 )
 
-// TestImports: the package imports the standard library, the root package and
-// internal/ddl, and nothing else, so a tool that reads a snapshot links no
+// TestImports: the package imports the standard library, the root package,
+// internal/ddl and internal/buildinfo, and nothing else, so a tool that reads a snapshot links no
 // driver and no generator.
 func TestImports(t *testing.T) {
 	files, err := filepath.Glob("*.go")
@@ -31,7 +31,7 @@ func TestImports(t *testing.T) {
 		for _, imp := range f.Imports {
 			path, _ := strconv.Unquote(imp.Path.Value)
 			switch {
-			case path == "github.com/syssam/velox2", path == "github.com/syssam/velox2/internal/ddl":
+			case path == "github.com/syssam/velox2", path == "github.com/syssam/velox2/internal/ddl", path == "github.com/syssam/velox2/internal/buildinfo":
 			case !strings.Contains(strings.SplitN(path, "/", 2)[0], "."):
 			default:
 				t.Errorf("%s imports %s", name, path)
