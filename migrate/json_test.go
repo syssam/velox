@@ -252,3 +252,18 @@ func TestSnapshotMarshalsValues(t *testing.T) {
 		t.Errorf("field: the round trip gives %v", err)
 	}
 }
+
+func TestSnapshotRefusesDuplicates(t *testing.T) {
+	for _, c := range []struct{ json, text string }{
+		{`{"version":1,"dialect":"sqlite","tables":[{"name":"t"},{"name":"t"}]}`, "migrate: t: schema.json has the table twice"},
+		{`{"version":1,"dialect":"mysql","tables":[{"name":"t","columns":[{"name":"a","type":"int"},{"name":"a","type":"int"}]}]}`,
+			`migrate: t: schema.json has the column "a" twice`},
+		{`{"version":1,"dialect":"postgres","enums":[{"name":"e"},{"name":"e"}]}`, "migrate: e: schema.json has the enum type twice"},
+	} {
+		var s Schema
+		err := s.UnmarshalJSON([]byte(c.json))
+		if e, ok := err.(*Error); !ok || e.Code != "schema" || err.Error() != c.text {
+			t.Errorf("%s: %v, want %s", c.json, err, c.text)
+		}
+	}
+}

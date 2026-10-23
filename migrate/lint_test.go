@@ -660,3 +660,14 @@ func TestLintVolatileDefaultIsPostgresOnly(t *testing.T) {
 		}
 	}
 }
+
+func TestLintNilChange(t *testing.T) {
+	for _, d := range []velox.Dialect{velox.Postgres, velox.MySQL, velox.SQLite} {
+		s := &migrate.Schema{Dialect: d, Tables: []migrate.Table{{Name: "t", Columns: []migrate.Column{{Name: "a", Type: "text"}}}}}
+		drop := migrate.DropColumn{Table: migrate.TableRef{Name: "t"}, Column: s.Tables[0].Columns[0]}
+		fs := migrate.Lint(s, []migrate.Change{nil, drop})
+		if slices.ContainsFunc(fs, func(f migrate.Finding) bool { return f.Change == 0 }) || !slices.ContainsFunc(fs, func(f migrate.Finding) bool { return f.Change == 1 }) {
+			t.Errorf("%v: %+v", d, fs)
+		}
+	}
+}

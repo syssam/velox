@@ -93,7 +93,8 @@ func Blocked(findings []Finding, allow []Allow) []Finding {
 // Lint classifies changes, the output of Diff from from. Each change gets at
 // most one finding of each code, in the order of the changes; a change with
 // no finding is safe. The table of a change counts as existing when from has
-// it, or it renames one of from's. Lint does not change from or the changes.
+// it, or it renames one of from's. A nil change gets no finding; Render
+// refuses it. Lint does not change from or the changes.
 func Lint(from *Schema, changes []Change) []Finding {
 	return lintChanges(from, changes).out
 }
@@ -113,7 +114,9 @@ func lintChanges(from *Schema, changes []Change) *linter {
 	}
 	l.scan()
 	for i, c := range changes {
-		l.change(i, c)
+		if c != nil {
+			l.change(i, c)
+		}
 	}
 	return l
 }
@@ -182,7 +185,7 @@ func (l *linter) scan() {
 	}
 	if l.d == velox.SQLite {
 		for i, c := range l.cs {
-			if l.rebuilds(c) {
+			if c != nil && l.rebuilds(c) {
 				l.rebuild[i] = true
 				l.rebuilt[l.canon(c.Target())] = true
 			}

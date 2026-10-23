@@ -2,6 +2,7 @@ package migrate
 
 import (
 	"cmp"
+	"fmt"
 	"slices"
 
 	"github.com/syssam/velox2"
@@ -198,4 +199,58 @@ func (s *Schema) sort() {
 		slices.SortStableFunc(t.ForeignKeys, func(a, b ForeignKey) int { return cmp.Compare(a.Name, b.Name) })
 		slices.SortStableFunc(t.Checks, func(a, b Check) int { return cmp.Compare(a.Name, b.Name) })
 	}
+}
+
+// validate refuses a schema no database has: an unknown dialect ("dialect"),
+// or a table, an enum type, or a table's column, index or constraint (a
+// foreign key or check) listed twice ("schema"). name says which schema it
+// is in the error.
+func (s *Schema) validate(name string) error {
+	if !knownDialect(s.Dialect) {
+		return &Error{Code: "dialect", Reason: fmt.Sprintf("%s has the unknown dialect %q", name, s.Dialect.String())}
+	}
+	twice := func(object, format string, args ...any) error {
+		return &Error{Code: "schema", Object: object, Reason: name + " has " + fmt.Sprintf(format, args...) + " twice"}
+	}
+	tables := map[TableRef]bool{}
+	for _, t := range s.Tables {
+		ref := t.Ref()
+		if tables[ref] {
+			return twice(ref.String(), "the table")
+		}
+		tables[ref] = true
+		cols, ixs, cons := map[string]bool{}, map[string]bool{}, map[string]bool{}
+		for _, c := range t.Columns {
+			if cols[c.Name] {
+				return twice(ref.String(), "the column %q", c.Name)
+			}
+			cols[c.Name] = true
+		}
+		for _, ix := range t.Indexes {
+			if ixs[ix.Name] {
+				return twice(ref.String(), "the index %q", ix.Name)
+			}
+			ixs[ix.Name] = true
+		}
+		for _, fk := range t.ForeignKeys {
+			if cons[fk.Name] {
+				return twice(ref.String(), "the constraint %q", fk.Name)
+			}
+			cons[fk.Name] = true
+		}
+		for _, ck := range t.Checks {
+			if cons[ck.Name] {
+				return twice(ref.String(), "the constraint %q", ck.Name)
+			}
+			cons[ck.Name] = true
+		}
+	}
+	enums := map[TableRef]bool{}
+	for _, e := range s.Enums {
+		if enums[e.ref()] {
+			return twice(e.ref().String(), "the enum type")
+		}
+		enums[e.ref()] = true
+	}
+	return nil
 }

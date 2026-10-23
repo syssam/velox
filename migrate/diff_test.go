@@ -625,3 +625,50 @@ func TestDiffErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestDiffValidates(t *testing.T) {
+	ok := func() *migrate.Schema {
+		return &migrate.Schema{Dialect: velox.Postgres, Tables: []migrate.Table{{
+			Name:        "users",
+			Columns:     []migrate.Column{{Name: "id", Type: "bigint"}, {Name: "org_id", Type: "bigint"}},
+			PrimaryKey:  []string{"id"},
+			Indexes:     []migrate.Index{{Name: "users_org_id_idx", Columns: []string{"org_id"}}},
+			ForeignKeys: []migrate.ForeignKey{{Name: "users_org_id_fkey", Columns: []string{"org_id"}, RefTable: migrate.TableRef{Name: "users"}, RefColumns: []string{"id"}}},
+			Checks:      []migrate.Check{{Name: "users_id_check", Expr: `"id" > 0`}},
+		}}, Enums: []migrate.Enum{{Name: "mood", Values: []string{"a"}}}}
+	}
+	for _, c := range []struct {
+		name  string
+		spoil func(s *migrate.Schema)
+		code  string
+		text  string
+	}{
+		{"dialect", func(s *migrate.Schema) { s.Dialect = 0 }, "dialect", `migrate: %s has the unknown dialect "Dialect(0)"`},
+		{"table", func(s *migrate.Schema) { s.Tables = append(s.Tables, s.Tables[0]) }, "schema", "migrate: users: %s has the table twice"},
+		{"column", func(s *migrate.Schema) { s.Tables[0].Columns[1].Name = "id" }, "schema", `migrate: users: %s has the column "id" twice`},
+		{"index", func(s *migrate.Schema) {
+			s.Tables[0].Indexes = append(s.Tables[0].Indexes, migrate.Index{Name: "users_org_id_idx", Columns: []string{"id"}})
+		}, "schema", `migrate: users: %s has the index "users_org_id_idx" twice`},
+		{"constraint", func(s *migrate.Schema) { s.Tables[0].Checks[0].Name = "users_org_id_fkey" }, "schema",
+			`migrate: users: %s has the constraint "users_org_id_fkey" twice`},
+		{"enum", func(s *migrate.Schema) { s.Enums = append(s.Enums, s.Enums[0]) }, "schema", "migrate: mood: %s has the enum type twice"},
+	} {
+		for _, side := range []string{"from", "to"} {
+			bad := ok()
+			c.spoil(bad)
+			from, to := bad, ok()
+			if side == "to" {
+				from, to = ok(), bad
+			}
+			_, err := migrate.Diff(from, to, migrate.DiffOptions{})
+			var me *migrate.Error
+			want := fmt.Sprintf(c.text, side)
+			if !errors.As(err, &me) || me.Code != c.code || err.Error() != want {
+				t.Errorf("%s in %s: %v, want code %q and\n%s", c.name, side, err, c.code, want)
+			}
+		}
+	}
+	if _, err := migrate.Diff(ok(), ok(), migrate.DiffOptions{}); err != nil {
+		t.Errorf("a valid schema: %v", err)
+	}
+}

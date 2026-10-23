@@ -40,8 +40,9 @@ func dialectError(name string) error {
 	return &Error{Code: "dialect", Reason: fmt.Sprintf("schema.json has the unknown dialect %q", name)}
 }
 
-// UnmarshalJSON reads what MarshalJSON writes. It refuses another version and
-// a dialect it does not know.
+// UnmarshalJSON reads what MarshalJSON writes. It refuses another version, a
+// dialect it does not know, and a table, enum type, or a table's column,
+// index or constraint listed twice.
 func (s *Schema) UnmarshalJSON(data []byte) error {
 	var in snapshot
 	if err := json.Unmarshal(data, &in); err != nil {
@@ -59,7 +60,11 @@ func (s *Schema) UnmarshalJSON(data []byte) error {
 	if d == 0 {
 		return dialectError(in.Dialect)
 	}
-	*s = Schema{Dialect: d, Tables: in.Tables, Enums: in.Enums}
+	out := Schema{Dialect: d, Tables: in.Tables, Enums: in.Enums}
+	if err := out.validate("schema.json"); err != nil {
+		return err
+	}
+	*s = out
 	s.sort()
 	return nil
 }

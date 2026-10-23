@@ -31,14 +31,22 @@ import (
 // object dropped before the renames is not renamed. A column rename carries
 // the checks and partial indexes that name the column.
 //
-// Its errors are *Error values: either schema is nil ("nil"), the dialects
-// differ ("dialect"), a primary
-// key's columns change ("primary-key"), or a rename names a table or column
-// from does not have, or one to does not have or from already has ("rename").
+// Its errors are *Error values: either schema is nil ("nil"), has a dialect
+// it does not know or the dialects differ ("dialect"), either schema lists a
+// table, an enum type, or a table's column, index or constraint twice
+// ("schema"), a primary key's columns change ("primary-key"), or a rename
+// names a table or column from does not have, or one to does not have or
+// from already has ("rename").
 // Diff does not change from or to.
 func Diff(from, to *Schema, opts DiffOptions) ([]Change, error) {
 	if from == nil || to == nil {
 		return nil, &Error{Code: "nil", Reason: "Diff needs two schemas"}
+	}
+	if err := from.validate("from"); err != nil {
+		return nil, err
+	}
+	if err := to.validate("to"); err != nil {
+		return nil, err
 	}
 	if from.Dialect != to.Dialect {
 		return nil, &Error{Code: "dialect", Reason: fmt.Sprintf("from is a %s schema and to a %s one; Diff compares two schemas of one dialect", from.Dialect, to.Dialect)}
