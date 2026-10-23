@@ -59,22 +59,22 @@ func TestInspectRefuses(t *testing.T) {
 	if _, err := migrate.Inspect(ctx, db, velox.Dialect(99), nil); !errors.As(err, &e) || e.Code != "dialect" {
 		t.Errorf("unknown dialect: %v", err)
 	}
-	for _, d := range []velox.Dialect{velox.MySQL, velox.SQLite} {
-		if _, err := migrate.Inspect(ctx, db, d, nil); !errors.As(err, &e) || e.Code != "dialect" {
-			t.Errorf("%v: %v", d, err)
-		}
-		if _, err := migrate.Drift(ctx, db, &migrate.Schema{Dialect: d}); !errors.As(err, &e) || e.Code != "dialect" {
-			t.Errorf("Drift on %v: %v", d, err)
-		}
+	if _, err := migrate.Inspect(ctx, db, velox.SQLite, nil); !errors.As(err, &e) || e.Code != "dialect" {
+		t.Errorf("SQLite: %v", err)
+	}
+	if _, err := migrate.Drift(ctx, db, &migrate.Schema{Dialect: velox.SQLite}); !errors.As(err, &e) || e.Code != "dialect" {
+		t.Errorf("Drift on SQLite: %v", err)
 	}
 	if _, err := migrate.Drift(ctx, db, nil); !errors.As(err, &e) || e.Code != "nil" {
 		t.Errorf("Drift of nil: %v", err)
 	}
-	// A database that does not answer as PostgreSQL: the driver's error,
-	// wrapped.
-	_, err := migrate.Inspect(ctx, db, velox.Postgres, nil)
-	if err == nil || !strings.HasPrefix(err.Error(), "migrate: inspect: ") || errors.Unwrap(err) == nil {
-		t.Errorf("SQLite as PostgreSQL: %v", err)
+	// A database that does not answer as PostgreSQL or MySQL: the
+	// driver's error, wrapped.
+	for _, d := range []velox.Dialect{velox.Postgres, velox.MySQL} {
+		_, err := migrate.Inspect(ctx, db, d, nil)
+		if err == nil || !strings.HasPrefix(err.Error(), "migrate: inspect: ") || errors.Unwrap(err) == nil {
+			t.Errorf("SQLite as %v: %v", d, err)
+		}
 	}
 }
 

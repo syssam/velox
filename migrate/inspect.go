@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/syssam/velox2"
+	"github.com/syssam/velox2/internal/ddl"
 )
 
 // Inspect reads the tables of db, a database of dialect d, as a Schema:
@@ -16,8 +17,9 @@ import (
 // their columns use. tables nil reads every table of the connection's
 // default schema but velox_migrations; a named table that is not there is
 // absent from the result. A table of the default schema, and a foreign
-// key's table there, has Schema "". Inspect only reads, on one connection
-// of db that it closes after, never returning it to the pool.
+// key's table there, has Schema "". On MySQL a primary key is named
+// PRIMARY, the name MySQL gives every one. Inspect only reads, on one
+// connection of db that it closes after, never returning it to the pool.
 func Inspect(ctx context.Context, db *sql.DB, d velox.Dialect, tables []TableRef) (*Schema, error) {
 	s, _, err := inspect(ctx, db, d, tables)
 	return s, err
@@ -52,6 +54,33 @@ type querier interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 }
 
+// eachRow runs query on q and calls scan for each row.
+func eachRow(ctx context.Context, q querier, query string, args []any, scan func(*sql.Rows) error) error {
+	rows, err := q.QueryContext(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		if err := scan(rows); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
+}
+
+// parseEnumCheck reads expr, a check as the database prints it, as one that
+// holds one of columns to values: col IN ('a', 'b').
+func parseEnumCheck(d velox.Dialect, expr string, columns []Column) (col string, values []string, ok bool) {
+	// The normal form spells the operator in lower case.
+	n := normalizePredicate(d, expr)
+	if i := strings.Index(n, " in ("); i > 0 && !strings.Contains(n[:i], "'") {
+		n = n[:i] + " IN (" + n[i+len(" in ("):]
+	}
+	col, values, ok = ddl.ParseEnumCheck(d, n)
+	return col, values, ok && slices.ContainsFunc(columns, func(c Column) bool { return c.Name == col })
+}
+
 // inspect is Inspect with its notes; Inspect returns its schema alone.
 func inspect(ctx context.Context, db *sql.DB, d velox.Dialect, tables []TableRef) (*Schema, []note, error) {
 	return inspectWith(ctx, db, d, tables, nil)
@@ -61,8 +90,8 @@ func inspect(ctx context.Context, db *sql.DB, d velox.Dialect, tables []TableRef
 // does for its snapshot's: a type no column uses any more is still there.
 func inspectWith(ctx context.Context, db *sql.DB, d velox.Dialect, tables, enums []TableRef) (*Schema, []note, error) {
 	switch d {
-	case velox.Postgres:
-	case velox.MySQL, velox.SQLite:
+	case velox.Postgres, velox.MySQL:
+	case velox.SQLite:
 		return nil, nil, &Error{Code: "dialect", Reason: "Inspect on " + dialectName(d) + " is not built yet"}
 	default:
 		return nil, nil, &Error{Code: "dialect", Reason: fmt.Sprintf("Inspect was given the unknown dialect %q", d.String())}
@@ -76,25 +105,49 @@ func inspectWith(ctx context.Context, db *sql.DB, d velox.Dialect, tables, enums
 	}
 	// The settings change only this connection, which is closed after.
 	defer discard(conn)
-	// PostgreSQL prints a timestamptz literal in the session's zone, and the
-	// normaliser reads one without a zone as UTC; it prints a literal's
-	// backslashes as written only with standard_conforming_strings on.
-	for _, q := range []string{`SET TimeZone = 'UTC'`, `SET standard_conforming_strings = on`} {
-		if _, err := conn.ExecContext(ctx, q); err != nil {
-			return nil, nil, wrap(ctx, "inspect", err)
-		}
+	var s *Schema
+	var notes []note
+	if d == velox.MySQL {
+		s, notes, err = inspectMySQLConn(ctx, conn, tables)
+	} else {
+		s, notes, err = inspectPostgresConn(ctx, conn, tables, enums)
 	}
-	tx, err := conn.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
-	if err != nil {
-		return nil, nil, wrap(ctx, "inspect", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	s, notes, err := inspectPostgres(ctx, tx, tables, enums)
 	if err != nil {
 		return nil, nil, wrap(ctx, "inspect", err)
 	}
 	s.sort()
 	return s, notes, nil
+}
+
+// inspectPostgresConn is inspectPostgres on conn, in a read-only snapshot.
+func inspectPostgresConn(ctx context.Context, conn *sql.Conn, tables, enums []TableRef) (*Schema, []note, error) {
+	// PostgreSQL prints a timestamptz literal in the session's zone, and the
+	// normaliser reads one without a zone as UTC; it prints a literal's
+	// backslashes as written only with standard_conforming_strings on.
+	for _, q := range []string{`SET TimeZone = 'UTC'`, `SET standard_conforming_strings = on`} {
+		if _, err := conn.ExecContext(ctx, q); err != nil {
+			return nil, nil, err
+		}
+	}
+	tx, err := conn.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+	if err != nil {
+		return nil, nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	return inspectPostgres(ctx, tx, tables, enums)
+}
+
+// inspectMySQLConn is inspectMySQL on conn, in a consistent read-only
+// snapshot, the session in UTC: MySQL prints a timestamp's default in the
+// session's zone.
+func inspectMySQLConn(ctx context.Context, conn *sql.Conn, tables []TableRef) (*Schema, []note, error) {
+	for _, q := range []string{`SET time_zone = '+00:00'`, `START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY`} {
+		if _, err := conn.ExecContext(ctx, q); err != nil {
+			return nil, nil, err
+		}
+	}
+	defer func() { _, _ = conn.ExecContext(ctx, `ROLLBACK`) }() // and the connection is discarded
+	return inspectMySQL(ctx, conn, tables)
 }
 
 var (

@@ -94,9 +94,9 @@ type Directives struct {
 //
 // Its errors are *Error values: either schema is nil ("nil"), the dialects
 // differ or one is not PostgreSQL, MySQL or SQLite ("dialect"), or a change
-// is nil, is not one Diff gives for the dialect, names what to lacks, or is
-// a PostgreSQL identity change that needs the name of a sequence from does
-// not give ("render"). Render does not change its arguments.
+// is nil, is not one Diff gives for the dialect, names what to lacks, is a
+// PostgreSQL identity change that needs the name of a sequence from does
+// not give, or renames a MySQL primary key, always named PRIMARY ("render"). Render does not change its arguments.
 func Render(from, to *Schema, changes []Change, opts RenderOptions) ([]Script, error) {
 	if from == nil || to == nil {
 		return nil, &Error{Code: "nil", Reason: "Render needs two schemas"}

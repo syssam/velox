@@ -787,3 +787,26 @@ func TestKindStrings(t *testing.T) {
 		}
 	}
 }
+
+// TestRenderMySQLRefusesPrimaryKeyRename: MySQL names every primary key
+// PRIMARY, so a rename of one is refused, whichever name it gives.
+func TestRenderMySQLRefusesPrimaryKeyRename(t *testing.T) {
+	s := mustTables(velox.MySQL, nil)
+	named := migrate.Clone(s)
+	table(named, "users").PrimaryKeyName = "users_pk"
+	for _, tc := range []struct {
+		from, to *migrate.Schema
+		c        migrate.RenameConstraint
+	}{
+		{s, s, migrate.RenameConstraint{Table: users, From: "PRIMARY", To: "users_pkey"}},
+		{s, s, migrate.RenameConstraint{Table: users, From: "users_pkey", To: "PRIMARY"}},
+		{named, s, migrate.RenameConstraint{Table: users, From: "users_pk", To: "users_pkey"}},
+		{s, named, migrate.RenameConstraint{Table: users, From: "users_pkey", To: "users_pk"}},
+	} {
+		_, err := migrate.Render(tc.from, tc.to, []migrate.Change{tc.c}, migrate.RenderOptions{})
+		var e *migrate.Error
+		if !errors.As(err, &e) || e.Code != "render" || !strings.Contains(e.Error(), "MySQL's primary key is always named PRIMARY") {
+			t.Errorf("%s: %v, want the primary key's refusal", tc.c, err)
+		}
+	}
+}

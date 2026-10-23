@@ -93,17 +93,7 @@ type pgReader struct {
 
 // each runs query and calls scan for each row.
 func (r *pgReader) each(query string, args []any, scan func(*sql.Rows) error) error {
-	rows, err := r.q.QueryContext(r.ctx, query, args...)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		if err := scan(rows); err != nil {
-			return err
-		}
-	}
-	return rows.Err()
+	return eachRow(r.ctx, r.q, query, args, scan)
 }
 
 // strings is the first column of query's rows.
@@ -427,13 +417,7 @@ func (r *pgReader) constraints(pt *pgTable) error {
 // casts PostgreSQL adds to its type are dropped first.
 func (pt *pgTable) enumCheck(expr string) string {
 	column := func(s string) (col string, values []string, ok bool) {
-		// The normal form spells the operator in lower case.
-		n := normalizePredicate(velox.Postgres, s)
-		if i := strings.Index(n, " in ("); i > 0 && !strings.Contains(n[:i], "'") {
-			n = n[:i] + " IN (" + n[i+len(" in ("):]
-		}
-		col, values, ok = ddl.ParseEnumCheck(velox.Postgres, n)
-		return col, values, ok && slices.ContainsFunc(pt.t.Columns, func(c Column) bool { return c.Name == col })
+		return parseEnumCheck(velox.Postgres, s, pt.t.Columns)
 	}
 	if col, values, ok := column(expr); ok {
 		return ddl.EnumCheck(velox.Postgres, col, values)

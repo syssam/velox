@@ -104,6 +104,10 @@ func (r *renderer) mysqlKeyRenames() (keys []keyRename, drop, add int, err error
 		if !ok {
 			continue
 		}
+		if r.primaryKeyName(rc) {
+			return nil, 0, 0, &Error{Object: rc.Target().String(), Code: "render",
+				Reason: fmt.Sprintf("change %d: MySQL's primary key is always named PRIMARY; it cannot be renamed", i)}
+		}
 		t, err := r.toTable(i, rc.Table)
 		if err != nil {
 			return nil, 0, 0, err
@@ -134,6 +138,16 @@ func (r *renderer) mysqlKeyRenames() (keys []keyRename, drop, add int, err error
 		}
 	}
 	return keys, drop, add, nil
+}
+
+// primaryKeyName reports whether rc renames a primary key: from or to
+// names PRIMARY, or the primary key's name of its table in from or to.
+func (r *renderer) primaryKeyName(rc RenameConstraint) bool {
+	pk := func(t *Table) bool {
+		return t != nil && t.PrimaryKeyName != "" && (rc.From == t.PrimaryKeyName || rc.To == t.PrimaryKeyName)
+	}
+	return rc.From == "PRIMARY" || rc.To == "PRIMARY" ||
+		pk(r.to.table(rc.Table)) || pk(r.from.table(rc.Table)) || pk(r.from.table(r.l.canon(rc.Table)))
 }
 
 // mysqlChange is change i as an action of an ALTER TABLE on table, in

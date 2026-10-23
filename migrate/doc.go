@@ -30,8 +30,9 @@
 //   - "rename": a rename names a table or column that is not there, or one
 //     that is there already.
 //   - "render": Render was given a change it cannot write: nil, not one Diff
-//     gives for the dialect, about what to lacks, or an identity change
-//     whose sequence from does not name.
+//     gives for the dialect, about what to lacks, an identity change
+//     whose sequence from does not name, or on MySQL a rename of a primary
+//     key, which MySQL always names PRIMARY.
 //   - "allow": ParseAllow was given an item it cannot read.
 //   - "json": UnmarshalJSON was given malformed JSON.
 //   - "version": UnmarshalJSON was given another version of the snapshot.
