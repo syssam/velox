@@ -5,21 +5,21 @@
 **Goal:** A migrations directory that velox writes, checks and applies on PostgreSQL, MySQL and SQLite:
 - `migrate` reads and writes the directory (`velox.json`, `velox.sum`, `schema.json`, the SQL files and their directives) and splits its statements;
 - `Up`, `Status`, `Resolve` and `Verify` apply it under a lock, one transaction per file where the dialect allows it, with a dirty state, unit resume and ruling 54's version rules;
-- `Inspect` reads a database into the model on three dialects, and `Drift` compares it with a snapshot through the predicate normaliser;
+- `Inspect` reads a database into the model on three dialects, and `Drift` reads a database and compares it with a snapshot through the predicate normaliser;
 - `velox-gen migrate diff|apply|status|drift|lint|hash|resolve`;
 - itests on real databases for every change kind, with the three invariants, rows, the targeted itests and the binding round-trips.
 
-**Architecture:** Everything but the CLI is in package `migrate`, which stays driver-free: the runner and `Inspect` take a `*sql.DB` and speak each dialect through `database/sql` only, reading driver codes through the root package's `velox.DriverCode`. The directory is plain files read through `fs.FS`; `Dir.Add` writes a plan's scripts with plan 1's `writeScript`, and `ParseFile` reads them back with the statement splitter, so the two are tested as one round trip. The runner holds one `*sql.Conn` for a run: the lock, the session checks, the history and every statement go through it. The model stays plain data: an unexported `inspect` returns the schema and, beside it, notes on what the model has no place for (a MySQL engine, an invalid PostgreSQL index). `Inspect` returns the schema alone; `DriftDB` inspects and passes the notes to `Drift`'s unexported core, which turns them and the residual spellings into warnings and everything else into `Diff`'s changes. velox-gen links the three drivers already in the root module. The itests live in `migrate`'s own tests (package `migrate_test`, reusing plan 1's `cases`) and in `internal/itest` for the binding round-trips.
+**Architecture:** Everything but the CLI is in package `migrate`, which stays driver-free: the runner and `Inspect` take a `*sql.DB` and speak each dialect through `database/sql` only, reading driver codes through the root package's `velox.DriverCode`. The directory is plain files read through `fs.FS`; `Dir.Add` writes a plan's scripts with plan 1's `writeScript`, and `ParseFile` reads them back with the statement splitter, so the two are tested as one round trip. The runner holds one `*sql.Conn` for a run: the lock, the session checks, the history and every statement go through it. The model stays plain data: an unexported `inspect` returns the schema and, beside it, notes on what the model has no place for (a MySQL engine, an invalid PostgreSQL index). `Inspect` returns the schema alone; `Drift(ctx, db, snapshot)` inspects the snapshot's tables and passes schema and notes to the unexported `drift`, which turns the notes and the residual spellings into warnings and everything else into `Diff`'s changes. Comparing two schemas in memory is `Diff`'s job, so there is no schema-to-schema `Drift`. velox-gen links the three drivers already in the root module. The itests live in `migrate`'s own tests (package `migrate_test`, reusing plan 1's `cases`) and in `internal/itest` for the binding round-trips.
 
 **Tech Stack:** Go 1.27; `database/sql`, `io/fs`, `testing/fstest`, `log/slog`, `crypto/sha256`. Drivers in tests and velox-gen only: pgx v5 (`pgx` and `pgxpool`), go-sql-driver/mysql, modernc SQLite. PostgreSQL 16 and MySQL 8.4 from `docker-compose.ci.yml`.
 
-**Spec:** `docs/specs/2026-10-23-migrate-design.md`: §9, §10, §11, §13, §14 (the directory, Inspect, runner and Drift blocks), §16, §17 (Fuzz, the real-database itests, the targeted itests, the predicate goldens, binding, the runner, the CLI), Plans item 2, rulings 45–55, and "Rulings made in plan 1" (binding facts about the code this plan builds on). Follow-ups: `docs/plans/2026-10-14-core-1-followups.md`, "Left by migrate plan 1" (every bullet lands in a task, named in its step). Where this plan's rulings differ from the spec, the rulings stand (see "Rulings this plan makes").
+**Spec:** `docs/specs/2026-10-23-migrate-design.md`: §9, §10, §11, §13, §14 (the directory, Inspect, runner and Drift blocks; `Drift`'s signature changed by ruling 20), §16, §17 (Fuzz, the real-database itests, the targeted itests, the predicate goldens, binding, the runner, the CLI), Plans item 2, rulings 45–55, and "Rulings made in plan 1" (binding facts about the code this plan builds on). Follow-ups: `docs/plans/2026-10-14-core-1-followups.md`, "Left by migrate plan 1" (every bullet lands in a task, named in its step). Where this plan's rulings differ from the spec, the rulings stand (see "Rulings this plan makes").
 
 ## Global Constraints
 
 - **Dependency discipline.** "The root module's dependencies stay pgx, the MySQL driver and SQLite. `migrate` adds none." `go.mod` does not change.
 - **`migrate` imports** the standard library, `github.com/syssam/velox2` and `internal/ddl`, nothing else (`TestImports` pins it). No driver in a non-test file of `migrate`; `cmd/velox-gen` and test files import the drivers.
-- **The model is a value.** "`Diff`, `Lint`, `Render`, `Drift` and `Inspect` never write through a `*Schema` they are given; planning copies." `Drift` gets a `DoesNotMutate` test.
+- **The model is a value.** "`Diff`, `Lint`, `Render`, `Drift` and `Inspect` never write through a `*Schema` they are given; planning copies." `drift` and `Drift` get `DoesNotMutate` tests.
 - **Deterministic output.** "Every list in the model, the plan and the files is sorted by a stated key." The same schema and directory give the same bytes; `Add`, `Sum`, `Inspect`, `Drift` and the CLI's printed lists each have a test that runs them twice.
 - **The core is untouched.** No file of the root package changes. `GeneratedCodeIsVersion4` stays 4; `go test -run Budget -v .` and the escape check of plan 1's Global Constraints print the same as before every task.
 - **Errors.** `migrate`'s start with `migrate: `; each `*Error` carries a `Code` the package doc lists (each task adds its codes to `doc.go`). velox-gen prints `velox-gen: migrate <subcommand>: <text without "migrate: ">`. Messages carry no rule numbers.
@@ -350,15 +350,15 @@ func (s *session) applyStepwise(ctx context.Context, f File, row *Applied, o opt
 - [ ] **Step 5: Run the full gate.** Expected: rc=0.
 - [ ] **Step 6: Commit** `Migrate: files run statement by statement, dirty versions, resume and Resolve`.
 
-### Task 5: The predicate normaliser and `Drift`
+### Task 5: The predicate normaliser and drift's comparison
 
 **Files:**
 - Create: `migrate/predicate.go`, `migrate/drift.go`, `migrate/predicate_test.go` (package `migrate`), `migrate/drift_test.go`, `migrate/drift_internal_test.go` (package `migrate`), `migrate/testdata/predicates/postgres.txt`.
-- Modify: `migrate/change.go` (`String` methods), `migrate/doc.go`.
+- Modify: `migrate/change.go` (`String` methods), `migrate/export_test.go` (`DriftOf`), `migrate/doc.go`.
 
 **Interfaces:**
 - Consumes: plan 1's `Diff`, `clone`, `validate`, `literalDefault` (`lint.go`), `ddl.ParseEnumCheck`.
-- Produces: §14's Drift block, verbatim (`Warning`, `DriftReport`, `Drift`), and:
+- Produces: §14's `Warning` and `DriftReport`, verbatim (the exported `Drift` is Task 6's, with ruling 20's signature), and:
 
 ```go
 func (w Warning) String() string // "<Object>: <Message>"
@@ -378,9 +378,13 @@ type note struct {
 	message string // as a Warning's Message
 }
 
-// drift is Drift with the notes of an inspection: each note on a table of
-// snapshot becomes a warning. Drift is drift(db, nil, snapshot).
-func drift(db *Schema, notes []note, snapshot *Schema) (*DriftReport, error)
+// drift compares an inspected schema and its notes with snapshot: the
+// changes that would bring the database to snapshot, and the warnings (each
+// note on a table of snapshot among them). Drift calls it after inspecting.
+func drift(inspected *Schema, notes []note, snapshot *Schema) (*DriftReport, error)
+
+// export_test.go: drift without notes, for package migrate_test's tests.
+func DriftOf(inspected, snapshot *Schema) (*DriftReport, error)
 
 // normalizePredicate is expr in one canonical spelling, for comparing what a
 // database prints with what was written (ruling 23).
@@ -388,7 +392,7 @@ func normalizePredicate(d velox.Dialect, expr string) string
 ```
 
 - **The normaliser** parses `or`, `and`, `not`, comparisons (`=`, `<>`/`!=`, `<`, `<=`, `>`, `>=`), `IS [NOT] NULL`, `[NOT] IN (…)`, `[NOT] LIKE`/`ILIKE` (PostgreSQL's `~~`, `!~~`, `~~*`, `!~~*`), `BETWEEN a AND b` (rewritten `>= a AND <= b`), `x = ANY (ARRAY[…])` and `x <> ALL (ARRAY[…])` (rewritten `IN` and `NOT IN`), `+ - * /`, unary `-`, function calls, literals, numbers, `true`/`false`/`NULL`, identifiers and casts; it drops every `::type` (a `'<number>'` cast to a numeric type becomes the number), unquotes identifiers PostgreSQL would not quote, lower-cases keywords, function names and unquoted identifiers, and prints with one space around binary operators and the parentheses precedence needs. Text it cannot parse comes back with its white space collapsed.
-- **`Drift(db, snapshot)`** refuses a nil schema (`"nil"`), two dialects (`"dialect"`) and `validate`'s refusals. On a copy of `db`, for each table both have (ruling 22):
+- **`drift(inspected, notes, snapshot)`** refuses a nil schema (`"nil"`), two dialects (`"dialect"`) and `validate`'s refusals. On a copy of `inspected`, for each table both have (ruling 22):
   - an index of one name, columns and `Unique` whose predicates differ: `snapshot`'s `Where` is copied in; when they differ after `normalizePredicate`, a warning names both spellings;
   - a check of one name whose `Expr`s differ: when both are enum checks (`ddl.ParseEnumCheck`), nothing is copied (a real change); else as a predicate;
   - a column default where both are expressions (`literalDefault` false for both): copied, with a warning naming both;
@@ -402,33 +406,40 @@ func normalizePredicate(d velox.Dialect, expr string) string
 - [ ] **Step 1: Write the failing tests.**
   - `TestNormalizePredicate` (`predicate_test.go`): `testdata/predicates/postgres.txt` holds blocks `input: …`, `printed: …` (may be empty until Task 6 fills it), `normal: …`. For each, `normalizePredicate(Postgres, input)` and, when present, of `printed`, equal `normal`. The inputs (written here; the normal forms with `-update`, read line by line): `status = 'active'`; `"status" = 'it''s'`; `qty > 0`; `qty >= -1`; `price < 1.5`; `qty <> 3`; `qty != 3`; `deleted_at IS NULL`; `deleted_at IS NOT NULL`; `active`; `NOT active`; `active = true`; `status IN ('a', 'b')`; `status NOT IN ('a', 'b')`; `qty > 0 AND status = 'a'`; `qty > 0 OR status = 'a'`; `(qty > 0 OR qty < -5) AND deleted_at IS NULL`; `qty > 0 AND (status = 'a' OR status = 'b')`; `status = 'a'::text`; `created_on > '2020-01-01'::date`; `lower(email) = 'x@y'`; `length(name) > 3`; `coalesce(qty, 0) > 1`; `name LIKE 'a%'`; `name NOT LIKE 'a%'`; `name ILIKE 'a%'`; `qty BETWEEN 1 AND 5`; `code = 'x'` (a `varchar` column).
   - `TestNormalizePredicateKeepsMeaning`: `a AND (b OR c)` and `a AND b OR c` differ; `(a)` and `a` are equal; a literal `'A  B'` keeps its case and spaces; `"Foo" = 1` and `foo = 1` differ.
-  - `drift_test.go`, on hand-made schemas:
-    - `TestDriftSelf`: `Drift(x, x)` has no change and no warning for every case's `from` and `to`.
+  - `drift_test.go`, on hand-made schemas, through `DriftOf`:
+    - `TestDriftSelf`: `DriftOf(x, x)` has no change and no warning for every case's `from` and `to`.
     - `TestDriftPredicateSpelling`: `(status = 'active'::text)` against `status = 'active'` gives nothing; `(status = 'banned'::text)` gives no change and one warning on `users.users_active` holding both texts.
     - `TestDriftDefaultExpression`: `CURRENT_TIMESTAMP` against `now()` gives a warning and no change; `'x'` against `'y'` gives an `AlterColumn` of default.
     - `TestDriftEnumCheck`: a SQLite enum check losing a value is a change.
     - `TestDriftMySQLRestrict`, `TestDriftUnnamedConstraints` (SQLite, by definition), `TestDriftPrimaryKey` (a warning, no error).
-    - `TestDriftNotes` (package `migrate`, in `drift_internal_test.go`, since `note` and `drift` are unexported): each kind of note on a snapshot table gives its warning and no change; a note on a table the snapshot lacks gives none; `Drift` gives no warning for the same schemas.
-    - `TestDriftUnknownTables` (Review Focus 5): a `db` holding a table the snapshot lacks gives no change about it; a snapshot table missing from `db` gives `CreateTable`; an extra index on a known table gives `DropIndex`.
+    - `TestDriftNotes` (package `migrate`, in `drift_internal_test.go`, since `note` and `drift` are unexported): each kind of note on a snapshot table gives its warning and no change; a note on a table the snapshot lacks gives none; `drift` with no notes gives no warning for the same schemas.
+    - `TestDriftUnknownTables` (Review Focus 5): an inspected schema holding a table the snapshot lacks gives no change about it; a snapshot table missing from it gives `CreateTable`; an extra index on a known table gives `DropIndex`.
     - `TestDriftDoesNotMutate`, `TestDriftDeterministic`, `TestDriftErrors`.
     - `TestChangeStrings`: one line per change type, e.g. `rename-table users → accounts`, `alter-column users.name (type|nullable)`.
 - [ ] **Step 2: Run them.** Run `go test ./migrate/ -run 'Predicate|Drift|ChangeStrings'`. Expected: FAIL.
 - [ ] **Step 3: Implement** as the Interfaces say.
 - [ ] **Step 4: Run** `go test ./migrate/`. Expected: PASS.
 - [ ] **Step 5: Run the full gate.** Expected: rc=0.
-- [ ] **Step 6: Commit** `Migrate: Drift, with the predicate normaliser`.
+- [ ] **Step 6: Commit** `Migrate: drift's comparison, with the predicate normaliser`.
 
-### Task 6: `Inspect` on PostgreSQL
+### Task 6: `Inspect` and `Drift` on PostgreSQL
 
 **Files:**
-- Create: `migrate/inspect.go` (`Inspect`, the dispatch, sorting, the default normaliser), `migrate/inspect_postgres.go`, `migrate/inspect_test.go`, `migrate/inspect_postgres_test.go`.
+- Create: `migrate/inspect.go` (`Inspect`, `Drift`, the dispatch, sorting, the default normaliser), `migrate/inspect_postgres.go`, `migrate/inspect_test.go`, `migrate/inspect_postgres_test.go`.
 - Modify: `migrate/testdata/predicates/postgres.txt` (the `printed` lines), `migrate/doc.go`.
 
 **Interfaces:**
 - Consumes: Task 5's `note`, `drift` and `normalizePredicate`; Task 3's `freshDB`; `ddl.EnumCheck`, `ddl.EnumType`, `ddl.NormalizeType`.
-- Produces: §14's `Inspect`, verbatim, and:
+- Produces: §14's `Inspect`, verbatim; `Drift` with ruling 20's signature; and:
 
 ```go
+// Drift reads db's tables and enum types that snapshot names, and reports
+// the changes that would bring them to snapshot, and warnings: spellings the
+// normaliser cannot match, and what the model cannot hold (a MySQL engine
+// other than InnoDB, an invalid index, a NOT VALID constraint, a GENERATED
+// ALWAYS identity). It never reads a table snapshot does not name.
+func Drift(ctx context.Context, db *sql.DB, snapshot *Schema) (*DriftReport, error)
+
 type querier interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 }
@@ -444,6 +455,7 @@ func inspectPostgres(ctx context.Context, q querier, tables []TableRef) (*Schema
 func normalizeDefault(d velox.Dialect, s string) string
 ```
 
+- **`Drift`** is `inspect(ctx, db, snapshot.Dialect, <snapshot's table refs>)`, then `drift` with its notes; MySQL and SQLite return `*Error{Code: "dialect", Reason: "… is not built yet"}` until Tasks 7 and 8.
 - **`Inspect`** refuses an unknown dialect (`"dialect"`); wraps database errors as `migrate: inspect: %w`; returns the tables sorted as §2 says. `tables` nil means every table of the default schema but `velox_migrations` (ruling 21); a named table that does not exist is absent. A table of the default schema has `Schema` "", and so does a foreign key's `RefTable` there.
 - **PostgreSQL** (§11), through `pg_catalog`, the default schema being `current_schema()`:
   - tables: `relkind` `r` and `p`; comments by `obj_description` and `col_description`;
@@ -456,18 +468,18 @@ func normalizeDefault(d velox.Dialect, s string) string
 - [ ] **Step 1: Write the failing tests.**
   - `inspect_test.go` (no database): `TestNormalizeDefault`: PostgreSQL `'x'::text` → `'x'`, `'it''s'::character varying` → `'it''s'`, `'-1'::integer` → `-1`, `'0'::numeric` → `0`, `'viewer'::users_role` → `'viewer'`, `nextval('users_id_seq'::regclass)` → `nextval('users_id_seq')`, `now()`, `CURRENT_TIMESTAMP`, `true` and `1.5` unchanged.
   - `inspect_postgres_test.go` (under `VELOX_TEST_POSTGRES`):
-    - `TestInspectPostgresCases`: for every case's `from` (but the hand-made ones) and `to` on PostgreSQL, created fresh through `Up` of `dirOf`, `DriftDB(ctx, db, model)` has no change and no warning.
+    - `TestInspectPostgresCases`: for every case's `from` (but the hand-made ones) and `to` on PostgreSQL, created fresh through `Up` of `dirOf`, `Drift(ctx, db, model)` has no change and no warning.
     - `TestInspectPostgresSequence` (carry 5): an identity named `users_id_seq` has it; an identity created without `SEQUENCE NAME` has PostgreSQL's name; a `serial` column has `Identity` false, `nextval('t_id_seq')` and `Sequence` `t_id_seq`; a `nextval` default of a sequence no column owns has `Sequence` "".
     - `TestInspectPostgresEnums`: `enum-shared`'s type appears once, values in order; a table in `billing` using a type there has `"billing"."status"`-form type.
-    - `TestInspectPostgresNotes`: an invalid index (a failed `CREATE UNIQUE INDEX CONCURRENTLY` over duplicates), a `NOT VALID` foreign key and a `GENERATED ALWAYS` column each give a note, and `drift` of the inspection against a model without them warns on each.
+    - `TestInspectPostgresNotes`: an invalid index (a failed `CREATE UNIQUE INDEX CONCURRENTLY` over duplicates), a `NOT VALID` foreign key and a `GENERATED ALWAYS` column each give a note, and `Drift` against a model warns on each with no change.
     - `TestInspectPostgresFilter` (Review Focus 5): `nil` leaves out `velox_migrations` and reads every other table; a named missing table is absent; a table only another schema holds is not read.
     - `TestPredicatesPostgres` (ruling 52's goldens): for each input of `postgres.txt`, a table with the columns the inputs name gets `CREATE INDEX … WHERE <input>`; `Inspect`'s `Where` equals the block's `printed` (written with `-update`), and `normalizePredicate` of it equals `normal`.
-    - `TestInspectDoesNotMutate`: the `tables` slice is unchanged; `TestInspectDeterministic`.
+    - `TestInspectDoesNotMutate`: the `tables` slice is unchanged; `TestDriftDoesNotMutate`: the snapshot is unchanged; `TestInspectDeterministic`.
 - [ ] **Step 2: Run them** against the CI PostgreSQL. Expected: FAIL.
 - [ ] **Step 3: Implement.** Fill `printed` with `-update` and read each line: a `normal` that the printed form misses is a normaliser bug, not a golden to rewrite.
 - [ ] **Step 4: Run** `go test ./migrate/` with and without the variables. Expected: PASS.
 - [ ] **Step 5: Run the full gate.** Expected: rc=0.
-- [ ] **Step 6: Commit** `Migrate: Inspect on PostgreSQL, with owned sequences and predicate goldens`.
+- [ ] **Step 6: Commit** `Migrate: Inspect and Drift on PostgreSQL, with owned sequences and predicate goldens`.
 
 ### Task 7: `Inspect` on MySQL, and the primary key's name
 
@@ -476,7 +488,7 @@ func normalizeDefault(d velox.Dialect, s string) string
 - Modify: `migrate/inspect.go` (the dispatch), `migrate/inspect_test.go`, `migrate/render_mysql.go` and `migrate/render_test.go` (carry 2).
 
 **Interfaces:**
-- Consumes: Task 6's `inspect`, `querier`, `normalizeDefault`; `ddl.MySQLEnum`, `ddl.ParseMySQLEnum`, `ddl.Literal`.
+- Consumes: Task 6's `inspect`, `Drift`, `querier`, `normalizeDefault`; `ddl.MySQLEnum`, `ddl.ParseMySQLEnum`, `ddl.Literal`.
 - Produces:
 
 ```go
@@ -499,7 +511,7 @@ func inspectMySQL(ctx context.Context, q querier, tables []TableRef) (*Schema, [
     - `TestInspectMySQLPrimaryKeyName` (carry 2): every table with a primary key has `PRIMARY`; `Diff(Inspect, a snapshot of the same tables)` has no `RenameConstraint`.
     - `TestInspectMySQLDefaults`: `literals`'s columns (a `'` and a `\` in a default, a comment and an enum value) inspect equal to the model; `CURRENT_TIMESTAMP(6)`, `('x')` on a `text` column, `0`, `1.5` and `1` on `tinyint(1)` read back as the model writes them.
     - `TestInspectMySQLRestrict`: `ON DELETE RESTRICT` and no action both give no drift against either model spelling.
-    - `TestInspectMySQLEngine`: a `MyISAM` table gives a note, and `drift` an engine warning and no change.
+    - `TestInspectMySQLEngine`: a `MyISAM` table gives a note, and `Drift` an engine warning and no change.
     - `TestInspectMySQLFilter` (Review Focus 5): as on PostgreSQL.
 - [ ] **Step 2: Run them** against the CI MySQL. Expected: FAIL.
 - [ ] **Step 3: Implement.**
@@ -507,10 +519,10 @@ func inspectMySQL(ctx context.Context, q querier, tables []TableRef) (*Schema, [
 - [ ] **Step 5: Run the full gate.** Expected: rc=0.
 - [ ] **Step 6: Commit** `Migrate: Inspect on MySQL; the primary key is always PRIMARY`.
 
-### Task 8: `Inspect` on SQLite, `DriftDB` and `Verify`
+### Task 8: `Inspect` on SQLite, and `Verify`
 
 **Files:**
-- Create: `migrate/inspect_sqlite.go`, `migrate/verify.go` (`DriftDB` and `Verify`), `migrate/inspect_sqlite_test.go`, `migrate/verify_test.go`.
+- Create: `migrate/inspect_sqlite.go`, `migrate/verify.go`, `migrate/inspect_sqlite_test.go`, `migrate/verify_test.go`.
 - Modify: `migrate/inspect.go`, `migrate/doc.go` (code `"drift"`).
 
 **Interfaces:**
@@ -518,12 +530,6 @@ func inspectMySQL(ctx context.Context, q querier, tables []TableRef) (*Schema, [
 - Produces: §14's `Verify`, verbatim, and:
 
 ```go
-// DriftDB inspects db's tables and enum types that snapshot names, and
-// compares them with it as Drift does, warning also on what the model cannot
-// hold: a MySQL engine other than InnoDB, an invalid index, a NOT VALID
-// constraint, a GENERATED ALWAYS identity (ruling 20; §14 addition).
-func DriftDB(ctx context.Context, db *sql.DB, snapshot *Schema) (*DriftReport, error)
-
 func inspectSQLite(ctx context.Context, q querier, tables []TableRef) (*Schema, []note, error)
 
 // createTable is what the CREATE TABLE text of sqlite_schema names that the
@@ -537,14 +543,14 @@ func parseCreateTable(sql string) (createTable, bool) // false: not a form it re
 ```
 
 - **SQLite** (§11): tables from `sqlite_schema` (`type = 'table'`, not `sqlite_%`, not `velox_migrations` when `tables` is nil); `pragma table_xinfo` (hidden columns left out): the declared type lower-cased through `ddl.NormalizeType`, `notnull`, `dflt_value` as written, `pk` order as `PrimaryKey`; `Identity` only for an `integer` one-column key with `AUTOINCREMENT` (ruling 24); `index_list` (origin `c` and `u`, not `pk`) and `index_info`, a partial index's `Where` the text after `WHERE` in its `CREATE INDEX`; `foreign_key_list` grouped by `id` (`NO ACTION` as ""); names and checks from `parseCreateTable`, which reads `CONSTRAINT <name> FOREIGN KEY|CHECK`, unnamed `CHECK (…)`, column-level `REFERENCES` and `CHECK`, all four quote forms and comments; a form it cannot read leaves names "" (§11's call). `PrimaryKeyName`, `Comment` and `Collation` are "".
-- **`Verify`** reads the directory; refuses a database that is not empty (a table but the history table, or a history row: `*Error` `"drift"`, `Verify needs an empty database`); runs `Up`; and returns `*Error{Code: "drift", Reason: "the database differs from schema.json after applying the directory:\n  " + each change's String, one per line}` when `DriftDB` against the snapshot finds a change (warnings do not fail it, ruling 32).
+- **`Verify`** reads the directory; refuses a database that is not empty (a table but the history table, or a history row: `*Error` `"drift"`, `Verify needs an empty database`); runs `Up`; and returns `*Error{Code: "drift", Reason: "the database differs from schema.json after applying the directory:\n  " + each change's String, one per line}` when `Drift` against the snapshot finds a change (warnings do not fail it, ruling 32).
 
 - [ ] **Step 1: Write the failing tests.**
   - `TestParseCreateTable`: velox's own `CREATE TABLE` of `create-tables` on SQLite; `CREATE TABLE t (id integer PRIMARY KEY AUTOINCREMENT, p integer REFERENCES u(id), s text CHECK (s IN ('a')), [x y] text, CONSTRAINT "k" FOREIGN KEY (p) REFERENCES u (id), CONSTRAINT c2 CHECK (length(s) > 0) /* ; */)`: `autoincrement`, the column-level check unnamed, `c2`'s text, `k` for `p`; an unreadable text gives false.
   - `TestInspectSQLiteCases`: as on PostgreSQL, always run (a file database).
   - `TestInspectSQLiteAutoincrement`: `integer PRIMARY KEY` without it is not `Identity`.
   - `TestInspectSQLiteFilter` (Review Focus 5): `sqlite_sequence` and `velox_migrations` are never read; a missing named table is absent.
-  - `TestDriftDB` (SQLite): a database made from a case's `to` has no change and no warning against it; a column added by hand gives `drop-column`; on PostgreSQL (under its variable), an invalid index gives the note's warning, and `Drift` of `Inspect`'s schema does not.
+  - `TestDriftSQLite`: `Drift` of a database made from a case's `to` has no change and no warning against it; a column added by hand gives `drop-column`; a table the snapshot does not name is never read.
   - `TestVerify` (SQLite): `dirOf` of a case's `from` then `to` passes on an empty database; a directory whose last file has a hand `ALTER TABLE users ADD COLUMN extra text` (rehashed) fails, the error naming `drop-column users.extra`; a database holding a table fails as not empty. `TestVerifyPostgres` and `TestVerifyMySQL`: the passing case, under their variables.
 - [ ] **Step 2: Run them.** Run `go test ./migrate/ -run 'CreateTable|InspectSQLite|Verify'`. Expected: FAIL.
 - [ ] **Step 3: Implement.**
@@ -633,7 +639,7 @@ func openDB(d velox.Dialect, dsn string) (*sql.DB, error)
 - **`apply`** `[-dir] [-db] [-to] [-resume] [-lock-wait 5m] [-dry-run]`: no DSN is exit 2 (`apply needs -db or $VELOX_DB`). Prints `applied <path> in <duration>` per file; `Ahead` prints `the database is ahead of the directory (versions 5, 6); nothing applied` (exit 0); `-dry-run` prints each pending file as `== <path>` and its content, from `Status`. A `*DirtyError`, `*ChecksumError`, `*SumError`, `ErrLockWait` or other error is exit 1, printed as `velox-gen: migrate apply: …`.
 - **`status`** `[-dir] [-db] [-json]`: lines `applied <version> <path> <applied_at RFC 3339 UTC>`, `pending <version> <path>`, `dirty <version> <path>: <statements> statements done: <error>`, `ahead <version> <name>`. Exit 0 when up to date or ahead, 3 with pending files, 1 with a dirty version (ruling 29). `-json` prints, indented:
   `{"applied":[{"version":1,"name":"create_users","sum":"h1:…","applied_at":"2026-10-24T10:00:00.123456Z","duration_ms":12,"dirty":false,"statements":3,"error":""}],"pending":[{"version":2,"path":"0002_add_users_email.sql"}],"ahead":[],"dirty":null}`.
-- **`drift`** `[-dir] [-db] [-json]`: `Status` first; a pending, dirty or ahead state is exit 1 naming it (`the database is not at the directory's last version: 0002_x.sql is pending`); then `DriftDB` against the snapshot. Each change prints `change: <String>`, each warning `warning: <String>`; exit 3 with a change, else 0. `-json`: `{"changes":[{"kind":"add-column","target":"users","text":"add-column users.email"}],"warnings":[{"object":"…","message":"…"}]}`.
+- **`drift`** `[-dir] [-db] [-json]`: `Status` first; a pending, dirty or ahead state is exit 1 naming it (`the database is not at the directory's last version: 0002_x.sql is pending`); then `Drift` against the snapshot. Each change prints `change: <String>`, each warning `warning: <String>`; exit 3 with a change, else 0. `-json`: `{"changes":[{"kind":"add-column","target":"users","text":"add-column users.email"}],"warnings":[{"object":"…","message":"…"}]}`.
 - **`resolve`** `[-dir] [-db] -version n (-applied | -undone)`: neither or both, or no `-version`, is exit 2.
 
 - [ ] **Step 1: Write the failing tests** (`migrate_test.go`, on a SQLite file DSN in `t.TempDir()`, the directory written by the test with `migrate.NewDir`, `Add` and plans from hand-made schemas):
@@ -713,7 +719,7 @@ func invariants(t *testing.T, db *sql.DB, d velox.Dialect, fsys fs.FS, model *mi
   3. `extend` with the case's plan (`opts.Diff` and `allow`); `Up`; `invariants(to)`;
   4. each table of `from` that `to` keeps (renames followed) still has its row, and each column it keeps (renamed or not) reads the same text.
   
-  `invariants`: (1) `DriftDB(ctx, db, model)` has no change; (2) `Diff(ReadDir(fsys).Snapshot, model)` is empty; (3) `DriftDB(ctx, db, snapshot)` has no change and no warning, the notes' warnings included. A failure prints the scripts and the drift report.
+  `invariants`: (1) `Drift(ctx, db, model)` has no change; (2) `Diff(ReadDir(fsys).Snapshot, model)` is empty; (3) `Drift(ctx, db, snapshot)` has no change and no warning, the notes' warnings included. A failure prints the scripts and the drift report.
 - **Targeted itests** (each naming the follow-up or §17 line it covers):
   - `TestMigrateMySQLCombined` (follow-up "MySQL's combined `ALTER TABLE`s"): asserts the goldens still hold the combined statement (`literals.mysql.sql`: an `ADD COLUMN` with a `MODIFY COLUMN`; `reuse-dropped-name.mysql.sql`: an index dropped and added under one name; `rename-table.mysql.sql` and `drop-column-in-unique-key.mysql.sql`: a foreign key's step-1 drop and step-7 add), then applies each on MySQL with rows, without error.
   - `TestMigrateFKIndexReplacedMySQL` (ruling 46): `fk-index-replaced` then `fk-index-restored` on MySQL with rows, no error 1553.
@@ -732,7 +738,7 @@ func invariants(t *testing.T, db *sql.DB, d velox.Dialect, fsys fs.FS, model *mi
 
 **Files:**
 - Create: `internal/bindmodel/schema/bind.go`, `internal/bindmodel/bindtype/bindtype.go` (a UUID type and an enum type), the generated `internal/bindmodel/*.go`, `internal/itest/binding_test.go`.
-- Modify: `scripts/ci-local.sh` and `.github/workflows/ci.yml` (`bin/velox-gen -check -out internal/bindmodel -package bindmodel ./internal/bindmodel/schema` and its `verify` line, after testmodel's); `docs/plans/2026-10-14-core-1-followups.md` (mark each "Left by migrate plan 1" bullet resolved with its task; add "Left by migrate plan 2"); `docs/specs/2026-10-23-migrate-design.md` (a section "Rulings made in plan 2": this plan's rulings and those found while executing it); `migrate/doc.go` (the runner, the directory and the codes, checked against the code).
+- Modify: `scripts/ci-local.sh` and `.github/workflows/ci.yml` (`bin/velox-gen -check -out internal/bindmodel -package bindmodel ./internal/bindmodel/schema` and its `verify` line, after testmodel's); `docs/plans/2026-10-14-core-1-followups.md` (mark each "Left by migrate plan 1" bullet resolved with its task; add "Left by migrate plan 2"); `docs/specs/2026-10-23-migrate-design.md` (a section "Rulings made in plan 2": this plan's rulings and those found while executing it; §14's `Drift` line marked as changed by ruling 20); `migrate/doc.go` (the runner, the directory and the codes, checked against the code).
 
 **Interfaces:**
 - Consumes: Tasks 2–3 (the table is made by `Up` of a directory `dirOf`-style in memory); Task 11's row count (the `binds` table must fit); `internal/itest`'s `targets`.
@@ -775,7 +781,7 @@ Each is a call made while writing this plan. An implementer who finds one wrong 
 17. **(call) `WithBaseline` and `apply -baseline` are plan 3's,** with baseline (Plans item 3); `Report.Baselined` is declared now and stays empty.
 18. **(call) `Resolve` acts on a dirty version only.** Resolving a clean version would rewrite history; adopting a database is baseline's. `ResolveApplied` needs the file's checksum unchanged, so the history never records a file other than the one on disk; `ResolveUndone` does not, since editing the file is why one undoes.
 19. **(call) `Status` returns the state with its dirty and ahead versions, and ruling 54's refusals as errors,** so `status` can show a dirty version while an edited applied file is still an error.
-20. **(call) The model stays plain data; what it has no place for travels beside it as notes** (spec defect: §11 asks `Drift(db, snapshot *Schema)` to warn on a non-InnoDB table, which a `Schema` cannot hold). The unexported `inspect` returns the schema and its notes (a MySQL engine, an invalid PostgreSQL index, a `NOT VALID` constraint, `GENERATED ALWAYS`); `Inspect` returns the schema alone; the unexported `drift` turns notes into warnings, and `Drift` is `drift` with none. Unexported fields on the model would be invisible to `Equal` and the JSON, and would surprise a user who builds or compares schemas. Since §14's `Drift` takes two schemas and cannot inspect, `DriftDB(ctx, db, snapshot)` is added (§14 addition): it inspects the snapshot's tables and calls `drift` with the notes; `velox-gen migrate drift`, `Verify` and the itests' invariants use it.
+20. **(spec defect) `Drift` reads the database: `Drift(ctx context.Context, db *sql.DB, snapshot *Schema) (*DriftReport, error)`, replacing §14's `Drift(db, snapshot *Schema)`.** A drift check that cannot see the database cannot report what only the database knows: §11 asks it to warn on a non-InnoDB table, which a `Schema` cannot hold, and comparing two schemas in memory is `Diff`'s job already. So there is one exported drift function. It inspects the snapshot's tables through the unexported `inspect`, which returns the schema and notes on what the model has no place for (a MySQL engine, an invalid PostgreSQL index, a `NOT VALID` constraint, `GENERATED ALWAYS`), and compares through the unexported `drift(inspected, notes, snapshot)`, which tests call through `DriftOf`. The model stays plain data: unexported fields on it would be invisible to `Equal` and the JSON, and would surprise a user who builds or compares schemas. `Inspect` returns the schema alone. `velox-gen migrate drift`, `Verify` and the itests' invariants call `Drift`.
 21. **(call) `Inspect` with `nil` leaves out `velox_migrations`** (spec defect: §11's "the history table is always left out", but `Inspect` is not given the Config). `drift`, `Verify` and the itests name their tables; `Verify`'s emptiness check leaves out the Config's table itself.
 22. **(call) `Drift` tolerates spellings and reports definitions:** predicates, non-enum checks and expression defaults that differ after normalising are warnings, never changes (ruling 52); MySQL's `RESTRICT` and no action are one; SQLite's unnamed constraints match by definition; a primary-key difference is a warning, since `Diff` refuses it.
 23. **(call) The predicate normaliser parses the predicates velox users write and prints them with the parentheses precedence needs.** Stripping every parenthesis would make `a AND (b OR c)` equal `a AND b OR c`; text it cannot parse is compared with its white space collapsed, so it warns rather than passes.
