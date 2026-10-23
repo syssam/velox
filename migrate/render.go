@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,6 +26,19 @@ const (
 	EnumScript                     // before the main script, no transaction: PostgreSQL ADD VALUE
 	OnlineScript                   // after the main script, no transaction: PostgreSQL CONCURRENTLY and VALIDATE
 )
+
+// String is "main", "enum" or "online".
+func (k ScriptKind) String() string {
+	switch k {
+	case MainScript:
+		return "main"
+	case EnumScript:
+		return "enum"
+	case OnlineScript:
+		return "online"
+	}
+	return "ScriptKind(" + strconv.Itoa(int(k)) + ")"
+}
 
 // A Script is the body of one migration file.
 type Script struct {

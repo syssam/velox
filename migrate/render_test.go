@@ -39,13 +39,11 @@ func caseScripts(t *testing.T, c testCase, d velox.Dialect) []migrate.Script {
 	return render(t, from, to, diff(t, from, to, c.opts), migrate.RenderOptions{LockTimeout: 5 * time.Second, Allow: c.allow})
 }
 
-var scriptNames = map[migrate.ScriptKind]string{migrate.MainScript: "main", migrate.EnumScript: "enum", migrate.OnlineScript: "online"}
-
 // scriptsText is each script as "-- script: <kind>" and its file body.
 func scriptsText(ss []migrate.Script) string {
 	var b strings.Builder
 	for _, s := range ss {
-		b.WriteString("-- script: " + scriptNames[s.Kind] + "\n")
+		b.WriteString("-- script: " + s.Kind.String() + "\n")
 		b.WriteString(migrate.WriteScript(s))
 	}
 	return b.String()
@@ -768,5 +766,24 @@ func checkClauses(ddl string) []string {
 		}
 		out = append(out, rest[start:j+1])
 		rest = rest[j+1:]
+	}
+}
+
+func TestKindStrings(t *testing.T) {
+	for k, want := range map[migrate.ScriptKind]string{
+		migrate.MainScript: "main", migrate.EnumScript: "enum", migrate.OnlineScript: "online", 7: "ScriptKind(7)",
+	} {
+		if got := k.String(); got != want {
+			t.Errorf("ScriptKind %d: %q, want %q", k, got, want)
+		}
+	}
+	all := migrate.ColumnType | migrate.ColumnNullable | migrate.ColumnDefault | migrate.ColumnIdentity | migrate.ColumnComment
+	for c, want := range map[migrate.ColumnChange]string{
+		0: "0", migrate.ColumnType: "type", migrate.ColumnNullable | migrate.ColumnComment: "nullable|comment",
+		all: "type|nullable|default|identity|comment", migrate.ColumnDefault | 0x80: "default|0x80",
+	} {
+		if got := c.String(); got != want {
+			t.Errorf("ColumnChange %#x: %q, want %q", uint8(c), got, want)
+		}
 	}
 }

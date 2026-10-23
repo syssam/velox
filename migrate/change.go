@@ -1,5 +1,10 @@
 package migrate
 
+import (
+	"fmt"
+	"strings"
+)
+
 // A Change is one step of a migration. Each kind is a struct of this package;
 // a caller switches on the type.
 type Change interface {
@@ -29,6 +34,25 @@ const (
 	ColumnIdentity // Identity, and Sequence with it
 	ColumnComment
 )
+
+// String is the names of the set bits, joined by "|" in the order
+// "type|nullable|default|identity|comment"; "0" for none.
+func (c ColumnChange) String() string {
+	if c == 0 {
+		return "0"
+	}
+	var parts []string
+	for i, name := range [...]string{"type", "nullable", "default", "identity", "comment"} {
+		if bit := ColumnChange(1) << i; c&bit != 0 {
+			parts = append(parts, name)
+			c &^= bit
+		}
+	}
+	if c != 0 {
+		parts = append(parts, fmt.Sprintf("%#x", uint8(c)))
+	}
+	return strings.Join(parts, "|")
+}
 
 // CreateTable creates a table, with its indexes, checks and foreign keys.
 type CreateTable struct{ Table Table }

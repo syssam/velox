@@ -815,6 +815,7 @@ type Kind string // "create-table", "drop-table", "rename-table", "add-column", 
 // "add-foreign-key", "drop-foreign-key", "add-check", "drop-check", "rename-constraint",
 // "set-table-comment", "set-table-collation", "create-enum", "rename-enum", "alter-enum", "drop-enum"
 type ColumnChange uint8 // ColumnType | ColumnNullable | ColumnDefault | ColumnIdentity | ColumnComment
+func (c ColumnChange) String() string // "type|nullable|default|identity|comment", the set bits
 
 type CreateTable struct{ Table Table }
 type DropTable struct{ Table Table }
@@ -883,6 +884,8 @@ const (
 	EnumScript                     // before the main script, no transaction: PostgreSQL ADD VALUE
 	OnlineScript                   // after the main script, no transaction: PostgreSQL CONCURRENTLY and VALIDATE
 )
+
+func (k ScriptKind) String() string // "main", "enum", "online"
 
 type Script struct {
 	Kind       ScriptKind
