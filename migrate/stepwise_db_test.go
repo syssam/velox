@@ -526,7 +526,7 @@ func TestUpMySQLConnectionKilled(t *testing.T) {
 		pgExec(t, killer, fmt.Sprintf("KILL CONNECTION %d", id))
 	})()
 	_, err := migrate.Up(context.Background(), db, fsys)
-	const msg = "migrate: the connection was lost during statements 2–2; check whether they ran before resuming"
+	const msg = "the connection was lost during statement 2; check whether it ran before resuming"
 	if de := dirtyOf(t, err); de.Statement != 2 || de.Err == nil || de.Err.Error() != msg {
 		t.Errorf("%v; want statement 2, the connection lost", err)
 	}

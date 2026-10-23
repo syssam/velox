@@ -144,7 +144,11 @@ func (s *session) lostConn(ctx context.Context) bool {
 // through the pool, says their outcome is unknown.
 func (s *session) lost(ctx context.Context, f File, first, end int, o options) error {
 	s.broken = true
-	err := fmt.Errorf("migrate: the connection was lost during statements %d–%d; check whether they ran before resuming", first+1, end)
+	which, they := fmt.Sprintf("statements %d–%d", first+1, end), "they"
+	if end <= first+1 {
+		which, they = fmt.Sprintf("statement %d", first+1), "it"
+	}
+	err := fmt.Errorf("the connection was lost during %s; check whether %s ran before resuming", which, they)
 	return s.failed(ctx, f, first, err, o)
 }
 
