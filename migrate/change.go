@@ -12,6 +12,9 @@ type Change interface {
 	// Target is the object it acts on, by its name when the change runs: a
 	// table, or an enum type's ref for the enum changes.
 	Target() TableRef
+	// String is the change in one line: its kind and the object it acts
+	// on, as in "add-column users.email" or "rename-table users → accounts".
+	String() string
 	isChange()
 }
 
@@ -244,3 +247,44 @@ func (CreateEnum) isChange()        {}
 func (DropEnum) isChange()          {}
 func (RenameEnum) isChange()        {}
 func (AlterEnum) isChange()         {}
+
+// String is "<kind> <object>": the object is the table, "<table>.<column>",
+// "<table>.<index or constraint>" or the enum type, as named when the change
+// runs. A rename adds " → <new name>", an alter-column " (<What>)", a
+// sequence rename " (<from> → <to>)" after its column, and an alter-enum
+// " (<from values> → <to values>)".
+func (c CreateTable) String() string  { return kindOf(c, c.Table.Ref().String()) }
+func (c DropTable) String() string    { return kindOf(c, c.Table.Ref().String()) }
+func (c RenameTable) String() string  { return kindOf(c, c.From.String()+" → "+c.To.String()) }
+func (c AddColumn) String() string    { return kindOf(c, objectOn(c.Table, c.Column.Name)) }
+func (c DropColumn) String() string   { return kindOf(c, objectOn(c.Table, c.Column.Name)) }
+func (c RenameColumn) String() string { return kindOf(c, objectOn(c.Table, c.From)+" → "+c.To) }
+func (c AlterColumn) String() string {
+	return kindOf(c, objectOn(c.Table, c.To.Name)+" ("+c.What.String()+")")
+}
+func (c AddIndex) String() string       { return kindOf(c, objectOn(c.Table, c.Index.Name)) }
+func (c DropIndex) String() string      { return kindOf(c, objectOn(c.Table, c.Index.Name)) }
+func (c RenameIndex) String() string    { return kindOf(c, objectOn(c.Table, c.From)+" → "+c.To) }
+func (c AddForeignKey) String() string  { return kindOf(c, objectOn(c.Table, c.ForeignKey.Name)) }
+func (c DropForeignKey) String() string { return kindOf(c, objectOn(c.Table, c.ForeignKey.Name)) }
+func (c AddCheck) String() string       { return kindOf(c, objectOn(c.Table, c.Check.Name)) }
+func (c DropCheck) String() string      { return kindOf(c, objectOn(c.Table, c.Check.Name)) }
+func (c RenameConstraint) String() string {
+	return kindOf(c, objectOn(c.Table, c.From)+" → "+c.To)
+}
+func (c SetTableComment) String() string   { return kindOf(c, c.Table.String()) }
+func (c SetTableCollation) String() string { return kindOf(c, c.Table.String()) }
+func (c CreateEnum) String() string        { return kindOf(c, c.Enum.ref().String()) }
+func (c DropEnum) String() string          { return kindOf(c, c.Enum.ref().String()) }
+func (c RenameEnum) String() string        { return kindOf(c, c.From.String()+" → "+c.To.String()) }
+func (c RenameSequence) String() string {
+	return kindOf(c, objectOn(c.Table, c.Column)+" ("+c.From+" → "+c.To+")")
+}
+func (c AlterEnum) String() string {
+	return kindOf(c, c.To.ref().String()+" ("+strings.Join(c.From.Values, ", ")+" → "+strings.Join(c.To.Values, ", ")+")")
+}
+
+func kindOf(c Change, object string) string { return string(c.Kind()) + " " + object }
+
+// objectOn is "<table>.<name>".
+func objectOn(t TableRef, name string) string { return t.String() + "." + name }

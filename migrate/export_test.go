@@ -93,3 +93,21 @@ func SetUnitDone(f func(version uint64, end int)) (restore func()) {
 
 // LostMessage is lostMessage.
 var LostMessage = lostMessage
+
+// A Note is a note, as tests write and read it.
+type Note struct {
+	Table           TableRef
+	Object, Message string
+}
+
+// DriftOf is drift.
+func DriftOf(inspected, snapshot *Schema, notes ...Note) (*DriftReport, error) {
+	var ns []note
+	for _, n := range notes {
+		ns = append(ns, note{table: n.Table, object: n.Object, message: n.Message})
+	}
+	return drift(inspected, ns, snapshot)
+}
+
+// NormalizePredicate is normalizePredicate.
+func NormalizePredicate(d velox.Dialect, expr string) string { return normalizePredicate(d, expr) }

@@ -59,6 +59,11 @@
 //   - "resolution": Resolve was given neither ResolveApplied nor
 //     ResolveUndone.
 //
+// Each [Change] has a String, its kind and the object it acts on in one
+// line. A [DriftReport] is what tells a database from its snapshot: the
+// changes that would bring the database to it, and [Warning]s for what
+// differs only in spelling or what the model has no place for.
+//
 // A directory holds velox.json, schema.json, the migration files and
 // velox.sum, which hashes the others. [ReadDir] reads one and returns a
 // [*SumError] when velox.sum does not match; [Dir.Add] writes the next files

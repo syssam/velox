@@ -1,0 +1,111 @@
+input: status = 'active'
+printed:
+normal: status = 'active'
+
+input: "status" = 'it''s'
+printed:
+normal: status = 'it''s'
+
+input: qty > 0
+printed:
+normal: qty > 0
+
+input: qty >= -1
+printed:
+normal: qty >= -1
+
+input: price < 1.5
+printed:
+normal: price < 1.5
+
+input: qty <> 3
+printed:
+normal: qty <> 3
+
+input: qty != 3
+printed:
+normal: qty <> 3
+
+input: deleted_at IS NULL
+printed:
+normal: deleted_at is null
+
+input: deleted_at IS NOT NULL
+printed:
+normal: deleted_at is not null
+
+input: active
+printed:
+normal: active
+
+input: NOT active
+printed:
+normal: not active
+
+input: active = true
+printed:
+normal: active = true
+
+input: status IN ('a', 'b')
+printed:
+normal: status in ('a', 'b')
+
+input: status NOT IN ('a', 'b')
+printed:
+normal: status not in ('a', 'b')
+
+input: qty > 0 AND status = 'a'
+printed:
+normal: qty > 0 and status = 'a'
+
+input: qty > 0 OR status = 'a'
+printed:
+normal: qty > 0 or status = 'a'
+
+input: (qty > 0 OR qty < -5) AND deleted_at IS NULL
+printed:
+normal: (qty > 0 or qty < -5) and deleted_at is null
+
+input: qty > 0 AND (status = 'a' OR status = 'b')
+printed:
+normal: qty > 0 and (status = 'a' or status = 'b')
+
+input: status = 'a'::text
+printed:
+normal: status = 'a'
+
+input: created_on > '2020-01-01'::date
+printed:
+normal: created_on > '2020-01-01'
+
+input: lower(email) = 'x@y'
+printed:
+normal: lower(email) = 'x@y'
+
+input: length(name) > 3
+printed:
+normal: length(name) > 3
+
+input: coalesce(qty, 0) > 1
+printed:
+normal: coalesce(qty, 0) > 1
+
+input: name LIKE 'a%'
+printed:
+normal: name like 'a%'
+
+input: name NOT LIKE 'a%'
+printed:
+normal: name not like 'a%'
+
+input: name ILIKE 'a%'
+printed:
+normal: name ilike 'a%'
+
+input: qty BETWEEN 1 AND 5
+printed:
+normal: qty >= 1 and qty <= 5
+
+input: code = 'x'
+printed:
+normal: code = 'x'
