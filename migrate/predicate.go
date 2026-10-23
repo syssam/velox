@@ -30,6 +30,11 @@ import (
 // without a zone is read as UTC, so the database's session must be in UTC.
 // A literal that does not read, an interval's always, keeps its cast, so a
 // cast literal of it never matches an uncast one.
+//
+// Its known limits: it does not know a column's type, so on a date column
+// d >= '2020-01-01 10:00'::timestamp matches d >= '2020-01-01 10:00',
+// which PostgreSQL would read apart; and a column cast to text matches the
+// column, so qty::text = '05' matches qty = '05'.
 func normalizePredicate(d velox.Dialect, expr string) string {
 	s, _ := normalized(d, expr)
 	return s
@@ -69,7 +74,17 @@ func parsePredicate(d velox.Dialect, expr string) (*predParser, *predNode, bool)
 // match reports whether a and b are one predicate: alike, but that a cast the
 // database adds itself (elides) matches no cast on the other side. Two casts
 // match only when they are to one type.
-func (p *predParser) match(a, b *predNode) bool {
+func (p *predParser) match(a, b *predNode) bool { return p.matchAt(a, b, atNone) }
+
+// Where a node sits, for elides: a direct operand of a comparison or an IN
+// element, an operand of +, - or * under one, or elsewhere.
+const (
+	atNone = iota
+	atCompare
+	atArith
+)
+
+func (p *predParser) matchAt(a, b *predNode, at int) bool {
 	if p.text(a) == p.text(b) { // one meaning, as and and or associate
 		return true
 	}
@@ -82,48 +97,84 @@ func (p *predParser) match(a, b *predNode) bool {
 		if t, ok := sameTime(a.cast.base, a.kids[0], b.kids[0]); ok {
 			return t
 		}
-		return p.match(a.kids[0], b.kids[0])
+		return p.matchAt(a.kids[0], b.kids[0], atNone)
 	case ac:
-		return p.elides(a, b)
+		return p.elides(a, b, at)
 	case bc:
-		return p.elides(b, a)
+		return p.elides(b, a, at)
 	}
 	if a.kind != b.kind || a.op != b.op || a.text != b.text || a.str != b.str || len(a.kids) != len(b.kids) ||
 		p.name(a.parts) != p.name(b.parts) {
 		return false
 	}
+	kid := atNone
+	switch {
+	case a.kind == nodeIn:
+		kid = atCompare
+	case a.kind != nodeBinary:
+	case a.op == "=" || a.op == "<>" || a.op == "<" || a.op == "<=" || a.op == ">" || a.op == ">=":
+		kid = atCompare
+	case (a.op == "+" || a.op == "-" || a.op == "*") && at != atNone:
+		kid = atArith
+	}
 	for i := range a.kids {
-		if !p.match(a.kids[i], b.kids[i]) {
+		if !p.matchAt(a.kids[i], b.kids[i], kid) {
 			return false
 		}
 	}
 	return true
 }
 
-// elides reports whether the cast c matches e, which is not a cast, where
-// the cast is exact: to numeric on any expression, the cast PostgreSQL
-// inserts; to bigint on an integer literal; to real or double precision on
-// a number literal; a string literal cast to a date or time type that is the
-// same value as the literal e; a string literal cast to regclass, as a
-// serial's default prints, that is e.
-func (p *predParser) elides(c, e *predNode) bool {
+// elides reports whether the cast c, sitting at at, matches e, which is not
+// a cast, where the cast keeps the value there:
+//   - to numeric, on any expression, or to bigint, on an integer literal, as
+//     an operand of a comparison or of +, - or * under one, as PostgreSQL
+//     prints price * (2)::numeric; never under / or in a function's
+//     arguments, where it changes the arithmetic;
+//   - to double precision, on a number literal that is an operand of a
+//     comparison;
+//   - a string literal to a date or time type that is the same value as the
+//     literal e;
+//   - a string literal to regclass, as a serial's default prints, that is e.
+func (p *predParser) elides(c, e *predNode, at int) bool {
 	if c.cast.mod || c.cast.array {
 		return false
 	}
 	k := c.kids[0]
-	number := k.kind == nodeLit && !k.str && plainNumber.MatchString(k.text)
 	switch c.cast.base {
 	case "numeric", "decimal":
-		return p.match(k, e)
+		if k.kind == nodeLit {
+			n, ok := asNumber(k, plainNumber)
+			return ok && at != atNone && p.matchAt(n, e, at)
+		}
+		return at != atNone && p.matchAt(k, e, at)
 	case "bigint", "int8":
-		return number && integer.MatchString(k.text) && p.match(k, e)
-	case "real", "float4", "double precision", "float8":
-		return number && p.match(k, e)
+		n, ok := asNumber(k, integer)
+		return ok && at != atNone && p.matchAt(n, e, at)
+	case "double precision", "float8":
+		n, ok := asNumber(k, plainNumber)
+		return ok && at == atCompare && p.matchAt(n, e, at)
 	case "regclass":
 		return k.str && e.str && k.val == e.val
 	}
 	same, ok := sameTime(c.cast.base, k, e)
 	return ok && same
+}
+
+// asNumber is the literal k as a number, when it is one that re matches,
+// quoted or not.
+func asNumber(k *predNode, re *regexp.Regexp) (*predNode, bool) {
+	if k.kind != nodeLit {
+		return nil, false
+	}
+	v := k.text
+	if k.str {
+		v = k.val
+	}
+	if !re.MatchString(v) {
+		return nil, false
+	}
+	return &predNode{kind: nodeLit, text: v}, true
 }
 
 // timeLayouts are the layouts a string literal of each date and time type
@@ -138,7 +189,9 @@ var timeLayouts = func() map[string][]string {
 	}
 	var zoned []string
 	for _, l := range stamp {
-		for _, z := range []string{"Z07", "Z07:00", "Z0700", " Z07", " Z07:00", " MST"} {
+		// A zone is an offset or Z: Go reads an abbreviation it does not
+		// know as UTC.
+		for _, z := range []string{"Z07", "Z07:00", "Z0700", " Z07", " Z07:00"} {
 			zoned = append(zoned, l+z)
 		}
 	}
@@ -641,9 +694,10 @@ type castTo struct {
 
 // castOf is n cast to c. A cast is part of the expression, except the
 // spellings of one value the databases echo back: a string literal or a
-// column cast to text or character varying, an integer literal cast to an
-// integer type, and a number cast to numeric, none with a modifier; and an
-// array of string literals cast to an array of text, as = ANY prints IN.
+// column cast to text or character varying, and an integer literal cast to
+// integer or smallint, none with a modifier; and an array of string literals
+// cast to an array of text, as = ANY prints IN. A cast to numeric, bigint or
+// double precision keeps the value only where it sits, which elides judges.
 func castOf(n *predNode, c castTo) *predNode {
 	plain := !c.mod && !c.array
 	textual := c.base == "text" || c.base == "character varying" || c.base == "varchar"
@@ -654,8 +708,7 @@ func castOf(n *predNode, c castTo) *predNode {
 	switch {
 	case plain && textual && (n.str || n.kind == nodeName):
 		return n
-	case plain && lit && intTypes[c.base] && integer.MatchString(v),
-		plain && lit && (c.base == "numeric" || c.base == "decimal") && plainNumber.MatchString(v):
+	case plain && lit && intTypes[c.base] && integer.MatchString(v):
 		return &predNode{kind: nodeLit, text: v}
 	case !c.mod && c.array && textual && n.kind == nodeArray &&
 		!slices.ContainsFunc(n.kids, func(k *predNode) bool { return !k.str }):
@@ -669,9 +722,10 @@ var (
 	integer     = regexp.MustCompile(`^-?[0-9]+$`)
 )
 
-// intTypes are the integer types.
+// intTypes are the integer types a cast of an integer literal to keeps its
+// value wherever it sits; bigint, which widens, is left to elides.
 var intTypes = map[string]bool{
-	"smallint": true, "integer": true, "int": true, "bigint": true, "int2": true, "int4": true, "int8": true,
+	"smallint": true, "integer": true, "int": true, "int2": true, "int4": true,
 }
 
 // typeWords are the words after a type's first that are part of its name.
