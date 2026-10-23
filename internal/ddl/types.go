@@ -24,12 +24,13 @@ var pgAliases = map[string]string{
 // prints.
 var mysqlInts = map[string]bool{"tinyint": true, "smallint": true, "mediumint": true, "int": true, "integer": true, "bigint": true}
 
-// NormalizeType is t in the dialect's canonical spelling: lower case, white
-// space collapsed, but quoted text kept as written; PostgreSQL's aliases varchar, char, int4, int8, float8,
-// bool, timestamptz, decimal and int mapped to character varying, character,
-// integer, bigint, double precision, boolean, timestamp with time zone,
-// numeric and integer (with a length or precision kept); MySQL's integer
-// display widths dropped, but for tinyint(1).
+// NormalizeType is t in the dialect's canonical spelling: lower case and
+// white space collapsed, but quoted text kept as written; PostgreSQL's
+// aliases varchar, char, int4, int8, float8, bool, timestamptz, decimal and
+// int mapped to character varying, character, integer, bigint, double
+// precision, boolean, timestamp with time zone, numeric and integer (with a
+// length or precision kept); MySQL's integer display widths dropped, but for
+// tinyint(1).
 func NormalizeType(d velox.Dialect, t string) string {
 	t = collapse(d, t)
 	word, rest := t, ""
