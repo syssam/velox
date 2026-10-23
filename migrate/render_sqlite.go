@@ -10,8 +10,9 @@ import (
 
 // sqlite renders the changes for SQLite. A table Lint finds rebuilt is
 // rebuilt once, at its last change; its other changes write nothing, but
-// for its rename, which runs first, and its index drops, which free their
-// names at once (the rebuild drops the old indexes anyway).
+// for its rename, which runs first, and its index drops and renames, which
+// drop the index at once to free its name for another table's index (the
+// rebuild drops the old indexes anyway, and makes the renamed one).
 func (r *renderer) sqlite() error {
 	last := map[TableRef]int{}      // a rebuilt table's last change, by its name in from
 	name := map[TableRef]TableRef{} // a rebuilt table's name after its rename
@@ -42,11 +43,13 @@ func (r *renderer) sqlite() error {
 			}
 			continue
 		}
-		switch c.(type) {
+		switch c := c.(type) {
 		case RenameTable, DropIndex:
 			if err := r.sqliteChange(i, c); err != nil {
 				return err
 			}
+		case RenameIndex:
+			r.emit("DROP INDEX "+r.indexName(c.Table, c.From), i)
 		}
 		if last[k] == i {
 			ref := k
@@ -153,7 +156,7 @@ func (r *renderer) rebuild(i int, k, ref TableRef) error {
 			added[c.Column.Name] = true
 		}
 		switch c.(type) {
-		case RenameTable, DropIndex:
+		case RenameTable, DropIndex, RenameIndex:
 		default:
 			folded = append(folded, j)
 		}
@@ -171,7 +174,7 @@ func (r *renderer) rebuild(i int, k, ref TableRef) error {
 		cols, src = append(cols, r.ident(c.Name)), append(src, r.ident(s))
 	}
 	tmp := TableRef{Schema: ref.Schema, Name: ddl.Rebuild(ref.Name)}
-	r.emitAt(r.sqliteCreate(tmp, t), i, folded)
+	r.out = append(r.out, Statement{SQL: r.sqliteCreate(tmp, t), Change: i, Review: r.review(folded, &ref)})
 	if len(cols) > 0 {
 		r.emit(fmt.Sprintf("INSERT INTO %s (%s) SELECT %s FROM %s", r.table(tmp), strings.Join(cols, ", "), strings.Join(src, ", "), r.table(ref)), i)
 	}

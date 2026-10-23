@@ -81,7 +81,7 @@ func Render(from, to *Schema, changes []Change, opts RenderOptions) ([]Script, e
 		return nil, r.refuse(i, "the change is nil")
 	}
 	l := lintChanges(from, changes)
-	r.l, r.reviews = l, reviews(l.out, len(changes))
+	r.l, r.findings, r.taken = l, reviewed(l.out, len(changes)), make([]bool, len(changes))
 	main := Script{Kind: MainScript}
 	var err error
 	switch r.d {
@@ -110,21 +110,20 @@ func Render(from, to *Schema, changes []Change, opts RenderOptions) ([]Script, e
 	return []Script{main}, nil
 }
 
-// reviews is the review line of each of n changes: its review and
-// destructive findings as "<code>: <message>", joined by "; ".
-func reviews(findings []Finding, n int) []string {
-	out := make([]string, n)
+// reviewed is the review and destructive findings of each of n changes,
+// which their statements' review lines hold.
+func reviewed(findings []Finding, n int) [][]Finding {
+	out := make([][]Finding, n)
 	for _, f := range findings {
-		if f.Class != Review && f.Class != Destructive || f.Change < 0 || f.Change >= n {
-			continue
+		if (f.Class == Review || f.Class == Destructive) && f.Change >= 0 && f.Change < n {
+			out[f.Change] = append(out[f.Change], f)
 		}
-		if out[f.Change] != "" {
-			out[f.Change] += "; "
-		}
-		out[f.Change] += f.Code + ": " + f.Message
 	}
 	return out
 }
+
+// oneLine keeps a review line on its comment line.
+var oneLine = strings.NewReplacer("\r", " ", "\n", " ")
 
 // allowed is the destructive findings allow covers, as the directives that
 // record them, sorted and without repeats.
@@ -146,7 +145,8 @@ type renderer struct {
 	from, to *Schema
 	cs       []Change
 	l        *linter
-	reviews  []string // each change's review line, until its first statement takes it
+	findings [][]Finding // each change's review and destructive findings
+	taken    []bool      // the change's first statement has its review line
 	out      []Statement
 	fkOff    bool // SQLite: the script needs foreign keys off
 }
@@ -155,18 +155,46 @@ type renderer struct {
 // and carries the first; its review line is theirs.
 func (r *renderer) emit(sql string, changes ...int) { r.emitAt(sql, changes[0], changes) }
 
-// emitAt adds a statement that carries change at, with the review lines of
-// the changes of the indexes in of; a change's review line goes on its first
-// statement only.
+// emitAt adds a statement that carries change at, with the review line of
+// the changes of the indexes in of.
 func (r *renderer) emitAt(sql string, at int, of []int) {
-	var rs []string
+	r.out = append(r.out, Statement{SQL: sql, Change: at, Review: r.review(of, nil)})
+}
+
+// review is the review line of the changes of the indexes in of: each
+// distinct "<code>: <message>" of their findings once, in order. A change's
+// findings go on its first statement only. For a SQLite rebuild of rebuilt,
+// the changes' sqlite-rebuild findings are one, saying what each does.
+func (r *renderer) review(of []int, rebuilt *TableRef) string {
+	var entries, whats []string
+	seen := map[string]bool{}
+	at := -1 // the place of the rebuild's entry
 	for _, i := range of {
-		if r.reviews[i] != "" {
-			rs = append(rs, r.reviews[i])
-			r.reviews[i] = ""
+		if r.taken[i] {
+			continue
+		}
+		r.taken[i] = true
+		for _, f := range r.findings[i] {
+			if rebuilt != nil && f.Code == "sqlite-rebuild" {
+				if w := r.l.rebuildWhat[i]; !slices.Contains(whats, w) {
+					whats = append(whats, w)
+				}
+				if at < 0 {
+					at = len(entries)
+					entries = append(entries, "")
+				}
+				continue
+			}
+			if e := f.Code + ": " + f.Message; !seen[e] {
+				seen[e] = true
+				entries = append(entries, e)
+			}
 		}
 	}
-	r.out = append(r.out, Statement{SQL: sql, Change: at, Review: strings.Join(rs, "; ")})
+	if at >= 0 {
+		entries[at] = "sqlite-rebuild: " + rebuildMessage(strings.Join(whats, ", "), *rebuilt)
+	}
+	return oneLine.Replace(strings.Join(entries, "; "))
 }
 
 // refuse is the error for change i, which Diff does not give on the dialect.

@@ -186,9 +186,14 @@ func (t *tabler) joinTable(jt joinTable) migrate.Table {
 
 // foreignKey adds fk to tb, with the index of its column unless the
 // primary key or one of keys leads with it; it reports whether it added the
-// index.
+// index. MySQL cannot name the connection's default database, so a key
+// from a table in another database to one in it is refused.
 func (t *tabler) foreignKey(tb *migrate.Table, fk foreignKey, keys [][]string) bool {
 	pos := fk.Edge.Pos
+	if t.d == velox.MySQL && tb.Schema != "" && fk.Ref.TableSchema == "" {
+		t.fail(edgePlace(fk.Owner, fk.Edge), "table %s.%s references %s in the connection's default database, which MySQL cannot name from another database; give %s a schema.TableIn",
+			tb.Schema, tb.Name, fk.Ref.Table, fk.Ref.Table)
+	}
 	tb.ForeignKeys = append(tb.ForeignKeys, migrate.ForeignKey{
 		Name: fk.Name, Columns: []string{fk.Column}, RefTable: migrate.TableRef{Schema: fk.Ref.TableSchema, Name: fk.Ref.Table},
 		RefColumns: []string{fk.Ref.Fields[0].Column}, OnDelete: fk.OnDelete, Pos: pos,

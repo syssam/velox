@@ -489,38 +489,12 @@
 				{
 					"name": "mood",
 					"type": "enum('calm','busy')"
-				},
-				{
-					"name": "tb_invoice_payer",
-					"type": "bigint"
 				}
 			],
 			"primary_key": [
 				"id"
 			],
 			"primary_key_name": "PRIMARY",
-			"indexes": [
-				{
-					"name": "invoices_tb_invoice_payer",
-					"columns": [
-						"tb_invoice_payer"
-					]
-				}
-			],
-			"foreign_keys": [
-				{
-					"name": "invoices_tb_invoice_payer_fkey",
-					"columns": [
-						"tb_invoice_payer"
-					],
-					"ref_table": {
-						"name": "tb_users"
-					},
-					"ref_columns": [
-						"id"
-					]
-				}
-			],
 			"comment": "a bill",
 			"collation": "utf8mb4_bin"
 		}

@@ -30,6 +30,10 @@ type alter struct {
 // mysql renders the changes for MySQL.
 func (r *renderer) mysql() error {
 	at, absorbed := r.mysqlIndexes()
+	keys, drop, add, err := r.mysqlKeyRenames()
+	if err != nil {
+		return err
+	}
 	var pending *alter
 	flush := func() {
 		if pending != nil {
@@ -37,16 +41,29 @@ func (r *renderer) mysql() error {
 			pending = nil
 		}
 	}
-	for i, c := range r.cs {
+	for i := 0; i <= len(r.cs); i++ {
+		for _, k := range keys {
+			switch i {
+			case drop:
+				flush()
+				r.emit("ALTER TABLE "+r.table(r.l.canon(k.c.Table))+" DROP FOREIGN KEY "+r.ident(k.c.From), k.i)
+			case add:
+				flush()
+				r.emit("ALTER TABLE "+r.table(k.c.Table)+" ADD CONSTRAINT "+r.ident(k.c.To)+" "+r.foreignKey(k.fk), k.i)
+			}
+		}
+		if i == len(r.cs) {
+			break
+		}
 		if g, ok := at[i]; ok {
 			flush()
 			r.emitAt(g.sql(r), i, g.changes)
 			continue
 		}
-		if absorbed[i] {
+		if absorbed[i] || slices.ContainsFunc(keys, func(k keyRename) bool { return k.i == i }) {
 			continue
 		}
-		table, phase, action, stmts, err := r.mysqlChange(i, c)
+		table, phase, action, stmts, err := r.mysqlChange(i, r.cs[i])
 		if err != nil {
 			return err
 		}
@@ -66,6 +83,57 @@ func (r *renderer) mysql() error {
 	}
 	flush()
 	return nil
+}
+
+// keyRename is a foreign key's RenameConstraint, change i.
+type keyRename struct {
+	i  int
+	c  RenameConstraint
+	fk ForeignKey // as to has it
+}
+
+// mysqlKeyRenames finds the renames of foreign keys. MySQL renames no
+// constraint, and a foreign key's drop and add in one ALTER TABLE would
+// need it to build in place, which a checked add does not; so the key is
+// dropped, under from's names, where the drops before the renames end
+// (place drop), and added after the other adds, where the index drops
+// after them or the table drops begin (place add).
+func (r *renderer) mysqlKeyRenames() (keys []keyRename, drop, add int, err error) {
+	for i, c := range r.cs {
+		rc, ok := c.(RenameConstraint)
+		if !ok {
+			continue
+		}
+		t, err := r.toTable(i, rc.Table)
+		if err != nil {
+			return nil, 0, 0, err
+		}
+		if fk := t.foreignKey(rc.To); fk != nil {
+			keys = append(keys, keyRename{i: i, c: rc, fk: *fk})
+		}
+	}
+	if len(keys) == 0 {
+		return nil, -1, -1, nil
+	}
+	drop = slices.IndexFunc(r.cs, func(c Change) bool {
+		switch c.(type) {
+		case DropForeignKey, DropCheck, DropIndex:
+			return false
+		}
+		return true
+	})
+	last := keys[len(keys)-1].i
+	add = len(r.cs)
+	for j := last + 1; j < len(r.cs); j++ {
+		switch r.cs[j].(type) {
+		case DropIndex, DropTable:
+			add = j
+		}
+		if add < len(r.cs) {
+			break
+		}
+	}
+	return keys, drop, add, nil
 }
 
 // mysqlChange is change i as an action of an ALTER TABLE on table, in
@@ -97,19 +165,16 @@ func (r *renderer) mysqlChange(i int, c Change) (table string, phase int, action
 	case DropCheck:
 		return r.table(c.Table), phaseDrop, "DROP CHECK " + r.ident(c.Check.Name), nil, nil
 	case RenameConstraint:
-		// MySQL renames no constraint: the old one is dropped and the new
-		// one added.
+		// MySQL renames no constraint: the old check is dropped and the
+		// new one added. A foreign key's is mysqlKeyRenames'.
 		t, err := r.toTable(i, c.Table)
 		if err != nil {
 			return "", 0, "", nil, err
 		}
-		if fk := t.foreignKey(c.To); fk != nil {
-			return r.table(c.Table), phaseRename, "DROP FOREIGN KEY " + r.ident(c.From) + ", ADD CONSTRAINT " + r.ident(c.To) + " " + r.foreignKey(*fk), nil, nil
-		}
 		if ck := t.check(c.To); ck != nil {
 			return r.table(c.Table), phaseRename, "DROP CHECK " + r.ident(c.From) + ", ADD CONSTRAINT " + r.ident(c.To) + " CHECK (" + ck.Expr + ")", nil, nil
 		}
-		return "", 0, "", nil, r.refuse(i, fmt.Sprintf("table %v of to has no foreign key or check %s", c.Table, c.To))
+		return "", 0, "", nil, r.refuse(i, fmt.Sprintf("table %v of to has no check %s", c.Table, c.To))
 	case SetTableComment:
 		return r.table(c.Table), phaseColumn, "COMMENT = " + ddl.Literal(velox.MySQL, c.To), nil, nil
 	case SetTableCollation:

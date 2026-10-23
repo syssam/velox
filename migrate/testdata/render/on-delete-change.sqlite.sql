@@ -1,7 +1,7 @@
 -- script: main
 -- velox:foreign-keys off
 
--- review: sqlite-rebuild: drops foreign key posts_author_id_fkey; SQLite rebuilds table posts: it copies every row into a new table; add-foreign-key: adds foreign key posts_author_id_fkey; it fails if rows have no match in users; sqlite-rebuild: adds foreign key posts_author_id_fkey; SQLite rebuilds table posts: it copies every row into a new table
+-- review: sqlite-rebuild: drops foreign key posts_author_id_fkey, adds foreign key posts_author_id_fkey; SQLite rebuilds table posts: it copies every row into a new table; add-foreign-key: adds foreign key posts_author_id_fkey; it fails if rows have no match in users
 CREATE TABLE "velox_new_posts" (
   "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
   "author_id" integer NOT NULL,

@@ -109,7 +109,7 @@ func lintChanges(from *Schema, changes []Change) *linter {
 		renamed: map[TableRef]TableRef{}, enumFrom: map[TableRef]TableRef{},
 		created: map[TableRef]bool{}, dropped: map[TableRef]bool{},
 		rebuild: make([]bool, len(changes)), rebuilt: map[TableRef]bool{},
-		quiet: make([]bool, len(changes)),
+		quiet: make([]bool, len(changes)), rebuildWhat: make([]string, len(changes)),
 	}
 	l.scan()
 	for i, c := range changes {
@@ -131,6 +131,8 @@ type linter struct {
 	rebuild  []bool                // SQLite: the change rebuilds its table
 	rebuilt  map[TableRef]bool     // SQLite: the tables with a rebuild, by their names in from
 	quiet    []bool                // the change is half of a pair that leaves things as they were
+
+	rebuildWhat []string // SQLite: what a rebuilding change does, as its sqlite-rebuild finding says
 }
 
 func (l *linter) add(i int, code string, class Class, target, pos, format string, args ...any) {
@@ -307,7 +309,14 @@ func (l *linter) rebuildFinding(i int, what string, args ...any) {
 		return
 	}
 	c := l.cs[i]
-	l.add(i, "sqlite-rebuild", Review, c.Target().String(), changePos(c), "%s; SQLite rebuilds table %s: it copies every row into a new table", fmt.Sprintf(what, args...), c.Target())
+	l.rebuildWhat[i] = fmt.Sprintf(what, args...)
+	l.add(i, "sqlite-rebuild", Review, c.Target().String(), changePos(c), "%s", rebuildMessage(l.rebuildWhat[i], c.Target()))
+}
+
+// rebuildMessage is the message of a sqlite-rebuild finding: what the
+// change does, and the rebuild of table.
+func rebuildMessage(what string, table TableRef) string {
+	return fmt.Sprintf("%s; SQLite rebuilds table %s: it copies every row into a new table", what, table)
 }
 
 // changePos is the Pos of the element of to that c adds or alters; a dropped

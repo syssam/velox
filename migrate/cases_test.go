@@ -103,8 +103,17 @@ func (Invoice) Fields() []schema.Field {
 	return []schema.Field{field.Enum("state").Values("open", "paid").Default("open")}
 }
 func (Invoice) Edges() []schema.Edge {
-	return []schema.Edge{edge.To("payer", User.Type).Unique().Required()}
+	return []schema.Edge{edge.To("payer", Payer.Type).Unique().Required()}
 }
+
+// Payer is in billing too: MySQL cannot name the default database from
+// another one, so Invoice's key points within billing.
+type Payer struct{ schema.Schema }
+
+func (Payer) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.TableIn("billing", "payers")}
+}
+func (Payer) Fields() []schema.Field { return []schema.Field{field.String("name")} }
 
 // part carries one element into a load model.
 type part struct {
@@ -473,7 +482,7 @@ var cases = []testCase{
 		addField(m, "User", field.String("motto").Default(`it's a \ test`).Comment(`it's a \ comment`))
 		setEnum(m, "User", "role", "admin", "viewer", "o'neil")
 	}},
-	{name: "schema-qualified", dialects: pgMySQL, to: func(m *loadjson.Model) { addSchema(m, Invoice{}) }},
+	{name: "schema-qualified", dialects: pgMySQL, to: func(m *loadjson.Model) { addSchema(m, Invoice{}, Payer{}) }},
 	{name: "add-identity", dialects: pg, fromDB: func(d velox.Dialect) *migrate.Schema {
 		s := mustTables(d, nil)
 		id := column(table(s, "users"), "id")

@@ -162,7 +162,12 @@ func (tbGroup) Edges() []schema.Edge {
 	return []schema.Edge{edge.From("users", tbUser.Type).Ref("groups")}
 }
 
-type tbInvoice struct{ schema.Schema }
+// tbInvoice is in database billing. local leaves out its key to tbUser,
+// which MySQL cannot name from billing.
+type tbInvoice struct {
+	schema.Schema
+	local bool
+}
 
 func (tbInvoice) Annotations() []schema.Annotation {
 	return []schema.Annotation{schema.TableIn("billing", "invoices"), schema.Comment("a bill")}
@@ -170,14 +175,17 @@ func (tbInvoice) Annotations() []schema.Annotation {
 func (tbInvoice) Fields() []schema.Field {
 	return []schema.Field{field.EnumOf[tbOrderStatus]("status"), field.Enum("mood").Values("calm", "busy").SchemaType(map[string]string{field.Postgres: "mood"})}
 }
-func (tbInvoice) Edges() []schema.Edge {
+func (i tbInvoice) Edges() []schema.Edge {
+	if i.local {
+		return nil
+	}
 	return []schema.Edge{edge.To("payer", tbUser.Type).Unique().Required()}
 }
 
 func goldenSchemas(d velox.Dialect) []schema.Interface {
 	ss := []schema.Interface{tbUser{noPartial: d == velox.MySQL}, tbPost{}, tbToken{}, tbProfile{}, tbGroup{}}
 	if d != velox.SQLite {
-		ss = append(ss, tbInvoice{})
+		ss = append(ss, tbInvoice{local: d == velox.MySQL})
 	}
 	return ss
 }
@@ -1037,6 +1045,23 @@ func (tbRfTableIn) Fields() []schema.Field {
 	return []schema.Field{f}
 }
 
+// tbRfCrossDB is in database billing and references a table in the
+// connection's default database.
+type tbRfCrossDB struct{ schema.Schema }
+
+func (tbRfCrossDB) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.TableIn("billing", "rf_cross")}
+}
+func (tbRfCrossDB) Edges() []schema.Edge {
+	e, l := edge.To("payer", tbRfCrossRef.Type).Unique().Required(), here()
+	refusalLines["cross database"] = l
+	return []schema.Edge{e}
+}
+
+type tbRfCrossRef struct{ schema.Schema }
+
+func (tbRfCrossRef) Fields() []schema.Field { return []schema.Field{field.String("name")} }
+
 type tbRfOther struct{ schema.Schema }
 
 func (tbRfOther) Fields() []schema.Field {
@@ -1088,28 +1113,34 @@ func TestTablesRefusals(t *testing.T) {
 		s      schema.Interface
 		where  string
 		reason string
-		also   velox.Dialect // another dialect that refuses the schema, in its own case
+		also   velox.Dialect    // another dialect that refuses the schema, in its own case
+		with   schema.Interface // a schema it needs, or nil
 	}{
-		{"partial", velox.MySQL, tbRfPartial{}, "index 0", "MySQL has no partial indexes (Where); drop Where or use a separate MySQL schema", 0},
-		{"text index", velox.MySQL, tbRfTextIndex{}, "index 0", "column bio is longtext on MySQL, which an index covers only by a prefix; give the field a MaxLen or a SchemaType", 0},
-		{"json unique", velox.MySQL, tbRfJSONUnique{}, `field "doc"`, "column doc is json on MySQL, which an index covers only by a prefix; give the field a MaxLen or a SchemaType", 0},
-		{"long value", velox.MySQL, tbRfLongValue{}, `field "e"`, "enum value Long is 256 characters on MySQL, over its 255", velox.Postgres},
-		{"long value", velox.Postgres, tbRfLongValue{}, `field "e"`, "enum value Long is 256 bytes, over PostgreSQL's 63", velox.MySQL},
-		{"pg long value", velox.Postgres, tbRfPGLongValue{}, `field "e"`, `enum value "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb…" is 64 bytes, over PostgreSQL's 63`, 0},
-		{"mysql enum type", velox.MySQL, tbRfEnumType{}, `field "e"`, "its MySQL SchemaType int is not a string type; drop it to get an enum(…) column, or give a string type to get a CHECK constraint", 0},
-		{"column comment", velox.MySQL, tbRfColumnComment{}, `field "s"`, "its comment is 1025 characters on MySQL, over its 1024", 0},
-		{"table comment", velox.MySQL, tbRfTableComment{}, "", "the table comment is 2049 characters on MySQL, over its 2048", 0},
-		{"pg enum type", velox.Postgres, tbRfPGEnumType{}, `field "e"`, "integer is a built-in PostgreSQL type, not an enum type name", 0},
-		{"pg enum name", velox.Postgres, tbRfPGEnumBadName{}, `field "e"`, "My Mood is not a lower-case identifier", 0},
-		{"nul default", velox.Postgres, tbRfNULDefault{}, `field "s"`, "PostgreSQL text cannot hold a NUL byte", 0},
-		{"nul value", velox.Postgres, tbRfNULValue{}, `field "e"`, "PostgreSQL text cannot hold a NUL byte", 0},
-		{"table in", velox.SQLite, tbRfTableIn{}, "", "schema.TableIn puts the table in database schema billing, which SQLite does not have", 0},
-		{"other", velox.MySQL, tbRfOther{}, `field "o"`, "an Other field needs a SchemaType for MySQL", 0},
-		{"id type", velox.MySQL, tbRfIDType{}, `field "id"`, "the ID is an integer, but its SchemaType varchar(20) is not an integer type on MySQL; Tables makes the column an identity itself", 0},
-		{"sqlite id type", velox.SQLite, tbRfIDTypeSQLite{}, `field "id"`, "the ID is an integer, but its SchemaType text is not an integer type on SQLite; Tables makes the column an identity itself", 0},
+		{"partial", velox.MySQL, tbRfPartial{}, "index 0", "MySQL has no partial indexes (Where); drop Where or use a separate MySQL schema", 0, nil},
+		{"text index", velox.MySQL, tbRfTextIndex{}, "index 0", "column bio is longtext on MySQL, which an index covers only by a prefix; give the field a MaxLen or a SchemaType", 0, nil},
+		{"json unique", velox.MySQL, tbRfJSONUnique{}, `field "doc"`, "column doc is json on MySQL, which an index covers only by a prefix; give the field a MaxLen or a SchemaType", 0, nil},
+		{"long value", velox.MySQL, tbRfLongValue{}, `field "e"`, "enum value Long is 256 characters on MySQL, over its 255", velox.Postgres, nil},
+		{"long value", velox.Postgres, tbRfLongValue{}, `field "e"`, "enum value Long is 256 bytes, over PostgreSQL's 63", velox.MySQL, nil},
+		{"pg long value", velox.Postgres, tbRfPGLongValue{}, `field "e"`, `enum value "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb…" is 64 bytes, over PostgreSQL's 63`, 0, nil},
+		{"mysql enum type", velox.MySQL, tbRfEnumType{}, `field "e"`, "its MySQL SchemaType int is not a string type; drop it to get an enum(…) column, or give a string type to get a CHECK constraint", 0, nil},
+		{"column comment", velox.MySQL, tbRfColumnComment{}, `field "s"`, "its comment is 1025 characters on MySQL, over its 1024", 0, nil},
+		{"table comment", velox.MySQL, tbRfTableComment{}, "", "the table comment is 2049 characters on MySQL, over its 2048", 0, nil},
+		{"pg enum type", velox.Postgres, tbRfPGEnumType{}, `field "e"`, "integer is a built-in PostgreSQL type, not an enum type name", 0, nil},
+		{"pg enum name", velox.Postgres, tbRfPGEnumBadName{}, `field "e"`, "My Mood is not a lower-case identifier", 0, nil},
+		{"nul default", velox.Postgres, tbRfNULDefault{}, `field "s"`, "PostgreSQL text cannot hold a NUL byte", 0, nil},
+		{"nul value", velox.Postgres, tbRfNULValue{}, `field "e"`, "PostgreSQL text cannot hold a NUL byte", 0, nil},
+		{"table in", velox.SQLite, tbRfTableIn{}, "", "schema.TableIn puts the table in database schema billing, which SQLite does not have", 0, nil},
+		{"other", velox.MySQL, tbRfOther{}, `field "o"`, "an Other field needs a SchemaType for MySQL", 0, nil},
+		{"id type", velox.MySQL, tbRfIDType{}, `field "id"`, "the ID is an integer, but its SchemaType varchar(20) is not an integer type on MySQL; Tables makes the column an identity itself", 0, nil},
+		{"sqlite id type", velox.SQLite, tbRfIDTypeSQLite{}, `field "id"`, "the ID is an integer, but its SchemaType text is not an integer type on SQLite; Tables makes the column an identity itself", 0, nil},
+		{"cross database", velox.MySQL, tbRfCrossDB{}, `edge "payer"`, "table billing.rf_cross references tb_rf_cross_refs in the connection's default database, which MySQL cannot name from another database; give tb_rf_cross_refs a schema.TableIn", velox.SQLite, tbRfCrossRef{}},
 	} {
 		t.Run(c.line, func(t *testing.T) {
-			g := mustBuild(t, c.s)
+			ss := []schema.Interface{c.s}
+			if c.with != nil {
+				ss = append(ss, c.with)
+			}
+			g := mustBuild(t, ss...)
 			_, err := Tables(g, c.d)
 			e := refusal(t, err)
 			if !strings.Contains(e.Reason, c.reason) || e.Where != c.where || e.Schema != g.Entities[0].Name {

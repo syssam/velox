@@ -1,7 +1,7 @@
 -- script: main
 -- velox:foreign-keys off
 
--- review: sqlite-rebuild: drops check users_role_check; SQLite rebuilds table users: it copies every row into a new table; add-check: adds check users.users_role_check; it fails if any row breaks it; sqlite-rebuild: adds check users_role_check; SQLite rebuilds table users: it copies every row into a new table
+-- review: sqlite-rebuild: drops check users_role_check, adds check users_role_check; SQLite rebuilds table users: it copies every row into a new table; add-check: adds check users.users_role_check; it fails if any row breaks it
 CREATE TABLE "velox_new_users" (
   "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
   "org_id" integer NOT NULL,

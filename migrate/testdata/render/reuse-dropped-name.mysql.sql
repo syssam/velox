@@ -3,8 +3,9 @@
 -- velox:allow drop-table posts
 
 ALTER TABLE `posts` DROP FOREIGN KEY `shared_fk`;
-ALTER TABLE `users` DROP FOREIGN KEY `user_mentor`, ADD CONSTRAINT `shared_fk` FOREIGN KEY (`mentor_id`) REFERENCES `users` (`id`);
+ALTER TABLE `users` DROP FOREIGN KEY `user_mentor`;
 -- review: add-index: adds index users.shared_idx; building it scans the table
 ALTER TABLE `users` ADD INDEX `shared_idx` (`created_at`), ALGORITHM=INPLACE, LOCK=NONE;
+ALTER TABLE `users` ADD CONSTRAINT `shared_fk` FOREIGN KEY (`mentor_id`) REFERENCES `users` (`id`);
 -- review: drop-table: drops table posts and its rows
 DROP TABLE `posts`;

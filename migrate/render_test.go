@@ -125,13 +125,22 @@ func TestRenderMySQLOrder(t *testing.T) {
 			"ALTER TABLE `users` ADD INDEX `users_org_id` (`org_id`), ALGORITHM=INPLACE, LOCK=NONE",
 			"ALTER TABLE `users` ADD CONSTRAINT `users_org_id_fkey` FOREIGN KEY (`org_id`) REFERENCES `orgs` (`id`)",
 		},
+		// A foreign key's rename is a drop before everything and an add
+		// with the other keys, in two statements.
 		"rename-table": {
+			"ALTER TABLE `users` DROP FOREIGN KEY `users_org_id_fkey`",
 			"RENAME TABLE `users` TO `accounts`",
 			"ALTER TABLE `accounts` RENAME INDEX `users_email_unique` TO `accounts_email_unique`, " +
 				"RENAME INDEX `users_mentor_id` TO `accounts_mentor_id`, " +
-				"RENAME INDEX `users_org_id` TO `accounts_org_id`, " +
-				"DROP FOREIGN KEY `users_org_id_fkey`, " +
-				"ADD CONSTRAINT `accounts_org_id_fkey` FOREIGN KEY (`org_id`) REFERENCES `orgs` (`id`)",
+				"RENAME INDEX `users_org_id` TO `accounts_org_id`",
+			"ALTER TABLE `accounts` ADD CONSTRAINT `accounts_org_id_fkey` FOREIGN KEY (`org_id`) REFERENCES `orgs` (`id`)",
+		},
+		"reuse-dropped-name": {
+			"ALTER TABLE `posts` DROP FOREIGN KEY `shared_fk`",
+			"ALTER TABLE `users` DROP FOREIGN KEY `user_mentor`",
+			"ALTER TABLE `users` ADD INDEX `shared_idx` (`created_at`), ALGORITHM=INPLACE, LOCK=NONE",
+			"ALTER TABLE `users` ADD CONSTRAINT `shared_fk` FOREIGN KEY (`mentor_id`) REFERENCES `users` (`id`)",
+			"DROP TABLE `posts`",
 		},
 		"on-delete-change": {
 			"ALTER TABLE `posts` DROP FOREIGN KEY `posts_author_id_fkey`",
@@ -212,6 +221,14 @@ func TestRenderSQLiteRebuild(t *testing.T) {
 		t.Errorf("reviews %q, want one sqlite-rebuild line", reviews)
 	}
 
+	// A rebuilt table's index rename frees the old name at once; the
+	// rebuild makes the new one.
+	got := sqls(caseScripts(t, caseNamed("rename-table"), velox.SQLite))
+	want = []string{`ALTER TABLE "users" RENAME TO "accounts"`, `DROP INDEX "users_email_unique"`, `DROP INDEX "users_mentor_id"`, `DROP INDEX "users_org_id"`}
+	if len(got) < len(want) || !slices.Equal(got[:len(want)], want) || !strings.HasPrefix(got[len(want)], `CREATE TABLE "velox_new_accounts"`) {
+		t.Errorf("rename-table:\n%s", strings.Join(got, ";\n"))
+	}
+
 	// A table without AUTOINCREMENT has no counter to keep.
 	from := mustTables(velox.SQLite, func(m *loadjson.Model) { addSchema(m, Tag{}) })
 	to := mustTables(velox.SQLite, func(m *loadjson.Model) {
@@ -219,7 +236,7 @@ func TestRenderSQLiteRebuild(t *testing.T) {
 		fieldOf(m, "Tag", "label").Optional = true
 		fieldOf(m, "Tag", "label").Nillable = true
 	})
-	got := sqls(render(t, from, to, diff(t, from, to, migrate.DiffOptions{}), migrate.RenderOptions{}))
+	got = sqls(render(t, from, to, diff(t, from, to, migrate.DiffOptions{}), migrate.RenderOptions{}))
 	if len(got) == 0 || !strings.HasPrefix(got[0], `CREATE TABLE "velox_new_tags"`) || !strings.Contains(got[0], `PRIMARY KEY ("id")`) {
 		t.Errorf("tags rebuild:\n%s", strings.Join(got, ";\n"))
 	}
@@ -231,7 +248,7 @@ func TestRenderSQLiteRebuild(t *testing.T) {
 }
 
 // TestRenderSQLiteRebuildsWhereLintSays: Render rebuilds exactly the tables
-// Lint's sqlite-rebuild findings name.
+// Lint's sqlite-rebuild findings name, and says so once on each rebuild.
 func TestRenderSQLiteRebuildsWhereLintSays(t *testing.T) {
 	for _, c := range cases {
 		if !slices.Contains(c.on(), velox.SQLite) {
@@ -250,9 +267,20 @@ func TestRenderSQLiteRebuildsWhereLintSays(t *testing.T) {
 			}
 		}
 		got := map[string]bool{}
-		for _, s := range sqls(render(t, from, to, cs, migrate.RenderOptions{})) {
-			if name, ok := strings.CutPrefix(s, `CREATE TABLE "velox_new_`); ok {
-				got[name[:strings.IndexByte(name, '"')]] = true
+		for _, ss := range render(t, from, to, cs, migrate.RenderOptions{}) {
+			for _, st := range ss.Statements {
+				name, ok := strings.CutPrefix(st.SQL, `CREATE TABLE "velox_new_`)
+				if ok {
+					got[name[:strings.IndexByte(name, '"')]] = true
+				}
+				// A rebuild's review line names the rebuild once, and
+				// no entry twice.
+				if n := strings.Count(st.Review, "sqlite-rebuild: "); n != 0 && (n != 1 || !ok) {
+					t.Errorf("%s: review %q", c.name, st.Review)
+				}
+				if ok && !strings.Contains(st.Review, "sqlite-rebuild: ") {
+					t.Errorf("%s: a rebuild without its review: %q", c.name, st.Review)
+				}
 			}
 		}
 		if !reflect.DeepEqual(got, want) {
@@ -538,86 +566,195 @@ func runScripts(t *testing.T, db *sql.DB, ss []migrate.Script) {
 	}
 }
 
-// execSQLite creates from in a new database, migrates it to to, and checks
-// the result against to.
+// execSQLite creates from in a new database, puts a row in each table,
+// migrates it to to, and compares it with a database made fresh from to.
 func execSQLite(t *testing.T, from, to *migrate.Schema, opts migrate.DiffOptions) {
 	t.Helper()
-	db := openSQLite(t)
 	empty := &migrate.Schema{Dialect: velox.SQLite}
+	db := openSQLite(t)
 	runScripts(t, db, render(t, empty, from, diff(t, empty, from, migrate.DiffOptions{}), migrate.RenderOptions{}))
-	if got, want := shape(t, db), modelShape(from); !slices.Equal(got, want) {
-		t.Fatalf("from's own scripts give\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	cs := diff(t, from, to, opts)
+	// A required column added to a table with rows fails, as its finding
+	// says; that plan runs on empty tables.
+	rows := !slices.ContainsFunc(migrate.Lint(from, cs), func(f migrate.Finding) bool { return f.Code == "add-required-column" })
+	if rows {
+		insertRows(t, db, from)
 	}
-	runScripts(t, db, render(t, from, to, diff(t, from, to, opts), migrate.RenderOptions{}))
-	if got, want := shape(t, db), modelShape(to); !slices.Equal(got, want) {
-		t.Errorf("after the migration\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	runScripts(t, db, render(t, from, to, cs, migrate.RenderOptions{}))
+
+	fresh := openSQLite(t)
+	runScripts(t, fresh, render(t, empty, to, diff(t, empty, to, migrate.DiffOptions{}), migrate.RenderOptions{}))
+	if got, want := describe(t, db), describe(t, fresh); !slices.Equal(got, want) {
+		t.Errorf("after the migration\n%s\nwant, as made fresh\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	if !rows {
+		return
+	}
+	for _, tb := range from.Tables {
+		ref := tb.Ref()
+		if r, ok := opts.RenameTables[ref]; ok {
+			ref = r
+		}
+		if _, ok := to.Table(ref); !ok {
+			continue
+		}
+		var n int
+		if err := db.QueryRow(`SELECT count(*) FROM "` + ref.Name + `"`).Scan(&n); err != nil || n != 1 {
+			t.Errorf("table %s has %d rows, %v; want its 1", ref, n, err)
+		}
 	}
 }
 
-// shape lists the database's tables with their columns, and its indexes
-// with their tables, sorted.
-func shape(t *testing.T, db *sql.DB) []string {
+// insertRows puts one row in each table of s, with foreign keys off while
+// it does, then checks that every key holds: each column gets a value its
+// type and checks take, and a key column the ID 1 of the table it
+// references.
+func insertRows(t *testing.T, db *sql.DB, s *migrate.Schema) {
 	t.Helper()
-	rows, err := db.Query(`SELECT type, name, tbl_name FROM sqlite_master WHERE type IN ('table', 'index') AND name NOT LIKE 'sqlite_%'`)
+	if _, err := db.Exec("PRAGMA foreign_keys = OFF"); err != nil {
+		t.Fatal(err)
+	}
+	for _, tb := range s.Tables {
+		var cols, vals []string
+		for _, c := range tb.Columns {
+			cols = append(cols, `"`+c.Name+`"`)
+			vals = append(vals, rowValue(&tb, c))
+		}
+		q := `INSERT INTO "` + tb.Name + `" (` + strings.Join(cols, ", ") + `) VALUES (` + strings.Join(vals, ", ") + `)`
+		if _, err := db.Exec(q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	if bad := foreignKeyCheck(t, db); bad {
+		t.Fatal("the rows break a foreign key")
+	}
+}
+
+// rowValue is a value for column c of tb: 1 for a key, its default, the
+// first value a check allows, or one of the column's type.
+func rowValue(tb *migrate.Table, c migrate.Column) string {
+	if slices.Contains(tb.PrimaryKey, c.Name) || slices.ContainsFunc(tb.ForeignKeys, func(fk migrate.ForeignKey) bool { return slices.Contains(fk.Columns, c.Name) }) {
+		if c.Type == "text" {
+			return "'1'"
+		}
+		return "1"
+	}
+	if c.Default != "" {
+		return c.Default
+	}
+	for _, ck := range tb.Checks {
+		if list, ok := strings.CutPrefix(ck.Expr, `"`+c.Name+`" IN (`); ok {
+			v, _, _ := strings.Cut(list, ",")
+			return strings.TrimSuffix(v, ")")
+		}
+	}
+	switch c.Type {
+	case "integer", "boolean":
+		return "1"
+	case "real":
+		return "1.5"
+	case "datetime":
+		return "'2026-01-01 00:00:00'"
+	}
+	return "'x'"
+}
+
+func foreignKeyCheck(t *testing.T, db *sql.DB) bool {
+	t.Helper()
+	rows, err := db.Query("PRAGMA foreign_key_check")
 	if err != nil {
 		t.Fatal(err)
 	}
-	var out, tables []string
-	for rows.Next() {
-		var typ, name, tbl string
-		if err := rows.Scan(&typ, &name, &tbl); err != nil {
-			t.Fatal(err)
-		}
-		if typ == "index" {
-			out = append(out, "index "+tbl+"."+name)
-			continue
-		}
-		tables = append(tables, name)
-	}
-	_ = rows.Close()
-	for _, tb := range tables {
-		cols, err := db.Query(`SELECT name, "notnull" FROM pragma_table_info(?)`, tb)
+	defer func() { _ = rows.Close() }()
+	return rows.Next()
+}
+
+// describe lists what the database holds, sorted: each table's columns
+// (name, type, notnull, default, key), foreign keys (table, from, to, on
+// delete), indexes (name, unique, partial, columns) and CHECK clauses.
+func describe(t *testing.T, db *sql.DB) []string {
+	t.Helper()
+	strs := func(q string, args ...any) [][]string {
+		rows, err := db.Query(q, args...)
 		if err != nil {
-			t.Fatal(err)
+			t.Fatalf("%s: %v", q, err)
 		}
-		var names []string
-		for cols.Next() {
-			var name string
-			var notNull bool
-			if err := cols.Scan(&name, &notNull); err != nil {
+		defer func() { _ = rows.Close() }()
+		var out [][]string
+		for rows.Next() {
+			cols, _ := rows.Columns()
+			v := make([]sql.NullString, len(cols))
+			p := make([]any, len(cols))
+			for i := range v {
+				p[i] = &v[i]
+			}
+			if err := rows.Scan(p...); err != nil {
 				t.Fatal(err)
 			}
-			if !notNull {
-				name += " null"
+			row := make([]string, len(cols))
+			for i, x := range v {
+				row[i] = x.String
+				if !x.Valid {
+					row[i] = "NULL"
+				}
 			}
-			names = append(names, name)
+			out = append(out, row)
 		}
-		_ = cols.Close()
-		slices.Sort(names)
-		out = append(out, "table "+tb+": "+strings.Join(names, ", "))
+		return out
+	}
+	var out []string
+	for _, tb := range strs(`SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`) {
+		name, ddl := tb[0], tb[1]
+		for _, c := range strs(`SELECT name, type, "notnull", dflt_value, pk FROM pragma_table_info(?)`, name) {
+			out = append(out, name+" column "+strings.Join(c, " "))
+		}
+		for _, fk := range strs(`SELECT "table", "from", "to", on_delete FROM pragma_foreign_key_list(?)`, name) {
+			out = append(out, name+" foreign key "+strings.Join(fk, " "))
+		}
+		for _, ix := range strs(`SELECT name, "unique", partial FROM pragma_index_list(?) WHERE origin <> 'pk'`, name) {
+			var cols []string
+			for _, c := range strs(`SELECT name FROM pragma_index_info(?) ORDER BY seqno`, ix[0]) {
+				cols = append(cols, c[0])
+			}
+			out = append(out, name+" index "+strings.Join(ix, " ")+" ("+strings.Join(cols, ", ")+")")
+		}
+		for _, ck := range checkClauses(ddl) {
+			out = append(out, name+" "+ck)
+		}
 	}
 	slices.Sort(out)
 	return out
 }
 
-// modelShape is shape's list for the model s.
-func modelShape(s *migrate.Schema) []string {
+// checkClauses is each [CONSTRAINT "name"] CHECK (…) of a CREATE TABLE,
+// parentheses matched outside string literals.
+func checkClauses(ddl string) []string {
 	var out []string
-	for _, tb := range s.Tables {
-		var names []string
-		for _, c := range tb.Columns {
-			name := c.Name
-			if c.Nullable {
-				name += " null"
+	for rest := ddl; ; {
+		i := strings.Index(rest, "CHECK (")
+		if i < 0 {
+			return out
+		}
+		depth, quoted, j := 0, false, i+len("CHECK ")
+		for ; j < len(rest); j++ {
+			switch c := rest[j]; {
+			case c == '\'':
+				quoted = !quoted
+			case quoted:
+			case c == '(':
+				depth++
+			case c == ')':
+				depth--
 			}
-			names = append(names, name)
+			if depth == 0 {
+				break
+			}
 		}
-		slices.Sort(names)
-		out = append(out, "table "+tb.Name+": "+strings.Join(names, ", "))
-		for _, ix := range tb.Indexes {
-			out = append(out, "index "+tb.Name+"."+ix.Name)
+		start := i
+		if k := strings.LastIndex(rest[:i], "CONSTRAINT "); k >= 0 && strings.Count(rest[k:i], `"`) == 2 && strings.HasSuffix(rest[:i], `" `) {
+			start = k
 		}
+		out = append(out, rest[start:j+1])
+		rest = rest[j+1:]
 	}
-	slices.Sort(out)
-	return out
 }

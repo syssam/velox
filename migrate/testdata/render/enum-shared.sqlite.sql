@@ -3,7 +3,7 @@
 -- velox:allow drop-enum-value posts.posts_status_check
 -- velox:allow drop-enum-value users.users_status_check
 
--- review: sqlite-rebuild: drops check posts_status_check; SQLite rebuilds table posts: it copies every row into a new table; drop-enum-value: removes 'banned' from check posts.posts_status_check; rows that hold it fail or change; add-check: adds check posts.posts_status_check; it fails if any row breaks it; sqlite-rebuild: adds check posts_status_check; SQLite rebuilds table posts: it copies every row into a new table
+-- review: sqlite-rebuild: drops check posts_status_check, adds check posts_status_check; SQLite rebuilds table posts: it copies every row into a new table; drop-enum-value: removes 'banned' from check posts.posts_status_check; rows that hold it fail or change; add-check: adds check posts.posts_status_check; it fails if any row breaks it
 CREATE TABLE "velox_new_posts" (
   "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
   "author_id" integer NOT NULL,
@@ -18,7 +18,7 @@ INSERT INTO sqlite_sequence (name, seq) SELECT 'velox_new_posts', seq FROM sqlit
 DROP TABLE "posts";
 ALTER TABLE "velox_new_posts" RENAME TO "posts";
 CREATE INDEX "posts_author_id" ON "posts" ("author_id");
--- review: sqlite-rebuild: drops check users_status_check; SQLite rebuilds table users: it copies every row into a new table; drop-enum-value: removes 'banned' from check users.users_status_check; rows that hold it fail or change; add-check: adds check users.users_status_check; it fails if any row breaks it; sqlite-rebuild: adds check users_status_check; SQLite rebuilds table users: it copies every row into a new table
+-- review: sqlite-rebuild: drops check users_status_check, adds check users_status_check; SQLite rebuilds table users: it copies every row into a new table; drop-enum-value: removes 'banned' from check users.users_status_check; rows that hold it fail or change; add-check: adds check users.users_status_check; it fails if any row breaks it
 CREATE TABLE "velox_new_users" (
   "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
   "org_id" integer NOT NULL,
