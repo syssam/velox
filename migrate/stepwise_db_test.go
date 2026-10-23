@@ -382,3 +382,169 @@ func TestUpMySQLLockWaitTimeout(t *testing.T) {
 		t.Errorf("after: %d, %v; want 77", after, err)
 	}
 }
+
+// TestUpMySQLCancelAfterUnit: a cancel that lands after a unit ran keeps
+// its count, and the run stops before the next unit with a *DirtyError.
+func TestUpMySQLCancelAfterUnit(t *testing.T) {
+	db, _ := freshDB(t, velox.MySQL)
+	fsys := dirOf(t, velox.MySQL, files("0001_abc.sql", "CREATE TABLE a (x int);\nCREATE TABLE b (x int);\nCREATE TABLE c (x int);\n"))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	defer migrate.SetUnitDone(func(_ uint64, end int) {
+		if end == 1 {
+			cancel()
+		}
+	})()
+	_, err := migrate.Up(ctx, db, fsys)
+	if de := dirtyOf(t, err); de.Statement != 2 || !errors.Is(err, context.Canceled) {
+		t.Errorf("%v; want a cancel at statement 2", err)
+	}
+	if rows := historyOf(t, db); len(rows) != 1 || !rows[0].Dirty || rows[0].Statements != 1 || !strings.Contains(rows[0].Error, "canceled") {
+		t.Fatalf("history %+v", rows)
+	}
+	mustUp(t, db, fsys, migrate.WithResume()) // CREATE TABLE a again would fail
+	if rows := historyOf(t, db); rows[0].Dirty || rows[0].Statements != 3 {
+		t.Errorf("history %+v", rows)
+	}
+}
+
+// TestUpMySQLOwnTransaction: a file's own transaction is rolled back when
+// a statement in it fails, or when the file ends with it open; the error is
+// committed, the row is not locked, the pooled connection holds no
+// transaction, and the resume starts at START TRANSACTION.
+func TestUpMySQLOwnTransaction(t *testing.T) {
+	ctx := context.Background()
+	db, dsn := freshDB(t, velox.MySQL)
+	db.SetMaxOpenConns(1)
+	other := openDB(t, "mysql", dsn)
+	pgExec(t, db, "CREATE TABLE t (x int PRIMARY KEY)")
+	fsys := dirOf(t, velox.MySQL, files("0001_tx.sql", "START TRANSACTION;\nINSERT INTO t VALUES (1);\nINSERT INTO nope VALUES (1);\nCOMMIT;\n"))
+	_, err := migrate.Up(ctx, db, fsys)
+	if de := dirtyOf(t, err); de.Statement != 3 || mysqlNumber(err) != 1146 {
+		t.Errorf("%v; want 1146 at statement 3", err)
+	}
+	if rows := historyOf(t, other); len(rows) != 1 || !rows[0].Dirty || rows[0].Statements != 0 || !strings.Contains(rows[0].Error, "1146") {
+		t.Fatalf("history, from another session: %+v", rows)
+	}
+	conn, err := other.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close() }()
+	for _, q := range []string{"SET SESSION innodb_lock_wait_timeout = 1", "UPDATE velox_migrations SET duration_ms = duration_ms + 1 WHERE version = 1"} {
+		if _, err := conn.ExecContext(ctx, q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	inTx := func() int {
+		t.Helper()
+		var n int
+		if err := db.QueryRow(`SELECT count(*) FROM information_schema.innodb_trx WHERE trx_mysql_thread_id = CONNECTION_ID()`).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	if inTx() != 0 {
+		t.Error("the pooled connection holds a transaction")
+	}
+	pgExec(t, db, "CREATE TABLE nope (x int)")
+	mustUp(t, db, fsys, migrate.WithResume())
+	var n int
+	if err := db.QueryRow(`SELECT count(*) FROM t`).Scan(&n); err != nil || n != 1 {
+		t.Errorf("t holds %d, %v; want 1", n, err)
+	}
+	// A file that leaves its transaction open.
+	fsys = extend(t, fsys, velox.MySQL, files("0002_open.sql", "START TRANSACTION;\nINSERT INTO t VALUES (2);\n"))
+	_, err = migrate.Up(ctx, db, fsys)
+	if de := dirtyOf(t, err); de.Version != 2 || de.Statement != 1 || !strings.Contains(err.Error(), "the file leaves a transaction open") {
+		t.Errorf("open: %v", err)
+	}
+	if rows := historyOf(t, other); len(rows) != 2 || !rows[1].Dirty || rows[1].Statements != 0 || rows[1].Error != "the file leaves a transaction open" {
+		t.Errorf("open: history %+v", rows)
+	}
+	if err := other.QueryRow(`SELECT count(*) FROM t`).Scan(&n); err != nil || n != 1 {
+		t.Errorf("open: t holds %d, %v; want 1", n, err)
+	}
+	if inTx() != 0 {
+		t.Error("open: the pooled connection holds a transaction")
+	}
+}
+
+// TestUpPostgresOwnTransaction: a no-transaction file left in a
+// transaction block is rolled back and dirty.
+func TestUpPostgresOwnTransaction(t *testing.T) {
+	db, _ := freshDB(t, velox.Postgres)
+	db.SetMaxOpenConns(1)
+	fsys := dirOf(t, velox.Postgres, files("0001_open.sql", "-- velox:no-transaction\nBEGIN;\nCREATE TABLE p (x int);\n"))
+	_, err := migrate.Up(context.Background(), db, fsys)
+	if de := dirtyOf(t, err); de.Statement != 1 || !strings.Contains(err.Error(), "the file leaves a transaction open") {
+		t.Errorf("%v", err)
+	}
+	if rows := historyOf(t, db); len(rows) != 1 || !rows[0].Dirty || rows[0].Error != "the file leaves a transaction open" {
+		t.Errorf("history %+v", rows)
+	}
+	var n int
+	if err := db.QueryRow(`SELECT count(*) FROM information_schema.tables WHERE table_name = 'p'`).Scan(&n); err != nil || n != 0 {
+		t.Errorf("p: %d, %v; want rolled back", n, err)
+	}
+}
+
+// TestUpMySQLProgressLost: a unit's count that cannot be written is a
+// wrapped error, not a *DirtyError.
+func TestUpMySQLProgressLost(t *testing.T) {
+	db, dsn := freshDB(t, velox.MySQL)
+	other := openDB(t, "mysql", dsn)
+	fsys := dirOf(t, velox.MySQL, files("0001_ab.sql", "CREATE TABLE a (x int);\nCREATE TABLE b (x int);\n"))
+	defer migrate.SetUnitDone(func(_ uint64, end int) {
+		if end == 1 {
+			pgExec(t, other, "DROP TABLE velox_migrations")
+		}
+	})()
+	_, err := migrate.Up(context.Background(), db, fsys)
+	var de *migrate.DirtyError
+	if err == nil || errors.As(err, &de) || !strings.HasPrefix(err.Error(), "migrate: 0001_ab.sql: statements 1 to 1 ran, but recording them in velox_migrations: ") || mysqlNumber(err) != 1146 {
+		t.Errorf("%v; want the wrapped error", err)
+	}
+}
+
+// TestUpMySQLConnectionKilled: when the session's connection is killed
+// after a unit, its count and the error are written through the pool.
+func TestUpMySQLConnectionKilled(t *testing.T) {
+	db, dsn := freshDB(t, velox.MySQL)
+	killer := openDB(t, "mysql", dsn)
+	fsys := dirOf(t, velox.MySQL, files("0001_ab.sql", "CREATE TABLE a (x int);\nCREATE TABLE b (x int);\n"))
+	defer migrate.SetUnitDone(func(_ uint64, end int) {
+		if end != 1 {
+			return
+		}
+		var id int64
+		if err := killer.QueryRow(`SELECT id FROM information_schema.processlist WHERE db = DATABASE() AND id <> CONNECTION_ID()`).Scan(&id); err != nil {
+			t.Errorf("the session's id: %v", err)
+			return
+		}
+		pgExec(t, killer, fmt.Sprintf("KILL CONNECTION %d", id))
+	})()
+	_, err := migrate.Up(context.Background(), db, fsys)
+	if de := dirtyOf(t, err); de.Statement != 2 {
+		t.Errorf("%v; want statement 2", err)
+	}
+	if rows := historyOf(t, db); len(rows) != 1 || !rows[0].Dirty || rows[0].Statements != 1 || rows[0].Error == "" {
+		t.Errorf("history %+v", rows)
+	}
+}
+
+// TestUpMySQLAutocommitOff: a file that turns autocommit off leaves a
+// transaction open, and is rolled back and dirty.
+func TestUpMySQLAutocommitOff(t *testing.T) {
+	db, dsn := freshDB(t, velox.MySQL)
+	pgExec(t, db, "CREATE TABLE t (x int)")
+	fsys := dirOf(t, velox.MySQL, files("0001_off.sql", "SET autocommit = 0;\nINSERT INTO t VALUES (1);\n"))
+	_, err := migrate.Up(context.Background(), db, fsys)
+	if de := dirtyOf(t, err); de.Statement != 1 || !strings.Contains(err.Error(), "the file leaves a transaction open") {
+		t.Errorf("%v", err)
+	}
+	var n int
+	if err := openDB(t, "mysql", dsn).QueryRow(`SELECT count(*) FROM t`).Scan(&n); err != nil || n != 0 {
+		t.Errorf("t holds %d, %v; want 0", n, err)
+	}
+}

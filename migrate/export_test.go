@@ -84,3 +84,11 @@ func SessionClose(ctx context.Context, db *sql.DB, discard bool) error {
 	s.close()
 	return nil
 }
+
+// SetUnitDone sets the hook called after each unit of a file run statement
+// by statement, and returns what sets it back.
+func SetUnitDone(f func(version uint64, end int)) (restore func()) {
+	was := unitDone
+	unitDone = f
+	return func() { unitDone = was }
+}

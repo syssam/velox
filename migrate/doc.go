@@ -71,7 +71,9 @@
 // statements of its completed units: one that fails leaves its version
 // dirty, a [*DirtyError] that stops every later run until [WithResume]
 // continues it from its first incomplete unit or [Resolve] marks it applied
-// or undone. [Status] reads the directory against the history without
+// or undone. A run killed while a statement ran may have applied it, and on
+// MySQL a cancelled statement may still have finished on the server, so
+// check the failed statement before resuming or undoing. [Status] reads the directory against the history without
 // applying. An applied file edited or gone is a [*ChecksumError], and a lock
 // held past the wait [ErrLockWait].
 package migrate

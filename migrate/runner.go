@@ -45,7 +45,11 @@ func WithTarget(version uint64) Option {
 
 // WithResume makes Up continue a dirty version before the pending files,
 // from the first statement of its first incomplete unit. Its file must be
-// unchanged: a changed or missing one is a *ChecksumError.
+// unchanged: a changed or missing one is a *ChecksumError; a dirty version
+// beside versions above the directory's last file is not resumed. A run
+// killed while a statement ran may have applied it, and on MySQL a
+// cancelled statement may still have finished on the server: check the
+// failed statement before resuming or undoing.
 func WithResume() Option {
 	return Option{func(o *options) { o.resume = true }}
 }
@@ -136,7 +140,7 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 	}
 	st, err := reading(d, rows)
 	var resumed *File
-	if de := (*DirtyError)(nil); errors.As(err, &de) && o.resume {
+	if de := (*DirtyError)(nil); errors.As(err, &de) && o.resume && len(st.Ahead) == 0 {
 		resumed, err = s.resuming(d, st)
 	}
 	if err != nil {

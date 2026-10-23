@@ -87,11 +87,24 @@ func TestResolveSQLite(t *testing.T) {
 	if err := migrate.Resolve(ctx, db, edited, 2, migrate.ResolveApplied); !errors.As(err, &ce) || ce.Version != 2 {
 		t.Errorf("edited: %#v; want *ChecksumError", err)
 	}
-	if err := migrate.Resolve(ctx, db, edited, 2, migrate.ResolveUndone); err != nil {
+	// An edit not yet hashed: ResolveApplied reads the directory and is
+	// refused; ResolveUndone reads velox.json alone.
+	stale := cloneFS(fsys)
+	stale["0002_b.sql"] = &fstest.MapFile{Data: []byte("CREATE TABLE b (y integer);")}
+	var se *migrate.SumError
+	if err := migrate.Resolve(ctx, db, stale, 2, migrate.ResolveApplied); !errors.As(err, &se) {
+		t.Errorf("stale, applied: %#v; want *SumError", err)
+	}
+	if err := migrate.Resolve(ctx, db, stale, 2, migrate.ResolveUndone); err != nil {
 		t.Fatal(err)
 	}
 	if rows := historyOf(t, db); len(rows) != 1 {
 		t.Errorf("undone: %+v", rows)
+	}
+	if err := migrate.Resolve(ctx, db, fstest.MapFS{}, 2, migrate.ResolveUndone); err == nil {
+		t.Error("no velox.json: no error")
+	} else {
+		_ = asError(t, err, "config")
 	}
 }
 
@@ -119,5 +132,21 @@ func TestUpResumeRefused(t *testing.T) {
 	}
 	if _, err := migrate.Up(ctx, db, dirOf(t, velox.SQLite, files("0001_a.sql", a)), migrate.WithResume()); !errors.As(err, &ce) || ce.Version != 2 || ce.Now != "" {
 		t.Errorf("above the last file: %#v; want *ChecksumError", err)
+	}
+}
+
+// TestUpResumeAhead: a dirty version with clean versions above the
+// directory's last file is refused with WithResume too.
+func TestUpResumeAhead(t *testing.T) {
+	db, _ := freshDB(t, velox.SQLite)
+	a := "CREATE TABLE a (x integer);"
+	newer := dirOf(t, velox.SQLite, files("0001_a.sql", a, "0002_b.sql", "CREATE TABLE b (x integer);", "0003_c.sql", "CREATE TABLE c (x integer);"))
+	mustUp(t, db, newer)
+	if _, err := db.Exec(`UPDATE velox_migrations SET dirty = true WHERE version = 1`); err != nil {
+		t.Fatal(err)
+	}
+	r, err := migrate.Up(context.Background(), db, dirOf(t, velox.SQLite, files("0001_a.sql", a, "0002_b.sql", "CREATE TABLE b (x integer);")), migrate.WithResume())
+	if de := dirtyOf(t, err); de.Version != 1 || r != nil {
+		t.Errorf("%+v, %+v", de, r)
 	}
 }

@@ -3,6 +3,7 @@ package migrate
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io/fs"
 	"slices"
@@ -22,8 +23,9 @@ const (
 // ResolveApplied marks it applied, with every statement of its file, which
 // must be in dir with the row's checksum (else a *ChecksumError);
 // ResolveUndone deletes its row, so the file may be edited and applied
-// again. Resolve reads the history itself, not against dir's other files,
-// so an edited file does not stop it. A version that is not dirty, or not
+// again, and reads only dir's velox.json, so an edit not yet hashed into
+// velox.sum does not stop it. Resolve reads the history itself, not against
+// dir's other files, so an edited file does not stop it either. A version that is not dirty, or not
 // in the history, is an *Error of Code "history"; a Resolution other than
 // the two, one of Code "resolution".
 func Resolve(ctx context.Context, db *sql.DB, dir fs.FS, version uint64, r Resolution, opts ...Option) error {
@@ -31,11 +33,27 @@ func Resolve(ctx context.Context, db *sql.DB, dir fs.FS, version uint64, r Resol
 		return &Error{Code: "resolution", Reason: fmt.Sprintf("no resolution %d; use ResolveApplied or ResolveUndone", r)}
 	}
 	o := optionsOf(opts)
-	d, err := ReadDir(dir)
-	if err != nil {
-		return err
+	var d *Dir
+	var cfg Config
+	if r == ResolveApplied {
+		var err error
+		if d, err = ReadDir(dir); err != nil {
+			return err
+		}
+		cfg = d.Config
+	} else {
+		raw, err := fs.ReadFile(dir, "velox.json")
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+			return &Error{Code: "config", Pos: "velox.json", Reason: "the file is missing"}
+		case err != nil:
+			return &Error{Code: "config", Pos: "velox.json", Reason: "the file cannot be read: " + err.Error(), cause: err}
+		}
+		if cfg, err = parseConfig(raw); err != nil {
+			return err
+		}
 	}
-	s, err := open(ctx, db, d.Config)
+	s, err := open(ctx, db, cfg)
 	if err != nil {
 		return err
 	}
