@@ -597,6 +597,14 @@ func (jsonFuncField) Fields() []schema.Field {
 	return []schema.Field{field.JSON("cb", func() {})}
 }
 
+// jsonOptionalFuncField is an Optional JSON func: rule 49 refuses it, and
+// rule 48's advice to add Nillable would lead into rule 49.
+type jsonOptionalFuncField struct{ schema.Schema }
+
+func (jsonOptionalFuncField) Fields() []schema.Field {
+	return []schema.Field{field.JSON("cb", func() {}).Optional()}
+}
+
 type jsonChanField struct{ schema.Schema }
 
 func (jsonChanField) Fields() []schema.Field {
@@ -1115,7 +1123,7 @@ func TestBuildRulesAreSingle(t *testing.T) {
 		{longColumn{}}, {longDerivedColumn{}}, {longImplicit{}, Pet{}}, {longIndexKey{}}, {longSymbol{}, Pet{}},
 		{longJoinTable{}}, {longEnumType{}}, {twoSymbolsO2M{}, Pet{}}, {oneSymbolM2M{}}, {symOwner{}, symPet{}},
 		{enumOrder{}, enumTicket{}}, {jsonFuncField{}}, {jsonChanField{}}, {jsonUnsafeField{}}, {jsonComplexField{}},
-		{jsonComplex64Field{}}, {jsonFuncMarshalerField{}},
+		{jsonComplex64Field{}}, {jsonFuncMarshalerField{}}, {jsonOptionalFuncField{}},
 	} {
 		_, err := build(t, ss...)
 		if n := len(err.(interface{ Unwrap() []error }).Unwrap()); n != 1 {

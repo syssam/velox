@@ -892,24 +892,27 @@ func (b *builder) validateFields(e *Entity) {
 				b.fail(r.rule, e.Name, fieldLoc(f), "an Optional %s needs a Default or Nillable", r.noun)
 			}
 		}
-		// An Optional JSON field's column holds NULL, so its Go field must
-		// hold nil: a slice, a map or a pointer, or a pointer that Nillable
-		// makes.
-		if f.Type == "json" && f.Optional && !f.Nillable && f.GoType != nil && !nilKinds[f.GoType.Kind] {
-			b.fail(48, e.Name, fieldLoc(f), "an Optional JSON field of a non-nil-able type needs Nillable")
-		}
 		// encoding/json cannot write an interface, func, chan or unsafe
 		// pointer, nor a complex number without its own encoding. A func or
 		// chan with a MarshalJSON stays refused: its nil is no pointer, slice
 		// or map, so the core could not take it as NULL.
+		unwritable := false
 		if f.Type == "json" && f.GoType != nil {
 			if noun, ok := unencodable[f.GoType.Kind]; ok && (!f.GoType.Marshaler || !complexKind[f.GoType.Kind]) {
+				unwritable = true
 				hint := ""
 				if complexKind[f.GoType.Kind] {
 					hint = "; give the type a MarshalJSON or MarshalText method"
 				}
 				b.fail(49, e.Name, fieldLoc(f), "its Go type %s is %s, which a JSON column cannot hold%s", f.GoType.Ident, noun, hint)
 			}
+		}
+		// An Optional JSON field's column holds NULL, so its Go field must
+		// hold nil: a slice, a map or a pointer, or a pointer that Nillable
+		// makes. A type no codec can write gets only the error above: adding
+		// Nillable would not help it.
+		if f.Type == "json" && f.Optional && !f.Nillable && f.GoType != nil && !unwritable && !nilKinds[f.GoType.Kind] {
+			b.fail(48, e.Name, fieldLoc(f), "an Optional JSON field of a non-nil-able type needs Nillable")
 		}
 		// No index covers a JSON column (rule 42 is a declared index's).
 		if f.Type == "json" && f.Unique {

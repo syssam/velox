@@ -46,6 +46,7 @@ func TestGodocCitesNoSpec(t *testing.T) {
 	add(".", true, false)
 	add("schema", false, true)
 	add("plugin", false, false)
+	add("migrate", false, false)
 	add("cmd/velox-gen", false, false)
 	if len(files) < 50 {
 		t.Fatalf("scanned only %d files: %v", len(files), files)
