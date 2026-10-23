@@ -25,13 +25,13 @@ var pgAliases = map[string]string{
 var mysqlInts = map[string]bool{"tinyint": true, "smallint": true, "mediumint": true, "int": true, "integer": true, "bigint": true}
 
 // NormalizeType is t in the dialect's canonical spelling: lower case, white
-// space collapsed; PostgreSQL's aliases varchar, char, int4, int8, float8,
+// space collapsed, but quoted text kept as written; PostgreSQL's aliases varchar, char, int4, int8, float8,
 // bool, timestamptz, decimal and int mapped to character varying, character,
 // integer, bigint, double precision, boolean, timestamp with time zone,
 // numeric and integer (with a length or precision kept); MySQL's integer
 // display widths dropped, but for tinyint(1).
 func NormalizeType(d velox.Dialect, t string) string {
-	t = collapse(t)
+	t = collapse(d, t)
 	word, rest := t, ""
 	if i := strings.IndexFunc(t, notWord); i >= 0 {
 		word, rest = t[:i], t[i:]
@@ -63,13 +63,58 @@ func NormalizeType(d velox.Dialect, t string) string {
 func notWord(r rune) bool { return (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '_' }
 
 // collapse is t in lower case, with runs of white space made one space, none
-// at either end, and none around parentheses and commas.
-func collapse(t string) string {
-	t = strings.Join(strings.Fields(strings.ToLower(t)), " ")
-	for _, p := range [][2]string{{" (", "("}, {"( ", "("}, {" )", ")"}, {" ,", ","}, {", ", ","}} {
-		t = strings.ReplaceAll(t, p[0], p[1])
+// at either end, and none around parentheses and commas. Quoted text, '…'
+// and "…" and on MySQL `…`, keeps its bytes.
+func collapse(d velox.Dialect, t string) string {
+	var b strings.Builder
+	space := false
+	for i := 0; i < len(t); {
+		c := t[i]
+		if c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v' {
+			space = b.Len() > 0
+			i++
+			continue
+		}
+		if space && !strings.ContainsRune("(),", rune(c)) {
+			if last := b.String()[b.Len()-1]; last != '(' && last != ',' {
+				b.WriteByte(' ')
+			}
+		}
+		space = false
+		if c == '\'' || c == '"' || c == '`' && d == velox.MySQL {
+			j := quoteEnd(d, t, i)
+			b.WriteString(t[i:j])
+			i = j
+			continue
+		}
+		j := i + 1
+		for j < len(t) && !strings.ContainsRune(" \t\n\r\f\v'\"`", rune(t[j])) {
+			j++
+		}
+		b.WriteString(strings.ToLower(t[i:j]))
+		i = j
 	}
-	return t
+	return b.String()
+}
+
+// quoteEnd is the index just past the quoted text that starts at t[i]: a
+// doubled quote stays inside it, and so on MySQL does a character after a
+// backslash in '…'. It is len(t) when the quote is not closed.
+func quoteEnd(d velox.Dialect, t string, i int) int {
+	q := t[i]
+	for j := i + 1; j < len(t); j++ {
+		switch {
+		case t[j] == '\\' && q == '\'' && d == velox.MySQL:
+			j++
+		case t[j] == q:
+			if j+1 < len(t) && t[j+1] == q {
+				j++
+				continue
+			}
+			return j + 1
+		}
+	}
+	return len(t)
 }
 
 // StringType reports whether t, normalised, is a built-in string type:

@@ -24,6 +24,17 @@ func TestNormalizeType(t *testing.T) {
 		{velox.MySQL, "bigint(20) unsigned", "bigint unsigned"},
 		{velox.MySQL, "tinyint(1)", "tinyint(1)"},
 		{velox.SQLite, "TEXT", "text"},
+		{velox.MySQL, "ENUM( 'Draft' , 'Published' )", "enum('Draft','Published')"},
+		{velox.MySQL, "SET('a, b','C')", "set('a, b','C')"},
+		{velox.MySQL, `enum('It''s','a\\'' B')`, `enum('It''s','a\\'' B')`},
+		{velox.MySQL, `ENUM('a\' B', 'C')`, `enum('a\' B','C')`},
+		{velox.MySQL, "VARCHAR(10)  COLLATE \"en_US\"", "varchar(10) collate \"en_US\""},
+		{velox.MySQL, "ENUM(`X  Y`)", "enum(`X  Y`)"},
+		{velox.Postgres, `"MyType"`, `"MyType"`},
+		{velox.Postgres, `"My  ""Odd"" Type"`, `"My  ""Odd"" Type"`},
+		{velox.Postgres, `Character Varying(20) COLLATE "en_US"`, `character varying(20) collate "en_US"`},
+		{velox.Postgres, `"Sch"."Typ"`, `"Sch"."Typ"`},
+		{velox.Postgres, `'unterminated  X`, `'unterminated  X`},
 	} {
 		if got := NormalizeType(c.d, c.in); got != c.out {
 			t.Errorf("%v: NormalizeType(%q) = %q, want %q", c.d, c.in, got, c.out)

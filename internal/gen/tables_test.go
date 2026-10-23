@@ -274,6 +274,7 @@ func (tbTypes) Fields() []schema.Field {
 		field.Time("t"), field.UUID("uu", uuidValue{}), field.JSON("j", jsonShape{}),
 		field.Other("o", tbMoney{}).SchemaType(map[string]string{field.Postgres: "MONEY", field.MySQL: "INT(11)", field.SQLite: "NUMERIC"}),
 		field.Int32("st").SchemaType(map[string]string{field.MySQL: "INT(11)", field.Postgres: "int4"}),
+		field.String("q").SchemaType(map[string]string{field.MySQL: "ENUM('Draft', 'Published')", field.Postgres: `VARCHAR(20) COLLATE "en_US"`, field.SQLite: `TEXT COLLATE "NoCase"`}),
 	}
 }
 
@@ -323,6 +324,7 @@ func TestTablesTypes(t *testing.T) {
 		"j":          {"jsonb", "json", "text"},
 		"o":          {"money", "int", "numeric"},
 		"st":         {"integer", "int", "integer"},
+		"q":          {`character varying(20) collate "en_US"`, "enum('Draft','Published')", `text collate "NoCase"`},
 	}
 	for i, d := range allDialects {
 		s := tables(t, d, tbTypes{}, tbTypesWide{})
