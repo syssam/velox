@@ -63,7 +63,7 @@ func (d *differ) dropTables(tables []*Table) {
 						if fk.RefTable != t.Ref() {
 							return false
 						}
-						d.add(DropForeignKey{Table: r.Ref(), ForeignKey: fk}, 1, 0, r.Ref(), 0, fk.Name)
+						d.add(DropForeignKey{Table: r.Ref(), ForeignKey: *d.orig.table(r.Ref()).foreignKey(fk.Name)}, 1, 0, r.Ref(), 0, fk.Name)
 						return true
 					})
 				}

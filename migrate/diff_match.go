@@ -52,6 +52,7 @@ func (d *differ) renameTables(m map[TableRef]TableRef) error {
 				}
 			}
 		}
+		d.fromRef[dst] = src
 		d.add(RenameTable{From: src, To: dst}, 2, 0, src, 0, "")
 	}
 	return nil
@@ -109,6 +110,10 @@ func (d *differ) renameColumns(tables map[TableRef]TableRef, m map[ColumnRef]str
 		rename(t.PrimaryKey)
 		for i := range t.Indexes {
 			rename(t.Indexes[i].Columns)
+			t.Indexes[i].Where = renameIdent(d.mid.Dialect, t.Indexes[i].Where, k.Column, dst)
+		}
+		for i := range t.Checks {
+			t.Checks[i].Expr = renameIdent(d.mid.Dialect, t.Checks[i].Expr, k.Column, dst)
 		}
 		for i := range t.ForeignKeys {
 			rename(t.ForeignKeys[i].Columns)
@@ -242,7 +247,8 @@ func (d *differ) renameObjects() {
 				continue
 			}
 			for _, uf := range u.ForeignKeys {
-				if t.foreignKey(uf.Name) == nil && sameForeignKey(*tf, uf) {
+				// A key dropped around a type change is not renamed.
+				if t.foreignKey(uf.Name) == nil && sameForeignKey(*tf, uf) && !d.keyRetyped(ref, uf) {
 					d.add(RenameConstraint{Table: ref, From: tf.Name, To: uf.Name}, 2, 4, ref, 0, tf.Name)
 					tf.Name = uf.Name
 					break

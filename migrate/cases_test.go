@@ -390,14 +390,15 @@ func withSmallKey(m *loadjson.Model) {
 	fieldOf(m, "User", "org_id").Type = "int32"
 }
 
+var renameUsers = migrate.DiffOptions{RenameTables: map[migrate.TableRef]migrate.TableRef{users: accounts}}
+
 var cases = []testCase{
 	{name: "create-tables", empty: true, to: func(m *loadjson.Model) { addSchema(m, Alpha{}, Beta{}) }},
 	{name: "drop-table", to: func(m *loadjson.Model) {
 		dropSchema(m, "Post")
 		dropEdge(m, "User", "posts")
 	}},
-	{name: "rename-table", to: func(m *loadjson.Model) { annotate(m, "User", schema.Table("accounts")) },
-		opts: migrate.DiffOptions{RenameTables: map[migrate.TableRef]migrate.TableRef{users: accounts}}},
+	{name: "rename-table", to: func(m *loadjson.Model) { annotate(m, "User", schema.Table("accounts")) }, opts: renameUsers},
 	{name: "add-column-optional", to: func(m *loadjson.Model) { addField(m, "User", field.String("nickname").Optional()) }},
 	{name: "add-column-nillable", to: func(m *loadjson.Model) {
 		addField(m, "User", field.String("nickname").Optional().Nillable())
@@ -476,4 +477,32 @@ var cases = []testCase{
 		return s
 	}},
 	{name: "rebuild-parent", dialects: sqlite, to: func(m *loadjson.Model) { fieldOf(m, "User", "logins").Type = "float64" }},
+	{name: "rename-table-drop-column", to: func(m *loadjson.Model) {
+		annotate(m, "User", schema.Table("accounts"))
+		dropField(m, "User", "email")
+	}, opts: renameUsers},
+	{name: "rename-table-key-type", dialects: pgMySQL, from: withSmallKey,
+		to: func(m *loadjson.Model) { annotate(m, "User", schema.Table("accounts")) }, opts: renameUsers},
+	{name: "reuse-dropped-name", from: func(m *loadjson.Model) {
+		addIndex(m, "Post", index.Fields("title").StorageKey("shared_idx"))
+		edgeOf(m, "Post", "author").Symbols = []string{"shared_fk"}
+	}, to: func(m *loadjson.Model) {
+		dropSchema(m, "Post")
+		dropEdge(m, "User", "posts")
+		addIndex(m, "User", index.Fields("created_at").StorageKey("shared_idx"))
+		edgeOf(m, "User", "mentor").Symbols = []string{"shared_fk"}
+	}},
+	{name: "drop-column-in-index", from: func(m *loadjson.Model) {
+		addIndex(m, "User", index.Fields("org_id", "logins"))
+	}, to: func(m *loadjson.Model) { dropField(m, "User", "logins") }},
+	{name: "rename-column-check", to: func(m *loadjson.Model) { fieldOf(m, "User", "role").StorageKey = "kind" },
+		opts: migrate.DiffOptions{RenameColumns: map[migrate.ColumnRef]string{{Table: users, Column: "role"}: "kind"}}},
+	{name: "rename-column-where", dialects: []velox.Dialect{velox.Postgres, velox.SQLite}, from: func(m *loadjson.Model) {
+		addIndex(m, "User", index.Fields("email").Where(`"bio" <> 'bio'`))
+		addIndex(m, "User", index.Fields("name").Where(`bio IS NOT NULL`))
+	}, to: func(m *loadjson.Model) {
+		fieldOf(m, "User", "bio").StorageKey = "about"
+		addIndex(m, "User", index.Fields("email").Where(`"about" <> 'bio'`))
+		addIndex(m, "User", index.Fields("name").Where(`about IS NOT NULL`))
+	}, opts: migrate.DiffOptions{RenameColumns: map[migrate.ColumnRef]string{{Table: users, Column: "bio"}: "about"}}},
 }

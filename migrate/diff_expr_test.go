@@ -1,0 +1,29 @@
+package migrate
+
+import (
+	"testing"
+
+	"github.com/syssam/velox2"
+)
+
+func TestRenameIdent(t *testing.T) {
+	for _, c := range []struct {
+		d          velox.Dialect
+		expr, want string
+	}{
+		{velox.Postgres, `"bio" <> 'bio'`, `"about" <> 'bio'`},
+		{velox.Postgres, `bio IS NOT NULL AND Bio <> ''`, `about IS NOT NULL AND about <> ''`},
+		{velox.Postgres, `bio(x) > 0 AND biography > 0 AND "bio""s" > 0`, `bio(x) > 0 AND biography > 0 AND "bio""s" > 0`},
+		{velox.Postgres, `'it''s bio' = bio`, `'it''s bio' = about`},
+		{velox.SQLite, "`bio` IN ('a', 'b') AND \"bio\" > 1", "\"about\" IN ('a', 'b') AND \"about\" > 1"},
+		{velox.MySQL, "`bio` IN ('a\\'bio', \"bio\") OR bio > 1", "`about` IN ('a\\'bio', \"bio\") OR about > 1"},
+		{velox.Postgres, `1bio > 0 AND t.bio > 0`, `1bio > 0 AND t.about > 0`},
+	} {
+		if got := renameIdent(c.d, c.expr, "bio", "about"); got != c.want {
+			t.Errorf("%v: %s: %s, want %s", c.d, c.expr, got, c.want)
+		}
+	}
+	if got := renameIdent(velox.Postgres, `bio > 0`, "bio", "About"); got != `"About" > 0` {
+		t.Errorf("a name that needs quotes: %s", got)
+	}
+}

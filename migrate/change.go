@@ -4,8 +4,8 @@ package migrate
 // a caller switches on the type.
 type Change interface {
 	Kind() Kind
-	// Target is the table the change acts on, by its name in to (in from for
-	// DropTable), or an enum type's ref for the enum changes.
+	// Target is the object it acts on, by its name when the change runs: a
+	// table, or an enum type's ref for the enum changes.
 	Target() TableRef
 	isChange()
 }

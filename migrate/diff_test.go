@@ -187,8 +187,18 @@ func orderPair() (from, to *migrate.Schema, opts migrate.DiffOptions) {
 				ForeignKeys: []migrate.ForeignKey{{Name: "a_gone_fkey", Columns: []string{"gone"}, RefTable: migrate.TableRef{Name: "d"}, RefColumns: []string{"id"}}},
 				Checks:      []migrate.Check{{Name: "a_chk", Expr: `"x" <> ''`}},
 			},
-			{Name: "d", Columns: []migrate.Column{id("d_id_seq")}, PrimaryKey: []string{"id"}, PrimaryKeyName: "d_pkey"},
-			{Name: "r_old", Columns: []migrate.Column{id("r_old_id_seq"), text("v")}, PrimaryKey: []string{"id"}, PrimaryKeyName: "r_old_pkey"},
+			{
+				Name: "d", Columns: []migrate.Column{id("d_id_seq"), {Name: "x", Type: "bigint"}}, PrimaryKey: []string{"id"}, PrimaryKeyName: "d_pkey",
+				ForeignKeys: []migrate.ForeignKey{{Name: "d_x_fkey", Columns: []string{"x"}, RefTable: migrate.TableRef{Name: "d2"}, RefColumns: []string{"id"}}},
+			},
+			{
+				Name: "d2", Columns: []migrate.Column{id("d2_id_seq"), {Name: "y", Type: "bigint"}}, PrimaryKey: []string{"id"}, PrimaryKeyName: "d2_pkey",
+				ForeignKeys: []migrate.ForeignKey{{Name: "d2_y_fkey", Columns: []string{"y"}, RefTable: migrate.TableRef{Name: "d"}, RefColumns: []string{"id"}}},
+			},
+			{
+				Name: "r_old", Columns: []migrate.Column{id("r_old_id_seq"), text("v"), text("w")}, PrimaryKey: []string{"id"}, PrimaryKeyName: "r_old_pkey",
+				Indexes: []migrate.Index{{Name: "r_old_w", Columns: []string{"w"}}},
+			},
 		},
 		Enums: []migrate.Enum{
 			{Name: "e_old", Values: []string{"p", "q"}},
@@ -213,9 +223,16 @@ func orderPair() (from, to *migrate.Schema, opts migrate.DiffOptions) {
 				},
 				ForeignKeys: []migrate.ForeignKey{{Name: "a_y_fkey", Columns: []string{"y"}, RefTable: migrate.TableRef{Name: "c"}, RefColumns: []string{"id"}}},
 				Checks:      []migrate.Check{{Name: "a_chk2", Expr: `"y" > 0`}},
-				Comment:     "c",
+				Comment:     "c", Collation: "utf8mb4_bin",
 			},
-			{Name: "c", Columns: []migrate.Column{id("c_id_seq")}, PrimaryKey: []string{"id"}, PrimaryKeyName: "c_pkey"},
+			{
+				Name: "c", Columns: []migrate.Column{id("c_id_seq"), {Name: "x", Type: "bigint"}}, PrimaryKey: []string{"id"}, PrimaryKeyName: "c_pkey",
+				ForeignKeys: []migrate.ForeignKey{{Name: "c_x_fkey", Columns: []string{"x"}, RefTable: migrate.TableRef{Name: "c2"}, RefColumns: []string{"id"}}},
+			},
+			{
+				Name: "c2", Columns: []migrate.Column{id("c2_id_seq"), {Name: "y", Type: "bigint"}}, PrimaryKey: []string{"id"}, PrimaryKeyName: "c2_pkey",
+				ForeignKeys: []migrate.ForeignKey{{Name: "c2_y_fkey", Columns: []string{"y"}, RefTable: migrate.TableRef{Name: "c"}, RefColumns: []string{"id"}}},
+			},
 			{
 				Name: "r_new", Columns: []migrate.Column{id("r_old_id_seq"), text("v")}, PrimaryKey: []string{"id"}, PrimaryKeyName: "r_old_pkey",
 				Indexes: []migrate.Index{{Name: "r_new_v", Columns: []string{"v"}}},
@@ -240,8 +257,10 @@ func TestDiffOrder(t *testing.T) {
 	cs := diff(t, from, to, opts)
 	want := []string{
 		"drop-foreign-key a a_gone_fkey",
+		"drop-foreign-key d2 d2_y_fkey",
 		"drop-check a a_chk",
 		"drop-index a a_gone",
+		"drop-index r_old r_old_w",
 		"rename-table r_new r_old r_new",
 		"rename-sequence a id a_id_seq_old a_id_seq",
 		"rename-column a old_name new_name",
@@ -251,16 +270,21 @@ func TestDiffOrder(t *testing.T) {
 		"create-enum fresh",
 		`alter-enum grow ["a" "b"] ["a" "b" "c"]`,
 		"create-table c",
+		"create-table c2",
 		"add-column a y",
 		"alter-column a x 10",
 		`set-table-comment a "" "c"`,
+		"set-table-collation a  utf8mb4_bin",
 		"drop-column a gone",
+		"drop-column r_new w",
 		"add-index a a_y",
 		"add-index r_new r_new_v",
 		"add-check a a_chk2",
 		"add-foreign-key a a_y_fkey",
+		"add-foreign-key c c_x_fkey",
 		"drop-index a a_id_x",
 		"drop-table d",
+		"drop-table d2",
 		`alter-enum swap ["a" "b"] ["b" "a"]`,
 		"drop-enum gone",
 	}
@@ -268,6 +292,87 @@ func TestDiffOrder(t *testing.T) {
 	got, err := migrate.ApplyChanges(from, cs)
 	if err != nil || !got.Equal(to) {
 		t.Errorf("from with the changes is not to: %v", err)
+	}
+}
+
+// The drops before the renames name the table and the object as from does,
+// and an object they drop is not renamed.
+func TestDiffStepOneUsesFromNames(t *testing.T) {
+	renames := []string{
+		"rename-table accounts users accounts",
+		"rename-sequence accounts id users_id_seq accounts_id_seq",
+	}
+	wantLines(t, "rename-table-drop-column", caseChanges(t, "rename-table-drop-column", velox.Postgres), append(append([]string{
+		"drop-index users users_email_unique"}, renames...),
+		"rename-index accounts users_mentor_id accounts_mentor_id",
+		"rename-index accounts users_org_id accounts_org_id",
+		"rename-constraint accounts users_org_id_fkey accounts_org_id_fkey",
+		"rename-constraint accounts users_pkey accounts_pkey",
+		"rename-enum accounts_role users_role",
+		"drop-column accounts email",
+	))
+	wantLines(t, "rename-table-key-type", caseChanges(t, "rename-table-key-type", velox.Postgres), append(append([]string{
+		"drop-foreign-key users users_org_id_fkey"}, renames...),
+		"rename-index accounts users_email_unique accounts_email_unique",
+		"rename-index accounts users_mentor_id accounts_mentor_id",
+		"rename-index accounts users_org_id accounts_org_id",
+		"rename-constraint accounts users_pkey accounts_pkey",
+		"rename-enum accounts_role users_role",
+		"alter-column accounts org_id 1",
+		"alter-column orgs id 1",
+		"add-foreign-key accounts accounts_org_id_fkey",
+	))
+}
+
+// A name to takes from a table dropped at the end is freed first: an
+// index's, or on MySQL, where they are per database, a foreign key's.
+func TestDiffReusedName(t *testing.T) {
+	for _, d := range allDialects {
+		first := "drop-index posts shared_idx"
+		if d == velox.MySQL {
+			first = "drop-foreign-key posts shared_fk"
+		}
+		wantLines(t, d.String(), caseChanges(t, "reuse-dropped-name", d), []string{
+			first,
+			"rename-constraint users user_mentor shared_fk",
+			"add-index users shared_idx",
+			"drop-table posts",
+		})
+	}
+}
+
+// An index on a dropped column goes before it, except on MySQL when it keeps
+// other columns: MySQL shrinks it, and it is dropped after the adds.
+func TestDiffDropColumnInIndex(t *testing.T) {
+	for _, d := range allDialects {
+		want := []string{"drop-index users users_org_id_logins", "drop-column users logins", "add-index users users_org_id"}
+		if d == velox.MySQL {
+			want = []string{"drop-column users logins", "add-index users users_org_id", "drop-index users users_org_id_logins"}
+		}
+		wantLines(t, d.String(), caseChanges(t, "drop-column-in-index", d), want)
+	}
+}
+
+// A column rename carries the checks and partial indexes that name the
+// column: a derived check and index are renamed, not dropped and added.
+func TestDiffRenameColumnRewrites(t *testing.T) {
+	want := map[velox.Dialect][]string{
+		velox.Postgres: {"rename-column users role kind", "rename-enum users_kind users_role"},
+		velox.MySQL:    {"rename-column users role kind"},
+		velox.SQLite:   {"rename-column users role kind", "rename-constraint users users_role_check users_kind_check"},
+	}
+	for _, d := range allDialects {
+		wantLines(t, d.String(), caseChanges(t, "rename-column-check", d), want[d])
+	}
+	for _, d := range caseNamed("rename-column-where").on() {
+		cs := caseChanges(t, "rename-column-where", d)
+		var got []string
+		for _, c := range cs {
+			got = append(got, string(c.Kind()))
+		}
+		if !slices.Equal(got, []string{"rename-column", "rename-index", "rename-index"}) {
+			t.Errorf("%v:\n%s", d, strings.Join(lines(cs), "\n"))
+		}
 	}
 }
 
@@ -463,6 +568,8 @@ func TestDiffErrors(t *testing.T) {
 		code     string
 		text     string
 	}{
+		{"nil from", nil, users("id"), migrate.DiffOptions{}, "nil", "migrate: Diff needs two schemas"},
+		{"nil to", users("id"), nil, migrate.DiffOptions{}, "nil", "migrate: Diff needs two schemas"},
 		{"dialect", users("id"), &migrate.Schema{Dialect: velox.MySQL}, migrate.DiffOptions{}, "dialect",
 			"migrate: from is a postgres schema and to a mysql one; Diff compares two schemas of one dialect"},
 		{"primary key", users("id"), users("id", "org_id"), migrate.DiffOptions{}, "primary-key",

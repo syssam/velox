@@ -26,15 +26,24 @@ import (
 // tables, children first, and swap or drop enum types. Within a step the
 // changes are sorted by table, then by object name or column position.
 //
-// Its errors are *Error values: the dialects differ ("dialect"), a primary
+// Each change names tables and objects as they are when it runs: the drops
+// before the renames use from's names, and the changes after them to's. An
+// object dropped before the renames is not renamed. A column rename carries
+// the checks and partial indexes that name the column.
+//
+// Its errors are *Error values: either schema is nil ("nil"), the dialects
+// differ ("dialect"), a primary
 // key's columns change ("primary-key"), or a rename names a table or column
 // from does not have, or one to does not have or from already has ("rename").
 // Diff does not change from or to.
 func Diff(from, to *Schema, opts DiffOptions) ([]Change, error) {
+	if from == nil || to == nil {
+		return nil, &Error{Code: "nil", Reason: "Diff needs two schemas"}
+	}
 	if from.Dialect != to.Dialect {
 		return nil, &Error{Code: "dialect", Reason: fmt.Sprintf("from is a %s schema and to a %s one; Diff compares two schemas of one dialect", from.Dialect, to.Dialect)}
 	}
-	d := &differ{orig: from.clone(), mid: from.clone(), to: to.clone()}
+	d := &differ{orig: from.clone(), mid: from.clone(), to: to.clone(), fromRef: map[TableRef]TableRef{}}
 	for _, s := range [...]*Schema{d.orig, d.mid, d.to} {
 		s.sort()
 	}
@@ -49,6 +58,7 @@ func Diff(from, to *Schema, opts DiffOptions) ([]Change, error) {
 		return nil, err
 	}
 	d.renameEnums()
+	d.findRetyped()
 	d.renameObjects()
 	d.mid.sort()
 	d.enums()
@@ -60,6 +70,7 @@ func Diff(from, to *Schema, opts DiffOptions) ([]Change, error) {
 // as it is found, so that after the renames it matches to by name.
 type differ struct {
 	orig, mid, to *Schema
+	fromRef       map[TableRef]TableRef        // a renamed table's name in from, by its name in to
 	retyped       map[TableRef]map[string]bool // the columns whose type changes, by table
 	out           []planned
 }
@@ -140,27 +151,16 @@ func (d *differ) alterEnum(from, to Enum) {
 
 // tables creates, alters and drops the tables, renames applied.
 func (d *differ) tables() {
-	d.retyped = map[TableRef]map[string]bool{}
 	var created, dropped []*Table
 	for i := range d.to.Tables {
-		u := &d.to.Tables[i]
-		t := d.mid.table(u.Ref())
-		if t == nil {
+		if u := &d.to.Tables[i]; d.mid.table(u.Ref()) == nil {
 			created = append(created, u)
-			continue
-		}
-		for _, uc := range u.Columns {
-			if tc := t.column(uc.Name); tc != nil && tc.Type != uc.Type {
-				if d.retyped[u.Ref()] == nil {
-					d.retyped[u.Ref()] = map[string]bool{}
-				}
-				d.retyped[u.Ref()][uc.Name] = true
-			}
 		}
 	}
 	for i := range d.mid.Tables {
 		if t := &d.mid.Tables[i]; d.to.table(t.Ref()) == nil {
 			dropped = append(dropped, t)
+			d.freeNames(t)
 		}
 	}
 	for i := range d.to.Tables {
@@ -172,9 +172,76 @@ func (d *differ) tables() {
 	d.dropTables(dropped)
 }
 
+// findRetyped finds the columns of the tables both have whose type changes,
+// renames applied.
+func (d *differ) findRetyped() {
+	d.retyped = map[TableRef]map[string]bool{}
+	for i := range d.to.Tables {
+		u := &d.to.Tables[i]
+		t := d.mid.table(u.Ref())
+		if t == nil {
+			continue
+		}
+		for _, uc := range u.Columns {
+			if tc := t.column(uc.Name); tc != nil && tc.Type != uc.Type {
+				if d.retyped[u.Ref()] == nil {
+					d.retyped[u.Ref()] = map[string]bool{}
+				}
+				d.retyped[u.Ref()][uc.Name] = true
+			}
+		}
+	}
+}
+
+// freeNames drops first the objects of t, a table dropped at the end, whose
+// names to gives another object: indexes, whose names are per database
+// schema, and on MySQL, where they are per database, foreign keys and
+// checks.
+func (d *differ) freeNames(t *Table) {
+	ref := t.Ref()
+	if d.to.Dialect != velox.MySQL {
+		for _, ix := range t.Indexes {
+			if d.toHas(ref.Schema, func(u *Table) bool { return u.index(ix.Name) != nil }) {
+				d.add(DropIndex{Table: ref, Index: ix}, 1, 2, ref, 0, ix.Name)
+			}
+		}
+		return
+	}
+	t.ForeignKeys = slices.DeleteFunc(t.ForeignKeys, func(fk ForeignKey) bool {
+		if !d.toHas(ref.Schema, func(u *Table) bool { return u.foreignKey(fk.Name) != nil }) {
+			return false
+		}
+		d.add(DropForeignKey{Table: ref, ForeignKey: *d.orig.table(ref).foreignKey(fk.Name)}, 1, 0, ref, 0, fk.Name)
+		return true
+	})
+	for _, ck := range t.Checks {
+		if d.toHas(ref.Schema, func(u *Table) bool { return u.check(ck.Name) != nil }) {
+			d.add(DropCheck{Table: ref, Check: ck}, 1, 1, ref, 0, ck.Name)
+		}
+	}
+}
+
+// toHas reports whether a table of to in the database schema schema has
+// what has looks for.
+func (d *differ) toHas(schema string, has func(*Table) bool) bool {
+	for i := range d.to.Tables {
+		if u := &d.to.Tables[i]; u.Schema == schema && has(u) {
+			return true
+		}
+	}
+	return false
+}
+
 // alterTable changes t, a table of from with the renames applied, into u.
+// The drops of step 1 run before the renames, so they name the table and the
+// object as from does.
 func (d *differ) alterTable(t, u *Table) {
 	ref := u.Ref()
+	oref := ref
+	if r, ok := d.fromRef[ref]; ok {
+		oref = r
+	}
+	ot := d.orig.table(oref)
 	gone := map[string]bool{}
 	for i, uc := range u.Columns {
 		tc := t.column(uc.Name)
@@ -202,7 +269,7 @@ func (d *differ) alterTable(t, u *Table) {
 	for _, ui := range u.Indexes {
 		ti := t.index(ui.Name)
 		if ti != nil && !sameIndex(*ti, ui) {
-			d.add(DropIndex{Table: ref, Index: *ti}, 1, 2, ref, 0, ti.Name)
+			d.add(DropIndex{Table: oref, Index: *ot.index(ti.Name)}, 1, 2, oref, 0, ti.Name)
 		}
 		if ti == nil || !sameIndex(*ti, ui) {
 			d.add(AddIndex{Table: ref, Index: ui}, 7, 0, ref, 0, ui.Name)
@@ -212,11 +279,17 @@ func (d *differ) alterTable(t, u *Table) {
 		if u.index(ti.Name) != nil {
 			continue
 		}
-		// An index on a dropped column goes with it, and one whose name
+		// An index on a dropped column goes before it, and one whose name
 		// another table's index takes goes before that one is made; the
-		// others go after the adds, so a replacement exists first.
-		if slices.ContainsFunc(ti.Columns, func(c string) bool { return gone[c] }) || d.nameTaken(ref, ti.Name) {
-			d.add(DropIndex{Table: ref, Index: ti}, 1, 2, ref, 0, ti.Name)
+		// others go after the adds, so a replacement exists first. MySQL
+		// drops an index with its last column, and shrinks one that keeps
+		// others, which then goes after the adds.
+		onGone := slices.ContainsFunc(ti.Columns, func(c string) bool { return gone[c] })
+		if d.to.Dialect == velox.MySQL {
+			onGone = !slices.ContainsFunc(ti.Columns, func(c string) bool { return !gone[c] })
+		}
+		if onGone || d.nameTaken(ref, ti.Name) {
+			d.add(DropIndex{Table: oref, Index: *ot.index(ti.Name)}, 1, 2, oref, 0, ti.Name)
 		} else {
 			d.add(DropIndex{Table: ref, Index: ti}, 8, 0, ref, 0, ti.Name)
 		}
@@ -225,7 +298,7 @@ func (d *differ) alterTable(t, u *Table) {
 	for _, uf := range u.ForeignKeys {
 		tf := t.foreignKey(uf.Name)
 		if tf != nil && (!sameForeignKey(*tf, uf) || d.keyRetyped(ref, uf)) {
-			d.add(DropForeignKey{Table: ref, ForeignKey: *tf}, 1, 0, ref, 0, tf.Name)
+			d.add(DropForeignKey{Table: oref, ForeignKey: *ot.foreignKey(tf.Name)}, 1, 0, oref, 0, tf.Name)
 			tf = nil
 		}
 		if tf == nil {
@@ -234,14 +307,14 @@ func (d *differ) alterTable(t, u *Table) {
 	}
 	for _, tf := range t.ForeignKeys {
 		if u.foreignKey(tf.Name) == nil {
-			d.add(DropForeignKey{Table: ref, ForeignKey: tf}, 1, 0, ref, 0, tf.Name)
+			d.add(DropForeignKey{Table: oref, ForeignKey: *ot.foreignKey(tf.Name)}, 1, 0, oref, 0, tf.Name)
 		}
 	}
 
 	for _, uc := range u.Checks {
 		tc := t.check(uc.Name)
 		if tc != nil && tc.Expr != uc.Expr {
-			d.add(DropCheck{Table: ref, Check: *tc}, 1, 1, ref, 0, tc.Name)
+			d.add(DropCheck{Table: oref, Check: *ot.check(tc.Name)}, 1, 1, oref, 0, tc.Name)
 		}
 		if tc == nil || tc.Expr != uc.Expr {
 			d.add(AddCheck{Table: ref, Check: uc}, 7, 1, ref, 0, uc.Name)
@@ -249,7 +322,7 @@ func (d *differ) alterTable(t, u *Table) {
 	}
 	for _, tc := range t.Checks {
 		if u.check(tc.Name) == nil {
-			d.add(DropCheck{Table: ref, Check: tc}, 1, 1, ref, 0, tc.Name)
+			d.add(DropCheck{Table: oref, Check: *ot.check(tc.Name)}, 1, 1, oref, 0, tc.Name)
 		}
 	}
 }

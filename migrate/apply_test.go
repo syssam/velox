@@ -3,6 +3,7 @@ package migrate
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/syssam/velox2"
 )
@@ -13,7 +14,11 @@ import (
 func applyChanges(s *Schema, changes []Change) (*Schema, error) {
 	s = s.clone()
 	for i, c := range changes {
-		if err := apply(s, c); err != nil {
+		err := apply(s, c)
+		if err == nil {
+			err = valid(s)
+		}
+		if err != nil {
 			return nil, fmt.Errorf("change %d (%s %v): %w", i, c.Kind(), c.Target(), err)
 		}
 	}
@@ -128,6 +133,11 @@ func apply(s *Schema, c Change) error {
 		if len(t.Columns) == n {
 			return fmt.Errorf("no column %s", c.Column.Name)
 		}
+		if s.Dialect == velox.MySQL { // MySQL shrinks the indexes on the column
+			for i := range t.Indexes {
+				t.Indexes[i].Columns = slices.DeleteFunc(t.Indexes[i].Columns, func(col string) bool { return col == c.Column.Name })
+			}
+		}
 	case RenameColumn:
 		col := colOf(t, c.From)
 		if col == nil || colOf(t, c.To) != nil {
@@ -144,6 +154,10 @@ func apply(s *Schema, c Change) error {
 		rename(t.PrimaryKey)
 		for i := range t.Indexes {
 			rename(t.Indexes[i].Columns)
+			t.Indexes[i].Where = renameIdent(s.Dialect, t.Indexes[i].Where, c.From, c.To)
+		}
+		for i := range t.Checks {
+			t.Checks[i].Expr = renameIdent(s.Dialect, t.Checks[i].Expr, c.From, c.To)
 		}
 		for i := range t.ForeignKeys {
 			rename(t.ForeignKeys[i].Columns)
@@ -276,6 +290,90 @@ func colOf(t *Table, name string) *Column {
 	for i := range t.Columns {
 		if t.Columns[i].Name == name {
 			return &t.Columns[i]
+		}
+	}
+	return nil
+}
+
+// valid checks that what s's tables name exists: the columns of each
+// primary key, index and foreign key, the table and columns a key references
+// (a table may come later on SQLite, which resolves a reference when it is
+// used), the enum type of each PostgreSQL enum column; and that no two
+// tables, enums, or objects of one table share a name.
+func valid(s *Schema) error {
+	enums := map[string]bool{}
+	for _, e := range s.Enums {
+		typ := enumTypeName(e.ref())
+		if enums[typ] {
+			return fmt.Errorf("two enums %s", typ)
+		}
+		enums[typ] = true
+	}
+	tables := map[TableRef]bool{}
+	for i := range s.Tables {
+		t := &s.Tables[i]
+		if tables[t.Ref()] {
+			return fmt.Errorf("two tables %v", t.Ref())
+		}
+		tables[t.Ref()] = true
+		has := func(what string, cols []string) error {
+			for _, c := range cols {
+				if t.column(c) == nil {
+					return fmt.Errorf("%s: %s has no column %s", what, t.Name, c)
+				}
+			}
+			return nil
+		}
+		names := map[string]bool{}
+		for _, c := range t.Columns {
+			if names[c.Name] {
+				return fmt.Errorf("%s has two columns %s", t.Name, c.Name)
+			}
+			names[c.Name] = true
+			if s.Dialect == velox.Postgres && strings.HasPrefix(c.Type, `"`) && !enums[c.Type] {
+				return fmt.Errorf("%s.%s is of the missing type %s", t.Name, c.Name, c.Type)
+			}
+		}
+		if err := has("the primary key", t.PrimaryKey); err != nil {
+			return err
+		}
+		names = map[string]bool{}
+		for _, ix := range t.Indexes {
+			if names[ix.Name] {
+				return fmt.Errorf("%s has two indexes %s", t.Name, ix.Name)
+			}
+			names[ix.Name] = true
+			if err := has("index "+ix.Name, ix.Columns); err != nil {
+				return err
+			}
+		}
+		names = map[string]bool{}
+		for _, fk := range t.ForeignKeys {
+			if names[fk.Name] {
+				return fmt.Errorf("%s has two constraints %s", t.Name, fk.Name)
+			}
+			names[fk.Name] = true
+			if err := has("foreign key "+fk.Name, fk.Columns); err != nil {
+				return err
+			}
+			r := s.table(fk.RefTable)
+			if r == nil {
+				if s.Dialect != velox.SQLite {
+					return fmt.Errorf("foreign key %s references the missing table %v", fk.Name, fk.RefTable)
+				}
+				continue
+			}
+			for _, c := range fk.RefColumns {
+				if r.column(c) == nil {
+					return fmt.Errorf("foreign key %s references the missing column %v.%s", fk.Name, fk.RefTable, c)
+				}
+			}
+		}
+		for _, ck := range t.Checks {
+			if names[ck.Name] {
+				return fmt.Errorf("%s has two constraints %s", t.Name, ck.Name)
+			}
+			names[ck.Name] = true
 		}
 	}
 	return nil
