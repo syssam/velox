@@ -378,10 +378,32 @@ func (g *Generator) isOrderableField(field *gen.Field) bool {
 	return field.IsTime() || field.IsInt() || field.IsInt64() || field.IsBool() || field.IsEnum() || field.IsFloat()
 }
 
+// orderIDField returns the primary key when the schema opts it in to ordering
+// with graphql.OrderField on the ID field, and nil otherwise.
+//
+// The ID is not among t.Fields, so the annotation was read by nothing: a
+// schema could ask for orderBy {field: ID} and the enum would never list it.
+// Ordering by the ID is opt-in rather than automatic so that a schema that
+// never asked for it keeps the enum it has. SDL (OrderFields) and Go
+// (orderableFields) both go through here, so the two cannot disagree.
+func (g *Generator) orderIDField(t *gen.Type) *gen.Field {
+	if !t.HasOneFieldID() || g.getFieldAnnotation(t.ID).GetOrderField() == "" {
+		return nil
+	}
+	if len(g.filterFields([]*gen.Field{t.ID}, graphql.SkipOrderField)) == 0 {
+		return nil
+	}
+	return t.ID
+}
+
 // orderableFields returns the orderable fields for a type, filtering out skipped fields.
+// The primary key comes first when the schema opts it in (see orderIDField).
 func (g *Generator) orderableFields(t *gen.Type) []*gen.Field {
 	fields := g.filterFields(t.Fields, graphql.SkipOrderField)
 	var result []*gen.Field
+	if id := g.orderIDField(t); id != nil {
+		result = append(result, id)
+	}
 	for _, fld := range fields {
 		if g.isOrderableField(fld) {
 			result = append(result, fld)
@@ -613,6 +635,21 @@ func (g *Generator) genModelOrderFieldVars(f *jen.File, t *gen.Type, typeName, r
 
 			group.Comment(fmt.Sprintf("%s orders %s by %s.", varName, t.Name, fld.Name))
 			storageKey := fld.StorageKey()
+			if fld == t.ID {
+				// The ID is its own cursor, as in DefaultOrder: no Value, so
+				// CursorsPredicate keys on the id alone, in either direction.
+				idField := "ID"
+				if !strings.EqualFold(t.ID.Name, "id") {
+					idField = pascal(t.ID.Name)
+				}
+				group.Id(varName).Op("=").Op("&").Id(orderFieldName).Values(
+					jen.Id("Column").Op(":").Lit(storageKey),
+					jen.Id("ToCursor").Op(":").Func().Params(jen.Id(receiver).Op("*").Id(nodeType)).Qual(gqlrelayPkg, "Cursor").Block(
+						jen.Return(jen.Qual(gqlrelayPkg, "Cursor").Values(jen.Id("ID").Op(":").Id(receiver).Dot(idField))),
+					),
+				)
+				continue
+			}
 			group.Id(varName).Op("=").Op("&").Id(orderFieldName).Values(
 				jen.Id("Column").Op(":").Lit(storageKey),
 				jen.Id("ToCursor").Op(":").Func().Params(jen.Id(receiver).Op("*").Id(nodeType)).Qual(gqlrelayPkg, "Cursor").BlockFunc(func(blk *jen.Group) {

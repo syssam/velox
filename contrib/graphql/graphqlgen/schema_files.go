@@ -23,6 +23,11 @@ type OrderField struct {
 // schema lists them. The SDL is written from it, so the two cannot differ.
 func (g *Generator) OrderFields(t *gen.Type) []OrderField {
 	var out []OrderField
+	// The primary key is not among t.Fields; it is listed only when the schema
+	// opts it in with graphql.OrderField (see orderIDField).
+	if id := g.orderIDField(t); id != nil {
+		out = append(out, OrderField{Name: g.getOrderFieldName(id), Field: id})
+	}
 	// Filter by SkipOrderField annotation, then exclude non-orderable fields.
 	// Text fields (field.Text(), Size >= MaxInt32) are excluded because ordering
 	// by unbounded text columns is inefficient and rarely useful in practice.

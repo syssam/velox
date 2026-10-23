@@ -111,6 +111,56 @@ func TestWhereFieldsAndOrderFieldsAreTheSchema(t *testing.T) {
 	}
 }
 
+// The primary key is not among a type's fields, so graphql.OrderField on the ID
+// was read by nothing and a list could never be ordered by it. An ID that asks
+// is the first value of the order enum, in the SDL and in the Go the enum is
+// bound to; an ID that does not ask, or that is skipped, changes nothing.
+func TestOrderFields_PrimaryKeyWhenOptedIn(t *testing.T) {
+	str := func(name string) *entgen.Field {
+		return &entgen.Field{Name: name, Type: &field.TypeInfo{Type: field.TypeString}}
+	}
+	idWith := func(ann map[string]any) *entgen.Field {
+		return &entgen.Field{Name: "id", Type: &field.TypeInfo{Type: field.TypeInt64}, Annotations: ann}
+	}
+	asks := map[string]any{graphql.AnnotationName: graphql.OrderField("ID")}
+	skipped := map[string]any{graphql.AnnotationName: graphql.Annotation{OrderField: "ID", Skip: graphql.SkipOrderField}}
+
+	opted := &entgen.Type{Name: "Opted", ID: idWith(asks), Fields: []*entgen.Field{str("title")}, Annotations: map[string]any{}}
+	silent := &entgen.Type{Name: "Silent", ID: idWith(nil), Fields: []*entgen.Field{str("title")}, Annotations: map[string]any{}}
+	hidden := &entgen.Type{Name: "Hidden", ID: idWith(skipped), Fields: []*entgen.Field{str("title")}, Annotations: map[string]any{}}
+	g := NewGenerator(&entgen.Graph{Config: &entgen.Config{Package: "example/ent"}, Nodes: []*entgen.Type{opted, silent, hidden}},
+		Config{Package: "graphql", ORMPackage: "example/ent", Ordering: true})
+
+	names := func(t *entgen.Type) []string {
+		var out []string
+		for _, o := range g.OrderFields(t) {
+			out = append(out, o.Name)
+		}
+		return out
+	}
+	if got, want := names(opted), []string{"ID", "TITLE"}; !slices.Equal(got, want) {
+		t.Errorf("an ID that asks: OrderFields = %v, want %v", got, want)
+	}
+	if got, want := names(silent), []string{"TITLE"}; !slices.Equal(got, want) {
+		t.Errorf("an ID that does not ask: OrderFields = %v, want %v", got, want)
+	}
+	if got, want := names(hidden), []string{"TITLE"}; !slices.Equal(got, want) {
+		t.Errorf("an ID that is skipped: OrderFields = %v, want %v", got, want)
+	}
+
+	// The SDL and the Go list the same fields in the same order: the Go
+	// switches on the value the SDL names.
+	for _, typ := range []*entgen.Type{opted, silent, hidden} {
+		var goNames []string
+		for _, f := range g.orderableFields(typ) {
+			goNames = append(goNames, g.getOrderFieldName(f))
+		}
+		if !slices.Equal(goNames, names(typ)) {
+			t.Errorf("%s: orderableFields %v, OrderFields %v", typ.Name, goNames, names(typ))
+		}
+	}
+}
+
 func regexpIndex(s, pattern string) int {
 	if loc := regexp.MustCompile(pattern).FindStringIndex(s); loc != nil {
 		return loc[0]
