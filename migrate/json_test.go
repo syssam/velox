@@ -3,6 +3,7 @@ package migrate
 import (
 	"bytes"
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -44,12 +45,12 @@ func TestSnapshotShape(t *testing.T) {
 			PrimaryKey: []string{"id"}, PrimaryKeyName: "users_pkey",
 			Indexes:     []Index{{Name: "users_email_unique", Columns: []string{"email"}, Unique: true}},
 			ForeignKeys: []ForeignKey{{Name: "users_org_id_fkey", Columns: []string{"org_id"}, RefTable: TableRef{Name: "orgs"}, RefColumns: []string{"id"}, OnDelete: "CASCADE"}},
-			Checks:      []Check{{Name: "c", Expr: "x"}},
+			Checks:      []Check{{Name: "c", Expr: "a < 1 & b > 2"}},
 			Comment:     "k", Collation: "C",
 		}},
 		Enums: []Enum{{Name: "users_role", Values: []string{"viewer", "admin"}}},
 	}
-	want := `{"version":1,"dialect":"postgres","tables":[{"name":"users","columns":[{"name":"id","type":"bigint","identity":true,"sequence":"users_id_seq"}],"primary_key":["id"],"primary_key_name":"users_pkey","indexes":[{"name":"users_email_unique","columns":["email"],"unique":true}],"foreign_keys":[{"name":"users_org_id_fkey","columns":["org_id"],"ref_table":{"name":"orgs"},"ref_columns":["id"],"on_delete":"CASCADE"}],"checks":[{"name":"c","expr":"x"}],"comment":"k","collation":"C"}],"enums":[{"name":"users_role","values":["viewer","admin"]}]}`
+	want := `{"version":1,"dialect":"postgres","tables":[{"name":"users","columns":[{"name":"id","type":"bigint","identity":true,"sequence":"users_id_seq"}],"primary_key":["id"],"primary_key_name":"users_pkey","indexes":[{"name":"users_email_unique","columns":["email"],"unique":true}],"foreign_keys":[{"name":"users_org_id_fkey","columns":["org_id"],"ref_table":{"name":"orgs"},"ref_columns":["id"],"on_delete":"CASCADE"}],"checks":[{"name":"c","expr":"a \u003c 1 \u0026 b \u003e 2"}],"comment":"k","collation":"C"}],"enums":[{"name":"users_role","values":["viewer","admin"]}]}`
 	got, err := s.MarshalJSON()
 	if err != nil {
 		t.Fatal(err)
@@ -57,10 +58,19 @@ func TestSnapshotShape(t *testing.T) {
 	if string(got) != want {
 		t.Errorf("got\n%s\nwant\n%s", got, want)
 	}
-	// json.Marshal reaches the same method, and its output stays compact.
+	// Every path gives the same bytes: encoding/json escapes <, > and & in
+	// what a MarshalJSON writes, so MarshalJSON escapes them too.
 	viaStd, err := json.Marshal(s)
 	if err != nil || string(viaStd) != want {
 		t.Errorf("json.Marshal: %s, %v", viaStd, err)
+	}
+	var indented bytes.Buffer
+	if err := json.Indent(&indented, got, "", "\t"); err != nil {
+		t.Fatal(err)
+	}
+	viaIndent, err := json.MarshalIndent(s, "", "\t")
+	if err != nil || !bytes.Equal(viaIndent, indented.Bytes()) {
+		t.Errorf("json.MarshalIndent differs from json.Indent of MarshalJSON: %s, %v", viaIndent, err)
 	}
 	empty, _ := (&Schema{Dialect: velox.SQLite}).MarshalJSON()
 	if string(empty) != `{"version":1,"dialect":"sqlite"}` {
@@ -96,8 +106,8 @@ func TestSnapshotOmitsPos(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(b), `"where":"org_id > 0"`) {
-		t.Errorf("a predicate is escaped: %s", b)
+	if !strings.Contains(string(b), `"where":"org_id \u003e 0"`) {
+		t.Errorf("a predicate is not escaped as encoding/json escapes it: %s", b)
 	}
 	for _, w := range []string{`"pos"`, `"Pos"`, "schema/invoice.go"} {
 		if strings.Contains(string(b), w) {
@@ -142,7 +152,70 @@ func TestSnapshotRefusesVersion(t *testing.T) {
 		}
 	}
 	var s Schema
-	if err := s.UnmarshalJSON([]byte(`{`)); err == nil {
-		t.Error("malformed JSON")
+	err := s.UnmarshalJSON([]byte(`{`))
+	if e, ok := err.(*Error); !ok || e.Code != "json" || !strings.HasPrefix(err.Error(), "migrate: schema.json: ") {
+		t.Errorf("malformed JSON: %v", err)
+	}
+}
+
+func TestSnapshotRefusesDialect(t *testing.T) {
+	for _, d := range []velox.Dialect{0, 4, 255} {
+		b, err := (&Schema{Dialect: d}).MarshalJSON()
+		e, ok := err.(*Error)
+		if !ok || e.Code != "dialect" || b != nil {
+			t.Errorf("%v: %s, %v", d, b, err)
+		}
+		if _, err := json.Marshal(&Schema{Dialect: d}); err == nil {
+			t.Errorf("%v: json.Marshal wrote it", d)
+		}
+	}
+}
+
+// orderSchema has the lists whose order is part of the model.
+func orderSchema() *Schema {
+	return &Schema{
+		Dialect: velox.Postgres,
+		Tables: []Table{{
+			Name:       "t",
+			Columns:    []Column{{Name: "a", Type: "bigint"}, {Name: "b", Type: "bigint"}},
+			PrimaryKey: []string{"a", "b"},
+			Indexes:    []Index{{Name: "i", Columns: []string{"a", "b"}}},
+			ForeignKeys: []ForeignKey{{
+				Name: "f", Columns: []string{"a", "b"}, RefTable: TableRef{Name: "u"}, RefColumns: []string{"x", "y"},
+			}},
+		}},
+		Enums: []Enum{{Name: "e", Values: []string{"a", "b"}}},
+	}
+}
+
+func TestOrderedListsKeepTheirOrder(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		rev  func(*Schema)
+	}{
+		{"PrimaryKey", func(s *Schema) { slices.Reverse(s.Tables[0].PrimaryKey) }},
+		{"index Columns", func(s *Schema) { slices.Reverse(s.Tables[0].Indexes[0].Columns) }},
+		{"foreign key Columns", func(s *Schema) { slices.Reverse(s.Tables[0].ForeignKeys[0].Columns) }},
+		{"foreign key RefColumns", func(s *Schema) { slices.Reverse(s.Tables[0].ForeignKeys[0].RefColumns) }},
+		{"enum Values", func(s *Schema) { slices.Reverse(s.Enums[0].Values) }},
+	} {
+		a, b := orderSchema(), orderSchema()
+		c.rev(b)
+		if a.Equal(b) {
+			t.Errorf("%s: Equal after reversing it", c.name)
+		}
+		// Neither sorting nor a snapshot reorders it.
+		before := b.clone()
+		bj, err := b.MarshalJSON()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got Schema
+		if err := got.UnmarshalJSON(bj); err != nil {
+			t.Fatal(err)
+		}
+		if !got.Equal(before) || got.Equal(a) {
+			t.Errorf("%s: the round trip changed the order:\n%s", c.name, bj)
+		}
 	}
 }

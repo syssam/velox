@@ -2,7 +2,7 @@ package migrate
 
 import "strings"
 
-// An Error is a refusal of the migration planner.
+// An Error is a refusal of this package.
 type Error struct {
 	Pos    string // the schema's file:line, when known
 	Object string // the table, column, index or constraint it is about

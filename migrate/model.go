@@ -7,7 +7,8 @@ import (
 	"github.com/syssam/velox2"
 )
 
-// A Schema is the database as one dialect sees it.
+// A Schema is the database as one dialect sees it. The struct tags on it and
+// the types under it are the keys of the snapshot JSON.
 type Schema struct {
 	Dialect velox.Dialect
 	Tables  []Table // sorted by (Schema, Name)
@@ -180,7 +181,8 @@ func (s *Schema) clone() *Schema {
 }
 
 // sort puts every list in its order: tables and enums by (Schema, Name),
-// indexes, foreign keys and checks by Name. Columns keep their creation order,
+// indexes, foreign keys and checks by Name. The keys are assumed unique; a
+// duplicate keeps its place. Columns keep their creation order,
 // and so do the lists of column names and enum values.
 func (s *Schema) sort() {
 	slices.SortStableFunc(s.Tables, func(a, b Table) int { return cmp.Or(cmp.Compare(a.Schema, b.Schema), cmp.Compare(a.Name, b.Name)) })

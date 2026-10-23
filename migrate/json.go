@@ -1,7 +1,6 @@
 package migrate
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 
@@ -19,19 +18,26 @@ type snapshot struct {
 	Enums   []Enum  `json:"enums,omitempty"`
 }
 
-// MarshalJSON writes the schema as compact JSON, sorted, without Pos. It does
-// not change s.
+// MarshalJSON writes the schema as compact JSON, sorted, without Pos. It
+// escapes <, > and & as encoding/json does, so that the bytes are the same
+// whether the caller uses this method, json.Marshal or json.MarshalIndent. It
+// refuses a Dialect that is not one of the three. It does not change s.
 func (s *Schema) MarshalJSON() ([]byte, error) {
+	if !knownDialect(s.Dialect) {
+		return nil, dialectError(s.Dialect.String())
+	}
 	c := s.clone()
 	c.sort()
-	// A predicate or a check holds < and >; the file stays readable.
-	var b bytes.Buffer
-	enc := json.NewEncoder(&b)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(snapshot{Version: snapshotVersion, Dialect: c.Dialect.String(), Tables: c.Tables, Enums: c.Enums}); err != nil {
-		return nil, err
-	}
-	return bytes.TrimSuffix(b.Bytes(), []byte("\n")), nil
+	return json.Marshal(snapshot{Version: snapshotVersion, Dialect: c.Dialect.String(), Tables: c.Tables, Enums: c.Enums})
+}
+
+// knownDialect reports whether d is a dialect a snapshot can hold.
+func knownDialect(d velox.Dialect) bool {
+	return d == velox.Postgres || d == velox.MySQL || d == velox.SQLite
+}
+
+func dialectError(name string) error {
+	return &Error{Code: "dialect", Reason: fmt.Sprintf("schema.json has the unknown dialect %q", name)}
 }
 
 // UnmarshalJSON reads what MarshalJSON writes. It refuses another version and
@@ -39,7 +45,7 @@ func (s *Schema) MarshalJSON() ([]byte, error) {
 func (s *Schema) UnmarshalJSON(data []byte) error {
 	var in snapshot
 	if err := json.Unmarshal(data, &in); err != nil {
-		return err
+		return &Error{Code: "json", Reason: "schema.json: " + err.Error()}
 	}
 	if in.Version != snapshotVersion {
 		return &Error{Code: "version", Reason: fmt.Sprintf("schema.json is version %d; this velox reads version %d", in.Version, snapshotVersion)}
@@ -51,7 +57,7 @@ func (s *Schema) UnmarshalJSON(data []byte) error {
 		}
 	}
 	if d == 0 {
-		return &Error{Code: "dialect", Reason: fmt.Sprintf("schema.json has the unknown dialect %q", in.Dialect)}
+		return dialectError(in.Dialect)
 	}
 	*s = Schema{Dialect: d, Tables: in.Tables, Enums: in.Enums}
 	s.sort()
