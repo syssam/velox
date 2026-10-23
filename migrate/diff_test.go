@@ -603,6 +603,8 @@ func TestDiffErrors(t *testing.T) {
 			"migrate: from is a postgres schema and to a mysql one; Diff compares two schemas of one dialect"},
 		{"primary key", users("id"), users("id", "org_id"), migrate.DiffOptions{}, "primary-key",
 			"migrate: users: the primary key changes from (id) to (id, org_id); write this migration by hand"},
+		{"primary key name", users("id"), func() *migrate.Schema { s := users("id"); s.Tables[0].PrimaryKeyName = "users_pkey"; return s }(), migrate.DiffOptions{}, "primary-key",
+			`migrate: users: the primary key's name changes from "" to "users_pkey"; only a name can be renamed to another`},
 		{"rename source", users("id"), users("id"), migrate.DiffOptions{RenameTables: map[migrate.TableRef]migrate.TableRef{nope: a}}, "rename",
 			"migrate: nope: the table to rename is not in from"},
 		{"rename target", users("id"), users("id"), migrate.DiffOptions{RenameTables: map[migrate.TableRef]migrate.TableRef{u: a}}, "rename",
@@ -670,5 +672,34 @@ func TestDiffValidates(t *testing.T) {
 	}
 	if _, err := migrate.Diff(ok(), ok(), migrate.DiffOptions{}); err != nil {
 		t.Errorf("a valid schema: %v", err)
+	}
+}
+
+// TestDiffEmptyIffEqual holds Diff and Equal to one notion of a difference:
+// Diff gives no change, and no error, exactly when the schemas are equal.
+func TestDiffEmptyIffEqual(t *testing.T) {
+	check := func(t *testing.T, name string, a, b *migrate.Schema, opts migrate.DiffOptions) {
+		t.Helper()
+		cs, err := migrate.Diff(a, b, opts)
+		if empty, eq := err == nil && len(cs) == 0, a.Equal(b); empty != eq {
+			t.Errorf("%s: Equal is %v, but Diff gives %v, %v", name, eq, lines(cs), err)
+		}
+	}
+	eachCase(t, func(t *testing.T, c testCase, from, to *migrate.Schema) {
+		check(t, "from, to", from, to, c.opts)
+		check(t, "from, to, no renames", from, to, migrate.DiffOptions{})
+		check(t, "to, from", to, from, migrate.DiffOptions{})
+		check(t, "from, from", from, from, migrate.DiffOptions{})
+		check(t, "to, to", to, to, migrate.DiffOptions{})
+	})
+	named := func(d velox.Dialect, pk string) *migrate.Schema {
+		return &migrate.Schema{Dialect: d, Tables: []migrate.Table{{
+			Name: "users", Columns: []migrate.Column{{Name: "id", Type: "bigint"}}, PrimaryKey: []string{"id"}, PrimaryKeyName: pk,
+		}}}
+	}
+	for _, d := range []velox.Dialect{velox.Postgres, velox.MySQL, velox.SQLite} {
+		for _, p := range [][2]string{{"", "users_pkey"}, {"users_pkey", ""}, {"", "PRIMARY"}, {"a_pkey", "b_pkey"}} {
+			check(t, fmt.Sprintf("%v: primary key name %q to %q", d, p[0], p[1]), named(d, p[0]), named(d, p[1]), migrate.DiffOptions{})
+		}
 	}
 }

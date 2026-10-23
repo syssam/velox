@@ -136,12 +136,22 @@ func (d *differ) renameColumns(tables map[TableRef]TableRef, m map[ColumnRef]str
 	return nil
 }
 
-// primaryKeys refuses a table whose primary key's columns change.
+// primaryKeys refuses a table whose primary key's columns change, or whose
+// primary key gains or loses its name, which no statement can rename.
 func (d *differ) primaryKeys() error {
 	for i := range d.mid.Tables {
 		t := &d.mid.Tables[i]
 		u := d.to.table(t.Ref())
-		if u == nil || slices.Equal(t.PrimaryKey, u.PrimaryKey) {
+		if u == nil {
+			continue
+		}
+		if t.PrimaryKeyName != u.PrimaryKeyName && (t.PrimaryKeyName == "" || u.PrimaryKeyName == "") {
+			return &Error{
+				Pos: u.Pos, Object: u.Ref().String(), Code: "primary-key",
+				Reason: fmt.Sprintf("the primary key's name changes from %q to %q; only a name can be renamed to another", t.PrimaryKeyName, u.PrimaryKeyName),
+			}
+		}
+		if slices.Equal(t.PrimaryKey, u.PrimaryKey) {
 			continue
 		}
 		return &Error{

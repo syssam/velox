@@ -214,7 +214,7 @@ type Enum struct { // a PostgreSQL CREATE TYPE … AS ENUM
 
 ### 4. Types
 
-A column's `Type` is the canonical spelling: what the database reports when inspected, lower case. `Render` writes it verbatim, so built-in types need no mapping back. A `SchemaType` for the dialect overrides the table and is normalised by a per-dialect alias list (for PostgreSQL: `varchar`, `int4`, `int8`, `float8`, `bool`, `timestamptz`, `decimal`, `int` → their canonical forms). On MySQL the normaliser also strips integer display widths (`int(11)`, `bigint(20) unsigned`), except `tinyint(1)`, which is the bool. Any other spelling is compared after lower-casing and collapsing white space. `SchemaType`'s doc says to write it as the database prints it. An enum's `SchemaType` means what §3 says.
+A column's `Type` is the canonical spelling: what the database reports when inspected, lower case. `Render` writes it verbatim, so built-in types need no mapping back. A `SchemaType` for the dialect overrides the table and is normalised by a per-dialect alias list (for PostgreSQL: `varchar`, `int4`, `int8`, `float8`, `bool`, `timestamptz`, `decimal`, `int` → their canonical forms). On MySQL the normaliser also strips integer display widths (`int(11)`, `bigint(20) unsigned`), except `tinyint(1)`, which is the bool. Any other spelling is compared after lower-casing and collapsing white space outside quoted text: a literal, a quoted identifier, and on MySQL a backquoted name keep their bytes. `SchemaType`'s doc says to write it as the database prints it. An enum's `SchemaType` means what §3 says.
 
 `Size` comes from `MaxLen` (strings and bytes) or `Text` (`math.MaxInt32`). It counts bytes.
 
@@ -1332,6 +1332,10 @@ Plan 1 (`docs/plans/2026-10-23-migrate-1-model.md`) made these calls where this 
 - A MySQL foreign key's rename is a step-1 `DROP FOREIGN KEY` under the old name and an `ADD CONSTRAINT` with the other keys, in separate statements (the §8.2 example follows it); a rebuilt SQLite table's index rename drops the old name at once.
 - A SQLite plan that drops tables referencing each other turns foreign keys off.
 - Review lines are one line: newlines in a finding's text become spaces.
+- `Diff` gives no change, and no error, exactly when `Equal` holds. A primary key whose name changes to or from "" is refused as `"primary-key"`: the name is part of the model, and no statement renames a key from no name or to none.
+- `Diff` and `UnmarshalJSON` refuse a schema of an unknown dialect (`"dialect"`), or one listing a table, an enum type, or a table's column, index or constraint twice (`"schema"`). `Lint` gives a nil change no finding; `Render` refuses it.
+- `ParseAllow("")` allows nothing, without an error.
+- `NormalizeType` keeps quoted text as written: literals, identifiers, and on MySQL backquoted names.
 
 **Rulings of the PostgreSQL renderer.**
 
