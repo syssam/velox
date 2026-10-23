@@ -21,7 +21,7 @@ import (
 )
 
 // rendered are the dialects Render writes.
-var rendered = []velox.Dialect{velox.MySQL, velox.SQLite}
+var rendered = []velox.Dialect{velox.Postgres, velox.MySQL, velox.SQLite}
 
 func render(t *testing.T, from, to *migrate.Schema, cs []migrate.Change, opts migrate.RenderOptions) []migrate.Script {
 	t.Helper()
@@ -306,8 +306,9 @@ func TestRenderSQLiteDropCycle(t *testing.T) {
 
 func TestRenderQuotesIdentifiers(t *testing.T) {
 	for d, want := range map[velox.Dialect][]string{
-		velox.MySQL:  {"`a``b`", "`a\"b`"},
-		velox.SQLite: {"\"a`b\"", `"a""b"`},
+		velox.Postgres: {"\"a`b\"", `"a""b"`},
+		velox.MySQL:    {"`a``b`", "`a\"b`"},
+		velox.SQLite:   {"\"a`b\"", `"a""b"`},
 	} {
 		to := &migrate.Schema{Dialect: d, Tables: []migrate.Table{{
 			Name:       "t",
@@ -326,8 +327,9 @@ func TestRenderQuotesIdentifiers(t *testing.T) {
 
 func TestRenderLiterals(t *testing.T) {
 	for d, want := range map[velox.Dialect][]string{
-		velox.MySQL:  {`DEFAULT 'it''s a \\ test'`, `COMMENT 'it''s a \\ comment'`, `'o''neil'`},
-		velox.SQLite: {`DEFAULT 'it''s a \ test'`, `'o''neil'`},
+		velox.Postgres: {`DEFAULT 'it''s a \ test'`, `COMMENT ON COLUMN "users"."motto" IS 'it''s a \ comment'`, `ADD VALUE IF NOT EXISTS 'o''neil'`},
+		velox.MySQL:    {`DEFAULT 'it''s a \\ test'`, `COMMENT 'it''s a \\ comment'`, `'o''neil'`},
+		velox.SQLite:   {`DEFAULT 'it''s a \ test'`, `'o''neil'`},
 	} {
 		got := scriptsText(caseScripts(t, caseNamed("literals"), d))
 		for _, w := range want {
@@ -353,7 +355,7 @@ func TestRenderDirectives(t *testing.T) {
 		if want := []migrate.Allow{{Code: "drop-column", Target: "users.legacy"}}; !reflect.DeepEqual(allowed[0].Directives.Allow, want) {
 			t.Errorf("%v: Allow %v, want %v", d, allowed[0].Directives.Allow, want)
 		}
-		if lt := strings.Contains(text, "-- velox:lock-timeout 5s\n"); lt != (d == velox.MySQL) {
+		if lt := strings.Contains(text, "-- velox:lock-timeout 5s\n"); lt != (d != velox.SQLite) {
 			t.Errorf("%v: lock-timeout directive %v:\n%s", d, lt, text)
 		}
 		plain := scriptsText(render(t, f, to, cs, migrate.RenderOptions{}))
@@ -380,6 +382,9 @@ func TestRenderReviewLines(t *testing.T) {
 	}
 }
 
+// TestRenderUnits: a MySQL statement and an ADD VALUE are each a unit; an
+// online unit is a run of statements that starts with an IF EXISTS drop;
+// a statement of a script in a transaction is unit 0.
 func TestRenderUnits(t *testing.T) {
 	for _, d := range rendered {
 		for _, c := range cases {
@@ -388,8 +393,24 @@ func TestRenderUnits(t *testing.T) {
 			}
 			for _, s := range caseScripts(t, c, d) {
 				for i, st := range s.Statements {
+					if s.Kind == migrate.OnlineScript {
+						first := i == 0 || st.Unit != s.Statements[i-1].Unit
+						if want := 0; i > 0 {
+							want = s.Statements[i-1].Unit
+							if first {
+								want++
+							}
+							if st.Unit != want {
+								t.Errorf("%s: online statement %d has unit %d, want %d", c.name, i, st.Unit, want)
+							}
+						}
+						if first != strings.Contains(st.SQL, " IF EXISTS ") {
+							t.Errorf("%s: online statement %d, first of its unit %v: %s", c.name, i, first, st.SQL)
+						}
+						continue
+					}
 					want := 0
-					if d == velox.MySQL {
+					if d == velox.MySQL || s.Kind == migrate.EnumScript {
 						want = i
 					}
 					if st.Unit != want {
@@ -407,6 +428,7 @@ func TestRenderRefuses(t *testing.T) {
 		d velox.Dialect
 		c migrate.Change
 	}{
+		{velox.Postgres, migrate.SetTableCollation{Table: users, To: "x"}},
 		{velox.MySQL, migrate.RenameSequence{Table: users, Column: "id", From: "a", To: "b"}},
 		{velox.MySQL, migrate.CreateEnum{Enum: migrate.Enum{Name: "e", Values: []string{"a"}}}},
 		{velox.SQLite, migrate.SetTableComment{Table: users, To: "x"}},
@@ -419,11 +441,7 @@ func TestRenderRefuses(t *testing.T) {
 			t.Errorf("%v %s: %v, want a render error", tc.d, tc.c.Kind(), err)
 		}
 	}
-	_, err := migrate.Render(s(velox.Postgres), s(velox.Postgres), nil, migrate.RenderOptions{})
 	var e *migrate.Error
-	if !errors.As(err, &e) || e.Code != "render" || e.Reason != "PostgreSQL rendering is not built yet" {
-		t.Errorf("PostgreSQL: %v", err)
-	}
 	for _, d := range rendered {
 		if _, err := migrate.Render(s(d), s(d), []migrate.Change{nil}, migrate.RenderOptions{}); !errors.As(err, &e) || e.Code != "render" {
 			t.Errorf("%v: a nil change: %v", d, err)
@@ -442,9 +460,6 @@ func TestRenderRefuses(t *testing.T) {
 
 func TestRenderDoesNotMutate(t *testing.T) {
 	eachCase(t, func(t *testing.T, c testCase, from, to *migrate.Schema) {
-		if from.Dialect == velox.Postgres {
-			return
-		}
 		cs := diff(t, from, to, c.opts)
 		f, w, want := migrate.Clone(from), migrate.Clone(to), diff(t, from, to, c.opts)
 		render(t, from, to, cs, migrate.RenderOptions{LockTimeout: time.Second, Allow: c.allow})
@@ -456,9 +471,6 @@ func TestRenderDoesNotMutate(t *testing.T) {
 
 func TestRenderDeterministic(t *testing.T) {
 	eachCase(t, func(t *testing.T, c testCase, from, to *migrate.Schema) {
-		if from.Dialect == velox.Postgres {
-			return
-		}
 		cs := diff(t, from, to, c.opts)
 		opts := migrate.RenderOptions{LockTimeout: time.Second, Allow: c.allow}
 		a, b := render(t, from, to, cs, opts), render(t, from, to, cs, opts)

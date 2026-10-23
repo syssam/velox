@@ -127,8 +127,8 @@ Left by the observability plan:
 
 ## Left by schema plan 1
 
-- `Index.Where` is PostgreSQL-only, and nothing refuses it on other dialects yet.
-- `edge.Symbol` and `edge.Immutable` are carried into the Graph's `Edge` (`symbols`, `immutable`); the migration planner is the first to use the symbols. Rule 34 refuses an edge whose immutability differs from its bound field's, as ent does.
+- Resolved in migrate plan 1, for MySQL (`Tables` refuses `Index.Where` on MySQL at plan time; SQLite keeps it). `Index.Where` is PostgreSQL-only, and nothing refuses it on other dialects yet.
+- Resolved in migrate plan 1 for the symbols (`Tables` names foreign keys by `edge.Symbol` and `edge.Symbols`, checked by rule 51); `edge.Immutable` stays as it is. `edge.Symbol` and `edge.Immutable` are carried into the Graph's `Edge` (`symbols`, `immutable`); the migration planner is the first to use the symbols. Rule 34 refuses an edge whose immutability differs from its bound field's, as ent does.
 - Irregular plurals need `schema.Table`.
 - `singular()` is the simple inverse of plural (`children` gives `children_id`, where ent says `child_id`). A self-M2M edge named after its own type (edge `nodes` on `Node`) gives a join table with two `node_id` columns; rule 35 refuses it and asks for `edge.Columns`.
 - Rule 31 is stricter than ent: `edge.Column` with a bound field whose column differs is refused (ent lets the field adopt the edge's column).
@@ -268,7 +268,7 @@ From the final tasks of API plan 2 (2026-10-21). The plan's own items are done: 
 - Errors inside velox2's own mixins (`mixin.Time` and the like) print module-cache paths, since the position is where the constructor ran.
 - A plugin panic's stack trace is dropped, as the response's error holds the value only. Make it available behind an environment variable.
 - The case fold of plugin paths does no Unicode normalization: two spellings that differ only by normalization form are two files, and collide on a file system that normalizes.
-- **1.0 blocker, for the migrations plan:** derived index names (`<table>_<cols>[_unique][_<hash>]`) have no length cap. PostgreSQL truncates identifiers to 63 bytes and MySQL refuses names over 64, so two long derived names that differ only after byte 63 collide in the database while rule 44 passes them. Cap derived names with a hash suffix, and run rule 44 on the capped names. No database holds these names until the migration planner exists.
+- Resolved in migrate plan 1 (derived names are capped at 63 bytes by `ddl.Cap`, after the suffix, and rule 44 runs on the capped names). **1.0 blocker, for the migrations plan:** derived index names (`<table>_<cols>[_unique][_<hash>]`) have no length cap. PostgreSQL truncates identifiers to 63 bytes and MySQL refuses names over 64, so two long derived names that differ only after byte 63 collide in the database while rule 44 passes them. Cap derived names with a hash suffix, and run rule 44 on the capped names. No database holds these names until the migration planner exists.
 - Linux CI never runs the case-respell path of the stale-file sweep (a generated file whose name changed only in case, on a case-insensitive file system): the tests take it on macOS only. Run CI on a case-insensitive volume, or add a test hook that folds case on Linux.
 - Since the final review's fix of `Number[T]`, every stored literal `Default` is its kind's base value, so the `Marshaler` exemption of model 2's `Field.Default` (§6b ruling 10) has no case left to protect for numbers. The ruling stands; it could be loosened later, additively.
 
@@ -300,7 +300,7 @@ From the mutations (2026-10-22). The plan's items are done: the inputs with thei
 - A created row is returned as written, and an updated one is read back without the Read policy (a tenant-scoped `velox.SkipPolicy` read). Neither is checked against what the caller may then read.
 - There is no savepoint inside the extension's transaction (binding call 3): a resolver that swallows a mutation's error commits its partial writes. `Atomic` could call `db.Tx` inside the extension's transaction too, which makes a savepoint (two extra statements per mutation). A swallowed error would then roll back only that mutation, and on PostgreSQL a failed mutation would not abort the operation's transaction for the mutations after it. `Atomic` would then be just `db.Tx(ctx, fn)`, and `shared.OperationTx` could go. Worth reconsidering before 1.0.
 - `TestMutationsRun`'s inner `go test` runs without `-race`. Pass `-race` when the outer test binary is race-built (a `//go:build race` const). It adds build time to the slowest CI step, and the runtime under race is covered by `gqlimpl`'s and `veloxgql`'s own `-race` tests.
-- The plugin's `Nullable` says yes for an `Optional` JSON field of an interface, func or chan type, whose nil binds SQL NULL, but its `ColumnDesc` is not `Nullable` (`ColumnDesc.Nullable` refuses such a field). It works today. Before the migrations plan reads `ColumnInfo.Nullable` for DDL, either accept `Nullable` on such a column in `buildDesc` or have rule 48 refuse it.
+- Resolved in migrate plan 1 (rule 49 refuses JSON fields of kinds that cannot be encoded, so the plugin, the core and the planner agree on `Nullable`). The plugin's `Nullable` says yes for an `Optional` JSON field of an interface, func or chan type, whose nil binds SQL NULL, but its `ColumnDesc` is not `Nullable` (`ColumnDesc.Nullable` refuses such a field). It works today. Before the migrations plan reads `ColumnInfo.Nullable` for DDL, either accept `Nullable` on such a column in `buildDesc` or have rule 48 refuse it.
 - An O2O re-point on update can hit a hidden current child: the unlink of the current child is scoped by the child's tenant and Write policy, so a child the caller cannot change stays linked, and linking the new one fails with "unique constraint violated", which reveals the hidden child; with no unique index on the key, the row ends with two children. Check with a scope-free `COUNT` first and refuse with the "already linked" text, or document it.
 - A one-sided M2M (an `edge.To` with no inverse, which velox-gen allows) leaves join rows on the target's delete: `deleteX` gathers join tables only from the entity's own M2M edges, so the FK refuses the delete with a `ConstraintError`, or the rows dangle where FKs are off. Gather the model's M2M edges whose `Target` is the entity too.
 - `internal/gogen/mutation.go` repeats itself: the join `own`/`other` choice (three times), the "foreign key … is no field" error (four), the re-point emission and the owner-key `Exist` emission (two each), and the `ret` and `exec` closures (two). Factor `joinCols(ed)`, `fkOf(ent, ed)` and one `repoint(...)` emitter; the goldens do not change.
@@ -330,7 +330,7 @@ From the core additions (2026-10-22): `First` and `Exists`, `Sum`, `Avg`, `Min` 
 - The `velox.aggregate` span attribute (optional): `contrib/veloxotel` could name the aggregate function (`SUM`, `AVG`, `MIN`, `MAX`) on a statement with `Statement.Aggregate`. Nothing asks for it.
 - The `clientFoundRows` check at `Open` moves to the pgx split (see "Left by GraphQL plan 3").
 - [x] Resolved in GraphQL plan 4, but for `Bidi` self-edges (see "Left by GraphQL plan 4"): the first/last-aware cost limit, `LoadedConnection`, a selected-columns accessor for `ConnectionOf` (`Query.Selects`), and adopting `ForUpdate` in `UpdateX`.
-- Left to the migration planner: the derived index-name cap, `ColumnInfo.Nullable` for interface JSON fields, and MySQL's `Index.Where`.
+- Resolved in migrate plan 1 (the cap, rule 49 for `Nullable`, and `Index.Where` refused on MySQL). Left to the migration planner: the derived index-name cap, `ColumnInfo.Nullable` for interface JSON fields, and MySQL's `Index.Where`.
 - Left to the pgx split: `Save`'s `cols` allocation and the core's pgx dependency.
 - Left to velox-gen: rule errors without positions, mixin paths, plugin panic stacks, Unicode case folding.
 - Left to otel: `TxInfo`'s route (see "Left by API plan 4").
@@ -344,6 +344,17 @@ From the core additions (2026-10-22): `First` and `Exists`, `Sum`, `Avg`, `Min` 
 - The compile-cost bounds (`TestGenericTypesCompileSmall`) keep a margin of about 1.2% over the measured size, as the old ones did; a task that grows a measured entity re-measures and moves its bound by that rule. `entityDescUse` is near its bound.
 - The MySQL lock itests read `performance_schema` through `VELOX_TEST_MYSQL_ADMIN` (the CI MySQL's root; CI and `scripts/ci-local.sh` set it); without it they wait a fixed time.
 - A temp-module test that fails with "module lookup disabled by GOPROXY=off" now says "run go mod download" (`internal/tempmod`, `bench/scale`, and the tests that run `go` offline).
+
+## Left by migrate plan 1
+
+From migrate plan 1 (2026-10-23): the model, `Tables`, `Diff`, `Lint`, `Render` on three dialects and `NewPlan`. Plan 2 owns:
+- `FuzzSplit`, with the statement splitter, and the directory's goldens; the directory writes its files with plan 1's `writeScript`.
+- The real-database itests of every change kind, with the three invariants. Plan 1 executes its SQLite goldens in memory, and its PostgreSQL goldens on the CI database (`TestRenderPostgresExecutes`, under `VELOX_TEST_POSTGRES`, without rows); the MySQL goldens are not executed yet.
+- Itests of MySQL's combined `ALTER TABLE`s: an `ADD COLUMN` with a `MODIFY COLUMN`; an index dropped and added again under one name; a foreign key's step-1 drop and step-7 add around a rename or an index change.
+- An itest of the SQLite drop cycle, run with `foreign_keys` off and `foreign_key_check` before `COMMIT`.
+- The PostgreSQL online units' resume after a failure in the middle of a unit, and the enum script's re-run, against a real server.
+- The rows: the casts of a type change and of the enum swap, `setval` after `add-identity`, and the validated checks of `SET NOT NULL`, each on a table that holds rows.
+- An identity whose sequence `from` does not name: `Render` leaves it as PostgreSQL named it, and `Inspect` should fill `Sequence` so that the case never arises from a snapshot.
 
 ## 1.0 release
 

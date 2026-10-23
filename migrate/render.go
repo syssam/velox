@@ -53,6 +53,14 @@ type Directives struct {
 // Render writes the scripts that make changes, the output of Diff from from
 // to to, in the order they run.
 //
+// On PostgreSQL it writes up to three scripts. Values added to an enum type
+// go to the enum script, which runs first, outside a transaction, each
+// ADD VALUE a unit. The main script runs in a transaction. The indexes,
+// foreign keys and checks added to an existing table, its indexes dropped,
+// and SET NOT NULL go to the online script, which runs last, outside a
+// transaction and with no lock timeout, as units that can each run again
+// from their first statement.
+//
 // On MySQL it writes one script, run statement by statement, each statement
 // a unit of its own, with the lock timeout when opts.LockTimeout is set. On
 // SQLite it writes one script, run in a transaction; a table SQLite cannot
@@ -73,9 +81,6 @@ func Render(from, to *Schema, changes []Change, opts RenderOptions) ([]Script, e
 	if from.Dialect != to.Dialect {
 		return nil, &Error{Code: "dialect", Reason: fmt.Sprintf("from is a %s schema and to a %s one; Render takes two schemas of one dialect", from.Dialect, to.Dialect)}
 	}
-	if to.Dialect == velox.Postgres {
-		return nil, &Error{Code: "render", Reason: "PostgreSQL rendering is not built yet"}
-	}
 	r := &renderer{d: to.Dialect, from: from, to: to, cs: changes}
 	if i := slices.Index(changes, nil); i >= 0 {
 		return nil, r.refuse(i, "the change is nil")
@@ -83,13 +88,18 @@ func Render(from, to *Schema, changes []Change, opts RenderOptions) ([]Script, e
 	l := lintChanges(from, changes)
 	r.l, r.findings, r.taken = l, reviewed(l.out, len(changes)), make([]bool, len(changes))
 	main := Script{Kind: MainScript}
+	if opts.LockTimeout > 0 && r.d != velox.SQLite {
+		main.Directives.LockTimeout, main.Directives.LockTimeoutSet = opts.LockTimeout, true
+	}
 	var err error
 	switch r.d {
+	case velox.Postgres:
+		if err := r.postgres(); err != nil {
+			return nil, err
+		}
+		return r.postgresScripts(main, opts), nil
 	case velox.MySQL:
 		err = r.mysql()
-		if opts.LockTimeout > 0 {
-			main.Directives.LockTimeout, main.Directives.LockTimeoutSet = opts.LockTimeout, true
-		}
 		for i := range r.out {
 			r.out[i].Unit = i
 		}
@@ -149,6 +159,8 @@ type renderer struct {
 	taken    []bool      // the change's first statement has its review line
 	out      []Statement
 	fkOff    bool // SQLite: the script needs foreign keys off
+
+	enum, online []Statement // PostgreSQL: the enum and online scripts'
 }
 
 // emit adds a statement that renders the changes of the indexes in changes

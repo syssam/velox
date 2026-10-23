@@ -1,6 +1,9 @@
 package migrate
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 // An Error is a refusal of this package.
 type Error struct {
@@ -22,6 +25,31 @@ func (e *Error) Error() string {
 			b.WriteString(s)
 			sep = ": "
 		}
+	}
+	return b.String()
+}
+
+// A BlockedError is NewPlan's refusal of a plan with destructive changes no
+// Allow covers.
+type BlockedError struct{ Findings []Finding }
+
+// Error is "migrate: <n> destructive change(s) refused:", then one line per
+// finding: "  [<pos>: ]<target>: <code>: <message>; allow with -allow <code>=<target>".
+func (e *BlockedError) Error() string {
+	var b strings.Builder
+	b.WriteString("migrate: ")
+	b.WriteString(strconv.Itoa(len(e.Findings)))
+	if len(e.Findings) == 1 {
+		b.WriteString(" destructive change refused:")
+	} else {
+		b.WriteString(" destructive changes refused:")
+	}
+	for _, f := range e.Findings {
+		b.WriteString("\n  ")
+		if f.Pos != "" {
+			b.WriteString(f.Pos + ": ")
+		}
+		b.WriteString(f.Target + ": " + f.Code + ": " + f.Message + "; allow with -allow " + f.Code + "=" + f.Target)
 	}
 	return b.String()
 }

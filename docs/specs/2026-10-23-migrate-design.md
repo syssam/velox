@@ -497,22 +497,24 @@ CREATE UNIQUE INDEX "users_email_unique" ON "users" ("email");
   -- PostgreSQL
   ALTER TABLE "users" RENAME TO "accounts";
   ALTER SEQUENCE "users_id_seq" RENAME TO "accounts_id_seq";
-  ALTER TABLE "accounts" RENAME CONSTRAINT "users_pkey" TO "accounts_pkey";
   ALTER INDEX "users_email_unique" RENAME TO "accounts_email_unique";
+  ALTER INDEX "users_org_id" RENAME TO "accounts_org_id";
   ALTER TABLE "accounts" RENAME CONSTRAINT "users_org_id_fkey" TO "accounts_org_id_fkey";
+  ALTER TABLE "accounts" RENAME CONSTRAINT "users_pkey" TO "accounts_pkey";
   ALTER TYPE "users_role" RENAME TO "accounts_role";
 
   -- MySQL
+  ALTER TABLE `users` DROP FOREIGN KEY `users_org_id_fkey`;
   RENAME TABLE `users` TO `accounts`;
   ALTER TABLE `accounts` RENAME INDEX `users_email_unique` TO `accounts_email_unique`,
-    RENAME INDEX `users_org_id` TO `accounts_org_id`,
-    DROP FOREIGN KEY `users_org_id_fkey`,
-    ADD CONSTRAINT `accounts_org_id_fkey` FOREIGN KEY (`org_id`) REFERENCES `orgs` (`id`) ON DELETE CASCADE;
+    RENAME INDEX `users_org_id` TO `accounts_org_id`;
+  ALTER TABLE `accounts` ADD CONSTRAINT `accounts_org_id_fkey` FOREIGN KEY (`org_id`) REFERENCES `orgs` (`id`) ON DELETE CASCADE;
 
   -- SQLite
   ALTER TABLE "users" RENAME TO "accounts";
   -- then one rebuild of "accounts" (§8.4): its indexes and constraints come back under the new names
   ```
+  The statements follow Diff's order: sequences, indexes, then constraints by name, then types. MySQL renames no constraint, and a foreign key's drop and add in one `ALTER TABLE` would need it to build in place, which a checked add cannot; so the key is dropped under its old name before the renames and added under the new one with the other keys (rulings of plan 1).
   On MySQL the primary key stays `PRIMARY` and the enum is inline, so neither needs a statement. On SQLite the rebuild carries `sqlite-rebuild`.
 - **Adding an identity to an existing PostgreSQL column (ruling 51):**
   ```sql
@@ -805,13 +807,13 @@ func (r TableRef) String() string                  // "billing.invoices", or "in
 // Diff (§7).
 type Change interface {
 	Kind() Kind
-	Target() TableRef // the table it acts on, by its name in to (in from for DropTable); an enum type's ref for the enum changes
+	Target() TableRef // the object it acts on, by its name when the change runs: a table, or an enum type's ref for the enum changes
 	isChange()
 }
 type Kind string // "create-table", "drop-table", "rename-table", "add-column", "drop-column",
 // "rename-column", "alter-column", "rename-sequence", "add-index", "drop-index", "rename-index",
 // "add-foreign-key", "drop-foreign-key", "add-check", "drop-check", "rename-constraint",
-// "set-table-comment", "create-enum", "rename-enum", "alter-enum", "drop-enum"
+// "set-table-comment", "set-table-collation", "create-enum", "rename-enum", "alter-enum", "drop-enum"
 type ColumnChange uint8 // ColumnType | ColumnNullable | ColumnDefault | ColumnIdentity | ColumnComment
 
 type CreateTable struct{ Table Table }
@@ -831,6 +833,7 @@ type AddCheck struct{ Table TableRef; Check Check }
 type DropCheck struct{ Table TableRef; Check Check }
 type RenameConstraint struct{ Table TableRef; From, To string }
 type SetTableComment struct{ Table TableRef; From, To string }
+type SetTableCollation struct{ Table TableRef; From, To string } // MySQL
 type CreateEnum struct{ Enum Enum }
 type RenameEnum struct{ From, To TableRef }
 type AlterEnum struct{ From, To Enum }
@@ -1266,6 +1269,75 @@ A rename flag naming nothing says where it looked: `-rename-column users.nme=ful
 53. **Literals are escaped per dialect** (defaults, enum values in a `CHECK` or an enum type, comments). On MySQL that doubles backslashes and quotes. The runner does not touch `sql_mode`, and the refusal of backslashes in defaults is dropped. My call beside it: the runner refuses to apply a MySQL file with a backslash in a literal under `NO_BACKSLASH_ESCAPES`, and a PostgreSQL session with `standard_conforming_strings` off, since either would store a different value (§8.2).
 54. **Applied versions.** Versions above the directory's last file are allowed (a rolling deploy); `Up` applies nothing and `Status` reports them. An applied version within the files' range with no file, or with a different checksum, is an error (§10).
 55. **SQLite files cannot be `no-transaction`;** the directive is refused there (§9, §10).
+
+## Rulings made in plan 1
+
+Plan 1 (`docs/plans/2026-10-23-migrate-1-model.md`) made these calls where this design was silent, or wrong. Where one differs from a section above, it stands.
+
+**The plan's own rulings.**
+
+1. `internal/ddl` holds the 63-byte cap, the helper names, the type normaliser and literal escaping, so the generator and the planner agree on them byte for byte.
+2. Rule 44 checks three namespaces per database schema, case-insensitively: relations, types and constraints (spec defect: one namespace would refuse an index named like an enum type).
+3. Rule 50 refuses every table and column name over 63 bytes, derived ones too, and names the option that shortens it (spec defect).
+4. Rule 49's `Marshaler` exception covers the complex kinds only; a required JSON field of a pointer type keeps a `NOT NULL` column (spec defect).
+5. Every enum field with a Go type names its PostgreSQL type after the type, `GoType` as well as `EnumOf`.
+6. Rule 52 compares fields per (database schema, type name).
+7. A rename is an error when its source is not in `from`, its target is not in `to`, or its target is already in `from` (spec defect: §7.1 said `to`).
+8. `SetTableCollation` is a change kind, §14's only addition, rendered on MySQL as `CONVERT TO CHARACTER SET utf8mb4 COLLATE …` (spec defect).
+9. A PostgreSQL enum that loses or reorders values changes in two steps: new values appended in step 3, the swap to the final order in step 9.
+10. Step 7 is indexes, checks, then foreign keys; MySQL's index changes of a table are one `ALTER TABLE … ALGORITHM=INPLACE, LOCK=NONE`, with foreign keys and checks in later statements; a step-1 drop of an index on a dropped column stays at step 1.
+11. Keys inside a cycle of created tables are added after them on PostgreSQL and MySQL; SQLite keeps them inline.
+12. A PostgreSQL type change drops and sets the column's default around it.
+13. SQLite's non-integer primary key is unnamed, `PRIMARY KEY ("id")` (spec defect: the model gives it no name).
+14. MySQL writes `NULL` on a NULL-able column.
+15. An `allow` directive goes into the script holding its change; the `_enum` script carries the lock timeout; the online script carries none.
+16. `Render` calls `Lint` itself for the review lines and allow directives.
+17. `FuzzSplit` and the directory's goldens are plan 2's (spec defect); `writeScript` is plan 1's.
+18. `Kind` has no exported constants.
+19. A partial index does not count for the foreign-key index rule.
+20. A table's `Pos` is its first declared field's or edge's; the row-limit error names the schema's file.
+21. The planner's tests build models from load models through `gen.Build` and `gen.Tables`, every case on three dialects.
+22. SQLite's rebuild runs at its table's last change and folds every change to the table but its rename.
+23. The foreign keys dropped and re-added around a type change, and the drop of a replaced index, carry no finding.
+24. `volatile-default` treats any default but a literal as an expression.
+25. `MarshalJSON` is compact and sorted; plan 2's writer indents `schema.json`.
+26. `Tables` reads a relation's symbols from either edge of a pair.
+27. `CreateTime` and `UpdateTime` carry the `SchemaDefault`s.
+28. Messages keep `Build`'s style, without rule numbers.
+29. A PostgreSQL enum `SchemaType` names a type when it is a lower-case identifier and not a built-in type.
+30. Left for plan 2: the directory, the runner, `Inspect`, `Drift`, the CLI, every itest and `FuzzSplit`; for plan 3: baseline, the property test, the examples on the planner and the documents.
+
+**Rulings made while executing it.**
+
+- The full gate is the committed CI mirror, `scripts/ci-local.sh`.
+- Two relations sharing one `edge.Table` are refused by rule 44: they were never supported, and their rows would mix.
+- An `Optional` JSON field of a kind rule 49 refuses gives rule 49's error alone.
+- The snapshot's bytes are the same on every write path (HTML escaping on each), and `MarshalJSON` refuses a dialect `UnmarshalJSON` would refuse.
+- A partial unique index is not unique for the table: it never covers a `Unique` field, and the core treats only an index without `Where` as unique.
+- `Tables` refuses more than §3 lists: a MySQL enum with a non-string `SchemaType`, `field.Other` without `SchemaType`, an integer ID with a non-integer `SchemaType` (on SQLite too), a NUL byte in a PostgreSQL default or enum value, a PostgreSQL enum label over 63 bytes, MySQL key and row limits on join tables and every primary key (so a `Text()` string ID), and a MySQL foreign key from a table in an explicit database into the connection's default one.
+- An implicit foreign key's comment refusal names the edge's own schema and position; a wide ID's refusal repeats at each key that copies it.
+- Diff writes no empty step-3 `AlterEnum`, and `Diff(nil, …)` is an `*Error`.
+- §14's `Target()` is "the object it acts on, by its name when the change runs": the drops of step 1 carry `from`'s names, the changes after the renames `to`'s.
+- A dropped table's indexes, foreign keys and checks whose names `to` gives another object are dropped in step 1, on PostgreSQL too.
+- A column rename rewrites the checks and partial-index predicates that name it, and renames its derived check.
+- On MySQL, a check on a renamed column is dropped before the rename and added after; a unique index losing a column is dropped in step 1; a non-unique index MySQL shrinks is dropped in step 8; a foreign key whose only index step 1 drops is dropped in step 1 and added in step 7; and Diff's output keeps every MySQL foreign key indexed.
+- Safe `widen-type` findings stay in `Lint`'s output, but only review and destructive findings become review lines.
+- `Render` rebuilds a SQLite table exactly where `Lint` gives `sqlite-rebuild`, and a rebuild's review line merges the changes' findings into one `sqlite-rebuild` entry.
+- MySQL `varchar` → `text` stays `alter-type`; unbounded PostgreSQL `character varying` is `text`; a drop finding has no `Pos`; a rename finding's target is the new name.
+- A MySQL foreign key's rename is a step-1 `DROP FOREIGN KEY` under the old name and an `ADD CONSTRAINT` with the other keys, in separate statements (the §8.2 example follows it); a rebuilt SQLite table's index rename drops the old name at once.
+- A SQLite plan that drops tables referencing each other turns foreign keys off.
+- Review lines are one line: newlines in a finding's text become spaces.
+
+**Rulings of the PostgreSQL renderer.**
+
+- Consecutive actions of one table and one step share one `ALTER TABLE`, as on MySQL; renames, comments and types are statements of their own.
+- An existing table's index drop goes to the online script, unless the plan drops its table or one of its columns, or gives its name to another table's index: those drops stay in the main script, where the name is free in time.
+- An identity whose sequence alone changes is not added again: the sequence is renamed when `from` names it, and left as PostgreSQL named it when `from` does not.
+- An identity added to a NULL-able column sets `NOT NULL` in the main script first, as PostgreSQL requires.
+- The `_enum` script names a type as `from` does, since it runs before the main script's renames; each value goes `BEFORE` the next value of `to` the type already has.
+- A type change always writes `USING`; a swap alters every column of `to` of the type, one `ALTER TABLE` per table.
+- An allow directive goes in each script holding a statement of its change, and in the main script when none does.
+- `CREATE SCHEMA IF NOT EXISTS` is written for a schema no table or enum type of `from` uses, before the first statement that creates or moves something into it.
 
 ## Follow-ups this closes
 
