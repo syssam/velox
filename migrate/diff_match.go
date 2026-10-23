@@ -249,8 +249,7 @@ func (d *differ) renameObjects() {
 			for _, uf := range u.ForeignKeys {
 				// A key dropped around a type change is not renamed.
 				if t.foreignKey(uf.Name) == nil && sameForeignKey(*tf, uf) && !d.keyRetyped(ref, uf) {
-					d.add(RenameConstraint{Table: ref, From: tf.Name, To: uf.Name}, 2, 4, ref, 0, tf.Name)
-					d.keyRenames[[3]string{ref.Schema, ref.Name, uf.Name}] = len(d.out) - 1
+					d.out = append(d.out, planned{c: RenameConstraint{Table: ref, From: tf.Name, To: uf.Name}, step: 2, sub: 4, ref: ref, name: tf.Name, keyRename: true})
 					tf.Name = uf.Name
 					break
 				}

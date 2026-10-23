@@ -43,7 +43,7 @@ func Diff(from, to *Schema, opts DiffOptions) ([]Change, error) {
 	if from.Dialect != to.Dialect {
 		return nil, &Error{Code: "dialect", Reason: fmt.Sprintf("from is a %s schema and to a %s one; Diff compares two schemas of one dialect", from.Dialect, to.Dialect)}
 	}
-	d := &differ{orig: from.clone(), mid: from.clone(), to: to.clone(), fromRef: map[TableRef]TableRef{}, keyRenames: map[[3]string]int{}}
+	d := &differ{orig: from.clone(), mid: from.clone(), to: to.clone(), fromRef: map[TableRef]TableRef{}}
 	for _, s := range [...]*Schema{d.orig, d.mid, d.to} {
 		s.sort()
 	}
@@ -74,14 +74,13 @@ func Diff(from, to *Schema, opts DiffOptions) ([]Change, error) {
 type differ struct {
 	orig, mid, to *Schema
 	fromRef       map[TableRef]TableRef        // a renamed table's name in from, by its name in to
-	keyRenames    map[[3]string]int            // the out index of a foreign key's rename, by (schema, table, new name)
 	retyped       map[TableRef]map[string]bool // the columns whose type changes, by table
 	out           []planned
 }
 
 // planned is a change and its place in the order: its step, its rank within
 // the step, the order of a created or dropped table, then its table, column
-// position and object name.
+// position and object name. keyRename marks a foreign key's rename.
 type planned struct {
 	c         Change
 	step, sub int
@@ -89,6 +88,7 @@ type planned struct {
 	ref       TableRef
 	pos       int
 	name      string
+	keyRename bool
 }
 
 func (d *differ) add(c Change, step, sub int, ref TableRef, pos int, name string) {
@@ -206,9 +206,9 @@ func (d *differ) keepKeysIndexed() {
 		}
 		for _, fk := range t.ForeignKeys {
 			name := fk.Name
-			at, renamed := d.keyRenames[[3]string{ref.Schema, ref.Name, fk.Name}]
-			if renamed {
-				name = d.out[at].c.(RenameConstraint).From
+			rename := d.keyRename(ref, fk.Name)
+			if rename != nil {
+				name = rename.c.(RenameConstraint).From
 			}
 			leads := func(cols []string) bool {
 				return len(cols) >= len(fk.Columns) && slices.Equal(cols[:len(fk.Columns)], fk.Columns)
@@ -218,8 +218,8 @@ func (d *differ) keepKeysIndexed() {
 			}) {
 				continue
 			}
-			if renamed {
-				d.out[at].c = nil
+			if rename != nil {
+				rename.c = nil
 			}
 			d.add(DropForeignKey{Table: oref, ForeignKey: *d.orig.table(oref).foreignKey(name)}, 1, 0, oref, 0, name)
 			if uf := u.foreignKey(fk.Name); uf != nil {
@@ -228,6 +228,17 @@ func (d *differ) keepKeysIndexed() {
 		}
 	}
 	d.out = slices.DeleteFunc(d.out, func(p planned) bool { return p.c == nil })
+}
+
+// keyRename is the planned rename of table ref's foreign key to name, or
+// nil.
+func (d *differ) keyRename(ref TableRef, name string) *planned {
+	for i := range d.out {
+		if rc, ok := d.out[i].c.(RenameConstraint); ok && d.out[i].keyRename && rc.Table == ref && rc.To == name {
+			return &d.out[i]
+		}
+	}
+	return nil
 }
 
 // findRetyped finds the columns of the tables both have whose type changes,
