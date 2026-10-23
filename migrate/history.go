@@ -135,12 +135,18 @@ func (s *session) readHistory(ctx context.Context) (rows []Applied, exists bool,
 	return rows, true, rs.Err()
 }
 
-// record inserts a's row.
-func (s *session) record(ctx context.Context, a Applied) error {
-	at := a.AppliedAt.UTC().Format(appliedLayout)
+// at is t as applied_at is written.
+func (s *session) at(t time.Time) string {
+	at := t.UTC().Format(appliedLayout)
 	if s.d == velox.Postgres {
 		at += "+00:00"
 	}
+	return at
+}
+
+// record inserts a's row.
+func (s *session) record(ctx context.Context, a Applied) error {
+	at := s.at(a.AppliedAt)
 	cols := make([]string, len(historyTypes))
 	phs := make([]string, len(historyTypes))
 	for i, c := range historyTypes {

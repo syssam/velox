@@ -14,13 +14,14 @@ import (
 	"github.com/syssam/velox2"
 )
 
-// An Option changes how Up and Status run.
+// An Option changes how Up, Status and Resolve run.
 type Option struct{ apply func(*options) }
 
 type options struct {
 	target   uint64        // 0: every file
 	lockWait time.Duration // default 5m
 	logger   *slog.Logger  // nil: none
+	resume   bool
 }
 
 // defaultLockWait is how long Up waits for the migration lock by default.
@@ -40,6 +41,13 @@ func optionsOf(opts []Option) options {
 // above it.
 func WithTarget(version uint64) Option {
 	return Option{func(o *options) { o.target = version }}
+}
+
+// WithResume makes Up continue a dirty version before the pending files,
+// from the first statement of its first incomplete unit. Its file must be
+// unchanged: a changed or missing one is a *ChecksumError.
+func WithResume() Option {
+	return Option{func(o *options) { o.resume = true }}
 }
 
 // WithLockWait bounds how long Up waits for the migration lock, which
@@ -86,19 +94,26 @@ type State struct {
 // file after this one read the history.
 var errAppliedMeanwhile = errors.New("migrate: applied by another runner")
 
-// Up applies dir's pending files to db, in version order, each in a
-// transaction with its history row. It reads and checks the directory,
-// takes one connection and checks that it answers as velox.json's dialect
-// at its minimum version, takes the migration lock, creates the history
-// table when it is missing, and reads the history against the directory:
-// an applied file that was edited or is gone is a *ChecksumError, a pending
-// file below the highest applied version an *Error of Code "history", and a
-// dirty version a *DirtyError. Versions above the directory's last file are
-// a newer directory's: Up applies nothing and sets Report.Ahead.
+// Up applies dir's pending files to db, in version order. It reads and
+// checks the directory, takes one connection and checks that it answers as
+// velox.json's dialect at its minimum version, takes the migration lock,
+// creates the history table when it is missing, and reads the history
+// against the directory: an applied file that was edited or is gone is a
+// *ChecksumError, a pending file below the highest applied version an
+// *Error of Code "history", and a dirty version a *DirtyError, unless
+// WithResume. Versions above the directory's last file are a newer
+// directory's: Up applies nothing and sets Report.Ahead. On MySQL, a session
+// whose sql_mode holds NO_BACKSLASH_ESCAPES or ANSI_QUOTES is refused,
+// before any file runs, when a file to apply holds a literal the mode would
+// read otherwise.
 //
-// A file that fails is rolled back, and Up stops with an error naming the
-// file and the statement that wraps the driver's; the Report holds the
-// files applied before it.
+// A file runs in a transaction with its history row on PostgreSQL and
+// SQLite; one that fails is rolled back, and Up stops with an error naming
+// the file and the statement that wraps the driver's. A MySQL file, or a
+// PostgreSQL no-transaction one, runs statement by statement: one that fails
+// leaves its version dirty and is a *DirtyError, which stops every later run
+// until WithResume continues it or Resolve ends it. Either way the Report
+// holds the files applied before it.
 func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, error) {
 	o := optionsOf(opts)
 	d, err := ReadDir(dir)
@@ -120,6 +135,10 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 		return nil, err
 	}
 	st, err := reading(d, rows)
+	var resumed *File
+	if de := (*DirtyError)(nil); errors.As(err, &de) && o.resume {
+		resumed, err = s.resuming(d, st)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -132,17 +151,29 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 		return r, nil
 	}
 	var todo []File
+	if resumed != nil {
+		todo = append(todo, *resumed)
+	}
 	for _, f := range st.Pending {
 		if o.target != 0 && f.Version > o.target {
 			break
 		}
-		if s.d == velox.MySQL || f.Directives.NoTransaction {
-			return nil, &Error{Code: "session", Reason: "files run statement by statement are not built yet"}
-		}
 		todo = append(todo, f)
 	}
+	if err := s.checkModes(todo); err != nil {
+		return nil, err
+	}
 	for _, f := range todo {
-		a, err := s.applyTx(ctx, f, o)
+		var a Applied
+		var err error
+		switch {
+		case resumed != nil && f.Version == resumed.Version:
+			a, err = s.applyStepwise(ctx, f, st.Dirty, o)
+		case s.stepwise(f):
+			a, err = s.applyStepwise(ctx, f, nil, o)
+		default:
+			a, err = s.applyTx(ctx, f, o)
+		}
 		if errors.Is(err, errAppliedMeanwhile) {
 			continue
 		}
@@ -269,24 +300,66 @@ func reading(dir *Dir, rows []Applied) (*State, error) {
 		}
 		return st, e
 	}
+	return st, st.check(dir)
+}
+
+// check is reading's refusals of the clean rows: an applied file edited or
+// gone, and a pending file below the highest applied version.
+func (st *State) check(dir *Dir) error {
 	for _, r := range st.Applied {
 		i := slices.IndexFunc(dir.Files, func(f File) bool { return f.Version == r.Version })
 		if i < 0 {
-			return nil, &ChecksumError{Version: r.Version, Path: pathOf(dir, r.Version, r.Name), Applied: r.Sum}
+			return &ChecksumError{Version: r.Version, Path: pathOf(dir, r.Version, r.Name), Applied: r.Sum}
 		}
 		if f := dir.Files[i]; f.Sum != r.Sum {
-			return nil, &ChecksumError{Version: r.Version, Path: f.Path, Applied: r.Sum, Now: f.Sum}
+			return &ChecksumError{Version: r.Version, Path: f.Path, Applied: r.Sum, Now: f.Sum}
 		}
 	}
-	if len(rows) > 0 {
-		highest := rows[len(rows)-1].Version
-		for _, f := range st.Pending {
-			if f.Version < highest {
-				return nil, &Error{Code: "history", Reason: fmt.Sprintf("%s is pending below version %d, the highest applied; the history is linear", f.Path, highest)}
-			}
+	var highest uint64
+	for _, rs := range [][]Applied{st.Applied, st.Ahead} {
+		if n := len(rs); n > 0 {
+			highest = max(highest, rs[n-1].Version)
 		}
 	}
-	return st, nil
+	if st.Dirty != nil {
+		highest = max(highest, st.Dirty.Version)
+	}
+	for _, f := range st.Pending {
+		if f.Version < highest {
+			return &Error{Code: "history", Reason: fmt.Sprintf("%s is pending below version %d, the highest applied; the history is linear", f.Path, highest)}
+		}
+	}
+	return nil
+}
+
+// stepwise reports whether f runs statement by statement: every MySQL file,
+// and a PostgreSQL no-transaction one.
+func (s *session) stepwise(f File) bool {
+	return s.d == velox.MySQL || (s.d == velox.Postgres && f.Directives.NoTransaction)
+}
+
+// resuming is the file of st's dirty version, to resume, after reading's
+// refusals of the clean rows. Its file must be in dir with the row's
+// checksum (else a *ChecksumError), and be one that runs statement by
+// statement, since a file run in a transaction never leaves its version
+// dirty (else an *Error of Code "history").
+func (s *session) resuming(dir *Dir, st *State) (*File, error) {
+	r := st.Dirty
+	i := slices.IndexFunc(dir.Files, func(f File) bool { return f.Version == r.Version })
+	if i < 0 {
+		return nil, &ChecksumError{Version: r.Version, Path: pathOf(dir, r.Version, r.Name), Applied: r.Sum}
+	}
+	f := dir.Files[i]
+	if f.Sum != r.Sum {
+		return nil, &ChecksumError{Version: r.Version, Path: f.Path, Applied: r.Sum, Now: f.Sum}
+	}
+	if !s.stepwise(f) {
+		return nil, &Error{Code: "history", Reason: fmt.Sprintf("%s: version %d is dirty, but its file runs in a transaction, which cannot be resumed; resolve it", f.Path, r.Version)}
+	}
+	if err := st.check(dir); err != nil {
+		return nil, err
+	}
+	return &f, nil
 }
 
 // applyTx runs a file in one transaction, its history row included: BEGIN

@@ -193,9 +193,5 @@ func TestMySQLLock(t *testing.T) {
 	if s := mustStatus(t, db, fsys); len(s.Applied)+len(s.Pending) != 0 {
 		t.Errorf("state %+v", s)
 	}
-	// Files run statement by statement come with the next part of the runner.
-	var e *migrate.Error
-	if _, err := migrate.Up(ctx, db, dirOf(t, velox.MySQL, files("0001_a.sql", "CREATE TABLE a (x int);"))); !errors.As(err, &e) || e.Code != "session" {
-		t.Errorf("%#v; want Code session", err)
-	}
+	mustUp(t, db, dirOf(t, velox.MySQL, files("0001_a.sql", "CREATE TABLE a (x int);")))
 }

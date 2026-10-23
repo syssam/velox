@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -20,13 +21,15 @@ import (
 // A session is the one connection a run holds, checked against the
 // directory's Config.
 type session struct {
-	conn    *sql.Conn
-	d       velox.Dialect
-	cfg     Config
-	db      string        // MySQL: DATABASE()
-	sqlMode string        // MySQL: @@SESSION.sql_mode
-	broken  bool          // a clean-up failed: close discards the connection
-	wait    time.Duration // SQLite: how long BEGIN IMMEDIATE waits
+	conn     *sql.Conn
+	pool     *sql.DB // the connection's pool, for recording a failure when the connection is gone
+	d        velox.Dialect
+	cfg      Config
+	db       string        // MySQL: DATABASE()
+	sqlMode  string        // MySQL: @@SESSION.sql_mode
+	lockWait int64         // MySQL: @@SESSION.lock_wait_timeout when the run began
+	broken   bool          // a clean-up failed: close discards the connection
+	wait     time.Duration // SQLite: how long BEGIN IMMEDIATE waits
 }
 
 // wrap is err, from what the runner was doing, as "migrate: <what>: <err>".
@@ -76,7 +79,7 @@ func open(ctx context.Context, db *sql.DB, cfg Config) (*session, error) {
 	if err != nil {
 		return nil, wrap(ctx, "taking a connection", err)
 	}
-	s := &session{conn: conn, d: cfg.Dialect, cfg: cfg}
+	s := &session{conn: conn, pool: db, d: cfg.Dialect, cfg: cfg}
 	if err := s.check(ctx); err != nil {
 		s.close()
 		return nil, err
@@ -97,7 +100,7 @@ func (s *session) check(ctx context.Context) error {
 		}
 	case velox.MySQL:
 		var db sql.NullString
-		err = s.conn.QueryRowContext(ctx, `SELECT @@version, DATABASE(), @@SESSION.sql_mode`).Scan(&version, &db, &s.sqlMode)
+		err = s.conn.QueryRowContext(ctx, `SELECT @@version, DATABASE(), @@SESSION.sql_mode, @@SESSION.lock_wait_timeout`).Scan(&version, &db, &s.sqlMode, &s.lockWait)
 		if err == nil && (!db.Valid || db.String == "") {
 			return refuseSession("the connection has no database; name one in the DSN")
 		}
@@ -116,6 +119,28 @@ func (s *session) check(ctx context.Context) error {
 		return e
 	}
 	return checkVersion(s.d, version)
+}
+
+// checkModes refuses, on MySQL, a session whose sql_mode would read one of
+// files' literals otherwise: NO_BACKSLASH_ESCAPES, a literal holding a
+// backslash; ANSI_QUOTES, a "…" literal. Every file is checked before the
+// first runs.
+func (s *session) checkModes(files []File) error {
+	if s.d != velox.MySQL {
+		return nil
+	}
+	modes := strings.Split(strings.ToUpper(s.sqlMode), ",")
+	noBackslash := slices.Contains(modes, "NO_BACKSLASH_ESCAPES")
+	ansiQuotes := slices.Contains(modes, "ANSI_QUOTES")
+	for _, f := range files {
+		switch {
+		case noBackslash && f.backslash:
+			return refuseSession("%s holds a backslash in a literal, which NO_BACKSLASH_ESCAPES would store as two; turn the mode off for migrating", f.Path)
+		case ansiQuotes && f.dquote:
+			return refuseSession("%s holds a \"…\" literal, which ANSI_QUOTES would read as a name; turn the mode off for migrating", f.Path)
+		}
+	}
+	return nil
 }
 
 // close releases the connection to the pool, or, when a clean-up failed and

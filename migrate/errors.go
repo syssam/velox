@@ -98,14 +98,35 @@ type DirtyError struct {
 	Err                   error
 }
 
-// Error, for a version found dirty, is "migrate: <Path>: version <Version>
-// is dirty: <Err>".
+// Error, when Statement > 0, is "migrate: <Path>: statement <Statement> of
+// <Statements>: <Err>", then "\n  version <Version> is dirty; fix the cause
+// and run migrate apply -resume, or " and, when statements ran before it,
+// "undo statement 1 and " or "undo statements 1 to <Statement-1> and ",
+// then "run migrate resolve -version <Version> -undone". For a version found
+// dirty (Statement 0) it is "migrate: <Path>: version <Version> is dirty:
+// <Err>", then "\n  fix the cause and run migrate apply -resume, or undo its
+// applied statements and run migrate resolve -version <Version> -undone".
 func (e *DirtyError) Error() string {
-	msg := fmt.Sprintf("migrate: %s: version %d is dirty", e.Path, e.Version)
+	var b strings.Builder
+	cause := ""
 	if e.Err != nil {
-		msg += ": " + e.Err.Error()
+		cause = ": " + e.Err.Error()
 	}
-	return msg
+	if e.Statement == 0 {
+		fmt.Fprintf(&b, "migrate: %s: version %d is dirty%s\n  fix the cause and run migrate apply -resume, or undo its applied statements and run migrate resolve -version %d -undone",
+			e.Path, e.Version, cause, e.Version)
+		return b.String()
+	}
+	fmt.Fprintf(&b, "migrate: %s: statement %d of %d%s\n  version %d is dirty; fix the cause and run migrate apply -resume, or ",
+		e.Path, e.Statement, e.Statements, cause, e.Version)
+	switch k := e.Statement - 1; {
+	case k == 1:
+		b.WriteString("undo statement 1 and ")
+	case k > 1:
+		fmt.Fprintf(&b, "undo statements 1 to %d and ", k)
+	}
+	fmt.Fprintf(&b, "run migrate resolve -version %d -undone", e.Version)
+	return b.String()
 }
 
 // Unwrap is Err.
