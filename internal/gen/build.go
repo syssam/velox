@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/syssam/velox2"
+	"github.com/syssam/velox2/internal/ddl"
 	"github.com/syssam/velox2/internal/gen/loadjson"
 	"github.com/syssam/velox2/plugin"
 )
@@ -21,12 +23,16 @@ import (
 // Build does not change m. The Graph shares m's annotations, checks and other
 // reference values.
 func Build(m *loadjson.Model) (*Graph, error) {
-	b := &builder{pkg: m.Package, g: &Graph{Package: m.Package, Entities: []*Entity{}}}
+	b := &builder{
+		pkg: m.Package, g: &Graph{Package: m.Package, Entities: []*Entity{}},
+		refused: map[*Index]bool{}, implicits: map[*Field]*edgeState{},
+	}
 	b.entities(m)
 	b.resolveEdges()
 	b.foreignKeys()
 	b.onDeletes()
 	b.indexes()
+	b.names()
 	b.validate()
 	if len(b.errs) > 0 {
 		slices.SortStableFunc(b.errs, func(x, y ruleError) int {
@@ -43,10 +49,12 @@ func Build(m *loadjson.Model) (*Graph, error) {
 
 // builder holds the state of one Build.
 type builder struct {
-	pkg   string
-	g     *Graph
-	nodes []*node // in the order of g.Entities
-	errs  []ruleError
+	pkg       string
+	g         *Graph
+	nodes     []*node // in the order of g.Entities
+	errs      []ruleError
+	refused   map[*Index]bool       // the indexes an index rule refuses, whose names are not compared
+	implicits map[*Field]*edgeState // the edge each implicit foreign key was added for
 }
 
 // ruleError is an Error with the number of the rule it reports, which orders
@@ -474,9 +482,9 @@ func (b *builder) implicit(holder, ref *node, s *edgeState, required, unique, im
 		g := *id.GoType
 		lf.GoType = &g
 	}
-	holder.ent.Fields = append(holder.ent.Fields, &Field{
-		Field: lf, GoName: plugin.GoName(name), Column: name, Pointer: !required, Implicit: s.ed.Name,
-	})
+	f := &Field{Field: lf, GoName: plugin.GoName(name), Column: name, Pointer: !required, Implicit: s.ed.Name}
+	holder.ent.Fields = append(holder.ent.Fields, f)
+	b.implicits[f] = s
 	b.bind(s, name, name)
 }
 
@@ -511,13 +519,10 @@ func sameType(f, id *loadjson.Field) bool {
 	return true
 }
 
-// indexes resolves the indexes of every entity (step 5).
+// indexes resolves the indexes of every entity (step 5), and records those an
+// index rule refuses: their names are rule 43's or partial, so step 5b does
+// not compare them.
 func (b *builder) indexes() {
-	type owner struct {
-		e *Entity
-		i int
-	}
-	names := map[[2]string]owner{} // by the table's schema and the index name
 	for _, n := range b.nodes {
 		e := n.ent
 		var ok []bool // the indexes no earlier rule refuses
@@ -558,29 +563,153 @@ func (b *builder) indexes() {
 			ix.Name = cmp.Or(li.StorageKey, indexName(e.Table, ix))
 			e.Indexes = append(e.Indexes, ix)
 			ok = append(ok, good)
-			if b.repeats(e, i, ok) || !good && li.StorageKey == "" {
-				continue // its name is rule 43's, or its derived name is partial
+			if b.repeats(e, i, ok) || !good {
+				b.refused[ix] = true
 			}
-			k := [2]string{e.TableSchema, ix.Name}
-			if o, dup := names[k]; dup {
-				by := fmt.Sprintf("index %d's", o.i)
-				if o.e != e {
-					by = fmt.Sprintf("schema %s's index %d", o.e.Name, o.i)
+		}
+	}
+}
+
+// names checks the names the graph puts in a database (step 5b): each one
+// the schema gives, or velox derives without a cap, is at most ddl.MaxName
+// bytes (rule 50); no two objects share a name in one namespace of one
+// database schema, compared case-insensitively (rule 44); and enum fields
+// that share a type have its values (rule 52).
+func (b *builder) names() {
+	b.nameLengths()
+	b.namespaces()
+}
+
+// nameLengths checks rule 50 on every table, column, join table and join
+// column name, explicit or derived, every index StorageKey, every Symbol and
+// every enum type a SchemaType names. A derived name's error says which
+// option names it.
+func (b *builder) nameLengths() {
+	long := func(schema string, at loc, what, name, hint string) {
+		if len(name) > ddl.MaxName {
+			b.fail(50, schema, at, "%s %q is %d bytes; a database name has at most %d%s", what, name, len(name), ddl.MaxName, hint)
+		}
+	}
+	for _, n := range b.nodes {
+		e := n.ent
+		hint := ""
+		if e.Table == plugin.Plural(e.Label) {
+			hint = "; name it with schema.Table"
+		}
+		long(e.Name, tableLoc(e), "table name", e.Table, hint)
+		for _, f := range e.Fields {
+			switch s := b.implicits[f]; {
+			case s != nil:
+				hint := ""
+				if s.column == "" {
+					hint = "; name it with edge.Column"
 				}
-				b.fail(44, e.Name, indexLoc(i, ix), "name %q is also %s", ix.Name, by)
+				long(s.owner.ent.Name, edgeLoc(s.ed), "column name", f.Column, hint)
+			case isDeclared(f):
+				hint := ""
+				if f.StorageKey == "" {
+					hint = "; name it with StorageKey"
+				}
+				long(e.Name, fieldLoc(f), "column name", f.Column, hint)
+				if st := f.SchemaType[velox.Postgres.String()]; f.Type == "enum" && st != "" && !ddl.StringType(velox.Postgres, st) {
+					long(e.Name, fieldLoc(f), "enum type name", st, "")
+				}
+			}
+		}
+		for i, li := range n.schema.Indexes {
+			long(e.Name, indexLoc(i, e.Indexes[i]), "index name", li.StorageKey, "")
+		}
+		for _, s := range n.edges {
+			for _, sym := range s.le.Symbols {
+				long(e.Name, edgeLoc(s.ed), "symbol", sym, "")
+			}
+			if s.ed.Rel.Kind != "M2M" || s.le.Inverse {
 				continue
 			}
-			names[k] = owner{e, i}
+			// The join table's names are the assoc edge's, unless its
+			// inverse gives them.
+			by, hint := s, "; name it with edge.Table"
+			if p := s.pair; s.le.Table == "" && p != nil && p.le.Table != "" {
+				by = p
+			}
+			if by.le.Table != "" {
+				hint = ""
+			}
+			long(by.owner.ent.Name, edgeLoc(by.ed), "join table name", s.ed.Rel.Table, hint)
+			by, hint = s, "; name them with edge.Columns"
+			if p := s.pair; len(s.le.Columns) == 0 && p != nil && len(p.le.Columns) > 0 {
+				by = p
+			}
+			if len(by.le.Columns) > 0 {
+				hint = ""
+			}
+			for i, c := range s.ed.Rel.Columns {
+				if i == 0 || c != s.ed.Rel.Columns[0] { // rule 35
+					long(by.owner.ent.Name, edgeLoc(by.ed), "join table column name", c, hint)
+				}
+			}
 		}
+	}
+}
+
+// namespaces checks rules 44 and 52 over the objects of the graph. The
+// second object with a name reports the first. Two tables are compared once,
+// as relations, and the other objects of tables that share a name are not
+// compared. Enum types of one name are one type when their values are equal
+// and in order; rule 52 reports them otherwise. A join table with an entity's
+// table's name is rule 27's.
+func (b *builder) namespaces() {
+	type key struct {
+		space        nameSpace
+		schema, name string
+	}
+	first := map[key]object{}
+	clashed := map[[2]string]bool{} // the tables that share a name, lower case, by database schema
+	for _, o := range objects(b.g, b.refused) {
+		if !o.isTable() && clashed[[2]string{strings.ToLower(o.schema), strings.ToLower(o.table)}] {
+			continue
+		}
+		k := key{o.space, strings.ToLower(o.schema), strings.ToLower(o.name)}
+		p, dup := first[k]
+		if !dup {
+			first[k] = o
+			continue
+		}
+		switch {
+		case o.space == spaceTypes && o.isTable() && p.isTable():
+			continue
+		case o.values != nil && p.values != nil:
+			if !slices.Equal(o.values, p.values) {
+				other := "this schema"
+				if p.owner != o.owner {
+					other = "schema " + p.owner
+				}
+				if p.at.pos != "" {
+					other += " (" + p.at.pos + ")"
+				}
+				b.fail(52, o.owner, o.at, "enum type %s is also %s of %s, with other values", o.name, strings.TrimPrefix(p.what, "enum type of "), other)
+			}
+			continue
+		case o.isTable() && p.isTable():
+			clashed[[2]string{k.schema, strings.ToLower(o.table)}] = true
+			if o.what != p.what && o.name == p.name {
+				continue // rule 27
+			}
+		}
+		other := "this schema's "
+		if p.owner != o.owner {
+			other = "schema " + p.owner + "'s "
+		}
+		b.fail(44, o.owner, o.at, "name %q is also %s%s", o.name, other, p.what)
 	}
 }
 
 // indexName derives the name of an index with no StorageKey: the table and
 // the columns, then _unique for a unique index and, for a partial one, the
 // FNV-1a hash of its Where, so that indexes that differ only in Unique or
-// Where have distinct names. Index names share one namespace per schema of
-// the database. _unique stays clear of _key, PostgreSQL's name for a column's
-// UNIQUE constraint.
+// Where have distinct names; the whole is capped. Index names share one
+// namespace per schema of the database. _unique stays clear of _key,
+// PostgreSQL's name for a column's UNIQUE constraint.
 func indexName(table string, ix *Index) string {
 	name := strings.Join(append([]string{table}, ix.Columns...), "_")
 	if ix.Unique {
@@ -591,7 +720,7 @@ func indexName(table string, ix *Index) string {
 		h.Write([]byte(ix.Where))
 		name += fmt.Sprintf("_%08x", h.Sum32())
 	}
-	return name
+	return ddl.Cap(name)
 }
 
 // repeats reports whether the index i of e repeats an earlier one (rule 43),
@@ -823,6 +952,36 @@ func (b *builder) validateEdges(n *node) {
 				}
 			}
 		}
+	}
+	for _, s := range n.edges {
+		b.validateSymbols(s)
+	}
+}
+
+// validateSymbols checks the foreign-key names of the resolved edge s (rule
+// 51): one for a relation that is not many-to-many, two for one that is, and
+// on an inverse edge the same as its pair's when both give them.
+func (b *builder) validateSymbols(s *edgeState) {
+	le, ed := s.le, s.ed
+	if ed.Rel.Kind == "" {
+		return // unresolved: an error is recorded
+	}
+	want := 1
+	if ed.Rel.Kind == "M2M" {
+		want = 2
+	}
+	switch n := len(le.Symbols); {
+	case n == 0:
+		return
+	case want == 1 && n > 1:
+		b.fail(51, s.owner.ent.Name, edgeLoc(ed), "a relation that is not many-to-many has one foreign key; use edge.Symbol")
+		return
+	case want == 2 && n == 1:
+		b.fail(51, s.owner.ent.Name, edgeLoc(ed), "a many-to-many relation has two foreign keys; name them with edge.Symbols")
+		return
+	}
+	if p := s.pair; le.Inverse && p != nil && len(p.le.Symbols) == want && !slices.Equal(le.Symbols, p.le.Symbols) {
+		b.fail(51, s.owner.ent.Name, edgeLoc(ed), "Symbols %q differ from edge %q's %q on %s", le.Symbols, p.le.Name, p.le.Symbols, p.owner.ent.Name)
 	}
 }
 

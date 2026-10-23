@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/syssam/velox2/internal/ddl"
 	"github.com/syssam/velox2/internal/gen/internal/other"
 	"github.com/syssam/velox2/internal/gen/loadjson"
 	"github.com/syssam/velox2/schema"
@@ -810,6 +811,112 @@ func (cycle) Edges() []schema.Edge {
 	return []schema.Edge{edge.To("next", cycle.Type).From("cycles")}
 }
 
+// long64 is a name one byte over the cap on database names.
+var long64 = strings.Repeat("x", 64)
+
+type longTable struct{ schema.Schema }
+
+func (longTable) Annotations() []schema.Annotation { return []schema.Annotation{schema.Table(long64)} }
+
+type longColumn struct{ schema.Schema }
+
+func (longColumn) Fields() []schema.Field {
+	return []schema.Field{field.String("x").StorageKey(long64)}
+}
+
+type longDerivedColumn struct{ schema.Schema }
+
+func (longDerivedColumn) Fields() []schema.Field { return []schema.Field{field.String(long64)} }
+
+// longDerivedTableAndSoOnAndSoOnUntilTheNameIsLongerThanTheCapAllowsThing's
+// table, its snake-case plural, is 90 bytes.
+type longDerivedTableAndSoOnAndSoOnUntilTheNameIsLongerThanTheCapAllowsThing struct{ schema.Schema }
+
+type longIndexKey struct{ schema.Schema }
+
+func (longIndexKey) Fields() []schema.Field { return []schema.Field{field.String("a")} }
+func (longIndexKey) Indexes() []schema.Index {
+	return []schema.Index{index.Fields("a").StorageKey(long64)}
+}
+
+type longSymbol struct{ schema.Schema }
+
+func (longSymbol) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("pets", Pet.Type).StorageKey(edge.Symbol(long64))}
+}
+
+// longImplicit's edge makes the implicit column long_implicit_<edge>, 64 bytes.
+type longImplicit struct{ schema.Schema }
+
+func (longImplicit) Edges() []schema.Edge {
+	return []schema.Edge{edge.To(strings.Repeat("p", 50), Pet.Type)}
+}
+
+type longJoinTable struct{ schema.Schema }
+
+func (longJoinTable) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("peers", longJoinTable.Type).StorageKey(edge.Table(long64))}
+}
+
+type longEnumType struct{ schema.Schema }
+
+func (longEnumType) Fields() []schema.Field {
+	return []schema.Field{field.Enum("s").Values("a").SchemaType(map[string]string{field.Postgres: long64})}
+}
+
+type twoSymbolsO2M struct{ schema.Schema }
+
+func (twoSymbolsO2M) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("pets", Pet.Type).StorageKey(edge.Symbols("a", "b"))}
+}
+
+type oneSymbolM2M struct{ schema.Schema }
+
+func (oneSymbolM2M) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("peers", oneSymbolM2M.Type).StorageKey(edge.Symbol("a"))}
+}
+
+type symOwner struct{ schema.Schema }
+
+func (symOwner) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("pets", symPet.Type).StorageKey(edge.Symbol("b"))}
+}
+
+type symPet struct{ schema.Schema }
+
+func (symPet) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("owner", symOwner.Type).Ref("pets").Unique().StorageKey(edge.Symbol("a"))}
+}
+
+// enumOrder and enumTicket name one PostgreSQL enum type, with other values.
+type enumOrder struct{ schema.Schema }
+
+var enumOrderLine int
+
+func (enumOrder) Fields() []schema.Field {
+	f, l := field.Enum("status").Values("a", "b").SchemaType(map[string]string{field.Postgres: "status"}), here()
+	enumOrderLine = l
+	return []schema.Field{f}
+}
+
+type enumTicket struct{ schema.Schema }
+
+func (enumTicket) Fields() []schema.Field {
+	return []schema.Field{field.Enum("state").Values("b", "a").SchemaType(map[string]string{field.Postgres: "status"})}
+}
+
+// nsOrder's enum type orders_status is nsOrderStatus's table.
+type nsOrder struct{ schema.Schema }
+
+func (nsOrder) Annotations() []schema.Annotation { return []schema.Annotation{schema.Table("orders")} }
+func (nsOrder) Fields() []schema.Field           { return []schema.Field{field.Enum("status").Values("a")} }
+
+type nsOrderStatus struct{ schema.Schema }
+
+func (nsOrderStatus) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.Table("orders_status")}
+}
+
 func TestBuildRules(t *testing.T) {
 	for _, c := range []struct {
 		name string
@@ -876,6 +983,20 @@ func TestBuildRules(t *testing.T) {
 		{"38 optional edge field", []schema.Interface{optionalFK{}}, `schema optionalFK: edge "parent": field "parent_id" must be Nillable when the edge is not Required: an unset foreign key is NULL`},
 		{"39 optional bytes", []schema.Interface{optionalBytes{}}, `schema optionalBytes: field "blob": an Optional bytes field needs a Default or Nillable`},
 		{"40 optional time", []schema.Interface{optionalTime{}}, `schema optionalTime: field "seen": an Optional time field needs a Default or Nillable`},
+		{"44 table and enum type", []schema.Interface{nsOrder{}, nsOrderStatus{}}, `schema nsOrder: field "status": name "orders_status" is also schema nsOrderStatus's table`},
+		{"50 long table", []schema.Interface{longTable{}}, `schema longTable: table name "` + long64 + `" is 64 bytes; a database name has at most 63`},
+		{"50 long derived table", []schema.Interface{longDerivedTableAndSoOnAndSoOnUntilTheNameIsLongerThanTheCapAllowsThing{}}, `table name "long_derived_table_and_so_on_and_so_on_until_the_name_is_longer_than_the_cap_allows_things" is 90 bytes; a database name has at most 63; name it with schema.Table`},
+		{"50 long column", []schema.Interface{longColumn{}}, `schema longColumn: field "x": column name "` + long64 + `" is 64 bytes; a database name has at most 63`},
+		{"50 long derived column", []schema.Interface{longDerivedColumn{}}, `schema longDerivedColumn: field "` + long64 + `": column name "` + long64 + `" is 64 bytes; a database name has at most 63; name it with StorageKey`},
+		{"50 long implicit column", []schema.Interface{longImplicit{}, Pet{}}, `schema longImplicit: edge "` + strings.Repeat("p", 50) + `": column name "long_implicit_` + strings.Repeat("p", 50) + `" is 64 bytes; a database name has at most 63; name it with edge.Column`},
+		{"50 long index key", []schema.Interface{longIndexKey{}}, `schema longIndexKey: index 0: index name "` + long64 + `" is 64 bytes; a database name has at most 63`},
+		{"50 long symbol", []schema.Interface{longSymbol{}, Pet{}}, `schema longSymbol: edge "pets": symbol "` + long64 + `" is 64 bytes; a database name has at most 63`},
+		{"50 long join table", []schema.Interface{longJoinTable{}}, `schema longJoinTable: edge "peers": join table name "` + long64 + `" is 64 bytes; a database name has at most 63`},
+		{"50 long enum type", []schema.Interface{longEnumType{}}, `schema longEnumType: field "s": enum type name "` + long64 + `" is 64 bytes; a database name has at most 63`},
+		{"51 two symbols on O2M", []schema.Interface{twoSymbolsO2M{}, Pet{}}, `schema twoSymbolsO2M: edge "pets": a relation that is not many-to-many has one foreign key; use edge.Symbol`},
+		{"51 one symbol on M2M", []schema.Interface{oneSymbolM2M{}}, `schema oneSymbolM2M: edge "peers": a many-to-many relation has two foreign keys; name them with edge.Symbols`},
+		{"51 symbols disagree", []schema.Interface{symOwner{}, symPet{}}, `schema symPet: edge "owner": Symbols ["a"] differ from edge "pets"'s ["b"] on symOwner`},
+		{"52 shared values differ", []schema.Interface{enumOrder{}, enumTicket{}}, `schema enumTicket: field "state": enum type status is also field "status" of schema enumOrder (`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			_, err := build(t, c.ss...)
@@ -903,6 +1024,10 @@ func TestBuildRulesAreSingle(t *testing.T) {
 		{odM2M{}, odM2M2{}}, {odSetNullRequired{}}, {odDiffOwner{}, odDiffPet{}},
 		{defaultBool{}}, {defaultNumber{}}, {defaultFuncNumber{}}, {optionalEnum{}}, {optionalFK{}}, {optionalBytes{}}, {optionalTime{}},
 		{optionalJSONStruct{}},
+		{nsOrder{}, nsOrderStatus{}}, {longTable{}}, {longDerivedTableAndSoOnAndSoOnUntilTheNameIsLongerThanTheCapAllowsThing{}},
+		{longColumn{}}, {longDerivedColumn{}}, {longImplicit{}, Pet{}}, {longIndexKey{}}, {longSymbol{}, Pet{}},
+		{longJoinTable{}}, {longEnumType{}}, {twoSymbolsO2M{}, Pet{}}, {oneSymbolM2M{}}, {symOwner{}, symPet{}},
+		{enumOrder{}, enumTicket{}},
 	} {
 		_, err := build(t, ss...)
 		if n := len(err.(interface{ Unwrap() []error }).Unwrap()); n != 1 {
@@ -1171,7 +1296,7 @@ func TestDuplicateIndexes(t *testing.T) {
 	want := `schema dupIndexes: index 10: field "tags" is JSON, which no index can cover
 schema dupIndexes: index 11: field "tags" is JSON, which no index can cover
 schema dupIndexes: index 2: repeats index 0
-schema dupIndexes: index 8: name "dup" is also index 7's`
+schema dupIndexes: index 8: name "dup" is also this schema's index 7`
 	if got := plain(err); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
@@ -1264,7 +1389,7 @@ schema keyShareB: index 1: name "share_a_a_unique" is also schema keyShareA's in
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
 	_, err = build(t, keyMixed{})
-	if got := plain(err); got != `schema keyMixed: index 1: name "k" is also index 0's` {
+	if got := plain(err); got != `schema keyMixed: index 1: name "k" is also this schema's index 0` {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -1435,4 +1560,163 @@ func TestOnDelete(t *testing.T) {
 			t.Fatalf("an unset action is shown:\n%s", b.String())
 		}
 	})
+}
+
+// capIndexes has two indexes whose derived names, 70 bytes, differ only
+// after byte 54.
+type capIndexes struct{ schema.Schema }
+
+var capColumn = strings.Repeat("c", 63)
+
+func (capIndexes) Annotations() []schema.Annotation { return []schema.Annotation{schema.Table("caps")} }
+func (capIndexes) Fields() []schema.Field {
+	return []schema.Field{field.String(capColumn), field.String("p"), field.String("q")}
+}
+func (capIndexes) Indexes() []schema.Index {
+	return []schema.Index{index.Fields(capColumn, "p"), index.Fields(capColumn, "q")}
+}
+
+// A derived index name over the cap is capped as a whole, and stays apart from
+// another that differs only past the cut.
+func TestIndexNamesCapped(t *testing.T) {
+	g := mustBuild(t, capIndexes{})
+	ixs := g.Entity("capIndexes").Indexes
+	o, err := Lower(g, Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var plugged []string
+	for _, e := range PluginModel(g, o).Entities {
+		if e.Name == "capIndexes" {
+			for _, ix := range e.Indexes {
+				plugged = append(plugged, ix.Name)
+			}
+		}
+	}
+	for i, suffix := range []string{"_p", "_q"} {
+		whole := "caps_" + capColumn + suffix
+		if len(whole) != 70 {
+			t.Fatalf("the uncapped name is %d bytes", len(whole))
+		}
+		if got := ixs[i].Name; got != ddl.Cap(whole) || len(got) > ddl.MaxName {
+			t.Errorf("index %d: %q, want %q", i, got, ddl.Cap(whole))
+		}
+	}
+	if ixs[0].Name == ixs[1].Name {
+		t.Errorf("both indexes are named %q", ixs[0].Name)
+	}
+	if len(plugged) != 2 || plugged[0] != ixs[0].Name || plugged[1] != ixs[1].Name {
+		t.Errorf("the plugin model names them %q", plugged)
+	}
+}
+
+type nsUser struct{ schema.Schema }
+
+func (nsUser) Annotations() []schema.Annotation { return []schema.Annotation{schema.Table("users")} }
+func (nsUser) Fields() []schema.Field {
+	return []schema.Field{field.Enum("role").Values("a", "b")}
+}
+
+type nsUsers struct{ schema.Schema }
+
+func (nsUsers) Annotations() []schema.Annotation { return []schema.Annotation{schema.Table("Users")} }
+
+type nsPost struct{ schema.Schema }
+
+func (nsPost) Annotations() []schema.Annotation { return []schema.Annotation{schema.Table("posts")} }
+func (nsPost) Fields() []schema.Field           { return []schema.Field{field.String("title")} }
+func (nsPost) Indexes() []schema.Index {
+	return []schema.Index{index.Fields("title").StorageKey("posts")}
+}
+
+// nsCheckUser's edge's symbol is its enum's check.
+type nsCheckUser struct{ schema.Schema }
+
+func (nsCheckUser) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.Table("users")}
+}
+func (nsCheckUser) Fields() []schema.Field {
+	return []schema.Field{field.Enum("role").Values("a", "b")}
+}
+func (nsCheckUser) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("pets", Pet.Type).StorageKey(edge.Symbol("users_role_check"))}
+}
+
+type nsVeloxNew struct{ schema.Schema }
+
+func (nsVeloxNew) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.Table("velox_new_users")}
+}
+
+// nsOther holds a table of nsUser's name in another database schema, with
+// an enum type of its name and other values.
+type nsOther struct{ schema.Schema }
+
+func (nsOther) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.TableIn("other", "users")}
+}
+func (nsOther) Fields() []schema.Field { return []schema.Field{field.Enum("role").Values("x")} }
+
+type nsStatus string
+
+func (nsStatus) Values() []string { return []string{"open", "closed"} }
+
+type nsTicket struct{ schema.Schema }
+
+func (nsTicket) Fields() []schema.Field { return []schema.Field{field.EnumOf[nsStatus]("status")} }
+
+type nsIssue struct{ schema.Schema }
+
+func (nsIssue) Fields() []schema.Field { return []schema.Field{field.EnumOf[nsStatus]("state")} }
+
+// Rule 44 compares, case-insensitively, the names of relations, of types and
+// of constraints, each within one database schema, the planner's helpers
+// included.
+func TestNamespace(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		ss   []schema.Interface
+		want string
+	}{
+		{"tables by case", []schema.Interface{nsUser{}, nsUsers{}}, `schema nsUsers: name "Users" is also schema nsUser's table`},
+		{"table and enum type", []schema.Interface{nsOrder{}, nsOrderStatus{}}, `schema nsOrder: field "status": name "orders_status" is also schema nsOrderStatus's table`},
+		{"index and table", []schema.Interface{nsPost{}}, `schema nsPost: index 0: name "posts" is also this schema's table`},
+		{"symbol and check", []schema.Interface{nsCheckUser{}, Pet{}}, `schema nsCheckUser: edge "pets": name "users_role_check" is also this schema's check of field "role"`},
+		{"table and rebuild table", []schema.Interface{nsUser{}, nsVeloxNew{}}, `schema nsVeloxNew: name "velox_new_users" is also schema nsUser's rebuild table`},
+		{"two database schemas", []schema.Interface{nsUser{}, nsOther{}}, ``},
+		{"one shared enum type", []schema.Interface{nsTicket{}, nsIssue{}}, ``},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := build(t, c.ss...)
+			if got := plain(err); err == nil && c.want != "" || err != nil && got != c.want {
+				t.Fatalf("got\n%v\nwant\n%s", got, c.want)
+			}
+		})
+	}
+}
+
+// PostgreSQL keeps indexes and types apart: an index and an enum type may
+// share the name orders_status.
+type nsIndexedEnum struct{ schema.Schema }
+
+func (nsIndexedEnum) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.Table("orders")}
+}
+func (nsIndexedEnum) Fields() []schema.Field  { return []schema.Field{field.Enum("status").Values("a")} }
+func (nsIndexedEnum) Indexes() []schema.Index { return []schema.Index{index.Fields("status")} }
+
+func TestNamespaceIndexOnEnumColumn(t *testing.T) {
+	ix := mustBuild(t, nsIndexedEnum{}).Entity("nsIndexedEnum").Indexes[0]
+	if ix.Name != "orders_status" {
+		t.Fatalf("index %q", ix.Name)
+	}
+}
+
+// Rule 52's error names the other field with its position.
+func TestSharedEnumValuesPos(t *testing.T) {
+	_, err := build(t, enumOrder{}, enumTicket{})
+	want := fmt.Sprintf("/build_test.go:%d), with other values", enumOrderLine)
+	if err == nil || !strings.HasSuffix(err.Error(), want) {
+		t.Fatalf("got %v, want the suffix %q", err, want)
+	}
 }
