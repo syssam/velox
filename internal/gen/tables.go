@@ -255,26 +255,15 @@ func (t *tabler) fieldType(e *Entity, f *Field, tb *migrate.Table) string {
 	case velox.Postgres:
 		if name, native := enumType(e, f); native {
 			t.enum(e, f, name)
-			if e.TableSchema != "" {
-				return ddl.Ident(t.d, e.TableSchema) + "." + ddl.Ident(t.d, name)
-			}
-			return ddl.Ident(t.d, name)
+			return ddl.EnumType(e.TableSchema, name)
 		}
 	case velox.MySQL:
 		if st == "" || !ddl.StringType(t.d, st) {
-			vs := make([]string, len(f.Enums))
-			for i, v := range f.Enums {
-				vs[i] = ddl.Literal(t.d, v.Value)
-			}
-			return "enum(" + strings.Join(vs, ",") + ")"
+			return ddl.MySQLEnum(enumValues(f))
 		}
 	}
-	vs := make([]string, len(f.Enums))
-	for i, v := range f.Enums {
-		vs[i] = ddl.Literal(t.d, v.Value)
-	}
 	tb.Checks = append(tb.Checks, migrate.Check{
-		Name: checkName(e.Table, f.Column), Expr: ddl.Ident(t.d, f.Column) + " IN (" + strings.Join(vs, ", ") + ")", Pos: f.Pos,
+		Name: checkName(e.Table, f.Column), Expr: ddl.EnumCheck(t.d, f.Column, enumValues(f)), Pos: f.Pos,
 	})
 	if st == "" {
 		return "text"
@@ -290,11 +279,7 @@ func (t *tabler) enum(e *Entity, f *Field, name string) {
 		return
 	}
 	t.enums[k] = true
-	vs := make([]string, len(f.Enums))
-	for i, v := range f.Enums {
-		vs[i] = v.Value
-	}
-	t.enumList = append(t.enumList, migrate.Enum{Schema: e.TableSchema, Name: name, Values: vs, Pos: f.Pos})
+	t.enumList = append(t.enumList, migrate.Enum{Schema: e.TableSchema, Name: name, Values: enumValues(f), Pos: f.Pos})
 }
 
 // columnDefault is the DEFAULT of f's column, of type typ: its SchemaDefault

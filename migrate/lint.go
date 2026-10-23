@@ -381,8 +381,8 @@ func (l *linter) alterColumn(i int, c AlterColumn) {
 func (l *linter) alterType(i int, c AlterColumn, target string) {
 	from, to := c.From.Type, c.To.Type
 	if l.d == velox.MySQL {
-		if a, ok := mysqlEnum(from); ok {
-			if b, ok := mysqlEnum(to); ok {
+		if a, ok := ddl.ParseMySQLEnum(from); ok {
+			if b, ok := ddl.ParseMySQLEnum(to); ok {
 				l.enumDelta(i, target, c.To.Pos, a, b, enumInline, "column "+target)
 				return
 			}
@@ -547,49 +547,8 @@ func (l *linter) addCheck(i int, c AddCheck) {
 
 // checkEnum reads the values of a check of the form `"col" IN ('a', 'b')`.
 func (l *linter) checkEnum(expr string) ([]string, bool) {
-	_, list, ok := strings.Cut(expr, " IN (")
-	if !ok || !strings.HasSuffix(list, ")") {
-		return nil, false
-	}
-	return literalList(l.d, strings.TrimSuffix(list, ")"))
-}
-
-// mysqlEnum reads the values of the type enum('a','b').
-func mysqlEnum(t string) ([]string, bool) {
-	list, ok := strings.CutPrefix(t, "enum(")
-	if !ok || !strings.HasSuffix(list, ")") {
-		return nil, false
-	}
-	return literalList(velox.MySQL, strings.TrimSuffix(list, ")"))
-}
-
-// literalList reads string literals separated by commas.
-func literalList(d velox.Dialect, s string) ([]string, bool) {
-	var out []string
-	for i := 0; ; {
-		for i < len(s) && s[i] == ' ' {
-			i++
-		}
-		if i >= len(s) || s[i] != '\'' {
-			return nil, false
-		}
-		j := stringEnd(s, i, d == velox.MySQL)
-		v, ok := ddl.Unquote(d, s[i:j])
-		if !ok {
-			return nil, false
-		}
-		out = append(out, v)
-		for j < len(s) && s[j] == ' ' {
-			j++
-		}
-		if j == len(s) {
-			return out, true
-		}
-		if s[j] != ',' {
-			return nil, false
-		}
-		i = j + 1
-	}
+	_, vs, ok := ddl.ParseEnumCheck(l.d, expr)
+	return vs, ok
 }
 
 // literalDefault reports whether a default is a string literal, a number,

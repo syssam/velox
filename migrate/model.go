@@ -42,7 +42,12 @@ type Table struct {
 	Pos            string       `json:"-"`                          // the schema's file:line, when known; never serialized or compared
 }
 
-// A Column is a table's column.
+// A Column is a table's column. Its Type is spelled as the dialect's
+// canonical form: lower case and white space collapsed outside quoted text.
+// A PostgreSQL enum column's Type is its type's quoted name, "billing"."mood"
+// or "mood"; a MySQL enum column's is enum('a','b'), the values as literals
+// joined by commas alone. A string column held to an enum's values has the
+// check "col" IN ('a', 'b').
 type Column struct {
 	Name     string `json:"name"`
 	Type     string `json:"type"` // the canonical spelling for the dialect

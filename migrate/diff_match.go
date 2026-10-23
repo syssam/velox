@@ -154,12 +154,7 @@ func (d *differ) primaryKeys() error {
 }
 
 // enumTypeName is the column type of the PostgreSQL enum type ref.
-func enumTypeName(ref TableRef) string {
-	if ref.Schema != "" {
-		return ddl.Ident(velox.Postgres, ref.Schema) + "." + ddl.Ident(velox.Postgres, ref.Name)
-	}
-	return ddl.Ident(velox.Postgres, ref.Name)
-}
+func enumTypeName(ref TableRef) string { return ddl.EnumType(ref.Schema, ref.Name) }
 
 // usage is the columns of s whose type is the enum type ref, sorted.
 func usage(s *Schema, ref TableRef) []string {
