@@ -507,14 +507,15 @@ func TestUpMySQLProgressLost(t *testing.T) {
 	}
 }
 
-// TestUpMySQLConnectionKilled: when the session's connection is killed
-// after a unit, its count and the error are written through the pool.
+// TestUpMySQLConnectionKilled: when the session's connection is lost after
+// a unit, the count stays at what the session last wrote, and the error,
+// written through the pool, says the unit's outcome is unknown.
 func TestUpMySQLConnectionKilled(t *testing.T) {
 	db, dsn := freshDB(t, velox.MySQL)
 	killer := openDB(t, "mysql", dsn)
-	fsys := dirOf(t, velox.MySQL, files("0001_ab.sql", "CREATE TABLE a (x int);\nCREATE TABLE b (x int);\n"))
+	fsys := dirOf(t, velox.MySQL, files("0001_abc.sql", "CREATE TABLE a (x int);\nCREATE TABLE b (x int);\nCREATE TABLE c (x int);\n"))
 	defer migrate.SetUnitDone(func(_ uint64, end int) {
-		if end != 1 {
+		if end != 2 {
 			return
 		}
 		var id int64
@@ -525,11 +526,12 @@ func TestUpMySQLConnectionKilled(t *testing.T) {
 		pgExec(t, killer, fmt.Sprintf("KILL CONNECTION %d", id))
 	})()
 	_, err := migrate.Up(context.Background(), db, fsys)
-	if de := dirtyOf(t, err); de.Statement != 2 {
-		t.Errorf("%v; want statement 2", err)
+	const msg = "migrate: the connection was lost during statements 2–2; check whether they ran before resuming"
+	if de := dirtyOf(t, err); de.Statement != 2 || de.Err == nil || de.Err.Error() != msg {
+		t.Errorf("%v; want statement 2, the connection lost", err)
 	}
-	if rows := historyOf(t, db); len(rows) != 1 || !rows[0].Dirty || rows[0].Statements != 1 || rows[0].Error == "" {
-		t.Errorf("history %+v", rows)
+	if rows := historyOf(t, db); len(rows) != 1 || !rows[0].Dirty || rows[0].Statements != 1 || rows[0].Error != msg {
+		t.Errorf("history %+v; want the count of unit 1 and the message", rows)
 	}
 }
 

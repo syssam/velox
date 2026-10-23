@@ -23,7 +23,9 @@ var unitDone func(version uint64, end int)
 // statement of the first incomplete unit, recording after each unit the
 // statements of the completed ones. On success the row is clean, with the
 // duration and applied_at now. The row is written though ctx is gone, and
-// ctx is checked before each unit, so a cancel keeps the count exact. A
+// ctx is checked before each unit, so a cancel keeps the count exact; a
+// count or clean row the session cannot write because its connection is
+// lost is never written through another, and the error says so. A
 // failing statement, a cancel, or a file that leaves a transaction open
 // leaves the row dirty, with the error, and is a *DirtyError; a
 // transaction the file opened is rolled back first.
@@ -56,6 +58,7 @@ func (s *session) applyStepwise(ctx context.Context, f File, row *Applied, o opt
 	}
 	defer restore()
 	table := s.q(s.cfg.Table)
+	last := from // the first statement of the last unit run
 	for u, first := range units {
 		if first < from {
 			continue
@@ -76,11 +79,15 @@ func (s *session) applyStepwise(ctx context.Context, f File, row *Applied, o opt
 			unitDone(f.Version, end)
 		}
 		q := fmt.Sprintf("UPDATE %s SET %s = %s WHERE %s = %s", table, s.q("statements"), s.ph(1), s.q("version"), s.ph(2))
-		if err := s.persist(ctx, q, end, int64(f.Version)); err != nil {
+		if err := s.write(ctx, q, end, int64(f.Version)); err != nil {
+			if s.lostConn(ctx) {
+				return Applied{}, s.lost(ctx, f, first, end, o)
+			}
 			err = fmt.Errorf("migrate: %s: statements 1 to %d ran, but recording them in %s: %w", f.Path, end, s.cfg.Table, err)
 			s.recordError(ctx, f, err, o)
 			return Applied{}, err
 		}
+		last = first
 	}
 	if open, err := s.inTransaction(ctx); open {
 		if err == nil {
@@ -101,7 +108,10 @@ func (s *session) applyStepwise(ctx context.Context, f File, row *Applied, o opt
 	q := fmt.Sprintf("UPDATE %s SET %s = %s, %s = %s, %s = %s, %s = %s, %s = %s WHERE %s = %s", table,
 		s.q("applied_at"), s.ph(1), s.q("duration_ms"), s.ph(2), s.q("dirty"), s.ph(3), s.q("statements"), s.ph(4), s.q("error"), s.ph(5),
 		s.q("version"), s.ph(6))
-	if err := s.persist(ctx, q, s.at(a.AppliedAt), a.Duration.Milliseconds(), false, n, "", int64(f.Version)); err != nil {
+	if err := s.write(ctx, q, s.at(a.AppliedAt), a.Duration.Milliseconds(), false, n, "", int64(f.Version)); err != nil {
+		if s.lostConn(ctx) {
+			return Applied{}, s.lost(ctx, f, last, n, o)
+		}
 		return Applied{}, fmt.Errorf("migrate: %s: every statement ran, but recording version %d clean in %s; it is dirty still: %w", f.Path, f.Version, s.cfg.Table, err)
 	}
 	if o.logger != nil {
@@ -110,9 +120,37 @@ func (s *session) applyStepwise(ctx context.Context, f File, row *Applied, o opt
 	return a, nil
 }
 
-// persist runs a write to the history, though ctx is gone, and through a
-// new connection from the pool when the session's no longer answers; the
-// session is then discarded.
+// write runs a write to the history on the session alone, though ctx is
+// gone. A unit's count and the clean row are written so: one written
+// through another connection could count statements the server rolled
+// back with the lost one.
+func (s *session) write(ctx context.Context, q string, args ...any) error {
+	c, cancel := cleanup(ctx)
+	defer cancel()
+	_, err := s.conn.ExecContext(c, q, args...)
+	return err
+}
+
+// lostConn reports whether the session's connection no longer answers.
+func (s *session) lostConn(ctx context.Context) bool {
+	c, cancel := cleanup(ctx)
+	defer cancel()
+	return s.conn.PingContext(c) != nil
+}
+
+// lost is the *DirtyError of a connection lost after statements first to
+// end (from 0, end exclusive) ran and before their count was written: the
+// row keeps the count the session last wrote, and the error, written
+// through the pool, says their outcome is unknown.
+func (s *session) lost(ctx context.Context, f File, first, end int, o options) error {
+	s.broken = true
+	err := fmt.Errorf("migrate: the connection was lost during statements %d–%d; check whether they ran before resuming", first+1, end)
+	return s.failed(ctx, f, first, err, o)
+}
+
+// persist runs a write of a dirty row's error, though ctx is gone, and
+// through a new connection from the pool when the session's no longer
+// answers; the session is then discarded.
 func (s *session) persist(ctx context.Context, q string, args ...any) error {
 	c, cancel := cleanup(ctx)
 	defer cancel()
