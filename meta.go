@@ -57,7 +57,6 @@ type ColumnInfo struct {
 	Name        string // the column name
 	Type        any    // the field's Go type, a reflect.Type: read it with GoType
 	Nullable    bool   // the column holds NULL: the field is a pointer, or its ColumnDesc says Nullable
-	SQLType     string // empty: the dialect's default for Type
 	Default     any
 	HasDefault  bool
 	DefaultFunc func() any // nil when none

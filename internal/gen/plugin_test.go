@@ -629,3 +629,49 @@ func TestPluginModelHasNoSchemaDefault(t *testing.T) {
 		t.Fatalf("the plugin model carries a SchemaDefault: %s", b)
 	}
 }
+
+// nullMix has JSON fields of every kind a column can hold NULL for, required,
+// Optional and Nillable.
+type nullMix struct{ schema.Schema }
+
+func (nullMix) Fields() []schema.Field {
+	return []schema.Field{
+		field.JSON("req_slice", []string{}),
+		field.JSON("opt_slice", []string{}).Optional(),
+		field.JSON("nil_slice", []string{}).Nillable(),
+		field.JSON("req_map", map[string]int{}),
+		field.JSON("opt_map", map[string]int{}).Optional(),
+		field.JSON("nil_map", map[string]int{}).Nillable(),
+		field.JSON("req_ptr", &jsonShape{}),
+		field.JSON("opt_ptr", &jsonShape{}).Optional(),
+		field.JSON("nil_ptr", &jsonShape{}).Nillable(),
+		field.JSON("req_struct", jsonShape{}),
+		field.JSON("nil_struct", jsonShape{}).Nillable(),
+	}
+}
+
+// For an Optional or Nillable JSON field, the plugin's Nullable is what the
+// core reads of the generated code: a pointer field, a ColumnDesc.Nullable
+// (NilIsNull), or a Go type that is a pointer. A required field of a pointer
+// type is the exception: the core's flag reports the Go type's nil, and its
+// column is NOT NULL.
+func TestNullableMatchesCore(t *testing.T) {
+	g := mustBuild(t, nullMix{})
+	o, err := Lower(g, Config{Package: "gen", SchemaPath: lowerSchemaPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pe := pluginEntity(t, PluginModel(g, o), "nullMix")
+	for _, of := range o.Entities[0].Fields[1:] {
+		got := pluginField(t, pe, of.Name).Nullable
+		if want := !strings.HasPrefix(of.Name, "req_"); got != want {
+			t.Errorf("field %s: Nullable %v, want %v", of.Name, got, want)
+		}
+		if strings.HasPrefix(of.Name, "req_") {
+			continue
+		}
+		if core := of.Pointer || of.NilIsNull || strings.HasPrefix(of.ElemType, "*"); got != core {
+			t.Errorf("field %s: the plugin says Nullable %v, the core reads %v", of.Name, got, core)
+		}
+	}
+}

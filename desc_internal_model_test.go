@@ -335,7 +335,7 @@ func orderedDesc() Desc[ordered] {
 			{Field: "ID", Name: "id"},
 			{Field: "TenantID", Name: "tenant_id"},
 			{Field: "Code", Name: "order_code", Default: "none"},
-			{Field: "Total", Name: "total", SQLType: "numeric(18,2)"},
+			{Field: "Total", Name: "total"},
 			{Field: "ShipAt", Name: "ship_at"},
 		},
 		PrimaryKey: []int{2},

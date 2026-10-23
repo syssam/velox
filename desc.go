@@ -59,7 +59,6 @@ type Desc[E any] struct {
 type ColumnDesc struct {
 	Field         string     // the Go field name
 	Name          string     // the column name
-	SQLType       string     // empty: the dialect's default
 	Default       any        // a value of the field's type (or of its element type, for a pointer field); nil when none
 	DefaultFunc   func() any // returns a value of the field's type (or of its element type, for a pointer field)
 	UpdateDefault func() any
@@ -200,7 +199,7 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 			// every scan writes through it: anything else is no column.
 			return fail(c.Field, "Addr does not return a pointer into the entity for column %d", i)
 		}
-		ci := ColumnInfo{Field: c.Field, Name: c.Name, Type: ft, Nullable: ft.Kind() == reflect.Pointer || c.Nullable, SQLType: c.SQLType,
+		ci := ColumnInfo{Field: c.Field, Name: c.Name, Type: ft, Nullable: ft.Kind() == reflect.Pointer || c.Nullable,
 			HasDefault: c.Default != nil, DefaultFunc: c.DefaultFunc, UpdateDefault: c.UpdateDefault,
 			Immutable: c.Immutable, Sensitive: c.Sensitive, Codec: c.Encode != nil, encode: c.Encode, decode: c.Decode, off: off}
 		if (c.Encode == nil) != (c.Decode == nil) {

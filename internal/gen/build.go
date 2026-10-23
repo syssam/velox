@@ -811,6 +811,16 @@ func (b *builder) validateNames(e *Entity) {
 // added nor an implicit foreign key.
 func isDeclared(f *Field) bool { return !f.AutoID && f.Implicit == "" }
 
+// unencodable names, by kind, the Go types encoding/json cannot write (rule
+// 49); complexKind marks those a MarshalJSON or MarshalText makes writable.
+var (
+	unencodable = map[string]string{
+		"interface": "an interface", "func": "a func", "chan": "a chan", "unsafe.Pointer": "an unsafe.Pointer",
+		"complex64": "a complex64", "complex128": "a complex128",
+	}
+	complexKind = map[string]bool{"complex64": true, "complex128": true}
+)
+
 // optionalNeeds lists the field types whose unset value cannot be stored, so
 // an Optional field of the type that is not Nillable needs a Default.
 var optionalNeeds = []struct {
@@ -883,10 +893,23 @@ func (b *builder) validateFields(e *Entity) {
 			}
 		}
 		// An Optional JSON field's column holds NULL, so its Go field must
-		// hold nil: a slice, a map, a pointer or an interface, or a pointer
-		// that Nillable makes.
+		// hold nil: a slice, a map or a pointer, or a pointer that Nillable
+		// makes.
 		if f.Type == "json" && f.Optional && !f.Nillable && f.GoType != nil && !nilKinds[f.GoType.Kind] {
 			b.fail(48, e.Name, fieldLoc(f), "an Optional JSON field of a non-nil-able type needs Nillable")
+		}
+		// encoding/json cannot write an interface, func, chan or unsafe
+		// pointer, nor a complex number without its own encoding. A func or
+		// chan with a MarshalJSON stays refused: its nil is no pointer, slice
+		// or map, so the core could not take it as NULL.
+		if f.Type == "json" && f.GoType != nil {
+			if noun, ok := unencodable[f.GoType.Kind]; ok && (!f.GoType.Marshaler || !complexKind[f.GoType.Kind]) {
+				hint := ""
+				if complexKind[f.GoType.Kind] {
+					hint = "; give the type a MarshalJSON or MarshalText method"
+				}
+				b.fail(49, e.Name, fieldLoc(f), "its Go type %s is %s, which a JSON column cannot hold%s", f.GoType.Ident, noun, hint)
+			}
 		}
 		// No index covers a JSON column (rule 42 is a declared index's).
 		if f.Type == "json" && f.Unique {

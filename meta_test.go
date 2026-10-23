@@ -82,7 +82,7 @@ func TestDescEntityInfo(t *testing.T) {
 		t.Errorf("GoType of a column without a type = %v, want nil", got)
 	}
 	total := info.Columns[5]
-	if total.SQLType != "numeric(18,2)" || total.HasDefault {
+	if total.HasDefault {
 		t.Errorf("total: %+v", total)
 	}
 	if code := info.Columns[4]; !code.HasDefault || code.Default != "none" {

@@ -180,8 +180,10 @@ func fieldIndex(e *Entity, name string) int {
 }
 
 // nilKinds are the kinds of Go types whose zero value is nil, so a field of one
-// is never a pointer: nil already means NULL.
-var nilKinds = map[string]bool{"slice": true, "map": true, "ptr": true, "interface": true, "func": true, "chan": true}
+// is never a pointer: nil already means NULL. They are the kinds a column can
+// hold NULL for without a pointer; rule 49 refuses a JSON field of any other
+// kind that holds nil.
+var nilKinds = map[string]bool{"slice": true, "map": true, "ptr": true}
 
 // field lowers the field f, column i of e (nil for a join entity).
 func (s *entState) field(e *Entity, i int, f *Field) *OutField {

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/syssam/velox2/internal/ddl"
 	"github.com/syssam/velox2/internal/gen/internal/other"
@@ -580,6 +581,66 @@ func TestBuildOptionalJSONNeedsNilable(t *testing.T) {
 	}
 }
 
+// jsonFunc is a func type with its own encoding; rule 49 still refuses it.
+type jsonFunc func()
+
+func (jsonFunc) MarshalJSON() ([]byte, error) { return []byte("null"), nil }
+
+// jsonComplex is a complex type with its own encoding, which rule 49 accepts.
+type jsonComplex complex128
+
+func (jsonComplex) MarshalJSON() ([]byte, error) { return []byte("null"), nil }
+
+type jsonFuncField struct{ schema.Schema }
+
+func (jsonFuncField) Fields() []schema.Field {
+	return []schema.Field{field.JSON("cb", func() {})}
+}
+
+type jsonChanField struct{ schema.Schema }
+
+func (jsonChanField) Fields() []schema.Field {
+	return []schema.Field{field.JSON("ch", make(chan int))}
+}
+
+type jsonUnsafeField struct{ schema.Schema }
+
+func (jsonUnsafeField) Fields() []schema.Field {
+	return []schema.Field{field.JSON("p", unsafe.Pointer(nil))}
+}
+
+type jsonComplexField struct{ schema.Schema }
+
+func (jsonComplexField) Fields() []schema.Field {
+	return []schema.Field{field.JSON("z", complex(1, 2))}
+}
+
+type jsonComplex64Field struct{ schema.Schema }
+
+func (jsonComplex64Field) Fields() []schema.Field {
+	return []schema.Field{field.JSON("z", complex64(1))}
+}
+
+type jsonFuncMarshalerField struct{ schema.Schema }
+
+func (jsonFuncMarshalerField) Fields() []schema.Field {
+	return []schema.Field{field.JSON("cb", jsonFunc(nil))}
+}
+
+type jsonComplexMarshalerField struct{ schema.Schema }
+
+func (jsonComplexMarshalerField) Fields() []schema.Field {
+	return []schema.Field{field.JSON("z", jsonComplex(0))}
+}
+
+// A complex type with its own encoding is a value type, like a struct.
+func TestBuildJSONComplexWithMarshaler(t *testing.T) {
+	g := mustBuild(t, jsonComplexMarshalerField{})
+	if f := g.Entity("jsonComplexMarshalerField").Field("z"); f.Optional || f.Nillable {
+		t.Errorf("the field is %+v, want required", f)
+	}
+}
+
 // optionalFK binds an Optional edge field that is not Nillable.
 type optionalFK struct{ schema.Schema }
 
@@ -1004,6 +1065,12 @@ func TestBuildRules(t *testing.T) {
 		{"39 optional bytes", []schema.Interface{optionalBytes{}}, `schema optionalBytes: field "blob": an Optional bytes field needs a Default or Nillable`},
 		{"40 optional time", []schema.Interface{optionalTime{}}, `schema optionalTime: field "seen": an Optional time field needs a Default or Nillable`},
 		{"44 table and enum type", []schema.Interface{nsOrder{}, nsOrderStatus{}}, `schema nsOrder: field "status": name "orders_status" is also schema nsOrderStatus's table`},
+		{"49 func", []schema.Interface{jsonFuncField{}}, `schema jsonFuncField: field "cb": its Go type func() is a func, which a JSON column cannot hold`},
+		{"49 chan", []schema.Interface{jsonChanField{}}, `schema jsonChanField: field "ch": its Go type chan int is a chan, which a JSON column cannot hold`},
+		{"49 unsafe pointer", []schema.Interface{jsonUnsafeField{}}, `schema jsonUnsafeField: field "p": its Go type unsafe.Pointer is an unsafe.Pointer, which a JSON column cannot hold`},
+		{"49 complex", []schema.Interface{jsonComplexField{}}, `schema jsonComplexField: field "z": its Go type complex128 is a complex128, which a JSON column cannot hold; give the type a MarshalJSON or MarshalText method`},
+		{"49 complex64", []schema.Interface{jsonComplex64Field{}}, `schema jsonComplex64Field: field "z": its Go type complex64 is a complex64, which a JSON column cannot hold; give the type a MarshalJSON or MarshalText method`},
+		{"49 func with MarshalJSON", []schema.Interface{jsonFuncMarshalerField{}}, `schema jsonFuncMarshalerField: field "cb": its Go type gen.jsonFunc is a func, which a JSON column cannot hold`},
 		{"50 long table", []schema.Interface{longTable{}}, `schema longTable: table name "` + long64 + `" is 64 bytes; a database name has at most 63`},
 		{"50 long derived table", []schema.Interface{longDerivedTableAndSoOnAndSoOnUntilTheNameIsLongerThanTheCapAllowsThing{}}, `table name "long_derived_table_and_so_on_and_so_on_until_the_name_is_longer_than_the_cap_allows_things" is 90 bytes; a database name has at most 63; name it with schema.Table`},
 		{"50 long column", []schema.Interface{longColumn{}}, `schema longColumn: field "x": column name "` + long64 + `" is 64 bytes; a database name has at most 63`},
@@ -1047,7 +1114,8 @@ func TestBuildRulesAreSingle(t *testing.T) {
 		{nsOrder{}, nsOrderStatus{}}, {longTable{}}, {longDerivedTableAndSoOnAndSoOnUntilTheNameIsLongerThanTheCapAllowsThing{}},
 		{longColumn{}}, {longDerivedColumn{}}, {longImplicit{}, Pet{}}, {longIndexKey{}}, {longSymbol{}, Pet{}},
 		{longJoinTable{}}, {longEnumType{}}, {twoSymbolsO2M{}, Pet{}}, {oneSymbolM2M{}}, {symOwner{}, symPet{}},
-		{enumOrder{}, enumTicket{}},
+		{enumOrder{}, enumTicket{}}, {jsonFuncField{}}, {jsonChanField{}}, {jsonUnsafeField{}}, {jsonComplexField{}},
+		{jsonComplex64Field{}}, {jsonFuncMarshalerField{}},
 	} {
 		_, err := build(t, ss...)
 		if n := len(err.(interface{ Unwrap() []error }).Unwrap()); n != 1 {
@@ -1692,9 +1760,6 @@ type nsIssue struct{ schema.Schema }
 
 func (nsIssue) Fields() []schema.Field { return []schema.Field{field.EnumOf[nsStatus]("state")} }
 
-// Rule 44 compares, case-insensitively, the names of relations, of types and
-// of constraints, each within one database schema, the planner's helpers
-// included.
 // nsSharedTable has two relations on one join table.
 type nsSharedTable struct{ schema.Schema }
 
@@ -1708,11 +1773,14 @@ func (nsSharedTable) Edges() []schema.Edge {
 // Two distinct relations cannot share one edge.Table: their rows would mix.
 func TestSharedEdgeTableRefused(t *testing.T) {
 	_, err := build(t, nsSharedTable{})
-	if err == nil || !strings.Contains(err.Error(), "is also") {
-		t.Fatalf("got %v, want a name clash", err)
+	if got, want := plain(err), `schema nsSharedTable: edge "rivals": name "shared_links" is also this schema's join table`; err == nil || got != want {
+		t.Fatalf("got\n%v\nwant\n%s", got, want)
 	}
 }
 
+// Rule 44 compares, case-insensitively, the names of relations, of types and
+// of constraints, each within one database schema, the planner's helpers
+// included.
 func TestNamespace(t *testing.T) {
 	for _, c := range []struct {
 		name string

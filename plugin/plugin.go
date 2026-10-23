@@ -118,7 +118,7 @@ type Field struct {
 	Imports    []string `json:"imports,omitempty"`     // every import path ElemType mentions (map[string]x.T's x too), sorted; "time" for a time field without a Go type; nil for a builtin type and velox-gen's own enum types
 	Kind       string   `json:"kind,omitempty"`        // the reflect kind of the schema's GoType ("string", "int64", "struct", "array", "slice", "ptr"…) when the schema gives one; "" for velox's standard type and velox-gen's own enum types
 	Pointer    bool     `json:"pointer,omitempty"`     // Nillable, unless the Go type can already be nil (a slice, a map): the Go struct holds a pointer. This is about the struct: use Nullable for nullability
-	Nullable   bool     `json:"nullable,omitempty"`    // Nillable || (Optional && Type == "json"): the column is NULL-able; the flag a plugin uses for nullability. An Optional field that is not Nillable stays NOT NULL, and unset is its zero value
+	Nullable   bool     `json:"nullable,omitempty"`    // Nillable || (Optional && Type == "json" && the Go type is a slice, a map or a pointer): the column is NULL-able; the flag a plugin uses for nullability. Any other Optional field stays NOT NULL, and unset is its zero value
 	Optional   bool     `json:"optional,omitempty"`    // the field need not be given on create; it says nothing of nullability
 	Immutable  bool     `json:"immutable,omitempty"`   // refused in updates: set only on create
 	Sensitive  bool     `json:"sensitive,omitempty"`   // left out of String(), JSON, logs and spans; a plugin keeps it out of what it exposes

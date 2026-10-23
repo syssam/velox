@@ -244,8 +244,10 @@ var genericObjects = []struct {
 	// a policy and hooks (policyGrowthMax). The rows of the old struct-scanning
 	// path (entity, entityUse, Shape, ColumnDef, RelDef, Schema) are gone with
 	// it. entityDesc was remeasured on 2026-10-22 after Rel.LimitEach and
-	// Rel.MaxRows (+518 bytes: 130782 before); its bound was kept.
-	{"entityDesc", "", entityDescSrc, 153600}, // measured 131300
+	// Rel.MaxRows (+518 bytes: 130782 before); its bound was kept. It was
+	// remeasured on 2026-10-23, after SQLType left ColumnDesc (-38 bytes), and
+	// its bound was kept again.
+	{"entityDesc", "", entityDescSrc, 153600}, // measured 131266
 	// entityDescUse is held like entityDescHooks: its bound is the
 	// measurement plus about 1.2%, rounded up to the next KiB; remeasured on
 	// 2026-10-22, darwin/arm64, Go 1.27.1, after the locking reads (about
@@ -255,11 +257,12 @@ var genericObjects = []struct {
 	// Rel.LimitEach and Rel.MaxRows (+1404 bytes: 782716 under 792576
 	// before), and after LoadEach and CountEach, whose After condition moved
 	// out of Query's generic prepare into addAfter, compiled once (-26846
-	// bytes: 784120 under 793600 before). Sum, Avg, Min and Max stay
+	// bytes: 784120 under 793600 before), and after SQLType left ColumnDesc
+	// (-88 bytes; the bound held). Sum, Avg, Min and Max stay
 	// functions: as Query methods they measured 800636 (before addAfter),
 	// since a method of Query whose signature names NumberCol[E, V] puts that
 	// in the export data of every package that uses a Query, called or not.
-	{"entityDescUse", "", entityDescUseSrc, 766976}, // measured 757274
+	{"entityDescUse", "", entityDescUseSrc, 766976}, // measured 757436
 	// entityDescHooks is held tighter than the rule above: a quarter of it
 	// would let it grow by 64 KiB unseen. Its bound is the measurement plus
 	// about 1.2%, rounded up to the next KiB, the headroom it had before
@@ -269,8 +272,9 @@ var genericObjects = []struct {
 	// and again when Mutation became a struct holding the mutation (-2708
 	// bytes: 1073952 under 1087488 before), and after Rel.LimitEach and
 	// Rel.MaxRows (+1398 bytes: 1071244 under 1084416 before), and after
-	// addAfter (-26882 bytes: 1072642 under 1086464 before).
-	{"entityDescHooks", "", entityDescHooksBound, 1058816}, // measured 1045760
+	// addAfter (-26882 bytes: 1072642 under 1086464 before), and after
+	// SQLType left ColumnDesc (-90 bytes; the bound held).
+	{"entityDescHooks", "", entityDescHooksBound, 1058816}, // measured 1045926
 	{"Policy", "velox.Policy[E]", "", 8192},                // measured 4050
 	// Mutation was remeasured on 2026-10-22, when it became a struct
 	// holding the mutation instead of a defined type of it (4692 before),
