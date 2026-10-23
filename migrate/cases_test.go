@@ -324,6 +324,7 @@ type testCase struct {
 	fromDB   func(d velox.Dialect) *migrate.Schema // a hand-made from (serial, ent-shaped); nil: from the load model
 	empty    bool                                  // from is the empty schema
 	opts     migrate.DiffOptions
+	allow    []migrate.Allow // covers every destructive finding of the case, on any dialect
 }
 
 var allDialects = []velox.Dialect{velox.Postgres, velox.MySQL, velox.SQLite}
@@ -395,11 +396,20 @@ func withSmallKey(m *loadjson.Model) {
 	fieldOf(m, "User", "org_id").Type = "int32"
 }
 
+// allow covers the destructive codes of a case.
+func allow(codes ...string) []migrate.Allow {
+	var out []migrate.Allow
+	for _, c := range codes {
+		out = append(out, migrate.Allow{Code: c})
+	}
+	return out
+}
+
 var renameUsers = migrate.DiffOptions{RenameTables: map[migrate.TableRef]migrate.TableRef{users: accounts}}
 
 var cases = []testCase{
 	{name: "create-tables", empty: true, to: func(m *loadjson.Model) { addSchema(m, Alpha{}, Beta{}) }},
-	{name: "drop-table", to: func(m *loadjson.Model) {
+	{name: "drop-table", allow: allow("drop-table"), to: func(m *loadjson.Model) {
 		dropSchema(m, "Post")
 		dropEdge(m, "User", "posts")
 	}},
@@ -408,20 +418,20 @@ var cases = []testCase{
 	{name: "add-column-nillable", to: func(m *loadjson.Model) {
 		addField(m, "User", field.String("nickname").Optional().Nillable())
 	}},
-	{name: "add-column-required", to: func(m *loadjson.Model) { addField(m, "User", field.String("nickname")) }},
+	{name: "add-column-required", allow: allow("add-required-column"), to: func(m *loadjson.Model) { addField(m, "User", field.String("nickname")) }},
 	{name: "add-column-default", to: func(m *loadjson.Model) { addField(m, "User", field.String("nickname").Default("anon")) }},
 	{name: "add-column-schema-default", to: func(m *loadjson.Model) {
 		addField(m, "User", field.Time("seen_at").SchemaDefault(map[string]string{
 			field.Postgres: "CURRENT_TIMESTAMP", field.MySQL: "CURRENT_TIMESTAMP(6)", field.SQLite: "CURRENT_TIMESTAMP",
 		}))
 	}},
-	{name: "drop-column", to: func(m *loadjson.Model) { dropField(m, "User", "email") }},
+	{name: "drop-column", allow: allow("drop-column"), to: func(m *loadjson.Model) { dropField(m, "User", "email") }},
 	{name: "rename-column", to: func(m *loadjson.Model) { fieldOf(m, "User", "name").StorageKey = "full_name" },
 		opts: migrate.DiffOptions{RenameColumns: map[migrate.ColumnRef]string{{Table: users, Column: "name"}: "full_name"}}},
 	{name: "widen-int", to: func(m *loadjson.Model) { fieldOf(m, "User", "logins").Type = "int64" }, dialects: pgMySQL},
 	{name: "widen-varchar", to: func(m *loadjson.Model) { fieldOf(m, "User", "email").Size = 255 }, dialects: pgMySQL},
-	{name: "narrow-varchar", to: func(m *loadjson.Model) { fieldOf(m, "User", "email").Size = 64 }, dialects: pgMySQL},
-	{name: "set-not-null", to: func(m *loadjson.Model) {
+	{name: "narrow-varchar", allow: allow("alter-type"), to: func(m *loadjson.Model) { fieldOf(m, "User", "email").Size = 64 }, dialects: pgMySQL},
+	{name: "set-not-null", allow: allow("set-not-null"), to: func(m *loadjson.Model) {
 		f := fieldOf(m, "User", "bio")
 		f.Optional, f.Nillable = false, false
 	}},
@@ -436,7 +446,7 @@ var cases = []testCase{
 	{name: "add-index", to: func(m *loadjson.Model) { addIndex(m, "User", index.Fields("created_at")) }},
 	{name: "drop-index", to: func(m *loadjson.Model) { dropIndex(m, "User", 0) }},
 	{name: "rename-index", to: func(m *loadjson.Model) { ent(m, "User").Indexes[0].StorageKey = "users_name_idx" }},
-	{name: "add-unique", to: func(m *loadjson.Model) { fieldOf(m, "User", "name").Unique = true }},
+	{name: "add-unique", allow: allow("add-unique"), to: func(m *loadjson.Model) { fieldOf(m, "User", "name").Unique = true }},
 	{name: "fk-index-replaced", to: withFKIndex},
 	{name: "fk-index-restored", from: withFKIndex},
 	{name: "add-foreign-key", from: withReviewer, to: func(m *loadjson.Model) {
@@ -449,14 +459,14 @@ var cases = []testCase{
 	}},
 	{name: "on-delete-change", to: func(m *loadjson.Model) { edgeOf(m, "Post", "author").OnDelete = "RESTRICT" }},
 	{name: "enum-append", to: func(m *loadjson.Model) { setEnum(m, "User", "role", "admin", "viewer", "owner") }},
-	{name: "enum-insert", to: func(m *loadjson.Model) { setEnum(m, "User", "role", "admin", "editor", "viewer") }},
-	{name: "enum-remove", to: func(m *loadjson.Model) { setEnum(m, "User", "role", "viewer") }},
-	{name: "enum-reorder", to: func(m *loadjson.Model) { setEnum(m, "User", "role", "viewer", "admin") }},
-	{name: "enum-shared", to: func(m *loadjson.Model) {
+	{name: "enum-insert", allow: allow("reorder-enum"), to: func(m *loadjson.Model) { setEnum(m, "User", "role", "admin", "editor", "viewer") }},
+	{name: "enum-remove", allow: allow("drop-enum-value"), to: func(m *loadjson.Model) { setEnum(m, "User", "role", "viewer") }},
+	{name: "enum-reorder", allow: allow("reorder-enum"), to: func(m *loadjson.Model) { setEnum(m, "User", "role", "viewer", "admin") }},
+	{name: "enum-shared", allow: allow("drop-enum-value"), to: func(m *loadjson.Model) {
 		setEnum(m, "User", "status", "active", "pending")
 		setEnum(m, "Post", "status", "active", "pending")
 	}},
-	{name: "enum-opt-out", dialects: pgMySQL, to: func(m *loadjson.Model) {
+	{name: "enum-opt-out", allow: allow("alter-type"), dialects: pgMySQL, to: func(m *loadjson.Model) {
 		fieldOf(m, "User", "role").SchemaType = map[string]string{field.Postgres: "text", field.MySQL: "varchar(16)"}
 	}},
 	{name: "literals", to: func(m *loadjson.Model) {
@@ -476,19 +486,19 @@ var cases = []testCase{
 		id.Identity, id.Default = false, "nextval('users_id_seq')"
 		return s
 	}},
-	{name: "collation", dialects: mysqlOnly, fromDB: func(d velox.Dialect) *migrate.Schema {
+	{name: "collation", allow: allow("convert-collation"), dialects: mysqlOnly, fromDB: func(d velox.Dialect) *migrate.Schema {
 		s := mustTables(d, nil)
 		table(s, "users").Collation = "utf8mb4_0900_ai_ci"
 		return s
 	}},
 	{name: "rebuild-parent", dialects: sqlite, to: func(m *loadjson.Model) { fieldOf(m, "User", "logins").Type = "float64" }},
-	{name: "rename-table-drop-column", to: func(m *loadjson.Model) {
+	{name: "rename-table-drop-column", allow: allow("drop-column"), to: func(m *loadjson.Model) {
 		annotate(m, "User", schema.Table("accounts"))
 		dropField(m, "User", "email")
 	}, opts: renameUsers},
 	{name: "rename-table-key-type", dialects: pgMySQL, from: withSmallKey,
 		to: func(m *loadjson.Model) { annotate(m, "User", schema.Table("accounts")) }, opts: renameUsers},
-	{name: "reuse-dropped-name", from: func(m *loadjson.Model) {
+	{name: "reuse-dropped-name", allow: allow("drop-table"), from: func(m *loadjson.Model) {
 		addIndex(m, "Post", index.Fields("title").StorageKey("shared_idx"))
 		edgeOf(m, "Post", "author").Symbols = []string{"shared_fk"}
 	}, to: func(m *loadjson.Model) {
@@ -497,13 +507,13 @@ var cases = []testCase{
 		addIndex(m, "User", index.Fields("created_at").StorageKey("shared_idx"))
 		edgeOf(m, "User", "mentor").Symbols = []string{"shared_fk"}
 	}},
-	{name: "drop-column-in-index", from: func(m *loadjson.Model) {
+	{name: "drop-column-in-index", allow: allow("drop-column"), from: func(m *loadjson.Model) {
 		addIndex(m, "User", index.Fields("org_id", "logins"))
 	}, to: func(m *loadjson.Model) { dropField(m, "User", "logins") }},
-	{name: "drop-column-in-unique", from: func(m *loadjson.Model) {
+	{name: "drop-column-in-unique", allow: allow("drop-column"), from: func(m *loadjson.Model) {
 		addIndex(m, "User", index.Fields("name", "logins").Unique())
 	}, to: func(m *loadjson.Model) { dropField(m, "User", "logins") }},
-	{name: "drop-column-in-unique-key", from: func(m *loadjson.Model) {
+	{name: "drop-column-in-unique-key", allow: allow("drop-column"), from: func(m *loadjson.Model) {
 		addIndex(m, "User", index.Fields("org_id", "logins").Unique())
 	}, to: func(m *loadjson.Model) { dropField(m, "User", "logins") }},
 	{name: "rename-column-opt-out", from: optOutRole, to: func(m *loadjson.Model) {
