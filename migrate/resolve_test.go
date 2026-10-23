@@ -150,3 +150,12 @@ func TestUpResumeAhead(t *testing.T) {
 		t.Errorf("%+v, %+v", de, r)
 	}
 }
+
+func TestLostMessage(t *testing.T) {
+	if got, want := migrate.LostMessage(1, 3), "the connection was lost during statements 2 to 3; check whether they ran before resuming"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	if got, want := migrate.LostMessage(1, 2), "the connection was lost during statement 2; check whether it ran before resuming"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}

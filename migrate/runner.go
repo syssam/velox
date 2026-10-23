@@ -118,6 +118,9 @@ var errAppliedMeanwhile = errors.New("migrate: applied by another runner")
 // leaves its version dirty and is a *DirtyError, which stops every later run
 // until WithResume continues it or Resolve ends it. Either way the Report
 // holds the files applied before it.
+//
+// Up uses one connection of db for its run and closes it after, so nothing
+// a file sets on its session reaches db's other connections.
 func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, error) {
 	o := optionsOf(opts)
 	d, err := ReadDir(dir)
@@ -195,7 +198,8 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 // State.Applied holds the clean versions up to the directory's last file,
 // Ahead the clean versions above it, and Dirty the dirty version alone,
 // wherever it is. On SQLite, the read waits as long as WithLockWait says
-// for a writer to finish; Status takes no other option.
+// for a writer to finish; Status takes no other option. Like Up, it uses
+// one connection of db and closes it after.
 func Status(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*State, error) {
 	o := optionsOf(opts)
 	d, err := ReadDir(dir)

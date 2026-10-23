@@ -73,7 +73,10 @@
 // continues it from its first incomplete unit or [Resolve] marks it applied
 // or undone. A run killed while a statement ran may have applied it, and on
 // MySQL a cancelled statement may still have finished on the server, so
-// check the failed statement before resuming or undoing. [Status] reads the directory against the history without
-// applying. An applied file edited or gone is a [*ChecksumError], and a lock
-// held past the wait [ErrLockWait].
+// check the failed statement before resuming or undoing. [Status] reads the
+// directory against the history without applying. Each uses one connection
+// of the database and closes it after, so nothing a file sets on its
+// session reaches the application's other connections. An applied file
+// edited or gone is a [*ChecksumError], and a lock held past the wait
+// [ErrLockWait].
 package migrate

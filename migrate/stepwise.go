@@ -93,7 +93,6 @@ func (s *session) applyStepwise(ctx context.Context, f File, row *Applied, o opt
 		if err == nil {
 			err = errors.New("the file leaves a transaction open")
 		}
-		s.broken = true
 		s.undo(ctx, "ROLLBACK")
 		return Applied{}, s.failed(ctx, f, s.completed(ctx, f.Version, from), err, o)
 	}
@@ -143,25 +142,28 @@ func (s *session) lostConn(ctx context.Context) bool {
 // row keeps the count the session last wrote, and the error, written
 // through the pool, says their outcome is unknown.
 func (s *session) lost(ctx context.Context, f File, first, end int, o options) error {
-	s.broken = true
-	which, they := fmt.Sprintf("statements %d–%d", first+1, end), "they"
+	return s.failed(ctx, f, first, errors.New(lostMessage(first, end)), o)
+}
+
+// lostMessage is lost's error for statements first to end (from 0, end
+// exclusive).
+func lostMessage(first, end int) string {
+	which, they := fmt.Sprintf("statements %d to %d", first+1, end), "they"
 	if end <= first+1 {
 		which, they = fmt.Sprintf("statement %d", first+1), "it"
 	}
-	err := fmt.Errorf("the connection was lost during %s; check whether %s ran before resuming", which, they)
-	return s.failed(ctx, f, first, err, o)
+	return fmt.Sprintf("the connection was lost during %s; check whether %s ran before resuming", which, they)
 }
 
 // persist runs a write of a dirty row's error, though ctx is gone, and
 // through a new connection from the pool when the session's no longer
-// answers; the session is then discarded.
+// answers.
 func (s *session) persist(ctx context.Context, q string, args ...any) error {
 	c, cancel := cleanup(ctx)
 	defer cancel()
 	if _, err := s.conn.ExecContext(c, q, args...); err == nil {
 		return nil
 	}
-	s.broken = true
 	_, err := s.pool.ExecContext(c, q, args...)
 	return err
 }
@@ -255,19 +257,29 @@ func (s *session) stepTimeout(ctx context.Context, f File) (restore func(), err 
 
 // failed rolls back a transaction the file opened, records err on f's
 // dirty row, and is the *DirtyError at statement i (from 0, at most the
-// file's last).
+// file's last). When a transaction was rolled back, the undo hint names the
+// statements the row counts as committed, not those before i.
 func (s *session) failed(ctx context.Context, f File, i int, err error, o options) error {
+	open, perr := s.inTransaction(ctx)
 	s.recordError(ctx, f, err, o)
 	n := len(f.Statements)
-	return &DirtyError{Version: f.Version, Path: f.Path, Statement: max(min(i+1, n), 1), Statements: n, Err: err}
+	e := &DirtyError{Version: f.Version, Path: f.Path, Statement: max(min(i+1, n), 1), Statements: n, Err: err}
+	if open && perr == nil {
+		k := s.completed(ctx, f.Version, i)
+		e.applied = &k
+	}
+	return e
 }
 
 // recordError rolls back a transaction the file opened (a ROLLBACK outside
-// one does nothing), so the row's error is committed and no transaction
-// reaches the pool, then writes err to f's dirty row through persist. A
+// one does nothing) and, on MySQL, turns autocommit back on, so the row's
+// error commits; then it writes err to f's dirty row through persist. A
 // failure to write it goes to o's logger.
 func (s *session) recordError(ctx context.Context, f File, err error, o options) {
 	s.undo(ctx, "ROLLBACK")
+	if s.d == velox.MySQL {
+		s.undo(ctx, "SET autocommit = 1")
+	}
 	q := fmt.Sprintf("UPDATE %s SET %s = %s WHERE %s = %s", s.q(s.cfg.Table), s.q("error"), s.ph(1), s.q("version"), s.ph(2))
 	if werr := s.persist(ctx, q, err.Error(), int64(f.Version)); werr != nil && o.logger != nil {
 		c, cancel := cleanup(ctx)

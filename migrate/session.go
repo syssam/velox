@@ -28,7 +28,6 @@ type session struct {
 	db       string        // MySQL: DATABASE()
 	sqlMode  string        // MySQL: @@SESSION.sql_mode
 	lockWait int64         // MySQL: @@SESSION.lock_wait_timeout when the run began
-	broken   bool          // a clean-up failed: close discards the connection
 	wait     time.Duration // SQLite: how long BEGIN IMMEDIATE waits
 }
 
@@ -143,23 +142,21 @@ func (s *session) checkModes(files []File) error {
 	return nil
 }
 
-// close releases the connection to the pool, or, when a clean-up failed and
-// the connection may hold the lock or the run's settings, closes it.
+// close closes the connection; it never returns to the pool. A file may
+// change any setting of the session, and a failed clean-up may leave the
+// lock or the run's settings on it, so none of it reaches the application's
+// other connections.
 func (s *session) close() {
-	if s.broken {
-		_ = s.conn.Raw(func(any) error { return driver.ErrBadConn })
-	}
+	_ = s.conn.Raw(func(any) error { return driver.ErrBadConn })
 	_ = s.conn.Close()
 }
 
-// undo runs a clean-up statement, though ctx is gone; a failure discards the
-// connection.
+// undo runs a clean-up statement, though ctx is gone. A failure is left to
+// close, which discards the connection with whatever it holds.
 func (s *session) undo(ctx context.Context, q string, args ...any) {
 	c, cancel := cleanup(ctx)
 	defer cancel()
-	if _, err := s.conn.ExecContext(c, q, args...); err != nil {
-		s.broken = true
-	}
+	_, _ = s.conn.ExecContext(c, q, args...)
 }
 
 // The minimum versions.
@@ -311,7 +308,6 @@ func (s *session) lock(ctx context.Context, wait time.Duration) (unlock func(), 
 			return nil, wrap(ctx, what, err)
 		}
 		if _, err := s.conn.ExecContext(ctx, fmt.Sprintf("PRAGMA busy_timeout = %d", waitMillis(wait))); err != nil {
-			s.broken = true
 			return nil, wrap(ctx, what, err)
 		}
 		s.wait = wait

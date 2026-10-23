@@ -479,17 +479,23 @@ func TestRunnerErrorsSayWhat(t *testing.T) {
 	}
 }
 
-// TestSessionDiscard: a session whose clean-up failed is closed, not
-// returned to the pool.
+// TestSessionDiscard: the runner's connection is closed after its run, on
+// success too, never returned to the pool.
 func TestSessionDiscard(t *testing.T) {
 	db, _ := freshDB(t, velox.SQLite)
-	for _, discard := range []bool{false, true} {
-		if err := migrate.SessionClose(context.Background(), db, discard); err != nil {
-			t.Fatal(err)
-		}
-		if n, want := db.Stats().Idle, map[bool]int{false: 1, true: 0}[discard]; n != want {
-			t.Errorf("discard %t: %d idle connections; want %d", discard, n, want)
-		}
+	if err := migrate.SessionClose(context.Background(), db); err != nil {
+		t.Fatal(err)
+	}
+	if n := db.Stats().Idle; n != 0 {
+		t.Errorf("SessionClose: %d idle connections; want 0", n)
+	}
+	fsys := dirOf(t, velox.SQLite, files("0001_a.sql", "CREATE TABLE a (x integer);"))
+	mustUp(t, db, fsys)
+	if _, err := migrate.Status(context.Background(), db, fsys); err != nil {
+		t.Fatal(err)
+	}
+	if n := db.Stats().Idle; n != 0 {
+		t.Errorf("Up and Status: %d idle connections; want 0", n)
 	}
 }
 

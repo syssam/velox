@@ -73,14 +73,12 @@ var (
 	WaitSeconds = waitSeconds
 )
 
-// SessionClose opens a SQLite session on db and closes it, discarding its
-// connection when discard is set, as a failed clean-up does.
-func SessionClose(ctx context.Context, db *sql.DB, discard bool) error {
+// SessionClose opens a SQLite session on db and closes it.
+func SessionClose(ctx context.Context, db *sql.DB) error {
 	s, err := open(ctx, db, Config{Dialect: velox.SQLite, Table: defaultTable})
 	if err != nil {
 		return err
 	}
-	s.broken = discard
 	s.close()
 	return nil
 }
@@ -92,3 +90,6 @@ func SetUnitDone(f func(version uint64, end int)) (restore func()) {
 	unitDone = f
 	return func() { unitDone = was }
 }
+
+// LostMessage is lostMessage.
+var LostMessage = lostMessage

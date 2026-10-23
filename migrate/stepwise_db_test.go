@@ -420,8 +420,9 @@ func TestUpMySQLOwnTransaction(t *testing.T) {
 	pgExec(t, db, "CREATE TABLE t (x int PRIMARY KEY)")
 	fsys := dirOf(t, velox.MySQL, files("0001_tx.sql", "START TRANSACTION;\nINSERT INTO t VALUES (1);\nINSERT INTO nope VALUES (1);\nCOMMIT;\n"))
 	_, err := migrate.Up(ctx, db, fsys)
-	if de := dirtyOf(t, err); de.Statement != 3 || mysqlNumber(err) != 1146 {
-		t.Errorf("%v; want 1146 at statement 3", err)
+	if de := dirtyOf(t, err); de.Statement != 3 || mysqlNumber(err) != 1146 ||
+		!strings.HasSuffix(err.Error(), "\n  version 1 is dirty; fix the cause and run migrate apply -resume, or run migrate resolve -version 1 -undone") {
+		t.Errorf("%v; want 1146 at statement 3, with nothing to undo", err)
 	}
 	if rows := historyOf(t, other); len(rows) != 1 || !rows[0].Dirty || rows[0].Statements != 0 || !strings.Contains(rows[0].Error, "1146") {
 		t.Fatalf("history, from another session: %+v", rows)
@@ -536,17 +537,61 @@ func TestUpMySQLConnectionKilled(t *testing.T) {
 }
 
 // TestUpMySQLAutocommitOff: a file that turns autocommit off leaves a
-// transaction open, and is rolled back and dirty.
+// transaction open, at its end or when it fails; either way it is rolled
+// back, the row's error is committed, and the row is not locked.
 func TestUpMySQLAutocommitOff(t *testing.T) {
-	db, dsn := freshDB(t, velox.MySQL)
-	pgExec(t, db, "CREATE TABLE t (x int)")
-	fsys := dirOf(t, velox.MySQL, files("0001_off.sql", "SET autocommit = 0;\nINSERT INTO t VALUES (1);\n"))
-	_, err := migrate.Up(context.Background(), db, fsys)
-	if de := dirtyOf(t, err); de.Statement != 1 || !strings.Contains(err.Error(), "the file leaves a transaction open") {
-		t.Errorf("%v", err)
+	ctx := context.Background()
+	for _, c := range []struct {
+		name, file, error string
+		statement         int
+	}{
+		{"left open", "SET autocommit = 0;\nINSERT INTO t VALUES (1);\n", "the file leaves a transaction open", 1},
+		{"failing", "SET autocommit = 0;\nINSERT INTO t VALUES (1);\nINSERT INTO nope VALUES (1);\n", "1146", 3},
+	} {
+		db, dsn := freshDB(t, velox.MySQL)
+		db.SetMaxOpenConns(1)
+		other := openDB(t, "mysql", dsn)
+		pgExec(t, db, "CREATE TABLE t (x int)")
+		_, err := migrate.Up(ctx, db, dirOf(t, velox.MySQL, files("0001_off.sql", c.file)))
+		if de := dirtyOf(t, err); de.Statement != c.statement || !strings.Contains(err.Error(), c.error) {
+			t.Errorf("%s: %v", c.name, err)
+		}
+		if rows := historyOf(t, other); len(rows) != 1 || !rows[0].Dirty || rows[0].Statements != 0 || !strings.Contains(rows[0].Error, c.error) {
+			t.Errorf("%s: history, from another session: %+v", c.name, rows)
+		}
+		var n int
+		if err := other.QueryRow(`SELECT count(*) FROM t`).Scan(&n); err != nil || n != 0 {
+			t.Errorf("%s: t holds %d, %v; want 0", c.name, n, err)
+		}
+		conn, err := other.Conn(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, q := range []string{"SET SESSION innodb_lock_wait_timeout = 1", "UPDATE velox_migrations SET duration_ms = duration_ms + 1 WHERE version = 1"} {
+			if _, err := conn.ExecContext(ctx, q); err != nil {
+				t.Errorf("%s: %s: %v", c.name, q, err)
+			}
+		}
+		_ = conn.Close()
+		var autocommit int
+		if err := db.QueryRow(`SELECT count(*) FROM information_schema.innodb_trx WHERE trx_mysql_thread_id = CONNECTION_ID()`).Scan(&n); err != nil || n != 0 {
+			t.Errorf("%s: the pool's connection holds %d transactions, %v", c.name, n, err)
+		}
+		if err := db.QueryRow(`SELECT @@autocommit`).Scan(&autocommit); err != nil || autocommit != 1 {
+			t.Errorf("%s: the pool's connection has autocommit %d, %v", c.name, autocommit, err)
+		}
 	}
-	var n int
-	if err := openDB(t, "mysql", dsn).QueryRow(`SELECT count(*) FROM t`).Scan(&n); err != nil || n != 0 {
-		t.Errorf("t holds %d, %v; want 0", n, err)
+}
+
+// TestUpMySQLSessionNotPooled: what a file sets on the session never
+// reaches the pool, though the file applies.
+func TestUpMySQLSessionNotPooled(t *testing.T) {
+	db, _ := freshDB(t, velox.MySQL)
+	db.SetMaxOpenConns(1)
+	mustUp(t, db, dirOf(t, velox.MySQL, files("0001_mode.sql", "SET SESSION sql_mode = 'ANSI_QUOTES';\nSET SESSION foreign_key_checks = 0;\n")))
+	var mode string
+	var fk int
+	if err := db.QueryRow(`SELECT @@SESSION.sql_mode, @@SESSION.foreign_key_checks`).Scan(&mode, &fk); err != nil || strings.Contains(mode, "ANSI_QUOTES") || fk != 1 {
+		t.Errorf("the pool's connection: sql_mode %q, foreign_key_checks %d, %v", mode, fk, err)
 	}
 }

@@ -25,9 +25,10 @@ const (
 // ResolveUndone deletes its row, so the file may be edited and applied
 // again, and reads only dir's velox.json, so an edit not yet hashed into
 // velox.sum does not stop it. Resolve reads the history itself, not against
-// dir's other files, so an edited file does not stop it either. A version that is not dirty, or not
-// in the history, is an *Error of Code "history"; a Resolution other than
-// the two, one of Code "resolution".
+// dir's other files, so an edited file does not stop it either. A version
+// that is not dirty, or not in the history, is an *Error of Code "history";
+// a Resolution other than the two, one of Code "resolution". Like Up, it
+// uses one connection of db and closes it after.
 func Resolve(ctx context.Context, db *sql.DB, dir fs.FS, version uint64, r Resolution, opts ...Option) error {
 	if r != ResolveApplied && r != ResolveUndone {
 		return &Error{Code: "resolution", Reason: fmt.Sprintf("no resolution %d; use ResolveApplied or ResolveUndone", r)}
