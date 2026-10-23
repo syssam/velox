@@ -53,9 +53,13 @@ var destructive = []string{
 
 // ParseAllow reads the items of the -allow flag, joined by commas, each a
 // destructive code and optionally "=" and the target it covers:
-// "drop-column=users.name,drop-table". An empty item, an empty target, or a
-// code that is not destructive is an *Error with Code "allow".
+// "drop-column=users.name,drop-table". An empty s, or one of white space,
+// allows nothing: nil and no error. In a list, an empty item, an empty
+// target, or a code that is not destructive is an *Error with Code "allow".
 func ParseAllow(s string) ([]Allow, error) {
+	if strings.TrimSpace(s) == "" {
+		return nil, nil
+	}
 	var out []Allow
 	for _, item := range strings.Split(s, ",") {
 		item = strings.TrimSpace(item)

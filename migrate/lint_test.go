@@ -491,7 +491,12 @@ func TestParseAllow(t *testing.T) {
 	if got, err = migrate.ParseAllow(" add-unique = users.users_name_unique , set-not-null "); err != nil || len(got) != 2 || got[0].Target != "users.users_name_unique" {
 		t.Errorf("with spaces: %v, %v", got, err)
 	}
-	for _, s := range []string{"rename-table", "", "drop-column=,", ",drop-table", "drop-table,,drop-column", "drop-column=", "nonsense", "widen-type=users.x"} {
+	for _, s := range []string{"", "  "} {
+		if got, err := migrate.ParseAllow(s); got != nil || err != nil {
+			t.Errorf("ParseAllow(%q) = %v, %v; want nothing", s, got, err)
+		}
+	}
+	for _, s := range []string{"rename-table", ",", " , ", "drop-column=,", ",drop-table", "drop-table,,drop-column", "drop-column=", "nonsense", "widen-type=users.x"} {
 		_, err := migrate.ParseAllow(s)
 		var e *migrate.Error
 		if !errors.As(err, &e) || e.Code != "allow" {
