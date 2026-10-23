@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -149,7 +150,8 @@ func TestInspectPostgresCases(t *testing.T) {
 
 // TestInspectPostgresSequence: an identity has its sequence, named or
 // PostgreSQL's; a serial is no identity, but its nextval default and its
-// sequence; a nextval of a sequence no column owns is a plain default.
+// sequence; a nextval of a sequence no column owns is a plain default. An
+// identity's own sequence wins over another the column owns.
 func TestInspectPostgresSequence(t *testing.T) {
 	db, _ := freshDB(t, velox.Postgres)
 	for _, q := range []string{
@@ -160,6 +162,8 @@ func TestInspectPostgresSequence(t *testing.T) {
 		`CREATE TABLE f (id bigint DEFAULT nextval('free_seq') PRIMARY KEY)`,
 		`CREATE SCHEMA billing`,
 		`CREATE TABLE billing.s (id bigserial PRIMARY KEY)`,
+		// An identity that also owns a sequence of an earlier name.
+		`CREATE SEQUENCE a_aaa_seq OWNED BY a.id`,
 	} {
 		pgExec(t, db, q)
 	}
@@ -184,7 +188,8 @@ func TestInspectPostgresSequence(t *testing.T) {
 
 // TestInspectPostgresEnums: a type two tables use is read once, its values
 // in order; a type in another schema is named with it; an unused type is not
-// read.
+// read. A check on an enum column, its type qualified or not, is in the
+// model's form.
 func TestInspectPostgresEnums(t *testing.T) {
 	needPostgres(t)
 	_, to := models(t, caseNamed("enum-shared"), velox.Postgres)
@@ -193,7 +198,8 @@ func TestInspectPostgresEnums(t *testing.T) {
 	pgExec(t, db, `CREATE TYPE unused AS ENUM ('z')`)
 	pgExec(t, db, `CREATE SCHEMA billing`)
 	pgExec(t, db, `CREATE TYPE billing.status AS ENUM ('y', 'x')`)
-	pgExec(t, db, `CREATE TABLE billing.inv (s billing.status NOT NULL DEFAULT 'x')`)
+	pgExec(t, db, `CREATE TABLE billing.inv (s billing.status NOT NULL DEFAULT 'x', CONSTRAINT inv_s_known CHECK (s IN ('x', 'y')))`)
+	pgExec(t, db, `ALTER TABLE users ADD CONSTRAINT users_role_known CHECK (role IN ('admin', 'viewer'))`)
 
 	s := mustInspect(t, db)
 	var shared []migrate.Enum
@@ -208,7 +214,14 @@ func TestInspectPostgresEnums(t *testing.T) {
 	if len(shared) != 1 || shared[0].Schema != "" || !slices.Equal(shared[0].Values, []string{"active", "pending"}) {
 		t.Errorf("case_status: %+v", shared)
 	}
-	if !s.Equal(mustInspect(t, db, refsOf(to)...)) ||
+	// A check on an enum column is in the model's form.
+	if ck := table(s, "users").Checks; len(ck) != 1 || ck[0].Expr != `"role" IN ('admin', 'viewer')` {
+		t.Errorf("users' checks %+v", ck)
+	}
+	table(s, "users").Checks = nil
+	inspected := mustInspect(t, db, refsOf(to)...)
+	table(inspected, "users").Checks = nil
+	if !s.Equal(inspected) ||
 		!(&migrate.Schema{Dialect: velox.Postgres, Enums: s.Enums}).Equal(&migrate.Schema{Dialect: velox.Postgres, Enums: to.Enums}) {
 		t.Errorf("enums %+v, want %+v", s.Enums, to.Enums)
 	}
@@ -217,6 +230,9 @@ func TestInspectPostgresEnums(t *testing.T) {
 	want := migrate.Column{Name: "s", Type: `"billing"."status"`, Default: "'x'"}
 	if len(b.Tables) != 1 || len(b.Tables[0].Columns) != 1 || b.Tables[0].Columns[0] != want {
 		t.Errorf("billing.inv: %+v", b.Tables)
+	}
+	if ck := b.Tables[0].Checks; len(ck) != 1 || ck[0].Expr != `"s" IN ('x', 'y')` {
+		t.Errorf("billing.inv's checks %+v", ck)
 	}
 	if !reflect.DeepEqual(b.Enums, []migrate.Enum{{Schema: "billing", Name: "status", Values: []string{"y", "x"}}}) {
 		t.Errorf("billing's enums %+v", b.Enums)
@@ -336,7 +352,11 @@ func TestInspectDoesNotMutate(t *testing.T) {
 		t.Errorf("tables %v, was %v", tables, was)
 	}
 	if len(s.Tables) != 1 {
-		t.Errorf("tables %+v", s.Tables)
+		t.Fatalf("tables %+v", s.Tables)
+	}
+	// The varchar column's enum check is in the model's form.
+	if ck := s.Tables[0].Checks; len(ck) != 2 || ck[0].Expr != `"kind" IN ('a', 'b')` {
+		t.Errorf("checks %+v", ck)
 	}
 }
 
@@ -379,5 +399,150 @@ func TestInspectDeterministic(t *testing.T) {
 	}
 	if len(ra.Changes) == 0 || !reflect.DeepEqual(ra, rb) {
 		t.Errorf("two drifts differ, or find nothing:\n%v\n%v", ra, rb)
+	}
+}
+
+// TestInspectPostgresUnheld: what an index, a foreign key or a constraint
+// holds that the model cannot is one note per object naming it, so Drift
+// warns; the index or key itself is still read in the form the model has.
+func TestInspectPostgresUnheld(t *testing.T) {
+	ctx := context.Background()
+	db, _ := freshDB(t, velox.Postgres)
+	for _, q := range []string{
+		`CREATE TABLE p (id integer PRIMARY KEY, a text, b integer, c integer, r tsrange)`,
+		`CREATE UNIQUE INDEX p_b_c ON p (b, c)`,
+		`CREATE TABLE u (id integer PRIMARY KEY, p1 integer, p2 integer, p3 integer, p4 integer, k integer,
+			CONSTRAINT u_p1_fkey FOREIGN KEY (p1) REFERENCES p (id) ON UPDATE CASCADE,
+			CONSTRAINT u_p2_fkey FOREIGN KEY (p2) REFERENCES p (id) DEFERRABLE INITIALLY DEFERRED,
+			CONSTRAINT u_p3_fkey FOREIGN KEY (p3, p4) REFERENCES p (b, c) MATCH FULL,
+			CONSTRAINT u_k_key UNIQUE (k) DEFERRABLE)`,
+		`CREATE INDEX p_hash ON p USING hash (a)`,
+		`CREATE INDEX p_desc ON p (b DESC, c NULLS FIRST)`,
+		`CREATE INDEX p_ops ON p (a text_pattern_ops)`,
+		`CREATE INDEX p_coll ON p (a COLLATE "C")`,
+		`CREATE INDEX p_incl ON p (b) INCLUDE (c)`,
+		`CREATE UNIQUE INDEX p_nnd ON p (c) NULLS NOT DISTINCT`,
+		`CREATE INDEX p_expr ON p (lower(a))`,
+		`ALTER TABLE p ADD CONSTRAINT p_r_excl EXCLUDE USING gist (r WITH &&)`,
+		`CREATE INDEX p_plain ON p (a)`,
+	} {
+		pgExec(t, db, q)
+	}
+	s, notes, err := migrate.InspectNotes(ctx, db, velox.Postgres, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string][]string{
+		"p.p_hash":    {"hash"},
+		"p.p_desc":    {"DESC", "NULLS FIRST"},
+		"p.p_ops":     {"operator class"},
+		"p.p_coll":    {"collation"},
+		"p.p_incl":    {"INCLUDE"},
+		"p.p_nnd":     {"NULLS NOT DISTINCT"},
+		"p.p_expr":    {"expression"},
+		"p.p_r_excl":  {"exclusion"},
+		"u.u_p1_fkey": {"ON UPDATE CASCADE"},
+		"u.u_p2_fkey": {"DEFERRABLE"},
+		"u.u_p3_fkey": {"MATCH FULL"},
+		"u.u_k_key":   {"DEFERRABLE"},
+	}
+	got := map[string]string{}
+	for _, n := range notes {
+		if _, twice := got[n.Object]; twice {
+			t.Errorf("two notes on %s", n.Object)
+		}
+		got[n.Object] = n.Message
+	}
+	for object, words := range want {
+		for _, w := range words {
+			if !strings.Contains(got[object], w) {
+				t.Errorf("%s: note %q, want it to name %s", object, got[object], w)
+			}
+		}
+	}
+	if len(got) != len(want) {
+		t.Errorf("notes %v", got)
+	}
+	var indexes []string
+	for _, ix := range table(s, "p").Indexes {
+		indexes = append(indexes, ix.Name)
+	}
+	if !slices.Equal(indexes, []string{"p_b_c", "p_coll", "p_desc", "p_hash", "p_incl", "p_nnd", "p_ops", "p_plain"}) {
+		t.Errorf("p's indexes %v", indexes)
+	}
+	if fk := table(s, "u").ForeignKeys; len(fk) != 3 {
+		t.Errorf("u's keys %+v", fk)
+	}
+	r, err := migrate.Drift(ctx, db, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Changes) != 0 || len(r.Warnings) != len(want) {
+		t.Errorf("drift: changes %v, warnings %v", r.Changes, r.Warnings)
+	}
+}
+
+// TestDriftPostgresLive: a hand change to the database after Up is the one
+// change that undoes it, and what the model cannot hold is a warning.
+func TestDriftPostgresLive(t *testing.T) {
+	needPostgres(t)
+	_, base := models(t, caseNamed("add-index"), velox.Postgres)
+	for _, c := range []struct {
+		name    string
+		snap    *migrate.Schema
+		alter   []string
+		changes []string
+		warns   []string
+	}{
+		{name: "type", alter: []string{`ALTER TABLE g ALTER COLUMN kind TYPE character varying(20)`},
+			changes: []string{"alter-column g.kind (type)"}},
+		{name: "nullability", alter: []string{`ALTER TABLE g ALTER COLUMN qty DROP NOT NULL`},
+			changes: []string{"alter-column g.qty (nullable)"}},
+		{name: "default", alter: []string{`ALTER TABLE g ALTER COLUMN kind SET DEFAULT 'b'`},
+			changes: []string{"alter-column g.kind (default)"}},
+		{name: "on-delete", alter: []string{`ALTER TABLE g DROP CONSTRAINT g_parent, ADD CONSTRAINT g_parent FOREIGN KEY (parent_id) REFERENCES g (id) ON DELETE CASCADE`},
+			changes: []string{"drop-foreign-key g.g_parent", "add-foreign-key g.g_parent"}},
+		{name: "predicate", alter: []string{`DROP INDEX g_price`, `CREATE INDEX g_price ON g (price) WHERE price > 2.5 AND NOT active`},
+			changes: []string{"drop-index g.g_price", "add-index g.g_price"}},
+		{name: "check", alter: []string{`ALTER TABLE g DROP CONSTRAINT g_qty_check, ADD CONSTRAINT g_qty_check CHECK (qty >= -6 OR qty IS NULL)`},
+			changes: []string{"drop-check g.g_qty_check", "add-check g.g_qty_check"}},
+		{name: "enum-label", alter: []string{`ALTER TYPE g_role ADD VALUE 'c'`},
+			changes: []string{"alter-enum g_role (a, b, o'neil, c → a, b, o'neil)"}},
+		{name: "hash", alter: []string{`DROP INDEX g_created_on`, `CREATE INDEX g_created_on ON g USING hash (created_on) WHERE created_on > '2020-01-01'`},
+			warns: []string{"g.g_created_on"}},
+		{name: "on-update", alter: []string{`ALTER TABLE g DROP CONSTRAINT g_parent, ADD CONSTRAINT g_parent FOREIGN KEY (parent_id) REFERENCES g (id) ON DELETE SET NULL ON UPDATE CASCADE`},
+			warns: []string{"g.g_parent"}},
+		// An enum column made text, its type still there: the column alone.
+		{name: "enum-to-text", snap: base, alter: []string{
+			`ALTER TABLE users ALTER COLUMN role DROP DEFAULT, ALTER COLUMN role TYPE text, ALTER COLUMN role SET DEFAULT 'viewer'`},
+			changes: []string{"alter-column users.role (type)"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			db, _ := freshDB(t, velox.Postgres)
+			snap := c.snap
+			if snap == nil {
+				snap = predicateSchema()
+				mustUp(t, db, predicateDir(t))
+			} else {
+				mustUp(t, db, dirOf(t, velox.Postgres, step{to: snap, name: "case"}))
+			}
+			for _, q := range c.alter {
+				pgExec(t, db, q)
+			}
+			r, err := migrate.Drift(context.Background(), db, snap)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var changes, warns []string
+			for _, ch := range r.Changes {
+				changes = append(changes, ch.String())
+			}
+			for _, w := range r.Warnings {
+				warns = append(warns, w.Object)
+			}
+			if !slices.Equal(changes, c.changes) || !slices.Equal(warns, c.warns) {
+				t.Errorf("changes %q, warnings %v; want %q, %q", changes, r.Warnings, c.changes, c.warns)
+			}
+		})
 	}
 }

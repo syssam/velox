@@ -20,6 +20,7 @@ type pgTable struct {
 	oid    int64
 	schema string
 	t      Table
+	enums  map[string]string // an enum column's type, as a cast to it prints
 }
 
 // pgEnum is an enum type a column uses.
@@ -29,8 +30,8 @@ type pgEnum struct {
 }
 
 // inspectPostgres reads tables through pg_catalog, the default schema being
-// current_schema().
-func inspectPostgres(ctx context.Context, q querier, tables []TableRef) (*Schema, []note, error) {
+// current_schema(), and the enum types their columns use and enums names.
+func inspectPostgres(ctx context.Context, q querier, tables, enums []TableRef) (*Schema, []note, error) {
 	r := &pgReader{ctx: ctx, q: q, enums: map[int64]TableRef{}}
 	def, err := r.strings(`SELECT coalesce(current_schema(), '')`)
 	if err != nil {
@@ -51,12 +52,27 @@ func inspectPostgres(ctx context.Context, q querier, tables []TableRef) (*Schema
 		}
 		s.Tables = append(s.Tables, pt.t)
 	}
-	enums := make([]pgEnum, 0, len(r.enums))
-	for oid, ref := range r.enums {
-		enums = append(enums, pgEnum{oid, ref})
+	for _, ref := range enums {
+		err := r.each(`SELECT t.oid::bigint FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+			WHERE t.typtype = 'e' AND n.nspname = $1 AND t.typname = $2`, []any{cmp.Or(ref.Schema, r.def), ref.Name},
+			func(rows *sql.Rows) error {
+				var oid int64
+				if err := rows.Scan(&oid); err != nil {
+					return err
+				}
+				r.enums[oid] = TableRef{Schema: r.schema(cmp.Or(ref.Schema, r.def)), Name: ref.Name}
+				return nil
+			})
+		if err != nil {
+			return nil, nil, err
+		}
 	}
-	slices.SortFunc(enums, func(a, b pgEnum) int { return cmp.Compare(a.oid, b.oid) })
-	for _, e := range enums {
+	used := make([]pgEnum, 0, len(r.enums))
+	for oid, ref := range r.enums {
+		used = append(used, pgEnum{oid, ref})
+	}
+	slices.SortFunc(used, func(a, b pgEnum) int { return cmp.Compare(a.oid, b.oid) })
+	for _, e := range used {
 		values, err := r.strings(`SELECT enumlabel FROM pg_enum WHERE enumtypid = $1::bigint::oid ORDER BY enumsortorder`, e.oid)
 		if err != nil {
 			return nil, nil, err
@@ -182,7 +198,7 @@ LEFT JOIN LATERAL (
 	JOIN pg_namespace sn ON sn.oid = s.relnamespace
 	WHERE dep.classid = 'pg_class'::regclass AND dep.refclassid = 'pg_class'::regclass
 		AND dep.refobjid = a.attrelid AND dep.refobjsubid = a.attnum AND dep.deptype IN ('a', 'i')
-	ORDER BY s.relname LIMIT 1
+	ORDER BY dep.deptype = 'i' DESC, s.relname LIMIT 1
 ) seq ON true
 WHERE a.attrelid = $1::bigint::oid AND a.attnum > 0 AND NOT a.attisdropped
 ORDER BY a.attnum`
@@ -210,6 +226,10 @@ func (r *pgReader) columns(pt *pgTable) (map[int]string, error) {
 			ref := TableRef{Schema: r.schema(tnsp), Name: tname}
 			c.Type = ddl.EnumType(ref.Schema, ref.Name)
 			r.enums[typOID] = ref
+			if pt.enums == nil {
+				pt.enums = map[string]string{}
+			}
+			pt.enums[c.Name] = typ
 		}
 		seq := seqName
 		if seqNsp != pt.schema {
@@ -239,45 +259,85 @@ func (r *pgReader) columns(pt *pgTable) (map[int]string, error) {
 
 // The indexes but the primary key and those of exclusion constraints.
 const pgIndexesQuery = `SELECT ic.relname, i.indisunique, i.indisvalid, i.indexprs IS NOT NULL, i.indkey::text, i.indnkeyatts,
-	coalesce(pg_get_expr(i.indpred, i.indrelid), '')
-FROM pg_index i JOIN pg_class ic ON ic.oid = i.indexrelid
+	i.indnatts, coalesce(pg_get_expr(i.indpred, i.indrelid), ''), am.amname, i.indoption::text,
+	coalesce((to_jsonb(i) ->> 'indnullsnotdistinct')::boolean, false),
+	EXISTS (SELECT 1 FROM generate_series(0, i.indnkeyatts - 1) k JOIN pg_opclass oc ON oc.oid = i.indclass[k]
+		WHERE NOT oc.opcdefault),
+	EXISTS (SELECT 1 FROM generate_series(0, i.indnkeyatts - 1) k
+		JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[k]
+		WHERE i.indcollation[k] <> a.attcollation)
+FROM pg_index i JOIN pg_class ic ON ic.oid = i.indexrelid JOIN pg_am am ON am.oid = ic.relam
 WHERE i.indrelid = $1::bigint::oid AND NOT i.indisprimary
 	AND NOT EXISTS (SELECT 1 FROM pg_constraint k WHERE k.conindid = i.indexrelid AND k.conrelid = i.indrelid AND k.contype = 'x')
 ORDER BY ic.relname`
 
 // indexes reads pt's indexes, columns by names. An invalid index is a note
 // and left out; so is an index over an expression, which the model cannot
-// hold. A predicate is kept as PostgreSQL prints it.
+// hold. What else an index has that the model cannot hold (a method but
+// btree, DESC, NULLS FIRST or LAST, an operator class or collation of its
+// own, INCLUDE, NULLS NOT DISTINCT) is a note, and the index is read without
+// it. A predicate is kept as PostgreSQL prints it.
 func (r *pgReader) indexes(pt *pgTable, names map[int]string) error {
 	return r.each(pgIndexesQuery, []any{pt.oid}, func(rows *sql.Rows) error {
 		var (
-			ix          Index
-			valid, expr bool
-			key         string
-			keys        int
+			ix                                        Index
+			valid, expr, notDistinct, opclass, collat bool
+			key, method, option                       string
+			keys, atts                                int
 		)
-		if err := rows.Scan(&ix.Name, &ix.Unique, &valid, &expr, &key, &keys, &ix.Where); err != nil {
+		if err := rows.Scan(&ix.Name, &ix.Unique, &valid, &expr, &key, &keys, &atts, &ix.Where,
+			&method, &option, &notDistinct, &opclass, &collat); err != nil {
 			return err
 		}
 		if !valid {
 			r.note(pt, ix.Name, "the index is invalid, as a failed CREATE INDEX CONCURRENTLY leaves it, and serves no query; drop it and create it again")
 			return nil
 		}
-		if expr {
-			return nil
-		}
-		for i, f := range strings.Fields(key) {
+		nums := strings.Fields(key)
+		for _, f := range nums[:min(keys, len(nums))] {
 			n, err := strconv.Atoi(f)
 			if err != nil {
 				return err
 			}
-			if i >= keys {
-				break // INCLUDE columns
-			}
 			if names[n] == "" {
-				return nil // an expression
+				expr = true
+				break
 			}
 			ix.Columns = append(ix.Columns, names[n])
+		}
+		if expr {
+			r.note(pt, ix.Name, "the index is over an expression, which the model cannot hold; it is not compared")
+			return nil
+		}
+		var has []string
+		if method != "btree" {
+			has = append(has, "the "+method+" method")
+		}
+		var desc, nullsFirst, nullsLast bool
+		for _, f := range strings.Fields(option) {
+			o, err := strconv.Atoi(f)
+			if err != nil {
+				return err
+			}
+			d := o&1 != 0
+			desc = desc || d
+			nullsFirst = nullsFirst || (!d && o&2 != 0)
+			nullsLast = nullsLast || (d && o&2 == 0)
+		}
+		for _, x := range []struct {
+			on   bool
+			what string
+		}{
+			{desc, "DESC"}, {nullsFirst, "NULLS FIRST"}, {nullsLast, "NULLS LAST"},
+			{opclass, "an operator class of its own"}, {collat, "a collation of its own"},
+			{atts > keys, "INCLUDE columns"}, {notDistinct, "NULLS NOT DISTINCT"},
+		} {
+			if x.on {
+				has = append(has, x.what)
+			}
+		}
+		if len(has) > 0 {
+			r.note(pt, ix.Name, "the index has "+strings.Join(has, ", ")+", which the model cannot hold; it is compared without")
 		}
 		pt.t.Indexes = append(pt.t.Indexes, ix)
 		return nil
@@ -292,26 +352,29 @@ const pgConstraintsQuery = `SELECT k.conname, k.contype::text,
 	coalesce((SELECT json_agg(a.attname ORDER BY u.o) FROM unnest(k.confkey) WITH ORDINALITY u(n, o)
 		JOIN pg_attribute a ON a.attrelid = k.confrelid AND a.attnum = u.n), '[]')::text,
 	coalesce(rn.nspname, ''), coalesce(rc.relname, ''), k.confdeltype::text, k.convalidated,
-	coalesce(pg_get_expr(k.conbin, k.conrelid), '')
+	coalesce(pg_get_expr(k.conbin, k.conrelid), ''), k.confupdtype::text, k.condeferrable, k.confmatchtype::text
 FROM pg_constraint k
 LEFT JOIN pg_class rc ON rc.oid = k.confrelid
 LEFT JOIN pg_namespace rn ON rn.oid = rc.relnamespace
-WHERE k.conrelid = $1::bigint::oid AND k.contype IN ('p', 'f', 'c')
+WHERE k.conrelid = $1::bigint::oid AND k.contype IN ('p', 'f', 'c', 'u', 'x')
 ORDER BY k.conname`
 
-// pgOnDelete is the model's ON DELETE of confdeltype.
+// pgOnDelete is the model's ON DELETE of confdeltype, and of confupdtype.
 var pgOnDelete = map[string]string{"a": "", "r": "RESTRICT", "c": "CASCADE", "n": "SET NULL", "d": "SET DEFAULT"}
 
 // constraints reads pt's primary key, foreign keys and checks. A unique
 // constraint is left out: its index is read. An enum check is in the
-// model's form, any other check as PostgreSQL prints it.
+// model's form, any other check as PostgreSQL prints it. What a constraint
+// has that the model cannot hold is one note: NOT VALID, an exclusion
+// constraint, DEFERRABLE, and a foreign key's ON UPDATE or MATCH FULL.
 func (r *pgReader) constraints(pt *pgTable) error {
 	return r.each(pgConstraintsQuery, []any{pt.oid}, func(rows *sql.Rows) error {
 		var (
-			name, typ, cols, refCols, refNsp, refName, onDelete, expr string
-			validated                                                 bool
+			name, typ, cols, refCols, refNsp, refName, onDelete, expr, onUpdate, match string
+			validated, deferrable                                                      bool
 		)
-		if err := rows.Scan(&name, &typ, &cols, &refCols, &refNsp, &refName, &onDelete, &validated, &expr); err != nil {
+		if err := rows.Scan(&name, &typ, &cols, &refCols, &refNsp, &refName, &onDelete, &validated, &expr,
+			&onUpdate, &deferrable, &match); err != nil {
 			return err
 		}
 		var columns, refColumns []string
@@ -321,8 +384,28 @@ func (r *pgReader) constraints(pt *pgTable) error {
 		if err := json.Unmarshal([]byte(refCols), &refColumns); err != nil {
 			return err
 		}
+		var says []string
 		if !validated {
-			r.note(pt, name, "the constraint is NOT VALID: the rows from before it are not checked; VALIDATE CONSTRAINT checks them")
+			says = append(says, "the constraint is NOT VALID: the rows from before it are not checked; VALIDATE CONSTRAINT checks them")
+		}
+		var has []string
+		if typ == "x" {
+			has = append(has, "an exclusion constraint")
+		}
+		if deferrable {
+			has = append(has, "DEFERRABLE")
+		}
+		if typ == "f" && onUpdate != "a" {
+			has = append(has, "ON UPDATE "+pgOnDelete[onUpdate])
+		}
+		if typ == "f" && match == "f" {
+			has = append(has, "MATCH FULL")
+		}
+		if len(has) > 0 {
+			says = append(says, "it is "+strings.Join(has, ", ")+", which the model cannot hold; it is compared without")
+		}
+		if len(says) > 0 {
+			r.note(pt, name, strings.Join(says, "; "))
 		}
 		switch typ {
 		case "p":
@@ -333,12 +416,80 @@ func (r *pgReader) constraints(pt *pgTable) error {
 				RefTable: TableRef{Schema: r.schema(refNsp), Name: refName},
 			})
 		case "c":
-			if col, values, ok := ddl.ParseEnumCheck(velox.Postgres, normalizePredicate(velox.Postgres, expr)); ok &&
-				slices.ContainsFunc(pt.t.Columns, func(c Column) bool { return c.Name == col }) {
-				expr = ddl.EnumCheck(velox.Postgres, col, values)
-			}
-			pt.t.Checks = append(pt.t.Checks, Check{Name: name, Expr: expr})
+			pt.t.Checks = append(pt.t.Checks, Check{Name: name, Expr: pt.enumCheck(expr)})
 		}
 		return nil
 	})
+}
+
+// enumCheck is expr in the model's form when it holds a column to values,
+// "col" IN ('a', 'b'), and as printed when not. On an enum column the
+// casts PostgreSQL adds to its type are dropped first.
+func (pt *pgTable) enumCheck(expr string) string {
+	column := func(s string) (col string, values []string, ok bool) {
+		// The normal form spells the operator in lower case.
+		n := normalizePredicate(velox.Postgres, s)
+		if i := strings.Index(n, " in ("); i > 0 && !strings.Contains(n[:i], "'") {
+			n = n[:i] + " IN (" + n[i+len(" in ("):]
+		}
+		col, values, ok = ddl.ParseEnumCheck(velox.Postgres, n)
+		return col, values, ok && slices.ContainsFunc(pt.t.Columns, func(c Column) bool { return c.Name == col })
+	}
+	if col, values, ok := column(expr); ok {
+		return ddl.EnumCheck(velox.Postgres, col, values)
+	}
+	for _, c := range pt.t.Columns {
+		typ, ok := pt.enums[c.Name]
+		if !ok {
+			continue
+		}
+		if col, values, ok := column(dropCasts(expr, typ)); ok && col == c.Name {
+			return ddl.EnumCheck(velox.Postgres, col, values)
+		}
+	}
+	return expr
+}
+
+// dropCasts is expr without its casts to typ (and to typ[]), outside
+// literals and quoted names.
+func dropCasts(expr, typ string) string {
+	var b strings.Builder
+	cast := "::" + typ
+	for i := 0; i < len(expr); {
+		switch c := expr[i]; {
+		case c == '\'' || c == '"':
+			j := i + 1
+			for j < len(expr) {
+				if expr[j] == c {
+					if j+1 < len(expr) && expr[j+1] == c {
+						j += 2
+						continue
+					}
+					break
+				}
+				j++
+			}
+			j = min(j+1, len(expr))
+			b.WriteString(expr[i:j])
+			i = j
+		case strings.HasPrefix(expr[i:], cast) && !nameByte(expr, i+len(cast)):
+			i += len(cast)
+			if strings.HasPrefix(expr[i:], "[]") {
+				i += 2
+			}
+		default:
+			b.WriteByte(c)
+			i++
+		}
+	}
+	return b.String()
+}
+
+// nameByte reports whether s[i] goes on a name: a letter, digit, _, $ or .
+func nameByte(s string, i int) bool {
+	if i >= len(s) {
+		return false
+	}
+	c := s[i]
+	return c == '_' || c == '$' || c == '.' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
 }

@@ -479,18 +479,18 @@ type predParser struct {
 }
 
 // enumCasts is the enum types of s as a cast to each prints in a predicate
-// match reads: "users_role", and for one in another schema "billing.status"
-// and, as PostgreSQL prints it when the schema is on the search path,
-// "status".
+// match reads: "users_role" in the default schema, "billing.status" in
+// another. A bare name is only the default schema's, as another type of that
+// name may be.
 func enumCasts(s *Schema) map[string]bool {
 	p := &predParser{d: s.Dialect}
 	out := map[string]bool{}
 	for _, e := range s.Enums {
 		parts := []predName{{name: e.Name, quoted: true}}
-		out[p.name(parts)] = true
 		if e.Schema != "" {
-			out[p.name(append([]predName{{name: e.Schema, quoted: true}}, parts...))] = true
+			parts = append([]predName{{name: e.Schema, quoted: true}}, parts...)
 		}
+		out[p.name(parts)] = true
 	}
 	return out
 }

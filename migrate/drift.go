@@ -126,6 +126,13 @@ func (c *drifter) table(t, u *Table) {
 	for i := range t.Columns {
 		tc := &t.Columns[i]
 		uc := u.column(tc.Name)
+		if uc != nil && tc.Default != uc.Default && castLiteral(tc.Default) && literalDefault(c.d, uc.Default) {
+			// A time literal as PostgreSQL prints it: one value, or a change.
+			if same, ok := c.same(tc.Default, uc.Default); same && ok {
+				tc.Default = uc.Default
+			}
+			continue
+		}
 		if uc == nil || tc.Default == uc.Default || tc.Default == "" || uc.Default == "" ||
 			literalDefault(c.d, tc.Default) || literalDefault(c.d, uc.Default) {
 			continue
@@ -249,6 +256,12 @@ func (c *drifter) sameKey(a, b ForeignKey) bool {
 		a.OnDelete = b.OnDelete
 	}
 	return sameForeignKey(a, b)
+}
+
+// castLiteral reports whether s is a '…' literal and a cast.
+func castLiteral(s string) bool {
+	end := literalEnd(s)
+	return end > 0 && strings.HasPrefix(s[end:], "::")
 }
 
 // restricts reports whether a MySQL ON DELETE is RESTRICT or no action, one

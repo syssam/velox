@@ -37,6 +37,13 @@ func TestNormalizeDefault(t *testing.T) {
 		{`('x'::text || 'y'::text)`, `('x'::text || 'y'::text)`},
 		{`'a'::text::character varying`, `'a'`},
 		{`''::text`, `''`},
+		{`NULL::character varying`, ``},
+		{`NULL`, ``},
+		// Date and time literals keep their casts, for drift to compare by
+		// value.
+		{`'2020-01-01 08:00:00+00'::timestamp with time zone`, `'2020-01-01 08:00:00+00'::timestamp with time zone`},
+		{`'2020-01-01 10:00:00'::timestamp without time zone`, `'2020-01-01 10:00:00'::timestamp without time zone`},
+		{`'10:00:00'::time without time zone`, `'10:00:00'::time without time zone`},
 		{``, ``},
 	} {
 		if got := migrate.NormalizeDefault(velox.Postgres, c.in); got != c.want {
@@ -99,6 +106,9 @@ func TestDriftEnumCasts(t *testing.T) {
 			`(role = ANY (ARRAY['admin'::users_role, 'banned'::users_role]))`, `"role" IN ('admin', 'viewer')`, []migrate.Enum{role}, 4},
 		{`(role = 'admin'::users_role)`, `role = 'admin'`,
 			`(role = ANY (ARRAY['admin'::users_role, 'viewer'::users_role]))`, `"role" IN ('admin', 'viewer')`, nil, 4},
+		// An enum type of another schema prints qualified.
+		{`(role = 'admin'::users_role)`, `role = 'admin'`,
+			`(role = ANY (ARRAY['admin'::users_role, 'viewer'::users_role]))`, `"role" IN ('admin', 'viewer')`, []migrate.Enum{billing}, 4},
 		// A function's argument keeps its cast.
 		{`(f('admin'::users_role) = 1)`, `f('admin') = 1`, `(role IS NOT NULL)`, `role IS NOT NULL`, []migrate.Enum{role}, 2},
 	} {
@@ -108,6 +118,34 @@ func TestDriftEnumCasts(t *testing.T) {
 		}
 		if len(r.Changes) != c.changes || len(r.Warnings) != 0 {
 			t.Errorf("%s, %s: changes %v, warnings %v; want %d changes", c.printed, c.check, r.Changes, r.Warnings, c.changes)
+		}
+	}
+}
+
+// TestDriftTimeDefaults: a date or time default PostgreSQL prints in its own
+// form is compared by value; another value is a change.
+func TestDriftTimeDefaults(t *testing.T) {
+	schema := func(def string) *migrate.Schema {
+		return &migrate.Schema{Dialect: velox.Postgres, Tables: []migrate.Table{{
+			Name:    "t",
+			Columns: []migrate.Column{{Name: "at", Type: "timestamp with time zone", Default: def}},
+		}}}
+	}
+	for _, c := range []struct {
+		printed, written string
+		changes          int
+	}{
+		{`'2020-01-01 08:00:00+00'::timestamp with time zone`, `'2020-01-01 10:00:00+02'`, 0},
+		{`'2020-01-01 08:00:00+00'::timestamp with time zone`, `'2020-01-01 08:00:00+00'`, 0},
+		{`'2020-01-01 08:00:00+00'::timestamp with time zone`, `'2020-01-01 10:00:00+00'`, 1},
+		{`'2020-01-01 00:00:00'::timestamp without time zone`, `'2020-01-01'`, 0},
+	} {
+		r, err := migrate.DriftOf(schema(c.printed), schema(c.written))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(r.Changes) != c.changes || len(r.Warnings) != 0 {
+			t.Errorf("%s, %s: changes %v, warnings %v", c.printed, c.written, r.Changes, r.Warnings)
 		}
 	}
 }

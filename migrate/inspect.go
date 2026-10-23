@@ -36,7 +36,11 @@ func Drift(ctx context.Context, db *sql.DB, snapshot *Schema) (*DriftReport, err
 	for _, t := range snapshot.Tables {
 		refs = append(refs, t.Ref())
 	}
-	inspected, notes, err := inspect(ctx, db, snapshot.Dialect, refs)
+	enums := make([]TableRef, 0, len(snapshot.Enums))
+	for _, e := range snapshot.Enums {
+		enums = append(enums, e.ref())
+	}
+	inspected, notes, err := inspectWith(ctx, db, snapshot.Dialect, refs, enums)
 	if err != nil {
 		return nil, err
 	}
@@ -50,6 +54,12 @@ type querier interface {
 
 // inspect is Inspect with its notes; Inspect returns its schema alone.
 func inspect(ctx context.Context, db *sql.DB, d velox.Dialect, tables []TableRef) (*Schema, []note, error) {
+	return inspectWith(ctx, db, d, tables, nil)
+}
+
+// inspectWith is inspect, reading the enum types enums names too, as Drift
+// does for its snapshot's: a type no column uses any more is still there.
+func inspectWith(ctx context.Context, db *sql.DB, d velox.Dialect, tables, enums []TableRef) (*Schema, []note, error) {
 	switch d {
 	case velox.Postgres:
 	case velox.MySQL, velox.SQLite:
@@ -79,7 +89,7 @@ func inspect(ctx context.Context, db *sql.DB, d velox.Dialect, tables []TableRef
 		return nil, nil, wrap(ctx, "inspect", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	s, notes, err := inspectPostgres(ctx, tx, tables)
+	s, notes, err := inspectPostgres(ctx, tx, tables, enums)
 	if err != nil {
 		return nil, nil, wrap(ctx, "inspect", err)
 	}
@@ -98,9 +108,15 @@ var (
 // pgNumeric are the numeric types a quoted number is cast to.
 var pgNumeric = []string{"smallint", "integer", "bigint", "numeric", "real", "double precision"}
 
+// pgClock are the time types whose literal PostgreSQL prints in a form of
+// its own, a timestamptz in the session's zone: the cast is kept.
+var pgClock = []string{"timestamp with time zone", "timestamp without time zone", "time without time zone"}
+
 // normalizeDefault is a default as the database prints it, in the model's
 // spelling: casts dropped from literals, a quoted number cast to a numeric
-// type unquoted, nextval('s'::regclass) as nextval('s').
+// type unquoted, nextval('s'::regclass) as nextval('s'), NULL as no
+// default. A timestamp or time literal keeps its cast, for drift to compare
+// by value, since PostgreSQL prints the value in its own form.
 func normalizeDefault(d velox.Dialect, s string) string {
 	if d != velox.Postgres {
 		return s
@@ -110,6 +126,9 @@ func normalizeDefault(d velox.Dialect, s string) string {
 			return "nextval(" + lit + ")"
 		}
 		return s
+	}
+	if rest, ok := strings.CutPrefix(s, "NULL"); ok && (rest == "" || pgCasts.MatchString(rest)) {
+		return "" // DEFAULT NULL is no default
 	}
 	end := literalEnd(s)
 	if end <= 0 || end == len(s) || !pgCasts.MatchString(s[end:]) {
@@ -121,8 +140,11 @@ func normalizeDefault(d velox.Dialect, s string) string {
 	if i := strings.IndexByte(typ, '('); i >= 0 {
 		typ = typ[:i]
 	}
-	if v := lit[1 : len(lit)-1]; pgNumber.MatchString(v) && slices.Contains(pgNumeric, typ) {
+	switch v := lit[1 : len(lit)-1]; {
+	case pgNumber.MatchString(v) && slices.Contains(pgNumeric, typ):
 		return v
+	case slices.Contains(pgClock, typ):
+		return s // PostgreSQL prints its own form of the value: drift compares by value
 	}
 	return lit
 }
