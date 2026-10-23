@@ -421,3 +421,56 @@ func TestNormalizePredicateKeepsMeaning(t *testing.T) {
 		}
 	}
 }
+
+// TestNormalizePredicateNegation: a NOT over a predicate that has a negated
+// operator is that operator, as MySQL prints x NOT LIKE y as not((x like
+// y)) and NOT (a = 1) as a <> 1; these hold in SQL's three-valued logic.
+// Nothing else is folded: no De Morgan.
+func TestNormalizePredicateNegation(t *testing.T) {
+	for _, c := range []struct {
+		d    velox.Dialect
+		a, b string
+	}{
+		{velox.Postgres, `NOT (x LIKE 'a%')`, `x NOT LIKE 'a%'`},
+		{velox.Postgres, `NOT (x NOT LIKE 'a%')`, `x LIKE 'a%'`},
+		{velox.Postgres, `NOT (x ILIKE 'a%')`, `x NOT ILIKE 'a%'`},
+		{velox.Postgres, `NOT (x IN (1, 2))`, `x NOT IN (1, 2)`},
+		{velox.Postgres, `NOT (x NOT IN (1, 2))`, `x IN (1, 2)`},
+		{velox.Postgres, `NOT (x BETWEEN 1 AND 5)`, `x NOT BETWEEN 1 AND 5`},
+		{velox.Postgres, `NOT (x NOT BETWEEN 1 AND 5)`, `x BETWEEN 1 AND 5`},
+		{velox.Postgres, `NOT (x IS NULL)`, `x IS NOT NULL`},
+		{velox.Postgres, `NOT (x IS NOT NULL)`, `x IS NULL`},
+		{velox.Postgres, `NOT (a = b)`, `a <> b`},
+		{velox.Postgres, `NOT (a <> b)`, `a = b`},
+		{velox.Postgres, `NOT (a < b)`, `a >= b`},
+		{velox.Postgres, `NOT (a <= b)`, `a > b`},
+		{velox.Postgres, `NOT (a > b)`, `a <= b`},
+		{velox.Postgres, `NOT (a >= b)`, `a < b`},
+		{velox.Postgres, `NOT a = 1`, `a <> 1`},
+		{velox.Postgres, `NOT (NOT x)`, `x`},
+		{velox.Postgres, `NOT NOT (a AND b)`, `a AND b`},
+		{velox.Postgres, `NOT (NOT (a = 1))`, `a = 1`},
+		{velox.Postgres, `(NOT (x ~~ 'a%'::text))`, `x NOT LIKE 'a%'`},
+		{velox.MySQL, "(not((`motto` like _utf8mb4'a%')))", `motto NOT LIKE 'a%'`},
+		{velox.MySQL, "(`a` <> 1)", `NOT (a = 1)`},
+		{velox.SQLite, `NOT (x IN (1, 2))`, `x NOT IN (1, 2)`},
+	} {
+		if !same(c.d, c.a, c.b) {
+			t.Errorf("%v: %s normalises to %q and %s to %q", c.d, c.a, migrate.NormalizePredicate(c.d, c.a), c.b, migrate.NormalizePredicate(c.d, c.b))
+		}
+	}
+	for _, c := range [][2]string{
+		{`NOT (a = 1)`, `a = 1`},
+		{`NOT (a < 1)`, `a > 1`},
+		{`NOT (a AND b)`, `NOT a AND NOT b`},
+		{`NOT (a OR b)`, `NOT a AND NOT b`},
+		{`NOT (x IS TRUE)`, `x IS FALSE`},
+		{`NOT (x LIKE 'a%')`, `x LIKE 'a%'`},
+		{`NOT (x IN (1, 2))`, `x IN (1, 2)`},
+		{`NOT (NOT x)`, `NOT x`},
+	} {
+		if same(velox.Postgres, c[0], c[1]) {
+			t.Errorf("%s and %s are called the same", c[0], c[1])
+		}
+	}
+}

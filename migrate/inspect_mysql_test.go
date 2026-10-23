@@ -90,6 +90,8 @@ func mysqlSchema() *migrate.Schema {
 			{Name: "ratio", Type: "double", Default: "1.5"},
 			{Name: "created_on", Type: "date", Default: "'2020-01-01'"},
 			{Name: "at", Type: "datetime(6)", Default: "CURRENT_TIMESTAMP(6)"},
+			{Name: "stamp", Type: "datetime(6)", Default: "'2020-01-01 00:00:00'"},
+			{Name: "clock", Type: "time", Default: "'10:00'"},
 			{Name: "body", Type: "text", Default: `('it''s a \\ x')`},
 			{Name: "note", Type: "text", Default: "('x')"},
 			{Name: "role", Type: "enum('a','b','o''neil','c\\\\d')", Default: "'o''neil'"},
@@ -111,7 +113,8 @@ func mysqlSchema() *migrate.Schema {
 			RefTable: migrate.TableRef{Name: "g"}, RefColumns: []string{"id"}, OnDelete: "SET NULL"}},
 		Checks: []migrate.Check{
 			{Name: "g_kind_check", Expr: "`kind` IN ('a', 'b')"},
-			{Name: "g_motto_check", Expr: `motto <> 'it''s' OR motto LIKE 'a\\_%'`},
+			{Name: "g_motto_check", Expr: `motto <> 'it''s' OR motto NOT LIKE 'a\\_%'`},
+			{Name: "g_not_check", Expr: "NOT (qty = 7)"},
 			{Name: "g_qty_check", Expr: "qty >= -5 OR qty IS NULL"},
 		},
 		Comment:   `it's g \ here`,
@@ -221,9 +224,16 @@ func TestInspectMySQLDefaults(t *testing.T) {
 
 	db, _ = freshDB(t, velox.MySQL)
 	mustUp(t, db, mysqlDir(t))
-	// Checks other than the enum check are as MySQL prints them.
+	// Checks other than the enum check are as MySQL prints them, and so is
+	// a time literal, which drift compares by value.
 	s, want2 := mustInspectMySQL(t, db), mysqlSchema()
 	s.Tables[0].Checks, want2.Tables[0].Checks = s.Tables[0].Checks[:1], want2.Tables[0].Checks[:1]
+	for name, printed := range map[string]string{"stamp": "'2020-01-01 00:00:00.000000'", "clock": "'10:00:00'"} {
+		if got := column(&s.Tables[0], name).Default; got != printed {
+			t.Errorf("%s's default %s, want %s", name, got, printed)
+		}
+		column(&s.Tables[0], name).Default = column(&want2.Tables[0], name).Default
+	}
 	if !s.Equal(want2) {
 		a, _ := json.MarshalIndent(s, "", "  ")
 		t.Errorf("inspected %s", a)
@@ -421,6 +431,8 @@ func TestDriftMySQLLive(t *testing.T) {
 			changes: []string{"alter-column g.qty (nullable)"}},
 		{name: "default", alter: []string{"ALTER TABLE g ALTER COLUMN kind SET DEFAULT 'b'"},
 			changes: []string{"alter-column g.kind (default)"}},
+		{name: "time-default", alter: []string{"ALTER TABLE g ALTER COLUMN stamp SET DEFAULT '2020-01-01 00:00:01'"},
+			changes: []string{"alter-column g.stamp (default)"}},
 		{name: "on-delete", alter: []string{"ALTER TABLE g DROP FOREIGN KEY g_parent", "ALTER TABLE g ADD CONSTRAINT g_parent FOREIGN KEY (parent_id) REFERENCES g (id) ON DELETE CASCADE"},
 			changes: []string{"drop-foreign-key g.g_parent", "add-foreign-key g.g_parent"}},
 		{name: "check", alter: []string{"ALTER TABLE g DROP CHECK g_qty_check", "ALTER TABLE g ADD CONSTRAINT g_qty_check CHECK (qty >= -6 OR qty IS NULL)"},

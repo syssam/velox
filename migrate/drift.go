@@ -45,8 +45,9 @@ type note struct {
 // a copy of inspected, what differs only in spelling takes snapshot's
 // spelling before Diff compares the two: a predicate or check that
 // samePredicateIn calls the same with the enum types of both, an expression
-// default (with a warning when it does not), a predicate or check the
-// normaliser cannot read (with a warning when the texts differ), MySQL's
+// default (with a warning when it does not), a date or time literal default
+// of one value (PostgreSQL's cast, MySQL's padded), a predicate or check
+// the normaliser cannot read (with a warning when the texts differ), MySQL's
 // RESTRICT for no action, the names SQLite does not keep, matched by
 // definition, and a primary key Diff would refuse (with a warning).
 func drift(inspected *Schema, notes []note, snapshot *Schema) (*DriftReport, error) {
@@ -126,6 +127,12 @@ func (c *drifter) table(t, u *Table) {
 	for i := range t.Columns {
 		tc := &t.Columns[i]
 		uc := u.column(tc.Name)
+		if uc != nil && tc.Default != uc.Default && c.d == velox.MySQL {
+			// A time literal as MySQL prints it, padded: one value, or a change.
+			if same, ok := mysqlSameTime(uc.Type, tc.Default, uc.Default); same && ok {
+				tc.Default = uc.Default
+			}
+		}
 		if uc != nil && tc.Default != uc.Default && castLiteral(tc.Default) && literalDefault(c.d, uc.Default) {
 			// A time literal as PostgreSQL prints it: one value, or a change.
 			if same, ok := c.same(tc.Default, uc.Default); same && ok {
@@ -274,4 +281,24 @@ func keyText(cols []string) string {
 		return "no primary key"
 	}
 	return "the primary key (" + strings.Join(cols, ", ") + ")"
+}
+
+// mysqlTimes are the layouts of sameTime for MySQL's date and time types.
+var mysqlTimes = map[string]string{"date": "date", "datetime": "timestamp", "timestamp": "timestamp", "time": "time"}
+
+// mysqlSameTime reports, when a and b are literals of the MySQL date or
+// time type typ, whether they are one value: MySQL pads a datetime(6)'s
+// '2020-01-01 00:00:00' to '2020-01-01 00:00:00.000000'. ok is false when
+// typ is no such type or either is not one of its values.
+func mysqlSameTime(typ, a, b string) (same, ok bool) {
+	if i := strings.IndexByte(typ, '('); i >= 0 {
+		typ = typ[:i]
+	}
+	layout, known := mysqlTimes[typ]
+	va, oka := ddl.Unquote(velox.MySQL, a)
+	vb, okb := ddl.Unquote(velox.MySQL, b)
+	if !known || !oka || !okb {
+		return false, false
+	}
+	return sameTime(layout, &predNode{kind: nodeLit, str: true, val: va}, &predNode{kind: nodeLit, str: true, val: vb})
 }

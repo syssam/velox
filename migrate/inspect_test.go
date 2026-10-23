@@ -149,3 +149,36 @@ func TestDriftTimeDefaults(t *testing.T) {
 		}
 	}
 }
+
+// TestDriftMySQLTimeDefaults: a date or time default MySQL prints padded is
+// compared by value; another value is a change.
+func TestDriftMySQLTimeDefaults(t *testing.T) {
+	schema := func(typ, def string) *migrate.Schema {
+		return &migrate.Schema{Dialect: velox.MySQL, Tables: []migrate.Table{{
+			Name: "t", Collation: "utf8mb4_bin",
+			Columns: []migrate.Column{{Name: "at", Type: typ, Default: def}},
+		}}}
+	}
+	for _, c := range []struct {
+		typ, printed, written string
+		changes               int
+	}{
+		{"datetime(6)", `'2020-01-01 00:00:00.000000'`, `'2020-01-01 00:00:00'`, 0},
+		{"datetime(6)", `'2020-01-01 00:00:00.000000'`, `'2020-01-01'`, 0},
+		{"timestamp(3)", `'2020-01-01 10:00:00.500'`, `'2020-01-01 10:00:00.5'`, 0},
+		{"date", `'2020-01-01'`, `'2020-01-01'`, 0},
+		{"time", `'10:00:00'`, `'10:00'`, 0},
+		{"datetime(6)", `'2020-01-01 00:00:00.000000'`, `'2020-01-01 00:00:01'`, 1},
+		{"time", `'10:00:00'`, `'10:01'`, 1},
+		// Not a time type: the text is the value.
+		{"varchar(32)", `'2020-01-01 00:00:00.000000'`, `'2020-01-01 00:00:00'`, 1},
+	} {
+		r, err := migrate.DriftOf(schema(c.typ, c.printed), schema(c.typ, c.written))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(r.Changes) != c.changes || len(r.Warnings) != 0 {
+			t.Errorf("%s %s, %s: changes %v, warnings %v", c.typ, c.printed, c.written, r.Changes, r.Warnings)
+		}
+	}
+}

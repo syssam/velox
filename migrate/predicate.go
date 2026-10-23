@@ -17,9 +17,11 @@ import (
 // ARRAY, arithmetic, function calls, literals and casts. It drops the casts
 // that only spell a value again (castOf), unquotes the names that need no
 // quotes, lower-cases keywords, function names and unquoted names, and
-// prints one space around each binary operator and only the parentheses
-// precedence needs, so two predicates of one meaning in different spellings
-// print alike and two of different meanings never do. A chain of
+// folds a NOT over a comparison, [NOT] LIKE, IN, BETWEEN or IS [NOT] NULL
+// into the negated operator and NOT NOT x into x, and prints one space
+// around each binary operator and only the parentheses precedence needs,
+// so two predicates of one meaning in different spellings print alike and
+// two of different meanings never do. A chain of
 // comparisons without parentheses, a comment and what else it does not read
 // fail the parse, and the text comes back with its white space collapsed
 // outside quotes.
@@ -449,6 +451,9 @@ type predNode struct {
 	parts []predName
 	cast  castTo // a cast's type
 	kids  []*predNode
+	// between: an and or or that BETWEEN or NOT BETWEEN wrote, which NOT
+	// negates as one predicate.
+	between bool
 }
 
 type predName struct {
@@ -545,9 +550,50 @@ func (p *predParser) and() *predNode {
 
 func (p *predParser) not() *predNode {
 	if p.accept("not") {
-		return &predNode{kind: nodeUnary, op: "not", kids: []*predNode{p.not()}}
+		k := p.not()
+		if n, ok := negated(k); ok {
+			return n
+		}
+		return &predNode{kind: nodeUnary, op: "not", kids: []*predNode{k}}
 	}
 	return p.compare()
+}
+
+// negatedOps are the operators that a NOT over them makes, in SQL's
+// three-valued logic as in two: NOT (a < b) is a >= b, NULL when either is.
+var negatedOps = map[string]string{
+	"=": "<>", "<>": "=", "<": ">=", ">=": "<", "<=": ">", ">": "<=",
+	"like": "not like", "not like": "like", "ilike": "not ilike", "not ilike": "ilike",
+	"in": "not in", "not in": "in", "is null": "is not null", "is not null": "is null",
+}
+
+// negated is NOT n folded into n's operator, as MySQL prints x NOT LIKE y
+// as not((x like y)) and NOT (a = 1) as a <> 1: a comparison, [NOT] LIKE,
+// ILIKE, IN, BETWEEN and IS [NOT] NULL, and NOT NOT x as x. false when n is
+// none of these; nothing else folds, De Morgan's laws among it.
+func negated(n *predNode) (*predNode, bool) {
+	switch {
+	case n.kind == nodeUnary && n.op == "not":
+		return n.kids[0], true
+	case n.between:
+		a, b := n.kids[0], n.kids[1]
+		op := "or"
+		if n.op == "or" {
+			op = "and"
+		}
+		out := binaryNode(op, binaryNode(negatedOps[a.op], a.kids[0], a.kids[1]), binaryNode(negatedOps[b.op], b.kids[0], b.kids[1]))
+		out.between = true
+		return out, true
+	case n.kind == nodeBinary || n.kind == nodeIn || n.kind == nodeIs && (n.op == "is null" || n.op == "is not null"):
+		op, ok := negatedOps[n.op]
+		if !ok {
+			return nil, false
+		}
+		out := *n
+		out.op = op
+		return &out, true
+	}
+	return nil, false
 }
 
 var compareOps = map[string]string{"=": "=", "==": "=", "<>": "<>", "!=": "<>", "<": "<", "<=": "<=", ">": ">", ">=": ">=",
@@ -635,6 +681,7 @@ func (p *predParser) comparison(n *predNode) *predNode {
 		} else {
 			n = binaryNode("and", binaryNode(">=", n, lo), binaryNode("<=", n, hi))
 		}
+		n.between = true
 	}
 	return n
 }
