@@ -23,6 +23,13 @@ import (
 // comparisons without parentheses, a comment and what else it does not read
 // fail the parse, and the text comes back with its white space collapsed
 // outside quotes.
+//
+// samePredicate compares two predicates by their trees, where a cast the
+// database adds itself matches no cast. A date or time literal is compared
+// by its value when it reads in an ISO layout, and a timestamptz literal
+// without a zone is read as UTC, so the database's session must be in UTC.
+// A literal that does not read, an interval's always, keeps its cast, so a
+// cast literal of it never matches an uncast one.
 func normalizePredicate(d velox.Dialect, expr string) string {
 	s, _ := normalized(d, expr)
 	return s
@@ -93,9 +100,10 @@ func (p *predParser) match(a, b *predNode) bool {
 	return true
 }
 
-// elides reports whether the cast c matches e, which is not a cast: a cast
-// that widens a number, to bigint, numeric, real or double precision, on
-// any expression; a string literal cast to a date or time type that is the
+// elides reports whether the cast c matches e, which is not a cast, where
+// the cast is exact: to numeric on any expression, the cast PostgreSQL
+// inserts; to bigint on an integer literal; to real or double precision on
+// a number literal; a string literal cast to a date or time type that is the
 // same value as the literal e; a string literal cast to regclass, as a
 // serial's default prints, that is e.
 func (p *predParser) elides(c, e *predNode) bool {
@@ -103,21 +111,19 @@ func (p *predParser) elides(c, e *predNode) bool {
 		return false
 	}
 	k := c.kids[0]
-	switch {
-	case wideningTypes[c.cast.base]:
+	number := k.kind == nodeLit && !k.str && plainNumber.MatchString(k.text)
+	switch c.cast.base {
+	case "numeric", "decimal":
 		return p.match(k, e)
-	case c.cast.base == "regclass":
+	case "bigint", "int8":
+		return number && integer.MatchString(k.text) && p.match(k, e)
+	case "real", "float4", "double precision", "float8":
+		return number && p.match(k, e)
+	case "regclass":
 		return k.str && e.str && k.val == e.val
 	}
 	same, ok := sameTime(c.cast.base, k, e)
 	return ok && same
-}
-
-// wideningTypes are the types a number is cast to without its value
-// changing.
-var wideningTypes = map[string]bool{
-	"bigint": true, "int8": true, "numeric": true, "decimal": true,
-	"real": true, "float4": true, "double precision": true, "float8": true,
 }
 
 // timeLayouts are the layouts a string literal of each date and time type
