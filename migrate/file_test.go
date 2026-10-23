@@ -102,6 +102,7 @@ func TestParseFileDirectives(t *testing.T) {
 		{velox.Postgres, "SELECT 1;\n-- velox:unit\nSELECT 2;", "2", "unit is only for a file run statement by statement: a MySQL file, or a no-transaction one"},
 		{velox.SQLite, "-- velox:unit\nSELECT 2;", "1", "unit is only for a file run statement by statement: a MySQL file, or a no-transaction one"},
 		{velox.Postgres, "SELECT 'x", "1", "unterminated string literal"},
+		{velox.Postgres, "SELECT 1;\nSELECT 2; -- velox:unit\n", "2", "a directive must start its line"},
 	} {
 		_, err := migrate.ParseFile(c.d, "0001_x.sql", []byte(c.src))
 		wantFileError(t, c.d.String()+" "+c.src, err, "0001_x.sql:"+c.line, c.reason)
@@ -115,6 +116,9 @@ func TestParseFileUnits(t *testing.T) {
 	}
 	if want := []string{"SELECT 1", "SELECT 2", "SELECT 3", "SELECT 4"}; !reflect.DeepEqual(f.Statements, want) {
 		t.Errorf("statements %q, want %q", f.Statements, want)
+	}
+	if want := []int{2, 4, 5, 7}; !reflect.DeepEqual(migrate.FileLines(f), want) {
+		t.Errorf("lines %v, want %v", migrate.FileLines(f), want)
 	}
 	if f := parseFile(t, velox.MySQL, "0001_x.sql", "SELECT 1; SELECT 2; SELECT 3;"); !reflect.DeepEqual(f.Units, []int{0, 1, 2}) {
 		t.Errorf("MySQL: units %v", f.Units)
@@ -157,6 +161,42 @@ func TestParseFileBackslash(t *testing.T) {
 	}
 	if migrate.FileBackslash(parseFile(t, velox.Postgres, "0001_x.sql", `SELECT E'a\\b'`)) {
 		t.Error("PostgreSQL: backslash set")
+	}
+}
+
+func TestParseFileDquote(t *testing.T) {
+	for src, want := range map[string]bool{
+		`INSERT INTO t VALUES ("a")`:         true,
+		`INSERT INTO t VALUES ('"a"')`:       false,
+		"INSERT INTO `\"a` VALUES (1)":       false,
+		"-- \"a\"\nINSERT INTO t VALUES (1)": false,
+	} {
+		if got := migrate.FileDquote(parseFile(t, velox.MySQL, "0001_x.sql", src)); got != want {
+			t.Errorf("%q: dquote %v, want %v", src, got, want)
+		}
+	}
+	if migrate.FileDquote(parseFile(t, velox.Postgres, "0001_x.sql", `SELECT "a"`)) {
+		t.Error("PostgreSQL: dquote set")
+	}
+}
+
+func TestParseFileBOM(t *testing.T) {
+	src := genHeader + "-- velox:no-transaction\nSELECT 1;\n"
+	plain := parseFile(t, velox.Postgres, "0001_x.sql", src)
+	bom := parseFile(t, velox.Postgres, "0001_x.sql", "\xEF\xBB\xBF"+src)
+	if !reflect.DeepEqual(bom, plain) {
+		t.Errorf("BOM differs:\n%+v\n%+v", bom, plain)
+	}
+	if !migrate.FileGenerated(bom) || !bom.Directives.NoTransaction {
+		t.Errorf("BOM: generated %v, directives %+v", migrate.FileGenerated(bom), bom.Directives)
+	}
+	if !reflect.DeepEqual(migrate.FileLines(bom), []int{3}) {
+		t.Errorf("BOM: lines %v", migrate.FileLines(bom))
+	}
+	nobom := parseFile(t, velox.Postgres, "0001_x.sql", "-- velox:no-transaction\nSELECT 1;")
+	withbom := parseFile(t, velox.Postgres, "0001_x.sql", "\xEF\xBB\xBF-- velox:no-transaction\r\nSELECT 1;")
+	if !reflect.DeepEqual(nobom, withbom) {
+		t.Errorf("BOM and CRLF differ:\n%+v\n%+v", withbom, nobom)
 	}
 }
 

@@ -19,8 +19,9 @@ const directivePrefix = "-- velox:"
 
 // split reads src as d reads SQL: ";" ends a statement outside quotes,
 // comments and dollar quotes. Comments before a statement's first token and
-// after its last are not part of it. A "-- velox:" line between statements
-// is a directive; one inside a statement is an error.
+// after its last are not part of it; MySQL's executable comments, "/*!",
+// are statement text. A "-- velox:" line between statements is a directive;
+// one inside a statement, or not at the start of its line, is an error.
 func split(d velox.Dialect, src string) ([]piece, error) {
 	s := splitter{d: d, src: src}
 	if err := s.run(); err != nil {
@@ -35,6 +36,7 @@ type splitter struct {
 	src       string
 	out       []piece
 	backslash bool // MySQL: a string literal holds a backslash
+	dquote    bool // MySQL: a "…" literal
 }
 
 // run splits s.src into s.out. Its errors are *Error values with Code "file"
@@ -71,6 +73,9 @@ func (s *splitter) run() error {
 				j += i
 			}
 			if text, ok := strings.CutPrefix(src[i:j], directivePrefix); ok {
+				if !lineStart(src, i) {
+					return fileErr(line, "a directive must start its line")
+				}
 				if start >= 0 {
 					return fileErr(line, "a directive inside a statement")
 				}
@@ -78,7 +83,7 @@ func (s *splitter) run() error {
 			}
 			i = j
 			continue
-		case c == '/' && i+1 < len(src) && src[i+1] == '*':
+		case strings.HasPrefix(src[i:], "/*") && !s.executable(i):
 			j := s.commentEnd(i)
 			if j < 0 {
 				return fileErr(line, "unterminated comment")
@@ -104,6 +109,23 @@ func (s *splitter) run() error {
 // fileErr is the splitter's refusal at line.
 func fileErr(line int, reason string) *Error {
 	return &Error{Code: "file", Pos: strconv.Itoa(line), Reason: reason}
+}
+
+// lineStart reports whether only white space comes before src[i] on its line.
+func lineStart(src string, i int) bool {
+	for i > 0 && src[i-1] != '\n' {
+		i--
+		if !space(src[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// executable reports whether a MySQL executable comment, "/*!" or
+// "/*!NNNNN", starts at i: MySQL runs its content as statement text.
+func (s *splitter) executable(i int) bool {
+	return s.d == velox.MySQL && strings.HasPrefix(s.src[i:], "/*!")
 }
 
 // space reports whether c is white space between tokens.
@@ -156,8 +178,8 @@ func (s *splitter) commentEnd(i int) int {
 }
 
 // token is the index after the token at i: a quoted literal or name, a
-// dollar-quoted string, or a single byte. A reason is given when a quote is
-// not closed.
+// dollar-quoted string, a MySQL executable comment, or a single byte. A
+// reason is given when a quote is not closed.
 func (s *splitter) token(i int) (int, string) {
 	src := s.src
 	c := src[i]
@@ -169,7 +191,13 @@ func (s *splitter) token(i int) (int, string) {
 	case c == '\'':
 		return s.quoted(i, s.d == velox.MySQL, "unterminated string literal")
 	case c == '"' && s.d == velox.MySQL:
+		s.dquote = true
 		return s.quoted(i, true, "unterminated string literal")
+	case s.executable(i):
+		if j := strings.Index(src[i+3:], "*/"); j >= 0 {
+			return i + 3 + j + 2, ""
+		}
+		return 0, "unterminated comment"
 	case c == '"':
 		return s.quoted(i, false, "unterminated quoted name")
 	case c == '`' && s.d != velox.Postgres:

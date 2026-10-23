@@ -40,3 +40,9 @@ func FileBackslash(f File) bool { return f.backslash }
 
 // FileGenerated is f.generated.
 func FileGenerated(f File) bool { return f.generated }
+
+// FileLines is f.lines.
+func FileLines(f File) []int { return f.lines }
+
+// FileDquote is f.dquote.
+func FileDquote(f File) bool { return f.dquote }
