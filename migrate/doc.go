@@ -22,7 +22,7 @@
 //   - "dialect": a schema's dialect is not PostgreSQL, MySQL or SQLite, or
 //     two schemas' dialects differ.
 //   - "schema": a schema lists a table, an enum type, or a table's column,
-//     index or constraint twice.
+//     or a named index or constraint, twice.
 //   - "primary-key": a table's primary key changes its columns, or gains or
 //     loses its name, which Diff leaves to a hand-written migration.
 //   - "rename": a rename names a table or column that is not there, or one

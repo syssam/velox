@@ -76,7 +76,7 @@ normal: status = 'a'
 
 input: created_on > '2020-01-01'::date
 printed:
-normal: created_on > '2020-01-01'
+normal: created_on > '2020-01-01'::date
 
 input: lower(email) = 'x@y'
 printed:

@@ -203,8 +203,8 @@ func (s *Schema) sort() {
 
 // validate refuses a schema no database has: an unknown dialect ("dialect"),
 // or a table, an enum type, or a table's column, index or constraint (a
-// foreign key or check) listed twice ("schema"). name says which schema it
-// is in the error.
+// foreign key or check) listed twice ("schema"); unnamed ones, named "",
+// may repeat. name says which schema it is in the error.
 func (s *Schema) validate(name string) error {
 	if !knownDialect(s.Dialect) {
 		return &Error{Code: "dialect", Reason: fmt.Sprintf("%s has the unknown dialect %q", name, s.Dialect.String())}
@@ -226,20 +226,22 @@ func (s *Schema) validate(name string) error {
 			}
 			cols[c.Name] = true
 		}
+		// An index or constraint named "" is unnamed, as SQLite keeps some,
+		// and a table may have several.
 		for _, ix := range t.Indexes {
-			if ixs[ix.Name] {
+			if ix.Name != "" && ixs[ix.Name] {
 				return twice(ref.String(), "the index %q", ix.Name)
 			}
 			ixs[ix.Name] = true
 		}
 		for _, fk := range t.ForeignKeys {
-			if cons[fk.Name] {
+			if fk.Name != "" && cons[fk.Name] {
 				return twice(ref.String(), "the constraint %q", fk.Name)
 			}
 			cons[fk.Name] = true
 		}
 		for _, ck := range t.Checks {
-			if cons[ck.Name] {
+			if ck.Name != "" && cons[ck.Name] {
 				return twice(ref.String(), "the constraint %q", ck.Name)
 			}
 			cons[ck.Name] = true

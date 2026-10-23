@@ -135,7 +135,9 @@ func TestDriftDefaultExpression(t *testing.T) {
 	wantDrift(t, driftOf(t, withDefault("now()"), withDefault("'y'")), []string{"alter-column users.created_at (default)"})
 	wantDrift(t, driftOf(t, withDefault(""), withDefault("now()")), []string{"alter-column users.created_at (default)"})
 	// What only the normaliser removes is not worth a warning.
-	wantDrift(t, driftOf(t, withDefault("nextval('users_id_seq'::regclass)"), withDefault("nextval('users_id_seq')")), nil)
+	wantDrift(t, driftOf(t, withDefault("NOW()"), withDefault("now()")), nil)
+	// A cast that is not one value spelled again is part of the default.
+	wantDrift(t, driftOf(t, withDefault("nextval('users_id_seq'::regclass)"), withDefault("nextval('users_id_seq')")), nil, "users.created_at")
 }
 
 func TestDriftEnumCheck(t *testing.T) {
@@ -158,11 +160,7 @@ func TestDriftCheckSpelling(t *testing.T) {
 		}))
 	}
 	snap := withCheck("qty > 0")
-	r := driftOf(t, withCheck("(qty > 0)"), snap)
-	wantDrift(t, r, nil, "users.users_qty_check")
-	if m := r.Warnings[0].Message; !strings.Contains(m, "(qty > 0)") || !strings.Contains(m, " qty > 0") {
-		t.Errorf("the warning does not name both spellings: %s", m)
-	}
+	wantDrift(t, driftOf(t, withCheck("(qty > 0)"), snap), nil)
 	wantDrift(t, driftOf(t, withCheck("(qty > 5)"), snap),
 		[]string{"drop-check users.users_qty_check", "add-check users.users_qty_check"})
 	// One the normaliser cannot read is warned of, not compared.
@@ -224,6 +222,12 @@ func TestDriftUnnamedConstraints(t *testing.T) {
 	wantDrift(t, driftOf(t, schemaOf(velox.SQLite, posts(false, false), usersOf(velox.SQLite, nil)), snap), nil)
 	// One the snapshot has no match for is a change.
 	wantDrift(t, driftOf(t, schemaOf(velox.SQLite, posts(true, true), usersOf(velox.SQLite, nil)), snap), []string{"drop-check posts."})
+	// Several unnamed ones on a table are allowed.
+	many := posts(true, true)
+	many.Checks = append(many.Checks, migrate.Check{Expr: "qty < 50"})
+	many.ForeignKeys = append(many.ForeignKeys, migrate.ForeignKey{Columns: []string{"qty"}, RefTable: users, RefColumns: []string{"id"}})
+	wantDrift(t, driftOf(t, schemaOf(velox.SQLite, many, usersOf(velox.SQLite, nil)), snap),
+		[]string{"drop-foreign-key posts.", "drop-check posts.", "drop-check posts."})
 	// An unnamed one of another definition is not given the name.
 	other := posts(false, false)
 	other.ForeignKeys[0].OnDelete = "CASCADE"
@@ -347,8 +351,8 @@ func TestDriftDeterministic(t *testing.T) {
 	sorted := slices.IsSortedFunc(a.Warnings, func(x, y migrate.Warning) int {
 		return cmp.Or(cmp.Compare(x.Object, y.Object), cmp.Compare(x.Message, y.Message))
 	})
-	if !sorted || len(a.Warnings) != 7 {
-		t.Errorf("warnings not sorted by object and message, or not 7:\n%s", strings.Join(warningStrings(a.Warnings), "\n"))
+	if !sorted || len(a.Warnings) != 5 {
+		t.Errorf("warnings not sorted by object and message, or not 5:\n%s", strings.Join(warningStrings(a.Warnings), "\n"))
 	}
 	if len(a.Changes) > 0 {
 		t.Errorf("changes: %s", strings.Join(changeStrings(a.Changes), "\n"))

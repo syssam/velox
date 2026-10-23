@@ -2,6 +2,7 @@ package migrate
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/syssam/velox2"
@@ -12,13 +13,15 @@ import (
 // database prints with what was written. It reads the predicates velox
 // users write: and, or, not, comparisons, IS [NOT] NULL, [NOT] IN, [NOT]
 // LIKE and ILIKE (PostgreSQL's ~~ forms), BETWEEN, = ANY and <> ALL of an
-// ARRAY, arithmetic, function calls, literals and casts. It drops every
-// cast, unquotes the names that need no quotes, lower-cases keywords,
-// function names and unquoted names, and prints one space around each binary
-// operator and only the parentheses precedence needs, so two predicates of
-// one meaning in different spellings print alike and two of different
-// meanings never do. Text it cannot parse comes back with its white space
-// collapsed outside quotes.
+// ARRAY, arithmetic, function calls, literals and casts. It drops the casts
+// that only spell a value again (castOf), unquotes the names that need no
+// quotes, lower-cases keywords, function names and unquoted names, and
+// prints one space around each binary operator and only the parentheses
+// precedence needs, so two predicates of one meaning in different spellings
+// print alike and two of different meanings never do. A chain of
+// comparisons without parentheses, a comment and what else it does not read
+// fail the parse, and the text comes back with its white space collapsed
+// outside quotes.
 func normalizePredicate(d velox.Dialect, expr string) string {
 	s, _ := normalized(d, expr)
 	return s
@@ -50,7 +53,8 @@ func samePredicate(d velox.Dialect, a, b string) (same, comparable bool) {
 }
 
 // collapseSpace is s with each run of white space outside quotes made one
-// space, and none at either end. A MySQL literal's \ escapes.
+// space, and none at either end. Quotes are literals, quoted names, and on
+// PostgreSQL E'…' and dollar-quoted strings; a MySQL literal's \ escapes.
 func collapseSpace(d velox.Dialect, s string) string {
 	var b strings.Builder
 	space := false
@@ -66,8 +70,13 @@ func collapseSpace(d velox.Dialect, s string) string {
 		}
 		space = false
 		j := i + 1
-		if c == '\'' || c == '"' || c == '`' {
+		switch {
+		case c == '\'' || c == '"' || c == '`':
 			j = stringEnd(s, i, c != '`' && d == velox.MySQL)
+		case d == velox.Postgres && (c == 'E' || c == 'e') && i+1 < len(s) && s[i+1] == '\'' && (i == 0 || !wordByte(s[i-1])):
+			j = stringEnd(s, i+1, true)
+		case d == velox.Postgres && c == '$' && dollarEnd(s, i) > 0:
+			j = dollarEnd(s, i)
 		}
 		b.WriteString(s[i:j])
 		i = j
@@ -133,9 +142,15 @@ func lexPredicate(d velox.Dialect, expr string) ([]predToken, bool) {
 			}
 			word := expr[i:j]
 			if j < len(expr) && expr[j] == '\'' {
-				// MySQL's character set before a literal, _utf8mb4'a', is
-				// dropped; PostgreSQL's E'' and the like are not read.
-				if d != velox.MySQL || word[0] != '_' {
+				// MySQL's UTF-8 character set before a literal, _utf8mb4'a',
+				// is dropped; another, which changes the comparison, and
+				// PostgreSQL's E'' and the like are not read.
+				switch strings.ToLower(word) {
+				case "_utf8mb4", "_utf8mb3", "_utf8":
+				default:
+					return nil, false
+				}
+				if d != velox.MySQL {
 					return nil, false
 				}
 				i = j
@@ -143,6 +158,8 @@ func lexPredicate(d velox.Dialect, expr string) ([]predToken, bool) {
 			}
 			toks = append(toks, predToken{tokWord, word})
 			i = j
+		case strings.HasPrefix(expr[i:], "--") || strings.HasPrefix(expr[i:], "/*"):
+			return nil, false // a comment
 		default:
 			op := ""
 			for _, o := range predOps {
@@ -181,15 +198,24 @@ func unquoteAt(expr string, i int, backslash bool) (string, int, bool) {
 				return "", 0, false
 			}
 			j++
+			// MySQL's escapes: \% and \_ keep their backslash, for LIKE;
+			// any other character but these stands for itself.
 			switch e := expr[j]; e {
-			case 'n':
-				b.WriteByte('\n')
-			case 't':
-				b.WriteByte('\t')
-			case 'r':
-				b.WriteByte('\r')
 			case '0':
 				b.WriteByte(0)
+			case 'b':
+				b.WriteByte('\b')
+			case 'n':
+				b.WriteByte('\n')
+			case 'r':
+				b.WriteByte('\r')
+			case 't':
+				b.WriteByte('\t')
+			case 'Z':
+				b.WriteByte(0x1a)
+			case '%', '_':
+				b.WriteByte('\\')
+				b.WriteByte(e)
 			default:
 				b.WriteByte(e)
 			}
@@ -215,6 +241,7 @@ const (
 	nodeBinary        // op; kids[0] and kids[1]
 	nodeIs            // op: "is null", "is not true", …; kids[0]
 	nodeIn            // op: "in" or "not in"; kids[0] in kids[1:]
+	nodeCast          // text: the type; kids[0]
 )
 
 type predNode struct {
@@ -311,69 +338,87 @@ func (p *predParser) not() *predNode {
 var compareOps = map[string]string{"=": "=", "==": "=", "<>": "<>", "!=": "<>", "<": "<", "<=": "<=", ">": ">", ">=": ">=",
 	"~~": "like", "!~~": "not like", "~~*": "ilike", "!~~*": "not ilike"}
 
+// compare reads one comparison, IS, IN, LIKE or BETWEEN. The databases
+// rank these apart from each other in different ways, so a chain of them
+// without parentheses is not read.
 func (p *predParser) compare() *predNode {
 	n := p.add()
-	for p.ok {
-		t := p.peek(0)
+	if !p.ok || !p.comparing() {
+		return n
+	}
+	n = p.comparison(n)
+	if p.ok && p.comparing() {
+		p.fail()
+	}
+	return n
+}
+
+// comparing reports whether the next tokens start a comparison's operator.
+func (p *predParser) comparing() bool {
+	t := p.peek(0)
+	return t.kind == tokOp && compareOps[t.text] != "" || p.is(0, "is") || p.is(0, "in") || p.is(0, "like") ||
+		p.is(0, "ilike") || p.is(0, "between") ||
+		p.is(0, "not") && (p.is(1, "in") || p.is(1, "like") || p.is(1, "ilike") || p.is(1, "between"))
+}
+
+// comparison reads the operator after n, and its right side.
+func (p *predParser) comparison(n *predNode) *predNode {
+	t := p.peek(0)
+	switch {
+	case t.kind == tokOp && compareOps[t.text] != "":
+		p.i++
+		op := compareOps[t.text]
+		if p.is(0, "any") || p.is(0, "all") || p.is(0, "some") {
+			return p.quantified(n, op)
+		}
+		n = binaryNode(op, n, p.add())
+	case p.accept("is"):
+		op := "is "
+		if p.accept("not") {
+			op += "not "
+		}
 		switch {
-		case t.kind == tokOp && compareOps[t.text] != "":
-			p.i++
-			op := compareOps[t.text]
-			if p.is(0, "any") || p.is(0, "all") || p.is(0, "some") {
-				n = p.quantified(n, op)
-				continue
-			}
-			n = binaryNode(op, n, p.add())
-		case p.accept("is"):
-			op := "is "
-			if p.accept("not") {
-				op += "not "
-			}
-			switch {
-			case p.accept("null"):
-				op += "null"
-			case p.accept("true"):
-				op += "true"
-			case p.accept("false"):
-				op += "false"
-			default:
-				p.fail()
-			}
-			n = &predNode{kind: nodeIs, op: op, kids: []*predNode{n}}
-		case p.is(0, "in") || p.is(0, "not") && p.is(1, "in"):
-			neg := p.accept("not")
-			p.expect("in")
-			p.expect("(")
-			list := []*predNode{n}
-			for p.ok {
-				list = append(list, p.or())
-				if !p.accept(",") {
-					break
-				}
-			}
-			p.expect(")")
-			n = in(neg, list)
-		case p.is(0, "like") || p.is(0, "ilike") || p.is(0, "not") && (p.is(1, "like") || p.is(1, "ilike")):
-			op := ""
-			if p.accept("not") {
-				op = "not "
-			}
-			op += strings.ToLower(p.peek(0).text)
-			p.i++
-			n = binaryNode(op, n, p.add())
-		case p.is(0, "between") || p.is(0, "not") && p.is(1, "between"):
-			neg := p.accept("not")
-			p.expect("between")
-			lo := p.add()
-			p.expect("and")
-			hi := p.add()
-			if neg {
-				n = binaryNode("or", binaryNode("<", n, lo), binaryNode(">", n, hi))
-			} else {
-				n = binaryNode("and", binaryNode(">=", n, lo), binaryNode("<=", n, hi))
-			}
+		case p.accept("null"):
+			op += "null"
+		case p.accept("true"):
+			op += "true"
+		case p.accept("false"):
+			op += "false"
 		default:
-			return n
+			p.fail()
+		}
+		n = &predNode{kind: nodeIs, op: op, kids: []*predNode{n}}
+	case p.is(0, "in") || p.is(0, "not") && p.is(1, "in"):
+		neg := p.accept("not")
+		p.expect("in")
+		p.expect("(")
+		list := []*predNode{n}
+		for p.ok {
+			list = append(list, p.or())
+			if !p.accept(",") {
+				break
+			}
+		}
+		p.expect(")")
+		n = in(neg, list)
+	case p.is(0, "like") || p.is(0, "ilike") || p.is(0, "not") && (p.is(1, "like") || p.is(1, "ilike")):
+		op := ""
+		if p.accept("not") {
+			op = "not "
+		}
+		op += strings.ToLower(p.peek(0).text)
+		p.i++
+		n = binaryNode(op, n, p.add())
+	case p.is(0, "between") || p.is(0, "not") && p.is(1, "between"):
+		neg := p.accept("not")
+		p.expect("between")
+		lo := p.add()
+		p.expect("and")
+		hi := p.add()
+		if neg {
+			n = binaryNode("or", binaryNode("<", n, lo), binaryNode(">", n, hi))
+		} else {
+			n = binaryNode("and", binaryNode(">=", n, lo), binaryNode("<=", n, hi))
 		}
 	}
 	return n
@@ -447,57 +492,104 @@ func (p *predParser) unary() *predNode {
 	}
 	n := p.primary()
 	for p.ok && p.accept("::") {
-		if p.castType() && n.str && plainNumber.MatchString(n.val) {
-			n = &predNode{kind: nodeLit, text: n.val}
-		}
+		n = castOf(n, p.castType())
 	}
 	return n
 }
 
-var plainNumber = regexp.MustCompile(`^-?[0-9]+(\.[0-9]+)?$`)
+// A castTo is the type after ::.
+type castTo struct {
+	base  string // an unquoted type's name, lower case: "character varying"; "" for another
+	mod   bool   // it has a modifier, as varchar(1)
+	array bool
+	text  string // as printed
+}
 
-// numericTypes are the type names a literal cast to becomes a number.
-var numericTypes = map[string]bool{
+// castOf is n cast to c. A cast is part of the expression, except the
+// spellings of one value the databases echo back: a string literal or a
+// column cast to text or character varying, an integer literal cast to an
+// integer type, and a number cast to numeric, none with a modifier; and an
+// array of string literals cast to an array of text, as = ANY prints IN.
+func castOf(n *predNode, c castTo) *predNode {
+	plain := !c.mod && !c.array
+	textual := c.base == "text" || c.base == "character varying" || c.base == "varchar"
+	v, lit := n.text, n.kind == nodeLit
+	if n.str {
+		v = n.val
+	}
+	switch {
+	case plain && textual && (n.str || n.kind == nodeName):
+		return n
+	case plain && lit && intTypes[c.base] && integer.MatchString(v),
+		plain && lit && (c.base == "numeric" || c.base == "decimal") && plainNumber.MatchString(v):
+		return &predNode{kind: nodeLit, text: v}
+	case !c.mod && c.array && textual && n.kind == nodeArray &&
+		!slices.ContainsFunc(n.kids, func(k *predNode) bool { return !k.str }):
+		return n
+	}
+	return &predNode{kind: nodeCast, text: c.text, kids: []*predNode{n}}
+}
+
+var (
+	plainNumber = regexp.MustCompile(`^-?[0-9]+(\.[0-9]+)?$`)
+	integer     = regexp.MustCompile(`^-?[0-9]+$`)
+)
+
+// intTypes are the integer types.
+var intTypes = map[string]bool{
 	"smallint": true, "integer": true, "int": true, "bigint": true, "int2": true, "int4": true, "int8": true,
-	"numeric": true, "decimal": true, "real": true, "float4": true, "float8": true, "double": true,
 }
 
 // typeWords are the words after a type's first that are part of its name.
 var typeWords = map[string]bool{"varying": true, "precision": true, "with": true, "without": true, "time": true, "zone": true}
 
-// castType reads the type after ::, and reports whether it is numeric.
-func (p *predParser) castType() bool {
-	t := p.peek(0)
-	if t.kind != tokWord && t.kind != tokQuoted {
-		p.fail()
-		return false
-	}
-	p.i++
-	first := strings.ToLower(t.text)
-	if p.accept(".") {
-		if u := p.peek(0); u.kind == tokWord || u.kind == tokQuoted {
-			p.i++
-			first = ""
-		} else {
+// castType reads the type after ::.
+func (p *predParser) castType() castTo {
+	var c castTo
+	var parts []predName
+	for {
+		t := p.peek(0)
+		if t.kind != tokWord && t.kind != tokQuoted {
 			p.fail()
+			return c
 		}
+		p.i++
+		parts = append(parts, predName{name: t.text, quoted: t.kind == tokQuoted})
+		if !p.accept(".") {
+			break
+		}
+	}
+	c.text = p.name(parts)
+	if len(parts) == 1 && !parts[0].quoted {
+		c.base = strings.ToLower(parts[0].name)
 	}
 	for t := p.peek(0); t.kind == tokWord && typeWords[strings.ToLower(t.text)]; t = p.peek(0) {
 		p.i++
+		w := strings.ToLower(t.text)
+		c.text += " " + w
+		if c.base != "" {
+			c.base += " " + w
+		}
 	}
 	if p.accept("(") {
+		c.mod = true
+		var mods []string
 		for p.ok && p.peek(0).kind == tokNumber {
+			mods = append(mods, p.peek(0).text)
 			p.i++
 			if !p.accept(",") {
 				break
 			}
 		}
 		p.expect(")")
+		c.text += "(" + strings.Join(mods, ", ") + ")"
 	}
 	for p.ok && p.accept("[") {
 		p.expect("]")
+		c.array = true
+		c.text += "[]"
 	}
-	return t.kind == tokWord && numericTypes[first]
+	return c
 }
 
 // startless are the keywords a primary cannot be: those the parser reads
@@ -635,6 +727,8 @@ func (p *predParser) text(n *predNode) string {
 		return p.print(n.kids[0], precCompare+1) + " " + n.op
 	case nodeIn:
 		return p.print(n.kids[0], precCompare+1) + " " + n.op + " (" + p.list(n.kids[1:]) + ")"
+	case nodeCast:
+		return p.print(n.kids[0], precPrimary) + "::" + n.text
 	}
 	// A binary operator: the left operand of one level needs no
 	// parentheses, except a comparison's, and the right one does, except

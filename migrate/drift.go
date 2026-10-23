@@ -44,7 +44,7 @@ type note struct {
 // Only the tables snapshot has are compared, and the enum types they use. On
 // a copy of inspected, what differs only in spelling takes snapshot's
 // spelling before Diff compares the two: a predicate or check alike after
-// normalizing (a check with a warning), an expression default (with a
+// normalizing, an expression default (with a
 // warning when the normal forms differ), a predicate or check the
 // normaliser cannot read (with a warning when the texts differ), MySQL's
 // RESTRICT for no action, the names SQLite does not keep, matched by
@@ -163,7 +163,6 @@ func (c *drifter) table(t, u *Table) {
 		same, comparable := samePredicate(c.d, tc.Expr, uc.Expr)
 		switch {
 		case same:
-			c.warn(ref+"."+tc.Name, "the check is spelled %s in the database and %s in the snapshot", tc.Expr, uc.Expr)
 		case !comparable:
 			c.warn(ref+"."+tc.Name, "the check is %s in the database and %s in the snapshot; one cannot be parsed, so they are not compared", tc.Expr, uc.Expr)
 		default:

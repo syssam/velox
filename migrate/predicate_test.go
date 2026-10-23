@@ -101,7 +101,10 @@ func TestNormalizePredicatePrinted(t *testing.T) {
 		{`(status = 'a'::text)`, `status IN ('a')`},
 		{`((qty > 0) AND (status = 'a'::text))`, `qty > 0 AND status = 'a'`},
 		{`(((qty > 0) OR (qty < '-5'::integer)) AND (deleted_at IS NULL))`, `(qty > 0 OR qty < -5) AND deleted_at IS NULL`},
-		{`(created_on > '2020-01-01'::date)`, `created_on > '2020-01-01'`},
+		{`(created_on > '2020-01-01'::date)`, `created_on > '2020-01-01'::date`},
+		{`(price < '-1.5'::numeric)`, `price < -1.5`},
+		{`(price > (2)::numeric)`, `price > 2`},
+		{`(qty > (1.9)::integer)`, `qty > 1.9::integer`},
 		{`(lower((email)::text) = 'x@y'::text)`, `lower(email) = 'x@y'`},
 		{`(COALESCE(qty, 0) > 1)`, `coalesce(qty, 0) > 1`},
 		{`(name ~~ 'a%'::text)`, `name LIKE 'a%'`},
@@ -110,7 +113,7 @@ func TestNormalizePredicatePrinted(t *testing.T) {
 		{`(name !~~* 'a%'::text)`, `name NOT ILIKE 'a%'`},
 		{`((qty >= 1) AND (qty <= 5))`, `qty BETWEEN 1 AND 5`},
 		{`((qty < 1) OR (qty > 5))`, `qty NOT BETWEEN 1 AND 5`},
-		{`((qty * 2) > (price - 1))`, `qty * 2 > price - 1`},
+		{`((qty * 2) > (qty - 1))`, `qty * 2 > qty - 1`},
 		{`("Status" = 'a'::text)`, `"Status" = 'a'`},
 	} {
 		got, want := migrate.NormalizePredicate(velox.Postgres, c.printed), migrate.NormalizePredicate(velox.Postgres, c.written)
@@ -171,6 +174,78 @@ func TestNormalizePredicateKeepsMeaning(t *testing.T) {
 			t.Errorf("%s normalises to %q and %s to %q", c[0], norm(c[0]), c[1], norm(c[1]))
 		}
 	}
+	// Each pair differs in meaning on its dialect.
+	for _, c := range []struct {
+		d    velox.Dialect
+		a, b string
+	}{
+		// A cast is part of the expression, but for the spellings of one
+		// value the databases echo back.
+		{velox.Postgres, `qty > 1.9::integer`, `qty > 1.9`},
+		{velox.Postgres, `code = 'abc'::varchar(1)`, `code = 'abc'`},
+		{velox.Postgres, `code = 'abc'::character varying(1)`, `code = 'abc'`},
+		{velox.Postgres, `x::date = y`, `x::timestamp = y`},
+		{velox.Postgres, `x::date = y`, `x = y`},
+		{velox.Postgres, `x::timestamp = y`, `x = y`},
+		{velox.Postgres, `created_at::date > '2020-01-01'`, `created_at > '2020-01-01'`},
+		{velox.Postgres, `t > '2020-01-01 10:00'::date`, `t > '2020-01-01 10:00'::timestamp`},
+		{velox.Postgres, `t > '2020-01-01 10:00'::date`, `t > '2020-01-01 10:00'`},
+		{velox.Postgres, `qty::numeric(3, 1) > 1`, `qty > 1`},
+		{velox.Postgres, `5::numeric(3, 1) > qty`, `5 > qty`},
+		{velox.Postgres, `code::varchar(2) = 'ab'`, `code = 'ab'`},
+		{velox.Postgres, `(a + b)::text = 'x'`, `a + b = 'x'`},
+		{velox.Postgres, `'5'::bigint = qty`, `'5' = qty`},
+		// MySQL's escapes: \% and \_ keep their backslash, \b and \Z are
+		// characters of their own.
+		{velox.MySQL, `code NOT LIKE '%\_%'`, `code NOT LIKE '%_%'`},
+		{velox.MySQL, `code LIKE '\%'`, `code LIKE '%'`},
+		{velox.MySQL, `code = '\b'`, `code = 'b'`},
+		{velox.MySQL, `code = '\Z'`, `code = 'Z'`},
+		// A chain of comparisons is read differently by each database, so
+		// it is not read.
+		{velox.SQLite, `a = b < c`, `(a = b) < c`},
+		{velox.Postgres, `flag = b IN (true, false)`, `(flag = b) IN (true, false)`},
+		{velox.Postgres, `name LIKE 'a' = flag`, `(name LIKE 'a') = flag`},
+		{velox.Postgres, `a IS NULL IS NULL`, `(a IS NULL) IS NULL`},
+		// A comment is not an operator.
+		{velox.Postgres, `qty > 5 -- x`, `qty > 5 - -x`},
+		{velox.Postgres, `qty > 5 /* x */`, `qty > 5 / * x * /`},
+		// MySQL's other character sets change the comparison.
+		{velox.MySQL, `name = _binary'abc'`, `name = 'abc'`},
+		{velox.MySQL, `name = _latin1'abc'`, `name = 'abc'`},
+		// The fallback keeps every literal's inside.
+		{velox.Postgres, `E'a\'  b' = x`, `E'a\' b' = x`},
+		{velox.Postgres, `$$a  b$$ = x`, `$$a b$$ = x`},
+		{velox.Postgres, `$t$a  b$t$ = x`, `$t$a b$t$ = x`},
+	} {
+		if x, y := migrate.NormalizePredicate(c.d, c.a), migrate.NormalizePredicate(c.d, c.b); x == y {
+			t.Errorf("%v: %s and %s both normalise to %q", c.d, c.a, c.b, x)
+		}
+	}
+	// And each of these is one value spelled two ways.
+	for _, c := range []struct {
+		d    velox.Dialect
+		a, b string
+	}{
+		{velox.Postgres, `status = 'a'::text`, `status = 'a'`},
+		{velox.Postgres, `status = 'a'::varchar`, `status = 'a'`},
+		{velox.Postgres, `status = 'a'::character varying`, `status = 'a'`},
+		{velox.Postgres, `qty = 5::bigint`, `qty = 5`},
+		{velox.Postgres, `qty >= '-1'::integer`, `qty >= -1`},
+		{velox.Postgres, `price > 2::numeric`, `price > 2`},
+		{velox.Postgres, `(code)::text = 'x'`, `code = 'x'`},
+		{velox.Postgres, `code::character varying = 'x'`, `code = 'x'`},
+		{velox.MySQL, `name = _utf8mb4'abc'`, `name = 'abc'`},
+		{velox.MySQL, `name = _utf8mb3'abc'`, `name = 'abc'`},
+		{velox.MySQL, `name = _UTF8'abc'`, `name = 'abc'`},
+		{velox.MySQL, `code LIKE '\\_'`, `code LIKE '\_'`},
+		{velox.MySQL, `code = 'it\'s'`, `code = 'it''s'`},
+		{velox.MySQL, `code = '\q'`, `code = 'q'`},
+	} {
+		if x, y := migrate.NormalizePredicate(c.d, c.a), migrate.NormalizePredicate(c.d, c.b); x != y {
+			t.Errorf("%v: %s normalises to %q and %s to %q", c.d, c.a, x, c.b, y)
+		}
+	}
 	if got := norm(`name = 'A  B'`); got != `name = 'A  B'` {
 		t.Errorf("a literal's case and spaces: got %q", got)
 	}
@@ -182,6 +257,8 @@ func TestNormalizePredicateKeepsMeaning(t *testing.T) {
 		"a = ":                      "a =",
 		"x::":                       "x::",
 		"f(a,":                      "f(a,",
+		"E'a\\'  b'   = x":          "E'a\\'  b' = x",
+		"$t$a  b$t$   = x":          "$t$a  b$t$ = x",
 	} {
 		if got := norm(in); got != want {
 			t.Errorf("%q: got %q, want %q", in, got, want)
