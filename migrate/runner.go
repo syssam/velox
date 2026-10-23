@@ -120,7 +120,9 @@ var errAppliedMeanwhile = errors.New("migrate: applied by another runner")
 // holds the files applied before it.
 //
 // Up uses one connection of db for its run and closes it after, so nothing
-// a file sets on its session reaches db's other connections.
+// a file sets on its session reaches db's other connections. Files run with
+// the session in UTC on PostgreSQL and MySQL, so a time literal in a file
+// means one instant whatever the server's zone.
 func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, error) {
 	o := optionsOf(opts)
 	d, err := ReadDir(dir)

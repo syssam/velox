@@ -68,7 +68,9 @@
 // database from the snapshot: the changes that would bring the database to
 // it, and [Warning]s for what differs only in spelling or what the model has
 // no place for. Both read on one connection of the database and close it
-// after.
+// after. Up and Resolve run on one connection too, with the session in UTC
+// on PostgreSQL and MySQL, so files run with the session in UTC: a time
+// literal means one instant on any server, and Inspect reads it in UTC.
 //
 // A directory holds velox.json, schema.json, the migration files and
 // velox.sum, which hashes the others. [ReadDir] reads one and returns a

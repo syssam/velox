@@ -72,6 +72,7 @@ func dialectName(d velox.Dialect) string {
 
 // open takes one connection and checks it: it answers as cfg.Dialect, at its
 // minimum version, and on PostgreSQL with standard_conforming_strings on.
+// It then puts the session in UTC.
 // Its refusals are *Error with Code "session".
 func open(ctx context.Context, db *sql.DB, cfg Config) (*session, error) {
 	conn, err := db.Conn(ctx)
@@ -83,7 +84,28 @@ func open(ctx context.Context, db *sql.DB, cfg Config) (*session, error) {
 		s.close()
 		return nil, err
 	}
+	if err := s.utc(ctx); err != nil {
+		s.close()
+		return nil, wrap(ctx, "setting the session's time zone", err)
+	}
 	return s, nil
+}
+
+// utc puts the session in UTC, so a file's time literals mean one instant
+// whatever the server's zone, the zone Inspect reads them in. The session
+// is discarded at close, so the zone never reaches the pool.
+func (s *session) utc(ctx context.Context) error {
+	var q string
+	switch s.d {
+	case velox.Postgres:
+		q = `SET TimeZone = 'UTC'`
+	case velox.MySQL:
+		q = `SET time_zone = '+00:00'`
+	default:
+		return nil // SQLite has no session zone
+	}
+	_, err := s.conn.ExecContext(ctx, q)
+	return err
 }
 
 // check is open's checks of the connection.
