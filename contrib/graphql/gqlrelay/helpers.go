@@ -268,9 +268,18 @@ func multiPredicate(cursor *Cursor, opts *MultiCursorsOptions, invert bool) (fun
 // cursor value is followed only by non-NULL values when NULLs sort first,
 // by nothing when they sort last; a non-NULL value is followed by the NULLs
 // too when they sort last. The plain row comparison `(x, id) > (x1, id1)`
-// is NULL whenever x or x1 is, so a walk stopped at the first NULL row.
+// is NULL whenever x or x1 is, so a walk stopped at the first NULL row. The one
+// case where the plain row comparison is exact is rowComparable's, and it is
+// used there.
 func keysetAfter(s *sql.Selector, fields []string, asc []bool, vals []any) *sql.Predicate {
 	nullsFirstAsc := dialect.GetCapabilities(s.Dialect()).Has(dialect.CapNullsFirst)
+	if rowComparable(fields, asc, vals, nullsFirstAsc) {
+		cols := make([]string, len(fields))
+		for i, f := range fields {
+			cols[i] = s.C(f)
+		}
+		return sql.CompositeLT(cols, vals...)
+	}
 	var or []*sql.Predicate
 	for i, f := range fields {
 		col := s.C(f)
@@ -303,6 +312,30 @@ func keysetAfter(s *sql.Selector, fields []string, asc []bool, vals []any) *sql.
 		}
 	}
 	return sql.Or(or...)
+}
+
+// rowComparable reports whether the OR expansion in keysetAfter can be written
+// as the single row comparison `(x, id) < (x1, id1)`.
+//
+// It can only when every key is descending, no cursor value is NULL, and the
+// dialect sorts NULL first in a descending order (PostgreSQL). Then every row
+// holding a NULL sorts BEFORE the cursor, and the row comparison, which is NULL
+// for such a row, leaves it out, which is right. In any other case a NULL row
+// can sort AFTER the cursor and the row comparison would skip it.
+//
+// The point of the single form: PostgreSQL can turn a row comparison into an
+// index start position, so a deep page seeks to the cursor on an index over the
+// leading key instead of walking every newer row. It cannot do that with OR.
+func rowComparable(fields []string, asc []bool, vals []any, nullsFirstAsc bool) bool {
+	if len(fields) < 2 || nullsFirstAsc {
+		return false
+	}
+	for i := range fields {
+		if asc[i] || vals[i] == nil {
+			return false
+		}
+	}
+	return true
 }
 
 // LimitPerRow returns a query modifier that limits the number of rows returned

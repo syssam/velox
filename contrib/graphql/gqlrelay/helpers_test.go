@@ -1,10 +1,14 @@
 package gqlrelay
 
 import (
+	stdsql "database/sql"
+	"sort"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	_ "modernc.org/sqlite" // registers the "sqlite" driver
 
 	"github.com/syssam/velox/dialect/sql"
 )
@@ -265,6 +269,135 @@ func TestCursorsPredicate_BothCursors_ExecutePredicates(t *testing.T) {
 			assert.Contains(t, query, "id")
 		})
 	}
+}
+
+// The single row comparison is only exact where every NULL row sorts before the
+// cursor (PostgreSQL, all keys descending, no NULL cursor value). Anywhere else
+// the OR expansion must stay, because a NULL row can sort after the cursor and a
+// row comparison would skip it.
+func TestCursorsPredicate_RowComparisonOnlyWhereExact(t *testing.T) {
+	cursor := &Cursor{ID: 7, Value: "alice"}
+	tests := []struct {
+		name      string
+		dialect   string
+		after     *Cursor
+		direction OrderDirection
+		wantRow   bool
+	}{
+		{"postgres DESC non-NULL value", "postgres", cursor, OrderDirectionDesc, true},
+		{"postgres ASC keeps OR (NULLs sort after)", "postgres", cursor, OrderDirectionAsc, false},
+		{"mysql DESC keeps OR (NULLs sort last)", "mysql", cursor, OrderDirectionDesc, false},
+		{"sqlite DESC keeps OR (NULLs sort last)", "sqlite", cursor, OrderDirectionDesc, false},
+		{"postgres DESC NULL value keeps OR", "postgres", &Cursor{ID: 7}, OrderDirectionDesc, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			preds := CursorsPredicate(tt.after, nil, "id", "name", tt.direction)
+			require.Len(t, preds, 1)
+			s := sql.Dialect(tt.dialect).Select("*").From(sql.Table("users"))
+			preds[0](s)
+			query, args := s.Query()
+			if tt.wantRow {
+				assert.Contains(t, query, ") < (", "expected one row comparison: %s", query)
+				assert.NotContains(t, query, " OR ", "row comparison must not also carry the OR form: %s", query)
+				assert.Equal(t, []any{tt.after.Value, tt.after.ID}, args, "the cursor's own values, in column order")
+			} else {
+				assert.NotContains(t, query, ") < (", "must keep the OR expansion: %s", query)
+			}
+		})
+	}
+}
+
+// The claim behind the row comparison is that, for a non-NULL cursor value, it
+// selects exactly the rows after the cursor in PostgreSQL's descending order
+// (NULL first, then value descending, then id descending). This runs the SQL
+// keysetAfter really emits for PostgreSQL against a table holding NULLs and
+// ties, and checks it against a model of that order. SQLite is only the engine:
+// it evaluates the same row-value comparison and three-valued logic.
+func TestCursorsPredicate_RowComparisonSelectsRowsAfterCursor(t *testing.T) {
+	db, err := stdsql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	db.SetMaxOpenConns(1) // one connection, or each would see its own empty database
+
+	_, err = db.Exec(`CREATE TABLE "t" ("name" TEXT NULL, "id" INTEGER PRIMARY KEY)`)
+	require.NoError(t, err)
+
+	type row struct {
+		name *string
+		id   int64
+	}
+	str := func(s string) *string { return &s }
+	rows := []row{
+		{nil, 1}, {nil, 2},
+		{str("a"), 3}, {str("a"), 4},
+		{str("b"), 5}, {str("b"), 6},
+		{str("c"), 7},
+	}
+	for _, r := range rows {
+		_, err := db.Exec(`INSERT INTO "t" ("name", "id") VALUES (?, ?)`, r.name, r.id)
+		require.NoError(t, err)
+	}
+
+	// before reports whether a sorts ahead of b: NULL first, then name
+	// descending, then id descending.
+	before := func(a, b row) bool {
+		switch {
+		case a.name == nil && b.name != nil:
+			return true
+		case a.name != nil && b.name == nil:
+			return false
+		case a.name != nil && *a.name != *b.name:
+			return *a.name > *b.name
+		}
+		return a.id > b.id
+	}
+
+	for _, cur := range rows {
+		if cur.name == nil {
+			continue // a NULL cursor value takes the OR expansion; see rowComparable
+		}
+		var want []int64
+		for _, r := range rows {
+			if before(cur, r) {
+				want = append(want, r.id)
+			}
+		}
+		sort.Slice(want, func(i, j int) bool { return want[i] < want[j] })
+
+		preds := CursorsPredicate(&Cursor{ID: cur.id, Value: *cur.name}, nil, "id", "name", OrderDirectionDesc)
+		require.Len(t, preds, 1)
+		s := sql.Dialect("postgres").Select("id").From(sql.Table("t"))
+		preds[0](s)
+		query, args := s.Query()
+		require.Contains(t, query, ") < (", "this test is about the row comparison form: %s", query)
+		// PostgreSQL numbers its placeholders $1, $2; SQLite spells that ?1, ?2.
+		query = strings.NewReplacer("$1", "?1", "$2", "?2").Replace(query)
+
+		found, err := db.Query(query, args...)
+		require.NoError(t, err)
+		var got []int64
+		for found.Next() {
+			var id int64
+			require.NoError(t, found.Scan(&id))
+			got = append(got, id)
+		}
+		require.NoError(t, found.Err())
+		require.NoError(t, found.Close())
+		sort.Slice(got, func(i, j int) bool { return got[i] < got[j] })
+
+		assert.Equal(t, want, got, "rows after cursor (%s, %d)", *cur.name, cur.id)
+	}
+}
+
+func TestRowComparable(t *testing.T) {
+	desc, asc := []bool{false, false}, []bool{false, true}
+	f := []string{"name", "id"}
+	assert.True(t, rowComparable(f, desc, []any{"a", int64(1)}, false))
+	assert.False(t, rowComparable(f, desc, []any{"a", int64(1)}, true), "NULLs-first-on-ASC dialect")
+	assert.False(t, rowComparable(f, asc, []any{"a", int64(1)}, false), "mixed direction")
+	assert.False(t, rowComparable(f, desc, []any{nil, int64(1)}, false), "NULL cursor value")
+	assert.False(t, rowComparable([]string{"id"}, []bool{false}, []any{int64(1)}, false), "single key")
 }
 
 func TestDirectionOrderTerm(t *testing.T) {
