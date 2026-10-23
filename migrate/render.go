@@ -33,10 +33,17 @@ type Script struct {
 	Statements []Statement
 }
 
-// A Statement is one SQL statement of a script.
+// A Statement is one SQL statement of a script. Change is the index of the
+// change it renders. A statement that renders several carries the one at
+// whose place it runs: the first of them in plan order for an ALTER TABLE
+// that groups a table's changes; on MySQL, for the statement that adds and
+// drops a table's indexes, its first add, or its first drop when it adds
+// none; on SQLite, for each statement of a rebuild, the change at which the
+// rebuild runs, its table's last. A PostgreSQL CREATE SCHEMA carries the
+// first change that needs the schema.
 type Statement struct {
 	SQL    string // one statement, without its trailing semicolon
-	Change int    // the change it renders
+	Change int    // the index of the change it renders, or carries
 	Unit   int    // statements with one Unit form a unit of a no-transaction script
 	Review string // the review finding written above it, or ""
 }
