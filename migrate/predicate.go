@@ -567,14 +567,31 @@ var negatedOps = map[string]string{
 	"in": "not in", "not in": "in", "is null": "is not null", "is not null": "is null",
 }
 
+// predicate reports whether n is true, false or NULL by its kind: a
+// comparison, [NOT] LIKE, IN, BETWEEN, IS, AND, OR or NOT.
+func predicate(n *predNode) bool {
+	switch n.kind {
+	case nodeIn, nodeIs:
+		return true
+	case nodeUnary:
+		return n.op == "not"
+	case nodeBinary:
+		_, negatable := negatedOps[n.op]
+		return negatable || n.op == "and" || n.op == "or"
+	}
+	return false
+}
+
 // negated is NOT n folded into n's operator, as MySQL prints x NOT LIKE y
 // as not((x like y)) and NOT (a = 1) as a <> 1: a comparison, [NOT] LIKE,
-// ILIKE, IN, BETWEEN and IS [NOT] NULL, and NOT NOT x as x. false when n is
-// none of these; nothing else folds, De Morgan's laws among it.
+// ILIKE, IN, BETWEEN and IS [NOT] NULL, and NOT NOT x as x for a predicate
+// x. false when n is none of these; nothing else folds, De Morgan's laws
+// among it.
 func negated(n *predNode) (*predNode, bool) {
 	switch {
 	case n.kind == nodeUnary && n.op == "not":
-		return n.kids[0], true
+		// Only over a predicate: on MySQL and SQLite NOT NOT 5 is 1.
+		return n.kids[0], predicate(n.kids[0])
 	case n.between:
 		a, b := n.kids[0], n.kids[1]
 		op := "or"

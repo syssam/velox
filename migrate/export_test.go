@@ -127,3 +127,11 @@ func InspectNotes(ctx context.Context, db *sql.DB, d velox.Dialect, tables []Tab
 
 // NormalizeDefault is normalizeDefault.
 func NormalizeDefault(d velox.Dialect, s string) string { return normalizeDefault(d, s) }
+
+// UnescapeMySQL is unescapeMySQL.
+var UnescapeMySQL = unescapeMySQL
+
+// MySQLDefault is mysqlDefault, def never NULL.
+func MySQLDefault(typ string, expr bool, def string) string {
+	return mysqlDefault(typ, expr, sql.NullString{String: def, Valid: true})
+}

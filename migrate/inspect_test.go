@@ -182,3 +182,110 @@ func TestDriftMySQLTimeDefaults(t *testing.T) {
 		}
 	}
 }
+
+// TestUnescapeMySQL: information_schema's escape level is read, and the
+// escapes of the literal under it are kept for the normaliser.
+func TestUnescapeMySQL(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{`_utf8mb4\'x\'`, `_utf8mb4'x'`},
+		{`_utf8mb4\'a\\nb\'`, `_utf8mb4'a\nb'`},
+		{`_utf8mb4\'a\\0b\'`, `_utf8mb4'a\0b'`},
+		{`_utf8mb4\'it\\\'s\'`, `_utf8mb4'it\'s'`},
+		{`(_utf8mb4\'c\\\\\\\'d\')`, `(_utf8mb4'c\\\'d')`},
+		{`CURRENT_TIMESTAMP(6)`, `CURRENT_TIMESTAMP(6)`},
+	} {
+		if got := migrate.UnescapeMySQL(c.in); got != c.want {
+			t.Errorf("%s: %s, want %s", c.in, got, c.want)
+		}
+	}
+}
+
+// TestMySQLDefault: a COLUMN_DEFAULT in the model's spelling.
+func TestMySQLDefault(t *testing.T) {
+	for _, c := range []struct {
+		typ  string
+		expr bool
+		def  string
+		want string
+	}{
+		{"text", true, `_utf8mb4\'a\\nb\'`, "('a\nb')"},
+		{"text", true, `_utf8mb4\'a\\0b\'`, "('a\x00b')"},
+		{"text", true, `_utf8mb4\'it\\\'s\'`, `('it''s')`},
+		{"int", true, `42`, `(42)`},
+		{"int", true, `1e2`, `(1e2)`},
+		{"tinyint(1)", true, `true`, `(true)`},
+		{"int", true, `NULL`, `(NULL)`},
+		{"int", true, `-(1)`, `-(1)`},
+		{"int", true, `(1 + 1)`, `(1 + 1)`},
+		{"datetime(6)", true, `CURRENT_TIMESTAMP(6)`, `CURRENT_TIMESTAMP(6)`},
+		{"varchar(8)", false, `CURRENT_TIMESTAMP`, `'CURRENT_TIMESTAMP'`},
+		{"int", false, `0`, `0`},
+	} {
+		if got := migrate.MySQLDefault(c.typ, c.expr, c.def); got != c.want {
+			t.Errorf("%s %v %s: %q, want %q", c.typ, c.expr, c.def, got, c.want)
+		}
+	}
+}
+
+// TestDriftNumberDefaults: a number default on a number column is compared
+// by value on every dialect; another value is a change, and on a text
+// column the text is the value.
+func TestDriftNumberDefaults(t *testing.T) {
+	schema := func(d velox.Dialect, typ, def string) *migrate.Schema {
+		s := &migrate.Schema{Dialect: d, Tables: []migrate.Table{{
+			Name:    "t",
+			Columns: []migrate.Column{{Name: "n", Type: typ, Default: def}},
+		}}}
+		if d == velox.MySQL {
+			s.Tables[0].Collation = "utf8mb4_bin"
+		}
+		return s
+	}
+	for _, c := range []struct {
+		d                 velox.Dialect
+		typ, printed, src string
+		changes           int
+	}{
+		{velox.Postgres, "numeric(10,2)", "0.00", "0", 0},
+		{velox.Postgres, "numeric(10,2)", "0", "0e0", 0},
+		{velox.Postgres, "double precision", "1.5", "1.50", 0},
+		{velox.Postgres, "integer", "100", "1e2", 0},
+		{velox.Postgres, "double precision", "1.5", "1.50001", 1},
+		{velox.MySQL, "double", "1.5", "1.50", 0},
+		{velox.MySQL, "decimal(5,2)", "-0.50", "-.5", 0},
+		{velox.MySQL, "double", "1.5", "1.50001", 1},
+		{velox.MySQL, "tinyint(1)", "1", "1.0", 0},
+		{velox.SQLite, "real", "0.0", "0", 0},
+		{velox.SQLite, "integer", "1", "2", 1},
+		{velox.Postgres, "text", "'0.00'", "'0'", 1},
+	} {
+		r, err := migrate.DriftOf(schema(c.d, c.typ, c.printed), schema(c.d, c.typ, c.src))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(r.Changes) != c.changes || len(r.Warnings) != 0 {
+			t.Errorf("%v %s %s, %s: changes %v, warnings %v", c.d, c.typ, c.printed, c.src, r.Changes, r.Warnings)
+		}
+	}
+}
+
+// TestDriftMySQLPrimaryKeyName: MySQL names every primary key PRIMARY, so
+// a snapshot naming it otherwise is no rename and no warning.
+func TestDriftMySQLPrimaryKeyName(t *testing.T) {
+	schema := func(name string) *migrate.Schema {
+		return &migrate.Schema{Dialect: velox.MySQL, Tables: []migrate.Table{{
+			Name: "t", Collation: "utf8mb4_bin",
+			Columns:    []migrate.Column{{Name: "id", Type: "bigint"}},
+			PrimaryKey: []string{"id"}, PrimaryKeyName: name,
+		}}}
+	}
+	for _, name := range []string{"t_pkey", ""} {
+		r, err := migrate.DriftOf(schema("PRIMARY"), schema(name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(r.Changes) != 0 || len(r.Warnings) != 0 {
+			t.Errorf("%q: changes %v, warnings %v", name, r.Changes, r.Warnings)
+		}
+	}
+}

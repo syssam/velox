@@ -49,9 +49,10 @@ func TestUpSessionInUTC(t *testing.T) {
 		d                 velox.Dialect
 		typ, probe, query string
 		zone              string // the file's session's
+		pid               string // the session's own number
 	}{
-		{velox.Postgres, "timestamp with time zone", `CREATE TABLE zone AS SELECT current_setting('TimeZone') AS tz;`, `SELECT current_setting('TimeZone')`, "UTC"},
-		{velox.MySQL, "timestamp(6)", "CREATE TABLE zone AS SELECT @@session.time_zone AS tz;", "SELECT @@session.time_zone", "+00:00"},
+		{velox.Postgres, "timestamp with time zone", `CREATE TABLE zone AS SELECT current_setting('TimeZone') AS tz;`, `SELECT current_setting('TimeZone')`, "UTC", `SELECT pg_backend_pid()`},
+		{velox.MySQL, "timestamp(6)", "CREATE TABLE zone AS SELECT @@session.time_zone AS tz;", "SELECT @@session.time_zone", "+00:00", `SELECT CONNECTION_ID()`},
 	} {
 		t.Run(c.d.String(), func(t *testing.T) {
 			db := zoned(t, c.d)
@@ -61,6 +62,13 @@ func TestUpSessionInUTC(t *testing.T) {
 			}}}
 			if c.d == velox.MySQL {
 				snap.Tables[0].Collation = "utf8mb4_bin"
+			}
+			// One connection: the run takes the pool's own, and must not give
+			// it back in UTC.
+			db.SetMaxOpenConns(1)
+			var before, after int64
+			if err := db.QueryRow(c.pid).Scan(&before); err != nil {
+				t.Fatal(err)
 			}
 			mustUp(t, db, dirOf(t, c.d, step{to: snap, name: "ev"}, files("0002_zone.sql", c.probe+"\n")))
 			var tz string
@@ -77,8 +85,10 @@ func TestUpSessionInUTC(t *testing.T) {
 			if len(r.Changes) != 0 || len(r.Warnings) != 0 {
 				t.Errorf("drift: %v, %v", r.Changes, r.Warnings)
 			}
-			// The pool's sessions keep their own zone.
-			db.SetMaxOpenConns(1)
+			// The run's connection was discarded, not pooled in UTC.
+			if err := db.QueryRow(c.pid).Scan(&after); err != nil || after == before {
+				t.Errorf("the pool's connection %d after the run, %d before; %v", after, before, err)
+			}
 			if err := db.QueryRow(c.query).Scan(&tz); err != nil || tz == c.zone {
 				t.Errorf("the pool's zone %q, %v", tz, err)
 			}

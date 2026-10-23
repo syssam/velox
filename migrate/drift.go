@@ -3,6 +3,8 @@ package migrate
 import (
 	"cmp"
 	"fmt"
+	"math/big"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -45,11 +47,14 @@ type note struct {
 // a copy of inspected, what differs only in spelling takes snapshot's
 // spelling before Diff compares the two: a predicate or check that
 // samePredicateIn calls the same with the enum types of both, an expression
-// default (with a warning when it does not), a date or time literal default
-// of one value (PostgreSQL's cast, MySQL's padded), a predicate or check
+// default (with a warning when it does not), a number default of one value
+// on a number column (0.00 and 0), a date or time literal default of one
+// value (PostgreSQL's cast, MySQL's padded), a predicate or check
 // the normaliser cannot read (with a warning when the texts differ), MySQL's
 // RESTRICT for no action, the names SQLite does not keep, matched by
-// definition, and a primary key Diff would refuse (with a warning).
+// definition, and a primary key Diff would refuse (with a warning); on
+// MySQL, a primary key's name, always PRIMARY there, and the index MySQL
+// makes for a foreign key no index covers.
 func drift(inspected *Schema, notes []note, snapshot *Schema) (*DriftReport, error) {
 	if inspected == nil || snapshot == nil {
 		return nil, &Error{Code: "nil", Reason: "drift needs the inspected schema and the snapshot"}
@@ -81,7 +86,16 @@ func drift(inspected *Schema, notes []note, snapshot *Schema) (*DriftReport, err
 			c.warnings = append(c.warnings, Warning{Object: n.object, Message: n.message})
 		}
 	}
-	changes, err := Diff(c.db, snapshot, DiffOptions{})
+	snap := snapshot
+	if len(c.implicit) > 0 {
+		snap = snapshot.clone()
+		for _, im := range c.implicit {
+			t := snap.table(im.table)
+			t.Indexes = append(t.Indexes, im.index)
+		}
+		snap.sort()
+	}
+	changes, err := Diff(c.db, snap, DiffOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -98,6 +112,13 @@ type drifter struct {
 	db, snap *Schema
 	enums    map[string]bool // the enum types of both, as enumCasts
 	warnings []Warning
+	implicit []implicitIndex // MySQL: the indexes it made for foreign keys
+}
+
+// implicitIndex is an index MySQL made for a foreign key of table.
+type implicitIndex struct {
+	table TableRef
+	index Index
 }
 
 // same is samePredicateIn with the enum types of both schemas.
@@ -119,6 +140,10 @@ func (c *drifter) table(t, u *Table) {
 		c.warn(ref, "the database has %s and the snapshot %s; change it by hand", keyText(t.PrimaryKey), keyText(u.PrimaryKey))
 		t.PrimaryKey = slices.Clone(u.PrimaryKey)
 	}
+	if c.d == velox.MySQL {
+		// MySQL names every primary key PRIMARY and holds no other name.
+		t.PrimaryKeyName = u.PrimaryKeyName
+	}
 	if (t.PrimaryKeyName == "") != (u.PrimaryKeyName == "") {
 		c.warn(ref, "the database names the primary key %q and the snapshot %q; change it by hand", t.PrimaryKeyName, u.PrimaryKeyName)
 		t.PrimaryKeyName = u.PrimaryKeyName
@@ -127,6 +152,9 @@ func (c *drifter) table(t, u *Table) {
 	for i := range t.Columns {
 		tc := &t.Columns[i]
 		uc := u.column(tc.Name)
+		if uc != nil && tc.Default != uc.Default && numberType(c.d, uc.Type) && sameNumber(tc.Default, uc.Default) {
+			tc.Default = uc.Default // 0.00 is 0
+		}
 		if uc != nil && tc.Default != uc.Default && c.d == velox.MySQL {
 			// A time literal as MySQL prints it, padded: one value, or a change.
 			if same, ok := mysqlSameTime(uc.Type, tc.Default, uc.Default); same && ok {
@@ -193,6 +221,14 @@ func (c *drifter) table(t, u *Table) {
 	}
 
 	if c.d == velox.MySQL {
+		// The index MySQL makes for a foreign key no index covers, its name
+		// and columns the key's: the snapshot is compared as if it had it.
+		for _, ix := range t.Indexes {
+			if fk := t.foreignKey(ix.Name); fk != nil && !ix.Unique && ix.Where == "" &&
+				slices.Equal(ix.Columns, fk.Columns) && u.index(ix.Name) == nil && u.foreignKey(ix.Name) != nil {
+				c.implicit = append(c.implicit, implicitIndex{t.Ref(), ix})
+			}
+		}
 		for i := range t.ForeignKeys {
 			tf := &t.ForeignKeys[i]
 			if uf := u.foreignKey(tf.Name); uf != nil && restricts(tf.OnDelete) && restricts(uf.OnDelete) {
@@ -301,4 +337,35 @@ func mysqlSameTime(typ, a, b string) (same, ok bool) {
 		return false, false
 	}
 	return sameTime(layout, &predNode{kind: nodeLit, str: true, val: va}, &predNode{kind: nodeLit, str: true, val: vb})
+}
+
+// numberLiteral is a number literal as a default holds it.
+var numberLiteral = regexp.MustCompile(`^[-+]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][-+]?[0-9]+)?$`)
+
+// sameNumber reports whether a and b are number literals of one value:
+// 0, 0.00 and 0e0.
+func sameNumber(a, b string) bool {
+	if !numberLiteral.MatchString(a) || !numberLiteral.MatchString(b) {
+		return false
+	}
+	x, okx := new(big.Rat).SetString(strings.TrimPrefix(a, "+"))
+	y, oky := new(big.Rat).SetString(strings.TrimPrefix(b, "+"))
+	return okx && oky && x.Cmp(y) == 0
+}
+
+// numberTypes are the number types of each dialect, by their first word.
+var numberTypes = map[string]bool{
+	"smallint": true, "integer": true, "int": true, "bigint": true, "tinyint": true, "mediumint": true,
+	"numeric": true, "decimal": true, "real": true, "double": true, "float": true,
+	"int2": true, "int4": true, "int8": true, "float4": true, "float8": true,
+}
+
+// numberType reports whether typ, canonical for d, is a number type, whose
+// literal default is its value.
+func numberType(d velox.Dialect, typ string) bool {
+	word := typ
+	if i := strings.IndexAny(word, "( "); i >= 0 {
+		word = word[:i]
+	}
+	return numberTypes[word] && (d != velox.Postgres || !strings.HasSuffix(typ, "[]"))
 }

@@ -194,7 +194,8 @@ func (r *myReader) columns(mt *myTable) error {
 // mysqlDefault is a COLUMN_DEFAULT in the model's spelling. NULL is no
 // default. An expression (DEFAULT_GENERATED) is as printed, information
 // schema's escapes read, but a lone literal, _utf8mb4'…', is the model's
-// ('…'). A literal of a string, enum, set, date or time type is quoted
+// ('…'), and a number, true, false or NULL, which MySQL prints bare, is in
+// parentheses again. A literal of a string, enum, set, date or time type is quoted
 // again, MySQL printing it bare; a decimal loses the zeros its scale pads
 // it with; any other is as printed.
 func mysqlDefault(typ string, expr bool, def sql.NullString) string {
@@ -215,6 +216,9 @@ func mysqlDefault(typ string, expr bool, def sql.NullString) string {
 			if v, end, ok := unquoteAt(lit, 0, true); ok && end == len(lit) {
 				return "(" + ddl.Literal(velox.MySQL, v) + ")"
 			}
+		}
+		if literalDefault(velox.MySQL, s) {
+			return "(" + s + ")" // (42), (TRUE) and (NULL) print bare
 		}
 		return s
 	}
@@ -255,7 +259,7 @@ func unescapeMySQL(s string) string {
 
 const myIndexesQuery = `SELECT INDEX_NAME, NON_UNIQUE, COLUMN_NAME, SUB_PART, COALESCE(COLLATION, ''), INDEX_TYPE, IS_VISIBLE
 FROM information_schema.STATISTICS
-WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND INDEX_NAME <> 'PRIMARY'
+WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
 ORDER BY INDEX_NAME, SEQ_IN_INDEX`
 
 // myIndex is an index as its rows of STATISTICS give it.
@@ -267,10 +271,11 @@ type myIndex struct {
 	kind            string
 }
 
-// indexes reads mt's indexes but the primary key. An index over an
-// expression or a prefix of a column is a note and left out; what else an
-// index has that the model cannot hold (a type but BTREE, DESC, INVISIBLE)
-// is a note, and the index is read without it.
+// indexes reads mt's indexes but the primary key, whose index gives notes
+// only: a prefix or DESC. An index over an expression or a prefix of a
+// column is a note and left out; what else an index has that the model
+// cannot hold (a type but BTREE, DESC, INVISIBLE) is a note, and the index
+// is read without it.
 func (r *myReader) indexes(mt *myTable) error {
 	var list []*myIndex
 	err := r.each(myIndexesQuery, []any{mt.schema, mt.t.Name}, func(rows *sql.Rows) error {
@@ -312,6 +317,15 @@ func (r *myReader) indexes(mt *myTable) error {
 			has = append(has, "the invisible attribute")
 		}
 		switch {
+		case mi.ix.Name == "PRIMARY":
+			// The key's columns are keys'; its index is read for notes only.
+			if len(mi.prefix) > 0 {
+				has = append(has, "the prefix "+strings.Join(mi.prefix, ", "))
+			}
+			if len(has) > 0 {
+				r.note(mt, mi.ix.Name, "the primary key has "+strings.Join(has, ", ")+", which the model cannot hold; it is compared without")
+			}
+			continue
 		case mi.expr:
 			r.note(mt, mi.ix.Name, "the index is over an expression, which the model cannot hold; it is not compared")
 			continue

@@ -99,6 +99,14 @@ func mysqlSchema() *migrate.Schema {
 			{Name: "motto", Type: "varchar(64)", Default: `'it''s a \\ test'`},
 			{Name: "parent_id", Type: "bigint", Nullable: true},
 			{Name: "active", Type: "tinyint(1)", Default: "1"},
+			// Expressions that MySQL prints bare, and a line break.
+			{Name: "n42", Type: "int", Default: "(42)"},
+			{Name: "flag", Type: "tinyint(1)", Default: "(TRUE)"},
+			{Name: "nul", Type: "int", Nullable: true, Default: "(NULL)"},
+			{Name: "word", Type: "varchar(8)", Default: "('a')"},
+			{Name: "lines", Type: "text", Default: "('a\nb')"},
+			// A foreign key without an index of its own: MySQL makes one.
+			{Name: "owner_id", Type: "bigint", Nullable: true},
 		},
 		PrimaryKey:     []string{"id"},
 		PrimaryKeyName: "PRIMARY",
@@ -109,10 +117,14 @@ func mysqlSchema() *migrate.Schema {
 			{Name: "g_parent_id", Columns: []string{"parent_id"}},
 			{Name: "g_qty", Columns: []string{"qty"}, Unique: true},
 		},
-		ForeignKeys: []migrate.ForeignKey{{Name: "g_parent", Columns: []string{"parent_id"},
-			RefTable: migrate.TableRef{Name: "g"}, RefColumns: []string{"id"}, OnDelete: "SET NULL"}},
+		ForeignKeys: []migrate.ForeignKey{
+			{Name: "g_owner", Columns: []string{"owner_id"}, RefTable: migrate.TableRef{Name: "g"}, RefColumns: []string{"id"}},
+			{Name: "g_parent", Columns: []string{"parent_id"},
+				RefTable: migrate.TableRef{Name: "g"}, RefColumns: []string{"id"}, OnDelete: "SET NULL"},
+		},
 		Checks: []migrate.Check{
 			{Name: "g_kind_check", Expr: "`kind` IN ('a', 'b')"},
+			{Name: "g_line_check", Expr: "kind <> 'a\nb'"},
 			{Name: "g_motto_check", Expr: `motto <> 'it''s' OR motto NOT LIKE 'a\\_%'`},
 			{Name: "g_not_check", Expr: "NOT (qty = 7)"},
 			{Name: "g_qty_check", Expr: "qty >= -5 OR qty IS NULL"},
@@ -228,7 +240,9 @@ func TestInspectMySQLDefaults(t *testing.T) {
 	// a time literal, which drift compares by value.
 	s, want2 := mustInspectMySQL(t, db), mysqlSchema()
 	s.Tables[0].Checks, want2.Tables[0].Checks = s.Tables[0].Checks[:1], want2.Tables[0].Checks[:1]
-	for name, printed := range map[string]string{"stamp": "'2020-01-01 00:00:00.000000'", "clock": "'10:00:00'"} {
+	// MySQL made g_owner's index; drift does not count it.
+	s.Tables[0].Indexes = slices.DeleteFunc(s.Tables[0].Indexes, func(ix migrate.Index) bool { return ix.Name == "g_owner" })
+	for name, printed := range map[string]string{"stamp": "'2020-01-01 00:00:00.000000'", "clock": "'10:00:00'", "flag": "(true)"} {
 		if got := column(&s.Tables[0], name).Default; got != printed {
 			t.Errorf("%s's default %s, want %s", name, got, printed)
 		}
@@ -357,6 +371,7 @@ func TestInspectMySQLUnheld(t *testing.T) {
 			"INDEX p_expr ((b + 1)), INDEX p_inv (c) INVISIBLE, INDEX p_plain (a), " +
 			"CONSTRAINT p_unenforced CHECK (b > 0) NOT ENFORCED" +
 			") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+		"CREATE TABLE k (a varchar(20) NOT NULL, b int NOT NULL, PRIMARY KEY (a(5), b DESC)) COLLATE=utf8mb4_bin",
 		"CREATE TABLE u (id bigint PRIMARY KEY, p_id bigint, INDEX u_p_id (p_id), CONSTRAINT u_p FOREIGN KEY (p_id) REFERENCES p (id) ON UPDATE CASCADE) COLLATE=utf8mb4_bin",
 	} {
 		pgExec(t, db, q)
@@ -378,6 +393,7 @@ func TestInspectMySQLUnheld(t *testing.T) {
 		"p.hid":          {"invisible"},
 		"p.p_unenforced": {"NOT ENFORCED"},
 		"u.u_p":          {"ON UPDATE CASCADE"},
+		"k.PRIMARY":      {"prefix a(5)", "DESC"},
 	}
 	got := map[string]string{}
 	for _, n := range notes {
