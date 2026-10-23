@@ -162,7 +162,7 @@ func TestSnapshotRefusesDialect(t *testing.T) {
 	for _, d := range []velox.Dialect{0, 4, 255} {
 		b, err := (&Schema{Dialect: d}).MarshalJSON()
 		e, ok := err.(*Error)
-		if !ok || e.Code != "dialect" || b != nil {
+		if !ok || e.Code != "dialect" || b != nil || err.Error() != `migrate: the schema has the unknown dialect "`+d.String()+`"` {
 			t.Errorf("%v: %s, %v", d, b, err)
 		}
 		if _, err := json.Marshal(&Schema{Dialect: d}); err == nil {

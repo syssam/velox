@@ -15,4 +15,22 @@
 // own, the main script, and an online script of units for what must not
 // hold a lock for long. [NewPlan] runs the four in one call, and refuses a
 // plan with a destructive change not allowed with a [*BlockedError].
+//
+// The other refusals are [*Error] values, whose Code names the failure:
+//
+//   - "nil": a schema Diff or Render needs is nil.
+//   - "dialect": a schema's dialect is not PostgreSQL, MySQL or SQLite, or
+//     two schemas' dialects differ.
+//   - "schema": a schema lists a table, an enum type, or a table's column,
+//     index or constraint twice.
+//   - "primary-key": a table's primary key changes, which Diff leaves to a
+//     hand-written migration.
+//   - "rename": a rename names a table or column that is not there, or one
+//     that is there already.
+//   - "render": Render was given a change it cannot write: nil, not one Diff
+//     gives for the dialect, about what to lacks, or an identity change
+//     whose sequence from does not name.
+//   - "allow": ParseAllow was given an item it cannot read.
+//   - "json": UnmarshalJSON was given malformed JSON.
+//   - "version": UnmarshalJSON was given another version of the snapshot.
 package migrate

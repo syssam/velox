@@ -24,7 +24,7 @@ type snapshot struct {
 // refuses a Dialect that is not one of the three. It does not change s.
 func (s Schema) MarshalJSON() ([]byte, error) {
 	if !knownDialect(s.Dialect) {
-		return nil, dialectError(s.Dialect.String())
+		return nil, &Error{Code: "dialect", Reason: fmt.Sprintf("the schema has the unknown dialect %q", s.Dialect.String())}
 	}
 	c := s.clone()
 	c.sort()
@@ -34,10 +34,6 @@ func (s Schema) MarshalJSON() ([]byte, error) {
 // knownDialect reports whether d is a dialect a snapshot can hold.
 func knownDialect(d velox.Dialect) bool {
 	return d == velox.Postgres || d == velox.MySQL || d == velox.SQLite
-}
-
-func dialectError(name string) error {
-	return &Error{Code: "dialect", Reason: fmt.Sprintf("schema.json has the unknown dialect %q", name)}
 }
 
 // UnmarshalJSON reads what MarshalJSON writes. It refuses another version, a
@@ -58,7 +54,7 @@ func (s *Schema) UnmarshalJSON(data []byte) error {
 		}
 	}
 	if d == 0 {
-		return dialectError(in.Dialect)
+		return &Error{Code: "dialect", Reason: fmt.Sprintf("schema.json has the unknown dialect %q", in.Dialect)}
 	}
 	out := Schema{Dialect: d, Tables: in.Tables, Enums: in.Enums}
 	if err := out.validate("schema.json"); err != nil {

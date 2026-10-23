@@ -72,10 +72,10 @@ type Directives struct {
 // recorded as an allow directive. A script with no statement is left out.
 //
 // Its errors are *Error values: either schema is nil ("nil"), the dialects
-// differ ("dialect"), or a change is not one Diff gives for the dialect, or
-// names what to lacks, or a PostgreSQL identity change needs the name of a
-// sequence from does not give ("render"). Render does not change its
-// arguments.
+// differ or one is not PostgreSQL, MySQL or SQLite ("dialect"), or a change
+// is nil, is not one Diff gives for the dialect, names what to lacks, or is
+// a PostgreSQL identity change that needs the name of a sequence from does
+// not give ("render"). Render does not change its arguments.
 func Render(from, to *Schema, changes []Change, opts RenderOptions) ([]Script, error) {
 	if from == nil || to == nil {
 		return nil, &Error{Code: "nil", Reason: "Render needs two schemas"}

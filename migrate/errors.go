@@ -9,12 +9,12 @@ import (
 type Error struct {
 	Pos    string // the schema's file:line, when known
 	Object string // the table, column, index or constraint it is about
-	Code   string // names the failure for programs: "primary-key", "rename"
+	Code   string // names the failure for programs; the package doc lists the codes
 	Reason string
 }
 
 // Error is "migrate: " and the non-empty of Pos, Object and Reason, joined
-// by ": ". Code names the failure for programs ("primary-key", "rename").
+// by ": ".
 func (e *Error) Error() string {
 	var b strings.Builder
 	b.WriteString("migrate: ")
