@@ -112,8 +112,13 @@ func (d *differ) renameColumns(tables map[TableRef]TableRef, m map[ColumnRef]str
 			rename(t.Indexes[i].Columns)
 			t.Indexes[i].Where = renameIdent(d.mid.Dialect, t.Indexes[i].Where, k.Column, dst)
 		}
+		// MySQL refuses to rename a column a check uses, so there the
+		// check keeps its expression: it is dropped before the rename and
+		// added after.
 		for i := range t.Checks {
-			t.Checks[i].Expr = renameIdent(d.mid.Dialect, t.Checks[i].Expr, k.Column, dst)
+			if d.mid.Dialect != velox.MySQL {
+				t.Checks[i].Expr = renameIdent(d.mid.Dialect, t.Checks[i].Expr, k.Column, dst)
+			}
 		}
 		for i := range t.ForeignKeys {
 			rename(t.ForeignKeys[i].Columns)
@@ -250,6 +255,7 @@ func (d *differ) renameObjects() {
 				// A key dropped around a type change is not renamed.
 				if t.foreignKey(uf.Name) == nil && sameForeignKey(*tf, uf) && !d.keyRetyped(ref, uf) {
 					d.add(RenameConstraint{Table: ref, From: tf.Name, To: uf.Name}, 2, 4, ref, 0, tf.Name)
+					d.keyRenames[[3]string{ref.Schema, ref.Name, uf.Name}] = len(d.out) - 1
 					tf.Name = uf.Name
 					break
 				}

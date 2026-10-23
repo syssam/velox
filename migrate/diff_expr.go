@@ -9,33 +9,42 @@ import (
 
 // renameIdent is the SQL expression expr with the column from renamed to:
 // each identifier that names it, quoted or not, outside string literals and
-// not a function's name. An unquoted name compares without case, as the
-// databases fold it; the new name is unquoted when it needs no quotes.
+// not a function's name. On PostgreSQL an unquoted name is folded to lower
+// case and a quoted one compares exactly; MySQL and SQLite compare both
+// without case. The new name is unquoted when it needs no quotes.
+//
+// It reads identifiers, not the grammar: a keyword spelled like the column,
+// such as year in EXTRACT(year FROM …), is renamed too. Diff only compares
+// what it returns, so a miss makes a rename a drop and an add, never wrong
+// SQL.
 func renameIdent(d velox.Dialect, expr, from, to string) string {
 	if expr == "" || from == to {
 		return expr
+	}
+	same := func(name string, quoted bool) bool {
+		switch {
+		case d != velox.Postgres:
+			return strings.EqualFold(name, from)
+		case quoted:
+			return name == from
+		}
+		return strings.ToLower(name) == from
 	}
 	var b strings.Builder
 	for i := 0; i < len(expr); {
 		c := expr[i]
 		switch {
 		case c == '\'' || c == '"' && d == velox.MySQL: // a string literal
-			j := i + 1
-			for j < len(expr) {
-				if d == velox.MySQL && expr[j] == '\\' {
-					j += 2
-					continue
-				}
-				if expr[j] == c {
-					if j+1 < len(expr) && expr[j+1] == c {
-						j += 2
-						continue
-					}
-					break
-				}
-				j++
-			}
-			j = min(j+1, len(expr))
+			j := stringEnd(expr, i, d == velox.MySQL)
+			b.WriteString(expr[i:j])
+			i = j
+		case d == velox.Postgres && (c == 'E' || c == 'e') && i+1 < len(expr) && expr[i+1] == '\'' &&
+			(i == 0 || !wordByte(expr[i-1])): // an escape string
+			j := stringEnd(expr, i+1, true)
+			b.WriteString(expr[i:j])
+			i = j
+		case d == velox.Postgres && c == '$' && dollarEnd(expr, i) > 0: // a dollar-quoted string
+			j := dollarEnd(expr, i)
 			b.WriteString(expr[i:j])
 			i = j
 		case c == '"' || c == '`' && d != velox.Postgres: // a quoted identifier
@@ -53,7 +62,7 @@ func renameIdent(d velox.Dialect, expr, from, to string) string {
 				j++
 			}
 			j = min(j+1, len(expr))
-			if name.String() == from {
+			if same(name.String(), true) {
 				b.WriteString(ddl.Ident(d, to))
 			} else {
 				b.WriteString(expr[i:j])
@@ -71,7 +80,7 @@ func renameIdent(d velox.Dialect, expr, from, to string) string {
 			}
 			isCall := k < len(expr) && expr[k] == '('
 			switch {
-			case c >= '0' && c <= '9', isCall, !strings.EqualFold(word, from):
+			case c >= '0' && c <= '9', isCall, !same(word, false):
 				b.WriteString(word)
 			case plainName(to):
 				b.WriteString(to)
@@ -85,6 +94,49 @@ func renameIdent(d velox.Dialect, expr, from, to string) string {
 		}
 	}
 	return b.String()
+}
+
+// stringEnd is the index after the string literal that starts with the quote
+// at expr[i]: a doubled quote stays inside it, and so does a quote after \
+// when backslash escapes.
+func stringEnd(expr string, i int, backslash bool) int {
+	q := expr[i]
+	j := i + 1
+	for j < len(expr) {
+		switch {
+		case backslash && expr[j] == '\\':
+			j += 2
+			continue
+		case expr[j] == q && j+1 < len(expr) && expr[j+1] == q:
+			j += 2
+			continue
+		case expr[j] == q:
+			return j + 1
+		}
+		j++
+	}
+	return len(expr)
+}
+
+// dollarEnd is the index after the PostgreSQL $tag$…$tag$ string at expr[i],
+// or 0 when there is none.
+func dollarEnd(expr string, i int) int {
+	j := i + 1
+	for j < len(expr) && expr[j] != '$' {
+		if !wordByte(expr[j]) || expr[j] >= '0' && expr[j] <= '9' && j == i+1 {
+			return 0
+		}
+		j++
+	}
+	if j == len(expr) {
+		return 0
+	}
+	tag := expr[i : j+1]
+	k := strings.Index(expr[j+1:], tag)
+	if k < 0 {
+		return 0
+	}
+	return j + 1 + k + len(tag)
 }
 
 // wordByte reports whether c can be part of an unquoted identifier or number.
@@ -103,4 +155,9 @@ func plainName(name string) bool {
 		}
 	}
 	return name != ""
+}
+
+// namesColumn reports whether the SQL expression expr names the column col.
+func namesColumn(d velox.Dialect, expr, col string) bool {
+	return renameIdent(d, expr, col, col+"_") != expr
 }

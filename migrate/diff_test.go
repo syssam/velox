@@ -325,19 +325,22 @@ func TestDiffStepOneUsesFromNames(t *testing.T) {
 }
 
 // A name to takes from a table dropped at the end is freed first: an
-// index's, or on MySQL, where they are per database, a foreign key's.
+// index's on PostgreSQL and SQLite, whose index names are per schema, and a
+// foreign key's on PostgreSQL and MySQL, whose constraint names are.
 func TestDiffReusedName(t *testing.T) {
 	for _, d := range allDialects {
-		first := "drop-index posts shared_idx"
-		if d == velox.MySQL {
-			first = "drop-foreign-key posts shared_fk"
+		var first []string
+		if d != velox.SQLite {
+			first = append(first, "drop-foreign-key posts shared_fk")
 		}
-		wantLines(t, d.String(), caseChanges(t, "reuse-dropped-name", d), []string{
-			first,
+		if d != velox.MySQL {
+			first = append(first, "drop-index posts shared_idx")
+		}
+		wantLines(t, d.String(), caseChanges(t, "reuse-dropped-name", d), append(first,
 			"rename-constraint users user_mentor shared_fk",
 			"add-index users shared_idx",
 			"drop-table posts",
-		})
+		))
 	}
 }
 
@@ -350,6 +353,25 @@ func TestDiffDropColumnInIndex(t *testing.T) {
 			want = []string{"drop-column users logins", "add-index users users_org_id", "drop-index users users_org_id_logins"}
 		}
 		wantLines(t, d.String(), caseChanges(t, "drop-column-in-index", d), want)
+
+		// MySQL would keep a unique index unique over the columns left, so
+		// it goes before the column on every dialect.
+		wantLines(t, d.String()+" unique", caseChanges(t, "drop-column-in-unique", d), []string{
+			"drop-index users users_name_logins_unique", "drop-column users logins",
+		})
+		// On MySQL a foreign key whose only index goes first goes with it,
+		// and comes back after its new index.
+		want = []string{"drop-index users users_org_id_logins_unique", "drop-column users logins", "add-index users users_org_id"}
+		if d == velox.MySQL {
+			want = []string{
+				"drop-foreign-key users users_org_id_fkey",
+				"drop-index users users_org_id_logins_unique",
+				"drop-column users logins",
+				"add-index users users_org_id",
+				"add-foreign-key users users_org_id_fkey",
+			}
+		}
+		wantLines(t, d.String()+" unique key", caseChanges(t, "drop-column-in-unique-key", d), want)
 	}
 }
 
@@ -364,6 +386,13 @@ func TestDiffRenameColumnRewrites(t *testing.T) {
 	for _, d := range allDialects {
 		wantLines(t, d.String(), caseChanges(t, "rename-column-check", d), want[d])
 	}
+	// MySQL refuses to rename a column a check uses: the check goes first and
+	// comes back after.
+	wantLines(t, "mysql opt-out", caseChanges(t, "rename-column-opt-out", velox.MySQL), []string{
+		"drop-check users users_role_check",
+		"rename-column users role kind",
+		"add-check users users_kind_check",
+	})
 	for _, d := range caseNamed("rename-column-where").on() {
 		cs := caseChanges(t, "rename-column-where", d)
 		var got []string

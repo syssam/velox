@@ -379,6 +379,11 @@ var (
 // foreign key users.org_id.
 func withFKIndex(m *loadjson.Model) { addIndex(m, "User", index.Fields("org_id", "created_at")) }
 
+// optOutRole makes users.role a varchar and a check on MySQL.
+func optOutRole(m *loadjson.Model) {
+	fieldOf(m, "User", "role").SchemaType = map[string]string{field.MySQL: "varchar(16)"}
+}
+
 // withReviewer gives posts a reviewer_id column.
 func withReviewer(m *loadjson.Model) {
 	addField(m, "Post", field.Int64("reviewer_id").Optional().Nillable())
@@ -495,6 +500,16 @@ var cases = []testCase{
 	{name: "drop-column-in-index", from: func(m *loadjson.Model) {
 		addIndex(m, "User", index.Fields("org_id", "logins"))
 	}, to: func(m *loadjson.Model) { dropField(m, "User", "logins") }},
+	{name: "drop-column-in-unique", from: func(m *loadjson.Model) {
+		addIndex(m, "User", index.Fields("name", "logins").Unique())
+	}, to: func(m *loadjson.Model) { dropField(m, "User", "logins") }},
+	{name: "drop-column-in-unique-key", from: func(m *loadjson.Model) {
+		addIndex(m, "User", index.Fields("org_id", "logins").Unique())
+	}, to: func(m *loadjson.Model) { dropField(m, "User", "logins") }},
+	{name: "rename-column-opt-out", from: optOutRole, to: func(m *loadjson.Model) {
+		optOutRole(m)
+		fieldOf(m, "User", "role").StorageKey = "kind"
+	}, opts: migrate.DiffOptions{RenameColumns: map[migrate.ColumnRef]string{{Table: users, Column: "role"}: "kind"}}},
 	{name: "rename-column-check", to: func(m *loadjson.Model) { fieldOf(m, "User", "role").StorageKey = "kind" },
 		opts: migrate.DiffOptions{RenameColumns: map[migrate.ColumnRef]string{{Table: users, Column: "role"}: "kind"}}},
 	{name: "rename-column-where", dialects: []velox.Dialect{velox.Postgres, velox.SQLite}, from: func(m *loadjson.Model) {

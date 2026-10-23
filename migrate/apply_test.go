@@ -128,6 +128,9 @@ func apply(s *Schema, c Change) error {
 		}
 		t.Columns = append(t.Columns, c.Column)
 	case DropColumn:
+		if err := mysqlColumnUse(s.Dialect, t, c.Column.Name, true); err != nil {
+			return err
+		}
 		n := len(t.Columns)
 		t.Columns = slices.DeleteFunc(t.Columns, func(col Column) bool { return col.Name == c.Column.Name })
 		if len(t.Columns) == n {
@@ -139,6 +142,9 @@ func apply(s *Schema, c Change) error {
 			}
 		}
 	case RenameColumn:
+		if err := mysqlColumnUse(s.Dialect, t, c.From, false); err != nil {
+			return err
+		}
 		col := colOf(t, c.From)
 		if col == nil || colOf(t, c.To) != nil {
 			return fmt.Errorf("cannot rename column %s to %s", c.From, c.To)
@@ -268,6 +274,26 @@ func apply(s *Schema, c Change) error {
 	return nil
 }
 
+// mysqlColumnUse is MySQL's refusal to drop or rename a column of t a check
+// uses (error 3959), and to drop one from a unique index of more columns,
+// which it would keep unique over the others.
+func mysqlColumnUse(d velox.Dialect, t *Table, col string, drop bool) error {
+	if d != velox.MySQL {
+		return nil
+	}
+	for _, ck := range t.Checks {
+		if namesColumn(d, ck.Expr, col) {
+			return fmt.Errorf("check %s uses column %s", ck.Name, col)
+		}
+	}
+	for _, ix := range t.Indexes {
+		if drop && ix.Unique && len(ix.Columns) > 1 && slices.Contains(ix.Columns, col) {
+			return fmt.Errorf("unique index %s would keep its other columns unique", ix.Name)
+		}
+	}
+	return nil
+}
+
 func tableOf(s *Schema, ref TableRef) (*Table, error) {
 	for i := range s.Tables {
 		if s.Tables[i].Ref() == ref {
@@ -301,6 +327,9 @@ func colOf(t *Table, name string) *Column {
 // used), the enum type of each PostgreSQL enum column; and that no two
 // tables, enums, or objects of one table share a name.
 func valid(s *Schema) error {
+	if err := namespaces(s); err != nil {
+		return err
+	}
 	enums := map[string]bool{}
 	for _, e := range s.Enums {
 		typ := enumTypeName(e.ref())
@@ -356,6 +385,9 @@ func valid(s *Schema) error {
 			if err := has("foreign key "+fk.Name, fk.Columns); err != nil {
 				return err
 			}
+			if s.Dialect == velox.MySQL && !covered(t, fk.Columns) {
+				return fmt.Errorf("foreign key %s of %s has no index", fk.Name, t.Name)
+			}
 			r := s.table(fk.RefTable)
 			if r == nil {
 				if s.Dialect != velox.SQLite {
@@ -374,6 +406,50 @@ func valid(s *Schema) error {
 				return fmt.Errorf("%s has two constraints %s", t.Name, ck.Name)
 			}
 			names[ck.Name] = true
+		}
+	}
+	return nil
+}
+
+// covered reports whether the primary key or an index of t leads with cols,
+// as MySQL needs for a foreign key.
+func covered(t *Table, cols []string) bool {
+	leads := func(ix []string) bool { return len(ix) >= len(cols) && slices.Equal(ix[:len(cols)], cols) }
+	return leads(t.PrimaryKey) || slices.ContainsFunc(t.Indexes, func(ix Index) bool { return leads(ix.Columns) })
+}
+
+// namespaces checks the names the dialect keeps across tables: index names
+// per schema on PostgreSQL and SQLite, foreign-key and check names per
+// schema on PostgreSQL and MySQL.
+func namespaces(s *Schema) error {
+	type key struct{ schema, name string }
+	indexes, constraints := map[key]string{}, map[key]string{}
+	for _, t := range s.Tables {
+		if s.Dialect != velox.MySQL {
+			for _, ix := range t.Indexes {
+				k := key{t.Schema, ix.Name}
+				if o, ok := indexes[k]; ok {
+					return fmt.Errorf("index %s is on %s and %s", ix.Name, o, t.Name)
+				}
+				indexes[k] = t.Name
+			}
+		}
+		if s.Dialect == velox.SQLite {
+			continue
+		}
+		var names []string
+		for _, fk := range t.ForeignKeys {
+			names = append(names, fk.Name)
+		}
+		for _, ck := range t.Checks {
+			names = append(names, ck.Name)
+		}
+		for _, n := range names {
+			k := key{t.Schema, n}
+			if o, ok := constraints[k]; ok && o != t.Name {
+				return fmt.Errorf("constraint %s is on %s and %s", n, o, t.Name)
+			}
+			constraints[k] = t.Name
 		}
 	}
 	return nil

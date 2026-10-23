@@ -43,7 +43,7 @@ func Diff(from, to *Schema, opts DiffOptions) ([]Change, error) {
 	if from.Dialect != to.Dialect {
 		return nil, &Error{Code: "dialect", Reason: fmt.Sprintf("from is a %s schema and to a %s one; Diff compares two schemas of one dialect", from.Dialect, to.Dialect)}
 	}
-	d := &differ{orig: from.clone(), mid: from.clone(), to: to.clone(), fromRef: map[TableRef]TableRef{}}
+	d := &differ{orig: from.clone(), mid: from.clone(), to: to.clone(), fromRef: map[TableRef]TableRef{}, keyRenames: map[[3]string]int{}}
 	for _, s := range [...]*Schema{d.orig, d.mid, d.to} {
 		s.sort()
 	}
@@ -63,6 +63,9 @@ func Diff(from, to *Schema, opts DiffOptions) ([]Change, error) {
 	d.mid.sort()
 	d.enums()
 	d.tables()
+	if d.to.Dialect == velox.MySQL {
+		d.keepKeysIndexed()
+	}
 	return d.changes(), nil
 }
 
@@ -71,6 +74,7 @@ func Diff(from, to *Schema, opts DiffOptions) ([]Change, error) {
 type differ struct {
 	orig, mid, to *Schema
 	fromRef       map[TableRef]TableRef        // a renamed table's name in from, by its name in to
+	keyRenames    map[[3]string]int            // the out index of a foreign key's rename, by (schema, table, new name)
 	retyped       map[TableRef]map[string]bool // the columns whose type changes, by table
 	out           []planned
 }
@@ -172,6 +176,60 @@ func (d *differ) tables() {
 	d.dropTables(dropped)
 }
 
+// keepKeysIndexed, on MySQL, drops in step 1 a foreign key whose every
+// index step 1 drops, as MySQL refuses to drop a key's last index (error
+// 1553), and adds it back in step 7, after the indexes. A key renamed in
+// step 2 is dropped under its from name instead.
+func (d *differ) keepKeysIndexed() {
+	for i := range d.to.Tables {
+		u := &d.to.Tables[i]
+		t := d.mid.table(u.Ref())
+		if t == nil {
+			continue
+		}
+		ref, oref := u.Ref(), u.Ref()
+		if r, ok := d.fromRef[ref]; ok {
+			oref = r
+		}
+		dropped, keys := map[string]bool{}, map[string]bool{}
+		for _, p := range d.out {
+			switch c := p.c.(type) {
+			case DropIndex:
+				if p.step == 1 && c.Table == oref {
+					dropped[c.Index.Name] = true
+				}
+			case DropForeignKey:
+				if p.step == 1 && c.Table == oref {
+					keys[c.ForeignKey.Name] = true
+				}
+			}
+		}
+		for _, fk := range t.ForeignKeys {
+			name := fk.Name
+			at, renamed := d.keyRenames[[3]string{ref.Schema, ref.Name, fk.Name}]
+			if renamed {
+				name = d.out[at].c.(RenameConstraint).From
+			}
+			leads := func(cols []string) bool {
+				return len(cols) >= len(fk.Columns) && slices.Equal(cols[:len(fk.Columns)], fk.Columns)
+			}
+			if keys[name] || leads(t.PrimaryKey) || slices.ContainsFunc(t.Indexes, func(ix Index) bool {
+				return !dropped[ix.Name] && leads(ix.Columns)
+			}) {
+				continue
+			}
+			if renamed {
+				d.out[at].c = nil
+			}
+			d.add(DropForeignKey{Table: oref, ForeignKey: *d.orig.table(oref).foreignKey(name)}, 1, 0, oref, 0, name)
+			if uf := u.foreignKey(fk.Name); uf != nil {
+				d.add(AddForeignKey{Table: ref, ForeignKey: *uf}, 7, 2, ref, 0, uf.Name)
+			}
+		}
+	}
+	d.out = slices.DeleteFunc(d.out, func(p planned) bool { return p.c == nil })
+}
+
 // findRetyped finds the columns of the tables both have whose type changes,
 // renames applied.
 func (d *differ) findRetyped() {
@@ -194,9 +252,9 @@ func (d *differ) findRetyped() {
 }
 
 // freeNames drops first the objects of t, a table dropped at the end, whose
-// names to gives another object: indexes, whose names are per database
-// schema, and on MySQL, where they are per database, foreign keys and
-// checks.
+// names to gives another object in t's database schema: indexes on
+// PostgreSQL and SQLite, and foreign keys and checks on PostgreSQL and
+// MySQL, where the names are per schema.
 func (d *differ) freeNames(t *Table) {
 	ref := t.Ref()
 	if d.to.Dialect != velox.MySQL {
@@ -205,6 +263,8 @@ func (d *differ) freeNames(t *Table) {
 				d.add(DropIndex{Table: ref, Index: ix}, 1, 2, ref, 0, ix.Name)
 			}
 		}
+	}
+	if d.to.Dialect == velox.SQLite {
 		return
 	}
 	t.ForeignKeys = slices.DeleteFunc(t.ForeignKeys, func(fk ForeignKey) bool {
@@ -241,6 +301,9 @@ func (d *differ) alterTable(t, u *Table) {
 	if r, ok := d.fromRef[ref]; ok {
 		oref = r
 	}
+	// ot holds from's names for the drops of step 1. An object renamed by
+	// definition is never dropped in step 1, so every object those drops
+	// name has its from name in mid, and ot has it.
 	ot := d.orig.table(oref)
 	gone := map[string]bool{}
 	for i, uc := range u.Columns {
@@ -284,8 +347,10 @@ func (d *differ) alterTable(t, u *Table) {
 		// others go after the adds, so a replacement exists first. MySQL
 		// drops an index with its last column, and shrinks one that keeps
 		// others, which then goes after the adds.
+		// A unique one it would keep unique over the others, so that goes
+		// first too.
 		onGone := slices.ContainsFunc(ti.Columns, func(c string) bool { return gone[c] })
-		if d.to.Dialect == velox.MySQL {
+		if d.to.Dialect == velox.MySQL && !ti.Unique {
 			onGone = !slices.ContainsFunc(ti.Columns, func(c string) bool { return !gone[c] })
 		}
 		if onGone || d.nameTaken(ref, ti.Name) {
