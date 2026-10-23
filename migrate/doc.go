@@ -33,4 +33,8 @@
 //   - "allow": ParseAllow was given an item it cannot read.
 //   - "json": UnmarshalJSON was given malformed JSON.
 //   - "version": UnmarshalJSON was given another version of the snapshot.
+//   - "file": ParseFile was given a migration file it cannot read: a bad
+//     name, an unterminated quote, comment or dollar quote, or a directive
+//     that is unknown, malformed, repeated, misplaced or refused on its
+//     dialect.
 package migrate

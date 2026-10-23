@@ -31,6 +31,7 @@ go test -run XXX -fuzz FuzzRender -fuzztime 20s .
 go test -run XXX -fuzz FuzzQuote -fuzztime 10s .
 go test -run XXX -fuzz FuzzScope -fuzztime 10s .
 go test -run XXX -fuzz FuzzLiteral -fuzztime 10s ./internal/ddl
+go test -run XXX -fuzz FuzzSplit -fuzztime 10s ./migrate
 
 go build -o bin/velox-gen ./cmd/velox-gen
 bin/velox-gen -check -out internal/testmodel -package testmodel ./internal/testmodel/schema

@@ -1,6 +1,10 @@
 package migrate
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/syssam/velox2"
+)
 
 // For the tests of package migrate_test.
 var (
@@ -14,3 +18,25 @@ func WriteScript(s Script) string {
 	writeScript(&b, s)
 	return b.String()
 }
+
+// A Piece is a piece of split.
+type Piece struct {
+	SQL, Directive string
+	Line           int
+}
+
+// Split is split.
+func Split(d velox.Dialect, src string) ([]Piece, error) {
+	ps, err := split(d, src)
+	var out []Piece
+	for _, p := range ps {
+		out = append(out, Piece(p))
+	}
+	return out, err
+}
+
+// FileBackslash is f.backslash.
+func FileBackslash(f File) bool { return f.backslash }
+
+// FileGenerated is f.generated.
+func FileGenerated(f File) bool { return f.generated }
