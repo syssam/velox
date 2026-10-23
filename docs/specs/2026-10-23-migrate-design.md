@@ -404,7 +404,7 @@ On MySQL an enum's values live in the column type, so a change of values is an `
 | `sqlite-rebuild` | review | a SQLite change that rebuilds the table (§8.4) |
 | `volatile-default` | review | PostgreSQL: adding a column with a `SchemaDefault` expression, which rewrites the table if the expression is volatile |
 
-Adding a native enum value is safe: at the end on MySQL, anywhere on PostgreSQL (`ADD VALUE … BEFORE`). `widen-type` on PostgreSQL is safe for `varchar` growth and `varchar`→`text` (no rewrite), and review otherwise (a rewrite under an exclusive lock).
+Adding a native enum value is safe: at the end on MySQL, anywhere on PostgreSQL (`ADD VALUE … BEFORE`). `widen-type` on PostgreSQL is safe for `varchar` growth and `varchar`→`text` (no rewrite), and review otherwise (a rewrite under an exclusive lock). On SQLite a type change gives only `sqlite-rebuild`, never `alter-type` or `widen-type`: the rebuild copies every value, which a column's type affinity keeps.
 
 **Allowing (decision 7).** `Blocked(findings, allow)` returns the destructive findings no `Allow` covers. `Allow{Code, Target}` covers one code, for one target (`users.name`, `users`) or for every target when `Target` is "". The flag form is `-allow drop-column=users.name,drop-table`. The allowed set extends the default (safe and review); it never replaces it. Each allowed finding is written into the file as a `-- velox:allow` directive. Each review finding is written as a `-- review:` comment above its statement.
 
