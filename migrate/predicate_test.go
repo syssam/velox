@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -103,8 +104,8 @@ func TestNormalizePredicate(t *testing.T) {
 
 // TestPredicatesPostgres creates each golden predicate as a partial index
 // and as a check on PostgreSQL, and reads them back: what PostgreSQL prints
-// is the predicate written, and not its neighbour of another meaning. With
-// -update it writes the printed lines.
+// is the predicate written, and not its neighbour of another meaning, and
+// Inspect reads it as printed. With -update it writes the printed lines.
 func TestPredicatesPostgres(t *testing.T) {
 	db, _ := freshDB(t, velox.Postgres)
 	db.SetMaxOpenConns(1)
@@ -144,6 +145,24 @@ func TestPredicatesPostgres(t *testing.T) {
 			cs[i].printed = printed
 		} else if c.printed != printed {
 			t.Errorf("%s: PostgreSQL prints %s, the golden %s (run with -update)", c.input, printed, c.printed)
+		}
+	}
+	// Inspect reads each index's predicate as PostgreSQL prints it, the
+	// input's predicate and not its neighbour's.
+	s := mustInspect(t, db, migrate.TableRef{Name: "g"})
+	for i, c := range cs {
+		name := fmt.Sprintf("g_%02d", i)
+		j := slices.IndexFunc(s.Tables[0].Indexes, func(ix migrate.Index) bool { return ix.Name == name })
+		if j < 0 {
+			t.Errorf("%s: Inspect has no index %s", c.input, name)
+			continue
+		}
+		where := s.Tables[0].Indexes[j].Where
+		if where != cs[i].printed {
+			t.Errorf("%s: Inspect reads %s, PostgreSQL prints %s", c.input, where, cs[i].printed)
+		}
+		if !same(velox.Postgres, where, c.input) || same(velox.Postgres, where, c.differs) {
+			t.Errorf("%s: Inspect's %s is not the input, or is %s", c.input, where, c.differs)
 		}
 	}
 	if *update {

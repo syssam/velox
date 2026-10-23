@@ -44,9 +44,9 @@ type note struct {
 // Only the tables snapshot has are compared, and the enum types they use. On
 // a copy of inspected, what differs only in spelling takes snapshot's
 // spelling before Diff compares the two: a predicate or check that
-// samePredicate calls the same, an expression default (with a warning when
-// it does not), a predicate or check the normaliser cannot read (with a
-// warning when the texts differ), MySQL's
+// samePredicateIn calls the same with the enum types of both, an expression
+// default (with a warning when it does not), a predicate or check the
+// normaliser cannot read (with a warning when the texts differ), MySQL's
 // RESTRICT for no action, the names SQLite does not keep, matched by
 // definition, and a primary key Diff would refuse (with a warning).
 func drift(inspected *Schema, notes []note, snapshot *Schema) (*DriftReport, error) {
@@ -62,7 +62,8 @@ func drift(inspected *Schema, notes []note, snapshot *Schema) (*DriftReport, err
 	if inspected.Dialect != snapshot.Dialect {
 		return nil, &Error{Code: "dialect", Reason: fmt.Sprintf("the database is %s and the snapshot %s", inspected.Dialect, snapshot.Dialect)}
 	}
-	c := &drifter{d: snapshot.Dialect, db: inspected.clone(), snap: snapshot}
+	c := &drifter{d: snapshot.Dialect, db: inspected.clone(), snap: snapshot,
+		enums: enumCasts(&Schema{Dialect: snapshot.Dialect, Enums: append(slices.Clone(snapshot.Enums), inspected.Enums...)})}
 	c.db.Tables = slices.DeleteFunc(c.db.Tables, func(t Table) bool { return snapshot.table(t.Ref()) == nil })
 	c.db.Enums = slices.DeleteFunc(c.db.Enums, func(e Enum) bool {
 		return snapshot.enum(e.ref()) == nil && len(usage(c.db, e.ref())) == 0
@@ -94,7 +95,13 @@ func drift(inspected *Schema, notes []note, snapshot *Schema) (*DriftReport, err
 type drifter struct {
 	d        velox.Dialect
 	db, snap *Schema
+	enums    map[string]bool // the enum types of both, as enumCasts
 	warnings []Warning
+}
+
+// same is samePredicateIn with the enum types of both schemas.
+func (c *drifter) same(a, b string) (same, comparable bool) {
+	return samePredicateIn(c.d, a, b, c.enums)
 }
 
 func (c *drifter) warn(object, format string, args ...any) {
@@ -123,7 +130,7 @@ func (c *drifter) table(t, u *Table) {
 			literalDefault(c.d, tc.Default) || literalDefault(c.d, uc.Default) {
 			continue
 		}
-		if same, _ := samePredicate(c.d, tc.Default, uc.Default); !same {
+		if same, _ := c.same(tc.Default, uc.Default); !same {
 			c.warn(ref+"."+tc.Name, "the default is %s in the database and %s in the snapshot", tc.Default, uc.Default)
 		}
 		tc.Default = uc.Default
@@ -136,7 +143,7 @@ func (c *drifter) table(t, u *Table) {
 			ti.Unique != ui.Unique || !slices.Equal(ti.Columns, ui.Columns) {
 			continue
 		}
-		same, comparable := samePredicate(c.d, ti.Where, ui.Where)
+		same, comparable := c.same(ti.Where, ui.Where)
 		switch {
 		case !comparable && !same:
 			c.warn(ref+"."+ti.Name, "the predicate is %s in the database and %s in the snapshot; one cannot be parsed, so they are not compared", ti.Where, ui.Where)
@@ -160,7 +167,7 @@ func (c *drifter) table(t, u *Table) {
 			}
 			continue
 		}
-		same, comparable := samePredicate(c.d, tc.Expr, uc.Expr)
+		same, comparable := c.same(tc.Expr, uc.Expr)
 		switch {
 		case same:
 		case !comparable:
@@ -232,7 +239,7 @@ func (c *drifter) sameText(a, b string) bool {
 	if a == "" || b == "" {
 		return false
 	}
-	same, comparable := samePredicate(c.d, a, b)
+	same, comparable := c.same(a, b)
 	return same && comparable
 }
 

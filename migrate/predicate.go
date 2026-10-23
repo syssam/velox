@@ -52,9 +52,18 @@ func normalized(d velox.Dialect, expr string) (string, bool) {
 // their trees match (match); else they are alike with their white space
 // collapsed. comparable is whether both parsed.
 func samePredicate(d velox.Dialect, a, b string) (same, comparable bool) {
+	return samePredicateIn(d, a, b, nil)
+}
+
+// samePredicateIn is samePredicate where a string literal cast to one of
+// enums, PostgreSQL enum types as a cast prints them (enumCasts), matches
+// the same literal uncast: PostgreSQL casts a literal compared with an enum
+// column to the column's type, and a label is its own value.
+func samePredicateIn(d velox.Dialect, a, b string, enums map[string]bool) (same, comparable bool) {
 	p, na, oka := parsePredicate(d, a)
 	_, nb, okb := parsePredicate(d, b)
 	if oka && okb {
+		p.enums = enums
 		return p.match(na, nb), true
 	}
 	return collapseSpace(d, a) == collapseSpace(d, b), false
@@ -135,12 +144,17 @@ func (p *predParser) matchAt(a, b *predNode, at int) bool {
 //     comparison;
 //   - a string literal to a date or time type that is the same value as the
 //     literal e;
-//   - a string literal to regclass, as a serial's default prints, that is e.
+//   - a string literal to regclass, as a serial's default prints, that is e;
+//   - a string literal to one of p.enums that is e, as an operand of a
+//     comparison or an IN element.
 func (p *predParser) elides(c, e *predNode, at int) bool {
 	if c.cast.mod || c.cast.array {
 		return false
 	}
 	k := c.kids[0]
+	if p.enums[c.text] {
+		return at == atCompare && k.str && e.str && k.val == e.val
+	}
 	switch c.cast.base {
 	case "numeric", "decimal":
 		if k.kind == nodeLit {
@@ -457,10 +471,28 @@ const (
 // predParser reads tokens by recursive descent; ok turns false at the first
 // thing it does not read.
 type predParser struct {
-	d    velox.Dialect
-	toks []predToken
-	i    int
-	ok   bool
+	d     velox.Dialect
+	toks  []predToken
+	i     int
+	ok    bool
+	enums map[string]bool // for match: the enum types, as enumCasts
+}
+
+// enumCasts is the enum types of s as a cast to each prints in a predicate
+// match reads: "users_role", and for one in another schema "billing.status"
+// and, as PostgreSQL prints it when the schema is on the search path,
+// "status".
+func enumCasts(s *Schema) map[string]bool {
+	p := &predParser{d: s.Dialect}
+	out := map[string]bool{}
+	for _, e := range s.Enums {
+		parts := []predName{{name: e.Name, quoted: true}}
+		out[p.name(parts)] = true
+		if e.Schema != "" {
+			out[p.name(append([]predName{{name: e.Schema, quoted: true}}, parts...))] = true
+		}
+	}
+	return out
 }
 
 func (p *predParser) peek(k int) predToken {

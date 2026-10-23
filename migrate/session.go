@@ -146,9 +146,12 @@ func (s *session) checkModes(files []File) error {
 // change any setting of the session, and a failed clean-up may leave the
 // lock or the run's settings on it, so none of it reaches the application's
 // other connections.
-func (s *session) close() {
-	_ = s.conn.Raw(func(any) error { return driver.ErrBadConn })
-	_ = s.conn.Close()
+func (s *session) close() { discard(s.conn) }
+
+// discard closes conn so that it never returns to the pool.
+func discard(conn *sql.Conn) {
+	_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+	_ = conn.Close()
 }
 
 // undo runs a clean-up statement, though ctx is gone. A failure is left to

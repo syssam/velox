@@ -114,3 +114,16 @@ func NormalizePredicate(d velox.Dialect, expr string) string { return normalizeP
 
 // SamePredicate is samePredicate.
 var SamePredicate = samePredicate
+
+// InspectNotes is inspect, its notes as Notes.
+func InspectNotes(ctx context.Context, db *sql.DB, d velox.Dialect, tables []TableRef) (*Schema, []Note, error) {
+	s, ns, err := inspect(ctx, db, d, tables)
+	var out []Note
+	for _, n := range ns {
+		out = append(out, Note{Table: n.table, Object: n.object, Message: n.message})
+	}
+	return s, out, err
+}
+
+// NormalizeDefault is normalizeDefault.
+func NormalizeDefault(d velox.Dialect, s string) string { return normalizeDefault(d, s) }

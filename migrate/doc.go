@@ -18,9 +18,11 @@
 //
 // The other refusals are [*Error] values, whose Code names the failure:
 //
-//   - "nil": a schema Diff or Render needs is nil.
+//   - "nil": a schema Diff, Render or Drift needs is nil, or Inspect was
+//     given no database.
 //   - "dialect": a schema's dialect is not PostgreSQL, MySQL or SQLite, or
-//     two schemas' dialects differ.
+//     two schemas' dialects differ, or Inspect was given a dialect it cannot
+//     read yet.
 //   - "schema": a schema lists a table, an enum type, or a table's column,
 //     or a named index or constraint, twice.
 //   - "primary-key": a table's primary key changes its columns, or gains or
@@ -60,9 +62,12 @@
 //     ResolveUndone.
 //
 // Each [Change] has a String, its kind and the object it acts on in one
-// line. A [DriftReport] is what tells a database from its snapshot: the
-// changes that would bring the database to it, and [Warning]s for what
-// differs only in spelling or what the model has no place for.
+// line. [Inspect] reads a database's tables as a Schema, and [Drift] reads
+// the tables a snapshot names and returns a [DriftReport], what tells the
+// database from the snapshot: the changes that would bring the database to
+// it, and [Warning]s for what differs only in spelling or what the model has
+// no place for. Both read on one connection of the database and close it
+// after.
 //
 // A directory holds velox.json, schema.json, the migration files and
 // velox.sum, which hashes the others. [ReadDir] reads one and returns a
