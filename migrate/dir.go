@@ -101,39 +101,39 @@ func (c Config) marshal() []byte {
 // configKeys is the members of velox.json's object. It refuses what is not
 // one object, a key given twice and a null value.
 func configKeys(data []byte) (map[string]json.RawMessage, error) {
-	bad := func(code, format string, args ...any) error {
-		return &Error{Code: code, Pos: "velox.json", Reason: fmt.Sprintf(format, args...)}
+	bad := func(format string, args ...any) error {
+		return &Error{Code: "config", Pos: "velox.json", Reason: fmt.Sprintf(format, args...)}
 	}
 	dec := json.NewDecoder(bytes.NewReader(data))
 	if tok, err := dec.Token(); err != nil {
-		return nil, bad("config", "%v", err)
+		return nil, bad("%v", err)
 	} else if tok != json.Delim('{') {
-		return nil, bad("config", "the content is not a JSON object")
+		return nil, bad("the content is not a JSON object")
 	}
 	out := map[string]json.RawMessage{}
 	for dec.More() {
 		tok, err := dec.Token()
 		if err != nil {
-			return nil, bad("config", "%v", err)
+			return nil, bad("%v", err)
 		}
 		key := tok.(string)
 		var v json.RawMessage
 		if err := dec.Decode(&v); err != nil {
-			return nil, bad("config", "%s: %v", key, err)
+			return nil, bad("%s: %v", key, err)
 		}
 		switch _, dup := out[key]; {
 		case dup:
-			return nil, bad("directory", "the key %q is given twice", key)
+			return nil, bad("the key %q is given twice", key)
 		case string(v) == "null":
-			return nil, bad("directory", "the key %q is null; leave it out for its default", key)
+			return nil, bad("the key %q is null; leave it out for its default", key)
 		}
 		out[key] = v
 	}
 	if _, err := dec.Token(); err != nil { // the closing brace
-		return nil, bad("config", "%v", err)
+		return nil, bad("%v", err)
 	}
 	if _, err := dec.Token(); err != io.EOF {
-		return nil, bad("config", "text after the JSON object")
+		return nil, bad("text after the JSON object")
 	}
 	return out, nil
 }

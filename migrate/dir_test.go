@@ -837,7 +837,7 @@ func TestConfigStrict(t *testing.T) {
 		{"null version", `{"version":null,"dialect":"postgres"}`, "version"},
 	} {
 		_, err := migrate.ReadDir(sumFS(t, map[string]string{"velox.json": c.json}))
-		e := asError(t, err, "directory")
+		e := asError(t, err, "config")
 		if !strings.Contains(err.Error(), `"`+c.key+`"`) || e.Pos != "velox.json" {
 			t.Errorf("%s: %v", c.name, err)
 		}
