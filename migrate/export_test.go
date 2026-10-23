@@ -55,3 +55,12 @@ var Generator = generator
 
 // ConfigJSON is the velox.json Add writes for c.
 func ConfigJSON(c Config) []byte { return c.marshal() }
+
+// LockName is lockName.
+var LockName = lockName
+
+// LockKey is lockKey.
+var LockKey = lockKey
+
+// CheckVersion is checkVersion.
+var CheckVersion = checkVersion

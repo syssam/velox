@@ -417,42 +417,6 @@ func TestRenderPostgresExecutes(t *testing.T) {
 	}
 }
 
-// pgDatabase is a new database beside dsn's, dropped when t ends.
-func pgDatabase(t *testing.T, admin *sql.DB, dsn string) *sql.DB {
-	t.Helper()
-	name := fmt.Sprintf("velox_migrate_%d_%d", os.Getpid(), time.Now().UnixNano())
-	pgExec(t, admin, `CREATE DATABASE "`+name+`"`)
-	db, err := sql.Open("pgx", dsnWithDatabase(dsn, name))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		_ = db.Close()
-		_, _ = admin.Exec(`DROP DATABASE IF EXISTS "` + name + `"`)
-	})
-	db.SetMaxOpenConns(1)
-	return db
-}
-
-// dsnWithDatabase is the URL dsn with its database replaced by name.
-func dsnWithDatabase(dsn, name string) string {
-	rest, query, _ := strings.Cut(dsn, "?")
-	if i := strings.LastIndex(rest, "/"); i > len("postgres://") {
-		rest = rest[:i]
-	}
-	if query != "" {
-		return rest + "/" + name + "?" + query
-	}
-	return rest + "/" + name
-}
-
-func pgExec(t *testing.T, db *sql.DB, q string) {
-	t.Helper()
-	if _, err := db.Exec(q); err != nil {
-		t.Fatalf("%s: %v", q, err)
-	}
-}
-
 // runPostgres runs ss as the runner will: a script in a transaction with
 // SET LOCAL lock_timeout, a no-transaction script statement by statement.
 func runPostgres(t *testing.T, db *sql.DB, ss []migrate.Script) {

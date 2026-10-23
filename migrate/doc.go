@@ -46,9 +46,22 @@
 //     present beside none, or of another dialect, or a file that cannot be
 //     read; or Dir.Add was given a plan with no script, a schema of another
 //     dialect, or a name outside a-z, 0-9 and _ or over 40 bytes.
+//   - "session": the runner's connection does not answer as velox.json's
+//     dialect, is below its minimum version (PostgreSQL 12, MySQL 8.0.19,
+//     SQLite 3.35; MariaDB is refused), names no MySQL database, or is a
+//     PostgreSQL session with standard_conforming_strings off; or a file
+//     the runner cannot run yet.
+//   - "history": the history table holds what the runner cannot read, or
+//     a file is pending below the highest applied version.
 //
 // A directory holds velox.json, schema.json, the migration files and
 // velox.sum, which hashes the others. [ReadDir] reads one and returns a
 // [*SumError] when velox.sum does not match; [Dir.Add] writes the next files
 // of a plan.
+//
+// [Up] applies a directory's pending files to a database, under a lock, each
+// in a transaction with its row in the history table; [Status] reads the
+// directory against the history without applying. An applied file edited or
+// gone is a [*ChecksumError], a version left part-way a [*DirtyError], and a
+// lock held past the wait [ErrLockWait].
 package migrate

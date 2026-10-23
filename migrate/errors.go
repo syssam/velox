@@ -1,6 +1,8 @@
 package migrate
 
 import (
+	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 )
@@ -63,3 +65,47 @@ type SumError struct{ Path string } // "velox.sum", as fsys names it
 func (e *SumError) Error() string {
 	return "migrate: " + e.Path + " is out of date; run velox-gen migrate hash if the edits are intended"
 }
+
+// A ChecksumError is the refusal of an applied version whose file was edited
+// or is gone.
+type ChecksumError struct {
+	Version      uint64
+	Path         string
+	Applied, Now string // Now is "" when the file is missing
+}
+
+// Error is "migrate: <Path> was applied with checksum <Applied> and is now
+// <Now>", or, when Now is "", "migrate: version <Version> is applied but the
+// directory has no file for it".
+func (e *ChecksumError) Error() string {
+	if e.Now == "" {
+		return fmt.Sprintf("migrate: version %d is applied but the directory has no file for it", e.Version)
+	}
+	return "migrate: " + e.Path + " was applied with checksum " + e.Applied + " and is now " + e.Now
+}
+
+// A DirtyError is a version left part-way: by a file that failed now, at
+// Statement of Statements, or found dirty in the history, with Statement 0.
+type DirtyError struct {
+	Version               uint64
+	Path                  string
+	Statement, Statements int
+	Err                   error
+}
+
+// Error, for a version found dirty, is "migrate: <Path>: version <Version>
+// is dirty: <Err>".
+func (e *DirtyError) Error() string {
+	msg := fmt.Sprintf("migrate: %s: version %d is dirty", e.Path, e.Version)
+	if e.Err != nil {
+		msg += ": " + e.Err.Error()
+	}
+	return msg
+}
+
+// Unwrap is Err.
+func (e *DirtyError) Unwrap() error { return e.Err }
+
+// ErrLockWait is the runner's refusal when the migration lock stays taken
+// for the whole lock wait.
+var ErrLockWait = errors.New("migrate: timed out waiting for the migration lock")
