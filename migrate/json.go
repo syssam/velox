@@ -22,7 +22,7 @@ type snapshot struct {
 // escapes <, > and & as encoding/json does, so that the bytes are the same
 // whether the caller uses this method, json.Marshal or json.MarshalIndent. It
 // refuses a Dialect that is not one of the three. It does not change s.
-func (s *Schema) MarshalJSON() ([]byte, error) {
+func (s Schema) MarshalJSON() ([]byte, error) {
 	if !knownDialect(s.Dialect) {
 		return nil, dialectError(s.Dialect.String())
 	}

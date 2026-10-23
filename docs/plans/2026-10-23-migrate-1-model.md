@@ -258,7 +258,7 @@ const Version = 3
 - Modify: `godoc_test.go` (`add("migrate", false, false)`).
 
 **Interfaces:**
-- Produces: §2's types and §14's model block, verbatim: `Schema`, `TableRef`, `ColumnRef`, `Table`, `Column`, `Index`, `ForeignKey`, `Check`, `Enum`, `(*Schema).Table`, `(*Schema).Equal`, `(*Schema).MarshalJSON`, `(*Schema).UnmarshalJSON`, `(*Table).Ref`, `TableRef.String`. And:
+- Produces: §2's types and §14's model block, verbatim: `Schema`, `TableRef`, `ColumnRef`, `Table`, `Column`, `Index`, `ForeignKey`, `Check`, `Enum`, `(*Schema).Table`, `(*Schema).Equal`, `Schema.MarshalJSON`, `(*Schema).UnmarshalJSON`, `(*Table).Ref`, `TableRef.String`. And:
 
 ```go
 type Error struct{ Pos, Object, Code, Reason string }

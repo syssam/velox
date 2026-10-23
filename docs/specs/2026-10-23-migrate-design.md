@@ -799,7 +799,7 @@ type Enum struct{ … }
 
 func (s *Schema) Table(ref TableRef) (*Table, bool) // the returned table must not be modified
 func (s *Schema) Equal(t *Schema) bool             // ignores Pos and column order
-func (s *Schema) MarshalJSON() ([]byte, error)
+func (s Schema) MarshalJSON() ([]byte, error)
 func (s *Schema) UnmarshalJSON(data []byte) error
 func (t *Table) Ref() TableRef
 func (r TableRef) String() string                  // "billing.invoices", or "invoices"

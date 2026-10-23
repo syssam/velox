@@ -219,3 +219,36 @@ func TestOrderedListsKeepTheirOrder(t *testing.T) {
 		}
 	}
 }
+
+func TestSnapshotMarshalsValues(t *testing.T) {
+	s := full()
+	want, err := s.MarshalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	type holder struct{ Schema Schema }
+	h, err := json.Marshal(holder{*s})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, v := range map[string]any{"value": *s, "pointer": s} {
+		got, err := json.Marshal(v)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if !bytes.Equal(got, want) {
+			t.Errorf("%s: %s, want %s", name, got, want)
+		}
+		var back Schema
+		if err := json.Unmarshal(got, &back); err != nil || !back.Equal(s) {
+			t.Errorf("%s: the round trip gives %v", name, err)
+		}
+	}
+	if !bytes.Equal(h, []byte(`{"Schema":`+string(want)+`}`)) {
+		t.Errorf("field: %s", h)
+	}
+	var back holder
+	if err := json.Unmarshal(h, &back); err != nil || !back.Schema.Equal(s) {
+		t.Errorf("field: the round trip gives %v", err)
+	}
+}
