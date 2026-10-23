@@ -12,7 +12,10 @@ import (
 	"testing"
 
 	"github.com/syssam/velox2"
+	"github.com/syssam/velox2/internal/gen/loadjson"
 	"github.com/syssam/velox2/migrate"
+	"github.com/syssam/velox2/schema"
+	"github.com/syssam/velox2/schema/field"
 )
 
 var update = flag.Bool("update", false, "write the golden files")
@@ -193,6 +196,9 @@ func TestLintWidenType(t *testing.T) {
 		{pgM, "character varying(10)", "character varying(20)", widen, migrate.Safe},
 		{pgM, "character varying(10)", "text", widen, migrate.Safe},
 		{pgM, "character varying(10)", "character varying", widen, migrate.Safe},
+		{pgM, "character varying", "text", widen, migrate.Safe},
+		{pgM, "text", "character varying", widen, migrate.Safe},
+		{pgM, "character varying", "character varying(10)", alter, migrate.Destructive},
 		{pgM, "integer", "smallint", alter, migrate.Destructive},
 		{pgM, "bigint", "integer", alter, migrate.Destructive},
 		{pgM, "double precision", "real", alter, migrate.Destructive},
@@ -355,25 +361,123 @@ func TestLintEnumChecks(t *testing.T) {
 	}
 }
 
-// TestLintPos: a finding carries the position of the element of the schema it
-// is about.
+// TestLintPos: an add or alter finding carries the position of the element of
+// to it is about; a drop finding carries none, as the element is no longer in
+// the schema.
 func TestLintPos(t *testing.T) {
-	c := caseNamed("add-column-required")
-	from, to := models(t, c, velox.Postgres)
-	want := column(table(to, "users"), "nickname").Pos
-	if want == "" {
-		t.Fatal("the column has no position")
+	pgM, lite := velox.Postgres, velox.SQLite
+	byName := func(t *testing.T, name string, d velox.Dialect) (*migrate.Schema, []migrate.Finding) {
+		c := caseNamed(name)
+		from, to := models(t, c, d)
+		return to, lint(t, from, diff(t, from, to, c.opts))
 	}
-	fs := lint(t, from, diff(t, from, to, c.opts))
-	if len(fs) != 1 || fs[0].Pos != want {
-		t.Errorf("add-required-column Pos %q, want %q: %+v", fs[0].Pos, want, fs)
+	find := func(t *testing.T, fs []migrate.Finding, code string) migrate.Finding {
+		t.Helper()
+		for _, f := range fs {
+			if f.Code == code {
+				return f
+			}
+		}
+		t.Fatalf("no %s finding in %v", code, codes(fs))
+		return migrate.Finding{}
 	}
-	c = caseNamed("drop-column")
-	from, to = models(t, c, velox.Postgres)
-	want = column(table(from, "users"), "email").Pos
-	for _, f := range lint(t, from, diff(t, from, to, c.opts)) {
-		if f.Code == "drop-column" && f.Pos != want {
-			t.Errorf("drop-column Pos %q, want %q", f.Pos, want)
+	for _, r := range []struct {
+		name string
+		d    velox.Dialect
+		code string
+		pos  func(to *migrate.Schema) string
+	}{
+		{"add-column-required", pgM, "add-required-column", func(to *migrate.Schema) string { return column(table(to, "users"), "nickname").Pos }},
+		{"add-column-schema-default", pgM, "volatile-default", func(to *migrate.Schema) string { return column(table(to, "users"), "seen_at").Pos }},
+		{"set-not-null", pgM, "set-not-null", func(to *migrate.Schema) string { return column(table(to, "users"), "bio").Pos }},
+		{"widen-int", pgM, "widen-type", func(to *migrate.Schema) string { return column(table(to, "users"), "logins").Pos }},
+		{"add-index", pgM, "add-index", func(to *migrate.Schema) string {
+			for _, ix := range table(to, "users").Indexes {
+				if ix.Name == "users_created_at" {
+					return ix.Pos
+				}
+			}
+			return ""
+		}},
+		{"add-unique", pgM, "add-unique", func(to *migrate.Schema) string {
+			for _, ix := range table(to, "users").Indexes {
+				if ix.Name == "users_name_unique" {
+					return ix.Pos
+				}
+			}
+			return ""
+		}},
+		{"add-foreign-key", pgM, "add-foreign-key", func(to *migrate.Schema) string {
+			for _, fk := range table(to, "posts").ForeignKeys {
+				if fk.Name == "posts_reviewer_id_fkey" {
+					return fk.Pos
+				}
+			}
+			return ""
+		}},
+		{"enum-append", lite, "add-check", func(to *migrate.Schema) string {
+			for _, ck := range table(to, "users").Checks {
+				if ck.Name == "users_role_check" {
+					return ck.Pos
+				}
+			}
+			return ""
+		}},
+		{"enum-remove", pgM, "drop-enum-value", func(to *migrate.Schema) string {
+			for _, e := range to.Enums {
+				if e.Name == "users_role" {
+					return e.Pos
+				}
+			}
+			return ""
+		}},
+		{"add-column-required", lite, "sqlite-rebuild", func(to *migrate.Schema) string { return column(table(to, "users"), "nickname").Pos }},
+	} {
+		t.Run(r.name+"/"+r.code, func(t *testing.T) {
+			to, fs := byName(t, r.name, r.d)
+			want := r.pos(to)
+			if want == "" {
+				t.Fatal("the element has no position")
+			}
+			if got := find(t, fs, r.code).Pos; got != want {
+				t.Errorf("Pos %q, want %q", got, want)
+			}
+		})
+	}
+
+	// Every drop, with a position on the element from holds, gives none.
+	const pos = "schema/old.go:7"
+	users := migrate.TableRef{Name: "users"}
+	cols := func(names ...string) []migrate.Column {
+		var out []migrate.Column
+		for _, n := range names {
+			out = append(out, migrate.Column{Name: n, Type: "text", Pos: pos})
+		}
+		return out
+	}
+	ix := migrate.Index{Name: "users_a", Columns: []string{"a"}, Pos: pos}
+	fk := migrate.ForeignKey{Name: "users_b_fkey", Columns: []string{"b"}, RefTable: migrate.TableRef{Name: "orgs"}, RefColumns: []string{"id"}, Pos: pos}
+	ck := migrate.Check{Name: "users_c_check", Expr: `"c" > ''`, Pos: pos}
+	tb := migrate.Table{Name: "users", Columns: cols("a", "b", "c", "d"), Indexes: []migrate.Index{ix}, ForeignKeys: []migrate.ForeignKey{fk}, Checks: []migrate.Check{ck}, Pos: pos}
+	for _, d := range allDialects {
+		from := &migrate.Schema{Dialect: d, Tables: []migrate.Table{tb}}
+		for _, c := range []migrate.Change{
+			migrate.DropTable{Table: tb},
+			migrate.DropColumn{Table: users, Column: cols("a")[0]}, // an indexed column: SQLite rebuilds
+			migrate.DropColumn{Table: users, Column: cols("d")[0]},
+			migrate.DropIndex{Table: users, Index: ix},
+			migrate.DropForeignKey{Table: users, ForeignKey: fk},
+			migrate.DropCheck{Table: users, Check: ck},
+		} {
+			fs := lint(t, from, []migrate.Change{c})
+			if len(fs) == 0 && d != velox.SQLite {
+				t.Errorf("%v on %v: no finding", c.Kind(), d)
+			}
+			for _, f := range fs {
+				if f.Pos != "" {
+					t.Errorf("%v on %v: %s has Pos %q", c.Kind(), d, f.Code, f.Pos)
+				}
+			}
 		}
 	}
 }
@@ -427,8 +531,10 @@ func TestBlocked(t *testing.T) {
 }
 
 // TestCaseAllowsCoverTheCases: each case's allow names every destructive
-// finding it has, and nothing less does.
+// finding it has, and without any one item some dialect of the case is
+// blocked.
 func TestCaseAllowsCoverTheCases(t *testing.T) {
+	needed := map[string]bool{} // case/code
 	eachCase(t, func(t *testing.T, c testCase, from, to *migrate.Schema) {
 		fs := lint(t, from, diff(t, from, to, c.opts))
 		if b := migrate.Blocked(fs, c.allow); len(b) > 0 {
@@ -443,7 +549,23 @@ func TestCaseAllowsCoverTheCases(t *testing.T) {
 		if (destructive > 0) != (len(migrate.Blocked(fs, nil)) > 0) {
 			t.Errorf("Blocked(nil) disagrees with the destructive findings")
 		}
+		for i, a := range c.allow {
+			less := slices.Delete(slices.Clone(c.allow), i, i+1)
+			if b := migrate.Blocked(fs, less); len(b) > 0 {
+				needed[c.name+"/"+a.Code] = true
+				if !slices.ContainsFunc(b, func(f migrate.Finding) bool { return f.Code == a.Code }) {
+					t.Errorf("without %v, %v is blocked, not %s", a, codes(b), a.Code)
+				}
+			}
+		}
 	})
+	for _, c := range cases {
+		for _, a := range c.allow {
+			if !needed[c.name+"/"+a.Code] {
+				t.Errorf("case %s: allow %v blocks nothing on any dialect", c.name, a)
+			}
+		}
+	}
 }
 
 func TestLintDoesNotMutate(t *testing.T) {
@@ -479,4 +601,62 @@ func TestLintDeterministic(t *testing.T) {
 			t.Error("findings are not in the order of the changes")
 		}
 	})
+}
+
+// TestLintRenamedTable: a column added to a table the plan renames is added
+// to an existing table, and a drop folded into a rebuild of a renamed SQLite
+// table is quiet.
+func TestLintRenamedTable(t *testing.T) {
+	for _, d := range allDialects {
+		from := mustTables(d, nil)
+		to := mustTables(d, func(m *loadjson.Model) {
+			annotate(m, "User", schema.Table("accounts"))
+			addField(m, "User", field.String("nickname"))
+		})
+		cs := diff(t, from, to, renameUsers)
+		if !slices.ContainsFunc(cs, func(c migrate.Change) bool { _, ok := c.(migrate.RenameTable); return ok }) {
+			t.Fatalf("%v: no rename in %v", d, lines(cs))
+		}
+		var got []string
+		for _, f := range lint(t, from, cs) {
+			if f.Code == "add-required-column" {
+				got = append(got, f.Target)
+			}
+		}
+		if !slices.Equal(got, []string{"accounts.nickname"}) {
+			t.Errorf("%v: add-required-column on %v", d, got)
+		}
+	}
+	for _, d := range allDialects {
+		c := caseNamed("rename-table-drop-column")
+		from, to := models(t, c, d)
+		cs := diff(t, from, to, c.opts)
+		drops := slices.ContainsFunc(cs, func(c migrate.Change) bool { _, ok := c.(migrate.DropIndex); return ok })
+		if !drops {
+			t.Fatalf("%v: the case drops no index", d)
+		}
+		loud := slices.ContainsFunc(lint(t, from, cs), func(f migrate.Finding) bool { return f.Code == "drop-index" })
+		if loud == (d == velox.SQLite) {
+			t.Errorf("%v: drop-index finding is %v", d, loud)
+		}
+	}
+}
+
+// TestLintVolatileDefaultIsPostgresOnly: MySQL and SQLite add a column with an
+// expression default without the rewrite PostgreSQL may do.
+func TestLintVolatileDefaultIsPostgresOnly(t *testing.T) {
+	for _, d := range allDialects {
+		has := slices.ContainsFunc(caseFindings(t, "add-column-schema-default", d), func(f migrate.Finding) bool { return f.Code == "volatile-default" })
+		if has != (d == velox.Postgres) {
+			t.Errorf("%v: volatile-default is %v", d, has)
+		}
+	}
+	// A literal default is never volatile.
+	for _, def := range []string{"'x'", "0", "-1.5", "true", "FALSE", "NULL", "'it''s'"} {
+		from := &migrate.Schema{Dialect: velox.Postgres, Tables: []migrate.Table{{Name: "t"}}}
+		cs := []migrate.Change{migrate.AddColumn{Table: migrate.TableRef{Name: "t"}, Column: migrate.Column{Name: "c", Type: "text", Default: def}}}
+		if fs := lint(t, from, cs); len(fs) > 0 {
+			t.Errorf("default %s: %v", def, codes(fs))
+		}
+	}
 }

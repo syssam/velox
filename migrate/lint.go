@@ -252,7 +252,7 @@ func (l *linter) uses(t *Table, col string) bool {
 func (l *linter) change(i int, c Change) {
 	switch c := c.(type) {
 	case DropTable:
-		l.add(i, "drop-table", Destructive, c.Table.Ref().String(), c.Table.Pos, "drops table %s and its rows", c.Table.Ref())
+		l.add(i, "drop-table", Destructive, c.Table.Ref().String(), "", "drops table %s and its rows", c.Table.Ref())
 	case RenameTable:
 		l.add(i, "rename-table", Review, c.To.String(), "", "renames table %s to %s; code that uses the old name breaks while old and new versions run together", c.From, c.To)
 	case SetTableCollation:
@@ -260,7 +260,7 @@ func (l *linter) change(i int, c Change) {
 	case AddColumn:
 		l.addColumn(i, c)
 	case DropColumn:
-		l.add(i, "drop-column", Destructive, colTarget(c.Table, c.Column.Name), c.Column.Pos, "drops column %s and its data", colTarget(c.Table, c.Column.Name))
+		l.add(i, "drop-column", Destructive, colTarget(c.Table, c.Column.Name), "", "drops column %s and its data", colTarget(c.Table, c.Column.Name))
 		l.rebuildFinding(i, "drops column %s, which a key, index or constraint uses", colTarget(c.Table, c.Column.Name))
 	case RenameColumn:
 		l.add(i, "rename-column", Review, colTarget(c.Table, c.To), "", "renames column %s to %s; code that uses the old name breaks while old and new versions run together", colTarget(c.Table, c.From), c.To)
@@ -277,14 +277,14 @@ func (l *linter) change(i int, c Change) {
 		l.rebuildFinding(i, "adds foreign key %s", c.ForeignKey.Name)
 	case DropForeignKey:
 		if !l.quiet[i] && !l.dropped[l.canon(c.Table)] && !l.rebuild[i] && !l.replacesKey(c) {
-			l.add(i, "drop-foreign-key", Review, colTarget(c.Table, c.ForeignKey.Name), c.ForeignKey.Pos, "drops foreign key %s; rows are no longer checked against %s", c.ForeignKey.Name, c.ForeignKey.RefTable)
+			l.add(i, "drop-foreign-key", Review, colTarget(c.Table, c.ForeignKey.Name), "", "drops foreign key %s; rows are no longer checked against %s", c.ForeignKey.Name, c.ForeignKey.RefTable)
 		}
 		l.rebuildFinding(i, "drops foreign key %s", c.ForeignKey.Name)
 	case AddCheck:
 		l.addCheck(i, c)
 	case DropCheck:
 		if !l.dropped[l.canon(c.Table)] && !l.rebuild[i] && !l.replacesCheck(c) {
-			l.add(i, "drop-check", Review, colTarget(c.Table, c.Check.Name), c.Check.Pos, "drops check %s; rows are no longer limited by it", c.Check.Name)
+			l.add(i, "drop-check", Review, colTarget(c.Table, c.Check.Name), "", "drops check %s; rows are no longer limited by it", c.Check.Name)
 		}
 		l.rebuildFinding(i, "drops check %s", c.Check.Name)
 	case RenameConstraint:
@@ -304,22 +304,17 @@ func (l *linter) rebuildFinding(i int, what string, args ...any) {
 	l.add(i, "sqlite-rebuild", Review, c.Target().String(), changePos(c), "%s; SQLite rebuilds table %s: it copies every row into a new table", fmt.Sprintf(what, args...), c.Target())
 }
 
-// changePos is the Pos of the element c acts on.
+// changePos is the Pos of the element of to that c adds or alters; a dropped
+// element has none.
 func changePos(c Change) string {
 	switch c := c.(type) {
 	case AddColumn:
-		return c.Column.Pos
-	case DropColumn:
 		return c.Column.Pos
 	case AlterColumn:
 		return c.To.Pos
 	case AddForeignKey:
 		return c.ForeignKey.Pos
-	case DropForeignKey:
-		return c.ForeignKey.Pos
 	case AddCheck:
-		return c.Check.Pos
-	case DropCheck:
 		return c.Check.Pos
 	}
 	return ""
@@ -463,7 +458,7 @@ func (l *linter) dropIndex(i int, c DropIndex) {
 		return
 	}
 	target := colTarget(c.Table, c.Index.Name)
-	l.add(i, "drop-index", Review, target, c.Index.Pos, "drops index %s; queries that used it get slower", target)
+	l.add(i, "drop-index", Review, target, "", "drops index %s; queries that used it get slower", target)
 }
 
 // replacesIndex reports whether the plan adds an index that does what the
@@ -612,9 +607,14 @@ func widening(d velox.Dialect, from, to string) (Class, bool) {
 		if from == "real" && to == "double precision" {
 			return Review, true
 		}
+		// Unbounded character varying is text.
+		unbounded := func(t string) bool { return t == "text" || t == "character varying" }
+		if unbounded(from) && unbounded(to) {
+			return Safe, true
+		}
 		if n, ok := sizeOf(from, "character varying"); ok {
 			m, sized := sizeOf(to, "character varying")
-			if to == "text" || to == "character varying" || sized && m > n {
+			if unbounded(to) || sized && m > n {
 				return Safe, true
 			}
 		}
