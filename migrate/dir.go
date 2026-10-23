@@ -1,0 +1,456 @@
+package migrate
+
+import (
+	"bytes"
+	"cmp"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
+	"maps"
+	"regexp"
+	"runtime/debug"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/syssam/velox2"
+)
+
+// Config is a directory's settings, the content of velox.json.
+type Config struct {
+	Dialect     velox.Dialect
+	Table       string        // default "velox_migrations"
+	LockTimeout time.Duration // default 5s
+}
+
+// The defaults of velox.json's optional keys, and the longest history table
+// name, the planner's cap on an identifier.
+const (
+	defaultTable       = "velox_migrations"
+	defaultLockTimeout = 5 * time.Second
+	maxTableName       = 63
+)
+
+// identifier is what a history table's name must match.
+var identifier = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// A Dir is a migration directory as ReadDir read it, or an empty one NewDir
+// made.
+type Dir struct {
+	Config   Config
+	Files    []File  // by Version
+	Snapshot *Schema // the model after the last file; the empty schema of the dialect when there are no files
+
+	sums  map[string]string // path → h1 of each file ReadDir read: the SQL files, schema.json, velox.json
+	fresh bool              // made by NewDir: Add writes velox.json too
+}
+
+// check fills Config's defaults when fill is set, and refuses what velox.json
+// refuses: an unknown dialect, a table that is not an identifier of at most 63
+// bytes, a negative lock timeout.
+func (c Config) check(fill bool) (Config, error) {
+	if fill {
+		c.Table = cmp.Or(c.Table, defaultTable)
+		if c.LockTimeout == 0 {
+			c.LockTimeout = defaultLockTimeout
+		}
+	}
+	refuse := func(format string, args ...any) error {
+		return &Error{Code: "config", Reason: fmt.Sprintf(format, args...)}
+	}
+	switch {
+	case !knownDialect(c.Dialect):
+		return Config{}, refuse("the dialect %q is not postgres, mysql or sqlite", c.Dialect.String())
+	case !identifier.MatchString(c.Table) || len(c.Table) > maxTableName:
+		return Config{}, refuse("the table %q is not an identifier of at most %d bytes (A-Z, a-z, 0-9 and _, not starting with a digit)", c.Table, maxTableName)
+	case c.LockTimeout < 0:
+		return Config{}, refuse("the lock timeout %s is negative", c.LockTimeout)
+	}
+	return c, nil
+}
+
+// NewDir makes the empty directory c describes, with c's defaults filled: the
+// table velox_migrations and a lock timeout of 5s. A Config with a lock
+// timeout of 0 takes the default; velox.json's "0s" turns it off. Add writes
+// velox.json with the first plan.
+func NewDir(c Config) (*Dir, error) {
+	c, err := c.check(true)
+	if err != nil {
+		return nil, err
+	}
+	return &Dir{Config: c, Snapshot: &Schema{Dialect: c.Dialect}, sums: map[string]string{}, fresh: true}, nil
+}
+
+// configJSON is velox.json, as written.
+type configJSON struct {
+	Version     int    `json:"version"`
+	Dialect     string `json:"dialect"`
+	Table       string `json:"table"`
+	LockTimeout string `json:"lock_timeout"`
+}
+
+// marshal is velox.json: every key, indented by two spaces, with a final
+// newline.
+func (c Config) marshal() []byte {
+	b, _ := json.MarshalIndent(configJSON{1, c.Dialect.String(), c.Table, c.LockTimeout.String()}, "", "  ")
+	return append(b, '\n')
+}
+
+// parseConfig reads velox.json: the version and the dialect are required, an
+// unknown key is an error, and the table and lock timeout default.
+func parseConfig(data []byte) (Config, error) {
+	bad := func(format string, args ...any) error {
+		return &Error{Code: "config", Pos: "velox.json", Reason: fmt.Sprintf(format, args...)}
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return Config{}, bad("%v", err)
+	}
+	for _, k := range slices.Sorted(maps.Keys(raw)) {
+		switch k {
+		case "version", "dialect", "table", "lock_timeout":
+		default:
+			return Config{}, bad("unknown key %q", k)
+		}
+	}
+	get := func(key string, into any) (bool, error) {
+		v, ok := raw[key]
+		if !ok {
+			return false, nil
+		}
+		if err := json.Unmarshal(v, into); err != nil {
+			return true, bad("%s: %v", key, err)
+		}
+		return true, nil
+	}
+	var version int
+	if ok, err := get("version", &version); err != nil {
+		return Config{}, err
+	} else if !ok {
+		return Config{}, bad("version is required")
+	} else if version != 1 {
+		return Config{}, bad("version %d; this velox reads version 1", version)
+	}
+	var name string
+	if ok, err := get("dialect", &name); err != nil {
+		return Config{}, err
+	} else if !ok {
+		return Config{}, bad("dialect is required")
+	}
+	var c Config
+	for _, d := range [...]velox.Dialect{velox.Postgres, velox.MySQL, velox.SQLite} {
+		if d.String() == name {
+			c.Dialect = d
+		}
+	}
+	if c.Dialect == 0 {
+		return Config{}, bad("the dialect %q is not postgres, mysql or sqlite", name)
+	}
+	c.Table = defaultTable
+	if _, err := get("table", &c.Table); err != nil {
+		return Config{}, err
+	}
+	c.LockTimeout = defaultLockTimeout
+	var timeout string
+	if ok, err := get("lock_timeout", &timeout); err != nil {
+		return Config{}, err
+	} else if ok {
+		t, err := time.ParseDuration(timeout)
+		if err != nil {
+			return Config{}, bad("lock_timeout: %v", err)
+		}
+		c.LockTimeout = t
+	}
+	c, err := c.check(false)
+	if err != nil {
+		e := err.(*Error)
+		e.Pos = "velox.json"
+		return Config{}, e
+	}
+	return c, nil
+}
+
+// inSum reports whether velox.sum covers the top-level file name.
+func inSum(name string) bool {
+	return strings.HasSuffix(name, ".sql") || name == "schema.json" || name == "velox.json"
+}
+
+// topFiles is the content of the files velox.sum covers, by path.
+func topFiles(fsys fs.FS) (map[string][]byte, error) {
+	ents, err := fs.ReadDir(fsys, ".")
+	if err != nil {
+		return nil, &Error{Code: "directory", Reason: err.Error()}
+	}
+	out := map[string][]byte{}
+	for _, e := range ents {
+		if e.IsDir() || !inSum(e.Name()) {
+			continue
+		}
+		data, err := fs.ReadFile(fsys, e.Name())
+		if err != nil {
+			return nil, &Error{Code: "directory", Reason: err.Error()}
+		}
+		out[e.Name()] = data
+	}
+	return out, nil
+}
+
+// sumText is velox.sum over sums, the h1 of each inSum file by path: the
+// hash of the lines below, then a line for each path, sorted.
+func sumText(sums map[string]string) []byte {
+	var b strings.Builder
+	for _, p := range slices.Sorted(maps.Keys(sums)) {
+		b.WriteString(p + " " + sums[p] + "\n")
+	}
+	return []byte(sum([]byte(b.String())) + "\n" + b.String())
+}
+
+// Sum is the velox.sum fsys should have: the hash of the lines below it, then
+// one line, "<path> h1:…", for each top-level *.sql file, schema.json and
+// velox.json, sorted by path. Other files and directories are not inSum.
+// A file's hash is over its content with a leading UTF-8 byte order mark
+// dropped and CRLF read as LF, so a checkout that changes line endings gives
+// the same sums.
+func Sum(fsys fs.FS) ([]byte, error) {
+	files, err := topFiles(fsys)
+	if err != nil {
+		return nil, err
+	}
+	sums := map[string]string{}
+	for p, data := range files {
+		sums[p] = sum(data)
+	}
+	return sumText(sums), nil
+}
+
+// ReadDir reads the migration directory fsys: velox.json, schema.json and the
+// top-level *.sql files, by version. It checks velox.sum first, whatever else
+// is wrong with the directory, and returns a *SumError when it is missing or
+// does not match the files; velox.sum is read with CRLF as LF, as the files
+// are. Then it parses velox.json (Code "config"), schema.json, which must be
+// there when there are files, must not when there are none, and must be of
+// velox.json's dialect, and every file with ParseFile. Two files of one
+// version are an error (Code "directory"). A directory with no files has the
+// empty schema of its dialect as its Snapshot.
+func ReadDir(fsys fs.FS) (*Dir, error) {
+	files, err := topFiles(fsys)
+	if err != nil {
+		return nil, err
+	}
+	sums := map[string]string{}
+	for p, data := range files {
+		sums[p] = sum(data)
+	}
+	have, err := fs.ReadFile(fsys, "velox.sum")
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return nil, &SumError{Path: "velox.sum"}
+	case err != nil:
+		return nil, &Error{Code: "directory", Reason: err.Error()}
+	}
+	have = bytes.ReplaceAll(bytes.TrimPrefix(have, bom), []byte("\r\n"), []byte("\n"))
+	if !bytes.Equal(have, sumText(sums)) {
+		return nil, &SumError{Path: "velox.sum"}
+	}
+	raw, ok := files["velox.json"]
+	if !ok {
+		return nil, &Error{Code: "config", Pos: "velox.json", Reason: "the file is missing"}
+	}
+	cfg, err := parseConfig(raw)
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for p := range files {
+		if strings.HasSuffix(p, ".sql") {
+			names = append(names, p)
+		}
+	}
+	slices.Sort(names)
+	d := &Dir{Config: cfg, Snapshot: &Schema{Dialect: cfg.Dialect}, sums: sums}
+	snap, haveSnap := files["schema.json"]
+	switch {
+	case len(names) > 0 && !haveSnap:
+		return nil, &Error{Code: "directory", Pos: "schema.json", Reason: "the file is missing; the directory has migration files"}
+	case len(names) == 0 && haveSnap:
+		return nil, &Error{Code: "directory", Pos: "schema.json", Reason: "the directory has no migration files, so it has no snapshot"}
+	case haveSnap:
+		var s Schema
+		if err := s.UnmarshalJSON(snap); err != nil {
+			return nil, err
+		}
+		if s.Dialect != cfg.Dialect {
+			return nil, &Error{Code: "directory", Pos: "schema.json", Reason: fmt.Sprintf("the snapshot is %s's; velox.json says %s", s.Dialect, cfg.Dialect)}
+		}
+		d.Snapshot = &s
+	}
+	for _, p := range names {
+		f, err := ParseFile(cfg.Dialect, p, files[p])
+		if err != nil {
+			return nil, err
+		}
+		d.Files = append(d.Files, f)
+	}
+	slices.SortStableFunc(d.Files, func(a, b File) int { return cmp.Compare(a.Version, b.Version) })
+	for i := 1; i < len(d.Files); i++ {
+		if a, b := d.Files[i-1], d.Files[i]; a.Version == b.Version {
+			return nil, &Error{Code: "directory", Reason: fmt.Sprintf("%s and %s have one version", a.Path, b.Path)}
+		}
+	}
+	return d, nil
+}
+
+// generator is "velox-gen" and the version of the velox2 module the program
+// is built from, "(devel)" when the build does not say, as velox-gen version
+// prints it.
+func generator() string {
+	const modulePath = "github.com/syssam/velox2"
+	v := ""
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		if bi.Main.Path == modulePath {
+			v = bi.Main.Version
+		}
+		for _, d := range bi.Deps {
+			if d.Path == modulePath {
+				v = d.Version
+				if d.Replace != nil && d.Replace.Version != "" {
+					v = d.Replace.Version
+				}
+			}
+		}
+	}
+	if v == "" {
+		v = "(devel)"
+	}
+	return "velox-gen " + v
+}
+
+// maxName is the longest name of a plan's files.
+const maxName = 40
+
+// fileLabel is a plan file's name beyond its version.
+var fileLabel = regexp.MustCompile(`^[a-z0-9_]+$`)
+
+// defaultName is a plan's file name when Add is given none: the first change's
+// kind up to its first "-", its table ("<schema>_<name>" when qualified), and
+// for a column change the column: create_users, add_users_email,
+// drop_posts_legacy. It is lower-cased with every other byte an underscore,
+// cut to 40 bytes with no trailing underscore.
+func defaultName(changes []Change) string {
+	if len(changes) == 0 {
+		return ""
+	}
+	c := changes[0]
+	kind, _, _ := strings.Cut(string(c.Kind()), "-")
+	parts := []string{kind}
+	if t := c.Target(); t.Schema != "" {
+		parts = append(parts, t.Schema, t.Name)
+	} else {
+		parts = append(parts, t.Name)
+	}
+	switch c := c.(type) {
+	case AddColumn:
+		parts = append(parts, c.Column.Name)
+	case DropColumn:
+		parts = append(parts, c.Column.Name)
+	case RenameColumn:
+		parts = append(parts, c.To)
+	case AlterColumn:
+		parts = append(parts, c.To.Name)
+	case RenameSequence:
+		parts = append(parts, c.Column)
+	}
+	b := []byte(strings.ToLower(strings.Join(parts, "_")))
+	for i, c := range b {
+		if (c < 'a' || c > 'z') && (c < '0' || c > '9') {
+			b[i] = '_'
+		}
+	}
+	if len(b) > maxName {
+		b = b[:maxName]
+	}
+	return strings.TrimRight(string(b), "_")
+}
+
+// header is the first line of a file Add writes.
+func header() string {
+	return "-- Generated by " + generator() + " migrate diff. Review before applying; velox.sum checks it.\n"
+}
+
+// Add writes plan p, which makes to, as the directory's next files, and
+// returns them by path with their content: one file for each of p's scripts,
+// at the last version plus one, two, three, zero-padded to four digits, named
+// <version>_<name>_enum.sql, <version>_<name>.sql and
+// <version>_<name>_online.sql by the script's kind; schema.json, which is to;
+// velox.json, when the directory is new; and velox.sum over all the
+// directory's files. An empty name is the one defaultName makes. Each SQL
+// file starts with a header line saying velox-gen wrote it, then the script as
+// Render wrote it, but an enum script without a lock timeout of its own takes
+// the Config's: it runs outside a transaction, where nothing else would
+// bound its wait.
+//
+// Add refuses, with an *Error of Code "directory", a nil plan or one with no
+// script, a schema of another dialect than the directory's, and a name that
+// is not of a-z, 0-9 and _ or is over 40 bytes. It does not change d, p or
+// to; a second plan reads the directory again.
+func (d *Dir) Add(name string, p *Plan, to *Schema) (map[string][]byte, error) {
+	refuse := func(format string, args ...any) error {
+		return &Error{Code: "directory", Reason: fmt.Sprintf(format, args...)}
+	}
+	switch {
+	case p == nil || len(p.Scripts) == 0:
+		return nil, refuse("the plan has no script to write")
+	case to == nil:
+		return nil, refuse("the schema is nil")
+	case !knownDialect(d.Config.Dialect) || to.Dialect != d.Config.Dialect:
+		return nil, refuse("the schema is %s's; the directory is %s's", to.Dialect, d.Config.Dialect)
+	}
+	if name == "" {
+		name = defaultName(p.Changes)
+	}
+	if !fileLabel.MatchString(name) || len(name) > maxName {
+		return nil, refuse("the name %q is not of a-z, 0-9 and _, or is over %d bytes", name, maxName)
+	}
+	snapshot, err := json.MarshalIndent(to, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	last := uint64(0)
+	for _, f := range d.Files {
+		last = max(last, f.Version)
+	}
+	out := map[string][]byte{"schema.json": append(snapshot, '\n')}
+	for i, s := range p.Scripts {
+		var suffix string
+		switch s.Kind {
+		case MainScript:
+		case EnumScript:
+			suffix = "_enum"
+			if !s.Directives.LockTimeoutSet {
+				s.Directives.LockTimeout, s.Directives.LockTimeoutSet = d.Config.LockTimeout, true
+			}
+		case OnlineScript:
+			suffix = "_online"
+		default:
+			return nil, refuse("script %d has the unknown kind %s", i, s.Kind)
+		}
+		path := fmt.Sprintf("%04d_%s%s.sql", last+uint64(i)+1, name, suffix)
+		var b strings.Builder
+		b.WriteString(header())
+		writeScript(&b, s)
+		out[path] = []byte(b.String())
+	}
+	if d.fresh {
+		out["velox.json"] = d.Config.marshal()
+	}
+	sums := maps.Clone(d.sums)
+	if sums == nil {
+		sums = map[string]string{}
+	}
+	for p, data := range out {
+		sums[p] = sum(data)
+	}
+	out["velox.sum"] = sumText(sums)
+	return out, nil
+}

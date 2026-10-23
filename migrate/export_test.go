@@ -46,3 +46,12 @@ func FileLines(f File) []int { return f.lines }
 
 // FileDquote is f.dquote.
 func FileDquote(f File) bool { return f.dquote }
+
+// DefaultName is defaultName.
+var DefaultName = defaultName
+
+// Generator is generator.
+var Generator = generator
+
+// ConfigJSON is the velox.json Add writes for c.
+func ConfigJSON(c Config) []byte { return c.marshal() }

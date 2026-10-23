@@ -53,3 +53,13 @@ func (e *BlockedError) Error() string {
 	}
 	return b.String()
 }
+
+// A SumError is the refusal of a directory whose velox.sum is missing or does
+// not match its files.
+type SumError struct{ Path string } // "velox.sum", as fsys names it
+
+// Error is "migrate: <Path> is out of date; run velox-gen migrate hash if the
+// edits are intended".
+func (e *SumError) Error() string {
+	return "migrate: " + e.Path + " is out of date; run velox-gen migrate hash if the edits are intended"
+}

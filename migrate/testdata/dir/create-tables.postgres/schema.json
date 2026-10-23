@@ -1,0 +1,287 @@
+{
+  "version": 1,
+  "dialect": "postgres",
+  "tables": [
+    {
+      "name": "alphas",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "identity": true,
+          "sequence": "alphas_id_seq"
+        },
+        {
+          "name": "beta_id",
+          "type": "bigint",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "alphas_pkey",
+      "indexes": [
+        {
+          "name": "alphas_beta_id",
+          "columns": [
+            "beta_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": "alphas_beta_id_fkey",
+          "columns": [
+            "beta_id"
+          ],
+          "ref_table": {
+            "name": "betas"
+          },
+          "ref_columns": [
+            "id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "betas",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "identity": true,
+          "sequence": "betas_id_seq"
+        },
+        {
+          "name": "alpha_id",
+          "type": "bigint",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "betas_pkey",
+      "indexes": [
+        {
+          "name": "betas_alpha_id",
+          "columns": [
+            "alpha_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": "betas_alpha_id_fkey",
+          "columns": [
+            "alpha_id"
+          ],
+          "ref_table": {
+            "name": "alphas"
+          },
+          "ref_columns": [
+            "id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "orgs",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "identity": true,
+          "sequence": "orgs_id_seq"
+        },
+        {
+          "name": "name",
+          "type": "text"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "orgs_pkey"
+    },
+    {
+      "name": "posts",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "identity": true,
+          "sequence": "posts_id_seq"
+        },
+        {
+          "name": "author_id",
+          "type": "bigint"
+        },
+        {
+          "name": "title",
+          "type": "character varying(200)"
+        },
+        {
+          "name": "status",
+          "type": "\"case_status\"",
+          "default": "'active'"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "posts_pkey",
+      "indexes": [
+        {
+          "name": "posts_author_id",
+          "columns": [
+            "author_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": "posts_author_id_fkey",
+          "columns": [
+            "author_id"
+          ],
+          "ref_table": {
+            "name": "users"
+          },
+          "ref_columns": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
+        }
+      ]
+    },
+    {
+      "name": "users",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "identity": true,
+          "sequence": "users_id_seq"
+        },
+        {
+          "name": "org_id",
+          "type": "bigint"
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "comment": "the display name"
+        },
+        {
+          "name": "email",
+          "type": "character varying(120)"
+        },
+        {
+          "name": "bio",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "role",
+          "type": "\"users_role\"",
+          "default": "'viewer'"
+        },
+        {
+          "name": "status",
+          "type": "\"case_status\"",
+          "default": "'active'"
+        },
+        {
+          "name": "logins",
+          "type": "integer",
+          "default": "0"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone"
+        },
+        {
+          "name": "mentor_id",
+          "type": "bigint",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "users_pkey",
+      "indexes": [
+        {
+          "name": "users_by_name",
+          "columns": [
+            "name"
+          ]
+        },
+        {
+          "name": "users_email_unique",
+          "columns": [
+            "email"
+          ],
+          "unique": true
+        },
+        {
+          "name": "users_mentor_id",
+          "columns": [
+            "mentor_id"
+          ]
+        },
+        {
+          "name": "users_org_id",
+          "columns": [
+            "org_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": "user_mentor",
+          "columns": [
+            "mentor_id"
+          ],
+          "ref_table": {
+            "name": "users"
+          },
+          "ref_columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "users_org_id_fkey",
+          "columns": [
+            "org_id"
+          ],
+          "ref_table": {
+            "name": "orgs"
+          },
+          "ref_columns": [
+            "id"
+          ]
+        }
+      ]
+    }
+  ],
+  "enums": [
+    {
+      "name": "case_status",
+      "values": [
+        "active",
+        "banned",
+        "pending"
+      ]
+    },
+    {
+      "name": "users_role",
+      "values": [
+        "admin",
+        "viewer"
+      ]
+    }
+  ]
+}

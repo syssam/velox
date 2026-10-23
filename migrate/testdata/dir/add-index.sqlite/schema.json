@@ -1,0 +1,201 @@
+{
+  "version": 1,
+  "dialect": "sqlite",
+  "tables": [
+    {
+      "name": "orgs",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "identity": true
+        },
+        {
+          "name": "name",
+          "type": "text"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ]
+    },
+    {
+      "name": "posts",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "identity": true
+        },
+        {
+          "name": "author_id",
+          "type": "integer"
+        },
+        {
+          "name": "title",
+          "type": "text"
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "default": "'active'"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "posts_author_id",
+          "columns": [
+            "author_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": "posts_author_id_fkey",
+          "columns": [
+            "author_id"
+          ],
+          "ref_table": {
+            "name": "users"
+          },
+          "ref_columns": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
+        }
+      ],
+      "checks": [
+        {
+          "name": "posts_status_check",
+          "expr": "\"status\" IN ('active', 'banned', 'pending')"
+        }
+      ]
+    },
+    {
+      "name": "users",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "identity": true
+        },
+        {
+          "name": "org_id",
+          "type": "integer"
+        },
+        {
+          "name": "name",
+          "type": "text"
+        },
+        {
+          "name": "email",
+          "type": "text"
+        },
+        {
+          "name": "bio",
+          "type": "text",
+          "nullable": true
+        },
+        {
+          "name": "role",
+          "type": "text",
+          "default": "'viewer'"
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "default": "'active'"
+        },
+        {
+          "name": "logins",
+          "type": "integer",
+          "default": "0"
+        },
+        {
+          "name": "created_at",
+          "type": "datetime"
+        },
+        {
+          "name": "mentor_id",
+          "type": "integer",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "users_by_name",
+          "columns": [
+            "name"
+          ]
+        },
+        {
+          "name": "users_created_at",
+          "columns": [
+            "created_at"
+          ]
+        },
+        {
+          "name": "users_email_unique",
+          "columns": [
+            "email"
+          ],
+          "unique": true
+        },
+        {
+          "name": "users_mentor_id",
+          "columns": [
+            "mentor_id"
+          ]
+        },
+        {
+          "name": "users_org_id",
+          "columns": [
+            "org_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": "user_mentor",
+          "columns": [
+            "mentor_id"
+          ],
+          "ref_table": {
+            "name": "users"
+          },
+          "ref_columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "users_org_id_fkey",
+          "columns": [
+            "org_id"
+          ],
+          "ref_table": {
+            "name": "orgs"
+          },
+          "ref_columns": [
+            "id"
+          ]
+        }
+      ],
+      "checks": [
+        {
+          "name": "users_role_check",
+          "expr": "\"role\" IN ('admin', 'viewer')"
+        },
+        {
+          "name": "users_status_check",
+          "expr": "\"status\" IN ('active', 'banned', 'pending')"
+        }
+      ]
+    }
+  ]
+}

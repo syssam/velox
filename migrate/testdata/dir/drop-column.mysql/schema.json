@@ -1,0 +1,175 @@
+{
+  "version": 1,
+  "dialect": "mysql",
+  "tables": [
+    {
+      "name": "orgs",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "identity": true
+        },
+        {
+          "name": "name",
+          "type": "varchar(255)"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "PRIMARY",
+      "collation": "utf8mb4_bin"
+    },
+    {
+      "name": "posts",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "identity": true
+        },
+        {
+          "name": "author_id",
+          "type": "bigint"
+        },
+        {
+          "name": "title",
+          "type": "varchar(200)"
+        },
+        {
+          "name": "status",
+          "type": "enum('active','banned','pending')",
+          "default": "'active'"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "PRIMARY",
+      "indexes": [
+        {
+          "name": "posts_author_id",
+          "columns": [
+            "author_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": "posts_author_id_fkey",
+          "columns": [
+            "author_id"
+          ],
+          "ref_table": {
+            "name": "users"
+          },
+          "ref_columns": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
+        }
+      ],
+      "collation": "utf8mb4_bin"
+    },
+    {
+      "name": "users",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "identity": true
+        },
+        {
+          "name": "org_id",
+          "type": "bigint"
+        },
+        {
+          "name": "name",
+          "type": "varchar(255)",
+          "comment": "the display name"
+        },
+        {
+          "name": "bio",
+          "type": "varchar(255)",
+          "nullable": true
+        },
+        {
+          "name": "role",
+          "type": "enum('admin','viewer')",
+          "default": "'viewer'"
+        },
+        {
+          "name": "status",
+          "type": "enum('active','banned','pending')",
+          "default": "'active'"
+        },
+        {
+          "name": "logins",
+          "type": "int",
+          "default": "0"
+        },
+        {
+          "name": "created_at",
+          "type": "datetime(6)"
+        },
+        {
+          "name": "mentor_id",
+          "type": "bigint",
+          "nullable": true
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "PRIMARY",
+      "indexes": [
+        {
+          "name": "users_by_name",
+          "columns": [
+            "name"
+          ]
+        },
+        {
+          "name": "users_mentor_id",
+          "columns": [
+            "mentor_id"
+          ]
+        },
+        {
+          "name": "users_org_id",
+          "columns": [
+            "org_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": "user_mentor",
+          "columns": [
+            "mentor_id"
+          ],
+          "ref_table": {
+            "name": "users"
+          },
+          "ref_columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "users_org_id_fkey",
+          "columns": [
+            "org_id"
+          ],
+          "ref_table": {
+            "name": "orgs"
+          },
+          "ref_columns": [
+            "id"
+          ]
+        }
+      ],
+      "collation": "utf8mb4_bin"
+    }
+  ]
+}

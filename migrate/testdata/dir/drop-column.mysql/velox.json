@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "dialect": "mysql",
+  "table": "velox_migrations",
+  "lock_timeout": "5s"
+}
