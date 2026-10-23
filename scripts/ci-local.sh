@@ -30,6 +30,7 @@ go test -race -count=1 -timeout 20m ./...
 go test -run XXX -fuzz FuzzRender -fuzztime 20s .
 go test -run XXX -fuzz FuzzQuote -fuzztime 10s .
 go test -run XXX -fuzz FuzzScope -fuzztime 10s .
+go test -run XXX -fuzz FuzzLiteral -fuzztime 10s ./internal/ddl
 
 go build -o bin/velox-gen ./cmd/velox-gen
 bin/velox-gen -check -out internal/testmodel -package testmodel ./internal/testmodel/schema

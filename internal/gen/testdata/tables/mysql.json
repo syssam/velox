@@ -1,0 +1,529 @@
+{
+	"version": 1,
+	"dialect": "mysql",
+	"tables": [
+		{
+			"name": "posts",
+			"columns": [
+				{
+					"name": "id",
+					"type": "bigint",
+					"identity": true
+				},
+				{
+					"name": "author_id",
+					"type": "bigint",
+					"nullable": true
+				},
+				{
+					"name": "title",
+					"type": "varchar(200)"
+				},
+				{
+					"name": "status",
+					"type": "enum('open','paid','void')",
+					"default": "'open'"
+				},
+				{
+					"name": "body",
+					"type": "blob",
+					"nullable": true
+				},
+				{
+					"name": "digest",
+					"type": "varbinary(32)",
+					"nullable": true
+				},
+				{
+					"name": "published_at",
+					"type": "datetime(6)",
+					"nullable": true
+				},
+				{
+					"name": "ref",
+					"type": "char(36)",
+					"nullable": true
+				},
+				{
+					"name": "meta",
+					"type": "json"
+				},
+				{
+					"name": "price",
+					"type": "decimal(10,2)"
+				},
+				{
+					"name": "mood",
+					"type": "enum('calm','busy')"
+				}
+			],
+			"primary_key": [
+				"id"
+			],
+			"primary_key_name": "PRIMARY",
+			"indexes": [
+				{
+					"name": "posts_author_id",
+					"columns": [
+						"author_id"
+					]
+				}
+			],
+			"foreign_keys": [
+				{
+					"name": "post_author",
+					"columns": [
+						"author_id"
+					],
+					"ref_table": {
+						"name": "tb_users"
+					},
+					"ref_columns": [
+						"id"
+					],
+					"on_delete": "SET NULL"
+				}
+			],
+			"collation": "utf8mb4_bin"
+		},
+		{
+			"name": "tb_groups",
+			"columns": [
+				{
+					"name": "id",
+					"type": "bigint",
+					"identity": true
+				},
+				{
+					"name": "status",
+					"type": "enum('open','paid','void')",
+					"default": "'open'"
+				}
+			],
+			"primary_key": [
+				"id"
+			],
+			"primary_key_name": "PRIMARY",
+			"collation": "utf8mb4_bin"
+		},
+		{
+			"name": "tb_profiles",
+			"columns": [
+				{
+					"name": "id",
+					"type": "bigint",
+					"identity": true
+				},
+				{
+					"name": "handle",
+					"type": "varchar(255)"
+				},
+				{
+					"name": "tb_user_profile",
+					"type": "bigint",
+					"comment": "whose profile"
+				}
+			],
+			"primary_key": [
+				"id"
+			],
+			"primary_key_name": "PRIMARY",
+			"indexes": [
+				{
+					"name": "tb_profiles_tb_user_profile_unique",
+					"columns": [
+						"tb_user_profile"
+					],
+					"unique": true
+				}
+			],
+			"foreign_keys": [
+				{
+					"name": "tb_profiles_tb_user_profile_fkey",
+					"columns": [
+						"tb_user_profile"
+					],
+					"ref_table": {
+						"name": "tb_users"
+					},
+					"ref_columns": [
+						"id"
+					]
+				}
+			],
+			"collation": "utf8mb4_bin"
+		},
+		{
+			"name": "tb_tokens",
+			"columns": [
+				{
+					"name": "id",
+					"type": "varchar(255)"
+				},
+				{
+					"name": "i8",
+					"type": "tinyint"
+				},
+				{
+					"name": "i16",
+					"type": "smallint"
+				},
+				{
+					"name": "i32",
+					"type": "int"
+				},
+				{
+					"name": "u8",
+					"type": "tinyint unsigned"
+				},
+				{
+					"name": "u16",
+					"type": "smallint unsigned"
+				},
+				{
+					"name": "u32",
+					"type": "int unsigned"
+				},
+				{
+					"name": "u",
+					"type": "bigint unsigned"
+				},
+				{
+					"name": "u64",
+					"type": "bigint unsigned"
+				},
+				{
+					"name": "f32",
+					"type": "float"
+				},
+				{
+					"name": "tb_user_tokens",
+					"type": "bigint",
+					"nullable": true
+				}
+			],
+			"primary_key": [
+				"id"
+			],
+			"primary_key_name": "PRIMARY",
+			"indexes": [
+				{
+					"name": "tb_tokens_tb_user_tokens",
+					"columns": [
+						"tb_user_tokens"
+					]
+				}
+			],
+			"foreign_keys": [
+				{
+					"name": "tb_tokens_tb_user_tokens_fkey",
+					"columns": [
+						"tb_user_tokens"
+					],
+					"ref_table": {
+						"name": "tb_users"
+					},
+					"ref_columns": [
+						"id"
+					],
+					"on_delete": "CASCADE"
+				}
+			],
+			"collation": "utf8mb4_bin"
+		},
+		{
+			"name": "tb_user_friends",
+			"columns": [
+				{
+					"name": "tb_user_id",
+					"type": "bigint"
+				},
+				{
+					"name": "friend_id",
+					"type": "bigint"
+				}
+			],
+			"primary_key": [
+				"tb_user_id",
+				"friend_id"
+			],
+			"primary_key_name": "PRIMARY",
+			"indexes": [
+				{
+					"name": "tb_user_friends_friend_id",
+					"columns": [
+						"friend_id"
+					]
+				}
+			],
+			"foreign_keys": [
+				{
+					"name": "tb_user_friends_friend_id_fkey",
+					"columns": [
+						"friend_id"
+					],
+					"ref_table": {
+						"name": "tb_users"
+					},
+					"ref_columns": [
+						"id"
+					],
+					"on_delete": "CASCADE"
+				},
+				{
+					"name": "tb_user_friends_tb_user_id_fkey",
+					"columns": [
+						"tb_user_id"
+					],
+					"ref_table": {
+						"name": "tb_users"
+					},
+					"ref_columns": [
+						"id"
+					],
+					"on_delete": "CASCADE"
+				}
+			],
+			"collation": "utf8mb4_bin"
+		},
+		{
+			"name": "tb_user_groups",
+			"columns": [
+				{
+					"name": "tb_user_id",
+					"type": "bigint"
+				},
+				{
+					"name": "tb_group_id",
+					"type": "bigint"
+				}
+			],
+			"primary_key": [
+				"tb_user_id",
+				"tb_group_id"
+			],
+			"primary_key_name": "PRIMARY",
+			"indexes": [
+				{
+					"name": "tb_user_groups_tb_group_id",
+					"columns": [
+						"tb_group_id"
+					]
+				}
+			],
+			"foreign_keys": [
+				{
+					"name": "membership_group",
+					"columns": [
+						"tb_group_id"
+					],
+					"ref_table": {
+						"name": "tb_groups"
+					},
+					"ref_columns": [
+						"id"
+					],
+					"on_delete": "CASCADE"
+				},
+				{
+					"name": "membership_user",
+					"columns": [
+						"tb_user_id"
+					],
+					"ref_table": {
+						"name": "tb_users"
+					},
+					"ref_columns": [
+						"id"
+					],
+					"on_delete": "CASCADE"
+				}
+			],
+			"collation": "utf8mb4_bin"
+		},
+		{
+			"name": "tb_users",
+			"columns": [
+				{
+					"name": "id",
+					"type": "bigint",
+					"identity": true
+				},
+				{
+					"name": "created_at",
+					"type": "datetime(6)",
+					"default": "CURRENT_TIMESTAMP(6)"
+				},
+				{
+					"name": "updated_at",
+					"type": "datetime(6)",
+					"default": "CURRENT_TIMESTAMP(6)"
+				},
+				{
+					"name": "name",
+					"type": "varchar(255)",
+					"comment": "the display name"
+				},
+				{
+					"name": "email",
+					"type": "varchar(120)"
+				},
+				{
+					"name": "bio",
+					"type": "longtext",
+					"default": "('')"
+				},
+				{
+					"name": "active",
+					"type": "tinyint(1)",
+					"nullable": true,
+					"default": "1"
+				},
+				{
+					"name": "admin",
+					"type": "tinyint(1)",
+					"default": "0"
+				},
+				{
+					"name": "age",
+					"type": "bigint",
+					"default": "0"
+				},
+				{
+					"name": "score",
+					"type": "double",
+					"nullable": true,
+					"default": "1.5"
+				},
+				{
+					"name": "role",
+					"type": "enum('admin','viewer')",
+					"default": "'viewer'"
+				},
+				{
+					"name": "mood",
+					"type": "enum('calm','busy')"
+				},
+				{
+					"name": "tier",
+					"type": "varchar(16)"
+				},
+				{
+					"name": "locale",
+					"type": "varchar(255)",
+					"default": "'en'"
+				},
+				{
+					"name": "tags",
+					"type": "json",
+					"nullable": true
+				},
+				{
+					"name": "tb_user_spouse",
+					"type": "bigint",
+					"nullable": true
+				}
+			],
+			"primary_key": [
+				"id"
+			],
+			"primary_key_name": "PRIMARY",
+			"indexes": [
+				{
+					"name": "tb_users_email_unique_d975992f",
+					"columns": [
+						"email"
+					],
+					"unique": true,
+					"where": "active"
+				},
+				{
+					"name": "tb_users_tb_user_spouse_unique",
+					"columns": [
+						"tb_user_spouse"
+					],
+					"unique": true
+				},
+				{
+					"name": "users_by_name",
+					"columns": [
+						"name"
+					]
+				}
+			],
+			"foreign_keys": [
+				{
+					"name": "tb_users_tb_user_spouse_fkey",
+					"columns": [
+						"tb_user_spouse"
+					],
+					"ref_table": {
+						"name": "tb_users"
+					},
+					"ref_columns": [
+						"id"
+					]
+				}
+			],
+			"checks": [
+				{
+					"name": "tb_users_tier_check",
+					"expr": "`tier` IN ('free', 'pro')"
+				}
+			],
+			"comment": "a person",
+			"collation": "utf8mb4_bin"
+		},
+		{
+			"schema": "billing",
+			"name": "invoices",
+			"columns": [
+				{
+					"name": "id",
+					"type": "bigint",
+					"identity": true
+				},
+				{
+					"name": "status",
+					"type": "enum('open','paid','void')"
+				},
+				{
+					"name": "mood",
+					"type": "enum('calm','busy')"
+				},
+				{
+					"name": "tb_invoice_payer",
+					"type": "bigint"
+				}
+			],
+			"primary_key": [
+				"id"
+			],
+			"primary_key_name": "PRIMARY",
+			"indexes": [
+				{
+					"name": "invoices_tb_invoice_payer",
+					"columns": [
+						"tb_invoice_payer"
+					]
+				}
+			],
+			"foreign_keys": [
+				{
+					"name": "invoices_tb_invoice_payer_fkey",
+					"columns": [
+						"tb_invoice_payer"
+					],
+					"ref_table": {
+						"name": "tb_users"
+					},
+					"ref_columns": [
+						"id"
+					]
+				}
+			],
+			"comment": "a bill",
+			"collation": "utf8mb4_bin"
+		}
+	]
+}

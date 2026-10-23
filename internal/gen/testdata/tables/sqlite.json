@@ -1,0 +1,485 @@
+{
+	"version": 1,
+	"dialect": "sqlite",
+	"tables": [
+		{
+			"name": "posts",
+			"columns": [
+				{
+					"name": "id",
+					"type": "integer",
+					"identity": true
+				},
+				{
+					"name": "author_id",
+					"type": "integer",
+					"nullable": true
+				},
+				{
+					"name": "title",
+					"type": "text"
+				},
+				{
+					"name": "status",
+					"type": "text",
+					"default": "'open'"
+				},
+				{
+					"name": "body",
+					"type": "blob",
+					"nullable": true
+				},
+				{
+					"name": "digest",
+					"type": "blob",
+					"nullable": true
+				},
+				{
+					"name": "published_at",
+					"type": "datetime",
+					"nullable": true
+				},
+				{
+					"name": "ref",
+					"type": "text",
+					"nullable": true
+				},
+				{
+					"name": "meta",
+					"type": "text"
+				},
+				{
+					"name": "price",
+					"type": "numeric"
+				},
+				{
+					"name": "mood",
+					"type": "text"
+				}
+			],
+			"primary_key": [
+				"id"
+			],
+			"indexes": [
+				{
+					"name": "posts_author_id",
+					"columns": [
+						"author_id"
+					]
+				}
+			],
+			"foreign_keys": [
+				{
+					"name": "post_author",
+					"columns": [
+						"author_id"
+					],
+					"ref_table": {
+						"name": "tb_users"
+					},
+					"ref_columns": [
+						"id"
+					],
+					"on_delete": "SET NULL"
+				}
+			],
+			"checks": [
+				{
+					"name": "posts_mood_check",
+					"expr": "\"mood\" IN ('calm', 'busy')"
+				},
+				{
+					"name": "posts_status_check",
+					"expr": "\"status\" IN ('open', 'paid', 'void')"
+				}
+			]
+		},
+		{
+			"name": "tb_groups",
+			"columns": [
+				{
+					"name": "id",
+					"type": "integer",
+					"identity": true
+				},
+				{
+					"name": "status",
+					"type": "text",
+					"default": "'open'"
+				}
+			],
+			"primary_key": [
+				"id"
+			],
+			"checks": [
+				{
+					"name": "tb_groups_status_check",
+					"expr": "\"status\" IN ('open', 'paid', 'void')"
+				}
+			]
+		},
+		{
+			"name": "tb_profiles",
+			"columns": [
+				{
+					"name": "id",
+					"type": "integer",
+					"identity": true
+				},
+				{
+					"name": "handle",
+					"type": "text"
+				},
+				{
+					"name": "tb_user_profile",
+					"type": "integer"
+				}
+			],
+			"primary_key": [
+				"id"
+			],
+			"indexes": [
+				{
+					"name": "tb_profiles_tb_user_profile_unique",
+					"columns": [
+						"tb_user_profile"
+					],
+					"unique": true
+				}
+			],
+			"foreign_keys": [
+				{
+					"name": "tb_profiles_tb_user_profile_fkey",
+					"columns": [
+						"tb_user_profile"
+					],
+					"ref_table": {
+						"name": "tb_users"
+					},
+					"ref_columns": [
+						"id"
+					]
+				}
+			]
+		},
+		{
+			"name": "tb_tokens",
+			"columns": [
+				{
+					"name": "id",
+					"type": "text"
+				},
+				{
+					"name": "i8",
+					"type": "integer"
+				},
+				{
+					"name": "i16",
+					"type": "integer"
+				},
+				{
+					"name": "i32",
+					"type": "integer"
+				},
+				{
+					"name": "u8",
+					"type": "integer"
+				},
+				{
+					"name": "u16",
+					"type": "integer"
+				},
+				{
+					"name": "u32",
+					"type": "integer"
+				},
+				{
+					"name": "u",
+					"type": "integer"
+				},
+				{
+					"name": "u64",
+					"type": "integer"
+				},
+				{
+					"name": "f32",
+					"type": "real"
+				},
+				{
+					"name": "tb_user_tokens",
+					"type": "integer",
+					"nullable": true
+				}
+			],
+			"primary_key": [
+				"id"
+			],
+			"indexes": [
+				{
+					"name": "tb_tokens_tb_user_tokens",
+					"columns": [
+						"tb_user_tokens"
+					]
+				}
+			],
+			"foreign_keys": [
+				{
+					"name": "tb_tokens_tb_user_tokens_fkey",
+					"columns": [
+						"tb_user_tokens"
+					],
+					"ref_table": {
+						"name": "tb_users"
+					},
+					"ref_columns": [
+						"id"
+					],
+					"on_delete": "CASCADE"
+				}
+			]
+		},
+		{
+			"name": "tb_user_friends",
+			"columns": [
+				{
+					"name": "tb_user_id",
+					"type": "integer"
+				},
+				{
+					"name": "friend_id",
+					"type": "integer"
+				}
+			],
+			"primary_key": [
+				"tb_user_id",
+				"friend_id"
+			],
+			"indexes": [
+				{
+					"name": "tb_user_friends_friend_id",
+					"columns": [
+						"friend_id"
+					]
+				}
+			],
+			"foreign_keys": [
+				{
+					"name": "tb_user_friends_friend_id_fkey",
+					"columns": [
+						"friend_id"
+					],
+					"ref_table": {
+						"name": "tb_users"
+					},
+					"ref_columns": [
+						"id"
+					],
+					"on_delete": "CASCADE"
+				},
+				{
+					"name": "tb_user_friends_tb_user_id_fkey",
+					"columns": [
+						"tb_user_id"
+					],
+					"ref_table": {
+						"name": "tb_users"
+					},
+					"ref_columns": [
+						"id"
+					],
+					"on_delete": "CASCADE"
+				}
+			]
+		},
+		{
+			"name": "tb_user_groups",
+			"columns": [
+				{
+					"name": "tb_user_id",
+					"type": "integer"
+				},
+				{
+					"name": "tb_group_id",
+					"type": "integer"
+				}
+			],
+			"primary_key": [
+				"tb_user_id",
+				"tb_group_id"
+			],
+			"indexes": [
+				{
+					"name": "tb_user_groups_tb_group_id",
+					"columns": [
+						"tb_group_id"
+					]
+				}
+			],
+			"foreign_keys": [
+				{
+					"name": "membership_group",
+					"columns": [
+						"tb_group_id"
+					],
+					"ref_table": {
+						"name": "tb_groups"
+					},
+					"ref_columns": [
+						"id"
+					],
+					"on_delete": "CASCADE"
+				},
+				{
+					"name": "membership_user",
+					"columns": [
+						"tb_user_id"
+					],
+					"ref_table": {
+						"name": "tb_users"
+					},
+					"ref_columns": [
+						"id"
+					],
+					"on_delete": "CASCADE"
+				}
+			]
+		},
+		{
+			"name": "tb_users",
+			"columns": [
+				{
+					"name": "id",
+					"type": "integer",
+					"identity": true
+				},
+				{
+					"name": "created_at",
+					"type": "datetime",
+					"default": "CURRENT_TIMESTAMP"
+				},
+				{
+					"name": "updated_at",
+					"type": "datetime",
+					"default": "CURRENT_TIMESTAMP"
+				},
+				{
+					"name": "name",
+					"type": "text"
+				},
+				{
+					"name": "email",
+					"type": "text"
+				},
+				{
+					"name": "bio",
+					"type": "text",
+					"default": "''"
+				},
+				{
+					"name": "active",
+					"type": "boolean",
+					"nullable": true,
+					"default": "1"
+				},
+				{
+					"name": "admin",
+					"type": "boolean",
+					"default": "0"
+				},
+				{
+					"name": "age",
+					"type": "integer",
+					"default": "0"
+				},
+				{
+					"name": "score",
+					"type": "real",
+					"nullable": true,
+					"default": "1.5"
+				},
+				{
+					"name": "role",
+					"type": "text",
+					"default": "'viewer'"
+				},
+				{
+					"name": "mood",
+					"type": "text"
+				},
+				{
+					"name": "tier",
+					"type": "text"
+				},
+				{
+					"name": "locale",
+					"type": "text",
+					"default": "'en'"
+				},
+				{
+					"name": "tags",
+					"type": "text",
+					"nullable": true
+				},
+				{
+					"name": "tb_user_spouse",
+					"type": "integer",
+					"nullable": true
+				}
+			],
+			"primary_key": [
+				"id"
+			],
+			"indexes": [
+				{
+					"name": "tb_users_email_unique_d975992f",
+					"columns": [
+						"email"
+					],
+					"unique": true,
+					"where": "active"
+				},
+				{
+					"name": "tb_users_tb_user_spouse_unique",
+					"columns": [
+						"tb_user_spouse"
+					],
+					"unique": true
+				},
+				{
+					"name": "users_by_name",
+					"columns": [
+						"name"
+					]
+				}
+			],
+			"foreign_keys": [
+				{
+					"name": "tb_users_tb_user_spouse_fkey",
+					"columns": [
+						"tb_user_spouse"
+					],
+					"ref_table": {
+						"name": "tb_users"
+					},
+					"ref_columns": [
+						"id"
+					]
+				}
+			],
+			"checks": [
+				{
+					"name": "tb_users_mood_check",
+					"expr": "\"mood\" IN ('calm', 'busy')"
+				},
+				{
+					"name": "tb_users_role_check",
+					"expr": "\"role\" IN ('admin', 'viewer')"
+				},
+				{
+					"name": "tb_users_tier_check",
+					"expr": "\"tier\" IN ('free', 'pro')"
+				}
+			]
+		}
+	]
+}
