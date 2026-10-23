@@ -928,6 +928,30 @@ func TestLowerFieldUniqueIndexIsNotRepeated(t *testing.T) {
 	}
 }
 
+// A partial unique index is unique only over the rows its predicate keeps,
+// so the core sees it as non-unique, and a Unique field on its column keeps
+// its own index.
+type LwPartial struct{ schema.Schema }
+
+func (LwPartial) Fields() []schema.Field {
+	return []schema.Field{field.String("email").Unique(), field.Bool("active").Nillable(), field.String("code")}
+}
+func (LwPartial) Indexes() []schema.Index {
+	return []schema.Index{index.Fields("email").Where("active").Unique(), index.Fields("code").Where("active").Unique()}
+}
+
+func TestLowerPartialUniqueIndex(t *testing.T) {
+	e := mustLower(t, Config{}, LwPartial{}).entity("LwPartial")
+	want := []OutIndex{
+		{Columns: []int{1}}, // email, partial: not unique for the table
+		{Columns: []int{3}}, // code, partial
+		{Columns: []int{1}, Unique: true},
+	}
+	if !reflect.DeepEqual(e.Indexes, want) {
+		t.Fatalf("indexes %+v, want %+v", e.Indexes, want)
+	}
+}
+
 // A conversion in the Check code is there only where the types differ: x is
 // already a string or an int when the field has no Go type of its own.
 type lwCents int64

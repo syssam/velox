@@ -143,7 +143,7 @@ func (l *lowerer) entities() {
 		}
 		s.out.PrimaryKey = []int{0}
 		for i, ix := range e.Indexes {
-			oi := OutIndex{Columns: []int{}, Unique: ix.Unique}
+			oi := OutIndex{Columns: []int{}, Unique: ix.Unique && ix.Where == ""} // a partial index is not unique for the table
 			for _, c := range ix.Columns {
 				if j := columnIndex(e, c); j >= 0 {
 					oi.Columns = append(oi.Columns, j)
@@ -155,7 +155,7 @@ func (l *lowerer) entities() {
 		}
 		// A field's Unique is a single-column unique index, after the
 		// declared ones, which the runtime's uniqueness rules read. The ID is
-		// unique by being the primary key. A declared unique index on the
+		// unique by being the primary key. A declared full unique index on the
 		// field alone already is that index, and is not repeated.
 		for i, f := range e.Fields {
 			if !f.Unique || i == 0 {

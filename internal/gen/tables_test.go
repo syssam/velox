@@ -228,6 +228,14 @@ func TestTablesPositions(t *testing.T) {
 	if e := s.Enums[slices.IndexFunc(s.Enums, func(e migrate.Enum) bool { return e.Name == "tb_users_role" })]; e.Pos != u.Field("role").Pos {
 		t.Errorf("enum pos %q", e.Pos)
 	}
+	// An implicit foreign key, and its index, are at the edge that declares them.
+	tokens, at := table(t, s, "tb_tokens"), u.Edge("tokens").Pos
+	if c := column(t, tokens, "tb_user_tokens"); c.Pos != at || at == "" {
+		t.Errorf("implicit column pos %q, want the edge's %q", c.Pos, at)
+	}
+	if ix := tokens.Indexes[0]; ix.Name != "tb_tokens_tb_user_tokens" || ix.Pos != at {
+		t.Errorf("foreign-key index %+v, want the edge's pos %q", ix, at)
+	}
 }
 
 // --- types
@@ -447,6 +455,8 @@ func (tbDefaults) Fields() []schema.Field {
 		field.JSON("j", jsonShape{}).Default(jsonShape{W: 1}),
 		field.Enum("role").Values("admin", "viewer").Default("viewer"),
 		field.Enum("mode").Values("a", "b").Default("a").SchemaType(map[string]string{field.MySQL: "text"}),
+		field.String("blobby").Default("x").SchemaType(map[string]string{field.MySQL: "blob"}),
+		field.String("doc").Optional().SchemaType(map[string]string{field.MySQL: "json"}),
 	}
 }
 
@@ -475,6 +485,8 @@ func TestTablesDefaults(t *testing.T) {
 		"j":       {"", "", ""},
 		"role":    {"'viewer'", "'viewer'", "'viewer'"},
 		"mode":    {"'a'", "('a')", "'a'"},
+		"blobby":  {"'x'", "('x')", "'x'"},
+		"doc":     {"''", "('')", "''"},
 	}
 	for i, d := range allDialects {
 		tb := table(t, tables(t, d, tbDefaults{}), "tb_defaults")
@@ -667,6 +679,7 @@ func (tbFkUser) Edges() []schema.Edge {
 	return []schema.Edge{
 		edge.To("pets", tbFkPet.Type),
 		edge.To("cars", tbFkCar.Type).OnDelete(edge.Cascade),
+		edge.To("bikes", tbFkBike.Type).StorageKey(edge.Symbol("bike_owner")),
 		edge.To("groups", tbFkGroup.Type).StorageKey(edge.Symbols("gm_user", "gm_group")),
 		edge.To("teams", tbFkTeam.Type),
 	}
@@ -679,6 +692,13 @@ func (tbFkPet) Edges() []schema.Edge {
 }
 
 type tbFkCar struct{ schema.Schema }
+
+// tbFkBike holds the key; the Symbol is on the other edge of the pair.
+type tbFkBike struct{ schema.Schema }
+
+func (tbFkBike) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("owner", tbFkUser.Type).Ref("bikes").Unique()}
+}
 
 type tbFkGroup struct{ schema.Schema }
 
@@ -694,11 +714,12 @@ func (tbFkTeam) Edges() []schema.Edge {
 
 func TestTablesForeignKeys(t *testing.T) {
 	for _, d := range allDialects {
-		s := tables(t, d, tbFkUser{}, tbFkPet{}, tbFkCar{}, tbFkGroup{}, tbFkTeam{})
+		s := tables(t, d, tbFkUser{}, tbFkPet{}, tbFkCar{}, tbFkBike{}, tbFkGroup{}, tbFkTeam{})
 		users := migrate.TableRef{Name: "tb_fk_users"}
 		for tableName, want := range map[string][]migrate.ForeignKey{
-			"tb_fk_pets": {{Name: "pet_owner", Columns: []string{"tb_fk_user_pets"}, RefTable: users, RefColumns: []string{"id"}, OnDelete: "SET NULL"}},
-			"tb_fk_cars": {{Name: "tb_fk_cars_tb_fk_user_cars_fkey", Columns: []string{"tb_fk_user_cars"}, RefTable: users, RefColumns: []string{"id"}, OnDelete: "CASCADE"}},
+			"tb_fk_pets":  {{Name: "pet_owner", Columns: []string{"tb_fk_user_pets"}, RefTable: users, RefColumns: []string{"id"}, OnDelete: "SET NULL"}},
+			"tb_fk_bikes": {{Name: "bike_owner", Columns: []string{"tb_fk_user_bikes"}, RefTable: users, RefColumns: []string{"id"}}},
+			"tb_fk_cars":  {{Name: "tb_fk_cars_tb_fk_user_cars_fkey", Columns: []string{"tb_fk_user_cars"}, RefTable: users, RefColumns: []string{"id"}, OnDelete: "CASCADE"}},
 			"tb_fk_user_groups": {
 				{Name: "gm_group", Columns: []string{"tb_fk_group_id"}, RefTable: migrate.TableRef{Name: "tb_fk_groups"}, RefColumns: []string{"id"}, OnDelete: "CASCADE"},
 				{Name: "gm_user", Columns: []string{"tb_fk_user_id"}, RefTable: users, RefColumns: []string{"id"}, OnDelete: "CASCADE"},
@@ -826,5 +847,42 @@ func TestTablesDeterministic(t *testing.T) {
 		if strings.Contains(string(ja), `"dialect":"`+d.String()+`"`) == false {
 			t.Errorf("%v: %s", d, ja)
 		}
+	}
+}
+
+// A partial unique index is not unique for the whole table: a Unique field
+// keeps its own index beside one on its column.
+type tbPartialUniq struct{ schema.Schema }
+
+func (tbPartialUniq) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.Table("accounts")}
+}
+func (tbPartialUniq) Fields() []schema.Field {
+	return []schema.Field{field.String("email").Unique(), field.Bool("active").Nillable()}
+}
+func (tbPartialUniq) Indexes() []schema.Index {
+	return []schema.Index{index.Fields("email").Where("active").Unique()}
+}
+
+func TestTablesPartialUniqueKeepsFieldIndex(t *testing.T) {
+	partial := indexName("accounts", &Index{Columns: []string{"email"}, Unique: true, Where: "active"})
+	for _, d := range allDialects {
+		tb := table(t, tables(t, d, tbPartialUniq{}), "accounts")
+		want := []migrate.Index{
+			{Name: "accounts_email_unique", Columns: []string{"email"}, Unique: true},
+			{Name: partial, Columns: []string{"email"}, Unique: true, Where: "active"},
+		}
+		slices.SortFunc(want, func(a, b migrate.Index) int { return strings.Compare(a.Name, b.Name) })
+		if !slices.EqualFunc(tb.Indexes, want, func(x, y migrate.Index) bool {
+			return x.Name == y.Name && x.Unique == y.Unique && x.Where == y.Where && slices.Equal(x.Columns, y.Columns)
+		}) {
+			t.Errorf("%v: indexes %+v, want %+v", d, tb.Indexes, want)
+		}
+	}
+}
+
+func TestTablesUnknownDialect(t *testing.T) {
+	if s, err := Tables(mustBuild(t, tbCmUser{}, tbCmPet{}, tbCmGroup{}), velox.Dialect(0)); err == nil || s != nil {
+		t.Errorf("Tables of Dialect(0) = %v, %v; want an error", s, err)
 	}
 }

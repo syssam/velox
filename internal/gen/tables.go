@@ -17,6 +17,9 @@ import (
 // entity and per many-to-many join table, sorted. Its errors are *Error
 // values with positions, joined as Build's are. Tables does not change g.
 func Tables(g *Graph, d velox.Dialect) (*migrate.Schema, error) {
+	if d != velox.Postgres && d != velox.MySQL && d != velox.SQLite {
+		return nil, &Error{Reason: "Tables: unknown dialect " + d.String()}
+	}
 	t := &tabler{d: d, ids: map[*Entity]string{}, fks: map[[3]string]foreignKey{}, enums: map[[2]string]bool{}}
 	for _, e := range g.Entities {
 		t.ids[e] = t.idType(e.Fields[0])
@@ -323,16 +326,20 @@ func (t *tabler) columnDefault(f *Field, typ string) string {
 			return ""
 		}
 		lit := ddl.Literal(t.d, v)
-		if t.d == velox.MySQL && mysqlText[typ] {
-			return "(" + lit + ")" // MySQL takes no literal default on a text column
+		if t.d == velox.MySQL && mysqlExprDefault[typ] {
+			return "(" + lit + ")" // MySQL takes no literal default on these types
 		}
 		return lit
 	}
 	return ""
 }
 
-// mysqlText are MySQL's text types.
-var mysqlText = map[string]bool{"tinytext": true, "text": true, "mediumtext": true, "longtext": true}
+// mysqlExprDefault are MySQL's text, blob and json types, whose default must
+// be an expression.
+var mysqlExprDefault = map[string]bool{
+	"tinytext": true, "text": true, "mediumtext": true, "longtext": true,
+	"tinyblob": true, "blob": true, "mediumblob": true, "longblob": true, "json": true,
+}
 
 // baseTypes are the column types of the field types whose type does not
 // depend on their Size: PostgreSQL's, MySQL's, then SQLite's.

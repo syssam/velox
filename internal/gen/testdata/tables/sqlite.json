@@ -431,6 +431,13 @@
 			],
 			"indexes": [
 				{
+					"name": "tb_users_email_unique",
+					"columns": [
+						"email"
+					],
+					"unique": true
+				},
+				{
 					"name": "tb_users_email_unique_d975992f",
 					"columns": [
 						"email"

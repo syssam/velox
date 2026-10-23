@@ -173,8 +173,9 @@ func fkIndexed(pk []string, indexes [][]string, column string) bool {
 }
 
 // fieldIndexes are the unique indexes of e's Unique fields but the ID, each
-// with its field: one per column, unless a declared unique index, not in
-// refused, covers that column alone.
+// with its field: one per column, unless a declared unique index, not
+// partial and not in refused, covers that column alone. A partial index is
+// unique only over the rows its predicate keeps.
 func fieldIndexes(e *Entity, refused map[*Index]bool) ([]*Index, []*Field) {
 	var ixs []*Index
 	var fs []*Field
@@ -183,7 +184,9 @@ func fieldIndexes(e *Entity, refused map[*Index]bool) ([]*Index, []*Field) {
 			continue // a column two fields share is rule 2's
 		}
 		ix := &Index{Columns: []string{f.Column}, Unique: true}
-		if slices.ContainsFunc(e.Indexes, func(d *Index) bool { return !refused[d] && d.Unique && slices.Equal(d.Columns, ix.Columns) }) {
+		if slices.ContainsFunc(e.Indexes, func(d *Index) bool {
+			return !refused[d] && d.Unique && d.Where == "" && slices.Equal(d.Columns, ix.Columns)
+		}) {
 			continue
 		}
 		ix.Name = indexName(e.Table, ix)
