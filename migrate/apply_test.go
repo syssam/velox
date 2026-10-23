@@ -1,0 +1,282 @@
+package migrate
+
+import (
+	"fmt"
+	"slices"
+
+	"github.com/syssam/velox2"
+)
+
+// applyChanges is s with changes applied as a model: what a database that
+// held s would hold after the migration, for the invariants. It fails on a
+// change that names what is not there.
+func applyChanges(s *Schema, changes []Change) (*Schema, error) {
+	s = s.clone()
+	for i, c := range changes {
+		if err := apply(s, c); err != nil {
+			return nil, fmt.Errorf("change %d (%s %v): %w", i, c.Kind(), c.Target(), err)
+		}
+	}
+	s.sort()
+	return s, nil
+}
+
+func apply(s *Schema, c Change) error {
+	switch c := c.(type) {
+	case CreateTable:
+		if _, ok := s.Table(c.Table.Ref()); ok {
+			return fmt.Errorf("the table exists")
+		}
+		s.Tables = append(s.Tables, c.Table)
+		s.Tables = s.clone().Tables // own the new table's lists
+		return nil
+	case DropTable:
+		n := len(s.Tables)
+		s.Tables = slices.DeleteFunc(s.Tables, func(t Table) bool { return t.Ref() == c.Table.Ref() })
+		if len(s.Tables) == n {
+			return fmt.Errorf("no such table")
+		}
+		for _, t := range s.Tables {
+			for _, fk := range t.ForeignKeys {
+				// SQLite keeps a cycle's keys inline, and drops a referenced table.
+				if fk.RefTable == c.Table.Ref() && s.Dialect != velox.SQLite {
+					return fmt.Errorf("%s.%s still references it", t.Name, fk.Name)
+				}
+			}
+		}
+		return nil
+	case RenameTable:
+		t, err := tableOf(s, c.From)
+		if err != nil {
+			return err
+		}
+		if _, ok := s.Table(c.To); ok {
+			return fmt.Errorf("%v exists", c.To)
+		}
+		t.Schema, t.Name = c.To.Schema, c.To.Name
+		for i := range s.Tables {
+			for j := range s.Tables[i].ForeignKeys {
+				if fk := &s.Tables[i].ForeignKeys[j]; fk.RefTable == c.From {
+					fk.RefTable = c.To
+				}
+			}
+		}
+		return nil
+	case CreateEnum:
+		if slices.ContainsFunc(s.Enums, func(e Enum) bool { return e.ref() == c.Enum.ref() }) {
+			return fmt.Errorf("the enum exists")
+		}
+		e := c.Enum
+		e.Values = slices.Clone(e.Values)
+		s.Enums = append(s.Enums, e)
+		return nil
+	case DropEnum:
+		n := len(s.Enums)
+		s.Enums = slices.DeleteFunc(s.Enums, func(e Enum) bool { return e.ref() == c.Enum.ref() })
+		if len(s.Enums) == n {
+			return fmt.Errorf("no such enum")
+		}
+		typ := enumTypeName(c.Enum.ref())
+		for _, t := range s.Tables {
+			for _, col := range t.Columns {
+				if col.Type == typ {
+					return fmt.Errorf("%s.%s still uses it", t.Name, col.Name)
+				}
+			}
+		}
+		return nil
+	case RenameEnum:
+		e, err := enumOf(s, c.From)
+		if err != nil {
+			return err
+		}
+		e.Schema, e.Name = c.To.Schema, c.To.Name
+		from, to := enumTypeName(c.From), enumTypeName(c.To)
+		for i := range s.Tables {
+			for j := range s.Tables[i].Columns {
+				if col := &s.Tables[i].Columns[j]; col.Type == from {
+					col.Type = to
+				}
+			}
+		}
+		return nil
+	case AlterEnum:
+		e, err := enumOf(s, c.From.ref())
+		if err != nil {
+			return err
+		}
+		if !slices.Equal(e.Values, c.From.Values) {
+			return fmt.Errorf("the values are %q, not %q", e.Values, c.From.Values)
+		}
+		e.Values = slices.Clone(c.To.Values)
+		return nil
+	}
+
+	t, err := tableOf(s, c.Target())
+	if err != nil {
+		return err
+	}
+	switch c := c.(type) {
+	case AddColumn:
+		if colOf(t, c.Column.Name) != nil {
+			return fmt.Errorf("column %s exists", c.Column.Name)
+		}
+		t.Columns = append(t.Columns, c.Column)
+	case DropColumn:
+		n := len(t.Columns)
+		t.Columns = slices.DeleteFunc(t.Columns, func(col Column) bool { return col.Name == c.Column.Name })
+		if len(t.Columns) == n {
+			return fmt.Errorf("no column %s", c.Column.Name)
+		}
+	case RenameColumn:
+		col := colOf(t, c.From)
+		if col == nil || colOf(t, c.To) != nil {
+			return fmt.Errorf("cannot rename column %s to %s", c.From, c.To)
+		}
+		col.Name = c.To
+		rename := func(names []string) {
+			for i := range names {
+				if names[i] == c.From {
+					names[i] = c.To
+				}
+			}
+		}
+		rename(t.PrimaryKey)
+		for i := range t.Indexes {
+			rename(t.Indexes[i].Columns)
+		}
+		for i := range t.ForeignKeys {
+			rename(t.ForeignKeys[i].Columns)
+		}
+		for i := range s.Tables {
+			for j := range s.Tables[i].ForeignKeys {
+				if fk := &s.Tables[i].ForeignKeys[j]; fk.RefTable == t.Ref() {
+					rename(fk.RefColumns)
+				}
+			}
+		}
+	case AlterColumn:
+		col := colOf(t, c.From.Name)
+		if col == nil {
+			return fmt.Errorf("no column %s", c.From.Name)
+		}
+		if c.What == 0 || c.From.Name != c.To.Name {
+			return fmt.Errorf("an empty or renaming alter")
+		}
+		if c.What&ColumnType != 0 {
+			col.Type = c.To.Type
+		}
+		if c.What&ColumnNullable != 0 {
+			col.Nullable = c.To.Nullable
+		}
+		if c.What&ColumnDefault != 0 {
+			col.Default = c.To.Default
+		}
+		if c.What&ColumnIdentity != 0 {
+			col.Identity, col.Sequence = c.To.Identity, c.To.Sequence
+		}
+		if c.What&ColumnComment != 0 {
+			col.Comment = c.To.Comment
+		}
+	case RenameSequence:
+		col := colOf(t, c.Column)
+		if col == nil || col.Sequence != c.From {
+			return fmt.Errorf("no sequence %s on %s", c.From, c.Column)
+		}
+		col.Sequence = c.To
+	case AddIndex:
+		if slices.ContainsFunc(t.Indexes, func(ix Index) bool { return ix.Name == c.Index.Name }) {
+			return fmt.Errorf("index %s exists", c.Index.Name)
+		}
+		ix := c.Index
+		ix.Columns = slices.Clone(ix.Columns)
+		t.Indexes = append(t.Indexes, ix)
+	case DropIndex:
+		n := len(t.Indexes)
+		t.Indexes = slices.DeleteFunc(t.Indexes, func(ix Index) bool { return ix.Name == c.Index.Name })
+		if len(t.Indexes) == n {
+			return fmt.Errorf("no index %s", c.Index.Name)
+		}
+	case RenameIndex:
+		i := slices.IndexFunc(t.Indexes, func(ix Index) bool { return ix.Name == c.From })
+		if i < 0 {
+			return fmt.Errorf("no index %s", c.From)
+		}
+		t.Indexes[i].Name = c.To
+	case AddForeignKey:
+		if slices.ContainsFunc(t.ForeignKeys, func(fk ForeignKey) bool { return fk.Name == c.ForeignKey.Name }) {
+			return fmt.Errorf("foreign key %s exists", c.ForeignKey.Name)
+		}
+		fk := c.ForeignKey
+		fk.Columns, fk.RefColumns = slices.Clone(fk.Columns), slices.Clone(fk.RefColumns)
+		t.ForeignKeys = append(t.ForeignKeys, fk)
+	case DropForeignKey:
+		n := len(t.ForeignKeys)
+		t.ForeignKeys = slices.DeleteFunc(t.ForeignKeys, func(fk ForeignKey) bool { return fk.Name == c.ForeignKey.Name })
+		if len(t.ForeignKeys) == n {
+			return fmt.Errorf("no foreign key %s", c.ForeignKey.Name)
+		}
+	case AddCheck:
+		if slices.ContainsFunc(t.Checks, func(ck Check) bool { return ck.Name == c.Check.Name }) {
+			return fmt.Errorf("check %s exists", c.Check.Name)
+		}
+		t.Checks = append(t.Checks, c.Check)
+	case DropCheck:
+		n := len(t.Checks)
+		t.Checks = slices.DeleteFunc(t.Checks, func(ck Check) bool { return ck.Name == c.Check.Name })
+		if len(t.Checks) == n {
+			return fmt.Errorf("no check %s", c.Check.Name)
+		}
+	case RenameConstraint:
+		switch {
+		case t.PrimaryKeyName == c.From:
+			t.PrimaryKeyName = c.To
+		case slices.ContainsFunc(t.ForeignKeys, func(fk ForeignKey) bool { return fk.Name == c.From }):
+			t.ForeignKeys[slices.IndexFunc(t.ForeignKeys, func(fk ForeignKey) bool { return fk.Name == c.From })].Name = c.To
+		case slices.ContainsFunc(t.Checks, func(ck Check) bool { return ck.Name == c.From }):
+			t.Checks[slices.IndexFunc(t.Checks, func(ck Check) bool { return ck.Name == c.From })].Name = c.To
+		default:
+			return fmt.Errorf("no constraint %s", c.From)
+		}
+	case SetTableComment:
+		if t.Comment != c.From {
+			return fmt.Errorf("the comment is %q, not %q", t.Comment, c.From)
+		}
+		t.Comment = c.To
+	case SetTableCollation:
+		if t.Collation != c.From {
+			return fmt.Errorf("the collation is %q, not %q", t.Collation, c.From)
+		}
+		t.Collation = c.To
+	default:
+		return fmt.Errorf("unknown change %T", c)
+	}
+	return nil
+}
+
+func tableOf(s *Schema, ref TableRef) (*Table, error) {
+	for i := range s.Tables {
+		if s.Tables[i].Ref() == ref {
+			return &s.Tables[i], nil
+		}
+	}
+	return nil, fmt.Errorf("no table %v", ref)
+}
+
+func enumOf(s *Schema, ref TableRef) (*Enum, error) {
+	for i := range s.Enums {
+		if s.Enums[i].ref() == ref {
+			return &s.Enums[i], nil
+		}
+	}
+	return nil, fmt.Errorf("no enum %v", ref)
+}
+
+func colOf(t *Table, name string) *Column {
+	for i := range t.Columns {
+		if t.Columns[i].Name == name {
+			return &t.Columns[i]
+		}
+	}
+	return nil
+}
