@@ -68,6 +68,10 @@
 == serial-to-identity
 0 add-identity review users.id: adds an identity to column users.id and sets its counter past the column's largest value
 0 serial-to-identity review users.id: turns serial column users.id into an identity: its default and sequence are dropped
+== enum-swap-dependents
+0 drop-enum-value destructive users_role [cases_test.go]: removes 'guest' from enum type users_role; rows that hold it fail or change
+== index-name-to-table
+0 drop-index review users.tags: drops index users.tags; queries that used it get slower
 == rename-table-drop-column
 0 drop-index review users.users_email_unique: drops index users.users_email_unique; queries that used it get slower
 1 rename-table review accounts: renames table users to accounts; code that uses the old name breaks while old and new versions run together

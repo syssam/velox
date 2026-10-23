@@ -3,6 +3,7 @@ package migrate_test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"reflect"
@@ -118,6 +119,12 @@ func TestRenderOnlineUnits(t *testing.T) {
 		!slices.Contains(stmtSQL(on.Statements), `CREATE INDEX CONCURRENTLY "shared_idx" ON "users" ("created_at")`) {
 		t.Errorf("reuse-dropped-name:\n%s", scriptsText(ss))
 	}
+
+	// So does an index whose name a new table takes, before the table.
+	got := sqls(caseScripts(t, caseNamed("index-name-to-table"), velox.Postgres))
+	if i, j := slices.Index(got, `DROP INDEX "tags"`), slices.IndexFunc(got, func(s string) bool { return strings.HasPrefix(s, `CREATE TABLE "tags"`) }); i < 0 || j < i {
+		t.Errorf("index-name-to-table:\n%s", strings.Join(got, "\n"))
+	}
 }
 
 // TestRenderEnumScript: added values are the enum script's, before the main
@@ -142,6 +149,23 @@ func TestRenderEnumScript(t *testing.T) {
 	}
 	if len(ss) != 1 || ss[0].Kind != migrate.MainScript || !slices.Equal(stmtSQL(ss[0].Statements), want) {
 		t.Errorf("enum-shared:\n%s", scriptsText(ss))
+	}
+
+	// What casts to the type is dropped before the columns change and
+	// made again after.
+	ss = caseScripts(t, caseNamed("enum-swap-dependents"), velox.Postgres)
+	want = []string{
+		`ALTER TYPE "users_role" RENAME TO "users_role_velox_old"`,
+		`CREATE TYPE "users_role" AS ENUM ('admin', 'viewer')`,
+	}
+	got := stmtSQL(ss[0].Statements)
+	if len(ss) != 1 || len(got) != 8 || got[2] != `ALTER TABLE "users" DROP CONSTRAINT "users_role_known"` ||
+		!strings.HasPrefix(got[3], `DROP INDEX "users_name_`) ||
+		!strings.HasPrefix(got[4], `ALTER TABLE "users" ALTER COLUMN "role" DROP DEFAULT, ALTER COLUMN "role" TYPE "users_role"`) ||
+		!strings.HasPrefix(got[5], `CREATE INDEX "users_name_`) || !strings.HasSuffix(got[5], ` ON "users" ("name") WHERE role = 'admin'`) ||
+		got[6] != `ALTER TABLE "users" ADD CONSTRAINT "users_role_known" CHECK ("role" IN ('admin', 'viewer'))` ||
+		got[7] != `DROP TYPE "users_role_velox_old"` || !slices.Equal(got[:2], want) {
+		t.Errorf("enum-swap-dependents:\n%s", scriptsText(ss))
 	}
 
 	// A value added to a type the main script renames names the type as
@@ -176,29 +200,55 @@ func TestRenderIdentity(t *testing.T) {
 			t.Errorf("%s: review %q", name, r)
 		}
 	}
+
+	// A serial whose sequence from does not name: the name is read from
+	// its default, as an identifier; a default it cannot read is refused.
+	from, to := models(t, caseNamed("serial-to-identity"), velox.Postgres)
+	id := column(table(from, "users"), "id")
+	id.Sequence = ""
+	for def, drop := range map[string]string{
+		`nextval('users_id_seq'::regclass)`:          `DROP SEQUENCE "users_id_seq"`,
+		`nextval('Users_ID_Seq')`:                    `DROP SEQUENCE "users_id_seq"`,
+		`nextval('"Odd""seq"'::regclass)`:            `DROP SEQUENCE "Odd""seq"`,
+		`nextval('public."users_id_seq"'::regclass)`: `DROP SEQUENCE "public"."users_id_seq"`,
+	} {
+		id.Default = def
+		got := sqls(render(t, from, to, diff(t, from, to, migrate.DiffOptions{}), migrate.RenderOptions{}))
+		if len(got) != 4 || got[1] != drop || got[2] != add {
+			t.Errorf("%s:\n%s", def, strings.Join(got, "\n"))
+		}
+	}
+	for _, def := range []string{`nextval(42)`, `nextval('a.b.c'::regclass)`, `nextval('"open'::regclass)`} {
+		id.Default = def
+		_, err := migrate.Render(from, to, diff(t, from, to, migrate.DiffOptions{}), migrate.RenderOptions{})
+		var e *migrate.Error
+		if !errors.As(err, &e) || e.Code != "render" || err.Error() != unnamedSequence {
+			t.Errorf("%s: %v", def, err)
+		}
+	}
 }
 
+// unnamedSequence is Render's refusal of an identity change on users.id
+// whose sequence from does not name.
+const unnamedSequence = "migrate: users.id: the identity's sequence is not named in the snapshot; run velox-gen migrate baseline, or rename it by hand"
+
 // TestRenderSequenceOnly: an identity whose sequence alone changes keeps its
-// identity: the sequence is renamed when from names it, and left as it is
-// when from does not.
+// identity: the sequence is renamed when from names it, and Render refuses
+// the change when from does not.
 func TestRenderSequenceOnly(t *testing.T) {
 	s := mustTables(velox.Postgres, nil)
 	id := *column(table(s, "users"), "id")
 	old := id
 	old.Sequence = "users_legacy_seq"
-	for _, tc := range []struct {
-		from string
-		want []string
-	}{
-		{"users_legacy_seq", []string{`ALTER SEQUENCE "users_legacy_seq" RENAME TO "users_id_seq"`}},
-		{"", nil},
-	} {
-		old.Sequence = tc.from
-		c := migrate.AlterColumn{Table: users, From: old, To: id, What: migrate.ColumnIdentity}
-		got := sqls(render(t, s, s, []migrate.Change{c}, migrate.RenderOptions{}))
-		if !slices.Equal(got, tc.want) {
-			t.Errorf("from sequence %q: %q, want %q", tc.from, got, tc.want)
-		}
+	c := migrate.AlterColumn{Table: users, From: old, To: id, What: migrate.ColumnIdentity}
+	if got, want := sqls(render(t, s, s, []migrate.Change{c}, migrate.RenderOptions{})), []string{`ALTER SEQUENCE "users_legacy_seq" RENAME TO "users_id_seq"`}; !slices.Equal(got, want) {
+		t.Errorf("a named sequence: %q, want %q", got, want)
+	}
+	c.From.Sequence = ""
+	_, err := migrate.Render(s, s, []migrate.Change{c}, migrate.RenderOptions{})
+	var e *migrate.Error
+	if !errors.As(err, &e) || e.Code != "render" || err.Error() != unnamedSequence {
+		t.Errorf("an unnamed sequence: %v", err)
 	}
 }
 
@@ -325,8 +375,10 @@ func TestRenderPostgresDetails(t *testing.T) {
 
 // TestRenderPostgresExecutes runs every PostgreSQL case on the server
 // VELOX_TEST_POSTGRES names, as the runner will run its scripts: from is
-// created by its own scripts in a new database, the case's scripts run, and
-// the result is compared with a database made fresh from to.
+// created by its own scripts in a new database, the case's scripts run, each
+// unit of the enum and online scripts also cut short after each of its
+// statements and run again, and the result is compared with a database made
+// fresh from to.
 func TestRenderPostgresExecutes(t *testing.T) {
 	dsn := os.Getenv("VELOX_TEST_POSTGRES")
 	if dsn == "" {
@@ -354,7 +406,7 @@ func TestRenderPostgresExecutes(t *testing.T) {
 			}
 			empty := &migrate.Schema{Dialect: velox.Postgres}
 			runPostgres(t, db, render(t, empty, from, diff(t, empty, from, migrate.DiffOptions{}), migrate.RenderOptions{LockTimeout: 5 * time.Second}))
-			runPostgres(t, db, caseScripts(t, c, velox.Postgres))
+			runPostgresResuming(t, db, caseScripts(t, c, velox.Postgres), true)
 
 			fresh := pgDatabase(t, admin, dsn)
 			runPostgres(t, fresh, render(t, empty, to, diff(t, empty, to, migrate.DiffOptions{}), migrate.RenderOptions{}))
@@ -404,14 +456,38 @@ func pgExec(t *testing.T, db *sql.DB, q string) {
 // runPostgres runs ss as the runner will: a script in a transaction with
 // SET LOCAL lock_timeout, a no-transaction script statement by statement.
 func runPostgres(t *testing.T, db *sql.DB, ss []migrate.Script) {
+	runPostgresResuming(t, db, ss, false)
+}
+
+// runPostgresResuming is runPostgres; with resume, each unit of a
+// no-transaction script is run as a resume after a failure would run it:
+// for every k, its first k statements, then the whole unit again.
+func runPostgresResuming(t *testing.T, db *sql.DB, ss []migrate.Script, resume bool) {
 	t.Helper()
 	ctx := context.Background()
+	exec := func(sts []migrate.Statement) {
+		t.Helper()
+		for _, st := range sts {
+			if _, err := db.ExecContext(ctx, st.SQL); err != nil {
+				t.Fatalf("%s: %v\n%s", st.SQL, err, scriptsText(ss))
+			}
+		}
+	}
 	for _, s := range ss {
 		if s.Directives.NoTransaction {
-			for _, st := range s.Statements {
-				if _, err := db.ExecContext(ctx, st.SQL); err != nil {
-					t.Fatalf("%s: %v\n%s", st.SQL, err, scriptsText(ss))
+			for i := 0; i < len(s.Statements); {
+				j := i + 1
+				for j < len(s.Statements) && s.Statements[j].Unit == s.Statements[i].Unit {
+					j++
 				}
+				unit := s.Statements[i:j]
+				if resume {
+					for k := 1; k <= len(unit); k++ {
+						exec(unit[:k])
+					}
+				}
+				exec(unit)
+				i = j
 			}
 			continue
 		}

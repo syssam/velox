@@ -1314,6 +1314,8 @@ Plan 1 (`docs/plans/2026-10-23-migrate-1-model.md`) made these calls where this 
 - An `Optional` JSON field of a kind rule 49 refuses gives rule 49's error alone.
 - The snapshot's bytes are the same on every write path (HTML escaping on each), and `MarshalJSON` refuses a dialect `UnmarshalJSON` would refuse.
 - A partial unique index is not unique for the table: it never covers a `Unique` field, and the core treats only an index without `Where` as unique.
+- `Tables` returns an `*Error` for a dialect it does not know, and writes MySQL defaults of blob and JSON columns as expressions, `('…')`.
+- A drop on a table the plan drops carries no finding, and neither does a foreign key dropped and added again as it was, whatever the reason (ruling 23 names two such reasons).
 - `Tables` refuses more than §3 lists: a MySQL enum with a non-string `SchemaType`, `field.Other` without `SchemaType`, an integer ID with a non-integer `SchemaType` (on SQLite too), a NUL byte in a PostgreSQL default or enum value, a PostgreSQL enum label over 63 bytes, MySQL key and row limits on join tables and every primary key (so a `Text()` string ID), and a MySQL foreign key from a table in an explicit database into the connection's default one.
 - An implicit foreign key's comment refusal names the edge's own schema and position; a wide ID's refusal repeats at each key that copies it.
 - Diff writes no empty step-3 `AlterEnum`, and `Diff(nil, …)` is an `*Error`.
@@ -1331,8 +1333,10 @@ Plan 1 (`docs/plans/2026-10-23-migrate-1-model.md`) made these calls where this 
 **Rulings of the PostgreSQL renderer.**
 
 - Consecutive actions of one table and one step share one `ALTER TABLE`, as on MySQL; renames, comments and types are statements of their own.
-- An existing table's index drop goes to the online script, unless the plan drops its table or one of its columns, or gives its name to another table's index: those drops stay in the main script, where the name is free in time.
-- An identity whose sequence alone changes is not added again: the sequence is renamed when `from` names it, and left as PostgreSQL named it when `from` does not.
+- An existing table's index drop goes to the online script, unless the plan drops its table or one of its columns, or `to` gives its name to a table, a sequence, a primary key or another table's index: those drops stay in the main script, where the name is free in time. Diff drops such an index in step 1, on PostgreSQL and SQLite, for every name of that namespace, not only other tables' indexes.
+- An identity whose sequence alone changes is not added again: the sequence is renamed when `from` names it, and `Render` refuses the change (`*Error`, code `render`: "the identity's sequence is not named in the snapshot; run velox-gen migrate baseline, or rename it by hand") when it does not.
+- A serial turned into an identity drops the sequence `from` names, or else the one its `nextval('…'::regclass)` default names, read by PostgreSQL's identifier rules; a default it cannot read is the same refusal.
+- The enum swap drops the partial indexes and checks that name the type, or a column of it, before the columns change, and makes them again after, in the main script: PostgreSQL stores their literals cast to the old type. One the online script adds later is left to it; one the online script drops later is dropped here.
 - An identity added to a NULL-able column sets `NOT NULL` in the main script first, as PostgreSQL requires.
 - The `_enum` script names a type as `from` does, since it runs before the main script's renames; each value goes `BEFORE` the next value of `to` the type already has.
 - A type change always writes `USING`; a swap alters every column of `to` of the type, one `ALTER TABLE` per table.

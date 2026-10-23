@@ -20,7 +20,8 @@ type Plan struct {
 
 // NewPlan runs Diff, Lint, Blocked and Render in one call, as velox-gen uses
 // them. When a destructive finding is not allowed, it returns a
-// *BlockedError holding every such finding, and no plan. Diff's and
+// *BlockedError holding every such finding, and no plan. Render gets
+// opts.LockTimeout and opts.Allow as they are. Diff's and
 // Render's errors come through as they are. NewPlan does not change its
 // arguments.
 func NewPlan(from, to *Schema, opts PlanOptions) (*Plan, error) {

@@ -259,7 +259,7 @@ func (d *differ) freeNames(t *Table) {
 	ref := t.Ref()
 	if d.to.Dialect != velox.MySQL {
 		for _, ix := range t.Indexes {
-			if d.toHas(ref.Schema, func(u *Table) bool { return u.index(ix.Name) != nil }) {
+			if d.nameTaken(ref, ix.Name) {
 				d.add(DropIndex{Table: ref, Index: ix}, 1, 2, ref, 0, ix.Name)
 			}
 		}
@@ -413,14 +413,20 @@ func columnChange(a, b Column) ColumnChange {
 	return w
 }
 
-// nameTaken reports whether an index of another table of ref's database
-// schema in to is named name. MySQL names indexes per table.
+// nameTaken reports whether to gives name, in ref's database schema, to a
+// table, a sequence, a primary key, or an index of another table: the names
+// an index shares on PostgreSQL and SQLite. MySQL names indexes per table.
 func (d *differ) nameTaken(ref TableRef, name string) bool {
 	if d.to.Dialect == velox.MySQL {
 		return false
 	}
 	for i := range d.to.Tables {
-		if u := &d.to.Tables[i]; u.Schema == ref.Schema && u.Ref() != ref && u.index(name) != nil {
+		u := &d.to.Tables[i]
+		if u.Schema != ref.Schema {
+			continue
+		}
+		if u.Name == name || u.PrimaryKeyName == name || u.Ref() != ref && u.index(name) != nil ||
+			slices.ContainsFunc(u.Columns, func(c Column) bool { return c.Sequence == name }) {
 			return true
 		}
 	}

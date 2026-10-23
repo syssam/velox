@@ -13,7 +13,7 @@ import (
 
 // RenderOptions are what Render writes beside the statements.
 type RenderOptions struct {
-	LockTimeout time.Duration // 0: none written
+	LockTimeout time.Duration // 0: no lock-timeout directive in any script, so a PostgreSQL enum script then runs with none
 	Allow       []Allow       // recorded as directives
 }
 
@@ -73,7 +73,9 @@ type Directives struct {
 //
 // Its errors are *Error values: either schema is nil ("nil"), the dialects
 // differ ("dialect"), or a change is not one Diff gives for the dialect, or
-// names what to lacks ("render"). Render does not change its arguments.
+// names what to lacks, or a PostgreSQL identity change needs the name of a
+// sequence from does not give ("render"). Render does not change its
+// arguments.
 func Render(from, to *Schema, changes []Change, opts RenderOptions) ([]Script, error) {
 	if from == nil || to == nil {
 		return nil, &Error{Code: "nil", Reason: "Render needs two schemas"}

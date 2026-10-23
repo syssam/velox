@@ -331,6 +331,7 @@ type testCase struct {
 	from     func(*loadjson.Model)                 // edits the base for from; nil: the base
 	to       func(*loadjson.Model)                 // edits the base for to
 	fromDB   func(d velox.Dialect) *migrate.Schema // a hand-made from (serial, ent-shaped); nil: from the load model
+	both     func(*migrate.Schema)                 // a hand edit of from and to both, for what the DSL cannot say
 	empty    bool                                  // from is the empty schema
 	opts     migrate.DiffOptions
 	allow    []migrate.Allow // covers every destructive finding of the case, on any dialect
@@ -362,6 +363,10 @@ func models(t *testing.T, c testCase, d velox.Dialect) (from, to *migrate.Schema
 	}
 	if to, err = tables(d, c.to); err != nil {
 		t.Fatalf("%s on %v: to: %v", c.name, d, err)
+	}
+	if c.both != nil {
+		c.both(from)
+		c.both(to)
 	}
 	return from, to
 }
@@ -495,6 +500,25 @@ var cases = []testCase{
 		id.Identity, id.Default = false, "nextval('users_id_seq')"
 		return s
 	}},
+	// The swap rebuilds the partial index and the check that cast to the
+	// type, which PostgreSQL would otherwise rebuild against the old one.
+	{name: "enum-swap-dependents", dialects: pg, allow: allow("drop-enum-value"), from: func(m *loadjson.Model) {
+		setEnum(m, "User", "role", "admin", "viewer", "guest")
+		addIndex(m, "User", index.Fields("name").Where("role = 'admin'"))
+	}, to: func(m *loadjson.Model) {
+		addIndex(m, "User", index.Fields("name").Where("role = 'admin'"))
+	}, both: func(s *migrate.Schema) {
+		tb := table(s, "users")
+		tb.Checks = append(tb.Checks, migrate.Check{Name: "users_role_known", Expr: `"role" IN ('admin', 'viewer')`})
+	}},
+	// An index whose name a new table takes is dropped before the table
+	// is created.
+	{name: "index-name-to-table", dialects: pg, fromDB: func(d velox.Dialect) *migrate.Schema {
+		s := mustTables(d, nil)
+		tb := table(s, "users")
+		tb.Indexes = append(tb.Indexes, migrate.Index{Name: "tags", Columns: []string{"created_at"}})
+		return s
+	}, to: func(m *loadjson.Model) { addSchema(m, Tag{}) }},
 	{name: "collation", allow: allow("convert-collation"), dialects: mysqlOnly, fromDB: func(d velox.Dialect) *migrate.Schema {
 		s := mustTables(d, nil)
 		table(s, "users").Collation = "utf8mb4_0900_ai_ci"

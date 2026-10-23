@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/internal/ddl"
 )
 
@@ -143,7 +144,7 @@ func (r *renderer) pgChange(i int, c Change) (pgParts, error) {
 	case RenameColumn:
 		return pgParts{stmts: []string{"ALTER TABLE " + r.table(c.Table) + " RENAME COLUMN " + r.ident(c.From) + " TO " + r.ident(c.To)}}, nil
 	case AlterColumn:
-		return r.pgAlterColumn(c), nil
+		return r.pgAlterColumn(c)
 	case RenameSequence:
 		return pgParts{stmts: []string{"ALTER SEQUENCE " + r.indexName(c.Table, c.From) + " RENAME TO " + r.ident(c.To)}}, nil
 	case AddIndex:
@@ -222,7 +223,8 @@ func (r *renderer) pgConstraint(i int, table TableRef, name, def string) pgParts
 
 // dropOnline reports whether the drop of an index goes to the online
 // script: an index of an existing table the plan keeps, on no column the
-// plan drops, whose name no other table's index takes. The others are
+// plan drops, whose name to gives no table, sequence, primary key or other
+// table's index. The others are
 // dropped in the main script: with a table or column that goes anyway, or
 // in time to free the name for another index.
 func (r *renderer) dropOnline(c DropIndex) bool {
@@ -235,8 +237,13 @@ func (r *renderer) dropOnline(c DropIndex) bool {
 			return false
 		}
 	}
+	name := c.Index.Name
 	for _, t := range r.to.Tables {
-		if t.Schema == c.Table.Schema && r.l.canon(t.Ref()) != k && t.index(c.Index.Name) != nil {
+		if t.Schema != c.Table.Schema {
+			continue
+		}
+		if t.Name == name || t.PrimaryKeyName == name || r.l.canon(t.Ref()) != k && t.index(name) != nil ||
+			slices.ContainsFunc(t.Columns, func(col Column) bool { return col.Sequence == name }) {
 			return false
 		}
 	}
@@ -257,7 +264,7 @@ func (r *renderer) afterRename(ref TableRef) TableRef {
 // pgAlterColumn renders the alteration of a column. A type change drops
 // the default before it and sets it after, as PostgreSQL cannot cast a
 // default; SET NOT NULL is an online unit through a validated check.
-func (r *renderer) pgAlterColumn(c AlterColumn) pgParts {
+func (r *renderer) pgAlterColumn(c AlterColumn) (pgParts, error) {
 	pc := pgParts{table: r.table(c.Table), phase: phaseColumn}
 	col := r.ident(c.To.Name)
 	act := func(s string) { pc.actions = append(pc.actions, "ALTER COLUMN "+col+" "+s) }
@@ -303,9 +310,18 @@ func (r *renderer) pgAlterColumn(c AlterColumn) pgParts {
 		switch {
 		case identity:
 			// A serial's default is dropped above; its sequence goes
-			// before the identity takes the name.
-			if strings.HasPrefix(c.From.Default, "nextval(") && c.From.Sequence != "" {
-				pc.stmts = append(pc.stmts, "DROP SEQUENCE "+r.indexName(c.Table, c.From.Sequence))
+			// before the identity takes the name. One from does not
+			// name is read from the default.
+			if strings.HasPrefix(c.From.Default, "nextval(") {
+				seq := r.indexName(c.Table, c.From.Sequence)
+				if c.From.Sequence == "" {
+					ref, ok := nextvalSequence(c.From.Default)
+					if !ok {
+						return pgParts{}, unnamedSequence(c)
+					}
+					seq = r.table(ref)
+				}
+				pc.stmts = append(pc.stmts, "DROP SEQUENCE "+seq)
 			}
 			pc.stmts = append(pc.stmts,
 				"ALTER TABLE "+pc.table+" ALTER COLUMN "+col+" ADD "+r.identity(c.To),
@@ -313,17 +329,90 @@ func (r *renderer) pgAlterColumn(c AlterColumn) pgParts {
 					ddl.Literal(r.d, pc.table), ddl.Literal(r.d, c.To.Name), col, pc.table))
 		case c.From.Identity && !c.To.Identity:
 			act("DROP IDENTITY")
-		case c.From.Sequence != "" && c.To.Sequence != "":
-			// The identity stays; only its sequence's name changes. When
-			// from does not name the sequence, PostgreSQL gave it its own
-			// name, which is left as it is.
+		case c.From.Identity && c.To.Sequence != "":
+			// The identity stays; only its sequence's name changes, which
+			// takes from's name for it.
+			if c.From.Sequence == "" {
+				return pgParts{}, unnamedSequence(c)
+			}
 			pc.stmts = append(pc.stmts, "ALTER SEQUENCE "+r.indexName(c.Table, c.From.Sequence)+" RENAME TO "+r.ident(c.To.Sequence))
 		}
 	}
 	if c.What&ColumnComment != 0 {
 		pc.stmts = append(pc.stmts, r.columnComment(c.Table, c.To))
 	}
-	return pc
+	return pc, nil
+}
+
+// unnamedSequence is the refusal of an identity change that needs the name
+// of a sequence from does not give.
+func unnamedSequence(c AlterColumn) error {
+	return &Error{Object: colTarget(c.Table, c.To.Name), Code: "render",
+		Reason: "the identity's sequence is not named in the snapshot; run velox-gen migrate baseline, or rename it by hand"}
+}
+
+// nextvalSequence is the sequence a serial's default nextval('…'::regclass)
+// names, read by PostgreSQL's identifier rules: a name in double quotes as
+// it is, any other folded to lower case, and at most a schema before it.
+func nextvalSequence(def string) (TableRef, bool) {
+	arg, ok := strings.CutPrefix(def, "nextval(")
+	if ok {
+		arg, ok = strings.CutSuffix(arg, ")")
+	}
+	if !ok {
+		return TableRef{}, false
+	}
+	text, ok := ddl.Unquote(velox.Postgres, strings.TrimSuffix(arg, "::regclass"))
+	if !ok {
+		return TableRef{}, false
+	}
+	var parts []string
+	for {
+		var part string
+		if rest, quoted := strings.CutPrefix(text, `"`); quoted {
+			var b strings.Builder
+			for {
+				i := strings.IndexByte(rest, '"')
+				if i < 0 {
+					return TableRef{}, false
+				}
+				b.WriteString(rest[:i])
+				rest = rest[i+1:]
+				if !strings.HasPrefix(rest, `"`) {
+					break
+				}
+				b.WriteByte('"')
+				rest = rest[1:]
+			}
+			part, text = b.String(), rest
+		} else {
+			i := strings.IndexByte(text, '.')
+			if i < 0 {
+				i = len(text)
+			}
+			part, text = strings.ToLower(text[:i]), text[i:]
+			if strings.ContainsAny(part, `" `) {
+				return TableRef{}, false
+			}
+		}
+		if part == "" {
+			return TableRef{}, false
+		}
+		parts = append(parts, part)
+		if text == "" {
+			break
+		}
+		if text, ok = strings.CutPrefix(text, "."); !ok {
+			return TableRef{}, false
+		}
+	}
+	switch len(parts) {
+	case 1:
+		return TableRef{Name: parts[0]}, true
+	case 2:
+		return TableRef{Schema: parts[0], Name: parts[1]}, true
+	}
+	return TableRef{}, false
 }
 
 // identity is the identity clause of c.
@@ -413,86 +502,6 @@ func (r *renderer) pgIndex(table TableRef, ix Index, online bool) string {
 		s += " WHERE " + ix.Where
 	}
 	return s
-}
-
-// createType is the CREATE TYPE of the enum type ref.
-func (r *renderer) createType(ref TableRef, values []string) string {
-	lits := make([]string, len(values))
-	for i, v := range values {
-		lits[i] = ddl.Literal(r.d, v)
-	}
-	return "CREATE TYPE " + r.table(ref) + " AS ENUM (" + strings.Join(lits, ", ") + ")"
-}
-
-// addedValues is the values to adds to from, when from's keep their order
-// in to; false when they do not, which takes a swap.
-func addedValues(from, to []string) ([]string, bool) {
-	j := 0
-	var added []string
-	for _, v := range to {
-		if j < len(from) && from[j] == v {
-			j++
-		} else if !slices.Contains(from, v) {
-			added = append(added, v)
-		}
-	}
-	return added, j == len(from)
-}
-
-// addValues adds each value of added to the enum type of c in the enum
-// script, a unit each, before the next value of to that the type already
-// has. The type has its name in from, as the script runs before the main
-// one renames it.
-func (r *renderer) addValues(i int, c AlterEnum, added []string) {
-	ref := c.To.ref()
-	if f, ok := r.l.enumFrom[ref]; ok {
-		ref = f
-	}
-	for _, v := range added {
-		s := "ALTER TYPE " + r.table(ref) + " ADD VALUE IF NOT EXISTS " + ddl.Literal(r.d, v)
-		at := slices.Index(c.To.Values, v)
-		for _, w := range c.To.Values[at+1:] {
-			if slices.Contains(c.From.Values, w) {
-				s += " BEFORE " + ddl.Literal(r.d, w)
-				break
-			}
-		}
-		r.enum = append(r.enum, Statement{SQL: s, Change: i, Unit: len(r.enum), Review: r.review([]int{i}, nil)})
-	}
-}
-
-// swapEnum replaces the enum type e by one of its values: the old type is
-// renamed to a helper name, the new one created, every column of to that
-// uses the type altered to it, its default dropped and set around the
-// change, and the old type dropped.
-func (r *renderer) swapEnum(e Enum) []string {
-	ref := e.ref()
-	typ := enumTypeName(ref)
-	old := TableRef{Schema: ref.Schema, Name: ddl.OldEnum(ref.Name)}
-	out := []string{
-		"ALTER TYPE " + r.table(ref) + " RENAME TO " + r.ident(old.Name),
-		r.createType(ref, e.Values),
-	}
-	for _, t := range r.to.Tables {
-		var actions []string
-		for _, c := range t.Columns {
-			if c.Type != typ {
-				continue
-			}
-			col := r.ident(c.Name)
-			if c.Default != "" {
-				actions = append(actions, "ALTER COLUMN "+col+" DROP DEFAULT")
-			}
-			actions = append(actions, "ALTER COLUMN "+col+" TYPE "+typ+" USING "+col+"::text::"+typ)
-			if c.Default != "" {
-				actions = append(actions, "ALTER COLUMN "+col+" SET DEFAULT "+c.Default)
-			}
-		}
-		if len(actions) > 0 {
-			out = append(out, "ALTER TABLE "+r.table(t.Ref())+" "+strings.Join(actions, ", "))
-		}
-	}
-	return append(out, "DROP TYPE "+r.table(old))
 }
 
 // postgresScripts is the scripts in run order: the enum script, then main,
