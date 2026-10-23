@@ -136,8 +136,9 @@ func TestDriftDefaultExpression(t *testing.T) {
 	wantDrift(t, driftOf(t, withDefault(""), withDefault("now()")), []string{"alter-column users.created_at (default)"})
 	// What only the normaliser removes is not worth a warning.
 	wantDrift(t, driftOf(t, withDefault("NOW()"), withDefault("now()")), nil)
-	// A cast that is not one value spelled again is part of the default.
-	wantDrift(t, driftOf(t, withDefault("nextval('users_id_seq'::regclass)"), withDefault("nextval('users_id_seq')")), nil, "users.created_at")
+	// The regclass cast PostgreSQL adds is no difference; another cast is.
+	wantDrift(t, driftOf(t, withDefault("nextval('users_id_seq'::regclass)"), withDefault("nextval('users_id_seq')")), nil)
+	wantDrift(t, driftOf(t, withDefault("now()::date"), withDefault("now()")), nil, "users.created_at")
 }
 
 func TestDriftEnumCheck(t *testing.T) {

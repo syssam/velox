@@ -1,6 +1,7 @@
 package migrate_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,8 +12,9 @@ import (
 )
 
 // A predicateCase is a block of testdata/predicates: a predicate as written,
-// as PostgreSQL printed it ("" until inspected), and its normal form.
-type predicateCase struct{ input, printed, normal string }
+// as PostgreSQL printed it ("" until inspected), its normal form, and a
+// predicate of another meaning that the normaliser must keep apart from it.
+type predicateCase struct{ input, printed, normal, differs string }
 
 func readPredicates(t *testing.T, path string) []predicateCase {
 	t.Helper()
@@ -33,12 +35,14 @@ func readPredicates(t *testing.T, path string) []predicateCase {
 				c.printed = val
 			case "normal":
 				c.normal = val
+			case "differs":
+				c.differs = val
 			default:
 				t.Fatalf("%s: unknown line %q", path, l)
 			}
 		}
-		if c.input == "" {
-			t.Fatalf("%s: a block without input:\n%s", path, block)
+		if c.input == "" || c.differs == "" {
+			t.Fatalf("%s: a block without input or differs:\n%s", path, block)
 		}
 		out = append(out, c)
 	}
@@ -52,35 +56,103 @@ func writePredicates(t *testing.T, path string, cs []predicateCase) {
 		if i > 0 {
 			b.WriteString("\n")
 		}
-		b.WriteString("input: " + c.input + "\nprinted: " + c.printed + "\nnormal: " + c.normal + "\n")
+		b.WriteString("input: " + c.input + "\nprinted: " + c.printed + "\nnormal: " + c.normal + "\ndiffers: " + c.differs + "\n")
 	}
 	if err := os.WriteFile(path, []byte(strings.ReplaceAll(b.String(), ": \n", ":\n")), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
 
+var predicatesPath = filepath.Join("testdata", "predicates", "postgres.txt")
+
+// same reports whether the normaliser calls a and b one predicate.
+func same(d velox.Dialect, a, b string) bool {
+	s, _ := migrate.SamePredicate(d, a, b)
+	return s
+}
+
 func TestNormalizePredicate(t *testing.T) {
-	path := filepath.Join("testdata", "predicates", "postgres.txt")
-	cs := readPredicates(t, path)
+	cs := readPredicates(t, predicatesPath)
 	if *update {
 		for i := range cs {
 			cs[i].normal = migrate.NormalizePredicate(velox.Postgres, cs[i].input)
 		}
-		writePredicates(t, path, cs)
+		writePredicates(t, predicatesPath, cs)
 		return
 	}
 	for _, c := range cs {
 		if got := migrate.NormalizePredicate(velox.Postgres, c.input); got != c.normal {
 			t.Errorf("%s: normal %q, want %q", c.input, got, c.normal)
 		}
-		if c.printed != "" {
-			if got := migrate.NormalizePredicate(velox.Postgres, c.printed); got != c.normal {
-				t.Errorf("%s: printed %s normalises to %q, want %q", c.input, c.printed, got, c.normal)
-			}
-		}
 		if got := migrate.NormalizePredicate(velox.Postgres, c.normal); got != c.normal {
 			t.Errorf("%s: the normal form %q normalises to %q", c.input, c.normal, got)
 		}
+		if s, ok := migrate.SamePredicate(velox.Postgres, c.input, c.input); !s || !ok {
+			t.Errorf("%s: not itself, or not parsed", c.input)
+		}
+		if c.printed != "" && !same(velox.Postgres, c.printed, c.input) {
+			t.Errorf("%s: printed %s is not the same predicate", c.input, c.printed)
+		}
+		for _, x := range []string{c.input, c.printed} {
+			if x != "" && same(velox.Postgres, x, c.differs) {
+				t.Errorf("%s and %s are called the same", x, c.differs)
+			}
+		}
+	}
+}
+
+// TestPredicatesPostgres creates each golden predicate as a partial index
+// and as a check on PostgreSQL, and reads them back: what PostgreSQL prints
+// is the predicate written, and not its neighbour of another meaning. With
+// -update it writes the printed lines.
+func TestPredicatesPostgres(t *testing.T) {
+	db, _ := freshDB(t, velox.Postgres)
+	db.SetMaxOpenConns(1)
+	pgExec(t, db, "SET TimeZone = 'UTC'")
+	pgExec(t, db, `CREATE SEQUENCE g_seq`)
+	pgExec(t, db, `CREATE TABLE g (id integer PRIMARY KEY DEFAULT nextval('g_seq'), status text, qty integer,
+		price numeric, r real, deleted_at timestamptz, active boolean, created_on date, ts timestamp,
+		tstz timestamptz, tm time, email text, name text, code varchar(10))`)
+	read := func(q string, args ...any) string {
+		t.Helper()
+		var s string
+		if err := db.QueryRow(q, args...).Scan(&s); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+		return s
+	}
+	cs := readPredicates(t, predicatesPath)
+	for i, c := range cs {
+		name := fmt.Sprintf("g_%02d", i)
+		pgExec(t, db, "CREATE INDEX "+name+" ON g (id) WHERE "+c.input)
+		pgExec(t, db, "ALTER TABLE g ADD CONSTRAINT "+name+"_check CHECK ("+c.input+")")
+		printed := read(`SELECT pg_get_expr(indpred, indrelid) FROM pg_index WHERE indexrelid = $1::regclass`, name)
+		def := read(`SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = $1`, name+"_check")
+		check, ok := strings.CutPrefix(def, "CHECK ")
+		if !ok {
+			t.Fatalf("%s: constraint %s", c.input, def)
+		}
+		for _, x := range []string{printed, check} {
+			if !same(velox.Postgres, x, c.input) {
+				t.Errorf("%s: PostgreSQL prints %s, not the same predicate", c.input, x)
+			}
+			if same(velox.Postgres, x, c.differs) {
+				t.Errorf("%s: PostgreSQL's %s is called the same as %s", c.input, x, c.differs)
+			}
+		}
+		if *update {
+			cs[i].printed = printed
+		} else if c.printed != printed {
+			t.Errorf("%s: PostgreSQL prints %s, the golden %s (run with -update)", c.input, printed, c.printed)
+		}
+	}
+	if *update {
+		writePredicates(t, predicatesPath, cs)
+	}
+	// A serial default comes back with its regclass cast.
+	def := read(`SELECT pg_get_expr(adbin, adrelid) FROM pg_attrdef WHERE adrelid = 'g'::regclass`)
+	if !same(velox.Postgres, def, "nextval('g_seq')") || same(velox.Postgres, def, "nextval('g_other')") {
+		t.Errorf("the default %s", def)
 	}
 }
 
@@ -114,11 +186,15 @@ func TestNormalizePredicatePrinted(t *testing.T) {
 		{`((qty >= 1) AND (qty <= 5))`, `qty BETWEEN 1 AND 5`},
 		{`((qty < 1) OR (qty > 5))`, `qty NOT BETWEEN 1 AND 5`},
 		{`((qty * 2) > (qty - 1))`, `qty * 2 > qty - 1`},
+		{`(((qty * 2))::numeric > (price - (1)::numeric))`, `qty * 2 > price - 1`},
+		{`(r < (1.5)::double precision)`, `r < 1.5`},
+		{`(ts > '2020-01-01 00:00:00'::timestamp without time zone)`, `ts > '2020-01-01'`},
+		{`(created_on > '2020-01-01'::date)`, `created_on > '2020-01-01'`},
+		{`nextval('users_id_seq'::regclass)`, `nextval('users_id_seq')`},
 		{`("Status" = 'a'::text)`, `"Status" = 'a'`},
 	} {
-		got, want := migrate.NormalizePredicate(velox.Postgres, c.printed), migrate.NormalizePredicate(velox.Postgres, c.written)
-		if got != want {
-			t.Errorf("%s normalises to %q; %s to %q", c.printed, got, c.written, want)
+		if !same(velox.Postgres, c.printed, c.written) {
+			t.Errorf("%s is not %s", c.printed, c.written)
 		}
 	}
 	for _, c := range []struct {
@@ -131,9 +207,8 @@ func TestNormalizePredicatePrinted(t *testing.T) {
 		{velox.MySQL, `(name = 'it\'s')`, `name = 'it''s'`},
 		{velox.SQLite, `[qty] == 0`, `"qty" = 0`},
 	} {
-		got, want := migrate.NormalizePredicate(c.d, c.printed), migrate.NormalizePredicate(c.d, c.written)
-		if got != want {
-			t.Errorf("%v: %s normalises to %q; %s to %q", c.d, c.printed, got, c.written, want)
+		if !same(c.d, c.printed, c.written) {
+			t.Errorf("%v: %s is not %s", c.d, c.printed, c.written)
 		}
 	}
 }
@@ -156,8 +231,8 @@ func TestNormalizePredicateKeepsMeaning(t *testing.T) {
 		{`- (a + b) > 0`, `- a + b > 0`},
 		{`qty > 0 OR status = 'a'`, `qty > 0 AND status = 'a'`},
 	} {
-		if norm(c[0]) == norm(c[1]) {
-			t.Errorf("%s and %s both normalise to %q", c[0], c[1], norm(c[0]))
+		if same(velox.Postgres, c[0], c[1]) {
+			t.Errorf("%s and %s are called the same", c[0], c[1])
 		}
 	}
 	for _, c := range [][2]string{
@@ -170,7 +245,7 @@ func TestNormalizePredicateKeepsMeaning(t *testing.T) {
 		{`qty != 3`, `qty <> 3`},
 		{`'5'::integer = qty`, `5 = qty`},
 	} {
-		if norm(c[0]) != norm(c[1]) {
+		if !same(velox.Postgres, c[0], c[1]) {
 			t.Errorf("%s normalises to %q and %s to %q", c[0], norm(c[0]), c[1], norm(c[1]))
 		}
 	}
@@ -195,6 +270,25 @@ func TestNormalizePredicateKeepsMeaning(t *testing.T) {
 		{velox.Postgres, `code::varchar(2) = 'ab'`, `code = 'ab'`},
 		{velox.Postgres, `(a + b)::text = 'x'`, `a + b = 'x'`},
 		{velox.Postgres, `'5'::bigint = qty`, `'5' = qty`},
+		// A cast the database adds itself matches no cast, but never
+		// another cast, and a narrowing cast never matches none.
+		{velox.Postgres, `x::numeric > 1`, `x::bigint > 1`},
+		{velox.Postgres, `x::double precision > 1`, `x::real > 1`},
+		{velox.Postgres, `qty::integer > 1`, `qty > 1`},
+		{velox.Postgres, `qty::smallint > 1`, `qty > 1`},
+		{velox.Postgres, `qty::numeric(3, 1) > 1`, `qty::numeric > 1`},
+		{velox.Postgres, `qty::bigint[] = x`, `qty = x`},
+		{velox.Postgres, `ts::date = '2020-01-01'`, `ts = '2020-01-01'`},
+		{velox.Postgres, `x = '2020-01-01'::date`, `x = '2020-01-01'::timestamp`},
+		{velox.Postgres, `x = '2020-01-01'::date`, `x = '2020-01-02'`},
+		{velox.Postgres, `x = '2020-01-01 00:00:00'::timestamp`, `x = '2020-01-01 00:00:01'`},
+		{velox.Postgres, `x = '2020-01-01 00:00:00+00'::timestamptz`, `x = '2020-01-01 00:00:00+01'`},
+		{velox.Postgres, `x = '10:00:00'::time`, `x = '10:00:01'`},
+		{velox.Postgres, `x = 'soon'::date`, `x = 'soon'`},
+		{velox.Postgres, `x = '1 day'::interval`, `x = '1 day'`},
+		{velox.Postgres, `x = '2020-01-01'::date`, `x = 2020`},
+		{velox.Postgres, `nextval('s'::regclass)`, `nextval('t')`},
+		{velox.Postgres, `nextval('s'::regclass)`, `nextval(s)`},
 		// MySQL's escapes: \% and \_ keep their backslash, \b and \Z are
 		// characters of their own.
 		{velox.MySQL, `code NOT LIKE '%\_%'`, `code NOT LIKE '%_%'`},
@@ -218,8 +312,8 @@ func TestNormalizePredicateKeepsMeaning(t *testing.T) {
 		{velox.Postgres, `$$a  b$$ = x`, `$$a b$$ = x`},
 		{velox.Postgres, `$t$a  b$t$ = x`, `$t$a b$t$ = x`},
 	} {
-		if x, y := migrate.NormalizePredicate(c.d, c.a), migrate.NormalizePredicate(c.d, c.b); x == y {
-			t.Errorf("%v: %s and %s both normalise to %q", c.d, c.a, c.b, x)
+		if same(c.d, c.a, c.b) || same(c.d, c.b, c.a) {
+			t.Errorf("%v: %s and %s are called the same", c.d, c.a, c.b)
 		}
 	}
 	// And each of these is one value spelled two ways.
@@ -235,6 +329,20 @@ func TestNormalizePredicateKeepsMeaning(t *testing.T) {
 		{velox.Postgres, `price > 2::numeric`, `price > 2`},
 		{velox.Postgres, `(code)::text = 'x'`, `code = 'x'`},
 		{velox.Postgres, `code::character varying = 'x'`, `code = 'x'`},
+		{velox.Postgres, `(qty * 2)::numeric > price - 1::numeric`, `qty * 2 > price - 1`},
+		{velox.Postgres, `qty::bigint > 1`, `qty > 1`},
+		{velox.Postgres, `qty::int8 > 1`, `qty > 1`},
+		{velox.Postgres, `r < 1.5::double precision`, `r < 1.5`},
+		{velox.Postgres, `r < 1.5::real`, `r < 1.5`},
+		{velox.Postgres, `f(x)::decimal > 1`, `f(x) > 1`},
+		{velox.Postgres, `x = '2020-01-01 00:00:00'::timestamp without time zone`, `x = '2020-01-01'`},
+		{velox.Postgres, `x = '2020-01-01'::date`, `x = '2020-01-01'`},
+		{velox.Postgres, `x = '2020-01-01 10:30:00'::timestamp`, `x = '2020-01-01 10:30'`},
+		{velox.Postgres, `x = '2020-01-01 00:00:00+00'::timestamp with time zone`, `x = '2020-01-01'`},
+		{velox.Postgres, `x = '2020-01-01 01:00:00+01'::timestamptz`, `x = '2020-01-01 00:00:00+00'`},
+		{velox.Postgres, `x = '10:00:00'::time without time zone`, `x = '10:00'`},
+		{velox.Postgres, `x = '2020-01-01'::date`, `x = '2020-01-01'::date`},
+		{velox.Postgres, `nextval('s'::regclass)`, `nextval('s')`},
 		{velox.MySQL, `name = _utf8mb4'abc'`, `name = 'abc'`},
 		{velox.MySQL, `name = _utf8mb3'abc'`, `name = 'abc'`},
 		{velox.MySQL, `name = _UTF8'abc'`, `name = 'abc'`},
@@ -242,8 +350,8 @@ func TestNormalizePredicateKeepsMeaning(t *testing.T) {
 		{velox.MySQL, `code = 'it\'s'`, `code = 'it''s'`},
 		{velox.MySQL, `code = '\q'`, `code = 'q'`},
 	} {
-		if x, y := migrate.NormalizePredicate(c.d, c.a), migrate.NormalizePredicate(c.d, c.b); x != y {
-			t.Errorf("%v: %s normalises to %q and %s to %q", c.d, c.a, x, c.b, y)
+		if !same(c.d, c.a, c.b) || !same(c.d, c.b, c.a) {
+			t.Errorf("%v: %s and %s are not called the same", c.d, c.a, c.b)
 		}
 	}
 	if got := norm(`name = 'A  B'`); got != `name = 'A  B'` {
@@ -257,6 +365,8 @@ func TestNormalizePredicateKeepsMeaning(t *testing.T) {
 		"a = ":                      "a =",
 		"x::":                       "x::",
 		"f(a,":                      "f(a,",
+		"-":                         "-",
+		"- (":                       "- (",
 		"E'a\\'  b'   = x":          "E'a\\'  b' = x",
 		"$t$a  b$t$   = x":          "$t$a  b$t$ = x",
 	} {

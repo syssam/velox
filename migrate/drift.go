@@ -43,10 +43,10 @@ type note struct {
 //
 // Only the tables snapshot has are compared, and the enum types they use. On
 // a copy of inspected, what differs only in spelling takes snapshot's
-// spelling before Diff compares the two: a predicate or check alike after
-// normalizing, an expression default (with a
-// warning when the normal forms differ), a predicate or check the
-// normaliser cannot read (with a warning when the texts differ), MySQL's
+// spelling before Diff compares the two: a predicate or check that
+// samePredicate calls the same, an expression default (with a warning when
+// it does not), a predicate or check the normaliser cannot read (with a
+// warning when the texts differ), MySQL's
 // RESTRICT for no action, the names SQLite does not keep, matched by
 // definition, and a primary key Diff would refuse (with a warning).
 func drift(inspected *Schema, notes []note, snapshot *Schema) (*DriftReport, error) {

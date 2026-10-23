@@ -1,111 +1,234 @@
 input: status = 'active'
-printed:
+printed: (status = 'active'::text)
 normal: status = 'active'
+differs: status = 'banned'
 
 input: "status" = 'it''s'
-printed:
+printed: (status = 'it''s'::text)
 normal: status = 'it''s'
+differs: status = 'its'
 
 input: qty > 0
-printed:
+printed: (qty > 0)
 normal: qty > 0
+differs: qty >= 0
 
 input: qty >= -1
-printed:
+printed: (qty >= '-1'::integer)
 normal: qty >= -1
+differs: qty >= 1
 
 input: price < 1.5
-printed:
+printed: (price < 1.5)
 normal: price < 1.5
+differs: price < 1.6
 
 input: qty <> 3
-printed:
+printed: (qty <> 3)
 normal: qty <> 3
+differs: qty = 3
 
 input: qty != 3
-printed:
+printed: (qty <> 3)
 normal: qty <> 3
+differs: qty <> 4
 
 input: deleted_at IS NULL
-printed:
+printed: (deleted_at IS NULL)
 normal: deleted_at is null
+differs: deleted_at IS NOT NULL
 
 input: deleted_at IS NOT NULL
-printed:
+printed: (deleted_at IS NOT NULL)
 normal: deleted_at is not null
+differs: deleted_at IS NULL
 
 input: active
-printed:
+printed: active
 normal: active
+differs: NOT active
 
 input: NOT active
-printed:
+printed: (NOT active)
 normal: not active
+differs: active
 
 input: active = true
-printed:
+printed: (active = true)
 normal: active = true
+differs: active = false
 
 input: status IN ('a', 'b')
-printed:
+printed: (status = ANY (ARRAY['a'::text, 'b'::text]))
 normal: status in ('a', 'b')
+differs: status IN ('a', 'c')
 
 input: status NOT IN ('a', 'b')
-printed:
+printed: (status <> ALL (ARRAY['a'::text, 'b'::text]))
 normal: status not in ('a', 'b')
+differs: status IN ('a', 'b')
 
 input: qty > 0 AND status = 'a'
-printed:
+printed: ((qty > 0) AND (status = 'a'::text))
 normal: qty > 0 and status = 'a'
+differs: qty > 0 OR status = 'a'
 
 input: qty > 0 OR status = 'a'
-printed:
+printed: ((qty > 0) OR (status = 'a'::text))
 normal: qty > 0 or status = 'a'
+differs: qty > 0 AND status = 'a'
 
 input: (qty > 0 OR qty < -5) AND deleted_at IS NULL
-printed:
+printed: (((qty > 0) OR (qty < '-5'::integer)) AND (deleted_at IS NULL))
 normal: (qty > 0 or qty < -5) and deleted_at is null
+differs: qty > 0 OR qty < -5 AND deleted_at IS NULL
 
 input: qty > 0 AND (status = 'a' OR status = 'b')
-printed:
+printed: ((qty > 0) AND ((status = 'a'::text) OR (status = 'b'::text)))
 normal: qty > 0 and (status = 'a' or status = 'b')
+differs: qty > 0 AND status = 'a' OR status = 'b'
 
 input: status = 'a'::text
-printed:
+printed: (status = 'a'::text)
 normal: status = 'a'
+differs: status = 'b'
 
 input: created_on > '2020-01-01'::date
-printed:
+printed: (created_on > '2020-01-01'::date)
 normal: created_on > '2020-01-01'::date
+differs: created_on > '2020-01-02'
 
 input: lower(email) = 'x@y'
-printed:
+printed: (lower(email) = 'x@y'::text)
 normal: lower(email) = 'x@y'
+differs: upper(email) = 'x@y'
 
 input: length(name) > 3
-printed:
+printed: (length(name) > 3)
 normal: length(name) > 3
+differs: length(email) > 3
 
 input: coalesce(qty, 0) > 1
-printed:
+printed: (COALESCE(qty, 0) > 1)
 normal: coalesce(qty, 0) > 1
+differs: coalesce(qty, 1) > 1
 
 input: name LIKE 'a%'
-printed:
+printed: (name ~~ 'a%'::text)
 normal: name like 'a%'
+differs: name ILIKE 'a%'
 
 input: name NOT LIKE 'a%'
-printed:
+printed: (name !~~ 'a%'::text)
 normal: name not like 'a%'
+differs: name LIKE 'a%'
 
 input: name ILIKE 'a%'
-printed:
+printed: (name ~~* 'a%'::text)
 normal: name ilike 'a%'
+differs: name LIKE 'a%'
 
 input: qty BETWEEN 1 AND 5
-printed:
+printed: ((qty >= 1) AND (qty <= 5))
 normal: qty >= 1 and qty <= 5
+differs: qty BETWEEN 1 AND 6
 
 input: code = 'x'
-printed:
+printed: ((code)::text = 'x'::text)
 normal: code = 'x'
+differs: code = 'y'
+
+input: status IN ('a')
+printed: (status = 'a'::text)
+normal: status = 'a'
+differs: status IN ('b')
+
+input: code IN ('a', 'b')
+printed: ((code)::text = ANY ((ARRAY['a'::character varying, 'b'::character varying])::text[]))
+normal: code in ('a', 'b')
+differs: code IN ('a', 'b', 'c')
+
+input: qty NOT BETWEEN 1 AND 5
+printed: ((qty < 1) OR (qty > 5))
+normal: qty < 1 or qty > 5
+differs: qty BETWEEN 1 AND 5
+
+input: status <> 'a'
+printed: (status <> 'a'::text)
+normal: status <> 'a'
+differs: status = 'a'
+
+input: qty * 2 > price - 1
+printed: (((qty * 2))::numeric > (price - (1)::numeric))
+normal: qty * 2 > price - 1
+differs: qty * 2 > price - 2
+
+input: name ~~ 'a%'
+printed: (name ~~ 'a%'::text)
+normal: name like 'a%'
+differs: name ~~* 'a%'
+
+input: NOT (qty > 0 AND active)
+printed: (NOT ((qty > 0) AND active))
+normal: not (qty > 0 and active)
+differs: NOT qty > 0 AND active
+
+input: price < -1.5
+printed: (price < '-1.5'::numeric)
+normal: price < -1.5
+differs: price < 1.5
+
+input: price > 2
+printed: (price > (2)::numeric)
+normal: price > 2
+differs: price > 2.5
+
+input: qty > 1.9::integer
+printed: (qty > (1.9)::integer)
+normal: qty > 1.9::integer
+differs: qty > 1.9
+
+input: ts > '2020-01-01'
+printed: (ts > '2020-01-01 00:00:00'::timestamp without time zone)
+normal: ts > '2020-01-01'
+differs: ts > '2020-01-02'
+
+input: ts >= '2020-01-01 10:30:00'
+printed: (ts >= '2020-01-01 10:30:00'::timestamp without time zone)
+normal: ts >= '2020-01-01 10:30:00'
+differs: ts >= '2020-01-01 10:30:01'
+
+input: tstz > '2020-01-01 00:00:00+00'
+printed: (tstz > '2020-01-01 00:00:00+00'::timestamp with time zone)
+normal: tstz > '2020-01-01 00:00:00+00'
+differs: tstz > '2020-01-01 00:00:00+01'
+
+input: tm > '10:00'
+printed: (tm > '10:00:00'::time without time zone)
+normal: tm > '10:00'
+differs: tm > '10:00:01'
+
+input: created_on > '2020-01-01'
+printed: (created_on > '2020-01-01'::date)
+normal: created_on > '2020-01-01'
+differs: created_on >= '2020-01-01'
+
+input: ts::date = '2020-01-01'
+printed: ((ts)::date = '2020-01-01'::date)
+normal: ts::date = '2020-01-01'
+differs: ts = '2020-01-01'
+
+input: r < 1.5
+printed: (r < (1.5)::double precision)
+normal: r < 1.5
+differs: r < 2
+
+input: qty::bigint > 1
+printed: ((qty)::bigint > 1)
+normal: qty::bigint > 1
+differs: qty::integer > 1
+
+input: qty::numeric > 1
+printed: ((qty)::numeric > (1)::numeric)
+normal: qty::numeric > 1
+differs: qty::numeric(3, 1) > 1

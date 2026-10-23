@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/internal/ddl"
@@ -29,27 +30,149 @@ func normalizePredicate(d velox.Dialect, expr string) string {
 
 // normalized is normalizePredicate, and whether expr parsed.
 func normalized(d velox.Dialect, expr string) (string, bool) {
-	toks, ok := lexPredicate(d, expr)
-	if ok && len(toks) > 0 {
-		p := &predParser{d: d, toks: toks, ok: true}
-		n := p.or()
-		if p.ok && p.i == len(p.toks) {
-			return p.print(n, 0), true
-		}
+	if p, n, ok := parsePredicate(d, expr); ok {
+		return p.print(n, 0), true
 	}
 	return collapseSpace(d, expr), false
 }
 
-// samePredicate reports whether a and b are one predicate: alike after
-// normalizing when both parse, else alike with their white space collapsed.
-// comparable is whether both parsed.
+// samePredicate reports whether a and b are one predicate: when both parse,
+// their trees match (match); else they are alike with their white space
+// collapsed. comparable is whether both parsed.
 func samePredicate(d velox.Dialect, a, b string) (same, comparable bool) {
-	na, oka := normalized(d, a)
-	nb, okb := normalized(d, b)
+	p, na, oka := parsePredicate(d, a)
+	_, nb, okb := parsePredicate(d, b)
 	if oka && okb {
-		return na == nb, true
+		return p.match(na, nb), true
 	}
 	return collapseSpace(d, a) == collapseSpace(d, b), false
+}
+
+// parsePredicate is expr's tree, and whether it parsed.
+func parsePredicate(d velox.Dialect, expr string) (*predParser, *predNode, bool) {
+	toks, ok := lexPredicate(d, expr)
+	if !ok || len(toks) == 0 {
+		return nil, nil, false
+	}
+	p := &predParser{d: d, toks: toks, ok: true}
+	n := p.or()
+	return p, n, p.ok && p.i == len(p.toks)
+}
+
+// match reports whether a and b are one predicate: alike, but that a cast the
+// database adds itself (elides) matches no cast on the other side. Two casts
+// match only when they are to one type.
+func (p *predParser) match(a, b *predNode) bool {
+	if p.text(a) == p.text(b) { // one meaning, as and and or associate
+		return true
+	}
+	ac, bc := a.kind == nodeCast, b.kind == nodeCast
+	switch {
+	case ac && bc:
+		if a.text != b.text {
+			return false
+		}
+		if t, ok := sameTime(a.cast.base, a.kids[0], b.kids[0]); ok {
+			return t
+		}
+		return p.match(a.kids[0], b.kids[0])
+	case ac:
+		return p.elides(a, b)
+	case bc:
+		return p.elides(b, a)
+	}
+	if a.kind != b.kind || a.op != b.op || a.text != b.text || a.str != b.str || len(a.kids) != len(b.kids) ||
+		p.name(a.parts) != p.name(b.parts) {
+		return false
+	}
+	for i := range a.kids {
+		if !p.match(a.kids[i], b.kids[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// elides reports whether the cast c matches e, which is not a cast: a cast
+// that widens a number, to bigint, numeric, real or double precision, on
+// any expression; a string literal cast to a date or time type that is the
+// same value as the literal e; a string literal cast to regclass, as a
+// serial's default prints, that is e.
+func (p *predParser) elides(c, e *predNode) bool {
+	if c.cast.mod || c.cast.array {
+		return false
+	}
+	k := c.kids[0]
+	switch {
+	case wideningTypes[c.cast.base]:
+		return p.match(k, e)
+	case c.cast.base == "regclass":
+		return k.str && e.str && k.val == e.val
+	}
+	same, ok := sameTime(c.cast.base, k, e)
+	return ok && same
+}
+
+// wideningTypes are the types a number is cast to without its value
+// changing.
+var wideningTypes = map[string]bool{
+	"bigint": true, "int8": true, "numeric": true, "decimal": true,
+	"real": true, "float4": true, "double precision": true, "float8": true,
+}
+
+// timeLayouts are the layouts a string literal of each date and time type
+// is read in: the ISO forms PostgreSQL prints and the shorter ones written.
+var timeLayouts = func() map[string][]string {
+	date := []string{"2006-01-02"}
+	var stamp []string
+	for _, sep := range []string{" ", "T"} {
+		for _, clock := range []string{"15:04", "15:04:05", "15:04:05.999999999"} {
+			stamp = append(stamp, "2006-01-02"+sep+clock)
+		}
+	}
+	var zoned []string
+	for _, l := range stamp {
+		for _, z := range []string{"Z07", "Z07:00", "Z0700", " Z07", " Z07:00", " MST"} {
+			zoned = append(zoned, l+z)
+		}
+	}
+	clock := []string{"15:04", "15:04:05", "15:04:05.999999999"}
+	stamp = append(date, stamp...)
+	return map[string][]string{
+		"date":                        date,
+		"timestamp":                   stamp,
+		"timestamp without time zone": stamp,
+		"timestamptz":                 append(zoned, stamp...),
+		"timestamp with time zone":    append(zoned, stamp...),
+		"time":                        clock,
+		"time without time zone":      clock,
+	}
+}()
+
+// sameTime reports, when a and b are string literals that are both values
+// of the date or time type typ, whether they are one value. A literal
+// without a zone is read as UTC. ok is false when typ is no such type or a
+// literal is not one of its values, as an interval never is.
+func sameTime(typ string, a, b *predNode) (same, ok bool) {
+	layouts := timeLayouts[typ]
+	if layouts == nil || !a.str || !b.str {
+		return false, false
+	}
+	ta, oka := parseTime(layouts, a.val)
+	tb, okb := parseTime(layouts, b.val)
+	if !oka || !okb {
+		return false, false
+	}
+	return ta.Equal(tb), true
+}
+
+func parseTime(layouts []string, s string) (time.Time, bool) {
+	for _, l := range layouts {
+		if t, err := time.Parse(l, s); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
 }
 
 // collapseSpace is s with each run of white space outside quotes made one
@@ -251,6 +374,7 @@ type predNode struct {
 	str   bool   // a string literal, whose value is val
 	val   string // a string literal's value
 	parts []predName
+	cast  castTo // a cast's type
 	kids  []*predNode
 }
 
@@ -488,7 +612,11 @@ func (p *predParser) mul() *predNode {
 
 func (p *predParser) unary() *predNode {
 	if p.accept("-") {
-		return &predNode{kind: nodeUnary, op: "-", kids: []*predNode{p.unary()}}
+		n := p.unary()
+		if p.ok && n.kind == nodeLit && !n.str && n.text != "" && n.text[0] >= '0' && n.text[0] <= '9' {
+			return &predNode{kind: nodeLit, text: "-" + n.text} // a negative number
+		}
+		return &predNode{kind: nodeUnary, op: "-", kids: []*predNode{n}}
 	}
 	n := p.primary()
 	for p.ok && p.accept("::") {
@@ -527,7 +655,7 @@ func castOf(n *predNode, c castTo) *predNode {
 		!slices.ContainsFunc(n.kids, func(k *predNode) bool { return !k.str }):
 		return n
 	}
-	return &predNode{kind: nodeCast, text: c.text, kids: []*predNode{n}}
+	return &predNode{kind: nodeCast, text: c.text, cast: c, kids: []*predNode{n}}
 }
 
 var (

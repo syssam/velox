@@ -111,3 +111,6 @@ func DriftOf(inspected, snapshot *Schema, notes ...Note) (*DriftReport, error) {
 
 // NormalizePredicate is normalizePredicate.
 func NormalizePredicate(d velox.Dialect, expr string) string { return normalizePredicate(d, expr) }
+
+// SamePredicate is samePredicate.
+var SamePredicate = samePredicate
