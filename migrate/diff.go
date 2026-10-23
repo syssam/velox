@@ -413,24 +413,31 @@ func columnChange(a, b Column) ColumnChange {
 	return w
 }
 
-// nameTaken reports whether to gives name, in ref's database schema, to a
-// table, a sequence, a primary key, or an index of another table: the names
-// an index shares on PostgreSQL and SQLite. MySQL names indexes per table.
-func (d *differ) nameTaken(ref TableRef, name string) bool {
-	if d.to.Dialect == velox.MySQL {
+// indexNameTaken reports whether to gives name, in database schema sch, to
+// a table, a sequence, a primary key, or an index of a table other than the
+// index's own, which own reports by its name in to: the names an index
+// shares on PostgreSQL and SQLite. MySQL names indexes per table. Such an
+// index is dropped in the main script's first step, to free the name.
+func indexNameTaken(to *Schema, sch, name string, own func(TableRef) bool) bool {
+	if to.Dialect == velox.MySQL {
 		return false
 	}
-	for i := range d.to.Tables {
-		u := &d.to.Tables[i]
-		if u.Schema != ref.Schema {
+	for i := range to.Tables {
+		u := &to.Tables[i]
+		if u.Schema != sch {
 			continue
 		}
-		if u.Name == name || u.PrimaryKeyName == name || u.Ref() != ref && u.index(name) != nil ||
+		if u.Name == name || u.PrimaryKeyName == name || !own(u.Ref()) && u.index(name) != nil ||
 			slices.ContainsFunc(u.Columns, func(c Column) bool { return c.Sequence == name }) {
 			return true
 		}
 	}
 	return false
+}
+
+// nameTaken is indexNameTaken for an index of the table ref.
+func (d *differ) nameTaken(ref TableRef, name string) bool {
+	return indexNameTaken(d.to, ref.Schema, name, func(u TableRef) bool { return u == ref })
 }
 
 // keyRetyped reports whether a column of fk, of table ref, or one it

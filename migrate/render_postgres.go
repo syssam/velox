@@ -223,8 +223,7 @@ func (r *renderer) pgConstraint(i int, table TableRef, name, def string) pgParts
 
 // dropOnline reports whether the drop of an index goes to the online
 // script: an index of an existing table the plan keeps, on no column the
-// plan drops, whose name to gives no table, sequence, primary key or other
-// table's index. The others are
+// plan drops, whose name is not taken (indexNameTaken). The others are
 // dropped in the main script: with a table or column that goes anyway, or
 // in time to free the name for another index.
 func (r *renderer) dropOnline(c DropIndex) bool {
@@ -237,17 +236,7 @@ func (r *renderer) dropOnline(c DropIndex) bool {
 			return false
 		}
 	}
-	name := c.Index.Name
-	for _, t := range r.to.Tables {
-		if t.Schema != c.Table.Schema {
-			continue
-		}
-		if t.Name == name || t.PrimaryKeyName == name || r.l.canon(t.Ref()) != k && t.index(name) != nil ||
-			slices.ContainsFunc(t.Columns, func(col Column) bool { return col.Sequence == name }) {
-			return false
-		}
-	}
-	return true
+	return !indexNameTaken(r.to, c.Table.Schema, c.Index.Name, func(u TableRef) bool { return r.l.canon(u) == k })
 }
 
 // afterRename is the name the table of from named ref has after the main
