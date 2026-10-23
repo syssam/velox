@@ -295,7 +295,7 @@ func TestBuildersAreDocumented(t *testing.T) {
 			methods[typ.Name] = append(methods[typ.Name], m.Name)
 		}
 	}
-	common := []string{"Optional", "Nillable", "Unique", "Comment", "StorageKey", "SchemaType", "Annotations", "Default"}
+	common := []string{"Optional", "Nillable", "Unique", "Comment", "StorageKey", "SchemaType", "SchemaDefault", "Annotations", "Default"}
 	for _, b := range []string{
 		"BoolBuilder", "NumberBuilder", "StringBuilder", "BytesBuilder", "TimeBuilder",
 		"UUIDBuilder", "UUIDOfBuilder", "JSONBuilder", "OtherBuilder", "EnumBuilder", "EnumOfBuilder",
@@ -412,6 +412,32 @@ func TestSchemaTypeDialects(t *testing.T) {
 	d = field.String("s").SchemaType(map[string]string{"postgress": "citext", field.Postgres: "citext"}).Descriptor()
 	if err := errors.Join(d.Errs...); err == nil || err.Error() != `SchemaType: unknown dialect "postgress"; the keys are field.Postgres, field.MySQL and field.SQLite` {
 		t.Fatalf("got %v", err)
+	}
+}
+
+func TestSchemaDefault(t *testing.T) {
+	m := map[string]string{field.Postgres: "now()", field.MySQL: "CURRENT_TIMESTAMP(6)"}
+	d := field.Time("t").SchemaDefault(m).Descriptor()
+	if len(d.Errs) != 0 {
+		t.Fatal(d.Errs)
+	}
+	// The descriptor holds a copy.
+	m[field.Postgres] = "changed"
+	m[field.SQLite] = "added"
+	if len(d.SchemaDefault) != 2 || d.SchemaDefault[field.Postgres] != "now()" || d.SchemaDefault[field.MySQL] != "CURRENT_TIMESTAMP(6)" {
+		t.Fatalf("%v", d.SchemaDefault)
+	}
+	for _, c := range []struct {
+		m    map[string]string
+		want string
+	}{
+		{map[string]string{"oracle": "x"}, `SchemaDefault: unknown dialect "oracle"; the keys are field.Postgres, field.MySQL and field.SQLite`},
+		{map[string]string{field.MySQL: ""}, `SchemaDefault: the mysql default is empty`},
+	} {
+		d := field.String("s").SchemaDefault(c.m).Descriptor()
+		if err := errors.Join(d.Errs...); err == nil || err.Error() != c.want {
+			t.Errorf("got %v, want %s", err, c.want)
+		}
 	}
 }
 

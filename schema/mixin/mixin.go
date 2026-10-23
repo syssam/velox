@@ -30,6 +30,10 @@ func (Schema) Indexes() []schema.Index { return nil }
 // Annotations returns no annotations.
 func (Schema) Annotations() []schema.Annotation { return nil }
 
+// nowDefault is the database default of created_at and updated_at. Each call
+// of SchemaDefault copies it.
+var nowDefault = map[string]string{field.Postgres: "now()", field.MySQL: "CURRENT_TIMESTAMP(6)", field.SQLite: "CURRENT_TIMESTAMP"}
+
 // Time adds created_at and updated_at: the first is set once when the row is
 // created, the second on every update.
 type Time struct{ Schema }
@@ -45,7 +49,7 @@ type CreateTime struct{ Schema }
 
 // Fields returns created_at.
 func (CreateTime) Fields() []schema.Field {
-	return []schema.Field{field.Time("created_at").Default(time.Now).Immutable()}
+	return []schema.Field{field.Time("created_at").Default(time.Now).Immutable().SchemaDefault(nowDefault)}
 }
 
 // UpdateTime adds updated_at, set to the current time when the row is created
@@ -54,5 +58,5 @@ type UpdateTime struct{ Schema }
 
 // Fields returns updated_at.
 func (UpdateTime) Fields() []schema.Field {
-	return []schema.Field{field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now)}
+	return []schema.Field{field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now).SchemaDefault(nowDefault)}
 }

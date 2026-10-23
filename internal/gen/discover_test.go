@@ -41,13 +41,13 @@ type Alias = Post
 }
 
 func TestDecodeModel(t *testing.T) {
-	m, err := decodeModel([]byte(`{"version":2,"package":"p","schemas":[]}`))
+	m, err := decodeModel([]byte(`{"version":3,"package":"p","schemas":[]}`))
 	if err != nil || m.Package != "p" {
 		t.Fatalf("got %+v %v", m, err)
 	}
 	// A model of another version whose shape differs reports the version.
 	_, err = decodeModel([]byte(`{"version":1,"package":["p"],"schemas":{}}`))
-	if err == nil || !strings.Contains(err.Error(), "the loader wrote model version 1; velox-gen reads version 2: update velox-gen and the velox2 module together") {
+	if err == nil || !strings.Contains(err.Error(), "the loader wrote model version 1; velox-gen reads version 3: update velox-gen and the velox2 module together") {
 		t.Fatalf("got %v", err)
 	}
 }

@@ -4,5 +4,5 @@ package testmodel
 
 import "github.com/syssam/velox2"
 
-// Model: sha256:31ba2945b9ff64fb28658989c8b651612d1d012c400e22b53e4108d6d89029c6
+// Model: sha256:7891b07f794679a5e1fde50bd890738f2a2d05aaab3200bc5efa4976b684cd8b
 const _ = velox.GeneratedCodeIsVersion4

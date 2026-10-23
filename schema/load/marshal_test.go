@@ -133,6 +133,22 @@ func TestMarshal(t *testing.T) {
 	}
 }
 
+func TestMarshalSchemaDefault(t *testing.T) {
+	u := marshal(t, User{}, Post{}).Schemas[1]
+	want := map[string]string{field.Postgres: "now()", field.MySQL: "CURRENT_TIMESTAMP(6)", field.SQLite: "CURRENT_TIMESTAMP"}
+	if got := u.Fields[0].SchemaDefault; !reflect.DeepEqual(got, want) {
+		t.Fatalf("created_at: %v", got)
+	}
+	b, err := json.Marshal(u.Fields[0])
+	if err != nil || !strings.Contains(string(b), `"schema_default":{`) {
+		t.Fatalf("created_at: %s %v", b, err)
+	}
+	// A field without one has no key.
+	if b, err = json.Marshal(u.Fields[3]); err != nil || strings.Contains(string(b), "schema_default") {
+		t.Fatalf("name: %s %v", b, err)
+	}
+}
+
 type hooked struct{ schema.Schema }
 
 var hookedLine = here() + 2 // the line of Hooks

@@ -1104,3 +1104,62 @@ func TestLowerNullable(t *testing.T) {
 		t.Errorf("the generated code lacks %s", want)
 	}
 }
+
+// sdUser has a SchemaDefault when withDefault is set.
+type sdUser struct {
+	schema.Schema
+	withDefault bool
+}
+
+func (u sdUser) Fields() []schema.Field {
+	f := field.Time("seen")
+	if u.withDefault {
+		f = f.SchemaDefault(map[string]string{field.Postgres: "now()"})
+	}
+	return []schema.Field{f, field.String("name")}
+}
+
+// A SchemaDefault is for the migration planner: the generated code does not
+// change, but for the line that holds the model's hash.
+func TestSchemaDefaultChangesOnlyTheHash(t *testing.T) {
+	gen := func(u sdUser) map[string]string {
+		g, err := build(t, u)
+		if err != nil {
+			t.Fatal(err)
+		}
+		files, err := Generate(g, Config{Package: "gen", SchemaPath: lowerSchemaPath})
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := map[string]string{}
+		for _, f := range files {
+			out[f.Name] = string(f.Data)
+		}
+		return out
+	}
+	without, with := gen(sdUser{}), gen(sdUser{withDefault: true})
+	if len(without) != len(with) {
+		t.Fatalf("%d files without, %d with", len(without), len(with))
+	}
+	changed := 0
+	for name, a := range without {
+		b := with[name]
+		if a == b {
+			continue
+		}
+		changed++
+		la, lb := strings.Split(a, "\n"), strings.Split(b, "\n")
+		if len(la) != len(lb) {
+			t.Fatalf("%s: %d lines without, %d with", name, len(la), len(lb))
+		}
+		for i := range la {
+			hashes := strings.HasPrefix(la[i], "// Model: sha256:") && strings.HasPrefix(lb[i], "// Model: sha256:")
+			if la[i] != lb[i] && !hashes {
+				t.Errorf("%s:%d differs\n%s\n%s", name, i+1, la[i], lb[i])
+			}
+		}
+	}
+	if changed == 0 {
+		t.Fatal("the model's hash did not change")
+	}
+}

@@ -1,9 +1,11 @@
 package mixin_test
 
 import (
+	"maps"
 	"testing"
 
 	"github.com/syssam/velox2/schema"
+	"github.com/syssam/velox2/schema/field"
 	"github.com/syssam/velox2/schema/mixin"
 )
 
@@ -26,5 +28,18 @@ func TestTime(t *testing.T) {
 	}
 	if (mixin.Schema{}).Edges() != nil {
 		t.Fatal("an empty mixin declares nothing")
+	}
+}
+
+func TestTimeSchemaDefault(t *testing.T) {
+	want := map[string]string{field.Postgres: "now()", field.MySQL: "CURRENT_TIMESTAMP(6)", field.SQLite: "CURRENT_TIMESTAMP"}
+	fs := mixin.Time{}.Fields()
+	for _, f := range fs {
+		if d := f.Descriptor(); !maps.Equal(d.SchemaDefault, want) {
+			t.Errorf("%s: %v", d.Name, d.SchemaDefault)
+		}
+	}
+	if len(fs) != 2 {
+		t.Fatalf("%d fields", len(fs))
 	}
 }

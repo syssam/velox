@@ -280,7 +280,7 @@ func (l *loader) buildField(f schema.Field, prefix string, j int, pos loadjson.P
 		DefaultFunc:   d.DefaultFunc != nil,
 		UpdateDefault: d.UpdateDefault != nil,
 		Validators:    len(d.Validators),
-		StorageKey:    d.StorageKey, SchemaType: d.SchemaType, Comment: d.Comment, StructTag: d.StructTag,
+		StorageKey:    d.StorageKey, SchemaType: d.SchemaType, SchemaDefault: d.SchemaDefault, Comment: d.Comment, StructTag: d.StructTag,
 		Position: pos, Pos: desc.PosOf(d.PC),
 	}
 	if d.GoType != nil {

@@ -594,6 +594,24 @@ func (defaultTenant) Fields() []schema.Field {
 	return []schema.Field{field.Int64("org").Tenant().Default(1)}
 }
 
+type sdTenant struct{ schema.Schema }
+
+func (sdTenant) Fields() []schema.Field {
+	return []schema.Field{field.Int64("org").Tenant().SchemaDefault(map[string]string{field.Postgres: "1"})}
+}
+
+type sdIntID struct{ schema.Schema }
+
+func (sdIntID) Fields() []schema.Field {
+	return []schema.Field{field.Int64("id").SchemaDefault(map[string]string{field.Postgres: "1"})}
+}
+
+type sdStringID struct{ schema.Schema }
+
+func (sdStringID) Fields() []schema.Field {
+	return []schema.Field{field.String("id").SchemaDefault(map[string]string{field.Postgres: "gen_random_uuid()::text"})}
+}
+
 type bytesTenant struct{ schema.Schema }
 
 func (bytesTenant) Fields() []schema.Field { return []schema.Field{field.Bytes("org").Tenant()} }
@@ -944,12 +962,14 @@ func TestBuildRules(t *testing.T) {
 		{"14 two tenants", []schema.Interface{twoTenants{}}, `schema twoTenants: field "b": a second tenant field; "a" is the tenant`},
 		{"15 optional tenant", []schema.Interface{optionalTenant{}}, `schema optionalTenant: field "org": the tenant field must be required and not Nillable`},
 		{"16 default tenant", []schema.Interface{defaultTenant{}}, `schema defaultTenant: field "org": the tenant field cannot have a default: the context's tenant fills it`},
+		{"16 schema default on the tenant", []schema.Interface{sdTenant{}}, `schema sdTenant: field "org": the tenant field cannot have a default: the context's tenant fills it`},
 		{"17 bytes tenant", []schema.Interface{bytesTenant{}}, `schema bytesTenant: field "org": the tenant field must be of a comparable type`},
 		{"18 empty enum", []schema.Interface{emptyEnum{}}, `schema emptyEnum: field "s": an enum needs Values`},
 		{"19 duplicate enum value", []schema.Interface{dupEnum{}}, `schema dupEnum: field "s": value "a" is given twice`},
 		{"19 value from Values and GoType", []schema.Interface{enumGoTypeDup{}}, `schema enumGoTypeDup: field "s": value "a" is given twice`},
 		{"20 enum go name", []schema.Interface{badEnum{}}, `schema badEnum: field "s": value "in-progress" has no Go name; use NamedValues`},
 		{"21 optional id", []schema.Interface{optionalID{}}, `schema optionalID: field "id": the ID must be required, not Nillable, and have no UpdateDefault`},
+		{"21 schema default on an integer ID", []schema.Interface{sdIntID{}}, `schema sdIntID: field "id": an integer ID is assigned by the database and cannot have a SchemaDefault`},
 		{"22 float id", []schema.Interface{floatID{}}, `schema floatID: field "id": the ID cannot be of type float64`},
 		{"23 unknown index field", []schema.Interface{unknownIndexField{}}, `schema unknownIndexField: index 0: names unknown field "nope"`},
 		{"23 unknown index edge", []schema.Interface{unknownIndexEdge{}}, `schema unknownIndexEdge: index 0: names unknown edge "nope"`},
@@ -1014,7 +1034,7 @@ func TestBuildRulesAreSingle(t *testing.T) {
 		{dupField{}}, {dupColumn{}}, {dupEdge{}}, {edgeGoName{}}, {unknownTarget{}}, {otherPkgTarget{}}, {notSchemaTarget{}},
 		{noRef{}}, {badRef{}}, {wrongRef{}, refHolder{}, Pet{}}, {reqA{}, reqB{}}, {fieldMissing{}},
 		{fieldWrongSide{}, Pet{}}, {fieldMany{}}, {fieldWrongType{}}, {fieldOptional{}}, {twoTenants{}}, {optionalTenant{}},
-		{defaultTenant{}}, {bytesTenant{}}, {emptyEnum{}}, {dupEnum{}}, {badEnum{}}, {optionalID{}}, {floatID{}},
+		{defaultTenant{}}, {sdTenant{}}, {sdIntID{}}, {bytesTenant{}}, {emptyEnum{}}, {dupEnum{}}, {badEnum{}}, {optionalID{}}, {floatID{}},
 		{unknownIndexField{}}, {unknownIndexEdge{}}, {indexForeignEdge{}, Pet{}}, {emptyIndex{}}, {otherNoType{}},
 		{joinClash{}, clashTable{}}, {inlineOther{}, Pet{}}, {inlineNotSchema{}},
 		{tableOnO2M{}, Pet{}}, {badFieldName{}}, {emptyFieldName{}}, {badEdgeName{}}, {fieldGoNames{}}, {edgeGoNames{}},
@@ -1035,6 +1055,9 @@ func TestBuildRulesAreSingle(t *testing.T) {
 		}
 	}
 }
+
+// A string ID may have a SchemaDefault; only an integer ID is the database's.
+func TestBuildSchemaDefaultOnStringID(t *testing.T) { mustBuild(t, sdStringID{}) }
 
 func TestBuildOptionalBytesWithDefaultOrNillable(t *testing.T) { mustBuild(t, optionalBytesOK{}) }
 
@@ -1672,6 +1695,24 @@ func (nsIssue) Fields() []schema.Field { return []schema.Field{field.EnumOf[nsSt
 // Rule 44 compares, case-insensitively, the names of relations, of types and
 // of constraints, each within one database schema, the planner's helpers
 // included.
+// nsSharedTable has two relations on one join table.
+type nsSharedTable struct{ schema.Schema }
+
+func (nsSharedTable) Edges() []schema.Edge {
+	return []schema.Edge{
+		edge.To("friends", nsSharedTable.Type).StorageKey(edge.Table("shared_links")),
+		edge.To("rivals", nsSharedTable.Type).StorageKey(edge.Table("shared_links")),
+	}
+}
+
+// Two distinct relations cannot share one edge.Table: their rows would mix.
+func TestSharedEdgeTableRefused(t *testing.T) {
+	_, err := build(t, nsSharedTable{})
+	if err == nil || !strings.Contains(err.Error(), "is also") {
+		t.Fatalf("got %v, want a name clash", err)
+	}
+}
+
 func TestNamespace(t *testing.T) {
 	for _, c := range []struct {
 		name string

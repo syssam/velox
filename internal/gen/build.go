@@ -863,7 +863,7 @@ func (b *builder) validateFields(e *Entity) {
 		if f.Optional || f.Nillable {
 			b.fail(15, e.Name, fieldLoc(f), "the tenant field must be required and not Nillable")
 		}
-		if len(f.Default) > 0 || f.DefaultFunc || f.UpdateDefault {
+		if len(f.Default) > 0 || f.DefaultFunc || f.UpdateDefault || len(f.SchemaDefault) > 0 {
 			b.fail(16, e.Name, fieldLoc(f), "the tenant field cannot have a default: the context's tenant fills it")
 		}
 		if f.Type == "json" || f.Type == "bytes" {
@@ -904,6 +904,9 @@ func (b *builder) validateFields(e *Entity) {
 	if id := e.Fields[0]; !id.AutoID {
 		if id.Optional || id.Nillable || id.UpdateDefault {
 			b.fail(21, e.Name, fieldLoc(id), "the ID must be required, not Nillable, and have no UpdateDefault")
+		}
+		if integer(id.Type) && len(id.SchemaDefault) > 0 {
+			b.fail(21, e.Name, fieldLoc(id), "an integer ID is assigned by the database and cannot have a SchemaDefault")
 		}
 		if !idTypes[id.Type] {
 			b.fail(22, e.Name, fieldLoc(id), "the ID cannot be of type %s", id.Type)

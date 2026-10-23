@@ -607,3 +607,25 @@ func TestPluginModelOwnsKey(t *testing.T) {
 		t.Errorf("keys %+v", keys)
 	}
 }
+
+// A plugin does not see SchemaDefault: it is for the migration planner.
+func TestPluginModelHasNoSchemaDefault(t *testing.T) {
+	g, err := build(t, sdUser{withDefault: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f := g.Entity("sdUser").Fields[1]; len(f.SchemaDefault) == 0 {
+		t.Fatalf("the graph's field %s has no SchemaDefault", f.Name)
+	}
+	o, err := Lower(g, Config{Package: "gen", SchemaPath: lowerSchemaPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := json.Marshal(PluginModel(g, o))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(b, []byte("schema_default")) || bytes.Contains(b, []byte("now()")) {
+		t.Fatalf("the plugin model carries a SchemaDefault: %s", b)
+	}
+}

@@ -92,7 +92,7 @@ func Uint16(name string) *NumberBuilder[uint16] { return newNumber[uint16](name,
 // Uint32 declares a uint32 field.
 func Uint32(name string) *NumberBuilder[uint32] { return newNumber[uint32](name, desc.Caller()) }
 
-// Uint64 declares a uint64 field.
+// Uint64 declares a uint64 field. SQLite's integer holds at most 2⁶³−1.
 func Uint64(name string) *NumberBuilder[uint64] { return newNumber[uint64](name, desc.Caller()) }
 
 // Float declares a float64 field.
@@ -440,6 +440,8 @@ type EnumValues interface{ Values() []string }
 type EnumBuilder struct{ common[*EnumBuilder] }
 
 // Enum declares an enum field, stored as a string. EnumOf is the typed form.
+// Enums are native on PostgreSQL and MySQL; both sort an enum by the order its
+// values are declared in, not alphabetically.
 func Enum(name string) *EnumBuilder { return newEnum(name, desc.Caller()) }
 
 func newEnum(name string, pc uintptr) *EnumBuilder {
@@ -499,7 +501,9 @@ type EnumType interface {
 type EnumOfBuilder[T EnumType] struct{ common[*EnumOfBuilder[T]] }
 
 // EnumOf declares an enum field of the Go type T, whose Values method lists
-// the values. It is Enum(name).GoType(T("")), with a typed Default.
+// the values. It is Enum(name).GoType(T("")), with a typed Default. Enums are
+// native on PostgreSQL and MySQL; both sort an enum by the order its values are
+// declared in, not alphabetically.
 func EnumOf[T EnumType](name string) *EnumOfBuilder[T] {
 	e := newEnum(name, desc.Caller()).GoType(T(""))
 	b := &EnumOfBuilder[T]{}

@@ -132,6 +132,7 @@ type Field struct {
 	Validators    []any // Validate's functions, each a func(T) error
 	StorageKey    string
 	SchemaType    map[string]string
+	SchemaDefault map[string]string // the database default per dialect, as SQL
 	Comment       string
 	StructTag     string
 	Annotations   []Annotation

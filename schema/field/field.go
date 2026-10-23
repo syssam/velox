@@ -71,6 +71,10 @@ const (
 // SchemaType sets the column type per dialect, such as
 // {field.Postgres: "citext"}. The keys are Postgres, MySQL and SQLite; any
 // other is a misuse.
+//
+// On an enum field, a PostgreSQL value that is not a string type names the
+// enum type; the planner creates and manages it, and fields may share it. A
+// string type opts that dialect out of the native enum, to text plus a CHECK.
 func (c common[B]) SchemaType(m map[string]string) B {
 	for _, k := range slices.Sorted(maps.Keys(m)) {
 		if k != Postgres && k != MySQL && k != SQLite {
@@ -78,6 +82,24 @@ func (c common[B]) SchemaType(m map[string]string) B {
 		}
 	}
 	c.d.SchemaType = maps.Clone(m)
+	return c.self
+}
+
+// SchemaDefault sets the column's default in the database per dialect, as
+// SQL written as the database prints it, such as {field.Postgres: "now()"}.
+// velox's inserts write every column, so it serves rows written outside
+// velox and existing rows when the column is added. The keys are Postgres,
+// MySQL and SQLite; any other, or an empty value, is a misuse.
+func (c common[B]) SchemaDefault(m map[string]string) B {
+	for _, k := range slices.Sorted(maps.Keys(m)) {
+		switch {
+		case k != Postgres && k != MySQL && k != SQLite:
+			fail(c.d, "SchemaDefault: unknown dialect %q; the keys are field.Postgres, field.MySQL and field.SQLite", k)
+		case m[k] == "":
+			fail(c.d, "SchemaDefault: the %s default is empty", k)
+		}
+	}
+	c.d.SchemaDefault = maps.Clone(m)
 	return c.self
 }
 
