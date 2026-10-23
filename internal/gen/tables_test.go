@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -72,7 +73,11 @@ type tbMoney struct{}
 
 func (tbMoney) Value() (driver.Value, error) { return nil, nil }
 
-type tbUser struct{ schema.Schema }
+// tbUser's partial index is left out of the MySQL set, which has none.
+type tbUser struct {
+	schema.Schema
+	noPartial bool
+}
 
 func (tbUser) Annotations() []schema.Annotation {
 	return []schema.Annotation{schema.Comment("a person")}
@@ -104,11 +109,12 @@ func (tbUser) Edges() []schema.Edge {
 		edge.To("spouse", tbUser.Type).Unique(),
 	}
 }
-func (tbUser) Indexes() []schema.Index {
-	return []schema.Index{
-		index.Fields("name").StorageKey("users_by_name"),
-		index.Fields("email").Where("active").Unique(),
+func (u tbUser) Indexes() []schema.Index {
+	ixs := []schema.Index{index.Fields("name").StorageKey("users_by_name")}
+	if !u.noPartial {
+		ixs = append(ixs, index.Fields("email").Where("active").Unique())
 	}
+	return ixs
 }
 
 type tbPost struct{ schema.Schema }
@@ -169,7 +175,7 @@ func (tbInvoice) Edges() []schema.Edge {
 }
 
 func goldenSchemas(d velox.Dialect) []schema.Interface {
-	ss := []schema.Interface{tbUser{}, tbPost{}, tbToken{}, tbProfile{}, tbGroup{}}
+	ss := []schema.Interface{tbUser{noPartial: d == velox.MySQL}, tbPost{}, tbToken{}, tbProfile{}, tbGroup{}}
 	if d != velox.SQLite {
 		ss = append(ss, tbInvoice{})
 	}
@@ -252,7 +258,7 @@ func (tbTypes) Fields() []schema.Field {
 		field.Uint8("u8"), field.Uint16("u16"), field.Uint32("u32"), field.Uint("u"), field.Uint64("u64"),
 		field.Float32("f32"), field.Float("f64"),
 		field.String("s"), field.String("s1").MaxLen(1), field.Text("txt"),
-		field.String("s16383").MaxLen(16383), field.String("s16384").MaxLen(16384), field.String("s65535").MaxLen(65535),
+		field.String("s16384").MaxLen(16384), field.String("s65535").MaxLen(65535),
 		field.String("s65536").MaxLen(65536), field.String("s16777215").MaxLen(16777215), field.String("s16777216").MaxLen(16777216),
 		field.String("s10485760").MaxLen(10485760), field.String("s10485761").MaxLen(10485761),
 		field.Bytes("by"), field.Bytes("by255").MaxLen(255), field.Bytes("by256").MaxLen(256),
@@ -261,6 +267,16 @@ func (tbTypes) Fields() []schema.Field {
 		field.Other("o", tbMoney{}).SchemaType(map[string]string{field.Postgres: "MONEY", field.MySQL: "INT(11)", field.SQLite: "NUMERIC"}),
 		field.Int32("st").SchemaType(map[string]string{field.MySQL: "INT(11)", field.Postgres: "int4"}),
 	}
+}
+
+// tbTypesWide holds the widest varchar, which fills a MySQL row alone.
+type tbTypesWide struct{ schema.Schema }
+
+func (tbTypesWide) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.Table("tb_types_wide")}
+}
+func (tbTypesWide) Fields() []schema.Field {
+	return []schema.Field{field.String("s16383").MaxLen(16383)}
 }
 
 func TestTablesTypes(t *testing.T) {
@@ -301,8 +317,15 @@ func TestTablesTypes(t *testing.T) {
 		"st":         {"integer", "int", "integer"},
 	}
 	for i, d := range allDialects {
-		tb := table(t, tables(t, d, tbTypes{}), "tb_types")
+		s := tables(t, d, tbTypes{}, tbTypesWide{})
+		tb, wide := table(t, s, "tb_types"), table(t, s, "tb_types_wide")
 		for name, w := range want {
+			if name == "s16383" {
+				if c := column(t, wide, name); c.Type != w[i] {
+					t.Errorf("%v: %s is %q, want %q", d, name, c.Type, w[i])
+				}
+				continue
+			}
 			if c := column(t, tb, name); c.Type != w[i] {
 				t.Errorf("%v: %s is %q, want %q", d, name, c.Type, w[i])
 			}
@@ -626,12 +649,18 @@ func (tbIxB) Edges() []schema.Edge {
 	return []schema.Edge{edge.From("owner", tbIxOwner.Type).Ref("b").Unique()}
 }
 
-type tbIxC struct{ schema.Schema }
+type tbIxC struct {
+	schema.Schema
+	noWhere bool // MySQL has no partial indexes
+}
 
 func (tbIxC) Edges() []schema.Edge {
 	return []schema.Edge{edge.From("owner", tbIxOwner.Type).Ref("c").Unique()}
 }
-func (tbIxC) Indexes() []schema.Index {
+func (c tbIxC) Indexes() []schema.Index {
+	if c.noWhere {
+		return []schema.Index{index.Edges("owner")}
+	}
 	return []schema.Index{index.Edges("owner").Where("tb_ix_owner_c > 0")}
 }
 
@@ -643,12 +672,16 @@ func (tbIxTag) Edges() []schema.Edge {
 
 func TestTablesIndexes(t *testing.T) {
 	for _, d := range allDialects {
-		s := tables(t, d, tbIxOwner{}, tbIxA{}, tbIxB{}, tbIxC{}, tbIxTag{})
+		s := tables(t, d, tbIxOwner{}, tbIxA{}, tbIxB{}, tbIxC{noWhere: d == velox.MySQL}, tbIxTag{})
+		ixcs := []string{"tb_ixcs_tb_ix_owner_c", indexName("tb_ixcs", &Index{Columns: []string{"tb_ix_owner_c"}, Where: "tb_ix_owner_c > 0"})}
+		if d == velox.MySQL {
+			ixcs = ixcs[:1] // the declared index, which the key needs no other beside
+		}
 		for tableName, want := range map[string][]string{
 			"tb_ix_owners":     {"tb_ix_owners_code_unique", "tb_ix_owners_slug_unique"},
 			"tb_ixas":          {"tb_ixas_tb_ix_owner_a"},
 			"tb_ixbs":          {"tb_ixbs_tb_ix_owner_b_name"},
-			"tb_ixcs":          {"tb_ixcs_tb_ix_owner_c", indexName("tb_ixcs", &Index{Columns: []string{"tb_ix_owner_c"}, Where: "tb_ix_owner_c > 0"})},
+			"tb_ixcs":          ixcs,
 			"tb_ix_owner_tags": {"tb_ix_owner_tags_tb_ix_tag_id"},
 		} {
 			tb := table(t, s, tableName)
@@ -866,7 +899,8 @@ func (tbPartialUniq) Indexes() []schema.Index {
 
 func TestTablesPartialUniqueKeepsFieldIndex(t *testing.T) {
 	partial := indexName("accounts", &Index{Columns: []string{"email"}, Unique: true, Where: "active"})
-	for _, d := range allDialects {
+	for _, d := range []velox.Dialect{velox.Postgres, velox.SQLite} { // MySQL has no partial indexes
+
 		tb := table(t, tables(t, d, tbPartialUniq{}), "accounts")
 		want := []migrate.Index{
 			{Name: "accounts_email_unique", Columns: []string{"email"}, Unique: true},
@@ -884,5 +918,329 @@ func TestTablesPartialUniqueKeepsFieldIndex(t *testing.T) {
 func TestTablesUnknownDialect(t *testing.T) {
 	if s, err := Tables(mustBuild(t, tbCmUser{}, tbCmPet{}, tbCmGroup{}), velox.Dialect(0)); err == nil || s != nil {
 		t.Errorf("Tables of Dialect(0) = %v, %v; want an error", s, err)
+	}
+}
+
+// --- refusals at plan time
+
+// refusalLines holds the line of each element a refusal case names.
+var refusalLines = map[string]int{}
+
+type tbRfPartial struct{ schema.Schema }
+
+func (tbRfPartial) Fields() []schema.Field { return []schema.Field{field.String("name")} }
+func (tbRfPartial) Indexes() []schema.Index {
+	ix, l := index.Fields("name").Where("name <> ''"), here()
+	refusalLines["partial"] = l
+	return []schema.Index{ix}
+}
+
+type tbRfTextIndex struct{ schema.Schema }
+
+func (tbRfTextIndex) Fields() []schema.Field { return []schema.Field{field.Text("bio")} }
+func (tbRfTextIndex) Indexes() []schema.Index {
+	ix, l := index.Fields("bio"), here()
+	refusalLines["text index"] = l
+	return []schema.Index{ix}
+}
+
+type tbRfJSONUnique struct{ schema.Schema }
+
+func (tbRfJSONUnique) Fields() []schema.Field {
+	f, l := field.String("doc").SchemaType(map[string]string{field.MySQL: "json"}).Unique(), here()
+	refusalLines["json unique"] = l
+	return []schema.Field{f}
+}
+
+type tbRfLongValue struct{ schema.Schema }
+
+func (tbRfLongValue) Fields() []schema.Field {
+	f, l := field.Enum("e").NamedValues("Long", strings.Repeat("a", 256)), here()
+	refusalLines["long value"] = l
+	return []schema.Field{f}
+}
+
+type tbRfEnumType struct{ schema.Schema }
+
+func (tbRfEnumType) Fields() []schema.Field {
+	f, l := field.Enum("e").Values("a").SchemaType(map[string]string{field.MySQL: "int"}), here()
+	refusalLines["mysql enum type"] = l
+	return []schema.Field{f}
+}
+
+type tbRfColumnComment struct{ schema.Schema }
+
+func (tbRfColumnComment) Fields() []schema.Field {
+	f, l := field.String("s").Comment(strings.Repeat("c", 1025)), here()
+	refusalLines["column comment"] = l
+	return []schema.Field{f}
+}
+
+type tbRfTableComment struct{ schema.Schema }
+
+func (tbRfTableComment) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.Comment(strings.Repeat("c", 2049))}
+}
+func (tbRfTableComment) Fields() []schema.Field {
+	f, l := field.String("s"), here()
+	refusalLines["table comment"] = l
+	return []schema.Field{f}
+}
+
+type tbRfPGEnumType struct{ schema.Schema }
+
+func (tbRfPGEnumType) Fields() []schema.Field {
+	f, l := field.Enum("e").Values("a").SchemaType(map[string]string{field.Postgres: "integer"}), here()
+	refusalLines["pg enum type"] = l
+	return []schema.Field{f}
+}
+
+type tbRfPGEnumBadName struct{ schema.Schema }
+
+func (tbRfPGEnumBadName) Fields() []schema.Field {
+	f, l := field.Enum("e").Values("a").SchemaType(map[string]string{field.Postgres: "My Mood"}), here()
+	refusalLines["pg enum name"] = l
+	return []schema.Field{f}
+}
+
+type tbRfNULDefault struct{ schema.Schema }
+
+func (tbRfNULDefault) Fields() []schema.Field {
+	f, l := field.String("s").Default("a\x00b"), here()
+	refusalLines["nul default"] = l
+	return []schema.Field{f}
+}
+
+type tbRfNULValue struct{ schema.Schema }
+
+func (tbRfNULValue) Fields() []schema.Field {
+	f, l := field.Enum("e").NamedValues("A", "a\x00"), here()
+	refusalLines["nul value"] = l
+	return []schema.Field{f}
+}
+
+type tbRfTableIn struct{ schema.Schema }
+
+func (tbRfTableIn) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.TableIn("billing", "rf_bills")}
+}
+func (tbRfTableIn) Fields() []schema.Field {
+	f, l := field.String("s"), here()
+	refusalLines["table in"] = l
+	return []schema.Field{f}
+}
+
+type tbRfOther struct{ schema.Schema }
+
+func (tbRfOther) Fields() []schema.Field {
+	f, l := field.Other("o", tbMoney{}).SchemaType(map[string]string{field.Postgres: "money", field.SQLite: "numeric"}), here()
+	refusalLines["other"] = l
+	return []schema.Field{f}
+}
+
+type tbRfIDType struct{ schema.Schema }
+
+func (tbRfIDType) Fields() []schema.Field {
+	f, l := field.Int("id").SchemaType(map[string]string{field.MySQL: "varchar(20)"}), here()
+	refusalLines["id type"] = l
+	return []schema.Field{f}
+}
+
+type tbRfIDTypeSQLite struct{ schema.Schema }
+
+func (tbRfIDTypeSQLite) Fields() []schema.Field {
+	f, l := field.Int64("id").SchemaType(map[string]string{field.SQLite: "text"}), here()
+	refusalLines["sqlite id type"] = l
+	return []schema.Field{f}
+}
+
+// refusal is the one *Error of err.
+func refusal(t *testing.T, err error) *Error {
+	t.Helper()
+	if err == nil {
+		t.Fatal("no error")
+	}
+	errs := []error{err}
+	if j, ok := err.(interface{ Unwrap() []error }); ok {
+		errs = j.Unwrap()
+	}
+	if len(errs) != 1 {
+		t.Fatalf("%d errors, want 1:\n%v", len(errs), err)
+	}
+	e, ok := errs[0].(*Error)
+	if !ok {
+		t.Fatalf("%T %v, want an *Error", errs[0], errs[0])
+	}
+	return e
+}
+
+func TestTablesRefusals(t *testing.T) {
+	for _, c := range []struct {
+		line   string
+		d      velox.Dialect
+		s      schema.Interface
+		where  string
+		reason string
+	}{
+		{"partial", velox.MySQL, tbRfPartial{}, "index 0", "MySQL has no partial indexes (Where); drop Where or use a separate MySQL schema"},
+		{"text index", velox.MySQL, tbRfTextIndex{}, "index 0", "column bio is longtext on MySQL, which an index covers only by a prefix; give the field a MaxLen or a SchemaType"},
+		{"json unique", velox.MySQL, tbRfJSONUnique{}, `field "doc"`, "column doc is json on MySQL, which an index covers only by a prefix; give the field a MaxLen or a SchemaType"},
+		{"long value", velox.MySQL, tbRfLongValue{}, `field "e"`, "enum value 0 is 256 characters on MySQL, over its 255"},
+		{"mysql enum type", velox.MySQL, tbRfEnumType{}, `field "e"`, "its MySQL SchemaType int is not a string type"},
+		{"column comment", velox.MySQL, tbRfColumnComment{}, `field "s"`, "its comment is 1025 characters on MySQL, over its 1024"},
+		{"table comment", velox.MySQL, tbRfTableComment{}, "", "the table comment is 2049 characters on MySQL, over its 2048"},
+		{"pg enum type", velox.Postgres, tbRfPGEnumType{}, `field "e"`, "its PostgreSQL SchemaType integer is neither a string type nor an enum type name"},
+		{"pg enum name", velox.Postgres, tbRfPGEnumBadName{}, `field "e"`, "its PostgreSQL SchemaType My Mood is neither a string type nor an enum type name"},
+		{"nul default", velox.Postgres, tbRfNULDefault{}, `field "s"`, "PostgreSQL text cannot hold a NUL byte"},
+		{"nul value", velox.Postgres, tbRfNULValue{}, `field "e"`, "PostgreSQL text cannot hold a NUL byte"},
+		{"table in", velox.SQLite, tbRfTableIn{}, "", "schema.TableIn puts the table in database schema billing, which SQLite does not have"},
+		{"other", velox.MySQL, tbRfOther{}, `field "o"`, "an Other field needs a SchemaType for MySQL"},
+		{"id type", velox.MySQL, tbRfIDType{}, `field "id"`, "the ID is an integer, but its SchemaType varchar(20) is not an integer type on MySQL"},
+		{"sqlite id type", velox.SQLite, tbRfIDTypeSQLite{}, `field "id"`, "the ID is an integer, but its SchemaType text is not an integer type on SQLite"},
+	} {
+		t.Run(c.line, func(t *testing.T) {
+			g := mustBuild(t, c.s)
+			_, err := Tables(g, c.d)
+			e := refusal(t, err)
+			if !strings.Contains(e.Reason, c.reason) || e.Where != c.where || e.Schema != g.Entities[0].Name {
+				t.Errorf("%v: %+v\nwant where %q, reason containing %q", c.d, e, c.where, c.reason)
+			}
+			if line := refusalLines[c.line]; line == 0 || !strings.HasSuffix(e.Pos, "tables_test.go:"+strconv.Itoa(line)) {
+				t.Errorf("%v: pos %q, want line %d", c.d, e.Pos, line)
+			}
+			for _, d := range allDialects {
+				if d == c.d {
+					continue
+				}
+				if _, err := Tables(g, d); err != nil {
+					t.Errorf("%v: %v", d, err)
+				}
+			}
+		})
+	}
+}
+
+// Errors are ordered by schema name, then by the order of the elements.
+type tbRfOrderA struct{ schema.Schema }
+
+func (tbRfOrderA) Fields() []schema.Field {
+	return []schema.Field{field.Text("a").Unique(), field.String("b").Comment(strings.Repeat("c", 1025))}
+}
+func (tbRfOrderA) Indexes() []schema.Index {
+	return []schema.Index{index.Fields("b").Where("b <> ''")}
+}
+
+type tbRfOrderB struct{ schema.Schema }
+
+func (tbRfOrderB) Fields() []schema.Field { return []schema.Field{field.Text("a").Unique()} }
+
+func TestTablesRefusalsOrder(t *testing.T) {
+	_, err := Tables(mustBuild(t, tbRfOrderB{}, tbRfOrderA{}), velox.MySQL)
+	if err == nil {
+		t.Fatal("no error")
+	}
+	got := plain(err)
+	want := strings.Join([]string{
+		`schema tbRfOrderA: field "b": its comment is 1025 characters on MySQL, over its 1024`,
+		`schema tbRfOrderA: index 0: MySQL has no partial indexes (Where); drop Where or use a separate MySQL schema`,
+		`schema tbRfOrderA: field "a": column a is longtext on MySQL, which an index covers only by a prefix; give the field a MaxLen or a SchemaType`,
+		`schema tbRfOrderB: field "a": column a is longtext on MySQL, which an index covers only by a prefix; give the field a MaxLen or a SchemaType`,
+	}, "\n")
+	if got != want {
+		t.Errorf("errors\n%s\nwant\n%s", got, want)
+	}
+	_, again := Tables(mustBuild(t, tbRfOrderB{}, tbRfOrderA{}), velox.MySQL)
+	if again.Error() != err.Error() {
+		t.Errorf("two calls differ:\n%v\n%v", err, again)
+	}
+}
+
+type tbRfRow struct{ schema.Schema }
+
+func (tbRfRow) Fields() []schema.Field {
+	a, la := field.String("body").MaxLen(10000), here()
+	b, lb := field.String("summary").MaxLen(10000), here()
+	refusalLines["row body"], refusalLines["row summary"] = la, lb
+	return []schema.Field{a, b, field.Text("free")}
+}
+
+// 16320*4+2 + 63*4+1 is 65535 bytes.
+type tbRfRowFull struct{ schema.Schema }
+
+func (tbRfRowFull) Fields() []schema.Field {
+	return []schema.Field{field.String("a").MaxLen(16320), field.String("b").MaxLen(63)}
+}
+
+func TestTablesRowLimit(t *testing.T) {
+	g := mustBuild(t, tbRfRow{})
+	e := refusal(t, func() error { _, err := Tables(g, velox.MySQL); return err }())
+	file := e.Pos
+	if !strings.HasSuffix(file, "tables_test.go") || e.Schema != "tbRfRow" || e.Where != "" {
+		t.Errorf("error %+v, want the schema's file as its Pos", e)
+	}
+	want := "MySQL rows hold at most 65535 bytes in varchar and varbinary columns; these need 80004:\n" +
+		"  " + file + ":" + strconv.Itoa(refusalLines["row body"]) + `: field "body": varchar(10000), 40002 bytes` + "\n" +
+		"  " + file + ":" + strconv.Itoa(refusalLines["row summary"]) + `: field "summary": varchar(10000), 40002 bytes` + "\n" +
+		"  use Text() or a smaller MaxLen"
+	if e.Reason != want {
+		t.Errorf("reason\n%s\nwant\n%s", e.Reason, want)
+	}
+	for _, d := range []velox.Dialect{velox.Postgres, velox.SQLite} {
+		if _, err := Tables(g, d); err != nil {
+			t.Errorf("%v: %v", d, err)
+		}
+	}
+	if _, err := Tables(mustBuild(t, tbRfRowFull{}), velox.MySQL); err != nil {
+		t.Errorf("a row of 65535 bytes: %v", err)
+	}
+}
+
+type tbRfKey769 struct{ schema.Schema }
+
+func (tbRfKey769) Fields() []schema.Field { return []schema.Field{field.String("k").MaxLen(769)} }
+func (tbRfKey769) Indexes() []schema.Index {
+	ix, l := index.Fields("k"), here()
+	refusalLines["key 769"] = l
+	return []schema.Index{ix}
+}
+
+type tbRfKey768 struct{ schema.Schema }
+
+func (tbRfKey768) Fields() []schema.Field  { return []schema.Field{field.String("k").MaxLen(768)} }
+func (tbRfKey768) Indexes() []schema.Index { return []schema.Index{index.Fields("k")} }
+
+// Every counted type: 4*700 + 1+2+4+8+4+8+8+2 + 36*4 is 2981 bytes; the
+// varbinary(100) makes it 3081.
+type tbRfKeyMixed struct{ schema.Schema }
+
+func (tbRfKeyMixed) Fields() []schema.Field {
+	return []schema.Field{
+		field.String("s").MaxLen(700), field.Int8("i8"), field.Int16("i16"), field.Int32("i32"), field.Int64("i64"),
+		field.Float32("f32"), field.Float("f64"), field.Time("t"), field.Enum("e").Values("a"), field.UUID("u", uuidValue{}),
+		field.Bytes("b").MaxLen(100), field.Other("o", tbMoney{}).SchemaType(map[string]string{field.MySQL: "decimal(10,2)", field.Postgres: "numeric", field.SQLite: "numeric"}),
+	}
+}
+func (tbRfKeyMixed) Indexes() []schema.Index {
+	return []schema.Index{index.Fields("s", "i8", "i16", "i32", "i64", "f32", "f64", "t", "e", "u", "o"), index.Fields("s", "i8", "i16", "i32", "i64", "f32", "f64", "t", "e", "u", "o", "b")}
+}
+
+func TestTablesKeyLimit(t *testing.T) {
+	g := mustBuild(t, tbRfKey769{})
+	e := refusal(t, func() error { _, err := Tables(g, velox.MySQL); return err }())
+	if e.Reason != "the key is 3076 bytes on MySQL, over its 3072" || e.Where != "index 0" ||
+		!strings.HasSuffix(e.Pos, "tables_test.go:"+strconv.Itoa(refusalLines["key 769"])) {
+		t.Errorf("error %+v", e)
+	}
+	for _, d := range []velox.Dialect{velox.Postgres, velox.SQLite} {
+		if _, err := Tables(g, d); err != nil {
+			t.Errorf("%v: %v", d, err)
+		}
+	}
+	if _, err := Tables(mustBuild(t, tbRfKey768{}), velox.MySQL); err != nil {
+		t.Errorf("a key of 3072 bytes: %v", err)
+	}
+	e = refusal(t, func() error { _, err := Tables(mustBuild(t, tbRfKeyMixed{}), velox.MySQL); return err }())
+	if e.Reason != "the key is 3081 bytes on MySQL, over its 3072" || e.Where != "index 1" {
+		t.Errorf("mixed key: %+v", e)
 	}
 }

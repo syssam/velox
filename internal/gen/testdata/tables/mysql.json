@@ -437,14 +437,6 @@
 					"unique": true
 				},
 				{
-					"name": "tb_users_email_unique_d975992f",
-					"columns": [
-						"email"
-					],
-					"unique": true,
-					"where": "active"
-				},
-				{
 					"name": "tb_users_tb_user_spouse_unique",
 					"columns": [
 						"tb_user_spouse"

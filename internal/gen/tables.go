@@ -128,8 +128,10 @@ func (t *tabler) entity(e *Entity) migrate.Table {
 	}
 
 	var keys [][]string // the leading columns of the non-partial indexes, for fkIndexed
-	for _, ix := range e.Indexes {
+	var at []loc        // the element that makes each index, for the checks
+	for i, ix := range e.Indexes {
 		tb.Indexes = append(tb.Indexes, migrate.Index{Name: ix.Name, Columns: slices.Clone(ix.Columns), Unique: ix.Unique, Where: ix.Where, Pos: ix.Pos})
+		at = append(at, indexLoc(i, ix))
 		if ix.Where == "" {
 			keys = append(keys, ix.Columns)
 		}
@@ -137,6 +139,7 @@ func (t *tabler) entity(e *Entity) migrate.Table {
 	ixs, fs := fieldIndexes(e, nil)
 	for i, ix := range ixs {
 		tb.Indexes = append(tb.Indexes, migrate.Index{Name: ix.Name, Columns: ix.Columns, Unique: true, Pos: fs[i].Pos})
+		at = append(at, fieldLoc(fs[i]))
 		keys = append(keys, ix.Columns)
 	}
 	for _, f := range e.Fields {
@@ -144,8 +147,11 @@ func (t *tabler) entity(e *Entity) migrate.Table {
 		if !ok {
 			continue
 		}
-		t.foreignKey(&tb, fk, keys)
+		if t.foreignKey(&tb, fk, keys) {
+			at = append(at, edgeLoc(fk.Edge))
+		}
 	}
+	t.check(e, &tb, at)
 	return tb
 }
 
@@ -171,16 +177,19 @@ func (t *tabler) joinTable(jt joinTable) migrate.Table {
 }
 
 // foreignKey adds fk to tb, with the index of its column unless the
-// primary key or one of keys leads with it.
-func (t *tabler) foreignKey(tb *migrate.Table, fk foreignKey, keys [][]string) {
+// primary key or one of keys leads with it; it reports whether it added the
+// index.
+func (t *tabler) foreignKey(tb *migrate.Table, fk foreignKey, keys [][]string) bool {
 	pos := fk.Edge.Pos
 	tb.ForeignKeys = append(tb.ForeignKeys, migrate.ForeignKey{
 		Name: fk.Name, Columns: []string{fk.Column}, RefTable: migrate.TableRef{Schema: fk.Ref.TableSchema, Name: fk.Ref.Table},
 		RefColumns: []string{fk.Ref.Fields[0].Column}, OnDelete: fk.OnDelete, Pos: pos,
 	})
-	if !fkIndexed(tb.PrimaryKey, keys, fk.Column) {
-		tb.Indexes = append(tb.Indexes, migrate.Index{Name: indexName(fk.Table, &Index{Columns: []string{fk.Column}}), Columns: []string{fk.Column}, Pos: pos})
+	if fkIndexed(tb.PrimaryKey, keys, fk.Column) {
+		return false
 	}
+	tb.Indexes = append(tb.Indexes, migrate.Index{Name: indexName(fk.Table, &Index{Columns: []string{fk.Column}}), Columns: []string{fk.Column}, Pos: pos})
+	return true
 }
 
 // column is the column of e's field f, the i-th; an enum may add a check to
