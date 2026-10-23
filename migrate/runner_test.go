@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"math"
 	"slices"
 	"strings"
 	"sync"
@@ -382,6 +383,116 @@ func TestUpSQLiteConcurrent(t *testing.T) {
 	}
 }
 
+// holdSQLite is a connection to dsn's database holding BEGIN IMMEDIATE,
+// rolled back when t ends.
+func holdSQLite(t *testing.T, dsn string) *sql.Conn {
+	t.Helper()
+	ctx := context.Background()
+	holder, err := openDB(t, "sqlite", dsn).Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = holder.Close() })
+	if _, err := holder.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = holder.ExecContext(ctx, "ROLLBACK") })
+	return holder
+}
+
+// TestUpSQLiteNoWait: a lock wait of 0 tries once.
+func TestUpSQLiteNoWait(t *testing.T) {
+	db, dsn := freshDB(t, velox.SQLite)
+	mustUp(t, db, dirOf(t, velox.SQLite), migrate.WithLockWait(0))
+	holdSQLite(t, dsn)
+	start := time.Now()
+	if _, err := migrate.Up(context.Background(), db, dirOf(t, velox.SQLite), migrate.WithLockWait(0)); !errors.Is(err, migrate.ErrLockWait) {
+		t.Fatalf("%#v; want ErrLockWait", err)
+	}
+	if d := time.Since(start); d > 2*time.Second {
+		t.Errorf("Up waited %s; want no wait", d)
+	}
+}
+
+// TestUpSQLiteHugeWait: a wait past what the database takes is clamped.
+func TestUpSQLiteHugeWait(t *testing.T) {
+	db, _ := freshDB(t, velox.SQLite)
+	mustUp(t, db, dirOf(t, velox.SQLite), migrate.WithLockWait(math.MaxInt64))
+}
+
+func TestLockWaitUnits(t *testing.T) {
+	for _, c := range []struct {
+		wait        time.Duration
+		ms, seconds int64
+	}{
+		{0, 0, 0},
+		{-time.Second, 0, 0},
+		{time.Nanosecond, 1, 1},
+		{1500 * time.Millisecond, 1500, 2},
+		{5 * time.Minute, 300000, 300},
+		{30 * 24 * time.Hour, math.MaxInt32, 2592000},
+		{math.MaxInt64, math.MaxInt32, math.MaxInt32},
+	} {
+		if ms, sec := migrate.WaitMillis(c.wait), migrate.WaitSeconds(c.wait); ms != c.ms || sec != c.seconds {
+			t.Errorf("%v: %d ms, %d s; want %d, %d", c.wait, ms, sec, c.ms, c.seconds)
+		}
+	}
+}
+
+// TestUpSQLiteLockWaitCancel: a cancelled context ends the wait at once,
+// with the context's error.
+func TestUpSQLiteLockWaitCancel(t *testing.T) {
+	db, dsn := freshDB(t, velox.SQLite)
+	holdSQLite(t, dsn)
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(200*time.Millisecond, cancel)
+	start := time.Now()
+	_, err := migrate.Up(ctx, db, dirOf(t, velox.SQLite), migrate.WithLockWait(time.Minute))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("%#v; want context.Canceled", err)
+	}
+	if d := time.Since(start); d > 5*time.Second {
+		t.Errorf("Up took %s after the cancel", d)
+	}
+}
+
+// TestRunnerErrorsSayWhat: a driver's error is wrapped with what failed.
+func TestRunnerErrorsSayWhat(t *testing.T) {
+	db, _ := freshDB(t, velox.SQLite)
+	// An index takes the history table's name.
+	if _, err := db.Exec(`CREATE TABLE x (a integer); CREATE INDEX velox_migrations ON x (a)`); err != nil {
+		t.Fatal(err)
+	}
+	_, err := migrate.Up(context.Background(), db, dirOf(t, velox.SQLite))
+	var se *sqlitedriver.Error
+	if err == nil || !strings.HasPrefix(err.Error(), "migrate: creating the history table velox_migrations: ") || !errors.As(err, &se) {
+		t.Errorf("Up: %#v", err)
+	}
+
+	db, _ = freshDB(t, velox.SQLite)
+	if _, err := db.Exec(`CREATE TABLE velox_migrations (version integer)`); err != nil {
+		t.Fatal(err)
+	}
+	_, err = migrate.Status(context.Background(), db, dirOf(t, velox.SQLite))
+	if err == nil || !strings.HasPrefix(err.Error(), "migrate: reading the history table velox_migrations: ") || !errors.As(err, &se) {
+		t.Errorf("Status: %#v", err)
+	}
+}
+
+// TestSessionDiscard: a session whose clean-up failed is closed, not
+// returned to the pool.
+func TestSessionDiscard(t *testing.T) {
+	db, _ := freshDB(t, velox.SQLite)
+	for _, discard := range []bool{false, true} {
+		if err := migrate.SessionClose(context.Background(), db, discard); err != nil {
+			t.Fatal(err)
+		}
+		if n, want := db.Stats().Idle, map[bool]int{false: 1, true: 0}[discard]; n != want {
+			t.Errorf("discard %t: %d idle connections; want %d", discard, n, want)
+		}
+	}
+}
+
 // TestUpSQLiteLockWait: a writer holding the database makes Up wait, then
 // give ErrLockWait, before it creates the history table.
 func TestUpSQLiteLockWait(t *testing.T) {
@@ -439,7 +550,8 @@ func TestStatusDirty(t *testing.T) {
 			t.Errorf("%s: %#v; want *DirtyError of version 2", name, err)
 			continue
 		}
-		if s == nil || s.Dirty == nil || s.Dirty.Version != 2 || !s.Dirty.Dirty || s.Dirty.Error != "boom" || len(s.Ahead) != 0 {
+		if s == nil || s.Dirty == nil || s.Dirty.Version != 2 || !s.Dirty.Dirty || s.Dirty.Error != "boom" || len(s.Ahead) != 0 ||
+			!slices.Equal(versions(s.Applied), []uint64{1}) {
 			t.Errorf("%s: state %+v", name, s)
 		}
 		if _, err := migrate.Up(context.Background(), db, dir); !errors.As(err, &de) {

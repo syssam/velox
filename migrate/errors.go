@@ -13,7 +13,12 @@ type Error struct {
 	Object string // the table, column, index or constraint it is about
 	Code   string // names the failure for programs; the package doc lists the codes
 	Reason string
+
+	cause error // the driver's error behind a refusal, when there is one
 }
+
+// Unwrap is the driver's error behind the refusal, or nil.
+func (e *Error) Unwrap() error { return e.cause }
 
 // Error is "migrate: " and the non-empty of Pos, Object and Reason, joined
 // by ": ".

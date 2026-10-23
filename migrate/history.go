@@ -65,7 +65,7 @@ func (s *session) createHistory(ctx context.Context) error {
 		b.WriteString(" ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin")
 	}
 	_, err := s.conn.ExecContext(ctx, b.String())
-	return err
+	return wrap(ctx, "creating the history table "+s.cfg.Table, err)
 }
 
 // hasHistory reports whether the history table exists.
@@ -90,10 +90,19 @@ func (s *session) hasHistory(ctx context.Context) (bool, error) {
 
 // history is the table's rows by version; exists is false when there is no table.
 func (s *session) history(ctx context.Context) (rows []Applied, exists bool, err error) {
+	rows, exists, err = s.readHistory(ctx)
+	return rows, exists, wrap(ctx, "reading the history table "+s.cfg.Table, err)
+}
+
+// readHistory is history, its errors unwrapped. The columns are qualified
+// by the table, so a column missing from a table of another shape is an
+// error on SQLite too, not a string.
+func (s *session) readHistory(ctx context.Context) (rows []Applied, exists bool, err error) {
 	if exists, err = s.hasHistory(ctx); err != nil || !exists {
 		return nil, exists, err
 	}
-	at := s.q("applied_at")
+	col := func(name string) string { return s.q(s.cfg.Table) + "." + s.q(name) }
+	at := col("applied_at")
 	switch s.d {
 	case velox.Postgres:
 		at = "to_char(" + at + " AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS.US')"
@@ -101,7 +110,7 @@ func (s *session) history(ctx context.Context) (rows []Applied, exists bool, err
 		at = "CAST(" + at + " AS CHAR)"
 	}
 	q := fmt.Sprintf("SELECT %s, %s, %s, %s, %s, %s, %s, %s FROM %s ORDER BY %[1]s",
-		s.q("version"), s.q("name"), s.q("checksum"), at, s.q("duration_ms"), s.q("dirty"), s.q("statements"), s.q("error"), s.q(s.cfg.Table))
+		col("version"), col("name"), col("checksum"), at, col("duration_ms"), col("dirty"), col("statements"), col("error"), s.q(s.cfg.Table))
 	rs, err := s.conn.QueryContext(ctx, q)
 	if err != nil {
 		return nil, true, err

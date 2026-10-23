@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"math"
 	"slices"
 	"strings"
 	"testing"
@@ -104,13 +105,22 @@ func TestUpPostgresLockWait(t *testing.T) {
 		t.Fatal(err)
 	}
 	fsys := dirOf(t, velox.Postgres)
+	start := time.Now()
 	if _, err := migrate.Up(ctx, db, fsys, migrate.WithLockWait(300*time.Millisecond)); !errors.Is(err, migrate.ErrLockWait) {
 		t.Fatalf("%#v; want ErrLockWait", err)
+	}
+	if d := time.Since(start); d < 300*time.Millisecond {
+		t.Errorf("Up waited %s; want 300ms", d)
+	}
+	if _, err := migrate.Up(ctx, db, fsys, migrate.WithLockWait(0)); !errors.Is(err, migrate.ErrLockWait) {
+		t.Fatalf("no wait: %#v; want ErrLockWait", err)
 	}
 	if _, err := other.ExecContext(ctx, `SELECT pg_advisory_unlock($1)`, migrate.LockKey("velox_migrations")); err != nil {
 		t.Fatal(err)
 	}
 	mustUp(t, db, fsys, migrate.WithLockWait(300*time.Millisecond))
+	mustUp(t, db, fsys, migrate.WithLockWait(0))
+	mustUp(t, db, fsys, migrate.WithLockWait(math.MaxInt64)) // past lock_timeout's range, clamped
 }
 
 func TestUpPostgresStandardConformingStrings(t *testing.T) {
@@ -154,10 +164,14 @@ func TestMySQLLock(t *testing.T) {
 	if d := time.Since(start); d < time.Second {
 		t.Errorf("Up waited %s; want 1s", d)
 	}
+	if _, err := migrate.Up(ctx, db, fsys, migrate.WithLockWait(0)); !errors.Is(err, migrate.ErrLockWait) {
+		t.Fatalf("no wait: %#v; want ErrLockWait", err)
+	}
 	if err := other.QueryRowContext(ctx, `SELECT RELEASE_LOCK(?)`, lock).Scan(&got); err != nil || got != 1 {
 		t.Fatalf("RELEASE_LOCK: %d, %v", got, err)
 	}
 	mustUp(t, db, fsys, migrate.WithLockWait(time.Second))
+	mustUp(t, db, fsys, migrate.WithLockWait(math.MaxInt64))
 	cols := columnsOf(t, db, `SELECT column_name, column_type, is_nullable FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'velox_migrations' ORDER BY ordinal_position`)
 	want := []string{
 		"version bigint",

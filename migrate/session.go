@@ -4,9 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -20,8 +23,31 @@ type session struct {
 	conn    *sql.Conn
 	d       velox.Dialect
 	cfg     Config
-	db      string // MySQL: DATABASE()
-	sqlMode string // MySQL: @@SESSION.sql_mode
+	db      string        // MySQL: DATABASE()
+	sqlMode string        // MySQL: @@SESSION.sql_mode
+	broken  bool          // a clean-up failed: close discards the connection
+	wait    time.Duration // SQLite: how long BEGIN IMMEDIATE waits
+}
+
+// wrap is err, from what the runner was doing, as "migrate: <what>: <err>".
+// ctx's own error, ErrLockWait and this package's error types are returned
+// as they are.
+func wrap(ctx context.Context, what string, err error) error {
+	if err == nil {
+		return nil
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	var (
+		e  *Error
+		ce *ChecksumError
+		de *DirtyError
+	)
+	if errors.Is(err, ErrLockWait) || errors.As(err, &e) || errors.As(err, &ce) || errors.As(err, &de) {
+		return err
+	}
+	return fmt.Errorf("migrate: %s: %w", what, err)
 }
 
 // refuseSession is a refusal of the connection.
@@ -48,7 +74,7 @@ func dialectName(d velox.Dialect) string {
 func open(ctx context.Context, db *sql.DB, cfg Config) (*session, error) {
 	conn, err := db.Conn(ctx)
 	if err != nil {
-		return nil, err
+		return nil, wrap(ctx, "taking a connection", err)
 	}
 	s := &session{conn: conn, d: cfg.Dialect, cfg: cfg}
 	if err := s.check(ctx); err != nil {
@@ -83,14 +109,33 @@ func (s *session) check(ctx context.Context) error {
 	}
 	if err != nil {
 		if ctx.Err() != nil {
-			return err
+			return ctx.Err()
 		}
-		return refuseSession("the database does not answer as %s, velox.json's dialect: %v", dialectName(s.d), err)
+		e := refuseSession("the database does not answer as %s, velox.json's dialect: %v", dialectName(s.d), err).(*Error)
+		e.cause = err
+		return e
 	}
 	return checkVersion(s.d, version)
 }
 
-func (s *session) close() { _ = s.conn.Close() }
+// close releases the connection to the pool, or, when a clean-up failed and
+// the connection may hold the lock or the run's settings, closes it.
+func (s *session) close() {
+	if s.broken {
+		_ = s.conn.Raw(func(any) error { return driver.ErrBadConn })
+	}
+	_ = s.conn.Close()
+}
+
+// undo runs a clean-up statement, though ctx is gone; a failure discards the
+// connection.
+func (s *session) undo(ctx context.Context, q string, args ...any) {
+	c, cancel := cleanup(ctx)
+	defer cancel()
+	if _, err := s.conn.ExecContext(c, q, args...); err != nil {
+		s.broken = true
+	}
+}
 
 // The minimum versions.
 var (
@@ -109,7 +154,11 @@ func checkVersion(d velox.Dialect, v string) error {
 			return refuseSession("PostgreSQL's server_version_num %q is not a number", v)
 		}
 		if n < minPostgres {
-			return refuseSession("the server is PostgreSQL %d.%d; migrate needs 12 or later", n/10000, n%10000)
+			name := strconv.Itoa(n / 10000) // 10 and later: the major version alone
+			if n < 100000 {
+				name += "." + strconv.Itoa(n/100%100)
+			}
+			return refuseSession("the server is PostgreSQL %s; migrate needs 12 or later", name)
 		}
 	case velox.MySQL:
 		if strings.Contains(strings.ToLower(v), "mariadb") {
@@ -188,10 +237,11 @@ func cleanup(ctx context.Context) (context.Context, context.CancelFunc) {
 }
 
 // lock takes the migration lock, waiting at most wait and while ctx lives;
-// a timeout is ErrLockWait. A wait of 0 or less does not wait. On SQLite it
-// sets busy_timeout to wait for the run, and each file's BEGIN IMMEDIATE is
-// the lock.
+// a timeout is ErrLockWait. A wait of 0 or less does not wait: the lock is
+// tried once. On SQLite it sets busy_timeout to wait for the run, and each
+// file's BEGIN IMMEDIATE is the lock.
 func (s *session) lock(ctx context.Context, wait time.Duration) (unlock func(), err error) {
+	const what = "taking the migration lock"
 	wait = max(wait, 0)
 	switch s.d {
 	case velox.Postgres:
@@ -200,69 +250,69 @@ func (s *session) lock(ctx context.Context, wait time.Duration) (unlock func(), 
 		if wait == 0 {
 			err = s.conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock($1)`, key).Scan(&ok)
 		} else {
-			if _, err = s.conn.ExecContext(ctx, fmt.Sprintf("SET lock_timeout = '%dms'", ceilDiv(wait, time.Millisecond))); err != nil {
-				return nil, err
+			if _, err = s.conn.ExecContext(ctx, fmt.Sprintf("SET lock_timeout = '%dms'", waitMillis(wait))); err != nil {
+				return nil, wrap(ctx, what, err)
 			}
 			_, err = s.conn.ExecContext(ctx, `SELECT pg_advisory_lock($1)`, key)
 			ok = err == nil
 			if code, _ := velox.DriverCode(err); code == "55P03" {
 				err = nil
 			}
-			c, cancel := cleanup(ctx)
-			_, rerr := s.conn.ExecContext(c, `RESET lock_timeout`)
-			cancel()
-			if err == nil && rerr != nil {
-				err = rerr
-			}
+			s.undo(ctx, `RESET lock_timeout`)
 		}
 		switch {
 		case err != nil:
-			return nil, err
+			return nil, wrap(ctx, what, err)
 		case !ok:
 			return nil, ErrLockWait
 		}
-		return func() {
-			c, cancel := cleanup(ctx)
-			defer cancel()
-			_, _ = s.conn.ExecContext(c, `SELECT pg_advisory_unlock($1)`, key)
-		}, nil
+		return func() { s.undo(ctx, `SELECT pg_advisory_unlock($1)`, key) }, nil
 	case velox.MySQL:
 		name := lockName(s.db, s.cfg.Table)
 		var got sql.NullInt64
-		if err := s.conn.QueryRowContext(ctx, `SELECT GET_LOCK(?, ?)`, name, ceilDiv(wait, time.Second)).Scan(&got); err != nil {
-			return nil, err
+		if err := s.conn.QueryRowContext(ctx, `SELECT GET_LOCK(?, ?)`, name, waitSeconds(wait)).Scan(&got); err != nil {
+			return nil, wrap(ctx, what, err)
 		}
 		switch {
 		case !got.Valid:
-			return nil, fmt.Errorf("migrate: GET_LOCK(%q) failed", name)
+			return nil, fmt.Errorf("migrate: %s: GET_LOCK(%q) returned NULL", what, name)
 		case got.Int64 != 1:
 			return nil, ErrLockWait
 		}
-		return func() {
-			c, cancel := cleanup(ctx)
-			defer cancel()
-			_, _ = s.conn.ExecContext(c, `SELECT RELEASE_LOCK(?)`, name)
-		}, nil
+		return func() { s.undo(ctx, `SELECT RELEASE_LOCK(?)`, name) }, nil
 	case velox.SQLite:
 		var was int64
 		if err := s.conn.QueryRowContext(ctx, `PRAGMA busy_timeout`).Scan(&was); err != nil {
-			return nil, err
+			return nil, wrap(ctx, what, err)
 		}
-		if _, err := s.conn.ExecContext(ctx, fmt.Sprintf("PRAGMA busy_timeout = %d", ceilDiv(wait, time.Millisecond))); err != nil {
-			return nil, err
+		if _, err := s.conn.ExecContext(ctx, fmt.Sprintf("PRAGMA busy_timeout = %d", waitMillis(wait))); err != nil {
+			s.broken = true
+			return nil, wrap(ctx, what, err)
 		}
-		return func() {
-			c, cancel := cleanup(ctx)
-			defer cancel()
-			_, _ = s.conn.ExecContext(c, fmt.Sprintf("PRAGMA busy_timeout = %d", was))
-		}, nil
+		s.wait = wait
+		return func() { s.undo(ctx, fmt.Sprintf("PRAGMA busy_timeout = %d", was)) }, nil
 	}
 	return nil, refuseSession("no dialect %s", s.d)
 }
 
-// ceilDiv is d in units, rounded up.
+// waitMillis is a lock wait in milliseconds, rounded up, and at most
+// 2147483647, the most PostgreSQL's lock_timeout and SQLite's busy_timeout
+// take.
+func waitMillis(d time.Duration) int64 {
+	return min(ceilDiv(max(d, 0), time.Millisecond), math.MaxInt32)
+}
+
+// waitSeconds is a lock wait in whole seconds, rounded up, and at most
+// 2147483647, for MySQL's GET_LOCK.
+func waitSeconds(d time.Duration) int64 { return min(ceilDiv(max(d, 0), time.Second), math.MaxInt32) }
+
+// ceilDiv is d in units, rounded up, for d of 0 or more.
 func ceilDiv(d, unit time.Duration) int64 {
-	return int64((d + unit - 1) / unit)
+	n := d / unit
+	if d%unit != 0 {
+		n++
+	}
+	return int64(n)
 }
 
 // sqliteBusy reports SQLITE_BUSY, or one of its extended codes.
@@ -275,23 +325,36 @@ func sqliteBusy(err error) bool {
 	return cerr == nil && n&0xff == 5
 }
 
-// begin starts a file's transaction: BEGIN IMMEDIATE on SQLite, where a busy
-// database is ErrLockWait.
+// begin starts a file's transaction. On SQLite it is BEGIN IMMEDIATE, tried
+// again until the lock wait has passed, so that a cancelled ctx ends the
+// wait at once (SQLite's own busy wait does not see it); a database still
+// busy is ErrLockWait.
 func (s *session) begin(ctx context.Context) error {
-	q := "BEGIN"
-	if s.d == velox.SQLite {
-		q = "BEGIN IMMEDIATE"
+	if s.d != velox.SQLite {
+		_, err := s.conn.ExecContext(ctx, "BEGIN")
+		return err
 	}
-	_, err := s.conn.ExecContext(ctx, q)
-	if s.d == velox.SQLite && sqliteBusy(err) {
-		return ErrLockWait
+	if _, err := s.conn.ExecContext(ctx, "PRAGMA busy_timeout = 0"); err != nil {
+		return err
 	}
-	return err
+	defer s.undo(ctx, fmt.Sprintf("PRAGMA busy_timeout = %d", waitMillis(s.wait)))
+	deadline := time.Now().Add(s.wait)
+	for {
+		_, err := s.conn.ExecContext(ctx, "BEGIN IMMEDIATE")
+		if !sqliteBusy(err) {
+			return err
+		}
+		left := time.Until(deadline)
+		if left <= 0 {
+			return ErrLockWait
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(min(left, 10*time.Millisecond)):
+		}
+	}
 }
 
 // rollback ends a failed transaction, though ctx is gone.
-func (s *session) rollback(ctx context.Context) {
-	c, cancel := cleanup(ctx)
-	defer cancel()
-	_, _ = s.conn.ExecContext(c, "ROLLBACK")
-}
+func (s *session) rollback(ctx context.Context) { s.undo(ctx, "ROLLBACK") }

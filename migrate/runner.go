@@ -44,7 +44,8 @@ func WithTarget(version uint64) Option {
 
 // WithLockWait bounds how long Up waits for the migration lock, which
 // another runner holds while it applies; 5 minutes by default. A wait of 0
-// does not wait.
+// or less does not wait: the lock is tried once. A wait past what the
+// database takes (about 24 days) is cut to it.
 func WithLockWait(d time.Duration) Option {
 	return Option{func(o *options) { o.lockWait = d }}
 }
@@ -75,7 +76,7 @@ type Report struct {
 
 // A State is a directory read against a database's history.
 type State struct {
-	Applied []Applied // in version order: the history up to the directory's last file
+	Applied []Applied // in version order: the clean versions up to the directory's last file
 	Pending []File
 	Ahead   []Applied // above the directory's last file
 	Dirty   *Applied
@@ -156,10 +157,12 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 // Status reads dir against db's history, as Up would, without the lock and
 // without creating the history table. A dirty version gives the state, with
 // Dirty set, and a *DirtyError together; Up's other refusals give no state.
-// State.Applied holds the history up to the directory's last file, Ahead the
-// clean versions above it, and Dirty the dirty version, wherever it is.
-// It takes Up's options and uses none of them.
+// State.Applied holds the clean versions up to the directory's last file,
+// Ahead the clean versions above it, and Dirty the dirty version alone,
+// wherever it is. On SQLite, the read waits as long as WithLockWait says
+// for a writer to finish; Status takes no other option.
 func Status(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*State, error) {
+	o := optionsOf(opts)
 	d, err := ReadDir(dir)
 	if err != nil {
 		return nil, err
@@ -169,6 +172,13 @@ func Status(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*State,
 		return nil, err
 	}
 	defer s.close()
+	if s.d == velox.SQLite {
+		restore, err := s.lock(ctx, o.lockWait) // busy_timeout alone: SQLite's lock is each file's BEGIN IMMEDIATE
+		if err != nil {
+			return nil, err
+		}
+		defer restore()
+	}
 	rows, _, err := s.history(ctx)
 	if err != nil {
 		return nil, err
@@ -179,9 +189,10 @@ func Status(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*State,
 // prepare creates the history table when it is missing and reads it. On
 // SQLite both run in a BEGIN IMMEDIATE, so they wait on the lock too.
 func (s *session) prepare(ctx context.Context) ([]Applied, error) {
+	what := "creating the history table " + s.cfg.Table
 	if s.d == velox.SQLite {
 		if err := s.begin(ctx); err != nil {
-			return nil, err
+			return nil, wrap(ctx, what, err)
 		}
 	}
 	err := s.createHistory(ctx)
@@ -190,11 +201,14 @@ func (s *session) prepare(ctx context.Context) ([]Applied, error) {
 		rows, _, err = s.history(ctx)
 	}
 	if s.d == velox.SQLite {
+		if err == nil {
+			if _, cerr := s.conn.ExecContext(ctx, "COMMIT"); cerr != nil {
+				err = wrap(ctx, what+": COMMIT", cerr)
+			}
+		}
 		if err != nil {
 			s.rollback(ctx)
-			return nil, err
 		}
-		_, err = s.conn.ExecContext(ctx, "COMMIT")
 	}
 	if err != nil {
 		return nil, err
@@ -233,9 +247,10 @@ func reading(dir *Dir, rows []Applied) (*State, error) {
 			st.Dirty = &rows[i]
 		}
 		switch {
+		case r.Dirty:
 		case inRange(r.Version):
 			st.Applied = append(st.Applied, r)
-		case !r.Dirty:
+		default:
 			st.Ahead = append(st.Ahead, r)
 		}
 	}
@@ -279,7 +294,9 @@ func reading(dir *Dir, rows []Applied) (*State, error) {
 // statements, PRAGMA foreign_key_check on SQLite with foreign keys off, the
 // row, COMMIT, then a line to o's logger. On SQLite, foreign keys are turned off before BEGIN when the
 // file asks and set back after, and a file another runner applied since the
-// history was read is skipped with errAppliedMeanwhile.
+// history was read is skipped with errAppliedMeanwhile. That runner's row is
+// matched by version alone: its checksum was checked against its own
+// directory, and the next run checks it against this one.
 func (s *session) applyTx(ctx context.Context, f File, o options) (Applied, error) {
 	rolledBack := func(format string, args ...any) error {
 		return fmt.Errorf("migrate: %s: "+format+"; the file was rolled back", append([]any{f.Path}, args...)...)
@@ -288,19 +305,15 @@ func (s *session) applyTx(ctx context.Context, f File, o options) (Applied, erro
 	if fkOff {
 		var was int
 		if err := s.conn.QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&was); err != nil {
-			return Applied{}, err
+			return Applied{}, wrap(ctx, f.Path+": reading foreign_keys", err)
 		}
+		defer s.undo(ctx, fmt.Sprintf("PRAGMA foreign_keys = %d", was))
 		if _, err := s.conn.ExecContext(ctx, "PRAGMA foreign_keys = OFF"); err != nil {
-			return Applied{}, err
+			return Applied{}, wrap(ctx, f.Path+": turning foreign keys off", err)
 		}
-		defer func() {
-			c, cancel := cleanup(ctx)
-			defer cancel()
-			_, _ = s.conn.ExecContext(c, fmt.Sprintf("PRAGMA foreign_keys = %d", was))
-		}()
 	}
 	if err := s.begin(ctx); err != nil {
-		return Applied{}, err
+		return Applied{}, wrap(ctx, f.Path+": BEGIN", err)
 	}
 	done := false
 	defer func() {
@@ -309,9 +322,9 @@ func (s *session) applyTx(ctx context.Context, f File, o options) (Applied, erro
 		}
 	}()
 	if s.d == velox.SQLite {
-		rows, _, err := s.history(ctx)
+		rows, _, err := s.readHistory(ctx)
 		if err != nil {
-			return Applied{}, rolledBack("reading the history: %w", err)
+			return Applied{}, rolledBack("reading the history table %s: %w", s.cfg.Table, err)
 		}
 		if slices.ContainsFunc(rows, func(a Applied) bool { return a.Version == f.Version }) {
 			return Applied{}, errAppliedMeanwhile
@@ -346,7 +359,7 @@ func (s *session) applyTx(ctx context.Context, f File, o options) (Applied, erro
 		Statements: len(f.Statements),
 	}
 	if err := s.record(ctx, a); err != nil {
-		return Applied{}, rolledBack("recording the version: %w", err)
+		return Applied{}, rolledBack("recording version %d in %s: %w", f.Version, s.cfg.Table, err)
 	}
 	if _, err := s.conn.ExecContext(ctx, "COMMIT"); err != nil {
 		return Applied{}, rolledBack("COMMIT: %w", err)

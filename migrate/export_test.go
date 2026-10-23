@@ -1,6 +1,8 @@
 package migrate
 
 import (
+	"context"
+	"database/sql"
 	"strings"
 
 	"github.com/syssam/velox2"
@@ -64,3 +66,21 @@ var LockKey = lockKey
 
 // CheckVersion is checkVersion.
 var CheckVersion = checkVersion
+
+// WaitMillis and WaitSeconds are waitMillis and waitSeconds.
+var (
+	WaitMillis  = waitMillis
+	WaitSeconds = waitSeconds
+)
+
+// SessionClose opens a SQLite session on db and closes it, discarding its
+// connection when discard is set, as a failed clean-up does.
+func SessionClose(ctx context.Context, db *sql.DB, discard bool) error {
+	s, err := open(ctx, db, Config{Dialect: velox.SQLite, Table: defaultTable})
+	if err != nil {
+		return err
+	}
+	s.broken = discard
+	s.close()
+	return nil
+}

@@ -2,6 +2,7 @@ package migrate_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/syssam/velox2"
@@ -37,6 +38,15 @@ func TestCheckVersion(t *testing.T) {
 		var e *migrate.Error
 		if err != nil && (!errors.As(err, &e) || e.Code != "session") {
 			t.Errorf("%v %s: %#v; want Code session", c.d, c.v, err)
+		}
+	}
+}
+
+// TestCheckVersionText: the refusal names the version as PostgreSQL does.
+func TestCheckVersionText(t *testing.T) {
+	for v, want := range map[string]string{"90624": "PostgreSQL 9.6;", "110005": "PostgreSQL 11;"} {
+		if err := migrate.CheckVersion(velox.Postgres, v); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: %v; want %q", v, err, want)
 		}
 	}
 }
