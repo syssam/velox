@@ -95,6 +95,12 @@ func Blocked(findings []Finding, allow []Allow) []Finding {
 // no finding is safe. The table of a change counts as existing when from has
 // it, or it renames one of from's. Lint does not change from or the changes.
 func Lint(from *Schema, changes []Change) []Finding {
+	return lintChanges(from, changes).out
+}
+
+// lintChanges lints changes and returns the linter, whose findings are Lint's
+// and whose rebuilt tables are the ones Render rebuilds on SQLite.
+func lintChanges(from *Schema, changes []Change) *linter {
 	if from == nil {
 		from = &Schema{}
 	}
@@ -109,7 +115,7 @@ func Lint(from *Schema, changes []Change) []Finding {
 	for i, c := range changes {
 		l.change(i, c)
 	}
-	return l.out
+	return l
 }
 
 type linter struct {
