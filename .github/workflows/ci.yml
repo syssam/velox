@@ -54,6 +54,8 @@ jobs:
           go build -o bin/velox-gen ./cmd/velox-gen
           bin/velox-gen -check -out internal/testmodel -package testmodel ./internal/testmodel/schema
           bin/velox-gen verify -out internal/testmodel ./internal/testmodel/schema
+          bin/velox-gen -check -out internal/bindmodel -package bindmodel ./internal/bindmodel/schema
+          bin/velox-gen verify -out internal/bindmodel ./internal/bindmodel/schema
       - name: example
         working-directory: example
         run: |

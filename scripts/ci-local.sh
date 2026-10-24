@@ -36,6 +36,8 @@ go test -run XXX -fuzz FuzzSplit -fuzztime 10s ./migrate
 go build -o bin/velox-gen ./cmd/velox-gen
 bin/velox-gen -check -out internal/testmodel -package testmodel ./internal/testmodel/schema
 bin/velox-gen verify -out internal/testmodel ./internal/testmodel/schema
+bin/velox-gen -check -out internal/bindmodel -package bindmodel ./internal/bindmodel/schema
+bin/velox-gen verify -out internal/bindmodel ./internal/bindmodel/schema
 
 # The example is its own module: its own vet, lint, tests and generated files.
 (

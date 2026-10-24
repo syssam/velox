@@ -4,8 +4,15 @@
 //
 // A [Schema] is the database as one dialect sees it: every name is the
 // database's name, and every type is spelled as the dialect spells it. The
-// model is plain data. Nothing in this package opens a connection, and the
-// functions that take a *Schema never write through it.
+// model is plain data, and the functions that take a *Schema never write
+// through it. A MySQL enum, and a PostgreSQL enum type, sort by the order
+// of their values, not by their text.
+//
+// [Diff], [Lint], [Render] and [NewPlan] are pure: they read schemas and
+// open no connection. [Up], [Status], [Resolve], [Inspect], [Drift] and
+// [Verify] take a *sql.DB and use one connection of it, with the session in
+// UTC on PostgreSQL and MySQL, and close that connection after rather than
+// return it to the pool.
 //
 // Planning has four parts. [Diff] lists the changes from one schema to
 // another, in the order they run. [Lint] says which of them need care: a
@@ -18,10 +25,11 @@
 //
 // The other refusals are [*Error] values, whose Code names the failure:
 //
-//   - "nil": a schema Diff, Render or Drift needs is nil, or Inspect or
-//     Verify was given no database.
+//   - "nil": a schema Diff, Render or Drift needs is nil, or Up, Status,
+//     Resolve, Inspect, Drift or Verify was given no database.
 //   - "dialect": a schema's dialect is not PostgreSQL, MySQL or SQLite, or
-//     two schemas' dialects differ, or Inspect was given another dialect.
+//     two schemas' dialects differ, or Inspect or ParseFile was given
+//     another dialect.
 //   - "schema": a schema lists a table, an enum type, or a table's column,
 //     or a named index or constraint, twice.
 //   - "primary-key": a table's primary key changes its columns, or gains or
@@ -69,20 +77,26 @@
 // line. [Inspect] reads a database's tables as a Schema, and [Drift] reads
 // the tables a snapshot names and returns a [DriftReport], what tells the
 // database from the snapshot: the changes that would bring the database to
-// it, and [Warning]s for what differs only in spelling or what the model has
-// no place for. Both read on one connection of the database and close it
-// after. Up and Resolve run on one connection too, with the session in UTC
-// on PostgreSQL and MySQL, so files run with the session in UTC: a time
-// literal means one instant on any server, and Inspect reads it in UTC.
+// it, and [Warning]s. A predicate or check the database prints its own way
+// is no difference: Drift compares the two by their parsed form, where a
+// cast the database adds itself without changing the value matches no
+// cast, and a NOT over a comparison matches its negated operator. One whose
+// meaning differs is a change, so a hand-edited check is found. A Warning
+// is what the comparison cannot settle: an expression default that differs,
+// a predicate the normaliser cannot read whose text differs, a primary key
+// that differs, or what the model has no place for, such as a MySQL table
+// that is not InnoDB, an invalid PostgreSQL index or a NOT VALID
+// constraint.
 //
 // A directory holds velox.json, schema.json, the migration files and
-// velox.sum, which hashes the others. [ReadDir] reads one and returns a
-// [*SumError] when velox.sum does not match; [Dir.Add] writes the next files
-// of a plan. [LintFile] checks a file as velox-gen migrate lint does: what
-// cannot run in its transaction, and, in a file not written by Dir.Add, the
-// destructive statements it can read, with the codes delete-rows and
-// update-rows beside Lint's for TRUNCATE, and DELETE or UPDATE without
-// WHERE.
+// velox.sum, which hashes the others. Line endings never change a sum: each
+// file, velox.sum too, is read with CRLF as LF. [ReadDir] reads one and
+// returns a [*SumError] when velox.sum does not match; [Dir.Add] writes the
+// next files of a plan. [LintFile] checks a file as velox-gen migrate lint
+// does: what cannot run in its transaction, and, in a file not written by
+// Dir.Add, the destructive statements it can read, with the codes
+// delete-rows and update-rows beside Lint's for TRUNCATE, and DELETE or
+// UPDATE without WHERE.
 //
 // [Up] applies a directory's pending files to a database, under a lock. On
 // PostgreSQL and SQLite each runs in a transaction with its row in the
@@ -93,11 +107,14 @@
 // continues it from its first incomplete unit or [Resolve] marks it applied
 // or undone. A run killed while a statement ran may have applied it, and on
 // MySQL a cancelled statement may still have finished on the server, so
-// check the failed statement before resuming or undoing. [Status] reads the
-// directory against the history without applying. Each uses one connection
-// of the database and closes it after, so nothing a file sets on its
-// session reaches the application's other connections. An applied file
-// edited or gone is a [*ChecksumError], and a lock held past the wait
+// check the failed statement before resuming or undoing: resuming runs it
+// again. [Status] reads the directory against the history without
+// applying. Files run with the session in UTC on PostgreSQL and MySQL, so
+// a time literal means one instant on any server, and nothing a file sets on its session reaches the
+// application's other connections. A trigger, a MySQL routine or event and
+// a BEGIN … END block are refused on SQLite and MySQL, whose bodies the
+// splitter would cut at their inner semicolons. An applied file edited or
+// gone is a [*ChecksumError], and a lock held past the wait
 // [ErrLockWait]. [Verify] applies a directory to an empty database and
 // fails when Drift then finds a change against schema.json: a test's check
 // that the files make what the snapshot says. On SQLite, Verify, Up and

@@ -285,6 +285,23 @@ func TestUpDialectMismatch(t *testing.T) {
 	}
 }
 
+// TestRunnerNilDatabase: Up, Status and Resolve given no database refuse
+// it, as Inspect and Verify do, rather than panic.
+func TestRunnerNilDatabase(t *testing.T) {
+	ctx := context.Background()
+	fsys := dirOf(t, velox.SQLite, files("0001_a.sql", "CREATE TABLE a (x integer);"))
+	for name, call := range map[string]func() error{
+		"Up":      func() error { _, err := migrate.Up(ctx, nil, fsys); return err },
+		"Status":  func() error { _, err := migrate.Status(ctx, nil, fsys); return err },
+		"Resolve": func() error { return migrate.Resolve(ctx, nil, fsys, 1, migrate.ResolveUndone) },
+	} {
+		var e *migrate.Error
+		if err := call(); !errors.As(err, &e) || e.Code != "nil" || e.Error() != "migrate: "+name+" needs a database" {
+			t.Errorf("%s: %v; want Code nil", name, err)
+		}
+	}
+}
+
 // TestUpSQLiteRebuild: a rebuilt parent keeps its children and its
 // AUTOINCREMENT counter through the runner, which sets foreign keys back on
 // after; a foreign-keys off file that leaves an orphan is rolled back.

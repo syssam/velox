@@ -129,6 +129,9 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 	if err != nil {
 		return nil, err
 	}
+	if db == nil {
+		return nil, &Error{Code: "nil", Reason: "Up needs a database"}
+	}
 	s, err := open(ctx, db, d.Config, o.lockWait)
 	if err != nil {
 		return nil, err
@@ -207,6 +210,9 @@ func Status(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*State,
 	d, err := ReadDir(dir)
 	if err != nil {
 		return nil, err
+	}
+	if db == nil {
+		return nil, &Error{Code: "nil", Reason: "Status needs a database"}
 	}
 	s, err := open(ctx, db, d.Config, o.lockWait)
 	if err != nil {

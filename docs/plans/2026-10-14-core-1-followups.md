@@ -127,7 +127,7 @@ Left by the observability plan:
 
 ## Left by schema plan 1
 
-- Partly resolved in migrate plan 1: MySQL refuses `Index.Where` at plan time, and SQLite keeps it. What remains: nothing compares a predicate with what the database prints until plan 2's normaliser, and SQLite's predicates are not checked. `Index.Where` was PostgreSQL-only, and nothing refused it on other dialects.
+- Resolved in migrate plans 1 and 2: MySQL refuses `Index.Where` at plan time, and SQLite keeps it (plan 1); `Drift` compares each dialect's printed predicate with the snapshot's through the predicate normaliser, SQLite's included, and `TestPredicatesPostgres` pins it against a real PostgreSQL (plan 2, Tasks 5–8). `Index.Where` was PostgreSQL-only, and nothing refused it on other dialects.
 - [x] Resolved in migrate plan 1 for the symbols (`Tables` names foreign keys by `edge.Symbol` and `edge.Symbols`, checked by rule 51); `edge.Immutable` stays as it is. `edge.Symbol` and `edge.Immutable` are carried into the Graph's `Edge` (`symbols`, `immutable`); the migration planner is the first to use the symbols. Rule 34 refuses an edge whose immutability differs from its bound field's, as ent does.
 - Irregular plurals need `schema.Table`.
 - `singular()` is the simple inverse of plural (`children` gives `children_id`, where ent says `child_id`). A self-M2M edge named after its own type (edge `nodes` on `Node`) gives a join table with two `node_id` columns; rule 35 refuses it and asks for `edge.Columns`.
@@ -348,14 +348,35 @@ From the core additions (2026-10-22): `First` and `Exists`, `Sum`, `Avg`, `Min` 
 ## Left by migrate plan 1
 
 From migrate plan 1 (2026-10-23): the model, `Tables`, `Diff`, `Lint`, `Render` on three dialects and `NewPlan`. Plan 2 owns:
-- `FuzzSplit`, with the statement splitter, and the directory's goldens; the directory writes its files with plan 1's `writeScript`.
-- The real-database itests of every change kind, with the three invariants. Plan 1 executes its SQLite goldens in memory, and its PostgreSQL goldens on the CI database (`TestRenderPostgresExecutes`, under `VELOX_TEST_POSTGRES`, without rows); the MySQL goldens are not executed yet.
-- Itests of MySQL's combined `ALTER TABLE`s: an `ADD COLUMN` with a `MODIFY COLUMN`; an index dropped and added again under one name; a foreign key's step-1 drop and step-7 add around a rename or an index change.
-- An itest of the SQLite drop cycle, run with `foreign_keys` off and `foreign_key_check` before `COMMIT`.
-- The PostgreSQL online units' resume after a failure inside a statement, against a real server with rows. Plan 1 checks re-running each unit from its first statement after each of its statements, on empty tables (`TestRenderPostgresExecutes`).
-- The rows: the casts of a type change and of the enum swap, `setval` after `add-identity`, and the validated checks of `SET NOT NULL`, each on a table that holds rows.
-- With `RenderOptions.LockTimeout` 0, the PostgreSQL enum script has no lock-timeout directive and runs with none, while the main script takes the Config's; `NewPlan` always passes one. The runner could apply the Config's timeout to the `_enum` file too: plan 2's call.
-- An identity whose sequence `from` does not name: `Render` refuses it (and a serial whose `nextval` default it cannot read), asking for `velox-gen migrate baseline`; `Inspect` fills `Sequence` so that a snapshot never lacks it.
+- [x] Resolved in migrate plan 2, Tasks 1–2 (`FuzzSplit`, in CI; `TestDirGolden`). `FuzzSplit`, with the statement splitter, and the directory's goldens; the directory writes its files with plan 1's `writeScript`.
+- [x] Resolved in migrate plan 2, Task 12 (`TestMigrateCases`: every case on SQLite, PostgreSQL and MySQL through `Up`, with rows and the three invariants, so the MySQL goldens run too). The real-database itests of every change kind, with the three invariants. Plan 1 executes its SQLite goldens in memory, and its PostgreSQL goldens on the CI database (`TestRenderPostgresExecutes`, under `VELOX_TEST_POSTGRES`, without rows); the MySQL goldens are not executed yet.
+- [x] Resolved in migrate plan 2, Task 12 (`TestMigrateMySQLCombined`, `TestMigrateFKIndexReplacedMySQL`). Itests of MySQL's combined `ALTER TABLE`s: an `ADD COLUMN` with a `MODIFY COLUMN`; an index dropped and added again under one name; a foreign key's step-1 drop and step-7 add around a rename or an index change.
+- [x] Resolved in migrate plan 2, Tasks 3 and 12 (the runner's `foreign_key_check`; `TestMigrateSQLiteDropCycle`). An itest of the SQLite drop cycle, run with `foreign_keys` off and `foreign_key_check` before `COMMIT`.
+- [x] Resolved in migrate plan 2, Tasks 4 and 12 (`TestUpPostgresOnlineResume`, a cancel during an online build with rows; `TestMigrateRowsSurvivePostgresUnits`). The PostgreSQL online units' resume after a failure inside a statement, against a real server with rows. Plan 1 checks re-running each unit from its first statement after each of its statements, on empty tables (`TestRenderPostgresExecutes`).
+- [x] Resolved in migrate plan 2, Task 12 (`TestMigrateRowsSurvive`). The rows: the casts of a type change and of the enum swap, `setval` after `add-identity`, and the validated checks of `SET NOT NULL`, each on a table that holds rows.
+- [x] Resolved in migrate plan 2, Task 2 (`Dir.Add` writes the Config's lock timeout into an enum script that has none, `TestDirAddEnumLockTimeout`; the runner never reads a file's name). With `RenderOptions.LockTimeout` 0, the PostgreSQL enum script has no lock-timeout directive and runs with none, while the main script takes the Config's; `NewPlan` always passes one. The runner could apply the Config's timeout to the `_enum` file too: plan 2's call.
+- [x] Resolved in migrate plan 2, Task 6 for `Inspect` (it fills `Sequence` from `pg_depend`, `TestInspectPostgresSequence`); baseline, which the refusal names, is plan 3's. An identity whose sequence `from` does not name: `Render` refuses it (and a serial whose `nextval` default it cannot read), asking for `velox-gen migrate baseline`; `Inspect` fills `Sequence` so that a snapshot never lacks it.
+
+## Left by migrate plan 2
+
+From migrate plan 2 (2026-10-24): the directory, the runner, `Inspect` and `Drift` on three dialects, the CLI's `diff`, `apply`, `status`, `drift`, `lint`, `hash` and `resolve`, and the itests. Plan 3 owns:
+- Baseline: `velox-gen migrate baseline`, `apply -baseline` and `WithBaseline`. `Report.Baselined` is declared and stays empty until then.
+- The property test (the spec's Plans, item 3).
+- The examples and `internal/testmodel` on the planner: their tables are still hand-written DDL.
+- `migrate diff -check` in CI, for the examples' directories.
+- The documents: the README and the example's, beside `migrate`'s package doc.
+
+Found while executing plan 2:
+- PostgreSQL's primary-key index is not checked for the attributes the model lacks (a `DESC` column, an operator class); its constraint's `DEFERRABLE` is. MySQL notes a prefix or `DESC` primary key.
+- When a deferrable unique constraint's note and its index's note are both given, the two warnings share one Object name.
+- MySQL's binary and bit literal defaults: MySQL prints them as `0x…` and `b'…'`, and `Inspect` keeps them, so a model `'a'` on a `varbinary` column would drift. An `_binary'…'` expression default is not stripped either.
+- A MySQL expression default with an introducer other than a UTF-8 one (`_latin1'a'`, from a latin1 client) stays as printed and gives a warning, not silence. The runner's connections print `_utf8mb4`.
+- A default the column rounds is a change: a model `1.555` on `decimal(5,2)`, which MySQL stores as `1.56`. Drift is right that the stored default differs; `Tables` could refuse such a default instead.
+- Trigger support: triggers, MySQL routines and events, and `BEGIN … END` blocks are refused on SQLite and MySQL, since the splitter would cut their bodies. Supporting them needs the splitter to read their bodies, or MySQL's `DELIMITER`.
+- When pgconn cannot load a file a PostgreSQL DSN names (a missing `sslrootcert`), velox-gen says `-db is not a PostgreSQL connection string`, which misleads.
+- `mysqlRowBytes` counts 0 for the types it does not know (`set`, `float(p)`, the spatial types), so a row of them is undercounted and MySQL refuses it at apply instead of at plan time.
+- The normaliser's known limits: an interval literal always keeps its cast, so a cast one never matches an uncast one; it does not know a column's type, so on a `date` column `d >= '2020-01-01 10:00'::timestamp` matches `d >= '2020-01-01 10:00'`, which PostgreSQL reads apart; and a column cast to `text` matches the column, so `qty::text = '05'` matches `qty = '05'`.
+- MySQL's row limit refuses `varchar(16382)` and `varchar(16383)` with any ID wider than `tinyint`, though §4 maps `MaxLen` up to 16383 to `varchar`. Moving the `varchar`-to-`text` cut-off (to 16381, say) would let every such field build; the error already points at `Text()`.
 
 ## 1.0 release
 

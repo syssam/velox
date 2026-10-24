@@ -202,7 +202,7 @@ type Enum struct { // a PostgreSQL CREATE TYPE … AS ENUM
   - an `Index.Where`: MySQL has no partial index (closes follow-up :333);
   - an index or unique field on a column of a `text`, `blob` or `json` type: InnoDB needs a prefix, which velox does not model; the message suggests `MaxLen` or `SchemaType`;
   - an index whose key is over 3072 bytes, counting 4 bytes per `varchar` character and the fixed size of other types;
-  - **a row whose `varchar` and `varbinary` columns exceed 65535 bytes** (ruling 47). The count is 4 bytes per `varchar` character and 1 byte per `varbinary` byte, plus each column's length bytes (1 when its maximum is 255 bytes or less, else 2). The error names every such field with its file:line, and suggests `Text()` or a smaller `MaxLen`;
+  - **a row over MySQL's 65535 bytes** (ruling 47, **changed by plan 2's ruling 35: MySQL counts every column, not only `varchar` and `varbinary`**). A `varchar` counts 4 bytes per character and a `varbinary` 1 per byte, each plus its length bytes (1 when its maximum is 255 bytes or less, else 2); a fixed-size type counts its size, `text`, `blob` and `json` their in-row pointer (9 to 12 bytes), a `decimal` its digits, and the row its NULL bitmap. The error names every `varchar` and `varbinary` field with its file:line and bytes, gives the other columns' and the bitmap's bytes, and suggests `Text()` or a smaller `MaxLen`;
   - an enum value over 255 characters, MySQL's limit for `ENUM` and the size of an opted-out enum's `varchar(255)`;
   - an enum's MySQL `SchemaType` that is not a string type;
   - a column comment over 1024 characters, or a table comment over 2048.
@@ -614,7 +614,7 @@ h1:<base64 of SHA-256 over the lines below>
 schema.json h1:…
 velox.json h1:…
 ```
-- **CRLF:** a file's hash is taken over its bytes with CRLF turned into LF (call), so a Windows checkout does not change it.
+- **CRLF:** a file's hash is taken over its bytes with CRLF turned into LF (call), so a Windows checkout does not change it. `velox.sum` itself is read with CRLF as LF too (plan 2's ruling 38), so such a checkout also leaves it fresh.
 - **Detection:** an edited, reordered, added or removed file makes `velox.sum` stale. `lint`, `hash -check`, `diff` and the runner refuse a stale sum until `migrate hash` rewrites it.
 - **Merges:** two branches that each add a migration both change the first line, so git reports a conflict, and the second author re-runs `diff`.
 
@@ -712,7 +712,7 @@ The runner binds with each dialect's placeholders (`$1`, `?`). It reads `applied
 
 **Canonical checks.** An enum check is recognised in each dialect's printed form and rewritten into the model's: PostgreSQL's `((c = ANY (ARRAY['a'::text, 'b'::text])))`, MySQL's ``(`c` in (_utf8mb4'a',_utf8mb4'b'))``, SQLite's text verbatim. Any other check keeps the database's text. `RESTRICT` and `NO ACTION` are one action on MySQL.
 
-**Predicates (ruling 52).** PostgreSQL prints a partial index's predicate in its own form: `status = 'active'` comes back as `(status = 'active'::text)`. `Inspect` keeps the printed text. Comparing it with a snapshot goes through a **predicate normaliser** for the predicates velox users write. It strips casts such as `::text`, the parentheses PostgreSQL adds around operators and the whole, identifier quoting and white space. The normaliser has golden tests against a real PostgreSQL: each input predicate, created as an index, inspected and normalised, must equal the input normalised. A predicate that still differs while the index's name and columns match is a **drift warning, not a change**: the planner never drops and recreates an index over a spelling.
+**Predicates (ruling 52).** PostgreSQL prints a partial index's predicate in its own form: `status = 'active'` comes back as `(status = 'active'::text)`. `Inspect` keeps the printed text. Comparing it with a snapshot goes through a **predicate normaliser** for the predicates velox users write. It strips casts such as `::text`, the parentheses PostgreSQL adds around operators and the whole, identifier quoting and white space. The normaliser has golden tests against a real PostgreSQL: each input predicate, created as an index, inspected and normalised, must equal the input normalised. **(changed by plan 2: a difference only in spelling is no difference, neither a change nor a warning.** Drift compares predicates and checks by their parsed trees, where a cast the database adds itself without changing the value matches no cast, two casts match only when they are to one type, and a `NOT` over a comparison, `LIKE`, `IN`, `BETWEEN` or `IS NULL` matches its negated operator. A predicate or check whose normalised form differs is a change, so `Verify` fails on a hand edit. Only text the normaliser cannot parse is compared with its white space collapsed, and a difference there is a warning. The planner still never drops and recreates an index over a spelling.)
 
 **Objects the model did not create.** An index, check or foreign key on a known table is modelled, so a baselined database's next `diff` proposes dropping it, as a review change the author sees. An unknown table is never read, dropped or reported (decision 3).
 
@@ -721,7 +721,7 @@ The runner binds with each dialect's placeholders (`$1`, `?`). It reads `applied
 - **MySQL:** a native `enum('a','b')`, which is velox's default too. Equal values plan nothing.
 - **SQLite:** `text` without the check. The next `diff` adds the check, through a rebuild.
 
-**Drift.** `Drift(db, snapshot *Schema) (*DriftReport, error)` compares an inspected database with the snapshot. It reports each difference as the change that would remove it, plus warnings: residual predicate spellings, unmatched default expressions, non-InnoDB tables. `velox-gen migrate drift` inspects the snapshot's tables and prints the report. **(changed: decision 3 restricted drift to "the tables the snapshot or schema names" and compared with the schema. The snapshot is what the applied directory should have produced. A schema ahead of the snapshot is `diff -check`'s finding, not drift.)** Drift needs the database at the directory's last version, because only the last snapshot exists. A database behind it is an error naming the pending files. Warnings alone do not make drift exit 3.
+**Drift.** `Drift(ctx, db *sql.DB, snapshot *Schema) (*DriftReport, error)` inspects the snapshot's tables and compares them with the snapshot **(changed by plan 2's ruling 20: it was `Drift(db, snapshot *Schema)`, two schemas; a drift check must read the database to see what only the database knows, such as a table's engine, and comparing two schemas is `Diff`'s job)**. It reports each difference as the change that would remove it, plus warnings: predicates the normaliser cannot read whose text differs, unmatched default expressions, a primary key that differs, and what the model has no place for (a non-InnoDB table, an invalid PostgreSQL index, a `NOT VALID` constraint, a `GENERATED ALWAYS` identity). `velox-gen migrate drift` inspects the snapshot's tables and prints the report. **(changed: decision 3 restricted drift to "the tables the snapshot or schema names" and compared with the schema. The snapshot is what the applied directory should have produced. A schema ahead of the snapshot is `diff -check`'s finding, not drift.)** Drift needs the database at the directory's last version, because only the last snapshot exists. A database behind it is an error naming the pending files. Warnings alone do not make drift exit 3.
 
 ### 12. Baseline
 
@@ -925,7 +925,7 @@ type DriftReport struct {
 	Warnings []Warning
 }
 
-func Drift(db, snapshot *Schema) (*DriftReport, error)
+func Drift(ctx context.Context, db *sql.DB, snapshot *Schema) (*DriftReport, error) // changed by plan 2's ruling 20: it reads the database
 
 // The directory (§9).
 type Config struct {
@@ -989,7 +989,7 @@ type Report struct {
 	Ahead     bool // the database has versions above the directory's last
 }
 type State struct {
-	Applied []Applied // in version order
+	Applied []Applied // in version order: the clean versions up to the directory's last file
 	Pending []File
 	Ahead   []Applied // above the directory's last file
 	Dirty   *Applied
@@ -1090,9 +1090,10 @@ Every refusal names the schema's file:line when the element has one, in velox-ge
 schema/user.go:14: schema User: index 0: MySQL has no partial indexes (Where); drop Where or use a separate MySQL schema
 schema/user.go:9: schema User: field "email": index users_email_unique is also schema Account's index 2 (rule 44)
 schema/order.go:11: schema Order: field "status": enum type order_status is also field "state" of schema Invoice (schema/invoice.go:8), with other values (rule 52)
-schema/post.go: schema Post: MySQL rows hold at most 65535 bytes in varchar and varbinary columns; these need 81204:
+schema/post.go: schema Post: MySQL rows hold at most 65535 bytes; these need 80012:
   schema/post.go:12: field "body": varchar(10000), 40002 bytes
   schema/post.go:13: field "summary": varchar(10000), 40002 bytes
+  the other columns and the NULL bitmap: 8 bytes
   use Text() or a smaller MaxLen
 ```
 
@@ -1257,7 +1258,7 @@ A rename flag naming nothing says where it looked: `-rename-column users.nme=ful
 
 45. **Online units and their resume.** In an online script, a `DROP INDEX … IF EXISTS` with its `CREATE INDEX CONCURRENTLY` is one unit, and so is a `DROP CONSTRAINT IF EXISTS` with its `ADD … NOT VALID` and `VALIDATE`. `-resume` restarts a failed unit from its first statement. Online statements run with `lock_timeout` off unless the file's directive sets one (§8.3, §9, §10).
 46. **An index is added before the one it replaces is dropped** (§7.3 step 8). On MySQL the index changes of one table are one `ALTER TABLE`. A golden and an itest cover the foreign-key index replaced (§17).
-47. **MySQL's row limit.** Plan time refuses a row whose `varchar` and `varbinary` columns exceed 65535 bytes, counting utf8mb4 as 4 bytes per character plus length bytes. The error names the fields with file:line and suggests `Text()` or a smaller `MaxLen` (§3, §16).
+47. **MySQL's row limit.** Plan time refuses a row over 65535 bytes, counting every column as MySQL 8.4 does: utf8mb4 as 4 bytes per `varchar` character plus length bytes, fixed-size types by their size, `text`, `blob` and `json` by their in-row pointer, `decimal` by its digits, and the NULL bitmap **(changed by plan 2's ruling 35: this ruling counted only `varchar` and `varbinary`)**. The error names the `varchar` and `varbinary` fields with file:line, gives the other columns' bytes, and suggests `Text()` or a smaller `MaxLen` (§3, §16).
 48. **The MySQL lock name** is `velox_migrate_` plus the first 16 hex characters of SHA-256 of `<database>.<history table>`, fixed once shipped (§10).
 49. **Table renames carry derived names.** The model holds the primary key's name, `<table>_pkey`. A table rename also renames the names velox derived from the table: the primary key, the identity sequence, the derived indexes, foreign keys and checks, and an enum type named `<table>_<col>`. Names the schema gave are not renamed. The SQL per dialect is in §8.2 (§2, §7.1).
 50. **The cap is applied after the suffix,** and the helper names (`_velox_old`, `_not_null`, `velox_new_`) are in rule 44's namespace (§6, §15.2).
@@ -1266,7 +1267,7 @@ A rename flag naming nothing says where it looked: `-rename-column users.nme=ful
     - Serial to identity is the review code `serial-to-identity` (§4, §8.1, §8.2, §11, §12).
 52. **Predicates.**
     - `diff` compares schema text with snapshot text, both from the schema.
-    - `Inspect` and drift compare the database's printed predicate after a normaliser for PostgreSQL's output (casts, parentheses, quoting, white space), with goldens against a real PostgreSQL. A predicate that still differs while the name and columns match is a drift warning, not a rebuild.
+    - `Inspect` and drift compare the database's printed predicate after a normaliser for PostgreSQL's output (casts, parentheses, quoting, white space), with goldens against a real PostgreSQL. **(changed by plan 2: a difference the normaliser removes is silent; one in the normalised form is a change; only text it cannot parse that differs is a warning, §11.)** The planner never rebuilds an index over a spelling.
     - Baseline matches inspected indexes to schema indexes by name and columns, adopts the schema's `Where` text where they are equal after normalising, and warns otherwise (§7, §11, §12).
     - With it, **MySQL's normaliser strips display widths except `tinyint(1)`** (§4, ruling 41).
 53. **Literals are escaped per dialect** (defaults, enum values in a `CHECK` or an enum type, comments). On MySQL that doubles backslashes and quotes. The runner does not touch `sql_mode`, and the refusal of backslashes in defaults is dropped. My call beside it: the runner refuses to apply a MySQL file with a backslash in a literal under `NO_BACKSLASH_ESCAPES`, and a PostgreSQL session with `standard_conforming_strings` off, since either would store a different value (§8.2).
@@ -1349,6 +1350,108 @@ Plan 1 (`docs/plans/2026-10-23-migrate-1-model.md`) made these calls where this 
 - A type change always writes `USING`; a swap alters every column of `to` of the type, one `ALTER TABLE` per table.
 - An allow directive goes in each script holding a statement of its change, and in the main script when none does.
 - `CREATE SCHEMA IF NOT EXISTS` is written for a schema no table or enum type of `from` uses, before the first statement that creates or moves something into it.
+
+## Rulings made in plan 2
+
+Plan 2 (`docs/plans/2026-10-24-migrate-2-runner.md`) made these calls where this design was silent, or wrong. Where one differs from a section above, it stands.
+
+**The plan's own rulings.**
+
+1. A statement runs from its first token to its last; the comments around it are not part of it, so a statement split again gives itself.
+2. Directives are refused where they mean nothing: `foreign-keys off` outside SQLite, `lock-timeout` on SQLite, `unit` in a file run in a transaction, any directive but `allow` given twice. `no-transaction` is accepted on MySQL.
+3. The splitter reads each dialect as the dialect does: MySQL's `#` comments and its `--` only before white space, PostgreSQL's nested block comments and `E''` strings, SQLite's `[…]` names.
+4. `velox.sum` lists its files sorted by path, and covers the top-level `*.sql`, `schema.json` and `velox.json` only; `ReadDir` checks the sum before it parses anything.
+5. `velox.json` refuses unknown keys; its table is an identifier of at most 63 bytes.
+6. The `_enum` file always carries its lock timeout: `Add` writes the Config's into an enum script `Render` gave none. The runner applies a file's directive, else the Config's in a transaction or on MySQL, else none in a PostgreSQL `no-transaction` file, and never reads a file's name to decide.
+7. The default file name is the first change's kind up to its first `-`, its table (`<schema>_<name>` when qualified), and the column for a column change, lower-cased, other bytes `_`, cut to 40 bytes.
+8. The header's version is the velox2 module's, read from the build info.
+9. `Add` does not change the `Dir`; it returns the files, and refuses an empty plan, another dialect and a bad name.
+10. PostgreSQL's lock key is the first 8 bytes of SHA-256 of the history table's name, as a big-endian `int64`, fixed once shipped. The wait is `lock_timeout` around `pg_advisory_lock`; `55P03` is `ErrLockWait`.
+11. SQLite's wait is `busy_timeout`, set for the run and restored after; `SQLITE_BUSY` at `BEGIN IMMEDIATE` is `ErrLockWait`.
+12. `applied_at` is written in UTC and read as text, in a fixed layout per dialect, so no DSN needs `parseTime`.
+13. A failure in a file run in a transaction is a wrapped error, `migrate: <path>: statement i of n: <driver error>; the file was rolled back`.
+14. The runner records a failure through `context.WithoutCancel`, bounded to 10 seconds, and through a new connection when its own is gone.
+15. MySQL's `lock_wait_timeout` is whole seconds, rounded up; `0` sets back the session's own value, restored after each file.
+16. MariaDB is refused at the version check.
+17. `WithBaseline` and `apply -baseline` are plan 3's; `Report.Baselined` is declared and stays empty.
+18. `Resolve` acts on a dirty version only. `ResolveApplied` needs the file's checksum unchanged; `ResolveUndone` does not.
+19. `Status` returns the state with its ahead versions; ruling 54's refusals as errors with no state; a dirty version as the state and a `*DirtyError` together.
+20. **(spec defect)** `Drift(ctx, db *sql.DB, snapshot *Schema)` reads the database, replacing `Drift(db, snapshot *Schema)` (§11, §14). It inspects the snapshot's tables through an unexported `inspect` that returns the schema and notes on what the model has no place for, so the model stays plain data. `Inspect` returns the schema alone.
+21. **(spec defect)** `Inspect` with `nil` leaves out `velox_migrations`: it is not given the Config. Drift, `Verify` and the itests name their tables.
+22. Drift reports definitions and is silent on spellings: a predicate or check that differs only in what the normaliser removes is no difference; one whose normalised form differs is a change, so `Verify` fails on a hand-edited check; a predicate the normaliser cannot parse whose text differs, and an expression default that differs, are warnings. MySQL's `RESTRICT` and no action are one; SQLite's unnamed constraints match by definition; a primary-key difference is a warning.
+23. The predicate normaliser parses the predicates velox users write and prints them with the parentheses precedence needs; text it cannot parse is compared with its white space collapsed.
+24. A SQLite `integer PRIMARY KEY` without `AUTOINCREMENT` is not `Identity`.
+25. A `UNIQUE` constraint is modelled as its unique index; an index over an expression or a MySQL prefix is left out.
+26. `Inspect` reads the enum types the inspected columns use, and no others.
+27. Every change type has `String` (§14 addition).
+28. **(spec defect)** `migrate.LintFile`, and the destructive codes `delete-rows` and `update-rows` (§14 addition), so an `allow` can cover `TRUNCATE` and `DELETE` or `UPDATE` without `WHERE`. Files with velox-gen's header are not classified.
+29. CLI exits: a rename naming nothing is 1; `status` with a dirty version is 1; `drift` on a database not at the directory's last version is 1; `-lock-timeout 0` writes no directive.
+30. PostgreSQL itests make a database per test; MySQL's `billing` database is made and dropped around its case.
+31. The binding round-trips use their own generated package, `internal/bindmodel`.
+32. `Verify` fails on changes only; warnings are spellings, which `drift` prints.
+33. The `NO_BACKSLASH_ESCAPES` refusal checks the files before the first runs.
+34. A MySQL file's `unit` lines group statements for resume as on PostgreSQL.
+35. **(spec defect)** MySQL's row limit counts every column (§3, ruling 47): fixed-size types by their size, `text`, `blob` and `json` by their in-row pointer, `decimal` by its digits, and the NULL bitmap.
+36. Every test the plan adds to `migrate` is in package `migrate_test`, reaching unexported code through `export_test.go` hooks.
+37. The splitter finds the ends of literals, quoted names and dollar quotes itself, so it can report an unterminated one.
+38. Line endings never change a sum: each file's hash is over its content with CRLF as LF, and `velox.sum` itself is parsed with CRLF as LF.
+39. The tests' directory helper skips an empty plan and writes `schema.json` with hand files; `Dir.Add` still refuses an empty plan.
+40. `reading` reports a dirty row first, as the state and a `*DirtyError` together, whatever its file's checksum; checksums are compared for clean rows only.
+41. On SQLite the history table is created inside `BEGIN IMMEDIATE`.
+42. SQLite's `applied_at` column is `text` (§10's table said `datetime`), holding ruling 12's layout.
+43. An invalid PostgreSQL index is left out of `Inspect`'s schema and reported only as a note.
+44. `LintFile` knows a generated file by its first line, `Dir.Add`'s header.
+
+**Rulings made while executing it.**
+
+- The splitter and `ParseFile`:
+  - `FuzzSplit`'s join property ends the joined text with `;`: a MySQL `--` that `#` follows is a comment at the end of the input.
+  - A `-- velox:` directive must start its line, after white space only; one elsewhere is an error.
+  - An unknown dialect in `ParseFile` is Code `"dialect"`; `ParseFile` takes a base name.
+  - Repeated `unit` lines with no statement between them fold into one; version `0000` is accepted.
+  - MySQL's `/*! … */` is executable: kept as statement text, and one standing alone is a statement.
+  - A leading UTF-8 BOM is ignored, by `ParseFile` and by the sums alike.
+  - On SQLite and MySQL a trigger, a MySQL procedure, function or event (with or without `DEFINER`), and a `BEGIN … END` block are refused: the splitter would cut their bodies at the inner `;`. Trigger support is a follow-up.
+- The directory:
+  - A rename or alter of a column names the default file after the new name; the default name skips enum changes when the plan changes a table.
+  - `velox.json` refuses a key given twice and a null value (Code `"config"`); a malformed `schema.json` is Code `"json"`.
+  - The generator's version has one home, read from the build info by both `Dir.Add` and `velox-gen version`.
+- The runner:
+  - `State.Applied` holds clean rows only; a dirty row is in `Dirty` alone (§14's `State`).
+  - Every driver error is wrapped with `migrate: ` and what was being done; `Error` keeps its cause for `errors.As`.
+  - A lock wait of 0 or less tries the lock once.
+  - On SQLite, `BEGIN IMMEDIATE` runs with `busy_timeout` 0 and is retried until the wait passes or the context ends, so a cancel ends the wait; `busy_timeout` is set before the first statement that reads the database.
+  - The history's `SELECT` qualifies its columns.
+  - The `sql_mode` refusal covers the files this run applies (a resumed file and the pending files up to the target), and also refuses `ANSI_QUOTES` when such a file holds a double-quoted literal.
+  - Before recording a failure, the runner rolls back any transaction the file left open, on PostgreSQL too; MySQL's open transaction is found with a savepoint, since 8.4 has no `@@in_transaction`.
+  - The runner's connection is always discarded at close, never returned to the pool, so no session setting reaches the application.
+  - A lost connection never advances a dirty version's statement count.
+  - `WithResume` with a dirty version and versions ahead is refused.
+  - A kill while a statement runs may have applied it: the docs say to check the statement before resuming.
+  - `ResolveUndone` reads only `velox.json`, so an edit not yet hashed does not stop it.
+  - The runner's sessions are in UTC on PostgreSQL and MySQL, and so are Inspect's.
+  - Up, Status and Resolve refuse a nil database with Code `"nil"`, as Inspect and Verify do.
+- The normaliser and drift:
+  - A cast matches no cast only where PostgreSQL adds it itself without changing the value: a date or time literal compared by value (numeric zone offsets only); `numeric` on any expression, and `bigint` on an integer literal, as an operand of a comparison or of `+`, `-` or `*` under one; `double precision` on a number literal compared; `regclass` on a literal; a string literal or a column to `text` or unbounded `character varying`; a string literal to an enum type of either schema, compared or in an `IN` list. Two casts match only when they are to one type; narrowing never.
+  - A `NOT` folds into a comparison's, `LIKE`'s, `IN`'s, `BETWEEN`'s or `IS NULL`'s negated operator, and `NOT NOT x` into `x` for a predicate `x`, as three-valued logic allows; De Morgan's laws do not apply.
+  - A difference the normaliser removes is silent for predicates and checks alike (plan ruling 22 as written said a warning); warnings are only for unparseable mismatches and expression defaults.
+  - An empty constraint name is unnamed: a SQLite table may have several.
+  - MySQL's backslash escapes are read; a chain of comparisons without parentheses and a comment fall back to collapsed text; only `utf8` introducers are dropped.
+  - Number defaults compare by value, MySQL's time defaults by value, and a bare expression default as the database wraps it.
+  - Inspect reports what the model cannot hold as notes: a generated column, an index's attributes the model lacks (on MySQL the primary key's too: a prefix or a descending column), a SQLite column collation; partitions are left out. The snapshot's enum types are matched by name, casts to a qualified enum type are read, and an enum check is rewritten into the model's canonical form.
+  - MySQL's primary-key name is ignored by drift; the index MySQL makes for a foreign key no index covers is expected.
+  - MySQL's `information_schema` text is unescaped one level; decimal defaults lose trailing zeros.
+  - SQLite's `CREATE TABLE` is read with case-insensitive column names, comments stripped, foreign keys matched by their full key in order, and a table-level `PRIMARY KEY (id AUTOINCREMENT)`.
+- The CLI:
+  - `lint` prints to stderr; `hash` writes only when the sum differs; `diff -check` with no change prints nothing.
+  - An existing directory without migration files is new; `hash` without `velox.json` is refused.
+  - `diff` writes all its files or none, through temporary files renamed into place, `velox.sum` last.
+  - `LintFile` reads a `WHERE` at depth 0 only, `WITH … DELETE|UPDATE`, MySQL's multi-table `DELETE` and `UPDATE`, and PostgreSQL's `ABORT`.
+  - A negative `-lock-timeout` is exit 2.
+  - `-db` is parsed against the dialect before any connection, and a bad one is exit 2 with no part of it echoed; messages redact the whole DSN and a password only where a DSN holds it.
+  - On SQLite, `status`, `drift` and `resolve` never create the database file; `apply` does.
+  - `status` prints a dirty version on stdout and its error on stderr.
+- MySQL's row limit refuses `varchar(16382)` and wider with any ID wider than `tinyint`, as MySQL 8.4 does; the message points at `Text()` and `MaxLen`.
 
 ## Follow-ups this closes
 
