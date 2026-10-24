@@ -67,7 +67,7 @@ func ParseFile(d velox.Dialect, path string, data []byte) (File, error) {
 	if !ok {
 		return File{}, &Error{Code: "file", Pos: path, Reason: "the name is not <version>_<name>.sql, with a version of at least four digits and a name of a-z, 0-9 and _"}
 	}
-	data = bytes.ReplaceAll(bytes.TrimPrefix(data, bom), []byte("\r\n"), []byte("\n"))
+	data = asText(data)
 	f := File{Version: version, Name: m[2], Path: path, Sum: sum(data)}
 	f.generated = strings.HasPrefix(string(data), generatedPrefix)
 	s := splitter{d: d, src: string(data)}
@@ -186,10 +186,21 @@ func ParseFile(d velox.Dialect, path string, data []byte) (File, error) {
 // bom is the UTF-8 byte order mark some editors start a file with.
 var bom = []byte("\xEF\xBB\xBF")
 
+// asText is a file of the directory as it is read and hashed: without a
+// leading UTF-8 byte order mark, and with each "\r\n" read as "\n".
+func asText(data []byte) []byte {
+	return bytes.ReplaceAll(bytes.TrimPrefix(data, bom), []byte("\r\n"), []byte("\n"))
+}
+
+// versionFile is the name of version's file: "<version>_<name>.sql", the
+// version of at least four digits.
+func versionFile(version uint64, name string) string {
+	return fmt.Sprintf("%04d_%s.sql", version, name)
+}
+
 // sum is a file's hash: "h1:" and the padded standard base64 of the SHA-256
-// of data without a leading UTF-8 byte order mark and with each "\r\n" read
-// as "\n".
+// of data as asText reads it.
 func sum(data []byte) string {
-	h := sha256.Sum256(bytes.ReplaceAll(bytes.TrimPrefix(data, bom), []byte("\r\n"), []byte("\n")))
+	h := sha256.Sum256(asText(data))
 	return "h1:" + base64.StdEncoding.EncodeToString(h[:])
 }

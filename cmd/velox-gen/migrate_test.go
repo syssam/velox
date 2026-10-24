@@ -280,6 +280,17 @@ func TestMigrateHashAndLint(t *testing.T) {
 	want(t, "hash", code, out, errs, 0, "velox.sum\n", "")
 	code, out, errs = run("hash")
 	want(t, "hash again", code, out, errs, 0, "", "")
+	sum, err := os.ReadFile(filepath.Join(dir, "velox.sum"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	crlf := "\xEF\xBB\xBF" + strings.ReplaceAll(string(sum), "\n", "\r\n")
+	put("velox.sum", crlf)
+	code, out, errs = run("hash")
+	want(t, "hash BOM and CRLF", code, out, errs, 0, "", "")
+	if got, _ := os.ReadFile(filepath.Join(dir, "velox.sum")); string(got) != crlf {
+		t.Errorf("hash rewrote a velox.sum that matches but for its BOM and line endings")
+	}
 	code, out, errs = run("hash", "-check")
 	want(t, "hashed hash -check", code, out, errs, 0, "", "")
 	code, out, errs = run("lint")

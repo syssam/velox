@@ -116,7 +116,7 @@ func (s *session) resolve(ctx context.Context, dir *Dir, version uint64, r Resol
 	}
 	j := slices.IndexFunc(dir.Files, func(f File) bool { return f.Version == version })
 	if j < 0 {
-		return &ChecksumError{Version: version, Path: pathOf(dir, version, row.Name), Applied: row.Sum}
+		return &ChecksumError{Version: version, Path: dir.PathOf(version, row.Name), Applied: row.Sum}
 	}
 	f := dir.Files[j]
 	if f.Sum != row.Sum {

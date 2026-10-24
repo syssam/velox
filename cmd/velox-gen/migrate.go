@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"cmp"
 	"errors"
 	"flag"
@@ -218,12 +217,11 @@ func runMigrateHash(args []string, dir string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return c.fail(1, err)
 	}
-	have, err := os.ReadFile(filepath.Join(abs, "velox.sum"))
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+	if _, err := os.Stat(filepath.Join(abs, "velox.sum")); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return c.fail(1, err)
 	}
-	have = bytes.ReplaceAll(bytes.TrimPrefix(have, []byte("\xEF\xBB\xBF")), []byte("\r\n"), []byte("\n"))
-	if bytes.Equal(have, sum) {
+	// ReadDir checks velox.sum first, read as migrate reads every file.
+	if _, err := migrate.ReadDir(os.DirFS(abs)); !errors.As(err, new(*migrate.SumError)) {
 		return 0
 	}
 	if *check {

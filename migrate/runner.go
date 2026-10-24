@@ -292,15 +292,6 @@ func (s *session) prepare(ctx context.Context) ([]Applied, error) {
 	return rows, nil
 }
 
-// pathOf is the path of version v's file in dir, or, when the directory has
-// none, the path Dir.Add would have given it.
-func pathOf(dir *Dir, v uint64, name string) string {
-	if i := slices.IndexFunc(dir.Files, func(f File) bool { return f.Version == v }); i >= 0 {
-		return dir.Files[i].Path
-	}
-	return fmt.Sprintf("%04d_%s.sql", v, name)
-}
-
 // reading is dir against the history rows: a dirty row first, as the state
 // with Dirty set and a *DirtyError, together; else the state, or the first
 // refusal (*ChecksumError, or *Error with Code "history"), with a nil state.
@@ -336,7 +327,7 @@ func reading(dir *Dir, rows []Applied) (*State, error) {
 		}
 	}
 	if r := st.Dirty; r != nil {
-		e := &DirtyError{Version: r.Version, Path: pathOf(dir, r.Version, r.Name)}
+		e := &DirtyError{Version: r.Version, Path: dir.PathOf(r.Version, r.Name)}
 		if i := slices.IndexFunc(dir.Files, func(f File) bool { return f.Version == r.Version }); i >= 0 {
 			e.Statements = len(dir.Files[i].Statements)
 		} else {
@@ -356,7 +347,7 @@ func (st *State) check(dir *Dir) error {
 	for _, r := range st.Applied {
 		i := slices.IndexFunc(dir.Files, func(f File) bool { return f.Version == r.Version })
 		if i < 0 {
-			return &ChecksumError{Version: r.Version, Path: pathOf(dir, r.Version, r.Name), Applied: r.Sum}
+			return &ChecksumError{Version: r.Version, Path: dir.PathOf(r.Version, r.Name), Applied: r.Sum}
 		}
 		if f := dir.Files[i]; f.Sum != r.Sum {
 			return &ChecksumError{Version: r.Version, Path: f.Path, Applied: r.Sum, Now: f.Sum}
@@ -400,7 +391,7 @@ func (s *session) resuming(dir *Dir, st *State) (*File, error) {
 	}
 	i := slices.IndexFunc(dir.Files, func(f File) bool { return f.Version == r.Version })
 	if i < 0 {
-		return nil, &ChecksumError{Version: r.Version, Path: pathOf(dir, r.Version, r.Name), Applied: r.Sum, dirty: true}
+		return nil, &ChecksumError{Version: r.Version, Path: dir.PathOf(r.Version, r.Name), Applied: r.Sum, dirty: true}
 	}
 	f := dir.Files[i]
 	if f.Sum != r.Sum {

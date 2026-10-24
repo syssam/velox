@@ -109,23 +109,9 @@ func (c *dbCmd) connect(dir string, env []string, staleCode int, existing bool) 
 	return d, db, 0, true
 }
 
-// fileOf is the file of version v in d, or nil.
-func fileOf(d *migrate.Dir, v uint64) *migrate.File {
-	i := slices.IndexFunc(d.Files, func(f migrate.File) bool { return f.Version == v })
-	if i < 0 {
-		return nil
-	}
-	return &d.Files[i]
-}
-
 // filePath is the path of a's file in d, or the path migrate gives a
 // version without one.
-func filePath(d *migrate.Dir, a migrate.Applied) string {
-	if f := fileOf(d, a.Version); f != nil {
-		return f.Path
-	}
-	return fmt.Sprintf("%04d_%s.sql", a.Version, a.Name)
-}
+func filePath(d *migrate.Dir, a migrate.Applied) string { return d.PathOf(a.Version, a.Name) }
 
 // statements is "1 statement" or "<n> statements".
 func statements(n int) string {

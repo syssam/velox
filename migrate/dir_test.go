@@ -863,3 +863,20 @@ func TestJSONFilesBOM(t *testing.T) {
 		t.Errorf("Config = %+v, Files = %d, Snapshot = %+v", got.Config, len(got.Files), got.Snapshot)
 	}
 }
+
+// TestDirPathOf: a version's path is its file's, else the name Add gives.
+func TestDirPathOf(t *testing.T) {
+	d, err := migrate.ReadDir(dirOf(t, velox.SQLite, files("0001_a.sql", "CREATE TABLE a (x integer);")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := d.PathOf(1, "other"); got != "0001_a.sql" {
+		t.Errorf("version 1: %s", got)
+	}
+	if got := d.PathOf(12, "users"); got != "0012_users.sql" {
+		t.Errorf("version 12: %s", got)
+	}
+	if got := d.PathOf(12345, "x"); got != "12345_x.sql" {
+		t.Errorf("version 12345: %s", got)
+	}
+}
