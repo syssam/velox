@@ -381,6 +381,7 @@ Found while executing plan 2:
 From the final review's fix wave:
 - Lexer unification: `migrate` has four SQL lexers, each with its own quoting rules: the splitter and `lex` (split.go), `lexPredicate` (predicate.go) and `lexSQL` (inspect_sqlite_create.go). One lexer per dialect, which the others build on, would keep them from disagreeing about a quote or a comment.
 - The inspect readers' shared helpers: the PostgreSQL, MySQL and SQLite readers each have their own `each`, `note`, `schema` and `tables`. One reader type that holds them once would leave each dialect only its queries.
+- The splitter cuts PostgreSQL 14's `CREATE FUNCTION … BEGIN ATOMIC …; END` at the body's inner semicolons, so the trailing `END` is now refused as "END in a file run in a transaction", which points the wrong way. The splitter should read a `BEGIN ATOMIC` body as one statement.
 - A file run in a transaction that changes its session's `search_path` (pg_dump's `set_config('search_path', '', false)`) breaks its own history write, which names the table unqualified; Up resets the session only after each file. Qualifying the history table, or resetting before the history write, would close it.
 
 ## 1.0 release

@@ -14,13 +14,14 @@ import (
 // with Code "file" joined, is for CONCURRENTLY or ALTER TYPE … ADD VALUE in
 // a PostgreSQL file run in a transaction, and for BEGIN, START, COMMIT,
 // ROLLBACK or END leading a statement of a PostgreSQL or SQLite file run in
-// one. Its findings, for a file that is not generated (f.generated), are the
-// destructive statements it reads: DROP TABLE t (drop-table t), ALTER TABLE t
-// DROP COLUMN c (drop-column t.c), ALTER TABLE t ALTER COLUMN c [SET DATA]
-// TYPE and MODIFY COLUMN c (alter-type t.c), ALTER COLUMN c SET NOT NULL
-// (set-not-null t.c), TRUNCATE t and DELETE FROM t without WHERE
-// (delete-rows t), UPDATE t without WHERE (update-rows t); Pos is
-// "<path>:<line>", Change the statement's index.
+// one, but ROLLBACK TO a savepoint. Its findings, for a file that is not
+// generated (f.generated), are the destructive statements it reads: DROP
+// TABLE t (drop-table t), ALTER TABLE t DROP COLUMN c (drop-column t.c),
+// ALTER TABLE t ALTER COLUMN c [SET DATA] TYPE and MODIFY COLUMN c
+// (alter-type t.c), ALTER COLUMN c SET NOT NULL (set-not-null t.c),
+// TRUNCATE t and DELETE FROM t without WHERE (delete-rows t), UPDATE t
+// without WHERE (update-rows t); Pos is "<path>:<line>", Change the
+// statement's index.
 //
 // A WHERE counts only outside parentheses, so a subquery's does not. A
 // DELETE or UPDATE may follow a WITH clause; MySQL's multi-table DELETE t1,
@@ -46,7 +47,7 @@ func LintFile(d velox.Dialect, f File) ([]Finding, error) {
 			errs = append(errs, &Error{Code: "file", Pos: pos, Reason: fmt.Sprintf(format, args...)})
 		}
 		lead := l.upper(0)
-		if inTx && txControl(d, lead) {
+		if inTx && txControl(d, l) {
 			refuse(txControlReason, lead)
 		}
 		if d == velox.Postgres && !f.Directives.NoTransaction {
@@ -69,11 +70,19 @@ func LintFile(d velox.Dialect, f File) ([]Finding, error) {
 // the like in a file run in a transaction.
 const txControlReason = "%s in a file run in a transaction; the runner begins and commits the file's transaction itself"
 
-// txControl reports whether a statement led by lead, upper-cased, begins or
-// ends a transaction: BEGIN, START, COMMIT, ROLLBACK, END, and on PostgreSQL
-// ABORT.
-func txControl(d velox.Dialect, lead string) bool {
-	return slices.Contains([]string{"BEGIN", "START", "COMMIT", "ROLLBACK", "END"}, lead) || d == velox.Postgres && lead == "ABORT"
+// txControl reports whether l's statement begins or ends a transaction: it
+// is led by BEGIN, START, COMMIT, ROLLBACK, END, or on PostgreSQL ABORT.
+// ROLLBACK [WORK | TRANSACTION] TO, to a savepoint, ends none.
+func txControl(d velox.Dialect, l *fileLinter) bool {
+	lead := l.upper(0)
+	if lead == "ROLLBACK" {
+		next := l.upper(1)
+		if next == "WORK" || next == "TRANSACTION" {
+			next = l.upper(2)
+		}
+		return next != "TO"
+	}
+	return slices.Contains([]string{"BEGIN", "START", "COMMIT", "END"}, lead) || d == velox.Postgres && lead == "ABORT"
 }
 
 // checkTxControl is LintFile's refusal of the first statement of f, a file
@@ -82,7 +91,7 @@ func txControl(d velox.Dialect, lead string) bool {
 func checkTxControl(d velox.Dialect, f File) error {
 	for i, sql := range f.Statements {
 		l := &fileLinter{d: d, ws: lex(d, sql)}
-		if lead := l.upper(0); txControl(d, lead) {
+		if lead := l.upper(0); txControl(d, l) {
 			pos := f.Path
 			if i < len(f.lines) {
 				pos += ":" + strconv.Itoa(f.lines[i])

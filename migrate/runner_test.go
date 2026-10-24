@@ -751,3 +751,16 @@ func TestUpTransactionEndedByFile(t *testing.T) {
 		t.Errorf("history %+v", rows)
 	}
 }
+
+// TestUpSavepoint: a file that rolls back to a savepoint runs, in the
+// runner's transaction.
+func TestUpSavepoint(t *testing.T) {
+	db, _ := freshDB(t, velox.SQLite)
+	mustUp(t, db, dirOf(t, velox.SQLite, files("0001_x.sql", "CREATE TABLE a (id integer);\nSAVEPOINT s;\nCREATE TABLE b (id integer);\nROLLBACK TO SAVEPOINT s;\nRELEASE s;\n")))
+	if !hasTable(t, db, "a") || hasTable(t, db, "b") {
+		t.Error("want a without b")
+	}
+	if rows := historyOf(t, db); len(rows) != 1 {
+		t.Errorf("history %+v", rows)
+	}
+}

@@ -163,3 +163,18 @@ func TestWords(t *testing.T) {
 		}
 	}
 }
+
+// TestLintFileSavepoint: ROLLBACK TO a savepoint never ends the transaction,
+// so it is not refused; ROLLBACK itself is.
+func TestLintFileSavepoint(t *testing.T) {
+	for _, d := range []velox.Dialect{velox.Postgres, velox.SQLite} {
+		for _, q := range []string{"ROLLBACK TO SAVEPOINT s", "ROLLBACK TO s", "rollback work to savepoint s", "ROLLBACK TRANSACTION TO s"} {
+			if _, err := lintFile(t, d, "SAVEPOINT s;\nCREATE TABLE a (x integer);\n"+q+";\nRELEASE s;\n"); err != nil {
+				t.Errorf("%v %s: %v", d, q, err)
+			}
+		}
+		if _, err := lintFile(t, d, "ROLLBACK WORK;\n"); err == nil {
+			t.Errorf("%v: ROLLBACK WORK not refused", d)
+		}
+	}
+}
