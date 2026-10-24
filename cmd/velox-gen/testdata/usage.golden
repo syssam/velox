@@ -1,0 +1,27 @@
+Usage:
+  velox-gen [generate] [-out dir] [-package name] [-plugin tool[:key=value,...]]... [-check] [package]
+        generate the gen package of a schema package (default ./schema)
+  velox-gen verify [-out dir] [-package name] [-plugin tool[:key=value,...]]... [package]
+        check every generated entity's metadata
+  velox-gen describe [-json] [package]
+        print the entities, columns and relations of a schema package;
+        with -json, the model that a plugin receives
+  velox-gen version
+        print the version of velox-gen, of the generated code, of the plugin
+        protocol and of the model
+  velox-gen migrate diff [-dir ./migrations] [-dialect d] [-name n] [-allow code[=target],...]
+        [-rename-table old=new]... [-rename-column table.old=new]...
+        [-lock-timeout 5s] [-check] [-dry-run] [package]
+        write the migration that brings the directory's schema.json to the
+        schema package
+  velox-gen migrate lint [-dir ./migrations] [-since version]
+        check the migration files
+  velox-gen migrate hash [-dir ./migrations] [-check]
+        rewrite velox.sum
+
+Exit codes:
+  0  success
+  1  an error
+  2  misuse: an unknown subcommand or flag, a malformed option
+  3  stale: generated files (generate -check; verify, for a plugin's Go file),
+     or the migration directory (migrate diff -check, migrate hash -check)

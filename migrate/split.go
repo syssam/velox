@@ -259,3 +259,105 @@ func dollarTag(src string, i int) string {
 	}
 	return ""
 }
+
+// A word is a token of a statement outside literals and comments: a word as
+// written, a quoted name unquoted, or a byte of punctuation.
+type word struct {
+	text   string
+	quoted bool // a quoted name
+}
+
+// lex is sql's words as d reads them. An unterminated quote or comment runs
+// to the end.
+func lex(d velox.Dialect, sql string) []word {
+	s := splitter{d: d, src: sql}
+	var out []word
+	exec := false // inside a MySQL executable comment, whose text is the statement's
+	end := func(j int, reason string) int {
+		if reason != "" {
+			return len(sql)
+		}
+		return j
+	}
+	for i := 0; i < len(sql); {
+		c := sql[i]
+		switch {
+		case space(c):
+			i++
+		case s.lineComment(i):
+			j := strings.IndexByte(sql[i:], '\n')
+			if j < 0 {
+				return out
+			}
+			i += j
+		case exec && strings.HasPrefix(sql[i:], "*/"):
+			exec = false
+			i += 2
+		case s.executable(i):
+			exec = true
+			for i += 3; i < len(sql) && sql[i] >= '0' && sql[i] <= '9'; i++ {
+			}
+		case strings.HasPrefix(sql[i:], "/*"):
+			if i = s.commentEnd(i); i < 0 {
+				return out
+			}
+		case c == '\'' || c == '"' && d == velox.MySQL:
+			i = end(s.quoted(i, d == velox.MySQL, "unterminated"))
+		case d == velox.Postgres && (c == 'E' || c == 'e') && i+1 < len(sql) && sql[i+1] == '\'' && (i == 0 || !identByte(sql[i-1])):
+			i = end(s.quoted(i+1, true, "unterminated"))
+		case d == velox.Postgres && c == '$' && (i == 0 || !identByte(sql[i-1])) && dollarTag(sql, i) != "":
+			tag := dollarTag(sql, i)
+			if k := strings.Index(sql[i+len(tag):], tag); k >= 0 {
+				i += len(tag) + k + len(tag)
+			} else {
+				return out
+			}
+		case c == '"' || c == '`' && d != velox.Postgres || c == '[' && d == velox.SQLite:
+			q := c
+			if q == '[' {
+				q = ']'
+			}
+			j := i + 1
+			var b strings.Builder
+			for ; j < len(sql); j++ {
+				if sql[j] == q {
+					if q != ']' && j+1 < len(sql) && sql[j+1] == q {
+						b.WriteByte(q)
+						j++
+						continue
+					}
+					break
+				}
+				b.WriteByte(sql[j])
+			}
+			out = append(out, word{text: b.String(), quoted: true})
+			i = min(j+1, len(sql))
+		case wordByte(c):
+			j := i + 1
+			for j < len(sql) && (wordByte(sql[j]) || d == velox.Postgres && sql[j] == '$') {
+				j++
+			}
+			out = append(out, word{text: sql[i:j]})
+			i = j
+		default:
+			out = append(out, word{text: sql[i : i+1]})
+			i++
+		}
+	}
+	return out
+}
+
+// words is sql's tokens outside literals and comments, keywords upper-cased,
+// quoted names unquoted. Every word not quoted counts as a keyword, so a name
+// written without quotes comes out upper-cased too.
+func words(d velox.Dialect, sql string) []string {
+	ws := lex(d, sql)
+	out := make([]string, len(ws))
+	for i, w := range ws {
+		out[i] = w.text
+		if !w.quoted {
+			out[i] = strings.ToUpper(w.text)
+		}
+	}
+	return out
+}

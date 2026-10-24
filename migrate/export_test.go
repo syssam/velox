@@ -146,3 +146,6 @@ func ParseCreateTable(sql string) (autoincrement bool, checks []Check, foreignKe
 	}
 	return ct.autoincrement, ct.checks, foreignKeys, ok
 }
+
+// Words is words.
+var Words = words

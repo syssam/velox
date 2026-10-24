@@ -16,13 +16,19 @@
 //	velox-gen verify [-out dir] [-package name] [-plugin tool[:key=value,...]]... [package]
 //	velox-gen describe [-json] [package]
 //	velox-gen version
+//	velox-gen migrate diff [-dir ./migrations] [-dialect d] [-name n] [-allow code[=target],...]
+//	                       [-rename-table old=new]... [-rename-column table.old=new]...
+//	                       [-lock-timeout 5s] [-check] [-dry-run] [package]
+//	velox-gen migrate lint [-dir ./migrations] [-since version]
+//	velox-gen migrate hash [-dir ./migrations] [-check]
 //
 // Each subcommand has its own flags; a flag it does not take is a usage
 // error. Flags may follow the package, as in "go test ./x -v"; "--" ends them.
 // A word that is not a subcommand, or a second package, is a usage error; for
 // a word that names a directory the message says to write ./word. The exit
 // code is 0 for success, 1 for an error, 2 for misuse and 3 when generated
-// files are stale (-check, and verify when a plugin's Go file is out of date).
+// files are stale (-check, and verify when a plugin's Go file is out of date)
+// or a migration directory is (migrate diff -check and migrate hash -check).
 //
 // The package is one schema package, ./schema when none is named; a pattern
 // that names no package, or a package that declares no schemas, is an error
@@ -90,6 +96,44 @@
 // (default ./schema) declares; with -json, the model that a plugin receives as
 // "model", indented. version prints one line, such as
 // "velox-gen v1.2.3 (generated code 4, plugin protocol 2, model 2)".
+//
+// migrate works on a migration directory, ./migrations unless -dir names
+// another, which holds velox.json, schema.json, the migration files and
+// velox.sum, as package github.com/syssam/velox2/migrate reads them. Each
+// path it prints is joined to -dir, and each error is printed as
+// "velox-gen: migrate <subcommand>: <text>".
+//
+// migrate diff loads the schema package (default ./schema), builds its
+// tables for the directory's dialect and plans them against schema.json. It
+// writes the new files, schema.json and velox.sum, and prints their paths; a
+// new directory also gets velox.json, and needs -dialect (postgres, mysql or
+// sqlite), which must otherwise agree with velox.json. No change prints "no
+// changes". -name names the files (default: from the first change, as
+// create_users or add_users_email). A destructive change is refused, with
+// the flag that allows it, unless -allow covers it, as -allow
+// drop-column=users.name,drop-table; each allowed change is written into the
+// file as a -- velox:allow line. -rename-table old=new and -rename-column
+// table.old=new, repeatable, name the renames the plan cannot see, a table
+// optionally as schema.name; one that names nothing in schema.json is an
+// error. -lock-timeout is the lock timeout the files carry (default:
+// velox.json's); 0 writes none, so velox.json's applies when they run.
+// -dry-run prints each file after "== <path>" and writes nothing. -check
+// writes nothing and exits 3 when the schema differs from schema.json or
+// velox.sum is out of date; CI runs it. A stale velox.sum is otherwise an
+// error: run migrate hash when the edits are intended.
+//
+// migrate lint checks every file, or those from -since version on: their
+// directives and statements, what cannot run in a file's transaction
+// (CONCURRENTLY and ALTER TYPE … ADD VALUE on PostgreSQL, BEGIN or COMMIT
+// on PostgreSQL and SQLite), and, in a file migrate diff did not write, the
+// destructive statements it can read (DROP TABLE, DROP COLUMN, a type
+// change, SET NOT NULL, TRUNCATE, and DELETE or UPDATE without WHERE) that no
+// -- velox:allow line of the file allows. Each problem is printed as
+// "<path>:<line>: <code>: <message>", and any is exit 1.
+//
+// migrate hash rewrites velox.sum when it does not match the files and
+// prints its path; with -check it writes nothing and exits 3 when it does
+// not match.
 package main
 
 import (
@@ -120,6 +164,8 @@ func run(args []string, dir string, env []string, stdout, stderr io.Writer) int 
 			return runGenCommand("verify", args[1:], dir, env, stdout, stderr)
 		case "describe":
 			return runDescribe(args[1:], dir, env, stdout, stderr)
+		case "migrate":
+			return runMigrate(args[1:], dir, env, stdout, stderr)
 		case "version":
 			return runVersion(args[1:], stdout, stderr)
 		default:
@@ -258,12 +304,22 @@ func printUsage(w io.Writer) {
   velox-gen version
         print the version of velox-gen, of the generated code, of the plugin
         protocol and of the model
+  velox-gen migrate diff [-dir ./migrations] [-dialect d] [-name n] [-allow code[=target],...]
+        [-rename-table old=new]... [-rename-column table.old=new]...
+        [-lock-timeout 5s] [-check] [-dry-run] [package]
+        write the migration that brings the directory's schema.json to the
+        schema package
+  velox-gen migrate lint [-dir ./migrations] [-since version]
+        check the migration files
+  velox-gen migrate hash [-dir ./migrations] [-check]
+        rewrite velox.sum
 
 Exit codes:
   0  success
   1  an error
   2  misuse: an unknown subcommand or flag, a malformed option
-  3  generated files are stale (generate -check; verify, for a plugin's Go file)
+  3  stale: generated files (generate -check; verify, for a plugin's Go file),
+     or the migration directory (migrate diff -check, migrate hash -check)
 `)
 }
 

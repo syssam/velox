@@ -45,10 +45,12 @@ type Finding struct {
 // An Allow lets a destructive finding through.
 type Allow struct{ Code, Target string } // Target "" covers every target of Code
 
-// destructive are the codes an Allow can name.
+// destructive are the codes an Allow can name. Lint gives the first nine;
+// delete-rows and update-rows are LintFile's only.
 var destructive = []string{
 	"drop-table", "drop-column", "alter-type", "set-not-null", "add-required-column",
 	"add-unique", "drop-enum-value", "reorder-enum", "convert-collation",
+	"delete-rows", "update-rows",
 }
 
 // ParseAllow reads the items of the -allow flag, joined by commas, each a

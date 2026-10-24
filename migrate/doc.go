@@ -38,7 +38,8 @@
 //   - "file": ParseFile was given a migration file it cannot read: a bad
 //     name, an unterminated quote, comment or dollar quote, or a directive
 //     that is unknown, malformed, repeated, misplaced or refused on its
-//     dialect.
+//     dialect; or LintFile found a statement that cannot run in the file's
+//     transaction.
 //   - "config": velox.json, or the Config NewDir was given, is missing or
 //     invalid: another version, an unknown dialect or key, a key given twice
 //     or null, a table that is not an identifier of at most 63 bytes, a lock
@@ -76,7 +77,11 @@
 // A directory holds velox.json, schema.json, the migration files and
 // velox.sum, which hashes the others. [ReadDir] reads one and returns a
 // [*SumError] when velox.sum does not match; [Dir.Add] writes the next files
-// of a plan.
+// of a plan. [LintFile] checks a file as velox-gen migrate lint does: what
+// cannot run in its transaction, and, in a file not written by Dir.Add, the
+// destructive statements it can read, with the codes delete-rows and
+// update-rows beside Lint's for TRUNCATE, and DELETE or UPDATE without
+// WHERE.
 //
 // [Up] applies a directory's pending files to a database, under a lock. On
 // PostgreSQL and SQLite each runs in a transaction with its row in the
