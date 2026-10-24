@@ -20,7 +20,10 @@ import (
 // name SQLite does not keep. Everything else keeps the database's form, so
 // the next migrate diff plans what differs. A table of want that is not in
 // the database is a warning and left out; the next diff creates it. A table
-// the database holds that want does not name is never read. The warnings
+// the database holds that want does not name is never read. An enum type
+// want names that the database has is in the snapshot with the database's
+// values, even when no table found uses it, so the next diff does not
+// create it again. The warnings
 // are what Drift reports, and what a build from the snapshot loses: a
 // PostgreSQL sequence's start and increment, a type from an extension, a
 // unique constraint read as its index.
@@ -61,9 +64,10 @@ func refsOf(s *Schema) (tables, enums []TableRef) {
 }
 
 // adopt is Baseline after inspecting: inspected's tables that want names,
-// each object in want's spelling where drift's comparison finds it equal,
-// in inspected's otherwise; the notes on those tables as warnings; and the
-// refusals, joined. On an error the snapshot and the warnings are nil.
+// with the enum types they use or want names, each object in want's
+// spelling where drift's comparison finds it equal, in inspected's
+// otherwise; the notes on those tables as warnings; and the refusals,
+// joined. On an error the snapshot and the warnings are nil.
 func adopt(inspected *Schema, notes []note, want *Schema) (*Schema, []Warning, error) {
 	if inspected == nil || want == nil {
 		return nil, nil, &Error{Code: "nil", Reason: "Baseline needs the inspected schema and the schema"}
@@ -87,7 +91,6 @@ func adopt(inspected *Schema, notes []note, want *Schema) (*Schema, []Warning, e
 	}
 	snap := c.db
 	snap.Dialect = want.Dialect
-	snap.Enums = slices.DeleteFunc(snap.Enums, func(e Enum) bool { return len(usage(snap, e.ref())) == 0 })
 	snap.sort()
 	if err := refusals(snap); err != nil {
 		return nil, nil, err

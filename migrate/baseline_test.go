@@ -405,3 +405,42 @@ func TestBaselineNil(t *testing.T) {
 		}
 	}
 }
+
+// TestAdoptKeepsEnumTypes: an enum type the schema names that the database
+// has is in the snapshot, with the database's values, though the table
+// using it is missing; the next diff creates only the table.
+func TestAdoptKeepsEnumTypes(t *testing.T) {
+	inspected := schemaOf(velox.Postgres, usersOf(velox.Postgres, nil))
+	inspected.Enums = []migrate.Enum{{Name: "posts_state", Values: []string{"draft", "live"}}}
+	want := schemaOf(velox.Postgres, usersOf(velox.Postgres, nil), migrate.Table{Name: "posts",
+		Columns: []migrate.Column{{Name: "state", Type: `"posts_state"`}}})
+	want.Enums = []migrate.Enum{{Name: "posts_state", Values: []string{"draft", "live"}}}
+	snap, ws := adoptOf(t, inspected, want)
+	if !reflect.DeepEqual(snap.Enums, inspected.Enums) {
+		t.Errorf("enums %+v", snap.Enums)
+	}
+	if got := warningObjects(ws); !slices.Equal(got, []string{"posts"}) {
+		t.Errorf("warnings:\n%s", adoptWarnings(ws))
+	}
+	cs, err := migrate.Diff(snap, want, migrate.DiffOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := changeStrings(cs); !slices.Equal(got, []string{"create-table posts"}) {
+		t.Errorf("the next diff: %v", got)
+	}
+}
+
+// TestAdoptWarningsNameTheSchema: a warning of Baseline's names the schema
+// where Drift's names the snapshot.
+func TestAdoptWarningsNameTheSchema(t *testing.T) {
+	inspected := schemaOf(velox.Postgres, usersOf(velox.Postgres, func(tb *migrate.Table) { tb.PrimaryKey = []string{"id", "qty"} }))
+	want := schemaOf(velox.Postgres, usersOf(velox.Postgres, nil))
+	_, ws := adoptOf(t, inspected, want)
+	if got := adoptWarnings(ws); got != "users: the database has the primary key (id, qty) and the schema the primary key (id); change it by hand" {
+		t.Errorf("AdoptOf:\n%s", got)
+	}
+	if got := adoptWarnings(driftOf(t, inspected, want).Warnings); got != "users: the database has the primary key (id, qty) and the snapshot the primary key (id); change it by hand" {
+		t.Errorf("DriftOf:\n%s", got)
+	}
+}

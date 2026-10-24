@@ -101,7 +101,7 @@ func compare(inspected *Schema, notes []note, snapshot *Schema, adopt bool) (*dr
 	if inspected.Dialect != snapshot.Dialect {
 		return nil, &Error{Code: "dialect", Reason: fmt.Sprintf("the database is %s and %s %s", inspected.Dialect, name, snapshot.Dialect)}
 	}
-	c := &drifter{d: snapshot.Dialect, db: inspected.clone(), snap: snapshot, adopt: adopt,
+	c := &drifter{d: snapshot.Dialect, db: inspected.clone(), snap: snapshot, adopt: adopt, other: name,
 		enums: enumCasts(&Schema{Dialect: snapshot.Dialect, Enums: append(slices.Clone(snapshot.Enums), inspected.Enums...)})}
 	c.db.Tables = slices.DeleteFunc(c.db.Tables, func(t Table) bool { return snapshot.table(t.Ref()) == nil })
 	c.db.Enums = slices.DeleteFunc(c.db.Enums, func(e Enum) bool {
@@ -135,6 +135,7 @@ type drifter struct {
 	d        velox.Dialect
 	db, snap *Schema
 	adopt    bool            // Baseline's: db keeps its form where it differs
+	other    string          // what the warnings call snap: "the snapshot", or Baseline's "the schema"
 	enums    map[string]bool // the enum types of both, as enumCasts
 	warnings []Warning
 	implicit []implicitIndex // MySQL: the indexes it made for foreign keys
@@ -162,7 +163,7 @@ func (c *drifter) table(t, u *Table) {
 	c.names(t, u)
 
 	if !slices.Equal(t.PrimaryKey, u.PrimaryKey) {
-		c.warn(ref, "the database has %s and the snapshot %s; change it by hand", keyText(t.PrimaryKey), keyText(u.PrimaryKey))
+		c.warn(ref, "the database has %s and %s %s; change it by hand", keyText(t.PrimaryKey), c.other, keyText(u.PrimaryKey))
 		if !c.adopt {
 			t.PrimaryKey = slices.Clone(u.PrimaryKey)
 		}
@@ -173,7 +174,7 @@ func (c *drifter) table(t, u *Table) {
 		t.PrimaryKeyName = u.PrimaryKeyName
 	}
 	if (t.PrimaryKeyName == "") != (u.PrimaryKeyName == "") && c.d != velox.MySQL {
-		c.warn(ref, "the database names the primary key %q and the snapshot %q; change it by hand", t.PrimaryKeyName, u.PrimaryKeyName)
+		c.warn(ref, "the database names the primary key %q and %s %q; change it by hand", t.PrimaryKeyName, c.other, u.PrimaryKeyName)
 		if !c.adopt {
 			t.PrimaryKeyName = u.PrimaryKeyName
 		}
@@ -203,7 +204,7 @@ func (c *drifter) table(t, u *Table) {
 			continue
 		}
 		if same, _ := c.same(tc.Default, uc.Default); !same {
-			c.warn(ref+"."+tc.Name, "the default is %s in the database and %s in the snapshot", tc.Default, uc.Default)
+			c.warn(ref+"."+tc.Name, "the default is %s in the database and %s in %s", tc.Default, uc.Default, c.other)
 			if c.adopt {
 				continue
 			}
@@ -225,7 +226,7 @@ func (c *drifter) table(t, u *Table) {
 		same, comparable := c.same(ti.Where, ui.Where)
 		switch {
 		case !comparable && !same:
-			c.warn(ref+"."+ti.Name, "the predicate is %s in the database and %s in the snapshot; one cannot be parsed, so they are not compared", ti.Where, ui.Where)
+			c.warn(ref+"."+ti.Name, "the predicate is %s in the database and %s in %s; one cannot be parsed, so they are not compared", ti.Where, ui.Where, c.other)
 			if c.adopt {
 				continue
 			}
@@ -253,7 +254,7 @@ func (c *drifter) table(t, u *Table) {
 		switch {
 		case same:
 		case !comparable:
-			c.warn(ref+"."+tc.Name, "the check is %s in the database and %s in the snapshot; one cannot be parsed, so they are not compared", tc.Expr, uc.Expr)
+			c.warn(ref+"."+tc.Name, "the check is %s in the database and %s in %s; one cannot be parsed, so they are not compared", tc.Expr, uc.Expr, c.other)
 			if c.adopt {
 				continue
 			}
