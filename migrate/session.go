@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 	"strconv"
@@ -30,6 +31,14 @@ type session struct {
 	lockWait int64         // MySQL: @@SESSION.lock_wait_timeout when the run began
 	wait     time.Duration // SQLite: how long BEGIN IMMEDIATE waits, and busy_timeout
 	busyWas  int64         // SQLite: the connection's busy_timeout before open set it
+	given    pgSession     // PostgreSQL: the session as open was given it
+}
+
+// pgSession is what a PostgreSQL session was set to by SET: its settings
+// whose source is the session, by name, and its role ("none" for none).
+type pgSession struct {
+	settings map[string]string
+	role     string
 }
 
 // wrap is err, from what the runner was doing, as "migrate: <what>: <err>".
@@ -104,6 +113,12 @@ func open(ctx context.Context, db *sql.DB, cfg Config, wait time.Duration) (*ses
 		s.close()
 		return nil, err
 	}
+	if s.d == velox.Postgres {
+		if s.given, err = s.pgSession(ctx); err != nil {
+			s.close()
+			return nil, wrap(ctx, "reading the session's settings", err)
+		}
+	}
 	if err := s.utc(ctx); err != nil {
 		s.close()
 		return nil, wrap(ctx, "setting the session's time zone", err)
@@ -128,15 +143,29 @@ func (s *session) utc(ctx context.Context) error {
 	return err
 }
 
-// reset puts the session back as open left it, after a file: on PostgreSQL
-// RESET ALL, then UTC; on MySQL the sql_mode open read, then UTC, and the
-// files still to run are checked against the mode read back.
+// reset puts the session back as open was given it, after a file. On
+// PostgreSQL a setting the file changed gets its value back, one it set
+// that the session had not set is RESET, and so is the role; then UTC, and
+// standard_conforming_strings is checked again. On MySQL it is the sql_mode
+// open read, then UTC, and the files still to run are checked against the
+// mode read back.
 func (s *session) reset(ctx context.Context, next []File) error {
 	switch s.d {
 	case velox.Postgres:
-		if _, err := s.conn.ExecContext(ctx, "RESET ALL"); err != nil {
+		if err := s.pgRestore(ctx); err != nil {
 			return err
 		}
+		if err := s.utc(ctx); err != nil {
+			return err
+		}
+		var scs string
+		if err := s.conn.QueryRowContext(ctx, `SELECT current_setting('standard_conforming_strings')`).Scan(&scs); err != nil {
+			return err
+		}
+		if scs != "on" {
+			return refuseSession("standard_conforming_strings is %s after setting the session back; turn it on for migrating", scs)
+		}
+		return nil
 	case velox.MySQL:
 		if _, err := s.conn.ExecContext(ctx, "SET SESSION sql_mode = ?", s.sqlMode); err != nil {
 			return err
@@ -149,6 +178,63 @@ func (s *session) reset(ctx context.Context, next []File) error {
 		}
 	}
 	return s.utc(ctx)
+}
+
+// pgSession reads what the session was set to by SET.
+func (s *session) pgSession(ctx context.Context) (pgSession, error) {
+	p := pgSession{settings: map[string]string{}}
+	rows, err := s.conn.QueryContext(ctx, `SELECT name, setting FROM pg_settings WHERE source = 'session'`)
+	if err != nil {
+		return p, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var name, setting string
+		if err := rows.Scan(&name, &setting); err != nil {
+			return p, err
+		}
+		p.settings[name] = setting
+	}
+	if err := rows.Err(); err != nil {
+		return p, err
+	}
+	err = s.conn.QueryRowContext(ctx, `SELECT current_setting('role')`).Scan(&p.role)
+	return p, err
+}
+
+// pgRestore puts back what of s.given a file changed: a setting's value
+// with set_config, a setting the session had not set with RESET, the role
+// with SET ROLE or RESET ROLE.
+func (s *session) pgRestore(ctx context.Context) error {
+	now, err := s.pgSession(ctx)
+	if err != nil {
+		return err
+	}
+	var qs []string
+	var args [][]any
+	for _, name := range slices.Sorted(maps.Keys(now.settings)) {
+		if _, ok := s.given.settings[name]; !ok {
+			qs, args = append(qs, "RESET "+s.q(name)), append(args, nil)
+		}
+	}
+	for _, name := range slices.Sorted(maps.Keys(s.given.settings)) {
+		if v, ok := now.settings[name]; !ok || v != s.given.settings[name] {
+			qs, args = append(qs, "SELECT set_config($1, $2, false)"), append(args, []any{name, s.given.settings[name]})
+		}
+	}
+	if now.role != s.given.role {
+		q := "RESET ROLE"
+		if s.given.role != "none" {
+			q = "SET ROLE " + s.q(s.given.role)
+		}
+		qs, args = append(qs, q), append(args, nil)
+	}
+	for i, q := range qs {
+		if _, err := s.conn.ExecContext(ctx, q, args[i]...); err != nil {
+			return fmt.Errorf("%s: %w", q, err)
+		}
+	}
+	return nil
 }
 
 // check is open's checks of the connection.

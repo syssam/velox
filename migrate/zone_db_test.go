@@ -3,7 +3,10 @@ package migrate_test
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"os"
 	"testing"
+	"time"
 
 	"github.com/go-sql-driver/mysql"
 
@@ -121,5 +124,53 @@ func TestUpSessionPerFile(t *testing.T) {
 				t.Errorf("%q, %v; want %q", got, err, c.want)
 			}
 		})
+	}
+}
+
+// TestUpPostgresSessionGiven: the settings the session had when Up took it,
+// as an AfterConnect hook makes them (a role, a search_path,
+// standard_conforming_strings over the database's default), hold for every
+// file, and what a file sets does not reach the next.
+func TestUpPostgresSessionGiven(t *testing.T) {
+	base := os.Getenv("VELOX_TEST_POSTGRES")
+	if base == "" {
+		t.Skip("needs VELOX_TEST_POSTGRES")
+	}
+	admin := openDB(t, "pgx", base)
+	role := fmt.Sprintf("velox_owner_%d_%d", os.Getpid(), time.Now().UnixNano())
+	pgExec(t, admin, `CREATE ROLE "`+role+`"`)
+	t.Cleanup(func() { _, _ = admin.Exec(`DROP ROLE IF EXISTS "` + role + `"`) }) // after the database is dropped
+	setup, dsn := freshDB(t, velox.Postgres)
+	var name string
+	if err := setup.QueryRow(`SELECT current_database()`).Scan(&name); err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{
+		`ALTER DATABASE "` + name + `" SET standard_conforming_strings = off`,
+		`CREATE SCHEMA app`, `CREATE SCHEMA other`,
+		`GRANT ALL ON SCHEMA app, other TO "` + role + `"`,
+	} {
+		pgExec(t, setup, q)
+	}
+	db := openDB(t, "pgx", dsn) // its sessions start with the database's settings
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+	ctx := context.Background()
+	conn, err := db.Conn(ctx) // as an AfterConnect hook would
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{`SET standard_conforming_strings = on`, `SET search_path TO app`, `SET ROLE "` + role + `"`} {
+		if _, err := conn.ExecContext(ctx, q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = conn.Close() // back to the pool, for Up to take
+	mustUp(t, db, dirOf(t, velox.Postgres, files(
+		"0001_set.sql", "SET search_path TO other, app;\nSET standard_conforming_strings = off;\nRESET ROLE;\n",
+		"0002_probe.sql", "CREATE TABLE probe AS SELECT current_user::text || ' ' || current_schema() || ' ' || current_setting('standard_conforming_strings') AS v;\n")))
+	var got string
+	if err := db.QueryRow(`SELECT v FROM app.probe`).Scan(&got); err != nil || got != role+" app on" {
+		t.Errorf("%q, %v; want %q", got, err, role+" app on")
 	}
 }

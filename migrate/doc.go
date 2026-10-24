@@ -117,7 +117,7 @@
 // again. [Status] reads the directory against the history without
 // applying. Files run with the session in UTC on PostgreSQL and MySQL, so
 // a time literal means one instant on any server; each file starts with
-// the session as Up opened it, and nothing a file sets on its session
+// the session as Up was given it, and nothing a file sets on its session
 // reaches the application's other connections. A trigger, a MySQL routine or event and
 // a BEGIN … END block are refused on SQLite and MySQL, whose bodies the
 // splitter would cut at their inner semicolons. An applied file edited or
