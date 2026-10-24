@@ -28,7 +28,8 @@ const (
 // dir's other files, so an edited file does not stop it either. A version
 // that is not dirty, or not in the history, is an *Error of Code "history";
 // a Resolution other than the two, one of Code "resolution". Like Up, it
-// uses one connection of db, its session in UTC, and closes it after.
+// uses one connection of db, its session in UTC, and closes it after. Of
+// the Options, it takes WithLockWait and WithLogger.
 func Resolve(ctx context.Context, db *sql.DB, dir fs.FS, version uint64, r Resolution, opts ...Option) error {
 	if r != ResolveApplied && r != ResolveUndone {
 		return &Error{Code: "resolution", Reason: fmt.Sprintf("no resolution %d; use ResolveApplied or ResolveUndone", r)}

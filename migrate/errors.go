@@ -117,11 +117,12 @@ func undoHint(v uint64) string {
 // and run migrate apply -resume, or " and, when statements ran before it,
 // "undo statement 1 and " or "undo statements 1 to <Statement-1> and "
 // (when the runner rolled back a transaction the file opened, the
-// statements still applied instead of Statement-1), then "run migrate resolve -version <Version> -undone". For a version found
-// dirty (Statement 0) it is "migrate: <Path>: version <Version> is dirty:
-// <Err>", then "\n  fix the cause and run migrate apply -resume, or undo its
-// applied statements and run migrate resolve -version <Version> -undone".
-// A version found dirty whose file the directory lacks is "migrate: version
+// statements still applied instead of Statement-1), then "run migrate
+// resolve -version <Version> -undone". For a version found dirty
+// (Statement 0) it is "migrate: <Path>: version <Version> is dirty: <Err>",
+// then "\n  fix the cause and run migrate apply -resume, or undo its
+// applied statements and run migrate resolve -version <Version> -undone". A
+// version found dirty whose file the directory lacks is "migrate: version
 // <Version> is dirty: <Err>", then a line that says the file is missing and
 // to resume with the directory that has it, or undo and resolve.
 func (e *DirtyError) Error() string {

@@ -9,10 +9,13 @@
 // of their values, not by their text.
 //
 // [Diff], [Lint], [Render] and [NewPlan] are pure: they read schemas and
-// open no connection. [Up], [Status], [Resolve], [Inspect], [Drift] and
-// [Verify] take a *sql.DB and use one connection of it, with the session in
-// UTC on PostgreSQL and MySQL, and close that connection after rather than
-// return it to the pool.
+// open no connection. [Up], [Status], [Resolve], [Inspect] and [Drift] take
+// a *sql.DB and use one connection of it, with the session in UTC on
+// PostgreSQL and MySQL, and close that connection after rather than return
+// it to the pool; when a file run statement by statement fails and that
+// connection is lost, Up writes the error to its dirty row, and reads the
+// row's count, through another connection of the pool. [Verify] uses three such connections in turn: one
+// to check the database is empty, then Up's and Drift's.
 //
 // Planning has four parts. [Diff] lists the changes from one schema to
 // another, in the order they run. [Lint] says which of them need care: a
@@ -112,8 +115,9 @@
 // check the failed statement before resuming or undoing: resuming runs it
 // again. [Status] reads the directory against the history without
 // applying. Files run with the session in UTC on PostgreSQL and MySQL, so
-// a time literal means one instant on any server, and nothing a file sets on its session reaches the
-// application's other connections. A trigger, a MySQL routine or event and
+// a time literal means one instant on any server; each file starts with
+// the session as Up opened it, and nothing a file sets on its session
+// reaches the application's other connections. A trigger, a MySQL routine or event and
 // a BEGIN … END block are refused on SQLite and MySQL, whose bodies the
 // splitter would cut at their inner semicolons. An applied file edited or
 // gone is a [*ChecksumError], and a lock held past the wait

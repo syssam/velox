@@ -14,7 +14,8 @@ import (
 	"github.com/syssam/velox2"
 )
 
-// An Option changes how Up, Status and Resolve run.
+// An Option changes how Up, Status and Resolve run. Each says which of them
+// it applies to; the others ignore it.
 type Option struct{ apply func(*options) }
 
 type options struct {
@@ -56,15 +57,17 @@ func WithResume() Option {
 	return Option{func(o *options) { o.resume = true }}
 }
 
-// WithLockWait bounds how long Up waits for the migration lock, which
-// another runner holds while it applies; 5 minutes by default. A wait of 0
-// or less does not wait: the lock is tried once. A wait past what the
-// database takes (about 24 days) is cut to it.
+// WithLockWait bounds how long Up and Resolve wait for the migration lock,
+// which another runner holds while it applies, and how long Status waits on
+// SQLite for a writer to finish; 5 minutes by default. A wait of 0 or less
+// does not wait: the lock is tried once. A wait past what the database
+// takes (about 24 days) is cut to it.
 func WithLockWait(d time.Duration) Option {
 	return Option{func(o *options) { o.lockWait = d }}
 }
 
-// WithLogger makes Up log each file it applies to l.
+// WithLogger makes Up log each file it applies, and Resolve the version it
+// resolves, to l.
 func WithLogger(l *slog.Logger) Option {
 	return Option{func(o *options) { o.logger = l }}
 }
@@ -410,10 +413,11 @@ func (s *session) resuming(dir *Dir, st *State) (*File, error) {
 
 // applyTx runs a file in one transaction, its history row included: BEGIN
 // (BEGIN IMMEDIATE on SQLite), the lock timeout on PostgreSQL, the
-// statements, PRAGMA foreign_key_check on SQLite with foreign keys off, the
-// row, COMMIT, then a line to o's logger. On SQLite, foreign keys are turned off before BEGIN when the
-// file asks and set back after, and a file another runner applied since the
-// history was read is skipped with errAppliedMeanwhile. That runner's row is
+// statements, a check that the file left the transaction open, PRAGMA
+// foreign_key_check on SQLite with foreign keys off, the row, COMMIT, then
+// a line to o's logger. On SQLite, foreign keys are turned off before BEGIN
+// when the file asks and set back after, and a file another runner applied
+// since the history was read is skipped with errAppliedMeanwhile. That runner's row is
 // matched by version alone: its checksum was checked against its own
 // directory, and the next run checks it against this one.
 func (s *session) applyTx(ctx context.Context, f File, o options) (Applied, error) {
