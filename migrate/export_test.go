@@ -83,12 +83,10 @@ func SessionClose(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-// SetUnitDone sets the hook called after each unit of a file run statement
-// by statement, and returns what sets it back.
-func SetUnitDone(f func(version uint64, end int)) (restore func()) {
-	was := unitDone
-	unitDone = f
-	return func() { unitDone = was }
+// WithUnitDone makes Up call f after each unit of a file run statement by
+// statement, before its count is recorded.
+func WithUnitDone(f func(version uint64, end int)) Option {
+	return Option{func(o *options) { o.unitDone = f }}
 }
 
 // LostMessage is lostMessage.

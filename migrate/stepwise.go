@@ -12,10 +12,6 @@ import (
 // maxLockWaitTimeout is the most MySQL's lock_wait_timeout takes: a year.
 const maxLockWaitTimeout = 31536000
 
-// unitDone, when set, is called after each unit's statements ran, before
-// its count is recorded. The tests set it.
-var unitDone func(version uint64, end int)
-
 // applyStepwise runs a file statement by statement, as every MySQL file and
 // a PostgreSQL no-transaction file run. It inserts the history row dirty,
 // with no statements (row, a dirty row to resume, is kept instead), sets
@@ -31,10 +27,7 @@ var unitDone func(version uint64, end int)
 // transaction the file opened is rolled back first.
 func (s *session) applyStepwise(ctx context.Context, f File, row *Applied, o options) (Applied, error) {
 	n := len(f.Statements)
-	units := f.Units
-	if len(units) == 0 && n > 0 {
-		units = []int{0}
-	}
+	units := f.Units // ParseFile gives every file with statements a unit at 0
 	from := 0
 	if row == nil {
 		a := Applied{Version: f.Version, Name: f.Name, Sum: f.Sum, AppliedAt: time.Now().UTC().Truncate(time.Microsecond), Dirty: true}
@@ -75,8 +68,8 @@ func (s *session) applyStepwise(ctx context.Context, f File, row *Applied, o opt
 				return Applied{}, s.failed(ctx, f, i, err, o)
 			}
 		}
-		if unitDone != nil {
-			unitDone(f.Version, end)
+		if o.unitDone != nil {
+			o.unitDone(f.Version, end)
 		}
 		q := fmt.Sprintf("UPDATE %s SET %s = %s WHERE %s = %s", table, s.q("statements"), s.ph(1), s.q("version"), s.ph(2))
 		if err := s.write(ctx, q, end, int64(f.Version)); err != nil {

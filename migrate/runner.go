@@ -24,7 +24,11 @@ type options struct {
 	logger   *slog.Logger  // nil: none
 	resume   bool
 
-	noTxCheck bool // the tests: skip the check of transaction files' BEGIN, COMMIT and ROLLBACK
+	// For the tests: skip the check of transaction files' BEGIN, COMMIT and
+	// ROLLBACK; and a hook called after each unit of a file run statement by
+	// statement, before its count is recorded.
+	noTxCheck bool
+	unitDone  func(version uint64, end int)
 }
 
 // defaultLockWait is how long Up waits for the migration lock by default.

@@ -390,12 +390,12 @@ func TestUpMySQLCancelAfterUnit(t *testing.T) {
 	fsys := dirOf(t, velox.MySQL, files("0001_abc.sql", "CREATE TABLE a (x int);\nCREATE TABLE b (x int);\nCREATE TABLE c (x int);\n"))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	defer migrate.SetUnitDone(func(_ uint64, end int) {
+	hook := migrate.WithUnitDone(func(_ uint64, end int) {
 		if end == 1 {
 			cancel()
 		}
-	})()
-	_, err := migrate.Up(ctx, db, fsys)
+	})
+	_, err := migrate.Up(ctx, db, fsys, hook)
 	if de := dirtyOf(t, err); de.Statement != 2 || !errors.Is(err, context.Canceled) {
 		t.Errorf("%v; want a cancel at statement 2", err)
 	}
@@ -496,12 +496,12 @@ func TestUpMySQLProgressLost(t *testing.T) {
 	db, dsn := freshDB(t, velox.MySQL)
 	other := openDB(t, "mysql", dsn)
 	fsys := dirOf(t, velox.MySQL, files("0001_ab.sql", "CREATE TABLE a (x int);\nCREATE TABLE b (x int);\n"))
-	defer migrate.SetUnitDone(func(_ uint64, end int) {
+	hook := migrate.WithUnitDone(func(_ uint64, end int) {
 		if end == 1 {
 			pgExec(t, other, "DROP TABLE velox_migrations")
 		}
-	})()
-	_, err := migrate.Up(context.Background(), db, fsys)
+	})
+	_, err := migrate.Up(context.Background(), db, fsys, hook)
 	var de *migrate.DirtyError
 	if err == nil || errors.As(err, &de) || !strings.HasPrefix(err.Error(), "migrate: 0001_ab.sql: statements 1 to 1 ran, but recording them in velox_migrations: ") || mysqlNumber(err) != 1146 {
 		t.Errorf("%v; want the wrapped error", err)
@@ -515,7 +515,7 @@ func TestUpMySQLConnectionKilled(t *testing.T) {
 	db, dsn := freshDB(t, velox.MySQL)
 	killer := openDB(t, "mysql", dsn)
 	fsys := dirOf(t, velox.MySQL, files("0001_abc.sql", "CREATE TABLE a (x int);\nCREATE TABLE b (x int);\nCREATE TABLE c (x int);\n"))
-	defer migrate.SetUnitDone(func(_ uint64, end int) {
+	hook := migrate.WithUnitDone(func(_ uint64, end int) {
 		if end != 2 {
 			return
 		}
@@ -525,8 +525,8 @@ func TestUpMySQLConnectionKilled(t *testing.T) {
 			return
 		}
 		pgExec(t, killer, fmt.Sprintf("KILL CONNECTION %d", id))
-	})()
-	_, err := migrate.Up(context.Background(), db, fsys)
+	})
+	_, err := migrate.Up(context.Background(), db, fsys, hook)
 	const msg = "the connection was lost during statement 2; check whether it ran before resuming"
 	if de := dirtyOf(t, err); de.Statement != 2 || de.Err == nil || de.Err.Error() != msg {
 		t.Errorf("%v; want statement 2, the connection lost", err)
