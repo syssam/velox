@@ -21,6 +21,8 @@ Usage:
         print the applied, pending, dirty and ahead versions
   velox-gen migrate drift [-dir ./migrations] [-db dsn] [-json]
         print how the database's tables differ from schema.json
+  velox-gen migrate baseline [-dir ./migrations] -dialect d [-db dsn] [package]
+        adopt an existing database into a new migration directory
   velox-gen migrate lint [-dir ./migrations] [-since version]
         check the migration files
   velox-gen migrate hash [-dir ./migrations] [-check]

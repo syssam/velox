@@ -170,8 +170,9 @@ func (s secret) redact(text string) string {
 
 // dsnForm refuses a dsn that is not of d's driver's form, or is a SQLite
 // database in memory, before it is used: the message names src (-db or
-// $VELOX_DB), never the DSN or the parser's text.
-func dsnForm(d velox2.Dialect, dsn, src string) error {
+// $VELOX_DB) and whose dialect d is (velox.json's or -dialect), never the
+// DSN or the parser's text.
+func dsnForm(d velox2.Dialect, dsn, src, whose string) error {
 	var name string
 	ok := true
 	switch d {
@@ -182,7 +183,7 @@ func dsnForm(d velox2.Dialect, dsn, src string) error {
 	case velox2.MySQL:
 		name = "a MySQL DSN"
 		if strings.Contains(dsn, "://") {
-			return fmt.Errorf("%s is not %s (velox.json's dialect is mysql); MySQL DSNs look like user:pass@tcp(host:3306)/db", src, name)
+			return fmt.Errorf("%s is not %s (%s is mysql); MySQL DSNs look like user:pass@tcp(host:3306)/db", src, name, whose)
 		}
 		_, err := mysql.ParseDSN(dsn)
 		ok = err == nil
@@ -201,7 +202,7 @@ func dsnForm(d velox2.Dialect, dsn, src string) error {
 		}
 	}
 	if !ok {
-		return fmt.Errorf("%s is not %s (velox.json's dialect is %s)", src, name, d)
+		return fmt.Errorf("%s is not %s (%s is %s)", src, name, whose, d)
 	}
 	return nil
 }

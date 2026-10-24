@@ -25,6 +25,7 @@ type dbCmd struct {
 	*migrateCmd
 	db     *string // -db, as given
 	secret secret  // what of the DSN no message shows
+	whose  string  // whose dialect the DSN is of, for messages: velox.json's unless set
 }
 
 // newDBCmd is the subcommand name with its -dir and -db flags.
@@ -53,7 +54,7 @@ func (c *dbCmd) dsn(env []string) (dsn, src string, ok bool) {
 // not there is exit 1, and the file is opened without creating it. It
 // reports false, with the exit code, when it fails.
 func (c *dbCmd) open(d velox2.Dialect, dsn, src string, existing bool) (*sql.DB, int, bool) {
-	if err := dsnForm(d, dsn, src); err != nil {
+	if err := dsnForm(d, dsn, src, c.dialectOf()); err != nil {
 		return nil, c.fail(2, err), false
 	}
 	c.secret = secrets(d, dsn).joined(func(s string) string { return dirFile.ReplaceAllStringFunc(s, c.path) })
@@ -71,6 +72,9 @@ func (c *dbCmd) open(d velox2.Dialect, dsn, src string, existing bool) (*sql.DB,
 	}
 	return db, 0, true
 }
+
+// dialectOf is whose dialect the DSN is of, as messages name it.
+func (c *dbCmd) dialectOf() string { return cmp.Or(c.whose, "velox.json's dialect") }
 
 // fail prints err as "velox-gen: migrate <name>: <text>", without the
 // library's "migrate: ", the DSN hidden and the directory's files joined to
@@ -201,7 +205,7 @@ func runMigrateApply(args []string, dir string, env []string, stdout, stderr io.
 		if !ok {
 			return code
 		}
-		if d.Config.Dialect == velox2.SQLite && dsnForm(d.Config.Dialect, dsn, src) == nil {
+		if d.Config.Dialect == velox2.SQLite && dsnForm(d.Config.Dialect, dsn, src, c.dialectOf()) == nil {
 			if _, err := os.Stat(sqlitePath(dsn)); errors.Is(err, fs.ErrNotExist) {
 				return show(d.Files)
 			}

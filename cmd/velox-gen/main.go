@@ -23,6 +23,7 @@
 //	                        [-baseline version]
 //	velox-gen migrate status [-dir ./migrations] [-db dsn] [-json]
 //	velox-gen migrate drift [-dir ./migrations] [-db dsn] [-json]
+//	velox-gen migrate baseline [-dir ./migrations] -dialect d [-db dsn] [package]
 //	velox-gen migrate lint [-dir ./migrations] [-since version]
 //	velox-gen migrate hash [-dir ./migrations] [-check]
 //	velox-gen migrate resolve [-dir ./migrations] [-db dsn] -version n (-applied | -undone)
@@ -146,17 +147,18 @@
 // not match. A directory without velox.json is an error: migrate diff
 // starts one.
 //
-// migrate apply, status, drift and resolve open the database -db names, a
-// DSN as the directory's driver reads it: a pgx connection string, a
-// go-sql-driver/mysql DSN, or a SQLite path or URI. Without -db they read
-// $VELOX_DB, which keeps a password out of the shell's history; with
-// neither, the subcommand is a usage error, as is a DSN not of the
-// dialect's form, which is refused before it is used. No message shows the
-// DSN or its password; a SQLite path is named. status, drift and resolve
-// open a SQLite file without creating it: one that is not there is an
-// error; apply creates it. SIGINT or SIGTERM cancels the run: a file being applied
-// statement by statement is left dirty with the reason, one in a
-// transaction is rolled back, and the exit code is 1.
+// migrate apply, status, drift, baseline and resolve open the database -db
+// names, a DSN as the driver of the directory's dialect (baseline's
+// -dialect) reads it: a pgx connection string, a go-sql-driver/mysql DSN, or
+// a SQLite path or URI. Without -db they read $VELOX_DB, which keeps a
+// password out of the shell's history; with neither, the subcommand is a
+// usage error, as is a DSN not of the dialect's form, which is refused
+// before it is used. No message shows the DSN or its password; a SQLite path
+// is named. status, drift, baseline and resolve open a SQLite file without
+// creating it: one that is not there is an error; apply creates it. SIGINT
+// or SIGTERM cancels the run: a file being applied statement by statement is
+// left dirty with the reason, one in a transaction is rolled back, and the
+// exit code is 1.
 //
 // migrate apply applies the pending files, as package migrate's Up does,
 // and prints "applied <path> in <duration>" for each. -to stops at a
@@ -191,6 +193,18 @@
 // <message>". A change is exit 3; warnings alone are not. -json prints
 // {"changes": [{"kind", "target", "text"}], "warnings": [{"object",
 // "message"}]} instead.
+//
+// migrate baseline adopts a database made before the directory, such as one
+// ent made. It builds the schema package's tables for -dialect, reads them
+// from the database as package migrate's Baseline does, and writes a new
+// directory, all or nothing: 0001_baseline.sql, which builds them, then
+// schema.json, velox.json and velox.sum. It prints their paths, then each
+// warning on stderr as "warning: <object>: <message>", and what to run next:
+// migrate apply -baseline 1 on each existing database, then migrate drift
+// there. A -dir that is a migration directory already is exit 1, as is a
+// database that holds none of the schema's tables, a foreign key to a table
+// outside them or, on PostgreSQL, a nextval default whose sequence the
+// column does not own. No -dialect is exit 2.
 //
 // migrate resolve ends a dirty version a human finished (-applied, which
 // needs its file unchanged) or reverted (-undone, which deletes its row, so
@@ -378,6 +392,8 @@ func printUsage(w io.Writer) {
         print the applied, pending, dirty and ahead versions
   velox-gen migrate drift [-dir ./migrations] [-db dsn] [-json]
         print how the database's tables differ from schema.json
+  velox-gen migrate baseline [-dir ./migrations] -dialect d [-db dsn] [package]
+        adopt an existing database into a new migration directory
   velox-gen migrate lint [-dir ./migrations] [-since version]
         check the migration files
   velox-gen migrate hash [-dir ./migrations] [-check]

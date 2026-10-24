@@ -1,0 +1,2 @@
+velox-gen: migrate baseline: warning: users.users_email_key: the unique constraint users_email_key is read as its index; to drop it later, replace it with a unique index by hand first
+velox-gen: migrate baseline: run velox-gen migrate apply -baseline 1 once on each existing database, then migrate drift there

@@ -21,11 +21,11 @@ import (
 // defaultMigrations is the migration directory when -dir is not given.
 const defaultMigrations = "./migrations"
 
-// runMigrate is velox-gen migrate: diff, apply, status, drift, lint, hash,
-// resolve and sql.
+// runMigrate is velox-gen migrate: diff, apply, status, drift, baseline,
+// lint, hash, resolve and sql.
 func runMigrate(args []string, dir string, env []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		_, _ = fmt.Fprintln(stderr, "velox-gen: migrate needs a subcommand: diff, apply, status, drift, lint, hash, resolve or sql")
+		_, _ = fmt.Fprintln(stderr, "velox-gen: migrate needs a subcommand: diff, apply, status, drift, baseline, lint, hash, resolve or sql")
 		printUsage(stderr)
 		return 2
 	}
@@ -38,6 +38,8 @@ func runMigrate(args []string, dir string, env []string, stdout, stderr io.Write
 		return runMigrateStatus(args[1:], dir, env, stdout, stderr)
 	case "drift":
 		return runMigrateDrift(args[1:], dir, env, stdout, stderr)
+	case "baseline":
+		return runMigrateBaseline(args[1:], dir, env, stdout, stderr)
 	case "resolve":
 		return runMigrateResolve(args[1:], dir, env, stdout, stderr)
 	case "lint":
