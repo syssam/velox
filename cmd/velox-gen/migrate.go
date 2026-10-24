@@ -217,12 +217,14 @@ func runMigrateHash(args []string, dir string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return c.fail(1, err)
 	}
-	if _, err := os.Stat(filepath.Join(abs, "velox.sum")); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return c.fail(1, err)
-	}
-	// ReadDir checks velox.sum first, read as migrate reads every file.
-	if _, err := migrate.ReadDir(os.DirFS(abs)); !errors.As(err, new(*migrate.SumError)) {
+	// ReadDir checks velox.sum first, read as migrate reads every file; its
+	// other errors are the directory's, which hash does not hide.
+	_, err = migrate.ReadDir(os.DirFS(abs))
+	switch {
+	case err == nil:
 		return 0
+	case !errors.As(err, new(*migrate.SumError)):
+		return c.fail(1, err)
 	}
 	if *check {
 		return c.fail(3, &migrate.SumError{Path: c.path("velox.sum")})
