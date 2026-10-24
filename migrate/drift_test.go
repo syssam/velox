@@ -222,18 +222,18 @@ func TestDriftUnnamedConstraints(t *testing.T) {
 	snap := schemaOf(velox.SQLite, posts(true, false), usersOf(velox.SQLite, nil))
 	wantDrift(t, driftOf(t, schemaOf(velox.SQLite, posts(false, false), usersOf(velox.SQLite, nil)), snap), nil)
 	// One the snapshot has no match for is a change.
-	wantDrift(t, driftOf(t, schemaOf(velox.SQLite, posts(true, true), usersOf(velox.SQLite, nil)), snap), []string{"drop-check posts."})
+	wantDrift(t, driftOf(t, schemaOf(velox.SQLite, posts(true, true), usersOf(velox.SQLite, nil)), snap), []string{"drop-check posts.check (qty < 100)"})
 	// Several unnamed ones on a table are allowed.
 	many := posts(true, true)
 	many.Checks = append(many.Checks, migrate.Check{Expr: "qty < 50"})
 	many.ForeignKeys = append(many.ForeignKeys, migrate.ForeignKey{Columns: []string{"qty"}, RefTable: users, RefColumns: []string{"id"}})
 	wantDrift(t, driftOf(t, schemaOf(velox.SQLite, many, usersOf(velox.SQLite, nil)), snap),
-		[]string{"drop-foreign-key posts.", "drop-check posts.", "drop-check posts."})
+		[]string{"drop-foreign-key posts.(qty)", "drop-check posts.check (qty < 100)", "drop-check posts.check (qty < 50)"})
 	// An unnamed one of another definition is not given the name.
 	other := posts(false, false)
 	other.ForeignKeys[0].OnDelete = "CASCADE"
 	wantDrift(t, driftOf(t, schemaOf(velox.SQLite, other, usersOf(velox.SQLite, nil)), snap),
-		[]string{"drop-foreign-key posts.", "add-foreign-key posts.posts_users_posts"})
+		[]string{"drop-foreign-key posts.(user_id)", "add-foreign-key posts.posts_users_posts"})
 }
 
 func TestDriftPrimaryKey(t *testing.T) {

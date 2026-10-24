@@ -108,7 +108,7 @@ func Render(from, to *Schema, changes []Change, opts RenderOptions) ([]Script, e
 	if i := slices.Index(changes, nil); i >= 0 {
 		return nil, r.refuse(i, "the change is nil")
 	}
-	l := lintChanges(from, changes)
+	l := lintChanges(from, to, changes)
 	r.l, r.findings, r.taken = l, reviewed(l.out, len(changes)), make([]bool, len(changes))
 	main := Script{Kind: MainScript}
 	if opts.LockTimeout > 0 && r.d != velox.SQLite {

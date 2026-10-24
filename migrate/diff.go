@@ -15,7 +15,8 @@ import (
 // table, after opts.RenameColumns; nothing guesses a table or column rename.
 // An index, foreign key, check or enum type matches by name, else by its
 // definition, which makes it a rename: so a table rename carries the names
-// derived from the table's. A column whose type is a renamed enum type is not
+// derived from the table's. An unnamed index, key or check, as SQLite keeps
+// some, matches one unnamed one by its definition, never by its name. A column whose type is a renamed enum type is not
 // altered.
 //
 // The order is: drop the foreign keys, checks and indexes that must go first;
@@ -349,17 +350,18 @@ func (d *differ) alterTable(t, u *Table) {
 		d.add(SetTableCollation{Table: ref, From: t.Collation, To: u.Collation}, 5, 3, ref, 0, "")
 	}
 
-	for _, ui := range u.Indexes {
-		ti := t.index(ui.Name)
+	tu, ut := pairIndexes(t.Indexes, u.Indexes)
+	for j, ui := range u.Indexes {
+		ti := at(t.Indexes, ut[j])
 		if ti != nil && !sameIndex(*ti, ui) {
-			d.add(DropIndex{Table: oref, Index: *ot.index(ti.Name)}, 1, 2, oref, 0, ti.Name)
+			d.add(DropIndex{Table: oref, Index: origIndex(ot, *ti)}, 1, 2, oref, 0, ti.Name)
 		}
 		if ti == nil || !sameIndex(*ti, ui) {
 			d.add(AddIndex{Table: ref, Index: ui}, 7, 0, ref, 0, ui.Name)
 		}
 	}
-	for _, ti := range t.Indexes {
-		if u.index(ti.Name) != nil {
+	for k, ti := range t.Indexes {
+		if tu[k] >= 0 {
 			continue
 		}
 		// An index on a dropped column goes before it, and one whose name
@@ -374,40 +376,42 @@ func (d *differ) alterTable(t, u *Table) {
 			onGone = !slices.ContainsFunc(ti.Columns, func(c string) bool { return !gone[c] })
 		}
 		if onGone || d.nameTaken(ref, ti.Name) {
-			d.add(DropIndex{Table: oref, Index: *ot.index(ti.Name)}, 1, 2, oref, 0, ti.Name)
+			d.add(DropIndex{Table: oref, Index: origIndex(ot, ti)}, 1, 2, oref, 0, ti.Name)
 		} else {
 			d.add(DropIndex{Table: ref, Index: ti}, 8, 0, ref, 0, ti.Name)
 		}
 	}
 
-	for _, uf := range u.ForeignKeys {
-		tf := t.foreignKey(uf.Name)
+	tu, ut = pairKeys(t.ForeignKeys, u.ForeignKeys)
+	for j, uf := range u.ForeignKeys {
+		tf := at(t.ForeignKeys, ut[j])
 		if tf != nil && (!sameForeignKey(*tf, uf) || d.keyRetyped(ref, uf)) {
-			d.add(DropForeignKey{Table: oref, ForeignKey: *ot.foreignKey(tf.Name)}, 1, 0, oref, 0, tf.Name)
+			d.add(DropForeignKey{Table: oref, ForeignKey: origKey(ot, *tf)}, 1, 0, oref, 0, tf.Name)
 			tf = nil
 		}
 		if tf == nil {
 			d.add(AddForeignKey{Table: ref, ForeignKey: uf}, 7, 2, ref, 0, uf.Name)
 		}
 	}
-	for _, tf := range t.ForeignKeys {
-		if u.foreignKey(tf.Name) == nil {
-			d.add(DropForeignKey{Table: oref, ForeignKey: *ot.foreignKey(tf.Name)}, 1, 0, oref, 0, tf.Name)
+	for k, tf := range t.ForeignKeys {
+		if tu[k] < 0 {
+			d.add(DropForeignKey{Table: oref, ForeignKey: origKey(ot, tf)}, 1, 0, oref, 0, tf.Name)
 		}
 	}
 
-	for _, uc := range u.Checks {
-		tc := t.check(uc.Name)
+	tu, ut = pairChecks(t.Checks, u.Checks)
+	for j, uc := range u.Checks {
+		tc := at(t.Checks, ut[j])
 		if tc != nil && tc.Expr != uc.Expr {
-			d.add(DropCheck{Table: oref, Check: *ot.check(tc.Name)}, 1, 1, oref, 0, tc.Name)
+			d.add(DropCheck{Table: oref, Check: origCheck(ot, *tc)}, 1, 1, oref, 0, tc.Name)
 		}
 		if tc == nil || tc.Expr != uc.Expr {
 			d.add(AddCheck{Table: ref, Check: uc}, 7, 1, ref, 0, uc.Name)
 		}
 	}
-	for _, tc := range t.Checks {
-		if u.check(tc.Name) == nil {
-			d.add(DropCheck{Table: oref, Check: *ot.check(tc.Name)}, 1, 1, oref, 0, tc.Name)
+	for k, tc := range t.Checks {
+		if tu[k] < 0 {
+			d.add(DropCheck{Table: oref, Check: origCheck(ot, tc)}, 1, 1, oref, 0, tc.Name)
 		}
 	}
 }
@@ -439,7 +443,7 @@ func columnChange(a, b Column) ColumnChange {
 // shares on PostgreSQL and SQLite. MySQL names indexes per table. Such an
 // index is dropped in the main script's first step, to free the name.
 func indexNameTaken(to *Schema, sch, name string, own func(TableRef) bool) bool {
-	if to.Dialect == velox.MySQL {
+	if to.Dialect == velox.MySQL || name == "" {
 		return false
 	}
 	for i := range to.Tables {
@@ -465,6 +469,77 @@ func (d *differ) nameTaken(ref TableRef, name string) bool {
 func (d *differ) keyRetyped(ref TableRef, fk ForeignKey) bool {
 	return slices.ContainsFunc(fk.Columns, func(c string) bool { return d.retyped[ref][c] }) ||
 		slices.ContainsFunc(fk.RefColumns, func(c string) bool { return d.retyped[fk.RefTable][c] })
+}
+
+// pair pairs the objects of a with those of b, one to one: a named one with
+// b's of its name, and an unnamed one, as SQLite keeps some, with the first
+// unpaired unnamed one of b that same calls one with it, in order; "" is
+// never a name to match by. ab[i] is the place in b of a[i]'s pair, and
+// ba[j] that in a of b[j]'s, or -1.
+func pair[T any](a, b []T, name func(T) string, same func(x, y T) bool) (ab, ba []int) {
+	ab, ba = make([]int, len(a)), make([]int, len(b))
+	for i := range ab {
+		ab[i] = -1
+	}
+	for j := range ba {
+		ba[j] = -1
+	}
+	for i, x := range a {
+		n := name(x)
+		for j, y := range b {
+			if ba[j] < 0 && name(y) == n && (n != "" || same(x, y)) {
+				ab[i], ba[j] = j, i
+				break
+			}
+		}
+	}
+	return ab, ba
+}
+
+func indexName(ix Index) string    { return ix.Name }
+func keyName(fk ForeignKey) string { return fk.Name }
+func checkName(ck Check) string    { return ck.Name }
+
+// pairIndexes, pairKeys and pairChecks are pair for a table's indexes,
+// foreign keys and checks, unnamed ones paired by Diff's definition.
+func pairIndexes(a, b []Index) (ab, ba []int) { return pair(a, b, indexName, sameIndex) }
+func pairKeys(a, b []ForeignKey) (ab, ba []int) {
+	return pair(a, b, keyName, sameForeignKey)
+}
+func pairChecks(a, b []Check) (ab, ba []int) {
+	return pair(a, b, checkName, func(x, y Check) bool { return x.Expr == y.Expr })
+}
+
+// at is &s[i], or nil when i is -1.
+func at[T any](s []T, i int) *T {
+	if i < 0 {
+		return nil
+	}
+	return &s[i]
+}
+
+// origIndex is the index ti, of the table t of mid, as from names it: the
+// one of ot of its name, or ti itself when it is unnamed. origKey and
+// origCheck are the same for keys and checks.
+func origIndex(ot *Table, ti Index) Index {
+	if ti.Name == "" {
+		return ti
+	}
+	return *ot.index(ti.Name)
+}
+
+func origKey(ot *Table, tf ForeignKey) ForeignKey {
+	if tf.Name == "" {
+		return tf
+	}
+	return *ot.foreignKey(tf.Name)
+}
+
+func origCheck(ot *Table, tc Check) Check {
+	if tc.Name == "" {
+		return tc
+	}
+	return *ot.check(tc.Name)
 }
 
 func sameIndex(a, b Index) bool {

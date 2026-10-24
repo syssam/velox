@@ -238,42 +238,48 @@ func (d *differ) renameObjects() {
 				tc.Sequence = uc.Sequence
 			}
 		}
+		// What pairs by name, or unnamed by definition, keeps its name; the
+		// rest of t is renamed to the first unpaired one of u, named, of its
+		// definition.
+		tu, ut := pairIndexes(t.Indexes, u.Indexes)
 		for j := range t.Indexes {
 			ti := &t.Indexes[j]
-			if u.index(ti.Name) != nil {
+			if tu[j] >= 0 {
 				continue
 			}
-			for _, ui := range u.Indexes {
-				if t.index(ui.Name) == nil && sameIndex(*ti, ui) {
+			for k, ui := range u.Indexes {
+				if ut[k] < 0 && ui.Name != "" && sameIndex(*ti, ui) {
 					d.add(RenameIndex{Table: ref, From: ti.Name, To: ui.Name}, 2, 3, ref, 0, ti.Name)
-					ti.Name = ui.Name
+					ti.Name, ut[k] = ui.Name, j
 					break
 				}
 			}
 		}
+		tu, ut = pairKeys(t.ForeignKeys, u.ForeignKeys)
 		for j := range t.ForeignKeys {
 			tf := &t.ForeignKeys[j]
-			if u.foreignKey(tf.Name) != nil {
+			if tu[j] >= 0 {
 				continue
 			}
-			for _, uf := range u.ForeignKeys {
+			for k, uf := range u.ForeignKeys {
 				// A key dropped around a type change is not renamed.
-				if t.foreignKey(uf.Name) == nil && sameForeignKey(*tf, uf) && !d.keyRetyped(ref, uf) {
+				if ut[k] < 0 && uf.Name != "" && sameForeignKey(*tf, uf) && !d.keyRetyped(ref, uf) {
 					d.out = append(d.out, planned{c: RenameConstraint{Table: ref, From: tf.Name, To: uf.Name}, step: 2, sub: 4, ref: ref, name: tf.Name, keyRename: true})
-					tf.Name = uf.Name
+					tf.Name, ut[k] = uf.Name, j
 					break
 				}
 			}
 		}
+		tu, ut = pairChecks(t.Checks, u.Checks)
 		for j := range t.Checks {
 			tc := &t.Checks[j]
-			if u.check(tc.Name) != nil {
+			if tu[j] >= 0 {
 				continue
 			}
-			for _, uc := range u.Checks {
-				if t.check(uc.Name) == nil && tc.Expr == uc.Expr {
+			for k, uc := range u.Checks {
+				if ut[k] < 0 && uc.Name != "" && tc.Expr == uc.Expr {
 					d.add(RenameConstraint{Table: ref, From: tc.Name, To: uc.Name}, 2, 4, ref, 0, tc.Name)
-					tc.Name = uc.Name
+					tc.Name, ut[k] = uc.Name, j
 					break
 				}
 			}

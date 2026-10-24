@@ -515,16 +515,111 @@ func TestAdoptWarningsNameTheSchema(t *testing.T) {
 	}
 }
 
-// TestAdoptUnnamedCheck: a check SQLite keeps no name for is named in a
-// warning by its place in the table.
-func TestAdoptUnnamedCheck(t *testing.T) {
-	withCheck := func(expr string) *migrate.Schema {
-		tb := sqliteUsers()
-		tb.Checks = []migrate.Check{{Expr: expr}}
-		return schemaOf(velox.SQLite, tb)
+// twoUnnamed is a SQLite database whose users table has two of each object
+// SQLite keeps no name for: UNIQUE constraints, inline REFERENCES keys and
+// checks; and its Baseline snapshot.
+func twoUnnamed(t *testing.T) (*sql.DB, *migrate.Schema) {
+	t.Helper()
+	db := sqliteDB(t, `CREATE TABLE orgs (id integer NOT NULL PRIMARY KEY AUTOINCREMENT)`,
+		`CREATE TABLE users (id integer NOT NULL PRIMARY KEY AUTOINCREMENT, n text NOT NULL UNIQUE, email text NOT NULL UNIQUE,
+			a integer REFERENCES orgs (id), b integer REFERENCES orgs (id), CHECK (n <> ''), CHECK (email <> ''))`)
+	users := migrate.Table{Name: "users", PrimaryKey: []string{"id"}, Columns: []migrate.Column{
+		{Name: "id", Type: "integer", Identity: true},
+		{Name: "n", Type: "text"},
+		{Name: "email", Type: "text"},
+		{Name: "a", Type: "integer", Nullable: true},
+		{Name: "b", Type: "integer", Nullable: true},
+	}}
+	orgs := migrate.Table{Name: "orgs", PrimaryKey: []string{"id"}, Columns: []migrate.Column{{Name: "id", Type: "integer", Identity: true}}}
+	snap, ws, err := migrate.Baseline(context.Background(), db, schemaOf(velox.SQLite, orgs, users))
+	if err != nil {
+		t.Fatal(err)
 	}
-	_, ws := adoptOf(t, withCheck("email || 'x' <> 'y'"), withCheck("email || 'z' <> 'y'"))
-	if got := warningObjects(ws); !slices.Equal(got, []string{"users.check#1"}) {
+	if len(ws) > 0 {
 		t.Errorf("warnings:\n%s", adoptWarnings(ws))
 	}
+	tb := table(snap, "users")
+	if len(tb.Indexes) != 2 || len(tb.ForeignKeys) != 2 || len(tb.Checks) != 2 {
+		t.Fatalf("the snapshot's users: %+v", tb)
+	}
+	return db, snap
+}
+
+// TestUnnamedSelf: a table with two unnamed objects of each kind is its own
+// snapshot's: Diff of the snapshot with itself is empty, and Drift of the
+// database against it finds no change.
+func TestUnnamedSelf(t *testing.T) {
+	db, snap := twoUnnamed(t)
+	if cs := diff(t, snap, snap, migrate.DiffOptions{}); len(cs) > 0 {
+		t.Errorf("Diff(snap, snap): %v", changeStrings(cs))
+	}
+	noChanges(t, db, snap)
+}
+
+// TestUnnamedOneMore: an unnamed index, key and check the database has
+// beyond the snapshot are found by Drift, and planned by Diff.
+func TestUnnamedOneMore(t *testing.T) {
+	db, snap := twoUnnamed(t)
+	less := migrate.Clone(snap)
+	tb := table(less, "users")
+	tb.Indexes, tb.ForeignKeys, tb.Checks = tb.Indexes[:1], tb.ForeignKeys[:1], tb.Checks[:1]
+	r, err := migrate.Drift(context.Background(), db, less)
+	if err != nil {
+		t.Fatal(err)
+	}
+	drops := []string{"drop-foreign-key users.(b)", "drop-check users.check (email <> '')", "drop-index users.(email)"}
+	if got := changeStrings(r.Changes); !sameSet(got, drops) {
+		t.Errorf("Drift: %v, want %v", got, drops)
+	}
+	if got := changeStrings(diff(t, snap, less, migrate.DiffOptions{})); !sameSet(got, drops) {
+		t.Errorf("Diff(snap, less): %v, want %v", got, drops)
+	}
+	adds := []string{"add-index users.(email)", "add-check users.check (email <> '')", "add-foreign-key users.(b)"}
+	if got := changeStrings(diff(t, less, snap, migrate.DiffOptions{})); !sameSet(got, adds) {
+		t.Errorf("Diff(less, snap): %v, want %v", got, adds)
+	}
+	// The plan of the adds applies, through a rebuild.
+	fsys := extend(t, dirOf(t, velox.SQLite, step{to: less, name: "less"}), velox.SQLite,
+		step{to: snap, name: "more", opts: migrate.PlanOptions{Allow: []migrate.Allow{{Code: "add-unique"}}}})
+	fresh, _ := freshDB(t, velox.SQLite)
+	if _, err := migrate.Up(context.Background(), fresh, fsys); err != nil {
+		t.Fatalf("Up: %v\n%s", err, sqlFiles(fsys))
+	}
+	noChanges(t, fresh, snap)
+}
+
+// sameSet reports whether a and b hold the same strings, in any order.
+func sameSet(a, b []string) bool {
+	a, b = slices.Clone(a), slices.Clone(b)
+	slices.Sort(a)
+	slices.Sort(b)
+	return slices.Equal(a, b)
+}
+
+// TestUnnamedRenames: two unnamed unique indexes renamed by definition are
+// each named, by their columns, in the rebuild's review.
+func TestUnnamedRenames(t *testing.T) {
+	_, snap := twoUnnamed(t)
+	to := migrate.Clone(snap)
+	tb := table(to, "users")
+	for i := range tb.Indexes {
+		tb.Indexes[i].Name = "users_" + tb.Indexes[i].Columns[0] + "_key"
+	}
+	plan, err := migrate.NewPlan(snap, to, migrate.PlanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := scriptsText(plan.Scripts)
+	for _, w := range []string{"renames the index of a UNIQUE constraint on users.(n) to users_n_key",
+		"renames the index of a UNIQUE constraint on users.(email) to users_email_key"} {
+		if !strings.Contains(text, w) {
+			t.Errorf("no %q in\n%s", w, text)
+		}
+	}
+	fresh, _ := freshDB(t, velox.SQLite)
+	fsys := extend(t, dirOf(t, velox.SQLite, step{to: snap, name: "baseline"}), velox.SQLite, step{to: to, name: "next"})
+	if _, err := migrate.Up(context.Background(), fresh, fsys); err != nil {
+		t.Fatalf("Up: %v\n%s", err, sqlFiles(fsys))
+	}
+	noChanges(t, fresh, to)
 }

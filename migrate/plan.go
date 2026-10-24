@@ -29,7 +29,7 @@ func NewPlan(from, to *Schema, opts PlanOptions) (*Plan, error) {
 	if err != nil {
 		return nil, err
 	}
-	findings := Lint(from, changes)
+	findings := lintChanges(from, to, changes).out
 	if blocked := Blocked(findings, opts.Allow); len(blocked) > 0 {
 		return nil, &BlockedError{Findings: blocked}
 	}

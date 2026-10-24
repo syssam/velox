@@ -212,9 +212,12 @@ func (c *drifter) table(t, u *Table) {
 		tc.Default = uc.Default
 	}
 
+	tu, _ := pair(t.Indexes, u.Indexes, indexName, func(a, b Index) bool {
+		return a.Unique == b.Unique && slices.Equal(a.Columns, b.Columns) && c.sameText(a.Where, b.Where)
+	})
 	for i := range t.Indexes {
 		ti := &t.Indexes[i]
-		ui := u.index(ti.Name)
+		ui := at(u.Indexes, tu[i])
 		if ui == nil && c.adopt {
 			c.adoptWhere(ti, u)
 			continue
@@ -236,9 +239,10 @@ func (c *drifter) table(t, u *Table) {
 		ti.Where = ui.Where
 	}
 
+	tu, _ = pair(t.Checks, u.Checks, checkName, func(a, b Check) bool { return c.sameCheck(a.Expr, b.Expr) })
 	for i := range t.Checks {
 		tc := &t.Checks[i]
-		uc := u.check(tc.Name)
+		uc := at(u.Checks, tu[i])
 		if uc == nil || tc.Expr == uc.Expr {
 			continue
 		}
@@ -254,7 +258,7 @@ func (c *drifter) table(t, u *Table) {
 		switch {
 		case same:
 		case !comparable:
-			c.warn(checkObject(t.Ref(), i, *tc), "the check is %s in the database and %s in %s; one cannot be parsed, so they are not compared", tc.Expr, uc.Expr, c.other)
+			c.warn(colTarget(t.Ref(), tc.Name), "the check is %s in the database and %s in %s; one cannot be parsed, so they are not compared", tc.Expr, uc.Expr, c.other)
 			if c.adopt {
 				continue
 			}
@@ -311,7 +315,7 @@ func (c *drifter) names(t, u *Table) {
 			continue
 		}
 		for _, ui := range u.Indexes {
-			if t.index(ui.Name) == nil && ti.Unique == ui.Unique && slices.Equal(ti.Columns, ui.Columns) && c.sameText(ti.Where, ui.Where) {
+			if ui.Name != "" && t.index(ui.Name) == nil && ti.Unique == ui.Unique && slices.Equal(ti.Columns, ui.Columns) && c.sameText(ti.Where, ui.Where) {
 				ti.Name = ui.Name
 				break
 			}
@@ -323,7 +327,7 @@ func (c *drifter) names(t, u *Table) {
 			continue
 		}
 		for _, uf := range u.ForeignKeys {
-			if t.foreignKey(uf.Name) == nil && c.sameKey(*tf, uf) {
+			if uf.Name != "" && t.foreignKey(uf.Name) == nil && c.sameKey(*tf, uf) {
 				tf.Name = uf.Name
 				break
 			}
@@ -335,12 +339,23 @@ func (c *drifter) names(t, u *Table) {
 			continue
 		}
 		for _, uc := range u.Checks {
-			if t.check(uc.Name) == nil && c.sameText(tc.Expr, uc.Expr) {
+			if uc.Name != "" && t.check(uc.Name) == nil && c.sameText(tc.Expr, uc.Expr) {
 				tc.Name = uc.Name
 				break
 			}
 		}
 	}
+}
+
+// sameCheck reports whether two checks are one: the same enum check, or
+// one by sameText.
+func (c *drifter) sameCheck(a, b string) bool {
+	col, vs, ok := ddl.ParseEnumCheck(c.d, a)
+	ucol, uvs, uok := ddl.ParseEnumCheck(c.d, b)
+	if ok && uok {
+		return col == ucol && slices.Equal(vs, uvs)
+	}
+	return c.sameText(a, b)
 }
 
 // sameText reports whether two predicates or checks are one by their normal

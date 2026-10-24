@@ -262,13 +262,13 @@ func (c RenameColumn) String() string { return kindOf(c, objectOn(c.Table, c.Fro
 func (c AlterColumn) String() string {
 	return kindOf(c, objectOn(c.Table, c.To.Name)+" ("+c.What.String()+")")
 }
-func (c AddIndex) String() string       { return kindOf(c, objectOn(c.Table, c.Index.Name)) }
-func (c DropIndex) String() string      { return kindOf(c, objectOn(c.Table, c.Index.Name)) }
+func (c AddIndex) String() string       { return kindOf(c, indexObject(c.Table, c.Index)) }
+func (c DropIndex) String() string      { return kindOf(c, indexObject(c.Table, c.Index)) }
 func (c RenameIndex) String() string    { return kindOf(c, objectOn(c.Table, c.From)+" → "+c.To) }
-func (c AddForeignKey) String() string  { return kindOf(c, objectOn(c.Table, c.ForeignKey.Name)) }
-func (c DropForeignKey) String() string { return kindOf(c, objectOn(c.Table, c.ForeignKey.Name)) }
-func (c AddCheck) String() string       { return kindOf(c, objectOn(c.Table, c.Check.Name)) }
-func (c DropCheck) String() string      { return kindOf(c, objectOn(c.Table, c.Check.Name)) }
+func (c AddForeignKey) String() string  { return kindOf(c, keyObject(c.Table, c.ForeignKey)) }
+func (c DropForeignKey) String() string { return kindOf(c, keyObject(c.Table, c.ForeignKey)) }
+func (c AddCheck) String() string       { return kindOf(c, checkObject(c.Table, c.Check)) }
+func (c DropCheck) String() string      { return kindOf(c, checkObject(c.Table, c.Check)) }
 func (c RenameConstraint) String() string {
 	return kindOf(c, objectOn(c.Table, c.From)+" → "+c.To)
 }

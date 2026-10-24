@@ -102,17 +102,17 @@ func Blocked(findings []Finding, allow []Allow) []Finding {
 // it, or it renames one of from's. A nil change gets no finding; Render
 // refuses it. Lint does not change from or the changes.
 func Lint(from *Schema, changes []Change) []Finding {
-	return lintChanges(from, changes).out
+	return lintChanges(from, nil, changes).out
 }
 
 // lintChanges lints changes and returns the linter, whose findings are Lint's
 // and whose rebuilt tables are the ones Render rebuilds on SQLite.
-func lintChanges(from *Schema, changes []Change) *linter {
+func lintChanges(from, to *Schema, changes []Change) *linter {
 	if from == nil {
 		from = &Schema{}
 	}
 	l := &linter{
-		from: from, d: from.Dialect, cs: changes,
+		from: from, to: to, d: from.Dialect, cs: changes,
 		renamed: map[TableRef]TableRef{}, enumFrom: map[TableRef]TableRef{},
 		created: map[TableRef]bool{}, dropped: map[TableRef]bool{},
 		rebuild: make([]bool, len(changes)), rebuilt: map[TableRef]bool{},
@@ -129,6 +129,7 @@ func lintChanges(from *Schema, changes []Change) *linter {
 
 type linter struct {
 	from *Schema
+	to   *Schema // the plan's to, when known: it names what a rename of an unnamed index makes
 	d    velox.Dialect
 	cs   []Change
 	out  []Finding
@@ -209,8 +210,8 @@ func (l *linter) sameKey(a, b ForeignKey) bool {
 // rebuilds reports whether SQLite can only make c by rebuilding its table: it
 // alters a column's type, nullability, default or identity, adds or drops a
 // key or a check, renames a constraint, adds a column it cannot add in place,
-// drops one that something uses, or drops or renames a UNIQUE constraint's
-// index.
+// drops one that something uses, or adds, drops or renames a UNIQUE
+// constraint's index.
 func (l *linter) rebuilds(c Change) bool {
 	if l.dropped[l.canon(c.Target())] || !l.existing(c.Target()) {
 		return false
@@ -232,6 +233,8 @@ func (l *linter) rebuilds(c Change) bool {
 		return t != nil && l.uses(t, c.Column.Name)
 	case AddForeignKey, DropForeignKey, AddCheck, DropCheck, RenameConstraint:
 		return true
+	case AddIndex:
+		return tableUnique(c.Index)
 	case DropIndex:
 		return tableUnique(c.Index)
 	case RenameIndex:
@@ -293,24 +296,24 @@ func (l *linter) change(i int, c Change) {
 	case DropIndex:
 		l.dropIndex(i, c)
 	case RenameIndex:
-		l.rebuildFinding(i, "renames the index of a UNIQUE constraint on %s to %s", indexObject(c.Table, l.fromIndex(c.Table, c.From)), c.To)
+		l.rebuildFinding(i, "renames the index of a UNIQUE constraint%s to %s", l.renamedUnique(c), c.To)
 	case AddForeignKey:
 		if l.existing(c.Table) && !l.quiet[i] {
-			l.add(i, "add-foreign-key", Review, colTarget(c.Table, c.ForeignKey.Name), c.ForeignKey.Pos, "adds foreign key %s; it fails if rows have no match in %s", c.ForeignKey.Name, c.ForeignKey.RefTable)
+			l.add(i, "add-foreign-key", Review, keyObject(c.Table, c.ForeignKey), c.ForeignKey.Pos, "adds foreign key %s; it fails if rows have no match in %s", keyLabel(c.ForeignKey), c.ForeignKey.RefTable)
 		}
-		l.rebuildFinding(i, "adds foreign key %s", c.ForeignKey.Name)
+		l.rebuildFinding(i, "adds foreign key %s", keyLabel(c.ForeignKey))
 	case DropForeignKey:
 		if !l.quiet[i] && !l.dropped[l.canon(c.Table)] && !l.rebuild[i] && !l.replacesKey(c) {
-			l.add(i, "drop-foreign-key", Review, colTarget(c.Table, c.ForeignKey.Name), "", "drops foreign key %s; rows are no longer checked against %s", c.ForeignKey.Name, c.ForeignKey.RefTable)
+			l.add(i, "drop-foreign-key", Review, keyObject(c.Table, c.ForeignKey), "", "drops foreign key %s; rows are no longer checked against %s", keyLabel(c.ForeignKey), c.ForeignKey.RefTable)
 		}
-		l.rebuildFinding(i, "drops foreign key %s", c.ForeignKey.Name)
+		l.rebuildFinding(i, "drops foreign key %s", keyLabel(c.ForeignKey))
 	case AddCheck:
 		l.addCheck(i, c)
 	case DropCheck:
 		if !l.dropped[l.canon(c.Table)] && !l.rebuild[i] && !l.replacesCheck(c) {
-			l.add(i, "drop-check", Review, colTarget(c.Table, c.Check.Name), "", "drops check %s; rows are no longer limited by it", c.Check.Name)
+			l.add(i, "drop-check", Review, checkObject(c.Table, c.Check), "", "drops check %s; rows are no longer limited by it", checkLabel(c.Check))
 		}
-		l.rebuildFinding(i, "drops check %s", c.Check.Name)
+		l.rebuildFinding(i, "drops check %s", checkLabel(c.Check))
 	case RenameConstraint:
 		l.rebuildFinding(i, "renames constraint %s to %s", c.From, c.To)
 	case AlterEnum:
@@ -353,32 +356,35 @@ func changePos(c Change) string {
 
 func colTarget(t TableRef, name string) string { return t.String() + "." + name }
 
-// indexObject is "<table>.<index>", or for an index SQLite keeps no name
-// for "<table>.(<columns>)".
-func indexObject(t TableRef, ix Index) string {
+// indexLabel is ix's name, or for an index SQLite keeps no name for its
+// columns, "(a, b)". keyLabel is the same for a foreign key, and checkLabel
+// for a check, unnamed "check (<expr>)".
+func indexLabel(ix Index) string {
 	if ix.Name == "" {
-		return colTarget(t, "("+strings.Join(ix.Columns, ", ")+")")
+		return "(" + strings.Join(ix.Columns, ", ") + ")"
 	}
-	return colTarget(t, ix.Name)
+	return ix.Name
 }
 
-// keyObject is "<table>.<key>", or for a foreign key SQLite keeps no name
-// for "<table>.(<columns>)".
-func keyObject(t TableRef, fk ForeignKey) string {
+func keyLabel(fk ForeignKey) string {
 	if fk.Name == "" {
-		return colTarget(t, "("+strings.Join(fk.Columns, ", ")+")")
+		return "(" + strings.Join(fk.Columns, ", ") + ")"
 	}
-	return colTarget(t, fk.Name)
+	return fk.Name
 }
 
-// checkObject is "<table>.<check>", or for the i-th check of the table,
-// counted from 0, that SQLite keeps no name for "<table>.check#<i+1>".
-func checkObject(t TableRef, i int, ck Check) string {
+func checkLabel(ck Check) string {
 	if ck.Name == "" {
-		return colTarget(t, "check#"+strconv.Itoa(i+1))
+		return "check (" + ck.Expr + ")"
 	}
-	return colTarget(t, ck.Name)
+	return ck.Name
 }
+
+// indexObject is "<table>.<index>", the index by indexLabel; keyObject and
+// checkObject are the same for a foreign key and a check.
+func indexObject(t TableRef, ix Index) string    { return colTarget(t, indexLabel(ix)) }
+func keyObject(t TableRef, fk ForeignKey) string { return colTarget(t, keyLabel(fk)) }
+func checkObject(t TableRef, ck Check) string    { return colTarget(t, checkLabel(ck)) }
 
 func (l *linter) addColumn(i int, c AddColumn) {
 	col, target := c.Column, colTarget(c.Table, c.Column.Name)
@@ -503,7 +509,8 @@ func (l *linter) addIndex(i int, c AddIndex) {
 	if !l.existing(c.Table) {
 		return
 	}
-	target := colTarget(c.Table, c.Index.Name)
+	defer l.rebuildFinding(i, "adds a UNIQUE constraint on %s", indexObject(c.Table, c.Index))
+	target := indexObject(c.Table, c.Index)
 	if c.Index.Unique {
 		l.add(i, "add-unique", Destructive, target, c.Index.Pos, "adds unique index %s; it fails if rows hold duplicates", target)
 		return
@@ -520,15 +527,19 @@ func (l *linter) dropIndex(i int, c DropIndex) {
 	l.add(i, "drop-index", Review, target, "", "drops index %s; queries that used it get slower", target)
 }
 
-// fromIndex is the index named name of from's table ref, or one named name
-// and no columns.
-func (l *linter) fromIndex(ref TableRef, name string) Index {
-	if t := l.from.table(l.canon(ref)); t != nil {
-		if ix := t.index(name); ix != nil {
-			return *ix
+// renamedUnique is " on <table>.(<columns>)", the UNIQUE constraint's index
+// c renames by the columns of to's index c.To, which a rename by definition
+// shares; "" when the linter has no to.
+func (l *linter) renamedUnique(c RenameIndex) string {
+	if l.to == nil {
+		return ""
+	}
+	if t := l.to.table(c.Table); t != nil {
+		if ix := t.index(c.To); ix != nil {
+			return " on " + indexObject(c.Table, Index{Columns: ix.Columns})
 		}
 	}
-	return Index{Name: name}
+	return ""
 }
 
 // replacesIndex reports whether the plan adds an index that does what the
@@ -557,7 +568,7 @@ func (l *linter) replacesIndex(d DropIndex) bool {
 func (l *linter) replacesKey(d DropForeignKey) bool {
 	return slices.ContainsFunc(l.cs, func(c Change) bool {
 		a, ok := c.(AddForeignKey)
-		return ok && l.canon(a.Table) == l.canon(d.Table) && a.ForeignKey.Name == d.ForeignKey.Name
+		return ok && l.canon(a.Table) == l.canon(d.Table) && a.ForeignKey.Name != "" && a.ForeignKey.Name == d.ForeignKey.Name
 	})
 }
 
@@ -573,17 +584,17 @@ func (l *linter) replacesCheck(d DropCheck) bool {
 	}
 	return slices.ContainsFunc(l.cs, func(c Change) bool {
 		a, ok := c.(AddCheck)
-		return ok && l.canon(a.Table) == l.canon(d.Table) && (a.Check.Name == d.Check.Name || a.Check.Expr == expr)
+		return ok && l.canon(a.Table) == l.canon(d.Table) && (a.Check.Name != "" && a.Check.Name == d.Check.Name || a.Check.Expr == expr)
 	})
 }
 
 func (l *linter) addCheck(i int, c AddCheck) {
 	if l.existing(c.Table) {
-		target := colTarget(c.Table, c.Check.Name)
+		target := checkObject(c.Table, c.Check)
 		// A check that replaces one over the same column, listing fewer
 		// values, removes values from an enum.
 		for _, o := range l.cs {
-			if d, ok := o.(DropCheck); ok && l.canon(d.Table) == l.canon(c.Table) && d.Check.Name == c.Check.Name {
+			if d, ok := o.(DropCheck); ok && l.canon(d.Table) == l.canon(c.Table) && c.Check.Name != "" && d.Check.Name == c.Check.Name {
 				if from, ok := l.checkEnum(d.Check.Expr); ok {
 					if to, ok := l.checkEnum(c.Check.Expr); ok {
 						l.enumDelta(i, target, c.Check.Pos, from, to, enumCheck, "check "+target)
@@ -597,7 +608,7 @@ func (l *linter) addCheck(i int, c AddCheck) {
 		}
 		l.add(i, "add-check", Review, target, c.Check.Pos, "adds check %s; it fails if any row breaks it%s", target, more)
 	}
-	l.rebuildFinding(i, "adds check %s", c.Check.Name)
+	l.rebuildFinding(i, "adds check %s", checkLabel(c.Check))
 }
 
 // checkEnum reads the values of a check of the form `"col" IN ('a', 'b')`.
