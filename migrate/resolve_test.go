@@ -130,8 +130,20 @@ func TestUpResumeRefused(t *testing.T) {
 	if _, err := migrate.Up(ctx, db, edited, migrate.WithResume()); !errors.As(err, &ce) || ce.Version != 2 || ce.Now == "" {
 		t.Errorf("edited: %#v; want *ChecksumError", err)
 	}
-	if _, err := migrate.Up(ctx, db, dirOf(t, velox.SQLite, files("0001_a.sql", a)), migrate.WithResume()); !errors.As(err, &ce) || ce.Version != 2 || ce.Now != "" {
+	old := dirOf(t, velox.SQLite, files("0001_a.sql", a))
+	_, err = migrate.Up(ctx, db, old, migrate.WithResume())
+	if !errors.As(err, &ce) || ce.Version != 2 || ce.Now != "" {
 		t.Errorf("above the last file: %#v; want *ChecksumError", err)
+	}
+	if want := "migrate: version 2 is dirty, and the directory has no file for it; resume it with the directory that has its file, or undo its applied statements and run migrate resolve -version 2 -undone"; err == nil || err.Error() != want {
+		t.Errorf("above the last file, resumed:\n%v\nwant\n%s", err, want)
+	}
+	_, err = migrate.Up(ctx, db, old)
+	if de := dirtyOf(t, err); de.Version != 2 {
+		t.Errorf("above the last file: %+v", de)
+	}
+	if want := "migrate: version 2 is dirty\n  the directory has no file for it; resume it with the directory that has its file, or undo its applied statements and run migrate resolve -version 2 -undone"; err.Error() != want {
+		t.Errorf("above the last file:\n%v\nwant\n%s", err, want)
 	}
 }
 
@@ -146,8 +158,21 @@ func TestUpResumeAhead(t *testing.T) {
 		t.Fatal(err)
 	}
 	r, err := migrate.Up(context.Background(), db, dirOf(t, velox.SQLite, files("0001_a.sql", a, "0002_b.sql", "CREATE TABLE b (x integer);")), migrate.WithResume())
-	if de := dirtyOf(t, err); de.Version != 1 || r != nil {
-		t.Errorf("%+v, %+v", de, r)
+	if e := asError(t, err, "history"); r != nil || e.Error() != "migrate: version 1 is dirty, and the database has versions above the directory's last file, up to 3; "+
+		"restore the missing files to the directory and resume with it, or undo its applied statements and run migrate resolve -version 1 -undone" {
+		t.Errorf("%v, %+v", err, r)
+	}
+
+	// Dirty above the directory's last file too: clean 2, dirty 3, the
+	// directory at 1.
+	db, _ = freshDB(t, velox.SQLite)
+	mustUp(t, db, newer)
+	if _, err := db.Exec(`UPDATE velox_migrations SET dirty = true WHERE version = 3`); err != nil {
+		t.Fatal(err)
+	}
+	_, err = migrate.Up(context.Background(), db, dirOf(t, velox.SQLite, files("0001_a.sql", a)), migrate.WithResume())
+	if e := asError(t, err, "history"); !strings.Contains(e.Reason, "version 3 is dirty, and the database has versions above the directory's last file, up to 3") {
+		t.Errorf("%v", err)
 	}
 }
 

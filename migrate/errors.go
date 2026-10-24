@@ -77,12 +77,18 @@ type ChecksumError struct {
 	Version      uint64
 	Path         string
 	Applied, Now string // Now is "" when the file is missing
+
+	dirty bool // the version is dirty: WithResume found no file to resume
 }
 
 // Error is "migrate: <Path> was applied with checksum <Applied> and is now
 // <Now>", or, when Now is "", "migrate: version <Version> is applied but the
-// directory has no file for it".
+// directory has no file for it". For a dirty version to resume whose file is
+// missing it says the version is dirty, and how to go on.
 func (e *ChecksumError) Error() string {
+	if e.Now == "" && e.dirty {
+		return fmt.Sprintf("migrate: version %d is dirty, and the directory has no file for it; resume it with the directory that has its file, or %s", e.Version, undoHint(e.Version))
+	}
 	if e.Now == "" {
 		return fmt.Sprintf("migrate: version %d is applied but the directory has no file for it", e.Version)
 	}
@@ -98,6 +104,12 @@ type DirtyError struct {
 	Err                   error
 
 	applied *int // the statements still applied, when the runner rolled back the file's own transaction
+	missing bool // found dirty, and the directory has no file for it
+}
+
+// undoHint is the way out of dirty version v by undoing it.
+func undoHint(v uint64) string {
+	return fmt.Sprintf("undo its applied statements and run migrate resolve -version %d -undone", v)
 }
 
 // Error, when Statement > 0, is "migrate: <Path>: statement <Statement> of
@@ -109,15 +121,23 @@ type DirtyError struct {
 // dirty (Statement 0) it is "migrate: <Path>: version <Version> is dirty:
 // <Err>", then "\n  fix the cause and run migrate apply -resume, or undo its
 // applied statements and run migrate resolve -version <Version> -undone".
+// A version found dirty whose file the directory lacks is "migrate: version
+// <Version> is dirty: <Err>", then a line that says the file is missing and
+// to resume with the directory that has it, or undo and resolve.
 func (e *DirtyError) Error() string {
 	var b strings.Builder
 	cause := ""
 	if e.Err != nil {
 		cause = ": " + e.Err.Error()
 	}
+	if e.Statement == 0 && e.missing {
+		fmt.Fprintf(&b, "migrate: version %d is dirty%s\n  the directory has no file for it; resume it with the directory that has its file, or %s",
+			e.Version, cause, undoHint(e.Version))
+		return b.String()
+	}
 	if e.Statement == 0 {
-		fmt.Fprintf(&b, "migrate: %s: version %d is dirty%s\n  fix the cause and run migrate apply -resume, or undo its applied statements and run migrate resolve -version %d -undone",
-			e.Path, e.Version, cause, e.Version)
+		fmt.Fprintf(&b, "migrate: %s: version %d is dirty%s\n  fix the cause and run migrate apply -resume, or %s",
+			e.Path, e.Version, cause, undoHint(e.Version))
 		return b.String()
 	}
 	fmt.Fprintf(&b, "migrate: %s: statement %d of %d%s\n  version %d is dirty; fix the cause and run migrate apply -resume, or ",

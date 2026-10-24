@@ -48,10 +48,10 @@ func WithTarget(version uint64) Option {
 // WithResume makes Up continue a dirty version before the pending files,
 // from the first statement of its first incomplete unit. Its file must be
 // unchanged: a changed or missing one is a *ChecksumError; a dirty version
-// beside versions above the directory's last file is not resumed. A run
-// killed while a statement ran may have applied it, and on MySQL a
-// cancelled statement may still have finished on the server: check the
-// failed statement before resuming or undoing.
+// beside versions above the directory's last file is not resumed, an *Error
+// of Code "history". A run killed while a statement ran may have applied
+// it, and on MySQL a cancelled statement may still have finished on the
+// server: check the failed statement before resuming or undoing.
 func WithResume() Option {
 	return Option{func(o *options) { o.resume = true }}
 }
@@ -153,7 +153,7 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 	}
 	st, err := reading(d, rows)
 	var resumed *File
-	if de := (*DirtyError)(nil); errors.As(err, &de) && o.resume && len(st.Ahead) == 0 {
+	if de := (*DirtyError)(nil); errors.As(err, &de) && o.resume {
 		resumed, err = s.resuming(d, st)
 	}
 	if err != nil {
@@ -323,6 +323,8 @@ func reading(dir *Dir, rows []Applied) (*State, error) {
 		e := &DirtyError{Version: r.Version, Path: pathOf(dir, r.Version, r.Name)}
 		if i := slices.IndexFunc(dir.Files, func(f File) bool { return f.Version == r.Version }); i >= 0 {
 			e.Statements = len(dir.Files[i].Statements)
+		} else {
+			e.missing = true
 		}
 		if r.Error != "" {
 			e.Err = errors.New(r.Error)
@@ -368,15 +370,21 @@ func (s *session) stepwise(f File) bool {
 }
 
 // resuming is the file of st's dirty version, to resume, after reading's
-// refusals of the clean rows. Its file must be in dir with the row's
-// checksum (else a *ChecksumError), and be one that runs statement by
-// statement, since a file run in a transaction never leaves its version
-// dirty (else an *Error of Code "history").
+// refusals of the clean rows. The database must have no version above the
+// directory's last file, whose files the directory lacks (else an *Error of
+// Code "history"). Its file must be in dir with the row's checksum (else a
+// *ChecksumError), and be one that runs statement by statement, since a
+// file run in a transaction never leaves its version dirty (else an *Error
+// of Code "history").
 func (s *session) resuming(dir *Dir, st *State) (*File, error) {
 	r := st.Dirty
+	if n := len(st.Ahead); n > 0 {
+		return nil, &Error{Code: "history", Reason: fmt.Sprintf("version %d is dirty, and the database has versions above the directory's last file, up to %d; restore the missing files to the directory and resume with it, or %s",
+			r.Version, max(st.Ahead[n-1].Version, r.Version), undoHint(r.Version))}
+	}
 	i := slices.IndexFunc(dir.Files, func(f File) bool { return f.Version == r.Version })
 	if i < 0 {
-		return nil, &ChecksumError{Version: r.Version, Path: pathOf(dir, r.Version, r.Name), Applied: r.Sum}
+		return nil, &ChecksumError{Version: r.Version, Path: pathOf(dir, r.Version, r.Name), Applied: r.Sum, dirty: true}
 	}
 	f := dir.Files[i]
 	if f.Sum != r.Sum {

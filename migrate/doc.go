@@ -67,7 +67,8 @@
 //     a file to apply holds a literal the mode would read otherwise.
 //   - "history": the history table holds what the runner cannot read, a
 //     file is pending below the highest applied version, a dirty version
-//     to resume runs in a transaction, or the version Resolve was given is
+//     to resume runs in a transaction or has versions above the
+//     directory's last file beside it, or the version Resolve was given is
 //     not dirty or not in the history.
 //   - "resolution": Resolve was given neither ResolveApplied nor
 //     ResolveUndone.
