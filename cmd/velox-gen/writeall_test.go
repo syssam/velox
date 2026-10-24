@@ -66,3 +66,44 @@ func TestWriteAllRollback(t *testing.T) {
 		})
 	}
 }
+
+// TestWriteAllKeepsTarget: a replaced file is at its path throughout the
+// swap, the original kept by a hard link; where links fail, the old way
+// still rolls back.
+func TestWriteAllKeepsTarget(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "schema.json"), "old schema")
+	writeFile(t, filepath.Join(dir, "velox.sum"), "old sum")
+	renameFile = func(from, to string) error {
+		if strings.Contains(from, ".tmp-") {
+			if _, err := os.Stat(to); err != nil && filepath.Base(to) != "0002_x.sql" {
+				t.Errorf("%s is missing during its swap: %v", filepath.Base(to), err)
+			}
+		}
+		return os.Rename(from, to)
+	}
+	defer func() { renameFile = os.Rename }()
+	if err := writeAll(dir, map[string][]byte{"0002_x.sql": []byte("new"), "schema.json": []byte("new schema"), "velox.sum": []byte("new sum")}); err != nil {
+		t.Fatal(err)
+	}
+	if got := dirFiles(t, dir); !reflect.DeepEqual(got, map[string]string{"0002_x.sql": "new", "schema.json": "new schema", "velox.sum": "new sum"}) {
+		t.Errorf("%v", got)
+	}
+
+	injected := errors.New("injected failure")
+	linkFile = func(string, string) error { return errors.New("links unsupported") }
+	defer func() { linkFile = os.Link }()
+	before := dirFiles(t, dir)
+	renameFile = func(from, to string) error {
+		if filepath.Base(to) == "velox.sum" && strings.Contains(from, ".tmp-") {
+			return injected
+		}
+		return os.Rename(from, to)
+	}
+	if err := writeAll(dir, map[string][]byte{"schema.json": []byte("newer"), "velox.sum": []byte("newer")}); !errors.Is(err, injected) || err.Error() != "injected failure" {
+		t.Fatalf("%v", err)
+	}
+	if after := dirFiles(t, dir); !reflect.DeepEqual(after, before) {
+		t.Errorf("without links the directory changed:\n%v", after)
+	}
+}

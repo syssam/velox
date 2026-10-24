@@ -316,6 +316,7 @@ func relMigrate(dir string, err error) error {
 var (
 	writeTemp  = writeTempFile
 	renameFile = os.Rename
+	linkFile   = os.Link
 )
 
 // writeTempFile writes data to a new file in dir named by pattern, as
@@ -341,7 +342,8 @@ func writeTempFile(dir, pattern string, data []byte) (string, error) {
 
 // writeAll writes files into dir, all or nothing: each under a temporary
 // name first, then renamed into place, velox.sum last; a file it replaces is
-// renamed aside first, and removed once every file is in place. On a
+// kept aside first, by a hard link (else a rename), and removed once every
+// file is in place. On a
 // failure it removes what it wrote and renames the replaced files back; the
 // error names what it could not undo.
 func writeAll(dir string, files map[string][]byte) error {
@@ -384,23 +386,38 @@ func writeAll(dir string, files map[string][]byte) error {
 	}
 	for _, p := range paths {
 		s := swapped{target: filepath.Join(dir, p)}
-		if _, err := os.Lstat(s.target); err == nil {
-			aside, err := writeTemp(dir, "."+p+".old-*", nil) // a name of its own, which the rename replaces
+		linked := false
+		if fi, err := os.Lstat(s.target); err == nil {
+			aside, err := writeTemp(dir, "."+p+".old-*", nil) // a name of its own
 			if err != nil {
 				return undo(err)
 			}
-			if err := renameFile(s.target, aside); err != nil {
-				_ = os.Remove(aside)
+			// A hard link keeps a regular file at its path until the rename
+			// replaces it; a symbolic link, or where links fail, is renamed
+			// aside.
+			if err := os.Remove(aside); err != nil {
 				return undo(err)
+			}
+			linked = fi.Mode().IsRegular() && linkFile(s.target, aside) == nil
+			if !linked {
+				if err := renameFile(s.target, aside); err != nil {
+					_ = os.Remove(aside)
+					return undo(err)
+				}
 			}
 			s.aside = aside
 		} else if !errors.Is(err, fs.ErrNotExist) {
 			return undo(err)
 		}
-		done = append(done, s)
 		if err := renameFile(temps[p], s.target); err != nil {
+			if linked {
+				_ = os.Remove(s.aside) // the original is at its path still
+			} else {
+				done = append(done, s)
+			}
 			return undo(err)
 		}
+		done = append(done, s)
 		delete(temps, p)
 	}
 	var left []string
