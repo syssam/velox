@@ -517,10 +517,14 @@ func pgDescribe(t *testing.T, db *sql.DB) []string {
 func TestRenderOwnedSequence(t *testing.T) {
 	empty := &migrate.Schema{Dialect: velox.Postgres}
 	serial := func(schema string) *migrate.Schema {
+		def := "nextval('g_id_seq')"
+		if schema != "" {
+			def = "nextval('" + schema + ".g_id_seq')"
+		}
 		return &migrate.Schema{Dialect: velox.Postgres, Tables: []migrate.Table{{
 			Schema: schema, Name: "g",
 			Columns: []migrate.Column{
-				{Name: "id", Type: "integer", Default: "nextval('g_id_seq')", Sequence: "g_id_seq"},
+				{Name: "id", Type: "integer", Default: def, Sequence: "g_id_seq"},
 				{Name: "n", Type: "bigint"},
 			},
 			Indexes: []migrate.Index{{Name: "g_n", Columns: []string{"n"}}},
@@ -536,7 +540,7 @@ func TestRenderOwnedSequence(t *testing.T) {
 		"billing": {
 			`CREATE SCHEMA IF NOT EXISTS "billing"`,
 			`CREATE SEQUENCE "billing"."g_id_seq" AS integer`,
-			"CREATE TABLE \"billing\".\"g\" (\n  \"id\" integer NOT NULL DEFAULT nextval('g_id_seq'),\n  \"n\" bigint NOT NULL\n)",
+			"CREATE TABLE \"billing\".\"g\" (\n  \"id\" integer NOT NULL DEFAULT nextval('billing.g_id_seq'),\n  \"n\" bigint NOT NULL\n)",
 			`ALTER SEQUENCE "billing"."g_id_seq" OWNED BY "billing"."g"."id"`,
 			`CREATE INDEX "g_n" ON "billing"."g" ("n")`,
 		},

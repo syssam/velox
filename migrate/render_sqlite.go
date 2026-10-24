@@ -43,13 +43,22 @@ func (r *renderer) sqlite() error {
 			}
 			continue
 		}
+		// A UNIQUE constraint's index goes with the old table.
 		switch c := c.(type) {
-		case RenameTable, DropIndex:
+		case RenameTable:
 			if err := r.sqliteChange(i, c); err != nil {
 				return err
 			}
+		case DropIndex:
+			if !tableUnique(c.Index) {
+				if err := r.sqliteChange(i, c); err != nil {
+					return err
+				}
+			}
 		case RenameIndex:
-			r.emit("DROP INDEX "+r.indexName(c.Table, c.From), i)
+			if c.From != "" {
+				r.emit("DROP INDEX "+r.indexName(c.Table, c.From), i)
+			}
 		}
 		if last[k] == i {
 			ref := k
@@ -159,6 +168,9 @@ func (r *renderer) rebuild(i int, k, ref TableRef) error {
 		}
 		switch c.(type) {
 		case RenameTable, DropIndex, RenameIndex:
+			if r.l.rebuild[j] {
+				folded = append(folded, j) // a UNIQUE constraint's index
+			}
 		default:
 			folded = append(folded, j)
 		}
@@ -256,9 +268,10 @@ func (r *renderer) constraint(name string) string {
 	return "CONSTRAINT " + r.ident(name) + " "
 }
 
-// tableUnique reports whether ix is an unnamed unique index, as SQLite
-// keeps a UNIQUE constraint's: sqliteCreate writes it as UNIQUE (…), and no
-// CREATE INDEX makes it.
+// tableUnique reports whether ix is a UNIQUE constraint's index, unnamed as
+// SQLite keeps it: sqliteCreate writes it as UNIQUE (…), no CREATE INDEX
+// makes it, and no DROP INDEX drops it, so dropping or renaming it rebuilds
+// its table.
 func tableUnique(ix Index) bool { return ix.Name == "" && ix.Unique && ix.Where == "" }
 
 // indexName is the index name of table, with the table's schema.

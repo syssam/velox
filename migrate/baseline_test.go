@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"reflect"
 	"slices"
 	"strings"
@@ -162,7 +163,8 @@ func TestAdoptRefusals(t *testing.T) {
 
 	// A key to a table of the schema the database lacks is refused too.
 	want = schemaOf(velox.Postgres, usersOf(velox.Postgres, nil), migrate.Table{Name: "orgs"})
-	if _, _, err := migrate.AdoptOf(inspected, want); err == nil || !strings.Contains(err.Error(), "users.users_org_id_fkey") {
+	if _, _, err := migrate.AdoptOf(inspected, want); fmt.Sprint(err) != "migrate: users.users_org_id_fkey: references orgs, "+
+		"which the database does not have; create the table, or drop the key first" {
 		t.Errorf("a key to a missing table: %v", err)
 	}
 }
@@ -318,7 +320,74 @@ func TestBaselineSQLiteVerify(t *testing.T) {
 			if err := migrate.Verify(ctx, fresh, fsys); err != nil {
 				t.Errorf("Verify: %v\n%s", err, sqlFiles(fsys))
 			}
+			noChanges(t, db, snap)
 		})
+	}
+}
+
+// noChanges checks that Drift of db against snap finds no change.
+func noChanges(t *testing.T, db *sql.DB, snap *migrate.Schema) {
+	t.Helper()
+	r, err := migrate.Drift(context.Background(), db, snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Changes) > 0 {
+		t.Errorf("Drift against the snapshot:\n%s", reportText(r))
+	}
+}
+
+// TestBaselineSQLiteConstraintIndex: a UNIQUE constraint's index, adopted
+// unnamed, is dropped or renamed by the next diff through a rebuild of its
+// table, never a DROP INDEX, and the result applies with no drift; a
+// schema that names it by definition does not name it in the snapshot.
+func TestBaselineSQLiteConstraintIndex(t *testing.T) {
+	ctx := context.Background()
+	named := sqliteUsers()
+	named.Indexes = []migrate.Index{{Name: "users_email", Columns: []string{"email"}, Unique: true}}
+	for name, c := range map[string]struct{ baseline, next migrate.Table }{
+		"drop":                {sqliteUsers(), sqliteUsers()},
+		"rename-to-named":     {sqliteUsers(), named},
+		"named-by-the-schema": {named, named},
+	} {
+		t.Run(name, func(t *testing.T) {
+			db := sqliteDB(t, `CREATE TABLE users (id integer NOT NULL PRIMARY KEY AUTOINCREMENT, email text NOT NULL UNIQUE)`)
+			snap, _, err := migrate.Baseline(ctx, db, schemaOf(velox.SQLite, c.baseline))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if ix := table(snap, "users").Indexes; len(ix) != 1 || ix[0].Name != "" {
+				t.Fatalf("the snapshot's indexes %+v", ix)
+			}
+			noChanges(t, db, snap)
+			next := schemaOf(velox.SQLite, c.next)
+			fsys := extend(t, dirOf(t, velox.SQLite, step{to: snap, name: "baseline"}), velox.SQLite, step{to: next, name: "next"})
+			text := sqlFiles(fsys)
+			if strings.Contains(text, "DROP INDEX") || !strings.Contains(text, "sqlite-rebuild") {
+				t.Errorf("the files:\n%s", text)
+			}
+			fresh, _ := freshDB(t, velox.SQLite)
+			if _, err := migrate.Up(ctx, fresh, fsys); err != nil {
+				t.Fatalf("Up: %v\n%s", err, text)
+			}
+			noChanges(t, fresh, next)
+		})
+	}
+}
+
+// TestBaselineSQLiteUnnamedRefusals: keys SQLite keeps no name for are
+// named by their columns in the refusals.
+func TestBaselineSQLiteUnnamedRefusals(t *testing.T) {
+	db := sqliteDB(t, `CREATE TABLE orgs (id integer NOT NULL PRIMARY KEY AUTOINCREMENT)`,
+		`CREATE TABLE users (id integer NOT NULL PRIMARY KEY AUTOINCREMENT, email text NOT NULL,
+			a integer REFERENCES orgs (id), b integer REFERENCES orgs (id))`)
+	want := sqliteUsers()
+	want.Columns = append(want.Columns, migrate.Column{Name: "a", Type: "integer", Nullable: true},
+		migrate.Column{Name: "b", Type: "integer", Nullable: true})
+	_, _, err := migrate.Baseline(context.Background(), db, schemaOf(velox.SQLite, want))
+	reason := ": references orgs, which the schema does not name; add the table to the schema, or drop the key first"
+	if got, want := fmt.Sprint(err), "migrate: users.(a)"+reason+"\nmigrate: users.(b)"+reason; got != want {
+		t.Errorf("got\n%s\nwant\n%s", got, want)
 	}
 }
 
@@ -367,6 +436,7 @@ func TestBaselinePostgres(t *testing.T) {
 	if got := warningStrings(ws); !slices.Equal(got, wantWarnings) {
 		t.Errorf("warnings:\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(wantWarnings, "\n"))
 	}
+	noChanges(t, db, snap)
 	fsys := dirOf(t, velox.Postgres, step{to: snap, name: "baseline"})
 	fresh, _ := freshDB(t, velox.Postgres)
 	if citext {
@@ -442,5 +512,19 @@ func TestAdoptWarningsNameTheSchema(t *testing.T) {
 	}
 	if got := adoptWarnings(driftOf(t, inspected, want).Warnings); got != "users: the database has the primary key (id, qty) and the snapshot the primary key (id); change it by hand" {
 		t.Errorf("DriftOf:\n%s", got)
+	}
+}
+
+// TestAdoptUnnamedCheck: a check SQLite keeps no name for is named in a
+// warning by its place in the table.
+func TestAdoptUnnamedCheck(t *testing.T) {
+	withCheck := func(expr string) *migrate.Schema {
+		tb := sqliteUsers()
+		tb.Checks = []migrate.Check{{Expr: expr}}
+		return schemaOf(velox.SQLite, tb)
+	}
+	_, ws := adoptOf(t, withCheck("email || 'x' <> 'y'"), withCheck("email || 'z' <> 'y'"))
+	if got := warningObjects(ws); !slices.Equal(got, []string{"users.check#1"}) {
+		t.Errorf("warnings:\n%s", adoptWarnings(ws))
 	}
 }

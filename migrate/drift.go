@@ -226,7 +226,7 @@ func (c *drifter) table(t, u *Table) {
 		same, comparable := c.same(ti.Where, ui.Where)
 		switch {
 		case !comparable && !same:
-			c.warn(ref+"."+ti.Name, "the predicate is %s in the database and %s in %s; one cannot be parsed, so they are not compared", ti.Where, ui.Where, c.other)
+			c.warn(indexObject(t.Ref(), *ti), "the predicate is %s in the database and %s in %s; one cannot be parsed, so they are not compared", ti.Where, ui.Where, c.other)
 			if c.adopt {
 				continue
 			}
@@ -254,7 +254,7 @@ func (c *drifter) table(t, u *Table) {
 		switch {
 		case same:
 		case !comparable:
-			c.warn(ref+"."+tc.Name, "the check is %s in the database and %s in %s; one cannot be parsed, so they are not compared", tc.Expr, uc.Expr, c.other)
+			c.warn(checkObject(t.Ref(), i, *tc), "the check is %s in the database and %s in %s; one cannot be parsed, so they are not compared", tc.Expr, uc.Expr, c.other)
 			if c.adopt {
 				continue
 			}
@@ -299,9 +299,13 @@ func (c *drifter) adoptWhere(ti *Index, u *Table) {
 
 // names gives the indexes, foreign keys and checks of t named "", as SQLite
 // keeps no name for some, the name of one of u of their definition that t
-// lacks.
+// lacks. Baseline leaves an index unnamed: it is a UNIQUE constraint's,
+// which the snapshot must hold as one, since no DROP INDEX drops it.
 func (c *drifter) names(t, u *Table) {
 	for i := range t.Indexes {
+		if c.adopt {
+			break
+		}
 		ti := &t.Indexes[i]
 		if ti.Name != "" {
 			continue

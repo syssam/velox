@@ -12,11 +12,11 @@
 // open no connection. [Up], [Status], [Resolve], [Inspect], [Drift] and
 // [Baseline] take a *sql.DB and use one connection of it, with the session
 // in UTC on PostgreSQL and MySQL, and close that connection after rather
-// than return it to the pool; when a file run statement by statement fails and that
-// connection is lost, Up writes the error to its dirty row, and reads the
-// row's count, through another connection of the pool. [Verify] uses
-// three such connections in turn: one to check the database is empty, then
-// Up's and Drift's.
+// than return it to the pool; when a file run statement by statement fails
+// and that connection is lost, Up writes the error to its dirty row, and
+// reads the row's count, through another connection of the pool. [Verify]
+// uses three such connections in turn: one to check the database is empty,
+// then Up's and Drift's.
 //
 // Planning has four parts. [Diff] lists the changes from one schema to
 // another, in the order they run. [Lint] says which of them need care: a

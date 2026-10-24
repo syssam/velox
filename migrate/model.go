@@ -62,7 +62,7 @@ type Column struct {
 
 // An Index is a secondary index.
 type Index struct {
-	Name    string   `json:"name"`
+	Name    string   `json:"name"` // SQLite: "" for a UNIQUE constraint's index, which SQLite keeps no name for
 	Columns []string `json:"columns,omitempty"`
 	Unique  bool     `json:"unique,omitempty"`
 	Where   string   `json:"where,omitempty"` // the predicate of a partial index; "" for none; never on MySQL

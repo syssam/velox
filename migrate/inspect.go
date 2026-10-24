@@ -49,6 +49,20 @@ func Drift(ctx context.Context, db *sql.DB, snapshot *Schema) (*DriftReport, err
 	return drift(inspected, notes, snapshot)
 }
 
+// refsOf is the tables and enum types s names, neither nil: nil would read
+// every table.
+func refsOf(s *Schema) (tables, enums []TableRef) {
+	tables = make([]TableRef, 0, len(s.Tables))
+	for _, t := range s.Tables {
+		tables = append(tables, t.Ref())
+	}
+	enums = make([]TableRef, 0, len(s.Enums))
+	for _, e := range s.Enums {
+		enums = append(enums, e.ref())
+	}
+	return tables, enums
+}
+
 // A querier is what inspect reads through: a transaction on its connection.
 type querier interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)

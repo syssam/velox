@@ -403,9 +403,10 @@ var pgOnDelete = map[string]string{"a": "", "r": "RESTRICT", "c": "CASCADE", "n"
 
 // constraints reads pt's primary key, foreign keys and checks. A unique
 // constraint is left out, its index read, and is a baseline note. An enum
-// check is in the model's form, any other check as PostgreSQL prints it. What a constraint
-// has that the model cannot hold is one note: NOT VALID, an exclusion
-// constraint, DEFERRABLE, and a foreign key's ON UPDATE or MATCH FULL.
+// check is in the model's form, any other check as PostgreSQL prints it.
+// What a constraint has that the model cannot hold is one note: NOT VALID,
+// an exclusion constraint, DEFERRABLE, and a foreign key's ON UPDATE or
+// MATCH FULL.
 func (r *pgReader) constraints(pt *pgTable) error {
 	return r.each(pgConstraintsQuery, []any{pt.oid}, func(rows *sql.Rows) error {
 		var (

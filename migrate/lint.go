@@ -209,7 +209,8 @@ func (l *linter) sameKey(a, b ForeignKey) bool {
 // rebuilds reports whether SQLite can only make c by rebuilding its table: it
 // alters a column's type, nullability, default or identity, adds or drops a
 // key or a check, renames a constraint, adds a column it cannot add in place,
-// or drops one that something uses.
+// drops one that something uses, or drops or renames a UNIQUE constraint's
+// index.
 func (l *linter) rebuilds(c Change) bool {
 	if l.dropped[l.canon(c.Target())] || !l.existing(c.Target()) {
 		return false
@@ -231,6 +232,10 @@ func (l *linter) rebuilds(c Change) bool {
 		return t != nil && l.uses(t, c.Column.Name)
 	case AddForeignKey, DropForeignKey, AddCheck, DropCheck, RenameConstraint:
 		return true
+	case DropIndex:
+		return tableUnique(c.Index)
+	case RenameIndex:
+		return c.From == "" // a UNIQUE constraint's index, which no DROP INDEX drops
 	}
 	return false
 }
@@ -287,6 +292,8 @@ func (l *linter) change(i int, c Change) {
 		l.addIndex(i, c)
 	case DropIndex:
 		l.dropIndex(i, c)
+	case RenameIndex:
+		l.rebuildFinding(i, "renames the index of a UNIQUE constraint on %s to %s", indexObject(c.Table, l.fromIndex(c.Table, c.From)), c.To)
 	case AddForeignKey:
 		if l.existing(c.Table) && !l.quiet[i] {
 			l.add(i, "add-foreign-key", Review, colTarget(c.Table, c.ForeignKey.Name), c.ForeignKey.Pos, "adds foreign key %s; it fails if rows have no match in %s", c.ForeignKey.Name, c.ForeignKey.RefTable)
@@ -345,6 +352,33 @@ func changePos(c Change) string {
 }
 
 func colTarget(t TableRef, name string) string { return t.String() + "." + name }
+
+// indexObject is "<table>.<index>", or for an index SQLite keeps no name
+// for "<table>.(<columns>)".
+func indexObject(t TableRef, ix Index) string {
+	if ix.Name == "" {
+		return colTarget(t, "("+strings.Join(ix.Columns, ", ")+")")
+	}
+	return colTarget(t, ix.Name)
+}
+
+// keyObject is "<table>.<key>", or for a foreign key SQLite keeps no name
+// for "<table>.(<columns>)".
+func keyObject(t TableRef, fk ForeignKey) string {
+	if fk.Name == "" {
+		return colTarget(t, "("+strings.Join(fk.Columns, ", ")+")")
+	}
+	return colTarget(t, fk.Name)
+}
+
+// checkObject is "<table>.<check>", or for the i-th check of the table,
+// counted from 0, that SQLite keeps no name for "<table>.check#<i+1>".
+func checkObject(t TableRef, i int, ck Check) string {
+	if ck.Name == "" {
+		return colTarget(t, "check#"+strconv.Itoa(i+1))
+	}
+	return colTarget(t, ck.Name)
+}
 
 func (l *linter) addColumn(i int, c AddColumn) {
 	col, target := c.Column, colTarget(c.Table, c.Column.Name)
@@ -478,11 +512,23 @@ func (l *linter) addIndex(i int, c AddIndex) {
 }
 
 func (l *linter) dropIndex(i int, c DropIndex) {
-	if l.dropped[l.canon(c.Table)] || l.rebuilt[l.canon(c.Table)] || l.replacesIndex(c) {
+	target := indexObject(c.Table, c.Index)
+	defer l.rebuildFinding(i, "drops the index of a UNIQUE constraint on %s", target)
+	if l.dropped[l.canon(c.Table)] || (l.rebuilt[l.canon(c.Table)] && !l.rebuild[i]) || l.replacesIndex(c) {
 		return
 	}
-	target := colTarget(c.Table, c.Index.Name)
 	l.add(i, "drop-index", Review, target, "", "drops index %s; queries that used it get slower", target)
+}
+
+// fromIndex is the index named name of from's table ref, or one named name
+// and no columns.
+func (l *linter) fromIndex(ref TableRef, name string) Index {
+	if t := l.from.table(l.canon(ref)); t != nil {
+		if ix := t.index(name); ix != nil {
+			return *ix
+		}
+	}
+	return Index{Name: name}
 }
 
 // replacesIndex reports whether the plan adds an index that does what the

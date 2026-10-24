@@ -49,20 +49,6 @@ func Baseline(ctx context.Context, db *sql.DB, want *Schema) (*Schema, []Warning
 	return adopt(inspected, notes, want)
 }
 
-// refsOf is the tables and enum types s names, neither nil: nil would read
-// every table.
-func refsOf(s *Schema) (tables, enums []TableRef) {
-	tables = make([]TableRef, 0, len(s.Tables))
-	for _, t := range s.Tables {
-		tables = append(tables, t.Ref())
-	}
-	enums = make([]TableRef, 0, len(s.Enums))
-	for _, e := range s.Enums {
-		enums = append(enums, e.ref())
-	}
-	return tables, enums
-}
-
 // adopt is Baseline after inspecting: inspected's tables that want names,
 // with the enum types they use or want names, each object in want's
 // spelling where drift's comparison finds it equal, in inspected's
@@ -92,7 +78,7 @@ func adopt(inspected *Schema, notes []note, want *Schema) (*Schema, []Warning, e
 	snap := c.db
 	snap.Dialect = want.Dialect
 	snap.sort()
-	if err := refusals(snap); err != nil {
+	if err := refusals(snap, want); err != nil {
 		return nil, nil, err
 	}
 	if err := snap.validate("the baseline"); err != nil {
@@ -107,7 +93,7 @@ func adopt(inspected *Schema, notes []note, want *Schema) (*Schema, []Warning, e
 // sorted by object: a foreign key to a table snap lacks, and on PostgreSQL a
 // nextval default whose sequence the column does not own. One is returned
 // as itself, several joined.
-func refusals(snap *Schema) error {
+func refusals(snap, want *Schema) error {
 	var errs []*Error
 	refuse := func(object, reason string) {
 		errs = append(errs, &Error{Code: "baseline", Object: object, Reason: reason})
@@ -115,8 +101,12 @@ func refusals(snap *Schema) error {
 	for _, t := range snap.Tables {
 		ref := t.Ref().String()
 		for _, fk := range t.ForeignKeys {
-			if snap.table(fk.RefTable) == nil {
-				refuse(ref+"."+fk.Name, "references "+fk.RefTable.String()+", which the schema does not name; add the table to the schema, or drop the key first")
+			switch {
+			case snap.table(fk.RefTable) != nil:
+			case want.table(fk.RefTable) != nil:
+				refuse(keyObject(t.Ref(), fk), "references "+fk.RefTable.String()+", which the database does not have; create the table, or drop the key first")
+			default:
+				refuse(keyObject(t.Ref(), fk), "references "+fk.RefTable.String()+", which the schema does not name; add the table to the schema, or drop the key first")
 			}
 		}
 		if snap.Dialect != velox.Postgres {
