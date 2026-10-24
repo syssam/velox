@@ -311,11 +311,11 @@ func (l *linter) change(i int, c Change) {
 		l.addCheck(i, c)
 	case DropCheck:
 		if !l.dropped[l.canon(c.Table)] && !l.rebuild[i] && !l.replacesCheck(c) {
-			l.add(i, "drop-check", Review, checkObject(c.Table, c.Check), "", "drops check %s; rows are no longer limited by it", checkLabel(c.Check))
+			l.add(i, "drop-check", Review, checkObject(c.Table, c.Check), "", "drops %s; rows are no longer limited by it", checkNoun(c.Check))
 		}
-		l.rebuildFinding(i, "drops check %s", checkLabel(c.Check))
+		l.rebuildFinding(i, "drops %s", checkNoun(c.Check))
 	case RenameConstraint:
-		l.rebuildFinding(i, "renames constraint %s to %s", c.From, c.To)
+		l.rebuildFinding(i, "renames constraint %s to %s", source(c.From, c.def), c.To)
 	case AlterEnum:
 		l.alterEnum(i, c)
 	}
@@ -378,6 +378,14 @@ func checkLabel(ck Check) string {
 		return "check (" + ck.Expr + ")"
 	}
 	return ck.Name
+}
+
+// checkNoun is "check <name>", or for an unnamed check its label.
+func checkNoun(ck Check) string {
+	if ck.Name == "" {
+		return checkLabel(ck)
+	}
+	return "check " + ck.Name
 }
 
 // indexObject is "<table>.<index>", the index by indexLabel; keyObject and
@@ -606,9 +614,13 @@ func (l *linter) addCheck(i int, c AddCheck) {
 		if l.d == velox.MySQL {
 			more = "; MySQL copies the table"
 		}
-		l.add(i, "add-check", Review, target, c.Check.Pos, "adds check %s; it fails if any row breaks it%s", target, more)
+		what := "check " + target
+		if c.Check.Name == "" {
+			what = checkLabel(c.Check) + " on " + c.Table.String()
+		}
+		l.add(i, "add-check", Review, target, c.Check.Pos, "adds %s; it fails if any row breaks it%s", what, more)
 	}
-	l.rebuildFinding(i, "adds check %s", checkLabel(c.Check))
+	l.rebuildFinding(i, "adds %s", checkNoun(c.Check))
 }
 
 // checkEnum reads the values of a check of the form `"col" IN ('a', 'b')`.

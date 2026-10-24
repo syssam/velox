@@ -53,7 +53,7 @@ func Diff(from, to *Schema, opts DiffOptions) ([]Change, error) {
 	if from.Dialect != to.Dialect {
 		return nil, &Error{Code: "dialect", Reason: fmt.Sprintf("from is a %s schema and to a %s one; Diff compares two schemas of one dialect", from.Dialect, to.Dialect)}
 	}
-	d := &differ{orig: from.clone(), mid: from.clone(), to: to.clone(), fromRef: map[TableRef]TableRef{}}
+	d := &differ{orig: from.clone(), mid: from.clone(), to: to.clone(), fromRef: map[TableRef]TableRef{}, colFrom: map[TableRef]map[string]string{}}
 	for _, s := range [...]*Schema{d.orig, d.mid, d.to} {
 		s.sort()
 	}
@@ -83,8 +83,9 @@ func Diff(from, to *Schema, opts DiffOptions) ([]Change, error) {
 // as it is found, so that after the renames it matches to by name.
 type differ struct {
 	orig, mid, to *Schema
-	fromRef       map[TableRef]TableRef        // a renamed table's name in from, by its name in to
-	retyped       map[TableRef]map[string]bool // the columns whose type changes, by table
+	fromRef       map[TableRef]TableRef          // a renamed table's name in from, by its name in to
+	retyped       map[TableRef]map[string]bool   // the columns whose type changes, by table
+	colFrom       map[TableRef]map[string]string // a renamed column's name in from, by table and its name in to
 	out           []planned
 }
 
@@ -354,7 +355,7 @@ func (d *differ) alterTable(t, u *Table) {
 	for j, ui := range u.Indexes {
 		ti := at(t.Indexes, ut[j])
 		if ti != nil && !sameIndex(*ti, ui) {
-			d.add(DropIndex{Table: oref, Index: origIndex(ot, *ti)}, 1, 2, oref, 0, ti.Name)
+			d.add(DropIndex{Table: oref, Index: d.origIndex(ref, ot, *ti)}, 1, 2, oref, 0, ti.Name)
 		}
 		if ti == nil || !sameIndex(*ti, ui) {
 			d.add(AddIndex{Table: ref, Index: ui}, 7, 0, ref, 0, ui.Name)
@@ -376,7 +377,7 @@ func (d *differ) alterTable(t, u *Table) {
 			onGone = !slices.ContainsFunc(ti.Columns, func(c string) bool { return !gone[c] })
 		}
 		if onGone || d.nameTaken(ref, ti.Name) {
-			d.add(DropIndex{Table: oref, Index: origIndex(ot, ti)}, 1, 2, oref, 0, ti.Name)
+			d.add(DropIndex{Table: oref, Index: d.origIndex(ref, ot, ti)}, 1, 2, oref, 0, ti.Name)
 		} else {
 			d.add(DropIndex{Table: ref, Index: ti}, 8, 0, ref, 0, ti.Name)
 		}
@@ -386,7 +387,7 @@ func (d *differ) alterTable(t, u *Table) {
 	for j, uf := range u.ForeignKeys {
 		tf := at(t.ForeignKeys, ut[j])
 		if tf != nil && (!sameForeignKey(*tf, uf) || d.keyRetyped(ref, uf)) {
-			d.add(DropForeignKey{Table: oref, ForeignKey: origKey(ot, *tf)}, 1, 0, oref, 0, tf.Name)
+			d.add(DropForeignKey{Table: oref, ForeignKey: d.origKey(ref, ot, *tf)}, 1, 0, oref, 0, tf.Name)
 			tf = nil
 		}
 		if tf == nil {
@@ -395,7 +396,7 @@ func (d *differ) alterTable(t, u *Table) {
 	}
 	for k, tf := range t.ForeignKeys {
 		if tu[k] < 0 {
-			d.add(DropForeignKey{Table: oref, ForeignKey: origKey(ot, tf)}, 1, 0, oref, 0, tf.Name)
+			d.add(DropForeignKey{Table: oref, ForeignKey: d.origKey(ref, ot, tf)}, 1, 0, oref, 0, tf.Name)
 		}
 	}
 
@@ -403,7 +404,7 @@ func (d *differ) alterTable(t, u *Table) {
 	for j, uc := range u.Checks {
 		tc := at(t.Checks, ut[j])
 		if tc != nil && tc.Expr != uc.Expr {
-			d.add(DropCheck{Table: oref, Check: origCheck(ot, *tc)}, 1, 1, oref, 0, tc.Name)
+			d.add(DropCheck{Table: oref, Check: d.origCheck(ref, ot, *tc)}, 1, 1, oref, 0, tc.Name)
 		}
 		if tc == nil || tc.Expr != uc.Expr {
 			d.add(AddCheck{Table: ref, Check: uc}, 7, 1, ref, 0, uc.Name)
@@ -411,7 +412,7 @@ func (d *differ) alterTable(t, u *Table) {
 	}
 	for k, tc := range t.Checks {
 		if tu[k] < 0 {
-			d.add(DropCheck{Table: oref, Check: origCheck(ot, tc)}, 1, 1, oref, 0, tc.Name)
+			d.add(DropCheck{Table: oref, Check: d.origCheck(ref, ot, tc)}, 1, 1, oref, 0, tc.Name)
 		}
 	}
 }
@@ -518,28 +519,66 @@ func at[T any](s []T, i int) *T {
 	return &s[i]
 }
 
-// origIndex is the index ti, of the table t of mid, as from names it: the
-// one of ot of its name, or ti itself when it is unnamed. origKey and
-// origCheck are the same for keys and checks.
-func origIndex(ot *Table, ti Index) Index {
-	if ti.Name == "" {
-		return ti
+// origIndex is the index ti, of the table ref of mid, as from names it: the
+// one of ot of its name, or for an unnamed one, ti with the column renames
+// undone, as ot has it. origKey and origCheck are the same for keys and
+// checks.
+func (d *differ) origIndex(ref TableRef, ot *Table, ti Index) Index {
+	if ti.Name != "" {
+		return *ot.index(ti.Name)
 	}
-	return *ot.index(ti.Name)
+	ti.Columns, ti.Where = d.fromCols(ref, ti.Columns), d.fromExpr(ref, ti.Where)
+	if i := slices.IndexFunc(ot.Indexes, func(o Index) bool { return o.Name == "" && sameIndex(o, ti) }); i >= 0 {
+		return ot.Indexes[i]
+	}
+	return ti
 }
 
-func origKey(ot *Table, tf ForeignKey) ForeignKey {
-	if tf.Name == "" {
-		return tf
+func (d *differ) origKey(ref TableRef, ot *Table, tf ForeignKey) ForeignKey {
+	if tf.Name != "" {
+		return *ot.foreignKey(tf.Name)
 	}
-	return *ot.foreignKey(tf.Name)
+	tf.Columns, tf.RefColumns = d.fromCols(ref, tf.Columns), d.fromCols(tf.RefTable, tf.RefColumns)
+	if r, ok := d.fromRef[tf.RefTable]; ok {
+		tf.RefTable = r
+	}
+	if i := slices.IndexFunc(ot.ForeignKeys, func(o ForeignKey) bool { return o.Name == "" && sameForeignKey(o, tf) }); i >= 0 {
+		return ot.ForeignKeys[i]
+	}
+	return tf
 }
 
-func origCheck(ot *Table, tc Check) Check {
-	if tc.Name == "" {
-		return tc
+func (d *differ) origCheck(ref TableRef, ot *Table, tc Check) Check {
+	if tc.Name != "" {
+		return *ot.check(tc.Name)
 	}
-	return *ot.check(tc.Name)
+	if d.mid.Dialect != velox.MySQL { // MySQL's checks keep their expression
+		tc.Expr = d.fromExpr(ref, tc.Expr)
+	}
+	if i := slices.IndexFunc(ot.Checks, func(o Check) bool { return o.Name == "" && o.Expr == tc.Expr }); i >= 0 {
+		return ot.Checks[i]
+	}
+	return tc
+}
+
+// fromCols is cols, of the table ref of mid, with the column renames undone.
+func (d *differ) fromCols(ref TableRef, cols []string) []string {
+	out := slices.Clone(cols)
+	for i, c := range out {
+		if o, ok := d.colFrom[ref][c]; ok {
+			out[i] = o
+		}
+	}
+	return out
+}
+
+// fromExpr is expr, of the table ref of mid, with the column renames undone.
+// No renamed column takes a name from has, so the order does not matter.
+func (d *differ) fromExpr(ref TableRef, expr string) string {
+	for to, from := range d.colFrom[ref] {
+		expr = renameIdent(d.mid.Dialect, expr, to, from)
+	}
+	return expr
 }
 
 func sameIndex(a, b Index) bool {

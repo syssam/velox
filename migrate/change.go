@@ -113,6 +113,7 @@ type DropIndex struct {
 type RenameIndex struct {
 	Table    TableRef
 	From, To string
+	def      string // the label of an unnamed source, From "", by its definition
 }
 
 // AddForeignKey adds a foreign key.
@@ -143,6 +144,7 @@ type DropCheck struct {
 type RenameConstraint struct {
 	Table    TableRef
 	From, To string
+	def      string // the label of an unnamed source, From "", by its definition
 }
 
 // SetTableComment changes a table's comment.
@@ -262,15 +264,17 @@ func (c RenameColumn) String() string { return kindOf(c, objectOn(c.Table, c.Fro
 func (c AlterColumn) String() string {
 	return kindOf(c, objectOn(c.Table, c.To.Name)+" ("+c.What.String()+")")
 }
-func (c AddIndex) String() string       { return kindOf(c, indexObject(c.Table, c.Index)) }
-func (c DropIndex) String() string      { return kindOf(c, indexObject(c.Table, c.Index)) }
-func (c RenameIndex) String() string    { return kindOf(c, objectOn(c.Table, c.From)+" → "+c.To) }
+func (c AddIndex) String() string  { return kindOf(c, indexObject(c.Table, c.Index)) }
+func (c DropIndex) String() string { return kindOf(c, indexObject(c.Table, c.Index)) }
+func (c RenameIndex) String() string {
+	return kindOf(c, objectOn(c.Table, source(c.From, c.def))+" → "+c.To)
+}
 func (c AddForeignKey) String() string  { return kindOf(c, keyObject(c.Table, c.ForeignKey)) }
 func (c DropForeignKey) String() string { return kindOf(c, keyObject(c.Table, c.ForeignKey)) }
 func (c AddCheck) String() string       { return kindOf(c, checkObject(c.Table, c.Check)) }
 func (c DropCheck) String() string      { return kindOf(c, checkObject(c.Table, c.Check)) }
 func (c RenameConstraint) String() string {
-	return kindOf(c, objectOn(c.Table, c.From)+" → "+c.To)
+	return kindOf(c, objectOn(c.Table, source(c.From, c.def))+" → "+c.To)
 }
 func (c SetTableComment) String() string   { return kindOf(c, c.Table.String()) }
 func (c SetTableCollation) String() string { return kindOf(c, c.Table.String()) }
@@ -285,6 +289,14 @@ func (c AlterEnum) String() string {
 }
 
 func kindOf(c Change, object string) string { return string(c.Kind()) + " " + object }
+
+// source is a rename's from name, or def, the label of an unnamed source.
+func source(from, def string) string {
+	if from == "" {
+		return def
+	}
+	return from
+}
 
 // objectOn is "<table>.<name>".
 func objectOn(t TableRef, name string) string { return t.String() + "." + name }

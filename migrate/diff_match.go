@@ -100,6 +100,10 @@ func (d *differ) renameColumns(tables map[TableRef]TableRef, m map[ColumnRef]str
 		}
 		t := d.mid.table(ref)
 		t.column(k.Column).Name = dst
+		if d.colFrom[ref] == nil {
+			d.colFrom[ref] = map[string]string{}
+		}
+		d.colFrom[ref][dst] = k.Column
 		rename := func(names []string) {
 			for i := range names {
 				if names[i] == k.Column {
@@ -249,7 +253,7 @@ func (d *differ) renameObjects() {
 			}
 			for k, ui := range u.Indexes {
 				if ut[k] < 0 && ui.Name != "" && sameIndex(*ti, ui) {
-					d.add(RenameIndex{Table: ref, From: ti.Name, To: ui.Name}, 2, 3, ref, 0, ti.Name)
+					d.add(RenameIndex{Table: ref, From: ti.Name, To: ui.Name, def: indexLabel(Index{Columns: ti.Columns})}, 2, 3, ref, 0, ti.Name)
 					ti.Name, ut[k] = ui.Name, j
 					break
 				}
@@ -264,7 +268,7 @@ func (d *differ) renameObjects() {
 			for k, uf := range u.ForeignKeys {
 				// A key dropped around a type change is not renamed.
 				if ut[k] < 0 && uf.Name != "" && sameForeignKey(*tf, uf) && !d.keyRetyped(ref, uf) {
-					d.out = append(d.out, planned{c: RenameConstraint{Table: ref, From: tf.Name, To: uf.Name}, step: 2, sub: 4, ref: ref, name: tf.Name, keyRename: true})
+					d.out = append(d.out, planned{c: RenameConstraint{Table: ref, From: tf.Name, To: uf.Name, def: keyLabel(ForeignKey{Columns: tf.Columns})}, step: 2, sub: 4, ref: ref, name: tf.Name, keyRename: true})
 					tf.Name, ut[k] = uf.Name, j
 					break
 				}
@@ -278,7 +282,7 @@ func (d *differ) renameObjects() {
 			}
 			for k, uc := range u.Checks {
 				if ut[k] < 0 && uc.Name != "" && tc.Expr == uc.Expr {
-					d.add(RenameConstraint{Table: ref, From: tc.Name, To: uc.Name}, 2, 4, ref, 0, tc.Name)
+					d.add(RenameConstraint{Table: ref, From: tc.Name, To: uc.Name, def: checkLabel(Check{Expr: tc.Expr})}, 2, 4, ref, 0, tc.Name)
 					tc.Name, ut[k] = uc.Name, j
 					break
 				}

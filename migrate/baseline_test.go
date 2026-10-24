@@ -623,3 +623,91 @@ func TestUnnamedRenames(t *testing.T) {
 	}
 	noChanges(t, fresh, to)
 }
+
+// TestUnnamedDropLabels: an unnamed index, key and check dropped before a
+// column rename runs are named by from's columns and expression.
+func TestUnnamedDropLabels(t *testing.T) {
+	orgs := migrate.Table{Name: "orgs", PrimaryKey: []string{"id"}, Columns: []migrate.Column{{Name: "id", Type: "integer", Identity: true}}}
+	from := migrate.Table{Name: "users", PrimaryKey: []string{"id"}, Columns: []migrate.Column{
+		{Name: "id", Type: "integer", Identity: true},
+		{Name: "org_id", Type: "integer", Nullable: true},
+		{Name: "x", Type: "text"},
+	},
+		Indexes:     []migrate.Index{{Columns: []string{"org_id", "x"}, Unique: true}},
+		ForeignKeys: []migrate.ForeignKey{{Columns: []string{"org_id"}, RefTable: migrate.TableRef{Name: "orgs"}, RefColumns: []string{"id"}}},
+		Checks:      []migrate.Check{{Expr: "org_id > 0"}},
+	}
+	to := migrate.Table{Name: "users", PrimaryKey: []string{"id"}, Columns: []migrate.Column{
+		{Name: "id", Type: "integer", Identity: true},
+		{Name: "team_id", Type: "integer", Nullable: true},
+	}}
+	cs := diff(t, schemaOf(velox.SQLite, orgs, from), schemaOf(velox.SQLite, orgs, to), migrate.DiffOptions{
+		RenameColumns: map[migrate.ColumnRef]string{{Table: migrate.TableRef{Name: "users"}, Column: "org_id"}: "team_id"},
+	})
+	got := changeStrings(cs)
+	for _, w := range []string{"drop-foreign-key users.(org_id)", "drop-check users.check (org_id > 0)", "drop-index users.(org_id, x)"} {
+		if !slices.Contains(got, w) {
+			t.Errorf("no %q in %v", w, got)
+		}
+	}
+}
+
+// TestUnnamedRenameLabels: an unnamed index, key or check renamed by
+// definition is named by its definition, in the change and in the rebuild's
+// review.
+func TestUnnamedRenameLabels(t *testing.T) {
+	_, snap := twoUnnamed(t)
+	to := migrate.Clone(snap)
+	tb := table(to, "users")
+	for i := range tb.Indexes {
+		tb.Indexes[i].Name = "users_" + tb.Indexes[i].Columns[0] + "_key"
+	}
+	for i := range tb.ForeignKeys {
+		tb.ForeignKeys[i].Name = "users_" + tb.ForeignKeys[i].Columns[0] + "_fkey"
+	}
+	for i := range tb.Checks {
+		tb.Checks[i].Name = fmt.Sprintf("users_check_%d", i)
+	}
+	got := changeStrings(diff(t, snap, to, migrate.DiffOptions{}))
+	for _, w := range []string{"rename-index users.(n) → users_n_key", "rename-constraint users.(a) → users_a_fkey",
+		"rename-constraint users.check (n <> '') → users_check_"} {
+		if !slices.ContainsFunc(got, func(s string) bool { return strings.HasPrefix(s, w) }) {
+			t.Errorf("no %q in %v", w, got)
+		}
+	}
+	plan, err := migrate.NewPlan(snap, to, migrate.PlanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := scriptsText(plan.Scripts)
+	for _, w := range []string{"renames constraint (a) to users_a_fkey", "renames constraint check (n <> '') to users_check_"} {
+		if !strings.Contains(text, w) {
+			t.Errorf("no %q in\n%s", w, text)
+		}
+	}
+}
+
+// TestUnnamedCheckReviews: the rebuild's review of an unnamed check says
+// "check" once.
+func TestUnnamedCheckReviews(t *testing.T) {
+	_, snap := twoUnnamed(t)
+	less := migrate.Clone(snap)
+	tb := table(less, "users")
+	tb.Checks = tb.Checks[:1]
+	drop, err := migrate.NewPlan(snap, less, migrate.PlanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	add, err := migrate.NewPlan(less, snap, migrate.PlanOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ text, want string }{
+		{scriptsText(drop.Scripts), "drops check (email <> '')"},
+		{scriptsText(add.Scripts), "adds check (email <> '')"},
+	} {
+		if !strings.Contains(c.text, c.want) || strings.Contains(c.text, "check check") || strings.Contains(c.text, "check users.check") {
+			t.Errorf("want %q, and \"check\" once, in\n%s", c.want, c.text)
+		}
+	}
+}
