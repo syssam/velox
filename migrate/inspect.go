@@ -21,8 +21,9 @@ import (
 // PRIMARY, the name MySQL gives every one. On SQLite the default schema is
 // main, and constraint names and checks come from the table's CREATE TABLE
 // text: where it cannot be read, a table has no checks and its foreign keys
-// are unnamed. Inspect only reads, on one connection of db that it closes
-// after, never returning it to the pool.
+// are unnamed; Inspect waits up to 5 minutes for a writer to finish. Inspect
+// only reads, on one connection of db that it closes after, never returning
+// it to the pool.
 func Inspect(ctx context.Context, db *sql.DB, d velox.Dialect, tables []TableRef) (*Schema, error) {
 	s, _, err := inspect(ctx, db, d, tables)
 	return s, err
@@ -35,7 +36,7 @@ func Inspect(ctx context.Context, db *sql.DB, d velox.Dialect, tables []TableRef
 // its type's on PostgreSQL or BINARY on SQLite, an UNLOGGED or TEMPORARY
 // PostgreSQL table, an invalid index, a NOT VALID constraint, a GENERATED
 // ALWAYS identity, a STRICT SQLite table). It never reads a table snapshot
-// does not name.
+// does not name, and on SQLite it waits for a writer as Inspect does.
 func Drift(ctx context.Context, db *sql.DB, snapshot *Schema) (*DriftReport, error) {
 	if snapshot == nil {
 		return nil, &Error{Code: "nil", Reason: "Drift needs the snapshot"}
@@ -157,8 +158,13 @@ func inspectMySQLConn(ctx context.Context, conn *sql.Conn, tables []TableRef) (*
 	return inspectMySQL(ctx, conn, tables)
 }
 
-// inspectSQLiteConn is inspectSQLite on conn, in one read transaction.
+// inspectSQLiteConn is inspectSQLite on conn, in one read transaction. It
+// waits for a writer as long as Up waits for the lock by default: a writer
+// committing keeps every reader out.
 func inspectSQLiteConn(ctx context.Context, conn *sql.Conn, tables []TableRef) (*Schema, []note, error) {
+	if _, err := conn.ExecContext(ctx, fmt.Sprintf("PRAGMA busy_timeout = %d", waitMillis(defaultLockWait))); err != nil {
+		return nil, nil, err
+	}
 	tx, err := conn.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return nil, nil, err

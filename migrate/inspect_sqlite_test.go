@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/migrate"
@@ -612,5 +613,39 @@ func TestInspectSQLiteUnreadable(t *testing.T) {
 	}
 	if r := table(s, "r"); len(r.Columns) != 1 || len(r.Checks) != 0 {
 		t.Errorf("r: %+v", r)
+	}
+}
+
+// TestInspectSQLiteWaits: Inspect and Drift wait for a writer that holds
+// the database, rather than fail at once.
+func TestInspectSQLiteWaits(t *testing.T) {
+	ctx := context.Background()
+	db, dsn := freshDB(t, velox.SQLite)
+	if _, err := db.Exec(`CREATE TABLE a (id integer PRIMARY KEY)`); err != nil {
+		t.Fatal(err)
+	}
+	snap, err := migrate.Inspect(ctx, db, velox.SQLite, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, call := range map[string]func() error{
+		"Inspect": func() error { _, err := migrate.Inspect(ctx, db, velox.SQLite, nil); return err },
+		"Drift":   func() error { _, err := migrate.Drift(ctx, db, snap); return err },
+	} {
+		holder, err := openDB(t, "sqlite", dsn).Conn(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := holder.ExecContext(ctx, "BEGIN EXCLUSIVE"); err != nil {
+			t.Fatal(err)
+		}
+		release := time.AfterFunc(300*time.Millisecond, func() { _, _ = holder.ExecContext(ctx, "ROLLBACK") })
+		if err := call(); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+		if release.Stop() {
+			_, _ = holder.ExecContext(ctx, "ROLLBACK")
+		}
+		_ = holder.Close()
 	}
 }
