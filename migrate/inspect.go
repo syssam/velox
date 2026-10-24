@@ -41,14 +41,7 @@ func Drift(ctx context.Context, db *sql.DB, snapshot *Schema) (*DriftReport, err
 	if snapshot == nil {
 		return nil, &Error{Code: "nil", Reason: "Drift needs the snapshot"}
 	}
-	refs := make([]TableRef, 0, len(snapshot.Tables)) // not nil: nil would read every table
-	for _, t := range snapshot.Tables {
-		refs = append(refs, t.Ref())
-	}
-	enums := make([]TableRef, 0, len(snapshot.Enums))
-	for _, e := range snapshot.Enums {
-		enums = append(enums, e.ref())
-	}
+	refs, enums := refsOf(snapshot)
 	inspected, notes, err := inspectWith(ctx, db, snapshot.Dialect, refs, enums)
 	if err != nil {
 		return nil, err

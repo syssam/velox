@@ -34,9 +34,10 @@ type DriftReport struct {
 // engine other than InnoDB, an invalid PostgreSQL index, a NOT VALID
 // constraint, a GENERATED ALWAYS identity. The model holds no notes.
 type note struct {
-	table   TableRef
-	object  string // as a Warning's Object: "users", "users.users_x"
-	message string // as a Warning's Message
+	table    TableRef
+	object   string // as a Warning's Object: "users", "users.users_x"
+	message  string // as a Warning's Message
+	baseline bool   // only Baseline reports it: what a build from the snapshot loses, not a difference; drift skips it
 }
 
 // drift compares an inspected schema and its notes with snapshot: the
@@ -56,35 +57,9 @@ type note struct {
 // MySQL, a primary key's name, always PRIMARY there, and the index MySQL
 // makes for a foreign key no index covers.
 func drift(inspected *Schema, notes []note, snapshot *Schema) (*DriftReport, error) {
-	if inspected == nil || snapshot == nil {
-		return nil, &Error{Code: "nil", Reason: "drift needs the inspected schema and the snapshot"}
-	}
-	if err := snapshot.validate("the snapshot"); err != nil {
+	c, err := compare(inspected, notes, snapshot, false)
+	if err != nil {
 		return nil, err
-	}
-	if !knownDialect(inspected.Dialect) {
-		return nil, &Error{Code: "dialect", Reason: fmt.Sprintf("the database has the unknown dialect %q", inspected.Dialect.String())}
-	}
-	if inspected.Dialect != snapshot.Dialect {
-		return nil, &Error{Code: "dialect", Reason: fmt.Sprintf("the database is %s and the snapshot %s", inspected.Dialect, snapshot.Dialect)}
-	}
-	c := &drifter{d: snapshot.Dialect, db: inspected.clone(), snap: snapshot,
-		enums: enumCasts(&Schema{Dialect: snapshot.Dialect, Enums: append(slices.Clone(snapshot.Enums), inspected.Enums...)})}
-	c.db.Tables = slices.DeleteFunc(c.db.Tables, func(t Table) bool { return snapshot.table(t.Ref()) == nil })
-	c.db.Enums = slices.DeleteFunc(c.db.Enums, func(e Enum) bool {
-		return snapshot.enum(e.ref()) == nil && len(usage(c.db, e.ref())) == 0
-	})
-	for i := range c.db.Tables {
-		t := &c.db.Tables[i]
-		c.table(t, snapshot.table(t.Ref()))
-	}
-	if err := c.db.validate("the database"); err != nil {
-		return nil, err
-	}
-	for _, n := range notes {
-		if snapshot.table(n.table) != nil {
-			c.warnings = append(c.warnings, Warning{Object: n.object, Message: n.message})
-		}
 	}
 	snap := snapshot
 	if len(c.implicit) > 0 {
@@ -99,10 +74,59 @@ func drift(inspected *Schema, notes []note, snapshot *Schema) (*DriftReport, err
 	if err != nil {
 		return nil, err
 	}
-	slices.SortFunc(c.warnings, func(a, b Warning) int {
+	sortWarnings(c.warnings)
+	return &DriftReport{Changes: changes, Warnings: c.warnings}, nil
+}
+
+// compare is drift up to Diff: the checks of both schemas, the copy of
+// inspected cut to snapshot's tables and the enum types they use or
+// snapshot names, given snapshot's spellings by table, and the notes on
+// snapshot's tables as warnings, baseline notes only when adopt. In adopt
+// mode, Baseline's, the copy keeps the database's form wherever drift
+// would force snapshot's over a difference.
+func compare(inspected *Schema, notes []note, snapshot *Schema, adopt bool) (*drifter, error) {
+	if inspected == nil || snapshot == nil {
+		return nil, &Error{Code: "nil", Reason: "drift needs the inspected schema and the snapshot"}
+	}
+	name := "the snapshot"
+	if adopt {
+		name = "the schema"
+	}
+	if err := snapshot.validate(name); err != nil {
+		return nil, err
+	}
+	if !knownDialect(inspected.Dialect) {
+		return nil, &Error{Code: "dialect", Reason: fmt.Sprintf("the database has the unknown dialect %q", inspected.Dialect.String())}
+	}
+	if inspected.Dialect != snapshot.Dialect {
+		return nil, &Error{Code: "dialect", Reason: fmt.Sprintf("the database is %s and %s %s", inspected.Dialect, name, snapshot.Dialect)}
+	}
+	c := &drifter{d: snapshot.Dialect, db: inspected.clone(), snap: snapshot, adopt: adopt,
+		enums: enumCasts(&Schema{Dialect: snapshot.Dialect, Enums: append(slices.Clone(snapshot.Enums), inspected.Enums...)})}
+	c.db.Tables = slices.DeleteFunc(c.db.Tables, func(t Table) bool { return snapshot.table(t.Ref()) == nil })
+	c.db.Enums = slices.DeleteFunc(c.db.Enums, func(e Enum) bool {
+		return snapshot.enum(e.ref()) == nil && len(usage(c.db, e.ref())) == 0
+	})
+	for i := range c.db.Tables {
+		t := &c.db.Tables[i]
+		c.table(t, snapshot.table(t.Ref()))
+	}
+	if err := c.db.validate("the database"); err != nil {
+		return nil, err
+	}
+	for _, n := range notes {
+		if snapshot.table(n.table) != nil && (adopt || !n.baseline) {
+			c.warnings = append(c.warnings, Warning{Object: n.object, Message: n.message})
+		}
+	}
+	return c, nil
+}
+
+// sortWarnings sorts ws by object, then message.
+func sortWarnings(ws []Warning) {
+	slices.SortFunc(ws, func(a, b Warning) int {
 		return cmp.Or(cmp.Compare(a.Object, b.Object), cmp.Compare(a.Message, b.Message))
 	})
-	return &DriftReport{Changes: changes, Warnings: c.warnings}, nil
 }
 
 // drifter holds one drift: db is the copy of the inspected schema it
@@ -110,6 +134,7 @@ func drift(inspected *Schema, notes []note, snapshot *Schema) (*DriftReport, err
 type drifter struct {
 	d        velox.Dialect
 	db, snap *Schema
+	adopt    bool            // Baseline's: db keeps its form where it differs
 	enums    map[string]bool // the enum types of both, as enumCasts
 	warnings []Warning
 	implicit []implicitIndex // MySQL: the indexes it made for foreign keys
@@ -138,15 +163,20 @@ func (c *drifter) table(t, u *Table) {
 
 	if !slices.Equal(t.PrimaryKey, u.PrimaryKey) {
 		c.warn(ref, "the database has %s and the snapshot %s; change it by hand", keyText(t.PrimaryKey), keyText(u.PrimaryKey))
-		t.PrimaryKey = slices.Clone(u.PrimaryKey)
+		if !c.adopt {
+			t.PrimaryKey = slices.Clone(u.PrimaryKey)
+		}
 	}
-	if c.d == velox.MySQL {
+	if c.d == velox.MySQL && !c.adopt {
 		// MySQL names every primary key PRIMARY and holds no other name.
+		// Baseline keeps the database's, which has a key or none.
 		t.PrimaryKeyName = u.PrimaryKeyName
 	}
-	if (t.PrimaryKeyName == "") != (u.PrimaryKeyName == "") {
+	if (t.PrimaryKeyName == "") != (u.PrimaryKeyName == "") && c.d != velox.MySQL {
 		c.warn(ref, "the database names the primary key %q and the snapshot %q; change it by hand", t.PrimaryKeyName, u.PrimaryKeyName)
-		t.PrimaryKeyName = u.PrimaryKeyName
+		if !c.adopt {
+			t.PrimaryKeyName = u.PrimaryKeyName
+		}
 	}
 
 	for i := range t.Columns {
@@ -174,6 +204,9 @@ func (c *drifter) table(t, u *Table) {
 		}
 		if same, _ := c.same(tc.Default, uc.Default); !same {
 			c.warn(ref+"."+tc.Name, "the default is %s in the database and %s in the snapshot", tc.Default, uc.Default)
+			if c.adopt {
+				continue
+			}
 		}
 		tc.Default = uc.Default
 	}
@@ -181,6 +214,10 @@ func (c *drifter) table(t, u *Table) {
 	for i := range t.Indexes {
 		ti := &t.Indexes[i]
 		ui := u.index(ti.Name)
+		if ui == nil && c.adopt {
+			c.adoptWhere(ti, u)
+			continue
+		}
 		if ui == nil || ti.Where == ui.Where || ti.Where == "" || ui.Where == "" ||
 			ti.Unique != ui.Unique || !slices.Equal(ti.Columns, ui.Columns) {
 			continue
@@ -189,6 +226,9 @@ func (c *drifter) table(t, u *Table) {
 		switch {
 		case !comparable && !same:
 			c.warn(ref+"."+ti.Name, "the predicate is %s in the database and %s in the snapshot; one cannot be parsed, so they are not compared", ti.Where, ui.Where)
+			if c.adopt {
+				continue
+			}
 		case !same:
 			continue // another predicate: Diff rebuilds the index
 		}
@@ -214,6 +254,9 @@ func (c *drifter) table(t, u *Table) {
 		case same:
 		case !comparable:
 			c.warn(ref+"."+tc.Name, "the check is %s in the database and %s in the snapshot; one cannot be parsed, so they are not compared", tc.Expr, uc.Expr)
+			if c.adopt {
+				continue
+			}
 		default:
 			continue // another check: Diff drops and adds it
 		}
@@ -234,6 +277,21 @@ func (c *drifter) table(t, u *Table) {
 			if uf := u.foreignKey(tf.Name); uf != nil && restricts(tf.OnDelete) && restricts(uf.OnDelete) {
 				tf.OnDelete = uf.OnDelete
 			}
+		}
+	}
+}
+
+// adoptWhere gives ti, an index u has no index of the name of, the
+// predicate text of u's index of its columns, uniqueness and normalised
+// predicate; ti keeps its name, which the next Diff renames by definition.
+func (c *drifter) adoptWhere(ti *Index, u *Table) {
+	if ti.Where == "" {
+		return
+	}
+	for _, ui := range u.Indexes {
+		if ui.Unique == ti.Unique && slices.Equal(ui.Columns, ti.Columns) && ui.Where != "" && c.sameText(ti.Where, ui.Where) {
+			ti.Where = ui.Where
+			return
 		}
 	}
 }

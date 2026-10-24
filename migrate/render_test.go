@@ -746,3 +746,35 @@ func TestRenderMySQLRefusesPrimaryKeyRename(t *testing.T) {
 		}
 	}
 }
+
+// TestRenderSQLiteUnnamed: a foreign key, check or unique index SQLite
+// keeps no name for is written in the CREATE TABLE as SQLite reads it back:
+// a key and a check with no CONSTRAINT, a unique index as UNIQUE (…).
+func TestRenderSQLiteUnnamed(t *testing.T) {
+	empty := &migrate.Schema{Dialect: velox.SQLite}
+	to := &migrate.Schema{Dialect: velox.SQLite, Tables: []migrate.Table{
+		{Name: "orgs", Columns: []migrate.Column{{Name: "id", Type: "integer", Identity: true}}, PrimaryKey: []string{"id"}},
+		{
+			Name: "users",
+			Columns: []migrate.Column{
+				{Name: "id", Type: "integer", Identity: true},
+				{Name: "org_id", Type: "integer"},
+				{Name: "email", Type: "text"},
+			},
+			PrimaryKey:  []string{"id"},
+			Indexes:     []migrate.Index{{Columns: []string{"email"}, Unique: true}, {Name: "users_org", Columns: []string{"org_id"}}},
+			ForeignKeys: []migrate.ForeignKey{{Columns: []string{"org_id"}, RefTable: migrate.TableRef{Name: "orgs"}, RefColumns: []string{"id"}}},
+			Checks:      []migrate.Check{{Expr: "email <> ''"}},
+		},
+	}}
+	got := sqls(render(t, empty, to, diff(t, empty, to, migrate.DiffOptions{}), migrate.RenderOptions{}))
+	want := []string{
+		"CREATE TABLE \"orgs\" (\n  \"id\" integer NOT NULL PRIMARY KEY AUTOINCREMENT\n)",
+		"CREATE TABLE \"users\" (\n  \"id\" integer NOT NULL PRIMARY KEY AUTOINCREMENT,\n  \"org_id\" integer NOT NULL,\n  \"email\" text NOT NULL,\n" +
+			"  FOREIGN KEY (\"org_id\") REFERENCES \"orgs\" (\"id\"),\n  CHECK (email <> ''),\n  UNIQUE (\"email\")\n)",
+		`CREATE INDEX "users_org" ON "users" ("org_id")`,
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("got\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}

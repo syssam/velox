@@ -90,7 +90,9 @@ func (r *renderer) sqliteChange(i int, c Change) error {
 	case CreateTable:
 		r.emit(r.sqliteCreate(c.Table.Ref(), &c.Table), i)
 		for _, ix := range c.Table.Indexes {
-			r.emit(r.sqliteIndex(c.Table.Ref(), ix), i)
+			if !tableUnique(ix) {
+				r.emit(r.sqliteIndex(c.Table.Ref(), ix), i)
+			}
 		}
 	case DropTable:
 		r.emit("DROP TABLE "+r.table(c.Table.Ref()), i)
@@ -186,7 +188,9 @@ func (r *renderer) rebuild(i int, k, ref TableRef) error {
 	r.emit("DROP TABLE "+r.table(ref), i)
 	r.emit("ALTER TABLE "+r.table(tmp)+" RENAME TO "+r.ident(ref.Name), i)
 	for _, ix := range t.Indexes {
-		r.emit(r.sqliteIndex(ref, ix), i)
+		if !tableUnique(ix) {
+			r.emit(r.sqliteIndex(ref, ix), i)
+		}
 	}
 	return nil
 }
@@ -219,7 +223,7 @@ func (r *renderer) sqliteColumn(c Column, key bool) string {
 
 // sqliteCreate is the CREATE TABLE of t under the name ref, with its
 // foreign keys and checks; a key other than one identity column is an
-// unnamed table constraint.
+// unnamed table constraint, and so is an unnamed unique index.
 func (r *renderer) sqliteCreate(ref TableRef, t *Table) string {
 	auto := autoIncrement(t)
 	var defs []string
@@ -230,13 +234,32 @@ func (r *renderer) sqliteCreate(ref TableRef, t *Table) string {
 		defs = append(defs, "PRIMARY KEY ("+r.idents(t.PrimaryKey)+")")
 	}
 	for _, fk := range t.ForeignKeys {
-		defs = append(defs, "CONSTRAINT "+r.ident(fk.Name)+" "+r.foreignKey(fk))
+		defs = append(defs, r.constraint(fk.Name)+r.foreignKey(fk))
 	}
 	for _, ck := range t.Checks {
-		defs = append(defs, "CONSTRAINT "+r.ident(ck.Name)+" CHECK ("+ck.Expr+")")
+		defs = append(defs, r.constraint(ck.Name)+"CHECK ("+ck.Expr+")")
+	}
+	for _, ix := range t.Indexes {
+		if tableUnique(ix) {
+			defs = append(defs, "UNIQUE ("+r.idents(ix.Columns)+")")
+		}
 	}
 	return "CREATE TABLE " + r.table(ref) + " (\n  " + strings.Join(defs, ",\n  ") + "\n)"
 }
+
+// constraint is "CONSTRAINT <name> ", or "" for a constraint SQLite keeps
+// no name for.
+func (r *renderer) constraint(name string) string {
+	if name == "" {
+		return ""
+	}
+	return "CONSTRAINT " + r.ident(name) + " "
+}
+
+// tableUnique reports whether ix is an unnamed unique index, as SQLite
+// keeps a UNIQUE constraint's: sqliteCreate writes it as UNIQUE (…), and no
+// CREATE INDEX makes it.
+func tableUnique(ix Index) bool { return ix.Name == "" && ix.Unique && ix.Where == "" }
 
 // indexName is the index name of table, with the table's schema.
 func (r *renderer) indexName(table TableRef, name string) string {

@@ -96,15 +96,26 @@ var LostMessage = lostMessage
 type Note struct {
 	Table           TableRef
 	Object, Message string
+	Baseline        bool
+}
+
+// notesOf is notes as notes.
+func notesOf(notes []Note) []note {
+	var ns []note
+	for _, n := range notes {
+		ns = append(ns, note{table: n.Table, object: n.Object, message: n.Message, baseline: n.Baseline})
+	}
+	return ns
 }
 
 // DriftOf is drift.
 func DriftOf(inspected, snapshot *Schema, notes ...Note) (*DriftReport, error) {
-	var ns []note
-	for _, n := range notes {
-		ns = append(ns, note{table: n.Table, object: n.Object, message: n.Message})
-	}
-	return drift(inspected, ns, snapshot)
+	return drift(inspected, notesOf(notes), snapshot)
+}
+
+// AdoptOf is adopt.
+func AdoptOf(inspected, want *Schema, notes ...Note) (*Schema, []Warning, error) {
+	return adopt(inspected, notesOf(notes), want)
 }
 
 // NormalizePredicate is normalizePredicate.
@@ -118,7 +129,7 @@ func InspectNotes(ctx context.Context, db *sql.DB, d velox.Dialect, tables []Tab
 	s, ns, err := inspect(ctx, db, d, tables)
 	var out []Note
 	for _, n := range ns {
-		out = append(out, Note{Table: n.table, Object: n.object, Message: n.message})
+		out = append(out, Note{Table: n.table, Object: n.object, Message: n.message, Baseline: n.baseline})
 	}
 	return s, out, err
 }

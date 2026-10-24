@@ -87,26 +87,6 @@ func invariants(t *testing.T, db *sql.DB, d velox.Dialect, fsys fs.FS, model *mi
 	}
 }
 
-// ownedSequences are the hand files a from with serial columns needs, as a
-// baseline writes them: each sequence created before the plan, and owned by
-// its column after.
-func ownedSequences(s *migrate.Schema) (before, after step) {
-	var create, own []string
-	for _, tb := range s.Tables {
-		for _, c := range tb.Columns {
-			if c.Sequence != "" && !c.Identity {
-				create = append(create, `CREATE SEQUENCE "`+c.Sequence+`";`)
-				own = append(own, `ALTER SEQUENCE "`+c.Sequence+`" OWNED BY "`+tb.Name+`"."`+c.Name+`";`)
-			}
-		}
-	}
-	if len(create) == 0 {
-		return step{}, step{}
-	}
-	return files("0001_sequences.sql", strings.Join(create, "\n")+"\n"),
-		files("0003_owned.sql", strings.Join(own, "\n")+"\n")
-}
-
 // otherDatabases makes, on MySQL, the server-wide databases the tables of
 // ss name; PostgreSQL's plans create their schemas.
 func otherDatabases(t *testing.T, d velox.Dialect, ss ...*migrate.Schema) {
@@ -125,15 +105,11 @@ func otherDatabases(t *testing.T, d velox.Dialect, ss ...*migrate.Schema) {
 	}
 }
 
-// fromDir is the directory of from: its plan, with the hand files of its
-// owned sequences around it.
+// fromDir is the directory of from: its plan, which creates the sequences
+// its serial columns own.
 func fromDir(t *testing.T, d velox.Dialect, from *migrate.Schema) fstest.MapFS {
 	t.Helper()
-	before, after := ownedSequences(from)
-	if before.files == nil {
-		return dirOf(t, d, step{to: from, name: "from"})
-	}
-	return dirOf(t, d, before, step{to: from, name: "from"}, after)
+	return dirOf(t, d, step{to: from, name: "from"})
 }
 
 // migrated is what migrateCase leaves: the database, its directory, and

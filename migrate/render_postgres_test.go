@@ -396,14 +396,6 @@ func TestRenderPostgresExecutes(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			from, to := models(t, c, velox.Postgres)
 			db := pgDatabase(t, admin, dsn)
-			// A serial's sequence exists before its table.
-			for _, tb := range from.Tables {
-				for _, col := range tb.Columns {
-					if strings.HasPrefix(col.Default, "nextval(") && col.Sequence != "" {
-						pgExec(t, db, "CREATE SEQUENCE "+`"`+col.Sequence+`"`)
-					}
-				}
-			}
 			empty := &migrate.Schema{Dialect: velox.Postgres}
 			runPostgres(t, db, render(t, empty, from, diff(t, empty, from, migrate.DiffOptions{}), migrate.RenderOptions{LockTimeout: 5 * time.Second}))
 			runPostgresResuming(t, db, caseScripts(t, c, velox.Postgres), true)
@@ -517,4 +509,59 @@ func pgDescribe(t *testing.T, db *sql.DB) []string {
 	}
 	slices.Sort(out)
 	return out
+}
+
+// TestRenderOwnedSequence: a serial's sequence is created before its table,
+// as its column's type, and owned by the column after it, before the
+// table's indexes; an identity's is the identity's own.
+func TestRenderOwnedSequence(t *testing.T) {
+	empty := &migrate.Schema{Dialect: velox.Postgres}
+	serial := func(schema string) *migrate.Schema {
+		return &migrate.Schema{Dialect: velox.Postgres, Tables: []migrate.Table{{
+			Schema: schema, Name: "g",
+			Columns: []migrate.Column{
+				{Name: "id", Type: "integer", Default: "nextval('g_id_seq')", Sequence: "g_id_seq"},
+				{Name: "n", Type: "bigint"},
+			},
+			Indexes: []migrate.Index{{Name: "g_n", Columns: []string{"n"}}},
+		}}}
+	}
+	for schema, want := range map[string][]string{
+		"": {
+			`CREATE SEQUENCE "g_id_seq" AS integer`,
+			"CREATE TABLE \"g\" (\n  \"id\" integer NOT NULL DEFAULT nextval('g_id_seq'),\n  \"n\" bigint NOT NULL\n)",
+			`ALTER SEQUENCE "g_id_seq" OWNED BY "g"."id"`,
+			`CREATE INDEX "g_n" ON "g" ("n")`,
+		},
+		"billing": {
+			`CREATE SCHEMA IF NOT EXISTS "billing"`,
+			`CREATE SEQUENCE "billing"."g_id_seq" AS integer`,
+			"CREATE TABLE \"billing\".\"g\" (\n  \"id\" integer NOT NULL DEFAULT nextval('g_id_seq'),\n  \"n\" bigint NOT NULL\n)",
+			`ALTER SEQUENCE "billing"."g_id_seq" OWNED BY "billing"."g"."id"`,
+			`CREATE INDEX "g_n" ON "billing"."g" ("n")`,
+		},
+	} {
+		to := serial(schema)
+		if got := sqls(render(t, empty, to, diff(t, empty, to, migrate.DiffOptions{}), migrate.RenderOptions{})); !slices.Equal(got, want) {
+			t.Errorf("schema %q:\n%s\nwant\n%s", schema, strings.Join(got, "\n"), strings.Join(want, "\n"))
+		}
+	}
+
+	// A type that is no integer gets no AS.
+	to := serial("")
+	to.Tables[0].Columns[0].Type = "numeric(20,0)"
+	if got := sqls(render(t, empty, to, diff(t, empty, to, migrate.DiffOptions{}), migrate.RenderOptions{})); got[0] != `CREATE SEQUENCE "g_id_seq"` {
+		t.Errorf("numeric: %s", got[0])
+	}
+
+	to = serial("")
+	id := &to.Tables[0].Columns[0]
+	id.Identity, id.Default = true, ""
+	got := sqls(render(t, empty, to, diff(t, empty, to, migrate.DiffOptions{}), migrate.RenderOptions{}))
+	for _, s := range got {
+		if strings.Contains(s, "CREATE SEQUENCE") || strings.Contains(s, "OWNED BY") {
+			t.Errorf("an identity: %s", strings.Join(got, "\n"))
+			break
+		}
+	}
 }

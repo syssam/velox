@@ -9,10 +9,10 @@
 // of their values, not by their text.
 //
 // [Diff], [Lint], [Render] and [NewPlan] are pure: they read schemas and
-// open no connection. [Up], [Status], [Resolve], [Inspect] and [Drift] take
-// a *sql.DB and use one connection of it, with the session in UTC on
-// PostgreSQL and MySQL, and close that connection after rather than return
-// it to the pool; when a file run statement by statement fails and that
+// open no connection. [Up], [Status], [Resolve], [Inspect], [Drift] and
+// [Baseline] take a *sql.DB and use one connection of it, with the session
+// in UTC on PostgreSQL and MySQL, and close that connection after rather
+// than return it to the pool; when a file run statement by statement fails and that
 // connection is lost, Up writes the error to its dirty row, and reads the
 // row's count, through another connection of the pool. [Verify] uses
 // three such connections in turn: one to check the database is empty, then
@@ -29,8 +29,9 @@
 //
 // The other refusals are [*Error] values, whose Code names the failure:
 //
-//   - "nil": a schema Diff, Render or Drift needs is nil, or Up, Status,
-//     Resolve, Inspect, Drift or Verify was given no database.
+//   - "nil": a schema Diff, Render, Drift or Baseline needs is nil, or Up,
+//     Status, Resolve, Inspect, Drift, Verify or Baseline was given no
+//     database.
 //   - "dialect": a schema's dialect is not PostgreSQL, MySQL or SQLite, or
 //     two schemas' dialects differ, or Inspect or ParseFile was given
 //     another dialect.
@@ -78,6 +79,9 @@
 //     ResolveUndone.
 //   - "drift": Verify was given a database that is not empty, or the
 //     database differs from schema.json after the directory's files ran.
+//   - "baseline": Baseline found none of the schema's tables, a foreign key
+//     to a table outside them, or a sequence default the column does not
+//     own; or Up was given WithBaseline where it cannot record.
 //
 // Each [Change] has a String, its kind and the object it acts on in one
 // line. [Inspect] reads a database's tables as a Schema, and [Drift] reads
@@ -93,6 +97,14 @@
 // that differs, or what the model has no place for, such as a MySQL table
 // that is not InnoDB, an invalid PostgreSQL index or a NOT VALID
 // constraint.
+//
+// [Baseline] adopts an existing database into a new directory: it reads
+// the tables a schema names and returns them as the directory's first
+// snapshot, each object in the schema's spelling where the comparison of
+// Drift finds it equal and in the database's otherwise, with warnings for
+// what a build from the snapshot loses. It refuses a database that holds
+// none of the schema's tables, a foreign key to a table outside them, and
+// a sequence default the column does not own.
 //
 // A directory holds velox.json, schema.json, the migration files and
 // velox.sum, which hashes the others. Line endings never change a sum: each

@@ -442,12 +442,24 @@ func (r *renderer) columnComment(table TableRef, c Column) string {
 }
 
 // pgCreate is the CREATE TABLE of t, with its key, foreign keys and checks,
-// then its indexes and comments.
+// then its indexes and comments. A serial's sequence is created before the
+// table and owned by its column after it.
 func (r *renderer) pgCreate(t *Table) []string {
 	ref := t.Ref()
-	var defs []string
+	var out, defs, owned []string
 	for _, c := range t.Columns {
 		defs = append(defs, r.pgColumn(c))
+		if c.Identity || c.Sequence == "" {
+			continue
+		}
+		seq := r.indexName(ref, c.Sequence)
+		create := "CREATE SEQUENCE " + seq
+		switch c.Type {
+		case "smallint", "integer", "bigint":
+			create += " AS " + c.Type
+		}
+		out = append(out, create)
+		owned = append(owned, "ALTER SEQUENCE "+seq+" OWNED BY "+r.table(ref)+"."+r.ident(c.Name))
 	}
 	if len(t.PrimaryKey) > 0 {
 		pk := "PRIMARY KEY (" + r.idents(t.PrimaryKey) + ")"
@@ -462,7 +474,8 @@ func (r *renderer) pgCreate(t *Table) []string {
 	for _, ck := range t.Checks {
 		defs = append(defs, "CONSTRAINT "+r.ident(ck.Name)+" CHECK ("+ck.Expr+")")
 	}
-	out := []string{"CREATE TABLE " + r.table(ref) + " (\n  " + strings.Join(defs, ",\n  ") + "\n)"}
+	out = append(out, "CREATE TABLE "+r.table(ref)+" (\n  "+strings.Join(defs, ",\n  ")+"\n)")
+	out = append(out, owned...)
 	for _, ix := range t.Indexes {
 		out = append(out, r.pgIndex(ref, ix, false))
 	}

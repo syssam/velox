@@ -96,14 +96,11 @@ func predicateSchema() *migrate.Schema {
 	}
 }
 
-// predicateDir is predicateSchema's directory: the sequence is created
-// before the plan and owned by the column after it, as a baseline does.
+// predicateDir is predicateSchema's directory, whose plan creates the
+// serial's sequence.
 func predicateDir(t *testing.T) fstest.MapFS {
 	t.Helper()
-	return dirOf(t, velox.Postgres,
-		files("0001_sequence.sql", "CREATE SEQUENCE g_id_seq;\n"),
-		step{to: predicateSchema(), name: "g"},
-		files("0003_own.sql", "ALTER SEQUENCE g_id_seq OWNED BY g.id;\n"))
+	return dirOf(t, velox.Postgres, step{to: predicateSchema(), name: "g"})
 }
 
 // TestInspectPostgresCases: every case's schema on PostgreSQL, the golden
@@ -452,6 +449,9 @@ func TestInspectPostgresUnheld(t *testing.T) {
 	}
 	got := map[string]string{}
 	for _, n := range notes {
+		if n.Baseline {
+			continue // Baseline's alone, as TestInspectPostgresBaselineNotes checks
+		}
 		if _, twice := got[n.Object]; twice {
 			t.Errorf("two notes on %s", n.Object)
 		}
@@ -548,5 +548,26 @@ func TestDriftPostgresLive(t *testing.T) {
 				t.Errorf("changes %q, warnings %v; want %q, %q", changes, r.Warnings, c.changes, c.warns)
 			}
 		})
+	}
+}
+
+// TestInspectPostgresBaselineNotes: a unique constraint read as its index,
+// and a serial's sequence that does not start at 1, are baseline notes.
+func TestInspectPostgresBaselineNotes(t *testing.T) {
+	db, _ := freshDB(t, velox.Postgres)
+	pgExec(t, db, `CREATE TABLE u (id serial PRIMARY KEY, k integer CONSTRAINT u_k_key UNIQUE)`)
+	pgExec(t, db, `ALTER SEQUENCE u_id_seq INCREMENT BY 2`)
+	_, notes, err := migrate.InspectNotes(context.Background(), db, velox.Postgres, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []migrate.Note{
+		{Table: migrate.TableRef{Name: "u"}, Object: "u.id", Baseline: true,
+			Message: "the sequence u_id_seq starts at 1 and increments by 2; 0001_baseline.sql creates it with the defaults"},
+		{Table: migrate.TableRef{Name: "u"}, Object: "u.u_k_key", Baseline: true,
+			Message: "the unique constraint u_k_key is read as its index; to drop it later, replace it with a unique index by hand first"},
+	}
+	if !reflect.DeepEqual(notes, want) {
+		t.Errorf("notes\n%+v\nwant\n%+v", notes, want)
 	}
 }

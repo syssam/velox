@@ -21,6 +21,7 @@ type pgTable struct {
 	schema string
 	t      Table
 	enums  map[string]string // an enum column's type, as a cast to it prints
+	exts   map[string]bool   // the extensions its columns' types come from
 }
 
 // pgEnum is an enum type a column uses.
@@ -185,25 +186,36 @@ func (r *pgReader) note(pt *pgTable, name, message string) {
 	r.notes = append(r.notes, note{table: pt.t.Ref(), object: pt.object(name), message: message})
 }
 
+// baselineNote is a note only Baseline reports.
+func (r *pgReader) baselineNote(pt *pgTable, name, message string) {
+	r.notes = append(r.notes, note{table: pt.t.Ref(), object: pt.object(name), message: message, baseline: true})
+}
+
 // The columns, with what makes a serial: the sequence the column owns,
-// by an auto (serial) or internal (identity) dependency, and its regclass
-// spelling, as a nextval default prints it; and the column's collation when
-// it is not its type's.
+// by an auto (serial) or internal (identity) dependency, its regclass
+// spelling, as a nextval default prints it, and its start and increment;
+// the column's collation when it is not its type's; and the extension its
+// type comes from.
 const pgColumnsQuery = `SELECT a.attnum, a.attname, format_type(a.atttypid, a.atttypmod), t.typtype::text, t.oid::bigint,
 	tn.nspname, t.typname, a.attnotnull, coalesce(pg_get_expr(d.adbin, d.adrelid), ''),
 	a.attidentity::text, a.attgenerated::text, coalesce(col_description(a.attrelid, a.attnum), ''),
 	coalesce(seq.nspname, ''), coalesce(seq.relname, ''), coalesce(seq.reg, ''),
+	coalesce(seq.seqstart, 1), coalesce(seq.seqincrement, 1),
 	coalesce((SELECT quote_ident(co.collname) FROM pg_collation co
-		WHERE co.oid = a.attcollation AND a.attcollation <> t.typcollation AND a.attcollation <> 0), '')
+		WHERE co.oid = a.attcollation AND a.attcollation <> t.typcollation AND a.attcollation <> 0), ''),
+	coalesce((SELECT e.extname FROM pg_depend de JOIN pg_extension e ON e.oid = de.refobjid
+		WHERE de.classid = 'pg_type'::regclass AND de.objid = t.oid
+			AND de.refclassid = 'pg_extension'::regclass AND de.deptype = 'e' LIMIT 1), '')
 FROM pg_attribute a
 JOIN pg_type t ON t.oid = a.atttypid
 JOIN pg_namespace tn ON tn.oid = t.typnamespace
 LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
 LEFT JOIN LATERAL (
-	SELECT sn.nspname, s.relname, s.oid::regclass::text AS reg
+	SELECT sn.nspname, s.relname, s.oid::regclass::text AS reg, ps.seqstart, ps.seqincrement
 	FROM pg_depend dep
 	JOIN pg_class s ON s.oid = dep.objid AND s.relkind = 'S'
 	JOIN pg_namespace sn ON sn.oid = s.relnamespace
+	LEFT JOIN pg_sequence ps ON ps.seqrelid = s.oid
 	WHERE dep.classid = 'pg_class'::regclass AND dep.refclassid = 'pg_class'::regclass
 		AND dep.refobjid = a.attrelid AND dep.refobjsubid = a.attnum AND dep.deptype IN ('a', 'i')
 	ORDER BY dep.deptype = 'i' DESC, s.relname LIMIT 1
@@ -212,7 +224,9 @@ WHERE a.attrelid = $1::bigint::oid AND a.attnum > 0 AND NOT a.attisdropped
 ORDER BY a.attnum`
 
 // columns reads pt's columns, and returns their names by number. A
-// collation other than the type's is a note.
+// collation other than the type's is a note. An owned sequence that does
+// not start and increment by 1, and an extension's type, once per
+// extension, are baseline notes.
 func (r *pgReader) columns(pt *pgTable) (map[int]string, error) {
 	names := map[int]string{}
 	err := r.each(pgColumnsQuery, []any{pt.oid}, func(rows *sql.Rows) error {
@@ -221,12 +235,12 @@ func (r *pgReader) columns(pt *pgTable) (map[int]string, error) {
 			c                                         Column
 			typ, typtype, tnsp, tname, def            string
 			identity, generated, seqNsp, seqName, reg string
-			collation                                 string
-			typOID                                    int64
+			collation, ext                            string
+			typOID, start, increment                  int64
 			notNull                                   bool
 		)
 		if err := rows.Scan(&num, &c.Name, &typ, &typtype, &typOID, &tnsp, &tname, &notNull, &def,
-			&identity, &generated, &c.Comment, &seqNsp, &seqName, &reg, &collation); err != nil {
+			&identity, &generated, &c.Comment, &seqNsp, &seqName, &reg, &start, &increment, &collation, &ext); err != nil {
 			return err
 		}
 		if collation != "" {
@@ -263,6 +277,18 @@ func (r *pgReader) columns(pt *pgTable) (map[int]string, error) {
 			if seqName != "" && c.Default == "nextval("+ddl.Literal(velox.Postgres, reg)+")" {
 				c.Sequence = seq
 			}
+		}
+		if c.Sequence != "" && (start != 1 || increment != 1) {
+			r.baselineNote(pt, c.Name, "the sequence "+c.Sequence+" starts at "+strconv.FormatInt(start, 10)+
+				" and increments by "+strconv.FormatInt(increment, 10)+"; 0001_baseline.sql creates it with the defaults")
+		}
+		if ext != "" && !pt.exts[ext] {
+			if pt.exts == nil {
+				pt.exts = map[string]bool{}
+			}
+			pt.exts[ext] = true
+			r.baselineNote(pt, "", "the type "+c.Type+" comes from the extension "+ext+"; add CREATE EXTENSION "+ext+
+				" to 0001_baseline.sql before the tables, then run migrate hash")
 		}
 		pt.t.Columns = append(pt.t.Columns, c)
 		return nil
@@ -376,8 +402,8 @@ ORDER BY k.conname`
 var pgOnDelete = map[string]string{"a": "", "r": "RESTRICT", "c": "CASCADE", "n": "SET NULL", "d": "SET DEFAULT"}
 
 // constraints reads pt's primary key, foreign keys and checks. A unique
-// constraint is left out: its index is read. An enum check is in the
-// model's form, any other check as PostgreSQL prints it. What a constraint
+// constraint is left out, its index read, and is a baseline note. An enum
+// check is in the model's form, any other check as PostgreSQL prints it. What a constraint
 // has that the model cannot hold is one note: NOT VALID, an exclusion
 // constraint, DEFERRABLE, and a foreign key's ON UPDATE or MATCH FULL.
 func (r *pgReader) constraints(pt *pgTable) error {
@@ -430,6 +456,8 @@ func (r *pgReader) constraints(pt *pgTable) error {
 			})
 		case "c":
 			pt.t.Checks = append(pt.t.Checks, Check{Name: name, Expr: pt.enumCheck(expr)})
+		case "u":
+			r.baselineNote(pt, name, "the unique constraint "+name+" is read as its index; to drop it later, replace it with a unique index by hand first")
 		}
 		return nil
 	})
