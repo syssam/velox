@@ -15,7 +15,7 @@ Usage:
         write the migration that brings the directory's schema.json to the
         schema package
   velox-gen migrate apply [-dir ./migrations] [-db dsn] [-to version] [-resume]
-        [-lock-wait 5m] [-dry-run]
+        [-lock-wait 5m] [-dry-run] [-baseline version]
         apply the pending migration files to the database (-db or $VELOX_DB)
   velox-gen migrate status [-dir ./migrations] [-db dsn] [-json]
         print the applied, pending, dirty and ahead versions

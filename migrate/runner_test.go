@@ -6,6 +6,7 @@ import (
 	"database/sql/driver"
 	"errors"
 	"math"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -759,6 +760,160 @@ func TestUpSavepoint(t *testing.T) {
 	mustUp(t, db, dirOf(t, velox.SQLite, files("0001_x.sql", "CREATE TABLE a (id integer);\nSAVEPOINT s;\nCREATE TABLE b (id integer);\nROLLBACK TO SAVEPOINT s;\nRELEASE s;\n")))
 	if !hasTable(t, db, "a") || hasTable(t, db, "b") {
 		t.Error("want a without b")
+	}
+	if rows := historyOf(t, db); len(rows) != 1 {
+		t.Errorf("history %+v", rows)
+	}
+}
+
+// baselineFiles is a directory of three files, the first two already run
+// on the database by hand.
+var baselineFiles = []string{
+	"0001_a.sql", "CREATE TABLE a (x integer);",
+	"0002_b.sql", "CREATE TABLE b (x integer);",
+	"0003_c.sql", "CREATE TABLE c (x integer);",
+}
+
+// baselineErr checks that err is an *Error of Code "baseline" with text.
+func baselineErr(t *testing.T, name string, err error, text string) {
+	t.Helper()
+	var e *migrate.Error
+	if !errors.As(err, &e) || e.Code != "baseline" || err.Error() != "migrate: "+text {
+		t.Errorf("%s: %v; want Code baseline, %q", name, err, text)
+	}
+}
+
+// TestUpBaseline: WithBaseline records the files up to its version, with
+// their sums and nothing run, then applies the files above it.
+func TestUpBaseline(t *testing.T) {
+	db := sqliteDB(t, "CREATE TABLE t (x integer)")
+	fsys := dirOf(t, velox.SQLite, files(baselineFiles...))
+	dir, err := migrate.ReadDir(fsys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := mustUp(t, db, fsys, migrate.WithBaseline(2))
+	if !slices.Equal(r.Baselined, []uint64{1, 2}) || !slices.Equal(versions(r.Applied), []uint64{3}) || r.Ahead {
+		t.Fatalf("report %+v", r)
+	}
+	rows := historyOf(t, db)
+	if len(rows) != 3 {
+		t.Fatalf("history %+v", rows)
+	}
+	for i, row := range rows[:2] {
+		f := dir.Files[i]
+		if row.Version != int64(f.Version) || row.Name != f.Name || row.Sum != f.Sum || row.Duration != 0 || row.Statements != 0 || row.Dirty || row.Error != "" {
+			t.Errorf("history row %+v; file %s", row, f.Path)
+		}
+	}
+	if hasTable(t, db, "a") || hasTable(t, db, "b") || !hasTable(t, db, "c") {
+		t.Errorf("a baselined file ran, or the pending one did not")
+	}
+	if s := mustStatus(t, db, fsys); len(s.Applied) != 3 || len(s.Pending) != 0 || s.Dirty != nil || len(s.Ahead) != 0 {
+		t.Errorf("state %+v", s)
+	}
+
+	db = sqliteDB(t, "CREATE TABLE t (x integer)")
+	fsys = dirOf(t, velox.SQLite, files("0000_x.sql", "CREATE TABLE x (x integer);", "0001_y.sql", "CREATE TABLE y (x integer);"))
+	if r := mustUp(t, db, fsys, migrate.WithBaseline(0)); !slices.Equal(r.Baselined, []uint64{0}) || !slices.Equal(versions(r.Applied), []uint64{1}) {
+		t.Errorf("WithBaseline(0): report %+v", r)
+	}
+}
+
+// TestUpBaselineRefusals: the misuses refused before the database is
+// touched.
+func TestUpBaselineRefusals(t *testing.T) {
+	fsys := dirOf(t, velox.SQLite, files(baselineFiles...))
+	for _, c := range []struct {
+		name string
+		opts []migrate.Option
+		text string
+	}{
+		{"resume", []migrate.Option{migrate.WithBaseline(1), migrate.WithResume()}, "WithBaseline cannot resume a dirty version"},
+		{"target", []migrate.Option{migrate.WithTarget(1), migrate.WithBaseline(2)}, "the target 1 is below the baseline 2"},
+		{"no file", []migrate.Option{migrate.WithBaseline(4)}, "the directory has no file of version 4"},
+	} {
+		db := sqliteDB(t, "CREATE TABLE t (x integer)")
+		_, err := migrate.Up(context.Background(), db, fsys, c.opts...)
+		baselineErr(t, c.name, err, c.text)
+		if hasTable(t, db, "velox_migrations") {
+			t.Errorf("%s: the history table was made", c.name)
+		}
+	}
+}
+
+// TestUpBaselineEmptyDatabase: a database with no table but the history
+// is refused, and the history stays empty.
+func TestUpBaselineEmptyDatabase(t *testing.T) {
+	db, _ := freshDB(t, velox.SQLite)
+	fsys := dirOf(t, velox.SQLite, files(baselineFiles...))
+	_, err := migrate.Up(context.Background(), db, fsys, migrate.WithBaseline(1))
+	baselineErr(t, "empty", err, "the database is empty; run Up without WithBaseline")
+	if !hasTable(t, db, "velox_migrations") || len(historyOf(t, db)) != 0 {
+		t.Errorf("history: %v, %+v", hasTable(t, db, "velox_migrations"), historyOf(t, db))
+	}
+}
+
+const baselinedText = "the history already has versions; WithBaseline adopts a database once, run Up without it"
+
+// TestUpBaselineTwice: a second baseline is refused, not a no-op, and
+// leaves the history as it was.
+func TestUpBaselineTwice(t *testing.T) {
+	db := sqliteDB(t, "CREATE TABLE t (x integer)")
+	fsys := dirOf(t, velox.SQLite, files(baselineFiles...))
+	mustUp(t, db, fsys, migrate.WithBaseline(1), migrate.WithTarget(1))
+	before := historyOf(t, db)
+	_, err := migrate.Up(context.Background(), db, fsys, migrate.WithBaseline(1))
+	baselineErr(t, "twice", err, baselinedText)
+	if after := historyOf(t, db); !reflect.DeepEqual(after, before) {
+		t.Errorf("history\n%+v\nwas\n%+v", after, before)
+	}
+}
+
+// TestUpBaselineMigrated: a database Up migrated is refused.
+func TestUpBaselineMigrated(t *testing.T) {
+	db, _ := freshDB(t, velox.SQLite)
+	fsys := dirOf(t, velox.SQLite, files(baselineFiles...))
+	mustUp(t, db, fsys, migrate.WithTarget(1))
+	before := historyOf(t, db)
+	_, err := migrate.Up(context.Background(), db, fsys, migrate.WithBaseline(1))
+	baselineErr(t, "migrated", err, baselinedText)
+	if after := historyOf(t, db); !reflect.DeepEqual(after, before) {
+		t.Errorf("history\n%+v\nwas\n%+v", after, before)
+	}
+}
+
+// TestUpBaselineConcurrent: of two baselines at once, one records and the
+// other is refused.
+func TestUpBaselineConcurrent(t *testing.T) {
+	db, dsn := freshDB(t, velox.SQLite)
+	pgExec(t, db, "CREATE TABLE t (x integer)")
+	fsys := dirOf(t, velox.SQLite, files(baselineFiles...))
+	var wg sync.WaitGroup
+	reports := make([]*migrate.Report, 2)
+	errs := make([]error, 2)
+	for i, db := range []*sql.DB{db, openDB(t, "sqlite", dsn)} {
+		wg.Go(func() {
+			reports[i], errs[i] = migrate.Up(context.Background(), db, fsys, migrate.WithBaseline(1), migrate.WithTarget(1))
+		})
+	}
+	wg.Wait()
+	won := 0
+	for i, err := range errs {
+		var e *migrate.Error
+		switch {
+		case err == nil:
+			if !slices.Equal(reports[i].Baselined, []uint64{1}) {
+				t.Errorf("run %d: report %+v", i, reports[i])
+			}
+			won++
+		case errors.As(err, &e) && e.Code == "baseline", errors.Is(err, migrate.ErrLockWait):
+		default:
+			t.Errorf("run %d: %v", i, err)
+		}
+	}
+	if won != 1 {
+		t.Errorf("%d runs baselined; errors %v", won, errs)
 	}
 	if rows := historyOf(t, db); len(rows) != 1 {
 		t.Errorf("history %+v", rows)

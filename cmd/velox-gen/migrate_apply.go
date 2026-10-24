@@ -135,19 +135,46 @@ func versions(rows []migrate.Applied) string {
 
 // runMigrateApply is velox-gen migrate apply: it applies the directory's
 // pending files with migrate.Up and prints each it applied; with -dry-run
-// it prints them instead.
+// it prints them instead. With -baseline it first records the files up to
+// that version, as migrate.WithBaseline does, and prints each.
 func runMigrateApply(args []string, dir string, env []string, stdout, stderr io.Writer) int {
 	c := newDBCmd("apply", stderr)
 	to := c.fs.Uint64("to", 0, "apply the files up to `version` and none above it (default: every file)")
 	resume := c.fs.Bool("resume", false, "continue the dirty version, from its first unit not done, before the pending files")
 	lockWait := c.fs.Duration("lock-wait", 5*time.Minute, "how long to wait for another runner's migration lock; 0 tries it once")
 	dryRun := c.fs.Bool("dry-run", false, "print the files to apply instead of applying them")
+	var baseline uint64
+	baselineSet := false
+	c.fs.Func("baseline", "record the files up to `version` as applied without running them, on a database made before the directory, then apply the rest", func(v string) error {
+		n, err := strconv.ParseUint(v, 10, 64)
+		if err != nil {
+			return errors.New("not a version")
+		}
+		baseline, baselineSet = n, true
+		return nil
+	})
 	rest, code, done := parseFlags(c.fs, args)
 	if done {
 		return code
 	}
 	if len(rest) > 0 {
 		return c.noArgs()
+	}
+	if baselineSet {
+		misuse := ""
+		switch {
+		case *resume:
+			misuse = "-baseline and -resume cannot be combined"
+		case *dryRun:
+			misuse = "-baseline and -dry-run cannot be combined"
+		case *to != 0 && *to < baseline:
+			misuse = fmt.Sprintf("-to %d is below -baseline %d", *to, baseline)
+		}
+		if misuse != "" {
+			_, _ = fmt.Fprintf(stderr, "velox-gen: migrate apply: %s\n", misuse)
+			c.fs.Usage()
+			return 2
+		}
 	}
 	fsys := os.DirFS(c.abs(dir))
 	show := func(files []migrate.File) int {
@@ -207,8 +234,14 @@ func runMigrateApply(args []string, dir string, env []string, stdout, stderr io.
 	if *resume {
 		opts = append(opts, migrate.WithResume())
 	}
+	if baselineSet {
+		opts = append(opts, migrate.WithBaseline(baseline))
+	}
 	r, err := migrate.Up(ctx, db, fsys, opts...)
 	if r != nil {
+		for _, v := range r.Baselined {
+			_, _ = fmt.Fprintf(stdout, "baselined %s\n", c.path(d.PathOf(v, "")))
+		}
 		for _, a := range r.Applied {
 			_, _ = fmt.Fprintf(stdout, "applied %s in %s\n", c.path(filePath(d, a)), a.Duration.Round(time.Microsecond))
 		}

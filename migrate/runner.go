@@ -24,6 +24,9 @@ type options struct {
 	logger   *slog.Logger  // nil: none
 	resume   bool
 
+	baseline    uint64
+	baselineSet bool // 0 is a version: 0000 is a valid file
+
 	// For the tests: skip the check of transaction files' BEGIN, COMMIT and
 	// ROLLBACK; and a hook called after each unit of a file run statement by
 	// statement, before its count is recorded.
@@ -59,6 +62,25 @@ func WithTarget(version uint64) Option {
 // server: check the failed statement before resuming or undoing.
 func WithResume() Option {
 	return Option{func(o *options) { o.resume = true }}
+}
+
+// WithBaseline makes Up record the files up to version as applied, without
+// running them, before it applies the files above it, up to WithTarget. It
+// adopts a database whose tables were made before the directory: run it
+// once on each existing environment. The rows are written in one
+// transaction under the migration lock, each with its file's current
+// checksum, so an edit to a baselined file is then a *ChecksumError, as for
+// any applied file. It refuses, with an *Error of Code "baseline", with
+// WithResume, a target below version, a version no file of the directory
+// has, a history that has a row, and a database with no table besides the
+// history: on PostgreSQL a table of any schema but pg_catalog's,
+// information_schema's and the temporary ones, not owned by an extension;
+// on MySQL one of the connection's database alone, so an application whose
+// tables all sit in other databases is refused. The first three are refused
+// before Up connects. Report.Baselined lists the versions recorded. Status
+// and Resolve ignore it.
+func WithBaseline(version uint64) Option {
+	return Option{func(o *options) { o.baseline, o.baselineSet = version, true }}
 }
 
 // WithLockWait bounds how long Up and Resolve wait for the migration lock,
@@ -150,6 +172,11 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 	if db == nil {
 		return nil, &Error{Code: "nil", Reason: "Up needs a database"}
 	}
+	if o.baselineSet {
+		if err := o.checkBaseline(d); err != nil {
+			return nil, err
+		}
+	}
 	s, err := open(ctx, db, d.Config, o.lockWait)
 	if err != nil {
 		return nil, err
@@ -164,6 +191,13 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 	if err != nil {
 		return nil, err
 	}
+	r := &Report{}
+	if o.baselineSet {
+		if rows, err = s.baselining(ctx, d, rows, o); err != nil {
+			return nil, err
+		}
+		r.Baselined = versionsOf(rows)
+	}
 	st, err := reading(d, rows)
 	var resumed *File
 	if de := (*DirtyError)(nil); errors.As(err, &de) && o.resume {
@@ -172,7 +206,6 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 	if err != nil {
 		return nil, err
 	}
-	r := &Report{}
 	if len(st.Ahead) > 0 {
 		r.Ahead = true
 		if o.logger != nil {
@@ -226,6 +259,90 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 		r.Applied = append(r.Applied, a)
 	}
 	return r, nil
+}
+
+// checkBaseline is WithBaseline's refusals that need no database.
+func (o options) checkBaseline(d *Dir) error {
+	refuse := func(format string, args ...any) error {
+		return &Error{Code: "baseline", Reason: fmt.Sprintf(format, args...)}
+	}
+	switch {
+	case o.resume:
+		return refuse("WithBaseline cannot resume a dirty version")
+	case o.target != 0 && o.target < o.baseline:
+		return refuse("the target %d is below the baseline %d", o.target, o.baseline)
+	case !slices.ContainsFunc(d.Files, func(f File) bool { return f.Version == o.baseline }):
+		return refuse("the directory has no file of version %d", o.baseline)
+	}
+	return nil
+}
+
+// errBaselined is WithBaseline's refusal of a history that has a row.
+var errBaselined = &Error{Code: "baseline", Reason: "the history already has versions; WithBaseline adopts a database once, run Up without it"}
+
+// baselining records dir's files up to o.baseline as applied, in one
+// transaction, on a database whose history, rows, is empty and which holds
+// another table. It returns the rows it recorded, and logs each.
+func (s *session) baselining(ctx context.Context, d *Dir, rows []Applied, o options) ([]Applied, error) {
+	if len(rows) > 0 {
+		return nil, errBaselined
+	}
+	ok, err := s.hasTables(ctx)
+	if err != nil {
+		return nil, wrap(ctx, "reading the database's tables", err)
+	}
+	if !ok {
+		return nil, &Error{Code: "baseline", Reason: "the database is empty; run Up without WithBaseline"}
+	}
+	if err := s.begin(ctx); err != nil {
+		return nil, wrap(ctx, "baselining: BEGIN", err)
+	}
+	done := false
+	defer func() {
+		if !done {
+			s.rollback(ctx)
+		}
+	}()
+	if s.d == velox.SQLite { // another runner may have recorded since prepare
+		rows, _, err := s.readHistory(ctx)
+		if err != nil {
+			return nil, wrap(ctx, "baselining", err)
+		}
+		if len(rows) > 0 {
+			return nil, errBaselined
+		}
+	}
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	var out []Applied
+	for _, f := range d.Files {
+		if f.Version > o.baseline {
+			break
+		}
+		a := Applied{Version: f.Version, Name: f.Name, Sum: f.Sum, AppliedAt: now}
+		if err := s.record(ctx, a); err != nil {
+			return nil, wrap(ctx, "baselining", err)
+		}
+		out = append(out, a)
+	}
+	if _, err := s.conn.ExecContext(ctx, "COMMIT"); err != nil {
+		return nil, wrap(ctx, "baselining: COMMIT", err)
+	}
+	done = true
+	if o.logger != nil {
+		for _, a := range out {
+			o.logger.InfoContext(ctx, "migrate: baselined", "version", a.Version, "path", d.PathOf(a.Version, a.Name))
+		}
+	}
+	return out, nil
+}
+
+// versionsOf is rows' versions, in order.
+func versionsOf(rows []Applied) []uint64 {
+	vs := make([]uint64, len(rows))
+	for i, r := range rows {
+		vs[i] = r.Version
+	}
+	return vs
 }
 
 // Status reads dir against db's history, as Up would, without the lock and

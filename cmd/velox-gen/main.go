@@ -20,6 +20,7 @@
 //	                       [-rename-table old=new]... [-rename-column table.old=new]...
 //	                       [-lock-timeout 5s] [-check] [-dry-run] [package]
 //	velox-gen migrate apply [-dir ./migrations] [-db dsn] [-to version] [-resume] [-lock-wait 5m] [-dry-run]
+//	                        [-baseline version]
 //	velox-gen migrate status [-dir ./migrations] [-db dsn] [-json]
 //	velox-gen migrate drift [-dir ./migrations] [-db dsn] [-json]
 //	velox-gen migrate lint [-dir ./migrations] [-since version]
@@ -161,7 +162,13 @@
 // and prints "applied <path> in <duration>" for each. -to stops at a
 // version, -resume continues a dirty version first, and -lock-wait bounds
 // the wait for another runner's lock (default 5m). -dry-run prints each
-// file it would apply after "== <path>" and applies nothing. A database
+// file it would apply after "== <path>" and applies nothing. -baseline
+// adopts a database made before the directory, as Up's WithBaseline does:
+// it records the files up to its version as applied without running them,
+// printing "baselined <path>" for each, then applies the rest; it is run
+// once on each existing database, and refuses a history that has a row or
+// a database with no table. -baseline with -resume or -dry-run, or with -to
+// below it, is a usage error. A database
 // with versions above the directory's last file is a newer directory's: apply
 // says so and applies nothing (exit 0). A dirty version, an applied file that
 // was edited or is gone, a stale velox.sum, a lock wait that ran out, or a
@@ -365,7 +372,7 @@ func printUsage(w io.Writer) {
         write the migration that brings the directory's schema.json to the
         schema package
   velox-gen migrate apply [-dir ./migrations] [-db dsn] [-to version] [-resume]
-        [-lock-wait 5m] [-dry-run]
+        [-lock-wait 5m] [-dry-run] [-baseline version]
         apply the pending migration files to the database (-db or $VELOX_DB)
   velox-gen migrate status [-dir ./migrations] [-db dsn] [-json]
         print the applied, pending, dirty and ahead versions

@@ -156,3 +156,29 @@ func (s *session) record(ctx context.Context, a Applied) error {
 	_, err := s.conn.ExecContext(ctx, q, int64(a.Version), a.Name, a.Sum, at, a.Duration.Milliseconds(), a.Dirty, a.Statements, a.Error)
 	return err
 }
+
+// hasTables reports whether the database holds a table besides the
+// history. PostgreSQL: an ordinary or partitioned table, not temporary, of
+// a schema not named pg_% (pg_catalog, pg_toast, pg_temp_N) nor
+// information_schema, that no extension owns (as PostGIS's
+// spatial_ref_sys); the history is matched by its schema, current_schema(),
+// and its name. MySQL: a base table of DATABASE() but the history. SQLite:
+// a table of main not named sqlite_% nor the history.
+func (s *session) hasTables(ctx context.Context) (bool, error) {
+	var q string
+	switch s.d {
+	case velox.Postgres:
+		q = `SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE c.relkind IN ('r', 'p') AND c.relpersistence <> 't'
+AND n.nspname NOT LIKE 'pg\_%' AND n.nspname <> 'information_schema'
+AND NOT (n.nspname = current_schema() AND c.relname = $1)
+AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_depend d WHERE d.classid = 'pg_catalog.pg_class'::regclass AND d.objid = c.oid AND d.deptype = 'e'))`
+	case velox.MySQL:
+		q = `SELECT count(*) > 0 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE' AND table_name <> ?`
+	default:
+		q = `SELECT count(*) > 0 FROM main.sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite\_%' ESCAPE '\' AND lower(name) <> lower(?)`
+	}
+	var ok bool
+	err := s.conn.QueryRowContext(ctx, q, s.cfg.Table).Scan(&ok)
+	return ok, err
+}

@@ -605,6 +605,49 @@ func TestMigrateApply(t *testing.T) {
 	}
 }
 
+// TestMigrateApplyBaseline: apply -baseline records the files up to its
+// version and applies the rest, once; its misuses are exit 2.
+func TestMigrateApplyBaseline(t *testing.T) {
+	dir := t.TempDir()
+	mig := filepath.Join(dir, "migrations")
+	writeMigrations(t, mig, velox2.SQLite, usersSchema, usersEmailSchema)
+	dsn := filepath.Join(dir, "app.db")
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("CREATE TABLE users (id integer PRIMARY KEY AUTOINCREMENT, name text NOT NULL)"); err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+	m := func(args ...string) (int, string, string) {
+		return velox(t, dir, append([]string{"migrate", "apply", "-db", dsn}, args...)...)
+	}
+	first, second := filepath.Join("migrations", "0001_create_users.sql"), filepath.Join("migrations", "0002_add_users_email.sql")
+
+	for _, c := range []struct {
+		args []string
+		text string
+	}{
+		{[]string{"-baseline", "1", "-resume"}, "-baseline and -resume cannot be combined"},
+		{[]string{"-baseline", "1", "-dry-run"}, "-baseline and -dry-run cannot be combined"},
+		{[]string{"-to", "1", "-baseline", "2"}, "-to 1 is below -baseline 2"},
+	} {
+		code, out, errs := m(c.args...)
+		if code != 2 || out != "" || !strings.HasPrefix(errs, "velox-gen: migrate apply: "+c.text+"\n") {
+			t.Errorf("%v: exit %d\nstdout:\n%s\nstderr:\n%s", c.args, code, out, errs)
+		}
+	}
+
+	code, out, errs := m("-baseline", "1")
+	matches(t, "apply -baseline 1", code, out, errs, 0, "baselined "+regexp.QuoteMeta(first)+"\n"+appliedLine(second), "")
+	code, out, errs = m("-baseline", "1")
+	want(t, "apply -baseline 1 again", code, out, errs, 1, "",
+		"velox-gen: migrate apply: the history already has versions; WithBaseline adopts a database once, run Up without it\n")
+	code, out, errs = velox(t, dir, "migrate", "status", "-db", dsn)
+	matches(t, "status", code, out, errs, 0, "applied 1 "+regexp.QuoteMeta(first)+" "+stamp+"\napplied 2 "+regexp.QuoteMeta(second)+" "+stamp+"\n", "")
+}
+
 func TestMigrateDrift(t *testing.T) {
 	dir := t.TempDir()
 	mig := filepath.Join(dir, "migrations")

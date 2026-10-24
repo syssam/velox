@@ -241,3 +241,81 @@ func TestUpPostgresHugeLockTimeout(t *testing.T) {
 	resum(t, fsys)
 	mustUp(t, db, fsys)
 }
+
+// TestUpBaselineEmptyDatabase on PostgreSQL and MySQL: a database with no
+// application table is refused; on PostgreSQL a temporary table and a
+// table an extension owns do not count, and a table in any other user
+// schema does, even one named as the history.
+func TestUpBaselineEmptyDatabasePostgres(t *testing.T) {
+	ctx := context.Background()
+	fsys := dirOf(t, velox.Postgres, files(baselineFiles...))
+	up := func(db *sql.DB) error {
+		_, err := migrate.Up(ctx, db, fsys, migrate.WithBaseline(1), migrate.WithTarget(1))
+		return err
+	}
+	t.Run("fresh", func(t *testing.T) {
+		db, _ := freshDB(t, velox.Postgres)
+		baselineErr(t, "fresh", up(db), "the database is empty; run Up without WithBaseline")
+		var n int
+		if err := db.QueryRow(`SELECT count(*) FROM velox_migrations`).Scan(&n); err != nil || n != 0 {
+			t.Errorf("history rows %d, %v", n, err)
+		}
+	})
+	t.Run("temporary", func(t *testing.T) {
+		db, _ := freshDB(t, velox.Postgres)
+		conn, err := db.Conn(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = conn.Close() }()
+		if _, err := conn.ExecContext(ctx, `CREATE TEMPORARY TABLE scratch (x integer)`); err != nil {
+			t.Fatal(err)
+		}
+		baselineErr(t, "temporary", up(db), "the database is empty; run Up without WithBaseline")
+	})
+	t.Run("extension", func(t *testing.T) {
+		db, _ := freshDB(t, velox.Postgres)
+		// A table an extension owns, as PostGIS owns spatial_ref_sys: one
+		// added to an extension is its member as one it made would be.
+		if _, err := db.Exec(`CREATE EXTENSION citext`); err != nil {
+			t.Skipf("CREATE EXTENSION citext: %v", err)
+		}
+		pgExec(t, db, `CREATE TABLE spatial_ref_sys (srid integer PRIMARY KEY)`)
+		pgExec(t, db, `ALTER EXTENSION citext ADD TABLE spatial_ref_sys`)
+		baselineErr(t, "extension", up(db), "the database is empty; run Up without WithBaseline")
+	})
+	t.Run("schema", func(t *testing.T) {
+		db, _ := freshDB(t, velox.Postgres)
+		pgExec(t, db, `CREATE SCHEMA billing`)
+		pgExec(t, db, `CREATE TABLE billing.invoices (id bigint PRIMARY KEY)`)
+		if err := up(db); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("history elsewhere", func(t *testing.T) {
+		db, _ := freshDB(t, velox.Postgres)
+		pgExec(t, db, `CREATE SCHEMA other`)
+		pgExec(t, db, `CREATE TABLE other.velox_migrations (version bigint PRIMARY KEY)`)
+		if err := up(db); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+func TestUpBaselineEmptyDatabaseMySQL(t *testing.T) {
+	fsys := dirOf(t, velox.MySQL, files(baselineFiles...))
+	up := func(db *sql.DB) error {
+		_, err := migrate.Up(context.Background(), db, fsys, migrate.WithBaseline(1), migrate.WithTarget(1))
+		return err
+	}
+	db, _ := freshDB(t, velox.MySQL)
+	baselineErr(t, "fresh", up(db), "the database is empty; run Up without WithBaseline")
+	var n int
+	if err := db.QueryRow("SELECT count(*) FROM velox_migrations").Scan(&n); err != nil || n != 0 {
+		t.Errorf("history rows %d, %v", n, err)
+	}
+	pgExec(t, db, "CREATE TABLE t (x integer)")
+	if err := up(db); err != nil {
+		t.Fatal(err)
+	}
+}
