@@ -278,14 +278,15 @@ func (tbTypes) Fields() []schema.Field {
 	}
 }
 
-// tbTypesWide holds the widest varchar, which fills a MySQL row alone.
+// tbTypesWide holds the widest varchar, which fills a MySQL row with a
+// tinyint ID (65534 + 1 bytes).
 type tbTypesWide struct{ schema.Schema }
 
 func (tbTypesWide) Annotations() []schema.Annotation {
 	return []schema.Annotation{schema.Table("tb_types_wide")}
 }
 func (tbTypesWide) Fields() []schema.Field {
-	return []schema.Field{field.String("s16383").MaxLen(16383)}
+	return []schema.Field{field.Int8("id"), field.String("s16383").MaxLen(16383)}
 }
 
 func TestTablesTypes(t *testing.T) {
@@ -1202,16 +1203,30 @@ func TestTablesRefusalsOrder(t *testing.T) {
 	}
 }
 
+// The ID (8), n (4) and the NULL bitmap (1), a (8165*4+2), b (8164*4+2) and
+// c (201+1) are 65535 bytes.
 type tbRfRow struct{ schema.Schema }
 
 func (tbRfRow) Fields() []schema.Field {
-	a, la := field.String("body").MaxLen(10000), here()
-	b, lb := field.String("summary").MaxLen(10000), here()
-	refusalLines["row body"], refusalLines["row summary"] = la, lb
-	return []schema.Field{a, b, field.Text("free")}
+	a, la := field.String("a").MaxLen(8165), here()
+	b, lb := field.String("b").MaxLen(8164), here()
+	c, lc := field.Bytes("c").MaxLen(201), here()
+	refusalLines["row a"], refusalLines["row b"], refusalLines["row c"] = la, lb, lc
+	return []schema.Field{field.Int32("n").Optional().Nillable(), a, b, c}
 }
 
-// 16320*4+2 + 63*4+1 is 65535 bytes.
+// tbRfRow with c one byte longer: 65536 bytes.
+type tbRfRowOne struct{ schema.Schema }
+
+func (tbRfRowOne) Fields() []schema.Field {
+	a, la := field.String("a").MaxLen(8165), here()
+	b, lb := field.String("b").MaxLen(8164), here()
+	c, lc := field.Bytes("c").MaxLen(202), here()
+	refusalLines["row1 a"], refusalLines["row1 b"], refusalLines["row1 c"] = la, lb, lc
+	return []schema.Field{field.Int32("n").Optional().Nillable(), a, b, c}
+}
+
+// 16320*4+2 + 63*4+1 is 65535 bytes of varchar, and the ID is 8 more.
 type tbRfRowFull struct{ schema.Schema }
 
 func (tbRfRowFull) Fields() []schema.Field {
@@ -1220,14 +1235,21 @@ func (tbRfRowFull) Fields() []schema.Field {
 
 func TestTablesRowLimit(t *testing.T) {
 	g := mustBuild(t, tbRfRow{})
+	if _, err := Tables(g, velox.MySQL); err != nil {
+		t.Errorf("a row of 65535 bytes: %v", err)
+	}
+	g = mustBuild(t, tbRfRowOne{})
 	e := refusal(t, func() error { _, err := Tables(g, velox.MySQL); return err }())
 	file := e.Pos
-	if !strings.HasSuffix(file, "tables_test.go") || e.Schema != "tbRfRow" || e.Where != "" {
+	if !strings.HasSuffix(file, "tables_test.go") || e.Schema != "tbRfRowOne" || e.Where != "" {
 		t.Errorf("error %+v, want the schema's file as its Pos", e)
 	}
-	want := "MySQL rows hold at most 65535 bytes in varchar and varbinary columns; these need 80004:\n" +
-		"  " + file + ":" + strconv.Itoa(refusalLines["row body"]) + `: field "body": varchar(10000), 40002 bytes` + "\n" +
-		"  " + file + ":" + strconv.Itoa(refusalLines["row summary"]) + `: field "summary": varchar(10000), 40002 bytes` + "\n" +
+	at := func(k string) string { return "  " + file + ":" + strconv.Itoa(refusalLines[k]) }
+	want := "MySQL rows hold at most 65535 bytes; these need 65536:\n" +
+		at("row1 a") + `: field "a": varchar(8165), 32662 bytes` + "\n" +
+		at("row1 b") + `: field "b": varchar(8164), 32658 bytes` + "\n" +
+		at("row1 c") + `: field "c": varbinary(202), 203 bytes` + "\n" +
+		"  the other columns and the NULL bitmap: 13 bytes\n" +
 		"  use Text() or a smaller MaxLen"
 	if e.Reason != want {
 		t.Errorf("reason\n%s\nwant\n%s", e.Reason, want)
@@ -1237,8 +1259,102 @@ func TestTablesRowLimit(t *testing.T) {
 			t.Errorf("%v: %v", d, err)
 		}
 	}
-	if _, err := Tables(mustBuild(t, tbRfRowFull{}), velox.MySQL); err != nil {
+	e = refusal(t, func() error { _, err := Tables(mustBuild(t, tbRfRowFull{}), velox.MySQL); return err }())
+	if !strings.Contains(e.Reason, "these need 65543:") || !strings.Contains(e.Reason, "the other columns and the NULL bitmap: 8 bytes") {
+		t.Errorf("65535 bytes of varchar and an ID: %s", e.Reason)
+	}
+}
+
+// Text and JSON count their in-row pointers, 12 bytes each: the ID (8), k
+// (1), t, j and a (16375*4+2) are 65535 bytes.
+type tbRfRowPtr struct{ schema.Schema }
+
+func (tbRfRowPtr) Fields() []schema.Field {
+	return []schema.Field{field.Int8("k"), field.Text("t"), field.JSON("j", jsonShape{}), field.String("a").MaxLen(16375)}
+}
+
+type tbRfRowPtrOver struct{ schema.Schema }
+
+func (tbRfRowPtrOver) Fields() []schema.Field {
+	return []schema.Field{field.Int8("k"), field.Text("t"), field.JSON("j", jsonShape{}), field.String("a").MaxLen(16376)}
+}
+
+// A join table counts every column: a varchar(16350) ID (65402) and a
+// char(36) one (144).
+type tbRfRowJoinUser struct{ schema.Schema }
+
+func (tbRfRowJoinUser) Fields() []schema.Field {
+	return []schema.Field{field.String("id").MaxLen(16350)}
+}
+func (tbRfRowJoinUser) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("groups", tbRfRowJoinGroup.Type)}
+}
+
+type tbRfRowJoinGroup struct{ schema.Schema }
+
+func (tbRfRowJoinGroup) Fields() []schema.Field {
+	return []schema.Field{field.UUID("id", uuidValue{})}
+}
+func (tbRfRowJoinGroup) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("users", tbRfRowJoinUser.Type).Ref("groups")}
+}
+
+func TestTablesRowSize(t *testing.T) {
+	if _, err := Tables(mustBuild(t, tbRfRowPtr{}), velox.MySQL); err != nil {
 		t.Errorf("a row of 65535 bytes: %v", err)
+	}
+	e := refusal(t, func() error { _, err := Tables(mustBuild(t, tbRfRowPtrOver{}), velox.MySQL); return err }())
+	if !strings.Contains(e.Reason, "these need 65539:") || !strings.Contains(e.Reason, "the other columns and the NULL bitmap: 33 bytes") {
+		t.Errorf("text and json: %s", e.Reason)
+	}
+	_, err := Tables(mustBuild(t, tbRfRowJoinUser{}, tbRfRowJoinGroup{}), velox.MySQL)
+	var row *Error
+	for _, e := range refusals(t, err) {
+		if strings.HasPrefix(e.Reason, "MySQL rows hold") {
+			row = e
+		}
+	}
+	if row == nil || row.Where != `edge "groups"` || !strings.Contains(row.Reason, "these need 65546:") ||
+		!strings.Contains(row.Reason, `: column "tb_rf_row_join_user_id": varchar(16350), 65402 bytes`) ||
+		!strings.Contains(row.Reason, "the other columns and the NULL bitmap: 144 bytes") {
+		t.Errorf("join row: %v", err)
+	}
+}
+
+func TestMySQLRowBytes(t *testing.T) {
+	enum := func(n int) string {
+		vs := make([]string, n)
+		for i := range vs {
+			vs[i] = "'v" + strconv.Itoa(i) + "'"
+		}
+		return "enum(" + strings.Join(vs, ",") + ")"
+	}
+	for _, c := range []struct {
+		typ string
+		n   int
+	}{
+		{"tinyint", 1}, {"tinyint unsigned", 1}, {"tinyint(1)", 1}, {"smallint", 2}, {"smallint unsigned", 2},
+		{"mediumint", 3}, {"mediumint unsigned", 3}, {"int", 4}, {"int unsigned", 4}, {"bigint", 8}, {"bigint unsigned", 8},
+		{"float", 4}, {"double", 8},
+		{"decimal(20,0)", 9}, {"decimal(10,2)", 5}, {"decimal(9,0)", 4}, {"decimal(18,9)", 8}, {"decimal(65,30)", 30}, {"decimal(1,1)", 1},
+		{"decimal", 5}, {"decimal(12)", 6}, {"char", 4}, {"binary", 1}, {"bit", 1},
+		{"date", 3}, {"datetime", 5}, {"datetime(1)", 6}, {"datetime(3)", 7}, {"datetime(6)", 8},
+		{"timestamp", 4}, {"timestamp(6)", 7}, {"time", 3}, {"time(2)", 4}, {"time(6)", 6}, {"year", 1},
+		{"char(36)", 144}, {"char(1)", 4}, {"binary(16)", 16},
+		{"varchar(63)", 253}, {"varchar(64)", 258}, {"varbinary(255)", 256}, {"varbinary(256)", 258},
+		{"enum('a','b')", 1}, {enum(255), 1}, {enum(256), 2},
+		{"bit(1)", 1}, {"bit(9)", 2}, {"bit(64)", 8},
+		{"tinytext", 9}, {"tinyblob", 9}, {"text", 10}, {"blob", 10}, {"mediumtext", 11}, {"mediumblob", 11},
+		{"longtext", 12}, {"longblob", 12}, {"json", 12},
+	} {
+		if n, ok := mysqlRowBytes(c.typ); n != c.n || !ok {
+			t.Errorf("%.40s: %d, %v, want %d", c.typ, n, ok, c.n)
+		}
+	}
+	for _, typ := range []string{"geometry", "point", "varchar", "decimal(x,1)", "decimal(2,3)", "decimal(66,0)", "bit(65)", "datetime(7)", "enum(", ""} {
+		if n, ok := mysqlRowBytes(typ); n != 0 || ok {
+			t.Errorf("%s: %d, %v, want 0, false", typ, n, ok)
+		}
 	}
 }
 
@@ -1471,7 +1587,7 @@ func (tbRfRowBounds) Fields() []schema.Field {
 	return []schema.Field{field.String("a").MaxLen(16320), field.String("b").MaxLen(63), field.String("c").MaxLen(64)}
 }
 
-// 16320*4+2 + 253+1 is 65536 bytes.
+// 16320*4+2 + 253+1 and the ID's 8 are 65544 bytes.
 type tbRfRowOver struct{ schema.Schema }
 
 func (tbRfRowOver) Fields() []schema.Field {
@@ -1480,13 +1596,13 @@ func (tbRfRowOver) Fields() []schema.Field {
 
 func TestTablesRowLimitBounds(t *testing.T) {
 	e := refusal(t, func() error { _, err := Tables(mustBuild(t, tbRfRowBounds{}), velox.MySQL); return err }())
-	for _, s := range []string{"these need 65793:", `field "b": varchar(63), 253 bytes`, `field "c": varchar(64), 258 bytes`} {
+	for _, s := range []string{"these need 65801:", `field "b": varchar(63), 253 bytes`, `field "c": varchar(64), 258 bytes`} {
 		if !strings.Contains(e.Reason, s) {
 			t.Errorf("reason lacks %q:\n%s", s, e.Reason)
 		}
 	}
 	e = refusal(t, func() error { _, err := Tables(mustBuild(t, tbRfRowOver{}), velox.MySQL); return err }())
-	if !strings.Contains(e.Reason, "these need 65536:") || !strings.Contains(e.Reason, `field "b": varbinary(253), 254 bytes`) {
+	if !strings.Contains(e.Reason, "these need 65544:") || !strings.Contains(e.Reason, `field "b": varbinary(253), 254 bytes`) {
 		t.Errorf("reason %s", e.Reason)
 	}
 }

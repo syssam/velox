@@ -18,7 +18,7 @@ import (
 // MySQL's limits, and PostgreSQL's.
 const (
 	mysqlKeyBytes      = 3072
-	mysqlRowBytes      = 65535
+	mysqlRowLimit      = 65535
 	mysqlEnumChars     = 255
 	mysqlColumnComment = 1024
 	mysqlTableComment  = 2048
@@ -191,33 +191,111 @@ func enumValueName(v loadjson.Enum) string {
 	return strconv.Quote(v.Value)
 }
 
-// checkRow records a MySQL row of tb whose varchar and varbinary columns need
-// more than MySQL's 65535 bytes, counting 4 bytes per varchar character and
-// each column's 1 or 2 length bytes. name names the i-th column's element.
+// checkRow records a MySQL row of tb that needs more than MySQL's 65535
+// bytes: every column as mysqlRowBytes counts it, and the NULL bitmap. The
+// error lists the varchar and varbinary columns, which Text() or a smaller
+// MaxLen shrinks. name names the i-th column's element.
 func (t *tabler) checkRow(tb *migrate.Table, at place, name func(i int) string) {
-	total := 0
+	total, other, nulls := 0, 0, 0
 	var lines []string
 	for i, c := range tb.Columns {
-		n, ok := sizeOf(c.Type, "varbinary")
-		if chars, isVarchar := sizeOf(c.Type, "varchar"); isVarchar {
-			n, ok = 4*chars, true
-		}
-		if !ok {
-			continue
-		}
-		if n <= 255 {
-			n++
-		} else {
-			n += 2
-		}
+		n, _ := mysqlRowBytes(c.Type)
 		total += n
-		lines = append(lines, fmt.Sprintf("  %s: %s: %s, %d bytes", c.Pos, name(i), c.Type, n))
+		if c.Nullable {
+			nulls++
+		}
+		_, varchar := sizeOf(c.Type, "varchar")
+		_, varbinary := sizeOf(c.Type, "varbinary")
+		if varchar || varbinary {
+			lines = append(lines, fmt.Sprintf("  %s: %s: %s, %d bytes", c.Pos, name(i), c.Type, n))
+		} else {
+			other += n
+		}
 	}
-	if total > mysqlRowBytes {
-		t.fail(at, "MySQL rows hold at most %d bytes in varchar and varbinary columns; these need %d:\n%s\n  use Text() or a smaller MaxLen",
-			mysqlRowBytes, total, strings.Join(lines, "\n"))
+	bitmap := (nulls + 7) / 8
+	total += bitmap
+	if total > mysqlRowLimit {
+		t.fail(at, "MySQL rows hold at most %d bytes; these need %d:\n%s\n  the other columns and the NULL bitmap: %d bytes\n  use Text() or a smaller MaxLen",
+			mysqlRowLimit, total, strings.Join(lines, "\n"), other+bitmap)
 	}
 }
+
+// mysqlRowBytes is what a column of MySQL type t (normalised) counts toward
+// the 65535-byte row limit, as MySQL 8.4 counts it with utf8mb4; ok is false
+// for a type it does not know, which counts 0.
+func mysqlRowBytes(t string) (n int, ok bool) {
+	if n, ok := mysqlRowFixed[strings.TrimSuffix(t, " unsigned")]; ok {
+		return n, true
+	}
+	if n, ok := sizeOf(t, "varchar"); ok {
+		return lengthBytes(4 * n), true
+	}
+	if n, ok := sizeOf(t, "varbinary"); ok {
+		return lengthBytes(n), true
+	}
+	if n, ok := sizeOf(t, "char"); ok {
+		return 4 * n, true
+	}
+	if n, ok := sizeOf(t, "binary"); ok {
+		return n, true
+	}
+	if n, ok := sizeOf(t, "bit"); ok && n >= 1 && n <= 64 {
+		return (n + 7) / 8, true
+	}
+	for base, size := range mysqlRowTimes {
+		if p, ok := sizeOf(t, base); ok && p <= 6 {
+			return size + (p+1)/2, true
+		}
+	}
+	if vs, ok := ddl.ParseMySQLEnum(t); ok {
+		if len(vs) > 255 {
+			return 2, true
+		}
+		return 1, true
+	}
+	if m, ok := sizeOf(t, "decimal"); ok && m <= 65 {
+		return decimalBytes(m), true
+	}
+	if s, ok := strings.CutPrefix(t, "decimal("); ok && strings.HasSuffix(s, ")") {
+		m, d, _ := strings.Cut(strings.TrimSuffix(s, ")"), ",")
+		mi, err1 := strconv.Atoi(m)
+		di, err2 := strconv.Atoi(d)
+		if err1 == nil && err2 == nil && di >= 0 && di <= mi && mi <= 65 {
+			return decimalBytes(mi-di) + decimalBytes(di), true
+		}
+	}
+	return 0, false
+}
+
+// lengthBytes is n bytes of a varchar or varbinary and its 1 or 2 length
+// bytes.
+func lengthBytes(n int) int {
+	if n <= 255 {
+		return n + 1
+	}
+	return n + 2
+}
+
+// decimalBytes is what n digits of a decimal take: 4 bytes per 9, and the
+// rest by mysqlDigits.
+func decimalBytes(n int) int { return n/9*4 + mysqlDigits[n%9] }
+
+// mysqlDigits are the bytes of 0 to 8 leftover decimal digits.
+var mysqlDigits = [9]int{0, 1, 1, 2, 2, 3, 3, 4, 4}
+
+// mysqlRowFixed are the row bytes of MySQL's types of a fixed size, unsigned
+// or not, and of the text, blob and json types' in-row pointers.
+var mysqlRowFixed = map[string]int{
+	"tinyint": 1, "tinyint(1)": 1, "smallint": 2, "mediumint": 3, "int": 4, "integer": 4, "bigint": 8,
+	"float": 4, "double": 8, "date": 3, "datetime": 5, "timestamp": 4, "time": 3, "year": 1,
+	"tinytext": 9, "tinyblob": 9, "text": 10, "blob": 10, "mediumtext": 11, "mediumblob": 11,
+	"longtext": 12, "longblob": 12, "json": 12,
+	"char": 4, "binary": 1, "bit": 1, "decimal": 5, // char(1), binary(1), bit(1), decimal(10,0)
+}
+
+// mysqlRowTimes are the row bytes of datetime(p), timestamp(p) and time(p)
+// for p 0; a precision p adds (p+1)/2 bytes.
+var mysqlRowTimes = map[string]int{"datetime": 5, "timestamp": 4, "time": 3}
 
 // columnType is the type of tb's column name.
 func columnType(tb *migrate.Table, name string) string {
