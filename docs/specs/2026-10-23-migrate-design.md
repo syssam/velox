@@ -1200,6 +1200,38 @@ env "velox" {
 
   with `atlas migrate diff --env velox` and `atlas migrate apply --env velox -u <url>`, and say that velox's own `migrate` and Atlas are alternatives for one directory: a directory is managed by one of them.
 
+
+**Rulings on plan 3's builder check (2026-10-24, binding where they differ from §12 and §18 above).**
+1. The subcommand is `velox-gen migrate sql -dialect d [package]` (a top-level `schema` word would shadow `generate`'s hint). A missing `-dialect` is exit 2. It prints each MainScript statement's SQL followed by `;\n`, and fails if Render returns anything but one MainScript with no directives. The output includes `CREATE SCHEMA` and `COMMENT ON` where Render emits them. Tables' refusals are §3's.
+2. Its test is a CLI unit test: the output equals the statements of `migrate diff -dry-run`'s first file on a new directory. `TestMigrateCases` already proves that Render from empty applies with Drift empty, so there is no new per-dialect itest.
+3. `atlas.hcl` uses the tool directive: `program = ["go", "tool", "velox-gen", "migrate", "sql", "-dialect", "postgres", "./schema"]`, run from the module root after `go get -tool github.com/syssam/velox2/cmd/velox-gen`. Dev URLs: `docker://postgres/16/dev?search_path=public` (single schema), `docker://mysql/8.4/dev`, `sqlite://dev?mode=memory`. The file lives in the documents only. The documents are migrate/doc.go and example/README.md, whose "migrations later" line is replaced.
+4. `migrate.Baseline(ctx, db *sql.DB, want *Schema) (*Schema, []Warning, error)` is the public entry. It inspects the tables `want` names and returns the snapshot. Wherever drift() finds an object equal, the snapshot takes the schema's form (index Where, defaults, checks); otherwise it takes the inspected form. Indexes match by name, else by columns, unique and normalised Where. Inspect's notes become warnings. The CLI does NewDir, NewPlan(empty, snapshot), Add("baseline"), prints the warnings and exits 0.
+5. Render's PostgreSQL CreateTable of a column with an owned `Sequence` emits `CREATE SEQUENCE s AS <type>` before the table and `ALTER SEQUENCE s OWNED BY t.c` after it.
+6. Baseline refuses, naming the object:
+   - a foreign key to a table outside the snapshot;
+   - a `nextval` default whose sequence the column does not own ("run ALTER SEQUENCE s OWNED BY t.c, then baseline again");
+   - no schema table found in the database;
+   - an existing migration directory (exit 1).
+   It warns about:
+   - a schema table missing from the database;
+   - a PostgreSQL UNIQUE constraint read as an index;
+   - identity START/INCREMENT that is not the default;
+   - extensions.
+7. `apply -baseline N`:
+   - N must be a file's version, and 0 is valid, so WithBaseline carries a set flag. It refuses unless the history table has no rows (created first) and the database has at least one table besides it.
+   - It records one row per file ≤ N, with the file's current checksum, duration 0 and statements 0, in one transaction under the lock (SQLite: BEGIN IMMEDIATE, then re-read the history). Report.Baselined lists them.
+   - It then applies the files above N up to `-to`.
+   - `-to` below N, or `-baseline` with `-resume`, is exit 2.
+   - Running it again is refused, not a no-op.
+   - `0001_baseline.sql` may be edited (then `hash`) only before the first `apply -baseline`; after that, an edit is a ChecksumError as for any file.
+8. The ent fixture's assertions:
+   - goldens of baseline's output per dialect;
+   - Verify on the produced directory;
+   - `apply -baseline 1` then a clean Status;
+   - a golden of the next `diff`: renames only, the varchar→enum change (needs `-allow`), serial→identity.
+   The documents say: run `migrate drift` on each environment after `apply -baseline`.
+9. TestMigrateUsage and usage.golden change from "baseline not built" to the real command. `0001_baseline.sql`'s header names `migrate baseline`.
+
 ## What is left to the builder
 
 - The JSON field names of `schema.json` and `velox.json`, within §2 and §9.
