@@ -315,7 +315,7 @@ func (s *session) lock(ctx context.Context, wait time.Duration) (unlock func(), 
 		if wait == 0 {
 			err = s.conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock($1)`, key).Scan(&ok)
 		} else {
-			if _, err = s.conn.ExecContext(ctx, fmt.Sprintf("SET lock_timeout = '%dms'", waitMillis(wait))); err != nil {
+			if _, err = s.conn.ExecContext(ctx, "SET lock_timeout = "+pgLockTimeout(wait)); err != nil {
 				return nil, wrap(ctx, what, err)
 			}
 			_, err = s.conn.ExecContext(ctx, `SELECT pg_advisory_lock($1)`, key)
@@ -378,6 +378,10 @@ func (s *session) busyWait(ctx context.Context, wait time.Duration) error {
 func waitMillis(d time.Duration) int64 {
 	return min(ceilDiv(max(d, 0), time.Millisecond), math.MaxInt32)
 }
+
+// pgLockTimeout is d as a value of PostgreSQL's lock_timeout: '<n>ms', in
+// waitMillis's range.
+func pgLockTimeout(d time.Duration) string { return fmt.Sprintf("'%dms'", waitMillis(d)) }
 
 // waitSeconds is a lock wait in whole seconds, rounded up, and at most
 // 2147483647, for MySQL's GET_LOCK.

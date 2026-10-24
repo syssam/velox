@@ -445,7 +445,7 @@ func (s *session) applyTx(ctx context.Context, f File, o options) (Applied, erro
 		if f.Directives.LockTimeoutSet {
 			timeout = f.Directives.LockTimeout
 		}
-		if _, err := s.conn.ExecContext(ctx, fmt.Sprintf("SET LOCAL lock_timeout = '%dms'", ceilDiv(timeout, time.Millisecond))); err != nil {
+		if _, err := s.conn.ExecContext(ctx, "SET LOCAL lock_timeout = "+pgLockTimeout(timeout)); err != nil {
 			return Applied{}, rolledBack("setting the lock timeout: %w", err)
 		}
 	}

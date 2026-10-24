@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/syssam/velox2"
@@ -225,4 +226,18 @@ func TestUpPostgresTransactionControl(t *testing.T) {
 	if err := db.QueryRow(`SELECT count(*) FROM velox_migrations`).Scan(&n); err != nil || n != 0 {
 		t.Errorf("history rows %d, %v", n, err)
 	}
+}
+
+// TestUpPostgresHugeLockTimeout: a Config lock timeout past what
+// lock_timeout takes is cut to it, as a file's directive is.
+func TestUpPostgresHugeLockTimeout(t *testing.T) {
+	db, _ := freshDB(t, velox.Postgres)
+	fsys := dirOf(t, velox.Postgres, files("0001_x.sql", lockTimeoutIs("2147483647ms")))
+	dir, err := migrate.NewDir(migrate.Config{Dialect: velox.Postgres, LockTimeout: 720 * time.Hour})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fsys["velox.json"] = &fstest.MapFile{Data: migrate.ConfigJSON(dir.Config)}
+	resum(t, fsys)
+	mustUp(t, db, fsys)
 }

@@ -232,7 +232,7 @@ func (s *session) stepTimeout(ctx context.Context, f File) (restore func(), err 
 	case velox.Postgres:
 		q := "SET lock_timeout = 0"
 		if f.Directives.LockTimeoutSet {
-			q = fmt.Sprintf("SET lock_timeout = '%dms'", waitMillis(f.Directives.LockTimeout))
+			q = "SET lock_timeout = " + pgLockTimeout(f.Directives.LockTimeout)
 		}
 		if _, err := s.conn.ExecContext(ctx, q); err != nil {
 			return nil, err
