@@ -163,7 +163,7 @@ func runMigrateApply(args []string, dir string, env []string, stdout, stderr io.
 	if len(rest) > 0 {
 		return c.noArgs()
 	}
-	d, db, code, ok := c.connect(dir, env, 1, false)
+	d, db, code, ok := c.connect(dir, env, 1, *dryRun) // a dry run makes no database
 	if !ok {
 		return code
 	}
@@ -177,7 +177,7 @@ func runMigrateApply(args []string, dir string, env []string, stdout, stderr io.
 	}
 
 	if *dryRun {
-		st, err := migrate.Status(ctx, db, fsys)
+		st, err := migrate.Status(ctx, db, fsys, migrate.WithLockWait(*lockWait))
 		if err != nil {
 			return c.fail(1, err)
 		}

@@ -977,8 +977,9 @@ func TestMigrateSQLiteMissing(t *testing.T) {
 	dir := t.TempDir()
 	writeMigrations(t, filepath.Join(dir, "migrations"), velox2.SQLite, usersSchema)
 	for _, dsn := range []string{filepath.Join(dir, "app.db"), "file:" + filepath.Join(dir, "app.db") + "?_pragma=foreign_keys(1)"} {
-		for _, sub := range []string{"status", "drift"} {
-			code, out, errs := velox(t, dir, "migrate", sub, "-db", dsn)
+		for _, args := range [][]string{{"status"}, {"drift"}, {"apply", "-dry-run"}} {
+			sub := args[0]
+			code, out, errs := velox(t, dir, append(append([]string{"migrate"}, args...), "-db", dsn)...)
 			want(t, sub, code, out, errs, 1, "", "velox-gen: migrate "+sub+": "+filepath.Join(dir, "app.db")+": no such database\n")
 			if exists(filepath.Join(dir, "app.db")) {
 				t.Fatalf("%s %s made the database", sub, dsn)
@@ -991,6 +992,51 @@ func TestMigrateSQLiteMissing(t *testing.T) {
 	}
 	code, out, errs := velox(t, dir, "migrate", "status", "-db", dsn)
 	matches(t, "status", code, out, errs, 0, "applied 1 "+regexp.QuoteMeta(filepath.Join("migrations", "0001_create_users.sql"))+" "+stamp+"\n", "")
+}
+
+// TestMigrateSQLiteMemory: a SQLite database in memory, which ends with its
+// connection, is refused by every subcommand that opens one.
+func TestMigrateSQLiteMemory(t *testing.T) {
+	dir := t.TempDir()
+	writeMigrations(t, filepath.Join(dir, "migrations"), velox2.SQLite, usersSchema)
+	for _, dsn := range []string{":memory:", "file::memory:?cache=shared", "file:app.db?mode=memory"} {
+		for _, args := range [][]string{{"status"}, {"apply"}, {"apply", "-dry-run"}, {"drift"}, {"resolve", "-version", "1", "-undone"}} {
+			code, out, errs := velox(t, dir, append(append([]string{"migrate"}, args...), "-db", dsn)...)
+			want(t, dsn+" "+strings.Join(args, " "), code, out, errs, 2, "", "velox-gen: migrate "+args[0]+": -db is a SQLite database in memory, which ends with its connection; name a file\n")
+		}
+	}
+}
+
+// TestMigrateDryRunLockWait: apply -dry-run waits for a writer as long as
+// -lock-wait says.
+func TestMigrateDryRunLockWait(t *testing.T) {
+	dir := t.TempDir()
+	writeMigrations(t, filepath.Join(dir, "migrations"), velox2.SQLite, usersSchema)
+	path := filepath.Join(dir, "app.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	ctx := context.Background()
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close() }()
+	if _, err := conn.ExecContext(ctx, "CREATE TABLE x (id integer)"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := conn.ExecContext(ctx, "BEGIN EXCLUSIVE"); err != nil {
+		t.Fatal(err)
+	}
+	release := time.AfterFunc(2*time.Second, func() { _, _ = conn.ExecContext(ctx, "ROLLBACK") })
+	defer release.Stop()
+	start := time.Now()
+	code, _, errs := velox(t, dir, "migrate", "apply", "-dry-run", "-lock-wait", "100ms", "-db", path)
+	if code != 1 || time.Since(start) > 1500*time.Millisecond {
+		t.Errorf("exit %d after %s: %s; want 1 within the wait", code, time.Since(start), errs)
+	}
 }
 
 // TestMigrateDriftWarning: a difference drift only warns about is printed

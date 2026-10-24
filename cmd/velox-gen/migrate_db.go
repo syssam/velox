@@ -168,8 +168,9 @@ func (s secret) redact(text string) string {
 	return text
 }
 
-// dsnForm refuses a dsn that is not of d's driver's form, before it is used:
-// message names src (-db or $VELOX_DB), never the DSN or the parser's text.
+// dsnForm refuses a dsn that is not of d's driver's form, or is a SQLite
+// database in memory, before it is used: the message names src (-db or
+// $VELOX_DB), never the DSN or the parser's text.
 func dsnForm(d velox2.Dialect, dsn, src string) error {
 	var name string
 	ok := true
@@ -195,6 +196,9 @@ func dsnForm(d velox2.Dialect, dsn, src string) error {
 			ok = ok && err == nil
 		}
 		ok = ok && dsn != ""
+		if ok && sqlitePath(dsn) == "" {
+			return fmt.Errorf("%s is a SQLite database in memory, which ends with its connection; name a file", src)
+		}
 	}
 	if !ok {
 		return fmt.Errorf("%s is not %s (velox.json's dialect is %s)", src, name, d)
