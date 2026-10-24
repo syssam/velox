@@ -1,6 +1,7 @@
 package migrate
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -45,11 +46,16 @@ func (s *splitter) run() error {
 	src := s.src
 	line := 1
 	start, end, startLine := -1, -1, 0 // the statement's first token, the end of its last, and its line
-	flush := func() {
+	flush := func() error {
 		if start >= 0 {
-			s.out = append(s.out, piece{SQL: src[start:end], Line: startLine})
+			sql := src[start:end]
+			if s.body(sql) {
+				return fileErr(startLine, "triggers and procedures are not supported in migration files")
+			}
+			s.out = append(s.out, piece{SQL: sql, Line: startLine})
 		}
 		start, end = -1, -1
+		return nil
 	}
 	for i := 0; i < len(src); {
 		c := src[i]
@@ -62,7 +68,9 @@ func (s *splitter) run() error {
 			i++
 			continue
 		case c == ';':
-			flush()
+			if err := flush(); err != nil {
+				return err
+			}
 			i++
 			continue
 		case s.lineComment(i):
@@ -102,8 +110,55 @@ func (s *splitter) run() error {
 		line += strings.Count(src[i:j], "\n")
 		i, end = j, j
 	}
-	flush()
-	return nil
+	return flush()
+}
+
+// body reports whether a statement of SQLite or MySQL starts a trigger, a
+// MySQL routine or event, or a BEGIN … END block: their bodies hold ";",
+// which the split cannot read as the database does, so they are refused
+// rather than run in pieces. BEGIN alone, or with TRANSACTION or WORK (and
+// SQLite's DEFERRED, IMMEDIATE or EXCLUSIVE), starts a transaction.
+// PostgreSQL's bodies are dollar-quoted and split whole.
+func (s *splitter) body(sql string) bool {
+	if s.d == velox.Postgres {
+		return false
+	}
+	ws := words(s.d, sql)
+	at := func(i int) string {
+		if i < len(ws) {
+			return ws[i]
+		}
+		return ""
+	}
+	switch at(0) {
+	case "BEGIN":
+		i := 1
+		if s.d == velox.SQLite && (at(1) == "DEFERRED" || at(1) == "IMMEDIATE" || at(1) == "EXCLUSIVE") {
+			i = 2
+		}
+		if at(i) == "TRANSACTION" || at(i) == "WORK" {
+			i++
+		}
+		return i < len(ws)
+	case "CREATE":
+		i := 1
+		if s.d == velox.MySQL && at(1) == "DEFINER" {
+			// DEFINER = user, a name, @ and a host or CURRENT_USER[()]: the
+			// object's keyword is the first of these after it.
+			for i = 2; i < len(ws) && !slices.Contains([]string{"TRIGGER", "PROCEDURE", "FUNCTION", "EVENT", "VIEW", "SQL"}, ws[i]); i++ {
+			}
+		}
+		if s.d == velox.SQLite && (at(i) == "TEMP" || at(i) == "TEMPORARY") {
+			i++
+		}
+		switch at(i) {
+		case "TRIGGER":
+			return true
+		case "PROCEDURE", "FUNCTION", "EVENT":
+			return s.d == velox.MySQL
+		}
+	}
+	return false
 }
 
 // fileErr is the splitter's refusal at line.

@@ -75,7 +75,7 @@ var (
 
 // SessionClose opens a SQLite session on db and closes it.
 func SessionClose(ctx context.Context, db *sql.DB) error {
-	s, err := open(ctx, db, Config{Dialect: velox.SQLite, Table: defaultTable})
+	s, err := open(ctx, db, Config{Dialect: velox.SQLite, Table: defaultTable}, 0)
 	if err != nil {
 		return err
 	}

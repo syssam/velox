@@ -54,7 +54,7 @@ func Resolve(ctx context.Context, db *sql.DB, dir fs.FS, version uint64, r Resol
 			return err
 		}
 	}
-	s, err := open(ctx, db, cfg)
+	s, err := open(ctx, db, cfg, o.lockWait)
 	if err != nil {
 		return err
 	}

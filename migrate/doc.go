@@ -36,9 +36,10 @@
 //   - "json": UnmarshalJSON was given malformed JSON.
 //   - "version": UnmarshalJSON was given another version of the snapshot.
 //   - "file": ParseFile was given a migration file it cannot read: a bad
-//     name, an unterminated quote, comment or dollar quote, or a directive
+//     name, an unterminated quote, comment or dollar quote, a directive
 //     that is unknown, malformed, repeated, misplaced or refused on its
-//     dialect; or LintFile found a statement that cannot run in the file's
+//     dialect, or on SQLite or MySQL a trigger, a MySQL routine or event, or
+//     a BEGIN … END block; or LintFile found a statement that cannot run in the file's
 //     transaction.
 //   - "config": velox.json, or the Config NewDir was given, is missing or
 //     invalid: another version, an unknown dialect or key, a key given twice

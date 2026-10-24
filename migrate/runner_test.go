@@ -383,6 +383,45 @@ func TestUpSQLiteConcurrent(t *testing.T) {
 	}
 }
 
+// A run waits on SQLite from its first statement: a writer committing as the
+// run opens its session must not make the session's first query busy.
+func TestUpSQLiteWaitsFromFirstStatement(t *testing.T) {
+	_, dsn := freshDB(t, velox.SQLite)
+	fsys := dirOf(t, velox.SQLite, files(concurrentFiles...))
+	ctx := context.Background()
+	for _, run := range []struct {
+		name string
+		do   func(*sql.DB) error
+	}{
+		{"Up", func(db *sql.DB) error {
+			_, err := migrate.Up(ctx, db, fsys, migrate.WithLockWait(5*time.Second))
+			return err
+		}},
+		{"Status", func(db *sql.DB) error {
+			_, err := migrate.Status(ctx, db, fsys, migrate.WithLockWait(5*time.Second))
+			return err
+		}},
+	} {
+		// An exclusive lock keeps every reader out, as a commit in rollback
+		// journal mode does, until it is released.
+		holder, err := openDB(t, "sqlite", dsn).Conn(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := holder.ExecContext(ctx, "BEGIN EXCLUSIVE"); err != nil {
+			t.Fatal(err)
+		}
+		release := time.AfterFunc(300*time.Millisecond, func() { _, _ = holder.ExecContext(ctx, "COMMIT") })
+		err = run.do(openDB(t, "sqlite", dsn))
+		release.Stop()
+		_, _ = holder.ExecContext(ctx, "ROLLBACK")
+		_ = holder.Close()
+		if err != nil {
+			t.Errorf("%s: %v", run.name, err)
+		}
+	}
+}
+
 // holdSQLite is a connection to dsn's database holding BEGIN IMMEDIATE,
 // rolled back when t ends.
 func holdSQLite(t *testing.T, dsn string) *sql.Conn {

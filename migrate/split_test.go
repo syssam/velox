@@ -80,6 +80,23 @@ var splitCases = []struct {
 	{d: velox.SQLite, src: `SELECT 'a\'; SELECT 2`, want: []migrate.Piece{stmt(`SELECT 'a\'`, 1), stmt("SELECT 2", 1)}},
 	{d: velox.MySQL, src: "SELECT /* /* */ 1; SELECT 2", want: []migrate.Piece{stmt("SELECT /* /* */ 1", 1), stmt("SELECT 2", 1)}},
 	{d: velox.Postgres, src: "SELECT 'a\nb\nc';\n\nSELECT 2;", want: []migrate.Piece{stmt("SELECT 'a\nb\nc'", 1), stmt("SELECT 2", 5)}},
+	// Triggers and procedures, whose bodies hold ";", are refused at their statement.
+	{d: velox.SQLite, src: "SELECT 1;\nCREATE TRIGGER t AFTER INSERT ON a BEGIN UPDATE a SET x = 1; END;", err: "triggers and procedures are not supported in migration files", line: 2},
+	{d: velox.SQLite, src: "create temp trigger t after insert on a begin select 1; end;", err: "triggers and procedures are not supported in migration files", line: 1},
+	{d: velox.SQLite, src: "CREATE TEMPORARY TRIGGER IF NOT EXISTS t AFTER INSERT ON a BEGIN SELECT 1; END;", err: "triggers and procedures are not supported in migration files", line: 1},
+	{d: velox.MySQL, src: "CREATE TRIGGER t BEFORE INSERT ON a FOR EACH ROW SET NEW.x = 1;", err: "triggers and procedures are not supported in migration files", line: 1},
+	{d: velox.MySQL, src: "\nCREATE PROCEDURE p() BEGIN SELECT 1; END;", err: "triggers and procedures are not supported in migration files", line: 2},
+	{d: velox.MySQL, src: "CREATE FUNCTION f() RETURNS int RETURN 1;", err: "triggers and procedures are not supported in migration files", line: 1},
+	{d: velox.MySQL, src: "CREATE EVENT e ON SCHEDULE EVERY 1 DAY DO DELETE FROM a;", err: "triggers and procedures are not supported in migration files", line: 1},
+	{d: velox.MySQL, src: "CREATE DEFINER = `u`@`%` TRIGGER t BEFORE INSERT ON a FOR EACH ROW SET NEW.x = 1;", err: "triggers and procedures are not supported in migration files", line: 1},
+	{d: velox.MySQL, src: "BEGIN SELECT 1; END;", err: "triggers and procedures are not supported in migration files", line: 1},
+	{d: velox.SQLite, src: "SELECT 1; BEGIN SELECT 1; END;", err: "triggers and procedures are not supported in migration files", line: 1},
+	{d: velox.SQLite, src: "BEGIN; BEGIN TRANSACTION; begin work; BEGIN IMMEDIATE; BEGIN EXCLUSIVE TRANSACTION",
+		want: []migrate.Piece{stmt("BEGIN", 1), stmt("BEGIN TRANSACTION", 1), stmt("begin work", 1), stmt("BEGIN IMMEDIATE", 1), stmt("BEGIN EXCLUSIVE TRANSACTION", 1)}},
+	{d: velox.MySQL, src: "BEGIN; BEGIN WORK; SELECT 'CREATE TRIGGER'; CREATE TABLE `trigger` (id int)",
+		want: []migrate.Piece{stmt("BEGIN", 1), stmt("BEGIN WORK", 1), stmt("SELECT 'CREATE TRIGGER'", 1), stmt("CREATE TABLE `trigger` (id int)", 1)}},
+	{d: velox.Postgres, src: "CREATE FUNCTION f() RETURNS trigger AS $$ BEGIN RETURN NEW; END $$ LANGUAGE plpgsql; CREATE TRIGGER t BEFORE INSERT ON a FOR EACH ROW EXECUTE FUNCTION f()",
+		want: []migrate.Piece{stmt("CREATE FUNCTION f() RETURNS trigger AS $$ BEGIN RETURN NEW; END $$ LANGUAGE plpgsql", 1), stmt("CREATE TRIGGER t BEFORE INSERT ON a FOR EACH ROW EXECUTE FUNCTION f()", 1)}},
 }
 
 func TestSplit(t *testing.T) {

@@ -28,7 +28,8 @@ type session struct {
 	db       string        // MySQL: DATABASE()
 	sqlMode  string        // MySQL: @@SESSION.sql_mode
 	lockWait int64         // MySQL: @@SESSION.lock_wait_timeout when the run began
-	wait     time.Duration // SQLite: how long BEGIN IMMEDIATE waits
+	wait     time.Duration // SQLite: how long BEGIN IMMEDIATE waits, and busy_timeout
+	busyWas  int64         // SQLite: the connection's busy_timeout before open set it
 }
 
 // wrap is err, from what the runner was doing, as "migrate: <what>: <err>".
@@ -72,14 +73,22 @@ func dialectName(d velox.Dialect) string {
 
 // open takes one connection and checks it: it answers as cfg.Dialect, at its
 // minimum version, and on PostgreSQL with standard_conforming_strings on.
-// It then puts the session in UTC.
+// It then puts the session in UTC. On SQLite it first sets busy_timeout to
+// wait, before any statement that reads the database: a writer committing
+// keeps every reader out, the check's query too.
 // Its refusals are *Error with Code "session".
-func open(ctx context.Context, db *sql.DB, cfg Config) (*session, error) {
+func open(ctx context.Context, db *sql.DB, cfg Config, wait time.Duration) (*session, error) {
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		return nil, wrap(ctx, "taking a connection", err)
 	}
 	s := &session{conn: conn, pool: db, d: cfg.Dialect, cfg: cfg}
+	if s.d == velox.SQLite {
+		if err := s.busyWait(ctx, wait); err != nil {
+			s.close()
+			return nil, wrap(ctx, "setting busy_timeout", err)
+		}
+	}
 	if err := s.check(ctx); err != nil {
 		s.close()
 		return nil, err
@@ -328,17 +337,30 @@ func (s *session) lock(ctx context.Context, wait time.Duration) (unlock func(), 
 		}
 		return func() { s.undo(ctx, `SELECT RELEASE_LOCK(?)`, name) }, nil
 	case velox.SQLite:
-		var was int64
-		if err := s.conn.QueryRowContext(ctx, `PRAGMA busy_timeout`).Scan(&was); err != nil {
-			return nil, wrap(ctx, what, err)
+		if wait != s.wait {
+			if _, err := s.conn.ExecContext(ctx, fmt.Sprintf("PRAGMA busy_timeout = %d", waitMillis(wait))); err != nil {
+				return nil, wrap(ctx, what, err)
+			}
+			s.wait = wait
 		}
-		if _, err := s.conn.ExecContext(ctx, fmt.Sprintf("PRAGMA busy_timeout = %d", waitMillis(wait))); err != nil {
-			return nil, wrap(ctx, what, err)
-		}
-		s.wait = wait
-		return func() { s.undo(ctx, fmt.Sprintf("PRAGMA busy_timeout = %d", was)) }, nil
+		return func() { s.undo(ctx, fmt.Sprintf("PRAGMA busy_timeout = %d", s.busyWas)) }, nil
 	}
 	return nil, refuseSession("no dialect %s", s.d)
+}
+
+// busyWait notes the connection's busy_timeout and sets it to wait: SQLite
+// then waits that long for a writer, from the session's first query on.
+// Neither statement reads the database, so neither is busy.
+func (s *session) busyWait(ctx context.Context, wait time.Duration) error {
+	wait = max(wait, 0)
+	if err := s.conn.QueryRowContext(ctx, `PRAGMA busy_timeout`).Scan(&s.busyWas); err != nil {
+		return err
+	}
+	if _, err := s.conn.ExecContext(ctx, fmt.Sprintf("PRAGMA busy_timeout = %d", waitMillis(wait))); err != nil {
+		return err
+	}
+	s.wait = wait
+	return nil
 }
 
 // waitMillis is a lock wait in milliseconds, rounded up, and at most

@@ -58,7 +58,7 @@ var verifyTablesQuery = map[velox.Dialect]string{
 // verifyEmpty refuses db unless its default schema holds no table but the
 // history table, and that no row.
 func verifyEmpty(ctx context.Context, db *sql.DB, cfg Config) error {
-	s, err := open(ctx, db, cfg)
+	s, err := open(ctx, db, cfg, defaultLockWait) // as Up waits after
 	if err != nil {
 		return err
 	}

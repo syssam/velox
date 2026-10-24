@@ -129,7 +129,7 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 	if err != nil {
 		return nil, err
 	}
-	s, err := open(ctx, db, d.Config)
+	s, err := open(ctx, db, d.Config, o.lockWait)
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +208,7 @@ func Status(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*State,
 	if err != nil {
 		return nil, err
 	}
-	s, err := open(ctx, db, d.Config)
+	s, err := open(ctx, db, d.Config, o.lockWait)
 	if err != nil {
 		return nil, err
 	}
