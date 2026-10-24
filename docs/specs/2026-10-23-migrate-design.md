@@ -1179,11 +1179,13 @@ Atlas supports ORMs through providers: a program that prints the ORM's schema as
 velox-gen schema sql -dialect postgres|mysql|sqlite [package]
 ```
 
+**(changed: see the rulings on plan 3's builder check)** The subcommand is `velox-gen migrate sql -dialect postgres|mysql|sqlite [package]`.
+
 - It prints, on stdout, the `CREATE` DDL of the whole schema of `package` (default `./schema`, as `generate` loads it): `Render` of `Diff` from an empty schema to `internal/gen.Tables`. These are the same statements `migrate diff` writes as the first file of a new directory, so there is one renderer and Atlas sees what velox's own planner would build.
   - Enum types (PostgreSQL), tables, owned sequences, indexes, foreign keys and checks, in the planner's order; every statement ends with `;` and a newline. No `-- velox:` directives, no `-- review:` comments, no transaction statements: plain DDL for Atlas's parser.
   - The output is deterministic: the same schema gives the same bytes.
   - The refusals of `Tables` (§5) fail it with their file:line, exit 1; a bad flag is exit 2.
-- An itest applies the output to a fresh database of each dialect, and `Drift` against `Tables` is then empty, so the provider's DDL is exactly the schema.
+- An itest applies the output to a fresh database of each dialect, and `Drift` against `Tables` is then empty, so the provider's DDL is exactly the schema. **(changed: see the rulings on plan 3's builder check)** A CLI unit test compares the output with `migrate diff -dry-run`'s first file, and there is no new itest.
 - The documents give an `atlas.hcl`:
 
 ```hcl
@@ -1199,6 +1201,8 @@ env "velox" {
 ```
 
   with `atlas migrate diff --env velox` and `atlas migrate apply --env velox -u <url>`, and say that velox's own `migrate` and Atlas are alternatives for one directory: a directory is managed by one of them.
+
+**(changed: see the rulings on plan 3's builder check)** The `program` is `["go", "tool", "velox-gen", "migrate", "sql", "-dialect", "postgres", "./schema"]`, and the dev URLs are the rulings'.
 
 
 **Rulings on plan 3's builder check (2026-10-24, binding where they differ from §12 and §18 above).**
@@ -1256,7 +1260,7 @@ env "velox" {
    - The CLI's `diff`, `apply`, `status`, `drift`, `lint`, `hash` and `resolve`.
    - The real-database itests for every change kind, with the three invariants, the targeted itests, the binding round-trips and the runner tests, in CI.
 3. **Atlas provider and adoption (lean, §18).**
-   - `velox-gen schema sql`: the schema's DDL on stdout, for Atlas's `external_schema` (§18).
+   - `velox-gen migrate sql`: the schema's DDL on stdout, for Atlas's `external_schema` (§18).
    - `baseline` and `apply -baseline`, with owned sequences and the adoption of schema predicates. An ent-shaped fixture covers PostgreSQL varchar enums, MySQL native enums, `serial` keys, and ent's index and foreign-key names.
    - The documents: `migrate`'s package doc, the README's migrations section with both paths (velox's own `migrate`, and Atlas), the example's `atlas.hcl`.
    - **(changed 2026-10-24, the user's ruling: migrations are not the focus, ORM and GraphQL are. The property test, `internal/testmodel` and the examples on the planner, `diff -check` in CI, drift through a scratch database and an Atlas cross-check move to the followups.)**

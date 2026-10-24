@@ -23,10 +23,9 @@ import (
 // the database holds that want does not name is never read. An enum type
 // want names that the database has is in the snapshot with the database's
 // values, even when no table found uses it, so the next diff does not
-// create it again. The warnings
-// are what Drift reports, and what a build from the snapshot loses: a
-// PostgreSQL sequence's start and increment, a type from an extension, a
-// unique constraint read as its index.
+// create it again. The warnings are what Drift reports, and what a build
+// from the snapshot loses: a PostgreSQL sequence's start and increment, a
+// type from an extension, a unique constraint read as its index.
 //
 // Baseline refuses, with Code "baseline", a database that holds none of
 // want's tables, a foreign key to a table outside the snapshot, and on

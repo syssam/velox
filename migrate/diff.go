@@ -16,8 +16,8 @@ import (
 // An index, foreign key, check or enum type matches by name, else by its
 // definition, which makes it a rename: so a table rename carries the names
 // derived from the table's. An unnamed index, key or check, as SQLite keeps
-// some, matches one unnamed one by its definition, never by its name. A column whose type is a renamed enum type is not
-// altered.
+// some, matches one unnamed one by its definition, never by its name. A
+// column whose type is a renamed enum type is not altered.
 //
 // The order is: drop the foreign keys, checks and indexes that must go first;
 // rename tables, sequences, columns, indexes, constraints and enum types;

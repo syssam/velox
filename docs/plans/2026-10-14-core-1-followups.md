@@ -360,7 +360,7 @@ From migrate plan 1 (2026-10-23): the model, `Tables`, `Diff`, `Lint`, `Render` 
 ## Left by migrate plan 2
 
 From migrate plan 2 (2026-10-24): the directory, the runner, `Inspect` and `Drift` on three dialects, the CLI's `diff`, `apply`, `status`, `drift`, `lint`, `hash` and `resolve`, and the itests. Plan 3 owns:
-- [x] Resolved in migrate plan 3, Tasks 2–4 (`migrate.Baseline`, `WithBaseline` and `Report.Baselined`, `velox-gen migrate baseline` and `apply -baseline`, with the ent fixture). Baseline: `velox-gen migrate baseline`, `apply -baseline` and `WithBaseline`. `Report.Baselined` is declared and stays empty until then.
+- [x] Resolved in migrate plan 3, Tasks 2–4 (`migrate.Baseline`, `WithBaseline` and `Report.Baselined`, `velox-gen migrate baseline` and `apply -baseline`, with the ent fixture). Baseline: `velox-gen migrate baseline`, `apply -baseline` and `WithBaseline`.
 - Moved to "Left by migrate plan 3" by the user's ruling of 2026-10-24. The property test (the spec's Plans, item 3).
 - Moved to "Left by migrate plan 3". The examples and `internal/testmodel` on the planner: their tables are still hand-written DDL.
 - Moved to "Left by migrate plan 3". `migrate diff -check` in CI, for the examples' directories.
