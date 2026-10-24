@@ -149,3 +149,9 @@ func ParseCreateTable(sql string) (autoincrement bool, checks []Check, foreignKe
 
 // Words is words.
 var Words = words
+
+// WithoutTxControlCheck makes Up skip its refusal, before the run, of a
+// transaction file's BEGIN, COMMIT or ROLLBACK.
+func WithoutTxControlCheck() Option {
+	return Option{func(o *options) { o.noTxCheck = true }}
+}

@@ -47,8 +47,9 @@
 //     name, an unterminated quote, comment or dollar quote, a directive
 //     that is unknown, malformed, repeated, misplaced or refused on its
 //     dialect, or on SQLite or MySQL a trigger, a MySQL routine or event, or
-//     a BEGIN … END block; or LintFile found a statement that cannot run in the file's
-//     transaction.
+//     a BEGIN … END block; or LintFile found a statement that cannot run in
+//     the file's transaction, or Up, before its run, one that begins or
+//     ends a transaction in a file run in one.
 //   - "config": velox.json, or the Config NewDir was given, is missing or
 //     invalid: another version, an unknown dialect or key, a key given twice
 //     or null, a table that is not an identifier of at most 63 bytes, a lock

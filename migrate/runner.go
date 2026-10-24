@@ -22,6 +22,8 @@ type options struct {
 	lockWait time.Duration // default 5m
 	logger   *slog.Logger  // nil: none
 	resume   bool
+
+	noTxCheck bool // the tests: skip the check of transaction files' BEGIN, COMMIT and ROLLBACK
 }
 
 // defaultLockWait is how long Up waits for the migration lock by default.
@@ -109,7 +111,10 @@ var errAppliedMeanwhile = errors.New("migrate: applied by another runner")
 // directory's: Up applies nothing and sets Report.Ahead. On MySQL, a session
 // whose sql_mode holds NO_BACKSLASH_ESCAPES or ANSI_QUOTES is refused,
 // before any file runs, when a file to apply holds a literal the mode would
-// read otherwise.
+// read otherwise. A file run in a transaction with a statement led by
+// BEGIN, START, COMMIT, ROLLBACK or END (or ABORT, on PostgreSQL) is
+// refused too, as LintFile refuses it: an *Error of Code "file" at the
+// statement's line.
 //
 // A file runs in a transaction with its history row on PostgreSQL and
 // SQLite; one that fails is rolled back, and Up stops with an error naming
@@ -174,6 +179,14 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 	}
 	if err := s.checkModes(todo); err != nil {
 		return nil, err
+	}
+	for _, f := range todo {
+		if o.noTxCheck || s.stepwise(f) {
+			continue
+		}
+		if err := checkTxControl(s.d, f); err != nil {
+			return nil, err
+		}
 	}
 	for _, f := range todo {
 		var a Applied
@@ -434,6 +447,9 @@ func (s *session) applyTx(ctx context.Context, f File, o options) (Applied, erro
 			return Applied{}, rolledBack("statement %d of %d: %w", i+1, len(f.Statements), err)
 		}
 	}
+	if !s.ownsTx(ctx) {
+		return Applied{}, fmt.Errorf("migrate: %s: the file ended the runner's transaction, so what it ran is committed in part; version %d is not recorded", f.Path, f.Version)
+	}
 	if fkOff {
 		if err := s.foreignKeyCheck(ctx); err != nil {
 			return Applied{}, rolledBack("%w", err)
@@ -477,4 +493,31 @@ func (s *session) foreignKeyCheck(ctx context.Context) error {
 		return fmt.Errorf("PRAGMA foreign_key_check: %w", err)
 	}
 	return fmt.Errorf("PRAGMA foreign_key_check reports row %d of %s, whose foreign key %d names no row of %s", rowid.Int64, table, fk, parent)
+}
+
+// ownsTx reports whether the transaction applyTx began is open still, after
+// the file's statements: a file that ended it ran its later statements on
+// their own. On PostgreSQL a savepoint outside a transaction block is
+// 25P01; on SQLite a BEGIN outside a transaction succeeds, and is rolled
+// back. A session that cannot say is taken as owning it, and the history
+// write that follows fails on its own.
+func (s *session) ownsTx(ctx context.Context) bool {
+	c, cancel := cleanup(ctx)
+	defer cancel()
+	switch s.d {
+	case velox.Postgres:
+		_, err := s.conn.ExecContext(c, "SAVEPOINT velox_migrate_check")
+		if code, _ := velox.DriverCode(err); code == "25P01" {
+			return false
+		}
+		if err == nil {
+			s.undo(ctx, "RELEASE SAVEPOINT velox_migrate_check")
+		}
+	case velox.SQLite:
+		if _, err := s.conn.ExecContext(c, "BEGIN"); err == nil {
+			s.rollback(ctx)
+			return false
+		}
+	}
+	return true
 }

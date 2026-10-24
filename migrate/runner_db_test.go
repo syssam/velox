@@ -195,3 +195,34 @@ func TestMySQLLock(t *testing.T) {
 	}
 	mustUp(t, db, dirOf(t, velox.MySQL, files("0001_a.sql", "CREATE TABLE a (x int);")))
 }
+
+// TestUpPostgresTransactionControl: a transaction file's COMMIT or ROLLBACK
+// is refused before any file runs; one the check cannot see is reported
+// after the file, and its version is not recorded.
+func TestUpPostgresTransactionControl(t *testing.T) {
+	for _, lead := range []string{"COMMIT", "ROLLBACK", "ABORT"} {
+		db, _ := freshDB(t, velox.Postgres)
+		fsys := dirOf(t, velox.Postgres, files(
+			"0001_ok.sql", "CREATE TABLE ok (id integer);",
+			"0002_x.sql", "CREATE TABLE a (id integer);\n"+lead+";\nCREATE TABLE b (id integer);\n"))
+		_, err := migrate.Up(context.Background(), db, fsys)
+		if e := asError(t, err, "file"); e.Pos != "0002_x.sql:2" {
+			t.Errorf("%s: %v", lead, err)
+		}
+		var n int
+		if err := db.QueryRow(`SELECT count(*) FROM pg_tables WHERE tablename IN ('ok', 'a', 'b')`).Scan(&n); err != nil || n != 0 {
+			t.Errorf("%s: %d tables, %v", lead, n, err)
+		}
+	}
+
+	db, _ := freshDB(t, velox.Postgres)
+	fsys := dirOf(t, velox.Postgres, files("0001_x.sql", "CREATE TABLE a (id integer);\nCOMMIT;\nCREATE TABLE b (id integer);\n"))
+	_, err := migrate.Up(context.Background(), db, fsys, migrate.WithoutTxControlCheck())
+	if err == nil || !strings.Contains(err.Error(), "0001_x.sql: the file ended the runner's transaction") {
+		t.Fatalf("%v", err)
+	}
+	var n int
+	if err := db.QueryRow(`SELECT count(*) FROM velox_migrations`).Scan(&n); err != nil || n != 0 {
+		t.Errorf("history rows %d, %v", n, err)
+	}
+}

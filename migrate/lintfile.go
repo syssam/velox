@@ -46,8 +46,8 @@ func LintFile(d velox.Dialect, f File) ([]Finding, error) {
 			errs = append(errs, &Error{Code: "file", Pos: pos, Reason: fmt.Sprintf(format, args...)})
 		}
 		lead := l.upper(0)
-		if inTx && (slices.Contains([]string{"BEGIN", "START", "COMMIT", "ROLLBACK", "END"}, lead) || d == velox.Postgres && lead == "ABORT") {
-			refuse("%s in a file run in a transaction; the runner begins and commits the file's transaction itself", lead)
+		if inTx && txControl(d, lead) {
+			refuse(txControlReason, lead)
 		}
 		if d == velox.Postgres && !f.Directives.NoTransaction {
 			if l.concurrently() {
@@ -63,6 +63,34 @@ func LintFile(d velox.Dialect, f File) ([]Finding, error) {
 		}
 	}
 	return out, errors.Join(errs...)
+}
+
+// txControlReason is the refusal of a statement led by BEGIN, COMMIT and
+// the like in a file run in a transaction.
+const txControlReason = "%s in a file run in a transaction; the runner begins and commits the file's transaction itself"
+
+// txControl reports whether a statement led by lead, upper-cased, begins or
+// ends a transaction: BEGIN, START, COMMIT, ROLLBACK, END, and on PostgreSQL
+// ABORT.
+func txControl(d velox.Dialect, lead string) bool {
+	return slices.Contains([]string{"BEGIN", "START", "COMMIT", "ROLLBACK", "END"}, lead) || d == velox.Postgres && lead == "ABORT"
+}
+
+// checkTxControl is LintFile's refusal of the first statement of f, a file
+// run in a transaction, that begins or ends one, at its line; nil when none
+// does.
+func checkTxControl(d velox.Dialect, f File) error {
+	for i, sql := range f.Statements {
+		l := &fileLinter{d: d, ws: lex(d, sql)}
+		if lead := l.upper(0); txControl(d, lead) {
+			pos := f.Path
+			if i < len(f.lines) {
+				pos += ":" + strconv.Itoa(f.lines[i])
+			}
+			return &Error{Code: "file", Pos: pos, Reason: fmt.Sprintf(txControlReason, lead)}
+		}
+	}
+	return nil
 }
 
 // fileLinter reads one statement of a file for LintFile.

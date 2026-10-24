@@ -710,3 +710,44 @@ func TestUpRefusesADatabaseThatIsNotSQLite(t *testing.T) {
 		t.Errorf("%v", err)
 	}
 }
+
+// TestUpRefusesTransactionControl: a file run in a transaction that ends
+// it, with COMMIT or ROLLBACK, is refused at its line before any file runs.
+func TestUpRefusesTransactionControl(t *testing.T) {
+	for _, lead := range []string{"COMMIT", "ROLLBACK", "end transaction"} {
+		t.Run(lead, func(t *testing.T) {
+			db, _ := freshDB(t, velox.SQLite)
+			fsys := dirOf(t, velox.SQLite, files(
+				"0001_ok.sql", "CREATE TABLE ok (id integer);",
+				"0002_x.sql", "CREATE TABLE a (id integer);\n"+lead+";\nCREATE TABLE b (id integer);\n"))
+			_, err := migrate.Up(context.Background(), db, fsys)
+			e := asError(t, err, "file")
+			if e.Pos != "0002_x.sql:2" || !strings.Contains(e.Reason, "in a file run in a transaction") {
+				t.Errorf("%v", err)
+			}
+			for _, name := range []string{"ok", "a", "b"} {
+				if hasTable(t, db, name) {
+					t.Errorf("table %s was made", name)
+				}
+			}
+			if rows := historyOf(t, db); len(rows) != 0 {
+				t.Errorf("history %+v", rows)
+			}
+		})
+	}
+}
+
+// TestUpTransactionEndedByFile: a file that ends the runner's transaction
+// in a way the check before the run cannot see is reported, and its version
+// is not recorded.
+func TestUpTransactionEndedByFile(t *testing.T) {
+	db, _ := freshDB(t, velox.SQLite)
+	fsys := dirOf(t, velox.SQLite, files("0001_x.sql", "CREATE TABLE a (id integer);\nCOMMIT;\nCREATE TABLE b (id integer);\n"))
+	_, err := migrate.Up(context.Background(), db, fsys, migrate.WithoutTxControlCheck())
+	if err == nil || !strings.Contains(err.Error(), "0001_x.sql: the file ended the runner's transaction") || strings.Contains(err.Error(), "rolled back") {
+		t.Fatalf("%v", err)
+	}
+	if rows := historyOf(t, db); len(rows) != 0 {
+		t.Errorf("history %+v", rows)
+	}
+}
