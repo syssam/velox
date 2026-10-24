@@ -166,7 +166,7 @@ func TestMigrateDiff(t *testing.T) {
 			}},
 			{"rename", func() {
 				renameFile = func(from, to string) error {
-					if filepath.Base(to) == "velox.sum" {
+					if filepath.Base(to) == "velox.sum" && strings.Contains(from, ".tmp-") { // the swap, not the undo
 						return injected
 					}
 					return os.Rename(from, to)
@@ -181,7 +181,14 @@ func TestMigrateDiff(t *testing.T) {
 				t.Errorf("%s: the directory changed:\n%v\nwas\n%v", c.name, slices.Sorted(maps.Keys(after)), slices.Sorted(maps.Keys(before)))
 			}
 		}
-		code, out, errs := velox(t, dir, "migrate", "diff")
+		renameFile = func(string, string) error { return injected }
+		code, out, errs := velox(t, dir, "migrate", "diff", "-dir", "new/a/b", "-dialect", "sqlite")
+		renameFile = os.Rename
+		want(t, "new directory", code, out, errs, 1, "", "velox-gen: migrate diff: injected failure\n")
+		if exists(filepath.Join(dir, "new")) {
+			t.Error("a failed diff left the directories it made")
+		}
+		code, out, errs = velox(t, dir, "migrate", "diff")
 		want(t, "diff", code, out, errs, 0, "migrations/0004_add_users_bio.sql\nmigrations/schema.json\nmigrations/velox.sum\n", "")
 	})
 
@@ -261,6 +268,14 @@ func TestMigrateHashAndLint(t *testing.T) {
 	want(t, "edited hash -check", code, out, errs, 3, "", "velox-gen: migrate hash: "+stale)
 	code, out, errs = run("lint")
 	want(t, "edited lint", code, out, errs, 1, "", "velox-gen: migrate lint: "+stale)
+	before := dirFiles(t, dir)
+	renameFile = func(string, string) error { return errors.New("injected failure") }
+	code, out, errs = run("hash")
+	renameFile = os.Rename
+	want(t, "hash failing", code, out, errs, 1, "", "velox-gen: migrate hash: injected failure\n")
+	if after := dirFiles(t, dir); !reflect.DeepEqual(after, before) {
+		t.Errorf("a failed hash changed the directory:\n%v", slices.Sorted(maps.Keys(after)))
+	}
 	code, out, errs = run("hash")
 	want(t, "hash", code, out, errs, 0, "velox.sum\n", "")
 	code, out, errs = run("hash")

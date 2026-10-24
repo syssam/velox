@@ -229,7 +229,7 @@ func runMigrateHash(args []string, dir string, stdout, stderr io.Writer) int {
 	if *check {
 		return c.fail(3, &migrate.SumError{Path: c.path("velox.sum")})
 	}
-	if err := os.WriteFile(filepath.Join(abs, "velox.sum"), sum, 0o644); err != nil {
+	if err := writeAll(abs, map[string][]byte{"velox.sum": sum}); err != nil {
 		return c.fail(1, err)
 	}
 	_, _ = fmt.Fprintln(stdout, c.path("velox.sum"))
