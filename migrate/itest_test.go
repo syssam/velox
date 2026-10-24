@@ -376,10 +376,10 @@ func pgRows(t *testing.T, db *sql.DB, n int, role, status func(i int) string) []
 			id = 10
 		}
 		ids = append(ids, id)
-		pgExec(t, db, fmt.Sprintf(`INSERT INTO orgs (id, name) VALUES (%d, 'o%d')`, id, id))
-		pgExec(t, db, fmt.Sprintf(`INSERT INTO users (id, org_id, name, email, bio, role, status, logins, created_at) VALUES (%d, %d, 'u%d', 'u%d@x', 'b', '%s', '%s', %d, '2026-01-01 00:00:00+00')`,
+		mustExec(t, db, fmt.Sprintf(`INSERT INTO orgs (id, name) VALUES (%d, 'o%d')`, id, id))
+		mustExec(t, db, fmt.Sprintf(`INSERT INTO users (id, org_id, name, email, bio, role, status, logins, created_at) VALUES (%d, %d, 'u%d', 'u%d@x', 'b', '%s', '%s', %d, '2026-01-01 00:00:00+00')`,
 			id, id, id, id, role(i), status(i), 2147483647-i))
-		pgExec(t, db, fmt.Sprintf(`INSERT INTO posts (id, author_id, title, status) VALUES (%d, %d, 't%d', '%s')`, id, id, id, status(i)))
+		mustExec(t, db, fmt.Sprintf(`INSERT INTO posts (id, author_id, title, status) VALUES (%d, %d, 't%d', '%s')`, id, id, id, status(i)))
 	}
 	return ids
 }
@@ -494,7 +494,7 @@ func TestMigrateRowsSurvivePostgresUnits(t *testing.T) {
 	fsys := dirOf(t, d, step{to: from, name: "from"})
 	mustUp(t, db, fsys)
 	pgRows(t, db, 3, func(int) string { return "viewer" }, func(int) string { return "active" })
-	pgExec(t, db, `UPDATE users SET name = 'same'`) // the second unit's index fails
+	mustExec(t, db, `UPDATE users SET name = 'same'`) // the second unit's index fails
 	fsys = extend(t, fsys, d, step{to: to, name: "to", opts: migrate.PlanOptions{Allow: allow("add-unique")}})
 	_, err := migrate.Up(context.Background(), db, fsys)
 	de := dirtyOf(t, err)
@@ -506,7 +506,7 @@ func TestMigrateRowsSurvivePostgresUnits(t *testing.T) {
 		t.Fatalf("history %+v; want the first unit's 2 statements", rows)
 	}
 	oid := pgStrings(t, db, `SELECT 'orgs_name_unique'::regclass::oid::text`)
-	pgExec(t, db, `UPDATE users SET name = 'u' || id`)
+	mustExec(t, db, `UPDATE users SET name = 'u' || id`)
 	mustUp(t, db, fsys, migrate.WithResume())
 	invariants(t, db, d, fsys, to)
 	if again := pgStrings(t, db, `SELECT 'orgs_name_unique'::regclass::oid::text`); !slices.Equal(again, oid) {
@@ -535,7 +535,7 @@ func TestMigrateLiterals(t *testing.T) {
 				`INSERT INTO "users" ("id", "org_id", "name", "email", "bio", "created_at") VALUES (2, 1, 'n', 'n@x', 'b', '2026-01-01 00:00:00')`,
 				`INSERT INTO "users" ("id", "org_id", "name", "email", "bio", "created_at", "role") VALUES (3, 1, 'm', 'm@x', 'b', '2026-01-01 00:00:00', 'o''neil')`,
 			} {
-				pgExec(t, m.db, q(s))
+				mustExec(t, m.db, q(s))
 			}
 			var motto, role string
 			if err := m.db.QueryRow(q(`SELECT "motto" FROM "users" WHERE "name" = 'n'`)).Scan(&motto); err != nil || motto != `it's a \ test` {
@@ -601,7 +601,7 @@ func TestMigrateMySQLRowLimit(t *testing.T) {
 	fsys := dirOf(t, d, step{to: s, name: "row"})
 	mustUp(t, db, fsys)
 	invariants(t, db, d, fsys, s)
-	pgExec(t, db, "INSERT INTO `row_limits` (`n`, `a`, `b`, `c`) VALUES (NULL, REPEAT('é', 8165), REPEAT('😀', 8164), REPEAT('x', 201))")
+	mustExec(t, db, "INSERT INTO `row_limits` (`n`, `a`, `b`, `c`) VALUES (NULL, REPEAT('é', 8165), REPEAT('😀', 8164), REPEAT('x', 201))")
 	var a, b, c int
 	if err := db.QueryRow("SELECT CHAR_LENGTH(`a`), CHAR_LENGTH(`b`), LENGTH(`c`) FROM `row_limits`").Scan(&a, &b, &c); err != nil || a != 8165 || b != 8164 || c != 201 {
 		t.Errorf("lengths %d %d %d, %v", a, b, c, err)

@@ -59,7 +59,7 @@ func TestUpMySQLDirty(t *testing.T) {
 	if _ = dirtyOf(t, err); s == nil || s.Dirty == nil || s.Dirty.Version != 1 || s.Dirty.Statements != 1 || s.Dirty.Error != rows[0].Error {
 		t.Errorf("state %+v", s)
 	}
-	pgExec(t, db, "CREATE TABLE b (x int)")
+	mustExec(t, db, "CREATE TABLE b (x int)")
 	r := mustUp(t, db, fsys, migrate.WithResume())
 	if len(r.Applied) != 1 || r.Applied[0].Version != 1 || r.Applied[0].Statements != 3 {
 		t.Errorf("report %+v", r)
@@ -84,7 +84,7 @@ func TestResolveMySQL(t *testing.T) {
 	fsys := dirOf(t, velox.MySQL, files("0001_abc.sql", "CREATE TABLE a (x int);\nINSERT INTO b VALUES (1);\n"))
 	_ = dirtyOf(t, func() error { _, err := migrate.Up(ctx, db, fsys); return err }())
 	// Undone: a human reverts statement 1, fixes the file, and applies it.
-	pgExec(t, db, "DROP TABLE a")
+	mustExec(t, db, "DROP TABLE a")
 	if err := migrate.Resolve(ctx, db, fsys, 1, migrate.ResolveUndone); err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +125,7 @@ func TestResolveMySQL(t *testing.T) {
 func TestUpMySQLLockTimeout(t *testing.T) {
 	ctx := context.Background()
 	db, _ := freshDB(t, velox.MySQL)
-	pgExec(t, db, "CREATE TABLE t (x int)")
+	mustExec(t, db, "CREATE TABLE t (x int)")
 	other, err := db.Conn(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -185,8 +185,8 @@ func TestUpMySQLSQLMode(t *testing.T) {
 		}
 		// A run that stops below the file is not refused.
 		mustUp(t, db, fsys, migrate.WithTarget(1))
-		pgExec(t, db, "DROP TABLE a")
-		pgExec(t, db, "DELETE FROM velox_migrations")
+		mustExec(t, db, "DROP TABLE a")
+		mustExec(t, db, "DELETE FROM velox_migrations")
 	}
 }
 
@@ -216,8 +216,8 @@ func pgIndexValid(t *testing.T, db *sql.DB, name string) bool {
 // usersRows makes an org and n users, with bio NULL.
 func usersRows(t *testing.T, db *sql.DB, n int) {
 	t.Helper()
-	pgExec(t, db, `INSERT INTO orgs (name) VALUES ('o')`)
-	pgExec(t, db, fmt.Sprintf(`INSERT INTO users (org_id, name, email, created_at) SELECT 1, 'u' || g, 'u' || g || '@x', now() FROM generate_series(1, %d) g`, n))
+	mustExec(t, db, `INSERT INTO orgs (name) VALUES ('o')`)
+	mustExec(t, db, fmt.Sprintf(`INSERT INTO users (org_id, name, email, created_at) SELECT 1, 'u' || g, 'u' || g || '@x', now() FROM generate_series(1, %d) g`, n))
 }
 
 // TestUpPostgresOnlineResume: an index build cancelled while it waits for
@@ -274,7 +274,7 @@ func TestUpPostgresSetNotNullResume(t *testing.T) {
 	fsys := caseDir(t, caseNamed("set-not-null"), velox.Postgres)
 	mustUp(t, db, fsys, migrate.WithTarget(1))
 	usersRows(t, db, 3)
-	pgExec(t, db, `UPDATE users SET bio = 'b' WHERE id > 1`)
+	mustExec(t, db, `UPDATE users SET bio = 'b' WHERE id > 1`)
 	_, err := migrate.Up(ctx, db, fsys)
 	de := dirtyOf(t, err)
 	if code, _ := velox.DriverCode(err); code != "23514" || de.Statement != 3 || !strings.Contains(string(fsys[de.Path].Data), "VALIDATE CONSTRAINT") {
@@ -284,7 +284,7 @@ func TestUpPostgresSetNotNullResume(t *testing.T) {
 	if last := rows[len(rows)-1]; !last.Dirty || last.Statements != 0 || last.Error == "" {
 		t.Fatalf("history %+v", rows)
 	}
-	pgExec(t, db, `UPDATE users SET bio = '' WHERE bio IS NULL`)
+	mustExec(t, db, `UPDATE users SET bio = '' WHERE bio IS NULL`)
 	mustUp(t, db, fsys, migrate.WithResume())
 	var nullable string
 	if err := db.QueryRow(`SELECT is_nullable FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'bio'`).Scan(&nullable); err != nil || nullable != "NO" {
@@ -417,7 +417,7 @@ func TestUpMySQLOwnTransaction(t *testing.T) {
 	db, dsn := freshDB(t, velox.MySQL)
 	db.SetMaxOpenConns(1)
 	other := openDB(t, "mysql", dsn)
-	pgExec(t, db, "CREATE TABLE t (x int PRIMARY KEY)")
+	mustExec(t, db, "CREATE TABLE t (x int PRIMARY KEY)")
 	fsys := dirOf(t, velox.MySQL, files("0001_tx.sql", "START TRANSACTION;\nINSERT INTO t VALUES (1);\nINSERT INTO nope VALUES (1);\nCOMMIT;\n"))
 	_, err := migrate.Up(ctx, db, fsys)
 	if de := dirtyOf(t, err); de.Statement != 3 || mysqlNumber(err) != 1146 ||
@@ -448,7 +448,7 @@ func TestUpMySQLOwnTransaction(t *testing.T) {
 	if inTx() != 0 {
 		t.Error("the pooled connection holds a transaction")
 	}
-	pgExec(t, db, "CREATE TABLE nope (x int)")
+	mustExec(t, db, "CREATE TABLE nope (x int)")
 	mustUp(t, db, fsys, migrate.WithResume())
 	var n int
 	if err := db.QueryRow(`SELECT count(*) FROM t`).Scan(&n); err != nil || n != 1 {
@@ -498,7 +498,7 @@ func TestUpMySQLProgressLost(t *testing.T) {
 	fsys := dirOf(t, velox.MySQL, files("0001_ab.sql", "CREATE TABLE a (x int);\nCREATE TABLE b (x int);\n"))
 	hook := migrate.WithUnitDone(func(_ uint64, end int) {
 		if end == 1 {
-			pgExec(t, other, "DROP TABLE velox_migrations")
+			mustExec(t, other, "DROP TABLE velox_migrations")
 		}
 	})
 	_, err := migrate.Up(context.Background(), db, fsys, hook)
@@ -524,7 +524,7 @@ func TestUpMySQLConnectionKilled(t *testing.T) {
 			t.Errorf("the session's id: %v", err)
 			return
 		}
-		pgExec(t, killer, fmt.Sprintf("KILL CONNECTION %d", id))
+		mustExec(t, killer, fmt.Sprintf("KILL CONNECTION %d", id))
 	})
 	_, err := migrate.Up(context.Background(), db, fsys, hook)
 	const msg = "the connection was lost during statement 2; check whether it ran before resuming"
@@ -551,7 +551,7 @@ func TestUpMySQLAutocommitOff(t *testing.T) {
 		db, dsn := freshDB(t, velox.MySQL)
 		db.SetMaxOpenConns(1)
 		other := openDB(t, "mysql", dsn)
-		pgExec(t, db, "CREATE TABLE t (x int)")
+		mustExec(t, db, "CREATE TABLE t (x int)")
 		_, err := migrate.Up(ctx, db, dirOf(t, velox.MySQL, files("0001_off.sql", c.file)))
 		if de := dirtyOf(t, err); de.Statement != c.statement || !strings.Contains(err.Error(), c.error) {
 			t.Errorf("%s: %v", c.name, err)

@@ -109,9 +109,9 @@ func TestNormalizePredicate(t *testing.T) {
 func TestPredicatesPostgres(t *testing.T) {
 	db, _ := freshDB(t, velox.Postgres)
 	db.SetMaxOpenConns(1)
-	pgExec(t, db, "SET TimeZone = 'UTC'")
-	pgExec(t, db, `CREATE SEQUENCE g_seq`)
-	pgExec(t, db, `CREATE TABLE g (id integer PRIMARY KEY DEFAULT nextval('g_seq'), status text, qty integer,
+	mustExec(t, db, "SET TimeZone = 'UTC'")
+	mustExec(t, db, `CREATE SEQUENCE g_seq`)
+	mustExec(t, db, `CREATE TABLE g (id integer PRIMARY KEY DEFAULT nextval('g_seq'), status text, qty integer,
 		price numeric, r real, deleted_at timestamptz, active boolean, created_on date, ts timestamp,
 		tstz timestamptz, tm time, email text, name text, code varchar(10))`)
 	read := func(q string, args ...any) string {
@@ -125,8 +125,8 @@ func TestPredicatesPostgres(t *testing.T) {
 	cs := readPredicates(t, predicatesPath)
 	for i, c := range cs {
 		name := fmt.Sprintf("g_%02d", i)
-		pgExec(t, db, "CREATE INDEX "+name+" ON g (id) WHERE "+c.input)
-		pgExec(t, db, "ALTER TABLE g ADD CONSTRAINT "+name+"_check CHECK ("+c.input+")")
+		mustExec(t, db, "CREATE INDEX "+name+" ON g (id) WHERE "+c.input)
+		mustExec(t, db, "ALTER TABLE g ADD CONSTRAINT "+name+"_check CHECK ("+c.input+")")
 		printed := read(`SELECT pg_get_expr(indpred, indrelid) FROM pg_index WHERE indexrelid = $1::regclass`, name)
 		def := read(`SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = $1`, name+"_check")
 		check, ok := strings.CutPrefix(def, "CHECK ")

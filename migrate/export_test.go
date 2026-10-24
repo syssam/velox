@@ -164,3 +164,10 @@ var Words = words
 func WithoutTxControlCheck() Option {
 	return Option{func(o *options) { o.noTxCheck = true }}
 }
+
+// SetBeforeBaselining makes Up call f between its read of the history and
+// its baseline, and returns the function that undoes it.
+func SetBeforeBaselining(f func()) (restore func()) {
+	beforeBaselining = f
+	return func() { beforeBaselining = nil }
+}

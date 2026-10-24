@@ -34,6 +34,10 @@ type options struct {
 	unitDone  func(version uint64, end int)
 }
 
+// beforeBaselining, for the tests, is called by Up between its read of the
+// history and its baseline.
+var beforeBaselining func()
+
 // defaultLockWait is how long Up waits for the migration lock by default.
 const defaultLockWait = 5 * time.Minute
 
@@ -193,6 +197,9 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 	}
 	r := &Report{}
 	if o.baselineSet {
+		if beforeBaselining != nil {
+			beforeBaselining()
+		}
 		if rows, err = s.baselining(ctx, d, rows, o); err != nil {
 			return nil, err
 		}
@@ -279,7 +286,11 @@ func (o options) checkBaseline(d *Dir) error {
 
 // errBaselined is WithBaseline's refusal of a history of n rows.
 func errBaselined(n int) error {
-	return &Error{Code: "baseline", Reason: fmt.Sprintf("the database already has a migration history (%d rows): a baseline adopts a database once; apply without one", n)}
+	rows := fmt.Sprintf("%d rows", n)
+	if n == 1 {
+		rows = "1 row"
+	}
+	return &Error{Code: "baseline", Reason: "the database already has a migration history (" + rows + "): a baseline adopts a database once; apply without one"}
 }
 
 // baselining records dir's files up to o.baseline as applied, in one

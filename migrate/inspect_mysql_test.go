@@ -42,8 +42,8 @@ func mustInspectMySQL(t *testing.T, db *sql.DB, tables ...migrate.TableRef) *mig
 func mysqlDatabase(t *testing.T, name string) {
 	t.Helper()
 	admin := openDB(t, "mysql", os.Getenv("VELOX_TEST_MYSQL_ADMIN"))
-	pgExec(t, admin, "DROP DATABASE IF EXISTS `"+name+"`")
-	pgExec(t, admin, "CREATE DATABASE `"+name+"`")
+	mustExec(t, admin, "DROP DATABASE IF EXISTS `"+name+"`")
+	mustExec(t, admin, "CREATE DATABASE `"+name+"`")
 	t.Cleanup(func() {
 		if _, err := admin.Exec("DROP DATABASE IF EXISTS `" + name + "`"); err != nil {
 			t.Errorf("drop %s: %v", name, err)
@@ -190,8 +190,8 @@ func TestInspectMySQLPrimaryKeyName(t *testing.T) {
 	_, to := models(t, caseNamed("add-index"), velox.MySQL)
 	db, _ := freshDB(t, velox.MySQL)
 	mustUp(t, db, dirOf(t, velox.MySQL, step{to: to, name: "case"}))
-	pgExec(t, db, "CREATE TABLE named (id int, CONSTRAINT named_pkey PRIMARY KEY (id))")
-	pgExec(t, db, "CREATE TABLE nokey (id int)")
+	mustExec(t, db, "CREATE TABLE named (id int, CONSTRAINT named_pkey PRIMARY KEY (id))")
+	mustExec(t, db, "CREATE TABLE nokey (id int)")
 	s := mustInspectMySQL(t, db)
 	for _, tb := range s.Tables {
 		want := "PRIMARY"
@@ -291,7 +291,7 @@ func TestInspectMySQLEngine(t *testing.T) {
 	needMySQL(t)
 	ctx := context.Background()
 	db, _ := freshDB(t, velox.MySQL)
-	pgExec(t, db, "CREATE TABLE m (id int PRIMARY KEY) ENGINE=MyISAM")
+	mustExec(t, db, "CREATE TABLE m (id int PRIMARY KEY) ENGINE=MyISAM")
 	s, notes, err := migrate.InspectNotes(ctx, db, velox.MySQL, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -322,8 +322,8 @@ func TestInspectMySQLFilter(t *testing.T) {
 	}
 	other := fmt.Sprintf("velox_other_%d_%d", os.Getpid(), time.Now().UnixNano())
 	mysqlDatabase(t, other)
-	pgExec(t, db, "CREATE TABLE `"+other+"`.c (id integer PRIMARY KEY, b_id integer, CONSTRAINT c_b FOREIGN KEY (b_id) REFERENCES `"+name+"`.b (id) ON DELETE CASCADE)")
-	pgExec(t, db, "CREATE VIEW v AS SELECT 1 AS x")
+	mustExec(t, db, "CREATE TABLE `"+other+"`.c (id integer PRIMARY KEY, b_id integer, CONSTRAINT c_b FOREIGN KEY (b_id) REFERENCES `"+name+"`.b (id) ON DELETE CASCADE)")
+	mustExec(t, db, "CREATE VIEW v AS SELECT 1 AS x")
 
 	names := func(s *migrate.Schema) []string {
 		var out []string
@@ -374,7 +374,7 @@ func TestInspectMySQLUnheld(t *testing.T) {
 		"CREATE TABLE k (a varchar(20) NOT NULL, b int NOT NULL, PRIMARY KEY (a(5), b DESC)) COLLATE=utf8mb4_bin",
 		"CREATE TABLE u (id bigint PRIMARY KEY, p_id bigint, INDEX u_p_id (p_id), CONSTRAINT u_p FOREIGN KEY (p_id) REFERENCES p (id) ON UPDATE CASCADE) COLLATE=utf8mb4_bin",
 	} {
-		pgExec(t, db, q)
+		mustExec(t, db, q)
 	}
 	s, notes, err := migrate.InspectNotes(ctx, db, velox.MySQL, nil)
 	if err != nil {
@@ -466,7 +466,7 @@ func TestDriftMySQLLive(t *testing.T) {
 			db, _ := freshDB(t, velox.MySQL)
 			mustUp(t, db, mysqlDir(t))
 			for _, q := range c.alter {
-				pgExec(t, db, q)
+				mustExec(t, db, q)
 			}
 			r, err := migrate.Drift(context.Background(), db, mysqlSchema())
 			if err != nil {

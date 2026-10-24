@@ -130,7 +130,7 @@ func TestUpPostgresStandardConformingStrings(t *testing.T) {
 	if err := db.QueryRow(`SELECT current_database()`).Scan(&name); err != nil {
 		t.Fatal(err)
 	}
-	pgExec(t, db, `ALTER DATABASE "`+name+`" SET standard_conforming_strings = off`)
+	mustExec(t, db, `ALTER DATABASE "`+name+`" SET standard_conforming_strings = off`)
 	off := openDB(t, "pgx", dsn) // a new session takes the database's setting
 	var e *migrate.Error
 	if _, err := migrate.Up(context.Background(), off, dirOf(t, velox.Postgres)); !errors.As(err, &e) || e.Code != "session" || !strings.Contains(e.Reason, "standard_conforming_strings") {
@@ -249,8 +249,11 @@ func TestUpPostgresHugeLockTimeout(t *testing.T) {
 func TestUpBaselineEmptyDatabasePostgres(t *testing.T) {
 	ctx := context.Background()
 	fsys := dirOf(t, velox.Postgres, files(baselineFiles...))
+	run := func(db *sql.DB) (*migrate.Report, error) {
+		return migrate.Up(ctx, db, fsys, migrate.WithBaseline(1), migrate.WithTarget(1))
+	}
 	up := func(db *sql.DB) error {
-		_, err := migrate.Up(ctx, db, fsys, migrate.WithBaseline(1), migrate.WithTarget(1))
+		_, err := run(db)
 		return err
 	}
 	t.Run("fresh", func(t *testing.T) {
@@ -280,32 +283,48 @@ func TestUpBaselineEmptyDatabasePostgres(t *testing.T) {
 		if _, err := db.Exec(`CREATE EXTENSION citext`); err != nil {
 			t.Skipf("CREATE EXTENSION citext: %v", err)
 		}
-		pgExec(t, db, `CREATE TABLE spatial_ref_sys (srid integer PRIMARY KEY)`)
-		pgExec(t, db, `ALTER EXTENSION citext ADD TABLE spatial_ref_sys`)
+		mustExec(t, db, `CREATE TABLE spatial_ref_sys (srid integer PRIMARY KEY)`)
+		mustExec(t, db, `ALTER EXTENSION citext ADD TABLE spatial_ref_sys`)
 		baselineErr(t, "extension", up(db), "the database has no tables besides the history: there is nothing to adopt; apply without a baseline")
 	})
 	t.Run("schema", func(t *testing.T) {
 		db, _ := freshDB(t, velox.Postgres)
-		pgExec(t, db, `CREATE SCHEMA billing`)
-		pgExec(t, db, `CREATE TABLE billing.invoices (id bigint PRIMARY KEY)`)
-		if err := up(db); err != nil {
-			t.Fatal(err)
-		}
+		mustExec(t, db, `CREATE SCHEMA billing`)
+		mustExec(t, db, `CREATE TABLE billing.invoices (id bigint PRIMARY KEY)`)
+		baselinedOne(t, db)(run(db))
 	})
 	t.Run("history elsewhere", func(t *testing.T) {
 		db, _ := freshDB(t, velox.Postgres)
-		pgExec(t, db, `CREATE SCHEMA other`)
-		pgExec(t, db, `CREATE TABLE other.velox_migrations (version bigint PRIMARY KEY)`)
-		if err := up(db); err != nil {
+		mustExec(t, db, `CREATE SCHEMA other`)
+		mustExec(t, db, `CREATE TABLE other.velox_migrations (version bigint PRIMARY KEY)`)
+		baselinedOne(t, db)(run(db))
+	})
+}
+
+// baselinedOne checks the result of a baseline of version 1 on db: no
+// error, Baselined [1], and the history its one row.
+func baselinedOne(t *testing.T, db *sql.DB) func(*migrate.Report, error) {
+	return func(r *migrate.Report, err error) {
+		t.Helper()
+		if err != nil {
 			t.Fatal(err)
 		}
-	})
+		if !slices.Equal(r.Baselined, []uint64{1}) || len(r.Applied) != 0 {
+			t.Errorf("report %+v", r)
+		}
+		if rows := historyOf(t, db); len(rows) != 1 || rows[0].Version != 1 || rows[0].Name != "a" {
+			t.Errorf("history %+v", rows)
+		}
+	}
 }
 
 func TestUpBaselineEmptyDatabaseMySQL(t *testing.T) {
 	fsys := dirOf(t, velox.MySQL, files(baselineFiles...))
+	run := func(db *sql.DB) (*migrate.Report, error) {
+		return migrate.Up(context.Background(), db, fsys, migrate.WithBaseline(1), migrate.WithTarget(1))
+	}
 	up := func(db *sql.DB) error {
-		_, err := migrate.Up(context.Background(), db, fsys, migrate.WithBaseline(1), migrate.WithTarget(1))
+		_, err := run(db)
 		return err
 	}
 	db, _ := freshDB(t, velox.MySQL)
@@ -314,8 +333,6 @@ func TestUpBaselineEmptyDatabaseMySQL(t *testing.T) {
 	if err := db.QueryRow("SELECT count(*) FROM velox_migrations").Scan(&n); err != nil || n != 0 {
 		t.Errorf("history rows %d, %v", n, err)
 	}
-	pgExec(t, db, "CREATE TABLE t (x integer)")
-	if err := up(db); err != nil {
-		t.Fatal(err)
-	}
+	mustExec(t, db, "CREATE TABLE t (x integer)")
+	baselinedOne(t, db)(run(db))
 }

@@ -216,10 +216,10 @@ func TestInspectSQLiteCases(t *testing.T) {
 // an identity; an INTEGER PRIMARY KEY without it reuses a deleted top ID.
 func TestInspectSQLiteAutoincrement(t *testing.T) {
 	db, _ := freshDB(t, velox.SQLite)
-	pgExec(t, db, `CREATE TABLE a (id integer PRIMARY KEY)`)
-	pgExec(t, db, `CREATE TABLE b (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT)`)
-	pgExec(t, db, `CREATE TABLE c (id integer, n integer, PRIMARY KEY (id, n))`)
-	pgExec(t, db, `CREATE TABLE d (id integer, PRIMARY KEY (id AUTOINCREMENT))`)
+	mustExec(t, db, `CREATE TABLE a (id integer PRIMARY KEY)`)
+	mustExec(t, db, `CREATE TABLE b (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT)`)
+	mustExec(t, db, `CREATE TABLE c (id integer, n integer, PRIMARY KEY (id, n))`)
+	mustExec(t, db, `CREATE TABLE d (id integer, PRIMARY KEY (id AUTOINCREMENT))`)
 	s, notes, err := migrate.InspectNotes(context.Background(), db, velox.SQLite, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -258,7 +258,7 @@ func TestInspectSQLiteFilter(t *testing.T) {
 	db, _ := freshDB(t, velox.SQLite)
 	mustUp(t, db, dirOf(t, velox.SQLite, files("0001_tables.sql",
 		"CREATE TABLE b (id integer PRIMARY KEY AUTOINCREMENT);\nCREATE TABLE a (id integer PRIMARY KEY, b_id integer REFERENCES b);\nINSERT INTO b DEFAULT VALUES;\n")))
-	pgExec(t, db, `CREATE VIEW v AS SELECT 1 AS x`)
+	mustExec(t, db, `CREATE VIEW v AS SELECT 1 AS x`)
 	if !hasTable(t, db, "sqlite_sequence") || !hasTable(t, db, "velox_migrations") {
 		t.Fatal("no sqlite_sequence or history table to leave out")
 	}
@@ -302,7 +302,7 @@ func TestInspectSQLiteUnheld(t *testing.T) {
 		`CREATE INDEX p_expr ON p (lower(a))`,
 		`CREATE INDEX p_plain ON p (c)`,
 	} {
-		pgExec(t, db, q)
+		mustExec(t, db, q)
 	}
 	s, notes, err := migrate.InspectNotes(ctx, db, velox.SQLite, nil)
 	if err != nil {
@@ -387,10 +387,10 @@ func rebuildG(t *testing.T, db *sql.DB, edit func(string) string) {
 	if edited == create {
 		t.Fatalf("the edit changes nothing in %s", create)
 	}
-	pgExec(t, db, `DROP TABLE g`)
-	pgExec(t, db, edited)
+	mustExec(t, db, `DROP TABLE g`)
+	mustExec(t, db, edited)
 	for _, q := range indexes {
-		pgExec(t, db, q)
+		mustExec(t, db, q)
 	}
 }
 
@@ -435,7 +435,7 @@ func TestDriftSQLiteLive(t *testing.T) {
 				rebuildG(t, db, c.edit)
 			}
 			for _, q := range c.alter {
-				pgExec(t, db, q)
+				mustExec(t, db, q)
 			}
 			r, err := migrate.Drift(context.Background(), db, sqliteSchema())
 			if err != nil {
@@ -463,8 +463,8 @@ func TestDriftSQLite(t *testing.T) {
 	_, to := models(t, caseNamed("add-index"), velox.SQLite)
 	db, _ := freshDB(t, velox.SQLite)
 	mustUp(t, db, dirOf(t, velox.SQLite, step{to: to, name: "case"}))
-	pgExec(t, db, `CREATE TABLE other (k text PRIMARY KEY, n integer) WITHOUT ROWID, STRICT`)
-	pgExec(t, db, `CREATE INDEX other_expr ON other (lower(k))`)
+	mustExec(t, db, `CREATE TABLE other (k text PRIMARY KEY, n integer) WITHOUT ROWID, STRICT`)
+	mustExec(t, db, `CREATE INDEX other_expr ON other (lower(k))`)
 	r, err := migrate.Drift(ctx, db, to)
 	if err != nil {
 		t.Fatal(err)
@@ -472,7 +472,7 @@ func TestDriftSQLite(t *testing.T) {
 	if len(r.Changes) != 0 || len(r.Warnings) != 0 {
 		t.Errorf("drift: %v, %v", r.Changes, r.Warnings)
 	}
-	pgExec(t, db, `ALTER TABLE users ADD COLUMN extra text`)
+	mustExec(t, db, `ALTER TABLE users ADD COLUMN extra text`)
 	r, err = migrate.Drift(ctx, db, to)
 	if err != nil {
 		t.Fatal(err)
@@ -487,7 +487,7 @@ func TestDriftSQLite(t *testing.T) {
 func TestInspectSQLiteDoesNotMutate(t *testing.T) {
 	db, _ := freshDB(t, velox.SQLite)
 	mustUp(t, db, sqliteDir(t))
-	pgExec(t, db, `CREATE TABLE h (id integer PRIMARY KEY, a integer UNIQUE, b integer UNIQUE, CHECK (a > 0), CHECK (b > 0))`)
+	mustExec(t, db, `CREATE TABLE h (id integer PRIMARY KEY, a integer UNIQUE, b integer UNIQUE, CHECK (a > 0), CHECK (b > 0))`)
 	tables := []migrate.TableRef{{Name: "missing"}, {Name: "g"}, {Name: "h"}}
 	was := slices.Clone(tables)
 	a := mustInspectSQLite(t, db, tables...)
@@ -542,7 +542,7 @@ func TestInspectSQLiteCase(t *testing.T) {
 			CONSTRAINT fk_check CHECK (p > 0 /* positive */))`,
 		"CREATE INDEX fk_p ON fk (p) WHERE p > 0 -- trailing",
 	} {
-		pgExec(t, db, q)
+		mustExec(t, db, q)
 	}
 	s, notes, err := migrate.InspectNotes(ctx, db, velox.SQLite, []migrate.TableRef{{Name: "fk"}})
 	if err != nil {
@@ -582,7 +582,7 @@ func TestInspectSQLiteKeyNames(t *testing.T) {
 		`CREATE TABLE c9 (a integer, CONSTRAINT f1 FOREIGN KEY (a) REFERENCES u (id), CONSTRAINT f2 FOREIGN KEY (a) REFERENCES c8 (id),
 			CONSTRAINT g1 FOREIGN KEY (a) REFERENCES u (id) ON DELETE CASCADE, CONSTRAINT g2 FOREIGN KEY (a) REFERENCES u (id) ON DELETE SET NULL)`,
 	} {
-		pgExec(t, db, q)
+		mustExec(t, db, q)
 	}
 	s := mustInspectSQLite(t, db, migrate.TableRef{Name: "c9"})
 	got := map[string]string{}
@@ -603,7 +603,7 @@ func TestInspectSQLiteKeyNames(t *testing.T) {
 // checks.
 func TestInspectSQLiteUnreadable(t *testing.T) {
 	db, _ := freshDB(t, velox.SQLite)
-	pgExec(t, db, `CREATE TABLE r (a text DEFAULT -'x', CONSTRAINT r_a CHECK (a <> ''))`)
+	mustExec(t, db, `CREATE TABLE r (a text DEFAULT -'x', CONSTRAINT r_a CHECK (a <> ''))`)
 	s, notes, err := migrate.InspectNotes(context.Background(), db, velox.SQLite, nil)
 	if err != nil {
 		t.Fatal(err)

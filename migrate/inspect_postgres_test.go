@@ -162,7 +162,7 @@ func TestInspectPostgresSequence(t *testing.T) {
 		// An identity that also owns a sequence of an earlier name.
 		`CREATE SEQUENCE a_aaa_seq OWNED BY a.id`,
 	} {
-		pgExec(t, db, q)
+		mustExec(t, db, q)
 	}
 	s := mustInspect(t, db, migrate.TableRef{Name: "a"}, migrate.TableRef{Name: "b"}, migrate.TableRef{Name: "t"},
 		migrate.TableRef{Name: "f"}, migrate.TableRef{Schema: "billing", Name: "s"})
@@ -192,11 +192,11 @@ func TestInspectPostgresEnums(t *testing.T) {
 	_, to := models(t, caseNamed("enum-shared"), velox.Postgres)
 	db, _ := freshDB(t, velox.Postgres)
 	mustUp(t, db, dirOf(t, velox.Postgres, step{to: to, name: "shared"}))
-	pgExec(t, db, `CREATE TYPE unused AS ENUM ('z')`)
-	pgExec(t, db, `CREATE SCHEMA billing`)
-	pgExec(t, db, `CREATE TYPE billing.status AS ENUM ('y', 'x')`)
-	pgExec(t, db, `CREATE TABLE billing.inv (s billing.status NOT NULL DEFAULT 'x', CONSTRAINT inv_s_known CHECK (s IN ('x', 'y')))`)
-	pgExec(t, db, `ALTER TABLE users ADD CONSTRAINT users_role_known CHECK (role IN ('admin', 'viewer'))`)
+	mustExec(t, db, `CREATE TYPE unused AS ENUM ('z')`)
+	mustExec(t, db, `CREATE SCHEMA billing`)
+	mustExec(t, db, `CREATE TYPE billing.status AS ENUM ('y', 'x')`)
+	mustExec(t, db, `CREATE TABLE billing.inv (s billing.status NOT NULL DEFAULT 'x', CONSTRAINT inv_s_known CHECK (s IN ('x', 'y')))`)
+	mustExec(t, db, `ALTER TABLE users ADD CONSTRAINT users_role_known CHECK (role IN ('admin', 'viewer'))`)
 
 	s := mustInspect(t, db)
 	var shared []migrate.Enum
@@ -251,12 +251,12 @@ func refsOf(s *migrate.Schema) []migrate.TableRef {
 func TestInspectPostgresNotes(t *testing.T) {
 	ctx := context.Background()
 	db, _ := freshDB(t, velox.Postgres)
-	pgExec(t, db, `CREATE TABLE n (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, x integer, p bigint)`)
-	pgExec(t, db, `INSERT INTO n (x) VALUES (1), (1)`)
+	mustExec(t, db, `CREATE TABLE n (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, x integer, p bigint)`)
+	mustExec(t, db, `INSERT INTO n (x) VALUES (1), (1)`)
 	if _, err := db.Exec(`CREATE UNIQUE INDEX CONCURRENTLY n_x ON n (x)`); err == nil {
 		t.Fatal("the index over duplicates was built")
 	}
-	pgExec(t, db, `ALTER TABLE n ADD CONSTRAINT n_p_fkey FOREIGN KEY (p) REFERENCES n (id) NOT VALID`)
+	mustExec(t, db, `ALTER TABLE n ADD CONSTRAINT n_p_fkey FOREIGN KEY (p) REFERENCES n (id) NOT VALID`)
 
 	s, notes, err := migrate.InspectNotes(ctx, db, velox.Postgres, nil)
 	if err != nil {
@@ -306,9 +306,9 @@ func TestInspectPostgresNotes(t *testing.T) {
 func TestInspectPostgresFilter(t *testing.T) {
 	db, _ := freshDB(t, velox.Postgres)
 	mustUp(t, db, dirOf(t, velox.Postgres, files("0001_tables.sql", "CREATE TABLE b (id integer PRIMARY KEY);\nCREATE TABLE a (id integer PRIMARY KEY, b_id integer REFERENCES b);\n")))
-	pgExec(t, db, `CREATE SCHEMA other`)
-	pgExec(t, db, `CREATE TABLE other.c (id integer PRIMARY KEY, b_id integer REFERENCES public.b ON DELETE CASCADE)`)
-	pgExec(t, db, `CREATE VIEW v AS SELECT 1 AS x`)
+	mustExec(t, db, `CREATE SCHEMA other`)
+	mustExec(t, db, `CREATE TABLE other.c (id integer PRIMARY KEY, b_id integer REFERENCES public.b ON DELETE CASCADE)`)
+	mustExec(t, db, `CREATE VIEW v AS SELECT 1 AS x`)
 
 	names := func(s *migrate.Schema) []string {
 		var out []string
@@ -425,7 +425,7 @@ func TestInspectPostgresUnheld(t *testing.T) {
 		`CREATE TABLE c (id integer PRIMARY KEY, e text COLLATE "C", f text COLLATE "default", g text)`,
 		`CREATE UNLOGGED TABLE l (id integer PRIMARY KEY)`,
 	} {
-		pgExec(t, db, q)
+		mustExec(t, db, q)
 	}
 	s, notes, err := migrate.InspectNotes(ctx, db, velox.Postgres, nil)
 	if err != nil {
@@ -531,7 +531,7 @@ func TestDriftPostgresLive(t *testing.T) {
 				mustUp(t, db, dirOf(t, velox.Postgres, step{to: snap, name: "case"}))
 			}
 			for _, q := range c.alter {
-				pgExec(t, db, q)
+				mustExec(t, db, q)
 			}
 			r, err := migrate.Drift(context.Background(), db, snap)
 			if err != nil {
@@ -555,8 +555,8 @@ func TestDriftPostgresLive(t *testing.T) {
 // and a serial's sequence that does not start at 1, are baseline notes.
 func TestInspectPostgresBaselineNotes(t *testing.T) {
 	db, _ := freshDB(t, velox.Postgres)
-	pgExec(t, db, `CREATE TABLE u (id serial PRIMARY KEY, k integer CONSTRAINT u_k_key UNIQUE)`)
-	pgExec(t, db, `ALTER SEQUENCE u_id_seq INCREMENT BY 2`)
+	mustExec(t, db, `CREATE TABLE u (id serial PRIMARY KEY, k integer CONSTRAINT u_k_key UNIQUE)`)
+	mustExec(t, db, `ALTER SEQUENCE u_id_seq INCREMENT BY 2`)
 	_, notes, err := migrate.InspectNotes(context.Background(), db, velox.Postgres, nil)
 	if err != nil {
 		t.Fatal(err)

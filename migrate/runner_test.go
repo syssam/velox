@@ -1,10 +1,12 @@
 package migrate_test
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"log/slog"
 	"math"
 	"reflect"
 	"slices"
@@ -792,9 +794,24 @@ func TestUpBaseline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := mustUp(t, db, fsys, migrate.WithBaseline(2))
+	var log bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&log, &slog.HandlerOptions{ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
+		if a.Key == slog.TimeKey {
+			return slog.Attr{}
+		}
+		return a
+	}}))
+	r := mustUp(t, db, fsys, migrate.WithBaseline(2), migrate.WithLogger(logger))
 	if !slices.Equal(r.Baselined, []uint64{1, 2}) || !slices.Equal(versions(r.Applied), []uint64{3}) || r.Ahead {
 		t.Fatalf("report %+v", r)
+	}
+	for _, w := range []string{
+		`level=INFO msg="migrate: baselined" version=1 path=0001_a.sql`,
+		`level=INFO msg="migrate: baselined" version=2 path=0002_b.sql`,
+	} {
+		if !strings.Contains(log.String(), w+"\n") {
+			t.Errorf("no %q in the log:\n%s", w, log.String())
+		}
 	}
 	rows := historyOf(t, db)
 	if len(rows) != 3 {
@@ -854,7 +871,7 @@ func TestUpBaselineEmptyDatabase(t *testing.T) {
 	}
 }
 
-const baselinedText = "the database already has a migration history (1 rows): a baseline adopts a database once; apply without one"
+const baselinedText = "the database already has a migration history (1 row): a baseline adopts a database once; apply without one"
 
 // TestUpBaselineTwice: a second baseline is refused, not a no-op, and
 // leaves the history as it was.
@@ -883,11 +900,46 @@ func TestUpBaselineMigrated(t *testing.T) {
 	}
 }
 
+// TestUpBaselineBelowTarget: a baseline below the target records the files
+// up to it, applies those up to the target, and leaves the rest pending.
+func TestUpBaselineBelowTarget(t *testing.T) {
+	db := sqliteDB(t, "CREATE TABLE t (x integer)")
+	fsys := dirOf(t, velox.SQLite, files(baselineFiles...))
+	r := mustUp(t, db, fsys, migrate.WithBaseline(1), migrate.WithTarget(2))
+	if !slices.Equal(r.Baselined, []uint64{1}) || !slices.Equal(versions(r.Applied), []uint64{2}) || r.Ahead {
+		t.Fatalf("report %+v", r)
+	}
+	if hasTable(t, db, "a") || !hasTable(t, db, "b") || hasTable(t, db, "c") {
+		t.Errorf("a baselined file ran, or the file to the target did not, or one above it did")
+	}
+	if s := mustStatus(t, db, fsys); len(s.Applied) != 2 || len(s.Pending) != 1 || s.Pending[0].Version != 3 {
+		t.Errorf("state %+v", s)
+	}
+}
+
+// TestUpBaselineMeanwhile: a history row another connection records after
+// Up read the history, and before it baselines, is found by the read under
+// SQLite's write lock, and the baseline is refused.
+func TestUpBaselineMeanwhile(t *testing.T) {
+	db, dsn := freshDB(t, velox.SQLite)
+	mustExec(t, db, "CREATE TABLE t (x integer)")
+	fsys := dirOf(t, velox.SQLite, files(baselineFiles...))
+	other := openDB(t, "sqlite", dsn)
+	defer migrate.SetBeforeBaselining(func() {
+		mustExec(t, other, `INSERT INTO velox_migrations (version, name, checksum, applied_at, duration_ms, dirty, statements, error) VALUES (9, 'x', 'x', '2026-10-24 00:00:00.000000', 0, false, 0, '')`)
+	})()
+	_, err := migrate.Up(context.Background(), db, fsys, migrate.WithBaseline(1))
+	baselineErr(t, "meanwhile", err, baselinedText)
+	if rows := historyOf(t, db); len(rows) != 1 || rows[0].Version != 9 {
+		t.Errorf("history %+v", rows)
+	}
+}
+
 // TestUpBaselineConcurrent: of two baselines at once, one records and the
 // other is refused.
 func TestUpBaselineConcurrent(t *testing.T) {
 	db, dsn := freshDB(t, velox.SQLite)
-	pgExec(t, db, "CREATE TABLE t (x integer)")
+	mustExec(t, db, "CREATE TABLE t (x integer)")
 	fsys := dirOf(t, velox.SQLite, files(baselineFiles...))
 	var wg sync.WaitGroup
 	reports := make([]*migrate.Report, 2)

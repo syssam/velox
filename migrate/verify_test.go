@@ -65,7 +65,7 @@ func TestVerify(t *testing.T) {
 	}
 
 	db, _ = freshDB(t, velox.SQLite)
-	pgExec(t, db, `CREATE TABLE x (id integer)`)
+	mustExec(t, db, `CREATE TABLE x (id integer)`)
 	if e := verifyErr(t, migrate.Verify(ctx, db, fsys)); e.Code != "drift" || e.Object != "x" || e.Reason != "Verify needs an empty database" {
 		t.Errorf("a table: %+v", e)
 	}

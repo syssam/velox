@@ -67,7 +67,7 @@ func openDB(t *testing.T, driver, dsn string) *sql.DB {
 func newDatabase(t *testing.T, admin *sql.DB, q string) string {
 	t.Helper()
 	name := fmt.Sprintf("velox_migrate_%d_%d", os.Getpid(), time.Now().UnixNano())
-	pgExec(t, admin, "CREATE DATABASE "+q+name+q)
+	mustExec(t, admin, "CREATE DATABASE "+q+name+q)
 	t.Cleanup(func() {
 		drop := "DROP DATABASE IF EXISTS " + q + name + q
 		if q == `"` {
@@ -101,7 +101,8 @@ func dsnWithDatabase(dsn, name string) string {
 	return rest + "/" + name
 }
 
-func pgExec(t *testing.T, db *sql.DB, q string) {
+// mustExec runs q on db, of any dialect, and fails the test on an error.
+func mustExec(t *testing.T, db *sql.DB, q string) {
 	t.Helper()
 	if _, err := db.Exec(q); err != nil {
 		t.Fatalf("%s: %v", q, err)

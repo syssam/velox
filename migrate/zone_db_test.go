@@ -24,7 +24,7 @@ func zoned(t *testing.T, d velox.Dialect) *sql.DB {
 		if err := db.QueryRow(`SELECT current_database()`).Scan(&name); err != nil {
 			t.Fatal(err)
 		}
-		pgExec(t, db, `ALTER DATABASE "`+name+`" SET TimeZone = 'Asia/Hong_Kong'`)
+		mustExec(t, db, `ALTER DATABASE "`+name+`" SET TimeZone = 'Asia/Hong_Kong'`)
 		_ = db.Close()
 		return openDB(t, "pgx", dsn)
 	case velox.MySQL:
@@ -138,7 +138,7 @@ func TestUpPostgresSessionGiven(t *testing.T) {
 	}
 	admin := openDB(t, "pgx", base)
 	role := fmt.Sprintf("velox_owner_%d_%d", os.Getpid(), time.Now().UnixNano())
-	pgExec(t, admin, `CREATE ROLE "`+role+`"`)
+	mustExec(t, admin, `CREATE ROLE "`+role+`"`)
 	t.Cleanup(func() { _, _ = admin.Exec(`DROP ROLE IF EXISTS "` + role + `"`) }) // after the database is dropped
 	setup, dsn := freshDB(t, velox.Postgres)
 	var name string
@@ -150,7 +150,7 @@ func TestUpPostgresSessionGiven(t *testing.T) {
 		`CREATE SCHEMA app`, `CREATE SCHEMA other`,
 		`GRANT ALL ON SCHEMA app, other TO "` + role + `"`,
 	} {
-		pgExec(t, setup, q)
+		mustExec(t, setup, q)
 	}
 	db := openDB(t, "pgx", dsn) // its sessions start with the database's settings
 	db.SetMaxOpenConns(1)
