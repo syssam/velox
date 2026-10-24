@@ -18,8 +18,11 @@ import (
 // default schema but velox_migrations; a named table that is not there is
 // absent from the result. A table of the default schema, and a foreign
 // key's table there, has Schema "". On MySQL a primary key is named
-// PRIMARY, the name MySQL gives every one. Inspect only reads, on one
-// connection of db that it closes after, never returning it to the pool.
+// PRIMARY, the name MySQL gives every one. On SQLite the default schema is
+// main, and constraint names and checks come from the table's CREATE TABLE
+// text: where it cannot be read, a table has no checks and its foreign keys
+// are unnamed. Inspect only reads, on one connection of db that it closes
+// after, never returning it to the pool.
 func Inspect(ctx context.Context, db *sql.DB, d velox.Dialect, tables []TableRef) (*Schema, error) {
 	s, _, err := inspect(ctx, db, d, tables)
 	return s, err
@@ -29,7 +32,8 @@ func Inspect(ctx context.Context, db *sql.DB, d velox.Dialect, tables []TableRef
 // the changes that would bring them to snapshot, and warnings: spellings the
 // normaliser cannot match, and what the model cannot hold (a MySQL engine
 // other than InnoDB, an invalid index, a NOT VALID constraint, a GENERATED
-// ALWAYS identity). It never reads a table snapshot does not name.
+// ALWAYS identity, a STRICT SQLite table). It never reads a table snapshot
+// does not name.
 func Drift(ctx context.Context, db *sql.DB, snapshot *Schema) (*DriftReport, error) {
 	if snapshot == nil {
 		return nil, &Error{Code: "nil", Reason: "Drift needs the snapshot"}
@@ -90,9 +94,7 @@ func inspect(ctx context.Context, db *sql.DB, d velox.Dialect, tables []TableRef
 // does for its snapshot's: a type no column uses any more is still there.
 func inspectWith(ctx context.Context, db *sql.DB, d velox.Dialect, tables, enums []TableRef) (*Schema, []note, error) {
 	switch d {
-	case velox.Postgres, velox.MySQL:
-	case velox.SQLite:
-		return nil, nil, &Error{Code: "dialect", Reason: "Inspect on " + dialectName(d) + " is not built yet"}
+	case velox.Postgres, velox.MySQL, velox.SQLite:
 	default:
 		return nil, nil, &Error{Code: "dialect", Reason: fmt.Sprintf("Inspect was given the unknown dialect %q", d.String())}
 	}
@@ -107,9 +109,12 @@ func inspectWith(ctx context.Context, db *sql.DB, d velox.Dialect, tables, enums
 	defer discard(conn)
 	var s *Schema
 	var notes []note
-	if d == velox.MySQL {
+	switch d {
+	case velox.MySQL:
 		s, notes, err = inspectMySQLConn(ctx, conn, tables)
-	} else {
+	case velox.SQLite:
+		s, notes, err = inspectSQLiteConn(ctx, conn, tables)
+	default:
 		s, notes, err = inspectPostgresConn(ctx, conn, tables, enums)
 	}
 	if err != nil {
@@ -148,6 +153,16 @@ func inspectMySQLConn(ctx context.Context, conn *sql.Conn, tables []TableRef) (*
 	}
 	defer func() { _, _ = conn.ExecContext(ctx, `ROLLBACK`) }() // and the connection is discarded
 	return inspectMySQL(ctx, conn, tables)
+}
+
+// inspectSQLiteConn is inspectSQLite on conn, in one read transaction.
+func inspectSQLiteConn(ctx context.Context, conn *sql.Conn, tables []TableRef) (*Schema, []note, error) {
+	tx, err := conn.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	return inspectSQLite(ctx, tx, tables)
 }
 
 var (

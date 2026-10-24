@@ -59,11 +59,8 @@ func TestInspectRefuses(t *testing.T) {
 	if _, err := migrate.Inspect(ctx, db, velox.Dialect(99), nil); !errors.As(err, &e) || e.Code != "dialect" {
 		t.Errorf("unknown dialect: %v", err)
 	}
-	if _, err := migrate.Inspect(ctx, db, velox.SQLite, nil); !errors.As(err, &e) || e.Code != "dialect" {
-		t.Errorf("SQLite: %v", err)
-	}
-	if _, err := migrate.Drift(ctx, db, &migrate.Schema{Dialect: velox.SQLite}); !errors.As(err, &e) || e.Code != "dialect" {
-		t.Errorf("Drift on SQLite: %v", err)
+	if _, err := migrate.Inspect(ctx, nil, velox.SQLite, nil); !errors.As(err, &e) || e.Code != "nil" {
+		t.Errorf("no database: %v", err)
 	}
 	if _, err := migrate.Drift(ctx, db, nil); !errors.As(err, &e) || e.Code != "nil" {
 		t.Errorf("Drift of nil: %v", err)

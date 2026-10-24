@@ -135,3 +135,9 @@ var UnescapeMySQL = unescapeMySQL
 func MySQLDefault(typ string, expr bool, def string) string {
 	return mysqlDefault(typ, expr, sql.NullString{String: def, Valid: true})
 }
+
+// ParseCreateTable is parseCreateTable.
+func ParseCreateTable(sql string) (autoincrement bool, checks []Check, foreignKeys map[string]string, ok bool) {
+	ct, ok := parseCreateTable(sql)
+	return ct.autoincrement, ct.checks, ct.foreignKeys, ok
+}

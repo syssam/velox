@@ -18,11 +18,10 @@
 //
 // The other refusals are [*Error] values, whose Code names the failure:
 //
-//   - "nil": a schema Diff, Render or Drift needs is nil, or Inspect was
-//     given no database.
+//   - "nil": a schema Diff, Render or Drift needs is nil, or Inspect or
+//     Verify was given no database.
 //   - "dialect": a schema's dialect is not PostgreSQL, MySQL or SQLite, or
-//     two schemas' dialects differ, or Inspect was given a dialect it cannot
-//     read yet.
+//     two schemas' dialects differ, or Inspect was given another dialect.
 //   - "schema": a schema lists a table, an enum type, or a table's column,
 //     or a named index or constraint, twice.
 //   - "primary-key": a table's primary key changes its columns, or gains or
@@ -61,6 +60,8 @@
 //     not dirty or not in the history.
 //   - "resolution": Resolve was given neither ResolveApplied nor
 //     ResolveUndone.
+//   - "drift": Verify was given a database that is not empty, or the
+//     database differs from schema.json after the directory's files ran.
 //
 // Each [Change] has a String, its kind and the object it acts on in one
 // line. [Inspect] reads a database's tables as a Schema, and [Drift] reads
@@ -91,5 +92,7 @@
 // of the database and closes it after, so nothing a file sets on its
 // session reaches the application's other connections. An applied file
 // edited or gone is a [*ChecksumError], and a lock held past the wait
-// [ErrLockWait].
+// [ErrLockWait]. [Verify] applies a directory to an empty database and
+// fails when Drift then finds a change against schema.json: a test's check
+// that the files make what the snapshot says.
 package migrate
