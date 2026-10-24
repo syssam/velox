@@ -983,12 +983,20 @@ func TestMigrateDSNForm(t *testing.T) {
 }
 
 // TestMigrateSQLiteMissing: status and drift do not make a SQLite database
-// that is not there; apply does.
+// that is not there; apply -dry-run shows every file pending and makes
+// nothing; apply makes it.
 func TestMigrateSQLiteMissing(t *testing.T) {
 	dir := t.TempDir()
 	writeMigrations(t, filepath.Join(dir, "migrations"), velox2.SQLite, usersSchema)
 	for _, dsn := range []string{filepath.Join(dir, "app.db"), "file:" + filepath.Join(dir, "app.db") + "?_pragma=foreign_keys(1)"} {
-		for _, args := range [][]string{{"status"}, {"drift"}, {"apply", "-dry-run"}} {
+		code, out, errs := velox(t, dir, "migrate", "apply", "-dry-run", "-db", dsn)
+		if code != 0 || errs != "" || !strings.HasPrefix(out, "== migrations/0001_create_users.sql\n") {
+			t.Errorf("apply -dry-run: %d %q\n%s", code, errs, out)
+		}
+		if exists(filepath.Join(dir, "app.db")) {
+			t.Fatalf("apply -dry-run %s made the database", dsn)
+		}
+		for _, args := range [][]string{{"status"}, {"drift"}} {
 			sub := args[0]
 			code, out, errs := velox(t, dir, append(append([]string{"migrate"}, args...), "-db", dsn)...)
 			want(t, sub, code, out, errs, 1, "", "velox-gen: migrate "+sub+": "+filepath.Join(dir, "app.db")+": no such database\n")

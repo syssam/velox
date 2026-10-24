@@ -149,6 +149,37 @@ func runMigrateApply(args []string, dir string, env []string, stdout, stderr io.
 	if len(rest) > 0 {
 		return c.noArgs()
 	}
+	fsys := os.DirFS(c.abs(dir))
+	show := func(files []migrate.File) int {
+		for _, f := range files {
+			if *to != 0 && f.Version > *to {
+				break
+			}
+			data, err := fs.ReadFile(fsys, f.Path)
+			if err != nil {
+				return c.fail(1, err)
+			}
+			_, _ = fmt.Fprintf(stdout, "== %s\n%s", c.path(f.Path), data)
+		}
+		return 0
+	}
+	if *dryRun {
+		// A SQLite file not made yet is an empty database: every file is
+		// pending, and nothing is opened.
+		dsn, src, ok := c.dsn(env)
+		if !ok {
+			return 2
+		}
+		d, code, ok := c.readDir(dir, 1)
+		if !ok {
+			return code
+		}
+		if d.Config.Dialect == velox2.SQLite && dsnForm(d.Config.Dialect, dsn, src) == nil {
+			if _, err := os.Stat(sqlitePath(dsn)); errors.Is(err, fs.ErrNotExist) {
+				return show(d.Files)
+			}
+		}
+	}
 	d, db, code, ok := c.connect(dir, env, 1, *dryRun) // a dry run makes no database
 	if !ok {
 		return code
@@ -156,7 +187,6 @@ func runMigrateApply(args []string, dir string, env []string, stdout, stderr io.
 	defer func() { _ = db.Close() }()
 	ctx, stop := signalContext()
 	defer stop()
-	fsys := os.DirFS(c.abs(dir))
 	ahead := func(rows []migrate.Applied) int {
 		_, _ = fmt.Fprintf(stdout, "the database is ahead of the directory (%s); nothing applied\n", versions(rows))
 		return 0
@@ -170,17 +200,7 @@ func runMigrateApply(args []string, dir string, env []string, stdout, stderr io.
 		if len(st.Ahead) > 0 {
 			return ahead(st.Ahead)
 		}
-		for _, f := range st.Pending {
-			if *to != 0 && f.Version > *to {
-				break
-			}
-			data, err := fs.ReadFile(fsys, f.Path)
-			if err != nil {
-				return c.fail(1, err)
-			}
-			_, _ = fmt.Fprintf(stdout, "== %s\n%s", c.path(f.Path), data)
-		}
-		return 0
+		return show(st.Pending)
 	}
 
 	opts := []migrate.Option{migrate.WithTarget(*to), migrate.WithLockWait(*lockWait)}
