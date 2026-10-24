@@ -140,6 +140,31 @@
 // Drift need a file database, since each run opens a connection of its own
 // and a connection to :memory: is a new, empty database.
 //
+// # Adopting a database
+//
+// A database made before the directory, by ent, by old velox or by hand,
+// is adopted in five steps. In a program, [Baseline] is step 1 and
+// [WithBaseline] step 3:
+//
+//  1. Run velox-gen migrate baseline -dialect d -db <dsn> against one
+//     environment. It writes a new directory whose 0001_baseline.sql builds
+//     the schema's tables as that database holds them. Read its warnings:
+//     an extension to add to 0001_baseline.sql by hand, a sequence's start
+//     or increment it does not keep, a PostgreSQL unique constraint read as
+//     its index.
+//  2. 0001_baseline.sql may be edited, followed by velox-gen migrate hash,
+//     only before any environment runs apply -baseline. After that, an edit
+//     is a [*ChecksumError] on every baselined database.
+//  3. Commit the directory, and run velox-gen migrate apply -baseline 1
+//     once on each existing environment. It records the file as applied
+//     without running it, and refuses a history that is not empty and a
+//     database with no tables besides the history.
+//  4. Run velox-gen migrate drift on each environment, since baseline read
+//     only one.
+//  5. Run velox-gen migrate diff as usual. An ent database's names come
+//     back as renames, and its varchar enums as alter-type changes, which
+//     are destructive and need -allow.
+//
 // # Atlas
 //
 // A team that uses Atlas can plan and apply with it instead: velox-gen

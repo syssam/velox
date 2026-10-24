@@ -74,6 +74,33 @@ velox's own `migrate` and Atlas are alternatives for one directory.
   `docker://mysql/8.4/dev` with `-dialect mysql`, and for SQLite
   `sqlite://dev?mode=memory` with `-dialect sqlite`.
 
+### Adopting an existing database
+
+A database made before the directory (by ent, by old velox or by hand) joins
+velox's planner in five steps:
+
+1. Run `go tool velox-gen migrate baseline -dialect postgres -db <dsn>`
+   against one environment. It writes a new `./migrations` whose
+   `0001_baseline.sql` builds the schema package's tables as that database
+   holds them. Read its warnings: an extension to add to `0001_baseline.sql`
+   by hand, a sequence's start or increment it does not keep, a PostgreSQL
+   unique constraint read as its index.
+2. `0001_baseline.sql` may be edited, followed by
+   `go tool velox-gen migrate hash`, only before any environment runs
+   `apply -baseline`. After that, an edit is a checksum error on every
+   baselined database.
+3. Commit the directory, and run
+   `go tool velox-gen migrate apply -baseline 1 -db <dsn>` once on each
+   existing environment. It records the file as applied without running it,
+   and refuses a history that is not empty and a database with no tables
+   besides the history.
+4. Run `go tool velox-gen migrate drift -db <dsn>` on each environment,
+   since baseline read only one.
+5. Run `go tool velox-gen migrate diff` as usual. An ent database's names
+   come back as renames, and its varchar enums as `alter-type` changes,
+   which are destructive and need `-allow` (as
+   `-allow alter-type=users.role`).
+
 ## Regenerate
 
 velox-gen is a tool dependency of this module (the `tool` line in `go.mod`).

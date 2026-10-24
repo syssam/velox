@@ -1514,6 +1514,35 @@ Plan 2 (`docs/plans/2026-10-24-migrate-2-runner.md`) made these calls where this
   - `status` prints a dirty version on stdout and its error on stderr.
 - MySQL's row limit refuses `varchar(16382)` and wider with any ID wider than `tinyint`, as MySQL 8.4 does; the message points at `Text()` and `MaxLen`.
 
+## Rulings made in plan 3
+
+Plan 3 (`docs/plans/2026-10-24-migrate-3-atlas-baseline.md`) made these calls where this design was silent, or wrong. Where one differs from a section above, or from the rulings on plan 3's builder check, it stands.
+
+**The plan's own rulings.**
+
+1. `migrate sql` takes no `-dir`: it reads no directory, so it has its own flag set.
+2. `migrate sql` writes stdout once, only on success: Atlas reads stdout as SQL.
+3. Baseline's comparison is drift's, in an adopt mode, not a second comparer. Where drift takes the snapshot's form so that `Diff` reports the rest, adopt mode keeps the database's, since the snapshot must describe the database.
+4. `Dir.Add` names `migrate baseline` in the header when the name is `baseline` and the directory has no file. `migrate diff -name baseline` on a new directory says `migrate baseline` too.
+5. Baseline's refusals are all collected, sorted by object and joined, so one run names them all; a lone refusal is returned as itself, and callers use `errors.As`.
+6. What `0001_baseline.sql` loses is a baseline note, which drift skips: an owned sequence's start and increment, an extension's type, and a PostgreSQL unique constraint folded into its index. A MySQL table's `AUTO_INCREMENT` is its next value, not its start, so it is not reported.
+7. Every `WithBaseline` refusal is Code `"baseline"`, before the run and under the lock alike; the checks that need no database run before the lock is taken.
+8. "Empty" for `apply -baseline` is no table in the connection's database besides the history. On PostgreSQL any user schema counts; `pg_%` schemas, `information_schema`, temporary tables and tables an extension owns do not, and the history is matched by schema and name. On MySQL only `DATABASE()` counts.
+9. Baseline reads only the schema's tables and enum types, never every table: an unknown table is never read, refused or warned about.
+10. The ent fixture is in `cmd/velox-gen`, through the CLI.
+
+**Rulings made while executing it.**
+
+- `migrate sql` refuses a schema package with no schemas, as `diff` and `generate` do (exit 1, nothing on stdout): an empty desired state would have Atlas plan to drop every table. **(changed: the plan's amendment M2 had it exit 0 with no output.)**
+- An enum type the schema names stays in the snapshot when the database has it, even when no found table uses it, with the database's labels in its order: else the next `diff` would create a type that exists. **(changed: the plan kept only the enum types the result's tables use.)**
+- In adopt mode, the comparison's warnings say "the schema" where drift's say "the snapshot".
+- On SQLite, unnamed indexes, foreign keys and checks pair by definition, one to one and in order, never by the name `""`, in `Diff`, drift and adopt mode alike; a rename by definition never targets `""`. An unnamed index or key is labelled by its columns, `users.(email)`, and an unnamed check by its expression, `users.check (email <> '')`. **(changed: an unnamed check was first labelled `users.check#N`; with checks paired by definition that label could never print, and was dropped.)**
+- On SQLite, `""` as an index's name marks a `UNIQUE` constraint's index. Adding, dropping or renaming one rebuilds the table, since SQLite cannot drop such an index; adopt mode never names it from the schema. SQLite's `CREATE TABLE` writes an unnamed key or check without `CONSTRAINT`, and an unnamed unique index as `UNIQUE (cols)`.
+- A foreign key to a table the schema names but the database lacks is refused with its own text: `references <t>, which the database does not have; create the table, or drop the key first`.
+- Baseline's refusal texts name no Go API, so velox-gen prints the library's texts as they are: `the database already has a migration history (N rows): a baseline adopts a database once; apply without one`, `the database has no tables besides the history: there is nothing to adopt; apply without a baseline` and `a baseline cannot resume a dirty version`.
+- `migrate baseline`'s closing hint names the new directory's last version, from its script count, `apply -baseline 1` whenever the plan is one script. Its malformed `-db` message names `-dialect` as the dialect's source, since there is no `velox.json` yet: `-db is not a SQLite path or URI (-dialect is sqlite)`.
+- A refused baseline writes no directory, and a missing SQLite file is not created.
+
 ## Follow-ups this closes
 
 From `docs/plans/2026-10-14-core-1-followups.md`:

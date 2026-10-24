@@ -360,11 +360,11 @@ From migrate plan 1 (2026-10-23): the model, `Tables`, `Diff`, `Lint`, `Render` 
 ## Left by migrate plan 2
 
 From migrate plan 2 (2026-10-24): the directory, the runner, `Inspect` and `Drift` on three dialects, the CLI's `diff`, `apply`, `status`, `drift`, `lint`, `hash` and `resolve`, and the itests. Plan 3 owns:
-- Baseline: `velox-gen migrate baseline`, `apply -baseline` and `WithBaseline`. `Report.Baselined` is declared and stays empty until then.
-- The property test (the spec's Plans, item 3).
-- The examples and `internal/testmodel` on the planner: their tables are still hand-written DDL.
-- `migrate diff -check` in CI, for the examples' directories.
-- The documents: the README and the example's, beside `migrate`'s package doc.
+- [x] Resolved in migrate plan 3, Tasks 2–4 (`migrate.Baseline`, `WithBaseline` and `Report.Baselined`, `velox-gen migrate baseline` and `apply -baseline`, with the ent fixture). Baseline: `velox-gen migrate baseline`, `apply -baseline` and `WithBaseline`. `Report.Baselined` is declared and stays empty until then.
+- Moved to "Left by migrate plan 3" by the user's ruling of 2026-10-24. The property test (the spec's Plans, item 3).
+- Moved to "Left by migrate plan 3". The examples and `internal/testmodel` on the planner: their tables are still hand-written DDL.
+- Moved to "Left by migrate plan 3". `migrate diff -check` in CI, for the examples' directories.
+- [x] Resolved in migrate plan 3, Tasks 1 and 5 (`migrate`'s package doc and `example/README.md`'s "Migrations": the Atlas provider and adopting a database). The repo's own README is the 1.0 release's item. The documents: the README and the example's, beside `migrate`'s package doc.
 
 Found while executing plan 2:
 - PostgreSQL's primary-key index is not checked for the attributes the model lacks (a `DESC` column, an operator class); its constraint's `DEFERRABLE` is. MySQL notes a prefix or `DESC` primary key.
@@ -383,6 +383,25 @@ From the final review's fix wave:
 - The inspect readers' shared helpers: the PostgreSQL, MySQL and SQLite readers each have their own `each`, `note`, `schema` and `tables`. One reader type that holds them once would leave each dialect only its queries.
 - The splitter cuts PostgreSQL 14's `CREATE FUNCTION … BEGIN ATOMIC …; END` at the body's inner semicolons, so the trailing `END` is now refused as "END in a file run in a transaction", which points the wrong way. The splitter should read a `BEGIN ATOMIC` body as one statement.
 - A file run in a transaction that changes its session's `search_path` (pg_dump's `set_config('search_path', '', false)`) breaks its own history write, which names the table unqualified; Up resets the session only after each file. Qualifying the history table, or resetting before the history write, would close it.
+
+## Left by migrate plan 3
+
+From migrate plan 3 (2026-10-24): `velox-gen migrate sql`, the Atlas provider; Render's owned sequences; `migrate.Baseline` and `velox-gen migrate baseline`; `WithBaseline` and `apply -baseline`; the ent fixture; the documents.
+
+Moved out of the plan by the user's ruling of 2026-10-24 (migrations are not the focus; the ORM and GraphQL are):
+- The property test (the spec's Plans, item 3).
+- The examples and `internal/testmodel` on the planner: their tables are still hand-written DDL.
+- `migrate diff -check` in CI, for the examples' directories.
+- Drift through a scratch database.
+- An Atlas cross-check of `migrate sql`'s output: no test runs Atlas on it.
+
+Left by the plan:
+- A SQLite ent fixture. The ent fixture (`cmd/velox-gen/testdata/ent`) covers PostgreSQL and MySQL; SQLite's baseline is covered by `TestMigrateBaselineSQLite` and `migrate`'s own tests on a velox-made database.
+- MySQL `AUTO_INCREMENT` start values: a table's `AUTO_INCREMENT` is its next value, not its start, so baseline does not see a start value and gives no warning; `0001_baseline.sql` builds a fresh database whose counter starts at 1.
+
+Found while executing it:
+- PostgreSQL unique constraints: velox models one as its unique index, and baseline warns that it is read so. The next diff renames its index with `ALTER INDEX … RENAME`, which renames the constraint too (ent's `users_email_key` becomes `users_email_unique`), but a later drop renders `DROP INDEX`, which PostgreSQL refuses for a constraint's index. Render should write `ALTER TABLE … DROP CONSTRAINT` for it, which needs the model to tell a constraint's index from a plain one.
+- The extension note matches only a column type's own `pg_depend` row. A column of an array of an extension's type (`citext[]`), or of a domain over one, gets no note, so `0001_baseline.sql` fails on a fresh database with no word of the missing `CREATE EXTENSION`.
 
 ## 1.0 release
 
