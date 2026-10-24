@@ -268,7 +268,7 @@ func (o options) checkBaseline(d *Dir) error {
 	}
 	switch {
 	case o.resume:
-		return refuse("WithBaseline cannot resume a dirty version")
+		return refuse("a baseline cannot resume a dirty version")
 	case o.target != 0 && o.target < o.baseline:
 		return refuse("the target %d is below the baseline %d", o.target, o.baseline)
 	case !slices.ContainsFunc(d.Files, func(f File) bool { return f.Version == o.baseline }):
@@ -277,22 +277,24 @@ func (o options) checkBaseline(d *Dir) error {
 	return nil
 }
 
-// errBaselined is WithBaseline's refusal of a history that has a row.
-var errBaselined = &Error{Code: "baseline", Reason: "the history already has versions; WithBaseline adopts a database once, run Up without it"}
+// errBaselined is WithBaseline's refusal of a history of n rows.
+func errBaselined(n int) error {
+	return &Error{Code: "baseline", Reason: fmt.Sprintf("the database already has a migration history (%d rows): a baseline adopts a database once; apply without one", n)}
+}
 
 // baselining records dir's files up to o.baseline as applied, in one
 // transaction, on a database whose history, rows, is empty and which holds
 // another table. It returns the rows it recorded, and logs each.
 func (s *session) baselining(ctx context.Context, d *Dir, rows []Applied, o options) ([]Applied, error) {
 	if len(rows) > 0 {
-		return nil, errBaselined
+		return nil, errBaselined(len(rows))
 	}
 	ok, err := s.hasTables(ctx)
 	if err != nil {
 		return nil, wrap(ctx, "reading the database's tables", err)
 	}
 	if !ok {
-		return nil, &Error{Code: "baseline", Reason: "the database is empty; run Up without WithBaseline"}
+		return nil, &Error{Code: "baseline", Reason: "the database has no tables besides the history: there is nothing to adopt; apply without a baseline"}
 	}
 	if err := s.begin(ctx); err != nil {
 		return nil, wrap(ctx, "baselining: BEGIN", err)
@@ -309,7 +311,7 @@ func (s *session) baselining(ctx context.Context, d *Dir, rows []Applied, o opti
 			return nil, wrap(ctx, "baselining", err)
 		}
 		if len(rows) > 0 {
-			return nil, errBaselined
+			return nil, errBaselined(len(rows))
 		}
 	}
 	now := time.Now().UTC().Truncate(time.Microsecond)

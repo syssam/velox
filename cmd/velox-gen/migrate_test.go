@@ -639,11 +639,16 @@ func TestMigrateApplyBaseline(t *testing.T) {
 		}
 	}
 
-	code, out, errs := m("-baseline", "1")
+	empty := filepath.Join(dir, "empty.db")
+	code, out, errs := velox(t, dir, "migrate", "apply", "-db", empty, "-baseline", "1")
+	want(t, "apply -baseline 1 on an empty database", code, out, errs, 1, "",
+		"velox-gen: migrate apply: the database has no tables besides the history: there is nothing to adopt; apply without a baseline\n")
+
+	code, out, errs = m("-baseline", "1")
 	matches(t, "apply -baseline 1", code, out, errs, 0, "baselined "+regexp.QuoteMeta(first)+"\n"+appliedLine(second), "")
 	code, out, errs = m("-baseline", "1")
 	want(t, "apply -baseline 1 again", code, out, errs, 1, "",
-		"velox-gen: migrate apply: the history already has versions; WithBaseline adopts a database once, run Up without it\n")
+		"velox-gen: migrate apply: the database already has a migration history (2 rows): a baseline adopts a database once; apply without one\n")
 	code, out, errs = velox(t, dir, "migrate", "status", "-db", dsn)
 	matches(t, "status", code, out, errs, 0, "applied 1 "+regexp.QuoteMeta(first)+" "+stamp+"\napplied 2 "+regexp.QuoteMeta(second)+" "+stamp+"\n", "")
 }

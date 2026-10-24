@@ -255,7 +255,7 @@ func TestUpBaselineEmptyDatabasePostgres(t *testing.T) {
 	}
 	t.Run("fresh", func(t *testing.T) {
 		db, _ := freshDB(t, velox.Postgres)
-		baselineErr(t, "fresh", up(db), "the database is empty; run Up without WithBaseline")
+		baselineErr(t, "fresh", up(db), "the database has no tables besides the history: there is nothing to adopt; apply without a baseline")
 		var n int
 		if err := db.QueryRow(`SELECT count(*) FROM velox_migrations`).Scan(&n); err != nil || n != 0 {
 			t.Errorf("history rows %d, %v", n, err)
@@ -271,7 +271,7 @@ func TestUpBaselineEmptyDatabasePostgres(t *testing.T) {
 		if _, err := conn.ExecContext(ctx, `CREATE TEMPORARY TABLE scratch (x integer)`); err != nil {
 			t.Fatal(err)
 		}
-		baselineErr(t, "temporary", up(db), "the database is empty; run Up without WithBaseline")
+		baselineErr(t, "temporary", up(db), "the database has no tables besides the history: there is nothing to adopt; apply without a baseline")
 	})
 	t.Run("extension", func(t *testing.T) {
 		db, _ := freshDB(t, velox.Postgres)
@@ -282,7 +282,7 @@ func TestUpBaselineEmptyDatabasePostgres(t *testing.T) {
 		}
 		pgExec(t, db, `CREATE TABLE spatial_ref_sys (srid integer PRIMARY KEY)`)
 		pgExec(t, db, `ALTER EXTENSION citext ADD TABLE spatial_ref_sys`)
-		baselineErr(t, "extension", up(db), "the database is empty; run Up without WithBaseline")
+		baselineErr(t, "extension", up(db), "the database has no tables besides the history: there is nothing to adopt; apply without a baseline")
 	})
 	t.Run("schema", func(t *testing.T) {
 		db, _ := freshDB(t, velox.Postgres)
@@ -309,7 +309,7 @@ func TestUpBaselineEmptyDatabaseMySQL(t *testing.T) {
 		return err
 	}
 	db, _ := freshDB(t, velox.MySQL)
-	baselineErr(t, "fresh", up(db), "the database is empty; run Up without WithBaseline")
+	baselineErr(t, "fresh", up(db), "the database has no tables besides the history: there is nothing to adopt; apply without a baseline")
 	var n int
 	if err := db.QueryRow("SELECT count(*) FROM velox_migrations").Scan(&n); err != nil || n != 0 {
 		t.Errorf("history rows %d, %v", n, err)

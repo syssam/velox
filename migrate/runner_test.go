@@ -829,7 +829,7 @@ func TestUpBaselineRefusals(t *testing.T) {
 		opts []migrate.Option
 		text string
 	}{
-		{"resume", []migrate.Option{migrate.WithBaseline(1), migrate.WithResume()}, "WithBaseline cannot resume a dirty version"},
+		{"resume", []migrate.Option{migrate.WithBaseline(1), migrate.WithResume()}, "a baseline cannot resume a dirty version"},
 		{"target", []migrate.Option{migrate.WithTarget(1), migrate.WithBaseline(2)}, "the target 1 is below the baseline 2"},
 		{"no file", []migrate.Option{migrate.WithBaseline(4)}, "the directory has no file of version 4"},
 	} {
@@ -848,13 +848,13 @@ func TestUpBaselineEmptyDatabase(t *testing.T) {
 	db, _ := freshDB(t, velox.SQLite)
 	fsys := dirOf(t, velox.SQLite, files(baselineFiles...))
 	_, err := migrate.Up(context.Background(), db, fsys, migrate.WithBaseline(1))
-	baselineErr(t, "empty", err, "the database is empty; run Up without WithBaseline")
+	baselineErr(t, "empty", err, "the database has no tables besides the history: there is nothing to adopt; apply without a baseline")
 	if !hasTable(t, db, "velox_migrations") || len(historyOf(t, db)) != 0 {
 		t.Errorf("history: %v, %+v", hasTable(t, db, "velox_migrations"), historyOf(t, db))
 	}
 }
 
-const baselinedText = "the history already has versions; WithBaseline adopts a database once, run Up without it"
+const baselinedText = "the database already has a migration history (1 rows): a baseline adopts a database once; apply without one"
 
 // TestUpBaselineTwice: a second baseline is refused, not a no-op, and
 // leaves the history as it was.
