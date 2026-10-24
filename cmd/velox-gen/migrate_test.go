@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"maps"
 	"net/url"
 	"os"
@@ -636,9 +637,23 @@ func TestMigrateApplyBaseline(t *testing.T) {
 			t.Errorf("%v: exit %d\nstdout:\n%s\nstderr:\n%s", c.args, code, out, errs)
 		}
 	}
+	code, out, errs := m("-baseline", "x")
+	if code != 2 || out != "" || !strings.HasPrefix(errs, `invalid value "x" for flag -baseline: not a version`) {
+		t.Errorf("-baseline x: exit %d\nstdout:\n%s\nstderr:\n%s", code, out, errs)
+	}
+
+	missing := filepath.Join(dir, "typo.db")
+	code, out, errs = velox(t, dir, "migrate", "apply", "-db", missing, "-baseline", "1")
+	want(t, "apply -baseline 1 on a missing file", code, out, errs, 1, "", "velox-gen: migrate apply: "+missing+": no such database\n")
+	if _, err := os.Stat(missing); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("apply -baseline 1 on a missing file made it: %v", err)
+	}
 
 	empty := filepath.Join(dir, "empty.db")
-	code, out, errs := velox(t, dir, "migrate", "apply", "-db", empty, "-baseline", "1")
+	if err := os.WriteFile(empty, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, out, errs = velox(t, dir, "migrate", "apply", "-db", empty, "-baseline", "1")
 	want(t, "apply -baseline 1 on an empty database", code, out, errs, 1, "",
 		"velox-gen: migrate apply: the database has no tables besides the history: there is nothing to adopt; apply without a baseline\n")
 

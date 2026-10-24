@@ -211,7 +211,8 @@ func runMigrateApply(args []string, dir string, env []string, stdout, stderr io.
 			}
 		}
 	}
-	d, db, code, ok := c.connect(dir, env, 1, *dryRun) // a dry run makes no database
+	// A dry run makes no database, and a baseline adopts one already there.
+	d, db, code, ok := c.connect(dir, env, 1, *dryRun || baselineSet)
 	if !ok {
 		return code
 	}
