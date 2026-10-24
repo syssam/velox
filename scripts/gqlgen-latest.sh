@@ -18,13 +18,16 @@ trap 'chmod -R u+w "$tmp" 2>/dev/null || true; rm -rf "$tmp"' EXIT
   go get github.com/99designs/gqlgen@latest
   go mod tidy
   # The itests build applications offline that require velox2 and this
-  # module, with velox-gen and velox-graphql as tools. Their module graph is
-  # not this module's (velox-gen's SQLite driver reaches modules the upgrade
-  # moved), so tidy one such application online first, to fill the module
-  # cache with what they read.
+  # module, with velox-gen and velox-graphql as tools: TestThroughTheLoader
+  # (annotation_test.go) and app (cmd/velox-graphql/e2e_test.go) write their
+  # go.mod, which this one mirrors. Their module graph is not this module's
+  # (velox-gen's SQLite driver reaches modules the upgrade moved), so tidy one
+  # such application online first, to fill the module cache with what they
+  # read. Its go line is the repository's.
+  goline=$(sed -n 's/^go //p' "$tmp/go.mod")
   mkdir "$tmp/warm"
-  printf 'module example.com/warm\n\ngo 1.27.0\n\ntool (\n\tgithub.com/syssam/velox2/cmd/velox-gen\n\tgithub.com/syssam/velox2/contrib/graphql/cmd/velox-graphql\n)\n\nrequire (\n\tgithub.com/syssam/velox2 v0.0.0\n\tgithub.com/syssam/velox2/contrib/graphql v0.0.0\n)\n\nreplace (\n\tgithub.com/syssam/velox2 => %s\n\tgithub.com/syssam/velox2/contrib/graphql => %s\n)\n' \
-    "$tmp" "$tmp/contrib/graphql" > "$tmp/warm/go.mod"
+  printf 'module example.com/warm\n\ngo %s\n\ntool (\n\tgithub.com/syssam/velox2/cmd/velox-gen\n\tgithub.com/syssam/velox2/contrib/graphql/cmd/velox-graphql\n)\n\nrequire (\n\tgithub.com/syssam/velox2 v0.0.0\n\tgithub.com/syssam/velox2/contrib/graphql v0.0.0\n)\n\nreplace (\n\tgithub.com/syssam/velox2 => %s\n\tgithub.com/syssam/velox2/contrib/graphql => %s\n)\n' \
+    "$goline" "$tmp" "$tmp/contrib/graphql" > "$tmp/warm/go.mod"
   (cd "$tmp/warm" && go mod tidy)
   go vet ./...
   # CI unset: this job has no databases, and the mutation itest's TestMain

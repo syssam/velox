@@ -23,8 +23,8 @@ import (
 // A dbCmd is a migrate subcommand that opens a database: -dir and -db.
 type dbCmd struct {
 	*migrateCmd
-	db      *string  // -db, as given
-	secrets []string // what of the DSN no message shows
+	db     *string // -db, as given
+	secret secret  // what of the DSN no message shows
 }
 
 // newDBCmd is the subcommand name with its -dir and -db flags.
@@ -34,24 +34,42 @@ func newDBCmd(name string, stderr io.Writer) *dbCmd {
 	return c
 }
 
-// dsn is -db, else $VELOX_DB; with neither it prints the usage error and
-// reports false.
-func (c *dbCmd) dsn(env []string) (string, bool) {
-	dsn := *c.db
+// dsn is -db, else $VELOX_DB, and the one it is ("-db" or "$VELOX_DB");
+// with neither it prints the usage error and reports false.
+func (c *dbCmd) dsn(env []string) (dsn, src string, ok bool) {
+	dsn, src = *c.db, "-db"
 	if dsn == "" {
-		dsn = lookupEnv(env, "VELOX_DB")
+		dsn, src = lookupEnv(env, "VELOX_DB"), "$VELOX_DB"
 	}
 	if dsn == "" {
 		_, _ = fmt.Fprintf(c.stderr, "velox-gen: migrate %s needs -db or $VELOX_DB\n", c.name)
-		return "", false
+		return "", "", false
 	}
-	return dsn, true
+	return dsn, src, true
 }
 
-// open opens dsn with the driver of d.
-func (c *dbCmd) open(d velox2.Dialect, dsn string) (*sql.DB, error) {
-	c.secrets = secrets(d, dsn)
-	return openDB(d, dsn)
+// open opens dsn, from src, with the driver of d. A DSN not of the driver's
+// form is exit 2, before it is used. With existing, a SQLite file that is
+// not there is exit 1, and the file is opened without creating it. It
+// reports false, with the exit code, when it fails.
+func (c *dbCmd) open(d velox2.Dialect, dsn, src string, existing bool) (*sql.DB, int, bool) {
+	if err := dsnForm(d, dsn, src); err != nil {
+		return nil, c.fail(2, err), false
+	}
+	c.secret = secrets(d, dsn).joined(func(s string) string { return dirFile.ReplaceAllStringFunc(s, c.path) })
+	if d == velox2.SQLite && existing {
+		if path := sqlitePath(dsn); path != "" {
+			if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
+				return nil, c.fail(1, fmt.Errorf("%s: no such database", path)), false
+			}
+			dsn = readWrite(dsn)
+		}
+	}
+	db, err := openDB(d, dsn)
+	if err != nil {
+		return nil, c.fail(1, err), false
+	}
+	return db, 0, true
 }
 
 // fail prints err as "velox-gen: migrate <name>: <text>", without the
@@ -62,19 +80,21 @@ func (c *dbCmd) fail(code int, err error) int {
 	return code
 }
 
-// text is s with the DSN hidden and the directory's files joined to -dir.
+// text is s with the directory's files joined to -dir, then the DSN hidden.
 func (c *dbCmd) text(s string) string {
-	return dirFile.ReplaceAllStringFunc(redact(s, c.secrets), c.path)
+	return c.secret.redact(dirFile.ReplaceAllStringFunc(s, c.path))
 }
 
 // dirFile is a file of the directory in a message of migrate's, which names
-// them as the directory does.
+// them as the directory does: a migration file's name as migrate reads it
+// (TestDirFileIsMigrates holds the two together), or one of its other files.
 var dirFile = regexp.MustCompile(`\b(?:[0-9]{4,}_[a-z0-9_]+\.sql|velox\.json|velox\.sum|schema\.json)\b`)
 
 // connect reads the directory and opens the database: the start of apply,
-// status and drift. It reports false, with the exit code, when it fails.
-func (c *dbCmd) connect(dir string, env []string, staleCode int) (*migrate.Dir, *sql.DB, int, bool) {
-	dsn, ok := c.dsn(env)
+// status and drift; existing is open's. It reports false, with the exit
+// code, when it fails.
+func (c *dbCmd) connect(dir string, env []string, staleCode int, existing bool) (*migrate.Dir, *sql.DB, int, bool) {
+	dsn, src, ok := c.dsn(env)
 	if !ok {
 		return nil, nil, 2, false
 	}
@@ -82,9 +102,9 @@ func (c *dbCmd) connect(dir string, env []string, staleCode int) (*migrate.Dir, 
 	if !ok {
 		return nil, nil, code, false
 	}
-	db, err := c.open(d.Config.Dialect, dsn)
-	if err != nil {
-		return nil, nil, c.fail(1, err), false
+	db, code, ok := c.open(d.Config.Dialect, dsn, src, existing)
+	if !ok {
+		return nil, nil, code, false
 	}
 	return d, db, 0, true
 }
@@ -105,6 +125,14 @@ func filePath(d *migrate.Dir, a migrate.Applied) string {
 		return f.Path
 	}
 	return fmt.Sprintf("%04d_%s.sql", a.Version, a.Name)
+}
+
+// statements is "1 statement" or "<n> statements".
+func statements(n int) string {
+	if n == 1 {
+		return "1 statement"
+	}
+	return strconv.Itoa(n) + " statements"
 }
 
 // versions is "version 5" or "versions 5, 6".
@@ -135,7 +163,7 @@ func runMigrateApply(args []string, dir string, env []string, stdout, stderr io.
 	if len(rest) > 0 {
 		return c.noArgs()
 	}
-	d, db, code, ok := c.connect(dir, env, 1)
+	d, db, code, ok := c.connect(dir, env, 1, false)
 	if !ok {
 		return code
 	}
@@ -252,7 +280,7 @@ func runMigrateStatus(args []string, dir string, env []string, stdout, stderr io
 	if len(rest) > 0 {
 		return c.noArgs()
 	}
-	d, db, code, ok := c.connect(dir, env, 1)
+	d, db, code, ok := c.connect(dir, env, 1, true)
 	if !ok {
 		return code
 	}
@@ -272,7 +300,7 @@ func runMigrateStatus(args []string, dir string, env []string, stdout, stderr io
 		}
 		if st.Dirty != nil {
 			a := appliedOf(*st.Dirty)
-			a.Error = redact(a.Error, c.secrets)
+			a.Error = c.secret.redact(a.Error)
 			j.Dirty = &a
 		}
 		if err := printJSON(stdout, j); err != nil {
@@ -294,7 +322,7 @@ func runMigrateStatus(args []string, dir string, env []string, stdout, stderr io
 			lines = append(lines, line{a.Version, fmt.Sprintf("ahead %d %s", a.Version, a.Name)})
 		}
 		if a := st.Dirty; a != nil {
-			s := fmt.Sprintf("dirty %d %s: %d statements done", a.Version, c.path(dirty.Path), a.Statements)
+			s := fmt.Sprintf("dirty %d %s: %s done", a.Version, c.path(dirty.Path), statements(a.Statements))
 			if a.Error != "" {
 				s += ": " + c.text(a.Error)
 			}
@@ -345,7 +373,7 @@ func runMigrateDrift(args []string, dir string, env []string, stdout, stderr io.
 	if len(rest) > 0 {
 		return c.noArgs()
 	}
-	d, db, code, ok := c.connect(dir, env, 1)
+	d, db, code, ok := c.connect(dir, env, 1, true)
 	if !ok {
 		return code
 	}
@@ -425,7 +453,7 @@ func runMigrateResolve(args []string, dir string, env []string, stdout, stderr i
 		c.fs.Usage()
 		return 2
 	}
-	dsn, ok := c.dsn(env)
+	dsn, src, ok := c.dsn(env)
 	if !ok {
 		return 2
 	}
@@ -445,9 +473,9 @@ func runMigrateResolve(args []string, dir string, env []string, stdout, stderr i
 	if err := json.Unmarshal(raw, &cfg); err != nil || dialect.Set(cfg.Dialect) != nil {
 		return c.fail(1, errors.New("velox.json: no dialect postgres, mysql or sqlite"))
 	}
-	db, err := c.open(dialect.d, dsn)
-	if err != nil {
-		return c.fail(1, err)
+	db, code, ok := c.open(dialect.d, dsn, src, true)
+	if !ok {
+		return code
 	}
 	defer func() { _ = db.Close() }()
 	ctx, stop := signalContext()

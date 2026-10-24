@@ -148,8 +148,11 @@
 // DSN as the directory's driver reads it: a pgx connection string, a
 // go-sql-driver/mysql DSN, or a SQLite path or URI. Without -db they read
 // $VELOX_DB, which keeps a password out of the shell's history; with
-// neither, the subcommand is a usage error. No message shows the DSN or its
-// password. SIGINT or SIGTERM cancels the run: a file being applied
+// neither, the subcommand is a usage error, as is a DSN not of the
+// dialect's form, which is refused before it is used. No message shows the
+// DSN or its password; a SQLite path is named. status, drift and resolve
+// open a SQLite file without creating it: one that is not there is an
+// error; apply creates it. SIGINT or SIGTERM cancels the run: a file being applied
 // statement by statement is left dirty with the reason, one in a
 // transaction is rolled back, and the exit code is 1.
 //
@@ -166,7 +169,7 @@
 //
 // migrate status prints a line per version, in version order: "applied
 // <version> <path> <time>", the time in RFC 3339 and UTC, "pending <version>
-// <path>", "dirty <version> <path>: <n> statements done: <error>" and "ahead
+// <path>", "dirty <version> <path>: <n> statement(s) done: <error>" and "ahead
 // <version> <name>" for a version above the directory's last file. It exits
 // 0 when the database is up to date or ahead, 3 with pending files and 1
 // with a dirty version. -json prints {"applied", "pending", "ahead",
