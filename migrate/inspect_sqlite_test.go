@@ -40,7 +40,7 @@ func TestParseCreateTable(t *testing.T) {
 		{Name: "users_role_check", Expr: `"role" IN ('admin', 'viewer')`},
 		{Name: "users_status_check", Expr: `"status" IN ('active', 'banned', 'pending')`},
 	}
-	wantKeys := map[string]string{"mentor_id": "user_mentor", "org_id": "users_org_id_fkey"}
+	wantKeys := []migrate.ForeignKey{{Name: "user_mentor", Columns: []string{"mentor_id"}, RefTable: migrate.TableRef{Name: "users"}, RefColumns: []string{"id"}}, {Name: "users_org_id_fkey", Columns: []string{"org_id"}, RefTable: migrate.TableRef{Name: "orgs"}, RefColumns: []string{"id"}}}
 	if !ok || !auto || !reflect.DeepEqual(checks, wantChecks) || !reflect.DeepEqual(fks, wantKeys) {
 		t.Errorf("users: %v %+v %v %v", auto, checks, fks, ok)
 	}
@@ -49,7 +49,8 @@ func TestParseCreateTable(t *testing.T) {
 		`p integer REFERENCES u(id), s text CHECK (s IN ('a')), [x y] text, ` +
 		`CONSTRAINT "k" FOREIGN KEY (p) REFERENCES u (id), CONSTRAINT c2 CHECK (length(s) > 0) /* ; */)`)
 	wantChecks = []migrate.Check{{Expr: "s IN ('a')"}, {Name: "c2", Expr: "length(s) > 0"}}
-	if !ok || !auto || !reflect.DeepEqual(checks, wantChecks) || !reflect.DeepEqual(fks, map[string]string{"p": "k"}) {
+	if !ok || !auto || !reflect.DeepEqual(checks, wantChecks) || !reflect.DeepEqual(fks, []migrate.ForeignKey{
+		{Name: "", Columns: []string{"p"}, RefTable: migrate.TableRef{Name: "u"}, RefColumns: []string{"id"}}, {Name: "k", Columns: []string{"p"}, RefTable: migrate.TableRef{Name: "u"}, RefColumns: []string{"id"}}}) {
 		t.Errorf("hand-written: %v %+v %v %v", auto, checks, fks, ok)
 	}
 
@@ -63,8 +64,22 @@ func TestParseCreateTable(t *testing.T) {
 		"  UNIQUE (b) ON CONFLICT REPLACE, CHECK (a > 0)\n" +
 		") WITHOUT ROWID, STRICT")
 	wantChecks = []migrate.Check{{Name: "c check", Expr: "c <> ')'"}, {Expr: "a > 0"}}
-	if !ok || auto || !reflect.DeepEqual(checks, wantChecks) || !reflect.DeepEqual(fks, map[string]string{"b": "b_ref", "a,c": "two"}) {
+	if !ok || auto || !reflect.DeepEqual(checks, wantChecks) || !reflect.DeepEqual(fks, []migrate.ForeignKey{
+		{Name: "b_ref", Columns: []string{"b"}, RefTable: migrate.TableRef{Name: "u"}, RefColumns: nil}, {Name: "two", Columns: []string{"a", "c"}, RefTable: migrate.TableRef{Name: "u"}, RefColumns: []string{"x", "y"}}}) {
 		t.Errorf("quoted: %v %+v %v %v", auto, checks, fks, ok)
+	}
+
+	// A constraint's columns are the declared ones, matched by ASCII case;
+	// comments are not part of a check; a table key may be AUTOINCREMENT;
+	// two named keys on one column keep their names.
+	auto, checks, fks, ok = migrate.ParseCreateTable(`CREATE TABLE fk (P integer, "Role" text, ` +
+		`CONSTRAINT fkx FOREIGN KEY (p) REFERENCES ty(a), CONSTRAINT f2 FOREIGN KEY ("p") REFERENCES c8 (id), ` +
+		`CHECK (p > 0 /* positive */ AND [ROLE] IN ('a') -- trailing
+		), CHECK ("role" <> 'P'), PRIMARY KEY (p AUTOINCREMENT))`)
+	wantChecks = []migrate.Check{{Expr: "P > 0 AND [Role] IN ('a')"}, {Expr: `"Role" <> 'P'`}}
+	wantKeys = []migrate.ForeignKey{{Name: "fkx", Columns: []string{"P"}, RefTable: migrate.TableRef{Name: "ty"}, RefColumns: []string{"a"}}, {Name: "f2", Columns: []string{"P"}, RefTable: migrate.TableRef{Name: "c8"}, RefColumns: []string{"id"}}}
+	if !ok || !auto || !reflect.DeepEqual(checks, wantChecks) || !reflect.DeepEqual(fks, wantKeys) {
+		t.Errorf("case: %v %+v %+v %v", auto, checks, fks, ok)
 	}
 
 	for _, bad := range []string{
@@ -203,8 +218,15 @@ func TestInspectSQLiteAutoincrement(t *testing.T) {
 	pgExec(t, db, `CREATE TABLE a (id integer PRIMARY KEY)`)
 	pgExec(t, db, `CREATE TABLE b (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT)`)
 	pgExec(t, db, `CREATE TABLE c (id integer, n integer, PRIMARY KEY (id, n))`)
-	s := mustInspectSQLite(t, db)
-	want := map[string]bool{"a": false, "b": true, "c": false}
+	pgExec(t, db, `CREATE TABLE d (id integer, PRIMARY KEY (id AUTOINCREMENT))`)
+	s, notes, err := migrate.InspectNotes(context.Background(), db, velox.SQLite, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(notes) != 0 {
+		t.Errorf("notes %+v", notes)
+	}
+	want := map[string]bool{"a": false, "b": true, "c": false, "d": true}
 	if len(s.Tables) != len(want) {
 		t.Fatalf("tables %+v", s.Tables)
 	}
@@ -503,5 +525,92 @@ func TestInspectSQLiteDoesNotMutate(t *testing.T) {
 	}
 	if len(ra.Changes) == 0 || !reflect.DeepEqual(ra, rb) {
 		t.Errorf("two drifts differ, or find nothing:\n%v\n%v", ra, rb)
+	}
+}
+
+// TestInspectSQLiteCase: SQLite matches names by ASCII case, so a key, a
+// check or a predicate naming a column in another case is read with the
+// column's declared name; a key's name and DEFERRABLE are kept, and
+// comments are not part of a check or predicate.
+func TestInspectSQLiteCase(t *testing.T) {
+	ctx := context.Background()
+	db, _ := freshDB(t, velox.SQLite)
+	for _, q := range []string{
+		`CREATE TABLE ty (a integer PRIMARY KEY)`,
+		`CREATE TABLE fk (P integer, CONSTRAINT fkx FOREIGN KEY (p) REFERENCES TY(A) ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED,
+			CONSTRAINT fk_check CHECK (p > 0 /* positive */))`,
+		"CREATE INDEX fk_p ON fk (p) WHERE p > 0 -- trailing",
+	} {
+		pgExec(t, db, q)
+	}
+	s, notes, err := migrate.InspectNotes(ctx, db, velox.SQLite, []migrate.TableRef{{Name: "fk"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(notes) != 1 || notes[0].Object != "fk.fkx" || !strings.Contains(notes[0].Message, "ON UPDATE CASCADE") || !strings.Contains(notes[0].Message, "DEFERRABLE") {
+		t.Errorf("notes %+v", notes)
+	}
+	snapshot := &migrate.Schema{Dialect: velox.SQLite, Tables: []migrate.Table{{
+		Name:        "fk",
+		Columns:     []migrate.Column{{Name: "P", Type: "integer", Nullable: true}},
+		Indexes:     []migrate.Index{{Name: "fk_p", Columns: []string{"P"}, Where: "P > 0"}},
+		ForeignKeys: []migrate.ForeignKey{{Name: "fkx", Columns: []string{"P"}, RefTable: migrate.TableRef{Name: "ty"}, RefColumns: []string{"a"}}},
+		Checks:      []migrate.Check{{Name: "fk_check", Expr: "P > 0"}},
+	}}}
+	if !s.Equal(snapshot) {
+		b, _ := json.MarshalIndent(s, "", "  ")
+		t.Errorf("inspected %s", b)
+	}
+	r, err := migrate.Drift(ctx, db, snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Changes) != 0 || len(r.Warnings) != 1 || r.Warnings[0].Object != "fk.fkx" {
+		t.Errorf("drift: %v, %v", r.Changes, r.Warnings)
+	}
+}
+
+// TestInspectSQLiteKeyNames: keys are matched to the pragma's by their
+// columns, table and referenced columns, identical ones in order, so each
+// keeps its own name.
+func TestInspectSQLiteKeyNames(t *testing.T) {
+	db, _ := freshDB(t, velox.SQLite)
+	for _, q := range []string{
+		`CREATE TABLE u (id integer PRIMARY KEY)`,
+		`CREATE TABLE c8 (id integer PRIMARY KEY)`,
+		`CREATE TABLE c9 (a integer, CONSTRAINT f1 FOREIGN KEY (a) REFERENCES u (id), CONSTRAINT f2 FOREIGN KEY (a) REFERENCES c8 (id),
+			CONSTRAINT g1 FOREIGN KEY (a) REFERENCES u (id) ON DELETE CASCADE, CONSTRAINT g2 FOREIGN KEY (a) REFERENCES u (id) ON DELETE SET NULL)`,
+	} {
+		pgExec(t, db, q)
+	}
+	s := mustInspectSQLite(t, db, migrate.TableRef{Name: "c9"})
+	got := map[string]string{}
+	for _, fk := range s.Tables[0].ForeignKeys {
+		got[fk.Name] = fk.RefTable.Name + " " + fk.OnDelete
+	}
+	want := map[string]string{"f1": "u ", "f2": "c8 ", "g1": "u CASCADE", "g2": "u SET NULL"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("keys %v, want %v", got, want)
+	}
+	if r, err := migrate.Drift(context.Background(), db, s); err != nil || len(r.Changes) != 0 || len(r.Warnings) != 0 {
+		t.Errorf("drift: %+v, %v", r, err)
+	}
+}
+
+// TestInspectSQLiteUnreadable: a CREATE TABLE SQLite accepts but the parser
+// does not read is a note on the table, and the table is read without its
+// checks.
+func TestInspectSQLiteUnreadable(t *testing.T) {
+	db, _ := freshDB(t, velox.SQLite)
+	pgExec(t, db, `CREATE TABLE r (a text DEFAULT -'x', CONSTRAINT r_a CHECK (a <> ''))`)
+	s, notes, err := migrate.InspectNotes(context.Background(), db, velox.SQLite, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(notes) != 1 || notes[0].Object != "r" || !strings.Contains(notes[0].Message, "cannot be read") {
+		t.Errorf("notes %+v", notes)
+	}
+	if r := table(s, "r"); len(r.Columns) != 1 || len(r.Checks) != 0 {
+		t.Errorf("r: %+v", r)
 	}
 }

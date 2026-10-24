@@ -94,5 +94,7 @@
 // edited or gone is a [*ChecksumError], and a lock held past the wait
 // [ErrLockWait]. [Verify] applies a directory to an empty database and
 // fails when Drift then finds a change against schema.json: a test's check
-// that the files make what the snapshot says.
+// that the files make what the snapshot says. On SQLite, Verify, Up and
+// Drift need a file database, since each run opens a connection of its own
+// and a connection to :memory: is a new, empty database.
 package migrate

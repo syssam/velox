@@ -136,8 +136,13 @@ func MySQLDefault(typ string, expr bool, def string) string {
 	return mysqlDefault(typ, expr, sql.NullString{String: def, Valid: true})
 }
 
-// ParseCreateTable is parseCreateTable.
-func ParseCreateTable(sql string) (autoincrement bool, checks []Check, foreignKeys map[string]string, ok bool) {
+// ParseCreateTable is parseCreateTable, each key of the text as a
+// ForeignKey: its name, its columns, and its referenced table and columns
+// as written.
+func ParseCreateTable(sql string) (autoincrement bool, checks []Check, foreignKeys []ForeignKey, ok bool) {
 	ct, ok := parseCreateTable(sql)
-	return ct.autoincrement, ct.checks, ct.foreignKeys, ok
+	for _, k := range ct.foreignKeys {
+		foreignKeys = append(foreignKeys, ForeignKey{Name: k.name, Columns: k.columns, RefTable: TableRef{Name: k.refTable}, RefColumns: k.refColumns})
+	}
+	return ct.autoincrement, ct.checks, foreignKeys, ok
 }

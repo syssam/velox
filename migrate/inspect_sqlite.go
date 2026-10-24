@@ -48,6 +48,7 @@ type liteTable struct {
 	sql  string
 	ct   createTable
 	t    Table
+	cols []string // every column's name, generated ones too
 	says []string
 }
 
@@ -163,6 +164,7 @@ func (r *liteReader) columns(lt *liteTable) error {
 		if err := rows.Scan(&c.Name, &typ, &notNull, &def, &pk, &hd); err != nil {
 			return err
 		}
+		lt.cols = append(lt.cols, c.Name)
 		switch hd {
 		case 0:
 		case 2, 3:
@@ -276,7 +278,7 @@ func (r *liteReader) indexes(lt *liteTable) error {
 			if err := r.each(q, []any{li.name}, func(rows *sql.Rows) error { return rows.Scan(&text) }); err != nil {
 				return err
 			}
-			where, ok := indexWhere(text)
+			where, ok := indexWhere(text, lt.cols)
 			if !ok {
 				has = append(has, "a predicate that cannot be read")
 			}
@@ -291,11 +293,14 @@ func (r *liteReader) indexes(lt *liteTable) error {
 }
 
 const liteKeysQuery = `SELECT id, "table", "from", "to", on_update, on_delete
-FROM pragma_foreign_key_list(?, ?) ORDER BY id, seq`
+FROM pragma_foreign_key_list(?, ?) ORDER BY id DESC, seq`
 
-// keys reads lt's foreign keys, named from the CREATE text. A key that
-// names no columns references its table's primary key. ON UPDATE other than
-// no action, and DEFERRABLE, are a note.
+// keys reads lt's foreign keys. SQLite numbers them last first, so they are
+// read in the order the CREATE text declares them; each takes the name and
+// DEFERRABLE of the first key of the text not taken yet with its columns,
+// table and referenced columns. The referenced table and columns are named
+// as declared; a key that names no columns references its table's primary
+// key. ON UPDATE other than no action, and DEFERRABLE, are a note.
 func (r *liteReader) keys(lt *liteTable) error {
 	type liteKey struct {
 		fk       ForeignKey
@@ -321,32 +326,51 @@ func (r *liteReader) keys(lt *liteTable) error {
 			keys = append(keys, &liteKey{fk: ForeignKey{RefTable: TableRef{Schema: lt.t.Schema, Name: ref}, OnDelete: onDel}, onUpdate: onUpdate})
 		}
 		k := keys[len(keys)-1]
-		k.fk.Columns = append(k.fk.Columns, from)
+		k.fk.Columns = append(k.fk.Columns, declared(from, lt.cols))
 		k.to = append(k.to, to)
 		return nil
 	})
 	if err != nil {
 		return err
 	}
+	taken := make([]bool, len(lt.ct.foreignKeys))
 	for _, k := range keys {
 		fk := &k.fk
-		if !slices.ContainsFunc(k.to, func(s sql.NullString) bool { return s.Valid }) {
-			if fk.RefColumns, err = r.primaryKey(lt.db, fk.RefTable.Name); err != nil {
-				return err
-			}
-		} else {
-			for _, s := range k.to {
-				fk.RefColumns = append(fk.RefColumns, s.String)
+		var written []string // the referenced columns as written
+		for _, s := range k.to {
+			if s.Valid {
+				written = append(written, s.String)
 			}
 		}
-		key := strings.Join(fk.Columns, ",")
-		fk.Name = lt.ct.foreignKeys[key]
+		var tk *textKey
+		for i := range lt.ct.foreignKeys {
+			t := &lt.ct.foreignKeys[i]
+			if !taken[i] && sameNames(t.columns, fk.Columns) && sameName(t.refTable, fk.RefTable.Name) && sameNames(t.refColumns, written) {
+				taken[i], tk = true, t
+				break
+			}
+		}
+		table, cols, key, err := r.parent(lt.db, fk.RefTable.Name)
+		if err != nil {
+			return err
+		}
+		fk.RefTable.Name = table
+		if len(written) == 0 {
+			fk.RefColumns = key
+		} else {
+			for _, c := range written {
+				fk.RefColumns = append(fk.RefColumns, declared(c, cols))
+			}
+		}
 		var has []string
 		if k.onUpdate != "NO ACTION" {
 			has = append(has, "ON UPDATE "+k.onUpdate)
 		}
-		if lt.ct.deferrable[key] {
-			has = append(has, "DEFERRABLE")
+		if tk != nil {
+			fk.Name = tk.name
+			if tk.deferrable {
+				has = append(has, "DEFERRABLE")
+			}
 		}
 		if len(has) > 0 {
 			if fk.Name != "" {
@@ -360,30 +384,130 @@ func (r *liteReader) keys(lt *liteTable) error {
 	return nil
 }
 
-// primaryKey is the primary key's columns of table in db, in order.
-func (r *liteReader) primaryKey(db, table string) ([]string, error) {
-	var cols []string
-	err := r.each(`SELECT name FROM pragma_table_xinfo(?, ?) WHERE pk > 0 ORDER BY pk`, []any{table, db}, func(rows *sql.Rows) error {
-		var name string
-		err := rows.Scan(&name)
-		cols = append(cols, name)
-		return err
+// parent is the table name of db, as it is declared, its columns and its
+// primary key's columns in order; name itself and none when it is not
+// there.
+func (r *liteReader) parent(db, name string) (table string, cols, key []string, err error) {
+	table = name
+	q := `SELECT name FROM ` + ddl.Ident(velox.SQLite, db) + `.sqlite_schema WHERE type = 'table' AND name = ? COLLATE NOCASE`
+	if err := r.each(q, []any{name}, func(rows *sql.Rows) error { return rows.Scan(&table) }); err != nil {
+		return "", nil, nil, err
+	}
+	type keyed struct {
+		pk   int
+		name string
+	}
+	var pk []keyed
+	err = r.each(`SELECT name, pk FROM pragma_table_xinfo(?, ?) ORDER BY cid`, []any{table, db}, func(rows *sql.Rows) error {
+		var c keyed
+		if err := rows.Scan(&c.name, &c.pk); err != nil {
+			return err
+		}
+		cols = append(cols, c.name)
+		if c.pk > 0 {
+			pk = append(pk, c)
+		}
+		return nil
 	})
-	return cols, err
+	slices.SortFunc(pk, func(a, b keyed) int { return cmp.Compare(a.pk, b.pk) })
+	for _, c := range pk {
+		key = append(key, c.name)
+	}
+	return table, cols, key, err
 }
 
 // createTable is what the CREATE TABLE text of sqlite_schema names that the
 // pragmas do not: constraint names, CHECK texts and AUTOINCREMENT, and what
 // inspect notes: a column's collation, a DEFERRABLE key, and the table's
-// options.
+// options. A column a constraint names is the column's declared name,
+// matched by ASCII case as SQLite matches it, and a text has no comments.
 type createTable struct {
 	autoincrement bool
 	checks        []Check           // in order; Name "" for an unnamed one
-	foreignKeys   map[string]string // the key's columns joined by "," → its name; unnamed keys are not in it
+	foreignKeys   []textKey         // in order
 	defaults      map[string]string // a column's DEFAULT as written, parentheses kept, by column
 	collations    map[string]string // a column's COLLATE, by column
-	deferrable    map[string]bool   // a DEFERRABLE key, by its columns joined by ","
 	options       []string          // WITHOUT ROWID, STRICT
+}
+
+// textKey is a foreign key as the CREATE TABLE text gives it: its
+// referenced table and columns as written, none when it names none.
+type textKey struct {
+	name       string // "" for an unnamed one
+	columns    []string
+	refTable   string
+	refColumns []string
+	deferrable bool
+}
+
+// sameName reports whether a and b are one name to SQLite, which folds
+// ASCII letters only.
+func sameName(a, b string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := 0; i < len(a); i++ {
+		x, y := a[i], b[i]
+		if 'A' <= x && x <= 'Z' {
+			x += 'a' - 'A'
+		}
+		if 'A' <= y && y <= 'Z' {
+			y += 'a' - 'A'
+		}
+		if x != y {
+			return false
+		}
+	}
+	return true
+}
+
+// declared is name as one of cols, the declared names, spells it, or name
+// when none is it.
+func declared(name string, cols []string) string {
+	for _, c := range cols {
+		if sameName(c, name) {
+			return c
+		}
+	}
+	return name
+}
+
+// sameNames reports whether a and b are the same names, in order.
+func sameNames(a, b []string) bool {
+	return slices.EqualFunc(a, b, sameName)
+}
+
+// tokenText is the text of toks[from:to] of src without its comments, the
+// space between tokens kept where it holds none, and each name of a column
+// of cols spelled as cols declares it, in its own quotes.
+func tokenText(src string, toks []sqlTok, from, to int, cols []string) string {
+	var b strings.Builder
+	for k := from; k < to; k++ {
+		t := toks[k]
+		if k > from {
+			gap := src[toks[k-1].end:t.start]
+			if strings.TrimSpace(gap) != "" {
+				gap = " " // a comment
+			}
+			b.WriteString(gap)
+		}
+		text := t.text
+		if n, ok := t.name(); ok && t.kind != 's' {
+			if c := declared(n, cols); c != n {
+				switch t.text[0] {
+				case '"', '`':
+					q := t.text[:1]
+					text = q + strings.ReplaceAll(c, q, q+q) + q
+				case '[':
+					text = "[" + c + "]"
+				default:
+					text = c
+				}
+			}
+		}
+		b.WriteString(text)
+	}
+	return b.String()
 }
 
 // parseCreateTable reads sql, a CREATE TABLE as sqlite_schema holds it:
@@ -395,30 +519,44 @@ func parseCreateTable(sql string) (createTable, bool) {
 	if !ok {
 		return createTable{}, false
 	}
-	p := &ctParser{src: sql, toks: toks, ct: createTable{
-		foreignKeys: map[string]string{}, defaults: map[string]string{}, collations: map[string]string{}, deferrable: map[string]bool{}}}
+	p := &ctParser{src: sql, toks: toks, ct: createTable{defaults: map[string]string{}, collations: map[string]string{}},
+		defaults: map[string][2]int{}}
 	if !p.parse() {
 		return createTable{}, false
+	}
+	// The columns are all declared now: a check may name a later one.
+	for _, c := range p.checks {
+		p.ct.checks = append(p.ct.checks, Check{Name: c.name, Expr: tokenText(sql, toks, c.from, c.to, p.cols)})
+	}
+	for col, r := range p.defaults {
+		p.ct.defaults[col] = tokenText(sql, toks, r[0], r[1], p.cols)
+	}
+	for i := range p.ct.foreignKeys {
+		k := &p.ct.foreignKeys[i]
+		for j, c := range k.columns {
+			k.columns[j] = declared(c, p.cols)
+		}
 	}
 	return p.ct, true
 }
 
-// indexWhere is the predicate of sql, a CREATE INDEX: the text after its
-// WHERE. false: no WHERE, or not a text it reads.
-func indexWhere(sql string) (string, bool) {
+// indexWhere is the predicate of sql, a CREATE INDEX on a table of the
+// columns cols: the text after its WHERE, as tokenText gives it. false: no
+// WHERE, or not a text it reads.
+func indexWhere(sql string, cols []string) (string, bool) {
 	toks, ok := lexSQL(sql)
 	if !ok {
 		return "", false
 	}
 	depth := 0
-	for _, t := range toks {
+	for k, t := range toks {
 		switch {
 		case t.is("("):
 			depth++
 		case t.is(")"):
 			depth--
 		case depth == 0 && t.word("WHERE"):
-			where := strings.TrimSpace(sql[t.end:])
+			where := tokenText(sql, toks, k+1, len(toks), cols)
 			return where, where != ""
 		}
 	}
@@ -426,7 +564,8 @@ func indexWhere(sql string) (string, bool) {
 }
 
 // A sqlTok is a token of SQLite's SQL: a word (a keyword, a bare name or a
-// number), a quoted name ("", [], “), a '…' literal, or one other byte.
+// number), a quoted name (in double quotes, brackets or backquotes), a '…'
+// literal, or one other byte.
 type sqlTok struct {
 	kind       byte // 'w', 'q', 's' or 'p'
 	text       string
@@ -524,10 +663,20 @@ func lexSQL(src string) ([]sqlTok, bool) {
 
 // ctParser is parseCreateTable's reader: toks from i.
 type ctParser struct {
-	src  string
-	toks []sqlTok
-	i    int
-	ct   createTable
+	src      string
+	toks     []sqlTok
+	i        int
+	ct       createTable
+	cols     []string          // the declared columns, in order
+	autoinc  bool              // names read AUTOINCREMENT
+	checks   []textCheck       // made texts once every column is declared
+	defaults map[string][2]int // a column's DEFAULT, as tokens from and to
+}
+
+// textCheck is a check as its tokens from and to.
+type textCheck struct {
+	name     string
+	from, to int
 }
 
 func (p *ctParser) done() bool { return p.i >= len(p.toks) }
@@ -572,12 +721,12 @@ func (p *ctParser) name() (string, bool) {
 }
 
 // group takes a parenthesised group, the next token its "(", and returns
-// the text between its parentheses, trimmed.
-func (p *ctParser) group() (string, bool) {
+// the tokens between its parentheses, from and to.
+func (p *ctParser) group() (from, to int, ok bool) {
 	if !p.peek().is("(") {
-		return "", false
+		return 0, 0, false
 	}
-	open := p.toks[p.i]
+	from = p.i + 1
 	depth := 0
 	for ; p.i < len(p.toks); p.i++ {
 		switch t := p.toks[p.i]; {
@@ -586,16 +735,17 @@ func (p *ctParser) group() (string, bool) {
 		case t.is(")"):
 			depth--
 			if depth == 0 {
+				to = p.i
 				p.i++
-				return strings.TrimSpace(p.src[open.end:t.start]), true
+				return from, to, true
 			}
 		}
 	}
-	return "", false
+	return 0, 0, false
 }
 
 // names takes a parenthesised list of column names, each perhaps with
-// COLLATE and ASC or DESC.
+// COLLATE and ASC or DESC, and for a table's primary key AUTOINCREMENT.
 func (p *ctParser) names() ([]string, bool) {
 	if !p.punct("(") {
 		return nil, false
@@ -613,6 +763,9 @@ func (p *ctParser) names() ([]string, bool) {
 			}
 		}
 		p.word("ASC", "DESC")
+		if p.word("AUTOINCREMENT") {
+			p.autoinc = true
+		}
 		if p.punct(")") {
 			return out, true
 		}
@@ -684,12 +837,13 @@ func (p *ctParser) definition() bool {
 	if !ok {
 		return false
 	}
+	p.cols = append(p.cols, col)
 	// The type: names, then perhaps (n) or (n, m).
 	for t := p.peek(); (t.kind == 'w' || t.kind == 'q' || t.kind == 's') && !columnKeyword(t); t = p.peek() {
 		p.i++
 	}
 	if p.peek().is("(") {
-		if _, ok := p.group(); !ok {
+		if _, _, ok := p.group(); !ok {
 			return false
 		}
 	}
@@ -725,17 +879,17 @@ func (p *ctParser) definition() bool {
 				return false
 			}
 		case p.word("CHECK"):
-			expr, ok := p.group()
+			from, to, ok := p.group()
 			if !ok {
 				return false
 			}
-			p.ct.checks = append(p.ct.checks, Check{Name: named, Expr: expr})
+			p.checks = append(p.checks, textCheck{named, from, to})
 		case p.word("DEFAULT"):
-			start := p.peek().start
+			from := p.i
 			if !p.defaultValue() {
 				return false
 			}
-			p.ct.defaults[col] = p.src[start:p.toks[p.i-1].end]
+			p.defaults[col] = [2]int{from, p.i}
 		case p.word("COLLATE"):
 			coll, ok := p.name()
 			if !ok {
@@ -751,7 +905,7 @@ func (p *ctParser) definition() bool {
 				return false
 			}
 		case p.word("AS"):
-			if _, ok := p.group(); !ok {
+			if _, _, ok := p.group(); !ok {
 				return false
 			}
 			p.word("STORED", "VIRTUAL")
@@ -785,7 +939,7 @@ func (p *ctParser) conflict() bool {
 // word.
 func (p *ctParser) defaultValue() bool {
 	if p.peek().is("(") {
-		_, ok := p.group()
+		_, _, ok := p.group()
 		return ok
 	}
 	if p.punct("-") || p.punct("+") {
@@ -816,44 +970,54 @@ func (p *ctParser) tableConstraint() bool {
 		if !p.word("KEY") {
 			return false
 		}
-		if _, ok := p.names(); !ok {
+		p.autoinc = false
+		cols, ok := p.names()
+		if !ok {
 			return false
+		}
+		if p.autoinc {
+			// SQLite refuses AUTOINCREMENT but on one INTEGER column.
+			p.ct.autoincrement = len(cols) == 1
 		}
 		return p.conflict()
 	case p.word("UNIQUE"):
-		if _, ok := p.names(); !ok {
+		p.autoinc = false
+		if _, ok := p.names(); !ok || p.autoinc {
 			return false
 		}
 		return p.conflict()
 	case p.word("CHECK"):
-		expr, ok := p.group()
+		from, to, ok := p.group()
 		if !ok {
 			return false
 		}
-		p.ct.checks = append(p.ct.checks, Check{Name: name, Expr: expr})
+		p.checks = append(p.checks, textCheck{name, from, to})
 		return true
 	case p.word("FOREIGN"):
 		if !p.word("KEY") {
 			return false
 		}
+		p.autoinc = false
 		cols, ok := p.names()
-		return ok && p.word("REFERENCES") && p.references(cols, name)
+		return ok && !p.autoinc && p.word("REFERENCES") && p.references(cols, name)
 	}
 	return false
 }
 
 // references reads a foreign key clause after REFERENCES, for the key of
-// cols named name; an unnamed key is not in foreignKeys.
+// cols named name.
 func (p *ctParser) references(cols []string, name string) bool {
-	if _, ok := p.name(); !ok {
+	k := textKey{name: name, columns: cols}
+	var ok bool
+	if k.refTable, ok = p.name(); !ok {
 		return false
 	}
 	if p.peek().is("(") {
-		if _, ok := p.names(); !ok {
+		p.autoinc = false
+		if k.refColumns, ok = p.names(); !ok || p.autoinc {
 			return false
 		}
 	}
-	key := strings.Join(cols, ",")
 	for {
 		switch {
 		case p.word("ON"):
@@ -881,12 +1045,10 @@ func (p *ctParser) references(cols []string, name string) bool {
 			p.i += 2
 			p.initially()
 		case p.word("DEFERRABLE"):
-			p.ct.deferrable[key] = true
+			k.deferrable = true
 			p.initially()
 		default:
-			if name != "" {
-				p.ct.foreignKeys[key] = name
-			}
+			p.ct.foreignKeys = append(p.ct.foreignKeys, k)
 			return true
 		}
 	}

@@ -15,7 +15,9 @@ import (
 // know. A database holding a table of its default schema but the history
 // table, or a row of the history, is refused, as is one that differs after
 // the files ran; both are an *Error of Code "drift". Drift's warnings do
-// not fail it.
+// not fail it. On SQLite, db must be a file database: Verify, Up and Drift
+// each open a connection of their own and close it, and each connection to
+// :memory: is a new, empty database.
 func Verify(ctx context.Context, db *sql.DB, dir fs.FS) error {
 	d, err := ReadDir(dir)
 	if err != nil {
