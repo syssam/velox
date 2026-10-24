@@ -25,6 +25,7 @@
 //	velox-gen migrate lint [-dir ./migrations] [-since version]
 //	velox-gen migrate hash [-dir ./migrations] [-check]
 //	velox-gen migrate resolve [-dir ./migrations] [-db dsn] -version n (-applied | -undone)
+//	velox-gen migrate sql -dialect postgres|mysql|sqlite [package]
 //
 // Each subcommand has its own flags; a flag it does not take is a usage
 // error. Flags may follow the package, as in "go test ./x -v"; "--" ends them.
@@ -376,6 +377,8 @@ func printUsage(w io.Writer) {
         rewrite velox.sum
   velox-gen migrate resolve [-dir ./migrations] [-db dsn] -version n (-applied | -undone)
         end a dirty version that was finished or undone by hand
+  velox-gen migrate sql -dialect postgres|mysql|sqlite [package]
+        print the schema package's DDL, for Atlas's external_schema
 
 Exit codes:
   0  success

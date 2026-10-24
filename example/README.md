@@ -35,11 +35,44 @@ go run ./start
   generated handles (`gen.Users`, …), and any helpers they use. velox-gen
   binds those methods into the entity's metadata. Never edit the
   `*_velox.go` files.
-- Tables are created with plain DDL. Planning migrations from the schemas is
-  a later velox2 sub-project.
+- Tables are created with plain DDL, so each example runs on a fresh
+  in-memory database. A real application plans its migrations from the
+  schemas, as below.
 - The output is deterministic. `go test ./...` compares each example's output
   with its `testdata/output.golden`; after an intended change,
   `go test ./start -update` rewrites that example's file.
+
+## Migrations
+
+There are two paths, and a migration directory is managed by one of them:
+velox's own `migrate` and Atlas are alternatives for one directory.
+
+- **velox's planner.** `go tool velox-gen migrate diff -dialect postgres`
+  writes the next migration into `./migrations` from the schema package, and
+  `go tool velox-gen migrate apply -db <dsn>` applies the pending ones.
+- **Atlas.** `go tool velox-gen migrate sql` prints the schema package's
+  `CREATE` statements, which Atlas reads through its `external_schema`. Add
+  the tool with `go get -tool github.com/syssam/velox2/cmd/velox-gen`, then
+  run `atlas` from the module root with this `atlas.hcl`:
+
+  ```hcl
+  data "external_schema" "velox" {
+    program = ["go", "tool", "velox-gen", "migrate", "sql", "-dialect", "postgres", "./schema"]
+  }
+
+  env "velox" {
+    src = data.external_schema.velox.url
+    dev = "docker://postgres/16/dev?search_path=public"
+    migration { dir = "file://migrations" }
+  }
+  ```
+
+  `atlas migrate diff --env velox` writes a migration, and
+  `atlas migrate apply --env velox -u <url>` applies it. For a schema that
+  keeps tables in PostgreSQL schemas (`schema.TableIn`), use
+  `docker://postgres/16/dev`, which is database-scoped. For MySQL use
+  `docker://mysql/8.4/dev` with `-dialect mysql`, and for SQLite
+  `sqlite://dev?mode=memory` with `-dialect sqlite`.
 
 ## Regenerate
 

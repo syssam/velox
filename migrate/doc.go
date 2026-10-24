@@ -127,4 +127,31 @@
 // that the files make what the snapshot says. On SQLite, Verify, Up and
 // Drift need a file database, since each run opens a connection of its own
 // and a connection to :memory: is a new, empty database.
+//
+// # Atlas
+//
+// A team that uses Atlas can plan and apply with it instead: velox-gen
+// migrate sql prints the schema package's CREATE statements, the first file
+// migrate diff would write for a new directory, as plain DDL for Atlas's
+// external_schema. Add velox-gen to the module with go get -tool
+// github.com/syssam/velox2/cmd/velox-gen, and run atlas from the module root
+// with this atlas.hcl:
+//
+//	data "external_schema" "velox" {
+//	  program = ["go", "tool", "velox-gen", "migrate", "sql", "-dialect", "postgres", "./schema"]
+//	}
+//
+//	env "velox" {
+//	  src = data.external_schema.velox.url
+//	  dev = "docker://postgres/16/dev?search_path=public"
+//	  migration { dir = "file://migrations" }
+//	}
+//
+// atlas migrate diff --env velox then writes a migration, and atlas migrate
+// apply --env velox -u <url> applies it. For a schema that keeps tables in
+// PostgreSQL schemas (schema.TableIn), use docker://postgres/16/dev, which
+// is database-scoped. For MySQL use docker://mysql/8.4/dev with -dialect
+// mysql, and for SQLite sqlite://dev?mode=memory with -dialect sqlite.
+// velox's migrate and Atlas are alternatives for one directory: a directory
+// is managed by one of them.
 package migrate
