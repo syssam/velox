@@ -1,15 +1,23 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"maps"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/go-sql-driver/mysql"
 
 	velox2 "github.com/syssam/velox2"
 	"github.com/syssam/velox2/migrate"
@@ -314,17 +322,496 @@ func TestMigrateUsage(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, out, errs := velox(t, dir, "migrate")
-	want(t, "migrate", code, out, errs, 2, "", "velox-gen: migrate needs a subcommand: diff, lint or hash\n"+string(usage))
+	want(t, "migrate", code, out, errs, 2, "", "velox-gen: migrate needs a subcommand: diff, apply, status, drift, lint, hash or resolve\n"+string(usage))
 	code, out, errs = velox(t, dir, "migrate", "nope")
 	want(t, "nope", code, out, errs, 2, "", "velox-gen: migrate: unknown subcommand \"nope\"\n"+string(usage))
 	code, out, errs = velox(t, dir, "migrate", "baseline")
 	want(t, "baseline", code, out, errs, 2, "", "velox-gen: migrate: unknown subcommand \"baseline\"\n"+string(usage))
 	code, out, errs = velox(t, dir, "migrate", "-h")
 	want(t, "-h", code, out, errs, 0, "", string(usage))
-	for _, sub := range []string{"diff", "lint", "hash"} {
+	for _, sub := range []string{"diff", "apply", "status", "drift", "lint", "hash", "resolve"} {
 		code, _, errs := velox(t, dir, "migrate", sub, "-h")
 		if code != 0 || !strings.HasPrefix(errs, string(usage)) || !strings.Contains(errs, "Flags of migrate "+sub+":\n") || !strings.Contains(errs, "  -dir string\n") {
 			t.Errorf("%s -h: %d\n%s", sub, code, errs)
 		}
+	}
+}
+
+// noVeloxDB is the process's environment without VELOX_DB.
+func noVeloxDB() []string {
+	return slices.DeleteFunc(os.Environ(), func(kv string) bool { return strings.HasPrefix(kv, "VELOX_DB=") })
+}
+
+// writeMigrations adds a file to the migration directory dir for each of
+// steps, each planned from the one before, as migrate diff writes them; a
+// new directory is of dialect d.
+func writeMigrations(t *testing.T, dir string, d velox2.Dialect, steps ...*migrate.Schema) {
+	t.Helper()
+	for _, to := range steps {
+		md, err := migrate.ReadDir(os.DirFS(dir))
+		if !exists(filepath.Join(dir, "velox.json")) {
+			md, err = migrate.NewDir(migrate.Config{Dialect: d})
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		plan, err := migrate.NewPlan(md.Snapshot, to, migrate.PlanOptions{LockTimeout: md.Config.LockTimeout})
+		if err != nil {
+			t.Fatal(err)
+		}
+		files, err := md.Add("", plan, to)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for p, data := range files {
+			writeFile(t, filepath.Join(dir, p), string(data))
+		}
+	}
+}
+
+// handDir writes a migration directory of dialect d into dir with the
+// hand-written files given, by path, an empty schema.json and velox.sum.
+func handDir(t *testing.T, dir string, d velox2.Dialect, files map[string]string) {
+	t.Helper()
+	writeFile(t, filepath.Join(dir, "velox.json"), `{"version": 1, "dialect": "`+d.String()+`"}`+"\n")
+	snap, err := json.Marshal(&migrate.Schema{Dialect: d})
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(dir, "schema.json"), string(snap)+"\n")
+	for p, src := range files {
+		writeFile(t, filepath.Join(dir, p), src)
+	}
+	sum, err := migrate.Sum(os.DirFS(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(dir, "velox.sum"), string(sum))
+}
+
+// testDSN is the DSN of a new, empty database of dialect d, dropped when t
+// ends: on PostgreSQL one beside VELOX_TEST_POSTGRES's, on MySQL one made
+// through VELOX_TEST_MYSQL_ADMIN. It skips t when the variable is unset.
+func testDSN(t *testing.T, d velox2.Dialect) string {
+	t.Helper()
+	v, driver, q := "VELOX_TEST_POSTGRES", "pgx", `"`
+	if d == velox2.MySQL {
+		v, driver, q = "VELOX_TEST_MYSQL_ADMIN", "mysql", "`"
+	}
+	base := os.Getenv(v)
+	if base == "" {
+		t.Skip("needs " + v)
+	}
+	admin, err := sql.Open(driver, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = admin.Close() })
+	name := fmt.Sprintf("velox_gen_%d_%d", os.Getpid(), time.Now().UnixNano())
+	if _, err := admin.Exec("CREATE DATABASE " + q + name + q); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		drop := "DROP DATABASE IF EXISTS " + q + name + q
+		if d == velox2.Postgres {
+			drop += " WITH (FORCE)"
+		}
+		if _, err := admin.Exec(drop); err != nil {
+			t.Errorf("%s: %v", drop, err)
+		}
+	})
+	if d == velox2.MySQL {
+		cfg, err := mysql.ParseDSN(base)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg.DBName = name
+		return cfg.FormatDSN()
+	}
+	rest, query, _ := strings.Cut(base, "?")
+	if i := strings.LastIndex(rest, "/"); i > len("postgres://") {
+		rest = rest[:i]
+	}
+	if query != "" {
+		return rest + "/" + name + "?" + query
+	}
+	return rest + "/" + name
+}
+
+// The schemas of the SQLite tests: users, then users with email, then
+// posts beside them.
+var (
+	usersSchema = &migrate.Schema{Dialect: velox2.SQLite, Tables: []migrate.Table{{
+		Name:       "users",
+		Columns:    []migrate.Column{{Name: "id", Type: "integer", Identity: true}, {Name: "name", Type: "text"}},
+		PrimaryKey: []string{"id"},
+	}}}
+	usersEmailSchema = &migrate.Schema{Dialect: velox2.SQLite, Tables: []migrate.Table{{
+		Name:       "users",
+		Columns:    []migrate.Column{{Name: "id", Type: "integer", Identity: true}, {Name: "name", Type: "text"}, {Name: "email", Type: "text", Nullable: true}},
+		PrimaryKey: []string{"id"},
+	}}}
+	postsSchema = &migrate.Schema{Dialect: velox2.SQLite, Tables: []migrate.Table{
+		{
+			Name:       "posts",
+			Columns:    []migrate.Column{{Name: "id", Type: "integer", Identity: true}, {Name: "title", Type: "text"}},
+			PrimaryKey: []string{"id"},
+		},
+		usersEmailSchema.Tables[0],
+	}}
+)
+
+// appliedLine is a line migrate apply prints for a file.
+func appliedLine(path string) string {
+	return `applied ` + regexp.QuoteMeta(path) + ` in [0-9.]+(ns|µs|ms|s)\n`
+}
+
+// matches checks a run against an exit code, a pattern of its whole
+// standard output and its standard error.
+func matches(t *testing.T, name string, code int, out, errs string, wantCode int, outPattern, wantErrs string) {
+	t.Helper()
+	if code != wantCode || !regexp.MustCompile(`^`+outPattern+`$`).MatchString(out) || errs != wantErrs {
+		t.Errorf("%s: exit %d, want %d\nstdout:\n%s\nwant /%s/\nstderr:\n%s\nwant:\n%s", name, code, wantCode, out, outPattern, errs, wantErrs)
+	}
+}
+
+const stamp = `[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z`
+
+func TestMigrateApply(t *testing.T) {
+	dir := t.TempDir()
+	mig := filepath.Join(dir, "migrations")
+	writeMigrations(t, mig, velox2.SQLite, usersSchema, usersEmailSchema)
+	dsn := filepath.Join(dir, "app.db")
+	m := func(sub string, args ...string) (int, string, string) {
+		return velox(t, dir, append([]string{"migrate", sub, "-db", dsn}, args...)...)
+	}
+	first, second := filepath.Join("migrations", "0001_create_users.sql"), filepath.Join("migrations", "0002_add_users_email.sql")
+
+	code, out, errs := m("status")
+	want(t, "status", code, out, errs, 3, "pending 1 "+first+"\npending 2 "+second+"\n", "")
+
+	code, out, errs = m("apply", "-dry-run")
+	files := dirFiles(t, mig)
+	want(t, "dry-run", code, out, errs, 0, "== "+first+"\n"+files["0001_create_users.sql"]+"== "+second+"\n"+files["0002_add_users_email.sql"], "")
+	code, out, errs = m("apply", "-dry-run", "-to", "1")
+	want(t, "dry-run -to", code, out, errs, 0, "== "+first+"\n"+files["0001_create_users.sql"], "")
+	code, _, _ = m("status")
+	if code != 3 {
+		t.Errorf("dry-run applied: status exit %d", code)
+	}
+
+	code, out, errs = m("apply", "-to", "1")
+	matches(t, "apply -to 1", code, out, errs, 0, appliedLine(first), "")
+	code, out, errs = m("status")
+	matches(t, "status after 1", code, out, errs, 3, "applied 1 "+regexp.QuoteMeta(first)+" "+stamp+"\npending 2 "+regexp.QuoteMeta(second)+"\n", "")
+	code, out, errs = m("apply")
+	matches(t, "apply", code, out, errs, 0, appliedLine(second), "")
+	code, out, errs = m("apply")
+	want(t, "apply again", code, out, errs, 0, "", "")
+	code, out, errs = m("status")
+	matches(t, "status after", code, out, errs, 0, "applied 1 "+regexp.QuoteMeta(first)+" "+stamp+"\napplied 2 "+regexp.QuoteMeta(second)+" "+stamp+"\n", "")
+
+	code, out, errs = m("status", "-json")
+	if code != 0 || errs != "" || !strings.Contains(out, "\n  \"ahead\": [],\n  \"dirty\": null\n}") {
+		t.Fatalf("status -json: %d %q\n%s", code, errs, out)
+	}
+	type applied struct {
+		Version    uint64    `json:"version"`
+		Name       string    `json:"name"`
+		Sum        string    `json:"sum"`
+		AppliedAt  time.Time `json:"applied_at"`
+		DurationMS int64     `json:"duration_ms"`
+		Dirty      bool      `json:"dirty"`
+		Statements int       `json:"statements"`
+		Error      string    `json:"error"`
+	}
+	var st struct {
+		Applied []applied `json:"applied"`
+		Pending []struct {
+			Version uint64 `json:"version"`
+			Path    string `json:"path"`
+		} `json:"pending"`
+		Ahead []applied `json:"ahead"`
+		Dirty *applied  `json:"dirty"`
+	}
+	dec := json.NewDecoder(strings.NewReader(out))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&st); err != nil {
+		t.Fatal(err)
+	}
+	if len(st.Applied) != 2 || st.Applied[0].Version != 1 || st.Applied[0].Name != "create_users" || st.Applied[1].Name != "add_users_email" ||
+		!strings.HasPrefix(st.Applied[0].Sum, "h1:") || st.Applied[0].AppliedAt.IsZero() || st.Applied[0].AppliedAt.Location() != time.UTC ||
+		st.Applied[0].Dirty || st.Applied[0].Statements != 1 || len(st.Pending) != 0 || st.Ahead == nil || len(st.Ahead) != 0 || st.Dirty != nil {
+		t.Errorf("status -json: %+v", st)
+	}
+	_, again, _ := m("status", "-json")
+	if again != out {
+		t.Errorf("status -json twice:\n%s\n%s", out, again)
+	}
+
+	writeMigrations(t, mig, velox2.SQLite, postsSchema)
+	code, out, errs = m("status", "-json")
+	if code != 3 || errs != "" || !strings.Contains(out, "\"pending\": [\n    {\n      \"version\": 3,\n      \"path\": \"0003_create_posts.sql\"\n    }\n  ],") {
+		t.Errorf("status -json pending: %d %q\n%s", code, errs, out)
+	}
+}
+
+func TestMigrateDrift(t *testing.T) {
+	dir := t.TempDir()
+	mig := filepath.Join(dir, "migrations")
+	writeMigrations(t, mig, velox2.SQLite, usersSchema, usersEmailSchema)
+	dsn := filepath.Join(dir, "app.db")
+	m := func(sub string, args ...string) (int, string, string) {
+		return velox(t, dir, append([]string{"migrate", sub, "-db", dsn}, args...)...)
+	}
+	if code, _, errs := m("apply"); code != 0 {
+		t.Fatalf("apply: %d %s", code, errs)
+	}
+	code, out, errs := m("drift")
+	want(t, "drift", code, out, errs, 0, "", "")
+	code, out, errs = m("drift", "-json")
+	want(t, "drift -json", code, out, errs, 0, "{\n  \"changes\": [],\n  \"warnings\": []\n}\n", "")
+
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("ALTER TABLE users ADD COLUMN extra text"); err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+	code, out, errs = m("drift")
+	want(t, "drift extra", code, out, errs, 3, "change: drop-column users.extra\n", "")
+	code, out, errs = m("drift", "-json")
+	want(t, "drift extra -json", code, out, errs, 3, `{
+  "changes": [
+    {
+      "kind": "drop-column",
+      "target": "users",
+      "text": "drop-column users.extra"
+    }
+  ],
+  "warnings": []
+}
+`, "")
+	_, again, _ := m("drift", "-json")
+	if again != out {
+		t.Errorf("drift -json twice:\n%s\n%s", out, again)
+	}
+
+	writeMigrations(t, mig, velox2.SQLite, postsSchema)
+	code, out, errs = m("drift")
+	want(t, "pending", code, out, errs, 1, "", "velox-gen: migrate drift: the database is not at the directory's last version: "+
+		filepath.Join("migrations", "0003_create_posts.sql")+" is pending\n")
+}
+
+func TestMigrateAhead(t *testing.T) {
+	dir := t.TempDir()
+	three, two := filepath.Join(dir, "three"), filepath.Join(dir, "two")
+	writeMigrations(t, three, velox2.SQLite, usersSchema, usersEmailSchema, postsSchema)
+	writeMigrations(t, two, velox2.SQLite, usersSchema, usersEmailSchema)
+	dsn := filepath.Join(dir, "app.db")
+	m := func(d, sub string, args ...string) (int, string, string) {
+		return velox(t, dir, append([]string{"migrate", sub, "-dir", d, "-db", dsn}, args...)...)
+	}
+	if code, _, errs := m("three", "apply"); code != 0 {
+		t.Fatalf("apply: %d %s", code, errs)
+	}
+	code, out, errs := m("two", "apply")
+	want(t, "apply", code, out, errs, 0, "the database is ahead of the directory (version 3); nothing applied\n", "")
+	code, out, errs = m("two", "apply", "-dry-run")
+	want(t, "apply -dry-run", code, out, errs, 0, "the database is ahead of the directory (version 3); nothing applied\n", "")
+	code, out, errs = m("two", "status")
+	matches(t, "status", code, out, errs, 0, "applied 1 two/0001_create_users.sql "+stamp+"\napplied 2 two/0002_add_users_email.sql "+stamp+"\nahead 3 create_posts\n", "")
+	code, out, errs = m("two", "drift")
+	want(t, "drift", code, out, errs, 1, "", "velox-gen: migrate drift: the database is not at the directory's last version: version 3 is applied above the directory's last file\n")
+}
+
+func TestMigrateResolve(t *testing.T) {
+	dir := t.TempDir()
+	mig := filepath.Join(dir, "migrations")
+	writeMigrations(t, mig, velox2.SQLite, usersSchema)
+	dsn := filepath.Join(dir, "app.db")
+	env := noVeloxDB()
+	m := func(args ...string) (int, string, string) {
+		return veloxEnv(t, dir, env, append([]string{"migrate"}, args...)...)
+	}
+	first := filepath.Join("migrations", "0001_create_users.sql")
+
+	for _, sub := range []string{"apply", "status", "drift", "resolve"} {
+		args := []string{sub}
+		if sub == "resolve" {
+			args = append(args, "-version", "1", "-applied")
+		}
+		code, out, errs := m(args...)
+		want(t, sub+" without a database", code, out, errs, 2, "", "velox-gen: migrate "+sub+" needs -db or $VELOX_DB\n")
+	}
+	env = append(env, "VELOX_DB="+dsn)
+	code, out, errs := m("apply")
+	matches(t, "apply from $VELOX_DB", code, out, errs, 0, appliedLine(first), "")
+
+	code, out, errs = m("resolve", "-version", "1", "-applied")
+	want(t, "clean", code, out, errs, 1, "", "velox-gen: migrate resolve: version 1 is not dirty\n")
+	code, out, errs = m("resolve", "-version", "2", "-undone")
+	want(t, "absent", code, out, errs, 1, "", "velox-gen: migrate resolve: version 2 is not in the history table velox_migrations\n")
+	for _, args := range [][]string{{"-version", "1"}, {"-applied"}, {"-version", "1", "-applied", "-undone"}, {"-version", "0", "-undone"}, {"-version", "1", "-undone", "extra"}} {
+		code, out, errs := m(append([]string{"resolve"}, args...)...)
+		if code != 2 || out != "" || !strings.Contains(errs, "Flags of migrate resolve:") {
+			t.Errorf("resolve %v: %d %q %q", args, code, out, errs)
+		}
+	}
+
+	// A version made dirty by hand.
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	if _, err := db.Exec("UPDATE velox_migrations SET dirty = true, statements = 0, error = 'boom' WHERE version = 1"); err != nil {
+		t.Fatal(err)
+	}
+	code, out, errs = m("status")
+	want(t, "dirty status", code, out, errs, 1, "dirty 1 "+first+": 0 statements done: boom\n",
+		"velox-gen: migrate status: "+first+": version 1 is dirty: boom\n  fix the cause and run migrate apply -resume, or undo its applied statements and run migrate resolve -version 1 -undone\n")
+	code, out, errs = m("status", "-json")
+	if code != 1 || !strings.Contains(out, "\"dirty\": {\n    \"version\": 1,") || !strings.Contains(out, "\"error\": \"boom\"") {
+		t.Errorf("dirty status -json: %d %q\n%s", code, errs, out)
+	}
+	code, out, errs = m("apply")
+	want(t, "dirty apply", code, out, errs, 1, "",
+		"velox-gen: migrate apply: "+first+": version 1 is dirty: boom\n  fix the cause and run migrate apply -resume, or undo its applied statements and run migrate resolve -version 1 -undone\n")
+	code, out, errs = m("drift")
+	want(t, "dirty drift", code, out, errs, 1, "", "velox-gen: migrate drift: the database is not at the directory's last version: "+first+" is dirty\n")
+	code, out, errs = m("resolve", "-version", "1", "-applied")
+	want(t, "resolve -applied", code, out, errs, 0, "resolved version 1 as applied\n", "")
+	code, out, errs = m("status")
+	matches(t, "status after", code, out, errs, 0, "applied 1 "+regexp.QuoteMeta(first)+" "+stamp+"\n", "")
+}
+
+func TestMigrateDirtyMySQL(t *testing.T) {
+	dsn := testDSN(t, velox2.MySQL)
+	dir := t.TempDir()
+	handDir(t, dir, velox2.MySQL, map[string]string{
+		"0001_a.sql": "CREATE TABLE a (id int);\n",
+		"0002_b.sql": "CREATE TABLE b (id int);\nCREATE TABLE a (id int);\n",
+	})
+	m := func(args ...string) (int, string, string) {
+		return velox(t, dir, append([]string{"migrate", args[0], "-dir", ".", "-db", dsn}, args[1:]...)...)
+	}
+	code, out, errs := m("apply")
+	if code != 1 || !regexp.MustCompile(`^`+appliedLine("0001_a.sql")+`$`).MatchString(out) ||
+		!strings.HasPrefix(errs, "velox-gen: migrate apply: 0002_b.sql: statement 2 of 2: Error 1050 (42S01): Table 'a' already exists\n") ||
+		!strings.HasSuffix(errs, "\n  version 2 is dirty; fix the cause and run migrate apply -resume, or undo statement 1 and run migrate resolve -version 2 -undone\n") ||
+		strings.Count(errs, "\n") != 2 {
+		t.Errorf("apply: %d\n%s\n%s", code, out, errs)
+	}
+	code, out, errs = m("status")
+	if code != 1 || !regexp.MustCompile(`^applied 1 0001_a.sql `+stamp+"\ndirty 2 0002_b.sql: 1 statements done: Error 1050 \\(42S01\\): Table 'a' already exists\n$").MatchString(out) ||
+		!strings.HasPrefix(errs, "velox-gen: migrate status: 0002_b.sql: version 2 is dirty: Error 1050") {
+		t.Errorf("status: %d\n%s\n%s", code, out, errs)
+	}
+	code, out, errs = m("resolve", "-version", "2", "-undone")
+	want(t, "resolve", code, out, errs, 0, "resolved version 2 as undone\n", "")
+	code, out, errs = m("status")
+	matches(t, "status after", code, out, errs, 3, "applied 1 0001_a.sql "+stamp+"\npending 2 0002_b.sql\n", "")
+}
+
+// TestMigrateCancel: an apply cancelled while a statement runs, as Ctrl-C
+// cancels it, leaves its version dirty with the reason and exits 1.
+func TestMigrateCancel(t *testing.T) {
+	for _, c := range []struct {
+		d     velox2.Dialect
+		files map[string]string
+	}{
+		{velox2.Postgres, map[string]string{"0001_slow.sql": "-- velox:no-transaction\nCREATE TABLE a (id int);\nSELECT pg_sleep(30);\nCREATE TABLE b (id int);\n"}},
+		{velox2.MySQL, map[string]string{"0001_slow.sql": "CREATE TABLE a (id int);\nSELECT SLEEP(30);\nCREATE TABLE b (id int);\n"}},
+	} {
+		t.Run(c.d.String(), func(t *testing.T) {
+			dsn := testDSN(t, c.d)
+			dir := t.TempDir()
+			handDir(t, dir, c.d, c.files)
+			signalContext = func() (context.Context, context.CancelFunc) {
+				ctx, cancel := context.WithCancel(context.Background())
+				time.AfterFunc(2*time.Second, cancel)
+				return ctx, cancel
+			}
+			t.Cleanup(func() { signalContext = notifyContext })
+			start := time.Now()
+			code, out, errs := velox(t, dir, "migrate", "apply", "-dir", ".", "-db", dsn)
+			if code != 1 || out != "" || time.Since(start) > 20*time.Second ||
+				!strings.HasPrefix(errs, "velox-gen: migrate apply: 0001_slow.sql: statement 2 of 3: ") ||
+				!strings.HasSuffix(errs, "\n  version 1 is dirty; fix the cause and run migrate apply -resume, or undo statement 1 and run migrate resolve -version 1 -undone\n") {
+				t.Errorf("apply: %d %v\n%s\n%s", code, time.Since(start), out, errs)
+			}
+			signalContext = notifyContext
+			code, out, _ = velox(t, dir, "migrate", "status", "-dir", ".", "-db", dsn)
+			if code != 1 || !strings.HasPrefix(out, "dirty 1 0001_slow.sql: 1 statements done: ") {
+				t.Errorf("status: %d\n%s", code, out)
+			}
+		})
+	}
+}
+
+// TestMigrateDSNHidden: no message shows the DSN's password, though the
+// driver's error would.
+func TestMigrateDSNHidden(t *testing.T) {
+	for _, c := range []struct {
+		d   velox2.Dialect
+		dsn string
+	}{
+		{velox2.Postgres, "postgres://velox:s3cret%2Fpw@127.0.0.1:1/velox?connect_timeout=2"},
+		{velox2.Postgres, "postgres://velox:s3cretpw@127.0.0.1:notaport/velox"},
+		{velox2.Postgres, "host=127.0.0.1 port=1 user=velox password=s3cretpw dbname=velox connect_timeout=2"},
+		{velox2.Postgres, "host=127.0.0.1 port=notaport user=velox password='s3cret pw' dbname=velox"},
+		{velox2.MySQL, "velox:s3cretpw@tcp(127.0.0.1:1)/velox?timeout=2s"},
+		{velox2.MySQL, "velox:s3cretpw@tcp(127.0.0.1:1)/velox?nope=%zz"},
+	} {
+		dir := t.TempDir()
+		handDir(t, dir, c.d, map[string]string{"0001_a.sql": "SELECT 1;\n"})
+		for _, args := range [][]string{{"status"}, {"apply"}, {"drift"}, {"resolve", "-version", "1", "-undone"}} {
+			for _, env := range [][]string{nil, {"VELOX_DB=" + c.dsn}} {
+				full := append([]string{"migrate"}, args...)
+				full = append(full, "-dir", ".")
+				if env == nil {
+					full = append(full, "-db", c.dsn)
+				}
+				code, out, errs := veloxEnv(t, dir, append(noVeloxDB(), env...), full...)
+				if code != 1 || strings.Contains(out+errs, "s3cret") || !strings.HasPrefix(errs, "velox-gen: migrate "+args[0]+": ") {
+					t.Errorf("%s %v: %d\n%s\n%s", c.dsn, full, code, out, errs)
+				}
+			}
+		}
+	}
+}
+
+// TestRedact: an error that echoes the DSN, or its password in any of the
+// DSN's spellings, shows neither.
+func TestRedact(t *testing.T) {
+	for _, c := range []struct {
+		d       velox2.Dialect
+		dsn, pw string
+	}{
+		{velox2.Postgres, "postgres://velox:s3cret%2Fpw@db.example:5432/velox?sslmode=disable", "s3cret/pw"},
+		{velox2.Postgres, "postgres://velox:s3cret@pw@db.example:notaport/velox", "s3cret@pw"},
+		{velox2.Postgres, "host=db.example user=velox password=s3cretpw dbname=velox", "s3cretpw"},
+		{velox2.Postgres, "host=db.example user=velox password='s3cret pw' dbname=velox", "s3cret pw"},
+		{velox2.MySQL, "velox:s3cret@pw@tcp(db.example:3306)/velox?parseTime=true", "s3cret@pw"},
+		{velox2.MySQL, "velox:s3cretpw@tcp(db.example:3306)/velox?nope=%zz", "s3cretpw"},
+		{velox2.SQLite, "file:/data/s3cret.db?_pragma=foreign_keys(1)", ""},
+	} {
+		s := secrets(c.d, c.dsn)
+		for _, text := range []string{
+			"cannot connect to " + c.dsn + ": refused",
+			"bad DSN " + strings.ReplaceAll(c.dsn, "%2F", "/"),
+			"password " + c.pw + " rejected",
+			"password " + url.QueryEscape(c.pw) + " rejected",
+		} {
+			if got := redact(text, s); strings.Contains(got, "s3cret") {
+				t.Errorf("%s: %q shows it", c.dsn, got)
+			}
+		}
+	}
+	if got := redact("version 1 is not dirty", secrets(velox2.Postgres, "postgres://velox:s3cret@db/velox")); got != "version 1 is not dirty" {
+		t.Errorf("redacted what holds no secret: %q", got)
 	}
 }

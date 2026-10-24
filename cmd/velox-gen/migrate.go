@@ -23,16 +23,24 @@ import (
 const defaultMigrations = "./migrations"
 
 // runMigrate is velox-gen migrate: diff, apply, status, drift, lint, hash and
-// resolve (Task 10 adds the four that open a database).
+// resolve.
 func runMigrate(args []string, dir string, env []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		_, _ = fmt.Fprintln(stderr, "velox-gen: migrate needs a subcommand: diff, lint or hash")
+		_, _ = fmt.Fprintln(stderr, "velox-gen: migrate needs a subcommand: diff, apply, status, drift, lint, hash or resolve")
 		printUsage(stderr)
 		return 2
 	}
 	switch args[0] {
 	case "diff":
 		return runMigrateDiff(args[1:], dir, env, stdout, stderr)
+	case "apply":
+		return runMigrateApply(args[1:], dir, env, stdout, stderr)
+	case "status":
+		return runMigrateStatus(args[1:], dir, env, stdout, stderr)
+	case "drift":
+		return runMigrateDrift(args[1:], dir, env, stdout, stderr)
+	case "resolve":
+		return runMigrateResolve(args[1:], dir, env, stdout, stderr)
 	case "lint":
 		return runMigrateLint(args[1:], dir, stderr)
 	case "hash":

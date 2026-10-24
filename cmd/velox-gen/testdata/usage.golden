@@ -14,14 +14,24 @@ Usage:
         [-lock-timeout 5s] [-check] [-dry-run] [package]
         write the migration that brings the directory's schema.json to the
         schema package
+  velox-gen migrate apply [-dir ./migrations] [-db dsn] [-to version] [-resume]
+        [-lock-wait 5m] [-dry-run]
+        apply the pending migration files to the database (-db or $VELOX_DB)
+  velox-gen migrate status [-dir ./migrations] [-db dsn] [-json]
+        print the applied, pending, dirty and ahead versions
+  velox-gen migrate drift [-dir ./migrations] [-db dsn] [-json]
+        print how the database's tables differ from schema.json
   velox-gen migrate lint [-dir ./migrations] [-since version]
         check the migration files
   velox-gen migrate hash [-dir ./migrations] [-check]
         rewrite velox.sum
+  velox-gen migrate resolve [-dir ./migrations] [-db dsn] -version n (-applied | -undone)
+        end a dirty version that was finished or undone by hand
 
 Exit codes:
   0  success
   1  an error
   2  misuse: an unknown subcommand or flag, a malformed option
   3  stale: generated files (generate -check; verify, for a plugin's Go file),
-     or the migration directory (migrate diff -check, migrate hash -check)
+     or the migration directory (migrate diff -check, migrate hash -check);
+     pending files (migrate status); drift (migrate drift)

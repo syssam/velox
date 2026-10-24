@@ -19,8 +19,12 @@
 //	velox-gen migrate diff [-dir ./migrations] [-dialect d] [-name n] [-allow code[=target],...]
 //	                       [-rename-table old=new]... [-rename-column table.old=new]...
 //	                       [-lock-timeout 5s] [-check] [-dry-run] [package]
+//	velox-gen migrate apply [-dir ./migrations] [-db dsn] [-to version] [-resume] [-lock-wait 5m] [-dry-run]
+//	velox-gen migrate status [-dir ./migrations] [-db dsn] [-json]
+//	velox-gen migrate drift [-dir ./migrations] [-db dsn] [-json]
 //	velox-gen migrate lint [-dir ./migrations] [-since version]
 //	velox-gen migrate hash [-dir ./migrations] [-check]
+//	velox-gen migrate resolve [-dir ./migrations] [-db dsn] -version n (-applied | -undone)
 //
 // Each subcommand has its own flags; a flag it does not take is a usage
 // error. Flags may follow the package, as in "go test ./x -v"; "--" ends them.
@@ -28,7 +32,9 @@
 // a word that names a directory the message says to write ./word. The exit
 // code is 0 for success, 1 for an error, 2 for misuse and 3 when generated
 // files are stale (-check, and verify when a plugin's Go file is out of date)
-// or a migration directory is (migrate diff -check and migrate hash -check).
+// or a migration directory is (migrate diff -check and migrate hash -check),
+// when migrate status finds pending files and when migrate drift finds a
+// change.
 //
 // The package is one schema package, ./schema when none is named; a pattern
 // that names no package, or a package that declares no schemas, is an error
@@ -137,6 +143,48 @@
 // prints its path; with -check it writes nothing and exits 3 when it does
 // not match. A directory without velox.json is an error: migrate diff
 // starts one.
+//
+// migrate apply, status, drift and resolve open the database -db names, a
+// DSN as the directory's driver reads it: a pgx connection string, a
+// go-sql-driver/mysql DSN, or a SQLite path or URI. Without -db they read
+// $VELOX_DB, which keeps a password out of the shell's history; with
+// neither, the subcommand is a usage error. No message shows the DSN or its
+// password. SIGINT or SIGTERM cancels the run: a file being applied
+// statement by statement is left dirty with the reason, one in a
+// transaction is rolled back, and the exit code is 1.
+//
+// migrate apply applies the pending files, as package migrate's Up does,
+// and prints "applied <path> in <duration>" for each. -to stops at a
+// version, -resume continues a dirty version first, and -lock-wait bounds
+// the wait for another runner's lock (default 5m). -dry-run prints each
+// file it would apply after "== <path>" and applies nothing. A database
+// with versions above the directory's last file is a newer directory's: apply
+// says so and applies nothing (exit 0). A dirty version, an applied file that
+// was edited or is gone, a stale velox.sum, a lock wait that ran out, or a
+// failed file is exit 1; a file that fails part-way is printed with what to
+// do next.
+//
+// migrate status prints a line per version, in version order: "applied
+// <version> <path> <time>", the time in RFC 3339 and UTC, "pending <version>
+// <path>", "dirty <version> <path>: <n> statements done: <error>" and "ahead
+// <version> <name>" for a version above the directory's last file. It exits
+// 0 when the database is up to date or ahead, 3 with pending files and 1
+// with a dirty version. -json prints {"applied", "pending", "ahead",
+// "dirty"} instead, indented, with each file's path relative to the
+// directory.
+//
+// migrate drift compares the database's tables with schema.json, on a
+// database at the directory's last version (else exit 1, naming the pending,
+// dirty or ahead versions), and prints each difference as "change: <the
+// change that would remove it>" and each warning as "warning: <object>:
+// <message>". A change is exit 3; warnings alone are not. -json prints
+// {"changes": [{"kind", "target", "text"}], "warnings": [{"object",
+// "message"}]} instead.
+//
+// migrate resolve ends a dirty version a human finished (-applied, which
+// needs its file unchanged) or reverted (-undone, which deletes its row, so
+// the file may be edited and applied again). A version that is not dirty is
+// exit 1; no -version, or neither or both of -applied and -undone, is exit 2.
 package main
 
 import (
@@ -312,17 +360,27 @@ func printUsage(w io.Writer) {
         [-lock-timeout 5s] [-check] [-dry-run] [package]
         write the migration that brings the directory's schema.json to the
         schema package
+  velox-gen migrate apply [-dir ./migrations] [-db dsn] [-to version] [-resume]
+        [-lock-wait 5m] [-dry-run]
+        apply the pending migration files to the database (-db or $VELOX_DB)
+  velox-gen migrate status [-dir ./migrations] [-db dsn] [-json]
+        print the applied, pending, dirty and ahead versions
+  velox-gen migrate drift [-dir ./migrations] [-db dsn] [-json]
+        print how the database's tables differ from schema.json
   velox-gen migrate lint [-dir ./migrations] [-since version]
         check the migration files
   velox-gen migrate hash [-dir ./migrations] [-check]
         rewrite velox.sum
+  velox-gen migrate resolve [-dir ./migrations] [-db dsn] -version n (-applied | -undone)
+        end a dirty version that was finished or undone by hand
 
 Exit codes:
   0  success
   1  an error
   2  misuse: an unknown subcommand or flag, a malformed option
   3  stale: generated files (generate -check; verify, for a plugin's Go file),
-     or the migration directory (migrate diff -check, migrate hash -check)
+     or the migration directory (migrate diff -check, migrate hash -check);
+     pending files (migrate status); drift (migrate drift)
 `)
 }
 
