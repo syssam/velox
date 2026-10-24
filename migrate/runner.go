@@ -412,9 +412,9 @@ func (s *session) resuming(dir *Dir, st *State) (*File, error) {
 // foreign_key_check on SQLite with foreign keys off, the row, COMMIT, then
 // a line to o's logger. On SQLite, foreign keys are turned off before BEGIN
 // when the file asks and set back after, and a file another runner applied
-// since the history was read is skipped with errAppliedMeanwhile. That runner's row is
-// matched by version alone: its checksum was checked against its own
-// directory, and the next run checks it against this one.
+// since the history was read is skipped with errAppliedMeanwhile. That
+// runner's row is matched by version alone: its checksum was checked
+// against its own directory, and the next run checks it against this one.
 func (s *session) applyTx(ctx context.Context, f File, o options) (Applied, error) {
 	rolledBack := func(format string, args ...any) error {
 		return fmt.Errorf("migrate: %s: "+format+"; the file was rolled back", append([]any{f.Path}, args...)...)
