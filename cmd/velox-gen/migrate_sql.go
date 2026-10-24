@@ -36,18 +36,12 @@ func runMigrateSQL(args []string, dir string, env []string, stdout, stderr io.Wr
 		return 1
 	}
 
-	// A package with no schemas is an empty schema, which Atlas accepts.
-	pattern := defaultSchema
-	if len(patterns) == 1 {
-		pattern = patterns[0]
-	}
-	_, schemas, err := gen.Inspect(dir, pattern, env)
+	// A package with no schemas is refused: Atlas would read an empty
+	// output as an empty schema and plan to drop every table.
+	pattern, err := schemaPackage(dir, patterns, env)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", err)
 		return 1
-	}
-	if len(schemas) == 0 {
-		return 0
 	}
 	to, err := func() (*migrate.Schema, error) {
 		m, err := gen.Load(dir, pattern, env)

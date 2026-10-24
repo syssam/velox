@@ -100,9 +100,6 @@ func TestMigrateSQL(t *testing.T) {
 		})
 	}
 
-	empty := tempModule(t, map[string]string{"schema/doc.go": "// Package schema has no entities.\npackage schema\n"})
-	code, out, errs := velox(t, empty, "migrate", "sql", "-dialect", "postgres")
-	want(t, "no entities", code, out, errs, 0, "", "")
 }
 
 // Review Focus 5: a refusal prints nothing on stdout.
@@ -129,5 +126,13 @@ func TestMigrateSQLRefusals(t *testing.T) {
 	code, out, errs := velox(t, dir, "migrate", "sql", "-dialect", "mysql")
 	if code != 1 || out != "" || !regexp.MustCompile(`^velox-gen: schema/user\.go:[0-9]+: `).MatchString(errs) {
 		t.Errorf("mysql Where: exit %d, want 1\nstdout:\n%s\nstderr:\n%s", code, out, errs)
+	}
+
+	// An empty output would be an empty schema to Atlas, which drops every
+	// table, so a package with no schemas is refused.
+	empty := tempModule(t, map[string]string{"schema/doc.go": "// Package schema has no entities.\npackage schema\n"})
+	code, out, errs = velox(t, empty, "migrate", "sql", "-dialect", "postgres")
+	if code != 1 || out != "" || !strings.HasPrefix(errs, "velox-gen: no schemas in ") {
+		t.Errorf("no schemas: exit %d, want 1\nstdout:\n%s\nstderr:\n%s", code, out, errs)
 	}
 }
