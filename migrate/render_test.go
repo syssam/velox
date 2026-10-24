@@ -588,7 +588,7 @@ func execSQLite(t *testing.T, from, to *migrate.Schema, opts migrate.DiffOptions
 	// says; that plan runs on empty tables.
 	rows := !slices.ContainsFunc(migrate.Lint(from, cs), func(f migrate.Finding) bool { return f.Code == "add-required-column" })
 	if rows {
-		insertRows(t, db, from)
+		insertRows(t, db, velox.SQLite, from)
 	}
 	runScripts(t, db, render(t, from, to, cs, migrate.RenderOptions{}))
 
@@ -613,70 +613,6 @@ func execSQLite(t *testing.T, from, to *migrate.Schema, opts migrate.DiffOptions
 			t.Errorf("table %s has %d rows, %v; want its 1", ref, n, err)
 		}
 	}
-}
-
-// insertRows puts one row in each table of s, with foreign keys off while
-// it does, then checks that every key holds: each column gets a value its
-// type and checks take, and a key column the ID 1 of the table it
-// references.
-func insertRows(t *testing.T, db *sql.DB, s *migrate.Schema) {
-	t.Helper()
-	if _, err := db.Exec("PRAGMA foreign_keys = OFF"); err != nil {
-		t.Fatal(err)
-	}
-	for _, tb := range s.Tables {
-		var cols, vals []string
-		for _, c := range tb.Columns {
-			cols = append(cols, `"`+c.Name+`"`)
-			vals = append(vals, rowValue(&tb, c))
-		}
-		q := `INSERT INTO "` + tb.Name + `" (` + strings.Join(cols, ", ") + `) VALUES (` + strings.Join(vals, ", ") + `)`
-		if _, err := db.Exec(q); err != nil {
-			t.Fatalf("%s: %v", q, err)
-		}
-	}
-	if bad := foreignKeyCheck(t, db); bad {
-		t.Fatal("the rows break a foreign key")
-	}
-}
-
-// rowValue is a value for column c of tb: 1 for a key, its default, the
-// first value a check allows, or one of the column's type.
-func rowValue(tb *migrate.Table, c migrate.Column) string {
-	if slices.Contains(tb.PrimaryKey, c.Name) || slices.ContainsFunc(tb.ForeignKeys, func(fk migrate.ForeignKey) bool { return slices.Contains(fk.Columns, c.Name) }) {
-		if c.Type == "text" {
-			return "'1'"
-		}
-		return "1"
-	}
-	if c.Default != "" {
-		return c.Default
-	}
-	for _, ck := range tb.Checks {
-		if list, ok := strings.CutPrefix(ck.Expr, `"`+c.Name+`" IN (`); ok {
-			v, _, _ := strings.Cut(list, ",")
-			return strings.TrimSuffix(v, ")")
-		}
-	}
-	switch c.Type {
-	case "integer", "boolean":
-		return "1"
-	case "real":
-		return "1.5"
-	case "datetime":
-		return "'2026-01-01 00:00:00'"
-	}
-	return "'x'"
-}
-
-func foreignKeyCheck(t *testing.T, db *sql.DB) bool {
-	t.Helper()
-	rows, err := db.Query("PRAGMA foreign_key_check")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = rows.Close() }()
-	return rows.Next()
 }
 
 // describe lists what the database holds, sorted: each table's columns
