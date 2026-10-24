@@ -1171,6 +1171,35 @@ A rename flag naming nothing says where it looked: `-rename-column users.nme=ful
   - Itests that test a constraint's hand-written name keep their DDL.
   - CI runs `velox-gen migrate diff -check` on each of these directories, and the new itests, in `ci.yml` and `scripts/ci-local.sh` alike.
 
+### 18. The Atlas provider
+
+Atlas supports ORMs through providers: a program that prints the ORM's schema as SQL DDL, which Atlas reads through its `external_schema` data source, replays on a dev database, and then diffs, lints and applies (GORM's is `ariga.io/atlas-provider-gorm`). velox ships one as a velox-gen subcommand, so a team that uses Atlas can use it for velox's schema the way it does for GORM's. velox does not import Atlas.
+
+```
+velox-gen schema sql -dialect postgres|mysql|sqlite [package]
+```
+
+- It prints, on stdout, the `CREATE` DDL of the whole schema of `package` (default `./schema`, as `generate` loads it): `Render` of `Diff` from an empty schema to `internal/gen.Tables`. These are the same statements `migrate diff` writes as the first file of a new directory, so there is one renderer and Atlas sees what velox's own planner would build.
+  - Enum types (PostgreSQL), tables, owned sequences, indexes, foreign keys and checks, in the planner's order; every statement ends with `;` and a newline. No `-- velox:` directives, no `-- review:` comments, no transaction statements: plain DDL for Atlas's parser.
+  - The output is deterministic: the same schema gives the same bytes.
+  - The refusals of `Tables` (§5) fail it with their file:line, exit 1; a bad flag is exit 2.
+- An itest applies the output to a fresh database of each dialect, and `Drift` against `Tables` is then empty, so the provider's DDL is exactly the schema.
+- The documents give an `atlas.hcl`:
+
+```hcl
+data "external_schema" "velox" {
+  program = ["go", "run", "github.com/syssam/velox2/cmd/velox-gen", "schema", "sql", "-dialect", "postgres", "./schema"]
+}
+
+env "velox" {
+  src = data.external_schema.velox.url
+  dev = "docker://postgres/16/dev"
+  migration { dir = "file://migrations" }
+}
+```
+
+  with `atlas migrate diff --env velox` and `atlas migrate apply --env velox -u <url>`, and say that velox's own `migrate` and Atlas are alternatives for one directory: a directory is managed by one of them.
+
 ## What is left to the builder
 
 - The JSON field names of `schema.json` and `velox.json`, within §2 and §9.
@@ -1194,15 +1223,15 @@ A rename flag naming nothing says where it looked: `-rename-column users.nme=ful
    - `Inspect` on three dialects (enum types, owned sequences, primary-key names), `Drift` and the predicate normaliser with its PostgreSQL goldens.
    - The CLI's `diff`, `apply`, `status`, `drift`, `lint`, `hash` and `resolve`.
    - The real-database itests for every change kind, with the three invariants, the targeted itests, the binding round-trips and the runner tests, in CI.
-3. **Adoption and proof.**
+3. **Atlas provider and adoption (lean, §18).**
+   - `velox-gen schema sql`: the schema's DDL on stdout, for Atlas's `external_schema` (§18).
    - `baseline` and `apply -baseline`, with owned sequences and the adoption of schema predicates. An ent-shaped fixture covers PostgreSQL varchar enums, MySQL native enums, `serial` keys, and ent's index and foreign-key names.
-   - The property test.
-   - The examples and `internal/testmodel` on the planner; `diff -check` in CI.
-   - The documents: `migrate`'s package doc, the README and the example's.
+   - The documents: `migrate`'s package doc, the README's migrations section with both paths (velox's own `migrate`, and Atlas), the example's `atlas.hcl`.
+   - **(changed 2026-10-24, the user's ruling: migrations are not the focus, ORM and GraphQL are. The property test, `internal/testmodel` and the examples on the planner, `diff -check` in CI, drift through a scratch database and an Atlas cross-check move to the followups.)**
 
 ## Rulings
 
-1. **Own planner, no Atlas** (decision 1). Three dialects and one model are small enough to own, and they keep the dependency discipline, deterministic output and the safety rules in velox's hands. If wrong, it costs more code to own.
+1. **Own planner, no Atlas** (decision 1). Three dialects and one model are small enough to own, and they keep the dependency discipline, deterministic output and the safety rules in velox's hands. If wrong, it costs more code to own. **(2026-10-24: kept, and complemented: velox-gen also ships an Atlas provider (§18), so Atlas users need neither velox's planner nor a velox dependency on Atlas.)**
 2. **Versioned SQL files are the product; no auto-migrate for production** (decision 2). §9.
 3. **Planning reads the snapshot, never the database** (decision 3). The database is read only by `drift`, `baseline` and the runner.
 4. **One model, one builder** (decision 4): `internal/gen.Tables`, values never mutated, `Pos` neither serialized nor compared. The model gains `Pos`, `PrimaryKeyName`, `Sequence`, `Collation`, `Enums`, `Check.Expr` and `TableRef` (changed, §2).
