@@ -127,7 +127,11 @@ var errAppliedMeanwhile = errors.New("migrate: applied by another runner")
 // Up uses one connection of db for its run and closes it after, so nothing
 // a file sets on its session reaches db's other connections. Files run with
 // the session in UTC on PostgreSQL and MySQL, so a time literal in a file
-// means one instant whatever the server's zone.
+// means one instant whatever the server's zone. Each file starts with the
+// session as Up opened it: after a file, PostgreSQL's settings are RESET
+// ALL and MySQL's sql_mode is set back, and the zone is UTC again. Other
+// MySQL session state a file sets, such as a user variable, reaches the
+// run's later files.
 func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, error) {
 	o := optionsOf(opts)
 	d, err := ReadDir(dir)
@@ -188,7 +192,12 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 			return nil, err
 		}
 	}
-	for _, f := range todo {
+	for i, f := range todo {
+		if i > 0 {
+			if err := s.reset(ctx, todo[i:]); err != nil {
+				return r, wrap(ctx, "resetting the session after "+todo[i-1].Path, err)
+			}
+		}
 		var a Applied
 		var err error
 		switch {

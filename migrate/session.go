@@ -128,6 +128,29 @@ func (s *session) utc(ctx context.Context) error {
 	return err
 }
 
+// reset puts the session back as open left it, after a file: on PostgreSQL
+// RESET ALL, then UTC; on MySQL the sql_mode open read, then UTC, and the
+// files still to run are checked against the mode read back.
+func (s *session) reset(ctx context.Context, next []File) error {
+	switch s.d {
+	case velox.Postgres:
+		if _, err := s.conn.ExecContext(ctx, "RESET ALL"); err != nil {
+			return err
+		}
+	case velox.MySQL:
+		if _, err := s.conn.ExecContext(ctx, "SET SESSION sql_mode = ?", s.sqlMode); err != nil {
+			return err
+		}
+		if err := s.conn.QueryRowContext(ctx, "SELECT @@SESSION.sql_mode").Scan(&s.sqlMode); err != nil {
+			return err
+		}
+		if err := s.checkModes(next); err != nil {
+			return err
+		}
+	}
+	return s.utc(ctx)
+}
+
 // check is open's checks of the connection.
 func (s *session) check(ctx context.Context) error {
 	var version string

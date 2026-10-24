@@ -95,3 +95,31 @@ func TestUpSessionInUTC(t *testing.T) {
 		})
 	}
 }
+
+// TestUpSessionPerFile: each file starts with the session as Up opened it,
+// whatever the file before it set: the zone, PostgreSQL's search_path,
+// MySQL's sql_mode.
+func TestUpSessionPerFile(t *testing.T) {
+	for _, c := range []struct {
+		d            velox.Dialect
+		first, probe string
+		query        string
+		want         string
+	}{
+		{velox.Postgres, "CREATE SCHEMA other;\nSET search_path = other, public;\nSET TimeZone = 'Asia/Tokyo';\nSET lock_timeout = '1s';\n",
+			"CREATE TABLE probe AS SELECT current_setting('TimeZone') || ' ' || current_schema() || ' ' || current_setting('lock_timeout') AS v;\n",
+			`SELECT v FROM public.probe`, "UTC public 5s"},
+		{velox.MySQL, "SET SESSION sql_mode = 'ANSI_QUOTES';\nSET time_zone = '+09:00';\n",
+			"CREATE TABLE probe (v varchar(200) DEFAULT \"x\");\nINSERT INTO probe (v) SELECT CONCAT(@@session.time_zone, ' ', @@session.sql_mode LIKE '%ANSI_QUOTES%');\n",
+			`SELECT v FROM probe`, "+00:00 0"},
+	} {
+		t.Run(c.d.String(), func(t *testing.T) {
+			db := zoned(t, c.d)
+			mustUp(t, db, dirOf(t, c.d, files("0001_set.sql", c.first, "0002_probe.sql", c.probe)))
+			var got string
+			if err := db.QueryRow(c.query).Scan(&got); err != nil || got != c.want {
+				t.Errorf("%q, %v; want %q", got, err, c.want)
+			}
+		})
+	}
+}
