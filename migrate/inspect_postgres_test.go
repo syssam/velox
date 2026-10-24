@@ -425,6 +425,8 @@ func TestInspectPostgresUnheld(t *testing.T) {
 		`CREATE INDEX p_expr ON p (lower(a))`,
 		`ALTER TABLE p ADD CONSTRAINT p_r_excl EXCLUDE USING gist (r WITH &&)`,
 		`CREATE INDEX p_plain ON p (a)`,
+		`CREATE TABLE c (id integer PRIMARY KEY, e text COLLATE "C", f text COLLATE "default", g text)`,
+		`CREATE UNLOGGED TABLE l (id integer PRIMARY KEY)`,
 	} {
 		pgExec(t, db, q)
 	}
@@ -445,6 +447,8 @@ func TestInspectPostgresUnheld(t *testing.T) {
 		"u.u_p2_fkey": {"DEFERRABLE"},
 		"u.u_p3_fkey": {"MATCH FULL"},
 		"u.u_k_key":   {"DEFERRABLE"},
+		"c.e":         {`COLLATE "C"`},
+		"l":           {"UNLOGGED"},
 	}
 	got := map[string]string{}
 	for _, n := range notes {

@@ -31,7 +31,9 @@ func Inspect(ctx context.Context, db *sql.DB, d velox.Dialect, tables []TableRef
 // Drift reads db's tables and enum types that snapshot names, and reports
 // the changes that would bring them to snapshot, and warnings: spellings the
 // normaliser cannot match, and what the model cannot hold (a MySQL engine
-// other than InnoDB, an invalid index, a NOT VALID constraint, a GENERATED
+// other than InnoDB, a column's collation other than the table's on MySQL,
+// its type's on PostgreSQL or BINARY on SQLite, an UNLOGGED or TEMPORARY
+// PostgreSQL table, an invalid index, a NOT VALID constraint, a GENERATED
 // ALWAYS identity, a STRICT SQLite table). It never reads a table snapshot
 // does not name.
 func Drift(ctx context.Context, db *sql.DB, snapshot *Schema) (*DriftReport, error) {

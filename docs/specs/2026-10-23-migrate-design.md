@@ -1438,7 +1438,7 @@ Plan 2 (`docs/plans/2026-10-24-migrate-2-runner.md`) made these calls where this
   - An empty constraint name is unnamed: a SQLite table may have several.
   - MySQL's backslash escapes are read; a chain of comparisons without parentheses and a comment fall back to collapsed text; only `utf8` introducers are dropped.
   - Number defaults compare by value, MySQL's time defaults by value, and a bare expression default as the database wraps it.
-  - Inspect reports what the model cannot hold as notes: a generated column, an index's attributes the model lacks (on MySQL the primary key's too: a prefix or a descending column), a SQLite column collation; partitions are left out. The snapshot's enum types are matched by name, casts to a qualified enum type are read, and an enum check is rewritten into the model's canonical form.
+  - Inspect reports what the model cannot hold as notes: a generated column, an index's attributes the model lacks (on MySQL the primary key's too: a prefix or a descending column), a SQLite column collation, a PostgreSQL column collation other than its type's, an UNLOGGED or TEMPORARY PostgreSQL table; partitions are left out. The snapshot's enum types are matched by name, casts to a qualified enum type are read, and an enum check is rewritten into the model's canonical form.
   - MySQL's primary-key name is ignored by drift; the index MySQL makes for a foreign key no index covers is expected.
   - MySQL's `information_schema` text is unescaped one level; decimal defaults lose trailing zeros.
   - SQLite's `CREATE TABLE` is read with case-insensitive column names, comments stripped, foreign keys matched by their full key in order, and a table-level `PRIMARY KEY (id AUTOINCREMENT)`.

@@ -118,24 +118,33 @@ func (r *pgReader) schema(nsp string) string {
 	return nsp
 }
 
-const pgTablesQuery = `SELECT c.oid::bigint, n.nspname, c.relname, coalesce(obj_description(c.oid, 'pg_class'), '')
+const pgTablesQuery = `SELECT c.oid::bigint, n.nspname, c.relname, coalesce(obj_description(c.oid, 'pg_class'), ''), c.relpersistence::text
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE c.relkind IN ('r', 'p') AND n.nspname = $1`
 
 // tables finds the tables to read: those of refs that are there, once each,
 // or with refs nil every table of the default schema but velox_migrations
-// and partitions, which belong to their table.
+// and partitions, which belong to their table. An UNLOGGED or TEMPORARY
+// table is a note.
 func (r *pgReader) tables(refs []TableRef) ([]pgTable, error) {
 	var out []pgTable
 	scan := func(rows *sql.Rows) error {
 		var pt pgTable
-		if err := rows.Scan(&pt.oid, &pt.schema, &pt.t.Name, &pt.t.Comment); err != nil {
+		var persistence string
+		if err := rows.Scan(&pt.oid, &pt.schema, &pt.t.Name, &pt.t.Comment, &persistence); err != nil {
 			return err
 		}
-		if !slices.ContainsFunc(out, func(x pgTable) bool { return x.oid == pt.oid }) {
-			pt.t.Schema = r.schema(pt.schema)
-			out = append(out, pt)
+		if slices.ContainsFunc(out, func(x pgTable) bool { return x.oid == pt.oid }) {
+			return nil
 		}
+		pt.t.Schema = r.schema(pt.schema)
+		switch persistence {
+		case "u":
+			r.note(&pt, "", "the table is UNLOGGED, which the model cannot hold: a crash empties it")
+		case "t":
+			r.note(&pt, "", "the table is TEMPORARY, which the model cannot hold: it ends with its session")
+		}
+		out = append(out, pt)
 		return nil
 	}
 	if refs == nil {
@@ -163,8 +172,14 @@ func (r *pgReader) table(pt *pgTable) error {
 	return r.constraints(pt)
 }
 
-// object is a Warning's Object for something of pt named name.
-func (pt *pgTable) object(name string) string { return pt.t.Ref().String() + "." + name }
+// object is a Warning's Object for something of pt named name, or for pt
+// itself when name is "".
+func (pt *pgTable) object(name string) string {
+	if name == "" {
+		return pt.t.Ref().String()
+	}
+	return pt.t.Ref().String() + "." + name
+}
 
 func (r *pgReader) note(pt *pgTable, name, message string) {
 	r.notes = append(r.notes, note{table: pt.t.Ref(), object: pt.object(name), message: message})
@@ -172,11 +187,14 @@ func (r *pgReader) note(pt *pgTable, name, message string) {
 
 // The columns, with what makes a serial: the sequence the column owns,
 // by an auto (serial) or internal (identity) dependency, and its regclass
-// spelling, as a nextval default prints it.
+// spelling, as a nextval default prints it; and the column's collation when
+// it is not its type's.
 const pgColumnsQuery = `SELECT a.attnum, a.attname, format_type(a.atttypid, a.atttypmod), t.typtype::text, t.oid::bigint,
 	tn.nspname, t.typname, a.attnotnull, coalesce(pg_get_expr(d.adbin, d.adrelid), ''),
 	a.attidentity::text, a.attgenerated::text, coalesce(col_description(a.attrelid, a.attnum), ''),
-	coalesce(seq.nspname, ''), coalesce(seq.relname, ''), coalesce(seq.reg, '')
+	coalesce(seq.nspname, ''), coalesce(seq.relname, ''), coalesce(seq.reg, ''),
+	coalesce((SELECT quote_ident(co.collname) FROM pg_collation co
+		WHERE co.oid = a.attcollation AND a.attcollation <> t.typcollation AND a.attcollation <> 0), '')
 FROM pg_attribute a
 JOIN pg_type t ON t.oid = a.atttypid
 JOIN pg_namespace tn ON tn.oid = t.typnamespace
@@ -193,7 +211,8 @@ LEFT JOIN LATERAL (
 WHERE a.attrelid = $1::bigint::oid AND a.attnum > 0 AND NOT a.attisdropped
 ORDER BY a.attnum`
 
-// columns reads pt's columns, and returns their names by number.
+// columns reads pt's columns, and returns their names by number. A
+// collation other than the type's is a note.
 func (r *pgReader) columns(pt *pgTable) (map[int]string, error) {
 	names := map[int]string{}
 	err := r.each(pgColumnsQuery, []any{pt.oid}, func(rows *sql.Rows) error {
@@ -202,12 +221,16 @@ func (r *pgReader) columns(pt *pgTable) (map[int]string, error) {
 			c                                         Column
 			typ, typtype, tnsp, tname, def            string
 			identity, generated, seqNsp, seqName, reg string
+			collation                                 string
 			typOID                                    int64
 			notNull                                   bool
 		)
 		if err := rows.Scan(&num, &c.Name, &typ, &typtype, &typOID, &tnsp, &tname, &notNull, &def,
-			&identity, &generated, &c.Comment, &seqNsp, &seqName, &reg); err != nil {
+			&identity, &generated, &c.Comment, &seqNsp, &seqName, &reg, &collation); err != nil {
 			return err
+		}
+		if collation != "" {
+			r.note(pt, c.Name, "the column has COLLATE "+collation+", which the model cannot hold; it is compared without")
 		}
 		names[num] = c.Name
 		c.Nullable = !notNull
