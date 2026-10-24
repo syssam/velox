@@ -22,6 +22,11 @@ import (
 // (delete-rows t), UPDATE t without WHERE (update-rows t); Pos is
 // "<path>:<line>", Change the statement's index.
 //
+// A WHERE counts only outside parentheses, so a subquery's does not. A
+// DELETE or UPDATE may follow a WITH clause; MySQL's multi-table DELETE t1,
+// t2 FROM … (aliases read as their tables) and UPDATE t1, t2 SET … name
+// each table. PostgreSQL's ABORT counts as ROLLBACK.
+//
 // A target is "<table>" or "<schema>.<table>", and a column's adds
 // ".<column>": a quoted name as written, an unquoted one folded to lower
 // case on PostgreSQL. A statement LintFile cannot read, such as one in a
@@ -41,7 +46,7 @@ func LintFile(d velox.Dialect, f File) ([]Finding, error) {
 			errs = append(errs, &Error{Code: "file", Pos: pos, Reason: fmt.Sprintf(format, args...)})
 		}
 		lead := l.upper(0)
-		if inTx && slices.Contains([]string{"BEGIN", "START", "COMMIT", "ROLLBACK", "END"}, lead) {
+		if inTx && (slices.Contains([]string{"BEGIN", "START", "COMMIT", "ROLLBACK", "END"}, lead) || d == velox.Postgres && lead == "ABORT") {
 			refuse("%s in a file run in a transaction; the runner begins and commits the file's transaction itself", lead)
 		}
 		if d == velox.Postgres && !f.Directives.NoTransaction {
@@ -169,39 +174,166 @@ func (l *fileLinter) names(i int, code, format string) {
 	}
 }
 
-// classify adds the statement's destructive findings.
+// classify adds the statement's destructive findings. A WITH clause before
+// a DELETE or UPDATE is passed over.
 func (l *fileLinter) classify() {
 	const (
 		dropTable  = "drops table %s and its rows"
 		deleteRows = "deletes every row of %s"
 		updateRows = "updates every row of %s"
 	)
-	switch l.upper(0) {
+	b := 0
+	if l.upper(0) == "WITH" {
+		b = l.afterWith()
+	}
+	switch l.upper(b) {
 	case "DROP":
-		if l.upper(1) == "TABLE" {
+		if b == 0 && l.upper(1) == "TABLE" {
 			l.names(l.skip(2, "IF", "EXISTS"), "drop-table", dropTable)
 		}
 	case "TRUNCATE":
-		l.names(l.skip(1, "TABLE"), "delete-rows", deleteRows)
+		if b == 0 {
+			l.names(l.skip(1, "TABLE"), "delete-rows", deleteRows)
+		}
 	case "DELETE":
-		if l.upper(1) == "FROM" && !l.has("WHERE") {
-			if n, _ := l.name(l.skip(2, "ONLY")); n != "" {
-				l.add("delete-rows", n, deleteRows)
-			}
+		if l.topWhere(b) {
+			return
+		}
+		i := b + 1
+		for slices.Contains([]string{"LOW_PRIORITY", "QUICK", "IGNORE"}, l.upper(i)) {
+			i++
+		}
+		if l.upper(i) == "FROM" {
+			// DELETE FROM t, or MySQL's DELETE FROM t1, t2 USING ….
+			l.names(i+1, "delete-rows", deleteRows)
+			return
+		}
+		// MySQL's DELETE t1[, t2] FROM …: the tables, or their aliases, come
+		// before FROM.
+		for _, n := range l.nameList(i) {
+			l.add("delete-rows", l.unalias(n, i), deleteRows)
 		}
 	case "UPDATE":
-		if !l.has("WHERE") {
-			i := l.skip(l.skip(l.skip(1, "LOW_PRIORITY"), "IGNORE"), "ONLY")
-			if n, _ := l.name(i); n != "" {
-				l.add("update-rows", n, updateRows)
+		if l.topWhere(b) {
+			return
+		}
+		i := b + 1
+		for slices.Contains([]string{"LOW_PRIORITY", "IGNORE"}, l.upper(i)) {
+			i++
+		}
+		// UPDATE t [alias] [JOIN …], or MySQL's UPDATE t1 [a1], t2 [a2] SET ….
+		for j := i; ; {
+			j = l.skip(j, "ONLY")
+			n, k := l.name(j)
+			if n == "" {
+				return
 			}
+			l.add("update-rows", n, updateRows)
+			if l.upper(k) == "AS" {
+				k++
+			}
+			if k < len(l.ws) && l.isName(k) && !slices.Contains([]string{"SET", "JOIN", "INNER", "LEFT", "RIGHT", "CROSS", "STRAIGHT_JOIN", "NATURAL"}, l.upper(k)) {
+				k++ // an alias
+			}
+			if !l.punct(k, ",") {
+				return
+			}
+			j = k + 1
 		}
 	case "ALTER":
-		if l.upper(1) == "TABLE" {
+		if b == 0 && l.upper(1) == "TABLE" {
 			l.alterTable()
 		}
 	}
 }
+
+// afterWith is the index of the statement after a WITH clause: the first
+// word outside parentheses after its last "AS (…)".
+func (l *fileLinter) afterWith() int {
+	depth := 0
+	for i, w := range l.ws {
+		if w.quoted {
+			continue
+		}
+		switch w.text {
+		case "(":
+			depth++
+		case ")":
+			depth--
+		}
+		if depth == 0 && i > 0 && slices.Contains([]string{"SELECT", "INSERT", "UPDATE", "DELETE", "MERGE", "VALUES", "TABLE"}, l.upper(i)) && l.punct(i-1, ")") {
+			return i
+		}
+	}
+	return len(l.ws)
+}
+
+// topWhere reports whether a WHERE from word b on is the statement's own,
+// outside parentheses.
+func (l *fileLinter) topWhere(b int) bool {
+	depth := 0
+	for i := b; i < len(l.ws); i++ {
+		switch {
+		case l.punct(i, "("):
+			depth++
+		case l.punct(i, ")"):
+			depth--
+		case depth == 0 && l.upper(i) == "WHERE":
+			return true
+		}
+	}
+	return false
+}
+
+// punct reports whether the i-th word is the punctuation p.
+func (l *fileLinter) punct(i int, p string) bool {
+	return i >= 0 && i < len(l.ws) && !l.ws[i].quoted && l.ws[i].text == p
+}
+
+// isName reports whether the i-th word can be a name: quoted, or a word.
+func (l *fileLinter) isName(i int) bool {
+	w := l.ws[i]
+	return w.quoted || w.text != "" && wordByte(w.text[0])
+}
+
+// nameList reads names joined by commas from i.
+func (l *fileLinter) nameList(i int) []string {
+	var out []string
+	for {
+		n, j := l.name(i)
+		if n == "" {
+			return out
+		}
+		out = append(out, n)
+		if !l.punct(j, ",") {
+			return out
+		}
+		i = j + 1
+	}
+}
+
+// unalias is the table that alias names in the statement after word from:
+// the table written before it, as "t alias" or "t AS alias"; alias itself
+// when none is.
+func (l *fileLinter) unalias(alias string, from int) string {
+	for i := from; i < len(l.ws); i++ {
+		n, j := l.name(i)
+		if n == "" || slices.Contains(notAlias, l.upper(i)) {
+			continue
+		}
+		if l.upper(j) == "AS" {
+			j++
+		}
+		if a, _ := l.name(j); a == alias && !strings.Contains(alias, ".") && j < len(l.ws) && !slices.Contains(notAlias, l.upper(j)) {
+			return n
+		}
+		i = j - 1
+	}
+	return alias
+}
+
+// notAlias are the words after a table that are not its alias.
+var notAlias = []string{"FROM", "JOIN", "ON", "USING", "WHERE", "SET", "INNER", "LEFT", "RIGHT", "CROSS", "NATURAL", "STRAIGHT_JOIN", "AS"}
 
 // alterTable adds the findings of ALTER TABLE's actions.
 func (l *fileLinter) alterTable() {

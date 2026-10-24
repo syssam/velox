@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -100,16 +101,60 @@ func (c *migrateCmd) inDir(err error) error {
 		return &migrate.SumError{Path: c.path(se.Path)}
 	}
 	var me *migrate.Error
-	if errors.As(err, &me) && me.Pos != "" {
+	if errors.As(err, &me) && (me.Pos != "" || me.Code == "directory") {
 		e := *me
-		e.Pos = c.path(me.Pos)
+		if e.Pos != "" {
+			e.Pos = c.path(me.Pos)
+		}
+		if e.Code == "directory" {
+			e.Reason = migrationFile.ReplaceAllStringFunc(e.Reason, c.path)
+		}
 		return &e
 	}
 	return err
 }
 
+// migrationFile is a migration file's name in an error's text.
+var migrationFile = regexp.MustCompile(`\b[0-9]{4,}_[a-z0-9_]+\.sql\b`)
+
+// The states of a -dir.
+const (
+	noDir        = iota // nothing is there
+	otherDir            // a directory without the files velox.sum covers, such as one holding only .gitkeep: a new one
+	migrationDir        // a directory with velox.json, velox.sum, schema.json or a *.sql file
+)
+
+// dirState is the state of the directory at abs.
+func dirState(abs string) (int, error) {
+	ents, err := os.ReadDir(abs)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return noDir, nil
+	case err != nil:
+		return 0, err
+	}
+	for _, e := range ents {
+		n := e.Name()
+		if !e.IsDir() && (n == "velox.json" || n == "velox.sum" || n == "schema.json" || strings.HasSuffix(n, ".sql")) {
+			return migrationDir, nil
+		}
+	}
+	return otherDir, nil
+}
+
+// exists refuses a -dir that is not there.
+func (c *migrateCmd) exists(dir string) error {
+	if _, err := os.Stat(c.abs(dir)); errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("%s does not exist", filepath.Clean(*c.dir))
+	}
+	return nil
+}
+
 // readDir reads the directory at -dir. A stale velox.sum is staleCode.
 func (c *migrateCmd) readDir(dir string, staleCode int) (*migrate.Dir, int, bool) {
+	if err := c.exists(dir); err != nil {
+		return nil, c.fail(1, err), false
+	}
 	d, err := migrate.ReadDir(os.DirFS(c.abs(dir)))
 	if err != nil {
 		code := 1
@@ -154,7 +199,13 @@ func runMigrateHash(args []string, dir string, stdout, stderr io.Writer) int {
 	if len(rest) > 0 {
 		return c.noArgs()
 	}
+	if err := c.exists(dir); err != nil {
+		return c.fail(1, err)
+	}
 	abs := c.abs(dir)
+	if _, err := os.Stat(filepath.Join(abs, "velox.json")); errors.Is(err, fs.ErrNotExist) {
+		return c.fail(1, fmt.Errorf("%s: not a migration directory (no velox.json); run velox-gen migrate diff first", filepath.Clean(*c.dir)))
+	}
 	sum, err := migrate.Sum(os.DirFS(abs))
 	if err != nil {
 		return c.fail(1, err)

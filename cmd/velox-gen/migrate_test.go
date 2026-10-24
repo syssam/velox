@@ -2,8 +2,12 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
+	"maps"
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -35,6 +39,24 @@ func want(t *testing.T, name string, code int, out, errs string, wantCode int, w
 	}
 }
 
+// dirFiles is the files of dir by name, with their content.
+func dirFiles(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	ents, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := map[string]string{}
+	for _, e := range ents {
+		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		out[e.Name()] = string(data)
+	}
+	return out
+}
+
 // exists reports whether the file at path is there.
 func exists(path string) bool {
 	_, err := os.Stat(path)
@@ -61,6 +83,26 @@ func TestMigrateDiff(t *testing.T) {
 		want(t, "again", code, out, errs, 0, "no changes\n", "")
 		code, out, errs = velox(t, dir, "migrate", "diff", "-check")
 		want(t, "check", code, out, errs, 0, "", "")
+	})
+
+	t.Run("existing empty directory", func(t *testing.T) {
+		writeFile(t, filepath.Join(dir, "empty", ".gitkeep"), "")
+		writeFile(t, filepath.Join(dir, "empty", "embed.go"), "package empty\n")
+		code, out, errs := velox(t, dir, "migrate", "hash", "-dir", "empty")
+		want(t, "hash", code, out, errs, 1, "", "velox-gen: migrate hash: empty: not a migration directory (no velox.json); run velox-gen migrate diff first\n")
+		code, out, errs = velox(t, dir, "migrate", "diff", "-dir", "empty")
+		want(t, "no dialect", code, out, errs, 2, "", "velox-gen: migrate diff: empty is not a migration directory yet; name its dialect with -dialect to start it\n")
+		code, out, errs = velox(t, dir, "migrate", "diff", "-dir", "empty", "-dialect", "sqlite")
+		want(t, "diff", code, out, errs, 0, "empty/0001_create_users.sql\nempty/schema.json\nempty/velox.json\nempty/velox.sum\n", "")
+		code, out, errs = velox(t, dir, "migrate", "hash", "-dir", "empty")
+		want(t, "hash after", code, out, errs, 0, "", "")
+		code, out, errs = velox(t, dir, "migrate", "diff", "-dir", "empty")
+		want(t, "diff after", code, out, errs, 0, "no changes\n", "")
+		for _, f := range []string{".gitkeep", "embed.go"} {
+			if !exists(filepath.Join(dir, "empty", f)) {
+				t.Errorf("%s is gone", f)
+			}
+		}
 	})
 
 	t.Run("add", func(t *testing.T) {
@@ -96,6 +138,44 @@ func TestMigrateDiff(t *testing.T) {
 		}
 	})
 
+	t.Run("all or nothing", func(t *testing.T) {
+		setSchema(`field.String("email").Nillable()`, `field.String("bio").Nillable()`)
+		before := dirFiles(t, mig)
+		injected := errors.New("injected failure")
+		for _, c := range []struct {
+			name string
+			fail func()
+		}{
+			{"write", func() {
+				n := 0
+				writeTemp = func(dir, pattern string, data []byte) (string, error) {
+					if n++; n == 2 {
+						return "", injected
+					}
+					return writeTempFile(dir, pattern, data)
+				}
+			}},
+			{"rename", func() {
+				renameFile = func(from, to string) error {
+					if filepath.Base(to) == "velox.sum" {
+						return injected
+					}
+					return os.Rename(from, to)
+				}
+			}},
+		} {
+			c.fail()
+			code, out, errs := velox(t, dir, "migrate", "diff")
+			writeTemp, renameFile = writeTempFile, os.Rename
+			want(t, c.name, code, out, errs, 1, "", "velox-gen: migrate diff: injected failure\n")
+			if after := dirFiles(t, mig); !reflect.DeepEqual(after, before) {
+				t.Errorf("%s: the directory changed:\n%v\nwas\n%v", c.name, slices.Sorted(maps.Keys(after)), slices.Sorted(maps.Keys(before)))
+			}
+		}
+		code, out, errs := velox(t, dir, "migrate", "diff")
+		want(t, "diff", code, out, errs, 0, "migrations/0004_add_users_bio.sql\nmigrations/schema.json\nmigrations/velox.sum\n", "")
+	})
+
 	t.Run("misuse", func(t *testing.T) {
 		code, out, errs := velox(t, dir, "migrate", "diff", "-dialect", "postgres")
 		want(t, "dialect", code, out, errs, 2, "", "velox-gen: migrate diff: -dialect postgres disagrees with migrations/velox.json, which says sqlite\n")
@@ -105,7 +185,7 @@ func TestMigrateDiff(t *testing.T) {
 		}
 		for _, args := range [][]string{
 			{"-rename-table", "x"}, {"-rename-table", "a=b=c"}, {"-rename-column", "users=x"}, {"-rename-column", "users.=x"},
-			{"-dialect", "oracle"}, {"./a", "./b"},
+			{"-dialect", "oracle"}, {"./a", "./b"}, {"-lock-timeout", "-5s"},
 		} {
 			code, out, errs := velox(t, dir, append([]string{"migrate", "diff"}, args...)...)
 			if code != 2 || out != "" || !strings.Contains(errs, "Usage:") {
@@ -211,6 +291,16 @@ func TestMigrateHashAndLint(t *testing.T) {
 	hash()
 	code, out, errs = velox(t, filepath.Dir(dir), "migrate", "lint", "-dir", filepath.Base(dir))
 	want(t, "-dir lint", code, out, errs, 1, "", filepath.Join(filepath.Base(dir), "0004_z.sql")+":1: delete-rows: deletes every row of users\n")
+	put("0005_a.sql", "SELECT 1;\n")
+	put("0005_b.sql", "SELECT 2;\n")
+	hash()
+	code, out, errs = velox(t, filepath.Dir(dir), "migrate", "lint", "-dir", filepath.Base(dir))
+	base := filepath.Base(dir)
+	want(t, "-dir names", code, out, errs, 1, "", "velox-gen: migrate lint: "+filepath.Join(base, "0005_a.sql")+" and "+filepath.Join(base, "0005_b.sql")+" have one version\n")
+	for _, sub := range []string{"lint", "hash"} {
+		code, out, errs = velox(t, dir, "migrate", sub, "-dir", "nowhere")
+		want(t, sub+" missing", code, out, errs, 1, "", "velox-gen: migrate "+sub+": nowhere does not exist\n")
+	}
 	code, out, errs = run("lint", "extra")
 	if code != 2 || !strings.Contains(errs, "Usage:") {
 		t.Errorf("extra: %d %q %q", code, out, errs)

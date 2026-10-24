@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"io/fs"
@@ -11,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/syssam/velox2/internal/gen"
 	"github.com/syssam/velox2/migrate"
@@ -28,6 +28,32 @@ func (f *allowFlag) Set(s string) error {
 		return errors.New(strings.TrimPrefix(err.Error(), "migrate: "))
 	}
 	*f = append(*f, as...)
+	return nil
+}
+
+// timeoutFlag is -lock-timeout: a duration of 0 or more, and whether it
+// was given.
+type timeoutFlag struct {
+	d   time.Duration
+	set bool
+}
+
+func (f *timeoutFlag) String() string {
+	if f == nil || !f.set {
+		return ""
+	}
+	return f.d.String()
+}
+
+func (f *timeoutFlag) Set(s string) error {
+	d, err := time.ParseDuration(s)
+	switch {
+	case err != nil:
+		return errors.New("not a duration, as 5s")
+	case d < 0:
+		return errors.New("the duration is negative")
+	}
+	f.d, f.set = d, true
 	return nil
 }
 
@@ -109,7 +135,8 @@ func runMigrateDiff(args []string, dir string, env []string, stdout, stderr io.W
 	var renames []rename
 	c.fs.Var(renameFlag{list: &renames}, "rename-table", "rename the table `old=new`, each optionally schema.name; repeat for several")
 	c.fs.Var(renameFlag{column: true, list: &renames}, "rename-column", "rename the column `table.old=new`; repeat for several")
-	lockTimeout := c.fs.Duration("lock-timeout", 0, "the lock timeout the files carry; 0 writes none, so velox.json's applies (default: velox.json's)")
+	var lockTimeout timeoutFlag
+	c.fs.Var(&lockTimeout, "lock-timeout", "the lock timeout the files carry; 0 writes none, so velox.json's applies (default: velox.json's)")
 	check := c.fs.Bool("check", false, "write nothing; exit 3 when the schema differs from schema.json or velox.sum is out of date")
 	dryRun := c.fs.Bool("dry-run", false, "print the files instead of writing them")
 	patterns, code, done := parseFlags(c.fs, args)
@@ -119,15 +146,21 @@ func runMigrateDiff(args []string, dir string, env []string, stdout, stderr io.W
 	if len(patterns) > 1 {
 		return tooMany("migrate diff", c.fs, stderr)
 	}
-	lockSet := false
-	c.fs.Visit(func(f *flag.Flag) { lockSet = lockSet || f.Name == "lock-timeout" })
 
 	// The directory, or a new one of -dialect.
 	abs := c.abs(dir)
 	var d *migrate.Dir
-	if _, err := os.Stat(abs); errors.Is(err, fs.ErrNotExist) {
+	state, err := dirState(abs)
+	if err != nil {
+		return c.fail(1, err)
+	}
+	if state != migrationDir {
 		if dialect.d == 0 {
-			_, _ = fmt.Fprintf(stderr, "velox-gen: migrate diff: %s does not exist; name its dialect with -dialect to start it\n", filepath.Clean(*c.dir))
+			how := "does not exist"
+			if state == otherDir {
+				how = "is not a migration directory yet"
+			}
+			_, _ = fmt.Fprintf(stderr, "velox-gen: migrate diff: %s %s; name its dialect with -dialect to start it\n", filepath.Clean(*c.dir), how)
 			return 2
 		}
 		if d, err = migrate.NewDir(migrate.Config{Dialect: dialect.d}); err != nil {
@@ -193,8 +226,8 @@ func runMigrateDiff(args []string, dir string, env []string, stdout, stderr io.W
 	}
 
 	timeout := d.Config.LockTimeout
-	if lockSet {
-		timeout = *lockTimeout
+	if lockTimeout.set {
+		timeout = lockTimeout.d
 	}
 	plan, err := migrate.NewPlan(d.Snapshot, to, migrate.PlanOptions{Diff: opts, Allow: allow, LockTimeout: timeout})
 	if err != nil {
@@ -215,15 +248,20 @@ func runMigrateDiff(args []string, dir string, env []string, stdout, stderr io.W
 		}
 		return 0
 	}
-	if err := os.MkdirAll(abs, 0o755); err != nil {
-		return c.fail(1, err)
-	}
-	// velox.sum sorts last, so a write that fails part-way leaves it stale,
-	// which the next read reports.
-	for _, p := range paths {
-		if err := os.WriteFile(filepath.Join(abs, p), files[p], 0o644); err != nil {
+	made := false
+	if _, err := os.Stat(abs); errors.Is(err, fs.ErrNotExist) {
+		if err := os.MkdirAll(abs, 0o755); err != nil {
 			return c.fail(1, err)
 		}
+		made = true
+	}
+	if err := writeAll(abs, files); err != nil {
+		if made {
+			_ = os.Remove(abs)
+		}
+		return c.fail(1, err)
+	}
+	for _, p := range paths {
 		_, _ = fmt.Fprintln(stdout, c.path(p))
 	}
 	return 0
@@ -277,4 +315,84 @@ func relMigrate(dir string, err error) error {
 		return &e
 	}
 	return err
+}
+
+// writeTemp and renameFile are how diff writes its files; tests replace them.
+var (
+	writeTemp  = writeTempFile
+	renameFile = os.Rename
+)
+
+// writeTempFile writes data to a new file in dir named by pattern, as
+// os.CreateTemp names it, with mode 0o644, and returns its path.
+func writeTempFile(dir, pattern string, data []byte) (string, error) {
+	f, err := os.CreateTemp(dir, pattern)
+	if err != nil {
+		return "", err
+	}
+	_, err = f.Write(data)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Chmod(f.Name(), 0o644)
+	}
+	if err != nil {
+		_ = os.Remove(f.Name())
+		return "", err
+	}
+	return f.Name(), nil
+}
+
+// writeAll writes files into dir, all or nothing: each under a temporary
+// name first, then renamed into place, velox.sum last. On a failure it
+// removes what it wrote and puts back the files it replaced.
+func writeAll(dir string, files map[string][]byte) error {
+	paths := slices.Sorted(maps.Keys(files))
+	if i := slices.Index(paths, "velox.sum"); i >= 0 {
+		paths = append(append(paths[:i:i], paths[i+1:]...), "velox.sum")
+	}
+	temps := map[string]string{}
+	type replaced struct {
+		path string
+		old  []byte
+		had  bool
+	}
+	var done []replaced
+	undo := func() {
+		for _, t := range temps {
+			_ = os.Remove(t)
+		}
+		for i := len(done) - 1; i >= 0; i-- {
+			r := done[i]
+			if r.had {
+				_ = os.WriteFile(r.path, r.old, 0o644)
+			} else {
+				_ = os.Remove(r.path)
+			}
+		}
+	}
+	for _, p := range paths {
+		t, err := writeTemp(dir, "."+p+".tmp-*", files[p])
+		if err != nil {
+			undo()
+			return err
+		}
+		temps[p] = t
+	}
+	for _, p := range paths {
+		target := filepath.Join(dir, p)
+		old, err := os.ReadFile(target)
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			undo()
+			return err
+		}
+		if err := renameFile(temps[p], target); err != nil {
+			undo()
+			return err
+		}
+		delete(temps, p)
+		done = append(done, replaced{target, old, err == nil})
+	}
+	return nil
 }

@@ -105,8 +105,10 @@
 //
 // migrate diff loads the schema package (default ./schema), builds its
 // tables for the directory's dialect and plans them against schema.json. It
-// writes the new files, schema.json and velox.sum, and prints their paths; a
-// new directory also gets velox.json, and needs -dialect (postgres, mysql or
+// writes the new files, schema.json and velox.sum, all or nothing, and prints
+// their paths. A new directory, one that is missing or holds none of
+// velox.json, velox.sum, schema.json and *.sql (a .gitkeep or a Go file
+// stays), also gets velox.json, and needs -dialect (postgres, mysql or
 // sqlite), which must otherwise agree with velox.json. No change prints "no
 // changes". -name names the files (default: from the first change, as
 // create_users or add_users_email). A destructive change is refused, with
@@ -133,7 +135,8 @@
 //
 // migrate hash rewrites velox.sum when it does not match the files and
 // prints its path; with -check it writes nothing and exits 3 when it does
-// not match.
+// not match. A directory without velox.json is an error: migrate diff
+// starts one.
 package main
 
 import (

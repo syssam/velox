@@ -52,6 +52,22 @@ func TestLintFile(t *testing.T) {
 		{velox.MySQL, "SELECT \"DROP TABLE users\"; # DROP TABLE users;", nil},
 		{velox.Postgres, "DO $$ BEGIN DROP TABLE users; END $$;", nil},
 		{velox.Postgres, "ALTER TABLE users ADD COLUMN email text, ALTER COLUMN name DROP NOT NULL;", nil},
+		// Only a WHERE of the statement itself counts.
+		{velox.Postgres, "UPDATE users SET x = (SELECT y FROM z WHERE z.id = users.zid);", []found{{"update-rows", "users", "0002_x.sql:1"}}},
+		{velox.Postgres, "DELETE FROM users WHERE id IN (SELECT id FROM gone);", nil},
+		{velox.MySQL, "DELETE FROM users WHERE (id = 1);", nil},
+		// A WITH clause comes before the statement.
+		{velox.Postgres, "WITH old AS (SELECT id FROM users WHERE age > 9) DELETE FROM users;", []found{{"delete-rows", "users", "0002_x.sql:1"}}},
+		{velox.Postgres, "WITH RECURSIVE a(x) AS (SELECT 1), b AS MATERIALIZED (SELECT 2) UPDATE users SET n = 1;", []found{{"update-rows", "users", "0002_x.sql:1"}}},
+		{velox.Postgres, "WITH a AS (DELETE FROM logs) DELETE FROM users WHERE id = 1;", nil},
+		{velox.Postgres, "WITH a AS (SELECT 1) SELECT * FROM a;", nil},
+		// MySQL's multi-table forms name their tables before FROM, or before SET.
+		{velox.MySQL, "DELETE u FROM users u JOIN orgs o ON o.id = u.org_id;", []found{{"delete-rows", "users", "0002_x.sql:1"}}},
+		{velox.MySQL, "DELETE LOW_PRIORITY users, orgs FROM users JOIN orgs ON orgs.id = users.org_id;", []found{{"delete-rows", "users", "0002_x.sql:1"}, {"delete-rows", "orgs", "0002_x.sql:1"}}},
+		{velox.MySQL, "DELETE u FROM users AS u JOIN orgs o ON o.id = u.org_id WHERE o.gone;", nil},
+		{velox.MySQL, "DELETE FROM users, orgs USING users JOIN orgs ON orgs.id = users.org_id;", []found{{"delete-rows", "users", "0002_x.sql:1"}, {"delete-rows", "orgs", "0002_x.sql:1"}}},
+		{velox.MySQL, "UPDATE users u JOIN orgs o ON o.id = u.org_id SET u.name = o.name;", []found{{"update-rows", "users", "0002_x.sql:1"}}},
+		{velox.MySQL, "UPDATE users, orgs SET users.name = orgs.name;", []found{{"update-rows", "users", "0002_x.sql:1"}, {"update-rows", "orgs", "0002_x.sql:1"}}},
 	} {
 		got, err := lintFile(t, c.d, c.src)
 		if err != nil {
@@ -98,6 +114,7 @@ func TestLintFile(t *testing.T) {
 		{velox.SQLite, "START TRANSACTION;", "0002_x.sql:1"},
 		{velox.SQLite, "SELECT 1;\nEND;", "0002_x.sql:2"},
 		{velox.SQLite, "ROLLBACK;", "0002_x.sql:1"},
+		{velox.Postgres, "SELECT 1;\nABORT;", "0002_x.sql:2"},
 	} {
 		_, err := lintFile(t, c.d, c.src)
 		var e *migrate.Error

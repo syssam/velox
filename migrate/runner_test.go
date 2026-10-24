@@ -3,6 +3,7 @@ package migrate_test
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"math"
 	"slices"
@@ -659,5 +660,36 @@ func TestHistoryTableSQLite(t *testing.T) {
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("columns\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+// errNotSQLite is what notSQLite's connections answer every statement with,
+// as another database answers SQLite's PRAGMA.
+var errNotSQLite = errors.New(`syntax error at or near "PRAGMA"`)
+
+// notSQLite is a driver whose connections refuse every statement.
+type notSQLite struct{}
+
+func (notSQLite) Open(string) (driver.Conn, error) { return notSQLiteConn{}, nil }
+
+type notSQLiteConn struct{}
+
+func (notSQLiteConn) Prepare(string) (driver.Stmt, error) { return nil, errNotSQLite }
+func (notSQLiteConn) Close() error                        { return nil }
+func (notSQLiteConn) Begin() (driver.Tx, error)           { return nil, errNotSQLite }
+
+var registerNotSQLite sync.Once
+
+// A SQLite run on a database that is not SQLite is the session refusal,
+// whatever its first statement is.
+func TestUpRefusesADatabaseThatIsNotSQLite(t *testing.T) {
+	registerNotSQLite.Do(func() { sql.Register("velox-not-sqlite", notSQLite{}) })
+	db := openDB(t, "velox-not-sqlite", "")
+	fsys := dirOf(t, velox.SQLite, files(concurrentFiles...))
+	_, err := migrate.Up(context.Background(), db, fsys)
+	var e *migrate.Error
+	if !errors.As(err, &e) || e.Code != "session" || !errors.Is(err, errNotSQLite) ||
+		err.Error() != `migrate: the database does not answer as SQLite, velox.json's dialect: syntax error at or near "PRAGMA"` {
+		t.Errorf("%v", err)
 	}
 }

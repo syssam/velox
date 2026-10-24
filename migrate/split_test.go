@@ -89,6 +89,7 @@ var splitCases = []struct {
 	{d: velox.MySQL, src: "CREATE FUNCTION f() RETURNS int RETURN 1;", err: "triggers and procedures are not supported in migration files", line: 1},
 	{d: velox.MySQL, src: "CREATE EVENT e ON SCHEDULE EVERY 1 DAY DO DELETE FROM a;", err: "triggers and procedures are not supported in migration files", line: 1},
 	{d: velox.MySQL, src: "CREATE DEFINER = `u`@`%` TRIGGER t BEFORE INSERT ON a FOR EACH ROW SET NEW.x = 1;", err: "triggers and procedures are not supported in migration files", line: 1},
+	{d: velox.MySQL, src: "CREATE DEFINER = `TRIGGER`@`%` VIEW v AS SELECT 1", want: []migrate.Piece{stmt("CREATE DEFINER = `TRIGGER`@`%` VIEW v AS SELECT 1", 1)}},
 	{d: velox.MySQL, src: "BEGIN SELECT 1; END;", err: "triggers and procedures are not supported in migration files", line: 1},
 	{d: velox.SQLite, src: "SELECT 1; BEGIN SELECT 1; END;", err: "triggers and procedures are not supported in migration files", line: 1},
 	{d: velox.SQLite, src: "BEGIN; BEGIN TRANSACTION; begin work; BEGIN IMMEDIATE; BEGIN EXCLUSIVE TRANSACTION",

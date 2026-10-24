@@ -123,10 +123,10 @@ func (s *splitter) body(sql string) bool {
 	if s.d == velox.Postgres {
 		return false
 	}
-	ws := words(s.d, sql)
-	at := func(i int) string {
-		if i < len(ws) {
-			return ws[i]
+	ws := lex(s.d, sql)
+	at := func(i int) string { // the i-th word upper-cased, "" when quoted
+		if i < len(ws) && !ws[i].quoted {
+			return strings.ToUpper(ws[i].text)
 		}
 		return ""
 	}
@@ -145,7 +145,7 @@ func (s *splitter) body(sql string) bool {
 		if s.d == velox.MySQL && at(1) == "DEFINER" {
 			// DEFINER = user, a name, @ and a host or CURRENT_USER[()]: the
 			// object's keyword is the first of these after it.
-			for i = 2; i < len(ws) && !slices.Contains([]string{"TRIGGER", "PROCEDURE", "FUNCTION", "EVENT", "VIEW", "SQL"}, ws[i]); i++ {
+			for i = 2; i < len(ws) && !slices.Contains([]string{"TRIGGER", "PROCEDURE", "FUNCTION", "EVENT", "VIEW", "SQL"}, at(i)); i++ {
 			}
 		}
 		if s.d == velox.SQLite && (at(i) == "TEMP" || at(i) == "TEMPORARY") {

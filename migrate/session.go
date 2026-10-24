@@ -58,6 +58,14 @@ func refuseSession(format string, args ...any) error {
 	return &Error{Code: "session", Reason: fmt.Sprintf(format, args...)}
 }
 
+// notAnswering is the refusal of a connection whose database answers err
+// to a query of d's, with err as its cause.
+func notAnswering(d velox.Dialect, err error) error {
+	e := refuseSession("the database does not answer as %s, velox.json's dialect: %v", dialectName(d), err).(*Error)
+	e.cause = err
+	return e
+}
+
 // dialectName is d as its documentation names it.
 func dialectName(d velox.Dialect) string {
 	switch d {
@@ -86,7 +94,10 @@ func open(ctx context.Context, db *sql.DB, cfg Config, wait time.Duration) (*ses
 	if s.d == velox.SQLite {
 		if err := s.busyWait(ctx, wait); err != nil {
 			s.close()
-			return nil, wrap(ctx, "setting busy_timeout", err)
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, notAnswering(s.d, err)
 		}
 	}
 	if err := s.check(ctx); err != nil {
@@ -144,9 +155,7 @@ func (s *session) check(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		e := refuseSession("the database does not answer as %s, velox.json's dialect: %v", dialectName(s.d), err).(*Error)
-		e.cause = err
-		return e
+		return notAnswering(s.d, err)
 	}
 	return checkVersion(s.d, version)
 }
