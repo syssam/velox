@@ -378,6 +378,11 @@ Found while executing plan 2:
 - The normaliser's known limits: an interval literal always keeps its cast, so a cast one never matches an uncast one; it does not know a column's type, so on a `date` column `d >= '2020-01-01 10:00'::timestamp` matches `d >= '2020-01-01 10:00'`, which PostgreSQL reads apart; and a column cast to `text` matches the column, so `qty::text = '05'` matches `qty = '05'`.
 - MySQL's row limit refuses `varchar(16382)` and `varchar(16383)` with any ID wider than `tinyint`, though §4 maps `MaxLen` up to 16383 to `varchar`. Moving the `varchar`-to-`text` cut-off (to 16381, say) would let every such field build; the error already points at `Text()`.
 
+From the final review's fix wave:
+- Lexer unification: `migrate` has four SQL lexers, each with its own quoting rules: the splitter and `lex` (split.go), `lexPredicate` (predicate.go) and `lexSQL` (inspect_sqlite_create.go). One lexer per dialect, which the others build on, would keep them from disagreeing about a quote or a comment.
+- The inspect readers' shared helpers: the PostgreSQL, MySQL and SQLite readers each have their own `each`, `note`, `schema` and `tables`. One reader type that holds them once would leave each dialect only its queries.
+- A file run in a transaction that changes its session's `search_path` (pg_dump's `set_config('search_path', '', false)`) breaks its own history write, which names the table unqualified; Up resets the session only after each file. Qualifying the history table, or resetting before the history write, would close it.
+
 ## 1.0 release
 
 - `apidiff` (API plan 5 ruling 11) is not wired: there is no tag to compare with, and a check against `main` would fail on the breaking changes still planned (the pgx split reshapes `Open`). After the first `v1.0.0` tag, CI runs `golang.org/x/exp/cmd/apidiff`, pinned, for the root module, `contrib/veloxotel` and `contrib/graphql` against the latest `v1` tag, and fails on an incompatible change. The generated-only names (`Desc`, `ColumnDesc`, …, `gqlimpl`) are outside semver and are reported, not failed.
