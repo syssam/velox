@@ -330,6 +330,46 @@ func TestBuildJoinColumnsSingular(t *testing.T) {
 	}
 }
 
+// A join entity is named by the singular of its table, which is a plural
+// already, and its handles by the table itself; a table whose singular is
+// itself takes GoPlural's handles.
+type (
+	Vault struct{ schema.Schema }
+	Crew  struct{ schema.Schema }
+)
+
+func (Vault) Edges() []schema.Edge { return []schema.Edge{edge.To("data", Vault.Type)} }
+
+func (Crew) Edges() []schema.Edge {
+	return []schema.Edge{
+		edge.To("teams", Crew.Type).StorageKey(edge.Table("crew_team")),
+		edge.To("kit", Crew.Type).StorageKey(edge.Table("crew_equipment")),
+	}
+}
+
+func TestJoinEntityNames(t *testing.T) {
+	o, err := Lower(mustBuild(t, Category{}, Vault{}, Crew{}), Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ table, name, handles string }{
+		{"category_children", "CategoryChild", "CategoryChildren"},
+		{"vault_data", "VaultDatum", "VaultData"},
+		{"crew_team", "CrewTeam", "CrewTeams"},
+		{"crew_equipment", "CrewEquipment", "CrewEquipments"},
+	} {
+		var e *OutEntity
+		for _, x := range o.Entities {
+			if x.Join && x.Table == c.table {
+				e = x
+			}
+		}
+		if e == nil || e.Name != c.name || e.Handles != c.handles {
+			t.Errorf("%s: %+v, want %s and %s", c.table, e, c.name, c.handles)
+		}
+	}
+}
+
 // A unique edge to its own schema is a bidirectional O2O.
 type Person struct{ schema.Schema }
 

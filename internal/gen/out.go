@@ -25,7 +25,7 @@ type Out struct {
 
 // OutEntity is one generated entity: a schema's, or a many-to-many join entity.
 type OutEntity struct {
-	Name, Label, Handles, Table, TableSchema string // Handles = Plural(Name), e.g. "Users"
+	Name, Label, Handles, Table, TableSchema string // Handles = GoPlural(Name), e.g. "Users", "StatusSlice"; a join entity's is GoName(Table)
 	Fields                                   []*OutField
 	Rels                                     []*OutRel
 	PrimaryKey                               []int

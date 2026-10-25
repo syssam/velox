@@ -785,7 +785,16 @@ func (l *lowerer) through(s *entState, e, t *Entity, ed *Edge) string {
 	}
 	j := l.joins[ed.Rel.Table]
 	if j == nil {
+		// The join table's name is already a plural, so the entity is
+		// named by its singular and the handles by the table itself:
+		// category_children gives CategoryChild and CategoryChildren,
+		// user_data UserDatum and UserData. A table whose singular is
+		// itself, such as user_group, takes GoPlural's handles.
 		name := plugin.GoName(plugin.Singular(ed.Rel.Table))
+		handles := plugin.GoName(ed.Rel.Table)
+		if handles == name {
+			handles = plugin.GoPlural(name)
+		}
 		if !ident(name) {
 			s.fail(where, "join table %s has no Go name for its entity", ed.Rel.Table)
 			name = "Join"
@@ -795,7 +804,7 @@ func (l *lowerer) through(s *entState, e, t *Entity, ed *Edge) string {
 			s.fail(where, "join table %s lies between tables in different schemas (%q and %q)", ed.Rel.Table, owner.TableSchema, target.TableSchema)
 		}
 		js.out = &OutEntity{
-			TableSchema: owner.TableSchema, Name: name, Label: plugin.Snake(name), Handles: plugin.GoPlural(name), Table: ed.Rel.Table,
+			TableSchema: owner.TableSchema, Name: name, Label: plugin.Snake(name), Handles: handles, Table: ed.Rel.Table,
 			PrimaryKey: []int{0, 1}, Tenant: -1, Join: true, Bound: l.cfg.Bound[name],
 		}
 		for i, ent := range []*Entity{owner, target} {

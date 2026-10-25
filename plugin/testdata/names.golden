@@ -95,6 +95,7 @@ buses	buses	buses	bus	Buses	busesSlice
 buzz	buzz	buzzs	buzz	Buzz	buzzs
 categories	categories	categories	category	Categories	categoriesSlice
 category	category	categories	category	Category	categories
+category_children	category_children	category_children	category_child	CategoryChildren	category_childrenSlice
 child	child	children	child	Child	children
 children	children	children	child	Children	childrenSlice
 church	church	churches	church	Church	churches
@@ -197,6 +198,7 @@ url	url	urls	url	URL	urls
 url_x	url_x	url_xes	url_x	URLX	url_xes
 user	user	users	user	User	users
 userID	user_id	userIDs	userID	UserID	userIDs
+user_data	user_data	user_data	user_datum	UserData	user_dataSlice
 utf8	utf8	utf8s	utf8	UTF8	utf8s
 utf8_x	utf8_x	utf8_xes	utf8_x	UTF8X	utf8_xes
 uuid	uuid	uuids	uuid	UUID	uuids

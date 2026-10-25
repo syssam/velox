@@ -40,7 +40,7 @@ func TestNamesGolden(t *testing.T) {
 	lines := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
 	// The count is pinned, so that deleting a row fails. Adding a row means
 	// raising it, by hand.
-	const rows = 266
+	const rows = 268
 	if len(lines) != rows {
 		t.Fatalf("golden has %d rows, want %d", len(lines), rows)
 	}
