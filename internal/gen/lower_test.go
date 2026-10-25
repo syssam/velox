@@ -677,6 +677,42 @@ func TestLowerSensitiveTag(t *testing.T) {
 	}
 }
 
+type lwPoint struct{ X, Y int }
+
+type LwTagged struct{ schema.Schema }
+
+func (LwTagged) Fields() []schema.Field {
+	return []schema.Field{
+		field.Time("at"),
+		field.Time("seen").Optional().Nillable(),
+		field.UUID("u", uuidValue{}),
+		field.JSON("p", lwPoint{}),
+		field.JSON("m", map[string]int{}),
+		field.String("s"),
+		field.String("pw").Sensitive(),
+	}
+}
+
+// TestJSONTags: a struct or an array that is not a pointer is omitzero, as
+// omitempty never omits it; every other field is omitempty, and a Sensitive
+// field is never in JSON.
+func TestJSONTags(t *testing.T) {
+	e := mustLower(t, Config{}, LwTagged{}).entity("LwTagged")
+	for name, want := range map[string]string{
+		"at":   "`json:\"at,omitzero\"`",
+		"seen": "`json:\"seen,omitempty\"`",
+		"u":    "`json:\"u,omitzero\"`",
+		"p":    "`json:\"p,omitzero\"`",
+		"m":    "`json:\"m,omitempty\"`",
+		"s":    "`json:\"s,omitempty\"`",
+		"pw":   "`json:\"-\"`",
+	} {
+		if f := e.field(name); f == nil || f.Tag != want {
+			t.Errorf("%s: %+v, want tag %s", name, f, want)
+		}
+	}
+}
+
 type LwSchemaA struct{ schema.Schema }
 
 func (LwSchemaA) Annotations() []schema.Annotation {

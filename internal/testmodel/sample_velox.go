@@ -10,7 +10,7 @@ import (
 	"github.com/syssam/velox2/internal/testmodel/kind"
 )
 
-const _ = velox.GeneratedCodeIsVersion5
+const _ = velox.GeneratedCodeIsVersion6
 
 // Sample is the entity of schema Sample.
 type Sample struct {
@@ -22,7 +22,7 @@ type Sample struct {
 	Ratio     *float64          `json:"ratio,omitempty"`
 	Flag      bool              `json:"flag,omitempty"`
 	MaybeFlag *bool             `json:"maybe_flag,omitempty"`
-	When      time.Time         `json:"when,omitempty"`
+	When      time.Time         `json:"when,omitzero"`
 	MaybeWhen *time.Time        `json:"maybe_when,omitempty"`
 	Blob      []byte            `json:"blob,omitempty"`
 	ParentID  *int64            `json:"parent_id,omitempty"`

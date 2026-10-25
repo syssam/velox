@@ -12,13 +12,13 @@ import (
 	"github.com/syssam/velox2"
 )
 
-const _ = velox.GeneratedCodeIsVersion5
+const _ = velox.GeneratedCodeIsVersion6
 
 // User is a person who writes posts.
 type User struct {
 	ID        int64     `json:"id,omitempty"`
-	CreatedAt time.Time `json:"created_at,omitempty"`
-	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	CreatedAt time.Time `json:"created_at,omitzero"`
+	UpdatedAt time.Time `json:"updated_at,omitzero"`
 	CreatedBy string    `json:"created_by,omitempty"`
 	OrgID     int64     `json:"org_id,omitempty"`
 	// The display name.

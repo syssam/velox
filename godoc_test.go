@@ -81,7 +81,7 @@ func TestGodocCitesNoSpec(t *testing.T) {
 // word.
 func TestGeneratedOnlyAPIIsMarked(t *testing.T) {
 	names := []string{"Desc", "ColumnDesc", "EdgeDesc", "EdgeTo", "EdgeThrough", "Meta", "MetaOnce",
-		"BindPolicy", "BindHooks", "BoundPolicy", "BoundHooks", "Lazy", "Validate", "ValidateSet", "GeneratedCodeIsVersion5"}
+		"BindPolicy", "BindHooks", "BoundPolicy", "BoundHooks", "Lazy", "Validate", "ValidateSet", "GeneratedCodeIsVersion6"}
 	listed := map[string]bool{}
 	for _, n := range names {
 		listed[n] = true

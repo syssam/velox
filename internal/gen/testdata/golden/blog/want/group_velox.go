@@ -9,7 +9,7 @@ import (
 	"github.com/syssam/velox2"
 )
 
-const _ = velox.GeneratedCodeIsVersion5
+const _ = velox.GeneratedCodeIsVersion6
 
 // Group is the entity of schema Group.
 type Group struct {

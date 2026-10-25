@@ -11,13 +11,13 @@ import (
 	sch "github.com/syssam/velox2/example/tour/schema"
 )
 
-const _ = velox.GeneratedCodeIsVersion5
+const _ = velox.GeneratedCodeIsVersion6
 
 // Invoice is the entity of schema Invoice.
 type Invoice struct {
 	ID         int64            `json:"id,omitempty"`
-	CreatedAt  time.Time        `json:"created_at,omitempty"`
-	UpdatedAt  time.Time        `json:"updated_at,omitempty"`
+	CreatedAt  time.Time        `json:"created_at,omitzero"`
+	UpdatedAt  time.Time        `json:"updated_at,omitzero"`
 	OrgID      int64            `json:"org_id,omitempty"`
 	Number     string           `json:"number,omitempty"`
 	Customer   string           `json:"customer,omitempty"`

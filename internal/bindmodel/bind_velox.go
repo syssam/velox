@@ -12,7 +12,7 @@ import (
 	"github.com/syssam/velox2/internal/bindmodel/bindtype"
 )
 
-const _ = velox.GeneratedCodeIsVersion5
+const _ = velox.GeneratedCodeIsVersion6
 
 // Bind is the entity of schema Bind.
 type Bind struct {
@@ -35,10 +35,10 @@ type Bind struct {
 	Level     bindtype.Level `json:"level,omitempty"`
 	Data      []byte         `json:"data,omitempty"`
 	ShortData []byte         `json:"short_data,omitempty"`
-	At        time.Time      `json:"at,omitempty"`
-	UID       bindtype.UUID  `json:"uid,omitempty"`
+	At        time.Time      `json:"at,omitzero"`
+	UID       bindtype.UUID  `json:"uid,omitzero"`
 	Tags      []string       `json:"tags,omitempty"`
-	Doc       bindtype.Doc   `json:"doc,omitempty"`
+	Doc       bindtype.Doc   `json:"doc,omitzero"`
 	Note      *string        `json:"note,omitempty"`
 }
 

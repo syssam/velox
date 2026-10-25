@@ -4,7 +4,7 @@ package bindmodel
 
 import "github.com/syssam/velox2"
 
-const _ = velox.GeneratedCodeIsVersion5
+const _ = velox.GeneratedCodeIsVersion6
 
 // BindKind is an enum of the model.
 type BindKind string
@@ -16,4 +16,16 @@ const (
 )
 
 // Values returns the values of BindKind in declaration order.
-func (BindKind) Values() []string { return []string{"a", "b"} }
+func (e BindKind) Values() []string { return []string{"a", "b"} }
+
+// String returns the stored value of e.
+func (e BindKind) String() string { return string(e) }
+
+// IsValid reports whether e is one of the values of BindKind.
+func (e BindKind) IsValid() bool {
+	switch e {
+	case BindKindA, BindKindB:
+		return true
+	}
+	return false
+}

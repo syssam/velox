@@ -10,7 +10,7 @@ import (
 	"github.com/syssam/velox2"
 )
 
-const _ = velox.GeneratedCodeIsVersion5
+const _ = velox.GeneratedCodeIsVersion6
 
 // User is the entity of schema User.
 type User struct {
@@ -18,7 +18,7 @@ type User struct {
 	Name         string           `json:"name,omitempty"`
 	Email        string           `json:"email,omitempty"`
 	Role         UserRole         `json:"role,omitempty"`
-	JoinedAt     time.Time        `json:"joined_at,omitempty"`
+	JoinedAt     time.Time        `json:"joined_at,omitzero"`
 	PasswordHash string           `json:"-"`
 	Posts        velox.Many[Post] `json:"posts,omitzero"`
 }

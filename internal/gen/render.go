@@ -30,7 +30,7 @@ func Generate(g *Graph, cfg Config) ([]File, error) {
 }
 
 // Render writes one file per entity, <label>_velox.go (the join entities too),
-// and velox.go: the package comment, the enums and the model's hash.
+// and velox.go: the package comment and the enums.
 //
 // The files are in the order of o.Entities, then velox.go. Render does not
 // change o, and the same o gives the same bytes.
@@ -110,7 +110,19 @@ func renderPackage(o *Out) string {
 		w.p(")")
 		w.p("")
 		w.p("// Values returns the values of %s in declaration order.", en.Type)
-		w.p("func (%s) Values() []string { return []string{%s} }", en.Type, quoteAll(en.Values))
+		w.p("func (e %s) Values() []string { return []string{%s} }", en.Type, quoteAll(en.Values))
+		w.p("")
+		w.p("// String returns the stored value of e.")
+		w.p("func (e %s) String() string { return string(e) }", en.Type)
+		w.p("")
+		w.p("// IsValid reports whether e is one of the values of %s.", en.Type)
+		w.p("func (e %s) IsValid() bool {", en.Type)
+		w.p("\tswitch e {")
+		w.p("\tcase %s:", strings.Join(en.Consts, ", "))
+		w.p("\t\treturn true")
+		w.p("\t}")
+		w.p("\treturn false")
+		w.p("}")
 	}
 	return w.String()
 }

@@ -247,6 +247,10 @@ func (s *entState) field(e *Entity, i int, f *Field) *OutField {
 		o.Tag = quoteTag(f.StructTag)
 	case f.Sensitive:
 		o.Tag = quoteTag(`json:"-"`)
+	case !o.Pointer && (kind == "struct" || kind == "array"):
+		// omitempty never omits a struct or an array; omitzero omits its zero
+		// value, such as a zero time.Time or UUID.
+		o.Tag = quoteTag(fmt.Sprintf(`json:"%s,omitzero"`, f.Name))
 	default:
 		o.Tag = quoteTag(fmt.Sprintf(`json:"%s,omitempty"`, f.Name))
 	}

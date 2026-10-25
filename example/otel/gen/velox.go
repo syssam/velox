@@ -5,7 +5,7 @@ package gen
 
 import "github.com/syssam/velox2"
 
-const _ = velox.GeneratedCodeIsVersion5
+const _ = velox.GeneratedCodeIsVersion6
 
 // InvoiceStatus is an enum of the model.
 type InvoiceStatus string
@@ -17,4 +17,16 @@ const (
 )
 
 // Values returns the values of InvoiceStatus in declaration order.
-func (InvoiceStatus) Values() []string { return []string{"sent", "paid"} }
+func (e InvoiceStatus) Values() []string { return []string{"sent", "paid"} }
+
+// String returns the stored value of e.
+func (e InvoiceStatus) String() string { return string(e) }
+
+// IsValid reports whether e is one of the values of InvoiceStatus.
+func (e InvoiceStatus) IsValid() bool {
+	switch e {
+	case InvoiceStatusSent, InvoiceStatusPaid:
+		return true
+	}
+	return false
+}

@@ -101,6 +101,33 @@ func TestGolden(t *testing.T) {
 	}
 }
 
+// The blog golden's velox.go gives each enum Values, String and IsValid, all
+// with the receiver e.
+func TestGoldenEnumMethods(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("testdata", "golden", "blog", "want", "velox.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `// Values returns the values of PostStatus in declaration order.
+func (e PostStatus) Values() []string { return []string{"draft", "published"} }
+
+// String returns the stored value of e.
+func (e PostStatus) String() string { return string(e) }
+
+// IsValid reports whether e is one of the values of PostStatus.
+func (e PostStatus) IsValid() bool {
+	switch e {
+	case PostStatusDraft, PostStatusPublished:
+		return true
+	}
+	return false
+}
+`
+	if !strings.Contains(string(b), want) {
+		t.Errorf("velox.go lacks PostStatus's methods:\n%s", b)
+	}
+}
+
 // firstDiff is the 1-based number of the first line where a and b differ.
 func firstDiff(a, b string) int {
 	x, y := strings.Split(a, "\n"), strings.Split(b, "\n")

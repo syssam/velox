@@ -22,7 +22,7 @@ func TestOldAPIIsGone(t *testing.T) {
 	}
 	doc := string(out)
 	// Not vacuous: the new API is listed.
-	for _, kept := range []string{`(?m)^type Desc\[E any\] struct`, `(?m)^func \(o \*MetaOnce\[E\]\) Load\[`, `(?m)^const GeneratedCodeIsVersion5 `, `(?m)^func EdgeTo\[`, `(?m)^func \(m \*Mutation\[E\]\) Conds\[`} {
+	for _, kept := range []string{`(?m)^type Desc\[E any\] struct`, `(?m)^func \(o \*MetaOnce\[E\]\) Load\[`, `(?m)^const GeneratedCodeIsVersion6 `, `(?m)^func EdgeTo\[`, `(?m)^func \(m \*Mutation\[E\]\) Conds\[`} {
 		if !regexp.MustCompile(kept).MatchString(doc) {
 			t.Errorf("go doc does not list %s: the check reads nothing", kept)
 		}
@@ -38,6 +38,7 @@ func TestOldAPIIsGone(t *testing.T) {
 		`^func \(o \*MetaOnce\[E\]\) Get\b`,
 		`^const GeneratedCodeIsVersion2\b`,
 		`^const GeneratedCodeIsVersion4\b`,
+		`^const GeneratedCodeIsVersion5\b`,
 		`^type Relation\b`,
 		`^func AllTenants\b`,
 		`^func SkipPolicy\b`,

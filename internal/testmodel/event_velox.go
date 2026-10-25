@@ -11,12 +11,12 @@ import (
 	sch "github.com/syssam/velox2/internal/testmodel/schema"
 )
 
-const _ = velox.GeneratedCodeIsVersion5
+const _ = velox.GeneratedCodeIsVersion6
 
 // Event is the entity of schema Event.
 type Event struct {
 	ID      int64        `json:"id,omitempty"`
-	At      kind.Moment  `json:"at,omitempty"`
+	At      kind.Moment  `json:"at,omitzero"`
 	MaybeAt *kind.Moment `json:"maybe_at,omitempty"`
 }
 

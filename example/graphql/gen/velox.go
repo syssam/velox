@@ -5,7 +5,7 @@ package gen
 
 import "github.com/syssam/velox2"
 
-const _ = velox.GeneratedCodeIsVersion5
+const _ = velox.GeneratedCodeIsVersion6
 
 // PostStatus is an enum of the model.
 type PostStatus string
@@ -17,7 +17,19 @@ const (
 )
 
 // Values returns the values of PostStatus in declaration order.
-func (PostStatus) Values() []string { return []string{"draft", "published"} }
+func (e PostStatus) Values() []string { return []string{"draft", "published"} }
+
+// String returns the stored value of e.
+func (e PostStatus) String() string { return string(e) }
+
+// IsValid reports whether e is one of the values of PostStatus.
+func (e PostStatus) IsValid() bool {
+	switch e {
+	case PostStatusDraft, PostStatusPublished:
+		return true
+	}
+	return false
+}
 
 // UserRole is an enum of the model.
 type UserRole string
@@ -29,4 +41,16 @@ const (
 )
 
 // Values returns the values of UserRole in declaration order.
-func (UserRole) Values() []string { return []string{"admin", "member"} }
+func (e UserRole) Values() []string { return []string{"admin", "member"} }
+
+// String returns the stored value of e.
+func (e UserRole) String() string { return string(e) }
+
+// IsValid reports whether e is one of the values of UserRole.
+func (e UserRole) IsValid() bool {
+	switch e {
+	case UserRoleAdmin, UserRoleMember:
+		return true
+	}
+	return false
+}
