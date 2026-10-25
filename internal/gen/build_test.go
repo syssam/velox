@@ -1043,12 +1043,12 @@ func (immutableField) Edges() []schema.Edge {
 // after the schema itself: loop_id twice.
 type loop struct{ schema.Schema }
 
+func (loop) Edges() []schema.Edge { return []schema.Edge{edge.To("loops", loop.Type)} }
+
 // Man's edge men has the singular man, Man's own label (rule 35).
 type Man struct{ schema.Schema }
 
 func (Man) Edges() []schema.Edge { return []schema.Edge{edge.To("men", Man.Type)} }
-
-func (loop) Edges() []schema.Edge { return []schema.Edge{edge.To("loops", loop.Type)} }
 
 type cycle struct{ schema.Schema }
 

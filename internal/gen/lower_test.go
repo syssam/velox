@@ -677,7 +677,11 @@ func TestLowerSensitiveTag(t *testing.T) {
 	}
 }
 
-type LwPoint struct{ X, Y int }
+type (
+	LwPoint struct{ X, Y int }
+	LwTags  []string
+	LwAttrs map[string]string
+)
 
 type LwTagged struct{ schema.Schema }
 
@@ -688,6 +692,10 @@ func (LwTagged) Fields() []schema.Field {
 		field.UUID("u", UUIDValue{}),
 		field.JSON("p", LwPoint{}),
 		field.JSON("m", map[string]int{}),
+		field.JSON("tags", LwTags{}),
+		field.JSON("attrs", LwAttrs{}),
+		field.JSON("pp", &LwPoint{}),
+		field.JSON("arr", [2]int{}),
 		field.String("s"),
 		field.String("pw").Sensitive(),
 	}
@@ -699,13 +707,17 @@ func (LwTagged) Fields() []schema.Field {
 func TestJSONTags(t *testing.T) {
 	e := mustLower(t, Config{}, LwTagged{}).entity("LwTagged")
 	for name, want := range map[string]string{
-		"at":   "`json:\"at,omitzero\"`",
-		"seen": "`json:\"seen,omitempty\"`",
-		"u":    "`json:\"u,omitzero\"`",
-		"p":    "`json:\"p,omitzero\"`",
-		"m":    "`json:\"m,omitempty\"`",
-		"s":    "`json:\"s,omitempty\"`",
-		"pw":   "`json:\"-\"`",
+		"at":    "`json:\"at,omitzero\"`",
+		"seen":  "`json:\"seen,omitempty\"`",
+		"u":     "`json:\"u,omitzero\"`",
+		"p":     "`json:\"p,omitzero\"`",
+		"m":     "`json:\"m,omitempty\"`",
+		"tags":  "`json:\"tags,omitempty\"`",
+		"attrs": "`json:\"attrs,omitempty\"`",
+		"pp":    "`json:\"pp,omitempty\"`",
+		"arr":   "`json:\"arr,omitzero\"`",
+		"s":     "`json:\"s,omitempty\"`",
+		"pw":    "`json:\"-\"`",
 	} {
 		if f := e.field(name); f == nil || f.Tag != want {
 			t.Errorf("%s: %+v, want tag %s", name, f, want)
