@@ -43,10 +43,12 @@ func (c common[B]) Nillable() B { c.d.Nillable = true; return c.self }
 // UpdateDefault, which no update would call.
 func (c common[B]) Immutable() B { c.d.Immutable = true; return c.self }
 
-// Unique adds a single-column unique index. A field that is unique only when
-// present needs Nillable: NULLs do not collide, but the zero values of unset
-// Optional fields do. velox-gen refuses a Unique JSON field: no index covers
-// a JSON column.
+// Unique adds a single-column unique index, named as ent names it:
+// <table>_<column>_key on PostgreSQL (cut at 63 bytes, as PostgreSQL cuts
+// it) and on SQLite, and the column's name on MySQL. A field that is unique
+// only when present needs Nillable: NULLs do not collide, but the zero values
+// of unset Optional fields do. velox-gen refuses a Unique JSON field: no index
+// covers a JSON column.
 func (c common[B]) Unique() B { c.d.Unique = true; return c.self }
 
 // Sensitive leaves the field out of String(), JSON, logs and spans.

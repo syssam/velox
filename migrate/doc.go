@@ -70,9 +70,6 @@
 //     PostgreSQL session with standard_conforming_strings off; or a MySQL
 //     session whose sql_mode holds NO_BACKSLASH_ESCAPES or ANSI_QUOTES when
 //     a file to apply holds a literal the mode would read otherwise.
-//     On PostgreSQL 18, PostgreSQL names the NOT NULL constraints; migrate
-//     neither models nor renames them, and after a table rename they keep
-//     the old table's name.
 //   - "history": the history table holds what the runner cannot read, a
 //     file is pending below the highest applied version, a dirty version
 //     to resume runs in a transaction or has versions above the
@@ -85,6 +82,10 @@
 //   - "baseline": Baseline found none of the schema's tables, a foreign key
 //     to a table outside them, or a sequence default the column does not
 //     own; or Up was given WithBaseline where it cannot record.
+//
+// On PostgreSQL 18, PostgreSQL names the NOT NULL constraints; migrate
+// neither models nor renames them, and after a table rename they keep the
+// old table's name.
 //
 // Each [Change] has a String, its kind and the object it acts on in one
 // line. [Inspect] reads a database's tables as a Schema, and [Drift] reads

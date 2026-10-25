@@ -10,7 +10,9 @@ type TableAnnotation struct {
 // Name returns "Table".
 func (*TableAnnotation) Name() string { return "Table" }
 
-// Table names the table of a schema.
+// Table names the table of a schema. Without it the table is ent's: the
+// snake_case of the plural of the schema's Go name, which is case-sensitive,
+// so User gives users, Category categories, Person persons and Status status.
 func Table(name string) *TableAnnotation { return &TableAnnotation{Table: name} }
 
 // TableIn names the table of a schema and the database schema that holds it.
