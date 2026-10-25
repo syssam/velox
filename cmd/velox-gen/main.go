@@ -117,7 +117,9 @@
 // module, imports the generated package and reports, for every entity, the
 // mistakes that velox.CheckEntity finds and, for every relation,
 // velox.CheckRelation, whose target the generated metadata does not name. It
-// removes the directory, also when interrupted, and says so when the program
+// removes the directory, also when interrupted (SIGINT or SIGTERM, which it
+// passes on to go build and the program as an interrupt), after which it
+// exits 130, as generate and migrate do, and it says so when the program
 // does not build, as when the generated package is stale or edited by hand;
 // a killed process leaves it behind, and the next verify removes one older
 // than an hour; ignore .velox-verify-*/ in git. With -plugin it runs the

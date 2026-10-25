@@ -21,9 +21,10 @@ const verifyPrefix = ".velox-verify-"
 // of the module at modDir and runs it, with stdout and stderr connected, and
 // removes the directory afterwards. It first removes the directories older
 // runs left behind (sweepVerifyDirs). When ctx is done, as on an interrupt,
-// it stops the command and fails; when the program does not build, it says
-// why go's errors may be in the generated package. It returns the exit code
-// of velox-gen.
+// it interrupts the command (gently, see gentle), says so and returns
+// interruptedCode, as it does when the command dies of a signal and ctx is
+// done soon after; when the program does not build, it says why go's errors
+// may be in the generated package. It returns the exit code of velox-gen.
 func runProgram(ctx context.Context, modDir string, src []byte, env []string, stdout, stderr io.Writer) int {
 	sweepVerifyDirs(modDir, time.Now())
 	tmp, err := os.MkdirTemp(modDir, verifyPrefix)
@@ -40,37 +41,73 @@ func runProgram(ctx context.Context, modDir string, src []byte, env []string, st
 	if runtime.GOOS == "windows" {
 		bin += ".exe"
 	}
-	build := exec.CommandContext(ctx, "go", "build", "-o", bin, "./"+filepath.Base(tmp))
+	build := gentle(exec.CommandContext(ctx, "go", "build", "-o", bin, "./"+filepath.Base(tmp)))
 	build.Dir, build.Env, build.Stdout, build.Stderr = modDir, env, stdout, stderr
 	err = build.Run()
-	if ctx.Err() != nil {
+	if interrupted(ctx, err) {
 		_, _ = fmt.Fprintln(stderr, "velox-gen verify: interrupted")
-		return 1
+		return interruptedCode
 	}
 	if err != nil {
 		var exit *exec.ExitError
-		if !errors.As(err, &exit) { // an ExitError means go already printed why
+		if !errors.As(err, &exit) || exit.ExitCode() == -1 { // an exit of go's own, not a signal, means go printed why
 			_, _ = fmt.Fprintf(stderr, "velox-gen verify: %v\n", err)
 			return 1
 		}
 		_, _ = fmt.Fprintln(stderr, "velox-gen verify: the check program did not build; the generated package may be stale or edited by hand: run velox-gen, then verify again")
 		return 1
 	}
-	run := exec.CommandContext(ctx, bin)
+	run := gentle(exec.CommandContext(ctx, bin))
 	run.Dir, run.Env, run.Stdout, run.Stderr = modDir, env, stdout, stderr
 	err = run.Run()
-	if ctx.Err() != nil {
+	if interrupted(ctx, err) {
 		_, _ = fmt.Fprintln(stderr, "velox-gen verify: interrupted")
-		return 1
+		return interruptedCode
 	}
 	if err != nil {
 		var exit *exec.ExitError
-		if !errors.As(err, &exit) { // an ExitError means the program printed why
+		if !errors.As(err, &exit) || exit.ExitCode() == -1 { // an exit of the program's own, not a signal, means it printed why
 			_, _ = fmt.Fprintf(stderr, "velox-gen verify: %v\n", err)
 		}
 		return 1
 	}
 	return 0
+}
+
+// gentle makes c, when its context is done, send os.Interrupt rather than
+// kill, and wait up to 5s for it to exit before it is killed, so that go
+// build cleans up after itself; Windows cannot send os.Interrupt to a
+// process, so there c is killed at once.
+func gentle(c *exec.Cmd) *exec.Cmd {
+	if runtime.GOOS != "windows" {
+		c.Cancel = func() error { return c.Process.Signal(os.Interrupt) }
+		c.WaitDelay = 5 * time.Second
+	}
+	return c
+}
+
+// interruptGrace is how long interrupted waits, after a command died of a
+// signal, for ctx to be done.
+var interruptGrace = time.Second
+
+// interrupted reports whether a command's run, which returned err, was
+// interrupted: ctx is done, or the command died of a signal and ctx is done
+// within interruptGrace. A terminal's Ctrl-C reaches the command too, which
+// can die of it before velox-gen's own handler cancels ctx.
+func interrupted(ctx context.Context, err error) bool {
+	if ctx.Err() != nil {
+		return true
+	}
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) || exit.ExitCode() != -1 {
+		return false
+	}
+	select {
+	case <-ctx.Done():
+		return true
+	case <-time.After(interruptGrace):
+		return false
+	}
 }
 
 // sweepVerifyDirs removes the .velox-verify-* directories of modDir last
