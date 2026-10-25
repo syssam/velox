@@ -27,8 +27,9 @@ There are no templates. velox-gen writes code from format strings in `internal/g
 - **Commits** are `Area: what changed`. They end with a blank line, then `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Stage files by name with `git add <paths>`, never `git add -A` or `.`, and never stage `.DS_Store`. `git status --short` lists what a task changed; every path in it but `.DS_Store` is staged. Never push.
 - **No deprecated aliases.** A replaced name or constant is deleted.
 - **Lint and revive stay at 0** in every module, generated code included.
+- **Greps.** Apple's git greps with BSD regex, where `-E` never matches `\b`. A leftover grep with `\b` uses `git grep -P`.
 - **Goldens.** A golden changes only by its `-update` run or by the hand edit a step names. Read every changed golden line: only what the task changes may differ.
-- **Historical documents.** Nothing under `docs/reviews/` or `docs/plans/` changes but this plan. Under `docs/specs/`, only the lines a task names change: core-design §2's line count (C7), the migrate spec's §4 and its ruling 41 and line 36 (M10, MS1). The hardening spec's builder ruling 3 had its licence corrected to MIT with this plan.
+- **Historical documents.** Nothing under `docs/reviews/` or `docs/plans/` changes but this plan. Under `docs/specs/`, only the lines a task names change: core-design §2's line count (C7) and its two MySQL minimums (Task 2), the migrate spec's §4 and its ruling 41 and line 36 (M10, MS1). The hardening spec's builder ruling 3 had its licence corrected to MIT with this plan.
 - **The followups file** (`docs/plans/2026-10-14-core-1-followups.md`) is not touched. Wave 6 marks its items, citing these commits.
 - **No machine-specific paths** in committed files.
 
@@ -74,7 +75,7 @@ for m in testmodel bindmodel; do bin/velox-gen -check -out internal/$m -package 
 ## Review Focus
 
 1. **An entity name inflect leaves unchanged.** `Status`, `Settings`, `Data`, `Media` and `Equipment` must still generate: table `status`, handles `StatusSlice`, no rule 44 clash with the type. Pin: Task 4 `TestEntityNamedStatus`.
-2. **A self many-to-many edge whose singular is the owner's label.** `Person` with `edge.To("people", Person.Type)` now gives `person_id` twice. It must be refused with rule 35's hint, not generate a broken join table. Pin: Task 4, a `TestBuildRules` case.
+2. **A self many-to-many edge whose singular is the owner's label.** `Man` with `edge.To("men", Man.Type)` now gives `man_id` twice. It must be refused with rule 35's hint, not generate a broken join table. Pin: Task 4, a `TestBuildRules` case.
 3. **Two declared indexes on the same columns.** Under ent's names they share `lower(Type)_<cols>`. A partial one gets its Where hash; two full ones (one `Unique`) are refused by rule 44, naming StorageKey as the fix. Pin: Task 5 `TestIndexNames` and its rule 44 case.
 4. **MySQL's per-table index names.** A `Unique` field's index is named after its column on MySQL, so it can meet a declared index's name inside one table. Tables must refuse it with file:line, not leave MySQL to fail at apply. Pin: Task 5 `TestTablesMySQLIndexNameClash`.
 5. **A generate that fails part-way, or an output whose file names change only in case.** `-out` must be exactly as it was after a failed write, stale files included. A case-only rename must work on a case-insensitive file system. Pins: Task 10 `TestWriteAllRemoves`, `TestWriteAllCaseRename` and `TestGenerateIsAllOrNothing`.
@@ -83,18 +84,27 @@ for m in testmodel bindmodel; do bin/velox-gen -check -out internal/$m -package 
 
 ## Wave 0: CI hygiene
 
-### Task 1: One CI run per change, a read-only token, `VELOX_ITEST_REQUIRE`, and C7's re-measure
+### Task 1: One CI run per change, a read-only token, `VELOX_ITEST_REQUIRE`, the examples and fuzz targets, the harness's GOFLAGS, and C7's re-measure
 
-Covers C11, C12's docker guard, C100 and C7. C12's pinned digests land in Task 2, with the new images.
+Covers C11, C12's docker guard, C100, N2, C44's fuzz anchors, G21, G22 and C7 (builder ruling 20's Wave 0). C12's pinned digests land in Task 2, with the new images.
 
 **Files:**
 - Modify: `.github/workflows/ci.yml`, `scripts/ci-local.sh`.
-- Modify, the guard: `internal/itest/itest_test.go:1-46`, `cmd/velox-gen/main_test.go:10-27`, `migrate/main_test.go:10-27`, `contrib/graphql/cmd/velox-graphql/collect_e2e_test.go:220-235` and `contrib/graphql/cmd/velox-graphql/mutation_e2e_test.go:200-215`.
+- Modify, the guard: `internal/itest/itest_test.go:1-46`, `cmd/velox-gen/main_test.go:10-27`, `migrate/main_test.go:10-27`, `contrib/graphql/cmd/velox-graphql/collect_e2e_test.go:220-235,907` and `contrib/graphql/cmd/velox-graphql/mutation_e2e_test.go:200-215,1663` (the last two are comments that say `with CI=true`; they say `with VELOX_ITEST_REQUIRE=1`).
 - Modify, C7: `docs/specs/2026-10-14-core-design.md:224-225`.
+- Modify, G21 and G22: `internal/tempmod/tempmod.go:48-51,90`, `bench/scale/main.go:146,169`.
+- Test: `internal/tempmod/tempmod_test.go` (create if absent).
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: the environment variable `VELOX_ITEST_REQUIRE=1`. With it, a test binary whose database variables are unset exits 1 instead of skipping. `CI` is no longer read.
+- Produces: the environment variable `VELOX_ITEST_REQUIRE=1`. With it, a test binary whose database variables are unset exits 1 instead of skipping. `CI` is no longer read. And:
+
+```go
+// internal/tempmod
+// GoFlags is the user's GOFLAGS with extra after it, so that a flag such as
+// -p=2 survives; extra alone when GOFLAGS is unset.
+func GoFlags(extra string) string
+```
 
 - **ci.yml** (C11):
   - the trigger is `on: {push: {branches: [main]}, pull_request: {}}`, written in block form;
@@ -105,11 +115,31 @@ Covers C11, C12's docker guard, C100 and C7. C12's pinned digests land in Task 2
 - **ci-local.sh:**
   - after the Go-version check, `command -v docker >/dev/null || { echo "ci-local.sh needs docker" >&2; exit 1; }`;
   - `export CI=true` and its comment become `export VELOX_ITEST_REQUIRE=1`, with the comment `# As in CI: the itests fail, rather than skip, when a database variable is unset.`.
+- **N2.** The examples' `-check`/`verify` loop (ci.yml:70, ci-local.sh:53) iterates over the schema directories, not a list:
+
+  ```bash
+  for d in */schema; do
+    x=${d%/schema}
+    [ "$x" = graphql ] && continue # its own lines below, with the plugin
+    go tool velox-gen -check -out "./$x/gen" "./$x/schema"
+    go tool velox-gen verify -out "./$x/gen" "./$x/schema"
+  done
+  ```
+
+  This plan's R5, R7 and G keep their lists; they name today's examples.
+- **C44's anchors.** Each `-fuzz` in ci.yml:47-51 and ci-local.sh:30-34 is anchored: `-fuzz '^FuzzRender$'`, `'^FuzzQuote$'`, `'^FuzzScope$'`, `'^FuzzLiteral$'`, `'^FuzzSplit$'`.
+- **G21.** `tempmod.Go` (tempmod.go:90) and bench/scale's two commands (main.go:146,169) set `"GOFLAGS="+tempmod.GoFlags("-mod=mod")` in place of `"GOFLAGS=-mod=mod"`. A later `-mod` in GOFLAGS wins, as the go command reads its flags in order.
+- **G22.** `WriteGraphQL` keeps `go mod tidy -e`, whose comment says why, and then runs `go list -deps ./...` in dir, offline, without `-e`. That fails on any package the build graph cannot resolve, which is what `-e` would hide; the levenshtein test dependencies `-e` is for are not in that graph. Its error is returned with `Hint`, as `Go`'s is.
 - **The five TestMains** test `os.Getenv("VELOX_ITEST_REQUIRE") == "1"`. Each message replaces `CI=true but` with `VELOX_ITEST_REQUIRE=1 but`. Each doc comment says `when VELOX_ITEST_REQUIRE=1, as CI and scripts/ci-local.sh set it` in place of `on a CI runner (CI=true)`, and itest's package comment says `With VELOX_ITEST_REQUIRE=1` in place of `With CI=true`.
 - **C7.** Spec text: the sentence at core-design:224-225 becomes `That is about 8 lines per field plus 53 per entity (98 lines per entity on average, re-measured on 2026-10-25 for the schema DSL on the 25 generated entities of internal/testmodel, internal/bindmodel and example).`
 
 - [ ] **Step 1: Check the guard's current behaviour.** Run `VELOX_ITEST_REQUIRE=1 VELOX_TEST_POSTGRES= VELOX_TEST_MYSQL= VELOX_TEST_MYSQL_ADMIN= go test -count=1 ./internal/itest`. Expected: `ok` (the guard is not read yet, and the tests skip).
-- [ ] **Step 2: Edit** ci.yml, ci-local.sh and the five TestMains as above.
+- [ ] **Step 2: Write the failing tests** in `internal/tempmod/tempmod_test.go`:
+  - `TestGoFlags`: with `t.Setenv("GOFLAGS", "-p=2")`, `GoFlags("-mod=mod")` is `-p=2 -mod=mod`; with `t.Setenv("GOFLAGS", "")`, it is `-mod=mod`.
+  - `TestWriteGraphQLRefusesUnresolved`: `WriteGraphQL` of a module whose one file imports `example.com/nosuchmodule/x` returns an error that holds `example.com/nosuchmodule`. Today tidy's `-e` lets it pass.
+
+  Run `go test -run 'TestGoFlags|TestWriteGraphQLRefusesUnresolved' ./internal/tempmod`. Expected: FAIL (GoFlags is undefined).
+- [ ] **Step 2b: Edit** ci.yml, ci-local.sh, the five TestMains and tempmod and bench/scale as above. Run the Step 2 tests again, then `go test ./internal/tempmod ./cmd/velox-gen`. Expected: PASS.
 - [ ] **Step 3: Run the guard.**
   - The Step 1 command again. Expected: FAIL, with stderr `itest: VELOX_ITEST_REQUIRE=1 but VELOX_TEST_POSTGRES, VELOX_TEST_MYSQL, VELOX_TEST_MYSQL_ADMIN unset: the PostgreSQL and MySQL tests would be skipped`.
   - `CI=true VELOX_TEST_POSTGRES= VELOX_TEST_MYSQL= VELOX_TEST_MYSQL_ADMIN= go test -count=1 ./internal/itest ./migrate`. Expected: `ok` twice.
@@ -120,8 +150,15 @@ Covers C11, C12's docker guard, C100 and C7. C12's pinned digests land in Task 2
   ```
 
   Expected: `n=25 mean_lines=98 mean_fields=5.5 per_field=8.0 per_entity=53`. Write the spec sentence above. If the numbers differ, write the measured ones and say so in the report.
-- [ ] **Step 5: Leftover grep.** `git grep -nE 'Getenv\("CI"\)|CI=true|CI: "true"|go-version: "1.27"' -- ':!docs'`. Expected: nothing.
-- [ ] **Step 6: Commit** `CI: one run per change, a read-only token, go.mod's Go; VELOX_ITEST_REQUIRE; C7 re-measured`.
+- [ ] **Step 5: Leftover grep.**
+
+  ```bash
+  git grep -nE 'Getenv\("CI"\)|CI=true|CI: "true"|go-version: "1.27"' -- ':!docs'
+  git grep -nE '"GOFLAGS=-mod=mod"|-fuzz Fuzz|for x in start' -- internal/tempmod bench .github scripts
+  ```
+
+  Expected: nothing from either. Before the task (checked at d758f40), the first prints 22 lines: ci.yml:32, :37 and :111; the five TestMains' comment, test and message lines; the two e2e comments (collect_e2e_test.go:907, mutation_e2e_test.go:1663); itest's package comment (itest_test.go:5); and ci-local.sh:21. The second prints 15: tempmod.go:90, bench/scale/main.go:146 and :169, the ten fuzz lines, and the two loops. The test helpers that set `GOFLAGS=-mod=mod` for their own child processes (cmd/velox-gen/cli_test.go:29, internal/gen/load_test.go:65, and three in contrib/graphql, which cannot import tempmod) are outside G21 and keep it.
+- [ ] **Step 6: Commit** `CI: one run per change, a read-only token, go.mod's Go; VELOX_ITEST_REQUIRE; examples by directory, anchored fuzz targets; the harness keeps GOFLAGS and sees unresolved imports; C7 re-measured`.
 - [ ] **Step 7: Run the gate.** Expected: rc=0.
 
 ### Task 2: Floors PostgreSQL 14 and MySQL 8.4; the matrix and pinned images
@@ -132,6 +169,7 @@ Covers the version part of MS1 and C32 (builder ruling 16), and C12's digests.
 - Modify: `migrate/session.go:313-347`, `migrate/session_test.go:12-52`, `migrate/doc.go:67-69`.
 - Modify: `.github/workflows/ci.yml`, `docker-compose.ci.yml`, `scripts/ci-local.sh`.
 - Modify: `docs/specs/2026-10-23-migrate-design.md:36` and `:1317` (ruling 41).
+- Modify: `docs/specs/2026-10-14-core-design.md:382` and `:571`, and `render.go:696`'s comment: MySQL 8.0.19 becomes 8.4. `:382` ends `(MySQL 8.4 and later)`, `:571`'s header cell is `MySQL 8.4+`, and render.go:696 says `(MySQL 8.4 and later`, the rest of its sentence unchanged.
 
 **Interfaces:**
 - Consumes: Task 1's files.
@@ -203,8 +241,8 @@ var (
 - [ ] **Step 6: Leftover grep.**
 
   ```bash
-  git grep -nE 'postgres:1[0-9]\b|mysql:8\.4\b' -- .github docker-compose.ci.yml scripts | grep -v '@sha256:'
-  git grep -nE '8\.0\.19|120000|PostgreSQL 12' -- migrate ':!migrate/*_test.go'
+  git grep -nP 'postgres:1[0-9]\b|mysql:8\.4\b' -- .github docker-compose.ci.yml scripts | grep -v '@sha256:'
+  git grep -nE '8\.0\.19|120000|PostgreSQL 12' -- migrate render.go docs/specs/2026-10-14-core-design.md ':!migrate/*_test.go'
   ```
 
   Expected: nothing from either.
@@ -219,7 +257,7 @@ var (
 
 **Files:**
 - Modify: `internal/gen/render.go:99`, `internal/gen/out.go:21`, `internal/gen/lower.go:6-8,34-41`, `internal/gen/graph.go:42`.
-- Test: `internal/gen/lower_test.go:146-149` and `:1145-1189`, `internal/gen/build_test.go:1217-1260`.
+- Test: `internal/gen/lower_test.go:146-149` and `:1145-1189`, `internal/gen/build_test.go:1217-1260` (its comment at :1217 drops `the model hash, `), `cmd/velox-gen/generate_test.go:856` (the comment drops `velox.go's model hash and`).
 - Regenerated: R2, R3, R5. Every `velox.go` loses its `// Model: sha256:` line.
 
 **Interfaces:**
@@ -235,7 +273,7 @@ var (
 - [ ] **Step 2: Run** `go test -run 'TestSchemaDefaultChangesNoCode|TestOutputIgnoresPositionsInGraph|TestPackageFileHasNoHash' ./internal/gen`. Expected: FAIL to compile on `o.Hash`, or `TestSchemaDefaultChangesNoCode` and `TestPackageFileHasNoHash` FAIL.
 - [ ] **Step 3: Drop** the line, the field and the hashing.
 - [ ] **Step 4: Regenerate:** R2, R3, R5.
-- [ ] **Step 5: Leftover grep.** `git grep -nE 'Model: sha256|model hash|\bo\.Hash\b|\.Hash !=' -- internal cmd example contrib`. Expected: nothing.
+- [ ] **Step 5: Leftover grep.** `git grep -nP 'Model: sha256|model hash|\bo\.Hash\b|\.Hash !=' -- internal cmd example contrib`. Expected: nothing. Before the task (checked at d758f40) it prints 23 lines in 19 files: the 14 checked-in `velox.go` files' hash lines, render.go:99, graph.go:42, build_test.go:1217, :1256 and :1257, lower_test.go:148, :149 and :1180, and generate_test.go:856.
 - [ ] **Step 6: Run** `go test ./internal/gen ./cmd/velox-gen`. Expected: PASS.
 - [ ] **Step 7: Commit** `velox-gen: no model hash in velox.go`.
 - [ ] **Step 8: Run G, then the gate.** Expected: G clean, gate rc=0.
@@ -267,8 +305,9 @@ func tableName(name string) string // plugin.Snake(plugin.Plural(name)): ent's T
 ```
 
 - **The copied rules** (builder ruling 3). `plugin/inflect.go`:
+  - A test, `TestRuleCounts`, pins the counts: 83, 86, 6 and 10.
   - It opens with a comment that says the tables are copied from github.com/go-openapi/inflect v0.19.0's `NewDefaultRuleset`, the version ent pins. Then the full text of v0.19.0's LICENCE, which is MIT: `Copyright (c) 2011 Chris Farmiloe` and its permission notice.
-  - The rules are a package-level array of `{kind, a, b string; exact bool}` literals, one per `Add*` call of `NewDefaultRuleset` (inflect.go:46-233), in that order: 83 `AddPlural`/`AddPluralExact`, 87 `AddSingular`/`AddSingularExact`, 6 `AddIrregular` and 10 `AddUncountable`. It is static data, so plugin's init does no inflect work.
+  - The rules are a package-level array of `{kind, a, b string; exact bool}` literals, one per `Add*` call of `NewDefaultRuleset` (inflect.go:46-233), in that order: 83 `AddPlural`/`AddPluralExact`, 86 `AddSingular`/`AddSingularExact` (84 and 2), 6 `AddIrregular` and 10 `AddUncountable`. It is static data, so plugin's init does no inflect work.
   - `var defaultRules = sync.OnceValue(newRuleset)` builds the lookup lists on first use, with inflect's semantics:
     - each add puts its rule *first*;
     - an add of plural or singular deletes its suffix from the uncountables;
@@ -304,7 +343,7 @@ func tableName(name string) string // plugin.Snake(plugin.Plural(name)): ent's T
 - [ ] **Step 1: Write the failing tests.**
   - `plugin/names_test.go`:
     - `TestSingular`'s map: `"children": "child"`, `"quizzes": "quiz"`, `"s": ""`; the other entries stay.
-    - A new `TestGoPlural`: `User`→`Users`, `Status`→`StatusSlice`, `Settings`→`SettingsSlice`, `Media`→`MediaSlice`, `Person`→`Persons`, `Category`→`Categories`, `Index`→`Indices`.
+    - A new `TestGoPlural`: `User`→`Users`, `Status`→`StatusSlice`, `Settings`→`SettingsSlice`, `Media`→`MediaSlice`, `Person`→`Persons`, `Category`→`Categories`, `Index`→`Indexes`, and, for the case split, `index`→`indices`.
     - `TestNamesGolden` reads 6 columns (Snake, Plural, Singular, GoName, GoPlural), and `rows = 266`.
     - A new `TestEntNames` reads `testdata/ent.golden`, skipping lines that start with `#`. Each `table` row checks `Snake(Plural(Name)) == table` and `GoPlural(Name) == slice`. Each `edge` row checks `Singular(name) == singular` and `GoName(Singular(name)) == goName`. It pins the row count at 105.
   - `plugin/testdata/names.golden`: every row gets a sixth column, `GoPlural(in)`, which is column 3 plus `Slice` when column 3 equals column 1. Columns 3 and 4 change in exactly these 37 rows (input: Plural, Singular):
@@ -350,7 +389,7 @@ func tableName(name string) string // plugin.Snake(plugin.Plural(name)): ent's T
   - `plugin/testdata/ent.golden`, as given at the end of this task.
   - `internal/gen/build_test.go`:
     - `TestEntityNamedStatus` (Review Focus 1): `mustBuild` of schemas `Status`, `Settings`, `Data`, `Media` and `Equipment`. Then `Lower` gives tables `status`, `settings`, `data`, `media` and `equipment`, handles `StatusSlice`, `SettingsSlice`, `DataSlice`, `MediaSlice` and `EquipmentSlice`, and no error.
-    - A `TestBuildRules` case `{"35 singular is the owner's label", []schema.Interface{Person{}}, `schema Person: edge "people": join table person_people has two columns named person_id; name them with edge.Columns`}` (Review Focus 2). `Person` (label `person`, table `persons`) declares `edge.To("people", Person.Type)`; ent's `Singular("people")` is `person`, so both columns are `person_id`.
+    - A `TestBuildRules` case `{"35 singular is the owner's label", []schema.Interface{Man{}}, `schema Man: edge "men": join table man_men has two columns named man_id; name them with edge.Columns`}` (Review Focus 2). `Man` (label `man`) declares `edge.To("men", Man.Type)`; ent's `Singular("men")` is `man`, so both columns are `man_id`. (`Person` is taken: build_test.go:290 declares it for `TestBuildO2OBidi`.)
     - A test that a self-M2M edge `children` on `Category` has join columns `category_id` and `child_id`.
   - `contrib/graphql/internal/sdl`: a test on a Category model with an O2M `children` edge. The create input has `childIDs` with Go name `ChildIDs`. The update input has `addChildIDs`/`AddChildIDs` and `removeChildIDs`/`RemoveChildIDs`.
 - [ ] **Step 2: Run** `go test -run 'TestSingular|TestGoPlural|TestNamesGolden|TestEntNames' ./plugin && go test -run 'TestEntityNamedStatus|TestBuildRules' ./internal/gen`. Expected: FAIL. `GoPlural` is undefined, so the tests fail to compile.
@@ -363,10 +402,10 @@ func tableName(name string) string // plugin.Snake(plugin.Plural(name)): ent's T
 
   ```bash
   git grep -nE 'plugin\.Plural\((e\.Label|e\.Name|name|t\.Name|n|typ)\)' -- '*.go'
-  git grep -nE '\bbetas\b|boxeses|importses|defaultses|numberses|ChildrenIDs|childrenIDs' -- '*.go' '*.json' '*.sql' '*.graphqls'
+  git grep -nP '\bbetas\b|boxeses|importses|defaultses|numberses|ChildrenIDs|childrenIDs' -- '*.go' '*.json' '*.sql' '*.graphqls'
   ```
 
-  Expected: nothing from either. `plugin.Plural` stays only inside `tableName` and the plugin package.
+  Expected: the first prints one line, dbnames.go's `tableName`; the second prints nothing. Before the task (checked at d758f40) the first prints 8 lines: build.go:133 and :596, lower.go:126, :761 and :842, conn.go:21 and :63, paginate.go:125. The second prints 51 lines in 16 files: gql_category.go (14), sdl's velox.graphqls (3), render_test.go (2) and surface_test.go (3), which this task's Step 1 updates to `childIDs`; migrate's diff_test.go (2), itest_test.go (4) and runner_db_test.go (1), which Step 7 updates; and nine `create-tables` goldens under migrate/testdata/dir and migrate/testdata/render, which R8 rewrites. `plugin.Plural` stays only inside `tableName` and the plugin package.
 - [ ] **Step 9: Run** `go vet ./... && go test ./...` in the root, `contrib/graphql` and `example`, one at a time. Expected: PASS.
 - [ ] **Step 10: Commit** `Names: ent's inflection, copied from go-openapi/inflect v0.19.0; tables from the Go name, Slice plurals`.
 - [ ] **Step 11: Run G, then the gate.** Expected: G clean, gate rc=0.
@@ -491,7 +530,7 @@ Covers C77 and builder ruling 4, with the coordinator's rulings on its open poin
 - Modify, the ent fixture: `cmd/velox-gen/testdata/ent/schema/{user,post}.go`, `postgres.sql`, `mysql.sql` (one long index name and one long foreign-key name, below).
 - Modify, docs: `plugin/plugin.go:77` (`Index.Name`), `schema/index/index.go:44-47` (`StorageKey`), `schema/edge/edge.go:91-96` (`Symbol`, `Symbols`).
 - Test: `internal/ddl/name_test.go` and new `internal/ddl/testdata/symbol.golden` and `internal/ddl/testdata/pgname.golden`; `internal/gen/build_test.go` (`TestIndexNames`, `TestIndexNamesAcrossGraph`, `TestIndexNamesCapped`, `TestNamespace`), `internal/gen/dbnames_test.go`, `internal/gen/tables_test.go`, `internal/gen/plugin_test.go`; `cmd/velox-gen/migrate_baseline_test.go:83-200`; the migrate tests whose models come from `gen.Tables` (`migrate/cases_test.go`, `itest_test.go`, `baseline_test.go`). Tests that build `migrate.Schema` by hand keep their names.
-- Regenerated: R3, R8, R9 (with D). Every file of `cmd/velox-gen/testdata/ent/want/{postgres,mysql}` changes: the fixture gains two objects, and the diffs lose their renames. The examples' generated Go code does not change: index and key names are not in it.
+- Regenerated: R3, R8, R9 (with D). R8 rewrites `migrate/testdata/dir` and the lint goldens, and also the render goldens `migrate/testdata/render/*.sql` (131 files from migrate's cases, through `gen.Tables`: render_test.go:70, cases_test.go:297). The 52 of them that hold `_unique` or `_fkey` names change; read them as expected churn, and nothing else in them may differ. Every file of `cmd/velox-gen/testdata/ent/want/{postgres,mysql}` changes: the fixture gains two objects, and the diffs lose their renames. The examples' generated Go code does not change: index and key names are not in it.
 
 **Interfaces:**
 - Consumes: Task 4's `tableName`.
@@ -534,11 +573,12 @@ func joinFKName(table, column string) string                       // table + "_
   - A field `Unique`'s name: ent does not cap it. PostgreSQL cuts the name ent sends at 63 bytes, on a character boundary, so velox gives `uniqueName` cut the same way. SQLite keeps the whole name. MySQL's is the column, which rule 50 already limits.
   - **PostgreSQL's primary key and sequence** (dbnames.go:16,18): `pkName(table)` is `ddl.PostgresName(table, "", "pkey")` and `seqName(table, column)` is `ddl.PostgresName(table, column, "seq")`, for entity and join tables alike. Only PostgreSQL's DDL holds these names: MySQL's key is `PRIMARY` (`tabler.pkName`, tables.go:84-92) and SQLite's is unnamed, so neither needs one. The relations namespace (dbnames.go:285-335) checks the same names.
   - **`ddl.Cap` stays for the names ent and PostgreSQL never make**, at these sites: `checkName` (dbnames.go:22), `enumType`'s two derived names (dbnames.go:41,43; ent stores an enum as varchar), `ddl.NotNull`, `ddl.Rebuild`, `ddl.OldEnum`, and `fkIndexName` on PostgreSQL and SQLite (ent makes no foreign-key index there).
-  - Rule 44 compares the uncapped names. md5 is over the whole name, so two names that differ uncapped differ capped. Tables' MySQL clash check below compares the capped names.
+  - Rule 44 compares the uncapped names of what `Symbol` caps: md5 is over the whole name, so two names that differ uncapped differ capped. It compares primary keys and sequences in their `PostgresName` form, the names the database gets: `PostgresName` truncates without a hash, so two long tables that share their first 58 bytes get one `_pkey` name, and PostgreSQL would silently name the second `…_pkey1`. Tables' MySQL clash check below compares the capped names.
   - The Graph field holding a derived name gets a `Derived bool` beside it (in JSON as `derived`, omitted when false) so that Tables knows which names to cap. Name it as the Graph's style has it.
 
 - **Each call site:**
   - **Declared index** (build.go:563): `cmp.Or(li.StorageKey, indexName(e.Name, ix.Columns))`. Then, once all of an entity's declared indexes are named, an index with a Where and no StorageKey whose name another declared index of the entity also has is renamed `partialIndexName(…)`. A full index never gets the hash. Two full indexes of one name (one `Unique`) are rule 44's, as any shared name is.
+  - **Field `Unique` beside a declared unique index** (`fieldIndexes`, dbnames.go:175-195), ent's rule (postgres.go:158-177, mysql.go:222-258, sqlite.go:149-172): the field's index is left out only when a declared `Unique` index has the field index's implicit name on the dialect. On PostgreSQL that is `<table>_<col>_key`, or that followed by a number above 0. On MySQL it is `<col>`, or `<col>_<n>` with n above 1. On SQLite it is `<col>`, or `sqlite_autoindex_<table>_<n>` with n above 0. Otherwise both are made: `email` Unique with `index.Fields("email").Unique()` gives `users_email_key` and `user_email` on PostgreSQL. Today's rule (any full declared unique index on the column alone) goes. The choice is per dialect, so it moves into `Tables`; `objects` applies PostgreSQL's.
   - **Field `Unique`** (`fieldIndexes`, dbnames.go:192): `uniqueName(e.Table, f.Column)`. This name is the one `objects` puts in the relations namespace. `Tables` gives it per dialect: PostgreSQL and SQLite `uniqueName`, MySQL the column's name (ent's, mysql.go:224-235).
   - **Foreign key** of an O2O, O2M or M2O relation (`foreignKeys`, dbnames.go:132): a Symbol if given, else `fkName(ed.Rel.Table, ref.Table, assoc)`. `assoc` is the assoc edge's name: `ed.Name` when `!ed.Inverse`, else `ed.Ref`.
   - **A join table's two foreign keys** (dbnames.go:144): `jt.Symbols[i]` if given, else `joinFKName(jt.Table, jt.Columns[i])`. Its primary key stays `<table>_pkey`.
@@ -568,7 +608,7 @@ func joinFKName(table, column string) string                       // table + "_
     ```
 
     The test also checks that every output is at most the dialect's limit and is valid UTF-8.
-  - `TestPostgresName` in `internal/ddl/name_test.go` reads `testdata/pgname.golden` (tab-separated: name1, name2 or `-`, label, output; `-update` rewrites it). The rows, for a table `audit_entries_` padded with `x` to 58, 59 and 70 bytes, each with `("", "pkey")` and `("id", "seq")`, and three more; after `-update` the golden must hold exactly these outputs:
+  - `TestPostgresName` in `internal/ddl/name_test.go` reads `testdata/pgname.golden` (tab-separated: name1, name2 or `-`, label, output; `-update` rewrites it). The rows, for a table `audit_entries_` padded with `x` to 58, 59 and 70 bytes, each with `("", "pkey")` and `("id", "seq")`, and three more, checked on PostgreSQL 18; after `-update` the golden must hold exactly these outputs:
 
     ```
     58 pkey   audit_entries_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_pkey       (the whole table: 63 bytes)
@@ -579,44 +619,47 @@ func joinFKName(table, column string) string                       // table + "_
     70 id seq audit_entries_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx_id_seq     (the same)
     posts_ + 34 y (40 bytes), body_ + 35 z (40 bytes), seq:
            posts_yyyyyyyyyyyyyyyyyyyyyyy_body_zzzzzzzzzzzzzzzzzzzzzzzz_seq      (29 and 29: the tie cuts name2)
-    posts_ + 30 é (66 bytes), pkey: posts_éééééééééééééééééééééééééé_pkey        (cut to 58 bytes, 26 é)
-    posts_ + 30 é, id, seq:         posts_ééééééééééééééééééééééééé_id_seq       (56 is mid-character: cut to 55, 25 é)
+    post_ + 30 é (65 bytes), pkey: post_éééééééééééééééééééééééééé_pkey          (58 is mid-character: cut to 57, 26 é; 62 bytes)
+    post_ + 30 é, id, seq:         post_ééééééééééééééééééééééééé_id_seq         (56 is mid-character: cut to 55, 25 é; 62 bytes)
     ```
 
     The test also checks that `PostgresName("users", "", "pkey")` is `users_pkey` and `PostgresName("users", "id", "seq")` is `users_id_seq`, as now.
+  - A `TestBuildRules` case for rule 44 on shortened names: `lpA` and `lpB` take `schema.Table(p+"a")` and `schema.Table(p+"bb")`, where `p` is `long_table_` padded with `t` to 58 bytes (59- and 60-byte tables). Both primary keys are `p+"_pkey"`. The want holds `name "`+p+`_pkey" is also schema lpA's primary key`; use the exact text rule 44 prints, and pin the sequence clash it also reports.
   - `TestIndexNamesCapped` checks `ddl.Symbol` in place of `ddl.Cap`: on PostgreSQL the 70-byte names become 63 bytes, and on MySQL 64.
   - `TestIndexNames` (Review Focus 3). The fixture `indexNames` keeps `schema.Table("names")` and declares index(a), index(a).Where(X), index(a).Where(Y) and index(a).StorageKey("names_a_key"). Its want is `indexnames_a`, `indexnames_a_fd0c5087`, `indexnames_a_fc0c4ef4`, `names_a_key`. Use the hashes the current test has for X and Y.
   - A `TestBuildRules` case: index(name) and index(name).Unique() on `dupNamed` give `schema dupNamed: index 1: name "dupnamed_name" is also index 0`.
-  - `TestDDLNames` in tables_test.go, on each dialect, for `User` (field `name`, field `email` Unique, index(name), edge.To("posts", Post).StorageKey(edge.Column("user_posts"))), `Post` (edge.From("author", User).Ref("posts").Unique(), edge.To("tags", Tag)) and `Tag`:
-    - users' indexes: `user_name`, plus `users_email_key` on PostgreSQL and SQLite and `email` on MySQL;
-    - posts' foreign key `posts_users_posts`; its index `posts_user_posts` on PostgreSQL and SQLite, `posts_users_posts` on MySQL;
-    - post_tags' foreign keys `post_tags_post_id` and `post_tags_tag_id`, and its index on `tag_id` named `post_tags_tag_id`;
+  - `TestDDLNames` in tables_test.go, on each dialect. The package's tests already declare `User`, `Post`, `Tag` and `Article` (build_test.go:76-311), so the schemas are `Writer` (field `name`, field `email` Unique, index(name), edge.To("stories", Story).StorageKey(edge.Column("writer_stories"))), `Story` (edge.From("writer", Writer).Ref("stories").Unique(), edge.To("topics", Topic)) and `Topic`:
+    - writers' indexes: `writer_name`, plus `writers_email_key` on PostgreSQL and SQLite and `email` on MySQL;
+    - stories' foreign key `stories_writers_stories`; its index `stories_writer_stories` on PostgreSQL and SQLite, `stories_writers_stories` on MySQL;
+    - story_topics' foreign keys `story_topics_story_id` and `story_topics_topic_id`, and its index on `topic_id` named `story_topics_topic_id`;
     - an entity `UserProfile` with index(bio) gives `userprofile_bio`.
-  - `TestTablesMySQLIndexNameClash`: `User` with field `user_name` Unique and index(name) is refused on MySQL. The error carries the field's file:line and the text above, with `"user_name"`. The same schema passes on PostgreSQL and SQLite.
+  - `TestFieldUniqueBesideIndex`, on each dialect: `Subscriber` with `email` Unique and `index.Fields("email").Unique()` gets two unique indexes on email: `subscribers_email_key` and `subscriber_email` on PostgreSQL and SQLite, `email` and `subscriber_email` on MySQL. With `index.Fields("email").Unique().StorageKey("subscribers_email_key")`, PostgreSQL and SQLite get the one index `subscribers_email_key`, and MySQL gets `email` and `subscribers_email_key`. With `StorageKey("email")`, MySQL and SQLite get the one index `email`. Tests that pin today's rule are changed to this one.
+  - `TestTablesMySQLIndexNameClash`: `Member` with field `member_name` Unique and index(name) is refused on MySQL: the declared index is `member_name`, the field's MySQL index is its column, `member_name`. The error carries the field's file:line and the text above, with `"member_name"`. The same schema passes on PostgreSQL and SQLite.
   - `migrate_baseline_test.go`:
     - `entChange` no longer accepts `RenameIndex` or `RenameConstraint`.
     - The fixture gains a long index name and a long foreign-key name, so the cap is pinned against ent's own names:
-      - `Post` gets `field.Time("reviewed_by_an_editor_before_the_post_was_published_on").Optional()` and `index.Fields("title", "reviewed_by_an_editor_before_the_post_was_published_on")`. ent's index name has 65 bytes: on PostgreSQL it is `post_title_reviewed_by_an_edit_610afc49e3060dc9162738c5b5b2de3d`, on MySQL `post_title_reviewed_by_an_edito_610afc49e3060dc9162738c5b5b2de3d`.
-      - `User` gets `edge.To("drafts_written_but_never_published_by_this_user_so_far", Post.Type)`. Its column in posts is `user_drafts_written_but_never_published_by_this_user_so_far` (59 bytes). ent's foreign key has 66 bytes: on PostgreSQL it is `posts_users_drafts_written_but_f5ecc73789cbf6208f1deb12fd406c67`, on MySQL `posts_users_drafts_written_but__f5ecc73789cbf6208f1deb12fd406c67`, which also names MySQL's index for it.
+      - `Post` gets `field.Int64("reviewed_by_an_editor_before_the_post_was_published_on").Optional().Nillable()`, written `bigint NULL` in both SQL files (an Optional field stays NOT NULL in velox, and ent's MySQL time type is not velox's, so neither a plain Optional nor a Time field would diff clean), and `index.Fields("title", "reviewed_by_an_editor_before_the_post_was_published_on")`. ent's index name has 65 bytes: on PostgreSQL it is `post_title_reviewed_by_an_edit_610afc49e3060dc9162738c5b5b2de3d`, on MySQL `post_title_reviewed_by_an_edito_610afc49e3060dc9162738c5b5b2de3d`.
+      - `User` gets `edge.To("drafts_written_but_never_published_by_this_user_so_far", Post.Type).OnDelete(edge.SetNull)`, as its `posts` edge has. Its column in posts is `user_drafts_written_but_never_published_by_this_user_so_far` (59 bytes). ent's foreign key has 66 bytes: on PostgreSQL it is `posts_users_drafts_written_but_f5ecc73789cbf6208f1deb12fd406c67`, on MySQL `posts_users_drafts_written_but__f5ecc73789cbf6208f1deb12fd406c67`, which also names MySQL's index for it.
+      - `User` gets `index.Fields("email").Unique()` beside its Unique `email` field. ent makes both indexes, so `postgres.sql` gains `CREATE UNIQUE INDEX "user_email" ON "users" ("email");` and `mysql.sql` gains `` CREATE UNIQUE INDEX `user_email` ON `users` (`email`); ``, beside the column's own `UNIQUE`.
       - A third entity, `AuditEntry`, with `schema.Table("audit_entries_kept_for_every_change_an_editor_makes_to_posts")` (60 bytes) and one field `field.String("note")`. `postgres.sql` creates it with `"id" bigint NOT NULL GENERATED BY DEFAULT AS IDENTITY` and `PRIMARY KEY ("id")`, as it creates posts, leaving both names to PostgreSQL. PostgreSQL names them `audit_entries_kept_for_every_change_an_editor_makes_to_pos_pkey` and `audit_entries_kept_for_every_change_an_editor_makes_to_p_id_seq`, and velox's model must name them the same. `mysql.sql` creates it as it creates posts.
       - `postgres.sql` and `mysql.sql` get the column, the index and the foreign key (`ON DELETE SET NULL`, as `posts_users_posts`) with exactly those names, written as each file already writes ent's objects.
     - On PostgreSQL, the next diff holds exactly five changes, none for AuditEntry: `CreateEnum users_role`, the role `AlterColumn` (`ColumnType`), the id serial-to-identity `AlterColumn`, `AddIndex posts_user_posts`, and `AddIndex` of the new foreign key's index, `ddl.Cap("posts_user_drafts_written_but_never_published_by_this_user_so_far")` (velox's own index; ent makes none on PostgreSQL).
     - On MySQL it holds none: `len(changes) == 0` replaces the "has no changes" error for MySQL, and step 4's output is `no changes\n`.
-- [ ] **Step 2: Run** `go test -run 'TestIndexNames|TestBuildRules|TestDDLNames|TestTablesMySQLIndexNameClash' ./internal/gen`. Expected: FAIL.
+- [ ] **Step 2: Run** `go test -run 'TestSymbol|TestPostgresName' ./internal/ddl && go test -run 'TestIndexNames|TestBuildRules|TestDDLNames|TestFieldUniqueBesideIndex|TestTablesMySQLIndexNameClash' ./internal/gen`. Expected: FAIL.
 - [ ] **Step 3: Implement** the name functions, the call sites, the clash check and the docs.
 - [ ] **Step 4: Regenerate:** R3, R8, then R9 with D. Expected golden changes:
   - `want/postgres/diff.sql` loses its three rename lines (`ALTER INDEX "user_name" …`, `ALTER INDEX "users_email_key" …`, `ALTER TABLE "posts" RENAME CONSTRAINT …`), and gains the second online index. The rest is unchanged: `CREATE TYPE`, the identity lines, the alter-type, and 0003's online index.
   - `want/mysql/diff.sql` becomes `no changes\n`.
-  - `schema.json` and `0001_baseline.sql` gain the new table, column, index and foreign key, under the names above, on both dialects; nothing else in them changes. `warnings.txt` does not change. The PostgreSQL warning about `users_email_key` stays until wave 4's M22.
+  - `schema.json` and `0001_baseline.sql` gain the new table, column, the two indexes and the foreign key, under the names above, on both dialects; nothing else in them changes. `warnings.txt` does not change. The PostgreSQL warning about `users_email_key` stays until wave 4's M22.
 - [ ] **Step 5: Fix the gen-derived migrate and gen tests** that `go test ./internal/gen ./migrate ./cmd/velox-gen` reports, to the new names.
 - [ ] **Step 6: Leftover grep.**
 
   ```bash
-  git grep -nE '_unique\b|_fkey"' -- internal/gen plugin schema cmd/velox-gen/testdata migrate/testdata ':!*_test.go'
+  git grep -nP '_unique\b|_fkey\b' -- internal/gen plugin schema cmd/velox-gen/testdata migrate/testdata ':!*_test.go'
   git grep -nE 'indexName\(e\.Table' -- internal/gen
   ```
 
-  Expected: nothing from either. Primary keys keep `<table>_pkey`.
+  Expected: nothing from either. Primary keys keep `<table>_pkey`. A line left that comes from a Symbol or StorageKey a test schema gives is kept; name it in the report. Before the task (checked at d758f40) the first prints 294 lines in 93 files: build.go:708, :711 and :716, dbnames.go:20, plugin.go:77 and index.go:45; internal/gen/testdata (blog/plugin.json and the three tables/*.json); the ent fixture's two diff.sql; and migrate/testdata/dir (28 files), lint (3) and render (52). The second prints build.go:563 and dbnames.go:192.
 - [ ] **Step 7: Run** `go test ./internal/gen ./migrate ./cmd/velox-gen ./internal/itest`, with D for the database tests. Expected: PASS, with `TestMigrateBaselineEnt/postgres` and `/mysql` run, not skipped.
 - [ ] **Step 8: Commit** `DDL: ent's index, unique and foreign-key names, capped as ent caps them; PostgreSQL's own key and sequence names; an ent database baselines without renames`.
 - [ ] **Step 9: Run G, then the gate.** Expected: G clean, gate rc=0.
@@ -626,9 +669,9 @@ func joinFKName(table, column string) string                       // table + "_
 Covers R1 (spec ruling 4, builder ruling 11), R3 (spec ruling 6) and spec ruling 10's velox bump. R9 is withdrawn (builder ruling 7), so the bump lands here, once.
 
 **Files:**
-- Modify: `internal/gen/lower.go:252-259` (the tag), `internal/gen/render.go:84-114` (`renderPackage`), `internal/gen/out.go:90-92`, `doc.go:218-236`.
+- Modify: `internal/gen/lower.go:252-259` (the tag), `internal/gen/render.go:84-114` (`renderPackage`), `internal/gen/out.go:90-92`, `doc.go:218-236`, `cmd/velox-gen/main.go:108` (`version`'s example line: `generated code 6`).
 - Test: `internal/gen/lower_test.go`, `internal/gen/render_test.go`, `oldapi_test.go:25,39-40`, `godoc_test.go:84`, `cmd/velox-gen/cli_test.go:309`. Create `internal/bindmodel/enum_test.go`.
-- Regenerated: R2, R3, R5, R7.
+- Regenerated: R2, R3, R5, R6, R7.
 
 **Interfaces:**
 - Consumes: Tasks 3–5's output.
@@ -669,9 +712,9 @@ The three methods share the receiver name `e`, old velox's (compiler/gen/sql/pac
   - `oldapi_test.go`: the kept list gets `^const GeneratedCodeIsVersion6 `, and the old list gains `^const GeneratedCodeIsVersion5\b`. `godoc_test.go:84` names `GeneratedCodeIsVersion6`, and `cli_test.go:309` `generated code 6`.
 - [ ] **Step 2: Run** `go test -run 'TestJSONTags|TestGolden' ./internal/gen && go test -run 'TestOldAPIIsGone|TestGeneratedOnlyAPIIsMarked' . && go test -run TestVersion ./cmd/velox-gen`. Expected: FAIL.
 - [ ] **Step 3: Implement** the tag, the methods and the bump.
-- [ ] **Step 4: Regenerate:** R2, R3, R5, R7. The examples' entity files change their time and UUID tags, and each `velox.go` with an enum gains the two methods.
+- [ ] **Step 4: Regenerate:** R2, R3, R5, R6, R7. The examples' entity files change their time and UUID tags, and each `velox.go` with an enum gains the two methods. R6 must give no diff in `example/graphql/graph` (`git diff --exit-code -- example/graphql/graph`).
 - [ ] **Step 5: Re-run C7's script** (Task 1 Step 4). Expected: the same line, `n=25 mean_lines=98 mean_fields=5.5 per_field=8.0 per_entity=53`; no task of this wave changes an entity file's line count.
-- [ ] **Step 6: Leftover grep.** `git grep -n 'GeneratedCodeIsVersion5' -- ':!docs'`. Expected: only `oldapi_test.go`'s old list.
+- [ ] **Step 6: Leftover grep.** `git grep -n 'GeneratedCodeIsVersion5' -- ':!docs'`, then `git grep -n 'generated code 5' -- cmd`. Expected: only `oldapi_test.go`'s old list from the first; nothing from the second. Before the task (checked at d758f40) the first prints 51 lines, and the second cli_test.go:309 and main.go:108.
 - [ ] **Step 7: Run** `go test ./...` in the root, then `(cd contrib/graphql && go test ./...)`, then `(cd example && go test ./...)`, one at a time. Expected: PASS.
 - [ ] **Step 8: Commit** `velox-gen: omitzero on struct and array fields, enum String and IsValid; generated code 6`.
 - [ ] **Step 9: Run G, then the gate.** Expected: G clean, gate rc=0, revive at 0 on `./internal/testmodel`, `./internal/bindmodel` and `./*/gen`.
@@ -896,9 +939,9 @@ Each is a call made while writing this plan. An implementer who finds one wrong 
 2. **(call) v0.19.0's Pluralize and Singularize use no regexps.** "Compile lazily" is met by building the rule lists in a `sync.OnceValue` from a static array. Neither plugin's init nor gqlimpl's start-up does inflect work.
 3. **(call) `GoPlural` is the exported name of ent's `plural()`.** It pairs with `GoName`: both make Go identifiers. `Plural` stays inflect's raw plural, which tables use through `tableName`.
 4. **(call) A GraphQL edge input's singular comes from the schema edge's name**, as entgql's does, when the GraphQL name was made from the edge. inflect is case-sensitive, so `Singular("Children")` is `Children`, and the Go name would otherwise disagree with `childIDs`.
-5. **(coordinator's ruling, overrides builder ruling 4's "SQLite unnamed") A field `Unique` on SQLite is named `<table>_<col>_key`.** ent's Atlas migrate names that index so on SQLite (dialect/sql/schema/sqlite.go:151-161: "Ent uses the PostgreSQL approach in its migration"); "unnamed" was ent's old, non-Atlas writer. velox2 already names it so, and a named index is one SQLite can drop without rebuilding the table.
+5. **(coordinator's ruling, overrides builder ruling 4's "SQLite unnamed") A field `Unique` on SQLite is named `<table>_<col>_key`.** ent's Atlas migrate names that index so on SQLite (dialect/sql/schema/sqlite.go:151-161: "Ent uses the PostgreSQL approach in its migration"); "unnamed" was ent's old, non-Atlas writer. velox2 names it today, as `<table>_<col>_unique` (migrate/testdata/render/add-column-required.sqlite.sql:29, `users_email_unique`); this becomes ent's `_key`. A named index is one SQLite can drop without rebuilding the table.
 6. **(coordinator's ruling) On MySQL, the foreign-key index takes the foreign key's name**, which is what MySQL names the index it makes for an ent foreign key. With `<table>_<col>`, the ent fixture's MySQL diff would hold a rename. PostgreSQL and SQLite keep their current names (`<table>_<col>`), as builder ruling 4 says: ent makes no foreign-key index there.
-7. **(coordinator's ruling) Long names are capped as ent caps them.** ent caps every index and foreign-key name with Atlas's `symbol`: at 63 bytes on PostgreSQL and 64 on MySQL and SQLite, `name[:limit-33]_<md5 hex>`. `ddl.Symbol` is that, pinned by `internal/ddl/testdata/symbol.golden` at the boundary and by the ent fixture's long index and foreign key, so that an ent-adopted database with long names plans no renames. A field-Unique name, which ent does not cap, is PostgreSQL's own 63-byte cut there and whole on SQLite. PostgreSQL itself names an ent table's primary key and serial or identity sequence, so `pkName` and `seqName` follow its makeObjectName (`ddl.PostgresName`), pinned by `internal/ddl/testdata/pgname.golden` at tables of 58, 59 and 70 bytes and by the ent fixture's 60-byte table (the coordinator's ruling on the gap this left). MySQL's `PRIMARY` and SQLite's unnamed key need no name. `ddl.Cap` (54 bytes and FNV-1a) stays for the names neither ent nor PostgreSQL makes: checks, enum types, migrate's NOT NULL checks, SQLite's rebuild tables, PostgreSQL's swapped-out enum types, and velox's foreign-key indexes on PostgreSQL and SQLite.
+7. **(coordinator's ruling) Long names are capped as ent caps them, and a field `Unique` beside a declared unique index follows ent's rule** (Task 5): both indexes are made unless the declared one has the field index's implicit name on that dialect. ent caps every index and foreign-key name with Atlas's `symbol`: at 63 bytes on PostgreSQL and 64 on MySQL and SQLite, `name[:limit-33]_<md5 hex>`. `ddl.Symbol` is that, pinned by `internal/ddl/testdata/symbol.golden` at the boundary and by the ent fixture's long index and foreign key, so that an ent-adopted database with long names plans no renames. A field-Unique name, which ent does not cap, is PostgreSQL's own 63-byte cut there and whole on SQLite. PostgreSQL itself names an ent table's primary key and serial or identity sequence, so `pkName` and `seqName` follow its makeObjectName (`ddl.PostgresName`), pinned by `internal/ddl/testdata/pgname.golden` at tables of 58, 59 and 70 bytes and by the ent fixture's 60-byte table (the coordinator's ruling on the gap this left). MySQL's `PRIMARY` and SQLite's unnamed key need no name. `ddl.Cap` (54 bytes and FNV-1a) stays for the names neither ent nor PostgreSQL makes: checks, enum types, migrate's NOT NULL checks, SQLite's rebuild tables, PostgreSQL's swapped-out enum types, and velox's foreign-key indexes on PostgreSQL and SQLite.
 8. **(call) The Where hash goes only on a partial index whose name another declared index of the same entity has.** Two full indexes of one name are rule 44's, whose message already says to name one.
 9. **(call) Local CI runs postgres:18, and `VELOX_CI_MATRIX=1` runs the tests again on postgres:14.** That is one image per database, as builder ruling 16 says, plus the opt-in. An incompatibility found on 18 is reported, not fixed in Wave 0.
 10. **(call) CI's Go comes from go.mod's `go 1.27.0`**, the module's floor (C11's `go-version-file`). ci-local still requires a go1.27 toolchain.
