@@ -161,7 +161,7 @@ func runPlugin(name, modDir string, req []byte, env []string, stderr io.Writer) 
 		if msg := strings.TrimSpace(se.String()); msg != "" {
 			text := oneLines(msg)
 			if strings.Contains(msg, "no such tool") {
-				text += fmt.Sprintf("\nthe module has no tool %s: add it with go get -tool <its package path>", oneLine(name))
+				text += fmt.Sprintf("\nthe module has no tool %s: add it with go get -tool %s", oneLine(name), toolPath(name))
 			}
 			return nil, fmt.Errorf("%w\n%s", err, text)
 		}
@@ -190,24 +190,47 @@ func runPlugin(name, modDir string, req []byte, env []string, stderr io.Writer) 
 	return &resp, nil
 }
 
+// knownTools are the package paths of the plugins velox2 ships, by tool
+// name, for the hint of a module that lacks one.
+var knownTools = map[string]string{
+	"velox-graphql": "github.com/syssam/velox2/contrib/graphql/cmd/velox-graphql",
+}
+
+// toolPath is what to go get -tool for the plugin name: its package path when
+// velox2 ships it, else a placeholder.
+func toolPath(name string) string {
+	if p, ok := knownTools[name]; ok {
+		return p
+	}
+	return "<its package path>"
+}
+
 // oneLines is each line of s through oneLine, a carriage return before its
-// newline dropped, joined by newlines.
+// newline dropped, joined by newlines, but with its tabs kept, as a stack's
+// lines indent with them.
 func oneLines(s string) string {
 	lines := strings.Split(s, "\n")
 	for i, l := range lines {
-		lines[i] = oneLine(strings.TrimSuffix(l, "\r"))
+		lines[i] = escape(strings.TrimSuffix(l, "\r"), true)
 	}
 	return strings.Join(lines, "\n")
 }
 
-// oneLine is s with each control character (newlines among them), each line
-// or paragraph separator (U+2028, U+2029) and each bidirectional control
-// (U+202E and its kin) escaped as in a Go string literal, so that a plugin's
-// text is one line that cannot pass for velox-gen's own output, reorder what
-// the terminal shows, or move its cursor.
-func oneLine(s string) string {
+// oneLine is s with each control character (newlines and tabs among them),
+// each line or paragraph separator (U+2028, U+2029) and each bidirectional
+// control (U+202E and its kin) escaped as in a Go string literal, so that a
+// plugin's text is one line that cannot pass for velox-gen's own output,
+// reorder what the terminal shows, or move its cursor.
+func oneLine(s string) string { return escape(s, false) }
+
+// escape is oneLine's, leaving tabs as they are when tabs is true.
+func escape(s string, tabs bool) string {
 	var b strings.Builder
 	for _, r := range s {
+		if r == '\t' && tabs {
+			b.WriteRune(r)
+			continue
+		}
 		if unicode.IsControl(r) || r == '\u2028' || r == '\u2029' || unicode.Is(unicode.Bidi_Control, r) {
 			q := strconv.QuoteRune(r)
 			b.WriteString(q[1 : len(q)-1])

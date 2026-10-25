@@ -393,7 +393,8 @@ func TestPluginErrors(t *testing.T) {
 		{"error", "fakeplugin", []string{"FAKEPLUGIN_MODE=error"}, "the fake plugin refuses"},
 		{"exit", "fakeplugin", []string{"FAKEPLUGIN_MODE=exit"}, "the fake plugin crashed"},
 		{"malformed", "fakeplugin", []string{"FAKEPLUGIN_MODE=malformed"}, "response"},
-		{"unknown", "nosuchplugin", nil, "the module has no tool nosuchplugin: add it with go get -tool"},
+		{"unknown", "nosuchplugin", nil, "the module has no tool nosuchplugin: add it with go get -tool <its package path>\n"},
+		{"unknown velox-graphql", "velox-graphql", nil, "the module has no tool velox-graphql: add it with go get -tool github.com/syssam/velox2/contrib/graphql/cmd/velox-graphql\n"},
 		{"panic", "fakeplugin", []string{"FAKEPLUGIN_MODE=panic"}, "the plugin panicked: the fake plugin panics"},
 		{"panic traced", "fakeplugin", []string{"FAKEPLUGIN_MODE=panic", "VELOX_PLUGIN_TRACE=1"}, "the plugin panicked: the fake plugin panics\n"},
 	}
@@ -414,6 +415,10 @@ func TestPluginErrors(t *testing.T) {
 			case "panic traced":
 				if !strings.Contains(after, "goroutine ") {
 					t.Errorf("no stack under VELOX_PLUGIN_TRACE=1: %q", errs)
+				}
+				// The stack keeps its tabs.
+				if !strings.Contains(after, "\n\t") || strings.Contains(after, `\t`) {
+					t.Errorf("the stack's tabs are escaped: %q", errs)
 				}
 			}
 			if got := names(t, gen); len(got) != 0 {
@@ -839,6 +844,18 @@ func TestOneLine(t *testing.T) {
 	} {
 		if got := oneLine(in); got != want {
 			t.Errorf("oneLine(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// oneLines keeps tabs, and escapes the rest as oneLine does, line by line.
+func TestOneLines(t *testing.T) {
+	for in, want := range map[string]string{
+		"main.main()\n\t/x/main.go:3 +0x1d\r\n": "main.main()\n\t/x/main.go:3 +0x1d\n",
+		"a\rb\x1b[2J\u202e\u2028":               "a\\rb\\x1b[2J\\u202e\\u2028",
+	} {
+		if got := oneLines(in); got != want {
+			t.Errorf("oneLines(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
