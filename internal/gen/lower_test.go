@@ -486,7 +486,13 @@ func TestLowerMixinPosition(t *testing.T) {
 }
 
 type ClBox struct{ schema.Schema }
+
+// ClBoxes has a table of its own: its default, cl_boxes, is ClBox's.
 type ClBoxes struct{ schema.Schema }
+
+func (ClBoxes) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.Table("cl_box_rows")}
+}
 
 type ClUser struct{ schema.Schema }
 

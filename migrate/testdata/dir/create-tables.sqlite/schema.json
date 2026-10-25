@@ -34,7 +34,7 @@
             "beta_id"
           ],
           "ref_table": {
-            "name": "betas"
+            "name": "beta"
           },
           "ref_columns": [
             "id"
@@ -43,7 +43,7 @@
       ]
     },
     {
-      "name": "betas",
+      "name": "beta",
       "columns": [
         {
           "name": "id",
@@ -61,7 +61,7 @@
       ],
       "indexes": [
         {
-          "name": "betas_alpha_id",
+          "name": "beta_alpha_id",
           "columns": [
             "alpha_id"
           ]
@@ -69,7 +69,7 @@
       ],
       "foreign_keys": [
         {
-          "name": "betas_alpha_id_fkey",
+          "name": "beta_alpha_id_fkey",
           "columns": [
             "alpha_id"
           ],

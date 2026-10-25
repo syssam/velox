@@ -36,7 +36,7 @@
             "beta_id"
           ],
           "ref_table": {
-            "name": "betas"
+            "name": "beta"
           },
           "ref_columns": [
             "id"
@@ -45,13 +45,13 @@
       ]
     },
     {
-      "name": "betas",
+      "name": "beta",
       "columns": [
         {
           "name": "id",
           "type": "bigint",
           "identity": true,
-          "sequence": "betas_id_seq"
+          "sequence": "beta_id_seq"
         },
         {
           "name": "alpha_id",
@@ -62,10 +62,10 @@
       "primary_key": [
         "id"
       ],
-      "primary_key_name": "betas_pkey",
+      "primary_key_name": "beta_pkey",
       "indexes": [
         {
-          "name": "betas_alpha_id",
+          "name": "beta_alpha_id",
           "columns": [
             "alpha_id"
           ]
@@ -73,7 +73,7 @@
       ],
       "foreign_keys": [
         {
-          "name": "betas_alpha_id_fkey",
+          "name": "beta_alpha_id_fkey",
           "columns": [
             "alpha_id"
           ],

@@ -6,24 +6,16 @@ import (
 	"unicode/utf8"
 )
 
-// Singular is velox-gen's singular of an English noun, the inverse of the
-// plural it names tables and handles with: categories → category, boxes →
-// box, friends → friend. A word that does not end in "s", such as children,
-// is returned unchanged. velox-gen names join columns and join entities with
-// it, and a plugin can name things after edges the same way. Because join
-// columns are named with it, its output must never change: a change would
-// rename columns in existing databases. Plugins' own names are frozen with it.
+// Singular is the singular of an English noun: categories → category,
+// boxes → box, friends → friend. Its rules are ent's, copied from
+// go-openapi/inflect v0.19.0: Singular("children") is child, Singular("men")
+// is man. It is case-sensitive, as [Plural] is. velox-gen names join columns
+// and join entities with it, and a plugin can name things after edges the
+// same way. Its outputs never change: a change would rename columns in
+// existing databases.
 func Singular(s string) string {
-	switch {
-	case strings.HasSuffix(s, "ies") && len(s) > 3:
-		return s[:len(s)-3] + "y"
-	case strings.HasSuffix(s, "ses"), strings.HasSuffix(s, "xes"), strings.HasSuffix(s, "zes"),
-		strings.HasSuffix(s, "ches"), strings.HasSuffix(s, "shes"):
-		return s[:len(s)-2]
-	case strings.HasSuffix(s, "s") && len(s) > 1:
-		return s[:len(s)-1]
-	}
-	return s
+	rs := defaultRules()
+	return rs.inflect(rs.singulars, s, s)
 }
 
 // acronyms are the words GoName writes in upper case: ent's list.
@@ -83,15 +75,24 @@ func Snake(s string) string {
 }
 
 // Plural is the plural of an English noun: user → users, category →
-// categories, box → boxes. velox-gen names tables and handles with it. Its output must never change: a
+// categories, box → boxes. Its rules are ent's, copied from go-openapi/inflect
+// v0.19.0. It is case-sensitive, so Plural("Person") is Persons while
+// Plural("person") is people. velox-gen names tables with it, as ent does:
+// the snake_case of the plural of the Go name. Its outputs never change: a
 // change would rename tables in existing databases.
 func Plural(s string) string {
-	switch {
-	case len(s) > 1 && s[len(s)-1] == 'y' && !strings.ContainsRune("aeiouAEIOU", rune(s[len(s)-2])):
-		return s[:len(s)-1] + "ies"
-	case strings.HasSuffix(s, "s"), strings.HasSuffix(s, "x"), strings.HasSuffix(s, "z"),
-		strings.HasSuffix(s, "ch"), strings.HasSuffix(s, "sh"):
-		return s + "es"
+	rs := defaultRules()
+	return rs.inflect(rs.plurals, s, s+"s")
+}
+
+// GoPlural is the plural velox-gen names Go identifiers with, ent's plural():
+// [Plural] of name, with "Slice" appended when Plural leaves name unchanged.
+// It is Users for User, StatusSlice for Status. Its outputs never change: they
+// name Go identifiers in users' code.
+func GoPlural(name string) string {
+	p := Plural(name)
+	if p == name {
+		p += "Slice"
 	}
-	return s + "s"
+	return p
 }

@@ -444,3 +444,39 @@ func TestNoDeprecatedOnRequiredInput(t *testing.T) {
 		}
 	}
 }
+
+// An edge's ID inputs are named after ent's singular of its lowercase name,
+// in Go and GraphQL alike: an edge people, or an edge renamed to people,
+// gives addPersonIDs and AddPersonIDs.
+func TestEdgeInputsSingular(t *testing.T) {
+	team := entity("Team")
+	team.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate()))
+	team.Edges = []*plugin.Edge{edge("people", plugin.M2M, "Person")}
+	club := entity("Club")
+	club.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate()))
+	members := edge("members", plugin.M2M, "Person")
+	members.Annotations = ann(t, graphql.FieldName("people"))
+	club.Edges = []*plugin.Edge{members}
+	m := model(club, entity("Person"), team)
+	s, err := Build(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	load(t, m)
+	names := func(fs []InputField) []string {
+		var out []string
+		for _, f := range fs {
+			out = append(out, f.Name+" "+f.GoName)
+		}
+		return out
+	}
+	for _, typ := range []string{"Team", "Club"} {
+		ty := typeNamed(t, s, typ)
+		if got, want := names(ty.Create), []string{"personIDs PersonIDs"}; !slices.Equal(got, want) {
+			t.Errorf("Create%sInput: %q, want %q", typ, got, want)
+		}
+		if got, want := names(ty.Update), []string{"addPersonIDs AddPersonIDs", "removePersonIDs RemovePersonIDs", "clearPeople ClearPeople"}; !slices.Equal(got, want) {
+			t.Errorf("Update%sInput: %q, want %q", typ, got, want)
+		}
+	}
+}

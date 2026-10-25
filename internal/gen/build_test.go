@@ -286,6 +286,48 @@ func TestBuildUniqueAssocInverse(t *testing.T) {
 	}
 }
 
+// Schemas whose names ent's plural leaves unchanged: their tables are the
+// names' snake_case, and their handles end in Slice.
+type (
+	Status    struct{ schema.Schema }
+	Settings  struct{ schema.Schema }
+	Data      struct{ schema.Schema }
+	Media     struct{ schema.Schema }
+	Equipment struct{ schema.Schema }
+)
+
+func TestEntityNamedStatus(t *testing.T) {
+	g := mustBuild(t, Status{}, Settings{}, Data{}, Media{}, Equipment{})
+	o, err := Lower(g, Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ name, table, handles string }{
+		{"Status", "status", "StatusSlice"},
+		{"Settings", "settings", "SettingsSlice"},
+		{"Data", "data", "DataSlice"},
+		{"Media", "media", "MediaSlice"},
+		{"Equipment", "equipment", "EquipmentSlice"},
+	} {
+		if e := o.entity(c.name); e == nil || e.Table != c.table || e.Handles != c.handles {
+			t.Errorf("%s: %+v, want table %s and handles %s", c.name, e, c.table, c.handles)
+		}
+	}
+}
+
+// A self many-to-many edge's second column is the singular of its name:
+// ent's, so children gives child_id.
+type Category struct{ schema.Schema }
+
+func (Category) Edges() []schema.Edge { return []schema.Edge{edge.To("children", Category.Type)} }
+
+func TestBuildJoinColumnsSingular(t *testing.T) {
+	c := mustBuild(t, Category{}).Entity("Category").Edge("children")
+	if c.Rel.Kind != "M2M" || c.Rel.Table != "category_children" || c.Rel.Columns[0] != "category_id" || c.Rel.Columns[1] != "child_id" {
+		t.Fatalf("children %+v", c.Rel)
+	}
+}
+
 // A unique edge to its own schema is a bidirectional O2O.
 type Person struct{ schema.Schema }
 
@@ -890,6 +932,11 @@ func (immutableField) Edges() []schema.Edge {
 // after the schema itself: loop_id twice.
 type loop struct{ schema.Schema }
 
+// Man's edge men has the singular man, Man's own label (rule 35).
+type Man struct{ schema.Schema }
+
+func (Man) Edges() []schema.Edge { return []schema.Edge{edge.To("men", Man.Type)} }
+
 func (loop) Edges() []schema.Edge { return []schema.Edge{edge.To("loops", loop.Type)} }
 
 type cycle struct{ schema.Schema }
@@ -1064,6 +1111,7 @@ func TestBuildRules(t *testing.T) {
 		{"34 immutable edge", []schema.Interface{immutableEdge{}}, `schema immutableEdge: edge "parent": is Immutable but field "parent_id" is not`},
 		{"34 immutable field", []schema.Interface{immutableField{}}, `schema immutableField: edge "parent": field "parent_id" is Immutable but the edge is not`},
 		{"35 join columns collide", []schema.Interface{loop{}}, `schema loop: edge "loops": join table loop_loops has two columns named loop_id; name them with edge.Columns`},
+		{"35 singular is the owner's label", []schema.Interface{Man{}}, `schema Man: edge "men": join table man_men has two columns named man_id; name them with edge.Columns`},
 		{"35 join columns collide on an inverse", []schema.Interface{cycle{}}, `schema cycle: edge "cycles": join table cycle_next has two columns named cycle_id; name them with edge.Columns`},
 		{"36 default on a bool", []schema.Interface{defaultBool{}}, `schema defaultBool: field "active": a Default or DefaultFunc on a bool or number that is not Nillable cannot be told from unset; make the field Nillable or drop the Default`},
 		{"36 default on an optional number", []schema.Interface{defaultNumber{}}, `schema defaultNumber: field "score": a Default or DefaultFunc on a bool or number that is not Nillable cannot be told from unset; make the field Nillable or drop the Default`},
@@ -1115,7 +1163,7 @@ func TestBuildRulesAreSingle(t *testing.T) {
 		{tableOnO2M{}, Pet{}}, {badFieldName{}}, {emptyFieldName{}}, {badEdgeName{}}, {fieldGoNames{}}, {edgeGoNames{}},
 		{enumGoNames{}}, {clashOwner{}, clashPet{}}, {columnFieldMismatch{}}, {keyA{}, keyB{}}, {oneColumnM2M{}},
 		{twoColumnsO2M{}, Pet{}}, {invAssoc{}, invItem{}}, {enumGoTypeDup{}},
-		{fkUnbound{}}, {fieldStringFK{}}, {immutableEdge{}}, {immutableField{}}, {loop{}}, {cycle{}},
+		{fkUnbound{}}, {fieldStringFK{}}, {immutableEdge{}}, {immutableField{}}, {loop{}}, {Man{}}, {cycle{}},
 		{odM2M{}, odM2M2{}}, {odSetNullRequired{}}, {odDiffOwner{}, odDiffPet{}},
 		{defaultBool{}}, {defaultNumber{}}, {defaultFuncNumber{}}, {optionalEnum{}}, {optionalFK{}}, {optionalBytes{}}, {optionalTime{}},
 		{optionalJSONStruct{}},

@@ -232,15 +232,15 @@ func TestSurfaceInputs(t *testing.T) {
 	cat := typeNamed(t, s, "Category")
 	if got, want := describe(cat, cat.Create), []string{
 		"Title: title value field title string",
-		"ChildrenIDs: childrenIDs edgeIDs edge children Category",
+		"ChildIDs: childIDs edgeIDs edge children Category",
 		"ParentID: parentID edgeID edge parent Category",
 	}; !slices.Equal(got, want) {
 		t.Errorf("CreateCategoryInput:\n got %q\nwant %q", got, want)
 	}
 	if got, want := describe(cat, cat.Update), []string{
 		"Title: title value field title string",
-		"AddChildrenIDs: addChildrenIDs add edge children Category",
-		"RemoveChildrenIDs: removeChildrenIDs remove edge children Category",
+		"AddChildIDs: addChildIDs add edge children Category",
+		"RemoveChildIDs: removeChildIDs remove edge children Category",
 		"ClearChildren: clearChildren clearEdge edge children Category",
 		"ParentID: parentID edgeID edge parent Category",
 		"ClearParent: clearParent clearEdge edge parent Category",

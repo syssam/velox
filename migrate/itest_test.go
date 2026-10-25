@@ -311,8 +311,8 @@ func TestMigrateSQLiteDropCycle(t *testing.T) {
 		if err := db.QueryRow(`SELECT beta_id FROM alphas`).Scan(&a); err != nil || a != 1 {
 			t.Fatalf("alphas.beta_id %d, %v", a, err)
 		}
-		if err := db.QueryRow(`SELECT alpha_id FROM betas`).Scan(&b); err != nil || b != 1 {
-			t.Fatalf("betas.alpha_id %d, %v", b, err)
+		if err := db.QueryRow(`SELECT alpha_id FROM beta`).Scan(&b); err != nil || b != 1 {
+			t.Fatalf("beta.alpha_id %d, %v", b, err)
 		}
 		return db, extend(t, fsys, d, step{to: to, name: "drop", opts: migrate.PlanOptions{Allow: allow("drop-table")}})
 	}
@@ -330,7 +330,7 @@ func TestMigrateSQLiteDropCycle(t *testing.T) {
 		}
 		mustUp(t, db, fsys)
 		invariants(t, db, d, fsys, to)
-		if hasTable(t, db, "alphas") || hasTable(t, db, "betas") {
+		if hasTable(t, db, "alphas") || hasTable(t, db, "beta") {
 			t.Error("the tables are still there")
 		}
 		var on int
@@ -351,7 +351,7 @@ func TestMigrateSQLiteDropCycle(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "foreign") {
 			t.Fatalf("Up: %v; want a foreign key failure", err)
 		}
-		if !hasTable(t, db, "alphas") || !hasTable(t, db, "betas") {
+		if !hasTable(t, db, "alphas") || !hasTable(t, db, "beta") {
 			t.Error("the drops were not rolled back")
 		}
 		var n int

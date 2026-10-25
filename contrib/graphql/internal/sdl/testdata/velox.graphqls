@@ -121,15 +121,15 @@ input CategoryWhereInput {
 """The input of createCategory."""
 input CreateCategoryInput {
   title: String!
-  childrenIDs: [ID!]
+  childIDs: [ID!]
   parentID: ID
 }
 
 """The input of updateCategory: a field not given is left as it is."""
 input UpdateCategoryInput {
   title: String
-  addChildrenIDs: [ID!]
-  removeChildrenIDs: [ID!]
+  addChildIDs: [ID!]
+  removeChildIDs: [ID!]
   clearChildren: Boolean
   parentID: ID
   clearParent: Boolean

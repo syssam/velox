@@ -13,6 +13,11 @@ import (
 // The names of what the graph puts in a database that velox derives. Build's
 // rules and Tables derive them here and nowhere else; each is capped.
 
+// tableName is the default table of the entity named name: the snake_case
+// of its plural, as ent's Type.Table names it. user gives users, Status
+// gives status.
+func tableName(name string) string { return plugin.Snake(plugin.Plural(name)) }
+
 func pkName(table string) string { return ddl.Cap(table + "_pkey") }
 
 func seqName(table, column string) string { return ddl.Cap(table + "_" + column + "_seq") }

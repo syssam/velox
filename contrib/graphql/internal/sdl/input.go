@@ -271,10 +271,19 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]edgeInput, error) {
 		}
 	}
 	// The Go names follow the GraphQL names' parts: the edge's Go name, when
-	// the GraphQL name was made from it, and its singular.
+	// the GraphQL name was made from it, and its singular. The singular is
+	// ent's (MutationAdd), of the lowercase name, never of a capitalised one:
+	// the edge name's for an edge the GraphQL name was made from, so children
+	// gives childIDs and ChildIDs; a renamed edge's GraphQL name's, so a
+	// rename to people gives addPersonIDs and AddPersonIDs.
 	goEdge := goOf(name, ed.GoName)
-	goOne := upper(plugin.Singular(goEdge))
 	one, many := upper(plugin.Singular(name)), plugin.Singular(name)
+	goOne := one
+	if camel(ed.GoName) == name {
+		goOne = plugin.GoName(plugin.Singular(ed.Name))
+		many = camel(goOne)
+		one = upper(many)
+	}
 	var out []edgeInput
 	add := func(name, typ, goName string, kind InputKind) {
 		out = append(out, edgeInput{

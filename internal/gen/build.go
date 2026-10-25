@@ -130,7 +130,7 @@ func (b *builder) entities(m *loadjson.Model) {
 	slices.SortStableFunc(schemas, func(x, y *loadjson.Schema) int { return strings.Compare(x.Name, y.Name) })
 	for _, s := range schemas {
 		e := &Entity{Name: s.Name, Label: plugin.Snake(s.Name), Fields: []*Field{}, Edges: []*Edge{}, Annotations: s.Annotations}
-		e.Table = plugin.Plural(e.Label)
+		e.Table = tableName(e.Name)
 		if raw, ok := s.Annotations["Table"]; ok {
 			var t struct {
 				Schema string `json:"schema"`
@@ -593,7 +593,7 @@ func (b *builder) nameLengths() {
 	for _, n := range b.nodes {
 		e := n.ent
 		hint := ""
-		if e.Table == plugin.Plural(e.Label) {
+		if e.Table == tableName(e.Name) {
 			hint = "; name it with schema.Table"
 		}
 		long(e.Name, tableLoc(e), "table name", e.Table, hint)

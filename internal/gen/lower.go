@@ -116,7 +116,7 @@ func (l *lowerer) entities() {
 	for _, e := range l.g.Entities {
 		s := &entState{l: l, name: e.Name, paths: map[string]string{}}
 		s.out = &OutEntity{
-			Name: e.Name, Label: e.Label, Handles: plugin.Plural(e.Name), Table: e.Table, TableSchema: e.TableSchema,
+			Name: e.Name, Label: e.Label, Handles: plugin.GoPlural(e.Name), Table: e.Table, TableSchema: e.TableSchema,
 			Tenant: -1, Bound: l.cfg.Bound[e.Name],
 		}
 		if raw, ok := e.Annotations["Comment"]; ok {
@@ -751,7 +751,7 @@ func (l *lowerer) through(s *entState, e, t *Entity, ed *Edge) string {
 			s.fail(where, "join table %s lies between tables in different schemas (%q and %q)", ed.Rel.Table, owner.TableSchema, target.TableSchema)
 		}
 		js.out = &OutEntity{
-			TableSchema: owner.TableSchema, Name: name, Label: plugin.Snake(name), Handles: plugin.Plural(name), Table: ed.Rel.Table,
+			TableSchema: owner.TableSchema, Name: name, Label: plugin.Snake(name), Handles: plugin.GoPlural(name), Table: ed.Rel.Table,
 			PrimaryKey: []int{0, 1}, Tenant: -1, Join: true, Bound: l.cfg.Bound[name],
 		}
 		for i, ent := range []*Entity{owner, target} {
@@ -832,7 +832,7 @@ func (l *lowerer) finish() {
 		}
 	}
 	for _, e := range l.g.Entities {
-		add(plugin.Plural(e.Name), "handles variable", e.Name, "")
+		add(plugin.GoPlural(e.Name), "handles variable", e.Name, "")
 	}
 	for i, j := range joins {
 		if joinOK[i] {

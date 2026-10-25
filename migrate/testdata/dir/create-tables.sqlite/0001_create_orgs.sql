@@ -36,12 +36,12 @@ CREATE INDEX "posts_author_id" ON "posts" ("author_id");
 CREATE TABLE "alphas" (
   "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
   "beta_id" integer,
-  CONSTRAINT "alphas_beta_id_fkey" FOREIGN KEY ("beta_id") REFERENCES "betas" ("id")
+  CONSTRAINT "alphas_beta_id_fkey" FOREIGN KEY ("beta_id") REFERENCES "beta" ("id")
 );
 CREATE INDEX "alphas_beta_id" ON "alphas" ("beta_id");
-CREATE TABLE "betas" (
+CREATE TABLE "beta" (
   "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
   "alpha_id" integer,
-  CONSTRAINT "betas_alpha_id_fkey" FOREIGN KEY ("alpha_id") REFERENCES "alphas" ("id")
+  CONSTRAINT "beta_alpha_id_fkey" FOREIGN KEY ("alpha_id") REFERENCES "alphas" ("id")
 );
-CREATE INDEX "betas_alpha_id" ON "betas" ("alpha_id");
+CREATE INDEX "beta_alpha_id" ON "beta" ("alpha_id");

@@ -684,15 +684,15 @@ func (tbIxTag) Edges() []schema.Edge {
 func TestTablesIndexes(t *testing.T) {
 	for _, d := range allDialects {
 		s := tables(t, d, tbIxOwner{}, tbIxA{}, tbIxB{}, tbIxC{noWhere: d == velox.MySQL}, tbIxTag{})
-		ixcs := []string{"tb_ixcs_tb_ix_owner_c", indexName("tb_ixcs", &Index{Columns: []string{"tb_ix_owner_c"}, Where: "tb_ix_owner_c > 0"})}
+		ixcs := []string{"tb_ix_cs_tb_ix_owner_c", indexName("tb_ix_cs", &Index{Columns: []string{"tb_ix_owner_c"}, Where: "tb_ix_owner_c > 0"})}
 		if d == velox.MySQL {
 			ixcs = ixcs[:1] // the declared index, which the key needs no other beside
 		}
 		for tableName, want := range map[string][]string{
 			"tb_ix_owners":     {"tb_ix_owners_code_unique", "tb_ix_owners_slug_unique"},
-			"tb_ixas":          {"tb_ixas_tb_ix_owner_a"},
-			"tb_ixbs":          {"tb_ixbs_tb_ix_owner_b_name"},
-			"tb_ixcs":          ixcs,
+			"tb_ix_as":         {"tb_ix_as_tb_ix_owner_a"},
+			"tb_ix_bs":         {"tb_ix_bs_tb_ix_owner_b_name"},
+			"tb_ix_cs":         ixcs,
 			"tb_ix_owner_tags": {"tb_ix_owner_tags_tb_ix_tag_id"},
 		} {
 			tb := table(t, s, tableName)
@@ -709,7 +709,7 @@ func TestTablesIndexes(t *testing.T) {
 				t.Errorf("%v: %+v", d, ix)
 			}
 		}
-		if ix := table(t, s, "tb_ixas").Indexes[0]; ix.Unique || !slices.Equal(ix.Columns, []string{"tb_ix_owner_a"}) {
+		if ix := table(t, s, "tb_ix_as").Indexes[0]; ix.Unique || !slices.Equal(ix.Columns, []string{"tb_ix_owner_a"}) {
 			t.Errorf("%v: foreign-key index %+v", d, ix)
 		}
 	}

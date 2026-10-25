@@ -122,7 +122,7 @@ type Connection[E any] struct {
 func NewConnection[E any](ctx context.Context, q velox.Query[E], typ string, args Args, order, key []OrderTerm[E]) (*Connection[E], error) {
 	if q.Ordered() {
 		// The application's bug, not the client's: an uncoded error.
-		return nil, fmt.Errorf("veloxgql: %sConnectionOf: the base query has an OrderBy; the connection orders by its orderBy argument", plugin.Plural(typ))
+		return nil, fmt.Errorf("veloxgql: %sConnectionOf: the base query has an OrderBy; the connection orders by its orderBy argument", plugin.GoPlural(typ))
 	}
 	lim := veloxgql.LimitsFromContext(ctx)
 	n, back, err := pageSize(args, lim.MaxPage)

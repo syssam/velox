@@ -125,11 +125,14 @@
 //
 // # Naming
 //
-// [Snake], [Plural], [Singular] and [GoName] are velox-gen's naming helpers.
-// They are frozen: they decide table, column and Go names, which live in
-// databases and code. Their outputs never change within a major version, for
-// any input; a change to any output needs a new major version. Helpers may be
-// added. The golden table testdata/names.golden pins them.
+// [Snake], [Plural], [Singular], [GoName] and [GoPlural] are velox-gen's
+// naming helpers. Plural and Singular use ent's rules, copied from
+// go-openapi/inflect v0.19.0, so that tables, join columns and Go names match
+// ent's. They are frozen: they decide table, column and Go names, which live
+// in databases and code. Their outputs never change within a major version,
+// for any input; a change to any output needs a new major version. Helpers
+// may be added. The golden tables testdata/names.golden and
+// testdata/ent.golden pin them.
 //
 // The package imports only the standard library, so that a plugin depends on
 // nothing else of velox.

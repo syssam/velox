@@ -18,7 +18,7 @@ func lowerFirst(name string) string {
 
 // The functions of t's connections: the exported one the application composes
 // a connection with, and the unexported ones of its key's and its terms.
-func connFunc(t *sdl.Type) string { return plugin.Plural(t.Name) + "ConnectionOf" }
+func connFunc(t *sdl.Type) string { return plugin.GoPlural(t.Name) + "ConnectionOf" }
 func keyFunc(t *sdl.Type) string  { return lowerFirst(t.Entity.Name) + "KeyGQL" }
 func termFunc(t *sdl.Type) string { return lowerFirst(t.Entity.Name) + "TermGQL" }
 func colsFunc(t *sdl.Type) string { return lowerFirst(t.Entity.Name) + "ColumnsGQL" }
@@ -60,7 +60,7 @@ func connArgs(t *sdl.Type) string {
 func (r *renderer) writeConnection(f *file, t *sdl.Type) error {
 	e, n := t.Entity, t.Name
 	what := "schema " + e.Name
-	root := plugin.Plural(n) + "Connection"
+	root := plugin.GoPlural(n) + "Connection"
 	for _, name := range []string{n + "Connection", n + "Edge", root, connFunc(t), keyFunc(t), colsFunc(t)} {
 		if err := r.declare(name, what); err != nil {
 			return err

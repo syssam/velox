@@ -1,243 +1,266 @@
-		s		
-ABCd	ab_cd	ABCds	ABCd	ABCd
-ACL	acl	ACLs	ACL	ACL
-API	api	APIs	API	API
-APIKey	api_key	APIKeys	APIKey	APIKey
-ASCII	ascii	ASCIIs	ASCII	ASCII
-AWS	aws	AWSs	AWS	AWS
-Box	box	Boxes	Box	Box
-CPU	cpu	CPUs	CPU	CPU
-CSS	css	CSSs	CSS	CSS
-Category	category	Categories	Category	Category
-DNS	dns	DNSs	DNS	DNS
-Day	day	Days	Day	Day
-EOF	eof	EOFs	EOF	EOF
-Fizz	fizz	Fizzes	Fizz	Fizz
-GB	gb	GBs	GB	GB
-GUID	guid	GUIDs	GUID	GUID
-HCL	hcl	HCLs	HCL	HCL
-HTML	html	HTMLs	HTML	HTML
-HTTP	http	HTTPs	HTTP	HTTP
-HTTPS	https	HTTPSs	HTTPS	HTTPS
-HTTPServer	http_server	HTTPServers	HTTPServer	HTTPServer
-ID	id	IDs	ID	ID
-IP	ip	IPs	IP	IP
-IPv4Addr	ipv4addr	IPv4Addrs	IPv4Addr	IPv4Addr
-JSON	json	JSONs	JSON	JSON
-JSONData	json_data	JSONDatas	JSONData	JSONData
-KB	kb	KBs	KB	KB
-LHS	lhs	LHSs	LHS	LHS
-MAC	mac	MACs	MAC	MAC
-MB	mb	MBs	MB	MB
-Match	match	Matches	Match	Match
-OAuth2Token	oauth2token	OAuth2Tokens	OAuth2Token	OAuth2Token
-OrgID	org_id	OrgIDs	OrgID	OrgID
-OrgURLs	org_ur_ls	OrgURLses	OrgURL	OrgURLs
-OrgUnit	org_unit	OrgUnits	OrgUnit	OrgUnit
-QPS	qps	QPSs	QPS	QPS
-RAM	ram	RAMs	RAM	RAM
-RHS	rhs	RHSs	RHS	RHS
-RPC	rpc	RPCs	RPC	RPC
-S3Bucket	s3bucket	S3Buckets	S3Bucket	S3Bucket
-SLA	sla	SLAs	SLA	SLA
-SMTP	smtp	SMTPs	SMTP	SMTP
-SQL	sql	SQLs	SQL	SQL
-SQLQuery	sql_query	SQLQueries	SQLQuery	SQLQuery
-SSH	ssh	SSHs	SSH	SSH
-SSO	sso	SSOs	SSO	SSO
-TCP	tcp	TCPs	TCP	TCP
-TLS	tls	TLSs	TLS	TLS
-TTL	ttl	TTLs	TTL	TTL
-UDP	udp	UDPs	UDP	UDP
-UI	ui	UIs	UI	UI
-UID	uid	UIDs	UID	UID
-URI	uri	URIs	URI	URI
-URL	url	URLs	URL	URL
-UTF8	utf8	UTF8s	UTF8	UTF8
-UUID	uuid	UUIDs	UUID	UUID
-UserIDs	user_ids	UserIDses	UserID	UserIDs
-UserInfo	user_info	UserInfos	UserInfo	UserInfo
-Users	users	Userses	User	Users
-VM	vm	VMs	VM	VM
-XML	xml	XMLs	XML	XML
-XMPP	xmpp	XMPPs	XMPP	XMPP
-XSRF	xsrf	XSRFs	XSRF	XSRF
-XSS	xss	XSSs	XSS	XSS
-Y	y	Ys	Y	Y
-_lead	_lead	_leads	_lead	Lead
-a_b__c	a_b__c	a_b__cs	a_b__c	ABC
-acl	acl	acls	acl	ACL
-acl_x	acl_x	acl_xes	acl_x	ACLX
-already_snake	already_snake	already_snakes	already_snake	AlreadySnake
-api	api	apis	api	API
-api_key	api_key	api_keys	api_key	APIKey
-api_x	api_x	api_xes	api_x	APIX
-ascii	ascii	asciis	ascii	ASCII
-ascii_x	ascii_x	ascii_xes	ascii_x	ASCIIX
-aws	aws	awses	aw	AWS
-aws_x	aws_x	aws_xes	aws_x	AWSX
-base64_data	base64_data	base64_datas	base64_data	Base64Data
-box	box	boxes	box	Box
-boxes	boxes	boxeses	box	Boxes
-bus	bus	buses	bu	Bus
-buses	buses	buseses	bus	Buses
-buzz	buzz	buzzes	buzz	Buzz
-categories	categories	categorieses	category	Categories
-category	category	categories	category	Category
-child	child	childs	child	Child
-children	children	childrens	children	Children
-church	church	churches	church	Church
-cpu	cpu	cpus	cpu	CPU
-cpu_x	cpu_x	cpu_xes	cpu_x	CPUX
-css	css	csses	cs	CSS
-css_x	css_x	css_xes	css_x	CSSX
-dash	dash	dashes	dash	Dash
-day	day	days	day	Day
-dns	dns	dnses	dn	DNS
-dns_x	dns_x	dns_xes	dns_x	DNSX
-eof	eof	eofs	eof	EOF
-eof_x	eof_x	eof_xes	eof_x	EOFX
-fizz	fizz	fizzes	fizz	Fizz
-gb	gb	gbs	gb	GB
-gb_x	gb_x	gb_xes	gb_x	GBX
-guid	guid	guids	guid	GUID
-guid_x	guid_x	guid_xes	guid_x	GUIDX
-hcl	hcl	hcls	hcl	HCL
-hcl_x	hcl_x	hcl_xes	hcl_x	HCLX
-html	html	htmls	html	HTML
-html_x	html_x	html_xes	html_x	HTMLX
-http	http	https	http	HTTP
-http_x	http_x	http_xes	http_x	HTTPX
-https	https	httpses	http	HTTPS
-https_x	https_x	https_xes	https_x	HTTPSX
-id	id	ids	id	ID
-id_x	id_x	id_xes	id_x	IDX
-ies	ies	ieses	ie	Ies
-in-progress	in-progress	in-progresses	in-progres	In-progress
-ip	ip	ips	ip	IP
-ip_x	ip_x	ip_xes	ip_x	IPX
-json	json	jsons	json	JSON
-json_doc	json_doc	json_docs	json_doc	JSONDoc
-json_x	json_x	json_xes	json_x	JSONX
-kb	kb	kbs	kb	KB
-kb_x	kb_x	kb_xes	kb_x	KBX
-key	key	keys	key	Key
-lhs	lhs	lhses	lh	LHS
-lhs_x	lhs_x	lhs_xes	lhs_x	LHSX
-mac	mac	macs	mac	MAC
-mac_x	mac_x	mac_xes	mac_x	MACX
-match	match	matches	match	Match
-mb	mb	mbs	mb	MB
-mb_x	mb_x	mb_xes	mb_x	MBX
-men	men	mens	men	Men
-org_id	org_id	org_ids	org_id	OrgID
-person	person	persons	person	Person
-qps	qps	qpses	qp	QPS
-qps_x	qps_x	qps_xes	qps_x	QPSX
-quiz	quiz	quizes	quiz	Quiz
-quizzes	quizzes	quizzeses	quizz	Quizzes
-ram	ram	rams	ram	RAM
-ram_x	ram_x	ram_xes	ram_x	RAMX
-rhs	rhs	rhses	rh	RHS
-rhs_x	rhs_x	rhs_xes	rhs_x	RHSX
-rpc	rpc	rpcs	rpc	RPC
-rpc_x	rpc_x	rpc_xes	rpc_x	RPCX
-s	s	ses	s	S
-s3_bucket	s3_bucket	s3_buckets	s3_bucket	S3Bucket
-sla	sla	slas	sla	SLA
-sla_x	sla_x	sla_xes	sla_x	SLAX
-smtp	smtp	smtps	smtp	SMTP
-smtp_x	smtp_x	smtp_xes	smtp_x	SMTPX
-sql	sql	sqls	sql	SQL
-sql_x	sql_x	sql_xes	sql_x	SQLX
-ssh	ssh	sshes	ssh	SSH
-ssh_x	ssh_x	ssh_xes	ssh_x	SSHX
-sso	sso	ssos	sso	SSO
-sso_x	sso_x	sso_xes	sso_x	SSOX
-status	status	statuses	statu	Status
-tcp	tcp	tcps	tcp	TCP
-tcp_x	tcp_x	tcp_xes	tcp_x	TCPX
-tls	tls	tlses	tl	TLS
-tls_x	tls_x	tls_xes	tls_x	TLSX
-toy	toy	toys	toy	Toy
-trail_	trail_	trail_s	trail_	Trail
-ttl	ttl	ttls	ttl	TTL
-ttl_x	ttl_x	ttl_xes	ttl_x	TTLX
-udp	udp	udps	udp	UDP
-udp_x	udp_x	udp_xes	udp_x	UDPX
-ui	ui	uis	ui	UI
-ui_x	ui_x	ui_xes	ui_x	UIX
-uid	uid	uids	uid	UID
-uid_x	uid_x	uid_xes	uid_x	UIDX
-uri	uri	uris	uri	URI
-uri_x	uri_x	uri_xes	uri_x	URIX
-url	url	urls	url	URL
-url_x	url_x	url_xes	url_x	URLX
-user	user	users	user	User
-userID	user_id	userIDs	userID	UserID
-utf8	utf8	utf8s	utf8	UTF8
-utf8_x	utf8_x	utf8_xes	utf8_x	UTF8X
-uuid	uuid	uuids	uuid	UUID
-uuid_v7	uuid_v7	uuid_v7s	uuid_v7	UUIDV7
-uuid_x	uuid_x	uuid_xes	uuid_x	UUIDX
-vm	vm	vms	vm	VM
-vm_x	vm_x	vm_xes	vm_x	VMX
-wish	wish	wishes	wish	Wish
-wishes	wishes	wisheses	wish	Wishes
-x1Y2	x1y2	x1Y2s	x1Y2	X1Y2
-x_acl	x_acl	x_acls	x_acl	XACL
-x_api	x_api	x_apis	x_api	XAPI
-x_ascii	x_ascii	x_asciis	x_ascii	XASCII
-x_aws	x_aws	x_awses	x_aw	XAWS
-x_cpu	x_cpu	x_cpus	x_cpu	XCPU
-x_css	x_css	x_csses	x_cs	XCSS
-x_dns	x_dns	x_dnses	x_dn	XDNS
-x_eof	x_eof	x_eofs	x_eof	XEOF
-x_gb	x_gb	x_gbs	x_gb	XGB
-x_guid	x_guid	x_guids	x_guid	XGUID
-x_hcl	x_hcl	x_hcls	x_hcl	XHCL
-x_html	x_html	x_htmls	x_html	XHTML
-x_http	x_http	x_https	x_http	XHTTP
-x_https	x_https	x_httpses	x_http	XHTTPS
-x_id	x_id	x_ids	x_id	XID
-x_ip	x_ip	x_ips	x_ip	XIP
-x_json	x_json	x_jsons	x_json	XJSON
-x_kb	x_kb	x_kbs	x_kb	XKB
-x_lhs	x_lhs	x_lhses	x_lh	XLHS
-x_mac	x_mac	x_macs	x_mac	XMAC
-x_mb	x_mb	x_mbs	x_mb	XMB
-x_qps	x_qps	x_qpses	x_qp	XQPS
-x_ram	x_ram	x_rams	x_ram	XRAM
-x_rhs	x_rhs	x_rhses	x_rh	XRHS
-x_rpc	x_rpc	x_rpcs	x_rpc	XRPC
-x_sla	x_sla	x_slas	x_sla	XSLA
-x_smtp	x_smtp	x_smtps	x_smtp	XSMTP
-x_sql	x_sql	x_sqls	x_sql	XSQL
-x_ssh	x_ssh	x_sshes	x_ssh	XSSH
-x_sso	x_sso	x_ssos	x_sso	XSSO
-x_tcp	x_tcp	x_tcps	x_tcp	XTCP
-x_tls	x_tls	x_tlses	x_tl	XTLS
-x_ttl	x_ttl	x_ttls	x_ttl	XTTL
-x_udp	x_udp	x_udps	x_udp	XUDP
-x_ui	x_ui	x_uis	x_ui	XUI
-x_uid	x_uid	x_uids	x_uid	XUID
-x_uri	x_uri	x_uris	x_uri	XURI
-x_url	x_url	x_urls	x_url	XURL
-x_utf8	x_utf8	x_utf8s	x_utf8	XUTF8
-x_uuid	x_uuid	x_uuids	x_uuid	XUUID
-x_vm	x_vm	x_vms	x_vm	XVM
-x_xml	x_xml	x_xmls	x_xml	XXML
-x_xmpp	x_xmpp	x_xmpps	x_xmpp	XXMPP
-x_xsrf	x_xsrf	x_xsrfs	x_xsrf	XXSRF
-x_xss	x_xss	x_xsses	x_xs	XXSS
-xml	xml	xmls	xml	XML
-xml_x	xml_x	xml_xes	xml_x	XMLX
-xmpp	xmpp	xmpps	xmpp	XMPP
-xmpp_x	xmpp_x	xmpp_xes	xmpp_x	XMPPX
-xsrf	xsrf	xsrfs	xsrf	XSRF
-xsrf_x	xsrf_x	xsrf_xes	xsrf_x	XSRFX
-xss	xss	xsses	xs	XSS
-xss_x	xss_x	xss_xes	xss_x	XSSX
-y	y	ys	y	Y
-Ünicode	ãnicode	Ünicodes	Ünicode	Ünicode
-über_name	ã¼ber_name	über_names	über_name	ÜberName
+					Slice
+ABCd	ab_cd	ABCds	ABCd	ABCd	ABCds
+ACL	acl	ACLs	ACL	ACL	ACLs
+API	api	APIs	API	API	APIs
+APIKey	api_key	APIKeys	APIKey	APIKey	APIKeys
+ASCII	ascii	ASCIIs	ASCII	ASCII	ASCIIs
+AWS	aws	AWSs	AWS	AWS	AWSs
+B2y	b2y	B2ys	B2y	B2y	B2ys
+Box	box	Boxes	Box	Box	Boxes
+Bus	bus	Bus	Bu	Bus	BusSlice
+CPU	cpu	CPUs	CPU	CPU	CPUs
+CSS	css	CSSs	CSS	CSS	CSSs
+Category	category	Categories	Category	Category	Categories
+Child	child	Childs	Child	Child	Childs
+DNS	dns	DNSs	DNS	DNS	DNSs
+Data	data	Data	Datum	Data	DataSlice
+Day	day	Days	Day	Day	Days
+EOF	eof	EOFs	EOF	EOF	EOFs
+Equipment	equipment	Equipment	Equipment	Equipment	EquipmentSlice
+Fizz	fizz	Fizzs	Fizz	Fizz	Fizzs
+GB	gb	GBs	GB	GB	GBs
+GUID	guid	GUIDs	GUID	GUID	GUIDs
+Goods	goods	Goods	Good	Goods	GoodsSlice
+HCL	hcl	HCLs	HCL	HCL	HCLs
+HTML	html	HTMLs	HTML	HTML	HTMLs
+HTTP	http	HTTPs	HTTP	HTTP	HTTPs
+HTTPS	https	HTTPSs	HTTPS	HTTPS	HTTPSs
+HTTPServer	http_server	HTTPServers	HTTPServer	HTTPServer	HTTPServers
+ID	id	IDs	ID	ID	IDs
+IP	ip	IPs	IP	IP	IPs
+IPv4Addr	ipv4addr	IPv4Addrs	IPv4Addr	IPv4Addr	IPv4Addrs
+JSON	json	JSONs	JSON	JSON	JSONs
+JSONData	json_data	JSONData	JSONDatum	JSONData	JSONDataSlice
+KB	kb	KBs	KB	KB	KBs
+LHS	lhs	LHSs	LHS	LHS	LHSs
+MAC	mac	MACs	MAC	MAC	MACs
+MB	mb	MBs	MB	MB	MBs
+Match	match	Matches	Match	Match	Matches
+Media	media	Media	Medium	Media	MediaSlice
+Metadata	metadata	Metadata	Metadatum	Metadata	MetadataSlice
+OAuth2Token	oauth2token	OAuth2Tokens	OAuth2Token	OAuth2Token	OAuth2Tokens
+OrgID	org_id	OrgIDs	OrgID	OrgID	OrgIDs
+OrgURLs	org_ur_ls	OrgURLs	OrgURL	OrgURLs	OrgURLsSlice
+OrgUnit	org_unit	OrgUnits	OrgUnit	OrgUnit	OrgUnits
+Person	person	Persons	Person	Person	Persons
+QPS	qps	QPSs	QPS	QPS	QPSs
+RAM	ram	RAMs	RAM	RAM	RAMs
+RHS	rhs	RHSs	RHS	RHS	RHSs
+RPC	rpc	RPCs	RPC	RPC	RPCs
+S3Bucket	s3bucket	S3Buckets	S3Bucket	S3Bucket	S3Buckets
+SLA	sla	SLAs	SLA	SLA	SLAs
+SMTP	smtp	SMTPs	SMTP	SMTP	SMTPs
+SQL	sql	SQLs	SQL	SQL	SQLs
+SQLQuery	sql_query	SQLQueries	SQLQuery	SQLQuery	SQLQueries
+SSH	ssh	SSHs	SSH	SSH	SSHs
+SSO	sso	SSOs	SSO	SSO	SSOs
+Settings	settings	Settings	Setting	Settings	SettingsSlice
+Status	status	Status	Statu	Status	StatusSlice
+TCP	tcp	TCPs	TCP	TCP	TCPs
+TLS	tls	TLSs	TLS	TLS	TLSs
+TTL	ttl	TTLs	TTL	TTL	TTLs
+UDP	udp	UDPs	UDP	UDP	UDPs
+UI	ui	UIs	UI	UI	UIs
+UID	uid	UIDs	UID	UID	UIDs
+URI	uri	URIs	URI	URI	URIs
+URL	url	URLs	URL	URL	URLs
+UTF8	utf8	UTF8s	UTF8	UTF8	UTF8s
+UUID	uuid	UUIDs	UUID	UUID	UUIDs
+UserIDs	user_ids	UserIDs	UserID	UserIDs	UserIDsSlice
+UserInfo	user_info	UserInfos	UserInfo	UserInfo	UserInfos
+Users	users	Users	User	Users	UsersSlice
+VM	vm	VMs	VM	VM	VMs
+XML	xml	XMLs	XML	XML	XMLs
+XMPP	xmpp	XMPPs	XMPP	XMPP	XMPPs
+XSRF	xsrf	XSRFs	XSRF	XSRF	XSRFs
+XSS	xss	XSSs	XSS	XSS	XSSs
+Y	y	Ys	Y	Y	Ys
+_lead	_lead	_leads	_lead	Lead	_leads
+a_b__c	a_b__c	a_b__cs	a_b__c	ABC	a_b__cs
+acl	acl	acls	acl	ACL	acls
+acl_x	acl_x	acl_xes	acl_x	ACLX	acl_xes
+already_snake	already_snake	already_snakes	already_snake	AlreadySnake	already_snakes
+api	api	apis	api	API	apis
+api_key	api_key	api_keys	api_key	APIKey	api_keys
+api_x	api_x	api_xes	api_x	APIX	api_xes
+ascii	ascii	asciis	ascii	ASCII	asciis
+ascii_x	ascii_x	ascii_xes	ascii_x	ASCIIX	ascii_xes
+aws	aws	aws	aw	AWS	awsSlice
+aws_x	aws_x	aws_xes	aws_x	AWSX	aws_xes
+base64_data	base64_data	base64_data	base64_datum	Base64Data	base64_dataSlice
+box	box	boxes	box	Box	boxes
+boxes	boxes	boxes	box	Boxes	boxesSlice
+bus	bus	buses	bu	Bus	buses
+buses	buses	buses	bus	Buses	busesSlice
+buzz	buzz	buzzs	buzz	Buzz	buzzs
+categories	categories	categories	category	Categories	categoriesSlice
+category	category	categories	category	Category	categories
+child	child	children	child	Child	children
+children	children	children	child	Children	childrenSlice
+church	church	churches	church	Church	churches
+cpu	cpu	cpus	cpu	CPU	cpus
+cpu_x	cpu_x	cpu_xes	cpu_x	CPUX	cpu_xes
+css	css	csses	cs	CSS	csses
+css_x	css_x	css_xes	css_x	CSSX	css_xes
+dash	dash	dashes	dash	Dash	dashes
+data	data	data	datum	Data	dataSlice
+day	day	days	day	Day	days
+dns	dns	dns	dn	DNS	dnsSlice
+dns_x	dns_x	dns_xes	dns_x	DNSX	dns_xes
+eof	eof	eofs	eof	EOF	eofs
+eof_x	eof_x	eof_xes	eof_x	EOFX	eof_xes
+equipment	equipment	equipment	equipment	Equipment	equipmentSlice
+fizz	fizz	fizzs	fizz	Fizz	fizzs
+gb	gb	gbs	gb	GB	gbs
+gb_x	gb_x	gb_xes	gb_x	GBX	gb_xes
+guid	guid	guids	guid	GUID	guids
+guid_x	guid_x	guid_xes	guid_x	GUIDX	guid_xes
+hcl	hcl	hcls	hcl	HCL	hcls
+hcl_x	hcl_x	hcl_xes	hcl_x	HCLX	hcl_xes
+html	html	htmls	html	HTML	htmls
+html_x	html_x	html_xes	html_x	HTMLX	html_xes
+http	http	https	http	HTTP	https
+http_x	http_x	http_xes	http_x	HTTPX	http_xes
+https	https	https	http	HTTPS	httpsSlice
+https_x	https_x	https_xes	https_x	HTTPSX	https_xes
+id	id	ids	id	ID	ids
+id_x	id_x	id_xes	id_x	IDX	id_xes
+ies	ies	ies	ie	Ies	iesSlice
+in-progress	in-progress	in-progresses	in-progres	In-progress	in-progresses
+index	index	indices	index	Index	indices
+indices	indices	indices	index	Indices	indicesSlice
+ip	ip	ips	ip	IP	ips
+ip_x	ip_x	ip_xes	ip_x	IPX	ip_xes
+json	json	jsons	json	JSON	jsons
+json_doc	json_doc	json_docs	json_doc	JSONDoc	json_docs
+json_x	json_x	json_xes	json_x	JSONX	json_xes
+kb	kb	kbs	kb	KB	kbs
+kb_x	kb_x	kb_xes	kb_x	KBX	kb_xes
+key	key	keys	key	Key	keys
+leaf	leaf	leafs	leaf	Leaf	leafs
+lhs	lhs	lhs	lh	LHS	lhsSlice
+lhs_x	lhs_x	lhs_xes	lhs_x	LHSX	lhs_xes
+mac	mac	macs	mac	MAC	macs
+mac_x	mac_x	mac_xes	mac_x	MACX	mac_xes
+match	match	matches	match	Match	matches
+mb	mb	mbs	mb	MB	mbs
+mb_x	mb_x	mb_xes	mb_x	MBX	mb_xes
+media	media	media	medium	Media	mediaSlice
+men	men	men	man	Men	menSlice
+mouse	mouse	mice	mouse	Mouse	mice
+news	news	news	news	News	newsSlice
+org_id	org_id	org_ids	org_id	OrgID	org_ids
+people	people	people	person	People	peopleSlice
+person	person	people	person	Person	people
+qps	qps	qps	qp	QPS	qpsSlice
+qps_x	qps_x	qps_xes	qps_x	QPSX	qps_xes
+quiz	quiz	quizzes	quiz	Quiz	quizzes
+quizzes	quizzes	quizzes	quiz	Quizzes	quizzesSlice
+ram	ram	rams	ram	RAM	rams
+ram_x	ram_x	ram_xes	ram_x	RAMX	ram_xes
+rhs	rhs	rhs	rh	RHS	rhsSlice
+rhs_x	rhs_x	rhs_xes	rhs_x	RHSX	rhs_xes
+rpc	rpc	rpcs	rpc	RPC	rpcs
+rpc_x	rpc_x	rpc_xes	rpc_x	RPCX	rpc_xes
+s	s	s		S	sSlice
+s3_bucket	s3_bucket	s3_buckets	s3_bucket	S3Bucket	s3_buckets
+series	series	series	series	Series	seriesSlice
+settings	settings	settings	setting	Settings	settingsSlice
+sla	sla	slas	sla	SLA	slas
+sla_x	sla_x	sla_xes	sla_x	SLAX	sla_xes
+smtp	smtp	smtps	smtp	SMTP	smtps
+smtp_x	smtp_x	smtp_xes	smtp_x	SMTPX	smtp_xes
+sql	sql	sqls	sql	SQL	sqls
+sql_x	sql_x	sql_xes	sql_x	SQLX	sql_xes
+ssh	ssh	sshes	ssh	SSH	sshes
+ssh_x	ssh_x	ssh_xes	ssh_x	SSHX	ssh_xes
+sso	sso	ssos	sso	SSO	ssos
+sso_x	sso_x	sso_xes	sso_x	SSOX	sso_xes
+status	status	statuses	statu	Status	statuses
+tcp	tcp	tcps	tcp	TCP	tcps
+tcp_x	tcp_x	tcp_xes	tcp_x	TCPX	tcp_xes
+tls	tls	tls	tl	TLS	tlsSlice
+tls_x	tls_x	tls_xes	tls_x	TLSX	tls_xes
+toy	toy	toys	toy	Toy	toys
+trail_	trail_	trail_s	trail_	Trail	trail_s
+ttl	ttl	ttls	ttl	TTL	ttls
+ttl_x	ttl_x	ttl_xes	ttl_x	TTLX	ttl_xes
+udp	udp	udps	udp	UDP	udps
+udp_x	udp_x	udp_xes	udp_x	UDPX	udp_xes
+ui	ui	uis	ui	UI	uis
+ui_x	ui_x	ui_xes	ui_x	UIX	ui_xes
+uid	uid	uids	uid	UID	uids
+uid_x	uid_x	uid_xes	uid_x	UIDX	uid_xes
+uri	uri	uris	uri	URI	uris
+uri_x	uri_x	uri_xes	uri_x	URIX	uri_xes
+url	url	urls	url	URL	urls
+url_x	url_x	url_xes	url_x	URLX	url_xes
+user	user	users	user	User	users
+userID	user_id	userIDs	userID	UserID	userIDs
+utf8	utf8	utf8s	utf8	UTF8	utf8s
+utf8_x	utf8_x	utf8_xes	utf8_x	UTF8X	utf8_xes
+uuid	uuid	uuids	uuid	UUID	uuids
+uuid_v7	uuid_v7	uuid_v7s	uuid_v7	UUIDV7	uuid_v7s
+uuid_x	uuid_x	uuid_xes	uuid_x	UUIDX	uuid_xes
+vm	vm	vms	vm	VM	vms
+vm_x	vm_x	vm_xes	vm_x	VMX	vm_xes
+wife	wife	wives	wife	Wife	wives
+wish	wish	wishes	wish	Wish	wishes
+wishes	wishes	wishes	wish	Wishes	wishesSlice
+x1Y2	x1y2	x1Y2s	x1Y2	X1Y2	x1Y2s
+x_acl	x_acl	x_acls	x_acl	XACL	x_acls
+x_api	x_api	x_apis	x_api	XAPI	x_apis
+x_ascii	x_ascii	x_asciis	x_ascii	XASCII	x_asciis
+x_aws	x_aws	x_aws	x_aw	XAWS	x_awsSlice
+x_cpu	x_cpu	x_cpus	x_cpu	XCPU	x_cpus
+x_css	x_css	x_csses	x_cs	XCSS	x_csses
+x_dns	x_dns	x_dns	x_dn	XDNS	x_dnsSlice
+x_eof	x_eof	x_eofs	x_eof	XEOF	x_eofs
+x_gb	x_gb	x_gbs	x_gb	XGB	x_gbs
+x_guid	x_guid	x_guids	x_guid	XGUID	x_guids
+x_hcl	x_hcl	x_hcls	x_hcl	XHCL	x_hcls
+x_html	x_html	x_htmls	x_html	XHTML	x_htmls
+x_http	x_http	x_https	x_http	XHTTP	x_https
+x_https	x_https	x_https	x_http	XHTTPS	x_httpsSlice
+x_id	x_id	x_ids	x_id	XID	x_ids
+x_ip	x_ip	x_ips	x_ip	XIP	x_ips
+x_json	x_json	x_jsons	x_json	XJSON	x_jsons
+x_kb	x_kb	x_kbs	x_kb	XKB	x_kbs
+x_lhs	x_lhs	x_lhs	x_lh	XLHS	x_lhsSlice
+x_mac	x_mac	x_macs	x_mac	XMAC	x_macs
+x_mb	x_mb	x_mbs	x_mb	XMB	x_mbs
+x_qps	x_qps	x_qps	x_qp	XQPS	x_qpsSlice
+x_ram	x_ram	x_rams	x_ram	XRAM	x_rams
+x_rhs	x_rhs	x_rhs	x_rh	XRHS	x_rhsSlice
+x_rpc	x_rpc	x_rpcs	x_rpc	XRPC	x_rpcs
+x_sla	x_sla	x_slas	x_sla	XSLA	x_slas
+x_smtp	x_smtp	x_smtps	x_smtp	XSMTP	x_smtps
+x_sql	x_sql	x_sqls	x_sql	XSQL	x_sqls
+x_ssh	x_ssh	x_sshes	x_ssh	XSSH	x_sshes
+x_sso	x_sso	x_ssos	x_sso	XSSO	x_ssos
+x_tcp	x_tcp	x_tcps	x_tcp	XTCP	x_tcps
+x_tls	x_tls	x_tls	x_tl	XTLS	x_tlsSlice
+x_ttl	x_ttl	x_ttls	x_ttl	XTTL	x_ttls
+x_udp	x_udp	x_udps	x_udp	XUDP	x_udps
+x_ui	x_ui	x_uis	x_ui	XUI	x_uis
+x_uid	x_uid	x_uids	x_uid	XUID	x_uids
+x_uri	x_uri	x_uris	x_uri	XURI	x_uris
+x_url	x_url	x_urls	x_url	XURL	x_urls
+x_utf8	x_utf8	x_utf8s	x_utf8	XUTF8	x_utf8s
+x_uuid	x_uuid	x_uuids	x_uuid	XUUID	x_uuids
+x_vm	x_vm	x_vms	x_vm	XVM	x_vms
+x_xml	x_xml	x_xmls	x_xml	XXML	x_xmls
+x_xmpp	x_xmpp	x_xmpps	x_xmpp	XXMPP	x_xmpps
+x_xsrf	x_xsrf	x_xsrves	x_xsrf	XXSRF	x_xsrves
+x_xss	x_xss	x_xsses	x_xs	XXSS	x_xsses
+xml	xml	xmls	xml	XML	xmls
+xml_x	xml_x	xml_xes	xml_x	XMLX	xml_xes
+xmpp	xmpp	xmpps	xmpp	XMPP	xmpps
+xmpp_x	xmpp_x	xmpp_xes	xmpp_x	XMPPX	xmpp_xes
+xsrf	xsrf	xsrves	xsrf	XSRF	xsrves
+xsrf_x	xsrf_x	xsrf_xes	xsrf_x	XSRFX	xsrf_xes
+xss	xss	xsses	xs	XSS	xsses
+xss_x	xss_x	xss_xes	xss_x	XSSX	xss_xes
+y	y	ys	y	Y	ys
+Ünicode	ãnicode	Ünicodes	Ünicode	Ünicode	Ünicodes
+über_name	ã¼ber_name	über_names	über_name	ÜberName	über_names

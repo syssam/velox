@@ -130,9 +130,10 @@
 //     GraphQL type, and the marshalers of velox-gen's enum types;
 //   - the <Edge>GQL edge methods: a connection, a list or the one node,
 //     each read for every row of its batch in one statement;
-//   - the root connection function <Plural>Connection, named after the
-//     plural of the GraphQL type (UsersConnection for User, AccountsConnection
-//     for a User exposed as Account), which a Query field's resolver returns;
+//   - the root connection function <GoPlural>Connection, named after ent's
+//     plural of the GraphQL type (UsersConnection for User,
+//     StatusSliceConnection for Status, AccountsConnection for a User exposed
+//     as Account), which a Query field's resolver returns;
 //   - the where input's method Pred, which turns a where argument into a
 //     velox condition.
 //
@@ -299,7 +300,7 @@
 // application's own, in an extend type, whose resolver may read anything), or
 // one of a connection or an edge that gqlimpl.Selected cannot see through
 // (see its documentation). It never adds a column the application's query
-// left out (velox.Query.Selects), and a <Plural>ConnectionOf whose base query
+// left out (velox.Query.Selects), and a <GoPlural>ConnectionOf whose base query
 // drops the key or a column an orderBy names is refused with an internal
 // error. A mutation's returned row is not narrowed.
 //

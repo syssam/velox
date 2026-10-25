@@ -76,7 +76,7 @@ func TestUpPostgres(t *testing.T) {
 		t.Errorf("columns\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 	var n int
-	if err := db.QueryRow(`SELECT count(*) FROM information_schema.tables WHERE table_name IN ('alphas', 'beta', 'betas', 'alpha')`).Scan(&n); err != nil || n == 0 {
+	if err := db.QueryRow(`SELECT count(*) FROM information_schema.tables WHERE table_name IN ('alphas', 'beta')`).Scan(&n); err != nil || n == 0 {
 		t.Errorf("the plan's tables: %d, %v", n, err)
 	}
 }

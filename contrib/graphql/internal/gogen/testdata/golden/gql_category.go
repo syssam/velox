@@ -227,8 +227,8 @@ func categoryFieldGQL(goField string) string {
 // not given.
 type CreateCategoryInput struct {
 	Title string
-	// ChildrenIDs are the IDs of the Category nodes the edge children leads to.
-	ChildrenIDs []string
+	// ChildIDs are the IDs of the Category nodes the edge children leads to.
+	ChildIDs []string
 	// ParentID is the ID of the Category the edge parent leads to.
 	ParentID *string
 }
@@ -239,7 +239,7 @@ func (in CreateCategoryInput) String() string {
 	if in.ParentID != nil {
 		p2 = *in.ParentID
 	}
-	return fmt.Sprintf("CreateCategoryInput(Title=%v, ChildrenIDs=%v, ParentID=%v)", in.Title, in.ChildrenIDs, p2)
+	return fmt.Sprintf("CreateCategoryInput(Title=%v, ChildIDs=%v, ParentID=%v)", in.Title, in.ChildIDs, p2)
 }
 
 // GoString is String, so that %#v does not print the sensitive fields either.
@@ -265,7 +265,7 @@ func CreateCategory(ctx context.Context, input CreateCategoryInput) (*Category, 
 		k2  int64
 		err error
 	)
-	if k1, err = gqlimpl.DecodeIDs[int64](ctx, "CreateCategoryInput.childrenIDs", input.ChildrenIDs, "Category"); err != nil {
+	if k1, err = gqlimpl.DecodeIDs[int64](ctx, "CreateCategoryInput.childIDs", input.ChildIDs, "Category"); err != nil {
 		return nil, err
 	}
 	if input.ParentID != nil {
@@ -293,7 +293,7 @@ func CreateCategory(ctx context.Context, input CreateCategoryInput) (*Category, 
 		if len(k1) > 0 {
 			if n, err := db.Update[Category]().Set(Categories.CategoryChildren.Set(x.ID)).Where(Categories.ID.In(k1...), Categories.CategoryChildren.IsNull()).Exec(ctx); err != nil {
 				return err
-			} else if err := gqlimpl.Repointed(ctx, n, len(k1), db.Query[Category]().Where(Categories.ID.In(k1...), Categories.CategoryChildren.NotNull(), Categories.CategoryChildren.NEQ(x.ID)), "CreateCategoryInput.childrenIDs", "Category", "Category"); err != nil {
+			} else if err := gqlimpl.Repointed(ctx, n, len(k1), db.Query[Category]().Where(Categories.ID.In(k1...), Categories.CategoryChildren.NotNull(), Categories.CategoryChildren.NEQ(x.ID)), "CreateCategoryInput.childIDs", "Category", "Category"); err != nil {
 				return err
 			}
 		}
@@ -312,11 +312,11 @@ func CreateCategory(ctx context.Context, input CreateCategoryInput) (*Category, 
 // refused with the field or the edge's ID given too.
 type UpdateCategoryInput struct {
 	Title *string
-	// AddChildrenIDs are the IDs of Category nodes to add to the edge children.
-	AddChildrenIDs []string
-	// RemoveChildrenIDs are the IDs of Category nodes to remove from the edge
+	// AddChildIDs are the IDs of Category nodes to add to the edge children.
+	AddChildIDs []string
+	// RemoveChildIDs are the IDs of Category nodes to remove from the edge
 	// children; an ID the edge does not lead to is ignored.
-	RemoveChildrenIDs []string
+	RemoveChildIDs []string
 	// ClearChildren removes every Category from the edge children, before the
 	// IDs to remove and to add.
 	ClearChildren bool
@@ -336,7 +336,7 @@ func (in UpdateCategoryInput) String() string {
 	if in.ParentID != nil {
 		p4 = *in.ParentID
 	}
-	return fmt.Sprintf("UpdateCategoryInput(Title=%v, AddChildrenIDs=%v, RemoveChildrenIDs=%v, ClearChildren=%v, ParentID=%v, ClearParent=%v)", p0, in.AddChildrenIDs, in.RemoveChildrenIDs, in.ClearChildren, p4, in.ClearParent)
+	return fmt.Sprintf("UpdateCategoryInput(Title=%v, AddChildIDs=%v, RemoveChildIDs=%v, ClearChildren=%v, ParentID=%v, ClearParent=%v)", p0, in.AddChildIDs, in.RemoveChildIDs, in.ClearChildren, p4, in.ClearParent)
 }
 
 // GoString is String, so that %#v does not print the sensitive fields either.
@@ -385,10 +385,10 @@ func UpdateCategory(ctx context.Context, id string, input UpdateCategoryInput) (
 	if key, err = gqlimpl.DecodeID[int64]("updateCategory.id", id, "Category"); err != nil {
 		return nil, err
 	}
-	if k1, err = gqlimpl.DecodeIDs[int64](ctx, "UpdateCategoryInput.addChildrenIDs", input.AddChildrenIDs, "Category"); err != nil {
+	if k1, err = gqlimpl.DecodeIDs[int64](ctx, "UpdateCategoryInput.addChildIDs", input.AddChildIDs, "Category"); err != nil {
 		return nil, err
 	}
-	if k2, err = gqlimpl.DecodeIDs[int64](ctx, "UpdateCategoryInput.removeChildrenIDs", input.RemoveChildrenIDs, "Category"); err != nil {
+	if k2, err = gqlimpl.DecodeIDs[int64](ctx, "UpdateCategoryInput.removeChildIDs", input.RemoveChildIDs, "Category"); err != nil {
 		return nil, err
 	}
 	if input.ParentID != nil {
@@ -396,7 +396,7 @@ func UpdateCategory(ctx context.Context, id string, input UpdateCategoryInput) (
 			return nil, err
 		}
 	}
-	if err = gqlimpl.Disjoint("UpdateCategoryInput", "addChildrenIDs", "removeChildrenIDs", k1, k2); err != nil {
+	if err = gqlimpl.Disjoint("UpdateCategoryInput", "addChildIDs", "removeChildIDs", k1, k2); err != nil {
 		return nil, err
 	}
 	if input.ParentID != nil && input.ClearParent {
@@ -455,7 +455,7 @@ func UpdateCategory(ctx context.Context, id string, input UpdateCategoryInput) (
 			}
 			if n, err := db.Query[Category]().Where(Categories.ID.In(k1...), Categories.CategoryChildren.EQ(key)).Count(ctx); err != nil {
 				return err
-			} else if err := gqlimpl.Repointed(ctx, n, len(k1), db.Query[Category]().Where(Categories.ID.In(k1...), Categories.CategoryChildren.NotNull(), Categories.CategoryChildren.NEQ(key)), "UpdateCategoryInput.addChildrenIDs", "Category", "Category"); err != nil {
+			} else if err := gqlimpl.Repointed(ctx, n, len(k1), db.Query[Category]().Where(Categories.ID.In(k1...), Categories.CategoryChildren.NotNull(), Categories.CategoryChildren.NEQ(key)), "UpdateCategoryInput.addChildIDs", "Category", "Category"); err != nil {
 				return err
 			}
 		}

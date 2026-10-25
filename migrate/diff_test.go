@@ -519,7 +519,7 @@ func TestDiffCreateOrder(t *testing.T) {
 		if fks := created["users"].ForeignKeys; !slices.ContainsFunc(fks, func(fk migrate.ForeignKey) bool { return fk.Name == "user_mentor" }) {
 			t.Errorf("%v: the self-reference is not inline: %+v", d, fks)
 		}
-		inline := len(created["alphas"].ForeignKeys) + len(created["betas"].ForeignKeys)
+		inline := len(created["alphas"].ForeignKeys) + len(created["beta"].ForeignKeys)
 		var added []string
 		for _, c := range cs {
 			if c, ok := c.(migrate.AddForeignKey); ok {
@@ -535,7 +535,7 @@ func TestDiffCreateOrder(t *testing.T) {
 		if inline != 1 || !slices.Equal(added, []string{"add-foreign-key alphas alphas_beta_id_fkey"}) {
 			t.Errorf("%v: the cycle's keys are %d inline and %q added", d, inline, added)
 		}
-		if at("add-foreign-key alphas alphas_beta_id_fkey") < at("create-table betas") || at("create-table betas") < at("create-table alphas") {
+		if at("add-foreign-key alphas alphas_beta_id_fkey") < at("create-table beta") || at("create-table beta") < at("create-table alphas") {
 			t.Errorf("%v: the cycle's key is not added after both tables:\n%s", d, strings.Join(lines(cs), "\n"))
 		}
 	}

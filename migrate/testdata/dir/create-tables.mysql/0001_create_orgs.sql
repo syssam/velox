@@ -40,11 +40,11 @@ CREATE TABLE `alphas` (
   PRIMARY KEY (`id`),
   INDEX `alphas_beta_id` (`beta_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
-CREATE TABLE `betas` (
+CREATE TABLE `beta` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `alpha_id` bigint NULL,
   PRIMARY KEY (`id`),
-  INDEX `betas_alpha_id` (`alpha_id`),
-  CONSTRAINT `betas_alpha_id_fkey` FOREIGN KEY (`alpha_id`) REFERENCES `alphas` (`id`)
+  INDEX `beta_alpha_id` (`alpha_id`),
+  CONSTRAINT `beta_alpha_id_fkey` FOREIGN KEY (`alpha_id`) REFERENCES `alphas` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
-ALTER TABLE `alphas` ADD CONSTRAINT `alphas_beta_id_fkey` FOREIGN KEY (`beta_id`) REFERENCES `betas` (`id`);
+ALTER TABLE `alphas` ADD CONSTRAINT `alphas_beta_id_fkey` FOREIGN KEY (`beta_id`) REFERENCES `beta` (`id`);

@@ -56,7 +56,7 @@ type Model struct {
 type Entity struct {
 	Name        string   `json:"name"`                   // the Go type name, e.g. "User": the schema's struct name, or for a join entity the one velox-gen gives it
 	Label       string   `json:"label"`                  // snake_case of Name
-	Handles     string   `json:"handles"`                // the plural of Name, e.g. "Users"
+	Handles     string   `json:"handles"`                // GoPlural of Name, e.g. "Users", "StatusSlice"
 	Table       string   `json:"table"`                  // the table's name
 	TableSchema string   `json:"table_schema,omitempty"` // the database schema that holds Table, from schema.TableIn; "" for the connection's default
 	Join        bool     `json:"join,omitempty"`         // a many-to-many join entity
