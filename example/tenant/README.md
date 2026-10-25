@@ -18,14 +18,14 @@ db.Update[gen.Project]()...Exec(ctx)   // changes only this tenant's rows
 
 db.Insert(&p).OnConflict(P.OrgID, P.Name).Update(P.Status).Exec(ctx) // a tenant-safe upsert
 
-report := velox.AllTenants(ctx, "weekly status report") // unscoped, with a reason
+report := velox.WithAllTenants(ctx, "weekly status report") // unscoped, with a reason
 ```
 
 It fails closed:
 
 | What | Error |
 |---|---|
-| no `WithTenant` or `AllTenants` (or `AllTenants` with no reason) | `velox.ErrNoTenant` |
+| no `WithTenant` or `WithAllTenants` (or `WithAllTenants` with no reason) | `velox.ErrNoTenant` |
 | `WithTenant(ctx, 1)`: an `int`, not the column's `int64` | `velox.ErrTenantMismatch` |
 | inserting a row whose `OrgID` names another tenant | `velox.ErrTenantMismatch` |
 | `Set` of the tenant column to another tenant | `velox.ErrTenantImmutable` |

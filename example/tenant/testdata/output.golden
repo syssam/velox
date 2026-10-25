@@ -11,8 +11,8 @@ insert for org 2 as org 1: ErrTenantMismatch=true
 move a row to org 2: ErrTenantImmutable=true
 upsert on (name): ErrTenantUpsert=true
 upsert on (org_id, name): INSERT INTO "projects" ("org_id", "name", "status") VALUES (?, ?, ?) ON CONFLICT ("org_id", "name") DO UPDATE SET "status" = EXCLUDED."status" RETURNING "id"
-AllTenants: org 1 Anvil active
-AllTenants: org 1 Magnet paused
-AllTenants: org 1 Rocket done
-AllTenants: org 2 Rocket active
-AllTenants with no reason: ErrNoTenant=true
+WithAllTenants: org 1 Anvil active
+WithAllTenants: org 1 Magnet paused
+WithAllTenants: org 1 Rocket done
+WithAllTenants: org 2 Rocket active
+WithAllTenants with no reason: ErrNoTenant=true

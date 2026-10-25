@@ -52,9 +52,9 @@ func ownerDesc() velox.Desc[owner] {
 		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}, {Field: "Age", Name: "age"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Relations:  []velox.Relation{velox.EdgeTo[child]("Children", 0, 1), velox.EdgeThrough[ownerTag, tag]("Tags", 0, 0, 1, 0)},
+		Edges:      []velox.EdgeDesc{velox.EdgeTo[child]("Children", 0, 1), velox.EdgeThrough[ownerTag, tag]("Tags", 0, 0, 1, 0)},
 		Addr:       func(x *owner, i int) any { return [...]any{&x.ID, &x.Name, &x.Age}[i] },
-		RelAddr: func(x *owner, i int) any {
+		EdgeAddr: func(x *owner, i int) any {
 			switch i {
 			case 0:
 				return &x.Children
@@ -97,9 +97,9 @@ func childDesc() velox.Desc[child] {
 		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "OwnerID", Name: "owner_id"}, {Field: "Title", Name: "title"}, {Field: "EditorID", Name: "editor_id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Relations:  []velox.Relation{velox.EdgeTo[owner]("Owner", 1, 0), velox.EdgeTo[owner]("Editor", 3, 0)},
+		Edges:      []velox.EdgeDesc{velox.EdgeTo[owner]("Owner", 1, 0), velox.EdgeTo[owner]("Editor", 3, 0)},
 		Addr:       func(x *child, i int) any { return [...]any{&x.ID, &x.OwnerID, &x.Title, &x.EditorID}[i] },
-		RelAddr: func(x *child, i int) any {
+		EdgeAddr: func(x *child, i int) any {
 			switch i {
 			case 0:
 				return &x.Owner
@@ -583,8 +583,8 @@ func TestEdgeScopes(t *testing.T) {
 		scope func(context.Context, string) context.Context
 		loads int
 	}{
-		{"SkipPolicy", func(ctx context.Context, s string) context.Context { return velox.SkipPolicy(ctx, s) }, 2},
-		{"OnShard", velox.OnShard, 2},
+		{"WithoutPolicy", func(ctx context.Context, s string) context.Context { return velox.WithoutPolicy(ctx, s) }, 2},
+		{"WithShard", velox.WithShard, 2},
 		// A tenant id == cannot compare: no panic, and a read of its own.
 		{"incomparable tenant", func(ctx context.Context, s string) context.Context { return velox.WithTenant(ctx, []byte(s)) }, 3},
 		// A comparable type whose value is not (the review's M2): the same.

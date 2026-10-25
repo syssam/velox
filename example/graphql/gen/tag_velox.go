@@ -8,7 +8,7 @@ import (
 	"github.com/syssam/velox2"
 )
 
-const _ = velox.GeneratedCodeIsVersion4
+const _ = velox.GeneratedCodeIsVersion5
 
 // Tag is the entity of schema Tag.
 type Tag struct {
@@ -49,7 +49,7 @@ func tagDesc() velox.Desc[Tag] {
 		Indexes: []velox.IndexInfo{
 			{Columns: []int{1}, Unique: true},
 		},
-		Relations: []velox.Relation{
+		Edges: []velox.EdgeDesc{
 			velox.EdgeThrough[PostTag, Post]("Posts", 0, 1, 0, 0),
 		},
 		Addr: func(x *Tag, i int) any {
@@ -63,7 +63,7 @@ func tagDesc() velox.Desc[Tag] {
 			}
 			return nil
 		},
-		RelAddr: func(x *Tag, i int) any {
+		EdgeAddr: func(x *Tag, i int) any {
 			switch i {
 			case 0:
 				return &x.Posts

@@ -80,9 +80,9 @@ func lzTaskDesc() velox.Desc[lzTask] {
 		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "ProjectID", Name: "project_id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Relations:  []velox.Relation{velox.EdgeTo[lzProject]("Project", 1, 0)},
+		Edges:      []velox.EdgeDesc{velox.EdgeTo[lzProject]("Project", 1, 0)},
 		Addr:       func(x *lzTask, i int) any { return [...]any{&x.ID, &x.ProjectID}[i] },
-		RelAddr:    func(x *lzTask, i int) any { return &x.Project },
+		EdgeAddr:   func(x *lzTask, i int) any { return &x.Project },
 	}
 }
 
@@ -156,9 +156,9 @@ func lzRaceDesc() velox.Desc[lzRace] {
 		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "ProjectID", Name: "project_id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Relations:  []velox.Relation{velox.EdgeTo[lzProject]("Project", 1, 0)},
+		Edges:      []velox.EdgeDesc{velox.EdgeTo[lzProject]("Project", 1, 0)},
 		Addr:       func(x *lzRace, i int) any { return [...]any{&x.ID, &x.ProjectID}[i] },
-		RelAddr:    func(x *lzRace, i int) any { return &x.Project },
+		EdgeAddr:   func(x *lzRace, i int) any { return &x.Project },
 	}
 }
 
@@ -234,9 +234,9 @@ func (*lzLate) VeloxMeta() *velox.Meta[lzLate] {
 			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
-			Relations:  []velox.Relation{velox.EdgeTo[badDesc]("Bad", 0, 0)},
+			Edges:      []velox.EdgeDesc{velox.EdgeTo[badDesc]("Bad", 0, 0)},
 			Addr:       func(x *lzLate, i int) any { return &x.ID },
-			RelAddr:    func(x *lzLate, i int) any { return &x.Bad },
+			EdgeAddr:   func(x *lzLate, i int) any { return &x.Bad },
 		}
 	})
 }
@@ -476,9 +476,9 @@ func (*mmA) VeloxMeta() *velox.Meta[mmA] {
 	return mmAMeta.Load(func() velox.Desc[mmA] {
 		return velox.Desc[mmA]{
 			Table: "mm_as", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
-			Relations: []velox.Relation{velox.EdgeTo[mmItem]("Items", 0, 1)},
-			Addr:      func(x *mmA, i int) any { return &x.ID },
-			RelAddr:   func(x *mmA, i int) any { return &x.Items },
+			Edges:    []velox.EdgeDesc{velox.EdgeTo[mmItem]("Items", 0, 1)},
+			Addr:     func(x *mmA, i int) any { return &x.ID },
+			EdgeAddr: func(x *mmA, i int) any { return &x.Items },
 		}
 	})
 }
@@ -487,9 +487,9 @@ func (*mmB) VeloxMeta() *velox.Meta[mmB] {
 	return mmBMeta.Load(func() velox.Desc[mmB] {
 		return velox.Desc[mmB]{
 			Table: "mm_bs", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
-			Relations: []velox.Relation{velox.EdgeTo[mmItem]("Items", 0, 1)},
-			Addr:      func(x *mmB, i int) any { return &x.ID },
-			RelAddr:   func(x *mmB, i int) any { return &x.Items },
+			Edges:    []velox.EdgeDesc{velox.EdgeTo[mmItem]("Items", 0, 1)},
+			Addr:     func(x *mmB, i int) any { return &x.ID },
+			EdgeAddr: func(x *mmB, i int) any { return &x.Items },
 		}
 	})
 }
@@ -534,9 +534,9 @@ func (*mmE) VeloxMeta() *velox.Meta[mmE] {
 	return mmEMeta.Load(func() velox.Desc[mmE] {
 		return velox.Desc[mmE]{
 			Table: "mm_es", Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}}, PrimaryKey: []int{0}, Tenant: -1,
-			Relations: []velox.Relation{velox.EdgeTo[mmItem]("Items", 0, 1), velox.EdgeTo[mmItem]("More", 0, 1)},
-			Addr:      func(x *mmE, i int) any { return &x.ID },
-			RelAddr: func(x *mmE, i int) any {
+			Edges: []velox.EdgeDesc{velox.EdgeTo[mmItem]("Items", 0, 1), velox.EdgeTo[mmItem]("More", 0, 1)},
+			Addr:  func(x *mmE, i int) any { return &x.ID },
+			EdgeAddr: func(x *mmE, i int) any {
 				if i == 0 {
 					return &x.Items
 				}

@@ -8,7 +8,7 @@ import (
 	"github.com/syssam/velox2"
 )
 
-const _ = velox.GeneratedCodeIsVersion4
+const _ = velox.GeneratedCodeIsVersion5
 
 // Ticket is the entity of schema Ticket.
 type Ticket struct {
@@ -74,7 +74,7 @@ func ticketDesc() velox.Desc[Ticket] {
 		Indexes: []velox.IndexInfo{
 			{Columns: []int{2, 4}, Unique: true},
 		},
-		Relations: []velox.Relation{
+		Edges: []velox.EdgeDesc{
 			velox.EdgeTo[Invoice]("Invoice", 6, 0),
 			velox.EdgeTo[Ticket]("Parent", 7, 0),
 		},
@@ -99,7 +99,7 @@ func ticketDesc() velox.Desc[Ticket] {
 			}
 			return nil
 		},
-		RelAddr: func(x *Ticket, i int) any {
+		EdgeAddr: func(x *Ticket, i int) any {
 			switch i {
 			case 0:
 				return &x.Invoice

@@ -369,9 +369,9 @@ func (in UpdateCategoryInput) GoString() string { return in.String() }
 // NOT_FOUND and keeps nothing. A validator's refusal is BAD_USER_INPUT, naming
 // the input field, and comes before any statement; velox's other errors are
 // returned as they are. The row is read back as written, under the tenant scope
-// and without the Read policy (velox.SkipPolicy): an update that takes the row
-// out of what the caller may read still returns it. On MySQL the UPDATE's row
-// count needs clientFoundRows=true, as velox's Update does. There is no
+// and without the Read policy (velox.WithoutPolicy): an update that takes the
+// row out of what the caller may read still returns it. On MySQL the UPDATE's
+// row count needs clientFoundRows=true, as velox's Update does. There is no
 // savepoint inside the extension's transaction, so a resolver must return this
 // function's error.
 func UpdateCategory(ctx context.Context, id string, input UpdateCategoryInput) (*Category, error) {
@@ -459,7 +459,7 @@ func UpdateCategory(ctx context.Context, id string, input UpdateCategoryInput) (
 				return err
 			}
 		}
-		x, err := db.Query[Category]().Where(Categories.ID.EQ(key)).One(velox.SkipPolicy(ctx, "graphql: the row this update wrote"))
+		x, err := db.Query[Category]().Where(Categories.ID.EQ(key)).One(velox.WithoutPolicy(ctx, "graphql: the row this update wrote"))
 		if errors.Is(err, velox.ErrNotFound) {
 			return gqlimpl.NotFound("updateCategory", "Category")
 		}

@@ -15,7 +15,7 @@ func (*Invoice) Policy() velox.Policy[Invoice] {
 		// Accountants see every invoice of their organization; viewers see
 		// only the ones that were sent.
 		Read: func(ctx context.Context) (velox.Pred[Invoice], error) {
-			switch RoleOf(ctx) {
+			switch RoleFromContext(ctx) {
 			case Accountant:
 				return velox.Allow[Invoice](), nil
 			case Viewer:

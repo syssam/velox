@@ -259,7 +259,7 @@
 // caller's (a forceResolver that computes them per row).
 //
 // A batch is read under its first caller's context. Its key holds the
-// callers' row scope (velox.RowScopeOf: the tenant, a bypass, the shard),
+// callers' row scope (velox.RowScopeFromContext: the tenant, a bypass, the shard),
 // the DB and a list edge's MaxList, so callers that differ in them never
 // share a read.
 // Any other context value a Read policy or a Rewrite or Around hook reads,

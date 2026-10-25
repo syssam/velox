@@ -54,7 +54,7 @@ func dAuthorDesc() velox.Desc[dAuthor] {
 		},
 		PrimaryKey: []int{0},
 		Tenant:     1,
-		Relations:  []velox.Relation{velox.EdgeTo[dBook]("Books", 0, 1)},
+		Edges:      []velox.EdgeDesc{velox.EdgeTo[dBook]("Books", 0, 1)},
 		Addr: func(x *dAuthor, i int) any {
 			switch i {
 			case 0:
@@ -70,7 +70,7 @@ func dAuthorDesc() velox.Desc[dAuthor] {
 			}
 			return nil
 		},
-		RelAddr: func(x *dAuthor, i int) any {
+		EdgeAddr: func(x *dAuthor, i int) any {
 			if i == 0 {
 				return &x.Books
 			}
@@ -131,7 +131,7 @@ func dBookDesc() velox.Desc[dBook] {
 		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "AuthorID", Name: "author_id"}, {Field: "Title", Name: "title"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Relations: []velox.Relation{
+		Edges: []velox.EdgeDesc{
 			velox.EdgeTo[dAuthor]("Author", 1, 0),
 			velox.EdgeThrough[dBookTag, dTag]("Tags", 0, 0, 1, 0),
 			velox.EdgeThrough[dPick, dTag]("Picks", 0, 0, 1, 0),
@@ -147,7 +147,7 @@ func dBookDesc() velox.Desc[dBook] {
 			}
 			return nil
 		},
-		RelAddr: func(x *dBook, i int) any {
+		EdgeAddr: func(x *dBook, i int) any {
 			switch i {
 			case 0:
 				return &x.Author
@@ -186,7 +186,7 @@ func dTagDesc() velox.Desc[dTag] {
 		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},
 		Tenant:     1,
-		Relations:  []velox.Relation{velox.EdgeThrough[dBookTag, dBook]("Books", 0, 1, 0, 0)},
+		Edges:      []velox.EdgeDesc{velox.EdgeThrough[dBookTag, dBook]("Books", 0, 1, 0, 0)},
 		Addr: func(x *dTag, i int) any {
 			switch i {
 			case 0:
@@ -198,7 +198,7 @@ func dTagDesc() velox.Desc[dTag] {
 			}
 			return nil
 		},
-		RelAddr: func(x *dTag, i int) any {
+		EdgeAddr: func(x *dTag, i int) any {
 			if i == 0 {
 				return &x.Books
 			}

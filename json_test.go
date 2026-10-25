@@ -111,9 +111,9 @@ func (*jOwner) VeloxMeta() *velox.Meta[jOwner] {
 			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
-			Relations:  []velox.Relation{velox.EdgeTo[jDoc]("Docs", 0, 1)},
+			Edges:      []velox.EdgeDesc{velox.EdgeTo[jDoc]("Docs", 0, 1)},
 			Addr:       func(x *jOwner, i int) any { return &x.ID },
-			RelAddr:    func(x *jOwner, i int) any { return &x.Docs },
+			EdgeAddr:   func(x *jOwner, i int) any { return &x.Docs },
 		}
 	})
 }
@@ -912,11 +912,11 @@ func jKeyDesc(tenant int, codec ...int) velox.Desc[jKey] {
 	}
 	return velox.Desc[jKey]{
 		Table: "j_keys", Columns: cols, PrimaryKey: []int{0}, Tenant: tenant,
-		Relations: []velox.Relation{velox.EdgeTo[jKid]("Kids", 2, 1)},
+		Edges: []velox.EdgeDesc{velox.EdgeTo[jKid]("Kids", 2, 1)},
 		Addr: func(x *jKey, i int) any {
 			return [...]any{&x.ID, &x.Org, &x.Parent}[i]
 		},
-		RelAddr: func(x *jKey, i int) any { return &x.Kids },
+		EdgeAddr: func(x *jKey, i int) any { return &x.Kids },
 	}
 }
 

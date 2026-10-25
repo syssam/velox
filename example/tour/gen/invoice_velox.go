@@ -11,7 +11,7 @@ import (
 	sch "github.com/syssam/velox2/example/tour/schema"
 )
 
-const _ = velox.GeneratedCodeIsVersion4
+const _ = velox.GeneratedCodeIsVersion5
 
 // Invoice is the entity of schema Invoice.
 type Invoice struct {
@@ -77,7 +77,7 @@ func invoiceDesc() velox.Desc[Invoice] {
 		Indexes: []velox.IndexInfo{
 			{Columns: []int{3, 4}, Unique: true},
 		},
-		Relations: []velox.Relation{
+		Edges: []velox.EdgeDesc{
 			velox.EdgeTo[Line]("Lines", 0, 2),
 		},
 		Addr: func(x *Invoice, i int) any {
@@ -101,7 +101,7 @@ func invoiceDesc() velox.Desc[Invoice] {
 			}
 			return nil
 		},
-		RelAddr: func(x *Invoice, i int) any {
+		EdgeAddr: func(x *Invoice, i int) any {
 			switch i {
 			case 0:
 				return &x.Lines

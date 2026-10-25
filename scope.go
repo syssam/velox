@@ -11,7 +11,7 @@ import (
 // scope applies the context's tenant and the entities' policies to a statement.
 // On a tenant-scoped entity it adds the condition tenant = id, or fails the
 // statement with ErrNoTenant when the context has neither WithTenant nor
-// AllTenants. Unless the context says SkipPolicy, a SELECT gets the entity's
+// WithAllTenants. Unless the context says WithoutPolicy, a SELECT gets the entity's
 // Read policy and an UPDATE or DELETE, or a Writable SELECT, its Read and
 // Write policies, after the tenant. Every EXISTS gets its target's tenant
 // and Read policy the same way. scope runs after the guard and the Rewrite
@@ -111,7 +111,7 @@ func (db *DB) scopeInsert(ctx context.Context, st *Statement) error {
 	}
 	pol := in.policy
 	if pol != nil && pol.insert != nil {
-		sc.policyOn() // records a SkipPolicy that insertAllowed obeyed
+		sc.policyOn() // records a WithoutPolicy that insertAllowed obeyed
 	}
 	if cf := st.Conflict; cf != nil && !cf.DoNothing && len(cf.Update) > 0 {
 		if tenant {
@@ -251,7 +251,7 @@ func columnNames(in *EntityInfo, cols []int) string {
 	return b.String()
 }
 
-// scoper is one statement's scope: the context's tenant and SkipPolicy,
+// scoper is one statement's scope: the context's tenant and WithoutPolicy,
 // looked up when an entity first needs them, and the Read conditions made so
 // far.
 type scoper struct {
@@ -260,11 +260,11 @@ type scoper struct {
 
 	tenantRead bool   // id and all are looked up
 	id         any    // the context's tenant; nil when none
-	all        string // the AllTenants reason
+	all        string // the WithAllTenants reason
 	scoped     bool   // an entity of the statement is tenant-scoped
 
 	skipRead bool   // skip is looked up
-	skip     string // the SkipPolicy reason
+	skip     string // the WithoutPolicy reason
 	skipped  bool   // a policy that would have applied was skipped
 
 	reads     []readCond
@@ -279,7 +279,7 @@ type readCond struct {
 
 // tenantOf reports whether entity t's rows get the tenant condition: whether
 // t is tenant-scoped and the context has a tenant of t's type. It fails when
-// t is scoped and the context has neither a tenant nor AllTenants.
+// t is scoped and the context has neither a tenant nor WithAllTenants.
 func (sc *scoper) tenantOf(t *EntityInfo) (bool, error) {
 	if t.Tenant < 0 {
 		return false, nil
@@ -298,7 +298,7 @@ func (sc *scoper) tenantOf(t *EntityInfo) (bool, error) {
 	return true, checkTenantValue(t, sc.id)
 }
 
-// policyOn reports whether a policy applies: false under SkipPolicy, which
+// policyOn reports whether a policy applies: false under WithoutPolicy, which
 // is then recorded as applied.
 func (sc *scoper) policyOn() bool {
 	if !sc.skipRead {

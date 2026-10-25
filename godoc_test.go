@@ -79,8 +79,8 @@ func TestGodocCitesNoSpec(t *testing.T) {
 // documentation lists under "Generated code" open their documentation with
 // "For generated code.", and the section names each of them as a whole word.
 func TestGeneratedOnlyAPIIsMarked(t *testing.T) {
-	names := []string{"Desc", "ColumnDesc", "Relation", "EdgeTo", "EdgeThrough", "Meta", "MetaOnce",
-		"BindPolicy", "BindHooks", "BoundPolicy", "BoundHooks", "Lazy", "Validate", "ValidateSet", "GeneratedCodeIsVersion4"}
+	names := []string{"Desc", "ColumnDesc", "EdgeDesc", "EdgeTo", "EdgeThrough", "Meta", "MetaOnce",
+		"BindPolicy", "BindHooks", "BoundPolicy", "BoundHooks", "Lazy", "Validate", "ValidateSet", "GeneratedCodeIsVersion5"}
 	listed := map[string]bool{}
 	for _, n := range names {
 		listed[n] = true

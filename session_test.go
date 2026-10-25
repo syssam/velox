@@ -115,12 +115,12 @@ func TestSessionsAreIndependent(t *testing.T) {
 // Primary and a session share one context key: each keeps the other's mark.
 func TestSessionAndPrimaryMarksCompose(t *testing.T) {
 	s := seeded(true)
-	sctx := velox.ReadPrimary(velox.WithSession(ctx))
+	sctx := velox.WithPrimaryReads(velox.WithSession(ctx))
 	writeOne(t, s.db, sctx)
 	if u := velox.PinnedUntil(sctx); u.IsZero() {
 		t.Error("the session under Primary is lost")
 	}
-	pctx := velox.WithSession(velox.ReadPrimary(ctx))
+	pctx := velox.WithSession(velox.WithPrimaryReads(ctx))
 	readOne(t, s.db, pctx)
 	s.check(t, true, [3]int{2, 0, 0}, onPrimary, onPrimary)
 }

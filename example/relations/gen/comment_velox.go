@@ -8,7 +8,7 @@ import (
 	"github.com/syssam/velox2"
 )
 
-const _ = velox.GeneratedCodeIsVersion4
+const _ = velox.GeneratedCodeIsVersion5
 
 // Comment is the entity of schema Comment.
 type Comment struct {
@@ -46,7 +46,7 @@ func commentDesc() velox.Desc[Comment] {
 		},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Relations: []velox.Relation{
+		Edges: []velox.EdgeDesc{
 			velox.EdgeTo[Post]("Post", 1, 0),
 		},
 		Addr: func(x *Comment, i int) any {
@@ -60,7 +60,7 @@ func commentDesc() velox.Desc[Comment] {
 			}
 			return nil
 		},
-		RelAddr: func(x *Comment, i int) any {
+		EdgeAddr: func(x *Comment, i int) any {
 			switch i {
 			case 0:
 				return &x.Post

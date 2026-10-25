@@ -124,11 +124,11 @@ func rowDesc() velox.Desc[dRow] {
 		PrimaryKey: []int{0},
 		Tenant:     -1,
 		Indexes:    []velox.IndexInfo{{Columns: []int{3}, Unique: true}},
-		Relations:  []velox.Relation{velox.EdgeTo[dAuthor]("Author", 0, 0)},
+		Edges:      []velox.EdgeDesc{velox.EdgeTo[dAuthor]("Author", 0, 0)},
 		Addr: func(x *dRow, i int) any {
 			return [...]any{&x.ID, &x.Flag, &x.Opt, &x.Name}[i]
 		},
-		RelAddr: func(x *dRow, i int) any { return &x.Author },
+		EdgeAddr: func(x *dRow, i int) any { return &x.Author },
 	}
 }
 
@@ -208,24 +208,24 @@ func TestDescRefusals(t *testing.T) {
 		{"panic in Addr", func(d *velox.Desc[dRow]) {
 			d.Addr = func(x *dRow, i int) any { panic("addr") }
 		}, "the generated metadata panicked: addr"},
-		{"no RelAddr", func(d *velox.Desc[dRow]) { d.RelAddr = nil }, "has relations but no RelAddr"},
-		{"RelAddr gives a column", func(d *velox.Desc[dRow]) {
-			d.RelAddr = func(x *dRow, i int) any { return &x.ID }
-		}, "dRow.Author: RelAddr does not return a *One[T] or *Many[T]"},
+		{"no EdgeAddr", func(d *velox.Desc[dRow]) { d.EdgeAddr = nil }, "has relations but no EdgeAddr"},
+		{"EdgeAddr gives a column", func(d *velox.Desc[dRow]) {
+			d.EdgeAddr = func(x *dRow, i int) any { return &x.ID }
+		}, "dRow.Author: EdgeAddr does not return a *One[T] or *Many[T]"},
 		{"relation not from EdgeTo", func(d *velox.Desc[dRow]) {
-			d.Relations = []velox.Relation{{}} // a literal, not made by EdgeTo
+			d.Edges = []velox.EdgeDesc{{}} // a literal, not made by EdgeTo
 		}, "relation 0 was not made by EdgeTo or EdgeThrough"},
 		{"EdgeTo owner column out of range", func(d *velox.Desc[dRow]) {
-			d.Relations = []velox.Relation{velox.EdgeTo[dAuthor]("Author", 9, 0)}
+			d.Edges = []velox.EdgeDesc{velox.EdgeTo[dAuthor]("Author", 9, 0)}
 		}, "dRow.Author: its key names column 9 of velox_test.dRow, which has 4"},
 		{"EdgeTo target column out of range", func(d *velox.Desc[dRow]) {
-			d.Relations = []velox.Relation{velox.EdgeTo[dAuthor]("Author", 0, 5)}
+			d.Edges = []velox.EdgeDesc{velox.EdgeTo[dAuthor]("Author", 0, 5)}
 		}, "its key names column 5 of velox_test.dAuthor, which has 5"},
 		{"EdgeTo key types differ", func(d *velox.Desc[dRow]) {
-			d.Relations = []velox.Relation{velox.EdgeTo[dAuthor]("Author", 3, 0)}
+			d.Edges = []velox.EdgeDesc{velox.EdgeTo[dAuthor]("Author", 3, 0)}
 		}, "the key types differ"},
 		{"EdgeThrough on a One", func(d *velox.Desc[dRow]) {
-			d.Relations = []velox.Relation{velox.EdgeThrough[dBook, dAuthor]("Author", 0, 0, 1, 0)}
+			d.Edges = []velox.EdgeDesc{velox.EdgeThrough[dBook, dAuthor]("Author", 0, 0, 1, 0)}
 		}, "dRow.Author: a many-to-many relation needs a Many field"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -249,10 +249,10 @@ func TestEdgeToHolderMismatch(t *testing.T) {
 		want string
 	}{
 		{"EdgeTo at a One of another entity", func(d *velox.Desc[dRow]) {
-			d.Relations = []velox.Relation{velox.EdgeTo[dBook]("Author", 0, 0)}
+			d.Edges = []velox.EdgeDesc{velox.EdgeTo[dBook]("Author", 0, 0)}
 		}, "velox: velox_test.dRow.Author: relation Author is a velox.One[github.com/syssam/velox2_test.dAuthor], not a One or Many of github.com/syssam/velox2_test.dBook"},
 		{"EdgeThrough at a One of another entity", func(d *velox.Desc[dRow]) {
-			d.Relations = []velox.Relation{velox.EdgeThrough[dBookTag, dBook]("Author", 0, 0, 1, 0)}
+			d.Edges = []velox.EdgeDesc{velox.EdgeThrough[dBookTag, dBook]("Author", 0, 0, 1, 0)}
 		}, "velox: velox_test.dRow.Author: relation Author is a velox.One[github.com/syssam/velox2_test.dAuthor], not a One or Many of github.com/syssam/velox2_test.dBook"},
 	} {
 		t.Run(c.name, func(t *testing.T) {

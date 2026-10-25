@@ -141,7 +141,7 @@ func (c *EachClause) windowed(in *EntityInfo) bool { return c.Limit > 0 && !c.ke
 // see it, and its SQL, Args and Fingerprint are set when it is made. Its
 // Entity is the entity Raw scans into, or for Exec an EntityInfo named "Exec"
 // with no table or columns. Its TenantBypass and PolicyBypass both hold the
-// caller's reason, as given, untrimmed (so does an AllTenants or SkipPolicy
+// caller's reason, as given, untrimmed (so does a WithAllTenants or WithoutPolicy
 // reason).
 //
 // The EntityInfo that Entity points to is shared by every query on the
@@ -171,8 +171,8 @@ type Statement struct {
 	Returning    []int           // INSERT: columns read back (PostgreSQL and SQLite)
 	AllRows      bool            // UPDATE and DELETE: the statement said All
 	Tenant       any             // the tenant scope applied; nil when unscoped
-	TenantBypass string          // the AllTenants reason, when it applied; raw SQL's reason
-	PolicyBypass string          // the SkipPolicy reason, when it applied; raw SQL's reason
+	TenantBypass string          // the WithAllTenants reason, when it applied; raw SQL's reason
+	PolicyBypass string          // the WithoutPolicy reason, when it applied; raw SQL's reason
 	DryRun       bool            // built for SQL(ctx), not sent
 	InTx         bool
 	Tx           *TxInfo // the transaction the statement runs in, when the DB has hooks; nil otherwise
@@ -191,7 +191,7 @@ type Statement struct {
 	// rendering. Rewrite hooks run before it and see it unset (zero, not
 	// Replica -1); Around hooks, and everything after them, see it set. An
 	// Around hook reads it, with one exception: setting Route.Fallback to true
-	// sends the hook's retry to the primary. Changing ReadPrimary, OnShard or
+	// sends the hook's retry to the primary. Changing WithPrimaryReads, WithShard or
 	// WithSession in the context passed to next does not re-route the
 	// statement, as routing happens before the Around hooks.
 	Route Route

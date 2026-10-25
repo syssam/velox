@@ -8,7 +8,7 @@ import (
 	"github.com/syssam/velox2"
 )
 
-const _ = velox.GeneratedCodeIsVersion4
+const _ = velox.GeneratedCodeIsVersion5
 
 // Line is the entity of schema Line.
 type Line struct {
@@ -55,7 +55,7 @@ func lineDesc() velox.Desc[Line] {
 		},
 		PrimaryKey: []int{0},
 		Tenant:     1,
-		Relations: []velox.Relation{
+		Edges: []velox.EdgeDesc{
 			velox.EdgeTo[Invoice]("Invoice", 2, 0),
 		},
 		Addr: func(x *Line, i int) any {
@@ -73,7 +73,7 @@ func lineDesc() velox.Desc[Line] {
 			}
 			return nil
 		},
-		RelAddr: func(x *Line, i int) any {
+		EdgeAddr: func(x *Line, i int) any {
 			switch i {
 			case 0:
 				return &x.Invoice

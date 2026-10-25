@@ -75,7 +75,7 @@ func pnoteDesc() velox.Desc[pnote] {
 			{Field: "ParentID", Name: "parent_id"}, {Field: "InvoiceID", Name: "invoice_id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Relations:  []velox.Relation{velox.EdgeTo[pnote]("Parent", 3, 0), velox.EdgeTo[testmodel.Invoice]("Invoice", 4, 0)},
+		Edges:      []velox.EdgeDesc{velox.EdgeTo[pnote]("Parent", 3, 0), velox.EdgeTo[testmodel.Invoice]("Invoice", 4, 0)},
 		Addr: func(x *pnote, i int) any {
 			switch i {
 			case 0:
@@ -91,7 +91,7 @@ func pnoteDesc() velox.Desc[pnote] {
 			}
 			return nil
 		},
-		RelAddr: func(x *pnote, i int) any {
+		EdgeAddr: func(x *pnote, i int) any {
 			if i == 0 {
 				return &x.Parent
 			}
@@ -132,14 +132,14 @@ func pboxDesc() velox.Desc[pbox] {
 		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "NoteID", Name: "note_id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Relations:  []velox.Relation{velox.EdgeTo[pnote]("Note", 1, 0)},
+		Edges:      []velox.EdgeDesc{velox.EdgeTo[pnote]("Note", 1, 0)},
 		Addr: func(x *pbox, i int) any {
 			if i == 0 {
 				return &x.ID
 			}
 			return &x.NoteID
 		},
-		RelAddr: func(x *pbox, i int) any { return &x.Note },
+		EdgeAddr: func(x *pbox, i int) any { return &x.Note },
 	}
 }
 
@@ -169,14 +169,14 @@ func pcommentDesc() velox.Desc[pcomment] {
 		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "NoteID", Name: "note_id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Relations:  []velox.Relation{velox.EdgeTo[pnote]("Note", 1, 0)},
+		Edges:      []velox.EdgeDesc{velox.EdgeTo[pnote]("Note", 1, 0)},
 		Addr: func(x *pcomment, i int) any {
 			if i == 0 {
 				return &x.ID
 			}
 			return &x.NoteID
 		},
-		RelAddr: func(x *pcomment, i int) any { return &x.Note },
+		EdgeAddr: func(x *pcomment, i int) any { return &x.Note },
 	}
 }
 
@@ -225,14 +225,14 @@ func pcycADesc() velox.Desc[pcycA] {
 		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "BID", Name: "b_id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Relations:  []velox.Relation{velox.EdgeTo[pcycB]("B", 1, 0)},
+		Edges:      []velox.EdgeDesc{velox.EdgeTo[pcycB]("B", 1, 0)},
 		Addr: func(x *pcycA, i int) any {
 			if i == 0 {
 				return &x.ID
 			}
 			return &x.BID
 		},
-		RelAddr: func(x *pcycA, i int) any { return &x.B },
+		EdgeAddr: func(x *pcycA, i int) any { return &x.B },
 	}
 }
 
@@ -243,14 +243,14 @@ func pcycBDesc() velox.Desc[pcycB] {
 		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "AID", Name: "a_id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Relations:  []velox.Relation{velox.EdgeTo[pcycA]("A", 1, 0)},
+		Edges:      []velox.EdgeDesc{velox.EdgeTo[pcycA]("A", 1, 0)},
 		Addr: func(x *pcycB, i int) any {
 			if i == 0 {
 				return &x.ID
 			}
 			return &x.AID
 		},
-		RelAddr: func(x *pcycB, i int) any { return &x.A },
+		EdgeAddr: func(x *pcycB, i int) any { return &x.A },
 	}
 }
 

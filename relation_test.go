@@ -108,7 +108,7 @@ func TestInvalidTargetIsNamed(t *testing.T) {
 }
 
 // TestEdgeThroughKeepsItsJoin: EdgeThrough names its join entity, which has
-// no relations of its own. EdgeTo and EdgeThrough name no target: a Relation
+// no relations of its own. EdgeTo and EdgeThrough name no target: an EdgeDesc
 // has no field for one, so linking an entity does not link the entities it
 // relates to and, through them, the whole connected model (the use site names
 // the target: Rel; see TestServiceLinksOnlyItsEntities in bench/scale).

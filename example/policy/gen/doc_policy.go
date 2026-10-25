@@ -13,7 +13,7 @@ import (
 func (*Doc) Policy() velox.Policy[Doc] {
 	return velox.Policy[Doc]{
 		Read: func(ctx context.Context) (velox.Pred[Doc], error) {
-			switch u := userOf(ctx); u {
+			switch u := userFromContext(ctx); u {
 			case "":
 				return velox.Pred[Doc]{}, velox.Deny("no user")
 			case "admin":
@@ -24,7 +24,7 @@ func (*Doc) Policy() velox.Policy[Doc] {
 		},
 		// Write filters which rows may change; Read applies too.
 		Write: func(ctx context.Context) (velox.Pred[Doc], error) {
-			switch u := userOf(ctx); u {
+			switch u := userFromContext(ctx); u {
 			case "":
 				return velox.Pred[Doc]{}, velox.Deny("no user")
 			case "admin":
@@ -35,7 +35,7 @@ func (*Doc) Policy() velox.Policy[Doc] {
 		},
 		// Insert checks each new row.
 		Insert: func(ctx context.Context, x *Doc) error {
-			if u := userOf(ctx); u != "admin" && u != x.Owner {
+			if u := userFromContext(ctx); u != "admin" && u != x.Owner {
 				return velox.Deny("a doc must be created by its owner")
 			}
 			return nil

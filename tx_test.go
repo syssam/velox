@@ -584,7 +584,7 @@ func TestWithoutTx(t *testing.T) {
 			t.Errorf("tags %v, want %v", got, want)
 		}
 		if id, all := velox.TenantOf(free); id != nil || all == "" {
-			t.Errorf("tenant %v, %q: the AllTenants of the caller's ctx is lost", id, all)
+			t.Errorf("tenant %v, %q: the WithAllTenants of the caller's ctx is lost", id, all)
 		}
 		if a, _ := free.Deadline(); !a.Equal(func() time.Time { d, _ := ctx.Deadline(); return d }()) {
 			t.Errorf("deadline %v", a)

@@ -10,19 +10,19 @@ import (
 // userKey is the context key of the user the tests act as.
 type userKey struct{}
 
-// AsUser returns ctx acting as user; "admin" sees and changes every ticket.
-func AsUser(ctx context.Context, user string) context.Context {
+// WithUser returns ctx acting as user; "admin" sees and changes every ticket.
+func WithUser(ctx context.Context, user string) context.Context {
 	return context.WithValue(ctx, userKey{}, user)
 }
 
-func userOf(ctx context.Context) string { u, _ := ctx.Value(userKey{}).(string); return u }
+func userFromContext(ctx context.Context) string { u, _ := ctx.Value(userKey{}).(string); return u }
 
 // Policy lets a user see and change only their own tickets, and create only
 // tickets they own; "admin" sees, changes and creates every ticket. velox
 // calls it once, on a nil *Ticket.
 func (*Ticket) Policy() velox.Policy[Ticket] {
 	own := func(ctx context.Context) (velox.Pred[Ticket], error) {
-		switch u := userOf(ctx); u {
+		switch u := userFromContext(ctx); u {
 		case "":
 			return velox.Pred[Ticket]{}, velox.Deny("no user")
 		case "admin":
@@ -35,7 +35,7 @@ func (*Ticket) Policy() velox.Policy[Ticket] {
 		Read:  own,
 		Write: own,
 		Insert: func(ctx context.Context, x *Ticket) error {
-			if u := userOf(ctx); u != "admin" && u != x.Owner {
+			if u := userFromContext(ctx); u != "admin" && u != x.Owner {
 				return velox.Deny("a ticket must be created by its owner")
 			}
 			return nil
@@ -59,7 +59,7 @@ func stamp(next velox.Mutator[Ticket]) velox.Mutator[Ticket] {
 	return velox.MutateFunc[Ticket](func(ctx context.Context, m *velox.Mutation[Ticket]) error {
 		for _, x := range m.Rows() {
 			if x.CreatedBy == "" {
-				x.CreatedBy = userOf(ctx)
+				x.CreatedBy = userFromContext(ctx)
 			}
 		}
 		return next.Mutate(ctx, m)

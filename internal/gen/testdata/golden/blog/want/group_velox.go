@@ -9,7 +9,7 @@ import (
 	"github.com/syssam/velox2"
 )
 
-const _ = velox.GeneratedCodeIsVersion4
+const _ = velox.GeneratedCodeIsVersion5
 
 // Group is the entity of schema Group.
 type Group struct {
@@ -48,7 +48,7 @@ func groupDesc() velox.Desc[Group] {
 		},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Relations: []velox.Relation{
+		Edges: []velox.EdgeDesc{
 			velox.EdgeThrough[UserGroup, User]("Users", 0, 1, 0, 0),
 		},
 		Addr: func(x *Group, i int) any {
@@ -62,7 +62,7 @@ func groupDesc() velox.Desc[Group] {
 			}
 			return nil
 		},
-		RelAddr: func(x *Group, i int) any {
+		EdgeAddr: func(x *Group, i int) any {
 			switch i {
 			case 0:
 				return &x.Users

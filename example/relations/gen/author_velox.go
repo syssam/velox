@@ -8,7 +8,7 @@ import (
 	"github.com/syssam/velox2"
 )
 
-const _ = velox.GeneratedCodeIsVersion4
+const _ = velox.GeneratedCodeIsVersion5
 
 // Author is the entity of schema Author.
 type Author struct {
@@ -42,7 +42,7 @@ func authorDesc() velox.Desc[Author] {
 		},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Relations: []velox.Relation{
+		Edges: []velox.EdgeDesc{
 			velox.EdgeTo[Post]("Posts", 0, 1),
 		},
 		Addr: func(x *Author, i int) any {
@@ -54,7 +54,7 @@ func authorDesc() velox.Desc[Author] {
 			}
 			return nil
 		},
-		RelAddr: func(x *Author, i int) any {
+		EdgeAddr: func(x *Author, i int) any {
 			switch i {
 			case 0:
 				return &x.Posts

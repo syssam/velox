@@ -10,7 +10,7 @@ import (
 	"github.com/syssam/velox2/internal/testmodel/kind"
 )
 
-const _ = velox.GeneratedCodeIsVersion4
+const _ = velox.GeneratedCodeIsVersion5
 
 // Sample is the entity of schema Sample.
 type Sample struct {
@@ -91,7 +91,7 @@ func sampleDesc() velox.Desc[Sample] {
 		},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Relations: []velox.Relation{
+		Edges: []velox.EdgeDesc{
 			velox.EdgeTo[Line]("Lines", 0, 1),
 			velox.EdgeTo[Sample]("Parent", 11, 0),
 		},
@@ -126,7 +126,7 @@ func sampleDesc() velox.Desc[Sample] {
 			}
 			return nil
 		},
-		RelAddr: func(x *Sample, i int) any {
+		EdgeAddr: func(x *Sample, i int) any {
 			switch i {
 			case 0:
 				return &x.Lines

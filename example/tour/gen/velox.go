@@ -5,7 +5,7 @@ package gen
 import "github.com/syssam/velox2"
 
 // Model: sha256:c58bb2a67c863cb78ceba990614f88affcf8e13878c636f5d4648388bebce9c3
-const _ = velox.GeneratedCodeIsVersion4
+const _ = velox.GeneratedCodeIsVersion5
 
 // InvoiceStatus is an enum of the model.
 type InvoiceStatus string

@@ -127,16 +127,16 @@ func run(ctx context.Context, w io.Writer) error {
 		return err
 	}
 
-	// AllTenants lifts the scope for one context and needs a reason, which
+	// WithAllTenants lifts the scope for one context and needs a reason, which
 	// hooks see as Statement.TenantBypass. An empty reason is ignored.
-	report := velox.AllTenants(ctx, "weekly status report")
+	report := velox.WithAllTenants(ctx, "weekly status report")
 	for p, err := range db.Query[gen.Project]().OrderBy(P.OrgID.Asc(), P.Name.Asc()).Unbounded().Iter(report) {
 		if err != nil {
 			return err
 		}
-		say("AllTenants: org %d %s %s", p.OrgID, p.Name, p.Status)
+		say("WithAllTenants: org %d %s %s", p.OrgID, p.Name, p.Status)
 	}
-	_, err = db.Query[gen.Project]().Count(velox.AllTenants(ctx, ""))
-	say("AllTenants with no reason: ErrNoTenant=%t", errors.Is(err, velox.ErrNoTenant))
+	_, err = db.Query[gen.Project]().Count(velox.WithAllTenants(ctx, ""))
+	say("WithAllTenants with no reason: ErrNoTenant=%t", errors.Is(err, velox.ErrNoTenant))
 	return nil
 }

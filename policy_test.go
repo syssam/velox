@@ -17,7 +17,7 @@ func asUser(user string) context.Context {
 	if user == "" {
 		return ctx
 	}
-	return testmodel.AsUser(ctx, user)
+	return testmodel.WithUser(ctx, user)
 }
 
 func TestPolicyReadPredicate(t *testing.T) {
@@ -152,11 +152,11 @@ func TestPolicyInsideHasOfAnEntityWithout(t *testing.T) {
 		t.Errorf("%d denied statements sent", e.Calls-calls)
 	}
 
-	if _, err := q.All(velox.SkipPolicy(context.Background(), "support")); err != nil {
+	if _, err := q.All(velox.WithoutPolicy(context.Background(), "support")); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(e.SQL, "owner") || seen.PolicyBypass != "support" {
-		t.Errorf("SkipPolicy: %s, PolicyBypass %q", e.SQL, seen.PolicyBypass)
+		t.Errorf("WithoutPolicy: %s, PolicyBypass %q", e.SQL, seen.PolicyBypass)
 	}
 }
 
@@ -198,7 +198,7 @@ func TestPolicyCalledOncePerStatement(t *testing.T) {
 		return err
 	})
 	count("skipped", 0, 0, func() error {
-		_, err := db.Update[pnote]().Set(pn.InvoiceID.Set(2)).Where(nested).Exec(velox.SkipPolicy(bg, "support"))
+		_, err := db.Update[pnote]().Set(pn.InvoiceID.Set(2)).Where(nested).Exec(velox.WithoutPolicy(bg, "support"))
 		return err
 	})
 	if strings.Contains(e.SQL, `"owner"`) || strings.Contains(e.SQL, `"locked"`) {
@@ -265,7 +265,7 @@ func TestSkipPolicy(t *testing.T) {
 		seen = append(seen, *st)
 		return next(ctx)
 	}))
-	support := velox.SkipPolicy(asUser(""), "support")
+	support := velox.WithoutPolicy(asUser(""), "support")
 	if _, err := db.Query[testmodel.Ticket]().Where(Tk.Done.EQ(false)).Limit(5).All(support); err != nil {
 		t.Fatal(err)
 	}
@@ -274,7 +274,7 @@ func TestSkipPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 	// An entity with no policy skips none.
-	if _, err := db.Query[testmodel.Invoice]().Limit(5).All(velox.SkipPolicy(tenant(int64(1)), "support")); err != nil {
+	if _, err := db.Query[testmodel.Invoice]().Limit(5).All(velox.WithoutPolicy(tenant(int64(1)), "support")); err != nil {
 		t.Fatal(err)
 	}
 	if len(seen) != 3 {
@@ -354,8 +354,8 @@ func TestPolicyCycleIsRefused(t *testing.T) {
 	if e.Calls != 0 {
 		t.Errorf("%d statements sent", e.Calls)
 	}
-	// Under SkipPolicy no policy runs, so there is no cycle.
-	if _, err := db.Query[pnote]().Limit(1).All(velox.SkipPolicy(self, "support")); err != nil {
+	// Under WithoutPolicy no policy runs, so there is no cycle.
+	if _, err := db.Query[pnote]().Limit(1).All(velox.WithoutPolicy(self, "support")); err != nil {
 		t.Error(err)
 	}
 }
@@ -467,12 +467,12 @@ func TestAllowRendersNothing(t *testing.T) {
 	allow := velox.Allow[pnote]()
 
 	q := db.Query[pnote]().Where(pn.ID.GT(0)).Limit(3)
-	if _, err := q.All(velox.SkipPolicy(context.Background(), "test")); err != nil {
+	if _, err := q.All(velox.WithoutPolicy(context.Background(), "test")); err != nil {
 		t.Fatal(err)
 	}
 	wantSQL, wantArgs := e.SQL, e.Args
 	if strings.Contains(wantSQL, `"owner" =`) {
-		t.Fatalf("SkipPolicy sent %s", wantSQL)
+		t.Fatalf("WithoutPolicy sent %s", wantSQL)
 	}
 	if _, err := q.All(pnoteReading(allow, nil)); err != nil {
 		t.Fatal(err)
@@ -483,7 +483,7 @@ func TestAllowRendersNothing(t *testing.T) {
 
 	// Both of an update's conditions Allow: the statement is the caller's.
 	up := db.Update[pnote]().Set(pn.Owner.Set("x")).Where(pn.ID.EQ(1))
-	if _, err := up.Exec(velox.SkipPolicy(context.Background(), "test")); err != nil {
+	if _, err := up.Exec(velox.WithoutPolicy(context.Background(), "test")); err != nil {
 		t.Fatal(err)
 	}
 	wantSQL, wantArgs = e.SQL, e.Args
@@ -497,7 +497,7 @@ func TestAllowRendersNothing(t *testing.T) {
 
 	// And inside an EXISTS: the target's Allow adds nothing.
 	bq := db.Query[pbox]().Where(pboxNote.Has()).Limit(1)
-	if _, err := bq.All(velox.SkipPolicy(context.Background(), "test")); err != nil {
+	if _, err := bq.All(velox.WithoutPolicy(context.Background(), "test")); err != nil {
 		t.Fatal(err)
 	}
 	wantSQL = e.SQL
@@ -516,7 +516,7 @@ func TestAllowComposes(t *testing.T) {
 	db := velox.OpenFake(velox.Postgres, e)
 	allow := velox.Allow[pnote]()
 	x := pn.Owner.EQ("ann")
-	skip := velox.SkipPolicy(context.Background(), "test")
+	skip := velox.WithoutPolicy(context.Background(), "test")
 
 	sql := func(p velox.Pred[pnote]) (string, []any) {
 		t.Helper()
@@ -604,8 +604,8 @@ func TestPolicyWritable(t *testing.T) {
 	if e.Calls != calls {
 		t.Errorf("%d denied statements sent", e.Calls-calls)
 	}
-	// SkipPolicy skips Write too.
-	if _, err := q.Writable().Count(velox.SkipPolicy(context.Background(), "test")); err != nil {
+	// WithoutPolicy skips Write too.
+	if _, err := q.Writable().Count(velox.WithoutPolicy(context.Background(), "test")); err != nil {
 		t.Fatal(err)
 	}
 	wantSent(t, e, `SELECT COUNT(*) FROM "pnotes" WHERE "id" = $1`, int64(1))
@@ -646,7 +646,7 @@ func TestPolicySQLOnEveryDialect(t *testing.T) {
 	} {
 		db := velox.OpenFake(c.d, &velox.FakeExec{})
 		q := db.Query[pnote]().Where(pn.ID.GT(0)).Limit(3)
-		unscoped, uargs, err := q.SQL(velox.SkipPolicy(context.Background(), "test"))
+		unscoped, uargs, err := q.SQL(velox.WithoutPolicy(context.Background(), "test"))
 		if err != nil || unscoped != c.want {
 			t.Errorf("%v: unscoped\n got %s, %v\nwant %s", c.d, unscoped, err, c.want)
 		}

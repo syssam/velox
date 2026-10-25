@@ -87,13 +87,13 @@ type RawQuery[E any] struct {
 // SQL's last line holds a -- comment. Raw has no SQL(ctx) method: its SQL is
 // the caller's already.
 //
-// velox treats Raw as a read: it goes to a replica unless ReadPrimary or a
+// velox treats Raw as a read: it goes to a replica unless WithPrimaryReads or a
 // pinned session says otherwise, and runs under a dry run (IsDryRun). Run a
 // write that returns rows (UPDATE … RETURNING) in a transaction, or under
-// ReadPrimary, and never under a dry run.
+// WithPrimaryReads, and never under a dry run.
 //
 // On a DB opened with OpenShards, Raw and Exec run on the shard the context
-// names, as every statement does: OnShard's, else the one WithShardFor gives
+// names, as every statement does: WithShard's, else the one WithShardFor gives
 // for the context's tenant (WithTenant), though the tenant scopes nothing.
 // With neither they fail with ErrNoShard, before anything is sent.
 func (db *DB) Raw[E any, PE Entity[E]](reason, query string, args ...any) RawQuery[E] {

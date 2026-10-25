@@ -44,7 +44,7 @@ no tenant in the context: ErrNoTenant=true: velox: gen.Invoice: no tenant in the
 INV-003 is taken (unique constraint on invoices.org_id, invoices.number); using INV-004
 committed: org 1 has 4 invoices
 
-== 8. AllTenants and Raw
+== 8. WithAllTenants and Raw
 SELECT "id", "created_at", "updated_at", "org_id", "number", "customer", "status", "total_cents" FROM "invoices" WHERE "status" <> ?
 paid in all: 1950.00
 org 1: 2750.00

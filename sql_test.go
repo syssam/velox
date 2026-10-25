@@ -26,7 +26,7 @@ func sqlOK(t *testing.T) func(string, []any, error) (string, []any) {
 // annIn7 acts as ann under tenant 7: Ticket's tenant scope, policy and hooks
 // all apply.
 func annIn7() context.Context {
-	return testmodel.AsUser(velox.WithTenant(context.Background(), int64(7)), "ann")
+	return testmodel.WithUser(velox.WithTenant(context.Background(), int64(7)), "ann")
 }
 
 // sameAsSent fails t unless SQL(ctx)'s text and args are what e was sent.
@@ -145,7 +145,7 @@ func TestSQLReportsTheRefusal(t *testing.T) {
 	if !errors.Is(err, velox.ErrUnbounded) || text != "" || args != nil {
 		t.Errorf("unbounded: %q %v %v", text, args, err)
 	}
-	text, _, err = db.Query[testmodel.Ticket]().Limit(1).SQL(testmodel.AsUser(context.Background(), "ann"))
+	text, _, err = db.Query[testmodel.Ticket]().Limit(1).SQL(testmodel.WithUser(context.Background(), "ann"))
 	if !errors.Is(err, velox.ErrNoTenant) || text != "" {
 		t.Errorf("no tenant: %q %v", text, err)
 	}

@@ -138,7 +138,7 @@ func FuzzScope(f *testing.F) {
 		want, _ := scopeCase(ops, s) // the same conditions, built again: a copy no run touches
 		in := st.Where
 		db := velox.OpenFake(velox.Postgres, &velox.FakeExec{}, opts...)
-		ctx := testmodel.AsUser(velox.WithTenant(context.Background(), n), "ann")
+		ctx := testmodel.WithUser(velox.WithTenant(context.Background(), n), "ann")
 		err := velox.Prepare(db, ctx, st)
 		if n == 0 {
 			// The zero tenant scopes nothing: the statement fails closed.

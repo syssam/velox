@@ -20,7 +20,7 @@ func createdBy[E any](field func(*E) *string) velox.Hook[E] {
 		return velox.MutateFunc[E](func(ctx context.Context, m *velox.Mutation[E]) error {
 			for _, x := range m.Rows() {
 				if p := field(x); *p == "" {
-					*p = userOf(ctx)
+					*p = userFromContext(ctx)
 				}
 			}
 			return next.Mutate(ctx, m)

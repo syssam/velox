@@ -12,7 +12,7 @@ import (
 	"github.com/syssam/velox2"
 )
 
-const _ = velox.GeneratedCodeIsVersion4
+const _ = velox.GeneratedCodeIsVersion5
 
 // Post is the entity of schema Post.
 type Post struct {
@@ -72,7 +72,7 @@ func postDesc() velox.Desc[Post] {
 		},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Relations: []velox.Relation{
+		Edges: []velox.EdgeDesc{
 			velox.EdgeTo[User]("Author", 1, 0),
 		},
 		Addr: func(x *Post, i int) any {
@@ -96,7 +96,7 @@ func postDesc() velox.Desc[Post] {
 			}
 			return nil
 		},
-		RelAddr: func(x *Post, i int) any {
+		EdgeAddr: func(x *Post, i int) any {
 			switch i {
 			case 0:
 				return &x.Author

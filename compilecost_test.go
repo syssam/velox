@@ -76,7 +76,7 @@ func eDesc() velox.Desc[E] {
 		},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Relations:  []velox.Relation{velox.EdgeTo[E]("Parent", 2, 0), velox.EdgeTo[E]("Kids", 0, 2)},
+		Edges:      []velox.EdgeDesc{velox.EdgeTo[E]("Parent", 2, 0), velox.EdgeTo[E]("Kids", 0, 2)},
 		Addr: func(x *E, i int) any {
 			switch i {
 			case 0:
@@ -88,7 +88,7 @@ func eDesc() velox.Desc[E] {
 			}
 			return nil
 		},
-		RelAddr: func(x *E, i int) any {
+		EdgeAddr: func(x *E, i int) any {
 			switch i {
 			case 0:
 				return &x.Parent
@@ -169,10 +169,10 @@ var (
 // entityDescHooksBound is entityDescHooksSrc with its Desc binding the
 // methods.
 var entityDescHooksBound = strings.Replace(entityDescHooksSrc, `		Tenant:     -1,
-		Relations:`, `		Tenant:     -1,
+		Edges:`, `		Tenant:     -1,
 		Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*E)(nil).Policy()) },
 		Hooks:      func() velox.BoundHooks { return velox.BindHooks((*E)(nil).Hooks()) },
-		Relations:`, 1)
+		Edges:`, 1)
 
 // genericObjects is one unexported variable of each exported generic type,
 // and of the non-generic types generated code reaches, as a package would

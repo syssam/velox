@@ -181,10 +181,10 @@ func TestAggregateIsTenantScoped(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
 		I := testmodel.Invoices
 		q := tg.db.Query[testmodel.Invoice]()
-		if v, err := velox.Sum(velox.WithTenant(velox.SkipPolicy(ctx, "test"), int64(1)), q, I.Total); err != nil || v != 100 {
+		if v, err := velox.Sum(velox.WithTenant(velox.WithoutPolicy(ctx, "test"), int64(1)), q, I.Total); err != nil || v != 100 {
 			t.Errorf("org 1: %v, %v", v, err)
 		}
-		if v, err := velox.Sum(velox.WithTenant(velox.SkipPolicy(ctx, "test"), int64(2)), q, I.Total); err != nil || v != 50 {
+		if v, err := velox.Sum(velox.WithTenant(velox.WithoutPolicy(ctx, "test"), int64(2)), q, I.Total); err != nil || v != 50 {
 			t.Errorf("org 2: %v, %v", v, err)
 		}
 	})

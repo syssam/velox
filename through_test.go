@@ -225,7 +225,7 @@ func TestOfThroughRenders(t *testing.T) {
 // the join's far column in the correlation and its near column in the owners'
 // IN, on every dialect.
 func TestOfSelfManyToMany(t *testing.T) {
-	skip := velox.SkipPolicy(ctx, "self many-to-many test")
+	skip := velox.WithoutPolicy(ctx, "self many-to-many test")
 	p1, p2 := dPeer{ID: 1}, dPeer{ID: 2}
 	for _, c := range []struct {
 		d    velox.Dialect
@@ -317,7 +317,7 @@ func (*dBadThrough) VeloxMeta() *velox.Meta[dBadThrough] {
 			Columns:    []velox.ColumnDesc{{Field: "Key", Name: "key"}, {Field: "ID", Name: "id"}},
 			PrimaryKey: []int{1},
 			Tenant:     -1,
-			Relations: []velox.Relation{
+			Edges: []velox.EdgeDesc{
 				velox.EdgeThrough[dBookTag, dTag]("Mismatch", 0, 0, 1, 0),   // a string owner key, an int64 join key
 				velox.EdgeThrough[dBookTag, dTag]("JoinCol", 1, 2, 1, 0),    // the join has two columns
 				velox.EdgeThrough[dBookTag, dAuthor]("Target", 1, 0, 1, 2),  // an int64 join key, a string target key
@@ -327,7 +327,7 @@ func (*dBadThrough) VeloxMeta() *velox.Meta[dBadThrough] {
 				velox.EdgeThrough[dPolicyJoin, dTag]("PolicyJ", 1, 0, 1, 0), // the join entity has a Read policy
 			},
 			Addr: func(x *dBadThrough, i int) any { return [...]any{&x.Key, &x.ID}[i] },
-			RelAddr: func(x *dBadThrough, i int) any {
+			EdgeAddr: func(x *dBadThrough, i int) any {
 				return [...]any{&x.Mismatch, &x.JoinCol, &x.Target, &x.Single, &x.BadJoin, &x.TenantJ, &x.PolicyJ}[i]
 			},
 		}
@@ -408,9 +408,9 @@ func (*dLinker) VeloxMeta() *velox.Meta[dLinker] {
 			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
-			Relations:  []velox.Relation{velox.EdgeThrough[dLink, dTag]("Tags", 0, 0, 1, 0)},
+			Edges:      []velox.EdgeDesc{velox.EdgeThrough[dLink, dTag]("Tags", 0, 0, 1, 0)},
 			Addr:       func(x *dLinker, i int) any { return &x.ID },
-			RelAddr:    func(x *dLinker, i int) any { return &x.Tags },
+			EdgeAddr:   func(x *dLinker, i int) any { return &x.Tags },
 		}
 	})
 }
@@ -593,7 +593,7 @@ func (*dNote) VeloxMeta() *velox.Meta[dNote] {
 			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "BookID", Name: "book_id"}},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
-			Relations:  []velox.Relation{velox.EdgeThrough[dBookTag, dNote]("SameBook", 1, 0, 0, 1)},
+			Edges:      []velox.EdgeDesc{velox.EdgeThrough[dBookTag, dNote]("SameBook", 1, 0, 0, 1)},
 			Addr: func(x *dNote, i int) any {
 				switch i {
 				case 0:
@@ -603,7 +603,7 @@ func (*dNote) VeloxMeta() *velox.Meta[dNote] {
 				}
 				return nil
 			},
-			RelAddr: func(x *dNote, i int) any {
+			EdgeAddr: func(x *dNote, i int) any {
 				if i == 0 {
 					return &x.SameBook
 				}
@@ -668,7 +668,7 @@ func (*dPeer) VeloxMeta() *velox.Meta[dPeer] {
 			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}},
 			PrimaryKey: []int{0},
 			Tenant:     -1,
-			Relations: []velox.Relation{
+			Edges: []velox.EdgeDesc{
 				velox.EdgeThrough[dFriend, dPeer]("Friends", 0, 0, 1, 0),
 				velox.EdgeThrough[dBookTag, dTag]("Tags", 0, 0, 1, 0),
 			},
@@ -678,7 +678,7 @@ func (*dPeer) VeloxMeta() *velox.Meta[dPeer] {
 				}
 				return nil
 			},
-			RelAddr: func(x *dPeer, i int) any {
+			EdgeAddr: func(x *dPeer, i int) any {
 				switch i {
 				case 0:
 					return &x.Friends

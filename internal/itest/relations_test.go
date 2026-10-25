@@ -197,9 +197,9 @@ func shelfDesc() velox.Desc[shelf] {
 		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Relations:  []velox.Relation{velox.EdgeTo[note]("Notes", 0, 1), velox.EdgeThrough[shelfTag, tag]("Tags", 0, 1, 2, 0)},
+		Edges:      []velox.EdgeDesc{velox.EdgeTo[note]("Notes", 0, 1), velox.EdgeThrough[shelfTag, tag]("Tags", 0, 1, 2, 0)},
 		Addr:       func(x *shelf, i int) any { return &x.ID },
-		RelAddr: func(x *shelf, i int) any {
+		EdgeAddr: func(x *shelf, i int) any {
 			if i == 0 {
 				return &x.Notes
 			}

@@ -8,9 +8,9 @@ import "context"
 
 type userKey struct{}
 
-// AsUser returns ctx acting as user, as authentication middleware would.
-func AsUser(ctx context.Context, user string) context.Context {
+// WithUser returns ctx acting as user, as authentication middleware would.
+func WithUser(ctx context.Context, user string) context.Context {
 	return context.WithValue(ctx, userKey{}, user)
 }
 
-func userOf(ctx context.Context) string { u, _ := ctx.Value(userKey{}).(string); return u }
+func userFromContext(ctx context.Context) string { u, _ := ctx.Value(userKey{}).(string); return u }

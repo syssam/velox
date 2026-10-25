@@ -514,7 +514,7 @@ func TestTenant(t *testing.T) {
 	wantStrings(t, "org 1", texts(org(1)), []string{"one", "uno"})
 	wantStrings(t, "org 2", texts(org(2)), []string{"two"})
 	wantStrings(t, "org 3", texts(org(3)), nil)
-	wantStrings(t, "all tenants", texts(velox.AllTenants(ctx, "e2e test")), []string{"one", "uno", "two"})
+	wantStrings(t, "all tenants", texts(velox.WithAllTenants(ctx, "e2e test")), []string{"one", "uno", "two"})
 	// No tenant: refused.
 	if err := db.Insert(&gen.Note{Text: "x"}).Exec(ctx); !errors.Is(err, velox.ErrNoTenant) {
 		t.Errorf("insert without a tenant: %v", err)

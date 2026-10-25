@@ -48,7 +48,7 @@ func PgxConn(pool *pgxpool.Pool) Conn {
 
 // WithReplicas adds read replicas to a DB's primary, the connection Open or
 // OpenPgx was given. A read outside a transaction goes to a replica, each in
-// turn, unless its context is marked with ReadPrimary; a query's With loads go
+// turn, unless its context is marked with WithPrimaryReads; a query's With loads go
 // to the replica the query read. Writes, and every statement in a transaction,
 // go to the primary. Statement.Route records the choice.
 //
@@ -86,11 +86,11 @@ type Shard struct {
 // OpenShards returns a DB of dialect d whose statements each run on one of
 // shards, chosen from the statement's context:
 //
-//  1. the shard OnShard names;
+//  1. the shard WithShard names;
 //  2. otherwise, the one WithShardFor's function returns for the context's
 //     tenant (WithTenant); its error refuses the statement;
 //  3. otherwise none: the statement fails with ErrNoShard, as it does under
-//     AllTenants without OnShard.
+//     WithAllTenants without WithShard.
 //
 // A name that is not one of shards fails with ErrNoShard too, naming it.
 // Within its shard a statement is routed as on a DB with replicas: writes to
@@ -144,7 +144,7 @@ func OpenShards(d Dialect, shards map[string]Shard, opts ...Option) *DB {
 // WithShardFor sets the function that gives the name of a statement's shard,
 // on a DB opened with OpenShards, from its context's tenant: the id given to
 // WithTenant. It is called, with the statement's context, for each statement
-// and Tx whose context has a tenant and no OnShard, so it should be fast; a
+// and Tx whose context has a tenant and no WithShard, so it should be fast; a
 // SQL(ctx) dry run calls it too. Its error refuses the statement, which then
 // matches both ErrNoShard and the error.
 //
@@ -152,7 +152,7 @@ func OpenShards(d Dialect, shards map[string]Shard, opts ...Option) *DB {
 // be safe for that, and fast: a map lookup or a hash, not a query.
 //
 // It is required with OpenShards; given to Open or OpenPgx, it panics there.
-// A nil f panics.
+// A nil f panics. WithShard names a statement's shard from its context instead.
 func WithShardFor(f func(ctx context.Context, tenant any) (string, error)) Option {
 	if f == nil {
 		panic("velox: WithShardFor(nil)")
@@ -160,19 +160,20 @@ func WithShardFor(f func(ctx context.Context, tenant any) (string, error)) Optio
 	return Option{func(c *config) { c.shardFor = f }}
 }
 
-// OnShard returns a context whose statements, on a DB opened with
+// WithShard returns a context whose statements, on a DB opened with
 // OpenShards, run on the shard named name, whatever the context's tenant:
-// for admin jobs and for data that belongs to no tenant. A later OnShard
-// replaces it. On a DB opened otherwise it is ignored.
-func OnShard(ctx context.Context, name string) context.Context {
+// for admin jobs and for data that belongs to no tenant. A later WithShard
+// replaces it. On a DB opened otherwise it is ignored. Without it, the shard
+// is the one WithShardFor gives for the context's tenant.
+func WithShard(ctx context.Context, name string) context.Context {
 	rc, _ := ctx.Value(routeKey{}).(routeCtx)
 	rc.shard, rc.onShard = name, true
 	return context.WithValue(ctx, routeKey{}, rc)
 }
 
-// ReadPrimary returns a context whose reads go to the primary, on a DB with
+// WithPrimaryReads returns a context whose reads go to the primary, on a DB with
 // replicas: for a read that must see a write the replicas may not have yet.
-func ReadPrimary(ctx context.Context) context.Context {
+func WithPrimaryReads(ctx context.Context) context.Context {
 	rc, _ := ctx.Value(routeKey{}).(routeCtx)
 	rc.primary = true
 	return context.WithValue(ctx, routeKey{}, rc)
@@ -310,9 +311,9 @@ type routeKey struct{}
 // the context's routeCtx, changes it, and stores the copy.
 type routeCtx struct {
 	sess    *session // WithSession's; nil: none
-	shard   string   // OnShard's name, when onShard is set
-	primary bool     // ReadPrimary: reads go to the primary
-	onShard bool     // OnShard: statements go to the shard named shard
+	shard   string   // WithShard's name, when onShard is set
+	primary bool     // WithPrimaryReads: reads go to the primary
+	onShard bool     // WithShard: statements go to the shard named shard
 }
 
 // router is the connections of a DB with replicas or shards, among which the
@@ -371,16 +372,16 @@ func newShard(d Dialect, primary executor, replicas []Conn, what string) *shard 
 }
 
 // shardOf returns the shard ctx names on a sharded DB, whose route marks are
-// rc: OnShard's, else the one WithShardFor gives for ctx's tenant. It returns
+// rc: WithShard's, else the one WithShardFor gives for ctx's tenant. It returns
 // nil and no error when ctx names none, and an error wrapping ErrNoShard for a
 // name that is not a shard and for WithShardFor's error. Only without an
-// OnShard does it look the tenant up.
+// WithShard does it look the tenant up.
 func (rt *router) shardOf(ctx context.Context, rc routeCtx) (*shard, error) {
 	if rc.onShard {
 		if sh := rt.shards[rc.shard]; sh != nil {
 			return sh, nil
 		}
-		return nil, fmt.Errorf("%w: OnShard names %q, which is not a shard of the DB", ErrNoShard, rc.shard)
+		return nil, fmt.Errorf("%w: WithShard names %q, which is not a shard of the DB", ErrNoShard, rc.shard)
 	}
 	id, _ := tenantOf(ctx)
 	if id == nil {
@@ -400,9 +401,9 @@ func (rt *router) shardOf(ctx context.Context, rc routeCtx) (*shard, error) {
 // context ctx names no shard, outside a transaction.
 func noShard(ctx context.Context) error {
 	if _, all := tenantOf(ctx); all != "" {
-		return fmt.Errorf("%w: AllTenants names no shard; name one with OnShard", ErrNoShard)
+		return fmt.Errorf("%w: WithAllTenants names no shard; name one with WithShard", ErrNoShard)
 	}
-	return fmt.Errorf("%w: the context has neither OnShard nor a tenant (WithTenant)", ErrNoShard)
+	return fmt.Errorf("%w: the context has neither WithShard nor a tenant (WithTenant)", ErrNoShard)
 }
 
 // shardForTx returns the shard a transaction begun with ctx runs on: on a
@@ -430,7 +431,7 @@ func (db *DB) shardForTx(ctx context.Context) (*shard, error) {
 // records the choice in st.Route.
 //
 // Writes, statements in a transaction, reads whose context is marked with
-// ReadPrimary and reads of a session within its pin window go to the primary.
+// WithPrimaryReads and reads of a session within its pin window go to the primary.
 // Exec's raw SQL is a write, and Raw's a read. A With load goes where its
 // query went. Any other read goes to the next replica in turn, skipping one
 // in back-off, or to the primary when every replica is. A dry run is routed

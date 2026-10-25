@@ -279,7 +279,7 @@ func entityDesc(w *writer, e *OutEntity) {
 		w.p("},")
 	}
 	if len(e.Rels) > 0 {
-		w.p("Relations: []velox.Relation{")
+		w.p("Edges: []velox.EdgeDesc{")
 		for _, r := range e.Rels {
 			w.p("%s,", r.Desc)
 		}
@@ -295,7 +295,7 @@ func entityDesc(w *writer, e *OutEntity) {
 	w.p("return nil")
 	w.p("},")
 	if len(e.Rels) > 0 {
-		w.p("RelAddr: func(x *%s, i int) any {", e.Name)
+		w.p("EdgeAddr: func(x *%s, i int) any {", e.Name)
 		w.p("switch i {")
 		for i, r := range e.Rels {
 			w.p("case %d:", i)

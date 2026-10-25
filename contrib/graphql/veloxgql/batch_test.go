@@ -45,9 +45,9 @@ func keeperDesc() velox.Desc[keeper] {
 		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Relations:  []velox.Relation{velox.EdgeTo[pet]("Pets", 0, 1)},
+		Edges:      []velox.EdgeDesc{velox.EdgeTo[pet]("Pets", 0, 1)},
 		Addr:       func(x *keeper, i int) any { return [...]any{&x.ID, &x.Name}[i] },
-		RelAddr: func(x *keeper, i int) any {
+		EdgeAddr: func(x *keeper, i int) any {
 			if i == 0 {
 				return &x.Pets
 			}

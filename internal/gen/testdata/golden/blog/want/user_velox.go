@@ -12,7 +12,7 @@ import (
 	"github.com/syssam/velox2"
 )
 
-const _ = velox.GeneratedCodeIsVersion4
+const _ = velox.GeneratedCodeIsVersion5
 
 // User is a person who writes posts.
 type User struct {
@@ -103,7 +103,7 @@ func userDesc() velox.Desc[User] {
 			{Columns: []int{4, 5}, Unique: true},
 			{Columns: []int{6}, Unique: true},
 		},
-		Relations: []velox.Relation{
+		Edges: []velox.EdgeDesc{
 			velox.EdgeTo[Post]("Posts", 0, 1),
 			velox.EdgeThrough[UserGroup, Group]("Groups", 0, 0, 1, 0),
 		},
@@ -138,7 +138,7 @@ func userDesc() velox.Desc[User] {
 			}
 			return nil
 		},
-		RelAddr: func(x *User, i int) any {
+		EdgeAddr: func(x *User, i int) any {
 			switch i {
 			case 0:
 				return &x.Posts

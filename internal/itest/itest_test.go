@@ -47,7 +47,7 @@ func TestMain(m *testing.M) {
 }
 
 var (
-	ctx = velox.AllTenants(context.Background(), "velox tests")
+	ctx = velox.WithAllTenants(context.Background(), "velox tests")
 	t0  = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	I   = testmodel.Invoices
 )

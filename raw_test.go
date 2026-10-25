@@ -158,7 +158,7 @@ func TestRawUnknownColumn(t *testing.T) {
 }
 
 // TestRawRoutes: Exec is a write, so it goes to the primary and pins the
-// session; a Raw read goes to a replica, unless ReadPrimary or a pinned
+// session; a Raw read goes to a replica, unless WithPrimaryReads or a pinned
 // session says otherwise; in a transaction both run on it.
 func TestRawRoutes(t *testing.T) {
 	bothPaths(t, func(t *testing.T, hooked bool) {
@@ -170,7 +170,7 @@ func TestRawRoutes(t *testing.T) {
 		if _, err := raw.All(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := raw.All(velox.ReadPrimary(ctx)); err != nil {
+		if _, err := raw.All(velox.WithPrimaryReads(ctx)); err != nil {
 			t.Fatal(err)
 		}
 		sctx := velox.WithSession(ctx)
@@ -369,7 +369,7 @@ func TestRawPipeline(t *testing.T) {
 }
 
 // TestRawOnShards: on a sharded DB, Raw and Exec run on the shard the context
-// names, by OnShard or by its tenant through WithShardFor, though the tenant
+// names, by WithShard or by its tenant through WithShardFor, though the tenant
 // scopes nothing; with neither they fail with ErrNoShard and send nothing.
 func TestRawOnShards(t *testing.T) {
 	bothPaths(t, func(t *testing.T, hooked bool) {
@@ -385,7 +385,7 @@ func TestRawOnShards(t *testing.T) {
 		if _, err := s.db.Exec(eu, "r", "DELETE FROM invoices WHERE paid"); err != nil {
 			t.Fatal(err)
 		}
-		us := velox.OnShard(bg, "us")
+		us := velox.WithShard(bg, "us")
 		if _, err := raw.All(us); err != nil {
 			t.Fatal(err)
 		}
@@ -395,7 +395,7 @@ func TestRawOnShards(t *testing.T) {
 		if e := s.euP.Log[0]; e != "DELETE FROM invoices WHERE paid" {
 			t.Errorf("eu's primary ran %q, want it unscoped", e)
 		}
-		for _, c := range []context.Context{bg, velox.AllTenants(bg, "every tenant")} {
+		for _, c := range []context.Context{bg, velox.WithAllTenants(bg, "every tenant")} {
 			if _, err := raw.All(c); !errors.Is(err, velox.ErrNoShard) {
 				t.Errorf("Raw with no shard: %v", err)
 			}

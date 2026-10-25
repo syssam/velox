@@ -9,7 +9,7 @@ import (
 	"github.com/syssam/velox2"
 )
 
-const _ = velox.GeneratedCodeIsVersion4
+const _ = velox.GeneratedCodeIsVersion5
 
 // Invoice is the entity of schema Invoice.
 type Invoice struct {

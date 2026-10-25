@@ -60,13 +60,13 @@ type holder struct {
 	loaded bool
 }
 
-// For generated code. Relation is one relation field of a generated Desc: its
+// For generated code. EdgeDesc is one relation field of a generated Desc: its
 // name and the columns that key it. EdgeTo and EdgeThrough make it. It carries
 // no target entity: the use site supplies that (see EdgeTo).
-type Relation struct {
+type EdgeDesc struct {
 	name string
 
-	explicit  bool     // EdgeTo or EdgeThrough made it; a literal Relation is refused
+	explicit  bool     // EdgeTo or EdgeThrough made it; a literal EdgeDesc is refused
 	ownerCol  int      // an index into the owner's Columns
 	targetCol int      // an index into the target's Columns
 	through   *through // EdgeThrough's join entity; nil for any other relation
@@ -258,7 +258,7 @@ func targetName(t reflect.Type) string {
 }
 
 // Rel is the handle of a relation of entity E to entity T, written by
-// velox-gen: I is the relation's index in E's Desc relations. Passed to Query.With it
+// velox-gen: I is the index of its edge in E's Desc Edges. Passed to Query.With it
 // loads the relation; its Where, OrderBy and With say what to load. Like a
 // Query it is a value: each method returns a new Rel.
 type Rel[E, T any] struct {

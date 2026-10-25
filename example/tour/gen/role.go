@@ -27,15 +27,15 @@ func WithRole(ctx context.Context, role Role) context.Context {
 	return context.WithValue(ctx, roleKey{}, role)
 }
 
-// RoleOf returns the role ctx acts with; "" when none.
-func RoleOf(ctx context.Context) Role {
+// RoleFromContext returns the role ctx acts with; "" when none.
+func RoleFromContext(ctx context.Context) Role {
 	r, _ := ctx.Value(roleKey{}).(Role)
 	return r
 }
 
 // requireAccountant denies a write by anyone but an accountant.
 func requireAccountant(ctx context.Context) error {
-	if RoleOf(ctx) != Accountant {
+	if RoleFromContext(ctx) != Accountant {
 		return velox.Deny("only accountants change billing data")
 	}
 	return nil

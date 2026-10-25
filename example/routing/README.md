@@ -17,11 +17,11 @@ db := velox.OpenShards(velox.SQLite, map[string]velox.Shard{
 	velox.WithPinWindow(50*time.Millisecond),       // default 2 s
 )
 
-ctx = velox.WithSession(ctx)                      // per request, in middleware
-db.Update[gen.Note]()…Exec(ctx)                   // a write: pins this session
-db.Query[gen.Note]()…One(ctx)                     // in the window: the primary; after: a replica
-db.Query[gen.Note]()…One(velox.ReadPrimary(ctx))  // always the primary
-velox.OnShard(ctx, "us")                          // name a shard without a tenant
+ctx = velox.WithSession(ctx)                           // per request, in middleware
+db.Update[gen.Note]()…Exec(ctx)                        // a write: pins this session
+db.Query[gen.Note]()…One(ctx)                          // in the window: the primary; after: a replica
+db.Query[gen.Note]()…One(velox.WithPrimaryReads(ctx))  // always the primary
+velox.WithShard(ctx, "us")                             // name a shard without a tenant
 ```
 
 - `WithShardFor` gets the context's tenant (`WithTenant`) and returns a shard
@@ -29,8 +29,8 @@ velox.OnShard(ctx, "us")                          // name a shard without a tena
   its replicas in turn. Nothing runs on two shards.
 - A statement whose shard cannot be found fails with `ErrNoShard` and is not
   sent. On a tenant-scoped entity such as `Note`, a context with no tenant
-  fails earlier, with `ErrNoTenant`; `AllTenants` lifts that check and shows
-  `ErrNoShard`. `OnShard` names the shard for work that has no tenant.
+  fails earlier, with `ErrNoTenant`; `WithAllTenants` lifts that check and shows
+  `ErrNoShard`. `WithShard` names the shard for work that has no tenant.
 - A write pins its session's reads to the primary for the pin window, so the
   request reads what it wrote. `velox.PinnedUntil(ctx)` gives the time to keep
   across requests, and `velox.PinUntil(ctx, t)` restores it on the next one.

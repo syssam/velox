@@ -304,7 +304,7 @@ func TestBareWordHint(t *testing.T) {
 
 func TestVersion(t *testing.T) {
 	code, out, errs := velox(t, t.TempDir(), "version")
-	if code != 0 || errs != "" || !regexp.MustCompile(`^velox-gen \S+ \(generated code 4, plugin protocol 2, model 2\)\n$`).MatchString(out) {
+	if code != 0 || errs != "" || !regexp.MustCompile(`^velox-gen \S+ \(generated code 5, plugin protocol 2, model 2\)\n$`).MatchString(out) {
 		t.Fatalf("%d %q %q", code, out, errs)
 	}
 	if want := "velox-gen " + strings.TrimPrefix(generator(), "velox-gen ") + " ("; !strings.HasPrefix(out, want) {

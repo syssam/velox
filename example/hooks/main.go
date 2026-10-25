@@ -68,7 +68,7 @@ func run(ctx context.Context, w io.Writer) error {
 		return rows, nil
 	}
 
-	ada := gen.AsUser(ctx, "ada")
+	ada := gen.WithUser(ctx, "ada")
 
 	// The insert hooks: createdBy, a generic hook, fills CreatedBy from the
 	// context's user; deriveSlug checks the title and derives the slug, in

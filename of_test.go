@@ -58,7 +58,7 @@ func TestOfEdgeCases(t *testing.T) {
 		t.Error("a nil owner among others was accepted")
 	}
 
-	admin := testmodel.AsUser(ctx, "admin")
+	admin := testmodel.WithUser(ctx, "admin")
 	ticket := testmodel.Ticket{ID: 1} // ParentID nil
 	got, err := db.Query[testmodel.Ticket]().Where(testmodel.Tickets.Parent.Of(&ticket)).Limit(10).All(admin)
 	if err != nil || len(got) != 0 {

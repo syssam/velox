@@ -11,4 +11,4 @@ bob unshares Roadmap: rows changed=0
 bob unshares Notes: rows changed=1
 no user: ErrDenied=true, entity gen.Doc, op select, reason "no user"
 bob inserts a doc as alice: velox: gen.Doc: insert denied by policy: a doc must be created by its owner
-SkipPolicy: 3 docs
+WithoutPolicy: 3 docs

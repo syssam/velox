@@ -129,7 +129,7 @@ func TestRouteTable(t *testing.T) {
 		bothPaths(t, func(t *testing.T, hooked bool) {
 			s := openReplicas(hooked)
 			s.p.Results = [][][]any{{invoiceRow(1)}, {invoiceRow(1)}, {{int64(1)}}, {invoiceRow(1)}}
-			pctx := velox.ReadPrimary(ctx)
+			pctx := velox.WithPrimaryReads(ctx)
 			readAll(t, s.db, pctx)
 			s.check(t, hooked, [3]int{4, 0, 0}, onPrimary, onPrimary, onPrimary, onPrimary)
 		})

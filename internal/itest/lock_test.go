@@ -144,10 +144,10 @@ func TestLockWithScopeOnRealDatabases(t *testing.T) {
 			return tx.Query[testmodel.Ticket]().Where(Tk.Invoice.HasWhere(I.Paid.EQ(true))).OrderBy(Tk.ID.Asc()).Limit(10)
 		}
 		asAnn := func(ctx context.Context) context.Context {
-			return testmodel.AsUser(velox.WithTenant(ctx, int64(1)), "ann")
+			return testmodel.WithUser(velox.WithTenant(ctx, int64(1)), "ann")
 		}
 		org1 := func(ctx context.Context) context.Context {
-			return velox.SkipPolicy(velox.WithTenant(ctx, int64(1)), "velox tests")
+			return velox.WithoutPolicy(velox.WithTenant(ctx, int64(1)), "velox tests")
 		}
 		var text string
 		a := hold(t, lctx, tg, func(ctx context.Context, tx *velox.DB) error {

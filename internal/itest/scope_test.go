@@ -46,14 +46,14 @@ type who struct {
 
 // asIn1 acts as user in org 1.
 func asIn1(user string) context.Context {
-	return testmodel.AsUser(velox.WithTenant(context.Background(), int64(1)), user)
+	return testmodel.WithUser(velox.WithTenant(context.Background(), int64(1)), user)
 }
 
 var (
 	ann   = who{"ann", asIn1("ann")}
 	admin = who{"admin", asIn1("admin")}
 	// anyone sees both orgs and skips the policy.
-	anyone  = who{"anyone", velox.SkipPolicy(ctx, "velox tests")}
+	anyone  = who{"anyone", velox.WithoutPolicy(ctx, "velox tests")}
 	callers = []who{ann, admin, anyone}
 )
 
@@ -175,7 +175,7 @@ func TestScopeReads(t *testing.T) {
 // is the policy's denial.
 func TestScopeNeedsTenantAndUser(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
-		_, err := tg.db.Query[testmodel.Ticket]().Unbounded().All(testmodel.AsUser(context.Background(), "ann"))
+		_, err := tg.db.Query[testmodel.Ticket]().Unbounded().All(testmodel.WithUser(context.Background(), "ann"))
 		if !errors.Is(err, velox.ErrNoTenant) {
 			t.Errorf("no tenant: %v", err)
 		}
@@ -301,7 +301,7 @@ func TestScopeSave(t *testing.T) {
 func TestScopeInsert(t *testing.T) {
 	eachCaller(t, func(t *testing.T, tg target, c who) {
 		// Ann's tickets: the tenant is filled from the context, and CreatedBy
-		// from its user (anyone has none); under AllTenants the row names its
+		// from its user (anyone has none); under WithAllTenants the row names its
 		// org.
 		one := testmodel.Ticket{Owner: "ann", Title: "N1"}
 		two := []testmodel.Ticket{{Owner: "ann", Title: "N2"}, {Owner: "ann", Title: "N3"}}

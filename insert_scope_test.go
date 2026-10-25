@@ -17,7 +17,7 @@ const ticketInsertCols = `"created_by", "org_id", "owner", "title", "done", "inv
 
 // as returns a context acting as user, scoped to tenant org.
 func as(user string, org int64) context.Context {
-	return testmodel.AsUser(velox.WithTenant(context.Background(), org), user)
+	return testmodel.WithUser(velox.WithTenant(context.Background(), org), user)
 }
 
 func wantPolicyError(t *testing.T, err error, op velox.Op) {
@@ -55,7 +55,7 @@ func TestInsertTenantMismatch(t *testing.T) {
 	}
 	// The context's tenant must have the column's type, as for a query.
 	tk.OrgID = 0
-	if err := db.Insert(&tk).Exec(testmodel.AsUser(velox.WithTenant(context.Background(), 7), "ann")); !errors.Is(err, velox.ErrTenantMismatch) || tk.OrgID != 0 {
+	if err := db.Insert(&tk).Exec(testmodel.WithUser(velox.WithTenant(context.Background(), 7), "ann")); !errors.Is(err, velox.ErrTenantMismatch) || tk.OrgID != 0 {
 		t.Errorf("an int tenant: %v, OrgID %d", err, tk.OrgID)
 	}
 }
@@ -63,13 +63,13 @@ func TestInsertTenantMismatch(t *testing.T) {
 func TestInsertAllTenants(t *testing.T) {
 	e := &velox.FakeExec{Rows: [][]any{{int64(5)}}}
 	db := velox.OpenFake(velox.Postgres, e)
-	all := testmodel.AsUser(velox.AllTenants(context.Background(), "import"), "ann")
+	all := testmodel.WithUser(velox.WithAllTenants(context.Background(), "import"), "ann")
 	tk := testmodel.Ticket{Owner: "ann", Title: "t"}
 	err := db.Insert(&tk).Exec(all)
 	if !errors.Is(err, velox.ErrNoTenant) || !strings.HasPrefix(err.Error(), "velox: testmodel.Ticket: no tenant in the context") {
-		t.Fatalf("a zero tenant under AllTenants: %v", err)
+		t.Fatalf("a zero tenant under WithAllTenants: %v", err)
 	}
-	if err := db.Insert(&tk).Exec(testmodel.AsUser(context.Background(), "ann")); !errors.Is(err, velox.ErrNoTenant) {
+	if err := db.Insert(&tk).Exec(testmodel.WithUser(context.Background(), "ann")); !errors.Is(err, velox.ErrNoTenant) {
 		t.Errorf("no tenant at all: %v", err)
 	}
 	if e.Calls != 0 {
@@ -109,15 +109,15 @@ func TestInsertPolicy(t *testing.T) {
 	if e.Calls != 0 {
 		t.Errorf("%d statements sent", e.Calls)
 	}
-	// SkipPolicy lets it through, and the hooks see the reason.
+	// WithoutPolicy lets it through, and the hooks see the reason.
 	var bypass string
 	var tenant any
 	db = velox.OpenFake(velox.Postgres, e, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
 		bypass, tenant = st.PolicyBypass, st.Tenant
 		return next(ctx)
 	}))
-	if err := db.Insert(&tk).Exec(velox.SkipPolicy(as("bob", 7), "migration")); err != nil || bypass != "migration" || tenant != int64(7) {
-		t.Errorf("SkipPolicy: %v, PolicyBypass %q, Tenant %v", err, bypass, tenant)
+	if err := db.Insert(&tk).Exec(velox.WithoutPolicy(as("bob", 7), "migration")); err != nil || bypass != "migration" || tenant != int64(7) {
+		t.Errorf("WithoutPolicy: %v, PolicyBypass %q, Tenant %v", err, bypass, tenant)
 	}
 }
 
@@ -207,9 +207,9 @@ func TestUpsertPolicyAndCache(t *testing.T) {
 	// A policy that denies denies the upsert, as an update.
 	err := q.Exec(velox.WithTenant(context.Background(), int64(7)))
 	wantPolicyError(t, err, velox.OpInsert) // the Insert policy runs first
-	// SkipPolicy: no condition.
-	if err := q.Exec(velox.SkipPolicy(as("ann", 7), "sync")); err != nil || strings.Contains(e.SQL, "WHERE") {
-		t.Errorf("SkipPolicy: %v %s", err, e.SQL)
+	// WithoutPolicy: no condition.
+	if err := q.Exec(velox.WithoutPolicy(as("ann", 7), "sync")); err != nil || strings.Contains(e.SQL, "WHERE") {
+		t.Errorf("WithoutPolicy: %v %s", err, e.SQL)
 	}
 }
 
@@ -237,17 +237,17 @@ func TestUpsertOnMySQL(t *testing.T) {
 	if !errors.Is(err, velox.ErrTenantUpsert) || !strings.Contains(err.Error(), "primary key (id)") {
 		t.Errorf("tenant 7: %v", err)
 	}
-	all := testmodel.AsUser(velox.AllTenants(context.Background(), "sync"), "ann")
+	all := testmodel.WithUser(velox.WithAllTenants(context.Background(), "sync"), "ann")
 	tk.OrgID = 7
 	if err := q.Exec(all); !errors.Is(err, velox.ErrPolicyUpsert) ||
 		!strings.HasPrefix(err.Error(), "velox: testmodel.Ticket: upsert cannot apply the policy") {
-		t.Errorf("AllTenants: %v", err)
+		t.Errorf("WithAllTenants: %v", err)
 	}
 	if e.Calls != 0 {
 		t.Errorf("%d statements sent", e.Calls)
 	}
-	if err := q.Exec(velox.SkipPolicy(all, "sync")); err != nil {
-		t.Errorf("AllTenants and SkipPolicy: %v", err)
+	if err := q.Exec(velox.WithoutPolicy(all, "sync")); err != nil {
+		t.Errorf("WithAllTenants and WithoutPolicy: %v", err)
 	}
 	if e.Calls != 1 || strings.Contains(e.SQL, "WHERE") {
 		t.Errorf("%d statements sent: %s", e.Calls, e.SQL)
@@ -355,11 +355,11 @@ func TestUpsertConditionFromAHook(t *testing.T) {
 			return nil
 		})
 	}
-	ctx := velox.SkipPolicy(as("ann", 7), "hooks")
+	ctx := velox.WithoutPolicy(as("ann", 7), "hooks")
 	e := &velox.FakeExec{Affected: 1}
 	db := velox.OpenFake(velox.MySQL, e, cond(velox.ColumnEQ(3, "ann")))
 	tk := testmodel.Ticket{ID: 1, OrgID: 7, Owner: "ann", Title: "t"}
-	all := velox.SkipPolicy(velox.AllTenants(context.Background(), "sync"), "sync")
+	all := velox.WithoutPolicy(velox.WithAllTenants(context.Background(), "sync"), "sync")
 	if err := db.Insert(&tk).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(all); err == nil || !strings.Contains(err.Error(), "takes none") {
 		t.Errorf("MySQL: %v", err)
 	}
@@ -407,7 +407,7 @@ func TestUpsertConditionThatWouldBeDropped(t *testing.T) {
 		}
 		return nil
 	}))
-	ctx := velox.SkipPolicy(as("ann", 7), "hooks")
+	ctx := velox.WithoutPolicy(as("ann", 7), "hooks")
 	tk := testmodel.Ticket{ID: 1, Owner: "ann", Title: "t"}
 	for name, q := range map[string]velox.InsertQuery[testmodel.Ticket]{
 		"DoNothing":    db.Insert(&tk).OnConflict(Tk.OrgID, Tk.Title).DoNothing(),
@@ -448,7 +448,7 @@ func TestUpsertAllOfAHiddenRowRollsBack(t *testing.T) {
 	}
 
 	// No transaction when nothing conditions the upsert: one row, DoNothing,
-	// SkipPolicy, or an entity with no Read or Write policy.
+	// WithoutPolicy, or an entity with no Read or Write policy.
 	for name, q := range map[string]velox.InsertQuery[testmodel.Ticket]{
 		"one row":   db.InsertAll(three[:1]).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done),
 		"DoNothing": db.InsertAll(three).OnConflict(Tk.OrgID, Tk.Title).DoNothing(),
@@ -459,8 +459,8 @@ func TestUpsertAllOfAHiddenRowRollsBack(t *testing.T) {
 		}
 	}
 	e.Log = nil
-	if err := q.Exec(velox.SkipPolicy(as("ann", 7), "sync")); err != nil || len(e.Log) != 1 {
-		t.Errorf("SkipPolicy: %v, log %q", err, e.Log)
+	if err := q.Exec(velox.WithoutPolicy(as("ann", 7), "sync")); err != nil || len(e.Log) != 1 {
+		t.Errorf("WithoutPolicy: %v, log %q", err, e.Log)
 	}
 	e.Log = nil
 	invs := []testmodel.Invoice{{ID: 1, Number: "a"}, {ID: 2, Number: "b"}}

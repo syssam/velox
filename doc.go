@@ -144,7 +144,7 @@
 // WithSession keeps a request reading its own writes from the primary for a
 // short window after a write; a replica that fails a read falls over to the
 // primary. OpenShards runs each statement on one shard, chosen from the
-// context's tenant (WithShardFor) or OnShard. See example/routing.
+// context's tenant (WithShardFor) or WithShard. See example/routing.
 //
 // # Raw SQL
 //
@@ -178,17 +178,17 @@
 // A context decorator returns a context that changes what the statements
 // run under it do. None of them changes the DB:
 //
-//   - WithTenant and AllTenants name the tenant a statement is scoped to, or
+//   - WithTenant and WithAllTenants name the tenant a statement is scoped to, or
 //     lift the scope.
-//   - SkipPolicy lifts the entities' policies.
-//   - OnShard, ReadPrimary and WithSession route a statement.
+//   - WithoutPolicy lifts the entities' policies.
+//   - WithShard, WithPrimaryReads and WithSession route a statement.
 //   - PinUntil restarts a session's pin from a time stored earlier, as
 //     PinnedUntil gives it; it changes the session, not the context.
 //   - WithTags adds tags to the SQL comment.
 //   - WithoutTx removes a transaction's mark from a context.
 //
-// RowScopeOf reads back what a context scopes statements by (the tenant, the
-// reasons of AllTenants and SkipPolicy, the shard) as a RowScope, which
+// RowScopeFromContext reads back what a context scopes statements by (the tenant, the
+// reasons of WithAllTenants and WithoutPolicy, the shard) as a RowScope, which
 // compares with == (see its documentation for a tenant that cannot be
 // compared): code that reads for several callers in one statement keeps
 // callers of different scopes apart by it.
@@ -213,22 +213,22 @@
 // # Generated code
 //
 // velox-gen and its plugins write code that uses part of this package, and
-// nothing else should: Desc, ColumnDesc, Relation, EdgeTo, EdgeThrough,
+// nothing else should: Desc, ColumnDesc, EdgeDesc, EdgeTo, EdgeThrough,
 // Meta, MetaOnce, BindPolicy, BindHooks, BoundPolicy, BoundHooks, Lazy,
-// Validate, ValidateSet and GeneratedCodeIsVersion4. Each says "For
+// Validate, ValidateSet and GeneratedCodeIsVersion5. Each says "For
 // generated code." in its documentation. They are not part of velox's API:
-// they change only when GeneratedCodeIsVersion4 is replaced by the next
+// they change only when GeneratedCodeIsVersion5 is replaced by the next
 // version, which is outside semantic versioning. Run velox-gen again after
 // you update velox; code generated for another version fails to compile.
 package velox
 
 //go:generate go run ./internal/handlegen/gen
 
-// For generated code. GeneratedCodeIsVersion4 is referenced by every file
+// For generated code. GeneratedCodeIsVersion5 is referenced by every file
 // velox-gen writes from a schema package, so that generated code and this
 // library fail to compile together when they disagree. It is replaced by
-// GeneratedCodeIsVersion5 when generated code must change.
-const GeneratedCodeIsVersion4 = true
+// GeneratedCodeIsVersion6 when generated code must change.
+const GeneratedCodeIsVersion5 = true
 
 // For generated code. Lazy is the constraint of the type parameter that every
 // method of a generic velox type carries, and that callers never write. A

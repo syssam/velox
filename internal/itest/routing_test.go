@@ -357,7 +357,7 @@ func TestRoutingSendsWhereItSays(t *testing.T) {
 		wantNumbers(t, "read with no session", readNumbers(t, db, ctx), []string{"REPLICA-SEED"})
 		wantRoute(t, "read with no session", log.last(t), velox.Route{Replica: 0})
 
-		wantNumbers(t, "read under Primary", readNumbers(t, db, velox.ReadPrimary(ctx)), []string{"PRIMARY-SEED", "WRITTEN"})
+		wantNumbers(t, "read under Primary", readNumbers(t, db, velox.WithPrimaryReads(ctx)), []string{"PRIMARY-SEED", "WRITTEN"})
 		wantRoute(t, "read under Primary", log.last(t), velox.Route{Replica: -1})
 
 		// Within a session, a read after a write reads the primary, the write
@@ -406,15 +406,15 @@ func TestRoutingShardsByTenant(t *testing.T) {
 		wantNumbers(t, "tenant 1's read", readNumbers(t, db, t1), []string{"TENANT-1"})
 		wantNumbers(t, "tenant 2's read", readNumbers(t, db, t2), []string{"TENANT-2"})
 		wantRoute(t, "tenant 2's read", log.last(t), velox.Route{Shard: "two", Replica: -1})
-		wantNumbers(t, "OnShard", readNumbers(t, db, velox.OnShard(ctx, "two")), []string{"TENANT-2"})
+		wantNumbers(t, "WithShard", readNumbers(t, db, velox.WithShard(ctx, "two")), []string{"TENANT-2"})
 
 		_, err := db.Query[testmodel.Invoice]().Unbounded().All(ctx)
 		if !errors.Is(err, velox.ErrNoShard) {
-			t.Errorf("a read under AllTenants without OnShard: %v, want ErrNoShard", err)
+			t.Errorf("a read under WithAllTenants without WithShard: %v, want ErrNoShard", err)
 		}
 		refused := newInvoice(1, "REFUSED")
 		if err := db.Insert(&refused).Exec(ctx); !errors.Is(err, velox.ErrNoShard) {
-			t.Errorf("a write under AllTenants without OnShard: %v, want ErrNoShard", err)
+			t.Errorf("a write under WithAllTenants without WithShard: %v, want ErrNoShard", err)
 		}
 		wantNumbers(t, "shard one after the refusal", invoiceNumbers(t, one), []string{"TENANT-1"})
 		wantNumbers(t, "shard two after the refusal", invoiceNumbers(t, two), []string{"TENANT-2"})

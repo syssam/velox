@@ -57,7 +57,7 @@ func renamed(next velox.Mutator[Task]) velox.Mutator[Task] {
 		// caller is in db.Tx, so the audit row commits or rolls back with the
 		// update. Outside a transaction it is the database, and the two are
 		// separate statements.
-		audit := Audit{Actor: userOf(ctx), Message: "renamed a task to " + title}
+		audit := Audit{Actor: userFromContext(ctx), Message: "renamed a task to " + title}
 		return m.DB().Insert(&audit).Exec(ctx)
 	})
 }

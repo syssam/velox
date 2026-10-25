@@ -34,7 +34,7 @@ func (*Doc) Policy() velox.Policy[Doc] {
 - Inheritance through `Has`: `Comment`'s `Read` is `Comments.Doc.Has()`, and
   velox applies `Doc`'s own `Read` inside that `EXISTS`.
 - `SQL(ctx)` prints the conditions the policy adds for that context.
-- `velox.SkipPolicy(ctx, reason)` switches policies off for one context. It
+- `velox.WithoutPolicy(ctx, reason)` switches policies off for one context. It
   does not lift tenant scoping.
 
 The output is in `testdata/output.golden`.

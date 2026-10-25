@@ -8,7 +8,7 @@ import (
 	"github.com/syssam/velox2"
 )
 
-const _ = velox.GeneratedCodeIsVersion4
+const _ = velox.GeneratedCodeIsVersion5
 
 // Category is the entity of schema Category.
 type Category struct {
@@ -53,7 +53,7 @@ func categoryDesc() velox.Desc[Category] {
 		Indexes: []velox.IndexInfo{
 			{Columns: []int{1, 2}},
 		},
-		Relations: []velox.Relation{
+		Edges: []velox.EdgeDesc{
 			velox.EdgeTo[Category]("Children", 0, 2),
 			velox.EdgeTo[Category]("Parent", 2, 0),
 		},
@@ -68,7 +68,7 @@ func categoryDesc() velox.Desc[Category] {
 			}
 			return nil
 		},
-		RelAddr: func(x *Category, i int) any {
+		EdgeAddr: func(x *Category, i int) any {
 			switch i {
 			case 0:
 				return &x.Children

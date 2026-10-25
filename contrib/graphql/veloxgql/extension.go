@@ -165,7 +165,7 @@ func WithTxFilter(f func(ctx context.Context, op *ast.OperationDefinition) bool)
 // the last wins.
 //
 // A batch reads every row's edge under its first caller's context. velox's
-// row scope (velox.RowScopeOf: the tenant, the AllTenants and SkipPolicy
+// row scope (velox.RowScopeFromContext: the tenant, the WithAllTenants and WithoutPolicy
 // bypasses, the shard) is always in the key, and so are the DB and a list
 // edge's MaxList. Any other context value that a Read policy or a Rewrite or Around
 // hook reads, such as the viewer or a role, must be the same for every row

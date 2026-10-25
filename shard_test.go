@@ -157,35 +157,35 @@ func TestShardFailoverStaysInShard(t *testing.T) {
 	})
 }
 
-// TestOnShardWins: OnShard names the shard whatever the tenant, and is how a
+// TestWithShardWins: WithShard names the shard whatever the tenant, and is how a
 // statement on an entity with no tenant column finds its shard.
-func TestOnShardWins(t *testing.T) {
+func TestWithShardWins(t *testing.T) {
 	bothPaths(t, func(t *testing.T, hooked bool) {
 		s := openShards(hooked)
 		s.usP.Rows = [][]any{invoiceRow(1)}
-		if _, err := s.db.Query[testmodel.Invoice]().Limit(1).All(velox.OnShard(velox.WithTenant(bg, int64(1)), "us")); err != nil {
+		if _, err := s.db.Query[testmodel.Invoice]().Limit(1).All(velox.WithShard(velox.WithTenant(bg, int64(1)), "us")); err != nil {
 			t.Fatal(err)
 		}
-		// OnShard on the outer context, under a later WithTenant, still
+		// WithShard on the outer context, under a later WithTenant, still
 		// wins: the marks and the tenant are separate.
-		if _, err := s.db.Query[testmodel.Invoice]().Limit(1).All(velox.WithTenant(velox.OnShard(bg, "us"), int64(1))); err != nil {
+		if _, err := s.db.Query[testmodel.Invoice]().Limit(1).All(velox.WithTenant(velox.WithShard(bg, "us"), int64(1))); err != nil {
 			t.Fatal(err)
 		}
 		s.euR.Rows = [][]any{itemRow(1, 1, "A", 1)}
-		if _, err := s.db.Query[testmodel.Item]().Limit(1).All(velox.OnShard(bg, "eu")); err != nil {
+		if _, err := s.db.Query[testmodel.Item]().Limit(1).All(velox.WithShard(bg, "eu")); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.db.Delete[testmodel.Item]().Where(It.ID.EQ(1)).Exec(velox.OnShard(bg, "us")); err != nil {
+		if _, err := s.db.Delete[testmodel.Item]().Where(It.ID.EQ(1)).Exec(velox.WithShard(bg, "us")); err != nil {
 			t.Fatal(err)
 		}
-		// A later OnShard replaces an earlier one, and keeps the other marks.
-		pctx := velox.OnShard(velox.OnShard(velox.ReadPrimary(bg), "us"), "eu")
+		// A later WithShard replaces an earlier one, and keeps the other marks.
+		pctx := velox.WithShard(velox.WithShard(velox.WithPrimaryReads(bg), "us"), "eu")
 		if _, err := s.db.Query[testmodel.Item]().Limit(1).All(pctx); err != nil {
 			t.Fatal(err)
 		}
 		s.check(t, hooked, [3]int{1, 1, 3}, usPrimary, usPrimary, euR0, usPrimary, euPrimary)
 		if n := s.lookups.Load(); n != 0 {
-			t.Errorf("WithShardFor called %d times under OnShard, want 0", n)
+			t.Errorf("WithShardFor called %d times under WithShard, want 0", n)
 		}
 	})
 }
@@ -199,11 +199,11 @@ func TestNoShard(t *testing.T) {
 		want []string // in the error's text, after the prefix
 		is   error    // matched besides ErrNoShard
 	}{
-		{"no tenant and no OnShard", bg, nil, nil},
-		{"AllTenants without OnShard", velox.AllTenants(bg, "report"), []string{"AllTenants"}, nil},
+		{"no tenant and no WithShard", bg, nil, nil},
+		{"WithAllTenants without WithShard", velox.WithAllTenants(bg, "report"), []string{"WithAllTenants"}, nil},
 		{"an unknown shard from WithShardFor", velox.WithTenant(bg, int64(3)), []string{`"mars"`}, nil},
-		{"an unknown shard from OnShard", velox.OnShard(velox.WithTenant(bg, int64(1)), "nope"), []string{`"nope"`}, nil},
-		{"OnShard with no name", velox.OnShard(velox.WithTenant(bg, int64(1)), ""), []string{`""`}, nil},
+		{"an unknown shard from WithShard", velox.WithShard(velox.WithTenant(bg, int64(1)), "nope"), []string{`"nope"`}, nil},
+		{"WithShard with no name", velox.WithShard(velox.WithTenant(bg, int64(1)), ""), []string{`""`}, nil},
 		{"WithShardFor's error", velox.WithTenant(bg, int64(4)), []string{errShardLookup.Error()}, errShardLookup},
 	}
 	for _, c := range cases {
@@ -253,7 +253,7 @@ func TestTxPinsItsShard(t *testing.T) {
 		tctx := velox.WithTenant(bg, int64(1))
 		var mismatch, lookup error
 		err := s.db.Tx(tctx, func(ctx context.Context, tx *velox.DB) error {
-			for _, sctx := range []context.Context{tctx, bg, velox.AllTenants(bg, "report"), velox.OnShard(bg, "eu")} {
+			for _, sctx := range []context.Context{tctx, bg, velox.WithAllTenants(bg, "report"), velox.WithShard(bg, "eu")} {
 				if _, err := tx.Query[testmodel.Item]().Limit(1).All(sctx); err != nil {
 					return err
 				}
@@ -261,7 +261,7 @@ func TestTxPinsItsShard(t *testing.T) {
 			if _, err := tx.Update[testmodel.Item]().Set(It.Qty.Set(2)).Where(It.ID.EQ(1)).Exec(bg); err != nil {
 				return err
 			}
-			_, mismatch = tx.Query[testmodel.Item]().Limit(1).All(velox.OnShard(tctx, "us"))
+			_, mismatch = tx.Query[testmodel.Item]().Limit(1).All(velox.WithShard(tctx, "us"))
 			_, lookup = tx.Query[testmodel.Item]().Limit(1).All(velox.WithTenant(bg, int64(4)))
 			return tx.Tx(bg, func(ctx context.Context, tx *velox.DB) error { // a savepoint, on eu too
 				_, err := tx.Query[testmodel.Item]().Limit(1).All(bg)
@@ -284,9 +284,9 @@ func TestTxPinsItsShard(t *testing.T) {
 		}
 		s.check(t, hooked, [3]int{8, 0, 0}, euPrimary, euPrimary, euPrimary, euPrimary, euPrimary, euPrimary)
 
-		// A transaction OnShard names begins on that shard.
+		// A transaction WithShard names begins on that shard.
 		s = openShards(hooked)
-		if err := s.db.Tx(velox.OnShard(bg, "us"), func(ctx context.Context, tx *velox.DB) error {
+		if err := s.db.Tx(velox.WithShard(bg, "us"), func(ctx context.Context, tx *velox.DB) error {
 			_, err := tx.Delete[testmodel.Item]().Where(It.ID.EQ(1)).Exec(bg)
 			return err
 		}); err != nil {
@@ -307,11 +307,11 @@ func TestTxWithNoShard(t *testing.T) {
 		want string
 		is   error
 	}{
-		"no tenant":                  {bg, "", nil},
-		"unknown shard":              {velox.WithTenant(bg, int64(3)), `"mars"`, nil},
-		"an unknown OnShard":         {velox.OnShard(bg, "nope"), `"nope"`, nil},
-		"AllTenants without OnShard": {velox.AllTenants(bg, "report"), "", nil},
-		"a failed lookup":            {velox.WithTenant(bg, int64(4)), "", errShardLookup},
+		"no tenant":                        {bg, "", nil},
+		"unknown shard":                    {velox.WithTenant(bg, int64(3)), `"mars"`, nil},
+		"an unknown WithShard":             {velox.WithShard(bg, "nope"), `"nope"`, nil},
+		"WithAllTenants without WithShard": {velox.WithAllTenants(bg, "report"), "", nil},
+		"a failed lookup":                  {velox.WithTenant(bg, int64(4)), "", errShardLookup},
 	} {
 		t.Run(name, func(t *testing.T) {
 			hooks := 0

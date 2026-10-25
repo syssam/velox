@@ -11,7 +11,7 @@ import (
 	sch "github.com/syssam/velox2/internal/testmodel/schema"
 )
 
-const _ = velox.GeneratedCodeIsVersion4
+const _ = velox.GeneratedCodeIsVersion5
 
 // Event is the entity of schema Event.
 type Event struct {

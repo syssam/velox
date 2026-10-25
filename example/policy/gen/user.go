@@ -8,10 +8,10 @@ import "context"
 
 type userKey struct{}
 
-// AsUser returns ctx acting as user. In a service, authentication middleware
+// WithUser returns ctx acting as user. In a service, authentication middleware
 // sets it. The user "admin" may read and change everything.
-func AsUser(ctx context.Context, user string) context.Context {
+func WithUser(ctx context.Context, user string) context.Context {
 	return context.WithValue(ctx, userKey{}, user)
 }
 
-func userOf(ctx context.Context) string { u, _ := ctx.Value(userKey{}).(string); return u }
+func userFromContext(ctx context.Context) string { u, _ := ctx.Value(userKey{}).(string); return u }

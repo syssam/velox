@@ -95,13 +95,13 @@ func (q InsertQuery[E]) DoNothing[_ Lazy[E]]() InsertQuery[E] {
 // Exec then fills, in each entity, every zero field whose column has Default
 // or DefaultFunc (an UpdateDefault fills on update only). On a tenant-scoped entity
 // it then sets a zero tenant field to the context's tenant, and refuses a
-// field set to another one (ErrTenantMismatch) or, under AllTenants, left at
+// field set to another one (ErrTenantMismatch) or, under WithAllTenants, left at
 // zero (ErrNoTenant). Then the validators run and the policy's Insert is
 // asked; every entity is prepared before anything is sent.
 //
 // Under WithTenant, an upsert that updates must name the tenant column in
 // OnConflict (ErrTenantUpsert); on MySQL, where any unique key can conflict,
-// every unique key must hold it. Under AllTenants, which reaches every
+// every unique key must hold it. Under WithAllTenants, which reaches every
 // tenant's rows anyway, neither is required. Its update branch gets the
 // policy's Read and Write conditions, on the existing row; an upsert that
 // changed fewer rows than it sent, because the conditions hid a conflicting
@@ -430,7 +430,7 @@ func prepareRow(ctx context.Context, in *EntityInfo, p unsafe.Pointer) error {
 }
 
 // insertAllowed asks the policy's Insert about the row of in at p, prepared
-// and validated, unless SkipPolicy.
+// and validated, unless WithoutPolicy.
 func insertAllowed(ctx context.Context, in *EntityInfo, p unsafe.Pointer) error {
 	if pol := in.policy; pol != nil && pol.insert != nil && policyBypass(ctx) == "" {
 		if err := pol.insert(ctx, p); err != nil {
@@ -447,7 +447,7 @@ func tenantField(in *EntityInfo, p unsafe.Pointer) reflect.Value {
 }
 
 // fillTenant sets the row's zero tenant field to the context's tenant id, and
-// checks one already set. Under AllTenants (all) the row must name its
+// checks one already set. Under WithAllTenants (all) the row must name its
 // tenant.
 func fillTenant(in *EntityInfo, p unsafe.Pointer, id any, all string) error {
 	if id != nil {
@@ -464,7 +464,7 @@ func fillTenant(in *EntityInfo, p unsafe.Pointer, id any, all string) error {
 
 // checkRowTenant checks the row's tenant field against the context's tenant
 // id, whose type fillTenant checked: under WithTenant the field must hold id,
-// under AllTenants (all) it must not be zero, and with neither the row has no
+// under WithAllTenants (all) it must not be zero, and with neither the row has no
 // tenant. who says what put the value in the field.
 func checkRowTenant(in *EntityInfo, p unsafe.Pointer, id any, all, who string) error {
 	col := in.Columns[in.Tenant].Name
@@ -472,7 +472,7 @@ func checkRowTenant(in *EntityInfo, p unsafe.Pointer, id any, all, who string) e
 	switch {
 	case all != "":
 		if v.IsZero() {
-			return fmt.Errorf("velox: %s: %w: under AllTenants the row names its tenant, and its %s is zero", in.Name, ErrNoTenant, col)
+			return fmt.Errorf("velox: %s: %w: under WithAllTenants the row names its tenant, and its %s is zero", in.Name, ErrNoTenant, col)
 		}
 		return nil
 	case id == nil:
@@ -627,7 +627,7 @@ func insertBatches[E any](ctx context.Context, db *DB, m *Meta[E], xs []E, cols 
 // statement has written the others, so such an InsertAll of several rows runs
 // in a transaction, which the failure rolls back. The scope conditions an
 // upsert that updates, on any dialect but MySQL (which refuses it), of an
-// entity with a Read or Write policy, unless SkipPolicy.
+// entity with a Read or Write policy, unless WithoutPolicy.
 func conditionedUpsert(ctx context.Context, db *DB, in *EntityInfo, cf *ConflictClause, n int) bool {
 	return n > 1 && cf != nil && !cf.DoNothing && len(cf.Update) > 0 && db.d != MySQL &&
 		in.policy != nil && (in.policy.read != nil || in.policy.write != nil) && policyBypass(ctx) == ""

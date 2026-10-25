@@ -23,7 +23,7 @@ import (
 )
 
 var (
-	ctx = velox.AllTenants(context.Background(), "otel tests")
+	ctx = velox.WithAllTenants(context.Background(), "otel tests")
 	I   = testmodel.Invoices
 )
 
@@ -269,7 +269,7 @@ func TestTenantNotRecordedByDefault(t *testing.T) {
 func TestPolicyBypass(t *testing.T) {
 	f := &fakeDB{cols: []string{}}
 	db, exp, _ := traced(t, f, veloxotel.Config{})
-	if _, err := db.Query[testmodel.Ticket]().Limit(1).All(velox.SkipPolicy(ctx, "support")); err != nil {
+	if _, err := db.Query[testmodel.Ticket]().Limit(1).All(velox.WithoutPolicy(ctx, "support")); err != nil {
 		t.Fatal(err)
 	}
 	s := only(t, exp)
@@ -551,7 +551,7 @@ func TestRouteAttributes(t *testing.T) {
 	t.Run("primary read", func(t *testing.T) {
 		p, r := &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}, &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}
 		db, exp, _ := traced(t, p, veloxotel.Config{}, velox.WithReplicas(velox.SQLConn(r.open())))
-		read(velox.ReadPrimary(ctx), db)
+		read(velox.WithPrimaryReads(ctx), db)
 		a := attrs(only(t, exp))
 		if a["velox.route.replica"] != attribute.BoolValue(false) {
 			t.Errorf("velox.route.replica = %v", a["velox.route.replica"].String())
@@ -576,7 +576,7 @@ func TestRouteAttributes(t *testing.T) {
 		a1, b1 := &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}, &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}
 		db, exp, _ := shardedTraced(t, map[string]*fakeDB{"a": a1, "b": b1})
 		read(tenant(2), db)
-		read(velox.OnShard(velox.AllTenants(context.Background(), "otel tests"), "a"), db)
+		read(velox.WithShard(velox.WithAllTenants(context.Background(), "otel tests"), "a"), db)
 		var got []string
 		for _, s := range exp.GetSpans() {
 			a := attrs(s)

@@ -19,9 +19,9 @@ type Desc[E any] struct {
 	PrimaryKey []int // indexes into Columns
 	Tenant     int   // index into Columns; -1 when the entity has none (so velox-gen always writes it: 0 is column 0)
 	Indexes    []IndexInfo
-	Relations  []Relation            // in the order of the generated relation handles
+	Edges      []EdgeDesc            // in the order of the generated relation handles
 	Addr       func(x *E, i int) any // &x.<field of column i>
-	RelAddr    func(x *E, i int) any // &x.<field of relation i>: a *One[T] or *Many[T]
+	EdgeAddr   func(x *E, i int) any // &x.<field of edge i>: a *One[T] or *Many[T]
 
 	// Check runs the validators of column col on its value v, and is nil
 	// when no column has any. For a pointer field, v is the value the
@@ -101,19 +101,19 @@ type descFields struct {
 	primaryKey []int
 	tenant     int
 	indexes    []IndexInfo
-	relations  []Relation
+	relations  []EdgeDesc
 	check      func(col int, v any) error
 	policy     bool // Desc.Policy is set
 	hooks      bool // Desc.Hooks is set
 }
 
-// descView is a Desc with E erased: its fields, and its Addr and RelAddr
-// bound to one new entity. addr and relAddr are nil when Addr and RelAddr
+// descView is a Desc with E erased: its fields, and its Addr and EdgeAddr
+// bound to one new entity. addr and relAddr are nil when Addr and EdgeAddr
 // are.
 type descView struct {
 	d       *descFields
 	addr    func(i int) any // d.Addr(x, i)
-	relAddr func(i int) any // d.RelAddr(x, i)
+	relAddr func(i int) any // d.EdgeAddr(x, i)
 }
 
 // Load returns the entity's Meta, building it from desc the first time. A
@@ -132,12 +132,12 @@ func (o *MetaOnce[E]) Load[_ Lazy[E]](desc func() Desc[E]) *Meta[E] {
 		info, err := buildDesc(x, unsafe.Pointer(x), func() descView {
 			d = desc()
 			v := descView{d: &descFields{table: d.Table, schema: d.Schema, columns: d.Columns, primaryKey: d.PrimaryKey,
-				tenant: d.Tenant, indexes: d.Indexes, relations: d.Relations, check: d.Check,
+				tenant: d.Tenant, indexes: d.Indexes, relations: d.Edges, check: d.Check,
 				policy: d.Policy != nil, hooks: d.Hooks != nil}}
 			if a := d.Addr; a != nil {
 				v.addr = func(i int) any { return a(x, i) }
 			}
-			if a := d.RelAddr; a != nil {
+			if a := d.EdgeAddr; a != nil {
 				v.relAddr = func(i int) any { return a(x, i) }
 			}
 			return v
@@ -244,7 +244,7 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 	}
 	rels := make([]*relation, len(d.relations))
 	if len(rels) > 0 && v.relAddr == nil {
-		return fail("", "the generated metadata has relations but no RelAddr; run go tool velox-gen")
+		return fail("", "the generated metadata has relations but no EdgeAddr; run go tool velox-gen")
 	}
 	for i, r := range d.relations {
 		if !r.explicit {
@@ -254,7 +254,7 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 		}
 		off, rt, ok := fieldOf(v.relAddr(i), base, t.Size())
 		if !ok || !isRelation(rt) {
-			return fail(r.name, "RelAddr does not return a *One[T] or *Many[T] in the entity for relation %d", i)
+			return fail(r.name, "EdgeAddr does not return a *One[T] or *Many[T] in the entity for relation %d", i)
 		}
 		if rt != r.holders[0] && rt != r.holders[1] {
 			// The field holds another entity's relation: loading would fill
@@ -324,7 +324,7 @@ func defaultOf(d any, ft reflect.Type) (any, bool) {
 
 // For generated code. EdgeTo is a relation to entity T keyed
 // owner.Columns[ownerCol] = T.Columns[targetCol]. Its field must be a One[T] or
-// a Many[T]: the metadata is refused at first use when RelAddr returns another
+// a Many[T]: the metadata is refused at first use when EdgeAddr returns another
 // type, such as the holder of another entity, as stale or hand-edited code
 // would.
 //
@@ -332,8 +332,8 @@ func defaultOf(d any, ft reflect.Type) (any, bool) {
 // the owner would link T, and through T's own relations every entity of the
 // connected model. Where the relation is used, the handle Rel[E, T] says T, and
 // CheckRelation checks the target.
-func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) Relation {
-	return Relation{
+func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) EdgeDesc {
+	return EdgeDesc{
 		name: name, explicit: true, ownerCol: ownerCol, targetCol: targetCol,
 		holders: [2]any{elemType((*One[T])(nil)), elemType((*Many[T])(nil))},
 	}
@@ -352,7 +352,7 @@ func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) Relation 
 // check that a link's two endpoints are rows the caller may see or change:
 // an application that writes links checks both endpoints itself, in J's
 // Policy (Insert, and Write for updates and deletes) or in a hook on J.
-func EdgeThrough[J, T any, PJ Entity[J], PT Entity[T]](name string, ownerCol, joinOwner, joinTarget, targetCol int) Relation {
+func EdgeThrough[J, T any, PJ Entity[J], PT Entity[T]](name string, ownerCol, joinOwner, joinTarget, targetCol int) EdgeDesc {
 	r := EdgeTo[T, PT](name, ownerCol, targetCol)
 	r.through = &through{
 		join: func() (*EntityInfo, error) {

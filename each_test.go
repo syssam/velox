@@ -40,9 +40,9 @@ func eUserDesc() velox.Desc[eUser] {
 		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Relations:  []velox.Relation{velox.EdgeTo[ePost]("Posts", 0, 1), velox.EdgeThrough[eLink, dTag]("Tags", 0, 1, 2, 0)},
+		Edges:      []velox.EdgeDesc{velox.EdgeTo[ePost]("Posts", 0, 1), velox.EdgeThrough[eLink, dTag]("Tags", 0, 1, 2, 0)},
 		Addr:       func(x *eUser, i int) any { return [...]any{&x.ID, &x.Name}[i] },
-		RelAddr: func(x *eUser, i int) any {
+		EdgeAddr: func(x *eUser, i int) any {
 			switch i {
 			case 0:
 				return &x.Posts

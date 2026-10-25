@@ -135,9 +135,9 @@ func companyDesc() Desc[company] {
 		Columns:    []ColumnDesc{{Field: "ID", Name: "id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Relations:  []Relation{EdgeTo[employee]("Staff", 0, 1)}, // employee.CompanyID
+		Edges:      []EdgeDesc{EdgeTo[employee]("Staff", 0, 1)}, // employee.CompanyID
 		Addr:       func(x *company, i int) any { return &x.ID },
-		RelAddr:    func(x *company, i int) any { return &x.Staff },
+		EdgeAddr:   func(x *company, i int) any { return &x.Staff },
 	}
 }
 
@@ -159,7 +159,7 @@ func employeeDesc() Desc[employee] {
 		Columns:    []ColumnDesc{{Field: "ID", Name: "id"}, {Field: "CompanyID", Name: "company_id"}, {Field: "BossID", Name: "boss_id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Relations:  []Relation{EdgeTo[employee]("Boss", 2, 0), EdgeTo[company]("Company", 1, 0)},
+		Edges:      []EdgeDesc{EdgeTo[employee]("Boss", 2, 0), EdgeTo[company]("Company", 1, 0)},
 		Addr: func(x *employee, i int) any {
 			switch i {
 			case 0:
@@ -169,7 +169,7 @@ func employeeDesc() Desc[employee] {
 			}
 			return &x.BossID
 		},
-		RelAddr: func(x *employee, i int) any {
+		EdgeAddr: func(x *employee, i int) any {
 			if i == 0 {
 				return &x.Boss
 			}
@@ -194,9 +194,9 @@ func keyedDesc() Desc[keyed] {
 		Columns:    []ColumnDesc{{Field: "ID", Name: "id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Relations:  []Relation{EdgeTo[keyedLine]("Lines", 0, 1)},
+		Edges:      []EdgeDesc{EdgeTo[keyedLine]("Lines", 0, 1)},
 		Addr:       func(x *keyed, i int) any { return &x.ID },
-		RelAddr:    func(x *keyed, i int) any { return &x.Lines },
+		EdgeAddr:   func(x *keyed, i int) any { return &x.Lines },
 	}
 }
 
@@ -240,9 +240,9 @@ func blobOwnerDesc() Desc[blobOwner] {
 		Columns:    []ColumnDesc{{Field: "ID", Name: "id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Relations:  []Relation{EdgeTo[blobLine]("Lines", 0, 1)},
+		Edges:      []EdgeDesc{EdgeTo[blobLine]("Lines", 0, 1)},
 		Addr:       func(x *blobOwner, i int) any { return &x.ID },
-		RelAddr:    func(x *blobOwner, i int) any { return &x.Lines },
+		EdgeAddr:   func(x *blobOwner, i int) any { return &x.Lines },
 	}
 }
 
@@ -289,9 +289,9 @@ func invalidHolderDesc() Desc[invalidHolder] {
 		Columns:    []ColumnDesc{{Field: "ID", Name: "id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Relations:  []Relation{EdgeTo[brokenTarget]("T", 0, 0)},
+		Edges:      []EdgeDesc{EdgeTo[brokenTarget]("T", 0, 0)},
 		Addr:       func(x *invalidHolder, i int) any { return &x.ID },
-		RelAddr:    func(x *invalidHolder, i int) any { return &x.T },
+		EdgeAddr:   func(x *invalidHolder, i int) any { return &x.T },
 	}
 }
 

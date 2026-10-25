@@ -11,13 +11,13 @@ import (
 
 func TestTenantContextLaterWins(t *testing.T) {
 	bg := context.Background()
-	ctx := velox.AllTenants(velox.WithTenant(bg, int64(7)), "nightly billing")
+	ctx := velox.WithAllTenants(velox.WithTenant(bg, int64(7)), "nightly billing")
 	if id, all := velox.TenantOf(ctx); id != nil || all != "nightly billing" {
-		t.Errorf("WithTenant then AllTenants: id %v, all %q", id, all)
+		t.Errorf("WithTenant then WithAllTenants: id %v, all %q", id, all)
 	}
-	ctx = velox.WithTenant(velox.AllTenants(bg, "nightly billing"), int64(7))
+	ctx = velox.WithTenant(velox.WithAllTenants(bg, "nightly billing"), int64(7))
 	if id, all := velox.TenantOf(ctx); id != int64(7) || all != "" {
-		t.Errorf("AllTenants then WithTenant: id %v, all %q", id, all)
+		t.Errorf("WithAllTenants then WithTenant: id %v, all %q", id, all)
 	}
 	if id, all := velox.TenantOf(bg); id != nil || all != "" {
 		t.Errorf("no tenant: id %v, all %q", id, all)
@@ -27,23 +27,23 @@ func TestTenantContextLaterWins(t *testing.T) {
 func TestTenantBypassNeedsAReason(t *testing.T) {
 	ctx := velox.WithTenant(context.Background(), int64(7))
 	for _, reason := range []string{"", " \t\n"} {
-		if velox.AllTenants(ctx, reason) != ctx {
-			t.Errorf("AllTenants with the reason %q changed the context", reason)
+		if velox.WithAllTenants(ctx, reason) != ctx {
+			t.Errorf("WithAllTenants with the reason %q changed the context", reason)
 		}
 	}
-	if id, all := velox.TenantOf(velox.AllTenants(ctx, "")); id != int64(7) || all != "" {
-		t.Errorf("AllTenants with no reason: id %v, all %q", id, all)
+	if id, all := velox.TenantOf(velox.WithAllTenants(ctx, "")); id != int64(7) || all != "" {
+		t.Errorf("WithAllTenants with no reason: id %v, all %q", id, all)
 	}
 }
 
 func TestSkipPolicyNeedsAReason(t *testing.T) {
 	ctx := context.Background()
 	for _, reason := range []string{"", " \t\n"} {
-		if velox.SkipPolicy(ctx, reason) != ctx {
-			t.Errorf("SkipPolicy with the reason %q changed the context", reason)
+		if velox.WithoutPolicy(ctx, reason) != ctx {
+			t.Errorf("WithoutPolicy with the reason %q changed the context", reason)
 		}
 	}
-	if got := velox.PolicyBypass(velox.SkipPolicy(ctx, "support tool")); got != "support tool" {
+	if got := velox.PolicyBypass(velox.WithoutPolicy(ctx, "support tool")); got != "support tool" {
 		t.Errorf("PolicyBypass = %q", got)
 	}
 	if got := velox.PolicyBypass(ctx); got != "" {
@@ -103,20 +103,20 @@ func TestTicketMetadata(t *testing.T) {
 
 func TestRowScopeOf(t *testing.T) {
 	ctx := context.Background()
-	if got := velox.RowScopeOf(ctx); got != (velox.RowScope{}) {
+	if got := velox.RowScopeFromContext(ctx); got != (velox.RowScope{}) {
 		t.Errorf("no scope: %+v", got)
 	}
-	ctx = velox.SkipPolicy(velox.WithTenant(ctx, int64(7)), "audit")
-	if got, want := velox.RowScopeOf(ctx), (velox.RowScope{Tenant: int64(7), SkipPolicy: "audit"}); got != want {
+	ctx = velox.WithoutPolicy(velox.WithTenant(ctx, int64(7)), "audit")
+	if got, want := velox.RowScopeFromContext(ctx), (velox.RowScope{Tenant: int64(7), PolicyBypass: "audit"}); got != want {
 		t.Errorf("%+v, want %+v", got, want)
 	}
-	if got := velox.RowScopeOf(velox.AllTenants(ctx, "nightly")); got.Tenant != nil || got.AllTenants != "nightly" || got.SkipPolicy != "audit" {
+	if got := velox.RowScopeFromContext(velox.WithAllTenants(ctx, "nightly")); got.Tenant != nil || got.TenantBypass != "nightly" || got.PolicyBypass != "audit" {
 		t.Errorf("all tenants: %+v", got)
 	}
-	if got, want := velox.RowScopeOf(velox.OnShard(ctx, "eu")), (velox.RowScope{Tenant: int64(7), SkipPolicy: "audit", Shard: "eu", OnShard: true}); got != want {
+	if got, want := velox.RowScopeFromContext(velox.WithShard(ctx, "eu")), (velox.RowScope{Tenant: int64(7), PolicyBypass: "audit", Shard: "eu", HasShard: true}); got != want {
 		t.Errorf("on a shard: %+v, want %+v", got, want)
 	}
-	if got := velox.RowScopeOf(velox.OnShard(ctx, "")); !got.OnShard || got == velox.RowScopeOf(ctx) {
-		t.Errorf("OnShard(\"\"): %+v, want it told from no shard", got)
+	if got := velox.RowScopeFromContext(velox.WithShard(ctx, "")); !got.HasShard || got == velox.RowScopeFromContext(ctx) {
+		t.Errorf("WithShard(\"\"): %+v, want it told from no shard", got)
 	}
 }

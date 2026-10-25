@@ -45,7 +45,7 @@ func run(ctx context.Context, w io.Writer) error {
 	D, C := gen.Docs, gen.Comments
 	say := func(format string, args ...any) { _, _ = fmt.Fprintf(w, format+"\n", args...) }
 
-	alice, bob, admin := gen.AsUser(ctx, "alice"), gen.AsUser(ctx, "bob"), gen.AsUser(ctx, "admin")
+	alice, bob, admin := gen.WithUser(ctx, "alice"), gen.WithUser(ctx, "bob"), gen.WithUser(ctx, "admin")
 
 	// Each owner inserts their own docs; the Insert policy checks the row.
 	docs := map[string]*gen.Doc{
@@ -55,7 +55,7 @@ func run(ctx context.Context, w io.Writer) error {
 	}
 	for _, title := range []string{"Roadmap", "Salaries", "Notes"} {
 		d := docs[title]
-		if err := db.Insert(d).Exec(gen.AsUser(ctx, d.Owner)); err != nil {
+		if err := db.Insert(d).Exec(gen.WithUser(ctx, d.Owner)); err != nil {
 			return err
 		}
 	}
@@ -121,14 +121,14 @@ func run(ctx context.Context, w io.Writer) error {
 	err = db.Insert(&gen.Doc{Owner: "alice", Title: "Forged"}).Exec(bob)
 	say("bob inserts a doc as alice: %v", err)
 
-	// SkipPolicy switches every policy off for one context, with a reason
+	// WithoutPolicy switches every policy off for one context, with a reason
 	// that hooks see as Statement.PolicyBypass. It does not lift tenant
-	// scoping (see AllTenants).
-	n, err := db.Query[gen.Doc]().Count(velox.SkipPolicy(ctx, "nightly backup"))
+	// scoping (see WithAllTenants).
+	n, err := db.Query[gen.Doc]().Count(velox.WithoutPolicy(ctx, "nightly backup"))
 	if err != nil {
 		return err
 	}
-	say("SkipPolicy: %d docs", n)
+	say("WithoutPolicy: %d docs", n)
 	return nil
 }
 

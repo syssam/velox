@@ -21,7 +21,7 @@ const ticketCols = `"id", "created_by", "org_id", "owner", "title", "done", "inv
 // tenant returns a context scoped to tenant id, with the policy skipped: the
 // tenant tests check the scope alone.
 func tenant(id any) context.Context {
-	return velox.WithTenant(velox.SkipPolicy(context.Background(), "tenant tests"), id)
+	return velox.WithTenant(velox.WithoutPolicy(context.Background(), "tenant tests"), id)
 }
 
 func ticketRow(id, org int64, parent any) []any {
@@ -109,7 +109,7 @@ func TestTenantScopeOnBothPaths(t *testing.T) {
 	}
 }
 
-// TestNoTenantFailsEveryOperation: with neither WithTenant nor AllTenants,
+// TestNoTenantFailsEveryOperation: with neither WithTenant nor WithAllTenants,
 // every operation on a scoped entity fails, on both paths, and sends nothing.
 func TestNoTenantFailsEveryOperation(t *testing.T) {
 	bg := context.Background()
@@ -152,7 +152,7 @@ func TestAllTenantsAddsNothing(t *testing.T) {
 		mu.Unlock()
 		return next(ctx)
 	}))
-	all := velox.AllTenants(context.Background(), "reason")
+	all := velox.WithAllTenants(context.Background(), "reason")
 	if _, err := db.Query[testmodel.Invoice]().Where(I.Paid.EQ(true)).Limit(5).All(all); err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +168,7 @@ func TestAllTenantsAddsNothing(t *testing.T) {
 		t.Fatalf("the Around hook saw %d statements", len(seen))
 	}
 	if seen[0].TenantBypass != "reason" || seen[0].Tenant != nil {
-		t.Errorf("AllTenants: Tenant %v, TenantBypass %q", seen[0].Tenant, seen[0].TenantBypass)
+		t.Errorf("WithAllTenants: Tenant %v, TenantBypass %q", seen[0].Tenant, seen[0].TenantBypass)
 	}
 	if seen[1].Tenant != int64(7) || seen[1].TenantBypass != "" {
 		t.Errorf("WithTenant: Tenant %v, TenantBypass %q", seen[1].Tenant, seen[1].TenantBypass)
@@ -223,12 +223,12 @@ func TestTenantColumnAssignments(t *testing.T) {
 	if err := db.Save(&inv, I.OrgID).Exec(t7); err != nil {
 		t.Errorf("Save of the tenant: %v", err)
 	}
-	all := velox.AllTenants(context.Background(), "move an invoice")
+	all := velox.WithAllTenants(context.Background(), "move an invoice")
 	if _, err := upd(I.OrgID.Set(8)).Exec(all); err != nil {
-		t.Errorf("AllTenants, Set(8): %v", err)
+		t.Errorf("WithAllTenants, Set(8): %v", err)
 	}
 	if _, err := upd(I.OrgID.Add(1)).Exec(all); err != nil {
-		t.Errorf("AllTenants, Add(1): %v", err)
+		t.Errorf("WithAllTenants, Add(1): %v", err)
 	}
 }
 
@@ -267,11 +267,11 @@ func TestHasOnAScopedTargetFromAnUnscopedEntity(t *testing.T) {
 	if !errors.Is(err, velox.ErrTenantMismatch) || !strings.HasPrefix(err.Error(), "velox: testmodel.Item: in the EXISTS on testmodel.Invoice: tenant does not match: ") {
 		t.Errorf("mismatch inside EXISTS: %v", err)
 	}
-	if _, err := q.All(velox.AllTenants(context.Background(), "reason")); err != nil {
+	if _, err := q.All(velox.WithAllTenants(context.Background(), "reason")); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(e.SQL, "org_id") || seen.TenantBypass != "reason" {
-		t.Errorf("AllTenants: %s, TenantBypass %q", e.SQL, seen.TenantBypass)
+		t.Errorf("WithAllTenants: %s, TenantBypass %q", e.SQL, seen.TenantBypass)
 	}
 
 	// An unscoped entity whose conditions reach no scoped target needs no

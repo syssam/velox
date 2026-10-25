@@ -287,10 +287,10 @@ func run(ctx context.Context, w io.Writer) error {
 	}
 	say("committed: org 1 has %d invoices", n)
 
-	// 8. AllTenants lifts the tenant scope for one context, and requires a
+	// 8. WithAllTenants lifts the tenant scope for one context, and requires a
 	// reason. The policy still applies, so the report runs as an accountant.
-	say("\n== 8. AllTenants and Raw")
-	report := gen.WithRole(velox.AllTenants(ctx, "monthly revenue report"), gen.Accountant)
+	say("\n== 8. WithAllTenants and Raw")
+	report := gen.WithRole(velox.WithAllTenants(ctx, "monthly revenue report"), gen.Accountant)
 	text, _, err := db.Query[gen.Invoice]().Where(I.Status.NEQ(gen.InvoiceStatusDraft)).Unbounded().SQL(report)
 	if err != nil {
 		return err

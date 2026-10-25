@@ -107,7 +107,7 @@ func (q Query[E]) Unbounded[_ Lazy[E]]() Query[E] {
 // entity's Write policy, as it does to an UPDATE. A Count or Exists of it
 // checks a row before writes that do not go through E's own UPDATE, such as
 // another entity's rows that point at it. The query stays a read: a Write
-// policy's denial is a select's, and SkipPolicy skips it as it skips Read.
+// policy's denial is a select's, and WithoutPolicy skips it as it skips Read.
 // It does not reach the queries of a With load.
 func (q Query[E]) Writable[_ Lazy[E]]() Query[E] {
 	q.st.Writable = true
