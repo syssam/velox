@@ -2,14 +2,14 @@
 -- velox:foreign-keys off
 
 DROP INDEX "posts_reviewer_id";
--- review: sqlite-rebuild: drops foreign key posts_reviewer_id_fkey; SQLite rebuilds table posts: it copies every row into a new table
+-- review: sqlite-rebuild: drops foreign key posts_users_reviewer; SQLite rebuilds table posts: it copies every row into a new table
 CREATE TABLE "velox_new_posts" (
   "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
   "author_id" integer NOT NULL,
   "title" text NOT NULL,
   "status" text NOT NULL DEFAULT 'active',
   "reviewer_id" integer,
-  CONSTRAINT "posts_author_id_fkey" FOREIGN KEY ("author_id") REFERENCES "users" ("id") ON DELETE CASCADE,
+  CONSTRAINT "posts_users_posts" FOREIGN KEY ("author_id") REFERENCES "users" ("id") ON DELETE CASCADE,
   CONSTRAINT "posts_status_check" CHECK ("status" IN ('active', 'banned', 'pending'))
 );
 INSERT INTO "velox_new_posts" ("id", "author_id", "title", "status", "reviewer_id") SELECT "id", "author_id", "title", "status", "reviewer_id" FROM "posts";

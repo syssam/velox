@@ -49,7 +49,7 @@
       "primary_key_name": "PRIMARY",
       "indexes": [
         {
-          "name": "posts_author_id",
+          "name": "posts_users_posts",
           "columns": [
             "author_id"
           ]
@@ -57,7 +57,7 @@
       ],
       "foreign_keys": [
         {
-          "name": "posts_author_id_fkey",
+          "name": "posts_users_posts",
           "columns": [
             "author_id"
           ],
@@ -125,19 +125,19 @@
       "primary_key_name": "PRIMARY",
       "indexes": [
         {
+          "name": "user_mentor",
+          "columns": [
+            "mentor_id"
+          ]
+        },
+        {
           "name": "users_by_name",
           "columns": [
             "name"
           ]
         },
         {
-          "name": "users_mentor_id",
-          "columns": [
-            "mentor_id"
-          ]
-        },
-        {
-          "name": "users_org_id",
+          "name": "users_orgs_users",
           "columns": [
             "org_id"
           ]
@@ -157,7 +157,7 @@
           ]
         },
         {
-          "name": "users_org_id_fkey",
+          "name": "users_orgs_users",
           "columns": [
             "org_id"
           ],

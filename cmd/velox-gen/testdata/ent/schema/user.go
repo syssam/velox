@@ -21,14 +21,17 @@ func (User) Fields() []schema.Field {
 	}
 }
 
-// Indexes returns ent's user_name.
+// Indexes returns ent's user_name, and user_email beside the field's own
+// unique index.
 func (User) Indexes() []schema.Index {
-	return []schema.Index{index.Fields("name")}
+	return []schema.Index{index.Fields("name"), index.Fields("email").Unique()}
 }
 
-// Edges returns Posts, whose key is ent's user_posts column.
+// Edges returns Posts, whose key is ent's user_posts column, and a second
+// edge to posts, whose foreign key's 66-byte name ent caps.
 func (User) Edges() []schema.Edge {
 	return []schema.Edge{
 		edge.To("posts", Post.Type).StorageKey(edge.Column("user_posts")).OnDelete(edge.SetNull),
+		edge.To("drafts_written_but_never_published_by_this_user_so_far", Post.Type).OnDelete(edge.SetNull),
 	}
 }

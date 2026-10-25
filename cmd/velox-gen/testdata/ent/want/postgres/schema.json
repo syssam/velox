@@ -3,6 +3,25 @@
   "dialect": "postgres",
   "tables": [
     {
+      "name": "audit_entries_kept_for_every_change_an_editor_makes_to_posts",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "identity": true,
+          "sequence": "audit_entries_kept_for_every_change_an_editor_makes_to_p_id_seq"
+        },
+        {
+          "name": "note",
+          "type": "character varying(255)"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "audit_entries_kept_for_every_change_an_editor_makes_to_pos_pkey"
+    },
+    {
       "name": "posts",
       "columns": [
         {
@@ -16,7 +35,17 @@
           "type": "character varying(255)"
         },
         {
+          "name": "reviewed_by_an_editor_before_the_post_was_published_on",
+          "type": "bigint",
+          "nullable": true
+        },
+        {
           "name": "user_posts",
+          "type": "bigint",
+          "nullable": true
+        },
+        {
+          "name": "user_drafts_written_but_never_published_by_this_user_so_far",
           "type": "bigint",
           "nullable": true
         }
@@ -25,7 +54,29 @@
         "id"
       ],
       "primary_key_name": "posts_pkey",
+      "indexes": [
+        {
+          "name": "post_title_reviewed_by_an_edit_610afc49e3060dc9162738c5b5b2de3d",
+          "columns": [
+            "title",
+            "reviewed_by_an_editor_before_the_post_was_published_on"
+          ]
+        }
+      ],
       "foreign_keys": [
+        {
+          "name": "posts_users_drafts_written_but_f5ecc73789cbf6208f1deb12fd406c67",
+          "columns": [
+            "user_drafts_written_but_never_published_by_this_user_so_far"
+          ],
+          "ref_table": {
+            "name": "users"
+          },
+          "ref_columns": [
+            "id"
+          ],
+          "on_delete": "SET NULL"
+        },
         {
           "name": "posts_users_posts",
           "columns": [
@@ -68,6 +119,13 @@
       ],
       "primary_key_name": "users_pkey",
       "indexes": [
+        {
+          "name": "user_email",
+          "columns": [
+            "email"
+          ],
+          "unique": true
+        },
         {
           "name": "user_name",
           "columns": [

@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/syssam/velox2"
+	"github.com/syssam/velox2/internal/ddl"
 	"github.com/syssam/velox2/plugin"
 )
 
@@ -152,7 +154,8 @@ func checks(gf *Field) []plugin.Check {
 }
 
 // indexes are the declared indexes of e, by the Names of the fields that hold
-// their columns, with the names Build gave them.
+// their columns, with the names Build gave them, a derived one capped as on
+// PostgreSQL.
 func indexes(e *Entity) []*plugin.Index {
 	byColumn := make(map[string]string, len(e.Fields))
 	for _, f := range e.Fields {
@@ -162,7 +165,11 @@ func indexes(e *Entity) []*plugin.Index {
 	}
 	out := make([]*plugin.Index, 0, len(e.Indexes))
 	for _, ix := range e.Indexes {
-		pi := &plugin.Index{Name: ix.Name, Fields: make([]string, 0, len(ix.Columns)), Unique: ix.Unique, Where: ix.Where}
+		name := ix.Name
+		if ix.Derived {
+			name = ddl.Symbol(velox.Postgres, name)
+		}
+		pi := &plugin.Index{Name: name, Fields: make([]string, 0, len(ix.Columns)), Unique: ix.Unique, Where: ix.Where}
 		for _, c := range ix.Columns {
 			pi.Fields = append(pi.Fields, byColumn[c])
 		}

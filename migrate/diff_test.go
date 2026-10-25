@@ -124,12 +124,38 @@ func TestApplyDiffGivesTo(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%v\n%s", err, strings.Join(lines(cs), "\n"))
 		}
-		if !got.Equal(to) {
+		if !keyNamesOf(got, to).Equal(to) {
 			g, _ := got.MarshalJSON()
 			w, _ := to.MarshalJSON()
 			t.Errorf("from with the changes is not to:\n%s\ngot  %s\nwant %s", strings.Join(lines(cs), "\n"), g, w)
 		}
 	})
+}
+
+// keyNamesOf is s, with the names of to's foreign keys on SQLite, where a
+// key that differs only in its name is no change: each key of s takes the
+// name of the key of to's table of its definition.
+func keyNamesOf(s, to *migrate.Schema) *migrate.Schema {
+	if s.Dialect != velox.SQLite {
+		return s
+	}
+	s = migrate.Clone(s)
+	for i := range s.Tables {
+		tb := &s.Tables[i]
+		u := table(to, tb.Name)
+		if u == nil {
+			continue
+		}
+		for j := range tb.ForeignKeys {
+			fk := &tb.ForeignKeys[j]
+			for _, uf := range u.ForeignKeys {
+				if fk.RefTable == uf.RefTable && fk.OnDelete == uf.OnDelete && slices.Equal(fk.Columns, uf.Columns) && slices.Equal(fk.RefColumns, uf.RefColumns) {
+					fk.Name = uf.Name
+				}
+			}
+		}
+	}
+	return s
 }
 
 func TestDiffDoesNotMutate(t *testing.T) {
@@ -303,30 +329,33 @@ func TestDiffStepOneUsesFromNames(t *testing.T) {
 		"rename-sequence accounts id users_id_seq accounts_id_seq",
 	}
 	wantLines(t, "rename-table-drop-column", caseChanges(t, "rename-table-drop-column", velox.Postgres), append(append([]string{
-		"drop-index users users_email_unique"}, renames...),
+		"drop-index users users_email_key"}, renames...),
 		"rename-index accounts users_mentor_id accounts_mentor_id",
 		"rename-index accounts users_org_id accounts_org_id",
-		"rename-constraint accounts users_org_id_fkey accounts_org_id_fkey",
+		"rename-constraint accounts users_orgs_users accounts_orgs_users",
 		"rename-constraint accounts users_pkey accounts_pkey",
+		"rename-constraint posts posts_users_posts posts_accounts_posts",
 		"rename-enum accounts_role users_role",
 		"drop-column accounts email",
 	))
 	wantLines(t, "rename-table-key-type", caseChanges(t, "rename-table-key-type", velox.Postgres), append(append([]string{
-		"drop-foreign-key users users_org_id_fkey"}, renames...),
-		"rename-index accounts users_email_unique accounts_email_unique",
+		"drop-foreign-key users users_orgs_users"}, renames...),
+		"rename-index accounts users_email_key accounts_email_key",
 		"rename-index accounts users_mentor_id accounts_mentor_id",
 		"rename-index accounts users_org_id accounts_org_id",
 		"rename-constraint accounts users_pkey accounts_pkey",
+		"rename-constraint posts posts_users_posts posts_accounts_posts",
 		"rename-enum accounts_role users_role",
 		"alter-column accounts org_id 1",
 		"alter-column orgs id 1",
-		"add-foreign-key accounts accounts_org_id_fkey",
+		"add-foreign-key accounts accounts_orgs_users",
 	))
 }
 
 // A name to takes from a table dropped at the end is freed first: an
 // index's on PostgreSQL and SQLite, whose index names are per schema, and a
-// foreign key's on PostgreSQL and MySQL, whose constraint names are.
+// foreign key's on PostgreSQL and MySQL, whose constraint names are. On MySQL
+// the key's index has the key's name, and is renamed with it.
 func TestDiffReusedName(t *testing.T) {
 	for _, d := range allDialects {
 		var first []string
@@ -335,9 +364,13 @@ func TestDiffReusedName(t *testing.T) {
 		}
 		if d != velox.MySQL {
 			first = append(first, "drop-index posts shared_idx")
+		} else {
+			first = append(first, "rename-index users user_mentor shared_fk")
+		}
+		if d != velox.SQLite { // a key's new name alone is no change there
+			first = append(first, "rename-constraint users user_mentor shared_fk")
 		}
 		wantLines(t, d.String(), caseChanges(t, "reuse-dropped-name", d), append(first,
-			"rename-constraint users user_mentor shared_fk",
 			"add-index users shared_idx",
 			"drop-table posts",
 		))
@@ -348,27 +381,27 @@ func TestDiffReusedName(t *testing.T) {
 // other columns: MySQL shrinks it, and it is dropped after the adds.
 func TestDiffDropColumnInIndex(t *testing.T) {
 	for _, d := range allDialects {
-		want := []string{"drop-index users users_org_id_logins", "drop-column users logins", "add-index users users_org_id"}
+		want := []string{"drop-index users user_org_id_logins", "drop-column users logins", "add-index users users_org_id"}
 		if d == velox.MySQL {
-			want = []string{"drop-column users logins", "add-index users users_org_id", "drop-index users users_org_id_logins"}
+			want = []string{"drop-column users logins", "add-index users users_orgs_users", "drop-index users user_org_id_logins"}
 		}
 		wantLines(t, d.String(), caseChanges(t, "drop-column-in-index", d), want)
 
 		// MySQL would keep a unique index unique over the columns left, so
 		// it goes before the column on every dialect.
 		wantLines(t, d.String()+" unique", caseChanges(t, "drop-column-in-unique", d), []string{
-			"drop-index users users_name_logins_unique", "drop-column users logins",
+			"drop-index users user_name_logins", "drop-column users logins",
 		})
 		// On MySQL a foreign key whose only index goes first goes with it,
 		// and comes back after its new index.
-		want = []string{"drop-index users users_org_id_logins_unique", "drop-column users logins", "add-index users users_org_id"}
+		want = []string{"drop-index users user_org_id_logins", "drop-column users logins", "add-index users users_org_id"}
 		if d == velox.MySQL {
 			want = []string{
-				"drop-foreign-key users users_org_id_fkey",
-				"drop-index users users_org_id_logins_unique",
+				"drop-foreign-key users users_orgs_users",
+				"drop-index users user_org_id_logins",
 				"drop-column users logins",
-				"add-index users users_org_id",
-				"add-foreign-key users users_org_id_fkey",
+				"add-index users users_orgs_users",
+				"add-foreign-key users users_orgs_users",
 			}
 		}
 		wantLines(t, d.String()+" unique key", caseChanges(t, "drop-column-in-unique-key", d), want)
@@ -376,7 +409,8 @@ func TestDiffDropColumnInIndex(t *testing.T) {
 }
 
 // A column rename carries the checks and partial indexes that name the
-// column: a derived check and index are renamed, not dropped and added.
+// column: a derived check is renamed, and a partial index whose name has no
+// hash of its Where keeps it; neither is dropped and added.
 func TestDiffRenameColumnRewrites(t *testing.T) {
 	want := map[velox.Dialect][]string{
 		velox.Postgres: {"rename-column users role kind", "rename-enum users_kind users_role"},
@@ -399,7 +433,7 @@ func TestDiffRenameColumnRewrites(t *testing.T) {
 		for _, c := range cs {
 			got = append(got, string(c.Kind()))
 		}
-		if !slices.Equal(got, []string{"rename-column", "rename-index", "rename-index"}) {
+		if !slices.Equal(got, []string{"rename-column"}) {
 			t.Errorf("%v:\n%s", d, strings.Join(lines(cs), "\n"))
 		}
 	}
@@ -410,26 +444,26 @@ func TestDiffRenameTableCarriesDerivedNames(t *testing.T) {
 		velox.Postgres: {
 			"rename-table accounts users accounts",
 			"rename-sequence accounts id users_id_seq accounts_id_seq",
-			"rename-index accounts users_email_unique accounts_email_unique",
+			"rename-index accounts users_email_key accounts_email_key",
 			"rename-index accounts users_mentor_id accounts_mentor_id",
 			"rename-index accounts users_org_id accounts_org_id",
-			"rename-constraint accounts users_org_id_fkey accounts_org_id_fkey",
+			"rename-constraint accounts users_orgs_users accounts_orgs_users",
 			"rename-constraint accounts users_pkey accounts_pkey",
+			"rename-constraint posts posts_users_posts posts_accounts_posts",
 			"rename-enum accounts_role users_role",
 		},
 		velox.MySQL: {
 			"rename-table accounts users accounts",
-			"rename-index accounts users_email_unique accounts_email_unique",
-			"rename-index accounts users_mentor_id accounts_mentor_id",
-			"rename-index accounts users_org_id accounts_org_id",
-			"rename-constraint accounts users_org_id_fkey accounts_org_id_fkey",
+			"rename-index accounts users_orgs_users accounts_orgs_users",
+			"rename-index posts posts_users_posts posts_accounts_posts",
+			"rename-constraint accounts users_orgs_users accounts_orgs_users",
+			"rename-constraint posts posts_users_posts posts_accounts_posts",
 		},
 		velox.SQLite: {
 			"rename-table accounts users accounts",
-			"rename-index accounts users_email_unique accounts_email_unique",
+			"rename-index accounts users_email_key accounts_email_key",
 			"rename-index accounts users_mentor_id accounts_mentor_id",
 			"rename-index accounts users_org_id accounts_org_id",
-			"rename-constraint accounts users_org_id_fkey accounts_org_id_fkey",
 			"rename-constraint accounts users_role_check accounts_role_check",
 			"rename-constraint accounts users_status_check accounts_status_check",
 		},
@@ -469,8 +503,7 @@ func TestDiffMatchesByDefinition(t *testing.T) {
 	to := tb(migrate.Index{Name: "i2", Columns: x}, fk("f2", ""), migrate.Check{Name: "c2", Expr: `"x" > 0`})
 	wantLines(t, "names alone differ", diff(t, from, to, migrate.DiffOptions{}), []string{
 		"rename-index t i1 i2",
-		"rename-constraint t c1 c2",
-		"rename-constraint t f1 f2",
+		"rename-constraint t c1 c2", // f1's new name alone is no change on SQLite
 	})
 
 	to = tb(migrate.Index{Name: "i1", Columns: []string{"y"}}, fk("f1", "CASCADE"), migrate.Check{Name: "c1", Expr: `"x" > 1`})
@@ -488,11 +521,56 @@ func TestDiffMatchesByDefinition(t *testing.T) {
 	}
 }
 
+// On SQLite a foreign key whose name alone differs is no change: a rename of
+// the table it references renames that table only, and the referencing
+// table is not rebuilt, though its key's derived name holds the old one. A
+// key whose definition changes too is dropped and added: its table is
+// rebuilt.
+func TestDiffSQLiteKeyNameAlone(t *testing.T) {
+	id := []migrate.Column{{Name: "id", Type: "integer", Identity: true}}
+	onDelete := "CASCADE"
+	schema := func(users, key string) *migrate.Schema {
+		return &migrate.Schema{Dialect: velox.SQLite, Tables: []migrate.Table{
+			{Name: users, Columns: id, PrimaryKey: []string{"id"}},
+			{
+				Name: "posts", Columns: append(slices.Clone(id), migrate.Column{Name: "author_id", Type: "integer"}), PrimaryKey: []string{"id"},
+				ForeignKeys: []migrate.ForeignKey{{Name: key, Columns: []string{"author_id"}, RefTable: migrate.TableRef{Name: users}, RefColumns: []string{"id"}, OnDelete: onDelete}},
+			},
+		}}
+	}
+	from, to := schema("users", "posts_users_posts"), schema("accounts", "posts_accounts_posts")
+	opts := migrate.DiffOptions{RenameTables: map[migrate.TableRef]migrate.TableRef{{Name: "users"}: {Name: "accounts"}}}
+	cs := diff(t, from, to, opts)
+	wantLines(t, "rename", cs, []string{"rename-table accounts users accounts"})
+	if got := sqls(render(t, from, to, cs, migrate.RenderOptions{})); !slices.Equal(got, []string{`ALTER TABLE "users" RENAME TO "accounts"`}) {
+		t.Errorf("rendered\n%s", strings.Join(got, "\n"))
+	}
+	if cs := diff(t, schema("users", "a"), schema("users", "b"), migrate.DiffOptions{}); len(cs) > 0 {
+		t.Errorf("a key's new name alone:\n%s", strings.Join(lines(cs), "\n"))
+	}
+
+	from = schema("users", "a")
+	onDelete = "SET NULL"
+	to = schema("users", "b")
+	cs = diff(t, from, to, migrate.DiffOptions{})
+	wantLines(t, "name and action", cs, []string{"drop-foreign-key posts a", "add-foreign-key posts b"})
+	got := sqls(render(t, from, to, cs, migrate.RenderOptions{}))
+	if !slices.ContainsFunc(got, func(s string) bool {
+		return strings.HasPrefix(s, `CREATE TABLE "velox_new_posts"`) && strings.Contains(s, `CONSTRAINT "b" FOREIGN KEY ("author_id") REFERENCES "users" ("id") ON DELETE SET NULL`)
+	}) {
+		t.Errorf("posts is not rebuilt with key b:\n%s", strings.Join(got, "\n"))
+	}
+}
+
 func TestDiffFKIndexReplaced(t *testing.T) {
 	for _, d := range allDialects {
+		fkIndex := "users_org_id"
+		if d == velox.MySQL {
+			fkIndex = "users_orgs_users" // the key's name
+		}
 		wantLines(t, d.String(), caseChanges(t, "fk-index-replaced", d), []string{
-			"add-index users users_org_id_created_at",
-			"drop-index users users_org_id",
+			"add-index users user_org_id_created_at",
+			"drop-index users " + fkIndex,
 		})
 	}
 }
@@ -532,10 +610,10 @@ func TestDiffCreateOrder(t *testing.T) {
 			}
 			continue
 		}
-		if inline != 1 || !slices.Equal(added, []string{"add-foreign-key alphas alphas_beta_id_fkey"}) {
+		if inline != 1 || !slices.Equal(added, []string{"add-foreign-key alphas alphas_beta_beta"}) {
 			t.Errorf("%v: the cycle's keys are %d inline and %q added", d, inline, added)
 		}
-		if at("add-foreign-key alphas alphas_beta_id_fkey") < at("create-table beta") || at("create-table beta") < at("create-table alphas") {
+		if at("add-foreign-key alphas alphas_beta_beta") < at("create-table beta") || at("create-table beta") < at("create-table alphas") {
 			t.Errorf("%v: the cycle's key is not added after both tables:\n%s", d, strings.Join(lines(cs), "\n"))
 		}
 	}

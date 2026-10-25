@@ -18,12 +18,12 @@ CREATE TABLE `users` (
   `created_at` datetime(6) NOT NULL,
   `mentor_id` bigint NULL,
   PRIMARY KEY (`id`),
+  UNIQUE INDEX `email` (`email`),
+  INDEX `user_mentor` (`mentor_id`),
   INDEX `users_by_name` (`name`),
-  UNIQUE INDEX `users_email_unique` (`email`),
-  INDEX `users_mentor_id` (`mentor_id`),
-  INDEX `users_org_id` (`org_id`),
+  INDEX `users_orgs_users` (`org_id`),
   CONSTRAINT `user_mentor` FOREIGN KEY (`mentor_id`) REFERENCES `users` (`id`),
-  CONSTRAINT `users_org_id_fkey` FOREIGN KEY (`org_id`) REFERENCES `orgs` (`id`)
+  CONSTRAINT `users_orgs_users` FOREIGN KEY (`org_id`) REFERENCES `orgs` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 CREATE TABLE `posts` (
   `id` bigint NOT NULL AUTO_INCREMENT,
@@ -31,6 +31,6 @@ CREATE TABLE `posts` (
   `title` varchar(200) NOT NULL,
   `status` enum('active','banned','pending') NOT NULL DEFAULT 'active',
   PRIMARY KEY (`id`),
-  INDEX `posts_author_id` (`author_id`),
-  CONSTRAINT `posts_author_id_fkey` FOREIGN KEY (`author_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+  INDEX `posts_users_posts` (`author_id`),
+  CONSTRAINT `posts_users_posts` FOREIGN KEY (`author_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;

@@ -46,16 +46,16 @@ func stmtSQL(sts []migrate.Statement) []string {
 func TestRenderOnlineUnits(t *testing.T) {
 	for name, want := range map[string][][]string{
 		"add-index": {{
-			`DROP INDEX CONCURRENTLY IF EXISTS "users_created_at"`,
-			`CREATE INDEX CONCURRENTLY "users_created_at" ON "users" ("created_at")`,
+			`DROP INDEX CONCURRENTLY IF EXISTS "user_created_at"`,
+			`CREATE INDEX CONCURRENTLY "user_created_at" ON "users" ("created_at")`,
 		}},
 		"add-foreign-key": {{
 			`DROP INDEX CONCURRENTLY IF EXISTS "posts_reviewer_id"`,
 			`CREATE INDEX CONCURRENTLY "posts_reviewer_id" ON "posts" ("reviewer_id")`,
 		}, {
-			`ALTER TABLE "posts" DROP CONSTRAINT IF EXISTS "posts_reviewer_id_fkey"`,
-			`ALTER TABLE "posts" ADD CONSTRAINT "posts_reviewer_id_fkey" FOREIGN KEY ("reviewer_id") REFERENCES "users" ("id") NOT VALID`,
-			`ALTER TABLE "posts" VALIDATE CONSTRAINT "posts_reviewer_id_fkey"`,
+			`ALTER TABLE "posts" DROP CONSTRAINT IF EXISTS "posts_users_reviewer"`,
+			`ALTER TABLE "posts" ADD CONSTRAINT "posts_users_reviewer" FOREIGN KEY ("reviewer_id") REFERENCES "users" ("id") NOT VALID`,
+			`ALTER TABLE "posts" VALIDATE CONSTRAINT "posts_users_reviewer"`,
 		}},
 		"set-not-null": {{
 			`ALTER TABLE "users" DROP CONSTRAINT IF EXISTS "users_bio_not_null"`,
@@ -101,7 +101,7 @@ func TestRenderOnlineUnits(t *testing.T) {
 		t.Fatalf("key-type-change:\n%s", scriptsText(ss))
 	}
 	if want := []string{
-		`ALTER TABLE "users" DROP CONSTRAINT "users_org_id_fkey"`,
+		`ALTER TABLE "users" DROP CONSTRAINT "users_orgs_users"`,
 		`ALTER TABLE "orgs" ALTER COLUMN "id" TYPE bigint USING "id"::bigint`,
 		`ALTER TABLE "users" ALTER COLUMN "org_id" TYPE bigint USING "org_id"::bigint`,
 	}; !slices.Equal(stmtSQL(main.Statements), want) {
@@ -160,9 +160,9 @@ func TestRenderEnumScript(t *testing.T) {
 	}
 	got := stmtSQL(ss[0].Statements)
 	if len(ss) != 1 || len(got) != 8 || got[2] != `ALTER TABLE "users" DROP CONSTRAINT "users_role_known"` ||
-		!strings.HasPrefix(got[3], `DROP INDEX "users_name_`) ||
+		got[3] != `DROP INDEX "user_name"` ||
 		!strings.HasPrefix(got[4], `ALTER TABLE "users" ALTER COLUMN "role" DROP DEFAULT, ALTER COLUMN "role" TYPE "users_role"`) ||
-		!strings.HasPrefix(got[5], `CREATE INDEX "users_name_`) || !strings.HasSuffix(got[5], ` ON "users" ("name") WHERE role = 'admin'`) ||
+		got[5] != `CREATE INDEX "user_name" ON "users" ("name") WHERE role = 'admin'` ||
 		got[6] != `ALTER TABLE "users" ADD CONSTRAINT "users_role_known" CHECK ("role" IN ('admin', 'viewer'))` ||
 		got[7] != `DROP TYPE "users_role_velox_old"` || !slices.Equal(got[:2], want) {
 		t.Errorf("enum-swap-dependents:\n%s", scriptsText(ss))
@@ -259,32 +259,35 @@ func TestRenderTableRename(t *testing.T) {
 	if got, want := sqls(caseScripts(t, c, velox.Postgres)), []string{
 		`ALTER TABLE "users" RENAME TO "accounts"`,
 		`ALTER SEQUENCE "users_id_seq" RENAME TO "accounts_id_seq"`,
-		`ALTER INDEX "users_email_unique" RENAME TO "accounts_email_unique"`,
+		`ALTER INDEX "users_email_key" RENAME TO "accounts_email_key"`,
 		`ALTER INDEX "users_mentor_id" RENAME TO "accounts_mentor_id"`,
 		`ALTER INDEX "users_org_id" RENAME TO "accounts_org_id"`,
-		`ALTER TABLE "accounts" RENAME CONSTRAINT "users_org_id_fkey" TO "accounts_org_id_fkey"`,
+		`ALTER TABLE "accounts" RENAME CONSTRAINT "users_orgs_users" TO "accounts_orgs_users"`,
 		`ALTER TABLE "accounts" RENAME CONSTRAINT "users_pkey" TO "accounts_pkey"`,
+		`ALTER TABLE "posts" RENAME CONSTRAINT "posts_users_posts" TO "posts_accounts_posts"`,
 		`ALTER TYPE "users_role" RENAME TO "accounts_role"`,
 	}; !slices.Equal(got, want) {
 		t.Errorf("PostgreSQL:\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 	if got, want := sqls(caseScripts(t, c, velox.MySQL)), []string{
-		"ALTER TABLE `users` DROP FOREIGN KEY `users_org_id_fkey`",
+		"ALTER TABLE `users` DROP FOREIGN KEY `users_orgs_users`",
+		"ALTER TABLE `posts` DROP FOREIGN KEY `posts_users_posts`",
 		"RENAME TABLE `users` TO `accounts`",
-		"ALTER TABLE `accounts` RENAME INDEX `users_email_unique` TO `accounts_email_unique`, " +
-			"RENAME INDEX `users_mentor_id` TO `accounts_mentor_id`, " +
-			"RENAME INDEX `users_org_id` TO `accounts_org_id`",
-		"ALTER TABLE `accounts` ADD CONSTRAINT `accounts_org_id_fkey` FOREIGN KEY (`org_id`) REFERENCES `orgs` (`id`)",
+		"ALTER TABLE `accounts` RENAME INDEX `users_orgs_users` TO `accounts_orgs_users`",
+		"ALTER TABLE `posts` RENAME INDEX `posts_users_posts` TO `posts_accounts_posts`",
+		"ALTER TABLE `accounts` ADD CONSTRAINT `accounts_orgs_users` FOREIGN KEY (`org_id`) REFERENCES `orgs` (`id`)",
+		"ALTER TABLE `posts` ADD CONSTRAINT `posts_accounts_posts` FOREIGN KEY (`author_id`) REFERENCES `accounts` (`id`) ON DELETE CASCADE",
 	}; !slices.Equal(got, want) {
 		t.Errorf("MySQL:\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 	got := sqls(caseScripts(t, c, velox.SQLite))
 	if len(got) < 2 || got[0] != `ALTER TABLE "users" RENAME TO "accounts"` ||
 		slices.ContainsFunc(got[1:], func(s string) bool {
-			return strings.HasPrefix(s, "ALTER TABLE") && !strings.HasPrefix(s, `ALTER TABLE "velox_new_accounts" RENAME TO "accounts"`)
+			return strings.HasPrefix(s, "ALTER TABLE") && !strings.HasPrefix(s, `ALTER TABLE "velox_new_`) // a rebuild's
+
 		}) ||
 		!slices.ContainsFunc(got, func(s string) bool { return strings.HasPrefix(s, `CREATE TABLE "velox_new_accounts"`) }) ||
-		!slices.Contains(got, `CREATE UNIQUE INDEX "accounts_email_unique" ON "accounts" ("email")`) {
+		!slices.Contains(got, `CREATE UNIQUE INDEX "accounts_email_key" ON "accounts" ("email")`) {
 		t.Errorf("SQLite:\n%s", strings.Join(got, "\n"))
 	}
 }
@@ -293,7 +296,7 @@ func TestRenderTableRename(t *testing.T) {
 // with the column's type, which PostgreSQL keeps apart; both are created.
 func TestRenderCreateEnumAndIndex(t *testing.T) {
 	from := &migrate.Schema{Dialect: velox.Postgres}
-	to := mustTables(velox.Postgres, func(m *loadjson.Model) { addIndex(m, "User", index.Fields("role")) })
+	to := mustTables(velox.Postgres, func(m *loadjson.Model) { addIndex(m, "User", index.Fields("role").StorageKey("users_role")) })
 	got := sqls(render(t, from, to, diff(t, from, to, migrate.DiffOptions{}), migrate.RenderOptions{}))
 	for _, w := range []string{`CREATE TYPE "users_role" AS ENUM ('admin', 'viewer')`, `CREATE INDEX "users_role" ON "users" ("role")`} {
 		if !slices.Contains(got, w) {

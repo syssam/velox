@@ -232,12 +232,12 @@ func TestMigrateMySQLCombined(t *testing.T) {
 			"ALTER TABLE `users` ADD CONSTRAINT `shared_fk` FOREIGN KEY (`mentor_id`)",
 		},
 		"rename-table": {
-			"ALTER TABLE `users` DROP FOREIGN KEY `users_org_id_fkey`;",
-			"ALTER TABLE `accounts` ADD CONSTRAINT `accounts_org_id_fkey` FOREIGN KEY (`org_id`)",
+			"ALTER TABLE `users` DROP FOREIGN KEY `users_orgs_users`;",
+			"ALTER TABLE `accounts` ADD CONSTRAINT `accounts_orgs_users` FOREIGN KEY (`org_id`)",
 		},
 		"drop-column-in-unique-key": {
-			"ALTER TABLE `users` DROP FOREIGN KEY `users_org_id_fkey`;",
-			"ALTER TABLE `users` ADD CONSTRAINT `users_org_id_fkey` FOREIGN KEY (`org_id`)",
+			"ALTER TABLE `users` DROP FOREIGN KEY `users_orgs_users`;",
+			"ALTER TABLE `users` ADD CONSTRAINT `users_orgs_users` FOREIGN KEY (`org_id`)",
 		},
 	}
 	for _, name := range slices.Sorted(maps.Keys(want)) {
@@ -505,11 +505,11 @@ func TestMigrateRowsSurvivePostgresUnits(t *testing.T) {
 	if last := rows[len(rows)-1]; !last.Dirty || last.Statements != 2 {
 		t.Fatalf("history %+v; want the first unit's 2 statements", rows)
 	}
-	oid := pgStrings(t, db, `SELECT 'orgs_name_unique'::regclass::oid::text`)
+	oid := pgStrings(t, db, `SELECT 'orgs_name_key'::regclass::oid::text`)
 	mustExec(t, db, `UPDATE users SET name = 'u' || id`)
 	mustUp(t, db, fsys, migrate.WithResume())
 	invariants(t, db, d, fsys, to)
-	if again := pgStrings(t, db, `SELECT 'orgs_name_unique'::regclass::oid::text`); !slices.Equal(again, oid) {
+	if again := pgStrings(t, db, `SELECT 'orgs_name_key'::regclass::oid::text`); !slices.Equal(again, oid) {
 		t.Errorf("the first unit ran again: index %v, was %v", again, oid)
 	}
 	if n := pgStrings(t, db, `SELECT count(*)::text FROM users`); !slices.Equal(n, []string{"3"}) {

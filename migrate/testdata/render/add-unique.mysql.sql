@@ -1,6 +1,6 @@
 -- script: main
 -- velox:lock-timeout 5s
--- velox:allow add-unique users.users_name_unique
+-- velox:allow add-unique users.name
 
--- review: add-unique: adds unique index users.users_name_unique; it fails if rows hold duplicates
-ALTER TABLE `users` ADD UNIQUE INDEX `users_name_unique` (`name`), ALGORITHM=INPLACE, LOCK=NONE;
+-- review: add-unique: adds unique index users.name; it fails if rows hold duplicates
+ALTER TABLE `users` ADD UNIQUE INDEX `name` (`name`), ALGORITHM=INPLACE, LOCK=NONE;

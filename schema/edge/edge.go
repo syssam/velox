@@ -88,11 +88,12 @@ func Columns(to, from string) StorageOption {
 	return func(d *desc.Edge) { d.Columns = []string{to, from} }
 }
 
-// Symbol sets the name of the foreign-key constraint.
+// Symbol sets the name of the foreign-key constraint. Without it, the name is
+// ent's: <table>_<referenced table>_<assoc edge>, as posts_users_posts.
 func Symbol(s string) StorageOption { return func(d *desc.Edge) { d.Symbols = []string{s} } }
 
 // Symbols sets the names of the two foreign-key constraints of a many-to-many
-// join table, in the order of Columns.
+// join table, in the order of Columns. Without them, <join table>_<column>.
 func Symbols(to, from string) StorageOption {
 	return func(d *desc.Edge) { d.Symbols = []string{to, from} }
 }

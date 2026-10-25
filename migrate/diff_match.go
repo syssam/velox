@@ -222,7 +222,8 @@ func (d *differ) renameEnums() {
 
 // renameObjects renames, within each table both have, the primary key, the
 // sequences, and the indexes, foreign keys and checks that match one of to
-// by definition but not by name.
+// by definition but not by name; on SQLite such a foreign key takes to's
+// name with no change.
 func (d *differ) renameObjects() {
 	for i := range d.to.Tables {
 		u := &d.to.Tables[i]
@@ -268,6 +269,13 @@ func (d *differ) renameObjects() {
 			for k, uf := range u.ForeignKeys {
 				// A key dropped around a type change is not renamed.
 				if ut[k] < 0 && uf.Name != "" && sameForeignKey(*tf, uf) && !d.keyRetyped(ref, uf) {
+					if d.to.Dialect == velox.SQLite {
+						// SQLite cannot rename a constraint and never uses
+						// its name: a key that differs only in it is no
+						// change.
+						tf.Name, ut[k] = uf.Name, j
+						break
+					}
 					d.out = append(d.out, planned{c: RenameConstraint{Table: ref, From: tf.Name, To: uf.Name, def: keyLabel(ForeignKey{Columns: tf.Columns})}, step: 2, sub: 4, ref: ref, name: tf.Name, keyRename: true})
 					tf.Name, ut[k] = uf.Name, j
 					break

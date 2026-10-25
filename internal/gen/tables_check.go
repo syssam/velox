@@ -94,12 +94,48 @@ func (t *tabler) check(e *Entity, tb *migrate.Table, at []place) {
 			t.fail(at[i], "MySQL has no partial indexes (Where); drop Where or use a separate MySQL schema")
 		}
 		t.checkKey(tb, ix.Columns, at[i])
+		if j := slices.IndexFunc(tb.Indexes[:i], func(p migrate.Index) bool { return strings.EqualFold(p.Name, ix.Name) }); j >= 0 {
+			t.fail(at[i], "index name %q of %s is also that of %s, in table %s on MySQL%s; give one a StorageKey",
+				ix.Name, indexOf(at[i]), indexOf(at[j]), tb.Name, namedBy(at[j], at[i]))
+		}
 	}
 	file := tb.Pos
 	if i := strings.LastIndexByte(file, ':'); i >= 0 {
 		file = file[:i]
 	}
 	t.checkRow(tb, place{e, rankRow, 0, loc{pos: file}}, func(i int) string { return fieldAt(e.Fields[i].Name) })
+}
+
+// indexOf names the index made by the element at p: "index 0" for a
+// declared index, `the unique index of field "email"`, or `the foreign-key
+// index of edge "posts"`.
+func indexOf(p place) string {
+	switch p.rank {
+	case rankField:
+		return "the unique index of " + p.loc.where
+	case rankEdge:
+		return "the foreign-key index of " + p.loc.where
+	}
+	return p.loc.where
+}
+
+// namedBy says how MySQL names the indexes at ps that it names itself: a
+// Unique field's after its column, a foreign key's after the key; "" when
+// it names none of them.
+func namedBy(ps ...place) string {
+	var how []string
+	for _, p := range ps {
+		switch p.rank {
+		case rankField:
+			how = append(how, "the unique index of "+p.loc.where+" after its column")
+		case rankEdge:
+			how = append(how, "the foreign-key index of "+p.loc.where+" after the key")
+		}
+	}
+	if len(how) == 0 {
+		return ""
+	}
+	return ", which names " + strings.Join(how, " and ")
 }
 
 // checkJoin records what the join table tb holds that MySQL cannot, at the

@@ -16,14 +16,20 @@ import (
 func TestDerivedNames(t *testing.T) {
 	long := strings.Repeat("t", 60)
 	for got, want := range map[string]string{
-		pkName("users"):            "users_pkey",
-		seqName("users", "id"):     "users_id_seq",
-		fkName("pets", "owner_id"): "pets_owner_id_fkey",
-		checkName("users", "role"): "users_role_check",
-		pkName(long):               ddl.Cap(long + "_pkey"),
-		seqName(long, "id"):        ddl.Cap(long + "_id_seq"),
+		pkName("users"):                               "users_pkey",
+		seqName("users", "id"):                        "users_id_seq",
+		checkName("users", "role"):                    "users_role_check",
+		pkName(long):                                  ddl.PostgresName(long, "", "pkey"),
+		seqName(long, "id"):                           ddl.PostgresName(long, "id", "seq"),
+		indexName("UserProfile", []string{"a"}):       "userprofile_a",
+		partialIndexName("Names", []string{"a"}, "x"): "names_a_fd0c5087",
+		uniqueName("users", "email"):                  "users_email_key",
+		fkIndexName("pets", "owner_id"):               "pets_owner_id",
+		fkIndexName(long, "owner_id"):                 ddl.Cap(long + "_owner_id"),
+		fkName("posts", "users", "posts"):             "posts_users_posts",
+		joinFKName("user_groups", "user_id"):          "user_groups_user_id",
 	} {
-		if got != want || len(got) > ddl.MaxName {
+		if got != want {
 			t.Errorf("got %q, want %q", got, want)
 		}
 	}
@@ -135,7 +141,7 @@ func TestJoinTablesAndForeignKeys(t *testing.T) {
 		`dn_owner_groups.dn_group_id m_group -> dnGroup "CASCADE" by dnOwner.groups`,
 		`dn_owner_groups.dn_owner_id m_owner -> dnOwner "CASCADE" by dnOwner.groups`,
 		`dn_pets.dn_owner_pets pet_owner -> dnOwner "" by dnPet.owner`,
-		`dn_toys.dn_owner_toys dn_toys_dn_owner_toys_fkey -> dnOwner "CASCADE" by dnOwner.toys`,
+		`dn_toys.dn_owner_toys dn_toys_dn_owners_toys -> dnOwner "CASCADE" by dnOwner.toys`,
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("got\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -167,12 +173,12 @@ func TestObjects(t *testing.T) {
 		{spaceRelations, []string{
 			"orders", "dn_owners", "dn_owner_groups", "velox_new_orders", "velox_new_dn_owner_groups", "orders_pkey",
 			"orders_id_seq", "dn_owner_groups_pkey", "dn_owner_groups_dn_group_id", "dn_pets_dn_owner_pets",
-			"dn_pets_dn_owner_pets_fd0c5087", "dn_toys_dn_owner_toys_name",
+			"dnpet_dn_owner_pets", "dntoy_dn_owner_toys_name",
 		}, []string{"dn_owner_groups_id_seq", "dn_owner_groups_dn_owner_id", "dn_toys_dn_owner_toys", "orders_plain"}},
 		{spaceTypes, []string{"orders", "dn_owner_groups", "orders_plain", "dn_order_status", "mood", "orders_plain_velox_old", "mood_velox_old"},
 			[]string{"orders_text", "orders_pkey"}},
 		{spaceConstraints, []string{
-			"m_owner", "m_group", "pet_owner", "dn_toys_dn_owner_toys_fkey", "orders_plain_check", "orders_text_check",
+			"m_owner", "m_group", "pet_owner", "dn_toys_dn_owners_toys", "orders_plain_check", "orders_text_check",
 			"orders_id_not_null", "orders_plain_not_null", "dn_owner_groups_dn_owner_id_not_null", "dn_toys_name_not_null",
 		}, []string{"dn_pets_dn_owner_pets_not_null"}},
 	} {

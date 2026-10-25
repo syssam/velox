@@ -74,7 +74,7 @@ type Entity struct {
 
 // Index is an index of an entity's table.
 type Index struct {
-	Name   string   `json:"name"`             // the name the database gets: the StorageKey, else <table>_<columns>[_unique][_<hash of Where>]; one over 63 bytes is capped to its first 54 bytes, then _<hash of the whole>
+	Name   string   `json:"name"`             // the StorageKey, else ent's: lower(entity)_<columns>, with _<hash of Where> for a partial index whose name another index has. A derived name over 63 bytes is capped as ent caps it on PostgreSQL: its first 30 bytes, "_", and the md5 of the whole name. MySQL and SQLite cap at 64 bytes, so a derived name of exactly 64 bytes is capped only on PostgreSQL.
 	Fields []string `json:"fields"`           // the Names of the fields it covers, in order; an edge's foreign key is its field, implicit or not
 	Unique bool     `json:"unique,omitempty"` // a unique index
 	Where  string   `json:"where,omitempty"`  // a partial index's predicate, as SQL

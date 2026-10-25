@@ -140,7 +140,7 @@
 			],
 			"indexes": [
 				{
-					"name": "tb_profiles_tb_user_profile_unique",
+					"name": "tb_profiles_tb_user_profile_key",
 					"columns": [
 						"tb_user_profile"
 					],
@@ -149,7 +149,7 @@
 			],
 			"foreign_keys": [
 				{
-					"name": "tb_profiles_tb_user_profile_fkey",
+					"name": "tb_profiles_tb_users_profile",
 					"columns": [
 						"tb_user_profile"
 					],
@@ -224,7 +224,7 @@
 			],
 			"foreign_keys": [
 				{
-					"name": "tb_tokens_tb_user_tokens_fkey",
+					"name": "tb_tokens_tb_users_tokens",
 					"columns": [
 						"tb_user_tokens"
 					],
@@ -264,7 +264,7 @@
 			],
 			"foreign_keys": [
 				{
-					"name": "tb_user_friends_friend_id_fkey",
+					"name": "tb_user_friends_friend_id",
 					"columns": [
 						"friend_id"
 					],
@@ -277,7 +277,7 @@
 					"on_delete": "CASCADE"
 				},
 				{
-					"name": "tb_user_friends_tb_user_id_fkey",
+					"name": "tb_user_friends_tb_user_id",
 					"columns": [
 						"tb_user_id"
 					],
@@ -431,26 +431,26 @@
 			],
 			"indexes": [
 				{
-					"name": "tb_users_email_unique",
+					"name": "tb_users_email_key",
 					"columns": [
 						"email"
 					],
 					"unique": true
 				},
 				{
-					"name": "tb_users_email_unique_d975992f",
+					"name": "tb_users_tb_user_spouse_key",
+					"columns": [
+						"tb_user_spouse"
+					],
+					"unique": true
+				},
+				{
+					"name": "tbuser_email",
 					"columns": [
 						"email"
 					],
 					"unique": true,
 					"where": "active"
-				},
-				{
-					"name": "tb_users_tb_user_spouse_unique",
-					"columns": [
-						"tb_user_spouse"
-					],
-					"unique": true
 				},
 				{
 					"name": "users_by_name",
@@ -461,7 +461,7 @@
 			],
 			"foreign_keys": [
 				{
-					"name": "tb_users_tb_user_spouse_fkey",
+					"name": "tb_users_tb_users_spouse",
 					"columns": [
 						"tb_user_spouse"
 					],

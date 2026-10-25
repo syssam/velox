@@ -652,9 +652,9 @@ func TestUnnamedDropLabels(t *testing.T) {
 	}
 }
 
-// TestUnnamedRenameLabels: an unnamed index, key or check renamed by
-// definition is named by its definition, in the change and in the rebuild's
-// review.
+// TestUnnamedRenameLabels: an unnamed index or check renamed by definition
+// is named by its definition, in the change and in the rebuild's review. An
+// unnamed key that takes a name is no change on SQLite; the rebuild names it.
 func TestUnnamedRenameLabels(t *testing.T) {
 	_, snap := twoUnnamed(t)
 	to := migrate.Clone(snap)
@@ -669,18 +669,20 @@ func TestUnnamedRenameLabels(t *testing.T) {
 		tb.Checks[i].Name = fmt.Sprintf("users_check_%d", i)
 	}
 	got := changeStrings(diff(t, snap, to, migrate.DiffOptions{}))
-	for _, w := range []string{"rename-index users.(n) → users_n_key", "rename-constraint users.(a) → users_a_fkey",
-		"rename-constraint users.check (n <> '') → users_check_"} {
+	for _, w := range []string{"rename-index users.(n) → users_n_key", "rename-constraint users.check (n <> '') → users_check_"} {
 		if !slices.ContainsFunc(got, func(s string) bool { return strings.HasPrefix(s, w) }) {
 			t.Errorf("no %q in %v", w, got)
 		}
+	}
+	if slices.ContainsFunc(got, func(s string) bool { return strings.Contains(s, "_fkey") }) {
+		t.Errorf("a key's name alone is a change: %v", got)
 	}
 	plan, err := migrate.NewPlan(snap, to, migrate.PlanOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	text := scriptsText(plan.Scripts)
-	for _, w := range []string{"renames constraint (a) to users_a_fkey", "renames constraint check (n <> '') to users_check_"} {
+	for _, w := range []string{`CONSTRAINT "users_a_fkey" FOREIGN KEY ("a")`, "renames constraint check (n <> '') to users_check_"} {
 		if !strings.Contains(text, w) {
 			t.Errorf("no %q in\n%s", w, text)
 		}

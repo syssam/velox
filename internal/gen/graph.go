@@ -98,6 +98,7 @@ type Rel struct {
 // Index is an index of an entity's table.
 type Index struct {
 	Name        string                     `json:"name"`
+	Derived     bool                       `json:"derived,omitempty"` // Name is ent's, uncapped: each dialect caps it with ddl.Symbol
 	Columns     []string                   `json:"columns"`
 	Unique      bool                       `json:"unique,omitempty"`
 	Where       string                     `json:"where,omitempty"`

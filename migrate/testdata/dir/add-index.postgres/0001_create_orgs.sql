@@ -21,10 +21,10 @@ CREATE TABLE "users" (
   "mentor_id" bigint,
   CONSTRAINT "users_pkey" PRIMARY KEY ("id"),
   CONSTRAINT "user_mentor" FOREIGN KEY ("mentor_id") REFERENCES "users" ("id"),
-  CONSTRAINT "users_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "orgs" ("id")
+  CONSTRAINT "users_orgs_users" FOREIGN KEY ("org_id") REFERENCES "orgs" ("id")
 );
 CREATE INDEX "users_by_name" ON "users" ("name");
-CREATE UNIQUE INDEX "users_email_unique" ON "users" ("email");
+CREATE UNIQUE INDEX "users_email_key" ON "users" ("email");
 CREATE INDEX "users_mentor_id" ON "users" ("mentor_id");
 CREATE INDEX "users_org_id" ON "users" ("org_id");
 COMMENT ON COLUMN "users"."name" IS 'the display name';
@@ -34,6 +34,6 @@ CREATE TABLE "posts" (
   "title" character varying(200) NOT NULL,
   "status" "case_status" NOT NULL DEFAULT 'active',
   CONSTRAINT "posts_pkey" PRIMARY KEY ("id"),
-  CONSTRAINT "posts_author_id_fkey" FOREIGN KEY ("author_id") REFERENCES "users" ("id") ON DELETE CASCADE
+  CONSTRAINT "posts_users_posts" FOREIGN KEY ("author_id") REFERENCES "users" ("id") ON DELETE CASCADE
 );
 CREATE INDEX "posts_author_id" ON "posts" ("author_id");

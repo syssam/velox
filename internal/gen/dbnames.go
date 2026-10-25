@@ -2,7 +2,10 @@ package gen
 
 import (
 	"cmp"
+	"fmt"
+	"hash/fnv"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/syssam/velox2"
@@ -11,18 +14,56 @@ import (
 )
 
 // The names of what the graph puts in a database that velox derives. Build's
-// rules and Tables derive them here and nowhere else; each is capped.
+// rules and Tables derive them here and nowhere else. Those ent derives are
+// ent's, uncapped, and each dialect caps them as ent does; the others are
+// capped here.
 
 // tableName is the default table of the entity named name: the snake_case
 // of its plural, as ent's Type.Table names it. user gives users, Status
 // gives status.
 func tableName(name string) string { return plugin.Snake(plugin.Plural(name)) }
 
-func pkName(table string) string { return ddl.Cap(table + "_pkey") }
+// pkName is the name PostgreSQL gives table's primary key, which ent leaves
+// to it.
+func pkName(table string) string { return ddl.PostgresName(table, "", "pkey") }
 
-func seqName(table, column string) string { return ddl.Cap(table + "_" + column + "_seq") }
+// seqName is the name PostgreSQL gives the sequence of table's identity
+// column, which ent leaves to it.
+func seqName(table, column string) string { return ddl.PostgresName(table, column, "seq") }
 
-func fkName(table, column string) string { return ddl.Cap(table + "_" + column + "_fkey") }
+// indexName is ent's name of an index with no StorageKey (entc/gen/type.go):
+// the entity's name in lower case, then the columns, joined by "_". It is
+// not capped; each dialect caps it with ddl.Symbol.
+func indexName(entity string, cols []string) string {
+	return strings.Join(append([]string{strings.ToLower(entity)}, cols...), "_")
+}
+
+// partialIndexName is the name of a partial index with no StorageKey whose
+// indexName another index of its entity has: indexName's, then "_" and the
+// FNV-1a 32 hash of its Where.
+func partialIndexName(entity string, cols []string, where string) string {
+	h := fnv.New32a()
+	h.Write([]byte(where))
+	return fmt.Sprintf("%s_%08x", indexName(entity, cols), h.Sum32())
+}
+
+// uniqueName is the name of a Unique field's index on PostgreSQL and SQLite,
+// as ent names it: PostgreSQL's own name for a UNIQUE column's constraint.
+func uniqueName(table, column string) string { return table + "_" + column + "_key" }
+
+// fkIndexName is the name of velox's index of a foreign-key column on
+// PostgreSQL and SQLite, where ent makes none.
+func fkIndexName(table, column string) string { return ddl.Cap(table + "_" + column) }
+
+// fkName is ent's name of the foreign key of an O2O, O2M or M2O relation
+// with no Symbol (entc/gen/graph.go): the table that holds it, the table it
+// references and the assoc edge. It is not capped; each dialect caps it with
+// ddl.Symbol.
+func fkName(table, refTable, edge string) string { return table + "_" + refTable + "_" + edge }
+
+// joinFKName is ent's name of a join table's foreign key with no Symbol: the
+// join table and the column. It is not capped, as fkName is not.
+func joinFKName(table, column string) string { return table + "_" + column }
 
 func checkName(table, column string) string { return ddl.Cap(table + "_" + column + "_check") }
 
@@ -107,7 +148,8 @@ func joinTables(g *Graph) []joinTable {
 // join table's two.
 type foreignKey struct {
 	Schema, Table, Column string // where the key is
-	Name                  string // a Symbol, or fkName
+	Name                  string // a Symbol, else fkName or joinFKName, uncapped
+	Derived               bool   // Name is derived: each dialect caps it with ddl.Symbol
 	Ref                   *Entity
 	OnDelete              string  // "", "CASCADE", "SET NULL" or "RESTRICT"; a join table's are "CASCADE"
 	Owner                 *Entity // the schema that declares the edge, for errors
@@ -133,27 +175,32 @@ func foreignKeys(g *Graph) []foreignKey {
 			if holder == nil || ref == nil {
 				continue
 			}
-			col := ed.Rel.Columns[0]
-			name := fkName(ed.Rel.Table, col)
-			if s := symbols(g, e, ed); len(s) > 0 {
-				name = s[0]
+			assoc := ed.Name
+			if ed.Inverse {
+				assoc = ed.Ref
 			}
-			out = append(out, foreignKey{
-				Schema: holder.TableSchema, Table: ed.Rel.Table, Column: col, Name: name,
+			fk := foreignKey{
+				Schema: holder.TableSchema, Table: ed.Rel.Table, Column: ed.Rel.Columns[0],
+				Name: fkName(ed.Rel.Table, ref.Table, assoc), Derived: true,
 				Ref: ref, OnDelete: ed.Rel.OnDelete, Owner: e, Edge: ed,
-			})
+			}
+			if s := symbols(g, e, ed); len(s) > 0 {
+				fk.Name, fk.Derived = s[0], false
+			}
+			out = append(out, fk)
 		}
 	}
 	for _, jt := range joinTables(g) {
 		for i, ref := range []*Entity{jt.Owner, jt.Target} {
-			name := fkName(jt.Table, jt.Columns[i])
-			if i < len(jt.Symbols) {
-				name = jt.Symbols[i]
-			}
-			out = append(out, foreignKey{
-				Schema: jt.Schema, Table: jt.Table, Column: jt.Columns[i], Name: name,
+			fk := foreignKey{
+				Schema: jt.Schema, Table: jt.Table, Column: jt.Columns[i],
+				Name: joinFKName(jt.Table, jt.Columns[i]), Derived: true,
 				Ref: ref, OnDelete: "CASCADE", Owner: jt.Owner, Edge: jt.Edge,
-			})
+			}
+			if i < len(jt.Symbols) {
+				fk.Name, fk.Derived = jt.Symbols[i], false
+			}
+			out = append(out, fk)
 		}
 	}
 	slices.SortStableFunc(out, func(x, y foreignKey) int {
@@ -177,27 +224,60 @@ func fkIndexed(pk []string, indexes [][]string, column string) bool {
 	return false
 }
 
-// fieldIndexes are the unique indexes of e's Unique fields but the ID, each
-// with its field: one per column, unless a declared unique index, not
-// partial and not in refused, covers that column alone. A partial index is
-// unique only over the rows its predicate keeps.
-func fieldIndexes(e *Entity, refused map[*Index]bool) ([]*Index, []*Field) {
+// fieldIndexes are the unique indexes of e's Unique fields but the ID on the
+// dialect d, each with its field, one per column, named as ent names them:
+// uniqueName on PostgreSQL, cut at 63 bytes as PostgreSQL cuts it, and on
+// SQLite; the column on MySQL. As ent does, a field's index is left out
+// when a declared Unique index not in refused has the name the dialect
+// would give it (implicitName); unlike ent, only when that index is full and
+// on the field's column alone, so no uniqueness is lost. One of that name
+// over other columns is a clash of names, which rule 44 or Tables refuses.
+func fieldIndexes(e *Entity, refused map[*Index]bool, d velox.Dialect) ([]*Index, []*Field) {
 	var ixs []*Index
 	var fs []*Field
 	for _, f := range e.Fields[1:] {
 		if !f.Unique || slices.ContainsFunc(fs, func(g *Field) bool { return g.Column == f.Column }) {
 			continue // a column two fields share is rule 2's
 		}
-		ix := &Index{Columns: []string{f.Column}, Unique: true}
-		if slices.ContainsFunc(e.Indexes, func(d *Index) bool {
-			return !refused[d] && d.Unique && d.Where == "" && slices.Equal(d.Columns, ix.Columns)
+		if slices.ContainsFunc(e.Indexes, func(ix *Index) bool {
+			return !refused[ix] && ix.Unique && ix.Where == "" && slices.Equal(ix.Columns, []string{f.Column}) && implicitName(d, ix.Name, e.Table, f.Column)
 		}) {
 			continue
 		}
-		ix.Name = indexName(e.Table, ix)
-		ixs, fs = append(ixs, ix), append(fs, f)
+		name := uniqueName(e.Table, f.Column)
+		switch d {
+		case velox.Postgres:
+			name = ddl.Clip(name, ddl.MaxName) // as PostgreSQL truncates it
+		case velox.MySQL:
+			name = f.Column
+		}
+		ixs, fs = append(ixs, &Index{Name: name, Columns: []string{f.Column}, Unique: true}), append(fs, f)
 	}
 	return ixs, fs
+}
+
+// implicitName reports whether name is one the dialect d gives the index of
+// a UNIQUE column of table, as ent tells (dialect/sql/schema): on PostgreSQL
+// <table>_<column>_key, or that followed by a number above 0; on MySQL
+// <column>, or <column>_<n> with n above 1; on SQLite <column>, or
+// sqlite_autoindex_<table>_<n> with n above 0, or <table>_<column>_key, the
+// name ent and velox give it there.
+func implicitName(d velox.Dialect, name, table, column string) bool {
+	numbered := func(prefix string, above int64) bool {
+		rest, ok := strings.CutPrefix(name, prefix)
+		if !ok {
+			return false
+		}
+		n, err := strconv.ParseInt(rest, 10, 64)
+		return err == nil && n > above
+	}
+	switch d {
+	case velox.Postgres:
+		return name == uniqueName(table, column) || numbered(uniqueName(table, column), 0)
+	case velox.MySQL:
+		return name == column || numbered(column+"_", 1)
+	}
+	return name == column || name == uniqueName(table, column) || numbered("sqlite_autoindex_"+table+"_", 0)
 }
 
 // object is one name the graph puts in a database, on any dialect.
@@ -300,7 +380,7 @@ func objects(g *Graph, refused map[*Index]bool) []object {
 				k.indexes = append(k.indexes, ix.Columns)
 			}
 		}
-		ixs, fs := fieldIndexes(e, refused)
+		ixs, fs := fieldIndexes(e, refused, velox.Postgres)
 		for i, ix := range ixs {
 			add(spaceRelations, ix.Name, "unique index of "+fieldAt(fs[i].Name), fieldLoc(fs[i]))
 			k.indexes = append(k.indexes, ix.Columns)
@@ -355,7 +435,7 @@ func objects(g *Graph, refused map[*Index]bool) []object {
 		obj := object{schema: fk.Schema, owner: fk.Owner.Name, at: at, table: fk.Table}
 		if k := tables[tableKey{fk.Schema, fk.Table}]; k == nil || !fkIndexed(k.pk, k.indexes, fk.Column) {
 			ix := obj
-			ix.space, ix.name, ix.what = spaceRelations, indexName(fk.Table, &Index{Columns: []string{fk.Column}}), "foreign-key index of "+of
+			ix.space, ix.name, ix.what = spaceRelations, fkIndexName(fk.Table, fk.Column), "foreign-key index of "+of
 			out = append(out, ix)
 		}
 		obj.space, obj.name, obj.what = spaceConstraints, fk.Name, "foreign key of "+of

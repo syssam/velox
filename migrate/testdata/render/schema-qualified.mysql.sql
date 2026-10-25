@@ -11,6 +11,6 @@ CREATE TABLE `billing`.`invoices` (
   `state` enum('open','paid') NOT NULL DEFAULT 'open',
   `invoice_payer` bigint NOT NULL,
   PRIMARY KEY (`id`),
-  INDEX `invoices_invoice_payer` (`invoice_payer`),
-  CONSTRAINT `invoices_invoice_payer_fkey` FOREIGN KEY (`invoice_payer`) REFERENCES `billing`.`payers` (`id`)
+  INDEX `invoices_payers_payer` (`invoice_payer`),
+  CONSTRAINT `invoices_payers_payer` FOREIGN KEY (`invoice_payer`) REFERENCES `billing`.`payers` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;

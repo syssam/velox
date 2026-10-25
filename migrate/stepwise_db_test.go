@@ -251,14 +251,14 @@ func TestUpPostgresOnlineResume(t *testing.T) {
 	if len(rows) != 2 || !rows[1].Dirty || rows[1].Statements != 0 || rows[1].Error == "" {
 		t.Fatalf("history %+v", rows)
 	}
-	if pgIndexValid(t, db, "users_created_at") {
+	if pgIndexValid(t, db, "user_created_at") {
 		t.Error("the cancelled index is valid")
 	}
 	if _, err := other.ExecContext(ctx, `ROLLBACK`); err != nil {
 		t.Fatal(err)
 	}
 	mustUp(t, db, fsys, migrate.WithResume())
-	if !pgIndexValid(t, db, "users_created_at") {
+	if !pgIndexValid(t, db, "user_created_at") {
 		t.Error("the resumed index is invalid")
 	}
 	if rows := historyOf(t, db); rows[1].Dirty || rows[1].Statements != 2 || rows[1].Error != "" {

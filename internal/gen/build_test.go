@@ -7,11 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 	"unsafe"
 
+	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/internal/ddl"
 	"github.com/syssam/velox2/internal/gen/internal/other"
 	"github.com/syssam/velox2/internal/gen/loadjson"
@@ -112,7 +114,7 @@ func TestBuildBlog(t *testing.T) {
 		users.Rel.Table != "user_groups" || users.Rel.Columns[0] != "group_id" || users.Rel.Columns[1] != "user_id" {
 		t.Fatalf("groups %+v users %+v", groups, users)
 	}
-	if ix := u.Indexes[0]; ix.Name != "users_org_id_name_unique" || !ix.Unique || ix.Columns[1] != "name" {
+	if ix := u.Indexes[0]; ix.Name != "user_org_id_name" || !ix.Derived || !ix.Unique || ix.Columns[1] != "name" {
 		t.Fatalf("index %+v", ix)
 	}
 }
@@ -1051,6 +1053,31 @@ func (nsOrderStatus) Annotations() []schema.Annotation {
 	return []schema.Annotation{schema.Table("orders_status")}
 }
 
+// lpPrefix is 58 bytes: lpA's and lpB's tables, of 59 and 60 bytes, share
+// it, and PostgreSQL's names of their primary keys and sequences cut each
+// table back to it, or shorter.
+var lpPrefix = "long_table_" + strings.Repeat("t", 47)
+
+type lpA struct{ schema.Schema }
+
+func (lpA) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.Table(lpPrefix + "a")}
+}
+
+type lpB struct{ schema.Schema }
+
+func (lpB) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.Table(lpPrefix + "bb")}
+}
+
+// dupNamed's two indexes have one derived name: a full index takes no hash.
+type dupNamed struct{ schema.Schema }
+
+func (dupNamed) Fields() []schema.Field { return []schema.Field{field.String("name")} }
+func (dupNamed) Indexes() []schema.Index {
+	return []schema.Index{index.Fields("name"), index.Fields("name").Unique()}
+}
+
 func TestBuildRules(t *testing.T) {
 	for _, c := range []struct {
 		name string
@@ -1120,6 +1147,9 @@ func TestBuildRules(t *testing.T) {
 		{"38 optional edge field", []schema.Interface{optionalFK{}}, `schema optionalFK: edge "parent": field "parent_id" must be Nillable when the edge is not Required: an unset foreign key is NULL`},
 		{"39 optional bytes", []schema.Interface{optionalBytes{}}, `schema optionalBytes: field "blob": an Optional bytes field needs a Default or Nillable`},
 		{"40 optional time", []schema.Interface{optionalTime{}}, `schema optionalTime: field "seen": an Optional time field needs a Default or Nillable`},
+		{"44 shortened primary keys", []schema.Interface{lpA{}, lpB{}}, `schema lpB: name "` + lpPrefix + `_pkey" is also schema lpA's primary key`},
+		{"44 shortened sequences", []schema.Interface{lpA{}, lpB{}}, `schema lpB: field "id": name "` + lpPrefix[:56] + `_id_seq" is also schema lpA's identity sequence`},
+		{"44 indexes of one name", []schema.Interface{dupNamed{}}, `schema dupNamed: index 1: name "dupnamed_name" is also this schema's index 0`},
 		{"44 table and enum type", []schema.Interface{nsOrder{}, nsOrderStatus{}}, `schema nsOrder: field "status": name "orders_status" is also schema nsOrderStatus's table`},
 		{"49 func", []schema.Interface{jsonFuncField{}}, `schema jsonFuncField: field "cb": its Go type func() is a func, which a JSON column cannot hold`},
 		{"49 chan", []schema.Interface{jsonChanField{}}, `schema jsonChanField: field "ch": its Go type chan int is a chan, which a JSON column cannot hold`},
@@ -1412,13 +1442,13 @@ func (dupIndexes) Indexes() []schema.Index {
 		index.Fields("a", "b"),
 		index.Fields("b", "a"),            // another order
 		index.Fields("a", "b"),            // rule 43
-		index.Fields("a", "b").Unique(),   // unique
+		index.Fields("a", "b").Unique(),   // unique, but of index 0's name: rule 44
 		index.Fields("a", "b").Where("x"), // partial
 		index.Fields("a", "b").Where("y"), // another predicate
 		index.Fields("b"),                 // b's Unique is not compared
 		index.Fields("a").StorageKey("dup"),
 		index.Fields("b", "a").Unique().StorageKey("dup"), // rule 44
-		index.Fields("b").Unique(),                        // beside b's Unique
+		index.Fields("b").Unique(),                        // beside b's Unique; index 6's name
 		index.Fields("tags"),                              // rule 42
 		index.Fields("tags"),                              // rule 42, and not 43
 	}
@@ -1448,7 +1478,9 @@ func TestDuplicateIndexes(t *testing.T) {
 	want := `schema dupIndexes: index 10: field "tags" is JSON, which no index can cover
 schema dupIndexes: index 11: field "tags" is JSON, which no index can cover
 schema dupIndexes: index 2: repeats index 0
-schema dupIndexes: index 8: name "dup" is also this schema's index 7`
+schema dupIndexes: index 3: name "dupindexes_a_b" is also this schema's index 0
+schema dupIndexes: index 8: name "dup" is also this schema's index 7
+schema dupIndexes: index 9: name "dupindexes_b" is also this schema's index 6`
 	if got := plain(err); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
@@ -1460,31 +1492,32 @@ schema dupIndexes: index 8: name "dup" is also this schema's index 7`
 	}
 }
 
-// indexNames has the indexes on one column whose derived names must differ.
+// indexNames has the indexes on one column whose derived names are ent's,
+// partial ones with a hash of Where.
 type indexNames struct{ schema.Schema }
 
 func (indexNames) Annotations() []schema.Annotation {
 	return []schema.Annotation{schema.Table("names")}
 }
-func (indexNames) Fields() []schema.Field { return []schema.Field{field.String("a").Unique()} }
+func (indexNames) Fields() []schema.Field { return []schema.Field{field.String("a")} }
 func (indexNames) Indexes() []schema.Index {
 	return []schema.Index{
 		index.Fields("a"),
-		index.Fields("a").Unique(),
 		index.Fields("a").Where("x"),
 		index.Fields("a").Where("y"),
-		index.Fields("a").Unique().Where("x"),
-		index.Fields("a").Unique().Where("y").StorageKey("names_a_key"),
+		index.Fields("a").Unique().StorageKey("names_a_key"),
 	}
 }
 
-// A derived index name tells Unique and Where apart, deterministically.
+// A derived index name is ent's: the entity's name in lower case and the
+// columns. A partial index that shares it takes the hash of its Where; a full
+// one keeps it.
 func TestIndexNames(t *testing.T) {
 	var got []string
 	for _, ix := range mustBuild(t, indexNames{}).Entity("indexNames").Indexes {
 		got = append(got, ix.Name)
 	}
-	want := []string{"names_a", "names_a_unique", "names_a_fd0c5087", "names_a_fc0c4ef4", "names_a_unique_fd0c5087", "names_a_key"}
+	want := []string{"indexnames_a", "indexnames_a_fd0c5087", "indexnames_a_fc0c4ef4", "names_a_key"}
 	if strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Fatalf("got %q, want %q", got, want)
 	}
@@ -1504,7 +1537,7 @@ type keyShareB struct{ schema.Schema }
 
 func (keyShareB) Fields() []schema.Field { return []schema.Field{field.String("b")} }
 func (keyShareB) Indexes() []schema.Index {
-	return []schema.Index{index.Fields("b").StorageKey("shared"), index.Fields("b").Unique().StorageKey("share_a_a_unique")}
+	return []schema.Index{index.Fields("b").StorageKey("shared"), index.Fields("b").Unique().StorageKey("keysharea_a")}
 }
 
 // keyShareC holds its table in another database schema, whose index names
@@ -1536,7 +1569,7 @@ func (keyMixed) Indexes() []schema.Index {
 func TestIndexNamesAcrossGraph(t *testing.T) {
 	_, err := build(t, keyShareA{}, keyShareB{}, keyShareC{})
 	want := `schema keyShareB: index 0: name "shared" is also schema keyShareA's index 0
-schema keyShareB: index 1: name "share_a_a_unique" is also schema keyShareA's index 1`
+schema keyShareB: index 1: name "keysharea_a" is also schema keyShareA's index 1`
 	if got := plain(err); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
@@ -1714,8 +1747,8 @@ func TestOnDelete(t *testing.T) {
 	})
 }
 
-// capIndexes has two indexes whose derived names, 70 bytes, differ only
-// after byte 54.
+// capIndexes has two indexes whose derived names, 76 bytes, differ only
+// at their end.
 type capIndexes struct{ schema.Schema }
 
 var capColumn = strings.Repeat("c", 63)
@@ -1728,8 +1761,9 @@ func (capIndexes) Indexes() []schema.Index {
 	return []schema.Index{index.Fields(capColumn, "p"), index.Fields(capColumn, "q")}
 }
 
-// A derived index name over the cap is capped as a whole, and stays apart from
-// another that differs only past the cut.
+// A derived index name over the cap is capped as ent caps it, on each
+// dialect, and stays apart from another that differs only past the cut. The
+// Graph keeps it whole; the plugin model gives PostgreSQL's.
 func TestIndexNamesCapped(t *testing.T) {
 	g := mustBuild(t, capIndexes{})
 	ixs := g.Entity("capIndexes").Indexes
@@ -1745,20 +1779,31 @@ func TestIndexNamesCapped(t *testing.T) {
 			}
 		}
 	}
-	for i, suffix := range []string{"_p", "_q"} {
-		whole := "caps_" + capColumn + suffix
-		if len(whole) != 70 {
-			t.Fatalf("the uncapped name is %d bytes", len(whole))
-		}
-		if got := ixs[i].Name; got != ddl.Cap(whole) || len(got) > ddl.MaxName {
-			t.Errorf("index %d: %q, want %q", i, got, ddl.Cap(whole))
+	wholes := []string{"capindexes_" + capColumn + "_p", "capindexes_" + capColumn + "_q"}
+	for i, whole := range wholes {
+		if got := ixs[i].Name; got != whole || !ixs[i].Derived {
+			t.Errorf("index %d: %q, derived %v; want %q", i, got, ixs[i].Derived, whole)
 		}
 	}
-	if ixs[0].Name == ixs[1].Name {
-		t.Errorf("both indexes are named %q", ixs[0].Name)
+	for d, size := range map[velox.Dialect]int{velox.Postgres: 63, velox.MySQL: 64, velox.SQLite: 64} {
+		s, err := Tables(g, d)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, ix := range s.Tables[0].Indexes {
+			got = append(got, ix.Name)
+			if len(ix.Name) != size {
+				t.Errorf("%v: %q is %d bytes, want %d", d, ix.Name, len(ix.Name), size)
+			}
+		}
+		want := []string{ddl.Symbol(d, wholes[0]), ddl.Symbol(d, wholes[1])}
+		if slices.Sort(want); !slices.Equal(got, want) || got[0] == got[1] {
+			t.Errorf("%v: indexes %q, want %q", d, got, want)
+		}
 	}
-	if len(plugged) != 2 || plugged[0] != ixs[0].Name || plugged[1] != ixs[1].Name {
-		t.Errorf("the plugin model names them %q", plugged)
+	if want := []string{ddl.Symbol(velox.Postgres, wholes[0]), ddl.Symbol(velox.Postgres, wholes[1])}; !slices.Equal(plugged, want) {
+		t.Errorf("the plugin model names them %q, want %q", plugged, want)
 	}
 }
 
@@ -1872,8 +1917,10 @@ type nsIndexedEnum struct{ schema.Schema }
 func (nsIndexedEnum) Annotations() []schema.Annotation {
 	return []schema.Annotation{schema.Table("orders")}
 }
-func (nsIndexedEnum) Fields() []schema.Field  { return []schema.Field{field.Enum("status").Values("a")} }
-func (nsIndexedEnum) Indexes() []schema.Index { return []schema.Index{index.Fields("status")} }
+func (nsIndexedEnum) Fields() []schema.Field { return []schema.Field{field.Enum("status").Values("a")} }
+func (nsIndexedEnum) Indexes() []schema.Index {
+	return []schema.Index{index.Fields("status").StorageKey("orders_status")}
+}
 
 func TestNamespaceIndexOnEnumColumn(t *testing.T) {
 	ix := mustBuild(t, nsIndexedEnum{}).Entity("nsIndexedEnum").Indexes[0]

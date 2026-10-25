@@ -22,7 +22,7 @@
       "primary_key_name": "PRIMARY",
       "indexes": [
         {
-          "name": "alphas_beta_id",
+          "name": "alphas_beta_beta",
           "columns": [
             "beta_id"
           ]
@@ -30,7 +30,7 @@
       ],
       "foreign_keys": [
         {
-          "name": "alphas_beta_id_fkey",
+          "name": "alphas_beta_beta",
           "columns": [
             "beta_id"
           ],
@@ -64,7 +64,7 @@
       "primary_key_name": "PRIMARY",
       "indexes": [
         {
-          "name": "beta_alpha_id",
+          "name": "beta_alphas_alpha",
           "columns": [
             "alpha_id"
           ]
@@ -72,7 +72,7 @@
       ],
       "foreign_keys": [
         {
-          "name": "beta_alpha_id_fkey",
+          "name": "beta_alphas_alpha",
           "columns": [
             "alpha_id"
           ],
@@ -133,7 +133,7 @@
       "primary_key_name": "PRIMARY",
       "indexes": [
         {
-          "name": "posts_author_id",
+          "name": "posts_users_posts",
           "columns": [
             "author_id"
           ]
@@ -141,7 +141,7 @@
       ],
       "foreign_keys": [
         {
-          "name": "posts_author_id_fkey",
+          "name": "posts_users_posts",
           "columns": [
             "author_id"
           ],
@@ -213,26 +213,26 @@
       "primary_key_name": "PRIMARY",
       "indexes": [
         {
-          "name": "users_by_name",
-          "columns": [
-            "name"
-          ]
-        },
-        {
-          "name": "users_email_unique",
+          "name": "email",
           "columns": [
             "email"
           ],
           "unique": true
         },
         {
-          "name": "users_mentor_id",
+          "name": "user_mentor",
           "columns": [
             "mentor_id"
           ]
         },
         {
-          "name": "users_org_id",
+          "name": "users_by_name",
+          "columns": [
+            "name"
+          ]
+        },
+        {
+          "name": "users_orgs_users",
           "columns": [
             "org_id"
           ]
@@ -252,7 +252,7 @@
           ]
         },
         {
-          "name": "users_org_id_fkey",
+          "name": "users_orgs_users",
           "columns": [
             "org_id"
           ],

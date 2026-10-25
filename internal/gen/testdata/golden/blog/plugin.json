@@ -67,7 +67,7 @@
       ],
       "indexes": [
         {
-          "name": "categories_title_category_children",
+          "name": "category_title_category_children",
           "fields": [
             "title",
             "category_children"
@@ -460,7 +460,7 @@
       ],
       "indexes": [
         {
-          "name": "users_org_id_name_unique",
+          "name": "user_org_id_name",
           "fields": [
             "org_id",
             "name"

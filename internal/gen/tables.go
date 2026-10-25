@@ -137,13 +137,13 @@ func (t *tabler) entity(e *Entity) migrate.Table {
 	var keys [][]string // the leading columns of the non-partial indexes, for fkIndexed
 	var at []place      // the element that makes each index, for the checks
 	for i, ix := range e.Indexes {
-		tb.Indexes = append(tb.Indexes, migrate.Index{Name: ix.Name, Columns: slices.Clone(ix.Columns), Unique: ix.Unique, Where: ix.Where, Pos: ix.Pos})
+		tb.Indexes = append(tb.Indexes, migrate.Index{Name: t.symbol(ix.Name, ix.Derived), Columns: slices.Clone(ix.Columns), Unique: ix.Unique, Where: ix.Where, Pos: ix.Pos})
 		at = append(at, place{e, rankIndex, i, indexLoc(i, ix)})
 		if ix.Where == "" {
 			keys = append(keys, ix.Columns)
 		}
 	}
-	ixs, fs := fieldIndexes(e, nil)
+	ixs, fs := fieldIndexes(e, nil, t.d)
 	for i, ix := range ixs {
 		tb.Indexes = append(tb.Indexes, migrate.Index{Name: ix.Name, Columns: ix.Columns, Unique: true, Pos: fs[i].Pos})
 		at = append(at, place{e, rankField, slices.Index(e.Fields, fs[i]), fieldLoc(fs[i])})
@@ -184,24 +184,39 @@ func (t *tabler) joinTable(jt joinTable) migrate.Table {
 	return tb
 }
 
+// symbol is name on the dialect: capped as ent caps it when derived, else
+// as given.
+func (t *tabler) symbol(name string, derived bool) string {
+	if derived {
+		return ddl.Symbol(t.d, name)
+	}
+	return name
+}
+
 // foreignKey adds fk to tb, with the index of its column unless the
 // primary key or one of keys leads with it; it reports whether it added the
-// index. MySQL cannot name the connection's default database, so a key
-// from a table in another database to one in it is refused.
+// index. On MySQL the index has the key's name, as MySQL names the index it
+// makes for a key; elsewhere it is fkIndexName. MySQL cannot name the
+// connection's default database, so a key from a table in another database
+// to one in it is refused.
 func (t *tabler) foreignKey(tb *migrate.Table, fk foreignKey, keys [][]string) bool {
 	pos := fk.Edge.Pos
 	if t.d == velox.MySQL && tb.Schema != "" && fk.Ref.TableSchema == "" {
 		t.fail(edgePlace(fk.Owner, fk.Edge), "table %s.%s references %s in the connection's default database, which MySQL cannot name from another database; give %s a schema.TableIn",
 			tb.Schema, tb.Name, fk.Ref.Table, fk.Ref.Table)
 	}
+	name := t.symbol(fk.Name, fk.Derived)
 	tb.ForeignKeys = append(tb.ForeignKeys, migrate.ForeignKey{
-		Name: fk.Name, Columns: []string{fk.Column}, RefTable: migrate.TableRef{Schema: fk.Ref.TableSchema, Name: fk.Ref.Table},
+		Name: name, Columns: []string{fk.Column}, RefTable: migrate.TableRef{Schema: fk.Ref.TableSchema, Name: fk.Ref.Table},
 		RefColumns: []string{fk.Ref.Fields[0].Column}, OnDelete: fk.OnDelete, Pos: pos,
 	})
 	if fkIndexed(tb.PrimaryKey, keys, fk.Column) {
 		return false
 	}
-	tb.Indexes = append(tb.Indexes, migrate.Index{Name: indexName(fk.Table, &Index{Columns: []string{fk.Column}}), Columns: []string{fk.Column}, Pos: pos})
+	if t.d != velox.MySQL {
+		name = fkIndexName(fk.Table, fk.Column)
+	}
+	tb.Indexes = append(tb.Indexes, migrate.Index{Name: name, Columns: []string{fk.Column}, Pos: pos})
 	return true
 }
 

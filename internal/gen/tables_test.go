@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql/driver"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -684,14 +685,18 @@ func (tbIxTag) Edges() []schema.Edge {
 func TestTablesIndexes(t *testing.T) {
 	for _, d := range allDialects {
 		s := tables(t, d, tbIxOwner{}, tbIxA{}, tbIxB{}, tbIxC{noWhere: d == velox.MySQL}, tbIxTag{})
-		ixcs := []string{"tb_ix_cs_tb_ix_owner_c", indexName("tb_ix_cs", &Index{Columns: []string{"tb_ix_owner_c"}, Where: "tb_ix_owner_c > 0"})}
+		owners := []string{"tb_ix_owners_code_key", "tb_ix_owners_slug_key", "tbixowner_slug"}
+		ixas := "tb_ix_as_tb_ix_owner_a"
+		ixcs := []string{"tb_ix_cs_tb_ix_owner_c", "tbixc_tb_ix_owner_c"}
 		if d == velox.MySQL {
-			ixcs = ixcs[:1] // the declared index, which the key needs no other beside
+			owners = []string{"code", "slug", "tbixowner_slug"}
+			ixas = "tb_ix_as_tb_ix_owners_a" // the foreign key's name
+			ixcs = ixcs[1:]                  // the declared index, which the key needs no other beside
 		}
 		for tableName, want := range map[string][]string{
-			"tb_ix_owners":     {"tb_ix_owners_code_unique", "tb_ix_owners_slug_unique"},
-			"tb_ix_as":         {"tb_ix_as_tb_ix_owner_a"},
-			"tb_ix_bs":         {"tb_ix_bs_tb_ix_owner_b_name"},
+			"tb_ix_owners":     owners,
+			"tb_ix_as":         {ixas},
+			"tb_ix_bs":         {"tbixb_tb_ix_owner_b_name"},
 			"tb_ix_cs":         ixcs,
 			"tb_ix_owner_tags": {"tb_ix_owner_tags_tb_ix_tag_id"},
 		} {
@@ -700,11 +705,12 @@ func TestTablesIndexes(t *testing.T) {
 				t.Errorf("%v: %s indexes %q, want %q", d, tableName, got, want)
 			}
 		}
-		owners := table(t, s, "tb_ix_owners")
-		if n := len(owners.Indexes); n != 2 {
-			t.Fatalf("%v: owners %+v", d, owners.Indexes)
+		// slug's Unique keeps its index beside the declared one, as ent's does.
+		owner := table(t, s, "tb_ix_owners")
+		if n := len(owner.Indexes); n != 3 {
+			t.Fatalf("%v: owners %+v", d, owner.Indexes)
 		}
-		for _, ix := range owners.Indexes {
+		for _, ix := range owner.Indexes {
 			if !ix.Unique || len(ix.Columns) != 1 {
 				t.Errorf("%v: %+v", d, ix)
 			}
@@ -763,14 +769,14 @@ func TestTablesForeignKeys(t *testing.T) {
 		for tableName, want := range map[string][]migrate.ForeignKey{
 			"tb_fk_pets":  {{Name: "pet_owner", Columns: []string{"tb_fk_user_pets"}, RefTable: users, RefColumns: []string{"id"}, OnDelete: "SET NULL"}},
 			"tb_fk_bikes": {{Name: "bike_owner", Columns: []string{"tb_fk_user_bikes"}, RefTable: users, RefColumns: []string{"id"}}},
-			"tb_fk_cars":  {{Name: "tb_fk_cars_tb_fk_user_cars_fkey", Columns: []string{"tb_fk_user_cars"}, RefTable: users, RefColumns: []string{"id"}, OnDelete: "CASCADE"}},
+			"tb_fk_cars":  {{Name: "tb_fk_cars_tb_fk_users_cars", Columns: []string{"tb_fk_user_cars"}, RefTable: users, RefColumns: []string{"id"}, OnDelete: "CASCADE"}},
 			"tb_fk_user_groups": {
 				{Name: "gm_group", Columns: []string{"tb_fk_group_id"}, RefTable: migrate.TableRef{Name: "tb_fk_groups"}, RefColumns: []string{"id"}, OnDelete: "CASCADE"},
 				{Name: "gm_user", Columns: []string{"tb_fk_user_id"}, RefTable: users, RefColumns: []string{"id"}, OnDelete: "CASCADE"},
 			},
 			"tb_fk_user_teams": {
-				{Name: "tb_fk_user_teams_tb_fk_team_id_fkey", Columns: []string{"tb_fk_team_id"}, RefTable: migrate.TableRef{Name: "tb_fk_teams"}, RefColumns: []string{"id"}, OnDelete: "CASCADE"},
-				{Name: "tb_fk_user_teams_tb_fk_user_id_fkey", Columns: []string{"tb_fk_user_id"}, RefTable: users, RefColumns: []string{"id"}, OnDelete: "CASCADE"},
+				{Name: "tb_fk_user_teams_tb_fk_team_id", Columns: []string{"tb_fk_team_id"}, RefTable: migrate.TableRef{Name: "tb_fk_teams"}, RefColumns: []string{"id"}, OnDelete: "CASCADE"},
+				{Name: "tb_fk_user_teams_tb_fk_user_id", Columns: []string{"tb_fk_user_id"}, RefTable: users, RefColumns: []string{"id"}, OnDelete: "CASCADE"},
 			},
 		} {
 			got := table(t, s, tableName).ForeignKeys
@@ -909,11 +915,11 @@ func (tbPartialUniq) Indexes() []schema.Index {
 }
 
 func TestTablesPartialUniqueKeepsFieldIndex(t *testing.T) {
-	partial := indexName("accounts", &Index{Columns: []string{"email"}, Unique: true, Where: "active"})
+	partial := indexName("tbPartialUniq", []string{"email"})
 	for _, d := range []velox.Dialect{velox.Postgres, velox.SQLite} { // MySQL has no partial indexes
 		tb := table(t, tables(t, d, tbPartialUniq{}), "accounts")
 		want := []migrate.Index{
-			{Name: "accounts_email_unique", Columns: []string{"email"}, Unique: true},
+			{Name: "accounts_email_key", Columns: []string{"email"}, Unique: true},
 			{Name: partial, Columns: []string{"email"}, Unique: true, Where: "active"},
 		}
 		slices.SortFunc(want, func(a, b migrate.Index) int { return strings.Compare(a.Name, b.Name) })
@@ -1604,5 +1610,200 @@ func TestTablesRowLimitBounds(t *testing.T) {
 	e = refusal(t, func() error { _, err := Tables(mustBuild(t, tbRfRowOver{}), velox.MySQL); return err }())
 	if !strings.Contains(e.Reason, "these need 65544:") || !strings.Contains(e.Reason, `field "b": varbinary(253), 254 bytes`) {
 		t.Errorf("reason %s", e.Reason)
+	}
+}
+
+// --- ent's names
+
+type Writer struct{ schema.Schema }
+
+func (Writer) Fields() []schema.Field {
+	return []schema.Field{field.String("name"), field.String("email").Unique()}
+}
+func (Writer) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("stories", Story.Type).StorageKey(edge.Column("writer_stories"))}
+}
+func (Writer) Indexes() []schema.Index { return []schema.Index{index.Fields("name")} }
+
+type Story struct{ schema.Schema }
+
+func (Story) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("writer", Writer.Type).Ref("stories").Unique(), edge.To("topics", Topic.Type)}
+}
+
+type Topic struct{ schema.Schema }
+
+func (Topic) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("stories", Story.Type).Ref("topics")}
+}
+
+type UserProfile struct{ schema.Schema }
+
+func (UserProfile) Fields() []schema.Field  { return []schema.Field{field.String("bio")} }
+func (UserProfile) Indexes() []schema.Index { return []schema.Index{index.Fields("bio")} }
+
+// Tables names indexes and foreign keys as ent does on each dialect.
+func TestDDLNames(t *testing.T) {
+	for _, d := range allDialects {
+		s := tables(t, d, Writer{}, Story{}, Topic{}, UserProfile{})
+		unique, fkIndex := "writers_email_key", "stories_writer_stories"
+		if d == velox.MySQL {
+			unique, fkIndex = "email", "stories_writers_stories"
+		}
+		for name, want := range map[string]struct{ indexes, fks []string }{
+			"writers":       {[]string{unique, "writer_name"}, nil},
+			"stories":       {[]string{fkIndex}, []string{"stories_writers_stories"}},
+			"story_topics":  {[]string{"story_topics_topic_id"}, []string{"story_topics_story_id", "story_topics_topic_id"}},
+			"user_profiles": {[]string{"userprofile_bio"}, nil},
+		} {
+			tb := table(t, s, name)
+			var fks []string
+			for _, fk := range tb.ForeignKeys {
+				fks = append(fks, fk.Name)
+			}
+			if got := tableIndexNames(tb); !slices.Equal(got, slices.Sorted(slices.Values(want.indexes))) || !slices.Equal(fks, want.fks) {
+				t.Errorf("%v: %s indexes %q, foreign keys %q; want %q, %q", d, name, got, fks, want.indexes, want.fks)
+			}
+		}
+	}
+}
+
+type Subscriber struct {
+	schema.Schema
+	key string // the declared index's StorageKey
+}
+
+func (Subscriber) Fields() []schema.Field { return []schema.Field{field.String("email").Unique()} }
+func (s Subscriber) Indexes() []schema.Index {
+	ix := index.Fields("email").Unique()
+	if s.key != "" {
+		ix = ix.StorageKey(s.key)
+	}
+	return []schema.Index{ix}
+}
+
+// A Unique field beside a declared unique index on its column keeps its own
+// index, as ent's does, unless the declared index has the name the dialect
+// gives the field's.
+func TestFieldUniqueBesideIndex(t *testing.T) {
+	for _, c := range []struct {
+		key                   string
+		postgres, mysql, lite []string
+	}{
+		{"", []string{"subscriber_email", "subscribers_email_key"}, []string{"email", "subscriber_email"}, []string{"subscriber_email", "subscribers_email_key"}},
+		{"subscribers_email_key", []string{"subscribers_email_key"}, []string{"email", "subscribers_email_key"}, []string{"subscribers_email_key"}},
+		{"email", []string{"email", "subscribers_email_key"}, []string{"email"}, []string{"email"}},
+	} {
+		for d, want := range map[velox.Dialect][]string{velox.Postgres: c.postgres, velox.MySQL: c.mysql, velox.SQLite: c.lite} {
+			tb := table(t, tables(t, d, Subscriber{key: c.key}), "subscribers")
+			if got := tableIndexNames(tb); !slices.Equal(got, want) {
+				t.Errorf("StorageKey %q, %v: indexes %q, want %q", c.key, d, got, want)
+			}
+			for _, ix := range tb.Indexes {
+				if !ix.Unique || !slices.Equal(ix.Columns, []string{"email"}) {
+					t.Errorf("StorageKey %q, %v: %+v", c.key, d, ix)
+				}
+			}
+		}
+	}
+}
+
+type Member struct{ schema.Schema }
+
+var memberLine int
+
+func (Member) Fields() []schema.Field {
+	f, l := field.String("member_name").Unique(), here()
+	memberLine = l
+	return []schema.Field{field.String("name"), f}
+}
+func (Member) Indexes() []schema.Index { return []schema.Index{index.Fields("name")} }
+
+// MySQL names a Unique field's index after its column, which may be a
+// declared index's name.
+func TestTablesMySQLIndexNameClash(t *testing.T) {
+	_, err := Tables(mustBuild(t, Member{}), velox.MySQL)
+	want := `schema Member: field "member_name": index name "member_name" of the unique index of field "member_name" is also that of index 0, in table members on MySQL, ` +
+		`which names the unique index of field "member_name" after its column; give one a StorageKey`
+	var ge *Error
+	if got := plain(err); got != want || !errors.As(err, &ge) || !strings.HasSuffix(ge.Pos, "/tables_test.go:"+strconv.Itoa(memberLine)) {
+		t.Fatalf("got %v, want %q", err, want)
+	}
+	for _, d := range []velox.Dialect{velox.Postgres, velox.SQLite} {
+		tables(t, d, Member{})
+	}
+}
+
+type Shelf struct{ schema.Schema }
+
+func (Shelf) Edges() []schema.Edge { return []schema.Edge{edge.To("books", Book.Type)} }
+
+// Book's index takes the name MySQL gives its foreign key's index.
+type Book struct{ schema.Schema }
+
+func (Book) Fields() []schema.Field { return []schema.Field{field.String("title")} }
+func (Book) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("shelf", Shelf.Type).Ref("books").Unique()}
+}
+func (Book) Indexes() []schema.Index {
+	return []schema.Index{index.Fields("title").StorageKey("books_shelves_books")}
+}
+
+// MySQL names a foreign key's index after the key, which may be a declared
+// index's name.
+func TestTablesMySQLForeignKeyIndexClash(t *testing.T) {
+	_, err := Tables(mustBuild(t, Shelf{}, Book{}), velox.MySQL)
+	want := `index name "books_shelves_books" of the foreign-key index of edge "shelf" is also that of index 0, in table books on MySQL, ` +
+		`which names the foreign-key index of edge "shelf" after the key; give one a StorageKey`
+	if got := plain(err); !strings.HasSuffix(got, want) || strings.Count(got, "\n") > 0 {
+		t.Fatalf("got %v, want the suffix %q", err, want)
+	}
+	for _, d := range []velox.Dialect{velox.Postgres, velox.SQLite} {
+		tables(t, d, Shelf{}, Book{})
+	}
+}
+
+// Signup's unique index over org_id and email has a name a dialect gives
+// email's Unique: it does not stand for that Unique, which is kept or
+// refused, never lost.
+type Signup struct {
+	schema.Schema
+	key string
+}
+
+func (Signup) Fields() []schema.Field {
+	return []schema.Field{field.Int64("org_id"), field.String("email").Unique()}
+}
+func (s Signup) Indexes() []schema.Index {
+	return []schema.Index{index.Fields("org_id", "email").Unique().StorageKey(s.key)}
+}
+
+func TestFieldUniqueNotLostToWiderIndex(t *testing.T) {
+	// On MySQL, email's index is email: a clash, refused.
+	_, err := Tables(mustBuild(t, Signup{key: "email"}), velox.MySQL)
+	if got := plain(err); !strings.Contains(got, `field "email": index name "email" of the unique index of field "email" is also that of index 0`) ||
+		!strings.HasSuffix(got, "; give one a StorageKey") {
+		t.Errorf("mysql: %v", err)
+	}
+	// On PostgreSQL it is signups_email_key, refused by rule 44 on every
+	// dialect.
+	_, err = build(t, Signup{key: "signups_email_key"})
+	if got, want := plain(err), `schema Signup: field "email": name "signups_email_key" is also this schema's index 0; give index 0 another StorageKey`; got != want {
+		t.Errorf("got %v, want %q", err, want)
+	}
+	// Where the names differ, both unique indexes are made.
+	for _, c := range []struct {
+		d    velox.Dialect
+		key  string
+		want []string
+	}{
+		{velox.Postgres, "email", []string{"email", "signups_email_key"}},
+		{velox.SQLite, "email", []string{"email", "signups_email_key"}},
+		{velox.SQLite, "sqlite_autoindex_signups_1", []string{"signups_email_key", "sqlite_autoindex_signups_1"}},
+	} {
+		tb := table(t, tables(t, c.d, Signup{key: c.key}), "signups")
+		if got := tableIndexNames(tb); !slices.Equal(got, c.want) || !tb.Indexes[0].Unique || !tb.Indexes[1].Unique {
+			t.Errorf("%v, StorageKey %q: indexes %+v, want %q", c.d, c.key, tb.Indexes, c.want)
+		}
 	}
 }

@@ -92,8 +92,8 @@ func TestRenderGolden(t *testing.T) {
 // that builds in place, the add first.
 func TestRenderMySQLIndexStatement(t *testing.T) {
 	for name, want := range map[string]string{
-		"fk-index-replaced": "ALTER TABLE `users` ADD INDEX `users_org_id_created_at` (`org_id`, `created_at`), DROP INDEX `users_org_id`, ALGORITHM=INPLACE, LOCK=NONE",
-		"fk-index-restored": "ALTER TABLE `users` ADD INDEX `users_org_id` (`org_id`), DROP INDEX `users_org_id_created_at`, ALGORITHM=INPLACE, LOCK=NONE",
+		"fk-index-replaced": "ALTER TABLE `users` ADD INDEX `user_org_id_created_at` (`org_id`, `created_at`), DROP INDEX `users_orgs_users`, ALGORITHM=INPLACE, LOCK=NONE",
+		"fk-index-restored": "ALTER TABLE `users` ADD INDEX `users_orgs_users` (`org_id`), DROP INDEX `user_org_id_created_at`, ALGORITHM=INPLACE, LOCK=NONE",
 	} {
 		got := sqls(caseScripts(t, caseNamed(name), velox.MySQL))
 		if !slices.Equal(got, []string{want}) {
@@ -109,40 +109,43 @@ func TestRenderMySQLIndexStatement(t *testing.T) {
 func TestRenderMySQLOrder(t *testing.T) {
 	for name, want := range map[string][]string{
 		"drop-column-in-unique": {
-			"ALTER TABLE `users` DROP INDEX `users_name_logins_unique`, ALGORITHM=INPLACE, LOCK=NONE",
+			"ALTER TABLE `users` DROP INDEX `user_name_logins`, ALGORITHM=INPLACE, LOCK=NONE",
 			"ALTER TABLE `users` DROP COLUMN `logins`",
 		},
 		"drop-column-in-index": {
 			"ALTER TABLE `users` DROP COLUMN `logins`",
-			"ALTER TABLE `users` ADD INDEX `users_org_id` (`org_id`), DROP INDEX `users_org_id_logins`, ALGORITHM=INPLACE, LOCK=NONE",
+			"ALTER TABLE `users` ADD INDEX `users_orgs_users` (`org_id`), DROP INDEX `user_org_id_logins`, ALGORITHM=INPLACE, LOCK=NONE",
 		},
 		"drop-column-in-unique-key": {
-			"ALTER TABLE `users` DROP FOREIGN KEY `users_org_id_fkey`",
-			"ALTER TABLE `users` DROP INDEX `users_org_id_logins_unique`, ALGORITHM=INPLACE, LOCK=NONE",
+			"ALTER TABLE `users` DROP FOREIGN KEY `users_orgs_users`",
+			"ALTER TABLE `users` DROP INDEX `user_org_id_logins`, ALGORITHM=INPLACE, LOCK=NONE",
 			"ALTER TABLE `users` DROP COLUMN `logins`",
-			"ALTER TABLE `users` ADD INDEX `users_org_id` (`org_id`), ALGORITHM=INPLACE, LOCK=NONE",
-			"ALTER TABLE `users` ADD CONSTRAINT `users_org_id_fkey` FOREIGN KEY (`org_id`) REFERENCES `orgs` (`id`)",
+			"ALTER TABLE `users` ADD INDEX `users_orgs_users` (`org_id`), ALGORITHM=INPLACE, LOCK=NONE",
+			"ALTER TABLE `users` ADD CONSTRAINT `users_orgs_users` FOREIGN KEY (`org_id`) REFERENCES `orgs` (`id`)",
 		},
 		// A foreign key's rename is a drop before everything and an add
-		// with the other keys, in two statements.
+		// with the other keys, in two statements; its index, of its name,
+		// is renamed with it.
 		"rename-table": {
-			"ALTER TABLE `users` DROP FOREIGN KEY `users_org_id_fkey`",
+			"ALTER TABLE `users` DROP FOREIGN KEY `users_orgs_users`",
+			"ALTER TABLE `posts` DROP FOREIGN KEY `posts_users_posts`",
 			"RENAME TABLE `users` TO `accounts`",
-			"ALTER TABLE `accounts` RENAME INDEX `users_email_unique` TO `accounts_email_unique`, " +
-				"RENAME INDEX `users_mentor_id` TO `accounts_mentor_id`, " +
-				"RENAME INDEX `users_org_id` TO `accounts_org_id`",
-			"ALTER TABLE `accounts` ADD CONSTRAINT `accounts_org_id_fkey` FOREIGN KEY (`org_id`) REFERENCES `orgs` (`id`)",
+			"ALTER TABLE `accounts` RENAME INDEX `users_orgs_users` TO `accounts_orgs_users`",
+			"ALTER TABLE `posts` RENAME INDEX `posts_users_posts` TO `posts_accounts_posts`",
+			"ALTER TABLE `accounts` ADD CONSTRAINT `accounts_orgs_users` FOREIGN KEY (`org_id`) REFERENCES `orgs` (`id`)",
+			"ALTER TABLE `posts` ADD CONSTRAINT `posts_accounts_posts` FOREIGN KEY (`author_id`) REFERENCES `accounts` (`id`) ON DELETE CASCADE",
 		},
 		"reuse-dropped-name": {
 			"ALTER TABLE `posts` DROP FOREIGN KEY `shared_fk`",
 			"ALTER TABLE `users` DROP FOREIGN KEY `user_mentor`",
+			"ALTER TABLE `users` RENAME INDEX `user_mentor` TO `shared_fk`",
 			"ALTER TABLE `users` ADD INDEX `shared_idx` (`created_at`), ALGORITHM=INPLACE, LOCK=NONE",
 			"ALTER TABLE `users` ADD CONSTRAINT `shared_fk` FOREIGN KEY (`mentor_id`) REFERENCES `users` (`id`)",
 			"DROP TABLE `posts`",
 		},
 		"on-delete-change": {
-			"ALTER TABLE `posts` DROP FOREIGN KEY `posts_author_id_fkey`",
-			"ALTER TABLE `posts` ADD CONSTRAINT `posts_author_id_fkey` FOREIGN KEY (`author_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT",
+			"ALTER TABLE `posts` DROP FOREIGN KEY `posts_users_posts`",
+			"ALTER TABLE `posts` ADD CONSTRAINT `posts_users_posts` FOREIGN KEY (`author_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT",
 		},
 	} {
 		got := sqls(caseScripts(t, caseNamed(name), velox.MySQL))
@@ -192,7 +195,7 @@ func TestRenderSQLiteRebuild(t *testing.T) {
   "created_at" datetime NOT NULL,
   "mentor_id" integer,
   CONSTRAINT "user_mentor" FOREIGN KEY ("mentor_id") REFERENCES "users" ("id"),
-  CONSTRAINT "users_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "orgs" ("id"),
+  CONSTRAINT "users_orgs_users" FOREIGN KEY ("org_id") REFERENCES "orgs" ("id"),
   CONSTRAINT "users_role_check" CHECK ("role" IN ('admin', 'viewer')),
   CONSTRAINT "users_status_check" CHECK ("status" IN ('active', 'banned', 'pending'))
 )`,
@@ -202,7 +205,7 @@ func TestRenderSQLiteRebuild(t *testing.T) {
 		`DROP TABLE "users"`,
 		`ALTER TABLE "velox_new_users" RENAME TO "users"`,
 		`CREATE INDEX "users_by_name" ON "users" ("name")`,
-		`CREATE UNIQUE INDEX "users_email_unique" ON "users" ("email")`,
+		`CREATE UNIQUE INDEX "users_email_key" ON "users" ("email")`,
 		`CREATE INDEX "users_mentor_id" ON "users" ("mentor_id")`,
 		`CREATE INDEX "users_org_id" ON "users" ("org_id")`,
 	}
@@ -222,7 +225,7 @@ func TestRenderSQLiteRebuild(t *testing.T) {
 	// A rebuilt table's index rename frees the old name at once; the
 	// rebuild makes the new one.
 	got := sqls(caseScripts(t, caseNamed("rename-table"), velox.SQLite))
-	want = []string{`ALTER TABLE "users" RENAME TO "accounts"`, `DROP INDEX "users_email_unique"`, `DROP INDEX "users_mentor_id"`, `DROP INDEX "users_org_id"`}
+	want = []string{`ALTER TABLE "users" RENAME TO "accounts"`, `DROP INDEX "users_email_key"`, `DROP INDEX "users_mentor_id"`, `DROP INDEX "users_org_id"`}
 	if len(got) < len(want) || !slices.Equal(got[:len(want)], want) || !strings.HasPrefix(got[len(want)], `CREATE TABLE "velox_new_accounts"`) {
 		t.Errorf("rename-table:\n%s", strings.Join(got, ";\n"))
 	}
@@ -372,7 +375,7 @@ func TestRenderReviewLines(t *testing.T) {
 		got = append(got, st.Review)
 	}
 	want := []string{
-		"drop-index: drops index users.users_email_unique; queries that used it get slower",
+		"drop-index: drops index users.email; queries that used it get slower",
 		"drop-column: drops column users.email and its data",
 	}
 	if !slices.Equal(got, want) {

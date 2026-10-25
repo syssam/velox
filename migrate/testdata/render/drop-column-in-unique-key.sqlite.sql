@@ -2,7 +2,7 @@
 -- velox:foreign-keys off
 -- velox:allow drop-column users.logins
 
-DROP INDEX "users_org_id_logins_unique";
+DROP INDEX "user_org_id_logins";
 -- review: drop-column: drops column users.logins and its data; sqlite-rebuild: drops column users.logins, which a key, index or constraint uses; SQLite rebuilds table users: it copies every row into a new table; add-index: adds index users.users_org_id; building it scans the table
 CREATE TABLE "velox_new_users" (
   "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
@@ -15,7 +15,7 @@ CREATE TABLE "velox_new_users" (
   "created_at" datetime NOT NULL,
   "mentor_id" integer,
   CONSTRAINT "user_mentor" FOREIGN KEY ("mentor_id") REFERENCES "users" ("id"),
-  CONSTRAINT "users_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "orgs" ("id"),
+  CONSTRAINT "users_orgs_users" FOREIGN KEY ("org_id") REFERENCES "orgs" ("id"),
   CONSTRAINT "users_role_check" CHECK ("role" IN ('admin', 'viewer')),
   CONSTRAINT "users_status_check" CHECK ("status" IN ('active', 'banned', 'pending'))
 );
@@ -25,6 +25,6 @@ INSERT INTO sqlite_sequence (name, seq) SELECT 'velox_new_users', seq FROM sqlit
 DROP TABLE "users";
 ALTER TABLE "velox_new_users" RENAME TO "users";
 CREATE INDEX "users_by_name" ON "users" ("name");
-CREATE UNIQUE INDEX "users_email_unique" ON "users" ("email");
+CREATE UNIQUE INDEX "users_email_key" ON "users" ("email");
 CREATE INDEX "users_mentor_id" ON "users" ("mentor_id");
 CREATE INDEX "users_org_id" ON "users" ("org_id");

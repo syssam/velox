@@ -31,7 +31,7 @@
       ],
       "foreign_keys": [
         {
-          "name": "alphas_beta_id_fkey",
+          "name": "alphas_beta_beta",
           "columns": [
             "beta_id"
           ],
@@ -73,7 +73,7 @@
       ],
       "foreign_keys": [
         {
-          "name": "beta_alpha_id_fkey",
+          "name": "beta_alphas_alpha",
           "columns": [
             "alpha_id"
           ],
@@ -142,7 +142,7 @@
       ],
       "foreign_keys": [
         {
-          "name": "posts_author_id_fkey",
+          "name": "posts_users_posts",
           "columns": [
             "author_id"
           ],
@@ -220,7 +220,7 @@
           ]
         },
         {
-          "name": "users_email_unique",
+          "name": "users_email_key",
           "columns": [
             "email"
           ],
@@ -253,7 +253,7 @@
           ]
         },
         {
-          "name": "users_org_id_fkey",
+          "name": "users_orgs_users",
           "columns": [
             "org_id"
           ],

@@ -114,8 +114,8 @@ func TestLintCases(t *testing.T) {
 		{"drop-not-null", pgM}:             nil,
 		{"drop-not-null", lite}:            {"sqlite-rebuild@users"},
 		{"change-default", pgM}:            nil,
-		{"add-index", pgM}:                 {"add-index@users.users_created_at"},
-		{"add-unique", pgM}:                {"add-unique@users.users_name_unique"},
+		{"add-index", pgM}:                 {"add-index@users.user_created_at"},
+		{"add-unique", pgM}:                {"add-unique@users.users_name_key"},
 		{"rename-index", pgM}:              nil,
 		{"enum-append", pgM}:               nil,
 		{"enum-append", my}:                nil,
@@ -393,7 +393,7 @@ func TestLintPos(t *testing.T) {
 		{"widen-int", pgM, "widen-type", func(to *migrate.Schema) string { return column(table(to, "users"), "logins").Pos }},
 		{"add-index", pgM, "add-index", func(to *migrate.Schema) string {
 			for _, ix := range table(to, "users").Indexes {
-				if ix.Name == "users_created_at" {
+				if ix.Name == "user_created_at" {
 					return ix.Pos
 				}
 			}
@@ -401,7 +401,7 @@ func TestLintPos(t *testing.T) {
 		}},
 		{"add-unique", pgM, "add-unique", func(to *migrate.Schema) string {
 			for _, ix := range table(to, "users").Indexes {
-				if ix.Name == "users_name_unique" {
+				if ix.Name == "users_name_key" {
 					return ix.Pos
 				}
 			}
@@ -409,7 +409,7 @@ func TestLintPos(t *testing.T) {
 		}},
 		{"add-foreign-key", pgM, "add-foreign-key", func(to *migrate.Schema) string {
 			for _, fk := range table(to, "posts").ForeignKeys {
-				if fk.Name == "posts_reviewer_id_fkey" {
+				if fk.Name == "posts_users_reviewer" {
 					return fk.Pos
 				}
 			}

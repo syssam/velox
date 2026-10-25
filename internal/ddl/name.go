@@ -1,15 +1,23 @@
 package ddl
 
 import (
+	"crypto/md5"
 	"fmt"
 	"hash/fnv"
 	"unicode/utf8"
+
+	"github.com/syssam/velox2"
 )
 
 // MaxName is the length in bytes of the longest database name: PostgreSQL
 // truncates a name at 63 bytes, and MySQL refuses one over 64.
 const MaxName = 63
 
+// Cap caps the names velox makes and neither ent nor PostgreSQL does: checks,
+// enum types and velox's own foreign-key indexes. ent's index and foreign-key
+// names are capped with Symbol, and PostgreSQL's key and sequence names are
+// PostgresName's.
+//
 // Cap returns name when it is MaxName bytes or less; otherwise its first 54
 // bytes, cut back to a UTF-8 boundary, then "_", then the 8 lower-case hex
 // digits of the FNV-1a 32 hash of the whole name.
@@ -17,13 +25,61 @@ func Cap(name string) string {
 	if len(name) <= MaxName {
 		return name
 	}
-	i := MaxName - 9
-	for i > 0 && !utf8.RuneStart(name[i]) {
-		i--
-	}
 	h := fnv.New32a()
 	h.Write([]byte(name))
-	return fmt.Sprintf("%s_%08x", name[:i], h.Sum32())
+	return fmt.Sprintf("%s_%08x", Clip(name, MaxName-9), h.Sum32())
+}
+
+// Symbol is ent's cap on an index or foreign-key name (dialect/sql/schema/atlas.go:1110):
+// name when it is at most limit bytes, else name[:limit-33], cut back to a UTF-8
+// boundary, then "_", then the 32 lower-case hex digits of md5(name). limit is 63
+// on PostgreSQL and 64 on MySQL and SQLite.
+func Symbol(d velox.Dialect, name string) string {
+	limit := 64
+	if d == velox.Postgres {
+		limit = 63
+	}
+	if len(name) <= limit {
+		return name
+	}
+	return fmt.Sprintf("%s_%x", Clip(name, limit-33), md5.Sum([]byte(name)))
+}
+
+// PostgresName is the name PostgreSQL gives an object it names itself, as its
+// makeObjectName does (src/backend/commands/indexcmds.c): name1, "_" and name2
+// when name2 is not "", "_", label. When that is over 63 bytes, it shortens
+// the longer of name1 and name2 by one byte at a time (name2 on a tie) until
+// it fits, then cuts each back to a character boundary (pg_mbcliplen).
+func PostgresName(name1, name2, label string) string {
+	avail := MaxName - len(label) - 1
+	if name2 != "" {
+		avail--
+	}
+	n1, n2 := len(name1), len(name2)
+	for n1+n2 > avail {
+		if n1 > n2 {
+			n1--
+		} else {
+			n2--
+		}
+	}
+	name := Clip(name1, n1)
+	if name2 != "" {
+		name += "_" + Clip(name2, n2)
+	}
+	return name + "_" + label
+}
+
+// Clip is the first n bytes of s, or fewer, cut back to a UTF-8 boundary:
+// how PostgreSQL truncates a name over MaxName bytes, as Clip(name, MaxName).
+func Clip(s string, n int) string {
+	if n >= len(s) {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
 }
 
 // NotNull is the name of the check that stands for NOT NULL on column while

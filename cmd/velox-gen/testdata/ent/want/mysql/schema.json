@@ -3,6 +3,25 @@
   "dialect": "mysql",
   "tables": [
     {
+      "name": "audit_entries_kept_for_every_change_an_editor_makes_to_posts",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "identity": true
+        },
+        {
+          "name": "note",
+          "type": "varchar(255)"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "PRIMARY",
+      "collation": "utf8mb4_bin"
+    },
+    {
       "name": "posts",
       "columns": [
         {
@@ -15,7 +34,17 @@
           "type": "varchar(255)"
         },
         {
+          "name": "reviewed_by_an_editor_before_the_post_was_published_on",
+          "type": "bigint",
+          "nullable": true
+        },
+        {
           "name": "user_posts",
+          "type": "bigint",
+          "nullable": true
+        },
+        {
+          "name": "user_drafts_written_but_never_published_by_this_user_so_far",
           "type": "bigint",
           "nullable": true
         }
@@ -26,6 +55,19 @@
       "primary_key_name": "PRIMARY",
       "indexes": [
         {
+          "name": "post_title_reviewed_by_an_edito_610afc49e3060dc9162738c5b5b2de3d",
+          "columns": [
+            "title",
+            "reviewed_by_an_editor_before_the_post_was_published_on"
+          ]
+        },
+        {
+          "name": "posts_users_drafts_written_but__f5ecc73789cbf6208f1deb12fd406c67",
+          "columns": [
+            "user_drafts_written_but_never_published_by_this_user_so_far"
+          ]
+        },
+        {
           "name": "posts_users_posts",
           "columns": [
             "user_posts"
@@ -33,6 +75,19 @@
         }
       ],
       "foreign_keys": [
+        {
+          "name": "posts_users_drafts_written_but__f5ecc73789cbf6208f1deb12fd406c67",
+          "columns": [
+            "user_drafts_written_but_never_published_by_this_user_so_far"
+          ],
+          "ref_table": {
+            "name": "users"
+          },
+          "ref_columns": [
+            "id"
+          ],
+          "on_delete": "SET NULL"
+        },
         {
           "name": "posts_users_posts",
           "columns": [
@@ -77,6 +132,13 @@
       "indexes": [
         {
           "name": "email",
+          "columns": [
+            "email"
+          ],
+          "unique": true
+        },
+        {
+          "name": "user_email",
           "columns": [
             "email"
           ],

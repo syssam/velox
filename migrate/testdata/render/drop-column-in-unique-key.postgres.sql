@@ -2,8 +2,8 @@
 -- velox:lock-timeout 5s
 -- velox:allow drop-column users.logins
 
--- review: drop-index: drops index users.users_org_id_logins_unique; queries that used it get slower
-DROP INDEX "users_org_id_logins_unique";
+-- review: drop-index: drops index users.user_org_id_logins; queries that used it get slower
+DROP INDEX "user_org_id_logins";
 -- review: drop-column: drops column users.logins and its data
 ALTER TABLE "users" DROP COLUMN "logins";
 -- script: online

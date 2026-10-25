@@ -204,7 +204,7 @@ func TestPluginModel2(t *testing.T) {
 	if len(user.Indexes) != 1 {
 		t.Fatalf("user indexes %+v", user.Indexes)
 	}
-	if ix := user.Indexes[0]; ix.Name != "users_org_id_name_unique" || strings.Join(ix.Fields, ",") != "org_id,name" || !ix.Unique || ix.Where != "" {
+	if ix := user.Indexes[0]; ix.Name != "user_org_id_name" || strings.Join(ix.Fields, ",") != "org_id,name" || !ix.Unique || ix.Where != "" {
 		t.Errorf("user index %+v", ix)
 	}
 	parent := pluginEdge(t, cat, "parent")
@@ -214,7 +214,7 @@ func TestPluginModel2(t *testing.T) {
 	if len(cat.Indexes) != 1 {
 		t.Fatalf("category indexes %+v", cat.Indexes)
 	}
-	if ix := cat.Indexes[0]; ix.Name != "categories_title_"+parent.Field || strings.Join(ix.Fields, ",") != "title,"+parent.Field || ix.Unique {
+	if ix := cat.Indexes[0]; ix.Name != "category_title_"+parent.Field || strings.Join(ix.Fields, ",") != "title,"+parent.Field || ix.Unique {
 		t.Errorf("category index %+v", ix)
 	}
 	if post.Indexes == nil || len(post.Indexes) != 0 {

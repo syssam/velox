@@ -41,7 +41,7 @@ func TestParseCreateTable(t *testing.T) {
 		{Name: "users_role_check", Expr: `"role" IN ('admin', 'viewer')`},
 		{Name: "users_status_check", Expr: `"status" IN ('active', 'banned', 'pending')`},
 	}
-	wantKeys := []migrate.ForeignKey{{Name: "user_mentor", Columns: []string{"mentor_id"}, RefTable: migrate.TableRef{Name: "users"}, RefColumns: []string{"id"}}, {Name: "users_org_id_fkey", Columns: []string{"org_id"}, RefTable: migrate.TableRef{Name: "orgs"}, RefColumns: []string{"id"}}}
+	wantKeys := []migrate.ForeignKey{{Name: "user_mentor", Columns: []string{"mentor_id"}, RefTable: migrate.TableRef{Name: "users"}, RefColumns: []string{"id"}}, {Name: "users_orgs_users", Columns: []string{"org_id"}, RefTable: migrate.TableRef{Name: "orgs"}, RefColumns: []string{"id"}}}
 	if !ok || !auto || !reflect.DeepEqual(checks, wantChecks) || !reflect.DeepEqual(fks, wantKeys) {
 		t.Errorf("users: %v %+v %v %v", auto, checks, fks, ok)
 	}

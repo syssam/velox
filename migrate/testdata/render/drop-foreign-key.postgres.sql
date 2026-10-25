@@ -1,8 +1,8 @@
 -- script: main
 -- velox:lock-timeout 5s
 
--- review: drop-foreign-key: drops foreign key posts_reviewer_id_fkey; rows are no longer checked against users
-ALTER TABLE "posts" DROP CONSTRAINT "posts_reviewer_id_fkey";
+-- review: drop-foreign-key: drops foreign key posts_users_reviewer; rows are no longer checked against users
+ALTER TABLE "posts" DROP CONSTRAINT "posts_users_reviewer";
 -- script: online
 -- velox:no-transaction
 

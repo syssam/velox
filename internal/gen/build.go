@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"path"
 	"slices"
 	"strings"
@@ -560,12 +559,24 @@ func (b *builder) indexes() {
 					ix.Columns = append(ix.Columns, s.ed.Rel.Columns[0])
 				}
 			}
-			ix.Name = cmp.Or(li.StorageKey, indexName(e.Table, ix))
+			ix.Name, ix.Derived = cmp.Or(li.StorageKey, indexName(e.Name, ix.Columns)), li.StorageKey == ""
 			e.Indexes = append(e.Indexes, ix)
 			ok = append(ok, good)
 			if b.repeats(e, i, ok) || !good {
 				b.refused[ix] = true
 			}
+		}
+		// A partial index with no StorageKey whose name another index has
+		// takes the hash of its Where; a full index never does, and two of
+		// one name are rule 44's.
+		var hashed []*Index
+		for _, ix := range e.Indexes {
+			if ix.Derived && ix.Where != "" && slices.ContainsFunc(e.Indexes, func(o *Index) bool { return o != ix && o.Name == ix.Name }) {
+				hashed = append(hashed, ix)
+			}
+		}
+		for _, ix := range hashed {
+			ix.Name = partialIndexName(e.Name, ix.Columns, ix.Where)
 		}
 	}
 }
@@ -700,27 +711,12 @@ func (b *builder) namespaces() {
 		if p.owner != o.owner {
 			other = "schema " + p.owner + "'s "
 		}
-		b.fail(44, o.owner, o.at, "name %q is also %s%s", o.name, other, p.what)
+		hint := ""
+		if strings.HasPrefix(o.what, "unique index of ") && strings.HasPrefix(p.what, "index ") {
+			hint = "; give " + p.what + " another StorageKey" // a declared index of the field's index's name over other columns
+		}
+		b.fail(44, o.owner, o.at, "name %q is also %s%s%s", o.name, other, p.what, hint)
 	}
-}
-
-// indexName derives the name of an index with no StorageKey: the table and
-// the columns, then _unique for a unique index and, for a partial one, the
-// FNV-1a hash of its Where, so that indexes that differ only in Unique or
-// Where have distinct names; the whole is capped. Index names share one
-// namespace per schema of the database. _unique stays clear of _key,
-// PostgreSQL's name for a column's UNIQUE constraint.
-func indexName(table string, ix *Index) string {
-	name := strings.Join(append([]string{table}, ix.Columns...), "_")
-	if ix.Unique {
-		name += "_unique"
-	}
-	if ix.Where != "" {
-		h := fnv.New32a()
-		h.Write([]byte(ix.Where))
-		name += fmt.Sprintf("_%08x", h.Sum32())
-	}
-	return ddl.Cap(name)
 }
 
 // repeats reports whether the index i of e repeats an earlier one (rule 43),

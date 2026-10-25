@@ -15,7 +15,7 @@ CREATE TABLE "velox_new_users" (
   "mentor_id" integer,
   "motto" text NOT NULL DEFAULT 'it''s a \ test',
   CONSTRAINT "user_mentor" FOREIGN KEY ("mentor_id") REFERENCES "users" ("id"),
-  CONSTRAINT "users_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "orgs" ("id"),
+  CONSTRAINT "users_orgs_users" FOREIGN KEY ("org_id") REFERENCES "orgs" ("id"),
   CONSTRAINT "users_role_check" CHECK ("role" IN ('admin', 'viewer', 'o''neil')),
   CONSTRAINT "users_status_check" CHECK ("status" IN ('active', 'banned', 'pending'))
 );
@@ -25,6 +25,6 @@ INSERT INTO sqlite_sequence (name, seq) SELECT 'velox_new_users', seq FROM sqlit
 DROP TABLE "users";
 ALTER TABLE "velox_new_users" RENAME TO "users";
 CREATE INDEX "users_by_name" ON "users" ("name");
-CREATE UNIQUE INDEX "users_email_unique" ON "users" ("email");
+CREATE UNIQUE INDEX "users_email_key" ON "users" ("email");
 CREATE INDEX "users_mentor_id" ON "users" ("mentor_id");
 CREATE INDEX "users_org_id" ON "users" ("org_id");

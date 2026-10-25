@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	velox2 "github.com/syssam/velox2"
+	"github.com/syssam/velox2/internal/ddl"
 	"github.com/syssam/velox2/internal/gen"
 	"github.com/syssam/velox2/migrate"
 )
@@ -81,9 +82,10 @@ func TestMigrateBaselineSQLite(t *testing.T) {
 }
 
 // TestMigrateBaselineEnt: baseline adopts the tables ent makes, on
-// PostgreSQL and MySQL. The directory builds a fresh database, apply
-// -baseline records it, and the next diff holds only what velox spells
-// differently from ent.
+// PostgreSQL and MySQL, under ent's names, long ones capped as ent caps
+// them. The directory builds a fresh database, apply -baseline records it,
+// and the next diff renames nothing: it holds only what velox spells
+// differently from ent on PostgreSQL, and nothing on MySQL.
 func TestMigrateBaselineEnt(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
@@ -96,7 +98,7 @@ func TestMigrateBaselineEnt(t *testing.T) {
 func baselineEnt(t *testing.T, d velox2.Dialect) {
 	original := testDSN(t, d)
 	files := map[string]string{}
-	for _, f := range []string{"user.go", "post.go"} {
+	for _, f := range []string{"user.go", "post.go", "audit_entry.go"} {
 		files["schema/"+f] = readFile(t, filepath.Join("testdata", "ent", "schema", f))
 	}
 	dir := tempModuleSerial(t, files)
@@ -163,31 +165,28 @@ func baselineEnt(t *testing.T, d velox2.Dialect) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(changes) == 0 {
-		t.Error("the next diff has no changes")
+	if n := map[velox2.Dialect]int{velox2.Postgres: 5, velox2.MySQL: 0}[d]; len(changes) != n {
+		t.Errorf("the next diff has %d changes, want %d: %v", len(changes), n, changes)
 	}
 	for _, ch := range changes {
 		if !entChange(d, ch) {
-			t.Errorf("the next diff holds %s (%T), which is not a rename or what velox spells differently from ent", ch, ch)
+			t.Errorf("the next diff holds %s (%T), which is not what velox spells differently from ent", ch, ch)
 		}
 	}
 }
 
 // entChange reports whether ch is one the next diff of an ent database may
-// hold: a rename of an index or a foreign key; on PostgreSQL also the index
-// of posts' foreign key, the role enum and its alter-type, and users.id's
-// serial-to-identity.
+// hold: on PostgreSQL the indexes of posts' two foreign keys, which ent does
+// not make there, the role enum and its alter-type, and users.id's
+// serial-to-identity; on MySQL none.
 func entChange(d velox2.Dialect, ch migrate.Change) bool {
-	switch ch.(type) {
-	case migrate.RenameIndex, migrate.RenameConstraint:
-		return true
-	}
 	if d != velox2.Postgres {
 		return false
 	}
 	switch c := ch.(type) {
 	case migrate.AddIndex:
-		return c.Table.Name == "posts" && c.Index.Name == "posts_user_posts"
+		return c.Table.Name == "posts" && (c.Index.Name == "posts_user_posts" ||
+			c.Index.Name == ddl.Cap("posts_user_drafts_written_but_never_published_by_this_user_so_far"))
 	case migrate.CreateEnum:
 		return c.Enum.Name == "users_role"
 	case migrate.AlterColumn:

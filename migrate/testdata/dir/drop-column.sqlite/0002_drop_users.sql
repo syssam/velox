@@ -2,7 +2,7 @@
 -- velox:foreign-keys off
 -- velox:allow drop-column users.email
 
-DROP INDEX "users_email_unique";
+DROP INDEX "users_email_key";
 -- review: drop-column: drops column users.email and its data; sqlite-rebuild: drops column users.email, which a key, index or constraint uses; SQLite rebuilds table users: it copies every row into a new table
 CREATE TABLE "velox_new_users" (
   "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
@@ -15,7 +15,7 @@ CREATE TABLE "velox_new_users" (
   "created_at" datetime NOT NULL,
   "mentor_id" integer,
   CONSTRAINT "user_mentor" FOREIGN KEY ("mentor_id") REFERENCES "users" ("id"),
-  CONSTRAINT "users_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "orgs" ("id"),
+  CONSTRAINT "users_orgs_users" FOREIGN KEY ("org_id") REFERENCES "orgs" ("id"),
   CONSTRAINT "users_role_check" CHECK ("role" IN ('admin', 'viewer')),
   CONSTRAINT "users_status_check" CHECK ("status" IN ('active', 'banned', 'pending'))
 );

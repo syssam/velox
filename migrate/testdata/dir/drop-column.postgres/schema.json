@@ -58,7 +58,7 @@
       ],
       "foreign_keys": [
         {
-          "name": "posts_author_id_fkey",
+          "name": "posts_users_posts",
           "columns": [
             "author_id"
           ],
@@ -158,7 +158,7 @@
           ]
         },
         {
-          "name": "users_org_id_fkey",
+          "name": "users_orgs_users",
           "columns": [
             "org_id"
           ],
