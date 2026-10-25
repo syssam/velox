@@ -85,3 +85,32 @@ The controller made every call below (the user said "do it"). Each call follows 
 - The order of the renames, and how the godoc work is split up.
 - The exact wording of each doc comment, in the voice of the surrounding godoc.
 - Whether a rule from ruling 10 needs a per-path exclusion. Each one is listed in the plan's report.
+
+## Rulings on the builder check (2026-10-25, binding where they differ from the above)
+
+1. **Both version constants bump.**
+   - velox's becomes `GeneratedCodeIsVersion5`, because generated code writes `velox.Relation`. `GeneratedCodeIsVersion4` is deleted.
+   - veloxgql's becomes `GeneratedCodeIsVersion2`, because velox-graphql's output calls `DBFrom`, `LimitsFrom`, `Exist` and `SkipPolicy`. `GeneratedCodeIsVersion1` is deleted.
+   - Every reference and test moves with them.
+2. **staticcheck's setting is `checks: ["all", "-ST1000"]`.** It must not be a list of only ST codes, because that would switch off the SA, S and QF checks. revive's `package-comments` covers ST1000.
+3. **gqlgen's output is excluded by name.** The rule is `path: ^example/graphql/graph/generated\.go$` with `linters: [staticcheck]`, and it is the only exclusion. velox2's own generated code is linted.
+4. **Further renames:**
+   - `RowScope`'s fields: `AllTenants` → `TenantBypass`, `SkipPolicy` → `PolicyBypass`, `OnShard` → `HasShard`. Keep the field types; the names match `Statement`'s.
+   - `gqlimpl.Exist` → `gqlimpl.CheckExists`. It asserts and returns an error, like `velox.CheckEntity`. This replaces ruling 6.
+   - `(*veloxgql.Extension).Context(ctx)` → `NewContext(ctx)`, the pair of `DBFromContext`.
+   - `shared.OperationTx` → `shared.OperationTxFromContext`.
+   - `internal/testmodel`'s `AsUser` → `WithUser` and `userOf` → `userFromContext`, with every test that uses them.
+   - `Desc.RelAddr` → `Desc.EdgeAddr`, in the edge vocabulary of ruling 5. `Rel[E, T]` and `CheckRelation` stay, because they are the user-facing relation handle.
+   - The constants of `migrate.ScriptKind`: `MainScript` → `ScriptMain`, `EnumScript` → `ScriptEnum`, `OnlineScript` → `ScriptOnline`. Enum constants take their type's name as a prefix.
+   - contrib/graphql's `Create()`, `Update()` and `Delete()` → `MutationCreate()`, `MutationUpdate()` and `MutationDelete()`, which is entgql's form.
+5. **Kept on purpose, added to ruling 7:**
+   - `migrate.Class`'s `Safe`, `Review` and `Destructive`, which read as `migrate.Safe`;
+   - the twins `ColumnInfo`/`ColumnDesc` and `EntityInfo`/`Desc`: the info types are runtime views, the desc types generated input;
+   - `One.Get` and `Many.Get`, the holder idiom;
+   - schema/edge's ent-style storage options;
+   - `veloxotel.Options`, `Dir.PathOf`, `ColumnEQ` and the `graphql` package name.
+6. **The zero value of `veloxgql.Option` behaves as velox's does.** Use whichever velox does, and state it in the godoc.
+7. **Godoc tests.** godoc_test.go and veloxgql/api_test.go, which now require "For generated code." first, are changed to require it after the first sentence. gqlimpl's "For generated code only." becomes "For generated code.". godoc_test gains a check that every exported method has a doc comment, `Error`, `String` and `Unwrap` included, because revive skips those.
+8. **Package doc.** The rule written in velox's package doc names the four Tx constructors.
+9. **Visible text.** Error strings, log labels and goldens that name a renamed function move to the new name. That is not a behaviour change under the non-goals.
+10. **The plan lists the regeneration steps.** velox-gen writes code from Go format strings in internal/gen/render.go; there are no templates. The plan states each step and checks it with the CI's "generated files are up to date" step. The API allow-lists and the test tables that hold names as strings move with the renames.
