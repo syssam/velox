@@ -16,7 +16,7 @@ import (
 //
 // first (with or without after) pages forward and last (with or without
 // before) backward; with neither, the page is the MaxPage of
-// veloxgql.LimitsFrom(ctx) rows forward, or backward from before when before
+// veloxgql.LimitsFromContext(ctx) rows forward, or backward from before when before
 // is given. first and last together, after and before together, first with
 // before and last with after all fail with ErrBadPagination: keyset paging
 // bounds a page on one side only.
@@ -120,7 +120,7 @@ type Connection[E any] struct {
 // It fails with ErrBadPagination for first and last together, either below
 // 0, another combination Args refuses, or an order of more than
 // MaxOrderTerms terms; with ErrPageTooLarge for either over MaxPage (both
-// the limits of veloxgql.LimitsFrom(ctx)); and with ErrBadCursor for a
+// the limits of veloxgql.LimitsFromContext(ctx)); and with ErrBadCursor for a
 // cursor of another type (ErrWrongIDType too), taken under another order,
 // or whose values are not of the order's types.
 func NewConnection[E any](ctx context.Context, q velox.Query[E], typ string, args Args, order, key []OrderTerm[E]) (*Connection[E], error) {
@@ -128,7 +128,7 @@ func NewConnection[E any](ctx context.Context, q velox.Query[E], typ string, arg
 		// The application's bug, not the client's: an uncoded error.
 		return nil, fmt.Errorf("veloxgql: %sConnectionOf: the base query has an OrderBy; the connection orders by its orderBy argument", plugin.Plural(typ))
 	}
-	lim := veloxgql.LimitsFrom(ctx)
+	lim := veloxgql.LimitsFromContext(ctx)
 	n, back, err := pageSize(args, lim.MaxPage)
 	if err != nil {
 		return nil, shared.Within(typ+" connection", err)
@@ -165,7 +165,7 @@ func NewConnection[E any](ctx context.Context, q velox.Query[E], typ string, arg
 
 // LoadedConnection is a connection over rows, the related rows a With
 // loaded, in key order (With's default) under the GraphQL type typ: its page
-// is the first rows, the MaxPage of veloxgql.LimitsFrom(ctx), its cursors
+// is the first rows, the MaxPage of veloxgql.LimitsFromContext(ctx), its cursors
 // are taken under the key's order, and its TotalCount is the number of rows.
 // It runs no query.
 func LoadedConnection[E any](ctx context.Context, rows []E, typ string, key []OrderTerm[E]) *Connection[E] {
@@ -174,7 +174,7 @@ func LoadedConnection[E any](ctx context.Context, rows []E, typ string, key []Or
 		t.Direction = veloxgql.OrderDirectionAsc
 		terms[i] = t
 	}
-	return &Connection[E]{typ: typ, n: veloxgql.LimitsFrom(ctx).MaxPage, terms: terms, loaded: rows, isLoaded: true}
+	return &Connection[E]{typ: typ, n: veloxgql.LimitsFromContext(ctx).MaxPage, terms: terms, loaded: rows, isLoaded: true}
 }
 
 // Page returns the connection's page, running its query on the first call:
@@ -187,7 +187,7 @@ func LoadedConnection[E any](ctx context.Context, rows []E, typ string, key []Or
 //     Relay lets a server say false when it cannot tell cheaply.
 //
 // The page query reads at most n+1 rows whatever the DB's WithMaxRows cap:
-// the MaxPage of veloxgql.LimitsFrom(ctx) bounds it. The base query's With
+// the MaxPage of veloxgql.LimitsFromContext(ctx) bounds it. The base query's With
 // loads share that cap of n+1 rows, unless they have Rel.MaxRows or
 // Rel.LimitEach. The page's rows become a group of the operation, whose
 // edges batch (see EdgeConnection); in the connection of an edge

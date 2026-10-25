@@ -13,7 +13,7 @@ import (
 	"github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion1
+const _ = veloxgql.GeneratedCodeIsVersion2
 
 // IsNode marks Post as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -66,7 +66,7 @@ func (e *PostStatus) UnmarshalGQL(v any) error {
 // AuthorGQL is the edge author: the Account it leads to, or nil when there is
 // none. It is read with the edge of every row read with x, in one query.
 func (x *Post) AuthorGQL(ctx context.Context) (*User, error) {
-	db, err := veloxgql.DBFrom(ctx)
+	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -79,11 +79,11 @@ func (x *Post) AuthorGQL(ctx context.Context) (*User, error) {
 
 // LikesGQL is the edge likes: the Like nodes it leads to, in key order. It is
 // read with the edge of every row read with x, in one query, which reads at
-// most the MaxList of veloxgql.LimitsFrom(ctx) rows for each, whatever the DB's
-// WithMaxRows: more fail x's with velox.ErrTooManyRows, in an error that names
-// the edge.
+// most the MaxList of veloxgql.LimitsFromContext(ctx) rows for each, whatever
+// the DB's WithMaxRows: more fail x's with velox.ErrTooManyRows, in an error
+// that names the edge.
 func (x *Post) LikesGQL(ctx context.Context) ([]*Like, error) {
-	db, err := veloxgql.DBFrom(ctx)
+	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +99,7 @@ func (x *Post) LikesGQL(ctx context.Context) ([]*Like, error) {
 // asks for the connection's fields, each with those of every row read with x,
 // in one query.
 func (x *Post) RelatedGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
-	db, err := veloxgql.DBFrom(ctx)
+	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +115,7 @@ func (x *Post) RelatedGQL(ctx context.Context, after *veloxgql.Cursor, first *in
 // asks for the connection's fields, each with those of every row read with x,
 // in one query.
 func (x *Post) RelatedByGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
-	db, err := veloxgql.DBFrom(ctx)
+	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -173,11 +173,11 @@ type PostEdge struct {
 }
 
 // PostsConnection is the connection to every Post node, through the DB
-// veloxgql.DBFrom reads from ctx, paged and ordered by the arguments of a
-// connection to Post: a Query field's resolver returns it. It fails before any
-// query runs on arguments gqlimpl.NewConnection refuses.
+// veloxgql.DBFromContext reads from ctx, paged and ordered by the arguments of
+// a connection to Post: a Query field's resolver returns it. It fails before
+// any query runs on arguments gqlimpl.NewConnection refuses.
 func PostsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
-	db, err := veloxgql.DBFrom(ctx)
+	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -391,11 +391,11 @@ type PostWhereInput struct {
 // holds, and a w that sets none, or a nil w, holds for every node. It fails,
 // before any query runs, on an ID of another type (veloxgql.ErrWrongIDType) or
 // a malformed one (veloxgql.ErrBadID), on a nesting deeper than the
-// MaxFilterDepth of veloxgql.LimitsFrom(ctx) (veloxgql.ErrFilterTooDeep), on an
-// and, an or, a has…With, an In or a NotIn of more than its MaxFilterWidth
-// entries (veloxgql.ErrFilterTooWide), and on a where argument of more than its
-// MaxFilterNodes inputs, predicates and values in all
-// (veloxgql.ErrFilterTooLarge).
+// MaxFilterDepth of veloxgql.LimitsFromContext(ctx)
+// (veloxgql.ErrFilterTooDeep), on an and, an or, a has…With, an In or a NotIn
+// of more than its MaxFilterWidth entries (veloxgql.ErrFilterTooWide), and on a
+// where argument of more than its MaxFilterNodes inputs, predicates and values
+// in all (veloxgql.ErrFilterTooLarge).
 func (w *PostWhereInput) Pred(ctx context.Context) (velox.Pred[Post], error) {
 	f := gqlimpl.NewFilter[Post](ctx, "PostWhereInput")
 	if w == nil {
@@ -512,17 +512,17 @@ func (in CreatePostInput) GoString() string { return in.String() }
 // CreatePost creates one Post from input, with its edges, and returns it, as
 // the mutation createPost does. It first decodes every ID and JSON value of
 // input, and fails before any statement on one it cannot decode
-// (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFrom reads from
-// ctx, in one transaction (gqlimpl.Atomic): the operation's, or one of its own.
-// The tenant scope and the policies apply as to any write: each ID must name a
-// row the caller may read, and a row it re-points one the caller may change, or
-// CreatePost fails with NOT_FOUND and keeps nothing. A validator's refusal is
-// BAD_USER_INPUT, naming the input field, and comes before any statement;
-// velox's other errors are returned as they are. The row is returned as
-// written, not read again through the Read policy. There is no savepoint inside
-// the extension's transaction, so a resolver must return this function's error:
-// one that swallows it commits the partial writes. A self-edge is written one
-// way, as the core's loads read it.
+// (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFromContext reads
+// from ctx, in one transaction (gqlimpl.Atomic): the operation's, or one of its
+// own. The tenant scope and the policies apply as to any write: each ID must
+// name a row the caller may read, and a row it re-points one the caller may
+// change, or CreatePost fails with NOT_FOUND and keeps nothing. A validator's
+// refusal is BAD_USER_INPUT, naming the input field, and comes before any
+// statement; velox's other errors are returned as they are. The row is returned
+// as written, not read again through the Read policy. There is no savepoint
+// inside the extension's transaction, so a resolver must return this function's
+// error: one that swallows it commits the partial writes. A self-edge is
+// written one way, as the core's loads read it.
 func CreatePost(ctx context.Context, input CreatePostInput) (*Post, error) {
 	var (
 		j4  []string
@@ -571,17 +571,17 @@ func CreatePost(ctx context.Context, input CreatePostInput) (*Post, error) {
 	}
 	var out *Post
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
-		if err := gqlimpl.Exist(ctx, db.Query[User]().Where(Users.ID.In(k7)), 1, "CreatePostInput.writerID", "Account"); err != nil {
+		if err := gqlimpl.CheckExists(ctx, db.Query[User]().Where(Users.ID.In(k7)), 1, "CreatePostInput.writerID", "Account"); err != nil {
 			return err
 		}
 		x.AuthorID = k7
 		if len(k8) > 0 {
-			if err := gqlimpl.Exist(ctx, db.Query[Post]().Where(Posts.ID.In(k8...)), len(k8), "CreatePostInput.relatedIDs", "Post"); err != nil {
+			if err := gqlimpl.CheckExists(ctx, db.Query[Post]().Where(Posts.ID.In(k8...)), len(k8), "CreatePostInput.relatedIDs", "Post"); err != nil {
 				return err
 			}
 		}
 		if len(k9) > 0 {
-			if err := gqlimpl.Exist(ctx, db.Query[Post]().Where(Posts.ID.In(k9...)), len(k9), "CreatePostInput.relatedByIDs", "Post"); err != nil {
+			if err := gqlimpl.CheckExists(ctx, db.Query[Post]().Where(Posts.ID.In(k9...)), len(k9), "CreatePostInput.relatedByIDs", "Post"); err != nil {
 				return err
 			}
 		}
@@ -691,33 +691,33 @@ func (in UpdatePostInput) GoString() string { return in.String() }
 // give is left as it is, and a clear field sets a field to NULL or empties an
 // edge. It first decodes id and every ID and JSON value of input, and refuses a
 // field given with its clear field, or an ID both to add and to remove, before
-// any statement (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFrom
-// reads from ctx, in one transaction (gqlimpl.Atomic): the operation's, or one
-// of its own. The fields go in one UPDATE, which the tenant scope and the Read
-// and Write policies scope; an input that sets none sends no UPDATE, and an
-// Exists under the same scope (Writable) checks the row instead, so that no
-// edge of a row the caller may not change is written. That check locks the row
-// (FOR UPDATE) wherever the dialect has locking reads, which is every one but
-// SQLite (whose transactions lock the database), so the row stays the caller's
-// until the edges are written. The edges follow, each cleared, then its IDs
-// removed, then its IDs added: an ID to remove the edge does not lead to is
-// ignored, and one to add it already leads to is kept. Clearing an edge whose
-// key is on the targets' rows, or removing from it, unlinks only the children
-// the tenant scope and the target's Write policy let the caller change; one
-// they hide stays linked. Clearing a many-to-many edge, or removing from it,
-// deletes only the links to targets the tenant scope and the target's Read
-// policy let the caller read; a link to one they hide stays. Each ID must name
-// a row the caller may read, and a row it re-points one the caller may change;
-// a child another node holds is refused (BAD_USER_INPUT). An id that names no
-// row the caller may change, or an ID no row it may read, fails with NOT_FOUND
-// and keeps nothing. A validator's refusal is BAD_USER_INPUT, naming the input
-// field, and comes before any statement; velox's other errors are returned as
-// they are. The row is read back as written, under the tenant scope and without
-// the Read policy (velox.WithoutPolicy): an update that takes the row out of
-// what the caller may read still returns it. On MySQL the UPDATE's row count
-// needs clientFoundRows=true, as velox's Update does. There is no savepoint
-// inside the extension's transaction, so a resolver must return this function's
-// error.
+// any statement (BAD_USER_INPUT). It then writes through the DB
+// veloxgql.DBFromContext reads from ctx, in one transaction (gqlimpl.Atomic):
+// the operation's, or one of its own. The fields go in one UPDATE, which the
+// tenant scope and the Read and Write policies scope; an input that sets none
+// sends no UPDATE, and an Exists under the same scope (Writable) checks the row
+// instead, so that no edge of a row the caller may not change is written. That
+// check locks the row (FOR UPDATE) wherever the dialect has locking reads,
+// which is every one but SQLite (whose transactions lock the database), so the
+// row stays the caller's until the edges are written. The edges follow, each
+// cleared, then its IDs removed, then its IDs added: an ID to remove the edge
+// does not lead to is ignored, and one to add it already leads to is kept.
+// Clearing an edge whose key is on the targets' rows, or removing from it,
+// unlinks only the children the tenant scope and the target's Write policy let
+// the caller change; one they hide stays linked. Clearing a many-to-many edge,
+// or removing from it, deletes only the links to targets the tenant scope and
+// the target's Read policy let the caller read; a link to one they hide stays.
+// Each ID must name a row the caller may read, and a row it re-points one the
+// caller may change; a child another node holds is refused (BAD_USER_INPUT). An
+// id that names no row the caller may change, or an ID no row it may read,
+// fails with NOT_FOUND and keeps nothing. A validator's refusal is
+// BAD_USER_INPUT, naming the input field, and comes before any statement;
+// velox's other errors are returned as they are. The row is read back as
+// written, under the tenant scope and without the Read policy
+// (velox.WithoutPolicy): an update that takes the row out of what the caller
+// may read still returns it. On MySQL the UPDATE's row count needs
+// clientFoundRows=true, as velox's Update does. There is no savepoint inside
+// the extension's transaction, so a resolver must return this function's error.
 func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, error) {
 	var (
 		key int64
@@ -797,7 +797,7 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 	var out *Post
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
 		if input.WriterID != nil {
-			if err := gqlimpl.Exist(ctx, db.Query[User]().Where(Users.ID.In(k8)), 1, "UpdatePostInput.writerID", "Account"); err != nil {
+			if err := gqlimpl.CheckExists(ctx, db.Query[User]().Where(Users.ID.In(k8)), 1, "UpdatePostInput.writerID", "Account"); err != nil {
 				return err
 			}
 			set = append(set, Posts.AuthorID.Set(k8))
@@ -840,7 +840,7 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 			}
 		}
 		if len(k9) > 0 {
-			if err := gqlimpl.Exist(ctx, db.Query[Post]().Where(Posts.ID.In(k9...)), len(k9), "UpdatePostInput.addRelatedIDs", "Post"); err != nil {
+			if err := gqlimpl.CheckExists(ctx, db.Query[Post]().Where(Posts.ID.In(k9...)), len(k9), "UpdatePostInput.addRelatedIDs", "Post"); err != nil {
 				return err
 			}
 			rows := make([]PostRelated, len(k9))
@@ -870,7 +870,7 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 			}
 		}
 		if len(k12) > 0 {
-			if err := gqlimpl.Exist(ctx, db.Query[Post]().Where(Posts.ID.In(k12...)), len(k12), "UpdatePostInput.addRelatedByIDs", "Post"); err != nil {
+			if err := gqlimpl.CheckExists(ctx, db.Query[Post]().Where(Posts.ID.In(k12...)), len(k12), "UpdatePostInput.addRelatedByIDs", "Post"); err != nil {
 				return err
 			}
 			rows := make([]PostRelated, len(k12))
@@ -900,10 +900,10 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 // DeletePost deletes the Post with the ID id, and its rows in the join tables
 // of its many-to-many edges, as the mutation deletePost does, and returns the
 // ID, encoded again from the key. It first decodes id, before any statement
-// (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFrom reads from
-// ctx, in one transaction (gqlimpl.Atomic): the operation's, or one of its own.
-// The DELETE is scoped by the tenant and the Read and Write policies. The join
-// rows, which neither scopes, go first, after an Exists under the DELETE's
+// (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFromContext reads
+// from ctx, in one transaction (gqlimpl.Atomic): the operation's, or one of its
+// own. The DELETE is scoped by the tenant and the Read and Write policies. The
+// join rows, which neither scopes, go first, after an Exists under the DELETE's
 // scope (Writable), locking the row (FOR UPDATE) wherever the dialect can, has
 // found the row: those of a row the caller may not delete are never touched.
 // Every join row of the row goes, whatever the tenant of the row at its other

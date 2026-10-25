@@ -11,11 +11,11 @@ import (
 	"github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion1
+const _ = veloxgql.GeneratedCodeIsVersion2
 
 // Node returns the node with the global ID id, or nil when no row has its
 // key. It reads the ID's type, decodes the key as that type's, and looks
-// the row up with one query on that entity, through the DB veloxgql.DBFrom
+// the row up with one query on that entity, through the DB veloxgql.DBFromContext
 // reads from ctx, reading only the columns the field's selection needs; its
 // edges batch (veloxgql.Batch). A column the selection does not need is
 // zero in the node, except the key, the foreign keys and the tenant: an
@@ -33,7 +33,7 @@ func Node(ctx context.Context, id string) (veloxgql.Noder, error) {
 		if err != nil {
 			return nil, err
 		}
-		db, err := veloxgql.DBFrom(ctx)
+		db, err := veloxgql.DBFromContext(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -55,7 +55,7 @@ func Node(ctx context.Context, id string) (veloxgql.Noder, error) {
 		if err != nil {
 			return nil, err
 		}
-		db, err := veloxgql.DBFrom(ctx)
+		db, err := veloxgql.DBFromContext(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -77,7 +77,7 @@ func Node(ctx context.Context, id string) (veloxgql.Noder, error) {
 		if err != nil {
 			return nil, err
 		}
-		db, err := veloxgql.DBFrom(ctx)
+		db, err := veloxgql.DBFromContext(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -100,7 +100,7 @@ func Node(ctx context.Context, id string) (veloxgql.Noder, error) {
 
 // Nodes returns the nodes with the global IDs ids, in their order, with nil
 // for an ID no row has. It decodes every ID first, and then looks up each
-// type's nodes with one query, through the DB veloxgql.DBFrom reads from
+// type's nodes with one query, through the DB veloxgql.DBFromContext reads from
 // ctx; the query reads at most one row for each of its IDs, whatever the
 // DB's WithMaxRows, and only the columns the field's selection needs. The
 // nodes of a type are one batch for their edges (veloxgql.Batch). A column
@@ -109,9 +109,9 @@ func Node(ctx context.Context, id string) (veloxgql.Noder, error) {
 // not select.
 // It fails as Node does on an ID, before any query runs,
 // and with veloxgql.ErrPageTooLarge on more IDs than the MaxPage of
-// veloxgql.LimitsFrom(ctx).
+// veloxgql.LimitsFromContext(ctx).
 func Nodes(ctx context.Context, ids []string) ([]veloxgql.Noder, error) {
-	if most := veloxgql.LimitsFrom(ctx).MaxPage; len(ids) > most {
+	if most := veloxgql.LimitsFromContext(ctx).MaxPage; len(ids) > most {
 		return nil, gqlimpl.InputErrorf("Nodes: %w: %d IDs, and the most is %d", veloxgql.ErrPageTooLarge, len(ids), most)
 	}
 	// The keys of each type, and the indexes in ids of their IDs.
@@ -158,7 +158,7 @@ func Nodes(ctx context.Context, ids []string) ([]veloxgql.Noder, error) {
 	if len(ids) == 0 {
 		return out, nil
 	}
-	db, err := veloxgql.DBFrom(ctx)
+	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -26,7 +26,7 @@ import (
 )
 
 // post is a hand-written tenant-scoped entity, as velox-gen would write it,
-// for Exist: a key, a tenant and a title. Its Read policy hides the posts
+// for CheckExists: a key, a tenant and a title. Its Read policy hides the posts
 // titled "hidden".
 type post struct {
 	ID     int64
@@ -203,7 +203,7 @@ func postMutation(t *testing.T, srv http.Handler) string {
 func TestAtomic(t *testing.T) {
 	t.Run("outside a server", func(t *testing.T) {
 		db, r := mutationDB(t)
-		ctx := veloxgql.NewExtension(db).Context(context.Background())
+		ctx := veloxgql.NewExtension(db).NewContext(context.Background())
 		var got *velox.DB
 		err := gqlimpl.Atomic(ctx, func(ctx context.Context, tx *velox.DB) error {
 			got = tx
@@ -238,7 +238,7 @@ func TestAtomic(t *testing.T) {
 		var opDB, fnDB *velox.DB
 		srv := serveRun(veloxgql.NewExtension(db), func(ctx context.Context) error {
 			var err error
-			if opDB, err = veloxgql.DBFrom(ctx); err != nil {
+			if opDB, err = veloxgql.DBFromContext(ctx); err != nil {
 				return err
 			}
 			return gqlimpl.Atomic(ctx, func(ctx context.Context, tx *velox.DB) error {
@@ -392,7 +392,7 @@ func TestDecodeIDsCap(t *testing.T) {
 	}
 
 	db, _ := mutationDB(t)
-	small := veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).Context(ctx)
+	small := veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).NewContext(ctx)
 	if _, err := gqlimpl.DecodeIDs[int64](small, at, encodeUsers(2), "User"); err != nil {
 		t.Errorf("2 IDs under MaxPage 2: %v", err)
 	}
@@ -423,7 +423,7 @@ func TestDecodeIDsRepeats(t *testing.T) {
 
 func TestExist(t *testing.T) {
 	db, _ := mutationDB(t)
-	ctx := veloxgql.NewExtension(db).Context(context.Background())
+	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
 	ann, bob := velox.WithTenant(ctx, "ann"), velox.WithTenant(ctx, "bob")
 	for _, p := range []struct {
 		ctx context.Context
@@ -434,7 +434,7 @@ func TestExist(t *testing.T) {
 		}
 	}
 	const at = "CreateUserInput.postIDs"
-	if err := gqlimpl.Exist(ann, db.Query[post]().Where(posts.ID.In(1)), 1, at, "Post"); err != nil {
+	if err := gqlimpl.CheckExists(ann, db.Query[post]().Where(posts.ID.In(1)), 1, at, "Post"); err != nil {
 		t.Errorf("one ID of ann's post: %v", err)
 	}
 	for name, c := range map[string]struct {
@@ -445,7 +445,7 @@ func TestExist(t *testing.T) {
 		"another tenant's": {ann, []int64{1, 2}},
 		"hidden by policy": {ann, []int64{1, 4}},
 	} {
-		err := gqlimpl.Exist(c.ctx, db.Query[post]().Where(posts.ID.In(c.ids...)), len(c.ids), at, "Post")
+		err := gqlimpl.CheckExists(c.ctx, db.Query[post]().Where(posts.ID.In(c.ids...)), len(c.ids), at, "Post")
 		if codeOf(err) != veloxgql.CodeNotFound {
 			t.Errorf("%s: %v, want NOT_FOUND", name, err)
 		}
@@ -455,7 +455,7 @@ func TestExist(t *testing.T) {
 	}
 	// One ID that names no row reads as NotFound does.
 	for name, id := range map[string]int64{"missing": 3, "another tenant's": 2, "hidden by policy": 4} {
-		err := gqlimpl.Exist(ann, db.Query[post]().Where(posts.ID.In(id)), 1, at, "Post")
+		err := gqlimpl.CheckExists(ann, db.Query[post]().Where(posts.ID.In(id)), 1, at, "Post")
 		if codeOf(err) != veloxgql.CodeNotFound {
 			t.Errorf("one ID, %s: %v, want NOT_FOUND", name, err)
 		}
@@ -464,7 +464,7 @@ func TestExist(t *testing.T) {
 		}
 	}
 	// The query's own error is returned as it is.
-	if err := gqlimpl.Exist(ctx, db.Query[post]().Where(posts.ID.In(1)), 1, at, "Post"); !errors.Is(err, velox.ErrNoTenant) {
+	if err := gqlimpl.CheckExists(ctx, db.Query[post]().Where(posts.ID.In(1)), 1, at, "Post"); !errors.Is(err, velox.ErrNoTenant) {
 		t.Errorf("no tenant: %v, want ErrNoTenant", err)
 	}
 }
@@ -480,7 +480,7 @@ func TestNotFound(t *testing.T) {
 // under the tenant and the Read policy, and runs no query for no keys.
 func TestReadable(t *testing.T) {
 	db, r := mutationDB(t)
-	ctx := veloxgql.NewExtension(db).Context(context.Background())
+	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
 	ann, bob := velox.WithTenant(ctx, "ann"), velox.WithTenant(ctx, "bob")
 	for _, p := range []struct {
 		ctx context.Context
@@ -513,7 +513,7 @@ func TestReadable(t *testing.T) {
 // again, and stops at a short page; unlink's error stops it.
 func TestUnlinkAll(t *testing.T) {
 	db, _ := mutationDB(t)
-	ctx := veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).Context(context.Background())
+	ctx := veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).NewContext(context.Background())
 	for i := int64(1); i <= 5; i++ {
 		if err := db.Insert(&person{ID: i, Name: "p", Age: i}).Exec(ctx); err != nil {
 			t.Fatal(err)
@@ -556,10 +556,10 @@ func TestUnlinkAll(t *testing.T) {
 
 // TestRepointed: an UPDATE that re-pointed fewer children than its IDs
 // fails with BAD_USER_INPUT when linked counts a child another owner holds,
-// and as Exist does otherwise; one that re-pointed them all runs no query.
+// and as CheckExists does otherwise; one that re-pointed them all runs no query.
 func TestRepointed(t *testing.T) {
 	db, _ := mutationDB(t)
-	ctx := veloxgql.NewExtension(db).Context(context.Background())
+	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
 	ann := velox.WithTenant(ctx, "ann")
 	if err := db.Insert(&post{ID: 1, Title: "linked"}).Exec(ann); err != nil {
 		t.Fatal(err)

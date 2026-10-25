@@ -24,15 +24,15 @@ import (
 //	srv.Use(veloxgql.NewExtension(db))
 //	srv.SetErrorPresenter(veloxgql.ErrorPresenter(nil))
 //
-// Every operation's context gets the DB, which DBFrom reads, and the
-// extension's limits, which LimitsFrom reads, so queries and subscriptions
+// Every operation's context gets the DB, which DBFromContext reads, and the
+// extension's limits, which LimitsFromContext reads, so queries and subscriptions
 // run on the DB, and a DB with replicas routes their reads to them.
 //
 // A mutation operation runs in one db.Tx, on the primary, unless WithTxFilter
 // leaves it out, and its resolvers get the transaction's DB and context, so
 // every statement of the operation, its nested fields' too, is in the
 // transaction. A statement a mutation's resolver runs on db itself, not on
-// the DB DBFrom reads, fails with velox.ErrOutsideTx; under
+// the DB DBFromContext reads, fails with velox.ErrOutsideTx; under
 // velox.WithoutTx(ctx) it runs outside the transaction, as an audit row that
 // must survive a rollback does.
 //
@@ -104,8 +104,9 @@ type Extension struct {
 	batchScope func(context.Context) any
 }
 
-// Option configures an Extension.
-type Option func(*Extension)
+// Option configures an Extension. The With functions make them; the zero
+// Option is not valid, and NewExtension panics on it, as velox.Open does.
+type Option struct{ apply func(*Extension) }
 
 // NewExtension returns the extension that serves a schema on db, with
 // DefaultLimits() unless WithLimits says otherwise.
@@ -121,7 +122,7 @@ type Option func(*Extension)
 func NewExtension(db *velox.DB, opts ...Option) *Extension {
 	e := &Extension{db: db, limits: DefaultLimits()}
 	for _, o := range opts {
-		o(e)
+		o.apply(e)
 	}
 	return e
 }
@@ -129,7 +130,7 @@ func NewExtension(db *velox.DB, opts ...Option) *Extension {
 // WithLimits sets the extension's limits to l, each zero field of l taken
 // from DefaultLimits(). Given twice, the last wins.
 func WithLimits(l Limits) Option {
-	return func(e *Extension) { e.limits = l.orDefault() }
+	return Option{func(e *Extension) { e.limits = l.orDefault() }}
 }
 
 // WithTxOptions sets the options of a mutation's transaction. Validate
@@ -137,7 +138,7 @@ func WithLimits(l Limits) Option {
 // operation cannot run again. Given twice, the last wins.
 func WithTxOptions(opts ...velox.TxOption) Option {
 	opts = slices.Clone(opts)
-	return func(e *Extension) { e.txOpts = opts }
+	return Option{func(e *Extension) { e.txOpts = opts }}
 }
 
 // WithTxFilter decides, for each mutation operation, whether it runs in a
@@ -153,7 +154,7 @@ func WithTxOptions(opts ...velox.TxOption) Option {
 // its own write goes to the primary. A session of the request's context is
 // replaced, with its pin kept.
 func WithTxFilter(f func(ctx context.Context, op *ast.OperationDefinition) bool) Option {
-	return func(e *Extension) { e.txFilter = f }
+	return Option{func(e *Extension) { e.txFilter = f }}
 }
 
 // WithBatchScope adds f's value to what the edges' batches are keyed by:
@@ -174,14 +175,15 @@ func WithTxFilter(f func(ctx context.Context, op *ast.OperationDefinition) bool)
 // (acting as the row's owner, raising a role) needs WithBatchScope, or the
 // rows of the field are read under whichever context comes first.
 func WithBatchScope(f func(context.Context) any) Option {
-	return func(e *Extension) { e.batchScope = f }
+	return Option{func(e *Extension) { e.batchScope = f }}
 }
 
-// Context returns ctx with the extension's DB and limits, as a query
+// NewContext returns ctx with the extension's DB and limits, as a query
 // operation gets them: for generated code called outside a gqlgen server.
-// Outside a server nothing batches, so the context holds no table of rows.
-// It panics with the error Validate would return.
-func (e *Extension) Context(ctx context.Context) context.Context {
+// DBFromContext and LimitsFromContext read them back. Outside a server
+// nothing batches, so the context holds no table of rows. It panics with the
+// error Validate would return.
+func (e *Extension) NewContext(ctx context.Context) context.Context {
 	if err := e.Validate(nil); err != nil {
 		panic(err)
 	}

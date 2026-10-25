@@ -23,10 +23,10 @@ func withState(ctx context.Context, db *velox.DB, limits Limits) context.Context
 	return context.WithValue(ctx, stateKey{}, &state{db: db, limits: limits})
 }
 
-// DBFrom returns the DB the extension put in ctx. It fails with ErrNoDB when
+// DBFromContext returns the DB the extension put in ctx. It fails with ErrNoDB when
 // there is none: the schema is served without veloxgql.NewExtension, which
 // puts it there.
-func DBFrom(ctx context.Context) (*velox.DB, error) {
+func DBFromContext(ctx context.Context) (*velox.DB, error) {
 	s, _ := ctx.Value(stateKey{}).(*state)
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("veloxgql: %w: serve the schema through veloxgql.NewExtension, which puts the DB in each request's context", ErrNoDB)

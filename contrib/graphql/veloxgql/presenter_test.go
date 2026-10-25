@@ -143,8 +143,8 @@ func TestErrorsAreCoded(t *testing.T) {
 	if err := veloxgql.ErrNoDB; codeOf(err) != "" {
 		t.Errorf("ErrNoDB has the code %q", codeOf(err))
 	}
-	if _, err := veloxgql.DBFrom(ctx); codeOf(err) != "" {
-		t.Errorf("DBFrom's error has the code %q", codeOf(err))
+	if _, err := veloxgql.DBFromContext(ctx); codeOf(err) != "" {
+		t.Errorf("DBFromContext's error has the code %q", codeOf(err))
 	}
 }
 

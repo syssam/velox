@@ -60,7 +60,7 @@ func (Writer) Edges() []schema.Edge {
 }
 
 func (Writer) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.Mutations(graphql.Create(), graphql.Update(), graphql.Delete())}
+	return []schema.Annotation{graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate(), graphql.MutationDelete())}
 }
 
 type Article struct{ schema.Schema }
@@ -77,7 +77,7 @@ func (Article) Edges() []schema.Edge {
 }
 
 func (Article) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.Mutations(graphql.Create(), graphql.Update(), graphql.Delete())}
+	return []schema.Annotation{graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate(), graphql.MutationDelete())}
 }
 
 type Circle struct{ schema.Schema }
@@ -89,7 +89,7 @@ func (Circle) Edges() []schema.Edge {
 }
 
 func (Circle) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.Mutations(graphql.Create(), graphql.Update(), graphql.Delete())}
+	return []schema.Annotation{graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate(), graphql.MutationDelete())}
 }
 
 type Profile struct{ schema.Schema }
@@ -106,7 +106,7 @@ func (Profile) Edges() []schema.Edge {
 }
 
 func (Profile) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.Mutations(graphql.Create())}
+	return []schema.Annotation{graphql.Mutations(graphql.MutationCreate())}
 }
 `
 
@@ -411,7 +411,7 @@ func run(t *testing.T, fk bool, fn func(t *testing.T, e *env)) {
 				}
 			}
 			e.raw, e.db = raw, db
-			e.ctx = velox.WithTenant(veloxgql.NewExtension(e.db).Context(context.Background()), int64(7))
+			e.ctx = velox.WithTenant(veloxgql.NewExtension(e.db).NewContext(context.Background()), int64(7))
 			fn(t, e)
 		})
 	}
@@ -1569,7 +1569,7 @@ func TestUnlinkScope(t *testing.T) {
 
 		// Pages of 2: five writers, of tenants 7 and 8 in turn, in one
 		// circle; clearWriters unlinks tenant 7's three.
-		paged := velox.WithTenant(veloxgql.NewExtension(e.db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).Context(context.Background()), int64(7))
+		paged := velox.WithTenant(veloxgql.NewExtension(e.db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).NewContext(context.Background()), int64(7))
 		big := &gen.Circle{Name: "big"}
 		insert(t, e.ctx, e.db, big)
 		for i := range 5 {

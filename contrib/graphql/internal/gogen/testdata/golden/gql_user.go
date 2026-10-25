@@ -13,7 +13,7 @@ import (
 	"github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion1
+const _ = veloxgql.GeneratedCodeIsVersion2
 
 // Account is User under its GraphQL type name, so that gqlgen's autobind finds
 // the Go type of the GraphQL type Account.
@@ -72,7 +72,7 @@ func (e *UserRole) UnmarshalGQL(v any) error {
 // asks for the connection's fields, each with those of every row read with x,
 // in one query.
 func (x *User) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy []*PostOrder, where *PostWhereInput) (*PostConnection, error) {
-	db, err := veloxgql.DBFrom(ctx)
+	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -85,11 +85,11 @@ func (x *User) PostsGQL(ctx context.Context, after *veloxgql.Cursor, first *int,
 
 // GroupsGQL is the edge groups: the Group nodes it leads to, in key order. It
 // is read with the edge of every row read with x, in one query, which reads at
-// most the MaxList of veloxgql.LimitsFrom(ctx) rows for each, whatever the DB's
-// WithMaxRows: more fail x's with velox.ErrTooManyRows, in an error that names
-// the edge.
+// most the MaxList of veloxgql.LimitsFromContext(ctx) rows for each, whatever
+// the DB's WithMaxRows: more fail x's with velox.ErrTooManyRows, in an error
+// that names the edge.
 func (x *User) GroupsGQL(ctx context.Context) ([]*Group, error) {
-	db, err := veloxgql.DBFrom(ctx)
+	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +105,7 @@ func (x *User) GroupsGQL(ctx context.Context) ([]*Group, error) {
 // asks for the connection's fields, each with those of every row read with x,
 // in one query.
 func (x *User) LikesGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*LikeConnection, error) {
-	db, err := veloxgql.DBFrom(ctx)
+	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -163,11 +163,11 @@ type AccountEdge struct {
 }
 
 // AccountsConnection is the connection to every Account node, through the DB
-// veloxgql.DBFrom reads from ctx, paged and ordered by the arguments of a
-// connection to Account: a Query field's resolver returns it. It fails before
+// veloxgql.DBFromContext reads from ctx, paged and ordered by the arguments of
+// a connection to Account: a Query field's resolver returns it. It fails before
 // any query runs on arguments gqlimpl.NewConnection refuses.
 func AccountsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *AccountWhereInput) (*AccountConnection, error) {
-	db, err := veloxgql.DBFrom(ctx)
+	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -289,11 +289,11 @@ type AccountWhereInput struct {
 // holds, and a w that sets none, or a nil w, holds for every node. It fails,
 // before any query runs, on an ID of another type (veloxgql.ErrWrongIDType) or
 // a malformed one (veloxgql.ErrBadID), on a nesting deeper than the
-// MaxFilterDepth of veloxgql.LimitsFrom(ctx) (veloxgql.ErrFilterTooDeep), on an
-// and, an or, a has…With, an In or a NotIn of more than its MaxFilterWidth
-// entries (veloxgql.ErrFilterTooWide), and on a where argument of more than its
-// MaxFilterNodes inputs, predicates and values in all
-// (veloxgql.ErrFilterTooLarge).
+// MaxFilterDepth of veloxgql.LimitsFromContext(ctx)
+// (veloxgql.ErrFilterTooDeep), on an and, an or, a has…With, an In or a NotIn
+// of more than its MaxFilterWidth entries (veloxgql.ErrFilterTooWide), and on a
+// where argument of more than its MaxFilterNodes inputs, predicates and values
+// in all (veloxgql.ErrFilterTooLarge).
 func (w *AccountWhereInput) Pred(ctx context.Context) (velox.Pred[User], error) {
 	f := gqlimpl.NewFilter[User](ctx, "AccountWhereInput")
 	if w == nil {
@@ -440,17 +440,17 @@ func (in CreateAccountInput) GoString() string { return in.String() }
 // CreateAccount creates one Account from input, with its edges, and returns it,
 // as the mutation createAccount does. It first decodes every ID and JSON value
 // of input, and fails before any statement on one it cannot decode
-// (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFrom reads from
-// ctx, in one transaction (gqlimpl.Atomic): the operation's, or one of its own.
-// The tenant scope and the policies apply as to any write: each ID must name a
-// row the caller may read, and a row it re-points one the caller may change, or
-// CreateAccount fails with NOT_FOUND and keeps nothing. A validator's refusal
-// is BAD_USER_INPUT, naming the input field, and comes before any statement;
-// velox's other errors are returned as they are. The row is returned as
-// written, not read again through the Read policy. There is no savepoint inside
-// the extension's transaction, so a resolver must return this function's error:
-// one that swallows it commits the partial writes. A self-edge is written one
-// way, as the core's loads read it.
+// (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFromContext reads
+// from ctx, in one transaction (gqlimpl.Atomic): the operation's, or one of its
+// own. The tenant scope and the policies apply as to any write: each ID must
+// name a row the caller may read, and a row it re-points one the caller may
+// change, or CreateAccount fails with NOT_FOUND and keeps nothing. A
+// validator's refusal is BAD_USER_INPUT, naming the input field, and comes
+// before any statement; velox's other errors are returned as they are. The row
+// is returned as written, not read again through the Read policy. There is no
+// savepoint inside the extension's transaction, so a resolver must return this
+// function's error: one that swallows it commits the partial writes. A
+// self-edge is written one way, as the core's loads read it.
 func CreateAccount(ctx context.Context, input CreateAccountInput) (*User, error) {
 	var (
 		j14 map[string]any
@@ -527,12 +527,12 @@ func CreateAccount(ctx context.Context, input CreateAccountInput) (*User, error)
 	var out *User
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
 		if len(k15) > 0 {
-			if err := gqlimpl.Exist(ctx, db.Query[Group]().Where(Groups.ID.In(k15...)), len(k15), "CreateAccountInput.membershipIDs", "Group"); err != nil {
+			if err := gqlimpl.CheckExists(ctx, db.Query[Group]().Where(Groups.ID.In(k15...)), len(k15), "CreateAccountInput.membershipIDs", "Group"); err != nil {
 				return err
 			}
 		}
 		if input.BestFriendID != nil {
-			if err := gqlimpl.Exist(ctx, db.Query[User]().Where(Users.ID.In(k16)), 1, "CreateAccountInput.bestFriendID", "Account"); err != nil {
+			if err := gqlimpl.CheckExists(ctx, db.Query[User]().Where(Users.ID.In(k16)), 1, "CreateAccountInput.bestFriendID", "Account"); err != nil {
 				return err
 			}
 			x.UserBestFriend = &k16

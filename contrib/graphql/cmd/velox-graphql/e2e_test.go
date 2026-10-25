@@ -68,7 +68,7 @@ func (Post) Edges() []schema.Edge {
 func (Post) Annotations() []schema.Annotation {
 	return []schema.Annotation{
 		graphql.QueryField("posts"),
-		graphql.Mutations(graphql.Create(), graphql.Update(), graphql.Delete()),
+		graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate(), graphql.MutationDelete()),
 	}
 }
 
@@ -108,7 +108,7 @@ func (Category) Edges() []schema.Edge {
 }
 
 func (Category) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.Mutations(graphql.Create(), graphql.Update())}
+	return []schema.Annotation{graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate())}
 }
 
 type Secret struct{ schema.Schema }
@@ -327,7 +327,7 @@ func (Event) Edges() []schema.Edge {
 }
 
 func (Event) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.QueryField("events"), graphql.Mutations(graphql.Create())}
+	return []schema.Annotation{graphql.QueryField("events"), graphql.Mutations(graphql.MutationCreate())}
 }
 
 // Owner's key is of a type from a package named ids, as Nodes's parameter
@@ -513,7 +513,7 @@ func TestConnections(t *testing.T) {
 		ran.Add(1)
 		return next(ctx)
 	}))
-	ctx := velox.WithTenant(veloxgql.NewExtension(db).Context(context.Background()), int64(7))
+	ctx := velox.WithTenant(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
 	user := func(e *gen.AccountEdge) int64 { return e.Node.ID }
 	post := func(e *gen.PostEdge) int64 { return e.Node.ID }
 
@@ -604,7 +604,7 @@ func TestConnections(t *testing.T) {
 	}
 	// A list edge reads at most MaxList rows, the DB's cap being none: more
 	// fail with ErrTooManyRows, and the error names the edge.
-	one := veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxList: 1})).Context(ctx)
+	one := veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxList: 1})).NewContext(ctx)
 	_, err = ann.GroupsGQL(one)
 	if gs, err2 := bob.GroupsGQL(one); err2 != nil || !slices.Equal(groupIDs(gs), []int64{2}) {
 		t.Errorf("bob's groups under MaxList 1: %v %v", groupIDs(gs), err2)
@@ -705,7 +705,7 @@ func TestConnectionOf(t *testing.T) {
 		t.Fatal(err)
 	}
 	db := velox.Open(velox.SQLite, sqlDB)
-	ctx := velox.WithTenant(veloxgql.NewExtension(db).Context(context.Background()), int64(7))
+	ctx := velox.WithTenant(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
 	post := func(e *gen.PostEdge) int64 { return e.Node.ID }
 
 	c, err := gen.PostsConnectionOf(ctx, db.Query[gen.Post]().Where(gen.Posts.Title.EQ("a")), nil, nil, nil, nil, nil, nil)
@@ -734,7 +734,7 @@ func TestConnectionOfLimitOffset(t *testing.T) {
 		t.Fatal(err)
 	}
 	db := velox.Open(velox.SQLite, sqlDB)
-	ctx := velox.WithTenant(veloxgql.NewExtension(db).Context(context.Background()), int64(7))
+	ctx := velox.WithTenant(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
 	post := func(e *gen.PostEdge) int64 { return e.Node.ID }
 
 	var all []int64
@@ -827,7 +827,7 @@ func open(t *testing.T, opts ...velox.Option) (context.Context, *velox.DB) {
 		return next(ctx)
 	}))
 	db := velox.Open(velox.SQLite, sqlDB, opts...)
-	ctx := velox.WithTenant(veloxgql.NewExtension(db).Context(context.Background()), int64(7))
+	ctx := velox.WithTenant(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
 	return ctx, db
 }
 
@@ -1189,7 +1189,7 @@ func chain(n int, not bool) *gen.OwnerWhereInput {
 }
 
 // TestWhereDepthAndWidth is Review Focus 4: a where nested deeper than the
-// MaxFilterDepth of veloxgql.LimitsFrom(ctx), an and, or or has…With list
+// MaxFilterDepth of veloxgql.LimitsFromContext(ctx), an and, or or has…With list
 // of more than its MaxFilterWidth inputs, and a where argument over its
 // MaxFilterNodes, fail before any statement runs.
 func TestWhereDepthAndWidth(t *testing.T) {

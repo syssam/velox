@@ -3,7 +3,7 @@
 // the scalars, and the limits on what a client may ask for.
 //
 // What only generated code calls is in package gqlimpl, whose names are
-// stable by GeneratedCodeIsVersion1 and not by semantic versioning. Where a
+// stable by GeneratedCodeIsVersion2 and not by semantic versioning. Where a
 // name below belongs to gqlimpl it is written gqlimpl.Name.
 //
 // # IDs
@@ -19,11 +19,11 @@
 //
 // # The DB
 //
-// Generated code runs its queries on the DB that DBFrom reads from the
+// Generated code runs its queries on the DB that DBFromContext reads from the
 // request's context. The Extension (NewExtension) is the gqlgen handler
 // extension that puts it there, with the limits, for every operation, and
 // runs a mutation operation in one transaction: it commits when the response
-// has no errors, and rolls back otherwise or on a panic. Extension.Context
+// has no errors, and rolls back otherwise or on a panic. Extension.NewContext
 // puts the same in a context for generated code called outside a gqlgen
 // server, in a job or a test.
 //
@@ -99,7 +99,7 @@
 //   - gqlimpl.Is adds a Boolean predicate, or its negation: IsNil, NotNil and
 //     has<Edge>.
 //
-// The limits are LimitsFrom(ctx)'s, read at the top of the where argument. A
+// The limits are LimitsFromContext(ctx)'s, read at the top of the where argument. A
 // nesting deeper than MaxFilterDepth fails with ErrFilterTooDeep. A list of
 // more than MaxFilterWidth entries, of inputs or of In or NotIn values, fails
 // with ErrFilterTooWide, and a where argument over its budget of
@@ -159,7 +159,7 @@
 // Limits caps what a client may ask for: MaxPage, MaxList, MaxFilterDepth,
 // MaxFilterWidth, MaxFilterNodes, MaxOrderTerms and MaxCost. An Extension has its
 // own (WithLimits; a zero field is the default), which it puts in each
-// operation's context, and generated code reads them with LimitsFrom, which
+// operation's context, and generated code reads them with LimitsFromContext, which
 // gives DefaultLimits() in a context without them. The Extension refuses a
 // negative limit. MaxList is how many rows a list edge reads, and more fail
 // with velox.ErrTooManyRows.
@@ -183,8 +183,8 @@
 // Nothing in the package runs at program start.
 package veloxgql
 
-// For generated code. GeneratedCodeIsVersion1 is referenced by every Go file
+// For generated code. GeneratedCodeIsVersion2 is referenced by every Go file
 // velox-graphql writes, so that generated code and this module fail to
 // compile together when they disagree. It is replaced by
-// GeneratedCodeIsVersion2 when generated code must change.
-const GeneratedCodeIsVersion1 = true
+// GeneratedCodeIsVersion3 when generated code must change.
+const GeneratedCodeIsVersion2 = true

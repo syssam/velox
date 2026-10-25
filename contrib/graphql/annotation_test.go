@@ -26,7 +26,7 @@ func TestAnnotationJSON(t *testing.T) {
 		{"Type", graphql.Type("Account"), `{"type":"Account"}`},
 		{"QueryField", graphql.QueryField("users"), `{"query_field":"users"}`},
 		{"Mutations()", graphql.Mutations(), `{"mutations":["create","update"]}`},
-		{"Mutations(all)", graphql.Mutations(graphql.Create(), graphql.Update(), graphql.Delete()), `{"mutations":["create","update","delete"]}`},
+		{"Mutations(all)", graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate(), graphql.MutationDelete()), `{"mutations":["create","update","delete"]}`},
 		{"MultiOrder", graphql.MultiOrder(), `{"multi_order":true}`},
 		{"FieldName", graphql.FieldName("fullName"), `{"field_name":"fullName"}`},
 		{"OrderField", graphql.OrderField("CREATED_AT"), `{"order_field":"CREATED_AT"}`},
@@ -82,6 +82,14 @@ func merge(t *testing.T, earlier, later graphql.Annotation) graphql.Annotation {
 	return out
 }
 
+// TestMutationsDefault: Mutations with no argument means create and update.
+func TestMutationsDefault(t *testing.T) {
+	got := graphql.Mutations().Mutations
+	if want := []graphql.MutationKind{graphql.MutationCreate(), graphql.MutationUpdate()}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Mutations() = %v, want %v", got, want)
+	}
+}
+
 func TestMerge(t *testing.T) {
 	t.Run("skip ORs", func(t *testing.T) {
 		got := merge(t, graphql.Skip(graphql.SkipOrderField), graphql.Skip(graphql.SkipWhereInput))
@@ -96,11 +104,11 @@ func TestMerge(t *testing.T) {
 		}
 	})
 	t.Run("mutations append", func(t *testing.T) {
-		got := merge(t, graphql.Mutations(graphql.Create()), graphql.Mutations(graphql.Delete()))
+		got := merge(t, graphql.Mutations(graphql.MutationCreate()), graphql.Mutations(graphql.MutationDelete()))
 		if want := []graphql.MutationKind{"create", "delete"}; !reflect.DeepEqual(got.Mutations, want) {
 			t.Errorf("Mutations = %v, want %v", got.Mutations, want)
 		}
-		got = merge(t, graphql.Mutations(), graphql.Mutations(graphql.Update(), graphql.Delete()))
+		got = merge(t, graphql.Mutations(), graphql.Mutations(graphql.MutationUpdate(), graphql.MutationDelete()))
 		if want := []graphql.MutationKind{"create", "update", "delete"}; !reflect.DeepEqual(got.Mutations, want) {
 			t.Errorf("repeated kind: Mutations = %v, want %v", got.Mutations, want)
 		}
@@ -195,7 +203,7 @@ func (User) Annotations() []schema.Annotation {
 		graphql.Mutations(),
 		graphql.Type("First"),
 		graphql.Type("Account"),
-		graphql.Mutations(graphql.Delete()),
+		graphql.Mutations(graphql.MutationDelete()),
 		graphql.Skip(graphql.SkipOrderField),
 		graphql.Skip(graphql.SkipWhereInput),
 	}

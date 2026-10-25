@@ -10,12 +10,12 @@ import (
 	"github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion1
+const _ = veloxgql.GeneratedCodeIsVersion2
 
 // UserGQL is the edge user: the Account it leads to, or nil when there is none.
 // It is read with the edge of every row read with x, in one query.
 func (x *Like) UserGQL(ctx context.Context) (*User, error) {
-	db, err := veloxgql.DBFrom(ctx)
+	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -29,7 +29,7 @@ func (x *Like) UserGQL(ctx context.Context) (*User, error) {
 // PostGQL is the edge post: the Post it leads to, or nil when there is none. It
 // is read with the edge of every row read with x, in one query.
 func (x *Like) PostGQL(ctx context.Context) (*Post, error) {
-	db, err := veloxgql.DBFrom(ctx)
+	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -87,11 +87,11 @@ type LikeEdge struct {
 }
 
 // LikesConnection is the connection to every Like node, through the DB
-// veloxgql.DBFrom reads from ctx, paged and ordered by the arguments of a
-// connection to Like: a Query field's resolver returns it. It fails before any
-// query runs on arguments gqlimpl.NewConnection refuses.
+// veloxgql.DBFromContext reads from ctx, paged and ordered by the arguments of
+// a connection to Like: a Query field's resolver returns it. It fails before
+// any query runs on arguments gqlimpl.NewConnection refuses.
 func LikesConnection(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*LikeConnection, error) {
-	db, err := veloxgql.DBFrom(ctx)
+	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -206,17 +206,17 @@ func (in CreateLikeInput) GoString() string { return in.String() }
 // CreateLike creates one Like from input, with its edges, and returns it, as
 // the mutation createLike does. It first decodes every ID and JSON value of
 // input, and fails before any statement on one it cannot decode
-// (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFrom reads from
-// ctx, in one transaction (gqlimpl.Atomic): the operation's, or one of its own.
-// The tenant scope and the policies apply as to any write: each ID must name a
-// row the caller may read, and a row it re-points one the caller may change, or
-// CreateLike fails with NOT_FOUND and keeps nothing. A validator's refusal is
-// BAD_USER_INPUT, naming the input field, and comes before any statement;
-// velox's other errors are returned as they are. The row is returned as
-// written, not read again through the Read policy. There is no savepoint inside
-// the extension's transaction, so a resolver must return this function's error:
-// one that swallows it commits the partial writes. A self-edge is written one
-// way, as the core's loads read it.
+// (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFromContext reads
+// from ctx, in one transaction (gqlimpl.Atomic): the operation's, or one of its
+// own. The tenant scope and the policies apply as to any write: each ID must
+// name a row the caller may read, and a row it re-points one the caller may
+// change, or CreateLike fails with NOT_FOUND and keeps nothing. A validator's
+// refusal is BAD_USER_INPUT, naming the input field, and comes before any
+// statement; velox's other errors are returned as they are. The row is returned
+// as written, not read again through the Read policy. There is no savepoint
+// inside the extension's transaction, so a resolver must return this function's
+// error: one that swallows it commits the partial writes. A self-edge is
+// written one way, as the core's loads read it.
 func CreateLike(ctx context.Context, input CreateLikeInput) (*Like, error) {
 	var (
 		k2  int64
@@ -244,11 +244,11 @@ func CreateLike(ctx context.Context, input CreateLikeInput) (*Like, error) {
 	}
 	var out *Like
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
-		if err := gqlimpl.Exist(ctx, db.Query[User]().Where(Users.ID.In(k2)), 1, "CreateLikeInput.userID", "Account"); err != nil {
+		if err := gqlimpl.CheckExists(ctx, db.Query[User]().Where(Users.ID.In(k2)), 1, "CreateLikeInput.userID", "Account"); err != nil {
 			return err
 		}
 		x.UserID = k2
-		if err := gqlimpl.Exist(ctx, db.Query[Post]().Where(Posts.ID.In(k3)), 1, "CreateLikeInput.postID", "Post"); err != nil {
+		if err := gqlimpl.CheckExists(ctx, db.Query[Post]().Where(Posts.ID.In(k3)), 1, "CreateLikeInput.postID", "Post"); err != nil {
 			return err
 		}
 		x.PostID = k3

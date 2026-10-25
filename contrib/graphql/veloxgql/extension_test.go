@@ -237,11 +237,33 @@ func handlerDB(t *testing.T, opts ...velox.Option) (*velox.DB, *txLog) {
 	return velox.Open(velox.SQLite, sqlDB, append([]velox.Option{velox.WithAround(l.around), velox.WithTxAround(l.txAround)}, opts...)...), l
 }
 
+// TestZeroOptionPanics: a zero Option is not valid; NewExtension panics on
+// it, as velox.Open does on a zero velox.Option.
+func TestZeroOptionPanics(t *testing.T) {
+	sqlDB, err := sql.Open("sqlite", "file::memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	panics := func(f func()) (p bool) {
+		defer func() { p = recover() != nil }()
+		f()
+		return false
+	}
+	db := velox.Open(velox.SQLite, sqlDB)
+	if !panics(func() { veloxgql.NewExtension(db, veloxgql.Option{}) }) {
+		t.Error("NewExtension(db, Option{}) did not panic")
+	}
+	if !panics(func() { velox.Open(velox.SQLite, sqlDB, velox.Option{}) }) {
+		t.Error("velox.Open(SQLite, sqlDB, Option{}) did not panic")
+	}
+}
+
 // errFail is the error of the fail field.
 var errFail = errors.New("fail failed")
 
 // handlerServer serves testSchema through veloxgql.NewExtension(db). Its
-// resolvers read the DB with DBFrom: add inserts a person and returns its
+// resolvers read the DB with DBFromContext: add inserts a person and returns its
 // id; fail and boom insert one and then fail with errFail or panic; cancel
 // inserts one, calls the cancel function set in *cancel, and returns its
 // id; count counts the people; hasDB reports whether the context holds db
@@ -255,7 +277,7 @@ func handlerServer(t *testing.T, db *velox.DB, cancel *context.CancelFunc) *hand
 // handlerResolvers are handlerServer's resolvers.
 func handlerResolvers(db *velox.DB, cancel *context.CancelFunc) map[string]resolver {
 	insert := func(ctx context.Context, args map[string]any) (int64, error) {
-		tx, err := veloxgql.DBFrom(ctx)
+		tx, err := veloxgql.DBFromContext(ctx)
 		if err != nil {
 			return 0, err
 		}
@@ -263,14 +285,14 @@ func handlerResolvers(db *velox.DB, cancel *context.CancelFunc) map[string]resol
 		return id, tx.Insert(&person{ID: id, Name: "p", Age: 1}).Exec(ctx)
 	}
 	count := func(ctx context.Context, _ map[string]any) (any, error) {
-		db, err := veloxgql.DBFrom(ctx)
+		db, err := veloxgql.DBFromContext(ctx)
 		if err != nil {
 			return nil, err
 		}
 		return db.Query[person]().Count(ctx)
 	}
 	page := func(ctx context.Context, args map[string]any) (any, error) {
-		db, err := veloxgql.DBFrom(ctx)
+		db, err := veloxgql.DBFromContext(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -298,7 +320,7 @@ func handlerResolvers(db *velox.DB, cancel *context.CancelFunc) map[string]resol
 		"count": count,
 		"page":  page,
 		"hasDB": func(ctx context.Context, _ map[string]any) (any, error) {
-			got, err := veloxgql.DBFrom(ctx)
+			got, err := veloxgql.DBFromContext(ctx)
 			return got == db, err
 		},
 		"add": func(ctx context.Context, args map[string]any) (any, error) {
@@ -383,9 +405,9 @@ func TestExtensionPutsTheDB(t *testing.T) {
 
 	// Without the extension, a resolver fails with ErrNoDB.
 	bare := handler.New(testSchema(map[string]resolver{"hasDB": func(ctx context.Context, _ map[string]any) (any, error) {
-		_, err := veloxgql.DBFrom(ctx)
+		_, err := veloxgql.DBFromContext(ctx)
 		if !errors.Is(err, veloxgql.ErrNoDB) {
-			t.Errorf("DBFrom without the extension: %v, want ErrNoDB", err)
+			t.Errorf("DBFromContext without the extension: %v, want ErrNoDB", err)
 		}
 		return nil, err
 	}}))
@@ -407,8 +429,8 @@ func TestExtensionMarksItsTx(t *testing.T) {
 	var marked, got *velox.DB
 	mark := func(ctx context.Context, args map[string]any) (any, error) {
 		var err error
-		got, err = veloxgql.DBFrom(ctx)
-		marked = shared.OperationTx(ctx)
+		got, err = veloxgql.DBFromContext(ctx)
+		marked = shared.OperationTxFromContext(ctx)
 		return args["id"], err
 	}
 	srv := serve(db, map[string]resolver{"add": mark, "count": func(ctx context.Context, _ map[string]any) (any, error) {
@@ -417,7 +439,7 @@ func TestExtensionMarksItsTx(t *testing.T) {
 
 	_ = post(t, context.Background(), srv, `mutation { add(id: 1) }`)
 	if marked == nil || marked != got || got == db {
-		t.Errorf("mutation: marked %p, DBFrom %p, db %p; want the transaction's DB marked", marked, got, db)
+		t.Errorf("mutation: marked %p, DBFromContext %p, db %p; want the transaction's DB marked", marked, got, db)
 	}
 	for name, query := range map[string]string{
 		"query":                   `{ count }`,
@@ -429,7 +451,7 @@ func TestExtensionMarksItsTx(t *testing.T) {
 			t.Errorf("%s: marked %p, want nothing", name, marked)
 		}
 	}
-	if m := shared.OperationTx(veloxgql.NewExtension(db).Context(context.Background())); m != nil {
+	if m := shared.OperationTxFromContext(veloxgql.NewExtension(db).NewContext(context.Background())); m != nil {
 		t.Errorf("Context: marked %p, want nothing", m)
 	}
 }
@@ -440,8 +462,8 @@ func TestExtensionNilDB(t *testing.T) {
 		t.Errorf("Validate: %v, want %q", err, want)
 	}
 	for name, use := range map[string]func(){
-		"Use":     func() { handler.New(testSchema(nil)).Use(veloxgql.NewExtension(nil)) },
-		"Context": func() { veloxgql.NewExtension(nil).Context(context.Background()) },
+		"Use":        func() { handler.New(testSchema(nil)).Use(veloxgql.NewExtension(nil)) },
+		"NewContext": func() { veloxgql.NewExtension(nil).NewContext(context.Background()) },
 	} {
 		func() {
 			defer func() {
@@ -482,8 +504,8 @@ func TestExtensionRefusesNegativeLimits(t *testing.T) {
 			t.Errorf("%s -1: Validate: %v, want %q", name, err, want)
 		}
 		for how, use := range map[string]func(){
-			"Use":     func() { handler.New(testSchema(nil)).Use(ext) },
-			"Context": func() { ext.Context(context.Background()) },
+			"Use":        func() { handler.New(testSchema(nil)).Use(ext) },
+			"NewContext": func() { ext.NewContext(context.Background()) },
 		} {
 			func() {
 				defer func() {
@@ -530,7 +552,7 @@ func TestTwoServersDiffer(t *testing.T) {
 	}
 	wg.Wait()
 	// The error is ErrPageTooLarge.
-	ctx := veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).Context(context.Background())
+	ctx := veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).NewContext(context.Background())
 	if _, err := handlerResolvers(db, nil)["page"](ctx, map[string]any{"first": int64(3)}); !errors.Is(err, veloxgql.ErrPageTooLarge) {
 		t.Errorf("first 3 under MaxPage 2: %v, want ErrPageTooLarge", err)
 	}
@@ -606,7 +628,7 @@ func TestMutationWithoutTx(t *testing.T) {
 			if err := db.Insert(&person{ID: 100 + id, Name: "audit", Age: 1}).Exec(velox.WithoutTx(ctx)); err != nil {
 				return nil, err
 			}
-			tx, err := veloxgql.DBFrom(ctx)
+			tx, err := veloxgql.DBFromContext(ctx)
 			if err != nil {
 				return nil, err
 			}
@@ -788,7 +810,7 @@ func TestMutationResolversRunOneAtATime(t *testing.T) {
 			time.Sleep(time.Millisecond)
 		}
 		seen()
-		db, err := veloxgql.DBFrom(ctx)
+		db, err := veloxgql.DBFromContext(ctx)
 		if err != nil {
 			return nil, err
 		}

@@ -18,7 +18,7 @@ func codeOf(err error) string {
 }
 
 // TestMatched: a write that matched fewer rows than its distinct IDs fails
-// as Exist does; one that matched them all, or more, does not fail as
+// as CheckExists does; one that matched them all, or more, does not fail as
 // NOT_FOUND.
 func TestMatched(t *testing.T) {
 	for _, c := range []struct {

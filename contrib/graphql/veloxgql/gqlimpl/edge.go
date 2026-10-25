@@ -28,7 +28,7 @@ import (
 //
 // A batch is keyed by its group, the edge's field (Field.Field, so two
 // aliases are two batches) and its selections, the edge (its name, the
-// relation and the target type), the DB veloxgql.DBFrom reads, EdgeList's
+// relation and the target type), the DB veloxgql.DBFromContext reads, EdgeList's
 // MaxList, the callers' row scope (velox.RowScopeFromContext: the tenant, the
 // WithAllTenants and WithoutPolicy reasons and the WithShard shard, of the context
 // each passes to the edge function) and the value of
@@ -129,10 +129,10 @@ func EdgeOne[E, T any](ctx context.Context, q velox.Query[T], x *E, r velox.Rel[
 // LimitEach of MaxList + 1: an owner with more than MaxList fails with
 // velox.ErrTooManyRows, in an error naming field, and the others do not.
 //
-// MaxList is that of veloxgql.LimitsFrom(ctx). Read alone, x's nodes are
+// MaxList is that of veloxgql.LimitsFromContext(ctx). Read alone, x's nodes are
 // one LoadEach of x, a group of their own.
 func EdgeList[E, T any](ctx context.Context, q velox.Query[T], x *E, r velox.Rel[E, T], field string) ([]*T, error) {
-	most := veloxgql.LimitsFrom(ctx).MaxList
+	most := veloxgql.LimitsFromContext(ctx).MaxList
 	rel := r.LimitEach(most + 1)
 	keep := func(rows []T) int {
 		if len(rows) > most {
@@ -175,7 +175,7 @@ type batchKey struct {
 	field  string       // the edge's GraphQL field, "Post.likes"
 	rel    int32        // the relation's index on the owner
 	target reflect.Type // the relation's target, T
-	db     *velox.DB    // veloxgql.DBFrom's
+	db     *velox.DB    // veloxgql.DBFromContext's
 	most   int          // EdgeList's MaxList; 0 for the others
 	scope  velox.RowScope
 	app    any // veloxgql.WithBatchScope's value
@@ -195,12 +195,12 @@ func batchOf[E, T any](ctx context.Context, x *E, r velox.Rel[E, T], field strin
 	if typ, name, _ := strings.Cut(field, "."); fc.Object != typ || fc.Field.Name != name {
 		return nil, nil, 0
 	}
-	t := shared.TableFrom(ctx)
+	t := shared.TableFromContext(ctx)
 	g, rows, i, ok := shared.Find(t, x)
 	if !ok {
 		return nil, nil, 0
 	}
-	db, _ := veloxgql.DBFrom(ctx)
+	db, _ := veloxgql.DBFromContext(ctx)
 	key := batchKey{field: field, rel: r.I, target: reflect.TypeFor[T](), db: db, most: most, scope: velox.RowScopeFromContext(ctx), app: t.Scope(ctx)}
 	if !canCompare(key.scope.Tenant) || !canCompare(key.app) {
 		// A tenant id or a batch scope == would panic on (a tenant of

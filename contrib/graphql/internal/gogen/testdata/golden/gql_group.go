@@ -11,7 +11,7 @@ import (
 	"github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion1
+const _ = veloxgql.GeneratedCodeIsVersion2
 
 // IsNode marks Group as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -44,7 +44,7 @@ func (e *GroupVisibility) UnmarshalGQL(v any) error {
 // asks for the connection's fields, each with those of every row read with x,
 // in one query.
 func (x *Group) UsersGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *AccountWhereInput) (*AccountConnection, error) {
-	db, err := veloxgql.DBFrom(ctx)
+	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -102,11 +102,11 @@ type GroupEdge struct {
 }
 
 // GroupsConnection is the connection to every Group node, through the DB
-// veloxgql.DBFrom reads from ctx, paged and ordered by the arguments of a
-// connection to Group: a Query field's resolver returns it. It fails before any
-// query runs on arguments gqlimpl.NewConnection refuses.
+// veloxgql.DBFromContext reads from ctx, paged and ordered by the arguments of
+// a connection to Group: a Query field's resolver returns it. It fails before
+// any query runs on arguments gqlimpl.NewConnection refuses.
 func GroupsConnection(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, orderBy *GroupOrder) (*GroupConnection, error) {
-	db, err := veloxgql.DBFrom(ctx)
+	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}

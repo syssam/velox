@@ -203,7 +203,7 @@ func (f *file) finish(name, pkg string) (plugin.File, error) {
 	}
 	// Generated code and veloxgql fail to compile together when they
 	// disagree on the version, as the core's files do.
-	fmt.Fprintf(&src, "const _ = %s.GeneratedCodeIsVersion1\n\n", guard)
+	fmt.Fprintf(&src, "const _ = %s.GeneratedCodeIsVersion2\n\n", guard)
 	src.Write(f.Bytes())
 	out, err := format.Source(src.Bytes())
 	if err != nil {
@@ -658,7 +658,7 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 	} else {
 		f.p("// Node returns the node with the global ID id, or nil when no row has its")
 		f.p("// key. It reads the ID's type, decodes the key as that type's, and looks")
-		f.p("// the row up with one query on that entity, through the DB veloxgql.DBFrom")
+		f.p("// the row up with one query on that entity, through the DB veloxgql.DBFromContext")
 		f.p("// reads from ctx, reading only the columns the field's selection needs; its")
 		f.p("// edges batch (veloxgql.Batch). A column the selection does not need is")
 		f.p("// zero in the node, except the key, the foreign keys and the tenant: an")
@@ -678,7 +678,7 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 			f.p("\t\tif err != nil {")
 			f.p("\t\t\treturn nil, err")
 			f.p("\t\t}")
-			f.p("\t\tdb, err := %s.DBFrom(ctx)", vgql)
+			f.p("\t\tdb, err := %s.DBFromContext(ctx)", vgql)
 			f.p("\t\tif err != nil {")
 			f.p("\t\t\treturn nil, err")
 			f.p("\t\t}")
@@ -700,14 +700,14 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 
 	f.p("")
 	tooMany := func() {
-		f.p("\tif most := %s.LimitsFrom(ctx).MaxPage; len(ids) > most {", vgql)
+		f.p("\tif most := %s.LimitsFromContext(ctx).MaxPage; len(ids) > most {", vgql)
 		f.p("\t\treturn nil, %s.InputErrorf(\"Nodes: %%w: %%d IDs, and the most is %%d\", %s.ErrPageTooLarge, len(ids), most)", f.gqlimpl(), vgql)
 		f.p("\t}")
 	}
 	if len(nodes) == 0 {
 		f.p("// Nodes is the root field nodes. No type of the schema is a Node, so an")
 		f.p("// ID fails as in Node, and so do more IDs than the MaxPage of")
-		f.p("// veloxgql.LimitsFrom(ctx), with veloxgql.ErrPageTooLarge.")
+		f.p("// veloxgql.LimitsFromContext(ctx), with veloxgql.ErrPageTooLarge.")
 		f.p("func Nodes(ctx %s.Context, ids []string) ([]%s.Noder, error) {", ctx, vgql)
 		tooMany()
 		f.p("\tfor _, id := range ids {")
@@ -722,7 +722,7 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 	}
 	f.p("// Nodes returns the nodes with the global IDs ids, in their order, with nil")
 	f.p("// for an ID no row has. It decodes every ID first, and then looks up each")
-	f.p("// type's nodes with one query, through the DB veloxgql.DBFrom reads from")
+	f.p("// type's nodes with one query, through the DB veloxgql.DBFromContext reads from")
 	f.p("// ctx; the query reads at most one row for each of its IDs, whatever the")
 	f.p("// DB's WithMaxRows, and only the columns the field's selection needs. The")
 	f.p("// nodes of a type are one batch for their edges (veloxgql.Batch). A column")
@@ -731,7 +731,7 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 	f.p("// not select.")
 	f.p("// It fails as Node does on an ID, before any query runs,")
 	f.p("// and with veloxgql.ErrPageTooLarge on more IDs than the MaxPage of")
-	f.p("// veloxgql.LimitsFrom(ctx).")
+	f.p("// veloxgql.LimitsFromContext(ctx).")
 	f.p("func Nodes(ctx %s.Context, ids []string) ([]%s.Noder, error) {", ctx, vgql)
 	tooMany()
 	f.p("\t// The keys of each type, and the indexes in ids of their IDs.")
@@ -764,7 +764,7 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 	f.p("\tif len(ids) == 0 {")
 	f.p("\t\treturn out, nil")
 	f.p("\t}")
-	f.p("\tdb, err := %s.DBFrom(ctx)", vgql)
+	f.p("\tdb, err := %s.DBFromContext(ctx)", vgql)
 	f.p("\tif err != nil {")
 	f.p("\t\treturn nil, err")
 	f.p("\t}")

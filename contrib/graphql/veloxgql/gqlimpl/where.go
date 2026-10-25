@@ -48,7 +48,7 @@ type Filter[E any] struct {
 // The depth, how deeply the input is nested in the where argument, and the
 // argument's node budget travel in ctx, under one unexported key. A context
 // without them starts a where argument: depth 0, a full budget of
-// MaxFilterNodes, and the limits of veloxgql.LimitsFrom(ctx). So each call
+// MaxFilterNodes, and the limits of veloxgql.LimitsFromContext(ctx). So each call
 // of a where input's Pred with a context of the application's has its own
 // budget, however often the context is used. A nested input's Pred is called
 // with a context of the helpers', one level deeper (inside each not, and,
@@ -64,7 +64,7 @@ type Filter[E any] struct {
 func NewFilter[E any](ctx context.Context, input string) *Filter[E] {
 	st, ok := ctx.Value(stateKey{}).(*state)
 	if !ok {
-		lim := veloxgql.LimitsFrom(ctx)
+		lim := veloxgql.LimitsFromContext(ctx)
 		st = &state{budget: &budget{left: lim.MaxFilterNodes, limits: lim}}
 	}
 	f := &Filter[E]{ctx: ctx, input: input, depth: st.depth, budget: st.budget}

@@ -11,7 +11,7 @@ import (
 	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
 )
 
-// Atomic runs fn with the DB veloxgql.DBFrom(ctx) reads. When that DB is the
+// Atomic runs fn with the DB veloxgql.DBFromContext(ctx) reads. When that DB is the
 // transaction the Extension opened for a mutation operation, fn runs in it;
 // otherwise fn runs in db.Tx(ctx, fn), so a mutation's writes are kept or
 // dropped together outside a server too. For generated code only.
@@ -22,11 +22,11 @@ import (
 // the error commits fn's partial writes with the operation. Without a DB in
 // ctx, Atomic fails with veloxgql.ErrNoDB and fn does not run.
 func Atomic(ctx context.Context, fn func(ctx context.Context, db *velox.DB) error) error {
-	db, err := veloxgql.DBFrom(ctx)
+	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return err
 	}
-	if db == shared.OperationTx(ctx) {
+	if db == shared.OperationTxFromContext(ctx) {
 		return fn(ctx, db)
 	}
 	return db.Tx(ctx, fn)
@@ -57,12 +57,12 @@ func DecodeIDAs[K, V any](at, id, typ string, conv func(K) V) (V, error) {
 }
 
 // DecodeIDs decodes ids as DecodeID does, keeps the first of each repeated
-// key, and refuses more than the MaxPage of veloxgql.LimitsFrom(ctx) IDs
+// key, and refuses more than the MaxPage of veloxgql.LimitsFromContext(ctx) IDs
 // with BAD_USER_INPUT wrapping veloxgql.ErrPageTooLarge, before decoding any.
 // An ID's error names its place in the list, as "<at>[2]". For generated
 // code only.
 func DecodeIDs[K comparable](ctx context.Context, at string, ids []string, typ string) ([]K, error) {
-	if most := veloxgql.LimitsFrom(ctx).MaxPage; len(ids) > most {
+	if most := veloxgql.LimitsFromContext(ctx).MaxPage; len(ids) > most {
 		return nil, InputErrorf("%s: %w: %d IDs, and the most is %d", at, veloxgql.ErrPageTooLarge, len(ids), most)
 	}
 	out := make([]K, 0, len(ids))
@@ -95,13 +95,13 @@ func DecodeIDsAs[K comparable, V any](ctx context.Context, at string, ids []stri
 	return out, nil
 }
 
-// Exist fails with NOT_FOUND, naming at and typ, unless q counts n rows:
+// CheckExists fails with NOT_FOUND, naming at and typ, unless q counts n rows:
 // q selects the rows the IDs of at name, under the caller's tenant and
 // Read policy. Its text is "veloxgql: <at>: <missing> of the <n> IDs name
 // no <typ>", or NotFound's for n 1, and echoes no ID. n is the number of
-// distinct IDs; for n 0, Exist runs no query. The query's own error is
+// distinct IDs; for n 0, CheckExists runs no query. The query's own error is
 // returned as it is. For generated code only.
-func Exist[E any](ctx context.Context, q velox.Query[E], n int, at, typ string) error {
+func CheckExists[E any](ctx context.Context, q velox.Query[E], n int, at, typ string) error {
 	if n == 0 {
 		return nil
 	}
@@ -112,7 +112,7 @@ func Exist[E any](ctx context.Context, q velox.Query[E], n int, at, typ string) 
 	return matched(got, n, at, typ)
 }
 
-// matched fails as Exist does unless got, the rows a statement counted or
+// matched fails as CheckExists does unless got, the rows a statement counted or
 // changed, is n, the number of distinct IDs of at that it names. More rows
 // than IDs is an internal error: the IDs were not distinct keys.
 func matched(got int64, n int, at, typ string) error {
@@ -134,7 +134,7 @@ func matched(got int64, n int, at, typ string) error {
 // children of those IDs the caller may read that an owner holds; one or more
 // is BAD_USER_INPUT "veloxgql: <at>: a <typ> is already linked to another
 // <owner>", which tells the caller nothing it may not read. Otherwise the
-// error is Exist's: NOT_FOUND for a child the caller may not change, or
+// error is CheckExists's: NOT_FOUND for a child the caller may not change, or
 // that does not exist. The count's own error is returned as it is. For
 // generated code only.
 func Repointed[E any](ctx context.Context, got int64, n int, linked velox.Query[E], at, typ, owner string) error {
@@ -174,14 +174,14 @@ func Readable[T, K any](ctx context.Context, q velox.Query[T], n int, key func(*
 
 // UnlinkAll is clear<Edge> of a many-to-many edge. links selects the join
 // rows of the row the mutation changes, ordered by their primary key;
-// UnlinkAll reads them the MaxPage of veloxgql.LimitsFrom(ctx) at a time,
+// UnlinkAll reads them the MaxPage of veloxgql.LimitsFromContext(ctx) at a time,
 // and gives unlink the target keys of each page, which other reads from a
 // join row. unlink deletes the join rows of the keys whose target the
 // caller may read (Readable), and leaves the others: each page starts after
 // the last row of the one before, so a join row left is not read again.
 // The first error is returned as it is. For generated code only.
 func UnlinkAll[J, K any](ctx context.Context, links velox.Query[J], other func(*J) K, unlink func(ks []K) error) error {
-	page := veloxgql.LimitsFrom(ctx).MaxPage
+	page := veloxgql.LimitsFromContext(ctx).MaxPage
 	q := links.Limit(page).MaxRows(page)
 	for {
 		js, err := q.All(ctx)

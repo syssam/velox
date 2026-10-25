@@ -165,7 +165,7 @@ func batchServerWith(db *velox.DB, opts []veloxgql.Option, seen ...func(ctx cont
 	parent := func(ctx context.Context) any { return graphql.GetFieldContext(ctx).Parent.Result }
 	read := func(batch bool) resolver {
 		return func(ctx context.Context, _ map[string]any) (any, error) {
-			db, err := veloxgql.DBFrom(ctx)
+			db, err := veloxgql.DBFromContext(ctx)
 			if err != nil {
 				return nil, err
 			}
@@ -191,7 +191,7 @@ func batchServerWith(db *velox.DB, opts []veloxgql.Option, seen ...func(ctx cont
 		func(x *pet) int64 { return x.ID }, func(x *pet, v int64) { x.ID = v })}
 	petConn := func(edge string) resolver {
 		return func(ctx context.Context, _ map[string]any) (any, error) {
-			db, err := veloxgql.DBFrom(ctx)
+			db, err := veloxgql.DBFromContext(ctx)
 			if err != nil {
 				return nil, err
 			}
@@ -206,7 +206,7 @@ func batchServerWith(db *velox.DB, opts []veloxgql.Option, seen ...func(ctx cont
 		"keepers": read(true),
 		"loose":   read(false),
 		"addPet": func(ctx context.Context, args map[string]any) (any, error) {
-			db, err := veloxgql.DBFrom(ctx)
+			db, err := veloxgql.DBFromContext(ctx)
 			if err != nil {
 				return nil, err
 			}
@@ -389,10 +389,10 @@ func TestSubscriptionEventsLetGo(t *testing.T) {
 	var events [][]*keeper
 	var found []bool // per event: whether its own rows, then the event before's, are in its table
 	srv := batchServer(db, func(ctx context.Context, rows []*keeper) {
-		_, _, _, own := shared.Find(shared.TableFrom(ctx), rows[0])
+		_, _, _, own := shared.Find(shared.TableFromContext(ctx), rows[0])
 		found = append(found, own)
 		if len(events) > 0 {
-			_, _, _, old := shared.Find(shared.TableFrom(ctx), events[len(events)-1][0])
+			_, _, _, old := shared.Find(shared.TableFromContext(ctx), events[len(events)-1][0])
 			found = append(found, old)
 		}
 		events = append(events, rows)

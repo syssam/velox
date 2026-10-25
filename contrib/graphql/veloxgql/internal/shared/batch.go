@@ -113,8 +113,8 @@ func (t *Table) Scope(ctx context.Context) any {
 	return t.scope(ctx)
 }
 
-// TableFrom returns ctx's Table, or nil.
-func TableFrom(ctx context.Context) *Table {
+// TableFromContext returns ctx's Table, or nil.
+func TableFromContext(ctx context.Context) *Table {
 	t, _ := ctx.Value(tableKey{}).(*Table)
 	return t
 }
@@ -124,7 +124,7 @@ func TableFrom(ctx context.Context) *Table {
 // table, or is in no gqlgen field: there nothing batches, and a context kept
 // long must not keep its rows.
 func Add[E any](ctx context.Context, rows []*E) {
-	t := TableFrom(ctx)
+	t := TableFromContext(ctx)
 	if t == nil || len(rows) == 0 || graphql.GetFieldContext(ctx) == nil {
 		return
 	}

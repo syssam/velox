@@ -9,7 +9,7 @@ import (
 // edge. A zero field means the default.
 //
 // The limits of an operation are the Extension's (WithLimits), which it puts
-// in the operation's context, where LimitsFrom reads them: two servers in
+// in the operation's context, where LimitsFromContext reads them: two servers in
 // one process can have different limits.
 type Limits struct {
 	// MaxPage is the largest first or last a connection takes, and the page
@@ -63,9 +63,9 @@ func DefaultLimits() Limits {
 	return Limits{MaxPage: 100, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 5, MaxCost: 100000}
 }
 
-// LimitsFrom returns the limits the extension put in ctx, or
+// LimitsFromContext returns the limits the extension put in ctx, or
 // DefaultLimits() when there are none.
-func LimitsFrom(ctx context.Context) Limits {
+func LimitsFromContext(ctx context.Context) Limits {
 	if s, ok := ctx.Value(stateKey{}).(*state); ok {
 		return s.limits
 	}

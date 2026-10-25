@@ -45,7 +45,7 @@ func (r *renderer) writePred(f *file, t *sdl.Type) error {
 	in := n + "WhereInput"
 	ctx, velox, impl := f.use("context", "context"), f.velox(), f.gqlimpl()
 	f.p("")
-	f.doc("", fmt.Sprintf("Pred is the condition w stands for, on %s nodes: every predicate w sets holds, and a w that sets none, or a nil w, holds for every node. It fails, before any query runs, on an ID of another type (veloxgql.ErrWrongIDType) or a malformed one (veloxgql.ErrBadID), on a nesting deeper than the MaxFilterDepth of veloxgql.LimitsFrom(ctx) (veloxgql.ErrFilterTooDeep), on an and, an or, a has…With, an In or a NotIn of more than its MaxFilterWidth entries (veloxgql.ErrFilterTooWide), and on a where argument of more than its MaxFilterNodes inputs, predicates and values in all (veloxgql.ErrFilterTooLarge).", n))
+	f.doc("", fmt.Sprintf("Pred is the condition w stands for, on %s nodes: every predicate w sets holds, and a w that sets none, or a nil w, holds for every node. It fails, before any query runs, on an ID of another type (veloxgql.ErrWrongIDType) or a malformed one (veloxgql.ErrBadID), on a nesting deeper than the MaxFilterDepth of veloxgql.LimitsFromContext(ctx) (veloxgql.ErrFilterTooDeep), on an and, an or, a has…With, an In or a NotIn of more than its MaxFilterWidth entries (veloxgql.ErrFilterTooWide), and on a where argument of more than its MaxFilterNodes inputs, predicates and values in all (veloxgql.ErrFilterTooLarge).", n))
 	f.p("func (w *%s) Pred(ctx %s.Context) (%s.Pred[%s], error) {", in, ctx, velox, e.Name)
 	f.p("\tf := %s.NewFilter[%s](ctx, %q)", impl, e.Name, in)
 	f.p("\tif w == nil {")

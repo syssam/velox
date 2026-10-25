@@ -540,7 +540,7 @@ func TestNoNodes(t *testing.T) {
 		},
 	}}}
 	node := render(t, m)["gql_node.go"]
-	if !strings.Contains(node, "func Node(_ context.Context, id string) (veloxgql.Noder, error) {") || strings.Contains(node, "DBFrom(ctx)") {
+	if !strings.Contains(node, "func Node(_ context.Context, id string) (veloxgql.Noder, error) {") || strings.Contains(node, "DBFromContext(ctx)") {
 		t.Errorf("gql_node.go:\n%s", node)
 	}
 }
@@ -656,7 +656,7 @@ func TestGeneratedFilesCarryTheGuard(t *testing.T) {
 			t.Fatalf("%s: no files", label)
 		}
 		for name, src := range files {
-			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion1\n"); n != 1 {
+			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion2\n"); n != 1 {
 				t.Errorf("%s: %s has the guard %d times, want once", label, name, n)
 			}
 			if !strings.Contains(src, `"github.com/syssam/velox2/contrib/graphql/veloxgql"`) {
@@ -727,7 +727,7 @@ func TestConnectionOfEveryNode(t *testing.T) {
 func mutationsModel(t *testing.T) *plugin.Model {
 	t.Helper()
 	m := typesModel(t)
-	b, err := json.Marshal(graphql.Mutations(graphql.Create()))
+	b, err := json.Marshal(graphql.Mutations(graphql.MutationCreate()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -852,7 +852,7 @@ func mutationDecls(t *testing.T, files map[string]string) (map[string]*ast.Struc
 func updateOnlyModel(t *testing.T) *plugin.Model {
 	t.Helper()
 	m := typesModel(t)
-	b, err := json.Marshal(graphql.Mutations(graphql.Update()))
+	b, err := json.Marshal(graphql.Mutations(graphql.MutationUpdate()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -963,7 +963,7 @@ func TestCreateConversions(t *testing.T) {
 		` Tags veloxgql.JSON `,
 		`gqlimpl.DecodeIDAs[int64, idspkg.UserID]("CreateEventInput.ownerID", *input.OwnerID, "Owner", gqlimpl.AsInt[idspkg.UserID, int64])`,
 		`gqlimpl.FromJSON[[]string]("CreateEventInput.tags", input.Tags)`,
-		`gqlimpl.Exist(ctx, db.Query[Owner]().Where(Owners.ID.In(k`,
+		`gqlimpl.CheckExists(ctx, db.Query[Owner]().Where(Owners.ID.In(k`,
 		`), 1, "CreateEventInput.ownerID", "Owner")`,
 		`return gqlimpl.WriteError(err, "CreateEventInput", "gen.Event", eventFieldGQL)`,
 		`case "Tags": return "tags"`,

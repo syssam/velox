@@ -286,7 +286,7 @@ func operationIn(t *testing.T, db *velox.DB, query string, schema *ast.Schema, o
 	if errs != nil {
 		t.Fatal(errs)
 	}
-	ctx := gqlshared.WithTable(veloxgql.NewExtension(db, opts...).Context(context.Background()), schema, nil)
+	ctx := gqlshared.WithTable(veloxgql.NewExtension(db, opts...).NewContext(context.Background()), schema, nil)
 	return graphql.WithOperationContext(ctx, &graphql.OperationContext{RawQuery: query, Doc: doc, Operation: doc.Operations[0], Variables: map[string]any{}})
 }
 
@@ -967,12 +967,12 @@ func TestNoFieldNoGroup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, ok := gqlshared.Find(gqlshared.TableFrom(ctx), p.Rows[0]); ok {
+	if _, _, _, ok := gqlshared.Find(gqlshared.TableFromContext(ctx), p.Rows[0]); ok {
 		t.Error("a page outside a field is a group")
 	}
 	if xs := ownersPage(t, ctx, db, db.Query[owner](), gqlimpl.Args{}); len(xs) == 0 {
 		t.Fatal("no owners")
-	} else if _, _, _, ok := gqlshared.Find(gqlshared.TableFrom(ctx), xs[0]); !ok {
+	} else if _, _, _, ok := gqlshared.Find(gqlshared.TableFromContext(ctx), xs[0]); !ok {
 		t.Error("a page in a field is no group")
 	}
 }

@@ -16,9 +16,9 @@ func WithOperationTx(ctx context.Context, tx *velox.DB) context.Context {
 	return context.WithValue(ctx, operationTxKey{}, tx)
 }
 
-// OperationTx returns the transaction's DB WithOperationTx marked ctx with;
+// OperationTxFromContext returns the transaction's DB WithOperationTx marked ctx with;
 // nil when ctx has none.
-func OperationTx(ctx context.Context) *velox.DB {
+func OperationTxFromContext(ctx context.Context) *velox.DB {
 	tx, _ := ctx.Value(operationTxKey{}).(*velox.DB)
 	return tx
 }

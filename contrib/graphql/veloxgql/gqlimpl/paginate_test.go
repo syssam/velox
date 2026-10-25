@@ -259,7 +259,7 @@ func TestPaginate(t *testing.T) {
 func TestPaginateDefaultPage(t *testing.T) {
 	ctx := context.Background()
 	db, _ := peopleDB(t)
-	ctx = veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 4})).Context(ctx)
+	ctx = veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 4})).NewContext(ctx)
 	p, err := gqlimpl.Paginate(ctx, db.Query[person](), "Person", gqlimpl.Args{}, nil, personKey())
 	if err != nil || !slices.Equal(ids(p.Rows), []int64{1, 2, 3, 4}) || !p.Info.HasNextPage {
 		t.Fatalf("%v %+v, want 1 to 4 and a next page", err, p)
@@ -386,7 +386,7 @@ func TestConnectionIsLazy(t *testing.T) {
 
 // TestLoadedConnection: a connection over rows a With loaded runs no query.
 func TestLoadedConnection(t *testing.T) {
-	ctx := veloxgql.NewExtension(&velox.DB{}, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).Context(context.Background())
+	ctx := veloxgql.NewExtension(&velox.DB{}, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).NewContext(context.Background())
 	rows := []person{{ID: 1, Name: "c"}, {ID: 2, Name: "a"}, {ID: 3, Name: "b"}}
 	c := gqlimpl.LoadedConnection(ctx, rows, "Person", personKey())
 	p, err := c.Page(ctx)
@@ -503,7 +503,7 @@ func TestConnectionWithoutExtension(t *testing.T) {
 // the connection's: the page and the count start at the first row.
 func TestPaginateClearsOffset(t *testing.T) {
 	db, _ := peopleDB(t)
-	ctx := veloxgql.NewExtension(db).Context(context.Background())
+	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
 	q := db.Query[person]().Limit(1).Offset(3)
 	c, err := gqlimpl.NewConnection(ctx, q, "Person", gqlimpl.Args{First: intp(2)}, nil, personKey())
 	if err != nil {
@@ -524,7 +524,7 @@ func TestPaginateClearsOffset(t *testing.T) {
 // nothing is queried.
 func TestConnectionRefusesOrderedQuery(t *testing.T) {
 	db, st := peopleDB(t)
-	ctx := veloxgql.NewExtension(db).Context(context.Background())
+	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
 	q := db.Query[person]().OrderBy(people.Age.Asc())
 	c, err := gqlimpl.NewConnection(ctx, q, "Person", gqlimpl.Args{First: intp(2)}, nil, personKey())
 	want := "veloxgql: PersonsConnectionOf: the base query has an OrderBy; the connection orders by its orderBy argument"

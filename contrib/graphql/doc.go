@@ -31,7 +31,7 @@
 //	func (User) Annotations() []schema.Annotation {
 //		return []schema.Annotation{
 //			graphql.QueryField("users"),
-//			graphql.Mutations(graphql.Create(), graphql.Update(), graphql.Delete()),
+//			graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate(), graphql.MutationDelete()),
 //			graphql.MultiOrder(),
 //		}
 //	}
@@ -134,7 +134,7 @@
 //
 // They use the runtime package veloxgql, and its package gqlimpl for what
 // only generated code calls; every file carries
-// "const _ = veloxgql.GeneratedCodeIsVersion1", so that generated code and
+// "const _ = veloxgql.GeneratedCodeIsVersion2", so that generated code and
 // the module fail to compile together when they disagree. A connection is
 // keyset-paged by its cursors, and runs its page query and its COUNT only
 // when gqlgen asks for edges or pageInfo, and for totalCount; see "Loading"
@@ -145,16 +145,16 @@
 // or larger in all than MaxFilterNodes, before any query runs. A list edge
 // (graphql.Connection(false)) reads at most MaxList rows and fails with
 // velox.ErrTooManyRows beyond them, whatever the DB's cap. The limits are
-// veloxgql.LimitsFrom(ctx): the ones given to veloxgql.NewExtension with
+// veloxgql.LimitsFromContext(ctx): the ones given to veloxgql.NewExtension with
 // veloxgql.WithLimits, or veloxgql.DefaultLimits().
 //
 // Every one of these limits bounds one argument or one edge, not a request;
 // see "The cost limit" below. A mutation's transaction does not cover @defer
 // (see veloxgql.Extension): do not defer fields of a mutation.
 //
-// For an entity with graphql.Create(), its file also has Create<T>Input and
+// For an entity with graphql.MutationCreate(), its file also has Create<T>Input and
 // Create<T>(ctx, input), which createX's resolver returns; with
-// graphql.Update(), Update<T>Input and Update<T>(ctx, id, input), which
+// graphql.MutationUpdate(), Update<T>Input and Update<T>(ctx, id, input), which
 // updateX's resolver returns. In an update input a field not given is left as
 // it is, clear<Field> sets a nullable one to NULL, and an edge is cleared, then
 // its remove<Edge>IDs removed, then its add<Edge>IDs added; a field given with
@@ -168,7 +168,7 @@
 // link to one they hide stays. Update<T> returns the row it wrote, read under
 // the tenant scope without the Read policy, as Create<T> returns the row it
 // inserted: an update that takes the row out of what the caller may read
-// succeeds. With graphql.Delete(), Delete<T>(ctx, id) deletes the row and its
+// succeeds. With graphql.MutationDelete(), Delete<T>(ctx, id) deletes the row and its
 // rows in the join tables of its many-to-many edges, and returns the ID encoded
 // again from the key; deleteX's resolver returns it. The join rows, which
 // neither the tenant nor a policy scopes, go only after a COUNT under the
@@ -180,9 +180,9 @@
 // gives a *velox.ConstraintError, shown as BAD_USER_INPUT.
 //
 // The generated functions read the DB from the context, as the root query's
-// do (veloxgql.DBFrom), and each is atomic: gqlimpl.Atomic runs it in the
+// do (veloxgql.DBFromContext), and each is atomic: gqlimpl.Atomic runs it in the
 // transaction the Extension opened for the operation, or in a db.Tx of its
-// own where there is none (outside a server, with Extension.Context, or in an
+// own where there is none (outside a server, with Extension.NewContext, or in an
 // operation WithTxFilter leaves out). There is no savepoint inside the
 // extension's transaction, so a resolver must return a mutation's error: one
 // that swallows it commits the partial writes. In a Go input a required field
@@ -246,7 +246,7 @@
 // one more), a totalCount with a grouped count (velox.CountEach), a to-one
 // edge by the target's key. Nothing waits for other resolvers to join a batch
 // (a mutation runs its resolvers one at a time, and would deadlock), so a
-// batch is read by the first caller, under its context, on the DB DBFrom
+// batch is read by the first caller, under its context, on the DB DBFromContext
 // reads; its error is every row's.
 //
 // A call joins a batch only when it is the same read: the same edge, called

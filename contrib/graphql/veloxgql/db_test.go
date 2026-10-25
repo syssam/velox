@@ -11,12 +11,12 @@ import (
 )
 
 func TestDBFrom(t *testing.T) {
-	_, err := veloxgql.DBFrom(context.Background())
+	_, err := veloxgql.DBFromContext(context.Background())
 	if !errors.Is(err, veloxgql.ErrNoDB) || !strings.Contains(err.Error(), "serve the schema through veloxgql.NewExtension") {
-		t.Errorf("DBFrom with no DB: %v, want ErrNoDB naming veloxgql.NewExtension", err)
+		t.Errorf("DBFromContext with no DB: %v, want ErrNoDB naming veloxgql.NewExtension", err)
 	}
 	db := &velox.DB{}
-	if got, err := veloxgql.DBFrom(veloxgql.NewExtension(db).Context(context.Background())); got != db || err != nil {
-		t.Errorf("DBFrom = %p, %v, want %p", got, err, db)
+	if got, err := veloxgql.DBFromContext(veloxgql.NewExtension(db).NewContext(context.Background())); got != db || err != nil {
+		t.Errorf("DBFromContext = %p, %v, want %p", got, err, db)
 	}
 }

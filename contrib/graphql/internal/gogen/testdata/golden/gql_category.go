@@ -10,7 +10,7 @@ import (
 	"github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion1
+const _ = veloxgql.GeneratedCodeIsVersion2
 
 // IsNode marks Category as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -25,7 +25,7 @@ func (x *Category) IDGQL() string { return veloxgql.EncodeID("Category", x.ID) }
 // asks for the connection's fields, each with those of every row read with x,
 // in one query.
 func (x *Category) ChildrenGQL(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *CategoryWhereInput) (*CategoryConnection, error) {
-	db, err := veloxgql.DBFrom(ctx)
+	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +42,7 @@ func (x *Category) ParentGQL(ctx context.Context) (*Category, error) {
 	if x.CategoryChildren == nil {
 		return nil, nil
 	}
-	db, err := veloxgql.DBFrom(ctx)
+	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -100,11 +100,11 @@ type CategoryEdge struct {
 }
 
 // CategoriesConnection is the connection to every Category node, through the DB
-// veloxgql.DBFrom reads from ctx, paged and ordered by the arguments of a
-// connection to Category: a Query field's resolver returns it. It fails before
-// any query runs on arguments gqlimpl.NewConnection refuses.
+// veloxgql.DBFromContext reads from ctx, paged and ordered by the arguments of
+// a connection to Category: a Query field's resolver returns it. It fails
+// before any query runs on arguments gqlimpl.NewConnection refuses.
 func CategoriesConnection(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *CategoryWhereInput) (*CategoryConnection, error) {
-	db, err := veloxgql.DBFrom(ctx)
+	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -191,11 +191,11 @@ type CategoryWhereInput struct {
 // holds, and a w that sets none, or a nil w, holds for every node. It fails,
 // before any query runs, on an ID of another type (veloxgql.ErrWrongIDType) or
 // a malformed one (veloxgql.ErrBadID), on a nesting deeper than the
-// MaxFilterDepth of veloxgql.LimitsFrom(ctx) (veloxgql.ErrFilterTooDeep), on an
-// and, an or, a has…With, an In or a NotIn of more than its MaxFilterWidth
-// entries (veloxgql.ErrFilterTooWide), and on a where argument of more than its
-// MaxFilterNodes inputs, predicates and values in all
-// (veloxgql.ErrFilterTooLarge).
+// MaxFilterDepth of veloxgql.LimitsFromContext(ctx)
+// (veloxgql.ErrFilterTooDeep), on an and, an or, a has…With, an In or a NotIn
+// of more than its MaxFilterWidth entries (veloxgql.ErrFilterTooWide), and on a
+// where argument of more than its MaxFilterNodes inputs, predicates and values
+// in all (veloxgql.ErrFilterTooLarge).
 func (w *CategoryWhereInput) Pred(ctx context.Context) (velox.Pred[Category], error) {
 	f := gqlimpl.NewFilter[Category](ctx, "CategoryWhereInput")
 	if w == nil {
@@ -248,17 +248,17 @@ func (in CreateCategoryInput) GoString() string { return in.String() }
 // CreateCategory creates one Category from input, with its edges, and returns
 // it, as the mutation createCategory does. It first decodes every ID and JSON
 // value of input, and fails before any statement on one it cannot decode
-// (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFrom reads from
-// ctx, in one transaction (gqlimpl.Atomic): the operation's, or one of its own.
-// The tenant scope and the policies apply as to any write: each ID must name a
-// row the caller may read, and a row it re-points one the caller may change, or
-// CreateCategory fails with NOT_FOUND and keeps nothing. A validator's refusal
-// is BAD_USER_INPUT, naming the input field, and comes before any statement;
-// velox's other errors are returned as they are. The row is returned as
-// written, not read again through the Read policy. There is no savepoint inside
-// the extension's transaction, so a resolver must return this function's error:
-// one that swallows it commits the partial writes. A self-edge is written one
-// way, as the core's loads read it.
+// (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFromContext reads
+// from ctx, in one transaction (gqlimpl.Atomic): the operation's, or one of its
+// own. The tenant scope and the policies apply as to any write: each ID must
+// name a row the caller may read, and a row it re-points one the caller may
+// change, or CreateCategory fails with NOT_FOUND and keeps nothing. A
+// validator's refusal is BAD_USER_INPUT, naming the input field, and comes
+// before any statement; velox's other errors are returned as they are. The row
+// is returned as written, not read again through the Read policy. There is no
+// savepoint inside the extension's transaction, so a resolver must return this
+// function's error: one that swallows it commits the partial writes. A
+// self-edge is written one way, as the core's loads read it.
 func CreateCategory(ctx context.Context, input CreateCategoryInput) (*Category, error) {
 	var (
 		k1  []int64
@@ -282,7 +282,7 @@ func CreateCategory(ctx context.Context, input CreateCategoryInput) (*Category, 
 	var out *Category
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
 		if input.ParentID != nil {
-			if err := gqlimpl.Exist(ctx, db.Query[Category]().Where(Categories.ID.In(k2)), 1, "CreateCategoryInput.parentID", "Category"); err != nil {
+			if err := gqlimpl.CheckExists(ctx, db.Query[Category]().Where(Categories.ID.In(k2)), 1, "CreateCategoryInput.parentID", "Category"); err != nil {
 				return err
 			}
 			x.CategoryChildren = &k2
@@ -348,32 +348,32 @@ func (in UpdateCategoryInput) GoString() string { return in.String() }
 // or empties an edge. It first decodes id and every ID and JSON value of input,
 // and refuses a field given with its clear field, or an ID both to add and to
 // remove, before any statement (BAD_USER_INPUT). It then writes through the DB
-// veloxgql.DBFrom reads from ctx, in one transaction (gqlimpl.Atomic): the
-// operation's, or one of its own. The fields go in one UPDATE, which the tenant
-// scope and the Read and Write policies scope; an input that sets none sends no
-// UPDATE, and an Exists under the same scope (Writable) checks the row instead,
-// so that no edge of a row the caller may not change is written. That check
-// locks the row (FOR UPDATE) wherever the dialect has locking reads, which is
-// every one but SQLite (whose transactions lock the database), so the row stays
-// the caller's until the edges are written. The edges follow, each cleared,
-// then its IDs removed, then its IDs added: an ID to remove the edge does not
-// lead to is ignored, and one to add it already leads to is kept. Clearing an
-// edge whose key is on the targets' rows, or removing from it, unlinks only the
-// children the tenant scope and the target's Write policy let the caller
-// change; one they hide stays linked. Clearing a many-to-many edge, or removing
-// from it, deletes only the links to targets the tenant scope and the target's
-// Read policy let the caller read; a link to one they hide stays. Each ID must
-// name a row the caller may read, and a row it re-points one the caller may
-// change; a child another node holds is refused (BAD_USER_INPUT). An id that
-// names no row the caller may change, or an ID no row it may read, fails with
-// NOT_FOUND and keeps nothing. A validator's refusal is BAD_USER_INPUT, naming
-// the input field, and comes before any statement; velox's other errors are
-// returned as they are. The row is read back as written, under the tenant scope
-// and without the Read policy (velox.WithoutPolicy): an update that takes the
-// row out of what the caller may read still returns it. On MySQL the UPDATE's
-// row count needs clientFoundRows=true, as velox's Update does. There is no
-// savepoint inside the extension's transaction, so a resolver must return this
-// function's error.
+// veloxgql.DBFromContext reads from ctx, in one transaction (gqlimpl.Atomic):
+// the operation's, or one of its own. The fields go in one UPDATE, which the
+// tenant scope and the Read and Write policies scope; an input that sets none
+// sends no UPDATE, and an Exists under the same scope (Writable) checks the row
+// instead, so that no edge of a row the caller may not change is written. That
+// check locks the row (FOR UPDATE) wherever the dialect has locking reads,
+// which is every one but SQLite (whose transactions lock the database), so the
+// row stays the caller's until the edges are written. The edges follow, each
+// cleared, then its IDs removed, then its IDs added: an ID to remove the edge
+// does not lead to is ignored, and one to add it already leads to is kept.
+// Clearing an edge whose key is on the targets' rows, or removing from it,
+// unlinks only the children the tenant scope and the target's Write policy let
+// the caller change; one they hide stays linked. Clearing a many-to-many edge,
+// or removing from it, deletes only the links to targets the tenant scope and
+// the target's Read policy let the caller read; a link to one they hide stays.
+// Each ID must name a row the caller may read, and a row it re-points one the
+// caller may change; a child another node holds is refused (BAD_USER_INPUT). An
+// id that names no row the caller may change, or an ID no row it may read,
+// fails with NOT_FOUND and keeps nothing. A validator's refusal is
+// BAD_USER_INPUT, naming the input field, and comes before any statement;
+// velox's other errors are returned as they are. The row is read back as
+// written, under the tenant scope and without the Read policy
+// (velox.WithoutPolicy): an update that takes the row out of what the caller
+// may read still returns it. On MySQL the UPDATE's row count needs
+// clientFoundRows=true, as velox's Update does. There is no savepoint inside
+// the extension's transaction, so a resolver must return this function's error.
 func UpdateCategory(ctx context.Context, id string, input UpdateCategoryInput) (*Category, error) {
 	var (
 		key int64
@@ -412,7 +412,7 @@ func UpdateCategory(ctx context.Context, id string, input UpdateCategoryInput) (
 	var out *Category
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
 		if input.ParentID != nil {
-			if err := gqlimpl.Exist(ctx, db.Query[Category]().Where(Categories.ID.In(k4)), 1, "UpdateCategoryInput.parentID", "Category"); err != nil {
+			if err := gqlimpl.CheckExists(ctx, db.Query[Category]().Where(Categories.ID.In(k4)), 1, "UpdateCategoryInput.parentID", "Category"); err != nil {
 				return err
 			}
 			set = append(set, Categories.CategoryChildren.Set(k4))
