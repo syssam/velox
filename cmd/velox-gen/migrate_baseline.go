@@ -104,9 +104,9 @@ func runMigrateBaseline(args []string, dir string, env []string, stdout, stderr 
 	if err != nil {
 		return c.fail(1, err)
 	}
-	if err := writeAll(abs, files); err != nil {
-		remove()
-		return c.fail(1, err)
+	interrupted, err := writeAllHeld(abs, files, nil)
+	if err != nil {
+		return c.stopped(interrupted, c.fail(1, undoDirs(err, remove)))
 	}
 	for _, p := range slices.Sorted(maps.Keys(files)) {
 		_, _ = fmt.Fprintln(stdout, c.path(p))
@@ -116,5 +116,5 @@ func runMigrateBaseline(args []string, dir string, env []string, stdout, stderr 
 	}
 	// The directory is new, so its last version is its number of scripts.
 	_, _ = fmt.Fprintf(stderr, "velox-gen: migrate baseline: run velox-gen migrate apply -baseline %d once on each existing database, then migrate drift there\n", len(plan.Scripts))
-	return 0
+	return c.stopped(interrupted, 0)
 }

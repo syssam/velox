@@ -37,7 +37,9 @@
 // files are stale (-check, and verify when a plugin's Go file is out of date)
 // or a migration directory is (migrate diff -check and migrate hash -check),
 // when migrate status finds pending files and when migrate drift finds a
-// change.
+// change. A command that writes files (generate, migrate diff, migrate hash
+// and migrate baseline) holds SIGINT and SIGTERM until its write is done or
+// undone, and then exits 130 if one arrived.
 //
 // The package is one schema package, ./schema when none is named; a pattern
 // that names no package, or a package that declares no schemas, is an error
@@ -93,11 +95,16 @@
 // whole path), a file of yours or a symbolic link at it or at a directory of
 // it, or a directory of yours whose name differs from one of the path's only
 // in case (rename it), fails the run before anything is written. A write that
-// fails part-way, such as on a full disk, leaves -out partly updated; running
-// velox-gen again restores it. A plugin built on package plugin that panics
-// fails with "the plugin panicked: " and the panic's value; run velox-gen with
-// VELOX_PLUGIN_TRACE=1, which reaches the plugin, for the stack on the lines
-// below it.
+// fails part-way, such as on a full disk, is undone: -out is left as it was.
+// An interrupt (SIGINT or SIGTERM) waits until the write is done or undone,
+// and velox-gen then exits 130. A run killed while it writes, as by SIGKILL,
+// can leave entries named .<name>.tmp-velox-<n>, .<name>.old-velox-<n> or
+// .<name>.gone-velox-<n> in -out; the next run puts back a file or directory
+// set aside whose name is missing, removes the others, and prints a line for
+// each.
+// A plugin built on package plugin that panics fails with "the plugin
+// panicked: " and the panic's value; run velox-gen with VELOX_PLUGIN_TRACE=1,
+// which reaches the plugin, for the stack on the lines below it.
 //
 // verify builds a program in a temporary .velox-verify-* directory of your
 // module, imports the generated package and reports, for every entity, the

@@ -84,6 +84,25 @@ func (c *migrateCmd) fail(code int, err error) int {
 	return code
 }
 
+// stopped is code, or, when a signal arrived while the command wrote, 130,
+// after it says so.
+func (c *migrateCmd) stopped(interrupted bool, code int) int {
+	if !interrupted {
+		return code
+	}
+	_, _ = fmt.Fprintf(c.stderr, "velox-gen: migrate %s: interrupted\n", c.name)
+	return interruptedCode
+}
+
+// undoDirs is err, naming the directories of -dir a failed write made that
+// remove could not remove.
+func undoDirs(err error, remove func() []string) error {
+	if left := remove(); len(left) > 0 {
+		return fmt.Errorf("%w; undoing the write failed, which left %s", err, strings.Join(left, ", "))
+	}
+	return err
+}
+
 // noArgs is the usage error of a subcommand given arguments it does not
 // take.
 func (c *migrateCmd) noArgs() int {
@@ -233,11 +252,12 @@ func runMigrateHash(args []string, dir string, stdout, stderr io.Writer) int {
 	if *check {
 		return c.fail(3, &migrate.SumError{Path: c.path("velox.sum")})
 	}
-	if err := writeAll(abs, map[string][]byte{"velox.sum": sum}); err != nil {
-		return c.fail(1, err)
+	interrupted, err := writeAllHeld(abs, map[string][]byte{"velox.sum": sum}, nil)
+	if err != nil {
+		return c.stopped(interrupted, c.fail(1, err))
 	}
 	_, _ = fmt.Fprintln(stdout, c.path("velox.sum"))
-	return 0
+	return c.stopped(interrupted, 0)
 }
 
 // runMigrateLint is velox-gen migrate lint: it reads the directory and

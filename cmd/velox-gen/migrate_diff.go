@@ -4,9 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"maps"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -252,14 +250,14 @@ func runMigrateDiff(args []string, dir string, env []string, stdout, stderr io.W
 	if err != nil {
 		return c.fail(1, err)
 	}
-	if err := writeAll(abs, files); err != nil {
-		remove()
-		return c.fail(1, err)
+	interrupted, err := writeAllHeld(abs, files, nil)
+	if err != nil {
+		return c.stopped(interrupted, c.fail(1, undoDirs(err, remove)))
 	}
 	for _, p := range paths {
 		_, _ = fmt.Fprintln(stdout, c.path(p))
 	}
-	return 0
+	return c.stopped(interrupted, 0)
 }
 
 // renameOptions is Diff's options for the renames, each checked against the
@@ -310,151 +308,4 @@ func relMigrate(dir string, err error) error {
 		return &e
 	}
 	return err
-}
-
-// writeTemp and renameFile are how diff writes its files; tests replace them.
-var (
-	writeTemp  = writeTempFile
-	renameFile = os.Rename
-	linkFile   = os.Link
-)
-
-// writeTempFile writes data to a new file in dir named by pattern, as
-// os.CreateTemp names it, with mode 0o644, and returns its path.
-func writeTempFile(dir, pattern string, data []byte) (string, error) {
-	f, err := os.CreateTemp(dir, pattern)
-	if err != nil {
-		return "", err
-	}
-	_, err = f.Write(data)
-	if cerr := f.Close(); err == nil {
-		err = cerr
-	}
-	if err == nil {
-		err = os.Chmod(f.Name(), 0o644)
-	}
-	if err != nil {
-		_ = os.Remove(f.Name())
-		return "", err
-	}
-	return f.Name(), nil
-}
-
-// writeAll writes files into dir, all or nothing: each under a temporary
-// name first, then renamed into place, velox.sum last; a file it replaces is
-// kept aside first, by a hard link (else a rename), and removed once every
-// file is in place. On a
-// failure it removes what it wrote and renames the replaced files back; the
-// error names what it could not undo.
-func writeAll(dir string, files map[string][]byte) error {
-	paths := slices.Sorted(maps.Keys(files))
-	if i := slices.Index(paths, "velox.sum"); i >= 0 {
-		paths = append(append(paths[:i:i], paths[i+1:]...), "velox.sum")
-	}
-	temps := map[string]string{}
-	type swapped struct{ target, aside string } // aside "": the target was new
-	var done []swapped
-	undo := func(err error) error {
-		var left []string
-		for _, t := range temps {
-			if rerr := os.Remove(t); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
-				left = append(left, t)
-			}
-		}
-		for i := len(done) - 1; i >= 0; i-- {
-			s := done[i]
-			if s.aside == "" {
-				if rerr := os.Remove(s.target); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
-					left = append(left, s.target)
-				}
-			} else if rerr := renameFile(s.aside, s.target); rerr != nil {
-				left = append(left, s.target+" (what it held is in "+s.aside+")")
-			}
-		}
-		if len(left) > 0 {
-			slices.Sort(left)
-			return fmt.Errorf("%w; undoing the write failed, which left %s", err, strings.Join(left, ", "))
-		}
-		return err
-	}
-	for _, p := range paths {
-		t, err := writeTemp(dir, "."+p+".tmp-*", files[p])
-		if err != nil {
-			return undo(err)
-		}
-		temps[p] = t
-	}
-	for _, p := range paths {
-		s := swapped{target: filepath.Join(dir, p)}
-		linked := false
-		if fi, err := os.Lstat(s.target); err == nil {
-			aside, err := writeTemp(dir, "."+p+".old-*", nil) // a name of its own
-			if err != nil {
-				return undo(err)
-			}
-			// A hard link keeps a regular file at its path until the rename
-			// replaces it; a symbolic link, or where links fail, is renamed
-			// aside.
-			if err := os.Remove(aside); err != nil {
-				return undo(err)
-			}
-			linked = fi.Mode().IsRegular() && linkFile(s.target, aside) == nil
-			if !linked {
-				if err := renameFile(s.target, aside); err != nil {
-					_ = os.Remove(aside)
-					return undo(err)
-				}
-			}
-			s.aside = aside
-		} else if !errors.Is(err, fs.ErrNotExist) {
-			return undo(err)
-		}
-		if err := renameFile(temps[p], s.target); err != nil {
-			if linked {
-				_ = os.Remove(s.aside) // the original is at its path still
-			} else {
-				done = append(done, s)
-			}
-			return undo(err)
-		}
-		done = append(done, s)
-		delete(temps, p)
-	}
-	var left []string
-	for _, s := range done {
-		if s.aside != "" {
-			if err := os.Remove(s.aside); err != nil && !errors.Is(err, fs.ErrNotExist) {
-				left = append(left, s.aside)
-			}
-		}
-	}
-	if len(left) > 0 {
-		return fmt.Errorf("the files are written, but removing the old ones failed, which left %s", strings.Join(left, ", "))
-	}
-	return nil
-}
-
-// makeDirs makes dir and the parents it lacks, and returns what removes
-// those it made, when they are empty.
-func makeDirs(dir string) (remove func(), err error) {
-	var made []string
-	for d := filepath.Clean(dir); ; d = filepath.Dir(d) {
-		if _, err := os.Stat(d); err == nil || !errors.Is(err, fs.ErrNotExist) {
-			break
-		}
-		made = append(made, d)
-		if filepath.Dir(d) == d {
-			break
-		}
-	}
-	remove = func() {
-		for _, d := range made { // deepest first
-			_ = os.Remove(d)
-		}
-	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		remove()
-		return nil, err
-	}
-	return remove, nil
 }

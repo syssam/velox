@@ -1,12 +1,16 @@
 package main
 
 import (
+	"errors"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"maps"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -902,5 +906,90 @@ func TestOutputIgnoresPositions(t *testing.T) {
 	}
 	if described[0] != described[1] {
 		t.Error("describe -json differs between the two checkouts")
+	}
+}
+
+// TestGenerateIsAllOrNothing: a run whose write fails part-way leaves the
+// output as it was, the file it would remove included.
+func TestGenerateIsAllOrNothing(t *testing.T) {
+	const item = `package schema
+
+import (
+	"github.com/syssam/velox2/schema"
+	"github.com/syssam/velox2/schema/field"
+)
+
+type Item struct{ schema.Schema }
+
+func (Item) Fields() []schema.Field { return []schema.Field{field.String("sku")} }
+`
+	dir := genModuleSerial(t, map[string]string{"schema/item.go": item})
+	gen := filepath.Join(dir, "gen")
+	if code, out, errs := velox(t, dir, "./schema"); code != 0 {
+		t.Fatalf("%d %q %q", code, out, errs)
+	}
+	// Without Tag, and with another field of Item and of User:
+	// item_velox.go and user_velox.go change, and tag_velox.go goes.
+	if err := os.Remove(filepath.Join(dir, "schema", "tag.go")); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(dir, "schema", "item.go"), strings.Replace(item, `field.String("sku")`, `field.String("sku"), field.Int("count")`, 1))
+	writeFile(t, filepath.Join(dir, "schema", "user.go"), strings.Replace(genUserSchema, `field.String("name"),`, `field.String("name"), field.Int("age"),`, 1))
+	before := treeFiles(t, gen)
+	injected := errors.New("injected failure")
+	renameFile = func(from, to string) error {
+		if filepath.Base(to) == "user_velox.go" && strings.Contains(from, ".tmp-") {
+			return injected
+		}
+		return os.Rename(from, to)
+	}
+	code, out, errs := velox(t, dir, "./schema")
+	renameFile = os.Rename
+	if code != 1 || out != "" || !strings.Contains(errs, "injected failure") {
+		t.Errorf("%d %q %q", code, out, errs)
+	}
+	if after := treeFiles(t, gen); !reflect.DeepEqual(after, before) {
+		t.Errorf("the output changed:\n%v", slices.Sorted(maps.Keys(after)))
+	}
+	if code, out, errs := velox(t, dir, "./schema"); code != 0 || out != "gen/item_velox.go\ngen/tag_velox.go\ngen/user_velox.go\n" {
+		t.Errorf("the next run: %d %q %q", code, out, errs)
+	}
+}
+
+// TestGenerateSweepsLeftovers: generate first rids -out of what a killed
+// write left, and says so; -check leaves it.
+func TestGenerateSweepsLeftovers(t *testing.T) {
+	dir := genModule(t, nil)
+	gen := filepath.Join(dir, "gen")
+	if code, out, errs := velox(t, dir, "./schema"); code != 0 {
+		t.Fatalf("%d %q %q", code, out, errs)
+	}
+	writeFile(t, filepath.Join(gen, ".user_velox.go.old-velox-1"), "old")
+	writeFile(t, filepath.Join(gen, ".velox.go.tmp-velox-2"), "new")
+	if err := os.Rename(filepath.Join(gen, "tag_velox.go"), filepath.Join(gen, ".tag_velox.go.gone-velox-3")); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(gen, ".pb.gone-velox-4", "x.go"), header+"\n\npackage pb\n")
+	writeFile(t, filepath.Join(gen, ".notes.old-velox"), "mine")
+	before := treeFiles(t, gen)
+	if code, _, _ := velox(t, dir, "-check", "./schema"); code != 3 {
+		t.Errorf("-check: %d", code)
+	}
+	if after := treeFiles(t, gen); !reflect.DeepEqual(after, before) {
+		t.Errorf("-check changed gen:\n%v", slices.Sorted(maps.Keys(after)))
+	}
+	code, out, errs := velox(t, dir, "./schema")
+	wantErrs := "velox-gen: restored gen/pb from gen/.pb.gone-velox-4, which an interrupted run left\n" +
+		"velox-gen: restored gen/tag_velox.go from gen/.tag_velox.go.gone-velox-3, which an interrupted run left\n" +
+		"velox-gen: removed gen/.user_velox.go.old-velox-1, which an interrupted run left\n" +
+		"velox-gen: removed gen/.velox.go.tmp-velox-2, which an interrupted run left\n"
+	if code != 0 || out != "gen/pb/x.go\n" || errs != wantErrs {
+		t.Errorf("%d %q %q", code, out, errs)
+	}
+	if got := slices.Sorted(maps.Keys(treeFiles(t, gen))); !slices.Equal(got, []string{".notes.old-velox", "tag_velox.go", "user_velox.go", "velox.go"}) {
+		t.Errorf("gen holds %v", got)
+	}
+	if exists(filepath.Join(gen, "pb")) {
+		t.Error("pb is left")
 	}
 }

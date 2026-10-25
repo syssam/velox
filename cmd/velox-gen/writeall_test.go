@@ -2,13 +2,16 @@ package main
 
 import (
 	"errors"
+	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 // TestWriteAllRollback: a failed swap puts back the files writeAll replaced,
@@ -42,7 +45,7 @@ func TestWriteAllRollback(t *testing.T) {
 				return os.Rename(from, to)
 			}
 			defer func() { renameFile = os.Rename }()
-			err := writeAll(dir, map[string][]byte{"0002_x.sql": []byte("new"), "schema.json": []byte("new schema"), "velox.sum": []byte("new sum")})
+			err := writeAll(dir, map[string][]byte{"0002_x.sql": []byte("new"), "schema.json": []byte("new schema"), "velox.sum": []byte("new sum")}, nil)
 			if !errors.Is(err, injected) {
 				t.Fatalf("%v", err)
 			}
@@ -83,7 +86,7 @@ func TestWriteAllKeepsTarget(t *testing.T) {
 		return os.Rename(from, to)
 	}
 	defer func() { renameFile = os.Rename }()
-	if err := writeAll(dir, map[string][]byte{"0002_x.sql": []byte("new"), "schema.json": []byte("new schema"), "velox.sum": []byte("new sum")}); err != nil {
+	if err := writeAll(dir, map[string][]byte{"0002_x.sql": []byte("new"), "schema.json": []byte("new schema"), "velox.sum": []byte("new sum")}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := dirFiles(t, dir); !reflect.DeepEqual(got, map[string]string{"0002_x.sql": "new", "schema.json": "new schema", "velox.sum": "new sum"}) {
@@ -100,10 +103,285 @@ func TestWriteAllKeepsTarget(t *testing.T) {
 		}
 		return os.Rename(from, to)
 	}
-	if err := writeAll(dir, map[string][]byte{"schema.json": []byte("newer"), "velox.sum": []byte("newer")}); !errors.Is(err, injected) || err.Error() != "injected failure" {
+	if err := writeAll(dir, map[string][]byte{"schema.json": []byte("newer"), "velox.sum": []byte("newer")}, nil); !errors.Is(err, injected) || err.Error() != "injected failure" {
 		t.Fatalf("%v", err)
 	}
 	if after := dirFiles(t, dir); !reflect.DeepEqual(after, before) {
 		t.Errorf("without links the directory changed:\n%v", after)
+	}
+}
+
+// treeFiles is the files below dir, keyed by slash path, with their content;
+// directories are not listed.
+func treeFiles(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	out := map[string]string{}
+	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		data, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(dir, p)
+		out[filepath.ToSlash(rel)] = string(data)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// TestWriteAllRemoves: writeAll removes what it is told to with the write,
+// and a failure puts it back, with the directories it made gone.
+func TestWriteAllRemoves(t *testing.T) {
+	files := map[string][]byte{"a.go": []byte("A"), "pb/x.proto": []byte("X"), "old.go": []byte("new")}
+	setup := func() string {
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, "old.go"), "old")
+		writeFile(t, filepath.Join(dir, "gone.go"), "gone")
+		return dir
+	}
+	dir := setup()
+	if err := writeAll(dir, files, []string{"gone.go"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := treeFiles(t, dir); !reflect.DeepEqual(got, map[string]string{"a.go": "A", "old.go": "new", "pb/x.proto": "X"}) {
+		t.Errorf("%v", got)
+	}
+
+	dir = setup()
+	before := treeFiles(t, dir)
+	injected := errors.New("injected failure")
+	renameFile = func(from, to string) error {
+		if to == filepath.Join(dir, "pb", "x.proto") {
+			return injected
+		}
+		return os.Rename(from, to)
+	}
+	defer func() { renameFile = os.Rename }()
+	if err := writeAll(dir, files, []string{"gone.go"}); !errors.Is(err, injected) || err.Error() != "injected failure" {
+		t.Fatalf("%v", err)
+	}
+	if after := treeFiles(t, dir); !reflect.DeepEqual(after, before) {
+		t.Errorf("the directory changed:\n%v\nwas\n%v", after, before)
+	}
+	if exists(filepath.Join(dir, "pb")) {
+		t.Error("a failed write left the directory it made")
+	}
+}
+
+// TestWriteAllCaseRename: a file, or a directory, whose new name differs
+// only in case takes the old one's place, on a file system that folds case
+// or not.
+func TestWriteAllCaseRename(t *testing.T) {
+	names := func(dir string) []string {
+		t.Helper()
+		des, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var ns []string
+		for _, de := range des {
+			ns = append(ns, de.Name())
+		}
+		return ns
+	}
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "user.go"), "a")
+	if err := writeAll(dir, map[string][]byte{"User.go": []byte("b")}, []string{"user.go"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := treeFiles(t, dir); !reflect.DeepEqual(got, map[string]string{"User.go": "b"}) {
+		t.Errorf("%v", got)
+	}
+	if got := names(dir); !slices.Equal(got, []string{"User.go"}) {
+		t.Errorf("the directory lists %v", got)
+	}
+
+	dir = t.TempDir()
+	writeFile(t, filepath.Join(dir, "Pb", "X.go"), "a")
+	before := treeFiles(t, dir)
+	remove := []string{"Pb/X.go", "Pb"}
+	files := map[string][]byte{"pb/x.go": []byte("b")}
+	injected := errors.New("injected failure")
+	renameFile = func(from, to string) error {
+		if strings.Contains(from, ".tmp-") {
+			return injected
+		}
+		return os.Rename(from, to)
+	}
+	defer func() { renameFile = os.Rename }()
+	if err := writeAll(dir, files, remove); !errors.Is(err, injected) {
+		t.Fatalf("%v", err)
+	}
+	if after := treeFiles(t, dir); !reflect.DeepEqual(after, before) {
+		t.Errorf("the directory changed:\n%v\nwas\n%v", after, before)
+	}
+	if got := names(dir); !slices.Equal(got, []string{"Pb"}) {
+		t.Errorf("the directory lists %v", got)
+	}
+	renameFile = os.Rename
+	if err := writeAll(dir, files, remove); err != nil {
+		t.Fatal(err)
+	}
+	if got := treeFiles(t, dir); !reflect.DeepEqual(got, map[string]string{"pb/x.go": "b"}) {
+		t.Errorf("%v", got)
+	}
+	if got := names(dir); !slices.Equal(got, []string{"pb"}) {
+		t.Errorf("the directory lists %v", got)
+	}
+}
+
+// TestWriteAllUndoSetAside: a failure while the removals are set aside puts
+// back those set aside before it, and a failure to put one back names where
+// what it held is.
+func TestWriteAllUndoSetAside(t *testing.T) {
+	injected := errors.New("injected failure")
+	defer func() { renameFile = os.Rename }()
+
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "a.go"), "a")
+	writeFile(t, filepath.Join(dir, "b.go"), "b")
+	before := treeFiles(t, dir)
+	renameFile = func(from, to string) error {
+		if from == filepath.Join(dir, "b.go") && strings.Contains(to, ".gone-velox-") {
+			return injected
+		}
+		return os.Rename(from, to)
+	}
+	if err := writeAll(dir, map[string][]byte{"c.go": []byte("c")}, []string{"a.go", "b.go"}); !errors.Is(err, injected) || err.Error() != "injected failure" {
+		t.Fatalf("%v", err)
+	}
+	if after := treeFiles(t, dir); !reflect.DeepEqual(after, before) {
+		t.Errorf("the directory changed:\n%v\nwas\n%v", after, before)
+	}
+
+	dir = t.TempDir()
+	writeFile(t, filepath.Join(dir, "gone.go"), "gone")
+	renameFile = func(from, to string) error {
+		if strings.Contains(from, ".tmp-velox-") || strings.Contains(from, ".gone-velox-") {
+			return injected
+		}
+		return os.Rename(from, to)
+	}
+	err := writeAll(dir, map[string][]byte{"a.go": []byte("A")}, []string{"gone.go"})
+	if !errors.Is(err, injected) || !strings.Contains(err.Error(), "undoing the write failed, which left "+filepath.Join(dir, "gone.go")+" (what it held is in "+filepath.Join(dir, ".gone.go.gone-velox-")) {
+		t.Fatalf("%v", err)
+	}
+}
+
+// TestWriteAllUndoNamesDirs: a directory it made that the undo cannot remove
+// is named.
+func TestWriteAllUndoNamesDirs(t *testing.T) {
+	dir := t.TempDir()
+	injected := errors.New("injected failure")
+	renameFile = func(from, to string) error {
+		if strings.Contains(from, ".tmp-velox-") {
+			writeFile(t, filepath.Join(dir, "pb", "mine.txt"), "mine")
+			return injected
+		}
+		return os.Rename(from, to)
+	}
+	defer func() { renameFile = os.Rename }()
+	err := writeAll(dir, map[string][]byte{"pb/x.proto": []byte("X")}, nil)
+	if !errors.Is(err, injected) || !strings.HasSuffix(err.Error(), "undoing the write failed, which left "+filepath.Join(dir, "pb")) {
+		t.Fatalf("%v", err)
+	}
+}
+
+// TestWriteAllKeepsANewFile: the commit deletes only the paths of remove and
+// then their directories when they are empty, so a file added to a directory
+// set aside is kept, and named.
+func TestWriteAllKeepsANewFile(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "pb", "x.go"), "x")
+	var aside string
+	renameFile = func(from, to string) error {
+		err := os.Rename(from, to)
+		if err == nil && from == filepath.Join(dir, "pb") {
+			aside = to
+			writeFile(t, filepath.Join(to, "mine.txt"), "mine")
+		}
+		return err
+	}
+	defer func() { renameFile = os.Rename }()
+	err := writeAll(dir, map[string][]byte{"a.go": []byte("A")}, []string{"pb", "pb/x.go"})
+	if err == nil || err.Error() != "the files are written, but removing the old ones failed, which left "+aside {
+		t.Fatalf("%v", err)
+	}
+	rel, _ := filepath.Rel(dir, aside)
+	if got := treeFiles(t, dir); !reflect.DeepEqual(got, map[string]string{"a.go": "A", rel + "/mine.txt": "mine"}) {
+		t.Errorf("%v", got)
+	}
+}
+
+// TestHoldSignals: a SIGINT that arrives while the signals are held does not
+// end the process, and release reports it.
+func TestHoldSignals(t *testing.T) {
+	h := holdSignals()
+	if err := syscall.Kill(os.Getpid(), syscall.SIGINT); err != nil {
+		h.release()
+		t.Fatal(err)
+	}
+	for deadline := time.Now().Add(10 * time.Second); len(h.ch) == 0 && time.Now().Before(deadline); {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if !h.release() {
+		t.Error("release does not report the SIGINT")
+	}
+	if holdSignals().release() {
+		t.Error("release reports a signal that never came")
+	}
+}
+
+// TestSweepLeftovers: what a killed write left is removed, or put back where
+// its name is missing; a dot-file of yours stays.
+func TestSweepLeftovers(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "a.go"), "new a")
+	writeFile(t, filepath.Join(dir, ".a.go.old-velox-1"), "old a")
+	writeFile(t, filepath.Join(dir, ".a.go.tmp-velox-2"), "newer a")
+	writeFile(t, filepath.Join(dir, ".b.go.tmp-velox-3"), "new b")
+	writeFile(t, filepath.Join(dir, ".c.go.old-velox-4"), "old c")
+	writeFile(t, filepath.Join(dir, ".d.go.gone-velox-5"), "d")
+	writeFile(t, filepath.Join(dir, ".e.go.gone-velox-6"), "old e")
+	writeFile(t, filepath.Join(dir, "e.go"), "e")
+	writeFile(t, filepath.Join(dir, ".pb.gone-velox-7", "x.go"), "x")
+	writeFile(t, filepath.Join(dir, ".qb.gone-velox-8", "y.go"), "y")
+	writeFile(t, filepath.Join(dir, "qb", "y.go"), "new y")
+	mine := []string{".env", ".a.go.old-1", ".a.go.old-velox-", ".a.go.bak-velox-9", "a.go.old-velox-9"}
+	for _, m := range mine {
+		writeFile(t, filepath.Join(dir, m), "mine")
+	}
+	des, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := sweepLeftovers(dir, des)
+	if err != nil {
+		t.Fatal(err)
+	}
+	j := func(n string) string { return filepath.Join(dir, n) }
+	if want := []swept{
+		{path: j(".a.go.old-velox-1")},
+		{path: j(".a.go.tmp-velox-2")},
+		{path: j(".b.go.tmp-velox-3")},
+		{path: j(".c.go.old-velox-4"), restored: j("c.go")},
+		{path: j(".d.go.gone-velox-5"), restored: j("d.go")},
+		{path: j(".e.go.gone-velox-6")},
+		{path: j(".pb.gone-velox-7"), restored: j("pb")},
+		{path: j(".qb.gone-velox-8")},
+	}; !reflect.DeepEqual(got, want) {
+		t.Errorf("%v\nwant %v", got, want)
+	}
+	wantTree := map[string]string{"a.go": "new a", "c.go": "old c", "d.go": "d", "e.go": "e", "pb/x.go": "x", "qb/y.go": "new y"}
+	for _, m := range mine {
+		wantTree[m] = "mine"
+	}
+	if tree := treeFiles(t, dir); !reflect.DeepEqual(tree, wantTree) {
+		t.Errorf("%v", tree)
 	}
 }

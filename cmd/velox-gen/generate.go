@@ -219,7 +219,14 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 			return fail(fmt.Errorf("%s was not written by velox-gen; move it", relPath(dir, p)))
 		}
 	}
-	sw, err := staleFiles(out, want, owners)
+	sw, err := staleFiles(out, want, owners, !f.check)
+	for _, s := range sw.swept {
+		if s.restored != "" {
+			_, _ = fmt.Fprintf(stderr, "velox-gen: restored %s from %s, which an interrupted run left\n", relPath(dir, s.restored), relPath(dir, s.path))
+		} else {
+			_, _ = fmt.Fprintf(stderr, "velox-gen: removed %s, which an interrupted run left\n", relPath(dir, s.path))
+		}
+	}
 	if err != nil {
 		return fail(err)
 	}
@@ -236,32 +243,37 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 		}
 		return 0
 	}
-	// Remove, then write: on a case-insensitive file system a file whose
-	// name changed only in case is the old file, which goes first. A write
-	// that fails part-way leaves the output partly updated; the next run
-	// restores it.
-	for _, p := range remove {
-		if err := os.Remove(p); err != nil {
-			return fail(err)
-		}
+	// writeAll sets the removals aside before it writes: on a
+	// case-insensitive file system a file or directory whose name changed
+	// only in case is the old one, which goes first. The emptied directories
+	// go with the files they held.
+	rel := func(p string) string {
+		r, _ := filepath.Rel(out, p)
+		return filepath.ToSlash(r)
 	}
-	for _, d := range sw.emptied {
-		if err := os.Remove(d); err != nil {
-			return fail(err)
-		}
-	}
+	write := make(map[string][]byte, len(stale))
 	for _, p := range stale {
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-			return fail(err)
-		}
-		if err := os.WriteFile(p, want[p], 0o644); err != nil {
-			return fail(err)
+		write[rel(p)] = want[p]
+	}
+	var gone []string
+	for _, p := range slices.Concat(remove, sw.emptied) {
+		gone = append(gone, rel(p))
+	}
+	// A signal waits for the write to finish or be undone.
+	interrupted, err := writeAllHeld(out, write, gone)
+	code := 0
+	if err != nil {
+		code = fail(err)
+	} else {
+		for _, p := range changed {
+			_, _ = fmt.Fprintln(stdout, relPath(dir, p))
 		}
 	}
-	for _, p := range changed {
-		_, _ = fmt.Fprintln(stdout, relPath(dir, p))
+	if interrupted {
+		_, _ = fmt.Fprintln(stderr, "velox-gen: interrupted")
+		return interruptedCode
 	}
-	return 0
+	return code
 }
 
 // checkEntry refuses what is at p, when anything is, unless it is a directory
@@ -287,6 +299,7 @@ type sweep struct {
 	write   []string // the files of want that are missing or hold other content
 	remove  []string // the generated files nothing produces now, under their spelling on disk
 	emptied []string // the directories the removals empty, deepest first
+	swept   []swept  // what an interrupted run left, which tidy handled
 }
 
 // staleFiles compares want, the files that must be in out, with the disk.
@@ -310,14 +323,14 @@ type sweep struct {
 // file of yours, or nothing) is an error, on every file system, because
 // velox-gen never renames a directory it did not empty. owners names the
 // plugin that wrote each path of want.
-func staleFiles(out string, want map[string][]byte, owners map[string]string) (sweep, error) {
+//
+// With tidy, each directory the walk lists is first rid of what a killed run
+// of writeAll left in it (sweepLeftovers), which sw.swept reports. Without
+// it, as for -check, those entries stay. Either way they are never counted
+// as a directory's entries.
+func staleFiles(out string, want map[string][]byte, owners map[string]string, tidy bool) (sweep, error) {
 	var sw sweep
 	write := map[string]bool{}
-	for p, data := range want {
-		if got, err := os.ReadFile(p); err != nil || !bytes.Equal(got, data) {
-			write[p] = true
-		}
-	}
 	wantFold := make(map[string]string, len(want)) // folded path → the path of want
 	for p := range want {
 		wantFold[fold(p)] = p
@@ -345,9 +358,24 @@ func staleFiles(out string, want map[string][]byte, owners map[string]string) (s
 			}
 			return err
 		}
-		held[d] = len(des)
+		if tidy {
+			done, err := sweepLeftovers(d, des)
+			sw.swept = append(sw.swept, done...)
+			if err != nil {
+				return err
+			}
+			if len(done) > 0 {
+				if des, err = os.ReadDir(d); err != nil {
+					return err
+				}
+			}
+		}
 		for _, de := range des {
 			p := filepath.Join(d, de.Name())
+			if leftover.MatchString(de.Name()) {
+				continue // -check leaves them; they never hold a directory
+			}
+			held[d]++
 			switch {
 			case de.IsDir():
 				if n := de.Name(); n[0] == '.' || n[0] == '_' || ownRoot(p) {
@@ -371,7 +399,13 @@ func staleFiles(out string, want map[string][]byte, owners map[string]string) (s
 		return nil
 	}
 	if err := walk(out); err != nil {
-		return sweep{}, err
+		return sweep{swept: sw.swept}, err
+	}
+	// After the walk, which may put back a file set aside.
+	for p, data := range want {
+		if got, err := os.ReadFile(p); err != nil || !bytes.Equal(got, data) {
+			write[p] = true
+		}
 	}
 	// Deepest first, so that a directory's emptied children count as gone.
 	slices.SortFunc(dirs, func(a, b string) int {
