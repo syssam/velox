@@ -249,6 +249,8 @@ func TestPluginPathsAreChecked(t *testing.T) {
 		"//go:build linux\n\npackage gen\n",
 		"// Package gen.\n\n//go:build tools\n\npackage gen\n",
 		"// +build ignore\n\npackage gen\n",
+		"//go:build prod\n\npackage gen\n",
+		"//go:build go1.28\n\npackage gen\n", // above the module's go 1.27.0
 	} {
 		t.Run("constraint "+src, func(t *testing.T) {
 			env := fakeEnv(filesEnv(t, plugin.File{Path: "x.go", Content: src}))
@@ -355,12 +357,13 @@ func TestPluginPathsAreChecked(t *testing.T) {
 
 	// A GOOS without its underscore, a suffix that is no GOOS or GOARCH, and
 	// a file that is not Go are names go build has no say over, and a
-	// constraint every build of this toolchain meets leaves no system out.
+	// constraint every build meets at the module's go 1.27.0 leaves no build
+	// out.
 	for _, c := range []struct{ path, src string }{
 		{"linux.go", "package gen\n"},
 		{"x_unix.go", "package gen\n"},
 		{"_x.proto", "package gen\n"},
-		{"y.go", "//go:build go1.1 && !tools\n\npackage gen\n"},
+		{"y.go", "//go:build go1.27 && (prod || !prod)\n\npackage gen\n"},
 	} {
 		p := c.path
 		t.Run("accepted "+p, func(t *testing.T) {

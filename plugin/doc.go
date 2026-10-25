@@ -69,8 +69,9 @@
 //     and are not testdata or vendor; it ends in .go, .graphqls or .proto;
 //     it is ASCII; a .go file's name is one go build always builds (not
 //     _x.go, .x.go, x_test.go or x_linux.go), and so are its build
-//     constraints (not //go:build ignore or linux: the header velox-gen
-//     puts in front is a line comment, which leaves them in force); and it
+//     constraints (not //go:build ignore, linux, prod or go1.N above the go
+//     version of the output module's go.mod: the header velox-gen puts in
+//     front is a line comment, which leaves them in force); and it
 //     is not a velox.go in a
 //     directory below the output directory, which would mark that directory
 //     as another run's output (see the sweep below). velox-gen puts the header

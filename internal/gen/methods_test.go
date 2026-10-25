@@ -117,7 +117,7 @@ func TestHasPackageDoc(t *testing.T) {
 		{"directive only", map[string]string{"generate.go": "//go:generate go tool velox-gen ../schema\npackage gen\n"}, false},
 		{"build ignore", map[string]string{"doc.go": "//go:build ignore\n\n// Package gen is ignored.\npackage gen\n"}, false},
 		{"build ignore and a tag", map[string]string{"doc.go": "//go:build ignore && tools\n\n// Package gen is ignored.\npackage gen\n"}, false},
-		{"build constraint every system meets", map[string]string{"doc.go": "//go:build go1.1 && !tools\n\n// Package gen is mine.\npackage gen\n"}, true},
+		{"build constraint every build meets", map[string]string{"doc.go": "//go:build go1.1 || tools\n\n// Package gen is mine.\npackage gen\n"}, true},
 		{"directive and doc", map[string]string{"doc.go": "// Package gen is mine.\n//\n//go:generate go tool velox-gen ../schema\npackage gen\n"}, true},
 	} {
 		got, err := HasPackageDoc(methodsDir(t, c.files))
@@ -136,7 +136,6 @@ func TestMethodsSkipsIgnoredFiles(t *testing.T) {
 	const policy = "package gen\n\nfunc (*User) Policy() int { return 0 }\n"
 	for name, files := range map[string]map[string]string{
 		"go:build ignore":   {"policy.go": "//go:build ignore\n\n" + policy},
-		"go:build tools":    {"policy.go": "//go:build tools\n\n" + policy},
 		"never satisfied":   {"policy.go": "//go:build linux && !linux\n\n" + policy},
 		"+build ignore":     {"policy.go": "// +build ignore\n\n" + policy},
 		"underscore prefix": {"_policy.go": policy},
@@ -167,6 +166,13 @@ func TestMethodsRefusesSystemFiles(t *testing.T) {
 		{"name", "policy_linux.go", policy, 0},
 		{"constraint", "policy.go", "//go:build darwin\n\n" + policy, 1},
 		{"not a system", "policy.go", "// Policies.\n\n//go:build !windows\n\n" + policy, 3},
+		// A custom tag is some builds' too: a build with -tags prod has the
+		// policy, so the generated code must not leave it unbound.
+		{"custom tag", "policy.go", "//go:build prod\n\n" + policy, 1},
+		{"tools", "policy.go", "//go:build tools\n\n" + policy, 1},
+		{"goexperiment", "policy.go", "//go:build goexperiment.jsonv2\n\n" + policy, 1},
+		{"architecture level", "policy.go", "//go:build amd64.v3\n\n" + policy, 1},
+		{"go version above the module's", "policy.go", "//go:build go1.28\n\n" + policy, 1},
 		{"cgo", "policy.go", "package gen\n\nimport \"C\"\n\nfunc (*User) Policy() int { return 0 }\n", 3},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -174,13 +180,13 @@ func TestMethodsRefusesSystemFiles(t *testing.T) {
 			_, err := Methods(dir, []string{"User"})
 			var fe *FileError
 			if !errors.As(err, &fe) || fe.Path != filepath.Join(dir, c.file) || fe.Line != c.line ||
-				!strings.Contains(fe.Reason, "velox-gen reads hooks and policies only from files that every system builds") {
+				!strings.Contains(fe.Reason, "velox-gen reads hooks and policies only from files that every build includes") {
 				t.Fatalf("got %v", err)
 			}
 		})
 	}
 	// An ordinary file, and one whose constraint every system meets, bind.
-	dir := methodsDir(t, map[string]string{"policy.go": policy, "hooks.go": "//go:build go1.1 && !tools\n\npackage gen\n\nfunc (*User) Hooks() int { return 0 }\n"})
+	dir := methodsDir(t, map[string]string{"go.mod": "module m\n\ngo 1.27.0\n", "policy.go": policy, "hooks.go": "//go:build go1.27 && (prod || !prod)\n\npackage gen\n\nfunc (*User) Hooks() int { return 0 }\n"})
 	got, err := Methods(dir, []string{"User"})
 	if err != nil || !reflect.DeepEqual(got, map[string]Bound{"User": {Policy: true, Hooks: true}}) {
 		t.Fatalf("got %v, %v", got, err)
@@ -203,8 +209,7 @@ func TestGoFileSystems(t *testing.T) {
 		{".x.go", "package p\n", NoSystem, 0},
 		{"x_test.go", "package p\n", NoSystem, 0},
 		{"x.go", "//go:build ignore\n\npackage p\n", NoSystem, 1},
-		{"x.go", "//go:build tools\n\npackage p\n", NoSystem, 1},
-		{"x.go", "//go:build go1.999\n\npackage p\n", NoSystem, 1},
+		{"x.go", "//go:build ignore && tools\n\npackage p\n", NoSystem, 1},
 		{"x.go", "//go:build linux && !linux\n\npackage p\n", NoSystem, 1},
 		{"x.go", "// +build ignore\n\npackage p\n", NoSystem, 1},
 		{"x_linux.go", "package p\n", SomeSystems, 0},
@@ -215,14 +220,66 @@ func TestGoFileSystems(t *testing.T) {
 		{"x.go", "//go:build unix\n\npackage p\n", SomeSystems, 1},
 		{"x.go", "//go:build cgo\n\npackage p\n", SomeSystems, 1},
 		{"x.go", "// +build linux darwin\n\npackage p\n", SomeSystems, 1},
+		// Every tag but ignore is free: a build may set it or not.
+		{"x.go", "//go:build tools\n\npackage p\n", SomeSystems, 1},
+		{"x.go", "//go:build prod\n\npackage p\n", SomeSystems, 1},
+		{"x.go", "//go:build enterprise\n\npackage p\n", SomeSystems, 1},
+		{"x.go", "//go:build !prod\n\npackage p\n", SomeSystems, 1},
+		{"x.go", "//go:build goexperiment.jsonv2\n\npackage p\n", SomeSystems, 1},
+		{"x.go", "//go:build amd64.v3\n\npackage p\n", SomeSystems, 1},
+		{"x.go", "//go:build arm64.v8.1\n\npackage p\n", SomeSystems, 1},
+		{"x.go", "//go:build go1.999\n\npackage p\n", SomeSystems, 1},
+		{"x.go", "// +build prod\n\npackage p\n", SomeSystems, 1},
 		{"x.go", "package p\n\nimport \"C\"\n", SomeSystems, 3},
 		// A //go:build line in the package's doc counts; a // +build line
 		// there does not, as for go/build.
 		{"x.go", "// Doc.\n//go:build ignore\npackage p\n", NoSystem, 2},
 		{"x.go", "// +build ignore\npackage p\n", EverySystem, 0},
+		// Nor does one after a /* */ comment: go/build stops reading // +build
+		// lines at the first line that is not a line comment.
+		{"x.go", "/* License */\n\n// +build ignore\n\npackage p\n", EverySystem, 0},
+		{"x.go", "// +build ignore\n/* License */\n\npackage p\n", EverySystem, 0},
+		{"x.go", "// +build ignore\n\n/* License */\n\npackage p\n", NoSystem, 1},
+		{"x.go", "/* License */\n\n//go:build ignore\n\npackage p\n", NoSystem, 3},
 	} {
-		if got, line := GoFileSystems(c.name, []byte(c.src)); got != c.want || line != c.line {
+		if got, line := GoFileSystems(c.name, []byte(c.src), "1.27.0"); got != c.want || line != c.line {
 			t.Errorf("GoFileSystems(%q, %q) = %d, %d; want %d, %d", c.name, c.src, got, line, c.want, c.line)
 		}
+	}
+}
+
+// A go1.N tag holds when the module's go version is go1.N or later, and is
+// free above it, whatever toolchain velox-gen runs on.
+func TestGoFileSystemsGoVersion(t *testing.T) {
+	for _, c := range []struct {
+		tag, goVersion string
+		want           Systems
+	}{
+		{"go1.21", "1.27.0", EverySystem},
+		{"go1.27", "1.27.0", EverySystem},
+		{"go1.27", "1.27", EverySystem},
+		{"go1.28", "1.27.0", SomeSystems},
+		{"go1.28", "1.30", EverySystem},
+		{"!go1.28", "1.27.0", SomeSystems},
+		{"!go1.21", "1.27.0", NoSystem},
+		{"go1.1", "", EverySystem},
+		{"go1.999", "", SomeSystems},
+	} {
+		src := "//go:build " + c.tag + "\n\npackage p\n"
+		if got, _ := GoFileSystems("x.go", []byte(src), c.goVersion); got != c.want {
+			t.Errorf("%s at go %q: got %d, want %d", c.tag, c.goVersion, got, c.want)
+		}
+	}
+}
+
+func TestModuleGoVersion(t *testing.T) {
+	dir := methodsDir(t, map[string]string{"go.mod": "module m\n\ngo 1.27.0\n\ntoolchain go1.28.1\n"})
+	for _, d := range []string{dir, filepath.Join(dir, "gen", "missing")} {
+		if got := ModuleGoVersion(d); got != "1.27.0" {
+			t.Errorf("ModuleGoVersion(%s) = %q", d, got)
+		}
+	}
+	if got := ModuleGoVersion(methodsDir(t, map[string]string{"go.mod": "module m\n"})); got != "" {
+		t.Errorf("no go line: got %q", got)
 	}
 }

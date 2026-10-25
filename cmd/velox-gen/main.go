@@ -3,7 +3,7 @@
 // It reads a schema package, a package whose structs embed schema.Schema, and
 // writes the gen package: one file, <entity>_velox.go, for every entity and
 // for every join entity of a many-to-many relation, and velox.go, which holds
-// the enums and the hash of the model.
+// the enums.
 //
 // Install it as a tool of your module and run it from the module root:
 //
@@ -65,7 +65,13 @@
 // stay: a method Policy or Hooks on a generated entity E, with receiver *E,
 // in a file of yours there, is bound into E's metadata. A value receiver is an
 // error, because velox calls the method on a nil *E. Your own file must not
-// declare a type named like a generated one. The generated velox.go has the
+// declare a type named like a generated one. velox-gen refuses any .go file
+// of yours in -out that some build would leave out, by its name or its build
+// constraints, such as x_linux.go, //go:build linux or //go:build prod, since
+// the generated code would bind its methods in one build and not another; it
+// reads neither a file //go:build ignore leaves out nor one whose name starts
+// with "_" or "." or ends in _test.go. A go1.N tag holds when the go line of
+// the module's go.mod is go1.N or later. The generated velox.go has the
 // package comment, unless a file of yours there has one.
 //
 // -plugin names a generator plugin, a tool of your module that "go tool" runs
@@ -83,8 +89,9 @@
 // standard output. A path is a slash path below -out, such as pb/user.proto,
 // with no "..", "." or empty segment, no directory that starts with "." or
 // "_" or is testdata or vendor, ASCII, ending in .go, .graphqls or .proto, a
-// .go file go build always builds, by its name and its build constraints, and
-// not a velox.go below -out. velox-gen puts its header in
+// .go file go build always builds, by its name and its build constraints (as
+// for your own files, but //go:build ignore is refused too), and not a
+// velox.go below -out. velox-gen puts its header in
 // front of the content, so the plugin's files are checked, rewritten and, when
 // the plugin is dropped from the command, deleted like its own, with the
 // directories that leaves empty. Each warning is printed as "velox-gen: plugin

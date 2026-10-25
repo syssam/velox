@@ -42,7 +42,7 @@ type File struct {
 	// testdata or vendor, it holds no backslash or NUL, and it ends in .go,
 	// .graphqls or .proto; it is ASCII, and a .go file's name is one go
 	// build always builds (not _x.go, .x.go, x_test.go or x_linux.go), as
-	// are its build constraints (not //go:build ignore or linux).
+	// are its build constraints (not //go:build ignore, linux or prod).
 	Path    string `json:"path"`
 	Content string `json:"content"` // without the generated-file header
 }

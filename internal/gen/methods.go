@@ -37,7 +37,7 @@ func (e *FileError) Error() string {
 // which a method with a value receiver would panic on, so a method Policy or
 // Hooks with receiver E is a *FileError, and so is a file that declares a type
 // named like an entity (its methods would clash with the generated ones). A
-// file no system builds is not read, and one only some systems build is a
+// file no build includes is not read, and one only some builds include is a
 // *FileError (see userFiles). A missing dir is no files.
 //
 // The result holds only the entities that have at least one of the methods.
@@ -86,8 +86,8 @@ func Methods(dir string, entities []string) (map[string]Bound, error) {
 
 // HasPackageDoc reports whether one of the non-test .go files in dir that do
 // not start with velox-gen's header has a package comment with text, not only
-// directives. A file no system builds does not count, and one only some
-// systems build is a *FileError (see userFiles). A missing dir is no files.
+// directives. A file no build includes does not count, and one only some
+// builds include is a *FileError (see userFiles). A missing dir is no files.
 func HasPackageDoc(dir string) (bool, error) {
 	found := false
 	err := userFiles(dir, parser.PackageClauseOnly|parser.ParseComments, func(_ string, f *ast.File) error {
@@ -101,10 +101,13 @@ func HasPackageDoc(dir string) (bool, error) {
 
 // userFiles parses, with mode, each non-test .go file in dir that does not
 // start with velox-gen's header, and calls fn with it. Whatever system
-// velox-gen runs on, it leaves out a file that no system builds
-// (GoFileSystems), and refuses, as a *FileError, one that only some systems
-// build: the generated code, built on another system, would bind what that
-// system's package does not have. A missing dir is no files.
+// velox-gen runs on, it leaves out a file that no build includes
+// (GoFileSystems, at the go version of dir's go.mod): //go:build ignore, or a
+// name that starts with _ or .. It refuses, as a *FileError, one that only
+// some builds include, such as one behind a GOOS or a custom tag: the
+// generated code, built on another system or with other tags, would bind what
+// the package there does not have, or would leave a policy unbound in a build
+// that has it. A missing dir is no files.
 func userFiles(dir string, mode parser.Mode, fn func(path string, f *ast.File) error) error {
 	des, err := os.ReadDir(dir)
 	if errors.Is(err, os.ErrNotExist) {
@@ -113,6 +116,7 @@ func userFiles(dir string, mode parser.Mode, fn func(path string, f *ast.File) e
 	if err != nil {
 		return err
 	}
+	goVersion := ModuleGoVersion(dir)
 	fset := token.NewFileSet()
 	for _, de := range des {
 		name := de.Name()
@@ -127,11 +131,11 @@ func userFiles(dir string, mode parser.Mode, fn func(path string, f *ast.File) e
 		if bytes.HasPrefix(src, []byte(strings.TrimSuffix(header, "\n\n")+"\n")) {
 			continue
 		}
-		switch sys, line := GoFileSystems(name, src); sys {
+		switch sys, line := GoFileSystems(name, src, goVersion); sys {
 		case NoSystem:
 			continue
 		case SomeSystems:
-			return &FileError{Path: path, Line: line, Reason: "go builds it on some systems only; velox-gen reads hooks and policies only from files that every system builds"}
+			return &FileError{Path: path, Line: line, Reason: "go leaves it out of some builds; velox-gen reads hooks and policies only from files that every build includes"}
 		}
 		f, err := parser.ParseFile(fset, path, src, mode|parser.SkipObjectResolution)
 		if err != nil {

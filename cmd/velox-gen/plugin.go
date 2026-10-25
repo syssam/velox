@@ -77,12 +77,13 @@ func generator() string { return buildinfo.Generator() }
 // stderr as it answers. The run fails, naming the plugin, when a plugin cannot
 // be run, exits non-zero, answers something that is not a response of
 // protocol 2, reports an error, or names a path that checkPluginPath refuses,
-// or a .go file that checkPluginGo refuses, or one that another plugin, or
+// or a .go file that checkPluginGo refuses at goVersion, the go version of
+// the output module's go.mod, or one that another plugin, or
 // itself, has written. Paths that differ only
 // in case are one file, or one directory, as they are on a case-insensitive
 // file system; a path is not both a file and a directory. A plugin's stderr is
 // shown only when it fails.
-func runPlugins(specs []pluginSpec, modDir string, req plugin.Request, env []string, stderr io.Writer) (files map[string][]byte, owners map[string]string, err error) {
+func runPlugins(specs []pluginSpec, modDir, goVersion string, req plugin.Request, env []string, stderr io.Writer) (files map[string][]byte, owners map[string]string, err error) {
 	files, owners = map[string][]byte{}, map[string]string{}
 	by := map[string]string{}   // folded file path → the path that took it
 	dirs := map[string]string{} // folded directory path → the spelling that took it
@@ -102,7 +103,7 @@ func runPlugins(specs []pluginSpec, modDir string, req plugin.Request, env []str
 			if err := checkPluginPath(f.Path); err != nil {
 				return nil, nil, fmt.Errorf("plugin %s: %w", name, err)
 			}
-			if err := checkPluginGo(f); err != nil {
+			if err := checkPluginGo(f, goVersion); err != nil {
 				return nil, nil, fmt.Errorf("plugin %s: %w", name, err)
 			}
 			if other, ok := by[fold(f.Path)]; ok {
@@ -271,22 +272,24 @@ func checkPluginPath(p string) error {
 // goIgnored reports whether go build leaves out a .go file named base, or
 // builds it only for some systems: a name that starts with _ or ., a
 // _test.go file, or a _GOOS, _GOARCH or _GOOS_GOARCH suffix.
-func goIgnored(base string) bool { return !goBuilds(base, "package p\n") }
+func goIgnored(base string) bool { return !goBuilds(base, "package p\n", "") }
 
-// goBuilds reports whether go build builds, on every system, a .go file
-// named base that holds src (gen.GoFileSystems, which also decides the
-// user's files in the output directory).
-func goBuilds(base, src string) bool {
-	sys, _ := gen.GoFileSystems(base, []byte(src))
+// goBuilds reports whether go build builds, in every build, a .go file named
+// base that holds src, in a module of go version goVersion
+// (gen.GoFileSystems, which also decides the user's files in the output
+// directory).
+func goBuilds(base, src, goVersion string) bool {
+	sys, _ := gen.GoFileSystems(base, []byte(src), goVersion)
 	return sys == gen.EverySystem
 }
 
 // checkPluginGo refuses a plugin's .go file whose build constraints, such as
-// //go:build ignore or //go:build linux, leave it out of some builds:
-// velox-gen's header is a line comment, so the constraints apply. Its name is
+// //go:build ignore, //go:build linux or //go:build prod, leave it out of
+// some builds of the output module, of go version goVersion: velox-gen's
+// header is a line comment, so the constraints apply. Its name is
 // checkPluginPath's.
-func checkPluginGo(f plugin.File) error {
-	if path.Ext(f.Path) != ".go" || goBuilds(path.Base(f.Path), f.Content) {
+func checkPluginGo(f plugin.File, goVersion string) error {
+	if path.Ext(f.Path) != ".go" || goBuilds(path.Base(f.Path), f.Content, goVersion) {
 		return nil
 	}
 	return fmt.Errorf("invalid path %q: a Go file's name is not one go build ignores or builds for some systems only; its build constraints leave it out", f.Path)
@@ -314,7 +317,7 @@ func pluginFiles(f genFlags, gm *genModel, pattern, dir, pkg string, env []strin
 		return nil, nil, err
 	}
 	req := plugin.Request{Protocol: plugin.ProtocolVersion, Generator: generator(), OutPackage: pkg, OutPath: outPath, Model: gen.PluginModel(gm.graph, gm.out)}
-	rel, byPlugin, err := runPlugins(f.plugins, mod, req, env, stderr)
+	rel, byPlugin, err := runPlugins(f.plugins, mod, gen.ModuleGoVersion(out), req, env, stderr)
 	if err != nil {
 		return nil, nil, err
 	}
