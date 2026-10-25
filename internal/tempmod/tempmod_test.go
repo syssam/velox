@@ -74,3 +74,32 @@ func TestWriteGraphQL(t *testing.T) {
 		t.Fatalf("velox-graphql is not a tool of the module: %v\n%s", err, out)
 	}
 }
+
+// TestGoFlags: the user's GOFLAGS survive, with the extra flags after them.
+func TestGoFlags(t *testing.T) {
+	t.Setenv("GOFLAGS", "-p=2")
+	if got := GoFlags("-mod=mod"); got != "-p=2 -mod=mod" {
+		t.Errorf("GoFlags with GOFLAGS=-p=2 = %q", got)
+	}
+	t.Setenv("GOFLAGS", "")
+	if got := GoFlags("-mod=mod"); got != "-mod=mod" {
+		t.Errorf("GoFlags with GOFLAGS unset = %q", got)
+	}
+}
+
+// TestWriteGraphQLRefusesUnresolved: a package that imports a module nothing
+// provides fails WriteGraphQL, which tidy's -e alone would let pass.
+func TestWriteGraphQLRefusesUnresolved(t *testing.T) {
+	if testing.Short() {
+		t.Skip("resolves a module offline; run without -short")
+	}
+	repo, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{"use/use.go": "package use\n\nimport _ \"example.com/nosuchmodule/x\"\n"}
+	err = WriteGraphQL(t.TempDir(), repo, files)
+	if err == nil || !strings.Contains(err.Error(), "example.com/nosuchmodule") {
+		t.Fatalf("WriteGraphQL = %v, want an error naming example.com/nosuchmodule", err)
+	}
+}

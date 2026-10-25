@@ -48,7 +48,14 @@ replace (
 	// -e: tidy also looks for the test dependencies of gqlparser's levenshtein,
 	// whose go.mod predates module graph pruning, and an offline module cache
 	// that holds only what builds need lacks them. Nothing here builds them.
-	return write(dir, mod, []string{"go.sum", filepath.Join("contrib", "graphql", "go.sum")}, repo, files, "mod", "tidy", "-e")
+	if err := write(dir, mod, []string{"go.sum", filepath.Join("contrib", "graphql", "go.sum")}, repo, files, "mod", "tidy", "-e"); err != nil {
+		return err
+	}
+	// -e also hides a package the build graph cannot resolve. The levenshtein
+	// test dependencies are not in this graph, so listing it without -e fails
+	// on what -e would have let pass.
+	_, err := Go(dir, "list", "-deps", "./...")
+	return err
 }
 
 // write writes go.mod (mod), go.sum (the sums, paths relative to repo, joined)
@@ -80,6 +87,15 @@ func write(dir, mod string, sums []string, repo string, files map[string]string,
 	return err
 }
 
+// GoFlags is the user's GOFLAGS with extra after it, so that a flag such as
+// -p=2 survives; extra alone when GOFLAGS is unset.
+func GoFlags(extra string) string {
+	if f := os.Getenv("GOFLAGS"); f != "" {
+		return f + " " + extra
+	}
+	return extra
+}
+
 // Go runs the go command in dir, offline, and returns its combined output.
 // It runs "go" from PATH: go test, go run, go generate and go tool put their
 // own GOROOT/bin first on a child's PATH (go help test), so this is the
@@ -87,7 +103,7 @@ func write(dir, mod string, sums []string, repo string, files map[string]string,
 func Go(dir string, args ...string) (string, error) {
 	cmd := exec.Command("go", args...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GOFLAGS=-mod=mod", "GOPROXY=off", "GOWORK=off")
+	cmd.Env = append(os.Environ(), "GOFLAGS="+GoFlags("-mod=mod"), "GOPROXY=off", "GOWORK=off")
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
 	err := cmd.Run()

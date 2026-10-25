@@ -217,11 +217,11 @@ import (
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
 )
 
-// TestMain refuses to run on a CI runner (CI=true) that was not given both
-// databases: a missing variable there would leave out the PostgreSQL or the
-// MySQL subtests without a failure.
+// TestMain refuses to run, when VELOX_ITEST_REQUIRE=1, as CI and
+// scripts/ci-local.sh set it, without both databases: a missing variable would
+// leave out the PostgreSQL or the MySQL subtests without a failure.
 func TestMain(m *testing.M) {
-	if os.Getenv("CI") == "true" {
+	if os.Getenv("VELOX_ITEST_REQUIRE") == "1" {
 		var missing []string
 		for _, v := range []string{"VELOX_TEST_POSTGRES", "VELOX_TEST_MYSQL"} {
 			if os.Getenv(v) == "" {
@@ -229,7 +229,7 @@ func TestMain(m *testing.M) {
 			}
 		}
 		if len(missing) > 0 {
-			fmt.Fprintf(os.Stderr, "app: CI=true but %s unset: the PostgreSQL and MySQL tests would be left out\n", strings.Join(missing, ", "))
+			fmt.Fprintf(os.Stderr, "app: VELOX_ITEST_REQUIRE=1 but %s unset: the PostgreSQL and MySQL tests would be left out\n", strings.Join(missing, ", "))
 			os.Exit(1)
 		}
 	}
@@ -904,7 +904,8 @@ func TestListEdgeCap(t *testing.T) {
 // velox-gen and the plugin, then gqlgen, and runs its tests, which serve the
 // schema through gqlgen on SQLite always and on PostgreSQL (pgx and
 // database/sql) and MySQL when VELOX_TEST_POSTGRES and VELOX_TEST_MYSQL name
-// them; with CI=true, the application's TestMain fails unless both do.
+// them; with VELOX_ITEST_REQUIRE=1, the application's TestMain fails unless
+// both do.
 func TestCollectRun(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")

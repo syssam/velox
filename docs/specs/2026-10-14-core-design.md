@@ -222,9 +222,10 @@ func invoiceShape() velox.Shape[Invoice] {
 }
 ```
 
-That is about 3 lines per field plus 35 per entity (98 lines per entity
-measured on the simulated schema). The only addition to the entity's own type is
-the method `VeloxMeta`.
+That is about 8 lines per field plus 53 per entity (98 lines per entity on
+average, re-measured on 2026-10-25 for the schema DSL on the 25 generated
+entities of internal/testmodel, internal/bindmodel and example). The only
+addition to the entity's own type is the method `VeloxMeta`.
 
 ### Handle types
 

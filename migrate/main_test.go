@@ -7,11 +7,11 @@ import (
 	"testing"
 )
 
-// TestMain refuses to run the tests on a CI runner (CI=true) that was not
-// given every database: a missing variable there would skip the PostgreSQL
-// and MySQL tests without a failure.
+// TestMain refuses to run the tests, when VELOX_ITEST_REQUIRE=1, as CI and
+// scripts/ci-local.sh set it, without every database: a missing variable would
+// skip the PostgreSQL and MySQL tests without a failure.
 func TestMain(m *testing.M) {
-	if os.Getenv("CI") == "true" {
+	if os.Getenv("VELOX_ITEST_REQUIRE") == "1" {
 		var missing []string
 		for _, v := range []string{"VELOX_TEST_POSTGRES", "VELOX_TEST_MYSQL_ADMIN"} {
 			if os.Getenv(v) == "" {
@@ -19,7 +19,7 @@ func TestMain(m *testing.M) {
 			}
 		}
 		if len(missing) > 0 {
-			fmt.Fprintf(os.Stderr, "migrate: CI=true but %s unset: the PostgreSQL and MySQL tests would be skipped\n", strings.Join(missing, ", "))
+			fmt.Fprintf(os.Stderr, "migrate: VELOX_ITEST_REQUIRE=1 but %s unset: the PostgreSQL and MySQL tests would be skipped\n", strings.Join(missing, ", "))
 			os.Exit(1)
 		}
 	}

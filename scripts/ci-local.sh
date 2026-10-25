@@ -8,6 +8,8 @@ case "$(go env GOVERSION)" in
   *) echo "CI uses Go 1.27; found $(go env GOVERSION)" >&2; exit 1 ;;
 esac
 
+command -v docker >/dev/null || { echo "ci-local.sh needs docker" >&2; exit 1; }
+
 compose=(docker compose -f docker-compose.ci.yml -p velox2-ci)
 # Registered before "up" so a failed or interrupted start still tears down.
 trap '"${compose[@]}" down -v' EXIT
@@ -17,8 +19,8 @@ export VELOX_TEST_POSTGRES='postgres://velox:velox@127.0.0.1:55432/velox?sslmode
 export VELOX_TEST_MYSQL='velox:velox@tcp(127.0.0.1:53306)/velox?parseTime=true&clientFoundRows=true'
 # The root DSN: the routing tests make databases beside the CI one (PostgreSQL's velox can; MySQL's cannot).
 export VELOX_TEST_MYSQL_ADMIN='root:velox@tcp(127.0.0.1:53306)/?parseTime=true&clientFoundRows=true'
-# As on a CI runner: the itests fail, rather than skip, on a database whose variable is unset.
-export CI=true
+# As in CI: the itests fail, rather than skip, when a database variable is unset.
+export VELOX_ITEST_REQUIRE=1
 
 unformatted=$(gofmt -l .)
 if [ -n "$unformatted" ]; then
@@ -27,11 +29,11 @@ fi
 go vet ./...
 go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
 go test -race -count=1 -timeout 20m ./...
-go test -run XXX -fuzz FuzzRender -fuzztime 20s .
-go test -run XXX -fuzz FuzzQuote -fuzztime 10s .
-go test -run XXX -fuzz FuzzScope -fuzztime 10s .
-go test -run XXX -fuzz FuzzLiteral -fuzztime 10s ./internal/ddl
-go test -run XXX -fuzz FuzzSplit -fuzztime 10s ./migrate
+go test -run XXX -fuzz '^FuzzRender$' -fuzztime 20s .
+go test -run XXX -fuzz '^FuzzQuote$' -fuzztime 10s .
+go test -run XXX -fuzz '^FuzzScope$' -fuzztime 10s .
+go test -run XXX -fuzz '^FuzzLiteral$' -fuzztime 10s ./internal/ddl
+go test -run XXX -fuzz '^FuzzSplit$' -fuzztime 10s ./migrate
 
 go build -o bin/velox-gen ./cmd/velox-gen
 bin/velox-gen -check -out internal/testmodel -package testmodel ./internal/testmodel/schema
@@ -50,7 +52,9 @@ go run github.com/mgechev/revive@v1.17.0 -config revive.toml -set_exit_status ./
   # golangci-lint's revive skips generated files; revive itself lints velox-gen's.
   go run github.com/mgechev/revive@v1.17.0 -config ../revive.toml -set_exit_status ./*/gen
   go test -race -count=1 ./...
-  for x in start relations tenant policy hooks tx routing otel tour; do
+  for d in */schema; do
+    x=${d%/schema}
+    [ "$x" = graphql ] && continue # its own lines below, with the plugin
     go tool velox-gen -check -out "./$x/gen" "./$x/schema"
     go tool velox-gen verify -out "./$x/gen" "./$x/schema"
   done

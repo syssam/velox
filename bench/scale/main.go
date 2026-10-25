@@ -143,7 +143,7 @@ func run(c config) (report, error) {
 		cmd.Dir = app
 		if c.graphql {
 			// The plugin is a tool of the module, built by go tool, offline.
-			cmd.Env = append(os.Environ(), "GOFLAGS=-mod=mod", "GOPROXY=off", "GOWORK=off")
+			cmd.Env = append(os.Environ(), "GOFLAGS="+tempmod.GoFlags("-mod=mod"), "GOPROXY=off", "GOWORK=off")
 		}
 		if out, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("velox-gen: %v\n%s", err, out)
@@ -166,7 +166,7 @@ func run(c config) (report, error) {
 	build := func() error {
 		cmd := exec.Command("go", "build", "-toolexec", wrapper, "-o", bin+string(filepath.Separator), "./...")
 		cmd.Dir = app
-		cmd.Env = append(os.Environ(), "GOCACHE="+cache, "GOFLAGS=-mod=mod", "GOPROXY=off", "GOWORK=off", "VELOX_LINKMEM="+memFile)
+		cmd.Env = append(os.Environ(), "GOCACHE="+cache, "GOFLAGS="+tempmod.GoFlags("-mod=mod"), "GOPROXY=off", "GOWORK=off", "VELOX_LINKMEM="+memFile)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("go build: %v\n%s%s", err, out, tempmod.Hint(string(out)))
 		}
