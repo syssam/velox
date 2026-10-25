@@ -853,7 +853,7 @@ func (Post) Edges() []schema.Edge {
 `
 
 // Review Focus 1: one schema package in two modules at different depths gives
-// byte-identical output, velox.go's model hash and describe -json included.
+// byte-identical output, describe -json included.
 func TestOutputIgnoresPositions(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")

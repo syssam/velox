@@ -18,7 +18,6 @@ type Out struct {
 	Package    string
 	Entities   []*OutEntity // the graph's, then the join entities, each sorted by Name
 	Enums      []*OutEnum   // sorted by type name
-	Hash       string       // sha256 of the Graph's JSON, hex
 	NeedsSch   bool         // some entity reads the schema package
 	SchemaPath string       // the schema package's import path
 	UserDoc    bool         // Config.UserDoc

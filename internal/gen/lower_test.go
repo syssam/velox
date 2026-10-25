@@ -145,8 +145,8 @@ func TestLowerTypes(t *testing.T) {
 	if !reflect.DeepEqual(u.Imports, []string{"encoding/json", "errors", "time"}) || u.Handles != "LwUsers" || u.Label != "lw_user" || u.Table != "lw_users" {
 		t.Errorf("user imports %v handles %s label %s table %s", u.Imports, u.Handles, u.Label, u.Table)
 	}
-	if o.Package != "gen" || o.SchemaPath != lowerSchemaPath || len(o.Hash) != 64 || o.NeedsSch {
-		t.Errorf("out %q %q %q %v", o.Package, o.SchemaPath, o.Hash, o.NeedsSch)
+	if o.Package != "gen" || o.SchemaPath != lowerSchemaPath || o.NeedsSch {
+		t.Errorf("out %q %q %v", o.Package, o.SchemaPath, o.NeedsSch)
 	}
 	if !reflect.DeepEqual(u.PrimaryKey, []int{0}) || u.Tenant != -1 {
 		t.Errorf("pk %v tenant %d", u.PrimaryKey, u.Tenant)
@@ -1143,9 +1143,9 @@ func (u sdUser) Fields() []schema.Field {
 	return []schema.Field{f, field.String("name")}
 }
 
-// A SchemaDefault is for the migration planner: the generated code does not
-// change, but for the line that holds the model's hash.
-func TestSchemaDefaultChangesOnlyTheHash(t *testing.T) {
+// A SchemaDefault is for the migration planner only: Generate gives the same
+// files with and without it.
+func TestSchemaDefaultChangesNoCode(t *testing.T) {
 	gen := func(u sdUser) map[string]string {
 		g, err := build(t, u)
 		if err != nil {
@@ -1165,25 +1165,22 @@ func TestSchemaDefaultChangesOnlyTheHash(t *testing.T) {
 	if len(without) != len(with) {
 		t.Fatalf("%d files without, %d with", len(without), len(with))
 	}
-	changed := 0
 	for name, a := range without {
-		b := with[name]
-		if a == b {
-			continue
-		}
-		changed++
-		la, lb := strings.Split(a, "\n"), strings.Split(b, "\n")
-		if len(la) != len(lb) {
-			t.Fatalf("%s: %d lines without, %d with", name, len(la), len(lb))
-		}
-		for i := range la {
-			hashes := strings.HasPrefix(la[i], "// Model: sha256:") && strings.HasPrefix(lb[i], "// Model: sha256:")
-			if la[i] != lb[i] && !hashes {
-				t.Errorf("%s:%d differs\n%s\n%s", name, i+1, la[i], lb[i])
-			}
+		if b, ok := with[name]; !ok || a != b {
+			t.Errorf("%s differs with a SchemaDefault", name)
 		}
 	}
-	if changed == 0 {
-		t.Fatal("the model's hash did not change")
+}
+
+// velox.go carries no hash of the model: no file Generate writes has one.
+func TestPackageFileHasNoHash(t *testing.T) {
+	files, err := Generate(mustBuild(t, User{}, Post{}, Group{}), Config{Package: "gen"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		if strings.Contains(string(f.Data), "sha256") {
+			t.Errorf("%s mentions sha256", f.Name)
+		}
 	}
 }

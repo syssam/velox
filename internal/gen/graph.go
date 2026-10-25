@@ -39,7 +39,7 @@ type Entity struct {
 // keys have no position in the schema and leave it zero, and Pos "".
 //
 // Pos is the file:line that declares the field, for errors. It is kept out of
-// the JSON, so that the model hash and the generated files do not depend on
+// the JSON, so that describe -json and the generated files do not depend on
 // the checkout's path. MarshalJSON leaves out the embedded loadjson.Field's
 // Pos too, which a json:"-" tag here would not hide.
 type Field struct {

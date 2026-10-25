@@ -1214,8 +1214,8 @@ func TestRuleErrorPos(t *testing.T) {
 	}
 }
 
-// Positions are kept out of the Graph's JSON: the model hash, describe -json
-// and the generated files do not depend on where the schema was declared.
+// Positions are kept out of the Graph's JSON: describe -json and the
+// generated files do not depend on where the schema was declared.
 func TestOutputIgnoresPositionsInGraph(t *testing.T) {
 	g := mustBuild(t, User{}, Post{}, Group{})
 	var hasPos bool
@@ -1234,7 +1234,7 @@ func TestOutputIgnoresPositionsInGraph(t *testing.T) {
 	if strings.Contains(string(b), "build_test.go") || strings.Contains(string(b), `"pos"`) {
 		t.Fatalf("a position is in the graph's JSON:\n%s", b)
 	}
-	out1, err := Lower(g, Config{})
+	files1, err := Generate(g, Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1249,12 +1249,17 @@ func TestOutputIgnoresPositionsInGraph(t *testing.T) {
 			ix.Pos = "/elsewhere/user.go:3"
 		}
 	}
-	out2, err := Lower(g, Config{})
+	files2, err := Generate(g, Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out1.Hash != out2.Hash {
-		t.Fatal("the model hash depends on the positions")
+	if len(files1) != len(files2) {
+		t.Fatalf("%d files, then %d", len(files1), len(files2))
+	}
+	for i, f := range files1 {
+		if f.Name != files2[i].Name || !bytes.Equal(f.Data, files2[i].Data) {
+			t.Errorf("%s depends on the positions", f.Name)
+		}
 	}
 }
 

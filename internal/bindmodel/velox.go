@@ -4,7 +4,6 @@ package bindmodel
 
 import "github.com/syssam/velox2"
 
-// Model: sha256:a5423dc11a902801c7f086aecee54ca47f851b4de5bf9477206498993644c52a
 const _ = velox.GeneratedCodeIsVersion5
 
 // BindKind is an enum of the model.

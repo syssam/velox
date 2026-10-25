@@ -96,7 +96,6 @@ func renderPackage(o *Out) string {
 	w.p("")
 	w.p(`import "github.com/syssam/velox2"`)
 	w.p("")
-	w.p("// Model: sha256:%s", o.Hash)
 	w.p("const _ = velox.GeneratedCodeIsVersion%d", GeneratedCodeVersion)
 	for _, en := range o.Enums {
 		w.p("")

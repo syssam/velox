@@ -3,8 +3,6 @@ package gen
 import (
 	"bytes"
 	"cmp"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -31,14 +29,9 @@ var reserved = map[string]bool{"VeloxMeta": true, "String": true, "GoString": tr
 // Lower does not change g. Two calls with equal Graphs and Configs give equal
 // results.
 func Lower(g *Graph, cfg Config) (*Out, error) {
-	b, err := json.Marshal(g)
-	if err != nil {
-		return nil, err
-	}
-	sum := sha256.Sum256(b)
 	l := &lowerer{
 		g: g, cfg: cfg,
-		out:   &Out{Package: cmp.Or(cfg.Package, "gen"), SchemaPath: cmp.Or(cfg.SchemaPath, g.Package), UserDoc: cfg.UserDoc, Hash: hex.EncodeToString(sum[:])},
+		out:   &Out{Package: cmp.Or(cfg.Package, "gen"), SchemaPath: cmp.Or(cfg.SchemaPath, g.Package), UserDoc: cfg.UserDoc},
 		joins: map[string]*join{},
 	}
 	l.owned = map[string]string{

@@ -5,5 +5,4 @@ package gen
 
 import "github.com/syssam/velox2"
 
-// Model: sha256:b0f97810f28ddc7e0945ce6b568b72d6b3e79599e863cf0b415d40b1b513a464
 const _ = velox.GeneratedCodeIsVersion5
