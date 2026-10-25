@@ -951,3 +951,53 @@ Each is a call made while writing this plan. An implementer who finds one wrong 
 14. **(call) A traced plugin stack travels in `Response.Error`'s later lines.** velox-gen prints each line through `oneLine`, as it already prints a failed plugin's stderr. No protocol field is added.
 15. **(call) `writeAll` moves to `writeall.go` and takes the files to remove.** Removals are set aside before any write. That is what makes a case-only rename work on a case-insensitive file system, which today's remove-then-write order handles.
 16. **(call) Bookkeeping is wave 6's:** G10's resolution, the graphql design spec's superseded note on `childrenIDs`, C13's Snake doc, and the followups file.
+
+## Rulings made during execution (2026-10-25/26)
+
+These rulings were made while the plan ran, after task reviews and the final review. Each says what it costs if wrong.
+
+1. **PostgreSQL 18 NOT NULL constraints.** PostgreSQL 18 names them itself (`<t>_<c>_not_null`). velox neither models nor renames them, as Inspect reads contype p, f, c, u and x only, as Atlas does. So the test helper pgDescribe ignores contype 'n', and migrate/doc.go says so. If wrong: a constraint name that looks stale after a table rename on 18, which causes no drift.
+2. **Go Add/Remove<X>IDs names.** They singularize the edge's declared lowercase name, as ent's `MutationAdd` does: "people" gives `AddPersonIDs`. An edge renamed in GraphQL takes its singular from the rename instead, since gqlgen binds input fields to Go fields case-insensitively. If wrong: a Go name changes for renamed edges.
+3. **SQLite foreign keys.** On SQLite, a key whose only change is its name is no change in Diff, so there is no rebuild. SQLite cannot rename a constraint, and pragma_foreign_key_list cannot see its name. If wrong: a stale key name in sqlite_master, which is invisible.
+4. **Accepted as ent parity:**
+   - On PostgreSQL and MySQL, a table rename renames the foreign keys of the tables that reference it.
+   - Rule 44 refuses a full index and a unique index on the same columns.
+   - A unique field's PostgreSQL name is cut at 63 bytes, the way PostgreSQL cuts it.
+
+   If wrong: a refusal that the user resolves with StorageKey.
+5. **Where velox departs from ent: a field's UNIQUE is never lost.** A declared unique index replaces a field's own unique index only when it is full and on exactly that column. A same-name index over other columns is refused. If wrong: velox refuses a schema ent accepts.
+6. **Bare MySQL decimals.** On MySQL, bare `decimal`, `numeric`, `dec` and `fixed` are checked as `(10,0)`. On PostgreSQL, bare `numeric` stays unchecked. A default written as SchemaDefault SQL is left alone.
+7. **Unexported Go types.** These are refused everywhere, with no exemption for the output package. Generated code always writes a field's type as pkg.T and imports that package. If wrong: nothing, since the exemption could never apply.
+8. **User and plugin .go files are matched independently of the host.** This revises an earlier ruling, which used build.Default and was unsafe.
+   - A file no build includes is skipped. That means `//go:build ignore`, a `_` or `.` name, or `_test.go`.
+   - A file that only some builds include is refused at its line. This covers any other tag, including custom tags like `prod` or `tools`, OS and arch, cgo, `goexperiment.*` and CPU levels.
+   - A go1.N tag counts as met only when it is a release tag (go1.1 or later) no newer than the module's go version.
+
+   Silently skipping a Policy file would be a security hole. If wrong: velox-gen refuses a platform-specific or tagged file in the output directory.
+9. **Emptied directories.** These are set aside whole inside writeAll, not removed after it, so a case-only directory rename works on a case-insensitive file system. If wrong: nothing, because staleFiles marks a directory emptied only when everything in it is being removed.
+10. **Temp names carry a `velox` marker** (`.<name>.tmp-velox-<n>` and similar). The next generate sweeps or restores only those names, so a user's dot-files are never touched. Signals are held while a write runs.
+11. **Join entity names.** The entity is `GoName(Singular(joinTable))` and the handles are `GoName(joinTable)`. So a self many-to-many edge `children` gives `CategoryChild` and `CategoryChildren`. When the singular is the table itself, the handles fall back to `GoPlural(name)`. If wrong: a rename before 1.0.
+12. **Smaller rulings:**
+    - verify exits 130 when interrupted;
+    - the foreign-key index names join the partial-index hash's collision set;
+    - the godocs of `schema.Table` and `field.Unique` state their default names;
+    - the local matrix runs the example tests on PostgreSQL 14;
+    - TestMigrateDiff runs serially, since it swaps global write hooks.
+13. **Process note.** One residual security finding from the final re-review (`!go1.0`) was fixed in a second, one-commit fix pass, 376c889, instead of being parked.
+
+## Left by this plan
+
+- **For Wave 6 (docs and the followups):**
+  - Stale index and constraint names in the migrate spec (:182, :294-295, :432-509, :1091) and the api-cleanup spec (:188).
+  - The migrate spec's lines :544 ("PostgreSQL 12+"), :1144 ("PostgreSQL 16") and :1519 (the varchar(16382) row-limit claim).
+  - A changelog note: C74 now refuses anonymous struct and interface GoTypes, and plugin .go files with constraints like `!windows`.
+- **For after 1.0, all additive:**
+  - Refuse a declared SQLite index named with the reserved `sqlite_` prefix.
+  - Row bytes for `float(M,D)`, `float(p) unsigned` and `point srid N`.
+  - The migrate commands don't yet sweep their own leftovers after a SIGKILL.
+  - An empty directory is left after a sweep that removed only temp files.
+  - The Mixin-line position also maps mixin fields that are called directly from `Fields()`.
+- **Cosmetic:**
+  - Two long comment lines (internal/itest/itest_test.go:4, migrate/render_postgres_test.go:485).
+  - `tempmod.GoFlags` reads GOFLAGS from the environment only.
+  - TestWriteGraphQLRefusesUnresolved could also assert "go list".
