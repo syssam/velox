@@ -15,8 +15,8 @@ type Role string
 
 // The billing roles.
 const (
-	Viewer     Role = "viewer"     // reads sent and paid invoices
-	Accountant Role = "accountant" // reads and writes everything
+	RoleViewer     Role = "viewer"     // reads sent and paid invoices
+	RoleAccountant Role = "accountant" // reads and writes everything
 )
 
 type roleKey struct{}
@@ -35,7 +35,7 @@ func RoleFromContext(ctx context.Context) Role {
 
 // requireAccountant denies a write by anyone but an accountant.
 func requireAccountant(ctx context.Context) error {
-	if RoleFromContext(ctx) != Accountant {
+	if RoleFromContext(ctx) != RoleAccountant {
 		return velox.Deny("only accountants change billing data")
 	}
 	return nil

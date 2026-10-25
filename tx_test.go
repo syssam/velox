@@ -666,3 +666,14 @@ func TestNestedTxRefusesOptions(t *testing.T) {
 		t.Errorf("%v %q", err, e.Log)
 	}
 }
+
+// TestZeroTxOptionPanics: a zero TxOption is not valid, as a zero Option is
+// not; TxRetries, like DB.Tx, panics on it.
+func TestZeroTxOptionPanics(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Error("TxRetries(TxOption{}) did not panic")
+		}
+	}()
+	velox.TxRetries(velox.TxOption{})
+}

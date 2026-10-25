@@ -82,8 +82,7 @@ type Page[E any] struct {
 // is called, and TotalCount the COUNT, once too. So a GraphQL selection of
 // only totalCount runs no page query, and one without it no COUNT.
 //
-// A Connection is made by NewConnection or LoadedConnection, and must not be
-// copied.
+// A Connection is made by NewConnection, and must not be copied.
 type Connection[E any] struct {
 	query velox.Query[E] // the whole list, unordered
 	typ   string         // the GraphQL type of the nodes
@@ -92,9 +91,6 @@ type Connection[E any] struct {
 	terms []OrderTerm[E] // the order's terms, then the key's columns
 	key   int            // the index in terms of the key's first column
 	after *E             // the row the page starts after, in the paging direction
-	// loaded are the rows of a LoadedConnection, which runs no query.
-	loaded   []E
-	isLoaded bool
 	// edge is set by EdgeConnection when the connection is its part of a
 	// batch.
 	edge *edge[E]
@@ -163,20 +159,6 @@ func NewConnection[E any](ctx context.Context, q velox.Query[E], typ string, arg
 	return c, nil
 }
 
-// LoadedConnection is a connection over rows, the related rows a With loaded,
-// in key order (With's default) under the GraphQL type typ: its page is the
-// first rows, the MaxPage of veloxgql.LimitsFromContext(ctx), its cursors are
-// taken under the key's order, and its TotalCount is the number of rows. It
-// runs no query.
-func LoadedConnection[E any](ctx context.Context, rows []E, typ string, key []OrderTerm[E]) *Connection[E] {
-	terms := make([]OrderTerm[E], len(key))
-	for i, t := range key {
-		t.Direction = veloxgql.OrderDirectionAsc
-		terms[i] = t
-	}
-	return &Connection[E]{typ: typ, n: veloxgql.LimitsFromContext(ctx).MaxPage, terms: terms, loaded: rows, isLoaded: true}
-}
-
 // Page returns the connection's page, running its query on the first call:
 //   - The order always ends with the key, so that it is total.
 //   - Paging backward (last or before) reverses every term's direction,
@@ -206,11 +188,6 @@ func (c *Connection[E]) Page[_ velox.Lazy[E]](ctx context.Context) (*Page[E], er
 func (c *Connection[E]) TotalCount[_ velox.Lazy[E]](ctx context.Context) (int, error) {
 	c.countOnce.Do(func() {
 		c.countErr = errPanicked // the other callers' error, when the count panics
-		if c.isLoaded {
-			c.countErr = nil
-			c.count = len(c.loaded)
-			return
-		}
 		if c.edge != nil {
 			c.count, c.countErr = c.edge.count(c.query)
 			return
@@ -223,30 +200,28 @@ func (c *Connection[E]) TotalCount[_ velox.Lazy[E]](ctx context.Context) (int, e
 
 // run reads the page.
 func (c *Connection[E]) run[_ velox.Lazy[E]](ctx context.Context) (*Page[E], error) {
-	rows := c.loaded
-	if !c.isLoaded {
-		orders := make([]velox.Order[E], len(c.terms))
-		for i, t := range c.terms {
-			orders[i] = t.asc
-			if (t.Direction == veloxgql.OrderDirectionDesc) != c.back {
-				orders[i] = t.desc
-			}
+	orders := make([]velox.Order[E], len(c.terms))
+	for i, t := range c.terms {
+		orders[i] = t.asc
+		if (t.Direction == veloxgql.OrderDirectionDesc) != c.back {
+			orders[i] = t.desc
 		}
-		q := c.query.OrderBy(orders...)
-		if c.after != nil {
-			q = q.After(c.after)
-		}
-		var err error
-		if c.edge != nil {
-			rows, err = c.edge.rows(q)
-		} else {
-			// MaxRows: the page is bounded by MaxPage, and the DB's row
-			// cap, which may be below it, must not fail a full page.
-			rows, err = q.Limit(c.n + 1).MaxRows(c.n + 1).All(ctx)
-		}
-		if err != nil {
-			return nil, err
-		}
+	}
+	q := c.query.OrderBy(orders...)
+	if c.after != nil {
+		q = q.After(c.after)
+	}
+	var rows []E
+	var err error
+	if c.edge != nil {
+		rows, err = c.edge.rows(q)
+	} else {
+		// MaxRows: the page is bounded by MaxPage, and the DB's row
+		// cap, which may be below it, must not fail a full page.
+		rows, err = q.Limit(c.n + 1).MaxRows(c.n + 1).All(ctx)
+	}
+	if err != nil {
+		return nil, err
 	}
 	more := len(rows) > c.n
 	if more {

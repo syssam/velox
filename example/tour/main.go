@@ -80,9 +80,9 @@ func run(ctx context.Context, w io.Writer) error {
 	// 1. The context says who is asking: the tenant for velox, the role for
 	// the policy. Middleware would set both.
 	say("\n== 1. Contexts and inserts")
-	acct := gen.WithRole(velox.WithTenant(ctx, acme), gen.Accountant)
-	viewer := gen.WithRole(velox.WithTenant(ctx, acme), gen.Viewer)
-	globexAcct := gen.WithRole(velox.WithTenant(ctx, globex), gen.Accountant)
+	acct := gen.WithRole(velox.WithTenant(ctx, acme), gen.RoleAccountant)
+	viewer := gen.WithRole(velox.WithTenant(ctx, acme), gen.RoleViewer)
+	globexAcct := gen.WithRole(velox.WithTenant(ctx, globex), gen.RoleAccountant)
 
 	// Insert fills OrgID from the context and reads the generated ID back.
 	inv := gen.Invoice{Number: "INV-001", Customer: "Initech", Status: gen.InvoiceStatusSent, TotalCents: 150000}
@@ -290,7 +290,7 @@ func run(ctx context.Context, w io.Writer) error {
 	// 8. WithAllTenants lifts the tenant scope for one context, and requires a
 	// reason. The policy still applies, so the report runs as an accountant.
 	say("\n== 8. WithAllTenants and Raw")
-	report := gen.WithRole(velox.WithAllTenants(ctx, "monthly revenue report"), gen.Accountant)
+	report := gen.WithRole(velox.WithAllTenants(ctx, "monthly revenue report"), gen.RoleAccountant)
 	text, _, err := db.Query[gen.Invoice]().Where(I.Status.NEQ(gen.InvoiceStatusDraft)).Unbounded().SQL(report)
 	if err != nil {
 		return err

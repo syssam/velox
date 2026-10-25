@@ -7,9 +7,8 @@
 // one in the operation's transaction or in one of its own, with no savepoint in
 // the first, the decoding of input IDs, CheckExists, Repointed, Readable,
 // UnlinkAll, Disjoint and NotFound, WriteError and FromJSON), and InputErrorf,
-// the coded error of a client's input. LoadedConnection stays for code
-// generated before the edges batched: the edge methods now written do not call
-// it. An application does not call this package.
+// the coded error of a client's input. An application does not call this
+// package.
 //
 // Compatibility is by veloxgql.GeneratedCodeIsVersion2, which every
 // generated file references, and not by semantic versioning, as protobuf's

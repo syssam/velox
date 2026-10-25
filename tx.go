@@ -13,7 +13,8 @@ import (
 )
 
 // TxOption configures one call of DB.Tx: TxIsolation, TxReadOnly,
-// TxRetrySerializable and TxTimeout.
+// TxRetrySerializable and TxTimeout. The zero TxOption is not valid: TxRetries
+// panics on it, and so does DB.Tx when it begins the transaction.
 type TxOption struct{ apply func(*txOptions) }
 
 // TxIsolation sets the transaction's isolation level; the default is the

@@ -15,7 +15,7 @@ import (
 )
 
 // An Option changes how Up, Status and Resolve run. Each says which of them
-// it applies to; the others ignore it.
+// it applies to; the others ignore it. The zero Option changes nothing.
 type Option struct{ apply func(*options) }
 
 type options struct {

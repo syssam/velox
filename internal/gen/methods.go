@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"go/ast"
+	"go/build/constraint"
 	"go/parser"
 	"go/token"
 	"os"
@@ -75,15 +76,46 @@ func Methods(dir string, entities []string) (map[string]Bound, error) {
 }
 
 // HasPackageDoc reports whether one of the non-test .go files in dir that do
-// not start with velox-gen's header has a package comment. A missing dir is no
-// files.
+// not start with velox-gen's header has a package comment with text, not only
+// directives. A file that //go:build ignore leaves out does not count. A
+// missing dir is no files.
 func HasPackageDoc(dir string) (bool, error) {
 	found := false
 	err := userFiles(dir, parser.PackageClauseOnly|parser.ParseComments, func(_ string, f *ast.File) error {
-		found = found || f.Doc != nil
+		if f.Doc != nil && strings.TrimSpace(f.Doc.Text()) != "" && !buildIgnored(f) {
+			found = true
+		}
 		return nil
 	})
 	return found, err
+}
+
+// buildIgnored reports whether f's //go:build line requires the tag ignore,
+// alone or in a chain of &&, so that no build includes it.
+func buildIgnored(f *ast.File) bool {
+	for _, g := range f.Comments {
+		if g.Pos() >= f.Package {
+			break
+		}
+		for _, c := range g.List {
+			if !constraint.IsGoBuild(c.Text) {
+				continue
+			}
+			x, err := constraint.Parse(c.Text)
+			return err == nil && needsIgnore(x)
+		}
+	}
+	return false
+}
+
+func needsIgnore(x constraint.Expr) bool {
+	switch x := x.(type) {
+	case *constraint.TagExpr:
+		return x.Tag == "ignore"
+	case *constraint.AndExpr:
+		return needsIgnore(x.X) || needsIgnore(x.Y)
+	}
+	return false
 }
 
 // userFiles parses, with mode, each non-test .go file in dir that does not

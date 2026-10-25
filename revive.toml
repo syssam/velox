@@ -1,6 +1,7 @@
-# revive's rules from .golangci.yml, for the code velox-gen writes into the
-# example: golangci-lint's revive always skips files with a generated header,
-# so CI runs revive on them itself. ignoreGeneratedHeader lints those files.
+# revive's rules from .golangci.yml, for the code velox-gen writes:
+# golangci-lint's revive always skips files with a generated header, so CI runs
+# revive on them itself. ignoreGeneratedHeader lints those files. The rules
+# must mirror .golangci.yml's revive section; TestReviveConfigsAgree checks it.
 ignoreGeneratedHeader = true
 severity = "warning"
 

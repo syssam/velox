@@ -108,7 +108,8 @@ The controller made every call below (the user said "do it"). Each call follows 
    - the twins `ColumnInfo`/`ColumnDesc` and `EntityInfo`/`Desc`: the info types are runtime views, the desc types generated input;
    - `One.Get` and `Many.Get`, the holder idiom;
    - schema/edge's ent-style storage options;
-   - `veloxotel.Options`, `Dir.PathOf`, `ColumnEQ` and the `graphql` package name.
+   - `veloxotel.Options`, `Dir.PathOf`, `ColumnEQ` and the `graphql` package name;
+   - the enum constants without their type's full name, which are ent's and entgql's forms: `velox.Postgres`, `MySQL` and `SQLite` (`Dialect`, as ent's `dialect.Postgres`), schema/edge's `Cascade`, `SetNull` and `Restrict` (`Action`, as entsql's `Cascade`), and contrib/graphql's `Op*` (`WhereOp`, entgql's abbreviated prefix). They read as `velox.Postgres` and `edge.Cascade`, as `migrate.Safe` does; the prefix rule of ruling 4 does not apply to them. (Added after the final review.)
 6. **The zero value of `veloxgql.Option` behaves as velox's does.** Use whichever velox does, and state it in the godoc.
 7. **Godoc tests.** godoc_test.go and veloxgql/api_test.go, which now require "For generated code." first, are changed to require it after the first sentence. gqlimpl's "For generated code only." becomes "For generated code.". godoc_test gains a check that every exported method has a doc comment, `Error`, `String` and `Unwrap` included, because revive skips those.
 8. **Package doc.** The rule written in velox's package doc names the four Tx constructors.

@@ -384,20 +384,6 @@ func TestConnectionIsLazy(t *testing.T) {
 	}
 }
 
-// TestLoadedConnection: a connection over rows a With loaded runs no query.
-func TestLoadedConnection(t *testing.T) {
-	ctx := veloxgql.NewExtension(&velox.DB{}, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).NewContext(context.Background())
-	rows := []person{{ID: 1, Name: "c"}, {ID: 2, Name: "a"}, {ID: 3, Name: "b"}}
-	c := gqlimpl.LoadedConnection(ctx, rows, "Person", personKey())
-	p, err := c.Page(ctx)
-	if err != nil || !slices.Equal(ids(p.Rows), []int64{1, 2}) || !p.Info.HasNextPage || p.Info.HasPreviousPage || p.Cursors[1].Key != int64(2) {
-		t.Errorf("page %v %+v", err, p)
-	}
-	if n, err := c.TotalCount(ctx); err != nil || n != 3 {
-		t.Errorf("TotalCount = %d, %v, want 3", n, err)
-	}
-}
-
 // TestPaginateUnderTheRowCap: a full page is read whatever the DB's row cap,
 // which may be at or below MaxPage: MaxPage bounds the page query.
 func TestPaginateUnderTheRowCap(t *testing.T) {
@@ -489,14 +475,6 @@ func TestConnectionWithoutExtension(t *testing.T) {
 		t.Errorf("first 101 under context.Background(): %v, want ErrPageTooLarge", err)
 	}
 
-	rows, err := db.Query[person]().OrderBy(people.ID.Asc()).Unbounded().All(ctx)
-	if err != nil || len(rows) != 150 {
-		t.Fatalf("the rows: %d, %v", len(rows), err)
-	}
-	lp, err := gqlimpl.LoadedConnection(ctx, rows, "Person", personKey()).Page(ctx)
-	if err != nil || len(lp.Rows) != 100 || !lp.Info.HasNextPage {
-		t.Fatalf("LoadedConnection under context.Background(): %v, %d rows, %+v; want 100 and a next page", err, len(lp.Rows), lp.Info)
-	}
 }
 
 // TestPaginateClearsOffset: a base query's Offset is the application's, not

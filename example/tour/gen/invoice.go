@@ -16,9 +16,9 @@ func (*Invoice) Policy() velox.Policy[Invoice] {
 		// only the ones that were sent.
 		Read: func(ctx context.Context) (velox.Pred[Invoice], error) {
 			switch RoleFromContext(ctx) {
-			case Accountant:
+			case RoleAccountant:
 				return velox.Allow[Invoice](), nil
-			case Viewer:
+			case RoleViewer:
 				return Invoices.Status.NEQ(InvoiceStatusDraft), nil
 			}
 			return velox.Pred[Invoice]{}, velox.Deny("no billing role")

@@ -285,7 +285,6 @@
 // arguments of the field. They do not read the row's With load (x.Posts):
 // an application's With may hold a page its own query chose, which is not the
 // edge. A With is not needed for batching, and the edge methods ignore it.
-// gqlimpl.LoadedConnection stays for code generated before.
 //
 // A page, a node and an edge's nodes read only the columns their selection
 // needs: the selected fields', the key, every foreign key on the row, the

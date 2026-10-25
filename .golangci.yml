@@ -14,6 +14,8 @@ linters:
       # ST1000 is revive's package-comments.
       checks: ["all", "-ST1000"]
     revive:
+      # revive.toml must mirror these rules: CI runs revive with it on generated
+      # code, which golangci-lint's revive skips. TestReviveConfigsAgree checks it.
       rules:
         - name: var-naming
         - name: exported

@@ -57,13 +57,9 @@ import (
 // order and cursor), and its totalCount with theirs (velox.CountEach), on
 // the first call of either for any row, under the context its
 // EdgeConnection was given; the rows read become a group. Otherwise its
-// queries are c's, filtered by r.Of(x). A LoadedConnection, which runs no
-// query, is returned as it is. A base query with a lock (ForUpdate,
+// queries are c's, filtered by r.Of(x). A base query with a lock (ForUpdate,
 // ForShare) is refused when batched: a per-owner read locks nothing.
 func EdgeConnection[E, T any](ctx context.Context, c *Connection[T], x *E, r velox.Rel[E, T], field string, args any) *Connection[T] {
-	if c.isLoaded {
-		return c
-	}
 	b, owners, i := batchOf(ctx, x, r, field, 0, args)
 	if b == nil {
 		c.query = c.query.Where(r.Of(x))

@@ -58,9 +58,7 @@
 // once, whoever calls it first, and TotalCount the COUNT. The order always
 // ends with the key. Paging is keyset, through velox's Query.After: last and
 // before reverse every term and reverse the rows read, and one row more than
-// the page sets hasNextPage or hasPreviousPage. gqlimpl.LoadedConnection
-// pages rows a With loaded, and runs no query; it is for code generated
-// before edges batched.
+// the page sets hasNextPage or hasPreviousPage.
 //
 // # Batches
 //

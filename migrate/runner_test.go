@@ -971,3 +971,15 @@ func TestUpBaselineConcurrent(t *testing.T) {
 		t.Errorf("history %+v", rows)
 	}
 }
+
+// TestZeroOptionIsIgnored: a zero Option changes nothing.
+func TestZeroOptionIsIgnored(t *testing.T) {
+	db, _ := freshDB(t, velox.SQLite)
+	fsys := dirOf(t, velox.SQLite, files("0001_a.sql", "CREATE TABLE a (x integer);"))
+	if r := mustUp(t, db, fsys, migrate.Option{}); !hasTable(t, db, "a") {
+		t.Errorf("Up with a zero Option: %+v", r)
+	}
+	if s, err := migrate.Status(context.Background(), db, fsys, migrate.Option{}); err != nil || !slices.Equal(versions(s.Applied), []uint64{1}) {
+		t.Errorf("Status with a zero Option: %+v, %v", s, err)
+	}
+}

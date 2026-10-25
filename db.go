@@ -68,7 +68,8 @@ type config struct {
 	shardFor func(ctx context.Context, tenant any) (string, error)
 }
 
-// Option configures a DB's pipeline. The With functions make them.
+// Option configures a DB's pipeline. The With functions make them; the zero
+// Option is not valid, and Open, OpenPgx and OpenShards panic on it.
 type Option struct{ apply func(*config) }
 
 // WithRewrite adds a rewrite hook. Rewrite hooks run in the order given. A
