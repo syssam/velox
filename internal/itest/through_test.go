@@ -36,7 +36,7 @@ func throughSetup(t *testing.T, tg target) {
 }
 
 // bookTags loads every book's tags through rel, by book id.
-func bookTags(t *testing.T, tg target, qctx context.Context, rel velox.Rel[book, tag]) map[int64][]string {
+func bookTags(t *testing.T, qctx context.Context, tg target, rel velox.Rel[book, tag]) map[int64][]string {
 	t.Helper()
 	bs, err := tg.db.Query[book]().With(rel).OrderBy(Books.ID.Asc()).Limit(10).All(qctx)
 	if err != nil {
@@ -67,11 +67,11 @@ func wantTags(t *testing.T, got, want map[int64][]string) {
 func TestThroughWith(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
 		throughSetup(t, tg)
-		wantTags(t, bookTags(t, tg, ctx, Books.Tags), map[int64][]string{1: {"go", "db"}, 2: {"db"}, 3: {}, 4: {"x"}})
-		wantTags(t, bookTags(t, tg, ctx, Books.Tags.OrderBy(Tags.Name.Asc())), map[int64][]string{1: {"db", "go"}, 2: {"db"}, 3: {}, 4: {"x"}})
-		wantTags(t, bookTags(t, tg, ctx, Books.Tags.Where(Tags.Name.NEQ("go"))), map[int64][]string{1: {"db"}, 2: {"db"}, 3: {}, 4: {"x"}})
+		wantTags(t, bookTags(t, ctx, tg, Books.Tags), map[int64][]string{1: {"go", "db"}, 2: {"db"}, 3: {}, 4: {"x"}})
+		wantTags(t, bookTags(t, ctx, tg, Books.Tags.OrderBy(Tags.Name.Asc())), map[int64][]string{1: {"db", "go"}, 2: {"db"}, 3: {}, 4: {"x"}})
+		wantTags(t, bookTags(t, ctx, tg, Books.Tags.Where(Tags.Name.NEQ("go"))), map[int64][]string{1: {"db"}, 2: {"db"}, 3: {}, 4: {"x"}})
 		// Org 1 sees none of book 4's tags: the target's tenant applies.
-		wantTags(t, bookTags(t, tg, velox.WithTenant(ctx, int64(1)), Books.Tags), map[int64][]string{1: {"go", "db"}, 2: {"db"}, 3: {}, 4: {}})
+		wantTags(t, bookTags(t, velox.WithTenant(ctx, int64(1)), tg, Books.Tags), map[int64][]string{1: {"go", "db"}, 2: {"db"}, 3: {}, 4: {}})
 
 		// Nested: each tag's books, through the join the other way.
 		bs, err := tg.db.Query[book]().Where(Books.ID.EQ(1)).With(Books.Tags.With(Tags.Books.OrderBy(Books.ID.Desc()))).Limit(1).All(ctx)
@@ -97,7 +97,7 @@ func TestThroughWith(t *testing.T) {
 		if err != nil || n != 1 {
 			t.Fatalf("delete %d, %v", n, err)
 		}
-		wantTags(t, bookTags(t, tg, ctx, Books.Tags), map[int64][]string{1: {"go"}, 2: {"db"}, 3: {}, 4: {"x"}})
+		wantTags(t, bookTags(t, ctx, tg, Books.Tags), map[int64][]string{1: {"go"}, 2: {"db"}, 3: {}, 4: {"x"}})
 	})
 }
 
@@ -154,7 +154,7 @@ func TestOfThroughOnRealDatabases(t *testing.T) {
 			return names
 		}
 		for _, qctx := range []context.Context{ctx, velox.WithTenant(ctx, int64(1))} {
-			loaded := bookTags(t, tg, qctx, Books.Tags)
+			loaded := bookTags(t, qctx, tg, Books.Tags)
 			for id := int64(1); id <= 4; id++ {
 				wantStrings(t, tagNames(qctx, &book{ID: id}), loaded[id])
 			}

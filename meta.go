@@ -43,9 +43,9 @@ type policy struct {
 }
 
 // Column returns the index of the column with the given name.
-func (e *EntityInfo) Column(name string) (int, bool) {
-	for i := range e.Columns {
-		if e.Columns[i].Name == name {
+func (in *EntityInfo) Column(name string) (int, bool) {
+	for i := range in.Columns {
+		if in.Columns[i].Name == name {
 			return i, true
 		}
 	}

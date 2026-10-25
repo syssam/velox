@@ -130,7 +130,7 @@ func TestRouteTable(t *testing.T) {
 			s := openReplicas(hooked)
 			s.p.Results = [][][]any{{invoiceRow(1)}, {invoiceRow(1)}, {{int64(1)}}, {invoiceRow(1)}}
 			pctx := velox.WithPrimaryReads(ctx)
-			readAll(t, s.db, pctx)
+			readAll(t, pctx, s.db)
 			s.check(t, hooked, [3]int{4, 0, 0}, onPrimary, onPrimary, onPrimary, onPrimary)
 		})
 	})
@@ -139,14 +139,14 @@ func TestRouteTable(t *testing.T) {
 			s := openReplicas(hooked)
 			s.r0.Results = [][][]any{{invoiceRow(1)}, {{int64(1)}}}    // All, Count
 			s.r1.Results = [][][]any{{invoiceRow(1)}, {invoiceRow(1)}} // One, Iter
-			readAll(t, s.db, ctx)
+			readAll(t, ctx, s.db)
 			s.check(t, hooked, [3]int{0, 2, 2}, onR0, onR1, onR0, onR1)
 		})
 	})
 }
 
 // readAll runs All, One, Count and Iter, in that order.
-func readAll(t *testing.T, db *velox.DB, ctx context.Context) {
+func readAll(t *testing.T, ctx context.Context, db *velox.DB) {
 	t.Helper()
 	q := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1)
 	if _, err := q.All(ctx); err != nil {
@@ -219,7 +219,7 @@ func TestNoReplicasIsTheOldPath(t *testing.T) {
 			}))
 		}
 		db := velox.OpenFake(velox.Postgres, e, opts...)
-		readAll(t, db, ctx)
+		readAll(t, ctx, db)
 		if _, err := db.Update[testmodel.Invoice]().Set(I.Paid.Set(true)).Where(I.ID.EQ(1)).Exec(ctx); err != nil {
 			t.Fatal(err)
 		}

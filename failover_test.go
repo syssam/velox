@@ -99,18 +99,18 @@ func refusedConnectError(t *testing.T, code string) error {
 	return fmt.Errorf("acquire: %w", err)
 }
 
-// safeToRetry is an error pgx marks as raised before anything was sent.
-type safeToRetry struct{}
+// safeToRetryError is an error pgx marks as raised before anything was sent.
+type safeToRetryError struct{}
 
-func (safeToRetry) Error() string     { return "failed to write startup message" }
-func (safeToRetry) SafeToRetry() bool { return true }
+func (safeToRetryError) Error() string     { return "failed to write startup message" }
+func (safeToRetryError) SafeToRetry() bool { return true }
 
-// netTimeout is a net.Error that is a timeout, not from a dial.
-type netTimeout struct{}
+// netTimeoutError is a net.Error that is a timeout, not from a dial.
+type netTimeoutError struct{}
 
-func (netTimeout) Error() string   { return "read: i/o timeout" }
-func (netTimeout) Timeout() bool   { return true }
-func (netTimeout) Temporary() bool { return true }
+func (netTimeoutError) Error() string   { return "read: i/o timeout" }
+func (netTimeoutError) Timeout() bool   { return true }
+func (netTimeoutError) Temporary() bool { return true }
 
 // mysqlErr returns a class that is a real driver error with number n.
 func mysqlErr(n uint16, msg string) func(*testing.T) error {
@@ -141,7 +141,7 @@ func TestFailoverClasses(t *testing.T) {
 		"PgError 57P02":         func(*testing.T) error { return &pgconn.PgError{Severity: "FATAL", Code: "57P02"} },
 		"PgError 57P03":         func(*testing.T) error { return &pgconn.PgError{Severity: "FATAL", Code: "57P03"} },
 		"mysql.ErrInvalidConn":  func(*testing.T) error { return fmt.Errorf("query: %w", mysql.ErrInvalidConn) },
-		"pgconn.SafeToRetry":    func(*testing.T) error { return fmt.Errorf("send: %w", safeToRetry{}) },
+		"pgconn.SafeToRetry":    func(*testing.T) error { return fmt.Errorf("send: %w", safeToRetryError{}) },
 		"a pgconn.ConnectError": connectError,
 		"a pgconn.ConnectError wrapping PgError 53300": func(t *testing.T) error {
 			return refusedConnectError(t, "53300")
@@ -168,7 +168,7 @@ func TestFailoverClasses(t *testing.T) {
 				s := openFailover(hooked)
 				s.r0.Errs = []error{err}
 				for range 3 {
-					readOne(t, s.db, ctx)
+					readOne(t, ctx, s.db)
 				}
 				// replica 0 fails and the primary serves the read; then
 				// replica 1, and replica 1 again in replica 0's turn.
@@ -194,7 +194,7 @@ func TestNoFailoverOnQueryErrors(t *testing.T) {
 		errors.New("something else"),
 		// a net timeout that is not a dial's: maybe a slow query
 		&net.OpError{Op: "read", Net: "tcp", Err: os.ErrDeadlineExceeded},
-		fmt.Errorf("read: %w", netTimeout{}),
+		fmt.Errorf("read: %w", netTimeoutError{}),
 	} {
 		t.Run(qerr.Error(), func(t *testing.T) {
 			bothPaths(t, func(t *testing.T, hooked bool) {
@@ -204,8 +204,8 @@ func TestNoFailoverOnQueryErrors(t *testing.T) {
 				if !errors.Is(err, qerr) {
 					t.Fatalf("got %v, want %v", err, qerr)
 				}
-				readOne(t, s.db, ctx)
-				readOne(t, s.db, ctx)
+				readOne(t, ctx, s.db)
+				readOne(t, ctx, s.db)
 				s.check(t, hooked, [3]int{0, 2, 1}, onR0, onR1, onR0)
 				if d := velox.ReplicaDownUntil(s.db, 0); !d.IsZero() {
 					t.Errorf("replica 0 is in back-off until %v", d)
@@ -268,17 +268,17 @@ func TestBackoffExpires(t *testing.T) {
 		s := openFailover(hooked, velox.WithReplicaBackoff(time.Minute))
 		s.r0.Errs = []error{driver.ErrBadConn}
 		before := time.Now()
-		readOne(t, s.db, ctx) // replica 0 fails
+		readOne(t, ctx, s.db) // replica 0 fails
 		after := time.Now()
 		if d := velox.ReplicaDownUntil(s.db, 0); d.Before(before.Add(time.Minute)) || d.After(after.Add(time.Minute)) {
 			t.Errorf("replica 0 is in back-off until %v, want a minute from the read", d)
 		}
-		readOne(t, s.db, ctx) // replica 1
-		readOne(t, s.db, ctx) // replica 0's turn, skipped: replica 1
+		readOne(t, ctx, s.db) // replica 1
+		readOne(t, ctx, s.db) // replica 0's turn, skipped: replica 1
 		// End the back-off, rather than wait for it.
 		velox.SetReplicaDown(s.db, 0, time.Now().Add(-time.Millisecond))
-		readOne(t, s.db, ctx) // replica 1's turn
-		readOne(t, s.db, ctx) // replica 0's, and it is back
+		readOne(t, ctx, s.db) // replica 1's turn
+		readOne(t, ctx, s.db) // replica 0's, and it is back
 		s.check(t, hooked, [3]int{1, 2, 3}, fellOver, onR1, onR1, onR1, onR0)
 		if d := velox.ReplicaDownUntil(s.db, 0); !d.IsZero() {
 			t.Errorf("replica 0's ended back-off is still recorded, until %v", d)
@@ -293,7 +293,7 @@ func TestAllReplicasDown(t *testing.T) {
 		s := openFailover(hooked)
 		s.r0.Err, s.r1.Err = driver.ErrBadConn, driver.ErrBadConn
 		for range 4 {
-			readOne(t, s.db, ctx)
+			readOne(t, ctx, s.db)
 		}
 		s.check(t, hooked, [3]int{4, 1, 1}, fellOver, fellOver, onPrimary, onPrimary)
 	})
@@ -429,8 +429,8 @@ func TestRowsErrorFallsOver(t *testing.T) {
 			s.check(t, hooked, [3]int{0, 1, 0}, onR0)
 			// Replica 0 is still in rotation: it serves its next turn.
 			s.r0.Rows, s.r0.RowsErr = [][]any{invoiceRow(1)}, nil
-			readOne(t, s.db, ctx) // replica 1
-			readOne(t, s.db, ctx) // replica 0
+			readOne(t, ctx, s.db) // replica 1
+			readOne(t, ctx, s.db) // replica 0
 			s.check(t, hooked, [3]int{0, 2, 1}, onR0, onR1, onR0)
 		})
 	})
@@ -522,7 +522,7 @@ func TestAroundRetryAfterFallbackStaysOnThePrimary(t *testing.T) {
 		return err
 	}))
 	s.r0.Errs, s.p.Errs = []error{driver.ErrBadConn}, []error{errors.New("primary hiccup")}
-	readOne(t, s.db, ctx)
+	readOne(t, ctx, s.db)
 	s.check(t, false, [3]int{2, 1, 0})
 	if len(routes) != 1 || routes[0] != fellOver {
 		t.Errorf("routes %+v, want one fallback", routes)
@@ -540,7 +540,7 @@ func TestDownReplicaTurnsSpreadEvenly(t *testing.T) {
 	db := velox.OpenFake(velox.Postgres, p, velox.WithReplicas(velox.FakeConn(rs[0]), velox.FakeConn(rs[1]), velox.FakeConn(rs[2])))
 	velox.SetReplicaDown(db, 1, time.Now().Add(time.Hour))
 	for range 60 {
-		readOne(t, db, ctx)
+		readOne(t, ctx, db)
 	}
 	if got := [4]int{p.Calls, rs[0].Calls, rs[1].Calls, rs[2].Calls}; got != [4]int{0, 30, 0, 30} {
 		t.Errorf("calls (primary, replicas 0, 1, 2) %v, want [0 30 0 30]", got)
@@ -552,7 +552,7 @@ func TestDownReplicaTurnsSpreadEvenly(t *testing.T) {
 func TestEndedBackoffIsCleared(t *testing.T) {
 	s := openFailover(false)
 	velox.SetReplicaDown(s.db, 0, time.Now().Add(-time.Second))
-	readOne(t, s.db, ctx)
+	readOne(t, ctx, s.db)
 	if d := velox.ReplicaDownUntil(s.db, 0); !d.IsZero() {
 		t.Errorf("replica 0's ended back-off is still recorded, until %v", d)
 	}

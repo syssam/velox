@@ -90,7 +90,7 @@ var (
 
 // shardWork runs, under sctx, a read of invoices and one of items, an
 // update of items and an insert of an invoice: Item has no tenant column.
-func shardWork(t *testing.T, db *velox.DB, sctx context.Context) {
+func shardWork(t *testing.T, sctx context.Context, db *velox.DB) {
 	t.Helper()
 	if _, err := db.Query[testmodel.Invoice]().Limit(1).All(sctx); err != nil {
 		t.Fatal(err)
@@ -113,12 +113,12 @@ func TestShardFromTenant(t *testing.T) {
 		s := openShards(hooked)
 		s.euR.Results = [][][]any{{invoiceRow(1)}, {itemRow(1, 1, "A", 1)}}
 		s.euP.Rows = [][]any{{int64(42)}} // the key the insert reads back
-		shardWork(t, s.db, velox.WithTenant(bg, int64(1)))
+		shardWork(t, velox.WithTenant(bg, int64(1)), s.db)
 		s.check(t, hooked, [3]int{2, 2, 0}, euR0, euR0, euPrimary, euPrimary)
 
 		s = openShards(hooked)
 		s.usP.Results = [][][]any{{invoiceRow(1)}, {itemRow(1, 1, "A", 1)}, {{int64(42)}}}
-		shardWork(t, s.db, velox.WithTenant(bg, int64(2)))
+		shardWork(t, velox.WithTenant(bg, int64(2)), s.db)
 		s.check(t, hooked, [3]int{0, 0, 4}, usPrimary, usPrimary, usPrimary, usPrimary)
 	})
 }
@@ -371,7 +371,7 @@ func TestDryRunIsRouted(t *testing.T) {
 		t.Fatalf("SQL with a tenant: %q, %v", text, err)
 	}
 	st := velox.Statement{Op: velox.OpSelect, Entity: velox.InfoOf[testmodel.Item](), Limit: 1}
-	if _, _, err := velox.DryRun(s.db, tctx, &st); err != nil {
+	if _, _, err := velox.DryRun(tctx, s.db, &st); err != nil {
 		t.Fatal(err)
 	}
 	s.euR.Rows = [][]any{itemRow(1, 1, "A", 1)}

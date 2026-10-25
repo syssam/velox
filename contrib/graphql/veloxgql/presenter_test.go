@@ -155,16 +155,16 @@ type presented struct {
 	Extensions map[string]any `json:"extensions"`
 }
 
-// appCoded is an application's coded error, with the code APP, which may
+// appCodedError is an application's coded error, with the code APP, which may
 // wrap an error the client is not shown.
-type appCoded struct {
+type appCodedError struct {
 	msg string
 	err error
 }
 
-func (e *appCoded) Error() string              { return e.msg }
-func (e *appCoded) Unwrap() error              { return e.err }
-func (e *appCoded) Extensions() map[string]any { return map[string]any{"code": "APP"} }
+func (e *appCodedError) Error() string              { return e.msg }
+func (e *appCodedError) Unwrap() error              { return e.err }
+func (e *appCodedError) Extensions() map[string]any { return map[string]any{"code": "APP"} }
 
 // logged records what an ErrorPresenter logs.
 type logged struct {
@@ -227,9 +227,9 @@ func TestErrorPresenter(t *testing.T) {
 		{"gqlerror over a coded error", gqlerror.WrapPath(path, codedBadID), "BAD_USER_INPUT", "User ID: malformed ID: not canonical base64url without padding", `["posts",0,"author"]`, false},
 		{"join", errors.Join(codedBadID, driverErr), "BAD_USER_INPUT", "User ID: malformed ID: not canonical base64url without padding", `["node"]`, true},
 		{"join, driver first", errors.Join(driverErr, codedBadID), "BAD_USER_INPUT", "User ID: malformed ID: not canonical base64url without padding", `["node"]`, true},
-		{"an application's coded error over a driver error", gqlerror.WrapPath(path, &appCoded{msg: "app says no", err: driverErr}), "APP", "app says no", `["posts",0,"author"]`, true},
+		{"an application's coded error over a driver error", gqlerror.WrapPath(path, &appCodedError{msg: "app says no", err: driverErr}), "APP", "app says no", `["posts",0,"author"]`, true},
 		{"a gqlerror with an application code over a driver error", &gqlerror.Error{Message: "app says no", Path: path, Extensions: map[string]any{"code": "APP"}, Err: driverErr}, "INTERNAL_SERVER_ERROR", "internal error", `["posts",0,"author"]`, true},
-		{"an application's coded error alone", &appCoded{msg: "app says no"}, "APP", "app says no", `["node"]`, false},
+		{"an application's coded error alone", &appCodedError{msg: "app says no"}, "APP", "app says no", `["node"]`, false},
 		{"coded over two sentinels", gqlerror.WrapPath(path, gqlimpl.InputErrorf("User cursor: %w: the key is an %w", veloxgql.ErrBadCursor, veloxgql.ErrWrongIDType)), "BAD_USER_INPUT", "User cursor: malformed cursor: the key is an ID of another type", `["posts",0,"author"]`, false},
 		{"int8 overflow", gqlerror.WrapPath(path, int8Err), "BAD_USER_INPUT", "300 overflows signed 8-bit integer", `["posts",0,"author"]`, false},
 		{"uint16 overflow", uint16Err, "BAD_USER_INPUT", "70000 overflows unsigned 16-bit integer", `["node"]`, false},

@@ -26,14 +26,14 @@ func seeded(hooked bool, opts ...velox.Option) *replicaSet {
 }
 
 // writeOne makes a write that returns no rows.
-func writeOne(t *testing.T, db *velox.DB, ctx context.Context) {
+func writeOne(t *testing.T, ctx context.Context, db *velox.DB) {
 	t.Helper()
 	if _, err := db.Update[testmodel.Invoice]().Set(I.Paid.Set(true)).Where(I.ID.EQ(1)).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func readOne(t *testing.T, db *velox.DB, ctx context.Context) {
+func readOne(t *testing.T, ctx context.Context, db *velox.DB) {
 	t.Helper()
 	if _, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).One(ctx); err != nil {
 		t.Fatal(err)
@@ -46,18 +46,18 @@ func TestPinAfterWrite(t *testing.T) {
 		sctx := velox.WithSession(ctx)
 		// The insert reads its key back; then two reads on the primary.
 		s.p.Results = [][][]any{{{int64(42)}}, {invoiceRow(1)}, {invoiceRow(1)}}
-		readOne(t, s.db, sctx) // before any write: a replica
+		readOne(t, sctx, s.db) // before any write: a replica
 		inv := testmodel.Invoice{OrgID: 1, Number: "N"}
 		if err := s.db.Insert(&inv).Exec(sctx); err != nil {
 			t.Fatal(err)
 		}
-		readOne(t, s.db, sctx)
-		readOne(t, s.db, sctx)
+		readOne(t, sctx, s.db)
+		readOne(t, sctx, s.db)
 		// replica 0, then the write, then two pinned reads
 		s.check(t, hooked, [3]int{3, 1, 0}, onR0, onPrimary, onPrimary, onPrimary)
 
 		time.Sleep(60 * time.Millisecond)
-		readOne(t, s.db, sctx)
+		readOne(t, sctx, s.db)
 		s.check(t, hooked, [3]int{3, 1, 1}, onR0, onPrimary, onPrimary, onPrimary, onR1)
 	})
 }
@@ -66,7 +66,7 @@ func TestDefaultPinWindow(t *testing.T) {
 	s := seeded(false)
 	sctx := velox.WithSession(ctx)
 	before := time.Now()
-	writeOne(t, s.db, sctx)
+	writeOne(t, sctx, s.db)
 	until := velox.PinnedUntil(sctx)
 	if d := until.Sub(before); d < 2*time.Second || d > 3*time.Second {
 		t.Errorf("a write pins for %v, want the default 2s", d)
@@ -83,7 +83,7 @@ func TestFailedWriteDoesNotPin(t *testing.T) {
 			t.Fatal("the insert should fail")
 		}
 		s.p.Err = nil
-		readOne(t, s.db, sctx)
+		readOne(t, sctx, s.db)
 		s.check(t, hooked, [3]int{1, 1, 0}, onPrimary, onR0)
 		if u := velox.PinnedUntil(sctx); !u.IsZero() {
 			t.Errorf("PinnedUntil %v after a failed write, want zero", u)
@@ -94,8 +94,8 @@ func TestFailedWriteDoesNotPin(t *testing.T) {
 func TestNoSessionNoPin(t *testing.T) {
 	bothPaths(t, func(t *testing.T, hooked bool) {
 		s := seeded(hooked)
-		writeOne(t, s.db, ctx)
-		readOne(t, s.db, ctx)
+		writeOne(t, ctx, s.db)
+		readOne(t, ctx, s.db)
 		s.check(t, hooked, [3]int{1, 1, 0}, onPrimary, onR0)
 	})
 }
@@ -105,10 +105,10 @@ func TestNoSessionNoPin(t *testing.T) {
 func TestSessionsAreIndependent(t *testing.T) {
 	s := seeded(true)
 	a, b := velox.WithSession(ctx), velox.WithSession(ctx)
-	writeOne(t, s.db, a)
-	readOne(t, s.db, a)
-	readOne(t, s.db, b)
-	readOne(t, s.db, ctx)
+	writeOne(t, a, s.db)
+	readOne(t, a, s.db)
+	readOne(t, b, s.db)
+	readOne(t, ctx, s.db)
 	s.check(t, true, [3]int{2, 1, 1}, onPrimary, onPrimary, onR0, onR1)
 }
 
@@ -116,12 +116,12 @@ func TestSessionsAreIndependent(t *testing.T) {
 func TestSessionAndPrimaryMarksCompose(t *testing.T) {
 	s := seeded(true)
 	sctx := velox.WithPrimaryReads(velox.WithSession(ctx))
-	writeOne(t, s.db, sctx)
+	writeOne(t, sctx, s.db)
 	if u := velox.PinnedUntil(sctx); u.IsZero() {
 		t.Error("the session under Primary is lost")
 	}
 	pctx := velox.WithSession(velox.WithPrimaryReads(ctx))
-	readOne(t, s.db, pctx)
+	readOne(t, pctx, s.db)
 	s.check(t, true, [3]int{2, 0, 0}, onPrimary, onPrimary)
 }
 
@@ -137,7 +137,7 @@ func TestTxCommitPins(t *testing.T) {
 			if err := s.db.Tx(sctx, update); err != nil {
 				t.Fatal(err)
 			}
-			readOne(t, s.db, sctx)
+			readOne(t, sctx, s.db)
 			s.check(t, hooked, [3]int{2, 0, 0}, onPrimary, onPrimary)
 		})
 	})
@@ -155,7 +155,7 @@ func TestTxCommitPins(t *testing.T) {
 			if !errors.Is(err, boom) {
 				t.Fatalf("Tx returned %v", err)
 			}
-			readOne(t, s.db, sctx)
+			readOne(t, sctx, s.db)
 			s.check(t, hooked, [3]int{1, 1, 0}, onPrimary, onR0)
 		})
 	})
@@ -166,7 +166,7 @@ func TestTxCommitPins(t *testing.T) {
 		if err := s.db.Tx(sctx, update); err == nil {
 			t.Fatal("the commit should fail")
 		}
-		readOne(t, s.db, sctx)
+		readOne(t, sctx, s.db)
 		if s.r0.Calls != 1 {
 			t.Errorf("the read after a failed commit went to %v, want replica 0", s.calls())
 		}
@@ -182,7 +182,7 @@ func TestTxCommitPins(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			readOne(t, s.db, sctx)
+			readOne(t, sctx, s.db)
 			s.check(t, hooked, [3]int{1, 1, 0}, onPrimary, onR0)
 		})
 	})
@@ -201,7 +201,7 @@ func TestTxCommitPins(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		readOne(t, s.db, sctx)
+		readOne(t, sctx, s.db)
 		if s.r0.Calls != 0 || s.r1.Calls != 0 {
 			t.Errorf("the read went to %v, want the primary", s.calls())
 		}
@@ -213,7 +213,7 @@ func TestTxCommitPins(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		readOne(t, s.db, sctx)
+		readOne(t, sctx, s.db)
 		if s.r0.Calls != 0 || s.r1.Calls != 0 {
 			t.Errorf("the read went to %v, want the primary", s.calls())
 		}
@@ -235,7 +235,7 @@ func TestTxCommitPins(t *testing.T) {
 		if err != nil || attempt != 2 {
 			t.Fatalf("attempt %d, err %v; want the second attempt to commit", attempt, err)
 		}
-		readOne(t, s.db, sctx)
+		readOne(t, sctx, s.db)
 		if s.r0.Calls != 1 {
 			t.Errorf("the read went to %v, want replica 0", s.calls())
 		}
@@ -270,7 +270,7 @@ func TestPinUntil(t *testing.T) {
 			if got := velox.PinnedUntil(sctx); !got.Equal(until) {
 				t.Errorf("PinnedUntil %v, want %v", got, until)
 			}
-			readOne(t, s.db, sctx)
+			readOne(t, sctx, s.db)
 			s.check(t, hooked, [3]int{1, 0, 0}, onPrimary)
 		})
 	})
@@ -278,7 +278,7 @@ func TestPinUntil(t *testing.T) {
 		s := seeded(true)
 		sctx := velox.WithSession(ctx)
 		velox.PinUntil(sctx, time.Now().Add(-time.Hour))
-		readOne(t, s.db, sctx)
+		readOne(t, sctx, s.db)
 		s.check(t, true, [3]int{0, 1, 0}, onR0)
 	})
 	t.Run("never lowers a later pin", func(t *testing.T) {
@@ -291,7 +291,7 @@ func TestPinUntil(t *testing.T) {
 		}
 		// nor does a write
 		s := seeded(false)
-		writeOne(t, s.db, sctx)
+		writeOne(t, sctx, s.db)
 		if got := velox.PinnedUntil(sctx); !got.Equal(late) {
 			t.Errorf("PinnedUntil %v after a write, want %v", got, late)
 		}
@@ -299,7 +299,7 @@ func TestPinUntil(t *testing.T) {
 	t.Run("raises an earlier one", func(t *testing.T) {
 		s := seeded(false)
 		sctx := velox.WithSession(ctx)
-		writeOne(t, s.db, sctx)
+		writeOne(t, sctx, s.db)
 		first := velox.PinnedUntil(sctx)
 		later := first.Add(time.Hour)
 		velox.PinUntil(sctx, later)
@@ -313,7 +313,7 @@ func TestPinUntil(t *testing.T) {
 		if got := velox.PinnedUntil(ctx); !got.IsZero() {
 			t.Errorf("PinnedUntil %v on a context without a session, want zero", got)
 		}
-		readOne(t, s.db, ctx)
+		readOne(t, ctx, s.db)
 		s.check(t, true, [3]int{0, 1, 0}, onR0)
 	})
 	t.Run("a time past int64's nanoseconds pins, not wraps", func(t *testing.T) {
@@ -325,7 +325,7 @@ func TestPinUntil(t *testing.T) {
 				if got := velox.PinnedUntil(sctx); got.Before(time.Date(2262, 1, 1, 0, 0, 0, 0, time.UTC)) {
 					t.Errorf("PinUntil(%v): PinnedUntil %v", far, got)
 				}
-				readOne(t, s.db, sctx)
+				readOne(t, sctx, s.db)
 				s.check(t, hooked, [3]int{1, 0, 0}, onPrimary)
 			}
 		})
@@ -453,7 +453,7 @@ func TestTxAroundPins(t *testing.T) {
 		if velox.PinnedUntil(sctx).IsZero() {
 			t.Error("the session of the context given to Tx was not pinned")
 		}
-		readOne(t, s.db, sctx)
+		readOne(t, sctx, s.db)
 		if s.r0.Calls != 0 || s.r1.Calls != 0 {
 			t.Errorf("the read went to %v, want the primary", s.calls())
 		}

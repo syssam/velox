@@ -318,7 +318,7 @@ func TestJSONWrites(t *testing.T) {
 	t.Run("AddRefused", func(t *testing.T) {
 		db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Affected: 1})
 		st := &velox.Statement{Op: velox.OpUpdate, Entity: velox.InfoOf[jDoc](), Set: []velox.Assignment{{Column: 2, Op: velox.AssignAdd, Value: 1}}, AllRows: true}
-		if _, _, err := velox.DryRun(db, ctx, st); err == nil || !strings.Contains(err.Error(), "tags") || !strings.Contains(err.Error(), "an encoded column") {
+		if _, _, err := velox.DryRun(ctx, db, st); err == nil || !strings.Contains(err.Error(), "tags") || !strings.Contains(err.Error(), "an encoded column") {
 			t.Fatalf("Add on a JSON column: %v", err)
 		}
 	})
@@ -704,13 +704,13 @@ func TestCodecFlagWithoutCodec(t *testing.T) {
 	in.Columns = slices.Clone(in.Columns)
 	in.Columns[1].Codec = true // owner_id: no Encode or Decode
 	st := &velox.Statement{Op: velox.OpUpdate, Entity: &in, Set: []velox.Assignment{{Column: 1, Op: velox.AssignSet, Value: int64(7)}}, AllRows: true}
-	_, _, err := velox.DryRun(db, ctx, st)
+	_, _, err := velox.DryRun(ctx, db, st)
 	if err == nil || !strings.Contains(err.Error(), "owner_id") || !strings.Contains(err.Error(), "no Encode and Decode") {
 		t.Fatalf("got %v, want an error naming the column and the missing codec", err)
 	}
 	// An untyped nil binds NULL, in a column that is not nullable too.
 	st = &velox.Statement{Op: velox.OpUpdate, Entity: velox.InfoOf[jDoc](), Set: []velox.Assignment{{Column: 2, Op: velox.AssignSet, Value: nil}}, AllRows: true}
-	_, args, err := velox.DryRun(db, ctx, st)
+	_, args, err := velox.DryRun(ctx, db, st)
 	if err != nil {
 		t.Fatal(err)
 	}

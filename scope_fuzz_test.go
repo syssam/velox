@@ -139,7 +139,7 @@ func FuzzScope(f *testing.F) {
 		in := st.Where
 		db := velox.OpenFake(velox.Postgres, &velox.FakeExec{}, opts...)
 		ctx := testmodel.WithUser(velox.WithTenant(context.Background(), n), "ann")
-		err := velox.Prepare(db, ctx, st)
+		err := velox.Prepare(ctx, db, st)
 		if n == 0 {
 			// The zero tenant scopes nothing: the statement fails closed.
 			if !errors.Is(err, velox.ErrNoTenant) {

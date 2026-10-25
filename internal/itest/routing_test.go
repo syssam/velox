@@ -270,7 +270,7 @@ func invoiceNumbers(t *testing.T, d *sql.DB) []string {
 
 // readNumbers returns the numbers of the invoices db reads under c, in id
 // order.
-func readNumbers(t *testing.T, db *velox.DB, c context.Context) []string {
+func readNumbers(t *testing.T, c context.Context, db *velox.DB) []string {
 	t.Helper()
 	got, err := db.Query[testmodel.Invoice]().OrderBy(I.ID.Asc()).Unbounded().All(c)
 	if err != nil {
@@ -325,7 +325,7 @@ func wantRoute(t *testing.T, what string, got, want velox.Route) {
 	}
 }
 
-func insertInvoice(t *testing.T, db *velox.DB, c context.Context, org int64, number string) {
+func insertInvoice(t *testing.T, c context.Context, db *velox.DB, org int64, number string) {
 	t.Helper()
 	inv := newInvoice(org, number)
 	if err := db.Insert(&inv).Exec(c); err != nil {
@@ -346,7 +346,7 @@ func TestRoutingSendsWhereItSays(t *testing.T) {
 		db := r.handle(t, r.primary, "").open(
 			velox.WithReplicas(r.handle(t, replicaDB, "").conn), velox.WithPinWindow(100*time.Millisecond), log.option())
 
-		insertInvoice(t, db, ctx, 1, "WRITTEN")
+		insertInvoice(t, ctx, db, 1, "WRITTEN")
 		wantRoute(t, "the write", log.last(t), velox.Route{Replica: -1})
 		wantNumbers(t, "primary after a write", invoiceNumbers(t, primary), []string{"PRIMARY-SEED", "WRITTEN"})
 		wantNumbers(t, "replica after a write", invoiceNumbers(t, replica), []string{"REPLICA-SEED"})
@@ -354,22 +354,22 @@ func TestRoutingSendsWhereItSays(t *testing.T) {
 
 		// With no session, the read goes to the replica: it finds the row only
 		// the replica has, and not the primary's.
-		wantNumbers(t, "read with no session", readNumbers(t, db, ctx), []string{"REPLICA-SEED"})
+		wantNumbers(t, "read with no session", readNumbers(t, ctx, db), []string{"REPLICA-SEED"})
 		wantRoute(t, "read with no session", log.last(t), velox.Route{Replica: 0})
 
-		wantNumbers(t, "read under Primary", readNumbers(t, db, velox.WithPrimaryReads(ctx)), []string{"PRIMARY-SEED", "WRITTEN"})
+		wantNumbers(t, "read under Primary", readNumbers(t, velox.WithPrimaryReads(ctx), db), []string{"PRIMARY-SEED", "WRITTEN"})
 		wantRoute(t, "read under Primary", log.last(t), velox.Route{Replica: -1})
 
 		// Within a session, a read after a write reads the primary, the write
 		// included; once the window has passed, the replica again.
 		sctx := velox.WithSession(ctx)
-		wantNumbers(t, "read in a session before its write", readNumbers(t, db, sctx), []string{"REPLICA-SEED"})
-		insertInvoice(t, db, sctx, 1, "IN-SESSION")
-		wantNumbers(t, "read in a session after its write", readNumbers(t, db, sctx), []string{"PRIMARY-SEED", "WRITTEN", "IN-SESSION"})
+		wantNumbers(t, "read in a session before its write", readNumbers(t, sctx, db), []string{"REPLICA-SEED"})
+		insertInvoice(t, sctx, db, 1, "IN-SESSION")
+		wantNumbers(t, "read in a session after its write", readNumbers(t, sctx, db), []string{"PRIMARY-SEED", "WRITTEN", "IN-SESSION"})
 		wantRoute(t, "read in the pin window", log.last(t), velox.Route{Replica: -1})
-		wantNumbers(t, "read with no session in the window", readNumbers(t, db, ctx), []string{"REPLICA-SEED"})
+		wantNumbers(t, "read with no session in the window", readNumbers(t, ctx, db), []string{"REPLICA-SEED"})
 		time.Sleep(150 * time.Millisecond)
-		wantNumbers(t, "read after the window", readNumbers(t, db, sctx), []string{"REPLICA-SEED"})
+		wantNumbers(t, "read after the window", readNumbers(t, sctx, db), []string{"REPLICA-SEED"})
 		wantRoute(t, "read after the window", log.last(t), velox.Route{Replica: 0})
 	})
 }
@@ -396,17 +396,17 @@ func TestRoutingShardsByTenant(t *testing.T) {
 		bg := context.Background()
 		t1, t2 := velox.WithTenant(bg, int64(1)), velox.WithTenant(bg, int64(2))
 
-		insertInvoice(t, db, t1, 1, "TENANT-1")
+		insertInvoice(t, t1, db, 1, "TENANT-1")
 		wantRoute(t, "tenant 1's write", log.last(t), velox.Route{Shard: "one", Replica: -1})
-		insertInvoice(t, db, t2, 2, "TENANT-2")
+		insertInvoice(t, t2, db, 2, "TENANT-2")
 		wantRoute(t, "tenant 2's write", log.last(t), velox.Route{Shard: "two", Replica: -1})
 		wantNumbers(t, "shard one", invoiceNumbers(t, one), []string{"TENANT-1"})
 		wantNumbers(t, "shard two", invoiceNumbers(t, two), []string{"TENANT-2"})
 
-		wantNumbers(t, "tenant 1's read", readNumbers(t, db, t1), []string{"TENANT-1"})
-		wantNumbers(t, "tenant 2's read", readNumbers(t, db, t2), []string{"TENANT-2"})
+		wantNumbers(t, "tenant 1's read", readNumbers(t, t1, db), []string{"TENANT-1"})
+		wantNumbers(t, "tenant 2's read", readNumbers(t, t2, db), []string{"TENANT-2"})
 		wantRoute(t, "tenant 2's read", log.last(t), velox.Route{Shard: "two", Replica: -1})
-		wantNumbers(t, "WithShard", readNumbers(t, db, velox.WithShard(ctx, "two")), []string{"TENANT-2"})
+		wantNumbers(t, "WithShard", readNumbers(t, velox.WithShard(ctx, "two"), db), []string{"TENANT-2"})
 
 		_, err := db.Query[testmodel.Invoice]().Unbounded().All(ctx)
 		if !errors.Is(err, velox.ErrNoShard) {
@@ -431,9 +431,9 @@ func TestFailoverToPrimary(t *testing.T) {
 		var log routeLog
 		db := r.handle(t, r.primary, "").open(velox.WithReplicas(r.handle(t, replicaDB, "127.0.0.1:1").conn), log.option())
 
-		wantNumbers(t, "read from a dead replica", readNumbers(t, db, ctx), []string{"PRIMARY-SEED"})
+		wantNumbers(t, "read from a dead replica", readNumbers(t, ctx, db), []string{"PRIMARY-SEED"})
 		wantRoute(t, "read from a dead replica", log.last(t), velox.Route{Replica: -1, Fallback: true})
-		wantNumbers(t, "read in back-off", readNumbers(t, db, ctx), []string{"PRIMARY-SEED"})
+		wantNumbers(t, "read in back-off", readNumbers(t, ctx, db), []string{"PRIMARY-SEED"})
 		wantRoute(t, "read in back-off", log.last(t), velox.Route{Replica: -1})
 	})
 }
@@ -462,13 +462,13 @@ func TestFailoverAfterBackendTerminated(t *testing.T) {
 		var log routeLog
 		db := r.handle(t, r.primary, "").open(velox.WithReplicas(r.handle(t, replicaDB, "").conn), log.option())
 
-		wantNumbers(t, "the warming read", readNumbers(t, db, ctx), []string{"REPLICA-SEED"})
+		wantNumbers(t, "the warming read", readNumbers(t, ctx, db), []string{"REPLICA-SEED"})
 		wantRoute(t, "the warming read", log.last(t), velox.Route{Replica: 0})
 		if n := r.endSessions(t, replicaDB); n == 0 {
 			t.Fatal("velox's pool holds no session on the replica database to end: it was not warm")
 		}
 
-		got := readNumbers(t, db, ctx)
+		got := readNumbers(t, ctx, db)
 		route := log.last(t)
 		switch {
 		case route.Fallback:
@@ -496,11 +496,11 @@ func TestFailoverWhenReplicaGoesAway(t *testing.T) {
 		var log routeLog
 		db := r.handle(t, r.primary, "").open(velox.WithReplicas(r.handle(t, replicaDB, addr).conn), log.option())
 
-		wantNumbers(t, "the warming read", readNumbers(t, db, ctx), []string{"REPLICA-SEED"})
+		wantNumbers(t, "the warming read", readNumbers(t, ctx, db), []string{"REPLICA-SEED"})
 		wantRoute(t, "the warming read", log.last(t), velox.Route{Replica: 0})
 		stop()
 
-		wantNumbers(t, "read after the replica went away", readNumbers(t, db, ctx), []string{"PRIMARY-SEED"})
+		wantNumbers(t, "read after the replica went away", readNumbers(t, ctx, db), []string{"PRIMARY-SEED"})
 		wantRoute(t, "read after the replica went away", log.last(t), velox.Route{Replica: -1, Fallback: true})
 	})
 }
