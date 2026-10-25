@@ -16,12 +16,13 @@ import (
 	"syscall"
 )
 
-// writeTemp, renameFile and linkFile are how writeAll writes its files; tests
-// replace them.
+// writeTemp, renameFile, linkFile and mkdirAll are how writeAll writes its
+// files and makes its directories; tests replace them.
 var (
 	writeTemp  = writeTempFile
 	renameFile = os.Rename
 	linkFile   = os.Link
+	mkdirAll   = os.MkdirAll
 )
 
 // writeTempFile writes data to a new file in dir named by pattern, as
@@ -242,10 +243,20 @@ func writeAll(dir string, files map[string][]byte, remove []string) error {
 }
 
 // holdSignals holds SIGINT and SIGTERM until release. A write that holds
-// them finishes its undo or its commit, and its command then exits 130.
+// them finishes its undo or its commit, and its command then exits 130. A
+// signal the process ignores, as one started with nohup or in the background
+// of a shell ignores SIGINT, stays ignored: holding it would turn it on.
 func holdSignals() *held {
 	h := &held{ch: make(chan os.Signal, 1)}
-	signal.Notify(h.ch, os.Interrupt, syscall.SIGTERM)
+	var sigs []os.Signal
+	for _, s := range []os.Signal{os.Interrupt, syscall.SIGTERM} {
+		if !signal.Ignored(s) {
+			sigs = append(sigs, s)
+		}
+	}
+	if len(sigs) > 0 {
+		signal.Notify(h.ch, sigs...)
+	}
 	return h
 }
 
@@ -275,13 +286,19 @@ func writeAllHeld(dir string, files map[string][]byte, remove []string) (bool, e
 const interruptedCode = 130
 
 // swept is one entry an interrupted writeAll left, which sweepLeftovers
-// handled: removed, or renamed back to restored.
-type swept struct{ path, restored string }
+// handled: removed, or renamed back to restored. kept are the files of yours
+// in a directory set aside, which it left there, and with them the
+// directory.
+type swept struct {
+	path, restored string
+	kept           []string
+}
 
 // sweepLeftovers handles the entries an interrupted writeAll left in d, of
 // those in des. A file written under a temporary name is removed. A file or
 // directory set aside is renamed back when its name is missing, and removed
-// otherwise. It reports what it handled.
+// otherwise: a directory entry by entry (removeGone), never whole, so that a
+// file of yours someone put in it stays. It reports what it handled.
 func sweepLeftovers(d string, des []fs.DirEntry) ([]swept, error) {
 	var out []swept
 	for _, de := range des {
@@ -301,12 +318,60 @@ func sweepLeftovers(d string, des []fs.DirEntry) ([]swept, error) {
 				return out, err
 			}
 		}
-		if err := os.RemoveAll(p); err != nil {
+		if de.IsDir() {
+			kept, err := removeGone(p)
+			if err != nil {
+				return out, err
+			}
+			out = append(out, swept{path: p, kept: kept})
+			continue
+		}
+		if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return out, err
 		}
 		out = append(out, swept{path: p})
 	}
 	return out, nil
+}
+
+// removeGone removes the directory d, which writeAll set aside, as writeAll
+// removes what it set aside: each generated file in it (isGenerated), then
+// each directory, deepest first, when it is empty. It keeps, and returns, the
+// other entries, which are not velox-gen's, with the directories that hold
+// them.
+func removeGone(d string) (kept []string, err error) {
+	var files, dirs []string
+	err = filepath.WalkDir(d, func(p string, de fs.DirEntry, err error) error {
+		switch {
+		case err != nil:
+			return err
+		case de.IsDir():
+			dirs = append(dirs, p)
+		case de.Type().IsRegular() && isGenerated(p):
+			files = append(files, p)
+		default:
+			kept = append(kept, p)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range files {
+		if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return nil, err
+		}
+	}
+	slices.SortFunc(dirs, func(a, b string) int { // deepest first
+		return cmp.Or(cmp.Compare(strings.Count(b, string(filepath.Separator)), strings.Count(a, string(filepath.Separator))), cmp.Compare(a, b))
+	})
+	for _, p := range dirs {
+		holds := slices.ContainsFunc(kept, func(k string) bool { return strings.HasPrefix(k, p+string(filepath.Separator)) })
+		if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) && !holds {
+			return nil, err
+		}
+	}
+	return kept, nil
 }
 
 // makeDirs makes dir and the parents it lacks, and returns what removes
@@ -331,8 +396,11 @@ func makeDirs(dir string) (remove func() []string, err error) {
 		}
 		return left
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		remove()
+	if err := mkdirAll(dir, 0o755); err != nil {
+		if left := remove(); len(left) > 0 {
+			slices.Sort(left)
+			return nil, fmt.Errorf("%w; removing the directories it made failed, which left %s", err, strings.Join(left, ", "))
+		}
 		return nil, err
 	}
 	return remove, nil

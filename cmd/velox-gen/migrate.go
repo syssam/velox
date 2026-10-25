@@ -94,6 +94,21 @@ func (c *migrateCmd) stopped(interrupted bool, code int) int {
 	return interruptedCode
 }
 
+// writeDirHeld makes the directory abs, with the parents it lacks, and writes
+// files in it with writeAll, holding SIGINT and SIGTERM from the first
+// directory it makes until the write is done or undone, the directories it
+// made among the undo. It reports whether a signal arrived meanwhile.
+func writeDirHeld(abs string, files map[string][]byte) (bool, error) {
+	h := holdSignals()
+	remove, err := makeDirs(abs)
+	if err == nil {
+		if err = writeAll(abs, files, nil); err != nil {
+			err = undoDirs(err, remove)
+		}
+	}
+	return h.release(), err
+}
+
 // undoDirs is err, naming the directories of -dir a failed write made that
 // remove could not remove.
 func undoDirs(err error, remove func() []string) error {

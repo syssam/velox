@@ -221,9 +221,14 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 	}
 	sw, err := staleFiles(out, want, owners, !f.check)
 	for _, s := range sw.swept {
-		if s.restored != "" {
+		switch {
+		case s.restored != "":
 			_, _ = fmt.Fprintf(stderr, "velox-gen: restored %s from %s, which an interrupted run left\n", relPath(dir, s.restored), relPath(dir, s.path))
-		} else {
+		case len(s.kept) > 0:
+			for _, k := range s.kept {
+				_, _ = fmt.Fprintf(stderr, "velox-gen: kept %s, which is not velox-gen's, in %s, which an interrupted run left; move it\n", relPath(dir, k), relPath(dir, s.path))
+			}
+		default:
 			_, _ = fmt.Fprintf(stderr, "velox-gen: removed %s, which an interrupted run left\n", relPath(dir, s.path))
 		}
 	}
@@ -237,7 +242,10 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 		for _, p := range changed {
 			_, _ = fmt.Fprintf(stderr, "velox-gen: %s is out of date\n", relPath(dir, p))
 		}
-		if len(changed) > 0 {
+		for _, p := range sw.leftovers {
+			_, _ = fmt.Fprintf(stderr, "velox-gen: %s is left over from an interrupted run\n", relPath(dir, p))
+		}
+		if len(changed)+len(sw.leftovers) > 0 {
 			_, _ = fmt.Fprintf(stderr, "velox-gen: run %s\n", rerunCommand(f.rerun))
 			return 3
 		}
@@ -296,10 +304,11 @@ func checkEntry(dir, p string, isDir bool) error {
 
 // sweep is what staleFiles finds to do in the output directory.
 type sweep struct {
-	write   []string // the files of want that are missing or hold other content
-	remove  []string // the generated files nothing produces now, under their spelling on disk
-	emptied []string // the directories the removals empty, deepest first
-	swept   []swept  // what an interrupted run left, which tidy handled
+	write     []string // the files of want that are missing or hold other content
+	remove    []string // the generated files nothing produces now, under their spelling on disk
+	emptied   []string // the directories the removals empty, deepest first
+	swept     []swept  // what an interrupted run left, which tidy handled
+	leftovers []string // what an interrupted run left, without tidy
 }
 
 // staleFiles compares want, the files that must be in out, with the disk.
@@ -326,8 +335,8 @@ type sweep struct {
 //
 // With tidy, each directory the walk lists is first rid of what a killed run
 // of writeAll left in it (sweepLeftovers), which sw.swept reports. Without
-// it, as for -check, those entries stay. Either way they are never counted
-// as a directory's entries.
+// it, as for -check, those entries stay, and sw.leftovers lists them. Either
+// way they are never counted as a directory's entries.
 func staleFiles(out string, want map[string][]byte, owners map[string]string, tidy bool) (sweep, error) {
 	var sw sweep
 	write := map[string]bool{}
@@ -373,6 +382,9 @@ func staleFiles(out string, want map[string][]byte, owners map[string]string, ti
 		for _, de := range des {
 			p := filepath.Join(d, de.Name())
 			if leftover.MatchString(de.Name()) {
+				if !tidy {
+					sw.leftovers = append(sw.leftovers, p)
+				}
 				continue // -check leaves them; they never hold a directory
 			}
 			held[d]++

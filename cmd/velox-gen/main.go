@@ -107,8 +107,9 @@
 // and velox-gen then exits 130. A run killed while it writes, as by SIGKILL,
 // can leave entries named .<name>.tmp-velox-<n>, .<name>.old-velox-<n> or
 // .<name>.gone-velox-<n> in -out; the next run puts back a file or directory
-// set aside whose name is missing, removes the others, and prints a line for
-// each.
+// set aside whose name is missing, removes the others, a directory entry by
+// entry, keeping a file in it that is not velox-gen's, and prints a line for
+// each; -check prints a line for each and exits 3.
 // A plugin built on package plugin that panics fails with "the plugin
 // panicked: " and the panic's value; run velox-gen with VELOX_PLUGIN_TRACE=1,
 // which reaches the plugin, for the stack on the lines below it.

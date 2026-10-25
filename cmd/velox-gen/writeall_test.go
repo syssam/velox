@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"maps"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -321,24 +322,115 @@ func TestWriteAllKeepsANewFile(t *testing.T) {
 // TestHoldSignals: a SIGINT that arrives while the signals are held does not
 // end the process, and release reports it.
 func TestHoldSignals(t *testing.T) {
+	sig := syscall.SIGINT
+	if signal.Ignored(sig) { // as in a shell's background job; it stays ignored
+		sig = syscall.SIGTERM
+	}
 	h := holdSignals()
-	if err := syscall.Kill(os.Getpid(), syscall.SIGINT); err != nil {
+	if err := syscall.Kill(os.Getpid(), sig); err != nil {
 		h.release()
 		t.Fatal(err)
 	}
-	for deadline := time.Now().Add(10 * time.Second); len(h.ch) == 0 && time.Now().Before(deadline); {
-		time.Sleep(5 * time.Millisecond)
-	}
+	waitHeld(h)
 	if !h.release() {
-		t.Error("release does not report the SIGINT")
+		t.Errorf("release does not report the %v", sig)
 	}
 	if holdSignals().release() {
 		t.Error("release reports a signal that never came")
 	}
 }
 
+// waitHeld waits up to 10s for h to hold a signal.
+func waitHeld(h *held) {
+	for deadline := time.Now().Add(10 * time.Second); len(h.ch) == 0 && time.Now().Before(deadline); {
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// TestHoldSignalsKeepsIgnored: holding the signals does not turn on one the
+// process ignores.
+func TestHoldSignalsKeepsIgnored(t *testing.T) {
+	if !signal.Ignored(syscall.SIGTERM) {
+		signal.Ignore(syscall.SIGTERM)
+		defer func() { // Reset does not undo Ignore; Notify does
+			c := make(chan os.Signal, 1)
+			signal.Notify(c, syscall.SIGTERM)
+			signal.Stop(c)
+		}()
+	}
+	h := holdSignals()
+	if !signal.Ignored(syscall.SIGTERM) {
+		h.release()
+		t.Fatal("holdSignals turned on the ignored SIGTERM")
+	}
+	h.release()
+	if !signal.Ignored(syscall.SIGTERM) {
+		t.Error("release turned on the ignored SIGTERM")
+	}
+}
+
+// TestWriteDirHeld: a signal that arrives while migrate writes waits until
+// the write is undone, the directories it made among the undo.
+func TestWriteDirHeld(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "a", "migrations")
+	injected := errors.New("injected failure")
+	writeTemp = func(string, string, []byte) (string, error) {
+		h := holdSignals() // a second holder, to see the signal arrive
+		defer h.release()
+		if err := syscall.Kill(os.Getpid(), syscall.SIGTERM); err != nil {
+			return "", err
+		}
+		waitHeld(h)
+		return "", injected
+	}
+	defer func() { writeTemp = writeTempFile }()
+	interrupted, err := writeDirHeld(dir, map[string][]byte{"1_x.sql": []byte("x")})
+	if !interrupted || !errors.Is(err, injected) {
+		t.Fatalf("%v %v", interrupted, err)
+	}
+	if _, err := os.Stat(filepath.Dir(dir)); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("the directories made are left: %v", err)
+	}
+}
+
+// TestMakeDirsNamesWhatItLeft: when MkdirAll fails part-way, makeDirs
+// removes the directories it made, and the error names those it could not.
+func TestMakeDirsNamesWhatItLeft(t *testing.T) {
+	base := t.TempDir()
+	a, b := filepath.Join(base, "a"), filepath.Join(base, "a", "b")
+	injected := errors.New("injected failure")
+	mkdirAll = func(string, os.FileMode) error {
+		// a is made, and something lands in it, then b fails.
+		writeFile(t, filepath.Join(a, "f"), "f")
+		return injected
+	}
+	defer func() { mkdirAll = os.MkdirAll }()
+	_, err := makeDirs(filepath.Join(b, "c"))
+	if !errors.Is(err, injected) || err.Error() != "injected failure; removing the directories it made failed, which left "+a {
+		t.Fatalf("%v", err)
+	}
+	// With nothing in the way, what it made is removed, and the error is
+	// MkdirAll's alone.
+	if err := os.RemoveAll(a); err != nil {
+		t.Fatal(err)
+	}
+	mkdirAll = func(dir string, _ os.FileMode) error {
+		if err := os.Mkdir(a, 0o755); err != nil {
+			return err
+		}
+		return injected
+	}
+	if _, err := makeDirs(filepath.Join(b, "c")); err == nil || err.Error() != "injected failure" {
+		t.Fatalf("%v", err)
+	}
+	if _, err := os.Stat(a); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("a is left: %v", err)
+	}
+}
+
 // TestSweepLeftovers: what a killed write left is removed, or put back where
-// its name is missing; a dot-file of yours stays.
+// its name is missing; a dot-file of yours stays, and so does a file of yours
+// in a directory set aside, with the directory, never removed whole.
 func TestSweepLeftovers(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "a.go"), "new a")
@@ -350,8 +442,13 @@ func TestSweepLeftovers(t *testing.T) {
 	writeFile(t, filepath.Join(dir, ".e.go.gone-velox-6"), "old e")
 	writeFile(t, filepath.Join(dir, "e.go"), "e")
 	writeFile(t, filepath.Join(dir, ".pb.gone-velox-7", "x.go"), "x")
-	writeFile(t, filepath.Join(dir, ".qb.gone-velox-8", "y.go"), "y")
+	writeFile(t, filepath.Join(dir, ".qb.gone-velox-8", "y.go"), header+"\n\ny")
+	writeFile(t, filepath.Join(dir, ".qb.gone-velox-8", "sub", "z.go"), header+"\n\nz")
 	writeFile(t, filepath.Join(dir, "qb", "y.go"), "new y")
+	writeFile(t, filepath.Join(dir, ".rb.gone-velox-9", "sub", "z.go"), header+"\n\nz")
+	writeFile(t, filepath.Join(dir, ".rb.gone-velox-9", "sub", "mine.go"), "mine")
+	writeFile(t, filepath.Join(dir, ".rb.gone-velox-9", "notes.txt"), "mine")
+	writeFile(t, filepath.Join(dir, "rb", "z.go"), "new z")
 	mine := []string{".env", ".a.go.old-1", ".a.go.old-velox-", ".a.go.bak-velox-9", "a.go.old-velox-9"}
 	for _, m := range mine {
 		writeFile(t, filepath.Join(dir, m), "mine")
@@ -374,10 +471,14 @@ func TestSweepLeftovers(t *testing.T) {
 		{path: j(".e.go.gone-velox-6")},
 		{path: j(".pb.gone-velox-7"), restored: j("pb")},
 		{path: j(".qb.gone-velox-8")},
+		{path: j(".rb.gone-velox-9"), kept: []string{j(".rb.gone-velox-9/notes.txt"), j(".rb.gone-velox-9/sub/mine.go")}},
 	}; !reflect.DeepEqual(got, want) {
 		t.Errorf("%v\nwant %v", got, want)
 	}
-	wantTree := map[string]string{"a.go": "new a", "c.go": "old c", "d.go": "d", "e.go": "e", "pb/x.go": "x", "qb/y.go": "new y"}
+	wantTree := map[string]string{
+		"a.go": "new a", "c.go": "old c", "d.go": "d", "e.go": "e", "pb/x.go": "x", "qb/y.go": "new y", "rb/z.go": "new z",
+		".rb.gone-velox-9/notes.txt": "mine", ".rb.gone-velox-9/sub/mine.go": "mine",
+	}
 	for _, m := range mine {
 		wantTree[m] = "mine"
 	}

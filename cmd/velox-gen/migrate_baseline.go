@@ -100,13 +100,9 @@ func runMigrateBaseline(args []string, dir string, env []string, stdout, stderr 
 	if err != nil {
 		return c.fail(1, err)
 	}
-	remove, err := makeDirs(abs)
+	interrupted, err := writeDirHeld(abs, files)
 	if err != nil {
-		return c.fail(1, err)
-	}
-	interrupted, err := writeAllHeld(abs, files, nil)
-	if err != nil {
-		return c.stopped(interrupted, c.fail(1, undoDirs(err, remove)))
+		return c.stopped(interrupted, c.fail(1, err))
 	}
 	for _, p := range slices.Sorted(maps.Keys(files)) {
 		_, _ = fmt.Fprintln(stdout, c.path(p))

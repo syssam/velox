@@ -993,3 +993,45 @@ func TestGenerateSweepsLeftovers(t *testing.T) {
 		t.Error("pb is left")
 	}
 }
+
+// TestGenerateCheckReportsLeftovers: -check reports, one line each, what a
+// killed write left, though every file is up to date, and exits 3.
+func TestGenerateCheckReportsLeftovers(t *testing.T) {
+	dir := genModule(t, nil)
+	gen := filepath.Join(dir, "gen")
+	if code, out, errs := velox(t, dir, "./schema"); code != 0 {
+		t.Fatalf("%d %q %q", code, out, errs)
+	}
+	writeFile(t, filepath.Join(gen, ".user_velox.go.old-velox-1"), "old")
+	writeFile(t, filepath.Join(gen, ".pb.gone-velox-2", "x.go"), header+"\n\npackage pb\n")
+	writeFile(t, filepath.Join(gen, ".notes.old-velox"), "mine")
+	code, out, errs := velox(t, dir, "-check", "./schema")
+	want := "velox-gen: gen/.pb.gone-velox-2 is left over from an interrupted run\n" +
+		"velox-gen: gen/.user_velox.go.old-velox-1 is left over from an interrupted run\n" +
+		"velox-gen: run go tool velox-gen ./schema\n"
+	if code != 3 || out != "" || errs != want {
+		t.Errorf("%d %q %q", code, out, errs)
+	}
+}
+
+// TestGenerateKeepsYoursInALeftover: a directory set aside whose name is
+// taken again is removed entry by entry: a file of yours in it stays, with
+// the directory, and generate names it.
+func TestGenerateKeepsYoursInALeftover(t *testing.T) {
+	dir := genModule(t, nil)
+	gen := filepath.Join(dir, "gen")
+	if code, out, errs := velox(t, dir, "./schema"); code != 0 {
+		t.Fatalf("%d %q %q", code, out, errs)
+	}
+	writeFile(t, filepath.Join(gen, "pb", "keep.txt"), "mine")
+	writeFile(t, filepath.Join(gen, ".pb.gone-velox-1", "x.go"), header+"\n\npackage pb\n")
+	writeFile(t, filepath.Join(gen, ".pb.gone-velox-1", "mine.txt"), "mine")
+	code, out, errs := velox(t, dir, "./schema")
+	want := "velox-gen: kept gen/.pb.gone-velox-1/mine.txt, which is not velox-gen's, in gen/.pb.gone-velox-1, which an interrupted run left; move it\n"
+	if code != 0 || out != "" || errs != want {
+		t.Errorf("%d %q %q", code, out, errs)
+	}
+	if got := treeFiles(t, filepath.Join(gen, ".pb.gone-velox-1")); !reflect.DeepEqual(got, map[string]string{"mine.txt": "mine"}) {
+		t.Errorf("the leftover holds %v", got)
+	}
+}
