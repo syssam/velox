@@ -20,18 +20,20 @@ type ValidationError struct {
 	Err    error  // the validator's error
 }
 
+// Error is "velox: <Entity>: <Field>: <Err>".
 func (e *ValidationError) Error() string {
 	return "velox: " + e.Entity + ": " + e.Field + ": " + e.Err.Error()
 }
 
+// Unwrap is Err.
 func (e *ValidationError) Unwrap() error { return e.Err }
 
-// For generated code. Validate runs the validators of the columns cs of x on
-// the values x holds now, before defaults are filled and before any hook,
-// and before any statement: velox-graphql's CreateX checks the fields its
-// input sets this way, so that an invalid one costs no query. The checks and
-// the error are Insert's (see ValidationError); Insert validates again after
-// its defaults and hooks.
+// Validate runs the validators of the columns cs of x on the values x holds
+// now, before defaults are filled and before any hook, and before any
+// statement: velox-graphql's CreateX checks the fields its input sets this way,
+// so that an invalid one costs no query. For generated code. The checks and the
+// error are Insert's (see ValidationError); Insert validates again after its
+// defaults and hooks.
 func Validate[E any, PE Entity[E]](x PE, cs ...Column[E]) error {
 	m := x.VeloxMeta()
 	if m.err != nil {
@@ -44,12 +46,11 @@ func Validate[E any, PE Entity[E]](x PE, cs ...Column[E]) error {
 	return validateRow(m.info, unsafe.Pointer(x), cols)
 }
 
-// For generated code. ValidateSet runs the validators of the Set values of
-// set, and refuses an Immutable column among them, on the values as given,
-// before any hook or UpdateDefault and before any statement: velox-graphql's
-// UpdateX checks the fields its input sets this way. The checks and the
-// error are Update's (see ValidationError); Update validates again after its
-// hooks.
+// ValidateSet runs the validators of the Set values of set, and refuses an
+// Immutable column among them, on the values as given, before any hook or
+// UpdateDefault and before any statement: velox-graphql's UpdateX checks the
+// fields its input sets this way. For generated code. The checks and the error
+// are Update's (see ValidationError); Update validates again after its hooks.
 func ValidateSet[E any, PE Entity[E]](set ...Setter[E]) error {
 	m := PE(nil).VeloxMeta()
 	if m.err != nil {

@@ -102,8 +102,8 @@ func TestAggregateRefusals(t *testing.T) {
 	}
 	// A Rewrite hook may not change the aggregate, and may not leave it
 	// without its one column.
-	clear := velox.WithRewrite(func(_ context.Context, st *velox.Statement) error { st.Aggregate = 0; return nil })
-	rdb := velox.OpenFake(velox.Postgres, e, clear)
+	clearAgg := velox.WithRewrite(func(_ context.Context, st *velox.Statement) error { st.Aggregate = 0; return nil })
+	rdb := velox.OpenFake(velox.Postgres, e, clearAgg)
 	calls := e.Calls
 	_, err := velox.Sum(ctx, rdb.Query[testmodel.Invoice](), I.Total)
 	if err == nil || err.Error() != "velox: testmodel.Invoice: a Rewrite hook changed the statement's Aggregate" || e.Calls != calls {

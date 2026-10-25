@@ -8,8 +8,8 @@ import (
 // Limits caps what a client may ask for. Each bounds one argument or one
 // edge. A zero field means the default.
 //
-// The limits of an operation are the Extension's (WithLimits), which it puts
-// in the operation's context, where LimitsFromContext reads them: two servers in
+// The limits of an operation are the Extension's (WithLimits), which it puts in
+// the operation's context, where LimitsFromContext reads them: two servers in
 // one process can have different limits.
 type Limits struct {
 	// MaxPage is the largest first or last a connection takes, and the page

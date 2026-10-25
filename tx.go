@@ -31,8 +31,8 @@ func TxReadOnly() TxOption { return TxOption{func(o *txOptions) { o.readOnly = t
 func TxRetrySerializable(n int) TxOption { return TxOption{func(o *txOptions) { o.retries = n }} }
 
 // TxRetries returns the n of the last TxRetrySerializable in opts, or 0 when
-// there is none. It is for code that runs a transaction's fn on an
-// application's behalf and cannot run it again.
+// there is none. It reads options and is not one. It is for code that runs a
+// transaction's fn on an application's behalf and cannot run it again.
 func TxRetries(opts ...TxOption) int {
 	var o txOptions
 	for _, opt := range opts {

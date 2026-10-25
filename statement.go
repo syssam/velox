@@ -137,11 +137,11 @@ func (c *EachClause) windowed(in *EntityInfo) bool { return c.Limit > 0 && !c.ke
 // one, and the pipeline's hooks see and may change it: rewrite hooks before it
 // is rendered, around hooks while it runs.
 //
-// Raw SQL (OpRawQuery and OpRawExec) is not rendered: Rewrite hooks do not
-// see it, and its SQL, Args and Fingerprint are set when it is made. Its
-// Entity is the entity Raw scans into, or for Exec an EntityInfo named "Exec"
-// with no table or columns. Its TenantBypass and PolicyBypass both hold the
-// caller's reason, as given, untrimmed (so does a WithAllTenants or WithoutPolicy
+// Raw SQL (OpRawQuery and OpRawExec) is not rendered: Rewrite hooks do not see
+// it, and its SQL, Args and Fingerprint are set when it is made. Its Entity is
+// the entity Raw scans into, or for Exec an EntityInfo named "Exec" with no
+// table or columns. Its TenantBypass and PolicyBypass both hold the caller's
+// reason, as given, untrimmed (so does a WithAllTenants or WithoutPolicy
 // reason).
 //
 // The EntityInfo that Entity points to is shared by every query on the
@@ -191,9 +191,9 @@ type Statement struct {
 	// rendering. Rewrite hooks run before it and see it unset (zero, not
 	// Replica -1); Around hooks, and everything after them, see it set. An
 	// Around hook reads it, with one exception: setting Route.Fallback to true
-	// sends the hook's retry to the primary. Changing WithPrimaryReads, WithShard or
-	// WithSession in the context passed to next does not re-route the
-	// statement, as routing happens before the Around hooks.
+	// sends the hook's retry to the primary. Changing WithPrimaryReads,
+	// WithShard or WithSession in the context passed to next does not re-route
+	// the statement, as routing happens before the Around hooks.
 	Route Route
 	// Result is reset before the Around hooks run, and set by each
 	// execution before next returns to them; a hook that retries sees the

@@ -157,8 +157,8 @@ func TestShardFailoverStaysInShard(t *testing.T) {
 	})
 }
 
-// TestWithShardWins: WithShard names the shard whatever the tenant, and is how a
-// statement on an entity with no tenant column finds its shard.
+// TestWithShardWins: WithShard names the shard whatever the tenant, and is how
+// a statement on an entity with no tenant column finds its shard.
 func TestWithShardWins(t *testing.T) {
 	bothPaths(t, func(t *testing.T, hooked bool) {
 		s := openShards(hooked)

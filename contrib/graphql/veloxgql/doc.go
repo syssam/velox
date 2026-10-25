@@ -99,10 +99,10 @@
 //   - gqlimpl.Is adds a Boolean predicate, or its negation: IsNil, NotNil and
 //     has<Edge>.
 //
-// The limits are LimitsFromContext(ctx)'s, read at the top of the where argument. A
-// nesting deeper than MaxFilterDepth fails with ErrFilterTooDeep. A list of
-// more than MaxFilterWidth entries, of inputs or of In or NotIn values, fails
-// with ErrFilterTooWide, and a where argument over its budget of
+// The limits are LimitsFromContext(ctx)'s, read at the top of the where
+// argument. A nesting deeper than MaxFilterDepth fails with ErrFilterTooDeep. A
+// list of more than MaxFilterWidth entries, of inputs or of In or NotIn values,
+// fails with ErrFilterTooWide, and a where argument over its budget of
 // MaxFilterNodes inputs, predicates and values in all with ErrFilterTooLarge.
 // None of it runs a query, so a refused filter fails before any statement is
 // built. An error names the field that held its cause, through the nesting:
@@ -157,11 +157,11 @@
 // # Limits
 //
 // Limits caps what a client may ask for: MaxPage, MaxList, MaxFilterDepth,
-// MaxFilterWidth, MaxFilterNodes, MaxOrderTerms and MaxCost. An Extension has its
-// own (WithLimits; a zero field is the default), which it puts in each
-// operation's context, and generated code reads them with LimitsFromContext, which
-// gives DefaultLimits() in a context without them. The Extension refuses a
-// negative limit. MaxList is how many rows a list edge reads, and more fail
+// MaxFilterWidth, MaxFilterNodes, MaxOrderTerms and MaxCost. An Extension has
+// its own (WithLimits; a zero field is the default), which it puts in each
+// operation's context, and generated code reads them with LimitsFromContext,
+// which gives DefaultLimits() in a context without them. The Extension refuses
+// a negative limit. MaxList is how many rows a list edge reads, and more fail
 // with velox.ErrTooManyRows.
 //
 // Every one of them but MaxCost bounds one argument or one edge, not a whole
@@ -183,8 +183,8 @@
 // Nothing in the package runs at program start.
 package veloxgql
 
-// For generated code. GeneratedCodeIsVersion2 is referenced by every Go file
-// velox-graphql writes, so that generated code and this module fail to
-// compile together when they disagree. It is replaced by
-// GeneratedCodeIsVersion3 when generated code must change.
+// GeneratedCodeIsVersion2 is referenced by every Go file velox-graphql writes,
+// so that generated code and this module fail to compile together when they
+// disagree. For generated code. It is replaced by GeneratedCodeIsVersion3 when
+// generated code must change.
 const GeneratedCodeIsVersion2 = true

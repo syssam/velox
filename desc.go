@@ -10,8 +10,9 @@ import (
 	"unsafe"
 )
 
-// For generated code. Desc is an entity's metadata as velox-gen writes it:
-// literals, read on the entity's first use. Its column order is the scan order.
+// Desc is an entity's metadata as velox-gen writes it: literals, read on the
+// entity's first use. For generated code. Its column order is the scan order.
+// EntityInfo is its runtime view.
 type Desc[E any] struct {
 	Table      string
 	Schema     string // the schema (PostgreSQL) or database holding Table; "" for the default
@@ -55,7 +56,8 @@ type Desc[E any] struct {
 	Hooks  func() BoundHooks
 }
 
-// For generated code. ColumnDesc describes one column of a Desc.
+// ColumnDesc describes one column of a Desc. For generated code. ColumnInfo
+// is its runtime view.
 type ColumnDesc struct {
 	Field         string     // the Go field name
 	Name          string     // the column name
@@ -322,9 +324,9 @@ func defaultOf(d any, ft reflect.Type) (any, bool) {
 	return nil, false
 }
 
-// For generated code. EdgeTo is a relation to entity T keyed
-// owner.Columns[ownerCol] = T.Columns[targetCol]. Its field must be a One[T] or
-// a Many[T]: the metadata is refused at first use when EdgeAddr returns another
+// EdgeTo is a relation to entity T keyed owner.Columns[ownerCol] =
+// T.Columns[targetCol]. For generated code. Its field must be a One[T] or a
+// Many[T]: the metadata is refused at first use when EdgeAddr returns another
 // type, such as the holder of another entity, as stale or hand-edited code
 // would.
 //
@@ -339,10 +341,10 @@ func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) EdgeDesc 
 	}
 }
 
-// For generated code. EdgeThrough is a many-to-many relation to T through the
-// join entity J: owner.Columns[ownerCol] = J.Columns[joinOwner] and
-// J.Columns[joinTarget] = T.Columns[targetCol]. Its field is a Many[T]. J's
-// rows are written like any entity's, with Insert and Delete.
+// EdgeThrough is a many-to-many relation to T through the join entity J:
+// owner.Columns[ownerCol] = J.Columns[joinOwner] and J.Columns[joinTarget] =
+// T.Columns[targetCol]. For generated code. Its field is a Many[T]. J's rows
+// are written like any entity's, with Insert and Delete.
 //
 // Loading it reads J's rows for the owners' keys, then T's rows for the keys
 // they hold, and Has is an EXISTS on J holding an EXISTS on T. T's tenant and

@@ -1189,8 +1189,8 @@ func chain(n int, not bool) *gen.OwnerWhereInput {
 }
 
 // TestWhereDepthAndWidth is Review Focus 4: a where nested deeper than the
-// MaxFilterDepth of veloxgql.LimitsFromContext(ctx), an and, or or has…With list
-// of more than its MaxFilterWidth inputs, and a where argument over its
+// MaxFilterDepth of veloxgql.LimitsFromContext(ctx), an and, or or has…With
+// list of more than its MaxFilterWidth inputs, and a where argument over its
 // MaxFilterNodes, fail before any statement runs.
 func TestWhereDepthAndWidth(t *testing.T) {
 	ctx, db := open(t)

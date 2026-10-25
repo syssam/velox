@@ -156,6 +156,11 @@
 //
 // # Options
 //
+// Open's options are WithX, as WithMaxRows; a transaction's are TxIsolation,
+// TxReadOnly, TxTimeout and TxRetrySerializable; a context is changed by WithX
+// or WithoutX, as WithTenant and WithoutPolicy, and read by XFromContext, as
+// RowScopeFromContext.
+//
 // An Option configures a DB, once, when it is opened (Open, OpenPgx, OpenShards).
 // What a DB checks and bounds:
 //
@@ -178,8 +183,8 @@
 // A context decorator returns a context that changes what the statements
 // run under it do. None of them changes the DB:
 //
-//   - WithTenant and WithAllTenants name the tenant a statement is scoped to, or
-//     lift the scope.
+//   - WithTenant and WithAllTenants name the tenant a statement is scoped to,
+//     or lift the scope.
 //   - WithoutPolicy lifts the entities' policies.
 //   - WithShard, WithPrimaryReads and WithSession route a statement.
 //   - PinUntil restarts a session's pin from a time stored earlier, as
@@ -187,11 +192,11 @@
 //   - WithTags adds tags to the SQL comment.
 //   - WithoutTx removes a transaction's mark from a context.
 //
-// RowScopeFromContext reads back what a context scopes statements by (the tenant, the
-// reasons of WithAllTenants and WithoutPolicy, the shard) as a RowScope, which
-// compares with == (see its documentation for a tenant that cannot be
-// compared): code that reads for several callers in one statement keeps
-// callers of different scopes apart by it.
+// RowScopeFromContext reads back what a context scopes statements by (the
+// tenant, the reasons of WithAllTenants and WithoutPolicy, the shard) as a
+// RowScope, which compares with == (see its documentation for a tenant that
+// cannot be compared): code that reads for several callers in one statement
+// keeps callers of different scopes apart by it.
 //
 // # Transaction options
 //
@@ -224,14 +229,14 @@ package velox
 
 //go:generate go run ./internal/handlegen/gen
 
-// For generated code. GeneratedCodeIsVersion5 is referenced by every file
-// velox-gen writes from a schema package, so that generated code and this
-// library fail to compile together when they disagree. It is replaced by
+// GeneratedCodeIsVersion5 is referenced by every file velox-gen writes from a
+// schema package, so that generated code and this library fail to compile
+// together when they disagree. For generated code. It is replaced by
 // GeneratedCodeIsVersion6 when generated code must change.
 const GeneratedCodeIsVersion5 = true
 
-// For generated code. Lazy is the constraint of the type parameter that every
-// method of a generic velox type carries, and that callers never write. A
+// Lazy is the constraint of the type parameter that every method of a generic
+// velox type carries, and that callers never write. For generated code. A
 // generic method is compiled only where it is called; an ordinary method of a
 // generic type is compiled into every package that uses the type.
 type Lazy[T any] interface{ *T }

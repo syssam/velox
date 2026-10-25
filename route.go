@@ -48,9 +48,9 @@ func PgxConn(pool *pgxpool.Pool) Conn {
 
 // WithReplicas adds read replicas to a DB's primary, the connection Open or
 // OpenPgx was given. A read outside a transaction goes to a replica, each in
-// turn, unless its context is marked with WithPrimaryReads; a query's With loads go
-// to the replica the query read. Writes, and every statement in a transaction,
-// go to the primary. Statement.Route records the choice.
+// turn, unless its context is marked with WithPrimaryReads; a query's With
+// loads go to the replica the query read. Writes, and every statement in a
+// transaction, go to the primary. Statement.Route records the choice.
 //
 // Give each replica's pool a connect timeout shorter than your request
 // deadlines: pgx's connect_timeout, a MySQL DSN's timeout=. Neither driver
@@ -171,8 +171,9 @@ func WithShard(ctx context.Context, name string) context.Context {
 	return context.WithValue(ctx, routeKey{}, rc)
 }
 
-// WithPrimaryReads returns a context whose reads go to the primary, on a DB with
-// replicas: for a read that must see a write the replicas may not have yet.
+// WithPrimaryReads returns a context whose reads go to the primary, on a DB
+// with replicas: for a read that must see a write the replicas may not have
+// yet.
 func WithPrimaryReads(ctx context.Context) context.Context {
 	rc, _ := ctx.Value(routeKey{}).(routeCtx)
 	rc.primary = true
@@ -431,12 +432,12 @@ func (db *DB) shardForTx(ctx context.Context) (*shard, error) {
 // records the choice in st.Route.
 //
 // Writes, statements in a transaction, reads whose context is marked with
-// WithPrimaryReads and reads of a session within its pin window go to the primary.
-// Exec's raw SQL is a write, and Raw's a read. A With load goes where its
-// query went. Any other read goes to the next replica in turn, skipping one
-// in back-off, or to the primary when every replica is. A dry run is routed
-// as the read would be, but takes no replica's turn: it sends nothing. exec,
-// not route, falls a failed replica read over to the primary.
+// WithPrimaryReads and reads of a session within its pin window go to the
+// primary. Exec's raw SQL is a write, and Raw's a read. A With load goes where
+// its query went. Any other read goes to the next replica in turn, skipping one
+// in back-off, or to the primary when every replica is. A dry run is routed as
+// the read would be, but takes no replica's turn: it sends nothing. exec, not
+// route, falls a failed replica read over to the primary.
 //
 // On a sharded DB the statement's shard comes first: the one its context names
 // (shardOf), the pinned target's for a With load, the transaction's in a

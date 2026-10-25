@@ -321,9 +321,9 @@ func TestAggregateShapes(t *testing.T) {
 		sql, _ := c.render(Postgres, st)
 		return sql
 	}
-	sum, max, other := agg(AggregateSum, 3), agg(AggregateMax, 3), agg(AggregateSum, 1)
-	if sum == max || sum == other || max == other {
-		t.Errorf("shapes share SQL: %s, %s, %s", sum, max, other)
+	sum, maxAgg, other := agg(AggregateSum, 3), agg(AggregateMax, 3), agg(AggregateSum, 1)
+	if sum == maxAgg || sum == other || maxAgg == other {
+		t.Errorf("shapes share SQL: %s, %s, %s", sum, maxAgg, other)
 	}
 	if c.size() != 3 {
 		t.Errorf("cache holds %d shapes, want 3", c.size())

@@ -34,8 +34,8 @@ func WithTenant(ctx context.Context, id any) context.Context {
 	return context.WithValue(ctx, tenantKey{}, tenantScope{id: id})
 }
 
-// WithAllTenants returns ctx unscoped: statements on a tenant-scoped entity reach
-// every tenant's rows. The reason is required and is shown to hooks as
+// WithAllTenants returns ctx unscoped: statements on a tenant-scoped entity
+// reach every tenant's rows. The reason is required and is shown to hooks as
 // Statement.TenantBypass; with a reason that is empty or only white space
 // WithAllTenants returns ctx unchanged, so a statement without a tenant still
 // fails. It replaces an earlier WithTenant or WithAllTenants on ctx.
@@ -48,8 +48,8 @@ func WithAllTenants(ctx context.Context, reason string) context.Context {
 
 // WithoutPolicy returns ctx with every entity's policy switched off. The reason
 // is required and is shown to hooks as Statement.PolicyBypass; with a reason
-// that is empty or only white space WithoutPolicy returns ctx unchanged. It does
-// not lift tenant scoping: see WithAllTenants.
+// that is empty or only white space WithoutPolicy returns ctx unchanged. It
+// does not lift tenant scoping: see WithAllTenants.
 func WithoutPolicy(ctx context.Context, reason string) context.Context {
 	if noReason(reason) {
 		return ctx
@@ -57,11 +57,11 @@ func WithoutPolicy(ctx context.Context, reason string) context.Context {
 	return context.WithValue(ctx, policyKey{}, reason)
 }
 
-// RowScope is what a context scopes statements by: WithTenant's id (nil
-// when none), the reasons of WithAllTenants and WithoutPolicy ("" when none), and
-// WithShard's shard, which holds other rows than another shard. A batcher
-// that reads for several callers in one statement compares their scopes,
-// so that callers of different scopes never share a read.
+// RowScope is what a context scopes statements by: WithTenant's id (nil when
+// none), the reasons of WithAllTenants and WithoutPolicy ("" when none), and
+// WithShard's shard, which holds other rows than another shard. A batcher that
+// reads for several callers in one statement compares their scopes, so that
+// callers of different scopes never share a read.
 //
 // RowScopes are compared with ==, which panics when Tenant holds a value
 // that cannot be compared. A tenant column's type is comparable (its
@@ -87,8 +87,8 @@ func RowScopeFromContext(ctx context.Context) RowScope {
 	return RowScope{Tenant: id, TenantBypass: all, PolicyBypass: policyBypass(ctx), Shard: rc.shard, HasShard: rc.onShard}
 }
 
-// noReason reports whether reason, a bypass's (WithAllTenants, WithoutPolicy, Raw,
-// Exec), says nothing: it is empty or only white space.
+// noReason reports whether reason, a bypass's (WithAllTenants, WithoutPolicy,
+// Raw, Exec), says nothing: it is empty or only white space.
 func noReason(reason string) bool { return strings.TrimSpace(reason) == "" }
 
 // dryRunKey is the context key the SQL(ctx) methods mark their context with.
@@ -175,6 +175,8 @@ type PolicyError struct {
 	Err error
 }
 
+// Error is "velox: <Entity>: <Op> denied by policy", then ": <Err>" when Err
+// is not nil.
 func (e *PolicyError) Error() string {
 	s := "velox: " + e.Entity + ": " + e.Op.String() + " denied by policy"
 	if e.Err == nil {

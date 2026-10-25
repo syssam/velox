@@ -40,17 +40,19 @@ type node struct {
 }
 
 // Pred is a condition on entity E, made by a column handle or by And, Or and
-// Not.
+// Not. It is the typed form of Predicate, as Order is of OrderTerm.
 type Pred[E any] struct{ n node }
 
-// Predicate is a condition in a Statement: the form hooks see and add.
+// Predicate is a condition in a Statement: the form hooks see and add. It is
+// the untyped form of Pred, as OrderTerm is of Order.
 type Predicate struct{ n node }
 
 // Order is an ordering by one column of entity E, made by a handle's Asc or
-// Desc.
+// Desc. It is the typed form of OrderTerm, as Pred is of Predicate.
 type Order[E any] struct{ t OrderTerm }
 
-// OrderTerm is an ordering by one column of a Statement's entity.
+// OrderTerm is an ordering by one column of a Statement's entity. It is the
+// untyped form of Order, as Predicate is of Pred.
 type OrderTerm struct {
 	Column int // index into EntityInfo.Columns
 	Desc   bool

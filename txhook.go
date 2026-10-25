@@ -43,6 +43,7 @@ type TxRetry struct {
 // TxOutcome is how a transaction's attempt ended.
 type TxOutcome uint8
 
+// The outcomes of an attempt.
 const (
 	TxCommit   TxOutcome = iota + 1 // fn returned nil and the commit succeeded
 	TxRollback                      // fn returned an error, or panicked

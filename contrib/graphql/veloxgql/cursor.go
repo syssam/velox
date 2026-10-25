@@ -205,6 +205,7 @@ func (d OrderDirection) IsValid() bool {
 	return d == OrderDirectionAsc || d == OrderDirectionDesc
 }
 
+// String is d as it is.
 func (d OrderDirection) String() string { return string(d) }
 
 // MarshalGQL writes d as an escaped JSON string, so that even an invalid d

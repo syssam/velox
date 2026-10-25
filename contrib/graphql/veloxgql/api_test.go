@@ -177,7 +177,8 @@ func TestPublicAPI(t *testing.T) {
 }
 
 // TestGqlimplIsForGeneratedCode: package gqlimpl says it is for generated
-// code, and what guards the pair; the version constant says so too.
+// code, and what guards the pair; the version constant says so too, just
+// after its first sentence.
 func TestGqlimplIsForGeneratedCode(t *testing.T) {
 	d := parseDoc(t, "gqlimpl", "github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl")
 	if !strings.HasPrefix(d.Doc, "Package gqlimpl is for generated code.") {
@@ -191,8 +192,8 @@ func TestGqlimplIsForGeneratedCode(t *testing.T) {
 	for _, v := range parseDoc(t, ".", "github.com/syssam/velox2/contrib/graphql/veloxgql").Consts {
 		if slices.Contains(v.Names, "GeneratedCodeIsVersion2") {
 			found = true
-			if !strings.HasPrefix(v.Doc, "For generated code.") {
-				t.Errorf("GeneratedCodeIsVersion2's doc starts %q", firstLine(v.Doc))
+			if _, rest, ok := strings.Cut(strings.Join(strings.Fields(v.Doc), " "), ". "); !ok || !strings.HasPrefix(rest, "For generated code.") {
+				t.Errorf("GeneratedCodeIsVersion2's doc %q does not say %q after its first sentence", firstLine(v.Doc), "For generated code.")
 			}
 		}
 	}

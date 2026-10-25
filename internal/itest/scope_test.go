@@ -301,8 +301,8 @@ func TestScopeSave(t *testing.T) {
 func TestScopeInsert(t *testing.T) {
 	eachCaller(t, func(t *testing.T, tg target, c who) {
 		// Ann's tickets: the tenant is filled from the context, and CreatedBy
-		// from its user (anyone has none); under WithAllTenants the row names its
-		// org.
+		// from its user (anyone has none); under WithAllTenants the row names
+		// its org.
 		one := testmodel.Ticket{Owner: "ann", Title: "N1"}
 		two := []testmodel.Ticket{{Owner: "ann", Title: "N2"}, {Owner: "ann", Title: "N3"}}
 		org, by := int64(1), c.name

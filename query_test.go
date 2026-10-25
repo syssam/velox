@@ -474,7 +474,7 @@ func TestRewriteCannotChangeExists(t *testing.T) {
 func TestRewriteCannotChangeCount(t *testing.T) {
 	const want = "velox: testmodel.Invoice: a Rewrite hook changed the statement's Count"
 	set := velox.WithRewrite(func(_ context.Context, st *velox.Statement) error { st.Count = true; return nil })
-	clear := velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+	clearAgg := velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
 		st.Count, st.Columns = false, []int{0}
 		return nil
 	})
@@ -502,7 +502,7 @@ func TestRewriteCannotChangeCount(t *testing.T) {
 			_, _, err := velox.Max(ctx, db.Query[testmodel.Invoice](), I.Total)
 			return err
 		}},
-		"cleared on Count, with Columns set": {clear, func(db *velox.DB) error {
+		"cleared on Count, with Columns set": {clearAgg, func(db *velox.DB) error {
 			_, err := db.Query[testmodel.Invoice]().Count(ctx)
 			return err
 		}},

@@ -48,19 +48,18 @@ type Filter[E any] struct {
 // The depth, how deeply the input is nested in the where argument, and the
 // argument's node budget travel in ctx, under one unexported key. A context
 // without them starts a where argument: depth 0, a full budget of
-// MaxFilterNodes, and the limits of veloxgql.LimitsFromContext(ctx). So each call
-// of a where input's Pred with a context of the application's has its own
+// MaxFilterNodes, and the limits of veloxgql.LimitsFromContext(ctx). So each
+// call of a where input's Pred with a context of the application's has its own
 // budget, however often the context is used. A nested input's Pred is called
-// with a context of the helpers', one level deeper (inside each not, and,
-// or and has<Edge>With) and with the same budget and limits, so that every
-// input of the argument has them; that context never leaves the helpers. A
-// depth over MaxFilterDepth fails the filter with ErrFilterTooDeep. The
-// input, each input nested in it, each predicate they set and each value of
-// their In and NotIn lists count one against the budget, and over it the
-// filter fails with ErrFilterTooLarge. So the whole argument is bounded,
-// even when it holds one input many times over, as a GraphQL variable used
-// at many places does. One where argument's Pred calls run on one
-// goroutine.
+// with a context of the helpers', one level deeper (inside each not, and, or
+// and has<Edge>With) and with the same budget and limits, so that every input
+// of the argument has them; that context never leaves the helpers. A depth over
+// MaxFilterDepth fails the filter with ErrFilterTooDeep. The input, each input
+// nested in it, each predicate they set and each value of their In and NotIn
+// lists count one against the budget, and over it the filter fails with
+// ErrFilterTooLarge. So the whole argument is bounded, even when it holds one
+// input many times over, as a GraphQL variable used at many places does. One
+// where argument's Pred calls run on one goroutine.
 func NewFilter[E any](ctx context.Context, input string) *Filter[E] {
 	st, ok := ctx.Value(stateKey{}).(*state)
 	if !ok {

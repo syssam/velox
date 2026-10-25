@@ -82,6 +82,8 @@ type SchemaError struct {
 	Reason string
 }
 
+// Error is "velox: <Entity>: <Reason>", or "velox: <Entity>.<Field>: <Reason>"
+// for an error about a field.
 func (e *SchemaError) Error() string {
 	if e.Field == "" {
 		return "velox: " + e.Entity + ": " + e.Reason
@@ -100,6 +102,8 @@ const (
 	ConstraintCheck                                // a CHECK constraint
 )
 
+// String is "unique", "foreign key", "not null" or "check"; "unknown" for any
+// other value.
 func (k ConstraintKind) String() string {
 	switch k {
 	case ConstraintUnique:
@@ -126,6 +130,8 @@ type ConstraintError struct {
 	Err        error
 }
 
+// Error is "velox: <Entity>: <Kind> constraint <Constraint> violated: <Err>",
+// with "(unnamed)" for an empty Constraint.
 func (e *ConstraintError) Error() string {
 	name := e.Constraint
 	if name == "" {
@@ -134,6 +140,7 @@ func (e *ConstraintError) Error() string {
 	return fmt.Sprintf("velox: %s: %s constraint %s violated: %v", e.Entity, e.Kind, name, e.Err)
 }
 
+// Unwrap is Err.
 func (e *ConstraintError) Unwrap() error { return e.Err }
 
 // hookError is the error of an entity hook: "velox: <Entity>: hook: <err>".

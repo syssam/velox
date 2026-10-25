@@ -92,11 +92,11 @@ func (q InsertQuery[E]) DoNothing[_ Lazy[E]]() InsertQuery[E] {
 // The entity's hooks (Hooks) run first, around all that follows; their next
 // does the rest. An InsertAll of nothing runs nothing.
 //
-// Exec then fills, in each entity, every zero field whose column has Default
-// or DefaultFunc (an UpdateDefault fills on update only). On a tenant-scoped entity
-// it then sets a zero tenant field to the context's tenant, and refuses a
-// field set to another one (ErrTenantMismatch) or, under WithAllTenants, left at
-// zero (ErrNoTenant). Then the validators run and the policy's Insert is
+// Exec then fills, in each entity, every zero field whose column has Default or
+// DefaultFunc (an UpdateDefault fills on update only). On a tenant-scoped
+// entity it then sets a zero tenant field to the context's tenant, and refuses
+// a field set to another one (ErrTenantMismatch) or, under WithAllTenants, left
+// at zero (ErrNoTenant). Then the validators run and the policy's Insert is
 // asked; every entity is prepared before anything is sent.
 //
 // Under WithTenant, an upsert that updates must name the tenant column in
@@ -462,9 +462,9 @@ func fillTenant(in *EntityInfo, p unsafe.Pointer, id any, all string) error {
 	return checkRowTenant(in, p, id, all, "the row has")
 }
 
-// checkRowTenant checks the row's tenant field against the context's tenant
-// id, whose type fillTenant checked: under WithTenant the field must hold id,
-// under WithAllTenants (all) it must not be zero, and with neither the row has no
+// checkRowTenant checks the row's tenant field against the context's tenant id,
+// whose type fillTenant checked: under WithTenant the field must hold id, under
+// WithAllTenants (all) it must not be zero, and with neither the row has no
 // tenant. who says what put the value in the field.
 func checkRowTenant(in *EntityInfo, p unsafe.Pointer, id any, all, who string) error {
 	col := in.Columns[in.Tenant].Name

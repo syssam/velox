@@ -554,9 +554,9 @@ func TestUnlinkAll(t *testing.T) {
 	}
 }
 
-// TestRepointed: an UPDATE that re-pointed fewer children than its IDs
-// fails with BAD_USER_INPUT when linked counts a child another owner holds,
-// and as CheckExists does otherwise; one that re-pointed them all runs no query.
+// TestRepointed: an UPDATE that re-pointed fewer children than its IDs fails
+// with BAD_USER_INPUT when linked counts a child another owner holds, and as
+// CheckExists does otherwise; one that re-pointed them all runs no query.
 func TestRepointed(t *testing.T) {
 	db, _ := mutationDB(t)
 	ctx := veloxgql.NewExtension(db).NewContext(context.Background())

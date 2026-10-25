@@ -76,8 +76,9 @@ func TestGodocCitesNoSpec(t *testing.T) {
 }
 
 // TestGeneratedOnlyAPIIsMarked: exactly the declarations that the package
-// documentation lists under "Generated code" open their documentation with
-// "For generated code.", and the section names each of them as a whole word.
+// documentation lists under "Generated code" say "For generated code." just
+// after their first sentence, and the section names each of them as a whole
+// word.
 func TestGeneratedOnlyAPIIsMarked(t *testing.T) {
 	names := []string{"Desc", "ColumnDesc", "EdgeDesc", "EdgeTo", "EdgeThrough", "Meta", "MetaOnce",
 		"BindPolicy", "BindHooks", "BoundPolicy", "BoundHooks", "Lazy", "Validate", "ValidateSet", "GeneratedCodeIsVersion5"}
@@ -129,13 +130,13 @@ func TestGeneratedOnlyAPIIsMarked(t *testing.T) {
 			}
 		}
 	}
-	const marker = "For generated code."
 	for name, doc := range docs {
-		if strings.HasPrefix(doc, marker) && !listed[name] {
-			t.Errorf("%s is marked %q but is not in the generated-code list", name, marker)
-		}
-		if strings.Contains(doc, marker) && !strings.HasPrefix(doc, marker) {
-			t.Errorf("%s mentions %q but does not open with it", name, marker)
+		mentions := strings.Contains(strings.Join(strings.Fields(doc), " "), generatedMarker)
+		switch {
+		case mentions && !listed[name]:
+			t.Errorf("%s is marked %q but is not in the generated-code list", name, generatedMarker)
+		case mentions && !markedGenerated(doc):
+			t.Errorf("%s mentions %q but not after its first sentence", name, generatedMarker)
 		}
 	}
 	_, section, ok := strings.Cut(pkgDoc, "# Generated code\n")
@@ -144,11 +145,105 @@ func TestGeneratedOnlyAPIIsMarked(t *testing.T) {
 	}
 	section, _, _ = strings.Cut(section, "\n# ")
 	for _, n := range names {
-		if !strings.HasPrefix(docs[n], marker) {
-			t.Errorf("%s: documentation opens %.40q, want %q", n, docs[n], marker)
+		if !strings.Contains(strings.Join(strings.Fields(docs[n]), " "), generatedMarker) {
+			t.Errorf("%s: documentation %.40q does not say %q", n, docs[n], generatedMarker)
 		}
 		if !regexp.MustCompile(`\b` + n + `\b`).MatchString(section) {
 			t.Errorf("the Generated code section does not name %s", n)
+		}
+	}
+}
+
+// generatedMarker marks a declaration that only generated code uses.
+const generatedMarker = "For generated code."
+
+// markedGenerated reports whether doc says generatedMarker just after its
+// first sentence.
+func markedGenerated(doc string) bool {
+	_, rest, ok := strings.Cut(strings.Join(strings.Fields(doc), " "), ". ")
+	return ok && strings.HasPrefix(rest, generatedMarker)
+}
+
+// TestExportedMethodsHaveDocs: every exported method of an exported type in a
+// hand-written, non-test file has a doc comment that opens with its name and a
+// space (strings.HasPrefix(doc, name+" ")), Error, String and Unwrap included,
+// which revive's exported rule skips.
+func TestExportedMethodsHaveDocs(t *testing.T) {
+	root := repoRoot()
+	var files []string
+	add := func(dir string, recursive bool) {
+		err := filepath.WalkDir(filepath.Join(root, dir), func(p string, d fs.DirEntry, err error) error {
+			switch {
+			case err != nil:
+				return err
+			case d.IsDir():
+				if p != filepath.Join(root, dir) && (!recursive || d.Name() == "testdata" || d.Name() == "internal") {
+					return filepath.SkipDir
+				}
+			case strings.HasSuffix(p, ".go") && !strings.HasSuffix(p, "_test.go"):
+				files = append(files, p)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	add(".", false)
+	add("migrate", false)
+	add("plugin", false)
+	add("schema", true)
+	add("contrib/graphql", false)
+	add("contrib/graphql/veloxgql", false)
+	add("contrib/graphql/veloxgql/gqlimpl", false)
+	add("contrib/veloxotel", false)
+	if len(files) < 80 {
+		t.Fatalf("scanned only %d files: %v", len(files), files)
+	}
+	fset := token.NewFileSet()
+	for _, name := range files {
+		f, err := parser.ParseFile(fset, name, nil, parser.ParseComments)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ast.IsGenerated(f) {
+			continue
+		}
+		for _, d := range f.Decls {
+			fn, ok := d.(*ast.FuncDecl)
+			if !ok || fn.Recv == nil || !fn.Name.IsExported() {
+				continue
+			}
+			// A method of an unexported type is not in the package's
+			// documentation.
+			recv := recvType(fn.Recv.List[0].Type)
+			if !ast.IsExported(recv) {
+				continue
+			}
+			if !strings.HasPrefix(fn.Doc.Text(), fn.Name.Name+" ") {
+				pos := fset.Position(fn.Pos())
+				rel, _ := filepath.Rel(root, pos.Filename)
+				t.Errorf("%s:%d: %s.%s has no doc comment that opens with its name", filepath.ToSlash(rel), pos.Line, recv, fn.Name.Name)
+			}
+		}
+	}
+}
+
+// recvType is the name of a receiver's type, without its pointer or type
+// parameters.
+func recvType(e ast.Expr) string {
+	for {
+		switch x := e.(type) {
+		case *ast.StarExpr:
+			e = x.X
+		case *ast.IndexExpr:
+			e = x.X
+		case *ast.IndexListExpr:
+			e = x.X
+		case *ast.Ident:
+			return x.Name
+		default:
+			return "?"
 		}
 	}
 }

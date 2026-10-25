@@ -182,7 +182,8 @@ func run(ctx context.Context, w io.Writer) error {
 		}
 		say("%-18s the stale read above is a stand-in for replication lag; replication is out of scope", "")
 
-		// WithPrimaryReads forces the primary for one read that must be current.
+		// WithPrimaryReads forces the primary for one read that must be
+		// current.
 		return read(velox.WithPrimaryReads(ctx), "read, Primary")
 	})
 	if err := edit(velox.WithTenant(ctx, acme)); err != nil {
@@ -203,10 +204,10 @@ func run(ctx context.Context, w io.Writer) error {
 		say("  file %-10s %s", name, b)
 	}
 
-	// A statement that names no shard is refused, and nothing is sent to any
-	// of them. Without a tenant, a tenant-scoped entity fails earlier, with
-	// ErrNoTenant; WithAllTenants lifts that check, and then no shard is left to
-	// pick.
+	// A statement that names no shard is refused, and nothing is sent to any of
+	// them. Without a tenant, a tenant-scoped entity fails earlier, with
+	// ErrNoTenant; WithAllTenants lifts that check, and then no shard is left
+	// to pick.
 	all := velox.WithAllTenants(ctx, "example admin count")
 	_, err = db.Query[gen.Note]().Count(all)
 	say("%-18s ErrNoShard=%t", "no shard:", errors.Is(err, velox.ErrNoShard))

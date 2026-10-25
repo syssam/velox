@@ -263,12 +263,12 @@ func TestZeroOptionPanics(t *testing.T) {
 var errFail = errors.New("fail failed")
 
 // handlerServer serves testSchema through veloxgql.NewExtension(db). Its
-// resolvers read the DB with DBFromContext: add inserts a person and returns its
-// id; fail and boom insert one and then fail with errFail or panic; cancel
-// inserts one, calls the cancel function set in *cancel, and returns its
-// id; count counts the people; hasDB reports whether the context holds db
-// itself; page returns the number of rows of the people connection's page
-// paged by first.
+// resolvers read the DB with DBFromContext: add inserts a person and returns
+// its id; fail and boom insert one and then fail with errFail or panic; cancel
+// inserts one, calls the cancel function set in *cancel, and returns its id;
+// count counts the people; hasDB reports whether the context holds db itself;
+// page returns the number of rows of the people connection's page paged by
+// first.
 func handlerServer(t *testing.T, db *velox.DB, cancel *context.CancelFunc) *handler.Server {
 	t.Helper()
 	return serve(db, handlerResolvers(db, cancel))

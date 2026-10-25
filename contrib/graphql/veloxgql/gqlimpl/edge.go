@@ -26,18 +26,17 @@ import (
 // field, an application's resolver calling x.ChildrenGQL, reads alone: one
 // statement for its row, by its own arguments.
 //
-// A batch is keyed by its group, the edge's field (Field.Field, so two
-// aliases are two batches) and its selections, the edge (its name, the
-// relation and the target type), the DB veloxgql.DBFromContext reads, EdgeList's
-// MaxList, the callers' row scope (velox.RowScopeFromContext: the tenant, the
-// WithAllTenants and WithoutPolicy reasons and the WithShard shard, of the context
-// each passes to the edge function) and the value of
-// veloxgql.WithBatchScope's function, if the extension has one. A row
-// whose resolver's context a field middleware or a directive scopes
-// otherwise is in a batch of its own scope; a key that cannot be compared
-// (reflect.Value.Comparable) reads alone. The batch keeps its first
-// caller's arguments, and a caller whose arguments differ
-// (reflect.DeepEqual: a resolver that computes them per row) reads alone.
+// A batch is keyed by its group, the edge's field (Field.Field, so two aliases
+// are two batches) and its selections, the edge (its name, the relation and the
+// target type), the DB veloxgql.DBFromContext reads, EdgeList's MaxList, the
+// callers' row scope (velox.RowScopeFromContext: the tenant, the WithAllTenants
+// and WithoutPolicy reasons and the WithShard shard, of the context each passes
+// to the edge function) and the value of veloxgql.WithBatchScope's function, if
+// the extension has one. A row whose resolver's context a field middleware or a
+// directive scopes otherwise is in a batch of its own scope; a key that cannot
+// be compared (reflect.Value.Comparable) reads alone. The batch keeps its first
+// caller's arguments, and a caller whose arguments differ (reflect.DeepEqual: a
+// resolver that computes them per row) reads alone.
 //
 // The first caller reads for all, under the context it passed to the edge
 // function, on the DB of its query; the others wait on the batch's

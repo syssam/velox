@@ -25,8 +25,9 @@ import (
 //	srv.SetErrorPresenter(veloxgql.ErrorPresenter(nil))
 //
 // Every operation's context gets the DB, which DBFromContext reads, and the
-// extension's limits, which LimitsFromContext reads, so queries and subscriptions
-// run on the DB, and a DB with replicas routes their reads to them.
+// extension's limits, which LimitsFromContext reads, so queries and
+// subscriptions run on the DB, and a DB with replicas routes their reads to
+// them.
 //
 // A mutation operation runs in one db.Tx, on the primary, unless WithTxFilter
 // leaves it out, and its resolvers get the transaction's DB and context, so
@@ -165,15 +166,15 @@ func WithTxFilter(f func(ctx context.Context, op *ast.OperationDefinition) bool)
 // concurrent resolvers, so it must be safe for concurrent use. Given twice,
 // the last wins.
 //
-// A batch reads every row's edge under its first caller's context. velox's
-// row scope (velox.RowScopeFromContext: the tenant, the WithAllTenants and WithoutPolicy
-// bypasses, the shard) is always in the key, and so are the DB and a list
-// edge's MaxList. Any other context value that a Read policy or a Rewrite or Around
-// hook reads, such as the viewer or a role, must be the same for every row
-// of a field, or be in f's value: a directive or a field middleware that
-// gives an edge field's resolver another context for some parent rows
-// (acting as the row's owner, raising a role) needs WithBatchScope, or the
-// rows of the field are read under whichever context comes first.
+// A batch reads every row's edge under its first caller's context. velox's row
+// scope (velox.RowScopeFromContext: the tenant, the WithAllTenants and
+// WithoutPolicy bypasses, the shard) is always in the key, and so are the DB
+// and a list edge's MaxList. Any other context value that a Read policy or a
+// Rewrite or Around hook reads, such as the viewer or a role, must be the same
+// for every row of a field, or be in f's value: a directive or a field
+// middleware that gives an edge field's resolver another context for some
+// parent rows (acting as the row's owner, raising a role) needs WithBatchScope,
+// or the rows of the field are read under whichever context comes first.
 func WithBatchScope(f func(context.Context) any) Option {
 	return Option{func(e *Extension) { e.batchScope = f }}
 }

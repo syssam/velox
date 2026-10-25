@@ -412,7 +412,7 @@ func check(r report, key, path string) []string {
 		if strings.HasPrefix(k, "_") {
 			continue // a comment
 		}
-		max, ok := raw.(float64)
+		most, ok := raw.(float64)
 		if !ok {
 			problems = append(problems, fmt.Sprintf("threshold %s is not a number", k))
 			continue
@@ -422,8 +422,8 @@ func check(r report, key, path string) []string {
 			problems = append(problems, "unknown measurement "+k)
 			continue
 		}
-		if v > max {
-			problems = append(problems, fmt.Sprintf("%s = %.2f, over %.2f", k, v, max))
+		if v > most {
+			problems = append(problems, fmt.Sprintf("%s = %.2f, over %.2f", k, v, most))
 		}
 	}
 	for k := range got {

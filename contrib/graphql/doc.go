@@ -31,7 +31,11 @@
 //	func (User) Annotations() []schema.Annotation {
 //		return []schema.Annotation{
 //			graphql.QueryField("users"),
-//			graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate(), graphql.MutationDelete()),
+//			graphql.Mutations(
+//				graphql.MutationCreate(),
+//				graphql.MutationUpdate(),
+//				graphql.MutationDelete(),
+//			),
 //			graphql.MultiOrder(),
 //		}
 //	}
@@ -152,8 +156,8 @@
 // see "The cost limit" below. A mutation's transaction does not cover @defer
 // (see veloxgql.Extension): do not defer fields of a mutation.
 //
-// For an entity with graphql.MutationCreate(), its file also has Create<T>Input and
-// Create<T>(ctx, input), which createX's resolver returns; with
+// For an entity with graphql.MutationCreate(), its file also has Create<T>Input
+// and Create<T>(ctx, input), which createX's resolver returns; with
 // graphql.MutationUpdate(), Update<T>Input and Update<T>(ctx, id, input), which
 // updateX's resolver returns. In an update input a field not given is left as
 // it is, clear<Field> sets a nullable one to NULL, and an edge is cleared, then
@@ -168,10 +172,10 @@
 // link to one they hide stays. Update<T> returns the row it wrote, read under
 // the tenant scope without the Read policy, as Create<T> returns the row it
 // inserted: an update that takes the row out of what the caller may read
-// succeeds. With graphql.MutationDelete(), Delete<T>(ctx, id) deletes the row and its
-// rows in the join tables of its many-to-many edges, and returns the ID encoded
-// again from the key; deleteX's resolver returns it. The join rows, which
-// neither the tenant nor a policy scopes, go only after a COUNT under the
+// succeeds. With graphql.MutationDelete(), Delete<T>(ctx, id) deletes the row
+// and its rows in the join tables of its many-to-many edges, and returns the ID
+// encoded again from the key; deleteX's resolver returns it. The join rows,
+// which neither the tenant nor a policy scopes, go only after a COUNT under the
 // DELETE's own scope (the tenant and the Read and Write policies) has found the
 // row, so a row the caller may not delete keeps them. A row's delete removes
 // all of its join rows, whatever the tenant at their other end: a shared row is
@@ -179,15 +183,15 @@
 // key are left to the database's foreign keys: one that refuses the DELETE
 // gives a *velox.ConstraintError, shown as BAD_USER_INPUT.
 //
-// The generated functions read the DB from the context, as the root query's
-// do (veloxgql.DBFromContext), and each is atomic: gqlimpl.Atomic runs it in the
-// transaction the Extension opened for the operation, or in a db.Tx of its
-// own where there is none (outside a server, with Extension.NewContext, or in an
+// The generated functions read the DB from the context, as the root query's do
+// (veloxgql.DBFromContext), and each is atomic: gqlimpl.Atomic runs it in the
+// transaction the Extension opened for the operation, or in a db.Tx of its own
+// where there is none (outside a server, with Extension.NewContext, or in an
 // operation WithTxFilter leaves out). There is no savepoint inside the
 // extension's transaction, so a resolver must return a mutation's error: one
 // that swallows it commits the partial writes. In a Go input a required field
-// is a value, an optional one a pointer (nil means not given), an ID a
-// string, a list of IDs a []string and a clear field a bool.
+// is a value, an optional one a pointer (nil means not given), an ID a string,
+// a list of IDs a []string and a clear field a bool.
 //
 // Errors are coded before the presenter sees them. A malformed or mistyped ID,
 // a conflicting input, too many IDs (more than veloxgql.Limits.MaxPage,
@@ -258,18 +262,16 @@
 // for its row; so does a call whose arguments are not its batch's first
 // caller's (a forceResolver that computes them per row).
 //
-// A batch is read under its first caller's context. Its key holds the
-// callers' row scope (velox.RowScopeFromContext: the tenant, a bypass, the shard),
-// the DB and a list edge's MaxList, so callers that differ in them never
-// share a read.
-// Any other context value a Read policy or a Rewrite or Around hook reads,
-// such as the viewer or a role, must be the same for every row of a field,
-// or be returned by veloxgql.WithBatchScope, whose value joins the key: a
-// directive or a field middleware that gives an edge field's resolver
-// another context for some parent rows needs it. Batches belong to one
-// response: a subscription's event starts new ones, and outside a gqlgen
-// field there is no batch, so a row read alone resolves its edges one row at
-// a time.
+// A batch is read under its first caller's context. Its key holds the callers'
+// row scope (velox.RowScopeFromContext: the tenant, a bypass, the shard), the
+// DB and a list edge's MaxList, so callers that differ in them never share a
+// read. Any other context value a Read policy or a Rewrite or Around hook
+// reads, such as the viewer or a role, must be the same for every row of a
+// field, or be returned by veloxgql.WithBatchScope, whose value joins the key:
+// a directive or a field middleware that gives an edge field's resolver another
+// context for some parent rows needs it. Batches belong to one response: a
+// subscription's event starts new ones, and outside a gqlgen field there is no
+// batch, so a row read alone resolves its edges one row at a time.
 //
 // A generated many-to-many edge reads the join table inside the target's
 // statement, so the join entity's hooks and policy do not see the edge's

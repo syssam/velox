@@ -15,6 +15,8 @@ const (
 	SQLite
 )
 
+// String is "postgres", "mysql" or "sqlite"; "Dialect(<n>)" for any other
+// value.
 func (d Dialect) String() string {
 	switch d {
 	case Postgres:

@@ -563,14 +563,14 @@ func TestIterDurationExcludesLoopBody(t *testing.T) {
 		}
 		return r, spans
 	}
-	check := func(t *testing.T, r *sdkmetric.ManualReader, max float64) {
+	check := func(t *testing.T, r *sdkmetric.ManualReader, most float64) {
 		t.Helper()
 		dps := points(t, r, "db.client.operation.duration", "s", wantDurationBounds)
 		if len(dps) != 1 || dps[0].Count != 1 {
 			t.Fatalf("%d points, want 1 of one statement", len(dps))
 		}
-		if sum := dps[0].Sum; sum < 0 || sum >= max {
-			t.Errorf("duration %v s, want 0 <= it < %v", sum, max)
+		if sum := dps[0].Sum; sum < 0 || sum >= most {
+			t.Errorf("duration %v s, want 0 <= it < %v", sum, most)
 		}
 	}
 	t.Run("three rows", func(t *testing.T) {

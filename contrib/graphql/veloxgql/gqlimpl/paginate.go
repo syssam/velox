@@ -14,11 +14,11 @@ import (
 
 // Args are a connection's paging arguments, as the client gave them.
 //
-// first (with or without after) pages forward and last (with or without
-// before) backward; with neither, the page is the MaxPage of
-// veloxgql.LimitsFromContext(ctx) rows forward, or backward from before when before
-// is given. first and last together, after and before together, first with
-// before and last with after all fail with ErrBadPagination: keyset paging
+// first (with or without after) pages forward and last (with or without before)
+// backward; with neither, the page is the MaxPage of
+// veloxgql.LimitsFromContext(ctx) rows forward, or backward from before when
+// before is given. first and last together, after and before together, first
+// with before and last with after all fail with ErrBadPagination: keyset paging
 // bounds a page on one side only.
 type Args struct {
 	After, Before *veloxgql.Cursor
@@ -163,11 +163,11 @@ func NewConnection[E any](ctx context.Context, q velox.Query[E], typ string, arg
 	return c, nil
 }
 
-// LoadedConnection is a connection over rows, the related rows a With
-// loaded, in key order (With's default) under the GraphQL type typ: its page
-// is the first rows, the MaxPage of veloxgql.LimitsFromContext(ctx), its cursors
-// are taken under the key's order, and its TotalCount is the number of rows.
-// It runs no query.
+// LoadedConnection is a connection over rows, the related rows a With loaded,
+// in key order (With's default) under the GraphQL type typ: its page is the
+// first rows, the MaxPage of veloxgql.LimitsFromContext(ctx), its cursors are
+// taken under the key's order, and its TotalCount is the number of rows. It
+// runs no query.
 func LoadedConnection[E any](ctx context.Context, rows []E, typ string, key []OrderTerm[E]) *Connection[E] {
 	terms := make([]OrderTerm[E], len(key))
 	for i, t := range key {
@@ -186,13 +186,13 @@ func LoadedConnection[E any](ctx context.Context, rows []E, typ string, key []Or
 //     hasNextPage forward and hasPreviousPage backward. The other is false:
 //     Relay lets a server say false when it cannot tell cheaply.
 //
-// The page query reads at most n+1 rows whatever the DB's WithMaxRows cap:
-// the MaxPage of veloxgql.LimitsFromContext(ctx) bounds it. The base query's With
+// The page query reads at most n+1 rows whatever the DB's WithMaxRows cap: the
+// MaxPage of veloxgql.LimitsFromContext(ctx) bounds it. The base query's With
 // loads share that cap of n+1 rows, unless they have Rel.MaxRows or
-// Rel.LimitEach. The page's rows become a group of the operation, whose
-// edges batch (see EdgeConnection); in the connection of an edge
-// (EdgeConnection) the page is the connection's part of the batch, which
-// may return n+1 rows per owner.
+// Rel.LimitEach. The page's rows become a group of the operation, whose edges
+// batch (see EdgeConnection); in the connection of an edge (EdgeConnection) the
+// page is the connection's part of the batch, which may return n+1 rows per
+// owner.
 func (c *Connection[E]) Page[_ velox.Lazy[E]](ctx context.Context) (*Page[E], error) {
 	c.pageOnce.Do(func() {
 		c.pageErr = errPanicked // the other callers' error, when run panics

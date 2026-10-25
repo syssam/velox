@@ -879,14 +879,14 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 		if ed.OwnsKey && ed.Kind != plugin.M2M {
 			continue
 		}
-		var clear, rm, add, one = -1, -1, -1, -1
+		var clr, rm, add, one = -1, -1, -1, -1
 		for i, fi := range fs {
 			if fi.Edge != ei {
 				continue
 			}
 			switch fi.Kind {
 			case sdl.InputClearEdge:
-				clear = i
+				clr = i
 			case sdl.InputRemoveIDs:
 				rm = i
 			case sdl.InputAddIDs:
@@ -895,7 +895,7 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 				one = i
 			}
 		}
-		if clear < 0 && rm < 0 && add < 0 && one < 0 {
+		if clr < 0 && rm < 0 && add < 0 && one < 0 {
 			continue
 		}
 		tt := r.typeOf[ed.Target]
@@ -918,10 +918,10 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 				own, other = other, own
 			}
 			jo, jt := j.Handles+"."+own.GoName, j.Handles+"."+other.GoName
-			if clear >= 0 || rm >= 0 {
-				// Join rows are scoped by no tenant or policy: only those
-				// to a target the caller may read, under the tenant scope
-				// and the target's Read policy, as add's CheckExists checks, are
+			if clr >= 0 || rm >= 0 {
+				// Join rows are scoped by no tenant or policy: only those to a
+				// target the caller may read, under the tenant scope and the
+				// target's Read policy, as add's CheckExists checks, are
 				// deleted. A link to a target hidden from the caller stays.
 				k, err := r.idKeyOf(f, e, tt)
 				if err != nil {
@@ -936,8 +936,8 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 				f.p("\t\t\t_, err = db.Delete[%s]().Where(%s.EQ(key), %s.In(vs...)).Exec(ctx)", j.Name, jo, jt)
 				f.p("\t\t\treturn err")
 				f.p("\t\t}")
-				if clear >= 0 {
-					f.p("\t\tif input.%s {", fs[clear].GoName)
+				if clr >= 0 {
+					f.p("\t\tif input.%s {", fs[clr].GoName)
 					ret("\t\t\t", fmt.Sprintf("%s.UnlinkAll(ctx, db.Query[%s]().Where(%s.EQ(key)).OrderBy(%s.Asc(), %s.Asc()), func(j *%s) %s { return j.%s }, %s)", impl, j.Name, jo, jo, jt, j.Name, k.typ, other.GoName, un))
 					f.p("\t\t}")
 				}
@@ -1002,8 +1002,8 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 			f.p("%s\treturn err", indent)
 			f.p("%s}", indent)
 		}
-		if clear >= 0 {
-			f.p("\t\tif input.%s {", fs[clear].GoName)
+		if clr >= 0 {
+			f.p("\t\tif input.%s {", fs[clr].GoName)
 			exec("\t\t\t", fmt.Sprintf("db.Update[%s]().Set(%s).Where(%s.EQ(%s)).Exec(ctx)", tgt.Name, tnull, fkh, v))
 			f.p("\t\t}")
 		}

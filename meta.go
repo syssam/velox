@@ -10,8 +10,9 @@ import (
 	"unsafe"
 )
 
-// EntityInfo is what velox knows about an entity, built once on its first
-// use. It is the non-generic view that hooks see in a Statement.
+// EntityInfo is what velox knows about an entity, built once on its first use.
+// It is the non-generic view that hooks see in a Statement, and the runtime
+// view of the generated Desc it is built from.
 //
 // One EntityInfo is shared by every query on the entity, in every goroutine,
 // so it must be treated as read-only, slices included. A hook that needs
@@ -51,7 +52,8 @@ func (e *EntityInfo) Column(name string) (int, bool) {
 	return -1, false
 }
 
-// ColumnInfo describes one column.
+// ColumnInfo describes one column. It is the runtime view of the generated
+// ColumnDesc it is built from.
 type ColumnInfo struct {
 	Field       string // the Go field name
 	Name        string // the column name
@@ -99,14 +101,14 @@ type IndexInfo struct {
 	Unique  bool
 }
 
-// For generated code. Meta is an entity's metadata and scan plan.
+// Meta is an entity's metadata and scan plan. For generated code.
 type Meta[E any] struct {
 	info *EntityInfo
 	addr func(*E, int) any
 	err  error
 }
 
-// For generated code. MetaOnce builds an entity's Meta on first use. Its zero
+// MetaOnce builds an entity's Meta on first use. For generated code. Its zero
 // value is ready, so a generated file declares one without running anything at
 // program start.
 type MetaOnce[E any] struct {
