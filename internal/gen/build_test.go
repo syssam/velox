@@ -1693,6 +1693,48 @@ func TestIndexNames(t *testing.T) {
 	}
 }
 
+// fkPartial's table is its name in lower case, so a partial index on its
+// foreign-key column alone is named like velox's foreign-key index of the
+// column on PostgreSQL and SQLite, and takes the hash of its Where instead.
+// fkPartialFull's full index leads with the column, so it has no foreign-key
+// index and its partial index keeps its name.
+type (
+	fkPartial     struct{ schema.Schema }
+	fkPartialFull struct{ schema.Schema }
+)
+
+func (fkPartial) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.Table("fkpartial")}
+}
+func (fkPartial) Fields() []schema.Field { return []schema.Field{field.Int64("owner_id")} }
+func (fkPartial) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("owner", Data.Type).Unique().Required().Field("owner_id")}
+}
+func (fkPartial) Indexes() []schema.Index {
+	return []schema.Index{index.Fields("owner_id").Where("owner_id > 0")}
+}
+
+func (fkPartialFull) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.Table("fkpartialfull")}
+}
+func (fkPartialFull) Fields() []schema.Field { return []schema.Field{field.Int64("owner_id")} }
+func (fkPartialFull) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("owner", Data.Type).Unique().Required().Field("owner_id")}
+}
+func (fkPartialFull) Indexes() []schema.Index {
+	return []schema.Index{index.Fields("owner_id").Where("owner_id > 0"), index.Fields("owner_id", "id")}
+}
+
+func TestPartialIndexNamedLikeAForeignKeyIndex(t *testing.T) {
+	g := mustBuild(t, fkPartial{}, fkPartialFull{}, Data{})
+	if got := g.Entity("fkPartial").Indexes[0].Name; got != partialIndexName("fkPartial", []string{"owner_id"}, "owner_id > 0") || got == "fkpartial_owner_id" {
+		t.Errorf("fkPartial: %q", got)
+	}
+	if got := g.Entity("fkPartialFull").Indexes[0].Name; got != "fkpartialfull_owner_id" {
+		t.Errorf("fkPartialFull: %q", got)
+	}
+}
+
 type keyShareA struct{ schema.Schema }
 
 func (keyShareA) Annotations() []schema.Annotation {

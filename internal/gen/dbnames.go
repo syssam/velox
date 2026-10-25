@@ -224,6 +224,30 @@ func fkIndexed(pk []string, indexes [][]string, column string) bool {
 	return false
 }
 
+// fkIndexNames are the names of velox's foreign-key indexes of e's table on
+// PostgreSQL and SQLite, given the foreign keys of the graph: those of the
+// keys in the table that neither its primary key, a non-partial index the
+// index rules do not refuse, nor a Unique field's index leads.
+func fkIndexNames(e *Entity, fks []foreignKey, refused map[*Index]bool) []string {
+	var keys [][]string
+	for _, ix := range e.Indexes {
+		if !refused[ix] && ix.Where == "" {
+			keys = append(keys, ix.Columns)
+		}
+	}
+	ixs, _ := fieldIndexes(e, refused, velox.Postgres)
+	for _, ix := range ixs {
+		keys = append(keys, ix.Columns)
+	}
+	var out []string
+	for _, fk := range fks {
+		if fk.Schema == e.TableSchema && fk.Table == e.Table && !fkIndexed([]string{e.Fields[0].Column}, keys, fk.Column) {
+			out = append(out, fkIndexName(fk.Table, fk.Column))
+		}
+	}
+	return out
+}
+
 // fieldIndexes are the unique indexes of e's Unique fields but the ID on the
 // dialect d, each with its field, one per column, named as ent names them:
 // uniqueName on PostgreSQL, cut at 63 bytes as PostgreSQL cuts it, and on
