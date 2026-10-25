@@ -65,11 +65,14 @@
 //     read; or Dir.Add was given a plan with no script, a schema of another
 //     dialect, or a name outside a-z, 0-9 and _ or over 40 bytes.
 //   - "session": the runner's connection does not answer as velox.json's
-//     dialect, is below its minimum version (PostgreSQL 12, MySQL 8.0.19,
+//     dialect, is below its minimum version (PostgreSQL 14, MySQL 8.4,
 //     SQLite 3.35; MariaDB is refused), names no MySQL database, or is a
 //     PostgreSQL session with standard_conforming_strings off; or a MySQL
 //     session whose sql_mode holds NO_BACKSLASH_ESCAPES or ANSI_QUOTES when
 //     a file to apply holds a literal the mode would read otherwise.
+//     On PostgreSQL 18, PostgreSQL names the NOT NULL constraints; migrate
+//     neither models nor renames them, and after a table rename they keep
+//     the old table's name.
 //   - "history": the history table holds what the runner cannot read, a
 //     file is pending below the highest applied version, a dirty version
 //     to resume runs in a transaction or has versions above the

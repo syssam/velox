@@ -1,20 +1,21 @@
-# The databases CI runs against, for scripts/ci-local.sh.
+# The databases CI runs against, for scripts/ci-local.sh. The default is
+# PostgreSQL 18; VELOX_CI_POSTGRES_IMAGE names another image.
 services:
   postgres:
-    image: postgres:16
+    image: ${VELOX_CI_POSTGRES_IMAGE:-postgres:18@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6}
     environment:
       POSTGRES_USER: velox
       POSTGRES_PASSWORD: velox
       POSTGRES_DB: velox
     ports: ["127.0.0.1:55432:5432"]
-    tmpfs: [/var/lib/postgresql/data]
+    tmpfs: [/var/lib/postgresql]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U velox -d velox"]
       interval: 1s
       timeout: 3s
       retries: 60
   mysql:
-    image: mysql:8.4
+    image: mysql:8.4@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69
     environment:
       MYSQL_ROOT_PASSWORD: velox
       MYSQL_DATABASE: velox

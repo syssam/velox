@@ -313,13 +313,13 @@ func (s *session) undo(ctx context.Context, q string, args ...any) {
 
 // The minimum versions.
 var (
-	minPostgres = 120000
-	minMySQL    = [3]int{8, 0, 19}
+	minPostgres = 140000
+	minMySQL    = [3]int{8, 4, 0}
 	minSQLite   = [3]int{3, 35, 0}
 )
 
-// checkVersion refuses a server below PostgreSQL 12 (server_version_num),
-// MySQL 8.0.19 (@@version; MariaDB refused) or SQLite 3.35 (sqlite_version()).
+// checkVersion refuses a server below PostgreSQL 14 (server_version_num),
+// MySQL 8.4 (@@version; MariaDB refused) or SQLite 3.35 (sqlite_version()).
 func checkVersion(d velox.Dialect, v string) error {
 	switch d {
 	case velox.Postgres:
@@ -332,18 +332,18 @@ func checkVersion(d velox.Dialect, v string) error {
 			if n < 100000 {
 				name += "." + strconv.Itoa(n/100%100)
 			}
-			return refuseSession("the server is PostgreSQL %s; migrate needs 12 or later", name)
+			return refuseSession("the server is PostgreSQL %s; migrate needs 14 or later", name)
 		}
 	case velox.MySQL:
 		if strings.Contains(strings.ToLower(v), "mariadb") {
-			return refuseSession("the server is MariaDB %s; migrate needs MySQL 8.0.19 or later", v)
+			return refuseSession("the server is MariaDB %s; migrate needs MySQL 8.4 or later", v)
 		}
 		n, ok := triple(v)
 		if !ok {
 			return refuseSession("MySQL's version %q is not <major>.<minor>.<patch>", v)
 		}
 		if less(n, minMySQL) {
-			return refuseSession("the server is MySQL %s; migrate needs 8.0.19 or later", v)
+			return refuseSession("the server is MySQL %s; migrate needs 8.4 or later", v)
 		}
 	case velox.SQLite:
 		n, ok := triple(v)

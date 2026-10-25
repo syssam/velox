@@ -16,14 +16,17 @@ func TestCheckVersion(t *testing.T) {
 		v  string
 		ok bool
 	}{
-		{velox.Postgres, "110000", false},
-		{velox.Postgres, "120000", true},
+		{velox.Postgres, "130000", false},
+		{velox.Postgres, "140000", true},
+		{velox.Postgres, "180001", true},
 		{velox.Postgres, "160004", true},
 		{velox.Postgres, "sixteen", false},
-		{velox.MySQL, "8.0.18", false},
-		{velox.MySQL, "8.0.19", true},
+		{velox.MySQL, "8.0.19", false},
+		{velox.MySQL, "8.0.36-log", false},
+		{velox.MySQL, "8.3.0", false},
+		{velox.MySQL, "8.4.0", true},
 		{velox.MySQL, "8.4.3", true},
-		{velox.MySQL, "8.0.36-log", true},
+		{velox.MySQL, "9.1.0", true},
 		{velox.MySQL, "5.7.44", false},
 		{velox.MySQL, "10.11.2-MariaDB", false},
 		{velox.MySQL, "eight", false},
@@ -44,9 +47,25 @@ func TestCheckVersion(t *testing.T) {
 
 // TestCheckVersionText: the refusal names the version as PostgreSQL does.
 func TestCheckVersionText(t *testing.T) {
-	for v, want := range map[string]string{"90624": "PostgreSQL 9.6;", "110005": "PostgreSQL 11;"} {
+	for v, want := range map[string]string{"90624": "PostgreSQL 9.6;", "110005": "PostgreSQL 11;", "130000": "PostgreSQL 13;"} {
 		if err := migrate.CheckVersion(velox.Postgres, v); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%s: %v; want %q", v, err, want)
+		}
+	}
+}
+
+// TestCheckVersionFloors: the refusal names the minimum.
+func TestCheckVersionFloors(t *testing.T) {
+	for _, c := range []struct {
+		d    velox.Dialect
+		v    string
+		want string
+	}{
+		{velox.MySQL, "8.0.36", "needs 8.4 or later"},
+		{velox.Postgres, "130000", "needs 14 or later"},
+	} {
+		if err := migrate.CheckVersion(c.d, c.v); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%v %s: %v; want %q", c.d, c.v, err, c.want)
 		}
 	}
 }

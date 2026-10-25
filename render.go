@@ -693,7 +693,7 @@ func (w *writer) insertStmt(st *Statement) {
 // branch's condition names the existing row's columns by its table. MySQL
 // has neither a conflict target nor DO NOTHING: ON DUPLICATE KEY UPDATE
 // applies to any unique key, keeping the existing row is a no-op assignment,
-// and the inserted values come from the row alias new (MySQL 8.0.19 and
+// and the inserted values come from the row alias new (MySQL 8.4 and
 // later). The alias makes an unqualified column name on the right side
 // ambiguous (error 1052), so the no-op assignment qualifies it with the
 // table.

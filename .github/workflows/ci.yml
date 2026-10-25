@@ -7,10 +7,19 @@ permissions:
   contents: read
 jobs:
   test:
+    name: test (PostgreSQL ${{ matrix.pg }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - pg: "14"
+            postgres-image: postgres:14@sha256:8ab94f61668dc73bbab4dc13273ff2fc37e635536af62aef5306a49a9682a446
+          - pg: "18"
+            postgres-image: postgres:18@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        image: ${{ matrix.postgres-image }}
         env:
           POSTGRES_USER: velox
           POSTGRES_PASSWORD: velox
@@ -19,7 +28,7 @@ jobs:
         options: >-
           --health-cmd "pg_isready -h 127.0.0.1 -U velox -d velox" --health-interval 2s --health-timeout 5s --health-retries 30
       mysql:
-        image: mysql:8.4
+        image: mysql:8.4@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69
         env:
           MYSQL_ROOT_PASSWORD: velox
           MYSQL_DATABASE: velox

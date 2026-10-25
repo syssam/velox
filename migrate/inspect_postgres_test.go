@@ -418,7 +418,6 @@ func TestInspectPostgresUnheld(t *testing.T) {
 		`CREATE INDEX p_ops ON p (a text_pattern_ops)`,
 		`CREATE INDEX p_coll ON p (a COLLATE "C")`,
 		`CREATE INDEX p_incl ON p (b) INCLUDE (c)`,
-		`CREATE UNIQUE INDEX p_nnd ON p (c) NULLS NOT DISTINCT`,
 		`CREATE INDEX p_expr ON p (lower(a))`,
 		`ALTER TABLE p ADD CONSTRAINT p_r_excl EXCLUDE USING gist (r WITH &&)`,
 		`CREATE INDEX p_plain ON p (a)`,
@@ -426,6 +425,14 @@ func TestInspectPostgresUnheld(t *testing.T) {
 		`CREATE UNLOGGED TABLE l (id integer PRIMARY KEY)`,
 	} {
 		mustExec(t, db, q)
+	}
+	// NULLS NOT DISTINCT is PostgreSQL 15's.
+	var version int
+	if err := db.QueryRow(`SELECT current_setting('server_version_num')::int`).Scan(&version); err != nil {
+		t.Fatal(err)
+	}
+	if version >= 150000 {
+		mustExec(t, db, `CREATE UNIQUE INDEX p_nnd ON p (c) NULLS NOT DISTINCT`)
 	}
 	s, notes, err := migrate.InspectNotes(ctx, db, velox.Postgres, nil)
 	if err != nil {
@@ -437,7 +444,6 @@ func TestInspectPostgresUnheld(t *testing.T) {
 		"p.p_ops":     {"operator class"},
 		"p.p_coll":    {"collation"},
 		"p.p_incl":    {"INCLUDE"},
-		"p.p_nnd":     {"NULLS NOT DISTINCT"},
 		"p.p_expr":    {"expression"},
 		"p.p_r_excl":  {"exclusion"},
 		"u.u_p1_fkey": {"ON UPDATE CASCADE"},
@@ -446,6 +452,9 @@ func TestInspectPostgresUnheld(t *testing.T) {
 		"u.u_k_key":   {"DEFERRABLE"},
 		"c.e":         {`COLLATE "C"`},
 		"l":           {"UNLOGGED"},
+	}
+	if version >= 150000 {
+		want["p.p_nnd"] = []string{"NULLS NOT DISTINCT"}
 	}
 	got := map[string]string{}
 	for _, n := range notes {
@@ -471,7 +480,11 @@ func TestInspectPostgresUnheld(t *testing.T) {
 	for _, ix := range table(s, "p").Indexes {
 		indexes = append(indexes, ix.Name)
 	}
-	if !slices.Equal(indexes, []string{"p_b_c", "p_coll", "p_desc", "p_hash", "p_incl", "p_nnd", "p_ops", "p_plain"}) {
+	wantIndexes := []string{"p_b_c", "p_coll", "p_desc", "p_hash", "p_incl", "p_ops", "p_plain"}
+	if version >= 150000 {
+		wantIndexes = []string{"p_b_c", "p_coll", "p_desc", "p_hash", "p_incl", "p_nnd", "p_ops", "p_plain"}
+	}
+	if !slices.Equal(indexes, wantIndexes) {
 		t.Errorf("p's indexes %v", indexes)
 	}
 	if fk := table(s, "u").ForeignKeys; len(fk) != 3 {

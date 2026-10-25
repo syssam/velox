@@ -482,9 +482,10 @@ func pgDescribe(t *testing.T, db *sql.DB) []string {
 			' ' || coalesce(c.character_maximum_length::text, '-')
 		FROM information_schema.columns c WHERE c.table_schema NOT IN ('pg_catalog', 'information_schema')`,
 		`SELECT 'index ' || schemaname || ' ' || indexdef FROM pg_indexes WHERE schemaname NOT IN ('pg_catalog', 'information_schema')`,
+		// PostgreSQL 18 names NOT NULL constraints itself; velox models nullability, which the column query compares through is_nullable, and not those names.
 		`SELECT 'constraint ' || n.nspname || '.' || r.relname || ' ' || c.conname || ' ' || pg_get_constraintdef(c.oid) || ' ' || c.convalidated
 		FROM pg_constraint c JOIN pg_class r ON r.oid = c.conrelid JOIN pg_namespace n ON n.oid = r.relnamespace
-		WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')`,
+		WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND c.contype <> 'n'`,
 		`SELECT 'enum ' || n.nspname || '.' || t.typname || ' ' || string_agg(e.enumlabel, ',' ORDER BY e.enumsortorder)
 		FROM pg_type t JOIN pg_enum e ON e.enumtypid = t.oid JOIN pg_namespace n ON n.oid = t.typnamespace GROUP BY n.nspname, t.typname`,
 		`SELECT 'sequence ' || schemaname || '.' || sequencename || ' ' || data_type FROM pg_sequences`,

@@ -33,7 +33,7 @@ An application changes its schema package, runs one command, and gets a reviewab
    - Checksums that refuse an edited applied file.
 6. **Online where the dialect allows it.** On PostgreSQL an index on an existing table is built `CONCURRENTLY`, and a foreign key or check is added `NOT VALID` and validated afterwards.
 7. **Adoption.** An existing database, including one ent or old velox created, can be adopted (`baseline`) and then brought to the schema by ordinary migrations.
-8. **Every dialect.** PostgreSQL 12+, MySQL 8.0.19+ and SQLite 3.35+, tested on PostgreSQL 16, MySQL 8.4 and SQLite.
+8. **Every dialect.** PostgreSQL 14+, MySQL 8.4+ and SQLite 3.35+, tested on PostgreSQL 14 and 18, MySQL 8.4 and SQLite.
 
 ## Non-goals (v1)
 
@@ -1314,7 +1314,7 @@ env "velox" {
 38. **The statement splitter** knows quotes, comments, dollar quotes and MySQL's backslash escapes, and not `DELIMITER` (§9).
 39. **`Verify` is the test helper** (§10).
 40. **`ColumnDesc.SQLType` and `ColumnInfo.SQLType` are removed** (§15.5).
-41. **Minimum versions:** PostgreSQL 12 (`SET NOT NULL` from a valid check), MySQL 8.0.19 (enforced `CHECK` from 8.0.16, display widths gone from 8.0.19; the normaliser still strips them, ruling 52), SQLite 3.35 (`DROP COLUMN`). MySQL 8.0 reached its end of life in April 2026; CI tests 8.4.
+41. **Minimum versions:** PostgreSQL 14, MySQL 8.4 and SQLite 3.35 (`DROP COLUMN`). PostgreSQL 12 and 13 and MySQL 8.0 are past their end of life; the normaliser still strips MySQL's display widths (ruling 52). CI tests PostgreSQL 14 and 18, MySQL 8.4 and SQLite **(changed by the pre-1.0 hardening spec, builder ruling 16: this ruling named PostgreSQL 12 and MySQL 8.0.19)**.
 42. **Out of scope as decision 15 lists,** and data migrations are hand-written files. Free-standing sequences stay out; owned ones are in (ruling 51).
 43. **Tests as §17** (decision 16).
 44. **Three plans, re-cut** (changed, Plans). The builder check's fixes keep the cut.

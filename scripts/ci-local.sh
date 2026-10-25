@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Runs what CI runs, against the same database versions, in local containers.
+# CI tests PostgreSQL 14 and 18; this runs 18, and VELOX_CI_MATRIX=1 then runs the tests again on 14.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -95,3 +96,12 @@ go run ./bench/scale -n 500 -s 100 -graphql -check bench/scale/thresholds.json
 
 # velox-graphql against the newest gqlgen, in a copy of the tree.
 scripts/gqlgen-latest.sh
+
+# VELOX_CI_MATRIX=1 runs the tests again on PostgreSQL 14, CI's other entry.
+if [ "${VELOX_CI_MATRIX:-}" = 1 ]; then
+  "${compose[@]}" down -v
+  VELOX_CI_POSTGRES_IMAGE='postgres:14@sha256:8ab94f61668dc73bbab4dc13273ff2fc37e635536af62aef5306a49a9682a446' "${compose[@]}" up -d --wait
+  go test -race -count=1 -timeout 20m ./...
+  (cd contrib/veloxotel && go test -race -count=1 ./...)
+  (cd contrib/graphql && go test -race -count=1 ./...)
+fi

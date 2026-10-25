@@ -380,7 +380,7 @@ Generated keys and database defaults are read back into the struct: `RETURNING`
 on PostgreSQL and SQLite, `LastInsertId` on MySQL for an insert without
 OnConflict (MySQL's insert id does not name the row after
 `ON DUPLICATE KEY UPDATE`). Upsert renders `ON CONFLICT … DO UPDATE` /
-`DO NOTHING`, or on MySQL `AS new ON DUPLICATE KEY UPDATE` (8.0.19 and later).
+`DO NOTHING`, or on MySQL `AS new ON DUPLICATE KEY UPDATE` (MySQL 8.4 and later).
 A static `Default` on a bool or numeric field must use a pointer field, so an
 explicit false or 0 can be inserted; `DefaultFunc` applies to any type and
 fills a zero field.
@@ -569,7 +569,7 @@ allocations per query without a cache.
 
 PostgreSQL is the reference; every feature is defined there first.
 
-| | PostgreSQL | MySQL 8.0.19+ | SQLite 3.35+ |
+| | PostgreSQL | MySQL 8.4+ | SQLite 3.35+ |
 |---|---|---|---|
 | Executor | native pgx (`pgx/v5`, a `*pgxpool.Pool`) | `database/sql` + `go-sql-driver/mysql` | `database/sql` + `modernc.org/sqlite` (no cgo) |
 | Placeholders | `$1` | `?` | `?` |
