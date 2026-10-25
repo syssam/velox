@@ -394,9 +394,9 @@ func rebuildG(t *testing.T, db *sql.DB, edit func(string) string) {
 	}
 }
 
-// replace is an edit of the text old to new.
-func replace(old, new string) func(string) string {
-	return func(s string) string { return strings.Replace(s, old, new, 1) }
+// replace is an edit of the text from to to.
+func replace(from, to string) func(string) string {
+	return func(s string) string { return strings.Replace(s, from, to, 1) }
 }
 
 // TestDriftSQLiteLive: a table rebuilt by hand after Up gives the changes

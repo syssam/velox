@@ -396,10 +396,10 @@ func handPlan() *migrate.Plan {
 	return &migrate.Plan{
 		Changes: []migrate.Change{migrate.CreateTable{Table: migrate.Table{Name: "t"}}},
 		Scripts: []migrate.Script{
-			{Kind: migrate.EnumScript, Directives: migrate.Directives{NoTransaction: true},
+			{Kind: migrate.ScriptEnum, Directives: migrate.Directives{NoTransaction: true},
 				Statements: []migrate.Statement{{SQL: "ALTER TYPE e ADD VALUE 'x'", Unit: 1}}},
-			{Kind: migrate.MainScript, Statements: []migrate.Statement{{SQL: "CREATE TABLE t (id bigint)"}, {SQL: "CREATE TABLE u (id bigint)", Review: "check; it"}}},
-			{Kind: migrate.OnlineScript, Directives: migrate.Directives{NoTransaction: true},
+			{Kind: migrate.ScriptMain, Statements: []migrate.Statement{{SQL: "CREATE TABLE t (id bigint)"}, {SQL: "CREATE TABLE u (id bigint)", Review: "check; it"}}},
+			{Kind: migrate.ScriptOnline, Directives: migrate.Directives{NoTransaction: true},
 				Statements: []migrate.Statement{{SQL: "CREATE INDEX CONCURRENTLY i ON t (id)", Unit: 1}}},
 		},
 	}
@@ -572,7 +572,7 @@ func TestDirAddEnumLockTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if plan.Scripts[0].Kind != migrate.EnumScript || plan.Scripts[0].Directives.LockTimeoutSet {
+	if plan.Scripts[0].Kind != migrate.ScriptEnum || plan.Scripts[0].Directives.LockTimeoutSet {
 		t.Fatalf("scripts = %+v", plan.Scripts)
 	}
 	files, err := dir.Add("", plan, to)

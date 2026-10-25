@@ -176,7 +176,7 @@ func (Tag) Fields() []schema.Field {
 
 func TestRenderSQLiteRebuild(t *testing.T) {
 	ss := caseScripts(t, caseNamed("rebuild-parent"), velox.SQLite)
-	if len(ss) != 1 || ss[0].Kind != migrate.MainScript || !ss[0].Directives.ForeignKeysOff {
+	if len(ss) != 1 || ss[0].Kind != migrate.ScriptMain || !ss[0].Directives.ForeignKeysOff {
 		t.Fatalf("want one main script with foreign keys off, got %+v", ss)
 	}
 	want := []string{
@@ -391,7 +391,7 @@ func TestRenderUnits(t *testing.T) {
 			}
 			for _, s := range caseScripts(t, c, d) {
 				for i, st := range s.Statements {
-					if s.Kind == migrate.OnlineScript {
+					if s.Kind == migrate.ScriptOnline {
 						first := i == 0 || st.Unit != s.Statements[i-1].Unit
 						if want := 0; i > 0 {
 							want = s.Statements[i-1].Unit
@@ -408,7 +408,7 @@ func TestRenderUnits(t *testing.T) {
 						continue
 					}
 					want := 0
-					if d == velox.MySQL || s.Kind == migrate.EnumScript {
+					if d == velox.MySQL || s.Kind == migrate.ScriptEnum {
 						want = i
 					}
 					if st.Unit != want {
@@ -707,7 +707,7 @@ func checkClauses(ddl string) []string {
 
 func TestKindStrings(t *testing.T) {
 	for k, want := range map[migrate.ScriptKind]string{
-		migrate.MainScript: "main", migrate.EnumScript: "enum", migrate.OnlineScript: "online", 7: "ScriptKind(7)",
+		migrate.ScriptMain: "main", migrate.ScriptEnum: "enum", migrate.ScriptOnline: "online", 7: "ScriptKind(7)",
 	} {
 		if got := k.String(); got != want {
 			t.Errorf("ScriptKind %d: %q, want %q", k, got, want)

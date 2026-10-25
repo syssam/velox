@@ -148,7 +148,7 @@ type implicitIndex struct {
 }
 
 // same is samePredicateIn with the enum types of both schemas.
-func (c *drifter) same(a, b string) (same, comparable bool) {
+func (c *drifter) same(a, b string) (same, parsed bool) {
 	return samePredicateIn(c.d, a, b, c.enums)
 }
 
@@ -226,9 +226,9 @@ func (c *drifter) table(t, u *Table) {
 			ti.Unique != ui.Unique || !slices.Equal(ti.Columns, ui.Columns) {
 			continue
 		}
-		same, comparable := c.same(ti.Where, ui.Where)
+		same, parsed := c.same(ti.Where, ui.Where)
 		switch {
-		case !comparable && !same:
+		case !parsed && !same:
 			c.warn(indexObject(t.Ref(), *ti), "the predicate is %s in the database and %s in %s; one cannot be parsed, so they are not compared", ti.Where, ui.Where, c.other)
 			if c.adopt {
 				continue
@@ -254,10 +254,10 @@ func (c *drifter) table(t, u *Table) {
 			}
 			continue
 		}
-		same, comparable := c.same(tc.Expr, uc.Expr)
+		same, parsed := c.same(tc.Expr, uc.Expr)
 		switch {
 		case same:
-		case !comparable:
+		case !parsed:
 			c.warn(colTarget(t.Ref(), tc.Name), "the check is %s in the database and %s in %s; one cannot be parsed, so they are not compared", tc.Expr, uc.Expr, c.other)
 			if c.adopt {
 				continue
@@ -367,8 +367,8 @@ func (c *drifter) sameText(a, b string) bool {
 	if a == "" || b == "" {
 		return false
 	}
-	same, comparable := c.same(a, b)
-	return same && comparable
+	same, parsed := c.same(a, b)
+	return same && parsed
 }
 
 // sameKey is sameForeignKey, with MySQL's RESTRICT and no action one.

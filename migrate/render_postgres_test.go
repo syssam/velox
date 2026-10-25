@@ -66,7 +66,7 @@ func TestRenderOnlineUnits(t *testing.T) {
 		}},
 	} {
 		ss := caseScripts(t, caseNamed(name), velox.Postgres)
-		if len(ss) != 1 || ss[0].Kind != migrate.OnlineScript {
+		if len(ss) != 1 || ss[0].Kind != migrate.ScriptOnline {
 			t.Fatalf("%s: want the online script alone:\n%s", name, scriptsText(ss))
 		}
 		on := ss[0]
@@ -96,7 +96,7 @@ func TestRenderOnlineUnits(t *testing.T) {
 	// The main script keeps the lock timeout; the foreign key dropped
 	// around the type change comes back online.
 	ss := caseScripts(t, caseNamed("key-type-change"), velox.Postgres)
-	main, on := scriptOf(ss, migrate.MainScript), scriptOf(ss, migrate.OnlineScript)
+	main, on := scriptOf(ss, migrate.ScriptMain), scriptOf(ss, migrate.ScriptOnline)
 	if main == nil || on == nil || main.Directives.LockTimeout != 5*time.Second || !main.Directives.LockTimeoutSet || main.Directives.NoTransaction {
 		t.Fatalf("key-type-change:\n%s", scriptsText(ss))
 	}
@@ -114,7 +114,7 @@ func TestRenderOnlineUnits(t *testing.T) {
 	// An index on a table the plan drops goes in the main script, before
 	// another table's index takes its name online.
 	ss = caseScripts(t, caseNamed("reuse-dropped-name"), velox.Postgres)
-	main, on = scriptOf(ss, migrate.MainScript), scriptOf(ss, migrate.OnlineScript)
+	main, on = scriptOf(ss, migrate.ScriptMain), scriptOf(ss, migrate.ScriptOnline)
 	if main == nil || on == nil || !slices.Contains(stmtSQL(main.Statements), `DROP INDEX "shared_idx"`) ||
 		!slices.Contains(stmtSQL(on.Statements), `CREATE INDEX CONCURRENTLY "shared_idx" ON "users" ("created_at")`) {
 		t.Errorf("reuse-dropped-name:\n%s", scriptsText(ss))
@@ -132,7 +132,7 @@ func TestRenderOnlineUnits(t *testing.T) {
 func TestRenderEnumScript(t *testing.T) {
 	ss := caseScripts(t, caseNamed("enum-insert"), velox.Postgres)
 	want := []string{`ALTER TYPE "users_role" ADD VALUE IF NOT EXISTS 'editor' BEFORE 'viewer'`}
-	if len(ss) != 1 || ss[0].Kind != migrate.EnumScript || !slices.Equal(stmtSQL(ss[0].Statements), want) {
+	if len(ss) != 1 || ss[0].Kind != migrate.ScriptEnum || !slices.Equal(stmtSQL(ss[0].Statements), want) {
 		t.Fatalf("enum-insert:\n%s", scriptsText(ss))
 	}
 	if d := ss[0].Directives; !d.NoTransaction || d.LockTimeout != 5*time.Second || !d.LockTimeoutSet {
@@ -147,7 +147,7 @@ func TestRenderEnumScript(t *testing.T) {
 		`ALTER TABLE "users" ALTER COLUMN "status" DROP DEFAULT, ALTER COLUMN "status" TYPE "case_status" USING "status"::text::"case_status", ALTER COLUMN "status" SET DEFAULT 'active'`,
 		`DROP TYPE "case_status_velox_old"`,
 	}
-	if len(ss) != 1 || ss[0].Kind != migrate.MainScript || !slices.Equal(stmtSQL(ss[0].Statements), want) {
+	if len(ss) != 1 || ss[0].Kind != migrate.ScriptMain || !slices.Equal(stmtSQL(ss[0].Statements), want) {
 		t.Errorf("enum-shared:\n%s", scriptsText(ss))
 	}
 
@@ -176,7 +176,7 @@ func TestRenderEnumScript(t *testing.T) {
 		migrate.RenameEnum{From: migrate.TableRef{Name: "users_role"}, To: kind},
 		migrate.AlterEnum{From: migrate.Enum{Name: "users_kind", Values: []string{"admin", "viewer"}}, To: migrate.Enum{Name: "users_kind", Values: []string{"admin", "viewer", "owner"}}},
 	}, migrate.RenderOptions{})
-	if len(ss) != 2 || ss[0].Kind != migrate.EnumScript || ss[1].Kind != migrate.MainScript ||
+	if len(ss) != 2 || ss[0].Kind != migrate.ScriptEnum || ss[1].Kind != migrate.ScriptMain ||
 		!slices.Equal(stmtSQL(ss[0].Statements), []string{`ALTER TYPE "users_role" ADD VALUE IF NOT EXISTS 'owner'`}) {
 		t.Errorf("a renamed type:\n%s", scriptsText(ss))
 	}
@@ -356,7 +356,7 @@ func TestRenderPostgresDetails(t *testing.T) {
 		f.SchemaType = map[string]string{field.Postgres: "varchar(50)"}
 	})
 	ss = render(t, from, to, diff(t, from, to, migrate.DiffOptions{}), migrate.RenderOptions{})
-	if main, on := scriptOf(ss, migrate.MainScript), scriptOf(ss, migrate.OnlineScript); main == nil || on == nil ||
+	if main, on := scriptOf(ss, migrate.ScriptMain), scriptOf(ss, migrate.ScriptOnline); main == nil || on == nil ||
 		!strings.Contains(main.Statements[0].Review, "alter-type: ") || !strings.Contains(main.Statements[0].Review, "set-not-null: ") ||
 		on.Statements[0].Review != "" || on.Statements[3].SQL != `ALTER TABLE "users" ALTER COLUMN "bio" SET NOT NULL` {
 		t.Errorf("type and NOT NULL:\n%s", scriptsText(ss))

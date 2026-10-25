@@ -112,7 +112,7 @@ func undoHint(v uint64) string {
 	return fmt.Sprintf("undo its applied statements and run migrate resolve -version %d -undone", v)
 }
 
-// Error, when Statement > 0, is "migrate: <Path>: statement <Statement> of
+// Error is, when Statement > 0, "migrate: <Path>: statement <Statement> of
 // <Statements>: <Err>", then "\n  version <Version> is dirty; fix the cause
 // and run migrate apply -resume, or " and, when statements ran before it,
 // "undo statement 1 and " or "undo statements 1 to <Statement-1> and "

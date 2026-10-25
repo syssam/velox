@@ -122,9 +122,9 @@ func TestSplit(t *testing.T) {
 
 // splitSeedScripts are writeScript outputs whose review lines hold ;, ' and ".
 var splitSeedScripts = []migrate.Script{
-	{Kind: migrate.MainScript, Statements: []migrate.Statement{{SQL: "ALTER TABLE users DROP COLUMN legacy", Review: "drop-column: drops a; b"}}},
-	{Kind: migrate.MainScript, Directives: migrate.Directives{Allow: []migrate.Allow{{Code: "drop-table", Target: "posts"}}}, Statements: []migrate.Statement{{SQL: "DROP TABLE posts", Review: "drop-table: it's posts'"}}},
-	{Kind: migrate.OnlineScript, Directives: migrate.Directives{NoTransaction: true}, Statements: []migrate.Statement{
+	{Kind: migrate.ScriptMain, Statements: []migrate.Statement{{SQL: "ALTER TABLE users DROP COLUMN legacy", Review: "drop-column: drops a; b"}}},
+	{Kind: migrate.ScriptMain, Directives: migrate.Directives{Allow: []migrate.Allow{{Code: "drop-table", Target: "posts"}}}, Statements: []migrate.Statement{{SQL: "DROP TABLE posts", Review: "drop-table: it's posts'"}}},
+	{Kind: migrate.ScriptOnline, Directives: migrate.Directives{NoTransaction: true}, Statements: []migrate.Statement{
 		{SQL: `CREATE INDEX CONCURRENTLY "a" ON "t" ("x")`, Review: `add-index: "quoted; name`},
 		{SQL: "SELECT 2", Unit: 1},
 	}},

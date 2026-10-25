@@ -14,6 +14,7 @@ import (
 // A Resolution is how a human ended a dirty version.
 type Resolution uint8
 
+// The two ways Resolve ends a dirty version.
 const (
 	ResolveApplied Resolution = iota + 1 // a human finished the version
 	ResolveUndone                        // a human reverted it; the row is deleted

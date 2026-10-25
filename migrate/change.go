@@ -30,6 +30,7 @@ type Kind string
 // A ColumnChange is the set of what an AlterColumn changes.
 type ColumnChange uint8
 
+// The ColumnChange bits, one per part of a column an AlterColumn changes.
 const (
 	ColumnType ColumnChange = 1 << iota
 	ColumnNullable
@@ -181,51 +182,137 @@ type DiffOptions struct {
 
 func (e *Enum) ref() TableRef { return TableRef{Schema: e.Schema, Name: e.Name} }
 
-func (CreateTable) Kind() Kind       { return "create-table" }
-func (DropTable) Kind() Kind         { return "drop-table" }
-func (RenameTable) Kind() Kind       { return "rename-table" }
-func (AddColumn) Kind() Kind         { return "add-column" }
-func (DropColumn) Kind() Kind        { return "drop-column" }
-func (RenameColumn) Kind() Kind      { return "rename-column" }
-func (AlterColumn) Kind() Kind       { return "alter-column" }
-func (RenameSequence) Kind() Kind    { return "rename-sequence" }
-func (AddIndex) Kind() Kind          { return "add-index" }
-func (DropIndex) Kind() Kind         { return "drop-index" }
-func (RenameIndex) Kind() Kind       { return "rename-index" }
-func (AddForeignKey) Kind() Kind     { return "add-foreign-key" }
-func (DropForeignKey) Kind() Kind    { return "drop-foreign-key" }
-func (AddCheck) Kind() Kind          { return "add-check" }
-func (DropCheck) Kind() Kind         { return "drop-check" }
-func (RenameConstraint) Kind() Kind  { return "rename-constraint" }
-func (SetTableComment) Kind() Kind   { return "set-table-comment" }
-func (SetTableCollation) Kind() Kind { return "set-table-collation" }
-func (CreateEnum) Kind() Kind        { return "create-enum" }
-func (DropEnum) Kind() Kind          { return "drop-enum" }
-func (RenameEnum) Kind() Kind        { return "rename-enum" }
-func (AlterEnum) Kind() Kind         { return "alter-enum" }
+// Kind is "create-table".
+func (CreateTable) Kind() Kind { return "create-table" }
 
-func (c CreateTable) Target() TableRef       { return c.Table.Ref() }
-func (c DropTable) Target() TableRef         { return c.Table.Ref() }
-func (c RenameTable) Target() TableRef       { return c.To }
-func (c AddColumn) Target() TableRef         { return c.Table }
-func (c DropColumn) Target() TableRef        { return c.Table }
-func (c RenameColumn) Target() TableRef      { return c.Table }
-func (c AlterColumn) Target() TableRef       { return c.Table }
-func (c RenameSequence) Target() TableRef    { return c.Table }
-func (c AddIndex) Target() TableRef          { return c.Table }
-func (c DropIndex) Target() TableRef         { return c.Table }
-func (c RenameIndex) Target() TableRef       { return c.Table }
-func (c AddForeignKey) Target() TableRef     { return c.Table }
-func (c DropForeignKey) Target() TableRef    { return c.Table }
-func (c AddCheck) Target() TableRef          { return c.Table }
-func (c DropCheck) Target() TableRef         { return c.Table }
-func (c RenameConstraint) Target() TableRef  { return c.Table }
-func (c SetTableComment) Target() TableRef   { return c.Table }
+// Kind is "drop-table".
+func (DropTable) Kind() Kind { return "drop-table" }
+
+// Kind is "rename-table".
+func (RenameTable) Kind() Kind { return "rename-table" }
+
+// Kind is "add-column".
+func (AddColumn) Kind() Kind { return "add-column" }
+
+// Kind is "drop-column".
+func (DropColumn) Kind() Kind { return "drop-column" }
+
+// Kind is "rename-column".
+func (RenameColumn) Kind() Kind { return "rename-column" }
+
+// Kind is "alter-column".
+func (AlterColumn) Kind() Kind { return "alter-column" }
+
+// Kind is "rename-sequence".
+func (RenameSequence) Kind() Kind { return "rename-sequence" }
+
+// Kind is "add-index".
+func (AddIndex) Kind() Kind { return "add-index" }
+
+// Kind is "drop-index".
+func (DropIndex) Kind() Kind { return "drop-index" }
+
+// Kind is "rename-index".
+func (RenameIndex) Kind() Kind { return "rename-index" }
+
+// Kind is "add-foreign-key".
+func (AddForeignKey) Kind() Kind { return "add-foreign-key" }
+
+// Kind is "drop-foreign-key".
+func (DropForeignKey) Kind() Kind { return "drop-foreign-key" }
+
+// Kind is "add-check".
+func (AddCheck) Kind() Kind { return "add-check" }
+
+// Kind is "drop-check".
+func (DropCheck) Kind() Kind { return "drop-check" }
+
+// Kind is "rename-constraint".
+func (RenameConstraint) Kind() Kind { return "rename-constraint" }
+
+// Kind is "set-table-comment".
+func (SetTableComment) Kind() Kind { return "set-table-comment" }
+
+// Kind is "set-table-collation".
+func (SetTableCollation) Kind() Kind { return "set-table-collation" }
+
+// Kind is "create-enum".
+func (CreateEnum) Kind() Kind { return "create-enum" }
+
+// Kind is "drop-enum".
+func (DropEnum) Kind() Kind { return "drop-enum" }
+
+// Kind is "rename-enum".
+func (RenameEnum) Kind() Kind { return "rename-enum" }
+
+// Kind is "alter-enum".
+func (AlterEnum) Kind() Kind { return "alter-enum" }
+
+// Target is the table it creates.
+func (c CreateTable) Target() TableRef { return c.Table.Ref() }
+
+// Target is the table it drops.
+func (c DropTable) Target() TableRef { return c.Table.Ref() }
+
+// Target is the table's new name.
+func (c RenameTable) Target() TableRef { return c.To }
+
+// Target is the table it adds the column to.
+func (c AddColumn) Target() TableRef { return c.Table }
+
+// Target is the table it drops the column from.
+func (c DropColumn) Target() TableRef { return c.Table }
+
+// Target is the column's table.
+func (c RenameColumn) Target() TableRef { return c.Table }
+
+// Target is the column's table.
+func (c AlterColumn) Target() TableRef { return c.Table }
+
+// Target is the column's table.
+func (c RenameSequence) Target() TableRef { return c.Table }
+
+// Target is the index's table.
+func (c AddIndex) Target() TableRef { return c.Table }
+
+// Target is the index's table.
+func (c DropIndex) Target() TableRef { return c.Table }
+
+// Target is the index's table.
+func (c RenameIndex) Target() TableRef { return c.Table }
+
+// Target is the foreign key's table.
+func (c AddForeignKey) Target() TableRef { return c.Table }
+
+// Target is the foreign key's table.
+func (c DropForeignKey) Target() TableRef { return c.Table }
+
+// Target is the check's table.
+func (c AddCheck) Target() TableRef { return c.Table }
+
+// Target is the check's table.
+func (c DropCheck) Target() TableRef { return c.Table }
+
+// Target is the constraint's table.
+func (c RenameConstraint) Target() TableRef { return c.Table }
+
+// Target is the table whose comment it sets.
+func (c SetTableComment) Target() TableRef { return c.Table }
+
+// Target is the table whose collation it sets.
 func (c SetTableCollation) Target() TableRef { return c.Table }
-func (c CreateEnum) Target() TableRef        { return c.Enum.ref() }
-func (c DropEnum) Target() TableRef          { return c.Enum.ref() }
-func (c RenameEnum) Target() TableRef        { return c.To }
-func (c AlterEnum) Target() TableRef         { return c.To.ref() }
+
+// Target is the enum type's ref.
+func (c CreateEnum) Target() TableRef { return c.Enum.ref() }
+
+// Target is the enum type's ref.
+func (c DropEnum) Target() TableRef { return c.Enum.ref() }
+
+// Target is the enum type's new ref.
+func (c RenameEnum) Target() TableRef { return c.To }
+
+// Target is the enum type's ref.
+func (c AlterEnum) Target() TableRef { return c.To.ref() }
 
 func (CreateTable) isChange()       {}
 func (DropTable) isChange()         {}
@@ -255,35 +342,77 @@ func (AlterEnum) isChange()         {}
 // runs. A rename adds " → <new name>", an alter-column " (<What>)", a
 // sequence rename " (<from> → <to>)" after its column, and an alter-enum
 // " (<from values> → <to values>)".
-func (c CreateTable) String() string  { return kindOf(c, c.Table.Ref().String()) }
-func (c DropTable) String() string    { return kindOf(c, c.Table.Ref().String()) }
-func (c RenameTable) String() string  { return kindOf(c, c.From.String()+" → "+c.To.String()) }
-func (c AddColumn) String() string    { return kindOf(c, objectOn(c.Table, c.Column.Name)) }
-func (c DropColumn) String() string   { return kindOf(c, objectOn(c.Table, c.Column.Name)) }
+func (c CreateTable) String() string { return kindOf(c, c.Table.Ref().String()) }
+
+// String is "drop-table <table>".
+func (c DropTable) String() string { return kindOf(c, c.Table.Ref().String()) }
+
+// String is "rename-table <from> → <to>".
+func (c RenameTable) String() string { return kindOf(c, c.From.String()+" → "+c.To.String()) }
+
+// String is "add-column <table>.<column>".
+func (c AddColumn) String() string { return kindOf(c, objectOn(c.Table, c.Column.Name)) }
+
+// String is "drop-column <table>.<column>".
+func (c DropColumn) String() string { return kindOf(c, objectOn(c.Table, c.Column.Name)) }
+
+// String is "rename-column <table>.<from> → <to>".
 func (c RenameColumn) String() string { return kindOf(c, objectOn(c.Table, c.From)+" → "+c.To) }
+
+// String is "alter-column <table>.<column> (<What>)".
 func (c AlterColumn) String() string {
 	return kindOf(c, objectOn(c.Table, c.To.Name)+" ("+c.What.String()+")")
 }
-func (c AddIndex) String() string  { return kindOf(c, indexObject(c.Table, c.Index)) }
+
+// String is "add-index <table>.<index>".
+func (c AddIndex) String() string { return kindOf(c, indexObject(c.Table, c.Index)) }
+
+// String is "drop-index <table>.<index>".
 func (c DropIndex) String() string { return kindOf(c, indexObject(c.Table, c.Index)) }
+
+// String is "rename-index <table>.<from> → <to>".
 func (c RenameIndex) String() string {
 	return kindOf(c, objectOn(c.Table, source(c.From, c.def))+" → "+c.To)
 }
-func (c AddForeignKey) String() string  { return kindOf(c, keyObject(c.Table, c.ForeignKey)) }
+
+// String is "add-foreign-key <table>.<constraint>".
+func (c AddForeignKey) String() string { return kindOf(c, keyObject(c.Table, c.ForeignKey)) }
+
+// String is "drop-foreign-key <table>.<constraint>".
 func (c DropForeignKey) String() string { return kindOf(c, keyObject(c.Table, c.ForeignKey)) }
-func (c AddCheck) String() string       { return kindOf(c, checkObject(c.Table, c.Check)) }
-func (c DropCheck) String() string      { return kindOf(c, checkObject(c.Table, c.Check)) }
+
+// String is "add-check <table>.<constraint>".
+func (c AddCheck) String() string { return kindOf(c, checkObject(c.Table, c.Check)) }
+
+// String is "drop-check <table>.<constraint>".
+func (c DropCheck) String() string { return kindOf(c, checkObject(c.Table, c.Check)) }
+
+// String is "rename-constraint <table>.<from> → <to>".
 func (c RenameConstraint) String() string {
 	return kindOf(c, objectOn(c.Table, source(c.From, c.def))+" → "+c.To)
 }
-func (c SetTableComment) String() string   { return kindOf(c, c.Table.String()) }
+
+// String is "set-table-comment <table>".
+func (c SetTableComment) String() string { return kindOf(c, c.Table.String()) }
+
+// String is "set-table-collation <table>".
 func (c SetTableCollation) String() string { return kindOf(c, c.Table.String()) }
-func (c CreateEnum) String() string        { return kindOf(c, c.Enum.ref().String()) }
-func (c DropEnum) String() string          { return kindOf(c, c.Enum.ref().String()) }
-func (c RenameEnum) String() string        { return kindOf(c, c.From.String()+" → "+c.To.String()) }
+
+// String is "create-enum <type>".
+func (c CreateEnum) String() string { return kindOf(c, c.Enum.ref().String()) }
+
+// String is "drop-enum <type>".
+func (c DropEnum) String() string { return kindOf(c, c.Enum.ref().String()) }
+
+// String is "rename-enum <from> → <to>".
+func (c RenameEnum) String() string { return kindOf(c, c.From.String()+" → "+c.To.String()) }
+
+// String is "rename-sequence <table>.<column> (<from> → <to>)".
 func (c RenameSequence) String() string {
 	return kindOf(c, objectOn(c.Table, c.Column)+" ("+c.From+" → "+c.To+")")
 }
+
+// String is "alter-enum <type> (<from values> → <to values>)".
 func (c AlterEnum) String() string {
 	return kindOf(c, c.To.ref().String()+" ("+strings.Join(c.From.Values, ", ")+" → "+strings.Join(c.To.Values, ", ")+")")
 }

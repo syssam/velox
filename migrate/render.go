@@ -21,20 +21,21 @@ type RenderOptions struct {
 // A ScriptKind says when a script runs.
 type ScriptKind uint8
 
+// The script kinds, by when each runs.
 const (
-	MainScript   ScriptKind = iota // in a transaction where the dialect has one
-	EnumScript                     // before the main script, no transaction: PostgreSQL ADD VALUE
-	OnlineScript                   // after the main script, no transaction: PostgreSQL CONCURRENTLY and VALIDATE
+	ScriptMain   ScriptKind = iota // in a transaction where the dialect has one
+	ScriptEnum                     // before the main script, no transaction: PostgreSQL ADD VALUE
+	ScriptOnline                   // after the main script, no transaction: PostgreSQL CONCURRENTLY and VALIDATE
 )
 
 // String is "main", "enum" or "online".
 func (k ScriptKind) String() string {
 	switch k {
-	case MainScript:
+	case ScriptMain:
 		return "main"
-	case EnumScript:
+	case ScriptEnum:
 		return "enum"
-	case OnlineScript:
+	case ScriptOnline:
 		return "online"
 	}
 	return "ScriptKind(" + strconv.Itoa(int(k)) + ")"
@@ -96,7 +97,8 @@ type Directives struct {
 // differ or one is not PostgreSQL, MySQL or SQLite ("dialect"), or a change
 // is nil, is not one Diff gives for the dialect, names what to lacks, is a
 // PostgreSQL identity change that needs the name of a sequence from does
-// not give, or renames a MySQL primary key, always named PRIMARY ("render"). Render does not change its arguments.
+// not give, or renames a MySQL primary key, always named PRIMARY
+// ("render"). Render does not change its arguments.
 func Render(from, to *Schema, changes []Change, opts RenderOptions) ([]Script, error) {
 	if from == nil || to == nil {
 		return nil, &Error{Code: "nil", Reason: "Render needs two schemas"}
@@ -110,7 +112,7 @@ func Render(from, to *Schema, changes []Change, opts RenderOptions) ([]Script, e
 	}
 	l := lintChanges(from, to, changes)
 	r.l, r.findings, r.taken = l, reviewed(l.out, len(changes)), make([]bool, len(changes))
-	main := Script{Kind: MainScript}
+	main := Script{Kind: ScriptMain}
 	if opts.LockTimeout > 0 && r.d != velox.SQLite {
 		main.Directives.LockTimeout, main.Directives.LockTimeoutSet = opts.LockTimeout, true
 	}

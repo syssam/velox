@@ -14,12 +14,16 @@ import (
 // safe.
 type Class uint8
 
+// The classes, from least care to most. They are bare, so they read as
+// migrate.Safe, migrate.Review and migrate.Destructive.
 const (
 	Safe Class = iota
 	Review
 	Destructive
 )
 
+// String is "safe", "review" or "destructive"; "class(<n>)" for another
+// value.
 func (c Class) String() string {
 	switch c {
 	case Safe:

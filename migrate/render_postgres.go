@@ -533,7 +533,7 @@ func (r *renderer) postgresScripts(main Script, opts RenderOptions) []Script {
 		d := main.Directives
 		d.NoTransaction = true
 		d.Allow = allowIn(func(i int) bool { return enum[i] })
-		out = append(out, Script{Kind: EnumScript, Directives: d, Statements: r.enum})
+		out = append(out, Script{Kind: ScriptEnum, Directives: d, Statements: r.enum})
 	}
 	if len(r.out) > 0 {
 		main.Directives.Allow = allowIn(func(i int) bool { return inMain[i] || !enum[i] && !online[i] })
@@ -542,7 +542,7 @@ func (r *renderer) postgresScripts(main Script, opts RenderOptions) []Script {
 	}
 	if len(r.online) > 0 {
 		d := Directives{NoTransaction: true, Allow: allowIn(func(i int) bool { return online[i] })}
-		out = append(out, Script{Kind: OnlineScript, Directives: d, Statements: r.online})
+		out = append(out, Script{Kind: ScriptOnline, Directives: d, Statements: r.online})
 	}
 	return out
 }

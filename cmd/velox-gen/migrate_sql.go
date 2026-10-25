@@ -70,7 +70,7 @@ func runMigrateSQL(args []string, dir string, env []string, stdout, stderr io.Wr
 	if len(plan.Scripts) == 0 {
 		return 0
 	}
-	if s := plan.Scripts[0]; len(plan.Scripts) != 1 || s.Kind != migrate.MainScript || !plainDirectives(s.Directives) {
+	if s := plan.Scripts[0]; len(plan.Scripts) != 1 || s.Kind != migrate.ScriptMain || !plainDirectives(s.Directives) {
 		return fail(errors.New("the plan from an empty database is not one plain script"))
 	}
 	var b strings.Builder

@@ -469,13 +469,13 @@ func (d *Dir) Add(name string, p *Plan, to *Schema) (map[string][]byte, error) {
 	for i, s := range p.Scripts {
 		var suffix string
 		switch s.Kind {
-		case MainScript:
-		case EnumScript:
+		case ScriptMain:
+		case ScriptEnum:
 			suffix = "_enum"
 			if !s.Directives.LockTimeoutSet {
 				s.Directives.LockTimeout, s.Directives.LockTimeoutSet = d.Config.LockTimeout, true
 			}
-		case OnlineScript:
+		case ScriptOnline:
 			suffix = "_online"
 		default:
 			return nil, refuse("script %d has the unknown kind %s", i, s.Kind)

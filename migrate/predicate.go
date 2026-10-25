@@ -52,8 +52,8 @@ func normalized(d velox.Dialect, expr string) (string, bool) {
 
 // samePredicate reports whether a and b are one predicate: when both parse,
 // their trees match (match); else they are alike with their white space
-// collapsed. comparable is whether both parsed.
-func samePredicate(d velox.Dialect, a, b string) (same, comparable bool) {
+// collapsed. parsed is whether both parsed.
+func samePredicate(d velox.Dialect, a, b string) (same, parsed bool) {
 	return samePredicateIn(d, a, b, nil)
 }
 
@@ -61,7 +61,7 @@ func samePredicate(d velox.Dialect, a, b string) (same, comparable bool) {
 // enums, PostgreSQL enum types as a cast prints them (enumCasts), matches
 // the same literal uncast: PostgreSQL casts a literal compared with an enum
 // column to the column's type, and a label is its own value.
-func samePredicateIn(d velox.Dialect, a, b string, enums map[string]bool) (same, comparable bool) {
+func samePredicateIn(d velox.Dialect, a, b string, enums map[string]bool) (same, parsed bool) {
 	p, na, oka := parsePredicate(d, a)
 	_, nb, okb := parsePredicate(d, b)
 	if oka && okb {
