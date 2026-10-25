@@ -77,7 +77,9 @@ func TestMigrateDiff(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
-	dir := tempModule(t, map[string]string{"schema/user.go": userSchema(`field.String("name")`)})
+	// Serial: "all or nothing" replaces writeTemp and renameFile, which the
+	// parallel tests' runs use too.
+	dir := tempModuleSerial(t, map[string]string{"schema/user.go": userSchema(`field.String("name")`)})
 	mig := filepath.Join(dir, "migrations")
 	setSchema := func(fields ...string) { writeFile(t, filepath.Join(dir, "schema", "user.go"), userSchema(fields...)) }
 
