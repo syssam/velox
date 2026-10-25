@@ -214,6 +214,55 @@ func TestPluginPathsAreChecked(t *testing.T) {
 		})
 	}
 
+	// A .go file go build leaves out, or builds only for some systems, and
+	// a path that is not ASCII.
+	for _, c := range []struct{ path, why string }{
+		{"_x.go", "a Go file's name"},
+		{".x.go", "a Go file's name"},
+		{"pb/_x.go", "a Go file's name"},
+		{"x_test.go", "a Go file's name"},
+		{"x_linux.go", "a Go file's name"},
+		{"x_amd64.go", "a Go file's name"},
+		{"pb/x_linux_arm64.go", "a Go file's name"},
+		{"é.go", "a path is ASCII"},
+		{"pb/ü/x.go", "a path is ASCII"},
+		{"testdata/x.go", "a directory of a path is not testdata or vendor"},
+		{"pb/vendor/x.proto", "a directory of a path is not testdata or vendor"},
+	} {
+		t.Run(c.path, func(t *testing.T) {
+			env := fakeEnv(filesEnv(t, plugin.File{Path: c.path, Content: "package gen\n"}))
+			code, out, errs := veloxEnv(t, dir, env, "-plugin", "fakeplugin", "./schema")
+			want := `velox-gen: plugin fakeplugin: invalid path "` + c.path + `": ` + c.why
+			if code != 1 || out != "" || !strings.HasPrefix(errs, want) {
+				t.Errorf("%d %q %q", code, out, errs)
+			}
+			if got := names(t, gen); len(got) != 0 {
+				t.Errorf("wrote %v", got)
+			}
+		})
+	}
+
+	// A .go file whose build constraints leave it out of some builds:
+	// velox-gen's header does not hide them.
+	for _, src := range []string{
+		"//go:build ignore\n\npackage gen\n",
+		"//go:build linux\n\npackage gen\n",
+		"// Package gen.\n\n//go:build tools\n\npackage gen\n",
+		"// +build ignore\n\npackage gen\n",
+	} {
+		t.Run("constraint "+src, func(t *testing.T) {
+			env := fakeEnv(filesEnv(t, plugin.File{Path: "x.go", Content: src}))
+			code, out, errs := veloxEnv(t, dir, env, "-plugin", "fakeplugin", "./schema")
+			want := `velox-gen: plugin fakeplugin: invalid path "x.go": a Go file's name is not one go build ignores or builds for some systems only; its build constraints leave it out`
+			if code != 1 || out != "" || !strings.HasPrefix(errs, want) {
+				t.Errorf("%d %q %q", code, out, errs)
+			}
+			if got := names(t, gen); len(got) != 0 {
+				t.Errorf("wrote %v", got)
+			}
+		})
+	}
+
 	t.Run("twice", func(t *testing.T) {
 		env := fakeEnv(filesEnv(t, plugin.File{Path: "x.go", Content: "package gen\n"}, plugin.File{Path: "x.go", Content: "package gen\n"}))
 		code, out, errs := veloxEnv(t, dir, env, "-plugin", "fakeplugin", "./schema")
@@ -303,6 +352,31 @@ func TestPluginPathsAreChecked(t *testing.T) {
 			t.Errorf("wrote %v", got)
 		}
 	})
+
+	// A GOOS without its underscore, a suffix that is no GOOS or GOARCH, and
+	// a file that is not Go are names go build has no say over, and a
+	// constraint every build of this toolchain meets leaves no system out.
+	for _, c := range []struct{ path, src string }{
+		{"linux.go", "package gen\n"},
+		{"x_unix.go", "package gen\n"},
+		{"_x.proto", "package gen\n"},
+		{"y.go", "//go:build go1.1 && !tools\n\npackage gen\n"},
+	} {
+		p := c.path
+		t.Run("accepted "+p, func(t *testing.T) {
+			if err := os.RemoveAll(gen); err != nil {
+				t.Fatal(err)
+			}
+			env := fakeEnv(filesEnv(t, plugin.File{Path: p, Content: c.src}))
+			code, out, errs := veloxEnv(t, dir, env, "-plugin", "fakeplugin", "./schema")
+			if code != 0 || errs != "" {
+				t.Fatalf("%d %q %q", code, out, errs)
+			}
+			if _, err := os.Stat(filepath.Join(gen, p)); err != nil {
+				t.Error(err)
+			}
+		})
+	}
 }
 
 func TestPluginErrors(t *testing.T) {

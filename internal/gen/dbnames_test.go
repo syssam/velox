@@ -35,9 +35,9 @@ func TestDerivedNames(t *testing.T) {
 	}
 }
 
-type dnOrderStatus string
+type DnOrderStatus string
 
-func (dnOrderStatus) Values() []string { return []string{"open", "closed"} }
+func (DnOrderStatus) Values() []string { return []string{"open", "closed"} }
 
 type dnOrder struct{ schema.Schema }
 
@@ -45,8 +45,8 @@ func (dnOrder) Annotations() []schema.Annotation { return []schema.Annotation{sc
 func (dnOrder) Fields() []schema.Field {
 	return []schema.Field{
 		field.Enum("plain").Values("a"),
-		field.EnumOf[dnOrderStatus]("status"),
-		field.Enum("typed").GoType(dnOrderStatus("")),
+		field.EnumOf[DnOrderStatus]("status"),
+		field.Enum("typed").GoType(DnOrderStatus("")),
 		field.Enum("named").Values("a").SchemaType(map[string]string{field.Postgres: "mood"}),
 		field.Enum("text").Values("a").SchemaType(map[string]string{field.Postgres: "varchar(9)"}),
 		field.Enum(strings.Repeat("e", 60)).Values("a"),

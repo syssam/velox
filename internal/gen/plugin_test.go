@@ -315,22 +315,22 @@ func TestPluginModel2(t *testing.T) {
 
 // A many-to-many edge to an entity whose ID has a Go type: the join entity's
 // field holds that ID, and imports its package.
-type plDocID string
+type PlDocID string
 
 type PlDoc struct{ schema.Schema }
 
 func (PlDoc) Fields() []schema.Field {
 	return []schema.Field{
-		field.String("id").GoType(plDocID("")).MaxLen(36),
+		field.String("id").GoType(PlDocID("")).MaxLen(36),
 		field.JSON("stamps", map[string][]time.Time{}).Optional(),
-		field.Time("at").GoType(plStamp{}).Default(func() time.Time { return time.Time{} }),
+		field.Time("at").GoType(PlStamp{}).Default(func() time.Time { return time.Time{} }),
 	}
 }
 func (PlDoc) Edges() []schema.Edge {
 	return []schema.Edge{edge.From("readers", PlReader.Type).Ref("docs")}
 }
 
-type plStamp time.Time
+type PlStamp time.Time
 
 type PlReader struct{ schema.Schema }
 
@@ -362,13 +362,13 @@ func TestPluginModel2Imports(t *testing.T) {
 
 // Join fields hold the IDs of the entities they join, typed as those are: a
 // uuid ID and a named string ID through many-to-many joins.
-type plUUID [16]byte
+type PlUUID [16]byte
 
-func (plUUID) Value() (driver.Value, error) { return nil, nil }
+func (PlUUID) Value() (driver.Value, error) { return nil, nil }
 
 type PlBadge struct{ schema.Schema }
 
-func (PlBadge) Fields() []schema.Field { return []schema.Field{field.UUID("id", plUUID{})} }
+func (PlBadge) Fields() []schema.Field { return []schema.Field{field.UUID("id", PlUUID{})} }
 func (PlBadge) Edges() []schema.Edge {
 	return []schema.Edge{edge.From("holders", PlHolder.Type).Ref("badges")}
 }
@@ -407,18 +407,18 @@ func TestPluginModel2JoinFieldsTyped(t *testing.T) {
 
 // Defaults are in the model only where their JSON is unambiguous: bool,
 // number, string and enum, as their base value.
-type plCount int32
+type PlCount int32
 
-type plLevel int
+type PlLevel int
 
-func (l plLevel) MarshalJSON() ([]byte, error) { return []byte(strconv.Itoa(int(l))), nil }
+func (l PlLevel) MarshalJSON() ([]byte, error) { return []byte(strconv.Itoa(int(l))), nil }
 
 type PlDefaults struct{ schema.Schema }
 
 func (PlDefaults) Fields() []schema.Field {
 	return []schema.Field{
-		field.Number[plCount]("count").Nillable().Default(5),
-		field.Number[plLevel]("level").Nillable().Default(2),
+		field.Number[PlCount]("count").Nillable().Default(5),
+		field.Number[PlLevel]("level").Nillable().Default(2),
 		field.Bool("on").Nillable().Default(true),
 		field.String("s").Default("x"),
 		field.Bytes("b").Default([]byte("hi")),
@@ -475,7 +475,7 @@ func TestPluginModelRoundTrip(t *testing.T) {
 type PlOwner struct{ schema.Schema }
 
 func (PlOwner) Fields() []schema.Field {
-	return []schema.Field{field.String("note").Optional().Comment("A note."), field.Enum("st").GoType(lwStatus("")).Default("off"), field.Strings("labels").Optional()}
+	return []schema.Field{field.String("note").Optional().Comment("A note."), field.Enum("st").GoType(LwStatus("")).Default("off"), field.Strings("labels").Optional()}
 }
 func (PlOwner) Edges() []schema.Edge {
 	return []schema.Edge{edge.To("keys", PlKey.Type).Comment("The keys."), edge.To("pets", PlPet.Type)}
@@ -541,7 +541,7 @@ func TestPluginModelJoinTypesAndComments(t *testing.T) {
 	// An enum with a Go type declares no enum type: the field names the Go
 	// type, and holds the values.
 	st := pluginField(t, owner, "st")
-	if st.Enum != "lwStatus" || strings.Join(st.EnumValues, ",") != "on,off" || st.Nullable || st.ElemType != "gen.lwStatus" || st.PkgPath != "github.com/syssam/velox2/internal/gen" || st.Kind != "string" {
+	if st.Enum != "LwStatus" || strings.Join(st.EnumValues, ",") != "on,off" || st.Nullable || st.ElemType != "gen.LwStatus" || st.PkgPath != "github.com/syssam/velox2/internal/gen" || st.Kind != "string" {
 		t.Errorf("st %+v", st)
 	}
 	if strings.Join(st.Imports, ",") != "github.com/syssam/velox2/internal/gen" {
@@ -642,11 +642,11 @@ func (nullMix) Fields() []schema.Field {
 		field.JSON("req_map", map[string]int{}),
 		field.JSON("opt_map", map[string]int{}).Optional(),
 		field.JSON("nil_map", map[string]int{}).Nillable(),
-		field.JSON("req_ptr", &jsonShape{}),
-		field.JSON("opt_ptr", &jsonShape{}).Optional(),
-		field.JSON("nil_ptr", &jsonShape{}).Nillable(),
-		field.JSON("req_struct", jsonShape{}),
-		field.JSON("nil_struct", jsonShape{}).Nillable(),
+		field.JSON("req_ptr", &JSONShape{}),
+		field.JSON("opt_ptr", &JSONShape{}).Optional(),
+		field.JSON("nil_ptr", &JSONShape{}).Nillable(),
+		field.JSON("req_struct", JSONShape{}),
+		field.JSON("nil_struct", JSONShape{}).Nillable(),
 	}
 }
 

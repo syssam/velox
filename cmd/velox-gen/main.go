@@ -79,7 +79,9 @@
 // [{"path": path, "content": text}], "warnings": [text], "error": text} to
 // standard output. A path is a slash path below -out, such as pb/user.proto,
 // with no "..", "." or empty segment, no directory that starts with "." or
-// "_", ending in .go, .graphqls or .proto, and not a velox.go below -out. velox-gen puts its header in
+// "_" or is testdata or vendor, ASCII, ending in .go, .graphqls or .proto, a
+// .go file go build always builds, by its name and its build constraints, and
+// not a velox.go below -out. velox-gen puts its header in
 // front of the content, so the plugin's files are checked, rewritten and, when
 // the plugin is dropped from the command, deleted like its own, with the
 // directories that leaves empty. Each warning is printed as "velox-gen: plugin

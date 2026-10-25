@@ -233,7 +233,7 @@ func (Role) Edges() []schema.Edge {
 
 type Home struct{ schema.Schema }
 
-func (Home) Fields() []schema.Field { return []schema.Field{field.UUID("id", uuidValue{})} }
+func (Home) Fields() []schema.Field { return []schema.Field{field.UUID("id", UUIDValue{})} }
 
 func TestBuildRelations(t *testing.T) {
 	g := mustBuild(t, Account{}, Profile{}, Role{}, Home{})
@@ -260,7 +260,7 @@ func TestBuildRelations(t *testing.T) {
 	home := a.Edge("home")
 	hk := a.Field("account_home")
 	if home.Rel.Kind != "M2O" || home.Rel.Table != "accounts" || hk == nil || hk.Type != "uuid" || hk.GoType == nil ||
-		hk.GoType.Ident != "gen.uuidValue" || hk.Optional || hk.Implicit != "home" || a.Fields[len(a.Fields)-1] != hk {
+		hk.GoType.Ident != "gen.UUIDValue" || hk.Optional || hk.Implicit != "home" || a.Fields[len(a.Fields)-1] != hk {
 		t.Fatalf("home %+v account_home %+v", home, hk)
 	}
 }
@@ -408,13 +408,13 @@ func TestBuildEdgeImmutableSymbols(t *testing.T) {
 
 // --- one schema type (or pair) per rule
 
-type uuidValue [16]byte
+type UUIDValue [16]byte
 
-func (uuidValue) Value() (driver.Value, error) { return nil, nil }
+func (UUIDValue) Value() (driver.Value, error) { return nil, nil }
 
-type pointValue struct{}
+type PointValue struct{}
 
-func (pointValue) Value() (driver.Value, error) { return nil, nil }
+func (PointValue) Value() (driver.Value, error) { return nil, nil }
 
 // notSchema is a type of this package that is not a schema.
 type notSchema struct{}
@@ -584,7 +584,7 @@ func (optionalTimeOK) Fields() []schema.Field {
 type optionalJSONStruct struct{ schema.Schema }
 
 func (optionalJSONStruct) Fields() []schema.Field {
-	return []schema.Field{field.JSON("shape", jsonShape{}).Optional()}
+	return []schema.Field{field.JSON("shape", JSONShape{}).Optional()}
 }
 
 // optionalJSONScalar has an Optional JSON field of a scalar type (rule 48).
@@ -594,8 +594,8 @@ func (optionalJSONScalar) Fields() []schema.Field {
 	return []schema.Field{field.JSON("n", 0).Optional()}
 }
 
-// jsonShape is a struct a json field holds.
-type jsonShape struct{ W, H int }
+// JSONShape is a struct a json field holds.
+type JSONShape struct{ W, H int }
 
 // optionalJSONOK has the Optional JSON fields that pass: of a slice, a map
 // or a pointer, which nil holds, and of a struct that is Nillable.
@@ -605,9 +605,9 @@ func (optionalJSONOK) Fields() []schema.Field {
 	return []schema.Field{
 		field.Strings("tags").Optional(),
 		field.JSON("attrs", map[string]any{}).Optional(),
-		field.JSON("ptr", &jsonShape{}).Optional(),
-		field.JSON("shape", jsonShape{}).Optional().Nillable(),
-		field.JSON("req", jsonShape{}),
+		field.JSON("ptr", &JSONShape{}).Optional(),
+		field.JSON("shape", JSONShape{}).Optional().Nillable(),
+		field.JSON("req", JSONShape{}),
 	}
 }
 
@@ -625,20 +625,24 @@ func TestBuildOptionalJSONNeedsNilable(t *testing.T) {
 	}
 }
 
-// jsonFunc is a func type with its own encoding; rule 49 still refuses it.
-type jsonFunc func()
+// JSONCallback is a named func type: velox-gen can write it, and rule 49
+// refuses it. An unnamed func fails in the field package already.
+type JSONCallback func()
 
-func (jsonFunc) MarshalJSON() ([]byte, error) { return []byte("null"), nil }
+// JSONFunc is a func type with its own encoding; rule 49 still refuses it.
+type JSONFunc func()
 
-// jsonComplex is a complex type with its own encoding, which rule 49 accepts.
-type jsonComplex complex128
+func (JSONFunc) MarshalJSON() ([]byte, error) { return []byte("null"), nil }
 
-func (jsonComplex) MarshalJSON() ([]byte, error) { return []byte("null"), nil }
+// JSONComplex is a complex type with its own encoding, which rule 49 accepts.
+type JSONComplex complex128
+
+func (JSONComplex) MarshalJSON() ([]byte, error) { return []byte("null"), nil }
 
 type jsonFuncField struct{ schema.Schema }
 
 func (jsonFuncField) Fields() []schema.Field {
-	return []schema.Field{field.JSON("cb", func() {})}
+	return []schema.Field{field.JSON("cb", JSONCallback(nil))}
 }
 
 // jsonOptionalFuncField is an Optional JSON func: rule 49 refuses it, and
@@ -646,7 +650,7 @@ func (jsonFuncField) Fields() []schema.Field {
 type jsonOptionalFuncField struct{ schema.Schema }
 
 func (jsonOptionalFuncField) Fields() []schema.Field {
-	return []schema.Field{field.JSON("cb", func() {}).Optional()}
+	return []schema.Field{field.JSON("cb", JSONCallback(nil)).Optional()}
 }
 
 type jsonChanField struct{ schema.Schema }
@@ -676,13 +680,13 @@ func (jsonComplex64Field) Fields() []schema.Field {
 type jsonFuncMarshalerField struct{ schema.Schema }
 
 func (jsonFuncMarshalerField) Fields() []schema.Field {
-	return []schema.Field{field.JSON("cb", jsonFunc(nil))}
+	return []schema.Field{field.JSON("cb", JSONFunc(nil))}
 }
 
 type jsonComplexMarshalerField struct{ schema.Schema }
 
 func (jsonComplexMarshalerField) Fields() []schema.Field {
-	return []schema.Field{field.JSON("z", jsonComplex(0))}
+	return []schema.Field{field.JSON("z", JSONComplex(0))}
 }
 
 // A complex type with its own encoding is a value type, like a struct.
@@ -737,14 +741,14 @@ type dupEnum struct{ schema.Schema }
 
 func (dupEnum) Fields() []schema.Field { return []schema.Field{field.Enum("s").Values("a", "b", "a")} }
 
-type statusValues string
+type StatusValues string
 
-func (statusValues) Values() []string { return []string{"a", "b"} }
+func (StatusValues) Values() []string { return []string{"a", "b"} }
 
 type enumGoTypeDup struct{ schema.Schema }
 
 func (enumGoTypeDup) Fields() []schema.Field {
-	return []schema.Field{field.Enum("s").Values("a").GoType(statusValues(""))}
+	return []schema.Field{field.Enum("s").Values("a").GoType(StatusValues(""))}
 }
 
 type badEnum struct{ schema.Schema }
@@ -780,7 +784,7 @@ func (emptyIndex) Indexes() []schema.Index { return []schema.Index{index.Fields(
 
 type otherNoType struct{ schema.Schema }
 
-func (otherNoType) Fields() []schema.Field { return []schema.Field{field.Other("o", pointValue{})} }
+func (otherNoType) Fields() []schema.Field { return []schema.Field{field.Other("o", PointValue{})} }
 
 type joinClash struct{ schema.Schema }
 
@@ -910,6 +914,58 @@ func (fieldStringFK) Fields() []schema.Field {
 }
 func (fieldStringFK) Edges() []schema.Edge {
 	return []schema.Edge{edge.To("parent", fieldStringFK.Type).Unique().Field("parent_id")}
+}
+
+type Cents int64
+
+type fkNamedType struct{ schema.Schema }
+
+func (fkNamedType) Fields() []schema.Field {
+	return []schema.Field{field.Int64("parent_id").GoType(Cents(0)).Optional().Nillable()}
+}
+func (fkNamedType) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("parent", fkNamedType.Type).Unique().Field("parent_id")}
+}
+
+// secretCents is unexported: the generated package cannot name it, so
+// Lower refuses a GoType of it, which Build and Tables accept.
+type secretCents int64
+
+type unexportedGoType struct{ schema.Schema }
+
+func (unexportedGoType) Fields() []schema.Field {
+	return []schema.Field{field.Int64("n").GoType(secretCents(0))}
+}
+
+// unexportedElem's unexported type is the element of the field's map.
+type unexportedElem struct{ schema.Schema }
+
+func (unexportedElem) Fields() []schema.Field {
+	return []schema.Field{field.JSON("m", map[string][]*secretCents{})}
+}
+
+// MyInt is an int of its own, so rule 12's hint to declare field.Int64
+// would not help a foreign key of it.
+type MyInt int
+
+type fkCustomInt struct{ schema.Schema }
+
+func (fkCustomInt) Fields() []schema.Field {
+	return []schema.Field{field.Int("parent_id").GoType(MyInt(0)).Optional().Nillable()}
+}
+func (fkCustomInt) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("parent", fkCustomInt.Type).Unique().Field("parent_id")}
+}
+
+// fkOtherPkg's ID and foreign key are both gen.Cents; a test moves the ID's
+// type to another package named gen.
+type fkOtherPkg struct{ schema.Schema }
+
+func (fkOtherPkg) Fields() []schema.Field {
+	return []schema.Field{field.Int64("id").GoType(Cents(0)), field.Int64("parent_id").GoType(Cents(0)).Optional().Nillable()}
+}
+func (fkOtherPkg) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("parent", fkOtherPkg.Type).Unique().Field("parent_id")}
 }
 
 type immutableEdge struct{ schema.Schema }
@@ -1101,6 +1157,8 @@ func TestBuildRules(t *testing.T) {
 		{"11 field on M2M", []schema.Interface{fieldMany{}}, `schema fieldMany: edge "peers": binds field "x", but the foreign key is in table field_many_peers`},
 		{"12 field wrong type", []schema.Interface{fieldStringFK{}}, `schema fieldStringFK: edge "parent": field "parent_id" is string; fieldStringFK's ID is int64`},
 		{"12 ported int field", []schema.Interface{fieldWrongType{}}, `schema fieldWrongType: edge "parent": field "parent_id" is int; fieldWrongType's ID is int64; declare it field.Int64, or declare the ID with field.Int("id")`},
+		{"12 field of a named type", []schema.Interface{fkNamedType{}}, `schema fkNamedType: edge "parent": field "parent_id" is gen.Cents; fkNamedType's ID is int64`},
+		{"12 field of a custom int", []schema.Interface{fkCustomInt{}}, `schema fkCustomInt: edge "parent": field "parent_id" is gen.MyInt; fkCustomInt's ID is int64`},
 		{"13 field optional", []schema.Interface{fieldOptional{}}, `schema fieldOptional: edge "parent": field "parent_id" must be Optional exactly when the edge is not Required`},
 		{"14 two tenants", []schema.Interface{twoTenants{}}, `schema twoTenants: field "b": a second tenant field; "a" is the tenant`},
 		{"15 optional tenant", []schema.Interface{optionalTenant{}}, `schema optionalTenant: field "org": the tenant field must be required and not Nillable`},
@@ -1151,12 +1209,12 @@ func TestBuildRules(t *testing.T) {
 		{"44 shortened sequences", []schema.Interface{lpA{}, lpB{}}, `schema lpB: field "id": name "` + lpPrefix[:56] + `_id_seq" is also schema lpA's identity sequence`},
 		{"44 indexes of one name", []schema.Interface{dupNamed{}}, `schema dupNamed: index 1: name "dupnamed_name" is also this schema's index 0`},
 		{"44 table and enum type", []schema.Interface{nsOrder{}, nsOrderStatus{}}, `schema nsOrder: field "status": name "orders_status" is also schema nsOrderStatus's table`},
-		{"49 func", []schema.Interface{jsonFuncField{}}, `schema jsonFuncField: field "cb": its Go type func() is a func, which a JSON column cannot hold`},
+		{"49 func", []schema.Interface{jsonFuncField{}}, `schema jsonFuncField: field "cb": its Go type gen.JSONCallback is a func, which a JSON column cannot hold`},
 		{"49 chan", []schema.Interface{jsonChanField{}}, `schema jsonChanField: field "ch": its Go type chan int is a chan, which a JSON column cannot hold`},
 		{"49 unsafe pointer", []schema.Interface{jsonUnsafeField{}}, `schema jsonUnsafeField: field "p": its Go type unsafe.Pointer is an unsafe.Pointer, which a JSON column cannot hold`},
 		{"49 complex", []schema.Interface{jsonComplexField{}}, `schema jsonComplexField: field "z": its Go type complex128 is a complex128, which a JSON column cannot hold; give the type a MarshalJSON or MarshalText method`},
 		{"49 complex64", []schema.Interface{jsonComplex64Field{}}, `schema jsonComplex64Field: field "z": its Go type complex64 is a complex64, which a JSON column cannot hold; give the type a MarshalJSON or MarshalText method`},
-		{"49 func with MarshalJSON", []schema.Interface{jsonFuncMarshalerField{}}, `schema jsonFuncMarshalerField: field "cb": its Go type gen.jsonFunc is a func, which a JSON column cannot hold`},
+		{"49 func with MarshalJSON", []schema.Interface{jsonFuncMarshalerField{}}, `schema jsonFuncMarshalerField: field "cb": its Go type gen.JSONFunc is a func, which a JSON column cannot hold`},
 		{"50 long table", []schema.Interface{longTable{}}, `schema longTable: table name "` + long64 + `" is 64 bytes; a database name has at most 63`},
 		{"50 long derived table", []schema.Interface{longDerivedTableAndSoOnAndSoOnUntilTheNameIsLongerThanTheCapAllowsThing{}}, `table name "long_derived_table_and_so_on_and_so_on_until_the_name_is_longer_than_the_cap_allows_things" is 90 bytes; a database name has at most 63; name it with schema.Table`},
 		{"50 long column", []schema.Interface{longColumn{}}, `schema longColumn: field "x": column name "` + long64 + `" is 64 bytes; a database name has at most 63`},
@@ -1181,6 +1239,58 @@ func TestBuildRules(t *testing.T) {
 	}
 }
 
+// A GoType that names an unexported type is refused by Lower, with the
+// field's position, also as an element; Build, which Tables runs, takes it.
+func TestLowerRefusesUnexportedGoTypes(t *testing.T) {
+	for s, want := range map[schema.Interface]string{
+		unexportedGoType{}: `schema unexportedGoType: field "n": its Go type gen.secretCents names gen.secretCents, which is unexported: the generated package cannot refer to it; export it`,
+		unexportedElem{}:   `schema unexportedElem: field "m": its Go type map[string][]*gen.secretCents names gen.secretCents, which is unexported: the generated package cannot refer to it; export it`,
+	} {
+		_, err := lower(t, Config{}, s)
+		var ge *Error
+		if err == nil || plain(err) != want || !errors.As(err, &ge) || !strings.Contains(ge.Pos, "build_test.go:") {
+			t.Errorf("%T: got %v, want %q", s, err, want)
+		}
+	}
+}
+
+// Rule 12's hint to declare field.Int64 is for a foreign key of a plain
+// integer type: with a GoType of its own, the hint would not help.
+func TestBuildFKHintOnlyWithoutGoType(t *testing.T) {
+	_, err := build(t, fkCustomInt{})
+	if err == nil || strings.Contains(err.Error(), "declare it field.Int64") {
+		t.Fatalf("got %v, want no hint", err)
+	}
+}
+
+// Two Go types that print alike, gen.Cents, but are of two packages: a
+// foreign key of one cannot hold an ID of the other.
+func TestBuildFKOfAnotherPackagesType(t *testing.T) {
+	b, err := load.Marshal("github.com/syssam/velox2/internal/gen", fkOtherPkg{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m loadjson.Model
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Build(&m); err != nil {
+		t.Fatalf("one package: %v", err)
+	}
+	id := m.Schemas[0].Fields[0]
+	if id.Name != "id" {
+		t.Fatalf("field 0 is %q", id.Name)
+	}
+	g := *id.GoType
+	g.PkgPath, g.Imports = "example.com/other/gen", []string{"example.com/other/gen"}
+	id.GoType = &g
+	_, err = Build(&m)
+	want := `schema fkOtherPkg: edge "parent": field "parent_id" is gen.Cents of github.com/syssam/velox2/internal/gen; fkOtherPkg's ID is gen.Cents of example.com/other/gen`
+	if err == nil || plain(err) != want {
+		t.Fatalf("got %v, want %q", err, want)
+	}
+}
+
 // The rule schemas each break one rule and nothing else.
 func TestBuildRulesAreSingle(t *testing.T) {
 	for _, ss := range [][]schema.Interface{
@@ -1202,6 +1312,7 @@ func TestBuildRulesAreSingle(t *testing.T) {
 		{longJoinTable{}}, {longEnumType{}}, {twoSymbolsO2M{}, Pet{}}, {oneSymbolM2M{}}, {symOwner{}, symPet{}},
 		{enumOrder{}, enumTicket{}}, {jsonFuncField{}}, {jsonChanField{}}, {jsonUnsafeField{}}, {jsonComplexField{}},
 		{jsonComplex64Field{}}, {jsonFuncMarshalerField{}}, {jsonOptionalFuncField{}},
+		{fkNamedType{}}, {fkCustomInt{}},
 	} {
 		_, err := build(t, ss...)
 		if n := len(err.(interface{ Unwrap() []error }).Unwrap()); n != 1 {
@@ -1854,17 +1965,17 @@ func (nsOther) Annotations() []schema.Annotation {
 }
 func (nsOther) Fields() []schema.Field { return []schema.Field{field.Enum("role").Values("x")} }
 
-type nsStatus string
+type NsStatus string
 
-func (nsStatus) Values() []string { return []string{"open", "closed"} }
+func (NsStatus) Values() []string { return []string{"open", "closed"} }
 
 type nsTicket struct{ schema.Schema }
 
-func (nsTicket) Fields() []schema.Field { return []schema.Field{field.EnumOf[nsStatus]("status")} }
+func (nsTicket) Fields() []schema.Field { return []schema.Field{field.EnumOf[NsStatus]("status")} }
 
 type nsIssue struct{ schema.Schema }
 
-func (nsIssue) Fields() []schema.Field { return []schema.Field{field.EnumOf[nsStatus]("state")} }
+func (nsIssue) Fields() []schema.Field { return []schema.Field{field.EnumOf[NsStatus]("state")} }
 
 // nsSharedTable has two relations on one join table.
 type nsSharedTable struct{ schema.Schema }
@@ -1935,5 +2046,22 @@ func TestSharedEnumValuesPos(t *testing.T) {
 	want := fmt.Sprintf("/build_test.go:%d), with other values", enumOrderLine)
 	if err == nil || !strings.HasSuffix(err.Error(), want) {
 		t.Fatalf("got %v, want the suffix %q", err, want)
+	}
+}
+
+func TestUnexportedName(t *testing.T) {
+	for ident, want := range map[string]string{
+		"int64":                    "",
+		"[16]uint8":                "",
+		"uuid.UUID":                "",
+		"map[string]*http.Request": "",
+		"schema.cents":             "schema.cents",
+		"[]*other.x":               "other.x",
+		"map[a.K]chan b.v":         "b.v",
+		"map[a.k]b.V":              "a.k",
+	} {
+		if got := unexportedName(ident); got != want {
+			t.Errorf("unexportedName(%q) = %q, want %q", ident, got, want)
+		}
 	}
 }

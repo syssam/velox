@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go/ast"
+	"go/parser"
 	"path"
 	"reflect"
 	"slices"
@@ -129,6 +131,9 @@ func (l *lowerer) entities() {
 			s.out.Comment = c.Text
 		}
 		for i, f := range e.Fields {
+			if isDeclared(f) {
+				s.exported(f)
+			}
 			s.out.Fields = append(s.out.Fields, s.field(e, i, f))
 			if f.Name == e.Tenant && e.Tenant != "" {
 				s.out.Tenant = i
@@ -162,6 +167,41 @@ func (l *lowerer) entities() {
 		l.state[e.Name] = s
 		l.out.Entities = append(l.out.Entities, s.out)
 	}
+}
+
+// exported refuses a GoType of f that names an unexported type, such as
+// schema.cents or the element of []*other.point, with f's position. The
+// generated code refers to a GoType by its Ident, through an import of its
+// package, so each name in it must be exported. (A type of the generated
+// package itself cannot be a GoType: the schema package, which the
+// generated code imports, would import it back.)
+func (s *entState) exported(f *Field) {
+	if f.GoType == nil {
+		return
+	}
+	if q := unexportedName(f.GoType.Ident); q != "" {
+		s.l.errs = append(s.l.errs, &Error{Pos: f.Pos, Schema: s.name, Where: fieldAt(f.Name),
+			Reason: fmt.Sprintf("its Go type %s names %s, which is unexported: the generated package cannot refer to it; export it", f.GoType.Ident, q)})
+	}
+}
+
+// unexportedName is the first qualified name in the type expression ident,
+// such as "schema.cents" in "[]*schema.cents", whose name is unexported, or "".
+func unexportedName(ident string) string {
+	x, err := parser.ParseExpr(ident)
+	if err != nil {
+		return ""
+	}
+	var q string
+	ast.Inspect(x, func(n ast.Node) bool {
+		if s, ok := n.(*ast.SelectorExpr); ok && q == "" && !ast.IsExported(s.Sel.Name) {
+			if pkg, ok := s.X.(*ast.Ident); ok {
+				q = pkg.Name + "." + s.Sel.Name
+			}
+		}
+		return q == ""
+	})
+	return q
 }
 
 func columnIndex(e *Entity, column string) int {

@@ -433,8 +433,14 @@ func (b *builder) foreignKey(n *node, s *edgeState) {
 		}
 		id := s.target.ent.Fields[0]
 		if !sameType(&f.Field, &id.Field) {
-			reason := fmt.Sprintf("field %q is %s; %s's ID is %s", f.Name, typeName(&f.Field), s.target.ent.Name, typeName(&id.Field))
-			if id.AutoID && integer(f.Type) && integer(id.Type) {
+			ft, it := typeName(&f.Field), typeName(&id.Field)
+			if ft == it {
+				// One printed name, two packages: say which.
+				ft += " of " + strings.Join(goImports(&f.Field), ", ")
+				it += " of " + strings.Join(goImports(&id.Field), ", ")
+			}
+			reason := fmt.Sprintf("field %q is %s; %s's ID is %s", f.Name, ft, s.target.ent.Name, it)
+			if id.AutoID && f.GoType == nil && integer(f.Type) && integer(id.Type) {
 				// A schema ported from ent, whose default ID is an int.
 				reason += `; declare it field.Int64, or declare the ID with field.Int("id")`
 			}
@@ -505,17 +511,20 @@ func typeName(f *loadjson.Field) string {
 }
 
 // sameType reports whether a foreign-key field of type f can hold an ID of
-// type id. The field types must be equal; a uuid, json or other type must also
-// have the same Go type.
+// type id: the field types and the Go types must both be equal, so that a
+// named Go type, such as type Cents int64, holds only an ID of that type. Two
+// Go types are equal when they print alike and name the same packages, so
+// that types.ID of one package is not types.ID of another.
 func sameType(f, id *loadjson.Field) bool {
-	if f.Type != id.Type {
-		return false
+	return f.Type == id.Type && typeName(f) == typeName(id) && slices.Equal(goImports(f), goImports(id))
+}
+
+// goImports is the package paths f's Go type names, or nil.
+func goImports(f *loadjson.Field) []string {
+	if f.GoType == nil {
+		return nil
 	}
-	switch f.Type {
-	case "uuid", "json", "other":
-		return typeName(f) == typeName(id)
-	}
-	return true
+	return f.GoType.Imports
 }
 
 // indexes resolves the indexes of every entity (step 5), and records those an

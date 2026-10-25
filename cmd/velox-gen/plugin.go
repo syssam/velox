@@ -77,7 +77,8 @@ func generator() string { return buildinfo.Generator() }
 // stderr as it answers. The run fails, naming the plugin, when a plugin cannot
 // be run, exits non-zero, answers something that is not a response of
 // protocol 2, reports an error, or names a path that checkPluginPath refuses,
-// or one that another plugin, or itself, has written. Paths that differ only
+// or a .go file that checkPluginGo refuses, or one that another plugin, or
+// itself, has written. Paths that differ only
 // in case are one file, or one directory, as they are on a case-insensitive
 // file system; a path is not both a file and a directory. A plugin's stderr is
 // shown only when it fails.
@@ -99,6 +100,9 @@ func runPlugins(specs []pluginSpec, modDir string, req plugin.Request, env []str
 		}
 		for _, f := range resp.Files {
 			if err := checkPluginPath(f.Path); err != nil {
+				return nil, nil, fmt.Errorf("plugin %s: %w", name, err)
+			}
+			if err := checkPluginGo(f); err != nil {
 				return nil, nil, fmt.Errorf("plugin %s: %w", name, err)
 			}
 			if other, ok := by[fold(f.Path)]; ok {
@@ -206,14 +210,18 @@ var pluginExts = []string{".go", ".graphqls", ".proto"}
 // checkPluginPath accepts a slash path below the output directory: not
 // absolute, no empty, "." or ".." segment, no backslash or NUL, no directory
 // that starts with "." or "_" (the stale-file sweep skips those, and go
-// ignores them), and a file name ending in .go, .graphqls or .proto that is
+// ignores them) or is testdata or vendor (which go's ./... leaves out), and a
+// file name ending in .go, .graphqls or .proto that is
 // not velox.go in a directory below the output directory (which marks another
-// run's output, which the sweep leaves alone).
+// run's output, which the sweep leaves alone). The path is ASCII, and a .go
+// file's name is not one goIgnored reports.
 func checkPluginPath(p string) error {
 	bad := func(why string) error { return fmt.Errorf("invalid path %q: %s", p, why) }
 	switch {
 	case p == "":
 		return bad("a path is not empty")
+	case strings.ContainsFunc(p, func(r rune) bool { return r >= 0x80 }):
+		return bad("a path is ASCII")
 	case strings.HasPrefix(p, "/"):
 		return bad("a path is relative to the output directory")
 	case strings.ContainsAny(p, "\\\x00"):
@@ -226,6 +234,8 @@ func checkPluginPath(p string) error {
 			return bad("a path has no empty, . or .. segment; it stays below the output directory")
 		case i < len(segs)-1 && (seg[0] == '.' || seg[0] == '_'):
 			return bad("a directory of a path does not start with . or _")
+		case i < len(segs)-1 && (seg == "testdata" || seg == "vendor"):
+			return bad("a directory of a path is not testdata or vendor")
 		}
 	}
 	base := segs[len(segs)-1]
@@ -235,12 +245,38 @@ func checkPluginPath(p string) error {
 		return bad("a path ends in .go, .graphqls or .proto")
 	case ext == base:
 		return bad("a path needs a name before the extension")
+	case ext == ".go" && goIgnored(base):
+		return bad("a Go file's name is not one go build ignores or builds for some systems only")
 	case !filepath.IsLocal(filepath.FromSlash(p)):
 		return bad("a path is a local file name")
 	case len(segs) > 1 && strings.EqualFold(base, "velox.go"):
 		return bad("a velox.go below the output directory marks another velox-gen run's output; name the file otherwise")
 	}
 	return nil
+}
+
+// goIgnored reports whether go build leaves out a .go file named base, or
+// builds it only for some systems: a name that starts with _ or ., a
+// _test.go file, or a _GOOS, _GOARCH or _GOOS_GOARCH suffix.
+func goIgnored(base string) bool { return !goBuilds(base, "package p\n") }
+
+// goBuilds reports whether go build builds, on every system, a .go file
+// named base that holds src (gen.GoFileSystems, which also decides the
+// user's files in the output directory).
+func goBuilds(base, src string) bool {
+	sys, _ := gen.GoFileSystems(base, []byte(src))
+	return sys == gen.EverySystem
+}
+
+// checkPluginGo refuses a plugin's .go file whose build constraints, such as
+// //go:build ignore or //go:build linux, leave it out of some builds:
+// velox-gen's header is a line comment, so the constraints apply. Its name is
+// checkPluginPath's.
+func checkPluginGo(f plugin.File) error {
+	if path.Ext(f.Path) != ".go" || goBuilds(path.Base(f.Path), f.Content) {
+		return nil
+	}
+	return fmt.Errorf("invalid path %q: a Go file's name is not one go build ignores or builds for some systems only; its build constraints leave it out", f.Path)
 }
 
 // withHeader puts the header of path's kind in front of content.

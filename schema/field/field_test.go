@@ -195,6 +195,19 @@ func TestTypedConstructors(t *testing.T) {
 	}
 }
 
+type box[T any] struct{ V T }
+
+// A JSON field of a type velox-gen cannot write, such as an instance of a
+// generic type, fails; one of map[string]any does not.
+func TestJSONUnwritableType(t *testing.T) {
+	if d := field.JSON("b", box[int]{}).Descriptor(); len(d.Errs) != 1 || !strings.Contains(d.Errs[0].Error(), "cannot write") {
+		t.Fatalf("box[int]: %v", d.Errs)
+	}
+	if d := field.JSON("m", map[string]any{}).Descriptor(); len(d.Errs) != 0 {
+		t.Fatalf("map[string]any: %v", d.Errs)
+	}
+}
+
 func TestValidate(t *testing.T) {
 	bad := errors.New("bad")
 	d := field.String("s").Validate(func(string) error { return bad }).Descriptor()

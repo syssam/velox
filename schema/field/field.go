@@ -178,7 +178,7 @@ func (t typed[B, V]) GoType(typ any) B {
 }
 
 // setGoType makes the Go type of d that of typ, if typ has the kind of base,
-// and reports whether it did.
+// and reports whether it did and velox-gen can write it.
 func setGoType(d *desc.Field, typ any, base reflect.Type) bool {
 	if typ == nil {
 		fail(d, "GoType is given a nil type")
@@ -191,6 +191,16 @@ func setGoType(d *desc.Field, typ any, base reflect.Type) bool {
 	}
 	d.GoType = desc.GoTypeOf(t)
 	d.RType = t
+	return writable(d, t)
+}
+
+// writable fails d, and reports false, when velox-gen cannot write t, its
+// Go type, as Go source.
+func writable(d *desc.Field, t reflect.Type) bool {
+	if r := desc.Unwritable(t); r != "" {
+		fail(d, "GoType %v %s, which velox-gen cannot write; declare a named type for it", t, r)
+		return false
+	}
 	return true
 }
 

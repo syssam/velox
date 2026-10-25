@@ -173,7 +173,9 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 	out := f.outDir(dir)
 	bound, err := gen.Methods(out, gm.names)
 	if fe := (*gen.FileError)(nil); errors.As(err, &fe) {
-		return fail(fmt.Errorf("%s: %s", relPath(dir, fe.Path), fe.Reason))
+		c := *fe
+		c.Path = relPath(dir, fe.Path)
+		return fail(&c)
 	}
 	if err != nil {
 		return fail(err)

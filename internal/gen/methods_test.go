@@ -100,7 +100,7 @@ func TestMethodsReportsASyntaxError(t *testing.T) {
 }
 
 // HasPackageDoc looks only at the user's files: not at generated files, test
-// files, files that //go:build ignore leaves out, or a file whose comment is
+// files, files that no system builds, or a file whose comment is
 // not the package's or holds only directives.
 func TestHasPackageDoc(t *testing.T) {
 	for _, c := range []struct {
@@ -117,7 +117,7 @@ func TestHasPackageDoc(t *testing.T) {
 		{"directive only", map[string]string{"generate.go": "//go:generate go tool velox-gen ../schema\npackage gen\n"}, false},
 		{"build ignore", map[string]string{"doc.go": "//go:build ignore\n\n// Package gen is ignored.\npackage gen\n"}, false},
 		{"build ignore and a tag", map[string]string{"doc.go": "//go:build ignore && tools\n\n// Package gen is ignored.\npackage gen\n"}, false},
-		{"other build constraint", map[string]string{"doc.go": "//go:build !windows\n\n// Package gen is mine.\npackage gen\n"}, true},
+		{"build constraint every system meets", map[string]string{"doc.go": "//go:build go1.1 && !tools\n\n// Package gen is mine.\npackage gen\n"}, true},
 		{"directive and doc", map[string]string{"doc.go": "// Package gen is mine.\n//\n//go:generate go tool velox-gen ../schema\npackage gen\n"}, true},
 	} {
 		got, err := HasPackageDoc(methodsDir(t, c.files))
@@ -127,5 +127,102 @@ func TestHasPackageDoc(t *testing.T) {
 	}
 	if got, err := HasPackageDoc(filepath.Join(t.TempDir(), "missing")); err != nil || got {
 		t.Errorf("missing dir: got %v, %v", got, err)
+	}
+}
+
+// A file go build leaves out is not in the package: its methods do not
+// bind, and its types do not clash with the generated ones.
+func TestMethodsSkipsIgnoredFiles(t *testing.T) {
+	const policy = "package gen\n\nfunc (*User) Policy() int { return 0 }\n"
+	for name, files := range map[string]map[string]string{
+		"go:build ignore":   {"policy.go": "//go:build ignore\n\n" + policy},
+		"go:build tools":    {"policy.go": "//go:build tools\n\n" + policy},
+		"never satisfied":   {"policy.go": "//go:build linux && !linux\n\n" + policy},
+		"+build ignore":     {"policy.go": "// +build ignore\n\n" + policy},
+		"underscore prefix": {"_policy.go": policy},
+		"dot prefix":        {".policy.go": policy},
+		"type":              {"types.go": "//go:build ignore\n\npackage gen\n\ntype User struct{}\n"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, err := Methods(methodsDir(t, files), []string{"User"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(got) != 0 {
+				t.Errorf("got %v, want none", got)
+			}
+		})
+	}
+}
+
+// A file only some systems build is refused, at the line that says so,
+// whatever system velox-gen runs on: generated on one and built on another,
+// the code would bind a method the package there does not have.
+func TestMethodsRefusesSystemFiles(t *testing.T) {
+	const policy = "package gen\n\nfunc (*User) Policy() int { return 0 }\n"
+	for _, c := range []struct {
+		name, file, src string
+		line            int
+	}{
+		{"name", "policy_linux.go", policy, 0},
+		{"constraint", "policy.go", "//go:build darwin\n\n" + policy, 1},
+		{"not a system", "policy.go", "// Policies.\n\n//go:build !windows\n\n" + policy, 3},
+		{"cgo", "policy.go", "package gen\n\nimport \"C\"\n\nfunc (*User) Policy() int { return 0 }\n", 3},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			dir := methodsDir(t, map[string]string{c.file: c.src})
+			_, err := Methods(dir, []string{"User"})
+			var fe *FileError
+			if !errors.As(err, &fe) || fe.Path != filepath.Join(dir, c.file) || fe.Line != c.line ||
+				!strings.Contains(fe.Reason, "velox-gen reads hooks and policies only from files that every system builds") {
+				t.Fatalf("got %v", err)
+			}
+		})
+	}
+	// An ordinary file, and one whose constraint every system meets, bind.
+	dir := methodsDir(t, map[string]string{"policy.go": policy, "hooks.go": "//go:build go1.1 && !tools\n\npackage gen\n\nfunc (*User) Hooks() int { return 0 }\n"})
+	got, err := Methods(dir, []string{"User"})
+	if err != nil || !reflect.DeepEqual(got, map[string]Bound{"User": {Policy: true, Hooks: true}}) {
+		t.Fatalf("got %v, %v", got, err)
+	}
+}
+
+func TestGoFileSystems(t *testing.T) {
+	for _, c := range []struct {
+		name, src string
+		want      Systems
+		line      int
+	}{
+		{"x.go", "package p\n", EverySystem, 0},
+		{"linux.go", "package p\n", EverySystem, 0},
+		{"x_unix.go", "package p\n", EverySystem, 0},
+		{"x.go", "not go", EverySystem, 0},
+		{"x.go", "//go:build go1.1\n\npackage p\n", EverySystem, 0},
+		{"x.go", "//go:build linux || !linux\n\npackage p\n", EverySystem, 0},
+		{"_x.go", "package p\n", NoSystem, 0},
+		{".x.go", "package p\n", NoSystem, 0},
+		{"x_test.go", "package p\n", NoSystem, 0},
+		{"x.go", "//go:build ignore\n\npackage p\n", NoSystem, 1},
+		{"x.go", "//go:build tools\n\npackage p\n", NoSystem, 1},
+		{"x.go", "//go:build go1.999\n\npackage p\n", NoSystem, 1},
+		{"x.go", "//go:build linux && !linux\n\npackage p\n", NoSystem, 1},
+		{"x.go", "// +build ignore\n\npackage p\n", NoSystem, 1},
+		{"x_linux.go", "package p\n", SomeSystems, 0},
+		{"x_arm64.go", "package p\n", SomeSystems, 0},
+		{"x_linux_arm64.go", "package p\n", SomeSystems, 0},
+		{"x.go", "//go:build darwin\n\npackage p\n", SomeSystems, 1},
+		{"x.go", "//go:build !windows\n\npackage p\n", SomeSystems, 1},
+		{"x.go", "//go:build unix\n\npackage p\n", SomeSystems, 1},
+		{"x.go", "//go:build cgo\n\npackage p\n", SomeSystems, 1},
+		{"x.go", "// +build linux darwin\n\npackage p\n", SomeSystems, 1},
+		{"x.go", "package p\n\nimport \"C\"\n", SomeSystems, 3},
+		// A //go:build line in the package's doc counts; a // +build line
+		// there does not, as for go/build.
+		{"x.go", "// Doc.\n//go:build ignore\npackage p\n", NoSystem, 2},
+		{"x.go", "// +build ignore\npackage p\n", EverySystem, 0},
+	} {
+		if got, line := GoFileSystems(c.name, []byte(c.src)); got != c.want || line != c.line {
+			t.Errorf("GoFileSystems(%q, %q) = %d, %d; want %d, %d", c.name, c.src, got, line, c.want, c.line)
+		}
 	}
 }

@@ -177,7 +177,7 @@ func TestLowerJSONFlag(t *testing.T) {
 	if f := m.field("labels"); f.Handle != "velox.JSONCol[LwMixed, []string]" {
 		t.Errorf("labels: handle %s, want velox.JSONCol", f.Handle)
 	}
-	if f := m.field("box"); !f.JSON || !f.Pointer || f.Handle != "velox.NullJSONCol[LwMixed, gen.lwBox]" {
+	if f := m.field("box"); !f.JSON || !f.Pointer || f.Handle != "velox.NullJSONCol[LwMixed, gen.LwBox]" {
 		t.Errorf("box (a Nillable field.JSON of a struct): JSON %v, pointer %v, handle %s, want velox.NullJSONCol", f.JSON, f.Pointer, f.Handle)
 	}
 	g, err := build(t, LwUser{}, LwPost{}, LwGroup{})
@@ -420,14 +420,14 @@ func (LwMixed) Fields() []schema.Field {
 		field.Int("count").Nillable().Default(5),
 		field.Float("ratio").Nillable().Default(1.5),
 		field.Strings("labels").Default([]string{"a", "b"}),
-		field.Other("pt", uuidValue{}).SchemaType(map[string]string{"postgres": "uuid"}).Default(uuidValue{1}),
+		field.Other("pt", UUIDValue{}).SchemaType(map[string]string{"postgres": "uuid"}).Default(UUIDValue{1}),
 		field.Enum("tier").Values("free", "paid").Default("paid"),
-		field.JSON("box", lwBox{}).Optional().Nillable(),
+		field.JSON("box", LwBox{}).Optional().Nillable(),
 	}
 }
 
-// lwBox is a struct a json field holds.
-type lwBox struct{ W, H int }
+// LwBox is a struct a json field holds.
+type LwBox struct{ W, H int }
 
 func TestLowerMixinPosition(t *testing.T) {
 	o := mustLower(t, Config{SchemaPath: lowerSchemaPath}, LwMixed{})
@@ -603,10 +603,10 @@ func TestLowerTenantIndexGoTypes(t *testing.T) {
 	o = mustLower(t, Config{}, Account{}, Profile{}, Role{}, Home{})
 	const pkg = "github.com/syssam/velox2/internal/gen"
 	a, h := o.entity("Account"), o.entity("Home")
-	if f := h.field("id"); f.GoType != "gen.uuidValue" || f.Handle != "velox.Col[Home, gen.uuidValue]" || f.Pointer {
+	if f := h.field("id"); f.GoType != "gen.UUIDValue" || f.Handle != "velox.Col[Home, gen.UUIDValue]" || f.Pointer {
 		t.Errorf("home id %+v", f)
 	}
-	if f := a.field("account_home"); f.GoType != "gen.uuidValue" || f.Pointer || f.Handle != "velox.Col[Account, gen.uuidValue]" {
+	if f := a.field("account_home"); f.GoType != "gen.UUIDValue" || f.Pointer || f.Handle != "velox.Col[Account, gen.UUIDValue]" {
 		t.Errorf("account_home %+v", f) // a required edge: the key is not a pointer
 	}
 	if f := a.field("id"); f.GoType != "string" || f.Handle != "velox.StringCol[Account, string]" || f.Pointer {
@@ -677,7 +677,7 @@ func TestLowerSensitiveTag(t *testing.T) {
 	}
 }
 
-type lwPoint struct{ X, Y int }
+type LwPoint struct{ X, Y int }
 
 type LwTagged struct{ schema.Schema }
 
@@ -685,8 +685,8 @@ func (LwTagged) Fields() []schema.Field {
 	return []schema.Field{
 		field.Time("at"),
 		field.Time("seen").Optional().Nillable(),
-		field.UUID("u", uuidValue{}),
-		field.JSON("p", lwPoint{}),
+		field.UUID("u", UUIDValue{}),
+		field.JSON("p", LwPoint{}),
 		field.JSON("m", map[string]int{}),
 		field.String("s"),
 		field.String("pw").Sensitive(),
@@ -860,38 +860,38 @@ func TestLowerPackageNameClash(t *testing.T) {
 	}
 }
 
-type lwTime struct{ time.Time }
+type LwTime struct{ time.Time }
 
 type LwWhen struct{ schema.Schema }
 
 func (LwWhen) Fields() []schema.Field {
-	return []schema.Field{field.Time("at").GoType(lwTime{}), field.Time("opt").Nillable().GoType(lwTime{})}
+	return []schema.Field{field.Time("at").GoType(LwTime{}), field.Time("opt").Nillable().GoType(LwTime{})}
 }
 
 func TestLowerTimeIsOrdered(t *testing.T) {
 	e := mustLower(t, Config{}, LwWhen{}).entity("LwWhen")
-	if f := e.field("at"); f.Handle != "velox.OrderedCol[LwWhen, gen.lwTime]" {
+	if f := e.field("at"); f.Handle != "velox.OrderedCol[LwWhen, gen.LwTime]" {
 		t.Errorf("at %+v", f)
 	}
-	if f := e.field("opt"); f.Handle != "velox.NullOrderedCol[LwWhen, gen.lwTime]" || f.GoType != "*gen.lwTime" {
+	if f := e.field("opt"); f.Handle != "velox.NullOrderedCol[LwWhen, gen.LwTime]" || f.GoType != "*gen.LwTime" {
 		t.Errorf("opt %+v", f)
 	}
 }
 
-type lwStatus string
+type LwStatus string
 
-func (lwStatus) Values() []string { return []string{"on", "off"} }
+func (LwStatus) Values() []string { return []string{"on", "off"} }
 
 type LwStatusful struct{ schema.Schema }
 
 func (LwStatusful) Fields() []schema.Field {
-	return []schema.Field{field.Enum("st").GoType(lwStatus("")).Default("off")}
+	return []schema.Field{field.Enum("st").GoType(LwStatus("")).Default("off")}
 }
 
 func TestLowerEnumDefault(t *testing.T) {
 	o := mustLower(t, Config{}, LwStatusful{})
 	f := o.entity("LwStatusful").field("st")
-	if f.DefaultCode != `gen.lwStatus("off")` || f.GoType != "gen.lwStatus" {
+	if f.DefaultCode != `gen.LwStatus("off")` || f.GoType != "gen.LwStatus" {
 		t.Errorf("st %+v", f)
 	}
 	if len(o.Enums) != 0 {
@@ -996,17 +996,17 @@ func TestLowerPartialUniqueIndex(t *testing.T) {
 
 // A conversion in the Check code is there only where the types differ: x is
 // already a string or an int when the field has no Go type of its own.
-type lwCents int64
-type lwSlug string
+type LwCents int64
+type LwSlug string
 
 type LwConv struct{ schema.Schema }
 
 func (LwConv) Fields() []schema.Field {
 	return []schema.Field{
 		field.String("plain").Match(regexp.MustCompile(`^a`)).Validate(func(string) error { return nil }),
-		field.String("slug").GoType(lwSlug("")).Match(regexp.MustCompile(`^b`)).Validate(func(string) error { return nil }),
+		field.String("slug").GoType(LwSlug("")).Match(regexp.MustCompile(`^b`)).Validate(func(string) error { return nil }),
 		field.Int64("n").Range(0, 9).Validate(func(int64) error { return nil }),
-		field.Int64("cents").GoType(lwCents(0)).Range(0, 9).Validate(func(int64) error { return nil }),
+		field.Int64("cents").GoType(LwCents(0)).Range(0, 9).Validate(func(int64) error { return nil }),
 	}
 }
 
@@ -1014,9 +1014,9 @@ func TestLowerChecksConvertOnlyWhenTypesDiffer(t *testing.T) {
 	e := mustLower(t, Config{}, LwConv{}).entity("LwConv")
 	for _, want := range []string{
 		"x := v.(string)", "re0.MatchString(x)", "v0(x)",
-		"x := v.(gen.lwSlug)", "re1.MatchString(string(x))", "v1(string(x))",
+		"x := v.(gen.LwSlug)", "re1.MatchString(string(x))", "v1(string(x))",
 		"x := v.(int64)", "if x < 0 {", "if x > 9 {", "v2(x)",
-		"x := v.(gen.lwCents)", "if x < gen.lwCents(0) {", "if x > gen.lwCents(9) {", "v3(int64(x))",
+		"x := v.(gen.LwCents)", "if x < gen.LwCents(0) {", "if x > gen.LwCents(9) {", "v3(int64(x))",
 	} {
 		if !strings.Contains(e.CheckCode, want) {
 			t.Errorf("CheckCode lacks %q:\n%s", want, e.CheckCode)
@@ -1039,15 +1039,15 @@ type LwPriced struct{ schema.Schema }
 func (LwPriced) Fields() []schema.Field {
 	if lwTypedSpelling {
 		return []schema.Field{
-			field.Number[lwCents]("price").Nillable().Default(5).Min(1).Validate(func(lwCents) error { return nil }),
-			field.EnumOf[lwStatus]("st").Default("off"),
-			field.UUIDOf[uuidValue]("ref").Default(func() uuidValue { return uuidValue{1} }),
+			field.Number[LwCents]("price").Nillable().Default(5).Min(1).Validate(func(LwCents) error { return nil }),
+			field.EnumOf[LwStatus]("st").Default("off"),
+			field.UUIDOf[UUIDValue]("ref").Default(func() UUIDValue { return UUIDValue{1} }),
 		}
 	}
 	return []schema.Field{
-		field.Int64("price").GoType(lwCents(0)).Nillable().Default(5).Min(1).Validate(func(int64) error { return nil }),
-		field.Enum("st").GoType(lwStatus("")).Default("off"),
-		field.UUID("ref", uuidValue{}).Default(func() uuidValue { return uuidValue{1} }),
+		field.Int64("price").GoType(LwCents(0)).Nillable().Default(5).Min(1).Validate(func(int64) error { return nil }),
+		field.Enum("st").GoType(LwStatus("")).Default("off"),
+		field.UUID("ref", UUIDValue{}).Default(func() UUIDValue { return UUIDValue{1} }),
 	}
 }
 
@@ -1072,24 +1072,24 @@ func TestLowerTypedConstructors(t *testing.T) {
 			t.Errorf("setup lacks %s:\n%s", want, e.CheckSetup)
 		}
 	}
-	for _, want := range []string{"case 1:", "x := v.(gen.lwCents)", "if x < gen.lwCents(1) {", "if err := v0(int64(x)); err != nil {"} {
+	for _, want := range []string{"case 1:", "x := v.(gen.LwCents)", "if x < gen.LwCents(1) {", "if err := v0(int64(x)); err != nil {"} {
 		if !strings.Contains(e.CheckCode, want) {
 			t.Errorf("CheckCode lacks %s:\n%s", want, e.CheckCode)
 		}
 	}
-	if f := e.field("price"); f.DefaultCode != "gen.lwCents(5)" || f.GoType != "*gen.lwCents" {
+	if f := e.field("price"); f.DefaultCode != "gen.LwCents(5)" || f.GoType != "*gen.LwCents" {
 		t.Errorf("price %+v", f)
 	}
 }
 
-// lwStamp is a time type that converts from time.Time.
-type lwStamp time.Time
+// LwStamp is a time type that converts from time.Time.
+type LwStamp time.Time
 
 type LwStamped struct{ schema.Schema }
 
 func (LwStamped) Fields() []schema.Field {
 	return []schema.Field{
-		field.Time("at").GoType(lwStamp{}).Default(time.Now).UpdateDefault(time.Now),
+		field.Time("at").GoType(LwStamp{}).Default(time.Now).UpdateDefault(time.Now),
 		field.Time("plain").Default(time.Now),
 	}
 }
@@ -1107,7 +1107,7 @@ func TestLowerTimeDefaultConverts(t *testing.T) {
 			t.Errorf("setup lacks %s:\n%s", want, e.CheckSetup)
 		}
 	}
-	if f := e.field("at"); f.DefaultFuncCode != "func() any { return gen.lwStamp(d0()) }" || f.UpdateDefaultCode != "func() any { return gen.lwStamp(d1()) }" {
+	if f := e.field("at"); f.DefaultFuncCode != "func() any { return gen.LwStamp(d0()) }" || f.UpdateDefaultCode != "func() any { return gen.LwStamp(d1()) }" {
 		t.Errorf("at %+v", f)
 	}
 	if f := e.field("plain"); f.DefaultFuncCode != "func() any { return d2() }" {
@@ -1125,8 +1125,8 @@ func (LwNull) Fields() []schema.Field {
 	return []schema.Field{
 		field.Strings("tags").Optional(),
 		field.JSON("attrs", map[string]any{}).Optional(),
-		field.JSON("box", lwBox{}).Optional().Nillable(),
-		field.JSON("shape", lwBox{}),
+		field.JSON("box", LwBox{}).Optional().Nillable(),
+		field.JSON("shape", LwBox{}),
 		field.Bytes("blob").Nillable(),
 		field.Bytes("raw").Optional().Default([]byte("r")),
 		field.String("bio").Optional(),

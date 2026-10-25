@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"slices"
 	"strconv"
+	"strings"
 )
 
 // Caller returns the program counter of the call to the function that calls
@@ -98,6 +99,42 @@ func collectImports(t reflect.Type, out []string) []string {
 		out = collectImports(t.Elem(), out)
 	}
 	return out
+}
+
+// Unwritable is why velox-gen cannot write t as Go source, or "": t
+// reaches, through pointers, slices, arrays, maps and channels, an
+// instance of a generic type (reflect prints its type arguments with
+// their full package paths), or an unnamed func, an unnamed interface
+// with methods, or an unnamed struct with fields (their packages would
+// go unimported, and an unexported field would make another type).
+// interface{} and struct{} are writable.
+func Unwritable(t reflect.Type) string {
+	if t.Name() != "" {
+		if strings.Contains(t.Name(), "[") {
+			return "is an instance of generic type " + t.String()
+		}
+		return ""
+	}
+	switch t.Kind() {
+	case reflect.Pointer, reflect.Slice, reflect.Array, reflect.Chan:
+		return Unwritable(t.Elem())
+	case reflect.Map:
+		if r := Unwritable(t.Key()); r != "" {
+			return r
+		}
+		return Unwritable(t.Elem())
+	case reflect.Func:
+		return "holds an unnamed func type"
+	case reflect.Interface:
+		if t.NumMethod() > 0 {
+			return "holds an unnamed interface type"
+		}
+	case reflect.Struct:
+		if t.NumField() > 0 {
+			return "holds an unnamed struct type"
+		}
+	}
+	return ""
 }
 
 // Check is a built-in validator on a field. Kind names it and Args holds its

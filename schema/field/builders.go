@@ -59,6 +59,7 @@ func newNumber[T Numeric](name string, pc uintptr) *NumberBuilder[T] {
 	d := newField(name, rt.Kind().String(), rt, pc)
 	if rt.PkgPath() != "" {
 		d.GoType = desc.GoTypeOf(rt)
+		writable(d, rt)
 	}
 	b.common = common[*NumberBuilder[T]]{d: d, self: b}
 	b.typed = newTyped[*NumberBuilder[T], T](&b.common)
@@ -352,6 +353,7 @@ func withType(d *desc.Field, typ any) {
 	t := reflect.TypeOf(typ)
 	d.GoType = desc.GoTypeOf(t)
 	d.RType = t
+	writable(d, t)
 }
 
 // UUIDBuilder builds a UUID field declared with UUID.

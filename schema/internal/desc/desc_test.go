@@ -3,8 +3,10 @@ package desc
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -26,6 +28,35 @@ func TestGoTypeOf(t *testing.T) {
 		got := GoTypeOf(reflect.TypeOf(c.v))
 		if !reflect.DeepEqual(*got, c.want) {
 			t.Errorf("GoTypeOf(%T) = %+v, want %+v", c.v, *got, c.want)
+		}
+	}
+}
+
+type box[T any] struct{ V T }
+
+func TestUnwritable(t *testing.T) {
+	for _, c := range []struct {
+		v    any
+		want string // a word the reason holds; "" for none
+	}{
+		{0, ""},
+		{[]string{}, ""},
+		{map[string]any{}, ""},
+		{map[string]struct{}{}, ""},
+		{&url.URL{}, ""},
+		{[16]byte{}, ""},
+		{local{}, ""},
+		{box[int]{}, "generic"},
+		{[]box[int]{}, "generic"},
+		{map[string]*box[int]{}, "generic"},
+		{struct{ A int }{}, "unnamed struct"},
+		{[]struct{ A int }{}, "unnamed struct"},
+		{func() {}, "unnamed func"},
+		{(*interface{ M() })(nil), "unnamed interface"},
+	} {
+		got := Unwritable(reflect.TypeOf(c.v))
+		if c.want == "" && got != "" || c.want != "" && !strings.Contains(got, c.want) {
+			t.Errorf("Unwritable(%T) = %q, want %q", c.v, got, c.want)
 		}
 	}
 }

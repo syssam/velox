@@ -379,17 +379,17 @@ func TestMarshalDuplicateSchema(t *testing.T) {
 	}
 }
 
-type cents int64
+type Cents int64
 
-type status string
+type Status string
 
-func (status) Values() []string { return []string{"active", "closed"} }
+func (Status) Values() []string { return []string{"active", "closed"} }
 
-type uid [16]byte
+type UID [16]byte
 
-func (uid) Value() (driver.Value, error) { return nil, nil }
+func (UID) Value() (driver.Value, error) { return nil, nil }
 
-func newUID() uid { return uid{1} }
+func newUID() UID { return UID{1} }
 
 // pair is a schema of one field.
 type pair struct {
@@ -399,11 +399,11 @@ type pair struct {
 
 func (p pair) Fields() []schema.Field { return []schema.Field{p.f} }
 
-// level is an int with its own JSON encoding, which a Default or a check
-// argument of Number[level] must not use.
-type level int
+// Level is an int with its own JSON encoding, which a Default or a check
+// argument of Number[Level] must not use.
+type Level int
 
-func (l level) MarshalJSON() ([]byte, error) { return json.Marshal(fmt.Sprintf("L%d", int(l))) }
+func (l Level) MarshalJSON() ([]byte, error) { return json.Marshal(fmt.Sprintf("L%d", int(l))) }
 
 // A typed constructor loads to the JSON of its ent spelling, and lowers to the
 // same output (Review Focus 4). A T with its own JSON or text encoding, such
@@ -411,24 +411,24 @@ func (l level) MarshalJSON() ([]byte, error) { return json.Marshal(fmt.Sprintf("
 func TestTypedConstructorsEqualGoType(t *testing.T) {
 	for name, c := range map[string][2]schema.Field{
 		"Number": {
-			field.Number[cents]("p").Nillable().Default(5).Min(1),
-			field.Int64("p").GoType(cents(0)).Nillable().Default(5).Min(1),
+			field.Number[Cents]("p").Nillable().Default(5).Min(1),
+			field.Int64("p").GoType(Cents(0)).Nillable().Default(5).Min(1),
 		},
 		"Number slog.Level": {
 			field.Number[slog.Level]("lvl").Optional().Nillable().Default(slog.LevelInfo).Min(slog.LevelDebug).Max(slog.LevelError),
 			field.Int("lvl").GoType(slog.Level(0)).Optional().Nillable().Default(0).Min(-4).Max(8),
 		},
 		"Number MarshalJSON": {
-			field.Number[level]("lvl").Nillable().Default(3).Range(1, 9),
-			field.Int("lvl").GoType(level(0)).Nillable().Default(3).Range(1, 9),
+			field.Number[Level]("lvl").Nillable().Default(3).Range(1, 9),
+			field.Int("lvl").GoType(Level(0)).Nillable().Default(3).Range(1, 9),
 		},
 		"EnumOf": {
-			field.EnumOf[status]("s").Default("closed"),
-			field.Enum("s").GoType(status("")).Default("closed"),
+			field.EnumOf[Status]("s").Default("closed"),
+			field.Enum("s").GoType(Status("")).Default("closed"),
 		},
 		"UUIDOf": {
-			field.UUIDOf[uid]("id").Default(newUID),
-			field.UUID("id", uid{}).Default(newUID),
+			field.UUIDOf[UID]("id").Default(newUID),
+			field.UUID("id", UID{}).Default(newUID),
 		},
 	} {
 		var out [2]string

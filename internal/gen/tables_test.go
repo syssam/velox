@@ -66,13 +66,13 @@ func tableIndexNames(tb *migrate.Table) []string {
 
 // --- the golden schemas: every field type and option, every relation kind.
 
-type tbOrderStatus string
+type TbOrderStatus string
 
-func (tbOrderStatus) Values() []string { return []string{"open", "paid", "void"} }
+func (TbOrderStatus) Values() []string { return []string{"open", "paid", "void"} }
 
-type tbMoney struct{}
+type TbMoney struct{}
 
-func (tbMoney) Value() (driver.Value, error) { return nil, nil }
+func (TbMoney) Value() (driver.Value, error) { return nil, nil }
 
 // tbUser's partial index is left out of the MySQL set, which has none.
 type tbUser struct {
@@ -125,13 +125,13 @@ func (tbPost) Fields() []schema.Field {
 	return []schema.Field{
 		field.Int64("author_id").Optional().Nillable(),
 		field.String("title").MaxLen(200),
-		field.EnumOf[tbOrderStatus]("status").Default("open"),
+		field.EnumOf[TbOrderStatus]("status").Default("open"),
 		field.Bytes("body").Optional().Nillable(),
 		field.Bytes("digest").MaxLen(32).Optional().Nillable(),
 		field.Time("published_at").Optional().Nillable(),
-		field.UUID("ref", uuidValue{}).Optional().Nillable(),
-		field.JSON("meta", jsonShape{}),
-		field.Other("price", tbMoney{}).SchemaType(map[string]string{field.Postgres: "numeric(10,2)", field.MySQL: "decimal(10,2)", field.SQLite: "numeric"}),
+		field.UUID("ref", UUIDValue{}).Optional().Nillable(),
+		field.JSON("meta", JSONShape{}),
+		field.Other("price", TbMoney{}).SchemaType(map[string]string{field.Postgres: "numeric(10,2)", field.MySQL: "decimal(10,2)", field.SQLite: "numeric"}),
 		field.Enum("mood").Values("calm", "busy").SchemaType(map[string]string{field.Postgres: "mood"}),
 	}
 }
@@ -157,7 +157,7 @@ func (tbProfile) Edges() []schema.Edge {
 type tbGroup struct{ schema.Schema }
 
 func (tbGroup) Fields() []schema.Field {
-	return []schema.Field{field.EnumOf[tbOrderStatus]("status").Default("open")}
+	return []schema.Field{field.EnumOf[TbOrderStatus]("status").Default("open")}
 }
 func (tbGroup) Edges() []schema.Edge {
 	return []schema.Edge{edge.From("users", tbUser.Type).Ref("groups")}
@@ -174,7 +174,7 @@ func (tbInvoice) Annotations() []schema.Annotation {
 	return []schema.Annotation{schema.TableIn("billing", "invoices"), schema.Comment("a bill")}
 }
 func (tbInvoice) Fields() []schema.Field {
-	return []schema.Field{field.EnumOf[tbOrderStatus]("status"), field.Enum("mood").Values("calm", "busy").SchemaType(map[string]string{field.Postgres: "mood"})}
+	return []schema.Field{field.EnumOf[TbOrderStatus]("status"), field.Enum("mood").Values("calm", "busy").SchemaType(map[string]string{field.Postgres: "mood"})}
 }
 func (i tbInvoice) Edges() []schema.Edge {
 	if i.local {
@@ -273,8 +273,8 @@ func (tbTypes) Fields() []schema.Field {
 		field.String("s10485760").MaxLen(10485760), field.String("s10485761").MaxLen(10485761),
 		field.Bytes("by"), field.Bytes("by255").MaxLen(255), field.Bytes("by256").MaxLen(256),
 		field.Bytes("by65536").MaxLen(65536), field.Bytes("by16777216").MaxLen(16777216),
-		field.Time("t"), field.UUID("uu", uuidValue{}), field.JSON("j", jsonShape{}),
-		field.Other("o", tbMoney{}).SchemaType(map[string]string{field.Postgres: "MONEY", field.MySQL: "INT(11)", field.SQLite: "NUMERIC"}),
+		field.Time("t"), field.UUID("uu", UUIDValue{}), field.JSON("j", JSONShape{}),
+		field.Other("o", TbMoney{}).SchemaType(map[string]string{field.Postgres: "MONEY", field.MySQL: "INT(11)", field.SQLite: "NUMERIC"}),
 		field.Int32("st").SchemaType(map[string]string{field.MySQL: "INT(11)", field.Postgres: "int4"}),
 		field.String("q").SchemaType(map[string]string{field.MySQL: "ENUM('Draft', 'Published')", field.Postgres: `VARCHAR(20) COLLATE "en_US"`, field.SQLite: `TEXT COLLATE "NoCase"`}),
 	}
@@ -363,7 +363,7 @@ func (tbIdentStr) Fields() []schema.Field { return []schema.Field{field.String("
 
 type tbIdentUUID struct{ schema.Schema }
 
-func (tbIdentUUID) Fields() []schema.Field { return []schema.Field{field.UUID("id", uuidValue{})} }
+func (tbIdentUUID) Fields() []schema.Field { return []schema.Field{field.UUID("id", UUIDValue{})} }
 
 type tbIdentI64 struct{ schema.Schema }
 
@@ -445,8 +445,8 @@ func (tbNull) Fields() []schema.Field {
 		field.String("nillable").Nillable(),
 		field.String("optional").Optional(),
 		field.Strings("slice").Optional(),
-		field.JSON("shape", jsonShape{}).Optional().Nillable(),
-		field.JSON("req", jsonShape{}),
+		field.JSON("shape", JSONShape{}).Optional().Nillable(),
+		field.JSON("req", JSONShape{}),
 	}
 }
 
@@ -489,8 +489,8 @@ func (tbDefaults) Fields() []schema.Field {
 		field.String("req"),
 		field.String("fn").DefaultFunc(func() string { return "" }),
 		field.Time("now").Default(func() time.Time { return time.Time{} }),
-		field.UUID("u", uuidValue{}).Default(func() uuidValue { return uuidValue{} }),
-		field.JSON("j", jsonShape{}).Default(jsonShape{W: 1}),
+		field.UUID("u", UUIDValue{}).Default(func() UUIDValue { return UUIDValue{} }),
+		field.JSON("j", JSONShape{}).Default(JSONShape{W: 1}),
 		field.Enum("role").Values("admin", "viewer").Default("viewer"),
 		field.Enum("mode").Values("a", "b").Default("a").SchemaType(map[string]string{field.MySQL: "text"}),
 		field.String("blobby").Default("x").SchemaType(map[string]string{field.MySQL: "blob"}),
@@ -1077,7 +1077,7 @@ func (tbRfCrossRef) Fields() []schema.Field { return []schema.Field{field.String
 type tbRfOther struct{ schema.Schema }
 
 func (tbRfOther) Fields() []schema.Field {
-	f, l := field.Other("o", tbMoney{}).SchemaType(map[string]string{field.Postgres: "money", field.SQLite: "numeric"}), here()
+	f, l := field.Other("o", TbMoney{}).SchemaType(map[string]string{field.Postgres: "money", field.SQLite: "numeric"}), here()
 	refusalLines["other"] = l
 	return []schema.Field{f}
 }
@@ -1279,13 +1279,13 @@ func TestTablesRowLimit(t *testing.T) {
 type tbRfRowPtr struct{ schema.Schema }
 
 func (tbRfRowPtr) Fields() []schema.Field {
-	return []schema.Field{field.Int8("k"), field.Text("t"), field.JSON("j", jsonShape{}), field.String("a").MaxLen(16375)}
+	return []schema.Field{field.Int8("k"), field.Text("t"), field.JSON("j", JSONShape{}), field.String("a").MaxLen(16375)}
 }
 
 type tbRfRowPtrOver struct{ schema.Schema }
 
 func (tbRfRowPtrOver) Fields() []schema.Field {
-	return []schema.Field{field.Int8("k"), field.Text("t"), field.JSON("j", jsonShape{}), field.String("a").MaxLen(16376)}
+	return []schema.Field{field.Int8("k"), field.Text("t"), field.JSON("j", JSONShape{}), field.String("a").MaxLen(16376)}
 }
 
 // A join table counts every column: a varchar(16350) ID (65402) and a
@@ -1302,7 +1302,7 @@ func (tbRfRowJoinUser) Edges() []schema.Edge {
 type tbRfRowJoinGroup struct{ schema.Schema }
 
 func (tbRfRowJoinGroup) Fields() []schema.Field {
-	return []schema.Field{field.UUID("id", uuidValue{})}
+	return []schema.Field{field.UUID("id", UUIDValue{})}
 }
 func (tbRfRowJoinGroup) Edges() []schema.Edge {
 	return []schema.Edge{edge.From("users", tbRfRowJoinUser.Type).Ref("groups")}
@@ -1518,8 +1518,8 @@ type tbRfKeyMixed struct{ schema.Schema }
 func (tbRfKeyMixed) Fields() []schema.Field {
 	return []schema.Field{
 		field.String("s").MaxLen(700), field.Int8("i8"), field.Int16("i16"), field.Int32("i32"), field.Int64("i64"),
-		field.Float32("f32"), field.Float("f64"), field.Time("t"), field.Enum("e").Values("a"), field.UUID("u", uuidValue{}),
-		field.Bytes("b").MaxLen(100), field.Other("o", tbMoney{}).SchemaType(map[string]string{field.MySQL: "decimal(10,2)", field.Postgres: "numeric", field.SQLite: "numeric"}),
+		field.Float32("f32"), field.Float("f64"), field.Time("t"), field.Enum("e").Values("a"), field.UUID("u", UUIDValue{}),
+		field.Bytes("b").MaxLen(100), field.Other("o", TbMoney{}).SchemaType(map[string]string{field.MySQL: "decimal(10,2)", field.Postgres: "numeric", field.SQLite: "numeric"}),
 	}
 }
 func (tbRfKeyMixed) Indexes() []schema.Index {

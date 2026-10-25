@@ -5,12 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"go/ast"
-	"go/build/constraint"
 	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -19,17 +19,26 @@ import (
 // way.
 type FileError struct {
 	Path   string
+	Line   int // the line of the problem, or 0 for the file's
 	Reason string
 }
 
-func (e *FileError) Error() string { return e.Path + ": " + e.Reason }
+// Error returns "path: reason", or "path:line: reason".
+func (e *FileError) Error() string {
+	if e.Line > 0 {
+		return e.Path + ":" + strconv.Itoa(e.Line) + ": " + e.Reason
+	}
+	return e.Path + ": " + e.Reason
+}
 
 // Methods reads the non-test .go files in dir that do not start with
 // velox-gen's header, and reports which of entities have a Policy or Hooks
 // method. The receiver must be *E: the binding calls the method on a nil *E,
 // which a method with a value receiver would panic on, so a method Policy or
 // Hooks with receiver E is a *FileError, and so is a file that declares a type
-// named like an entity (its methods would clash with the generated ones). A missing dir is no files.
+// named like an entity (its methods would clash with the generated ones). A
+// file no system builds is not read, and one only some systems build is a
+// *FileError (see userFiles). A missing dir is no files.
 //
 // The result holds only the entities that have at least one of the methods.
 func Methods(dir string, entities []string) (map[string]Bound, error) {
@@ -77,12 +86,12 @@ func Methods(dir string, entities []string) (map[string]Bound, error) {
 
 // HasPackageDoc reports whether one of the non-test .go files in dir that do
 // not start with velox-gen's header has a package comment with text, not only
-// directives. A file that //go:build ignore leaves out does not count. A
-// missing dir is no files.
+// directives. A file no system builds does not count, and one only some
+// systems build is a *FileError (see userFiles). A missing dir is no files.
 func HasPackageDoc(dir string) (bool, error) {
 	found := false
 	err := userFiles(dir, parser.PackageClauseOnly|parser.ParseComments, func(_ string, f *ast.File) error {
-		if f.Doc != nil && strings.TrimSpace(f.Doc.Text()) != "" && !buildIgnored(f) {
+		if f.Doc != nil && strings.TrimSpace(f.Doc.Text()) != "" {
 			found = true
 		}
 		return nil
@@ -90,37 +99,12 @@ func HasPackageDoc(dir string) (bool, error) {
 	return found, err
 }
 
-// buildIgnored reports whether f's //go:build line requires the tag ignore,
-// alone or in a chain of &&, so that no build includes it.
-func buildIgnored(f *ast.File) bool {
-	for _, g := range f.Comments {
-		if g.Pos() >= f.Package {
-			break
-		}
-		for _, c := range g.List {
-			if !constraint.IsGoBuild(c.Text) {
-				continue
-			}
-			x, err := constraint.Parse(c.Text)
-			return err == nil && needsIgnore(x)
-		}
-	}
-	return false
-}
-
-func needsIgnore(x constraint.Expr) bool {
-	switch x := x.(type) {
-	case *constraint.TagExpr:
-		return x.Tag == "ignore"
-	case *constraint.AndExpr:
-		return needsIgnore(x.X) || needsIgnore(x.Y)
-	}
-	return false
-}
-
 // userFiles parses, with mode, each non-test .go file in dir that does not
-// start with velox-gen's header, and calls fn with it. A missing dir is no
-// files.
+// start with velox-gen's header, and calls fn with it. Whatever system
+// velox-gen runs on, it leaves out a file that no system builds
+// (GoFileSystems), and refuses, as a *FileError, one that only some systems
+// build: the generated code, built on another system, would bind what that
+// system's package does not have. A missing dir is no files.
 func userFiles(dir string, mode parser.Mode, fn func(path string, f *ast.File) error) error {
 	des, err := os.ReadDir(dir)
 	if errors.Is(err, os.ErrNotExist) {
@@ -142,6 +126,12 @@ func userFiles(dir string, mode parser.Mode, fn func(path string, f *ast.File) e
 		}
 		if bytes.HasPrefix(src, []byte(strings.TrimSuffix(header, "\n\n")+"\n")) {
 			continue
+		}
+		switch sys, line := GoFileSystems(name, src); sys {
+		case NoSystem:
+			continue
+		case SomeSystems:
+			return &FileError{Path: path, Line: line, Reason: "go builds it on some systems only; velox-gen reads hooks and policies only from files that every system builds"}
 		}
 		f, err := parser.ParseFile(fset, path, src, mode|parser.SkipObjectResolution)
 		if err != nil {
