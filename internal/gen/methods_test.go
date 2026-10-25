@@ -264,6 +264,11 @@ func TestGoFileSystemsGoVersion(t *testing.T) {
 		{"!go1.21", "1.27.0", NoSystem},
 		{"go1.1", "", EverySystem},
 		{"go1.999", "", SomeSystems},
+		// Not release tags: free, so the file is refused, not skipped.
+		{"go1.0", "1.27.0", SomeSystems},
+		{"!go1.0", "1.27.0", SomeSystems},
+		{"!go1.00", "1.27.0", SomeSystems},
+		{"!go1.027", "1.27.0", SomeSystems},
 	} {
 		src := "//go:build " + c.tag + "\n\npackage p\n"
 		if got, _ := GoFileSystems("x.go", []byte(src), c.goVersion); got != c.want {

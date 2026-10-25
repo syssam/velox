@@ -35,8 +35,9 @@ const (
 // A name that starts with _ or ., or a _test.go file, is no build's. A
 // _GOOS, _GOARCH or _GOOS_GOARCH suffix is some systems'. The build
 // constraint, //go:build or else the // +build lines, decides next: ignore is
-// unset, a go1.N tag holds when goVersion is go1.N or later and is free
-// otherwise, and every other tag is free, a GOOS, GOARCH, unix, cgo, compiler,
+// unset, a release tag go1.N (go1.1 or later, as go writes it) holds when
+// goVersion is go1.N or later and is free otherwise, and every other tag is
+// free, go1.0 and go1.027 as much as a GOOS, GOARCH, unix, cgo, compiler,
 // goexperiment or architecture-level tag as much as a custom one such as prod
 // or tools, since a build may set it or not. A constraint that holds for every
 // choice of the free tags builds everywhere, one that holds for none nowhere,
@@ -159,9 +160,10 @@ func buildConstraint(fset *token.FileSet, f *ast.File) (constraint.Expr, int) {
 	return plus, plusLine
 }
 
-// systemsOf says on which builds x holds: ignore is unset, a go1.N tag that
-// goVersion ("" for velox-gen's toolchain) meets is set, and it tries every
-// choice of the other tags.
+// systemsOf says on which builds x holds: ignore is unset, a release tag go1.N
+// (go1.1 and later, written as go writes it) that goVersion ("" for
+// velox-gen's toolchain) meets is set, and it tries every choice of the other
+// tags, go1.0, go1.00 and go1.027 among them, which no release sets.
 func systemsOf(x constraint.Expr, goVersion string) Systems {
 	lang := "go" + goVersion
 	if goVersion == "" {
@@ -172,7 +174,7 @@ func systemsOf(x constraint.Expr, goVersion string) Systems {
 		switch {
 		case tag == "ignore":
 			return false, true
-		case goTag.MatchString(tag) && lang != "" && version.Compare(tag, lang) <= 0:
+		case goTag.MatchString(tag) && version.IsValid(tag) && version.Compare(tag, "go1.1") >= 0 && lang != "" && version.Compare(tag, lang) <= 0:
 			return true, true
 		}
 		return false, false
