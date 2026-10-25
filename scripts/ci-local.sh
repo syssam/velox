@@ -11,6 +11,13 @@ esac
 
 command -v docker >/dev/null || { echo "ci-local.sh needs docker" >&2; exit 1; }
 
+# VELOX_CI_MATRIX=1's PostgreSQL 14 is the image of CI's matrix, read from
+# ci.yml, so that it is pinned in one place.
+if [ "${VELOX_CI_MATRIX:-}" = 1 ]; then
+  pg14=$(sed -n 's/^ *postgres-image: *\(postgres:14@sha256:[0-9a-f]\{64\}\) *$/\1/p' .github/workflows/ci.yml)
+  [ "$(printf '%s\n' "$pg14" | grep -c .)" = 1 ] || { echo "ci-local.sh: no single postgres:14 image in .github/workflows/ci.yml's matrix" >&2; exit 1; }
+fi
+
 compose=(docker compose -f docker-compose.ci.yml -p velox2-ci)
 # Registered before "up" so a failed or interrupted start still tears down.
 trap '"${compose[@]}" down -v' EXIT
@@ -97,11 +104,13 @@ go run ./bench/scale -n 500 -s 100 -graphql -check bench/scale/thresholds.json
 # velox-graphql against the newest gqlgen, in a copy of the tree.
 scripts/gqlgen-latest.sh
 
-# VELOX_CI_MATRIX=1 runs the tests again on PostgreSQL 14, CI's other entry.
+# VELOX_CI_MATRIX=1 runs the tests again on PostgreSQL 14, CI's other entry,
+# in every module CI's 14 leg tests.
 if [ "${VELOX_CI_MATRIX:-}" = 1 ]; then
   "${compose[@]}" down -v
-  VELOX_CI_POSTGRES_IMAGE='postgres:14@sha256:8ab94f61668dc73bbab4dc13273ff2fc37e635536af62aef5306a49a9682a446' "${compose[@]}" up -d --wait
+  VELOX_CI_POSTGRES_IMAGE=$pg14 "${compose[@]}" up -d --wait
   go test -race -count=1 -timeout 20m ./...
+  (cd example && go test -race -count=1 ./...)
   (cd contrib/veloxotel && go test -race -count=1 ./...)
   (cd contrib/graphql && go test -race -count=1 ./...)
 fi
