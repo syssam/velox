@@ -28,7 +28,7 @@ There are no templates. velox-gen writes code from format strings in `internal/g
 - **No deprecated aliases.** A replaced name or constant is deleted.
 - **Lint and revive stay at 0** in every module, generated code included.
 - **Goldens.** A golden changes only by its `-update` run or by the hand edit a step names. Read every changed golden line: only what the task changes may differ.
-- **Historical documents.** Nothing under `docs/reviews/` or `docs/plans/` changes but this plan. Under `docs/specs/`, only the lines a task names change: core-design §2's line count (C7), the migrate spec's §4 and its ruling 41 and line 36 (M10, MS1).
+- **Historical documents.** Nothing under `docs/reviews/` or `docs/plans/` changes but this plan. Under `docs/specs/`, only the lines a task names change: core-design §2's line count (C7), the migrate spec's §4 and its ruling 41 and line 36 (M10, MS1). The hardening spec's builder ruling 3 had its licence corrected to MIT with this plan.
 - **The followups file** (`docs/plans/2026-10-14-core-1-followups.md`) is not touched. Wave 6 marks its items, citing these commits.
 - **No machine-specific paths** in committed files.
 
@@ -483,26 +483,47 @@ edge	users	user	User
 
 ### Task 5: ent's DDL names, and the ent fixture's acceptance (builder ruling 4)
 
-Covers C77 and builder ruling 4.
+Covers C77 and builder ruling 4, with the coordinator's rulings on its open points (this plan's rulings 5–7): SQLite's unique name, MySQL's foreign-key index, and ent's cap on long names.
 
 **Files:**
 - Modify: `internal/gen/dbnames.go:16-20,105-160,192,353` (the name functions, `foreignKeys`, `fieldIndexes`, `objects`), `internal/gen/build.go:563,705-722` (declared index names; `indexName` moves to dbnames.go), `internal/gen/tables.go:120-160,187-206` (the per-dialect names), `internal/gen/tables_check.go:77-103` (MySQL's clash check).
+- Modify: `internal/ddl/name.go` (new `Symbol`, ent's cap; `Cap` stays for the names ent never makes).
+- Modify, the ent fixture: `cmd/velox-gen/testdata/ent/schema/{user,post}.go`, `postgres.sql`, `mysql.sql` (one long index name and one long foreign-key name, below).
 - Modify, docs: `plugin/plugin.go:77` (`Index.Name`), `schema/index/index.go:44-47` (`StorageKey`), `schema/edge/edge.go:91-96` (`Symbol`, `Symbols`).
-- Test: `internal/gen/build_test.go` (`TestIndexNames`, `TestIndexNamesAcrossGraph`, `TestIndexNamesCapped`, `TestNamespace`), `internal/gen/dbnames_test.go`, `internal/gen/tables_test.go`, `internal/gen/plugin_test.go`; `cmd/velox-gen/migrate_baseline_test.go:83-200`; the migrate tests whose models come from `gen.Tables` (`migrate/cases_test.go`, `itest_test.go`, `baseline_test.go`). Tests that build `migrate.Schema` by hand keep their names.
-- Regenerated: R3, R8, R9 (with D). `cmd/velox-gen/testdata/ent/want/{postgres,mysql}/diff.sql` change. The examples' generated Go code does not change: index and key names are not in it.
+- Test: `internal/ddl/name_test.go` and a new `internal/ddl/testdata/symbol.golden`; `internal/gen/build_test.go` (`TestIndexNames`, `TestIndexNamesAcrossGraph`, `TestIndexNamesCapped`, `TestNamespace`), `internal/gen/dbnames_test.go`, `internal/gen/tables_test.go`, `internal/gen/plugin_test.go`; `cmd/velox-gen/migrate_baseline_test.go:83-200`; the migrate tests whose models come from `gen.Tables` (`migrate/cases_test.go`, `itest_test.go`, `baseline_test.go`). Tests that build `migrate.Schema` by hand keep their names.
+- Regenerated: R3, R8, R9 (with D). Every file of `cmd/velox-gen/testdata/ent/want/{postgres,mysql}` changes: the fixture gains two objects, and the diffs lose their renames. The examples' generated Go code does not change: index and key names are not in it.
 
 **Interfaces:**
 - Consumes: Task 4's `tableName`.
-- Produces, in dbnames.go (each capped with `ddl.Cap`, which stays as it is):
+- Produces, in `internal/ddl/name.go`:
+
+```go
+// Symbol is ent's cap on an index or foreign-key name (dialect/sql/schema/atlas.go:1110):
+// name when it is at most limit bytes, else name[:limit-33], cut back to a UTF-8
+// boundary, then "_", then the 32 lower-case hex digits of md5(name). limit is 63
+// on PostgreSQL and 64 on MySQL and SQLite.
+func Symbol(d velox.Dialect, name string) string
+```
+
+  ent cuts bytes without the UTF-8 step. The step changes only names ent would make invalid UTF-8, which no ent database holds.
+
+- Produces, in dbnames.go. These return the **uncapped** name; the Graph keeps it, and each dialect caps it as the next list says:
 
 ```go
 func indexName(entity string, cols []string) string                // strings.ToLower(entity) + "_" + cols joined by "_": ent's (entc/gen/type.go:727)
-func partialIndexName(entity string, cols []string, where string) string // indexName's text + "_" + the 8 hex digits of FNV-1a 32 of where, capped as a whole
+func partialIndexName(entity string, cols []string, where string) string // indexName's text + "_" + the 8 hex digits of FNV-1a 32 of where
 func uniqueName(table, column string) string                       // table + "_" + column + "_key": a field Unique on PostgreSQL and SQLite
-func fkIndexName(table, column string) string                      // table + "_" + column: velox's foreign-key index, as now
+func fkIndexName(table, column string) string                      // ddl.Cap(table + "_" + column): velox's foreign-key index on PostgreSQL and SQLite, as now
 func fkName(table, refTable, edge string) string                   // table + "_" + refTable + "_" + edge: ent's fkSymbol (entc/gen/graph.go:890)
 func joinFKName(table, column string) string                       // table + "_" + column: ent's fkSymbols (graph.go:898)
 ```
+
+- **Capping, per dialect** (this plan's ruling 7). `Tables` caps for its dialect; `PluginModel` and describe give the PostgreSQL form.
+  - Declared, partial and derived index names, and every derived foreign-key name (relation, join table, and MySQL's foreign-key index): `ddl.Symbol(d, name)`, as ent caps every index and foreign key. A given StorageKey or Symbol is not capped: rule 50 limits it to 63 bytes, as now.
+  - A field `Unique`'s name: ent does not cap it. PostgreSQL cuts the name ent sends at 63 bytes, on a character boundary, so velox gives `uniqueName` cut the same way. SQLite keeps the whole name. MySQL's is the column, which rule 50 already limits.
+  - **`ddl.Cap` stays for the names ent never makes**, at these sites: `pkName`, `seqName` and `checkName` (dbnames.go:16-22), `enumType`'s two derived names (dbnames.go:41,43; ent stores an enum as varchar), `ddl.NotNull`, `ddl.Rebuild`, `ddl.OldEnum`, and `fkIndexName` on PostgreSQL and SQLite (ent makes no foreign-key index there).
+  - Rule 44 compares the uncapped names. md5 is over the whole name, so two names that differ uncapped differ capped. Tables' MySQL clash check below compares the capped names.
+  - The Graph field holding a derived name gets a `Derived bool` beside it (in JSON as `derived`, omitted when false) so that Tables knows which names to cap. Name it as the Graph's style has it.
 
 - **Each call site:**
   - **Declared index** (build.go:563): `cmp.Or(li.StorageKey, indexName(e.Name, ix.Columns))`. Then, once all of an entity's declared indexes are named, an index with a Where and no StorageKey whose name another declared index of the entity also has is renamed `partialIndexName(…)`. A full index never gets the hash. Two full indexes of one name (one `Unique`) are rule 44's, as any shared name is.
@@ -512,13 +533,30 @@ func joinFKName(table, column string) string                       // table + "_
   - **Foreign-key index** (tables.go:204, dbnames.go:353): `fkIndexName(fk.Table, fk.Column)` on PostgreSQL and SQLite. On MySQL it is the foreign key's name, which is what MySQL names the index it makes for an ent foreign key, so an ent database already has it.
 - **MySQL's clash check** (Review Focus 4). In `check`, on MySQL, two indexes of one table whose names are equal case-insensitively fail at the second one's place: `index name %q is also index %s of table %s on MySQL, which names a Unique field's index after its column; give one a StorageKey`. `%s` is the first one's element, as the errors name it.
 - **Docs:**
-  - `plugin.Index.Name`: `the StorageKey, else ent's: lower(entity)_<columns>, with _<hash of Where> for a partial index whose name another index has; capped as before`.
+  - `plugin.Index.Name`: `the StorageKey, else ent's: lower(entity)_<columns>, with _<hash of Where> for a partial index whose name another index has. A derived name over 63 bytes is capped as ent caps it on PostgreSQL: its first 30 bytes, "_", and the md5 of the whole name. MySQL and SQLite cap at 64 bytes, so a derived name of exactly 64 bytes is capped only on PostgreSQL.`
+  - `ddl.Cap`'s doc: `Cap caps the names velox makes and ent does not: keys, sequences, checks, enum types and velox's own foreign-key indexes. ent's index and foreign-key names are capped with Symbol.`
   - `StorageKey`: `Without one, velox-gen derives ent's name: the entity's name in lower case and the columns, as user_name; a partial index that would share it with another gets a hash of Where.`
   - `Symbol`: `Without it, the name is ent's: <table>_<referenced table>_<assoc edge>, as posts_users_posts.`
   - `Symbols`: `Without them, <join table>_<column>.`
   - The comment of `indexName`'s old home at build.go:705-711 goes.
 
 - [ ] **Step 1: Write the failing tests.**
+  - `TestSymbol` in `internal/ddl/name_test.go` reads `testdata/symbol.golden` (tab-separated: dialect, input, output; `-update` rewrites it) and checks `Symbol` against each row. Inputs: `posts_` padded with `x` to 62, 63, 64, 65 and 80 bytes, on each dialect; and `posts_x` followed by 30 `é` (67 bytes), on PostgreSQL and MySQL. The outputs are ent's formula, computed for this plan; after `-update`, the golden must hold exactly these:
+
+    ```
+    62 and 63 bytes, every dialect: the input, unchanged
+    64  postgres  posts_xxxxxxxxxxxxxxxxxxxxxxxx_9792aa9ca5f26c5e08ed0b4f5ff63bf6
+    64  mysql, sqlite: the input, unchanged
+    65  postgres  posts_xxxxxxxxxxxxxxxxxxxxxxxx_2527dc711c103d45bf62572f215e893f
+    65  mysql, sqlite  posts_xxxxxxxxxxxxxxxxxxxxxxxxx_2527dc711c103d45bf62572f215e893f
+    80  postgres  posts_xxxxxxxxxxxxxxxxxxxxxxxx_9bbcb17c83ce03113784bc81e75f70a8
+    80  mysql, sqlite  posts_xxxxxxxxxxxxxxxxxxxxxxxxx_9bbcb17c83ce03113784bc81e75f70a8
+    é×30 postgres  posts_xééééééééééé_b4719d6da6b69f00823f753d622c57ee
+    é×30 mysql     posts_xéééééééééééé_b4719d6da6b69f00823f753d622c57ee
+    ```
+
+    The test also checks that every output is at most the dialect's limit and is valid UTF-8.
+  - `TestIndexNamesCapped` checks `ddl.Symbol` in place of `ddl.Cap`: on PostgreSQL the 70-byte names become 63 bytes, and on MySQL 64.
   - `TestIndexNames` (Review Focus 3). The fixture `indexNames` keeps `schema.Table("names")` and declares index(a), index(a).Where(X), index(a).Where(Y) and index(a).StorageKey("names_a_key"). Its want is `indexnames_a`, `indexnames_a_fd0c5087`, `indexnames_a_fc0c4ef4`, `names_a_key`. Use the hashes the current test has for X and Y.
   - A `TestBuildRules` case: index(name) and index(name).Unique() on `dupNamed` give `schema dupNamed: index 1: name "dupnamed_name" is also index 0`.
   - `TestDDLNames` in tables_test.go, on each dialect, for `User` (field `name`, field `email` Unique, index(name), edge.To("posts", Post).StorageKey(edge.Column("user_posts"))), `Post` (edge.From("author", User).Ref("posts").Unique(), edge.To("tags", Tag)) and `Tag`:
@@ -529,14 +567,18 @@ func joinFKName(table, column string) string                       // table + "_
   - `TestTablesMySQLIndexNameClash`: `User` with field `user_name` Unique and index(name) is refused on MySQL. The error carries the field's file:line and the text above, with `"user_name"`. The same schema passes on PostgreSQL and SQLite.
   - `migrate_baseline_test.go`:
     - `entChange` no longer accepts `RenameIndex` or `RenameConstraint`.
-    - On PostgreSQL, the next diff holds exactly four changes: `CreateEnum users_role`, the role `AlterColumn` (`ColumnType`), the id serial-to-identity `AlterColumn`, and `AddIndex posts_user_posts`.
+    - The fixture gains a long index name and a long foreign-key name, so the cap is pinned against ent's own names:
+      - `Post` gets `field.Time("reviewed_by_an_editor_before_the_post_was_published_on").Optional()` and `index.Fields("title", "reviewed_by_an_editor_before_the_post_was_published_on")`. ent's index name has 65 bytes: on PostgreSQL it is `post_title_reviewed_by_an_edit_610afc49e3060dc9162738c5b5b2de3d`, on MySQL `post_title_reviewed_by_an_edito_610afc49e3060dc9162738c5b5b2de3d`.
+      - `User` gets `edge.To("drafts_written_but_never_published_by_this_user_so_far", Post.Type)`. Its column in posts is `user_drafts_written_but_never_published_by_this_user_so_far` (59 bytes). ent's foreign key has 66 bytes: on PostgreSQL it is `posts_users_drafts_written_but_f5ecc73789cbf6208f1deb12fd406c67`, on MySQL `posts_users_drafts_written_but__f5ecc73789cbf6208f1deb12fd406c67`, which also names MySQL's index for it.
+      - `postgres.sql` and `mysql.sql` get the column, the index and the foreign key (`ON DELETE SET NULL`, as `posts_users_posts`) with exactly those names, written as each file already writes ent's objects.
+    - On PostgreSQL, the next diff holds exactly five changes: `CreateEnum users_role`, the role `AlterColumn` (`ColumnType`), the id serial-to-identity `AlterColumn`, `AddIndex posts_user_posts`, and `AddIndex` of the new foreign key's index, `ddl.Cap("posts_user_drafts_written_but_never_published_by_this_user_so_far")` (velox's own index; ent makes none on PostgreSQL).
     - On MySQL it holds none: `len(changes) == 0` replaces the "has no changes" error for MySQL, and step 4's output is `no changes\n`.
 - [ ] **Step 2: Run** `go test -run 'TestIndexNames|TestBuildRules|TestDDLNames|TestTablesMySQLIndexNameClash' ./internal/gen`. Expected: FAIL.
 - [ ] **Step 3: Implement** the name functions, the call sites, the clash check and the docs.
 - [ ] **Step 4: Regenerate:** R3, R8, then R9 with D. Expected golden changes:
-  - `want/postgres/diff.sql` loses its three rename lines (`ALTER INDEX "user_name" …`, `ALTER INDEX "users_email_key" …`, `ALTER TABLE "posts" RENAME CONSTRAINT …`). The rest is unchanged: `CREATE TYPE`, the identity lines, the alter-type, and 0003's online index.
+  - `want/postgres/diff.sql` loses its three rename lines (`ALTER INDEX "user_name" …`, `ALTER INDEX "users_email_key" …`, `ALTER TABLE "posts" RENAME CONSTRAINT …`), and gains the second online index. The rest is unchanged: `CREATE TYPE`, the identity lines, the alter-type, and 0003's online index.
   - `want/mysql/diff.sql` becomes `no changes\n`.
-  - `schema.json`, `0001_baseline.sql` and `warnings.txt` do not change on either dialect. The PostgreSQL warning about `users_email_key` stays until wave 4's M22.
+  - `schema.json` and `0001_baseline.sql` gain the new column, index and foreign key, under the names above, on both dialects; nothing else in them changes. `warnings.txt` does not change. The PostgreSQL warning about `users_email_key` stays until wave 4's M22.
 - [ ] **Step 5: Fix the gen-derived migrate and gen tests** that `go test ./internal/gen ./migrate ./cmd/velox-gen` reports, to the new names.
 - [ ] **Step 6: Leftover grep.**
 
@@ -547,7 +589,7 @@ func joinFKName(table, column string) string                       // table + "_
 
   Expected: nothing from either. Primary keys keep `<table>_pkey`.
 - [ ] **Step 7: Run** `go test ./internal/gen ./migrate ./cmd/velox-gen ./internal/itest`, with D for the database tests. Expected: PASS, with `TestMigrateBaselineEnt/postgres` and `/mysql` run, not skipped.
-- [ ] **Step 8: Commit** `DDL: ent's index, unique and foreign-key names; an ent database baselines without renames`.
+- [ ] **Step 8: Commit** `DDL: ent's index, unique and foreign-key names, capped as ent caps them; an ent database baselines without renames`.
 - [ ] **Step 9: Run G, then the gate.** Expected: G clean, gate rc=0.
 
 ### Task 6: `omitzero` for struct and array fields, enum `String` and `IsValid`, and `GeneratedCodeIsVersion6`
@@ -821,18 +863,13 @@ func writeAll(dir string, files map[string][]byte, remove []string) error
 
 Each is a call made while writing this plan. An implementer who finds one wrong stops and reports it instead of changing it.
 
-1. **(call) v0.19.0, fetched from the proxy, is the source of the copied rules.** ent pins it, and so builder ruling 3 holds without a fallback. Its licence is MIT (`LICENCE`, Chris Farmiloe), not Apache-2.0 as that ruling says; Apache-2.0 is v0.21.5's. The notice copied is v0.19.0's own.
+1. **(call) v0.19.0, fetched from the proxy, is the source of the copied rules.** ent pins it, and so builder ruling 3 holds without a fallback. Its licence is MIT (`LICENCE`, Chris Farmiloe); Apache-2.0 is v0.21.5's. The copied file carries MIT's notice. The spec's builder ruling 3 said Apache-2.0, and this plan's commit corrects it.
 2. **(call) v0.19.0's Pluralize and Singularize use no regexps.** "Compile lazily" is met by building the rule lists in a `sync.OnceValue` from a static array. Neither plugin's init nor gqlimpl's start-up does inflect work.
 3. **(call) `GoPlural` is the exported name of ent's `plural()`.** It pairs with `GoName`: both make Go identifiers. `Plural` stays inflect's raw plural, which tables use through `tableName`.
 4. **(call) A GraphQL edge input's singular comes from the schema edge's name**, as entgql's does, when the GraphQL name was made from the edge. inflect is case-sensitive, so `Singular("Children")` is `Children`, and the Go name would otherwise disagree with `childIDs`.
-5. **(call, deviates from builder ruling 4's parenthesis) A field `Unique` on SQLite is named `<table>_<col>_key`, not left unnamed.**
-   - The ruling's principle is "the name its dialect gives an ent column UNIQUE".
-   - ent's migrate names that index `<table>_<column>_key` on SQLite (dialect/sql/schema/sqlite.go:151-161: "Ent uses the PostgreSQL approach in its migration").
-   - "Unnamed" is the name of ent's old, non-Atlas writer.
-   - It also keeps a named index, which SQLite can drop without rebuilding the table. velox2 today makes a named index there too.
-   - **The controller confirms or overturns this before Task 5 starts.** Overturning it gives SQLite `Name: ""`, which migrate already renders as a table `UNIQUE (…)`.
-6. **(call) On MySQL, the foreign-key index takes the foreign key's name.** MySQL names the index it makes for an ent foreign key that way. With `<table>_<col>`, the ent fixture's MySQL diff would hold a rename, against the acceptance check. Builder ruling 4's "they keep their current names" is kept on PostgreSQL and SQLite, where ent makes no such index.
-7. **(call) `ddl.Cap` stays.** ent caps a long index or key name as `name[:30 or 31]_<md5>` (Atlas `symbol`, 63 bytes on PostgreSQL, 64 elsewhere). velox2's 63-byte FNV form differs only for names over 63 bytes, which a port then sees as a rename to review. This is a documented difference.
+5. **(coordinator's ruling, overrides builder ruling 4's "SQLite unnamed") A field `Unique` on SQLite is named `<table>_<col>_key`.** ent's Atlas migrate names that index so on SQLite (dialect/sql/schema/sqlite.go:151-161: "Ent uses the PostgreSQL approach in its migration"); "unnamed" was ent's old, non-Atlas writer. velox2 already names it so, and a named index is one SQLite can drop without rebuilding the table.
+6. **(coordinator's ruling) On MySQL, the foreign-key index takes the foreign key's name**, which is what MySQL names the index it makes for an ent foreign key. With `<table>_<col>`, the ent fixture's MySQL diff would hold a rename. PostgreSQL and SQLite keep their current names (`<table>_<col>`), as builder ruling 4 says: ent makes no foreign-key index there.
+7. **(coordinator's ruling) Long names are capped as ent caps them.** ent caps every index and foreign-key name with Atlas's `symbol`: at 63 bytes on PostgreSQL and 64 on MySQL and SQLite, `name[:limit-33]_<md5 hex>`. `ddl.Symbol` is that, pinned by `internal/ddl/testdata/symbol.golden` at the boundary and by the ent fixture's long index and foreign key, so that an ent-adopted database with long names plans no renames. A field-Unique name, which ent does not cap, is PostgreSQL's own 63-byte cut there and whole on SQLite. `ddl.Cap` (54 bytes and FNV-1a) stays for the names ent never makes: primary keys, sequences, checks, enum types, migrate's NOT NULL checks, SQLite's rebuild tables, PostgreSQL's swapped-out enum types, and velox's foreign-key indexes on PostgreSQL and SQLite. **Left open:** PostgreSQL, not ent, names an ent table's primary key and serial sequence; for a table name over 58 bytes, PostgreSQL's own cut differs from `ddl.Cap`'s, so such an adoption would plan a rename. No task changes this.
 8. **(call) The Where hash goes only on a partial index whose name another declared index of the same entity has.** Two full indexes of one name are rule 44's, whose message already says to name one.
 9. **(call) Local CI runs postgres:18, and `VELOX_CI_MATRIX=1` runs the tests again on postgres:14.** That is one image per database, as builder ruling 16 says, plus the opt-in. An incompatibility found on 18 is reported, not fixed in Wave 0.
 10. **(call) CI's Go comes from go.mod's `go 1.27.0`**, the module's floor (C11's `go-version-file`). ci-local still requires a go1.27 toolchain.
