@@ -400,7 +400,7 @@ func baseType(d velox.Dialect, typ string, size int) string {
 			switch {
 			case size == 0:
 				return "varchar(255)"
-			case size <= 16383:
+			case size <= 16381:
 				return "varchar(" + strconv.Itoa(size) + ")"
 			case size <= 65535:
 				return "text"

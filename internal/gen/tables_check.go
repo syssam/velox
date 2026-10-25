@@ -3,6 +3,7 @@ package gen
 import (
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"regexp"
 	"slices"
 	"strconv"
@@ -175,6 +176,9 @@ func (t *tabler) checkColumn(e *Entity, i int, f *Field, c *migrate.Column) {
 	if i == 0 && integer(f.Type) && st != "" && !integerType(t.d, ddl.NormalizeType(t.d, st)) {
 		t.fail(at, "the ID is an integer, but its SchemaType %s is not an integer type on %s; Tables makes the column an identity itself", st, dialectName(t.d))
 	}
+	if t.d != velox.SQLite {
+		t.checkDecimalDefault(at, f, c.Type)
+	}
 	switch t.d {
 	case velox.Postgres:
 		if f.Type == "enum" && st != "" && !ddl.StringType(t.d, st) {
@@ -213,6 +217,90 @@ func (t *tabler) checkColumn(e *Entity, i int, f *Field, c *migrate.Column) {
 			t.fail(at, "its comment is %d characters on MySQL, over its %d", n, mysqlColumnComment)
 		}
 	}
+}
+
+// checkDecimalDefault records a literal numeric Default of f that its column
+// of type typ, as decimalType reads it, would round or refuse: one that
+// rounding to the column's places changes, that has as many digits before the
+// point as the column has or more, or, on an unsigned column, that is
+// negative. A SchemaDefault stands in for the Default.
+func (t *tabler) checkDecimalDefault(at place, f *Field, typ string) {
+	if !numeric[f.Type] || len(f.Default) == 0 || f.SchemaDefault[t.d.String()] != "" {
+		return
+	}
+	p, s, unsigned, ok := decimalType(t.d, typ)
+	if !ok {
+		return
+	}
+	raw := strings.TrimSpace(string(f.Default))
+	v, ok := new(big.Rat).SetString(raw)
+	// PostgreSQL 15+ also takes numeric(p,s) with s > p or s < 0, which round
+	// to tens or hold only small fractions; they are skipped deliberately.
+	if !ok || p < s || s < 0 {
+		return
+	}
+	if unsigned && v.Sign() < 0 {
+		t.fail(at, "its Default %s is negative, but its column %s is unsigned; the database would refuse it", raw, typ)
+		return
+	}
+	scale := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(s)), nil)
+	scaled := new(big.Rat).Mul(v, new(big.Rat).SetInt(scale))
+	limit := new(big.Rat).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(p)), nil))
+	if !scaled.IsInt() || new(big.Rat).Abs(scaled).Cmp(limit) >= 0 {
+		t.fail(at, "its Default %s does not fit %s, which keeps %d digits before the point and %d after it; the database would round it or refuse it", raw, typ, p-s, s)
+	}
+}
+
+// decimalType reads the precision p and scale s of the normalised column type
+// typ of d, when it is an exact-number type with a p that d accepts: on
+// PostgreSQL numeric(p) and numeric(p,s), p up to 1000; on MySQL decimal,
+// numeric, dec and fixed, each bare (10,0), with (p) or (p,s), p up to 65 and
+// 0 <= s <= p, and with unsigned, zerofill or signed after it. unsigned is
+// true for unsigned and zerofill. A bare numeric on PostgreSQL has no
+// precision; it is not ok.
+func decimalType(d velox.Dialect, typ string) (p, s int, unsigned, ok bool) {
+	word, rest := typ, ""
+	if i := strings.IndexAny(typ, "( "); i >= 0 {
+		word, rest = typ[:i], typ[i:]
+	}
+	switch {
+	case d == velox.Postgres && (word == "numeric" || word == "decimal"):
+	case d == velox.MySQL && (word == "decimal" || word == "numeric" || word == "dec" || word == "fixed"):
+	default:
+		return 0, 0, false, false
+	}
+	p = 10 // MySQL's bare decimal is decimal(10,0)
+	if args, tail, found := strings.Cut(strings.TrimPrefix(rest, "("), ")"); strings.HasPrefix(rest, "(") {
+		if !found {
+			return 0, 0, false, false
+		}
+		rest = tail
+		ps, ss, scaled := strings.Cut(args, ",")
+		var err error
+		if p, err = strconv.Atoi(strings.TrimSpace(ps)); err != nil {
+			return 0, 0, false, false
+		}
+		if scaled {
+			if s, err = strconv.Atoi(strings.TrimSpace(ss)); err != nil {
+				return 0, 0, false, false
+			}
+		}
+	} else if d == velox.Postgres {
+		return 0, 0, false, false
+	}
+	if d == velox.Postgres {
+		return p, s, false, rest == "" && p >= 1 && p <= 1000
+	}
+	for _, w := range strings.Fields(rest) {
+		switch w {
+		case "unsigned", "zerofill":
+			unsigned = true
+		case "signed":
+		default:
+			return 0, 0, false, false
+		}
+	}
+	return p, s, unsigned, p >= 0 && p <= 65 && s >= 0 && s <= p
 }
 
 // enumValueName names the enum value v in an error: its Go name when
@@ -289,16 +377,28 @@ func mysqlRowBytes(t string) (n int, ok bool) {
 		}
 		return 1, true
 	}
-	if m, ok := sizeOf(t, "decimal"); ok && m <= 65 {
-		return decimalBytes(m), true
-	}
-	if s, ok := strings.CutPrefix(t, "decimal("); ok && strings.HasSuffix(s, ")") {
-		m, d, _ := strings.Cut(strings.TrimSuffix(s, ")"), ",")
-		mi, err1 := strconv.Atoi(m)
-		di, err2 := strconv.Atoi(d)
-		if err1 == nil && err2 == nil && di >= 0 && di <= mi && mi <= 65 {
-			return decimalBytes(mi-di) + decimalBytes(di), true
+	if vs, ok := ddl.ParseMySQLSet(t); ok {
+		switch n := len(vs); {
+		case n <= 8:
+			return 1, true
+		case n <= 16:
+			return 2, true
+		case n <= 24:
+			return 3, true
+		case n <= 32:
+			return 4, true
+		case n <= 64:
+			return 8, true
 		}
+	}
+	if p, ok := sizeOf(t, "float"); ok && p <= 53 {
+		if p <= 24 {
+			return 4, true
+		}
+		return 8, true
+	}
+	if p, sc, _, ok := decimalType(velox.MySQL, t); ok {
+		return decimalBytes(p-sc) + decimalBytes(sc), true
 	}
 	return 0, false
 }
@@ -326,6 +426,8 @@ var mysqlRowFixed = map[string]int{
 	"float": 4, "double": 8, "date": 3, "datetime": 5, "timestamp": 4, "time": 3, "year": 1,
 	"tinytext": 9, "tinyblob": 9, "text": 10, "blob": 10, "mediumtext": 11, "mediumblob": 11,
 	"longtext": 12, "longblob": 12, "json": 12,
+	"geometry": 12, "point": 12, "linestring": 12, "polygon": 12, "multipoint": 12, // blobs: the in-row pointer
+	"multilinestring": 12, "multipolygon": 12, "geometrycollection": 12,
 	"char": 4, "binary": 1, "bit": 1, "decimal": 5, // char(1), binary(1), bit(1), decimal(10,0)
 }
 

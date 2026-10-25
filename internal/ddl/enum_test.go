@@ -63,3 +63,17 @@ func TestMySQLEnumRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+func TestParseMySQLSet(t *testing.T) {
+	if got, ok := ParseMySQLSet("set('a','b')"); !ok || !slices.Equal(got, []string{"a", "b"}) {
+		t.Errorf("ParseMySQLSet = %q, %v", got, ok)
+	}
+	if got, ok := ParseMySQLSet("set('it''s', 'x,y')"); !ok || !slices.Equal(got, []string{"it's", "x,y"}) {
+		t.Errorf("ParseMySQLSet = %q, %v", got, ok)
+	}
+	for _, typ := range []string{"enum('a')", "set()", "set('a'", "varchar(3)", ""} {
+		if _, ok := ParseMySQLSet(typ); ok {
+			t.Errorf("ParseMySQLSet(%s) accepted it", typ)
+		}
+	}
+}

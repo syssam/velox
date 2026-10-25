@@ -232,7 +232,7 @@ A column's `Type` is the canonical spelling: what the database reports when insp
 | `float32` | `real` | `float` | `real` |
 | `float64` | `double precision` | `double` | `real` |
 | `string`, Size 0 | `text` | `varchar(255)` | `text` |
-| `string`, Size 1–10485760 | `character varying(Size)` | Size ≤ 16383: `varchar(Size)`; ≤ 65535: `text`; ≤ 16777215: `mediumtext`; else `longtext` | `text` |
+| `string`, Size 1–10485760 | `character varying(Size)` | Size ≤ 16381: `varchar(Size)`; ≤ 65535: `text`; ≤ 16777215: `mediumtext`; else `longtext` | `text` |
 | `string`, larger (`Text`) | `text` | `longtext` | `text` |
 | `enum` | the enum type, `"<name>"` (§3) | `enum('a','b',…)` | `text` + `CHECK` |
 | `enum`, opted out by `SchemaType` | that type + `CHECK` | that type + `CHECK` | — |
@@ -256,7 +256,7 @@ A column's `Type` is the canonical spelling: what the database reports when insp
 - **json:** the JSON-fields rulings (schema design §1.1) bind `[]byte` on PostgreSQL and a string on MySQL and SQLite. These are the column types they assume.
 - **enums:** an enum binds and scans as a string on every dialect, native or not. PostgreSQL casts the text parameter to the enum type; MySQL takes the value's text.
 - **bool:** MySQL's `BOOLEAN` is `tinyint(1)`, which is what it reports, so the model says so **(changed: the decision wrote `boolean`; that is a spelling MySQL never reports, so `inspect == model` would fail)**.
-- **strings on MySQL:** `MaxLen` counts bytes and `varchar(n)` counts characters, so `varchar(Size)` always holds the value. `varchar` stops at 16383 because utf8mb4 uses up to 4 bytes per character; the row limit across columns is ruling 47's. Beyond that the text family is chosen by bytes.
+- **strings on MySQL:** `MaxLen` counts bytes and `varchar(n)` counts characters, so `varchar(Size)` always holds the value. `varchar` stops at 16381, the widest that fits a row beside a bigint ID (16381 × 4 + 2 + 8 = 65534 bytes), because utf8mb4 uses up to 4 bytes per character; the row limit across columns is ruling 47's. Beyond that the text family is chosen by bytes.
 - **strings on SQLite:** always `text`. SQLite does not enforce a length, so a `MaxLen` change is no SQLite change.
 
 **MySQL tables** are `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`. Byte-wise comparison matches PostgreSQL's equality and SQLite's default. **A MySQL `ENUM` sorts by its values' positions, not their text**: `ORDER BY status` follows the declaration order. The docs of `field.Enum` and `migrate` say so. PostgreSQL's enum types sort by declaration order too; the `CHECK` form sorts by text.

@@ -267,6 +267,7 @@ func (tbTypes) Fields() []schema.Field {
 		field.Uint8("u8"), field.Uint16("u16"), field.Uint32("u32"), field.Uint("u"), field.Uint64("u64"),
 		field.Float32("f32"), field.Float("f64"),
 		field.String("s"), field.String("s1").MaxLen(1), field.Text("txt"),
+		field.String("s16382").MaxLen(16382), field.String("s16383").MaxLen(16383),
 		field.String("s16384").MaxLen(16384), field.String("s65535").MaxLen(65535),
 		field.String("s65536").MaxLen(65536), field.String("s16777215").MaxLen(16777215), field.String("s16777216").MaxLen(16777216),
 		field.String("s10485760").MaxLen(10485760), field.String("s10485761").MaxLen(10485761),
@@ -280,14 +281,14 @@ func (tbTypes) Fields() []schema.Field {
 }
 
 // tbTypesWide holds the widest varchar, which fills a MySQL row with a
-// tinyint ID (65534 + 1 bytes).
+// bigint ID (16381 * 4 + 2 + 8 = 65534 bytes).
 type tbTypesWide struct{ schema.Schema }
 
 func (tbTypesWide) Annotations() []schema.Annotation {
 	return []schema.Annotation{schema.Table("tb_types_wide")}
 }
 func (tbTypesWide) Fields() []schema.Field {
-	return []schema.Field{field.Int8("id"), field.String("s16383").MaxLen(16383)}
+	return []schema.Field{field.String("s16381").MaxLen(16381)}
 }
 
 func TestTablesTypes(t *testing.T) {
@@ -308,7 +309,9 @@ func TestTablesTypes(t *testing.T) {
 		"s":          {"text", "varchar(255)", "text"},
 		"s1":         {"character varying(1)", "varchar(1)", "text"},
 		"txt":        {"text", "longtext", "text"},
-		"s16383":     {"character varying(16383)", "varchar(16383)", "text"},
+		"s16381":     {"character varying(16381)", "varchar(16381)", "text"},
+		"s16382":     {"character varying(16382)", "text", "text"},
+		"s16383":     {"character varying(16383)", "text", "text"},
 		"s16384":     {"character varying(16384)", "text", "text"},
 		"s65535":     {"character varying(65535)", "text", "text"},
 		"s65536":     {"character varying(65536)", "mediumtext", "text"},
@@ -332,7 +335,7 @@ func TestTablesTypes(t *testing.T) {
 		s := tables(t, d, tbTypes{}, tbTypesWide{})
 		tb, wide := table(t, s, "tb_types"), table(t, s, "tb_types_wide")
 		for name, w := range want {
-			if name == "s16383" {
+			if name == "s16381" {
 				if c := column(t, wide, name); c.Type != w[i] {
 					t.Errorf("%v: %s is %q, want %q", d, name, c.Type, w[i])
 				}
@@ -1328,13 +1331,15 @@ func TestTablesRowSize(t *testing.T) {
 }
 
 func TestMySQLRowBytes(t *testing.T) {
-	enum := func(n int) string {
+	list := func(kind string, n int) string {
 		vs := make([]string, n)
 		for i := range vs {
 			vs[i] = "'v" + strconv.Itoa(i) + "'"
 		}
-		return "enum(" + strings.Join(vs, ",") + ")"
+		return kind + "(" + strings.Join(vs, ",") + ")"
 	}
+	enum := func(n int) string { return list("enum", n) }
+	set := func(n int) string { return list("set", n) }
 	for _, c := range []struct {
 		typ string
 		n   int
@@ -1343,7 +1348,8 @@ func TestMySQLRowBytes(t *testing.T) {
 		{"mediumint", 3}, {"mediumint unsigned", 3}, {"int", 4}, {"int unsigned", 4}, {"bigint", 8}, {"bigint unsigned", 8},
 		{"float", 4}, {"double", 8},
 		{"decimal(20,0)", 9}, {"decimal(10,2)", 5}, {"decimal(9,0)", 4}, {"decimal(18,9)", 8}, {"decimal(65,30)", 30}, {"decimal(1,1)", 1},
-		{"decimal", 5}, {"decimal(12)", 6}, {"char", 4}, {"binary", 1}, {"bit", 1},
+		{"decimal", 5}, {"decimal(12)", 6}, {"numeric", 5}, {"numeric(20,0)", 9}, {"numeric(10,2)", 5}, {"dec(10,2)", 5}, {"fixed(18,9)", 8},
+		{"decimal(10,2) unsigned", 5}, {"numeric(65,30) unsigned zerofill", 30}, {"decimal unsigned", 5}, {"char", 4}, {"binary", 1}, {"bit", 1},
 		{"date", 3}, {"datetime", 5}, {"datetime(1)", 6}, {"datetime(3)", 7}, {"datetime(6)", 8},
 		{"timestamp", 4}, {"timestamp(6)", 7}, {"time", 3}, {"time(2)", 4}, {"time(6)", 6}, {"year", 1},
 		{"char(36)", 144}, {"char(1)", 4}, {"binary(16)", 16},
@@ -1352,14 +1358,141 @@ func TestMySQLRowBytes(t *testing.T) {
 		{"bit(1)", 1}, {"bit(9)", 2}, {"bit(64)", 8},
 		{"tinytext", 9}, {"tinyblob", 9}, {"text", 10}, {"blob", 10}, {"mediumtext", 11}, {"mediumblob", 11},
 		{"longtext", 12}, {"longblob", 12}, {"json", 12},
+		{"set('a')", 1}, {set(8), 1}, {set(9), 2}, {set(16), 2}, {set(17), 3}, {set(25), 4}, {set(32), 4}, {set(33), 8}, {set(64), 8},
+		{"float(24)", 4}, {"float(25)", 8}, {"float(53)", 8},
+		{"geometry", 12}, {"point", 12}, {"linestring", 12}, {"polygon", 12}, {"multipoint", 12},
+		{"multilinestring", 12}, {"multipolygon", 12}, {"geometrycollection", 12},
 	} {
 		if n, ok := mysqlRowBytes(c.typ); n != c.n || !ok {
 			t.Errorf("%.40s: %d, %v, want %d", c.typ, n, ok, c.n)
 		}
 	}
-	for _, typ := range []string{"geometry", "point", "varchar", "decimal(x,1)", "decimal(2,3)", "decimal(66,0)", "bit(65)", "datetime(7)", "enum(", ""} {
+	for _, typ := range []string{"varchar", "float(54)", "set(", "set()", set(65), "numeric(66,0)", "numeric(2,3)", "decimal(5,2) foo", "geometry(3)", "decimal(x,1)", "decimal(2,3)", "decimal(66,0)", "bit(65)", "datetime(7)", "enum(", ""} {
 		if n, ok := mysqlRowBytes(typ); n != 0 || ok {
 			t.Errorf("%s: %d, %v, want 0, false", typ, n, ok)
+		}
+	}
+}
+
+// A decimal column rounds a Default that has more places than it keeps, and
+// refuses one with more digits before the point.
+type tbRoundedDefault struct{ schema.Schema }
+
+var tbRoundedValue float64
+var tbRoundedLine int
+
+func (tbRoundedDefault) Fields() []schema.Field {
+	f, l := field.Float("price").Nillable().Default(tbRoundedValue).SchemaType(map[string]string{field.Postgres: "numeric(5,2)", field.MySQL: "decimal(5,2)"}), here()
+	tbRoundedLine = l
+	return []schema.Field{f}
+}
+
+func TestTablesRoundedDefault(t *testing.T) {
+	for _, c := range []struct {
+		v    float64
+		json string
+		bad  bool
+	}{
+		{1.555, "1.555", true}, {1234.5, "1234.5", true}, {1000, "1000", true}, {-1234.5, "-1234.5", true}, {0.001, "0.001", true},
+		{1.55, "1.55", false}, {-999.99, "-999.99", false}, {0, "0", false}, {999.99, "999.99", false}, {5, "5", false},
+	} {
+		tbRoundedValue = c.v
+		g := mustBuild(t, tbRoundedDefault{})
+		for _, d := range allDialects {
+			_, err := Tables(g, d)
+			if !c.bad || d == velox.SQLite {
+				if err != nil {
+					t.Errorf("%v: %s: %v", d, c.json, err)
+				}
+				continue
+			}
+			e := refusal(t, err)
+			typ := map[velox.Dialect]string{velox.Postgres: "numeric(5,2)", velox.MySQL: "decimal(5,2)"}[d]
+			want := "its Default " + c.json + " does not fit " + typ + ", which keeps 3 digits before the point and 2 after it; the database would round it or refuse it"
+			if e.Reason != want || e.Where != `field "price"` || !strings.HasSuffix(e.Pos, "tables_test.go:"+strconv.Itoa(tbRoundedLine)) {
+				t.Errorf("%v: %s: %+v\nwant reason %q", d, c.json, e, want)
+			}
+		}
+	}
+}
+
+// The decimal types a Default is checked against: MySQL's bare decimal and
+// numeric are decimal(10,0), its dec, fixed and numeric are decimal's
+// synonyms, and unsigned or zerofill may follow; PostgreSQL's bare numeric
+// keeps every digit.
+type tbDecimalTypes struct{ schema.Schema }
+
+var tbDecimalPG, tbDecimalMy, tbDecimalSD string
+var tbDecimalValue float64
+
+func (tbDecimalTypes) Fields() []schema.Field {
+	f := field.Float("price").Nillable().Default(tbDecimalValue).SchemaType(map[string]string{field.Postgres: tbDecimalPG, field.MySQL: tbDecimalMy})
+	if tbDecimalSD != "" {
+		f = f.SchemaDefault(map[string]string{field.Postgres: tbDecimalSD, field.MySQL: tbDecimalSD})
+	}
+	return []schema.Field{f}
+}
+
+func TestTablesDecimalTypes(t *testing.T) {
+	const ( // which dialects refuse the row
+		none = 0
+		pg   = 1
+		my   = 2
+		both = pg | my
+	)
+	for _, c := range []struct {
+		pg, my string
+		sd     string // a SchemaDefault for both
+		v      float64
+		bad    int
+		neg    bool // the reason is a negative Default on an unsigned column
+	}{
+		{"numeric", "decimal", "", 1.5, my, false},
+		{"numeric", "decimal", "", 12345678901, my, false},
+		{"numeric", "decimal", "", 123, none, false},
+		{"numeric", "numeric", "", 1.5, my, false},
+		{"numeric", "numeric", "", 12345678901, my, false},
+		{"numeric", "numeric", "", 123, none, false},
+		{"numeric(5,2)", "dec(5,2)", "", 1.555, both, false},
+		{"numeric(5,2)", "fixed(5,2)", "", 1.555, both, false},
+		{"numeric(5,2)", "numeric(5,2)", "", 1.555, both, false},
+		{"numeric(5,2)", "numeric(5,2)", "", 1.55, none, false},
+		{"numeric(5)", "decimal(5)", "", 1.5, both, false},
+		{"numeric(5)", "decimal(5)", "", 99999, none, false},
+		{"numeric(5)", "decimal(5)", "", 100000, both, false},
+		{"numeric(5,2)", "decimal(5,2) unsigned", "", 1.55, none, false},
+		{"numeric(5,2)", "decimal(5,2) unsigned", "", -1.55, my, true},
+		{"numeric(5,2)", "decimal(5,2) unsigned", "", 1234.5, both, false},
+		{"numeric(5,2)", "decimal(5,2) unsigned zerofill", "", -1, my, true},
+		{"numeric(5,2)", "decimal(5,2) signed", "", -1.55, none, false},
+		{"numeric(5,2)", "decimal(5,2) zerofill", "", 1.555, both, false},
+		{"numeric", "decimal unsigned", "", 1.5, my, false},
+		{"numeric(999999999,0)", "decimal(999999999,0)", "", 5, none, false},
+		{"numeric(999999999,0)", "numeric(999999999,0)", "", 1.5, none, false},
+		{"numeric(5,2)", "decimal(5,2)", "1.555", 1.555, none, false}, // the SchemaDefault is the column's
+	} {
+		tbDecimalPG, tbDecimalMy, tbDecimalSD, tbDecimalValue = c.pg, c.my, c.sd, c.v
+		g := mustBuild(t, tbDecimalTypes{})
+		for _, d := range allDialects {
+			bit := map[velox.Dialect]int{velox.Postgres: pg, velox.MySQL: my}[d]
+			_, err := Tables(g, d)
+			if c.bad&bit == 0 {
+				if err != nil {
+					t.Errorf("%v: %s / %s: %v: %v", d, c.pg, c.my, c.v, err)
+				}
+				continue
+			}
+			typ := c.my
+			if d == velox.Postgres {
+				typ = c.pg
+			}
+			want := "its Default " + strconv.FormatFloat(c.v, 'f', -1, 64) + " does not fit " + typ + ","
+			if c.neg {
+				want = "its Default " + strconv.FormatFloat(c.v, 'f', -1, 64) + " is negative, but its column " + typ + " is unsigned"
+			}
+			if e := refusal(t, err); !strings.Contains(e.Reason, want) {
+				t.Errorf("%v: %s: %q, want it to contain %q", d, typ, e.Reason, want)
+			}
 		}
 	}
 }

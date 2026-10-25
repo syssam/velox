@@ -77,6 +77,19 @@ func ParseMySQLEnum(t string) ([]string, bool) {
 	return literalList(velox.MySQL, list)
 }
 
+// ParseMySQLSet is the members of a type of the form set('a','b'); false when
+// t is not one. Space around the literals does not matter.
+func ParseMySQLSet(t string) ([]string, bool) {
+	list, ok := strings.CutPrefix(t, "set(")
+	if !ok {
+		return nil, false
+	}
+	if list, ok = strings.CutSuffix(list, ")"); !ok {
+		return nil, false
+	}
+	return literalList(velox.MySQL, list)
+}
+
 // literalList reads one or more string literals separated by commas.
 func literalList(d velox.Dialect, s string) ([]string, bool) {
 	var out []string
