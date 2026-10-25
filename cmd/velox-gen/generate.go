@@ -178,7 +178,11 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 	if err != nil {
 		return fail(err)
 	}
-	files, err := gen.Generate(gm.graph, gen.Config{Package: pkg, SchemaPath: gm.importPath, Bound: bound})
+	userDoc, err := gen.HasPackageDoc(out)
+	if err != nil {
+		return fail(err)
+	}
+	files, err := gen.Generate(gm.graph, gen.Config{Package: pkg, SchemaPath: gm.importPath, Bound: bound, UserDoc: userDoc})
 	if err != nil {
 		return fail(err)
 	}

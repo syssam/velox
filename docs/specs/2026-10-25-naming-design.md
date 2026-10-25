@@ -10,7 +10,7 @@ The controller made every call below (the user said "do it"). Each call follows 
 
 1. One form for each kind of name, across velox, migrate, plugin, schema/*, contrib/graphql (with veloxgql and gqlimpl), contrib/veloxotel, velox-gen's generated code, and the examples.
 2. Godoc in Go's form for every exported identifier.
-3. The naming linters in `.golangci.yml`, so `scripts/ci-local.sh` fails on a regression in any module, the generated code included.
+3. The naming linters in `.golangci.yml`, so `scripts/ci-local.sh` fails on a regression in any module, the generated code included: golangci-lint lints it with staticcheck, and revive runs separately on it (ruling 10).
 
 ## Non-goals
 
@@ -69,7 +69,7 @@ The controller made every call below (the user said "do it"). Each call follows 
 10. **Linters.**
     - `.golangci.yml` keeps `default: standard` and enables `revive`, `errname`, and staticcheck's ST1003, ST1005, ST1006, ST1012, ST1016, ST1017, ST1019, ST1020, ST1021 and ST1022.
     - revive gets these rules: `var-naming`, `exported` (with `sayRepetitiveInsteadOfStutters`), `receiver-naming`, `error-naming`, `error-strings`, `errorf`, `context-as-argument` (allowing `*testing.T` and `testing.TB` before ctx), `context-keys-type`, `unexported-return`, `redefines-builtin-id`, `package-comments`, `time-naming`, `increment-decrement` and `blank-imports`.
-    - Generated files are linted: `exclusions.generated: disable`.
+    - Generated files are linted. golangci-lint lints them with staticcheck (`exclusions.generated: disable`). revive runs separately on them, from the root's `revive.toml` with `ignoreGeneratedHeader = true`, over the example's packages that hold velox-gen's output, because golangci-lint's revive always skips files with a generated header.
     - Each module's lint in `scripts/ci-local.sh` uses this one config, and the plan checks that it does.
     - Test files are linted too. Their findings are fixed rather than excluded, except where a rule has no meaning in a test, and then a path exclusion names the rule.
 11. **The `gen.X` handle tables and every generated method name** (`VeloxMeta`, `Hooks`, `Policy`, `Values`, `String`, `GoString`) stay, except where ruling 5 or 6 renames a referenced runtime identifier.

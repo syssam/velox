@@ -38,7 +38,7 @@ func Lower(g *Graph, cfg Config) (*Out, error) {
 	sum := sha256.Sum256(b)
 	l := &lowerer{
 		g: g, cfg: cfg,
-		out:   &Out{Package: cmp.Or(cfg.Package, "gen"), SchemaPath: cmp.Or(cfg.SchemaPath, g.Package), Hash: hex.EncodeToString(sum[:])},
+		out:   &Out{Package: cmp.Or(cfg.Package, "gen"), SchemaPath: cmp.Or(cfg.SchemaPath, g.Package), UserDoc: cfg.UserDoc, Hash: hex.EncodeToString(sum[:])},
 		joins: map[string]*join{},
 	}
 	l.owned = map[string]string{

@@ -1,0 +1,22 @@
+# revive's rules from .golangci.yml, for the code velox-gen writes into the
+# example: golangci-lint's revive always skips files with a generated header,
+# so CI runs revive on them itself. ignoreGeneratedHeader lints those files.
+ignoreGeneratedHeader = true
+severity = "warning"
+
+[rule.var-naming]
+[rule.exported]
+  arguments = ["sayRepetitiveInsteadOfStutters"]
+[rule.receiver-naming]
+[rule.error-naming]
+[rule.error-strings]
+[rule.errorf]
+[rule.context-as-argument]
+  arguments = [{allowTypesBefore = "*testing.T,testing.TB"}]
+[rule.context-keys-type]
+[rule.unexported-return]
+[rule.redefines-builtin-id]
+[rule.package-comments]
+[rule.time-naming]
+[rule.increment-decrement]
+[rule.blank-imports]

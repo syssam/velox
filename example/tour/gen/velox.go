@@ -10,6 +10,7 @@ const _ = velox.GeneratedCodeIsVersion5
 // InvoiceStatus is an enum of the model.
 type InvoiceStatus string
 
+// The values of InvoiceStatus.
 const (
 	InvoiceStatusDraft InvoiceStatus = "draft"
 	InvoiceStatusSent  InvoiceStatus = "sent"

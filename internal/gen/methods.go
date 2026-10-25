@@ -32,32 +32,8 @@ func (e *FileError) Error() string { return e.Path + ": " + e.Reason }
 //
 // The result holds only the entities that have at least one of the methods.
 func Methods(dir string, entities []string) (map[string]Bound, error) {
-	des, err := os.ReadDir(dir)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
 	out := map[string]Bound{}
-	fset := token.NewFileSet()
-	for _, de := range des {
-		name := de.Name()
-		if de.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-			continue
-		}
-		path := filepath.Join(dir, name)
-		src, err := os.ReadFile(path)
-		if err != nil {
-			return nil, err
-		}
-		if bytes.HasPrefix(src, []byte(strings.TrimSuffix(header, "\n\n")+"\n")) {
-			continue
-		}
-		f, err := parser.ParseFile(fset, path, src, parser.SkipObjectResolution)
-		if err != nil {
-			return nil, err
-		}
+	err := userFiles(dir, 0, func(path string, f *ast.File) error {
 		for _, d := range f.Decls {
 			switch d := d.(type) {
 			case *ast.GenDecl:
@@ -66,7 +42,7 @@ func Methods(dir string, entities []string) (map[string]Bound, error) {
 				}
 				for _, sp := range d.Specs {
 					if n := sp.(*ast.TypeSpec).Name.Name; slices.Contains(entities, n) {
-						return nil, &FileError{Path: path, Reason: "declares type " + n + ", which velox-gen generates"}
+						return &FileError{Path: path, Reason: "declares type " + n + ", which velox-gen generates"}
 					}
 				}
 			case *ast.FuncDecl:
@@ -85,13 +61,65 @@ func Methods(dir string, entities []string) (map[string]Bound, error) {
 				}
 				if !ptr {
 					m := d.Name.Name
-					return nil, &FileError{Path: path, Reason: fmt.Sprintf("%s.%s must have a pointer receiver (func (*%[1]s) %[2]s())", e, m)}
+					return &FileError{Path: path, Reason: fmt.Sprintf("%s.%s must have a pointer receiver (func (*%[1]s) %[2]s())", e, m)}
 				}
 				out[e] = b
 			}
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return out, nil
+}
+
+// HasPackageDoc reports whether one of the non-test .go files in dir that do
+// not start with velox-gen's header has a package comment. A missing dir is no
+// files.
+func HasPackageDoc(dir string) (bool, error) {
+	found := false
+	err := userFiles(dir, parser.PackageClauseOnly|parser.ParseComments, func(_ string, f *ast.File) error {
+		found = found || f.Doc != nil
+		return nil
+	})
+	return found, err
+}
+
+// userFiles parses, with mode, each non-test .go file in dir that does not
+// start with velox-gen's header, and calls fn with it. A missing dir is no
+// files.
+func userFiles(dir string, mode parser.Mode, fn func(path string, f *ast.File) error) error {
+	des, err := os.ReadDir(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	fset := token.NewFileSet()
+	for _, de := range des {
+		name := de.Name()
+		if de.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		path := filepath.Join(dir, name)
+		src, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if bytes.HasPrefix(src, []byte(strings.TrimSuffix(header, "\n\n")+"\n")) {
+			continue
+		}
+		f, err := parser.ParseFile(fset, path, src, mode|parser.SkipObjectResolution)
+		if err != nil {
+			return err
+		}
+		if err := fn(path, f); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // receiver is the type name of d's receiver, E for (E) and (*E), and whether it

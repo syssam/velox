@@ -10,6 +10,7 @@ const _ = velox.GeneratedCodeIsVersion5
 // BindKind is an enum of the model.
 type BindKind string
 
+// The values of BindKind.
 const (
 	BindKindA BindKind = "a"
 	BindKindB BindKind = "b"

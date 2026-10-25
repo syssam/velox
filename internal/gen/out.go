@@ -5,6 +5,7 @@ type Config struct {
 	Package    string           // the generated package's name; "gen" when empty
 	SchemaPath string           // the schema package's import path; Graph.Package when empty
 	Bound      map[string]Bound // per entity name: which methods the user's files declare
+	UserDoc    bool             // a user's file has the package comment; velox.go then has none
 }
 
 // Bound says which of an entity's methods the user's files declare, so that
@@ -20,6 +21,7 @@ type Out struct {
 	Hash       string       // sha256 of the Graph's JSON, hex
 	NeedsSch   bool         // some entity reads the schema package
 	SchemaPath string       // the schema package's import path
+	UserDoc    bool         // Config.UserDoc
 }
 
 // OutEntity is one generated entity: a schema's, or a many-to-many join entity.

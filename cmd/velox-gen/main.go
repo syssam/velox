@@ -63,7 +63,8 @@
 // stay: a method Policy or Hooks on a generated entity E, with receiver *E,
 // in a file of yours there, is bound into E's metadata. A value receiver is an
 // error, because velox calls the method on a nil *E. Your own file must not
-// declare a type named like a generated one.
+// declare a type named like a generated one. The generated velox.go has the
+// package comment, unless a file of yours there has one.
 //
 // -plugin names a generator plugin, a tool of your module that "go tool" runs
 // in the module directory (go get -tool example.com/some/velox-graphql, then

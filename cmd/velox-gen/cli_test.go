@@ -178,8 +178,10 @@ func TestGenerateSubcommand(t *testing.T) {
 	gens := func(out string) map[string]string {
 		m := map[string]string{}
 		for _, f := range files {
-			// The package is named for -out; compare the rest.
-			m[f] = regexp.MustCompile(`(?m)^package \w+$`).ReplaceAllString(read(t, filepath.Join(dir, out, f)), "package gen")
+			// The package is named for -out, in its clause and its comment;
+			// compare the rest.
+			src := regexp.MustCompile(`(?m)^package \w+$`).ReplaceAllString(read(t, filepath.Join(dir, out, f)), "package gen")
+			m[f] = regexp.MustCompile(`(?m)^// Package \w+ `).ReplaceAllString(src, "// Package gen ")
 		}
 		return m
 	}
