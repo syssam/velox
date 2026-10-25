@@ -2,19 +2,31 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strings"
+	"time"
 )
 
-// runProgram runs src as a main package in a new .velox-verify-* directory of
-// the module at modDir, with stdout and stderr connected, and removes the
-// directory afterwards. It returns the exit code of velox-gen.
-func runProgram(modDir string, src []byte, env []string, stdout, stderr io.Writer) int {
-	tmp, err := os.MkdirTemp(modDir, ".velox-verify-")
+// verifyPrefix starts the name of each directory runProgram makes.
+const verifyPrefix = ".velox-verify-"
+
+// runProgram builds src as a main package in a new .velox-verify-* directory
+// of the module at modDir and runs it, with stdout and stderr connected, and
+// removes the directory afterwards. It first removes the directories older
+// runs left behind (sweepVerifyDirs). When ctx is done, as on an interrupt,
+// it stops the command and fails; when the program does not build, it says
+// why go's errors may be in the generated package. It returns the exit code
+// of velox-gen.
+func runProgram(ctx context.Context, modDir string, src []byte, env []string, stdout, stderr io.Writer) int {
+	sweepVerifyDirs(modDir, time.Now())
+	tmp, err := os.MkdirTemp(modDir, verifyPrefix)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "velox-gen verify: %v\n", err)
 		return 1
@@ -24,16 +36,60 @@ func runProgram(modDir string, src []byte, env []string, stdout, stderr io.Write
 		_, _ = fmt.Fprintf(stderr, "velox-gen verify: %v\n", err)
 		return 1
 	}
-	cmd := exec.Command("go", "run", "./"+filepath.Base(tmp))
-	cmd.Dir, cmd.Env, cmd.Stdout, cmd.Stderr = modDir, env, stdout, stderr
-	if err := cmd.Run(); err != nil {
+	bin := filepath.Join(tmp, "check")
+	if runtime.GOOS == "windows" {
+		bin += ".exe"
+	}
+	build := exec.CommandContext(ctx, "go", "build", "-o", bin, "./"+filepath.Base(tmp))
+	build.Dir, build.Env, build.Stdout, build.Stderr = modDir, env, stdout, stderr
+	err = build.Run()
+	if ctx.Err() != nil {
+		_, _ = fmt.Fprintln(stderr, "velox-gen verify: interrupted")
+		return 1
+	}
+	if err != nil {
 		var exit *exec.ExitError
 		if !errors.As(err, &exit) { // an ExitError means go already printed why
+			_, _ = fmt.Fprintf(stderr, "velox-gen verify: %v\n", err)
+			return 1
+		}
+		_, _ = fmt.Fprintln(stderr, "velox-gen verify: the check program did not build; the generated package may be stale or edited by hand: run velox-gen, then verify again")
+		return 1
+	}
+	run := exec.CommandContext(ctx, bin)
+	run.Dir, run.Env, run.Stdout, run.Stderr = modDir, env, stdout, stderr
+	err = run.Run()
+	if ctx.Err() != nil {
+		_, _ = fmt.Fprintln(stderr, "velox-gen verify: interrupted")
+		return 1
+	}
+	if err != nil {
+		var exit *exec.ExitError
+		if !errors.As(err, &exit) { // an ExitError means the program printed why
 			_, _ = fmt.Fprintf(stderr, "velox-gen verify: %v\n", err)
 		}
 		return 1
 	}
 	return 0
+}
+
+// sweepVerifyDirs removes the .velox-verify-* directories of modDir last
+// modified over an hour before now: a verify that was killed left them
+// behind, and one younger may be another verify's, still running. It removes
+// what it can and reports nothing.
+func sweepVerifyDirs(modDir string, now time.Time) {
+	entries, err := os.ReadDir(modDir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), verifyPrefix) {
+			continue
+		}
+		if fi, err := e.Info(); err == nil && now.Sub(fi.ModTime()) > time.Hour {
+			_ = os.RemoveAll(filepath.Join(modDir, e.Name()))
+		}
+	}
 }
 
 // checkProgram is a main package that imports the packages ([alias, path]),

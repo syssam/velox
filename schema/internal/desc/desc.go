@@ -101,6 +101,17 @@ func collectImports(t reflect.Type, out []string) []string {
 	return out
 }
 
+// FuncOf returns the function of a counter that Caller returned, as
+// runtime.Frame.Function reports it (the package path, then the name, as in
+// github.com/syssam/velox2/schema/mixin.Time.Fields), or "" for 0.
+func FuncOf(pc uintptr) string {
+	if pc == 0 {
+		return ""
+	}
+	f, _ := runtime.CallersFrames([]uintptr{pc}).Next()
+	return f.Function
+}
+
 // Unwritable is why velox-gen cannot write t as Go source, or "": t
 // reaches, through pointers, slices, arrays, maps and channels, an
 // instance of a generic type (reflect prints its type arguments with

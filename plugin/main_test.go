@@ -161,10 +161,16 @@ func TestRunWriteError(t *testing.T) {
 }
 
 func TestRunRecoversPanic(t *testing.T) {
-	resp, _ := run(t, current, good(t), func(*plugin.Request) ([]plugin.File, []string, error) {
-		panic("index out of range")
-	})
+	panics := func(*plugin.Request) ([]plugin.File, []string, error) { panic("index out of range") }
+	t.Setenv("VELOX_PLUGIN_TRACE", "")
+	resp, _ := run(t, current, good(t), panics)
 	if resp.Error != "the plugin panicked: index out of range" || len(resp.Files) != 0 || resp.Protocol != plugin.ProtocolVersion {
 		t.Errorf("%+v", resp)
+	}
+	// VELOX_PLUGIN_TRACE=1 adds the stack, which names the panicking line.
+	t.Setenv("VELOX_PLUGIN_TRACE", "1")
+	resp, _ = run(t, current, good(t), panics)
+	if !strings.HasPrefix(resp.Error, "the plugin panicked: index out of range\n") || !strings.Contains(resp.Error, "main_test.go") || len(resp.Files) != 0 {
+		t.Errorf("traced: %+v", resp)
 	}
 }

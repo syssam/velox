@@ -68,7 +68,8 @@
 //
 // -plugin names a generator plugin, a tool of your module that "go tool" runs
 // in the module directory (go get -tool example.com/some/velox-graphql, then
-// -plugin velox-graphql); repeat it for several. Options for the plugin follow
+// -plugin velox-graphql; a tool the module lacks fails with that hint); repeat
+// it for several. Options for the plugin follow
 // a colon, -plugin velox-grpc:go_package=x/pb,mode=a; an option without "=",
 // with an empty key, or a key given twice is a usage error (exit 2). velox-gen
 // speaks plugin protocol 2, which package github.com/syssam/velox2/plugin
@@ -93,16 +94,21 @@
 // it, or a directory of yours whose name differs from one of the path's only
 // in case (rename it), fails the run before anything is written. A write that
 // fails part-way, such as on a full disk, leaves -out partly updated; running
-// velox-gen again restores it.
+// velox-gen again restores it. A plugin built on package plugin that panics
+// fails with "the plugin panicked: " and the panic's value; run velox-gen with
+// VELOX_PLUGIN_TRACE=1, which reaches the plugin, for the stack on the lines
+// below it.
 //
 // verify builds a program in a temporary .velox-verify-* directory of your
 // module, imports the generated package and reports, for every entity, the
 // mistakes that velox.CheckEntity finds and, for every relation,
 // velox.CheckRelation, whose target the generated metadata does not name. It
-// removes the directory, but a killed process leaves it behind; ignore
-// .velox-verify-*/ in git. With -plugin it runs the plugins and fails when a
-// Go file of theirs on disk is not what they write now; one in -out itself
-// compiles with the rest of the package.
+// removes the directory, also when interrupted, and says so when the program
+// does not build, as when the generated package is stale or edited by hand;
+// a killed process leaves it behind, and the next verify removes one older
+// than an hour; ignore .velox-verify-*/ in git. With -plugin it runs the
+// plugins and fails when a Go file of theirs on disk is not what they write
+// now; one in -out itself compiles with the rest of the package.
 //
 // describe prints the entities, columns and relations that the schema package
 // (default ./schema) declares; with -json, the model that a plugin receives as

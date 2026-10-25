@@ -2,7 +2,7 @@
 // request, and answers as the environment says:
 //
 //	FAKEPLUGIN_DUMP      a file to write the request to
-//	FAKEPLUGIN_MODE      "error", "exit" or "malformed" for a failing plugin;
+//	FAKEPLUGIN_MODE      "error", "exit", "panic" or "malformed" for a failing plugin;
 //	                     "protocol1" answers files, and "protocol1error" an
 //	                     error, in protocol 1's shape, without plugin_protocol
 //	FAKEPLUGIN_FILES     the files array of the response, as JSON
@@ -90,6 +90,8 @@ func generate(req *plugin.Request) ([]plugin.File, []string, error) {
 	case "exit":
 		fmt.Fprintln(os.Stderr, "the fake plugin crashed")
 		os.Exit(3)
+	case "panic":
+		panic("the fake plugin panics")
 	}
 	if raw := getenv("FAKEPLUGIN_FILES"); raw != "" {
 		var files []plugin.File

@@ -149,7 +149,8 @@ func parents(p string) []string {
 func fold(path string) string { return strings.ToLower(path) }
 
 // runPlugin runs one plugin and decodes its response, and prints its
-// warnings.
+// warnings. When go tool finds no tool of that name, the error says how to
+// add it.
 func runPlugin(name, modDir string, req []byte, env []string, stderr io.Writer) (*plugin.Response, error) {
 	cmd := exec.Command("go", "tool", name)
 	cmd.Dir, cmd.Env = modDir, env
@@ -157,11 +158,11 @@ func runPlugin(name, modDir string, req []byte, env []string, stderr io.Writer) 
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = bytes.NewReader(req), &so, &se
 	if err := cmd.Run(); err != nil {
 		if msg := strings.TrimSpace(se.String()); msg != "" {
-			lines := strings.Split(msg, "\n")
-			for i, l := range lines {
-				lines[i] = oneLine(strings.TrimSuffix(l, "\r"))
+			text := oneLines(msg)
+			if strings.Contains(msg, "no such tool") {
+				text += fmt.Sprintf("\nthe module has no tool %s: add it with go get -tool <its package path>", oneLine(name))
 			}
-			return nil, fmt.Errorf("%w\n%s", err, strings.Join(lines, "\n"))
+			return nil, fmt.Errorf("%w\n%s", err, text)
 		}
 		return nil, err
 	}
@@ -181,9 +182,21 @@ func runPlugin(name, modDir string, req []byte, env []string, stderr io.Writer) 
 		_, _ = fmt.Fprintf(stderr, "velox-gen: plugin %s: warning: %s\n", name, oneLine(w))
 	}
 	if resp.Error != "" {
-		return nil, fmt.Errorf("%s", oneLine(resp.Error))
+		// A plugin's error is a line, but for the stack that follows a panic
+		// under VELOX_PLUGIN_TRACE=1.
+		return nil, fmt.Errorf("%s", oneLines(strings.TrimRight(resp.Error, "\r\n")))
 	}
 	return &resp, nil
+}
+
+// oneLines is each line of s through oneLine, a carriage return before its
+// newline dropped, joined by newlines.
+func oneLines(s string) string {
+	lines := strings.Split(s, "\n")
+	for i, l := range lines {
+		lines[i] = oneLine(strings.TrimSuffix(l, "\r"))
+	}
+	return strings.Join(lines, "\n")
 }
 
 // oneLine is s with each control character (newlines among them), each line

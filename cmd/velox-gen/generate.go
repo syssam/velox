@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"cmp"
+	"context"
 	"errors"
 	"fmt"
 	"go/token"
@@ -11,9 +12,11 @@ import (
 	"maps"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 
 	"github.com/syssam/velox2/internal/gen"
 )
@@ -504,7 +507,10 @@ func runGenerateVerify(f genFlags, pattern, dir string, env []string, stdout, st
 	for i, r := range gm.rels {
 		rels[i] = "g." + r
 	}
-	return runProgram(mod, checkProgram([][2]string{{"g", outPath}}, types, rels), env, stdout, stderr)
+	// An interrupt stops the check program, and its directory is removed.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return runProgram(ctx, mod, checkProgram([][2]string{{"g", outPath}}, types, rels), env, stdout, stderr)
 }
 
 // moduleDir is the directory of the module that holds the package at pattern.

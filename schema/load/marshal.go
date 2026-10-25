@@ -64,8 +64,24 @@ func typeName(t reflect.Type) string {
 
 // loader loads one schema and collects its errors.
 type loader struct {
-	name string
-	errs []loadjson.Error
+	name     string
+	mixinPos string // the line of the schema's Mixin method, or ""
+	errs     []loadjson.Error
+}
+
+// mixinPkg prefixes the functions of package schema/mixin, whose elements
+// are declared on the line of the schema's Mixin method instead.
+const mixinPkg = "github.com/syssam/velox2/schema/mixin."
+
+// pos is the file:line of a counter that desc.Caller returned: the line of
+// the schema's Mixin method for an element that a mixin of velox2 declares,
+// since the user wrote that line and not the mixin's, else the
+// constructor's call.
+func (l *loader) pos(pc uintptr) string {
+	if l.mixinPos != "" && strings.HasPrefix(desc.FuncOf(pc), mixinPkg) {
+		return l.mixinPos
+	}
+	return desc.PosOf(pc)
 }
 
 // fail records a misuse at pos, of the element where names ("" for the schema).
@@ -148,6 +164,7 @@ func (l *loader) build(t reflect.Type, s schema.Interface) *loadjson.Schema {
 			l.fail(methodPos(vt, h), "", "has a %s method; hooks and policies are methods on the generated entity, not in the schema", h)
 		}
 	}
+	l.mixinPos = methodPos(vt, "Mixin")
 	out := &loadjson.Schema{Name: l.name}
 	annos := map[string]schema.Annotation{}
 	add := func(e elements, prefix string, mixin int, mixedIn bool) {
@@ -268,7 +285,7 @@ func (l *loader) buildField(f schema.Field, prefix string, j int, pos loadjson.P
 	}
 	where := fmt.Sprintf("field %q", d.Name)
 	for _, err := range d.Errs {
-		l.fail(desc.PosOf(d.PC), where, "%v", err)
+		l.fail(l.pos(d.PC), where, "%v", err)
 	}
 	if len(d.Errs) > 0 {
 		return nil
@@ -281,7 +298,7 @@ func (l *loader) buildField(f schema.Field, prefix string, j int, pos loadjson.P
 		UpdateDefault: d.UpdateDefault != nil,
 		Validators:    len(d.Validators),
 		StorageKey:    d.StorageKey, SchemaType: d.SchemaType, SchemaDefault: d.SchemaDefault, Comment: d.Comment, StructTag: d.StructTag,
-		Position: pos, Pos: desc.PosOf(d.PC),
+		Position: pos, Pos: l.pos(d.PC),
 	}
 	if d.GoType != nil {
 		g := loadjson.GoType(*d.GoType)
@@ -295,7 +312,7 @@ func (l *loader) buildField(f schema.Field, prefix string, j int, pos loadjson.P
 	default:
 		b, err := json.Marshal(d.Default)
 		if err != nil {
-			l.fail(desc.PosOf(d.PC), where, "Default does not marshal: %v", err)
+			l.fail(l.pos(d.PC), where, "Default does not marshal: %v", err)
 			ok = false
 		}
 		out.Default = b
@@ -308,7 +325,7 @@ func (l *loader) buildField(f schema.Field, prefix string, j int, pos loadjson.P
 		for _, a := range c.Args {
 			b, err := json.Marshal(a)
 			if err != nil {
-				l.fail(desc.PosOf(d.PC), where, "%s argument does not marshal: %v", c.Kind, err)
+				l.fail(l.pos(d.PC), where, "%s argument does not marshal: %v", c.Kind, err)
 				ok = false
 			}
 			lc.Args = append(lc.Args, b)
@@ -316,7 +333,7 @@ func (l *loader) buildField(f schema.Field, prefix string, j int, pos loadjson.P
 		out.Checks = append(out.Checks, lc)
 	}
 	if out.Annotations, err = listAnnotations(d.Annotations); err != nil {
-		l.fail(desc.PosOf(d.PC), where, "%v", err)
+		l.fail(l.pos(d.PC), where, "%v", err)
 		ok = false
 	}
 	if !ok {
@@ -343,11 +360,11 @@ func (l *loader) buildEdge(e schema.Edge, prefix string, j int, pos loadjson.Pos
 	}
 	n := len(l.errs)
 	for _, err := range d.Errs {
-		l.fail(desc.PosOf(d.PC), fmt.Sprintf("edge %q", d.Name), "%v", err)
+		l.fail(l.pos(d.PC), fmt.Sprintf("edge %q", d.Name), "%v", err)
 	}
 	if d.Ref != nil {
 		for _, err := range d.Ref.Errs {
-			l.fail(desc.PosOf(cmp.Or(d.Ref.PC, d.PC)), fmt.Sprintf("edge %q", d.Ref.Name), "%v", err)
+			l.fail(l.pos(cmp.Or(d.Ref.PC, d.PC)), fmt.Sprintf("edge %q", d.Ref.Name), "%v", err)
 		}
 	}
 	first := l.edgeOf(d, pos)
@@ -368,11 +385,11 @@ func (l *loader) edgeOf(d *desc.Edge, pos loadjson.Position) *loadjson.Edge {
 		Name: d.Name, Type: d.Type, TypePkg: d.TypePkg, Inverse: d.Inverse, Ref: d.RefName,
 		Unique: d.Unique, Required: d.Required, Immutable: d.Immutable,
 		Field: d.Field, OnDelete: d.OnDelete, Table: d.Table, Columns: d.Columns, Symbols: d.Symbols, Comment: d.Comment,
-		Position: pos, Pos: desc.PosOf(d.PC),
+		Position: pos, Pos: l.pos(d.PC),
 	}
 	var err error
 	if out.Annotations, err = listAnnotations(d.Annotations); err != nil {
-		l.fail(desc.PosOf(d.PC), fmt.Sprintf("edge %q", d.Name), "%v", err)
+		l.fail(l.pos(d.PC), fmt.Sprintf("edge %q", d.Name), "%v", err)
 	}
 	return out
 }
@@ -394,10 +411,10 @@ func (l *loader) buildIndex(x schema.Index, prefix string, j int, pos loadjson.P
 	}
 	out := &loadjson.Index{
 		Fields: d.Fields, Edges: d.Edges, Unique: d.Unique, StorageKey: d.StorageKey, Where: d.Where,
-		Position: pos, Pos: desc.PosOf(d.PC),
+		Position: pos, Pos: l.pos(d.PC),
 	}
 	if out.Annotations, err = listAnnotations(d.Annotations); err != nil {
-		l.fail(desc.PosOf(d.PC), "", "%sIndexes()[%d]: %v", prefix, j, err)
+		l.fail(l.pos(d.PC), "", "%sIndexes()[%d]: %v", prefix, j, err)
 		return nil
 	}
 	return out

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 )
 
 // Supports holds the versions a plugin was written for, as literals in its
@@ -28,7 +29,10 @@ type GenerateFunc func(req *Request) (files []File, warnings []string, err error
 // cannot be read, or when its protocol or its model's version is not s's. An
 // error from gen is the response's Error, and its files are dropped. A panic
 // in gen is recovered into the Error too, as "the plugin panicked: " and the
-// panic's value, without the stack. Every response carries Protocol:
+// panic's value, without the stack; with VELOX_PLUGIN_TRACE=1 in the
+// plugin's environment, the panic's stack follows on the next lines. velox-gen
+// passes its own environment to the plugin, so VELOX_PLUGIN_TRACE=1 go tool
+// velox-gen shows where the plugin panicked. Every response carries Protocol:
 // [ProtocolVersion].
 func Run(s Supports, in io.Reader, out io.Writer, gen GenerateFunc) error {
 	resp := answer(s, in, gen)
@@ -75,11 +79,15 @@ func answer(s Supports, in io.Reader, gen GenerateFunc) Response {
 	return Response{Files: files, Warnings: warnings}
 }
 
-// call is gen(req), with a panic recovered into the error.
+// call is gen(req), with a panic recovered into the error, and its stack
+// when VELOX_PLUGIN_TRACE is 1.
 func call(gen GenerateFunc, req *Request) (files []File, warnings []string, err error) {
 	defer func() {
 		if v := recover(); v != nil {
 			files, err = nil, fmt.Errorf("the plugin panicked: %v", v)
+			if os.Getenv("VELOX_PLUGIN_TRACE") == "1" {
+				err = fmt.Errorf("the plugin panicked: %v\n%s", v, debug.Stack())
+			}
 		}
 	}()
 	return gen(req)

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"reflect"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -364,8 +365,12 @@ func TestMarshalPositions(t *testing.T) {
 			t.Errorf("field %s: pos %q", f.Name, f.Pos)
 		}
 	}
-	if !strings.Contains(u.Fields[0].Pos, "/mixin/mixin.go:") || !strings.Contains(u.Fields[3].Pos, "/marshal_test.go:") {
-		t.Errorf("a mixin's field is at the mixin's line: %q %q", u.Fields[0].Pos, u.Fields[3].Pos)
+	// A field of velox2's mixin.Time is at the line of User's Mixin method,
+	// which the user wrote.
+	pc := reflect.ValueOf(User.Mixin).Pointer()
+	_, line := runtime.FuncForPC(pc).FileLine(pc)
+	if want := "marshal_test.go:" + strconv.Itoa(line); !strings.HasSuffix(u.Fields[0].Pos, want) || !strings.Contains(u.Fields[3].Pos, "/marshal_test.go:") {
+		t.Errorf("a mixin's field is at the line of Mixin, %s: %q %q", want, u.Fields[0].Pos, u.Fields[3].Pos)
 	}
 	// The inline inverse is declared on the line of its assoc edge.
 	if e := u.Edges; e[1].Pos == "" || e[2].Pos != e[1].Pos || u.Indexes[0].Pos == "" {

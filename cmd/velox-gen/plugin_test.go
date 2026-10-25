@@ -390,13 +390,28 @@ func TestPluginErrors(t *testing.T) {
 		{"error", "fakeplugin", []string{"FAKEPLUGIN_MODE=error"}, "the fake plugin refuses"},
 		{"exit", "fakeplugin", []string{"FAKEPLUGIN_MODE=exit"}, "the fake plugin crashed"},
 		{"malformed", "fakeplugin", []string{"FAKEPLUGIN_MODE=malformed"}, "response"},
-		{"unknown", "nosuchplugin", nil, "nosuchplugin"},
+		{"unknown", "nosuchplugin", nil, "the module has no tool nosuchplugin: add it with go get -tool"},
+		{"panic", "fakeplugin", []string{"FAKEPLUGIN_MODE=panic"}, "the plugin panicked: the fake plugin panics"},
+		{"panic traced", "fakeplugin", []string{"FAKEPLUGIN_MODE=panic", "VELOX_PLUGIN_TRACE=1"}, "the plugin panicked: the fake plugin panics\n"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			code, out, errs := veloxEnv(t, dir, fakeEnv(c.env...), "-plugin", c.plugin, "./schema")
 			if code != 1 || out != "" || !strings.HasPrefix(errs, "velox-gen: plugin "+c.plugin+": ") || !strings.Contains(errs, c.want) {
 				t.Errorf("%d %q %q", code, out, errs)
+			}
+			// The stack follows the panic, on lines of its own, only under
+			// VELOX_PLUGIN_TRACE=1.
+			_, after, _ := strings.Cut(errs, c.want)
+			switch c.name {
+			case "panic":
+				if strings.Contains(errs, "goroutine ") {
+					t.Errorf("a stack without VELOX_PLUGIN_TRACE: %q", errs)
+				}
+			case "panic traced":
+				if !strings.Contains(after, "goroutine ") {
+					t.Errorf("no stack under VELOX_PLUGIN_TRACE=1: %q", errs)
+				}
 			}
 			if got := names(t, gen); len(got) != 0 {
 				t.Errorf("wrote %v", got)

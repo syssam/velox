@@ -179,6 +179,35 @@ func (n *node) assoc(name string) *edgeState {
 	return nil
 }
 
+// assocNames are the names of n's assoc edges, in declaration order.
+func (n *node) assocNames() []string {
+	var names []string
+	for _, s := range n.edges {
+		if !s.le.Inverse {
+			names = append(names, s.ed.Name)
+		}
+	}
+	return names
+}
+
+// edgeNames are the names of n's edges, in declaration order.
+func (n *node) edgeNames() []string {
+	names := make([]string, len(n.edges))
+	for i, s := range n.edges {
+		names[i] = s.ed.Name
+	}
+	return names
+}
+
+// fieldNames are the names of e's fields, in e.Fields' order.
+func fieldNames(e *Entity) []string {
+	names := make([]string, len(e.Fields))
+	for i, f := range e.Fields {
+		names[i] = f.Name
+	}
+	return names
+}
+
 // edge returns n's first edge named name, or nil.
 func (n *node) edge(name string) *edgeState {
 	for _, s := range n.edges {
@@ -258,7 +287,7 @@ func (b *builder) resolveInverse(n *node, s *edgeState) {
 	}
 	r := t.assoc(le.Ref)
 	if r == nil {
-		b.fail(7, n.ent.Name, edgeLoc(ed), "%s has no edge %q to refer to", t.ent.Name, le.Ref)
+		b.fail(7, n.ent.Name, edgeLoc(ed), "%s has no edge %q to refer to%s", t.ent.Name, le.Ref, suggest(le.Ref, t.assocNames()))
 		return
 	}
 	if r.target != n {
@@ -543,7 +572,7 @@ func (b *builder) indexes() {
 			for _, name := range li.Fields {
 				f := e.Field(name)
 				if f == nil {
-					b.fail(23, e.Name, indexLoc(i, ix), "names unknown field %q", name)
+					b.fail(23, e.Name, indexLoc(i, ix), "names unknown field %q%s", name, suggest(name, fieldNames(e)))
 					good = false
 					continue
 				}
@@ -557,7 +586,7 @@ func (b *builder) indexes() {
 				s := n.edge(name)
 				switch {
 				case s == nil:
-					b.fail(23, e.Name, indexLoc(i, ix), "names unknown edge %q", name)
+					b.fail(23, e.Name, indexLoc(i, ix), "names unknown edge %q%s", name, suggest(name, n.edgeNames()))
 					good = false
 				case s.ed.Rel.Kind == "":
 					good = false // unresolved: an error is recorded

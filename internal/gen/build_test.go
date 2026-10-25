@@ -464,6 +464,13 @@ type badRef struct{ schema.Schema }
 
 func (badRef) Edges() []schema.Edge { return []schema.Edge{edge.From("x", badRef.Type).Ref("nope")} }
 
+// badRefNear's Ref is one letter short of its assoc edge.
+type badRefNear struct{ schema.Schema }
+
+func (badRefNear) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("posts", badRefNear.Type), edge.From("x", badRefNear.Type).Ref("post")}
+}
+
 type wrongRef struct{ schema.Schema }
 
 func (wrongRef) Edges() []schema.Edge {
@@ -766,6 +773,12 @@ func (floatID) Fields() []schema.Field { return []schema.Field{field.Float("id")
 type unknownIndexField struct{ schema.Schema }
 
 func (unknownIndexField) Indexes() []schema.Index { return []schema.Index{index.Fields("nope")} }
+
+// nearIndexField's index names its field with two letters swapped.
+type nearIndexField struct{ schema.Schema }
+
+func (nearIndexField) Fields() []schema.Field  { return []schema.Field{field.String("name")} }
+func (nearIndexField) Indexes() []schema.Index { return []schema.Index{index.Fields("nmae")} }
 
 type unknownIndexEdge struct{ schema.Schema }
 
@@ -1150,6 +1163,7 @@ func TestBuildRules(t *testing.T) {
 		{"5 not a schema", []schema.Interface{notSchemaTarget{}}, `schema notSchemaTarget: edge "x": type time.Time is not a schema of this package`},
 		{"6 no ref", []schema.Interface{noRef{}}, `schema noRef: edge "x": an inverse edge needs Ref(name)`},
 		{"7 bad ref", []schema.Interface{badRef{}}, `schema badRef: edge "x": badRef has no edge "nope" to refer to`},
+		{"7 bad ref near", []schema.Interface{badRefNear{}}, `schema badRefNear: edge "x": badRefNear has no edge "post" to refer to; did you mean "posts"?`},
 		{"8 wrong ref", []schema.Interface{wrongRef{}, refHolder{}, Pet{}}, `schema wrongRef: edge "x": refHolder.pets points to Pet, not to this schema`},
 		{"9 both required", []schema.Interface{reqA{}, reqB{}}, `schema reqB: edge "a": cannot be required in both directions with reqA.b`},
 		{"10 field missing", []schema.Interface{fieldMissing{}}, `schema fieldMissing: edge "parent": field "parent_id" is not declared`},
@@ -1173,6 +1187,7 @@ func TestBuildRules(t *testing.T) {
 		{"21 schema default on an integer ID", []schema.Interface{sdIntID{}}, `schema sdIntID: field "id": an integer ID is assigned by the database and cannot have a SchemaDefault`},
 		{"22 float id", []schema.Interface{floatID{}}, `schema floatID: field "id": the ID cannot be of type float64`},
 		{"23 unknown index field", []schema.Interface{unknownIndexField{}}, `schema unknownIndexField: index 0: names unknown field "nope"`},
+		{"23 near index field", []schema.Interface{nearIndexField{}}, `schema nearIndexField: index 0: names unknown field "nmae"; did you mean "name"?`},
 		{"23 unknown index edge", []schema.Interface{unknownIndexEdge{}}, `schema unknownIndexEdge: index 0: names unknown edge "nope"`},
 		{"24 index foreign edge", []schema.Interface{indexForeignEdge{}, Pet{}}, `schema indexForeignEdge: index 0: edge "pets" has no column in table index_foreign_edges`},
 		{"25 empty index", []schema.Interface{emptyIndex{}}, `schema emptyIndex: index 0: names no fields or edges`},
@@ -1235,6 +1250,10 @@ func TestBuildRules(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), c.want) || !errors.As(err, &ge) {
 				t.Fatalf("got %v, want %q", err, c.want)
 			}
+			// A suggestion is only for a name close to one there is.
+			if !strings.Contains(c.want, "did you mean") && strings.Contains(err.Error(), "did you mean") {
+				t.Errorf("got %v, want no suggestion", err)
+			}
 		})
 	}
 }
@@ -1295,10 +1314,10 @@ func TestBuildFKOfAnotherPackagesType(t *testing.T) {
 func TestBuildRulesAreSingle(t *testing.T) {
 	for _, ss := range [][]schema.Interface{
 		{dupField{}}, {dupColumn{}}, {dupEdge{}}, {edgeGoName{}}, {unknownTarget{}}, {otherPkgTarget{}}, {notSchemaTarget{}},
-		{noRef{}}, {badRef{}}, {wrongRef{}, refHolder{}, Pet{}}, {reqA{}, reqB{}}, {fieldMissing{}},
+		{noRef{}}, {badRef{}}, {badRefNear{}}, {wrongRef{}, refHolder{}, Pet{}}, {reqA{}, reqB{}}, {fieldMissing{}},
 		{fieldWrongSide{}, Pet{}}, {fieldMany{}}, {fieldWrongType{}}, {fieldOptional{}}, {twoTenants{}}, {optionalTenant{}},
 		{defaultTenant{}}, {sdTenant{}}, {sdIntID{}}, {bytesTenant{}}, {emptyEnum{}}, {dupEnum{}}, {badEnum{}}, {optionalID{}}, {floatID{}},
-		{unknownIndexField{}}, {unknownIndexEdge{}}, {indexForeignEdge{}, Pet{}}, {emptyIndex{}}, {otherNoType{}},
+		{unknownIndexField{}}, {nearIndexField{}}, {unknownIndexEdge{}}, {indexForeignEdge{}, Pet{}}, {emptyIndex{}}, {otherNoType{}},
 		{joinClash{}, clashTable{}}, {inlineOther{}, Pet{}}, {inlineNotSchema{}},
 		{tableOnO2M{}, Pet{}}, {badFieldName{}}, {emptyFieldName{}}, {badEdgeName{}}, {fieldGoNames{}}, {edgeGoNames{}},
 		{enumGoNames{}}, {clashOwner{}, clashPet{}}, {columnFieldMismatch{}}, {keyA{}, keyB{}}, {oneColumnM2M{}},
