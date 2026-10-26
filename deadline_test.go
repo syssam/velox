@@ -3,6 +3,7 @@ package velox_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -340,4 +341,39 @@ func TestStatementsInATxGetItsDeadline(t *testing.T) {
 		t.Fatal(err)
 	}
 	near(t, got, 3*time.Second)
+}
+
+// TestSavepointIsBoundedByTheTxDeadline: SAVEPOINT and RELEASE run within
+// the transaction's deadline whatever context the nested Tx is given.
+func TestSavepointIsBoundedByTheTxDeadline(t *testing.T) {
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e)
+	var dl, savepoint, release time.Time
+	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		dl, _ = ctx.Deadline()
+		err := tx.Tx(context.Background(), func(context.Context, *velox.DB) error {
+			savepoint = e.Deadline
+			return nil
+		})
+		release = e.Deadline
+		return err
+	}, velox.TxTimeout(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dl.IsZero() || !savepoint.Equal(dl) || !release.Equal(dl) {
+		t.Errorf("SAVEPOINT's deadline %v, RELEASE's %v, want the transaction's %v", savepoint, release, dl)
+	}
+
+	e = &velox.FakeExec{}
+	db = velox.OpenFake(velox.Postgres, e)
+	var nested error
+	_ = db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		e.Block = true
+		nested = tx.Tx(context.Background(), func(context.Context, *velox.DB) error { return nil })
+		return nested
+	}, velox.TxTimeout(20*time.Millisecond))
+	if !errors.Is(nested, velox.ErrTimeout) || !errors.Is(nested, context.DeadlineExceeded) || !strings.Contains(fmt.Sprint(nested), "velox: savepoint: ") {
+		t.Errorf("a SAVEPOINT past the transaction's deadline: %v", nested)
+	}
 }

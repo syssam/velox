@@ -53,9 +53,37 @@ type FakeExec struct {
 	Isolation   sql.IsolationLevel // the last transaction's options
 	ReadOnly    bool
 	// RollbackCtxErr and SavepointCtxErr are the first non-nil ctx.Err() that
-	// a ROLLBACK, and a ROLLBACK TO or RELEASE SAVEPOINT, ran with.
+	// a ROLLBACK, and a ROLLBACK TO or RELEASE SAVEPOINT, ran with; for a
+	// ROLLBACK that BlockRollback held, the error its context ended with.
 	RollbackCtxErr  error
 	SavepointCtxErr error
+	// BlockRollback makes ROLLBACK and ROLLBACK TO wait until their context
+	// ends, then return its error.
+	BlockRollback bool
+	// RollbackDeadline is the deadline of the last ROLLBACK's or ROLLBACK
+	// TO's context; zero when none.
+	RollbackDeadline time.Time
+}
+
+// SetRollbackTimeout sets rollbackTimeout to d until restore is called.
+func SetRollbackTimeout(d time.Duration) (restore func()) {
+	old := rollbackTimeout
+	rollbackTimeout = d
+	return func() { rollbackTimeout = old }
+}
+
+// rollbackWait records the deadline of a ROLLBACK's or ROLLBACK TO's ctx and,
+// when BlockRollback is set, waits for ctx to end.
+func (e *FakeExec) rollbackWait(ctx context.Context) error {
+	e.mu.Lock()
+	e.RollbackDeadline, _ = ctx.Deadline()
+	block := e.BlockRollback
+	e.mu.Unlock()
+	if !block {
+		return nil
+	}
+	<-ctx.Done()
+	return ctx.Err()
 }
 
 // next is the error the next call returns: the first of Errs, then Err.
@@ -108,6 +136,11 @@ func (e *FakeExec) exec(ctx context.Context, sql string, args []any) (result, er
 	if err := e.wait(ctx); err != nil {
 		return result{}, err
 	}
+	if strings.HasPrefix(sql, "ROLLBACK TO") {
+		if err := e.rollbackWait(ctx); err != nil {
+			return result{}, err
+		}
+	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if (strings.HasPrefix(sql, "ROLLBACK TO") || strings.HasPrefix(sql, "RELEASE")) && e.SavepointCtxErr == nil {
@@ -143,10 +176,14 @@ func (t fakeTx) commit(context.Context) error {
 }
 
 func (t fakeTx) rollback(ctx context.Context) error {
+	werr := t.e.rollbackWait(ctx)
 	t.e.mu.Lock()
 	defer t.e.mu.Unlock()
 	if t.e.RollbackCtxErr == nil {
 		t.e.RollbackCtxErr = ctx.Err()
+	}
+	if werr != nil {
+		return werr
 	}
 	t.e.Log = append(t.e.Log, "ROLLBACK")
 	return t.e.RollbackErr

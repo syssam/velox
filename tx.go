@@ -78,6 +78,10 @@ func TxRetries(opts ...TxOption) int {
 // is rolled back, never committed; its error matches ErrTimeout when velox's
 // deadline passed, and context.DeadlineExceeded or context.Canceled otherwise.
 //
+// A rollback velox sends after fn fails, or once ctx has ended, is bounded to
+// 5 seconds; database/sql's Tx.Rollback takes no context, so on a DB from Open
+// that bound covers a savepoint's ROLLBACK TO only.
+//
 // WithTxAround's hooks wrap the whole call: every attempt and the commit.
 //
 // On a DB with replicas the transaction runs on the primary. On a DB opened
@@ -183,12 +187,15 @@ func ended(err error) bool {
 // transaction runs fn once in a new transaction, and records how it ended in
 // info, which may be nil. A transaction that did not finish, because fn
 // panicked or called runtime.Goexit, is rolled back by the deferred function.
-// Rollback uses a context without ctx's cancellation, so a canceled ctx still
-// rolls back.
+// Rollback uses rollbackContext, without ctx's cancellation, so a canceled ctx
+// still rolls back, and bounded, so a dead connection cannot hang it.
 //
 // Once ctx has ended, a rollback's error is not reported: the driver may have
 // closed the connection that the deadline cut a statement off on (pgx does),
 // and the server then aborts the transaction itself.
+//
+// A savepoint whose rollback failed breaks the transaction (txFrame.broken):
+// fn's nil then rolls it back, with an error that wraps the rollback's.
 //
 // deadline, Tx's, ends the transaction as ctx's would, even when a TxAround
 // hook passed on a context without it: past it, nothing commits.
@@ -215,12 +222,11 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 	}
 	f := newTxFrame(ctx, DB{d: db.d, ex: ex, rt: db.rt, cfg: db.cfg, inTx: true, txDeadline: deadline, txCause: cause, tx: info, txWrote: wrote, txShard: txShard}, nil)
 	defer f.ended.Store(true) // deferred first, so it runs last: after the rollback
-	end := context.WithoutCancel(ctx)
 	finished := false
 	defer func() {
 		if !finished {
 			info.end(TxRollback)
-			_ = ctl.rollback(end)
+			_ = rollback(ctx, ctl)
 		}
 	}()
 	if err := fn(&f.ctx, &f.db); err != nil {
@@ -230,7 +236,7 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 		} else {
 			info.end(TxRollback)
 		}
-		if rerr := ctl.rollback(end); rerr != nil && !ended(rerr) && !over(ctx) && !past(deadline) {
+		if rerr := rollback(ctx, ctl); rerr != nil && !ended(rerr) && !over(ctx) && !past(deadline) {
 			return errors.Join(err, fmt.Errorf("velox: rollback: %w", rerr))
 		}
 		if cause != nil && past(deadline) && !is(err, ErrTimeout) {
@@ -245,7 +251,7 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 		info.end(TxError)
 		// Past the deadline, or canceled: roll back on every driver rather
 		// than leave it to the driver whether a late commit succeeds.
-		_ = ctl.rollback(end)
+		_ = rollback(ctx, ctl)
 		// velox's deadline is the cause even when a TxAround hook passed on
 		// a context without it.
 		if timedOut(ctx) || cause != nil && past(deadline) {
@@ -258,12 +264,43 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 		}
 		return fmt.Errorf("velox: transaction: %w", err)
 	}
+	if f.broken != nil {
+		// A savepoint did not roll back: its fn's work may still be in the
+		// transaction, which must not commit it.
+		info.end(TxError)
+		_ = rollback(ctx, ctl)
+		return fmt.Errorf("velox: transaction: %w", f.broken)
+	}
 	if err := ctl.commit(ctx); err != nil {
 		info.end(TxError)
 		return fmt.Errorf("velox: commit: %w", err)
 	}
 	info.end(TxCommit)
 	return nil
+}
+
+// rollback rolls the transaction ctl controls back on rollbackContext. Its
+// deadline is rollbackTimeout's alone: the transaction's ROLLBACK must run
+// after the transaction's deadline has passed.
+func rollback(ctx context.Context, ctl txControl) error {
+	rctx, cancel := rollbackContext(ctx, time.Time{})
+	defer cancel()
+	return ctl.rollback(rctx)
+}
+
+// rollbackTimeout bounds every rollback velox sends on a context it detached
+// from the caller's cancellation: the transaction's ROLLBACK and a savepoint's
+// ROLLBACK TO and its RELEASE. A var, so that a test can lower it.
+var rollbackTimeout = 5 * time.Second
+
+// rollbackContext is ctx without its cancellation, with rollbackTimeout from
+// now; for a savepoint also no later than the transaction's deadline (also).
+func rollbackContext(ctx context.Context, also time.Time) (context.Context, context.CancelFunc) {
+	dl := time.Now().Add(rollbackTimeout)
+	if !also.IsZero() && also.Before(dl) {
+		dl = also
+	}
+	return context.WithDeadline(context.WithoutCancel(ctx), dl)
 }
 
 // past reports whether deadline is set and has passed.
@@ -297,16 +334,40 @@ func over(ctx context.Context) bool {
 // savepoint runs fn under a savepoint of the current transaction, and gives
 // it ctx, marked as the transaction's. It runs no TxAround hook; its
 // statements see the transaction's TxInfo.
+//
+// SAVEPOINT and the RELEASE after fn succeeds run within the transaction's
+// deadline, as its statements do, whatever ctx is. On a sharded DB, a ctx that
+// names a shard other than the transaction's, or one that is not a shard, is
+// refused before SAVEPOINT, as a statement's is; one that names none passes.
+//
+// A rollback of the savepoint that fails, after fn's error or its panic,
+// breaks the transaction: see txFrame.broken.
 func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error) error {
-	name := "velox_" + strconv.Itoa(db.depth+1)
-	if _, err := db.ex.exec(ctx, "SAVEPOINT "+name, nil); err != nil {
+	if err := db.txRoot.broken; err != nil {
 		return fmt.Errorf("velox: savepoint: %w", err)
 	}
-	end := context.WithoutCancel(ctx)
+	if db.txShard != nil {
+		rc, _ := ctx.Value(routeKey{}).(routeCtx)
+		sh, err := db.rt.shardOf(ctx, rc)
+		if err != nil {
+			return fmt.Errorf("velox: savepoint: %w", err)
+		}
+		if sh != nil && sh != db.txShard {
+			return fmt.Errorf("velox: savepoint: for shard %q in a transaction on shard %q", sh.name, db.txShard.name)
+		}
+	}
+	sctx, cancel := bound(ctx, 0, 0, db.txDeadline, db.txCause)
+	if cancel != nil {
+		defer cancel()
+	}
+	name := "velox_" + strconv.Itoa(db.depth+1)
+	if _, err := db.ex.exec(sctx, "SAVEPOINT "+name, nil); err != nil {
+		return savepointErr(sctx, "savepoint", err)
+	}
 	finished := false
 	defer func() {
 		if !finished {
-			_ = db.rollbackSavepoint(end, name)
+			db.breakOn(db.undoSavepoint(ctx, name))
 		}
 	}()
 	f := newTxFrame(ctx, DB{d: db.d, ex: db.ex, rt: db.rt, cfg: db.cfg, inTx: true, depth: db.depth + 1, txDeadline: db.txDeadline, txCause: db.txCause, tx: db.tx, txWrote: db.txWrote, txShard: db.txShard}, db.txRoot)
@@ -314,16 +375,44 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 		finished = true
 		// As in transaction: once the transaction's deadline has passed, the
 		// connection may be gone and the rollback's error is noise.
-		if rerr := db.rollbackSavepoint(end, name); rerr != nil && !ended(rerr) && ctx.Err() == nil && !db.pastTxDeadline() {
+		rerr := db.undoSavepoint(ctx, name)
+		db.breakOn(rerr)
+		if rerr != nil && !ended(rerr) && ctx.Err() == nil && !db.pastTxDeadline() {
 			return errors.Join(err, fmt.Errorf("velox: rollback to savepoint: %w", rerr))
 		}
 		return err
 	}
 	finished = true
-	if _, err := db.ex.exec(ctx, "RELEASE SAVEPOINT "+name, nil); err != nil {
-		return fmt.Errorf("velox: release savepoint: %w", err)
+	if _, err := db.ex.exec(sctx, "RELEASE SAVEPOINT "+name, nil); err != nil {
+		return savepointErr(sctx, "release savepoint", err)
 	}
 	return nil
+}
+
+// savepointErr is the error of a SAVEPOINT or RELEASE (what) that failed
+// with err on sctx; it matches ErrTimeout when velox's deadline ended sctx.
+func savepointErr(sctx context.Context, what string, err error) error {
+	err = fmt.Errorf("velox: %s: %w", what, err)
+	if timedOut(sctx) {
+		return errors.Join(errTimeout(what), err)
+	}
+	return err
+}
+
+// breakOn breaks db's transaction when err, a savepoint's rollback's, is not
+// nil; the first such error is kept.
+func (db *DB) breakOn(err error) {
+	if err != nil && db.txRoot.broken == nil {
+		db.txRoot.broken = fmt.Errorf("a savepoint did not roll back, so the transaction can only roll back: %w", err)
+	}
+}
+
+// undoSavepoint is rollbackSavepoint on rollbackContext, bounded by the
+// transaction's deadline too.
+func (db *DB) undoSavepoint(ctx context.Context, name string) error {
+	rctx, cancel := rollbackContext(ctx, db.txDeadline)
+	defer cancel()
+	return db.rollbackSavepoint(rctx, name)
 }
 
 // rollbackSavepoint undoes the work since the savepoint and releases it,
@@ -400,10 +489,17 @@ func (c *txCtx) String() string { return fmt.Sprint(c.Context) + ".WithTx" }
 // txFrame is a transaction's or a savepoint's DB and the context its fn
 // gets, in one allocation. ended is set, on the transaction's own frame (its
 // root), once the transaction has committed or rolled back.
+//
+// broken is set, on the root, once a savepoint's ROLLBACK TO or its RELEASE
+// has failed: the savepoint's work may still be in the transaction. From then
+// on the transaction does not commit, and its statements and nested Tx fail
+// with broken before anything is sent. Like the rest of tx, it is read and
+// set by one goroutine at a time.
 type txFrame struct {
-	db    DB
-	ctx   txCtx
-	ended atomic.Bool
+	db     DB
+	ctx    txCtx
+	ended  atomic.Bool
+	broken error
 }
 
 // newTxFrame returns the frame of db, with ctx marked as the transaction's.

@@ -429,10 +429,14 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 
 // outsideTx fails a statement, st, under a context marked by a transaction
 // that has not ended and that db is not in (foreign), with ErrOutsideTx: one
-// context lookup, and a pointer compare.
+// context lookup, and a pointer compare. In a transaction a savepoint broke
+// (txFrame.broken), it fails st with that error.
 func (db *DB) outsideTx(ctx context.Context, st *Statement) error {
 	if db.foreign(ctx) {
 		return stmtErr(st, ErrOutsideTx)
+	}
+	if db.txRoot != nil && db.txRoot.broken != nil {
+		return stmtErr(st, db.txRoot.broken)
 	}
 	return nil
 }

@@ -456,3 +456,33 @@ func TestSQLiteFilePerShard(t *testing.T) {
 		}
 	}
 }
+
+// TestSavepointChecksItsShard: a nested Tx whose context names another shard,
+// or one that is not a shard, is refused before SAVEPOINT; one whose context
+// names none runs on the transaction's.
+func TestSavepointChecksItsShard(t *testing.T) {
+	s := openShards(false)
+	var other, unknown error
+	ran, plain := false, false
+	err := s.db.Tx(velox.WithShard(bg, "eu"), func(ctx context.Context, tx *velox.DB) error {
+		other = tx.Tx(velox.WithShard(ctx, "us"), func(context.Context, *velox.DB) error { ran = true; return nil })
+		unknown = tx.Tx(velox.WithShard(ctx, "zz"), func(context.Context, *velox.DB) error { ran = true; return nil })
+		return tx.Tx(bg, func(context.Context, *velox.DB) error { plain = true; return nil })
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `velox: savepoint: for shard "us" in a transaction on shard "eu"`; fmt.Sprint(other) != want {
+		t.Errorf("a savepoint for us: %v, want %q", other, want)
+	}
+	if !errors.Is(unknown, velox.ErrNoShard) {
+		t.Errorf("a savepoint for zz: %v, want ErrNoShard", unknown)
+	}
+	if ran || !plain {
+		t.Errorf("refused fn ran: %v; fn under no shard ran: %v", ran, plain)
+	}
+	// BEGIN, the third's SAVEPOINT and RELEASE, COMMIT
+	if want := []string{"BEGIN", "SAVEPOINT velox_1", "RELEASE SAVEPOINT velox_1", "COMMIT"}; !reflect.DeepEqual(s.euP.Log, want) {
+		t.Errorf("eu's primary was sent %q, want %q", s.euP.Log, want)
+	}
+}
