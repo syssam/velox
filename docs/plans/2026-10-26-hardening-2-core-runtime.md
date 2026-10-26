@@ -7,19 +7,19 @@
 - transactions cannot hang or escape: rollbacks are time-bounded, savepoints keep the transaction's deadline and shard, and the transaction's route reaches its hooks and its span;
 - the scope and policy backstops hold against Rewrite hooks;
 - `WithTenant` converts the ids it safely can;
-- a bidirectional self many-to-many edge writes and removes both join rows, as ent's does;
+- a bidirectional self edge is written both ways, as ent's is: a many-to-many edge writes and removes both join rows, and a one-to-one edge (ent's spouse) keeps both rows' keys pointing at each other;
 - the perf items are done, and `Query.With`/`Rel.With` are settled by measurement;
 - the compile-cost and allocation bounds are re-measured once, at the end.
 
-**Architecture:** Eleven tasks, each building and passing the gate at its commit.
+**Architecture:** Twelve tasks, each building and passing the gate at its commit.
 - Task 1 measures `With` first, because its outcome rewrites call sites the later tasks' tests use.
 - Tasks 2–5 are the error, transaction, telemetry and pipeline items, file by file: errclass.go, tx.go, txhook.go with veloxotel, then db.go.
 - Tasks 6–8 are the statement, load and tenant items: scope.go, insert.go, load.go and scope_api.go.
-- Task 9 is G17's core part. It is the one task that touches velox-gen (`Desc.Bidi`).
-- Task 10 is the perf items.
-- Task 11 re-measures.
+- Tasks 9 and 10 are G17's core part: the many-to-many half (`Desc.Bidi`), then the one-to-one half (`EdgeDesc.Bidi`). They are the only tasks that touch velox-gen.
+- Task 11 is the perf items.
+- Task 12 re-measures.
 
-Everything is in the root package and `contrib/veloxotel`, except Task 9's emitter line and its blog golden, and Task 8's tenant example.
+Everything is in the root package and `contrib/veloxotel`, except Tasks 9 and 10's emitter lines and their blog golden, and Task 8's tenant example.
 
 **Tech Stack:** Go 1.27. golangci-lint v2.14.0 and revive v1.17.0, as `scripts/ci-local.sh` pins them. OpenTelemetry Go v1.47.0 (`metric.Float64Histogram.Enabled`). Docker for PostgreSQL 18 and MySQL 8.4.
 
@@ -50,7 +50,7 @@ Everything is in the root package and `contrib/veloxotel`, except Task 9's emitt
 - **Historical documents.** Nothing under `docs/reviews/` or `docs/plans/` changes, except this plan. Under `docs/specs/`, only the api-cleanup spec's ruling 21 changes (Task 1).
 - **The followups file** (`docs/plans/2026-10-14-core-1-followups.md`) is not touched. Wave 6 marks its items, citing these commits.
 - **No machine-specific paths** in committed files.
-- **Generated-code version.** No task bumps `GeneratedCodeIsVersion6`. Task 9 adds a `Desc` field that velox-gen writes, but version 6 has never been released (plan ruling 14).
+- **Generated-code version.** No task bumps `GeneratedCodeIsVersion6`. Task 9 adds a `Desc` field and Task 10 a constructor that velox-gen writes, but version 6 has never been released (plan ruling 14).
 
 ### R: the regeneration steps
 
@@ -88,9 +88,10 @@ for m in testmodel bindmodel; do bin/velox-gen -check -out internal/$m -package 
 
 1. **One statement whose entities have tenant columns of different Go types.** A statement on an entity with an `int64` tenant, holding an EXISTS on an entity with an `int32` tenant, runs under `WithTenant(ctx, 7)`. Each condition must carry its own column's type. If the conversion happens once per statement, the EXISTS gets the wrong type, and on PostgreSQL that is a wrong comparison or an error. Pin: Task 8 `TestTenantConversionPerTarget`.
 2. **A self-link on a bidirectional edge.** Linking a node to itself must write one row, not two, or the primary key refuses the insert. Pin: Task 9 `TestBidiLinks`, its a–a case.
-3. **A rollback on a dead connection after the caller canceled.** `Tx` must return within the rollback timeout, not hang on the detached context. Pin: Task 3 `TestRollbackIsBounded`.
-4. **A Rewrite hook that gives an InsertAll upsert outside a transaction its update branch.** It must be refused before any row is sent. A hidden row must never fail the statement after the visible rows are written. Pin: Task 6 `TestHookCannotConditionAMultiRowUpsert`.
-5. **A write that fails after it reached the database** (a timeout after the commit, or a RETURNING scan error). It must pin the session, so the caller's next read goes to the primary and sees its own write. A write refused before sending must not pin. Pin: Task 5 `TestFailedWritePinsTheSession`.
+3. **Re-pointing a bidirectional one-to-one key onto a taken partner.** Pointing A at C, when C has a partner D, must fail and leave A, its old partner B, C and D as they were. Clearing B before checking C would orphan B if the transaction did not roll back. Pin: Task 10 `TestBidiOneOnRealDatabases`, its third case.
+4. **A rollback on a dead connection after the caller canceled.** `Tx` must return within the rollback timeout, not hang on the detached context. Pin: Task 3 `TestRollbackIsBounded`.
+5. **A Rewrite hook that gives an InsertAll upsert outside a transaction its update branch.** It must be refused before any row is sent. A hidden row must never fail the statement after the visible rows are written. Pin: Task 6 `TestHookCannotConditionAMultiRowUpsert`.
+6. **A write that fails after it reached the database** (a timeout after the commit, or a RETURNING scan error). It must pin the session, so the caller's next read goes to the primary and sees its own write. A write refused before sending must not pin. Pin: Task 5 `TestFailedWritePinsTheSession`.
 
 ---
 
@@ -528,23 +529,24 @@ This covers spec rulings 12 and 13, and builder ruling 8.
 ```go
 // scope.go
 // tenantFor returns id as the Go type of in's tenant column: unchanged when it
-// is of that type; converted when it is a predeclared integer type and the
-// column's is a predeclared integer type, or it is string and the column's
-// kind is string; refused with ErrTenantMismatch otherwise, or when it does
-// not fit; and refused with ErrNoTenant when the result is zero.
+// is of that type; converted when it is of a predeclared integer type and the
+// column's kind is an integer kind, or it is a string and the column's kind
+// is string, whether the column's type is predeclared or named; refused with
+// ErrTenantMismatch otherwise, or when it does not fit; and refused with
+// ErrNoTenant when the result is zero.
 func tenantFor(in *EntityInfo, id any) (any, error) // replaces checkTenantValue
 
 // scoper.tenantOf(t *EntityInfo) (id any, ok bool, err error) // id is converted for t
 ```
 
-- **The conversion rules** (builder ruling 8, plan ruling 8):
-  - A named source type (`OrgID`, `UserID`) never converts: it must be the column's type exactly.
-  - Integers convert only between predeclared types (`int`, `int8` … `int64`, `uint`, `uint8` … `uint64`). `uintptr` is not one of them.
-  - A predeclared `string` converts to a column of any string kind.
+- **The conversion rules** (builder ruling 8, as the controller refined it: plan ruling 8):
+  - A named source type (`OrgID`, `UserID`) never converts: it must be the column's type exactly. A `UserID` given for an `OrgID` column fails with ErrTenantMismatch, even when both are int64.
+  - A source of a predeclared integer type (`int`, `int8` … `int64`, `uint`, `uint8` … `uint64`) converts into a column of any integer kind, predeclared or named, so `WithTenant(ctx, 1)` serves an `OrgID int64` column. `uintptr` is neither a source nor a column kind that converts.
+  - A predeclared `string` converts into a column of string kind, predeclared or named.
 - **Range checks.**
   - A signed source whose value is negative is refused for an unsigned column.
   - An unsigned source above `math.MaxInt64` is refused for a signed column.
-  - Otherwise the check is `OverflowInt` or `OverflowUint` on the column's type.
+  - Otherwise the check is `OverflowInt` or `OverflowUint` on the column's type. All three checks read the column type's underlying kind, so a named column is checked as its kind is.
   - The refusal is `velox: <E>: tenant does not match: the context's tenant %v (a %T) does not fit the column %s, a %s`. The existing "is a %T, the column … is a %s" text stays for a type that never converts.
 - **Where the conversion happens.** It happens per entity, inside each statement:
   - `scope` uses the statement entity's converted id for `checkTenantAssignments` and `tenantPredicate`, and records it as `st.Tenant`;
@@ -553,24 +555,26 @@ func tenantFor(in *EntityInfo, id any) (any, error) // replaces checkTenantValue
   - `fillTenant` sets and checks the converted value.
 - **What stays raw.** `RowScope.Tenant` and `WithShardFor`'s `tenant` are the context's raw id. `Statement.Tenant`'s doc: `the tenant scope applied, as the type of the entity's tenant column; nil when unscoped`.
 - **WithTenant's doc** replaces "id's dynamic type must be the tenant column's Go type exactly" with:
-  > id is converted to the tenant column's Go type when it is a predeclared integer type (an untyped constant is an int) and the column's type is a predeclared integer type whose range holds it, or when it is a string and the column's kind is string. A named type, such as an OrgID, is never converted: it must be the column's type. Any other id fails the statement with ErrTenantMismatch.
+  > id is converted to the tenant column's Go type when it is of a predeclared integer type (an untyped constant is an int) and the column's type, predeclared or named such as an OrgID int64, is an integer type whose range holds it; or when it is a string and the column's kind is string. An id of a named type is never converted: it must be the column's type, so a UserID never serves an OrgID column. Any other id fails the statement with ErrTenantMismatch.
 
   ErrTenantMismatch's doc says `cannot be converted to the tenant column's type` in place of `is not of the tenant column's type`.
 - **C55.** Policy's godoc gains this paragraph, after "Any field may be nil …":
   > A policy function decides from ctx and, for Insert, the row; it does not query. A rule that must see other rows, such as that an inserted comment's parent is one the caller may read, is a hook (Hooks): it queries through Mutation.DB, in the write's transaction, and returns the error that refuses the write. This is ent's split: privacy rules decide, hooks query.
 - **The example.** main.go:108-109 becomes three lines:
   - `db.Query[gen.Project]().Count(velox.WithTenant(ctx, 1))`, where 1 is an int converted to the column's int64, printed with `say("tenant 1 as an int: %d projects, err=%v", n, err)`;
-  - then `type orgID int64` (declared in the function) with `WithTenant(ctx, orgID(1))`, printed with `say("tenant of a named type: ErrTenantMismatch=%t", …)`.
+  - then `type userID int64` (declared in the function) with `WithTenant(ctx, userID(1))`, printed with `say("tenant of another named type: ErrTenantMismatch=%t", …)`.
 
-- [ ] **Step 1: Write the failing tests** in tenant_test.go. Hand-write `tconvA`, with an `int64` tenant column `OrgID` and an `EdgeTo[tconvB]`; `tconvB`, with an `int32` tenant column; `tconvU`, with a `uint32` tenant; and `tconvS`, with a tenant of a named string type `tslug`.
+- [ ] **Step 1: Write the failing tests** in tenant_test.go. Hand-write `tconvA`, with an `int64` tenant column `OrgID` and an `EdgeTo[tconvB]`; `tconvB`, with an `int32` tenant column; `tconvU`, with a `uint32` tenant; `tconvS`, with a tenant of a named string type `tslug`; and `tconvN`, with a tenant of a named integer type `torg` (`type torg int64`), and `tconvNU`, with one of `type tuorg uint16`.
   - `TestTenantConversion`, a table of id → outcome on a Count:
     - on `testmodel.Invoice` (`int64`): `7`, `int32(7)`, `uint8(7)` and `uint64(7)` pass, and the sent arg is `int64(7)`;
     - `uint64(1 << 63)` fails with ErrTenantMismatch and `does not fit`;
     - `0` and `int8(0)` fail with ErrNoTenant;
     - `"7"` fails with ErrTenantMismatch;
     - `orgID(7)`, with `type orgID int64` declared in the test, fails with ErrTenantMismatch;
+    - on `tconvN`: `7` and `uint8(7)` pass as `torg(7)`; `orgID(7)` fails with ErrTenantMismatch, as a named source never converts into another named type; `torg(7)` passes unchanged;
+    - on `tconvNU`: `-1` and `70000` fail with ErrTenantMismatch and `does not fit`, as the named column is checked as a uint16; `7` passes as `tuorg(7)`;
     - on `tconvU`: `-1` and `int64(1 << 40)` fail with ErrTenantMismatch, and `7` passes as `uint32(7)`;
-    - on `tconvS`: `"acme"` passes as `tslug("acme")`;
+    - on `tconvS`: `"acme"` passes as `tslug("acme")`, and a `type otherSlug string` value fails with ErrTenantMismatch;
     - a Rewrite hook that keeps `st.Tenant` sees `int64(7)` for `WithTenant(ctx, 7)` on Invoice.
   - `TestTenantInsertConverts`:
     - an Insert of `testmodel.Invoice{}` under `WithTenant(ctx, 7)` fills `OrgID == 7`;
@@ -582,7 +586,7 @@ func tenantFor(in *EntityInfo, id any) (any, error) // replaces checkTenantValue
 - [ ] **Step 3: Implement** as in Interfaces, and update the tenant_test.go tests that assert today's exact-type refusal of an `int`.
 - [ ] **Step 4: Regenerate:** R7 for `./tenant` only: `(cd example && go test ./tenant -update)`.
   - The golden's line `tenant of type int: ErrTenantMismatch=true` becomes `tenant 1 as an int: <n> projects, err=<nil>`, where n is acme's project count as the earlier lines print it.
-  - A line `tenant of a named type: ErrTenantMismatch=true` is added.
+  - A line `tenant of another named type: ErrTenantMismatch=true` is added.
   - No other line changes.
 - [ ] **Step 5: Leftover grep.**
   - `git grep -nP 'checkTenantValue|reflect\.TypeOf\(id\) != t|must be the tenant column.s Go type exactly' -- '*.go'`. Expected: nothing. At b3348ba it prints scope.go:298, :378, :383 and :385, insert.go:454, and scope_api.go:29-30.
@@ -642,7 +646,7 @@ Bidi bool
    - `removeFriendIDs: [b]` empties both;
    - `clearFriends` empties both;
    - deleting a removes a from `b.friends`.
-2. The UpdateX and CreateX godoc sentence "A self-edge is written one way, as the core's loads read it." (gogen/mutation.go:390 and its UpdateX twin) and contrib/graphql/doc.go:220's bullet say instead: `A bidirectional self-edge (a self-referencing many-to-many edge with no inverse) is written and removed both ways, as in ent; a self-edge with an inverse is written one way.` The GraphQL goldens are regenerated.
+2. The UpdateX and CreateX godoc sentence "A self-edge is written one way, as the core's loads read it." (gogen/mutation.go:390 and its UpdateX twin) and contrib/graphql/doc.go:220's bullet say instead: `A bidirectional self-edge (a self-referencing edge with no inverse) is written both ways, as in ent: a many-to-many one writes and removes both join rows, and a one-to-one one keeps both rows' keys pointing at each other. A self-edge with an inverse is written one way.` The GraphQL goldens are regenerated.
 3. Nothing in the SDL or in gqlimpl changes.
 
 - [ ] **Step 1: Write the failing tests.**
@@ -667,14 +671,152 @@ Bidi bool
 - [ ] **Step 7: Commit** `velox: a bidirectional self many-to-many edge writes and removes both join rows, as ent's does (Desc.Bidi)`.
 - [ ] **Step 8: Run G, then the gate.** Expected: G clean, gate rc=0.
 
-### Task 10: Perf: large inserts skip the cache, Set clones once, the scope skips trees without EXISTS, loads pin without a DB copy (C30, C41, C43, C91)
+### Task 10: A bidirectional self one-to-one edge keeps both rows' keys pointing at each other (G17, O2O half)
+
+This covers the controller's ruling on G17's O2O half (plan ruling 19). velox-gen marks a self-referencing unique edge with no inverse `Bidi`, with its key on the owner's own row (build.go:362-364, `ownFK` at :431), and the key column is unique (build.go:499). This is ent's "spouse" edge. velox2 has no edge-mutation API: the key is a column of the entity, written with `Insert`, `Update` and `Save`. So the core does ent's work in those writes.
+
+**ent's behaviour, which this task matches** (`dialect/sql/sqlgraph/graph.go`; `entc/integration/integration_test.go:1570-1608`):
+- `setTableColumns` (:1308-1347, :1902-1906) writes the owner's own key for a Bidi O2O edge, and sets it NULL when the edge is cleared.
+- `clearFKEdges` (:1797-1819) clears the other row: `UPDATE t SET fk = NULL WHERE fk IN (ids)`.
+- `addFKEdges` (:1821-1856) sets the other row: `UPDATE t SET fk = id WHERE id = target AND fk IS NULL`. Fewer rows than targets is a `ConstraintError` ("already connected to a different …"). It also refuses linking more than one owner.
+- All of this runs in one transaction that sqlgraph opens.
+- **C's old partner.** When A is pointed at C and C already has a partner D, the write is refused: C's key is not NULL, so the `addFKEdges` UPDATE matches nothing. D and C are left as they were, and the transaction rolls back.
+- **B, A's old partner.** In ent, `SetSpouse(c)` alone does not clear B. The key column's unique index then refuses the write, because B's key still holds A (integration_test.go:1602). `ClearSpouse().SetSpouse(c)` clears B first and succeeds (:1605-1608).
+- velox has one assignment, the key's new value, where ent has a clear and a set. So velox's assignment does what ent's `ClearX().SetX(c)` does: B is cleared and C is set. A plain "set" that ent refuses through the unique index has no velox spelling.
+- A self-link (A as its own partner) is refused by ent: its own row's key is no longer NULL when `addFKEdges` runs.
+- Delete in ent deletes the row only. The foreign key's ON DELETE acts on the partner.
+
+**Files:**
+- Modify: `relation.go:66-77` (`EdgeDesc.bidi`), `desc.go` (`EdgeBidi`, and its load checks beside EdgeTo's), `meta.go:21-37` (`EntityInfo.bidiKeys`), `write.go:373-410` (`writeCore`), `insert.go` (the one-row path, `check` and `prepareMany`).
+- Create: `bidi.go`, which holds this task's functions.
+- Modify: `internal/gen/lower.go:758-770`, and `internal/gen/lower_test.go:920` (its want becomes `velox.EdgeBidi[Person]("Spouse", 1, 0)`).
+- Modify: `internal/gen/testdata/golden/blog/schema/user.go` (adds `edge.To("spouse", User.Type).Unique()`), and the blog golden by R3.
+- Test: `bidi_test.go`, `desc_test.go`, `internal/gen/render_test.go`, `internal/itest/through_test.go`, and `export_test.go` if FakeExec has no per-statement affected count.
+
+**Interfaces:**
+- Consumes: Task 9's `bidi_test.go` and itest `person` model, and Task 6's insert.go.
+- Produces:
+
+```go
+// desc.go
+// EdgeBidi is the one-to-one relation of a self-referencing edge that has no
+// inverse, which is bidirectional, as in ent: owner.Columns[keyCol] holds
+// the other row's T.Columns[idCol], and that row's key holds this row's. For
+// generated code. T is the owner entity, idCol is its primary key, and
+// keyCol is a nullable column of the key's Go type.
+//
+// velox writes both rows. An Insert that sets the key sets the other row's
+// key too. An Update or Save that sets it clears the key of the row that
+// pointed here and sets the new partner's; one that sets it to nil clears
+// the partner's. They run in the caller's transaction, or in one velox opens.
+// A partner that already has a partner is refused with a *ConstraintError of
+// kind ConstraintUnique: clear its key first. Delete writes only the deleted
+// rows; the foreign key's ON DELETE acts on their partners.
+func EdgeBidi[T any, PT Entity[T]](name string, keyCol, idCol int) EdgeDesc
+
+// relation.go: EdgeDesc gains `bidi bool // EdgeBidi made it`.
+
+// meta.go: EntityInfo gains `bidiKeys []bidiKey`, set at Load from the
+// EdgeBidi relations.
+
+// bidi.go
+type bidiKey struct {
+	col  int    // the key column, an index into Columns
+	edge string // the relation's name, for errors
+}
+
+// bidiSet returns the bidirectional keys set assigns and their values; a nil
+// value clears the key.
+func bidiSet(in *EntityInfo, set []Assignment) ([]bidiKey, []any)
+
+// pinnedKey returns v when where holds, at its top level, the condition
+// <primary key> = v that Save writes and Where(pk.EQ(v)) adds.
+func pinnedKey(in *EntityInfo, where []Predicate) (any, bool)
+
+// bidiUpdate sends an update that sets bidirectional keys of row k, and then
+// the statements that re-point the partners (steps 1-3 below), in db's
+// transaction or one it opens with db.Tx.
+func bidiUpdate(ctx context.Context, db *DB, mu *mutation, keys []bidiKey, k any, vs []any) error
+
+// bidiLink sets the key of row v to k, if v has no partner:
+// UPDATE … SET key = k WHERE id = v AND key IS NULL. When no row matches, it
+// returns a *ConstraintError{Entity, Kind: ConstraintUnique, Constraint: the
+// key column's name, Err: "row <v> already has a <edge>; clear it first"}.
+func bidiLink(ctx context.Context, db *DB, in *EntityInfo, bk bidiKey, k, v any) error
+```
+
+- **Load.** It refuses, with a SchemaError naming the entity and the edge, an `EdgeBidi` whose:
+  - T is not the owner entity (its `holders[0]` is not `One[E]`'s type);
+  - idCol is not the owner's only primary-key column;
+  - keyCol is a primary-key column or the tenant column, is not Nullable, has a codec, or has a Go type (a pointer's element) other than the primary key's.
+- **Update and Save** that assign a bidirectional key, in `writeCore`, after the existing checks and before anything is sent:
+  - The Where must hold a top-level `<pk> = k` (`pinnedKey`). Save always writes one, and GraphQL's UpdateX writes `Where(pk.EQ(key))` (gogen/mutation.go:864). Without it the update is refused: `velox: <E>: an update that sets <column>, the key of the bidirectional edge <Edge>, must name one row with Where(<pk>.EQ(id)), as velox re-points the other row too`. `All` is refused the same way.
+  - `v == k` is refused: `velox: <E>: a row cannot be its own <Edge>`.
+  - Then, in the transaction:
+    1. The caller's UPDATE. It reports n rows. When n is 0, nothing else is sent: Save fails with ErrNotFound as before, and Update reports 0. When n is above 1 (a Rewrite hook dropped the key condition), the write fails with `velox: <E>: the update that sets the bidirectional key <column> wrote <n> rows`, and the transaction rolls back.
+    2. For each bidirectional key it sets: `UPDATE t SET key = NULL WHERE key = k`. This clears B, the old partner. It also clears v when v already pointed at k, so re-saving the same link works.
+    3. For each key set to a non-nil v: `bidiLink(…, k, v)`. When C, the new partner, already has a partner, this returns the ConstraintError and the transaction rolls back. When another row's key already holds v, step 1 is refused first by the column's unique index, which errclass reports as a ConstraintUnique too.
+  - The entity's Hooks and Policy.Write run once, around the whole set, because they wrap writeCore. The statements of steps 2 and 3 are sent through `execWrite`, as InsertAll's later batches are. So the tenant scope, the Write policy's conditions, Rewrite hooks and Around hooks apply to each of them.
+    - A partner outside the caller's tenant or Write conditions is not linked: step 3 matches nothing.
+    - A hidden old partner is not cleared by step 2, so the unique index refuses step 3.
+    - Either way the write fails and rolls back.
+  - `Mutation.Affected` is step 1's n, the caller's rows.
+  - `SQL(ctx)` renders step 1 only. The doc of `UpdateQuery.SQL` and `SaveQuery.SQL` says so in one sentence.
+- **Insert** of one row whose bidirectional key is a non-nil v: in the transaction, the INSERT, then `bidiLink(…, id, v)` with the row's id as the INSERT returned it. A key equal to the row's own id (when the id is set) is refused before sending, with the self-link text. A nil key is one statement, as today.
+- **Refused** in `check` and `prepareMany`, before anything is sent:
+  - an Insert with `OnConflict` whose row sets a bidirectional key: `velox: <E>: an upsert cannot set the key of the bidirectional edge <Edge>; insert the row, then Save the key`;
+  - an InsertAll with any row that sets one: `velox: <E>: InsertAll cannot set the key of the bidirectional edge <Edge>; insert the rows, then Save each key`.
+- **Delete** is unchanged, as ent's is: the key's ON DELETE acts on the partner. With velox-gen's default (no action), deleting a row that has a partner fails with a ConstraintForeignKey error. With `OnDelete(edge.SetNull)`, the partner's key clears.
+- **velox-gen.** At lower.go:769, an edge with `ed.Rel.Kind == "O2O" && ed.Bidi` gets `r.Desc = fmt.Sprintf("velox.EdgeBidi[%s](%q, %d, %d)", t.Name, ed.GoName, ownerCol, targetCol)`. `OutRel`, render.go and `plugin.Edge` are unchanged. contrib/graphql's `OwnsKey` already holds for this edge (sdl/input_test.go:50, `user_best_friend`), so the SDL is unchanged.
+
+**What Wave 3 must add** (the GraphQL part of the O2O half). CreateX sets `<edge>ID` through the core's Insert, and UpdateX sets it through `db.Update[E]().Set(set...).Where(pk.EQ(key))` (gogen/mutation.go:864). So both write the two rows through this task with no generator change. Wave 3 adds:
+1. A mutable bidirectional O2O edge to the GraphQL test model, for example `edge.To("bestFriend", User.Type).Unique()`, and an e2e test, on each dialect:
+   - `createUser(input: {bestFriendID: b})` makes `b.bestFriend` a;
+   - `updateUser(a, {bestFriendID: c})` makes `c.bestFriend` a, and `b.bestFriend` null;
+   - `updateUser(a, {clearBestFriend: true})` makes `c.bestFriend` null;
+   - `updateUser(a, {bestFriendID: d})`, where d already has a partner, fails with the ConstraintError's message, and changes nothing.
+2. velox-graphql's e2e `twin` edge (e2e_test.go:106), which is immutable, is now set on both rows by createCategory. Wave 3 asserts that. The e2e tests generate their code when they run, so no committed GraphQL file holds the `Twin` relation (`git grep -nP 'EdgeTo\[\w+\]\("Twin"'` prints nothing at b3348ba).
+3. The godoc sentence about self-edges is Task 9's Wave 3 item 2, which covers both halves.
+
+- [ ] **Step 1: Write the failing tests.**
+  - `TestBidiOne` (bidi_test.go), with a hand-written `bspouse` (`ID int64`, `SpouseID *int64`, table `bspouses`, and `EdgeBidi[bspouse]("Spouse", 1, 0)`), on `OpenFake(Postgres, e)`, with FakeExec answering 1 row per statement unless the case says otherwise. If FakeExec cannot answer per statement, export_test.go gains `FakeExec.Affected func(text string) int64`. It asserts each case's statements in order, with their SET columns and args:
+    - `Save(&bspouse{ID: 1, SpouseID: ptr(3)}, S.SpouseID)` sends three statements in one transaction: the UPDATE of row 1 setting `spouse_id` with `3, 1`; `SET "spouse_id" = NULL WHERE "spouse_id" = $1` with `1`; and `SET "spouse_id" = $1 WHERE "id" = $2 AND "spouse_id" IS NULL` with `1, 3`;
+    - `Save` of the same row with `SpouseID: nil` sends the first two only;
+    - `Update[bspouse]().Set(S.SpouseID.Set(3)).Where(S.ID.EQ(1))` sends the same three as the first case;
+    - the third statement answering 0 rows fails with a `*velox.ConstraintError` of `ConstraintUnique`, `Constraint == "spouse_id"`, its text holding `row 3 already has a Spouse`, and the transaction is rolled back;
+    - the first statement answering 0 rows sends nothing more, and Save fails with ErrNotFound;
+    - `Save(&bspouse{ID: 1, SpouseID: ptr(1)}, …)` fails with `a row cannot be its own Spouse`, and nothing is sent;
+    - `Update[bspouse]().Set(S.SpouseID.Set(3)).Where(S.ID.In(1, 2))` and `….All()` fail with the `must name one row` text, and nothing is sent;
+    - `Insert(&bspouse{ID: 5, SpouseID: ptr(1)})` sends the INSERT, then `SET "spouse_id" = $1 WHERE "id" = $2 AND "spouse_id" IS NULL` with `5, 1`;
+    - `Insert(…).OnConflict(S.ID).DoNothing()` with a non-nil key, and `InsertAll` with one, fail with their texts, and nothing is sent;
+    - a hook on bspouse's `Mutation.Affected` reads 1 for the Save.
+  - `TestBidiOneDescRefused` (desc_test.go): an EdgeBidi to another entity, one whose key column is not a pointer, and one whose key is an `*int32` beside an `int64` id are each refused with a SchemaError naming the entity and the edge.
+  - internal/gen/render_test.go: the blog golden's `user_velox.go` holds `velox.EdgeBidi[User]("Spouse", `, and no `EdgeTo[User]("Spouse"`.
+  - `TestBidiOneOnRealDatabases` (internal/itest/through_test.go): Task 9's `person` gains `SpouseID *int64` (column `person_spouse`, UNIQUE, a foreign key to `persons.id` with ON DELETE SET NULL) and an `EdgeBidi[person]("Spouse", …)`. On each dialect, with persons 1 to 4:
+    - `Insert` of person 5 with `SpouseID: 1` gives person 1 `SpouseID == 5`;
+    - `Save` of person 5 with `SpouseID: 2` gives 1 nil, 2 = 5, and 5 = 2;
+    - `Save` of person 3 with `SpouseID: 4`, then `Save` of person 5 with `SpouseID: 4`, fails with a ConstraintError, and 5 = 2, 2 = 5, 3 = 4 and 4 = 3 are unchanged (C's old partner, as in ent);
+    - `Save` of person 5 with `SpouseID: nil` gives 5 nil and 2 nil;
+    - `Delete` of person 3 leaves 4 nil, through ON DELETE SET NULL;
+    - each case reads the rows back with a `Query` ordered by ID.
+- [ ] **Step 2: Run** `go test -run 'TestBidiOne|TestBidiOneDescRefused' . && go test -run 'TestGolden|TestLower' ./internal/gen`. Expected: FAIL. `EdgeBidi` is undefined, and the golden lacks Spouse.
+- [ ] **Step 3: Implement** as in Interfaces.
+- [ ] **Step 4: Regenerate:** R3, then R2 and R5. Expected:
+  - R3 changes the blog golden's user files, plugin.json and tables entry, for the `user_spouse` column, its unique index and foreign key, and the `Spouse` relation, and changes nothing else;
+  - R2 and R5 change nothing: no other model has a self unique edge without an inverse.
+- [ ] **Step 5: Leftover grep.** `git grep -nP 'EdgeBidi\[' -- '*.go'`. Expected: desc.go, lower.go, lower_test.go, the blog golden's user_velox.go, bidi_test.go, desc_test.go and internal/itest's model. At b3348ba it prints nothing.
+- [ ] **Step 6: Run** `go test -race . ./internal/gen ./cmd/velox-gen`, then `(cd contrib/graphql && go test ./...)`, then run D with `go test -count=1 -run 'TestBidiOnRealDatabases|TestBidiOneOnRealDatabases' ./internal/itest`. Expected: PASS. contrib/graphql's e2e `twin` edge now writes both rows. If an e2e case there created two categories with the same twin, it fails with the ConstraintError. Fix the case's data, not the core, and say so in the commit message.
+- [ ] **Step 7: Commit** `velox: a bidirectional self one-to-one edge keeps both rows' keys pointing at each other, as ent's does (EdgeBidi)`.
+- [ ] **Step 8: Run G, then the gate.** Expected: G clean, gate rc=0.
+
+### Task 11: Perf: large inserts skip the cache, Set clones once, the scope skips trees without EXISTS, loads pin without a DB copy (C30, C41, C43, C91)
 
 **Files:**
 - Modify: `render_cache.go:50-90` (C30), `scope_api.go:340,438-456` and `hook.go:85-99` (C41), `pred.go:35-40,85-117`, `query.go:300-310`, `relation.go:480-485` and `scope.go:455-462` (C43), `load.go:106-215`, `each.go:241`, `query.go:444`, `route.go:448-495`, `db.go:29-31` and `statement.go:203` (C91).
 - Test: `render_cache_test.go`, `hooks_internal_test.go`, `scope_fuzz_test.go` or a new `scope_internal_test.go`, `budget_test.go`.
 
 **Interfaces:**
-- Consumes: Task 7's load.go and Task 9's insert.go.
+- Consumes: Task 7's load.go, and Tasks 9 and 10's insert.go and write.go.
 - Produces:
 
 ```go
@@ -727,7 +869,7 @@ pin target // a With load's: the connection its query ran on, which its reads go
 - [ ] **Step 6: Commit** `velox: inserts above 32 rows skip the render cache, Mutation.Set clones once, the scope skips conditions without EXISTS, With loads pin without copying the DB`.
 - [ ] **Step 7: Run the gate.** Expected: rc=0.
 
-### Task 11: Re-measure the compile-cost and allocation bounds (builder ruling 20, Wave 2)
+### Task 12: Re-measure the compile-cost and allocation bounds (builder ruling 20, Wave 2)
 
 **Files:**
 - Modify: `compilecost_test.go:186-283` (the measured comments and the rows the rule moves).
@@ -760,12 +902,13 @@ Each is a call made while writing this plan. An implementer who finds one wrong 
 3. **(call) C99 pins on any error once the statement reached the driver.** This errs toward the primary, which keeps read-your-writes. A statement refused before sending does not pin.
 4. **(call) C49 re-chunks on overflow, and does not merely count the policy's parameters.** Re-chunking holds whatever the policy or a Rewrite hook adds. Counting would still fail when a hook adds more than 64 parameters. The 64-parameter reserve stays, so that the first try usually fits. The overflow is caught before the Around hooks, so no span records it.
 5. **(call) C30 leaves inserts above 32 rows uncached, and does not bucket their sizes.** Bucketing would split one InsertAll into more statements, which is more round trips. Not caching costs only the render time that a large insert already spends collecting arguments.
-6. **(call) C43 uses a per-node flag, not the triage's per-entity precomputation.** A per-entity flag is unsafe: `Pred[E](Predicate(otherRel.Has()))` converts another entity's EXISTS into E's conditions. Skipping by entity would then drop that target's tenant condition. The node flag is set by the only constructors of And, Or and Not nodes, fits node's padding, and skips exactly the trees that hold no EXISTS.
+6. **(call) C43 uses a per-node flag, not the triage's per-entity precomputation.** A per-entity flag is unsafe: `Pred[E](Predicate(otherRel.Has()))` converts another entity's EXISTS into E's conditions. Skipping by entity would then drop that target's tenant condition. The node flag is set by the only constructors of And, Or and Not nodes, fits node's padding, and skips exactly the trees that hold no EXISTS. The controller confirmed this approach before execution.
 7. **(call) C29 copies deeply**, through pointers, slices, maps, arrays and exported struct fields. A shallow copy would leave a `map[string][]string` Default shared.
 8. **(call) C51.**
    - `Statement.Tenant` shows the value converted for the statement's entity, as builder ruling 8's source asked ("show hooks the converted value").
    - `RowScope.Tenant` and `WithShardFor` see the context's raw id: they describe the context, not a statement.
-   - Integers convert only between predeclared types, as builder ruling 8 says, so `WithTenant(ctx, 1)` does not convert into a column of a named `OrgID int64`. A predeclared string converts into any string-kind column, as the ruling says "between string and a string type".
+   - The controller refined builder ruling 8: a predeclared source converts into a column of the same kind, whether the column's type is predeclared or named. So `WithTenant(ctx, 1)` converts into a column of a named `OrgID int64`, and a `string` into a column of a named string type. Range and sign are checked on the column type's underlying kind.
+   - A named source type is never converted, into any column: a `UserID` given for an `OrgID` column fails with ErrTenantMismatch, even when both are int64.
 9. **(call) C87 and G53 reuse `Route` as `TxInfo.Route`** (builder ruling 15). Its fields match: Replica is always -1 and Fallback always false. The tx duration point gets the shard and target too, as a statement's does.
 10. **(call) C23's bound is 5 s.** database/sql's `Tx.Rollback` takes no context, so on `Open`'s DBs the bound covers ROLLBACK TO only, and Tx's doc says so.
 11. **(call) C34: a savepoint's ROLLBACK TO is bounded by the earlier of the rollback timeout and the transaction's deadline.** Past the deadline the transaction's own ROLLBACK undoes everything anyway. The transaction's ROLLBACK is bounded by the timeout alone, since it must run after the deadline.
@@ -781,8 +924,14 @@ Each is a call made while writing this plan. An implementer who finds one wrong 
 17. **(call) C35 generalizes `hookError` into `stageError`**, so the hook and rewrite stages share one trimming rule.
 18. **(call) C33 joins the timeout first:** `errors.Join(errTimeout(…), err)`, as the transaction's does (tx.go:166).
 
+19. **(controller) G17's O2O half is built in this wave (Task 10).**
+    - A self unique edge with no inverse, which velox-gen marks Bidi, keeps both rows' keys pointing at each other, as ent's spouse edge does.
+    - velox's one assignment of the key does what ent's `ClearX().SetX(c)` does: the old partner is cleared, and the new one is set.
+    - A new partner that already has one is refused with a ConstraintError, and its old partner is untouched, as in ent.
+    - An update that sets the key must name one row by primary key, as ent's `addFKEdges` refuses more than one.
+    - Upserts and InsertAll that set the key are refused, and Delete leaves the partner to the foreign key's ON DELETE, as ent's does.
+    - `Mutation.Affected` counts the caller's rows only.
+
 ## Decisions for the controller before execution
 
-- **G17's O2O half.** velox-gen also marks a self O2O with no inverse `Bidi` (build.go:362-364), and ent sets both rows' keys for one (a "spouse" edge). Builder ruling 18 names only M2M, so this plan leaves O2O one-way. Should O2O be built in this wave, or recorded as a documented difference from ent?
-- **C51's integer rule.** Builder ruling 8 read literally refuses `WithTenant(ctx, 1)` on a column of a named integer type such as `OrgID int64`. That is the very case C51 cites when the column type is named. The plan follows the literal ruling (plan ruling 8). Allowing predeclared → named of the same kind, while still never converting named → named, would cover it.
-- **C43's approach** departs from the triage's "precomputed per entity" for the security reason in plan ruling 6. It needs the controller's acknowledgement.
+None. The three open at a66565a (G17's O2O half, C51's integer rule and C43's approach) were ruled by the controller: plan rulings 19, 8 and 6.
