@@ -858,8 +858,9 @@ func TestCondsAfterNext(t *testing.T) {
 }
 
 // TestSetAffected: a hook that makes the write itself reports its count
-// with SetAffected, and Exec returns it. With next, in either order, or a
-// negative count, it is a misuse.
+// with SetAffected, and Exec returns it, -1, the count its own Exec did not
+// know, included. With next, in either order, or a negative count other than
+// -1, it is a misuse.
 func TestSetAffected(t *testing.T) {
 	e := &velox.FakeExec{Affected: 1}
 	db := velox.OpenFake(velox.Postgres, e)
@@ -890,7 +891,14 @@ func TestSetAffected(t *testing.T) {
 		m.SetAffected(-1)
 		return nil
 	}
-	if n, err := db.Delete[hFlex]().All().Exec(ctx); err == nil || !strings.HasSuffix(err.Error(), "hook: SetAffected of a negative count") || n != 0 {
+	if n, err := db.Delete[hFlex]().All().Exec(ctx); err != nil || n != -1 {
+		t.Errorf("unknown: %v, %d rows; want -1 and no error", err, n)
+	}
+	flexHook = func(ctx context.Context, m *velox.Mutation[hFlex], next velox.Mutator[hFlex]) error {
+		m.SetAffected(-2)
+		return nil
+	}
+	if n, err := db.Delete[hFlex]().All().Exec(ctx); err == nil || !strings.HasSuffix(err.Error(), "hook: SetAffected of a negative count other than -1") || n != 0 {
 		t.Errorf("negative: %v, %d rows", err, n)
 	}
 }

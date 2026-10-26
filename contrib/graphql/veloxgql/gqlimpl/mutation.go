@@ -111,9 +111,13 @@ func CheckExists[E any](ctx context.Context, q velox.Query[E], n int, at, typ st
 
 // matched fails as CheckExists does unless got, the rows a statement counted or
 // changed, is n, the number of distinct IDs of at that it names. More rows
-// than IDs is an internal error: the IDs were not distinct keys.
+// than IDs is an internal error: the IDs were not distinct keys. A count the
+// driver did not report (-1) is CountUnknown's internal error, not a short
+// count.
 func matched(got int64, n int, at, typ string) error {
 	switch {
+	case got < 0:
+		return CountUnknown(at)
 	case got < int64(n) && n == 1:
 		return NotFound(at, typ)
 	case got < int64(n):
@@ -132,9 +136,11 @@ func matched(got int64, n int, at, typ string) error {
 // more is BAD_USER_INPUT "veloxgql: <at>: a <typ> is already linked to another
 // <owner>", which tells the caller nothing it may not read. Otherwise the error
 // is CheckExists's: NOT_FOUND for a child the caller may not change, or that
-// does not exist. The count's own error is returned as it is.
+// does not exist. The count's own error is returned as it is. A got of -1, a
+// count the driver did not report, is CountUnknown's error: the UPDATE's rows
+// cannot be told from the IDs that name no child.
 func Repointed[E any](ctx context.Context, got int64, n int, linked velox.Query[E], at, typ, owner string) error {
-	if got >= int64(n) {
+	if got < 0 || got >= int64(n) {
 		return matched(got, n, at, typ)
 	}
 	c, err := linked.Count(ctx)
@@ -231,6 +237,14 @@ func article(name string) string {
 // code.
 func NotFound(at, typ string) error {
 	return shared.NotFoundf("%s: no %s has this ID", at, typ)
+}
+
+// CountUnknown is the internal error of a write at whose driver did not report
+// the rows it changed (velox's count -1), when the count decides the result:
+// "veloxgql: <at>: row count unknown". For generated code. Returned inside the
+// mutation's transaction, it rolls the write back.
+func CountUnknown(at string) error {
+	return fmt.Errorf("veloxgql: %s: row count unknown", at)
 }
 
 // WriteError is err from a write of entity (the name velox reports, as

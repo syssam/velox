@@ -411,7 +411,9 @@ func insertOne[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *Conflic
 	}
 	out.Affected = res.affected
 	// st.Conflict, not cf: a rewrite hook may have added or removed the clause.
-	if st.Conflict == nil && res.hasLastID && res.affected == 1 {
+	// Without a conflict clause a successful insert wrote its row, whether
+	// the driver reported the count or not (-1).
+	if st.Conflict == nil && res.hasLastID && res.affected != 0 {
 		return setGeneratedKey(m, p, gen, res.lastID)
 	}
 	return nil
@@ -487,11 +489,22 @@ func checkRowTenant(in *EntityInfo, p unsafe.Pointer, id any, all, who string) e
 // denied: the policy's condition kept a conflicting row from being updated.
 var errHiddenRow = errors.New("the existing row is hidden from this upsert")
 
+// errUnknownAffected is why an upsert conditioned on the policy is denied
+// when the driver did not report its count (-1).
+var errUnknownAffected = errors.New("the driver did not report the rows the upsert affected, so a hidden row cannot be told apart")
+
 // checkUpserted denies an upsert whose update branch the scope conditioned on
 // the policy, when it affected fewer rows than it sent: a conflicting row the
-// policy hides was neither inserted nor updated.
+// policy hides was neither inserted nor updated. Without the count (-1) a
+// hidden row cannot be told apart, so it fails closed.
 func checkUpserted(st *Statement, affected int64) error {
-	if cf := st.Conflict; cf != nil && cf.policy && affected < int64(len(st.Rows)) {
+	cf := st.Conflict
+	switch {
+	case cf == nil || !cf.policy:
+		return nil
+	case affected < 0:
+		return &PolicyError{Entity: st.Entity.Name, Op: OpUpdate, Err: errUnknownAffected}
+	case affected < int64(len(st.Rows)):
 		return &PolicyError{Entity: st.Entity.Name, Op: OpUpdate, Err: errHiddenRow}
 	}
 	return nil
@@ -604,9 +617,10 @@ func insertMany[E any](ctx context.Context, db *DB, m *Meta[E], xs []E, cf *Conf
 }
 
 // insertBatches sends xs, prepared, in statements of at most per rows, and
-// returns the rows they affected.
+// returns the rows they affected: -1 when a batch's count is unknown.
 func insertBatches[E any](ctx context.Context, db *DB, m *Meta[E], xs []E, cols []int, per int, cf *ConflictClause) (int64, error) {
 	var affected int64
+	unknown := false
 	for start := 0; start < len(xs); start += per {
 		st := batch(m, xs[start:min(start+per, len(xs))], cols, cf, db.inTx)
 		res, err := execWrite(ctx, db, &st)
@@ -616,7 +630,13 @@ func insertBatches[E any](ctx context.Context, db *DB, m *Meta[E], xs []E, cols 
 		if err := checkUpserted(&st, res.affected); err != nil {
 			return 0, err
 		}
+		if res.affected < 0 {
+			unknown = true
+		}
 		affected += res.affected
+	}
+	if unknown {
+		return -1, nil
 	}
 	return affected, nil
 }

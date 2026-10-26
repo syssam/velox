@@ -118,7 +118,7 @@ func mutate(ctx context.Context, db *DB, in *EntityInfo, mu *mutation, core muta
 			if mu.err == nil {
 				mu.err = errNextTwice
 			}
-			mu.core = &hookError{in.Name, errNextTwice}
+			mu.core = &stageError{in.Name, "hook", errNextTwice}
 			return mu.core
 		}
 		mu.called = true
@@ -133,7 +133,7 @@ func mutate(ctx context.Context, db *DB, in *EntityInfo, mu *mutation, core muta
 		if mu.err != nil {
 			// Refuse before sending: the misuse would otherwise be
 			// reported only after the write was made.
-			mu.core = &hookError{in.Name, mu.err}
+			mu.core = &stageError{in.Name, "hook", mu.err}
 			return mu.core
 		}
 		mu.core = core(ctx, mu)
@@ -145,11 +145,11 @@ func mutate(ctx context.Context, db *DB, in *EntityInfo, mu *mutation, core muta
 	err := next(ctx, mu)
 	switch {
 	case err == nil && mu.err != nil:
-		return &hookError{in.Name, mu.err}
+		return &stageError{in.Name, "hook", mu.err}
 	case err == nil, identical(err, mu.core):
 		return err
 	}
-	return &hookError{in.Name, err}
+	return &stageError{in.Name, "hook", err}
 }
 
 // identical reports whether err is core itself. An error whose type cannot be

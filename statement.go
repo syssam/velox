@@ -218,7 +218,8 @@ type Result struct {
 	Rows int64
 	// Affected is the rows a write affected: the driver's count for one sent
 	// without RETURNING, the rows returned for one sent with it. It is -1
-	// for a read and for a failed statement.
+	// for a read, for a failed statement, and for a write whose driver could
+	// not report its count.
 	Affected int64
 	// LoopBody is the time Iter's caller spent in the loop body, summed over
 	// the rows it yielded, the last one included when the loop broke or the

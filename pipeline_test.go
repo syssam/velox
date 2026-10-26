@@ -327,3 +327,32 @@ func TestRewriteColumnsAreChecked(t *testing.T) {
 		})
 	}
 }
+
+// TestCheckColumnsRefusesAForeignExists: a Rewrite hook that puts another
+// entity's relation into a statement, through a Predicate conversion, is
+// refused when the relation's owner column is out of the statement entity's
+// range, instead of panicking in rendering; nothing is sent.
+func TestCheckColumnsRefusesAForeignExists(t *testing.T) {
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+		if st.Entity.Table == "pcomments" {
+			// pnote's Parent relation is owned by its column 3; a
+			// pcomment has 2.
+			st.Where = append(st.Where, velox.Predicate(pn.Parent.Has()))
+		}
+		return nil
+	}))
+	var err error
+	func() {
+		defer func() {
+			if p := recover(); p != nil {
+				t.Fatalf("panicked: %v", p)
+			}
+		}()
+		_, err = db.Query[pcomment]().Limit(1).All(context.Background())
+	}()
+	const want = "velox: velox_test.pcomment: a Rewrite hook set column 3, the entity has 2 columns"
+	if err == nil || err.Error() != want || e.Calls != 0 {
+		t.Errorf("%v, calls %d; want %q", err, e.Calls, want)
+	}
+}

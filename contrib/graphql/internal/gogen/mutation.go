@@ -868,6 +868,11 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 	f.p("\t\t\tif n == 0 {")
 	f.p("\t\t\t\treturn %s.NotFound(%q, %q)", impl, mutation, n)
 	f.p("\t\t\t}")
+	// -1: the driver did not report the count, and the row is checked
+	// as when there is nothing to set.
+	f.p("\t\t\tif n < 0 {")
+	r.lockedCheck(f, e, pk, mutation, n, impl, velox, "\t\t\t\t")
+	f.p("\t\t\t}")
 	f.p("\t\t} else {")
 	r.lockedCheck(f, e, pk, mutation, n, impl, velox, "\t\t\t")
 	f.p("\t\t}")
@@ -1166,6 +1171,11 @@ func (r *renderer) writeDelete(f *file, t *sdl.Type) error {
 	f.p("\t\t}")
 	f.p("\t\tif n == 0 {")
 	f.p("\t\t\treturn %s.NotFound(%q, %q)", impl, mutation, n)
+	f.p("\t\t}")
+	// -1: the driver did not report the count. The row may not have been
+	// deleted, so the mutation fails closed and the transaction rolls back.
+	f.p("\t\tif n < 0 {")
+	f.p("\t\t\treturn %s.CountUnknown(%q)", impl, mutation)
 	f.p("\t\t}")
 	f.p("\t\treturn nil")
 	f.p("\t})")

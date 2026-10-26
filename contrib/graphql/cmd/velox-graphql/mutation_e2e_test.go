@@ -172,6 +172,114 @@ func (*Circle) Policy() velox.Policy[Circle] {
 }
 `
 
+// e2eMutCountless is the application's test of the generated mutations on a
+// driver whose results cannot report the rows a statement changed, for which
+// velox's count is -1: SQLite behind a wrapper whose RowsAffected fails.
+const e2eMutCountless = `package app_test
+
+import (
+	"context"
+	"database/sql"
+	"database/sql/driver"
+	"errors"
+	"sync"
+	"testing"
+
+	"example.com/app/gen"
+	"github.com/syssam/velox2"
+	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+)
+
+// countless is a driver whose results report no count.
+type countless struct{ driver.Driver }
+
+// countlessInner is what the wrapped SQLite connection implements, and
+// countlessConn passes on.
+type countlessInner interface {
+	driver.Conn
+	driver.ExecerContext
+	driver.QueryerContext
+	driver.ConnBeginTx
+	driver.ConnPrepareContext
+}
+
+type countlessConn struct{ countlessInner }
+
+type countlessResult struct{ driver.Result }
+
+func (d countless) Open(name string) (driver.Conn, error) {
+	c, err := d.Driver.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	return countlessConn{c.(countlessInner)}, nil
+}
+
+func (c countlessConn) ExecContext(ctx context.Context, q string, args []driver.NamedValue) (driver.Result, error) {
+	r, err := c.countlessInner.ExecContext(ctx, q, args)
+	if err != nil {
+		return nil, err
+	}
+	return countlessResult{r}, nil
+}
+
+func (countlessResult) RowsAffected() (int64, error) { return 0, errors.New("countless: no count") }
+
+var registerCountless sync.Once
+
+// TestUnknownRowCount: with the count unknown, updateWriter checks the row
+// as when it has nothing to set, deleteWriter fails closed and rolls back,
+// and a create that re-points articles fails with the same internal error,
+// not NOT_FOUND.
+func TestUnknownRowCount(t *testing.T) {
+	registerCountless.Do(func() {
+		probe, err := sql.Open("sqlite", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		sql.Register("countless-sqlite", countless{probe.Driver()})
+		_ = probe.Close()
+	})
+	raw := sqlOpen(t, "countless-sqlite", "file::memory:?_pragma=foreign_keys(1)")
+	raw.SetMaxOpenConns(1)
+	for _, s := range sqliteDDL {
+		if _, err := raw.Exec(s); err != nil {
+			t.Fatalf("%s: %v", s, err)
+		}
+	}
+	db := velox.Open(velox.SQLite, raw)
+	ctx := velox.WithTenant(veloxgql.NewExtension(db).NewContext(context.Background()), int64(7))
+	w := &gen.Writer{Name: "w", Password: "x"}
+	insert(t, ctx, db, w)
+	a := &gen.Article{Title: "a"}
+	insert(t, ctx, db, a)
+
+	if _, err := gen.UpdateWriter(ctx, writerID(w.ID), gen.UpdateWriterInput{Name: ptr("w2")}); err != nil {
+		t.Errorf("updateWriter of a writer: %v", err)
+	}
+	_, err := gen.UpdateWriter(ctx, writerID(w.ID+100), gen.UpdateWriterInput{Name: ptr("w3")})
+	if code(err) != veloxgql.CodeNotFound || err.Error() != "veloxgql: updateWriter: no Writer has this ID" {
+		t.Errorf("updateWriter of no writer: %v (code %q), want NOT_FOUND", err, code(err))
+	}
+
+	_, err = gen.DeleteWriter(ctx, writerID(w.ID))
+	if code(err) != "" || err == nil || err.Error() != "veloxgql: deleteWriter: row count unknown" {
+		t.Errorf("deleteWriter: %v (code %q), want the internal error", err, code(err))
+	}
+	if n := count(t, ctx, db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(w.ID))); n != 1 {
+		t.Errorf("%d writers after the failed delete, want 1: it rolls back", n)
+	}
+
+	_, err = gen.CreateWriter(ctx, gen.CreateWriterInput{Name: "new", Password: "x", ArticleIDs: []string{articleID(a.ID)}})
+	if code(err) != "" || err == nil || err.Error() != "veloxgql: CreateWriterInput.articleIDs: row count unknown" {
+		t.Errorf("createWriter re-pointing an article: %v (code %q), want the internal error", err, code(err))
+	}
+	if n := count(t, ctx, db.Query[gen.Writer]().Where(gen.Writers.Name.EQ("new"))); n != 0 {
+		t.Errorf("%d writers named new, want 0: the create rolls back", n)
+	}
+}
+`
+
 // e2eMutRun is the application's test of the generated create, update and
 // delete mutations, run on each of targets' databases.
 const e2eMutRun = `package app_test
@@ -1666,7 +1774,7 @@ func TestMutationsRun(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
-	_, run := app(t, map[string]string{"schema/schema.go": e2eMutSchema, "gen/article_policy.go": e2eMutPolicy, "gen/circle_policy.go": e2eMutCirclePolicy, "gen/writer_policy.go": e2eMutWriterPolicy, "mutation_test.go": e2eMutRun})
+	_, run := app(t, map[string]string{"schema/schema.go": e2eMutSchema, "gen/article_policy.go": e2eMutPolicy, "gen/circle_policy.go": e2eMutCirclePolicy, "gen/writer_policy.go": e2eMutWriterPolicy, "mutation_test.go": e2eMutRun, "countless_test.go": e2eMutCountless})
 	if out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql", "./schema"); err != nil {
 		t.Fatalf("generate: %v\n%s", err, out)
 	}
@@ -1701,6 +1809,10 @@ func TestMutationsRun(t *testing.T) {
 				t.Errorf("no PASS of %s/%s in\n%s", name, tg, out)
 			}
 		}
+	}
+	// It runs on SQLite only, behind a driver that reports no count.
+	if !strings.Contains(out, "--- PASS: TestUnknownRowCount ") {
+		t.Errorf("no PASS of TestUnknownRowCount in\n%s", out)
 	}
 	for _, tg := range targets {
 		t.Logf("%s: %d tests passed", tg, strings.Count(out, "/"+tg+" ("))

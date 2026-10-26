@@ -148,20 +148,20 @@ func (e *ConstraintError) Error() string {
 // Unwrap is Err.
 func (e *ConstraintError) Unwrap() error { return e.Err }
 
-// hookError is the error of an entity hook: "velox: <Entity>: hook: <err>".
-// An err whose text already starts "velox: <Entity>: ", such as an invalid
-// condition a Mutation recorded, does not name the entity twice.
-type hookError struct {
-	entity string
-	err    error
+// stageError is the error of a hook stage: "velox: <Entity>: <stage>: <err>",
+// stage "hook" or "rewrite"; an err whose text starts "velox: <Entity>: " does
+// not name the entity twice.
+type stageError struct {
+	entity, stage string
+	err           error
 }
 
-func (e *hookError) Error() string {
+func (e *stageError) Error() string {
 	msg := e.err.Error()
 	if p := "velox: " + e.entity + ": "; strings.HasPrefix(msg, p) {
 		msg = msg[len(p):]
 	}
-	return "velox: " + e.entity + ": hook: " + msg
+	return "velox: " + e.entity + ": " + e.stage + ": " + msg
 }
 
-func (e *hookError) Unwrap() error { return e.err }
+func (e *stageError) Unwrap() error { return e.err }

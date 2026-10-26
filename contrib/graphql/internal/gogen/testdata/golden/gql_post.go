@@ -810,6 +810,17 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 			if n == 0 {
 				return gqlimpl.NotFound("updatePost", "Post")
 			}
+			if n < 0 {
+				chk := db.Query[Post]().Where(Posts.ID.EQ(key)).Writable()
+				if db.Dialect() != velox.SQLite {
+					chk = chk.ForUpdate()
+				}
+				if ok, err := chk.Exists(ctx); err != nil {
+					return err
+				} else if !ok {
+					return gqlimpl.NotFound("updatePost", "Post")
+				}
+			}
 		} else {
 			chk := db.Query[Post]().Where(Posts.ID.EQ(key)).Writable()
 			if db.Dialect() != velox.SQLite {
@@ -937,6 +948,9 @@ func DeletePost(ctx context.Context, id string) (string, error) {
 		}
 		if n == 0 {
 			return gqlimpl.NotFound("deletePost", "Post")
+		}
+		if n < 0 {
+			return gqlimpl.CountUnknown("deletePost")
 		}
 		return nil
 	})

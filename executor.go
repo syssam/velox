@@ -72,9 +72,11 @@ func (e sqlExecutor) exec(ctx context.Context, s string, args []any) (result, er
 	if err != nil {
 		return result{}, err
 	}
+	// The statement ran: a driver that cannot count its rows leaves the
+	// count unknown, -1, rather than failing a write that was made.
 	n, err := res.RowsAffected()
 	if err != nil {
-		return result{}, err
+		n = -1
 	}
 	id, idErr := res.LastInsertId()
 	return result{affected: n, lastID: id, hasLastID: idErr == nil}, nil

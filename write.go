@@ -70,7 +70,8 @@ func (u UpdateQuery[E]) statement[_ Lazy[E]]() (Statement, error) {
 }
 
 // Exec runs the update and returns the number of rows it matched (on MySQL,
-// with clientFoundRows=true; without it, the rows whose values changed).
+// with clientFoundRows=true; without it, the rows whose values changed), or
+// -1 when the driver could not report its count.
 //
 // The guard runs first, on the statement as built, then the entity's hooks
 // (Hooks). Then Exec adds an assignment for every column with an
@@ -142,7 +143,8 @@ func (d DeleteQuery[E]) All[_ Lazy[E]]() DeleteQuery[E] {
 	return d
 }
 
-// Exec runs the delete and returns the number of rows it removed.
+// Exec runs the delete and returns the number of rows it removed, or -1 when
+// the driver could not report its count.
 func (d DeleteQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 	if d.meta.err != nil {
 		return 0, d.meta.err

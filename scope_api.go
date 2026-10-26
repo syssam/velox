@@ -295,15 +295,18 @@ func (m *Mutation[E]) Conds[_ Lazy[E]]() []Pred[E] {
 // next has returned, or the count the hook gave SetAffected. It is 0 before
 // then, after next returned an error (an insert sets it only when every
 // statement succeeded and no upsert was denied), under SQL(ctx), which sends
-// nothing, and when a hook skipped next without calling SetAffected.
+// nothing, and when a hook skipped next without calling SetAffected. It is
+// -1 for a write whose driver could not report its count.
 func (m *Mutation[E]) Affected[_ Lazy[E]]() int64 { return m.mu.affected }
 
 // SetAffected is for a hook that makes an update or a delete itself instead
 // of calling next, such as a soft delete (see Mutation): n is the rows its
 // own write affected, which the update's or delete's Exec returns. A Save's
 // Exec returns no count and stores nothing in its entity, as velox wrote
-// nothing. Calling it and next both, in either order, with a negative n, or
-// on an insert, whose count is its rows, is a misuse.
+// nothing. An n of -1 is a count the driver did not report, as the hook's
+// own Exec returns it, and is passed on. Calling it and next both, in either
+// order, with a negative n other than -1, or on an insert, whose count is its
+// rows, is a misuse.
 func (m *Mutation[E]) SetAffected[_ Lazy[E]](n int64) {
 	m.mu.setAffected(n)
 }
@@ -315,7 +318,7 @@ func (mu *mutation) setAffected(n int64) {
 		mu.record(errInsertAffected)
 	case mu.called:
 		mu.record(errOwnAndNext)
-	case n < 0:
+	case n < -1:
 		mu.record(errNegativeAffected)
 	default:
 		mu.affected, mu.own = n, true
@@ -325,8 +328,9 @@ func (mu *mutation) setAffected(n int64) {
 // errInsertAffected is the misuse of SetAffected on an insert.
 var errInsertAffected = errors.New("SetAffected is for updates and deletes; an insert's count is its rows")
 
-// errNegativeAffected is the misuse of SetAffected with a negative count.
-var errNegativeAffected = errors.New("SetAffected of a negative count")
+// errNegativeAffected is the misuse of SetAffected with a negative count
+// other than -1, the unknown count.
+var errNegativeAffected = errors.New("SetAffected of a negative count other than -1")
 
 // Set adds assignments to an update; each replaces the statement's
 // assignment of the same column, if there is one. Set on a delete or an

@@ -528,6 +528,8 @@ func (w *writer) pred(n node) {
 		w.exists(n)
 	case opThrough:
 		w.through(n)
+	default:
+		w.fail(fmt.Errorf("velox: %s: a condition of unknown kind %d", w.in.Name, n.op))
 	}
 }
 

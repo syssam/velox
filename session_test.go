@@ -73,7 +73,11 @@ func TestDefaultPinWindow(t *testing.T) {
 	}
 }
 
-func TestFailedWriteDoesNotPin(t *testing.T) {
+// TestFailedWritePinsTheSession: a write that reached the database pins its
+// session even when it failed, as its outcome is unknown: an insert the
+// primary failed, an update whose connection reset, an insert whose RETURNING
+// row did not scan. A write refused before it was sent does not pin.
+func TestFailedWritePinsTheSession(t *testing.T) {
 	bothPaths(t, func(t *testing.T, hooked bool) {
 		s := seeded(hooked)
 		sctx := velox.WithSession(ctx)
@@ -83,10 +87,45 @@ func TestFailedWriteDoesNotPin(t *testing.T) {
 			t.Fatal("the insert should fail")
 		}
 		s.p.Err = nil
+		if u := velox.PinnedUntil(sctx); !u.After(time.Now()) {
+			t.Errorf("PinnedUntil %v after a failed insert, want a time to come", u)
+		}
 		readOne(t, sctx, s.db)
-		s.check(t, hooked, [3]int{1, 1, 0}, onPrimary, onR0)
+		s.check(t, hooked, [3]int{2, 0, 0}, onPrimary, onPrimary)
+
+		sctx = velox.WithSession(ctx)
+		s.p.Errs = []error{errors.New("connection reset")}
+		if _, err := s.db.Update[testmodel.Invoice]().Set(I.Paid.Set(true)).Where(I.ID.EQ(1)).Exec(sctx); err == nil {
+			t.Fatal("the update should fail")
+		}
+		if u := velox.PinnedUntil(sctx); !u.After(time.Now()) {
+			t.Errorf("PinnedUntil %v after a failed update, want a time to come", u)
+		}
+
+		sctx = velox.WithSession(ctx)
+		s.p.Results = [][][]any{{{int64(42), int64(43)}}} // two values for one key
+		if err := s.db.Insert(&testmodel.Invoice{OrgID: 1, Number: "N"}).Exec(sctx); err == nil {
+			t.Fatal("the insert's scan should fail")
+		}
+		if u := velox.PinnedUntil(sctx); !u.After(time.Now()) {
+			t.Errorf("PinnedUntil %v after a failed scan, want a time to come", u)
+		}
+
+		sctx = velox.WithSession(ctx)
+		restore := velox.SetMaxParams(velox.Postgres, 1)
+		_, err := s.db.Update[testmodel.Invoice]().Set(I.Paid.Set(true)).Where(I.ID.EQ(1)).Exec(sctx)
+		restore()
+		if err == nil {
+			t.Fatal("the update over the parameter limit should fail")
+		}
 		if u := velox.PinnedUntil(sctx); !u.IsZero() {
-			t.Errorf("PinnedUntil %v after a failed write, want zero", u)
+			t.Errorf("PinnedUntil %v after an update refused before sending, want zero", u)
+		}
+		if _, err := s.db.Update[testmodel.Invoice]().Set(I.Paid.Set(true)).Exec(sctx); !errors.Is(err, velox.ErrNoWhere) {
+			t.Fatalf("an update without Where: %v, want ErrNoWhere", err)
+		}
+		if u := velox.PinnedUntil(sctx); !u.IsZero() {
+			t.Errorf("PinnedUntil %v after ErrNoWhere, want zero", u)
 		}
 	})
 }

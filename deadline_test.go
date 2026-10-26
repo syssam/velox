@@ -126,7 +126,7 @@ func TestStatementOnTheTxContextTimesOut(t *testing.T) {
 			_, stmt = tx.Query[testmodel.Invoice]().Limit(1).All(ctx)
 			return stmt
 		}, velox.TxTimeout(20*time.Millisecond))
-		want := "velox: testmodel.Invoice: deadline set by velox passed: context deadline exceeded"
+		want := "velox: testmodel.Invoice: deadline set by velox passed: context deadline exceeded\nvelox: testmodel.Invoice: context deadline exceeded"
 		if !errors.Is(stmt, velox.ErrTimeout) || !errors.Is(stmt, context.DeadlineExceeded) || stmt.Error() != want {
 			t.Errorf("hooked=%v: the statement failed with %v, want %q", hooked, stmt, want)
 		}

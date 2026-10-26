@@ -21,10 +21,11 @@ func errNoReason(name string) error {
 }
 
 // Exec runs query, raw SQL that returns no rows, with args, and returns the
-// number of rows it affected, as the driver counts them. reason says why the
-// statement may skip the tenant scope and the policy; if it is empty or only
-// white space, Exec fails before anything runs. The hooks see reason as
-// given, untrimmed. See Raw for what raw SQL goes through, and what it skips.
+// number of rows it affected, as the driver counts them, or -1 when the
+// driver could not report its count. reason says why the statement may skip
+// the tenant scope and the policy; if it is empty or only white space, Exec
+// fails before anything runs. The hooks see reason as given, untrimmed. See
+// Raw for what raw SQL goes through, and what it skips.
 //
 // velox treats Exec as a write (OpRawExec), whatever its SQL: it goes to the
 // primary, pins the session (WithSession), and fails with ErrDryRun under a

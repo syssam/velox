@@ -101,10 +101,14 @@ type Shard struct {
 // whose context names another fails, and nothing is sent.
 //
 // WithShardFor is required, and WithReplicas is refused: each Shard has its
-// own Replicas. OpenShards panics on either mistake, on no shards, on a shard
-// named "" and on a shard whose Primary or a replica is the zero Conn, or a
-// PgxConn when d is not PostgreSQL.
+// own Replicas. OpenShards panics on either mistake, on a d that is not
+// Postgres, MySQL or SQLite, on no shards, on a shard named "" and on a shard
+// whose Primary or a replica is the zero Conn, or a PgxConn when d is not
+// PostgreSQL.
 func OpenShards(d Dialect, shards map[string]Shard, opts ...Option) *DB {
+	if !d.valid() {
+		panic(fmt.Sprintf("velox: OpenShards: unknown %v; use velox.Postgres, velox.MySQL or velox.SQLite", d))
+	}
 	if len(shards) == 0 {
 		panic("velox: OpenShards: no shards")
 	}
@@ -183,11 +187,12 @@ func WithPrimaryReads(ctx context.Context) context.Context {
 // request's: after a write made through the context (or a context derived
 // from it), the session's reads go to the primary for the DB's pin window
 // (WithPinWindow), so that the session reads its own writes from a replica
-// that may not have them yet. A transaction that wrote and committed counts as
-// a write, at its commit. Without a session in the context, nothing is
-// pinned. A session is safe for concurrent use and lives only in its context;
-// a context derived from a session's keeps it, and WithSession on one starts
-// a new one.
+// that may not have them yet. A write pins it once it has reached the
+// database, even when it then fails: its outcome is unknown. A transaction
+// that wrote and committed counts as a write, at its commit. Without a
+// session in the context, nothing is pinned. A session is safe for
+// concurrent use and lives only in its context; a context derived from a
+// session's keeps it, and WithSession on one starts a new one.
 func WithSession(ctx context.Context) context.Context {
 	rc, _ := ctx.Value(routeKey{}).(routeCtx)
 	rc.sess = new(session)
@@ -272,9 +277,10 @@ func (s *session) pinned() bool {
 	return u != 0 && time.Now().UnixNano() < u
 }
 
-// wrote records that a statement wrote successfully: in a transaction, in the
-// flag its commit reads; outside one, in the context's session. A DB without
-// replicas keeps no record.
+// wrote records that a write reached the driver, whether or not it then
+// failed, as its outcome is unknown: in a transaction, in the flag its commit
+// reads; outside one, in the context's session. A DB without replicas keeps
+// no record.
 func (db *DB) wrote(ctx context.Context) {
 	if db.inTx {
 		if db.txWrote != nil {

@@ -428,6 +428,17 @@ func UpdateCategory(ctx context.Context, id string, input UpdateCategoryInput) (
 			if n == 0 {
 				return gqlimpl.NotFound("updateCategory", "Category")
 			}
+			if n < 0 {
+				chk := db.Query[Category]().Where(Categories.ID.EQ(key)).Writable()
+				if db.Dialect() != velox.SQLite {
+					chk = chk.ForUpdate()
+				}
+				if ok, err := chk.Exists(ctx); err != nil {
+					return err
+				} else if !ok {
+					return gqlimpl.NotFound("updateCategory", "Category")
+				}
+			}
 		} else {
 			chk := db.Query[Category]().Where(Categories.ID.EQ(key)).Writable()
 			if db.Dialect() != velox.SQLite {

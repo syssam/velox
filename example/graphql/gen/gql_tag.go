@@ -491,6 +491,17 @@ func UpdateLabel(ctx context.Context, id string, input UpdateLabelInput) (*Tag, 
 			if n == 0 {
 				return gqlimpl.NotFound("updateLabel", "Label")
 			}
+			if n < 0 {
+				chk := db.Query[Tag]().Where(Tags.ID.EQ(key)).Writable()
+				if db.Dialect() != velox.SQLite {
+					chk = chk.ForUpdate()
+				}
+				if ok, err := chk.Exists(ctx); err != nil {
+					return err
+				} else if !ok {
+					return gqlimpl.NotFound("updateLabel", "Label")
+				}
+			}
 		} else {
 			chk := db.Query[Tag]().Where(Tags.ID.EQ(key)).Writable()
 			if db.Dialect() != velox.SQLite {

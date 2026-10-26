@@ -556,7 +556,8 @@ func TestUnlinkAll(t *testing.T) {
 
 // TestRepointed: an UPDATE that re-pointed fewer children than its IDs fails
 // with BAD_USER_INPUT when linked counts a child another owner holds, and as
-// CheckExists does otherwise; one that re-pointed them all runs no query.
+// CheckExists does otherwise; one that re-pointed them all runs no query. A
+// count the driver did not report (-1) is an internal error.
 func TestRepointed(t *testing.T) {
 	db, _ := mutationDB(t)
 	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
@@ -581,6 +582,10 @@ func TestRepointed(t *testing.T) {
 		{0, 1, linked, "Article", "Writer", veloxgql.CodeBadUserInput, "veloxgql: " + at + ": an Article is already linked to another Writer"},
 		{1, 2, none, "Post", "Account", veloxgql.CodeNotFound, "veloxgql: " + at + ": 1 of the 2 IDs name no Post"},
 		{0, 1, none, "Post", "Account", veloxgql.CodeNotFound, "veloxgql: " + at + ": no Post has this ID"},
+		// A count the driver did not report is not a short one: an internal
+		// error, not NOT_FOUND.
+		{-1, 1, none, "Post", "Account", "", "veloxgql: " + at + ": row count unknown"},
+		{-1, 2, linked, "Post", "Account", "", "veloxgql: " + at + ": row count unknown"},
 	} {
 		err := gqlimpl.Repointed(ann, c.got, c.n, c.q, at, c.typ, c.owner)
 		if err == nil || err.Error() != c.want || codeOf(err) != c.code {

@@ -3,6 +3,7 @@ package velox
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"math"
 	"slices"
@@ -125,8 +126,12 @@ func WithAround(a Around) Option {
 // an UPDATE count every row it matched as affected, even one whose values did
 // not change, which Save relies on. For SQLite, foreign keys are enforced
 // only when the DSN asks for it (modernc.org/sqlite:
-// _pragma=foreign_keys(1)).
+// _pragma=foreign_keys(1)). Open panics on a d that is not Postgres, MySQL or
+// SQLite.
 func Open(d Dialect, db *sql.DB, opts ...Option) *DB {
+	if !d.valid() {
+		panic(fmt.Sprintf("velox: Open: unknown %v; use velox.Postgres, velox.MySQL or velox.SQLite", d))
+	}
 	return newDB(d, sqlExecutor{c: db, db: db}, opts)
 }
 
@@ -239,7 +244,7 @@ func (db *DB) plain(ctx context.Context, st *Statement, read func(rows) error, r
 	}
 	if err := db.exec(tctx, st, t, read, res); err != nil {
 		if timedOut(tctx) {
-			return errTimeout(st.Entity.Name)
+			return errors.Join(errTimeout(st.Entity.Name), err)
 		}
 		return err
 	}
@@ -272,7 +277,7 @@ func (db *DB) run(ctx context.Context, st *Statement, read func(rows) error, res
 		}
 		if err := db.execute(tctx, st, t, read, res); err != nil {
 			if timedOut(tctx) {
-				return errTimeout(st.Entity.Name)
+				return errors.Join(errTimeout(st.Entity.Name), err)
 			}
 			return err
 		}
@@ -339,7 +344,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	each := st.Each
 	for _, rw := range db.cfg.rewrites {
 		if err := rw(ctx, st); err != nil {
-			return fmt.Errorf("velox: %s: rewrite: %w", entity.Name, err)
+			return &stageError{entity.Name, "rewrite", err}
 		}
 	}
 	if st.Op != op {
@@ -572,9 +577,12 @@ func checkColumns(st *Statement) error {
 			}
 			return nil
 		case opExists:
-			// Only the owner's column is the statement's entity's; the kids
-			// are conditions on the target, made by HasWhere. A Rewrite hook
-			// may have added one whose relation is not resolved yet.
+			// A backstop: a hook can put another entity's relation here
+			// through a Predicate conversion, and an owner column out of this
+			// entity's range would make rendering panic. Only the owner's
+			// column is the statement's entity's; the kids are conditions on
+			// the target, made by HasWhere. A Rewrite hook may have added one
+			// whose relation is not resolved yet.
 			l, err := existsLink(nd)
 			if err != nil {
 				return err
@@ -746,6 +754,11 @@ func (db *DB) exec(ctx context.Context, st *Statement, t target, read func(rows)
 	st.ran = t
 	if read == nil {
 		r, err := t.ex.exec(ctx, st.SQL, st.Args)
+		if !st.Op.Reads() {
+			// It reached the database: whether it failed or not, its
+			// outcome may be written.
+			db.wrote(ctx)
+		}
 		if err != nil {
 			return dbErr(st.Entity, err)
 		}
@@ -753,12 +766,14 @@ func (db *DB) exec(ctx context.Context, st *Statement, t target, read func(rows)
 		if res != nil {
 			*res = r
 		}
-		if !st.Op.Reads() {
-			db.wrote(ctx)
-		}
 		return nil
 	}
 	r, err := t.ex.query(ctx, st.SQL, st.Args)
+	if !st.Op.Reads() {
+		// As for exec: a write that reached the database pins, whatever
+		// came back. A write is not failed over, so it is sent only here.
+		db.wrote(ctx)
+	}
 	if err != nil {
 		if !db.broken(ctx, t, err) {
 			return dbErr(st.Entity, err)
@@ -821,9 +836,6 @@ func (db *DB) exec(ctx context.Context, st *Statement, t target, read func(rows)
 			// The rows a write returned are the rows it affected.
 			st.Result.Affected = counted.n
 		}
-	}
-	if !st.Op.Reads() && err == nil {
-		db.wrote(ctx)
 	}
 	return err
 }

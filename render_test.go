@@ -541,3 +541,12 @@ func TestNewClausesOnEveryDialect(t *testing.T) {
 		}
 	}
 }
+
+// TestUnknownOpIsRefused: a condition of a kind the renderer does not know
+// fails rendering with an error instead of rendering nothing.
+func TestUnknownOpIsRefused(t *testing.T) {
+	_, _, err := renderStmt(Postgres, &Statement{Op: OpSelect, Entity: invInfo, Where: []Predicate{{node{op: 200}}}})
+	if want := "velox: velox.inv: a condition of unknown kind 200"; err == nil || err.Error() != want {
+		t.Errorf("got %v, want %q", err, want)
+	}
+}
