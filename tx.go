@@ -136,7 +136,7 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error
 		defer cancel()
 		cause = ErrTimeout
 	}
-	info := db.newTxInfo(o)
+	info := db.newTxInfo(o, sh)
 	if len(db.cfg.txArounds) == 0 {
 		// No closure here: one passed to the hooks escapes, and would cost
 		// a DB with nothing configured an allocation per transaction.

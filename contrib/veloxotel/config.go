@@ -31,16 +31,18 @@ type Config struct {
 	RecordMetricFingerprint bool // add velox.fingerprint to the statement metrics
 	RecordReturnedRows      bool // add db.response.returned_rows to spans
 
-	// Target names the server every statement runs on, for its span and
-	// its duration point. The adapter sees no connection string: give it
-	// in the database system's form.
+	// Target names the server every statement and transaction runs on, for
+	// its span and its duration point. The adapter sees no connection
+	// string: give it in the database system's form.
 	Target Target
 	// TargetFor names the server per route, for a DB with shards or
 	// replicas; when set, it is used instead of Target. It is called once
 	// per statement, after it ran, with its final route: a read that fell
 	// over from a failed replica names the primary. Its attributes are
-	// therefore not start attributes. The package doc has an example. It
-	// must be safe for concurrent use.
+	// therefore not a statement's start attributes. A transaction's route
+	// is known when it starts: TargetFor is called with it then, for the
+	// span, and again for its duration point. The package doc has an
+	// example. It must be safe for concurrent use.
 	TargetFor func(r velox.Route) Target
 }
 

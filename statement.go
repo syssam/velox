@@ -193,7 +193,9 @@ type Statement struct {
 	// Around hook reads it, with one exception: setting Route.Fallback to true
 	// sends the hook's retry to the primary. Changing WithPrimaryReads,
 	// WithShard or WithSession in the context passed to next does not re-route
-	// the statement, as routing happens before the Around hooks.
+	// the statement, as routing happens before the Around hooks. A fallback
+	// keeps Route.Fallback set for the hook's later calls to next; a hook
+	// that counts failovers compares it with its value before next.
 	Route Route
 	// Result is reset before the Around hooks run, and set by each
 	// execution before next returns to them; a hook that retries sees the

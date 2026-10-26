@@ -64,8 +64,11 @@
 // The transaction's span, velox.tx, is of kind internal and covers every
 // attempt TxRetrySerializable makes and the commit. It carries the isolation
 // level, the read-only flag, the final attempt count and the outcome
-// (commit, rollback or error), with a "retry" event per retried attempt. A
-// savepoint (a nested Tx) makes no span of its own.
+// (commit, rollback or error), with a "retry" event per retried attempt. Its
+// start attributes also name where it runs, from velox.TxInfo.Route: the shard
+// as velox.route.shard on a sharded DB, and the server, Config.Target's or
+// TargetFor's for the shard's primary. A savepoint (a nested Tx) makes no span
+// of its own.
 //
 // A panic in the transaction's function, or in an Iter loop body, ends the
 // open spans with the status Error and the description "panic", records the
@@ -78,8 +81,9 @@
 // is a start attribute, so samplers and span processors see it.
 // velox.route.replica (whether a replica ran the statement) and
 // velox.route.fallback (a replica failed and the primary ran the read; only
-// when true) are set when the statement ends, because they can change while
-// it runs.
+// when true, and only on the span of the execution that fell over, not on an
+// outer hook's retry of it) are set when the statement ends, because they can
+// change while it runs.
 //
 // The adapter sees no connection string, so the application names the
 // server: Config.Target gives every statement's db.namespace (PostgreSQL's
@@ -89,9 +93,11 @@
 // route is final only once the statement ran, as a read on a failed replica
 // falls over to the primary, so TargetFor is called then, once, and its
 // attributes are set on the span before it ends and on the duration point:
-// a read that fell over names only the primary. The transaction's span,
-// which is no database client span, has none of them. With the hosts of
-// each shard's primary and replicas in two maps:
+// a read that fell over names only the primary. A transaction runs on its
+// shard's primary, which is known when it starts, so TargetFor is called with
+// its route then, and again for its duration point; its span and point carry
+// the same attributes. With the hosts of each shard's primary and replicas in
+// two maps:
 //
 //	TargetFor: func(r velox.Route) veloxotel.Target {
 //		t := veloxotel.Target{Namespace: "billing|public", Port: 5432}
@@ -123,8 +129,9 @@
 // early. Their attributes are bounded: the database system, operation, table
 // and summary (none for raw SQL), entity, the server Config.Target or TargetFor
 // names, error type and status code and, on a sharded DB, shard for a
-// statement; the outcome, read-only flag and whether it retried for a
-// transaction; and the shard alone for the fallback counter. Tags, the tenant,
+// statement; the outcome, read-only flag, whether it retried, the server and,
+// on a sharded DB, shard for a transaction; and the shard alone for the
+// fallback counter. Tags, the tenant,
 // the SQL text and the call site are on spans only; the fingerprint is added to
 // the statement metrics only with Config.RecordMetricFingerprint.
 //

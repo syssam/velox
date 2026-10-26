@@ -104,6 +104,44 @@ func TestTxIDsAreUnique(t *testing.T) {
 	}
 }
 
+// TestTxInfoRoute: a transaction runs on its shard's primary, which
+// TxInfo.Route names: Replica -1 with replicas too, and the shard on a
+// sharded DB.
+func TestTxInfoRoute(t *testing.T) {
+	var got velox.Route
+	keep := velox.WithTxAround(func(ctx context.Context, tx *velox.TxInfo, next func(context.Context) error) error {
+		got = tx.Route
+		return next(ctx)
+	})
+	none := func(context.Context, *velox.DB) error { return nil }
+	cases := []struct {
+		name string
+		db   *velox.DB
+		ctx  context.Context
+		want velox.Route
+	}{
+		{"unsharded", velox.OpenFake(velox.Postgres, &velox.FakeExec{}, keep), ctx, velox.Route{Replica: -1}},
+		{"replicas", velox.OpenFake(velox.Postgres, &velox.FakeExec{}, keep,
+			velox.WithReplicas(velox.FakeConn(&velox.FakeExec{}))), ctx, velox.Route{Replica: -1}},
+		{"sharded", velox.OpenShards(velox.Postgres, map[string]velox.Shard{
+			"a": {Primary: velox.FakeConn(&velox.FakeExec{})},
+			"b": {Primary: velox.FakeConn(&velox.FakeExec{})},
+		}, keep, velox.WithShardFor(func(context.Context, any) (string, error) { return "b", nil })),
+			velox.WithShard(ctx, "a"), velox.Route{Shard: "a", Replica: -1}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got = velox.Route{Replica: 7}
+			if err := tc.db.Tx(tc.ctx, none); err != nil {
+				t.Fatal(err)
+			}
+			if got != tc.want {
+				t.Errorf("TxInfo.Route %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}
+
 // TestStatementTx: with any hook, a statement in a transaction has its
 // TxInfo, without a TxAround hook too; one outside a transaction has none.
 func TestStatementTx(t *testing.T) {

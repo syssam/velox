@@ -492,6 +492,32 @@ func TestFallbackCountedOncePerFailover(t *testing.T) {
 	}
 }
 
+// TestFallbackSpanOncePerFailover: of the two executions an outer Around
+// hook makes, only the span of the one that fell over says so.
+func TestFallbackSpanOncePerFailover(t *testing.T) {
+	p, rep := &fakeDB{rows: [][]driver.Value{invoiceRow(1)}}, &fakeDB{errs: badConn()}
+	twice := velox.WithAround(func(ctx context.Context, _ *velox.Statement, next func(context.Context) error) error {
+		if err := next(ctx); err != nil {
+			return err
+		}
+		return next(ctx)
+	})
+	db, exp, _ := traced(t, p, veloxotel.Config{}, twice, velox.WithReplicas(velox.SQLConn(rep.open())))
+	if _, err := db.Query[testmodel.Invoice]().Limit(1).All(ctx); err != nil {
+		t.Fatal(err)
+	}
+	spans := byName(exp.GetSpans())["SELECT invoices"]
+	if len(spans) != 2 {
+		t.Fatalf("%d statement spans, want 2", len(spans))
+	}
+	if v, ok := attrs(spans[0])["velox.route.fallback"]; !ok || v != attribute.BoolValue(true) {
+		t.Errorf("the first span's velox.route.fallback = %v", v.String())
+	}
+	if v, ok := attrs(spans[1])["velox.route.fallback"]; ok {
+		t.Errorf("the second span's velox.route.fallback = %v, want none", v.String())
+	}
+}
+
 // TestRawMetrics: raw SQL's points carry the database system and the entity,
 // and no operation or table; a Raw read's rows are returned rows, Exec's are
 // not.

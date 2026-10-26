@@ -758,7 +758,7 @@ var targetKeys = []attribute.Key{"db.namespace", "server.address", "server.port"
 // server.port are on a statement's span from its start, and on its duration
 // point; a zero field leaves its attribute off. TargetFor's are set once the
 // route is final, so not at the start, and are on the point too. The
-// transaction's span, which is no database client span, has neither.
+// transaction's span has them too, from its start: its route is known then.
 func TestTargetAttributes(t *testing.T) {
 	for _, c := range []struct {
 		name   string
@@ -808,8 +808,11 @@ func TestTargetAttributes(t *testing.T) {
 					if got, has := point.Value(k); has != ok || got != want {
 						t.Errorf("duration point: %s = %v (%v), want %v (%v)", k, got.String(), has, want.String(), ok)
 					}
-					if _, has := tx[k]; has {
-						t.Errorf("velox.tx has %s", k)
+					if got, has := sp.got[1][k]; has != ok || got != want {
+						t.Errorf("velox.tx at start: %s = %v (%v), want %v (%v)", k, got.String(), has, want.String(), ok)
+					}
+					if got, has := tx[k]; has != ok || got != want {
+						t.Errorf("velox.tx: %s = %v (%v), want %v (%v)", k, got.String(), has, want.String(), ok)
 					}
 				}
 			})

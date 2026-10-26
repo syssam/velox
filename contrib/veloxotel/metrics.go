@@ -48,10 +48,23 @@ func handle(err error) {
 // record records a statement's duration, and a successful read's rows,
 // after it ran (not on a panic); coll and sum are its collection and
 // summary (see collection and summary), tkv its server's (Config.Target's
-// or TargetFor's) and f its failure. Its attributes are bounded: never the
-// tags, tenant, SQL or call site, and the fingerprint only with
-// Config.RecordMetricFingerprint.
+// or TargetFor's) and f its failure. fellOver counts a failover. Its
+// attributes are bounded: never the tags, tenant, SQL or call site, and the
+// fingerprint only with Config.RecordMetricFingerprint. An instrument that is
+// not enabled records nothing, and when none is, record returns before it
+// builds an attribute set.
 func (a *adapter) record(ctx context.Context, st *velox.Statement, coll, sum string, tkv []attribute.KeyValue, seconds float64, f failure, fellOver bool) {
+	dur, ret, fell := a.duration.Enabled(ctx), a.returned.Enabled(ctx), fellOver && a.fallbacks.Enabled(ctx)
+	if !dur && !ret && !fell {
+		return
+	}
+	if fell {
+		a.fallbacks.Add(ctx, 1, shardSet(st.Route.Shard))
+	}
+	ret = ret && st.Op.Reads() && f.errType == ""
+	if !dur && !ret {
+		return
+	}
 	kv := make([]attribute.KeyValue, 0, 9+len(tkv))
 	kv = append(kv, attribute.String(attrDBSystem, dbSystem(st.Dialect)))
 	kv = target(kv, st, coll, sum)
@@ -70,11 +83,10 @@ func (a *adapter) record(ctx context.Context, st *velox.Statement, coll, sum str
 		kv = append(kv, attribute.String(attrFingerprint, st.Fingerprint))
 	}
 	set := metric.WithAttributeSet(attribute.NewSet(kv...))
-	a.duration.Record(ctx, seconds, set)
-	if fellOver {
-		a.fallbacks.Add(ctx, 1, shardSet(st.Route.Shard))
+	if dur {
+		a.duration.Record(ctx, seconds, set)
 	}
-	if st.Op.Reads() && f.errType == "" {
+	if ret {
 		a.returned.Record(ctx, st.Result.Rows, set)
 	}
 }

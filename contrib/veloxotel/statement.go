@@ -42,7 +42,8 @@ func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(con
 	}()
 
 	// Fallback is sticky on the Statement: an outer hook that retries calls
-	// next again with it set. Only a failover in this run is counted.
+	// next again with it set. Only a failover in this run is marked on the
+	// span and counted.
 	wasFallback := st.Route.Fallback
 	start := time.Now()
 	err := next(sctx)
@@ -50,8 +51,9 @@ func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(con
 	// the duration point is the database's time, without it.
 	seconds := max(0, time.Since(start)-st.Result.LoopBody).Seconds()
 	// The route is read after next returns: a fallback happens during it.
+	fellOver := st.Route.Fallback && !wasFallback
 	var buf [8]attribute.KeyValue
-	kv := routeAttributes(buf[:0], st)
+	kv := routeAttributes(buf[:0], st, fellOver)
 	tkv := a.target
 	if a.cfg.TargetFor != nil {
 		tkv = a.cfg.TargetFor(st.Route).appendTo(make([]attribute.KeyValue, 0, 3))
@@ -84,17 +86,18 @@ func (a *adapter) around(ctx context.Context, st *velox.Statement, next func(con
 	}
 	ended = true
 	span.End()
-	a.record(sctx, st, coll, sum, tkv, seconds, f, st.Route.Fallback && !wasFallback)
+	a.record(sctx, st, coll, sum, tkv, seconds, f, fellOver)
 	return err
 }
 
 // routeAttributes appends to kv the span attributes of where st ran that
 // can change while it runs: whether a replica ran it, and a fallback when
-// there was one. The shard is final before the hooks run, so it is a start
+// this execution fell over (fellOver), not an earlier one an outer hook
+// retried. The shard is final before the hooks run, so it is a start
 // attribute (see attributes).
-func routeAttributes(kv []attribute.KeyValue, st *velox.Statement) []attribute.KeyValue {
+func routeAttributes(kv []attribute.KeyValue, st *velox.Statement, fellOver bool) []attribute.KeyValue {
 	kv = append(kv, attribute.Bool(attrRouteReplica, st.Route.Replica >= 0))
-	if st.Route.Fallback {
+	if fellOver {
 		kv = append(kv, attribute.Bool(attrRouteFallback, true))
 	}
 	return kv

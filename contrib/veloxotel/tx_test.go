@@ -277,3 +277,60 @@ func TestTxAroundInnerHookWithoutNext(t *testing.T) {
 		}
 	}
 }
+
+// TestTxSpanRoute: the velox.tx span and its velox.tx.duration point name
+// the transaction's shard and its server, TargetFor's for its route or
+// Config.Target's.
+func TestTxSpanRoute(t *testing.T) {
+	none := func(context.Context, *velox.DB) error { return nil }
+	t.Run("TargetFor", func(t *testing.T) {
+		exp := tracetest.NewInMemoryExporter()
+		tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exp))
+		r := sdkmetric.NewManualReader()
+		mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(r))
+		t.Cleanup(func() { _ = tp.Shutdown(context.Background()); _ = mp.Shutdown(context.Background()) })
+		cfg := veloxotel.Config{TracerProvider: tp, MeterProvider: mp, TargetFor: func(r velox.Route) veloxotel.Target {
+			return veloxotel.Target{Namespace: "db_" + r.Shard, Address: "h"}
+		}}
+		db := velox.OpenShards(velox.Postgres, map[string]velox.Shard{
+			"a": {Primary: velox.SQLConn((&fakeDB{}).open())},
+			"b": {Primary: velox.SQLConn((&fakeDB{}).open())},
+		}, append(veloxotel.Options(cfg), velox.WithShardFor(shardOf))...)
+		if err := db.Tx(velox.WithShard(ctx, "a"), none); err != nil {
+			t.Fatal(err)
+		}
+		want := map[attribute.Key]attribute.Value{
+			"velox.route.shard": attribute.StringValue("a"),
+			"db.namespace":      attribute.StringValue("db_a"),
+			"server.address":    attribute.StringValue("h"),
+		}
+		a := attrs(only(t, exp))
+		for k, v := range want {
+			if a[k] != v {
+				t.Errorf("velox.tx's %s = %q, want %q", k, a[k].String(), v.String())
+			}
+		}
+		dps := points(t, r, "velox.tx.duration", "s", wantDurationBounds)
+		if len(dps) != 1 {
+			t.Fatalf("%d points, want 1", len(dps))
+		}
+		for k, v := range want {
+			if got, _ := dps[0].Attributes.Value(k); got != v {
+				t.Errorf("velox.tx.duration's %s = %q, want %q", k, got.String(), v.String())
+			}
+		}
+	})
+	t.Run("Target", func(t *testing.T) {
+		db, exp, _ := traced(t, &fakeDB{}, veloxotel.Config{Target: veloxotel.Target{Namespace: "n"}})
+		if err := db.Tx(ctx, none); err != nil {
+			t.Fatal(err)
+		}
+		a := attrs(only(t, exp))
+		if a["db.namespace"] != attribute.StringValue("n") {
+			t.Errorf("velox.tx's db.namespace = %q, want n", a["db.namespace"].String())
+		}
+		if v, ok := a["velox.route.shard"]; ok {
+			t.Errorf("velox.tx's velox.route.shard = %q, want none", v.String())
+		}
+	})
+}

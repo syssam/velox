@@ -29,9 +29,12 @@ type TxInfo struct {
 	ID        uint64 // unique within the process
 	Isolation sql.IsolationLevel
 	ReadOnly  bool
-	Attempt   int       // 1 for the first try; TxRetrySerializable increments it
-	Retries   []TxRetry // the attempts TxRetrySerializable retried, in order
-	Outcome   TxOutcome // how the last attempt ended; set before next returns
+	// Route is where the transaction runs: its shard ("" on an unsharded DB), on
+	// the primary, so Replica is always -1 and Fallback always false.
+	Route   Route
+	Attempt int       // 1 for the first try; TxRetrySerializable increments it
+	Retries []TxRetry // the attempts TxRetrySerializable retried, in order
+	Outcome TxOutcome // how the last attempt ended; set before next returns
 }
 
 // TxRetry is an attempt that TxRetrySerializable retried.
@@ -75,13 +78,17 @@ func WithTxAround(h TxAround) Option {
 // txIDs numbers transactions; the first is 1.
 var txIDs atomic.Uint64
 
-// newTxInfo returns the TxInfo of a transaction with options o, or nil when
-// db has no hooks to read it.
-func (db *DB) newTxInfo(o txOptions) *TxInfo {
+// newTxInfo returns the TxInfo of a transaction with options o on shard sh
+// (nil on a DB without a router), or nil when db has no hooks to read it.
+func (db *DB) newTxInfo(o txOptions, sh *shard) *TxInfo {
 	if !db.hooked() && len(db.cfg.txArounds) == 0 {
 		return nil
 	}
-	return &TxInfo{ID: txIDs.Add(1), Isolation: o.isolation, ReadOnly: o.readOnly}
+	info := &TxInfo{ID: txIDs.Add(1), Isolation: o.isolation, ReadOnly: o.readOnly, Route: Route{Replica: -1}}
+	if sh != nil {
+		info.Route.Shard = sh.name
+	}
+	return info
 }
 
 // end records how the transaction's attempt ended; info may be nil.
