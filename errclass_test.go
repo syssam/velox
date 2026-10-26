@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/go-sql-driver/mysql"
@@ -32,6 +35,8 @@ func TestConstraintErrors(t *testing.T) {
 		{myErr(1451, "Cannot delete or update a parent row: a foreign key constraint fails (`velox`.`c`, CONSTRAINT `c_p_fk` FOREIGN KEY (`p_id`) REFERENCES `p` (`id`))"), ConstraintForeignKey, "c_p_fk"},
 		{myErr(1048, "Column 'code' cannot be null"), ConstraintNotNull, "code"},
 		{myErr(3819, "Check constraint 'p_n_ck' is violated."), ConstraintCheck, "p_n_ck"},
+		{myErr(1364, "Field 'code' doesn't have a default value"), ConstraintNotNull, "code"},
+		{myErr(4025, "CONSTRAINT `p_n_ck` failed for `velox`.`p`"), ConstraintCheck, "p_n_ck"},
 		{fmt.Errorf("velox: commit: %w", &pgconn.PgError{Code: "23505", ConstraintName: "late_uq"}), ConstraintUnique, "late_uq"},
 		// the duplicate value is row data and cannot choose the constraint's name
 		{myErr(1062, "Duplicate entry 'x' for key 'users.admin_uq' for key 'users.email_uq'"), ConstraintUnique, "email_uq"},
@@ -58,7 +63,9 @@ func TestConstraintErrors(t *testing.T) {
 
 // TestOtherErrorsAreLeftAlone is the other half of Review Focus 5.
 func TestOtherErrorsAreLeftAlone(t *testing.T) {
-	for _, err := range []error{io.EOF, &pgconn.PgError{Code: "42601"}, myErr(1064, "You have an error in your SQL syntax")} {
+	for _, err := range []error{io.EOF, &pgconn.PgError{Code: "42601"}, myErr(1064, "You have an error in your SQL syntax"),
+		// MySQL's 4025, not MariaDB's
+		myErr(4025, "The AUTOEXTEND_SIZE value is out of range")} {
 		got := dbErr(invInfo, err)
 		var ce *ConstraintError
 		if errors.As(got, &ce) || !errors.Is(got, err) || got.Error() != "velox: velox.inv: "+err.Error() {
@@ -110,7 +117,7 @@ func TestSQLiteKind(t *testing.T) {
 	}{
 		{787, "constraint failed: FOREIGN KEY constraint failed (787)", ConstraintForeignKey, ""},
 		{2067, "constraint failed: UNIQUE constraint failed: p.code (2067)", ConstraintUnique, "p.code"},
-		{1299, "constraint failed: NOT NULL constraint failed: p.code (1299)", ConstraintNotNull, "p.code"},
+		{1299, "constraint failed: NOT NULL constraint failed: p.code (1299)", ConstraintNotNull, "code"},
 	} {
 		if kind, name := sqliteKind(c.code, c.msg); kind != c.kind || name != c.name {
 			t.Errorf("sqliteKind(%d, %q) = %v, %q", c.code, c.msg, kind, name)
@@ -118,6 +125,93 @@ func TestSQLiteKind(t *testing.T) {
 	}
 	if got := (&ConstraintError{Entity: "e", Kind: ConstraintForeignKey, Err: io.EOF}).Error(); got != "velox: e: foreign key constraint (unnamed) violated: EOF" {
 		t.Error(got)
+	}
+}
+
+// TestTypedNilDriverErrors: a nil pointer of a driver's or the network's
+// error type, bare, wrapped or joined, is no driver error, and reading it
+// does not panic. The test reads with is and as: errors.Is and errors.As
+// would call Unwrap on a nil *net.OpError or *pgconn.ConnectError, and panic.
+func TestTypedNilDriverErrors(t *testing.T) {
+	// go-sql-driver/mysql's ErrInvalidConn is an *errors.errorString.
+	nilErrorString := reflect.Zero(reflect.TypeOf(errors.New("invalid connection"))).Interface().(error)
+	for _, c := range []struct {
+		name string
+		err  error
+	}{
+		{"pgx", (*pgconn.PgError)(nil)},
+		{"mysql wrapped", fmt.Errorf("x: %w", (*mysql.MySQLError)(nil))},
+		{"pgx joined", errors.Join(errors.New("x"), (*pgconn.PgError)(nil))},
+		{"pgx connect", (*pgconn.ConnectError)(nil)},
+		{"pgx connect wrapped", fmt.Errorf("x: %w", (*pgconn.ConnectError)(nil))},
+		{"net", (*net.OpError)(nil)},
+		{"net joined", errors.Join(errors.New("x"), (*net.OpError)(nil))},
+		{"invalid conn", nilErrorString},
+		{"invalid conn wrapped", fmt.Errorf("x: %w", nilErrorString)},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			got := dbErr(invInfo, c.err)
+			if _, ok := as[*ConstraintError](got); ok || is(got, ErrLocked) {
+				t.Errorf("dbErr = %v", got)
+			}
+			if code, ok := DriverCode(c.err); code != "" || ok {
+				t.Errorf("DriverCode = %q, %v; want none", code, ok)
+			}
+			if retryable(c.err) || failoverable(c.err) {
+				t.Errorf("retryable %v, failoverable %v", retryable(c.err), failoverable(c.err))
+			}
+		})
+	}
+	// A nil pointer is passed over, and the walk goes on to the error after
+	// it, for pgx as for the other drivers.
+	for _, c := range []struct {
+		name     string
+		err      error
+		code     string
+		retry    bool
+		failover bool
+	}{
+		{"pgx", errors.Join((*pgconn.PgError)(nil), &pgconn.PgError{Code: "40001"}), "40001", true, false},
+		{"mysql", errors.Join((*mysql.MySQLError)(nil), myErr(1213, "Deadlock found")), "1213", true, false},
+		{"net", errors.Join((*net.OpError)(nil), &net.OpError{Op: "dial", Err: errors.New("refused")}), "", false, true},
+		{"connect", errors.Join((*pgconn.ConnectError)(nil), io.ErrUnexpectedEOF), "", false, true},
+	} {
+		code, _ := DriverCode(c.err)
+		if code != c.code || retryable(c.err) != c.retry || failoverable(c.err) != c.failover {
+			t.Errorf("%s: DriverCode %q, retryable %v, failoverable %v; want %q, %v, %v",
+				c.name, code, retryable(c.err), failoverable(c.err), c.code, c.retry, c.failover)
+		}
+	}
+}
+
+// TestErrLocked: PostgreSQL's 55P03 and MySQL's 3572 match ErrLocked, with
+// the driver's error still reachable; a serialization failure and a lock
+// wait timeout do not.
+func TestErrLocked(t *testing.T) {
+	for _, err := range []error{
+		&pgconn.PgError{Code: "55P03"},
+		myErr(3572, "Statement aborted because lock(s) could not be acquired immediately and NOWAIT is set."),
+	} {
+		got := dbErr(invInfo, err)
+		if !errors.Is(got, ErrLocked) {
+			t.Errorf("%v: %v does not match ErrLocked", err, got)
+		}
+		var pg *pgconn.PgError
+		var my *mysql.MySQLError
+		if !errors.As(got, &pg) && !errors.As(got, &my) {
+			t.Errorf("%v: the driver's error is not reachable", got)
+		}
+		if want := "velox: velox.inv: lock not available: "; !strings.HasPrefix(got.Error(), want) {
+			t.Errorf("%q does not start %q", got.Error(), want)
+		}
+		if retryable(got) || failoverable(got) {
+			t.Errorf("%v: retryable %v, failoverable %v; want neither", got, retryable(got), failoverable(got))
+		}
+	}
+	for _, err := range []error{&pgconn.PgError{Code: "40001"}, myErr(1205, "Lock wait timeout exceeded")} {
+		if got := dbErr(invInfo, err); errors.Is(got, ErrLocked) {
+			t.Errorf("%v matches ErrLocked", got)
+		}
 	}
 }
 

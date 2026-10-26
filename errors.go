@@ -27,6 +27,11 @@ var (
 	// ErrTooManyRows is returned by a query when it reads more rows than
 	// WithMaxRows or the query's MaxRows allow.
 	ErrTooManyRows = errors.New("read more rows than the cap")
+	// ErrLocked is returned by a statement that could not take a lock without
+	// waiting: a NoWait read that met a row another transaction holds, or a
+	// PostgreSQL lock_timeout. It matches PostgreSQL's 55P03 (lock_not_available)
+	// and MySQL's 3572; the driver's error is wrapped with it.
+	ErrLocked = errors.New("lock not available")
 	// ErrTimeout is returned by a statement or transaction when a deadline
 	// velox set (WithDeadlines, TxTimeout) passes. The error also matches
 	// context.DeadlineExceeded; a deadline the caller set matches that alone.

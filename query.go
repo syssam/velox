@@ -148,7 +148,8 @@ func (q Query[E]) SkipLocked[_ Lazy[E]]() Query[E] {
 
 // NoWait returns the locking query failing at once, rather than waiting,
 // when a row it reads is locked, as NOWAIT. DriverCode gives the failure's
-// code: PostgreSQL's 55P03, MySQL's 3572. It needs ForUpdate or ForShare.
+// code: PostgreSQL's 55P03, MySQL's 3572. On PostgreSQL and MySQL the error
+// matches ErrLocked. It needs ForUpdate or ForShare.
 func (q Query[E]) NoWait[_ Lazy[E]]() Query[E] {
 	q.st.LockWait = LockNoWait
 	return q

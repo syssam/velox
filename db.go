@@ -3,7 +3,6 @@ package velox
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"math"
 	"slices"
@@ -170,14 +169,18 @@ func newDB(d Dialect, ex executor, opts []Option) *DB {
 // Dialect returns the DB's dialect.
 func (db *DB) Dialect() Dialect { return db.d }
 
-// dbErr names the entity in an error from the database or the driver, and
-// turns a violated constraint into a *ConstraintError.
+// dbErr names the entity in an error from the database or the driver, turns
+// a violated constraint into a *ConstraintError, and wraps a lock that could
+// not be taken with ErrLocked.
 func dbErr(info *EntityInfo, err error) error {
-	if errors.As(err, new(*ConstraintError)) {
+	if _, ok := as[*ConstraintError](err); ok {
 		return err // already classified
 	}
 	if ce := constraint(info.Name, err); ce != nil {
 		return ce
+	}
+	if locked(err) {
+		return fmt.Errorf("velox: %s: %w: %w", info.Name, ErrLocked, err)
 	}
 	return fmt.Errorf("velox: %s: %w", info.Name, err)
 }
@@ -794,7 +797,7 @@ func (db *DB) exec(ctx context.Context, st *Statement, t target, read func(rows)
 				r = counted
 			}
 			again, againRows := readRows(r, read)
-			if errors.Is(again, errIterAgain) {
+			if is(again, errIterAgain) {
 				return dbErr(st.Entity, rowsErr) // the replica's error
 			}
 			rerr, rowsErr = again, againRows

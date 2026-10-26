@@ -1,7 +1,6 @@
 package velox
 
 import (
-	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -17,9 +16,8 @@ import (
 func constraint(entity string, err error) *ConstraintError {
 	var kind ConstraintKind
 	var name string
-	var pg *pgconn.PgError
-	switch {
-	case errors.As(err, &pg):
+	switch pg := pgError(err); {
+	case pg != nil:
 		kind, name = pgKind(pg)
 	default:
 		if n, msg, ok := mysqlError(err); ok {
@@ -32,6 +30,23 @@ func constraint(entity string, err error) *ConstraintError {
 		return nil
 	}
 	return &ConstraintError{Entity: entity, Kind: kind, Constraint: name, Err: err}
+}
+
+// pgError returns the first *pgconn.PgError in err's tree that is not a nil
+// pointer, or nil.
+func pgError(err error) *pgconn.PgError {
+	pg, _ := as[*pgconn.PgError](err)
+	return pg
+}
+
+// locked reports a lock that could not be taken without waiting: PostgreSQL's
+// lock_not_available (55P03) or MySQL's 3572, NOWAIT's failure.
+func locked(err error) bool {
+	if pg := pgError(err); pg != nil {
+		return pg.Code == "55P03"
+	}
+	n, _, ok := mysqlError(err)
+	return ok && n == 3572
 }
 
 func pgKind(pg *pgconn.PgError) (ConstraintKind, string) {
@@ -48,28 +63,86 @@ func pgKind(pg *pgconn.PgError) (ConstraintKind, string) {
 	return 0, ""
 }
 
-// driverError walks err's tree depth-first, through both Unwrap() error and
-// Unwrap() []error, and returns the first error whose type is a pointer to the
-// named type pkg.name. Matching the package path and not only the type's name
-// keeps a look-alike type in another package from being taken for the driver's.
-func driverError(err error, pkg, name string) error {
+// walk calls f on err and on each error it wraps, depth-first through both
+// Unwrap() error and Unwrap() []error, in errors.As's order, until f returns
+// true, and reports whether it did. A nil pointer is skipped and not
+// unwrapped, and the walk goes on past it: it is no driver's error, and its
+// methods (Error, Unwrap, Timeout) could panic on it.
+func walk(err error, f func(error) bool) bool {
 	if err == nil {
-		return nil
+		return false
 	}
-	if t := reflect.TypeOf(err); t.Kind() == reflect.Pointer && t.Elem().PkgPath() == pkg && t.Elem().Name() == name {
-		return err
+	if v := reflect.ValueOf(err); v.Kind() == reflect.Pointer && v.IsNil() {
+		return false
+	}
+	if f(err) {
+		return true
 	}
 	switch u := err.(type) {
 	case interface{ Unwrap() error }:
-		return driverError(u.Unwrap(), pkg, name)
+		return walk(u.Unwrap(), f)
 	case interface{ Unwrap() []error }:
 		for _, e := range u.Unwrap() {
-			if d := driverError(e, pkg, name); d != nil {
-				return d
+			if walk(e, f) {
+				return true
 			}
 		}
 	}
-	return nil
+	return false
+}
+
+// is is errors.Is over walk: a nil pointer in err's tree is passed over.
+func is(err, target error) bool {
+	canEq := target != nil && reflect.TypeOf(target).Comparable()
+	return walk(err, func(e error) bool {
+		if canEq && e == target {
+			return true
+		}
+		x, ok := e.(interface{ Is(error) bool })
+		return ok && x.Is(target)
+	})
+}
+
+// as is errors.As over walk: it returns the first error in err's tree of
+// type T, or that an As method gives as T, which is not a nil pointer.
+func as[T error](err error) (T, bool) {
+	var found T
+	ok := walk(err, func(e error) bool {
+		if t, ok := e.(T); ok {
+			found = t
+			return true
+		}
+		x, ok := e.(interface{ As(any) bool })
+		if !ok {
+			return false
+		}
+		var t T
+		if !x.As(&t) {
+			return false
+		}
+		if v := reflect.ValueOf(t); !v.IsValid() || v.Kind() == reflect.Pointer && v.IsNil() {
+			return false
+		}
+		found = t
+		return true
+	})
+	return found, ok
+}
+
+// driverError returns the first error in err's tree (see walk) whose type is a
+// pointer to the named type pkg.name. Matching the package path and not only
+// the type's name keeps a look-alike type in another package from being taken
+// for the driver's.
+func driverError(err error, pkg, name string) error {
+	var found error
+	walk(err, func(e error) bool {
+		if t := reflect.TypeOf(e); t.Kind() == reflect.Pointer && t.Elem().PkgPath() == pkg && t.Elem().Name() == name {
+			found = e
+			return true
+		}
+		return false
+	})
+	return found
 }
 
 // mysqlError reads a go-sql-driver/mysql error, whose text is
@@ -106,6 +179,15 @@ func mysqlKind(n int, msg string) (ConstraintKind, string) {
 		return ConstraintNotNull, between(msg, "Column '", "'")
 	case 3819:
 		return ConstraintCheck, between(msg, "Check constraint '", "'")
+	case 1364: // strict mode: "Field 'code' doesn't have a default value"
+		return ConstraintNotNull, between(msg, "Field '", "'")
+	case 4025:
+		// MariaDB's ER_CONSTRAINT_FAILED, "CONSTRAINT `p_n_ck` failed for
+		// `velox`.`p`". MySQL 8.4's 4025 is ER_INNODB_AUTOEXTEND_SIZE_OUT_OF_RANGE,
+		// so only a message of MariaDB's form is a CHECK.
+		if name := between(msg, "CONSTRAINT `", "` failed for "); name != "" {
+			return ConstraintCheck, name
+		}
 	}
 	return 0, ""
 }
@@ -138,6 +220,9 @@ func sqliteKind(code int, msg string) (ConstraintKind, string) {
 	case 787: // SQLITE_CONSTRAINT_FOREIGNKEY
 		return ConstraintForeignKey, subject
 	case 1299: // SQLITE_CONSTRAINT_NOTNULL
+		if i := strings.LastIndexByte(subject, '.'); i >= 0 {
+			subject = subject[i+1:] // the column, without its table
+		}
 		return ConstraintNotNull, subject
 	case 275: // SQLITE_CONSTRAINT_CHECK
 		return ConstraintCheck, subject
@@ -174,8 +259,7 @@ func between(s, from, to string) string {
 // through database/sql), github.com/go-sql-driver/mysql and
 // modernc.org/sqlite; another driver's error has no code here.
 func DriverCode(err error) (string, bool) {
-	var pg *pgconn.PgError
-	if errors.As(err, &pg) {
+	if pg := pgError(err); pg != nil {
 		return pg.Code, pg.Code != ""
 	}
 	if n, _, ok := mysqlError(err); ok {
@@ -190,8 +274,7 @@ func DriverCode(err error) (string, bool) {
 // retryable reports a serialization failure or a deadlock, after which
 // running the transaction again can succeed.
 func retryable(err error) bool {
-	var pg *pgconn.PgError
-	if errors.As(err, &pg) {
+	if pg := pgError(err); pg != nil {
 		return pg.Code == "40001" || pg.Code == "40P01"
 	}
 	if n, _, ok := mysqlError(err); ok {

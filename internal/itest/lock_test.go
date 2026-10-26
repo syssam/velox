@@ -229,6 +229,9 @@ func wantLockFailure(t *testing.T, tg target, err error) {
 	if code, ok := velox.DriverCode(err); !ok || code != want {
 		t.Errorf("NoWait: %v, code %q, want %s", err, code, want)
 	}
+	if !errors.Is(err, velox.ErrLocked) {
+		t.Errorf("NoWait: %v does not match ErrLocked", err)
+	}
 	var ce *velox.ConstraintError
 	if errors.As(err, &ce) {
 		t.Errorf("NoWait's failure is a constraint error: %v", err)

@@ -162,7 +162,7 @@ func (db *DB) attempts(ctx, tctx context.Context, fn func(context.Context, *DB) 
 		if err == nil && wrote != nil && wrote.Load() {
 			db.pinSession(tctx) // the context given to Tx, not a TxAround hook's
 		}
-		if err != nil && cause != nil && timedOut(tctx) && !errors.Is(err, ErrTimeout) {
+		if err != nil && cause != nil && timedOut(tctx) && !is(err, ErrTimeout) {
 			err = errors.Join(errTimeout("transaction"), err)
 		}
 		if err == nil || attempt > o.retries || !retryable(err) || ctx.Err() != nil || tctx.Err() != nil {
@@ -177,7 +177,7 @@ func (db *DB) attempts(ctx, tctx context.Context, fn func(context.Context, *DB) 
 // ended reports whether err says the driver already ended the transaction,
 // as it does after a canceled context; rolling back then has nothing to do.
 func ended(err error) bool {
-	return errors.Is(err, sql.ErrTxDone) || errors.Is(err, pgx.ErrTxClosed)
+	return is(err, sql.ErrTxDone) || is(err, pgx.ErrTxClosed)
 }
 
 // transaction runs fn once in a new transaction, and records how it ended in
@@ -233,7 +233,7 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 		if rerr := ctl.rollback(end); rerr != nil && !ended(rerr) && !over(ctx) && !past(deadline) {
 			return errors.Join(err, fmt.Errorf("velox: rollback: %w", rerr))
 		}
-		if cause != nil && past(deadline) && !errors.Is(err, ErrTimeout) {
+		if cause != nil && past(deadline) && !is(err, ErrTimeout) {
 			// velox's deadline passed, whatever context fn's statements ran
 			// on: say so without waiting for the deadline's timer.
 			return errors.Join(errTimeout("transaction"), err)

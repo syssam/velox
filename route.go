@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
-	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -627,40 +626,48 @@ func (db *DB) fallBack(st *Statement, t target) target {
 // refusing or ending the connection counts (mysqlConnectError), as a pgx
 // ConnectError does.
 func failoverable(err error) bool {
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+	if is(err, context.Canceled) || is(err, context.DeadlineExceeded) {
 		return false
 	}
-	if errors.Is(err, driver.ErrBadConn) ||
-		errors.Is(err, sql.ErrConnDone) ||
-		errors.Is(err, net.ErrClosed) ||
-		errors.Is(err, io.EOF) ||
-		errors.Is(err, io.ErrUnexpectedEOF) ||
-		errors.Is(err, pgconn.ErrConnClosed) ||
-		pgconn.SafeToRetry(err) ||
+	if is(err, driver.ErrBadConn) ||
+		is(err, sql.ErrConnDone) ||
+		is(err, net.ErrClosed) ||
+		is(err, io.EOF) ||
+		is(err, io.ErrUnexpectedEOF) ||
+		is(err, pgconn.ErrConnClosed) ||
+		safeToRetry(err) ||
 		mysqlInvalidConn(err) {
 		return true
 	}
-	var ce *pgconn.ConnectError
-	if errors.As(err, &ce) {
+	if _, ok := as[*pgconn.ConnectError](err); ok {
 		// Whatever the server said while connecting, such as too many
 		// connections (53300) or a failed login: pgx wraps its PgError in
 		// the ConnectError, so this comes before the PgError check.
 		return true
 	}
-	var pg *pgconn.PgError
-	if errors.As(err, &pg) {
+	if pg := pgError(err); pg != nil {
 		// admin_shutdown, crash_shutdown, cannot_connect_now
 		return pg.Code == "57P01" || pg.Code == "57P02" || pg.Code == "57P03"
 	}
 	if n, _, ok := mysqlError(err); ok {
 		return mysqlConnectError(n)
 	}
-	var ne net.Error
-	if !errors.As(err, &ne) {
+	ne, ok := as[net.Error](err)
+	if !ok {
 		return false
 	}
-	var op *net.OpError
-	return !ne.Timeout() || errors.As(err, &op) && op.Op == "dial"
+	op, ok := as[*net.OpError](err)
+	return !ne.Timeout() || ok && op.Op == "dial"
+}
+
+// safeToRetry is pgconn.SafeToRetry over as, so that a nil pointer in err's
+// tree cannot panic it.
+func safeToRetry(err error) bool {
+	r, ok := as[interface {
+		error
+		SafeToRetry() bool
+	}](err)
+	return ok && r.SafeToRetry()
 }
 
 // mysqlConnectError reports whether MySQL error number n is the server
@@ -683,23 +690,8 @@ func mysqlConnectError(n int) bool {
 // does not import the driver (see constraint), so the sentinel, an
 // errors.New, is recognized by its type and text.
 func mysqlInvalidConn(err error) bool {
-	for err != nil {
-		if t := reflect.TypeOf(err); t.Kind() == reflect.Pointer && t.Elem().PkgPath() == "errors" && t.Elem().Name() == "errorString" && err.Error() == "invalid connection" {
-			return true
-		}
-		switch u := err.(type) {
-		case interface{ Unwrap() error }:
-			err = u.Unwrap()
-		case interface{ Unwrap() []error }:
-			for _, e := range u.Unwrap() {
-				if mysqlInvalidConn(e) {
-					return true
-				}
-			}
-			return false
-		default:
-			return false
-		}
-	}
-	return false
+	return walk(err, func(e error) bool {
+		t := reflect.TypeOf(e)
+		return t.Kind() == reflect.Pointer && t.Elem().PkgPath() == "errors" && t.Elem().Name() == "errorString" && e.Error() == "invalid connection"
+	})
 }
