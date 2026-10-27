@@ -3,6 +3,7 @@ package velox
 import (
 	"context"
 	"fmt"
+	"math"
 	"reflect"
 	"slices"
 	"strings"
@@ -33,12 +34,12 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 	}
 	in := st.Entity
 	sc := scoper{ctx: ctx, entity: in.Name}
-	tenant, err := sc.tenantOf(in)
+	id, tenant, err := sc.tenantOf(in)
 	if err != nil {
 		return err
 	}
 	if tenant {
-		if err := checkTenantAssignments(in, st.Set, sc.id); err != nil {
+		if err := checkTenantAssignments(in, st.Set, id); err != nil {
 			return err
 		}
 	}
@@ -73,7 +74,7 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 	}
 	// st.Where is now the scope's own array, or nothing is appended to it.
 	if tenant {
-		st.Where = append(st.Where, tenantPredicate(in, sc.id))
+		st.Where = append(st.Where, tenantPredicate(in, id))
 	}
 	if read.n.op != 0 {
 		st.Where = append(st.Where, read)
@@ -100,12 +101,12 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 func (db *DB) scopeInsert(ctx context.Context, st *Statement) error {
 	in := st.Entity
 	sc := scoper{ctx: ctx, entity: in.Name}
-	tenant, err := sc.tenantOf(in)
+	id, tenant, err := sc.tenantOf(in)
 	if err != nil {
 		return err
 	}
 	if tenant && len(db.cfg.rewrites) > 0 {
-		if err := checkTenantRows(in, st, sc.id); err != nil {
+		if err := checkTenantRows(in, st, id); err != nil {
 			return err
 		}
 	}
@@ -185,12 +186,18 @@ func (sc *scoper) conditionUpsert(in *EntityInfo, st *Statement, policy bool) er
 	return nil
 }
 
-// record shows hooks the scope that applied to st.
+// record shows hooks the scope that applied to st: the tenant as the type of
+// the statement entity's tenant column, which scope converted first; when
+// that entity is unscoped but an EXISTS target is scoped, the id as
+// WithTenant was given it, since the targets' column types may differ.
 func (sc *scoper) record(st *Statement) {
 	if sc.scoped {
-		if sc.all != "" {
+		switch {
+		case sc.all != "":
 			st.TenantBypass = sc.all
-		} else {
+		case st.Entity.Tenant >= 0:
+			st.Tenant = sc.conv.id
+		default:
 			st.Tenant = sc.id
 		}
 	}
@@ -265,9 +272,15 @@ type scoper struct {
 	entity string // the statement's entity, which every error names
 
 	tenantRead bool   // id and all are looked up
-	id         any    // the context's tenant; nil when none
+	id         any    // the context's tenant, as given; nil when none
 	all        string // the WithAllTenants reason
 	scoped     bool   // an entity of the statement is tenant-scoped
+
+	// conv is id converted for the first tenant column type the statement
+	// met, and convs for the others: id converts once per type, however
+	// many EXISTS reach entities of that type.
+	conv  tenantConv
+	convs []tenantConv
 
 	skipRead bool   // skip is looked up
 	skip     string // the WithoutPolicy reason
@@ -277,18 +290,26 @@ type scoper struct {
 	computing []*EntityInfo // the entities whose Read is being made, outermost first
 }
 
+// tenantConv is the context's tenant converted to tenant column type t.
+type tenantConv struct {
+	t  reflect.Type
+	id any
+}
+
 // readCond is an entity's Read condition, made once per statement.
 type readCond struct {
 	entity *EntityInfo
 	p      Predicate
 }
 
-// tenantOf reports whether entity t's rows get the tenant condition: whether
-// t is tenant-scoped and the context has a tenant of t's type. It fails when
-// t is scoped and the context has neither a tenant nor WithAllTenants.
-func (sc *scoper) tenantOf(t *EntityInfo) (bool, error) {
+// tenantOf reports whether entity t's rows get the tenant condition, and
+// returns the tenant converted to t's tenant column type (tenantFor): ok when
+// t is tenant-scoped and the context has a tenant that serves t. It fails
+// when t is scoped and the context has neither a tenant nor WithAllTenants,
+// or a tenant that does not serve t.
+func (sc *scoper) tenantOf(t *EntityInfo) (id any, ok bool, err error) {
 	if t.Tenant < 0 {
-		return false, nil
+		return nil, false, nil
 	}
 	if !sc.tenantRead {
 		sc.id, sc.all = tenantOf(sc.ctx)
@@ -297,11 +318,28 @@ func (sc *scoper) tenantOf(t *EntityInfo) (bool, error) {
 	sc.scoped = true
 	switch {
 	case sc.all != "":
-		return false, nil
+		return nil, false, nil
 	case sc.id == nil:
-		return false, fmt.Errorf("velox: %s: %w", t.Name, ErrNoTenant)
+		return nil, false, fmt.Errorf("velox: %s: %w", t.Name, ErrNoTenant)
 	}
-	return true, checkTenantValue(t, sc.id)
+	ct := GoType(t.Columns[t.Tenant])
+	if sc.conv.t == ct {
+		return sc.conv.id, true, nil
+	}
+	for _, c := range sc.convs {
+		if c.t == ct {
+			return c.id, true, nil
+		}
+	}
+	if id, err = tenantFor(t, sc.id); err != nil {
+		return nil, false, err
+	}
+	if sc.conv.t == nil {
+		sc.conv = tenantConv{ct, id}
+	} else {
+		sc.convs = append(sc.convs, tenantConv{ct, id})
+	}
+	return id, true, nil
 }
 
 // policyOn reports whether a policy applies: false under WithoutPolicy, which
@@ -381,20 +419,146 @@ func (sc *scoper) policyCond(t *EntityInfo, op Op, which string, p Predicate, er
 // tenantPredicate is the condition that scopes entity in's rows to tenant id.
 func tenantPredicate(in *EntityInfo, id any) Predicate { return ColumnEQ(in.Tenant, id) }
 
-// checkTenantValue refuses a tenant id whose dynamic type is not exactly the
-// Go type of in's tenant column: a named OrgID is not an int64, and an
-// untyped constant is an int. It refuses the type's zero value as no tenant:
-// that is what middleware gets when it parses a claim that is missing, and an
-// insert could not tell it from a tenant field left unset.
-func checkTenantValue(in *EntityInfo, id any) error {
+// tenantFor returns id as the Go type of in's tenant column: unchanged when it
+// is of that type; converted when it is of a predeclared integer type and the
+// column's kind is an integer kind, or it is a string and the column's kind
+// is string, whether the column's type is predeclared or named; refused with
+// ErrTenantMismatch otherwise, or when it does not fit; and refused with
+// ErrNoTenant when the result is zero.
+//
+// A named id is never converted: a UserID does not serve an OrgID column,
+// even when both are int64s. The zero value is no tenant: that is what
+// middleware gets when it parses a claim that is missing, and an insert could
+// not tell it from a tenant field left unset.
+//
+// The exact type allocates nothing. A conversion to a predeclared type makes
+// its value with a conversion of the kind's, which the runtime serves without
+// allocating below 256; only a named column type goes through reflect.
+func tenantFor(in *EntityInfo, id any) (any, error) {
 	c := in.Columns[in.Tenant]
-	if t := GoType(c); reflect.TypeOf(id) != t {
-		return fmt.Errorf("velox: %s: %w: the context's tenant is a %T, the column %s is a %s", in.Name, ErrTenantMismatch, id, c.Name, t)
+	t := GoType(c)
+	if reflect.TypeOf(id) == t {
+		if reflect.ValueOf(id).IsZero() {
+			return nil, zeroTenant(in)
+		}
+		return id, nil
 	}
-	if reflect.ValueOf(id).IsZero() {
-		return fmt.Errorf("velox: %s: %w: the tenant is the zero value", in.Name, ErrNoTenant)
+	var (
+		s        int64  // a signed id
+		u        uint64 // an unsigned id
+		unsigned bool
+	)
+	switch x := id.(type) {
+	case int:
+		s = int64(x)
+	case int8:
+		s = int64(x)
+	case int16:
+		s = int64(x)
+	case int32:
+		s = int64(x)
+	case int64:
+		s = x
+	case uint:
+		u, unsigned = uint64(x), true
+	case uint8:
+		u, unsigned = uint64(x), true
+	case uint16:
+		u, unsigned = uint64(x), true
+	case uint32:
+		u, unsigned = uint64(x), true
+	case uint64:
+		u, unsigned = x, true
+	case string:
+		if t.Kind() != reflect.String {
+			return nil, tenantMismatch(in, id)
+		}
+		if x == "" {
+			return nil, zeroTenant(in)
+		}
+		// A predeclared string column took the exact path: t is named.
+		return reflect.ValueOf(x).Convert(t).Interface(), nil
+	default:
+		return nil, tenantMismatch(in, id)
 	}
-	return nil
+	var out any
+	switch k := t.Kind(); k {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		if unsigned {
+			if u > math.MaxInt64 {
+				return nil, tenantMisfit(in, id)
+			}
+			s = int64(u)
+		}
+		if t.OverflowInt(s) {
+			return nil, tenantMisfit(in, id)
+		}
+		if s == 0 {
+			return nil, zeroTenant(in)
+		}
+		switch k {
+		case reflect.Int:
+			out = int(s)
+		case reflect.Int8:
+			out = int8(s)
+		case reflect.Int16:
+			out = int16(s)
+		case reflect.Int32:
+			out = int32(s)
+		default:
+			out = s
+		}
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		if !unsigned {
+			if s < 0 {
+				return nil, tenantMisfit(in, id)
+			}
+			u = uint64(s)
+		}
+		if t.OverflowUint(u) {
+			return nil, tenantMisfit(in, id)
+		}
+		if u == 0 {
+			return nil, zeroTenant(in)
+		}
+		switch k {
+		case reflect.Uint:
+			out = uint(u)
+		case reflect.Uint8:
+			out = uint8(u)
+		case reflect.Uint16:
+			out = uint16(u)
+		case reflect.Uint32:
+			out = uint32(u)
+		default:
+			out = u
+		}
+	default:
+		return nil, tenantMismatch(in, id)
+	}
+	if reflect.TypeOf(out) != t {
+		out = reflect.ValueOf(out).Convert(t).Interface() // a named column type
+	}
+	return out, nil
+}
+
+// tenantMismatch is the error of a tenant id that never serves in's tenant
+// column.
+func tenantMismatch(in *EntityInfo, id any) error {
+	c := in.Columns[in.Tenant]
+	return fmt.Errorf("velox: %s: %w: the context's tenant is a %T, the column %s is a %s", in.Name, ErrTenantMismatch, id, c.Name, GoType(c))
+}
+
+// tenantMisfit is the error of a tenant id that would convert into in's
+// tenant column, but whose value the column's type cannot hold.
+func tenantMisfit(in *EntityInfo, id any) error {
+	c := in.Columns[in.Tenant]
+	return fmt.Errorf("velox: %s: %w: the context's tenant %v (a %T) does not fit the column %s, a %s", in.Name, ErrTenantMismatch, id, id, c.Name, GoType(c))
+}
+
+// zeroTenant is the error of a tenant id that is the zero value.
+func zeroTenant(in *EntityInfo) error {
+	return fmt.Errorf("velox: %s: %w: the tenant is the zero value", in.Name, ErrNoTenant)
 }
 
 // checkTenantAssignments refuses an assignment that would move a row to
@@ -504,7 +668,7 @@ func (sc *scoper) node(n node) (node, bool, error) {
 		if _, lazy := n.v.(relRef); lazy {
 			n.v, resolved = l, true // n is a copy
 		}
-		tenant, read, err := sc.target(t)
+		id, tenant, read, err := sc.target(t)
 		if err != nil {
 			return n, false, sc.inExists(t, err)
 		}
@@ -513,7 +677,7 @@ func (sc *scoper) node(n node) (node, bool, error) {
 			copy(kids, n.kids)
 		}
 		if tenant {
-			kids = append(kids, tenantPredicate(t, sc.id).n)
+			kids = append(kids, tenantPredicate(t, id).n)
 		}
 		if read.n.op != 0 {
 			kids = append(kids, read.n)
@@ -527,18 +691,19 @@ func (sc *scoper) node(n node) (node, bool, error) {
 }
 
 // target returns what an EXISTS on entity t gets: whether the tenant
-// condition, and t's Read condition (zero for none).
-func (sc *scoper) target(t *EntityInfo) (bool, Predicate, error) {
-	tenant, err := sc.tenantOf(t)
+// condition, with the tenant as t's column type, and t's Read condition (zero
+// for none).
+func (sc *scoper) target(t *EntityInfo) (any, bool, Predicate, error) {
+	id, tenant, err := sc.tenantOf(t)
 	if err != nil {
-		return false, Predicate{}, err
+		return nil, false, Predicate{}, err
 	}
 	if t.policy == nil || t.policy.read == nil || !sc.policyOn() {
-		return tenant, Predicate{}, nil
+		return id, tenant, Predicate{}, nil
 	}
 	// An EXISTS reads its target, whatever the statement's kind.
 	read, err := sc.readOf(t, OpSelect)
-	return tenant, read, err
+	return id, tenant, read, err
 }
 
 // inExists returns err, an error from inside an EXISTS on t (from the EXISTS

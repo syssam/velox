@@ -10,7 +10,7 @@ go run ./tenant
 ```
 
 ```go
-ctx = velox.WithTenant(ctx, acme)      // acme is an int64: the tenant column's exact Go type
+ctx = velox.WithTenant(ctx, acme)      // acme is an int64, the tenant column's type; WithTenant(ctx, 1) would be converted to it
 
 db.Insert(&p).Exec(ctx)                // fills p.OrgID
 db.Query[gen.Project]().Count(ctx)     // ... WHERE "org_id" = ?

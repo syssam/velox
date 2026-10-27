@@ -48,8 +48,8 @@ CREATE TABLE lines (
 	amount_cents INTEGER NOT NULL
 );`
 
-// The two organizations, the tenants. A tenant's type must be the tenant
-// column's Go type exactly: int64 here, so an untyped 1 (an int) would not do.
+// The two organizations, the tenants, of the tenant column's Go type: int64.
+// An untyped 1, an int, would be converted to it.
 const (
 	acme   int64 = 1
 	globex int64 = 2

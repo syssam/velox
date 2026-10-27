@@ -26,10 +26,15 @@ type policyKey struct{}
 
 // WithTenant returns ctx scoped to tenant id: statements on a tenant-scoped
 // entity read and change only that tenant's rows, and inserts fill or check
-// the tenant column. id's dynamic type must be the tenant column's Go type
-// exactly. A nil id, or the type's zero value (what parsing a missing claim
-// gives), scopes nothing: such statements fail with ErrNoTenant. It replaces
-// an earlier WithTenant or WithAllTenants on ctx.
+// the tenant column. id is converted to the tenant column's Go type when it
+// is of a predeclared integer type (an untyped constant is an int) and the
+// column's type, predeclared or named such as an OrgID int64, is an integer
+// type whose range holds it; or when it is a string and the column's kind is
+// string. An id of a named type is never converted: it must be the column's
+// type, so a UserID never serves an OrgID column. Any other id fails the
+// statement with ErrTenantMismatch. A nil id, or the type's zero value (what
+// parsing a missing claim gives), scopes nothing: such statements fail with
+// ErrNoTenant. It replaces an earlier WithTenant or WithAllTenants on ctx.
 func WithTenant(ctx context.Context, id any) context.Context {
 	return context.WithValue(ctx, tenantKey{}, tenantScope{id: id})
 }
@@ -146,6 +151,12 @@ func policyBypass(ctx context.Context) string {
 // restriction; its zero Pred[E]{} fails the statement, naming the entity, so
 // that a code path that forgot to return a condition never lets a caller
 // through. Any error it returns denies the statement.
+//
+// A policy function decides from ctx and, for Insert, the row; it does not
+// query. A rule that must see other rows, such as that an inserted comment's
+// parent is one the caller may read, is a hook (Hooks): it queries through
+// Mutation.DB, in the write's transaction, and returns the error that refuses
+// the write. This is ent's split: privacy rules decide, hooks query.
 type Policy[E any] struct {
 	// Read is ANDed into every SELECT, Count, With load and Has/HasWhere
 	// subquery on the entity, into every UPDATE, DELETE and Save, and into

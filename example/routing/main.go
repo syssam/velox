@@ -36,7 +36,9 @@ CREATE TABLE notes (
 	body   TEXT NOT NULL
 )`
 
-// The tenants. A tenant must have the tenant column's Go type exactly: int64.
+// The tenants, of the tenant column's Go type: int64. WithTenant would convert
+// an untyped 1, but shardFor sees its id as given, and an int 1 would not
+// match acme: so these stay typed constants.
 const (
 	acme   int64 = 1 // its data is on the eu shard
 	globex int64 = 2 // its data is on the us shard

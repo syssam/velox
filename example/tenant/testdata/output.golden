@@ -6,7 +6,8 @@ SQL: SELECT "id", "org_id", "name", "status" FROM "projects" WHERE "status" = ? 
 org 2 asks for Magnet: ErrNotFound=true
 org 2 pauses Anvil: 0 rows changed (Anvil is org 1's)
 no tenant: ErrNoTenant=true
-tenant of type int: ErrTenantMismatch=true
+tenant 1 as an int: 3 projects, err=<nil>
+tenant of another named type: ErrTenantMismatch=true
 insert for org 2 as org 1: ErrTenantMismatch=true
 move a row to org 2: ErrTenantImmutable=true
 upsert on (name): ErrTenantUpsert=true

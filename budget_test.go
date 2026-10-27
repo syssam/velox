@@ -95,6 +95,32 @@ func TestTenantScopedOneRowBudget(t *testing.T) {
 	}
 }
 
+// TestTenantConvertedOneRowBudget: a tenant given as an int, which the scope
+// converts to the column's int64, costs at most one allocation more than the
+// exact type's TestTenantScopedOneRowBudget.
+func TestTenantConvertedOneRowBudget(t *testing.T) {
+	e := &velox.FakeExec{Rows: [][]any{invoiceRow(1)}}
+	db := velox.OpenFake(velox.Postgres, e)
+	allocs := func(id any) float64 {
+		ctx := velox.WithTenant(context.Background(), id)
+		run := func() {
+			if _, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(ctx); err != nil {
+				t.Fatal(err)
+			}
+		}
+		run() // fill the render cache
+		return testing.AllocsPerRun(200, run)
+	}
+	exact, converted := allocs(int64(1)), allocs(1)
+	if e.Args[1] != int64(1) {
+		t.Fatalf("the tenant sent is %#v, want int64(1)", e.Args[1])
+	}
+	t.Logf("int64 %.0f allocations, int %.0f", exact, converted)
+	if converted > exact+1 {
+		t.Errorf("a converted tenant makes %.0f allocations, the exact type %.0f: over the budget of +1", converted, exact)
+	}
+}
+
 func BenchmarkTenantScopedOneRow(b *testing.B) {
 	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Rows: [][]any{invoiceRow(1)}})
 	t1 := velox.WithTenant(context.Background(), int64(1))

@@ -168,7 +168,7 @@ type Statement struct {
 	Conflict     *ConflictClause // INSERT: the upsert clause, if any
 	Returning    []int           // INSERT: columns read back (PostgreSQL and SQLite)
 	AllRows      bool            // UPDATE and DELETE: the statement said All
-	Tenant       any             // the tenant scope applied; nil when unscoped
+	Tenant       any             // the tenant scope applied, as the type of the entity's tenant column; nil when unscoped; when the entity is unscoped but the statement reads a scoped entity, the id as WithTenant was given it
 	TenantBypass string          // the WithAllTenants reason, when it applied; raw SQL's reason
 	PolicyBypass string          // the WithoutPolicy reason, when it applied; raw SQL's reason
 	DryRun       bool            // built for SQL(ctx), not sent

@@ -418,7 +418,7 @@ func rowValues[E any](m *Meta[E], p *E, cols []int) []any {
 // PostgreSQL and SQLite the statement reads that key back with RETURNING.
 func oneStatement[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *ConflictClause) (Statement, int, error) {
 	fillDefaults(m, p)
-	if err := prepareRow(ctx, m.info, unsafe.Pointer(p)); err != nil {
+	if err := prepareOne(ctx, m.info, unsafe.Pointer(p)); err != nil {
 		return Statement{}, -1, err
 	}
 	gen := generatedKey(m, p)
@@ -498,14 +498,47 @@ func insertOne[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *Conflic
 	return nil
 }
 
+// rowTenant is what an insert fills or checks its rows' tenant with: the
+// context's tenant converted to the tenant column's type (tenantFor), and the
+// WithAllTenants reason.
+type rowTenant struct {
+	id  any
+	all string
+}
+
+// insertTenant returns the rowTenant of an insert of entity in, converted
+// once for all its rows.
+func insertTenant(ctx context.Context, in *EntityInfo) (rowTenant, error) {
+	if in.Tenant < 0 {
+		return rowTenant{}, nil
+	}
+	id, all := tenantOf(ctx)
+	if id != nil {
+		var err error
+		if id, err = tenantFor(in, id); err != nil {
+			return rowTenant{}, err
+		}
+	}
+	return rowTenant{id, all}, nil
+}
+
+// prepareOne readies the one row at p, of entity in, as prepareRow does.
+func prepareOne(ctx context.Context, in *EntityInfo, p unsafe.Pointer) error {
+	tn, err := insertTenant(ctx, in)
+	if err != nil {
+		return err
+	}
+	return prepareRow(in, p, tn)
+}
+
 // prepareRow readies the row at p, of entity in, to be inserted, once its
-// defaults are filled: it fills or checks the tenant column. The validators,
-// then the policy's Insert (insertAllowed), run after it. It changes the
-// caller's entity, and the changes stay when the insert then fails.
-func prepareRow(ctx context.Context, in *EntityInfo, p unsafe.Pointer) error {
+// defaults are filled: it fills or checks the tenant column with tn, from
+// insertTenant. The validators, then the policy's Insert (insertAllowed), run
+// after it. It changes the caller's entity, and the changes stay when the
+// insert then fails.
+func prepareRow(in *EntityInfo, p unsafe.Pointer, tn rowTenant) error {
 	if in.Tenant >= 0 {
-		id, all := tenantOf(ctx)
-		return fillTenant(in, p, id, all)
+		return fillTenant(in, p, tn.id, tn.all)
 	}
 	return nil
 }
@@ -527,14 +560,11 @@ func tenantField(in *EntityInfo, p unsafe.Pointer) reflect.Value {
 	return reflect.NewAt(GoType(*c), unsafe.Add(p, c.off)).Elem()
 }
 
-// fillTenant sets the row's zero tenant field to the context's tenant id, and
-// checks one already set. Under WithAllTenants (all) the row must name its
-// tenant.
+// fillTenant sets the row's zero tenant field to the context's tenant id,
+// which insertTenant converted to the field's type, and checks one already
+// set. Under WithAllTenants (all) the row must name its tenant.
 func fillTenant(in *EntityInfo, p unsafe.Pointer, id any, all string) error {
 	if id != nil {
-		if err := checkTenantValue(in, id); err != nil {
-			return err
-		}
 		if v := tenantField(in, p); v.IsZero() {
 			v.Set(reflect.ValueOf(id))
 			return nil
@@ -544,7 +574,7 @@ func fillTenant(in *EntityInfo, p unsafe.Pointer, id any, all string) error {
 }
 
 // checkRowTenant checks the row's tenant field against the context's tenant id,
-// whose type fillTenant checked: under WithTenant the field must hold id, under
+// converted to the field's type: under WithTenant the field must hold id, under
 // WithAllTenants (all) it must not be zero, and with neither the row has no
 // tenant. who says what put the value in the field.
 func checkRowTenant(in *EntityInfo, p unsafe.Pointer, id any, all, who string) error {
@@ -619,9 +649,13 @@ func setKey(in *EntityInfo, gen int, ptr any, id int64) error {
 // prepareMany prepares every entity in xs, as InsertAll's Exec does, and
 // returns the columns to insert and the most rows one statement holds.
 func prepareMany[E any](ctx context.Context, db *DB, m *Meta[E], xs []E) (cols []int, per int, err error) {
+	tn, err := insertTenant(ctx, m.info)
+	if err != nil {
+		return nil, 0, err
+	}
 	for i := range xs {
 		fillDefaults(m, &xs[i])
-		if err := prepareRow(ctx, m.info, unsafe.Pointer(&xs[i])); err != nil {
+		if err := prepareRow(m.info, unsafe.Pointer(&xs[i]), tn); err != nil {
 			return nil, 0, err
 		}
 	}

@@ -54,9 +54,9 @@ func TestInsertTenantMismatch(t *testing.T) {
 	if e.Calls != 0 {
 		t.Errorf("%d statements sent", e.Calls)
 	}
-	// The context's tenant must have the column's type, as for a query.
+	// An int tenant is converted to the column's int64, as for a query.
 	tk.OrgID = 0
-	if err := db.Insert(&tk).Exec(testmodel.WithUser(velox.WithTenant(context.Background(), 7), "ann")); !errors.Is(err, velox.ErrTenantMismatch) || tk.OrgID != 0 {
+	if err := db.Insert(&tk).Exec(testmodel.WithUser(velox.WithTenant(context.Background(), 7), "ann")); err != nil || tk.OrgID != 7 {
 		t.Errorf("an int tenant: %v, OrgID %d", err, tk.OrgID)
 	}
 }

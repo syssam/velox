@@ -178,16 +178,17 @@ func TestAllTenantsAddsNothing(t *testing.T) {
 	}
 }
 
-// TestTenantTypeMustMatch is Review Focus 2: an untyped constant is an int,
-// not the column's int64.
+// TestTenantTypeMustMatch is Review Focus 2: an id of a named type is never
+// converted, so an orgID is not the column's int64, though it is an int64.
 func TestTenantTypeMustMatch(t *testing.T) {
+	type orgID int64
 	e := &velox.FakeExec{Rows: [][]any{invoiceRow(1)}}
 	db := velox.OpenFake(velox.Postgres, e)
-	_, err := db.Query[testmodel.Invoice]().Limit(5).All(velox.WithTenant(context.Background(), 7))
+	_, err := db.Query[testmodel.Invoice]().Limit(5).All(velox.WithTenant(context.Background(), orgID(7)))
 	if !errors.Is(err, velox.ErrTenantMismatch) || !strings.HasPrefix(err.Error(), "velox: testmodel.Invoice: tenant does not match") {
 		t.Fatalf("got %v", err)
 	}
-	if !strings.Contains(err.Error(), "int64") || !strings.Contains(err.Error(), "int") {
+	if !strings.Contains(err.Error(), "int64") || !strings.Contains(err.Error(), "orgID") {
 		t.Errorf("the error names neither type: %v", err)
 	}
 	if e.Calls != 0 {
@@ -467,5 +468,391 @@ func TestZeroTenantIsRefused(t *testing.T) {
 	}
 	if e.Calls != 0 {
 		t.Errorf("%d statements sent", e.Calls)
+	}
+}
+
+// The tconv entities hold tenant columns of other Go types than
+// testmodel.Invoice's int64, for the conversion of WithTenant's id.
+type (
+	torg  int64  // a named integer tenant
+	tuorg uint16 // a named unsigned tenant
+	tslug string // a named string tenant
+)
+
+// tconvA has an int64 tenant and edges to tconvB, whose tenant is an int32,
+// and to tconvW, whose tenant is a uint16.
+type tconvA struct {
+	ID    int64
+	OrgID int64
+	Bs    velox.Many[tconvB]
+	Ws    velox.Many[tconvW]
+}
+
+type tconvW struct {
+	ID    int64
+	OrgID uint16
+	AID   int64
+}
+
+// tconvR is unscoped, with edges to the scoped tconvB and tconvW.
+type tconvR struct {
+	ID int64
+	Bs velox.Many[tconvB]
+	Ws velox.Many[tconvW]
+}
+
+type tconvB struct {
+	ID    int64
+	OrgID int32
+	AID   int64
+}
+
+type tconvU struct {
+	ID    int64
+	OrgID uint32
+}
+
+type tconvS struct {
+	ID    int64
+	OrgID tslug
+}
+
+type tconvN struct {
+	ID    int64
+	OrgID torg
+}
+
+type tconvNU struct {
+	ID    int64
+	OrgID tuorg
+}
+
+var (
+	tconvAB = velox.Rel[tconvA, tconvB]{I: 0}
+	tconvAW = velox.Rel[tconvA, tconvW]{I: 1}
+	tconvRB = velox.Rel[tconvR, tconvB]{I: 0}
+	tconvRW = velox.Rel[tconvR, tconvW]{I: 1}
+)
+
+var (
+	tconvAMeta  velox.MetaOnce[tconvA]
+	tconvBMeta  velox.MetaOnce[tconvB]
+	tconvUMeta  velox.MetaOnce[tconvU]
+	tconvSMeta  velox.MetaOnce[tconvS]
+	tconvNMeta  velox.MetaOnce[tconvN]
+	tconvNUMeta velox.MetaOnce[tconvNU]
+	tconvWMeta  velox.MetaOnce[tconvW]
+	tconvRMeta  velox.MetaOnce[tconvR]
+)
+
+// tconvDesc is the Desc of a tconv entity: the columns id and org_id, the
+// tenant, then more.
+func tconvDesc[E any](table string, addr func(*E, int) any, more ...velox.ColumnDesc) func() velox.Desc[E] {
+	return func() velox.Desc[E] {
+		return velox.Desc[E]{
+			Table:      table,
+			Columns:    append([]velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}}, more...),
+			PrimaryKey: []int{0},
+			Tenant:     1,
+			Addr:       addr,
+		}
+	}
+}
+
+func (*tconvA) VeloxMeta() *velox.Meta[tconvA] {
+	return tconvAMeta.Load(func() velox.Desc[tconvA] {
+		d := tconvDesc("tconv_a", func(x *tconvA, i int) any {
+			if i == 0 {
+				return &x.ID
+			}
+			return &x.OrgID
+		})()
+		d.Edges = []velox.EdgeDesc{velox.EdgeTo[tconvB]("Bs", 0, 2), velox.EdgeTo[tconvW]("Ws", 0, 2)}
+		d.EdgeAddr = func(x *tconvA, i int) any {
+			if i == 0 {
+				return &x.Bs
+			}
+			return &x.Ws
+		}
+		return d
+	})
+}
+
+func (*tconvW) VeloxMeta() *velox.Meta[tconvW] {
+	return tconvWMeta.Load(tconvDesc("tconv_w", func(x *tconvW, i int) any {
+		switch i {
+		case 0:
+			return &x.ID
+		case 1:
+			return &x.OrgID
+		}
+		return &x.AID
+	}, velox.ColumnDesc{Field: "AID", Name: "a_id"}))
+}
+
+func (*tconvR) VeloxMeta() *velox.Meta[tconvR] {
+	return tconvRMeta.Load(func() velox.Desc[tconvR] {
+		return velox.Desc[tconvR]{
+			Table:      "tconv_r",
+			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}},
+			PrimaryKey: []int{0},
+			Tenant:     -1,
+			Edges:      []velox.EdgeDesc{velox.EdgeTo[tconvB]("Bs", 0, 2), velox.EdgeTo[tconvW]("Ws", 0, 2)},
+			Addr:       func(x *tconvR, _ int) any { return &x.ID },
+			EdgeAddr: func(x *tconvR, i int) any {
+				if i == 0 {
+					return &x.Bs
+				}
+				return &x.Ws
+			},
+		}
+	})
+}
+
+func (*tconvB) VeloxMeta() *velox.Meta[tconvB] {
+	return tconvBMeta.Load(tconvDesc("tconv_b", func(x *tconvB, i int) any {
+		switch i {
+		case 0:
+			return &x.ID
+		case 1:
+			return &x.OrgID
+		}
+		return &x.AID
+	}, velox.ColumnDesc{Field: "AID", Name: "a_id"}))
+}
+
+func (*tconvU) VeloxMeta() *velox.Meta[tconvU] {
+	return tconvUMeta.Load(tconvDesc("tconv_u", func(x *tconvU, i int) any {
+		if i == 0 {
+			return &x.ID
+		}
+		return &x.OrgID
+	}))
+}
+
+func (*tconvS) VeloxMeta() *velox.Meta[tconvS] {
+	return tconvSMeta.Load(tconvDesc("tconv_s", func(x *tconvS, i int) any {
+		if i == 0 {
+			return &x.ID
+		}
+		return &x.OrgID
+	}))
+}
+
+func (*tconvN) VeloxMeta() *velox.Meta[tconvN] {
+	return tconvNMeta.Load(tconvDesc("tconv_n", func(x *tconvN, i int) any {
+		if i == 0 {
+			return &x.ID
+		}
+		return &x.OrgID
+	}))
+}
+
+func (*tconvNU) VeloxMeta() *velox.Meta[tconvNU] {
+	return tconvNUMeta.Load(tconvDesc("tconv_nu", func(x *tconvNU, i int) any {
+		if i == 0 {
+			return &x.ID
+		}
+		return &x.OrgID
+	}))
+}
+
+// TestTenantConversion: a predeclared integer converts into a tenant column
+// of any integer kind whose range holds it, a string into one of string kind,
+// predeclared or named; a named id never converts.
+func TestTenantConversion(t *testing.T) {
+	type orgID int64
+	type otherSlug string
+	e := &velox.FakeExec{Rows: [][]any{{int64(3)}}}
+	db := velox.OpenFake(velox.Postgres, e)
+	count := map[string]func(context.Context) error{
+		"Invoice": func(ctx context.Context) error { _, err := db.Query[testmodel.Invoice]().Count(ctx); return err },
+		"tconvN":  func(ctx context.Context) error { _, err := db.Query[tconvN]().Count(ctx); return err },
+		"tconvNU": func(ctx context.Context) error { _, err := db.Query[tconvNU]().Count(ctx); return err },
+		"tconvU":  func(ctx context.Context) error { _, err := db.Query[tconvU]().Count(ctx); return err },
+		"tconvS":  func(ctx context.Context) error { _, err := db.Query[tconvS]().Count(ctx); return err },
+	}
+	for _, c := range []struct {
+		entity string
+		id     any
+		sent   any    // the tenant sent; nil when the statement fails
+		err    error  // the failure
+		text   string // in the failure's text
+	}{
+		{"Invoice", 7, int64(7), nil, ""},
+		{"Invoice", int32(7), int64(7), nil, ""},
+		{"Invoice", uint8(7), int64(7), nil, ""},
+		{"Invoice", uint64(7), int64(7), nil, ""},
+		{"Invoice", int64(7), int64(7), nil, ""},
+		{"Invoice", uint64(1 << 63), nil, velox.ErrTenantMismatch, "does not fit"},
+		{"Invoice", 0, nil, velox.ErrNoTenant, ""},
+		{"Invoice", int8(0), nil, velox.ErrNoTenant, ""},
+		{"Invoice", "7", nil, velox.ErrTenantMismatch, ""},
+		{"Invoice", orgID(7), nil, velox.ErrTenantMismatch, ""},
+		{"tconvN", 7, torg(7), nil, ""},
+		{"tconvN", uint8(7), torg(7), nil, ""},
+		{"tconvN", orgID(7), nil, velox.ErrTenantMismatch, ""},
+		{"tconvN", torg(7), torg(7), nil, ""},
+		{"tconvNU", -1, nil, velox.ErrTenantMismatch, "does not fit"},
+		{"tconvNU", 70000, nil, velox.ErrTenantMismatch, "does not fit"},
+		{"tconvNU", 7, tuorg(7), nil, ""},
+		{"tconvU", -1, nil, velox.ErrTenantMismatch, "does not fit"},
+		{"tconvU", int64(1 << 40), nil, velox.ErrTenantMismatch, "does not fit"},
+		{"tconvU", 7, uint32(7), nil, ""},
+		{"tconvS", "acme", tslug("acme"), nil, ""},
+		{"tconvS", otherSlug("acme"), nil, velox.ErrTenantMismatch, ""},
+	} {
+		name := fmt.Sprintf("%s, %T(%v)", c.entity, c.id, c.id)
+		calls := e.Calls
+		err := count[c.entity](tenant(c.id))
+		if c.err == nil {
+			if err != nil {
+				t.Errorf("%s: %v", name, err)
+				continue
+			}
+			if got := e.Args[len(e.Args)-1]; !reflect.DeepEqual(got, c.sent) {
+				t.Errorf("%s: sent %#v (a %T), want %#v (a %T)", name, got, got, c.sent, c.sent)
+			}
+			continue
+		}
+		if !errors.Is(err, c.err) || !strings.Contains(err.Error(), c.text) {
+			t.Errorf("%s: got %v, want %v with %q", name, err, c.err, c.text)
+		}
+		if e.Calls != calls {
+			t.Errorf("%s: the refused statement was sent", name)
+		}
+	}
+
+	// The scope records the converted tenant; an Around hook sees it, a
+	// Rewrite hook runs before the scope.
+	var seen any
+	db = velox.OpenFake(velox.Postgres, e, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+		seen = st.Tenant
+		return next(ctx)
+	}))
+	if _, err := db.Query[testmodel.Invoice]().Count(tenant(7)); err != nil {
+		t.Fatal(err)
+	}
+	if seen != int64(7) {
+		t.Errorf("the Around hook saw the tenant %#v (a %T), want int64(7)", seen, seen)
+	}
+}
+
+// TestTenantInsertConverts: an insert fills and checks the converted tenant.
+func TestTenantInsertConverts(t *testing.T) {
+	e := &velox.FakeExec{Rows: [][]any{{int64(5)}}}
+	db := velox.OpenFake(velox.Postgres, e)
+	inv := testmodel.Invoice{Number: "INV-1"}
+	if err := db.Insert(&inv).Exec(tenant(7)); err != nil || inv.OrgID != 7 {
+		t.Errorf("a zero tenant: %v, OrgID %d", err, inv.OrgID)
+	}
+	inv = testmodel.Invoice{Number: "INV-1", OrgID: 7}
+	if err := db.Insert(&inv).Exec(tenant(7)); err != nil {
+		t.Errorf("the tenant: %v", err)
+	}
+	inv = testmodel.Invoice{Number: "INV-1", OrgID: 8}
+	if err := db.Insert(&inv).Exec(tenant(7)); !errors.Is(err, velox.ErrTenantMismatch) {
+		t.Errorf("another tenant: %v", err)
+	}
+	xs := []testmodel.Invoice{{Number: "INV-1"}, {Number: "INV-2", OrgID: 7}}
+	e.Rows = [][]any{{int64(5)}, {int64(6)}}
+	if err := db.InsertAll(xs).Exec(tenant(7)); err != nil || xs[0].OrgID != 7 {
+		t.Errorf("InsertAll: %v, OrgID %d", err, xs[0].OrgID)
+	}
+}
+
+// TestTenantConversionPerTarget is Review Focus 1: each entity of a statement
+// gets the tenant as its own column's type.
+func TestTenantConversionPerTarget(t *testing.T) {
+	e := &velox.FakeExec{Rows: [][]any{{int64(3)}}}
+	db := velox.OpenFake(velox.Postgres, e)
+	if _, err := db.Query[tconvA]().Where(tconvAB.Has()).Count(tenant(7)); err != nil {
+		t.Fatal(err)
+	}
+	if want := []any{int32(7), int64(7)}; !reflect.DeepEqual(e.Args, want) {
+		t.Errorf("sent %#v, want %#v; SQL %s", e.Args, want, e.SQL)
+	}
+}
+
+// TestRowScopeKeepsTheRawTenant: RowScope is the context's, not any column's.
+func TestRowScopeKeepsTheRawTenant(t *testing.T) {
+	if got := velox.RowScopeFromContext(velox.WithTenant(context.Background(), 7)).Tenant; got != 7 {
+		t.Errorf("Tenant %#v (a %T), want int(7)", got, got)
+	}
+}
+
+// TestTenantConversionIsolation: a conversion that fails anywhere in a
+// statement refuses it before it is sent, and a converted tenant guards
+// assignments and upserts as the exact type does.
+func TestTenantConversionIsolation(t *testing.T) {
+	e := &velox.FakeExec{Rows: [][]any{{int64(3)}}, Affected: 1}
+	db := velox.OpenFake(velox.Postgres, e)
+
+	// 70000 fits tconvA's int64, not the uint16 of the EXISTS's target.
+	_, err := db.Query[tconvA]().Where(tconvAW.Has()).Count(tenant(70000))
+	if !errors.Is(err, velox.ErrTenantMismatch) || !strings.Contains(err.Error(), "in the EXISTS on velox_test.tconvW") || !strings.Contains(err.Error(), "does not fit") {
+		t.Errorf("an EXISTS whose tenant does not fit: %v", err)
+	}
+	for name, id := range map[string]any{"a typed nil": (*int64)(nil), "an *int64": new(int64(7))} {
+		_, err := db.Query[testmodel.Invoice]().Count(tenant(id))
+		if !errors.Is(err, velox.ErrTenantMismatch) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if e.Calls != 0 {
+		t.Fatalf("%d refused statements sent", e.Calls)
+	}
+
+	upd := func(v int64) error {
+		_, err := db.Update[testmodel.Invoice]().Set(I.OrgID.Set(v)).Where(I.ID.EQ(1)).Exec(tenant(7))
+		return err
+	}
+	if err := upd(7); err != nil {
+		t.Errorf("Set(7) under the int 7: %v", err)
+	}
+	if err := upd(8); !errors.Is(err, velox.ErrTenantImmutable) {
+		t.Errorf("Set(8) under the int 7: %v", err)
+	}
+
+	e.Rows = [][]any{{int64(5)}}
+	inv := testmodel.Invoice{Number: "INV-1"}
+	if err := db.Insert(&inv).OnConflict(I.OrgID, I.Number).Update(I.Paid).Exec(tenant(7)); err != nil || inv.OrgID != 7 {
+		t.Errorf("a converted upsert: %v, OrgID %d", err, inv.OrgID)
+	} else if !slices.Contains(e.Args, any(int64(7))) {
+		t.Errorf("the upsert sent %#v, without int64(7)", e.Args)
+	}
+	calls := e.Calls
+	inv = testmodel.Invoice{Number: "INV-1"}
+	if err := db.Insert(&inv).OnConflict(I.Number).Update(I.Paid).Exec(tenant(7)); !errors.Is(err, velox.ErrTenantUpsert) {
+		t.Errorf("a converted upsert on (number): %v", err)
+	}
+	inv = testmodel.Invoice{Number: "INV-1", OrgID: 8}
+	if err := db.Insert(&inv).OnConflict(I.OrgID, I.Number).Update(I.Paid).Exec(tenant(7)); !errors.Is(err, velox.ErrTenantMismatch) {
+		t.Errorf("a converted upsert of another tenant's row: %v", err)
+	}
+	if e.Calls != calls {
+		t.Errorf("%d refused upserts sent", e.Calls-calls)
+	}
+}
+
+// TestTenantUnscopedEntityRecordsTheGivenTenant: a statement on an unscoped
+// entity that reads scoped targets of differently typed tenant columns shows
+// hooks the tenant as WithTenant was given it, and each target gets its own
+// column's type.
+func TestTenantUnscopedEntityRecordsTheGivenTenant(t *testing.T) {
+	e := &velox.FakeExec{Rows: [][]any{{int64(3)}}}
+	var seen any
+	db := velox.OpenFake(velox.Postgres, e, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+		seen = st.Tenant
+		return next(ctx)
+	}))
+	if _, err := db.Query[tconvR]().Where(tconvRB.Has(), tconvRW.Has()).Count(tenant(7)); err != nil {
+		t.Fatal(err)
+	}
+	if seen != 7 {
+		t.Errorf("the Around hook saw the tenant %#v (a %T), want int(7)", seen, seen)
+	}
+	if want := []any{int32(7), uint16(7)}; !reflect.DeepEqual(e.Args, want) {
+		t.Errorf("sent %#v, want %#v", e.Args, want)
 	}
 }

@@ -34,8 +34,8 @@ CREATE TABLE projects (
 	UNIQUE (org_id, name)
 )`
 
-// The tenants. A tenant must have the tenant column's Go type exactly:
-// int64 here, so these are typed constants. An untyped 1 would be an int.
+// The tenants, of the tenant column's Go type: int64. An untyped 1 is an int,
+// which WithTenant converts to it; an id of another named type it refuses.
 const (
 	acme   int64 = 1
 	globex int64 = 2
@@ -101,12 +101,16 @@ func run(ctx context.Context, w io.Writer) error {
 	}
 	say("org 2 pauses Anvil: %d rows changed (Anvil is org 1's)", n)
 
-	// Fail closed: no tenant, the wrong Go type, a row naming another
-	// tenant, and moving a row to another tenant are all refused.
+	// Fail closed: no tenant, a named type other than the column's, a row
+	// naming another tenant, and moving a row to another tenant are all
+	// refused.
 	_, err = db.Query[gen.Project]().Count(ctx)
 	say("no tenant: ErrNoTenant=%t", errors.Is(err, velox.ErrNoTenant))
-	_, err = db.Query[gen.Project]().Count(velox.WithTenant(ctx, 1)) // an int, not an int64
-	say("tenant of type int: ErrTenantMismatch=%t", errors.Is(err, velox.ErrTenantMismatch))
+	n, err = db.Query[gen.Project]().Count(velox.WithTenant(ctx, 1)) // an int, converted to the column's int64
+	say("tenant 1 as an int: %d projects, err=%v", n, err)
+	type userID int64
+	_, err = db.Query[gen.Project]().Count(velox.WithTenant(ctx, userID(1)))
+	say("tenant of another named type: ErrTenantMismatch=%t", errors.Is(err, velox.ErrTenantMismatch))
 	err = db.Insert(&gen.Project{OrgID: globex, Name: "Spy", Status: "active"}).Exec(acmeCtx)
 	say("insert for org 2 as org 1: ErrTenantMismatch=%t", errors.Is(err, velox.ErrTenantMismatch))
 	_, err = db.Update[gen.Project]().Set(P.OrgID.Set(globex)).Where(P.Name.EQ("Rocket")).Exec(acmeCtx)

@@ -39,8 +39,9 @@ var (
 	// ErrNoTenant is returned by a statement on a tenant-scoped entity when its
 	// context has neither WithTenant nor WithAllTenants.
 	ErrNoTenant = errors.New("no tenant in the context")
-	// ErrTenantMismatch is returned by a statement when the context's tenant is
-	// not of the tenant column's type, or an inserted row names another tenant.
+	// ErrTenantMismatch is returned by a statement when the context's tenant
+	// cannot be converted to the tenant column's type, or an inserted row names
+	// another tenant.
 	ErrTenantMismatch = errors.New("tenant does not match")
 	// ErrTenantImmutable is returned by an update when it assigns another
 	// tenant to the tenant column.
