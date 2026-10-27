@@ -140,9 +140,14 @@ func (r *renderer) joinCols(e *plugin.Entity, ed *plugin.Edge) (j *plugin.Entity
 }
 
 // checkExists returns the gqlimpl.CheckExists call on the rows of tgt whose
-// key pk is in keys, n of them expected.
+// key pk is in keys, n of them expected. keys is a list (it ends in "...",
+// and the rows are pk.In) or one key (pk.EQ).
 func checkExists(impl, tgt, pk, keys, n, at, typ string) string {
-	return fmt.Sprintf("%s.CheckExists(ctx, db.Query[%s]().Where(%s.In(%s)), %s, %s, %q)", impl, tgt, pk, keys, n, at, typ)
+	pred := "EQ(" + keys + ")"
+	if strings.HasSuffix(keys, "...") {
+		pred = "In(" + keys + ")"
+	}
+	return fmt.Sprintf("%s.CheckExists(ctx, db.Query[%s]().Where(%s.%s), %s, %s, %q)", impl, tgt, pk, pred, n, at, typ)
 }
 
 // writeRepointed writes the link of a target-held key: the UPDATE that sets
@@ -1077,9 +1082,8 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 	// caller could read before it, so read back under the tenant scope
 	// without the Read policy, as CreateX returns the row it inserted. An
 	// update that moves the row out of the caller's Read view succeeds.
-	errs := f.use("errors", "errors")
 	f.p("\t\tx, err := db.Query[%s]().Where(%s.EQ(key)).One(%s.WithoutPolicy(ctx, %q))", e.Name, pk, velox, "graphql: the row this update wrote")
-	f.p("\t\tif %s.Is(err, %s.ErrNotFound) {", errs, velox)
+	f.p("\t\tif %s.IsNotFound(err) {", velox)
 	f.p("\t\t\treturn %s.NotFound(%q, %q)", impl, mutation, n)
 	f.p("\t\t}")
 	f.p("\t\tif err != nil {")

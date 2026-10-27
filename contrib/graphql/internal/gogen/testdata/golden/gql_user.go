@@ -524,7 +524,7 @@ func CreateAccount(ctx context.Context, input CreateAccountInput) (*User, error)
 			}
 		}
 		if input.BestFriendID != nil {
-			if err := gqlimpl.CheckExists(ctx, db.Query[User]().Where(Users.ID.In(k16)), 1, "CreateAccountInput.bestFriendID", "Account"); err != nil {
+			if err := gqlimpl.CheckExists(ctx, db.Query[User]().Where(Users.ID.EQ(k16)), 1, "CreateAccountInput.bestFriendID", "Account"); err != nil {
 				return err
 			}
 			x.UserBestFriend = &k16

@@ -686,7 +686,7 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 			narrow(nd.t, "\t\t")
 			f.p("\t\tx, err := q.Where(%s.%s.EQ(%s)).One(ctx)", e.Handles, e.Fields[e.PrimaryKey[0]].GoName, nd.conv)
 			f.p("\t\tswitch {")
-			f.p("\t\tcase %s.Is(err, %s.ErrNotFound):", f.use("errors", "errors"), f.velox())
+			f.p("\t\tcase %s.IsNotFound(err):", f.velox())
 			f.p("\t\t\treturn nil, nil")
 			f.p("\t\tcase err != nil:")
 			f.p("\t\t\treturn nil, err")

@@ -236,11 +236,11 @@ func CreateLike(ctx context.Context, input CreateLikeInput) (*Like, error) {
 	}
 	var out *Like
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
-		if err := gqlimpl.CheckExists(ctx, db.Query[User]().Where(Users.ID.In(k2)), 1, "CreateLikeInput.userID", "Account"); err != nil {
+		if err := gqlimpl.CheckExists(ctx, db.Query[User]().Where(Users.ID.EQ(k2)), 1, "CreateLikeInput.userID", "Account"); err != nil {
 			return err
 		}
 		x.UserID = k2
-		if err := gqlimpl.CheckExists(ctx, db.Query[Post]().Where(Posts.ID.In(k3)), 1, "CreateLikeInput.postID", "Post"); err != nil {
+		if err := gqlimpl.CheckExists(ctx, db.Query[Post]().Where(Posts.ID.EQ(k3)), 1, "CreateLikeInput.postID", "Post"); err != nil {
 			return err
 		}
 		x.PostID = k3

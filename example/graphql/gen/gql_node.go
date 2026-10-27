@@ -4,7 +4,6 @@ package gen
 
 import (
 	"context"
-	"errors"
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
@@ -43,7 +42,7 @@ func Node(ctx context.Context, id string) (veloxgql.Noder, error) {
 		}
 		x, err := q.Where(Posts.ID.EQ(k)).One(ctx)
 		switch {
-		case errors.Is(err, velox.ErrNotFound):
+		case velox.IsNotFound(err):
 			return nil, nil
 		case err != nil:
 			return nil, err
@@ -65,7 +64,7 @@ func Node(ctx context.Context, id string) (veloxgql.Noder, error) {
 		}
 		x, err := q.Where(Tags.ID.EQ(k)).One(ctx)
 		switch {
-		case errors.Is(err, velox.ErrNotFound):
+		case velox.IsNotFound(err):
 			return nil, nil
 		case err != nil:
 			return nil, err
@@ -87,7 +86,7 @@ func Node(ctx context.Context, id string) (veloxgql.Noder, error) {
 		}
 		x, err := q.Where(Users.ID.EQ(k)).One(ctx)
 		switch {
-		case errors.Is(err, velox.ErrNotFound):
+		case velox.IsNotFound(err):
 			return nil, nil
 		case err != nil:
 			return nil, err

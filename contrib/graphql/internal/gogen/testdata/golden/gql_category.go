@@ -2,7 +2,6 @@ package gen
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/syssam/velox2"
@@ -274,7 +273,7 @@ func CreateCategory(ctx context.Context, input CreateCategoryInput) (*Category, 
 	var out *Category
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
 		if input.ParentID != nil {
-			if err := gqlimpl.CheckExists(ctx, db.Query[Category]().Where(Categories.ID.In(k2)), 1, "CreateCategoryInput.parentID", "Category"); err != nil {
+			if err := gqlimpl.CheckExists(ctx, db.Query[Category]().Where(Categories.ID.EQ(k2)), 1, "CreateCategoryInput.parentID", "Category"); err != nil {
 				return err
 			}
 			x.CategoryChildren = &k2
@@ -378,7 +377,7 @@ func UpdateCategory(ctx context.Context, id string, input UpdateCategoryInput) (
 	var out *Category
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
 		if input.ParentID != nil {
-			if err := gqlimpl.CheckExists(ctx, db.Query[Category]().Where(Categories.ID.In(k4)), 1, "UpdateCategoryInput.parentID", "Category"); err != nil {
+			if err := gqlimpl.CheckExists(ctx, db.Query[Category]().Where(Categories.ID.EQ(k4)), 1, "UpdateCategoryInput.parentID", "Category"); err != nil {
 				return err
 			}
 			set = append(set, Categories.CategoryChildren.Set(k4))
@@ -437,7 +436,7 @@ func UpdateCategory(ctx context.Context, id string, input UpdateCategoryInput) (
 			}
 		}
 		x, err := db.Query[Category]().Where(Categories.ID.EQ(key)).One(velox.WithoutPolicy(ctx, "graphql: the row this update wrote"))
-		if errors.Is(err, velox.ErrNotFound) {
+		if velox.IsNotFound(err) {
 			return gqlimpl.NotFound("updateCategory", "Category")
 		}
 		if err != nil {

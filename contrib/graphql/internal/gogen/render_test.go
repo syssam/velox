@@ -964,7 +964,7 @@ func TestCreateConversions(t *testing.T) {
 		` Tags veloxgql.JSON `,
 		`gqlimpl.DecodeIDAs[int64, idspkg.UserID]("CreateEventInput.ownerID", *input.OwnerID, "Owner", gqlimpl.AsInt[idspkg.UserID, int64])`,
 		`gqlimpl.FromJSON[[]string]("CreateEventInput.tags", input.Tags)`,
-		`gqlimpl.CheckExists(ctx, db.Query[Owner]().Where(Owners.ID.In(k`,
+		`gqlimpl.CheckExists(ctx, db.Query[Owner]().Where(Owners.ID.EQ(k`,
 		`), 1, "CreateEventInput.ownerID", "Owner")`,
 		`return gqlimpl.WriteError(err, "CreateEventInput", "gen.Event", eventFieldGQL)`,
 		`case "Tags": return "tags"`,
@@ -1560,5 +1560,21 @@ func TestMutationsHeading(t *testing.T) {
 	doc := readFile(t, filepath.Join("..", "..", "doc.go"))
 	if !strings.Contains(doc, "\n// # Mutations\n") {
 		t.Error(`contrib/graphql/doc.go has no "// # Mutations" heading, which the generated godoc of Create<T>, Update<T> and Delete<T> points to`)
+	}
+}
+
+// TestSingleOwnerKeyEQ: the existence check of one owner key is EQ, and only
+// a list of keys is In.
+func TestSingleOwnerKeyEQ(t *testing.T) {
+	files := render(t, testModel(t))
+	in := regexp.MustCompile(`\.In\(k\d+\)\), 1,`)
+	for name, src := range files {
+		if in.MatchString(src) {
+			t.Errorf("%s checks one owner key with In", name)
+		}
+	}
+	const want = `Users.ID.EQ(k7)), 1, "CreatePostInput.writerID"`
+	if !strings.Contains(files["gql_post.go"], want) {
+		t.Errorf("gql_post.go lacks %s", want)
 	}
 }

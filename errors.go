@@ -83,6 +83,11 @@ var (
 	ErrDryRun = errors.New("write in a dry run")
 )
 
+// IsNotFound reports whether err is, or wraps, ErrNotFound. It walks err's
+// tree as errors.Is does, but skips a nil error in it: a typed-nil error that a
+// driver wraps does not panic. ent's IsNotFound is the precedent.
+func IsNotFound(err error) bool { return is(err, ErrNotFound) }
+
 // SchemaError reports a mistake in an entity's generated metadata (its Desc,
 // or the Policy and Hooks methods it binds).
 type SchemaError struct {

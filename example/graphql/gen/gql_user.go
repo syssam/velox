@@ -5,7 +5,6 @@ package gen
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -525,7 +524,7 @@ func UpdateUser(ctx context.Context, id string, input UpdateUserInput) (*User, e
 			}
 		}
 		x, err := db.Query[User]().Where(Users.ID.EQ(key)).One(velox.WithoutPolicy(ctx, "graphql: the row this update wrote"))
-		if errors.Is(err, velox.ErrNotFound) {
+		if velox.IsNotFound(err) {
 			return gqlimpl.NotFound("updateUser", "User")
 		}
 		if err != nil {

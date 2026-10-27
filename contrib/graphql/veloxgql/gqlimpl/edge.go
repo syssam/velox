@@ -99,7 +99,7 @@ func EdgeOne[E, T any](ctx context.Context, q velox.Query[T], x *E, r velox.Rel[
 	b, owners, i := batchOf(ctx, x, r, field, 0, nil)
 	if b == nil {
 		v, err := q.Where(r.Of(x)).First(ctx)
-		if shared.Is(err, velox.ErrNotFound) {
+		if velox.IsNotFound(err) {
 			return nil, nil
 		}
 		if err != nil {

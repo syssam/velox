@@ -2,9 +2,11 @@ package velox
 
 import (
 	"errors"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"net"
 	"strings"
 	"testing"
 )
@@ -67,5 +69,30 @@ func TestSentinelDocs(t *testing.T) {
 	}
 	if n == 0 {
 		t.Error("no sentinel found")
+	}
+}
+
+// TestIsNotFound: IsNotFound is errors.Is(err, ErrNotFound) that skips a nil
+// pointer in err's tree, where errors.Is would call Unwrap on it and panic
+// (the typed nils of errclass_test.go's TestTypedNilDriverErrors).
+func TestIsNotFound(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"sentinel", ErrNotFound, true},
+		{"wrapped", fmt.Errorf("x: %w", ErrNotFound), true},
+		{"joined", errors.Join(errors.New("a"), ErrNotFound), true},
+		{"other", errors.New("not found"), false},
+		{"typed nil before", errors.Join((*net.OpError)(nil), ErrNotFound), true},
+		{"typed nil after", errors.Join(errors.New("x"), (*net.OpError)(nil)), false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if got := IsNotFound(c.err); got != c.want {
+				t.Errorf("IsNotFound(%v) = %v, want %v", c.err, got, c.want)
+			}
+		})
 	}
 }

@@ -3,7 +3,6 @@ package gen
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -563,7 +562,7 @@ func CreatePost(ctx context.Context, input CreatePostInput) (*Post, error) {
 	}
 	var out *Post
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
-		if err := gqlimpl.CheckExists(ctx, db.Query[User]().Where(Users.ID.In(k7)), 1, "CreatePostInput.writerID", "Account"); err != nil {
+		if err := gqlimpl.CheckExists(ctx, db.Query[User]().Where(Users.ID.EQ(k7)), 1, "CreatePostInput.writerID", "Account"); err != nil {
 			return err
 		}
 		x.AuthorID = k7
@@ -763,7 +762,7 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 	var out *Post
 	err = gqlimpl.Atomic(ctx, func(ctx context.Context, db *velox.DB) error {
 		if input.WriterID != nil {
-			if err := gqlimpl.CheckExists(ctx, db.Query[User]().Where(Users.ID.In(k8)), 1, "UpdatePostInput.writerID", "Account"); err != nil {
+			if err := gqlimpl.CheckExists(ctx, db.Query[User]().Where(Users.ID.EQ(k8)), 1, "UpdatePostInput.writerID", "Account"); err != nil {
 				return err
 			}
 			set = append(set, Posts.AuthorID.Set(k8))
@@ -859,7 +858,7 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 			}
 		}
 		x, err := db.Query[Post]().Where(Posts.ID.EQ(key)).One(velox.WithoutPolicy(ctx, "graphql: the row this update wrote"))
-		if errors.Is(err, velox.ErrNotFound) {
+		if velox.IsNotFound(err) {
 			return gqlimpl.NotFound("updatePost", "Post")
 		}
 		if err != nil {
