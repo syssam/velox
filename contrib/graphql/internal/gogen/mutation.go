@@ -110,6 +110,64 @@ func fieldOf(e *plugin.Entity, name string) *plugin.Field {
 	return nil
 }
 
+// fkOf is the foreign-key field ed.Field of on, the entity that holds it
+// (e for an edge that owns its key, else the target). Its error names e, ed
+// and on.
+func fkOf(e *plugin.Entity, ed *plugin.Edge, on *plugin.Entity) (*plugin.Field, error) {
+	fk := fieldOf(on, ed.Field)
+	if fk == nil {
+		return nil, fmt.Errorf("schema %s, edge %s: its foreign key %s is no field of %s", e.Name, ed.Name, ed.Field, on.Name)
+	}
+	return fk, nil
+}
+
+// joinCols is the join entity of the M2M edge ed of e, and its two fields:
+// own holds e's key, and other the target's. An inverse edge's owner is the
+// join entity's second field. Its error names e and ed.
+func (r *renderer) joinCols(e *plugin.Entity, ed *plugin.Edge) (j *plugin.Entity, own, other *plugin.Field, err error) {
+	j = r.ents[ed.Join]
+	if j == nil || len(j.Fields) != 2 {
+		return nil, nil, nil, fmt.Errorf("schema %s, edge %s: the model has no join entity %s of two fields", e.Name, ed.Name, ed.Join)
+	}
+	// velox-gen's join entity holds the key of the edge declared with
+	// edge.To first: an inverse edge's owner is its second.
+	own, other = j.Fields[0], j.Fields[1]
+	if ed.Inverse {
+		own, other = other, own
+	}
+	return j, own, other, nil
+}
+
+// checkExists returns the gqlimpl.CheckExists call on the rows of tgt whose
+// key pk is in keys, n of them expected.
+func checkExists(impl, tgt, pk, keys, n, at, typ string) string {
+	return fmt.Sprintf("%s.CheckExists(ctx, db.Query[%s]().Where(%s.In(%s)), %s, %s, %q)", impl, tgt, pk, keys, n, at, typ)
+}
+
+// writeRepointed writes the link of a target-held key: the UPDATE that sets
+// fkh to v on the rows ids names whose key is NULL, then gqlimpl.Repointed
+// on a count of cnt expected rows. With countAfter false (writeCreate) the
+// count is the UPDATE's own row count. With countAfter true (writeUpdate) it
+// is a separate Count of the rows of ids that hold v, after the UPDATE,
+// because a re-link to the same owner changes no row on MySQL without
+// clientFoundRows.
+func (r *renderer) writeRepointed(f *file, indent string, tgt *plugin.Entity, fkh, v, ids, cnt string, countAfter bool, fi sdl.InputField, at func(sdl.InputField) string, owner string) {
+	impl := f.gqlimpl()
+	set := fmt.Sprintf("db.Update[%s]().Set(%s.Set(%s)).Where(%s, %s.IsNull()).Exec(ctx)", tgt.Name, fkh, v, ids, fkh)
+	if countAfter {
+		f.p("%sif _, err := %s; err != nil {", indent, set)
+		f.p("%s\treturn err", indent)
+		f.p("%s}", indent)
+		f.p("%sif n, err := db.Query[%s]().Where(%s, %s.EQ(%s)).Count(ctx); err != nil {", indent, tgt.Name, ids, fkh, v)
+	} else {
+		f.p("%sif n, err := %s; err != nil {", indent, set)
+	}
+	f.p("%s\treturn err", indent)
+	f.p("%s} else if err := %s.Repointed(ctx, n, %s, db.Query[%s]().Where(%s, %s.NotNull(), %[6]s.NEQ(%s)), %s, %q, %q); err != nil {", indent, impl, cnt, tgt.Name, ids, fkh, v, at(fi), fi.Target, owner)
+	f.p("%s\treturn err", indent)
+	f.p("%s}", indent)
+}
+
 // writeInput writes the Go type of the mutation input in, whose fields are
 // fs, and its String and GoString, which leave out the sensitive fields'
 // values.
@@ -478,21 +536,21 @@ func (r *renderer) writeCreate(f *file, t *sdl.Type, in string) error {
 		pk := tgt.Handles + "." + d.key.fd.GoName
 		switch {
 		case fi.Kind == sdl.InputEdgeID && ed.OwnsKey:
-			fk := fieldOf(e, ed.Field)
-			if fk == nil {
-				return fmt.Errorf("schema %s, edge %s: its foreign key %s is no field of %s", e.Name, ed.Name, ed.Field, e.Name)
+			fk, err := fkOf(e, ed, e)
+			if err != nil {
+				return err
 			}
 			conv, err := r.keyConv(f, e, fk, d.key.fd, tt.Key)
 			if err != nil {
 				return err
 			}
 			indent, end := given("\t\t", i)
-			ret(indent, fmt.Sprintf("%s.CheckExists(ctx, db.Query[%s]().Where(%s.In(%s)), 1, %s, %q)", impl, tgt.Name, pk, d.v, at(fi), fi.Target))
+			ret(indent, checkExists(impl, tgt.Name, pk, d.v, "1", at(fi), fi.Target))
 			setKey(f, indent, "x."+fk.GoName, d.v, conv, "v"+strconv.Itoa(i), fk.Pointer)
 			end()
 		case fi.Kind == sdl.InputEdgeIDs && ed.Kind == plugin.M2M:
 			indent, end := given("\t\t", i)
-			ret(indent, fmt.Sprintf("%s.CheckExists(ctx, db.Query[%s]().Where(%s.In(%s...)), len(%[4]s), %s, %q)", impl, tgt.Name, pk, d.v, at(fi), fi.Target))
+			ret(indent, checkExists(impl, tgt.Name, pk, d.v+"...", "len("+d.v+")", at(fi), fi.Target))
 			end()
 		}
 	}
@@ -518,15 +576,9 @@ func (r *renderer) writeCreate(f *file, t *sdl.Type, in string) error {
 		}
 		ok := e.Fields[e.PrimaryKey[0]]
 		if ed.Kind == plugin.M2M {
-			j := r.ents[ed.Join]
-			if j == nil || len(j.Fields) != 2 {
-				return fmt.Errorf("schema %s, edge %s: the model has no join entity %s of two fields", e.Name, ed.Name, ed.Join)
-			}
-			// velox-gen's join entity holds the key of the edge declared
-			// with edge.To first: an inverse edge's owner is its second.
-			own, other := j.Fields[0], j.Fields[1]
-			if ed.Inverse {
-				own, other = other, own
+			j, own, other, err := r.joinCols(e, ed)
+			if err != nil {
+				return err
 			}
 			indent, end := given("\t\t", i)
 			f.p("%srows := make([]%s, len(%s))", indent, j.Name, d.v)
@@ -538,9 +590,9 @@ func (r *renderer) writeCreate(f *file, t *sdl.Type, in string) error {
 			continue
 		}
 		// The target's rows hold the key: re-point them.
-		tfk := fieldOf(tgt, ed.Field)
-		if tfk == nil {
-			return fmt.Errorf("schema %s, edge %s: its foreign key %s is no field of %s", e.Name, ed.Name, ed.Field, tgt.Name)
+		tfk, err := fkOf(e, ed, tgt)
+		if err != nil {
+			return err
 		}
 		conv, err := r.keyConv(f, tgt, tfk, ok, cmp.Or(t.Key, tfk.Type))
 		if err != nil {
@@ -567,11 +619,7 @@ func (r *renderer) writeCreate(f *file, t *sdl.Type, in string) error {
 			ids, n = pk+".EQ("+d.v+")", "1"
 		}
 		fkh := tgt.Handles + "." + tfk.GoName
-		f.p("%sif n, err := db.Update[%s]().Set(%s.Set(%s)).Where(%s, %s.IsNull()).Exec(ctx); err != nil {", indent, tgt.Name, fkh, v, ids, fkh)
-		f.p("%s\treturn err", indent)
-		f.p("%s} else if err := %s.Repointed(ctx, n, %s, db.Query[%s]().Where(%s, %s.NotNull(), %[6]s.NEQ(%s)), %s, %q, %q); err != nil {", indent, impl, n, tgt.Name, ids, fkh, v, at(fi), fi.Target, t.Name)
-		f.p("%s\treturn err", indent)
-		f.p("%s}", indent)
+		r.writeRepointed(f, indent, tgt, fkh, v, ids, n, false, fi, at, t.Name)
 		end()
 	}
 	f.p("\t\tout = &x")
@@ -824,9 +872,9 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 			if !ed.OwnsKey {
 				continue
 			}
-			fk := fieldOf(e, ed.Field)
-			if fk == nil {
-				return fmt.Errorf("schema %s, edge %s: its foreign key %s is no field of %s", e.Name, ed.Name, ed.Field, e.Name)
+			fk, err := fkOf(e, ed, e)
+			if err != nil {
+				return err
 			}
 			h := e.Handles + "." + fk.GoName
 			if fi.Kind == sdl.InputClearEdge {
@@ -850,7 +898,7 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 				v = conv + "(" + v + ")"
 			}
 			f.p("\t\tif input.%s != nil {", fi.GoName)
-			ret("\t\t\t", fmt.Sprintf("%s.CheckExists(ctx, db.Query[%s]().Where(%s.%s.In(%s)), 1, %s, %q)", impl, tt.Entity.Name, tt.Entity.Handles, d.key.fd.GoName, d.v, at(fi), fi.Target))
+			ret("\t\t\t", checkExists(impl, tt.Entity.Name, tt.Entity.Handles+"."+d.key.fd.GoName, d.v, "1", at(fi), fi.Target))
 			f.p("\t\t\tset = append(set, %s.Set(%s))", h, v)
 			f.p("\t\t}")
 		}
@@ -912,15 +960,9 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 		tpk := tgt.Handles + "." + tkey.GoName
 
 		if ed.Kind == plugin.M2M {
-			j := r.ents[ed.Join]
-			if j == nil || len(j.Fields) != 2 {
-				return fmt.Errorf("schema %s, edge %s: the model has no join entity %s of two fields", e.Name, ed.Name, ed.Join)
-			}
-			// As in writeCreate: an inverse edge's owner is the join
-			// entity's second field.
-			own, other := j.Fields[0], j.Fields[1]
-			if ed.Inverse {
-				own, other = other, own
+			j, own, other, err := r.joinCols(e, ed)
+			if err != nil {
+				return err
 			}
 			jo, jt := j.Handles+"."+own.GoName, j.Handles+"."+other.GoName
 			if clr >= 0 || rm >= 0 {
@@ -956,7 +998,7 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 			if add >= 0 {
 				v := dec[add].v
 				f.p("\t\tif len(%s) > 0 {", v)
-				ret("\t\t\t", fmt.Sprintf("%s.CheckExists(ctx, db.Query[%s]().Where(%s.In(%s...)), len(%[4]s), %s, %q)", impl, tgt.Name, tpk, v, at(fs[add]), fs[add].Target))
+				ret("\t\t\t", checkExists(impl, tgt.Name, tpk, v+"...", "len("+v+")", at(fs[add]), fs[add].Target))
 				f.p("\t\t\trows := make([]%s, len(%s))", j.Name, v)
 				f.p("\t\t\tfor i, c := range %s {", v)
 				f.p("\t\t\t\trows[i] = %s{%s: key, %s: c}", j.Name, own.GoName, other.GoName)
@@ -973,9 +1015,9 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 		// UPDATE, which matches no child this row already holds: the
 		// UPDATE's own row count is not read, since MySQL counts only the
 		// rows it changed unless the DSN has clientFoundRows=true.
-		tfk := fieldOf(tgt, ed.Field)
-		if tfk == nil {
-			return fmt.Errorf("schema %s, edge %s: its foreign key %s is no field of %s", e.Name, ed.Name, ed.Field, tgt.Name)
+		tfk, err := fkOf(e, ed, tgt)
+		if err != nil {
+			return err
 		}
 		if !tfk.Nullable {
 			return fmt.Errorf("schema %s, edge %s: an input re-points %s's rows, whose key %s is never NULL, which is a bug", e.Name, ed.Name, tgt.Name, tfk.Name)
@@ -1000,12 +1042,7 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 		// key the Write policy hides is not linked by the UPDATE, counts 0,
 		// and is NOT_FOUND.
 		link := func(indent string, fi sdl.InputField, ids, cnt string) {
-			exec(indent, fmt.Sprintf("db.Update[%s]().Set(%s.Set(%s)).Where(%s, %s.IsNull()).Exec(ctx)", tgt.Name, fkh, v, ids, fkh))
-			f.p("%sif n, err := db.Query[%s]().Where(%s, %s.EQ(%s)).Count(ctx); err != nil {", indent, tgt.Name, ids, fkh, v)
-			f.p("%s\treturn err", indent)
-			f.p("%s} else if err := %s.Repointed(ctx, n, %s, db.Query[%s]().Where(%s, %s.NotNull(), %[6]s.NEQ(%s)), %s, %q, %q); err != nil {", indent, impl, cnt, tgt.Name, ids, fkh, v, at(fi), fi.Target, t.Name)
-			f.p("%s\treturn err", indent)
-			f.p("%s}", indent)
+			r.writeRepointed(f, indent, tgt, fkh, v, ids, cnt, true, fi, at, t.Name)
 		}
 		if clr >= 0 {
 			f.p("\t\tif input.%s {", fs[clr].GoName)
@@ -1090,15 +1127,9 @@ func (r *renderer) writeDelete(f *file, t *sdl.Type) error {
 		if ed.Kind != plugin.M2M {
 			continue
 		}
-		j := r.ents[ed.Join]
-		if j == nil || len(j.Fields) != 2 {
-			return fmt.Errorf("schema %s, edge %s: the model has no join entity %s of two fields", e.Name, ed.Name, ed.Join)
-		}
-		// As in writeCreate: an inverse edge's owner is the join entity's
-		// second field.
-		own, other := j.Fields[0], j.Fields[1]
-		if ed.Inverse {
-			own, other = other, own
+		j, own, other, err := r.joinCols(e, ed)
+		if err != nil {
+			return err
 		}
 		cols := []*plugin.Field{own}
 		if ed.Target == e.Name {
