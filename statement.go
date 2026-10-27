@@ -172,9 +172,9 @@ type Statement struct {
 	TenantBypass string          // the WithAllTenants reason, when it applied; raw SQL's reason
 	PolicyBypass string          // the WithoutPolicy reason, when it applied; raw SQL's reason
 	DryRun       bool            // built for SQL(ctx), not sent
-	InTx         bool
-	Tx           *TxInfo // the transaction the statement runs in, when the DB has hooks; nil otherwise
-	Dialect      Dialect // the DB's: an Around hook has only the statement
+	InTx         bool            // set by velox: the statement runs in a transaction, inside db.Tx or one velox opens for it (a split InsertAll, a policy-conditioned upsert, an EdgeBidi write); a Rewrite hook may not change it
+	Tx           *TxInfo         // the transaction the statement runs in, when the DB has hooks; nil otherwise
+	Dialect      Dialect         // the DB's: an Around hook has only the statement
 	// Tags are the context's WithTags tags, set before the hooks run. A
 	// Rewrite hook gets its own copy; it may change them, and the SQL
 	// comment is rendered from what it leaves.

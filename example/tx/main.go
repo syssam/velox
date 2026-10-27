@@ -48,14 +48,14 @@ func transfer(ctx context.Context, db *velox.DB, from, to string, amount int64) 
 	if err != nil {
 		return err
 	}
-	if n == 0 {
+	if n != 1 { // the name is unique: one row, or none
 		return fmt.Errorf("%s: %w", from, errFunds)
 	}
 	n, err = db.Update[gen.Account]().Set(A.Balance.Add(amount)).Where(A.Name.EQ(to)).Exec(ctx)
 	if err != nil {
 		return err
 	}
-	if n == 0 {
+	if n != 1 {
 		return fmt.Errorf("no account %q", to)
 	}
 	return nil

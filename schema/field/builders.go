@@ -430,7 +430,11 @@ func Other(name string, typ driver.Valuer) *OtherBuilder {
 	return b
 }
 
-// Default sets the value a new row gets, of the field's type.
+// Default sets the value a new row gets, of the field's type. The value is
+// shared by every row, as in ent: a Default that holds a slice or a map,
+// such as an array type, is the same slice or map in each row that gets it,
+// so a change to one row's changes the others' and the next row's default.
+// Give it a value that is not changed in place.
 func (b *OtherBuilder) Default(v any) *OtherBuilder { b.d.Default = v; return b }
 
 // --- enum

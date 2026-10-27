@@ -30,7 +30,10 @@ var (
 	// ErrLocked is returned by a statement that could not take a lock without
 	// waiting: a NoWait read that met a row another transaction holds, or a
 	// PostgreSQL lock_timeout. It matches PostgreSQL's 55P03 (lock_not_available)
-	// and MySQL's 3572; the driver's error is wrapped with it.
+	// and MySQL's 3572; the driver's error is wrapped with it, and
+	// TxRetrySerializable does not retry it. MySQL's lock wait timeout (1205,
+	// innodb_lock_wait_timeout), the same situation on that dialect, is not
+	// ErrLocked: TxRetrySerializable retries it, as a deadlock.
 	ErrLocked = errors.New("lock not available")
 	// ErrTimeout is returned by a statement or transaction when a deadline
 	// velox set (WithDeadlines, TxTimeout) passes. The error also matches

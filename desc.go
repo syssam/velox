@@ -104,7 +104,8 @@ type ColumnDesc struct {
 	// `missing required edge "<Type>.<edge>"`, before anything is sent. Only
 	// the database's ON DELETE SET NULL clears it. velox-gen leaves it empty
 	// on a NOT NULL key, which the database enforces; on a column that cannot
-	// be NULL it is refused.
+	// be NULL it is refused. As with a field's validators and Immutable, a
+	// Rewrite or Around hook can still edit the statement after the check.
 	RequiredEdge string
 	// Encode and Decode are the column's codec, both or neither: with them,
 	// velox binds the bytes Encode returns for the field's value, and decodes
