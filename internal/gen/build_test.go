@@ -376,6 +376,13 @@ type Person struct{ schema.Schema }
 
 func (Person) Edges() []schema.Edge { return []schema.Edge{edge.To("spouse", Person.Type).Unique()} }
 
+// reqSpouse's spouse edge is a Required bidirectional O2O (rule 53).
+type reqSpouse struct{ schema.Schema }
+
+func (reqSpouse) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("spouse", reqSpouse.Type).Unique().Required()}
+}
+
 func TestBuildO2OBidi(t *testing.T) {
 	p := mustBuild(t, Person{}).Entity("Person")
 	sp := p.Edge("spouse")
@@ -567,7 +574,7 @@ func (fieldOptional) Fields() []schema.Field {
 	return []schema.Field{field.Int64("parent_id").Optional()}
 }
 func (fieldOptional) Edges() []schema.Edge {
-	return []schema.Edge{edge.To("parent", fieldOptional.Type).Unique().Required().Field("parent_id")}
+	return []schema.Edge{edge.To("children", fieldOptional.Type).From("parent").Unique().Required().Field("parent_id")}
 }
 
 type twoTenants struct{ schema.Schema }
@@ -1284,6 +1291,7 @@ func TestBuildRules(t *testing.T) {
 		{"51 one symbol on M2M", []schema.Interface{oneSymbolM2M{}}, `schema oneSymbolM2M: edge "peers": a many-to-many relation has two foreign keys; name them with edge.Symbols`},
 		{"51 symbols disagree", []schema.Interface{symOwner{}, symPet{}}, `schema symPet: edge "owner": Symbols ["a"] differ from edge "pets"'s ["b"] on symOwner`},
 		{"52 shared values differ", []schema.Interface{enumOrder{}, enumTicket{}}, `schema enumTicket: field "state": enum type status is also field "status" of schema enumOrder (`},
+		{"53 required bidirectional one-to-one", []schema.Interface{reqSpouse{}}, `schema reqSpouse: edge "spouse": a bidirectional one-to-one edge cannot be Required: its key is cleared whenever its partner re-points; make it optional, or give it an inverse edge`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			_, err := build(t, c.ss...)
@@ -2286,25 +2294,27 @@ func TestDefaultOnDelete(t *testing.T) {
 	}
 }
 
-// reqSelf is a tree whose parent is Required, and reqSelfSetNull a Required
-// edge to its own schema with OnDelete(SetNull).
+// reqSelf is a tree whose parent is Required, and reqSelfCascade one whose
+// Required parent says OnDelete(Cascade), which is not the default. (A Required unique edge to its own
+// schema with no inverse is a bidirectional one-to-one, which rule 53
+// refuses.)
 type reqSelf struct{ schema.Schema }
 
 func (reqSelf) Edges() []schema.Edge {
 	return []schema.Edge{edge.To("children", reqSelf.Type).From("parent").Unique().Required()}
 }
 
-type reqSelfSetNull struct{ schema.Schema }
+type reqSelfCascade struct{ schema.Schema }
 
-func (reqSelfSetNull) Edges() []schema.Edge {
-	return []schema.Edge{edge.To("parent", reqSelfSetNull.Type).Unique().Required().OnDelete(edge.SetNull)}
+func (reqSelfCascade) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("children", reqSelfCascade.Type).From("parent").Unique().Required().OnDelete(edge.Cascade)}
 }
 
 // A Required edge to its own schema keeps its implicit key NULL-able, as
 // ent's and old velox's tables do (n != e.Type), so its default is SET NULL;
 // the edge stays Required.
 func TestRequiredSelfKeyIsNullable(t *testing.T) {
-	g := mustBuild(t, reqSelf{}, reqSelfSetNull{})
+	g := mustBuild(t, reqSelf{}, reqSelfCascade{})
 	e := g.Entity("reqSelf")
 	if f := e.Field("req_self_children"); f == nil || !f.Optional || !f.Nillable || !f.Pointer {
 		t.Fatalf("req_self_children %+v", f)
@@ -2317,8 +2327,8 @@ func TestRequiredSelfKeyIsNullable(t *testing.T) {
 	if p := e.Edge("parent"); !p.Required {
 		t.Errorf("parent is not Required: %+v", p)
 	}
-	if got := g.Entity("reqSelfSetNull").Edges[0].Rel.OnDelete; got != "SET NULL" {
-		t.Errorf("reqSelfSetNull: got %q", got)
+	if got := g.Entity("reqSelfCascade").Edges[0].Rel.OnDelete; got != "CASCADE" {
+		t.Errorf("reqSelfCascade: got %q", got)
 	}
 	for _, d := range allDialects {
 		s := tables(t, d, reqSelf{})

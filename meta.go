@@ -32,6 +32,7 @@ type EntityInfo struct {
 	immutable  bool                       // some column is Immutable
 	required   bool                       // some column has a RequiredEdge
 	bidi       bool                       // Desc.Bidi: a link is two rows, (a, b) and (b, a)
+	bidiKeys   []bidiKey                  // the keys of the EdgeBidi relations, which both partners' rows hold
 	hooks      []hookFn                   // the Hooks method's, outermost first
 
 	// The entity's policy, bound once from its Policy method.

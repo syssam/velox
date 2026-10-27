@@ -917,7 +917,7 @@ func TestLowerOneToOneDesc(t *testing.T) {
 	if r := o.entity("Profile").rel("account"); r.Many || r.Desc != `velox.EdgeTo[Account]("Account", 1, 0)` {
 		t.Errorf("inverse %+v", r) // the key is in Profile, the inverse's owner
 	}
-	if r := o.entity("Person").rel("spouse"); r.Many || r.Desc != `velox.EdgeTo[Person]("Spouse", 1, 0)` {
+	if r := o.entity("Person").rel("spouse"); r.Many || r.Desc != `velox.EdgeBidi[Person]("Spouse", 1, 0)` {
 		t.Errorf("bidi %+v", r)
 	}
 }

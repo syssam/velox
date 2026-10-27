@@ -2,6 +2,8 @@ package itest
 
 import (
 	"context"
+	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/syssam/velox2"
@@ -316,7 +318,7 @@ func TestBidiOnRealDatabases(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {
 		tg.exec(t, "DROP TABLE IF EXISTS person_friends")
 		tg.exec(t, "DROP TABLE IF EXISTS persons")
-		tg.exec(t, "CREATE TABLE persons (id BIGINT PRIMARY KEY, name VARCHAR(64) NOT NULL)")
+		tg.exec(t, "CREATE TABLE persons (id BIGINT PRIMARY KEY, name VARCHAR(64) NOT NULL, person_spouse BIGINT)")
 		tg.exec(t, "CREATE TABLE person_friends (node_id BIGINT NOT NULL, friend_id BIGINT NOT NULL, PRIMARY KEY (node_id, friend_id))")
 		for id := range int64(3) {
 			tg.exec(t, "INSERT INTO persons (id, name) VALUES (?, ?)", id+1, "p")
@@ -389,5 +391,113 @@ func TestBidiOnRealDatabases(t *testing.T) {
 		if n := count(); n != 2 {
 			t.Fatalf("%d join rows after the repair, want 2", n)
 		}
+	})
+}
+
+// TestBidiOneOnRealDatabases: the bidirectional one-to-one edge Spouse keeps
+// both partners' keys pointing at each other. A write that would take a
+// partner that already has one fails, and leaves every row as it was: the
+// key's unique index refuses it, or, when one row's key points one way, the
+// link step does, and the transaction undoes the clearing of the old
+// partner. A delete leaves the partner to ON DELETE SET NULL.
+func TestBidiOneOnRealDatabases(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		if tg.d == velox.SQLite {
+			// The target's one connection enforces foreign keys only when told.
+			tg.exec(t, "PRAGMA foreign_keys = ON")
+			t.Cleanup(func() { tg.exec(t, "PRAGMA foreign_keys = OFF") })
+		}
+		tg.exec(t, "DROP TABLE IF EXISTS person_friends")
+		tg.exec(t, "DROP TABLE IF EXISTS persons")
+		tg.exec(t, "CREATE TABLE persons (id BIGINT PRIMARY KEY, name VARCHAR(64) NOT NULL, person_spouse BIGINT, "+
+			"UNIQUE (person_spouse), FOREIGN KEY (person_spouse) REFERENCES persons (id) ON DELETE SET NULL)")
+		for id := range int64(4) {
+			tg.exec(t, "INSERT INTO persons (id, name) VALUES (?, ?)", id+1, "p")
+		}
+		P := Persons
+		// spouses reads every person's key: 0 for none.
+		spouses := func(db *velox.DB) map[int64]int64 {
+			t.Helper()
+			ps, err := db.Query[person]().OrderBy(P.ID.Asc()).Limit(20).All(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			m := make(map[int64]int64, len(ps))
+			for _, p := range ps {
+				m[p.ID] = 0
+				if p.SpouseID != nil {
+					m[p.ID] = *p.SpouseID
+				}
+			}
+			return m
+		}
+		want := func(step string, w map[int64]int64) {
+			t.Helper()
+			if got := spouses(tg.db); !reflect.DeepEqual(got, w) {
+				t.Fatalf("%s: spouses %v, want %v", step, got, w)
+			}
+		}
+		save := func(db *velox.DB, id int64, spouse *int64) error {
+			return db.Save(&person{ID: id, SpouseID: spouse}, P.SpouseID).Exec(ctx)
+		}
+		taken := func(step string, err error) {
+			t.Helper()
+			var ce *velox.ConstraintError
+			if !errors.As(err, &ce) || ce.Kind != velox.ConstraintUnique {
+				t.Fatalf("%s: err = %v, want a unique ConstraintError", step, err)
+			}
+		}
+
+		if err := tg.db.Insert(&person{ID: 5, Name: "p", SpouseID: new(int64(1))}).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		want("insert", map[int64]int64{1: 5, 2: 0, 3: 0, 4: 0, 5: 1})
+		if err := save(tg.db, 5, new(int64(2))); err != nil {
+			t.Fatal(err)
+		}
+		want("re-point", map[int64]int64{1: 0, 2: 5, 3: 0, 4: 0, 5: 2})
+		if err := save(tg.db, 3, new(int64(4))); err != nil {
+			t.Fatal(err)
+		}
+		// 4 has a partner, 3, whose key the unique index keeps 4's.
+		taken("a taken partner", save(tg.db, 5, new(int64(4))))
+		want("a taken partner", map[int64]int64{1: 0, 2: 5, 3: 4, 4: 3, 5: 2})
+
+		// 6's key points at 7 one way: no row's key is 6, so the caller's
+		// UPDATE passes and the old partner 2 is cleared before the link
+		// finds 6 taken; the rollback restores 2.
+		for _, id := range []int64{6, 7} {
+			if err := tg.db.Insert(&person{ID: id, Name: "p"}).Exec(ctx); err != nil {
+				t.Fatal(err)
+			}
+		}
+		tg.exec(t, "UPDATE persons SET person_spouse = ? WHERE id = ?", 7, 6)
+		oneWay := map[int64]int64{1: 0, 2: 5, 3: 4, 4: 3, 5: 2, 6: 7, 7: 0}
+		taken("a one-way key", save(tg.db, 5, new(int64(6))))
+		want("a one-way key", oneWay)
+		err := tg.db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+			taken("a one-way key in a Tx", save(tx, 5, new(int64(6))))
+			p, err := tx.Query[person]().Where(P.ID.EQ(2)).First(ctx)
+			if err != nil {
+				return err
+			}
+			if p.SpouseID == nil || *p.SpouseID != 5 {
+				t.Errorf("in the Tx, after the savepoint's rollback, 2's spouse is %v, want 5", p.SpouseID)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		want("a one-way key in a Tx", oneWay)
+
+		if err := save(tg.db, 5, nil); err != nil {
+			t.Fatal(err)
+		}
+		want("clear", map[int64]int64{1: 0, 2: 0, 3: 4, 4: 3, 5: 0, 6: 7, 7: 0})
+		if _, err := tg.db.Delete[person]().Where(P.ID.EQ(3)).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		want("delete", map[int64]int64{1: 0, 2: 0, 4: 0, 5: 0, 6: 7, 7: 0})
 	})
 }

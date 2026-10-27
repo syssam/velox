@@ -2,7 +2,9 @@ package velox_test
 
 import (
 	"context"
+	"errors"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -274,4 +276,440 @@ func TestBidiLinks(t *testing.T) {
 			t.Errorf("sent %q, want both rows", e.Log)
 		}
 	})
+}
+
+// The bidirectional one-to-one model: bspouse's Spouse, a self-referencing
+// unique edge with no inverse, keyed by its own SpouseID, written by hand as
+// velox-gen writes a Desc. Its hook records Mutation.Affected.
+
+type bspouse struct {
+	ID       int64
+	SpouseID *int64
+	Spouse   velox.One[bspouse]
+}
+
+var bspouses = struct {
+	ID       velox.NumberCol[bspouse, int64]
+	SpouseID velox.NullNumberCol[bspouse, int64]
+}{velox.NumberCol[bspouse, int64]{I: 0}, velox.NullNumberCol[bspouse, int64]{I: 1}}
+
+// bspouseAffected is what bspouse's hook read from Mutation.Affected.
+var bspouseAffected int64
+
+func (*bspouse) Hooks() []velox.Hook[bspouse] {
+	return []velox.Hook[bspouse]{func(next velox.Mutator[bspouse]) velox.Mutator[bspouse] {
+		return velox.MutateFunc[bspouse](func(ctx context.Context, m *velox.Mutation[bspouse]) error {
+			err := next.Mutate(ctx, m)
+			bspouseAffected = m.Affected()
+			return err
+		})
+	}}
+}
+
+var bspouseMeta velox.MetaOnce[bspouse]
+
+func (*bspouse) VeloxMeta() *velox.Meta[bspouse] {
+	return bspouseMeta.Load(func() velox.Desc[bspouse] {
+		return velox.Desc[bspouse]{
+			Hooks:      func() velox.BoundHooks { return velox.BindHooks((*bspouse)(nil).Hooks()) },
+			Table:      "bspouses",
+			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "SpouseID", Name: "spouse_id"}},
+			PrimaryKey: []int{0},
+			Tenant:     -1,
+			Indexes:    []velox.IndexInfo{{Columns: []int{1}, Unique: true}},
+			Edges:      []velox.EdgeDesc{velox.EdgeBidi[bspouse]("Spouse", 1, 0)},
+			Addr: func(x *bspouse, i int) any {
+				if i == 0 {
+					return &x.ID
+				}
+				return &x.SpouseID
+			},
+			EdgeAddr: func(x *bspouse, i int) any { return &x.Spouse },
+		}
+	})
+}
+
+// TestBidiOne: a write that sets the key of a bidirectional one-to-one edge
+// re-points both rows in a transaction: the caller's UPDATE, the clearing of
+// the row that pointed at it, and the link of the new partner, which a taken
+// partner refuses.
+func TestBidiOne(t *testing.T) {
+	S := bspouses
+	const (
+		upd    = `UPDATE "bspouses" SET "spouse_id" = $1 WHERE "id" = $2`
+		unlink = `UPDATE "bspouses" SET "spouse_id" = $1 WHERE "spouse_id" = $2`
+		link   = `UPDATE "bspouses" SET "spouse_id" = $1 WHERE "id" = $2 AND "spouse_id" IS NULL`
+		probe  = `SELECT 1 FROM "bspouses" WHERE "id" = $1 LIMIT $2`
+		ins    = `INSERT INTO "bspouses" ("id", "spouse_id") VALUES ($1, $2)`
+	)
+	type stmt struct {
+		sql  string
+		args []any
+	}
+	// open returns a DB on a fake whose statements affect one row, but
+	// those affected names, which affect its value.
+	open := func(affected map[string]int64) (*velox.DB, *velox.FakeExec) {
+		e := &velox.FakeExec{AffectedBy: func(sql string) int64 {
+			if n, ok := affected[sql]; ok {
+				return n
+			}
+			return 1
+		}}
+		return velox.OpenFake(velox.Postgres, e), e
+	}
+	sent := func(t *testing.T, e *velox.FakeExec, want ...stmt) {
+		t.Helper()
+		var got []stmt
+		for i, s := range e.Log {
+			got = append(got, stmt{s, e.ArgLog[i]})
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("sent\n%v,\nwant\n%v", got, want)
+		}
+	}
+	linked := []stmt{
+		{"BEGIN", nil},
+		{upd, []any{new(int64(3)), int64(1)}},
+		{unlink, []any{nil, int64(1)}},
+		{link, []any{int64(1), int64(3)}},
+		{"COMMIT", nil},
+	}
+	t.Run("save", func(t *testing.T) {
+		bspouseAffected = 0
+		db, e := open(nil)
+		if err := db.Save(&bspouse{ID: 1, SpouseID: new(int64(3))}, S.SpouseID).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		sent(t, e, linked...)
+		if bspouseAffected != 1 {
+			t.Errorf("Mutation.Affected %d, want 1", bspouseAffected)
+		}
+	})
+	t.Run("save nil", func(t *testing.T) {
+		db, e := open(nil)
+		if err := db.Save(&bspouse{ID: 1}, S.SpouseID).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		sent(t, e, stmt{"BEGIN", nil}, stmt{upd, []any{(*int64)(nil), int64(1)}}, stmt{unlink, []any{nil, int64(1)}}, stmt{"COMMIT", nil})
+	})
+	t.Run("update", func(t *testing.T) {
+		db, e := open(nil)
+		if _, err := db.Update[bspouse]().Set(S.SpouseID.Set(3)).Where(S.ID.EQ(1)).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		want := slices.Clone(linked)
+		want[1].args = []any{int64(3), int64(1)}
+		sent(t, e, want...)
+	})
+	t.Run("SQL renders the caller's statement", func(t *testing.T) {
+		db, e := open(nil)
+		q, args, err := db.Save(&bspouse{ID: 1, SpouseID: new(int64(3))}, S.SpouseID).SQL(ctx)
+		if err != nil || q != upd || !reflect.DeepEqual(args, []any{new(int64(3)), int64(1)}) {
+			t.Errorf("SQL: %q %v %v", q, args, err)
+		}
+		sent(t, e)
+	})
+	taken := func(t *testing.T, found bool, want string) {
+		t.Helper()
+		db, e := open(map[string]int64{link: 0})
+		if found {
+			e.Rows = [][]any{{int64(1)}}
+		}
+		err := db.Save(&bspouse{ID: 1, SpouseID: new(int64(3))}, S.SpouseID).Exec(ctx)
+		var ce *velox.ConstraintError
+		if !errors.As(err, &ce) || ce.Kind != velox.ConstraintUnique || ce.Constraint != "spouse_id" || err.Error() != want {
+			t.Fatalf("err = %v,\nwant a unique ConstraintError: %s", err, want)
+		}
+		sent(t, e, append(slices.Clone(linked[:4]), stmt{probe, []any{int64(3), 1}}, stmt{"ROLLBACK", nil})...)
+	}
+	t.Run("taken partner", func(t *testing.T) {
+		taken(t, true, "velox: velox_test.bspouse: unique constraint spouse_id violated: row 3 already has a Spouse; clear it first")
+	})
+	t.Run("hidden partner", func(t *testing.T) {
+		taken(t, false, "velox: velox_test.bspouse: unique constraint spouse_id violated: row 3 cannot be linked")
+	})
+	t.Run("no row", func(t *testing.T) {
+		db, e := open(map[string]int64{upd: 0})
+		err := db.Save(&bspouse{ID: 1, SpouseID: new(int64(3))}, S.SpouseID).Exec(ctx)
+		if !errors.Is(err, velox.ErrNotFound) {
+			t.Fatalf("err = %v, want ErrNotFound", err)
+		}
+		sent(t, e, linked[0], linked[1], stmt{"COMMIT", nil})
+	})
+	t.Run("more rows", func(t *testing.T) {
+		db, e := open(map[string]int64{upd: 2})
+		err := db.Save(&bspouse{ID: 1, SpouseID: new(int64(3))}, S.SpouseID).Exec(ctx)
+		if want := "velox: velox_test.bspouse: the update that sets the bidirectional key spouse_id wrote 2 rows"; err == nil || err.Error() != want {
+			t.Fatalf("err = %v, want %s", err, want)
+		}
+		sent(t, e, linked[0], linked[1], stmt{"ROLLBACK", nil})
+	})
+	t.Run("unknown counts", func(t *testing.T) {
+		const want = "velox: velox_test.bspouse: the driver did not report the rows the link wrote"
+		// The caller's UPDATE and the link must say how many rows they
+		// wrote; the clearing may write any number, so its count is not read.
+		for _, c := range []struct {
+			sql  string
+			sent int
+		}{{upd, 2}, {link, 4}} {
+			db, e := open(map[string]int64{c.sql: -1})
+			err := db.Save(&bspouse{ID: 1, SpouseID: new(int64(3))}, S.SpouseID).Exec(ctx)
+			if err == nil || err.Error() != want {
+				t.Errorf("%s: err = %v, want %s", c.sql, err, want)
+			}
+			sent(t, e, append(slices.Clone(linked[:c.sent]), stmt{"ROLLBACK", nil})...)
+		}
+		db, e := open(map[string]int64{unlink: -1})
+		if err := db.Save(&bspouse{ID: 1, SpouseID: new(int64(3))}, S.SpouseID).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		sent(t, e, linked...)
+	})
+	t.Run("savepoint", func(t *testing.T) {
+		db, e := open(nil)
+		err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+			return tx.Save(&bspouse{ID: 1, SpouseID: new(int64(3))}, S.SpouseID).Exec(ctx)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := []string{"BEGIN", "SAVEPOINT", upd, unlink, link, "RELEASE SAVEPOINT", "COMMIT"}; !sameStarts(e.Log, want) {
+			t.Errorf("sent %q,\nwant %q", e.Log, want)
+		}
+	})
+	t.Run("savepoint rolled back", func(t *testing.T) {
+		db, e := open(map[string]int64{link: 0})
+		err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+			if err := tx.Save(&bspouse{ID: 1, SpouseID: new(int64(3))}, S.SpouseID).Exec(ctx); err == nil {
+				t.Error("a taken partner was linked")
+			}
+			_, err := tx.Update[bspouse]().Set(S.SpouseID.SetNull()).Where(S.ID.EQ(2)).Exec(ctx)
+			return err
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := []string{"BEGIN", "SAVEPOINT", upd, unlink, link, probe, "ROLLBACK TO SAVEPOINT", "RELEASE SAVEPOINT",
+			"SAVEPOINT", upd, unlink, "RELEASE SAVEPOINT", "COMMIT"}
+		if !sameStarts(e.Log, want) {
+			t.Errorf("sent %q,\nwant %q", e.Log, want)
+		}
+	})
+	t.Run("insert", func(t *testing.T) {
+		db, e := open(nil)
+		if err := db.Insert(&bspouse{ID: 5, SpouseID: new(int64(1))}).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		sent(t, e, stmt{"BEGIN", nil}, stmt{ins, []any{int64(5), new(int64(1))}}, stmt{link, []any{int64(5), int64(1)}}, stmt{"COMMIT", nil})
+	})
+	t.Run("insert without a key", func(t *testing.T) {
+		db, e := open(nil)
+		if err := db.Insert(&bspouse{ID: 5}).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		sent(t, e, stmt{ins, []any{int64(5), (*int64)(nil)}})
+	})
+	insGen := `INSERT INTO "bspouses" ("spouse_id") VALUES ($1) RETURNING "id"`
+	t.Run("insert, the key not returned", func(t *testing.T) {
+		// RETURNING gave no row: the row's key is unknown, so its partner
+		// cannot be linked, and the insert is rolled back.
+		const want = "velox: velox_test.bspouse: the insert did not return the row's key, so its Spouse cannot be linked"
+		db, e := open(nil)
+		if err := db.Insert(&bspouse{SpouseID: new(int64(1))}).Exec(ctx); err == nil || err.Error() != want {
+			t.Fatalf("err = %v, want %s", err, want)
+		}
+		if w := []string{"BEGIN", insGen, "ROLLBACK"}; !slices.Equal(e.Log, w) {
+			t.Errorf("sent %q, want %q", e.Log, w)
+		}
+		// MySQL without LastInsertId.
+		e = &velox.FakeExec{Affected: 1}
+		my := velox.OpenFake(velox.MySQL, e)
+		if err := my.Insert(&bspouse{SpouseID: new(int64(1))}).Exec(ctx); err == nil || err.Error() != want {
+			t.Fatalf("MySQL: err = %v, want %s", err, want)
+		}
+		if w := []string{"BEGIN", "INSERT INTO `bspouses` (`spouse_id`) VALUES (?)", "ROLLBACK"}; !slices.Equal(e.Log, w) {
+			t.Errorf("MySQL: sent %q, want %q", e.Log, w)
+		}
+		// Inside a caller's transaction: its savepoint is rolled back, and
+		// the transaction goes on.
+		db, e = open(nil)
+		err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+			if err := tx.Insert(&bspouse{SpouseID: new(int64(1))}).Exec(ctx); err == nil || err.Error() != want {
+				t.Errorf("in a Tx: err = %v, want %s", err, want)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if w := []string{"BEGIN", "SAVEPOINT", insGen, "ROLLBACK TO SAVEPOINT", "RELEASE SAVEPOINT", "COMMIT"}; !sameStarts(e.Log, w) {
+			t.Errorf("in a Tx: sent %q, want %q", e.Log, w)
+		}
+	})
+	t.Run("insert, the generated key is the partner", func(t *testing.T) {
+		db, e := open(nil)
+		e.Rows = [][]any{{int64(1)}} // RETURNING "id": 1, the partner given
+		err := db.Insert(&bspouse{SpouseID: new(int64(1))}).Exec(ctx)
+		if want := "velox: velox_test.bspouse: a row cannot be its own Spouse"; err == nil || err.Error() != want {
+			t.Fatalf("err = %v, want %s", err, want)
+		}
+		if w := []string{"BEGIN", insGen, "ROLLBACK"}; !slices.Equal(e.Log, w) {
+			t.Errorf("sent %q, want %q", e.Log, w)
+		}
+	})
+	t.Run("a Rewrite hook may not re-target the row", func(t *testing.T) {
+		e := &velox.FakeExec{Affected: 1}
+		db := velox.OpenFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+			if st.Op == velox.OpUpdate && len(st.Set) == 1 && st.Set[0].Value != nil {
+				st.Where = []velox.Predicate{velox.ColumnEQ(0, int64(2))}
+			}
+			return nil
+		}))
+		err := db.Save(&bspouse{ID: 1, SpouseID: new(int64(3))}, S.SpouseID).Exec(ctx)
+		if want := "velox: velox_test.bspouse: a Rewrite hook changed the row that the update of the bidirectional key spouse_id names"; err == nil || err.Error() != want {
+			t.Fatalf("err = %v, want %s", err, want)
+		}
+		if w := []string{"BEGIN", "ROLLBACK"}; !slices.Equal(e.Log, w) {
+			t.Errorf("sent %q, want %q", e.Log, w)
+		}
+	})
+	t.Run("a Rewrite hook may not make the insert an upsert", func(t *testing.T) {
+		e := &velox.FakeExec{Affected: 1}
+		db := velox.OpenFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+			if st.Op == velox.OpInsert {
+				st.Conflict = &velox.ConflictClause{Columns: []int{0}, DoNothing: true}
+			}
+			return nil
+		}))
+		err := db.Insert(&bspouse{ID: 5, SpouseID: new(int64(1))}).Exec(ctx)
+		if want := "velox: velox_test.bspouse: an upsert cannot set the key of the bidirectional edge Spouse; insert the row, then Save the key"; err == nil || err.Error() != want {
+			t.Fatalf("err = %v, want %s", err, want)
+		}
+		if w := []string{"BEGIN", "ROLLBACK"}; !slices.Equal(e.Log, w) {
+			t.Errorf("sent %q, want %q", e.Log, w)
+		}
+	})
+	t.Run("refused", func(t *testing.T) {
+		db, e := open(nil)
+		const (
+			self   = "velox: velox_test.bspouse: a row cannot be its own Spouse"
+			oneRow = "velox: velox_test.bspouse: an update that sets spouse_id, the key of the bidirectional edge Spouse, must name one row with Where(id.EQ(id)), as velox re-points the other row too"
+		)
+		_, errIn := db.Update[bspouse]().Set(S.SpouseID.Set(3)).Where(S.ID.In(1, 2)).Exec(ctx)
+		_, errAll := db.Update[bspouse]().Set(S.SpouseID.Set(3)).All().Exec(ctx)
+		_, errAdd := db.Update[bspouse]().Set(S.SpouseID.Add(1)).Where(S.ID.EQ(1)).Exec(ctx)
+		for _, c := range []struct {
+			name string
+			err  error
+			want string
+		}{
+			{"save self", db.Save(&bspouse{ID: 1, SpouseID: new(int64(1))}, S.SpouseID).Exec(ctx), self},
+			{"insert self", db.Insert(&bspouse{ID: 1, SpouseID: new(int64(1))}).Exec(ctx), self},
+			{"update in", errIn, oneRow},
+			{"update all", errAll, oneRow},
+			{"update add", errAdd, "velox: velox_test.bspouse: spouse_id, the key of the bidirectional edge Spouse, can only be set"},
+			{"upsert", db.Insert(&bspouse{ID: 5, SpouseID: new(int64(1))}).OnConflict(S.ID).DoNothing().Exec(ctx),
+				"velox: velox_test.bspouse: an upsert cannot set the key of the bidirectional edge Spouse; insert the row, then Save the key"},
+			{"insert all", db.InsertAll([]bspouse{{ID: 5}, {ID: 6, SpouseID: new(int64(1))}}).Exec(ctx),
+				"velox: velox_test.bspouse: InsertAll cannot set the key of the bidirectional edge Spouse; insert the rows, then Save each key"},
+		} {
+			if c.err == nil || c.err.Error() != c.want {
+				t.Errorf("%s: %v,\nwant %s", c.name, c.err, c.want)
+			}
+		}
+		if len(e.Log) != 0 {
+			t.Errorf("sent %q", e.Log)
+		}
+	})
+}
+
+// sameStarts reports whether got is want, where an element of want that
+// ends in SAVEPOINT matches one that starts with it and names the savepoint.
+func sameStarts(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if got[i] != want[i] && (!strings.HasSuffix(want[i], "SAVEPOINT") || !strings.HasPrefix(got[i], want[i]+" ")) {
+			return false
+		}
+	}
+	return true
+}
+
+// btspouse is bspouse with a tenant column: the bidirectional one-to-one
+// model of TestBidiOneTenant.
+type btspouse struct {
+	ID       int64
+	OrgID    int64
+	SpouseID *int64
+	Spouse   velox.One[btspouse]
+}
+
+// Policy lets every write: the clearing of the old partner bypasses it, and
+// says so.
+func (*btspouse) Policy() velox.Policy[btspouse] {
+	return velox.Policy[btspouse]{Write: func(context.Context) (velox.Pred[btspouse], error) { return velox.Allow[btspouse](), nil }}
+}
+
+var btspouseMeta velox.MetaOnce[btspouse]
+
+func (*btspouse) VeloxMeta() *velox.Meta[btspouse] {
+	return btspouseMeta.Load(func() velox.Desc[btspouse] {
+		return velox.Desc[btspouse]{
+			Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*btspouse)(nil).Policy()) },
+			Table:      "btspouses",
+			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "OrgID", Name: "org_id"}, {Field: "SpouseID", Name: "spouse_id"}},
+			PrimaryKey: []int{0},
+			Tenant:     1,
+			Indexes:    []velox.IndexInfo{{Columns: []int{2}, Unique: true}},
+			Edges:      []velox.EdgeDesc{velox.EdgeBidi[btspouse]("Spouse", 2, 0)},
+			Addr: func(x *btspouse, i int) any {
+				return [...]any{&x.ID, &x.OrgID, &x.SpouseID}[i]
+			},
+			EdgeAddr: func(x *btspouse, i int) any { return &x.Spouse },
+		}
+	})
+}
+
+// TestBidiOneTenant: under WithTenant, the caller's UPDATE, the link and the
+// probe are the tenant's, and the clearing of the old partner is not: it is
+// the edge's integrity, which hooks see by its bypass reasons. A partner the
+// tenant cannot see, one of another tenant, cannot be linked, and the write
+// is rolled back.
+func TestBidiOneTenant(t *testing.T) {
+	const (
+		upd    = `UPDATE "btspouses" SET "spouse_id" = $1 WHERE "id" = $2 AND "org_id" = $3`
+		unlink = `UPDATE "btspouses" SET "spouse_id" = $1 WHERE "spouse_id" = $2`
+		link   = `UPDATE "btspouses" SET "spouse_id" = $1 WHERE "id" = $2 AND "spouse_id" IS NULL AND "org_id" = $3`
+		probe  = `SELECT 1 FROM "btspouses" WHERE "id" = $1 AND "org_id" = $2 LIMIT $3`
+		reason = "velox: clearing the old partner of a bidirectional one-to-one edge"
+	)
+	type seen struct{ sql, tenantBypass, policyBypass string }
+	var got []seen
+	e := &velox.FakeExec{AffectedBy: func(sql string) int64 {
+		if sql == link {
+			return 0 // row 3 is another tenant's
+		}
+		return 1
+	}}
+	db := velox.OpenFake(velox.Postgres, e, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+		got = append(got, seen{st.SQL, st.TenantBypass, st.PolicyBypass})
+		return next(ctx)
+	}))
+	err := db.Save(&btspouse{ID: 1, SpouseID: new(int64(3))}, velox.NullNumberCol[btspouse, int64]{I: 2}).Exec(velox.WithTenant(ctx, int64(7)))
+	var ce *velox.ConstraintError
+	if want := "velox: velox_test.btspouse: unique constraint spouse_id violated: row 3 cannot be linked"; !errors.As(err, &ce) || err.Error() != want {
+		t.Fatalf("err = %v, want %s", err, want)
+	}
+	want := []seen{{upd, "", ""}, {unlink, reason, reason}, {link, "", ""}, {probe, "", ""}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("the hooks saw\n%q,\nwant\n%q", got, want)
+	}
+	if w := []string{"BEGIN", upd, unlink, link, probe, "ROLLBACK"}; !slices.Equal(e.Log, w) {
+		t.Errorf("sent %q, want %q", e.Log, w)
+	}
+	if w := []any{int64(1), int64(3), int64(7)}; len(e.ArgLog) > 3 && !reflect.DeepEqual(e.ArgLog[3], w) {
+		t.Errorf("the link's args %v, want %v", e.ArgLog[3], w)
+	}
 }

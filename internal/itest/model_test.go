@@ -128,19 +128,25 @@ func bookTagDesc() velox.Desc[bookTag] {
 
 // The bidirectional model: persons and their friends through personFriend, a
 // self-referencing many-to-many edge with no inverse, so each link is two
-// join rows.
+// join rows; and each person's Spouse, a self-referencing unique edge with no
+// inverse, keyed by SpouseID, which both partners' rows hold.
 
 type person struct {
-	ID      int64
-	Name    string
-	Friends velox.Many[person]
+	ID       int64
+	Name     string
+	SpouseID *int64
+	Friends  velox.Many[person]
+	Spouse   velox.One[person]
 }
 
 var Persons = struct {
-	ID      velox.NumberCol[person, int64]
-	Name    velox.StringCol[person, string]
-	Friends velox.Rel[person, person]
-}{velox.NumberCol[person, int64]{I: 0}, velox.StringCol[person, string]{I: 1}, velox.Rel[person, person]{I: 0}}
+	ID       velox.NumberCol[person, int64]
+	Name     velox.StringCol[person, string]
+	SpouseID velox.NullNumberCol[person, int64]
+	Friends  velox.Rel[person, person]
+	Spouse   velox.Rel[person, person]
+}{velox.NumberCol[person, int64]{I: 0}, velox.StringCol[person, string]{I: 1}, velox.NullNumberCol[person, int64]{I: 2},
+	velox.Rel[person, person]{I: 0}, velox.Rel[person, person]{I: 1}}
 
 var personMeta velox.MetaOnce[person]
 
@@ -149,22 +155,28 @@ func (*person) VeloxMeta() *velox.Meta[person] { return personMeta.Load(personDe
 func personDesc() velox.Desc[person] {
 	return velox.Desc[person]{
 		Table:      "persons",
-		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
+		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}, {Field: "SpouseID", Name: "person_spouse"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-		Edges:      []velox.EdgeDesc{velox.EdgeThrough[personFriend, person]("Friends", 0, 0, 1, 0)},
+		Indexes:    []velox.IndexInfo{{Columns: []int{2}, Unique: true}},
+		Edges:      []velox.EdgeDesc{velox.EdgeThrough[personFriend, person]("Friends", 0, 0, 1, 0), velox.EdgeBidi[person]("Spouse", 2, 0)},
 		Addr: func(x *person, i int) any {
 			switch i {
 			case 0:
 				return &x.ID
 			case 1:
 				return &x.Name
+			case 2:
+				return &x.SpouseID
 			}
 			return nil
 		},
 		EdgeAddr: func(x *person, i int) any {
-			if i == 0 {
+			switch i {
+			case 0:
 				return &x.Friends
+			case 1:
+				return &x.Spouse
 			}
 			return nil
 		},

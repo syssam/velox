@@ -351,3 +351,83 @@ func TestBidiDescRefused(t *testing.T) {
 		})
 	}
 }
+
+// dSpouse is a model for the refusals of a bidirectional one-to-one
+// relation's Desc (EdgeBidi).
+type dSpouse struct {
+	ID       int64
+	SpouseID *int64
+	Number   int64
+	Small    *int32
+	Blob     []byte
+	Spouse   velox.One[dSpouse]
+	Author   velox.One[dAuthor]
+}
+
+var dSpouseMeta velox.MetaOnce[dSpouse]
+
+func (*dSpouse) VeloxMeta() *velox.Meta[dSpouse] { return dSpouseMeta.Load(spouseDesc) }
+
+// spouseDesc is a valid Desc of dSpouse's Spouse; each case of
+// TestBidiOneDescRefused breaks it.
+func spouseDesc() velox.Desc[dSpouse] {
+	return velox.Desc[dSpouse]{
+		Table: "spouses",
+		Columns: []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "SpouseID", Name: "spouse_id"},
+			{Field: "Number", Name: "number"}, {Field: "Small", Name: "small"}, {Field: "Blob", Name: "blob", Nullable: true}},
+		PrimaryKey: []int{0},
+		Tenant:     -1,
+		Indexes:    []velox.IndexInfo{{Columns: []int{1}, Unique: true}, {Columns: []int{2}, Unique: true}, {Columns: []int{3}, Unique: true}},
+		Edges:      []velox.EdgeDesc{velox.EdgeBidi[dSpouse]("Spouse", 1, 0)},
+		Addr: func(x *dSpouse, i int) any {
+			return [...]any{&x.ID, &x.SpouseID, &x.Number, &x.Small, &x.Blob}[i]
+		},
+		EdgeAddr: func(x *dSpouse, i int) any { return [...]any{&x.Spouse, &x.Author}[i] },
+	}
+}
+
+func TestBidiOneDescRefused(t *testing.T) {
+	if _, err := velox.LoadDesc(spouseDesc()); err != nil {
+		t.Fatalf("a valid Desc: %v", err)
+	}
+	for _, c := range []struct {
+		name string
+		edit func(d *velox.Desc[dSpouse])
+		want string
+	}{
+		{"another entity", func(d *velox.Desc[dSpouse]) {
+			d.Edges = []velox.EdgeDesc{velox.EdgeTo[dSpouse]("Spouse", 1, 0), velox.EdgeBidi[dAuthor]("Author", 1, 0)}
+		}, "Author: EdgeBidi relates an entity to itself, not to velox_test.dAuthor"},
+		{"not a pointer", func(d *velox.Desc[dSpouse]) {
+			d.Edges = []velox.EdgeDesc{velox.EdgeBidi[dSpouse]("Spouse", 2, 0)}
+		}, "Spouse: EdgeBidi's key column number is a int64; make its field a pointer, which a NULL key leaves nil"},
+		{"a Nullable slice", func(d *velox.Desc[dSpouse]) {
+			d.Edges = []velox.EdgeDesc{velox.EdgeBidi[dSpouse]("Spouse", 4, 0)}
+		}, "Spouse: EdgeBidi's key column blob is a []uint8; make its field a pointer, which a NULL key leaves nil"},
+		{"a RequiredEdge", func(d *velox.Desc[dSpouse]) { d.Columns[1].RequiredEdge = "dSpouse.spouse" },
+			"Spouse: EdgeBidi's key column spouse_id has a RequiredEdge, and velox clears a partner's key whenever its partner re-points"},
+		{"another type", func(d *velox.Desc[dSpouse]) {
+			d.Edges = []velox.EdgeDesc{velox.EdgeBidi[dSpouse]("Spouse", 3, 0)}
+		}, "Spouse: EdgeBidi's key column small holds int32, and the primary key id int64"},
+		{"no unique index", func(d *velox.Desc[dSpouse]) { d.Indexes = d.Indexes[1:] },
+			"Spouse: EdgeBidi's key column spouse_id has no unique index of its own, which refuses a partner that already has one"},
+		{"a non-unique index", func(d *velox.Desc[dSpouse]) { d.Indexes[0].Unique = false },
+			"Spouse: EdgeBidi's key column spouse_id has no unique index of its own, which refuses a partner that already has one"},
+		{"the primary key", func(d *velox.Desc[dSpouse]) {
+			d.Edges = []velox.EdgeDesc{velox.EdgeBidi[dSpouse]("Spouse", 0, 0)}
+		}, "Spouse: EdgeBidi's key column id is a primary-key or tenant column"},
+		{"the id is not the key", func(d *velox.Desc[dSpouse]) {
+			d.Edges = []velox.EdgeDesc{velox.EdgeBidi[dSpouse]("Spouse", 1, 2)}
+		}, "Spouse: EdgeBidi's id column number is not the entity's one-column primary key"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			d := spouseDesc()
+			c.edit(&d)
+			_, err := velox.LoadDesc(d)
+			var se *velox.SchemaError
+			if !errors.As(err, &se) || err.Error() != "velox: velox_test.dSpouse."+c.want {
+				t.Errorf("err = %v,\nwant a SchemaError: velox: velox_test.dSpouse.%s", err, c.want)
+			}
+		})
+	}
+}

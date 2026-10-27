@@ -212,6 +212,9 @@ type Statement struct {
 	// conditioned it: checkUpserted compares with it, not with Rows, which
 	// an Around hook may change.
 	upsertRows int
+	// bidi is set on a statement of a bidirectional one-to-one write, whose
+	// Rewrite hooks' changes checkBidiRewrite checks; nil otherwise.
+	bidi *bidiStep
 }
 
 // Result is what executing a statement did: a Statement's, which an Around

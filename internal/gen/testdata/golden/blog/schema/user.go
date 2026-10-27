@@ -35,6 +35,7 @@ func (User) Edges() []schema.Edge {
 		edge.To("posts", Post.Type),
 		edge.To("groups", Group.Type),
 		edge.To("friends", User.Type),
+		edge.To("spouse", User.Type).Unique(),
 	}
 }
 

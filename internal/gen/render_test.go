@@ -123,6 +123,10 @@ func TestGoldenBidi(t *testing.T) {
 	if strings.Contains(read("user_group_velox.go"), "Bidi:") {
 		t.Error("user_group_velox.go's Desc says Bidi")
 	}
+	// The users' spouse edge is a bidirectional one-to-one relation.
+	if u := read("user_velox.go"); !strings.Contains(u, `velox.EdgeBidi[User]("Spouse", `) || strings.Contains(u, `EdgeTo[User]("Spouse"`) {
+		t.Error(`user_velox.go's Desc does not relate Spouse with velox.EdgeBidi[User]`)
+	}
 }
 
 // The blog golden's velox.go gives each enum Values, String and IsValid, all

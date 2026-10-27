@@ -61,7 +61,7 @@ type holder struct {
 }
 
 // EdgeDesc is one relation field of a generated Desc: its name and the columns
-// that key it. For generated code. EdgeTo and EdgeThrough make it. It carries
+// that key it. For generated code. EdgeTo, EdgeBidi and EdgeThrough make it. It carries
 // no target entity: the use site supplies that (see EdgeTo).
 type EdgeDesc struct {
 	name string
@@ -70,6 +70,7 @@ type EdgeDesc struct {
 	ownerCol  int      // an index into the owner's Columns
 	targetCol int      // an index into the target's Columns
 	through   *through // EdgeThrough's join entity; nil for any other relation
+	bidi      any      // EdgeBidi made it: the reflect.Type of T, which must be the owner; nil otherwise
 
 	// holders are the reflect.Types of One[T] and Many[T] for the target T:
 	// the types the relation's field may have.

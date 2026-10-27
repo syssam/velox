@@ -30,9 +30,11 @@ type User struct {
 	Age          int               `json:"age,omitempty"`
 	PasswordHash string            `json:"-"`
 	Score        *float64          `json:"score,omitempty"`
+	UserSpouse   *int64            `json:"user_spouse,omitempty"`
 	Posts        velox.Many[Post]  `json:"posts,omitzero"`
 	Groups       velox.Many[Group] `json:"groups,omitzero"`
 	Friends      velox.Many[User]  `json:"friends,omitzero"`
+	Spouse       velox.One[User]   `json:"spouse,omitzero"`
 }
 
 // Users holds the typed handles of User's columns and relations.
@@ -50,9 +52,11 @@ var Users = struct {
 	Age          velox.NumberCol[User, int]
 	PasswordHash velox.StringCol[User, string]
 	Score        velox.NullNumberCol[User, float64]
+	UserSpouse   velox.NullNumberCol[User, int64]
 	Posts        velox.Rel[User, Post]
 	Groups       velox.Rel[User, Group]
 	Friends      velox.Rel[User, User]
+	Spouse       velox.Rel[User, User]
 }{
 	ID:           velox.NumberCol[User, int64]{I: 0},
 	CreatedAt:    velox.OrderedCol[User, time.Time]{I: 1},
@@ -67,9 +71,11 @@ var Users = struct {
 	Age:          velox.NumberCol[User, int]{I: 10},
 	PasswordHash: velox.StringCol[User, string]{I: 11},
 	Score:        velox.NullNumberCol[User, float64]{I: 12},
+	UserSpouse:   velox.NullNumberCol[User, int64]{I: 13},
 	Posts:        velox.Rel[User, Post]{I: 0},
 	Groups:       velox.Rel[User, Group]{I: 1},
 	Friends:      velox.Rel[User, User]{I: 2},
+	Spouse:       velox.Rel[User, User]{I: 3},
 }
 
 var userMeta velox.MetaOnce[User]
@@ -99,17 +105,20 @@ func userDesc() velox.Desc[User] {
 			{Field: "Age", Name: "age"},
 			{Field: "PasswordHash", Name: "password_hash", Sensitive: true},
 			{Field: "Score", Name: "score", Default: float64(1.5)},
+			{Field: "UserSpouse", Name: "user_spouse"},
 		},
 		PrimaryKey: []int{0},
 		Tenant:     4,
 		Indexes: []velox.IndexInfo{
 			{Columns: []int{4, 5}, Unique: true},
 			{Columns: []int{6}, Unique: true},
+			{Columns: []int{13}, Unique: true},
 		},
 		Edges: []velox.EdgeDesc{
 			velox.EdgeTo[Post]("Posts", 0, 1),
 			velox.EdgeThrough[UserGroup, Group]("Groups", 0, 0, 1, 0),
 			velox.EdgeThrough[UserFriend, User]("Friends", 0, 0, 1, 0),
+			velox.EdgeBidi[User]("Spouse", 13, 0),
 		},
 		Addr: func(x *User, i int) any {
 			switch i {
@@ -139,6 +148,8 @@ func userDesc() velox.Desc[User] {
 				return &x.PasswordHash
 			case 12:
 				return &x.Score
+			case 13:
+				return &x.UserSpouse
 			}
 			return nil
 		},
@@ -150,6 +161,8 @@ func userDesc() velox.Desc[User] {
 				return &x.Groups
 			case 2:
 				return &x.Friends
+			case 3:
+				return &x.Spouse
 			}
 			return nil
 		},
@@ -210,7 +223,11 @@ func (x User) String() string {
 	if x.Score != nil {
 		p12 = *x.Score
 	}
-	return fmt.Sprintf("User(ID=%v, CreatedAt=%v, UpdatedAt=%v, CreatedBy=%v, OrgID=%v, Name=%v, Email=%v, Role=%v, Nickname=%v, Bio=%v, Age=%v, Score=%v)", x.ID, x.CreatedAt, x.UpdatedAt, x.CreatedBy, x.OrgID, x.Name, x.Email, x.Role, x.Nickname, p9, x.Age, p12)
+	var p13 any
+	if x.UserSpouse != nil {
+		p13 = *x.UserSpouse
+	}
+	return fmt.Sprintf("User(ID=%v, CreatedAt=%v, UpdatedAt=%v, CreatedBy=%v, OrgID=%v, Name=%v, Email=%v, Role=%v, Nickname=%v, Bio=%v, Age=%v, Score=%v, UserSpouse=%v)", x.ID, x.CreatedAt, x.UpdatedAt, x.CreatedBy, x.OrgID, x.Name, x.Email, x.Role, x.Nickname, p9, x.Age, p12, p13)
 }
 
 // GoString is String, so that %#v does not print the sensitive fields either.

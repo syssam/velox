@@ -437,6 +437,19 @@
           "nullable": true,
           "has_default": true,
           "default": 1.5
+        },
+        {
+          "name": "user_spouse",
+          "go_name": "UserSpouse",
+          "column": "user_spouse",
+          "type": "int64",
+          "go_type": "*int64",
+          "elem_type": "int64",
+          "pointer": true,
+          "nullable": true,
+          "optional": true,
+          "unique": true,
+          "implicit": "spouse"
         }
       ],
       "edges": [
@@ -463,6 +476,16 @@
           "target": "User",
           "kind": "M2M",
           "join": "UserFriend"
+        },
+        {
+          "name": "spouse",
+          "go_name": "Spouse",
+          "target": "User",
+          "kind": "O2O",
+          "unique": true,
+          "field": "user_spouse",
+          "field_on": "User",
+          "owns_key": true
         }
       ],
       "indexes": [

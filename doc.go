@@ -218,13 +218,14 @@
 // # Generated code
 //
 // velox-gen and its plugins write code that uses part of this package, and
-// nothing else should: Desc, ColumnDesc, EdgeDesc, EdgeTo, EdgeThrough,
-// Meta, MetaOnce, BindPolicy, BindHooks, BoundPolicy, BoundHooks, Lazy,
-// Validate, ValidateSet and GeneratedCodeIsVersion6. Each says "For
-// generated code." in its documentation. They are not part of velox's API:
-// they change only when GeneratedCodeIsVersion6 is replaced by the next
-// version, which is outside semantic versioning. Run velox-gen again after
-// you update velox; code generated for another version fails to compile.
+// nothing else should: Desc, ColumnDesc, EdgeDesc, EdgeTo, EdgeBidi,
+// EdgeThrough, Meta, MetaOnce, BindPolicy, BindHooks, BoundPolicy,
+// BoundHooks, Lazy, Validate, ValidateSet and GeneratedCodeIsVersion6. Each
+// says "For generated code." in its documentation. They are not part of
+// velox's API: they change only when GeneratedCodeIsVersion6 is replaced by
+// the next version, which is outside semantic versioning. Run velox-gen
+// again after you update velox; code generated for another version fails to
+// compile.
 package velox
 
 //go:generate go run ./internal/handlegen/gen

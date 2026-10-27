@@ -406,6 +406,9 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 		if err := checkColumns(st); err != nil {
 			return err
 		}
+		if err := checkBidiRewrite(st); err != nil {
+			return err
+		}
 		if cf := st.Conflict; cf != nil && len(cf.Where) > 0 {
 			switch {
 			case db.d == MySQL:

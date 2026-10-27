@@ -97,7 +97,10 @@ func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error) {
 // will not be sent. Around hooks, which wrap execution, do not run. A write a
 // hook makes under ctx, an audit row through Mutation.DB say, is refused with
 // ErrDryRun: a hook that returns that error after next leaves SQL(ctx) its
-// statement; one that returns it before next, SQL(ctx) fails with it.
+// statement; one that returns it before next, SQL(ctx) fails with it. An
+// update that sets the key of a bidirectional one-to-one edge (EdgeBidi)
+// renders as the caller's UPDATE alone, without the statements that re-point
+// the partners.
 func (u UpdateQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error) {
 	ctx = dryRunContext(ctx) // first, so that every hook sees it
 	st, err := u.statement()
@@ -287,7 +290,9 @@ func (s SaveQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 // assignments and the checks, the Rewrite hooks, the tenant and policy scope
 // and rendering. The hooks and the policy can tell from IsDryRun(ctx) that
 // the statement will not be sent. Around hooks do not run. A write a hook
-// makes under ctx is refused with ErrDryRun, as in UpdateQuery.SQL.
+// makes under ctx is refused with ErrDryRun, as in UpdateQuery.SQL. A Save
+// of the key of a bidirectional one-to-one edge (EdgeBidi) renders as the
+// caller's UPDATE alone, as in UpdateQuery.SQL.
 func (s SaveQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error) {
 	ctx = dryRunContext(ctx) // first, so that every hook sees it
 	st, err := s.statement()
@@ -380,6 +385,10 @@ func onlyDryRun(err error) bool {
 // the statement through the pipeline, whose guard runs first, or under
 // SQL(ctx) renders it into mu.sql and mu.args. It sets mu.affected.
 //
+// An update that sets the key of a bidirectional one-to-one edge (EdgeBidi)
+// must name one row by its primary key, and is sent with the statements that
+// re-point both partners (bidiUpdate).
+//
 // On the join entity of a bidirectional edge (write refused an update), a
 // delete's conditions also match each row's mirror (bidiWhere), so that both
 // rows of a link go, as ent's clearM2MEdges removes them. It sends a copy of
@@ -400,6 +409,18 @@ func writeCore(ctx context.Context, db *DB, mu *mutation) error {
 		}
 		if err := validateSet(in, st.Set); err != nil {
 			return err
+		}
+		if len(in.bidiKeys) > 0 {
+			if keys, vs := bidiSet(in, st.Set); len(keys) > 0 {
+				k, err := checkBidiUpdate(st, keys, vs)
+				if err != nil {
+					return err
+				}
+				st.InTx = true // Exec sends it in a transaction, bidiUpdate's
+				if !mu.dry {
+					return bidiUpdate(ctx, db, mu, keys, k, vs)
+				}
+			}
 		}
 	}
 	if mu.dry {

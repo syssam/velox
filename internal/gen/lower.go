@@ -791,6 +791,10 @@ func (l *lowerer) relations() {
 					continue
 				}
 				r.Desc = fmt.Sprintf("velox.EdgeTo[%s](%q, %d, %d)", t.Name, ed.GoName, ownerCol, targetCol)
+				if ed.Rel.Kind == "O2O" && ed.Bidi {
+					// Both rows hold the key: the core writes the partner's.
+					r.Desc = fmt.Sprintf("velox.EdgeBidi[%s](%q, %d, %d)", t.Name, ed.GoName, ownerCol, targetCol)
+				}
 			}
 			s.out.Rels = append(s.out.Rels, r)
 		}

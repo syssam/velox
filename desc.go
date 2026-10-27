@@ -285,6 +285,7 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 		}
 	}
 	rels := make([]*relation, len(d.relations))
+	var bidiKeys []bidiKey
 	if len(rels) > 0 && v.relAddr == nil {
 		return fail("", "the generated metadata has relations but no EdgeAddr; run go tool velox-gen")
 	}
@@ -303,10 +304,17 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 			// it with the wrong type.
 			return fail(r.name, "relation %s is a %v, not a One or Many of %s", r.name, rt, targetName(rtype(r.holders[0])))
 		}
+		if r.bidi != nil {
+			bk, err := checkEdgeBidi(name, t, d, cols, &r, rt)
+			if err != nil {
+				return nil, err
+			}
+			bidiKeys = append(bidiKeys, bk)
+		}
 		rels[i] = &relation{name: r.name, many: strings.HasPrefix(rt.Name(), "Many["), off: off, typ: rt, ownerCol: r.ownerCol, targetCol: r.targetCol, through: r.through}
 	}
 	info = &EntityInfo{Name: name, Table: d.table, Schema: d.schema, Columns: cols, PrimaryKey: d.primaryKey, Tenant: d.tenant,
-		Indexes: d.indexes, rels: rels, immutable: anyImmutable, required: anyRequired, bidi: d.bidi}
+		Indexes: d.indexes, rels: rels, immutable: anyImmutable, required: anyRequired, bidi: d.bidi, bidiKeys: bidiKeys}
 	if err := validate(info); err != nil {
 		return nil, err
 	}
@@ -412,6 +420,34 @@ func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) EdgeDesc 
 		name: name, explicit: true, ownerCol: ownerCol, targetCol: targetCol,
 		holders: [2]any{elemType((*One[T])(nil)), elemType((*Many[T])(nil))},
 	}
+}
+
+// EdgeBidi is the one-to-one relation of a self-referencing edge that has no
+// inverse, which is bidirectional, as in ent: owner.Columns[keyCol] holds
+// the other row's T.Columns[idCol], and that row's key holds this row's. For
+// generated code. T is the owner entity, idCol is its primary key, and
+// keyCol is a pointer field of the key's Go type, with a unique index and no
+// RequiredEdge.
+//
+// velox writes both rows. An Insert that sets the key sets the other row's
+// key too. An Update or Save that sets it clears the key of the row that
+// pointed here and sets the new partner's; one that sets it to nil clears
+// the partner's. They run in a transaction velox opens, a savepoint when the
+// caller is in one. A new partner that already has a partner is refused with
+// a *ConstraintError of kind ConstraintUnique: clear its key first. The
+// clearing of the old partner is not scoped by tenant or policy
+// (WithAllTenants, WithoutPolicy, with a reason the hooks see): it is the
+// edge's integrity, as ent's is. The link of the new partner is scoped as
+// the caller's write, so a partner it cannot see cannot be linked. A
+// Rewrite hook may not change the row such an update names, nor make such an
+// insert an upsert. Delete
+// writes only the deleted rows; the foreign key's ON DELETE acts on their
+// partners, and velox-gen's default for this NULL-able key, as ent's, is
+// SET NULL.
+func EdgeBidi[T any, PT Entity[T]](name string, keyCol, idCol int) EdgeDesc {
+	r := EdgeTo[T, PT](name, keyCol, idCol)
+	r.bidi = elemType((*T)(nil))
+	return r
 }
 
 // EdgeThrough is a many-to-many relation to T through the join entity J:

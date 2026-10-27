@@ -151,8 +151,10 @@ func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 // hooks, which wrap execution, do not run. A write a hook makes under ctx is
 // refused with ErrDryRun, as in UpdateQuery.SQL. An InsertAll too large for one
 // statement gives the first. InTx is set when Exec sends the statement in a
-// transaction: inside one, for an InsertAll too large for one statement, and
-// for one whose update branch gets the policy's conditions.
+// transaction: inside one, for an InsertAll too large for one statement, for
+// one whose update branch gets the policy's conditions, and for an Insert
+// that sets the key of a bidirectional one-to-one edge (EdgeBidi), whose
+// partner Exec then links.
 func (q InsertQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error) {
 	ctx = dryRunContext(ctx) // first, so that every hook sees it
 	if err := q.check(); err != nil {
@@ -231,7 +233,8 @@ func (q InsertQuery[E]) render[_ Lazy[E]](ctx context.Context, mu *mutation) err
 }
 
 // check refuses an insert that cannot be built: invalid metadata, Insert of
-// a nil pointer, an upsert without OnConflict's columns.
+// a nil pointer, an upsert without OnConflict's columns, and an upsert that
+// sets the key of a bidirectional one-to-one edge (EdgeBidi).
 func (q InsertQuery[E]) check[_ Lazy[E]]() error {
 	if q.meta.err != nil {
 		return q.meta.err
@@ -240,18 +243,25 @@ func (q InsertQuery[E]) check[_ Lazy[E]]() error {
 		return fmt.Errorf("velox: %s: Insert of a nil pointer", q.meta.info.Name)
 	}
 	if q.conflict != nil {
-		return checkConflict(q.meta.info, q.conflict)
+		return checkConflict(q.meta.info, q.conflict, unsafe.Pointer(q.one))
 	}
 	return nil
 }
 
 // checkConflict refuses an upsert clause of entity in without the columns of
-// a unique key, one that updates an Immutable column, and one that updates on
-// the join entity of a bidirectional edge. It is not generic, so that every
-// entity's InsertQuery does not compile it.
-func checkConflict(in *EntityInfo, cf *ConflictClause) error {
+// a unique key, one that updates an Immutable column, one that updates on
+// the join entity of a bidirectional edge, and an upsert of the row at one
+// (nil for InsertAll, whose prepareMany refuses it) that sets the key of a
+// bidirectional one-to-one edge. It is not generic, so that every entity's
+// InsertQuery does not compile it.
+func checkConflict(in *EntityInfo, cf *ConflictClause, one unsafe.Pointer) error {
 	if len(cf.Columns) == 0 {
 		return fmt.Errorf("velox: %s: an upsert needs OnConflict with the columns of a unique key", in.Name)
+	}
+	if one != nil && len(in.bidiKeys) > 0 {
+		if err := refuseBidiInsert(in, one, false); err != nil {
+			return err
+		}
 	}
 	if len(cf.Update) > 0 && in.bidi {
 		return errBidiUpdate(in)
@@ -454,6 +464,7 @@ func oneStatement[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *Conf
 	if gen >= 0 && db.d != MySQL {
 		st.Returning = []int{gen}
 	}
+	bidiInTx(&st, unsafe.Pointer(p))
 	return st, gen, nil
 }
 
@@ -463,13 +474,44 @@ func insertOne[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *Conflic
 	if err != nil {
 		return err
 	}
+	return insertRow(ctx, db, unsafe.Pointer(p), &st, gen, out)
+}
+
+// insertRow sends st, the insert of the row at p that oneStatement made with
+// its generated key column gen, and sets out.Affected. A row that sets the
+// key of a bidirectional one-to-one edge (EdgeBidi) is inserted with the
+// statement that links its partner (bidiInsert). It is not generic, so that
+// it is compiled once; the transaction's closure works on copies, made only
+// for such a row, so that no other insert allocates for it.
+func insertRow(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen int, out *Result) error {
+	if in := st.Entity; len(in.bidiKeys) > 0 {
+		if keys, vs := bidiRow(in, p); len(keys) > 0 {
+			cp := *st
+			cp.bidi = &bidiStep{key: keys[0], insert: true}
+			var res Result
+			err := bidiInsert(ctx, db, in, p, keys, vs, gen >= 0, cp.Conflict != nil, func(ctx context.Context, tx *DB) error {
+				return sendOne(ctx, tx, p, &cp, gen, &res)
+			})
+			if err == nil {
+				out.Affected = res.Affected
+			}
+			return err
+		}
+	}
+	return sendOne(ctx, db, p, st, gen, out)
+}
+
+// sendOne sends st, the insert of the row at p with its generated key column
+// gen, on db, reads that key back into the row, and sets out.Affected.
+func sendOne(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen int, out *Result) error {
+	in := st.Entity
 	if gen < 0 {
-		res, err := execWrite(ctx, db, &st)
+		res, err := execWrite(ctx, db, st)
 		if err != nil {
 			return err
 		}
 		out.Affected = res.affected
-		return checkUpserted(&st, res.affected)
+		return checkUpserted(st, res.affected)
 	}
 	if db.d != MySQL {
 		var back int64 // the rows that came back
@@ -481,14 +523,15 @@ func insertOne[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *Conflic
 			// A hook may have redirected Returning: then the row does not
 			// hold the key.
 			if len(st.Returning) == 1 && st.Returning[0] == gen {
-				return r.Scan(scanDst(m.info, gen, m.addr(p, gen)))
+				return r.Scan(scanDst(in, gen, fieldAddr(in, p, gen)))
 			}
 			return nil
 		}
+		var err error
 		if db.hooked() {
-			err = db.run(ctx, &st, read, nil)
+			err = db.run(ctx, st, read, nil)
 		} else {
-			err = db.plain(ctx, &st, read, nil)
+			err = db.plain(ctx, st, read, nil)
 		}
 		if err != nil {
 			return err
@@ -500,9 +543,9 @@ func insertOne[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *Conflic
 			// checks, so no row back is a hidden row.
 			return nil
 		}
-		return checkUpserted(&st, back)
+		return checkUpserted(st, back)
 	}
-	res, err := execWrite(ctx, db, &st)
+	res, err := execWrite(ctx, db, st)
 	if err != nil {
 		return err
 	}
@@ -511,7 +554,7 @@ func insertOne[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *Conflic
 	// Without a conflict clause a successful insert wrote its row, whether
 	// the driver reported the count or not (-1).
 	if st.Conflict == nil && res.hasLastID && res.affected != 0 {
-		return setGeneratedKey(m, p, gen, res.lastID)
+		return setKey(in, gen, fieldAddr(in, p, gen), res.lastID)
 	}
 	return nil
 }
@@ -640,10 +683,11 @@ func errNothingToInsert(in *EntityInfo) error {
 	return fmt.Errorf("velox: %s: nothing to insert: the only column is the generated key", in.Name)
 }
 
-// setGeneratedKey stores id in the integer key field gen, refusing a value
-// the field cannot hold.
-func setGeneratedKey[E any](m *Meta[E], p *E, gen int, id int64) error {
-	return setKey(m.info, gen, m.addr(p, gen), id)
+// fieldAddr is a pointer to the field of column col of the row of in at p,
+// as Meta's Addr returns it.
+func fieldAddr(in *EntityInfo, p unsafe.Pointer, col int) any {
+	c := &in.Columns[col]
+	return reflect.NewAt(GoType(*c), unsafe.Add(p, c.off)).Interface()
 }
 
 // setKey stores id in the integer field ptr points to, column gen of in. It
@@ -676,6 +720,9 @@ func prepareMany[E any](ctx context.Context, db *DB, m *Meta[E], xs []E) (cols [
 		if err := prepareRow(m.info, unsafe.Pointer(&xs[i]), tn); err != nil {
 			return nil, 0, err
 		}
+	}
+	if err := refuseBidiRows(m.info, unsafe.Pointer(unsafe.SliceData(xs)), unsafe.Sizeof(xs[0]), len(xs)); err != nil {
+		return nil, 0, err
 	}
 	gen := generatedKey(m, &xs[0])
 	for i := range xs {

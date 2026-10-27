@@ -362,6 +362,11 @@ func (b *builder) resolveAssoc(n *node, s *edgeState) {
 	case le.Unique && t == n:
 		ed.Rel.Kind, ed.Bidi = "O2O", true
 		ed.Rel.Table = n.ent.Table
+		if le.Required {
+			// The core clears a partner's key whenever its partner re-points,
+			// which a Required edge's key may never be.
+			b.fail(53, n.ent.Name, edgeLoc(ed), "a bidirectional one-to-one edge cannot be Required: its key is cleared whenever its partner re-points; make it optional, or give it an inverse edge")
+		}
 	case le.Unique:
 		ed.Rel.Kind = "M2O"
 		ed.Rel.Table = n.ent.Table

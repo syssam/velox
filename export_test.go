@@ -40,11 +40,17 @@ type FakeExec struct {
 	// when it had none.
 	Deadline time.Time
 
-	Affected  int64 // what exec reports
-	LastID    int64
-	HasLastID bool
-	Log       []string // every statement, and BEGIN, COMMIT, ROLLBACK
-	Errs      []error  // returned by the next calls, one each, before Err
+	Affected int64 // what exec reports
+	// AffectedBy, when set, is what exec reports for each statement, by its
+	// text; Affected otherwise.
+	AffectedBy func(sql string) int64
+	LastID     int64
+	HasLastID  bool
+	Log        []string // every statement, and BEGIN, COMMIT, ROLLBACK
+	// ArgLog holds the arguments of each entry of Log: nil for BEGIN,
+	// COMMIT and ROLLBACK.
+	ArgLog    [][]any
+	Errs      []error // returned by the next calls, one each, before Err
 	CommitErr error
 	BeginErr  error // what BEGIN returns
 	// RollbackErr is what ROLLBACK returns, as pgx does once it has closed a
@@ -118,6 +124,7 @@ func (e *FakeExec) query(ctx context.Context, sql string, args []any) (rows, err
 	e.SQL, e.Args = sql, args
 	e.Calls++
 	e.Log = append(e.Log, sql)
+	e.ArgLog = append(e.ArgLog, args)
 	if err := e.next(); err != nil {
 		return nil, err
 	}
@@ -149,16 +156,22 @@ func (e *FakeExec) exec(ctx context.Context, sql string, args []any) (result, er
 	e.SQL, e.Args = sql, args
 	e.Calls++
 	e.Log = append(e.Log, sql)
+	e.ArgLog = append(e.ArgLog, args)
 	if err := e.next(); err != nil {
 		return result{}, err
 	}
-	return result{affected: e.Affected, lastID: e.LastID, hasLastID: e.HasLastID}, nil
+	affected := e.Affected
+	if e.AffectedBy != nil {
+		affected = e.AffectedBy(sql)
+	}
+	return result{affected: affected, lastID: e.LastID, hasLastID: e.HasLastID}, nil
 }
 
 func (e *FakeExec) begin(_ context.Context, o txOptions) (executor, txControl, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.Log = append(e.Log, "BEGIN")
+	e.ArgLog = append(e.ArgLog, nil)
 	if e.BeginErr != nil {
 		return nil, nil, e.BeginErr
 	}
@@ -172,6 +185,7 @@ func (t fakeTx) commit(context.Context) error {
 	t.e.mu.Lock()
 	defer t.e.mu.Unlock()
 	t.e.Log = append(t.e.Log, "COMMIT")
+	t.e.ArgLog = append(t.e.ArgLog, nil)
 	return t.e.CommitErr
 }
 
@@ -186,6 +200,7 @@ func (t fakeTx) rollback(ctx context.Context) error {
 		return werr
 	}
 	t.e.Log = append(t.e.Log, "ROLLBACK")
+	t.e.ArgLog = append(t.e.ArgLog, nil)
 	return t.e.RollbackErr
 }
 

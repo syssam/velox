@@ -80,7 +80,7 @@ func TestGodocCitesNoSpec(t *testing.T) {
 // after their first sentence, and the section names each of them as a whole
 // word.
 func TestGeneratedOnlyAPIIsMarked(t *testing.T) {
-	names := []string{"Desc", "ColumnDesc", "EdgeDesc", "EdgeTo", "EdgeThrough", "Meta", "MetaOnce",
+	names := []string{"Desc", "ColumnDesc", "EdgeDesc", "EdgeTo", "EdgeBidi", "EdgeThrough", "Meta", "MetaOnce",
 		"BindPolicy", "BindHooks", "BoundPolicy", "BoundHooks", "Lazy", "Validate", "ValidateSet", "GeneratedCodeIsVersion6"}
 	listed := map[string]bool{}
 	for _, n := range names {
