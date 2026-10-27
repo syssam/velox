@@ -389,3 +389,260 @@ func TestOneLoadsNothingWhenNotSingular(t *testing.T) {
 		t.Errorf("items %v loaded %v, %d statements", items, loaded, len(e.Log))
 	}
 }
+
+// ovOwner has notes, and picks of notes through ovPick; ovNote's Read policy
+// is an In of the values ovReading puts in the context: the fixtures of a
+// load whose statement overflows the parameter limit once the policy's
+// conditions are added.
+type ovOwner struct {
+	ID    int64
+	Notes velox.Many[ovNote]
+	Picks velox.Many[ovNote]
+}
+
+var ovOwners = struct {
+	ID    velox.NumberCol[ovOwner, int64]
+	Notes velox.Rel[ovOwner, ovNote]
+	Picks velox.Rel[ovOwner, ovNote]
+}{velox.NumberCol[ovOwner, int64]{I: 0}, velox.Rel[ovOwner, ovNote]{I: 0}, velox.Rel[ovOwner, ovNote]{I: 1}}
+
+var ovOwnerMeta velox.MetaOnce[ovOwner]
+
+func (*ovOwner) VeloxMeta() *velox.Meta[ovOwner] {
+	return ovOwnerMeta.Load(func() velox.Desc[ovOwner] {
+		return velox.Desc[ovOwner]{
+			Table:      "ov_owners",
+			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}},
+			PrimaryKey: []int{0},
+			Tenant:     -1,
+			Edges:      []velox.EdgeDesc{velox.EdgeTo[ovNote]("Notes", 0, 1), velox.EdgeThrough[ovPick, ovNote]("Picks", 0, 0, 1, 0)},
+			Addr:       func(x *ovOwner, i int) any { return &x.ID },
+			EdgeAddr: func(x *ovOwner, i int) any {
+				if i == 0 {
+					return &x.Notes
+				}
+				return &x.Picks
+			},
+		}
+	})
+}
+
+type ovNote struct {
+	ID      int64
+	OwnerID int64
+	Rank    int64
+}
+
+var ovNotes = struct {
+	ID      velox.NumberCol[ovNote, int64]
+	OwnerID velox.NumberCol[ovNote, int64]
+	Rank    velox.NumberCol[ovNote, int64]
+}{velox.NumberCol[ovNote, int64]{I: 0}, velox.NumberCol[ovNote, int64]{I: 1}, velox.NumberCol[ovNote, int64]{I: 2}}
+
+// ovKey's value, a []int64, is what ovNote's Read policy's In holds.
+type ovKey struct{}
+
+// ovReading is a context under which ovNote's Read policy is an In of n
+// values, n parameters.
+func ovReading(n int) context.Context {
+	vs := make([]int64, n)
+	for i := range vs {
+		vs[i] = int64(i)
+	}
+	return context.WithValue(context.Background(), ovKey{}, vs)
+}
+
+func (*ovNote) Policy() velox.Policy[ovNote] {
+	return velox.Policy[ovNote]{Read: func(ctx context.Context) (velox.Pred[ovNote], error) {
+		if vs, ok := ctx.Value(ovKey{}).([]int64); ok {
+			return ovNotes.Rank.In(vs...), nil
+		}
+		return velox.Allow[ovNote](), nil
+	}}
+}
+
+var ovNoteMeta velox.MetaOnce[ovNote]
+
+func (*ovNote) VeloxMeta() *velox.Meta[ovNote] {
+	return ovNoteMeta.Load(func() velox.Desc[ovNote] {
+		return velox.Desc[ovNote]{
+			Policy:     func() velox.BoundPolicy { return velox.BindPolicy((*ovNote)(nil).Policy()) },
+			Table:      "ov_notes",
+			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "OwnerID", Name: "owner_id"}, {Field: "Rank", Name: "rank"}},
+			PrimaryKey: []int{0},
+			Tenant:     -1,
+			Addr:       func(x *ovNote, i int) any { return [...]any{&x.ID, &x.OwnerID, &x.Rank}[i] },
+		}
+	})
+}
+
+// ovPick is the join entity of ovOwner.Picks.
+type ovPick struct{ OwnerID, NoteID int64 }
+
+var ovPickMeta velox.MetaOnce[ovPick]
+
+func (*ovPick) VeloxMeta() *velox.Meta[ovPick] {
+	return ovPickMeta.Load(func() velox.Desc[ovPick] {
+		return velox.Desc[ovPick]{
+			Table:      "ov_picks",
+			Columns:    []velox.ColumnDesc{{Field: "OwnerID", Name: "owner_id"}, {Field: "NoteID", Name: "note_id"}},
+			PrimaryKey: []int{0, 1},
+			Tenant:     -1,
+			Addr:       func(x *ovPick, i int) any { return [...]any{&x.OwnerID, &x.NoteID}[i] },
+		}
+	})
+}
+
+// ovSent records the parameters of every statement the Around hooks see.
+type ovSent struct{ args []int }
+
+func (s *ovSent) around(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+	s.args = append(s.args, len(st.Args))
+	return next(ctx)
+}
+
+// ovRun opens a fake PostgreSQL database answering with results, whose
+// Around hook records into the ovSent returned.
+func ovRun(results [][][]any) (*velox.DB, *velox.FakeExec, *ovSent) {
+	e := &velox.FakeExec{Results: results}
+	s := &ovSent{}
+	return velox.OpenFake(velox.Postgres, e, velox.WithAround(s.around)), e, s
+}
+
+// ovOwnerRows are owners 1–n.
+func ovOwnerRows(n int) [][]any {
+	var rows [][]any
+	for id := int64(1); id <= int64(n); id++ {
+		rows = append(rows, []any{id})
+	}
+	return rows
+}
+
+// checkSent fails t unless every statement the fake received was one the
+// Around hooks saw, of at most 100 parameters, and the statements had want
+// parameters each.
+func checkSent(t *testing.T, e *velox.FakeExec, s *ovSent, want []int) {
+	t.Helper()
+	if e.Calls != len(s.args) {
+		t.Errorf("%d statements reached the database, the Around hooks saw %d", e.Calls, len(s.args))
+	}
+	for i, n := range s.args {
+		if n > 100 {
+			t.Errorf("statement %d has %d parameters", i, n)
+		}
+	}
+	if !reflect.DeepEqual(s.args, want) {
+		t.Errorf("the statements' parameters %v, want %v", s.args, want)
+	}
+}
+
+func TestLoadReChunksOnParameterOverflow(t *testing.T) {
+	// keysPer leaves 36 keys: with the policy's 80 values, 116 parameters,
+	// 16 too many, so the chunks hold 20 keys.
+	defer velox.SetMaxParams(velox.Postgres, 100)()
+	pctx := ovReading(80)
+	owners := func(t *testing.T, db *velox.DB, r velox.Rel[ovOwner, ovNote]) []ovOwner {
+		t.Helper()
+		os, err := db.Query[ovOwner]().OrderBy(ovOwners.ID.Asc()).With(r).Limit(50).All(pctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(os) != 50 {
+			t.Fatalf("%d owners", len(os))
+		}
+		return os
+	}
+	ids := func(t *testing.T, o ovOwner, m velox.Many[ovNote]) []int64 {
+		t.Helper()
+		ns, ok := m.Get()
+		if !ok {
+			t.Fatalf("owner %d: not loaded", o.ID)
+		}
+		out := []int64{}
+		for _, n := range ns {
+			out = append(out, n.ID)
+		}
+		return out
+	}
+	t.Run("one-to-many", func(t *testing.T) {
+		// Owner o's note is 1000+o.
+		notes := func(lo, hi int64) [][]any {
+			var rows [][]any
+			for o := lo; o <= hi; o++ {
+				rows = append(rows, []any{1000 + o, o, int64(0)})
+			}
+			return rows
+		}
+		db, e, s := ovRun([][][]any{ovOwnerRows(50), notes(1, 20), notes(21, 40), notes(41, 50)})
+		for _, o := range owners(t, db, ovOwners.Notes) {
+			if got := ids(t, o, o.Notes); !reflect.DeepEqual(got, []int64{1000 + o.ID}) {
+				t.Errorf("owner %d: notes %v", o.ID, got)
+			}
+		}
+		checkSent(t, e, s, []int{1, 100, 100, 90}) // the owners' LIMIT, then the notes'
+		// Without hooks, exec's check splits the chunk the same way.
+		e = &velox.FakeExec{Results: [][][]any{ovOwnerRows(50), notes(1, 20), notes(21, 40), notes(41, 50)}}
+		for _, o := range owners(t, velox.OpenFake(velox.Postgres, e), ovOwners.Notes) {
+			if got := ids(t, o, o.Notes); !reflect.DeepEqual(got, []int64{1000 + o.ID}) {
+				t.Errorf("without hooks: owner %d: notes %v", o.ID, got)
+			}
+		}
+		if e.Calls != 4 {
+			t.Errorf("without hooks: %d statements sent, want 4", e.Calls)
+		}
+	})
+	t.Run("many-to-many", func(t *testing.T) {
+		// Owner o picks notes 10o+1 and 10o+2, ranked 1 and 2: two keys per
+		// owner, so 10 owners per chunk. The fake returns each owner's in
+		// the order OrderBy(Rank.Desc()) gives.
+		links := func(lo, hi int64) [][]any {
+			var rows [][]any
+			for o := lo; o <= hi; o++ {
+				rows = append(rows, []any{o, 10*o + 1}, []any{o, 10*o + 2})
+			}
+			return rows
+		}
+		targets := func(lo int64) [][]any {
+			var rows [][]any
+			for o := lo; o < lo+10; o++ {
+				rows = append(rows, []any{10*o + 2, int64(0), int64(2)}, []any{10*o + 1, int64(0), int64(1)})
+			}
+			return rows
+		}
+		db, e, s := ovRun([][][]any{ovOwnerRows(50), links(1, 36), links(37, 50), targets(1), targets(11), targets(21), targets(31), targets(41)})
+		for _, o := range owners(t, db, ovOwners.Picks.OrderBy(ovNotes.Rank.Desc())) {
+			if got, want := ids(t, o, o.Picks), []int64{10*o.ID + 2, 10*o.ID + 1}; !reflect.DeepEqual(got, want) {
+				t.Errorf("owner %d: picks %v, want %v", o.ID, got, want)
+			}
+		}
+		// The join rows have no policy: 36 keys, then 14.
+		checkSent(t, e, s, []int{1, 36, 14, 100, 100, 100, 100, 100})
+	})
+	t.Run("many-to-many with LimitEach", func(t *testing.T) {
+		// The limit is a parameter too: 117, 17 too many, 19 keys a chunk.
+		picks := func(lo, hi int64) [][]any {
+			var rows [][]any
+			for o := lo; o <= hi; o++ {
+				rows = append(rows, []any{10*o + 1, int64(0), int64(1), o})
+			}
+			return rows
+		}
+		db, e, s := ovRun([][][]any{ovOwnerRows(50), picks(1, 19), picks(20, 38), picks(39, 50)})
+		for _, o := range owners(t, db, ovOwners.Picks.LimitEach(1)) {
+			if got := ids(t, o, o.Picks); !reflect.DeepEqual(got, []int64{10*o.ID + 1}) {
+				t.Errorf("owner %d: picks %v", o.ID, got)
+			}
+		}
+		checkSent(t, e, s, []int{1, 100, 100, 93})
+	})
+	t.Run("one key cannot fit", func(t *testing.T) {
+		db, e, s := ovRun([][][]any{ovOwnerRows(50)})
+		_, err := db.Query[ovOwner]().OrderBy(ovOwners.ID.Asc()).With(ovOwners.Notes).Limit(50).All(ovReading(100))
+		if err == nil || !strings.Contains(err.Error(), "the statement has 101 parameters; postgres allows 100") {
+			t.Errorf("%v", err)
+		}
+		if e.Calls != 1 || len(s.args) != 1 {
+			t.Errorf("%d statements sent, %d seen by the Around hooks; want the owners' only", e.Calls, len(s.args))
+		}
+	})
+}

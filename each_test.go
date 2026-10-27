@@ -817,3 +817,54 @@ func TestSelects(t *testing.T) {
 		}
 	}
 }
+
+// TestEachReChunksOnParameterOverflow: as TestLoadReChunksOnParameterOverflow,
+// for LoadEach and CountEach.
+func TestEachReChunksOnParameterOverflow(t *testing.T) {
+	defer velox.SetMaxParams(velox.Postgres, 100)()
+	pctx := ovReading(80)
+	owners := make([]*ovOwner, 50)
+	for i := range owners {
+		owners[i] = &ovOwner{ID: int64(i + 1)}
+	}
+	t.Run("LoadEach", func(t *testing.T) {
+		notes := func(lo, hi int64) [][]any {
+			var rows [][]any
+			for o := lo; o <= hi; o++ {
+				rows = append(rows, []any{1000 + o, o, int64(0)})
+			}
+			return rows
+		}
+		db, e, s := ovRun([][][]any{notes(1, 20), notes(21, 40), notes(41, 50)})
+		got, err := velox.LoadEach(pctx, db.Query[ovNote](), ovOwners.Notes, owners)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, ns := range got {
+			if len(ns) != 1 || ns[0].ID != 1000+owners[i].ID {
+				t.Errorf("owner %d: %v", owners[i].ID, ns)
+			}
+		}
+		checkSent(t, e, s, []int{100, 100, 90})
+	})
+	t.Run("CountEach", func(t *testing.T) {
+		counts := func(lo, hi int64) [][]any {
+			var rows [][]any
+			for o := lo; o <= hi; o++ {
+				rows = append(rows, []any{o, o})
+			}
+			return rows
+		}
+		db, e, s := ovRun([][][]any{counts(1, 20), counts(21, 40), counts(41, 50)})
+		got, err := velox.CountEach(pctx, db.Query[ovNote](), ovOwners.Notes, owners)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, n := range got {
+			if n != owners[i].ID {
+				t.Errorf("owner %d: %d", owners[i].ID, n)
+			}
+		}
+		checkSent(t, e, s, []int{100, 100, 90})
+	})
+}

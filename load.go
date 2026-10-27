@@ -225,6 +225,10 @@ func loadOne(ctx context.Context, db *DB, owner *EntityInfo, ptrs []unsafe.Point
 // The targets are read in statements that each hold the target keys of a run
 // of whole owners, so that each owner's come from one query, in the order it
 // asked for; a target of owners in two statements is read, and held, twice.
+// When one statement has more parameters than the dialect allows, because a
+// policy's or a hook's conditions take more than keysPer left them, the
+// chunks are built again with as many fewer keys as it had too many, and all
+// are read again, until a chunk holds one key.
 func fetchThrough(ctx context.Context, db *DB, owner *EntityInfo, r *relation, l link, sp loadSpec, keys []any, maxRows int, byKey map[any][]int) (any, []unsafe.Pointer, error) {
 	j, t := l.join, l.target
 	_, rows, err := fetch(ctx, db, j, []int{l.joinOwner, l.joinTarget}, loadSpec{}, keys, maxRows, nil)
@@ -243,10 +247,25 @@ func fetchThrough(ctx context.Context, db *DB, owner *EntityInfo, r *relation, l
 		seen[[2]any{own, tk}] = true
 		byOwner[own] = append(byOwner[own], tk)
 	}
-	// The statements: each holds the distinct target keys of a run of
-	// owners, in the owners' order, at most per of them.
-	type chunk struct{ keys, owners []any }
 	order, per := fetchPlan(db, t, sp)
+	for {
+		all, targets, err := throughChunks(ctx, db, owner, r, l, sp, order, per, keys, byOwner, maxRows, byKey)
+		// A statement over the parameter limit was not sent: the chunks are
+		// built again, smaller by its excess, and every one is read again.
+		if pe, ok := as[*paramsError](err); ok && per > 1 {
+			per = max(1, per-(pe.n-pe.max))
+			continue
+		}
+		return all, targets, err
+	}
+}
+
+// throughChunks is fetchThrough's reading of the targets, in statements that
+// each hold the distinct target keys of a run of whole owners, in the owners'
+// order, at most per of them. byOwner holds each owner key's target keys.
+func throughChunks(ctx context.Context, db *DB, owner *EntityInfo, r *relation, l link, sp loadSpec, order []OrderTerm, per int, keys []any, byOwner map[any][]any, maxRows int, byKey map[any][]int) (any, []unsafe.Pointer, error) {
+	t := l.target
+	type chunk struct{ keys, owners []any }
 	var chunks []chunk
 	var cur chunk
 	inCur := map[any]bool{}
@@ -282,6 +301,7 @@ func fetchThrough(ctx context.Context, db *DB, owner *EntityInfo, r *relation, l
 	chunks = append(chunks, cur)
 	parts := make([]any, len(chunks)) // each chunk's []T
 	for i, c := range chunks {
+		var err error
 		if parts[i], _, err = fetchPart(ctx, db, t, []int{l.targetCol}, sp, order, c.keys, maxRows, nil); err != nil {
 			return nil, nil, &loadError{owner: owner.Name, rel: r.name, err: err}
 		}
@@ -320,12 +340,15 @@ func fetch(ctx context.Context, db *DB, t *EntityInfo, cols []int, sp loadSpec, 
 		order = tieBreak(t, order)
 	}
 	var parts []any // each chunk's []T
-	for start := 0; start < len(keys); start += per {
-		part, _, err := fetchPart(ctx, db, t, cols, sp, order, keys[start:min(start+per, len(keys))], maxRows, ec)
-		if err != nil {
-			return nil, nil, err
+	err := byChunks(len(keys), per, func(lo, hi int) error {
+		part, _, err := fetchPart(ctx, db, t, cols, sp, order, keys[lo:hi], maxRows, ec)
+		if err == nil {
+			parts = append(parts, part)
 		}
-		parts = append(parts, part)
+		return err
+	})
+	if err != nil {
+		return nil, nil, err
 	}
 	all, ptrs := t.kit.join(parts) // pointers into the one slice pick and ptr index
 	return all, ptrs, nil
@@ -343,13 +366,16 @@ func fetchEach(ctx context.Context, db *DB, l link, sp loadSpec, keys []any, max
 	order = tieBreak(t, order)
 	ec := &EachClause{Join: l.join, JoinOwner: l.joinOwner, JoinTarget: l.joinTarget, Target: l.targetCol, Limit: sp.each}
 	var parts, owners []any
-	for start := 0; start < len(keys); start += per {
-		part, own, err := fetchPart(ctx, db, t, nil, sp, order, keys[start:min(start+per, len(keys))], maxRows, ec)
-		if err != nil {
-			return nil, nil, err
+	err := byChunks(len(keys), per, func(lo, hi int) error {
+		part, own, err := fetchPart(ctx, db, t, nil, sp, order, keys[lo:hi], maxRows, ec)
+		if err == nil {
+			parts = append(parts, part)
+			owners = append(owners, own...)
 		}
-		parts = append(parts, part)
-		owners = append(owners, own...)
+		return err
+	})
+	if err != nil {
+		return nil, nil, err
 	}
 	all, targets := t.kit.join(parts)
 	for i, own := range owners {
@@ -386,7 +412,8 @@ func fetchPlan(db *DB, t *EntityInfo, sp loadSpec) ([]OrderTerm, int) {
 
 // keysPer is how many keys one statement on t holds beside the conditions
 // ps: 64 parameters are left for conditions that rewrite hooks add, such as a
-// tenant's.
+// tenant's. A statement that still overflows, because a policy's or a hook's
+// conditions take more, is split again (byChunks).
 func keysPer(d Dialect, t *EntityInfo, ps []Predicate) int {
 	// The relations in ps resolve with the statement; one that does not
 	// fails it there. Writing needs them resolved.
@@ -401,6 +428,26 @@ func keysPer(d Dialect, t *EntityInfo, ps []Predicate) int {
 		fixed += len(w.args)
 	}
 	return max(1, maxParams[d]-fixed-64)
+}
+
+// byChunks runs read on keys[lo:hi] in chunks of at most per keys, in order.
+// A chunk whose statement had too many parameters (*paramsError) and more than
+// one key is read again, from lo, in chunks smaller by the excess, and the rest
+// use the smaller size; with one key, the error is returned.
+func byChunks(n, per int, read func(lo, hi int) error) error {
+	for lo := 0; lo < n; {
+		hi := min(lo+per, n)
+		err := read(lo, hi)
+		if pe, ok := as[*paramsError](err); ok && hi-lo > 1 {
+			per = max(1, hi-lo-(pe.n-pe.max))
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		lo = hi
+	}
+	return nil
 }
 
 // fetchPart reads, in one statement, t's rows whose column cols[0] holds one

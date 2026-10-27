@@ -217,17 +217,21 @@ func loadEach(ctx context.Context, q eachQuery, owner *EntityInfo, ownerErr erro
 	per := keysPer(db.d, t, st.Where)
 	var parts, owners []any
 	var at target
-	for start := 0; start < len(p.keys); start += per {
-		c := chunk(st, ec, p.keys[start:min(start+per, len(p.keys))])
+	err = byChunks(len(p.keys), per, func(lo, hi int) error {
+		c := chunk(st, ec, p.keys[lo:hi])
 		part, own, err := readPart(ctx, db, &c, t, key, loads)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		if start == 0 {
+		if lo == 0 {
 			at = c.ran
 		}
 		parts = append(parts, part)
 		owners = append(owners, own...)
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	out := make([]any, len(ps))
 	if len(parts) == 0 {
@@ -296,16 +300,15 @@ func countEach(ctx context.Context, q eachQuery, owner *EntityInfo, ownerErr err
 		}
 		return nil
 	}
-	for start := 0; start < len(p.keys); start += per {
-		c := chunk(st, ec, p.keys[start:min(start+per, len(p.keys))])
+	err = byChunks(len(p.keys), per, func(lo, hi int) error {
+		c := chunk(st, ec, p.keys[lo:hi])
 		if db.hooked() {
-			err = db.run(ctx, &c, read, nil)
-		} else {
-			err = db.plain(ctx, &c, read, nil)
+			return db.run(ctx, &c, read, nil)
 		}
-		if err != nil {
-			return nil, err
-		}
+		return db.plain(ctx, &c, read, nil)
+	})
+	if err != nil {
+		return nil, err
 	}
 	out := make([]int64, len(ps))
 	for i, k := range p.ownerKey {

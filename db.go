@@ -252,12 +252,12 @@ func (db *DB) plain(ctx context.Context, st *Statement, read func(rows) error, r
 }
 
 // run takes a statement through the pipeline: prepare's stages, the route
-// stage, then the around hooks wrapping execution, which is sending the
-// statement and reading its rows. read reads them; it is called once per
-// execution (an around hook that retries runs it again) and must not close
-// them: run does, before it returns, on every path. Hooks may keep the
-// statement, and next (which holds read), so both escape; a statement with
-// no hooks of either kind uses plain.
+// stage, the parameter limit (checkParams), then the around hooks wrapping
+// execution, which is sending the statement and reading its rows. read reads
+// them; it is called once per execution (an around hook that retries runs it
+// again) and must not close them: run does, before it returns, on every path.
+// Hooks may keep the statement, and next (which holds read), so both escape;
+// a statement with no hooks of either kind uses plain.
 func (db *DB) run(ctx context.Context, st *Statement, read func(rows) error, res *result) error {
 	if err := db.dryWrite(ctx, st); err != nil {
 		return err
@@ -267,6 +267,11 @@ func (db *DB) run(ctx context.Context, st *Statement, read func(rows) error, res
 	}
 	t, err := db.route(ctx, st)
 	if err != nil {
+		return err
+	}
+	// Before the around hooks, which never see a statement that cannot be
+	// sent; exec checks again, for a hook that changes Args.
+	if err := checkParams(db.d, st); err != nil {
 		return err
 	}
 	if db.timed() {
@@ -862,12 +867,24 @@ func readRows(r rows, read func(rows) error) (readErr, rowsErr error) {
 }
 
 // checkParams refuses a rendered statement with more parameters than
-// dialect d allows.
+// dialect d allows, with a *paramsError.
 func checkParams(d Dialect, st *Statement) error {
 	if lim := maxParams[d]; len(st.Args) > lim {
-		return fmt.Errorf("velox: %s: the statement has %d parameters; %s allows %d", st.Entity.Name, len(st.Args), d, lim)
+		return &paramsError{entity: st.Entity.Name, d: d, n: len(st.Args), max: lim}
 	}
 	return nil
+}
+
+// paramsError is a rendered statement with more parameters than its dialect
+// allows; nothing was sent. Its text is checkParams's.
+type paramsError struct {
+	entity string
+	d      Dialect
+	n, max int
+}
+
+func (e *paramsError) Error() string {
+	return fmt.Sprintf("velox: %s: the statement has %d parameters; %s allows %d", e.entity, e.n, e.d, e.max)
 }
 
 // execWrite runs a statement that returns no rows through the pipeline: run
