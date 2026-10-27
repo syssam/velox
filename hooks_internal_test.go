@@ -384,3 +384,28 @@ func TestBidiDeleteKeepsTheStatement(t *testing.T) {
 		}
 	}
 }
+
+// TestMutationSetClonesOnce: a hook's Set copies the statement's assignments
+// once, on its first change, and writes in place after.
+func TestMutationSetClonesOnce(t *testing.T) {
+	orig := []Assignment{{Column: 1, Op: AssignSet, Value: "a"}, {Column: 2, Op: AssignSet, Value: "b"}}
+	want := slices.Clone(orig)
+	set := func(st *Statement) {
+		mu := &mutation{st: st}
+		for i := range 3 {
+			mutateSet(mu, Assignment{Column: orig[0].Column, Op: AssignSet, Value: i})
+		}
+	}
+	st := &Statement{Op: OpUpdate, Set: orig}
+	set(st)
+	if !slices.Equal(orig, want) || st.Set[0].Value != 2 || len(st.Set) != 2 {
+		t.Errorf("orig %v, Set %v", orig, st.Set)
+	}
+	n := testing.AllocsPerRun(100, func() {
+		st := Statement{Op: OpUpdate, Set: orig}
+		set(&st)
+	})
+	if n != 1 {
+		t.Errorf("three Sets make %.0f allocations, want 1", n)
+	}
+}

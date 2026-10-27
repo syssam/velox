@@ -18,6 +18,10 @@ var maxShapes = 4096
 // many lengths are the shapes that grow it.
 var maxCacheBytes = 4 << 20
 
+// maxCachedRows is the most rows an INSERT may have and be cached: each row
+// count is a shape of its own, and a batch of thousands is rendered once.
+const maxCachedRows = 32
+
 // cached is what the cache keeps for a shape: its SQL text and its
 // fingerprint.
 type cached struct{ text, fp string }
@@ -46,10 +50,17 @@ type renderCache struct {
 }
 
 // get returns the shape's cached text and fingerprint, and the statement's
-// arguments, or renderStmt's error. A shape past the cache's bounds is
-// rendered each time, and gets its fingerprint each time. A shape whose
-// rendering fails is not cached.
+// arguments, or renderStmt's error. A shape past the cache's bounds, and an
+// insert of more than maxCachedRows rows, is rendered each time, and gets its
+// fingerprint each time. A shape whose rendering fails is not cached.
 func (c *renderCache) get(d Dialect, st *Statement) (cached, []any, error) {
+	if st.Op == OpInsert && len(st.Rows) > maxCachedRows {
+		text, args, err := renderStmt(d, st)
+		if err != nil {
+			return cached{}, nil, err
+		}
+		return cached{text, fingerprint(text)}, args, nil
+	}
 	var buf [256]byte
 	key := shapeKey(buf[:0], d, st)
 	c.mu.RLock()

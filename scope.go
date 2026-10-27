@@ -624,7 +624,11 @@ func withRoom(ps []Predicate, extra int) []Predicate {
 // with a new kids slice, and unchanged subtrees are shared with n.
 func (sc *scoper) node(n node) (node, bool, error) {
 	switch n.op {
-	case opAnd, opOr, opNot, opExists:
+	case opAnd, opOr, opNot:
+		if !n.deep {
+			return n, false, nil // no EXISTS in it: nothing to scope
+		}
+	case opExists:
 	default:
 		// An opThrough reads only join rows, which are never scoped: a join
 		// entity has neither a tenant column nor a Read policy.

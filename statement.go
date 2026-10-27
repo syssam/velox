@@ -201,6 +201,7 @@ type Statement struct {
 	Result Result
 
 	ran target // where exec sent it; its With loads run there
+	pin target // a With load's: the connection its query ran on, which its reads go to; zero otherwise
 	// handed is set once Iter has handed the caller a row: a broken
 	// connection is then not failed over, as the read cannot start again.
 	handed bool

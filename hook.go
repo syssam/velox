@@ -90,6 +90,7 @@ type mutation struct {
 	affected int64            // the rows the write affected, for Mutation.Affected
 	where    []Predicate      // st.Where when next was called, for Mutation.Conds
 	own      bool             // the hook called SetAffected: it made the write itself
+	ownSet   bool             // st.Set is the mutation's own array, cloned once
 	err      error            // a misuse recorded by ValueIn, Set, Where or SetAffected
 	core     error            // the error next returned, to pass through unwrapped
 	called   bool             // next has been called

@@ -317,6 +317,43 @@ func TestReplicaOneRowBudget(t *testing.T) {
 	}
 }
 
+// TestWithLoadOnReplicasAllocations: on a DB with replicas, a cached All with
+// one With load makes no allocation more than on a DB without them, its load
+// pinned to the replica its query read.
+func TestWithLoadOnReplicasAllocations(t *testing.T) {
+	measure := func(replicas bool) float64 {
+		row := [][]any{sampleRow(1, int64(1))} // its own parent: the query's row and the load's
+		e := &velox.FakeExec{Rows: row}
+		p := e
+		var opts []velox.Option
+		if replicas {
+			p = &velox.FakeExec{}
+			opts = append(opts, velox.WithReplicas(velox.FakeConn(e), velox.FakeConn(&velox.FakeExec{Rows: row})))
+		}
+		db := velox.OpenFake(velox.Postgres, p, opts...)
+		run := func() {
+			ss, err := db.Query[testmodel.Sample]().With(testmodel.Samples.Parent).Limit(10).All(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, loaded := ss[0].Parent.Get(); !loaded {
+				t.Fatal("the parent is not loaded")
+			}
+		}
+		run() // fill the render cache
+		allocs := testing.AllocsPerRun(200, run)
+		if replicas && (p.Calls != 0 || e.Calls == 0) {
+			t.Fatalf("the primary read %d times, replica 0 %d", p.Calls, e.Calls)
+		}
+		return allocs
+	}
+	plain, routed := measure(false), measure(true)
+	t.Logf("an All with one With load makes %.0f allocations with two replicas, %.0f without", routed, plain)
+	if routed != plain {
+		t.Errorf("replicas change an All with one With load's allocations from %.0f to %.0f", plain, routed)
+	}
+}
+
 // oneRowAllocs is the allocations of the one-row All the First and Exists
 // budgets are held to, on a fake with one row.
 func oneRowAllocs(db *velox.DB) float64 {

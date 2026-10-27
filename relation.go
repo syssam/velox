@@ -482,5 +482,5 @@ func ofNode(ref relRef, where []Predicate, err error, ps []unsafe.Pointer) node 
 	for _, p := range where {
 		kids = append(kids, p.n)
 	}
-	return node{op: opAnd, kids: kids}
+	return group(opAnd, kids)
 }

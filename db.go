@@ -23,12 +23,9 @@ type DB struct {
 	d Dialect
 	// ex runs the statements of a DB without replicas, and of a transaction;
 	// nil on a DB with replicas outside a transaction, whose rt chooses.
-	ex  executor
-	rt  *router // WithReplicas's; nil without replicas
-	cfg *config
-	// pin is, on the DB a query's With loads run on, the connection the query
-	// ran on: their reads go there too. Zero otherwise.
-	pin   target
+	ex    executor
+	rt    *router // WithReplicas's; nil without replicas
+	cfg   *config
 	inTx  bool
 	depth int // savepoint nesting inside a transaction
 	// txDeadline is, in a transaction, its deadline: velox's or the

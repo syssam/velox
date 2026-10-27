@@ -352,7 +352,7 @@ func (m *Mutation[E]) Set[_ Lazy[E]](ss ...Setter[E]) {
 		return
 	}
 	for _, s := range ss {
-		mutateSet(m.mu.st, &m.mu.err, s.a)
+		mutateSet(&m.mu, s.a)
 	}
 }
 
@@ -450,24 +450,29 @@ func assigned(st *Statement, col int) (any, bool) {
 	return nil, false
 }
 
-// mutateSet replaces st's assignment of a.Column with a, or appends a. It
-// records an error in *errp, keeping the first, when st is a delete.
-func mutateSet(st *Statement, errp *error, a Assignment) {
+// mutateSet replaces the assignment of a.Column in mu's statement with a, or
+// appends a. The first change copies st.Set, whose elements may be the
+// query's own, and sets mu.ownSet; later ones write in place. It records an
+// error, keeping the first, when the statement is a delete.
+func mutateSet(mu *mutation, a Assignment) {
+	st := mu.st
 	if st.Op == OpDelete {
-		if *errp == nil {
-			*errp = errors.New("a delete assigns no columns: Set is for updates")
-		}
+		mu.record(errors.New("a delete assigns no columns: Set is for updates"))
 		return
 	}
-	for i := range st.Set {
-		if st.Set[i].Column == a.Column {
-			// Copied before the change: the elements may be the query's own.
-			st.Set = slices.Clone(st.Set)
-			st.Set[i] = a
-			return
-		}
+	i := slices.IndexFunc(st.Set, func(s Assignment) bool { return s.Column == a.Column })
+	switch {
+	case i >= 0 && !mu.ownSet:
+		st.Set = slices.Clone(st.Set)
+	case i < 0 && !mu.ownSet:
+		st.Set = slices.Clip(st.Set) // append copies
 	}
-	st.Set = append(slices.Clip(st.Set), a)
+	mu.ownSet = true
+	if i >= 0 {
+		st.Set[i] = a
+	} else {
+		st.Set = append(st.Set, a)
+	}
 }
 
 // mutateWhere appends p to st's conditions, or records its error in *errp,

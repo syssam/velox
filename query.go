@@ -305,10 +305,10 @@ func addAfter(st *Statement, in *EntityInfo, after unsafe.Pointer) error {
 		if len(and) == 1 {
 			or = append(or, and[0])
 		} else {
-			or = append(or, node{op: opAnd, kids: and})
+			or = append(or, group(opAnd, and))
 		}
 	}
-	st.Where = append(st.Where, Predicate{node{op: opOr, kids: or}})
+	st.Where = append(st.Where, Predicate{group(opOr, or)})
 	return nil
 }
 
@@ -442,7 +442,7 @@ func (q Query[E]) load[_ Lazy[E]](ctx context.Context, rows []E, ran []int, at t
 	for i := range rows {
 		ptrs[i] = unsafe.Pointer(&rows[i])
 	}
-	return loadRelations(ctx, q.db.pinnedTo(at), q.meta.info, ptrs, q.loads, q.st.MaxRows)
+	return loadRelations(ctx, q.db, q.db.loadPin(at), q.meta.info, ptrs, q.loads, q.st.MaxRows)
 }
 
 // All runs the query and returns every row.

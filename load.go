@@ -103,34 +103,33 @@ func keyOf(v any) (any, bool) {
 	return v, true
 }
 
-// pinnedTo returns the DB a query's With loads run on: db, or on a DB with
-// replicas or shards a copy whose reads go to t, the connection the query ran
-// on. Parents and children are then read from one replica, with one replication
-// lag: children read from a replica further behind could be missing for a
-// parent read from one further ahead. On a sharded DB the loads run on the
-// query's shard without looking it up again.
-func (db *DB) pinnedTo(t target) *DB {
-	if db.rt == nil || db.inTx || t.ex == nil {
-		return db // every read runs on one connection already
+// loadPin returns the target a query's With loads read from: on a DB with
+// replicas or shards, at, the connection the query ran on; the zero target
+// otherwise. Parents and children are then read from one replica, with one
+// replication lag: children read from a replica further behind could be
+// missing for a parent read from one further ahead. On a sharded DB the loads
+// run on the query's shard without looking it up again.
+func (db *DB) loadPin(at target) target {
+	if db.rt == nil || db.inTx || at.ex == nil {
+		return target{} // every read runs on one connection already
 	}
-	p := *db
-	p.pin = t
-	return &p
+	return at
 }
 
 // loadRelations loads each spec's relation for the owners at ptrs. maxRows is
 // the owner query's MaxRows, which its loads, nested ones too, share unless a
-// load says MaxRows; 0 is the DB's cap.
-func loadRelations(ctx context.Context, db *DB, owner *EntityInfo, ptrs []unsafe.Pointer, specs []loadSpec, maxRows int) error {
+// load says MaxRows; 0 is the DB's cap. pin is the target their reads go
+// to (DB.loadPin).
+func loadRelations(ctx context.Context, db *DB, pin target, owner *EntityInfo, ptrs []unsafe.Pointer, specs []loadSpec, maxRows int) error {
 	for _, sp := range specs {
-		if err := loadOne(ctx, db, owner, ptrs, sp, maxRows); err != nil {
+		if err := loadOne(ctx, db, pin, owner, ptrs, sp, maxRows); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func loadOne(ctx context.Context, db *DB, owner *EntityInfo, ptrs []unsafe.Pointer, sp loadSpec, maxRows int) error {
+func loadOne(ctx context.Context, db *DB, pin target, owner *EntityInfo, ptrs []unsafe.Pointer, sp loadSpec, maxRows int) error {
 	if sp.err != nil {
 		return sp.err
 	}
@@ -167,11 +166,11 @@ func loadOne(ctx context.Context, db *DB, owner *EntityInfo, ptrs []unsafe.Point
 	switch {
 	case len(keys) == 0:
 	case l.join != nil && sp.each > 0:
-		if all, targets, err = fetchEach(ctx, db, l, sp, keys, maxRows, byKey); err != nil {
+		if all, targets, err = fetchEach(ctx, db, pin, l, sp, keys, maxRows, byKey); err != nil {
 			return &loadError{owner: owner.Name, rel: r.name, err: err}
 		}
 	case l.join != nil:
-		if all, targets, err = fetchThrough(ctx, db, owner, r, l, sp, keys, maxRows, byKey); err != nil {
+		if all, targets, err = fetchThrough(ctx, db, pin, owner, r, l, sp, keys, maxRows, byKey); err != nil {
 			return err
 		}
 	default:
@@ -179,7 +178,7 @@ func loadOne(ctx context.Context, db *DB, owner *EntityInfo, ptrs []unsafe.Point
 		if sp.each > 0 {
 			ec = &EachClause{Column: l.targetCol, Limit: sp.each}
 		}
-		if all, targets, err = fetch(ctx, db, t, []int{l.targetCol}, sp, keys, maxRows, ec); err != nil {
+		if all, targets, err = fetch(ctx, db, pin, t, []int{l.targetCol}, sp, keys, maxRows, ec); err != nil {
 			return &loadError{owner: owner.Name, rel: r.name, err: err}
 		}
 		for i, p := range targets {
@@ -192,7 +191,7 @@ func loadOne(ctx context.Context, db *DB, owner *EntityInfo, ptrs []unsafe.Point
 	// []T is empty; it is nil only when nothing was fetched (no owner had a
 	// key, or no join row held a target key), and there is nothing to load.
 	if all != nil && len(sp.with) > 0 {
-		if err := loadRelations(ctx, db, t, targets, sp.with, maxRows); err != nil {
+		if err := loadRelations(ctx, db, pin, t, targets, sp.with, maxRows); err != nil {
 			return err
 		}
 	}
@@ -229,9 +228,9 @@ func loadOne(ctx context.Context, db *DB, owner *EntityInfo, ptrs []unsafe.Point
 // policy's or a hook's conditions take more than keysPer left them, the
 // chunks are built again with as many fewer keys as it had too many, and all
 // are read again, until a chunk holds one key.
-func fetchThrough(ctx context.Context, db *DB, owner *EntityInfo, r *relation, l link, sp loadSpec, keys []any, maxRows int, byKey map[any][]int) (any, []unsafe.Pointer, error) {
+func fetchThrough(ctx context.Context, db *DB, pin target, owner *EntityInfo, r *relation, l link, sp loadSpec, keys []any, maxRows int, byKey map[any][]int) (any, []unsafe.Pointer, error) {
 	j, t := l.join, l.target
-	_, rows, err := fetch(ctx, db, j, []int{l.joinOwner, l.joinTarget}, loadSpec{}, keys, maxRows, nil)
+	_, rows, err := fetch(ctx, db, pin, j, []int{l.joinOwner, l.joinTarget}, loadSpec{}, keys, maxRows, nil)
 	if err != nil {
 		return nil, nil, &loadError{owner: owner.Name, rel: r.name, err: err}
 	}
@@ -249,7 +248,7 @@ func fetchThrough(ctx context.Context, db *DB, owner *EntityInfo, r *relation, l
 	}
 	order, per := fetchPlan(db, t, sp)
 	for {
-		all, targets, err := throughChunks(ctx, db, owner, r, l, sp, order, per, keys, byOwner, maxRows, byKey)
+		all, targets, err := throughChunks(ctx, db, pin, owner, r, l, sp, order, per, keys, byOwner, maxRows, byKey)
 		// A statement over the parameter limit was not sent: the chunks are
 		// built again, smaller by its excess, and every one is read again.
 		if pe, ok := as[*paramsError](err); ok && per > 1 {
@@ -263,7 +262,7 @@ func fetchThrough(ctx context.Context, db *DB, owner *EntityInfo, r *relation, l
 // throughChunks is fetchThrough's reading of the targets, in statements that
 // each hold the distinct target keys of a run of whole owners, in the owners'
 // order, at most per of them. byOwner holds each owner key's target keys.
-func throughChunks(ctx context.Context, db *DB, owner *EntityInfo, r *relation, l link, sp loadSpec, order []OrderTerm, per int, keys []any, byOwner map[any][]any, maxRows int, byKey map[any][]int) (any, []unsafe.Pointer, error) {
+func throughChunks(ctx context.Context, db *DB, pin target, owner *EntityInfo, r *relation, l link, sp loadSpec, order []OrderTerm, per int, keys []any, byOwner map[any][]any, maxRows int, byKey map[any][]int) (any, []unsafe.Pointer, error) {
 	t := l.target
 	type chunk struct{ keys, owners []any }
 	var chunks []chunk
@@ -302,7 +301,7 @@ func throughChunks(ctx context.Context, db *DB, owner *EntityInfo, r *relation, 
 	parts := make([]any, len(chunks)) // each chunk's []T
 	for i, c := range chunks {
 		var err error
-		if parts[i], _, err = fetchPart(ctx, db, t, []int{l.targetCol}, sp, order, c.keys, maxRows, nil); err != nil {
+		if parts[i], _, err = fetchPart(ctx, db, pin, t, []int{l.targetCol}, sp, order, c.keys, maxRows, nil); err != nil {
 			return nil, nil, &loadError{owner: owner.Name, rel: r.name, err: err}
 		}
 	}
@@ -334,14 +333,14 @@ func throughChunks(ctx context.Context, db *DB, owner *EntityInfo, r *relation, 
 // (by the target's primary key when nothing is asked). cols are the columns
 // of t its caller reads, the keys' column first. With ec, each statement reads
 // each owner's rows apart, as ec says (fetchPart).
-func fetch(ctx context.Context, db *DB, t *EntityInfo, cols []int, sp loadSpec, keys []any, maxRows int, ec *EachClause) (any, []unsafe.Pointer, error) {
+func fetch(ctx context.Context, db *DB, pin target, t *EntityInfo, cols []int, sp loadSpec, keys []any, maxRows int, ec *EachClause) (any, []unsafe.Pointer, error) {
 	order, per := fetchPlan(db, t, sp)
 	if ec != nil {
 		order = tieBreak(t, order)
 	}
 	var parts []any // each chunk's []T
 	err := byChunks(len(keys), per, func(lo, hi int) error {
-		part, _, err := fetchPart(ctx, db, t, cols, sp, order, keys[lo:hi], maxRows, ec)
+		part, _, err := fetchPart(ctx, db, pin, t, cols, sp, order, keys[lo:hi], maxRows, ec)
 		if err == nil {
 			parts = append(parts, part)
 		}
@@ -360,14 +359,14 @@ func fetch(ctx context.Context, db *DB, t *EntityInfo, cols []int, sp loadSpec, 
 // from it. It fills byKey with each owner key's targets, as indexes into the
 // targets returned, in their order; a target of two owners is read, and held,
 // once for each.
-func fetchEach(ctx context.Context, db *DB, l link, sp loadSpec, keys []any, maxRows int, byKey map[any][]int) (any, []unsafe.Pointer, error) {
+func fetchEach(ctx context.Context, db *DB, pin target, l link, sp loadSpec, keys []any, maxRows int, byKey map[any][]int) (any, []unsafe.Pointer, error) {
 	t := l.target
 	order, per := fetchPlan(db, t, sp)
 	order = tieBreak(t, order)
 	ec := &EachClause{Join: l.join, JoinOwner: l.joinOwner, JoinTarget: l.joinTarget, Target: l.targetCol, Limit: sp.each}
 	var parts, owners []any
 	err := byChunks(len(keys), per, func(lo, hi int) error {
-		part, own, err := fetchPart(ctx, db, t, nil, sp, order, keys[lo:hi], maxRows, ec)
+		part, own, err := fetchPart(ctx, db, pin, t, nil, sp, order, keys[lo:hi], maxRows, ec)
 		if err == nil {
 			parts = append(parts, part)
 			owners = append(owners, own...)
@@ -458,7 +457,7 @@ func byChunks(n, per int, read func(lo, hi int) error) error {
 // owner's rows apart; its cap is the load's own MaxRows, else the bound of
 // ec's Limit. When ec has a Join, cols is nil and fetchPart returns each
 // row's owner key too, read from the join entity.
-func fetchPart(ctx context.Context, db *DB, t *EntityInfo, cols []int, sp loadSpec, order []OrderTerm, keys []any, maxRows int, ec *EachClause) (any, []any, error) {
+func fetchPart(ctx context.Context, db *DB, pin target, t *EntityInfo, cols []int, sp loadSpec, order []OrderTerm, keys []any, maxRows int, ec *EachClause) (any, []any, error) {
 	st := Statement{Op: OpSelect, Entity: t, Unbounded: true, MaxRows: maxRows, InTx: db.inTx, OrderBy: order}
 	if ec != nil {
 		each := *ec
@@ -467,15 +466,16 @@ func fetchPart(ctx context.Context, db *DB, t *EntityInfo, cols []int, sp loadSp
 	} else {
 		st.Where = append([]Predicate{{node{op: opIn, col: int32(cols[0]), v: keys}}}, sp.where...)
 	}
-	return readPart(ctx, db, &st, t, cols, sp.with)
+	return readPart(ctx, db, pin, &st, t, cols, sp.with)
 }
 
 // readPart runs st, a read of t's rows, and scans them. A Rewrite hook may
 // not leave out any of cols, the columns the caller reads, nor a column the
 // loads with need. When st's Each has a Join, readPart returns each row's
 // owner key too, read from the join entity. st holds, once it returns, where
-// it ran.
-func readPart(ctx context.Context, db *DB, st *Statement, t *EntityInfo, cols []int, with []loadSpec) (any, []any, error) {
+// it ran. pin, when set, is where it runs: a With load's (DB.loadPin).
+func readPart(ctx context.Context, db *DB, pin target, st *Statement, t *EntityInfo, cols []int, with []loadSpec) (any, []any, error) {
+	st.pin = pin
 	var part any
 	var owners []any
 	read := func(r rows) (err error) {

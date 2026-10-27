@@ -219,7 +219,7 @@ func loadEach(ctx context.Context, q eachQuery, owner *EntityInfo, ownerErr erro
 	var at target
 	err = byChunks(len(p.keys), per, func(lo, hi int) error {
 		c := chunk(st, ec, p.keys[lo:hi])
-		part, own, err := readPart(ctx, db, &c, t, key, loads)
+		part, own, err := readPart(ctx, db, target{}, &c, t, key, loads)
 		if err != nil {
 			return err
 		}
@@ -242,7 +242,7 @@ func loadEach(ctx context.Context, q eachQuery, owner *EntityInfo, ownerErr erro
 	}
 	all, targets := t.kit.join(parts)
 	if len(loads) > 0 && len(targets) > 0 {
-		if err := loadRelations(ctx, db.pinnedTo(at), t, targets, loads, st.MaxRows); err != nil {
+		if err := loadRelations(ctx, db, db.loadPin(at), t, targets, loads, st.MaxRows); err != nil {
 			return nil, err
 		}
 	}

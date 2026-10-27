@@ -34,13 +34,26 @@ const (
 // node is a condition, typed by nothing: the generic API wraps it.
 type node struct {
 	op   op
+	deep bool // an opExists is among the kids, at any depth; set by group
 	col  int32
 	v, w any
 	kids []node
 }
 
-// group is the And, Or or Not (o) of kids.
-func group(o op, kids []node) node { return node{op: o, kids: kids} }
+// group is the And, Or or Not (o) of kids. It marks the node deep when an
+// EXISTS is among the kids, at any depth: the scope and resolveNode skip a
+// node that is not. And, Or, Not and every And or Or velox makes are made by
+// it, and node is unexported, so a Rewrite hook's conditions are too.
+func group(o op, kids []node) node {
+	n := node{op: o, kids: kids}
+	for _, k := range kids {
+		if k.op == opExists || k.deep {
+			n.deep = true
+			break
+		}
+	}
+	return n
+}
 
 // Pred is a condition on entity E, made by a column handle or by And, Or and
 // Not. It is the typed form of Predicate, as Order is of OrderTerm.
@@ -88,7 +101,7 @@ func Allow[E any]() Pred[E] { return Pred[E]{node{op: opAllow}} }
 // adds nothing: And of only Allows is Allow, and And(Allow(), x) is x.
 func And[E any](ps ...Pred[E]) Pred[E] {
 	if !hasAllow(ps) {
-		return Pred[E]{node{op: opAnd, kids: nodes(ps)}}
+		return Pred[E]{group(opAnd, nodes(ps))}
 	}
 	kept := make([]node, 0, len(ps))
 	for _, p := range ps {
@@ -102,7 +115,7 @@ func And[E any](ps ...Pred[E]) Pred[E] {
 	case 1:
 		return Pred[E]{kept[0]}
 	}
-	return Pred[E]{node{op: opAnd, kids: kept}}
+	return Pred[E]{group(opAnd, kept)}
 }
 
 // Or is true when any p is. Or of nothing is false. Or of any Allow is Allow,
@@ -113,11 +126,11 @@ func Or[E any](ps ...Pred[E]) Pred[E] {
 	if hasAllow(ps) && allSound(ps) {
 		return Allow[E]()
 	}
-	return Pred[E]{node{op: opOr, kids: nodes(ps)}}
+	return Pred[E]{group(opOr, nodes(ps))}
 }
 
 // Not is true when p is false. Not(Allow()) is true for no row.
-func Not[E any](p Pred[E]) Pred[E] { return Pred[E]{node{op: opNot, kids: []node{p.n}}} }
+func Not[E any](p Pred[E]) Pred[E] { return Pred[E]{group(opNot, []node{p.n})} }
 
 // allSound reports whether no p is or holds the zero Pred, an invalid
 // condition or an EXISTS, which an Or with an Allow would otherwise drop with
@@ -189,7 +202,11 @@ func existsLink(n node) (link, error) {
 // which may be in a Pred other goroutines hold (scoper.node's rule).
 func resolveNode(n node) (node, bool, error) {
 	switch n.op {
-	case opAnd, opOr, opNot, opExists:
+	case opAnd, opOr, opNot:
+		if !n.deep {
+			return n, false, nil // no EXISTS in it
+		}
+	case opExists:
 	default: // an opThrough is resolved already: Of resolves its relation
 		return n, false, nil
 	}

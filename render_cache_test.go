@@ -1,6 +1,8 @@
 package velox
 
 import (
+	"context"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -355,5 +357,47 @@ func TestLockShapes(t *testing.T) {
 	}
 	if len(texts) != 5 || c.size() != 5 {
 		t.Errorf("%d texts, %d shapes, want 5", len(texts), c.size())
+	}
+}
+
+// TestInsertAllAboveCachedRows: an insert of more than maxCachedRows rows is
+// rendered without the cache, and still gets its fingerprint; one of
+// maxCachedRows rows is cached.
+func TestInsertAllAboveCachedRows(t *testing.T) {
+	var fps []string
+	db := OpenFake(Postgres, &FakeExec{Affected: 1}, WithAround(func(ctx context.Context, st *Statement, next func(context.Context) error) error {
+		fps = append(fps, st.Fingerprint) // set by rendering, after the Rewrite hooks
+		return next(ctx)
+	}))
+	insert := func(n int) {
+		t.Helper()
+		rows := make([]hnote, n)
+		for i := range rows {
+			rows[i].ID = int64(i + 1)
+		}
+		if err := db.InsertAll(rows).Exec(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	before := CacheSize(db)
+	insert(maxCachedRows + 1)
+	insert(maxCachedRows + 1)
+	if got := CacheSize(db); got != before {
+		t.Errorf("an insert of %d rows grew the cache from %d to %d shapes", maxCachedRows+1, before, got)
+	}
+	insert(maxCachedRows)
+	if got := CacheSize(db); got != before+1 {
+		t.Errorf("an insert of %d rows left the cache at %d shapes, want %d", maxCachedRows, got, before+1)
+	}
+	if len(fps) != 3 {
+		t.Fatalf("%d statements ran, want 3", len(fps))
+	}
+	for i, fp := range fps {
+		if len(fp) != 16 || strings.Trim(fp, "0123456789abcdef") != "" {
+			t.Errorf("statement %d: fingerprint %q", i, fp)
+		}
+	}
+	if fps[0] != fps[1] || fps[0] == fps[2] {
+		t.Errorf("fingerprints %q", fps)
 	}
 }

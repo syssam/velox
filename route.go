@@ -466,8 +466,8 @@ func (db *DB) route(ctx context.Context, st *Statement) (target, error) {
 	sh := db.rt.one
 	var rc routeCtx // read once, on a sharded DB here, else for a read below
 	switch {
-	case db.pin.ex != nil:
-		sh = db.pin.sh // a With load: its query's shard
+	case st.pin.ex != nil:
+		sh = st.pin.sh // a With load: its query's shard
 	case sh == nil:
 		rc, _ = ctx.Value(routeKey{}).(routeCtx)
 		var err error
@@ -482,8 +482,8 @@ func (db *DB) route(ctx context.Context, st *Statement) (target, error) {
 	fallback := false
 	switch {
 	case !st.Op.Reads(): // a write, Exec's raw SQL included
-	case db.pin.ex != nil:
-		t = db.pin
+	case st.pin.ex != nil:
+		t = st.pin
 		if t.replica >= 0 && t.sh.replicas[t.replica].downUntil.Load() != 0 && !t.sh.replicas[t.replica].up(time.Now().UnixNano()) {
 			// The replica has failed since the query read it, on an earlier
 			// load: this one goes straight to the primary, as it would
