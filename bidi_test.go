@@ -3,6 +3,7 @@ package velox_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"slices"
 	"strings"
@@ -439,7 +440,7 @@ func TestBidiOne(t *testing.T) {
 	t.Run("more rows", func(t *testing.T) {
 		db, e := open(map[string]int64{upd: 2})
 		err := db.Save(&bspouse{ID: 1, SpouseID: new(int64(3))}, S.SpouseID).Exec(ctx)
-		if want := "velox: velox_test.bspouse: the update that sets the bidirectional key spouse_id wrote 2 rows"; err == nil || err.Error() != want {
+		if want := "velox: velox_test.bspouse: the update that sets the bidirectional key SpouseID wrote 2 rows"; err == nil || err.Error() != want {
 			t.Fatalf("err = %v, want %s", err, want)
 		}
 		sent(t, e, linked[0], linked[1], stmt{"ROLLBACK", nil})
@@ -550,7 +551,7 @@ func TestBidiOne(t *testing.T) {
 		db, e := open(nil)
 		e.Rows = [][]any{{int64(1)}} // RETURNING "id": 1, the partner given
 		err := db.Insert(&bspouse{SpouseID: new(int64(1))}).Exec(ctx)
-		if want := "velox: velox_test.bspouse: a row cannot be its own Spouse"; err == nil || err.Error() != want {
+		if want := "velox: velox_test.bspouse: SpouseID: a row cannot be its own Spouse"; err == nil || err.Error() != want {
 			t.Fatalf("err = %v, want %s", err, want)
 		}
 		if w := []string{"BEGIN", insGen, "ROLLBACK"}; !slices.Equal(e.Log, w) {
@@ -674,15 +675,77 @@ func TestBidiOne(t *testing.T) {
 		}
 		sent(t, e, stmt{"BEGIN", nil}, stmt{ins, []any{int64(5), new(int64(1))}}, stmt{link, []any{int64(5), int64(1)}}, stmt{"COMMIT", nil})
 	})
+	t.Run("refusals before the transaction name the entity", func(t *testing.T) {
+		save := func(ctx context.Context, db *velox.DB) error {
+			return db.Save(&bspouse{ID: 1, SpouseID: new(int64(3))}, S.SpouseID).Exec(ctx)
+		}
+		insert := func(ctx context.Context, db *velox.DB) error {
+			return db.Insert(&bspouse{ID: 5, SpouseID: new(int64(1))}).Exec(ctx)
+		}
+		check := func(t *testing.T, name string, err, is error, sent []string, e *velox.FakeExec) {
+			t.Helper()
+			if !errors.Is(err, is) || !strings.HasPrefix(fmt.Sprint(err), "velox: velox_test.bspouse: ") {
+				t.Errorf("%s: %v, want velox: velox_test.bspouse: …, matching %v", name, err, is)
+			}
+			if !slices.Equal(e.Log, sent) {
+				t.Errorf("%s: sent %q, want %q", name, e.Log, sent)
+			}
+		}
+		for _, w := range []func(context.Context, *velox.DB) error{save, insert} {
+			e := &velox.FakeExec{Affected: 1}
+			dry, db := dryContext(t, e)
+			check(t, "dry run", w(dry, db), velox.ErrDryRun, nil, e)
+
+			e = &velox.FakeExec{Affected: 1}
+			db = velox.OpenFake(velox.Postgres, e)
+			var err error
+			_ = db.Tx(ctx, func(ctx context.Context, _ *velox.DB) error {
+				err = w(ctx, db) // db, not the transaction's
+				return nil
+			})
+			check(t, "outside its transaction", err, velox.ErrOutsideTx, []string{"BEGIN", "COMMIT"}, e)
+
+			gone := errors.New("the connection is gone")
+			e = &velox.FakeExec{Affected: 1, Errs: []error{nil, gone}} // SAVEPOINT, then ROLLBACK TO
+			db = velox.OpenFake(velox.Postgres, e)
+			_ = db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+				_ = tx.Tx(ctx, func(context.Context, *velox.DB) error { return errors.New("boom") })
+				err = w(ctx, tx)
+				return nil
+			})
+			check(t, "broken", err, gone, []string{"BEGIN", e.Log[1], e.Log[2], "ROLLBACK"}, e)
+
+			s := openShards(false)
+			check(t, "no shard", w(ctx, s.db), velox.ErrNoShard, nil, s.euP)
+			if s.calls() != [3]int{} {
+				t.Errorf("no shard: sent %v", s.calls())
+			}
+		}
+	})
 	t.Run("refused", func(t *testing.T) {
 		db, e := open(nil)
 		const (
-			self   = "velox: velox_test.bspouse: a row cannot be its own Spouse"
-			oneRow = "velox: velox_test.bspouse: an update that sets spouse_id, the key of the bidirectional edge Spouse, must name one row with Where(id.EQ(id)), as velox re-points the other row too"
+			self   = "velox: velox_test.bspouse: SpouseID: a row cannot be its own Spouse"
+			oneRow = "velox: velox_test.bspouse: an update that sets SpouseID, the key of the bidirectional edge Spouse, must name one row by its primary key (Where on ID.EQ), as velox re-points the other row too"
 		)
 		_, errIn := db.Update[bspouse]().Set(S.SpouseID.Set(3)).Where(S.ID.In(1, 2)).Exec(ctx)
 		_, errAll := db.Update[bspouse]().Set(S.SpouseID.Set(3)).All().Exec(ctx)
 		_, errAdd := db.Update[bspouse]().Set(S.SpouseID.Add(1)).Where(S.ID.EQ(1)).Exec(ctx)
+		for name, err := range map[string]error{
+			"save self":   db.Save(&bspouse{ID: 1, SpouseID: new(int64(1))}, S.SpouseID).Exec(ctx),
+			"insert self": db.Insert(&bspouse{ID: 1, SpouseID: new(int64(1))}).Exec(ctx),
+			"update self": func() error {
+				_, err := db.Update[bspouse]().Set(S.SpouseID.Set(1)).Where(S.ID.EQ(1)).Exec(ctx)
+				return err
+			}(),
+		} {
+			// The value of one field is refused: GraphQL maps it to the
+			// input field, as BAD_USER_INPUT.
+			var ve *velox.ValidationError
+			if !errors.As(err, &ve) || ve.Entity != "velox_test.bspouse" || ve.Field != "SpouseID" {
+				t.Errorf("%s: %v, want a ValidationError on SpouseID", name, err)
+			}
+		}
 		for _, c := range []struct {
 			name string
 			err  error
@@ -692,7 +755,7 @@ func TestBidiOne(t *testing.T) {
 			{"insert self", db.Insert(&bspouse{ID: 1, SpouseID: new(int64(1))}).Exec(ctx), self},
 			{"update in", errIn, oneRow},
 			{"update all", errAll, oneRow},
-			{"update add", errAdd, "velox: velox_test.bspouse: spouse_id, the key of the bidirectional edge Spouse, can only be set"},
+			{"update add", errAdd, "velox: velox_test.bspouse: SpouseID, the key of the bidirectional edge Spouse, can only be set"},
 			{"upsert", db.Insert(&bspouse{ID: 5, SpouseID: new(int64(1))}).OnConflict(S.ID).DoNothing().Exec(ctx),
 				"velox: velox_test.bspouse: an upsert cannot set the key of the bidirectional edge Spouse; insert the row, then Save the key"},
 			{"insert all", db.InsertAll([]bspouse{{ID: 5}, {ID: 6, SpouseID: new(int64(1))}}).Exec(ctx),

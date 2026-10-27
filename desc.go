@@ -34,8 +34,10 @@ type Desc[E any] struct {
 	// half-link, from one-way data) cannot be inserted plainly either.
 	// OnConflict(…).DoNothing() is the idempotent insert, and it repairs a
 	// half-link by writing the missing row. ent's AddXIDs is idempotent
-	// silently, as it always adds DO NOTHING; velox's GraphQL mutations add
-	// DoNothing, so they behave as ent's do. For generated code.
+	// silently, as it adds DO NOTHING to the join rows of an edge without
+	// extra fields (an edge schema's rows get no such clause); velox's
+	// GraphQL mutations add DoNothing, so they behave as ent's do. For
+	// generated code.
 	Bidi     bool
 	Indexes  []IndexInfo
 	Edges    []EdgeDesc            // in the order of the generated relation handles
@@ -324,7 +326,8 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 // checkBidi refuses the Desc of a bidirectional edge's join entity unless its
 // two columns, of one Go type, are its primary key, and it has no tenant: the
 // mirror of a row swaps them. The type is a byte slice or one that == compares
-// without panicking, as a self-link is told by comparing the two (selfLink).
+// without panicking (linkKey), as a self-link is told by comparing the two
+// (selfLink).
 func checkBidi(name string, d *descFields, cols []ColumnInfo) error {
 	fail := func(format string, args ...any) error {
 		return &SchemaError{Entity: name, Reason: "the join entity of a bidirectional edge " + fmt.Sprintf(format, args...)}
@@ -344,14 +347,34 @@ func checkBidi(name string, d *descFields, cols []ColumnInfo) error {
 	return nil
 }
 
-// linkKey reports whether t, a bidirectional join entity's key type, is a
-// byte slice or a comparable type other than an interface, whose dynamic
-// value == could panic on.
+// linkKey reports whether t, a bidirectional edge's key type, is a byte
+// slice or a comparable type that holds no interface: == on an interface
+// panics when its dynamic value is uncomparable, and so does == on a struct
+// or an array that holds one (holdsInterface).
 func linkKey(t reflect.Type) bool {
 	if t.Kind() == reflect.Slice {
 		return t.Elem().Kind() == reflect.Uint8
 	}
-	return t.Comparable() && t.Kind() != reflect.Interface
+	return t.Comparable() && !holdsInterface(t)
+}
+
+// holdsInterface reports whether t is an interface, or a struct or an array
+// that holds one, in a field or its elements, at any depth. A pointer or a
+// channel is compared by its address, so what it points to does not count.
+func holdsInterface(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.Interface:
+		return true
+	case reflect.Array:
+		return holdsInterface(t.Elem())
+	case reflect.Struct:
+		for i := range t.NumField() {
+			if holdsInterface(t.Field(i).Type) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // unboundMethods refuses an entity whose pointer type has a Policy or Hooks
@@ -433,17 +456,32 @@ func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) EdgeDesc 
 // key too. An Update or Save that sets it clears the key of the row that
 // pointed here and sets the new partner's; one that sets it to nil clears
 // the partner's. They run in a transaction velox opens, a savepoint when the
-// caller is in one. A new partner that already has a partner is refused with
-// a *ConstraintError of kind ConstraintUnique: clear its key first. The
-// clearing of the old partner is not scoped by tenant or policy
-// (WithAllTenants, WithoutPolicy, with a reason the hooks see): it is the
-// edge's integrity, as ent's is. The link of the new partner is scoped as
-// the caller's write, so a partner it cannot see cannot be linked. A
-// Rewrite hook may not change the row such an update names, nor make such an
-// insert an upsert. Delete
-// writes only the deleted rows; the foreign key's ON DELETE acts on their
-// partners, and velox-gen's default for this NULL-able key, as ent's, is
-// SET NULL.
+// caller is in one. The clearing of the old partner is not scoped by tenant
+// or policy (WithAllTenants, WithoutPolicy, with a reason the hooks see): it
+// is the edge's integrity, as ent's is. The link of the new partner is
+// scoped as the caller's write, so a partner it cannot see cannot be linked.
+// Delete writes only the deleted rows; the foreign key's ON DELETE acts on
+// their partners, and velox-gen's default for this NULL-able key, as ent's,
+// is SET NULL.
+//
+// A new partner that already has a partner is refused with a
+// *ConstraintError of kind ConstraintUnique: clear its key first. Match it
+// on Kind, not Constraint: Constraint is the database's name for the key's
+// unique index when the index refuses the write, and the key column's name
+// when velox's link of the partner does (a partner whose key points one way,
+// or one the caller cannot see).
+//
+// velox refuses, before anything is sent, what it could not keep both rows
+// of: an Update that sets the key and does not name one row by its primary
+// key (Where on the id's EQ), as velox re-points that row's partners; Add or
+// Sub on the key; a row given itself as its partner, with a
+// *ValidationError on the key's field; and an InsertAll or an upsert that
+// sets the key. The last two are stricter than ent, which links through
+// them: InsertAll reads no generated key back, so velox cannot name the rows
+// to link, and an upsert's DO NOTHING or DO UPDATE leaves unknown whether the
+// row that holds the key is the caller's. Insert the rows, then Save each
+// key. A Rewrite hook may not change the row such an update names, the
+// key's value, nor make such an insert an upsert.
 func EdgeBidi[T any, PT Entity[T]](name string, keyCol, idCol int) EdgeDesc {
 	r := EdgeTo[T, PT](name, keyCol, idCol)
 	r.bidi = elemType((*T)(nil))

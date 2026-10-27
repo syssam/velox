@@ -134,15 +134,15 @@ func checkBidiUpdate(st *Statement, keys []bidiKey, vs []any) (any, error) {
 	for _, a := range st.Set {
 		for _, bk := range keys {
 			if a.Column == bk.col && a.Op != AssignSet {
-				return nil, fmt.Errorf("velox: %s: %s, the key of the bidirectional edge %s, can only be set", in.Name, in.Columns[bk.col].Name, bk.edge)
+				return nil, fmt.Errorf("velox: %s: %s, the key of the bidirectional edge %s, can only be set", in.Name, in.Columns[bk.col].Field, bk.edge)
 			}
 		}
 	}
 	k, ok := pinnedKey(in, st.Where)
 	if !ok || st.AllRows {
-		pk := in.Columns[in.PrimaryKey[0]].Name
-		col := in.Columns[keys[0].col].Name
-		return nil, fmt.Errorf("velox: %s: an update that sets %s, the key of the bidirectional edge %s, must name one row with Where(%s.EQ(id)), as velox re-points the other row too", in.Name, col, keys[0].edge, pk)
+		pk := in.Columns[in.PrimaryKey[0]].Field
+		col := in.Columns[keys[0].col].Field
+		return nil, fmt.Errorf("velox: %s: an update that sets %s, the key of the bidirectional edge %s, must name one row by its primary key (Where on %s.EQ), as velox re-points the other row too", in.Name, col, keys[0].edge, pk)
 	}
 	for i, v := range vs {
 		if v != nil && selfLink(k, v) {
@@ -152,9 +152,33 @@ func checkBidiUpdate(st *Statement, keys []bidiKey, vs []any) (any, error) {
 	return k, nil
 }
 
-// errSelfLink is the error of a write that makes a row its own partner.
+// errSelfLink is the error of a write that makes a row its own partner: a
+// *ValidationError on the key's field, as the value of one field is refused.
 func errSelfLink(in *EntityInfo, bk bidiKey) error {
-	return fmt.Errorf("velox: %s: a row cannot be its own %s", in.Name, bk.edge)
+	return &ValidationError{Entity: in.Name, Field: in.Columns[bk.col].Field, Err: fmt.Errorf("a row cannot be its own %s", bk.edge)}
+}
+
+// bidiTx runs fn under db.Tx for a bidirectional write of in, after the
+// refusals Tx would make as the transaction's, made here as in's, so that the
+// error names the entity as the same write without the key does: a dry run,
+// a statement under another transaction's mark, a transaction a savepoint
+// broke, and, outside a transaction, a context that names no shard.
+func bidiTx(ctx context.Context, db *DB, in *EntityInfo, fn func(ctx context.Context, tx *DB) error) error {
+	if IsDryRun(ctx) {
+		return fmt.Errorf("velox: %s: %w", in.Name, ErrDryRun)
+	}
+	if db.foreign(ctx) {
+		return fmt.Errorf("velox: %s: %w", in.Name, ErrOutsideTx)
+	}
+	if db.txRoot != nil && db.txRoot.broken != nil {
+		return fmt.Errorf("velox: %s: %w", in.Name, db.txRoot.broken)
+	}
+	if !db.inTx {
+		if _, err := db.ctxShard(ctx); err != nil {
+			return fmt.Errorf("velox: %s: %w", in.Name, err)
+		}
+	}
+	return db.Tx(ctx, fn)
 }
 
 // errLinkCount is the error of a bidirectional write whose driver did not
@@ -183,7 +207,7 @@ func bidiUpdate(ctx context.Context, db *DB, mu *mutation, keys []bidiKey, k any
 	st := mu.st
 	in := st.Entity
 	var n int64
-	err := db.Tx(ctx, func(ctx context.Context, tx *DB) error {
+	err := bidiTx(ctx, db, in, func(ctx context.Context, tx *DB) error {
 		st.InTx = true
 		st.bidi = &bidiStep{keys: keys, vals: vs, pinned: k}
 		res, err := execWrite(ctx, tx, st)
@@ -197,7 +221,7 @@ func bidiUpdate(ctx context.Context, db *DB, mu *mutation, keys []bidiKey, k any
 		case n < 0:
 			return errLinkCount(in)
 		case n > 1:
-			return fmt.Errorf("velox: %s: the update that sets the bidirectional key %s wrote %d rows", in.Name, in.Columns[keys[0].col].Name, n)
+			return fmt.Errorf("velox: %s: the update that sets the bidirectional key %s wrote %d rows", in.Name, in.Columns[keys[0].col].Field, n)
 		}
 		free := WithAllTenants(WithoutPolicy(ctx, bidiReason), bidiReason)
 		for _, bk := range keys {
@@ -441,7 +465,7 @@ func bidiInsert(ctx context.Context, db *DB, in *EntityInfo, p unsafe.Pointer, k
 			}
 		}
 	}
-	return db.Tx(ctx, func(ctx context.Context, tx *DB) error {
+	return bidiTx(ctx, db, in, func(ctx context.Context, tx *DB) error {
 		if err := send(ctx, tx); err != nil {
 			return err
 		}

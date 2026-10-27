@@ -296,6 +296,16 @@ func bidiDesc() velox.Desc[dBidi] {
 // dBidiSlice has keys == cannot compare.
 type dBidiSlice struct{ A, B []int }
 
+// ifaceKey is comparable, but == on it panics when X holds an uncomparable
+// value: a []int, say.
+type ifaceKey struct{ X struct{ Y any } }
+
+// dBidiIface and dBidiArray have keys == can panic on.
+type (
+	dBidiIface struct{ A, B ifaceKey }
+	dBidiArray struct{ A, B [2]any }
+)
+
 func TestBidiDescRefused(t *testing.T) {
 	_, err := velox.LoadDesc(velox.Desc[dBidiSlice]{
 		Table:      "links",
@@ -307,6 +317,28 @@ func TestBidiDescRefused(t *testing.T) {
 	})
 	if want := "velox: velox_test.dBidiSlice: the join entity of a bidirectional edge has columns of type []int, which cannot be compared; use a comparable type or a byte slice"; err == nil || err.Error() != want {
 		t.Errorf("a slice key: %v, want %s", err, want)
+	}
+	_, err = velox.LoadDesc(velox.Desc[dBidiIface]{
+		Table:      "links",
+		Columns:    []velox.ColumnDesc{{Field: "A", Name: "a"}, {Field: "B", Name: "b"}},
+		PrimaryKey: []int{0, 1},
+		Tenant:     -1,
+		Bidi:       true,
+		Addr:       func(x *dBidiIface, i int) any { return [...]any{&x.A, &x.B}[i] },
+	})
+	if want := "velox: velox_test.dBidiIface: the join entity of a bidirectional edge has columns of type velox_test.ifaceKey, which cannot be compared; use a comparable type or a byte slice"; err == nil || err.Error() != want {
+		t.Errorf("a struct key holding an interface: %v, want %s", err, want)
+	}
+	_, err = velox.LoadDesc(velox.Desc[dBidiArray]{
+		Table:      "links",
+		Columns:    []velox.ColumnDesc{{Field: "A", Name: "a"}, {Field: "B", Name: "b"}},
+		PrimaryKey: []int{0, 1},
+		Tenant:     -1,
+		Bidi:       true,
+		Addr:       func(x *dBidiArray, i int) any { return [...]any{&x.A, &x.B}[i] },
+	})
+	if want := "velox: velox_test.dBidiArray: the join entity of a bidirectional edge has columns of type [2]interface {}, which cannot be compared; use a comparable type or a byte slice"; err == nil || err.Error() != want {
+		t.Errorf("an array key of interfaces: %v, want %s", err, want)
 	}
 	allow := func(context.Context) (velox.Pred[dBidi], error) { return velox.Allow[dBidi](), nil }
 	if _, err := velox.LoadDesc(bidiDesc()); err != nil {

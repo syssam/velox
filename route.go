@@ -420,6 +420,15 @@ func noShard(ctx context.Context) error {
 // sharded DB the one ctx names, on a DB with replicas its one shard, and nil
 // on a DB without a router. Its error is Tx's.
 func (db *DB) shardForTx(ctx context.Context) (*shard, error) {
+	sh, err := db.ctxShard(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("velox: transaction: %w", err)
+	}
+	return sh, nil
+}
+
+// ctxShard is shardForTx's shard, and its error without the prefix.
+func (db *DB) ctxShard(ctx context.Context) (*shard, error) {
 	switch {
 	case db.rt == nil:
 		return nil, nil
@@ -431,10 +440,7 @@ func (db *DB) shardForTx(ctx context.Context) (*shard, error) {
 	if err == nil && sh == nil {
 		err = noShard(ctx)
 	}
-	if err != nil {
-		return nil, fmt.Errorf("velox: transaction: %w", err)
-	}
-	return sh, nil
+	return sh, err
 }
 
 // route is the route stage: it chooses the connection st runs on, and

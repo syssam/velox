@@ -789,8 +789,9 @@ func mirrorRows(st *Statement) {
 }
 
 // selfLink reports whether the key values a and b, of one Go type, are equal:
-// bytes.Equal for a byte slice of any named type, == otherwise. checkBidi
-// refuses every other key type that == could panic on.
+// bytes.Equal for a byte slice of any named type, == otherwise. checkBidi and
+// checkEdgeBidi refuse, through linkKey, every other key type that == could
+// panic on: an interface, and a struct or an array that holds one.
 func selfLink(a, b any) bool {
 	if x, ok := a.([]byte); ok {
 		y, _ := b.([]byte)
