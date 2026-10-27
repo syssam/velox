@@ -566,7 +566,7 @@ func TestBidiOne(t *testing.T) {
 			return nil
 		}))
 		err := db.Save(&bspouse{ID: 1, SpouseID: new(int64(3))}, S.SpouseID).Exec(ctx)
-		if want := "velox: velox_test.bspouse: a Rewrite hook changed the row that the update of the bidirectional key spouse_id names"; err == nil || err.Error() != want {
+		if want := "velox: velox_test.bspouse: a Rewrite hook changed the row that the update of the bidirectional key SpouseID names"; err == nil || err.Error() != want {
 			t.Fatalf("err = %v, want %s", err, want)
 		}
 		if w := []string{"BEGIN", "ROLLBACK"}; !slices.Equal(e.Log, w) {
@@ -588,6 +588,91 @@ func TestBidiOne(t *testing.T) {
 		if w := []string{"BEGIN", "ROLLBACK"}; !slices.Equal(e.Log, w) {
 			t.Errorf("sent %q, want %q", e.Log, w)
 		}
+	})
+	t.Run("a Rewrite hook that replaces the statement may not re-target the row", func(t *testing.T) {
+		e := &velox.FakeExec{Affected: 1}
+		db := velox.OpenFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+			freshStatement(st)
+			if st.Op == velox.OpUpdate && len(st.Set) == 1 && st.Set[0].Value != nil {
+				st.Where = []velox.Predicate{velox.ColumnEQ(0, int64(2))}
+			}
+			return nil
+		}))
+		err := db.Save(&bspouse{ID: 1, SpouseID: new(int64(3))}, S.SpouseID).Exec(ctx)
+		if want := "velox: velox_test.bspouse: a Rewrite hook changed the row that the update of the bidirectional key SpouseID names"; err == nil || err.Error() != want {
+			t.Fatalf("err = %v, want %s", err, want)
+		}
+		if w := []string{"BEGIN", "ROLLBACK"}; !slices.Equal(e.Log, w) {
+			t.Errorf("sent %q, want %q", e.Log, w)
+		}
+	})
+	t.Run("a Rewrite hook may not change the key's value", func(t *testing.T) {
+		const want = "velox: velox_test.bspouse: a Rewrite hook changed the value of SpouseID, the key of the bidirectional edge Spouse"
+		for _, c := range []struct {
+			name   string
+			insert bool
+			edit   func(st *velox.Statement)
+		}{
+			{"update, another value", false, func(st *velox.Statement) { st.Set[0].Value = int64(4) }},
+			{"update, cleared", false, func(st *velox.Statement) { st.Set[0].Value = nil }},
+			{"update, not a Set", false, func(st *velox.Statement) { st.Set[0].Op = velox.AssignAdd }},
+			{"update, set twice", false, func(st *velox.Statement) { st.Set = append(st.Set, st.Set[0]) }},
+			{"update, replaced", false, func(st *velox.Statement) {
+				freshStatement(st)
+				st.Set = []velox.Assignment{{Column: 1, Op: velox.AssignSet, Value: int64(4)}}
+			}},
+			{"insert, another value", true, func(st *velox.Statement) { st.Rows[0][1] = new(int64(4)) }},
+			{"insert, cleared", true, func(st *velox.Statement) { st.Rows[0][1] = (*int64)(nil) }},
+			{"insert, dropped", true, func(st *velox.Statement) { st.Columns, st.Rows = st.Columns[:1], [][]any{st.Rows[0][:1]} }},
+		} {
+			e := &velox.FakeExec{Affected: 1}
+			first := true
+			db := velox.OpenFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+				if first {
+					first = false
+					c.edit(st)
+				}
+				return nil
+			}))
+			var err error
+			if c.insert {
+				err = db.Insert(&bspouse{ID: 5, SpouseID: new(int64(3))}).Exec(ctx)
+			} else {
+				err = db.Save(&bspouse{ID: 1, SpouseID: new(int64(3))}, S.SpouseID).Exec(ctx)
+			}
+			if err == nil || err.Error() != want {
+				t.Errorf("%s: err = %v, want %s", c.name, err, want)
+			}
+			if w := []string{"BEGIN", "ROLLBACK"}; !slices.Equal(e.Log, w) {
+				t.Errorf("%s: sent %q, want %q", c.name, e.Log, w)
+			}
+		}
+	})
+	t.Run("a benign Rewrite hook", func(t *testing.T) {
+		// A hook that tags every statement, and replaces it with a copy of
+		// its exported fields, changes nothing a bidirectional write follows.
+		e := &velox.FakeExec{Affected: 1}
+		db := velox.OpenFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+			freshStatement(st)
+			st.Tags = append(st.Tags, velox.Tag{Key: "audit", Value: "yes"})
+			return nil
+		}))
+		if err := db.Save(&bspouse{ID: 1, SpouseID: new(int64(3))}, S.SpouseID).Exec(ctx); err != nil {
+			t.Fatalf("Save: %v", err)
+		}
+		sent(t, e, linked...)
+		e.Log, e.ArgLog = nil, nil
+		if _, err := db.Update[bspouse]().Set(S.SpouseID.Set(3)).Where(S.ID.EQ(1)).Exec(ctx); err != nil {
+			t.Fatalf("Update: %v", err)
+		}
+		if w := []string{"BEGIN", upd, unlink, link, "COMMIT"}; !slices.Equal(e.Log, w) {
+			t.Errorf("Update: sent %q, want %q", e.Log, w)
+		}
+		e.Log, e.ArgLog = nil, nil
+		if err := db.Insert(&bspouse{ID: 5, SpouseID: new(int64(1))}).Exec(ctx); err != nil {
+			t.Fatalf("Insert: %v", err)
+		}
+		sent(t, e, stmt{"BEGIN", nil}, stmt{ins, []any{int64(5), new(int64(1))}}, stmt{link, []any{int64(5), int64(1)}}, stmt{"COMMIT", nil})
 	})
 	t.Run("refused", func(t *testing.T) {
 		db, e := open(nil)
@@ -621,6 +706,20 @@ func TestBidiOne(t *testing.T) {
 			t.Errorf("sent %q", e.Log)
 		}
 	})
+}
+
+// freshStatement replaces *st with a Statement that holds only its exported
+// fields, as a Rewrite hook that writes *st = velox.Statement{…} does: every
+// field velox keeps unexported is zero.
+func freshStatement(st *velox.Statement) {
+	var fresh velox.Statement
+	from, to := reflect.ValueOf(st).Elem(), reflect.ValueOf(&fresh).Elem()
+	for i := range from.NumField() {
+		if from.Type().Field(i).IsExported() {
+			to.Field(i).Set(from.Field(i))
+		}
+	}
+	*st = fresh
 }
 
 // sameStarts reports whether got is want, where an element of want that

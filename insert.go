@@ -487,7 +487,7 @@ func insertRow(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen
 	if in := st.Entity; len(in.bidiKeys) > 0 {
 		if keys, vs := bidiRow(in, p); len(keys) > 0 {
 			cp := *st
-			cp.bidi = &bidiStep{key: keys[0], insert: true}
+			cp.bidi = &bidiStep{keys: keys, vals: vs, insert: true}
 			var res Result
 			err := bidiInsert(ctx, db, in, p, keys, vs, gen >= 0, cp.Conflict != nil, func(ctx context.Context, tx *DB) error {
 				return sendOne(ctx, tx, p, &cp, gen, &res)

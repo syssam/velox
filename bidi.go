@@ -185,7 +185,7 @@ func bidiUpdate(ctx context.Context, db *DB, mu *mutation, keys []bidiKey, k any
 	var n int64
 	err := db.Tx(ctx, func(ctx context.Context, tx *DB) error {
 		st.InTx = true
-		st.bidi = &bidiStep{key: keys[0], pinned: k}
+		st.bidi = &bidiStep{keys: keys, vals: vs, pinned: k}
 		res, err := execWrite(ctx, tx, st)
 		st.bidi = nil
 		if err != nil {
@@ -227,33 +227,100 @@ func bidiUpdate(ctx context.Context, db *DB, mu *mutation, keys []bidiKey, k any
 // bidiStep marks a statement that a bidirectional write sends, for the
 // checks a Rewrite hook's changes get (checkBidiRewrite).
 type bidiStep struct {
-	key    bidiKey
-	pinned any  // step 1 of bidiUpdate: the key of the row its Where names
-	insert bool // bidiInsert's INSERT
+	keys   []bidiKey // the bidirectional keys the statement sets
+	vals   []any     // their values, as keyOf gives them, nil for a clear: what the write's later statements link
+	pinned any       // step 1 of bidiUpdate: the key of the row its Where names
+	insert bool      // bidiInsert's INSERT
 }
 
 // checkBidiRewrite refuses what a Rewrite hook made of st, a statement of a
-// bidirectional write (st.bidi), that the write's later statements could not
-// follow: step 1 of an update re-targeted to another row, whose old partner
-// and new one steps 2 and 3 would then not re-point, and an INSERT made an
-// upsert, whose row the link could not name. prepare calls it, before the
-// statement is sent, only when the DB has Rewrite hooks.
-func checkBidiRewrite(st *Statement) error {
-	b := st.bidi
+// bidirectional write that b marks, that the write's later statements could
+// not follow: step 1 of an update re-targeted to another row, whose old
+// partner and new one steps 2 and 3 would then not re-point; an INSERT made
+// an upsert, whose row the link could not name; and a key's value changed or
+// dropped, in step 1's Set or the INSERT's row, which would leave the pair
+// one-way, as the later statements link the value set before the hooks.
+// prepare calls it, before the statement is sent, only when the DB has
+// Rewrite hooks, with b as it was before them: a hook that replaces the whole
+// statement cannot drop it.
+func checkBidiRewrite(st *Statement, b *bidiStep) error {
 	if b == nil {
 		return nil
 	}
 	in := st.Entity
 	if b.insert {
 		if st.Conflict != nil {
-			return fmt.Errorf("velox: %s: an upsert cannot set the key of the bidirectional edge %s; insert the row, then Save the key", in.Name, b.key.edge)
+			return fmt.Errorf("velox: %s: an upsert cannot set the key of the bidirectional edge %s; insert the row, then Save the key", in.Name, b.keys[0].edge)
+		}
+		for i, bk := range b.keys {
+			if v, ok := insertedKey(st, bk.col); !ok || !equalKey(v, b.vals[i]) {
+				return errBidiValue(in, bk)
+			}
 		}
 		return nil
 	}
-	if k, ok := pinnedKey(in, st.Where); !ok || !selfLink(k, b.pinned) {
-		return fmt.Errorf("velox: %s: a Rewrite hook changed the row that the update of the bidirectional key %s names", in.Name, in.Columns[b.key.col].Name)
+	if k, ok := pinnedKey(in, st.Where); !ok || !equalKey(k, b.pinned) {
+		return fmt.Errorf("velox: %s: a Rewrite hook changed the row that the update of the bidirectional key %s names", in.Name, in.Columns[b.keys[0].col].Field)
+	}
+	for i, bk := range b.keys {
+		if v, ok := assignedKey(st.Set, bk.col); !ok || !equalKey(v, b.vals[i]) {
+			return errBidiValue(in, bk)
+		}
 	}
 	return nil
+}
+
+// errBidiValue is checkBidiRewrite's error for a key a Rewrite hook changed.
+func errBidiValue(in *EntityInfo, bk bidiKey) error {
+	return fmt.Errorf("velox: %s: a Rewrite hook changed the value of %s, the key of the bidirectional edge %s", in.Name, in.Columns[bk.col].Field, bk.edge)
+}
+
+// assignedKey returns the value set gives column col, as keyOf gives it,
+// when set assigns col exactly once, with AssignSet.
+func assignedKey(set []Assignment, col int) (any, bool) {
+	var v any
+	n := 0
+	for _, a := range set {
+		if a.Column == col {
+			if a.Op != AssignSet {
+				return nil, false
+			}
+			v, _ = keyOf(a.Value)
+			n++
+		}
+	}
+	return v, n == 1
+}
+
+// insertedKey returns the value st, an insert, gives column col in its one
+// row, as keyOf gives it, when it lists col exactly once.
+func insertedKey(st *Statement, col int) (any, bool) {
+	if len(st.Rows) != 1 {
+		return nil, false
+	}
+	at := -1
+	for i, c := range st.Columns {
+		if c == col {
+			if at >= 0 {
+				return nil, false
+			}
+			at = i
+		}
+	}
+	if at < 0 || at >= len(st.Rows[0]) {
+		return nil, false
+	}
+	v, _ := keyOf(st.Rows[0][at])
+	return v, true
+}
+
+// equalKey reports whether the key values a and b, as keyOf gives them, are
+// equal: both nil, or of one type and equal by selfLink.
+func equalKey(a, b any) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return reflect.TypeOf(a) == reflect.TypeOf(b) && selfLink(a, b)
 }
 
 // bidiLink sets the key of row v to k, if v has no partner:

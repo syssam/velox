@@ -646,3 +646,27 @@ func TestLoadReChunksOnParameterOverflow(t *testing.T) {
 		}
 	})
 }
+
+// TestWithLoadPinSurvivesARewrite: a Rewrite hook that replaces the whole
+// statement (*st = velox.Statement{…}) does not unpin a With load, which
+// still reads the replica its query read.
+func TestWithLoadPinSurvivesARewrite(t *testing.T) {
+	row := [][]any{sampleRow(1, int64(1))} // its own parent
+	r0, r1 := &velox.FakeExec{Rows: row}, &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{},
+		velox.WithReplicas(velox.FakeConn(r0), velox.FakeConn(r1)),
+		velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+			freshStatement(st)
+			return nil
+		}))
+	ss, err := db.Query[testmodel.Sample]().With(testmodel.Samples.Parent).Limit(10).All(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, loaded := ss[0].Parent.Get(); !loaded {
+		t.Error("the parent is not loaded")
+	}
+	if r0.Calls != 2 || r1.Calls != 0 {
+		t.Errorf("replica 0 read %d times, replica 1 %d; want the query and its load on replica 0", r0.Calls, r1.Calls)
+	}
+}
