@@ -437,7 +437,7 @@ func (in CreateAccountInput) String() string {
 // GoString is String, so that %#v does not print the sensitive fields either.
 func (in CreateAccountInput) GoString() string { return in.String() }
 
-// CreateAccount creates a Account from input, with its edges, as the mutation
+// CreateAccount creates an Account from input, with its edges, as the mutation
 // createAccount does, and returns the row as written. It runs atomically on the
 // DB veloxgql.DBFromContext reads from ctx, under the tenant scope and the
 // policies. See "Mutations" in the documentation of package

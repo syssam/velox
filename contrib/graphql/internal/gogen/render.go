@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/syssam/velox2/contrib/graphql/internal/english"
 	"github.com/syssam/velox2/contrib/graphql/internal/sdl"
 	"github.com/syssam/velox2/plugin"
 )
@@ -306,7 +307,7 @@ func (r *renderer) writeGetter(f *file, t *sdl.Type, g sdl.Getter) error {
 		f.p("")
 		return nil
 	}
-	f.doc("", fmt.Sprintf("%s is the field %s as a %s, the Go type its GraphQL scalar binds to: gqlgen binds the field to it.", g.Method, fd.Name, ret))
+	f.doc("", fmt.Sprintf("%s is the field %s as %s %s, the Go type its GraphQL scalar binds to: gqlgen binds the field to it.", g.Method, fd.Name, english.Article(ret), ret))
 	if !fd.Pointer {
 		f.p("func (x *%s) %s() %s { return %s(x.%s) }", e.Name, g.Method, ret, ret, fd.GoName)
 		f.p("")

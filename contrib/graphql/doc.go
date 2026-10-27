@@ -192,19 +192,30 @@
 // may read: the tenant scope and the target's Read policy. A one-to-many or
 // one-to-one link from the owner sets the target's foreign key, so the target
 // must be one the caller may change: the tenant scope and its Read and Write
-// policies. Unlinking follows the same rule.
+// policies. A link by a key on the entity's own row, <edge>ID, changes no
+// target row: the target must be one the caller may read. Unlinking follows the
+// same rule.
 //
 // With graphql.MutationDelete(), Delete<T>(ctx, id) deletes the row and its
 // rows in the join tables of its many-to-many edges, and returns the ID encoded
 // again from the key; deleteX's resolver returns it. The join rows, which
 // neither the tenant nor a policy scopes, go only after an Exists under the
-// DELETE's own scope (Writable, locking the row with FOR UPDATE wherever the
-// dialect can) has found the row, so a row the caller may not delete keeps
+// DELETE's own scope (Writable: the tenant, and the Read and Write policies;
+// locking the row with FOR UPDATE wherever the dialect can) has found the row, so a row the caller may not delete keeps
 // them. A row's delete removes all of its join rows, whatever the tenant at
 // their other end: a shared row is unlinked from every tenant's rows. Rows of
 // other entities that hold the row's key are left to the database's foreign
 // keys: one that refuses the DELETE gives a *velox.ConstraintError, shown as
 // BAD_USER_INPUT.
+//
+// The rows a write counts decide its result. The UPDATE of Update<T> that
+// matched 0 rows is NOT_FOUND, and a count the driver did not report (-1) falls
+// back to the locking existence check of an update with no field to set. The
+// DELETE of Delete<T> that removed 0 rows is NOT_FOUND, and an unknown count is
+// the internal error "veloxgql: <mutation>: row count unknown"
+// (gqlimpl.CountUnknown), so that the mutation fails and its transaction rolls
+// back once the resolver returns the error. The UPDATE that links the children
+// whose key is on their own rows has the same error for an unknown count.
 //
 // The generated functions read the DB from the context, as the root query's do
 // (veloxgql.DBFromContext), and each is atomic: gqlimpl.Atomic runs it in the
@@ -216,15 +227,18 @@
 // is a value, an optional one a pointer (nil means not given), an ID a string,
 // a list of IDs a []string and a clear field a bool.
 //
-// Errors are coded before the presenter sees them. A malformed or mistyped ID,
-// a conflicting input, too many IDs (more than veloxgql.Limits.MaxPage,
+// Errors are coded before the presenter sees them. A malformed or mistyped ID
+// or JSON value, a conflicting input (a field given with its clear, an ID both
+// to add and to remove), too many IDs (more than veloxgql.Limits.MaxPage,
 // veloxgql.ErrPageTooLarge) and a child another owner holds are BAD_USER_INPUT,
-// naming the input field. A validator's refusal is BAD_USER_INPUT too,
-// "UpdatePostInput.title: invalid value: ..."; the validators of the fields an
-// input sets run before any statement, so an invalid field is refused even when
-// an ID with it names no row. An ID that names no row the caller may read, or
-// change, is NOT_FOUND (veloxgql.CodeNotFound), whether the row is missing,
-// another tenant's or hidden by a policy, so that a client cannot tell. Other
+// naming the input field; the first three are refused before any statement. A
+// validator's refusal is BAD_USER_INPUT too, "UpdatePostInput.title: invalid
+// value: ..."; the validators of the fields an input sets run before any
+// statement, so an invalid field is refused even when an ID with it names no
+// row. An ID that names no row the caller may read, or change, is NOT_FOUND
+// (veloxgql.CodeNotFound), whether the row is missing, another tenant's or
+// hidden by a policy, so that a client cannot tell; the mutation keeps nothing,
+// and a delete deletes nothing, once its error is returned (see above). Other
 // errors of velox are returned as they are, and ErrorPresenter maps them as it
 // does elsewhere. gqlgen's own validation errors (a variable of the wrong
 // shape) are left as gqlgen writes them, GRAPHQL_VALIDATION_FAILED with a path
@@ -237,7 +251,9 @@
 //     mutation's transaction, so there is no time-of-check race. SQLite has
 //     no locking reads, and its transactions lock the database.
 //   - On MySQL the DSN needs clientFoundRows=true: UpdateX counts the rows
-//     its UPDATE matched, and MySQL counts only changed rows without it.
+//     its UPDATE matched, and MySQL counts only changed rows without it, so
+//     an UPDATE that changes nothing counts 0 and fails with a false
+//     NOT_FOUND.
 //   - A self-edge is written one way, as the core's loads read it.
 //   - Not written: a key the caller supplies in a create input, JSON append,
 //     and application enums bound with @goModel.

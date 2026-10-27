@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/syssam/velox2"
+	"github.com/syssam/velox2/contrib/graphql/internal/english"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
 )
@@ -148,7 +148,7 @@ func Repointed[E any](ctx context.Context, got int64, n int, linked velox.Query[
 	case err != nil:
 		return err
 	case c > 0:
-		return InputErrorf("%s: %s %s is already linked to another %s", at, article(typ), typ, owner)
+		return InputErrorf("%s: %s %s is already linked to another %s", at, english.Article(typ), typ, owner)
 	}
 	return matched(got, n, at, typ)
 }
@@ -222,14 +222,6 @@ func Disjoint[K comparable](input, add, remove string, a, b []K) error {
 		}
 	}
 	return nil
-}
-
-// article is the indefinite article of the name: "an" before a vowel.
-func article(name string) string {
-	if name != "" && strings.ContainsRune("AEIOUaeiou", rune(name[0])) {
-		return "an"
-	}
-	return "a"
 }
 
 // NotFound is the NOT_FOUND error of a mutation whose ID names no row of typ

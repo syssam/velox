@@ -691,8 +691,8 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 // key, as the mutation deletePost does, and returns id encoded again from the
 // key. It runs atomically on the DB veloxgql.DBFromContext reads from ctx,
 // under the tenant scope and the policies. See "Mutations" in the documentation
-// of package github.com/syssam/velox2/contrib/graphql for what each input field
-// does, what the caller may link and change, and the errors.
+// of package github.com/syssam/velox2/contrib/graphql for what it deletes and
+// the errors.
 func DeletePost(ctx context.Context, id string) (string, error) {
 	key, err := gqlimpl.DecodeID[int64]("deletePost.id", id, "Post")
 	if err != nil {

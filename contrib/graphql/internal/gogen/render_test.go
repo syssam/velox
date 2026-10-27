@@ -19,6 +19,7 @@ import (
 	gqlast "github.com/vektah/gqlparser/v2/ast"
 
 	"github.com/syssam/velox2/contrib/graphql"
+	"github.com/syssam/velox2/contrib/graphql/internal/english"
 	"github.com/syssam/velox2/contrib/graphql/internal/sdl"
 	"github.com/syssam/velox2/plugin"
 )
@@ -1458,14 +1459,34 @@ func TestM2MWithoutInverse(t *testing.T) {
 	}
 }
 
+// deleteOnlyModel is typesModel with deleteX and no createX or updateX on
+// both types, which have no many-to-many edge.
+func deleteOnlyModel(t *testing.T) *plugin.Model {
+	t.Helper()
+	m := typesModel(t)
+	b, err := json.Marshal(graphql.Mutations(graphql.MutationDelete()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range m.Entities {
+		e.Annotations = map[string]json.RawMessage{"graphql": b}
+	}
+	return m
+}
+
 // TestMutationGodocPoints: the godoc of Create<T>, Update<T> and Delete<T>
 // is short and points to "Mutations" in the package documentation, which
 // holds what they promise; it does not repeat it. The comment is read with
-// its whitespace normalised, since f.doc wraps it.
+// its whitespace normalised, since f.doc wraps it. Create<T> and Update<T>
+// name the type with its article ("an Account", "a Post"), and Delete<T>
+// names the join rows exactly when the type has a many-to-many edge.
 func TestMutationGodocPoints(t *testing.T) {
 	const pointer = `See "Mutations" in the documentation of package github.com/syssam/velox2/contrib/graphql`
 	seen := map[string]int{}
-	for label, m := range map[string]*plugin.Model{"testdata": testModel(t), "update-only": updateOnlyModel(t), "mutations": mutationsModel(t)} {
+	article := map[string]string{}
+	joinRows := map[string]bool{}
+	models := map[string]*plugin.Model{"testdata": testModel(t), "update-only": updateOnlyModel(t), "mutations": mutationsModel(t), "delete-only": deleteOnlyModel(t)}
+	for label, m := range models {
 		for name, src := range render(t, m) {
 			f, err := parser.ParseFile(token.NewFileSet(), name, src, parser.ParseComments)
 			if err != nil {
@@ -1499,6 +1520,16 @@ func TestMutationGodocPoints(t *testing.T) {
 						t.Errorf("%s: %q is the package doc's", who, gone)
 					}
 				}
+				typ := strings.TrimPrefix(fn.Name.Name, kind)
+				switch kind {
+				case "Create":
+					article[who] = strings.Fields(strings.TrimPrefix(doc, fn.Name.Name+" creates "))[0] + " " + typ
+					if want := fn.Name.Name + " creates " + english.Article(typ) + " " + typ + " from input"; !strings.HasPrefix(doc, want) {
+						t.Errorf("%s: doc does not start with %q: %q", who, want, doc)
+					}
+				case "Delete":
+					joinRows[label+" "+fn.Name.Name] = strings.Contains(doc, "join rows")
+				}
 			}
 		}
 	}
@@ -1506,5 +1537,28 @@ func TestMutationGodocPoints(t *testing.T) {
 		if seen[kind] == 0 {
 			t.Errorf("no %s function rendered", kind)
 		}
+	}
+	// The articles themselves, spelled out: a vowel-initial type takes "an".
+	for who, want := range map[string]string{
+		"testdata CreateAccount": "an Account", "testdata CreatePost": "a Post",
+		"mutations CreateEvent": "an Event", "mutations CreateOwner": "an Owner",
+	} {
+		if article[who] != want {
+			t.Errorf("%s: article and type %q, want %q", who, article[who], want)
+		}
+	}
+	for who, want := range map[string]bool{"testdata DeletePost": true, "delete-only DeleteEvent": false, "delete-only DeleteOwner": false} {
+		if got, ok := joinRows[who]; !ok || got != want {
+			t.Errorf("%s: godoc names join rows = %v (rendered %v), want %v", who, got, ok, want)
+		}
+	}
+}
+
+// TestMutationsHeading: the generated godoc points to "Mutations" in the
+// package documentation, so doc.go must keep that heading.
+func TestMutationsHeading(t *testing.T) {
+	doc := readFile(t, filepath.Join("..", "..", "doc.go"))
+	if !strings.Contains(doc, "\n// # Mutations\n") {
+		t.Error(`contrib/graphql/doc.go has no "// # Mutations" heading, which the generated godoc of Create<T>, Update<T> and Delete<T> points to`)
 	}
 }

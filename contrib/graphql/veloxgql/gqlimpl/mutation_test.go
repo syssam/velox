@@ -580,6 +580,8 @@ func TestRepointed(t *testing.T) {
 	}{
 		{0, 2, linked, "Post", "Account", veloxgql.CodeBadUserInput, "veloxgql: " + at + ": a Post is already linked to another Account"},
 		{0, 1, linked, "Article", "Writer", veloxgql.CodeBadUserInput, "veloxgql: " + at + ": an Article is already linked to another Writer"},
+		{0, 1, linked, "User", "Writer", veloxgql.CodeBadUserInput, "veloxgql: " + at + ": a User is already linked to another Writer"},
+		{0, 1, linked, "Umbrella", "Writer", veloxgql.CodeBadUserInput, "veloxgql: " + at + ": an Umbrella is already linked to another Writer"},
 		{1, 2, none, "Post", "Account", veloxgql.CodeNotFound, "veloxgql: " + at + ": 1 of the 2 IDs name no Post"},
 		{0, 1, none, "Post", "Account", veloxgql.CodeNotFound, "veloxgql: " + at + ": no Post has this ID"},
 		// A count the driver did not report is not a short one: an internal
