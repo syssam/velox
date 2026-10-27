@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -314,10 +315,22 @@ func TestTxSpanRoute(t *testing.T) {
 		if len(dps) != 1 {
 			t.Fatalf("%d points, want 1", len(dps))
 		}
+		// The point's whole set: its outcome and flags, then where it ran,
+		// as the span names it.
+		full := map[attribute.Key]attribute.Value{
+			"velox.tx.outcome":   attribute.StringValue("commit"),
+			"velox.tx.read_only": attribute.BoolValue(false),
+			"velox.tx.retried":   attribute.BoolValue(false),
+		}
 		for k, v := range want {
-			if got, _ := dps[0].Attributes.Value(k); got != v {
-				t.Errorf("velox.tx.duration's %s = %q, want %q", k, got.String(), v.String())
-			}
+			full[k] = v
+		}
+		got := map[attribute.Key]attribute.Value{}
+		for _, kv := range dps[0].Attributes.ToSlice() {
+			got[kv.Key] = kv.Value
+		}
+		if !reflect.DeepEqual(got, full) {
+			t.Errorf("velox.tx.duration's attributes %v, want %v", got, full)
 		}
 	})
 	t.Run("Target", func(t *testing.T) {
@@ -333,4 +346,38 @@ func TestTxSpanRoute(t *testing.T) {
 			t.Errorf("velox.tx's velox.route.shard = %q, want none", v.String())
 		}
 	})
+}
+
+// TestSavepointStatementsSeeTheTxRoute: a statement in a savepoint sees the
+// transaction's TxInfo, its Route included, as the transaction's own
+// statements do: the savepoint makes no TxInfo of its own.
+func TestSavepointStatementsSeeTheTxRoute(t *testing.T) {
+	var routes []velox.Route
+	seen := velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+		if st.Tx != nil {
+			routes = append(routes, st.Tx.Route)
+		}
+		return next(ctx)
+	})
+	db := velox.OpenShards(velox.Postgres, map[string]velox.Shard{
+		"a": {Primary: velox.SQLConn((&fakeDB{}).open())},
+		"b": {Primary: velox.SQLConn((&fakeDB{}).open())},
+	}, append(veloxotel.Options(veloxotel.Config{}), velox.WithShardFor(shardOf), seen)...)
+	read := func(ctx context.Context, db *velox.DB) error {
+		_, err := db.Query[testmodel.Invoice]().Limit(1).All(ctx)
+		return err
+	}
+	err := db.Tx(velox.WithShard(ctx, "b"), func(ctx context.Context, tx *velox.DB) error {
+		if err := read(ctx, tx); err != nil {
+			return err
+		}
+		return tx.Tx(ctx, read)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := velox.Route{Shard: "b", Replica: -1}
+	if len(routes) != 2 || routes[0] != want || routes[1] != want {
+		t.Errorf("the statements' Tx.Route %+v, want %+v twice", routes, want)
+	}
 }

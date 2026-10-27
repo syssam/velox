@@ -19,16 +19,12 @@ import (
 // another context nests under that context's span.
 func (a *adapter) txAround(ctx context.Context, tx *velox.TxInfo, next func(context.Context) error) error {
 	start := time.Now()
-	tkv := a.txTarget(tx)
-	kv := make([]attribute.KeyValue, 0, 3+len(tkv))
+	kv := make([]attribute.KeyValue, 0, 2+txPlaceAttrs)
 	kv = append(kv,
 		attribute.String(attrTxIsolation, tx.Isolation.String()),
 		attribute.Bool(attrTxReadOnly, tx.ReadOnly),
 	)
-	if tx.Route.Shard != "" {
-		kv = append(kv, attribute.String(attrRouteShard, tx.Route.Shard))
-	}
-	kv = append(kv, tkv...)
+	kv = a.txPlace(kv, tx)
 	sctx, span := a.tracer.Start(ctx, spanTx, trace.WithSpanKind(trace.SpanKindInternal), trace.WithAttributes(kv...))
 	// A panic in fn ends the span, records the duration and goes on: the
 	// adapter never recovers one. velox rolled the transaction back.
@@ -71,27 +67,31 @@ func (a *adapter) txRecord(ctx context.Context, start time.Time, tx *velox.TxInf
 	if !a.txDuration.Enabled(ctx) {
 		return
 	}
-	tkv := a.txTarget(tx)
-	kv := make([]attribute.KeyValue, 0, 4+len(tkv))
+	kv := make([]attribute.KeyValue, 0, 3+txPlaceAttrs)
 	kv = append(kv,
 		attribute.String(attrTxOutcome, outcome.String()),
 		attribute.Bool(attrTxReadOnly, tx.ReadOnly),
 		attribute.Bool(attrTxRetried, tx.Attempt > 1),
 	)
-	if tx.Route.Shard != "" {
-		kv = append(kv, attribute.String(attrRouteShard, tx.Route.Shard))
-	}
-	kv = append(kv, tkv...)
+	kv = a.txPlace(kv, tx)
 	a.txDuration.Record(ctx, time.Since(start).Seconds(), metric.WithAttributeSet(attribute.NewSet(kv...)))
 }
 
-// txTarget is the attributes of the server tx runs on: TargetFor's for its
-// route when it is set, Config.Target's otherwise.
-func (a *adapter) txTarget(tx *velox.TxInfo) []attribute.KeyValue {
-	if a.cfg.TargetFor != nil {
-		return a.cfg.TargetFor(tx.Route).appendTo(make([]attribute.KeyValue, 0, 3))
+// txPlaceAttrs is the most attributes txPlace appends: the shard, and a
+// Target's three.
+const txPlaceAttrs = 4
+
+// txPlace appends to kv the attributes of where tx runs, the span's and the
+// duration point's alike: its shard, when it has one, and its server,
+// TargetFor's for its route when it is set, Config.Target's otherwise.
+func (a *adapter) txPlace(kv []attribute.KeyValue, tx *velox.TxInfo) []attribute.KeyValue {
+	if tx.Route.Shard != "" {
+		kv = append(kv, attribute.String(attrRouteShard, tx.Route.Shard))
 	}
-	return a.target
+	if a.cfg.TargetFor != nil {
+		return a.cfg.TargetFor(tx.Route).appendTo(kv)
+	}
+	return append(kv, a.target...)
 }
 
 // txEnd sets what is known once next has returned, or panicked: a retry

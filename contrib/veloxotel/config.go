@@ -41,8 +41,9 @@ type Config struct {
 	// over from a failed replica names the primary. Its attributes are
 	// therefore not a statement's start attributes. A transaction's route
 	// is known when it starts: TargetFor is called with it then, for the
-	// span, and again for its duration point. The package doc has an
-	// example. It must be safe for concurrent use.
+	// span, and again for its duration point, so it must be deterministic
+	// for a Route, or the two would name different servers. The package doc
+	// has an example. It must be safe for concurrent use.
 	TargetFor func(r velox.Route) Target
 }
 
