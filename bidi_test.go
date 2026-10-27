@@ -871,7 +871,7 @@ func TestBidiOneTenant(t *testing.T) {
 	if w := []string{"BEGIN", upd, unlink, link, probe, "ROLLBACK"}; !slices.Equal(e.Log, w) {
 		t.Errorf("sent %q, want %q", e.Log, w)
 	}
-	if w := []any{int64(1), int64(3), int64(7)}; len(e.ArgLog) > 3 && !reflect.DeepEqual(e.ArgLog[3], w) {
-		t.Errorf("the link's args %v, want %v", e.ArgLog[3], w)
+	if w := []any{int64(1), int64(3), int64(7)}; len(e.ArgLog) <= 3 || !reflect.DeepEqual(e.ArgLog[3], w) {
+		t.Errorf("the link's args %v, want %v", e.ArgLog, w)
 	}
 }

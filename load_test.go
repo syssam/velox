@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -634,6 +635,69 @@ func TestLoadReChunksOnParameterOverflow(t *testing.T) {
 			}
 		}
 		checkSent(t, e, s, []int{1, 100, 100, 93})
+	})
+	// picksOf are owner o's n picks, notes 100o+1 to 100o+n: its join rows
+	// (links) and its targets (notes).
+	links := func(o, n int64) [][]any {
+		var rows [][]any
+		for i := int64(1); i <= n; i++ {
+			rows = append(rows, []any{o, 100*o + i})
+		}
+		return rows
+	}
+	notes := func(o, n int64) [][]any {
+		var rows [][]any
+		for i := int64(1); i <= n; i++ {
+			rows = append(rows, []any{100*o + i, int64(0), int64(0)})
+		}
+		return rows
+	}
+	t.Run("many-to-many, a later chunk overflows", func(t *testing.T) {
+		// The policy's 70 values leave 30 keys. Owners 1, 2 and 3 have 20,
+		// 20 and 16 picks: owner 1's chunk is read; owners 2 and 3's, 36
+		// keys, overflows and is not sent. The chunks are planned again from
+		// owner 2 only, 30 keys a chunk: owner 1's is not read again.
+		join := slices.Concat(links(1, 20), links(2, 20), links(3, 16))
+		db, e, s := ovRun([][][]any{ovOwnerRows(3), join, notes(1, 20), notes(2, 20), notes(3, 16)})
+		os, err := db.Query[ovOwner]().OrderBy(ovOwners.ID.Asc()).With(ovOwners.Picks).Limit(3).All(ovReading(70))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, o := range os {
+			if got := ids(t, o, o.Picks); len(got) != []int{20, 20, 16}[i] || got[0] != 100*o.ID+1 {
+				t.Errorf("owner %d: picks %v", o.ID, got)
+			}
+		}
+		checkSent(t, e, s, []int{1, 3, 90, 90, 86})
+		for i := range e.ArgLog {
+			for j := range i {
+				if reflect.DeepEqual(e.ArgLog[i], e.ArgLog[j]) {
+					t.Errorf("statements %d and %d were sent with the same arguments %v", j, i, e.ArgLog[i])
+				}
+			}
+		}
+	})
+	t.Run("many-to-many, an owner too many for the smaller chunks", func(t *testing.T) {
+		// Owner 1's 32 picks overflow by 2 with the policy's 70 values:
+		// 30 keys a chunk cannot hold them, and the error says why.
+		db, e, s := ovRun([][][]any{ovOwnerRows(1), links(1, 32)})
+		_, err := db.Query[ovOwner]().With(ovOwners.Picks).Limit(1).All(ovReading(70))
+		const want = "velox: velox_test.ovOwner: relation Picks: an owner has 32 related rows, more than one statement can load in order: velox: velox_test.ovNote: the statement has 102 parameters; postgres allows 100"
+		if err == nil || err.Error() != want {
+			t.Errorf("err = %v,\nwant %s", err, want)
+		}
+		checkSent(t, e, s, []int{1, 1})
+	})
+	t.Run("many-to-many, one key cannot fit", func(t *testing.T) {
+		// One pick an owner: the chunks shrink to one key, which still
+		// overflows, and the load fails with the parameter error.
+		join := slices.Concat(links(1, 1), links(2, 1))
+		db, e, s := ovRun([][][]any{ovOwnerRows(2), join})
+		_, err := db.Query[ovOwner]().OrderBy(ovOwners.ID.Asc()).With(ovOwners.Picks).Limit(2).All(ovReading(100))
+		if err == nil || !strings.HasPrefix(err.Error(), "velox: velox_test.ovOwner: loading Picks: ") || !strings.Contains(err.Error(), "the statement has 101 parameters; postgres allows 100") {
+			t.Errorf("%v", err)
+		}
+		checkSent(t, e, s, []int{1, 2})
 	})
 	t.Run("one key cannot fit", func(t *testing.T) {
 		db, e, s := ovRun([][][]any{ovOwnerRows(50)})

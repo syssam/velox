@@ -2295,9 +2295,9 @@ func TestDefaultOnDelete(t *testing.T) {
 }
 
 // reqSelf is a tree whose parent is Required, and reqSelfCascade one whose
-// Required parent says OnDelete(Cascade), which is not the default. (A Required unique edge to its own
-// schema with no inverse is a bidirectional one-to-one, which rule 53
-// refuses.)
+// Required parent says OnDelete(Cascade), which is not the default. (A
+// Required unique edge to its own schema with no inverse is a bidirectional
+// one-to-one, which rule 53 refuses.)
 type reqSelf struct{ schema.Schema }
 
 func (reqSelf) Edges() []schema.Edge {

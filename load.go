@@ -225,11 +225,12 @@ func loadOne(ctx context.Context, db *DB, pin target, owner *EntityInfo, ptrs []
 // of whole owners, so that each owner's come from one query, in the order it
 // asked for; a target of owners in two statements is read, and held, twice.
 // When one statement has more parameters than the dialect allows, because a
-// policy's or a hook's conditions take more than keysPer left them, the
-// chunks are built again with as many fewer keys as it had too many, and all
-// are read again, until a chunk holds one key.
+// policy's or a hook's conditions take more than keysPer left them, it was not
+// sent: the statements already read are kept, and the chunks from its first
+// owner on are built again, with as many fewer keys as it had too many, until
+// a chunk holds one key.
 func fetchThrough(ctx context.Context, db *DB, pin target, owner *EntityInfo, r *relation, l link, sp loadSpec, keys []any, maxRows int, byKey map[any][]int) (any, []unsafe.Pointer, error) {
-	j, t := l.join, l.target
+	j := l.join
 	_, rows, err := fetch(ctx, db, pin, j, []int{l.joinOwner, l.joinTarget}, loadSpec{}, keys, maxRows, nil)
 	if err != nil {
 		return nil, nil, &loadError{owner: owner.Name, rel: r.name, err: err}
@@ -246,32 +247,26 @@ func fetchThrough(ctx context.Context, db *DB, pin target, owner *EntityInfo, r 
 		seen[[2]any{own, tk}] = true
 		byOwner[own] = append(byOwner[own], tk)
 	}
-	order, per := fetchPlan(db, t, sp)
-	for {
-		all, targets, err := throughChunks(ctx, db, pin, owner, r, l, sp, order, per, keys, byOwner, maxRows, byKey)
-		// A statement over the parameter limit was not sent: the chunks are
-		// built again, smaller by its excess, and every one is read again.
-		if pe, ok := as[*paramsError](err); ok && per > 1 {
-			per = max(1, per-(pe.n-pe.max))
-			continue
-		}
-		return all, targets, err
-	}
+	return throughChunks(ctx, db, pin, owner, r, l, sp, keys, byOwner, maxRows, byKey)
 }
 
-// throughChunks is fetchThrough's reading of the targets, in statements that
-// each hold the distinct target keys of a run of whole owners, in the owners'
-// order, at most per of them. byOwner holds each owner key's target keys.
-func throughChunks(ctx context.Context, db *DB, pin target, owner *EntityInfo, r *relation, l link, sp loadSpec, order []OrderTerm, per int, keys []any, byOwner map[any][]any, maxRows int, byKey map[any][]int) (any, []unsafe.Pointer, error) {
-	t := l.target
-	type chunk struct{ keys, owners []any }
-	var chunks []chunk
-	var cur chunk
+// throughChunk is one statement of throughChunks: the distinct target keys of
+// a run of whole owners.
+type throughChunk struct{ keys, owners []any }
+
+// throughPlan returns the chunks of the owner keys keys, each the target keys
+// of a run of whole owners, in the owners' order, at most per of them. An
+// owner with more than per, whose rows cannot come from one statement, ends
+// it: it returns no chunk, and that owner's count of target keys (over).
+// byOwner holds each owner key's target keys; an owner with none is in no
+// chunk.
+func throughPlan(keys []any, byOwner map[any][]any, per int) (chunks []throughChunk, over int) {
+	var cur throughChunk
 	inCur := map[any]bool{}
 	for _, own := range keys {
 		tks := byOwner[own]
 		if len(tks) > per {
-			return nil, nil, fmt.Errorf("velox: %s: relation %s: an owner has %d related rows, more than one statement can load in order", owner.Name, r.name, len(tks))
+			return nil, len(tks)
 		}
 		if len(tks) == 0 {
 			continue
@@ -284,7 +279,7 @@ func throughChunks(ctx context.Context, db *DB, pin target, owner *EntityInfo, r
 		}
 		if len(cur.keys)+added > per {
 			chunks = append(chunks, cur)
-			cur, inCur = chunk{}, map[any]bool{}
+			cur, inCur = throughChunk{}, map[any]bool{}
 		}
 		for _, tk := range tks {
 			if !inCur[tk] {
@@ -294,20 +289,56 @@ func throughChunks(ctx context.Context, db *DB, pin target, owner *EntityInfo, r
 		}
 		cur.owners = append(cur.owners, own)
 	}
-	if len(cur.keys) == 0 {
-		return nil, nil, nil
+	if len(cur.keys) > 0 {
+		chunks = append(chunks, cur)
 	}
-	chunks = append(chunks, cur)
-	parts := make([]any, len(chunks)) // each chunk's []T
-	for i, c := range chunks {
-		var err error
-		if parts[i], _, err = fetchPart(ctx, db, pin, t, []int{l.targetCol}, sp, order, c.keys, maxRows, nil); err != nil {
-			return nil, nil, &loadError{owner: owner.Name, rel: r.name, err: err}
+	return chunks, 0
+}
+
+// throughChunks is fetchThrough's reading of the targets, in the statements
+// throughPlan makes of keys, the owner keys, with keysPer keys at most.
+// byOwner holds each owner key's target keys. A statement over the parameter
+// limit is not sent: the chunks read are kept, and the ones from its first
+// owner on are planned again, with as many fewer keys as it had too many.
+func throughChunks(ctx context.Context, db *DB, pin target, owner *EntityInfo, r *relation, l link, sp loadSpec, keys []any, byOwner map[any][]any, maxRows int, byKey map[any][]int) (any, []unsafe.Pointer, error) {
+	t := l.target
+	order, per := fetchPlan(db, t, sp)
+	var done []throughChunk // the chunks read
+	var parts []any         // each one's []T
+	var shrunk error        // the parameter error that last made per smaller
+	rest := keys            // the owners not read yet
+plan:
+	for len(rest) > 0 {
+		chunks, n := throughPlan(rest, byOwner, per)
+		if n > 0 {
+			err := fmt.Errorf("velox: %s: relation %s: an owner has %d related rows, more than one statement can load in order", owner.Name, r.name, n)
+			if shrunk != nil {
+				// The limit that made the statements smaller.
+				err = fmt.Errorf("%w: %w", err, shrunk)
+			}
+			return nil, nil, err
 		}
+		for _, c := range chunks {
+			part, _, err := fetchPart(ctx, db, pin, t, []int{l.targetCol}, sp, order, c.keys, maxRows, nil)
+			if pe, ok := as[*paramsError](err); ok && per > 1 {
+				per = max(1, min(per, len(c.keys))-(pe.n-pe.max))
+				shrunk = pe
+				rest = rest[slices.Index(rest, c.owners[0]):]
+				continue plan
+			}
+			if err != nil {
+				return nil, nil, &loadError{owner: owner.Name, rel: r.name, err: err}
+			}
+			done, parts = append(done, c), append(parts, part)
+		}
+		break
+	}
+	if len(done) == 0 {
+		return nil, nil, nil
 	}
 	all, targets := t.kit.join(parts)
 	start := 0 // the chunk's first index into all
-	for i, c := range chunks {
+	for i, c := range done {
 		end := start + reflect.ValueOf(parts[i]).Len()
 		byTarget := make(map[any][]int, end-start) // target key → indexes into all
 		for k := start; k < end; k++ {

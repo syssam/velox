@@ -83,6 +83,32 @@ func TestSaveStoresWhatItSent(t *testing.T) {
 	}
 }
 
+// TestMutateSetClonesOnce: the first assignment a hook appends copies the
+// statement's Set, whose array may be the query's, once; later ones, an
+// append or a replacement, write the copy in place.
+func TestMutateSetClonesOnce(t *testing.T) {
+	query := make([]Assignment, 1, 4) // spare capacity an append would write
+	query[0] = Assignment{Column: 1, Op: AssignSet, Value: "a"}
+	st := &Statement{Op: OpUpdate}
+	mu := mutation{st: st}
+	run := func() {
+		st.Set, mu.ownSet = query, false
+		mutateSet(&mu, Assignment{Column: 2, Op: AssignSet, Value: "b"}) // append: the one copy
+		mutateSet(&mu, Assignment{Column: 2, Op: AssignSet, Value: "c"}) // in place
+		mutateSet(&mu, Assignment{Column: 1, Op: AssignSet, Value: "d"}) // in place
+	}
+	if allocs := testing.AllocsPerRun(100, run); allocs != 1 {
+		t.Errorf("%.0f allocations, want the one copy", allocs)
+	}
+	want := []Assignment{{Column: 1, Op: AssignSet, Value: "d"}, {Column: 2, Op: AssignSet, Value: "c"}}
+	if !slices.Equal(st.Set, want) {
+		t.Errorf("Set %v, want %v", st.Set, want)
+	}
+	if query[0].Value != "a" || query[:2][1] != (Assignment{}) {
+		t.Errorf("the query's array was written: %v", query[:2])
+	}
+}
+
 func TestMutationSetOnADelete(t *testing.T) {
 	e := &FakeExec{Affected: 1}
 	db := OpenFake(Postgres, e)

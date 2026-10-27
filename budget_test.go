@@ -323,12 +323,12 @@ func TestReplicaOneRowBudget(t *testing.T) {
 func TestWithLoadOnReplicasAllocations(t *testing.T) {
 	measure := func(replicas bool) float64 {
 		row := [][]any{sampleRow(1, int64(1))} // its own parent: the query's row and the load's
-		e := &velox.FakeExec{Rows: row}
+		e, r1 := &velox.FakeExec{Rows: row}, &velox.FakeExec{Rows: row}
 		p := e
 		var opts []velox.Option
 		if replicas {
 			p = &velox.FakeExec{}
-			opts = append(opts, velox.WithReplicas(velox.FakeConn(e), velox.FakeConn(&velox.FakeExec{Rows: row})))
+			opts = append(opts, velox.WithReplicas(velox.FakeConn(e), velox.FakeConn(r1)))
 		}
 		db := velox.OpenFake(velox.Postgres, p, opts...)
 		run := func() {
@@ -341,9 +341,14 @@ func TestWithLoadOnReplicasAllocations(t *testing.T) {
 			}
 		}
 		run() // fill the render cache
+		if replicas && (e.Calls != 2 || r1.Calls != 0) {
+			// The query read replica 0, whose turn it was, and so did its
+			// load: the next turn, replica 1's, is the next query's.
+			t.Fatalf("replica 0 read %d times, replica 1 %d; want the query and its load on replica 0", e.Calls, r1.Calls)
+		}
 		allocs := testing.AllocsPerRun(200, run)
-		if replicas && (p.Calls != 0 || e.Calls == 0) {
-			t.Fatalf("the primary read %d times, replica 0 %d", p.Calls, e.Calls)
+		if replicas && p.Calls != 0 {
+			t.Fatalf("the primary read %d times", p.Calls)
 		}
 		return allocs
 	}
@@ -396,4 +401,42 @@ func TestExistsAllocationBudget(t *testing.T) {
 	if exists > all {
 		t.Errorf("Exists makes %.0f allocations, the one-row All %.0f", exists, all)
 	}
+}
+
+// TestLoadAllocationBudgets pins, on the path where no statement overflows
+// the parameter limit, the allocations of a cached All with one With load,
+// of LoadEach and of CountEach, at the numbers measured when the budgets were
+// set: a load's allocations grow only by a decision to let them.
+func TestLoadAllocationBudgets(t *testing.T) {
+	measure := func(name string, budget float64, run func() error) {
+		t.Helper()
+		if err := run(); err != nil { // fill the render cache
+			t.Fatalf("%s: %v", name, err)
+		}
+		allocs := testing.AllocsPerRun(200, func() {
+			if err := run(); err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
+		})
+		t.Logf("%s makes %.0f allocations", name, allocs)
+		if allocs > budget {
+			t.Errorf("%s makes %.0f allocations: over the budget of %.0f", name, allocs, budget)
+		}
+	}
+	samples := velox.OpenFake(velox.Postgres, &velox.FakeExec{Rows: [][]any{sampleRow(1, int64(1))}}) // its own parent
+	measure("an All with one With load", 41, func() error {
+		_, err := samples.Query[testmodel.Sample]().With(testmodel.Samples.Parent).Limit(10).All(ctx)
+		return err
+	})
+	owners := []*testmodel.Invoice{{ID: 1}, {ID: 2}}
+	items := velox.OpenFake(velox.Postgres, &velox.FakeExec{Rows: [][]any{itemRow(10, 1, "A", 1), itemRow(11, 2, "B", 1)}})
+	measure("LoadEach", 33, func() error {
+		_, err := velox.LoadEach(ctx, items.Query[testmodel.Item](), I.Items, owners)
+		return err
+	})
+	counts := velox.OpenFake(velox.Postgres, &velox.FakeExec{Rows: [][]any{{int64(1), int64(3)}, {int64(2), int64(1)}}})
+	measure("CountEach", 23, func() error {
+		_, err := velox.CountEach(ctx, counts.Query[testmodel.Item](), I.Items, owners)
+		return err
+	})
 }

@@ -810,8 +810,12 @@ func TestTenantConversionIsolation(t *testing.T) {
 	if err := upd(7); err != nil {
 		t.Errorf("Set(7) under the int 7: %v", err)
 	}
+	sent := e.Calls
 	if err := upd(8); !errors.Is(err, velox.ErrTenantImmutable) {
 		t.Errorf("Set(8) under the int 7: %v", err)
+	}
+	if e.Calls != sent {
+		t.Errorf("Set(8) under the int 7 was sent")
 	}
 
 	e.Rows = [][]any{{int64(5)}}
