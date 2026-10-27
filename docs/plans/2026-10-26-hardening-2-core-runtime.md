@@ -1073,3 +1073,38 @@ Each is a call made while writing this plan. An implementer who finds one wrong 
 ## Decisions for the controller before execution
 
 None. The three open at a66565a (G17's O2O half, C51's integer rule and C43's approach) were ruled by the controller: plan rulings 19, 8 and 6.
+
+## Rulings made during execution
+
+1. **Per-task gates under load.** A gate that failed only in bench/scale on time, with every earlier step passing, was accepted for a task that touched no build surface. The machine is shared with other projects' CI. Task 13 and the final fix wave each passed bench/scale outright.
+2. **C27 widened (Task 2).** Go's `errors.Is` itself panics on a typed-nil `*net.OpError` or `*pgconn.ConnectError`, so every driver-error read goes through a nil-skipping walk (`is`, `as`), in core and in contrib. MySQL 8.4's 4025 is ER_INNODB_AUTOEXTEND_SIZE_OUT_OF_RANGE, so 4025 is a CHECK only in MariaDB's message form.
+3. **A failed savepoint rollback breaks the transaction (Task 3).** The outer transaction then refuses to commit, later statements fail before sending, and a COMMIT that was sent and failed pins the session.
+4. **Callers of an unknown row count (Task 5).**
+   - MySQL's insert reads its key when the count is -1.
+   - GraphQL update falls back to its locked existence check.
+   - GraphQL delete fails with `gqlimpl.CountUnknown` and rolls back.
+   - `SetAffected` accepts -1.
+5. **Hooks cannot unguard a write (Tasks 6, 11 and the final fix).** `prepare` refuses a Rewrite hook changing InTx. The row count velox sent (`upsertRows`), the bidi marker, the load pin and a bidi key's value are velox's own, snapshotted before the Rewrite hooks and checked after them.
+6. **Defaults are copied per row, through interfaces (Task 6).** velox-gen's hoisted `field.Other` Default still shares one value, as ent's does; its godoc says so.
+7. **`Statement.Tenant` (Task 8).** On a scoped entity it is the converted id. On an unscoped entity that reads a scoped one, it is the id as WithTenant was given it, which is the earlier behaviour; a nil was tried and reversed.
+8. **The M2M bidi mirror is not idempotent (Task 9).** ent's implicit DO NOTHING would also hide a conflict on the caller's own row. `OnConflict(…).DoNothing()` is the idempotent path and repairs a half-link.
+9. **ent's FK defaults, completed (Task 10).**
+   - `edge.NoAction` exists.
+   - A Required self edge's implicit key is NULL-able and SET NULL, as in ent and old velox. Its Required is enforced before sending (`ColumnDesc.RequiredEdge`, `missing required edge "T.e"`), as ent's builder check does.
+   - A Required self edge that binds its own non-pointer `.Field()` keeps a NOT NULL key: a known ent-adoption difference.
+10. **O2O bidi (Task 11).**
+    - The old partner's clear crosses tenants and policy, as the edge's integrity; the scoped API cannot create a cross-tenant pair.
+    - A hidden partner gives `row v cannot be linked`.
+    - The self-link refusal is a ValidationError.
+
+## Left by this plan
+
+- **Wave 3 (GraphQL).**
+  - A nil-safe `velox.IsNotFound(err)` for generated code: gogen's `errors.Is(err, velox.ErrNotFound)` can panic on a typed-nil driver error.
+  - `parent: T!` resolves null after ON DELETE SET NULL of a Required self edge's key, as in entgql.
+  - `removeChildIDs`/`clearChildren` are offered for a Required self edge and always refused.
+  - Bidi e2e tests through create and update.
+- **Wave 6 (docs).**
+  - doc.go's bidi paragraph.
+  - WithShardFor may run more than once per write.
+  - The ent-adoption differences above (8, the bound Required self key).
