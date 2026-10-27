@@ -2,7 +2,6 @@ package gqlimpl
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -100,7 +99,7 @@ func EdgeOne[E, T any](ctx context.Context, q velox.Query[T], x *E, r velox.Rel[
 	b, owners, i := batchOf(ctx, x, r, field, 0, nil)
 	if b == nil {
 		v, err := q.Where(r.Of(x)).First(ctx)
-		if errors.Is(err, velox.ErrNotFound) {
+		if shared.Is(err, velox.ErrNotFound) {
 			return nil, nil
 		}
 		if err != nil {

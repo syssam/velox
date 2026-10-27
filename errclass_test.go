@@ -280,3 +280,13 @@ func TestDriverCode(t *testing.T) {
 		}
 	}
 }
+
+// TestIsNilTarget: is with a nil target matches as errors.Is does, a nil err
+// only.
+func TestIsNilTarget(t *testing.T) {
+	for _, err := range []error{nil, errors.New("x"), (*pgconn.PgError)(nil), fmt.Errorf("x: %w", io.EOF)} {
+		if got, want := is(err, nil), errors.Is(err, nil); got != want {
+			t.Errorf("is(%#v, nil) = %v, errors.Is says %v", err, got, want)
+		}
+	}
+}

@@ -215,6 +215,10 @@ func TestErrorPresenter(t *testing.T) {
 		{"wrapped ErrBadID", fmt.Errorf("resolver: %w", codedBadID), "BAD_USER_INPUT", "User ID: malformed ID: not canonical base64url without padding", `["node"]`, false},
 		{"no tenant", fmt.Errorf("velox: gen.Post: %w", velox.ErrNoTenant), "UNAUTHENTICATED", "unauthenticated", `["node"]`, false},
 		{"denied", fmt.Errorf("velox: gen.Post: %w", velox.ErrDenied), "FORBIDDEN", "forbidden", `["node"]`, false},
+		// A driver's typed nil, whose Unwrap panics, is passed over.
+		{"denied, past a typed nil", errors.Join((*pgconn.ConnectError)(nil), fmt.Errorf("velox: gen.Post: %w", velox.ErrDenied)), "FORBIDDEN", "forbidden", `["node"]`, false},
+		{"constraint, past a typed nil", errors.Join((*pgconn.ConnectError)(nil), &velox.ConstraintError{Entity: "gen.User", Kind: velox.ConstraintUnique, Err: driverErr}), "BAD_USER_INPUT", "unique constraint violated", `["node"]`, false},
+		{"a typed nil alone", fmt.Errorf("x: %w", (*pgconn.ConnectError)(nil)), "INTERNAL_SERVER_ERROR", "internal error", `["node"]`, true},
 		{"policy", &velox.PolicyError{Entity: "gen.Post", Op: velox.OpSelect, Err: errors.New("tenant 7 may not")}, "FORBIDDEN", "forbidden", `["node"]`, false},
 		{"validation", &velox.ValidationError{Entity: "gen.User", Field: "Email", Err: errors.New("must hold an @")}, "BAD_USER_INPUT", "invalid value: must hold an @", `["node"]`, false},
 		{"constraint", &velox.ConstraintError{Entity: "gen.User", Kind: velox.ConstraintUnique, Constraint: "users_email_key", Err: driverErr}, "BAD_USER_INPUT", "unique constraint violated", `["node"]`, false},

@@ -27,6 +27,9 @@ func TestErrorType(t *testing.T) {
 		want string
 	}{
 		{bg, wrap(velox.ErrDenied), "velox.denied"},
+		// A driver's typed nil, whose Unwrap panics, is passed over.
+		{bg, errors.Join((*pgconn.ConnectError)(nil), wrap(velox.ErrDenied)), "velox.denied"},
+		{bg, errors.Join((*pgconn.ConnectError)(nil), constraint(velox.ConstraintUnique)), "constraint.unique"},
 		{bg, &velox.PolicyError{Entity: "X", Op: velox.OpSelect}, "velox.denied"},
 		{bg, wrap(velox.ErrNoTenant), "velox.no_tenant"},
 		{bg, wrap(velox.ErrUnbounded), "velox.unbounded"},

@@ -2,7 +2,6 @@ package veloxotel
 
 import (
 	"context"
-	"errors"
 	"strconv"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -180,22 +179,23 @@ func errorType(ctx context.Context, err error) string { return failureOf(ctx, er
 // none), from a short fixed list or, where none fits, the code, so it can key
 // metrics. ctx is the context the statement ran on: a deadline velox set is
 // velox.timeout even when the driver reports it as context.DeadlineExceeded.
+// err is matched through errIs and errAs, so a driver's typed nil in its tree
+// cannot panic.
 func errorTypeOf(ctx context.Context, err error, code string) string {
 	switch {
-	case errors.Is(err, velox.ErrDenied):
+	case errIs(err, velox.ErrDenied):
 		return "velox.denied"
-	case errors.Is(err, velox.ErrNoTenant):
+	case errIs(err, velox.ErrNoTenant):
 		return "velox.no_tenant"
-	case errors.Is(err, velox.ErrUnbounded), errors.Is(err, velox.ErrNoWhere), errors.Is(err, velox.ErrLimitTooLarge):
+	case errIs(err, velox.ErrUnbounded), errIs(err, velox.ErrNoWhere), errIs(err, velox.ErrLimitTooLarge):
 		return "velox.unbounded"
-	case errors.Is(err, velox.ErrTooManyRows):
+	case errIs(err, velox.ErrTooManyRows):
 		return "velox.too_many_rows"
-	case errors.Is(err, velox.ErrTimeout),
-		errors.Is(err, context.DeadlineExceeded) && errors.Is(context.Cause(ctx), velox.ErrTimeout):
+	case errIs(err, velox.ErrTimeout),
+		errIs(err, context.DeadlineExceeded) && errIs(context.Cause(ctx), velox.ErrTimeout):
 		return "velox.timeout"
 	}
-	var ce *velox.ConstraintError
-	if errors.As(err, &ce) {
+	if ce, ok := errAs[*velox.ConstraintError](err); ok {
 		switch ce.Kind {
 		case velox.ConstraintUnique:
 			return "constraint.unique"
@@ -208,9 +208,9 @@ func errorTypeOf(ctx context.Context, err error, code string) string {
 		}
 	}
 	switch {
-	case errors.Is(err, context.Canceled):
+	case errIs(err, context.Canceled):
 		return "context.canceled"
-	case errors.Is(err, context.DeadlineExceeded):
+	case errIs(err, context.DeadlineExceeded):
 		return "context.deadline_exceeded"
 	}
 	// The conventions prefer the database's code to _OTHER. SQLSTATE codes

@@ -91,9 +91,13 @@ func walk(err error, f func(error) bool) bool {
 	return false
 }
 
-// is is errors.Is over walk: a nil pointer in err's tree is passed over.
+// is is errors.Is over walk: a nil pointer in err's tree is passed over. A
+// nil target matches a nil err only, as with errors.Is.
 func is(err, target error) bool {
-	canEq := target != nil && reflect.TypeOf(target).Comparable()
+	if target == nil {
+		return err == nil
+	}
+	canEq := reflect.TypeOf(target).Comparable()
 	return walk(err, func(e error) bool {
 		if canEq && e == target {
 			return true

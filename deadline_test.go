@@ -377,3 +377,30 @@ func TestSavepointIsBoundedByTheTxDeadline(t *testing.T) {
 		t.Errorf("a SAVEPOINT past the transaction's deadline: %v", nested)
 	}
 }
+
+// TestStatementsPastTheDeadlineTimeOut: a savepoint whose rollback fails
+// because the transaction's deadline passed does not break the transaction,
+// so the statements after it fail as timed out, as they would without it,
+// not with a broken transaction's error.
+func TestStatementsPastTheDeadlineTimeOut(t *testing.T) {
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e)
+	var nested, after error
+	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		nested = tx.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+			e.Block = true // every statement waits out the deadline, ROLLBACK TO too
+			return touch(ctx, tx)
+		})
+		after = touch(ctx, tx)
+		return after
+	}, velox.TxTimeout(20*time.Millisecond))
+	if !errors.Is(nested, velox.ErrTimeout) {
+		t.Errorf("the nested Tx: %v, want ErrTimeout", nested)
+	}
+	if !errors.Is(after, velox.ErrTimeout) || strings.Contains(fmt.Sprint(after), "did not roll back") {
+		t.Errorf("a statement after: %v, want ErrTimeout, not a broken transaction", after)
+	}
+	if !errors.Is(err, velox.ErrTimeout) {
+		t.Errorf("Tx: %v, want ErrTimeout", err)
+	}
+}

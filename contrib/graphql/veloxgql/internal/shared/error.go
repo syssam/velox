@@ -86,27 +86,20 @@ type Coding interface {
 
 // Coded is the first error of err's tree, err itself first and then depth
 // first as errors.As goes, whose Extensions has a non-empty string code,
-// and that code; nil and "" when none has.
-func Coded(err error) (Coding, string) {
-	for err != nil {
-		if c, ok := err.(Coding); ok {
-			if code, _ := c.Extensions()["code"].(string); code != "" {
-				return c, code
-			}
+// and that code; nil and "" when none has. A nil pointer in the tree is
+// passed over (Walk).
+func Coded(err error) (c Coding, code string) {
+	Walk(err, func(e error) bool {
+		x, ok := e.(Coding)
+		if !ok {
+			return false
 		}
-		switch u := err.(type) {
-		case interface{ Unwrap() error }:
-			err = u.Unwrap()
-		case interface{ Unwrap() []error }:
-			for _, e := range u.Unwrap() {
-				if c, code := Coded(e); c != nil {
-					return c, code
-				}
-			}
-			return nil, ""
-		default:
-			return nil, ""
+		code, _ = x.Extensions()["code"].(string)
+		if code == "" {
+			return false
 		}
-	}
-	return nil, ""
+		c = x
+		return true
+	})
+	return c, code
 }

@@ -198,7 +198,9 @@ func TestTxCommitPins(t *testing.T) {
 			s.check(t, hooked, [3]int{1, 1, 0}, onPrimary, onR0)
 		})
 	})
-	t.Run("a failed commit does not", func(t *testing.T) {
+	t.Run("a failed commit pins", func(t *testing.T) {
+		// Its outcome is unknown, as a failed write's that reached the
+		// database: the session reads from the primary.
 		s := seeded(false)
 		sctx := velox.WithSession(ctx)
 		s.p.CommitErr = errors.New("commit failed")
@@ -206,8 +208,44 @@ func TestTxCommitPins(t *testing.T) {
 			t.Fatal("the commit should fail")
 		}
 		readOne(t, sctx, s.db)
+		if s.r0.Calls != 0 {
+			t.Errorf("the read after a failed commit went to %v, want the primary", s.calls())
+		}
+	})
+	t.Run("a failed commit of reads does not", func(t *testing.T) {
+		s := seeded(false)
+		sctx := velox.WithSession(ctx)
+		s.p.CommitErr = errors.New("commit failed")
+		err := s.db.Tx(sctx, func(ctx context.Context, tx *velox.DB) error {
+			_, err := tx.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).One(ctx)
+			return err
+		})
+		if err == nil {
+			t.Fatal("the commit should fail")
+		}
+		readOne(t, sctx, s.db)
 		if s.r0.Calls != 1 {
-			t.Errorf("the read after a failed commit went to %v, want replica 0", s.calls())
+			t.Errorf("the read after a failed commit of reads went to %v, want replica 0", s.calls())
+		}
+	})
+	t.Run("a broken transaction does not", func(t *testing.T) {
+		// It never sent COMMIT: it rolled back.
+		s := seeded(false)
+		sctx := velox.WithSession(ctx)
+		s.p.Errs = []error{nil, nil, errors.New("the connection is gone")} // the update, SAVEPOINT, then ROLLBACK TO
+		err := s.db.Tx(sctx, func(ctx context.Context, tx *velox.DB) error {
+			if err := update(ctx, tx); err != nil {
+				return err
+			}
+			_ = tx.Tx(ctx, func(context.Context, *velox.DB) error { return errors.New("undo") })
+			return nil
+		})
+		if err == nil {
+			t.Fatal("a broken transaction should fail")
+		}
+		readOne(t, sctx, s.db)
+		if s.r0.Calls != 1 {
+			t.Errorf("the read after a broken transaction went to %v, want replica 0", s.calls())
 		}
 	})
 	t.Run("a transaction of reads does not", func(t *testing.T) {
@@ -529,8 +567,8 @@ func TestTxAroundPins(t *testing.T) {
 		if err := s.db.Tx(sctx, update); err == nil {
 			t.Fatal("Tx should fail")
 		}
-		if got := velox.PinnedUntil(sctx); !got.IsZero() {
-			t.Errorf("a failed commit pinned the session until %v", got)
+		if velox.PinnedUntil(sctx).IsZero() {
+			t.Error("a failed commit, whose outcome is unknown, did not pin the session")
 		}
 	})
 	t.Run("a hook that calls next again after a commit", func(t *testing.T) {

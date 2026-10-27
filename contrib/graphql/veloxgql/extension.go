@@ -309,7 +309,7 @@ func (e *Extension) InterceptResponse(ctx context.Context, next graphql.Response
 		*out = *resp
 		out.Data = nil
 	}
-	if !errors.Is(err, errRollback) {
+	if !shared.Is(err, errRollback) {
 		// Begin or commit failed, or the transaction's deadline or the
 		// request's context ended it.
 		rctx := graphql.WithFreshResponseContext(ctx)

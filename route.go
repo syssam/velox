@@ -189,7 +189,8 @@ func WithPrimaryReads(ctx context.Context) context.Context {
 // (WithPinWindow), so that the session reads its own writes from a replica
 // that may not have them yet. A write pins it once it has reached the
 // database, even when it then fails: its outcome is unknown. A transaction
-// that wrote and committed counts as a write, at its commit. Without a
+// that wrote counts as a write once it sent its COMMIT, at the commit, even
+// when the COMMIT then failed; one that rolled back does not. Without a
 // session in the context, nothing is pinned. A session is safe for
 // concurrent use and lives only in its context; a context derived from a
 // session's keeps it, and WithSession on one starts a new one.

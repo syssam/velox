@@ -128,8 +128,7 @@ func ErrorPresenter(log func(ctx context.Context, err error)) graphql.ErrorPrese
 			log = canceled
 		}
 		out := &gqlerror.Error{Path: graphql.GetPath(ctx)}
-		var gqlErr *gqlerror.Error
-		if errors.As(err, &gqlErr) {
+		if gqlErr, ok := shared.As[*gqlerror.Error](err); ok {
 			if gqlErr.Err == nil {
 				if c, _ := shared.Coded(err); c == nil {
 					if len(leaves) > 0 {
@@ -164,8 +163,7 @@ func slogCanceled(ctx context.Context, err error) {
 // operation's name if any, and err.
 func logAttrs(ctx context.Context, err error) []any {
 	path := graphql.GetPath(ctx)
-	var gqlErr *gqlerror.Error
-	if errors.As(err, &gqlErr) && gqlErr.Path != nil {
+	if gqlErr, ok := shared.As[*gqlerror.Error](err); ok && gqlErr.Path != nil {
 		path = gqlErr.Path
 	}
 	attrs := []any{"path", path.String()}
@@ -186,9 +184,12 @@ func logAttrs(ctx context.Context, err error) []any {
 // velox's policy, validation and constraint errors. An application's coded
 // error is searched, so one that wraps a driver's error is logged.
 func internalLeaves(err error, out []error) []error {
-	switch e := err.(type) {
-	case nil:
+	if err == nil || shared.NilPointer(err) {
+		// A nil pointer, a driver's typed nil, is no error, and its methods
+		// could panic on it: it is passed over, as shared.Walk does.
 		return out
+	}
+	switch e := err.(type) {
 	case *shared.Error:
 		if e.Code != "" {
 			return out
@@ -217,7 +218,7 @@ func internalLeaves(err error, out []error) []error {
 // the cancellation of a context: the error is only the cancellation.
 func canceledOnly(leaves []error) bool {
 	for _, l := range leaves {
-		if !errors.Is(l, context.Canceled) {
+		if !shared.Is(l, context.Canceled) {
 			return false
 		}
 	}
@@ -229,8 +230,7 @@ func internal(err error) bool {
 	if c, _ := shared.Coded(err); c != nil {
 		return false
 	}
-	var gqlErr *gqlerror.Error
-	if errors.As(err, &gqlErr) && gqlErr.Err == nil {
+	if gqlErr, ok := shared.As[*gqlerror.Error](err); ok && gqlErr.Err == nil {
 		return false
 	}
 	code, _ := present(err)
@@ -242,24 +242,24 @@ func present(err error) (code, msg string) {
 	if c, code := shared.Coded(err); c != nil {
 		return code, strings.TrimPrefix(c.Error(), "veloxgql: ")
 	}
-	var (
-		validation *velox.ValidationError
-		constraint *velox.ConstraintError
-		integer    *graphql.IntegerError
-	)
+	// Through shared's Is and As: a driver's typed nil in err's tree
+	// cannot panic.
 	switch {
-	case errors.Is(err, velox.ErrNoTenant):
+	case shared.Is(err, velox.ErrNoTenant):
 		return CodeUnauthenticated, "unauthenticated"
-	case errors.Is(err, velox.ErrDenied):
+	case shared.Is(err, velox.ErrDenied):
 		return CodeForbidden, "forbidden"
-	case errors.As(err, &validation):
+	}
+	if validation, ok := shared.As[*velox.ValidationError](err); ok {
 		if validation.Err == nil {
 			return CodeBadUserInput, "invalid value"
 		}
 		return CodeBadUserInput, "invalid value: " + validation.Err.Error()
-	case errors.As(err, &constraint):
+	}
+	if constraint, ok := shared.As[*velox.ConstraintError](err); ok {
 		return CodeBadUserInput, constraint.Kind.String() + " constraint violated"
-	case errors.As(err, &integer):
+	}
+	if integer, ok := shared.As[*graphql.IntegerError](err); ok {
 		return CodeBadUserInput, integer.Message
 	}
 	return CodeInternal, "internal error"

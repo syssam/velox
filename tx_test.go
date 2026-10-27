@@ -741,6 +741,22 @@ func TestRollbackIsBounded(t *testing.T) {
 	}
 }
 
+// TestBrokenTxReportsItsRollback: a transaction a savepoint broke reports
+// the ROLLBACK's own failure too, as a transaction whose fn failed does.
+func TestBrokenTxReportsItsRollback(t *testing.T) {
+	gone, refused := errors.New("the connection is gone"), errors.New("rollback refused")
+	e := &velox.FakeExec{Errs: []error{nil, gone}, RollbackErr: refused} // SAVEPOINT, then ROLLBACK TO
+	db := velox.OpenFake(velox.Postgres, e)
+	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		_ = tx.Tx(ctx, func(context.Context, *velox.DB) error { return errors.New("boom") })
+		return nil
+	})
+	if !errors.Is(err, gone) || !errors.Is(err, refused) || !strings.Contains(fmt.Sprint(err), "velox: rollback: rollback refused") {
+		t.Errorf("Tx: %v, want the ROLLBACK TO's error and the ROLLBACK's", err)
+	}
+	notCommitted(t, e)
+}
+
 // TestFailedSavepointRollbackAbortsTheTx: once a savepoint's ROLLBACK TO has
 // failed, its work may still be in the transaction, so the transaction does
 // not commit even when fn swallows the error, and its statements and nested
