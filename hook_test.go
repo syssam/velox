@@ -367,6 +367,59 @@ func TestDescInsertBudget(t *testing.T) {
 	}
 }
 
+// dPlainDef is dPlain with a scalar Default on Title.
+type dPlainDef struct {
+	ID       int64
+	AuthorID int64
+	Title    string
+}
+
+var dPlainDefMeta velox.MetaOnce[dPlainDef]
+
+func (*dPlainDef) VeloxMeta() *velox.Meta[dPlainDef] {
+	return dPlainDefMeta.Load(func() velox.Desc[dPlainDef] {
+		return velox.Desc[dPlainDef]{
+			Table:      "books",
+			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "AuthorID", Name: "author_id"}, {Field: "Title", Name: "title", Default: "dune"}},
+			PrimaryKey: []int{0},
+			Tenant:     -1,
+			Addr: func(x *dPlainDef, i int) any {
+				switch i {
+				case 0:
+					return &x.ID
+				case 1:
+					return &x.AuthorID
+				}
+				return &x.Title
+			},
+		}
+	})
+}
+
+// TestDescInsertDefaultBudget: filling a scalar static Default allocates
+// nothing: a one-row Insert that takes it costs what dPlain's costs.
+func TestDescInsertDefaultBudget(t *testing.T) {
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Rows: [][]any{{int64(5)}}})
+	plain := func() {
+		x := dPlain{AuthorID: 1, Title: "dune"}
+		if err := db.Insert(&x).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	def := func() {
+		x := dPlainDef{AuthorID: 1}
+		if err := db.Insert(&x).Exec(ctx); err != nil || x.Title != "dune" {
+			t.Fatal(err, x.Title)
+		}
+	}
+	plain()
+	def() // fill the render caches
+	np, nd := testing.AllocsPerRun(200, plain), testing.AllocsPerRun(200, def)
+	if nd > np {
+		t.Errorf("an Insert that fills a scalar Default makes %.0f allocations, over the %.0f of one without", nd, np)
+	}
+}
+
 // TestNextTwiceSendsOnce: a second call of next sends nothing and fails the
 // write, whether the hook returns that error or drops it.
 func TestNextTwiceSendsOnce(t *testing.T) {

@@ -2,6 +2,7 @@ package velox_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
 	"strings"
@@ -309,5 +310,80 @@ func TestInsertReadsTheKeyBackUnderHooks(t *testing.T) {
 	inv = testmodel.Invoice{OrgID: 1, Number: "N"}
 	if err := db.Insert(&inv).Exec(ctx); err != nil || inv.ID != 0 {
 		t.Errorf("upsert added by a hook: %v, ID %d", err, inv.ID)
+	}
+}
+
+// dshared has a Default of each kind that holds memory: entities given one
+// must not share it.
+type dshared struct {
+	ID int64
+	B  []byte
+	S  []string
+	M  map[string]int
+	N  map[string][]string
+	A  map[string]any
+}
+
+var dsharedMeta velox.MetaOnce[dshared]
+
+func (*dshared) VeloxMeta() *velox.Meta[dshared] {
+	return dsharedMeta.Load(func() velox.Desc[dshared] {
+		enc := func(v any) ([]byte, error) { return json.Marshal(v) }
+		dec := func(data []byte, v any) error { return json.Unmarshal(data, v) }
+		return velox.Desc[dshared]{
+			Table: "dshared",
+			Columns: []velox.ColumnDesc{
+				{Field: "ID", Name: "id"},
+				{Field: "B", Name: "b", Default: []byte{1, 2}},
+				{Field: "S", Name: "s", Default: []string{"a"}, Encode: enc, Decode: dec},
+				{Field: "M", Name: "m", Default: map[string]int{"a": 1}, Encode: enc, Decode: dec},
+				{Field: "N", Name: "n", Default: map[string][]string{"k": {"v"}}, Encode: enc, Decode: dec},
+				{Field: "A", Name: "a", Default: map[string]any{"k": []int{1}}, Encode: enc, Decode: dec},
+			},
+			PrimaryKey: []int{0},
+			Tenant:     -1,
+			Addr: func(x *dshared, i int) any {
+				switch i {
+				case 0:
+					return &x.ID
+				case 1:
+					return &x.B
+				case 2:
+					return &x.S
+				case 3:
+					return &x.M
+				case 4:
+					return &x.N
+				}
+				return &x.A
+			},
+		}
+	})
+}
+
+// TestDefaultsAreNotShared: a Default that holds memory is copied into each
+// entity, so changing one entity's changes neither another's nor the
+// Default.
+func TestDefaultsAreNotShared(t *testing.T) {
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Rows: [][]any{{int64(1)}}})
+	insert := func() dshared {
+		var x dshared
+		if err := db.Insert(&x).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		return x
+	}
+	want := dshared{ID: 1, B: []byte{1, 2}, S: []string{"a"}, M: map[string]int{"a": 1}, N: map[string][]string{"k": {"v"}}, A: map[string]any{"k": []int{1}}}
+	x1, x2 := insert(), insert()
+	x1.B[0] = 9
+	x1.S[0] = "z"
+	x1.M["a"] = 9
+	x1.N["k"][0] = "z"
+	x1.A["k"].([]int)[0] = 9
+	if !reflect.DeepEqual(x2, want) {
+		t.Errorf("the second entity: %+v, want %+v", x2, want)
+	}
+	if x3 := insert(); !reflect.DeepEqual(x3, want) {
+		t.Errorf("a third entity: %+v, want %+v", x3, want)
 	}
 }

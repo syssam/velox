@@ -75,6 +75,9 @@ type ColumnInfo struct {
 	encode func(v any) ([]byte, error)    // ColumnDesc.Encode
 	decode func(data []byte, v any) error // ColumnDesc.Decode
 	off    uintptr                        // the field's offset in the entity
+	// copyDefault says Default holds memory a row would share: fillDefault
+	// gives each row a deep copy of it.
+	copyDefault bool
 }
 
 // GoType returns the Go type of column c's field. ColumnInfo.Type holds it as

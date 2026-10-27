@@ -244,7 +244,7 @@ func (q InsertQuery[E]) check[_ Lazy[E]]() error {
 	if q.conflict != nil && q.meta.info.immutable {
 		for _, c := range q.conflict.Update {
 			if col := &q.meta.info.Columns[c]; col.Immutable {
-				return fmt.Errorf("velox: %s: %s: %w", q.meta.info.Name, col.Name, ErrImmutable)
+				return fmt.Errorf("velox: %s: %s: %w", q.meta.info.Name, col.Field, ErrImmutable)
 			}
 		}
 	}
@@ -274,7 +274,11 @@ func fillDefault(c *ColumnInfo, ptr any) {
 	v := reflect.ValueOf(ptr).Elem()
 	switch {
 	case c.HasDefault && v.IsZero():
-		v.Set(defaultValue(c.Default))
+		if c.copyDefault {
+			v.Set(defaultValue(c.Default))
+		} else {
+			v.Set(reflect.ValueOf(c.Default))
+		}
 	case c.DefaultFunc != nil && v.IsZero():
 		d := reflect.ValueOf(c.DefaultFunc())
 		if t := v.Type(); t.Kind() == reflect.Pointer && d.Type() != t {
@@ -286,14 +290,87 @@ func fillDefault(c *ColumnInfo, ptr any) {
 	}
 }
 
-// defaultValue is a column's static default as a reflect.Value. A pointer
-// default is copied, so entities never share the pointee.
+// defaultValue is a column's static default as a reflect.Value: a deep copy,
+// so that entities never share a pointee, a slice's array or a map.
 func defaultValue(d any) reflect.Value {
-	v := reflect.ValueOf(d)
-	if v.Kind() == reflect.Pointer && !v.IsNil() {
+	return cloneValue(reflect.ValueOf(d))
+}
+
+// holdsRefs reports whether a value of type t shares memory with its copy:
+// whether cloneValue has anything to copy in it.
+func holdsRefs(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.Pointer, reflect.Slice, reflect.Map, reflect.Interface:
+		return true
+	case reflect.Array:
+		return t.Len() > 0 && holdsRefs(t.Elem())
+	case reflect.Struct:
+		for i := range t.NumField() {
+			if f := t.Field(i); f.IsExported() && holdsRefs(f.Type) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// cloneValue returns a deep copy of v, through pointers, slices, maps, arrays,
+// interfaces and exported struct fields; v must not be cyclic. A nil pointer,
+// slice, map or interface stays nil. A struct's unexported fields are copied
+// with the struct, shallowly; anything else is copied as is.
+func cloneValue(v reflect.Value) reflect.Value {
+	switch v.Kind() {
+	case reflect.Interface:
+		if v.IsNil() {
+			return v
+		}
+		r := reflect.New(v.Type()).Elem()
+		r.Set(cloneValue(v.Elem()))
+		return r
+	case reflect.Pointer:
+		if v.IsNil() {
+			return v
+		}
 		p := reflect.New(v.Type().Elem())
-		p.Elem().Set(v.Elem())
+		p.Elem().Set(cloneValue(v.Elem()))
 		return p
+	case reflect.Slice:
+		if v.IsNil() {
+			return v
+		}
+		s := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
+		if v.Type().Elem().Kind() == reflect.Uint8 {
+			reflect.Copy(s, v)
+			return s
+		}
+		for i := range v.Len() {
+			s.Index(i).Set(cloneValue(v.Index(i)))
+		}
+		return s
+	case reflect.Map:
+		if v.IsNil() {
+			return v
+		}
+		m := reflect.MakeMapWithSize(v.Type(), v.Len())
+		for it := v.MapRange(); it.Next(); {
+			m.SetMapIndex(it.Key(), cloneValue(it.Value()))
+		}
+		return m
+	case reflect.Array:
+		a := reflect.New(v.Type()).Elem()
+		for i := range v.Len() {
+			a.Index(i).Set(cloneValue(v.Index(i)))
+		}
+		return a
+	case reflect.Struct:
+		s := reflect.New(v.Type()).Elem()
+		s.Set(v)
+		for i := range v.NumField() {
+			if f := s.Field(i); f.CanSet() { // exported
+				f.Set(cloneValue(v.Field(i)))
+			}
+		}
+		return s
 	}
 	return v
 }
@@ -399,8 +476,10 @@ func insertOne[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *Conflic
 			return err
 		}
 		out.Affected = back
-		if len(st.Returning) == 0 {
-			// Without RETURNING (a hook dropped it), no row tells nothing.
+		if len(st.Returning) == 0 && !st.upsertPolicy {
+			// Without RETURNING (a hook dropped it), no row tells nothing; a
+			// policy-conditioned upsert was rendered with it, as prepare
+			// checks, so no row back is a hidden row.
 			return nil
 		}
 		return checkUpserted(&st, back)
@@ -498,13 +577,12 @@ var errUnknownAffected = errors.New("the driver did not report the rows the upse
 // policy hides was neither inserted nor updated. Without the count (-1) a
 // hidden row cannot be told apart, so it fails closed.
 func checkUpserted(st *Statement, affected int64) error {
-	cf := st.Conflict
 	switch {
-	case cf == nil || !cf.policy:
+	case !st.upsertPolicy:
 		return nil
 	case affected < 0:
 		return &PolicyError{Entity: st.Entity.Name, Op: OpUpdate, Err: errUnknownAffected}
-	case affected < int64(len(st.Rows)):
+	case affected < int64(st.upsertRows):
 		return &PolicyError{Entity: st.Entity.Name, Op: OpUpdate, Err: errHiddenRow}
 	}
 	return nil

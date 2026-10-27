@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -477,6 +478,125 @@ func TestUpsertOnMySQLNamesTheUniqueIndex(t *testing.T) {
 	x := tunique{ID: 1, Code: "c"}
 	err := db.Insert(&x).OnConflict(tu.OrgID, tu.ID).Update(tu.Code).Exec(velox.WithTenant(context.Background(), int64(7)))
 	want(t, err, velox.ErrTenantUpsert, "velox: velox_test.tunique: upsert could cross tenants: MySQL's ON DUPLICATE KEY UPDATE resolves a conflict on any unique key, and the unique index (code) does not hold the tenant column org_id")
+	if e.Calls != 0 {
+		t.Errorf("%d statements sent", e.Calls)
+	}
+}
+
+// ticketColumn is the index of Ticket's column name.
+func ticketColumn(t *testing.T, st *velox.Statement, name string) int {
+	t.Helper()
+	for i, c := range st.Entity.Columns {
+		if c.Name == name {
+			return i
+		}
+	}
+	t.Fatalf("no column %s", name)
+	return -1
+}
+
+// TestUpsertPolicyFlagIsTheStatements: whether the scope conditioned the
+// upsert on the policy is the Statement's, not the clause's, so an Around
+// hook that replaces the clause with its own copy keeps the hidden-row check.
+func TestUpsertPolicyFlagIsTheStatements(t *testing.T) {
+	cf := reflect.TypeFor[velox.ConflictClause]()
+	if cf.NumField() != 4 {
+		t.Errorf("ConflictClause has %d fields, want 4", cf.NumField())
+	}
+	for f := range cf.Fields() {
+		if !f.IsExported() {
+			t.Errorf("ConflictClause has the unexported field %s", f.Name)
+		}
+	}
+	e := &velox.FakeExec{Affected: 0}
+	db := velox.OpenFake(velox.Postgres, e, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+		c := st.Conflict
+		st.Conflict = &velox.ConflictClause{Columns: slices.Clone(c.Columns), Update: slices.Clone(c.Update), Where: slices.Clone(c.Where)}
+		return next(ctx)
+	}))
+	tk := testmodel.Ticket{ID: 1, Owner: "ann", Title: "t"}
+	err := db.Insert(&tk).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(as("ann", 7))
+	wantPolicyError(t, err, velox.OpUpdate)
+}
+
+// TestHookCannotConditionAMultiRowUpsert: a Rewrite hook that gives an
+// InsertAll's DoNothing upsert, outside a transaction, an update branch the
+// policy conditions is refused before anything is sent: a hidden row would
+// fail the statement after the visible rows were written. Claiming the
+// transaction with InTx does not get it through.
+func TestHookCannotConditionAMultiRowUpsert(t *testing.T) {
+	for _, c := range []struct {
+		inTx bool
+		want string
+	}{
+		{false, "velox: testmodel.Ticket: a Rewrite hook gave a multi-row upsert outside a transaction an update branch the policy conditions; a row the policy hides would fail it after the others were written"},
+		{true, "velox: testmodel.Ticket: a Rewrite hook changed the statement's InTx"},
+	} {
+		e := &velox.FakeExec{Affected: 2}
+		db := velox.OpenFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+			st.Conflict.DoNothing = false
+			st.Conflict.Update = []int{ticketColumn(t, st, "done")}
+			if c.inTx {
+				st.InTx = true
+			}
+			return nil
+		}))
+		two := []testmodel.Ticket{{ID: 1, Owner: "ann", Title: "a"}, {ID: 2, Owner: "ann", Title: "b"}}
+		err := db.InsertAll(two).OnConflict(Tk.OrgID, Tk.Title).DoNothing().Exec(as("ann", 7))
+		if err == nil || err.Error() != c.want {
+			t.Errorf("InTx %v: got %v, want %q", c.inTx, err, c.want)
+		}
+		for _, s := range e.Log {
+			if s == "BEGIN" || strings.HasPrefix(s, "INSERT") {
+				t.Errorf("InTx %v: sent %q", c.inTx, s)
+			}
+		}
+		if e.Calls != 0 {
+			t.Errorf("InTx %v: %d statements sent", c.inTx, e.Calls)
+		}
+	}
+}
+
+// TestAroundHookCannotUnguardAnUpsert: the hidden-row check of a
+// policy-conditioned upsert reads what velox sent, not what an Around hook
+// left in the Statement: neither dropping Returning nor Rows skips it.
+func TestAroundHookCannotUnguardAnUpsert(t *testing.T) {
+	around := func(edit func(*velox.Statement)) velox.Option {
+		return velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+			edit(st)
+			return next(ctx)
+		})
+	}
+	noReturning := around(func(st *velox.Statement) { st.Returning = nil })
+	noRows := around(func(st *velox.Statement) { st.Rows = nil })
+	// Returning dropped: no row came back.
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{}, noReturning)
+	tk := testmodel.Ticket{Owner: "ann", Title: "t"}
+	wantPolicyError(t, db.Insert(&tk).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(as("ann", 7)), velox.OpUpdate)
+	// Rows dropped: one row sent, none affected.
+	db = velox.OpenFake(velox.Postgres, &velox.FakeExec{Affected: 0}, noRows)
+	tk = testmodel.Ticket{ID: 1, Owner: "ann", Title: "t"}
+	wantPolicyError(t, db.Insert(&tk).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(as("ann", 7)), velox.OpUpdate)
+	// And an InsertAll's: two rows sent, one affected.
+	db = velox.OpenFake(velox.Postgres, &velox.FakeExec{Affected: 1}, noRows)
+	two := []testmodel.Ticket{{ID: 1, Owner: "ann", Title: "a"}, {ID: 2, Owner: "ann", Title: "b"}}
+	wantPolicyError(t, db.InsertAll(two).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(as("ann", 7)), velox.OpUpdate)
+}
+
+// TestHookCannotDropUpsertReturning: a Rewrite hook may not drop the
+// RETURNING of a policy-conditioned upsert: the row read back is how a row
+// the policy hides is found.
+func TestHookCannotDropUpsertReturning(t *testing.T) {
+	e := &velox.FakeExec{Rows: [][]any{{int64(5)}}}
+	db := velox.OpenFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+		st.Returning = nil
+		return nil
+	}))
+	tk := testmodel.Ticket{Owner: "ann", Title: "t"}
+	err := db.Insert(&tk).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(as("ann", 7))
+	if want := "velox: testmodel.Ticket: a Rewrite hook dropped the RETURNING of an upsert whose update branch the policy conditions; velox reads the row back to find a row the policy hides"; err == nil || err.Error() != want {
+		t.Errorf("got %v, want %q", err, want)
+	}
 	if e.Calls != 0 {
 		t.Errorf("%d statements sent", e.Calls)
 	}

@@ -126,6 +126,11 @@ func (db *DB) scopeInsert(ctx context.Context, st *Statement) error {
 		if err := sc.conditionUpsert(in, st, conditioned); err != nil {
 			return err
 		}
+		if st.upsertPolicy && len(st.Rows) > 1 && !st.InTx {
+			// conditionedUpsert runs every such InsertAll in a transaction:
+			// only a Rewrite hook gets here.
+			return fmt.Errorf("velox: %s: a Rewrite hook gave a multi-row upsert outside a transaction an update branch the policy conditions; a row the policy hides would fail it after the others were written", in.Name)
+		}
 	}
 	sc.record(st)
 	return nil
@@ -174,7 +179,8 @@ func (sc *scoper) conditionUpsert(in *EntityInfo, st *Statement, policy bool) er
 	if write.n.op != 0 {
 		cf.Where = append(cf.Where, write)
 	}
-	cf.policy = extra > 0
+	st.upsertPolicy = extra > 0
+	st.upsertRows = len(st.Rows)
 	st.Conflict = &cf
 	return nil
 }
@@ -460,10 +466,26 @@ func (sc *scoper) node(n node) (node, bool, error) {
 		// entity has neither a tenant column nor a Read policy.
 		return n, false, nil
 	}
+	// An EXISTS's relation first: an error from inside it names its target.
+	// resolveNode, for the statement's own conditions, walks the kids first;
+	// the order differs on purpose, and only a stale generated relation can
+	// fail here.
+	var l link
+	var t *EntityInfo // the EXISTS's target
+	if n.op == opExists {
+		var err error
+		if l, err = existsLink(n); err != nil {
+			return n, false, err
+		}
+		t = l.target
+	}
 	var kids []node // nil until a kid changes
 	for i, k := range n.kids {
 		nk, changed, err := sc.node(k)
 		if err != nil {
+			if t != nil {
+				err = sc.inExists(t, err)
+			}
 			return n, false, err
 		}
 		if !changed {
@@ -479,24 +501,12 @@ func (sc *scoper) node(n node) (node, bool, error) {
 	if n.op == opExists {
 		// A relation is resolved here when the condition came from a policy
 		// or a Rewrite hook: the statement's own were resolved by prepare.
-		l, err := existsLink(n)
-		if err != nil {
-			return n, false, err
-		}
 		if _, lazy := n.v.(relRef); lazy {
 			n.v, resolved = l, true // n is a copy
 		}
-		t := l.target
 		tenant, read, err := sc.target(t)
 		if err != nil {
-			// An error from an EXISTS in t's policy names its own target,
-			// and a cycle names the statement's entity already.
-			switch err.(type) {
-			case *existsError, *cycleError:
-			default:
-				err = &existsError{entity: sc.entity, target: t.Name, err: err}
-			}
-			return n, false, err
+			return n, false, sc.inExists(t, err)
 		}
 		if (tenant || read.n.op != 0) && kids == nil {
 			kids = make([]node, len(n.kids), len(n.kids)+2)
@@ -531,17 +541,32 @@ func (sc *scoper) target(t *EntityInfo) (bool, Predicate, error) {
 	return tenant, read, err
 }
 
-// existsError is an error of the scope inside an EXISTS on target: its text
-// names the statement's entity, then the target, and drops err's own
-// "velox: <target>: " so that the target is named once; errors.Is and As
-// still see err.
+// inExists returns err, an error from inside an EXISTS on t (from the EXISTS
+// in its condition, or from t's tenant and Read), with t at the front of its
+// path. A cycle passes unchanged: it names the statement's entity already.
+func (sc *scoper) inExists(t *EntityInfo, err error) error {
+	switch e := err.(type) {
+	case *cycleError:
+		return err
+	case *existsError:
+		e.path = slices.Insert(e.path, 0, t.Name)
+		return e
+	}
+	return &existsError{entity: sc.entity, path: []string{t.Name}, err: err}
+}
+
+// existsError is an error of the scope inside an EXISTS: its text names the
+// statement's entity, then the EXISTS targets from the outermost in, and
+// drops err's own "velox: <innermost target>: " so that the target is named
+// once; errors.Is and As still see err.
 type existsError struct {
-	entity, target string
-	err            error
+	entity string
+	path   []string // the EXISTS targets, outermost first
+	err    error
 }
 
 func (e *existsError) Error() string {
-	return "velox: " + e.entity + ": in the EXISTS on " + e.target + ": " + strings.TrimPrefix(e.err.Error(), "velox: "+e.target+": ")
+	return "velox: " + e.entity + ": in the EXISTS on " + strings.Join(e.path, ", then on ") + ": " + strings.TrimPrefix(e.err.Error(), "velox: "+e.path[len(e.path)-1]+": ")
 }
 
 func (e *existsError) Unwrap() error { return e.err }

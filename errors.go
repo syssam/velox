@@ -56,8 +56,8 @@ var (
 	// apply the predicate to the update.
 	ErrPolicyUpsert = errors.New("upsert cannot apply the policy")
 	// ErrImmutable is returned by an update, Save or upsert when its Update
-	// list assigns an Immutable column, including one a hook adds. An insert
-	// may set one.
+	// list assigns an Immutable column, including one a hook adds; the
+	// error names the Go field. An insert may set one.
 	ErrImmutable = errors.New("column is immutable")
 	// ErrNoShard is returned, on a DB opened with OpenShards, by a statement or
 	// Tx when its context names no shard (neither WithShard nor a tenant;

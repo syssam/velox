@@ -61,7 +61,7 @@ func TestRowsAffectedErrorIsUnknown(t *testing.T) {
 	if err != nil || r.affected != -1 {
 		t.Errorf("affected %d, error %v; want -1 and no error", r.affected, err)
 	}
-	st := &Statement{Op: OpInsert, Entity: invInfo, Rows: [][]any{{1}}, Conflict: &ConflictClause{policy: true}}
+	st := &Statement{Op: OpInsert, Entity: invInfo, Rows: [][]any{{1}}, Conflict: &ConflictClause{}, upsertPolicy: true}
 	var pe *PolicyError
 	if err := checkUpserted(st, -1); !errors.As(err, &pe) || !errors.Is(err, errUnknownAffected) {
 		t.Errorf("checkUpserted with -1: %v, want a *PolicyError wrapping errUnknownAffected", err)

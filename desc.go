@@ -61,7 +61,7 @@ type Desc[E any] struct {
 type ColumnDesc struct {
 	Field         string     // the Go field name
 	Name          string     // the column name
-	Default       any        // a value of the field's type (or of its element type, for a pointer field); nil when none
+	Default       any        // a value of the field's type (or of its element type, for a pointer field), not cyclic; nil when none
 	DefaultFunc   func() any // returns a value of the field's type (or of its element type, for a pointer field)
 	UpdateDefault func() any
 	Immutable     bool
@@ -224,6 +224,7 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 				// would panic on the first insert instead of failing here.
 				return fail(c.Field, "Default is a %T, not a %v", c.Default, ft)
 			}
+			ci.copyDefault = holdsRefs(reflect.TypeOf(ci.Default))
 		}
 		cols[i] = ci
 		anyImmutable = anyImmutable || c.Immutable

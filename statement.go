@@ -100,8 +100,6 @@ type ConflictClause struct {
 	// conflicting row it rejects is neither updated nor replaced. PostgreSQL
 	// and SQLite render it; velox refuses it on MySQL.
 	Where []Predicate
-
-	policy bool // the scope added the policy's conditions to Where
 }
 
 // EachClause makes a SELECT read, or count, the rows of each owner apart: the
@@ -206,6 +204,14 @@ type Statement struct {
 	// handed is set once Iter has handed the caller a row: a broken
 	// connection is then not failed over, as the read cannot start again.
 	handed bool
+	// upsertPolicy is set by the scope when it added the policy's conditions to
+	// the upsert's update branch: an upsert that then affected fewer rows than it
+	// sent met a row the policy hides.
+	upsertPolicy bool
+	// upsertRows is the number of rows the statement had when the scope
+	// conditioned it: checkUpserted compares with it, not with Rows, which
+	// an Around hook may change.
+	upsertRows int
 }
 
 // Result is what executing a statement did: a Statement's, which an Around

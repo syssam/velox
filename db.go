@@ -338,10 +338,11 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 			st.Each = &ec
 		}
 	}
-	entity, op, writable, count, exists, agg, lock, wait := st.Entity, st.Op, st.Writable, st.Count, st.Exists, st.Aggregate, st.Lock, st.LockWait
+	entity, op, writable, count, exists, agg, lock, wait, inTx := st.Entity, st.Op, st.Writable, st.Count, st.Exists, st.Aggregate, st.Lock, st.LockWait, st.InTx
 	// each is the Each the hooks get, a copy of velox's (was) when there are
 	// hooks: a hook may not replace it or change it.
 	each := st.Each
+	returning := len(st.Returning) > 0
 	for _, rw := range db.cfg.rewrites {
 		if err := rw(ctx, st); err != nil {
 			return &stageError{entity.Name, "rewrite", err}
@@ -354,6 +355,11 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 		// The scope reads it: without it, a Writable query drops the
 		// Write policy.
 		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's Writable", entity.Name)
+	}
+	if st.InTx != inTx {
+		// scopeInsert reads it: a hook that claimed a transaction would send
+		// a policy-conditioned InsertAll without one.
+		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's InTx", entity.Name)
 	}
 	if st.Count != count {
 		// The scan depends on it, and it renders before Exists and an
@@ -407,6 +413,9 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	}
 	if err := db.scope(ctx, st); err != nil {
 		return err
+	}
+	if returning && len(st.Returning) == 0 && st.upsertPolicy {
+		return fmt.Errorf("velox: %s: a Rewrite hook dropped the RETURNING of an upsert whose update branch the policy conditions; velox reads the row back to find a row the policy hides", entity.Name)
 	}
 	db.capLimit(st)
 	if st.Entity == entity {

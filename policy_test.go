@@ -222,9 +222,9 @@ func TestPolicyConditionIsScopedAndChecked(t *testing.T) {
 	_, err := q.All(ctx)
 	want(t, err, velox.ErrNoTenant, "velox: velox_test.pnote: in the EXISTS on testmodel.Invoice: no tenant in the context")
 	// The same condition as an EXISTS target's Read: the error names the
-	// innermost target.
+	// path, from the outermost target in.
 	_, err = db.Query[pbox]().Where(pboxNote.Has()).Limit(1).All(ctx)
-	want(t, err, velox.ErrNoTenant, "velox: velox_test.pbox: in the EXISTS on testmodel.Invoice: no tenant in the context")
+	want(t, err, velox.ErrNoTenant, "velox: velox_test.pbox: in the EXISTS on velox_test.pnote, then on testmodel.Invoice: no tenant in the context")
 	if _, err := db.Query[pbox]().Where(pboxNote.Has()).Limit(1).All(velox.WithTenant(ctx, int64(7))); err != nil {
 		t.Fatal(err)
 	}
@@ -662,4 +662,12 @@ func TestPolicySQLOnEveryDialect(t *testing.T) {
 			t.Errorf("%v: a zero Write: %v", c.d, err)
 		}
 	}
+}
+
+// TestExistsErrorNamesThePath: an error from an EXISTS nested in another
+// names both targets, from the outermost in.
+func TestExistsErrorNamesThePath(t *testing.T) {
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{})
+	_, err := db.Query[pbox]().Where(pboxNote.HasWhere(pn.Invoice.Has())).Limit(1).All(context.Background())
+	want(t, err, velox.ErrNoTenant, "velox: velox_test.pbox: in the EXISTS on velox_test.pnote, then on testmodel.Invoice: no tenant in the context")
 }

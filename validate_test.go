@@ -37,7 +37,7 @@ func TestUpdateValidatesAndRefusesImmutable(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 	_, err = db.Update[dAuthor]().Set(dAuthors.CreatedAt.Set(time.Now())).Where(dAuthors.ID.EQ(1)).Exec(tctx)
-	if !errors.Is(err, velox.ErrImmutable) || err.Error() != "velox: velox_test.dAuthor: created_at: column is immutable" {
+	if !errors.Is(err, velox.ErrImmutable) || err.Error() != "velox: velox_test.dAuthor: CreatedAt: column is immutable" {
 		t.Fatalf("got %v", err)
 	}
 	a := dAuthor{ID: 1, OrgID: 7, Name: "ada", CreatedAt: time.Now()}
@@ -48,7 +48,7 @@ func TestUpdateValidatesAndRefusesImmutable(t *testing.T) {
 	if err := db.Save(&a, dAuthors.Name).Exec(tctx); !errors.As(err, &ve) {
 		t.Fatalf("Save validates: %v", err)
 	}
-	if err := db.Insert(&dAuthor{Name: "ada"}).OnConflict(dAuthors.ID).Update(dAuthors.CreatedAt).Exec(tctx); !errors.Is(err, velox.ErrImmutable) {
+	if err := db.Insert(&dAuthor{Name: "ada"}).OnConflict(dAuthors.ID).Update(dAuthors.CreatedAt).Exec(tctx); !errors.Is(err, velox.ErrImmutable) || err.Error() != "velox: velox_test.dAuthor: CreatedAt: column is immutable" {
 		t.Fatalf("upsert: %v", err)
 	}
 }

@@ -83,7 +83,7 @@ func validateSet(in *EntityInfo, set []Assignment) error {
 	if in.immutable {
 		for _, a := range set {
 			if c := &in.Columns[a.Column]; c.Immutable {
-				return fmt.Errorf("velox: %s: %s: %w", in.Name, c.Name, ErrImmutable)
+				return fmt.Errorf("velox: %s: %s: %w", in.Name, c.Field, ErrImmutable)
 			}
 		}
 	}
