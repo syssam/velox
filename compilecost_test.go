@@ -206,6 +206,9 @@ var genericObjects = []struct {
 	// entityDesc now sit a little under what the rule above would give
 	// (about 4 KiB of headroom each, 23 KiB for entityDesc), which is
 	// tighter, not looser.
+	// Every other row, and policyGrowthMax, was remeasured on 2026-10-27,
+	// darwin/arm64, Go 1.27.x, after Wave 2 of the pre-1.0 hardening; every
+	// bound was kept, and none was over.
 	{"Col", "velox.Col[E, bool]", "", 18432},                        // measured 14312
 	{"OrderedCol", "velox.OrderedCol[E, int64]", "", 19456},         // measured 14924
 	{"NumberCol", "velox.NumberCol[E, int64]", "", 19456},           // measured 14846
@@ -219,17 +222,17 @@ var genericObjects = []struct {
 	{"Pred", "velox.Pred[E]", "", 5120},                             // measured 1014
 	{"Order", "velox.Order[E]", "", 6144},                           // measured 1114
 	{"Setter", "velox.Setter[E]", "", 8192},                         // measured 3168
-	{"Query", "velox.Query[E]", "", 10240},                          // measured 5932
-	{"UpdateQuery", "velox.UpdateQuery[E]", "", 9216},               // measured 5208
-	{"DeleteQuery", "velox.DeleteQuery[E]", "", 9216},               // measured 5208
-	{"InsertQuery", "velox.InsertQuery[E]", "", 10240},              // measured 6076
-	{"Rel", "velox.Rel[E, E]", "", 9216},                            // measured 4880 (4556 before LimitEach and MaxRows; 3528 before the use site named the target)
+	{"Query", "velox.Query[E]", "", 10240},                          // measured 5974
+	{"UpdateQuery", "velox.UpdateQuery[E]", "", 9216},               // measured 5250
+	{"DeleteQuery", "velox.DeleteQuery[E]", "", 9216},               // measured 5250
+	{"InsertQuery", "velox.InsertQuery[E]", "", 10240},              // measured 6118
+	{"Rel", "velox.Rel[E, E]", "", 9216},                            // measured 4924 (4556 before LimitEach and MaxRows; 3528 before the use site named the target)
 	{"One", "velox.One[E]", "", 20480},                              // measured 15972
 	{"Many", "velox.Many[E]", "", 20480},                            // measured 16044
-	{"MetaOnce", "velox.MetaOnce[E]", "", 10240},                    // measured 6274
-	{"Meta", "velox.Meta[E]", "", 7168},                             // measured 3118
-	{"Statement", "velox.Statement", "", 5120},                      // measured 1080
-	{"EntityInfo", "*velox.EntityInfo", "", 5120},                   // measured 1096
+	{"MetaOnce", "velox.MetaOnce[E]", "", 10240},                    // measured 6316
+	{"Meta", "velox.Meta[E]", "", 7168},                             // measured 3162
+	{"Statement", "velox.Statement", "", 5120},                      // measured 1124
+	{"EntityInfo", "*velox.EntityInfo", "", 5120},                   // measured 1140
 	{"ColumnInfo", "velox.ColumnInfo", "", 5120},                    // measured 20
 	// The entity packages, remeasured on 2026-10-19 when the old path went,
 	// on darwin/arm64, Go 1.27.1. entityDesc is the
@@ -247,7 +250,7 @@ var genericObjects = []struct {
 	// Rel.MaxRows (+518 bytes: 130782 before); its bound was kept. It was
 	// remeasured on 2026-10-23, after SQLType left ColumnDesc (-38 bytes), and
 	// its bound was kept again.
-	{"entityDesc", "", entityDescSrc, 153600}, // measured 131266
+	{"entityDesc", "", entityDescSrc, 153600}, // measured 132332
 	// entityDescUse is held like entityDescHooks: its bound is the
 	// measurement plus about 1.2%, rounded up to the next KiB; remeasured on
 	// 2026-10-22, darwin/arm64, Go 1.27.1, after the locking reads (about
@@ -265,7 +268,9 @@ var genericObjects = []struct {
 	// in the export data of every package that uses a Query, called or not.
 	// Query.With and Rel.With stay methods: with both called, functions would
 	// have saved 1638 bytes, under the 1% that decides it.
-	{"entityDescUse", "", entityDescUseSrc, 773120}, // measured 763608
+	// Remeasured on 2026-10-27, darwin/arm64, Go 1.27.x, after Wave 2 of the
+	// pre-1.0 hardening (763608 under 773120 before).
+	{"entityDescUse", "", entityDescUseSrc, 757760}, // measured 748016
 	// entityDescHooks is held tighter than the rule above: a quarter of it
 	// would let it grow by 64 KiB unseen. Its bound is the measurement plus
 	// about 1.2%, rounded up to the next KiB, the headroom it had before
@@ -278,12 +283,14 @@ var genericObjects = []struct {
 	// addAfter (-26882 bytes: 1072642 under 1086464 before), and after
 	// SQLType left ColumnDesc (-90 bytes; the bound held), and remeasured on
 	// 2026-10-26 after Use called Rel.With (G18): 1058816 before.
-	{"entityDescHooks", "", entityDescHooksBound, 1064960}, // measured 1052142
+	// Remeasured on 2026-10-27, darwin/arm64, Go 1.27.x, after Wave 2 of the
+	// pre-1.0 hardening (1052142 under 1064960 before).
+	{"entityDescHooks", "", entityDescHooksBound, 1049600}, // measured 1037136
 	{"Policy", "velox.Policy[E]", "", 8192},                // measured 4050
 	// Mutation was remeasured on 2026-10-22, when it became a struct
 	// holding the mutation instead of a defined type of it (4692 before),
 	// and its bound moved down by the rule above.
-	{"Mutation", "velox.Mutation[E]", "", 7168}, // measured 2182
+	{"Mutation", "velox.Mutation[E]", "", 7168}, // measured 2226
 }
 
 // policyGrowthMax bounds the bytes a Policy and three hooks add to an entity's
@@ -292,7 +299,7 @@ var genericObjects = []struct {
 // the generics velox instantiates for E (BindPolicy, BindHooks, On, the
 // Mutator and Mutation methods) and the export data of the types the
 // functions mention.
-const policyGrowthMax = 348160 // measured 288528
+const policyGrowthMax = 348160 // measured 289120
 
 // TestGenericTypesCompileSmall enforces the compile-cost rules for one
 // package: it measures each row's own object cost, the bytes its package
