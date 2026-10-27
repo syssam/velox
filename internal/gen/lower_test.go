@@ -1238,3 +1238,28 @@ func TestPackageFileHasNoHash(t *testing.T) {
 		}
 	}
 }
+
+// A Required edge whose key is NULL-able, an edge to its own schema, marks its
+// key's column RequiredEdge; one whose key is NOT NULL does not, since the
+// database refuses it unset.
+func TestLowerRequiredEdge(t *testing.T) {
+	o := mustLower(t, Config{Package: "gen", SchemaPath: lowerSchemaPath}, reqSelf{}, dodReq{}, dodReqPet{})
+	if f := o.entity("reqSelf").field("req_self_children"); f == nil || f.RequiredEdge != "parent" {
+		t.Errorf("req_self_children %+v", f)
+	}
+	if f := o.entity("dodReqPet").field("dod_req_pets"); f == nil || f.RequiredEdge != "" {
+		t.Errorf("dod_req_pets %+v", f)
+	}
+	files, err := Render(o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var all, parent int
+	for _, f := range files {
+		all += strings.Count(string(f.Data), "RequiredEdge:")
+		parent += strings.Count(string(f.Data), `RequiredEdge: "parent"`)
+	}
+	if all != 1 || parent != 1 {
+		t.Errorf("RequiredEdge written %d times, %d of them for parent; want once, for parent", all, parent)
+	}
+}

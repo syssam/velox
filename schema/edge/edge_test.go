@@ -136,12 +136,16 @@ func TestOnDelete(t *testing.T) {
 	if d.OnDelete != "" || d.Ref == nil || d.Ref.OnDelete != "RESTRICT" {
 		t.Fatalf("inline: the inverse's side is set, not the assoc's: %+v", d)
 	}
+	d = edge.To("posts", Post.Type).OnDelete(edge.NoAction).Descriptor()
+	if len(d.Errs) != 0 || d.OnDelete != "NO ACTION" {
+		t.Fatalf("NoAction %+v", d)
+	}
 	for _, d := range []*desc.Edge{
-		edge.To("x", Post.Type).OnDelete("NO ACTION").Descriptor(),
+		edge.To("x", Post.Type).OnDelete("SET DEFAULT").Descriptor(),
 		edge.From("x", User.Type).OnDelete("").Descriptor(),
 	} {
 		if len(d.Errs) != 1 || d.OnDelete != "" {
-			t.Errorf("an action outside the three is a builder error: %+v", d)
+			t.Errorf("an action outside the four is a builder error: %+v", d)
 		}
 	}
 }

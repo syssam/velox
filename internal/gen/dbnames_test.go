@@ -140,7 +140,7 @@ func TestJoinTablesAndForeignKeys(t *testing.T) {
 	want := []string{
 		`dn_owner_groups.dn_group_id m_group -> dnGroup "CASCADE" by dnOwner.groups`,
 		`dn_owner_groups.dn_owner_id m_owner -> dnOwner "CASCADE" by dnOwner.groups`,
-		`dn_pets.dn_owner_pets pet_owner -> dnOwner "" by dnPet.owner`,
+		`dn_pets.dn_owner_pets pet_owner -> dnOwner "SET NULL" by dnPet.owner`,
 		`dn_toys.dn_owner_toys dn_toys_dn_owners_toys -> dnOwner "CASCADE" by dnOwner.toys`,
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {

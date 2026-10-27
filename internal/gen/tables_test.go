@@ -771,7 +771,7 @@ func TestTablesForeignKeys(t *testing.T) {
 		users := migrate.TableRef{Name: "tb_fk_users"}
 		for tableName, want := range map[string][]migrate.ForeignKey{
 			"tb_fk_pets":  {{Name: "pet_owner", Columns: []string{"tb_fk_user_pets"}, RefTable: users, RefColumns: []string{"id"}, OnDelete: "SET NULL"}},
-			"tb_fk_bikes": {{Name: "bike_owner", Columns: []string{"tb_fk_user_bikes"}, RefTable: users, RefColumns: []string{"id"}}},
+			"tb_fk_bikes": {{Name: "bike_owner", Columns: []string{"tb_fk_user_bikes"}, RefTable: users, RefColumns: []string{"id"}, OnDelete: "SET NULL"}},
 			"tb_fk_cars":  {{Name: "tb_fk_cars_tb_fk_users_cars", Columns: []string{"tb_fk_user_cars"}, RefTable: users, RefColumns: []string{"id"}, OnDelete: "CASCADE"}},
 			"tb_fk_user_groups": {
 				{Name: "gm_group", Columns: []string{"tb_fk_group_id"}, RefTable: migrate.TableRef{Name: "tb_fk_groups"}, RefColumns: []string{"id"}, OnDelete: "CASCADE"},

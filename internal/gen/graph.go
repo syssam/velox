@@ -92,7 +92,7 @@ type Rel struct {
 	Kind     string   `json:"kind"`                // "O2O", "O2M", "M2O", "M2M"
 	Table    string   `json:"table"`               // the table holding the foreign key, or the join table
 	Columns  []string `json:"columns"`             // the foreign key; for M2M the join table's owner and target columns
-	OnDelete string   `json:"on_delete,omitempty"` // the foreign key's action; "" is the dialect's default (NO ACTION). Recorded for the migration planner, not in the plugin model
+	OnDelete string   `json:"on_delete,omitempty"` // the foreign key's action: "CASCADE", "SET NULL", "RESTRICT", "NO ACTION", or "" for a NOT NULL key that sets none (NO ACTION). Recorded for the migration planner, not in the plugin model
 }
 
 // Index is an index of an entity's table.

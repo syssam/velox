@@ -67,6 +67,7 @@ type OutField struct {
 	Comment              string
 	Sensitive, Immutable bool
 	JSON                 bool   // a json field: its ColumnDesc's codec is encoding/json's, which the file imports
+	RequiredEdge         string // the Required edge whose NULL-able key the field holds, an edge to its own schema: its ColumnDesc says RequiredEdge; "" when none
 	NilIsNull            bool   // a slice or map field whose column holds NULL (an Optional or Nillable json field, a Nillable bytes field), which nil binds: its ColumnDesc says Nullable
 	DefaultCode          string // "" or a Go expression for ColumnDesc.Default
 	DefaultFuncCode      string // "" or "func() any { … }"

@@ -17,6 +17,7 @@ import (
 	"github.com/syssam/velox2/internal/ddl"
 	"github.com/syssam/velox2/internal/gen/internal/other"
 	"github.com/syssam/velox2/internal/gen/loadjson"
+	"github.com/syssam/velox2/migrate"
 	"github.com/syssam/velox2/schema"
 	"github.com/syssam/velox2/schema/edge"
 	"github.com/syssam/velox2/schema/field"
@@ -1363,7 +1364,7 @@ func TestBuildRulesAreSingle(t *testing.T) {
 		{enumGoNames{}}, {clashOwner{}, clashPet{}}, {columnFieldMismatch{}}, {keyA{}, keyB{}}, {oneColumnM2M{}},
 		{twoColumnsO2M{}, Pet{}}, {invAssoc{}, invItem{}}, {enumGoTypeDup{}},
 		{fkUnbound{}}, {fieldStringFK{}}, {immutableEdge{}}, {immutableField{}}, {loop{}}, {Man{}}, {cycle{}},
-		{odM2M{}, odM2M2{}}, {odSetNullRequired{}}, {odDiffOwner{}, odDiffPet{}},
+		{odM2M{}, odM2M2{}}, {odSetNullRequired{}, odSetNullTarget{}}, {odDiffOwner{}, odDiffPet{}},
 		{defaultBool{}}, {defaultNumber{}}, {defaultFuncNumber{}}, {optionalEnum{}}, {optionalFK{}}, {optionalBytes{}}, {optionalTime{}},
 		{optionalJSONStruct{}},
 		{nsOrder{}, nsOrderStatus{}}, {longTable{}}, {longDerivedTableAndSoOnAndSoOnUntilTheNameIsLongerThanTheCapAllowsThing{}},
@@ -1847,11 +1848,15 @@ func (odM2MInv2) Edges() []schema.Edge {
 	return []schema.Edge{edge.From("others", odM2MInv.Type).Ref("peers").OnDelete(edge.Cascade)}
 }
 
+// odSetNullRequired's key to odSetNullTarget is NOT NULL: a key to its own
+// schema would be NULL-able, as in ent.
 type odSetNullRequired struct{ schema.Schema }
 
 func (odSetNullRequired) Edges() []schema.Edge {
-	return []schema.Edge{edge.To("parent", odSetNullRequired.Type).Unique().Required().OnDelete(edge.SetNull)}
+	return []schema.Edge{edge.To("parent", odSetNullTarget.Type).Unique().Required().OnDelete(edge.SetNull)}
 }
+
+type odSetNullTarget struct{ schema.Schema }
 
 type odSetNullField struct{ schema.Schema }
 
@@ -1891,7 +1896,7 @@ func TestOnDelete(t *testing.T) {
 	}{
 		{"45 many-to-many", []schema.Interface{odM2M{}, odM2M2{}}, `schema odM2M: edge "peers": OnDelete has no foreign key to act on in a many-to-many edge; join rows are deleted with either end`},
 		{"45 many-to-many on the inverse only", []schema.Interface{odM2MInv{}, odM2MInv2{}}, `schema odM2MInv2: edge "others": OnDelete has no foreign key to act on in a many-to-many edge; join rows are deleted with either end`},
-		{"46 required", []schema.Interface{odSetNullRequired{}}, `schema odSetNullRequired: edge "parent": SET NULL needs a NULL-able foreign key`},
+		{"46 required", []schema.Interface{odSetNullRequired{}, odSetNullTarget{}}, `schema odSetNullRequired: edge "parent": SET NULL needs a NULL-able foreign key`},
 		{"47 pair differs", []schema.Interface{odDiffOwner{}, odDiffPet{}}, `schema odDiffPet: edge "owner": OnDelete CASCADE differs from edge "pets"'s RESTRICT on odDiffOwner`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -1938,8 +1943,11 @@ func TestOnDelete(t *testing.T) {
 			}
 		}
 	})
-	t.Run("unset stays empty", func(t *testing.T) {
-		if got := mustBuild(t, Owner{}, Pet{}).Entity("Owner").Edges[0].Rel.OnDelete; got != "" {
+	t.Run("unset is SET NULL on a NULL-able key and none on a NOT NULL one", func(t *testing.T) {
+		if got := mustBuild(t, Owner{}, Pet{}).Entity("Owner").Edges[0].Rel.OnDelete; got != "SET NULL" {
+			t.Fatalf("got %q", got)
+		}
+		if got := mustBuild(t, dodReq{}, dodReqPet{}).Entity("dodReq").Edges[0].Rel.OnDelete; got != "" {
 			t.Fatalf("got %q", got)
 		}
 	})
@@ -1952,7 +1960,7 @@ func TestOnDelete(t *testing.T) {
 			t.Fatalf("got\n%s", b.String())
 		}
 		b.Reset()
-		_ = Describe(&b, mustBuild(t, Owner{}, Pet{}), false)
+		_ = Describe(&b, mustBuild(t, dodReq{}, dodReqPet{}), false)
 		if strings.Contains(b.String(), "on delete") {
 			t.Fatalf("an unset action is shown:\n%s", b.String())
 		}
@@ -2163,6 +2171,225 @@ func TestUnexportedName(t *testing.T) {
 	} {
 		if got := unexportedName(ident); got != want {
 			t.Errorf("unexportedName(%q) = %q, want %q", ident, got, want)
+		}
+	}
+}
+
+// ukUser and ukProfile are a one-to-one pair whose key, in the inverse's
+// table as in ent, is bound to a field; ukNode a one-to-one edge to its own
+// schema bound to a field; and ukLine a many-to-one edge to ukInvoice bound
+// to a field.
+type ukUser struct{ schema.Schema }
+
+func (ukUser) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("profile", ukProfile.Type).Unique()}
+}
+
+type ukProfile struct{ schema.Schema }
+
+func (ukProfile) Fields() []schema.Field {
+	return []schema.Field{field.Int64("owner_id").Optional().Nillable()}
+}
+func (ukProfile) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("owner", ukUser.Type).Ref("profile").Unique().Field("owner_id")}
+}
+
+type ukNode struct{ schema.Schema }
+
+func (ukNode) Fields() []schema.Field {
+	return []schema.Field{field.Int64("next_id").Optional().Nillable()}
+}
+func (ukNode) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("next", ukNode.Type).Unique().Field("next_id")}
+}
+
+type ukLine struct{ schema.Schema }
+
+func (ukLine) Fields() []schema.Field {
+	return []schema.Field{field.Int64("invoice_id").Optional().Nillable()}
+}
+func (ukLine) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("invoice", ukInvoice.Type).Unique().Field("invoice_id")}
+}
+
+type ukInvoice struct{ schema.Schema }
+
+// Every one-to-one key column is unique, implicit or bound, as ent's fkColumn
+// makes it; a many-to-one key is not.
+func TestOneToOneKeyIsUnique(t *testing.T) {
+	g := mustBuild(t, ukUser{}, ukProfile{}, ukNode{}, ukLine{}, ukInvoice{})
+	for _, c := range []struct {
+		entity, field string
+		unique        bool
+	}{
+		{"ukProfile", "owner_id", true},
+		{"ukNode", "next_id", true},
+		{"ukLine", "invoice_id", false},
+	} {
+		if f := g.Entity(c.entity).Field(c.field); f == nil || f.Unique != c.unique {
+			t.Errorf("%s.%s: got %+v, want Unique %v", c.entity, c.field, f, c.unique)
+		}
+	}
+}
+
+// dodOwner and dodPet are a one-to-many pair with a NULL-able key, dodReq and
+// dodReqPet one with a NOT NULL key, and dodM2M and dodM2M2 a many-to-many
+// pair; none sets OnDelete.
+type dodOwner struct{ schema.Schema }
+
+func (dodOwner) Edges() []schema.Edge { return []schema.Edge{edge.To("pets", dodPet.Type)} }
+
+type dodPet struct{ schema.Schema }
+
+func (dodPet) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("owner", dodOwner.Type).Ref("pets").Unique()}
+}
+
+type dodReq struct{ schema.Schema }
+
+func (dodReq) Edges() []schema.Edge { return []schema.Edge{edge.To("pets", dodReqPet.Type)} }
+
+type dodReqPet struct{ schema.Schema }
+
+func (dodReqPet) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("owner", dodReq.Type).Ref("pets").Unique().Required()}
+}
+
+type dodM2M struct{ schema.Schema }
+
+func (dodM2M) Edges() []schema.Edge { return []schema.Edge{edge.To("peers", dodM2M2.Type)} }
+
+type dodM2M2 struct{ schema.Schema }
+
+func (dodM2M2) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("others", dodM2M.Type).Ref("peers")}
+}
+
+// With no OnDelete, a NULL-able key is SET NULL and a NOT NULL one has none
+// (NO ACTION), as ent's deleteAction; an explicit OnDelete wins, and a
+// many-to-many relation has no action.
+func TestDefaultOnDelete(t *testing.T) {
+	g := mustBuild(t, dodOwner{}, dodPet{}, dodReq{}, dodReqPet{}, dodM2M{}, dodM2M2{}, odOwner{}, odPet{})
+	for _, c := range []struct{ entity, want string }{
+		{"dodOwner", "SET NULL"},
+		{"dodPet", "SET NULL"},
+		{"dodReq", ""},
+		{"dodReqPet", ""},
+		{"odOwner", "CASCADE"},
+		{"odPet", "CASCADE"},
+		{"dodM2M", ""},
+		{"dodM2M2", ""},
+	} {
+		if got := g.Entity(c.entity).Edges[0].Rel.OnDelete; got != c.want {
+			t.Errorf("%s: got %q, want %q", c.entity, got, c.want)
+		}
+	}
+}
+
+// reqSelf is a tree whose parent is Required, and reqSelfSetNull a Required
+// edge to its own schema with OnDelete(SetNull).
+type reqSelf struct{ schema.Schema }
+
+func (reqSelf) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("children", reqSelf.Type).From("parent").Unique().Required()}
+}
+
+type reqSelfSetNull struct{ schema.Schema }
+
+func (reqSelfSetNull) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("parent", reqSelfSetNull.Type).Unique().Required().OnDelete(edge.SetNull)}
+}
+
+// A Required edge to its own schema keeps its implicit key NULL-able, as
+// ent's and old velox's tables do (n != e.Type), so its default is SET NULL;
+// the edge stays Required.
+func TestRequiredSelfKeyIsNullable(t *testing.T) {
+	g := mustBuild(t, reqSelf{}, reqSelfSetNull{})
+	e := g.Entity("reqSelf")
+	if f := e.Field("req_self_children"); f == nil || !f.Optional || !f.Nillable || !f.Pointer {
+		t.Fatalf("req_self_children %+v", f)
+	}
+	for _, ed := range e.Edges {
+		if ed.Rel.OnDelete != "SET NULL" {
+			t.Errorf("%s: got %q, want SET NULL", ed.Name, ed.Rel.OnDelete)
+		}
+	}
+	if p := e.Edge("parent"); !p.Required {
+		t.Errorf("parent is not Required: %+v", p)
+	}
+	if got := g.Entity("reqSelfSetNull").Edges[0].Rel.OnDelete; got != "SET NULL" {
+		t.Errorf("reqSelfSetNull: got %q", got)
+	}
+	for _, d := range allDialects {
+		s := tables(t, d, reqSelf{})
+		if c := column(t, table(t, s, e.Table), "req_self_children"); !c.Nullable {
+			t.Errorf("%v: req_self_children is NOT NULL", d)
+		}
+	}
+}
+
+// noaOwner and noaPet are a one-to-many pair with a NULL-able key that sets
+// NoAction; noaM2M and noaM2M2 a many-to-many pair that sets it.
+type noaOwner struct{ schema.Schema }
+
+func (noaOwner) Edges() []schema.Edge { return []schema.Edge{edge.To("pets", noaPet.Type)} }
+
+type noaPet struct{ schema.Schema }
+
+func (noaPet) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("owner", noaOwner.Type).Ref("pets").Unique().OnDelete(edge.NoAction)}
+}
+
+type noaM2M struct{ schema.Schema }
+
+func (noaM2M) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("peers", noaM2M2.Type).OnDelete(edge.NoAction)}
+}
+
+type noaM2M2 struct{ schema.Schema }
+
+func (noaM2M2) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("others", noaM2M.Type).Ref("peers")}
+}
+
+// An explicit NoAction is not overwritten by the default: the model keeps it,
+// describe shows it, and the database model has migrate's NO ACTION, "",
+// which renders no ON DELETE clause.
+func TestNoAction(t *testing.T) {
+	g := mustBuild(t, noaOwner{}, noaPet{})
+	for _, n := range []string{"noaOwner", "noaPet"} {
+		if got := g.Entity(n).Edges[0].Rel.OnDelete; got != "NO ACTION" {
+			t.Errorf("%s: got %q", n, got)
+		}
+	}
+	var b bytes.Buffer
+	if err := Describe(&b, g, false); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(b.String(), "on delete NO ACTION") {
+		t.Errorf("describe:\n%s", b.String())
+	}
+	for _, d := range allDialects {
+		fks := table(t, tables(t, d, noaOwner{}, noaPet{}), "noa_pets").ForeignKeys
+		if len(fks) != 1 || fks[0].OnDelete != "" {
+			t.Errorf("%v: %+v", d, fks)
+		}
+	}
+	_, err := build(t, noaM2M{}, noaM2M2{})
+	if err == nil || !strings.Contains(err.Error(), "OnDelete has no foreign key to act on in a many-to-many edge") {
+		t.Errorf("many-to-many: got %v", err)
+	}
+}
+
+// The bound one-to-one key's unique index has ent's name for a unique
+// column: <table>_<column>_key, the column on MySQL.
+func TestOneToOneKeyIndex(t *testing.T) {
+	for d, want := range map[velox.Dialect]string{velox.Postgres: "uk_profiles_owner_id_key", velox.MySQL: "owner_id", velox.SQLite: "uk_profiles_owner_id_key"} {
+		ixs := table(t, tables(t, d, ukUser{}, ukProfile{}), "uk_profiles").Indexes
+		if !slices.ContainsFunc(ixs, func(ix migrate.Index) bool {
+			return ix.Name == want && ix.Unique && slices.Equal(ix.Columns, []string{"owner_id"})
+		}) {
+			t.Errorf("%v: %+v, want unique %s", d, ixs, want)
 		}
 	}
 }

@@ -20,7 +20,7 @@ CREATE TABLE "users" (
   "created_at" timestamp with time zone NOT NULL,
   "mentor_id" bigint,
   CONSTRAINT "users_pkey" PRIMARY KEY ("id"),
-  CONSTRAINT "user_mentor" FOREIGN KEY ("mentor_id") REFERENCES "users" ("id"),
+  CONSTRAINT "user_mentor" FOREIGN KEY ("mentor_id") REFERENCES "users" ("id") ON DELETE SET NULL,
   CONSTRAINT "users_orgs_users" FOREIGN KEY ("org_id") REFERENCES "orgs" ("id")
 );
 CREATE INDEX "users_by_name" ON "users" ("name");

@@ -18,6 +18,7 @@ import (
 	"github.com/syssam/velox2/internal/gen/loadjson"
 	"github.com/syssam/velox2/migrate"
 	"github.com/syssam/velox2/schema"
+	"github.com/syssam/velox2/schema/edge"
 	"github.com/syssam/velox2/schema/field"
 )
 
@@ -605,5 +606,67 @@ func TestMigrateMySQLRowLimit(t *testing.T) {
 	var a, b, c int
 	if err := db.QueryRow("SELECT CHAR_LENGTH(`a`), CHAR_LENGTH(`b`), LENGTH(`c`) FROM `row_limits`").Scan(&a, &b, &c); err != nil || a != 8165 || b != 8164 || c != 201 {
 		t.Errorf("lengths %d %d %d, %v", a, b, c, err)
+	}
+}
+
+// NaTeam has members, whose NULL-able key sets NoAction, and coaches, whose
+// NULL-able key sets nothing: SET NULL, as ent's default.
+type NaTeam struct{ schema.Schema }
+
+func (NaTeam) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("members", NaMember.Type), edge.To("coached", NaMember.Type)}
+}
+
+type NaMember struct{ schema.Schema }
+
+func (NaMember) Edges() []schema.Edge {
+	return []schema.Edge{
+		edge.From("team", NaTeam.Type).Ref("members").Unique().OnDelete(edge.NoAction),
+		edge.From("coach", NaTeam.Type).Ref("coached").Unique(),
+	}
+}
+
+// TestDriftNoAction: a database whose keys ent wrote, ON DELETE NO ACTION
+// spelled out and ON DELETE SET NULL, has no drift from a schema whose
+// edges set NoAction and nothing.
+func TestDriftNoAction(t *testing.T) {
+	for _, d := range []velox.Dialect{velox.Postgres, velox.MySQL} {
+		t.Run(d.String(), func(t *testing.T) {
+			g, err := gen.Build(marshal(NaTeam{}, NaMember{}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			model, err := gen.Tables(g, d)
+			if err != nil {
+				t.Fatal(err)
+			}
+			db, _ := freshDB(t, d)
+			fsys := fromDir(t, d, model)
+			mustUp(t, db, fsys)
+			members, ok := model.Table(migrate.TableRef{Name: "na_members"})
+			if !ok || len(members.ForeignKeys) != 2 {
+				t.Fatalf("na_members %+v", members)
+			}
+			q, drop := `"`, "DROP CONSTRAINT"
+			if d == velox.MySQL {
+				q, drop = "`", "DROP FOREIGN KEY"
+			}
+			for _, fk := range members.ForeignKeys {
+				act := map[string]string{"": "NO ACTION", "SET NULL": "SET NULL"}[fk.OnDelete]
+				if act == "" {
+					t.Fatalf("%s: OnDelete %q", fk.Name, fk.OnDelete)
+				}
+				mustExec(t, db, fmt.Sprintf("ALTER TABLE %[1]sna_members%[1]s %[2]s %[1]s%[3]s%[1]s", q, drop, fk.Name))
+				mustExec(t, db, fmt.Sprintf("ALTER TABLE %[1]sna_members%[1]s ADD CONSTRAINT %[1]s%[2]s%[1]s FOREIGN KEY (%[1]s%[3]s%[1]s) REFERENCES %[1]sna_teams%[1]s (%[1]sid%[1]s) ON DELETE %[4]s",
+					q, fk.Name, fk.Columns[0], act))
+			}
+			r, err := migrate.Drift(context.Background(), db, model)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(r.Changes) > 0 {
+				t.Errorf("drift:\n%s", reportText(r))
+			}
+		})
 	}
 }

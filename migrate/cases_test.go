@@ -22,7 +22,7 @@ import (
 )
 
 // The base schema every case edits: organisations have users, users write
-// posts and have a mentor.
+// posts and have a mentor, a tree whose key is mentor_id.
 
 type caseStatus string
 
@@ -51,7 +51,7 @@ func (User) Fields() []schema.Field {
 func (User) Edges() []schema.Edge {
 	return []schema.Edge{
 		edge.From("org", Org.Type).Ref("users").Unique().Required().Field("org_id"),
-		edge.To("mentor", User.Type).Unique().Field("mentor_id").StorageKey(edge.Symbol("user_mentor")),
+		edge.To("mentees", User.Type).From("mentor").Unique().Field("mentor_id").StorageKey(edge.Symbol("user_mentor")),
 		edge.To("posts", Post.Type),
 	}
 }

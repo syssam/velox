@@ -3,6 +3,7 @@ package velox
 import (
 	"fmt"
 	"reflect"
+	"strings"
 	"unsafe"
 )
 
@@ -14,6 +15,10 @@ import (
 //   - For an update or Save, the value of every Set assignment; not Add or Sub.
 //   - A nil pointer, or a nil value, is never checked, because it is the
 //     absence of a value; a non-nil pointer is checked as its element.
+//
+// It is also a nil key of a column with a RequiredEdge (see ColumnDesc), in an
+// insert or a Set assignment: its Err says missing required edge
+// "<Type>.<edge>", as ent's does.
 type ValidationError struct {
 	Entity string // the Go type, e.g. "gen.User"
 	Field  string // the Go field name
@@ -63,9 +68,17 @@ func ValidateSet[E any, PE Entity[E]](set ...Setter[E]) error {
 	return validateSet(m.info, as)
 }
 
-// validateRow checks the row of in at p: every column in cols whose value is
+// validateRow checks the row of in at p: it refuses a nil key of a
+// RequiredEdge among cols, then checks every column in cols whose value is
 // not a nil pointer. Non-generic.
 func validateRow(in *EntityInfo, p unsafe.Pointer, cols []int) error {
+	if in.required {
+		for _, c := range cols {
+			if in.Columns[c].RequiredEdge != "" && isNil(in.kit.value(p, c)) {
+				return missingEdge(in, c)
+			}
+		}
+	}
 	if in.check == nil {
 		return nil
 	}
@@ -77,9 +90,16 @@ func validateRow(in *EntityInfo, p unsafe.Pointer, cols []int) error {
 	return nil
 }
 
-// validateSet refuses an Immutable column among set, then checks every
-// AssignSet value that is not nil.
+// validateSet refuses an Immutable column among set, and a nil AssignSet of
+// a RequiredEdge's key, then checks every AssignSet value that is not nil.
 func validateSet(in *EntityInfo, set []Assignment) error {
+	if in.required {
+		for _, a := range set {
+			if a.Op == AssignSet && in.Columns[a.Column].RequiredEdge != "" && isNil(a.Value) {
+				return missingEdge(in, a.Column)
+			}
+		}
+	}
 	if in.immutable {
 		for _, a := range set {
 			if c := &in.Columns[a.Column]; c.Immutable {
@@ -99,6 +119,23 @@ func validateSet(in *EntityInfo, set []Assignment) error {
 		}
 	}
 	return nil
+}
+
+// missingEdge is the error of a nil key of column col's RequiredEdge, in
+// ent's words: missing required edge "Ticket.parent".
+func missingEdge(in *EntityInfo, col int) error {
+	c := &in.Columns[col]
+	typ := in.Name[strings.LastIndexByte(in.Name, '.')+1:]
+	return &ValidationError{Entity: in.Name, Field: c.Field, Err: fmt.Errorf("missing required edge %q", typ+"."+c.RequiredEdge)}
+}
+
+// isNil reports whether v is nil or a nil pointer.
+func isNil(v any) bool {
+	if v == nil {
+		return true
+	}
+	rv := reflect.ValueOf(v)
+	return rv.Kind() == reflect.Pointer && rv.IsNil()
 }
 
 // checkValue runs column col's validators on v, unless v is nil or a nil

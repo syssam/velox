@@ -28,10 +28,11 @@ func (Sample) Fields() []schema.Field {
 	}
 }
 
-// Edges returns Lines, to-many, and Parent, a sample's own to-one.
+// Edges returns Lines, to-many, and Children and Parent, a tree whose key is
+// parent_id.
 func (Sample) Edges() []schema.Edge {
 	return []schema.Edge{
 		edge.To("lines", Line.Type),
-		edge.To("parent", Sample.Type).Unique().Field("parent_id"),
+		edge.To("children", Sample.Type).From("parent").Unique().Field("parent_id"),
 	}
 }

@@ -54,7 +54,7 @@ func TestRenderOnlineUnits(t *testing.T) {
 			`CREATE INDEX CONCURRENTLY "posts_reviewer_id" ON "posts" ("reviewer_id")`,
 		}, {
 			`ALTER TABLE "posts" DROP CONSTRAINT IF EXISTS "posts_users_reviewer"`,
-			`ALTER TABLE "posts" ADD CONSTRAINT "posts_users_reviewer" FOREIGN KEY ("reviewer_id") REFERENCES "users" ("id") NOT VALID`,
+			`ALTER TABLE "posts" ADD CONSTRAINT "posts_users_reviewer" FOREIGN KEY ("reviewer_id") REFERENCES "users" ("id") ON DELETE SET NULL NOT VALID`,
 			`ALTER TABLE "posts" VALIDATE CONSTRAINT "posts_users_reviewer"`,
 		}},
 		"set-not-null": {{

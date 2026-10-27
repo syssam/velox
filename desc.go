@@ -93,6 +93,17 @@ type ColumnDesc struct {
 	// driver as it is. A pointer field is nullable without it; on a field of
 	// any other type it is refused.
 	Nullable bool
+	// RequiredEdge names the Required edge whose foreign key the column holds
+	// when that key is NULL-able, as velox-gen makes the key of an edge to
+	// the entity's own schema, so that the first row can have none. The
+	// database cannot refuse it unset, so velox does, as ent's create check
+	// does: Insert, InsertAll and an upsert refuse a row whose key is nil, and
+	// Update and Save refuse setting it to nil, with a *ValidationError
+	// `missing required edge "<Type>.<edge>"`, before anything is sent. Only
+	// the database's ON DELETE SET NULL clears it. velox-gen leaves it empty
+	// on a NOT NULL key, which the database enforces; on a column that cannot
+	// be NULL it is refused.
+	RequiredEdge string
 	// Encode and Decode are the column's codec, both or neither: with them,
 	// velox binds the bytes Encode returns for the field's value, and decodes
 	// what it reads with Decode, into a pointer to the field. velox-gen sets
@@ -212,7 +223,7 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 		return nil, err
 	}
 	cols := make([]ColumnInfo, len(d.columns))
-	anyImmutable := false
+	anyImmutable, anyRequired := false, false
 	for i, c := range d.columns {
 		off, ft, ok := fieldOf(v.addr(i), base, t.Size())
 		if !ok {
@@ -222,12 +233,15 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 		}
 		ci := ColumnInfo{Field: c.Field, Name: c.Name, Type: ft, Nullable: ft.Kind() == reflect.Pointer || c.Nullable,
 			HasDefault: c.Default != nil, DefaultFunc: c.DefaultFunc, UpdateDefault: c.UpdateDefault,
-			Immutable: c.Immutable, Sensitive: c.Sensitive, Codec: c.Encode != nil, encode: c.Encode, decode: c.Decode, off: off}
+			Immutable: c.Immutable, Sensitive: c.Sensitive, RequiredEdge: c.RequiredEdge, Codec: c.Encode != nil, encode: c.Encode, decode: c.Decode, off: off}
 		if (c.Encode == nil) != (c.Decode == nil) {
 			return fail(c.Field, "column %s has one of Encode and Decode; a codec needs both", c.Name)
 		}
 		if k := ft.Kind(); c.Nullable && k != reflect.Pointer && k != reflect.Slice && k != reflect.Map {
 			return fail(c.Field, "column %s says Nullable, and its field is a %v, which cannot be nil: make it a pointer", c.Name, ft)
+		}
+		if c.RequiredEdge != "" && !ci.Nullable {
+			return fail(c.Field, "column %s has a RequiredEdge, and cannot be NULL: the database refuses it unset", c.Name)
 		}
 		if c.Immutable && c.UpdateDefault != nil {
 			return fail(c.Field, "Immutable column %s has an UpdateDefault; every update would be refused", c.Field)
@@ -247,6 +261,7 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 		}
 		cols[i] = ci
 		anyImmutable = anyImmutable || c.Immutable
+		anyRequired = anyRequired || c.RequiredEdge != ""
 	}
 	inRange := func(i int) bool { return i >= 0 && i < len(cols) }
 	for _, k := range d.primaryKey {
@@ -291,7 +306,7 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 		rels[i] = &relation{name: r.name, many: strings.HasPrefix(rt.Name(), "Many["), off: off, typ: rt, ownerCol: r.ownerCol, targetCol: r.targetCol, through: r.through}
 	}
 	info = &EntityInfo{Name: name, Table: d.table, Schema: d.schema, Columns: cols, PrimaryKey: d.primaryKey, Tenant: d.tenant,
-		Indexes: d.indexes, rels: rels, immutable: anyImmutable, bidi: d.bidi}
+		Indexes: d.indexes, rels: rels, immutable: anyImmutable, required: anyRequired, bidi: d.bidi}
 	if err := validate(info); err != nil {
 		return nil, err
 	}

@@ -491,12 +491,17 @@ func (b *builder) foreignKey(n *node, s *edgeState) {
 		if c := s.column; c != "" && c != f.Column {
 			b.fail(31, n.ent.Name, edgeLoc(ed), "column %q differs from field %q's column %q", c, f.Name, f.Column)
 		}
+		if ed.Rel.Kind == "O2O" {
+			f.Unique = true // every one-to-one key is unique, as ent's fkColumn
+		}
 		b.bind(s, f.Name, f.Column)
 		return
 	}
 	switch {
 	case own && (s.pair == nil || s.pair.le.Field == ""):
-		b.implicit(n, s.target, s, le.Required, ed.Rel.Kind == "O2O", le.Immutable)
+		// A key to its own table is NULL-able even when the edge is Required,
+		// as in ent: the first row has none to reference.
+		b.implicit(n, s.target, s, le.Required && s.target != n, ed.Rel.Kind == "O2O", le.Immutable)
 	case ed.Rel.Kind == "O2M" && s.pair == nil:
 		// No edge on the target's side: the foreign key references n's ID.
 		b.implicit(s.target, n, s, false, false, false)
@@ -1053,7 +1058,8 @@ func (b *builder) validateSymbols(s *edgeState) {
 
 // onDeletes checks the actions of the foreign keys (rules 45-47) and gives both
 // edges of a relation its action: the one that is set, since a pair that sets
-// two must agree.
+// two must agree. With none set, a NULL-able key is SET NULL and a NOT NULL one
+// has none (NO ACTION), as ent's deleteAction.
 func (b *builder) onDeletes() {
 	for _, n := range b.nodes {
 		for _, s := range n.edges {
@@ -1069,6 +1075,9 @@ func (b *builder) onDeletes() {
 				case act != p.le.OnDelete && le.Inverse:
 					b.fail(47, n.ent.Name, edgeLoc(ed), "OnDelete %s differs from edge %q's %s on %s", act, p.le.Name, p.le.OnDelete, p.owner.ent.Name)
 				}
+			}
+			if act == "" && ed.Rel.Kind != "M2M" && !b.notNullable(s) {
+				act = "SET NULL"
 			}
 			ed.Rel.OnDelete = act
 			if le.OnDelete == "" {
@@ -1086,9 +1095,11 @@ func (b *builder) onDeletes() {
 }
 
 // notNullable reports whether the foreign key of the relation of s cannot be
-// NULL: either edge is Required, or the field that holds the key is not Nillable.
+// NULL: either edge is Required, unless the relation is to its own schema,
+// whose implicit key is NULL-able, or the field that holds the key is not
+// Nillable.
 func (b *builder) notNullable(s *edgeState) bool {
-	if s.le.Required || (s.pair != nil && s.pair.le.Required) {
+	if s.target != s.owner && (s.le.Required || (s.pair != nil && s.pair.le.Required)) {
 		return true
 	}
 	holder := s.owner

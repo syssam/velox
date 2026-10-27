@@ -23,8 +23,10 @@ func TestGeneratedEntities(t *testing.T) {
 		velox.CheckRelation(testmodel.Items.Invoice),
 		velox.CheckRelation(testmodel.Lines.Sample),
 		velox.CheckRelation(testmodel.Samples.Lines),
+		velox.CheckRelation(testmodel.Samples.Children),
 		velox.CheckRelation(testmodel.Samples.Parent),
 		velox.CheckRelation(testmodel.Tickets.Invoice),
+		velox.CheckRelation(testmodel.Tickets.Children),
 		velox.CheckRelation(testmodel.Tickets.Parent),
 	} {
 		if err != nil {

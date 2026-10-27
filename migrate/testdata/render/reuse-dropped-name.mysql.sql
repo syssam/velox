@@ -7,6 +7,6 @@ ALTER TABLE `users` DROP FOREIGN KEY `user_mentor`;
 ALTER TABLE `users` RENAME INDEX `user_mentor` TO `shared_fk`;
 -- review: add-index: adds index users.shared_idx; building it scans the table
 ALTER TABLE `users` ADD INDEX `shared_idx` (`created_at`), ALGORITHM=INPLACE, LOCK=NONE;
-ALTER TABLE `users` ADD CONSTRAINT `shared_fk` FOREIGN KEY (`mentor_id`) REFERENCES `users` (`id`);
+ALTER TABLE `users` ADD CONSTRAINT `shared_fk` FOREIGN KEY (`mentor_id`) REFERENCES `users` (`id`) ON DELETE SET NULL;
 -- review: drop-table: drops table posts and its rows
 DROP TABLE `posts`;

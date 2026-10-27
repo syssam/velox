@@ -31,7 +31,7 @@ func (User) Indexes() []schema.Index {
 // edge to posts, whose foreign key's 66-byte name ent caps.
 func (User) Edges() []schema.Edge {
 	return []schema.Edge{
-		edge.To("posts", Post.Type).StorageKey(edge.Column("user_posts")).OnDelete(edge.SetNull),
-		edge.To("drafts_written_but_never_published_by_this_user_so_far", Post.Type).OnDelete(edge.SetNull),
+		edge.To("posts", Post.Type).StorageKey(edge.Column("user_posts")),
+		edge.To("drafts_written_but_never_published_by_this_user_so_far", Post.Type),
 	}
 }

@@ -243,6 +243,15 @@ func (s *entState) field(e *Entity, i int, f *Field) *OutField {
 	if reserved[f.GoName] {
 		s.fail(where, "its Go name %s is reserved: it is a method of the entity", f.GoName)
 	}
+	if e != nil && f.Nillable {
+		// A Required edge whose key is NULL-able: velox refuses it nil, as
+		// ent's create check does, since the database cannot.
+		for _, ed := range e.Edges {
+			if ed.Required && ed.Field == f.Name && ownFK(ed) {
+				o.RequiredEdge = ed.Name
+			}
+		}
+	}
 	elem, kind := s.elemType(f, where)
 	o.ElemType = elem
 	// Only Nillable makes a pointer: a Default never changes the Go type.

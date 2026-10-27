@@ -198,7 +198,7 @@ type Edge struct {
 	Required            bool   // the foreign key may not be NULL
 	Immutable           bool   // the edge cannot change after create
 	Field               string // the foreign-key field this edge binds
-	OnDelete            string // "CASCADE", "SET NULL" or "RESTRICT"; "" is the dialect's default
+	OnDelete            string // "CASCADE", "SET NULL", "RESTRICT" or "NO ACTION"; "" is unset
 	Table               string // the join table or the foreign-key table
 	Columns             []string
 	Symbols             []string

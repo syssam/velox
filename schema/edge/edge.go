@@ -50,21 +50,24 @@ func newEdge(name string, t any, inverse bool, pc uintptr) *desc.Edge {
 // row it references is deleted.
 type Action string
 
-// The actions OnDelete takes. An edge that sets none has the dialect's default,
-// NO ACTION.
+// The actions OnDelete takes. An edge that sets none is SET NULL when its key
+// is NULL-able and NO ACTION otherwise, as in ent. NoAction differs from
+// Restrict on PostgreSQL and SQLite, where it may be deferred to the end of
+// the transaction.
 const (
 	Cascade  Action = "CASCADE"
 	SetNull  Action = "SET NULL"
 	Restrict Action = "RESTRICT"
+	NoAction Action = "NO ACTION"
 )
 
 // setOnDelete records a on d, or the misuse.
 func setOnDelete(d *desc.Edge, a Action) {
 	switch a {
-	case Cascade, SetNull, Restrict:
+	case Cascade, SetNull, Restrict, NoAction:
 		d.OnDelete = string(a)
 	default:
-		d.Errs = append(d.Errs, fmt.Errorf("OnDelete(%q) is not edge.Cascade, edge.SetNull or edge.Restrict", string(a)))
+		d.Errs = append(d.Errs, fmt.Errorf("OnDelete(%q) is not edge.Cascade, edge.SetNull, edge.Restrict or edge.NoAction", string(a)))
 	}
 }
 
@@ -130,8 +133,9 @@ func (b *AssocBuilder) StorageKey(opts ...StorageOption) *AssocBuilder {
 
 // OnDelete sets what the database does to the rows holding the edge's foreign
 // key when the row they reference is deleted. SetNull needs a NULL-able key:
-// the edge not Required, and its field Nillable. A many-to-many edge has no
-// foreign key to act on. Both edges of a relation must agree.
+// the edge not Required, and its field Nillable. With none, a NULL-able key is
+// SET NULL and a NOT NULL one NO ACTION. A many-to-many edge has no foreign
+// key to act on. Both edges of a relation must agree.
 func (b *AssocBuilder) OnDelete(a Action) *AssocBuilder { setOnDelete(b.d, a); return b }
 
 // Comment sets the edge's documentation.

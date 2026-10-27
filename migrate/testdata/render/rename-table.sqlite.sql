@@ -19,7 +19,7 @@ CREATE TABLE "velox_new_accounts" (
   "created_at" datetime NOT NULL,
   "mentor_id" integer,
   CONSTRAINT "accounts_orgs_users" FOREIGN KEY ("org_id") REFERENCES "orgs" ("id"),
-  CONSTRAINT "user_mentor" FOREIGN KEY ("mentor_id") REFERENCES "accounts" ("id"),
+  CONSTRAINT "user_mentor" FOREIGN KEY ("mentor_id") REFERENCES "accounts" ("id") ON DELETE SET NULL,
   CONSTRAINT "accounts_role_check" CHECK ("role" IN ('admin', 'viewer')),
   CONSTRAINT "accounts_status_check" CHECK ("status" IN ('active', 'banned', 'pending'))
 );

@@ -14,21 +14,22 @@ const _ = velox.GeneratedCodeIsVersion6
 
 // Sample is the entity of schema Sample.
 type Sample struct {
-	ID        int64             `json:"id,omitempty"`
-	Name      string            `json:"name,omitempty"`
-	Status    kind.Status       `json:"status,omitempty"`
-	Prev      *kind.Status      `json:"prev,omitempty"`
-	Price     kind.Cents        `json:"price,omitempty"`
-	Ratio     *float64          `json:"ratio,omitempty"`
-	Flag      bool              `json:"flag,omitempty"`
-	MaybeFlag *bool             `json:"maybe_flag,omitempty"`
-	When      time.Time         `json:"when,omitzero"`
-	MaybeWhen *time.Time        `json:"maybe_when,omitempty"`
-	Blob      []byte            `json:"blob,omitempty"`
-	ParentID  *int64            `json:"parent_id,omitempty"`
-	Score     kind.Score        `json:"score,omitempty"`
-	Lines     velox.Many[Line]  `json:"lines,omitzero"`
-	Parent    velox.One[Sample] `json:"parent,omitzero"`
+	ID        int64              `json:"id,omitempty"`
+	Name      string             `json:"name,omitempty"`
+	Status    kind.Status        `json:"status,omitempty"`
+	Prev      *kind.Status       `json:"prev,omitempty"`
+	Price     kind.Cents         `json:"price,omitempty"`
+	Ratio     *float64           `json:"ratio,omitempty"`
+	Flag      bool               `json:"flag,omitempty"`
+	MaybeFlag *bool              `json:"maybe_flag,omitempty"`
+	When      time.Time          `json:"when,omitzero"`
+	MaybeWhen *time.Time         `json:"maybe_when,omitempty"`
+	Blob      []byte             `json:"blob,omitempty"`
+	ParentID  *int64             `json:"parent_id,omitempty"`
+	Score     kind.Score         `json:"score,omitempty"`
+	Lines     velox.Many[Line]   `json:"lines,omitzero"`
+	Children  velox.Many[Sample] `json:"children,omitzero"`
+	Parent    velox.One[Sample]  `json:"parent,omitzero"`
 }
 
 // Samples holds the typed handles of Sample's columns and relations.
@@ -47,6 +48,7 @@ var Samples = struct {
 	ParentID  velox.NullNumberCol[Sample, int64]
 	Score     velox.NumberCol[Sample, kind.Score]
 	Lines     velox.Rel[Sample, Line]
+	Children  velox.Rel[Sample, Sample]
 	Parent    velox.Rel[Sample, Sample]
 }{
 	ID:        velox.NumberCol[Sample, int64]{I: 0},
@@ -63,7 +65,8 @@ var Samples = struct {
 	ParentID:  velox.NullNumberCol[Sample, int64]{I: 11},
 	Score:     velox.NumberCol[Sample, kind.Score]{I: 12},
 	Lines:     velox.Rel[Sample, Line]{I: 0},
-	Parent:    velox.Rel[Sample, Sample]{I: 1},
+	Children:  velox.Rel[Sample, Sample]{I: 1},
+	Parent:    velox.Rel[Sample, Sample]{I: 2},
 }
 
 var sampleMeta velox.MetaOnce[Sample]
@@ -93,6 +96,7 @@ func sampleDesc() velox.Desc[Sample] {
 		Tenant:     -1,
 		Edges: []velox.EdgeDesc{
 			velox.EdgeTo[Line]("Lines", 0, 1),
+			velox.EdgeTo[Sample]("Children", 0, 11),
 			velox.EdgeTo[Sample]("Parent", 11, 0),
 		},
 		Addr: func(x *Sample, i int) any {
@@ -131,6 +135,8 @@ func sampleDesc() velox.Desc[Sample] {
 			case 0:
 				return &x.Lines
 			case 1:
+				return &x.Children
+			case 2:
 				return &x.Parent
 			}
 			return nil

@@ -30,6 +30,7 @@ type EntityInfo struct {
 	kit        *kit                       // set by MetaOnce.Load
 	check      func(col int, v any) error // Desc.Check; nil when the entity has no validators
 	immutable  bool                       // some column is Immutable
+	required   bool                       // some column has a RequiredEdge
 	bidi       bool                       // Desc.Bidi: a link is two rows, (a, b) and (b, a)
 	hooks      []hookFn                   // the Hooks method's, outermost first
 
@@ -69,6 +70,10 @@ type ColumnInfo struct {
 	UpdateDefault func() any
 	Immutable     bool // an update may not assign the column
 	Sensitive     bool // the column holds a secret (velox logs no values)
+	// RequiredEdge is ColumnDesc.RequiredEdge: the Required edge whose
+	// NULL-able key the column holds, which a write may not leave nil; "" when
+	// none.
+	RequiredEdge string
 	// Codec says the column's value is encoded: its ColumnDesc gave Encode
 	// and Decode, as velox-gen does for every json field. The package
 	// documentation's JSON fields section says how such a column binds and reads.

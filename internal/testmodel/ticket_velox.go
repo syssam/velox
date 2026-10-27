@@ -21,6 +21,7 @@ type Ticket struct {
 	InvoiceID int64              `json:"invoice_id,omitempty"`
 	ParentID  *int64             `json:"parent_id,omitempty"`
 	Invoice   velox.One[Invoice] `json:"invoice,omitzero"`
+	Children  velox.Many[Ticket] `json:"children,omitzero"`
 	Parent    velox.One[Ticket]  `json:"parent,omitzero"`
 }
 
@@ -35,6 +36,7 @@ var Tickets = struct {
 	InvoiceID velox.NumberCol[Ticket, int64]
 	ParentID  velox.NullNumberCol[Ticket, int64]
 	Invoice   velox.Rel[Ticket, Invoice]
+	Children  velox.Rel[Ticket, Ticket]
 	Parent    velox.Rel[Ticket, Ticket]
 }{
 	ID:        velox.NumberCol[Ticket, int64]{I: 0},
@@ -46,7 +48,8 @@ var Tickets = struct {
 	InvoiceID: velox.NumberCol[Ticket, int64]{I: 6},
 	ParentID:  velox.NullNumberCol[Ticket, int64]{I: 7},
 	Invoice:   velox.Rel[Ticket, Invoice]{I: 0},
-	Parent:    velox.Rel[Ticket, Ticket]{I: 1},
+	Children:  velox.Rel[Ticket, Ticket]{I: 1},
+	Parent:    velox.Rel[Ticket, Ticket]{I: 2},
 }
 
 var ticketMeta velox.MetaOnce[Ticket]
@@ -76,6 +79,7 @@ func ticketDesc() velox.Desc[Ticket] {
 		},
 		Edges: []velox.EdgeDesc{
 			velox.EdgeTo[Invoice]("Invoice", 6, 0),
+			velox.EdgeTo[Ticket]("Children", 0, 7),
 			velox.EdgeTo[Ticket]("Parent", 7, 0),
 		},
 		Addr: func(x *Ticket, i int) any {
@@ -104,6 +108,8 @@ func ticketDesc() velox.Desc[Ticket] {
 			case 0:
 				return &x.Invoice
 			case 1:
+				return &x.Children
+			case 2:
 				return &x.Parent
 			}
 			return nil

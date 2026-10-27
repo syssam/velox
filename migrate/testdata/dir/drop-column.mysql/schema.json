@@ -154,7 +154,8 @@
           },
           "ref_columns": [
             "id"
-          ]
+          ],
+          "on_delete": "SET NULL"
         },
         {
           "name": "users_orgs_users",

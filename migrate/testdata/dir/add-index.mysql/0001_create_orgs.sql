@@ -22,7 +22,7 @@ CREATE TABLE `users` (
   INDEX `user_mentor` (`mentor_id`),
   INDEX `users_by_name` (`name`),
   INDEX `users_orgs_users` (`org_id`),
-  CONSTRAINT `user_mentor` FOREIGN KEY (`mentor_id`) REFERENCES `users` (`id`),
+  CONSTRAINT `user_mentor` FOREIGN KEY (`mentor_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
   CONSTRAINT `users_orgs_users` FOREIGN KEY (`org_id`) REFERENCES `orgs` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 CREATE TABLE `posts` (

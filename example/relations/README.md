@@ -24,8 +24,8 @@ and `Field` names the column that holds the key:
 `OnDelete(edge.Cascade)` on `Post.author` records what the database does to a
 post when its author is deleted: delete it. The choices are `edge.Cascade`,
 `edge.SetNull` (the key must be NULL-able: the edge not `Required`, its field
-`Nillable`) and `edge.Restrict`; left unset, the dialect's default (NO ACTION)
-applies. Either edge of a relation may carry it, and two edges that both do must
+`Nillable`), `edge.Restrict` and `edge.NoAction`; left unset, a NULL-able key
+is SET NULL and a NOT NULL one NO ACTION, as in ent. Either edge of a relation may carry it, and two edges that both do must
 agree. velox-gen records the action, and `describe` shows it as `on delete
 CASCADE`; the migration planner applies it. A many-to-many edge has no foreign
 key, so it refuses `OnDelete`.

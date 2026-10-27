@@ -39,7 +39,8 @@
           },
           "ref_columns": [
             "id"
-          ]
+          ],
+          "on_delete": "SET NULL"
         }
       ],
       "collation": "utf8mb4_bin"
@@ -81,7 +82,8 @@
           },
           "ref_columns": [
             "id"
-          ]
+          ],
+          "on_delete": "SET NULL"
         }
       ],
       "collation": "utf8mb4_bin"
@@ -249,7 +251,8 @@
           },
           "ref_columns": [
             "id"
-          ]
+          ],
+          "on_delete": "SET NULL"
         },
         {
           "name": "users_orgs_users",

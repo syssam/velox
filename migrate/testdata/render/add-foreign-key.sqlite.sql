@@ -9,7 +9,7 @@ CREATE TABLE "velox_new_posts" (
   "status" text NOT NULL DEFAULT 'active',
   "reviewer_id" integer,
   CONSTRAINT "posts_users_posts" FOREIGN KEY ("author_id") REFERENCES "users" ("id") ON DELETE CASCADE,
-  CONSTRAINT "posts_users_reviewer" FOREIGN KEY ("reviewer_id") REFERENCES "users" ("id"),
+  CONSTRAINT "posts_users_reviewer" FOREIGN KEY ("reviewer_id") REFERENCES "users" ("id") ON DELETE SET NULL,
   CONSTRAINT "posts_status_check" CHECK ("status" IN ('active', 'banned', 'pending'))
 );
 INSERT INTO "velox_new_posts" ("id", "author_id", "title", "status", "reviewer_id") SELECT "id", "author_id", "title", "status", "reviewer_id" FROM "posts";

@@ -15,7 +15,7 @@ CREATE TABLE "users" (
   "logins" integer NOT NULL DEFAULT 0,
   "created_at" datetime NOT NULL,
   "mentor_id" integer,
-  CONSTRAINT "user_mentor" FOREIGN KEY ("mentor_id") REFERENCES "users" ("id"),
+  CONSTRAINT "user_mentor" FOREIGN KEY ("mentor_id") REFERENCES "users" ("id") ON DELETE SET NULL,
   CONSTRAINT "users_orgs_users" FOREIGN KEY ("org_id") REFERENCES "orgs" ("id"),
   CONSTRAINT "users_role_check" CHECK ("role" IN ('admin', 'viewer')),
   CONSTRAINT "users_status_check" CHECK ("status" IN ('active', 'banned', 'pending'))
@@ -36,12 +36,12 @@ CREATE INDEX "posts_author_id" ON "posts" ("author_id");
 CREATE TABLE "alphas" (
   "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
   "beta_id" integer,
-  CONSTRAINT "alphas_beta_beta" FOREIGN KEY ("beta_id") REFERENCES "beta" ("id")
+  CONSTRAINT "alphas_beta_beta" FOREIGN KEY ("beta_id") REFERENCES "beta" ("id") ON DELETE SET NULL
 );
 CREATE INDEX "alphas_beta_id" ON "alphas" ("beta_id");
 CREATE TABLE "beta" (
   "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
   "alpha_id" integer,
-  CONSTRAINT "beta_alphas_alpha" FOREIGN KEY ("alpha_id") REFERENCES "alphas" ("id")
+  CONSTRAINT "beta_alphas_alpha" FOREIGN KEY ("alpha_id") REFERENCES "alphas" ("id") ON DELETE SET NULL
 );
 CREATE INDEX "beta_alpha_id" ON "beta" ("alpha_id");

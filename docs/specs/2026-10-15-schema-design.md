@@ -116,7 +116,7 @@ A failure is a `*ValidationError{Entity, Field, Err}`.
 - `Required()` and `Field(fk)` bind an edge to a declared foreign-key field.
 - `StorageKey(...)` names the foreign-key column or join table.
 - Many-to-many edges use a join table.
-- `OnDelete(edge.Cascade|SetNull|Restrict)` on either edge of a one-to-many or one-to-one relation sets what the database does to the rows holding the foreign key *(note 2026-10-21, API plan 2)*. `SetNull` needs a NULL-able key, both edges of a pair must agree, and an M2M edge refuses it. It reaches `describe` and the migration planner, not the plugin model.
+- `OnDelete(edge.Cascade|SetNull|Restrict)` on either edge of a one-to-many or one-to-one relation sets what the database does to the rows holding the foreign key *(note 2026-10-21, API plan 2)*. `SetNull` needs a NULL-able key, both edges of a pair must agree, and an M2M edge refuses it. It reaches `describe` and the migration planner, not the plugin model. *(note 2026-10-26, hardening wave 2)* With no OnDelete, a NULL-able key is SET NULL and a NOT NULL one has none (NO ACTION), as ent's deleteAction; and every one-to-one key column is unique, implicit or bound, as ent's fkColumn. `edge.NoAction` spells NO ACTION out on a NULL-able key. An implicit key to its own schema is NULL-able even when the edge is Required, as in ent and old velox.
 
 The generated struct holds the edges as `velox.Many[T]` and `velox.One[T]`, with the semantics of Core §1: never loaded lazily, and the zero value means not loaded. `With`, `Has` and `HasWhere` use generated relation handles, `gen.Users.Posts`, a `velox.Rel[User, Post]`. How a relation names its target is in §2.
 

@@ -33,11 +33,12 @@ func (Ticket) Fields() []schema.Field {
 	}
 }
 
-// Edges returns Invoice and Parent, both to-one with their keys in the table.
+// Edges returns Invoice, to-one with its key in the table, and Children and
+// Parent, a tree whose key is parent_id.
 func (Ticket) Edges() []schema.Edge {
 	return []schema.Edge{
 		edge.To("invoice", Invoice.Type).Unique().Required().Field("invoice_id"),
-		edge.To("parent", Ticket.Type).Unique().Field("parent_id"),
+		edge.To("children", Ticket.Type).From("parent").Unique().Field("parent_id"),
 	}
 }
 

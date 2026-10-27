@@ -140,7 +140,7 @@ func TestRenderMySQLOrder(t *testing.T) {
 			"ALTER TABLE `users` DROP FOREIGN KEY `user_mentor`",
 			"ALTER TABLE `users` RENAME INDEX `user_mentor` TO `shared_fk`",
 			"ALTER TABLE `users` ADD INDEX `shared_idx` (`created_at`), ALGORITHM=INPLACE, LOCK=NONE",
-			"ALTER TABLE `users` ADD CONSTRAINT `shared_fk` FOREIGN KEY (`mentor_id`) REFERENCES `users` (`id`)",
+			"ALTER TABLE `users` ADD CONSTRAINT `shared_fk` FOREIGN KEY (`mentor_id`) REFERENCES `users` (`id`) ON DELETE SET NULL",
 			"DROP TABLE `posts`",
 		},
 		"on-delete-change": {
@@ -194,7 +194,7 @@ func TestRenderSQLiteRebuild(t *testing.T) {
   "logins" real NOT NULL DEFAULT 0,
   "created_at" datetime NOT NULL,
   "mentor_id" integer,
-  CONSTRAINT "user_mentor" FOREIGN KEY ("mentor_id") REFERENCES "users" ("id"),
+  CONSTRAINT "user_mentor" FOREIGN KEY ("mentor_id") REFERENCES "users" ("id") ON DELETE SET NULL,
   CONSTRAINT "users_orgs_users" FOREIGN KEY ("org_id") REFERENCES "orgs" ("id"),
   CONSTRAINT "users_role_check" CHECK ("role" IN ('admin', 'viewer')),
   CONSTRAINT "users_status_check" CHECK ("status" IN ('active', 'banned', 'pending'))

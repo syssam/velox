@@ -151,7 +151,7 @@ type foreignKey struct {
 	Name                  string // a Symbol, else fkName or joinFKName, uncapped
 	Derived               bool   // Name is derived: each dialect caps it with ddl.Symbol
 	Ref                   *Entity
-	OnDelete              string  // "", "CASCADE", "SET NULL" or "RESTRICT"; a join table's are "CASCADE"
+	OnDelete              string  // "", "CASCADE", "SET NULL" or "RESTRICT", migrate's spelling: "" is NO ACTION; a join table's are "CASCADE"
 	Owner                 *Entity // the schema that declares the edge, for errors
 	Edge                  *Edge
 }
@@ -179,10 +179,14 @@ func foreignKeys(g *Graph) []foreignKey {
 			if ed.Inverse {
 				assoc = ed.Ref
 			}
+			act := ed.Rel.OnDelete
+			if act == "NO ACTION" {
+				act = "" // migrate's NO ACTION, which renders no clause
+			}
 			fk := foreignKey{
 				Schema: holder.TableSchema, Table: ed.Rel.Table, Column: ed.Rel.Columns[0],
 				Name: fkName(ed.Rel.Table, ref.Table, assoc), Derived: true,
-				Ref: ref, OnDelete: ed.Rel.OnDelete, Owner: e, Edge: ed,
+				Ref: ref, OnDelete: act, Owner: e, Edge: ed,
 			}
 			if s := symbols(g, e, ed); len(s) > 0 {
 				fk.Name, fk.Derived = s[0], false

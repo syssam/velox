@@ -22,7 +22,7 @@ CREATE TABLE `users` (
   INDEX `user_mentor` (`mentor_id`),
   INDEX `users_by_name` (`name`),
   INDEX `users_orgs_users` (`org_id`),
-  CONSTRAINT `user_mentor` FOREIGN KEY (`mentor_id`) REFERENCES `users` (`id`),
+  CONSTRAINT `user_mentor` FOREIGN KEY (`mentor_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
   CONSTRAINT `users_orgs_users` FOREIGN KEY (`org_id`) REFERENCES `orgs` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 CREATE TABLE `posts` (
@@ -45,6 +45,6 @@ CREATE TABLE `beta` (
   `alpha_id` bigint NULL,
   PRIMARY KEY (`id`),
   INDEX `beta_alphas_alpha` (`alpha_id`),
-  CONSTRAINT `beta_alphas_alpha` FOREIGN KEY (`alpha_id`) REFERENCES `alphas` (`id`)
+  CONSTRAINT `beta_alphas_alpha` FOREIGN KEY (`alpha_id`) REFERENCES `alphas` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
-ALTER TABLE `alphas` ADD CONSTRAINT `alphas_beta_beta` FOREIGN KEY (`beta_id`) REFERENCES `beta` (`id`);
+ALTER TABLE `alphas` ADD CONSTRAINT `alphas_beta_beta` FOREIGN KEY (`beta_id`) REFERENCES `beta` (`id`) ON DELETE SET NULL;
