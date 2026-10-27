@@ -19,10 +19,28 @@ type Desc[E any] struct {
 	Columns    []ColumnDesc
 	PrimaryKey []int // indexes into Columns
 	Tenant     int   // index into Columns; -1 when the entity has none (so velox-gen always writes it: 0 is column 0)
-	Indexes    []IndexInfo
-	Edges      []EdgeDesc            // in the order of the generated relation handles
-	Addr       func(x *E, i int) any // &x.<field of column i>
-	EdgeAddr   func(x *E, i int) any // &x.<field of edge i>: a *One[T] or *Many[T]
+	// Bidi marks the join entity of a self-referencing many-to-many edge that has
+	// no inverse, which is bidirectional, as in ent: each link is the two rows
+	// (a, b) and (b, a). Insert and InsertAll write both, Delete removes both, and
+	// Update and Save are refused. Its two columns are its primary key and have
+	// one Go type. Its Policy may have Insert, which sees the rows the caller
+	// gave, and it may have Hooks; it cannot have Read or Write, whose conditions
+	// would show or delete one row of a link. A condition a Rewrite hook adds
+	// to a delete is ANDed outside the two directions' Or, so it must hold
+	// for both rows of a link, or the delete splits it.
+	//
+	// velox adds no conflict clause: an insert of a link fails when either
+	// row already exists, its mirror included, so a link with one row (a
+	// half-link, from one-way data) cannot be inserted plainly either.
+	// OnConflict(…).DoNothing() is the idempotent insert, and it repairs a
+	// half-link by writing the missing row. ent's AddXIDs is idempotent
+	// silently, as it always adds DO NOTHING; velox's GraphQL mutations add
+	// DoNothing, so they behave as ent's do. For generated code.
+	Bidi     bool
+	Indexes  []IndexInfo
+	Edges    []EdgeDesc            // in the order of the generated relation handles
+	Addr     func(x *E, i int) any // &x.<field of column i>
+	EdgeAddr func(x *E, i int) any // &x.<field of edge i>: a *One[T] or *Many[T]
 
 	// Check runs the validators of column col on its value v, and is nil
 	// when no column has any. For a pointer field, v is the value the
@@ -102,6 +120,7 @@ type descFields struct {
 	columns    []ColumnDesc
 	primaryKey []int
 	tenant     int
+	bidi       bool
 	indexes    []IndexInfo
 	relations  []EdgeDesc
 	check      func(col int, v any) error
@@ -134,7 +153,7 @@ func (o *MetaOnce[E]) Load[_ Lazy[E]](desc func() Desc[E]) *Meta[E] {
 		info, err := buildDesc(x, unsafe.Pointer(x), func() descView {
 			d = desc()
 			v := descView{d: &descFields{table: d.Table, schema: d.Schema, columns: d.Columns, primaryKey: d.PrimaryKey,
-				tenant: d.Tenant, indexes: d.Indexes, relations: d.Edges, check: d.Check,
+				tenant: d.Tenant, bidi: d.Bidi, indexes: d.Indexes, relations: d.Edges, check: d.Check,
 				policy: d.Policy != nil, hooks: d.Hooks != nil}}
 			if a := d.Addr; a != nil {
 				v.addr = func(i int) any { return a(x, i) }
@@ -245,6 +264,11 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 	if d.tenant != -1 && !inRange(d.tenant) {
 		return fail("", "the tenant names column %d, of %d", d.tenant, len(cols))
 	}
+	if d.bidi {
+		if err := checkBidi(name, d, cols); err != nil {
+			return nil, err
+		}
+	}
 	rels := make([]*relation, len(d.relations))
 	if len(rels) > 0 && v.relAddr == nil {
 		return fail("", "the generated metadata has relations but no EdgeAddr; run go tool velox-gen")
@@ -267,11 +291,44 @@ func buildDesc(x any, base unsafe.Pointer, load func() descView) (info *EntityIn
 		rels[i] = &relation{name: r.name, many: strings.HasPrefix(rt.Name(), "Many["), off: off, typ: rt, ownerCol: r.ownerCol, targetCol: r.targetCol, through: r.through}
 	}
 	info = &EntityInfo{Name: name, Table: d.table, Schema: d.schema, Columns: cols, PrimaryKey: d.primaryKey, Tenant: d.tenant,
-		Indexes: d.indexes, rels: rels, immutable: anyImmutable}
+		Indexes: d.indexes, rels: rels, immutable: anyImmutable, bidi: d.bidi}
 	if err := validate(info); err != nil {
 		return nil, err
 	}
 	return info, nil
+}
+
+// checkBidi refuses the Desc of a bidirectional edge's join entity unless its
+// two columns, of one Go type, are its primary key, and it has no tenant: the
+// mirror of a row swaps them. The type is a byte slice or one that == compares
+// without panicking, as a self-link is told by comparing the two (selfLink).
+func checkBidi(name string, d *descFields, cols []ColumnInfo) error {
+	fail := func(format string, args ...any) error {
+		return &SchemaError{Entity: name, Reason: "the join entity of a bidirectional edge " + fmt.Sprintf(format, args...)}
+	}
+	switch {
+	case len(cols) != 2:
+		return fail("has %d columns; it has two, its primary key", len(cols))
+	case len(d.primaryKey) != 2 || d.primaryKey[0] != 0 || d.primaryKey[1] != 1:
+		return fail("has the primary key %v; its two columns are its primary key, [0 1]", d.primaryKey)
+	case cols[0].Type != cols[1].Type:
+		return fail("has columns of two types, %v and %v", cols[0].Type, cols[1].Type)
+	case !linkKey(rtype(cols[0].Type)):
+		return fail("has columns of type %v, which cannot be compared; use a comparable type or a byte slice", cols[0].Type)
+	case d.tenant != -1:
+		return fail("cannot have a tenant column")
+	}
+	return nil
+}
+
+// linkKey reports whether t, a bidirectional join entity's key type, is a
+// byte slice or a comparable type other than an interface, whose dynamic
+// value == could panic on.
+func linkKey(t reflect.Type) bool {
+	if t.Kind() == reflect.Slice {
+		return t.Elem().Kind() == reflect.Uint8
+	}
+	return t.Comparable() && t.Kind() != reflect.Interface
 }
 
 // unboundMethods refuses an entity whose pointer type has a Policy or Hooks
@@ -354,7 +411,10 @@ func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) EdgeDesc 
 // resolves. Join rows are therefore not tenant-scoped, and velox does not
 // check that a link's two endpoints are rows the caller may see or change:
 // an application that writes links checks both endpoints itself, in J's
-// Policy (Insert, and Write for updates and deletes) or in a hook on J.
+// Policy (Insert, and Write for updates and deletes) or in a hook on J. When J
+// is the join entity of a bidirectional edge (Desc.Bidi), its Policy cannot
+// have Write either, since a condition would delete one row of a link: check
+// deletes in a hook on J.
 func EdgeThrough[J, T any, PJ Entity[J], PT Entity[T]](name string, ownerCol, joinOwner, joinTarget, targetCol int) EdgeDesc {
 	r := EdgeTo[T, PT](name, ownerCol, targetCol)
 	r.through = &through{

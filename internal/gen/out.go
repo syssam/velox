@@ -10,7 +10,13 @@ type Config struct {
 
 // Bound says which of an entity's methods the user's files declare, so that
 // its Desc binds them.
-type Bound struct{ Policy, Hooks bool }
+type Bound struct {
+	Policy, Hooks bool
+	// PolicyConds is "path:line" of the first Read or Write key of a
+	// velox.Policy literal in the Policy method's body, "" when it has none.
+	// The join entity of a bidirectional edge cannot have either.
+	PolicyConds string
+}
 
 // Out is everything Render writes: the Graph lowered to Go names, types,
 // handle kinds, enums, join entities and the code of defaults and checks.
@@ -32,6 +38,7 @@ type OutEntity struct {
 	Tenant                                   int // -1 none
 	Indexes                                  []OutIndex
 	Join                                     bool   // a many-to-many join entity
+	Bidi                                     bool   // the join entity of a bidirectional self edge: its Desc says Bidi
 	Comment                                  string // the Comment annotation's text, "" when none
 	Bound                                    Bound
 

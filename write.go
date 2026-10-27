@@ -306,7 +306,14 @@ func (s SaveQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
 // The guard runs on st as the caller built it before the hooks see it, and
 // again inside next, in the pipeline: a condition a hook adds never stands in
 // for the caller's Where. Without hooks, the pipeline's guard is the only one.
+//
+// An update or Save on the join entity of a bidirectional edge is refused
+// first, before any hook runs, so that a refused write has no hook's side
+// effects.
 func write(ctx context.Context, db *DB, st *Statement, dry, save bool) (int64, string, []any, error) {
+	if st.Op == OpUpdate && st.Entity.bidi {
+		return 0, "", nil, errBidiUpdate(st.Entity)
+	}
 	if len(st.Entity.hooks) == 0 {
 		var err error
 		mu := mutation{st: st, dry: dry}
@@ -372,8 +379,19 @@ func onlyDryRun(err error) bool {
 // assigned twice or an Immutable one and runs the validators; then it sends
 // the statement through the pipeline, whose guard runs first, or under
 // SQL(ctx) renders it into mu.sql and mu.args. It sets mu.affected.
+//
+// On the join entity of a bidirectional edge (write refused an update), a
+// delete's conditions also match each row's mirror (bidiWhere), so that both
+// rows of a link go, as ent's clearM2MEdges removes them. It sends a copy of
+// the statement with that condition, so that the hooks' statement keeps the
+// Where they gave.
 func writeCore(ctx context.Context, db *DB, mu *mutation) error {
 	st := mu.st
+	if st.Entity.bidi && len(st.Where) > 0 {
+		cp := *st
+		cp.Where = []Predicate{bidiWhere(st.Where)}
+		st = &cp
+	}
 	if st.Op == OpUpdate {
 		in := st.Entity
 		st.Set = withUpdateDefaults(in, st.Set)
@@ -395,6 +413,47 @@ func writeCore(ctx context.Context, db *DB, mu *mutation) error {
 	}
 	mu.affected = res.affected
 	return nil
+}
+
+// bidiWhere is the condition that ps, a bidirectional join entity's
+// conditions, hold for a row or for its mirror: Or(And(ps…), And(swap(ps)…)),
+// or Or(p, swap(p)) for one p.
+func bidiWhere(ps []Predicate) Predicate {
+	if len(ps) == 1 {
+		return Predicate{group(opOr, []node{ps[0].n, swapCols(ps[0].n)})}
+	}
+	as, bs := make([]node, len(ps)), make([]node, len(ps))
+	for i, p := range ps {
+		as[i], bs[i] = p.n, swapCols(p.n)
+	}
+	return Predicate{group(opOr, []node{group(opAnd, as), group(opAnd, bs)})}
+}
+
+// swapCols returns a copy of n, a condition on a bidirectional join entity,
+// with its columns 0 and 1 exchanged, at every depth of And, Or and Not. The
+// kids of an EXISTS (opExists, opThrough) hold another entity's columns: such
+// a node is kept as it is.
+func swapCols(n node) node {
+	switch n.op {
+	case opAnd, opOr, opNot:
+		kids := make([]node, len(n.kids))
+		for i, k := range n.kids {
+			kids[i] = swapCols(k)
+		}
+		m := n
+		m.kids = kids
+		return m
+	case opExists, opThrough, opAllow, opInvalid:
+		return n
+	}
+	m := n
+	switch n.col {
+	case 0:
+		m.col = 1
+	case 1:
+		m.col = 0
+	}
+	return m
 }
 
 // saveCore is Save's core: writeCore, failing with ErrNotFound when no row

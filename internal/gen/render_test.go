@@ -6,6 +6,7 @@ import (
 	"go/format"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -29,31 +30,7 @@ func TestGolden(t *testing.T) {
 	for _, c := range goldenCases {
 		t.Run(c.name, func(t *testing.T) {
 			dir := filepath.Join("testdata", "golden", c.name)
-			files := map[string]string{}
-			matches, err := filepath.Glob(filepath.Join(dir, "schema", "*.go"))
-			if err != nil || len(matches) == 0 {
-				t.Fatalf("no schema files: %v", err)
-			}
-			for _, p := range matches {
-				b, err := os.ReadFile(p)
-				if err != nil {
-					t.Fatal(err)
-				}
-				// The first line is the //go:build ignore that keeps go vet ./...
-				// from type-checking the fixture as a package of velox2.
-				_, src, _ := bytes.Cut(b, []byte("\n"))
-				files["schema/"+filepath.Base(p)] = string(src)
-			}
-			tmp := module(t, files)
-			m, err := Load(tmp, "./schema", offline())
-			if err != nil {
-				t.Fatal(err)
-			}
-			g, err := Build(m)
-			if err != nil {
-				t.Fatal(err)
-			}
-			got, err := Generate(g, c.cfg)
+			got, err := Generate(goldenGraph(t, c.name), c.cfg)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -98,6 +75,53 @@ func TestGolden(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// goldenGraph loads and builds the schema package of the golden case name.
+func goldenGraph(t *testing.T, name string) *Graph {
+	t.Helper()
+	files := map[string]string{}
+	matches, err := filepath.Glob(filepath.Join("testdata", "golden", name, "schema", "*.go"))
+	if err != nil || len(matches) == 0 {
+		t.Fatalf("no schema files: %v", err)
+	}
+	for _, p := range matches {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// The first line is the //go:build ignore that keeps go vet ./...
+		// from type-checking the fixture as a package of velox2.
+		_, src, _ := bytes.Cut(b, []byte("\n"))
+		files["schema/"+filepath.Base(p)] = string(src)
+	}
+	m, err := Load(module(t, files), "./schema", offline())
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, err := Build(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return g
+}
+
+// The blog golden's bidirectional friends edge marks its join entity Bidi,
+// and the users' groups do not mark theirs.
+func TestGoldenBidi(t *testing.T) {
+	read := func(name string) string {
+		b, err := os.ReadFile(filepath.Join("testdata", "golden", "blog", "want", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	if !regexp.MustCompile(`\n\t\tBidi: +true,\n`).MatchString(read("user_friend_velox.go")) {
+		t.Error("user_friend_velox.go's Desc has no Bidi: true")
+	}
+	if strings.Contains(read("user_group_velox.go"), "Bidi:") {
+		t.Error("user_group_velox.go's Desc says Bidi")
 	}
 }
 

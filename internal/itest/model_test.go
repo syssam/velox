@@ -125,3 +125,84 @@ func bookTagDesc() velox.Desc[bookTag] {
 		},
 	}
 }
+
+// The bidirectional model: persons and their friends through personFriend, a
+// self-referencing many-to-many edge with no inverse, so each link is two
+// join rows.
+
+type person struct {
+	ID      int64
+	Name    string
+	Friends velox.Many[person]
+}
+
+var Persons = struct {
+	ID      velox.NumberCol[person, int64]
+	Name    velox.StringCol[person, string]
+	Friends velox.Rel[person, person]
+}{velox.NumberCol[person, int64]{I: 0}, velox.StringCol[person, string]{I: 1}, velox.Rel[person, person]{I: 0}}
+
+var personMeta velox.MetaOnce[person]
+
+func (*person) VeloxMeta() *velox.Meta[person] { return personMeta.Load(personDesc) }
+
+func personDesc() velox.Desc[person] {
+	return velox.Desc[person]{
+		Table:      "persons",
+		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, {Field: "Name", Name: "name"}},
+		PrimaryKey: []int{0},
+		Tenant:     -1,
+		Edges:      []velox.EdgeDesc{velox.EdgeThrough[personFriend, person]("Friends", 0, 0, 1, 0)},
+		Addr: func(x *person, i int) any {
+			switch i {
+			case 0:
+				return &x.ID
+			case 1:
+				return &x.Name
+			}
+			return nil
+		},
+		EdgeAddr: func(x *person, i int) any {
+			if i == 0 {
+				return &x.Friends
+			}
+			return nil
+		},
+	}
+}
+
+// personFriend is the join entity of the bidirectional edge Friends.
+type personFriend struct {
+	NodeID   int64
+	FriendID int64
+}
+
+var PersonFriends = struct {
+	NodeID   velox.NumberCol[personFriend, int64]
+	FriendID velox.NumberCol[personFriend, int64]
+}{velox.NumberCol[personFriend, int64]{I: 0}, velox.NumberCol[personFriend, int64]{I: 1}}
+
+var personFriendMeta velox.MetaOnce[personFriend]
+
+func (*personFriend) VeloxMeta() *velox.Meta[personFriend] {
+	return personFriendMeta.Load(personFriendDesc)
+}
+
+func personFriendDesc() velox.Desc[personFriend] {
+	return velox.Desc[personFriend]{
+		Table:      "person_friends",
+		Columns:    []velox.ColumnDesc{{Field: "NodeID", Name: "node_id"}, {Field: "FriendID", Name: "friend_id"}},
+		PrimaryKey: []int{0, 1},
+		Tenant:     -1,
+		Bidi:       true,
+		Addr: func(x *personFriend, i int) any {
+			switch i {
+			case 0:
+				return &x.NodeID
+			case 1:
+				return &x.FriendID
+			}
+			return nil
+		},
+	}
+}

@@ -362,3 +362,25 @@ func TestSaveWhereIsTheStatementsWhere(t *testing.T) {
 		t.Errorf("args %v", e.Args)
 	}
 }
+
+// TestBidiDeleteKeepsTheStatement: the core sends a bidirectional delete's
+// two-direction condition in a copy, so the hooks' statement keeps the Where
+// they gave, and a second render gives the same SQL.
+func TestBidiDeleteKeepsTheStatement(t *testing.T) {
+	in := &EntityInfo{Name: "links", Table: "links", Columns: []ColumnInfo{{Name: "a"}, {Name: "b"}}, PrimaryKey: []int{0, 1}, Tenant: -1, bidi: true}
+	st := &Statement{Op: OpDelete, Entity: in, Where: []Predicate{ColumnEQ(0, int64(1))}}
+	db := OpenFake(Postgres, &FakeExec{})
+	const want = `DELETE FROM "links" WHERE ("a" = $1 OR "b" = $2)`
+	for i := range 2 {
+		mu := &mutation{st: st, dry: true}
+		if err := writeCore(context.Background(), db, mu); err != nil {
+			t.Fatal(err)
+		}
+		if mu.sql != want {
+			t.Errorf("render %d: %s, want %s", i, mu.sql, want)
+		}
+		if len(st.Where) != 1 || st.Where[0].n.op != opEQ || st.Where[0].n.col != 0 {
+			t.Fatalf("render %d: the statement's Where became %+v", i, st.Where)
+		}
+	}
+}

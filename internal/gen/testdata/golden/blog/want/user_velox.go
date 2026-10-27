@@ -32,6 +32,7 @@ type User struct {
 	Score        *float64          `json:"score,omitempty"`
 	Posts        velox.Many[Post]  `json:"posts,omitzero"`
 	Groups       velox.Many[Group] `json:"groups,omitzero"`
+	Friends      velox.Many[User]  `json:"friends,omitzero"`
 }
 
 // Users holds the typed handles of User's columns and relations.
@@ -51,6 +52,7 @@ var Users = struct {
 	Score        velox.NullNumberCol[User, float64]
 	Posts        velox.Rel[User, Post]
 	Groups       velox.Rel[User, Group]
+	Friends      velox.Rel[User, User]
 }{
 	ID:           velox.NumberCol[User, int64]{I: 0},
 	CreatedAt:    velox.OrderedCol[User, time.Time]{I: 1},
@@ -67,6 +69,7 @@ var Users = struct {
 	Score:        velox.NullNumberCol[User, float64]{I: 12},
 	Posts:        velox.Rel[User, Post]{I: 0},
 	Groups:       velox.Rel[User, Group]{I: 1},
+	Friends:      velox.Rel[User, User]{I: 2},
 }
 
 var userMeta velox.MetaOnce[User]
@@ -106,6 +109,7 @@ func userDesc() velox.Desc[User] {
 		Edges: []velox.EdgeDesc{
 			velox.EdgeTo[Post]("Posts", 0, 1),
 			velox.EdgeThrough[UserGroup, Group]("Groups", 0, 0, 1, 0),
+			velox.EdgeThrough[UserFriend, User]("Friends", 0, 0, 1, 0),
 		},
 		Addr: func(x *User, i int) any {
 			switch i {
@@ -144,6 +148,8 @@ func userDesc() velox.Desc[User] {
 				return &x.Posts
 			case 1:
 				return &x.Groups
+			case 2:
+				return &x.Friends
 			}
 			return nil
 		},

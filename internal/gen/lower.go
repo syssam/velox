@@ -51,7 +51,22 @@ func Lower(g *Graph, cfg Config) (*Out, error) {
 		}
 		return nil, errors.Join(errs...)
 	}
+	for _, e := range l.out.Entities {
+		if e.Bidi && e.Bound.PolicyConds != "" {
+			return nil, bidiPolicyError(e)
+		}
+	}
 	return l.out, nil
+}
+
+// bidiPolicyError is the *FileError of the Policy of e, the join entity of a
+// bidirectional edge, that sets Read or Write where Bound.PolicyConds says.
+func bidiPolicyError(e *OutEntity) error {
+	at := e.Bound.PolicyConds
+	i := strings.LastIndexByte(at, ':')
+	line, _ := strconv.Atoi(at[i+1:])
+	return &FileError{Path: at[:i], Line: line, Reason: e.Name + ".Policy sets Read or Write: the join entity of a bidirectional edge allows only Insert, " +
+		"as a condition would show or delete one row of a link"}
 }
 
 // lowerer holds the state of one Lower.
@@ -805,7 +820,7 @@ func (l *lowerer) through(s *entState, e, t *Entity, ed *Edge) string {
 		}
 		js.out = &OutEntity{
 			TableSchema: owner.TableSchema, Name: name, Label: plugin.Snake(name), Handles: handles, Table: ed.Rel.Table,
-			PrimaryKey: []int{0, 1}, Tenant: -1, Join: true, Bound: l.cfg.Bound[name],
+			PrimaryKey: []int{0, 1}, Tenant: -1, Join: true, Bidi: ed.Bidi, Bound: l.cfg.Bound[name],
 		}
 		for i, ent := range []*Entity{owner, target} {
 			id := ent.Fields[0]

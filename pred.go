@@ -39,6 +39,9 @@ type node struct {
 	kids []node
 }
 
+// group is the And, Or or Not (o) of kids.
+func group(o op, kids []node) node { return node{op: o, kids: kids} }
+
 // Pred is a condition on entity E, made by a column handle or by And, Or and
 // Not. It is the typed form of Predicate, as Order is of OrderTerm.
 type Pred[E any] struct{ n node }

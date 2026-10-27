@@ -374,6 +374,44 @@ func TestGenerateRefusesAValueReceiver(t *testing.T) {
 	}
 }
 
+const genFriendsSchema = `package schema
+
+import (
+	"github.com/syssam/velox2/schema"
+	"github.com/syssam/velox2/schema/edge"
+	"github.com/syssam/velox2/schema/field"
+)
+
+type User struct{ schema.Schema }
+
+func (User) Fields() []schema.Field { return []schema.Field{field.String("name")} }
+
+func (User) Edges() []schema.Edge { return []schema.Edge{edge.To("friends", User.Type)} }
+`
+
+// A Policy that sets Write on the join entity of a bidirectional edge is an
+// error at its line, relative to the working directory, and nothing is
+// written.
+func TestGenerateRefusesABidiJoinPolicy(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a module")
+	}
+	dir := tempModule(t, map[string]string{
+		"schema/schema.go": genFriendsSchema,
+		"gen/user_friend_policy.go": "package gen\n\nimport (\n\t\"context\"\n\n\t\"github.com/syssam/velox2\"\n)\n\n" +
+			"func (*UserFriend) Policy() velox.Policy[UserFriend] {\n\treturn velox.Policy[UserFriend]{\n\t\t" +
+			"Write: func(context.Context) (velox.Pred[UserFriend], error) { return velox.Allow[UserFriend](), nil },\n\t}\n}\n",
+	})
+	code, out, errs := velox(t, dir, "./schema")
+	want := "velox-gen: gen/user_friend_policy.go:11: UserFriend.Policy sets Read or Write: the join entity of a bidirectional edge allows only Insert, as a condition would show or delete one row of a link\n"
+	if code != 1 || out != "" || errs != want {
+		t.Fatalf("%d %q %q, want %q", code, out, errs, want)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "gen", "user_velox.go")); !os.IsNotExist(err) {
+		t.Error("a file was written")
+	}
+}
+
 func TestGenerateReportsSchemaErrorsAndWritesNothing(t *testing.T) {
 	dir := genModule(t, map[string]string{"schema/bad.go": `package schema
 

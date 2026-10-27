@@ -43,7 +43,7 @@ func (e *FileError) Error() string {
 // The result holds only the entities that have at least one of the methods.
 func Methods(dir string, entities []string) (map[string]Bound, error) {
 	out := map[string]Bound{}
-	err := userFiles(dir, 0, func(path string, f *ast.File) error {
+	err := userFiles(dir, 0, func(fset *token.FileSet, path string, f *ast.File) error {
 		for _, d := range f.Decls {
 			switch d := d.(type) {
 			case *ast.GenDecl:
@@ -64,6 +64,9 @@ func Methods(dir string, entities []string) (map[string]Bound, error) {
 				switch d.Name.Name {
 				case "Policy":
 					b.Policy = true
+					if pos := policyConds(f, d, e); pos.IsValid() {
+						b.PolicyConds = fmt.Sprintf("%s:%d", path, fset.Position(pos).Line)
+					}
 				case "Hooks":
 					b.Hooks = true
 				default:
@@ -90,7 +93,7 @@ func Methods(dir string, entities []string) (map[string]Bound, error) {
 // builds include is a *FileError (see userFiles). A missing dir is no files.
 func HasPackageDoc(dir string) (bool, error) {
 	found := false
-	err := userFiles(dir, parser.PackageClauseOnly|parser.ParseComments, func(_ string, f *ast.File) error {
+	err := userFiles(dir, parser.PackageClauseOnly|parser.ParseComments, func(_ *token.FileSet, _ string, f *ast.File) error {
 		if f.Doc != nil && strings.TrimSpace(f.Doc.Text()) != "" {
 			found = true
 		}
@@ -108,7 +111,7 @@ func HasPackageDoc(dir string) (bool, error) {
 // generated code, built on another system or with other tags, would bind what
 // the package there does not have, or would leave a policy unbound in a build
 // that has it. A missing dir is no files.
-func userFiles(dir string, mode parser.Mode, fn func(path string, f *ast.File) error) error {
+func userFiles(dir string, mode parser.Mode, fn func(fset *token.FileSet, path string, f *ast.File) error) error {
 	des, err := os.ReadDir(dir)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -141,11 +144,72 @@ func userFiles(dir string, mode parser.Mode, fn func(path string, f *ast.File) e
 		if err != nil {
 			return err
 		}
-		if err := fn(path, f); err != nil {
+		if err := fn(fset, path, f); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// policyConds returns the position of the first Read or Write key, with a
+// value other than nil, of a composite literal of type velox.Policy[e] in the
+// body of d, the Policy method of entity e in file f, and token.NoPos when
+// there is none. velox is the name f imports the module under. A Policy
+// built another way, by a positional literal, by assigning its fields or in
+// another function, is left to the runtime's check when the entity loads.
+func policyConds(f *ast.File, d *ast.FuncDecl, e string) token.Pos {
+	name := ""
+	for _, im := range f.Imports {
+		if p, _ := strconv.Unquote(im.Path.Value); p == "github.com/syssam/velox2" {
+			name = "velox"
+			if im.Name != nil {
+				name = im.Name.Name
+			}
+		}
+	}
+	if name == "" || d.Body == nil {
+		return token.NoPos
+	}
+	found := token.NoPos
+	ast.Inspect(d.Body, func(n ast.Node) bool {
+		lit, ok := n.(*ast.CompositeLit)
+		if !ok || found.IsValid() {
+			return !found.IsValid()
+		}
+		if !isPolicyType(lit.Type, name, e) {
+			return true
+		}
+		for _, el := range lit.Elts {
+			if kv, ok := el.(*ast.KeyValueExpr); ok {
+				if v, ok := kv.Value.(*ast.Ident); ok && v.Name == "nil" {
+					continue
+				}
+				if k, ok := kv.Key.(*ast.Ident); ok && (k.Name == "Read" || k.Name == "Write") {
+					found = k.Pos()
+					return false
+				}
+			}
+		}
+		return true
+	})
+	return found
+}
+
+// isPolicyType reports whether t is <velox>.Policy[e].
+func isPolicyType(t ast.Expr, velox, e string) bool {
+	ix, ok := t.(*ast.IndexExpr)
+	if !ok {
+		return false
+	}
+	if arg, ok := ix.Index.(*ast.Ident); !ok || arg.Name != e {
+		return false
+	}
+	sel, ok := ix.X.(*ast.SelectorExpr)
+	if !ok || sel.Sel.Name != "Policy" {
+		return false
+	}
+	id, ok := sel.X.(*ast.Ident)
+	return ok && id.Name == velox
 }
 
 // receiver is the type name of d's receiver, E for (E) and (*E), and whether it

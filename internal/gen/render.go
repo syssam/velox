@@ -283,6 +283,9 @@ func entityDesc(w *writer, e *OutEntity) {
 	w.p("},")
 	w.p("PrimaryKey: %s,", ints(e.PrimaryKey))
 	w.p("Tenant: %d,", e.Tenant)
+	if e.Bidi {
+		w.p("Bidi: true,")
+	}
 	if len(e.Indexes) > 0 {
 		w.p("Indexes: []velox.IndexInfo{")
 		for _, ix := range e.Indexes {

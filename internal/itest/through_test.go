@@ -308,3 +308,86 @@ func TestEachThroughRepeatedLinksOnRealDatabases(t *testing.T) {
 		wantIDs(t, n, []int64{3, 1, 0})
 	})
 }
+
+// TestBidiOnRealDatabases: a link of the bidirectional edge Friends is two
+// join rows, so each person's With load sees the other, and a delete of one
+// direction removes both; a self-link is one row.
+func TestBidiOnRealDatabases(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		tg.exec(t, "DROP TABLE IF EXISTS person_friends")
+		tg.exec(t, "DROP TABLE IF EXISTS persons")
+		tg.exec(t, "CREATE TABLE persons (id BIGINT PRIMARY KEY, name VARCHAR(64) NOT NULL)")
+		tg.exec(t, "CREATE TABLE person_friends (node_id BIGINT NOT NULL, friend_id BIGINT NOT NULL, PRIMARY KEY (node_id, friend_id))")
+		for id := range int64(3) {
+			tg.exec(t, "INSERT INTO persons (id, name) VALUES (?, ?)", id+1, "p")
+		}
+		if err := tg.db.Insert(&personFriend{1, 2}).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		ps, err := tg.db.Query[person]().Where(Persons.ID.In(1, 2)).With(Persons.Friends).OrderBy(Persons.ID.Asc()).Limit(2).All(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, want := range []int64{2, 1} {
+			fs, _ := ps[i].Friends.Get()
+			var got []int64
+			for _, f := range fs {
+				got = append(got, f.ID)
+			}
+			wantIDs(t, got, []int64{want})
+		}
+		count := func() int64 {
+			t.Helper()
+			n, err := tg.db.Query[personFriend]().Count(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return n
+		}
+		if n := count(); n != 2 {
+			t.Fatalf("%d join rows, want 2", n)
+		}
+		if _, err := tg.db.Delete[personFriend]().Where(PersonFriends.NodeID.EQ(2), PersonFriends.FriendID.In(1)).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if n := count(); n != 0 {
+			t.Fatalf("%d join rows after the delete, want 0", n)
+		}
+		if err := tg.db.Insert(&personFriend{3, 3}).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if n := count(); n != 1 {
+			t.Fatalf("%d join rows for a self-link, want 1", n)
+		}
+
+		// The same link twice in one InsertAll conflicts with itself, and
+		// writes nothing; with DoNothing it is one link.
+		tg.exec(t, "DELETE FROM person_friends")
+		F := PersonFriends
+		if err := tg.db.InsertAll([]personFriend{{1, 2}, {2, 1}}).Exec(ctx); err == nil {
+			t.Fatal("InsertAll of a link both ways without DoNothing succeeded")
+		}
+		if n := count(); n != 0 {
+			t.Fatalf("%d join rows after the conflict, want 0", n)
+		}
+		if err := tg.db.InsertAll([]personFriend{{1, 2}, {2, 1}}).OnConflict(F.NodeID, F.FriendID).DoNothing().Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if n := count(); n != 2 {
+			t.Fatalf("%d join rows after DoNothing, want 2", n)
+		}
+
+		// A half-link, one row, is repaired by an insert with DoNothing.
+		tg.exec(t, "DELETE FROM person_friends")
+		tg.exec(t, "INSERT INTO person_friends (node_id, friend_id) VALUES (?, ?)", 2, 1)
+		if err := tg.db.Insert(&personFriend{1, 2}).Exec(ctx); err == nil {
+			t.Fatal("an insert onto a half-link without DoNothing succeeded")
+		}
+		if err := tg.db.Insert(&personFriend{1, 2}).OnConflict(F.NodeID, F.FriendID).DoNothing().Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if n := count(); n != 2 {
+			t.Fatalf("%d join rows after the repair, want 2", n)
+		}
+	})
+}

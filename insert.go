@@ -1,6 +1,7 @@
 package velox
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -238,13 +239,27 @@ func (q InsertQuery[E]) check[_ Lazy[E]]() error {
 	if q.single && q.one == nil {
 		return fmt.Errorf("velox: %s: Insert of a nil pointer", q.meta.info.Name)
 	}
-	if q.conflict != nil && len(q.conflict.Columns) == 0 {
-		return fmt.Errorf("velox: %s: an upsert needs OnConflict with the columns of a unique key", q.meta.info.Name)
+	if q.conflict != nil {
+		return checkConflict(q.meta.info, q.conflict)
 	}
-	if q.conflict != nil && q.meta.info.immutable {
-		for _, c := range q.conflict.Update {
-			if col := &q.meta.info.Columns[c]; col.Immutable {
-				return fmt.Errorf("velox: %s: %s: %w", q.meta.info.Name, col.Field, ErrImmutable)
+	return nil
+}
+
+// checkConflict refuses an upsert clause of entity in without the columns of
+// a unique key, one that updates an Immutable column, and one that updates on
+// the join entity of a bidirectional edge. It is not generic, so that every
+// entity's InsertQuery does not compile it.
+func checkConflict(in *EntityInfo, cf *ConflictClause) error {
+	if len(cf.Columns) == 0 {
+		return fmt.Errorf("velox: %s: an upsert needs OnConflict with the columns of a unique key", in.Name)
+	}
+	if len(cf.Update) > 0 && in.bidi {
+		return errBidiUpdate(in)
+	}
+	if in.immutable {
+		for _, c := range cf.Update {
+			if col := &in.Columns[c]; col.Immutable {
+				return fmt.Errorf("velox: %s: %s: %w", in.Name, col.Field, ErrImmutable)
 			}
 		}
 	}
@@ -433,6 +448,9 @@ func oneStatement[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *Conf
 		return Statement{}, -1, err
 	}
 	st := Statement{Op: OpInsert, Entity: m.info, Columns: cols, Rows: [][]any{rowValues(m, p, cols)}, Conflict: cf, InTx: db.inTx}
+	if m.info.bidi {
+		mirrorRows(&st)
+	}
 	if gen >= 0 && db.d != MySQL {
 		st.Returning = []int{gen}
 	}
@@ -679,7 +697,17 @@ func prepareMany[E any](ctx context.Context, db *DB, m *Meta[E], xs []E) (cols [
 			return nil, 0, err
 		}
 	}
-	return cols, max(1, maxParams[db.d]/len(cols)), nil
+	return cols, perStatement(db.d, m.info, len(cols)), nil
+}
+
+// perStatement is the most rows of n columns of entity in that one statement
+// holds on dialect d: half as many on the join entity of a bidirectional
+// edge, which also writes each row's mirror (mirrorRows).
+func perStatement(d Dialect, in *EntityInfo, n int) int {
+	if in.bidi {
+		n *= 2
+	}
+	return max(1, maxParams[d]/n)
 }
 
 // batch is the statement that inserts xs, prepared, in one statement.
@@ -688,7 +716,50 @@ func batch[E any](m *Meta[E], xs []E, cols []int, cf *ConflictClause, inTx bool)
 	for i := range xs {
 		st.Rows = append(st.Rows, rowValues(m, &xs[i], cols))
 	}
+	if m.info.bidi {
+		mirrorRows(&st)
+	}
 	return st
+}
+
+// mirrorRows gives each row of st, an insert on the join entity of a
+// bidirectional edge, its mirror after it: (b, a) for (a, b), unless a and b
+// are equal, as a self-link is one row. ent's addM2MEdges writes the mirror
+// the same way, as integrity maintenance: the entity's hooks and
+// Policy.Insert, which see the caller's rows, never judge it. A row holds the
+// two columns in order, as insertColumns lists them for an entity whose key
+// is not generated. It is not generic, and the generic callers only call it,
+// so that the entities that are no join entity compile none of it.
+func mirrorRows(st *Statement) {
+	rows := make([][]any, 0, 2*len(st.Rows))
+	for _, r := range st.Rows {
+		rows = append(rows, r)
+		if !selfLink(r[0], r[1]) {
+			rows = append(rows, []any{r[1], r[0]})
+		}
+	}
+	st.Rows = rows
+}
+
+// selfLink reports whether the key values a and b, of one Go type, are equal:
+// bytes.Equal for a byte slice of any named type, == otherwise. checkBidi
+// refuses every other key type that == could panic on.
+func selfLink(a, b any) bool {
+	if x, ok := a.([]byte); ok {
+		y, _ := b.([]byte)
+		return bytes.Equal(x, y)
+	}
+	if v := reflect.ValueOf(a); v.Kind() == reflect.Slice {
+		return bytes.Equal(v.Bytes(), reflect.ValueOf(b).Bytes())
+	}
+	return a == b
+}
+
+// errBidiUpdate is the error of an update, a Save or an upsert that updates,
+// on the join entity of a bidirectional edge: it would change one row of a
+// link.
+func errBidiUpdate(in *EntityInfo) error {
+	return fmt.Errorf("velox: %s: the join entity of a bidirectional edge cannot be updated; delete the link and insert it again", in.Name)
 }
 
 // insertMany inserts every entity in xs and sets out.Affected.

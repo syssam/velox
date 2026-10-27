@@ -1,6 +1,7 @@
 package velox_test
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"strings"
@@ -268,5 +269,85 @@ func TestEdgeToHolderMismatch(t *testing.T) {
 	// A One or a Many of the right entity is accepted.
 	if _, err := velox.LoadDesc(rowDesc()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// dBidi is a model for the refusals of a bidirectional join entity's Desc.
+type dBidi struct {
+	A, B int64
+	C    string
+}
+
+// bidiDesc is a valid Desc of dBidi's A and B, a bidirectional join entity;
+// each case of TestBidiDescRefused breaks it.
+func bidiDesc() velox.Desc[dBidi] {
+	return velox.Desc[dBidi]{
+		Table:      "links",
+		Columns:    []velox.ColumnDesc{{Field: "A", Name: "a"}, {Field: "B", Name: "b"}},
+		PrimaryKey: []int{0, 1},
+		Tenant:     -1,
+		Bidi:       true,
+		Addr: func(x *dBidi, i int) any {
+			return [...]any{&x.A, &x.B, &x.C}[i]
+		},
+	}
+}
+
+// dBidiSlice has keys == cannot compare.
+type dBidiSlice struct{ A, B []int }
+
+func TestBidiDescRefused(t *testing.T) {
+	_, err := velox.LoadDesc(velox.Desc[dBidiSlice]{
+		Table:      "links",
+		Columns:    []velox.ColumnDesc{{Field: "A", Name: "a"}, {Field: "B", Name: "b"}},
+		PrimaryKey: []int{0, 1},
+		Tenant:     -1,
+		Bidi:       true,
+		Addr:       func(x *dBidiSlice, i int) any { return [...]any{&x.A, &x.B}[i] },
+	})
+	if want := "velox: velox_test.dBidiSlice: the join entity of a bidirectional edge has columns of type []int, which cannot be compared; use a comparable type or a byte slice"; err == nil || err.Error() != want {
+		t.Errorf("a slice key: %v, want %s", err, want)
+	}
+	allow := func(context.Context) (velox.Pred[dBidi], error) { return velox.Allow[dBidi](), nil }
+	if _, err := velox.LoadDesc(bidiDesc()); err != nil {
+		t.Fatalf("a valid Desc: %v", err)
+	}
+	ok := bidiDesc()
+	ok.Policy = func() velox.BoundPolicy {
+		return velox.BindPolicy(velox.Policy[dBidi]{Insert: func(context.Context, *dBidi) error { return nil }})
+	}
+	if _, err := velox.LoadDesc(ok); err != nil {
+		t.Fatalf("a Policy with Insert only: %v", err)
+	}
+	for _, c := range []struct {
+		name string
+		edit func(d *velox.Desc[dBidi])
+		want string
+	}{
+		{"three columns", func(d *velox.Desc[dBidi]) {
+			d.Columns = append(d.Columns, velox.ColumnDesc{Field: "C", Name: "c"})
+		}, "the join entity of a bidirectional edge has 3 columns; it has two, its primary key"},
+		{"primary key", func(d *velox.Desc[dBidi]) { d.PrimaryKey = []int{1, 0} }, "the join entity of a bidirectional edge has the primary key [1 0]; its two columns are its primary key, [0 1]"},
+		{"two types", func(d *velox.Desc[dBidi]) {
+			d.Columns[1] = velox.ColumnDesc{Field: "C", Name: "c"}
+			d.Addr = func(x *dBidi, i int) any { return [...]any{&x.A, &x.C}[i] }
+		}, "the join entity of a bidirectional edge has columns of two types, int64 and string"},
+		{"tenant", func(d *velox.Desc[dBidi]) { d.Tenant = 0 }, "the join entity of a bidirectional edge cannot have a tenant column"},
+		{"read policy", func(d *velox.Desc[dBidi]) {
+			d.Policy = func() velox.BoundPolicy { return velox.BindPolicy(velox.Policy[dBidi]{Read: allow}) }
+		}, "the join entity of a bidirectional edge cannot have a Read or Write policy: its conditions would show or delete one row of a link; check links in Policy.Insert and deletes in a hook"},
+		{"write policy", func(d *velox.Desc[dBidi]) {
+			d.Policy = func() velox.BoundPolicy { return velox.BindPolicy(velox.Policy[dBidi]{Write: allow}) }
+		}, "the join entity of a bidirectional edge cannot have a Read or Write policy: its conditions would show or delete one row of a link; check links in Policy.Insert and deletes in a hook"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			d := bidiDesc()
+			c.edit(&d)
+			_, err := velox.LoadDesc(d)
+			var se *velox.SchemaError
+			if !errors.As(err, &se) || err.Error() != "velox: velox_test.dBidi: "+c.want {
+				t.Errorf("err = %v,\nwant a SchemaError: velox: velox_test.dBidi: %s", err, c.want)
+			}
+		})
 	}
 }

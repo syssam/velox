@@ -246,13 +246,18 @@ func erase[E any](h Hook[E]) hookFn {
 	}
 }
 
-// bindPolicy calls f, the Desc's Policy, and keeps its result in info.
+// bindPolicy calls f, the Desc's Policy, and keeps its result in info. On the
+// join entity of a bidirectional edge (Desc.Bidi) it refuses a Read or Write.
 func bindPolicy(info *EntityInfo, f func() BoundPolicy) error {
 	var b BoundPolicy
 	if err := recovered(info.Name, "Policy()", func() { b = f() }); err != nil {
 		return err
 	}
 	info.policy = b.p
+	if info.bidi && b.p != nil && (b.p.read != nil || b.p.write != nil) {
+		return &SchemaError{Entity: info.Name, Reason: "the join entity of a bidirectional edge cannot have a Read or Write policy: " +
+			"its conditions would show or delete one row of a link; check links in Policy.Insert and deletes in a hook"}
+	}
 	return nil
 }
 

@@ -174,14 +174,18 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 		return fail(err)
 	}
 	out := f.outDir(dir)
-	bound, err := gen.Methods(out, gm.names)
-	if fe := (*gen.FileError)(nil); errors.As(err, &fe) {
-		c := *fe
-		c.Path = relPath(dir, fe.Path)
-		return fail(&c)
-	}
-	if err != nil {
+	// A *FileError names a user's file: relative to dir, as other paths are.
+	failFile := func(err error) int {
+		if fe := (*gen.FileError)(nil); errors.As(err, &fe) {
+			c := *fe
+			c.Path = relPath(dir, fe.Path)
+			return fail(&c)
+		}
 		return fail(err)
+	}
+	bound, err := gen.Methods(out, gm.names)
+	if err != nil {
+		return failFile(err)
 	}
 	userDoc, err := gen.HasPackageDoc(out)
 	if err != nil {
@@ -189,7 +193,7 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 	}
 	files, err := gen.Generate(gm.graph, gen.Config{Package: pkg, SchemaPath: gm.importPath, Bound: bound, UserDoc: userDoc})
 	if err != nil {
-		return fail(err)
+		return failFile(err)
 	}
 	want := make(map[string][]byte, len(files))
 	for _, file := range files {

@@ -456,6 +456,13 @@
           "ref": "users",
           "kind": "M2M",
           "join": "UserGroup"
+        },
+        {
+          "name": "friends",
+          "go_name": "Friends",
+          "target": "User",
+          "kind": "M2M",
+          "join": "UserFriend"
         }
       ],
       "indexes": [
@@ -477,6 +484,38 @@
           "text": "User is a person who writes posts."
         }
       }
+    },
+    {
+      "name": "UserFriend",
+      "label": "user_friend",
+      "handles": "UserFriends",
+      "table": "user_friends",
+      "join": true,
+      "fields": [
+        {
+          "name": "user_id",
+          "go_name": "UserID",
+          "column": "user_id",
+          "type": "int64",
+          "go_type": "int64",
+          "elem_type": "int64"
+        },
+        {
+          "name": "friend_id",
+          "go_name": "FriendID",
+          "column": "friend_id",
+          "type": "int64",
+          "go_type": "int64",
+          "elem_type": "int64"
+        }
+      ],
+      "edges": [],
+      "indexes": [],
+      "primary_key": [
+        0,
+        1
+      ],
+      "tenant": -1
     },
     {
       "name": "UserGroup",

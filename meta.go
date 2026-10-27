@@ -30,6 +30,7 @@ type EntityInfo struct {
 	kit        *kit                       // set by MetaOnce.Load
 	check      func(col int, v any) error // Desc.Check; nil when the entity has no validators
 	immutable  bool                       // some column is Immutable
+	bidi       bool                       // Desc.Bidi: a link is two rows, (a, b) and (b, a)
 	hooks      []hookFn                   // the Hooks method's, outermost first
 
 	// The entity's policy, bound once from its Policy method.

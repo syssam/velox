@@ -288,3 +288,46 @@ func TestModuleGoVersion(t *testing.T) {
 		t.Errorf("no go line: got %q", got)
 	}
 }
+
+// Methods records the first Read or Write key, not nil, of the entity's
+// Policy literal in its Policy method, where velox-gen can see it.
+func TestMethodsFindsPolicyConds(t *testing.T) {
+	dir := methodsDir(t, map[string]string{
+		// Read is nil, and Other's literal is another entity's: the Write
+		// key is the first that counts.
+		"friend.go": "package gen\n\nimport \"github.com/syssam/velox2\"\n\nfunc (*UserFriend) Policy() velox.Policy[UserFriend] {\n\t_ = velox.Policy[Other]{Read: r}\n\treturn velox.Policy[UserFriend]{\n\t\tInsert: ins,\n\t\tRead:   nil,\n\t\tWrite:  w,\n\t\tRead:   r,\n\t}\n}\n",
+		"group.go":  "package gen\n\nimport vx \"github.com/syssam/velox2\"\n\nfunc (*UserGroup) Policy() vx.Policy[UserGroup] {\n\treturn vx.Policy[UserGroup]{Insert: ins, Write: nil}\n}\n",
+		// A positional literal is left to the runtime's check.
+		"pair.go": "package gen\n\nimport \"github.com/syssam/velox2\"\n\nfunc (*UserPair) Policy() velox.Policy[UserPair] {\n\treturn velox.Policy[UserPair]{r, w, nil}\n}\n",
+	})
+	got, err := Methods(dir, []string{"UserFriend", "UserGroup", "UserPair"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]Bound{
+		"UserFriend": {Policy: true, PolicyConds: filepath.Join(dir, "friend.go") + ":10"},
+		"UserGroup":  {Policy: true},
+		"UserPair":   {Policy: true},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// Generating the blog model, whose UserFriend is the join entity of a
+// bidirectional edge, with a Policy that sets Write fails at its line.
+func TestGenerateRefusesABidiPolicy(t *testing.T) {
+	dir := methodsDir(t, map[string]string{
+		"friend.go": "package gen\n\nimport \"github.com/syssam/velox2\"\n\nfunc (*UserFriend) Policy() velox.Policy[UserFriend] {\n\treturn velox.Policy[UserFriend]{Write: w}\n}\n",
+	})
+	bound, err := Methods(dir, []string{"UserFriend"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = Generate(goldenGraph(t, "blog"), Config{Package: "gen", Bound: bound})
+	var fe *FileError
+	if !errors.As(err, &fe) || fe.Path != filepath.Join(dir, "friend.go") || fe.Line != 6 ||
+		fe.Reason != "UserFriend.Policy sets Read or Write: the join entity of a bidirectional edge allows only Insert, as a condition would show or delete one row of a link" {
+		t.Fatalf("err = %v; want a FileError at friend.go:6", err)
+	}
+}
