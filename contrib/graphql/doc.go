@@ -157,6 +157,13 @@
 // see "The cost limit" below. A mutation's transaction does not cover @defer
 // (see veloxgql.Extension): do not defer fields of a mutation.
 //
+// The application writes the root query's resolvers, one call each: Node
+// and Nodes for node and nodes, and the root connection function for each
+// QueryField. The example example/graphql in the velox2 repository is a
+// whole server: a schema, its gqlgen.yml and its resolvers.
+//
+// # Mutations
+//
 // For an entity with graphql.MutationCreate(), its file also has Create<T>Input
 // and Create<T>(ctx, input), which createX's resolver returns; with
 // graphql.MutationUpdate(), Update<T>Input and Update<T>(ctx, id, input), which
@@ -164,25 +171,40 @@
 // it is, clear<Field> sets a nullable one to NULL, and an edge is cleared, then
 // its remove<Edge>IDs removed, then its add<Edge>IDs added; a field given with
 // its clear, or an ID both to add and to remove, is refused with
-// BAD_USER_INPUT. An update with no field to set checks its row under the same
-// scope as one with fields: the tenant, and the Read and Write policies.
+// BAD_USER_INPUT; an ID to remove that the edge does not lead to is ignored,
+// and one to add that it already leads to is kept. An update with no field to
+// set sends no UPDATE, and checks its row with an Exists under the same scope
+// as one with fields (Writable): the tenant, and the Read and Write policies.
 // Clearing or removing children unlinks only those the caller may change; one
 // the tenant scope or the child's Write policy hides stays linked. Clearing a
-// many-to-many edge, or removing from it, deletes only the join rows to targets
-// the caller may read, under the tenant scope and the target's Read policy; a
-// link to one they hide stays. Update<T> returns the row it wrote, read under
-// the tenant scope without the Read policy, as Create<T> returns the row it
-// inserted: an update that takes the row out of what the caller may read
-// succeeds. With graphql.MutationDelete(), Delete<T>(ctx, id) deletes the row
-// and its rows in the join tables of its many-to-many edges, and returns the ID
-// encoded again from the key; deleteX's resolver returns it. The join rows,
-// which neither the tenant nor a policy scopes, go only after a COUNT under the
-// DELETE's own scope (the tenant and the Read and Write policies) has found the
-// row, so a row the caller may not delete keeps them. A row's delete removes
-// all of its join rows, whatever the tenant at their other end: a shared row is
-// unlinked from every tenant's rows. Rows of other entities that hold the row's
-// key are left to the database's foreign keys: one that refuses the DELETE
-// gives a *velox.ConstraintError, shown as BAD_USER_INPUT.
+// many-to-many edge, or removing from it, deletes only the join rows to
+// targets the caller may read, under the tenant scope and the target's Read
+// policy; a link to one they hide stays.
+//
+// A mutation returns the row as written. Create<T> returns the row it
+// inserted. Update<T> reads it back under the tenant scope without the Read
+// policy: its UPDATE is scoped by the Read policy too, so the caller could read
+// the row before it wrote it. A mutation that takes the row out of what the
+// caller may read still returns it. This is a contract, and will not change.
+//
+// A link to a target needs what the write changes. A many-to-many link inserts
+// a join row and changes no target row, so the target must be one the caller
+// may read: the tenant scope and the target's Read policy. A one-to-many or
+// one-to-one link from the owner sets the target's foreign key, so the target
+// must be one the caller may change: the tenant scope and its Read and Write
+// policies. Unlinking follows the same rule.
+//
+// With graphql.MutationDelete(), Delete<T>(ctx, id) deletes the row and its
+// rows in the join tables of its many-to-many edges, and returns the ID encoded
+// again from the key; deleteX's resolver returns it. The join rows, which
+// neither the tenant nor a policy scopes, go only after an Exists under the
+// DELETE's own scope (Writable, locking the row with FOR UPDATE wherever the
+// dialect can) has found the row, so a row the caller may not delete keeps
+// them. A row's delete removes all of its join rows, whatever the tenant at
+// their other end: a shared row is unlinked from every tenant's rows. Rows of
+// other entities that hold the row's key are left to the database's foreign
+// keys: one that refuses the DELETE gives a *velox.ConstraintError, shown as
+// BAD_USER_INPUT.
 //
 // The generated functions read the DB from the context, as the root query's do
 // (veloxgql.DBFromContext), and each is atomic: gqlimpl.Atomic runs it in the
@@ -216,12 +238,7 @@
 //     no locking reads, and its transactions lock the database.
 //   - On MySQL the DSN needs clientFoundRows=true: UpdateX counts the rows
 //     its UPDATE matched, and MySQL counts only changed rows without it.
-//   - A created row is returned as written, not read again through the Read
-//     policy; so is an updated one.
 //   - A self-edge is written one way, as the core's loads read it.
-//   - Clearing or removing children skips those the caller may not change:
-//     an O2M or O2O child the tenant or its Write policy hides, and an M2M
-//     link to a target the tenant or its Read policy hides.
 //   - Not written: a key the caller supplies in a create input, JSON append,
 //     and application enums bound with @goModel.
 //
@@ -234,11 +251,6 @@
 // Update<T> re-point only a child no owner holds, or one the row already
 // holds: one that another owner holds is refused with BAD_USER_INPUT,
 // "already linked", and not taken from it.
-//
-// The application writes the root query's resolvers, one call each: Node
-// and Nodes for node and nodes, and the root connection function for each
-// QueryField. The example example/graphql in the velox2 repository is a
-// whole server: a schema, its gqlgen.yml and its resolvers.
 //
 // # Loading
 //

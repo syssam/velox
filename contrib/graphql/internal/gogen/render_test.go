@@ -1457,3 +1457,54 @@ func TestM2MWithoutInverse(t *testing.T) {
 		t.Errorf("Author.BooksGQL:\n%s", src)
 	}
 }
+
+// TestMutationGodocPoints: the godoc of Create<T>, Update<T> and Delete<T>
+// is short and points to "Mutations" in the package documentation, which
+// holds what they promise; it does not repeat it. The comment is read with
+// its whitespace normalised, since f.doc wraps it.
+func TestMutationGodocPoints(t *testing.T) {
+	const pointer = `See "Mutations" in the documentation of package github.com/syssam/velox2/contrib/graphql`
+	seen := map[string]int{}
+	for label, m := range map[string]*plugin.Model{"testdata": testModel(t), "update-only": updateOnlyModel(t), "mutations": mutationsModel(t)} {
+		for name, src := range render(t, m) {
+			f, err := parser.ParseFile(token.NewFileSet(), name, src, parser.ParseComments)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, decl := range f.Decls {
+				fn, ok := decl.(*ast.FuncDecl)
+				if !ok || fn.Recv != nil {
+					continue
+				}
+				var kind string
+				for _, k := range []string{"Create", "Update", "Delete"} {
+					if strings.HasPrefix(fn.Name.Name, k) {
+						kind = k
+					}
+				}
+				if kind == "" {
+					continue
+				}
+				seen[kind]++
+				doc := strings.Join(strings.Fields(fn.Doc.Text()), " ")
+				who := label + " " + fn.Name.Name
+				if !strings.Contains(doc, pointer) {
+					t.Errorf("%s: no pointer in %q", who, doc)
+				}
+				if n := len(strings.Fields(doc)); n > 80 {
+					t.Errorf("%s: %d words, want at most 80", who, n)
+				}
+				for _, gone := range []string{"savepoint", "written one way", "FOR UPDATE", "clientFoundRows"} {
+					if strings.Contains(doc, gone) {
+						t.Errorf("%s: %q is the package doc's", who, gone)
+					}
+				}
+			}
+		}
+	}
+	for _, kind := range []string{"Create", "Update", "Delete"} {
+		if seen[kind] == 0 {
+			t.Errorf("no %s function rendered", kind)
+		}
+	}
+}

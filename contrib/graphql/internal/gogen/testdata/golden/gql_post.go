@@ -509,20 +509,12 @@ func (in CreatePostInput) String() string {
 // GoString is String, so that %#v does not print the sensitive fields either.
 func (in CreatePostInput) GoString() string { return in.String() }
 
-// CreatePost creates one Post from input, with its edges, and returns it, as
-// the mutation createPost does. It first decodes every ID and JSON value of
-// input, and fails before any statement on one it cannot decode
-// (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFromContext reads
-// from ctx, in one transaction (gqlimpl.Atomic): the operation's, or one of its
-// own. The tenant scope and the policies apply as to any write: each ID must
-// name a row the caller may read, and a row it re-points one the caller may
-// change, or CreatePost fails with NOT_FOUND and keeps nothing. A validator's
-// refusal is BAD_USER_INPUT, naming the input field, and comes before any
-// statement; velox's other errors are returned as they are. The row is returned
-// as written, not read again through the Read policy. There is no savepoint
-// inside the extension's transaction, so a resolver must return this function's
-// error: one that swallows it commits the partial writes. A self-edge is
-// written one way, as the core's loads read it.
+// CreatePost creates a Post from input, with its edges, as the mutation
+// createPost does, and returns the row as written. It runs atomically on the DB
+// veloxgql.DBFromContext reads from ctx, under the tenant scope and the
+// policies. See "Mutations" in the documentation of package
+// github.com/syssam/velox2/contrib/graphql for what each input field does, what
+// the caller may link and change, and the errors.
 func CreatePost(ctx context.Context, input CreatePostInput) (*Post, error) {
 	var (
 		j4  []string
@@ -687,37 +679,11 @@ func (in UpdatePostInput) String() string {
 func (in UpdatePostInput) GoString() string { return in.String() }
 
 // UpdatePost updates the Post with the ID id from input, as the mutation
-// updatePost does, and returns it as it is afterwards: a field input does not
-// give is left as it is, and a clear field sets a field to NULL or empties an
-// edge. It first decodes id and every ID and JSON value of input, and refuses a
-// field given with its clear field, or an ID both to add and to remove, before
-// any statement (BAD_USER_INPUT). It then writes through the DB
-// veloxgql.DBFromContext reads from ctx, in one transaction (gqlimpl.Atomic):
-// the operation's, or one of its own. The fields go in one UPDATE, which the
-// tenant scope and the Read and Write policies scope; an input that sets none
-// sends no UPDATE, and an Exists under the same scope (Writable) checks the row
-// instead, so that no edge of a row the caller may not change is written. That
-// check locks the row (FOR UPDATE) wherever the dialect has locking reads,
-// which is every one but SQLite (whose transactions lock the database), so the
-// row stays the caller's until the edges are written. The edges follow, each
-// cleared, then its IDs removed, then its IDs added: an ID to remove the edge
-// does not lead to is ignored, and one to add it already leads to is kept.
-// Clearing an edge whose key is on the targets' rows, or removing from it,
-// unlinks only the children the tenant scope and the target's Write policy let
-// the caller change; one they hide stays linked. Clearing a many-to-many edge,
-// or removing from it, deletes only the links to targets the tenant scope and
-// the target's Read policy let the caller read; a link to one they hide stays.
-// Each ID must name a row the caller may read, and a row it re-points one the
-// caller may change; a child another node holds is refused (BAD_USER_INPUT). An
-// id that names no row the caller may change, or an ID no row it may read,
-// fails with NOT_FOUND and keeps nothing. A validator's refusal is
-// BAD_USER_INPUT, naming the input field, and comes before any statement;
-// velox's other errors are returned as they are. The row is read back as
-// written, under the tenant scope and without the Read policy
-// (velox.WithoutPolicy): an update that takes the row out of what the caller
-// may read still returns it. On MySQL the UPDATE's row count needs
-// clientFoundRows=true, as velox's Update does. There is no savepoint inside
-// the extension's transaction, so a resolver must return this function's error.
+// updatePost does, and returns the row as written. It runs atomically on the DB
+// veloxgql.DBFromContext reads from ctx, under the tenant scope and the
+// policies. See "Mutations" in the documentation of package
+// github.com/syssam/velox2/contrib/graphql for what each input field does, what
+// the caller may link and change, and the errors.
 func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, error) {
 	var (
 		key int64
@@ -908,22 +874,12 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 	return out, nil
 }
 
-// DeletePost deletes the Post with the ID id, and its rows in the join tables
-// of its many-to-many edges, as the mutation deletePost does, and returns the
-// ID, encoded again from the key. It first decodes id, before any statement
-// (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFromContext reads
-// from ctx, in one transaction (gqlimpl.Atomic): the operation's, or one of its
-// own. The DELETE is scoped by the tenant and the Read and Write policies. The
-// join rows, which neither scopes, go first, after an Exists under the DELETE's
-// scope (Writable), locking the row (FOR UPDATE) wherever the dialect can, has
-// found the row: those of a row the caller may not delete are never touched.
-// Every join row of the row goes, whatever the tenant of the row at its other
-// end: the row is gone, and a row of no tenant is unlinked from every tenant's
-// rows. An id that names no row the caller may change fails with NOT_FOUND and
-// deletes nothing. The rows of other entities whose key holds the row's are not
-// touched: the database's foreign keys decide, and a key that refuses the
-// DELETE fails it with a *velox.ConstraintError, which veloxgql.ErrorPresenter
-// shows as BAD_USER_INPUT. velox's errors are returned as they are.
+// DeletePost deletes the Post with the ID id, and the join rows that hold its
+// key, as the mutation deletePost does, and returns id encoded again from the
+// key. It runs atomically on the DB veloxgql.DBFromContext reads from ctx,
+// under the tenant scope and the policies. See "Mutations" in the documentation
+// of package github.com/syssam/velox2/contrib/graphql for what each input field
+// does, what the caller may link and change, and the errors.
 func DeletePost(ctx context.Context, id string) (string, error) {
 	key, err := gqlimpl.DecodeID[int64]("deletePost.id", id, "Post")
 	if err != nil {

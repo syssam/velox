@@ -437,20 +437,12 @@ func (in CreateAccountInput) String() string {
 // GoString is String, so that %#v does not print the sensitive fields either.
 func (in CreateAccountInput) GoString() string { return in.String() }
 
-// CreateAccount creates one Account from input, with its edges, and returns it,
-// as the mutation createAccount does. It first decodes every ID and JSON value
-// of input, and fails before any statement on one it cannot decode
-// (BAD_USER_INPUT). It then writes through the DB veloxgql.DBFromContext reads
-// from ctx, in one transaction (gqlimpl.Atomic): the operation's, or one of its
-// own. The tenant scope and the policies apply as to any write: each ID must
-// name a row the caller may read, and a row it re-points one the caller may
-// change, or CreateAccount fails with NOT_FOUND and keeps nothing. A
-// validator's refusal is BAD_USER_INPUT, naming the input field, and comes
-// before any statement; velox's other errors are returned as they are. The row
-// is returned as written, not read again through the Read policy. There is no
-// savepoint inside the extension's transaction, so a resolver must return this
-// function's error: one that swallows it commits the partial writes. A
-// self-edge is written one way, as the core's loads read it.
+// CreateAccount creates a Account from input, with its edges, as the mutation
+// createAccount does, and returns the row as written. It runs atomically on the
+// DB veloxgql.DBFromContext reads from ctx, under the tenant scope and the
+// policies. See "Mutations" in the documentation of package
+// github.com/syssam/velox2/contrib/graphql for what each input field does, what
+// the caller may link and change, and the errors.
 func CreateAccount(ctx context.Context, input CreateAccountInput) (*User, error) {
 	var (
 		j14 map[string]any
