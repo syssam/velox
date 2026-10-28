@@ -554,7 +554,17 @@ func TestEdges(t *testing.T) {
 	author := edge("author", plugin.M2O, "User")
 	author.Required, author.Field, author.FieldOn = true, "author_id", "Post"
 	post.Edges = []*plugin.Edge{author}
-	s, _ := load(t, model(cat, entity("Group"), post, entity("Profile"), user, folder(t)))
+	// On the side that does not own the key, too: a Required Desk.chair whose
+	// key Chair.desk_id is NULL-able can read null.
+	chair := entity("Chair", &plugin.Field{Name: "desk_id", GoName: "DeskID", Column: "desk_id", Type: "int64", Nullable: true, Optional: true, Unique: true})
+	cd := edge("desk", plugin.O2O, "Desk")
+	cd.Field, cd.FieldOn, cd.Ref, cd.Inverse, cd.OwnsKey = "desk_id", "Chair", "chair", true, true
+	chair.Edges = []*plugin.Edge{cd}
+	desk := entity("Desk")
+	dc := edge("chair", plugin.O2O, "Chair")
+	dc.Field, dc.FieldOn, dc.Ref, dc.Required = "desk_id", "Chair", "desk", true
+	desk.Edges = []*plugin.Edge{dc}
+	s, _ := load(t, model(cat, entity("Group"), post, entity("Profile"), user, folder(t), chair, desk))
 
 	for _, c := range [][4]string{
 		{"Category", "parent", "Category", "ParentGQL"},
@@ -563,6 +573,7 @@ func TestEdges(t *testing.T) {
 		{"Folder", "parent", "Folder", "ParentGQL"},
 		{"Folder", "prev", "Folder", "PrevGQL"},
 		{"Folder", "next", "Folder", "NextGQL"},
+		{"Desk", "chair", "Chair", "ChairGQL"},
 		{"User", "posts", "PostConnection!", "PostsGQL"},
 		{"User", "groups", "GroupConnection!", "GroupsGQL"},
 		{"User", "profile", "Profile", "ProfileGQL"},

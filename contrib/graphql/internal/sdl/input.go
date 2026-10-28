@@ -224,7 +224,7 @@ type edgeInput struct {
 //     (non-null) key always holds an owner, from whom a write would only
 //     take the row, and an immutable one cannot move, so the edge has no
 //     input at all, on create too; the child is linked from its side;
-//   - when that key is a RequiredKey, NULL-able but a Required edge's (a
+//   - when that key is a requiredKey, NULL-able but a Required edge's (a
 //     Required self edge's), the target's row may hold no owner, but velox
 //     refuses to unlink it: on update, an O2M has add<Edge>IDs only, and an
 //     O2O nothing; create keeps its inputs, which only link;
@@ -327,7 +327,7 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]edgeInput, error) {
 		// required one always holds an owner, whom a write could only take
 		// the row from, so the input could never succeed: the child is
 		// linked by its own <edge>ID.
-	case !create && RequiredKey(g.ents[ed.FieldOn], fk):
+	case !create && requiredKey(g.ents[ed.FieldOn], fk):
 		// The key is on the target's rows and is a Required edge's, NULL-able
 		// (a Required self edge's). Unlinking a child would leave its key
 		// NULL, which velox refuses: an O2O's re-point unlinks first, and so
@@ -355,7 +355,7 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]edgeInput, error) {
 	return out, nil
 }
 
-// RequiredKey reports whether a Required edge of t that owns its key holds
+// requiredKey reports whether a Required edge of t that owns its key holds
 // the field fk, and fk is NULL-able: the key of any Required edge whose key
 // is NULL-able, such as a self edge's. velox refuses such a key nil
 // (velox.ColumnDesc.RequiredEdge), and the database's ON DELETE SET NULL can
@@ -363,7 +363,7 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]edgeInput, error) {
 // a Required edge that owns it (internal/gen/lower.go, OutField.RequiredEdge),
 // which the plugin model gives as Required, OwnsKey and Field
 // (internal/gen/plugin.go), with the field Nullable.
-func RequiredKey(t *plugin.Entity, fk *plugin.Field) bool {
+func requiredKey(t *plugin.Entity, fk *plugin.Field) bool {
 	if t == nil || fk == nil || !fk.Nullable {
 		return false
 	}

@@ -280,16 +280,19 @@
 // the hidden child's own ID is NOT_FOUND like any other the caller may not
 // read, so the error does not confirm a guess of it.
 //
-// A Required edge whose key is NULL-able, as a Required self edge's is, has a
-// key velox refuses nil on every write, but the database's ON DELETE SET NULL
-// clears it when the target is deleted. So its field is nullable in the SDL,
-// parent: T, where entgql gives T!: a non-null field that read NULL would null
-// the object around it. Create<T>Input still requires its <edge>ID. On the side
-// that does not own the key, an update only adds: a one-to-many edge has
-// add<Edge>IDs but no remove<Edge>IDs or clear<Edge>, and a one-to-one edge
-// has neither <edge>ID nor clear<Edge>, since each would unlink a child and
-// leave its Required key NULL. A child moves by its own <edge>ID, and the
-// create inputs, which only link a child whose key is NULL, stay.
+// A Required one-to-one or many-to-one edge whose key is NULL-able can read
+// null, so its field is nullable in the SDL, parent: T, where entgql gives T!:
+// a non-null field that read NULL would null the object around it. On the side
+// that owns the key, as a Required self edge's parent does, velox refuses the
+// key nil on every write (velox.ColumnDesc.RequiredEdge), but the database's ON
+// DELETE SET NULL clears it when the target is deleted. On the other side
+// velox does not refuse it: no child need hold the row. Create<T>Input still
+// requires a Required edge's <edge>ID. When the owning side's key is one velox
+// refuses nil, an update on the other side only adds: a one-to-many edge has
+// add<Edge>IDs but no remove<Edge>IDs or clear<Edge>, and a one-to-one edge has
+// neither <edge>ID nor clear<Edge>, since each would unlink a child and leave
+// its key NULL. A child moves by its own <edge>ID, and the create inputs, which
+// only link a child whose key is NULL, stay.
 //
 // # Loading
 //
