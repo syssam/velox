@@ -863,7 +863,17 @@ None. The five open at 110a775 are ruled above.
 
 ## Rulings made during execution
 
-(none yet)
+1. **Per-task check (from Task 6).** Lint, race tests of the touched modules, G, and D when SQL or e2e changed; the full `scripts/ci-local.sh`, bench/scale included, runs once at the wave's gate. bench/scale measures absolute seconds and failed only on load during Tasks 1–4.
+2. **Articles (Task 2).** One rule in `contrib/graphql/internal/english`: "an" before A, E, I, O, and before U only when two consonants follow (Under, Unread); otherwise "a" (User, Unit). Generated godoc, gqlimpl's messages, gogen's and sdl's messages and cursor errors use it. The plan's copy "a Event" was a plan defect.
+3. **A single owner key's existence check is `EQ` (Task 3),** and hand-written example tests pinned the old `IN (?)`; the controller fixed them.
+4. **Savepoints (Task 4).** The counter is atomic on the root frame; the test of concurrent savepoints on one transaction was dropped, since a transaction is documented as one goroutine at a time. The dead `DB.depth` went.
+5. **A savepoint per mutation (Task 5).** A commit refused after a failed ROLLBACK TO records outcome "error" (TxError), not "rollback". The mutation allocation budget is 550 (498 + 10%, to the next 10), not a multiple of 100.
+6. **G47 (Task 6).** Before the unlink, the generated update checks the new child under the caller's scope, so a hidden or missing ID is NOT_FOUND and "already linked" reveals only that a hidden current child exists; without it, the error confirmed a guessed ID of the hidden child. `StillLinked` takes `(at, typ, owner)`, as `Repointed` does.
+7. **G48 closed, not reachable (Task 7; plan ruling 7 reversed).** In the DSL a To without a From is an O2M, as in ent; velox-gen lists every M2M on both entities, and a delete already removes the inverse's join rows. The gathering was removed; only a behaviour-preserving refactor and the CASCADE note stayed.
+8. **Nullable on either side (Task 8; plan ruling 8 amended).** A Required unique edge renders `T` whenever its key is NULL-able, on the owning or the other side. `requiredKey` is unexported: nothing outside sdl calls it. An entgql difference, for Wave 6.
+9. **@goField and @goModel are refused on every element (Task 11 and the final fix),** entities with no type and their fields and edges included, by `ownDirective` at the head of the checks; an earlier attempt dropped them silently on four placements.
+10. **Bidi O2O through GraphQL (final review).** It keeps Wave 2's core semantics: the link writes the new partner under the caller's Write scope, and a re-point clears the old partner's key without the tenant or policy scope, as the symmetric edge's integrity. The Mutations section says so, as the one exception to StillLinked's rule.
+11. **API names (final review).** `OnCanceled` keeps its name: `Option` is the With family, `PresenterOption` configures the presenter (as gRPC's DialOption and ServerOption differ). Only `velox.IsNotFound` is added for 1.0; other kinds are read with `errors.As` on `*ConstraintError` and `*ValidationError`, and IsX helpers would be additive.
 
 ## Left by this plan
 
@@ -873,3 +883,10 @@ None. The five open at 110a775 are ruled above.
   - R8's note on the import alias of the annotation package beside gqlgen's `graphql` (spec ruling 19).
   - A RELEASE SAVEPOINT that fails after fn succeeded returns its error with fn's writes still in the transaction (tx.go:393-395). A resolver that swallows that error keeps them (check finding 13). This is core behaviour, to be documented.
   - `maps.Clone` in G6 is shallow: a directive argument that is itself a map stays shared, as the triage's fix accepts (check finding 16).
+- **Wave 5 (tests), from execution.**
+  - e2e with a Write-policy-only Profile: a readable but unwritable new child, and a Write-hidden current child.
+  - TestRequiredSelfEdge: an owning `prevID` update, create's `childIDs`/`nextID`, SET NULL through an executed GraphQL query, and a gqlgen run over the mutation e2e schema.
+  - bench/scale measured against a reference build in the same run, so load does not fail it.
+- **Wave 6 (docs), from execution.**
+  - A bidi O2O link to a readable but Write-frozen partner shows as "unique constraint violated" (core bidiLink's ConstraintUnique): document it, or give it its own kind.
+  - The entgql differences: nullable `T` for a Required edge with a NULL-able key, on either side.
