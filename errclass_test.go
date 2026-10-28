@@ -308,3 +308,72 @@ func TestIsNilTarget(t *testing.T) {
 		}
 	}
 }
+
+// FuzzConstraint: whatever MySQL or SQLite error number and text a driver
+// reports, the classifiers are deterministic and name a constraint that the
+// text contains (the empty name too); and classifying a MySQL error through
+// dbErr never panics, keeps the driver's error reachable, and agrees with
+// mysqlKind on the text the driver gives (the message after "Error N
+// (state): ") - a constraint error exactly when mysqlKind names a kind, and
+// ErrLocked exactly for 3572.
+func FuzzConstraint(f *testing.F) {
+	for _, c := range []struct {
+		code int
+		msg  string
+	}{
+		{1062, "Duplicate entry 'a' for key 'p.p_code_uq'"},
+		{1452, "Cannot add or update a child row: a foreign key constraint fails (`velox`.`c`, CONSTRAINT `c_p_fk` FOREIGN KEY (`p_id`) REFERENCES `p` (`id`))"},
+		{1451, "Cannot delete or update a parent row: a foreign key constraint fails (`velox`.`c`, CONSTRAINT `c_p_fk` FOREIGN KEY (`p_id`) REFERENCES `p` (`id`))"},
+		{1048, "Column 'code' cannot be null"},
+		{3819, "Check constraint 'p_n_ck' is violated."},
+		{1364, "Field 'code' doesn't have a default value"},
+		{4025, "CONSTRAINT `p_n_ck` failed for `velox`.`p`"},
+		{4025, "The AUTOEXTEND_SIZE value is out of range"},
+		{1062, "Duplicate entry 'x' for key 'users.admin_uq' for key 'users.email_uq'"},
+		{1062, "Duplicate entry '1' for key 'inv.PRIMARY'"},
+		{1062, "Duplicate entry 'a' for key 'name_uq'"},
+		{1064, "You have an error in your SQL syntax"},
+		{1213, "Deadlock found when trying to get lock"},
+		{3572, "Statement aborted because lock(s) could not be acquired immediately and NOWAIT is set."},
+		{787, "constraint failed: FOREIGN KEY constraint failed (787)"},
+		{2067, "constraint failed: UNIQUE constraint failed: p.code (2067)"},
+		{1555, "constraint failed: PRIMARY KEY constraint failed: p.id (1555)"},
+		{1299, "constraint failed: NOT NULL constraint failed: p.code (1299)"},
+		{275, "constraint failed: CHECK constraint failed: p_n_ck (275)"},
+		{0, ""},
+		{-1, "for key '"},
+		{1 << 20, "failed: ("},
+	} {
+		f.Add(c.code, c.msg)
+	}
+	f.Fuzz(func(t *testing.T, code int, msg string) {
+		mk, mn := mysqlKind(code, msg)
+		if mk2, mn2 := mysqlKind(code, msg); mk2 != mk || mn2 != mn {
+			t.Fatalf("mysqlKind(%d, %q) is not deterministic: %v %q, then %v %q", code, msg, mk, mn, mk2, mn2)
+		}
+		if !strings.Contains(msg, mn) {
+			t.Fatalf("mysqlKind(%d, %q) names %q, which the message does not contain", code, msg, mn)
+		}
+		sk, sn := sqliteKind(code, msg)
+		if sk2, sn2 := sqliteKind(code, msg); sk2 != sk || sn2 != sn {
+			t.Fatalf("sqliteKind(%d, %q) is not deterministic: %v %q, then %v %q", code, msg, sk, sn, sk2, sn2)
+		}
+		if !strings.Contains(msg, sn) {
+			t.Fatalf("sqliteKind(%d, %q) names %q, which the message does not contain", code, msg, sn)
+		}
+
+		err := myErr(uint16(code), msg)
+		got := dbErr(invInfo, err)
+		if !errors.Is(got, err) {
+			t.Fatalf("code %d, %q: the driver's error is not reachable from %v", code, msg, got)
+		}
+		kind, name := mysqlKind(int(uint16(code)), err.Error())
+		var ce *ConstraintError
+		if errors.As(got, &ce) != (kind != 0) || ce != nil && (ce.Kind != kind || ce.Constraint != name || ce.Entity != "velox.inv") {
+			t.Fatalf("code %d, %q: dbErr gave %#v, mysqlKind %v %q", code, msg, got, kind, name)
+		}
+		if errors.Is(got, ErrLocked) != (uint16(code) == 3572) {
+			t.Fatalf("code %d, %q: ErrLocked = %v", code, msg, errors.Is(got, ErrLocked))
+		}
+	})
+}

@@ -42,6 +42,8 @@ go test -run XXX -fuzz '^FuzzQuote$' -fuzztime 10s .
 go test -run XXX -fuzz '^FuzzScope$' -fuzztime 10s .
 go test -run XXX -fuzz '^FuzzLiteral$' -fuzztime 10s ./internal/ddl
 go test -run XXX -fuzz '^FuzzSplit$' -fuzztime 10s ./migrate
+go test -run XXX -fuzz '^FuzzRenderWrite$' -fuzztime 10s .
+go test -run XXX -fuzz '^FuzzConstraint$' -fuzztime 10s .
 
 go build -o bin/velox-gen ./cmd/velox-gen
 bin/velox-gen -check -out internal/testmodel -package testmodel ./internal/testmodel/schema
@@ -107,6 +109,7 @@ go run github.com/mgechev/revive@v1.17.0 -config revive.toml -set_exit_status ./
   go vet ./...
   go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
   go test -race -count=1 ./...
+  go test -run XXX -fuzz '^FuzzCost$' -fuzztime 10s ./veloxgql
 )
 
 go run ./bench/scale -n 500 -s 100 -check bench/scale/thresholds.json

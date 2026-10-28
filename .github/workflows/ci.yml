@@ -63,6 +63,8 @@ jobs:
           go test -run XXX -fuzz '^FuzzScope$' -fuzztime 10s .
           go test -run XXX -fuzz '^FuzzLiteral$' -fuzztime 10s ./internal/ddl
           go test -run XXX -fuzz '^FuzzSplit$' -fuzztime 10s ./migrate
+          go test -run XXX -fuzz '^FuzzRenderWrite$' -fuzztime 10s .
+          go test -run XXX -fuzz '^FuzzConstraint$' -fuzztime 10s .
       - name: generated files are current and every entity is valid
         run: |
           go build -o bin/velox-gen ./cmd/velox-gen
@@ -124,6 +126,7 @@ jobs:
           go vet ./...
           go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
           go test -race -count=1 ./...
+          go test -run XXX -fuzz '^FuzzCost$' -fuzztime 10s ./veloxgql
       - name: scale (n=500)
         run: go run ./bench/scale -n 500 -s 100 -check bench/scale/thresholds.json
       - name: scale (n=500, GraphQL)

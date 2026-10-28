@@ -317,3 +317,61 @@ func TestCostSelectsOperation(t *testing.T) {
 		}
 	}
 }
+
+// FuzzCost: for any query that validates against costSDL and any limits, Cost
+// is in [0, saturated], is the same when asked twice, and does not fall when
+// MaxPage or MaxList rises (monotone in the multipliers: every term is a
+// non-negative sum or product, and saturation keeps the order).
+func FuzzCost(f *testing.F) {
+	for _, q := range []string{
+		`{ users(first: 10) { edges { node { name } } } }`,
+		`{ users { edges { node { name } } } }`,
+		`{ users(last: 5) { edges { node { name } } } }`,
+		`{ users(first: 10) { edges { node { posts(first: 2) { totalCount } } } } }`,
+		`{ users(first: 4) { totalCount pageInfo { hasNextPage } } }`,
+		`{ users(first: 0) { edges { node { name } } } }`,
+		`{ users(first: -5) { edges { node { name } } } }`,
+		`query ($n: Int) { users(first: $n) { edges { node { name } } } }`,
+		`query ($n: Int = 3) { users(first: $n) { totalCount } }`,
+		`{ a: users(first: 10) { edges { node { name } } } b: users(first: 10) { edges { node { name } } } }`,
+		`{ users(first: 1) { edges { node { ...F } } } } fragment F on User { name posts(first: 10) { totalCount } }`,
+		`{ users(first: 1) { edges { node { ...F0 } } } } fragment F0 on User { name ...F1 ...F1 } fragment F1 on User { name ...F2 ...F2 } fragment F2 on User { name }`,
+		`{ users(first: 1000000) { edges { node { posts(first: 1000000) { edges { node { author { posts(first: 1000000) { edges { node { author { posts(first: 1000000) { totalCount } } } } } } } } } } } } }`,
+		`{ node(id: "x") { ... on User { posts { totalCount } } ... on Post { title } } }`,
+		`{ users(first: 2) @skip(if: true) { totalCount } }`,
+		`{ users(first: 2) @include(if: false) { totalCount } }`,
+		`{ users(first: 2) @skip(if: false) @include(if: true) { totalCount } }`,
+		`query ($s: Boolean!) { users(first: 2) @skip(if: $s) { totalCount } }`,
+		`{ users(first: 2) { totalCount } ... @include(if: false) { node(id: "x") { id } } }`,
+		`{ ...F @skip(if: true) users(first: 1) { totalCount } } fragment F on Query { many: users(first: 5) { totalCount } }`,
+		`{ users(first: 2) { totalCount edges @skip(if: true) { node { name } } } }`,
+		`{ nodes(ids: ["a", "b", "c"]) { id } }`,
+		`{ users(first: 1) { edges { node { friends { name } tags } } } }`,
+		`{ __schema { types { name } } __typename }`,
+	} {
+		f.Add(q, uint8(7), uint8(20))
+		f.Add(q, uint8(0), uint8(0))
+		f.Add(q, uint8(255), uint8(255))
+	}
+	schema := gqlparser.MustLoadSchema(&ast.Source{Input: costSDL})
+	f.Fuzz(func(t *testing.T, query string, maxPage, maxList uint8) {
+		doc, errs := gqlparser.LoadQueryWithRules(schema, query, nil)
+		if len(errs) > 0 {
+			t.Skip()
+		}
+		l1 := veloxgql.Limits{MaxPage: int(maxPage), MaxList: int(maxList)}
+		l2 := veloxgql.Limits{MaxPage: int(maxPage) + 1, MaxList: int(maxList) + 1}
+		for _, op := range doc.Operations {
+			c1 := veloxgql.Cost(schema, op, nil, l1)
+			if c1 < 0 || c1 > saturated {
+				t.Fatalf("%q under %+v: cost %d is outside [0, %d]", query, l1, c1, saturated)
+			}
+			if again := veloxgql.Cost(schema, op, nil, l1); again != c1 {
+				t.Fatalf("%q under %+v: cost %d, then %d", query, l1, c1, again)
+			}
+			if c2 := veloxgql.Cost(schema, op, nil, l2); c2 < c1 || c2 > saturated {
+				t.Fatalf("%q: cost %d under %+v but %d under %+v", query, c1, l1, c2, l2)
+			}
+		}
+	})
+}
