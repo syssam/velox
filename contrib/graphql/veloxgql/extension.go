@@ -294,8 +294,7 @@ func (e *Extension) InterceptResponse(ctx context.Context, next graphql.Response
 	var resp *graphql.Response
 	err := e.db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		// The transaction's ctx: its deadline, and the TxAround hooks' values.
-		// It marks tx as the operation's, so gqlimpl.Atomic runs in it.
-		resp = next(shared.WithOperationTx(withState(ctx, tx, e.limits), tx))
+		resp = next(withState(ctx, tx, e.limits))
 		if resp != nil && len(resp.Errors) > 0 {
 			return errRollback
 		}

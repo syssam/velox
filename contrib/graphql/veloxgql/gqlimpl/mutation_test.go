@@ -3,6 +3,7 @@ package gqlimpl_test
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -117,6 +118,28 @@ func mutationDB(t *testing.T) (*velox.DB, *txRecord) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	return mutationDBOn(t, sqlDB)
+}
+
+// savepointDB is mutationDB through a savepointConn, whose record it returns
+// too.
+func savepointDB(t *testing.T) (*velox.DB, *txRecord, *savepointRec) {
+	t.Helper()
+	probe, err := sql.Open("sqlite", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	drv := probe.Driver()
+	_ = probe.Close()
+	sp := &savepointRec{}
+	db, r := mutationDBOn(t, sql.OpenDB(savepointConnector{drv, sp}))
+	return db, r, sp
+}
+
+// mutationDBOn is mutationDB on sqlDB, an in-memory database it closes when
+// the test ends.
+func mutationDBOn(t *testing.T, sqlDB *sql.DB) (*velox.DB, *txRecord) {
+	t.Helper()
 	t.Cleanup(func() { _ = sqlDB.Close() })
 	sqlDB.SetMaxOpenConns(1)
 	for _, ddl := range []string{
@@ -129,6 +152,73 @@ func mutationDB(t *testing.T) (*velox.DB, *txRecord) {
 	}
 	r := &txRecord{}
 	return velox.Open(velox.SQLite, sqlDB, velox.WithAround(r.around), velox.WithTxAround(r.txAround)), r
+}
+
+// savepointRec records the savepoint statements of a savepointConn: SAVEPOINT,
+// RELEASE and ROLLBACK TO, in the order they were sent. While failRollback is
+// set, a ROLLBACK TO fails with errRollbackTo and is not sent.
+type savepointRec struct {
+	mu           sync.Mutex
+	stmts        []string
+	failRollback bool
+}
+
+// take returns the statements recorded and forgets them.
+func (r *savepointRec) take() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s := r.stmts
+	r.stmts = nil
+	return s
+}
+
+var errRollbackTo = errors.New("savepointConn: ROLLBACK TO refused")
+
+// savepointConnector opens in-memory SQLite connections of drv as
+// savepointConns that record into rec.
+type savepointConnector struct {
+	drv driver.Driver
+	rec *savepointRec
+}
+
+func (c savepointConnector) Connect(context.Context) (driver.Conn, error) {
+	conn, err := c.drv.Open("file::memory:")
+	if err != nil {
+		return nil, err
+	}
+	return savepointConn{conn.(savepointInner), c.rec}, nil
+}
+
+func (c savepointConnector) Driver() driver.Driver { return c.drv }
+
+// savepointInner is what the wrapped SQLite connection implements, and
+// savepointConn passes on.
+type savepointInner interface {
+	driver.Conn
+	driver.ExecerContext
+	driver.QueryerContext
+	driver.ConnBeginTx
+	driver.ConnPrepareContext
+}
+
+// savepointConn is a SQLite connection that records its savepoint statements
+// in rec.
+type savepointConn struct {
+	savepointInner
+	rec *savepointRec
+}
+
+func (c savepointConn) ExecContext(ctx context.Context, q string, args []driver.NamedValue) (driver.Result, error) {
+	if strings.HasPrefix(q, "SAVEPOINT") || strings.HasPrefix(q, "RELEASE") || strings.HasPrefix(q, "ROLLBACK TO") {
+		c.rec.mu.Lock()
+		c.rec.stmts = append(c.rec.stmts, q)
+		fail := c.rec.failRollback && strings.HasPrefix(q, "ROLLBACK TO")
+		c.rec.mu.Unlock()
+		if fail {
+			return nil, errRollbackTo
+		}
+	}
+	return c.savepointInner.ExecContext(ctx, q, args)
 }
 
 // countPeople counts the people outside any transaction.
@@ -198,8 +288,8 @@ func postMutation(t *testing.T, srv http.Handler) string {
 
 // TestAtomic is Review Focus 4: a mutation's writes are kept or dropped
 // together, in the extension's transaction when there is one and in one of
-// Atomic's own otherwise, and Atomic never opens a transaction (or a
-// savepoint) inside the extension's.
+// Atomic's own otherwise, and Atomic never opens a transaction inside the
+// extension's.
 func TestAtomic(t *testing.T) {
 	t.Run("outside a server", func(t *testing.T) {
 		db, r := mutationDB(t)
@@ -249,8 +339,8 @@ func TestAtomic(t *testing.T) {
 		if got, want := postMutation(t, srv), `{"data":{"run":1}}`; got != want {
 			t.Fatalf("got %s, want %s", got, want)
 		}
-		if fnDB == nil || fnDB != opDB {
-			t.Error("fn did not get the operation's transaction DB")
+		if fnDB == nil || fnDB == opDB {
+			t.Error("fn did not get a savepoint's DB: it got the operation's, or none")
 		}
 		if txs, stmts := r.take(); !slices.Equal(txs, []string{"commit"}) || !slices.Equal(stmts, []string{"insert in tx"}) {
 			t.Errorf("transactions %q, statements %q; want one insert in the operation's one transaction", txs, stmts)
@@ -307,6 +397,144 @@ func TestAtomic(t *testing.T) {
 		})
 		if !errors.Is(err, veloxgql.ErrNoDB) {
 			t.Errorf("Atomic = %v, want ErrNoDB", err)
+		}
+	})
+}
+
+// TestAtomicSavepoint is Review Focus 1 and 7: in the extension's
+// transaction, Atomic runs fn in a savepoint, so a resolver that swallows fn's
+// error drops fn's writes only, and the operation commits its other writes;
+// a savepoint that does not roll back fails the operation, which keeps
+// nothing. Outside a server no savepoint is made.
+func TestAtomicSavepoint(t *testing.T) {
+	t.Run("in the extension's transaction, fn succeeds", func(t *testing.T) {
+		db, r, sp := savepointDB(t)
+		var opDB, fnDB *velox.DB
+		srv := serveRun(veloxgql.NewExtension(db), func(ctx context.Context) error {
+			var err error
+			if opDB, err = veloxgql.DBFromContext(ctx); err != nil {
+				return err
+			}
+			return gqlimpl.Atomic(ctx, func(ctx context.Context, tx *velox.DB) error {
+				fnDB = tx
+				return tx.Insert(&person{ID: 1, Name: "p", Age: 1}).Exec(ctx)
+			})
+		})
+		if got, want := postMutation(t, srv), `{"data":{"run":1}}`; got != want {
+			t.Fatalf("got %s, want %s", got, want)
+		}
+		if got, want := sp.take(), []string{"SAVEPOINT velox_1", "RELEASE SAVEPOINT velox_1"}; !slices.Equal(got, want) {
+			t.Errorf("savepoint statements %q, want %q", got, want)
+		}
+		if txs, _ := r.take(); !slices.Equal(txs, []string{"commit"}) {
+			t.Errorf("transactions %q, want one committed", txs)
+		}
+		if fnDB == nil || fnDB == opDB {
+			t.Error("fn got the operation's DB, not a savepoint's")
+		}
+		if n := countPeople(t, db); n != 1 {
+			t.Errorf("%d people kept, want 1", n)
+		}
+	})
+
+	t.Run("two mutations in one operation", func(t *testing.T) {
+		db, r, sp := savepointDB(t)
+		srv := serveRun(veloxgql.NewExtension(db), func(ctx context.Context) error {
+			for id := int64(1); id <= 2; id++ {
+				if err := gqlimpl.Atomic(ctx, func(ctx context.Context, tx *velox.DB) error {
+					return tx.Insert(&person{ID: id, Name: "p", Age: 1}).Exec(ctx)
+				}); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if got, want := postMutation(t, srv), `{"data":{"run":1}}`; got != want {
+			t.Fatalf("got %s, want %s", got, want)
+		}
+		want := []string{"SAVEPOINT velox_1", "RELEASE SAVEPOINT velox_1", "SAVEPOINT velox_2", "RELEASE SAVEPOINT velox_2"}
+		if got := sp.take(); !slices.Equal(got, want) {
+			t.Errorf("savepoint statements %q, want %q: one name per savepoint of the transaction", got, want)
+		}
+		if txs, _ := r.take(); !slices.Equal(txs, []string{"commit"}) {
+			t.Errorf("transactions %q, want one committed", txs)
+		}
+	})
+
+	// swallow is a resolver that swallows the error of a mutation that
+	// writes person 1 and fails, then writes person 2 and returns nil; ignore
+	// says whether it swallows the second write's error too.
+	swallow := func(ignore bool) func(ctx context.Context) error {
+		return func(ctx context.Context) error {
+			_ = gqlimpl.Atomic(ctx, insertThenFail)
+			db, err := veloxgql.DBFromContext(ctx)
+			if err != nil {
+				return err
+			}
+			if err := db.Insert(&person{ID: 2, Name: "q", Age: 1}).Exec(ctx); err != nil && !ignore {
+				return err
+			}
+			return nil
+		}
+	}
+
+	t.Run("swallowing", func(t *testing.T) {
+		db, r, sp := savepointDB(t)
+		srv := serveRun(veloxgql.NewExtension(db), swallow(false))
+		if got, want := postMutation(t, srv), `{"data":{"run":1}}`; got != want {
+			t.Fatalf("got %s, want %s", got, want)
+		}
+		want := []string{"SAVEPOINT velox_1", "ROLLBACK TO SAVEPOINT velox_1", "RELEASE SAVEPOINT velox_1"}
+		if got := sp.take(); !slices.Equal(got, want) {
+			t.Errorf("savepoint statements %q, want %q", got, want)
+		}
+		if txs, _ := r.take(); !slices.Equal(txs, []string{"commit"}) {
+			t.Errorf("transactions %q, want one committed", txs)
+		}
+		if n := countPeople(t, db); n != 1 {
+			t.Errorf("%d people kept, want 1", n)
+		}
+		if ok, err := db.Query[person]().Where(people.ID.EQ(1)).Exists(context.Background()); err != nil || ok {
+			t.Errorf("person 1 kept: %v, %v; want the swallowed mutation's write gone", ok, err)
+		}
+	})
+
+	t.Run("swallowing, and ROLLBACK TO fails", func(t *testing.T) {
+		db, r, sp := savepointDB(t)
+		sp.failRollback = true
+		srv := serveRun(veloxgql.NewExtension(db), swallow(true))
+		if got := postMutation(t, srv); !strings.Contains(got, `"data":null`) || !strings.Contains(got, "a savepoint did not roll back") {
+			t.Errorf("got %s, want data null and the broken transaction's error: it must not commit", got)
+		}
+		want := []string{"SAVEPOINT velox_1", "ROLLBACK TO SAVEPOINT velox_1"}
+		if got := sp.take(); !slices.Equal(got, want) {
+			t.Errorf("savepoint statements %q, want %q", got, want)
+		}
+		// The commit is refused and the transaction rolled back: TxInfo
+		// reports a refused commit as TxError.
+		if txs, _ := r.take(); !slices.Equal(txs, []string{"error"}) {
+			t.Errorf("transactions %q, want one whose commit was refused", txs)
+		}
+		sp.failRollback = false
+		if n := countPeople(t, db); n != 0 {
+			t.Errorf("%d people kept, want 0", n)
+		}
+	})
+
+	t.Run("outside a server", func(t *testing.T) {
+		db, r, sp := savepointDB(t)
+		ctx := veloxgql.NewExtension(db).NewContext(context.Background())
+		if err := gqlimpl.Atomic(ctx, insertThenFail); !errors.Is(err, errAfterWrite) {
+			t.Fatalf("Atomic = %v, want fn's error", err)
+		}
+		if got := sp.take(); len(got) != 0 {
+			t.Errorf("savepoint statements %q, want none", got)
+		}
+		if txs, _ := r.take(); !slices.Equal(txs, []string{"rollback"}) {
+			t.Errorf("transactions %q, want one rolled back", txs)
+		}
+		if n := countPeople(t, db); n != 0 {
+			t.Errorf("%d people kept, want 0", n)
 		}
 	})
 }

@@ -4,8 +4,8 @@
 // paging, the edges, which read in batches (the edge of every row of a page in
 // one statement: EdgeConnection, EdgeOne and EdgeList), the fields a selection
 // reads (Selected and Narrow), the runtime of the mutations (Atomic, which runs
-// one in the operation's transaction or in one of its own, with no savepoint in
-// the first, the decoding of input IDs, CheckExists, Repointed, Readable,
+// one in a savepoint inside the operation's transaction, or in a transaction
+// of its own, the decoding of input IDs, CheckExists, Repointed, Readable,
 // UnlinkAll, Disjoint and NotFound, WriteError and FromJSON), and InputErrorf,
 // the coded error of a client's input. An application does not call this
 // package.

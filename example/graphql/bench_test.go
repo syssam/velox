@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"runtime/debug"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -236,6 +238,127 @@ func TestNestedRequestBudget(t *testing.T) {
 	if large.allocs > nestedAllocsBudget {
 		t.Errorf("a request at n=50 made %.0f allocations, over the budget of %d", large.allocs, nestedAllocsBudget)
 	}
+}
+
+// budgetMutation is the request TestMutationBudget serves: an update of post
+// 1's title. Every run sends the same statements: an UPDATE to an unchanged
+// value is still sent.
+const budgetMutation = `mutation { updatePost(id: "` + post1 + `", input: {title: "Alpha 2"}) { title } }`
+
+// mutationStmts is the number of statements budgetMutation sends, as
+// velox.WithAround counts them, which does not see SAVEPOINT or RELEASE.
+// mutationAllocsBudget is the most allocations it may make under gqlgen
+// v0.17.86, through testing.AllocsPerRun: the measured figure plus 10%,
+// rounded up to a multiple of 100.
+// Measured on 2026-10-28 on darwin/arm64 (Apple M3 Max), go test -run
+// TestMutationBudget -v, three runs each: before the savepoint per mutation
+// (G45), at 5392eb6, 2 statements (the UPDATE and the read of the result),
+// 0 savepoint statements and 476 allocations in each run; after it, 2
+// statements, 2 savepoint statements and 498 allocations in each run. The
+// budget is 498 plus 10%, rounded up.
+const (
+	mutationStmts        = 2
+	mutationAllocsBudget = 600
+)
+
+// TestMutationBudget pins what one mutation costs: the statements it sends,
+// the savepoint it runs in (its SAVEPOINT and RELEASE), and its allocations.
+func TestMutationBudget(t *testing.T) {
+	probe, err := sql.Open("sqlite", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	drv := probe.Driver()
+	_ = probe.Close()
+	var savepoints, stmts atomic.Int64
+	sqlDB := sql.OpenDB(savepointCounter{drv, &savepoints})
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	db, err := open(t.Context(), sqlDB, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+		stmts.Add(1)
+		return next(ctx)
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := seed(t.Context(), db); err != nil {
+		t.Fatal(err)
+	}
+	h := orgFromHeader(server(db))
+	send := func() []byte {
+		body, err := json.Marshal(map[string]any{"query": budgetMutation})
+		if err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/graphql", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Org-ID", "1")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Body.Bytes()
+	}
+
+	stmts.Store(0)
+	savepoints.Store(0)
+	resp := send()
+	sent, sps := stmts.Load(), savepoints.Load()
+	allocs := testing.AllocsPerRun(20, func() { send() })
+	t.Logf("%d statements, %d savepoint statements, %.0f allocs", sent, sps, allocs)
+	if got, want := string(resp), `{"data":{"updatePost":{"title":"Alpha 2"}}}`; got != want {
+		t.Fatalf("response %s, want %s", got, want)
+	}
+	if sent != mutationStmts {
+		t.Errorf("statements: %d, want %d", sent, mutationStmts)
+	}
+	if sps != 2 {
+		t.Errorf("savepoint statements: %d, want 2: the mutation's SAVEPOINT and RELEASE", sps)
+	}
+	if !pinnedGqlgenBuilt() {
+		t.Skipf("the allocation budget is for gqlgen %s only", pinnedGqlgen)
+	}
+	if allocs > mutationAllocsBudget {
+		t.Errorf("the mutation made %.0f allocations, over the budget of %d", allocs, mutationAllocsBudget)
+	}
+}
+
+// savepointCounter opens in-memory SQLite connections of drv that count the
+// SAVEPOINT and RELEASE statements they send in n.
+type savepointCounter struct {
+	drv driver.Driver
+	n   *atomic.Int64
+}
+
+func (c savepointCounter) Connect(context.Context) (driver.Conn, error) {
+	conn, err := c.drv.Open("file::memory:")
+	if err != nil {
+		return nil, err
+	}
+	return savepointCountConn{conn.(savepointCountInner), c.n}, nil
+}
+
+func (c savepointCounter) Driver() driver.Driver { return c.drv }
+
+// savepointCountInner is what the wrapped SQLite connection implements, and
+// savepointCountConn passes on.
+type savepointCountInner interface {
+	driver.Conn
+	driver.ExecerContext
+	driver.QueryerContext
+	driver.ConnBeginTx
+	driver.ConnPrepareContext
+}
+
+// savepointCountConn is a SQLite connection that counts its SAVEPOINT and
+// RELEASE statements in n.
+type savepointCountConn struct {
+	savepointCountInner
+	n *atomic.Int64
+}
+
+func (c savepointCountConn) ExecContext(ctx context.Context, q string, args []driver.NamedValue) (driver.Result, error) {
+	if strings.HasPrefix(q, "SAVEPOINT") || strings.HasPrefix(q, "RELEASE") {
+		c.n.Add(1)
+	}
+	return c.savepointCountInner.ExecContext(ctx, q, args)
 }
 
 // pinnedGqlgenBuilt reports whether this binary was built with the gqlgen the

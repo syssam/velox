@@ -213,19 +213,19 @@
 // back to the locking existence check of an update with no field to set. The
 // DELETE of Delete<T> that removed 0 rows is NOT_FOUND, and an unknown count is
 // the internal error "veloxgql: <mutation>: row count unknown"
-// (gqlimpl.CountUnknown), so that the mutation fails and its transaction rolls
-// back once the resolver returns the error. The UPDATE that links the children
-// whose key is on their own rows has the same error for an unknown count.
+// (gqlimpl.CountUnknown), so that the mutation fails and its writes roll back.
+// The UPDATE that links the children whose key is on their own rows has the
+// same error for an unknown count.
 //
 // The generated functions read the DB from the context, as the root query's do
-// (veloxgql.DBFromContext), and each is atomic: gqlimpl.Atomic runs it in the
-// transaction the Extension opened for the operation, or in a db.Tx of its own
-// where there is none (outside a server, with Extension.NewContext, or in an
-// operation WithTxFilter leaves out). There is no savepoint inside the
-// extension's transaction, so a resolver must return a mutation's error: one
-// that swallows it commits the partial writes. In a Go input a required field
-// is a value, an optional one a pointer (nil means not given), an ID a string,
-// a list of IDs a []string and a clear field a bool.
+// (veloxgql.DBFromContext), and each is atomic: gqlimpl.Atomic runs it in a
+// savepoint inside the transaction the Extension opened for the operation, or
+// in a db.Tx of its own where there is none (outside a server, with
+// Extension.NewContext, or in an operation WithTxFilter leaves out). A
+// mutation's error rolls back its own writes only: a resolver that swallows
+// it keeps the operation's other writes, and the operation commits. In a Go
+// input a required field is a value, an optional one a pointer (nil means not
+// given), an ID a string, a list of IDs a []string and a clear field a bool.
 //
 // Errors are coded before the presenter sees them. A malformed or mistyped ID
 // or JSON value, a conflicting input (a field given with its clear, an ID both
@@ -238,11 +238,10 @@
 // row. An ID that names no row the caller may read, or change, is NOT_FOUND
 // (veloxgql.CodeNotFound), whether the row is missing, another tenant's or
 // hidden by a policy, so that a client cannot tell; the mutation keeps nothing,
-// and a delete deletes nothing, once its error is returned (see above). Other
-// errors of velox are returned as they are, and ErrorPresenter maps them as it
-// does elsewhere. gqlgen's own validation errors (a variable of the wrong
-// shape) are left as gqlgen writes them, GRAPHQL_VALIDATION_FAILED with a path
-// or locations.
+// and a delete deletes nothing (see above). Other errors of velox are returned
+// as they are, and ErrorPresenter maps them as it does elsewhere. gqlgen's own
+// validation errors (a variable of the wrong shape) are left as gqlgen writes
+// them, GRAPHQL_VALIDATION_FAILED with a path or locations.
 //
 // Limits of the mutations:
 //   - An update that sets no field, and a delete, check their row before they

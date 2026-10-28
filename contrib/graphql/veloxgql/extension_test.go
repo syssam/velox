@@ -28,7 +28,6 @@ import (
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
 )
 
 // handlerSDL is the schema of the extension's tests.
@@ -420,39 +419,39 @@ func TestExtensionPutsTheDB(t *testing.T) {
 	}
 }
 
-// TestExtensionMarksItsTx: the context of a mutation the extension runs in a
-// transaction marks that transaction's DB as the operation's, which
-// gqlimpl.Atomic then runs in; a query's, a mutation's WithTxFilter leaves
-// out and Context's mark nothing.
-func TestExtensionMarksItsTx(t *testing.T) {
+// TestExtensionGivesMutationsItsTx: DBFromContext gives a mutation the
+// extension runs in a transaction that transaction's DB, where
+// gqlimpl.Atomic makes its savepoints; a query, a mutation WithTxFilter
+// leaves out and NewContext get db itself.
+func TestExtensionGivesMutationsItsTx(t *testing.T) {
 	db, _ := handlerDB(t)
-	var marked, got *velox.DB
-	mark := func(ctx context.Context, args map[string]any) (any, error) {
+	var got *velox.DB
+	read := func(ctx context.Context, args map[string]any) (any, error) {
 		var err error
 		got, err = veloxgql.DBFromContext(ctx)
-		marked = shared.OperationTxFromContext(ctx)
 		return args["id"], err
 	}
-	srv := serve(db, map[string]resolver{"add": mark, "count": func(ctx context.Context, _ map[string]any) (any, error) {
-		return mark(ctx, map[string]any{"id": 0})
+	srv := serve(db, map[string]resolver{"add": read, "count": func(ctx context.Context, _ map[string]any) (any, error) {
+		return read(ctx, map[string]any{"id": 0})
 	}}, veloxgql.WithTxFilter(func(_ context.Context, op *ast.OperationDefinition) bool { return op.Name != "Plain" }))
 
 	_ = post(t, context.Background(), srv, `mutation { add(id: 1) }`)
-	if marked == nil || marked != got || got == db {
-		t.Errorf("mutation: marked %p, DBFromContext %p, db %p; want the transaction's DB marked", marked, got, db)
+	if got == nil || got == db {
+		t.Errorf("mutation: DBFromContext %p, db %p; want the transaction's DB", got, db)
 	}
 	for name, query := range map[string]string{
 		"query":                   `{ count }`,
 		"mutation left out of tx": `mutation Plain { add(id: 2) }`,
 	} {
-		marked = db
+		got = nil
 		_ = post(t, context.Background(), srv, query)
-		if marked != nil {
-			t.Errorf("%s: marked %p, want nothing", name, marked)
+		if got != db {
+			t.Errorf("%s: DBFromContext %p, want db %p", name, got, db)
 		}
 	}
-	if m := shared.OperationTxFromContext(veloxgql.NewExtension(db).NewContext(context.Background())); m != nil {
-		t.Errorf("Context: marked %p, want nothing", m)
+	got, err := veloxgql.DBFromContext(veloxgql.NewExtension(db).NewContext(context.Background()))
+	if err != nil || got != db {
+		t.Errorf("NewContext: DBFromContext %p, %v; want db %p", got, err, db)
 	}
 }
 

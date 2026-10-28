@@ -11,23 +11,20 @@ import (
 	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
 )
 
-// Atomic runs fn with the DB veloxgql.DBFromContext(ctx) reads. For generated
-// code. When that DB is the transaction the Extension opened for a mutation
-// operation, fn runs in it; otherwise fn runs in db.Tx(ctx, fn), so a
-// mutation's writes are kept or dropped together outside a server too.
+// Atomic runs fn in db.Tx(ctx, fn), on the DB veloxgql.DBFromContext(ctx)
+// reads. For generated code.
 //
-// In the Extension's transaction fn gets ctx and that DB as they are: no
-// savepoint is made, and fn's error fails the operation, whose transaction
-// then rolls back, as long as the resolver returns it: one that swallows
-// the error commits fn's partial writes with the operation. Without a DB in
-// ctx, Atomic fails with veloxgql.ErrNoDB and fn does not run.
+// In the transaction the Extension opened for a mutation operation, db.Tx
+// makes a savepoint, so fn's error rolls back fn's writes only. A resolver
+// that swallows the error keeps the operation's other writes, and the
+// operation commits. Outside one, fn runs in a transaction of its own, so a
+// mutation's writes are kept or dropped together outside a server too.
+// Without a DB in ctx, Atomic fails with veloxgql.ErrNoDB and fn does not
+// run.
 func Atomic(ctx context.Context, fn func(ctx context.Context, db *velox.DB) error) error {
 	db, err := veloxgql.DBFromContext(ctx)
 	if err != nil {
 		return err
-	}
-	if db == shared.OperationTxFromContext(ctx) {
-		return fn(ctx, db)
 	}
 	return db.Tx(ctx, fn)
 }
