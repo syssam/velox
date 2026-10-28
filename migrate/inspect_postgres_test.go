@@ -599,8 +599,10 @@ func TestInspectPostgresBaselineNotes(t *testing.T) {
 }
 
 // TestInspectPostgresExtensionThrough: an extension's type behind an array or
-// a domain is found, and a domain, which 0001_baseline.sql does not create, is
-// a baseline note naming the nearest domain, also behind an array.
+// a domain is found, and named as the type the column's type is over when a
+// domain lies between; a domain, which 0001_baseline.sql does not create, is
+// a baseline note naming the nearest domain, also behind an array or another
+// domain, but not one an extension creates or one of information_schema's.
 func TestInspectPostgresExtensionThrough(t *testing.T) {
 	db, _ := freshDB(t, velox.Postgres)
 	if _, err := db.Exec(`CREATE EXTENSION citext`); err != nil {
@@ -611,10 +613,36 @@ func TestInspectPostgresExtensionThrough(t *testing.T) {
 		`CREATE DOMAIN tag_name AS citext`,
 		`CREATE TABLE tag_names (id integer PRIMARY KEY, name tag_name)`,
 		`CREATE TABLE tag_lists (id integer PRIMARY KEY, names tag_name[])`,
+		`CREATE DOMAIN tag_arr AS citext[]`,
+		`CREATE TABLE tag_arrs (id integer PRIMARY KEY, names tag_arr)`,
+		`CREATE DOMAIN tag_word AS tag_name`,
+		`CREATE TABLE tag_words (id integer PRIMARY KEY, word tag_word)`,
+		`CREATE TABLE info_names (id integer PRIMARY KEY, name information_schema.sql_identifier)`,
 	} {
 		mustExec(t, db, q)
 	}
-	refs := []migrate.TableRef{{Name: "tag_sets"}, {Name: "tag_names"}, {Name: "tag_lists"}}
+	refs := []migrate.TableRef{{Name: "tag_sets"}, {Name: "tag_names"}, {Name: "tag_lists"}, {Name: "tag_arrs"}, {Name: "tag_words"}, {Name: "info_names"}}
+	// lo's type is a domain over oid that CREATE EXTENSION lo creates.
+	lo := true
+	if _, err := db.Exec(`CREATE EXTENSION lo`); err != nil {
+		t.Logf("CREATE EXTENSION lo: %v; its row is skipped", err)
+		lo = false
+	} else {
+		mustExec(t, db, `CREATE TABLE blobs (id integer PRIMARY KEY, b lo)`)
+		refs = append(refs, migrate.TableRef{Name: "blobs"})
+	}
+	// Whether citext's array type is the extension's member, as on PostgreSQL
+	// 18, or only citext is, as on 14: tag_arr is over the nearest member.
+	var arrMember bool
+	if err := db.QueryRow(`SELECT EXISTS (SELECT 1 FROM pg_depend WHERE classid = 'pg_type'::regclass
+		AND objid = 'citext[]'::regtype AND deptype = 'e')`).Scan(&arrMember); err != nil {
+		t.Fatal(err)
+	}
+	arrOver := "citext"
+	if arrMember {
+		arrOver = "citext[]"
+	}
+	t.Logf("citext[] is an extension member: %v", arrMember)
 	_, notes, err := migrate.InspectNotes(context.Background(), db, velox.Postgres, refs)
 	if err != nil {
 		t.Fatal(err)
@@ -629,10 +657,18 @@ func TestInspectPostgresExtensionThrough(t *testing.T) {
 	domain := " is a domain, which 0001_baseline.sql does not create; add its CREATE DOMAIN before the tables, then run migrate hash"
 	want := []migrate.Note{
 		{Table: migrate.TableRef{Name: "tag_sets"}, Object: "tag_sets", Baseline: true, Message: "the type citext[] comes from the extension citext" + add},
-		{Table: migrate.TableRef{Name: "tag_names"}, Object: "tag_names", Baseline: true, Message: "the type tag_name comes from the extension citext" + add},
+		{Table: migrate.TableRef{Name: "tag_names"}, Object: "tag_names", Baseline: true, Message: "the type tag_name is over citext, from the extension citext" + add},
 		{Table: migrate.TableRef{Name: "tag_names"}, Object: "tag_names", Baseline: true, Message: "the type tag_name" + domain},
-		{Table: migrate.TableRef{Name: "tag_lists"}, Object: "tag_lists", Baseline: true, Message: "the type tag_name[] comes from the extension citext" + add},
+		{Table: migrate.TableRef{Name: "tag_lists"}, Object: "tag_lists", Baseline: true, Message: "the type tag_name[] is over citext, from the extension citext" + add},
 		{Table: migrate.TableRef{Name: "tag_lists"}, Object: "tag_lists", Baseline: true, Message: "the type tag_name" + domain},
+		{Table: migrate.TableRef{Name: "tag_arrs"}, Object: "tag_arrs", Baseline: true, Message: "the type tag_arr is over " + arrOver + ", from the extension citext" + add},
+		{Table: migrate.TableRef{Name: "tag_arrs"}, Object: "tag_arrs", Baseline: true, Message: "the type tag_arr" + domain},
+		{Table: migrate.TableRef{Name: "tag_words"}, Object: "tag_words", Baseline: true, Message: "the type tag_word is over citext, from the extension citext" + add},
+		{Table: migrate.TableRef{Name: "tag_words"}, Object: "tag_words", Baseline: true, Message: "the type tag_word" + domain},
+	}
+	if lo {
+		want = append(want, migrate.Note{Table: migrate.TableRef{Name: "blobs"}, Object: "blobs", Baseline: true,
+			Message: "the type lo comes from the extension lo; add CREATE EXTENSION lo to 0001_baseline.sql before the tables, then run migrate hash"})
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("baseline notes\n%+v\nwant\n%+v", got, want)
