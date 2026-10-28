@@ -145,6 +145,12 @@ func MySQLDefault(typ string, expr bool, def string) string {
 	return mysqlDefault(typ, expr, sql.NullString{String: def, Valid: true})
 }
 
+// MySQLBinaryDefault is mysqlBinaryDefault.
+var MySQLBinaryDefault = mysqlBinaryDefault
+
+// MyShownDefault is myShownDefault.
+var MyShownDefault = myShownDefault
+
 // ParseCreateTable is parseCreateTable, each key of the text as a
 // ForeignKey: its name, its columns, and its referenced table and columns
 // as written.

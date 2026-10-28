@@ -341,14 +341,10 @@ func lexPredicate(d velox.Dialect, expr string) ([]predToken, bool) {
 			word := expr[i:j]
 			if j < len(expr) && expr[j] == '\'' {
 				// MySQL's UTF-8 character set before a literal, _utf8mb4'a',
-				// is dropped; another, which changes the comparison, and
-				// PostgreSQL's E'' and the like are not read.
-				switch strings.ToLower(word) {
-				case "_utf8mb4", "_utf8mb3", "_utf8":
-				default:
-					return nil, false
-				}
-				if d != velox.MySQL {
+				// is dropped, and so are _latin1 and _ascii before one whose
+				// every byte is ASCII; another, which changes the comparison,
+				// and PostgreSQL's E'' and the like are not read.
+				if d != velox.MySQL || !dropIntroducer(word, expr[j:stringEnd(expr, j, true)], false) {
 					return nil, false
 				}
 				i = j

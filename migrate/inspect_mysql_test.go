@@ -486,6 +486,56 @@ func TestDriftMySQLLive(t *testing.T) {
 	}
 }
 
+// TestInspectMySQLBinaryDefaults: a binary or varbinary column's literal
+// default is read from SHOW CREATE TABLE, information_schema cutting it at
+// its first NUL; a binary type's expression and an ASCII _latin1 literal
+// are the model's. Another default set by hand is a change.
+func TestInspectMySQLBinaryDefaults(t *testing.T) {
+	needMySQL(t)
+	s := &migrate.Schema{Dialect: velox.MySQL, Tables: []migrate.Table{{
+		Name: "bins",
+		Columns: []migrate.Column{
+			{Name: "id", Type: "bigint", Identity: true},
+			{Name: "code", Type: "varbinary(8)", Default: "'a'"},
+			{Name: "pad", Type: "binary(2)", Default: "'a'"},
+			{Name: "quote", Type: "varbinary(8)", Default: "''''"},
+			{Name: "data", Type: "blob", Default: "('a')"},
+			{Name: "latin", Type: "text", Default: "(_latin1'a')"},
+		},
+		PrimaryKey:     []string{"id"},
+		PrimaryKeyName: "PRIMARY",
+		Collation:      "utf8mb4_bin",
+	}}}
+	dir := dirOf(t, velox.MySQL, step{to: s, name: "bins"})
+	noDriftMySQL(t, dir, s)
+
+	db, _ := freshDB(t, velox.MySQL)
+	mustUp(t, db, dir)
+	mustExec(t, db, "ALTER TABLE bins ADD COLUMN scratch varbinary(8) DEFAULT 0x00ff")
+	var name, create string
+	if err := db.QueryRow("SHOW CREATE TABLE bins").Scan(&name, &create); err != nil {
+		t.Fatal(err)
+	}
+	for line := range strings.Lines(create) {
+		if strings.Contains(line, "`pad`") || strings.Contains(line, "`scratch`") || strings.Contains(line, "`latin`") {
+			t.Logf("SHOW CREATE TABLE: %s", strings.TrimSpace(line))
+		}
+	}
+	mustExec(t, db, "ALTER TABLE bins DROP COLUMN scratch")
+	mustExec(t, db, "ALTER TABLE bins ALTER COLUMN code SET DEFAULT 0x6100FF")
+	r, err := migrate.Drift(context.Background(), db, s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var changes []string
+	for _, ch := range r.Changes {
+		changes = append(changes, ch.String())
+	}
+	if want := []string{"alter-column bins.code (default)"}; !slices.Equal(changes, want) || len(r.Warnings) > 0 {
+		t.Errorf("changes %q, warnings %v; want %q", changes, r.Warnings, want)
+	}
+}
+
 // TestInspectMySQLDoesNotMutate: Inspect leaves the tables it is given as
 // they were, and Drift its snapshot; each gives the same twice.
 func TestInspectMySQLDoesNotMutate(t *testing.T) {

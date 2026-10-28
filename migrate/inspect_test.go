@@ -217,9 +217,78 @@ func TestMySQLDefault(t *testing.T) {
 		{"datetime(6)", true, `CURRENT_TIMESTAMP(6)`, `CURRENT_TIMESTAMP(6)`},
 		{"varchar(8)", false, `CURRENT_TIMESTAMP`, `'CURRENT_TIMESTAMP'`},
 		{"int", false, `0`, `0`},
+		// A binary type's expression: _binary'…' and 0x… of printable
+		// ASCII are the model's literal; other bytes are as printed.
+		{"blob", true, `_binary\'a\'`, `('a')`},
+		{"blob", true, `0x61`, `('a')`},
+		{"tinyblob", true, `0x61`, `('a')`},
+		{"blob", true, `0x00ff`, `0x00ff`},
+		{"varbinary(8)", true, `_binary\'a\'`, `('a')`},
+		// _latin1 and _ascii drop on an ASCII literal only.
+		{"text", true, `_latin1\'a\'`, `('a')`},
+		{"text", true, `_ascii\'a\'`, `('a')`},
+		{"text", true, `_latin1\'Ã©\'`, `_latin1'Ã©'`},
+		// Guards: _binary on text, a varchar's text, and bit are untouched.
+		{"text", true, `_binary\'a\'`, `_binary'a'`},
+		{"varchar(8)", false, `0x61`, `'0x61'`},
+		{"bit(8)", false, `b'101'`, `b'101'`},
 	} {
 		if got := migrate.MySQLDefault(c.typ, c.expr, c.def); got != c.want {
 			t.Errorf("%s %v %s: %q, want %q", c.typ, c.expr, c.def, got, c.want)
+		}
+	}
+}
+
+// TestMySQLBinaryDefault: a binary or varbinary column's default, as SHOW
+// CREATE TABLE prints it, in the model's spelling: printable ASCII is the
+// model's literal, binary's padding dropped; other bytes are as printed.
+func TestMySQLBinaryDefault(t *testing.T) {
+	for _, c := range []struct{ typ, shown, want string }{
+		{"varbinary(8)", `'a'`, `'a'`},
+		{"varbinary(8)", `0x6100FF`, `0x6100FF`},
+		{"varbinary(8)", `'a\0b'`, `'a\0b'`},
+		{"varbinary(8)", `'\0'`, `'\0'`},
+		{"binary(3)", `'\0a\0'`, `'\0a\0'`},
+		{"binary(2)", `'a\0'`, `'a'`},
+		{"varbinary(8)", `0x4A4B`, `'JK'`},
+		{"varbinary(8)", `0x5C`, `'\\'`},
+		{"varbinary(8)", `'it''s'`, `'it''s'`},
+		{"varbinary(8)", `'it\'s'`, `'it''s'`},
+		{"varbinary(8)", `0x00FF`, `0x00FF`},
+	} {
+		if got := migrate.MySQLBinaryDefault(c.typ, c.shown); got != c.want {
+			t.Errorf("%s %s: %s, want %s", c.typ, c.shown, got, c.want)
+		}
+	}
+}
+
+// TestMyShownDefault: one column's DEFAULT literal in SHOW CREATE TABLE's
+// text, a name or literal holding DEFAULT not misread.
+func TestMyShownDefault(t *testing.T) {
+	create := "CREATE TABLE `bins` (\n  `id` bigint NOT NULL AUTO_INCREMENT,\n  `code` varbinary(8) NOT NULL DEFAULT 'a',\n" +
+		"  `raw` varbinary(8) NOT NULL DEFAULT 0x6100FF,\n  `nul` varbinary(8) DEFAULT 'a\\0b',\n" +
+		"  `c DEFAULT d` varbinary(8) NOT NULL DEFAULT 'x'' DEFAULT y',\n  PRIMARY KEY (`id`)\n) ENGINE=InnoDB"
+	for _, c := range []struct {
+		create, col, want string
+		ok                bool
+	}{
+		{create, "code", `'a'`, true},
+		{create, "raw", `0x6100FF`, true},
+		{create, "nul", `'a\0b'`, true},
+		{create, "c DEFAULT d", `'x'' DEFAULT y'`, true},
+		{create, "id", "", false},
+		{create, "missing", "", false},
+		// A backquote doubled in a name, DEFAULT after other attributes
+		// and a comment holding DEFAULT.
+		{"CREATE TABLE `t` (\n  `a``b` varbinary(8) NOT NULL DEFAULT 'q',\n  `a` int\n)", "a`b", `'q'`, true},
+		{"CREATE TABLE `t` (\n  `a``b` varbinary(8) NOT NULL DEFAULT 'q',\n  `a` int\n)", "a", "", false},
+		{"CREATE TABLE `t` (\n  `c` varbinary(8) NOT NULL COMMENT 'no DEFAULT 0x00 here' DEFAULT 0x01\n)", "c", `0x01`, true},
+		{"CREATE TABLE `t` (\n  `c` varbinary(8) COMMENT 'DEFAULT ''z''',\n  `d` int DEFAULT '1'\n)", "c", "", false},
+		{"CREATE TABLE `t` (\n  `c` varbinary(8) COMMENT 'it\\'s DEFAULT 1' DEFAULT 'x,y'\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", "c", `'x,y'`, true},
+	} {
+		got, ok := migrate.MyShownDefault(c.create, c.col)
+		if got != c.want || ok != c.ok {
+			t.Errorf("%q in %q: %q %v, want %q %v", c.col, c.create, got, ok, c.want, c.ok)
 		}
 	}
 }

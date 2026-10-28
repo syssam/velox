@@ -1,9 +1,12 @@
 package migrate
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -145,9 +148,12 @@ ORDER BY ORDINAL_POSITION`
 
 // columns reads mt's columns. What a column has that the model cannot hold
 // is a note: a generated column, ON UPDATE CURRENT_TIMESTAMP, INVISIBLE,
-// and a collation other than the table's.
+// and a collation other than the table's. A binary or varbinary column's
+// literal default is read from SHOW CREATE TABLE, information_schema
+// cutting it at its first NUL byte.
 func (r *myReader) columns(mt *myTable) error {
-	return r.each(myColumnsQuery, []any{mt.schema, mt.t.Name}, func(rows *sql.Rows) error {
+	var shown []int // the columns whose default SHOW CREATE TABLE gives
+	err := r.each(myColumnsQuery, []any{mt.schema, mt.t.Name}, func(rows *sql.Rows) error {
 		var (
 			c                              Column
 			typ, nullable, extra, collated string
@@ -171,6 +177,9 @@ func (r *myReader) columns(mt *myTable) error {
 			unheld = append(unheld, "generated from an expression")
 		} else {
 			c.Default = mysqlDefault(c.Type, has("DEFAULT_GENERATED"), def)
+			if w := typeWord(c.Type); def.Valid && !has("DEFAULT_GENERATED") && (w == "binary" || w == "varbinary") {
+				shown = append(shown, len(mt.t.Columns))
+			}
 		}
 		for i, w := range words {
 			if strings.EqualFold(w, "update") && i > 0 && strings.EqualFold(words[i-1], "on") && i+1 < len(words) {
@@ -189,31 +198,55 @@ func (r *myReader) columns(mt *myTable) error {
 		mt.t.Columns = append(mt.t.Columns, c)
 		return nil
 	})
+	if err != nil || len(shown) == 0 {
+		return err
+	}
+	var name, create string
+	q := "SHOW CREATE TABLE " + ddl.Ident(velox.MySQL, mt.schema) + "." + ddl.Ident(velox.MySQL, mt.t.Name)
+	if err := r.each(q, nil, func(rows *sql.Rows) error { return rows.Scan(&name, &create) }); err != nil {
+		return err
+	}
+	for _, i := range shown {
+		c := &mt.t.Columns[i]
+		lit, ok := myShownDefault(create, c.Name)
+		if !ok {
+			return fmt.Errorf("SHOW CREATE TABLE %s shows no default for the column %s, though information_schema has one", mt.t.Ref(), c.Name)
+		}
+		c.Default = mysqlBinaryDefault(c.Type, lit)
+	}
+	return nil
 }
 
 // mysqlDefault is a COLUMN_DEFAULT in the model's spelling. NULL is no
 // default. An expression (DEFAULT_GENERATED) is as printed, information
-// schema's escapes read, but a lone literal, _utf8mb4'…', is the model's
-// ('…'), and a number, true, false or NULL, which MySQL prints bare, is in
-// parentheses again. A literal of a string, enum, set, date or time type is quoted
-// again, MySQL printing it bare; a decimal loses the zeros its scale pads
-// it with; any other is as printed.
+// schema's escapes read, but a lone literal is the model's ('…'): one of a
+// UTF-8 character set, _utf8mb4'…', one of _latin1 or _ascii whose every
+// byte is ASCII, and on a binary type _binary'…' and 0x… as
+// mysqlBinaryDefault reads it. A number, true, false or NULL, which MySQL
+// prints bare, is in parentheses again. A literal of a string, enum, set,
+// date or time type is quoted again, MySQL printing it bare; a decimal
+// loses the zeros its scale pads it with; any other is as printed.
 func mysqlDefault(typ string, expr bool, def sql.NullString) string {
 	if !def.Valid {
 		return ""
 	}
 	s := def.String
+	word := typeWord(typ)
 	if expr {
 		s = unescapeMySQL(s)
-		lit := s
-		for _, cs := range []string{"_utf8mb4", "_utf8mb3", "_utf8"} {
-			if rest, ok := strings.CutPrefix(lit, cs); ok {
-				lit = rest
-				break
+		binary := slices.Contains([]string{"binary", "varbinary", "tinyblob", "blob", "mediumblob", "longblob"}, word)
+		if binary && len(s) > 2 && (s[:2] == "0x" || s[:2] == "0X") {
+			if lit := mysqlBinaryDefault(typ, s); strings.HasPrefix(lit, "'") {
+				return "(" + lit + ")"
 			}
+			return s
 		}
-		if strings.HasPrefix(lit, "'") {
-			if v, end, ok := unquoteAt(lit, 0, true); ok && end == len(lit) {
+		if i := strings.IndexByte(s, '\''); i > 0 {
+			if v, end, ok := unquoteAt(s, i, true); ok && end == len(s) && dropIntroducer(s[:i], v, binary) {
+				return "(" + ddl.Literal(velox.MySQL, v) + ")"
+			}
+		} else if i == 0 {
+			if v, end, ok := unquoteAt(s, 0, true); ok && end == len(s) {
 				return "(" + ddl.Literal(velox.MySQL, v) + ")"
 			}
 		}
@@ -221,10 +254,6 @@ func mysqlDefault(typ string, expr bool, def sql.NullString) string {
 			return "(" + s + ")" // (42), (TRUE) and (NULL) print bare
 		}
 		return s
-	}
-	word := typ
-	if i := strings.IndexAny(word, "( "); i >= 0 {
-		word = word[:i]
 	}
 	switch word {
 	case "enum", "set", "date", "datetime", "timestamp", "time":
@@ -239,6 +268,164 @@ func mysqlDefault(typ string, expr bool, def sql.NullString) string {
 		return ddl.Literal(velox.MySQL, s)
 	}
 	return s
+}
+
+// typeWord is typ's first word: varbinary of varbinary(8).
+func typeWord(typ string) string {
+	if i := strings.IndexAny(typ, "( "); i >= 0 {
+		return typ[:i]
+	}
+	return typ
+}
+
+// dropIntroducer reports whether the character set introducer before a
+// literal of the value v drops without changing it: a UTF-8 one, _latin1
+// or _ascii when every byte of v is ASCII, and _binary when binary.
+func dropIntroducer(introducer, v string, binary bool) bool {
+	switch strings.ToLower(introducer) {
+	case "_utf8mb4", "_utf8mb3", "_utf8":
+		return true
+	case "_latin1", "_ascii":
+		return asciiOnly(v)
+	case "_binary":
+		return binary
+	}
+	return false
+}
+
+// asciiOnly reports whether every byte of s is below 0x80.
+func asciiOnly(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= 0x80 {
+			return false
+		}
+	}
+	return true
+}
+
+// mysqlBinaryDefault is a binary or varbinary column's literal default, as
+// SHOW CREATE TABLE prints it, in the model's spelling. It decodes the
+// literal ('…' with MySQL's escapes and doubled quotes, or 0x… in either
+// case) to its bytes; on binary(n) it drops the trailing 0x00 bytes that
+// pad the value. When every byte left is printable ASCII (0x20–0x7e), it is
+// ddl.Literal(velox.MySQL, …) of them; otherwise it is shown as printed.
+func mysqlBinaryDefault(typ, shown string) string {
+	var b []byte
+	switch {
+	case strings.HasPrefix(shown, "'"):
+		v, end, ok := unquoteAt(shown, 0, true)
+		if !ok || end != len(shown) {
+			return shown
+		}
+		b = []byte(v)
+	case len(shown) > 2 && (shown[:2] == "0x" || shown[:2] == "0X"):
+		var err error
+		if b, err = hex.DecodeString(shown[2:]); err != nil {
+			return shown
+		}
+	default:
+		return shown
+	}
+	if typeWord(typ) == "binary" {
+		b = bytes.TrimRight(b, "\x00")
+	}
+	for _, c := range b {
+		if c < 0x20 || c > 0x7e {
+			return shown
+		}
+	}
+	return ddl.Literal(velox.MySQL, string(b))
+}
+
+// myShownDefault is the literal of column col's DEFAULT in create, SHOW
+// CREATE TABLE's text: a quoted string as MySQL prints it, or 0x…; false
+// when the column has no DEFAULT. It reads backquoted names and quoted
+// literals, so a name or literal holding " DEFAULT " is not misread.
+func myShownDefault(create, col string) (string, bool) {
+	// The table's name, which may hold a parenthesis, up to the definitions.
+	i := 0
+	for {
+		tok, next := myToken(create, i)
+		if tok == "" {
+			return "", false
+		}
+		if tok[0] == '(' {
+			i = next - len(tok) + 1
+			break
+		}
+		i = next
+	}
+	// The definitions, each a list of tokens, up to the closing parenthesis.
+	var def []string
+	for i < len(create) {
+		tok, next := myToken(create, i)
+		switch tok {
+		case "", ")", ",":
+			if len(def) > 0 && def[0] == ddl.Ident(velox.MySQL, col) {
+				for k := 1; k+1 < len(def); k++ {
+					if strings.EqualFold(def[k], "DEFAULT") {
+						return def[k+1], true
+					}
+				}
+				return "", false
+			}
+			if tok != "," {
+				return "", false
+			}
+			def = def[:0]
+		default:
+			def = append(def, tok)
+		}
+		i = next
+	}
+	return "", false
+}
+
+// myToken is the token of SHOW CREATE TABLE's text at s[i], white space
+// skipped, and the index after it: a backquoted name, a quoted literal, a
+// parenthesised group, "," or ")", or a word; "" at the end.
+func myToken(s string, i int) (string, int) {
+	for i < len(s) && strings.IndexByte(" \t\r\n", s[i]) >= 0 {
+		i++
+	}
+	if i == len(s) {
+		return "", i
+	}
+	start := i
+	switch s[i] {
+	case '`':
+		return s[start:stringEnd(s, i, false)], stringEnd(s, i, false)
+	case '\'', '"':
+		end := stringEnd(s, i, true)
+		return s[start:end], end
+	case ',', ')':
+		return s[i : i+1], i + 1
+	case '(':
+		depth := 0
+		for i < len(s) {
+			switch s[i] {
+			case '\'', '"', '`':
+				i = stringEnd(s, i, s[i] != '`')
+				continue
+			case '(':
+				depth++
+			case ')':
+				depth--
+				if depth == 0 {
+					return s[start : i+1], i + 1
+				}
+			}
+			i++
+		}
+		return s[start:], i
+	}
+	for i < len(s) && strings.IndexByte(" \t\r\n,()'\"`", s[i]) < 0 {
+		i++
+	}
+	if i > start && i < len(s) && s[i] == '\'' { // _binary'…', b'…'
+		i = stringEnd(s, i, true)
+	}
+	return s[start:i], i
 }
 
 // unescapeMySQL is s with the escapes information_schema prints an

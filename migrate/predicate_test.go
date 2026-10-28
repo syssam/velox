@@ -346,9 +346,10 @@ func TestNormalizePredicateKeepsMeaning(t *testing.T) {
 		// A comment is not an operator.
 		{velox.Postgres, `qty > 5 -- x`, `qty > 5 - -x`},
 		{velox.Postgres, `qty > 5 /* x */`, `qty > 5 / * x * /`},
-		// MySQL's other character sets change the comparison.
+		// MySQL's other character sets, and latin1 past ASCII, change the
+		// comparison.
 		{velox.MySQL, `name = _binary'abc'`, `name = 'abc'`},
-		{velox.MySQL, `name = _latin1'abc'`, `name = 'abc'`},
+		{velox.MySQL, "name = _latin1'é'", "name = 'é'"},
 		// The fallback keeps every literal's inside.
 		{velox.Postgres, `E'a\'  b' = x`, `E'a\' b' = x`},
 		{velox.Postgres, `$$a  b$$ = x`, `$$a b$$ = x`},
@@ -392,6 +393,9 @@ func TestNormalizePredicateKeepsMeaning(t *testing.T) {
 		{velox.MySQL, `name = _utf8mb4'abc'`, `name = 'abc'`},
 		{velox.MySQL, `name = _utf8mb3'abc'`, `name = 'abc'`},
 		{velox.MySQL, `name = _UTF8'abc'`, `name = 'abc'`},
+		{velox.MySQL, "name = _latin1'abc'", "name = 'abc'"},
+		{velox.MySQL, "name = _ASCII'abc'", "name = 'abc'"},
+		{velox.MySQL, "(name = _ascii'a''b')", "name = 'a''b'"},
 		{velox.MySQL, `code LIKE '\\_'`, `code LIKE '\_'`},
 		{velox.MySQL, `code = 'it\'s'`, `code = 'it''s'`},
 		{velox.MySQL, `code = '\q'`, `code = 'q'`},
