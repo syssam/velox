@@ -88,6 +88,38 @@ func TestTxAroundSeesEveryAttempt(t *testing.T) {
 	}
 }
 
+// TestRetryExhaustedWithTxAround: when every attempt fails, the hook is
+// still called once, and sees the last attempt, its rollback and the retries
+// before it.
+func TestRetryExhaustedWithTxAround(t *testing.T) {
+	ser := &pgconn.PgError{Code: "40001"}
+	e := &velox.FakeExec{Errs: []error{ser, ser, ser}}
+	calls := 0
+	var info *velox.TxInfo
+	db := velox.OpenFake(velox.Postgres, e, velox.WithTxAround(func(ctx context.Context, tx *velox.TxInfo, next func(context.Context) error) error {
+		calls++
+		info = tx
+		return next(ctx)
+	}))
+	err := db.Tx(ctx, touch, velox.TxRetrySerializable(2))
+	if !errors.Is(err, ser) {
+		t.Errorf("got %v, want the serialization failure", err)
+	}
+	if calls != 1 || info == nil {
+		t.Fatalf("hook called %d times", calls)
+	}
+	if info.Attempt != 3 || info.Outcome != velox.TxRollback || len(info.Retries) != 2 {
+		t.Errorf("TxInfo %+v, want attempt 3, a rollback and 2 retries", info)
+	}
+	var want []string
+	for range 3 {
+		want = append(want, "BEGIN", touchSQL, "ROLLBACK")
+	}
+	if !reflect.DeepEqual(e.Log, want) {
+		t.Errorf("sent %q", e.Log)
+	}
+}
+
 func TestTxIDsAreUnique(t *testing.T) {
 	var ids []uint64
 	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{}, velox.WithTxAround(func(ctx context.Context, tx *velox.TxInfo, next func(context.Context) error) error {

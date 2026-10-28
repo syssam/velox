@@ -239,6 +239,39 @@ func TestTxAllocationBudget(t *testing.T) {
 	}
 }
 
+// TestTxAroundAllocationBudget is TestTxAllocationBudget with one
+// pass-through WithTxAround hook. The hook makes the transaction build a
+// TxInfo and run through the hook's closure chain: measured 8 allocations
+// more than the read alone, against 3 without the hook (14 in the
+// transaction and 6 alone, the same under -race).
+func TestTxAroundAllocationBudget(t *testing.T) {
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Rows: [][]any{invoiceRow(1)}},
+		velox.WithTxAround(func(ctx context.Context, _ *velox.TxInfo, next func(context.Context) error) error {
+			return next(ctx)
+		}))
+	read := func(ctx context.Context, db *velox.DB) error {
+		_, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(ctx)
+		return err
+	}
+	if err := db.Tx(ctx, read); err != nil { // fill the render cache
+		t.Fatal(err)
+	}
+	alone := testing.AllocsPerRun(200, func() {
+		if err := read(ctx, db); err != nil {
+			t.Fatal(err)
+		}
+	})
+	inTx := testing.AllocsPerRun(200, func() {
+		if err := db.Tx(ctx, read); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Logf("a one-row read makes %.0f allocations in a transaction with a TxAround hook, %.0f alone", inTx, alone)
+	if inTx > alone+8 {
+		t.Errorf("a transaction with a TxAround hook adds %.0f allocations to its read: over the budget of 8", inTx-alone)
+	}
+}
+
 // TestObservedOneRowBudget pins the observed budget: WithCallers and
 // WithSQLComment add at most one allocation, the comment's join, to a cached
 // one-row read. Its time is read from BenchmarkOneRowObserved against

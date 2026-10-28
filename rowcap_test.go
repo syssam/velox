@@ -179,3 +179,64 @@ func TestRowCapCoversRelationLoads(t *testing.T) {
 		t.Errorf("MaxRows(10): %d rows, %v", len(got), err)
 	}
 }
+
+// TestRowCapAcrossNestedWith: the cap covers a load inside a load. The error
+// names the inner load only: the outer "loading Items" context is lost
+// (recorded for after 1.0). The statements' last arguments are the owner
+// query's own LIMIT 1, then each load's cap+1.
+func TestRowCapAcrossNestedWith(t *testing.T) {
+	results := func() [][][]any {
+		return [][][]any{
+			{invoiceRow(1)},
+			{itemRow(10, 1, "A", 1), itemRow(11, 1, "B", 1)},
+			{invoiceRow(1), invoiceRow(2), invoiceRow(3)},
+		}
+	}
+	lastArgs := func(e *velox.FakeExec) []any {
+		var last []any
+		for _, args := range e.ArgLog {
+			last = append(last, args[len(args)-1])
+		}
+		return last
+	}
+	query := func(db *velox.DB) velox.Query[testmodel.Invoice] {
+		return db.Query[testmodel.Invoice]().With(I.Items.With(It.Invoice)).Limit(1)
+	}
+	e := &velox.FakeExec{Results: results()}
+	db := velox.OpenFake(velox.Postgres, e, velox.WithMaxRows(2))
+	_, err := query(db).All(ctx)
+	const want = "velox: testmodel.Item: loading Invoice: testmodel.Invoice: read more rows than the cap: more than 2; raise it with the query's MaxRows"
+	if !errors.Is(err, velox.ErrTooManyRows) || err.Error() != want {
+		t.Errorf("%v, want %q", err, want)
+	}
+	if got := lastArgs(e); !slices.Equal(got, []any{1, 3, 3}) {
+		t.Errorf("last arguments %v, want [1 3 3]", got)
+	}
+	e = &velox.FakeExec{Results: results()}
+	db = velox.OpenFake(velox.Postgres, e, velox.WithMaxRows(2))
+	got, err := query(db).MaxRows(10).All(ctx)
+	if err != nil || len(got) != 1 {
+		t.Errorf("MaxRows(10): %d rows, %v", len(got), err)
+	}
+	if got := lastArgs(e); len(got) != 3 || got[1] != 11 || got[2] != 11 {
+		t.Errorf("MaxRows(10): last arguments %v, want the loads' to be 11", got)
+	}
+}
+
+// TestRowCapFromARewrite: a cap a Rewrite hook sets on the Statement is
+// sent as a LIMIT and enforced.
+func TestRowCapFromARewrite(t *testing.T) {
+	e := &velox.FakeExec{Rows: [][]any{invoiceRow(1), invoiceRow(2), invoiceRow(3)}}
+	db := velox.OpenFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+		st.MaxRows = 2
+		return nil
+	}))
+	_, err := db.Query[testmodel.Invoice]().Unbounded().All(ctx)
+	const want = "velox: testmodel.Invoice: read more rows than the cap: more than 2; raise it with the query's MaxRows"
+	if !errors.Is(err, velox.ErrTooManyRows) || err.Error() != want {
+		t.Errorf("%v, want %q", err, want)
+	}
+	if !strings.HasSuffix(e.SQL, ` FROM "invoices" LIMIT $1`) || !slices.Equal(e.Args, []any{3}) {
+		t.Errorf("sent %s %v, want ... FROM \"invoices\" LIMIT $1 [3]", e.SQL, e.Args)
+	}
+}

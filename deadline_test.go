@@ -404,3 +404,36 @@ func TestStatementsPastTheDeadlineTimeOut(t *testing.T) {
 		t.Errorf("Tx: %v, want ErrTimeout", err)
 	}
 }
+
+// checkTxDeadline runs one read in a transaction on a DB with d and requires
+// the deadline that read saw to be d's MaxTx after the transaction began. The
+// bound comes from times taken just before and after Tx, so it does not
+// depend on the load.
+func checkTxDeadline(t *testing.T, d velox.Deadlines) {
+	t.Helper()
+	e := &velox.FakeExec{Rows: [][]any{invoiceRow(1)}}
+	db := velox.OpenFake(velox.Postgres, e, velox.WithDeadlines(d))
+	start := time.Now()
+	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		_, err := tx.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(ctx)
+		return err
+	})
+	end := time.Now()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lo, hi := start.Add(time.Second), end.Add(time.Second); e.Deadline.Before(lo) || e.Deadline.After(hi) {
+		t.Errorf("the read's deadline is %v after the start, want %v to %v", e.Deadline.Sub(start), lo.Sub(start), hi.Sub(start))
+	}
+}
+
+// TestMaxTxCapsALargerTx: MaxTx brings a transaction's deadline forward when
+// Tx would set a later one.
+func TestMaxTxCapsALargerTx(t *testing.T) {
+	checkTxDeadline(t, velox.Deadlines{Tx: time.Hour, MaxTx: time.Second})
+}
+
+// TestMaxTxAlone: MaxTx alone is the transaction's deadline.
+func TestMaxTxAlone(t *testing.T) {
+	checkTxDeadline(t, velox.Deadlines{MaxTx: time.Second})
+}

@@ -38,6 +38,47 @@ func TestOverWaitsForAPassedDeadline(t *testing.T) {
 	}
 }
 
+// TestOverWaitsWhileBlocked: over waits, up to overGrace, for the Done of a
+// context past its deadline, and returns once it closes, not before. It
+// compares times taken in the test, not a fixed slack. The blocked case is
+// the one a loaded machine can disturb: a 10 ms sleep that overruns the grace
+// makes over return before the cancel. It retries once, and logs that.
+func TestOverWaitsWhileBlocked(t *testing.T) {
+	blocked := func() (ok bool, early time.Duration) {
+		inner, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		done := make(chan time.Time, 1)
+		result := make(chan bool, 1)
+		go func() {
+			r := over(lateCtx{inner})
+			done <- time.Now()
+			result <- r
+		}()
+		time.Sleep(10 * time.Millisecond)
+		canceled := time.Now()
+		cancel()
+		returned := <-done
+		return <-result && !returned.Before(canceled), canceled.Sub(returned)
+	}
+	ok, _ := blocked()
+	if !ok {
+		t.Log("over returned before the cancel; the machine is loaded, retrying once")
+		if ok, early := blocked(); !ok {
+			t.Errorf("over returned %v before the context was canceled, or not true", early)
+		}
+	}
+
+	inner, cancel := context.WithCancel(context.Background())
+	cancel()
+	start := time.Now()
+	if !over(lateCtx{inner}) {
+		t.Error("a canceled context past its deadline is not over")
+	}
+	if d := time.Since(start); d >= overGrace {
+		t.Errorf("over took %v on a context already canceled, want less than the grace %v", d, overGrace)
+	}
+}
+
 // TestOverDoesNotWaitForever: a context past its deadline whose Done never
 // closes is over once a short grace has passed, so a transaction on it
 // neither hangs nor commits.
