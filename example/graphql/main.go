@@ -10,13 +10,16 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"errors"
 	"flag"
 	"fmt"
 	"io/fs"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
+	"syscall"
 	"time"
 
 	gqlgen "github.com/99designs/gqlgen/graphql"
@@ -42,7 +45,11 @@ func main() {
 	}
 }
 
+// serve runs the server until it fails or the process gets SIGINT or SIGTERM,
+// then shuts it down, so that the deferred cleanup of the database runs.
 func serve(ctx context.Context, addr string) error {
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	dir, err := os.MkdirTemp("", "velox-graphql-")
 	if err != nil {
 		return err
@@ -64,7 +71,19 @@ func serve(ctx context.Context, addr string) error {
 	mux.Handle("/graphql", orgFromHeader(roleFromHeader(server(db))))
 	fmt.Printf("POST GraphQL to http://%s/graphql, with X-Org-ID: 1 or 2 for posts, and X-Role: admin for emails\n", addr)
 	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
-	return srv.ListenAndServe()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		<-ctx.Done()
+		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(sctx)
+	}()
+	if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	<-done // in-flight requests are finished before the database closes
+	return nil
 }
 
 // server is the GraphQL endpoint: gqlgen's server on the generated schema,
@@ -139,8 +158,13 @@ func admin(ctx context.Context, _ any, next gqlgen.Resolver) (any, error) {
 	return next(ctx)
 }
 
-// The tables come from migrations/, made by `go tool velox-gen migrate diff
-// -dialect sqlite` from the schema package and applied with migrate.Up.
+// The tables come from migrations/, made, in the example module, by
+//
+//	go tool velox-gen migrate diff -dialect sqlite -dir ./graphql/migrations ./graphql/schema
+//
+// and applied with migrate.Up. The temporary SQLite database is this demo's;
+// a real application opens its own.
+//
 // post_tags is the join table of Post.Tags.
 //
 //go:embed migrations

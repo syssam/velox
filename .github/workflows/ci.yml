@@ -87,11 +87,17 @@ jobs:
             go tool velox-gen -check -out "./$x/gen" "./$x/schema"
             go tool velox-gen verify -out "./$x/gen" "./$x/schema"
           done
-          # Each example's tables come from its committed migrations: fail on drift.
+          # Each example's tables come from its committed migrations: fail on drift from the
+          # schema package, and on SQL that does not replay to its schema.json (applied to a
+          # temporary SQLite file, then compared with drift).
+          migdb=$(mktemp -d)
           for d in */migrations; do
             x=${d%/migrations}
             go tool velox-gen migrate diff -check -dir "./$x/migrations" "./$x/schema"
+            go tool velox-gen migrate apply -dir "./$x/migrations" -db "$migdb/$x.db"
+            go tool velox-gen migrate drift -dir "./$x/migrations" -db "$migdb/$x.db"
           done
+          rm -rf "$migdb"
           go tool velox-gen -check -out ./graphql/gen -plugin velox-graphql ./graphql/schema
           go tool velox-gen verify -out ./graphql/gen -plugin velox-graphql ./graphql/schema
           # gqlgen's output is checked in: regenerate it, and fail on any difference.

@@ -28,8 +28,12 @@ func main() {
 	}
 }
 
-// The tables come from migrations/, made by `go tool velox-gen migrate diff
-// -dialect sqlite` from the schema package and applied with migrate.Up.
+// The tables come from migrations/, made, in the example module, by
+//
+//	go tool velox-gen migrate diff -dialect sqlite -dir ./relations/migrations ./relations/schema
+//
+// and applied with migrate.Up. The temporary SQLite database is this demo's;
+// a real application opens its own.
 //
 //go:embed migrations
 var migrations embed.FS
