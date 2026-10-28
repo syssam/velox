@@ -9,10 +9,13 @@ package main
 import (
 	"context"
 	"database/sql"
+	"embed"
 	"flag"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -27,6 +30,7 @@ import (
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
 	"github.com/syssam/velox2/example/graphql/gen"
 	"github.com/syssam/velox2/example/graphql/graph"
+	"github.com/syssam/velox2/migrate"
 )
 
 func main() {
@@ -39,7 +43,12 @@ func main() {
 }
 
 func serve(ctx context.Context, addr string) error {
-	sqlDB, err := sql.Open("sqlite", "file::memory:")
+	dir, err := os.MkdirTemp("", "velox-graphql-")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+	sqlDB, err := sql.Open("sqlite", filepath.Join(dir, "graphql.db"))
 	if err != nil {
 		return err
 	}
@@ -130,42 +139,22 @@ func admin(ctx context.Context, _ any, next gqlgen.Resolver) (any, error) {
 	return next(ctx)
 }
 
-// ddl creates the tables by hand: planning migrations from the schemas is a
-// later velox2 sub-project. post_tags is the join table of Post.Tags.
-const ddl = `
-CREATE TABLE users (
-	id            INTEGER PRIMARY KEY,
-	name          TEXT NOT NULL,
-	email         TEXT NOT NULL,
-	role          TEXT NOT NULL,
-	joined_at     DATETIME NOT NULL,
-	password_hash TEXT NOT NULL
-);
-CREATE TABLE posts (
-	id           INTEGER PRIMARY KEY,
-	org_id       INTEGER NOT NULL,
-	author_id    INTEGER NOT NULL REFERENCES users (id),
-	title        TEXT NOT NULL,
-	status       TEXT NOT NULL,
-	views        INTEGER NOT NULL,
-	published_at DATETIME
-);
-CREATE TABLE tags (
-	id   INTEGER PRIMARY KEY,
-	name TEXT NOT NULL UNIQUE,
-	rank INTEGER NOT NULL
-);
-CREATE TABLE post_tags (
-	post_id INTEGER NOT NULL REFERENCES posts (id),
-	tag_id  INTEGER NOT NULL REFERENCES tags (id),
-	PRIMARY KEY (post_id, tag_id)
-)`
+// The tables come from migrations/, made by `go tool velox-gen migrate diff
+// -dialect sqlite` from the schema package and applied with migrate.Up.
+// post_tags is the join table of Post.Tags.
+//
+//go:embed migrations
+var migrations embed.FS
 
-// open creates the tables on sqlDB, an in-memory database, and opens a DB on
-// it with opts.
+// open creates the tables on sqlDB, a SQLite file, by applying migrations/,
+// and opens a DB on it with opts.
 func open(ctx context.Context, sqlDB *sql.DB, opts ...velox.Option) (*velox.DB, error) {
-	sqlDB.SetMaxOpenConns(1) // an in-memory database lives as long as its one connection
-	if _, err := sqlDB.ExecContext(ctx, ddl); err != nil {
+	sqlDB.SetMaxOpenConns(1) // statements and savepoints run on one connection
+	sub, err := fs.Sub(migrations, "migrations")
+	if err != nil {
+		return nil, err
+	}
+	if _, err := migrate.Up(ctx, sqlDB, sub); err != nil {
 		return nil, err
 	}
 	return velox.Open(velox.SQLite, sqlDB, opts...), nil

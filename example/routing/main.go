@@ -6,9 +6,11 @@ package main
 import (
 	"context"
 	"database/sql"
+	"embed"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +20,7 @@ import (
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/example/routing/gen"
+	"github.com/syssam/velox2/migrate"
 )
 
 func main() {
@@ -27,14 +30,11 @@ func main() {
 	}
 }
 
-// ddl creates the table by hand: planning migrations from the schemas is a
-// later velox2 sub-project.
-const ddl = `
-CREATE TABLE notes (
-	id     INTEGER PRIMARY KEY,
-	org_id INTEGER NOT NULL,
-	body   TEXT NOT NULL
-)`
+// The tables come from migrations/, made by `go tool velox-gen migrate diff
+// -dialect sqlite` from the schema package and applied with migrate.Up.
+//
+//go:embed migrations
+var migrations embed.FS
 
 // The tenants, of the tenant column's Go type: int64. WithTenant would convert
 // an untyped 1, but shardFor sees its id as given, and an int 1 would not
@@ -77,14 +77,19 @@ func where(r velox.Route) string {
 	return fmt.Sprintf("%s replica %d", r.Shard, r.Replica)
 }
 
-// open opens a SQLite file with the table, as one database server's pool.
+// open opens a SQLite file with the tables of migrations/, as one database server's pool.
 func open(ctx context.Context, path string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite", "file:"+path)
 	if err != nil {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	if _, err := db.ExecContext(ctx, ddl); err != nil {
+	sub, err := fs.Sub(migrations, "migrations")
+	if err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	if _, err := migrate.Up(ctx, db, sub); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
@@ -151,7 +156,7 @@ func run(ctx context.Context, w io.Writer) error {
 	},
 		velox.WithShardFor(shardFor),
 		// Short, so the example waits only a moment. The default is 2 s.
-		velox.WithPinWindow(50*time.Millisecond),
+		velox.WithPinWindow(250*time.Millisecond),
 		velox.WithAround(record),
 	)
 	N := gen.Notes
@@ -176,7 +181,7 @@ func run(ctx context.Context, w io.Writer) error {
 			return err
 		}
 
-		time.Sleep(150 * time.Millisecond) // well past the 50 ms window
+		time.Sleep(600 * time.Millisecond) // well past the 250 ms window
 		// Now the read goes to the replica, which has not got v2. This is
 		// replication lag, simulated: the example never copies the write.
 		if err := read(ctx, "read, after"); err != nil {

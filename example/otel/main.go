@@ -7,9 +7,12 @@ package main
 import (
 	"context"
 	"database/sql"
+	"embed"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
+	"path/filepath"
 
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
@@ -20,6 +23,7 @@ import (
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/veloxotel"
 	"github.com/syssam/velox2/example/otel/gen"
+	"github.com/syssam/velox2/migrate"
 )
 
 func main() {
@@ -29,17 +33,14 @@ func main() {
 	}
 }
 
-// ddl creates and fills the table by hand: planning migrations from the
-// schemas is a later velox2 sub-project.
-const ddl = `
-CREATE TABLE invoices (
-	id          INTEGER PRIMARY KEY,
-	number      TEXT NOT NULL UNIQUE,
-	customer    TEXT NOT NULL,
-	status      TEXT NOT NULL,
-	total_cents INTEGER NOT NULL
-);
-INSERT INTO invoices (number, customer, status, total_cents) VALUES
+// The tables come from migrations/, made by `go tool velox-gen migrate diff
+// -dialect sqlite` from the schema package and applied with migrate.Up.
+//
+//go:embed migrations
+var migrations embed.FS
+
+// seedSQL fills the table the migration made.
+const seedSQL = `INSERT INTO invoices (number, customer, status, total_cents) VALUES
 	('INV-003', 'Acme', 'paid', 12000),
 	('INV-004', 'Globex', 'sent', 4500)`
 
@@ -58,13 +59,25 @@ func pay(ctx context.Context, db *velox.DB, number string) error {
 }
 
 func run(ctx context.Context, w io.Writer) error {
-	sqlDB, err := sql.Open("sqlite", "file::memory:")
+	dir, err := os.MkdirTemp("", "velox-otel-")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+	sqlDB, err := sql.Open("sqlite", filepath.Join(dir, "otel.db"))
 	if err != nil {
 		return err
 	}
 	defer func() { _ = sqlDB.Close() }()
-	sqlDB.SetMaxOpenConns(1) // an in-memory database lives as long as its one connection
-	if _, err := sqlDB.ExecContext(ctx, ddl); err != nil {
+	sqlDB.SetMaxOpenConns(1) // statements and savepoints run on one connection
+	sub, err := fs.Sub(migrations, "migrations")
+	if err != nil {
+		return err
+	}
+	if _, err := migrate.Up(ctx, sqlDB, sub); err != nil {
+		return err
+	}
+	if _, err := sqlDB.ExecContext(ctx, seedSQL); err != nil {
 		return err
 	}
 

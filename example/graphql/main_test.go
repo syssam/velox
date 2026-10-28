@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -50,7 +51,7 @@ type testServer struct {
 func newServer(t *testing.T) *testServer {
 	t.Helper()
 	s := &testServer{}
-	sqlDB, err := sql.Open("sqlite", "file::memory:")
+	sqlDB, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "graphql.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

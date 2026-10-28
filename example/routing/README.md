@@ -14,7 +14,7 @@ db := velox.OpenShards(velox.SQLite, map[string]velox.Shard{
 	"us": {Primary: velox.SQLConn(us)},
 },
 	velox.WithShardFor(shardFor),                   // tenant -> shard name
-	velox.WithPinWindow(50*time.Millisecond),       // default 2 s
+	velox.WithPinWindow(250*time.Millisecond),      // default 2 s
 )
 
 ctx = velox.WithSession(ctx)                           // per request, in middleware

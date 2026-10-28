@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"runtime/debug"
 	"strings"
 	"sync/atomic"
@@ -110,7 +111,7 @@ func seedBench(t testing.TB, db *velox.DB, users, posts, tags int) {
 // called directly: no network.
 func benchHandler(t testing.TB) (http.Handler, *atomic.Int64) {
 	t.Helper()
-	sqlDB, err := sql.Open("sqlite", "file::memory:")
+	sqlDB, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "graphql.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,7 +274,7 @@ func TestMutationBudget(t *testing.T) {
 	drv := probe.Driver()
 	_ = probe.Close()
 	var savepoints, stmts atomic.Int64
-	sqlDB := sql.OpenDB(savepointCounter{drv, &savepoints})
+	sqlDB := sql.OpenDB(savepointCounter{drv, filepath.Join(t.TempDir(), "graphql.db"), &savepoints})
 	t.Cleanup(func() { _ = sqlDB.Close() })
 	db, err := open(t.Context(), sqlDB, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
 		stmts.Add(1)
@@ -333,15 +334,16 @@ func TestMutationBudget(t *testing.T) {
 	}
 }
 
-// savepointCounter opens in-memory SQLite connections of drv that count the
-// SAVEPOINT and RELEASE statements they send in n.
+// savepointCounter opens connections of drv to the SQLite file at path that
+// count the SAVEPOINT and RELEASE statements they send in n.
 type savepointCounter struct {
-	drv driver.Driver
-	n   *atomic.Int64
+	drv  driver.Driver
+	path string
+	n    *atomic.Int64
 }
 
 func (c savepointCounter) Connect(context.Context) (driver.Conn, error) {
-	conn, err := c.drv.Open("file::memory:")
+	conn, err := c.drv.Open(c.path)
 	if err != nil {
 		return nil, err
 	}

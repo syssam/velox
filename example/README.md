@@ -1,6 +1,6 @@
 # velox2 examples
 
-Small runnable programs, one topic each, on an in-memory SQLite database (routing uses SQLite files, one per database).
+Small runnable programs, one topic each, on SQLite files in a temporary directory (routing uses one per database).
 Each directory is a `main` package with its own `schema/` and `gen/` packages,
 a README, and a golden test of its output (graphql's test checks the
 responses of its server instead).
@@ -35,9 +35,11 @@ go run ./start
   generated handles (`gen.Users`, …), and any helpers they use. velox-gen
   binds those methods into the entity's metadata. Never edit the
   `*_velox.go` files.
-- Tables are created with plain DDL, so each example runs on a fresh
-  in-memory database. A real application plans its migrations from the
-  schemas, as below.
+- Each example's tables come from its `migrations/` directory, made by
+  `go tool velox-gen migrate diff -dialect sqlite` and applied with
+  `migrate.Up` to a fresh SQLite file; CI checks the directories with
+  `migrate diff -check`. A real application plans its migrations from the
+  schemas the same way, as below.
 - The output is deterministic. `go test ./...` compares each example's output
   with its `testdata/output.golden`; after an intended change,
   `go test ./start -update` rewrites that example's file.

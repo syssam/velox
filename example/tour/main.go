@@ -1,4 +1,4 @@
-// Command tour walks through velox2 on an in-memory SQLite database: it
+// Command tour walks through velox2 on a SQLite file made by its migrations: it
 // inserts, reads and changes the invoices of package gen as two
 // organizations, and prints what each step did.
 package main
@@ -6,10 +6,13 @@ package main
 import (
 	"context"
 	"database/sql"
+	"embed"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -17,6 +20,7 @@ import (
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/example/tour/gen"
+	"github.com/syssam/velox2/migrate"
 )
 
 func main() {
@@ -26,27 +30,11 @@ func main() {
 	}
 }
 
-// ddl creates the tables by hand. Planning migrations from the schemas is a
-// later velox2 sub-project.
-const ddl = `
-CREATE TABLE invoices (
-	id          INTEGER PRIMARY KEY,
-	org_id      INTEGER NOT NULL,
-	number      TEXT NOT NULL,
-	customer    TEXT NOT NULL,
-	status      TEXT NOT NULL,
-	total_cents INTEGER NOT NULL,
-	created_at  DATETIME NOT NULL,
-	updated_at  DATETIME NOT NULL,
-	CONSTRAINT invoices_org_number UNIQUE (org_id, number)
-);
-CREATE TABLE lines (
-	id           INTEGER PRIMARY KEY,
-	org_id       INTEGER NOT NULL,
-	invoice_id   INTEGER NOT NULL REFERENCES invoices (id),
-	description  TEXT NOT NULL,
-	amount_cents INTEGER NOT NULL
-);`
+// The tables come from migrations/, made by `go tool velox-gen migrate diff
+// -dialect sqlite` from the schema package and applied with migrate.Up.
+//
+//go:embed migrations
+var migrations embed.FS
 
 // The two organizations, the tenants, of the tenant column's Go type: int64.
 // An untyped 1, an int, would be converted to it.
@@ -56,13 +44,22 @@ const (
 )
 
 func run(ctx context.Context, w io.Writer) error {
-	sqlDB, err := sql.Open("sqlite", "file::memory:?_pragma=foreign_keys(1)")
+	dir, err := os.MkdirTemp("", "velox-tour-")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+	sqlDB, err := sql.Open("sqlite", filepath.Join(dir, "tour.db")+"?_pragma=foreign_keys(1)")
 	if err != nil {
 		return err
 	}
 	defer func() { _ = sqlDB.Close() }()
-	sqlDB.SetMaxOpenConns(1) // an in-memory database lives as long as its one connection
-	if _, err := sqlDB.ExecContext(ctx, ddl); err != nil {
+	sqlDB.SetMaxOpenConns(1) // statements and savepoints run on one connection
+	sub, err := fs.Sub(migrations, "migrations")
+	if err != nil {
+		return err
+	}
+	if _, err := migrate.Up(ctx, sqlDB, sub); err != nil {
 		return err
 	}
 

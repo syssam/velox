@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "dialect": "sqlite",
+  "tables": [
+    {
+      "name": "audits",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "identity": true
+        },
+        {
+          "name": "actor",
+          "type": "text"
+        },
+        {
+          "name": "message",
+          "type": "text"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ]
+    },
+    {
+      "name": "tasks",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "identity": true
+        },
+        {
+          "name": "created_by",
+          "type": "text"
+        },
+        {
+          "name": "title",
+          "type": "text"
+        },
+        {
+          "name": "slug",
+          "type": "text"
+        },
+        {
+          "name": "done",
+          "type": "boolean"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ]
+    }
+  ]
+}

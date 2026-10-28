@@ -1,10 +1,10 @@
 == spans
 POST /invoices/{number}/pay
   velox.tx isolation=Default read_only=false attempts=1 outcome=commit
-    SELECT invoices fingerprint=13ea7a2a168ee0b9 caller=otel/main.go:51
-      SELECT "id", "number", "customer", "status", "total_cents" FROM "invoices" WHERE "number" = ? LIMIT ? /*app='billing',caller='otel%2Fmain.go%3A51',route='POST%20%2Finvoices%2F%7Bnumber%7D%2Fpay'*/
-    UPDATE invoices fingerprint=5fe0721cd44d9afb caller=otel/main.go:56
-      UPDATE "invoices" SET "status" = ? WHERE "id" = ? /*app='billing',caller='otel%2Fmain.go%3A56',route='POST%20%2Finvoices%2F%7Bnumber%7D%2Fpay'*/
+    SELECT invoices fingerprint=13ea7a2a168ee0b9 caller=otel/main.go:52
+      SELECT "id", "number", "customer", "status", "total_cents" FROM "invoices" WHERE "number" = ? LIMIT ? /*app='billing',caller='otel%2Fmain.go%3A52',route='POST%20%2Finvoices%2F%7Bnumber%7D%2Fpay'*/
+    UPDATE invoices fingerprint=5fe0721cd44d9afb caller=otel/main.go:57
+      UPDATE "invoices" SET "status" = ? WHERE "id" = ? /*app='billing',caller='otel%2Fmain.go%3A57',route='POST%20%2Finvoices%2F%7Bnumber%7D%2Fpay'*/
 
 == metrics
 db.client.operation.duration (s)

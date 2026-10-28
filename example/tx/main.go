@@ -6,10 +6,13 @@ package main
 import (
 	"context"
 	"database/sql"
+	"embed"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -17,6 +20,7 @@ import (
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/example/tx/gen"
+	"github.com/syssam/velox2/migrate"
 )
 
 func main() {
@@ -26,14 +30,11 @@ func main() {
 	}
 }
 
-// ddl creates the table by hand: planning migrations from the schemas is a
-// later velox2 sub-project.
-const ddl = `
-CREATE TABLE accounts (
-	id      INTEGER PRIMARY KEY,
-	name    TEXT NOT NULL UNIQUE,
-	balance INTEGER NOT NULL
-)`
+// The tables come from migrations/, made by `go tool velox-gen migrate diff
+// -dialect sqlite` from the schema package and applied with migrate.Up.
+//
+//go:embed migrations
+var migrations embed.FS
 
 var errFunds = errors.New("insufficient funds")
 
@@ -62,13 +63,22 @@ func transfer(ctx context.Context, db *velox.DB, from, to string, amount int64) 
 }
 
 func run(ctx context.Context, w io.Writer) error {
-	sqlDB, err := sql.Open("sqlite", "file::memory:")
+	dir, err := os.MkdirTemp("", "velox-tx-")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+	sqlDB, err := sql.Open("sqlite", filepath.Join(dir, "tx.db"))
 	if err != nil {
 		return err
 	}
 	defer func() { _ = sqlDB.Close() }()
-	sqlDB.SetMaxOpenConns(1) // an in-memory database lives as long as its one connection
-	if _, err := sqlDB.ExecContext(ctx, ddl); err != nil {
+	sqlDB.SetMaxOpenConns(1) // statements and savepoints run on one connection
+	sub, err := fs.Sub(migrations, "migrations")
+	if err != nil {
+		return err
+	}
+	if _, err := migrate.Up(ctx, sqlDB, sub); err != nil {
 		return err
 	}
 	// Every statement and transaction gets a deadline when its context has

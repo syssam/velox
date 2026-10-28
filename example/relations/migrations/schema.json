@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "dialect": "sqlite",
+  "tables": [
+    {
+      "name": "authors",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "identity": true
+        },
+        {
+          "name": "name",
+          "type": "text"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ]
+    },
+    {
+      "name": "comments",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "identity": true
+        },
+        {
+          "name": "post_id",
+          "type": "integer"
+        },
+        {
+          "name": "body",
+          "type": "text"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "comments_post_id",
+          "columns": [
+            "post_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": "comments_posts_comments",
+          "columns": [
+            "post_id"
+          ],
+          "ref_table": {
+            "name": "posts"
+          },
+          "ref_columns": [
+            "id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "posts",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "identity": true
+        },
+        {
+          "name": "author_id",
+          "type": "integer"
+        },
+        {
+          "name": "title",
+          "type": "text"
+        },
+        {
+          "name": "votes",
+          "type": "integer"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "posts_author_id",
+          "columns": [
+            "author_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": "posts_authors_posts",
+          "columns": [
+            "author_id"
+          ],
+          "ref_table": {
+            "name": "authors"
+          },
+          "ref_columns": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
+        }
+      ]
+    }
+  ]
+}

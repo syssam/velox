@@ -20,8 +20,9 @@ go run ./tour
   and its `Hooks()`, `line.go` has `Line`'s `Policy()`, and `role.go` has the
   billing role. velox-gen binds the `Policy` and `Hooks` methods into the
   entities' metadata.
-- `main.go` creates the tables with plain DDL (the migration planner is a
-  later velox2 sub-project) and runs the walkthrough.
+- `migrations/` holds the tables, made by `go tool velox-gen migrate diff
+  -dialect sqlite -dir ./tour/migrations ./tour/schema`; `main.go` applies it
+  with `migrate.Up` to a fresh SQLite file and runs the walkthrough.
 
 ## What it shows
 

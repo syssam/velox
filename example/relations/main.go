@@ -6,15 +6,19 @@ package main
 import (
 	"context"
 	"database/sql"
+	"embed"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 
 	_ "modernc.org/sqlite"
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/example/relations/gen"
+	"github.com/syssam/velox2/migrate"
 )
 
 func main() {
@@ -24,23 +28,29 @@ func main() {
 	}
 }
 
-// ddl creates the tables by hand: planning migrations from the schemas is a
-// later velox2 sub-project.
-const ddl = `
-CREATE TABLE authors  (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
-CREATE TABLE posts    (id INTEGER PRIMARY KEY, author_id INTEGER NOT NULL REFERENCES authors (id),
-                       title TEXT NOT NULL, votes INTEGER NOT NULL);
-CREATE TABLE comments (id INTEGER PRIMARY KEY, post_id INTEGER NOT NULL REFERENCES posts (id),
-                       body TEXT NOT NULL);`
+// The tables come from migrations/, made by `go tool velox-gen migrate diff
+// -dialect sqlite` from the schema package and applied with migrate.Up.
+//
+//go:embed migrations
+var migrations embed.FS
 
 func run(ctx context.Context, w io.Writer) error {
-	sqlDB, err := sql.Open("sqlite", "file::memory:?_pragma=foreign_keys(1)")
+	dir, err := os.MkdirTemp("", "velox-relations-")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+	sqlDB, err := sql.Open("sqlite", filepath.Join(dir, "relations.db")+"?_pragma=foreign_keys(1)")
 	if err != nil {
 		return err
 	}
 	defer func() { _ = sqlDB.Close() }()
-	sqlDB.SetMaxOpenConns(1) // an in-memory database lives as long as its one connection
-	if _, err := sqlDB.ExecContext(ctx, ddl); err != nil {
+	sqlDB.SetMaxOpenConns(1) // statements and savepoints run on one connection
+	sub, err := fs.Sub(migrations, "migrations")
+	if err != nil {
+		return err
+	}
+	if _, err := migrate.Up(ctx, sqlDB, sub); err != nil {
 		return err
 	}
 	db := velox.Open(velox.SQLite, sqlDB)

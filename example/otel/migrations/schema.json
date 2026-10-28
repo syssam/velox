@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "dialect": "sqlite",
+  "tables": [
+    {
+      "name": "invoices",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "identity": true
+        },
+        {
+          "name": "number",
+          "type": "text"
+        },
+        {
+          "name": "customer",
+          "type": "text"
+        },
+        {
+          "name": "status",
+          "type": "text"
+        },
+        {
+          "name": "total_cents",
+          "type": "integer"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "invoices_number_key",
+          "columns": [
+            "number"
+          ],
+          "unique": true
+        }
+      ],
+      "checks": [
+        {
+          "name": "invoices_status_check",
+          "expr": "\"status\" IN ('sent', 'paid')"
+        }
+      ]
+    }
+  ]
+}

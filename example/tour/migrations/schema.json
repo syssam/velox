@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "dialect": "sqlite",
+  "tables": [
+    {
+      "name": "invoices",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "identity": true
+        },
+        {
+          "name": "created_at",
+          "type": "datetime",
+          "default": "CURRENT_TIMESTAMP"
+        },
+        {
+          "name": "updated_at",
+          "type": "datetime",
+          "default": "CURRENT_TIMESTAMP"
+        },
+        {
+          "name": "org_id",
+          "type": "integer"
+        },
+        {
+          "name": "number",
+          "type": "text"
+        },
+        {
+          "name": "customer",
+          "type": "text"
+        },
+        {
+          "name": "status",
+          "type": "text"
+        },
+        {
+          "name": "total_cents",
+          "type": "integer"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "invoice_org_id_number",
+          "columns": [
+            "org_id",
+            "number"
+          ],
+          "unique": true
+        }
+      ],
+      "checks": [
+        {
+          "name": "invoices_status_check",
+          "expr": "\"status\" IN ('draft', 'sent', 'paid')"
+        }
+      ]
+    },
+    {
+      "name": "lines",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "identity": true
+        },
+        {
+          "name": "org_id",
+          "type": "integer"
+        },
+        {
+          "name": "invoice_id",
+          "type": "integer"
+        },
+        {
+          "name": "description",
+          "type": "text"
+        },
+        {
+          "name": "amount_cents",
+          "type": "integer"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "lines_invoice_id",
+          "columns": [
+            "invoice_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": "lines_invoices_lines",
+          "columns": [
+            "invoice_id"
+          ],
+          "ref_table": {
+            "name": "invoices"
+          },
+          "ref_columns": [
+            "id"
+          ]
+        }
+      ]
+    }
+  ]
+}

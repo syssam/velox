@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "dialect": "sqlite",
+  "tables": [
+    {
+      "name": "comments",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "identity": true
+        },
+        {
+          "name": "doc_id",
+          "type": "integer"
+        },
+        {
+          "name": "body",
+          "type": "text"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "comments_doc_id",
+          "columns": [
+            "doc_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": "comments_docs_comments",
+          "columns": [
+            "doc_id"
+          ],
+          "ref_table": {
+            "name": "docs"
+          },
+          "ref_columns": [
+            "id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "docs",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "identity": true
+        },
+        {
+          "name": "owner",
+          "type": "text"
+        },
+        {
+          "name": "title",
+          "type": "text"
+        },
+        {
+          "name": "shared",
+          "type": "boolean"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ]
+    }
+  ]
+}

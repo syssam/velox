@@ -9,15 +9,19 @@ package main
 import (
 	"context"
 	"database/sql"
+	"embed"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
+	"path/filepath"
 
 	_ "modernc.org/sqlite"
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/example/hooks/gen"
+	"github.com/syssam/velox2/migrate"
 )
 
 func main() {
@@ -27,30 +31,29 @@ func main() {
 	}
 }
 
-// ddl creates the table by hand: planning migrations from the schemas is a
-// later velox2 sub-project.
-const ddl = `
-CREATE TABLE tasks (
-	id         INTEGER PRIMARY KEY,
-	created_by TEXT NOT NULL,
-	title      TEXT NOT NULL,
-	slug       TEXT NOT NULL,
-	done       BOOLEAN NOT NULL
-);
-CREATE TABLE audits (
-	id      INTEGER PRIMARY KEY,
-	actor   TEXT NOT NULL,
-	message TEXT NOT NULL
-);`
+// The tables come from migrations/, made by `go tool velox-gen migrate diff
+// -dialect sqlite` from the schema package and applied with migrate.Up.
+//
+//go:embed migrations
+var migrations embed.FS
 
 func run(ctx context.Context, w io.Writer) error {
-	sqlDB, err := sql.Open("sqlite", "file::memory:")
+	dir, err := os.MkdirTemp("", "velox-hooks-")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+	sqlDB, err := sql.Open("sqlite", filepath.Join(dir, "hooks.db"))
 	if err != nil {
 		return err
 	}
 	defer func() { _ = sqlDB.Close() }()
-	sqlDB.SetMaxOpenConns(1) // an in-memory database lives as long as its one connection
-	if _, err := sqlDB.ExecContext(ctx, ddl); err != nil {
+	sqlDB.SetMaxOpenConns(1) // statements and savepoints run on one connection
+	sub, err := fs.Sub(migrations, "migrations")
+	if err != nil {
+		return err
+	}
+	if _, err := migrate.Up(ctx, sqlDB, sub); err != nil {
 		return err
 	}
 	db := velox.Open(velox.SQLite, sqlDB)

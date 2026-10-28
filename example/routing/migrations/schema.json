@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "dialect": "sqlite",
+  "tables": [
+    {
+      "name": "notes",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "identity": true
+        },
+        {
+          "name": "org_id",
+          "type": "integer"
+        },
+        {
+          "name": "body",
+          "type": "text"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ]
+    }
+  ]
+}

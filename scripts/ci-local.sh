@@ -66,6 +66,11 @@ go run github.com/mgechev/revive@v1.17.0 -config revive.toml -set_exit_status ./
     go tool velox-gen -check -out "./$x/gen" "./$x/schema"
     go tool velox-gen verify -out "./$x/gen" "./$x/schema"
   done
+  # Each example's tables come from its committed migrations: fail on drift.
+  for d in */migrations; do
+    x=${d%/migrations}
+    go tool velox-gen migrate diff -check -dir "./$x/migrations" "./$x/schema"
+  done
   go tool velox-gen -check -out ./graphql/gen -plugin velox-graphql ./graphql/schema
   go tool velox-gen verify -out ./graphql/gen -plugin velox-graphql ./graphql/schema
   # gqlgen's output is checked in: regenerate it, and fail on any difference.
