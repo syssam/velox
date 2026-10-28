@@ -3,6 +3,7 @@ package velox
 import (
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -92,6 +93,41 @@ func TestPCCacheIsBounded(t *testing.T) {
 	}
 	if len(c.pcs) != 2 {
 		t.Errorf("%d PCs cached, want 2", len(c.pcs))
+	}
+}
+
+// TestPCCacheConcurrentAtBound: three call sites compete for two slots in the
+// cache while goroutines capture them; every capture is right and the cache
+// stays within its bound. The sites are literal, as in TestPCCacheIsBounded: a
+// loop or descend is one site, so one pc.
+func TestPCCacheConcurrentAtBound(t *testing.T) {
+	defer func(n int) { maxPCs = n }(maxPCs)
+	maxPCs = 2
+	c := &callers{}
+	c.once.Do(func() { c.self = "velox.invalid/none" })
+	var wg sync.WaitGroup
+	for g := range 8 {
+		wg.Go(func() {
+			check := func(site string, got Caller, line int) {
+				if got.File != "callers_internal_test.go" || got.Line == 0 || got.Line != line {
+					t.Errorf("goroutine %d, %s site: %+v, want line %d", g, site, got, line)
+				}
+			}
+			for range 100 {
+				got, line := c.capture(), thisLine()
+				check("first", got, line)
+				got, line = c.capture(), thisLine()
+				check("second", got, line)
+				got, line = c.capture(), thisLine()
+				check("third", got, line)
+			}
+		})
+	}
+	wg.Wait()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if len(c.pcs) > 2 {
+		t.Errorf("%d PCs cached, at most 2 allowed", len(c.pcs))
 	}
 }
 

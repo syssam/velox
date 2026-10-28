@@ -1,7 +1,9 @@
 package velox
 
 import (
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -108,5 +110,60 @@ func TestCommentCacheBoundedInBytes(t *testing.T) {
 	}
 	if _, ok := c.m[commentKey(c, big)]; ok || len(c.m) != held {
 		t.Errorf("the 400-byte value was cached: %d entries, %d before", len(c.m), held)
+	}
+}
+
+// commentBytes is the bytes c's entries add up to: each key and text.
+func commentBytes(c *commenter) int {
+	n := 0
+	for k, text := range c.m {
+		n += len(k) + len(text)
+	}
+	return n
+}
+
+// TestCommentCacheExactBytes: c.bytes is exactly what its entries add up to,
+// after every render.
+func TestCommentCacheExactBytes(t *testing.T) {
+	c := newCommenter("app", []string{"route"})
+	for i := range 50 {
+		v := strings.Repeat(string(rune('a'+i%26)), 18) + string(rune('a'+i/26)) + "z"
+		commentFor(c, Caller{}, Tag{"route", v})
+		if want := commentBytes(c); c.bytes != want || len(c.m) != i+1 {
+			t.Fatalf("after %d renders the cache counts %d bytes in %d entries, they add up to %d", i+1, c.bytes, len(c.m), want)
+		}
+	}
+}
+
+// TestCommentCacheConcurrentEviction: goroutines rendering more values than
+// the cache holds get the right text each time, and the cache ends within its
+// bound with its order and byte count in step with its entries.
+func TestCommentCacheConcurrentEviction(t *testing.T) {
+	defer func(n int) { maxComments = n }(maxComments)
+	maxComments = 8
+	c := newCommenter("app", []string{"route"})
+	var wg sync.WaitGroup
+	for g := range 8 {
+		wg.Go(func() {
+			for i := range 200 {
+				v := fmt.Sprintf("g%d-r%d", g, i)
+				if got, want := commentFor(c, Caller{}, Tag{"route", v}), ` /*app='app',route='`+v+`'*/`; got != want {
+					t.Errorf("%q, want %q", got, want)
+					return
+				}
+			}
+		})
+	}
+	wg.Wait()
+	if len(c.m) > 8 || len(c.order) != len(c.m) {
+		t.Errorf("the cache holds %d entries in m and %d in order, want at most 8 and the same", len(c.m), len(c.order))
+	}
+	if want := commentBytes(c); c.bytes != want {
+		t.Errorf("the cache counts %d bytes, its entries add up to %d", c.bytes, want)
+	}
+	for _, k := range c.order {
+		if _, ok := c.m[k]; !ok {
+			t.Errorf("order lists a key that m lacks")
+		}
 	}
 }

@@ -222,6 +222,57 @@ func TestCacheBoundedInBytes(t *testing.T) {
 	}
 }
 
+// inShape is a SELECT whose In list has n values: each n is a shape of its own.
+func inShape(n int) *Statement {
+	vs := make([]any, n)
+	for i := range vs {
+		vs[i] = int64(i)
+	}
+	return &Statement{Op: OpSelect, Entity: invInfo, Where: []Predicate{{node{op: opIn, col: 0, v: vs}}}}
+}
+
+// TestCacheBytesCountTheFingerprint: the bytes a cache holds are the key, the
+// text and the 16-byte fingerprint of each shape, and the byte bound includes
+// the fingerprint: a bound one byte short of the sum leaves the last shape out.
+func TestCacheBytesCountTheFingerprint(t *testing.T) {
+	const shapes = 50
+	var c renderCache
+	for n := 1; n <= shapes; n++ {
+		c.render(Postgres, inShape(n))
+	}
+	sum, held := 0, 0
+	for _, byKey := range c.m {
+		for key, e := range byKey {
+			if len(e.fp) != 16 {
+				t.Errorf("a fingerprint of %d bytes: %q", len(e.fp), e.fp)
+			}
+			sum += len(key) + len(e.text) + len(e.fp)
+			held++
+		}
+	}
+	if held != shapes || c.size() != shapes {
+		t.Fatalf("the cache holds %d shapes (size %d), want %d", held, c.size(), shapes)
+	}
+	if c.bytes != sum {
+		t.Errorf("the cache counts %d bytes, its entries sum to %d", c.bytes, sum)
+	}
+
+	defer func(n int) { maxCacheBytes = n }(maxCacheBytes)
+	maxCacheBytes = sum - 1
+	var tight renderCache
+	for n := 1; n <= shapes; n++ {
+		tight.render(Postgres, inShape(n))
+	}
+	var buf [256]byte
+	last := shapeKey(buf[:0], Postgres, inShape(shapes))
+	if _, ok := tight.m[invInfo][string(last)]; ok {
+		t.Errorf("the last shape is held, with a bound of %d bytes, one under the %d they need", maxCacheBytes, sum)
+	}
+	if tight.size() != shapes-1 || tight.bytes > maxCacheBytes {
+		t.Errorf("the tight cache holds %d shapes and %d bytes, want %d shapes within %d bytes", tight.size(), tight.bytes, shapes-1, maxCacheBytes)
+	}
+}
+
 func TestCacheKeysMoreShapes(t *testing.T) {
 	var c renderCache
 	base := func() *Statement { return &Statement{Op: OpSelect, Entity: invInfo} }
