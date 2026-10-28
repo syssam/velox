@@ -61,6 +61,9 @@ func article(kind string) string {
 // that needs one applies to it; a schema whose type is skipped has no root
 // field and no mutation, so asking for one is an error.
 func checkSchema(e *plugin.Entity, a graphql.Annotation, where string) error {
+	if err := ownDirective(a.Directives, where); err != nil {
+		return err
+	}
 	if err := misplaced(a, onSchema, where); err != nil {
 		return err
 	}
@@ -100,6 +103,9 @@ func checkSchema(e *plugin.Entity, a graphql.Annotation, where string) error {
 // checkField checks the annotation of e's field i. fk says whether the field
 // is a foreign key, which an edge stands for.
 func checkField(e *plugin.Entity, i int, a graphql.Annotation, fk bool, where string) error {
+	if err := ownDirective(a.Directives, where); err != nil {
+		return err
+	}
 	if err := misplaced(a, onField, where); err != nil {
 		return err
 	}
@@ -171,11 +177,11 @@ func zeroIsUnset(typ string) bool {
 
 // appDirective is the name of a's first application directive, one other
 // than GraphQL's own: "" for none. GraphQL's own guard nothing. (@goField and
-// @goModel, velox-graphql's own, are refused in graphql.Directives, wherever
-// it is: they are not the application's, and directives() says so.)
+// @goModel, velox-graphql's own, are refused by ownDirective before this
+// runs.)
 func appDirective(a graphql.Annotation) string {
 	for _, d := range a.Directives {
-		if !prelude[d.Name] && d.Name != "goField" && d.Name != "goModel" {
+		if !prelude[d.Name] {
 			return d.Name
 		}
 	}

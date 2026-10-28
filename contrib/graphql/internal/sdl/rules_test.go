@@ -439,3 +439,69 @@ func TestZeroIsUnsetMatchesVeloxGen(t *testing.T) {
 		}
 	}
 }
+
+// @goField and @goModel are velox-graphql's own: graphql.Directives refuses
+// them on every element, including the ones whose directives reach no SDL
+// field (a skipped entity, a join entity, a primary key, a foreign key),
+// where dropping them would fail open.
+func TestOwnDirectivesRefused(t *testing.T) {
+	for _, name := range []string{"goField", "goModel"} {
+		own := graphql.Directives(graphql.Directive{Name: name})
+		for _, c := range []struct {
+			placement, where string
+			model            func() *plugin.Model
+		}{
+			{"entity", "schema User:", func() *plugin.Model {
+				u := entity("User")
+				u.Annotations = ann(t, own)
+				return model(u)
+			}},
+			{"skipped entity", "schema User:", func() *plugin.Model {
+				u := entity("User")
+				u.Annotations = ann(t, own, graphql.Skip())
+				return model(u)
+			}},
+			{"join entity", "schema UserGroup:", func() *plugin.Model {
+				join := entity("UserGroup")
+				join.Join = true
+				join.Annotations = ann(t, own)
+				return model(entity("User"), join)
+			}},
+			{"plain field", "schema User, field name:", func() *plugin.Model {
+				f := field("name", "string")
+				f.Annotations = ann(t, own)
+				return model(entity("User", f))
+			}},
+			{"primary key", "schema User, field id:", func() *plugin.Model {
+				u := entity("User")
+				u.Fields[0].Annotations = ann(t, own)
+				return model(u)
+			}},
+			{"foreign key", "schema Post, field author_id:", func() *plugin.Model {
+				aid := field("author_id", "int64")
+				aid.Annotations = ann(t, own)
+				p := entity("Post", aid)
+				author := edge("author", plugin.M2O, "User")
+				author.Field, author.FieldOn = "author_id", "Post"
+				p.Edges = []*plugin.Edge{author}
+				return model(p, entity("User"))
+			}},
+			{"OrderField", "schema User, field name:", func() *plugin.Model {
+				f := field("name", "string")
+				f.Annotations = ann(t, own, graphql.OrderField("NAME"))
+				return model(entity("User", f))
+			}},
+			{"edge", "schema User, edge posts:", func() *plugin.Model {
+				u := entity("User")
+				posts := edge("posts", plugin.O2M, "User")
+				posts.Annotations = ann(t, own)
+				u.Edges = []*plugin.Edge{posts}
+				return model(u)
+			}},
+		} {
+			t.Run(name+"/"+c.placement, func(t *testing.T) {
+				renderErr(t, c.model(), c.where, "@"+name+" is velox-graphql's own: it binds ")
+			})
+		}
+	}
+}

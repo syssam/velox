@@ -176,8 +176,12 @@ func TestAppEnumRenamed(t *testing.T) {
 	if want := "enum AlarmLevel @goModel(model: \"example.com/app/levels.Level\") {\n"; !strings.Contains(string(sdlText), want) {
 		t.Errorf("no %q in\n%s", want, sdlText)
 	}
-	if b, err := os.ReadFile(filepath.Join(dir, "graph", "models_gen.go")); err == nil && strings.Contains(string(b), "AlarmLevel") {
-		t.Errorf("gqlgen generated a type for the enum:\n%s", b)
+	models, err := os.ReadFile(filepath.Join(dir, "graph", "models_gen.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(models), "AlarmLevel") {
+		t.Errorf("gqlgen generated a type for the enum:\n%s", models)
 	}
 	if out, err := run("mod", "tidy", "-e"); err != nil {
 		t.Fatalf("go mod tidy: %v\n%s", err, out)

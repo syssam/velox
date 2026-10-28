@@ -130,9 +130,10 @@
 // application must not redeclare them: a second declaration fails gqlgen's
 // load. Any other directive, @goTag for one, the application declares in its
 // own schema files. @goField and @goModel are velox-graphql's own, so
-// graphql.Directives refuses both: @goField binds fields to the Go code velox
-// generates, and @goModel binds types to it and to the application's enum
-// types.
+// graphql.Directives refuses both on an entity (a skipped one and a join
+// entity too) and on the fields (the primary key and a foreign key too) and
+// edges of an entity with a type. @goField binds fields to the Go code velox generates, and
+// @goModel binds types to it and to the application's enum types.
 //
 // The plugin also writes the Go that gqlgen's autobind binds the SDL's types
 // to, in the generated package: gen/gql_<label>.go for each entity with a

@@ -242,6 +242,9 @@ func build(m *plugin.Model) (*graph, error) {
 			if err != nil {
 				return nil, err
 			}
+			if err := ownDirective(ea.Directives, ew); err != nil {
+				return nil, err
+			}
 			if err := misplaced(ea, onEdge, ew); err != nil {
 				return nil, err
 			}
@@ -558,17 +561,32 @@ func bindTo(name string) directive {
 	return directive{name: "goField", text: "@goField(name: " + quote(name) + ")"}
 }
 
+// ownDirective refuses @goField and @goModel in ds, the directives of the
+// element where: they are velox-graphql's own, not the application's. The
+// annotation checks call it for every element, since the directives of some
+// (a skipped entity, a join entity, a primary key, a foreign key) reach no
+// SDL field, and dropping them there would fail open.
+func ownDirective(ds []graphql.Directive, where string) error {
+	for _, d := range ds {
+		switch d.Name {
+		case "goField":
+			return fmt.Errorf("%s: @goField is velox-graphql's own: it binds fields to the Go code velox generates", where)
+		case "goModel":
+			return fmt.Errorf("%s: @goModel is velox-graphql's own: it binds types to the Go code velox generates and the application's enum types", where)
+		}
+	}
+	return nil
+}
+
 // directives renders ds, the directives of the element where.
 func directives(ds []graphql.Directive, where string) ([]directive, error) {
 	out := make([]directive, 0, len(ds))
 	for _, d := range ds {
-		switch {
-		case !validName(d.Name):
+		if !validName(d.Name) {
 			return nil, fmt.Errorf("%s: the directive name %q is not a GraphQL name", where, d.Name)
-		case d.Name == "goField":
-			return nil, fmt.Errorf("%s: @goField is velox-graphql's own: it binds fields to the Go code velox generates", where)
-		case d.Name == "goModel":
-			return nil, fmt.Errorf("%s: @goModel is velox-graphql's own: it binds types to the Go code velox generates and the application's enum types", where)
+		}
+		if err := ownDirective([]graphql.Directive{d}, where); err != nil {
+			return nil, err
 		}
 		s := "@" + d.Name
 		if len(d.Args) > 0 {
