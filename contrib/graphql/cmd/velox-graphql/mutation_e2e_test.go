@@ -24,7 +24,9 @@ import (
 //     insert and lets no "locked" row change.
 //   - Circle is the M2M's other side, with a unique name; its policy, in
 //     gen/circle_policy.go, hides the circle named "hidden".
-//   - Profile holds the O2O's key.
+//   - Profile holds the O2O's key; its policy, in gen/profile_policy.go,
+//     hides the profile whose handle is "hidden" and lets no "frozen" one
+//     change.
 //   - Folder has two Required self edges, whose implicit keys are NULL-able
 //     (ON DELETE SET NULL): parent, of the O2M children, on folder_children,
 //     and prev, of the O2O next, on folder_next.
@@ -194,7 +196,8 @@ func (*Circle) Policy() velox.Policy[Circle] {
 `
 
 // e2eMutProfilePolicy is Profile's policy: its Read hides the profile whose
-// handle is "hidden".
+// handle is "hidden", and its Write lets no profile whose handle is "frozen"
+// change, though every one may be read.
 const e2eMutProfilePolicy = `package gen
 
 import (
@@ -203,10 +206,12 @@ import (
 	"github.com/syssam/velox2"
 )
 
-// Policy hides the profile whose handle is "hidden".
+// Policy hides the profile whose handle is "hidden", and lets no "frozen"
+// profile change.
 func (*Profile) Policy() velox.Policy[Profile] {
 	return velox.Policy[Profile]{
-		Read: func(context.Context) (velox.Pred[Profile], error) { return Profiles.Handle.NEQ("hidden"), nil },
+		Read:  func(context.Context) (velox.Pred[Profile], error) { return Profiles.Handle.NEQ("hidden"), nil },
+		Write: func(context.Context) (velox.Pred[Profile], error) { return Profiles.Handle.NEQ("frozen"), nil },
 	}
 }
 `
@@ -1071,6 +1076,78 @@ func TestRepointHiddenChild(t *testing.T) {
 	})
 }
 
+// TestWriteHiddenProfile: a profile the caller may read but not change, the
+// "frozen" one of Profile's Write policy, cannot be linked or taken from its
+// writer, and the errors do not tell it apart from a profile that is not there
+// or hidden:
+//   - createWriter and updateWriter linking it are NOT_FOUND, as for an ID that
+//     names no profile, and a failed create leaves no writer;
+//   - re-pointing a writer whose current profile it is to a free one is
+//     BAD_USER_INPUT "already linked", the unlink matching no row; the
+//     transaction rolls back, so the link stays, the free profile stays
+//     unlinked and the writer keeps its name;
+//   - clearProfile over it is a silent no-op, not an error: an error would
+//     tell the caller that a profile it may not change is linked there.
+func TestWriteHiddenProfile(t *testing.T) {
+	each(t, func(t *testing.T, e *env) {
+		w, other := &gen.Writer{Name: "w", Password: "x"}, &gen.Writer{Name: "other", Password: "x"}
+		insert(t, e.ctx, e.db, w)
+		insert(t, e.ctx, e.db, other)
+		frozen, free := &gen.Profile{Handle: "frozen"}, &gen.Profile{Handle: "free"}
+		insert(t, e.ctx, e.db, frozen)
+		insert(t, e.ctx, e.db, free)
+
+		// Create and update, linking the frozen profile: NOT_FOUND.
+		const notFound = "veloxgql: %s.profileID: no Profile has this ID"
+		_, err := gen.CreateWriter(e.ctx, gen.CreateWriterInput{Name: "new", Password: "x", ProfileID: ptr(profileID(frozen.ID))})
+		if want := fmt.Sprintf(notFound, "CreateWriterInput"); code(err) != veloxgql.CodeNotFound || err == nil || err.Error() != want {
+			t.Errorf("createWriter linking the frozen profile: %v (code %q), want %q", err, code(err), want)
+		}
+		if n := count(t, e.ctx, e.db.Query[gen.Writer]().Where(gen.Writers.Name.EQ("new"))); n != 0 {
+			t.Errorf("%d writers new after the refused create, want 0", n)
+		}
+		_, err = gen.UpdateWriter(e.ctx, writerID(other.ID), gen.UpdateWriterInput{ProfileID: ptr(profileID(frozen.ID))})
+		if want := fmt.Sprintf(notFound, "UpdateWriterInput"); code(err) != veloxgql.CodeNotFound || err == nil || err.Error() != want {
+			t.Errorf("updateWriter linking the frozen profile: %v (code %q), want %q", err, code(err), want)
+		}
+		if p := writerOfProfile(t, e, frozen.ID); p != nil {
+			t.Errorf("the frozen profile's writer is %d, want none", *p)
+		}
+
+		// w holds the frozen profile (the link made as the database's owner
+		// would, outside the policy).
+		if _, err := e.raw.Exec(fmt.Sprintf("UPDATE profiles SET writer_id = %d WHERE id = %d", w.ID, frozen.ID)); err != nil {
+			t.Fatal(err)
+		}
+
+		// Re-pointing: the unlink of the frozen profile matches no row.
+		_, err = gen.UpdateWriter(e.ctx, writerID(w.ID), gen.UpdateWriterInput{Name: ptr("renamed"), ProfileID: ptr(profileID(free.ID))})
+		const linked = "veloxgql: UpdateWriterInput.profileID: the Writer is already linked to a Profile"
+		if code(err) != veloxgql.CodeBadUserInput || err == nil || err.Error() != linked {
+			t.Errorf("re-pointing over the frozen profile: %v (code %q), want %q", err, code(err), linked)
+		}
+		check := func(when string) {
+			t.Helper()
+			if p := writerOfProfile(t, e, frozen.ID); !is(p, w.ID) {
+				t.Errorf("%s: the frozen profile's writer is %v, want %d", when, p, w.ID)
+			}
+			if p := writerOfProfile(t, e, free.ID); p != nil {
+				t.Errorf("%s: the free profile's writer is %d, want none", when, *p)
+			}
+			if got := writer(t, e, w.ID); got.Name != "w" {
+				t.Errorf("%s: w is named %q, want w", when, got.Name)
+			}
+		}
+		check("after the refused re-point")
+
+		// clearProfile: no error, and the link stays.
+		if _, err := gen.UpdateWriter(e.ctx, writerID(w.ID), gen.UpdateWriterInput{ClearProfile: true}); err != nil {
+			t.Errorf("clearProfile over the frozen profile: %v, want none", err)
+		}
+		check("after clearProfile")
+	})
+}
+
 // TestAtomic: a create that fails after its first write keeps nothing,
 // outside a server, where it runs in a transaction of its own.
 func TestAtomic(t *testing.T) {
@@ -1890,7 +1967,10 @@ func TestDeleteConstraint(t *testing.T) {
 // TestRequiredSelfEdge: Folder's parent and prev are Required self edges,
 // whose keys are NULL-able and ON DELETE SET NULL. Create sets them, the
 // owning side's update re-parents, the other side's update only adds, and
-// after the parent's delete the edges read nil.
+// after the parent's delete the edges read nil. Then the update sets prev
+// (a prev another folder holds is a unique ConstraintError, presented as
+// BAD_USER_INPUT), and a create takes children and a next (a next that has a
+// prev is BAD_USER_INPUT).
 func TestRequiredSelfEdge(t *testing.T) {
 	eachFK(t, func(t *testing.T, e *env) {
 		// rawFolder inserts a folder by raw SQL, its keys NULL, which velox
@@ -1973,6 +2053,70 @@ func TestRequiredSelfEdge(t *testing.T) {
 		}
 		if p, err := c.PrevGQL(e.ctx); p != nil || err != nil {
 			t.Errorf("c's PrevGQL after r's delete = %v, %v; want nil, nil", p, err)
+		}
+
+		// The owning side's update sets its prev: a free folder s takes it, and
+		// c's children are not touched.
+		s := rawFolder("s")
+		if _, err := gen.UpdateFolder(e.ctx, folderID(c.ID), gen.UpdateFolderInput{PrevID: ptr(folderID(s.ID))}); err != nil {
+			t.Fatalf("UpdateFolder of c, prev s: %v", err)
+		}
+		if ch, nx := keys(c.ID); ch != nil || !is(nx, s.ID) {
+			t.Errorf("c's folder_children %v, folder_next %v, want NULL, s %d", ch, nx, s.ID)
+		}
+		if ch, _ := keys(c2.ID); !is(ch, c.ID) {
+			t.Errorf("c2's folder_children %v, want c %d", ch, c.ID)
+		}
+
+		// A prev another folder already holds, y of z (z.folder_next is y): the key is unique, so
+		// the database refuses, and the error is the ConstraintError velox
+		// reports, presented as BAD_USER_INPUT without the driver's text. Each
+		// database names the constraint its own way, so only SQLite's text is
+		// compared.
+		y := rawFolder("y")
+		z, err := gen.CreateFolder(e.ctx, gen.CreateFolderInput{Name: "z", ParentID: folderID(s.ID), PrevID: folderID(y.ID)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = gen.UpdateFolder(e.ctx, folderID(c.ID), gen.UpdateFolderInput{PrevID: ptr(folderID(y.ID))})
+		var ce *velox.ConstraintError
+		if !errors.As(err, &ce) || ce.Kind != velox.ConstraintUnique {
+			t.Fatalf("UpdateFolder of c, prev y held by z: %v, want a unique ConstraintError", err)
+		}
+		if e.target == "sqlite" && !strings.HasPrefix(err.Error(), "velox: gen.Folder: unique constraint folders.folder_next violated: ") {
+			t.Errorf("the error is %q, want it to start with the folders.folder_next constraint", err)
+		}
+		ge := veloxgql.ErrorPresenter(nil)(e.ctx, err)
+		if ge.Message != "unique constraint violated" || ge.Extensions["code"] != veloxgql.CodeBadUserInput {
+			t.Errorf("presented as %q %v, want BAD_USER_INPUT unique constraint violated", ge.Message, ge.Extensions)
+		}
+		if _, nx := keys(c.ID); !is(nx, s.ID) {
+			t.Errorf("c's folder_next %v after the refusal, want s %d", nx, s.ID)
+		}
+		if _, nx := keys(z.ID); !is(nx, y.ID) {
+			t.Errorf("z's folder_next %v after the refusal, want y %d", nx, y.ID)
+		}
+
+		// A create takes d as a child and as its next: d's keys are both the
+		// new folder.
+		n, err := gen.CreateFolder(e.ctx, gen.CreateFolderInput{Name: "n", ParentID: folderID(s.ID), PrevID: folderID(c2.ID), ChildIDs: []string{folderID(d.ID)}, NextID: ptr(folderID(d.ID))})
+		if err != nil {
+			t.Fatalf("CreateFolder with childIDs and nextID d: %v", err)
+		}
+		if ch, nx := keys(d.ID); !is(ch, n.ID) || !is(nx, n.ID) {
+			t.Errorf("d's folder_children %v, folder_next %v, want n %d", ch, nx, n.ID)
+		}
+
+		// A next that already has a prev, z of y, is BAD_USER_INPUT on a create;
+		// nothing is created.
+		f := rawFolder("f")
+		_, err = gen.CreateFolder(e.ctx, gen.CreateFolderInput{Name: "m", ParentID: folderID(s.ID), PrevID: folderID(f.ID), NextID: ptr(folderID(z.ID))})
+		const held = "veloxgql: CreateFolderInput.nextID: a Folder is already linked to another Folder"
+		if code(err) != veloxgql.CodeBadUserInput || err == nil || err.Error() != held {
+			t.Errorf("CreateFolder with the held next z: %v (code %q), want %q", err, code(err), held)
+		}
+		if k := count(t, e.ctx, e.db.Query[gen.Folder]().Where(gen.Folders.Name.EQ("m"))); k != 0 {
+			t.Errorf("%d folders m after the refusal, want 0", k)
 		}
 	})
 }
@@ -2285,7 +2429,7 @@ func TestMutationsRun(t *testing.T) {
 	}
 	for _, name := range []string{"TestCreate", "TestCreateM2MBothSides", "TestRepeatedIDs", "TestEdgeScope", "TestAtomic", "TestCreateErrors", "TestRepoint", "TestRepointHiddenChild",
 		"TestUpdate", "TestUpdateConflicts", "TestUpdatePolicy", "TestUpdateWriteScope", "TestUpdateReadBack", "TestUpdateEmpty", "TestUpdateErrors", "TestMutationWaitsOnTheLock",
-		"TestDelete", "TestDeletePolicy", "TestDeleteConstraint", "TestSelfM2M", "TestUnlinkScope", "TestValidateFirst", "TestRequiredSelfEdge", "TestBidiPeers", "TestBidiPartner"} {
+		"TestDelete", "TestDeletePolicy", "TestDeleteConstraint", "TestSelfM2M", "TestUnlinkScope", "TestValidateFirst", "TestRequiredSelfEdge", "TestBidiPeers", "TestBidiPartner", "TestWriteHiddenProfile"} {
 		if !strings.Contains(out, "--- PASS: "+name+" ") {
 			t.Errorf("no PASS of %s in\n%s", name, out)
 		}
@@ -2301,6 +2445,160 @@ func TestMutationsRun(t *testing.T) {
 	}
 	for _, tg := range targets {
 		t.Logf("%s: %d tests passed", tg, strings.Count(out, "/"+tg+" ("))
+	}
+	if strings.Contains(out, "--- SKIP") {
+		t.Errorf("a test skipped:\n%s", out)
+	}
+}
+
+// e2eMutServeResolvers are the resolvers of the mutation schema served by
+// gqlgen that the test uses, one line each; gqlgen stubs the others, and keeps
+// these when it generates.
+const e2eMutServeResolvers = `package graph
+
+import (
+	"context"
+
+	"example.com/app/gen"
+	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+)
+
+// Node is the resolver for the node field.
+func (r *queryResolver) Node(ctx context.Context, id string) (veloxgql.Noder, error) {
+	return gen.Node(ctx, id)
+}
+
+// Nodes is the resolver for the nodes field.
+func (r *queryResolver) Nodes(ctx context.Context, ids []string) ([]veloxgql.Noder, error) {
+	return gen.Nodes(ctx, ids)
+}
+
+// UpdateFolder is the resolver for the updateFolder field.
+func (r *mutationResolver) UpdateFolder(ctx context.Context, id string, input gen.UpdateFolderInput) (*gen.Folder, error) {
+	return gen.UpdateFolder(ctx, id, input)
+}
+
+// Mutation returns MutationResolver implementation.
+func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
+
+// Query returns QueryResolver implementation.
+func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
+
+type mutationResolver struct{ *Resolver }
+type queryResolver struct{ *Resolver }
+`
+
+// e2eMutServeRun is the application's test of the mutation schema served by
+// gqlgen, on SQLite with foreign keys on: Folder's Required self edges, whose
+// keys are NULL-able, read through a query and written through a mutation.
+const e2eMutServeRun = `package app_test
+
+import (
+	"database/sql"
+	"fmt"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/99designs/gqlgen/graphql/handler"
+	"github.com/99designs/gqlgen/graphql/handler/transport"
+	_ "modernc.org/sqlite"
+
+	"example.com/app/graph"
+	"github.com/syssam/velox2"
+	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+)
+
+// TestFolderServed: a folder's parent and prev, which are Required, read as
+// the folders they name, and as null once the folder they name is deleted (the
+// keys are ON DELETE SET NULL); and updateFolder moves both.
+func TestFolderServed(t *testing.T) {
+	db, err := sql.Open("sqlite", "file::memory:?_pragma=foreign_keys(1)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	db.SetMaxOpenConns(1)
+	for _, s := range []string{
+		"CREATE TABLE folders (id INTEGER PRIMARY KEY, name TEXT NOT NULL, folder_children INTEGER REFERENCES folders (id) ON DELETE SET NULL, folder_next INTEGER UNIQUE REFERENCES folders (id) ON DELETE SET NULL)",
+		"INSERT INTO folders (id, name) VALUES (1, 'r'), (2, 'o')",
+		"INSERT INTO folders (id, name, folder_children, folder_next) VALUES (3, 'c', 1, 1)",
+	} {
+		if _, err := db.Exec(s); err != nil {
+			t.Fatalf("%s: %v", s, err)
+		}
+	}
+	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
+	srv.Use(veloxgql.NewExtension(velox.Open(velox.SQLite, db)))
+	srv.AddTransport(transport.POST{})
+	do := func(query string) string {
+		t.Helper()
+		body := fmt.Sprintf("{\"query\":%q}", query)
+		req := httptest.NewRequest("POST", "/", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, req)
+		return w.Body.String()
+	}
+	c := veloxgql.EncodeID("Folder", 3)
+	o := veloxgql.EncodeID("Folder", 2)
+	read := fmt.Sprintf("{ node(id: %q) { ... on Folder { name parent { name } prev { name } } } }", c)
+	for _, step := range []struct {
+		name, query, want string
+		before         string
+	}{
+		{"read", read, ` + "`" + `{"data":{"node":{"name":"c","parent":{"name":"r"},"prev":{"name":"r"}}}}` + "`" + `, ""},
+		{"read after r is deleted", read, ` + "`" + `{"data":{"node":{"name":"c","parent":null,"prev":null}}}` + "`" + `, "DELETE FROM folders WHERE id = 1"},
+		{"update", fmt.Sprintf("mutation { updateFolder(id: %q, input: {parentID: %q, prevID: %q}) { name parent { name } prev { name } } }", c, o, o),
+			` + "`" + `{"data":{"updateFolder":{"name":"c","parent":{"name":"o"},"prev":{"name":"o"}}}}` + "`" + `, ""},
+	} {
+		if step.before != "" {
+			if _, err := db.Exec(step.before); err != nil {
+				t.Fatalf("%s: %s: %v", step.name, step.before, err)
+			}
+		}
+		if got := do(step.query); got != step.want {
+			t.Errorf("%s:\ngot  %s\nwant %s", step.name, got, step.want)
+		}
+	}
+}
+`
+
+// TestMutationSchemaServes generates the mutation schema's application with
+// velox-gen and the plugin, then gqlgen over it, with resolvers for node,
+// nodes and updateFolder, and runs a test through gqlgen's handler: the
+// schema's mutation types, with their Required self edges, bind and serve. It
+// needs no database but SQLite.
+func TestMutationSchemaServes(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a module")
+	}
+	_, run := app(t, map[string]string{
+		"schema/schema.go":          e2eMutSchema,
+		"gqlgen.yml":                e2eCollectGqlgen,
+		"graph/schema.resolvers.go": e2eMutServeResolvers,
+		"serve_test.go":             e2eMutServeRun,
+	}, true)
+	if out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql", "./schema"); err != nil {
+		t.Fatalf("generate: %v\n%s", err, out)
+	}
+	if out, err := run("tool", "gqlgen", "generate"); err != nil {
+		t.Fatalf("gqlgen generate: %v\n%s", err, out)
+	}
+	if out, err := run("mod", "tidy", "-e"); err != nil {
+		t.Fatalf("go mod tidy: %v\n%s", err, out)
+	}
+	if out, err := run("vet", "./..."); err != nil {
+		t.Fatalf("go vet: %v\n%s", err, out)
+	}
+	out, err := run("test", "-count=1", "-v", ".")
+	if err != nil {
+		t.Fatalf("go test: %v\n%s", err, out)
+	}
+	for _, name := range []string{"TestFolderServed"} {
+		if !strings.Contains(out, "--- PASS: "+name+" ") {
+			t.Errorf("no PASS of %s in\n%s", name, out)
+		}
 	}
 	if strings.Contains(out, "--- SKIP") {
 		t.Errorf("a test skipped:\n%s", out)
