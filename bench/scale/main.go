@@ -11,6 +11,16 @@
 // memory, so the times include that wrapper's overhead. The overhead is the
 // same in every run and the thresholds were calibrated on the same setup, so
 // the figures compare with each other, not with a plain go build.
+//
+// The build cost is checked as CPU time (user plus system, of each command and
+// the children it reaped: the compiler and linker under go build) relative to a
+// reference build in the same run: a small module of its own that imports
+// net/http, built cold before the cold build and again after the schema edit.
+// CPU time counts the work, not the wait, so it does not depend on -p (the
+// local gate's GOFLAGS=-p=2 against CI's default) or on how many cores are
+// free. Contention still slows each CPU-second (shared caches, the clock),
+// which the reference, measured on the same machine at the same time, absorbs.
+// The wall-clock seconds are printed for information and not checked.
 package main
 
 import (
@@ -35,12 +45,25 @@ type config struct {
 }
 
 type report struct {
-	N                  int     `json:"n"`
-	Services           int     `json:"services"`
+	N        int `json:"n"`
+	Services int `json:"services"`
+	// The reference build's CPU and wall seconds, before the cold build and
+	// after the schema edit; RefCPUS is the mean of the two CPU times.
+	RefCPUBeforeS  float64 `json:"ref_cpu_before_s"`
+	RefCPUAfterS   float64 `json:"ref_cpu_after_s"`
+	RefWallBeforeS float64 `json:"ref_wall_before_s"`
+	RefWallAfterS  float64 `json:"ref_wall_after_s"`
+	RefCPUS        float64 `json:"ref_cpu_s"`
+	// Wall-clock seconds, printed only.
 	ColdBuildS         float64 `json:"cold_build_s"`
 	SchemaEditRebuildS float64 `json:"schema_edit_rebuild_s"`
-	ServiceBinaryMB    float64 `json:"service_binary_mb"`
-	LinkPeakMB         float64 `json:"link_peak_mb"`
+	// CPU seconds, and their ratios to RefCPUS, which are checked.
+	ColdBuildCPUS         float64 `json:"cold_build_cpu_s"`
+	SchemaEditRebuildCPUS float64 `json:"schema_edit_rebuild_cpu_s"`
+	ColdBuildX            float64 `json:"cold_build_x"`
+	SchemaEditRebuildX    float64 `json:"schema_edit_rebuild_x"`
+	ServiceBinaryMB       float64 `json:"service_binary_mb"`
+	LinkPeakMB            float64 `json:"link_peak_mb"`
 }
 
 func main() {
@@ -60,8 +83,10 @@ func main() {
 		b, _ := json.MarshalIndent(r, "", "  ")
 		fmt.Println(string(b))
 	} else {
-		fmt.Printf("n=%d services=%d cold %.1fs, schema edit + regenerate + rebuild %.2fs, service %.1f MB, link peak %.0f MB\n",
-			r.N, r.Services, r.ColdBuildS, r.SchemaEditRebuildS, r.ServiceBinaryMB, r.LinkPeakMB)
+		fmt.Printf("n=%d services=%d reference CPU %.2fs, %.2fs (wall %.2fs, %.2fs); cold %.2fx (CPU %.1fs, wall %.1fs), schema edit + regenerate + rebuild %.2fx (CPU %.1fs, wall %.1fs); service %.1f MB, link peak %.0f MB\n",
+			r.N, r.Services, r.RefCPUBeforeS, r.RefCPUAfterS, r.RefWallBeforeS, r.RefWallAfterS,
+			r.ColdBuildX, r.ColdBuildCPUS, r.ColdBuildS, r.SchemaEditRebuildX, r.SchemaEditRebuildCPUS, r.SchemaEditRebuildS,
+			r.ServiceBinaryMB, r.LinkPeakMB)
 	}
 	if *thresholds != "" {
 		if problems := check(r, c.thresholdsKey(), *thresholds); len(problems) > 0 {
@@ -134,7 +159,7 @@ func run(c config) (report, error) {
 	if err := buildWrapper(wrapper); err != nil {
 		return r, err
 	}
-	velox := func() error {
+	velox := func() (cpu float64, err error) {
 		args := []string{"-out", "gen"}
 		if c.graphql {
 			args = append(args, "-plugin", "velox-graphql")
@@ -145,12 +170,13 @@ func run(c config) (report, error) {
 			// The plugin is a tool of the module, built by go tool, offline.
 			cmd.Env = append(os.Environ(), "GOFLAGS="+tempmod.GoFlags("-mod=mod"), "GOPROXY=off", "GOWORK=off")
 		}
-		if out, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("velox-gen: %v\n%s", err, out)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return 0, fmt.Errorf("velox-gen: %v\n%s", err, out)
 		}
-		return nil
+		return cpuSeconds(cmd), nil
 	}
-	if err := velox(); err != nil {
+	if _, err := velox(); err != nil {
 		return r, err
 	}
 	for name, src := range services {
@@ -163,17 +189,25 @@ func run(c config) (report, error) {
 		}
 	}
 	memFile := filepath.Join(tools, "linkmem.txt")
-	build := func() error {
+	build := func() (cpu float64, err error) {
 		cmd := exec.Command("go", "build", "-toolexec", wrapper, "-o", bin+string(filepath.Separator), "./...")
 		cmd.Dir = app
 		cmd.Env = append(os.Environ(), "GOCACHE="+cache, "GOFLAGS="+tempmod.GoFlags("-mod=mod"), "GOPROXY=off", "GOWORK=off", "VELOX_LINKMEM="+memFile)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("go build: %v\n%s%s", err, out, tempmod.Hint(string(out)))
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return 0, fmt.Errorf("go build: %v\n%s%s", err, out, tempmod.Hint(string(out)))
 		}
-		return nil
+		return cpuSeconds(cmd), nil
+	}
+	ref := filepath.Join(c.dir, "ref")
+	if err := writeReference(ref); err != nil {
+		return r, err
+	}
+	if r.RefCPUBeforeS, r.RefWallBeforeS, err = buildReference(ref, filepath.Join(c.dir, "refcache-before"), wrapper); err != nil {
+		return r, err
 	}
 	start := time.Now()
-	if err := build(); err != nil {
+	if r.ColdBuildCPUS, err = build(); err != nil {
 		return r, err
 	}
 	r.ColdBuildS = time.Since(start).Seconds()
@@ -193,13 +227,25 @@ func run(c config) (report, error) {
 		return r, err
 	}
 	start = time.Now()
-	if err := velox(); err != nil {
+	genCPU, err := velox()
+	if err != nil {
 		return r, err
 	}
-	if err := build(); err != nil {
+	buildCPU, err := build()
+	if err != nil {
 		return r, err
 	}
 	r.SchemaEditRebuildS = time.Since(start).Seconds()
+	r.SchemaEditRebuildCPUS = genCPU + buildCPU
+	if r.RefCPUAfterS, r.RefWallAfterS, err = buildReference(ref, filepath.Join(c.dir, "refcache-after"), wrapper); err != nil {
+		return r, err
+	}
+	r.RefCPUS = (r.RefCPUBeforeS + r.RefCPUAfterS) / 2
+	if r.RefCPUS <= 0 {
+		return r, fmt.Errorf("the reference build measured no CPU time")
+	}
+	r.ColdBuildX = r.ColdBuildCPUS / r.RefCPUS
+	r.SchemaEditRebuildX = r.SchemaEditRebuildCPUS / r.RefCPUS
 
 	if fi, err := os.Stat(filepath.Join(bin, "s0")); err == nil {
 		r.ServiceBinaryMB = float64(fi.Size()) / (1 << 20)
@@ -208,6 +254,51 @@ func run(c config) (report, error) {
 	}
 	r.LinkPeakMB, err = peakMB(memFile)
 	return r, err
+}
+
+// cpuSeconds is the user plus system CPU time of cmd, which has been waited
+// for. The rusage behind it counts the children cmd reaped: under go build,
+// the compiler, the linker and the -toolexec wrapper that runs them.
+func cpuSeconds(cmd *exec.Cmd) float64 {
+	return (cmd.ProcessState.UserTime() + cmd.ProcessState.SystemTime()).Seconds()
+}
+
+// referenceSrc is the reference module's program: a small binary whose cold
+// build compiles the standard library's net/http and what it imports.
+const referenceSrc = `package main
+
+import (
+	"fmt"
+	"net/http"
+)
+
+func main() { fmt.Println(http.StatusOK) }
+`
+
+// writeReference writes the reference module, ref, with its own go.mod, in dir.
+func writeReference(dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module ref\n\ngo 1.27.0\n"), 0o644); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, "main.go"), []byte(referenceSrc), 0o644)
+}
+
+// buildReference builds the reference module in dir cold, with the fresh build
+// cache cache, under the same -toolexec wrapper as the application, and
+// returns its CPU and wall seconds. Its linker's peak memory goes to a file of
+// its own, not the application's.
+func buildReference(dir, cache, wrapper string) (cpu, wall float64, err error) {
+	cmd := exec.Command("go", "build", "-toolexec", wrapper, "-o", filepath.Join(dir, "ref"), ".")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GOCACHE="+cache, "GOFLAGS=", "GOPROXY=off", "GOWORK=off", "VELOX_LINKMEM="+filepath.Join(dir, "linkmem.txt"))
+	start := time.Now()
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return 0, 0, fmt.Errorf("building the reference: %v\n%s", err, out)
+	}
+	return cpuSeconds(cmd), time.Since(start).Seconds(), nil
 }
 
 // noteField is the line of every schema that the edit appends a field after.
@@ -404,7 +495,7 @@ func check(r report, key, path string) []string {
 		return []string{fmt.Sprintf("no thresholds for n=%s in %s", key, path)}
 	}
 	got := map[string]float64{
-		"cold_build_s": r.ColdBuildS, "schema_edit_rebuild_s": r.SchemaEditRebuildS,
+		"cold_build_x": r.ColdBuildX, "schema_edit_rebuild_x": r.SchemaEditRebuildX,
 		"service_binary_mb": r.ServiceBinaryMB, "link_peak_mb": r.LinkPeakMB,
 	}
 	var problems []string

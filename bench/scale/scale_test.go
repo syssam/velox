@@ -23,17 +23,28 @@ func TestScaleHarnessSmall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.ColdBuildS <= 0 || r.SchemaEditRebuildS <= 0 || r.ServiceBinaryMB <= 0 || r.LinkPeakMB <= 0 {
-		t.Fatalf("a measurement is missing: %+v", r)
-	}
+	measured(t, r)
 	th := filepath.Join(t.TempDir(), "th.json")
-	tight := map[string]map[string]any{"20": {"cold_build_s": r.ColdBuildS / 1000}}
+	tight := map[string]map[string]any{"20": {"cold_build_x": r.ColdBuildX / 1000}}
 	b, _ := json.Marshal(tight)
 	if err := os.WriteFile(th, b, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if problems := check(r, "20", th); len(problems) == 0 {
 		t.Error("check passed a measurement 1000 times over its threshold")
+	}
+}
+
+// measured fails t unless r holds every measurement: the wall and CPU times,
+// the reference's CPU time, the ratios, the binary and the link peak.
+func measured(t *testing.T, r report) {
+	t.Helper()
+	if r.ColdBuildS <= 0 || r.SchemaEditRebuildS <= 0 || r.ServiceBinaryMB <= 0 || r.LinkPeakMB <= 0 ||
+		r.RefCPUS <= 0 || r.ColdBuildCPUS <= 0 || r.SchemaEditRebuildCPUS <= 0 || r.ColdBuildX <= 0 || r.SchemaEditRebuildX <= 0 {
+		t.Fatalf("a measurement is missing: %+v", r)
+	}
+	if want := r.ColdBuildCPUS / r.RefCPUS; r.ColdBuildX != want {
+		t.Errorf("cold_build_x = %v, want cold CPU / reference CPU = %v", r.ColdBuildX, want)
 	}
 }
 
@@ -127,9 +138,7 @@ func TestScaleHarnessSmallGraphQL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.ColdBuildS <= 0 || r.SchemaEditRebuildS <= 0 || r.ServiceBinaryMB <= 0 || r.LinkPeakMB <= 0 {
-		t.Fatalf("a measurement is missing: %+v", r)
-	}
+	measured(t, r)
 	schemas, services := generate(20, 2, true)
 	for _, want := range []string{`graphql.QueryField("e7s")`, `graphql.OrderField("NAME"), graphql.WhereOps()`} {
 		if src := schemas[filepath.Join("schema", "e7.go")]; !strings.Contains(src, want) {
@@ -151,9 +160,9 @@ func TestScaleHarnessSmallGraphQL(t *testing.T) {
 // TestCheckPassesAGenerousThreshold: check reports nothing when every
 // measurement is under its threshold, and ignores comment keys.
 func TestCheckPassesAGenerousThreshold(t *testing.T) {
-	r := report{N: 20, ColdBuildS: 10, SchemaEditRebuildS: 5, ServiceBinaryMB: 5, LinkPeakMB: 100}
+	r := report{N: 20, ColdBuildX: 10, SchemaEditRebuildX: 5, ServiceBinaryMB: 5, LinkPeakMB: 100}
 	generous := map[string]map[string]any{"20": {
-		"_comment": "ignored", "cold_build_s": 20.0, "schema_edit_rebuild_s": 10.0,
+		"_comment": "ignored", "cold_build_x": 20.0, "schema_edit_rebuild_x": 10.0,
 		"service_binary_mb": 10.0, "link_peak_mb": 200.0,
 	}}
 	th := filepath.Join(t.TempDir(), "th.json")
@@ -180,7 +189,7 @@ func TestCheckRefusesAMissingOrUnknownKey(t *testing.T) {
 		}
 		return p
 	}
-	all := map[string]any{"cold_build_s": 1.0, "schema_edit_rebuild_s": 1.0, "service_binary_mb": 1.0, "link_peak_mb": 1.0}
+	all := map[string]any{"cold_build_x": 1.0, "schema_edit_rebuild_x": 1.0, "service_binary_mb": 1.0, "link_peak_mb": 1.0}
 	if problems := check(r, "20", write(all)); len(problems) != 0 {
 		t.Errorf("a complete file: %v", problems)
 	}
@@ -189,10 +198,13 @@ func TestCheckRefusesAMissingOrUnknownKey(t *testing.T) {
 	if problems := check(r, "20", write(missing)); len(problems) != 1 || !strings.Contains(problems[0], "missing threshold link_peak_mb") {
 		t.Errorf("a missing key: %v", problems)
 	}
-	unknown := maps.Clone(all)
-	unknown["leaf_rebuild_s"] = 1.0
-	if problems := check(r, "20", write(unknown)); len(problems) != 1 || !strings.Contains(problems[0], "unknown measurement leaf_rebuild_s") {
-		t.Errorf("an unknown key: %v", problems)
+	// The wall-clock seconds are printed, not checked: a threshold on them is unknown.
+	for _, k := range []string{"leaf_rebuild_s", "cold_build_s", "schema_edit_rebuild_s"} {
+		unknown := maps.Clone(all)
+		unknown[k] = 1.0
+		if problems := check(r, "20", write(unknown)); len(problems) != 1 || !strings.Contains(problems[0], "unknown measurement "+k) {
+			t.Errorf("an unknown key %s: %v", k, problems)
+		}
 	}
 }
 
@@ -240,7 +252,7 @@ func TestCommittedThresholds(t *testing.T) {
 			t.Errorf("no thresholds for %s, which CI checks", key)
 		}
 	}
-	known := []string{"cold_build_s", "schema_edit_rebuild_s", "service_binary_mb", "link_peak_mb"}
+	known := []string{"cold_build_x", "schema_edit_rebuild_x", "service_binary_mb", "link_peak_mb"}
 	for n, th := range all {
 		for k, v := range th {
 			if strings.HasPrefix(k, "_") {
@@ -267,10 +279,10 @@ func checkAtThresholds(t *testing.T, th map[string]any, key string) {
 	for k, v := range th {
 		f, _ := v.(float64)
 		switch k {
-		case "cold_build_s":
-			r.ColdBuildS = f
-		case "schema_edit_rebuild_s":
-			r.SchemaEditRebuildS = f
+		case "cold_build_x":
+			r.ColdBuildX = f
+		case "schema_edit_rebuild_x":
+			r.SchemaEditRebuildX = f
 		case "service_binary_mb":
 			r.ServiceBinaryMB = f
 		case "link_peak_mb":
