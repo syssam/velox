@@ -349,6 +349,12 @@ func over(ctx context.Context) bool {
 //
 // A rollback of the savepoint that fails, after fn's error or its panic,
 // breaks the transaction: see txFrame.broken.
+//
+// The savepoints of a transaction are named velox_1, velox_2, and so on, in
+// the order they are made, and no name is used twice: MySQL replaces a
+// savepoint of the same name, so a later ROLLBACK TO would reach the wrong
+// one, or none. The count is the transaction's, not the DB's depth, because
+// savepoints made from DBs of one depth can be nested.
 func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error) error {
 	if err := db.txRoot.broken; err != nil {
 		return fmt.Errorf("velox: savepoint: %w", err)
@@ -367,7 +373,7 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 	if cancel != nil {
 		defer cancel()
 	}
-	name := "velox_" + strconv.Itoa(db.depth+1)
+	name := "velox_" + strconv.FormatUint(db.txRoot.savepoints.Add(1), 10)
 	if _, err := db.ex.exec(sctx, "SAVEPOINT "+name, nil); err != nil {
 		return savepointErr(sctx, "savepoint", err)
 	}
@@ -507,11 +513,17 @@ func (c *txCtx) String() string { return fmt.Sprint(c.Context) + ".WithTx" }
 // one and whose fn then returns nil still sends its RELEASE, which the
 // transaction's rollback undoes with the rest. Like the rest of tx, it is
 // read and set by one goroutine at a time.
+//
+// savepoints counts the savepoints made in the transaction, on the root, and
+// names the next one. It is atomic like ended: statements on one transaction
+// from several goroutines race on the connection whatever this field is, but
+// this field is no part of that race, and no two savepoints get one name.
 type txFrame struct {
-	db     DB
-	ctx    txCtx
-	ended  atomic.Bool
-	broken error
+	db         DB
+	ctx        txCtx
+	ended      atomic.Bool
+	savepoints atomic.Uint64
+	broken     error
 }
 
 // newTxFrame returns the frame of db, with ctx marked as the transaction's.

@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -167,9 +168,72 @@ func TestNestedTxUsesSavepoints(t *testing.T) {
 		return nil
 	})
 	want := []string{"BEGIN", "SAVEPOINT velox_1", touchSQL, "RELEASE SAVEPOINT velox_1",
-		"SAVEPOINT velox_1", "ROLLBACK TO SAVEPOINT velox_1", "RELEASE SAVEPOINT velox_1", "COMMIT"}
+		"SAVEPOINT velox_2", "ROLLBACK TO SAVEPOINT velox_2", "RELEASE SAVEPOINT velox_2", "COMMIT"}
 	if err != nil || !reflect.DeepEqual(e.Log, want) {
 		t.Errorf("%v\n got %q\nwant %q", err, e.Log, want)
+	}
+}
+
+// TestSavepointNamesUnique: MySQL replaces a savepoint of the same name, so a
+// savepoint made from a shallower DB inside a deeper one must not reuse the
+// deeper one's name.
+func TestSavepointNamesUnique(t *testing.T) {
+	boom := errors.New("boom")
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.MySQL, e)
+	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		return tx.Tx(ctx, func(ctx context.Context, sp *velox.DB) error {
+			// What Atomic does: a savepoint from the depth-0 DB, inside sp's.
+			if err := tx.Tx(ctx, func(context.Context, *velox.DB) error { return nil }); err != nil {
+				return err
+			}
+			return boom
+		})
+	})
+	want := []string{"BEGIN", "SAVEPOINT velox_1", "SAVEPOINT velox_2", "RELEASE SAVEPOINT velox_2",
+		"ROLLBACK TO SAVEPOINT velox_1", "RELEASE SAVEPOINT velox_1", "ROLLBACK"}
+	if !errors.Is(err, boom) || !reflect.DeepEqual(e.Log, want) {
+		t.Errorf("%v\n got %q\nwant %q", err, e.Log, want)
+	}
+}
+
+// TestSavepointNamesUniqueConcurrently: the counter is the transaction's, and
+// savepoints made at once on one transaction (a misuse that races on the
+// connection, which the fake does not have) never share a name. Run with
+// -race, a plain counter fails here.
+func TestSavepointNamesUniqueConcurrently(t *testing.T) {
+	const n = 64
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e)
+	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		var wg sync.WaitGroup
+		errs := make([]error, n)
+		for i := range n {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				errs[i] = tx.Tx(ctx, func(context.Context, *velox.DB) error { return nil })
+			}()
+		}
+		wg.Wait()
+		return errors.Join(errs...)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	made := map[string]int{}
+	for _, q := range e.Log {
+		if name, ok := strings.CutPrefix(q, "SAVEPOINT "); ok {
+			made[name]++
+		}
+	}
+	if len(made) != n {
+		t.Errorf("%d distinct savepoint names for %d savepoints: %v", len(made), n, made)
+	}
+	for name, c := range made {
+		if c != 1 {
+			t.Errorf("savepoint %s made %d times", name, c)
+		}
 	}
 }
 
