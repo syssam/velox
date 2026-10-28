@@ -497,6 +497,7 @@ func TestInspectMySQLBinaryDefaults(t *testing.T) {
 		Columns: []migrate.Column{
 			{Name: "id", Type: "bigint", Identity: true},
 			{Name: "code", Type: "varbinary(8)", Default: "'a'"},
+			{Name: "hex", Type: "varbinary(8)", Default: "0x61"},
 			{Name: "pad", Type: "binary(2)", Default: "'a'"},
 			{Name: "quote", Type: "varbinary(8)", Default: "''''"},
 			{Name: "data", Type: "blob", Default: "('a')"},
@@ -509,7 +510,7 @@ func TestInspectMySQLBinaryDefaults(t *testing.T) {
 	dir := dirOf(t, velox.MySQL, step{to: s, name: "bins"})
 	noDriftMySQL(t, dir, s)
 
-	db, _ := freshDB(t, velox.MySQL)
+	db, dsn := freshDB(t, velox.MySQL)
 	mustUp(t, db, dir)
 	mustExec(t, db, "ALTER TABLE bins ADD COLUMN scratch varbinary(8) DEFAULT 0x00ff")
 	var name, create string
@@ -522,6 +523,49 @@ func TestInspectMySQLBinaryDefaults(t *testing.T) {
 		}
 	}
 	mustExec(t, db, "ALTER TABLE bins DROP COLUMN scratch")
+
+	// SHOW CREATE TABLE runs for bins, which has a binary default, and not
+	// for mysqlSchema's g, which has none.
+	gdb, _ := freshDB(t, velox.MySQL)
+	mustUp(t, gdb, mysqlDir(t))
+	for _, c := range []struct {
+		db    *sql.DB
+		table string
+		want  int
+	}{{db, "bins", 1}, {gdb, "g", 0}} {
+		_, queries, err := migrate.InspectMySQLQueries(context.Background(), c.db, []migrate.TableRef{{Name: c.table}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		n := 0
+		for _, q := range queries {
+			if strings.HasPrefix(q, "SHOW CREATE TABLE") {
+				n++
+			}
+		}
+		if n != c.want {
+			t.Errorf("%s: %d SHOW CREATE TABLE, want %d", c.table, n, c.want)
+		}
+	}
+
+	// A session whose SHOW CREATE TABLE quotes names with " or leaves them
+	// bare finds no drift either.
+	for _, set := range []string{
+		"SET SESSION sql_mode = CONCAT(@@sql_mode, ',ANSI_QUOTES')",
+		"SET SESSION sql_quote_show_create = OFF",
+	} {
+		one := openDB(t, "mysql", dsn)
+		one.SetMaxOpenConns(1)
+		mustExec(t, one, set)
+		r, err := migrate.Drift(context.Background(), one, s)
+		if err != nil {
+			t.Fatalf("%s: %v", set, err)
+		}
+		if len(r.Changes) > 0 || len(r.Warnings) > 0 {
+			t.Errorf("%s: changes %v, warnings %v", set, r.Changes, r.Warnings)
+		}
+	}
+
 	mustExec(t, db, "ALTER TABLE bins ALTER COLUMN code SET DEFAULT 0x6100FF")
 	r, err := migrate.Drift(context.Background(), db, s)
 	if err != nil {

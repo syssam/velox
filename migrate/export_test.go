@@ -177,3 +177,21 @@ func SetBeforeBaselining(f func()) (restore func()) {
 	beforeBaselining = f
 	return func() { beforeBaselining = nil }
 }
+
+// recorder is a querier that records each query it runs.
+type recorder struct {
+	q       querier
+	queries []string
+}
+
+func (r *recorder) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	r.queries = append(r.queries, query)
+	return r.q.QueryContext(ctx, query, args...)
+}
+
+// InspectMySQLQueries is inspectMySQL on db, and the queries it ran.
+func InspectMySQLQueries(ctx context.Context, db *sql.DB, tables []TableRef) (*Schema, []string, error) {
+	r := &recorder{q: db}
+	s, _, err := inspectMySQL(ctx, r, tables)
+	return s, r.queries, err
+}

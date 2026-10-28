@@ -177,7 +177,7 @@ func (r *myReader) columns(mt *myTable) error {
 			unheld = append(unheld, "generated from an expression")
 		} else {
 			c.Default = mysqlDefault(c.Type, has("DEFAULT_GENERATED"), def)
-			if w := typeWord(c.Type); def.Valid && !has("DEFAULT_GENERATED") && (w == "binary" || w == "varbinary") {
+			if def.Valid && !has("DEFAULT_GENERATED") && mysqlBinaryType(c.Type) {
 				shown = append(shown, len(mt.t.Columns))
 			}
 		}
@@ -210,7 +210,7 @@ func (r *myReader) columns(mt *myTable) error {
 		c := &mt.t.Columns[i]
 		lit, ok := myShownDefault(create, c.Name)
 		if !ok {
-			return fmt.Errorf("SHOW CREATE TABLE %s shows no default for the column %s, though information_schema has one", mt.t.Ref(), c.Name)
+			return fmt.Errorf("SHOW CREATE TABLE %s shows no default for the column %s, though information_schema has one; the session's sql_mode or sql_quote_show_create may print it in a form not read", mt.t.Ref(), c.Name)
 		}
 		c.Default = mysqlBinaryDefault(c.Type, lit)
 	}
@@ -305,29 +305,13 @@ func asciiOnly(s string) bool {
 
 // mysqlBinaryDefault is a binary or varbinary column's literal default, as
 // SHOW CREATE TABLE prints it, in the model's spelling. It decodes the
-// literal ('…' with MySQL's escapes and doubled quotes, or 0x… in either
-// case) to its bytes; on binary(n) it drops the trailing 0x00 bytes that
-// pad the value. When every byte left is printable ASCII (0x20–0x7e), it is
-// ddl.Literal(velox.MySQL, …) of them; otherwise it is shown as printed.
+// literal as mysqlBinaryBytes does; when every byte is printable ASCII
+// (0x20–0x7e), it is ddl.Literal(velox.MySQL, …) of them; otherwise it is
+// shown as printed.
 func mysqlBinaryDefault(typ, shown string) string {
-	var b []byte
-	switch {
-	case strings.HasPrefix(shown, "'"):
-		v, end, ok := unquoteAt(shown, 0, true)
-		if !ok || end != len(shown) {
-			return shown
-		}
-		b = []byte(v)
-	case len(shown) > 2 && (shown[:2] == "0x" || shown[:2] == "0X"):
-		var err error
-		if b, err = hex.DecodeString(shown[2:]); err != nil {
-			return shown
-		}
-	default:
+	b, ok := mysqlBinaryBytes(typ, shown)
+	if !ok {
 		return shown
-	}
-	if typeWord(typ) == "binary" {
-		b = bytes.TrimRight(b, "\x00")
 	}
 	for _, c := range b {
 		if c < 0x20 || c > 0x7e {
@@ -337,10 +321,48 @@ func mysqlBinaryDefault(typ, shown string) string {
 	return ddl.Literal(velox.MySQL, string(b))
 }
 
+// mysqlBinaryBytes is the value of a binary or varbinary column's literal
+// default: '…' with MySQL's escapes and doubled quotes, the same after
+// _binary, or 0x… in either case. On binary(n) the trailing 0x00 bytes that
+// pad the value are dropped. False when def is none of these.
+func mysqlBinaryBytes(typ, def string) ([]byte, bool) {
+	var b []byte
+	if len(def) > 7 && strings.EqualFold(def[:7], "_binary") && def[7] == '\'' {
+		def = def[7:]
+	}
+	switch {
+	case strings.HasPrefix(def, "'"):
+		v, end, ok := unquoteAt(def, 0, true)
+		if !ok || end != len(def) {
+			return nil, false
+		}
+		b = []byte(v)
+	case len(def) > 2 && (def[:2] == "0x" || def[:2] == "0X"):
+		var err error
+		if b, err = hex.DecodeString(def[2:]); err != nil {
+			return nil, false
+		}
+	default:
+		return nil, false
+	}
+	if typeWord(typ) == "binary" {
+		b = bytes.TrimRight(b, "\x00")
+	}
+	return b, true
+}
+
+// mysqlBinaryType reports whether typ is binary or varbinary.
+func mysqlBinaryType(typ string) bool {
+	w := typeWord(typ)
+	return w == "binary" || w == "varbinary"
+}
+
 // myShownDefault is the literal of column col's DEFAULT in create, SHOW
 // CREATE TABLE's text: a quoted string as MySQL prints it, or 0x…; false
 // when the column has no DEFAULT. It reads backquoted names and quoted
-// literals, so a name or literal holding " DEFAULT " is not misread.
+// literals, so a name or literal holding " DEFAULT " is not misread. The
+// name is backquoted, in double quotes under ANSI_QUOTES, or bare under
+// sql_quote_show_create=OFF.
 func myShownDefault(create, col string) (string, bool) {
 	// The table's name, which may hold a parenthesis, up to the definitions.
 	i := 0
@@ -361,13 +383,13 @@ func myShownDefault(create, col string) (string, bool) {
 		tok, next := myToken(create, i)
 		switch tok {
 		case "", ")", ",":
-			if len(def) > 0 && def[0] == ddl.Ident(velox.MySQL, col) {
+			// The name in backquotes, in double quotes, or bare.
+			if len(def) > 0 && (def[0] == ddl.Ident(velox.MySQL, col) || def[0] == ddl.Ident(velox.Postgres, col) || def[0] == col) {
 				for k := 1; k+1 < len(def); k++ {
 					if strings.EqualFold(def[k], "DEFAULT") {
 						return def[k+1], true
 					}
 				}
-				return "", false
 			}
 			if tok != "," {
 				return "", false

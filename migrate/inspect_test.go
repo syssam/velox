@@ -3,6 +3,7 @@ package migrate_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -255,6 +256,8 @@ func TestMySQLBinaryDefault(t *testing.T) {
 		{"varbinary(8)", `'it''s'`, `'it''s'`},
 		{"varbinary(8)", `'it\'s'`, `'it''s'`},
 		{"varbinary(8)", `0x00FF`, `0x00FF`},
+		{"varbinary(8)", `_binary'a'`, `'a'`},
+		{"varbinary(8)", `_binary'\0'`, `_binary'\0'`},
 	} {
 		if got := migrate.MySQLBinaryDefault(c.typ, c.shown); got != c.want {
 			t.Errorf("%s %s: %s, want %s", c.typ, c.shown, got, c.want)
@@ -285,10 +288,63 @@ func TestMyShownDefault(t *testing.T) {
 		{"CREATE TABLE `t` (\n  `c` varbinary(8) NOT NULL COMMENT 'no DEFAULT 0x00 here' DEFAULT 0x01\n)", "c", `0x01`, true},
 		{"CREATE TABLE `t` (\n  `c` varbinary(8) COMMENT 'DEFAULT ''z''',\n  `d` int DEFAULT '1'\n)", "c", "", false},
 		{"CREATE TABLE `t` (\n  `c` varbinary(8) COMMENT 'it\\'s DEFAULT 1' DEFAULT 'x,y'\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", "c", `'x,y'`, true},
+		// MySQL's own order: DEFAULT, then COMMENT.
+		{"CREATE TABLE `t` (\n  `c` varbinary(8) NOT NULL DEFAULT 'a' COMMENT 'DEFAULT ''b''',\n  `d` int\n)", "c", `'a'`, true},
+		// ANSI_QUOTES quotes names with ", and sql_quote_show_create=OFF
+		// leaves them bare.
+		{"CREATE TABLE \"t\" (\n  \"c\" varbinary(8) DEFAULT 'a',\n  \"d\"\"e\" varbinary(8) DEFAULT 'b'\n)", "c", `'a'`, true},
+		{"CREATE TABLE \"t\" (\n  \"c\" varbinary(8) DEFAULT 'a',\n  \"d\"\"e\" varbinary(8) DEFAULT 'b'\n)", `d"e`, `'b'`, true},
+		{"CREATE TABLE t (\n  c varbinary(8) DEFAULT 'a',\n  cc varbinary(8) DEFAULT 'b'\n)", "cc", `'b'`, true},
+		{"CREATE TABLE t (\n  c varbinary(8) DEFAULT 'a',\n  cc varbinary(8) DEFAULT 'b'\n)", "c", `'a'`, true},
 	} {
 		got, ok := migrate.MyShownDefault(c.create, c.col)
 		if got != c.want || ok != c.ok {
 			t.Errorf("%q in %q: %q %v, want %q %v", c.col, c.create, got, ok, c.want, c.ok)
+		}
+	}
+}
+
+// TestDriftMySQLBinaryDefaults: on MySQL a binary or varbinary default is
+// compared by its bytes, both sides decoded alike: the same bytes are no
+// difference, other bytes a change and never only a warning.
+func TestDriftMySQLBinaryDefaults(t *testing.T) {
+	schema := func(typ, def string) *migrate.Schema {
+		return &migrate.Schema{Dialect: velox.MySQL, Tables: []migrate.Table{{
+			Name:      "t",
+			Columns:   []migrate.Column{{Name: "c", Type: typ, Default: def}},
+			Collation: "utf8mb4_bin",
+		}}}
+	}
+	change := []string{"alter-column t.c (default)"}
+	for _, c := range []struct {
+		typ, db, model string
+		changes        []string
+	}{
+		{"varbinary(8)", `'a'`, `0x61`, nil},
+		{"varbinary(8)", `0x00FF`, `0x00ff`, nil},
+		{"varbinary(8)", `'\0'`, `0x00`, nil},
+		{"varbinary(8)", `_binary'a'`, `'a'`, nil},
+		{"varbinary(8)", `'it\'s'`, `'it''s'`, nil},
+		{"varbinary(8)", `'\n\r\t\b\Z\\'`, "0x0A0D09081A5C", nil},
+		{"varbinary(8)", `'a\0b'`, `'a\0c'`, change},
+		{"varbinary(8)", `'a\0b'`, "'a\x00b'", nil},
+		{"varbinary(8)", `'a\0b'`, "'a\x00c'", change},
+		{"binary(2)", `'a'`, `'a\0'`, nil},
+		{"varbinary(8)", `'a'`, `'a\0'`, change},
+		{"varbinary(8)", `0x6100FF`, `'a'`, change},
+		{"varbinary(8)", `0x061`, `0x61`, change},
+		{"varbinary(8)", `0x061`, `0x061`, nil},
+	} {
+		r, err := migrate.DriftOf(schema(c.typ, c.db), schema(c.typ, c.model))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var changes []string
+		for _, ch := range r.Changes {
+			changes = append(changes, ch.String())
+		}
+		if !slices.Equal(changes, c.changes) || len(r.Warnings) > 0 {
+			t.Errorf("%s: database %s, model %s: changes %q, warnings %v; want %q", c.typ, c.db, c.model, changes, r.Warnings, c.changes)
 		}
 	}
 }
