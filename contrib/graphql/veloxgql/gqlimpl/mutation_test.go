@@ -405,7 +405,8 @@ func TestAtomic(t *testing.T) {
 // transaction, Atomic runs fn in a savepoint, so a resolver that swallows fn's
 // error drops fn's writes only, and the operation commits its other writes;
 // a savepoint that does not roll back fails the operation, which keeps
-// nothing. Outside a server no savepoint is made.
+// nothing; fn's panic undoes the savepoint and carries on, and the operation
+// keeps nothing. Outside a server no savepoint is made.
 func TestAtomicSavepoint(t *testing.T) {
 	t.Run("in the extension's transaction, fn succeeds", func(t *testing.T) {
 		db, r, sp := savepointDB(t)
@@ -516,6 +517,40 @@ func TestAtomicSavepoint(t *testing.T) {
 			t.Errorf("transactions %q, want one whose commit was refused", txs)
 		}
 		sp.failRollback = false
+		if n := countPeople(t, db); n != 0 {
+			t.Errorf("%d people kept, want 0", n)
+		}
+	})
+
+	t.Run("fn panics", func(t *testing.T) {
+		db, r, sp := savepointDB(t)
+		var carried any
+		srv := serveRun(veloxgql.NewExtension(db), func(ctx context.Context) error {
+			defer func() {
+				carried = recover()
+				panic(carried)
+			}()
+			return gqlimpl.Atomic(ctx, func(ctx context.Context, tx *velox.DB) error {
+				if err := tx.Insert(&person{ID: 1, Name: "p", Age: 1}).Exec(ctx); err != nil {
+					return err
+				}
+				panic("boom")
+			})
+		})
+		srv.(*handler.Server).SetRecoverFunc(func(context.Context, any) error { return gqlerror.Errorf("internal system error") })
+		if got := postMutation(t, srv); !strings.Contains(got, `"data":null`) || !strings.Contains(got, "internal system error") {
+			t.Errorf("got %s, want data null and the recovered panic's error", got)
+		}
+		if carried != "boom" {
+			t.Errorf("Atomic's panic %v, want fn's panic carried on", carried)
+		}
+		want := []string{"SAVEPOINT velox_1", "ROLLBACK TO SAVEPOINT velox_1", "RELEASE SAVEPOINT velox_1"}
+		if got := sp.take(); !slices.Equal(got, want) {
+			t.Errorf("savepoint statements %q, want %q: the savepoint undone", got, want)
+		}
+		if txs, _ := r.take(); !slices.Equal(txs, []string{"rollback"}) {
+			t.Errorf("transactions %q, want one rolled back", txs)
+		}
 		if n := countPeople(t, db); n != 0 {
 			t.Errorf("%d people kept, want 0", n)
 		}

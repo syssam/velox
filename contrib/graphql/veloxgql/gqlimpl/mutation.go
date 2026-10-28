@@ -15,9 +15,9 @@ import (
 // reads. For generated code.
 //
 // In the transaction the Extension opened for a mutation operation, db.Tx
-// makes a savepoint, so fn's error rolls back fn's writes only. A resolver
-// that swallows the error keeps the operation's other writes, and the
-// operation commits. Outside one, fn runs in a transaction of its own, so a
+// makes a savepoint, so fn's error rolls back fn's writes at once, and the
+// operation's when the resolver returns it; a resolver that swallows it keeps
+// the operation's other writes, and the operation commits. Outside one, fn runs in a transaction of its own, so a
 // mutation's writes are kept or dropped together outside a server too.
 // Without a DB in ctx, Atomic fails with veloxgql.ErrNoDB and fn does not
 // run.

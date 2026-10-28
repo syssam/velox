@@ -222,10 +222,11 @@
 // savepoint inside the transaction the Extension opened for the operation, or
 // in a db.Tx of its own where there is none (outside a server, with
 // Extension.NewContext, or in an operation WithTxFilter leaves out). A
-// mutation's error rolls back its own writes only: a resolver that swallows
-// it keeps the operation's other writes, and the operation commits. In a Go
-// input a required field is a value, an optional one a pointer (nil means not
-// given), an ID a string, a list of IDs a []string and a clear field a bool.
+// mutation's error rolls back its own writes at once, and the operation's when
+// the resolver returns it; a resolver that swallows it keeps the operation's
+// other writes, and the operation commits. In a Go input a required field is a
+// value, an optional one a pointer (nil means not given), an ID a string, a
+// list of IDs a []string and a clear field a bool.
 //
 // Errors are coded before the presenter sees them. A malformed or mistyped ID
 // or JSON value, a conflicting input (a field given with its clear, an ID both

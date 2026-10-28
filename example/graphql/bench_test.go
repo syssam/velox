@@ -249,16 +249,18 @@ const budgetMutation = `mutation { updatePost(id: "` + post1 + `", input: {title
 // velox.WithAround counts them, which does not see SAVEPOINT or RELEASE.
 // mutationAllocsBudget is the most allocations it may make under gqlgen
 // v0.17.86, through testing.AllocsPerRun: the measured figure plus 10%,
-// rounded up to a multiple of 100.
+// rounded up to a multiple of 10.
 // Measured on 2026-10-28 on darwin/arm64 (Apple M3 Max), go test -run
 // TestMutationBudget -v, three runs each: before the savepoint per mutation
 // (G45), at 5392eb6, 2 statements (the UPDATE and the read of the result),
 // 0 savepoint statements and 476 allocations in each run; after it, 2
 // statements, 2 savepoint statements and 498 allocations in each run. The
-// budget is 498 plus 10%, rounded up.
+// budget is 498 plus 10%, 548, rounded up to 550. The counting wrapper hides
+// the SQLite conn's optional interfaces (NamedValueChecker, SessionResetter,
+// Validator), so the figures are the wrapped path's, not the bare driver's.
 const (
 	mutationStmts        = 2
-	mutationAllocsBudget = 600
+	mutationAllocsBudget = 550
 )
 
 // TestMutationBudget pins what one mutation costs: the statements it sends,
@@ -297,15 +299,26 @@ func TestMutationBudget(t *testing.T) {
 		return rec.Body.Bytes()
 	}
 
+	const want = `{"data":{"updatePost":{"title":"Alpha 2"}}}`
 	stmts.Store(0)
 	savepoints.Store(0)
 	resp := send()
 	sent, sps := stmts.Load(), savepoints.Load()
-	allocs := testing.AllocsPerRun(20, func() { send() })
-	t.Logf("%d statements, %d savepoint statements, %.0f allocs", sent, sps, allocs)
-	if got, want := string(resp), `{"data":{"updatePost":{"title":"Alpha 2"}}}`; got != want {
+	if got := string(resp); got != want {
 		t.Fatalf("response %s, want %s", got, want)
 	}
+	// Each measured send's response is checked after the runs, so that an
+	// error path is not measured unnoticed.
+	var bad []byte
+	allocs := testing.AllocsPerRun(20, func() {
+		if b := send(); bad == nil && string(b) != want {
+			bad = b
+		}
+	})
+	if bad != nil {
+		t.Fatalf("a measured send's response %s, want %s", bad, want)
+	}
+	t.Logf("%d statements, %d savepoint statements, %.0f allocs", sent, sps, allocs)
 	if sent != mutationStmts {
 		t.Errorf("statements: %d, want %d", sent, mutationStmts)
 	}
