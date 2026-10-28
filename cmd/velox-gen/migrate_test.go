@@ -1029,6 +1029,8 @@ func TestMigrateDSNForm(t *testing.T) {
 		{velox2.Postgres, "appuser:hunter22@tcp(dbhost.example:3306)/appdb", pg},
 		{velox2.Postgres, "mysql://appuser:hunter22@dbhost.example/appdb", pg},
 		{velox2.Postgres, "host=dbhost.example port=notaport user=appuser password=hunter22 dbname=appdb", pg},
+		{velox2.Postgres, "postgres://appuser:hunter22@dbhost.example/appdb?sslmode=verify-full&sslrootcert=/nonexistent/root.crt",
+			"-db names a file that cannot be read: open /nonexistent/root.crt: no such file or directory"},
 		{velox2.MySQL, "postgres://appuser:hunter22@dbhost.example:5432/appdb", my + "; MySQL DSNs look like user:pass@tcp(host:3306)/db"},
 		{velox2.MySQL, "mysql://appuser:hunter22@tcp(dbhost.example:3306)/appdb", my + "; MySQL DSNs look like user:pass@tcp(host:3306)/db"},
 		{velox2.MySQL, "appuser:hunter22@tcp(dbhost.example:3306)/appdb?nope=%zz", my},

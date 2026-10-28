@@ -4,7 +4,9 @@ import (
 	"cmp"
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"io/fs"
 	"net/url"
 	"os"
 	"os/signal"
@@ -171,7 +173,9 @@ func (s secret) redact(text string) string {
 // dsnForm refuses a dsn that is not of d's driver's form, or is a SQLite
 // database in memory, before it is used: the message names src (-db or
 // $VELOX_DB) and whose dialect d is (velox.json's or -dialect), never the
-// DSN or the parser's text.
+// DSN or the parser's text. A PostgreSQL DSN naming a file that cannot be
+// read, such as sslrootcert, says so and names that file, and nothing else of
+// the DSN.
 func dsnForm(d velox2.Dialect, dsn, src, whose string) error {
 	var name string
 	ok := true
@@ -179,6 +183,9 @@ func dsnForm(d velox2.Dialect, dsn, src, whose string) error {
 	case velox2.Postgres:
 		name = "a PostgreSQL connection string"
 		_, err := pgconn.ParseConfig(dsn)
+		if pe := (*fs.PathError)(nil); errors.As(err, &pe) {
+			return fmt.Errorf("%s names a file that cannot be read: %v", src, pe)
+		}
 		ok = err == nil
 	case velox2.MySQL:
 		name = "a MySQL DSN"
