@@ -227,7 +227,8 @@
 // policies. A link by a key on the entity's own row, <edge>ID, changes no
 // target row, so the target must be one the caller may read; a bidirectional
 // one-to-one key is the exception, since its link writes the partner's row
-// too (see the limits below). Unlinking follows the same rule.
+// too (see the limits below). Unlinking follows the same rule, but for the
+// bidirectional key, whose clear writes the old partner with no scope.
 //
 // Re-pointing a one-to-one edge from the owner checks the new child first: one
 // the caller may not read is NOT_FOUND, as an ID that names no row is. Then,
