@@ -1018,6 +1018,71 @@ func TestString_MaxRuneLen(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// TestString_LenCountsCharacters pins that string MaxLen/MinLen/NotEmpty count
+// characters (runes), not bytes: CJK text is 3 bytes per character in UTF-8, so
+// a byte count refused it at a third of the declared limit.
+func TestString_LenCountsCharacters(t *testing.T) {
+	check := func(fd *field.Descriptor, v string) error {
+		t.Helper()
+		require.Len(t, fd.Validators, 1)
+		return fd.Validators[0].(func(string) error)(v)
+	}
+
+	t.Run("MaxLen", func(t *testing.T) {
+		fd := field.String("name").MaxLen(5).Descriptor()
+		assert.Equal(t, 5, fd.Size, "column size is the character limit")
+
+		// ASCII behavior is unchanged.
+		require.NoError(t, check(fd, "hello"))
+		require.EqualError(t, check(fd, "hello!"), "value length 6 exceeds maximum 5")
+
+		// 5 characters, 15 bytes: within the limit.
+		require.NoError(t, check(fd, "你好世界！"))
+		// 6 characters, 18 bytes: over it, reported in characters.
+		require.EqualError(t, check(fd, "你好世界你好"), "value length 6 exceeds maximum 5")
+		// Mixed scripts and a 4-byte emoji count one each.
+		require.NoError(t, check(fd, "a你😀b好"))
+		require.NoError(t, check(fd, ""))
+	})
+
+	t.Run("MinLen", func(t *testing.T) {
+		fd := field.String("name").MinLen(3).Descriptor()
+		// 2 characters, 6 bytes: too short although 6 bytes >= 3.
+		require.EqualError(t, check(fd, "你好"), "value length 2 is less than minimum 3")
+		require.NoError(t, check(fd, "你好嗎"))
+		require.NoError(t, check(fd, "abc"))
+		require.EqualError(t, check(fd, "ab"), "value length 2 is less than minimum 3")
+	})
+
+	t.Run("NotEmpty", func(t *testing.T) {
+		fd := field.String("name").NotEmpty().Descriptor()
+		require.NoError(t, check(fd, "中"))
+		require.EqualError(t, check(fd, ""), "value length 0 is less than minimum 1")
+	})
+
+	t.Run("RuneLen aliases", func(t *testing.T) {
+		maxFD := field.String("name").MaxRuneLen(5).Descriptor()
+		assert.Equal(t, 5, maxFD.Size)
+		require.NoError(t, check(maxFD, "你好世界！"))
+		require.EqualError(t, check(maxFD, "你好世界你好"), "value length 6 exceeds maximum 5")
+
+		minFD := field.String("name").MinRuneLen(3).Descriptor()
+		require.EqualError(t, check(minFD, "你好"), "value length 2 is less than minimum 3")
+	})
+
+	t.Run("Bytes stay byte-limited", func(t *testing.T) {
+		fd := field.Bytes("blob").MaxLen(5).Descriptor()
+		require.Len(t, fd.Validators, 1)
+		v := fd.Validators[0].(func([]byte) error)
+		// 2 characters but 6 bytes: a Bytes limit counts bytes.
+		require.EqualError(t, v([]byte("你好")), "value length 6 exceeds maximum 5")
+		require.NoError(t, v([]byte("hello")))
+
+		minFD := field.Bytes("blob").MinLen(4).Descriptor()
+		require.NoError(t, minFD.Validators[0].(func([]byte) error)([]byte("你好")))
+	})
+}
+
 // TestFieldDescriptorOptions tests various descriptor options using table-driven tests.
 func TestFieldDescriptorOptions(t *testing.T) {
 	tests := []struct {

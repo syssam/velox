@@ -92,3 +92,32 @@ func TestUpdate_ValidatesHookWrittenValues(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "Hello", reread.Title)
 }
+
+// TestMaxLen_CountsCharacters pins, end to end through the generated create and
+// update check(), that `MaxLen(200)` on Post.title is a character limit: 200
+// Chinese characters (600 bytes of UTF-8) are accepted, 201 are refused. The
+// validator used to count bytes, so CJK text was refused at a third of the
+// declared limit.
+func TestMaxLen_CountsCharacters(t *testing.T) {
+	client := openTestClient(t)
+	ctx := context.Background()
+	author := createUser(t, client, "Alice", "alice@example.com")
+
+	atLimit := strings.Repeat("中", 200)
+	require.Len(t, atLimit, 600, "fixture: 200 characters, 600 bytes")
+	overLimit := atLimit + "文"
+
+	p := createPost(t, client, author, atLimit, "body") // 200 characters fit MaxLen(200)
+	assert.Equal(t, atLimit, p.Title)
+
+	_, err := client.Post.Create().SetTitle(overLimit).SetContent("body").
+		SetAuthorID(author.ID).SetCreatedAt(now).SetUpdatedAt(now).Save(ctx)
+	require.ErrorContains(t, err, "value length 201 exceeds maximum 200")
+
+	_, err = client.Post.UpdateOneID(p.ID).SetTitle(overLimit).Save(ctx)
+	require.ErrorContains(t, err, "value length 201 exceeds maximum 200")
+
+	updated, err := client.Post.UpdateOneID(p.ID).SetTitle(strings.Repeat("文", 200)).Save(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, strings.Repeat("文", 200), updated.Title)
+}

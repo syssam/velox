@@ -123,10 +123,10 @@ func (User) Annotations() []schema.Annotation { ... }
 | `.Deprecated(reason)` | Yes | Yes | |
 | `.Validate(fn)` | Yes | Yes | Custom validation function |
 | `.Match(regex)` | Yes | Yes | String only |
-| `.MinLen(n)` | Yes | Yes | String only |
-| `.MaxLen(n)` | Yes | Yes | String only |
-| `.MinRuneLen(n)` | Yes | Yes | String only |
-| `.MaxRuneLen(n)` | Yes | Yes | String only |
+| `.MinLen(n)` | Yes | Yes | String/Bytes. **Diverges:** Velox counts string length in characters (runes), Ent in bytes |
+| `.MaxLen(n)` | Yes | Yes | String/Bytes. **Diverges:** Velox counts string length in characters (runes), Ent in bytes. Bytes fields count bytes in both |
+| `.MinRuneLen(n)` | Yes | Yes | String only. In Velox, an alias of `MinLen` |
+| `.MaxRuneLen(n)` | Yes | Yes | String only. In Velox, an alias of `MaxLen` |
 | `.NotEmpty()` | Yes | Yes | String/Bytes |
 | `.Min(n)` | Yes | Yes | Numeric only |
 | `.Max(n)` | Yes | Yes | Numeric only |

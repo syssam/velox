@@ -245,31 +245,32 @@ func (b *stringBuilder) Match(re *regexp.Regexp) *stringBuilder {
 }
 
 // MinLen adds a length validator for this field.
-// Operation fails if the length of the string is less than the given value.
+// Operation fails if the string has fewer than i characters.
+//
+// Length is counted in characters (Unicode code points, as
+// utf8.RuneCountInString counts them), not bytes, matching what GraphQL
+// clients and SQL VARCHAR(n) columns count: "你好" has length 2, not 6.
+// Invalid UTF-8 bytes count as one character each. For a byte limit, use a
+// Bytes field or an explicit Validate.
 //
 //go:noinline
 func (b *stringBuilder) MinLen(i int) *stringBuilder {
 	b.desc.Validators = append(b.desc.Validators, func(v string) error {
-		if len(v) < i {
-			return fmt.Errorf("value length %d is less than minimum %d", len(v), i)
+		if n := utf8.RuneCountInString(v); n < i {
+			return fmt.Errorf("value length %d is less than minimum %d", n, i)
 		}
 		return nil
 	})
 	return b
 }
 
-// MinRuneLen adds a rune length validator for this field.
-// Operation fails if the rune count of the string is less than the given value.
+// MinRuneLen is the same as MinLen, which counts characters (runes).
+// It is kept for source compatibility with schemas written for Ent, where
+// MinLen counts bytes.
 //
 //go:noinline
 func (b *stringBuilder) MinRuneLen(i int) *stringBuilder {
-	b.desc.Validators = append(b.desc.Validators, func(v string) error {
-		if utf8.RuneCountInString(v) < i {
-			return fmt.Errorf("value rune length %d is less than minimum %d", utf8.RuneCountInString(v), i)
-		}
-		return nil
-	})
-	return b
+	return b.MinLen(i)
 }
 
 // NotEmpty adds a length validator for this field.
@@ -280,34 +281,41 @@ func (b *stringBuilder) NotEmpty() *stringBuilder {
 	return b.MinLen(1)
 }
 
-// MaxLen adds a length validator for this field.
-// Operation fails if the length of the string is greater than the given value.
+// MaxLen adds a length validator for this field and sets the column size.
+// Operation fails if the string has more than i characters.
+//
+// Length is counted in characters (Unicode code points, as
+// utf8.RuneCountInString counts them), not bytes, matching what GraphQL
+// clients and SQL VARCHAR(n) columns count: MaxLen(10) accepts ten Chinese
+// characters (30 bytes of UTF-8). Invalid UTF-8 bytes count as one character
+// each. The column size set here is VARCHAR(i) on MySQL, where n counts
+// characters too; PostgreSQL and SQLite columns are not sized by it. For a
+// byte limit, use a Bytes field or an explicit Validate.
 //
 //go:noinline
 func (b *stringBuilder) MaxLen(i int) *stringBuilder {
 	b.desc.Size = i
 	b.desc.Validators = append(b.desc.Validators, func(v string) error {
-		if len(v) > i {
-			return fmt.Errorf("value length %d exceeds maximum %d", len(v), i)
+		// A string of at most i bytes has at most i characters; skip
+		// the count on that common path.
+		if len(v) <= i {
+			return nil
+		}
+		if n := utf8.RuneCountInString(v); n > i {
+			return fmt.Errorf("value length %d exceeds maximum %d", n, i)
 		}
 		return nil
 	})
 	return b
 }
 
-// MaxRuneLen adds a rune length validator for this field.
-// Operation fails if the rune count of the string is greater than the given value.
+// MaxRuneLen is the same as MaxLen, which counts characters (runes).
+// It is kept for source compatibility with schemas written for Ent, where
+// MaxLen counts bytes.
 //
 //go:noinline
 func (b *stringBuilder) MaxRuneLen(i int) *stringBuilder {
-	b.desc.Size = i
-	b.desc.Validators = append(b.desc.Validators, func(v string) error {
-		if utf8.RuneCountInString(v) > i {
-			return fmt.Errorf("value rune length %d exceeds maximum %d", utf8.RuneCountInString(v), i)
-		}
-		return nil
-	})
-	return b
+	return b.MaxLen(i)
 }
 
 // Validate adds a validator for this field. Operation fails if the validation fails.
@@ -900,7 +908,9 @@ func (b *bytesBuilder) StructTag(s string) *bytesBuilder {
 	return b
 }
 
-// MaxLen sets the max-length of the bytes type in the database.
+// MaxLen sets the max-length of the bytes type in the database, and adds a
+// validator that fails if the value is longer than i bytes. Unlike the string
+// MaxLen, which counts characters, this counts bytes.
 // In MySQL, this affects the BLOB type (tiny 2^8-1, regular 2^16-1, medium 2^24-1, long 2^32-1).
 // In SQLite, it does not have any effect on the type size, which is default to 1B bytes.
 //
@@ -917,7 +927,7 @@ func (b *bytesBuilder) MaxLen(i int) *bytesBuilder {
 }
 
 // MinLen adds a length validator for this field.
-// Operation fails if the length of the buffer is less than the given value.
+// Operation fails if the buffer is shorter than i bytes.
 //
 //go:noinline
 func (b *bytesBuilder) MinLen(i int) *bytesBuilder {

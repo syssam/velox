@@ -280,6 +280,8 @@ Does NOT auto-default: Enum, JSON, Time, UUID, Bytes, Nillable fields.
 
 Always generated and run on both create and update (after hooks, before the SQL statement); a failure returns a `*ValidationError`. `gen.FeatureValidator` is a deprecated no-op. Methods: `NotEmpty()`, `MinLen(n)`, `MaxLen(n)`, `Match(re)`, `Positive()`, `NonNegative()`, `Min(n)`, `Max(n)`, `Range(min, max)`.
 
+String `MinLen`/`MaxLen`/`NotEmpty` count characters (runes), not bytes — `MaxLen(10)` accepts ten Chinese characters — matching GraphQL clients and SQL `VARCHAR(n)`. `MinRuneLen`/`MaxRuneLen` are identical aliases kept for Ent compatibility. `Bytes` fields' `MinLen`/`MaxLen` count bytes. Ent's string `MaxLen` counts bytes; this is a deliberate divergence.
+
 ## Schema Split Modes
 
 | Mode | Output |

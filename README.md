@@ -323,7 +323,7 @@ field.Bytes("data")                         // BYTEA/BLOB
 field.String("email").
     Unique().              // UNIQUE constraint
     NotEmpty().            // Validation: must not be empty
-    MaxLen(255).           // VARCHAR(255)
+    MaxLen(255).           // At most 255 characters (not bytes); VARCHAR(255) on MySQL
     Optional().            // Not required in create input
     Nillable().            // Database NULL, Go *string
     Default("value").      // Default value
