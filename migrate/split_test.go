@@ -19,6 +19,9 @@ func directive(text string, line int) migrate.Piece {
 	return migrate.Piece{Directive: text, Line: line}
 }
 
+// atomic is the refusal of a BEGIN ATOMIC body.
+const atomic = "BEGIN ATOMIC bodies are not supported in migration files; write the body as a string, AS $$ … $$"
+
 var splitCases = []struct {
 	d    velox.Dialect
 	src  string
@@ -98,6 +101,23 @@ var splitCases = []struct {
 		want: []migrate.Piece{stmt("BEGIN", 1), stmt("BEGIN WORK", 1), stmt("SELECT 'CREATE TRIGGER'", 1), stmt("CREATE TABLE `trigger` (id int)", 1)}},
 	{d: velox.Postgres, src: "CREATE FUNCTION f() RETURNS trigger AS $$ BEGIN RETURN NEW; END $$ LANGUAGE plpgsql; CREATE TRIGGER t BEFORE INSERT ON a FOR EACH ROW EXECUTE FUNCTION f()",
 		want: []migrate.Piece{stmt("CREATE FUNCTION f() RETURNS trigger AS $$ BEGIN RETURN NEW; END $$ LANGUAGE plpgsql", 1), stmt("CREATE TRIGGER t BEFORE INSERT ON a FOR EACH ROW EXECUTE FUNCTION f()", 1)}},
+	// BEGIN ATOMIC bodies and psql meta-command lines are refused by name.
+	{d: velox.Postgres, src: "CREATE FUNCTION f() RETURNS int LANGUAGE sql BEGIN ATOMIC SELECT 1; END;", err: atomic, line: 1},
+	{d: velox.Postgres, src: "SELECT 1;\nCREATE OR REPLACE PROCEDURE p() LANGUAGE sql\nBEGIN ATOMIC INSERT INTO a VALUES (1); INSERT INTO a VALUES (2); END;", err: atomic, line: 2},
+	{d: velox.Postgres, src: "CREATE FUNCTION f() RETURNS int LANGUAGE sql begin atomic end", err: atomic, line: 1},
+	{d: velox.Postgres, src: "SELECT 'BEGIN ATOMIC'; CREATE FUNCTION f() RETURNS int AS $$ BEGIN ATOMIC $$ LANGUAGE sql",
+		want: []migrate.Piece{stmt("SELECT 'BEGIN ATOMIC'", 1), stmt("CREATE FUNCTION f() RETURNS int AS $$ BEGIN ATOMIC $$ LANGUAGE sql", 1)}},
+	{d: velox.Postgres, src: "\\restrict abc123\n\nSET statement_timeout = 0;\nCREATE TABLE a (id integer);\n\\unrestrict abc123\n",
+		err: `a psql meta-command (\restrict) is not SQL; remove it`, line: 1},
+	{d: velox.Postgres, src: "SELECT 1;\n  \\connect other\nSELECT 2;", err: `a psql meta-command (\connect) is not SQL; remove it`, line: 2},
+	{d: velox.Postgres, src: "SELECT 1\n\\gset\n;", err: `a psql meta-command (\gset) is not SQL; remove it`, line: 2},
+	{d: velox.Postgres, src: "SELECT '\n\\x';", want: []migrate.Piece{stmt("SELECT '\n\\x'", 1)}},
+	{d: velox.MySQL, src: "SELECT '\n\\x';", want: []migrate.Piece{stmt("SELECT '\n\\x'", 1)}},
+	{d: velox.Postgres, src: "SELECT $$\n\\x$$; /* a\n\\y */ SELECT 2;", want: []migrate.Piece{stmt("SELECT $$\n\\x$$", 1), stmt("SELECT 2", 3)}},
+	{d: velox.Postgres, src: "-- c\n\\x\n", err: `a psql meta-command (\x) is not SQL; remove it`, line: 2},
+	{d: velox.Postgres, src: "SELECT 1; \\dt", err: `a psql meta-command (\dt) is not SQL; remove it`, line: 1},
+	{d: velox.MySQL, src: "SELECT 1\n\\g\n", want: []migrate.Piece{stmt("SELECT 1\n\\g", 1)}},
+	{d: velox.SQLite, src: "SELECT 1\n\\g\n", want: []migrate.Piece{stmt("SELECT 1\n\\g", 1)}},
 }
 
 func TestSplit(t *testing.T) {

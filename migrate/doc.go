@@ -52,7 +52,8 @@
 //     name, an unterminated quote, comment or dollar quote, a directive
 //     that is unknown, malformed, repeated, misplaced or refused on its
 //     dialect, or on SQLite or MySQL a trigger, a MySQL routine or event, or
-//     a BEGIN … END block; or LintFile found a statement that cannot run in
+//     a BEGIN … END block, or on PostgreSQL a BEGIN ATOMIC body or a psql
+//     meta-command line; or LintFile found a statement that cannot run in
 //     the file's transaction, or Up, before its run, one that begins or
 //     ends a transaction in a file run in one.
 //   - "config": velox.json, or the Config NewDir was given, is missing or
@@ -142,7 +143,9 @@
 // was given it, so its statements after a SET search_path or a USE run
 // without them; such a file sets them again at the top of each unit. A trigger, a MySQL routine or event and
 // a BEGIN … END block are refused on SQLite and MySQL, whose bodies the
-// splitter would cut at their inner semicolons. An applied file edited or
+// splitter would cut at their inner semicolons; a BEGIN ATOMIC body and a
+// psql meta-command line, one that starts with a backslash, are refused on
+// PostgreSQL. An applied file edited or
 // gone is a [*ChecksumError], and a lock held past the wait
 // [ErrLockWait]. [Verify] applies a directory to an empty database and
 // fails when Drift then finds a change against schema.json: a test's check
@@ -161,7 +164,10 @@
 //     the schema's tables as that database holds them. Read its warnings:
 //     an extension to add to 0001_baseline.sql by hand, a sequence's start
 //     or increment it does not keep, a PostgreSQL domain type, which it does
-//     not create.
+//     not create. A file made with pg_dump instead needs its lines that start
+//     with a backslash removed first (pg_dump 18's \restrict and
+//     \unrestrict): they are psql meta-commands, not SQL, and ParseFile
+//     refuses them.
 //  2. 0001_baseline.sql may be edited, followed by velox-gen migrate hash,
 //     only before any environment runs apply -baseline. After that, an edit
 //     is a [*ChecksumError] on every baselined database.

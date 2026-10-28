@@ -49,8 +49,8 @@ func (s *splitter) run() error {
 	flush := func() error {
 		if start >= 0 {
 			sql := src[start:end]
-			if s.body(sql) {
-				return fileErr(startLine, "triggers and procedures are not supported in migration files")
+			if reason := s.refusal(sql); reason != "" {
+				return fileErr(startLine, reason)
 			}
 			s.out = append(s.out, piece{SQL: sql, Line: startLine})
 		}
@@ -100,6 +100,16 @@ func (s *splitter) run() error {
 			i = j
 			continue
 		}
+		if c == '\\' && s.d == velox.Postgres && (start < 0 || lineStart(src, i)) {
+			// A literal, a quoted name or a comment was skipped above or in
+			// token, so this backslash is a psql meta-command's: one that
+			// starts its line or, after a ";" on the same line, a statement.
+			j := i + 1
+			for j < len(src) && wordByte(src[j]) {
+				j++
+			}
+			return fileErr(line, "a psql meta-command ("+src[i:j]+") is not SQL; remove it")
+		}
 		j, reason := s.token(i)
 		if reason != "" {
 			return fileErr(line, reason)
@@ -113,17 +123,25 @@ func (s *splitter) run() error {
 	return flush()
 }
 
-// body reports whether a statement of SQLite or MySQL starts a trigger, a
-// MySQL routine or event, or a BEGIN … END block: their bodies hold ";",
-// which the split cannot read as the database does, so they are refused
-// rather than run in pieces. BEGIN alone, or with TRANSACTION or WORK (and
-// SQLite's DEFERRED, IMMEDIATE or EXCLUSIVE), starts a transaction.
-// PostgreSQL's bodies are dollar-quoted and split whole.
-func (s *splitter) body(sql string) bool {
-	if s.d == velox.Postgres {
-		return false
-	}
+// refusal is the reason a statement is refused, or "". On SQLite and MySQL it
+// is a statement that starts a trigger, a MySQL routine or event, or a
+// BEGIN … END block: their bodies hold ";", which the split cannot read as
+// the database does, so they are refused rather than run in pieces. BEGIN
+// alone, or with TRANSACTION or WORK (and SQLite's DEFERRED, IMMEDIATE or
+// EXCLUSIVE), starts a transaction. On PostgreSQL it is a BEGIN ATOMIC body,
+// whose ";" the split cannot tell from the end of the statement; the other
+// bodies are dollar-quoted and split whole.
+func (s *splitter) refusal(sql string) string {
+	const body = "triggers and procedures are not supported in migration files"
 	ws := lex(s.d, sql)
+	if s.d == velox.Postgres {
+		for i := 1; i < len(ws); i++ {
+			if !ws[i-1].quoted && !ws[i].quoted && strings.EqualFold(ws[i-1].text, "BEGIN") && strings.EqualFold(ws[i].text, "ATOMIC") {
+				return "BEGIN ATOMIC bodies are not supported in migration files; write the body as a string, AS $$ … $$"
+			}
+		}
+		return ""
+	}
 	at := func(i int) string { // the i-th word upper-cased, "" when quoted
 		if i < len(ws) && !ws[i].quoted {
 			return strings.ToUpper(ws[i].text)
@@ -139,7 +157,9 @@ func (s *splitter) body(sql string) bool {
 		if at(i) == "TRANSACTION" || at(i) == "WORK" {
 			i++
 		}
-		return i < len(ws)
+		if i < len(ws) {
+			return body
+		}
 	case "CREATE":
 		i := 1
 		if s.d == velox.MySQL && at(1) == "DEFINER" {
@@ -153,12 +173,14 @@ func (s *splitter) body(sql string) bool {
 		}
 		switch at(i) {
 		case "TRIGGER":
-			return true
+			return body
 		case "PROCEDURE", "FUNCTION", "EVENT":
-			return s.d == velox.MySQL
+			if s.d == velox.MySQL {
+				return body
+			}
 		}
 	}
-	return false
+	return ""
 }
 
 // fileErr is the splitter's refusal at line.
