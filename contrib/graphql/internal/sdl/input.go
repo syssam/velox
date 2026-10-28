@@ -224,6 +224,10 @@ type edgeInput struct {
 //     (non-null) key always holds an owner, from whom a write would only
 //     take the row, and an immutable one cannot move, so the edge has no
 //     input at all, on create too; the child is linked from its side;
+//   - when that key is a RequiredKey, NULL-able but a Required edge's (a
+//     Required self edge's), the target's row may hold no owner, but velox
+//     refuses to unlink it: on update, an O2M has add<Edge>IDs only, and an
+//     O2O nothing; create keeps its inputs, which only link;
 //   - an immutable key on o's row is set on create only;
 //   - an M2M edge writes join rows: <edge>IDs, add/remove/clear;
 //   - an edge to a type that is not a Node has no ID and no input. When that
@@ -323,6 +327,15 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]edgeInput, error) {
 		// required one always holds an owner, whom a write could only take
 		// the row from, so the input could never succeed: the child is
 		// linked by its own <edge>ID.
+	case !create && RequiredKey(g.ents[ed.FieldOn], fk):
+		// The key is on the target's rows and is a Required edge's, NULL-able
+		// (a Required self edge's). Unlinking a child would leave its key
+		// NULL, which velox refuses: an O2O's re-point unlinks first, and so
+		// do remove and clear. Only an O2M's add, which sets a NULL key,
+		// can succeed; a child moves by its own <edge>ID.
+		if !ed.Unique {
+			add("add"+one+"IDs", "[ID!]", "Add"+goOne+"IDs", InputAddIDs)
+		}
 	case ed.Unique:
 		typ := "ID"
 		if create && ed.Required {
@@ -340,6 +353,23 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]edgeInput, error) {
 		clearEdge()
 	}
 	return out, nil
+}
+
+// RequiredKey reports whether a Required edge of t that owns its key holds
+// the field fk, and fk is NULL-able: the key of any Required edge whose key
+// is NULL-able, such as a self edge's. velox refuses such a key nil
+// (velox.ColumnDesc.RequiredEdge), and the database's ON DELETE SET NULL can
+// still clear it. velox-gen marks the same columns: a Nillable field held by
+// a Required edge that owns it (internal/gen/lower.go, OutField.RequiredEdge),
+// which the plugin model gives as Required, OwnsKey and Field
+// (internal/gen/plugin.go), with the field Nullable.
+func RequiredKey(t *plugin.Entity, fk *plugin.Field) bool {
+	if t == nil || fk == nil || !fk.Nullable {
+		return false
+	}
+	return slices.ContainsFunc(t.Edges, func(ed *plugin.Edge) bool {
+		return ed.Required && ed.OwnsKey && ed.Field == fk.Name
+	})
 }
 
 // keyField is the foreign-key field ed stands for, on whichever entity holds

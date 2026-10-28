@@ -547,16 +547,22 @@ func TestEdges(t *testing.T) {
 	plain := edge("tags", plugin.M2M, "Group")
 	plain.Annotations = ann(t, graphql.Connection(false))
 	user.Edges = append(user.Edges, plain)
-	post := entity("Post")
+	// A Required edge whose key is NOT NULL is never empty: T!. One whose key
+	// is NULL-able (a Required self edge's) is emptied by ON DELETE SET NULL:
+	// T.
+	post := entity("Post", field("author_id", "int64"))
 	author := edge("author", plugin.M2O, "User")
-	author.Required = true
+	author.Required, author.Field, author.FieldOn = true, "author_id", "Post"
 	post.Edges = []*plugin.Edge{author}
-	s, _ := load(t, model(cat, entity("Group"), post, entity("Profile"), user))
+	s, _ := load(t, model(cat, entity("Group"), post, entity("Profile"), user, folder(t)))
 
 	for _, c := range [][4]string{
 		{"Category", "parent", "Category", "ParentGQL"},
 		{"Category", "children", "CategoryConnection!", "ChildrenGQL"},
 		{"Post", "author", "User!", "AuthorGQL"},
+		{"Folder", "parent", "Folder", "ParentGQL"},
+		{"Folder", "prev", "Folder", "PrevGQL"},
+		{"Folder", "next", "Folder", "NextGQL"},
 		{"User", "posts", "PostConnection!", "PostsGQL"},
 		{"User", "groups", "GroupConnection!", "GroupsGQL"},
 		{"User", "profile", "Profile", "ProfileGQL"},

@@ -398,8 +398,10 @@ func (g *graph) fill(o *object) error {
 		ef := edgeField{edge: i, name: name, target: t}
 		switch {
 		case ed.Unique:
+			// A Required edge whose key is NULL-able (a Required self
+			// edge's) is emptied by the database's ON DELETE SET NULL.
 			f.typ, ef.kind = t.name, EdgeUnique
-			if ed.Required {
+			if fk := g.keyField(ed); ed.Required && (fk == nil || !fk.Nullable) {
 				f.typ += "!"
 			}
 		case a.Connection != nil && !*a.Connection:

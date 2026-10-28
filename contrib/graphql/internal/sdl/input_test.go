@@ -330,6 +330,35 @@ func TestEdgeInputsFollowTheKey(t *testing.T) {
 			}
 		})
 	}
+
+	// A Required edge whose key is NULL-able: create sets it from both sides,
+	// and the owning side's update moves it; the other side's update only adds,
+	// since a remove, a clear or a one-to-one re-point would leave the old
+	// child's Required key NULL, which velox refuses.
+	t.Run("required self edges", func(t *testing.T) {
+		s, sdl := load(t, model(folder(t)))
+		for typ, want := range map[string][]string{
+			"CreateFolderInput": {"name: String!", "childIDs: [ID!]", "parentID: ID!", "nextID: ID", "prevID: ID!"},
+			"UpdateFolderInput": {"name: String", "addChildIDs: [ID!]", "parentID: ID", "prevID: ID"},
+		} {
+			if got := fieldsOf(s, typ); !slices.Equal(got, want) {
+				t.Errorf("%s:\n got %v\nwant %v\n%s", typ, got, want, sdl)
+			}
+		}
+
+		// A self edge that is not Required keeps the other side's update inputs.
+		cat := entity("Category", &plugin.Field{Name: "category_children", GoName: "CategoryChildren", Column: "category_children", Type: "int64", Nullable: true, Optional: true, Implicit: "parent"})
+		ch := edge("children", plugin.O2M, "Category")
+		ch.Field, ch.FieldOn, ch.Ref = "category_children", "Category", "parent"
+		parent := edge("parent", plugin.M2O, "Category")
+		parent.Field, parent.FieldOn, parent.Ref, parent.Inverse = "category_children", "Category", "children", true
+		cat.Edges = []*plugin.Edge{ch, parent}
+		cat.Annotations = ann(t, graphql.Mutations(graphql.MutationUpdate()))
+		s, sdl = load(t, model(cat))
+		if got, want := fieldsOf(s, "UpdateCategoryInput"), []string{"addChildIDs: [ID!]", "removeChildIDs: [ID!]", "clearChildren: Boolean", "parentID: ID", "clearParent: Boolean"}; !slices.Equal(got, want) {
+			t.Errorf("UpdateCategoryInput:\n got %v\nwant %v\n%s", got, want, sdl)
+		}
+	})
 }
 
 // An Optional field is optional on create, and a Nillable one too; only a
@@ -479,4 +508,25 @@ func TestEdgeInputsSingular(t *testing.T) {
 			t.Errorf("Update%sInput: %q, want %q", typ, got, want)
 		}
 	}
+}
+
+// folder is an entity with two Required self edges whose keys are NULL-able,
+// as velox-gen gives them: parent (M2O) of children (O2M) on folder_children,
+// and prev (O2O, owning) of next on folder_next. Both have create and update.
+func folder(t *testing.T) *plugin.Entity {
+	t.Helper()
+	children := &plugin.Field{Name: "folder_children", GoName: "FolderChildren", Column: "folder_children", Type: "int64", Nullable: true, Optional: true, Implicit: "parent"}
+	next := &plugin.Field{Name: "folder_next", GoName: "FolderNext", Column: "folder_next", Type: "int64", Nullable: true, Optional: true, Unique: true, Implicit: "prev"}
+	f := entity("Folder", field("name", "string"), children, next)
+	ch := edge("children", plugin.O2M, "Folder")
+	ch.Field, ch.FieldOn, ch.Ref = "folder_children", "Folder", "parent"
+	parent := edge("parent", plugin.M2O, "Folder")
+	parent.Field, parent.FieldOn, parent.Ref, parent.Inverse, parent.Required = "folder_children", "Folder", "children", true, true
+	nx := edge("next", plugin.O2O, "Folder")
+	nx.Field, nx.FieldOn, nx.Ref = "folder_next", "Folder", "prev"
+	prev := edge("prev", plugin.O2O, "Folder")
+	prev.Field, prev.FieldOn, prev.Ref, prev.Inverse, prev.Required, prev.OwnsKey = "folder_next", "Folder", "next", true, true, true
+	f.Edges = []*plugin.Edge{ch, parent, nx, prev}
+	f.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate()))
+	return f
 }
