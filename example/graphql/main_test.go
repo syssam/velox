@@ -481,7 +481,7 @@ func TestBatchInMutation(t *testing.T) {
 			{"node": {"title": "Zeta", "tags": {"totalCount": 1}}}
 		]}}}}}`,
 		stmts: []string{
-			`SELECT COUNT(*) FROM "users" WHERE "id" IN (?) [1]`,
+			`SELECT COUNT(*) FROM "users" WHERE "id" = ? [1]`,
 			`SELECT COUNT(*) FROM "tags" WHERE "id" IN (?) [1]`,
 			`INSERT INTO "posts" ("org_id", "author_id", "title", "status", "views", "published_at") VALUES (?, ?, ?, ?, ?, ?) RETURNING "id" [1 1 Zeta draft 0 <nil>]`,
 			`INSERT INTO "post_tags" ("post_id", "tag_id") VALUES (?, ?) ON CONFLICT ("post_id", "tag_id") DO NOTHING [6 1]`,
@@ -836,7 +836,7 @@ func TestCreatePost(t *testing.T) {
 		} }`,
 		want: `{"data": {"createPost": {"title": "Epsilon", "status": "DRAFT", "author": {"name": "Brian"}, "tags": {"totalCount": 2}}}}`,
 		stmts: []string{
-			`SELECT COUNT(*) FROM "users" WHERE "id" IN (?) [2]`,
+			`SELECT COUNT(*) FROM "users" WHERE "id" = ? [2]`,
 			`SELECT COUNT(*) FROM "tags" WHERE "id" IN (?, ?) [1 2]`,
 			`INSERT INTO "posts" ("org_id", "author_id", "title", "status", "views", "published_at") VALUES (?, ?, ?, ?, ?, ?) RETURNING "id" [1 2 Epsilon draft 0 <nil>]`,
 			`INSERT INTO "post_tags" ("post_id", "tag_id") VALUES (?, ?), (?, ?) ON CONFLICT ("post_id", "tag_id") DO NOTHING [6 1 6 2]`,
