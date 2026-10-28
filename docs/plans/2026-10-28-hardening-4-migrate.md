@@ -3,18 +3,18 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Before 1.0 freezes the snapshot format and the generated DDL, migrate fixes what the triage found wrong on adopted and dumped databases:
-- a PostgreSQL unique constraint is held as one (`Index.Constraint`), so dropping or renaming it on an ent-adopted database works (M22);
+- a PostgreSQL unique constraint is held as one (`Index.Constraint`), so dropping it on an ent-adopted database works, and a rename names the constraint (M22);
 - inspection sees an extension's type behind an array or a domain (M23), and a primary key's index attributes (M1);
 - one object gets one warning (M2);
 - the history table is qualified, so a pg_dump file that empties `search_path` records itself (M14);
-- `BEGIN ATOMIC` gets a refusal that names it (M13's message);
-- MySQL binary defaults and ASCII introducers stop drifting (M3, M4);
+- `BEGIN ATOMIC`, and a psql meta-command line such as pg_dump 18's `\restrict`, get refusals that name them (M13's message; check finding 10);
+- MySQL binary defaults are read exactly, from `SHOW CREATE TABLE`, and ASCII introducers stop drifting (M3, M4);
 - a DSN naming an unreadable file says so (M7).
 
 **Architecture:** Eight tasks, each one commit that passes its check.
 - Tasks 1–3 are the inspect_postgres.go items, in sequence (builder ruling 20): M23 (the columns query), M1 (the indexes query), then M22 (the indexes query again, the model, Render and Dir.Add).
 - Task 4 merges notes per object in `compare`, which Task 3 makes easier to see.
-- Tasks 5–8 are independent of each other: the runner (M14), the splitter (M13), MySQL defaults and predicates (M3, M4), and the CLI (M7).
+- Tasks 5–8 are independent of each other: the runner (M14), the splitter (M13 and psql meta-commands), MySQL defaults and predicates (M3, M4), and the CLI (M7).
 - Only the root module changes, in `migrate/` and `cmd/velox-gen/`. No velox-gen output changes, and no generated-code version moves.
 
 **Tech Stack:** Go 1.27. pgx v5.11.0, go-sql-driver/mysql v1.10.1, modernc sqlite v1.60.1 (go.mod). golangci-lint v2.14.0, revive v1.17.0 (`scripts/ci-local.sh`). Docker for PostgreSQL and MySQL (docker-compose.ci.yml).
@@ -24,6 +24,7 @@
 - The evidence for each id is in `docs/reviews/2026-10-25-triage-M.md`.
 - The migrate design is `docs/specs/2026-10-23-migrate-design.md`, with plans `docs/plans/2026-10-2{3,4}-migrate-*.md`.
 - Every file:line below was read at c33cf95.
+- The builder check of this plan (at 7a27429, `scratchpad/hardening-4-plan-check.md`) ran the [D] probes on PostgreSQL 18.6 and MySQL 8.4.13. Its findings are cited as "check finding N", and the controller's rulings on them are under "Controller rulings". Where a [D] value below was measured by the check, it says "measured".
 
 **Scope.** The spec's wave split names Wave 4 "migrate". Its open migrate items are:
 - **This wave:** M1, M2, M3, M4, M7, M13 (the message), M14, M22, M23.
@@ -87,7 +88,7 @@ docker compose -f docker-compose.ci.yml -p velox2-ci down -v
 1. **Dropping a field-Unique on an ent-adopted PostgreSQL database.** The plan must drop the constraint, and the apply must succeed both on the adopted database and on a fresh one built from `0001_baseline.sql`. Today the first fails: PostgreSQL refuses `DROP INDEX` of a constraint's index. Pin: Task 3 `TestDriftPostgresAdoptedUnique`.
 2. **Redefining an adopted unique, for example adding a column.** The constraint is dropped and a plain unique index made. The next `schema.json` must not mark the new index a constraint, or a later drop renders `DROP CONSTRAINT` of an index. Pin: Task 3 `TestCarryConstraints` and `TestAddCarriesConstraint`, their redefined cases.
 3. **A pg_dump file that empties `search_path`, followed by a plain file.** Both must be recorded, and the second file's unqualified table must land in the schema the session started in. Pin: Task 5 `TestUpPostgresSearchPath`.
-4. **A varchar default whose text is `0x61`, and a binary default with a quote or a NUL.** Only a binary column's hex is decoded, and only to printable ASCII: varchar keeps `'0x61'`, `0x00ff` stays as printed, and `0x27` becomes `''''`. Pin: Task 7 `TestMySQLDefault`'s guard rows.
+4. **A binary default holding a NUL, and a varchar default whose text is `0x61`.** information_schema cuts a binary default at its first NUL (`0x6100ff` prints `0x61`, measured), so a decoder fed by it would call `'a'` and `0x6100ff` equal. The literal is read from SHOW CREATE TABLE, which is exact, and only printable ASCII is decoded: `0x6100FF` and `'a\0b'` stay as printed, and differ from `'a'`. A varchar keeps `'0x61'`. Pin: Task 7 `TestMySQLBinaryDefault`'s rows and `TestInspectMySQLBinaryDefaults`' differing case.
 5. **Renaming a table that holds an adopted constraint.** The rename of the derived name must be `RENAME CONSTRAINT`, on the table's new name. Pin: Task 3 `TestRenderPostgresConstraintIndex`, its table-rename case.
 
 ---
@@ -108,24 +109,30 @@ CREATE EXTENSION citext;
 CREATE TABLE tag_sets (id integer PRIMARY KEY, labels citext[]);
 CREATE DOMAIN tag_name AS citext;
 CREATE TABLE tag_names (id integer PRIMARY KEY, name tag_name);
+CREATE TABLE tag_lists (id integer PRIMARY KEY, names tag_name[]);
 ```
 
-Then `migrate.InspectNotes(ctx, db, velox.Postgres, []migrate.TableRef{{Name: "tag_sets"}, {Name: "tag_names"}})`. The notes with `Baseline` set must equal, in this order:
+Then `migrate.InspectNotes(ctx, db, velox.Postgres, []migrate.TableRef{{Name: "tag_sets"}, {Name: "tag_names"}, {Name: "tag_lists"}})`. The notes with `Baseline` set must equal, in this order:
 
 ```go
 add := "; add CREATE EXTENSION citext to 0001_baseline.sql before the tables, then run migrate hash"
+domain := " is a domain, which 0001_baseline.sql does not create; add its CREATE DOMAIN before the tables, then run migrate hash"
 want := []migrate.Note{
 	{Table: migrate.TableRef{Name: "tag_sets"}, Object: "tag_sets", Baseline: true, Message: "the type citext[] comes from the extension citext" + add},
 	{Table: migrate.TableRef{Name: "tag_names"}, Object: "tag_names", Baseline: true, Message: "the type tag_name comes from the extension citext" + add},
-	{Table: migrate.TableRef{Name: "tag_names"}, Object: "tag_names", Baseline: true, Message: "the type tag_name is a domain, which 0001_baseline.sql does not create; add its CREATE DOMAIN before the tables, then run migrate hash"},
+	{Table: migrate.TableRef{Name: "tag_names"}, Object: "tag_names", Baseline: true, Message: "the type tag_name" + domain},
+	{Table: migrate.TableRef{Name: "tag_lists"}, Object: "tag_lists", Baseline: true, Message: "the type tag_name[] comes from the extension citext" + add},
+	{Table: migrate.TableRef{Name: "tag_lists"}, Object: "tag_lists", Baseline: true, Message: "the type tag_name" + domain},
 }
 ```
 
-`ddl.NormalizeType(velox.Postgres, …)` keeps `citext[]` and `tag_name` as written (checked by a run).
-- [ ] **Step 2: Run it under D.** `go test -count=1 -run TestInspectPostgresExtensionThrough ./migrate`. Expected **[D]**: FAIL with no baseline note for either table, since today's subquery matches `de.objid = t.oid` only.
+The domain note names the nearest domain the walk passed (`tag_name`, not the column's `tag_name[]`; check finding 7). `ddl.NormalizeType(velox.Postgres, …)` keeps `citext[]`, `tag_name` and `tag_name[]` as written (checked by a run).
+- [ ] **Step 2: Run it under D.** `go test -count=1 -run TestInspectPostgresExtensionThrough ./migrate`. Expected **[D]**, as measured on PostgreSQL 18.6 (check finding 3): FAIL. tag_sets' note is already there, since PostgreSQL 18 makes the array type `_citext` itself a member of the extension (`pg_depend` holds a `deptype = 'e'` row for it). tag_names and tag_lists have neither the extension note nor the domain note.
+  - Record PostgreSQL 14's result in the commit message: run the test once with `VELOX_CI_MATRIX=1`'s PostgreSQL 14 image if that is cheap (scripts/ci-local.sh reads it from ci.yml), and otherwise at Task 9's gate, which runs the matrix. If PostgreSQL 14 has no member row for `_citext`, tag_sets' note is missing there today, and the walk adds it.
 - [ ] **Step 3: Implement.**
   - In `pgColumnsQuery`, the extension subquery resolves the column's type first: through `typbasetype` while `typtype = 'd'`, and through `typelem` while the type is an array (`typelem <> 0 AND typlen = -1`). Use a `WITH RECURSIVE` walk with a depth bound of 16, and take the nearest type with a `pg_depend` row of `deptype = 'e'`, as today.
-  - In `columns`, when `typtype == "d"`, add the domain baseline note once per domain type per table (`pt.domains`), after the extension note. The message is the third string above, with `c.Type` for `tag_name`.
+  - The query also returns the nearest domain the same walk passes, as `format_type(oid, NULL)`, or ''.
+  - In `columns`, when that domain is not "", add the domain baseline note once per domain per table (`pt.domains`), after the extension note.
 - [ ] **Step 4: Run** the test under D, then TestBaselinePostgres under D. Expected: PASS.
 - [ ] **Step 5: Commit.** `migrate: an extension's type behind an array or a domain, and a domain, are baseline notes (M23)`. Then run C under D.
 
@@ -161,9 +168,9 @@ func pgUnheld(method, option string, opclass, collat, notDistinct bool, keys, at
   ALTER TABLE k2 ADD CONSTRAINT k2_pkey PRIMARY KEY USING INDEX k2_desc;
   ```
 
-  Expected **[D]**: an error naming "does not have default sorting behavior", the refusal of `transformIndexConstraint` in parse_utilcmd.c, which also covers operator classes and collations. Record the error text in the commit message.
+  Expected **[D]**, measured on PostgreSQL 18.6: `index "k2_desc" column number 1 does not have default sorting behavior (SQLSTATE 42809)`, the refusal of `transformIndexConstraint` in parse_utilcmd.c. The check found the same for NULLS FIRST, an operator class and a collation. Record PostgreSQL 14's text in the commit message if the matrix run is cheap; otherwise Task 9 records it.
   - If PostgreSQL accepts the key instead, add the three statements to the test and `want["k2.k2_pkey"] = []string{"primary key", "DESC"}`.
-- [ ] **Step 3: Run the test under D.** `go test -count=1 -run TestInspectPostgresUnheld ./migrate`. Expected **[D]**: FAIL with `k.k_pkey: note "", want it to name primary key`.
+- [ ] **Step 3: Run the test under D.** `go test -count=1 -run TestInspectPostgresUnheld ./migrate`. Expected **[D]**: FAIL with `k.k_pkey: note "", want it to name primary key`. An INCLUDE key has no note today (measured).
 - [ ] **Step 4: Implement.**
   - Factor the `has` list (:351-377) into `pgUnheld`.
   - A primary row gets no Index. When `pgUnheld` returns something for it, it gets the note `the primary key's index has <has, joined by ", ">, which the model cannot hold; it is compared without`, on `pt.object(ix.Name)`, and `indexes` returns before reading columns or appending.
@@ -187,10 +194,10 @@ func pgUnheld(method, option string, opclass, collat, notDistinct bool, keys, at
   - `:150-155` AddIndex, `:156-161` DropIndex and `:162-163` RenameIndex;
   - `:447-481` pgCreate.
 - Modify `migrate/dir.go:419-464` (`Add`, and its doc's "schema.json, which is to"), with the new `carryConstraints` in dir.go.
-- Docs:
-  - `migrate/baseline.go:26-28`: drop "a unique constraint read as its index";
-  - `migrate/doc.go:155-158`: drop "a PostgreSQL unique constraint read as its index";
-  - `example/README.md:84-87`: the same clause.
+- Docs: in each list of baseline warnings, replace "a (PostgreSQL) unique constraint read as its index" with "a PostgreSQL domain type, which it does not create" (Task 1's note; check finding 8):
+  - `migrate/baseline.go:26-28`;
+  - `migrate/doc.go:155-158`;
+  - `example/README.md:84-87`.
 - Tests:
   - `migrate/model_test.go`: new `TestEqualIgnoresConstraint` and `TestSchemaRefusesConstraint`;
   - `migrate/json_test.go`: new `TestSnapshotConstraint`;
@@ -215,8 +222,9 @@ func pgUnheld(method, option string, opclass, collat, notDistinct bool, keys, at
 // to already (a baseline's, read from the database), or whose index in
 // from, the snapshot, is a constraint: the same table, after changes'
 // RenameTable, and the same name, after changes' RenameIndex, with the
-// same Unique and Columns, and to's Where empty. A redefined index is a
-// new one, and plain. It returns a clone; from and to are not changed.
+// same Unique and Columns, from's columns mapped through changes'
+// RenameColumn of that table, and to's Where empty. A redefined index is
+// a new one, and plain. It returns a clone; from and to are not changed.
 func carryConstraints(from, to *Schema, changes []Change) *Schema
 ```
 
@@ -235,6 +243,7 @@ func carryConstraints(from, to *Schema, changes []Change) *Schema
     | same | the index without the flag | none | yes |
     | renamed | the index renamed `users_mail_key` | `RenameIndex{Table: users, From: "users_email_key", To: "users_mail_key"}` | yes |
     | table renamed | table `accounts`, index `accounts_email_key` | `RenameTable` users→accounts, then `RenameIndex{Table: accounts, …}` | yes |
+    | column renamed | the index over `mail` | `RenameColumn{Table: users, From: "email", To: "mail"}` (Diff emits no index change; PostgreSQL keeps the constraint over `mail`, measured, check finding 1) | yes |
     | redefined | columns `email, name` | the drop and the add | no |
     | another index | a plain index of the same columns under another name | none | no |
     | partial | to's index has a Where | none | no |
@@ -255,7 +264,7 @@ func carryConstraints(from, to *Schema, changes []Change) *Schema
 
     Two Render calls follow. Their from schema holds the flag, which only Inspect and Baseline do.
     - **Create** (from empty, to holding the flag, as a baseline is). Today it gives the CREATE TABLE, then `CREATE UNIQUE INDEX "users_email_key" ON "users" ("email")`. Expected: the one statement `CREATE TABLE "users" (\n  "id" bigint GENERATED BY DEFAULT AS IDENTITY (SEQUENCE NAME "users_id_seq") NOT NULL,\n  "email" text NOT NULL,\n  "name" text NOT NULL,\n  CONSTRAINT "users_pkey" PRIMARY KEY ("id"),\n  CONSTRAINT "users_email_key" UNIQUE ("email")\n)`, and no CREATE INDEX.
-    - **Add on an existing table** (to holding the flag). Today it gives online `DROP INDEX CONCURRENTLY IF EXISTS "users_email_key"` and `CREATE UNIQUE INDEX CONCURRENTLY "users_email_key" ON "users" ("email")`. Expected: main `ALTER TABLE "users" ADD CONSTRAINT "users_email_key" UNIQUE ("email")`, and no online script.
+    - **Add on an existing table** (to holding the flag, `add-unique` allowed: NewPlan refuses it otherwise, check finding 5). Today it gives online `DROP INDEX CONCURRENTLY IF EXISTS "users_email_key"` and `CREATE UNIQUE INDEX CONCURRENTLY "users_email_key" ON "users" ("email")`. Expected: main `ALTER TABLE "users" ADD CONSTRAINT "users_email_key" UNIQUE ("email")`, and no online script.
 - [ ] **Step 2: Run them.** `go test -count=1 -run 'TestEqualIgnoresConstraint|TestSchemaRefusesConstraint|TestSnapshotConstraint|TestCarryConstraints|TestAddCarriesConstraint|TestRenderPostgresConstraintIndex' ./migrate`. Expected: a build failure, `unknown field Constraint in struct literal`.
 - [ ] **Step 3: Implement.**
   - **Model.** The field and validate's two refusals, in the exact Reasons above.
@@ -266,7 +275,7 @@ func carryConstraints(from, to *Schema, changes []Change) *Schema
     - pgCreate writes a Constraint index as `CONSTRAINT <name> UNIQUE (<cols>)` after the checks, as SQLite's unnamed UNIQUE goes (render_test.go:755-777), and leaves it out of the CREATE INDEX loop.
   - **Inspect.** The query column and the dropped note.
   - **Add.** `snapshot` is `json.MarshalIndent(carryConstraints(d.Snapshot, to, p.Changes), …)`. The doc says "schema.json, which is to, with the constraints of the snapshot's indexes that it keeps".
-  - **The docs.** The three clauses go.
+  - **The docs.** The three clauses are replaced, as Files says.
 - [ ] **Step 4: Run** the Step 2 command. Expected: PASS.
 - [ ] **Step 5: Write the database test, `TestDriftPostgresAdoptedUnique`** (baseline_test.go; `needPostgres`).
   - On a fresh database, run `CREATE TABLE users (id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, email text NOT NULL CONSTRAINT users_email_key UNIQUE)`.
@@ -275,7 +284,7 @@ func carryConstraints(from, to *Schema, changes []Change) *Schema
   - `fsys := dirOf(t, velox.Postgres, step{to: snap, name: "baseline"}, step{to: <want without the index>, name: "drop_unique"})`. Its `0002_drop_unique.sql` holds `ALTER TABLE "users" DROP CONSTRAINT "users_email_key";`.
   - `mustUp(t, db, fsys, migrate.WithBaseline(1))`, and on a second fresh database `mustUp(t, fresh, fsys)`.
   - On both, `SELECT count(*) FROM pg_indexes WHERE indexname = 'users_email_key'` is 0, and Drift against the directory's snapshot has no change.
-  - Expected today **[D]**: Baseline warns `users.users_email_key: the unique constraint users_email_key is read as its index; …`, and the drop step writes `DROP INDEX CONCURRENTLY IF EXISTS "users_email_key"` in its online file, as TestRenderPostgresConstraintIndex's "today" column shows. The adopted database's Up then fails, because PostgreSQL refuses to drop a constraint's index.
+  - Expected today **[D]**, measured on PostgreSQL 18.6: Baseline warns `users.users_email_key: the unique constraint users_email_key is read as its index; …`, and the drop step writes `DROP INDEX CONCURRENTLY IF EXISTS "users_email_key"` in its online file, as TestRenderPostgresConstraintIndex's "today" column shows. The adopted database's Up then fails with `cannot drop index users_email_key because constraint users_email_key on table users requires it (SQLSTATE 2BP01)`, and the fresh database's passes.
 - [ ] **Step 6: Update the pinned tests.** TestInspectPostgresBaselineNotes and migrate_baseline_test.go:117-119, as Files says.
 - [ ] **Step 7: Regenerate and read.** RE under D. Expected diff, and nothing else:
   - `want/postgres/0001_baseline.sql`: `CREATE UNIQUE INDEX "users_email_key" ON "users" ("email");` is gone. `CREATE TABLE "users"` ends `CONSTRAINT "users_pkey" PRIMARY KEY ("id"),\n  CONSTRAINT "users_email_key" UNIQUE ("email")\n);`.
@@ -350,23 +359,26 @@ func (s *session) historyTable() string
     - `0002_c.sql`: `CREATE TABLE c (id int);\n`.
 
     `mustUp` applies both, and `historyOf(t, db)` has versions 1 and 2. Table `c` is in the fresh database, and `b` is in `velox_use_other`, read through information_schema.TABLES.
-- [ ] **Step 2: Run them under D.** `go test -count=1 -run 'TestUpPostgresSearchPath|TestUpPostgresNoCurrentSchema|TestUpMySQLUse' ./migrate`. Expected **[D]**:
-  - TestUpPostgresSearchPath fails on recording 0001: the unqualified INSERT finds no velox_migrations.
-  - TestUpPostgresNoCurrentSchema fails with PostgreSQL's "no schema has been selected to create in" from CREATE TABLE, not the session refusal.
-  - TestUpMySQLUse fails on recording 0001 into `velox_use_other`, which has no history table.
+- [ ] **Step 2: Run them under D.** `go test -count=1 -run 'TestUpPostgresSearchPath|TestUpPostgresNoCurrentSchema|TestUpMySQLUse' ./migrate`. Expected **[D]**, measured on PostgreSQL 18.6 and MySQL 8.4.13:
+  - TestUpPostgresSearchPath fails with `recording version 1 in velox_migrations: ERROR: relation "velox_migrations" does not exist`.
+  - TestUpPostgresNoCurrentSchema fails with `creating the history table velox_migrations: ERROR: no schema has been selected to create in (SQLSTATE 3F000)`, not the session refusal. With search_path `''`, `current_schema()` is NULL.
+  - TestUpMySQLUse fails with `0001_a.sql: statements 1 to 2 ran, but recording them in velox_migrations: Error 1146 … 'velox_use_other.velox_migrations' doesn't exist`, the row left dirty.
 - [ ] **Step 3: Implement** `historyTable`, the qualified sites, the check and the reset.
   - doc.go:136's "each file starts with the session as Up was given it" now holds for MySQL's database too.
   - `reset`'s doc comment says it restores the database.
+  - One sentence beside doc.go:136 (check finding 11): a file resumed with `apply -resume` starts again with the session as Up was given it, so its statements after a `SET search_path` or a `USE` run without them; such a file sets them again at the top of each unit.
 - [ ] **Step 4: Run** the tests, then `go test -count=1 ./migrate`, under D. Expected: PASS.
 - [ ] **Step 5: Commit.** `migrate: the history table is qualified by the session's schema or database; reset USEs it again (M14)`. Then run C under D.
 
 ---
 
-### Task 6: `BEGIN ATOMIC` is refused by name (M13's message; spec M13)
+### Task 6: `BEGIN ATOMIC` and psql meta-commands are refused by name (M13's message; spec M13; check finding 10, controller ruling 3)
 
 **Files:**
-- Modify: `migrate/split.go:45-58` (`flush`), and `:115-160` (`body` becomes `refusal(sql string) string`, the reason or "").
-- Modify the docs: `migrate/file.go:48-55`, and `migrate/doc.go:51-57` and `:137-139`. Each adds "or on PostgreSQL a BEGIN ATOMIC body".
+- Modify: `migrate/split.go:45-58` (`flush`), `:115-160` (`body` becomes `refusal(sql string) string`, the reason or ""), and `run`'s token case (:98-110), for the meta-command line.
+- Modify the docs:
+  - `migrate/file.go:48-55`, and `migrate/doc.go:51-57` and `:137-139`, each add "or on PostgreSQL a BEGIN ATOMIC body or a psql meta-command line";
+  - doc.go's Baseline/adoption section (:150-170) says a pg_dump file needs its `\` lines (pg_dump 18's `\restrict` and `\unrestrict`) removed before it is a migration file.
 - Test: `migrate/split_test.go:22-104` (`splitCases`, which FuzzSplit seeds from too).
 
 **Interfaces:** Consumes nothing. Produces nothing later tasks use.
@@ -379,56 +391,119 @@ func (s *session) historyTable() string
 {d: velox.Postgres, src: "CREATE FUNCTION f() RETURNS int LANGUAGE sql begin atomic end", err: atomic, line: 1},
 {d: velox.Postgres, src: "SELECT 'BEGIN ATOMIC'; CREATE FUNCTION f() RETURNS int AS $$ BEGIN ATOMIC $$ LANGUAGE sql",
 	want: []migrate.Piece{stmt("SELECT 'BEGIN ATOMIC'", 1), stmt("CREATE FUNCTION f() RETURNS int AS $$ BEGIN ATOMIC $$ LANGUAGE sql", 1)}},
+{d: velox.Postgres, src: "\\restrict abc123\n\nSET statement_timeout = 0;\nCREATE TABLE a (id integer);\n\\unrestrict abc123\n",
+	err: `a psql meta-command (\restrict) is not SQL; remove it`, line: 1},
+{d: velox.Postgres, src: "SELECT 1;\n  \\connect other\nSELECT 2;", err: `a psql meta-command (\connect) is not SQL; remove it`, line: 2},
+{d: velox.Postgres, src: "SELECT 1\n\\gset\n;", err: `a psql meta-command (\gset) is not SQL; remove it`, line: 2},
+{d: velox.Postgres, src: "SELECT '\n\\x';", want: []migrate.Piece{stmt("SELECT '\n\\x'", 1)}},
+{d: velox.MySQL, src: "SELECT '\n\\x';", want: []migrate.Piece{stmt("SELECT '\n\\x'", 1)}},
 ```
 
 The results at c33cf95 (run):
 - The first splits into `CREATE FUNCTION … BEGIN ATOMIC SELECT 1` and `END`. ParseFile accepts it, and LintFile refuses `END in a file run in a transaction; …` at line 1.
-- The second splits into four pieces, and LintFile refuses `END` at line 2.
+- The second splits into four pieces, and LintFile refuses `END` at line 3 (check finding 9; the new refusal's line is 2, where the CREATE starts).
 - The third is one piece, accepted.
 - The fourth gives the two pieces above, and must keep giving them.
-- [ ] **Step 2: Run it.** `go test -count=1 -run TestSplit ./migrate`. Expected: FAIL on the first three rows.
+- The dump splits into three pieces, `\restrict abc123\n\nSET statement_timeout = 0`, `CREATE TABLE a (id integer)` and `\unrestrict abc123`, and ParseFile accepts it. The check measured the real pg_dump 18.6 output failing at Up with `0001_dump.sql: statement 1 of 16: ERROR: syntax error at or near "\"`.
+- The `\connect` source gives `SELECT 1` and `\connect other\nSELECT 2`; the `\gset` source gives one piece `SELECT 1\n\gset`. ParseFile accepts both.
+- A `\` inside a literal at a line's start stays one piece, on both dialects, and must keep doing so.
+- [ ] **Step 2: Run it.** `go test -count=1 -run TestSplit ./migrate`. Expected: FAIL on the three BEGIN ATOMIC rows and the three meta-command rows.
 - [ ] **Step 3: Implement.**
   - `refusal` returns today's trigger reason where `body` returned true.
   - On PostgreSQL, it returns `atomic` when two adjacent unquoted words of `lex(d, sql)` are BEGIN and ATOMIC, case-insensitively.
   - `flush` returns `fileErr(startLine, reason)` for a non-empty reason.
+  - In `run`, on PostgreSQL, a token that starts with `\` where `lineStart(src, i)` holds is refused at its line with `a psql meta-command (<cmd>) is not SQL; remove it`, `<cmd>` being the `\` and the letters after it. Literals, quoted names and comments are skipped before tokens, so a `\` inside them is not read.
 - [ ] **Step 4: Run** `go test -count=1 ./migrate`, then `go test -run XXX -fuzz '^FuzzSplit$' -fuzztime 10s ./migrate`. Expected: PASS.
-- [ ] **Step 5: Commit.** `migrate: a BEGIN ATOMIC body is refused by name (M13)`. Then run C.
+- [ ] **Step 5: Commit.** `migrate: a BEGIN ATOMIC body and a psql meta-command line are refused by name (M13)`. Then run C.
 
 ---
 
-### Task 7: MySQL binary defaults read as the model writes them; ASCII literals lose `_latin1` and `_ascii` (M3, M4)
+### Task 7: MySQL binary defaults are read exactly, from SHOW CREATE TABLE; ASCII literals lose `_latin1` and `_ascii` (M3, M4; controller ruling 2)
 
 **Files:**
-- Modify: `migrate/inspect_mysql.go:194-240` (`mysqlDefault` and its doc).
+- Modify: `migrate/inspect_mysql.go:140-192` (`columns`: the SHOW CREATE read), `:194-240` (`mysqlDefault`'s expression path, and its doc), and two new functions below.
 - Modify: `migrate/predicate.go:340-355` (the introducer case of the predicate lexer, and its comment).
 - Tests:
-  - `migrate/inspect_test.go:201-228` (TestMySQLDefault gains rows);
+  - `migrate/inspect_test.go:201-228` (TestMySQLDefault gains rows), and new `TestMySQLBinaryDefault` and `TestMyShownDefault` there, through `migrate/export_test.go` (`MySQLBinaryDefault = mysqlBinaryDefault`, `MyShownDefault = myShownDefault`);
   - `migrate/predicate_test.go`. **Pinned and changing:** the not-same row `{velox.MySQL, "name = _latin1'abc'", "name = 'abc'"}` at :351 moves to the same list (:392-397), and new rows are added;
   - `migrate/inspect_mysql_test.go`: new `TestInspectMySQLBinaryDefaults` (D).
 
-**Interfaces:** Consumes nothing. Produces nothing later tasks use.
+**Why SHOW CREATE TABLE** (check finding 2, measured on MySQL 8.4.13). information_schema's COLUMN_DEFAULT cuts a `binary` or `varbinary` literal default at its first NUL byte, and SHOW CREATE TABLE prints it exactly:
 
-- [ ] **Step 1: Write the failing rows.** In TestMySQLDefault (`typ, expr, def, want`), where "today" was run at c33cf95:
+| column default as written | COLUMN_DEFAULT | SHOW CREATE TABLE |
+|---|---|---|
+| `varbinary DEFAULT 0x00` | `0x` | `DEFAULT '\0'` |
+| `binary(3) DEFAULT 0x0061` | `0x` | `DEFAULT '\0a\0'` |
+| `DEFAULT 0x6100ff` | `0x61` | `DEFAULT 0x6100FF` |
+| `DEFAULT 'a\0b'` | `0x61` | `DEFAULT 'a\0b'` |
+| `varbinary DEFAULT 0x00ff` | `0x` | not measured |
+| `binary(2) DEFAULT 'a'` | `0x61` | not measured |
+
+A decoder fed by COLUMN_DEFAULT would call `'a'`, `0x6100ff` and `'a\0b'` one default, which builder ruling 6 forbids: M9 is its one exception. The expression path (blob, `DEFAULT_GENERATED`) is exact in COLUMN_DEFAULT (`blob DEFAULT (0x00ff)` prints `0x00ff`, lower case), so it stays there. Only a table with a `binary` or `varbinary` column that has a literal default pays the one extra query, `SHOW CREATE TABLE`.
+
+**Interfaces:** Consumes nothing. Produces, in inspect_mysql.go:
+
+```go
+// myShownDefault is the literal of column col's DEFAULT in create, SHOW
+// CREATE TABLE's text: a quoted string as MySQL prints it, or 0x…; false
+// when the column has no DEFAULT. It reads backquoted names and quoted
+// literals, so a name or literal holding " DEFAULT " is not misread.
+func myShownDefault(create, col string) (string, bool)
+
+// mysqlBinaryDefault is a binary or varbinary column's literal default, as
+// SHOW CREATE TABLE prints it, in the model's spelling. It decodes the
+// literal ('…' with MySQL's escapes and doubled quotes, or 0x… in either
+// case) to its bytes; on binary(n) it drops the trailing 0x00 bytes that
+// pad the value. When every byte left is printable ASCII (0x20–0x7e), it is
+// ddl.Literal(velox.MySQL, …) of them; otherwise it is shown as printed.
+func mysqlBinaryDefault(typ, shown string) string
+```
+
+- [ ] **Step 1: Write the failing rows.**
+
+  **`TestMySQLBinaryDefault`** (`typ, shown, want`). The rows marked "measured" take SHOW CREATE TABLE's output above:
+
+  | typ | shown (Go raw) | want | |
+  |---|---|---|---|
+  | `varbinary(8)` | `'a'` | `'a'` | |
+  | `varbinary(8)` | `0x6100FF` | `0x6100FF` | measured: not `'a'` |
+  | `varbinary(8)` | `'a\0b'` | `'a\0b'` | measured: not `'a'` |
+  | `varbinary(8)` | `'\0'` | `'\0'` | measured |
+  | `binary(3)` | `'\0a\0'` | `'\0a\0'` | measured |
+  | `binary(2)` | `'a\0'` | `'a'` | [D]: Step 4 records binary(2) DEFAULT 'a' |
+  | `varbinary(8)` | `0x4A4B` | `'JK'` | upper-case hex, as SHOW CREATE prints it |
+  | `varbinary(8)` | `0x5C` | `'\\'` | |
+  | `varbinary(8)` | `'it''s'` | `'it''s'` | |
+  | `varbinary(8)` | `'it\'s'` | `'it''s'` | |
+  | `varbinary(8)` | `0x00FF` | `0x00FF` | [D]: Step 4 records 0x00ff |
+
+  **`TestMyShownDefault`.** With `create` =
+
+  ```go
+  "CREATE TABLE `bins` (\n  `id` bigint NOT NULL AUTO_INCREMENT,\n  `code` varbinary(8) NOT NULL DEFAULT 'a',\n" +
+  	"  `raw` varbinary(8) NOT NULL DEFAULT 0x6100FF,\n  `nul` varbinary(8) DEFAULT 'a\\0b',\n" +
+  	"  `c DEFAULT d` varbinary(8) NOT NULL DEFAULT 'x'' DEFAULT y',\n  PRIMARY KEY (`id`)\n) ENGINE=InnoDB"
+  ```
+
+  `code` gives `'a'`, `raw` gives `0x6100FF`, `nul` gives `'a\0b'`, `c DEFAULT d` gives `'x'' DEFAULT y'`, and `id` gives false.
+
+  **TestMySQLDefault** (`typ, expr, def, want`): the expression path and the guards. "Today" was run at c33cf95, and the MySQL spellings were measured by the check (finding 6):
 
   | typ | expr | def (Go raw) | today | want |
   |---|---|---|---|---|
-  | `varbinary(8)` | false | `0x61` | `0x61` | `'a'` |
-  | `binary(2)` | false | `0x6100` | `0x6100` | `'a'` |
-  | `varbinary(8)` | false | `0x27` | `0x27` | `''''` |
-  | `varbinary(8)` | false | `0x5c` | `0x5c` | `'\\'` |
-  | `varbinary(8)` | false | `0x00ff` | `0x00ff` | `0x00ff` |
   | `blob` | true | `_binary\'a\'` | `_binary'a'` | `('a')` |
   | `blob` | true | `0x61` | `0x61` | `('a')` |
   | `tinyblob` | true | `0x61` | `0x61` | `('a')` |
+  | `blob` | true | `0x00ff` | `0x00ff` | `0x00ff` |
   | `varbinary(8)` | true | `_binary\'a\'` | `_binary'a'` | `('a')` |
   | `text` | true | `_latin1\'a\'` | `_latin1'a'` | `('a')` |
   | `text` | true | `_ascii\'a\'` | `_ascii'a'` | `('a')` |
-  | `text` | true | `"_latin1\\'é\\'"` (Go string) | `_latin1'é'` | `_latin1'é'` |
+  | `text` | true | `_latin1\'Ã©\'` (MySQL's print of `_latin1'é'`) | `_latin1'Ã©'` | `_latin1'Ã©'` |
   | `text` | true | `_binary\'a\'` | `_binary'a'` | `_binary'a'` |
   | `varchar(8)` | false | `0x61` | `'0x61'` | `'0x61'` |
   | `bit(8)` | false | `b'101'` | `b'101'` | `b'101'` |
 
-  The last five are guards: a non-ASCII latin1 literal, `_binary` on a text column, a varchar's text, and bit are not touched.
+  The last four are guards: a non-ASCII latin1 literal, `_binary` on a text column, a varchar's text, and bit are not touched.
 
   In predicate_test.go's same list:
   - `{velox.MySQL, "name = _latin1'abc'", "name = 'abc'"}`;
@@ -440,11 +515,12 @@ The results at c33cf95 (run):
   - the existing `_binary` row (:350) stays.
 
   The four new pairs give `same = false, parsed = false` today (run).
-- [ ] **Step 2: Run them.** `go test -count=1 -run 'TestMySQLDefault|TestNormalizePredicateKeepsMeaning' ./migrate`. Both predicate lists are in TestNormalizePredicateKeepsMeaning (predicate_test.go:235). Expected: FAIL on the new rows of TestMySQLDefault and of the same list.
+- [ ] **Step 2: Run them.** `go test -count=1 -run 'TestMySQLDefault|TestMySQLBinaryDefault|TestMyShownDefault|TestNormalizePredicateKeepsMeaning' ./migrate`. Both predicate lists are in TestNormalizePredicateKeepsMeaning (predicate_test.go:235). Expected: a build failure on the two new exports. Once they are stubs, the new rows FAIL.
 - [ ] **Step 3: Implement.**
-  - **M3.** A binary column is one whose type word is `binary`, `varbinary`, `tinyblob`, `blob`, `mediumblob` or `longblob`. On such a column only:
-    - a literal (`expr` false) or an expression of the form `0x<hex>` decodes to its bytes. `binary` drops its trailing 0x00 bytes, MySQL's padding. When every byte is printable ASCII (0x20–0x7e), the default is `ddl.Literal(velox.MySQL, bytes)`, wrapped in parentheses for an expression. Otherwise it stays as printed;
-    - an expression `_binary'…'` is read as the `_utf8mb4'…'` form is.
+  - **M3, literal path.** In `columns`, mark each `binary` or `varbinary` column with a non-NULL COLUMN_DEFAULT and no `DEFAULT_GENERATED`. After the loop, when any is marked, run `SHOW CREATE TABLE <db>.<table>` once, quoted with `ddl.Ident(velox.MySQL, …)`, since it takes no placeholders. Replace each marked column's Default with `mysqlBinaryDefault(typ, shown)`. A marked column that `myShownDefault` cannot find is an error naming the table and column.
+  - **M3, expression path.** On a column whose type word is `binary`, `varbinary`, `tinyblob`, `blob`, `mediumblob` or `longblob`:
+    - an expression `0x<hex>` decodes as `mysqlBinaryDefault` does, with the result in parentheses when it is a literal;
+    - `_binary'…'` is read as the `_utf8mb4'…'` form is.
 
     `bit` is left as printed.
   - **M4.** `_latin1` and `_ascii` join the UTF-8 introducers. Both match case-insensitively, and only when every byte of the literal is below 0x80:
@@ -457,11 +533,14 @@ The results at c33cf95 (run):
   - `data blob` Default `('a')`;
   - `latin text` Default `(_latin1'a')`.
 
-  Then `noDriftMySQL(t, dirOf(t, velox.MySQL, step{to: s, name: "bins"}), s)`.
-  - Expected **[D]** before Step 3: changes or warnings on code, pad and quote at least. After Step 3: PASS.
-  - If MySQL prints `data`'s or `latin`'s default in a form Step 3 does not read, record the printed form in the commit message and stop.
-- [ ] **Step 5: Run** the unit tests, then `go test -count=1 -run 'TestInspectMySQL' ./migrate` under D. Expected: PASS.
-- [ ] **Step 6: Commit.** `migrate: MySQL binary defaults read as the model writes them; _latin1 and _ascii drop on ASCII literals (M3, M4)`. Then run C under D.
+  Then:
+  - `noDriftMySQL(t, dirOf(t, velox.MySQL, step{to: s, name: "bins"}), s)`.
+  - The differing case: on a fresh database with the same directory applied, run `ALTER TABLE bins ALTER COLUMN code SET DEFAULT 0x6100FF`. Drift against `s` gives exactly the change `alter-column bins.code (default)`. That change's text was run through DriftOf at c33cf95.
+  - Log SHOW CREATE TABLE's lines for `pad`, and for a scratch column `varbinary(8) DEFAULT 0x00ff`, and record them in the commit message. If they differ from Step 1's two [D] rows, set those rows' `shown` to what MySQL prints, keeping their wants.
+  - Expected **[D]** before Step 3: changes or warnings on code, pad and quote. `data` already passes today (`_utf8mb4\'a\'` reads as `('a')`, measured). After Step 3: PASS.
+  - If MySQL prints `latin`'s default in a form Step 3 does not read, record the printed form in the commit message and stop.
+- [ ] **Step 5: Run** the unit tests, then `go test -count=1 -run 'TestInspectMySQL|TestDriftMySQL' ./migrate` under D. Expected: PASS.
+- [ ] **Step 6: Commit.** `migrate: MySQL binary defaults are read from SHOW CREATE TABLE; _latin1 and _ascii drop on ASCII literals (M3, M4)`. Then run C under D.
 
 ---
 
@@ -493,11 +572,12 @@ A run of `pgconn.ParseConfig` at c33cf95 gave this error for the DSN, for its ke
 ### Task 9: The wave's gate
 
 - [ ] **Step 1:** Run `bash scripts/ci-local.sh` with nothing else running. Expected: rc=0. If only a bench/scale time threshold fails, run it once more. Never raise a threshold.
-- [ ] **Step 2:** Run the leftover greps below. Expected: each prints nothing.
+- [ ] **Step 2:** Run the leftover greps below. Expected: each prints nothing, but for grep 5's two exempt lines.
+- [ ] **Step 3:** Record PostgreSQL 14's results for Task 1 Step 2 and Task 2 Step 2, from the gate's matrix run (`VELOX_CI_MATRIX=1`), if those tasks did not.
 
 ## Leftover greps
 
-Each was run at c33cf95. After the task named, each prints nothing.
+Each was run at c33cf95, and again after the plan-check fixes, with the same output. After the task named, each prints nothing, but for grep 5's two exempt lines.
 
 1. **Task 3.** `git grep -nP 'is read as its index|unique constraint read as' -- ':!docs'` prints:
    - `cmd/velox-gen/testdata/ent/want/postgres/warnings.txt:1`;
@@ -513,6 +593,10 @@ Each was run at c33cf95. After the task named, each prints nothing.
    - `migrate/history.go:46`, `:82`, `:104`, `:113`, `:155`, `:174`;
    - `migrate/resolve.go:113`;
    - `migrate/stepwise.go:53`, `:208`, `:276`.
+
+   After Task 5 it prints at most the two lines that stay on purpose (check finding 4, controller ruling 6), which Task 9 Step 2 exempts:
+   - `history.go:104`, the column qualifier `s.q(s.cfg.Table) + "." + s.q(name)`, since a column is qualified by the table's name alone even when FROM names the schema;
+   - `history.go:82`, `name := s.cfg.Table`, which stays for `hasHistory`'s MySQL and SQLite queries, whose table name is a plain parameter. Its PostgreSQL branch takes `historyTable()`.
 6. **Task 5.** `git grep -nP 'table_schema = DATABASE\(\)' -- migrate/history.go` prints `migrate/history.go:78`, `:177`.
 7. **Task 4.** `git grep -nP 'len\(a\.Warnings\) != 5' -- migrate` prints `migrate/drift_test.go:355`.
 
@@ -528,24 +612,40 @@ Each was run at c33cf95. After the task named, each prints nothing.
 8. **(call) M4's introducers are `_latin1` and `_ascii`, on ASCII bytes only, in both readers.** A fixed-width set such as `_utf16` reads the same bytes as other characters, so it is never stripped.
 9. **(call) Every `BEGIN ATOMIC` is refused, the empty `BEGIN ATOMIC END` too.** The empty one splits correctly today, but one rule is simpler to document.
 10. **(call) M7 names the file through `*fs.PathError`.** A missing service file is not a PathError, and it keeps the form message.
+11. **(known model limit) One idea, two forms.** A PostgreSQL unique constraint is an Index with `Constraint` set. A SQLite UNIQUE constraint is an unnamed Index (`Name: ""`), which SQLite keeps no name for. The frozen model holds both, deliberately: each is what its database can drop and rename. Atlas's model makes the same PostgreSQL split (`postgres.Constraint{T: "u"}`, check finding 12). Wave 6 documents it.
+12. **(call) The SHOW CREATE parser is narrow.** `myShownDefault` reads one column's DEFAULT literal, not the statement. It reads backquoted names and quoted literals, so neither can fake a `DEFAULT`.
+
+## Controller rulings
+
+The controller ruled on the two decisions of 7a27429 and on the builder check's findings.
+
+1. **Both decisions are accepted.** M14 qualifies with the database read at open, and `reset` runs `USE` (Task 5). M23 gets the domain baseline note (Task 1).
+2. **M3 reads SHOW CREATE TABLE (finding 2).** information_schema cuts a binary default at its first NUL, so it is not trusted for `binary` and `varbinary` literals. Their default is read from SHOW CREATE TABLE, which is exact, and decoded there. A second documented exception beside M9 would break builder ruling 6. Only a table with such a column and default pays the extra query. The test rows take MySQL's real output (finding 6), and the measured SHOW CREATE values are recorded in Task 7.
+3. **psql meta-commands (finding 10).** ParseFile refuses a PostgreSQL line that starts with `\`, by name and line: `a psql meta-command (\restrict) is not SQL; remove it`. It goes in Task 6, beside BEGIN ATOMIC. The docs say a pg_dump file needs its `\` lines removed.
+4. **carryConstraints maps columns through RenameColumn (finding 1).** Task 3 has the "column renamed" row.
+5. **Task 1 Step 2's [D] expectation is corrected (finding 3).** PostgreSQL 18's `_citext` is an extension member, and only the domain lacks a note. PostgreSQL 14 is recorded under D with `VELOX_CI_MATRIX=1` if cheap, else at the gate (Task 9 Step 3).
+6. **Leftover grep 5 exempts history.go:104 and :82 (finding 4),** with the reason.
+7. **Findings 5, 7, 8 and 9.**
+   - Task 3's add case allows `add-unique`.
+   - The domain walk notes the nearest domain, through an array too (Task 1).
+   - Task 3 puts the domain note into the baseline warning lists.
+   - Task 6's "today" line is 3.
+8. **Finding 11:** Task 5 adds one doc sentence on `apply -resume` after a `SET search_path` or a `USE`.
+9. **Finding 12:** the model limit is recorded as plan ruling 11, and is a Wave 6 docs leftover.
 
 ## Decisions for the controller
 
-1. **M14 on MySQL.** The triage's evidence is PostgreSQL's `search_path`. A MySQL file that runs `USE other` has the same failure: `record` inserts into the other database. On PostgreSQL, `reset` already restores a `search_path` the file set, but nothing restores MySQL's database.
-   - **Recommendation:** do both on MySQL as Task 5 plans, qualifying with the `DATABASE()` that open read, and having `reset` `USE` it again.
-   - The other choice is PostgreSQL only.
-2. **M23's domain note.** Resolving a domain to its extension, as the triage proposed, still leaves `0001_baseline.sql` failing: it does not create the domain.
-   - **Recommendation:** add the baseline note "the type X is a domain, which 0001_baseline.sql does not create; …", one sentence beside the extension's (Task 1).
-   - The other choice is the extension lookup alone.
+None open. The two of 7a27429 are ruled above.
 
 ## Left by this plan
 
 - **Wave 5 (tests).** M15, M16, M17 and M20, as the spec rules.
 - **Wave 6 (docs).**
   - M21.
+  - Plan ruling 11's model limit: PostgreSQL's unique constraint is `Index.Constraint`, and SQLite's is an unnamed Index.
   - M9's documented limits.
   - The migrate spec's stale lines (Wave 1's list).
-  - The migrate spec's §§ on baseline warnings now lack the unique-constraint warning, and gain the domain note if decision 2 is taken.
+  - The migrate spec's §§ on baseline warnings lose the unique-constraint warning and gain the domain note.
 - **After 1.0, additive.**
   - A PostgreSQL DSN whose `servicefile` is missing still gives the form message.
   - An online `ADD CONSTRAINT … USING INDEX` for a flagged add on an existing table.
