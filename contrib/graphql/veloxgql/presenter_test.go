@@ -476,6 +476,74 @@ func TestErrorPresenterCanceled(t *testing.T) {
 	}
 }
 
+// TestErrorPresenterOnCanceled: OnCanceled sends an error that is only the
+// cancellation of the request to its function, in place of log's default
+// (nothing, or a debug record when log is nil); nil drops it. Anything else
+// on a canceled request still goes to log.
+func TestErrorPresenterOnCanceled(t *testing.T) {
+	driverErr := errors.New("sqlite: interrupted")
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	canceled = graphql.WithFieldContext(canceled, &graphql.FieldContext{Field: graphql.CollectedField{Field: &ast.Field{Alias: "posts"}}})
+
+	l, c := &logged{}, &logged{}
+	present := veloxgql.ErrorPresenter(l.log, veloxgql.OnCanceled(c.log))
+	got := present(canceled, context.Canceled)
+	if got.Message != "internal error" || got.Extensions["code"] != "INTERNAL_SERVER_ERROR" {
+		t.Errorf("a bare cancellation: presented %v", got)
+	}
+	if errs := c.take(); len(errs) != 1 || errs[0] != context.Canceled {
+		t.Errorf("OnCanceled got %v, want the cancellation once", errs)
+	}
+	if errs := l.take(); len(errs) != 0 {
+		t.Errorf("log got %v, want nothing: it is only the cancellation", errs)
+	}
+	joined := errors.Join(context.Canceled, driverErr)
+	_ = present(canceled, joined)
+	if errs := l.take(); len(errs) != 1 || errs[0] != joined {
+		t.Errorf("log got %v, want the joined error once", errs)
+	}
+	if errs := c.take(); len(errs) != 0 {
+		t.Errorf("OnCanceled got %v, want nothing: the error is more than the cancellation", errs)
+	}
+	// On a live request a cancellation is the application's own: log's.
+	_ = present(context.Background(), context.Canceled)
+	if len(l.take()) != 1 || len(c.take()) != 0 {
+		t.Error("a live request's cancellation must go to log")
+	}
+
+	// With a nil log, OnCanceled replaces the debug record; OnCanceled(nil)
+	// drops the error without one.
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	if got := veloxgql.ErrorPresenter(nil, veloxgql.OnCanceled(nil))(canceled, context.Canceled); got.Message != "internal error" {
+		t.Errorf("OnCanceled(nil): presented %q", got.Message)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("OnCanceled(nil) logged %s, want nothing", buf.Bytes())
+	}
+	_ = veloxgql.ErrorPresenter(nil, veloxgql.OnCanceled(c.log))(canceled, context.Canceled)
+	if buf.Len() != 0 || len(c.take()) != 1 {
+		t.Errorf("a nil log with OnCanceled: slog got %s, want nothing, and OnCanceled the error", buf.Bytes())
+	}
+	// A driver's error is still logged at level error.
+	_ = veloxgql.ErrorPresenter(nil, veloxgql.OnCanceled(nil))(canceled, driverErr)
+	if !strings.Contains(buf.String(), `"level":"ERROR"`) {
+		t.Errorf("a driver's error on a canceled request: logged %s", buf.Bytes())
+	}
+
+	// The zero option is not valid.
+	defer func() {
+		if r := recover(); r != "veloxgql.ErrorPresenter: zero PresenterOption" {
+			t.Errorf("zero PresenterOption: recovered %v", r)
+		}
+	}()
+	veloxgql.ErrorPresenter(nil, veloxgql.PresenterOption{})
+	t.Error("zero PresenterOption: no panic")
+}
+
 // TestErrorPresenterSlog: with no log, an internal error is logged with
 // slog, with the field's path, the operation's name and the error.
 func TestErrorPresenterSlog(t *testing.T) {

@@ -96,7 +96,9 @@ const (
 // every error in the error's tree that the client is not shown is
 // context.Canceled (errors.Is). A nil log records it with
 // slog.DebugContext, at level debug, as "veloxgql: request canceled" with
-// the same attributes. Anything else that fails at the same moment, a
+// the same attributes; a non-nil log drops it. The OnCanceled option sends it
+// to a function of the application's instead, or drops it when given nil, in
+// either case. Anything else that fails at the same moment, a
 // driver's error or a panic, is logged as an internal error. The client, if
 // still there, sees what it would otherwise.
 //
@@ -113,19 +115,25 @@ const (
 //	})
 //
 // gqlgen's default presenter shows every error's text, and no codes.
-func ErrorPresenter(log func(ctx context.Context, err error)) graphql.ErrorPresenterFunc {
-	canceled := func(context.Context, error) {}
+func ErrorPresenter(log func(ctx context.Context, err error), opts ...PresenterOption) graphql.ErrorPresenterFunc {
+	p := presenter{log: log, canceled: func(context.Context, error) {}}
 	if log == nil {
-		log, canceled = slogInternal, slogCanceled
+		p.log, p.canceled = slogInternal, slogCanceled
+	}
+	for _, o := range opts {
+		if o.apply == nil {
+			panic("veloxgql.ErrorPresenter: zero PresenterOption")
+		}
+		o.apply(&p)
 	}
 	return func(ctx context.Context, err error) *gqlerror.Error {
 		if err == nil {
 			return nil
 		}
 		leaves := internalLeaves(err, nil)
-		log := log
+		log := p.log
 		if errors.Is(ctx.Err(), context.Canceled) && canceledOnly(leaves) {
-			log = canceled
+			log = p.canceled
 		}
 		out := &gqlerror.Error{Path: graphql.GetPath(ctx)}
 		if gqlErr, ok := shared.As[*gqlerror.Error](err); ok {
@@ -146,6 +154,27 @@ func ErrorPresenter(log func(ctx context.Context, err error)) graphql.ErrorPrese
 		out.Message, out.Extensions = msg, map[string]any{"code": code}
 		return out
 	}
+}
+
+// presenter is what ErrorPresenter's options set: where an internal error
+// goes, and where an error that is only the cancellation of the request goes.
+type presenter struct {
+	log, canceled func(ctx context.Context, err error)
+}
+
+// PresenterOption configures ErrorPresenter. OnCanceled makes one; the zero
+// PresenterOption is not valid, and ErrorPresenter panics on it, as
+// NewExtension does on a zero Option.
+type PresenterOption struct{ apply func(*presenter) }
+
+// OnCanceled sets the function an error that is only the cancellation of the
+// request goes to, in place of the default: slog at level debug when log is
+// nil, and nothing when log is not. A nil f drops such errors.
+func OnCanceled(f func(ctx context.Context, err error)) PresenterOption {
+	if f == nil {
+		f = func(context.Context, error) {}
+	}
+	return PresenterOption{func(p *presenter) { p.canceled = f }}
 }
 
 // slogInternal is ErrorPresenter's log when it is given none.
