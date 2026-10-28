@@ -1319,6 +1319,44 @@ func TestOwnerTags(t *testing.T) {
 	}
 }
 
+// TestCategoryTwin: Category.twin is a bidirectional self-edge, a O2O with no
+// inverse whose key, category_twin, is on the row. CreateCategory with a
+// twinID sets the new row's key to the twin, and the twin's to the new row:
+// the mirror velox writes, which the where inputs then see on both rows.
+func TestCategoryTwin(t *testing.T) {
+	ctx, db := open(t)
+	c1 := &gen.Category{Title: "c1"}
+	if err := db.Insert(c1).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	c2, err := gen.CreateCategory(ctx, gen.CreateCategoryInput{Title: "c2", TwinID: ptr(catID(c1.ID))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	twin := func(id int64) string {
+		x, err := db.Query[gen.Category]().Where(gen.Categories.ID.EQ(id)).One(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if x.CategoryTwin == nil {
+			return "NULL"
+		}
+		return fmt.Sprint(*x.CategoryTwin)
+	}
+	if got, want := twin(c2.ID), fmt.Sprint(c1.ID); got != want {
+		t.Errorf("the new row's category_twin = %s, want c1 %s", got, want)
+	}
+	if got, want := twin(c1.ID), fmt.Sprint(c2.ID); got != want {
+		t.Errorf("c1's category_twin = %s, want the new row %s", got, want)
+	}
+	// The seeded rows are untouched.
+	for id := int64(1); id <= 4; id++ {
+		if got := twin(id); got != "NULL" {
+			t.Errorf("category %d's category_twin = %s, want NULL", id, got)
+		}
+	}
+}
+
 // TestNodesUnderTheRowCap: Nodes reads one row for each ID it has, even
 // when that is more than the DB's WithMaxRows cap.
 func TestNodesUnderTheRowCap(t *testing.T) {
@@ -1352,7 +1390,9 @@ func TestNodesUnderTheRowCap(t *testing.T) {
 // generated Pred on SQLite (TestWhereOps), with not, and and or
 // (TestWhereLogic), has<Edge> and has<Edge>With (TestHasEdge), the depth and
 // width limits (TestWhereDepthAndWidth) and IDs of the wrong type
-// (TestWhereIDs); and Nodes under a DB's row cap.
+// (TestWhereIDs); Nodes under a DB's row cap; and CreateCategory's twinID,
+// which sets the key of a bidirectional self-edge on both rows
+// (TestCategoryTwin).
 func TestWhereRun(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
@@ -1368,7 +1408,7 @@ func TestWhereRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
-	for _, name := range []string{"TestWhereOps", "TestHasEdge", "TestWhereLogic", "TestWhereDepthAndWidth", "TestWhereIDs", "TestNodesUnderTheRowCap", "TestOwnerTags"} {
+	for _, name := range []string{"TestWhereOps", "TestHasEdge", "TestWhereLogic", "TestWhereDepthAndWidth", "TestWhereIDs", "TestNodesUnderTheRowCap", "TestOwnerTags", "TestCategoryTwin"} {
 		if !strings.Contains(out, "--- PASS: "+name+" ") {
 			t.Errorf("no PASS of %s in\n%s", name, out)
 		}

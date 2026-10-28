@@ -259,7 +259,10 @@
 //     its UPDATE matched, and MySQL counts only changed rows without it, so
 //     an UPDATE that changes nothing counts 0 and fails with a false
 //     NOT_FOUND.
-//   - A self-edge is written one way, as the core's loads read it.
+//   - A bidirectional self-edge (a self-referencing edge with no inverse) is
+//     written both ways, as in ent: a many-to-many one writes and removes both
+//     join rows, and a one-to-one one keeps both rows' keys pointing at each
+//     other. A self-edge with an inverse is written one way.
 //   - Not written: a key the caller supplies in a create input, JSON append,
 //     and application enums bound with @goModel.
 //
