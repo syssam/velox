@@ -507,13 +507,16 @@ func (d *Dir) Add(name string, p *Plan, to *Schema) (map[string][]byte, error) {
 // RenameTable, and the same name, after changes' RenameIndex, with the
 // same Unique and Columns, from's columns mapped through changes'
 // RenameColumn of that table, and to's Where empty. A redefined index is
-// a new one, and plain. It returns a clone; from and to are not changed.
+// a new one, and plain, and so is every index of a table changes create,
+// even under the name of one renamed away. It returns a clone; from and to
+// are not changed.
 func carryConstraints(from, to *Schema, changes []Change) *Schema {
 	out := to.clone()
 	if from == nil {
 		return out
 	}
 	tables := map[TableRef]TableRef{}           // from's name of a table, by to's
+	created := map[TableRef]bool{}              // the tables changes create
 	indexes := map[TableRef]map[string]string{} // from's name of an index, by its table and name in to
 	columns := map[TableRef]map[string]string{} // to's name of a column, by its table in to and name in from
 	put := func(m map[TableRef]map[string]string, ref TableRef, k, v string) {
@@ -526,6 +529,8 @@ func carryConstraints(from, to *Schema, changes []Change) *Schema {
 		switch c := c.(type) {
 		case RenameTable:
 			tables[c.To] = c.From
+		case CreateTable:
+			created[c.Table.Ref()] = true
 		case RenameIndex:
 			put(indexes, c.Table, c.To, c.From)
 		case RenameColumn:
@@ -535,6 +540,9 @@ func carryConstraints(from, to *Schema, changes []Change) *Schema {
 	for i := range out.Tables {
 		t := &out.Tables[i]
 		ref := t.Ref()
+		if created[ref] {
+			continue
+		}
 		oref := ref
 		if r, ok := tables[ref]; ok {
 			oref = r

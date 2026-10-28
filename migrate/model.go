@@ -68,12 +68,16 @@ type Column struct {
 // renamed and created as the constraint. On SQLite it is an Index with Name
 // "", which SQLite keeps no name for, and Constraint is never set. MySQL
 // keeps a unique constraint as a unique index, and Constraint is never set.
+// A directory baselined before Constraint existed has a schema.json without
+// it, so its first drop of such a constraint still fails: add
+// "constraint": true to that index in schema.json and run velox-gen migrate
+// hash, or start a new directory with velox-gen migrate baseline.
 type Index struct {
 	Name       string   `json:"name"` // SQLite: "" for a UNIQUE constraint's index, which SQLite keeps no name for
 	Columns    []string `json:"columns,omitempty"`
 	Unique     bool     `json:"unique,omitempty"`
 	Where      string   `json:"where,omitempty"`      // the predicate of a partial index; "" for none; never on MySQL
-	Constraint bool     `json:"constraint,omitempty"` // PostgreSQL: the index is a UNIQUE constraint's, as Inspect and Baseline read it; the desired model never sets it, and Diff, Drift and Equal ignore it
+	Constraint bool     `json:"constraint,omitempty"` // PostgreSQL: the index is a UNIQUE constraint's, as Inspect and Baseline read it; the desired model never sets it; Diff, Drift and Equal do not compare it, and Render reads it to choose the statement: from's for a drop or rename, to's for a create or add
 	Pos        string   `json:"-"`
 }
 

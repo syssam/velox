@@ -627,6 +627,23 @@ func TestRenderPostgresConstraintIndex(t *testing.T) {
 				`ALTER TABLE "accounts" RENAME CONSTRAINT "users_email_key" TO "accounts_email_key"`,
 				`ALTER TABLE "accounts" RENAME CONSTRAINT "users_pkey" TO "accounts_pkey"`,
 			}, nil},
+		{"drop with its column", schemaOf(velox.Postgres, func() migrate.Table {
+			u := constraintUsers("users")
+			u.Columns = slices.DeleteFunc(u.Columns, func(c migrate.Column) bool { return c.Name == "email" })
+			return u
+		}()), migrate.PlanOptions{Allow: []migrate.Allow{{Code: "drop-column"}}},
+			[]string{
+				`ALTER TABLE "users" DROP CONSTRAINT "users_email_key"`,
+				`ALTER TABLE "users" DROP COLUMN "email"`,
+			}, nil},
+		{"drop after a table rename", schemaOf(velox.Postgres, constraintUsers("accounts")),
+			migrate.PlanOptions{Diff: migrate.DiffOptions{RenameTables: map[migrate.TableRef]migrate.TableRef{{Name: "users"}: {Name: "accounts"}}}},
+			[]string{
+				`ALTER TABLE "users" RENAME TO "accounts"`,
+				`ALTER SEQUENCE "users_id_seq" RENAME TO "accounts_id_seq"`,
+				`ALTER TABLE "accounts" RENAME CONSTRAINT "users_pkey" TO "accounts_pkey"`,
+				`ALTER TABLE "accounts" DROP CONSTRAINT "users_email_key"`,
+			}, nil},
 	} {
 		p, err := migrate.NewPlan(from, c.to, c.opts)
 		if err != nil {

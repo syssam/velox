@@ -339,4 +339,21 @@ func TestCarryConstraints(t *testing.T) {
 			t.Errorf("%s: indexes %+v, want Constraint %v", c.name, ixs, c.carried)
 		}
 	}
+
+	// replaced: users is renamed to users_old and a new users is created;
+	// the new table's index is plain, the renamed one's keeps the flag.
+	old := tbl("users_old", email("users_old_email_key")).Tables[0]
+	fresh := tbl("users", email("users_email_key")).Tables[0]
+	to := &Schema{Dialect: velox.Postgres, Tables: []Table{old, fresh}}
+	got := carryConstraints(from, to, []Change{
+		RenameTable{From: users, To: TableRef{Name: "users_old"}},
+		RenameIndex{Table: TableRef{Name: "users_old"}, From: "users_email_key", To: "users_old_email_key"},
+		CreateTable{Table: fresh},
+	})
+	if ix := got.table(TableRef{Name: "users"}).Indexes[0]; ix.Constraint {
+		t.Errorf("replaced: the new table's index %+v carries the flag", ix)
+	}
+	if ix := got.table(TableRef{Name: "users_old"}).Indexes[0]; !ix.Constraint {
+		t.Errorf("replaced: the renamed table's index %+v lost the flag", ix)
+	}
 }
