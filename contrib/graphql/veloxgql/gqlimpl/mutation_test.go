@@ -877,12 +877,12 @@ func TestStillLinked(t *testing.T) {
 		{"Y", "veloxgql: " + at + ": the X is already linked to a Y"},
 		{"Account", "veloxgql: " + at + ": the X is already linked to an Account"},
 	} {
-		err := gqlimpl.StillLinked(a, held, at, "X", c.typ)
+		err := gqlimpl.StillLinked(a, held, at, c.typ, "X")
 		if err == nil || err.Error() != c.want || codeOf(err) != veloxgql.CodeBadUserInput {
 			t.Errorf("StillLinked(%s) = %v (code %q), want %q", c.typ, err, codeOf(err), c.want)
 		}
 	}
-	if err := gqlimpl.StillLinked(a, none, at, "X", "Y"); err != nil {
+	if err := gqlimpl.StillLinked(a, none, at, "Y", "X"); err != nil {
 		t.Errorf("no row: %v", err)
 	}
 }

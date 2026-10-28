@@ -151,12 +151,13 @@ func Repointed[E any](ctx context.Context, got int64, n int, linked velox.Query[
 }
 
 // StillLinked fails when q, run without the tenant scope or the Read policy,
-// finds a row: a child that the owner of the GraphQL type owner still holds
-// after the caller's scoped unlink, which the caller may not see. For
-// generated code. Its error is BAD_USER_INPUT "veloxgql: <at>: the <owner> is
-// already linked to a or an <typ>" (as Repointed writes the article), which
-// says nothing about the child. The query's own error is returned as it is.
-func StillLinked[E any](ctx context.Context, q velox.Query[E], at, owner, typ string) error {
+// finds a row: a child of the GraphQL type typ that the owner of the type owner
+// still holds after the caller's scoped unlink, which the caller may not
+// change. For generated code. Its error is BAD_USER_INPUT "veloxgql: <at>: the
+// <owner> is already linked to a or an <typ>" (as Repointed writes the
+// article), which says nothing about the child. The query's own error is
+// returned as it is.
+func StillLinked[E any](ctx context.Context, q velox.Query[E], at, typ, owner string) error {
 	const reason = "graphql: a hidden child of a one-to-one re-point"
 	ok, err := q.Exists(velox.WithAllTenants(velox.WithoutPolicy(ctx, reason), reason))
 	switch {

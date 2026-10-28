@@ -967,8 +967,10 @@ func TestRepoint(t *testing.T) {
 // TestRepointHiddenChild: re-pointing a writer's profile, when the profile it
 // holds now is hidden by the Read policy, so that the scoped unlink leaves it
 // linked, is BAD_USER_INPUT "already linked", not the unique key's error, and
-// keeps nothing; once the caller may see that profile, the same update moves
-// the link.
+// keeps nothing, not even the writer's new name, written before the check;
+// the hidden profile's own ID is NOT_FOUND, as an ID that names no profile is,
+// so the error does not confirm a guess of it. Once the caller may see that
+// profile, the same update moves the link.
 func TestRepointHiddenChild(t *testing.T) {
 	each(t, func(t *testing.T, e *env) {
 		w := &gen.Writer{Name: "w", Password: "x"}
@@ -985,12 +987,26 @@ func TestRepointHiddenChild(t *testing.T) {
 			}
 			return p.WriterID
 		}
-		in := gen.UpdateWriterInput{ProfileID: ptr(profileID(p2.ID))}
+		in := gen.UpdateWriterInput{Name: ptr("renamed"), ProfileID: ptr(profileID(p2.ID))}
 
 		_, err := gen.UpdateWriter(e.ctx, writerID(w.ID), in)
 		const want = "veloxgql: UpdateWriterInput.profileID: the Writer is already linked to a Profile"
 		if code(err) != veloxgql.CodeBadUserInput || err.Error() != want {
 			t.Errorf("over a hidden profile: %v (code %q), want %q", err, code(err), want)
+		}
+		if got, err := e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(w.ID)).One(e.ctx); err != nil || got.Name != "w" {
+			t.Errorf("w after the refusal: %v, %v: want the name w kept", got, err)
+		}
+		// The hidden profile's own ID, and one that names no profile: the
+		// same error.
+		_, missing := gen.UpdateWriter(e.ctx, writerID(w.ID), gen.UpdateWriterInput{ProfileID: ptr(profileID(999))})
+		const notFound = "veloxgql: UpdateWriterInput.profileID: no Profile has this ID"
+		if code(missing) != veloxgql.CodeNotFound || missing.Error() != notFound {
+			t.Errorf("a missing profile: %v (code %q), want %q", missing, code(missing), notFound)
+		}
+		_, own := gen.UpdateWriter(e.ctx, writerID(w.ID), gen.UpdateWriterInput{ProfileID: ptr(profileID(p1.ID))})
+		if code(own) != code(missing) || fmt.Sprint(own) != fmt.Sprint(missing) {
+			t.Errorf("the hidden profile's own ID: %v (code %q), want %v (code %q)", own, code(own), missing, code(missing))
 		}
 		if got := writerOf(p1.ID); got == nil || *got != w.ID {
 			t.Errorf("the hidden profile's writer is %v, want %d", got, w.ID)

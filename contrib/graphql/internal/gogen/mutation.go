@@ -1068,19 +1068,22 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 			f.p("\t\t}")
 		}
 		if one >= 0 {
-			// The child this row holds now, unless it is the new one, is
-			// let go first: the key is unique. The UPDATE is under the
-			// caller's scope, so a child it leaves holding the key is one
-			// the caller may not change, hidden by the tenant or a policy:
-			// StillLinked refuses the re-point before the link would fail
-			// on the unique key, and the child stays linked. It looks
-			// whatever the UPDATE's row count, which may be unknown (-1).
+			// The new child must be one the caller may read, or the
+			// re-point is NOT_FOUND, as for an ID that names no child:
+			// otherwise StillLinked, which leaves the new child out, would
+			// tell a guess of a hidden child's ID from any other ID. The
+			// child this row holds now, unless it is the new one, is let go
+			// next: the key is unique. That UPDATE is under the caller's
+			// scope, so a child it leaves holding the key is one the caller
+			// may not change, hidden by the tenant or a policy: StillLinked
+			// refuses the re-point before the link would fail on the unique
+			// key, and the child stays linked. It looks whatever the
+			// UPDATE's row count, which may be unknown (-1).
 			d := dec[one].v
 			f.p("\t\tif input.%s != nil {", fs[one].GoName)
+			ret("\t\t\t", checkExists(impl, tgt.Name, tpk, d, "1", at(fs[one]), fs[one].Target))
 			exec("\t\t\t", fmt.Sprintf("db.Update[%s]().Set(%s).Where(%s.EQ(%s), %s.NEQ(%s)).Exec(ctx)", tgt.Name, tnull, fkh, v, tpk, d))
-			f.p("\t\t\tif err := %s.StillLinked(ctx, db.Query[%s]().Where(%s.EQ(%s), %s.NEQ(%s)), %s, %q, %q); err != nil {", f.gqlimpl(), tgt.Name, fkh, v, tpk, d, at(fs[one]), t.Name, fs[one].Target)
-			f.p("\t\t\t\treturn err")
-			f.p("\t\t\t}")
+			ret("\t\t\t", fmt.Sprintf("%s.StillLinked(ctx, db.Query[%s]().Where(%s.EQ(%s), %s.NEQ(%s)), %s, %q, %q)", impl, tgt.Name, fkh, v, tpk, d, at(fs[one]), fs[one].Target, t.Name))
 			link("\t\t\t", fs[one], tpk+".EQ("+d+")", "1")
 			f.p("\t\t}")
 		}

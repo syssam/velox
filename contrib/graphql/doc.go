@@ -267,10 +267,13 @@
 // Update<T> re-point only a child no owner holds, or one the row already
 // holds: one that another owner holds is refused with BAD_USER_INPUT,
 // "already linked", and not taken from it. Re-pointing a one-to-one edge
-// from the owner, when its current child is one the caller may not change,
-// hidden by the tenant scope or a policy, fails with BAD_USER_INPUT "already
-// linked", and the child stays linked. The error names only the two types, no
-// ID, tenant or column.
+// from the owner checks the new child first: one the caller may not read is
+// NOT_FOUND, as an ID that names no row is. Then, when the current child is
+// one the caller may not change, hidden by the tenant scope or a policy, the
+// re-point fails with BAD_USER_INPUT "already linked", and the child stays
+// linked. The error names only the two types, no ID, tenant or column, and
+// the hidden child's own ID is NOT_FOUND like any other the caller may not
+// read, so the error does not confirm a guess of it.
 //
 // # Loading
 //
