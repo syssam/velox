@@ -192,12 +192,14 @@
 // 0001_baseline.sql that created each unique constraint as a plain index,
 // so its databases hold a constraint where they were adopted and an index
 // where they were built from the files. To drop such a constraint there,
-// write that migration by hand, then run velox-gen migrate hash:
+// let velox-gen migrate diff write the drop, replace its statement in the
+// file with these two, the table and the index qualified by their schema as
+// the file names them, then run velox-gen migrate hash:
 //
-//	ALTER TABLE <t> DROP CONSTRAINT IF EXISTS <k>;
-//	DROP INDEX IF EXISTS <k>;
+//	ALTER TABLE <schema>.<t> DROP CONSTRAINT IF EXISTS <k>;
+//	DROP INDEX IF EXISTS <schema>.<k>;
 //
-// It works on databases built either way. Or start a new directory with
+// They work on databases built either way. Or start a new directory with
 // velox-gen migrate baseline.
 //
 // # Atlas
