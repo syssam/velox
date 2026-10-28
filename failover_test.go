@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -65,7 +66,14 @@ func connectError(t *testing.T) error {
 // socket in a temporary directory that refuses every connection so.
 func refusedConnectError(t *testing.T, code string) error {
 	t.Helper()
-	dir, err := os.MkdirTemp("", "vx") // short: a socket path has a length limit
+	// A Unix socket's path is limited to about 104 bytes, and a long TMPDIR
+	// (macOS's is already long) would push it over, so use /tmp, short, where
+	// the OS has one.
+	base := "/tmp"
+	if runtime.GOOS == "windows" {
+		base = ""
+	}
+	dir, err := os.MkdirTemp(base, "vx")
 	if err != nil {
 		t.Fatal(err)
 	}

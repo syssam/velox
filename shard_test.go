@@ -143,6 +143,61 @@ func TestShardWithLoads(t *testing.T) {
 	})
 }
 
+// TestShardIterCountExists: Iter, Count and Exists run on the tenant's shard,
+// a read on its replica when it has one, and ask WithShardFor once each; a
+// tenant on no shard is refused.
+func TestShardIterCountExists(t *testing.T) {
+	bothPaths(t, func(t *testing.T, hooked bool) {
+		s := openShards(hooked)
+		s.usP.Results = [][][]any{{invoiceRow(1), invoiceRow(2)}, {{int64(2)}}, {{int64(1)}}}
+		uctx := velox.WithTenant(bg, int64(2))
+		rows := 0
+		for _, err := range s.db.Query[testmodel.Invoice]().Limit(5).Iter(uctx) {
+			if err != nil {
+				t.Fatal(err)
+			}
+			rows++
+		}
+		if rows != 2 {
+			t.Errorf("Iter yielded %d rows, want 2", rows)
+		}
+		if n, err := s.db.Query[testmodel.Invoice]().Count(uctx); err != nil || n != 2 {
+			t.Errorf("Count on us: %d, %v, want 2", n, err)
+		}
+		if ok, err := s.db.Query[testmodel.Invoice]().Exists(uctx); err != nil || !ok {
+			t.Errorf("Exists on us: %v, %v, want true", ok, err)
+		}
+		s.check(t, hooked, [3]int{0, 0, 3}, usPrimary, usPrimary, usPrimary)
+		if n := s.lookups.Load(); n != 3 {
+			t.Errorf("WithShardFor called %d times, want 3", n)
+		}
+
+		s = openShards(hooked)
+		s.euR.Results = [][][]any{{invoiceRow(1)}, {{int64(3)}}, {{int64(1)}}}
+		ectx := velox.WithTenant(bg, int64(1))
+		for _, err := range s.db.Query[testmodel.Invoice]().Limit(5).Iter(ectx) {
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		if n, err := s.db.Query[testmodel.Invoice]().Count(ectx); err != nil || n != 3 {
+			t.Errorf("Count on eu: %d, %v, want 3", n, err)
+		}
+		if ok, err := s.db.Query[testmodel.Invoice]().Exists(ectx); err != nil || !ok {
+			t.Errorf("Exists on eu: %v, %v, want true", ok, err)
+		}
+		s.check(t, hooked, [3]int{0, 3, 0}, euR0, euR0, euR0)
+
+		s = openShards(hooked)
+		_, err := s.db.Query[testmodel.Invoice]().Count(velox.WithTenant(bg, int64(3)))
+		const want = `velox: testmodel.Invoice: no shard for the statement: WithShardFor gave "mars", which is not a shard of the DB`
+		if !errors.Is(err, velox.ErrNoShard) || err.Error() != want {
+			t.Errorf("Count on tenant 3: %v, want ErrNoShard %q", err, want)
+		}
+		s.check(t, hooked, [3]int{0, 0, 0})
+	})
+}
+
 // TestShardFailoverStaysInShard: a replica's failed read falls over to its
 // own shard's primary.
 func TestShardFailoverStaysInShard(t *testing.T) {
