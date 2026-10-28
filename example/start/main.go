@@ -88,7 +88,7 @@ func run(ctx context.Context, w io.Writer) error {
 	}
 	say("One: %s has id %d", grace.Name, grace.ID)
 	_, err = db.Query[gen.User]().Where(U.Name.EQ("Nobody")).One(ctx)
-	say("One: ErrNotFound=%t", errors.Is(err, velox.ErrNotFound))
+	say("One: ErrNotFound=%t", velox.IsNotFound(err))
 
 	n, err := db.Query[gen.User]().Where(U.Name.HasPrefix("B")).Count(ctx)
 	if err != nil {

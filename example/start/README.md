@@ -19,7 +19,7 @@ db.Insert(&ada).Exec(ctx)                        // reads the new ID into ada
 db.InsertAll(users).Exec(ctx)                    // one statement, no IDs read back
 
 db.Query[gen.User]().Where(U.Age.GT(30)).OrderBy(U.Age.Desc()).Limit(10).All(ctx)
-db.Query[gen.User]().Where(U.Email.EQ(e)).One(ctx)   // velox.ErrNotFound for no row
+db.Query[gen.User]().Where(U.Email.EQ(e)).One(ctx)   // velox.ErrNotFound for no row: velox.IsNotFound(err)
 db.Query[gen.User]().Where(U.Name.HasPrefix("B")).Count(ctx)
 for u, err := range db.Query[gen.User]().Unbounded().Iter(ctx) { … }
 

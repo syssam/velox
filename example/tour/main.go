@@ -252,7 +252,7 @@ func run(ctx context.Context, w io.Writer) error {
 	}
 	say("org 2 sees %d invoice", seen)
 	_, err = db.Query[gen.Invoice]().Where(I.Number.EQ("INV-003")).One(globexAcct)
-	say("org 2 asks for org 1's INV-003: ErrNotFound=%t", errors.Is(err, velox.ErrNotFound))
+	say("org 2 asks for org 1's INV-003: ErrNotFound=%t", velox.IsNotFound(err))
 	_, err = db.Query[gen.Invoice]().Count(ctx)
 	say("no tenant in the context: ErrNoTenant=%t: %v", errors.Is(err, velox.ErrNoTenant), err)
 

@@ -92,7 +92,7 @@ func run(ctx context.Context, w io.Writer) error {
 	}
 	say("SQL: %s %v", text, args)
 	_, err = db.Query[gen.Project]().Where(P.Name.EQ("Magnet")).One(globexCtx)
-	say("org 2 asks for Magnet: ErrNotFound=%t", errors.Is(err, velox.ErrNotFound))
+	say("org 2 asks for Magnet: ErrNotFound=%t", velox.IsNotFound(err))
 
 	// Writes too: org 2 pausing every Anvil changes nothing of org 1's.
 	n, err := db.Update[gen.Project]().Set(P.Status.Set("paused")).Where(P.Name.EQ("Anvil")).Exec(globexCtx)
