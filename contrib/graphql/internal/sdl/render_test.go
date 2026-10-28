@@ -290,6 +290,9 @@ func TestNodeKeyWhere(t *testing.T) {
 		{"WhereOps()", withKey("int64", graphql.WhereOps()), ordered},
 		{"WhereOps(OpsAll)", withKey("int64", graphql.WhereOps(graphql.OpsAll)), ordered},
 		{"WhereOps(OpEQ)", withKey("int64", graphql.WhereOps(graphql.OpEQ)), equality[:1]},
+		// A partial explicit set gives those predicates alone, in the
+		// input's order.
+		{"WhereOps(OpIn, OpGT)", withKey("int64", graphql.WhereOps(graphql.OpIn, graphql.OpGT)), []string{"idIn: [ID!]", "idGT: ID"}},
 	}
 	for _, c := range cases {
 		s, sdl := load(t, model(c.u))
@@ -312,6 +315,20 @@ func TestNodeKeyWhere(t *testing.T) {
 		s, _ := load(t, model(entity("User")))
 		if got := fieldsOf(s, "UserWhereInput"); got != nil {
 			t.Errorf("a where input of %v", got)
+		}
+	})
+
+	// An op the key's kind lacks is refused, and the error calls the key an
+	// ID, not by an internal kind name.
+	t.Run("refused op", func(t *testing.T) {
+		for _, c := range []struct {
+			typ string
+			op  graphql.WhereOp
+		}{{"uuid", graphql.OpGT}, {"int64", graphql.OpsString}} {
+			_, err := Render(model(withKey(c.typ, graphql.WhereOps(c.op))))
+			if err == nil || !strings.Contains(err.Error(), "not a predicate of a non-nullable ID field") || strings.Contains(err.Error(), "orderedID") {
+				t.Errorf("%s key: %v, want a refusal that names an ID field", c.typ, err)
+			}
 		}
 	})
 
@@ -965,6 +982,30 @@ func TestAppEnumGoModel(t *testing.T) {
 	}
 	if d := s.Types["UserRole"].Directives.ForName("goModel"); d != nil {
 		t.Errorf("velox-gen's own enum UserRole has @goModel:\n%s", sdl)
+	}
+}
+
+// Two entities with a field of one application enum type get an enum each,
+// <Schema><Field>, both bound to that type; an application enum whose
+// package the model does not name (PkgPath "") gets no @goModel, and gqlgen
+// binds it by name, as velox-gen's.
+func TestAppEnumShared(t *testing.T) {
+	level := func() *plugin.Field {
+		return &plugin.Field{Name: "level", GoName: "Level", Type: "enum", Enum: "Level", ElemType: "levels.Level", PkgPath: "example.com/app/levels", EnumValues: []string{"low", "high"}}
+	}
+	bare := &plugin.Field{Name: "grade", GoName: "Grade", Type: "enum", Enum: "Grade", ElemType: "Grade", EnumValues: []string{"a"}}
+	s, sdl := load(t, model(entity("Event", level()), entity("Task", level(), bare)))
+	for _, name := range []string{"EventLevel", "TaskLevel"} {
+		if d := s.Types[name].Directives.ForName("goModel"); d == nil || d.Arguments.ForName("model").Value.Raw != "example.com/app/levels.Level" {
+			t.Errorf("%s has no @goModel of levels.Level:\n%s", name, sdl)
+		}
+	}
+	g := s.Types["TaskGrade"]
+	if g == nil {
+		t.Fatalf("no enum TaskGrade:\n%s", sdl)
+	}
+	if d := g.Directives.ForName("goModel"); d != nil {
+		t.Errorf("TaskGrade, of no package, has @goModel:\n%s", sdl)
 	}
 }
 

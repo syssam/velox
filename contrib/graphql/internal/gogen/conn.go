@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/syssam/velox2/contrib/graphql/internal/english"
 	"github.com/syssam/velox2/contrib/graphql/internal/sdl"
 	"github.com/syssam/velox2/plugin"
 )
@@ -254,7 +255,7 @@ func termBase(f *file, e *plugin.Entity, fd *plugin.Field) (string, error) {
 	case "uuid":
 		return "[16]byte", nil
 	}
-	return "", fmt.Errorf("schema %s, field %s: a connection orders by it, and keyset paging cannot continue after a %s value", e.Name, fd.Name, fd.Type)
+	return "", fmt.Errorf("schema %s, field %s: a connection orders by it, and keyset paging cannot continue after %s %s value", e.Name, fd.Name, english.Article(fd.Type), fd.Type)
 }
 
 // integerKinds and floatKinds are the reflect kinds of the Go types that
@@ -296,7 +297,7 @@ func (r *renderer) converts(e *plugin.Entity, fd *plugin.Field, base string) err
 	case !ok && (base == "time.Time" || base == "veloxgql.Time"):
 		return fmt.Errorf("schema %s, field %s: velox-graphql converts a time field only from time.Time, and its Go type is %s; give the field time.Time", e.Name, fd.Name, fd.ElemType)
 	case !ok:
-		return fmt.Errorf("schema %s, field %s: velox-graphql converts its Go type %s to %s, and a %s does not convert; give the field velox's standard Go type, or one whose underlying type is it", e.Name, fd.Name, fd.ElemType, base, fd.Kind)
+		return fmt.Errorf("schema %s, field %s: velox-graphql converts its Go type %s to %s, and %s %s does not convert; give the field velox's standard Go type, or one whose underlying type is it", e.Name, fd.Name, fd.ElemType, base, english.Article(fd.Kind), fd.Kind)
 	}
 	return nil
 }

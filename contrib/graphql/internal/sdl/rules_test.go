@@ -467,6 +467,36 @@ func TestOwnDirectivesRefused(t *testing.T) {
 				join.Annotations = ann(t, own)
 				return model(entity("User"), join)
 			}},
+			{"field of a skipped entity", "schema User, field name:", func() *plugin.Model {
+				f := field("name", "string")
+				f.Annotations = ann(t, own)
+				u := entity("User", f)
+				u.Annotations = ann(t, graphql.Skip())
+				return model(u)
+			}},
+			{"edge of a skipped entity", "schema User, edge posts:", func() *plugin.Model {
+				u := entity("User")
+				u.Annotations = ann(t, graphql.Skip())
+				posts := edge("posts", plugin.O2M, "User")
+				posts.Annotations = ann(t, own)
+				u.Edges = []*plugin.Edge{posts}
+				return model(u)
+			}},
+			{"field of a join entity", "schema UserGroup, field user_id:", func() *plugin.Model {
+				f := field("user_id", "int64")
+				f.Annotations = ann(t, own)
+				join := entity("UserGroup", f)
+				join.Join = true
+				return model(entity("User"), join)
+			}},
+			{"edge of a join entity", "schema UserGroup, edge user:", func() *plugin.Model {
+				join := entity("UserGroup")
+				join.Join = true
+				user := edge("user", plugin.M2O, "User")
+				user.Annotations = ann(t, own)
+				join.Edges = []*plugin.Edge{user}
+				return model(entity("User"), join)
+			}},
 			{"plain field", "schema User, field name:", func() *plugin.Model {
 				f := field("name", "string")
 				f.Annotations = ann(t, own)

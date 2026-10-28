@@ -140,12 +140,12 @@ func (r *renderer) joinCols(e *plugin.Entity, ed *plugin.Edge) (j *plugin.Entity
 }
 
 // checkExists returns the gqlimpl.CheckExists call on the rows of tgt whose
-// key pk is in keys, n of them expected. keys is a list (it ends in "...",
-// and the rows are pk.In) or one key (pk.EQ).
-func checkExists(impl, tgt, pk, keys, n, at, typ string) string {
-	pred := "EQ(" + keys + ")"
-	if strings.HasSuffix(keys, "...") {
-		pred = "In(" + keys + ")"
+// key pk is keys: with list, the slice keys names, all len(keys) of them
+// expected (pk.In); without, the one key keys names (pk.EQ).
+func checkExists(impl, tgt, pk, keys string, list bool, at, typ string) string {
+	pred, n := "EQ("+keys+")", "1"
+	if list {
+		pred, n = "In("+keys+"...)", "len("+keys+")"
 	}
 	return fmt.Sprintf("%s.CheckExists(ctx, db.Query[%s]().Where(%s.%s), %s, %s, %q)", impl, tgt, pk, pred, n, at, typ)
 }
@@ -551,12 +551,12 @@ func (r *renderer) writeCreate(f *file, t *sdl.Type, in string) error {
 				return err
 			}
 			indent, end := given("\t\t", i)
-			ret(indent, checkExists(impl, tgt.Name, pk, d.v, "1", at(fi), fi.Target))
+			ret(indent, checkExists(impl, tgt.Name, pk, d.v, false, at(fi), fi.Target))
 			setKey(f, indent, "x."+fk.GoName, d.v, conv, "v"+strconv.Itoa(i), fk.Pointer)
 			end()
 		case fi.Kind == sdl.InputEdgeIDs && ed.Kind == plugin.M2M:
 			indent, end := given("\t\t", i)
-			ret(indent, checkExists(impl, tgt.Name, pk, d.v+"...", "len("+d.v+")", at(fi), fi.Target))
+			ret(indent, checkExists(impl, tgt.Name, pk, d.v, true, at(fi), fi.Target))
 			end()
 		}
 	}
@@ -904,7 +904,7 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 				v = conv + "(" + v + ")"
 			}
 			f.p("\t\tif input.%s != nil {", fi.GoName)
-			ret("\t\t\t", checkExists(impl, tt.Entity.Name, tt.Entity.Handles+"."+d.key.fd.GoName, d.v, "1", at(fi), fi.Target))
+			ret("\t\t\t", checkExists(impl, tt.Entity.Name, tt.Entity.Handles+"."+d.key.fd.GoName, d.v, false, at(fi), fi.Target))
 			f.p("\t\t\tset = append(set, %s.Set(%s))", h, v)
 			f.p("\t\t}")
 		}
@@ -1004,7 +1004,7 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 			if add >= 0 {
 				v := dec[add].v
 				f.p("\t\tif len(%s) > 0 {", v)
-				ret("\t\t\t", checkExists(impl, tgt.Name, tpk, v+"...", "len("+v+")", at(fs[add]), fs[add].Target))
+				ret("\t\t\t", checkExists(impl, tgt.Name, tpk, v, true, at(fs[add]), fs[add].Target))
 				f.p("\t\t\trows := make([]%s, len(%s))", j.Name, v)
 				f.p("\t\t\tfor i, c := range %s {", v)
 				f.p("\t\t\t\trows[i] = %s{%s: key, %s: c}", j.Name, own.GoName, other.GoName)
@@ -1041,15 +1041,6 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 		if err != nil {
 			return err
 		}
-		// The count of the IDs linked to this row after the UPDATE is under
-		// the tenant and the Read policy, not the Write policy: a child
-		// already linked here that the Write policy hides is a link that
-		// exists, and adding it again changes nothing. A child with a NULL
-		// key the Write policy hides is not linked by the UPDATE, counts 0,
-		// and is NOT_FOUND.
-		link := func(indent string, fi sdl.InputField, ids, cnt string) {
-			r.writeRepointed(f, indent, tgt, fkh, v, ids, cnt, true, fi, at, t.Name)
-		}
 		if clr >= 0 {
 			f.p("\t\tif input.%s {", fs[clr].GoName)
 			exec("\t\t\t", fmt.Sprintf("db.Update[%s]().Set(%s).Where(%s.EQ(%s)).Exec(ctx)", tgt.Name, tnull, fkh, v))
@@ -1061,10 +1052,16 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 			exec("\t\t\t", fmt.Sprintf("db.Update[%s]().Set(%s).Where(%s.In(%s...), %s.EQ(%s)).Exec(ctx)", tgt.Name, tnull, tpk, d, fkh, v))
 			f.p("\t\t}")
 		}
+		// Each link (writeRepointed) counts the IDs linked to this row after
+		// the UPDATE under the tenant and the Read policy, not the Write
+		// policy: a child already linked here that the Write policy hides is
+		// a link that exists, and adding it again changes nothing. A child
+		// with a NULL key the Write policy hides is not linked by the
+		// UPDATE, counts 0, and is NOT_FOUND.
 		if add >= 0 {
 			d := dec[add].v
 			f.p("\t\tif len(%s) > 0 {", d)
-			link("\t\t\t", fs[add], tpk+".In("+d+"...)", "len("+d+")")
+			r.writeRepointed(f, "\t\t\t", tgt, fkh, v, tpk+".In("+d+"...)", "len("+d+")", true, fs[add], at, t.Name)
 			f.p("\t\t}")
 		}
 		if one >= 0 {
@@ -1081,10 +1078,10 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 			// UPDATE's row count, which may be unknown (-1).
 			d := dec[one].v
 			f.p("\t\tif input.%s != nil {", fs[one].GoName)
-			ret("\t\t\t", checkExists(impl, tgt.Name, tpk, d, "1", at(fs[one]), fs[one].Target))
+			ret("\t\t\t", checkExists(impl, tgt.Name, tpk, d, false, at(fs[one]), fs[one].Target))
 			exec("\t\t\t", fmt.Sprintf("db.Update[%s]().Set(%s).Where(%s.EQ(%s), %s.NEQ(%s)).Exec(ctx)", tgt.Name, tnull, fkh, v, tpk, d))
 			ret("\t\t\t", fmt.Sprintf("%s.StillLinked(ctx, db.Query[%s]().Where(%s.EQ(%s), %s.NEQ(%s)), %s, %q, %q)", impl, tgt.Name, fkh, v, tpk, d, at(fs[one]), fs[one].Target, t.Name))
-			link("\t\t\t", fs[one], tpk+".EQ("+d+")", "1")
+			r.writeRepointed(f, "\t\t\t", tgt, fkh, v, tpk+".EQ("+d+")", "1", true, fs[one], at, t.Name)
 			f.p("\t\t}")
 		}
 	}

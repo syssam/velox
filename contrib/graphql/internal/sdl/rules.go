@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/syssam/velox2/contrib/graphql"
+	"github.com/syssam/velox2/contrib/graphql/internal/english"
 	"github.com/syssam/velox2/plugin"
 )
 
@@ -49,12 +50,7 @@ func misplaced(a graphql.Annotation, on, where string) error {
 }
 
 // article is kind with its indefinite article.
-func article(kind string) string {
-	if kind == onEdge {
-		return "an " + kind
-	}
-	return "a " + kind
-}
+func article(kind string) string { return english.Article(kind) + " " + kind }
 
 // checkSchema checks the annotation of an entity. It refuses an application
 // directive; GraphQL's own are allowed. A join entity has no type, so nothing

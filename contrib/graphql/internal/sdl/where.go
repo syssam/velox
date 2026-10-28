@@ -103,6 +103,9 @@ func resolveOps(ops graphql.WhereOp, typ string, nullable bool, where string) (g
 		if nullable {
 			kind = "a nullable"
 		}
+		if typ == "orderedID" { // an internal kind: the key is an ID to the user
+			typ = "ID"
+		}
 		return 0, fmt.Errorf("%s: graphql.WhereOps(%s): not a predicate of %s %s field, which has %s", where, opNames(bad), kind, typ, opNames(has))
 	}
 	return out | ops, nil

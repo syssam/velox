@@ -201,6 +201,12 @@ func build(m *plugin.Model) (*graph, error) {
 			return nil, err
 		}
 		if e.Join || a.Skip&graphql.SkipType != 0 {
+			// No SDL field comes of the entity's fields and edges, but
+			// velox-graphql's own directives are refused on them as on
+			// every element (ownDirective).
+			if err := ownDirectives(e, where); err != nil {
+				return nil, err
+			}
 			continue
 		}
 		o := &object{ent: e, ann: a, name: e.Name, key: keyBase(e), fks: fks[e.Name]}
@@ -573,6 +579,33 @@ func ownDirective(ds []graphql.Directive, where string) error {
 			return fmt.Errorf("%s: @goField is velox-graphql's own: it binds fields to the Go code velox generates", where)
 		case "goModel":
 			return fmt.Errorf("%s: @goModel is velox-graphql's own: it binds types to the Go code velox generates and the application's enum types", where)
+		}
+	}
+	return nil
+}
+
+// ownDirectives refuses velox-graphql's own directives on the fields and
+// edges of e, an entity with no GraphQL type, whose annotations are otherwise
+// not checked.
+func ownDirectives(e *plugin.Entity, where string) error {
+	for _, f := range e.Fields {
+		fw := where + ", field " + f.Name
+		a, err := decode(f.Annotations, fw)
+		if err != nil {
+			return err
+		}
+		if err := ownDirective(a.Directives, fw); err != nil {
+			return err
+		}
+	}
+	for _, ed := range e.Edges {
+		ew := where + ", edge " + ed.Name
+		a, err := decode(ed.Annotations, ew)
+		if err != nil {
+			return err
+		}
+		if err := ownDirective(a.Directives, ew); err != nil {
+			return err
 		}
 	}
 	return nil

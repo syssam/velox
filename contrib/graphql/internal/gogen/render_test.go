@@ -611,6 +611,11 @@ func TestRenderErrors(t *testing.T) {
 			e.Fields[0].ElemType, e.Fields[0].PkgPath, e.Fields[0].Kind = "types.ID", "example.com/types", "string"
 			return e
 		}()}}, "schema Thing, field id: velox-graphql converts its Go type types.ID to int64, and a string does not convert"},
+		"an int for a UUID key": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{func() *plugin.Entity {
+			e := entity("Thing", "uuid")
+			e.Fields[0].ElemType, e.Fields[0].PkgPath, e.Fields[0].Kind = "types.ID", "example.com/types", "int"
+			return e
+		}()}}, "schema Thing, field id: velox-graphql converts its Go type types.ID to [16]byte, and an int does not convert"},
 		"a where on a time of another Go type": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{withField(entity("Thing", "int64"),
 			&plugin.Field{Name: "at", GoName: "At", Type: "time", GoType: "types.Stamp", ElemType: "types.Stamp", PkgPath: "example.com/types", Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"where_ops":1}`)}})}},
 			"schema Thing, field at: velox-graphql converts a time field only from time.Time, and its Go type is types.Stamp"},
@@ -1581,5 +1586,46 @@ func TestSingleOwnerKeyEQ(t *testing.T) {
 	const want = `Users.ID.EQ(k7)), 1, "CreatePostInput.writerID"`
 	if !strings.Contains(files["gql_post.go"], want) {
 		t.Errorf("gql_post.go lacks %s", want)
+	}
+}
+
+// TestRepointO2OOrder: re-pointing a one-to-one edge from the owner, whose
+// key the target holds, checks the new child first (CheckExists), then lets
+// the current child go, then refuses the re-point when a child the caller may
+// not change still holds the key (StillLinked), and only then links the new
+// child.
+func TestRepointO2OOrder(t *testing.T) {
+	idField := func() *plugin.Field {
+		return &plugin.Field{Name: "id", GoName: "ID", Type: "int64", GoType: "int64", ElemType: "int64", AutoID: true}
+	}
+	owner := &plugin.Entity{
+		Name: "Owner", Label: "owner", Handles: "Owners", Tenant: -1, PrimaryKey: []int{0},
+		Fields:      []*plugin.Field{idField()},
+		Edges:       []*plugin.Edge{{Name: "pet", GoName: "Pet", Target: "Pet", Ref: "owner", Kind: plugin.O2O, Unique: true, Field: "owner_pet", FieldOn: "Pet"}},
+		Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"mutations":["update"]}`)},
+	}
+	pet := &plugin.Entity{
+		Name: "Pet", Label: "pet", Handles: "Pets", Tenant: -1, PrimaryKey: []int{0},
+		Fields: []*plugin.Field{idField(),
+			{Name: "owner_pet", GoName: "OwnerPet", Type: "int64", GoType: "*int64", ElemType: "int64", Pointer: true, Nullable: true, Optional: true, Implicit: "pet"}},
+		Edges: []*plugin.Edge{{Name: "owner", GoName: "Owner", Target: "Owner", Ref: "pet", Kind: plugin.O2O, Unique: true, Inverse: true, Field: "owner_pet", FieldOn: "Pet", OwnsKey: true}},
+	}
+	src := funcSrc(t, render(t, &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{owner, pet}}), "UpdateOwner")
+	steps := []string{
+		`gqlimpl.CheckExists(ctx, db.Query[Pet]().Where(Pets.ID.EQ(`,
+		`db.Update[Pet]().Set(Pets.OwnerPet.SetNull()).Where(Pets.OwnerPet.EQ(key), Pets.ID.NEQ(`,
+		`gqlimpl.StillLinked(ctx, db.Query[Pet]().Where(Pets.OwnerPet.EQ(key), Pets.ID.NEQ(`,
+		`db.Update[Pet]().Set(Pets.OwnerPet.Set(key)).Where(Pets.ID.EQ(`,
+	}
+	at := -1
+	for _, s := range steps {
+		i := strings.Index(src, s)
+		if i < 0 {
+			t.Fatalf("UpdateOwner has no %s:\n%s", s, src)
+		}
+		if i < at {
+			t.Errorf("UpdateOwner: %s comes before the step ahead of it:\n%s", s, src)
+		}
+		at = i
 	}
 }

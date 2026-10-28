@@ -1,5 +1,6 @@
-// Package english holds the one English rule the generated godoc and the
-// runtime's error messages share: the indefinite article of a name.
+// Package english holds the one English rule that the generated godoc, the
+// generator's and the runtime's error messages share: the indefinite article
+// of a name.
 package english
 
 import "strings"
