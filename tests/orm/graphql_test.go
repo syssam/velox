@@ -80,6 +80,7 @@ func TestWhereInput(t *testing.T) {
 		"not":              {filter.UserWhereInput{Not: &filter.UserWhereInput{Name: ptr("ann")}}, []string{"bob", "cat"}},
 		"or":               {filter.UserWhereInput{Or: []*filter.UserWhereInput{{Name: ptr("ann")}, {Name: ptr("cat")}}}, []string{"ann", "cat"}},
 		"and":              {filter.UserWhereInput{And: []*filter.UserWhereInput{{NameNEQ: ptr("ann")}, {NameNEQ: ptr("cat")}}}, []string{"bob"}},
+		"empty in and":     {filter.UserWhereInput{And: []*filter.UserWhereInput{{}, {NameNEQ: ptr("ann")}}}, []string{"bob", "cat"}},
 		"has an edge":      {filter.UserWhereInput{HasPosts: ptr(true)}, []string{"ann", "bob"}},
 		"has no edge":      {filter.UserWhereInput{HasPosts: ptr(false)}, []string{"cat"}},
 		"has with":         {filter.UserWhereInput{HasPostsWith: []*filter.PostWhereInput{{Status: ptr(post.StatusPublished)}}}, []string{"ann"}},

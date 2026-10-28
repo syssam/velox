@@ -353,6 +353,12 @@ func (g *Generator) genWhereInputPMethod(f *jen.File, t *gen.Type, inputName, er
 					jen.Continue(),
 				),
 				jen.List(jen.Id("p"), jen.Id("err")).Op(":=").Id("w").Dot("p").Call(jen.Id("depth").Op("+").Lit(1)),
+				// An empty clause is the identity of AND, so it constrains nothing. It is
+				// not the identity of OR or NOT, which keep rejecting it. Compared with ==
+				// so only a directly empty child is skipped, never a wrapped nested error.
+				jen.If(jen.Id("err").Op("==").Id(errName)).Block(
+					jen.Continue(),
+				),
 				jen.If(jen.Id("err").Op("!=").Nil()).Block(
 					jen.Return(jen.Nil(), jen.Qual("fmt", "Errorf").Call(jen.Lit("%w: field 'and'"), jen.Id("err"))),
 				),

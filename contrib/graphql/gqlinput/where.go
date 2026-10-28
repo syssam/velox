@@ -97,11 +97,21 @@ func where(v reflect.Value, plan []WhereField, depth int) orm.P {
 	}
 	for i, op := range [...]orm.Op{orm.OpOr, orm.OpAnd} {
 		if list := rv.Field(2 + i); list.Len() > 0 {
-			subs := make([]orm.P, list.Len())
-			for j := range subs {
-				subs[j] = nested(list.Index(j))
+			subs := make([]orm.P, 0, list.Len())
+			for j := 0; j < list.Len(); j++ {
+				// An empty clause is the identity of AND, so it constrains
+				// nothing. It is not the identity of OR, which rejects it,
+				// and a nil one is a mistake, not an empty clause.
+				if op == orm.OpAnd && !list.Index(j).IsNil() {
+					if p := where(list.Index(j), plan, depth+1); p.Op == 0 {
+						continue
+					}
+				}
+				subs = append(subs, nested(list.Index(j)))
 			}
-			ps = append(ps, orm.P{Op: op, Subs: subs})
+			if len(subs) > 0 {
+				ps = append(ps, orm.P{Op: op, Subs: subs})
+			}
 		}
 	}
 	for i := range plan {

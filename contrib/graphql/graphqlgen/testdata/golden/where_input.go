@@ -83,6 +83,9 @@ func (i *UserWhereInput) p(depth int) (predicate.User, error) {
 				continue
 			}
 			p, err := w.p(depth + 1)
+			if err == ErrEmptyUserWhereInput {
+				continue
+			}
 			if err != nil {
 				return nil, fmt.Errorf("%w: field 'and'", err)
 			}
