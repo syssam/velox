@@ -342,6 +342,10 @@ func TestDriftMySQLBinaryDefaults(t *testing.T) {
 		{"varbinary(8)", `0x6100FF`, `'a'`, change},
 		{"varbinary(8)", `0x061`, `0x61`, change},
 		{"varbinary(8)", `0x061`, `0x061`, nil},
+		{"varbinary(8)", `'a'`, `X'61'`, nil},
+		{"varbinary(8)", `'ab'`, `x'6162'`, nil},
+		{"varbinary(8)", `'b'`, `X'61'`, change},
+		{"varbinary(8)", `0x61`, `X'061'`, change},
 		// An expression is compared as one, not by bytes.
 		{"binary(16)", `uuid_to_bin(uuid())`, `(uuid_to_bin(uuid()))`, nil},
 		{"binary(16)", `uuid_to_bin(uuid())`, `(UUID_TO_BIN(UUID()))`, nil},

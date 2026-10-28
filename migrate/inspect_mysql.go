@@ -323,8 +323,9 @@ func mysqlBinaryDefault(typ, shown string) string {
 
 // mysqlBinaryBytes is the value of a binary or varbinary column's literal
 // default: '…' with MySQL's escapes and doubled quotes, the same after
-// _binary, or 0x… in either case. On binary(n) the trailing 0x00 bytes that
-// pad the value are dropped. False when def is none of these.
+// _binary, 0x…, or X'…', each prefix in either case. On binary(n) the
+// trailing 0x00 bytes that pad the value are dropped. False when def is none
+// of these.
 func mysqlBinaryBytes(typ, def string) ([]byte, bool) {
 	var b []byte
 	if len(def) > 7 && strings.EqualFold(def[:7], "_binary") && def[7] == '\'' {
@@ -342,6 +343,11 @@ func mysqlBinaryBytes(typ, def string) ([]byte, bool) {
 		if b, err = hex.DecodeString(def[2:]); err != nil {
 			return nil, false
 		}
+	case mysqlHexQuoted(def):
+		var err error
+		if b, err = hex.DecodeString(def[2 : len(def)-1]); err != nil {
+			return nil, false
+		}
 	default:
 		return nil, false
 	}
@@ -352,11 +358,18 @@ func mysqlBinaryBytes(typ, def string) ([]byte, bool) {
 }
 
 // mysqlBinaryLiteral reports whether def is no default or written as a
-// literal mysqlBinaryBytes reads: '…', 0x… or _binary'…'. An expression is
-// not one.
+// literal mysqlBinaryBytes reads: '…', 0x…, X'…' or _binary'…'. An
+// expression is not one.
 func mysqlBinaryLiteral(def string) bool {
-	return def == "" || def[0] == '\'' || len(def) > 1 && (def[:2] == "0x" || def[:2] == "0X") ||
+	return def == "" || def[0] == '\'' || len(def) > 1 && (def[:2] == "0x" || def[:2] == "0X") || mysqlHexQuoted(def) ||
 		len(def) > 7 && strings.EqualFold(def[:7], "_binary") && def[7] == '\''
+}
+
+// mysqlHexQuoted reports whether def is written X'…' or x'…', a hexadecimal
+// literal in standard SQL's spelling.
+func mysqlHexQuoted(def string) bool {
+	return len(def) >= 3 && (def[0] == 'X' || def[0] == 'x') && def[1] == '\'' && def[len(def)-1] == '\'' &&
+		!strings.Contains(def[2:len(def)-1], "'")
 }
 
 // mysqlBinaryType reports whether typ is binary or varbinary.
