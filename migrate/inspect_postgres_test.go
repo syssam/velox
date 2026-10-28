@@ -566,21 +566,23 @@ func TestDriftPostgresLive(t *testing.T) {
 	}
 }
 
-// TestInspectPostgresBaselineNotes: a unique constraint read as its index,
-// and a serial's sequence that does not start at 1, are baseline notes.
+// TestInspectPostgresBaselineNotes: a serial's sequence that does not start
+// at 1 is a baseline note, and a unique constraint, whose index has
+// Constraint set, is none.
 func TestInspectPostgresBaselineNotes(t *testing.T) {
 	db, _ := freshDB(t, velox.Postgres)
 	mustExec(t, db, `CREATE TABLE u (id serial PRIMARY KEY, k integer CONSTRAINT u_k_key UNIQUE)`)
 	mustExec(t, db, `ALTER SEQUENCE u_id_seq INCREMENT BY 2`)
-	_, notes, err := migrate.InspectNotes(context.Background(), db, velox.Postgres, nil)
+	s, notes, err := migrate.InspectNotes(context.Background(), db, velox.Postgres, nil)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if ixs := table(s, "u").Indexes; !reflect.DeepEqual(ixs, []migrate.Index{{Name: "u_k_key", Columns: []string{"k"}, Unique: true, Constraint: true}}) {
+		t.Errorf("indexes %+v", ixs)
 	}
 	want := []migrate.Note{
 		{Table: migrate.TableRef{Name: "u"}, Object: "u.id", Baseline: true,
 			Message: "the sequence u_id_seq starts at 1 and increments by 2; 0001_baseline.sql creates it with the defaults"},
-		{Table: migrate.TableRef{Name: "u"}, Object: "u.u_k_key", Baseline: true,
-			Message: "the unique constraint u_k_key is read as its index; to drop it later, replace it with a unique index by hand first"},
 	}
 	if !reflect.DeepEqual(notes, want) {
 		t.Errorf("notes\n%+v\nwant\n%+v", notes, want)

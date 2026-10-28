@@ -420,7 +420,8 @@ func (d *Dir) PathOf(version uint64, name string) string {
 // returns them by path with their content: one file for each of p's scripts,
 // at the last version plus one, two, three, zero-padded to four digits, named
 // <version>_<name>_enum.sql, <version>_<name>.sql and
-// <version>_<name>_online.sql by the script's kind; schema.json, which is to;
+// <version>_<name>_online.sql by the script's kind; schema.json, which is
+// to, with the constraints of the snapshot's indexes that it keeps;
 // velox.json, when the directory is new; and velox.sum over all the
 // directory's files. An empty name is the one defaultName makes. Each SQL
 // file starts with a header line saying velox-gen migrate diff wrote it, or
@@ -453,7 +454,7 @@ func (d *Dir) Add(name string, p *Plan, to *Schema) (map[string][]byte, error) {
 	if !fileLabel.MatchString(name) || len(name) > maxName {
 		return nil, refuse("the name %q is not of a-z, 0-9 and _, or is over %d bytes", name, maxName)
 	}
-	snapshot, err := json.MarshalIndent(to, "", "  ")
+	snapshot, err := json.MarshalIndent(carryConstraints(d.Snapshot, to, p.Changes), "", "  ")
 	if err != nil {
 		return nil, err
 	}
@@ -498,4 +499,72 @@ func (d *Dir) Add(name string, p *Plan, to *Schema) (map[string][]byte, error) {
 	}
 	out["velox.sum"] = sumText(sums)
 	return out, nil
+}
+
+// carryConstraints is to with Constraint set on each index that has it in
+// to already (a baseline's, read from the database), or whose index in
+// from, the snapshot, is a constraint: the same table, after changes'
+// RenameTable, and the same name, after changes' RenameIndex, with the
+// same Unique and Columns, from's columns mapped through changes'
+// RenameColumn of that table, and to's Where empty. A redefined index is
+// a new one, and plain. It returns a clone; from and to are not changed.
+func carryConstraints(from, to *Schema, changes []Change) *Schema {
+	out := to.clone()
+	if from == nil {
+		return out
+	}
+	tables := map[TableRef]TableRef{}           // from's name of a table, by to's
+	indexes := map[TableRef]map[string]string{} // from's name of an index, by its table and name in to
+	columns := map[TableRef]map[string]string{} // to's name of a column, by its table in to and name in from
+	put := func(m map[TableRef]map[string]string, ref TableRef, k, v string) {
+		if m[ref] == nil {
+			m[ref] = map[string]string{}
+		}
+		m[ref][k] = v
+	}
+	for _, c := range changes {
+		switch c := c.(type) {
+		case RenameTable:
+			tables[c.To] = c.From
+		case RenameIndex:
+			put(indexes, c.Table, c.To, c.From)
+		case RenameColumn:
+			put(columns, c.Table, c.From, c.To)
+		}
+	}
+	for i := range out.Tables {
+		t := &out.Tables[i]
+		ref := t.Ref()
+		oref := ref
+		if r, ok := tables[ref]; ok {
+			oref = r
+		}
+		ft := from.table(oref)
+		if ft == nil {
+			continue
+		}
+		for j := range t.Indexes {
+			ix := &t.Indexes[j]
+			if ix.Constraint || ix.Name == "" || ix.Where != "" {
+				continue
+			}
+			name := ix.Name
+			if n, ok := indexes[ref][ix.Name]; ok {
+				name = n
+			}
+			fi := ft.index(name)
+			if fi == nil || !fi.Constraint || fi.Unique != ix.Unique || len(fi.Columns) != len(ix.Columns) {
+				continue
+			}
+			same := true
+			for k, col := range fi.Columns {
+				if n, ok := columns[ref][col]; ok {
+					col = n
+				}
+				same = same && col == ix.Columns[k]
+			}
+			ix.Constraint = same
+		}
+	}
+	return out
 }

@@ -935,3 +935,39 @@ func TestDirAddBaselineHeader(t *testing.T) {
 		t.Errorf("a second file: %s: %s", p, line)
 	}
 }
+
+// TestAddCarriesConstraint: schema.json keeps the snapshot's constraint
+// flag on an index the plan keeps, and drops it from one it redefines.
+func TestAddCarriesConstraint(t *testing.T) {
+	fsys := dirOf(t, velox.Postgres, step{to: schemaOf(velox.Postgres, constraintUsers("users", emailKey("users_email_key", true))), name: "baseline"})
+	if !strings.Contains(string(fsys["schema.json"].Data), `"constraint": true`) {
+		t.Fatalf("the baseline's schema.json:\n%s", fsys["schema.json"].Data)
+	}
+	dir, err := migrate.ReadDir(fsys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		name    string
+		ix      migrate.Index
+		carried bool
+	}{
+		{"kept", emailKey("users_email_key", false), true},
+		{"redefined", emailKey("users_email_key", false, "email", "name"), false},
+	} {
+		users := constraintUsers("users", c.ix)
+		users.Columns = append(users.Columns, migrate.Column{Name: "bio", Type: "text", Nullable: true})
+		to := schemaOf(velox.Postgres, users)
+		p, err := migrate.NewPlan(dir.Snapshot, to, migrate.PlanOptions{Allow: []migrate.Allow{{Code: "add-unique"}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, err := dir.Add("next", p, to)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Contains(string(out["schema.json"]), `"constraint": true`); got != c.carried {
+			t.Errorf("%s: schema.json:\n%s", c.name, out["schema.json"])
+		}
+	}
+}

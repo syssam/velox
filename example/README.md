@@ -84,7 +84,7 @@ velox's planner in five steps:
    `0001_baseline.sql` builds the schema package's tables as that database
    holds them. Read its warnings: an extension to add to `0001_baseline.sql`
    by hand, a sequence's start or increment it does not keep, a PostgreSQL
-   unique constraint read as its index.
+   domain type, which it does not create.
 2. `0001_baseline.sql` may be edited, followed by
    `go tool velox-gen migrate hash`, only before any environment runs
    `apply -baseline`. After that, an edit is a checksum error on every

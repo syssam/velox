@@ -25,7 +25,7 @@ import (
 // values, even when no table found uses it, so the next diff does not
 // create it again. The warnings are what Drift reports, and what a build
 // from the snapshot loses: a PostgreSQL sequence's start and increment, a
-// type from an extension, a unique constraint read as its index.
+// type from an extension, a PostgreSQL domain type, which it does not create.
 //
 // Baseline refuses, with Code "baseline", a database that holds none of
 // want's tables, a foreign key to a table outside the snapshot, and on

@@ -267,3 +267,27 @@ func TestSnapshotRefusesDuplicates(t *testing.T) {
 		}
 	}
 }
+
+// TestSnapshotConstraint: a constraint index is written with "constraint"
+// and read back with it.
+func TestSnapshotConstraint(t *testing.T) {
+	s := &Schema{Dialect: velox.Postgres, Tables: []Table{{
+		Name:    "users",
+		Columns: []Column{{Name: "email", Type: "text"}},
+		Indexes: []Index{{Name: "users_email_key", Columns: []string{"email"}, Unique: true, Constraint: true}},
+	}}}
+	b, err := s.MarshalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `"indexes":[{"name":"users_email_key","columns":["email"],"unique":true,"constraint":true}]`; !strings.Contains(string(b), want) {
+		t.Errorf("got\n%s\nwant it to hold\n%s", b, want)
+	}
+	var back Schema
+	if err := back.UnmarshalJSON(b); err != nil {
+		t.Fatal(err)
+	}
+	if !back.Equal(s) || !back.Tables[0].Indexes[0].Constraint {
+		t.Errorf("the round trip gives %+v", back.Tables)
+	}
+}

@@ -148,6 +148,9 @@ func (r *renderer) pgChange(i int, c Change) (pgParts, error) {
 	case RenameSequence:
 		return pgParts{stmts: []string{"ALTER SEQUENCE " + r.indexName(c.Table, c.From) + " RENAME TO " + r.ident(c.To)}}, nil
 	case AddIndex:
+		if c.Index.Constraint {
+			return pgParts{stmts: []string{"ALTER TABLE " + r.table(c.Table) + " ADD CONSTRAINT " + r.ident(c.Index.Name) + " UNIQUE (" + r.idents(c.Index.Columns) + ")"}}, nil
+		}
 		if r.l.existing(c.Table) {
 			r.unit(i, "DROP INDEX CONCURRENTLY IF EXISTS "+r.indexName(c.Table, c.Index.Name), r.pgIndex(c.Table, c.Index, true))
 			return pgParts{}, nil
@@ -158,8 +161,14 @@ func (r *renderer) pgChange(i int, c Change) (pgParts, error) {
 			r.unit(i, "DROP INDEX CONCURRENTLY IF EXISTS "+r.indexName(r.afterRename(c.Table), c.Index.Name))
 			return pgParts{}, nil
 		}
+		if c.Index.Constraint {
+			return pgParts{stmts: []string{"ALTER TABLE " + r.table(c.Table) + " DROP CONSTRAINT " + r.ident(c.Index.Name)}}, nil
+		}
 		return pgParts{stmts: []string{"DROP INDEX " + r.indexName(c.Table, c.Index.Name)}}, nil
 	case RenameIndex:
+		if r.renamesConstraint(c) {
+			return pgParts{stmts: []string{"ALTER TABLE " + r.table(c.Table) + " RENAME CONSTRAINT " + r.ident(c.From) + " TO " + r.ident(c.To)}}, nil
+		}
 		return pgParts{stmts: []string{"ALTER INDEX " + r.indexName(c.Table, c.From) + " RENAME TO " + r.ident(c.To)}}, nil
 	case AddForeignKey:
 		return r.pgConstraint(i, c.Table, c.ForeignKey.Name, r.foreignKey(c.ForeignKey)), nil
@@ -223,12 +232,13 @@ func (r *renderer) pgConstraint(i int, table TableRef, name, def string) pgParts
 
 // dropOnline reports whether the drop of an index goes to the online
 // script: an index of an existing table the plan keeps, on no column the
-// plan drops, whose name is not taken (indexNameTaken). The others are
-// dropped in the main script: with a table or column that goes anyway, or
-// in time to free the name for another index.
+// plan drops, whose name is not taken (indexNameTaken), and no constraint's,
+// which DROP INDEX CONCURRENTLY cannot drop. The others are dropped in the
+// main script: with a table or column that goes anyway, in time to free the
+// name for another index, or as the constraint.
 func (r *renderer) dropOnline(c DropIndex) bool {
 	k := r.l.canon(c.Table)
-	if !r.l.existing(c.Table) || r.l.dropped[k] {
+	if c.Index.Constraint || !r.l.existing(c.Table) || r.l.dropped[k] {
 		return false
 	}
 	for _, o := range r.cs {
@@ -237,6 +247,17 @@ func (r *renderer) dropOnline(c DropIndex) bool {
 		}
 	}
 	return !indexNameTaken(r.to, c.Table.Schema, c.Index.Name, func(u TableRef) bool { return r.l.canon(u) == k })
+}
+
+// renamesConstraint reports whether c renames a unique constraint's index:
+// from's index c.From of c.Table is a constraint's.
+func (r *renderer) renamesConstraint(c RenameIndex) bool {
+	t := r.from.table(r.l.canon(c.Table))
+	if t == nil {
+		return false
+	}
+	ix := t.index(c.From)
+	return ix != nil && ix.Constraint
 }
 
 // afterRename is the name the table of from named ref has after the main
@@ -441,9 +462,9 @@ func (r *renderer) columnComment(table TableRef, c Column) string {
 	return "COMMENT ON COLUMN " + r.table(table) + "." + r.ident(c.Name) + " IS " + r.commentText(c.Comment)
 }
 
-// pgCreate is the CREATE TABLE of t, with its key, foreign keys and checks,
-// then its indexes and comments. A serial's sequence is created before the
-// table and owned by its column after it.
+// pgCreate is the CREATE TABLE of t, with its key, foreign keys, checks and
+// unique constraints, then its other indexes and comments. A serial's
+// sequence is created before the table and owned by its column after it.
 func (r *renderer) pgCreate(t *Table) []string {
 	ref := t.Ref()
 	var out, defs, owned []string
@@ -474,10 +495,17 @@ func (r *renderer) pgCreate(t *Table) []string {
 	for _, ck := range t.Checks {
 		defs = append(defs, "CONSTRAINT "+r.ident(ck.Name)+" CHECK ("+ck.Expr+")")
 	}
+	for _, ix := range t.Indexes {
+		if ix.Constraint {
+			defs = append(defs, "CONSTRAINT "+r.ident(ix.Name)+" UNIQUE ("+r.idents(ix.Columns)+")")
+		}
+	}
 	out = append(out, "CREATE TABLE "+r.table(ref)+" (\n  "+strings.Join(defs, ",\n  ")+"\n)")
 	out = append(out, owned...)
 	for _, ix := range t.Indexes {
-		out = append(out, r.pgIndex(ref, ix, false))
+		if !ix.Constraint {
+			out = append(out, r.pgIndex(ref, ix, false))
+		}
 	}
 	if t.Comment != "" {
 		out = append(out, "COMMENT ON TABLE "+r.table(ref)+" IS "+r.commentText(t.Comment))

@@ -61,12 +61,20 @@ type Column struct {
 }
 
 // An Index is a secondary index.
+//
+// A unique constraint is held as its index, in the form its database can
+// drop and rename. On PostgreSQL it is a named Index with Constraint set:
+// PostgreSQL refuses DROP INDEX of a constraint's index, so it is dropped,
+// renamed and created as the constraint. On SQLite it is an Index with Name
+// "", which SQLite keeps no name for, and Constraint is never set. MySQL
+// keeps a unique constraint as a unique index, and Constraint is never set.
 type Index struct {
-	Name    string   `json:"name"` // SQLite: "" for a UNIQUE constraint's index, which SQLite keeps no name for
-	Columns []string `json:"columns,omitempty"`
-	Unique  bool     `json:"unique,omitempty"`
-	Where   string   `json:"where,omitempty"` // the predicate of a partial index; "" for none; never on MySQL
-	Pos     string   `json:"-"`
+	Name       string   `json:"name"` // SQLite: "" for a UNIQUE constraint's index, which SQLite keeps no name for
+	Columns    []string `json:"columns,omitempty"`
+	Unique     bool     `json:"unique,omitempty"`
+	Where      string   `json:"where,omitempty"`      // the predicate of a partial index; "" for none; never on MySQL
+	Constraint bool     `json:"constraint,omitempty"` // PostgreSQL: the index is a UNIQUE constraint's, as Inspect and Baseline read it; the desired model never sets it, and Diff, Drift and Equal ignore it
+	Pos        string   `json:"-"`
 }
 
 // A ForeignKey is a foreign key constraint.
@@ -201,10 +209,12 @@ func (s *Schema) sort() {
 	}
 }
 
-// validate refuses a schema no database has: an unknown dialect ("dialect"),
-// or a table, an enum type, or a table's column, index or constraint (a
-// foreign key or check) listed twice ("schema"); unnamed ones, named "",
-// may repeat. name says which schema it is in the error.
+// validate refuses a schema no database has: an unknown dialect ("dialect");
+// a table, an enum type, or a table's column, index or constraint (a
+// foreign key or check) listed twice ("schema"), where unnamed ones, named
+// "", may repeat; and an index marked a constraint outside PostgreSQL, or
+// one that is not unique or is partial ("schema"). name says which schema
+// it is in the error.
 func (s *Schema) validate(name string) error {
 	if !knownDialect(s.Dialect) {
 		return &Error{Code: "dialect", Reason: fmt.Sprintf("%s has the unknown dialect %q", name, s.Dialect.String())}
@@ -233,6 +243,13 @@ func (s *Schema) validate(name string) error {
 				return twice(ref.String(), "the index %q", ix.Name)
 			}
 			ixs[ix.Name] = true
+			switch {
+			case !ix.Constraint:
+			case s.Dialect != velox.Postgres:
+				return &Error{Code: "schema", Object: ref.String(), Reason: fmt.Sprintf("%s marks the index %q a constraint, which only PostgreSQL holds", name, ix.Name)}
+			case !ix.Unique || ix.Where != "":
+				return &Error{Code: "schema", Object: ref.String(), Reason: fmt.Sprintf("%s marks the index %q a constraint, which a non-unique or partial index cannot be", name, ix.Name)}
+			}
 		}
 		for _, fk := range t.ForeignKeys {
 			if fk.Name != "" && cons[fk.Name] {

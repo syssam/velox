@@ -1,6 +1,7 @@
 package migrate
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -238,5 +239,104 @@ func TestErrorText(t *testing.T) {
 	var err error = &Error{Reason: "r"}
 	if err.Error() != "migrate: r" {
 		t.Error(err)
+	}
+}
+
+// TestEqualIgnoresConstraint: Equal does not compare Index.Constraint,
+// which only Inspect and Baseline set.
+func TestEqualIgnoresConstraint(t *testing.T) {
+	a := full()
+	b := a.clone()
+	b.Tables[0].Indexes[1].Constraint = true
+	if !a.Equal(b) || !b.Equal(a) {
+		t.Error("Equal compares Constraint")
+	}
+}
+
+// TestSchemaRefusesConstraint: a constraint index outside PostgreSQL, and a
+// non-unique or partial one, are refused.
+func TestSchemaRefusesConstraint(t *testing.T) {
+	schema := func(d velox.Dialect, ix Index) *Schema {
+		ix.Name, ix.Columns, ix.Constraint = "k", []string{"a"}, true
+		return &Schema{Dialect: d, Tables: []Table{{Name: "t", Columns: []Column{{Name: "a", Type: "text"}}, Indexes: []Index{ix}}}}
+	}
+	only := `x marks the index "k" a constraint, which only PostgreSQL holds`
+	cannot := `x marks the index "k" a constraint, which a non-unique or partial index cannot be`
+	for _, c := range []struct {
+		name   string
+		s      *Schema
+		reason string
+	}{
+		{"mysql", schema(velox.MySQL, Index{Unique: true}), only},
+		{"sqlite", schema(velox.SQLite, Index{Unique: true}), only},
+		{"non-unique", schema(velox.Postgres, Index{}), cannot},
+		{"partial", schema(velox.Postgres, Index{Unique: true, Where: "a <> ''"}), cannot},
+	} {
+		err := c.s.validate("x")
+		if e, ok := err.(*Error); !ok || e.Code != "schema" || e.Object != "t" || e.Reason != c.reason {
+			t.Errorf("%s: %#v, want %q", c.name, err, c.reason)
+		}
+	}
+	if err := schema(velox.Postgres, Index{Unique: true}).validate("x"); err != nil {
+		t.Errorf("a unique whole index: %v", err)
+	}
+}
+
+// TestCarryConstraints: the snapshot's constraint flag is carried to an
+// index of to that is the same one, after renames; a redefined, partial or
+// other index is plain; to's own flag is kept.
+func TestCarryConstraints(t *testing.T) {
+	users := TableRef{Name: "users"}
+	accounts := TableRef{Name: "accounts"}
+	tbl := func(name string, ix ...Index) *Schema {
+		return &Schema{Dialect: velox.Postgres, Tables: []Table{{
+			Name: name, PrimaryKey: []string{"id"}, PrimaryKeyName: name + "_pkey",
+			Columns: []Column{{Name: "id", Type: "bigint"}, {Name: "email", Type: "text"}, {Name: "mail", Type: "text"}, {Name: "name", Type: "text"}},
+			Indexes: ix,
+		}}}
+	}
+	email := func(name string, cols ...string) Index {
+		if len(cols) == 0 {
+			cols = []string{"email"}
+		}
+		return Index{Name: name, Columns: cols, Unique: true}
+	}
+	flagged := func(ix Index) Index { ix.Constraint = true; return ix }
+	from := tbl("users", flagged(email("users_email_key")))
+	partial := email("users_email_key")
+	partial.Where = "email <> ''"
+	for _, c := range []struct {
+		name    string
+		from    *Schema
+		to      *Schema
+		changes []Change
+		carried bool
+	}{
+		{"same", from, tbl("users", email("users_email_key")), nil, true},
+		{"renamed", from, tbl("users", email("users_mail_key")),
+			[]Change{RenameIndex{Table: users, From: "users_email_key", To: "users_mail_key"}}, true},
+		{"table renamed", from, tbl("accounts", email("accounts_email_key")),
+			[]Change{RenameTable{From: users, To: accounts}, RenameIndex{Table: accounts, From: "users_email_key", To: "accounts_email_key"}}, true},
+		{"column renamed", from, tbl("users", email("users_email_key", "mail")),
+			[]Change{RenameColumn{Table: users, From: "email", To: "mail"}}, true},
+		{"redefined", from, tbl("users", email("users_email_key", "email", "name")),
+			[]Change{DropIndex{Table: users, Index: from.Tables[0].Indexes[0]}, AddIndex{Table: users, Index: email("users_email_key", "email", "name")}}, false},
+		{"another index", from, tbl("users", Index{Name: "users_email_idx", Columns: []string{"email"}}), nil, false},
+		{"partial", from, tbl("users", partial), nil, false},
+		{"baseline", &Schema{Dialect: velox.Postgres}, tbl("users", flagged(email("users_email_key"))),
+			[]Change{CreateTable{Table: tbl("users", flagged(email("users_email_key"))).Tables[0]}}, true},
+	} {
+		fromBefore, toBefore := c.from.clone(), c.to.clone()
+		got := carryConstraints(c.from, c.to, c.changes)
+		if !reflect.DeepEqual(c.from, fromBefore) || !reflect.DeepEqual(c.to, toBefore) {
+			t.Errorf("%s: from or to changed", c.name)
+		}
+		if !got.Equal(c.to) {
+			t.Errorf("%s: the result is not to", c.name)
+		}
+		ixs := got.Tables[0].Indexes
+		if len(ixs) != 1 || ixs[0].Constraint != c.carried {
+			t.Errorf("%s: indexes %+v, want Constraint %v", c.name, ixs, c.carried)
+		}
 	}
 }

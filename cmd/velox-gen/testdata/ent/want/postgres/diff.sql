@@ -175,7 +175,8 @@ CREATE INDEX CONCURRENTLY "posts_user_posts" ON "posts" ("user_posts");
           "columns": [
             "email"
           ],
-          "unique": true
+          "unique": true,
+          "constraint": true
         }
       ]
     }

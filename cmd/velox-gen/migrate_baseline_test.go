@@ -114,8 +114,8 @@ func baselineEnt(t *testing.T, d velox2.Dialect) {
 	if !strings.HasSuffix(errs, baselineHint) {
 		t.Errorf("baseline's stderr does not end with the hint:\n%s", errs)
 	}
-	if d == velox2.Postgres && !strings.Contains(errs, "users_email_key") {
-		t.Errorf("no unique-constraint warning:\n%s", errs)
+	if strings.Contains(errs, "read as its index") {
+		t.Errorf("baseline warns of a unique constraint:\n%s", errs)
 	}
 	compareGolden(t, filepath.Join(golden, "0001_baseline.sql"), generated(readFile(t, filepath.Join(mig, "0001_baseline.sql"))))
 	compareGolden(t, filepath.Join(golden, "schema.json"), readFile(t, filepath.Join(mig, "schema.json")))

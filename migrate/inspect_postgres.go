@@ -322,7 +322,8 @@ func (r *pgReader) columns(pt *pgTable) (map[int]string, error) {
 }
 
 // The indexes but those of exclusion constraints. The primary key's is read
-// for what the model cannot hold, and is no Index.
+// for what the model cannot hold, and is no Index; a unique constraint's is
+// an Index with Constraint set.
 const pgIndexesQuery = `SELECT ic.relname, i.indisunique, i.indisvalid, i.indexprs IS NOT NULL, i.indkey::text, i.indnkeyatts,
 	i.indnatts, coalesce(pg_get_expr(i.indpred, i.indrelid), ''), am.amname, i.indoption::text,
 	coalesce((to_jsonb(i) ->> 'indnullsnotdistinct')::boolean, false),
@@ -331,7 +332,8 @@ const pgIndexesQuery = `SELECT ic.relname, i.indisunique, i.indisvalid, i.indexp
 	EXISTS (SELECT 1 FROM generate_series(0, i.indnkeyatts - 1) k
 		JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[k]
 		WHERE i.indcollation[k] <> a.attcollation),
-	i.indisprimary
+	i.indisprimary,
+	EXISTS (SELECT 1 FROM pg_constraint k WHERE k.conindid = i.indexrelid AND k.conrelid = i.indrelid AND k.contype = 'u')
 FROM pg_index i JOIN pg_class ic ON ic.oid = i.indexrelid JOIN pg_am am ON am.oid = ic.relam
 WHERE i.indrelid = $1::bigint::oid
 	AND NOT EXISTS (SELECT 1 FROM pg_constraint k WHERE k.conindid = i.indexrelid AND k.conrelid = i.indrelid AND k.contype = 'x')
@@ -377,9 +379,10 @@ func pgUnheld(method, option string, opclass, collat, notDistinct bool, keys, at
 // hold. What else an index has that the model cannot hold (a method but
 // btree, DESC, NULLS FIRST or LAST, an operator class or collation of its
 // own, INCLUDE, NULLS NOT DISTINCT) is a note, and the index is read without
-// it. A predicate is kept as PostgreSQL prints it. The primary key's index
-// is no Index, the primary key being read from its constraint; it is read
-// only for what it has that the model cannot hold, which is one note.
+// it. A predicate is kept as PostgreSQL prints it. A unique constraint's
+// index has Constraint set. The primary key's index is no Index, the
+// primary key being read from its constraint; it is read only for what it
+// has that the model cannot hold, which is one note.
 // PostgreSQL itself refuses a primary key of DESC, NULLS FIRST or LAST, an
 // operator class or collation of its own (SQLSTATE 42809), so INCLUDE is
 // what can be there.
@@ -392,7 +395,7 @@ func (r *pgReader) indexes(pt *pgTable, names map[int]string) error {
 			keys, atts                                         int
 		)
 		if err := rows.Scan(&ix.Name, &ix.Unique, &valid, &expr, &key, &keys, &atts, &ix.Where,
-			&method, &option, &notDistinct, &opclass, &collat, &primary); err != nil {
+			&method, &option, &notDistinct, &opclass, &collat, &primary, &ix.Constraint); err != nil {
 			return err
 		}
 		if primary {
@@ -456,7 +459,7 @@ ORDER BY k.conname`
 var pgOnDelete = map[string]string{"a": "", "r": "RESTRICT", "c": "CASCADE", "n": "SET NULL", "d": "SET DEFAULT"}
 
 // constraints reads pt's primary key, foreign keys and checks. A unique
-// constraint is left out, its index read, and is a baseline note. An enum
+// constraint is left out, its index read. An enum
 // check is in the model's form, any other check as PostgreSQL prints it.
 // What a constraint has that the model cannot hold is one note: NOT VALID,
 // an exclusion constraint, DEFERRABLE, and a foreign key's ON UPDATE or
@@ -511,8 +514,6 @@ func (r *pgReader) constraints(pt *pgTable) error {
 			})
 		case "c":
 			pt.t.Checks = append(pt.t.Checks, Check{Name: name, Expr: pt.enumCheck(expr)})
-		case "u":
-			r.baselineNote(pt, name, "the unique constraint "+name+" is read as its index; to drop it later, replace it with a unique index by hand first")
 		}
 		return nil
 	})
