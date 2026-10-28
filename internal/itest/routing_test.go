@@ -343,8 +343,9 @@ func TestRoutingSendsWhereItSays(t *testing.T) {
 		r.seed(t, primary, 1, 1, "PRIMARY-SEED")
 		r.seed(t, replica, 1, 1, "REPLICA-SEED")
 		var log routeLog
+		const window = time.Second
 		db := r.handle(t, r.primary, "").open(
-			velox.WithReplicas(r.handle(t, replicaDB, "").conn), velox.WithPinWindow(100*time.Millisecond), log.option())
+			velox.WithReplicas(r.handle(t, replicaDB, "").conn), velox.WithPinWindow(window), log.option())
 
 		insertInvoice(t, ctx, db, 1, "WRITTEN")
 		wantRoute(t, "the write", log.last(t), velox.Route{Replica: -1})
@@ -365,10 +366,16 @@ func TestRoutingSendsWhereItSays(t *testing.T) {
 		sctx := velox.WithSession(ctx)
 		wantNumbers(t, "read in a session before its write", readNumbers(t, sctx, db), []string{"REPLICA-SEED"})
 		insertInvoice(t, sctx, db, 1, "IN-SESSION")
+		wrote := time.Now()
 		wantNumbers(t, "read in a session after its write", readNumbers(t, sctx, db), []string{"PRIMARY-SEED", "WRITTEN", "IN-SESSION"})
 		wantRoute(t, "read in the pin window", log.last(t), velox.Route{Replica: -1})
 		wantNumbers(t, "read with no session in the window", readNumbers(t, ctx, db), []string{"REPLICA-SEED"})
-		time.Sleep(150 * time.Millisecond)
+		// The in-window reads must have finished inside the window, or their
+		// checks prove nothing about it.
+		if took := time.Since(wrote); took >= window {
+			t.Fatalf("the runner took %v for the in-window reads, past the %v window", took, window)
+		}
+		time.Sleep(time.Until(wrote.Add(window + 100*time.Millisecond)))
 		wantNumbers(t, "read after the window", readNumbers(t, sctx, db), []string{"REPLICA-SEED"})
 		wantRoute(t, "read after the window", log.last(t), velox.Route{Replica: 0})
 	})
@@ -586,6 +593,19 @@ func (r routingDriver) endSessions(t *testing.T, db string) int {
 		}
 		if err := rows.Err(); err != nil {
 			t.Fatal(err)
+		}
+		// pg_terminate_backend only signals: wait until the sessions are gone.
+		var left int
+		for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(20 * time.Millisecond) {
+			if err := admin.QueryRowContext(ctx, "SELECT count(*) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()", db).Scan(&left); err != nil {
+				t.Fatal(err)
+			}
+			if left == 0 {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("%d sessions on %s still open 5s after pg_terminate_backend", left, db)
+			}
 		}
 		return n
 	}

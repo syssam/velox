@@ -11,6 +11,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"slices"
 	"strconv"
@@ -19,6 +21,7 @@ import (
 	"time"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
@@ -43,7 +46,57 @@ func TestMain(m *testing.M) {
 			os.Exit(1)
 		}
 	}
+	if p := dsnDatabaseProblem(os.Getenv("VELOX_TEST_POSTGRES")); p != "" {
+		fmt.Fprintln(os.Stderr, p)
+		os.Exit(1)
+	}
+	// The MySQL driver logs "closing bad idle connection" when a test kills a
+	// session; under -v that is noise, not a failure.
+	_ = mysql.SetLogger(log.New(io.Discard, "", 0))
 	os.Exit(m.Run())
+}
+
+// dsnDatabaseProblem returns what is wrong with dsn as VELOX_TEST_POSTGRES,
+// or "" when it is fine: an unset variable is, and so is a DSN that names a
+// database. The routing tests drop and create tables in it, and a name left
+// out would silently use the user's default database.
+// pgx reads the environment as the tests' connections do, so a DSN without a
+// name is fine when PGDATABASE names one.
+func dsnDatabaseProblem(dsn string) string {
+	if dsn == "" {
+		return ""
+	}
+	cfg, err := pgx.ParseConfig(dsn)
+	if err != nil {
+		return "itest: VELOX_TEST_POSTGRES does not parse as a PostgreSQL DSN"
+	}
+	if cfg.Database == "" {
+		return "itest: VELOX_TEST_POSTGRES names no database: add one, as in postgres://user:pass@host:port/velox"
+	}
+	return ""
+}
+
+func TestITestDSNNamesADatabase(t *testing.T) {
+	// pgx fills an empty database name from PGDATABASE; with it set, the
+	// refused DSNs below would pass.
+	t.Setenv("PGDATABASE", "")
+	for _, c := range []struct {
+		dsn  string
+		fine bool
+	}{
+		{"", true},
+		{"postgres://u:p@h:5432/velox?sslmode=disable", true},
+		{"postgres://u:p@h:5432/?sslmode=disable", false},
+		{"postgres://u:p@h:5432", false},
+	} {
+		if got := dsnDatabaseProblem(c.dsn); (got == "") != c.fine {
+			t.Errorf("dsnDatabaseProblem(%q) = %q, fine %v", c.dsn, got, c.fine)
+		}
+	}
+	t.Setenv("PGDATABASE", "velox")
+	if got := dsnDatabaseProblem("postgres://u:p@h:5432"); got != "" {
+		t.Errorf("with PGDATABASE set: %q", got)
+	}
 }
 
 var (

@@ -274,3 +274,47 @@ func TestSaveBuilder(t *testing.T) {
 		}
 	})
 }
+
+// TestUpsertUpdateBranchReadBack: the update branch writes only the columns it
+// names. Row 1 keeps the seed's note and paid, and takes the new total; the
+// update branch does not fire UpdatedAt's UpdateDefault, so updated_at stays
+// t0. That is as in old velox and ent, which do not fire it on an upsert's
+// update branch either (plan decision 5): pinned as correct, not as a gap.
+func TestUpsertUpdateBranchReadBack(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		over := newInvoice(1, "INV-1")
+		over.Total = 99
+		over.Note = "changed"
+		if err := tg.db.Insert(&over).OnConflict(I.OrgID, I.Number).Update(I.Total).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		// RETURNING reads the existing row's id back; MySQL has none.
+		wantID := int64(1)
+		if tg.d == velox.MySQL {
+			wantID = 0
+		}
+		if over.ID != wantID {
+			t.Errorf("ID %d, want %d", over.ID, wantID)
+		}
+		var (
+			total        float64
+			note, number string
+			paid         bool
+			org          int64
+		)
+		err := tg.direct.QueryRowContext(ctx, rebind(tg.d, "SELECT total, note, paid, number, org_id FROM invoices WHERE id = ?"), 1).Scan(&total, &note, &paid, &number, &org)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if total != 99 || note != "" || !paid || number != "INV-1" || org != 1 {
+			t.Errorf("row 1: total %v, note %q, paid %v, number %q, org %d", total, note, paid, number, org)
+		}
+		got, err := tg.db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).One(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !got.CreatedAt.Equal(t0) || !got.UpdatedAt.Equal(t0) {
+			t.Errorf("created_at %v, updated_at %v, want both %v", got.CreatedAt, got.UpdatedAt, t0)
+		}
+	})
+}

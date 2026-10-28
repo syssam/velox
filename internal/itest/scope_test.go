@@ -4,8 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
+	"strings"
 	"testing"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/internal/testmodel"
@@ -230,6 +234,45 @@ func TestScopeRelations(t *testing.T) {
 	})
 }
 
+// TestScopeCrossOrgParent: a ticket whose parent is in another org. Ticket 1
+// (org 1) is given ticket 6 (org 2) as its parent. A caller who cannot see
+// org 2 loads no parent for it, and Parent.Has() does not count it; a caller
+// who sees both orgs loads ticket 6. The seed itself has no cross-org parent.
+func TestScopeCrossOrgParent(t *testing.T) {
+	parents := map[string]map[int64]int64{
+		"ann":    {1: 0, 2: 1, 5: 0},
+		"admin":  {1: 0, 2: 1, 3: 0, 4: 3, 5: 3},
+		"anyone": {1: 6, 2: 1, 3: 0, 4: 3, 5: 3, 6: 0, 7: 6, 8: 6},
+	}
+	hasParent := map[string][]int64{"ann": {2}, "admin": {2, 4, 5}, "anyone": {1, 2, 4, 5, 7, 8}}
+	eachCaller(t, func(t *testing.T, tg target, c who) {
+		tg.exec(t, "UPDATE tickets SET parent_id = 6 WHERE id = 1")
+		xs, err := tg.db.Query[testmodel.Ticket]().With(Tk.Parent).OrderBy(Tk.ID.Asc()).Unbounded().All(c.ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := map[int64]int64{}
+		for _, x := range xs {
+			p, loaded := x.Parent.Get()
+			if !loaded {
+				t.Fatalf("ticket %d: parent not loaded", x.ID)
+			}
+			got[x.ID] = 0
+			if p != nil {
+				got[x.ID] = p.ID
+			}
+		}
+		if fmt.Sprint(got) != fmt.Sprint(parents[c.name]) {
+			t.Errorf("With(Parent): %v, want %v", got, parents[c.name])
+		}
+		has, err := tg.db.Query[testmodel.Ticket]().Where(Tk.Parent.Has()).OrderBy(Tk.ID.Asc()).Unbounded().All(c.ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantIDs(t, ticketIDs(has), hasParent[c.name])
+	})
+}
+
 func TestScopeUpdate(t *testing.T) {
 	eachCaller(t, func(t *testing.T, tg target, c who) {
 		before := rowIDs(ticketRows(t, tg), func(r ticketRow) bool { return r.done })
@@ -413,4 +456,85 @@ func TestScopeUpsert(t *testing.T) {
 		want = slices.DeleteFunc(want, func(id int64) bool { return id == 3 })
 		wantIDs(t, done(), want)
 	})
+}
+
+// TestUpsertSchemaQualifiedPostgres: a Rewrite hook that moves Ticket to the
+// schema vx_billing makes the whole upsert schema-qualified, DO UPDATE's WHERE
+// (the scope and the policy) included: ann's upsert updates vx_billing's row
+// and leaves public's alone, and bob's row is refused as in TestScopeUpsert.
+func TestUpsertSchemaQualifiedPostgres(t *testing.T) {
+	for _, tg := range targets(t, nil) {
+		t.Run(tg.name, func(t *testing.T) {
+			if tg.d != velox.Postgres {
+				t.Skip("schema-qualified DO UPDATE … WHERE is PostgreSQL's")
+			}
+			setup(t, tg)
+			tg.exec(t, "DROP SCHEMA IF EXISTS vx_billing CASCADE")
+			tg.exec(t, "CREATE SCHEMA vx_billing")
+			t.Cleanup(func() { tg.exec(t, "DROP SCHEMA vx_billing CASCADE") })
+			tg.exec(t, "CREATE TABLE vx_billing.tickets (LIKE public.tickets INCLUDING ALL)")
+			for _, r := range seedTickets {
+				tg.exec(t, "INSERT INTO vx_billing.tickets (created_by, id, org_id, owner, title, done, invoice_id, parent_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+					"seed", r.id, r.org, r.owner, r.title, r.done, r.invoice, r.parent)
+			}
+			move := velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+				e := *st.Entity
+				e.Schema = "vx_billing"
+				st.Entity = &e
+				return nil
+			})
+			var db *velox.DB
+			if tg.name == "postgres-pgx" {
+				pool, err := pgxpool.New(ctx, os.Getenv("VELOX_TEST_POSTGRES"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(pool.Close)
+				db = velox.OpenPgx(pool, move)
+			} else {
+				db = velox.Open(velox.Postgres, tg.direct, move)
+			}
+			done := func(table string) []int64 {
+				rs, err := tg.direct.QueryContext(ctx, "SELECT id FROM "+table+" WHERE done ORDER BY id")
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer func() { _ = rs.Close() }()
+				var out []int64
+				for rs.Next() {
+					var id int64
+					if err := rs.Scan(&id); err != nil {
+						t.Fatal(err)
+					}
+					out = append(out, id)
+				}
+				if err := rs.Err(); err != nil {
+					t.Fatal(err)
+				}
+				return out
+			}
+			upsert := func(x *testmodel.Ticket) error {
+				return db.Insert(x).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(ann.ctx)
+			}
+			a1 := testmodel.Ticket{Owner: "ann", Title: "A1", Done: true}
+			if err := upsert(&a1); err != nil {
+				t.Fatal(err)
+			}
+			if a1.ID != 1 {
+				t.Errorf("RETURNING: ID %d, want 1", a1.ID)
+			}
+			wantIDs(t, done("vx_billing.tickets"), []int64{1, 2, 3, 8})
+			wantIDs(t, done("public.tickets"), []int64{2, 3, 8})
+
+			// B1 is bob's ticket 3: ann's upsert is refused, and nothing changes.
+			b1 := testmodel.Ticket{Owner: "ann", Title: "B1", Done: false}
+			err := upsert(&b1)
+			var pe *velox.PolicyError
+			if !errors.As(err, &pe) || pe.Op != velox.OpUpdate || !strings.Contains(err.Error(), "the existing row is hidden from this upsert") {
+				t.Errorf("bob's row: %v", err)
+			}
+			wantIDs(t, done("vx_billing.tickets"), []int64{1, 2, 3, 8})
+			wantIDs(t, done("public.tickets"), []int64{2, 3, 8})
+		})
+	}
 }
