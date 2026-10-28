@@ -423,6 +423,7 @@ func TestInspectPostgresUnheld(t *testing.T) {
 		`CREATE INDEX p_plain ON p (a)`,
 		`CREATE TABLE c (id integer PRIMARY KEY, e text COLLATE "C", f text COLLATE "default", g text)`,
 		`CREATE UNLOGGED TABLE l (id integer PRIMARY KEY)`,
+		`CREATE TABLE k (id integer, a integer, CONSTRAINT k_pkey PRIMARY KEY (id) INCLUDE (a))`,
 	} {
 		mustExec(t, db, q)
 	}
@@ -452,6 +453,7 @@ func TestInspectPostgresUnheld(t *testing.T) {
 		"u.u_k_key":   {"DEFERRABLE"},
 		"c.e":         {`COLLATE "C"`},
 		"l":           {"UNLOGGED"},
+		"k.k_pkey":    {"primary key", "INCLUDE"},
 	}
 	if version >= 150000 {
 		want["p.p_nnd"] = []string{"NULLS NOT DISTINCT"}
