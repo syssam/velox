@@ -271,6 +271,16 @@ type AccountWhereInput struct {
 	And []*AccountWhereInput
 	Or  []*AccountWhereInput
 
+	// Predicates on the ID.
+	ID      *string
+	IDNEQ   *string
+	IDIn    []string
+	IDNotIn []string
+	IDGT    *string
+	IDGTE   *string
+	IDLT    *string
+	IDLTE   *string
+
 	// Predicates on the field name (displayName).
 	DisplayName          *string
 	DisplayNameNEQ       *string
@@ -302,6 +312,14 @@ func (w *AccountWhereInput) Pred(ctx context.Context) (velox.Pred[User], error) 
 	gqlimpl.Not(f, "not", w.Not)
 	gqlimpl.And(f, "and", w.And)
 	gqlimpl.Or(f, "or", w.Or)
+	gqlimpl.ID(f, "id", w.ID, "Account", Users.ID.EQ)
+	gqlimpl.ID(f, "idNEQ", w.IDNEQ, "Account", Users.ID.NEQ)
+	gqlimpl.IDList(f, "idIn", w.IDIn, "Account", Users.ID.In)
+	gqlimpl.IDList(f, "idNotIn", w.IDNotIn, "Account", Users.ID.NotIn)
+	gqlimpl.ID(f, "idGT", w.IDGT, "Account", Users.ID.GT)
+	gqlimpl.ID(f, "idGTE", w.IDGTE, "Account", Users.ID.GTE)
+	gqlimpl.ID(f, "idLT", w.IDLT, "Account", Users.ID.LT)
+	gqlimpl.ID(f, "idLTE", w.IDLTE, "Account", Users.ID.LTE)
 	gqlimpl.Value(f, "displayName", w.DisplayName, Users.Name.EQ)
 	gqlimpl.Value(f, "displayNameNEQ", w.DisplayNameNEQ, Users.Name.NEQ)
 	gqlimpl.List(f, "displayNameIn", w.DisplayNameIn, Users.Name.In)

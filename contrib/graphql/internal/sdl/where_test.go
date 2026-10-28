@@ -16,6 +16,11 @@ func logic(typ string) []string {
 	return []string{"not: " + typ, "and: [" + typ + "!]", "or: [" + typ + "!]"}
 }
 
+// nodeKey is the predicates of an int64 node key, after the logic.
+func nodeKey() []string {
+	return []string{"id: ID", "idNEQ: ID", "idIn: [ID!]", "idNotIn: [ID!]", "idGT: ID", "idGTE: ID", "idLT: ID", "idLTE: ID"}
+}
+
 func TestWhere(t *testing.T) {
 	t.Run("defaults", func(t *testing.T) {
 		opt := func(f *plugin.Field) *plugin.Field { f.Nullable, f.Pointer = true, true; return f }
@@ -41,7 +46,7 @@ func TestWhere(t *testing.T) {
 		for _, c := range cases {
 			c.f.Annotations = ann(t, graphql.WhereOps())
 			s, sdl := load(t, model(entity("User", c.f)))
-			want := append(logic("UserWhereInput"), c.want...)
+			want := append(append(logic("UserWhereInput"), nodeKey()...), c.want...)
 			if got := fieldsOf(s, "UserWhereInput"); !slices.Equal(got, want) {
 				t.Errorf("%s (%s):\n got %v\nwant %v\n%s", c.f.Name, c.f.Type, got, want, sdl)
 			}
@@ -52,7 +57,8 @@ func TestWhere(t *testing.T) {
 		u := entity("User")
 		u.Fields[0].Annotations = ann(t, graphql.WhereOps())
 		s, _ := load(t, model(u))
-		want := append(logic("UserWhereInput"), "id: ID", "idNEQ: ID", "idIn: [ID!]", "idNotIn: [ID!]")
+		// An int64 key is ordered: OpsDefault gives it comparison too.
+		want := append(logic("UserWhereInput"), nodeKey()...)
 		if got := fieldsOf(s, "UserWhereInput"); !slices.Equal(got, want) {
 			t.Errorf("got %v\nwant %v", got, want)
 		}
@@ -77,7 +83,7 @@ func TestWhere(t *testing.T) {
 		posts.Field, posts.FieldOn = "author_id", "Post"
 		user.Edges = []*plugin.Edge{posts}
 		s, sdl := load(t, model(post, user))
-		want := append(logic("PostWhereInput"), "writerID: ID", "writerIDNEQ: ID", "writerIDIn: [ID!]", "writerIDNotIn: [ID!]", "editorID: ID", "editorIDIsNil: Boolean")
+		want := append(append(logic("PostWhereInput"), nodeKey()...), "writerID: ID", "writerIDNEQ: ID", "writerIDIn: [ID!]", "writerIDNotIn: [ID!]", "editorID: ID", "editorIDIsNil: Boolean")
 		if got := fieldsOf(s, "PostWhereInput"); !slices.Equal(got, want) {
 			t.Errorf("got %v\nwant %v\n%s", got, want, sdl)
 		}
@@ -107,7 +113,7 @@ func TestWhere(t *testing.T) {
 			n := &plugin.Field{Name: "n", GoName: "N", Type: "string", Pointer: true, Nullable: true, Optional: true}
 			n.Annotations = ann(t, graphql.WhereOps(c.op))
 			s, _ := load(t, model(entity("User", n)))
-			want := append(logic("UserWhereInput"), c.want)
+			want := append(append(logic("UserWhereInput"), nodeKey()...), c.want)
 			if got := fieldsOf(s, "UserWhereInput"); !slices.Equal(got, want) {
 				t.Errorf("%s: got %v", c.want, got)
 			}
@@ -122,7 +128,7 @@ func TestWhere(t *testing.T) {
 		i := field("i", "int")
 		i.Annotations = ann(t, graphql.WhereOps(graphql.OpsAll))
 		s, _ := load(t, model(entity("User", n, i)))
-		want := append(logic("UserWhereInput"),
+		want := append(append(logic("UserWhereInput"), nodeKey()...),
 			"n: String", "nNEQ: String", "nIn: [String!]", "nNotIn: [String!]", "nGT: String", "nContains: String", "nHasPrefix: String", "nHasSuffix: String",
 			"i: Int", "iNEQ: Int", "iIn: [Int!]", "iNotIn: [Int!]", "iGT: Int", "iGTE: Int", "iLT: Int", "iLTE: Int")
 		if got := fieldsOf(s, "UserWhereInput"); !slices.Equal(got, want) {
@@ -134,7 +140,7 @@ func TestWhere(t *testing.T) {
 		n := field("name", "string")
 		n.Annotations = ann(t, graphql.FieldName("displayName"), graphql.WhereOps(graphql.OpEQ, graphql.OpIn))
 		s, _ := load(t, model(entity("User", n)))
-		want := append(logic("UserWhereInput"), "displayName: String", "displayNameIn: [String!]")
+		want := append(append(logic("UserWhereInput"), nodeKey()...), "displayName: String", "displayNameIn: [String!]")
 		if got := fieldsOf(s, "UserWhereInput"); !slices.Equal(got, want) {
 			t.Errorf("got %v", got)
 		}
@@ -154,7 +160,7 @@ func TestWhere(t *testing.T) {
 		post.Edges = []*plugin.Edge{edge("author", plugin.M2O, "User")}
 		s, sdl := load(t, model(entity("Group"), post, user))
 		// Group has no where input: memberships gets has, not hasWith.
-		want := append(logic("UserWhereInput"), "hasPosts: Boolean", "hasPostsWith: [PostWhereInput!]", "hasMemberships: Boolean")
+		want := append(append(logic("UserWhereInput"), nodeKey()...), "hasPosts: Boolean", "hasPostsWith: [PostWhereInput!]", "hasMemberships: Boolean")
 		if got := fieldsOf(s, "UserWhereInput"); !slices.Equal(got, want) {
 			t.Errorf("got %v\nwant %v\n%s", got, want, sdl)
 		}
@@ -236,7 +242,7 @@ func TestWhereCarriesDirectives(t *testing.T) {
 		salary := &plugin.Field{Name: "salary", GoName: "Salary", Type: "int", Pointer: true, Nullable: true, Optional: true}
 		salary.Annotations = ann(t, admin, graphql.WhereOps(graphql.OpsAll))
 		s, sdl := load(t, model(entity("User", salary)), appDirectives)
-		got := fieldsOf(s, "UserWhereInput")[3:]
+		got := fieldsOf(s, "UserWhereInput")[11:]
 		if len(got) != 10 { // equality, comparison and nullable
 			t.Fatalf("predicates %v\n%s", got, sdl)
 		}

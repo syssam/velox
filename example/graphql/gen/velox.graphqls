@@ -135,6 +135,14 @@ input PostWhereInput {
   not: PostWhereInput
   and: [PostWhereInput!]
   or: [PostWhereInput!]
+  id: ID
+  idNEQ: ID
+  idIn: [ID!]
+  idNotIn: [ID!]
+  idGT: ID
+  idGTE: ID
+  idLT: ID
+  idLTE: ID
   authorID: ID
   authorIDNEQ: ID
   authorIDIn: [ID!]
@@ -232,6 +240,14 @@ input LabelWhereInput {
   not: LabelWhereInput
   and: [LabelWhereInput!]
   or: [LabelWhereInput!]
+  id: ID
+  idNEQ: ID
+  idIn: [ID!]
+  idNotIn: [ID!]
+  idGT: ID
+  idGTE: ID
+  idLT: ID
+  idLTE: ID
   name: String
   nameNEQ: String
   nameIn: [String!]
@@ -318,6 +334,14 @@ input UserWhereInput {
   not: UserWhereInput
   and: [UserWhereInput!]
   or: [UserWhereInput!]
+  id: ID
+  idNEQ: ID
+  idIn: [ID!]
+  idNotIn: [ID!]
+  idGT: ID
+  idGTE: ID
+  idLT: ID
+  idLTE: ID
   name: String
   nameNEQ: String
   nameIn: [String!]

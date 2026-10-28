@@ -251,7 +251,7 @@ func TestPluginThroughVeloxGen(t *testing.T) {
 		"enum AccountOrderField {\n  NAME\n}\n",
 		"enum PostOrderField {\n  TITLE\n}\n",
 		"  displayNameHasSuffix: String\n  hasPosts: Boolean\n  hasPostsWith: [PostWhereInput!]\n  hasGroups: Boolean\n}\n",
-		"  or: [PostWhereInput!]\n  authorID: ID\n  authorIDNEQ: ID\n  authorIDIn: [ID!]\n  authorIDNotIn: [ID!]\n  title: String\n",
+		"  or: [PostWhereInput!]\n  id: ID\n  idNEQ: ID\n  idIn: [ID!]\n  idNotIn: [ID!]\n  idGT: ID\n  idGTE: ID\n  idLT: ID\n  idLTE: ID\n  authorID: ID\n  authorIDNEQ: ID\n  authorIDIn: [ID!]\n  authorIDNotIn: [ID!]\n  title: String\n",
 		"type Mutation {\n",
 		"  createPost(input: CreatePostInput!): Post!\n",
 		"  updatePost(id: ID!, input: UpdatePostInput!): Post!\n",
@@ -266,7 +266,7 @@ func TestPluginThroughVeloxGen(t *testing.T) {
 		"input CreateCategoryInput {\n  title: String!\n  parentID: ID\n  mentorID: ID\n  twinID: ID @deprecated(reason: \"Use mentor.\")\n}\n",
 		"input UpdateCategoryInput {\n  title: String\n}\n",
 		// The key's where predicates are named after the edge that owns it.
-		"  or: [CategoryWhereInput!]\n  mentorID: ID\n  mentorIDNEQ: ID\n  mentorIDIn: [ID!]\n  mentorIDNotIn: [ID!]\n}\n",
+		"  or: [CategoryWhereInput!]\n  id: ID\n  idNEQ: ID\n  idIn: [ID!]\n  idNotIn: [ID!]\n  idGT: ID\n  idGTE: ID\n  idLT: ID\n  idLTE: ID\n  mentorID: ID\n  mentorIDNEQ: ID\n  mentorIDIn: [ID!]\n  mentorIDNotIn: [ID!]\n}\n",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("no %q in\n%s", want, got)
@@ -772,6 +772,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"sync/atomic"
 	"testing"
@@ -1265,6 +1266,9 @@ func TestWhereIDs(t *testing.T) {
 		"Owner.id":              func() error { _, err := owners(ctx, &gen.OwnerWhereInput{ID: &post}); return err },
 		"Owner.idIn":            func() error { _, err := owners(ctx, &gen.OwnerWhereInput{IDIn: []string{ownerID(1), post}}); return err },
 		"Event.id":              func() error { _, err := events(ctx, &gen.EventWhereInput{ID: ptr(ownerID(1))}); return err },
+		"Owner.idIn of Event":   func() error { _, err := owners(ctx, &gen.OwnerWhereInput{IDIn: []string{eventID(1)}}); return err },
+		"Owner.idGT":            func() error { _, err := owners(ctx, &gen.OwnerWhereInput{IDGT: &post}); return err },
+		"Category.idLTE":        func() error { _, err := categories(ctx, &gen.CategoryWhereInput{IDLTE: ptr(userID(1))}); return err },
 		"Event.ownerIDNotIn":    func() error { _, err := events(ctx, &gen.EventWhereInput{OwnerIDNotIn: []string{post}}); return err },
 		"Post.authorID":         func() error { _, err := posts(ctx, &gen.PostWhereInput{AuthorID: &post}); return err },
 		"Category.mentorID":     func() error { _, err := categories(ctx, &gen.CategoryWhereInput{MentorID: ptr(userID(1))}); return err },
@@ -1289,6 +1293,27 @@ func TestWhereIDs(t *testing.T) {
 	if n := statements.Load(); n != 0 {
 		t.Errorf("the refused IDs ran %d statements", n)
 	}
+
+	// The node key's predicates: a uuid key has the four of equality, and
+	// an integer key the ordered ones too, through IDAs when its Go type is
+	// the application's own (Owner's ids.UserID) and as it is when not.
+	for _, op := range []string{"IDGT", "IDGTE", "IDLT", "IDLTE"} {
+		if _, ok := reflect.TypeFor[gen.EventWhereInput]().FieldByName(op); ok {
+			t.Errorf("EventWhereInput has %s: a UUID key is not ordered", op)
+		}
+	}
+	check(t, ctx, []whereCase{
+		ev("id of 4", &gen.EventWhereInput{ID: ptr(eventID(4))}, 4),
+		ow("idGT", &gen.OwnerWhereInput{IDGT: ptr(ownerID(2))}, 3),
+		ow("idGTE", &gen.OwnerWhereInput{IDGTE: ptr(ownerID(2))}, 2, 3),
+		ow("idLT", &gen.OwnerWhereInput{IDLT: ptr(ownerID(2))}, 1),
+		ow("idLTE", &gen.OwnerWhereInput{IDLTE: ptr(ownerID(2))}, 1, 2),
+		// A key with no annotation of its own.
+		ca("idGT", &gen.CategoryWhereInput{IDGT: ptr(catID(2))}, 3, 4),
+		ca("idLTE", &gen.CategoryWhereInput{IDLTE: ptr(catID(2))}, 1, 2),
+		ca("idIn", &gen.CategoryWhereInput{IDIn: []string{catID(1), catID(4)}}, 1, 4),
+		ca("idNotIn", &gen.CategoryWhereInput{IDNotIn: []string{catID(1), catID(4)}}, 2, 3),
+	})
 }
 
 // TestOwnerTags: Owner.tags, a json field, is read by velox from the JSON

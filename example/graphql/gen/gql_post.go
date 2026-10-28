@@ -292,6 +292,16 @@ type PostWhereInput struct {
 	And []*PostWhereInput
 	Or  []*PostWhereInput
 
+	// Predicates on the ID.
+	ID      *string
+	IDNEQ   *string
+	IDIn    []string
+	IDNotIn []string
+	IDGT    *string
+	IDGTE   *string
+	IDLT    *string
+	IDLTE   *string
+
 	// Predicates on the edge author, by the ID of its node.
 	AuthorID      *string
 	AuthorIDNEQ   *string
@@ -347,6 +357,14 @@ func (w *PostWhereInput) Pred(ctx context.Context) (velox.Pred[Post], error) {
 	gqlimpl.Not(f, "not", w.Not)
 	gqlimpl.And(f, "and", w.And)
 	gqlimpl.Or(f, "or", w.Or)
+	gqlimpl.ID(f, "id", w.ID, "Post", Posts.ID.EQ)
+	gqlimpl.ID(f, "idNEQ", w.IDNEQ, "Post", Posts.ID.NEQ)
+	gqlimpl.IDList(f, "idIn", w.IDIn, "Post", Posts.ID.In)
+	gqlimpl.IDList(f, "idNotIn", w.IDNotIn, "Post", Posts.ID.NotIn)
+	gqlimpl.ID(f, "idGT", w.IDGT, "Post", Posts.ID.GT)
+	gqlimpl.ID(f, "idGTE", w.IDGTE, "Post", Posts.ID.GTE)
+	gqlimpl.ID(f, "idLT", w.IDLT, "Post", Posts.ID.LT)
+	gqlimpl.ID(f, "idLTE", w.IDLTE, "Post", Posts.ID.LTE)
 	gqlimpl.ID(f, "authorID", w.AuthorID, "User", Posts.AuthorID.EQ)
 	gqlimpl.ID(f, "authorIDNEQ", w.AuthorIDNEQ, "User", Posts.AuthorID.NEQ)
 	gqlimpl.IDList(f, "authorIDIn", w.AuthorIDIn, "User", Posts.AuthorID.In)

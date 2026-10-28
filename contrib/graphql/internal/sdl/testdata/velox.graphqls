@@ -114,6 +114,14 @@ input CategoryWhereInput {
   not: CategoryWhereInput
   and: [CategoryWhereInput!]
   or: [CategoryWhereInput!]
+  id: ID
+  idNEQ: ID
+  idIn: [ID!]
+  idNotIn: [ID!]
+  idGT: ID
+  idGTE: ID
+  idLT: ID
+  idLTE: ID
   hasParent: Boolean
   hasParentWith: [CategoryWhereInput!]
 }
@@ -276,6 +284,14 @@ input PostWhereInput {
   not: PostWhereInput
   and: [PostWhereInput!]
   or: [PostWhereInput!]
+  id: ID
+  idNEQ: ID
+  idIn: [ID!]
+  idNotIn: [ID!]
+  idGT: ID
+  idGTE: ID
+  idLT: ID
+  idLTE: ID
   writerID: ID
   writerIDNEQ: ID
   writerIDIn: [ID!]
@@ -401,6 +417,14 @@ input AccountWhereInput {
   not: AccountWhereInput
   and: [AccountWhereInput!]
   or: [AccountWhereInput!]
+  id: ID
+  idNEQ: ID
+  idIn: [ID!]
+  idNotIn: [ID!]
+  idGT: ID
+  idGTE: ID
+  idLT: ID
+  idLTE: ID
   displayName: String
   displayNameNEQ: String
   displayNameIn: [String!]

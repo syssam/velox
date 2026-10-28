@@ -278,6 +278,16 @@ type UserWhereInput struct {
 	And []*UserWhereInput
 	Or  []*UserWhereInput
 
+	// Predicates on the ID.
+	ID      *string
+	IDNEQ   *string
+	IDIn    []string
+	IDNotIn []string
+	IDGT    *string
+	IDGTE   *string
+	IDLT    *string
+	IDLTE   *string
+
 	// Predicates on the field name.
 	Name          *string
 	NameNEQ       *string
@@ -324,6 +334,14 @@ func (w *UserWhereInput) Pred(ctx context.Context) (velox.Pred[User], error) {
 	gqlimpl.Not(f, "not", w.Not)
 	gqlimpl.And(f, "and", w.And)
 	gqlimpl.Or(f, "or", w.Or)
+	gqlimpl.ID(f, "id", w.ID, "User", Users.ID.EQ)
+	gqlimpl.ID(f, "idNEQ", w.IDNEQ, "User", Users.ID.NEQ)
+	gqlimpl.IDList(f, "idIn", w.IDIn, "User", Users.ID.In)
+	gqlimpl.IDList(f, "idNotIn", w.IDNotIn, "User", Users.ID.NotIn)
+	gqlimpl.ID(f, "idGT", w.IDGT, "User", Users.ID.GT)
+	gqlimpl.ID(f, "idGTE", w.IDGTE, "User", Users.ID.GTE)
+	gqlimpl.ID(f, "idLT", w.IDLT, "User", Users.ID.LT)
+	gqlimpl.ID(f, "idLTE", w.IDLTE, "User", Users.ID.LTE)
 	gqlimpl.Value(f, "name", w.Name, Users.Name.EQ)
 	gqlimpl.Value(f, "nameNEQ", w.NameNEQ, Users.Name.NEQ)
 	gqlimpl.List(f, "nameIn", w.NameIn, Users.Name.In)

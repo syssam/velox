@@ -609,6 +609,8 @@ func TestSensitiveFieldAbsent(t *testing.T) {
 			"user": {"fields": [{"name": "id"}, {"name": "name"}, {"name": "email"}, {"name": "role"}, {"name": "joinedAt"}, {"name": "posts"}, {"name": "initials"}]},
 			"where": {"inputFields": [
 				{"name": "not"}, {"name": "and"}, {"name": "or"},
+				{"name": "id"}, {"name": "idNEQ"}, {"name": "idIn"}, {"name": "idNotIn"},
+				{"name": "idGT"}, {"name": "idGTE"}, {"name": "idLT"}, {"name": "idLTE"},
 				{"name": "name"}, {"name": "nameNEQ"}, {"name": "nameIn"}, {"name": "nameNotIn"},
 				{"name": "nameContains"}, {"name": "nameHasPrefix"}, {"name": "nameHasSuffix"},
 				{"name": "email"}, {"name": "emailNEQ"}, {"name": "emailIn"}, {"name": "emailNotIn"},

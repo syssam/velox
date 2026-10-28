@@ -114,6 +114,15 @@
 // its own: -check fails when the schema changed, and dropping -plugin
 // velox-graphql removes the file on the next run.
 //
+// An entity that has a where input, by a WhereOps field or a WhereEdge edge,
+// has the predicates of its node key in it, before the fields': the node key
+// has id, idNEQ, idIn, idNotIn, and for an ordered key (an integer or a
+// string) idGT, idGTE, idLT and idLTE, typed ID and decoded with the type
+// check, so that an ID of another type fails as any other does. A uuid or an
+// enum key has the four of equality. WhereOps on the key chooses its predicates
+// instead, and Skip(SkipWhereInput) on it drops them. The key alone does not
+// give an entity a where input.
+//
 // The SDL binds to Go by gqlgen's @goField directive (a node's id to IDGQL, an
 // edge to <Edge>GQL) and by enum names (velox-gen's Go enum types).
 // velox.graphqls declares the directives @goField and @goModel itself, as

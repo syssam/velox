@@ -55,8 +55,9 @@ func opNames(ops graphql.WhereOp) string {
 }
 
 // predicatesOf are the predicates a field of the type typ offers (has) and
-// those WhereOps() gives it (defaults). typ is "ID" for a key, else the
-// schema field type. A nullable field, one whose handle tests for NULL, also
+// those WhereOps() gives it (defaults). typ is "ID" for the node key of an
+// enum or uuid type, "orderedID" for that of an integer or string type, else
+// the schema field type. A nullable field, one whose handle tests for NULL, also
 // has OpsNullable.
 func predicatesOf(typ string, nullable bool) (has, defaults graphql.WhereOp) {
 	switch typ {
@@ -67,6 +68,8 @@ func predicatesOf(typ string, nullable bool) (has, defaults graphql.WhereOp) {
 		has, defaults = graphql.OpsEquality|graphql.OpsComparison, graphql.OpsEquality|graphql.OpsComparison
 	case "bool":
 		has, defaults = graphql.OpEQ|graphql.OpNEQ, graphql.OpEQ|graphql.OpNEQ
+	case "orderedID":
+		has, defaults = graphql.OpsEquality|graphql.OpsComparison, graphql.OpsEquality|graphql.OpsComparison
 	case "ID", "enum", "uuid":
 		has, defaults = graphql.OpsEquality, graphql.OpsEquality
 	default: // bytes, json
@@ -147,6 +150,11 @@ func (g *graph) whereOf(o *object) error {
 	}
 	for i, f := range e.Fields {
 		a := o.fanns[i]
+		key := o.node && i == e.PrimaryKey[0]
+		if key && a.WhereOps == 0 {
+			// The node key filters by default; an explicit WhereOps wins.
+			a.WhereOps = graphql.OpsDefault
+		}
 		if a.WhereOps == 0 || a.Skip&graphql.SkipWhereInput != 0 {
 			continue
 		}
@@ -160,8 +168,13 @@ func (g *graph) whereOf(o *object) error {
 			return err
 		}
 		switch {
-		case o.node && i == e.PrimaryKey[0]:
-			name, typ, kind, goBase, target = "id", "ID", "ID", "ID", o.name
+		case key:
+			// Only an enum or a uuid key is unordered.
+			kind = "orderedID"
+			if f.Type == "enum" || f.Type == "uuid" {
+				kind = "ID"
+			}
+			name, typ, goBase, target = "id", "ID", "ID", o.name
 		case o.fks[f.Name] || f.Implicit != "":
 			// A foreign key is never a raw scalar: its edge names it, and it
 			// takes the IDs of the edge's target.

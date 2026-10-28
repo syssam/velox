@@ -255,6 +255,77 @@ func renderErr(t *testing.T, m *plugin.Model, wants ...string) {
 
 // ---- tests ----
 
+// TestNodeKeyWhere: the node key of an entity with a where input has
+// predicates, typed ID, by default: all eight for an ordered key, the four
+// of equality for a uuid or an enum, and an explicit WhereOps wins.
+func TestNodeKeyWhere(t *testing.T) {
+	equality := []string{"id: ID", "idNEQ: ID", "idIn: [ID!]", "idNotIn: [ID!]"}
+	ordered := append(slices.Clone(equality), "idGT: ID", "idGTE: ID", "idLT: ID", "idLTE: ID")
+	// withKey is a User whose key has the type typ and the annotations as,
+	// and a name field with WhereOps, which gives it a where input.
+	withKey := func(typ string, as ...graphql.Annotation) *plugin.Entity {
+		name := field("name", "string")
+		name.Annotations = ann(t, graphql.WhereOps(graphql.OpEQ))
+		u := entity("User", name)
+		k := u.Fields[0]
+		k.Type = typ
+		if typ == "enum" {
+			k.EnumValues = []string{"a", "b"}
+		}
+		if len(as) > 0 {
+			k.Annotations = ann(t, as...)
+		}
+		return u
+	}
+	cases := []struct {
+		name string
+		u    *plugin.Entity
+		want []string // the key's predicates
+	}{
+		{"int64", withKey("int64"), ordered},
+		{"uint64", withKey("uint64"), ordered},
+		{"string", withKey("string"), ordered},
+		{"uuid", withKey("uuid"), equality},
+		{"enum", withKey("enum"), equality},
+		{"WhereOps()", withKey("int64", graphql.WhereOps()), ordered},
+		{"WhereOps(OpsAll)", withKey("int64", graphql.WhereOps(graphql.OpsAll)), ordered},
+		{"WhereOps(OpEQ)", withKey("int64", graphql.WhereOps(graphql.OpEQ)), equality[:1]},
+	}
+	for _, c := range cases {
+		s, sdl := load(t, model(c.u))
+		want := slices.Concat(logic("UserWhereInput"), c.want, []string{"name: String"})
+		if got := fieldsOf(s, "UserWhereInput"); !slices.Equal(got, want) {
+			t.Errorf("%s:\n got %v\nwant %v\n%s", c.name, got, want, sdl)
+		}
+	}
+
+	t.Run("skipped", func(t *testing.T) {
+		s, _ := load(t, model(withKey("int64", graphql.Skip(graphql.SkipWhereInput))))
+		want := append(logic("UserWhereInput"), "name: String")
+		if got := fieldsOf(s, "UserWhereInput"); !slices.Equal(got, want) {
+			t.Errorf("got %v\nwant %v", got, want)
+		}
+	})
+
+	// The key alone does not give an entity a where input.
+	t.Run("no other predicate", func(t *testing.T) {
+		s, _ := load(t, model(entity("User")))
+		if got := fieldsOf(s, "UserWhereInput"); got != nil {
+			t.Errorf("a where input of %v", got)
+		}
+	})
+
+	// A time key makes no Node: the entity has no id, and so no key predicates.
+	t.Run("time key", func(t *testing.T) {
+		u := withKey("time")
+		s, sdl := load(t, model(u))
+		want := append(logic("UserWhereInput"), "name: String")
+		if got := fieldsOf(s, "UserWhereInput"); !slices.Equal(got, want) {
+			t.Errorf("got %v\nwant %v\n%s", got, want, sdl)
+		}
+	})
+}
+
 func TestTypeMapping(t *testing.T) {
 	cases := []struct {
 		f    *plugin.Field

@@ -181,6 +181,16 @@ type CategoryWhereInput struct {
 	And []*CategoryWhereInput
 	Or  []*CategoryWhereInput
 
+	// Predicates on the ID.
+	ID      *string
+	IDNEQ   *string
+	IDIn    []string
+	IDNotIn []string
+	IDGT    *string
+	IDGTE   *string
+	IDLT    *string
+	IDLTE   *string
+
 	// The edge parent: whether it has a node, or one that matches.
 	HasParent     *bool
 	HasParentWith []*CategoryWhereInput
@@ -203,6 +213,14 @@ func (w *CategoryWhereInput) Pred(ctx context.Context) (velox.Pred[Category], er
 	gqlimpl.Not(f, "not", w.Not)
 	gqlimpl.And(f, "and", w.And)
 	gqlimpl.Or(f, "or", w.Or)
+	gqlimpl.ID(f, "id", w.ID, "Category", Categories.ID.EQ)
+	gqlimpl.ID(f, "idNEQ", w.IDNEQ, "Category", Categories.ID.NEQ)
+	gqlimpl.IDList(f, "idIn", w.IDIn, "Category", Categories.ID.In)
+	gqlimpl.IDList(f, "idNotIn", w.IDNotIn, "Category", Categories.ID.NotIn)
+	gqlimpl.ID(f, "idGT", w.IDGT, "Category", Categories.ID.GT)
+	gqlimpl.ID(f, "idGTE", w.IDGTE, "Category", Categories.ID.GTE)
+	gqlimpl.ID(f, "idLT", w.IDLT, "Category", Categories.ID.LT)
+	gqlimpl.ID(f, "idLTE", w.IDLTE, "Category", Categories.ID.LTE)
 	gqlimpl.Is(f, "hasParent", w.HasParent, Categories.Parent.Has)
 	gqlimpl.HasWith(f, "hasParentWith", w.HasParentWith, Categories.Parent.HasWhere)
 	return f.Pred()

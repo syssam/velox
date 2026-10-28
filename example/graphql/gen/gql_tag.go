@@ -243,6 +243,16 @@ type LabelWhereInput struct {
 	And []*LabelWhereInput
 	Or  []*LabelWhereInput
 
+	// Predicates on the ID.
+	ID      *string
+	IDNEQ   *string
+	IDIn    []string
+	IDNotIn []string
+	IDGT    *string
+	IDGTE   *string
+	IDLT    *string
+	IDLTE   *string
+
 	// Predicates on the field name.
 	Name          *string
 	NameNEQ       *string
@@ -280,6 +290,14 @@ func (w *LabelWhereInput) Pred(ctx context.Context) (velox.Pred[Tag], error) {
 	gqlimpl.Not(f, "not", w.Not)
 	gqlimpl.And(f, "and", w.And)
 	gqlimpl.Or(f, "or", w.Or)
+	gqlimpl.ID(f, "id", w.ID, "Label", Tags.ID.EQ)
+	gqlimpl.ID(f, "idNEQ", w.IDNEQ, "Label", Tags.ID.NEQ)
+	gqlimpl.IDList(f, "idIn", w.IDIn, "Label", Tags.ID.In)
+	gqlimpl.IDList(f, "idNotIn", w.IDNotIn, "Label", Tags.ID.NotIn)
+	gqlimpl.ID(f, "idGT", w.IDGT, "Label", Tags.ID.GT)
+	gqlimpl.ID(f, "idGTE", w.IDGTE, "Label", Tags.ID.GTE)
+	gqlimpl.ID(f, "idLT", w.IDLT, "Label", Tags.ID.LT)
+	gqlimpl.ID(f, "idLTE", w.IDLTE, "Label", Tags.ID.LTE)
 	gqlimpl.Value(f, "name", w.Name, Tags.Name.EQ)
 	gqlimpl.Value(f, "nameNEQ", w.NameNEQ, Tags.Name.NEQ)
 	gqlimpl.List(f, "nameIn", w.NameIn, Tags.Name.In)
