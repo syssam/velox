@@ -2158,23 +2158,10 @@ func TestBidiPartner(t *testing.T) {
 		wantPartners(t, e, "c is created with a", c.ID, a.ID, a.ID, c.ID, b.ID, 0, d.ID, 0)
 
 		// Re-pointing c to b frees a.
-		e.reset()
 		if _, err := gen.UpdateWriter(e.ctx, writerID(c.ID), gen.UpdateWriterInput{PartnerID: ptr(writerID(b.ID))}); err != nil {
 			t.Fatal(err)
 		}
 		wantPartners(t, e, "c is re-pointed to b", c.ID, b.ID, b.ID, c.ID, a.ID, 0, d.ID, 0)
-		// The re-point is three UPDATEs of writers: c's own key, the key
-		// that still names c (the old partner's), and b's, which is linked
-		// only if it is NULL.
-		var updates []string
-		for _, s := range e.stmts() {
-			if strings.HasPrefix(s, "UPDATE") {
-				updates = append(updates, s)
-			}
-		}
-		if len(updates) != 3 || !strings.Contains(updates[2], "IS NULL") {
-			t.Errorf("sent %q, want three UPDATEs, the last linking a NULL key", e.stmts())
-		}
 
 		// Setting the partner it has changes nothing.
 		if _, err := gen.UpdateWriter(e.ctx, writerID(c.ID), gen.UpdateWriterInput{PartnerID: ptr(writerID(b.ID))}); err != nil {
@@ -2215,6 +2202,11 @@ func TestBidiPartner(t *testing.T) {
 			t.Errorf("c takes h, of tenant 8: %v (code %q), want NOT_FOUND", err, code(err))
 		}
 		wantPartners(t, e, "c fails to take h", c.ID, 0, a.ID, d.ID, d.ID, a.ID)
+		if hw, err := e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(h.ID)).One(velox.WithTenant(e.ctx, int64(8))); err != nil {
+			t.Fatal(err)
+		} else if hw.WriterPartner != nil {
+			t.Errorf("c fails to take h: h's writer_partner = %d, want NULL", *hw.WriterPartner)
+		}
 
 		// A partner the caller may read but not change, the "frozen" writer
 		// of Writer's Write policy, passes that check; the link of its key

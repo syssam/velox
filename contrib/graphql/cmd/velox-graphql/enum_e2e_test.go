@@ -9,7 +9,8 @@ import (
 
 // e2eEnumSchema is the schema of the enum e2e app: an entity renamed in
 // GraphQL (Alarm is the type Alert) with a field of the application's own
-// enum type.
+// enum type, and Tag, a Node with a string key, whose where input has the
+// key's ordered predicates.
 const e2eEnumSchema = `package schema
 
 import (
@@ -27,6 +28,12 @@ func (Alarm) Fields() []schema.Field {
 
 func (Alarm) Annotations() []schema.Annotation {
 	return []schema.Annotation{graphql.Type("Alert"), graphql.QueryField("alerts")}
+}
+
+type Tag struct{ schema.Schema }
+
+func (Tag) Fields() []schema.Field {
+	return []schema.Field{field.String("id"), field.String("name").Annotations(graphql.WhereOps(graphql.OpEQ))}
 }
 `
 
@@ -103,8 +110,10 @@ type queryResolver struct{ *Resolver }
 const e2eEnumRun = `package app_test
 
 import (
+	"context"
 	"database/sql"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -112,10 +121,47 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	_ "modernc.org/sqlite"
 
+	"example.com/app/gen"
 	"example.com/app/graph"
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
 )
+
+// TestTagIDGT: a string key's idGT compiles, to Tags.ID.GT, and compares
+// the keys (SQLite's default collation).
+func TestTagIDGT(t *testing.T) {
+	sdb, err := sql.Open("sqlite", "file::memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sdb.Close() })
+	sdb.SetMaxOpenConns(1)
+	for _, s := range []string{
+		"CREATE TABLE tags (id TEXT PRIMARY KEY, name TEXT NOT NULL)",
+		"INSERT INTO tags (id, name) VALUES ('a', 'x'), ('b', 'x'), ('c', 'x')",
+	} {
+		if _, err := sdb.Exec(s); err != nil {
+			t.Fatalf("%s: %v", s, err)
+		}
+	}
+	ctx := context.Background()
+	b := (&gen.Tag{ID: "b"}).IDGQL()
+	p, err := (&gen.TagWhereInput{IDGT: &b}).Pred(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := velox.Open(velox.SQLite, sdb).Query[gen.Tag]().Where(p).Unbounded().All(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, r := range rows {
+		ids = append(ids, r.ID)
+	}
+	if !slices.Equal(ids, []string{"c"}) {
+		t.Errorf("idGT b: %v, want [c]", ids)
+	}
+}
 
 func TestAlertLevel(t *testing.T) {
 	db, err := sql.Open("sqlite", "file::memory:")
@@ -193,7 +239,9 @@ func TestAppEnumRenamed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
-	if !strings.Contains(out, "--- PASS: TestAlertLevel ") {
-		t.Errorf("no PASS of TestAlertLevel in\n%s", out)
+	for _, name := range []string{"TestAlertLevel", "TestTagIDGT"} {
+		if !strings.Contains(out, "--- PASS: "+name+" ") {
+			t.Errorf("no PASS of %s in\n%s", name, out)
+		}
 	}
 }

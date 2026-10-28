@@ -41,6 +41,7 @@ type personWhere struct {
 	IDNEQ   *string
 	IDIn    []string
 	IDNotIn []string
+	IDGT    *string
 
 	Name          *string
 	NameNEQ       *string
@@ -81,6 +82,7 @@ func (w *personWhere) Pred(ctx context.Context) (velox.Pred[person], error) {
 	gqlimpl.IDAs(f, "idNEQ", w.IDNEQ, "Person", gqlimpl.AsInt[personID, int64], peopleAs.ID.NEQ)
 	gqlimpl.IDList(f, "idIn", w.IDIn, "Person", people.ID.In)
 	gqlimpl.IDListAs(f, "idNotIn", w.IDNotIn, "Person", gqlimpl.AsInt[personID, int64], peopleAs.ID.NotIn)
+	gqlimpl.ID(f, "idGT", w.IDGT, "Person", people.ID.GT)
 	gqlimpl.Value(f, "name", w.Name, people.Name.EQ)
 	gqlimpl.Value(f, "nameNEQ", w.NameNEQ, people.Name.NEQ)
 	gqlimpl.List(f, "nameIn", w.NameIn, people.Name.In)
@@ -305,6 +307,7 @@ func TestWhereIDs(t *testing.T) {
 		"IDNEQ":         {IDNEQ: &post},
 		"IDIn":          {IDIn: []string{personID64(1), post}},
 		"IDNotIn":       {IDNotIn: []string{post}},
+		"IDGT":          {IDGT: &post},
 		"nested":        {Or: []*personWhere{{Name: strp("a")}, {ID: &post}}},
 		"under a not":   {Not: &personWhere{IDIn: []string{post}}},
 		"after a field": {Name: strp("a"), IDNotIn: []string{personID64(2), post}},
@@ -321,6 +324,7 @@ func TestWhereIDs(t *testing.T) {
 	for name, w := range map[string]*personWhere{
 		"ID":     {ID: &bad},
 		"IDIn":   {IDIn: []string{bad}},
+		"IDGT":   {IDGT: &bad},
 		"string": {ID: strp(veloxgql.EncodeID("Person", "x"))},
 	} {
 		if _, err := w.Pred(ctx); !errors.Is(err, veloxgql.ErrBadID) {
@@ -329,6 +333,18 @@ func TestWhereIDs(t *testing.T) {
 	}
 	if ran := st.take(); len(ran) != 0 {
 		t.Errorf("the refused IDs ran %v", ran)
+	}
+}
+
+// TestWhereKeyOps: the key's ordered predicate compares keys, and an empty
+// idIn, a list given with no ID, selects no row, as an empty In does.
+func TestWhereKeyOps(t *testing.T) {
+	db, _ := peopleDB(t)
+	if got := where(t, db, &personWhere{IDGT: strp(personID64(7))}); !slices.Equal(got, []int64{8, 9, 10}) {
+		t.Errorf("idGT 7: %v, want [8 9 10]", got)
+	}
+	if got := where(t, db, &personWhere{IDIn: []string{}}); len(got) != 0 {
+		t.Errorf("an empty idIn: %v, want no row", got)
 	}
 }
 

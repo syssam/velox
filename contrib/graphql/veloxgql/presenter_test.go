@@ -511,6 +511,12 @@ func TestErrorPresenterOnCanceled(t *testing.T) {
 	if len(l.take()) != 1 || len(c.take()) != 0 {
 		t.Error("a live request's cancellation must go to log")
 	}
+	// The last OnCanceled wins.
+	first := &logged{}
+	_ = veloxgql.ErrorPresenter(l.log, veloxgql.OnCanceled(first.log), veloxgql.OnCanceled(c.log))(canceled, context.Canceled)
+	if len(first.take()) != 0 || len(c.take()) != 1 || len(l.take()) != 0 {
+		t.Error("two OnCanceled: the cancellation must go to the last one's function only")
+	}
 
 	// With a nil log, OnCanceled replaces the debug record; OnCanceled(nil)
 	// drops the error without one.

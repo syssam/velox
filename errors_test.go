@@ -88,6 +88,8 @@ func TestIsNotFound(t *testing.T) {
 		{"other", errors.New("not found"), false},
 		{"typed nil before", errors.Join((*net.OpError)(nil), ErrNotFound), true},
 		{"typed nil after", errors.Join(errors.New("x"), (*net.OpError)(nil)), false},
+		{"typed nil wrapped by %w", fmt.Errorf("x: %w", (*net.OpError)(nil)), false},
+		{"typed nil wrapped by %w, then the sentinel", fmt.Errorf("x: %w, %w", (*net.OpError)(nil), ErrNotFound), true},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			if got := IsNotFound(c.err); got != c.want {

@@ -167,8 +167,9 @@ func TestCostDodges(t *testing.T) {
 }
 
 // TestCostSkipInclude: a selection that @skip(if: true) or @include(if: false)
-// leaves out costs nothing, its condition read from the variables. One whose
-// condition cannot be read counts, as an upper bound.
+// leaves out costs nothing, its condition a literal or a variable's value, or
+// a missing variable's default. One whose condition is not a boolean counts,
+// as an upper bound.
 func TestCostSkipInclude(t *testing.T) {
 	l := veloxgql.DefaultLimits()
 	l.MaxPage = 7
@@ -191,9 +192,28 @@ func TestCostSkipInclude(t *testing.T) {
 		{"fragment spread", `{ ...F @skip(if: true) users(first: 1) { totalCount } } fragment F on Query { many: users(first: 5) { totalCount } }`, nil, 1 + 1},
 		{"spread skipped once, taken once", `{ ...F @skip(if: true) other: users(first: 1) { totalCount } ...F } fragment F on Query { many: users(first: 5) { totalCount } }`, nil, 1 + 1 + 1 + 5},
 		{"skipped child", `{ users(first: 2) { totalCount edges @skip(if: true) { node { name } } } }`, nil, 1 + 2*1},
+		// Both on one selection: either one leaves it out.
+		{"skip true, include true", `{ users(first: 2) @skip(if: true) @include(if: true) { totalCount } }`, nil, 0},
+		{"skip false, include false", `{ users(first: 2) @skip(if: false) @include(if: false) { totalCount } }`, nil, 0},
+		{"skip false, include true", `{ users(first: 2) @skip(if: false) @include(if: true) { totalCount } }`, nil, 1 + 2},
+		{"skip true by variable, include true", `query ($s: Boolean!) { users(first: 2) @include(if: true) @skip(if: $s) { totalCount } }`, map[string]any{"s": true}, 0},
+		// A missing variable reads its default.
+		{"skip by a missing variable's default", `query ($s: Boolean = true) { users(first: 2) @skip(if: $s) { totalCount } }`, nil, 0},
 	} {
 		if got := costOf(t, c.query, c.vars, l); got != c.want {
 			t.Errorf("%s: cost %d, want %d", c.name, got, c.want)
+		}
+	}
+	// A variable of the wrong type, or null, which gqlgen's coercion would
+	// refuse for a Boolean!, does not skip when Cost is handed it as it is.
+	schema := gqlparser.MustLoadSchema(&ast.Source{Input: costSDL})
+	doc, errs := gqlparser.LoadQueryWithRules(schema, withVar, nil)
+	if len(errs) > 0 {
+		t.Fatal(errs)
+	}
+	for name, v := range map[string]any{"a string": "yes", "null": nil} {
+		if got := veloxgql.Cost(schema, doc.Operations[0], map[string]any{"s": v}, l); got != 1+2 {
+			t.Errorf("skip by %s variable: cost %d, want %d", name, got, 1+2)
 		}
 	}
 }
