@@ -29,4 +29,7 @@ func TestOpRawAndReads(t *testing.T) {
 			t.Errorf("%v.Reads() = %v, want %v", c.op, got, c.reads)
 		}
 	}
+	if got := velox.Op(99).String(); got != "unknown" {
+		t.Errorf("Op(99).String() = %q, want unknown", got)
+	}
 }

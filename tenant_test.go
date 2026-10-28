@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/syssam/velox2"
@@ -316,6 +317,28 @@ func TestScopeNeverChangesASharedQuery(t *testing.T) {
 	}
 	before, beforeArgs := run0()
 
+	// dbH has an Around hook, so its statements take run's path, where
+	// prepare clones Where; db0 stays plain to keep the plain path covered.
+	// The hook checks, for each statement, that it holds the statement's
+	// tenant three times and no other goroutine's.
+	var hookBad atomic.Pointer[string]
+	eH := &velox.FakeExec{}
+	dbH := velox.OpenFake(velox.Postgres, eH, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+		n := 0
+		for _, a := range st.Args {
+			if a == st.Tenant {
+				n++
+			}
+		}
+		if n != 3 || slices.ContainsFunc(st.Args, func(a any) bool { v, ok := a.(int64); return ok && a != st.Tenant && v >= 100 }) {
+			s := fmt.Sprintf("tenant %v: args %v", st.Tenant, st.Args)
+			hookBad.CompareAndSwap(nil, &s)
+		}
+		return next(ctx)
+	}))
+	baseH := dbH.Query[testmodel.Ticket]().Where(cond, has).Limit(1)
+	sqlH0, argsH0 := sqlOK(t)(baseH.SQL(tenant(int64(1))))
+
 	var wg sync.WaitGroup
 	for i := range 50 {
 		id := int64(i + 100)
@@ -344,8 +367,20 @@ func TestScopeNeverChangesASharedQuery(t *testing.T) {
 				t.Error(err)
 			}
 		})
+		wg.Go(func() {
+			// The same on the hooked path, run's.
+			if _, err := baseH.All(tenant(id)); err != nil {
+				t.Error(err)
+			}
+		})
 	}
 	wg.Wait()
+	if s := hookBad.Load(); s != nil {
+		t.Errorf("hooked path, %s", *s)
+	}
+	if sql, args := sqlOK(t)(baseH.SQL(tenant(int64(1)))); sql != sqlH0 || !reflect.DeepEqual(args, argsH0) {
+		t.Errorf("the hooked base query's SQL changed:\n%s %v\n%s %v", sqlH0, argsH0, sql, args)
+	}
 
 	if sql, args := sqlOK(t)(base.SQL(tenant(int64(1)))); sql != sql0 || !reflect.DeepEqual(args, args0) {
 		t.Errorf("the base query's SQL changed:\n%s %v\n%s %v", sql0, args0, sql, args)

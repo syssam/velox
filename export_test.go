@@ -467,7 +467,11 @@ func ExistsOn(p Predicate) *EntityInfo {
 	if p.n.op != opExists {
 		return nil
 	}
-	return p.n.v.(link).target
+	l, ok := p.n.v.(link)
+	if !ok {
+		return nil
+	}
+	return l.target
 }
 
 // TargetOf is the target of a relation to T as a use site names it: what Rel

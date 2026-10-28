@@ -91,6 +91,27 @@ func TestPolicyOnCount(t *testing.T) {
 	wantSent(t, e, `SELECT COUNT(*) FROM "tickets" WHERE "org_id" = $1 AND "owner" = $2`, int64(1), "ann")
 }
 
+func TestPolicyOnCountOfAnExists(t *testing.T) {
+	e := &velox.FakeExec{Rows: [][]any{{int64(3)}}}
+	db := velox.OpenFake(velox.Postgres, e)
+	if _, err := db.Query[testmodel.Ticket]().Where(Tk.Parent.Has()).Count(asUser("ann")); err != nil {
+		t.Fatal(err)
+	}
+	wantSent(t, e, `SELECT COUNT(*) FROM "tickets" WHERE EXISTS (SELECT 1 FROM "tickets" AS "vx1" WHERE "vx1"."id" = "tickets"."parent_id" AND "org_id" = $1 AND "owner" = $2) AND "org_id" = $3 AND "owner" = $4`,
+		int64(1), "ann", int64(1), "ann")
+}
+
+// TestPolicyDeleteOrder: the caller's conditions come first, then the policy's.
+func TestPolicyDeleteOrder(t *testing.T) {
+	e := &velox.FakeExec{Affected: 1}
+	db := velox.OpenFake(velox.Postgres, e)
+	if _, err := db.Delete[testmodel.Ticket]().Where(Tk.Done.EQ(true), Tk.Title.NEQ("x")).Exec(asUser("ann")); err != nil {
+		t.Fatal(err)
+	}
+	wantSent(t, e, `DELETE FROM "tickets" WHERE "done" = $1 AND "title" <> $2 AND "done" = $3 AND "org_id" = $4 AND "owner" = $5 AND "owner" = $6`,
+		true, "x", true, int64(1), "ann", "ann")
+}
+
 // TestPolicyOnBothPaths: the policy applies with hooks (run) as without
 // (plain), after the Rewrite hooks, which see the statement without it.
 func TestPolicyOnBothPaths(t *testing.T) {
@@ -290,6 +311,23 @@ func TestSkipPolicy(t *testing.T) {
 func TestSaveOfAHiddenRow(t *testing.T) {
 	e := &velox.FakeExec{Affected: 0}
 	db := velox.OpenFake(velox.Postgres, e)
+	tk := testmodel.Ticket{ID: 1, OrgID: 1, Owner: "bob", Title: "T-1"}
+	err := db.Save(&tk, Tk.Title).Exec(asUser("ann"))
+	if !errors.Is(err, velox.ErrNotFound) {
+		t.Fatalf("got %v", err)
+	}
+	if strings.Count(e.SQL, `"owner" = $`) != 2 || e.Calls != 1 {
+		t.Errorf("save: %s %v", e.SQL, e.Args)
+	}
+}
+
+// TestHiddenRowThroughRun: the same as TestSaveOfAHiddenRow, on a DB with a
+// pass-through Around hook, so the save takes run's path.
+func TestHiddenRowThroughRun(t *testing.T) {
+	e := &velox.FakeExec{Affected: 0}
+	db := velox.OpenFake(velox.Postgres, e, velox.WithAround(func(ctx context.Context, _ *velox.Statement, next func(context.Context) error) error {
+		return next(ctx)
+	}))
 	tk := testmodel.Ticket{ID: 1, OrgID: 1, Owner: "bob", Title: "T-1"}
 	err := db.Save(&tk, Tk.Title).Exec(asUser("ann"))
 	if !errors.Is(err, velox.ErrNotFound) {

@@ -3,10 +3,12 @@ package velox_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/syssam/velox2"
+	"github.com/syssam/velox2/internal/testmodel"
 )
 
 // A daudited is an entity whose hooks do what a hook with an audit trail
@@ -303,6 +305,36 @@ func TestDryRunReadsRun(t *testing.T) {
 	}
 	if w := sentWrites(e); len(w) != 0 {
 		t.Errorf("sent %q", w)
+	}
+}
+
+// TestDryRunSplitInsertAllSQL: an InsertAll too large for one statement
+// returns the first statement from SQL(ctx), and sends nothing.
+func TestDryRunSplitInsertAllSQL(t *testing.T) {
+	e := &velox.FakeExec{}
+	db := velox.OpenFake(velox.Postgres, e)
+	defer velox.SetMaxParams(velox.Postgres, 18)()
+	rows := []testmodel.Invoice{{OrgID: 1, Number: "A"}, {OrgID: 1, Number: "B"}, {OrgID: 1, Number: "C"}}
+	sql, args, err := db.InsertAll(rows).SQL(tenant(int64(1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = `INSERT INTO "invoices" ("created_at", "updated_at", "org_id", "number", "total", "paid", "paid_at", "note", "data") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9), ($10, $11, $12, $13, $14, $15, $16, $17, $18)`
+	if sql != want {
+		t.Errorf("SQL\n got %s\nwant %s", sql, want)
+	}
+	if len(args) != 18 {
+		t.Fatalf("%d args, want 18: %v", len(args), args)
+	}
+	// The values are typed (a nil *time.Time, a nil []byte); compare their print.
+	if got := fmt.Sprint(args[2:9]); got != "[1 A 0 false <nil>  []]" {
+		t.Errorf("row 1: %s", got)
+	}
+	if got := fmt.Sprint(args[11:18]); got != "[1 B 0 false <nil>  []]" {
+		t.Errorf("row 2: %s", got)
+	}
+	if e.Calls != 0 {
+		t.Errorf("%d statements sent", e.Calls)
 	}
 }
 

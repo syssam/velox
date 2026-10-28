@@ -32,9 +32,10 @@ func TestMutationSetReplacesAndAppends(t *testing.T) {
 	}
 	// After an error, and when no row matched, *x is as it was.
 	x = hnote{ID: 1, Title: "t", Note: "old"}
-	e.Errs = []error{errors.New("boom")}
-	if err := db.Save(&x, hn.Title).Exec(ctx); err == nil {
-		t.Fatal("no error")
+	boom := errors.New("boom")
+	e.Errs = []error{boom}
+	if err := db.Save(&x, hn.Title).Exec(ctx); !errors.Is(err, boom) {
+		t.Fatalf("got %v, want boom", err)
 	}
 	e.Affected = 0
 	if err := db.Save(&x, hn.Title).Exec(ctx); !errors.Is(err, ErrNotFound) {

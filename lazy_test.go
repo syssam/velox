@@ -246,9 +246,13 @@ func TestHasWhereErrorAtStatement(t *testing.T) {
 	// relation's error and sends nothing.
 	le := &velox.FakeExec{}
 	ldb := velox.OpenFake(velox.Postgres, le)
+	// lzLateMeta is package-level and loads once per process, so this check
+	// means something on the process's first load only; on a later run, or
+	// after another test loaded it, it still pins that HasWhere loads nothing.
+	before := lzLateLoads
 	lp := lzLates.Bad.HasWhere()
-	if lzLateLoads != 0 {
-		t.Fatalf("HasWhere built the owner's metadata (%d loads)", lzLateLoads)
+	if lzLateLoads != before {
+		t.Fatalf("HasWhere built the owner's metadata (%d loads, were %d)", lzLateLoads, before)
 	}
 	const lwant = "velox: velox_test.lzLate.Bad: its target github.com/syssam/velox2_test.badDesc is invalid: velox_test.badDesc: the tenant names column 3, of 1"
 	if _, err := ldb.Query[lzLate]().Where(lp).Limit(1).All(ctx); err == nil || err.Error() != lwant {
