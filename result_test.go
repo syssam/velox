@@ -88,6 +88,43 @@ func TestResultOfAFailedStatement(t *testing.T) {
 	}
 }
 
+// TestAffectedOfAFailedReturning: an INSERT … RETURNING that fails, in the
+// query or part way through its rows, reports -1, not the rows it read.
+func TestAffectedOfAFailedReturning(t *testing.T) {
+	boom, cut := errors.New("boom"), errors.New("cut")
+	var got velox.Result
+	insert := func(d velox.Dialect, e *velox.FakeExec) (testmodel.Invoice, error) {
+		record := velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
+			err := next(ctx)
+			got = st.Result
+			return err
+		})
+		inv := testmodel.Invoice{OrgID: 1, Number: "N", Data: []byte("d")}
+		err := velox.OpenFake(d, e, record).Insert(&inv).Exec(ctx)
+		return inv, err
+	}
+
+	got = velox.Result{Affected: 99}
+	if _, err := insert(velox.Postgres, &velox.FakeExec{Err: boom}); !errors.Is(err, boom) || got.Affected != -1 {
+		t.Errorf("PostgreSQL, query error: %v, Affected %d", err, got.Affected)
+	}
+
+	got = velox.Result{Affected: 99}
+	inv, err := insert(velox.Postgres, &velox.FakeExec{Rows: [][]any{{int64(5)}}, RowsErr: cut})
+	if !errors.Is(err, cut) || err.Error() != "velox: testmodel.Invoice: cut" || got.Affected != -1 {
+		t.Errorf("PostgreSQL, rows error: %v, Affected %d", err, got.Affected)
+	}
+	// The key was scanned before the error; a failed insert still leaves it.
+	if inv.ID != 5 {
+		t.Errorf("ID %d, want 5 (today's behavior)", inv.ID)
+	}
+
+	got = velox.Result{Affected: 99}
+	if _, err := insert(velox.MySQL, &velox.FakeExec{Err: boom}); !errors.Is(err, boom) || got.Affected != -1 {
+		t.Errorf("MySQL, exec error: %v, Affected %d", err, got.Affected)
+	}
+}
+
 func TestResultIsTheLastAttempts(t *testing.T) {
 	boom := errors.New("boom")
 	var first, second velox.Result

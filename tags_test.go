@@ -31,6 +31,13 @@ func TestWithTagsNoPairs(t *testing.T) {
 	if got := velox.WithTags(bg); got != bg {
 		t.Errorf("WithTags(bg) = %v, want bg itself", got)
 	}
+	parent := velox.WithTags(bg, "route", "a")
+	if got := velox.WithTags(parent); got != parent {
+		t.Errorf("WithTags(parent) = %v, want parent itself", got)
+	}
+	if got, want := velox.TagsOf(velox.WithTags(parent)), []velox.Tag{{"route", "a"}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("tags %v, want %v", got, want)
+	}
 }
 
 func TestWithTagsOddCountPanics(t *testing.T) {

@@ -108,6 +108,24 @@ func TestLookAlikeErrorsAreLeftAlone(t *testing.T) {
 	}
 }
 
+// PgError has the shape of pgconn's error and the name, but is not the
+// driver's type: driverError checks the package path.
+type PgError struct{ Code string }
+
+func (*PgError) Error() string { return "look-alike" }
+
+func TestLookAlikeDriverTypeFromAnotherPackage(t *testing.T) {
+	err := &PgError{Code: "23505"}
+	var ce *ConstraintError
+	got := dbErr(invInfo, err)
+	if errors.As(got, &ce) || retryable(err) {
+		t.Errorf("a look-alike PgError was taken for the driver's: %v", got)
+	}
+	if code, ok := DriverCode(err); ok || code != "" {
+		t.Errorf("DriverCode = %q, %v", code, ok)
+	}
+}
+
 func TestSQLiteKind(t *testing.T) {
 	for _, c := range []struct {
 		code int

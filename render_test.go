@@ -108,6 +108,39 @@ func TestRenderSchemaQualifiedTable(t *testing.T) {
 	}
 }
 
+// TestRenderSchemaQualifiedWrites: INSERT, UPDATE and the upsert qualify the
+// table with its schema, and the upsert's update-branch condition qualifies
+// it again.
+func TestRenderSchemaQualifiedWrites(t *testing.T) {
+	info := &EntityInfo{Name: "velox.inv", Schema: "billing", Table: "invoices", Tenant: -1, Columns: []ColumnInfo{{Name: "id"}, {Name: "org_id"}, {Name: "total"}}}
+	where := []Predicate{{node{op: opEQ, col: 1, v: int64(7)}}}
+	insert := func() *Statement {
+		return &Statement{Op: OpInsert, Entity: info, Columns: []int{1, 2}, Rows: [][]any{{int64(7), 1.5}}, Returning: []int{0}}
+	}
+	update := &Statement{Op: OpUpdate, Entity: info, Set: []Assignment{{Column: 2, Op: AssignAdd, Value: 1.5}}, Where: where}
+	upsert := insert()
+	upsert.Conflict = &ConflictClause{Columns: []int{1}, Update: []int{2}, Where: where}
+	for _, c := range []struct {
+		d    Dialect
+		name string
+		st   *Statement
+		want string
+	}{
+		{Postgres, "insert", insert(), `INSERT INTO "billing"."invoices" ("org_id", "total") VALUES ($1, $2) RETURNING "id"`},
+		{Postgres, "update", update, `UPDATE "billing"."invoices" SET "total" = "total" + $1 WHERE "org_id" = $2`},
+		{Postgres, "upsert", upsert, `INSERT INTO "billing"."invoices" ("org_id", "total") VALUES ($1, $2) ON CONFLICT ("org_id") DO UPDATE SET "total" = EXCLUDED."total" WHERE "billing"."invoices"."org_id" = $3 RETURNING "id"`},
+		{MySQL, "insert", insert(), "INSERT INTO `billing`.`invoices` (`org_id`, `total`) VALUES (?, ?)"},
+		{MySQL, "update", update, "UPDATE `billing`.`invoices` SET `total` = `total` + ? WHERE `org_id` = ?"},
+		{SQLite, "insert", insert(), `INSERT INTO "billing"."invoices" ("org_id", "total") VALUES (?, ?) RETURNING "id"`},
+		{SQLite, "update", update, `UPDATE "billing"."invoices" SET "total" = "total" + ? WHERE "org_id" = ?`},
+		{SQLite, "upsert", upsert, `INSERT INTO "billing"."invoices" ("org_id", "total") VALUES (?, ?) ON CONFLICT ("org_id") DO UPDATE SET "total" = EXCLUDED."total" WHERE "billing"."invoices"."org_id" = ? RETURNING "id"`},
+	} {
+		if got, _ := render(c.d, c.st); got != c.want {
+			t.Errorf("%v %s:\n got %s\nwant %s", c.d, c.name, got, c.want)
+		}
+	}
+}
+
 // TestRenderMySQLDoNothingQualifiesTheSchema: the no-op assignment's right side
 // carries the whole qualified table name.
 func TestRenderMySQLDoNothingQualifiesTheSchema(t *testing.T) {

@@ -156,6 +156,48 @@ func TestCacheKeepsWriteShapesApart(t *testing.T) {
 	}
 }
 
+// TestCacheKeepsWriteColumnsApart: statements that differ only in which
+// columns a clause names do not share a cached shape.
+func TestCacheKeepsWriteColumnsApart(t *testing.T) {
+	upsert := func(key, update []int) *Statement {
+		st := ins([]int{1, 2, 3}, [][]any{{int64(1), "n", 1.0}})
+		st.Conflict = &ConflictClause{Columns: key, Update: update}
+		return st
+	}
+	returning := func(cols []int) *Statement {
+		st := ins([]int{1}, [][]any{{int64(1)}})
+		st.Returning = cols
+		return st
+	}
+	set := func(col int) *Statement {
+		return &Statement{Op: OpUpdate, Entity: invInfo, Set: []Assignment{{Column: col, Op: AssignSet, Value: 1.0}}}
+	}
+	for _, c := range []struct {
+		name string
+		a, b *Statement
+	}{
+		{"Conflict.Columns", upsert([]int{1}, []int{3}), upsert([]int{2}, []int{3})},
+		{"Conflict.Update", upsert([]int{1}, []int{3}), upsert([]int{1}, []int{2})},
+		{"Returning", returning([]int{0}), returning([]int{1})},
+		{"Set column", set(3), set(2)},
+	} {
+		for _, d := range []Dialect{Postgres, SQLite} {
+			var cache renderCache
+			a, _ := cache.render(d, c.a)
+			b, _ := cache.render(d, c.b)
+			if a == b {
+				t.Errorf("%s, %v: two shapes share SQL: %s", c.name, d, a)
+			}
+			if want, _ := render(d, c.a); a != want {
+				t.Errorf("%s, %v: first\n got %s\nwant %s", c.name, d, a, want)
+			}
+			if want, _ := render(d, c.b); b != want {
+				t.Errorf("%s, %v: second\n got %s\nwant %s", c.name, d, b, want)
+			}
+		}
+	}
+}
+
 // TestCacheBoundedInBytes is Review Focus 3: In lists of many lengths cannot
 // grow the cache past its byte bound, and statements past it still render
 // right.

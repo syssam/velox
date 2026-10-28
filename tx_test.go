@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"reflect"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/syssam/velox2"
@@ -48,6 +50,24 @@ func TestTxRollsBackOnError(t *testing.T) {
 	})
 	if !errors.Is(err, boom) || e.Log[len(e.Log)-1] != "ROLLBACK" {
 		t.Errorf("%v %q", err, e.Log)
+	}
+}
+
+// TestRollbackOfAnEndedTxIsNotJoined: a ROLLBACK that fails because the driver
+// already ended the transaction has nothing to report, so fn's error is
+// returned as it is.
+func TestRollbackOfAnEndedTxIsNotJoined(t *testing.T) {
+	boom := errors.New("boom")
+	for _, rollbackErr := range []error{sql.ErrTxDone, pgx.ErrTxClosed} {
+		e := &velox.FakeExec{RollbackErr: rollbackErr}
+		db := velox.OpenFake(velox.Postgres, e)
+		err := db.Tx(ctx, func(context.Context, *velox.DB) error { return boom })
+		if err == nil || err.Error() != "boom" || !errors.Is(err, boom) || errors.Is(err, rollbackErr) {
+			t.Errorf("%v: Tx returned %v", rollbackErr, err)
+		}
+		if !slices.Contains(e.Log, "ROLLBACK") || slices.Contains(e.Log, "COMMIT") {
+			t.Errorf("%v: log %q, want a ROLLBACK and no COMMIT", rollbackErr, e.Log)
+		}
 	}
 }
 

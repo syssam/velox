@@ -292,35 +292,68 @@ func (r *fakeRows) Scan(dst ...any) error {
 }
 
 func assign(dst, src any) error {
+	// A typed case takes a src of exactly its kind, as the driver's values are;
+	// any other is an error, as database/sql's Scan returns one.
+	bad := func() error { return fmt.Errorf("fake: cannot scan %T into %T", src, dst) }
 	switch d := dst.(type) {
 	case sql.Scanner:
 		return d.Scan(src)
 	case *int64:
-		*d = src.(int64)
+		v, ok := src.(int64)
+		if !ok {
+			return bad()
+		}
+		*d = v
 	case *string:
-		*d = src.(string)
+		v, ok := src.(string)
+		if !ok {
+			return bad()
+		}
+		*d = v
 	case *float64:
-		*d = src.(float64)
+		v, ok := src.(float64)
+		if !ok {
+			return bad()
+		}
+		*d = v
 	case *bool:
-		*d = src.(bool)
+		v, ok := src.(bool)
+		if !ok {
+			return bad()
+		}
+		*d = v
 	case *[]byte:
-		*d = src.([]byte)
+		v, ok := src.([]byte)
+		if !ok {
+			return bad()
+		}
+		*d = v
 	case *time.Time:
-		*d = src.(time.Time)
+		v, ok := src.(time.Time)
+		if !ok {
+			return bad()
+		}
+		*d = v
 	case **time.Time:
 		if src == nil {
 			*d = nil
-		} else {
-			v := src.(time.Time)
-			*d = &v
+			return nil
 		}
+		v, ok := src.(time.Time)
+		if !ok {
+			return bad()
+		}
+		*d = &v
 	case **string:
 		if src == nil {
 			*d = nil
-		} else {
-			v := src.(string)
-			*d = &v
+			return nil
 		}
+		v, ok := src.(string)
+		if !ok {
+			return bad()
+		}
+		*d = &v
 	default:
 		return assignReflect(dst, src)
 	}
@@ -328,8 +361,9 @@ func assign(dst, src any) error {
 }
 
 // assignReflect scans src into any pointer dst: a named type, or a pointer
-// field (nil src sets it to nil). Like the typed cases it panics on a source
-// of another kind.
+// field (nil src sets it to nil). Like the typed cases it returns an error for
+// a source of another kind, except that an int64 converts into any integer
+// kind, as database/sql does, and is an error when it does not fit.
 func assignReflect(dst, src any) error {
 	dv := reflect.ValueOf(dst)
 	if dv.Kind() != reflect.Pointer || dv.IsNil() {
@@ -342,24 +376,54 @@ func assignReflect(dst, src any) error {
 			dv.SetZero()
 			return nil
 		}
-		panic(fmt.Sprintf("fake: cannot scan nil into %T", dst))
+		return fmt.Errorf("fake: cannot scan %T into %T", src, dst)
 	}
 	sv := reflect.ValueOf(src)
 	target := dv.Type()
 	if dv.Kind() == reflect.Pointer {
 		target = target.Elem()
 	}
-	if sv.Kind() != target.Kind() {
-		panic(fmt.Sprintf("fake: cannot scan %T into %T", src, dst))
-	}
 	v := reflect.New(target).Elem()
-	v.Set(sv.Convert(target))
+	switch {
+	case sv.Kind() == target.Kind():
+		v.Set(sv.Convert(target))
+	case sv.Kind() == reflect.Int64 && isIntKind(target.Kind()):
+		n := sv.Int()
+		var fits bool
+		switch target.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32:
+			fits = !v.OverflowInt(n)
+			if fits {
+				v.SetInt(n)
+			}
+		default:
+			fits = n >= 0 && !v.OverflowUint(uint64(n))
+			if fits {
+				v.SetUint(uint64(n))
+			}
+		}
+		if !fits {
+			return fmt.Errorf("fake: %d overflows %T", n, dst)
+		}
+	default:
+		return fmt.Errorf("fake: cannot scan %T into %T", src, dst)
+	}
 	if dv.Kind() == reflect.Pointer {
 		dv.Set(v.Addr())
 	} else {
 		dv.Set(v)
 	}
 	return nil
+}
+
+// isIntKind reports whether k is a signed or unsigned integer kind.
+func isIntKind(k reflect.Kind) bool {
+	switch k {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return true
+	}
+	return false
 }
 
 // SetMaxParams lowers a dialect's parameter limit for a test.
