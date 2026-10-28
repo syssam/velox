@@ -65,6 +65,7 @@ jobs:
           go test -run XXX -fuzz '^FuzzSplit$' -fuzztime 10s ./migrate
           go test -run XXX -fuzz '^FuzzRenderWrite$' -fuzztime 10s .
           go test -run XXX -fuzz '^FuzzConstraint$' -fuzztime 10s .
+          go test -run XXX -fuzz '^FuzzDiff$' -fuzztime 10s ./migrate
       - name: generated files are current and every entity is valid
         run: |
           go build -o bin/velox-gen ./cmd/velox-gen

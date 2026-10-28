@@ -127,13 +127,18 @@ type migrated struct {
 func migrateCase(t *testing.T, c testCase, d velox.Dialect) migrated {
 	t.Helper()
 	from, to := models(t, c, d)
+	return migrateSchemas(t, d, from, to, migrate.PlanOptions{Diff: c.opts, Allow: c.allow})
+}
+
+// migrateSchemas is migrateCase's steps for the models from and to.
+func migrateSchemas(t *testing.T, d velox.Dialect, from, to *migrate.Schema, opts migrate.PlanOptions) migrated {
+	t.Helper()
 	db, _ := freshDB(t, d)
 	otherDatabases(t, d, from, to)
 	fsys := fromDir(t, d, from)
 	mustUp(t, db, fsys)
 	invariants(t, db, d, fsys, from)
 
-	opts := migrate.PlanOptions{Diff: c.opts, Allow: c.allow}
 	plan, err := migrate.NewPlan(from, to, opts)
 	if err != nil {
 		t.Fatal(err)
@@ -152,7 +157,7 @@ func migrateCase(t *testing.T, c testCase, d velox.Dialect) migrated {
 	}
 	invariants(t, db, d, fsys, to)
 	if rows {
-		keptRows(t, db, d, c.opts, from, to, before)
+		keptRows(t, db, d, opts.Diff, from, to, before)
 	}
 	return migrated{db: db, fsys: fsys, from: from, to: to}
 }

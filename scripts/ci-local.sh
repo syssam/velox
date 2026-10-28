@@ -44,6 +44,7 @@ go test -run XXX -fuzz '^FuzzLiteral$' -fuzztime 10s ./internal/ddl
 go test -run XXX -fuzz '^FuzzSplit$' -fuzztime 10s ./migrate
 go test -run XXX -fuzz '^FuzzRenderWrite$' -fuzztime 10s .
 go test -run XXX -fuzz '^FuzzConstraint$' -fuzztime 10s .
+go test -run XXX -fuzz '^FuzzDiff$' -fuzztime 10s ./migrate
 
 go build -o bin/velox-gen ./cmd/velox-gen
 bin/velox-gen -check -out internal/testmodel -package testmodel ./internal/testmodel/schema
