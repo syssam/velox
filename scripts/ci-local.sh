@@ -3,6 +3,7 @@
 # CI tests PostgreSQL 14 and 18; this runs 18, and VELOX_CI_MATRIX=1 then runs the tests again on 14.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+root=$PWD
 
 case "$(go env GOVERSION)" in
   go1.27*) ;;
@@ -36,7 +37,9 @@ if [ -n "$unformatted" ]; then
 fi
 go vet ./...
 go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
-go test -race -count=1 -timeout 20m ./...
+# Per-package coverage floors (scripts/coverage-floors.txt) are checked over the four modules' profiles
+# below, which are measured as CI measures them: with -race, and with the database tests as run.
+go test -race -count=1 -timeout 20m -coverprofile="$root/cover-root.out" ./...
 go test -run XXX -fuzz '^FuzzRender$' -fuzztime 20s .
 go test -run XXX -fuzz '^FuzzQuote$' -fuzztime 10s .
 go test -run XXX -fuzz '^FuzzScope$' -fuzztime 10s .
@@ -62,7 +65,7 @@ go run github.com/mgechev/revive@v1.17.0 -config revive.toml -set_exit_status ./
   go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
   # golangci-lint's revive skips generated files; revive itself lints velox-gen's.
   go run github.com/mgechev/revive@v1.17.0 -config ../revive.toml -set_exit_status ./*/gen
-  go test -race -count=1 ./...
+  go test -race -count=1 -coverprofile="$root/cover-example.out" ./...
   for d in */schema; do
     x=${d%/schema}
     [ "$x" = graphql ] && continue # its own lines below, with the plugin
@@ -95,7 +98,7 @@ go run github.com/mgechev/revive@v1.17.0 -config revive.toml -set_exit_status ./
   test -z "$(gofmt -l .)" || { echo "gofmt needed in contrib/veloxotel:"; gofmt -l .; exit 1; }
   go vet ./...
   go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
-  go test -race -count=1 ./...
+  go test -race -count=1 -coverprofile="$root/cover-veloxotel.out" ./...
 )
 
 # contrib/graphql is its own module too: the annotations package, the
@@ -109,9 +112,12 @@ go run github.com/mgechev/revive@v1.17.0 -config revive.toml -set_exit_status ./
   test -z "$(gofmt -l .)" || { echo "gofmt needed in contrib/graphql:"; gofmt -l .; exit 1; }
   go vet ./...
   go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
-  go test -race -count=1 ./...
+  go test -race -count=1 -coverprofile="$root/cover-graphql.out" ./...
   go test -run XXX -fuzz '^FuzzCost$' -fuzztime 10s ./veloxgql
 )
+
+# No package may fall below its floor, or lack one (scripts/coverage-floors.txt).
+go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-example.out cover-veloxotel.out cover-graphql.out
 
 go run ./bench/scale -n 500 -s 100 -check bench/scale/thresholds.json
 go run ./bench/scale -n 500 -s 100 -graphql -check bench/scale/thresholds.json
