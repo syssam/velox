@@ -243,8 +243,10 @@ bounds the whole request. The extension computes the request's cost before
 any resolver runs: a field costs 1 plus its children's cost times its
 multiplier, which is `first` or `last` for a connection (`MaxPage` when
 neither is given), the number of ids for `nodes`, and `MaxList` for another
-list of objects. Every alias and every branch of a fragment counts, `@skip`
-and `@include` are not read, and introspection costs nothing. A request over
+list of objects. Every alias and every branch of a fragment counts, except a
+selection that `@skip(if: true)` or `@include(if: false)` leaves out (its
+condition read from the variables; one whose variable is missing counts), and
+introspection costs nothing. A request over
 the limit fails with `COST_LIMIT_EXCEEDED` and runs no statement. Two levels
 of full connection pages (about 30000) pass; three do not (about a million).
 `main_test.go`'s `TestRequestCost` shows both. A list edge (one whose field
