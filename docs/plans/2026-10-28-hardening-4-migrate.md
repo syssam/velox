@@ -649,3 +649,39 @@ None open. The two of 7a27429 are ruled above.
 - **After 1.0, additive.**
   - A PostgreSQL DSN whose `servicefile` is missing still gives the form message.
   - An online `ADD CONSTRAINT … USING INDEX` for a flagged add on an existing table.
+
+## Rulings made during execution
+
+1. **The per-task check ran instead of the full gate.** It was lint, `go test -race` of the root module, G where goldens changed, and D where SQL, DDL or inspection changed. `scripts/ci-local.sh` ran once at the wave gate, with `VELOX_CI_MATRIX=1`.
+2. **Task 1's PG 14 record.** PostgreSQL 14.24 has no extension member row for `_citext`. So before the walk, a PG 14 database gave no baseline notes at all; on 18.6 only the domain cases lacked one. The walk notes both.
+3. **Task 3's carryConstraints** skips every table that the changes create. A table renamed away and a new one under its old name otherwise carried the flag, and the next drop failed with 42704.
+4. **Task 6.** The psql meta-command refusal also covers a backslash that starts a statement after a `;` on the same line (`SELECT 1; \dt`). FuzzSplit's round-trip needs it, and no PostgreSQL token starts with `\`.
+5. **Task 7's binary defaults.** On MySQL, a `binary` or `varbinary` default is compared by its bytes, decoding both sides alike, when both sides are literals: empty, `'…'`, `0x…`, `_binary'…'` or `X'…'`.
+   - Equal bytes are the same; different bytes are a change.
+   - A side that can't be decoded is compared as written.
+   - An expression default takes the expression path, which warns when the two differ.
+   - SHOW CREATE TABLE names are read backquoted, double-quoted, or bare when unambiguous.
+   - Measured on MySQL 8.4: NO_BACKSLASH_ESCAPES doesn't change SHOW CREATE's print.
+6. **Task 8 (M7)** was missed in dispatch, because the controller counted seven tasks. It ran in the final fix wave from its own brief.
+7. **The pre-Constraint upgrade advice** is in doc.go, not the frozen `Index` godoc. To drop such a constraint, take the file migrate diff writes and replace its statement with `ALTER TABLE … DROP CONSTRAINT IF EXISTS` and `DROP INDEX IF EXISTS`, both names schema-qualified, then run migrate hash. That works on databases built either way.
+8. **Drift on PostgreSQL warns** when an index is a UNIQUE constraint on one side and a plain index on the other. Changes and Equal still ignore the flag. Builder ruling 6 then holds without a second exception.
+9. **Notes merged on one object** join with "; also, ", and every note names its subject.
+10. **A PostgreSQL domain an extension creates**, or one in information_schema or pg_catalog, gets no domain note.
+11. **Leftover grep 5** exempts history.go's `historyTable()` body (`:49-53`) and the column qualifier (`:117`). Both are meant to be there.
+12. **5056f66 fails TestDriftDeterministic on its own;** c5d0147 fixes the pin. The local history was kept rather than rewritten, so a bisect needs both.
+
+## Left by this plan (execution)
+
+- **Wave 5 (tests):**
+  - the PostgreSQL stepwise path (recordError, the persist fallback, resolve) under a changed search_path;
+  - a quoted or dotted schema name;
+  - a test pinning that a domain over a user domain names only the nearest domain.
+- **Wave 6 (docs and limits):**
+  - PG 18 `UNIQUE … WITHOUT OVERLAPS` is read with a method note and rebuilt as a btree UNIQUE;
+  - SQLite's unique constraint is an unnamed Index while PostgreSQL's is `Index.Constraint`, two forms of one idea (ruling 11 of the plan);
+  - for nested domains, only the nearest is named in the baseline note;
+  - a `"$user"` schema created by a migration moves current_schema() between runs;
+  - a unique constraint that a foreign key references still can't be dropped alone.
+- **Left as is:**
+  - PostgreSQL's advisory-lock key hashes the history table name alone. It over-serialises two schemas in one database, and changing it would let an old and a new runner overlap.
+  - verify.go reads current_schema() and DATABASE() on the session's own connection, right after open's check.
