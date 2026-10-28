@@ -39,11 +39,25 @@ func (s *session) ph(i int) string {
 	return "?"
 }
 
-// createHistory creates the history table in the connection's default
-// schema, when it is missing.
+// historyTable is the history table as the session's statements name it:
+// qualified by the schema (PostgreSQL) or database (MySQL) open read, so a
+// file that changes search_path or USEs another database still records in
+// it; unqualified on SQLite.
+func (s *session) historyTable() string {
+	switch s.d {
+	case velox.Postgres:
+		return s.q(s.schema) + "." + s.q(s.cfg.Table)
+	case velox.MySQL:
+		return s.q(s.db) + "." + s.q(s.cfg.Table)
+	}
+	return s.q(s.cfg.Table)
+}
+
+// createHistory creates the history table in the schema or database open
+// read, when it is missing.
 func (s *session) createHistory(ctx context.Context) error {
 	var b strings.Builder
-	b.WriteString("CREATE TABLE IF NOT EXISTS " + s.q(s.cfg.Table) + " (")
+	b.WriteString("CREATE TABLE IF NOT EXISTS " + s.historyTable() + " (")
 	for i, c := range historyTypes {
 		if i > 0 {
 			b.WriteString(", ")
@@ -71,20 +85,19 @@ func (s *session) createHistory(ctx context.Context) error {
 // hasHistory reports whether the history table exists.
 func (s *session) hasHistory(ctx context.Context) (bool, error) {
 	var q string
+	args := []any{s.cfg.Table}
 	switch s.d {
 	case velox.Postgres:
 		q = `SELECT to_regclass($1) IS NOT NULL`
+		args = []any{s.historyTable()}
 	case velox.MySQL:
-		q = `SELECT count(*) > 0 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?`
+		q = `SELECT count(*) > 0 FROM information_schema.tables WHERE table_schema = ? AND table_name = ?`
+		args = []any{s.db, s.cfg.Table}
 	default:
 		q = `SELECT count(*) > 0 FROM sqlite_master WHERE type = 'table' AND name = ?`
 	}
-	name := s.cfg.Table
-	if s.d == velox.Postgres {
-		name = s.q(name)
-	}
 	var ok bool
-	err := s.conn.QueryRowContext(ctx, q, name).Scan(&ok)
+	err := s.conn.QueryRowContext(ctx, q, args...).Scan(&ok)
 	return ok, err
 }
 
@@ -110,7 +123,7 @@ func (s *session) readHistory(ctx context.Context) (rows []Applied, exists bool,
 		at = "CAST(" + at + " AS CHAR)"
 	}
 	q := fmt.Sprintf("SELECT %s, %s, %s, %s, %s, %s, %s, %s FROM %s ORDER BY %[1]s",
-		col("version"), col("name"), col("checksum"), at, col("duration_ms"), col("dirty"), col("statements"), col("error"), s.q(s.cfg.Table))
+		col("version"), col("name"), col("checksum"), at, col("duration_ms"), col("dirty"), col("statements"), col("error"), s.historyTable())
 	rs, err := s.conn.QueryContext(ctx, q)
 	if err != nil {
 		return nil, true, err
@@ -152,7 +165,7 @@ func (s *session) record(ctx context.Context, a Applied) error {
 	for i, c := range historyTypes {
 		cols[i], phs[i] = s.q(c.name), s.ph(i+1)
 	}
-	q := "INSERT INTO " + s.q(s.cfg.Table) + " (" + strings.Join(cols, ", ") + ") VALUES (" + strings.Join(phs, ", ") + ")"
+	q := "INSERT INTO " + s.historyTable() + " (" + strings.Join(cols, ", ") + ") VALUES (" + strings.Join(phs, ", ") + ")"
 	_, err := s.conn.ExecContext(ctx, q, int64(a.Version), a.Name, a.Sum, at, a.Duration.Milliseconds(), a.Dirty, a.Statements, a.Error)
 	return err
 }
@@ -161,8 +174,8 @@ func (s *session) record(ctx context.Context, a Applied) error {
 // history. PostgreSQL: an ordinary or partitioned table, not temporary, of
 // a schema not named pg_% (pg_catalog, pg_toast, pg_temp_N) nor
 // information_schema, that no extension owns (as PostGIS's
-// spatial_ref_sys); the history is matched by its schema, current_schema(),
-// and its name. MySQL: a base table of DATABASE() but the history. SQLite:
+// spatial_ref_sys); the history is matched by its schema, the one open read,
+// and its name. MySQL: a base table of the database open read but the history. SQLite:
 // a table of main not named sqlite_% nor the history.
 func (s *session) hasTables(ctx context.Context) (bool, error) {
 	var q string
@@ -171,14 +184,21 @@ func (s *session) hasTables(ctx context.Context) (bool, error) {
 		q = `SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 WHERE c.relkind IN ('r', 'p') AND c.relpersistence <> 't'
 AND n.nspname NOT LIKE 'pg\_%' AND n.nspname <> 'information_schema'
-AND NOT (n.nspname = current_schema() AND c.relname = $1)
+AND NOT (n.nspname = $2 AND c.relname = $1)
 AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_depend d WHERE d.classid = 'pg_catalog.pg_class'::regclass AND d.objid = c.oid AND d.deptype = 'e'))`
 	case velox.MySQL:
-		q = `SELECT count(*) > 0 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE' AND table_name <> ?`
+		q = `SELECT count(*) > 0 FROM information_schema.tables WHERE table_schema = ? AND table_type = 'BASE TABLE' AND table_name <> ?`
 	default:
 		q = `SELECT count(*) > 0 FROM main.sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite\_%' ESCAPE '\' AND lower(name) <> lower(?)`
 	}
+	args := []any{s.cfg.Table}
+	switch s.d {
+	case velox.Postgres:
+		args = append(args, s.schema)
+	case velox.MySQL:
+		args = []any{s.db, s.cfg.Table}
+	}
 	var ok bool
-	err := s.conn.QueryRowContext(ctx, q, s.cfg.Table).Scan(&ok)
+	err := s.conn.QueryRowContext(ctx, q, args...).Scan(&ok)
 	return ok, err
 }

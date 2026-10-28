@@ -26,7 +26,8 @@ type session struct {
 	pool     *sql.DB // the connection's pool, for recording a failure when the connection is gone
 	d        velox.Dialect
 	cfg      Config
-	db       string        // MySQL: DATABASE()
+	db       string        // MySQL: DATABASE() at open
+	schema   string        // PostgreSQL: current_schema() at open
 	sqlMode  string        // MySQL: @@SESSION.sql_mode
 	lockWait int64         // MySQL: @@SESSION.lock_wait_timeout when the run began
 	wait     time.Duration // SQLite: how long BEGIN IMMEDIATE waits, and busy_timeout
@@ -146,9 +147,9 @@ func (s *session) utc(ctx context.Context) error {
 // reset puts the session back as open was given it, after a file. On
 // PostgreSQL a setting the file changed gets its value back, one it set
 // that the session had not set is RESET, and so is the role; then UTC, and
-// standard_conforming_strings is checked again. On MySQL it is the sql_mode
-// open read, then UTC, and the files still to run are checked against the
-// mode read back.
+// standard_conforming_strings is checked again. On MySQL it is the database
+// open read (USE, when a file changed it), the sql_mode open read, then UTC,
+// and the files still to run are checked against the mode read back.
 func (s *session) reset(ctx context.Context, next []File) error {
 	switch s.d {
 	case velox.Postgres:
@@ -167,6 +168,15 @@ func (s *session) reset(ctx context.Context, next []File) error {
 		}
 		return nil
 	case velox.MySQL:
+		var db sql.NullString
+		if err := s.conn.QueryRowContext(ctx, "SELECT DATABASE()").Scan(&db); err != nil {
+			return err
+		}
+		if !db.Valid || db.String != s.db {
+			if _, err := s.conn.ExecContext(ctx, "USE "+s.q(s.db)); err != nil {
+				return err
+			}
+		}
 		if _, err := s.conn.ExecContext(ctx, "SET SESSION sql_mode = ?", s.sqlMode); err != nil {
 			return err
 		}
@@ -244,9 +254,12 @@ func (s *session) check(ctx context.Context) error {
 	switch s.d {
 	case velox.Postgres:
 		var scs string
-		err = s.conn.QueryRowContext(ctx, `SELECT current_setting('server_version_num'), current_setting('standard_conforming_strings')`).Scan(&version, &scs)
+		err = s.conn.QueryRowContext(ctx, `SELECT current_setting('server_version_num'), current_setting('standard_conforming_strings'), coalesce(current_schema(), '')`).Scan(&version, &scs, &s.schema)
 		if err == nil && scs != "on" {
 			return refuseSession("standard_conforming_strings is %s; turn it on for migrating, or a literal's backslashes would be stored otherwise", scs)
+		}
+		if err == nil && s.schema == "" {
+			return refuseSession("the connection has no current schema; set search_path")
 		}
 	case velox.MySQL:
 		var db sql.NullString

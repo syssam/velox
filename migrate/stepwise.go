@@ -50,7 +50,7 @@ func (s *session) applyStepwise(ctx context.Context, f File, row *Applied, o opt
 		return Applied{}, s.failed(ctx, f, from, fmt.Errorf("setting the lock timeout: %w", err), o)
 	}
 	defer restore()
-	table := s.q(s.cfg.Table)
+	table := s.historyTable()
 	last := from // the first statement of the last unit run
 	for u, first := range units {
 		if first < from {
@@ -205,7 +205,7 @@ func (s *session) inTransaction(ctx context.Context) (bool, error) {
 func (s *session) completed(ctx context.Context, v uint64, from int) int {
 	c, cancel := cleanup(ctx)
 	defer cancel()
-	q := fmt.Sprintf("SELECT %s FROM %s WHERE %s = %s", s.q("statements"), s.q(s.cfg.Table), s.q("version"), s.ph(1))
+	q := fmt.Sprintf("SELECT %s FROM %s WHERE %s = %s", s.q("statements"), s.historyTable(), s.q("version"), s.ph(1))
 	var k int
 	if err := s.conn.QueryRowContext(c, q, int64(v)).Scan(&k); err == nil {
 		return k
@@ -273,7 +273,7 @@ func (s *session) recordError(ctx context.Context, f File, err error, o options)
 	if s.d == velox.MySQL {
 		s.undo(ctx, "SET autocommit = 1")
 	}
-	q := fmt.Sprintf("UPDATE %s SET %s = %s WHERE %s = %s", s.q(s.cfg.Table), s.q("error"), s.ph(1), s.q("version"), s.ph(2))
+	q := fmt.Sprintf("UPDATE %s SET %s = %s WHERE %s = %s", s.historyTable(), s.q("error"), s.ph(1), s.q("version"), s.ph(2))
 	if werr := s.persist(ctx, q, err.Error(), int64(f.Version)); werr != nil && o.logger != nil {
 		c, cancel := cleanup(ctx)
 		defer cancel()

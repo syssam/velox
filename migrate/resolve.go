@@ -110,7 +110,7 @@ func (s *session) resolve(ctx context.Context, dir *Dir, version uint64, r Resol
 		return &Error{Code: "history", Reason: fmt.Sprintf("version %d is not dirty", version)}
 	}
 	row := rows[i]
-	table, where := s.q(s.cfg.Table), s.q("version")
+	table, where := s.historyTable(), s.q("version")
 	if r == ResolveUndone {
 		_, err := s.conn.ExecContext(ctx, fmt.Sprintf("DELETE FROM %s WHERE %s = %s", table, where, s.ph(1)), int64(version))
 		return wrap(ctx, what, err)

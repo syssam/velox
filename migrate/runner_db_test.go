@@ -138,6 +138,70 @@ func TestUpPostgresStandardConformingStrings(t *testing.T) {
 	}
 }
 
+// TestUpPostgresSearchPath: a file that empties search_path still records
+// itself, and the next file runs with the session as Up was given it. The
+// history table is named by the schema open read.
+func TestUpPostgresSearchPath(t *testing.T) {
+	db, _ := freshDB(t, velox.Postgres)
+	fsys := dirOf(t, velox.Postgres, files(
+		"0001_dump.sql", "SELECT pg_catalog.set_config('search_path', '', false);\nCREATE TABLE public.dumped (id integer);\n",
+		"0002_plain.sql", "CREATE TABLE plain (id integer);\n"))
+	mustUp(t, db, fsys)
+	if h := historyOf(t, db); len(h) != 2 || h[0].Version != 1 || h[1].Version != 2 {
+		t.Errorf("history %+v; want versions 1 and 2", h)
+	}
+	var n int
+	if err := db.QueryRow(`SELECT count(*) FROM pg_tables WHERE schemaname = 'public' AND tablename IN ('dumped', 'plain')`).Scan(&n); err != nil || n != 2 {
+		t.Errorf("tables %d, %v; want 2", n, err)
+	}
+}
+
+// TestUpPostgresNoCurrentSchema: a session whose search_path names no
+// schema is refused, not left to fail on the history table.
+func TestUpPostgresNoCurrentSchema(t *testing.T) {
+	db, dsn := freshDB(t, velox.Postgres)
+	var name string
+	if err := db.QueryRow(`SELECT current_database()`).Scan(&name); err != nil {
+		t.Fatal(err)
+	}
+	mustExec(t, db, `ALTER DATABASE "`+name+`" SET search_path = ''`)
+	_, err := migrate.Up(context.Background(), openDB(t, "pgx", dsn), dirOf(t, velox.Postgres))
+	if e := asError(t, err, "session"); e.Error() != "migrate: the connection has no current schema; set search_path" {
+		t.Errorf("%v", err)
+	}
+}
+
+// TestUpMySQLUse: a file that USEs another database records itself in the
+// database open read, and the next file runs there again.
+func TestUpMySQLUse(t *testing.T) {
+	db, _ := freshDB(t, velox.MySQL)
+	mysqlDatabase(t, "velox_use_other")
+	fsys := dirOf(t, velox.MySQL, files(
+		"0001_a.sql", "CREATE TABLE a (id int);\nUSE velox_use_other;\nCREATE TABLE b (id int);\n",
+		"0002_c.sql", "CREATE TABLE c (id int);\n"))
+	mustUp(t, db, fsys)
+	if h := historyOf(t, db); len(h) != 2 || h[0].Version != 1 || h[1].Version != 2 {
+		t.Errorf("history %+v; want versions 1 and 2", h)
+	}
+	where := func(table string) string {
+		var schema string
+		if err := db.QueryRow(`SELECT table_schema FROM information_schema.TABLES WHERE table_name = ? AND table_schema IN (DATABASE(), 'velox_use_other')`, table).Scan(&schema); err != nil {
+			t.Fatalf("%s: %v", table, err)
+		}
+		return schema
+	}
+	var fresh string
+	if err := db.QueryRow(`SELECT DATABASE()`).Scan(&fresh); err != nil {
+		t.Fatal(err)
+	}
+	if got := where("c"); got != fresh {
+		t.Errorf("c is in %s; want %s", got, fresh)
+	}
+	if got := where("b"); got != "velox_use_other" {
+		t.Errorf("b is in %s; want velox_use_other", got)
+	}
+}
+
 // TestMySQLLock: another session holding the lock makes Up wait, then give
 // ErrLockWait; released, Up creates the history table with MySQL's types.
 func TestMySQLLock(t *testing.T) {

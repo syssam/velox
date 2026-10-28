@@ -133,8 +133,14 @@
 // again. [Status] reads the directory against the history without
 // applying. Files run with the session in UTC on PostgreSQL and MySQL, so
 // a time literal means one instant on any server; each file starts with
-// the session as Up was given it, and nothing a file sets on its session
-// reaches the application's other connections. A trigger, a MySQL routine or event and
+// the session as Up was given it (on MySQL, in the database it was given
+// too), and nothing a file sets on its session reaches the application's
+// other connections. The history table is named by the schema (PostgreSQL)
+// or database (MySQL) Up was given, so a file that changes search_path or
+// USEs another database still records itself. A file resumed with
+// WithResume (velox-gen apply -resume) starts again with the session as Up
+// was given it, so its statements after a SET search_path or a USE run
+// without them; such a file sets them again at the top of each unit. A trigger, a MySQL routine or event and
 // a BEGIN … END block are refused on SQLite and MySQL, whose bodies the
 // splitter would cut at their inner semicolons. An applied file edited or
 // gone is a [*ChecksumError], and a lock held past the wait
