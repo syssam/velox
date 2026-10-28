@@ -352,11 +352,53 @@ func TestDriftDeterministic(t *testing.T) {
 	sorted := slices.IsSortedFunc(a.Warnings, func(x, y migrate.Warning) int {
 		return cmp.Or(cmp.Compare(x.Object, y.Object), cmp.Compare(x.Message, y.Message))
 	})
-	if !sorted || len(a.Warnings) != 5 {
-		t.Errorf("warnings not sorted by object and message, or not 5:\n%s", strings.Join(warningStrings(a.Warnings), "\n"))
+	if !sorted || len(a.Warnings) != 4 {
+		t.Errorf("warnings not sorted by object and message, or not 4:\n%s", strings.Join(warningStrings(a.Warnings), "\n"))
+	}
+	if !slices.Contains(warningStrings(a.Warnings), "users.users_x: b; a") {
+		t.Errorf("the notes on users.users_x are not one warning, b; a:\n%s", strings.Join(warningStrings(a.Warnings), "\n"))
 	}
 	if len(a.Changes) > 0 {
 		t.Errorf("changes: %s", strings.Join(changeStrings(a.Changes), "\n"))
+	}
+}
+
+// TestDriftNotesMerged: the notes on one object are one warning, joined
+// with "; " in their order; baseline notes count only when adopting; a
+// warning of drift's own stays apart.
+func TestDriftNotesMerged(t *testing.T) {
+	s := schemaOf(velox.Postgres, usersOf(velox.Postgres, nil))
+	identity := "the column is GENERATED ALWAYS AS IDENTITY, which the model holds as BY DEFAULT: a value given on insert is refused"
+	sequence := "the sequence users_id_seq starts at 5 and increments by 1; 0001_baseline.sql creates it with the defaults"
+
+	r := driftOf(t, s, s, migrate.Note{Table: users, Object: "users.id", Message: "a"}, migrate.Note{Table: users, Object: "users.id", Message: "b"})
+	if got := warningStrings(r.Warnings); !slices.Equal(got, []string{"users.id: a; b"}) {
+		t.Errorf("drift: %q, want one warning users.id: a; b", got)
+	}
+
+	notes := []migrate.Note{
+		{Table: users, Object: "users.id", Message: identity},
+		{Table: users, Object: "users.id", Message: sequence, Baseline: true},
+	}
+	_, ws := adoptOf(t, s, s, notes...)
+	if got, want := warningStrings(ws), []string{"users.id: " + identity + "; " + sequence}; !slices.Equal(got, want) {
+		t.Errorf("adopt: %q, want %q", got, want)
+	}
+	r = driftOf(t, s, s, notes...)
+	if got, want := warningStrings(r.Warnings), []string{"users.id: " + identity}; !slices.Equal(got, want) {
+		t.Errorf("drift with a baseline note: %q, want %q", got, want)
+	}
+
+	db, snap := spelled()
+	r = driftOf(t, db, snap, migrate.Note{Table: users, Object: "users", Message: "z"})
+	var own []string
+	for _, w := range r.Warnings {
+		if w.Object == "users" {
+			own = append(own, w.String())
+		}
+	}
+	if len(own) != 2 || !strings.HasPrefix(own[0], "users: the database has the primary key") || own[1] != "users: z" {
+		t.Errorf("drift's own warning and a note on users:\n%s", strings.Join(own, "\n"))
 	}
 }
 
