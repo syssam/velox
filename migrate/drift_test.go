@@ -355,8 +355,8 @@ func TestDriftDeterministic(t *testing.T) {
 	if !sorted || len(a.Warnings) != 4 {
 		t.Errorf("warnings not sorted by object and message, or not 4:\n%s", strings.Join(warningStrings(a.Warnings), "\n"))
 	}
-	if !slices.Contains(warningStrings(a.Warnings), "users.users_x: b; a") {
-		t.Errorf("the notes on users.users_x are not one warning, b; a:\n%s", strings.Join(warningStrings(a.Warnings), "\n"))
+	if !slices.Contains(warningStrings(a.Warnings), "users.users_x: b; also, a") {
+		t.Errorf("the notes on users.users_x are not one warning, b; also, a:\n%s", strings.Join(warningStrings(a.Warnings), "\n"))
 	}
 	if len(a.Changes) > 0 {
 		t.Errorf("changes: %s", strings.Join(changeStrings(a.Changes), "\n"))
