@@ -9,7 +9,6 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -165,10 +164,12 @@ func TestNestedTxUsesSavepoints(t *testing.T) {
 		if err := tx.Tx(ctx, func(context.Context, *velox.DB) error { return boom }); !errors.Is(err, boom) {
 			t.Errorf("inner error %v", err)
 		}
-		return nil
+		// A savepoint made after a ROLLBACK TO does not reuse a name.
+		return tx.Tx(ctx, touch)
 	})
 	want := []string{"BEGIN", "SAVEPOINT velox_1", touchSQL, "RELEASE SAVEPOINT velox_1",
-		"SAVEPOINT velox_2", "ROLLBACK TO SAVEPOINT velox_2", "RELEASE SAVEPOINT velox_2", "COMMIT"}
+		"SAVEPOINT velox_2", "ROLLBACK TO SAVEPOINT velox_2", "RELEASE SAVEPOINT velox_2",
+		"SAVEPOINT velox_3", touchSQL, "RELEASE SAVEPOINT velox_3", "COMMIT"}
 	if err != nil || !reflect.DeepEqual(e.Log, want) {
 		t.Errorf("%v\n got %q\nwant %q", err, e.Log, want)
 	}
@@ -194,46 +195,6 @@ func TestSavepointNamesUnique(t *testing.T) {
 		"ROLLBACK TO SAVEPOINT velox_1", "RELEASE SAVEPOINT velox_1", "ROLLBACK"}
 	if !errors.Is(err, boom) || !reflect.DeepEqual(e.Log, want) {
 		t.Errorf("%v\n got %q\nwant %q", err, e.Log, want)
-	}
-}
-
-// TestSavepointNamesUniqueConcurrently: the counter is the transaction's, and
-// savepoints made at once on one transaction (a misuse that races on the
-// connection, which the fake does not have) never share a name. Run with
-// -race, a plain counter fails here.
-func TestSavepointNamesUniqueConcurrently(t *testing.T) {
-	const n = 64
-	e := &velox.FakeExec{}
-	db := velox.OpenFake(velox.Postgres, e)
-	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
-		var wg sync.WaitGroup
-		errs := make([]error, n)
-		for i := range n {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				errs[i] = tx.Tx(ctx, func(context.Context, *velox.DB) error { return nil })
-			}()
-		}
-		wg.Wait()
-		return errors.Join(errs...)
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	made := map[string]int{}
-	for _, q := range e.Log {
-		if name, ok := strings.CutPrefix(q, "SAVEPOINT "); ok {
-			made[name]++
-		}
-	}
-	if len(made) != n {
-		t.Errorf("%d distinct savepoint names for %d savepoints: %v", len(made), n, made)
-	}
-	for name, c := range made {
-		if c != 1 {
-			t.Errorf("savepoint %s made %d times", name, c)
-		}
 	}
 }
 

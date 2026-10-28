@@ -353,7 +353,7 @@ func over(ctx context.Context) bool {
 // The savepoints of a transaction are named velox_1, velox_2, and so on, in
 // the order they are made, and no name is used twice: MySQL replaces a
 // savepoint of the same name, so a later ROLLBACK TO would reach the wrong
-// one, or none. The count is the transaction's, not the DB's depth, because
+// one, or none. The count is the transaction's, not the nesting depth, because
 // savepoints made from DBs of one depth can be nested.
 func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error) error {
 	if err := db.txRoot.broken; err != nil {
@@ -383,7 +383,7 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 			db.breakOn(db.undoSavepoint(ctx, name))
 		}
 	}()
-	f := newTxFrame(ctx, DB{d: db.d, ex: db.ex, rt: db.rt, cfg: db.cfg, inTx: true, depth: db.depth + 1, txDeadline: db.txDeadline, txCause: db.txCause, tx: db.tx, txWrote: db.txWrote, txShard: db.txShard}, db.txRoot)
+	f := newTxFrame(ctx, DB{d: db.d, ex: db.ex, rt: db.rt, cfg: db.cfg, inTx: true, txDeadline: db.txDeadline, txCause: db.txCause, tx: db.tx, txWrote: db.txWrote, txShard: db.txShard}, db.txRoot)
 	if err := fn(&f.ctx, &f.db); err != nil {
 		finished = true
 		// As in transaction: once the transaction's deadline has passed, the
@@ -515,9 +515,9 @@ func (c *txCtx) String() string { return fmt.Sprint(c.Context) + ".WithTx" }
 // read and set by one goroutine at a time.
 //
 // savepoints counts the savepoints made in the transaction, on the root, and
-// names the next one. It is atomic like ended: statements on one transaction
-// from several goroutines race on the connection whatever this field is, but
-// this field is no part of that race, and no two savepoints get one name.
+// names the next one. It is atomic so that misuse (statements on one
+// transaction from several goroutines) races only on the connection, not on
+// velox's own state.
 type txFrame struct {
 	db         DB
 	ctx        txCtx

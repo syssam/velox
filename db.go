@@ -23,11 +23,10 @@ type DB struct {
 	d Dialect
 	// ex runs the statements of a DB without replicas, and of a transaction;
 	// nil on a DB with replicas outside a transaction, whose rt chooses.
-	ex    executor
-	rt    *router // WithReplicas's; nil without replicas
-	cfg   *config
-	inTx  bool
-	depth int // savepoint nesting inside a transaction
+	ex   executor
+	rt   *router // WithReplicas's; nil without replicas
+	cfg  *config
+	inTx bool
 	// txDeadline is, in a transaction, its deadline: velox's or the
 	// caller's, whichever is earlier; zero when none. txCause is ErrTimeout
 	// when the deadline is velox's, nil when it is the caller's.
