@@ -674,3 +674,28 @@ func TestInspectPostgresExtensionThrough(t *testing.T) {
 		t.Errorf("baseline notes\n%+v\nwant\n%+v", got, want)
 	}
 }
+
+// TestInspectPostgresNestedDomain: a domain over a user's domain is one
+// baseline note, naming the nearest domain, d_outer; d_inner, which
+// 0001_baseline.sql does not create either, is not named.
+func TestInspectPostgresNestedDomain(t *testing.T) {
+	db, _ := freshDB(t, velox.Postgres)
+	for _, q := range []string{
+		`CREATE DOMAIN d_inner AS text`,
+		`CREATE DOMAIN d_outer AS d_inner`,
+		`CREATE TABLE nd (id integer PRIMARY KEY, v d_outer)`,
+	} {
+		mustExec(t, db, q)
+	}
+	_, notes, err := migrate.InspectNotes(context.Background(), db, velox.Postgres, []migrate.TableRef{{Name: "nd"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []migrate.Note{
+		{Table: migrate.TableRef{Name: "nd"}, Object: "nd", Baseline: true,
+			Message: "the type d_outer is a domain, which 0001_baseline.sql does not create; add its CREATE DOMAIN before the tables, then run migrate hash"},
+	}
+	if !reflect.DeepEqual(notes, want) {
+		t.Errorf("notes\n%+v\nwant\n%+v", notes, want)
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -533,6 +534,71 @@ func TestUpMySQLConnectionKilled(t *testing.T) {
 	}
 	if rows := historyOf(t, db); len(rows) != 1 || !rows[0].Dirty || rows[0].Statements != 1 || rows[0].Error != msg {
 		t.Errorf("history %+v; want the count of unit 1 and the message", rows)
+	}
+}
+
+// stepwiseFailing is a directory of a table and a no-transaction file that
+// empties the session's search_path and then runs the statement fail.
+func stepwiseFailing(t *testing.T, fail string) fstest.MapFS {
+	t.Helper()
+	return dirOf(t, velox.Postgres, files(
+		"0001_a.sql", "CREATE TABLE a (id integer);\n",
+		"0002_b.sql", "-- velox:no-transaction\nSELECT pg_catalog.set_config('search_path', '', false);\n"+fail+"\n"))
+}
+
+// TestUpPostgresStepwiseSearchPath: a no-transaction file that empties
+// search_path and then fails still leaves its row dirty with the error, for
+// the statements that record it name the history table by its schema. Status
+// and Resolve find the row too.
+func TestUpPostgresStepwiseSearchPath(t *testing.T) {
+	ctx := context.Background()
+	db, _ := freshDB(t, velox.Postgres)
+	fsys := stepwiseFailing(t, "SELECT 1/0;")
+	_, err := migrate.Up(ctx, db, fsys)
+	de := dirtyOf(t, err)
+	if code, _ := velox.DriverCode(err); de.Version != 2 || de.Statement != 2 || de.Statements != 2 || code != "22012" {
+		t.Fatalf("%+v; want version 2, statement 2 of 2, error 22012", de)
+	}
+	rows := historyOf(t, db)
+	if len(rows) != 2 || rows[0].Dirty || !rows[1].Dirty || rows[1].Statements != 1 ||
+		rows[1].Error != de.Err.Error() || !strings.Contains(rows[1].Error, "division by zero") {
+		t.Fatalf("history %+v; want version 2 dirty after statement 1, with the division by zero", rows)
+	}
+	s, err := migrate.Status(ctx, db, fsys)
+	if _ = dirtyOf(t, err); s == nil || s.Dirty == nil || s.Dirty.Version != 2 || s.Dirty.Error != rows[1].Error || !slices.Equal(versions(s.Applied), []uint64{1}) {
+		t.Errorf("state %+v", s)
+	}
+	if err := migrate.Resolve(ctx, db, fsys, 2, migrate.ResolveApplied); err != nil {
+		t.Fatal(err)
+	}
+	s = mustStatus(t, db, fsys)
+	if s.Dirty != nil || !slices.Equal(versions(s.Applied), []uint64{1, 2}) || len(s.Pending) != 0 {
+		t.Errorf("state after Resolve %+v", s)
+	}
+	if rows := historyOf(t, db); len(rows) != 2 || rows[1].Dirty || rows[1].Statements != 2 || rows[1].Error != "" {
+		t.Errorf("history after Resolve %+v", rows)
+	}
+}
+
+// TestUpPostgresStepwiseLostConnection: a statement that ends its own
+// session leaves the row dirty with an error, written through the pool
+// when the session no longer answers.
+func TestUpPostgresStepwiseLostConnection(t *testing.T) {
+	ctx := context.Background()
+	db, _ := freshDB(t, velox.Postgres)
+	fsys := stepwiseFailing(t, "SELECT pg_terminate_backend(pg_backend_pid());")
+	_, err := migrate.Up(ctx, db, fsys)
+	de := dirtyOf(t, err)
+	if code, _ := velox.DriverCode(err); de.Version != 2 || de.Statement != 2 || de.Statements != 2 || code != "57P01" {
+		t.Fatalf("%+v; want version 2, statement 2 of 2, error 57P01", de)
+	}
+	rows := historyOf(t, db)
+	if len(rows) != 2 || !rows[1].Dirty || rows[1].Error == "" || rows[1].Error != de.Err.Error() {
+		t.Fatalf("history %+v; want version 2 dirty with the error", rows)
+	}
+	if s, err := migrate.Status(ctx, db, fsys); s == nil || s.Dirty == nil || s.Dirty.Error != rows[1].Error {
+		_ = dirtyOf(t, err)
+		t.Errorf("state %+v", s)
 	}
 }
 

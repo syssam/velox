@@ -5,11 +5,15 @@ import (
 	"database/sql"
 	"errors"
 	"math"
+	"net/url"
+	"os"
 	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
+
+	"github.com/go-sql-driver/mysql"
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/migrate"
@@ -153,6 +157,124 @@ func TestUpPostgresSearchPath(t *testing.T) {
 	var n int
 	if err := db.QueryRow(`SELECT count(*) FROM pg_tables WHERE schemaname = 'public' AND tablename IN ('dumped', 'plain')`).Scan(&n); err != nil || n != 2 {
 		t.Errorf("tables %d, %v; want 2", n, err)
+	}
+}
+
+// withSearchPath is dsn, a URL, with its session's search_path set to value.
+func withSearchPath(t *testing.T, dsn, value string) string {
+	t.Helper()
+	u, err := url.Parse(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := u.Query()
+	q.Set("search_path", value)
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
+// TestUpPostgresQuotedSchema: a schema whose name needs quoting, first in
+// the session's search_path, holds the history table: Up applies, in a
+// transaction and statement by statement, Status reads the row, and a
+// second Up applies nothing, for hasHistory finds the quoted table. The
+// name cannot be Config.Table's, which NewDir refuses dotted; it comes from
+// the session.
+func TestUpPostgresQuotedSchema(t *testing.T) {
+	ctx := context.Background()
+	for _, c := range []struct{ name, schema string }{
+		{"dotted", "my.schema"},
+		{"quote", `we"ird`},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			admin, dsn := freshDB(t, velox.Postgres)
+			quoted := `"` + strings.ReplaceAll(c.schema, `"`, `""`) + `"`
+			mustExec(t, admin, "CREATE SCHEMA "+quoted)
+			db := openDB(t, "pgx", withSearchPath(t, dsn, quoted))
+			fsys := dirOf(t, velox.Postgres, files(
+				"0001_a.sql", "CREATE TABLE a (id integer);\n",
+				"0002_b.sql", "-- velox:no-transaction\nCREATE TABLE b (id integer);\nCREATE TABLE c (id integer);\n"))
+			if r := mustUp(t, db, fsys); !slices.Equal(versions(r.Applied), []uint64{1, 2}) {
+				t.Fatalf("applied %v", versions(r.Applied))
+			}
+			if s := mustStatus(t, db, fsys); !slices.Equal(versions(s.Applied), []uint64{1, 2}) || len(s.Pending) != 0 || s.Dirty != nil {
+				t.Errorf("state %+v", s)
+			}
+			if r := mustUp(t, db, fsys); len(r.Applied) != 0 {
+				t.Errorf("second Up applied %v", versions(r.Applied))
+			}
+			var tables []string
+			rows, err := admin.Query(`SELECT tablename FROM pg_tables WHERE schemaname = $1 ORDER BY tablename`, c.schema)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for rows.Next() {
+				var n string
+				if err := rows.Scan(&n); err != nil {
+					t.Fatal(err)
+				}
+				tables = append(tables, n)
+			}
+			_ = rows.Close()
+			if want := []string{"a", "b", "c", "velox_migrations"}; !slices.Equal(tables, want) {
+				t.Errorf("tables of %s: %v; want %v", c.schema, tables, want)
+			}
+			var n int
+			if err := admin.QueryRow(`SELECT count(*) FROM pg_tables WHERE schemaname = 'public'`).Scan(&n); err != nil || n != 0 {
+				t.Errorf("tables in public: %d, %v; want 0", n, err)
+			}
+			// A failing no-transaction file is recorded in the quoted schema too.
+			bad := extend(t, fsys, velox.Postgres, files("0003_bad.sql", "-- velox:no-transaction\nSELECT 1/0;\n"))
+			_, err = migrate.Up(ctx, db, bad)
+			if de := dirtyOf(t, err); de.Version != 3 {
+				t.Errorf("%+v; want version 3", de)
+			}
+			if h := historyOf(t, db); len(h) != 3 || !h[2].Dirty || !strings.Contains(h[2].Error, "division by zero") {
+				t.Errorf("history %+v", h)
+			}
+		})
+	}
+}
+
+// TestUpMySQLDottedDatabase: a database named my.db, the one the DSN
+// names, holds the history table: Up applies, Status reads the row, and a
+// second Up applies nothing.
+func TestUpMySQLDottedDatabase(t *testing.T) {
+	ctx := context.Background()
+	const name = "my.db"
+	base := os.Getenv("VELOX_TEST_MYSQL_ADMIN")
+	if base == "" {
+		t.Skip("needs VELOX_TEST_MYSQL_ADMIN")
+	}
+	mysqlDatabase(t, name)
+	cfg, err := mysql.ParseDSN(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.DBName = name
+	db := openDB(t, "mysql", cfg.FormatDSN())
+	fsys := dirOf(t, velox.MySQL, files(
+		"0001_a.sql", "CREATE TABLE a (id int);\n",
+		"0002_b.sql", "CREATE TABLE b (id int);\nCREATE TABLE c (id int);\n"))
+	if r := mustUp(t, db, fsys); !slices.Equal(versions(r.Applied), []uint64{1, 2}) {
+		t.Fatalf("applied %v", versions(r.Applied))
+	}
+	if s := mustStatus(t, db, fsys); !slices.Equal(versions(s.Applied), []uint64{1, 2}) || len(s.Pending) != 0 || s.Dirty != nil {
+		t.Errorf("state %+v", s)
+	}
+	if r := mustUp(t, db, fsys); len(r.Applied) != 0 {
+		t.Errorf("second Up applied %v", versions(r.Applied))
+	}
+	var n int
+	if err := db.QueryRow(`SELECT count(*) FROM information_schema.tables WHERE table_schema = ? AND table_name IN ('a', 'b', 'c', 'velox_migrations')`, name).Scan(&n); err != nil || n != 4 {
+		t.Errorf("tables of %s: %d, %v; want 4", name, n, err)
+	}
+	bad := extend(t, fsys, velox.MySQL, files("0003_bad.sql", "CREATE TABLE d (id int);\nINSERT INTO nope VALUES (1);\n"))
+	_, err = migrate.Up(ctx, db, bad)
+	if de := dirtyOf(t, err); de.Version != 3 || mysqlNumber(err) != 1146 {
+		t.Errorf("%+v; want version 3, error 1146", de)
+	}
+	if h := historyOf(t, db); len(h) != 3 || !h[2].Dirty || h[2].Statements != 1 || !strings.Contains(h[2].Error, "1146") {
+		t.Errorf("history %+v", h)
 	}
 }
 
