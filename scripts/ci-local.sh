@@ -116,6 +116,10 @@ go run github.com/mgechev/revive@v1.17.0 -config revive.toml -set_exit_status ./
 go run ./bench/scale -n 500 -s 100 -check bench/scale/thresholds.json
 go run ./bench/scale -n 500 -s 100 -graphql -check bench/scale/thresholds.json
 
+# Benchmarks against the committed baselines (bench/baseline). Report-only: the
+# baselines come from other hardware, so the deltas inform and never fail.
+scripts/bench-compare.sh
+
 # velox-graphql against the newest gqlgen, in a copy of the tree.
 scripts/gqlgen-latest.sh
 

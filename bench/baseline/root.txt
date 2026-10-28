@@ -1,0 +1,45 @@
+# recorded: 2026-10-28T19:08:08Z by scripts/bench-compare.sh -update, 90b80b2
+# machine: Apple M3 Max, 14 CPUs, go1.27.1
+# load (1, 5, 15 min, before the run): 5.57 6.09 7.37
+goos: darwin
+goarch: arm64
+pkg: github.com/syssam/velox2
+cpu: Apple M3 Max
+BenchmarkMetadataFirstUse-14      	  172024	      1401 ns/op	    2760 B/op	      19 allocs/op
+BenchmarkMetadataFirstUse-14      	  174512	      1376 ns/op	    2760 B/op	      19 allocs/op
+BenchmarkMetadataFirstUse-14      	  169174	      1377 ns/op	    2760 B/op	      19 allocs/op
+BenchmarkMetadataFirstUse-14      	  175039	      1377 ns/op	    2760 B/op	      19 allocs/op
+BenchmarkMetadataFirstUse-14      	  174015	      1384 ns/op	    2760 B/op	      19 allocs/op
+BenchmarkMetadataFirstUse-14      	  175348	      1384 ns/op	    2760 B/op	      19 allocs/op
+BenchmarkOneRow-14                	  248826	       895.3 ns/op	     764 B/op	       6 allocs/op
+BenchmarkOneRow-14                	  248074	       888.2 ns/op	     764 B/op	       6 allocs/op
+BenchmarkOneRow-14                	  265632	       911.5 ns/op	     755 B/op	       6 allocs/op
+BenchmarkOneRow-14                	  264585	       875.4 ns/op	     756 B/op	       6 allocs/op
+BenchmarkOneRow-14                	  259903	       889.7 ns/op	     758 B/op	       6 allocs/op
+BenchmarkOneRow-14                	  249477	      1151 ns/op	     763 B/op	       6 allocs/op
+BenchmarkTenantScopedOneRow-14    	  205311	      1107 ns/op	     974 B/op	       7 allocs/op
+BenchmarkTenantScopedOneRow-14    	  224378	      1067 ns/op	     986 B/op	       7 allocs/op
+BenchmarkTenantScopedOneRow-14    	  215876	      1104 ns/op	     963 B/op	       7 allocs/op
+BenchmarkTenantScopedOneRow-14    	  216082	      1101 ns/op	     963 B/op	       7 allocs/op
+BenchmarkTenantScopedOneRow-14    	  202884	      1062 ns/op	     977 B/op	       7 allocs/op
+BenchmarkTenantScopedOneRow-14    	  209935	      1105 ns/op	     969 B/op	       7 allocs/op
+BenchmarkHundredRows-14           	   16730	     14234 ns/op	   21439 B/op	     105 allocs/op
+BenchmarkHundredRows-14           	   16786	     14098 ns/op	   21438 B/op	     105 allocs/op
+BenchmarkHundredRows-14           	   16566	     14162 ns/op	   21440 B/op	     105 allocs/op
+BenchmarkHundredRows-14           	   17110	     13856 ns/op	   21435 B/op	     105 allocs/op
+BenchmarkHundredRows-14           	   16807	     13974 ns/op	   21438 B/op	     105 allocs/op
+BenchmarkHundredRows-14           	   17079	     13910 ns/op	   21435 B/op	     105 allocs/op
+BenchmarkOneRowWithDeadline-14    	  177140	      1282 ns/op	    1101 B/op	      10 allocs/op
+BenchmarkOneRowWithDeadline-14    	  183236	      1344 ns/op	    1124 B/op	      10 allocs/op
+BenchmarkOneRowWithDeadline-14    	  178390	      1319 ns/op	    1099 B/op	      10 allocs/op
+BenchmarkOneRowWithDeadline-14    	  176228	      1315 ns/op	    1102 B/op	      10 allocs/op
+BenchmarkOneRowWithDeadline-14    	  180160	      1309 ns/op	    1127 B/op	      10 allocs/op
+BenchmarkOneRowWithDeadline-14    	  178442	      1311 ns/op	    1099 B/op	      10 allocs/op
+BenchmarkOneRowObserved-14        	  172504	      1293 ns/op	     992 B/op	       7 allocs/op
+BenchmarkOneRowObserved-14        	  178374	      1286 ns/op	     988 B/op	       7 allocs/op
+BenchmarkOneRowObserved-14        	  177806	      1278 ns/op	     988 B/op	       7 allocs/op
+BenchmarkOneRowObserved-14        	  178971	      1284 ns/op	     987 B/op	       7 allocs/op
+BenchmarkOneRowObserved-14        	  176199	      1312 ns/op	     989 B/op	       7 allocs/op
+BenchmarkOneRowObserved-14        	  179269	      1288 ns/op	    1017 B/op	       7 allocs/op
+PASS
+ok  	github.com/syssam/velox2	9.603s

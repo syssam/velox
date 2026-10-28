@@ -132,6 +132,11 @@ jobs:
         run: go run ./bench/scale -n 500 -s 100 -check bench/scale/thresholds.json
       - name: scale (n=500, GraphQL)
         run: go run ./bench/scale -n 500 -s 100 -graphql -check bench/scale/thresholds.json
+      # Report-only: the baselines in bench/baseline come from other hardware, so
+      # the time deltas are informational. Allocation counts are enforced by the
+      # budget tests.
+      - name: benchmarks against the committed baselines (report-only)
+        run: scripts/bench-compare.sh
   # velox-graphql against the newest gqlgen. A red job says gqlgen moved.
   gqlgen-latest:
     runs-on: ubuntu-latest

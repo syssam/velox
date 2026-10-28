@@ -1,0 +1,21 @@
+# recorded: 2026-10-28T19:08:16Z by scripts/bench-compare.sh -update, 90b80b2
+# machine: Apple M3 Max, 14 CPUs, go1.27.1
+# load (1, 5, 15 min, before the run): 5.57 6.09 7.37
+goos: darwin
+goarch: arm64
+pkg: github.com/syssam/velox2/example/graphql
+cpu: Apple M3 Max
+BenchmarkNestedRequest/n=10-14         	      54	   4356258 ns/op	       710.0 nodes/op	         5.000 stmts/op	 2176033 B/op	   32299 allocs/op
+BenchmarkNestedRequest/n=10-14         	      60	   3954577 ns/op	       710.0 nodes/op	         5.000 stmts/op	 2176302 B/op	   32293 allocs/op
+BenchmarkNestedRequest/n=10-14         	      57	   3930259 ns/op	       710.0 nodes/op	         5.000 stmts/op	 2177872 B/op	   32286 allocs/op
+BenchmarkNestedRequest/n=10-14         	      60	   3922040 ns/op	       710.0 nodes/op	         5.000 stmts/op	 2180279 B/op	   32285 allocs/op
+BenchmarkNestedRequest/n=10-14         	      58	   3933017 ns/op	       710.0 nodes/op	         5.000 stmts/op	 2178956 B/op	   32287 allocs/op
+BenchmarkNestedRequest/n=10-14         	      63	   3952732 ns/op	       710.0 nodes/op	         5.000 stmts/op	 2172050 B/op	   32287 allocs/op
+BenchmarkNestedRequest/n=50-14         	      13	  16652311 ns/op	      3550 nodes/op	         5.000 stmts/op	10605162 B/op	  159736 allocs/op
+BenchmarkNestedRequest/n=50-14         	      13	  16507942 ns/op	      3550 nodes/op	         5.000 stmts/op	10592453 B/op	  159723 allocs/op
+BenchmarkNestedRequest/n=50-14         	      14	  16552446 ns/op	      3550 nodes/op	         5.000 stmts/op	10610977 B/op	  159743 allocs/op
+BenchmarkNestedRequest/n=50-14         	      14	  16512967 ns/op	      3550 nodes/op	         5.000 stmts/op	10581775 B/op	  159686 allocs/op
+BenchmarkNestedRequest/n=50-14         	      13	  16312337 ns/op	      3550 nodes/op	         5.000 stmts/op	10622913 B/op	  159689 allocs/op
+BenchmarkNestedRequest/n=50-14         	      14	  15728304 ns/op	      3550 nodes/op	         5.000 stmts/op	10558263 B/op	  159679 allocs/op
+PASS
+ok  	github.com/syssam/velox2/example/graphql	3.426s
