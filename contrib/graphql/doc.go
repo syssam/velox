@@ -129,7 +129,10 @@
 // gqlgen documents them (gqlgen v0.17.86, docs/content/config.md), so the
 // application must not redeclare them: a second declaration fails gqlgen's
 // load. Any other directive, @goTag for one, the application declares in its
-// own schema files.
+// own schema files. @goField and @goModel are velox-graphql's own, so
+// graphql.Directives refuses both: @goField binds fields to the Go code velox
+// generates, and @goModel binds types to it and to the application's enum
+// types.
 //
 // The plugin also writes the Go that gqlgen's autobind binds the SDL's types
 // to, in the generated package: gen/gql_<label>.go for each entity with a
@@ -272,8 +275,7 @@
 //     written both ways, as in ent: a many-to-many one writes and removes both
 //     join rows, and a one-to-one one keeps both rows' keys pointing at each
 //     other. A self-edge with an inverse is written one way.
-//   - Not written: a key the caller supplies in a create input, JSON append,
-//     and application enums bound with @goModel.
+//   - Not written: a key the caller supplies in a create input and JSON append.
 //
 // An edge's inputs follow its foreign key. A key on the entity's own row is
 // set by <edge>ID. A key on the target's rows is re-pointed from the owner
@@ -439,6 +441,14 @@
 //	    model: github.com/syssam/velox2/contrib/graphql/veloxgql.OrderDirection
 //	  PageInfo:
 //	    model: github.com/syssam/velox2/contrib/graphql/veloxgql.PageInfo
+//
+// An enum field of the application's own Go type is an SDL enum that
+// velox.graphqls binds to that type with @goModel(model: "<package
+// path>.<type>"), so gqlgen needs no models entry for it. The type is the
+// application's, so it implements gqlgen's graphql.Marshaler and
+// graphql.Unmarshaler itself (MarshalGQL and UnmarshalGQL, which write and
+// read the GraphQL value the SDL names): the plugin writes them only for
+// velox-gen's own enum types.
 //
 // String, Boolean and ID keep gqlgen's own models. veloxgql.Time,
 // veloxgql.UUID, veloxgql.Bytes and veloxgql.Uint64 resolve to the function

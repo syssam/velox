@@ -924,3 +924,42 @@ func TestCamel(t *testing.T) {
 		}
 	}
 }
+
+// An enum of the application's own Go type binds with @goModel, whatever the
+// entity's GraphQL type is called; velox-gen's own enum types, which gqlgen
+// binds by name, have none.
+func TestAppEnumGoModel(t *testing.T) {
+	level := &plugin.Field{Name: "level", GoName: "Level", Type: "enum", Enum: "Level", ElemType: "levels.Level", PkgPath: "example.com/app/levels", EnumValues: []string{"low", "high"}}
+	role := &plugin.Field{Name: "role", GoName: "Role", Type: "enum", Enum: "UserRole", EnumValues: []string{"admin"}}
+	event := entity("Event", level)
+	event.Annotations = ann(t, graphql.Type("Occurrence"))
+	user := entity("User", role)
+	m := model(event, user)
+	m.Enums = []*plugin.Enum{{Type: "UserRole", Values: []string{"admin"}}}
+	s, sdl := load(t, m)
+	if want := "enum EventLevel @goModel(model: \"example.com/app/levels.Level\") {\n  LOW\n  HIGH\n}\n"; !strings.Contains(sdl, want) {
+		t.Errorf("no %q in\n%s", want, sdl)
+	}
+	if d := s.Types["EventLevel"].Directives.ForName("goModel"); d == nil || d.Arguments.ForName("model").Value.Raw != "example.com/app/levels.Level" {
+		t.Errorf("EventLevel has no @goModel:\n%s", sdl)
+	}
+	if want := "enum UserRole {\n"; !strings.Contains(sdl, want) {
+		t.Errorf("no %q in\n%s", want, sdl)
+	}
+	if d := s.Types["UserRole"].Directives.ForName("goModel"); d != nil {
+		t.Errorf("velox-gen's own enum UserRole has @goModel:\n%s", sdl)
+	}
+}
+
+// @goModel is velox-graphql's own: it binds the types velox generates and
+// the application's enum types.
+func TestGoModelRefused(t *testing.T) {
+	const want = "@goModel is velox-graphql's own: it binds types to the Go code velox generates and the application's enum types"
+	goModel := graphql.Directives(graphql.Directive{Name: "goModel", Args: map[string]any{"model": "x.T"}})
+	f := field("name", "string")
+	f.Annotations = ann(t, goModel)
+	renderErr(t, model(entity("User", f)), "schema User, field name", want)
+	user := entity("User")
+	user.Annotations = ann(t, goModel)
+	renderErr(t, model(user), "schema User", want)
+}

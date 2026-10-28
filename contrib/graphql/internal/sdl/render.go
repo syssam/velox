@@ -121,6 +121,7 @@ type gqlEnum struct {
 	name   string   // "" for a String: the field's graphql.Skip has SkipEnumField
 	values []string // nil for a String
 	field  string   // the field it is the type of
+	model  string   // the Go type @goModel binds the enum to: the application's own enum type; "" for velox-gen's, which gqlgen binds by name
 }
 
 // reserveGoNames records the Go names velox-gen declares in the generated
@@ -491,7 +492,7 @@ func (g *graph) fieldType(o *object, f *plugin.Field, a graphql.Annotation, wher
 		}
 		// The enum is named after velox-gen's Go enum type, <Schema><Field>,
 		// so that gqlgen binds it whatever graphql.Type names the type. An enum
-		// of the application's own Go type gets the same name; Plan 2 binds it.
+		// of the application's own Go type gets the same name; @goModel binds it.
 		name := o.ent.Name + f.GoName
 		if g.goEnums[f.Enum] {
 			name = f.Enum
@@ -509,7 +510,11 @@ func (g *graph) fieldType(o *object, f *plugin.Field, a graphql.Annotation, wher
 		if err := add(name, where); err != nil {
 			return "", err
 		}
-		o.enums = append(o.enums, gqlEnum{name: name, values: values, field: f.Name})
+		en := gqlEnum{name: name, values: values, field: f.Name}
+		if !g.goEnums[f.Enum] && f.PkgPath != "" {
+			en.model = f.PkgPath + "." + f.Enum
+		}
+		o.enums = append(o.enums, en)
 		return name, nil
 	default:
 		return "", fmt.Errorf("%s: a field of type %s has no GraphQL type; leave it out with graphql.Skip()", where, f.Type)
@@ -562,6 +567,8 @@ func directives(ds []graphql.Directive, where string) ([]directive, error) {
 			return nil, fmt.Errorf("%s: the directive name %q is not a GraphQL name", where, d.Name)
 		case d.Name == "goField":
 			return nil, fmt.Errorf("%s: @goField is velox-graphql's own: it binds fields to the Go code velox generates", where)
+		case d.Name == "goModel":
+			return nil, fmt.Errorf("%s: @goModel is velox-graphql's own: it binds types to the Go code velox generates and the application's enum types", where)
 		}
 		s := "@" + d.Name
 		if len(d.Args) > 0 {
@@ -841,7 +848,14 @@ func (g *graph) writeObject(w *writer, o *object) {
 			continue // a String
 		}
 		w.line()
-		w.line("enum ", en.name, " {")
+		// @goModel is not one of w.dirs's: it is velox-graphql's own, and
+		// binds the type whether or not the application's directives are
+		// written.
+		var bind string
+		if en.model != "" {
+			bind = " @goModel(model: " + quote(en.model) + ")"
+		}
+		w.line("enum ", en.name, bind, " {")
 		for _, v := range en.values {
 			w.line("  ", v)
 		}

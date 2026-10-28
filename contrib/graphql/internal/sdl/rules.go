@@ -170,11 +170,12 @@ func zeroIsUnset(typ string) bool {
 }
 
 // appDirective is the name of a's first application directive, one other
-// than GraphQL's own: "" for none. GraphQL's own guard nothing. (@goField,
-// velox-graphql's own, is refused in graphql.Directives.)
+// than GraphQL's own: "" for none. GraphQL's own guard nothing. (@goField and
+// @goModel, velox-graphql's own, are refused in graphql.Directives, wherever
+// it is: they are not the application's, and directives() says so.)
 func appDirective(a graphql.Annotation) string {
 	for _, d := range a.Directives {
-		if !prelude[d.Name] {
+		if !prelude[d.Name] && d.Name != "goField" && d.Name != "goModel" {
 			return d.Name
 		}
 	}

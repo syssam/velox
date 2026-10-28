@@ -275,7 +275,12 @@ func checkNames(t *testing.T, m *plugin.Model, others ...string) {
 		case def.Name == "PageInfo" || def.Name == "OrderDirection":
 			return "veloxgql's, mapped in gqlgen.yml"
 		case def.Kind == gqlast.Enum && appEnums[def.Name]:
-			return "the application's own enum type, which a later task binds with @goModel"
+			// Bound by @goModel to the application's own type, which the
+			// plugin does not write.
+			if def.Directives.ForName("goModel") == nil {
+				t.Errorf("the application's enum %s has no @goModel", def.Name)
+			}
+			return "the application's own enum type, which @goModel binds"
 		}
 		return ""
 	}
