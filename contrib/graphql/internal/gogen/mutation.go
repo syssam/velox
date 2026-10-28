@@ -1139,18 +1139,7 @@ func (r *renderer) writeDelete(f *file, t *sdl.Type) error {
 		cols []*plugin.Field
 	}
 	var joins []*join
-	for _, ed := range e.Edges {
-		if ed.Kind != plugin.M2M {
-			continue
-		}
-		j, own, other, err := r.joinCols(e, ed)
-		if err != nil {
-			return err
-		}
-		cols := []*plugin.Field{own}
-		if ed.Target == e.Name {
-			cols = append(cols, other)
-		}
+	add := func(j *plugin.Entity, cols ...*plugin.Field) {
 		i := slices.IndexFunc(joins, func(x *join) bool { return x.ent == j })
 		if i < 0 {
 			joins = append(joins, &join{ent: j})
@@ -1160,6 +1149,38 @@ func (r *renderer) writeDelete(f *file, t *sdl.Type) error {
 			if !slices.Contains(joins[i].cols, c) {
 				joins[i].cols = append(joins[i].cols, c)
 			}
+		}
+	}
+	for _, ed := range e.Edges {
+		if ed.Kind != plugin.M2M {
+			continue
+		}
+		j, own, other, err := r.joinCols(e, ed)
+		if err != nil {
+			return err
+		}
+		if ed.Target == e.Name {
+			add(j, own, other)
+		} else {
+			add(j, own)
+		}
+	}
+	// The one-sided M2M edges of other entities that lead to e: an edge that
+	// is no inverse, with no inverse of its own on e. Its join rows hold e's
+	// key in the column other, and no edge of e's own names them. (velox-gen
+	// makes a pair of M2M edges between two entities, so this finds the
+	// edges of a model another producer wrote.) A two-sided pair was
+	// gathered above, from e's inverse edge, and adds nothing.
+	for _, x := range r.m.Entities {
+		for _, ed := range x.Edges {
+			if ed.Kind != plugin.M2M || ed.Inverse || ed.Target != e.Name {
+				continue
+			}
+			j, _, other, err := r.joinCols(x, ed)
+			if err != nil {
+				return err
+			}
+			add(j, other)
 		}
 	}
 
