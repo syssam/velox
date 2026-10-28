@@ -97,15 +97,15 @@
 // cast the database adds itself without changing the value matches no
 // cast, and a NOT over a comparison matches its negated operator. One whose
 // meaning differs is a change, so a hand-edited check is found. MySQL's
-// _utf8mb4 and _utf8mb3 before a literal, and _latin1 and _ascii before an
-// ASCII one, are dropped, so two literals compared with each other can be
-// called the same where their collations differ on trailing spaces. A
+// _utf8mb4, _utf8mb3 and _utf8 before a literal, and _latin1 and _ascii
+// before an ASCII one, are dropped, so two literals compared with each other
+// can be called the same where their collations differ on trailing spaces. A
 // MySQL binary or varbinary literal default is compared by its bytes. A
 // Warning is what the comparison cannot settle: an expression default that
 // differs, a predicate the normaliser cannot read whose text differs, a
 // primary key that differs, or what the model has no place for, such as a
-// MySQL table that is not InnoDB, an invalid PostgreSQL index or a NOT
-// VALID constraint.
+// MySQL table that is not InnoDB, an invalid PostgreSQL index or a NOT VALID
+// constraint.
 //
 // [Baseline] adopts an existing database into a new directory: it reads
 // the tables a schema names and returns them as the directory's first
@@ -135,27 +135,27 @@
 // or undone. A run killed while a statement ran may have applied it, and on
 // MySQL a cancelled statement may still have finished on the server, so
 // check the failed statement before resuming or undoing: resuming runs it
-// again. [Status] reads the directory against the history without
-// applying. Files run with the session in UTC on PostgreSQL and MySQL, so
-// a time literal means one instant on any server; each file starts with
-// the session as Up was given it (on MySQL, in the database it was given
-// too), and nothing a file sets on its session reaches the application's
-// other connections. The history table is named by the schema (PostgreSQL)
-// or database (MySQL) Up was given, so a file that changes search_path or
-// USEs another database still records itself. A file resumed with
-// WithResume (velox-gen apply -resume) starts again with the session as Up
-// was given it, so its statements after a SET search_path or a USE run
-// without them; such a file sets them again at the top of each unit. A trigger, a MySQL routine or event and
-// a BEGIN … END block are refused on SQLite and MySQL, whose bodies the
-// splitter would cut at their inner semicolons; a BEGIN ATOMIC body and a
-// psql meta-command line, one that starts with a backslash, are refused on
-// PostgreSQL. An applied file edited or
-// gone is a [*ChecksumError], and a lock held past the wait
-// [ErrLockWait]. [Verify] applies a directory to an empty database and
-// fails when Drift then finds a change against schema.json: a test's check
-// that the files make what the snapshot says. On SQLite, Verify, Up and
-// Drift need a file database, since each run opens a connection of its own
-// and a connection to :memory: is a new, empty database.
+// again. [Status] reads the directory against the history without applying.
+// Files run with the session in UTC on PostgreSQL and MySQL, so a time
+// literal means one instant on any server; each file starts with the session
+// as Up was given it (on MySQL, in the database it was given too), and
+// nothing a file sets on its session reaches the application's other
+// connections. The history table is named by the schema (PostgreSQL) or
+// database (MySQL) Up was given, so a file that changes search_path or USEs
+// another database still records itself. A file resumed with WithResume
+// (velox-gen migrate apply -resume) starts again with the session as Up was
+// given it, so its statements after a SET search_path or a USE run without
+// them; such a file sets them again at the top of each unit. A trigger, a
+// MySQL routine or event and a BEGIN … END block are refused on SQLite and
+// MySQL, whose bodies the splitter would cut at their inner semicolons; a
+// BEGIN ATOMIC body and a psql meta-command line, one that starts with a
+// backslash, are refused on PostgreSQL. An applied file edited or gone is a
+// [*ChecksumError], and a lock held past the wait [ErrLockWait]. [Verify]
+// applies a directory to an empty database and fails when Drift then finds a
+// change against schema.json: a test's check that the files make what the
+// snapshot says. On SQLite, Verify, Up and Drift need a file database, since
+// each run opens a connection of its own and a connection to :memory: is a
+// new, empty database.
 //
 // # Adopting a database
 //
