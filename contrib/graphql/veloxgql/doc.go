@@ -169,8 +169,10 @@
 // operation costs, as gqlgen's complexity recipe does: a field costs 1 plus
 // its children's cost times its multiplier, which is first or last for a
 // connection, the number of ids for nodes and MaxList for another list of
-// objects; every alias and every branch of a fragment counts, @skip and
-// @include are not read, and introspection is free. The Extension refuses a
+// objects; every alias and every branch of a fragment counts, except a
+// selection that @skip(if: true) or @include(if: false) leaves out, which
+// costs nothing, its condition read from the variables (one whose variable is
+// missing counts), and introspection is free. The Extension refuses a
 // request over MaxCost with ErrTooCostly (CodeTooCostly, COST_LIMIT_EXCEEDED),
 // before any resolver, so before any statement. The default MaxCost, 100000,
 // lets two levels of full connection pages through (about 30000) and not

@@ -385,8 +385,10 @@
 // A field costs 1 plus its children's cost times its multiplier. A connection
 // multiplies by its first or last, or by MaxPage when it has neither; nodes
 // by the number of its ids; any other list of objects by MaxList. Every
-// alias counts, and so does every branch of a fragment (an upper bound):
-// @skip and @include are not read. __schema and __type cost nothing, so
+// alias counts, and so does every branch of a fragment (an upper bound),
+// except a selection that @skip(if: true) or @include(if: false) leaves out,
+// which costs nothing, its condition read from the variables; one whose
+// variable is missing counts. __schema and __type cost nothing, so
 // introspection works. Variables are read; sums and products saturate, so
 // huge arguments cannot wrap the cost, and a named fragment is costed once
 // however often it is spread. Two levels of full connection pages cost about

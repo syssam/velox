@@ -160,9 +160,41 @@ func TestCostDodges(t *testing.T) {
 	if got, want := costOf(t, node, nil, l), 1+(1+100*1)+1; got != want {
 		t.Errorf("node with two branches: cost %d, want %d", got, want)
 	}
-	// @skip and @include are not read.
-	if got, want := costOf(t, `{ users(first: 2) @skip(if: true) { totalCount } }`, nil, l), 1+2; got != want {
+	// A selection that @skip leaves out costs nothing.
+	if got, want := costOf(t, `{ users(first: 2) @skip(if: true) { totalCount } }`, nil, l), 0; got != want {
 		t.Errorf("@skip: cost %d, want %d", got, want)
+	}
+}
+
+// TestCostSkipInclude: a selection that @skip(if: true) or @include(if: false)
+// leaves out costs nothing, its condition read from the variables. One whose
+// condition cannot be read counts, as an upper bound.
+func TestCostSkipInclude(t *testing.T) {
+	l := veloxgql.DefaultLimits()
+	l.MaxPage = 7
+	const withVar = `query ($s: Boolean!) { users(first: 2) @skip(if: $s) { totalCount } }`
+	for _, c := range []struct {
+		name  string
+		query string
+		vars  map[string]any
+		want  int
+	}{
+		{"skip true", `{ users(first: 2) @skip(if: true) { totalCount } }`, nil, 0},
+		{"include false", `{ users(first: 2) @include(if: false) { totalCount } }`, nil, 0},
+		{"skip false", `{ users(first: 2) @skip(if: false) { totalCount } }`, nil, 1 + 2},
+		{"include true", `{ users(first: 2) @include(if: true) { totalCount } }`, nil, 1 + 2},
+		{"skip by variable, true", withVar, map[string]any{"s": true}, 0},
+		{"skip by variable, false", withVar, map[string]any{"s": false}, 1 + 2},
+		{"skip by variable, missing", withVar, nil, 1 + 2},
+		{"include by variable, false", `query ($i: Boolean!) { users(first: 2) @include(if: $i) { totalCount } }`, map[string]any{"i": false}, 0},
+		{"inline fragment", `{ users(first: 2) { totalCount } ... @include(if: false) { node(id: "x") { id } } }`, nil, 1 + 2},
+		{"fragment spread", `{ ...F @skip(if: true) users(first: 1) { totalCount } } fragment F on Query { many: users(first: 5) { totalCount } }`, nil, 1 + 1},
+		{"spread skipped once, taken once", `{ ...F @skip(if: true) other: users(first: 1) { totalCount } ...F } fragment F on Query { many: users(first: 5) { totalCount } }`, nil, 1 + 1 + 1 + 5},
+		{"skipped child", `{ users(first: 2) { totalCount edges @skip(if: true) { node { name } } } }`, nil, 1 + 2*1},
+	} {
+		if got := costOf(t, c.query, c.vars, l); got != c.want {
+			t.Errorf("%s: cost %d, want %d", c.name, got, c.want)
+		}
 	}
 }
 

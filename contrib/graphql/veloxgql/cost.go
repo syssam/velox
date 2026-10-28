@@ -21,8 +21,11 @@ const maxCost = 1 << 62
 //     connection type multiplies by 1;
 //   - the root field nodes multiplies by the number of its ids;
 //   - any other field of a list of objects multiplies by l.MaxList;
-//   - every branch of a fragment counts, @skip and @include are not read,
-//     and __schema and __type cost nothing.
+//   - every branch of a fragment counts, but a selection that @skip(if: true)
+//     or @include(if: false) leaves out costs nothing, its condition read
+//     from the variables; one whose condition cannot be read (a variable
+//     that is missing) counts, as the cost is an upper bound;
+//   - __schema and __type cost nothing.
 //
 // Sums and products saturate at 1<<62 (math.MaxInt where int is smaller),
 // checked before they are computed, so huge arguments and many aliases cannot
@@ -66,8 +69,14 @@ func (c *coster) set(sels ast.SelectionSet, parent *ast.Definition, root bool) i
 	for _, s := range sels {
 		switch s := s.(type) {
 		case *ast.Field:
+			if c.skipped(s.Directives) {
+				continue
+			}
 			sum = add(sum, c.field(s, parent, root))
 		case *ast.InlineFragment:
+			if c.skipped(s.Directives) {
+				continue
+			}
 			p := parent
 			if s.TypeCondition != "" {
 				if d := c.schema.Types[s.TypeCondition]; d != nil {
@@ -76,10 +85,42 @@ func (c *coster) set(sels ast.SelectionSet, parent *ast.Definition, root bool) i
 			}
 			sum = add(sum, c.set(s.SelectionSet, p, false))
 		case *ast.FragmentSpread:
+			// Checked before spread, so the per-name cost it caches is the
+			// fragment's own, whichever spread reaches it first.
+			if c.skipped(s.Directives) {
+				continue
+			}
 			sum = add(sum, c.spread(s))
 		}
 	}
 	return sum
+}
+
+// skipped reports whether ds leave their selection out: @skip(if: true) or
+// @include(if: false), the condition read from the variables. A condition
+// that is not a boolean, or a variable that is missing, does not skip.
+func (c *coster) skipped(ds ast.DirectiveList) bool {
+	for _, d := range ds {
+		var leaves bool
+		switch d.Name {
+		case "skip":
+			leaves = true
+		case "include":
+			leaves = false
+		default:
+			continue
+		}
+		a := d.Arguments.ForName("if")
+		if a == nil || a.Value == nil {
+			continue
+		}
+		if v, err := a.Value.Value(c.vars); err == nil {
+			if b, ok := v.(bool); ok && b == leaves {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // spread is the cost of a named fragment's selections, computed once.
