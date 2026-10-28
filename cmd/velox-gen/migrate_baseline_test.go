@@ -82,21 +82,31 @@ func TestMigrateBaselineSQLite(t *testing.T) {
 }
 
 // TestMigrateBaselineEnt: baseline adopts the tables ent makes, on
-// PostgreSQL and MySQL, under ent's names, long ones capped as ent caps
-// them. The directory builds a fresh database, apply -baseline records it,
-// and the next diff renames nothing: it holds only what velox spells
-// differently from ent on PostgreSQL, and nothing on MySQL.
+// PostgreSQL, MySQL and SQLite, under ent's names, long ones capped as ent
+// caps them. The directory builds a fresh database, apply -baseline records
+// it, and the next diff renames nothing: it holds only what velox spells
+// differently from ent on PostgreSQL and SQLite, and nothing on MySQL: on
+// SQLite, the two indexes of posts' foreign keys and the role enum's CHECK,
+// which SQLite makes by rebuilding the table. PostgreSQL and MySQL need
+// their variables; SQLite needs nothing.
 func TestMigrateBaselineEnt(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
-	for _, d := range []velox2.Dialect{velox2.Postgres, velox2.MySQL} {
+	for _, d := range []velox2.Dialect{velox2.Postgres, velox2.MySQL, velox2.SQLite} {
 		t.Run(d.String(), func(t *testing.T) { baselineEnt(t, d) })
 	}
 }
 
 func baselineEnt(t *testing.T, d velox2.Dialect) {
-	original := testDSN(t, d)
+	// dsn is the DSN of a new, empty database: a file in t.TempDir on SQLite.
+	dsn := func(name string) string {
+		if d == velox2.SQLite {
+			return filepath.Join(t.TempDir(), name)
+		}
+		return testDSN(t, d)
+	}
+	original := dsn("original.db")
 	files := map[string]string{}
 	for _, f := range []string{"user.go", "post.go", "audit_entry.go"} {
 		files["schema/"+f] = readFile(t, filepath.Join("testdata", "ent", "schema", f))
@@ -122,7 +132,7 @@ func baselineEnt(t *testing.T, d velox2.Dialect) {
 	compareGolden(t, filepath.Join(golden, "warnings.txt"), errs)
 
 	// 2. The directory builds what its snapshot says.
-	fresh, err := openDB(d, testDSN(t, d))
+	fresh, err := openDB(d, dsn("fresh.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +175,7 @@ func baselineEnt(t *testing.T, d velox2.Dialect) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n := map[velox2.Dialect]int{velox2.Postgres: 5, velox2.MySQL: 0}[d]; len(changes) != n {
+	if n := map[velox2.Dialect]int{velox2.Postgres: 5, velox2.MySQL: 0, velox2.SQLite: 3}[d]; len(changes) != n {
 		t.Errorf("the next diff has %d changes, want %d: %v", len(changes), n, changes)
 	}
 	for _, ch := range changes {
@@ -176,17 +186,27 @@ func baselineEnt(t *testing.T, d velox2.Dialect) {
 }
 
 // entChange reports whether ch is one the next diff of an ent database may
-// hold: on PostgreSQL the indexes of posts' two foreign keys, which ent does
+// hold. On PostgreSQL: the indexes of posts' two foreign keys, which ent does
 // not make there, the role enum and its alter-type, and users.id's
-// serial-to-identity; on MySQL none.
+// serial-to-identity. On MySQL: none. On SQLite: the same two indexes, which
+// ent does not make there either, and users' CHECK on role, which ent writes
+// as no constraint at all (the enum is text) and which SQLite makes by
+// rebuilding the table.
 func entChange(d velox2.Dialect, ch migrate.Change) bool {
-	if d != velox2.Postgres {
+	if d == velox2.MySQL {
 		return false
 	}
 	switch c := ch.(type) {
 	case migrate.AddIndex:
 		return c.Table.Name == "posts" && (c.Index.Name == "posts_user_posts" ||
 			c.Index.Name == ddl.Cap("posts_user_drafts_written_but_never_published_by_this_user_so_far"))
+	case migrate.AddCheck:
+		return d == velox2.SQLite && c.Table.Name == "users" && c.Check.Name == "users_role_check"
+	}
+	if d != velox2.Postgres {
+		return false
+	}
+	switch c := ch.(type) {
 	case migrate.CreateEnum:
 		return c.Enum.Name == "users_role"
 	case migrate.AlterColumn:

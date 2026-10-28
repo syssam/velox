@@ -1,0 +1,1 @@
+velox-gen: migrate baseline: run velox-gen migrate apply -baseline 1 once on each existing database, then migrate drift there
