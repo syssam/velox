@@ -17,11 +17,12 @@ import (
 // pgTable is a table inspectPostgres reads: its oid, its schema as the
 // database names it, and the model's table.
 type pgTable struct {
-	oid    int64
-	schema string
-	t      Table
-	enums  map[string]string // an enum column's type, as a cast to it prints
-	exts   map[string]bool   // the extensions its columns' types come from
+	oid     int64
+	schema  string
+	t       Table
+	enums   map[string]string // an enum column's type, as a cast to it prints
+	exts    map[string]bool   // the extensions its columns' types come from
+	domains map[string]bool   // the domains its columns' types pass
 }
 
 // pgEnum is an enum type a column uses.
@@ -194,8 +195,11 @@ func (r *pgReader) baselineNote(pt *pgTable, name, message string) {
 // The columns, with what makes a serial: the sequence the column owns,
 // by an auto (serial) or internal (identity) dependency, its regclass
 // spelling, as a nextval default prints it, and its start and increment;
-// the column's collation when it is not its type's; and the extension its
-// type comes from.
+// the column's collation when it is not its type's; the extension its type
+// comes from; and the nearest domain its type passes. The last two walk from
+// the column's type through typbasetype while it is a domain and through
+// typelem while it is an array, at most 16 steps, the nearest type with an
+// extension member row (deptype e) winning.
 const pgColumnsQuery = `SELECT a.attnum, a.attname, format_type(a.atttypid, a.atttypmod), t.typtype::text, t.oid::bigint,
 	tn.nspname, t.typname, a.attnotnull, coalesce(pg_get_expr(d.adbin, d.adrelid), ''),
 	a.attidentity::text, a.attgenerated::text, coalesce(col_description(a.attrelid, a.attnum), ''),
@@ -203,12 +207,25 @@ const pgColumnsQuery = `SELECT a.attnum, a.attname, format_type(a.atttypid, a.at
 	coalesce(seq.seqstart, 1), coalesce(seq.seqincrement, 1),
 	coalesce((SELECT quote_ident(co.collname) FROM pg_collation co
 		WHERE co.oid = a.attcollation AND a.attcollation <> t.typcollation AND a.attcollation <> 0), ''),
-	coalesce((SELECT e.extname FROM pg_depend de JOIN pg_extension e ON e.oid = de.refobjid
-		WHERE de.classid = 'pg_type'::regclass AND de.objid = t.oid
-			AND de.refclassid = 'pg_extension'::regclass AND de.deptype = 'e' LIMIT 1), '')
+	coalesce(w.ext, ''), coalesce(w.dom, '')
 FROM pg_attribute a
 JOIN pg_type t ON t.oid = a.atttypid
 JOIN pg_namespace tn ON tn.oid = t.typnamespace
+LEFT JOIN LATERAL (
+	WITH RECURSIVE walk(oid, depth) AS (
+		SELECT t.oid, 0
+		UNION ALL
+		SELECT CASE WHEN wt.typtype = 'd' THEN wt.typbasetype ELSE wt.typelem END, walk.depth + 1
+		FROM walk JOIN pg_type wt ON wt.oid = walk.oid
+		WHERE walk.depth < 16 AND (wt.typtype = 'd' OR (wt.typelem <> 0 AND wt.typlen = -1))
+	)
+	SELECT (SELECT e.extname FROM walk JOIN pg_depend de ON de.objid = walk.oid
+			JOIN pg_extension e ON e.oid = de.refobjid
+			WHERE de.classid = 'pg_type'::regclass AND de.refclassid = 'pg_extension'::regclass AND de.deptype = 'e'
+			ORDER BY walk.depth, e.extname LIMIT 1) AS ext,
+		(SELECT format_type(walk.oid, NULL) FROM walk JOIN pg_type wt ON wt.oid = walk.oid
+			WHERE wt.typtype = 'd' ORDER BY walk.depth LIMIT 1) AS dom
+) w ON true
 LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
 LEFT JOIN LATERAL (
 	SELECT sn.nspname, s.relname, s.oid::regclass::text AS reg, ps.seqstart, ps.seqincrement
@@ -225,8 +242,8 @@ ORDER BY a.attnum`
 
 // columns reads pt's columns, and returns their names by number. A
 // collation other than the type's is a note. An owned sequence that does
-// not start and increment by 1, and an extension's type, once per
-// extension, are baseline notes.
+// not start and increment by 1, an extension's type, once per extension,
+// and a domain, once per domain, are baseline notes.
 func (r *pgReader) columns(pt *pgTable) (map[int]string, error) {
 	names := map[int]string{}
 	err := r.each(pgColumnsQuery, []any{pt.oid}, func(rows *sql.Rows) error {
@@ -235,12 +252,12 @@ func (r *pgReader) columns(pt *pgTable) (map[int]string, error) {
 			c                                         Column
 			typ, typtype, tnsp, tname, def            string
 			identity, generated, seqNsp, seqName, reg string
-			collation, ext                            string
+			collation, ext, domain                    string
 			typOID, start, increment                  int64
 			notNull                                   bool
 		)
 		if err := rows.Scan(&num, &c.Name, &typ, &typtype, &typOID, &tnsp, &tname, &notNull, &def,
-			&identity, &generated, &c.Comment, &seqNsp, &seqName, &reg, &start, &increment, &collation, &ext); err != nil {
+			&identity, &generated, &c.Comment, &seqNsp, &seqName, &reg, &start, &increment, &collation, &ext, &domain); err != nil {
 			return err
 		}
 		if collation != "" {
@@ -289,6 +306,14 @@ func (r *pgReader) columns(pt *pgTable) (map[int]string, error) {
 			pt.exts[ext] = true
 			r.baselineNote(pt, "", "the type "+c.Type+" comes from the extension "+ext+"; add CREATE EXTENSION "+ext+
 				" to 0001_baseline.sql before the tables, then run migrate hash")
+		}
+		if domain != "" && !pt.domains[domain] {
+			if pt.domains == nil {
+				pt.domains = map[string]bool{}
+			}
+			pt.domains[domain] = true
+			r.baselineNote(pt, "", "the type "+domain+" is a domain, which 0001_baseline.sql does not create; add its CREATE DOMAIN"+
+				" before the tables, then run migrate hash")
 		}
 		pt.t.Columns = append(pt.t.Columns, c)
 		return nil

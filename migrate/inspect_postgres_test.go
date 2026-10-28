@@ -584,3 +584,44 @@ func TestInspectPostgresBaselineNotes(t *testing.T) {
 		t.Errorf("notes\n%+v\nwant\n%+v", notes, want)
 	}
 }
+
+// TestInspectPostgresExtensionThrough: an extension's type behind an array or
+// a domain is found, and a domain, which 0001_baseline.sql does not create, is
+// a baseline note naming the nearest domain, also behind an array.
+func TestInspectPostgresExtensionThrough(t *testing.T) {
+	db, _ := freshDB(t, velox.Postgres)
+	if _, err := db.Exec(`CREATE EXTENSION citext`); err != nil {
+		t.Skipf("CREATE EXTENSION citext: %v", err)
+	}
+	for _, q := range []string{
+		`CREATE TABLE tag_sets (id integer PRIMARY KEY, labels citext[])`,
+		`CREATE DOMAIN tag_name AS citext`,
+		`CREATE TABLE tag_names (id integer PRIMARY KEY, name tag_name)`,
+		`CREATE TABLE tag_lists (id integer PRIMARY KEY, names tag_name[])`,
+	} {
+		mustExec(t, db, q)
+	}
+	refs := []migrate.TableRef{{Name: "tag_sets"}, {Name: "tag_names"}, {Name: "tag_lists"}}
+	_, notes, err := migrate.InspectNotes(context.Background(), db, velox.Postgres, refs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []migrate.Note
+	for _, n := range notes {
+		if n.Baseline {
+			got = append(got, n)
+		}
+	}
+	add := "; add CREATE EXTENSION citext to 0001_baseline.sql before the tables, then run migrate hash"
+	domain := " is a domain, which 0001_baseline.sql does not create; add its CREATE DOMAIN before the tables, then run migrate hash"
+	want := []migrate.Note{
+		{Table: migrate.TableRef{Name: "tag_sets"}, Object: "tag_sets", Baseline: true, Message: "the type citext[] comes from the extension citext" + add},
+		{Table: migrate.TableRef{Name: "tag_names"}, Object: "tag_names", Baseline: true, Message: "the type tag_name comes from the extension citext" + add},
+		{Table: migrate.TableRef{Name: "tag_names"}, Object: "tag_names", Baseline: true, Message: "the type tag_name" + domain},
+		{Table: migrate.TableRef{Name: "tag_lists"}, Object: "tag_lists", Baseline: true, Message: "the type tag_name[] comes from the extension citext" + add},
+		{Table: migrate.TableRef{Name: "tag_lists"}, Object: "tag_lists", Baseline: true, Message: "the type tag_name" + domain},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("baseline notes\n%+v\nwant\n%+v", got, want)
+	}
+}
