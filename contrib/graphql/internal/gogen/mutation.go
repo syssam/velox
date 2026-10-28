@@ -1165,24 +1165,6 @@ func (r *renderer) writeDelete(f *file, t *sdl.Type) error {
 			add(j, own)
 		}
 	}
-	// The one-sided M2M edges of other entities that lead to e: an edge that
-	// is no inverse, with no inverse of its own on e. Its join rows hold e's
-	// key in the column other, and no edge of e's own names them. (velox-gen
-	// makes a pair of M2M edges between two entities, so this finds the
-	// edges of a model another producer wrote.) A two-sided pair was
-	// gathered above, from e's inverse edge, and adds nothing.
-	for _, x := range r.m.Entities {
-		for _, ed := range x.Edges {
-			if ed.Kind != plugin.M2M || ed.Inverse || ed.Target != e.Name {
-				continue
-			}
-			j, _, other, err := r.joinCols(x, ed)
-			if err != nil {
-				return err
-			}
-			add(j, other)
-		}
-	}
 
 	ctx, velox, impl := f.use("context", "context"), f.velox(), f.gqlimpl()
 	idv := "key"

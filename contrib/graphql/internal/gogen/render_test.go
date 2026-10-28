@@ -1067,20 +1067,17 @@ func TestDeleteFunc(t *testing.T) {
 // DELETE of the row.
 func TestDeleteJoinRows(t *testing.T) {
 	m := testModel(t)
-	var user, group, post *plugin.Entity
+	var user, group *plugin.Entity
 	for _, e := range m.Entities {
 		switch e.Name {
 		case "User":
 			user = e
 		case "Group":
 			group = e
-		case "Post":
-			post = e
 		}
 	}
 	setMutations(t, user, "create", "delete")
 	setMutations(t, group, "delete")
-	setMutations(t, post, "delete")
 	// Follow joins User to itself: follows and its inverse, followers.
 	m.Entities = append(m.Entities, &plugin.Entity{
 		Name: "Follow", Label: "follow", Handles: "Follows", Table: "follows", Join: true, Tenant: -1, PrimaryKey: []int{0, 1},
@@ -1093,35 +1090,9 @@ func TestDeleteJoinRows(t *testing.T) {
 		&plugin.Edge{Name: "follows", GoName: "Follows", Target: "User", Ref: "followers", Kind: plugin.M2M, Join: "Follow"},
 		&plugin.Edge{Name: "followers", GoName: "Followers", Target: "User", Ref: "follows", Kind: plugin.M2M, Join: "Follow", Inverse: true},
 	)
-	// GroupPin has a one-sided M2M edge to Post (GroupPinPost holds the pin's
-	// key first and Post's second), and Post has no inverse of it: DeletePost
-	// deletes those join rows too, after Post's own, on the join's second
-	// field.
-	m.Entities = append(m.Entities,
-		&plugin.Entity{
-			Name: "GroupPin", Label: "group_pin", Handles: "GroupPins", Table: "group_pins", Tenant: -1, PrimaryKey: []int{0},
-			Fields:      []*plugin.Field{{Name: "id", GoName: "ID", Column: "id", Type: "int64", GoType: "int64", ElemType: "int64", AutoID: true}},
-			Edges:       []*plugin.Edge{{Name: "posts", GoName: "Posts", Target: "Post", Kind: plugin.M2M, Join: "GroupPinPost"}},
-			Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"skip":63}`)},
-		},
-		&plugin.Entity{
-			Name: "GroupPinPost", Label: "group_pin_post", Handles: "GroupPinPosts", Table: "group_pin_posts", Join: true, Tenant: -1, PrimaryKey: []int{0, 1},
-			Fields: []*plugin.Field{
-				{Name: "group_pin_id", GoName: "GroupPinID", Column: "group_pin_id", Type: "int64", GoType: "int64", ElemType: "int64"},
-				{Name: "post_id", GoName: "PostID", Column: "post_id", Type: "int64", GoType: "int64", ElemType: "int64"},
-			},
-		},
-	)
 	files := render(t, m)
 	squash := func(s string) string { return " " + strings.Join(strings.Fields(s), " ") + " " }
 	for file, wants := range map[string][]string{
-		"gql_post.go": {
-			`func DeletePost(ctx context.Context, id string) (string, error) {`,
-			`chk := db.Query[Post]().Where(Posts.ID.EQ(key)).Writable() if db.Dialect() != velox.SQLite { chk = chk.ForUpdate() } if ok, err := chk.Exists(ctx);`,
-			`db.Delete[PostRelated]().Where(velox.Or(PostRelateds.PostID.EQ(key), PostRelateds.RelatedID.EQ(key))).Exec(ctx)`,
-			`db.Delete[GroupPinPost]().Where(GroupPinPosts.PostID.EQ(key)).Exec(ctx)`,
-			`db.Delete[Post]().Where(Posts.ID.EQ(key)).Exec(ctx)`,
-		},
 		"gql_user.go": {
 			`func DeleteAccount(ctx context.Context, id string) (string, error) {`,
 			`chk := db.Query[User]().Where(Users.ID.EQ(key)).Writable() if db.Dialect() != velox.SQLite { chk = chk.ForUpdate() } if ok, err := chk.Exists(ctx);`,

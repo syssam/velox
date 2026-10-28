@@ -197,17 +197,19 @@
 // same rule.
 //
 // With graphql.MutationDelete(), Delete<T>(ctx, id) deletes the row and every
-// join row that holds its key, of its own many-to-many edges and of other
-// entities' edges to it, and returns the ID encoded again from the key;
-// deleteX's resolver returns it. velox-gen's own migrations give a join
-// table's foreign keys ON DELETE CASCADE, as ent's do, so the database would
-// remove them anyway; the delete matters for a schema written by hand. The
-// join rows, which neither the tenant nor a policy scopes, go only after an
-// Exists under the DELETE's own scope (Writable: the tenant, and the Read and
-// Write policies; locking the row with FOR UPDATE wherever the dialect can) has
-// found the row, so a row the caller may not delete keeps them. A row's delete removes all of its join rows, whatever the tenant at
-// their other end: a shared row is unlinked from every tenant's rows. Rows of
-// other entities that hold the row's key are left to the database's foreign
+// join row that holds its key, of its own many-to-many edges, and returns the
+// ID encoded again from the key; deleteX's resolver returns it. velox-gen's own
+// migrations give a join table's foreign keys ON DELETE CASCADE, as ent's do,
+// so the database would remove them anyway; the delete matters for a schema
+// written by hand. The generated join delete is not scoped by the tenant, and
+// it goes only after an Exists under the DELETE's own scope (Writable: the
+// tenant, and the Read and Write policies; locking the row with FOR UPDATE
+// wherever the dialect can) has found the row, so a row the caller may not
+// delete keeps them. A Write policy or a Delete hook that the application
+// binds on a join entity that is not bidirectional still narrows or refuses
+// that delete. A row's delete removes all of its join rows, whatever the tenant
+// at their other end: a shared row is unlinked from every tenant's rows. Rows
+// of other entities that hold the row's key are left to the database's foreign
 // keys: one that refuses the DELETE gives a *velox.ConstraintError, shown as
 // BAD_USER_INPUT.
 //
