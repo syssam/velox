@@ -296,6 +296,14 @@ func TestMyShownDefault(t *testing.T) {
 		{"CREATE TABLE \"t\" (\n  \"c\" varbinary(8) DEFAULT 'a',\n  \"d\"\"e\" varbinary(8) DEFAULT 'b'\n)", `d"e`, `'b'`, true},
 		{"CREATE TABLE t (\n  c varbinary(8) DEFAULT 'a',\n  cc varbinary(8) DEFAULT 'b'\n)", "cc", `'b'`, true},
 		{"CREATE TABLE t (\n  c varbinary(8) DEFAULT 'a',\n  cc varbinary(8) DEFAULT 'b'\n)", "c", `'a'`, true},
+		// A name holding quotes or a space is never read bare.
+		{"CREATE TABLE `t` (\n  `c` varbinary(8) DEFAULT 'a',\n  ```c``` varbinary(8) DEFAULT 'b'\n)", "`c`", `'b'`, true},
+		{"CREATE TABLE `t` (\n  `c` varbinary(8) DEFAULT 'a'\n)", "`c`", "", false},
+		{"CREATE TABLE t (\n  my varbinary(8) DEFAULT 'a'\n)", "my col", "", false},
+		{"CREATE TABLE t (\n  c varbinary(8) DEFAULT 'a'\n)", `"c"`, "", false},
+		// Under ANSI_QUOTES a backslash in a name escapes nothing.
+		{"CREATE TABLE \"t\" (\n  \"a\\\" varbinary(8) DEFAULT 'q',\n  \"c\" varbinary(8) DEFAULT 'r'\n)", `a\`, `'q'`, true},
+		{"CREATE TABLE \"t\" (\n  \"a\\\" varbinary(8) DEFAULT 'q',\n  \"c\" varbinary(8) DEFAULT 'r'\n)", "c", `'r'`, true},
 	} {
 		got, ok := migrate.MyShownDefault(c.create, c.col)
 		if got != c.want || ok != c.ok {
@@ -334,6 +342,11 @@ func TestDriftMySQLBinaryDefaults(t *testing.T) {
 		{"varbinary(8)", `0x6100FF`, `'a'`, change},
 		{"varbinary(8)", `0x061`, `0x61`, change},
 		{"varbinary(8)", `0x061`, `0x061`, nil},
+		// An expression is compared as one, not by bytes.
+		{"binary(16)", `uuid_to_bin(uuid())`, `(uuid_to_bin(uuid()))`, nil},
+		{"binary(16)", `uuid_to_bin(uuid())`, `(UUID_TO_BIN(UUID()))`, nil},
+		{"varbinary(8)", `uuid_to_bin(uuid())`, `(UUID_TO_BIN(UUID()))`, nil},
+		{"varbinary(8)", `concat(_utf8mb4'a',_utf8mb4'b')`, `(concat('a','b'))`, nil},
 	} {
 		r, err := migrate.DriftOf(schema(c.typ, c.db), schema(c.typ, c.model))
 		if err != nil {
@@ -346,6 +359,14 @@ func TestDriftMySQLBinaryDefaults(t *testing.T) {
 		if !slices.Equal(changes, c.changes) || len(r.Warnings) > 0 {
 			t.Errorf("%s: database %s, model %s: changes %q, warnings %v; want %q", c.typ, c.db, c.model, changes, r.Warnings, c.changes)
 		}
+	}
+	// An expression that differs is a warning, as on any other column.
+	r, err := migrate.DriftOf(schema("binary(16)", "uuid_to_bin(uuid(),1)"), schema("binary(16)", "(uuid_to_bin(uuid()))"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Changes) > 0 || len(r.Warnings) != 1 || r.Warnings[0].Object != "t.c" {
+		t.Errorf("a differing expression: changes %v, warnings %v; want one warning on t.c", r.Changes, r.Warnings)
 	}
 }
 

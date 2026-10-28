@@ -100,12 +100,12 @@
 // _utf8mb4 and _utf8mb3 before a literal, and _latin1 and _ascii before an
 // ASCII one, are dropped, so two literals compared with each other can be
 // called the same where their collations differ on trailing spaces. A
-// MySQL binary or varbinary default is compared by its bytes. A Warning is
-// what the comparison cannot settle: an expression default that differs, a
-// predicate the normaliser cannot read whose text differs, a primary key
-// that differs, or what the model has no place for, such as a MySQL table
-// that is not InnoDB, an invalid PostgreSQL index or a NOT VALID
-// constraint.
+// MySQL binary or varbinary literal default is compared by its bytes. A
+// Warning is what the comparison cannot settle: an expression default that
+// differs, a predicate the normaliser cannot read whose text differs, a
+// primary key that differs, or what the model has no place for, such as a
+// MySQL table that is not InnoDB, an invalid PostgreSQL index or a NOT
+// VALID constraint.
 //
 // [Baseline] adopts an existing database into a new directory: it reads
 // the tables a schema names and returns them as the directory's first

@@ -351,6 +351,14 @@ func mysqlBinaryBytes(typ, def string) ([]byte, bool) {
 	return b, true
 }
 
+// mysqlBinaryLiteral reports whether def is no default or written as a
+// literal mysqlBinaryBytes reads: '…', 0x… or _binary'…'. An expression is
+// not one.
+func mysqlBinaryLiteral(def string) bool {
+	return def == "" || def[0] == '\'' || len(def) > 1 && (def[:2] == "0x" || def[:2] == "0X") ||
+		len(def) > 7 && strings.EqualFold(def[:7], "_binary") && def[7] == '\''
+}
+
 // mysqlBinaryType reports whether typ is binary or varbinary.
 func mysqlBinaryType(typ string) bool {
 	w := typeWord(typ)
@@ -383,8 +391,10 @@ func myShownDefault(create, col string) (string, bool) {
 		tok, next := myToken(create, i)
 		switch tok {
 		case "", ")", ",":
-			// The name in backquotes, in double quotes, or bare.
-			if len(def) > 0 && (def[0] == ddl.Ident(velox.MySQL, col) || def[0] == ddl.Ident(velox.Postgres, col) || def[0] == col) {
+			// The name in backquotes, in double quotes, or bare when it
+			// holds nothing a bare name could be misread by.
+			if len(def) > 0 && (def[0] == ddl.Ident(velox.MySQL, col) || def[0] == ddl.Ident(velox.Postgres, col) ||
+				def[0] == col && !strings.ContainsAny(col, "'`\" ,()\t\r\n")) {
 				for k := 1; k+1 < len(def); k++ {
 					if strings.EqualFold(def[k], "DEFAULT") {
 						return def[k+1], true
@@ -415,9 +425,10 @@ func myToken(s string, i int) (string, int) {
 	}
 	start := i
 	switch s[i] {
-	case '`':
-		return s[start:stringEnd(s, i, false)], stringEnd(s, i, false)
-	case '\'', '"':
+	case '`', '"': // a name: in backquotes, or in double quotes under ANSI_QUOTES
+		end := stringEnd(s, i, false)
+		return s[start:end], end
+	case '\'':
 		end := stringEnd(s, i, true)
 		return s[start:end], end
 	case ',', ')':
@@ -427,7 +438,7 @@ func myToken(s string, i int) (string, int) {
 		for i < len(s) {
 			switch s[i] {
 			case '\'', '"', '`':
-				i = stringEnd(s, i, s[i] != '`')
+				i = stringEnd(s, i, s[i] == '\'')
 				continue
 			case '(':
 				depth++

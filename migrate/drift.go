@@ -192,9 +192,11 @@ func (c *drifter) table(t, u *Table) {
 	for i := range t.Columns {
 		tc := &t.Columns[i]
 		uc := u.column(tc.Name)
-		if uc != nil && c.d == velox.MySQL && mysqlBinaryType(tc.Type) && mysqlBinaryType(uc.Type) {
-			// A binary default is its bytes, both sides decoded alike: the
-			// same bytes, or a change; one not decoded is compared as written.
+		if uc != nil && c.d == velox.MySQL && mysqlBinaryType(tc.Type) && mysqlBinaryType(uc.Type) &&
+			mysqlBinaryLiteral(tc.Default) && mysqlBinaryLiteral(uc.Default) {
+			// A binary literal default is its bytes, both sides decoded
+			// alike: the same bytes, or a change; one not decoded is compared
+			// as written. An expression is compared below.
 			a, aok := mysqlBinaryBytes(tc.Type, tc.Default)
 			b, bok := mysqlBinaryBytes(uc.Type, uc.Default)
 			if aok && bok && bytes.Equal(a, b) {

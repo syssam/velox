@@ -498,6 +498,7 @@ func TestInspectMySQLBinaryDefaults(t *testing.T) {
 			{Name: "id", Type: "bigint", Identity: true},
 			{Name: "code", Type: "varbinary(8)", Default: "'a'"},
 			{Name: "hex", Type: "varbinary(8)", Default: "0x61"},
+			{Name: "uid", Type: "binary(16)", Default: "(UUID_TO_BIN(UUID()))"},
 			{Name: "pad", Type: "binary(2)", Default: "'a'"},
 			{Name: "quote", Type: "varbinary(8)", Default: "''''"},
 			{Name: "data", Type: "blob", Default: "('a')"},
