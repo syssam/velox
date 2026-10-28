@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/syssam/velox2/contrib/graphql"
@@ -13,37 +14,44 @@ import (
 	"github.com/syssam/velox2/schema"
 )
 
+type annotationCase struct {
+	name string
+	a    graphql.Annotation
+	want string
+}
+
+// annotationCases are annotations with their JSON, which TestAnnotationJSON
+// round-trips and TestAnnotationJSONCoversEveryField checks cover every
+// field.
+var annotationCases = []annotationCase{
+	{"zero", graphql.Annotation{}, `{}`},
+	{"Skip()", graphql.Skip(), `{"skip":63}`},
+	{"Skip(one)", graphql.Skip(graphql.SkipOrderField), `{"skip":4}`},
+	{"Skip(two)", graphql.Skip(graphql.SkipType, graphql.SkipWhereInput), `{"skip":9}`},
+	{"Type", graphql.Type("Account"), `{"type":"Account"}`},
+	{"QueryField", graphql.QueryField("users"), `{"query_field":"users"}`},
+	{"Mutations()", graphql.Mutations(), `{"mutations":["create","update"]}`},
+	{"Mutations(all)", graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate(), graphql.MutationDelete()), `{"mutations":["create","update","delete"]}`},
+	{"MultiOrder", graphql.MultiOrder(), `{"multi_order":true}`},
+	{"FieldName", graphql.FieldName("fullName"), `{"field_name":"fullName"}`},
+	{"OrderField", graphql.OrderField("CREATED_AT"), `{"order_field":"CREATED_AT"}`},
+	{"OrderUnguarded", graphql.OrderUnguarded(), `{"order_unguarded":true}`},
+	{"WhereOps()", graphql.WhereOps(), `{"where_ops":2147483648}`},
+	{"WhereOps(preset)", graphql.WhereOps(graphql.OpsEquality), `{"where_ops":15}`},
+	{"WhereOps(mixed)", graphql.WhereOps(graphql.OpEQ, graphql.OpsNullable), `{"where_ops":6145}`},
+	{"WhereOps(all)", graphql.WhereOps(graphql.OpsAll), `{"where_ops":8191}`},
+	{"WhereEdge", graphql.WhereEdge(), `{"where_edge":true}`},
+	{"Connection(false)", graphql.Connection(false), `{"connection":false}`},
+	{"Connection(true)", graphql.Connection(true), `{"connection":true}`},
+	{"CreateInput(false)", graphql.CreateInput(false), `{"create_input":false}`},
+	{"UpdateInput(true)", graphql.UpdateInput(true), `{"update_input":true}`},
+	{"EnumValues", graphql.EnumValues(map[string]string{"b": "B", "a": "A"}), `{"enum_values":{"a":"A","b":"B"}}`},
+	{"Directives", graphql.Directives(graphql.Directive{Name: "auth", Args: map[string]any{"role": "admin"}}, graphql.Directive{Name: "x"}),
+		`{"directives":[{"name":"auth","args":{"role":"admin"}},{"name":"x"}]}`},
+}
+
 func TestAnnotationJSON(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		a    graphql.Annotation
-		want string
-	}{
-		{"zero", graphql.Annotation{}, `{}`},
-		{"Skip()", graphql.Skip(), `{"skip":63}`},
-		{"Skip(one)", graphql.Skip(graphql.SkipOrderField), `{"skip":4}`},
-		{"Skip(two)", graphql.Skip(graphql.SkipType, graphql.SkipWhereInput), `{"skip":9}`},
-		{"Type", graphql.Type("Account"), `{"type":"Account"}`},
-		{"QueryField", graphql.QueryField("users"), `{"query_field":"users"}`},
-		{"Mutations()", graphql.Mutations(), `{"mutations":["create","update"]}`},
-		{"Mutations(all)", graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate(), graphql.MutationDelete()), `{"mutations":["create","update","delete"]}`},
-		{"MultiOrder", graphql.MultiOrder(), `{"multi_order":true}`},
-		{"FieldName", graphql.FieldName("fullName"), `{"field_name":"fullName"}`},
-		{"OrderField", graphql.OrderField("CREATED_AT"), `{"order_field":"CREATED_AT"}`},
-		{"OrderUnguarded", graphql.OrderUnguarded(), `{"order_unguarded":true}`},
-		{"WhereOps()", graphql.WhereOps(), `{"where_ops":2147483648}`},
-		{"WhereOps(preset)", graphql.WhereOps(graphql.OpsEquality), `{"where_ops":15}`},
-		{"WhereOps(mixed)", graphql.WhereOps(graphql.OpEQ, graphql.OpsNullable), `{"where_ops":6145}`},
-		{"WhereOps(all)", graphql.WhereOps(graphql.OpsAll), `{"where_ops":8191}`},
-		{"WhereEdge", graphql.WhereEdge(), `{"where_edge":true}`},
-		{"Connection(false)", graphql.Connection(false), `{"connection":false}`},
-		{"Connection(true)", graphql.Connection(true), `{"connection":true}`},
-		{"CreateInput(false)", graphql.CreateInput(false), `{"create_input":false}`},
-		{"UpdateInput(true)", graphql.UpdateInput(true), `{"update_input":true}`},
-		{"EnumValues", graphql.EnumValues(map[string]string{"b": "B", "a": "A"}), `{"enum_values":{"a":"A","b":"B"}}`},
-		{"Directives", graphql.Directives(graphql.Directive{Name: "auth", Args: map[string]any{"role": "admin"}}, graphql.Directive{Name: "x"}),
-			`{"directives":[{"name":"auth","args":{"role":"admin"}},{"name":"x"}]}`},
-	} {
+	for _, tc := range annotationCases {
 		t.Run(tc.name, func(t *testing.T) {
 			b, err := json.Marshal(tc.a)
 			if err != nil {
@@ -63,6 +71,21 @@ func TestAnnotationJSON(t *testing.T) {
 	}
 	if n := (graphql.Annotation{}).Name(); n != "graphql" {
 		t.Errorf("Name = %q", n)
+	}
+}
+
+// TestAnnotationJSONCoversEveryField: each field of Annotation is set in at
+// least one of annotationCases, so a field the JSON drops or misnames cannot
+// pass the round trip unnoticed.
+func TestAnnotationJSONCoversEveryField(t *testing.T) {
+	typ := reflect.TypeFor[graphql.Annotation]()
+	for i := range typ.NumField() {
+		f := typ.Field(i)
+		if !slices.ContainsFunc(annotationCases, func(tc annotationCase) bool {
+			return !reflect.ValueOf(tc.a).Field(i).IsZero()
+		}) {
+			t.Errorf("no case of annotationCases sets %s", f.Name)
+		}
 	}
 }
 

@@ -20,6 +20,7 @@ import (
 
 	"github.com/syssam/velox2/contrib/graphql"
 	"github.com/syssam/velox2/contrib/graphql/internal/english"
+	"github.com/syssam/velox2/contrib/graphql/internal/modeltest"
 	"github.com/syssam/velox2/contrib/graphql/internal/sdl"
 	"github.com/syssam/velox2/plugin"
 )
@@ -35,17 +36,6 @@ func readFile(t *testing.T, path string) string {
 		t.Fatal(err)
 	}
 	return string(b)
-}
-
-// testModel is plan 1's testdata model, whose annotations cover every
-// annotation.
-func testModel(t *testing.T) *plugin.Model {
-	t.Helper()
-	var m plugin.Model
-	if err := json.Unmarshal([]byte(readFile(t, filepath.Join("..", "sdl", "testdata", "model.json"))), &m); err != nil {
-		t.Fatal(err)
-	}
-	return &m
 }
 
 func render(t *testing.T, m *plugin.Model) map[string]string {
@@ -67,7 +57,7 @@ func render(t *testing.T, m *plugin.Model) map[string]string {
 // TestGoGolden pins the Go of the testdata model. Run it with -update to
 // rewrite testdata/golden.
 func TestGoGolden(t *testing.T) {
-	got := render(t, testModel(t))
+	got := render(t, modeltest.Model(t))
 	dir := filepath.Join("testdata", "golden")
 	if *update {
 		if err := os.RemoveAll(dir); err != nil {
@@ -121,7 +111,7 @@ func TestGoGolden(t *testing.T) {
 
 // TestGoDeterministic renders the model twice.
 func TestGoDeterministic(t *testing.T) {
-	a, b := render(t, testModel(t)), render(t, testModel(t))
+	a, b := render(t, modeltest.Model(t)), render(t, modeltest.Model(t))
 	for n := range a {
 		if a[n] != b[n] {
 			t.Errorf("%s differs between two runs", n)
@@ -219,7 +209,7 @@ func gqlName(s string) string { return strings.ToLower(strings.ReplaceAll(s, "_"
 // run does.
 func TestNamesMatchSDL(t *testing.T) {
 	t.Run("testdata", func(t *testing.T) {
-		checkNames(t, testModel(t), readFile(t, filepath.Join("..", "sdl", "testdata", "app.graphqls")))
+		checkNames(t, modeltest.Model(t), readFile(t, filepath.Join("..", "sdl", "testdata", "app.graphqls")))
 	})
 	t.Run("types", func(t *testing.T) { checkNames(t, typesModel(t)) })
 }
@@ -661,7 +651,7 @@ func withField(e *plugin.Entity, fds ...*plugin.Field) *plugin.Entity {
 // TestGeneratedFilesCarryTheGuard: every file carries the version guard once,
 // as the core's files carry theirs, whatever else it uses of veloxgql.
 func TestGeneratedFilesCarryTheGuard(t *testing.T) {
-	for label, m := range map[string]*plugin.Model{"testdata": testModel(t), "types": typesModel(t)} {
+	for label, m := range map[string]*plugin.Model{"testdata": modeltest.Model(t), "types": typesModel(t)} {
 		files := render(t, m)
 		if len(files) == 0 {
 			t.Fatalf("%s: no files", label)
@@ -680,7 +670,7 @@ func TestGeneratedFilesCarryTheGuard(t *testing.T) {
 // TestEnumErrorPercent: a stored enum value with a % in it is text in the
 // generated error, never a format verb of gqlimpl.InputErrorf.
 func TestEnumErrorPercent(t *testing.T) {
-	m := testModel(t)
+	m := modeltest.Model(t)
 	for _, e := range m.Entities {
 		for _, f := range e.Fields {
 			if f.Enum == "GroupVisibility" {
@@ -713,7 +703,7 @@ func TestEnumErrorPercent(t *testing.T) {
 // <Plural>ConnectionOf, and no file declares or calls a ConnectionGQL.
 func TestConnectionOfEveryNode(t *testing.T) {
 	const decl = "ConnectionOf(ctx context.Context, q velox.Query["
-	for label, m := range map[string]*plugin.Model{"testdata": testModel(t), "types": typesModel(t)} {
+	for label, m := range map[string]*plugin.Model{"testdata": modeltest.Model(t), "types": typesModel(t)} {
 		files := render(t, m)
 		total := 0
 		for name, src := range files {
@@ -759,7 +749,7 @@ func mutationsModel(t *testing.T) *plugin.Model {
 // when not Required (an ID a string, an ID list a []string), and
 // Create<T>, which takes it and returns the entity.
 func TestCreateInputs(t *testing.T) {
-	for label, m := range map[string]*plugin.Model{"testdata": testModel(t), "mutations": mutationsModel(t)} {
+	for label, m := range map[string]*plugin.Model{"testdata": modeltest.Model(t), "mutations": mutationsModel(t)} {
 		t.Run(label, func(t *testing.T) {
 			surf, err := sdl.Build(m)
 			if err != nil {
@@ -880,7 +870,7 @@ func updateOnlyModel(t *testing.T) *plugin.Model {
 // entity. A type with updateX and no createX still has <entity>FieldGQL,
 // which its UpdateX names.
 func TestUpdateInputs(t *testing.T) {
-	for label, m := range map[string]*plugin.Model{"testdata": testModel(t), "update-only": updateOnlyModel(t)} {
+	for label, m := range map[string]*plugin.Model{"testdata": modeltest.Model(t), "update-only": updateOnlyModel(t)} {
 		t.Run(label, func(t *testing.T) {
 			surf, err := sdl.Build(m)
 			if err != nil {
@@ -999,7 +989,7 @@ func TestCreateConversions(t *testing.T) {
 // TestInputStringHidesSensitive: an input's String, and so GoString and
 // fmt's %v and %#v, leaves out its sensitive fields.
 func TestInputStringHidesSensitive(t *testing.T) {
-	m := testModel(t)
+	m := modeltest.Model(t)
 	surf, err := sdl.Build(m)
 	if err != nil {
 		t.Fatal(err)
@@ -1035,7 +1025,7 @@ func TestInputStringHidesSensitive(t *testing.T) {
 // TestDeleteFunc: each type with deleteX has DeleteX, taking the ID and
 // returning it; a type without it has none.
 func TestDeleteFunc(t *testing.T) {
-	for label, m := range map[string]*plugin.Model{"testdata": testModel(t), "update-only": updateOnlyModel(t), "mutations": mutationsModel(t)} {
+	for label, m := range map[string]*plugin.Model{"testdata": modeltest.Model(t), "update-only": updateOnlyModel(t), "mutations": mutationsModel(t)} {
 		t.Run(label, func(t *testing.T) {
 			surf, err := sdl.Build(m)
 			if err != nil {
@@ -1076,7 +1066,7 @@ func TestDeleteFunc(t *testing.T) {
 // existence check under the DELETE's scope (Writable), and before the
 // DELETE of the row.
 func TestDeleteJoinRows(t *testing.T) {
-	m := testModel(t)
+	m := modeltest.Model(t)
 	var user, group *plugin.Entity
 	for _, e := range m.Entities {
 		switch e.Name {
@@ -1156,7 +1146,7 @@ func setMutations(t *testing.T, e *plugin.Entity, kinds ...string) {
 // whose target's GraphQL type is renamed (Group.users to User, the type
 // Account), finding the target by its entity, not by its type's name.
 func TestUpdateEdgeToRenamedType(t *testing.T) {
-	m := testModel(t)
+	m := modeltest.Model(t)
 	for _, e := range m.Entities {
 		if e.Name == "Group" {
 			setMutations(t, e, "update")
@@ -1178,7 +1168,7 @@ func TestUpdateEdgeToRenamedType(t *testing.T) {
 // check their row with a Writable Exists, locked with ForUpdate unless the
 // dialect is SQLite, and no longer with a Count, which cannot lock.
 func TestUpdateLocksTheRow(t *testing.T) {
-	m := testModel(t)
+	m := modeltest.Model(t)
 	for _, e := range m.Entities {
 		switch e.Name {
 		case "Group":
@@ -1286,7 +1276,7 @@ func funcSrc(t *testing.T, files map[string]string, name string) string {
 // owner's relation handle), and none reads the relation's field, which an
 // application's With may have loaded filtered or limited.
 func TestEdgesBatch(t *testing.T) {
-	for label, m := range map[string]*plugin.Model{"testdata": testModel(t), "types": typesModel(t)} {
+	for label, m := range map[string]*plugin.Model{"testdata": modeltest.Model(t), "types": typesModel(t)} {
 		surf, err := sdl.Build(m)
 		if err != nil {
 			t.Fatal(err)
@@ -1338,7 +1328,7 @@ func TestEdgesBatch(t *testing.T) {
 // field of its GraphQL type, getters and edges included, and whose columns
 // include no sensitive field's.
 func TestColumnsGQL(t *testing.T) {
-	for label, m := range map[string]*plugin.Model{"testdata": testModel(t), "types": typesModel(t)} {
+	for label, m := range map[string]*plugin.Model{"testdata": modeltest.Model(t), "types": typesModel(t)} {
 		sdlText, err := sdl.Render(m)
 		if err != nil {
 			t.Fatal(err)
@@ -1416,7 +1406,7 @@ func TestColumnsGQL(t *testing.T) {
 	// The key, the foreign keys on the row and the order columns, always, in
 	// this order; a tenant column too, so that a row handed to an
 	// application's resolver never has a zero tenant.
-	cols := colsLiteral(t, render(t, testModel(t)), "postColumnsGQL")
+	cols := colsLiteral(t, render(t, modeltest.Model(t)), "postColumnsGQL")
 	if len(cols) < 2 || cols[0] != "Posts.ID" || cols[1] != "Posts.AuthorID" {
 		t.Errorf("postColumnsGQL's cols %v, want the key and then the foreign keys", cols)
 	}
@@ -1426,7 +1416,7 @@ func TestColumnsGQL(t *testing.T) {
 // does not select the key or an orderBy column, and narrows its columns to
 // the selection, before anything else.
 func TestConnectionOfChecksSelects(t *testing.T) {
-	for label, m := range map[string]*plugin.Model{"testdata": testModel(t), "types": typesModel(t)} {
+	for label, m := range map[string]*plugin.Model{"testdata": modeltest.Model(t), "types": typesModel(t)} {
 		surf, err := sdl.Build(m)
 		if err != nil {
 			t.Fatal(err)
@@ -1495,7 +1485,7 @@ func TestMutationGodocPoints(t *testing.T) {
 	seen := map[string]int{}
 	article := map[string]string{}
 	joinRows := map[string]bool{}
-	models := map[string]*plugin.Model{"testdata": testModel(t), "update-only": updateOnlyModel(t), "mutations": mutationsModel(t), "delete-only": deleteOnlyModel(t)}
+	models := map[string]*plugin.Model{"testdata": modeltest.Model(t), "update-only": updateOnlyModel(t), "mutations": mutationsModel(t), "delete-only": deleteOnlyModel(t)}
 	for label, m := range models {
 		for name, src := range render(t, m) {
 			f, err := parser.ParseFile(token.NewFileSet(), name, src, parser.ParseComments)
@@ -1576,7 +1566,7 @@ func TestMutationsHeading(t *testing.T) {
 // TestSingleOwnerKeyEQ: the existence check of one owner key is EQ, and only
 // a list of keys is In.
 func TestSingleOwnerKeyEQ(t *testing.T) {
-	files := render(t, testModel(t))
+	files := render(t, modeltest.Model(t))
 	in := regexp.MustCompile(`\.In\(k\d+\)\), 1,`)
 	for name, src := range files {
 		if in.MatchString(src) {

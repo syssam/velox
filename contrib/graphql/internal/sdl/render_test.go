@@ -12,6 +12,7 @@ import (
 	"github.com/vektah/gqlparser/v2/ast"
 
 	"github.com/syssam/velox2/contrib/graphql"
+	"github.com/syssam/velox2/contrib/graphql/internal/modeltest"
 	"github.com/syssam/velox2/plugin"
 )
 
@@ -28,19 +29,8 @@ func readFile(t *testing.T, path string) string {
 	return string(b)
 }
 
-// testModel is testdata/model.json, a model whose annotations cover every
-// annotation.
-func testModel(t *testing.T) *plugin.Model {
-	t.Helper()
-	var m plugin.Model
-	if err := json.Unmarshal([]byte(readFile(t, filepath.Join("testdata", "model.json"))), &m); err != nil {
-		t.Fatal(err)
-	}
-	return &m
-}
-
 func TestRenderGolden(t *testing.T) {
-	got, err := Render(testModel(t))
+	got, err := Render(modeltest.Model(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +49,7 @@ func TestRenderGolden(t *testing.T) {
 		}
 		t.Fatalf("got %d lines, want %d (run go test -update to accept)", len(gl), len(wl))
 	}
-	again, err := Render(testModel(t))
+	again, err := Render(modeltest.Model(t))
 	if err != nil || again != got {
 		t.Errorf("a second render differs: %v", err)
 	}
@@ -79,7 +69,7 @@ func TestSDLIsValid(t *testing.T) {
 		t.Errorf("golden alone: %v, want an undefined application directive", err)
 	}
 
-	m := testModel(t)
+	m := modeltest.Model(t)
 	strip := func(a map[string]json.RawMessage) {
 		raw, ok := a["graphql"]
 		if !ok {

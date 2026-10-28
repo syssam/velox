@@ -10,6 +10,7 @@ import (
 	"github.com/vektah/gqlparser/v2/ast"
 
 	"github.com/syssam/velox2/contrib/graphql"
+	"github.com/syssam/velox2/contrib/graphql/internal/modeltest"
 	"github.com/syssam/velox2/plugin"
 )
 
@@ -95,7 +96,7 @@ func TestGetters(t *testing.T) {
 // The edge fields of each type, with their kind, target and method; an edge
 // that is skipped, or leads to a skipped type, has none.
 func TestSurfaceEdges(t *testing.T) {
-	s, err := Build(testModel(t))
+	s, err := Build(modeltest.Model(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +145,7 @@ func typeNamed(t *testing.T, s *Surface, name string) *Type {
 // The mutation inputs of each type, as the SDL declares them, with what each
 // field does and the field or edge it is about.
 func TestSurfaceInputs(t *testing.T) {
-	m := testModel(t)
+	m := modeltest.Model(t)
 	s, err := Build(m)
 	if err != nil {
 		t.Fatal(err)
@@ -273,7 +274,7 @@ func TestSurfaceInputs(t *testing.T) {
 // Every input object velox.graphqls declares for a type is the Surface's:
 // its create, update and where inputs, field by field.
 func TestSurfaceMatchesSDL(t *testing.T) {
-	m := testModel(t)
+	m := modeltest.Model(t)
 	s, err := Build(m)
 	if err != nil {
 		t.Fatal(err)

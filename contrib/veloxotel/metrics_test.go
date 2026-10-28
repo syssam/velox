@@ -589,29 +589,33 @@ func TestIterDurationExcludesLoopBody(t *testing.T) {
 		}
 		return r, spans
 	}
-	check := func(t *testing.T, r *sdkmetric.ManualReader, most float64) {
+	// check wants the duration point to be the span's time less the loop
+	// body's: the point is time.Since(start) - LoopBody, taken inside the
+	// span, and LoopBody is at least the n sleeps of body.
+	check := func(t *testing.T, r *sdkmetric.ManualReader, spanDur time.Duration, n int) {
 		t.Helper()
 		dps := points(t, r, "db.client.operation.duration", "s", wantDurationBounds)
 		if len(dps) != 1 || dps[0].Count != 1 {
 			t.Fatalf("%d points, want 1 of one statement", len(dps))
 		}
-		if sum := dps[0].Sum; sum < 0 || sum >= most {
-			t.Errorf("duration %v s, want 0 <= it < %v", sum, most)
+		most := spanDur.Seconds() - float64(n)*body.Seconds() + 1e-6
+		if sum := dps[0].Sum; sum < 0 || sum > most {
+			t.Errorf("duration %v s, want 0 <= it <= %v (span %v less %d x %v)", sum, most, spanDur, n, body)
 		}
 	}
 	t.Run("three rows", func(t *testing.T) {
 		r, spans := run(t, -1, false)
-		check(t, r, 0.15)
 		if len(spans) != 1 || spans[0] < 3*body {
-			t.Errorf("spans %v, want one of >= %v", spans, 3*body)
+			t.Fatalf("spans %v, want one of >= %v", spans, 3*body)
 		}
+		check(t, r, spans[0], 3)
 	})
 	t.Run("broken after the first row", func(t *testing.T) {
 		r, spans := run(t, 1, false)
-		check(t, r, 0.05)
 		if len(spans) != 1 || spans[0] < body {
-			t.Errorf("spans %v, want one of >= %v", spans, body)
+			t.Fatalf("spans %v, want one of >= %v", spans, body)
 		}
+		check(t, r, spans[0], 1)
 	})
 	t.Run("a panicking loop body", func(t *testing.T) {
 		r, spans := run(t, -1, true)

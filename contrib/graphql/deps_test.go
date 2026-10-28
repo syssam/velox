@@ -7,8 +7,9 @@ import (
 )
 
 // TestAnnotationsImportOnlySchema pins that the annotations package
-// compiles no GraphQL library. Its dependencies are the standard library,
-// velox2/schema and what schema itself imports.
+// compiles no GraphQL library. It imports the standard library and
+// velox2/schema, and no other package; its dependencies are those and what
+// schema itself imports.
 func TestAnnotationsImportOnlySchema(t *testing.T) {
 	if testing.Short() {
 		t.Skip("runs go list")
@@ -19,7 +20,7 @@ func TestAnnotationsImportOnlySchema(t *testing.T) {
 	}
 	for _, p := range strings.Fields(string(out)) {
 		std := !strings.Contains(strings.Split(p, "/")[0], ".")
-		if !std && !isSchema(p) {
+		if !std && p != "github.com/syssam/velox2/schema" {
 			t.Errorf("the annotations package imports %s", p)
 		}
 	}

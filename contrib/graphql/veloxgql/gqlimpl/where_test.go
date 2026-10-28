@@ -611,6 +611,13 @@ func TestPredTwiceOnOneContext(t *testing.T) {
 			t.Fatalf("call %d: %v", i+1, err)
 		}
 	}
+	// The context is not changed by a call, so a repeat costs what a first
+	// call does.
+	onCtx := testing.AllocsPerRun(100, func() { _, _ = w.Pred(ctx) })
+	fresh := testing.AllocsPerRun(100, func() { _, _ = w.Pred(context.Background()) })
+	if onCtx != fresh {
+		t.Errorf("Pred allocates %v times on a used context, %v on a fresh one", onCtx, fresh)
+	}
 	// A nested input's Pred, called directly, starts at depth 0.
 	deep := nest(&personWhere{}, veloxgql.DefaultLimits().MaxFilterDepth, "not")
 	for i := range 2 {

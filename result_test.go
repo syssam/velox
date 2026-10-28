@@ -196,23 +196,27 @@ func sleepIter(t *testing.T, seq func(func(testmodel.Invoice, error) bool), d ti
 // caller's loop body, summed over the rows yielded, the row a loop broke on
 // or panicked in included; every other method leaves it 0.
 func TestResultLoopBody(t *testing.T) {
-	// 50 ms leaves the upper bounds room for time.Sleep's overshoot on a
-	// loaded machine.
+	// The upper bound is the wall time of the loop, which no sleep's
+	// overshoot can exceed, as LoopBody is measured inside it.
 	const body = 50 * time.Millisecond
 	t.Run("three rows", func(t *testing.T) {
 		var got velox.Result
 		db := resultOf(&velox.FakeExec{Rows: threeInvoices()}, &got)
+		start := time.Now()
 		sleepIter(t, db.Query[testmodel.Invoice]().Unbounded().Iter(ctx), body, -1)
-		if got.Rows != 3 || got.LoopBody < 3*body {
-			t.Errorf("%+v, want 3 rows and LoopBody >= %v", got, 3*body)
+		w := time.Since(start)
+		if got.Rows != 3 || got.LoopBody < 3*body || got.LoopBody > w {
+			t.Errorf("%+v, want 3 rows and %v <= LoopBody <= %v", got, 3*body, w)
 		}
 	})
 	t.Run("broken after the first row", func(t *testing.T) {
 		var got velox.Result
 		db := resultOf(&velox.FakeExec{Rows: threeInvoices()}, &got)
+		start := time.Now()
 		sleepIter(t, db.Query[testmodel.Invoice]().Unbounded().Iter(ctx), body, 1)
-		if got.Rows != 1 || got.LoopBody < body || got.LoopBody >= 2*body {
-			t.Errorf("%+v, want 1 row and %v <= LoopBody < %v", got, body, 2*body)
+		w := time.Since(start)
+		if got.Rows != 1 || got.LoopBody < body || got.LoopBody > w {
+			t.Errorf("%+v, want 1 row and %v <= LoopBody <= %v", got, body, w)
 		}
 	})
 	t.Run("a panicking loop body", func(t *testing.T) {
@@ -222,6 +226,7 @@ func TestResultLoopBody(t *testing.T) {
 			return next(ctx)
 		})
 		db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Rows: threeInvoices()}, deferred)
+		start := time.Now()
 		func() {
 			defer func() {
 				if recover() != "boom" {
@@ -233,8 +238,9 @@ func TestResultLoopBody(t *testing.T) {
 				panic("boom")
 			}
 		}()
-		if got.LoopBody < body || got.LoopBody >= 2*body {
-			t.Errorf("%+v, want %v <= LoopBody < %v", got, body, 2*body)
+		w := time.Since(start)
+		if got.LoopBody < body || got.LoopBody > w {
+			t.Errorf("%+v, want %v <= LoopBody <= %v", got, body, w)
 		}
 	})
 	t.Run("All, Raw's All and a write", func(t *testing.T) {

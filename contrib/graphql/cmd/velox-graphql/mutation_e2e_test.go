@@ -2273,7 +2273,13 @@ func TestMutationsRun(t *testing.T) {
 		targets = append(targets, "mysql")
 	}
 	t.Logf("targets: %v", targets)
-	out, err := run("test", "-count=1", "-v", ".")
+	// The generated module's tests run under the race detector when this
+	// run does: the mutations take locks and nest transactions.
+	args := []string{"test", "-count=1", "-v"}
+	if raceEnabled {
+		args = append(args, "-race")
+	}
+	out, err := run(append(args, ".")...)
 	if err != nil {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
