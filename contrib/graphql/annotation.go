@@ -165,6 +165,9 @@ func (a Annotation) Merge(other schema.Annotation) schema.Annotation {
 		}
 	}
 	out.Directives = slices.Concat(o.Directives, a.Directives)
+	for i := range out.Directives {
+		out.Directives[i].Args = maps.Clone(out.Directives[i].Args)
+	}
 	if len(o.EnumValues)+len(a.EnumValues) > 0 {
 		out.EnumValues = make(map[string]string, len(o.EnumValues)+len(a.EnumValues))
 		maps.Copy(out.EnumValues, o.EnumValues)
@@ -285,5 +288,9 @@ func EnumValues(m map[string]string) Annotation {
 // edge. An entity takes GraphQL's own directives only; the package doc's
 // Directives section says why.
 func Directives(ds ...Directive) Annotation {
-	return Annotation{Directives: slices.Clone(ds)}
+	out := slices.Clone(ds)
+	for i := range out {
+		out[i].Args = maps.Clone(out[i].Args)
+	}
+	return Annotation{Directives: out}
 }

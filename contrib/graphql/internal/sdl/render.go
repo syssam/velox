@@ -726,7 +726,8 @@ func (w *writer) explain(err error) error {
 
 // desc writes text as a description, at indent.
 func (w *writer) desc(indent, text string) {
-	text = strings.TrimSpace(strings.ReplaceAll(text, "\r\n", "\n"))
+	text = strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\r", "\n")
+	text = strings.TrimSpace(text)
 	if text == "" {
 		return
 	}

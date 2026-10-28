@@ -324,3 +324,26 @@ func TestThroughTheLoader(t *testing.T) {
 		t.Fatalf("no User in:\n%s", out)
 	}
 }
+
+// Merge and Directives hand out their own copies of a directive's arguments:
+// changing the result must not change the annotation it was made from.
+func TestMergeClonesArgs(t *testing.T) {
+	a := graphql.Directives(graphql.Directive{Name: "d", Args: map[string]any{"k": 1}})
+	merged := merge(t, a, graphql.Type("T"))
+	merged.Directives[0].Args["k"] = 2
+	if got := a.Directives[0].Args["k"]; got != 1 {
+		t.Errorf("Merge shares the arguments: the source now has k = %v", got)
+	}
+	merged = merge(t, graphql.Type("T"), a)
+	merged.Directives[0].Args["k"] = 3
+	if got := a.Directives[0].Args["k"]; got != 1 {
+		t.Errorf("Merge shares the arguments (as the earlier side): the source now has k = %v", got)
+	}
+
+	ds := []graphql.Directive{{Name: "d", Args: map[string]any{"k": 1}}}
+	got := graphql.Directives(ds...)
+	got.Directives[0].Args["k"] = 2
+	if ds[0].Args["k"] != 1 {
+		t.Errorf("Directives shares the arguments: the argument now has k = %v", ds[0].Args["k"])
+	}
+}

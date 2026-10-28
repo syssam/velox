@@ -751,6 +751,23 @@ func TestDescriptions(t *testing.T) {
 	if got := s.Types["User"].Fields.ForName("posts").Description; got != posts.Comment {
 		t.Errorf("edge: %q", got)
 	}
+
+	// A lone CR is a line break, as CRLF is: both render as the block a "\n"
+	// comment does.
+	for _, c := range [][2]string{{"a\rb", "a\nb"}, {"a\r\n\rb", "a\n\nb"}} {
+		name.Comment = c[0]
+		got, sdl := load(t, model(entity("User", name)))
+		if d := got.Types["User"].Fields.ForName("name").Description; d != c[1] {
+			t.Errorf("comment %q: description %q, want %q\n%s", c[0], d, c[1], sdl)
+		}
+		if strings.Contains(sdl, "\r") {
+			t.Errorf("comment %q: the SDL has a CR:\n%q", c[0], sdl)
+		}
+		name.Comment = c[1]
+		if _, want := load(t, model(entity("User", name))); sdl != want {
+			t.Errorf("comment %q renders differently from %q:\n%s\nwant\n%s", c[0], c[1], sdl, want)
+		}
+	}
 }
 
 func TestDirectives(t *testing.T) {
