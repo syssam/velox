@@ -243,6 +243,16 @@ func (c *drifter) table(t, u *Table) {
 			c.adoptWhere(ti, u)
 			continue
 		}
+		// Diff ignores Constraint, but a drop renders from the snapshot's:
+		// DROP INDEX of a constraint's index, or DROP CONSTRAINT of a plain
+		// index, fails on this database.
+		if ui != nil && !c.adopt && c.d == velox.Postgres && ti.Constraint != ui.Constraint {
+			inDB, inSnap, drop := "a UNIQUE constraint", "an index", "DROP INDEX"
+			if ui.Constraint {
+				inDB, inSnap, drop = inSnap, inDB, "DROP CONSTRAINT"
+			}
+			c.warn(indexObject(t.Ref(), *ti), "the database has it as %s and %s as %s; a drop renders %s, which fails", inDB, c.other, inSnap, drop)
+		}
 		if ui == nil || ti.Where == ui.Where || ti.Where == "" || ui.Where == "" ||
 			ti.Unique != ui.Unique || !slices.Equal(ti.Columns, ui.Columns) {
 			continue

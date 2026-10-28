@@ -105,7 +105,10 @@
 // differs, a predicate the normaliser cannot read whose text differs, a
 // primary key that differs, or what the model has no place for, such as a
 // MySQL table that is not InnoDB, an invalid PostgreSQL index or a NOT VALID
-// constraint.
+// constraint. A PostgreSQL index the database holds as a UNIQUE constraint
+// and schema.json as a plain index, or the reverse, is a Warning, not a
+// change: a drop of it is rendered from schema.json, so it fails on that
+// database.
 //
 // [Baseline] adopts an existing database into a new directory: it reads
 // the tables a schema names and returns them as the directory's first

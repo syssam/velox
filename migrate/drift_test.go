@@ -363,6 +363,39 @@ func TestDriftDeterministic(t *testing.T) {
 	}
 }
 
+// TestDriftPostgresConstraintFlag: on PostgreSQL, an index the database
+// holds as a UNIQUE constraint and the snapshot as a plain index, or the
+// reverse, is one warning naming the drop that fails; it is no change, and
+// Equal calls the two the same. Baseline, whose schema never sets the flag,
+// does not warn.
+func TestDriftPostgresConstraintFlag(t *testing.T) {
+	users := func(constraint bool) *migrate.Schema {
+		return schemaOf(velox.Postgres, migrate.Table{Name: "users", PrimaryKey: []string{"id"},
+			Columns: []migrate.Column{{Name: "id", Type: "bigint"}, {Name: "email", Type: "text"}},
+			Indexes: []migrate.Index{{Name: "users_email_key", Columns: []string{"email"}, Unique: true, Constraint: constraint}}})
+	}
+	for _, c := range []struct {
+		db, snap bool
+		want     []string
+	}{
+		{true, false, []string{"users.users_email_key: the database has it as a UNIQUE constraint and the snapshot as an index; a drop renders DROP INDEX, which fails"}},
+		{false, true, []string{"users.users_email_key: the database has it as an index and the snapshot as a UNIQUE constraint; a drop renders DROP CONSTRAINT, which fails"}},
+		{true, true, nil},
+		{false, false, nil},
+	} {
+		r := driftOf(t, users(c.db), users(c.snap))
+		if got := warningStrings(r.Warnings); len(r.Changes) > 0 || !slices.Equal(got, c.want) {
+			t.Errorf("database %v, snapshot %v: changes %q, warnings %q; want %q", c.db, c.snap, changeStrings(r.Changes), got, c.want)
+		}
+		if !users(c.db).Equal(users(c.snap)) {
+			t.Errorf("database %v, snapshot %v: not Equal", c.db, c.snap)
+		}
+	}
+	if _, ws := adoptOf(t, users(true), users(false)); len(ws) > 0 {
+		t.Errorf("adopt: %q", warningStrings(ws))
+	}
+}
+
 // TestDriftNotesMerged: the notes on one object are one warning, joined
 // with "; also, " in their order; baseline notes count only when adopting; a
 // warning of drift's own stays apart.

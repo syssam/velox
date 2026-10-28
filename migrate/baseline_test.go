@@ -715,8 +715,9 @@ func TestUnnamedCheckReviews(t *testing.T) {
 }
 
 // TestDriftPostgresAdoptedUnique: a unique constraint ent made is adopted
-// as one, with no warning, and the next plan's drop of it applies both on
-// the adopted database and on a fresh one built from the directory.
+// as one, with no warning; Drift against a snapshot holding it as an index
+// warns; and the next plan's drop of it applies both on the adopted
+// database and on a fresh one built from the directory.
 func TestDriftPostgresAdoptedUnique(t *testing.T) {
 	needPostgres(t)
 	ctx := context.Background()
@@ -737,6 +738,15 @@ func TestDriftPostgresAdoptedUnique(t *testing.T) {
 	}
 	if ixs := table(snap, "users").Indexes; len(ixs) != 1 || !ixs[0].Constraint {
 		t.Fatalf("the snapshot's indexes %+v", ixs)
+	}
+	// Against a snapshot holding it as an index, Drift warns: a drop of it
+	// would render DROP INDEX.
+	r, err := migrate.Drift(ctx, db, want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, w := warningStrings(r.Warnings), []string{"users.users_email_key: the database has it as a UNIQUE constraint and the snapshot as an index; a drop renders DROP INDEX, which fails"}; len(r.Changes) > 0 || !slices.Equal(got, w) {
+		t.Errorf("Drift against an index:\n%s\nwant %q", reportText(r), w)
 	}
 	fsys := dirOf(t, velox.Postgres, step{to: snap, name: "baseline"}, step{to: users(), name: "drop_unique"})
 	if got, want := string(fsys["0002_drop_unique.sql"].Data), `ALTER TABLE "users" DROP CONSTRAINT "users_email_key";`; !strings.Contains(got, want) {

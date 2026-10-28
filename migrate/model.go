@@ -73,7 +73,7 @@ type Index struct {
 	Columns    []string `json:"columns,omitempty"`
 	Unique     bool     `json:"unique,omitempty"`
 	Where      string   `json:"where,omitempty"`      // the predicate of a partial index; "" for none; never on MySQL
-	Constraint bool     `json:"constraint,omitempty"` // PostgreSQL: the index is a UNIQUE constraint's, as Inspect and Baseline read it; the desired model never sets it; Diff, Drift and Equal do not compare it, and Render reads it to choose the statement: from's for a drop or rename, to's for a create or add
+	Constraint bool     `json:"constraint,omitempty"` // PostgreSQL: the index is a UNIQUE constraint's, as Inspect and Baseline read it; the desired model never sets it; Diff and Equal do not compare it, Drift warns where it differs, and Render reads it to choose the statement: from's for a drop or rename, to's for a create or add
 	Pos        string   `json:"-"`
 }
 
