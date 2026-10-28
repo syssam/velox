@@ -208,10 +208,15 @@
 // Errors are returned wrapped, in an error whose text starts
 // "velox: <Entity>: " (raw SQL's DB.Exec names its statement "Exec"), or for
 // a transaction "velox: transaction: " ("velox: begin: ", "velox: commit: "
-// and "velox: savepoint: " likewise). Test for the sentinels (ErrNotFound,
-// ErrDenied, ...) with errors.Is, and for a violated constraint
-// (ConstraintUnique, ConstraintForeignKey, ConstraintNotNull and
-// ConstraintCheck) with errors.As to a *ConstraintError. DriverCode returns
+// and "velox: savepoint: " likewise). Test for a row not found with
+// IsNotFound: errors.Is(err, ErrNotFound) that a driver's typed-nil error in
+// err's tree cannot make panic. Test for the other sentinels (ErrDenied, ...)
+// with errors.Is, for a violated constraint (ConstraintUnique,
+// ConstraintForeignKey, ConstraintNotNull and ConstraintCheck) with errors.As
+// to a *ConstraintError, and for a refused value with errors.As to a
+// *ValidationError. IsNotFound is the only such helper: where ent has
+// IsConstraintError and IsValidationError, velox has errors.As on its typed
+// errors, and helpers for them would be an addition. DriverCode returns
 // the database's own code for an error that came from it, such as
 // PostgreSQL's SQLSTATE, for logs and traces; it is not for an end user.
 //

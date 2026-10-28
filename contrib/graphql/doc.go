@@ -118,10 +118,11 @@
 // has the predicates of its node key in it, before the fields': the node key
 // has id, idNEQ, idIn, idNotIn, and for an ordered key (an integer or a
 // string) idGT, idGTE, idLT and idLTE, typed ID and decoded with the type
-// check, so that an ID of another type fails as any other does. A uuid or an
-// enum key has the four of equality. WhereOps on the key chooses its predicates
-// instead, and Skip(SkipWhereInput) on it drops them. The key alone does not
-// give an entity a where input.
+// check, so that an ID of another type fails as any other does. A string
+// key's idGT, idGTE, idLT and idLTE compare by the database's collation, as
+// any string column's do. A uuid or an enum key has the four of equality.
+// WhereOps on the key chooses its predicates instead, and Skip(SkipWhereInput)
+// on it drops them. The key alone does not give an entity a where input.
 //
 // The SDL binds to Go by gqlgen's @goField directive (a node's id to IDGQL, an
 // edge to <Edge>GQL) and by enum names (velox-gen's Go enum types).
@@ -130,9 +131,9 @@
 // application must not redeclare them: a second declaration fails gqlgen's
 // load. Any other directive, @goTag for one, the application declares in its
 // own schema files. @goField and @goModel are velox-graphql's own, so
-// graphql.Directives refuses both on an entity (a skipped one and a join
-// entity too) and on the fields (the primary key and a foreign key too) and
-// edges of an entity with a type. @goField binds fields to the Go code velox generates, and
+// graphql.Directives refuses both on an entity, a skipped one and a join
+// entity too, and on its fields, the primary key and a foreign key too, and
+// its edges. @goField binds fields to the Go code velox generates, and
 // @goModel binds types to it and to the application's enum types.
 //
 // The plugin also writes the Go that gqlgen's autobind binds the SDL's types
@@ -194,11 +195,29 @@
 // targets the caller may read, under the tenant scope and the target's Read
 // policy; a link to one they hide stays.
 //
-// A mutation returns the row as written. Create<T> returns the row it
-// inserted. Update<T> reads it back under the tenant scope without the Read
-// policy: its UPDATE is scoped by the Read policy too, so the caller could read
-// the row before it wrote it. A mutation that takes the row out of what the
-// caller may read still returns it. This is a contract, and will not change.
+// An edge's inputs follow its foreign key. A key on the entity's own row is
+// set by <edge>ID. A key on the target's rows is re-pointed from the owner
+// by <edge>ID, <edge>IDs or add<Edge>IDs, but only a key that is nullable
+// and mutable: one that is never NULL always holds an owner, and one that is
+// immutable cannot move, so the owner's inputs have no such field, and the
+// child is linked from its own side, by its <edge>ID. Create<T> and
+// Update<T> re-point only a child no owner holds, or one the row already
+// holds: one that another owner holds is refused with BAD_USER_INPUT,
+// "already linked", and not taken from it.
+//
+// A Required one-to-one or many-to-one edge whose key is NULL-able can read
+// null, so its field is nullable in the SDL, parent: T, where entgql gives T!:
+// a non-null field that read NULL would null the object around it. On the side
+// that owns the key, as a Required self edge's parent does, velox refuses the
+// key nil on every write (velox.ColumnDesc.RequiredEdge), but the database's ON
+// DELETE SET NULL clears it when the target is deleted. On the other side
+// velox does not refuse it: no child need hold the row. Create<T>Input still
+// requires a Required edge's <edge>ID. When the owning side's key is one velox
+// refuses nil, an update on the other side only adds: a one-to-many edge has
+// add<Edge>IDs but no remove<Edge>IDs or clear<Edge>, and a one-to-one edge has
+// neither <edge>ID nor clear<Edge>, since each would unlink a child and leave
+// its key NULL. A child moves by its own <edge>ID, and the create inputs, which
+// only link a child whose key is NULL, stay.
 //
 // A link to a target needs what the write changes. A many-to-many link inserts
 // a join row and changes no target row, so the target must be one the caller
@@ -206,34 +225,51 @@
 // one-to-one link from the owner sets the target's foreign key, so the target
 // must be one the caller may change: the tenant scope and its Read and Write
 // policies. A link by a key on the entity's own row, <edge>ID, changes no
-// target row: the target must be one the caller may read. Unlinking follows the
-// same rule.
+// target row, so the target must be one the caller may read; a bidirectional
+// one-to-one key is the exception, since its link writes the partner's row
+// too (see the limits below). Unlinking follows the same rule.
+//
+// Re-pointing a one-to-one edge from the owner checks the new child first: one
+// the caller may not read is NOT_FOUND, as an ID that names no row is. Then,
+// when the current child is one the caller may not change, hidden by the
+// tenant scope or a policy, the re-point fails with BAD_USER_INPUT "already
+// linked", and the child stays linked. The error names only the two types, no
+// ID, tenant or column, and the hidden child's own ID is NOT_FOUND like any
+// other the caller may not read, so the error does not confirm a guess of it.
+//
+// A mutation returns the row as written. Create<T> returns the row it
+// inserted. Update<T> reads it back under the tenant scope without the Read
+// policy: its UPDATE is scoped by the Read policy too, so the caller could read
+// the row before it wrote it. A mutation that takes the row out of what the
+// caller may read still returns it. This is a contract, and will not change.
 //
 // With graphql.MutationDelete(), Delete<T>(ctx, id) deletes the row and every
 // join row that holds its key, of its own many-to-many edges, and returns the
 // ID encoded again from the key; deleteX's resolver returns it. velox-gen's own
 // migrations give a join table's foreign keys ON DELETE CASCADE, as ent's do,
 // so the database would remove them anyway; the delete matters for a schema
-// written by hand. The generated join delete is not scoped by the tenant, and
-// it goes only after an Exists under the DELETE's own scope (Writable: the
-// tenant, and the Read and Write policies; locking the row with FOR UPDATE
-// wherever the dialect can) has found the row, so a row the caller may not
-// delete keeps them. A Write policy or a Delete hook that the application
-// binds on a join entity that is not bidirectional still narrows or refuses
-// that delete. A row's delete removes all of its join rows, whatever the tenant
-// at their other end: a shared row is unlinked from every tenant's rows. Rows
-// of other entities that hold the row's key are left to the database's foreign
-// keys: one that refuses the DELETE gives a *velox.ConstraintError, shown as
-// BAD_USER_INPUT.
+// written by hand. The join delete has no tenant scope (a join entity has no
+// tenant column), and it goes only after an Exists under the DELETE's own
+// scope (Writable: the tenant, and the Read and Write policies; locking the
+// row with FOR UPDATE wherever the dialect can) has found the row, so a row the
+// caller may not delete keeps them. It removes every join row of the row,
+// whatever the tenant of the row at the other end, so a shared row is unlinked
+// from every tenant's rows, unless a Write policy or a Delete hook that the
+// application binds on a join entity that is not bidirectional narrows or
+// refuses it. Rows of other entities that hold the row's key are left to the
+// database's foreign keys: one that refuses the DELETE gives a
+// *velox.ConstraintError, shown as BAD_USER_INPUT.
 //
 // The rows a write counts decide its result. The UPDATE of Update<T> that
 // matched 0 rows is NOT_FOUND, and a count the driver did not report (-1) falls
-// back to the locking existence check of an update with no field to set. The
-// DELETE of Delete<T> that removed 0 rows is NOT_FOUND, and an unknown count is
-// the internal error "veloxgql: <mutation>: row count unknown"
-// (gqlimpl.CountUnknown), so that the mutation fails and its writes roll back.
-// The UPDATE that links the children whose key is on their own rows has the
-// same error for an unknown count.
+// back to the locking existence check of an update with no field to set; an
+// update that sets a bidirectional key fails first instead, with the core's
+// internal error for a link whose count is unknown. The DELETE of Delete<T>
+// that removed 0 rows is NOT_FOUND, and an unknown count is the internal error
+// "veloxgql: <mutation>: row count unknown" (gqlimpl.CountUnknown), so that the
+// mutation fails and its writes roll back. The UPDATE that links the children
+// whose key is on their own rows gives the same kind of error for an unknown
+// count, naming the input field.
 //
 // The generated functions read the DB from the context, as the root query's do
 // (veloxgql.DBFromContext), and each is atomic: gqlimpl.Atomic runs it in a
@@ -275,39 +311,20 @@
 //   - A bidirectional self-edge (a self-referencing edge with no inverse) is
 //     written both ways, as in ent: a many-to-many one writes and removes both
 //     join rows, and a one-to-one one keeps both rows' keys pointing at each
-//     other. A self-edge with an inverse is written one way.
+//     other. A self-edge with an inverse is written one way. A one-to-one
+//     one's link writes the new partner's row under the caller's Write scope,
+//     so a partner the caller may read but not change fails the link, with
+//     BAD_USER_INPUT "unique constraint violated". Its re-point, and its
+//     clear, set the old partner's key NULL without the tenant scope or the
+//     policies, as the core's bidirectional update does, for the symmetric
+//     edge's integrity: no row is left pointing at one that does not point
+//     back. That is unlike a key on the target's rows, whose hidden child
+//     stays linked and fails the re-point (gqlimpl.StillLinked, above). A
+//     partner that already has one is refused by the unique key, with
+//     BAD_USER_INPUT "unique constraint violated", and a row named as its own
+//     partner is refused as an invalid value of <edge>ID, with BAD_USER_INPUT
+//     "<Input>.<edge>ID: invalid value: a row cannot be its own <edge>".
 //   - Not written: a key the caller supplies in a create input and JSON append.
-//
-// An edge's inputs follow its foreign key. A key on the entity's own row is
-// set by <edge>ID. A key on the target's rows is re-pointed from the owner
-// by <edge>ID, <edge>IDs or add<Edge>IDs, but only a key that is nullable
-// and mutable: one that is never NULL always holds an owner, and one that is
-// immutable cannot move, so the owner's inputs have no such field, and the
-// child is linked from its own side, by its <edge>ID. Create<T> and
-// Update<T> re-point only a child no owner holds, or one the row already
-// holds: one that another owner holds is refused with BAD_USER_INPUT,
-// "already linked", and not taken from it. Re-pointing a one-to-one edge
-// from the owner checks the new child first: one the caller may not read is
-// NOT_FOUND, as an ID that names no row is. Then, when the current child is
-// one the caller may not change, hidden by the tenant scope or a policy, the
-// re-point fails with BAD_USER_INPUT "already linked", and the child stays
-// linked. The error names only the two types, no ID, tenant or column, and
-// the hidden child's own ID is NOT_FOUND like any other the caller may not
-// read, so the error does not confirm a guess of it.
-//
-// A Required one-to-one or many-to-one edge whose key is NULL-able can read
-// null, so its field is nullable in the SDL, parent: T, where entgql gives T!:
-// a non-null field that read NULL would null the object around it. On the side
-// that owns the key, as a Required self edge's parent does, velox refuses the
-// key nil on every write (velox.ColumnDesc.RequiredEdge), but the database's ON
-// DELETE SET NULL clears it when the target is deleted. On the other side
-// velox does not refuse it: no child need hold the row. Create<T>Input still
-// requires a Required edge's <edge>ID. When the owning side's key is one velox
-// refuses nil, an update on the other side only adds: a one-to-many edge has
-// add<Edge>IDs but no remove<Edge>IDs or clear<Edge>, and a one-to-one edge has
-// neither <edge>ID nor clear<Edge>, since each would unlink a child and leave
-// its key NULL. A child moves by its own <edge>ID, and the create inputs, which
-// only link a child whose key is NULL, stay.
 //
 // # Loading
 //
@@ -383,20 +400,21 @@
 // COST_LIMIT_EXCEEDED, veloxgql.CodeTooCostly) and no statement.
 //
 // A field costs 1 plus its children's cost times its multiplier. A connection
-// multiplies by its first or last, or by MaxPage when it has neither; nodes
-// by the number of its ids; any other list of objects by MaxList. Every
-// alias counts, and so does every branch of a fragment (an upper bound),
-// except a selection that @skip(if: true) or @include(if: false) leaves out,
-// which costs nothing, its condition read from the variables; one whose
-// variable is missing counts. __schema and __type cost nothing, so
-// introspection works. Variables are read; sums and products saturate, so
-// huge arguments cannot wrap the cost, and a named fragment is costed once
-// however often it is spread. Two levels of full connection pages cost about
-// 30000 and pass the default; three do not. A list edge costs MaxList (1000)
-// for each parent, so posts(first: 100) { edges { node { likes { id } } } }
-// costs 100301 and is refused by default: raise MaxCost, or lower MaxList.
-// gqlgen's extension.FixedComplexityLimit
-// counts fields, not rows, and is not needed with it.
+// multiplies by its first or last, or by MaxPage when it has neither; nodes by
+// the number of its ids; any other list of objects by MaxList. Every alias
+// counts, and so does every branch of a fragment (an upper bound), except a
+// selection that @skip(if: true) or @include(if: false) leaves out, which costs
+// nothing, its condition a literal or a variable's value (a missing variable's
+// default, when it has one); one whose condition is not a boolean, a variable
+// missing with no default or null, counts. __schema and __type cost nothing, so
+// introspection works. Variables are read; sums and products saturate, so huge
+// arguments cannot wrap the cost, and a named fragment is costed once however
+// often it is spread. Two levels of full connection pages cost about 30000 and
+// pass the default; three do not. A list edge costs MaxList (1000) for each
+// parent, so posts(first: 100) { edges { node { likes { id } } } } costs 100301
+// and is refused by default: raise MaxCost, or lower MaxList. gqlgen's
+// extension.FixedComplexityLimit counts fields, not rows, and is not needed
+// with it.
 //
 // # gqlgen.yml
 //

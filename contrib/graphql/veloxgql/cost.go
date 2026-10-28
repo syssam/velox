@@ -22,9 +22,11 @@ const maxCost = 1 << 62
 //   - the root field nodes multiplies by the number of its ids;
 //   - any other field of a list of objects multiplies by l.MaxList;
 //   - every branch of a fragment counts, but a selection that @skip(if: true)
-//     or @include(if: false) leaves out costs nothing, its condition read
-//     from the variables; one whose condition cannot be read (a variable
-//     that is missing) counts, as the cost is an upper bound;
+//     or @include(if: false) leaves out costs nothing, its condition a
+//     literal or a variable's value (a missing variable's default, when it
+//     has one); one whose condition is not a boolean (a variable that is
+//     missing with no default, or null) counts, as the cost is an upper
+//     bound;
 //   - __schema and __type cost nothing.
 //
 // Sums and products saturate at 1<<62 (math.MaxInt where int is smaller),
@@ -97,8 +99,9 @@ func (c *coster) set(sels ast.SelectionSet, parent *ast.Definition, root bool) i
 }
 
 // skipped reports whether ds leave their selection out: @skip(if: true) or
-// @include(if: false), the condition read from the variables. A condition
-// that is not a boolean, or a variable that is missing, does not skip.
+// @include(if: false), the condition a literal or a variable's value, or a
+// missing variable's default. A condition that is not a boolean, a variable
+// that is null or missing with no default among them, does not skip.
 func (c *coster) skipped(ds ast.DirectiveList) bool {
 	for _, d := range ds {
 		var leaves bool

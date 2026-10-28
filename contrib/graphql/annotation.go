@@ -255,7 +255,11 @@ func OrderUnguarded() Annotation { return Annotation{OrderUnguarded: true} }
 // WhereOps offers the field these predicates in the entity's where input; with
 // no arguments, the defaults for the field's type. Two WhereOps annotations on
 // one field merge by OR, so WhereOps() together with WhereOps(OpsString)
-// offers the type's default predicates plus OpsString.
+// offers the type's default predicates plus OpsString. On the node key it
+// replaces the key's own predicates: WhereOps() gives the defaults of the
+// key's kind (equality, and comparison for an integer or string key), and an
+// op the key's kind lacks, OpsString or OpsComparison on a uuid key, is
+// refused.
 func WhereOps(ops ...WhereOp) Annotation {
 	var m WhereOp
 	for _, op := range ops {

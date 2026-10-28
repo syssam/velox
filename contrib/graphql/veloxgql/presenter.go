@@ -96,11 +96,11 @@ const (
 // every error in the error's tree that the client is not shown is
 // context.Canceled (errors.Is). A nil log records it with
 // slog.DebugContext, at level debug, as "veloxgql: request canceled" with
-// the same attributes; a non-nil log drops it. The OnCanceled option sends it
-// to a function of the application's instead, or drops it when given nil, in
-// either case. Anything else that fails at the same moment, a
-// driver's error or a panic, is logged as an internal error. The client, if
-// still there, sees what it would otherwise.
+// the same attributes; a non-nil log drops it. OnCanceled(f) sends it to f
+// instead, or drops it when f is nil, whether or not log is nil. Anything
+// else that fails at the same moment, a driver's error or a panic, is logged
+// as an internal error. The client, if still there, sees what it would
+// otherwise.
 //
 // A panic in a resolver does not reach the presenter as a panic: gqlgen
 // turns it into an error with the server's recover function first. gqlgen's
@@ -162,14 +162,16 @@ type presenter struct {
 	log, canceled func(ctx context.Context, err error)
 }
 
-// PresenterOption configures ErrorPresenter. OnCanceled makes one; the zero
-// PresenterOption is not valid, and ErrorPresenter panics on it, as
-// NewExtension does on a zero Option.
+// PresenterOption configures ErrorPresenter. OnCanceled makes one. Its
+// options are named for what they set, not With…: the With functions make an
+// Extension's Option. The zero PresenterOption is not valid: ErrorPresenter
+// panics on it.
 type PresenterOption struct{ apply func(*presenter) }
 
 // OnCanceled sets the function an error that is only the cancellation of the
 // request goes to, in place of the default: slog at level debug when log is
-// nil, and nothing when log is not. A nil f drops such errors.
+// nil, and nothing when log is not. A nil f drops such errors. Given more
+// than once, the last OnCanceled wins.
 func OnCanceled(f func(ctx context.Context, err error)) PresenterOption {
 	if f == nil {
 		f = func(context.Context, error) {}

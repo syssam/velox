@@ -133,10 +133,14 @@ naming `title`, whatever its IDs name.
 **One transaction per operation.** `veloxgql.NewExtension` runs a mutation
 operation in one transaction, and rolls it back when the response has any
 error. In `mutation { a: createLabel(…) b: createLabel(…) }`, when `b` fails
-(its name is taken), `a`'s row is rolled back too, and `data` is `null`. A
-generated mutation called outside a server, or in an operation
-`WithTxFilter` leaves out, runs in a transaction of its own, so it is never
-half-written either.
+(its name is taken), `a`'s row is rolled back too, and `data` is `null`.
+Inside that transaction each generated mutation runs in a savepoint, so its
+error rolls back its own writes at once. A resolver that returns the error,
+as this example's do, fails the operation, and the transaction rolls back
+all of it; a resolver that swallows the error keeps the operation's other
+writes, and the operation commits. A generated mutation called outside a
+server, or in an operation `WithTxFilter` leaves out, runs in a transaction
+of its own, so it is never half-written either.
 
 **The row returned.** `createX` returns the row as written. `updateX`
 reads its row back under the tenant scope but without the Read policy: the
@@ -245,7 +249,9 @@ multiplier, which is `first` or `last` for a connection (`MaxPage` when
 neither is given), the number of ids for `nodes`, and `MaxList` for another
 list of objects. Every alias and every branch of a fragment counts, except a
 selection that `@skip(if: true)` or `@include(if: false)` leaves out (its
-condition read from the variables; one whose variable is missing counts), and
+condition a literal or a variable's value, or a missing variable's default;
+one whose condition is not a boolean, such as a missing variable with no
+default, counts), and
 introspection costs nothing. A request over
 the limit fails with `COST_LIMIT_EXCEEDED` and runs no statement. Two levels
 of full connection pages (about 30000) pass; three do not (about a million).

@@ -119,8 +119,10 @@ type Edge struct {
 // Enum is an enum field in GraphQL: an enum type named after the field's Go
 // enum type, or a String of its stored values.
 type Enum struct {
-	// Name is the GraphQL enum's name, the field's Go enum type's name
-	// (plugin.Field.Enum); "" when the field is a String, as
+	// Name is the GraphQL enum's name: for velox-gen's Go enum type, that
+	// type's name (plugin.Field.Enum); for an application's own Go enum
+	// type, which @goModel binds, <Schema><Field>, the name velox-gen's would
+	// have; "" when the field is a String, as
 	// graphql.Skip(graphql.SkipEnumField) asks.
 	Name string
 	// Field is the index of the field in Entity.Fields.
