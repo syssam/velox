@@ -478,6 +478,15 @@ func TestInspectPostgresUnheld(t *testing.T) {
 	if len(got) != len(want) {
 		t.Errorf("notes %v", got)
 	}
+	// The texts in full, each naming its subject, so a merged warning reads.
+	for object, text := range map[string]string{
+		"k.k_pkey":  "the primary key's index has INCLUDE columns, which the model cannot hold; the key is compared without",
+		"u.u_k_key": "the constraint is DEFERRABLE, which the model cannot hold; it is compared without",
+	} {
+		if got[object] != text {
+			t.Errorf("%s: note %q, want %q", object, got[object], text)
+		}
+	}
 	var indexes []string
 	for _, ix := range table(s, "p").Indexes {
 		indexes = append(indexes, ix.Name)

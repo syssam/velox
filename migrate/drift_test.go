@@ -364,7 +364,7 @@ func TestDriftDeterministic(t *testing.T) {
 }
 
 // TestDriftNotesMerged: the notes on one object are one warning, joined
-// with "; " in their order; baseline notes count only when adopting; a
+// with "; also, " in their order; baseline notes count only when adopting; a
 // warning of drift's own stays apart.
 func TestDriftNotesMerged(t *testing.T) {
 	s := schemaOf(velox.Postgres, usersOf(velox.Postgres, nil))
@@ -372,8 +372,8 @@ func TestDriftNotesMerged(t *testing.T) {
 	sequence := "the sequence users_id_seq starts at 5 and increments by 1; 0001_baseline.sql creates it with the defaults"
 
 	r := driftOf(t, s, s, migrate.Note{Table: users, Object: "users.id", Message: "a"}, migrate.Note{Table: users, Object: "users.id", Message: "b"})
-	if got := warningStrings(r.Warnings); !slices.Equal(got, []string{"users.id: a; b"}) {
-		t.Errorf("drift: %q, want one warning users.id: a; b", got)
+	if got := warningStrings(r.Warnings); !slices.Equal(got, []string{"users.id: a; also, b"}) {
+		t.Errorf("drift: %q, want one warning users.id: a; also, b", got)
 	}
 
 	notes := []migrate.Note{
@@ -381,7 +381,7 @@ func TestDriftNotesMerged(t *testing.T) {
 		{Table: users, Object: "users.id", Message: sequence, Baseline: true},
 	}
 	_, ws := adoptOf(t, s, s, notes...)
-	if got, want := warningStrings(ws), []string{"users.id: " + identity + "; " + sequence}; !slices.Equal(got, want) {
+	if got, want := warningStrings(ws), []string{"users.id: " + identity + "; also, " + sequence}; !slices.Equal(got, want) {
 		t.Errorf("adopt: %q, want %q", got, want)
 	}
 	r = driftOf(t, s, s, notes...)

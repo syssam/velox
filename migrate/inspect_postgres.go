@@ -404,7 +404,7 @@ func (r *pgReader) indexes(pt *pgTable, names map[int]string) error {
 				return err
 			}
 			if len(has) > 0 {
-				r.note(pt, ix.Name, "the primary key's index has "+strings.Join(has, ", ")+", which the model cannot hold; it is compared without")
+				r.note(pt, ix.Name, "the primary key's index has "+strings.Join(has, ", ")+", which the model cannot hold; the key is compared without")
 			}
 			return nil
 		}
@@ -499,7 +499,7 @@ func (r *pgReader) constraints(pt *pgTable) error {
 			has = append(has, "MATCH FULL")
 		}
 		if len(has) > 0 {
-			says = append(says, "it is "+strings.Join(has, ", ")+", which the model cannot hold; it is compared without")
+			says = append(says, "the constraint is "+strings.Join(has, ", ")+", which the model cannot hold; it is compared without")
 		}
 		if len(says) > 0 {
 			r.note(pt, name, strings.Join(says, "; "))

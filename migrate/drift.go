@@ -80,12 +80,12 @@ func drift(inspected *Schema, notes []note, snapshot *Schema) (*DriftReport, err
 }
 
 // compare is drift up to Diff: the checks of both schemas, the copy of
-// inspected cut to snapshot's tables and the enum types they use or
-// snapshot names, given snapshot's spellings by table, and the notes on
-// snapshot's tables as warnings, baseline notes only when adopt, the notes
-// on one object as one warning, joined with "; " in their order. In adopt
-// mode, Baseline's, the copy keeps the database's form wherever drift
-// would force snapshot's over a difference.
+// inspected cut to snapshot's tables and the enum types they use or snapshot
+// names, given snapshot's spellings by table, and the notes on snapshot's
+// tables as warnings, baseline notes only when adopt, the notes on one object
+// as one warning, joined with "; also, " in their order. In adopt mode,
+// Baseline's, the copy keeps the database's form wherever drift would force
+// snapshot's over a difference.
 func compare(inspected *Schema, notes []note, snapshot *Schema, adopt bool) (*drifter, error) {
 	if inspected == nil || snapshot == nil {
 		return nil, &Error{Code: "nil", Reason: "drift needs the inspected schema and the snapshot"}
@@ -122,7 +122,7 @@ func compare(inspected *Schema, notes []note, snapshot *Schema, adopt bool) (*dr
 			continue
 		}
 		if i, ok := noted[n.object]; ok {
-			c.warnings[i].Message += "; " + n.message
+			c.warnings[i].Message += "; also, " + n.message
 			continue
 		}
 		noted[n.object] = len(c.warnings)
