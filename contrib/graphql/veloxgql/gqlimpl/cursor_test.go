@@ -111,6 +111,19 @@ func TestCursorValueMismatch(t *testing.T) {
 			t.Errorf("%s: %v, want ErrBadCursor", name, err)
 		}
 	}
+	// The message takes the type name's article (english.Article).
+	for _, c := range []struct {
+		err  error
+		want string
+	}{
+		{func() error { _, err := gqlimpl.CursorValue[int64]("ann"); return err }(), "a value is not an int64"},
+		{func() error { _, err := gqlimpl.CursorValue[uint64](json.Number("-1")); return err }(), "a value is not a uint64"},
+		{func() error { _, err := gqlimpl.CursorValue[string](json.Number("1")); return err }(), "a value is not a string"},
+	} {
+		if c.err == nil || !strings.HasSuffix(c.err.Error(), ": "+c.want) {
+			t.Errorf("%v, want it to end %q", c.err, c.want)
+		}
+	}
 	_, err := gqlimpl.CursorValue[struct{}]("x")
 	if err == nil || errors.Is(err, veloxgql.ErrBadCursor) {
 		t.Errorf("CursorValue[struct{}] = %v, want an unsupported-type error", err)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/syssam/velox2/contrib/graphql/internal/english"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
 )
@@ -52,7 +53,8 @@ func cursorValue[T any](v any) (T, error) {
 		return zero, fmt.Errorf("veloxgql: a cursor value of the Go type %s, which is not supported", shared.TypeName[T]())
 	case err != nil:
 		var zero T
-		return zero, InputErrorf("%w: a value is not a %s", veloxgql.ErrBadCursor, shared.TypeName[T]())
+		n := shared.TypeName[T]()
+		return zero, InputErrorf("%w: a value is not %s %s", veloxgql.ErrBadCursor, english.Article(n), n)
 	}
 	return t, nil
 }
