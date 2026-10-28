@@ -1069,10 +1069,18 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 		}
 		if one >= 0 {
 			// The child this row holds now, unless it is the new one, is
-			// let go first: the key is unique.
+			// let go first: the key is unique. The UPDATE is under the
+			// caller's scope, so a child it leaves holding the key is one
+			// the caller may not change, hidden by the tenant or a policy:
+			// StillLinked refuses the re-point before the link would fail
+			// on the unique key, and the child stays linked. It looks
+			// whatever the UPDATE's row count, which may be unknown (-1).
 			d := dec[one].v
 			f.p("\t\tif input.%s != nil {", fs[one].GoName)
 			exec("\t\t\t", fmt.Sprintf("db.Update[%s]().Set(%s).Where(%s.EQ(%s), %s.NEQ(%s)).Exec(ctx)", tgt.Name, tnull, fkh, v, tpk, d))
+			f.p("\t\t\tif err := %s.StillLinked(ctx, db.Query[%s]().Where(%s.EQ(%s), %s.NEQ(%s)), %s, %q, %q); err != nil {", f.gqlimpl(), tgt.Name, fkh, v, tpk, d, at(fs[one]), t.Name, fs[one].Target)
+			f.p("\t\t\t\treturn err")
+			f.p("\t\t\t}")
 			link("\t\t\t", fs[one], tpk+".EQ("+d+")", "1")
 			f.p("\t\t}")
 		}

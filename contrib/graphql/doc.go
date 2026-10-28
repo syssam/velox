@@ -139,7 +139,7 @@
 //
 // They use the runtime package veloxgql, and its package gqlimpl for what
 // only generated code calls; every file carries
-// "const _ = veloxgql.GeneratedCodeIsVersion2", so that generated code and
+// "const _ = veloxgql.GeneratedCodeIsVersion3", so that generated code and
 // the module fail to compile together when they disagree. A connection is
 // keyset-paged by its cursors, and runs its page query and its COUNT only
 // when gqlgen asks for edges or pageInfo, and for totalCount; see "Loading"
@@ -266,7 +266,11 @@
 // child is linked from its own side, by its <edge>ID. Create<T> and
 // Update<T> re-point only a child no owner holds, or one the row already
 // holds: one that another owner holds is refused with BAD_USER_INPUT,
-// "already linked", and not taken from it.
+// "already linked", and not taken from it. Re-pointing a one-to-one edge
+// from the owner, when its current child is one the caller may not change,
+// hidden by the tenant scope or a policy, fails with BAD_USER_INPUT "already
+// linked", and the child stays linked. The error names only the two types, no
+// ID, tenant or column.
 //
 // # Loading
 //

@@ -5,12 +5,12 @@
 // one statement: EdgeConnection, EdgeOne and EdgeList), the fields a selection
 // reads (Selected and Narrow), the runtime of the mutations (Atomic, which runs
 // one in a savepoint inside the operation's transaction, or in a transaction
-// of its own, the decoding of input IDs, CheckExists, Repointed, Readable,
-// UnlinkAll, Disjoint and NotFound, WriteError and FromJSON), and InputErrorf,
-// the coded error of a client's input. An application does not call this
-// package.
+// of its own, the decoding of input IDs, CheckExists, Repointed, StillLinked,
+// Readable, UnlinkAll, Disjoint and NotFound, WriteError and FromJSON), and
+// InputErrorf, the coded error of a client's input. An application does not
+// call this package.
 //
-// Compatibility is by veloxgql.GeneratedCodeIsVersion2, which every
+// Compatibility is by veloxgql.GeneratedCodeIsVersion3, which every
 // generated file references, and not by semantic versioning, as protobuf's
 // protoimpl is: a name here may change or go when the generated code
 // changes, and then the version constant is replaced, so that generated code

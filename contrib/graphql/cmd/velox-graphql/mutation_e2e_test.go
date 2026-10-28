@@ -172,6 +172,24 @@ func (*Circle) Policy() velox.Policy[Circle] {
 }
 `
 
+// e2eMutProfilePolicy is Profile's policy: its Read hides the profile whose
+// handle is "hidden".
+const e2eMutProfilePolicy = `package gen
+
+import (
+	"context"
+
+	"github.com/syssam/velox2"
+)
+
+// Policy hides the profile whose handle is "hidden".
+func (*Profile) Policy() velox.Policy[Profile] {
+	return velox.Policy[Profile]{
+		Read: func(context.Context) (velox.Pred[Profile], error) { return Profiles.Handle.NEQ("hidden"), nil },
+	}
+}
+`
+
 // e2eMutCountless is the application's test of the generated mutations on a
 // driver whose results cannot report the rows a statement changed, for which
 // velox's count is -1: SQLite behind a wrapper whose RowsAffected fails.
@@ -942,6 +960,56 @@ func TestRepoint(t *testing.T) {
 		}
 		if n := count(t, e.ctx, e.db.Query[gen.Profile]().Where(gen.Profiles.WriterID.EQ(w.ID))); n != 1 {
 			t.Errorf("w has %d profiles, want 1", n)
+		}
+	})
+}
+
+// TestRepointHiddenChild: re-pointing a writer's profile, when the profile it
+// holds now is hidden by the Read policy, so that the scoped unlink leaves it
+// linked, is BAD_USER_INPUT "already linked", not the unique key's error, and
+// keeps nothing; once the caller may see that profile, the same update moves
+// the link.
+func TestRepointHiddenChild(t *testing.T) {
+	each(t, func(t *testing.T, e *env) {
+		w := &gen.Writer{Name: "w", Password: "x"}
+		insert(t, e.ctx, e.db, w)
+		p1, p2 := &gen.Profile{Handle: "hidden", WriterID: ptr(w.ID)}, &gen.Profile{Handle: "free"}
+		insert(t, e.ctx, e.db, p1)
+		insert(t, e.ctx, e.db, p2)
+		all := velox.WithoutPolicy(e.ctx, "test: every profile")
+		writerOf := func(id int64) *int64 {
+			t.Helper()
+			p, err := e.db.Query[gen.Profile]().Where(gen.Profiles.ID.EQ(id)).One(all)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return p.WriterID
+		}
+		in := gen.UpdateWriterInput{ProfileID: ptr(profileID(p2.ID))}
+
+		_, err := gen.UpdateWriter(e.ctx, writerID(w.ID), in)
+		const want = "veloxgql: UpdateWriterInput.profileID: the Writer is already linked to a Profile"
+		if code(err) != veloxgql.CodeBadUserInput || err.Error() != want {
+			t.Errorf("over a hidden profile: %v (code %q), want %q", err, code(err), want)
+		}
+		if got := writerOf(p1.ID); got == nil || *got != w.ID {
+			t.Errorf("the hidden profile's writer is %v, want %d", got, w.ID)
+		}
+		if got := writerOf(p2.ID); got != nil {
+			t.Errorf("the free profile's writer is %d, want none", *got)
+		}
+
+		if _, err := e.raw.Exec(fmt.Sprintf("UPDATE profiles SET handle = 'seen' WHERE id = %d", p1.ID)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := gen.UpdateWriter(e.ctx, writerID(w.ID), in); err != nil {
+			t.Fatalf("over a profile the caller sees: %v", err)
+		}
+		if got := writerOf(p2.ID); got == nil || *got != w.ID {
+			t.Errorf("the free profile's writer is %v, want %d", got, w.ID)
+		}
+		if got := writerOf(p1.ID); got != nil {
+			t.Errorf("the seen profile's writer is %d, want none", *got)
 		}
 	})
 }
@@ -1774,7 +1842,7 @@ func TestMutationsRun(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a module")
 	}
-	_, run := app(t, map[string]string{"schema/schema.go": e2eMutSchema, "gen/article_policy.go": e2eMutPolicy, "gen/circle_policy.go": e2eMutCirclePolicy, "gen/writer_policy.go": e2eMutWriterPolicy, "mutation_test.go": e2eMutRun, "countless_test.go": e2eMutCountless})
+	_, run := app(t, map[string]string{"schema/schema.go": e2eMutSchema, "gen/article_policy.go": e2eMutPolicy, "gen/circle_policy.go": e2eMutCirclePolicy, "gen/writer_policy.go": e2eMutWriterPolicy, "gen/profile_policy.go": e2eMutProfilePolicy, "mutation_test.go": e2eMutRun, "countless_test.go": e2eMutCountless})
 	if out, err := run("tool", "velox-gen", "-out", "gen", "-plugin", "velox-graphql", "./schema"); err != nil {
 		t.Fatalf("generate: %v\n%s", err, out)
 	}
@@ -1798,7 +1866,7 @@ func TestMutationsRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
-	for _, name := range []string{"TestCreate", "TestCreateM2MBothSides", "TestRepeatedIDs", "TestEdgeScope", "TestAtomic", "TestCreateErrors", "TestRepoint",
+	for _, name := range []string{"TestCreate", "TestCreateM2MBothSides", "TestRepeatedIDs", "TestEdgeScope", "TestAtomic", "TestCreateErrors", "TestRepoint", "TestRepointHiddenChild",
 		"TestUpdate", "TestUpdateConflicts", "TestUpdatePolicy", "TestUpdateWriteScope", "TestUpdateReadBack", "TestUpdateEmpty", "TestUpdateErrors", "TestMutationWaitsOnTheLock",
 		"TestDelete", "TestDeletePolicy", "TestDeleteConstraint", "TestSelfM2M", "TestUnlinkScope", "TestValidateFirst"} {
 		if !strings.Contains(out, "--- PASS: "+name+" ") {

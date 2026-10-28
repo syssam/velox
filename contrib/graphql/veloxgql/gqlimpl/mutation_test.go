@@ -862,6 +862,31 @@ func TestRepointed(t *testing.T) {
 	}
 }
 
+// TestStillLinked: a row q finds, though the caller's tenant scope hides it,
+// fails with BAD_USER_INPUT naming only the two types; no row is not an error.
+func TestStillLinked(t *testing.T) {
+	db, _ := mutationDB(t)
+	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
+	if err := db.Insert(&post{ID: 1, Title: "held"}).Exec(velox.WithTenant(ctx, "b")); err != nil {
+		t.Fatal(err)
+	}
+	a := velox.WithTenant(ctx, "a")
+	const at = "UpdateXInput.yID"
+	held, none := db.Query[post]().Where(posts.ID.EQ(1)), db.Query[post]().Where(posts.ID.EQ(2))
+	for _, c := range []struct{ typ, want string }{
+		{"Y", "veloxgql: " + at + ": the X is already linked to a Y"},
+		{"Account", "veloxgql: " + at + ": the X is already linked to an Account"},
+	} {
+		err := gqlimpl.StillLinked(a, held, at, "X", c.typ)
+		if err == nil || err.Error() != c.want || codeOf(err) != veloxgql.CodeBadUserInput {
+			t.Errorf("StillLinked(%s) = %v (code %q), want %q", c.typ, err, codeOf(err), c.want)
+		}
+	}
+	if err := gqlimpl.StillLinked(a, none, at, "X", "Y"); err != nil {
+		t.Errorf("no row: %v", err)
+	}
+}
+
 // TestDisjoint: a key in both lists is BAD_USER_INPUT naming the input and
 // both fields, and echoes no ID; lists with no key in common, empty ones
 // included, are not an error.
