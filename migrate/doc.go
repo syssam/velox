@@ -185,6 +185,18 @@
 //     back as renames, and its varchar enums as alter-type changes, which
 //     are destructive and need -allow.
 //
+// A PostgreSQL directory baselined before [Index.Constraint] existed has a
+// 0001_baseline.sql that created each unique constraint as a plain index,
+// so its databases hold a constraint where they were adopted and an index
+// where they were built from the files. To drop such a constraint there,
+// write that migration by hand, then run velox-gen migrate hash:
+//
+//	ALTER TABLE <t> DROP CONSTRAINT IF EXISTS <k>;
+//	DROP INDEX IF EXISTS <k>;
+//
+// It works on databases built either way. Or start a new directory with
+// velox-gen migrate baseline.
+//
 // # Atlas
 //
 // A team that uses Atlas can plan and apply with it instead: velox-gen

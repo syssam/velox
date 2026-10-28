@@ -68,10 +68,6 @@ type Column struct {
 // renamed and created as the constraint. On SQLite it is an Index with Name
 // "", which SQLite keeps no name for, and Constraint is never set. MySQL
 // keeps a unique constraint as a unique index, and Constraint is never set.
-// A directory baselined before Constraint existed has a schema.json without
-// it, so its first drop of such a constraint still fails: add
-// "constraint": true to that index in schema.json and run velox-gen migrate
-// hash, or start a new directory with velox-gen migrate baseline.
 type Index struct {
 	Name       string   `json:"name"` // SQLite: "" for a UNIQUE constraint's index, which SQLite keeps no name for
 	Columns    []string `json:"columns,omitempty"`
