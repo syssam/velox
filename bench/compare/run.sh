@@ -92,11 +92,13 @@ if [ "$COMPARE_PGX" = 1 ]; then
   pgx_config=(-config variants=velox2pgx)
 fi
 
-# dialect_orms d: what dialect d's rounds run, one per line.
+# dialect_orms d: what dialect d's rounds run, on one line. Callers assign
+# it on its own, then split it with read -ra, so that a failure stops the
+# script: a command substitution in a for list or after local would hide it.
 dialect_orms() {
   case $1 in
-    sqlite) printf '%s\n' "${sqlite_orms[@]}" ;;
-    postgres) printf '%s\n' "${pg_orms[@]}" ;;
+    sqlite) echo "${sqlite_orms[*]}" ;;
+    postgres) echo "${pg_orms[*]}" ;;
     *) echo "unknown dialect $1" >&2; return 1 ;;
   esac
 }
@@ -166,10 +168,13 @@ for orm in "${orms[@]}"; do
 done
 
 # rounds_done d: every round file of dialect d exists.
+# It runs as an if condition, where set -e is off: hence the explicit exit.
 rounds_done() {
-  local i orm
+  local i orm list names
+  list=$(dialect_orms "$1") || exit 1
+  read -ra names <<<"$list"
   for ((i = 1; i <= COMPARE_BENCH_COUNT; i++)); do
-    for orm in $(dialect_orms "$1"); do [ -e "$raw/bench-$1-$orm-$i.txt" ] || return 1; done
+    for orm in "${names[@]}"; do [ -e "$raw/bench-$1-$orm-$i.txt" ] || return 1; done
   done
 }
 
@@ -177,8 +182,9 @@ rounds_done() {
 # dialect d's ORMs (dialect_orms). A round is one -count 1 run of each, after
 # one gate, so that each round sees them all under the same load.
 bench() {
-  local d=$1 i orm out todo
-  local names=($(dialect_orms "$d"))
+  local d=$1 i orm out todo list names
+  list=$(dialect_orms "$d")
+  read -ra names <<<"$list"
   for orm in "${names[@]}"; do
     "${step[@]}" -name "guard-$d-$orm" -- env COMPARE_DIALECT="$d" $(test_env "$orm") "$(test_bin "$orm")" -test.run '^TestGuard$'
   done
@@ -224,7 +230,9 @@ fi
 benchstat=(go run golang.org/x/perf/cmd/benchstat@v0.0.0-20261009192801-be2c69fb417e)
 for d in sqlite postgres; do
   files=()
-  for orm in $(dialect_orms "$d"); do
+  list=$(dialect_orms "$d")
+  read -ra names <<<"$list"
+  for orm in "${names[@]}"; do
     for ((i = 1; i <= COMPARE_BENCH_COUNT; i++)); do cat "$raw/bench-$d-$orm-$i.txt"; done >"$raw/bench-$d-$orm.txt"
     files+=("$orm=$raw/bench-$d-$orm.txt")
   done

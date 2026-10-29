@@ -17,8 +17,8 @@ import (
 // display is how the report names each ORM and runtime variant.
 var display = map[string]string{"velox2": "velox2", "oldvelox": "old velox", "ent": "ent", "velox2pgx": "velox2 (OpenPgx)"}
 
-// buildColumns are the columns of a table after velox2's: the other ORMs.
-var buildColumns = []string{"oldvelox", "ent"}
+// otherORMs are the ORMs other than velox2, in the order of their columns.
+var otherORMs = []string{"oldvelox", "ent"}
 
 // versionOrder is the order of the versions table.
 var versionOrder = []string{"velox2", "oldvelox", "ent", "sqlite", "pgx", "x/tools"}
@@ -170,11 +170,11 @@ func writeBuild(b *strings.Builder, s summary, sizes []int) {
 		if m.Doc != "" {
 			fmt.Fprintf(b, "%s\n\n", m.Doc)
 		}
-		writeTableHead(b, "size", buildColumns)
+		writeTableHead(b, "size", otherORMs)
 		for _, n := range sizes {
 			k := strconv.Itoa(n)
 			get := func(orm string) (stat, bool) { st, ok := s.Build[orm][k][m.Key]; return st, ok }
-			writeRow(b, "n="+k, buildColumns, get)
+			writeRow(b, "n="+k, otherORMs, get)
 		}
 		b.WriteString("\n")
 	}
@@ -192,7 +192,7 @@ func runtimeColumns(byORM map[string]map[string]map[string]stat) []string {
 			cols = append(cols, v)
 		}
 	}
-	return append(cols, buildColumns...)
+	return append(cols, otherORMs...)
 }
 
 // insertBulk is the benchmark that does not do the same work in every ORM.

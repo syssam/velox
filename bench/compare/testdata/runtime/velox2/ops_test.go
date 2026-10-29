@@ -80,7 +80,9 @@ func newApp(tb testing.TB, sqlDB *sql.DB) *app {
 	if s1.OpenConnections != s0.OpenConnections || s1.InUse != s0.InUse || s1.WaitCount != s0.WaitCount || s1.MaxIdleClosed != s0.MaxIdleClosed {
 		tb.Fatalf("velox2pgx: count used database/sql: stats %+v, then %+v", s0, s1)
 	}
-	sqlDB.SetMaxIdleConns(2) // database/sql's default
+	// Back to database/sql's default of 2, which SetMaxOpenConns(1) caps at 1:
+	// the one idle connection the harness had before the probe.
+	sqlDB.SetMaxIdleConns(2)
 	return a
 }
 

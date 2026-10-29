@@ -296,4 +296,12 @@ func TestReportRuntimeOnly(t *testing.T) {
 	if strings.Contains(section(rep, "## Runtime: sqlite"), "OpenPgx") {
 		t.Error("the sqlite tables have the velox2 (OpenPgx) column")
 	}
+	// A timed-out round gate is still reported without the build tables.
+	s.Steps = append(s.Steps, stepRecord{
+		Name: "gate-postgres-1", LoadBefore: load{One: 30},
+		Gate: &gateResult{Max: 12, WaitedS: 600, TimedOut: true},
+	})
+	if sec := section(fixtureReport(t, s), "## Runtime: postgres"); !strings.Contains(sec, "round 1 (gate waited 600 s, load 30 before)") {
+		t.Errorf("a runtime-only report drops a timed-out round gate:\n%s", sec)
+	}
 }
