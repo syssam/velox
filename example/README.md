@@ -64,7 +64,7 @@ velox's own `migrate` and Atlas are alternatives for one directory.
 
   env "velox" {
     src = data.external_schema.velox.url
-    dev = "docker://postgres/16/dev?search_path=public"
+    dev = "docker://postgres/18/dev?search_path=public"
     migration { dir = "file://migrations" }
   }
   ```
@@ -72,7 +72,7 @@ velox's own `migrate` and Atlas are alternatives for one directory.
   `atlas migrate diff --env velox` writes a migration, and
   `atlas migrate apply --env velox -u <url>` applies it. For a schema that
   keeps tables in PostgreSQL schemas (`schema.TableIn`), use
-  `docker://postgres/16/dev`, which is database-scoped. For MySQL use
+  `docker://postgres/18/dev`, which is database-scoped. For MySQL use
   `docker://mysql/8.4/dev` with `-dialect mysql`, and for SQLite
   `sqlite://dev?mode=memory` with `-dialect sqlite`.
 
@@ -86,7 +86,9 @@ velox's planner in five steps:
    `0001_baseline.sql` builds the schema package's tables as that database
    holds them. Read its warnings: an extension to add to `0001_baseline.sql`
    by hand, a sequence's start or increment it does not keep, a PostgreSQL
-   domain type, which it does not create.
+   domain type, which it does not create. MySQL's AUTO_INCREMENT counter is
+   not read, and gets no warning: a database built from the file starts IDs
+   at 1.
 2. `0001_baseline.sql` may be edited, followed by
    `go tool velox-gen migrate hash`, only before any environment runs
    `apply -baseline`. After that, an edit is a checksum error on every

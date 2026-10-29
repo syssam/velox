@@ -32,4 +32,9 @@ Guards are always on: a query with no `Limit` fails with `velox.ErrUnbounded`
 unless it says `Unbounded()`, and an update or delete with no `Where` fails
 with `velox.ErrNoWhere` unless it says `All()`.
 
+The table comes from `migrations/`. `go tool velox-gen migrate diff -dialect
+sqlite -name init -dir ./start/migrations ./start/schema` wrote it, and
+`main.go` applies it with `migrate.Up` to a temporary SQLite file. After a
+schema change, run `migrate diff` again without `-name init`, and regenerate.
+
 The output is in `testdata/output.golden`.
