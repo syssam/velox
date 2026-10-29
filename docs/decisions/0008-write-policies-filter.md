@@ -23,7 +23,10 @@ beyond that the write changed nothing.
 ## Evidence
 
 - `Policy.Write`'s doc, scope_api.go.
-- `TestWritePolicyFiltersToZeroRows` (policy_test.go:766): an update and a
+- `TestWritePolicyFiltersToZeroRows` (policy_test.go:773): an update and a
   delete as a caller the policy refuses affect 0 rows with no error; the
-  owner's delete affects 1.
+  owner's delete affects 1. On a pnote, whose Read allows the row and whose
+  Write hides it, the update and the delete affect 0 rows, the row is
+  unchanged, and a query still finds it. With Write ignored, that update
+  affects 1 row and the test fails.
 - docs/reviews/2026-10-25-triage-C.md, C56; docs/specs/2026-10-25-pre-1.0-hardening-design.md:94.

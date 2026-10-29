@@ -741,10 +741,17 @@ var policyDDL = []string{
   CONSTRAINT "tickets_tickets_children" FOREIGN KEY ("parent_id") REFERENCES "tickets" ("id") ON DELETE SET NULL
 )`,
 	`CREATE UNIQUE INDEX "ticket_org_id_title" ON "tickets" ("org_id", "title")`,
+	`CREATE TABLE "pnotes" (
+  "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "owner" text NOT NULL,
+  "locked" boolean NOT NULL,
+  "parent_id" integer,
+  "invoice_id" integer NOT NULL
+)`,
 }
 
-// policyDB opens a SQLite database in a temporary file, with the invoices and
-// tickets tables.
+// policyDB opens a SQLite database in a temporary file, with the invoices,
+// tickets and pnotes tables.
 func policyDB(t *testing.T) *velox.DB {
 	t.Helper()
 	raw, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "policy.db"))
@@ -794,6 +801,35 @@ func TestWritePolicyFiltersToZeroRows(t *testing.T) {
 	n, err = db.Delete[testmodel.Ticket]().Where(Tk.ID.EQ(tk.ID)).Exec(bob)
 	if n != 1 || err != nil {
 		t.Errorf("delete as bob: %d, %v", n, err)
+	}
+
+	// Ticket's Read and Write are the same predicate, and Read scopes an
+	// update too. A pnote's Read lets ann see her notes, and its Write hides
+	// the locked ones, so the zero rows below are Write's alone.
+	locked, open := &pnote{Owner: "ann", Locked: true}, &pnote{Owner: "ann"}
+	for _, x := range []*pnote{locked, open} {
+		if err := db.Insert(x).Exec(seed); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ctx := context.Background()
+	if n, err := db.Query[pnote]().Count(ctx); n != 2 || err != nil {
+		t.Fatalf("ann reads %d notes, %v", n, err)
+	}
+	n, err = db.Update[pnote]().Set(pn.Owner.Set("x")).Where(pn.ID.EQ(locked.ID)).Exec(ctx)
+	if n != 0 || err != nil {
+		t.Errorf("update of the locked note: %d, %v", n, err)
+	}
+	n, err = db.Delete[pnote]().Where(pn.ID.EQ(locked.ID)).Exec(ctx)
+	if n != 0 || err != nil {
+		t.Errorf("delete of the locked note: %d, %v", n, err)
+	}
+	if got, err := db.Query[pnote]().Where(pn.ID.EQ(locked.ID)).One(ctx); err != nil || got.Owner != "ann" || !got.Locked {
+		t.Errorf("the locked note after: %+v, %v", got, err)
+	}
+	n, err = db.Update[pnote]().Set(pn.InvoiceID.Set(7)).Where(pn.ID.EQ(open.ID)).Exec(ctx)
+	if n != 1 || err != nil {
+		t.Errorf("update of the unlocked note: %d, %v", n, err)
 	}
 }
 
