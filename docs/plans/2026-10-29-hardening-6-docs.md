@@ -574,6 +574,22 @@ The controller takes every recommendation in "Decisions for the controller":
 10. The root Examples use internal/testmodel. The example programs are a separate module (example/go.mod), so the root package cannot import them.
 11. The CHANGELOG has one "Unreleased (1.0.0)" summary.
 
+## Plan-check fixes (binding; they override the task text above)
+
+1. **Task 10 Step 4, Review Focus 2.** `go test` runs an Example once whatever `-count` says. Repeat with `for i in 1 2 3; do go test -count=1 -run '^Example' <pkg> || break; done`.
+2. **Task 3.** `TestEqualFoldIsASCIIOnSQLite` goes in policy_test.go, or a new file in `package velox_test`. handles_test.go is `package velox`, and importing testmodel from it is a cycle.
+3. **Task 8.** `TestSamePredicateKnownLimits` goes in a new migrate/predicate_internal_test.go (`package migrate`). predicate_test.go is `migrate_test`, and `samePredicate` is unexported. The [D] scratch uses `freshDB`, which lives in `migrate_test`. The expected values are unchanged.
+4. **Task 3, `TestWritePolicyFiltersToZeroRows`.** Ticket's `onlyDone` hook limits deletes to `Done = true`. Seed the ticket with `Done: true` and a tenant (the WithAllTenants `ctx` suffices). A delete as ann affects 0 rows; a delete as bob affects 1.
+5. **Line numbers drift within the wave.** Tasks 11, 13 and 14, and Task 13 Step 3's check, find each cited place by its text or symbol after Tasks 1–8, not by the line numbers read at 669f8d2. This covers doc.go, contrib/graphql/doc.go, migrate/doc.go, route.go and tx.go.
+6. **Task 7, R7.** The rename paragraph goes after the sentence that lists Type (contrib/graphql/doc.go, around :43-48), not inside the code block at :10-41.
+7. **Task 1.** Every comparison of `.op` with 0 uses `opZero`, `!=` as well as `==`: the eleven `.op != 0` sites in scope.go and scope_api.go. Leftover grep 2 also checks `\.op [!=]= 0` and prints nothing.
+8. **"Ruling 19" (plan :23, ADR 0015)** means spec ruling 19 (spec :57, R8), not builder ruling 19 (C85). Say "spec ruling 19".
+9. **Minor:**
+   - "never a `UNIQUE` constraint" is migrate spec :460, not :467.
+   - Leftover grep 11 is expected to print no tests.
+   - TestCacheKeysMoreShapes is at render_cache_test.go:276.
+   - Task 15 adds the "Rulings made during execution" section.
+
 ## Appendix: the followups map
 
 Each item is `id :<followups line> <commit(s)>`. A line with a letter (50a, 50b) is one of several ids on one line. Ids from other reviews have no line. G10 is resolved by 1d216d8 (Wave 1 Task 4), though the triage called it stale. C9 is closed by a test, Wave 5's ruling 1.
