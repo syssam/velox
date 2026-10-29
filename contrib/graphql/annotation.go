@@ -72,7 +72,9 @@ const (
 type MutationKind string
 
 // Directive is a GraphQL directive to put on the generated element. Args are
-// the directive's arguments, as JSON values.
+// the directive's arguments, as JSON values. Directives, and Merge, copy each
+// Args map but not the values in it: a nested map or slice stays shared with
+// the caller's, so do not change it after.
 type Directive struct {
 	Name string         `json:"name"`
 	Args map[string]any `json:"args,omitempty"`
@@ -211,7 +213,10 @@ func Skip(modes ...SkipMode) Annotation {
 	return Annotation{Skip: m}
 }
 
-// Type names the entity's GraphQL type.
+// Type names the entity's GraphQL type. An ID and a cursor hold the type's
+// name, so renaming the type changes every ID and cursor that clients hold.
+// veloxgql.DecodeID refuses an ID of the old name with
+// veloxgql.ErrWrongIDType.
 func Type(name string) Annotation { return Annotation{Type: name} }
 
 // QueryField adds a root Query field, with this name, that returns the
@@ -290,7 +295,9 @@ func EnumValues(m map[string]string) Annotation {
 
 // Directives puts these directives on the generated element: a field or an
 // edge. An entity takes GraphQL's own directives only; the package doc's
-// Directives section says why.
+// Directives section says why. It copies each Args map but not the values in
+// it: a nested map or slice stays shared with the caller's, so do not change
+// it after.
 func Directives(ds ...Directive) Annotation {
 	out := slices.Clone(ds)
 	for i := range out {

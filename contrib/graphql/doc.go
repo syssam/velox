@@ -3,6 +3,10 @@
 // the standard library and velox2/schema: the schema package, velox-gen's
 // loader and the application's schema code compile no GraphQL library.
 //
+// A file that also imports gqlgen's graphql package names this one:
+//
+//	import vgraphql "github.com/syssam/velox2/contrib/graphql"
+//
 // Every constructor returns the same type, Annotation, named "graphql". A
 // schema, field or edge lists as many as it likes in Annotations(), and the
 // loader merges them into one (see Annotation.Merge). A short schema:
@@ -46,6 +50,10 @@
 // Directives; of an edge, Skip, FieldName, WhereEdge, Connection and
 // Directives. One on an element it does not apply to makes the generator
 // fail, naming the schema and the element.
+//
+// An ID and a cursor hold the type's name, so renaming the type with Type
+// changes every ID and cursor that clients hold. veloxgql.DecodeID refuses an
+// ID of the old name with veloxgql.ErrWrongIDType.
 //
 // # Directives
 //
@@ -237,6 +245,9 @@
 // linked", and the child stays linked. The error names only the two types, no
 // ID, tenant or column, and the hidden child's own ID is NOT_FOUND like any
 // other the caller may not read, so the error does not confirm a guess of it.
+// Clearing such an edge, when its current child is one the caller may not
+// change, is a silent no-op, not an error: an error would tell the caller that
+// a child it may not change is linked there.
 //
 // A mutation returns the row as written. Create<T> returns the row it
 // inserted. Update<T> reads it back under the tenant scope without the Read

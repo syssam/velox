@@ -370,3 +370,18 @@ func TestMergeClonesArgs(t *testing.T) {
 		t.Errorf("Directives shares the arguments: the argument now has k = %v", ds[0].Args["k"])
 	}
 }
+
+// Directives copies each Args map one level: a key added to the caller's map
+// stays out of the annotation, but a nested map is shared.
+func TestDirectivesCopyArgsOneLevel(t *testing.T) {
+	args := map[string]any{"x": map[string]any{"y": 1}}
+	a := graphql.Directives(graphql.Directive{Name: "d", Args: args})
+	args["z"] = 2
+	if _, ok := a.Directives[0].Args["z"]; ok {
+		t.Errorf("Directives shares the Args map: z shows through")
+	}
+	args["x"].(map[string]any)["y"] = 3
+	if got := a.Directives[0].Args["x"].(map[string]any)["y"]; got != 3 {
+		t.Errorf("a nested map is copied: y = %v, want 3 (shared)", got)
+	}
+}
