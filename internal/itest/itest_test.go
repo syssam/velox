@@ -110,7 +110,7 @@ type target struct {
 	name    string
 	d       velox.Dialect
 	db      *velox.DB
-	exec    func(t *testing.T, query string, args ...any) // setup SQL, written with ? placeholders
+	exec    func(t testing.TB, query string, args ...any) // setup SQL, written with ? placeholders
 	ddl     string                                        // CREATE TABLE invoices
 	items   string                                        // CREATE TABLE items
 	tickets string                                        // CREATE TABLE tickets
@@ -122,7 +122,7 @@ type target struct {
 // environment variable is set. An unset variable omits the database; it never
 // skips a test, so the SQLite subtests always run. Each target's DB is opened
 // with opts.
-func targets(t *testing.T, opts []velox.Option) []target {
+func targets(t testing.TB, opts []velox.Option) []target {
 	t.Helper()
 	ts := []target{sqliteTarget(t, opts)}
 	if dsn := os.Getenv("VELOX_TEST_POSTGRES"); dsn != "" {
@@ -148,7 +148,7 @@ const pgDDL = `CREATE TABLE invoices (created_at timestamptz NOT NULL, updated_a
 // sqlDB for setup, so within a test its INSERT statement stays cached across
 // the second target's DROP and CREATE; that is harmless, because the schema is
 // the same and PostgreSQL re-plans a statement whose table was replaced.
-func postgresTargets(t *testing.T, dsn string, opts []velox.Option) []target {
+func postgresTargets(t testing.TB, dsn string, opts []velox.Option) []target {
 	t.Helper()
 	sqlDB, err := sql.Open("pgx", dsn)
 	if err != nil {
@@ -191,7 +191,7 @@ const mysqlDDL = "CREATE TABLE invoices (created_at DATETIME(6) NOT NULL, update
 	"paid BOOLEAN NOT NULL, paid_at DATETIME(6) NULL, note TEXT NOT NULL, data BLOB NOT NULL, " +
 	"CONSTRAINT invoices_org_number_uq UNIQUE (org_id, number))"
 
-func mysqlTarget(t *testing.T, dsn string, opts []velox.Option) target {
+func mysqlTarget(t testing.TB, dsn string, opts []velox.Option) target {
 	t.Helper()
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
@@ -202,7 +202,7 @@ func mysqlTarget(t *testing.T, dsn string, opts []velox.Option) target {
 		tickets: mysqlTickets, raw: db, direct: db}
 }
 
-func sqliteTarget(t *testing.T, opts []velox.Option) target {
+func sqliteTarget(t testing.TB, opts []velox.Option) target {
 	t.Helper()
 	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
@@ -219,8 +219,8 @@ func sqliteTarget(t *testing.T, opts []velox.Option) target {
 	}
 }
 
-func sqlExec(db *sql.DB, d velox.Dialect) func(*testing.T, string, ...any) {
-	return func(t *testing.T, q string, args ...any) {
+func sqlExec(db *sql.DB, d velox.Dialect) func(testing.TB, string, ...any) {
+	return func(t testing.TB, q string, args ...any) {
 		t.Helper()
 		if _, err := db.ExecContext(ctx, rebind(d, q), args...); err != nil {
 			t.Fatalf("%s: %v", q, err)
@@ -272,7 +272,7 @@ func TestRebind(t *testing.T) {
 // ones none (note is Optional, a NOT NULL column: "" means unset); paid
 // invoices have paid_at. The items are (id, invoice, sku, qty): (1, 1, A, 2),
 // (2, 1, B, 0), (3, 2, C, 5). The tickets are in seedTickets.
-func setup(t *testing.T, tg target) {
+func setup(t testing.TB, tg target) {
 	t.Helper()
 	tg.exec(t, "DROP TABLE IF EXISTS tickets")
 	tg.exec(t, "DROP TABLE IF EXISTS items")
