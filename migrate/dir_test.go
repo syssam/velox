@@ -137,27 +137,31 @@ func TestConfig(t *testing.T) {
 		t.Errorf("Config = %+v, want %+v", got.Config, want)
 	}
 
-	for _, c := range []struct{ name, json string }{
-		{"version 2", `{"version":2,"dialect":"postgres"}`},
-		{"no version", `{"dialect":"postgres"}`},
-		{"no dialect", `{"version":1}`},
-		{"dialect oracle", `{"version":1,"dialect":"oracle"}`},
-		{"unknown key", `{"version":1,"dialect":"postgres","tabel":"x"}`},
-		{"key in other case", `{"version":1,"dialect":"postgres","Table":"x"}`},
-		{"table a-b", `{"version":1,"dialect":"postgres","table":"a-b"}`},
-		{"table 64 bytes", `{"version":1,"dialect":"postgres","table":"` + strings.Repeat("t", 64) + `"}`},
-		{"table empty", `{"version":1,"dialect":"postgres","table":""}`},
-		{"table digit first", `{"version":1,"dialect":"postgres","table":"1a"}`},
-		{"negative timeout", `{"version":1,"dialect":"postgres","lock_timeout":"-1s"}`},
-		{"timeout x", `{"version":1,"dialect":"postgres","lock_timeout":"x"}`},
-		{"timeout number", `{"version":1,"dialect":"postgres","lock_timeout":5}`},
-		{"not an object", `[1]`},
-		{"malformed", `{"version":`},
+	// want, where set, is the whole error text.
+	for _, c := range []struct{ name, json, want string }{
+		{"version 2", `{"version":2,"dialect":"postgres"}`, "migrate: velox.json: version 2; this velox reads version 1"},
+		{"no version", `{"dialect":"postgres"}`, "migrate: velox.json: version is required"},
+		{"no dialect", `{"version":1}`, ""},
+		{"dialect oracle", `{"version":1,"dialect":"oracle"}`, ""},
+		{"unknown key", `{"version":1,"dialect":"postgres","tabel":"x"}`, ""},
+		{"key in other case", `{"version":1,"dialect":"postgres","Table":"x"}`, ""},
+		{"table a-b", `{"version":1,"dialect":"postgres","table":"a-b"}`, ""},
+		{"table 64 bytes", `{"version":1,"dialect":"postgres","table":"` + strings.Repeat("t", 64) + `"}`, ""},
+		{"table empty", `{"version":1,"dialect":"postgres","table":""}`, ""},
+		{"table digit first", `{"version":1,"dialect":"postgres","table":"1a"}`, ""},
+		{"negative timeout", `{"version":1,"dialect":"postgres","lock_timeout":"-1s"}`, ""},
+		{"timeout x", `{"version":1,"dialect":"postgres","lock_timeout":"x"}`, ""},
+		{"timeout number", `{"version":1,"dialect":"postgres","lock_timeout":5}`, ""},
+		{"not an object", `[1]`, ""},
+		{"malformed", `{"version":`, ""},
 	} {
 		_, err := migrate.ReadDir(sumFS(t, map[string]string{"velox.json": c.json}))
 		e := asError(t, err, "config")
 		if e.Pos != "velox.json" {
 			t.Errorf("%s: Pos = %q", c.name, e.Pos)
+		}
+		if c.want != "" && err.Error() != c.want {
+			t.Errorf("%s: %q, want %q", c.name, err.Error(), c.want)
 		}
 	}
 	for _, c := range []migrate.Config{
