@@ -838,8 +838,8 @@ func TestFailedSavepointRollbackAbortsTheTx(t *testing.T) {
 }
 
 // TestNestedTxReleaseFails: when a savepoint's RELEASE fails, the nested Tx
-// returns that error and does not roll back to the savepoint. Its work stays
-// in the transaction, which commits when the enclosing fn returns nil.
+// returns that error and does not roll back to the savepoint. velox goes on,
+// and sends COMMIT when the enclosing fn returns nil.
 func TestNestedTxReleaseFails(t *testing.T) {
 	// BEGIN consumes nothing: SAVEPOINT, the UPDATE, then RELEASE.
 	e := &velox.FakeExec{Errs: []error{nil, nil, errors.New("release failed")}}
