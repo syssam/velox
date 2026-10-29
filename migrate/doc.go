@@ -96,7 +96,11 @@
 // is no difference: Drift compares the two by their parsed form, where a
 // cast the database adds itself without changing the value matches no
 // cast, and a NOT over a comparison matches its negated operator. One whose
-// meaning differs is a change, so a hand-edited check is found. MySQL's
+// meaning differs is a change, so a hand-edited check is found. The
+// exception is a cast whose meaning depends on the column's type, which the
+// comparison does not know: on PostgreSQL, d >= '2020-01-01 10:00'::timestamp
+// matches d >= '2020-01-01 10:00' on a date column, and qty::text = '05'
+// matches qty = '05', though the database reads each pair apart. MySQL's
 // _utf8mb4, _utf8mb3 and _utf8 before a literal, and _latin1 and _ascii
 // before an ASCII one, are dropped, so two literals compared with each other
 // can be called the same where their collations differ on trailing spaces. A
@@ -114,9 +118,11 @@
 // the tables a schema names and returns them as the directory's first
 // snapshot, each object in the schema's spelling where the comparison of
 // Drift finds it equal and in the database's otherwise, with warnings for
-// what a build from the snapshot loses. It refuses a database that holds
-// none of the schema's tables, a foreign key to a table outside them, and
-// a sequence default the column does not own.
+// what a build from the snapshot loses. MySQL's AUTO_INCREMENT counter is
+// not read, and gets no warning: a database built from 0001_baseline.sql
+// starts each table's IDs at 1. It refuses a database that holds none of
+// the schema's tables, a foreign key to a table outside them, and a
+// sequence default the column does not own.
 //
 // A directory holds velox.json, schema.json, the migration files and
 // velox.sum, which hashes the others. Line endings never change a sum: each
@@ -145,20 +151,23 @@
 // nothing a file sets on its session reaches the application's other
 // connections. The history table is named by the schema (PostgreSQL) or
 // database (MySQL) Up was given, so a file that changes search_path or USEs
-// another database still records itself. A file resumed with WithResume
-// (velox-gen migrate apply -resume) starts again with the session as Up was
-// given it, so its statements after a SET search_path or a USE run without
-// them; such a file sets them again at the top of each unit. A trigger, a
-// MySQL routine or event and a BEGIN … END block are refused on SQLite and
-// MySQL, whose bodies the splitter would cut at their inner semicolons; a
-// BEGIN ATOMIC body and a psql meta-command line, one that starts with a
-// backslash, are refused on PostgreSQL. An applied file edited or gone is a
-// [*ChecksumError], and a lock held past the wait [ErrLockWait]. [Verify]
-// applies a directory to an empty database and fails when Drift then finds a
-// change against schema.json: a test's check that the files make what the
-// snapshot says. On SQLite, Verify, Up and Drift need a file database, since
-// each run opens a connection of its own and a connection to :memory: is a
-// new, empty database.
+// another database still records itself. On PostgreSQL that schema is
+// current_schema(). Under the default search_path, a file that creates a
+// schema named after the session's user moves it, and the next run looks
+// for the history there: name the schema in the DSN's search_path. A file
+// resumed with WithResume (velox-gen migrate apply -resume) starts again with
+// the session as Up was given it, so its statements after a SET search_path
+// or a USE run without them; such a file sets them again at the top of each
+// unit. A trigger, a MySQL routine or event and a BEGIN … END block are
+// refused on SQLite and MySQL, whose bodies the splitter would cut at their
+// inner semicolons; a BEGIN ATOMIC body and a psql meta-command line, one
+// that starts with a backslash, are refused on PostgreSQL. An applied file
+// edited or gone is a [*ChecksumError], and a lock held past the wait
+// [ErrLockWait]. [Verify] applies a directory to an empty database and fails
+// when Drift then finds a change against schema.json: a test's check that the
+// files make what the snapshot says. On SQLite, Verify, Up and Drift need a
+// file database, since each run opens a connection of its own and a
+// connection to :memory: is a new, empty database.
 //
 // # Adopting a database
 //
@@ -171,10 +180,12 @@
 //     the schema's tables as that database holds them. Read its warnings:
 //     an extension to add to 0001_baseline.sql by hand, a sequence's start
 //     or increment it does not keep, a PostgreSQL domain type, which it does
-//     not create. A file made with pg_dump instead needs its lines that start
-//     with a backslash removed first (pg_dump 18's \restrict and
-//     \unrestrict): they are psql meta-commands, not SQL, and ParseFile
-//     refuses them.
+//     not create (for a domain over another, the nearest). MySQL's
+//     AUTO_INCREMENT counter is not read, and gets no warning: a database
+//     built from 0001_baseline.sql starts each table's IDs at 1. A file made
+//     with pg_dump instead needs its lines that start with a backslash
+//     removed first (pg_dump 18's \restrict and \unrestrict): they are psql
+//     meta-commands, not SQL, and ParseFile refuses them.
 //  2. 0001_baseline.sql may be edited, followed by velox-gen migrate hash,
 //     only before any environment runs apply -baseline. After that, an edit
 //     is a [*ChecksumError] on every baselined database.
@@ -202,6 +213,10 @@
 // They work on databases built either way. Or start a new directory with
 // velox-gen migrate baseline.
 //
+// A unique constraint or index that a foreign key references cannot be
+// dropped alone: PostgreSQL refuses, and the file fails. Drop or change the
+// foreign key in the same migration.
+//
 // # Atlas
 //
 // A team that uses Atlas can plan and apply with it instead: velox-gen
@@ -217,13 +232,13 @@
 //
 //	env "velox" {
 //	  src = data.external_schema.velox.url
-//	  dev = "docker://postgres/16/dev?search_path=public"
+//	  dev = "docker://postgres/18/dev?search_path=public"
 //	  migration { dir = "file://migrations" }
 //	}
 //
 // atlas migrate diff --env velox then writes a migration, and atlas migrate
 // apply --env velox -u <url> applies it. For a schema that keeps tables in
-// PostgreSQL schemas (schema.TableIn), use docker://postgres/16/dev, which
+// PostgreSQL schemas (schema.TableIn), use docker://postgres/18/dev, which
 // is database-scoped. For MySQL use docker://mysql/8.4/dev with -dialect
 // mysql, and for SQLite sqlite://dev?mode=memory with -dialect sqlite.
 // velox's migrate and Atlas are alternatives for one directory: a directory

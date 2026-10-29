@@ -26,6 +26,8 @@ import (
 // create it again. The warnings are what Drift reports, and what a build
 // from the snapshot loses: a PostgreSQL sequence's start and increment, a
 // type from an extension, a PostgreSQL domain type, which it does not create.
+// MySQL's AUTO_INCREMENT counter is not read, and gets no warning: a
+// database built from 0001_baseline.sql starts each table's IDs at 1.
 //
 // Baseline refuses, with Code "baseline", a database that holds none of
 // want's tables, a foreign key to a table outside the snapshot, and on
