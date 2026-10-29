@@ -48,11 +48,13 @@ go run ./start
 
 There are two paths, and a directory is managed by one of them.
 
-- velox's planner. `go tool velox-gen migrate diff` writes the next migration
-  from the schema package. `go tool velox-gen migrate apply` applies the
-  pending ones.
-- Atlas. `go tool velox-gen migrate sql` prints the schema package's `CREATE`
-  statements, which Atlas reads through its `external_schema`.
+- velox's planner. `go tool velox-gen migrate diff -dialect postgres` writes
+  the next migration from the schema package; the first diff of a directory
+  needs `-dialect`. `go tool velox-gen migrate apply` applies the pending
+  ones.
+- Atlas. `go tool velox-gen migrate sql -dialect postgres ./schema` prints the
+  schema package's `CREATE` statements, which Atlas reads through its
+  `external_schema`.
 
 See [example/README.md](example/README.md#migrations) for both, and for
 adopting an existing database.
