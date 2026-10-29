@@ -176,3 +176,95 @@ func TestReportMissingORM(t *testing.T) {
 		t.Errorf("a missing ORM must show as -:\n%s", rep)
 	}
 }
+
+func TestReportInsertBulkFootnote(t *testing.T) {
+	rep := fixtureReport(t, fixtureSummary(t))
+	for _, d := range []string{"sqlite", "postgres"} {
+		sec := section(rep, "## Runtime: "+d)
+		if n := strings.Count(sec, "| InsertBulk100 ¹ |"); n != len(runtimeUnits) {
+			t.Errorf("%s: %d InsertBulk100 rows are marked, want %d", d, n, len(runtimeUnits))
+		}
+		if n := strings.Count(sec, insertBulkNote); n != len(runtimeUnits) {
+			t.Errorf("%s: %d footnotes, want one under each of %d unit tables", d, n, len(runtimeUnits))
+		}
+		for _, other := range []string{"InsertOne", "GetByID", "Count"} {
+			if strings.Contains(sec, "| "+other+" ¹") {
+				t.Errorf("%s: %s carries the footnote", d, other)
+			}
+		}
+	}
+	for _, want := range []string{"reads no keys back", "RETURNING id", "100 entities"} {
+		if !strings.Contains(insertBulkNote, want) {
+			t.Errorf("the footnote lacks %q", want)
+		}
+	}
+	// Each footnote follows its own table, before the next heading.
+	for _, sec := range strings.Split(section(rep, "## Runtime: sqlite"), "### ")[1:] {
+		if !strings.Contains(sec, "| InsertBulk100 ¹ |") || !strings.Contains(sec, insertBulkNote) {
+			t.Errorf("a unit table lacks the marker or its footnote:\n%s", sec)
+		}
+	}
+}
+
+func TestReportUsesLastRecordPerStep(t *testing.T) {
+	s := fixtureSummary(t)
+	// The fixture's ent build timed out its gate. After a resume, the step ran
+	// again and the gate passed; a bench step failed once, then succeeded; and
+	// one step's last attempt failed.
+	s.Steps = append(s.Steps,
+		stepRecord{Name: "build-ent-n100-r1", Gate: &gateResult{Max: 12, WaitedS: 1}},
+		stepRecord{Name: "gate-sqlite-1", Exit: 1, Gate: &gateResult{Max: 12, WaitedS: 600, TimedOut: true}, LoadBefore: load{One: 31.5}},
+		stepRecord{Name: "gate-sqlite-1", Gate: &gateResult{Max: 12, WaitedS: 2}},
+		stepRecord{Name: "bench-sqlite-ent-1", Exit: 2},
+		stepRecord{Name: "bench-sqlite-ent-1"},
+		stepRecord{Name: "guard-postgres-ent", Exit: 3},
+		stepRecord{Name: "gate-postgres-1", Gate: &gateResult{Max: 12, WaitedS: 600, TimedOut: true}, LoadBefore: load{One: 30}},
+	)
+	rep := fixtureReport(t, s)
+	if strings.Contains(section(rep, "## Build cost"), "Timed-out load gate") {
+		t.Errorf("a superseded timed-out build gate is reported:\n%s", section(rep, "## Build cost"))
+	}
+	if sec := section(rep, "## Runtime: sqlite"); strings.Contains(sec, "Timed-out") {
+		t.Errorf("a superseded timed-out bench gate is reported:\n%s", sec)
+	}
+	if sec := section(rep, "## Runtime: postgres"); !strings.Contains(sec, "round 1 (gate waited 600 s, load 30 before)") {
+		t.Errorf("the last record's timed-out gate is not reported:\n%s", sec)
+	}
+	if !strings.Contains(rep, "**Failed steps.** The last record of these steps has a non-zero exit: guard-postgres-ent (exit 3).") {
+		t.Errorf("a step whose last exit is non-zero is not called out:\n%s", section(rep, "## Machine and load"))
+	}
+	if strings.Contains(rep, "bench-sqlite-ent-1 (exit") || strings.Contains(rep, "gate-sqlite-1 (exit") {
+		t.Error("a superseded failure is called out")
+	}
+	// The steps table still lists every attempt.
+	if n := strings.Count(rep, "| gate-sqlite-1 |"); n != 2 {
+		t.Errorf("%d rows for gate-sqlite-1, want both attempts", n)
+	}
+	// A clean log has no failure note.
+	if strings.Contains(fixtureReport(t, fixtureSummary(t)), "Failed steps") {
+		t.Error("the fixture has no failed step")
+	}
+}
+
+func TestReportShowsEnv(t *testing.T) {
+	s := fixtureSummary(t)
+	if strings.Contains(fixtureReport(t, s), "GOFLAGS") {
+		t.Error("without env, the report names GOFLAGS")
+	}
+	s.Env = &runEnv{GoFlags: "-p=2", NumCPU: 14}
+	rep := section(fixtureReport(t, s), "## Machine and load")
+	if !strings.Contains(rep, "GOFLAGS of the run: `-p=2`") || !strings.Contains(rep, "CPUs counted by Go: 14") {
+		t.Errorf("the machine section lacks the env:\n%s", rep)
+	}
+}
+
+func TestReportRerunShare(t *testing.T) {
+	rep := fixtureReport(t, fixtureSummary(t))
+	sec := section(rep, "### rebuild_rerun_share")
+	if !strings.HasPrefix(sec, "\n\nlower is better.") || !strings.Contains(sec, "not a metric") {
+		t.Errorf("rebuild_rerun_share has no direction or explanation:\n%s", sec)
+	}
+	if strings.Contains(rep, "### rebuild_cached") || strings.Contains(rep, "higher is better.") {
+		t.Error("rebuild_cached has a table, or a table is higher-is-better")
+	}
+}

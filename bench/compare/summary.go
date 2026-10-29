@@ -51,23 +51,66 @@ func newStat(runs []float64, lowerIsBetter bool) stat {
 	return s
 }
 
-// metric is one build metric: its key in the build JSON and its direction.
+// metric is one build metric: its key and its direction. A metric with a
+// Derive is computed from the build JSON keys in From; any other is a key of
+// the build JSON. Doc, if set, is the one line the report prints under the
+// metric's table.
 type metric struct {
 	Key           string
 	LowerIsBetter bool
+	From          []string
+	Derive        func(raw map[string]float64) float64
+	Doc           string
 }
 
 // buildMetrics are the build metrics, in table order. orm, n, services, run
 // and ref_* are not here: they identify a run or measure the machine's load.
+//
+// The build JSON also holds rebuild_cached, the count of actions the rebuild
+// served from the cache. It is not a metric: it counts every package the edit
+// did not touch, the standard library included, so an ORM that generates more
+// packages "caches more" without a faster rebuild. rebuild_rerun_share, the
+// fraction that reran, replaces it; rebuild_cpu_s and edit_x are the cost.
 var buildMetrics = []metric{
-	{"codegen_x", true}, {"cold_x", true}, {"edit_x", true},
-	{"codegen_cpu_s", true}, {"codegen_wall_s", true},
-	{"cold_cpu_s", true}, {"cold_wall_s", true}, {"cold_app_action_s", true}, {"cold_dep_action_s", true},
-	{"regen_cpu_s", true}, {"regen_wall_s", true},
-	{"rebuild_cpu_s", true}, {"rebuild_wall_s", true},
-	{"rebuild_rerun", true}, {"rebuild_cached", false}, {"rebuild_relinks", true},
-	{"gen_lines", true}, {"gen_bytes", true},
-	{"service_binary_mb", true}, {"link_peak_mb", true},
+	{Key: "codegen_x", LowerIsBetter: true}, {Key: "cold_x", LowerIsBetter: true}, {Key: "edit_x", LowerIsBetter: true},
+	{Key: "codegen_cpu_s", LowerIsBetter: true}, {Key: "codegen_wall_s", LowerIsBetter: true},
+	{Key: "cold_cpu_s", LowerIsBetter: true}, {Key: "cold_wall_s", LowerIsBetter: true},
+	{Key: "cold_app_action_s", LowerIsBetter: true}, {Key: "cold_dep_action_s", LowerIsBetter: true},
+	{Key: "regen_cpu_s", LowerIsBetter: true}, {Key: "regen_wall_s", LowerIsBetter: true},
+	{Key: "rebuild_cpu_s", LowerIsBetter: true}, {Key: "rebuild_wall_s", LowerIsBetter: true},
+	{Key: "rebuild_rerun", LowerIsBetter: true},
+	{
+		Key: "rebuild_rerun_share", LowerIsBetter: true,
+		From:   []string{"rebuild_rerun", "rebuild_cached"},
+		Derive: rerunShare,
+		Doc:    "rebuild_rerun ÷ (rebuild_rerun + rebuild_cached): the fraction of the build's actions that the edit reran. The count of cached actions is not a metric, because it grows with the number of packages, not with a faster rebuild.",
+	},
+	{Key: "rebuild_relinks", LowerIsBetter: true},
+	{Key: "gen_lines", LowerIsBetter: true}, {Key: "gen_bytes", LowerIsBetter: true},
+	{Key: "service_binary_mb", LowerIsBetter: true}, {Key: "link_peak_mb", LowerIsBetter: true},
+}
+
+// rerunShare is rerun ÷ (rerun + cached), or 0 when there were no actions.
+func rerunShare(raw map[string]float64) float64 {
+	rerun, cached := raw["rebuild_rerun"], raw["rebuild_cached"]
+	if rerun+cached == 0 {
+		return 0
+	}
+	return rerun / (rerun + cached)
+}
+
+// rawKeys are the keys of a build JSON that summarize reads: the reference
+// build's, and those of every metric.
+func rawKeys() []string {
+	keys := []string{refMetric}
+	for _, m := range buildMetrics {
+		if m.Derive != nil {
+			keys = append(keys, m.From...)
+		} else {
+			keys = append(keys, m.Key)
+		}
+	}
+	return slices.Compact(slices.Sorted(slices.Values(keys)))
 }
 
 // refMetric is the key of the reference build's CPU seconds in the build JSON.
@@ -130,6 +173,30 @@ type machine struct {
 	MemoryGB float64 `json:"memory_gb"`
 	OS       string  `json:"os"`
 	Go       string  `json:"go"`
+}
+
+// runEnv is what run.sh recorded about the run's environment in env.txt, and
+// the CPU count of the machine that summarized it. The GOFLAGS of the run
+// say, among other things, which -p the app builds ran at.
+type runEnv struct {
+	GoFlags string `json:"goflags"`
+	NumCPU  int    `json:"num_cpu"`
+}
+
+// readEnv reads <results>/env.txt, whose lines are KEY=value. It returns nil
+// if the file is absent or has no GOFLAGS line: the summary then records
+// nothing.
+func readEnv(results string) *runEnv {
+	b, err := os.ReadFile(filepath.Join(results, "env.txt"))
+	if err != nil {
+		return nil
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		if v, ok := strings.CutPrefix(strings.TrimRight(line, "\r"), "GOFLAGS="); ok {
+			return &runEnv{GoFlags: v, NumCPU: runtime.NumCPU()}
+		}
+	}
+	return nil
 }
 
 // probeMachine reads the machine. Tests replace it, so that they do not
@@ -356,6 +423,8 @@ type summary struct {
 	Reference map[string]map[string]stat                       `json:"reference"` // orm → n
 	Runtime   map[string]map[string]map[string]map[string]stat `json:"runtime"`   // dialect → orm → benchmark → unit
 	Config    config                                           `json:"config"`
+	// Env is absent when the results directory has no env.txt.
+	Env *runEnv `json:"env,omitempty"`
 	// Missing lists the results that were absent when -partial let them be.
 	Missing []string `json:"missing"`
 }
@@ -396,6 +465,7 @@ func summarizePartial(results string, cfg map[string]any, partial bool) (summary
 	}
 	s := summary{
 		Machine:   probeMachine(),
+		Env:       readEnv(results),
 		Build:     map[string]map[string]map[string]stat{},
 		Reference: map[string]map[string]stat{},
 		Runtime:   map[string]map[string]map[string]map[string]stat{},
@@ -408,7 +478,7 @@ func summarizePartial(results string, cfg map[string]any, partial bool) (summary
 		return s, err
 	}
 	raw := filepath.Join(results, "raw")
-	sizes, haveBuild, err := summarizeBuild(&s, raw)
+	sizes, haveBuild, err := summarizeBuild(&s, raw, c.Services)
 	if err != nil {
 		return s, err
 	}
@@ -512,8 +582,9 @@ func readSteps(path string) ([]stepRecord, error) {
 }
 
 // summarizeBuild fills s.Build and s.Reference from raw/build-*.json and
-// returns the sizes found, in numeric order, and which builds exist.
-func summarizeBuild(s *summary, raw string) ([]int, map[buildKey]bool, error) {
+// returns the sizes found, in numeric order, and which builds exist. If
+// services is not 0, every build JSON must have been made with that many.
+func summarizeBuild(s *summary, raw string, services int) ([]int, map[buildKey]bool, error) {
 	files, err := filepath.Glob(filepath.Join(raw, "build-*.json"))
 	if err != nil {
 		return nil, nil, err
@@ -549,8 +620,11 @@ func summarizeBuild(s *summary, raw string) ([]int, map[buildKey]bool, error) {
 		if r["orm"] != m[1] || r["n"] != float64(n) || r["run"] != float64(run) {
 			return nil, nil, fmt.Errorf("%s: holds orm %v, n %v, run %v, which its name does not say", p, r["orm"], r["n"], r["run"])
 		}
+		if services != 0 && r["services"] != float64(services) {
+			return nil, nil, fmt.Errorf("%s: made with services %v, but config services is %d", p, r["services"], services)
+		}
 		vals := map[string]float64{}
-		for _, k := range append([]string{refMetric}, metricKeys()...) {
+		for _, k := range rawKeys() {
 			v, ok := r[k].(float64)
 			if !ok {
 				return nil, nil, fmt.Errorf("%s: no number for %s", p, k)
@@ -573,7 +647,12 @@ func summarizeBuild(s *summary, raw string) ([]int, map[buildKey]bool, error) {
 		}
 		s.Build[k.orm][n] = map[string]stat{}
 		for _, mt := range buildMetrics {
-			s.Build[k.orm][n][mt.Key] = newStat(column(ss, func(x sample) float64 { return x.vals[mt.Key] }), mt.LowerIsBetter)
+			s.Build[k.orm][n][mt.Key] = newStat(column(ss, func(x sample) float64 {
+				if mt.Derive != nil {
+					return mt.Derive(x.vals)
+				}
+				return x.vals[mt.Key]
+			}), mt.LowerIsBetter)
 		}
 		s.Reference[k.orm][n] = newStat(column(ss, func(x sample) float64 { return x.vals[refMetric] }), true)
 		if !slices.Contains(sizes, k.n) {
@@ -590,14 +669,6 @@ func column[T any](xs []T, f func(T) float64) []float64 {
 		out[i] = f(x)
 	}
 	return out
-}
-
-func metricKeys() []string {
-	keys := make([]string, len(buildMetrics))
-	for i, m := range buildMetrics {
-		keys[i] = m.Key
-	}
-	return keys
 }
 
 // summarizeRuntime fills s.Runtime from the round files raw/bench-<dialect>-<orm>-<i>.txt.
@@ -713,48 +784,48 @@ type configFlags []string
 func (c *configFlags) String() string     { return strings.Join(*c, " ") }
 func (c *configFlags) Set(v string) error { *c = append(*c, v); return nil }
 
-// loss is one metric in which another ORM's median beats velox2's. Section is
-// "build" (Key the size, Metric the build metric, Unit empty) or "runtime"
-// (Key the dialect, Metric the benchmark, Unit its unit). Ratio is Best over
-// Velox2.
+// loss is one metric in which one other ORM's median beats velox2's: Winner
+// is that ORM, and an ORM that also beats velox2 has a loss of its own. Section
+// is "build" (Key the size, Metric the build metric, Unit empty) or "runtime"
+// (Key the dialect, Metric the benchmark, Unit its unit). Best is Winner's
+// median, and Ratio is Best over Velox2.
 type loss struct {
 	Section, Key, Metric, Unit, Winner string
 	Velox2, Best, Ratio                float64
 }
 
+// beaters lists the ORMs other than velox2 whose median in stats beats
+// velox2's in the metric's direction, in the order of orms. A tie does not
+// beat. stats without velox2 has no beaters.
+func beaters(stats map[string]stat, lowerIsBetter bool) []string {
+	v2, ok := stats["velox2"]
+	if !ok {
+		return nil
+	}
+	var out []string
+	for _, o := range orms[1:] {
+		st, ok := stats[o.Name]
+		if !ok {
+			continue
+		}
+		if lowerIsBetter && st.Median < v2.Median || !lowerIsBetter && st.Median > v2.Median {
+			out = append(out, o.Name)
+		}
+	}
+	return out
+}
+
 // losses lists every build metric per size, and every runtime unit per dialect
 // and benchmark, where another ORM's median beats velox2's in the metric's
-// direction. There is no noise threshold. The result is sorted by Section,
-// Key, Metric and Unit.
+// direction: one loss for each ORM that beats velox2. There is no noise
+// threshold. The result is sorted by Section, Key, Metric and Unit, and, for
+// the same metric, in the order of orms.
 func losses(s summary) []loss {
 	var out []loss
 	consider := func(section, key, metric, unit string, lowerIsBetter bool, stats map[string]stat) {
-		v2, ok := stats["velox2"]
-		if !ok {
-			return
+		for _, w := range beaters(stats, lowerIsBetter) {
+			out = append(out, loss{section, key, metric, unit, w, stats["velox2"].Median, stats[w].Median, ratio(stats[w].Median, stats["velox2"].Median)})
 		}
-		var best *stat
-		var winner string
-		for _, o := range orms[1:] {
-			st, ok := stats[o.Name]
-			if !ok {
-				continue
-			}
-			beats := st.Median < v2.Median
-			if !lowerIsBetter {
-				beats = st.Median > v2.Median
-			}
-			if !beats {
-				continue
-			}
-			if best == nil || (lowerIsBetter && st.Median < best.Median) || (!lowerIsBetter && st.Median > best.Median) {
-				best, winner = &st, o.Name
-			}
-		}
-		if best == nil {
-			return
-		}
-		out = append(out, loss{section, key, metric, unit, winner, v2.Median, best.Median, ratio(best.Median, v2.Median)})
 	}
 	for n := range s.Build["velox2"] {
 		for _, m := range buildMetrics {
@@ -780,7 +851,7 @@ func losses(s summary) []loss {
 			}
 		}
 	}
-	slices.SortFunc(out, func(a, b loss) int {
+	slices.SortStableFunc(out, func(a, b loss) int {
 		return cmp.Or(strings.Compare(a.Section, b.Section), compareKeys(a.Key, b.Key),
 			strings.Compare(a.Metric, b.Metric), strings.Compare(a.Unit, b.Unit))
 	})

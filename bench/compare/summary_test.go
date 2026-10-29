@@ -5,6 +5,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -70,9 +71,16 @@ func TestSummarizeFixture(t *testing.T) {
 	if got := s.Build["ent"]["100"]["cold_cpu_s"]; got.Median != 10 || got.Worst != 11.25 || len(got.Runs) != 2 {
 		t.Errorf("ent cold_cpu_s %+v, want median 10, worst 11.25, 2 runs", got)
 	}
-	// Higher is better: the worst of rebuild_cached is the minimum.
-	if got := s.Build["oldvelox"]["100"]["rebuild_cached"]; got.Median != 90 || got.Worst != 90 {
-		t.Errorf("oldvelox rebuild_cached %+v", got)
+	// rebuild_cached counts packages, not a faster rebuild: it is not a metric,
+	// and the share that reran, rerun ÷ (rerun + cached), replaces it.
+	if got := s.Build["oldvelox"]["100"]["rebuild_rerun_share"]; math.Abs(got.Median-40.0/130) > 1e-9 || math.Abs(got.Worst-40.0/130) > 1e-9 {
+		t.Errorf("oldvelox rebuild_rerun_share %+v, want 40/130", got)
+	}
+	if got := s.Build["oldvelox"]["100"]["rebuild_rerun"]; got.Median != 40 {
+		t.Errorf("oldvelox rebuild_rerun %+v, want 40", got)
+	}
+	if _, ok := s.Build["oldvelox"]["100"]["rebuild_cached"]; ok {
+		t.Error("rebuild_cached is a metric")
 	}
 	for _, k := range []string{"ref_cpu_s", "orm", "n", "services", "run", "ref_cpu_before_s"} {
 		if _, ok := s.Build["ent"]["100"][k]; ok {
@@ -151,6 +159,35 @@ func TestSummarizeErrors(t *testing.T) {
 		_, err := summarize(dir, map[string]any{})
 		if err == nil || !strings.Contains(err.Error(), "cold_cpu_s") {
 			t.Errorf("got %v, want an error naming cold_cpu_s", err)
+		}
+	})
+	t.Run("an input of a derived metric missing", func(t *testing.T) {
+		dir := copyFixture(t)
+		p := filepath.Join(dir, "raw", "build-ent-n100-r1.json")
+		b, _ := os.ReadFile(p)
+		var m map[string]any
+		_ = json.Unmarshal(b, &m)
+		delete(m, "rebuild_cached")
+		b, _ = json.Marshal(m)
+		if err := os.WriteFile(p, b, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		_, err := summarize(dir, map[string]any{})
+		if err == nil || !strings.Contains(err.Error(), "rebuild_cached") {
+			t.Errorf("got %v, want an error naming rebuild_cached", err)
+		}
+	})
+	t.Run("services differ from the config", func(t *testing.T) {
+		// The fixture was made with 2 services.
+		_, err := summarize(copyFixture(t), map[string]any{"services": 20})
+		if err == nil || !strings.Contains(err.Error(), "services") || !strings.Contains(err.Error(), "build-") {
+			t.Errorf("got %v, want an error about services that names a build file", err)
+		}
+		if _, err := summarize(copyFixture(t), map[string]any{"services": 2}); err != nil {
+			t.Errorf("matching services: %v", err)
+		}
+		if _, err := summarize(copyFixture(t), map[string]any{}); err != nil {
+			t.Errorf("services left out of the config: %v", err)
 		}
 	})
 	t.Run("no results", func(t *testing.T) {
@@ -254,6 +291,42 @@ func TestSummarizeCommitFile(t *testing.T) {
 	}
 }
 
+func TestSummarizeEnv(t *testing.T) {
+	fixtureSummary(t)
+	cfg := map[string]any{"sizes": "100"}
+	dir := copyFixture(t)
+	s, err := summarize(dir, cfg)
+	if err != nil || s.Env != nil {
+		t.Fatalf("no env.txt: got env %+v, %v; want nothing recorded", s.Env, err)
+	}
+	if b, _ := json.Marshal(s); strings.Contains(string(b), `"env"`) {
+		t.Errorf("no env.txt, but the summary has an env: %s", b)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "env.txt"), []byte("GOFLAGS=-p=2 -mod=mod\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if s, err = summarize(dir, cfg); err != nil || s.Env == nil || s.Env.GoFlags != "-p=2 -mod=mod" || s.Env.NumCPU != runtime.NumCPU() {
+		t.Errorf("env.txt: got %+v, %v; want GOFLAGS and runtime.NumCPU()", s.Env, err)
+	}
+
+	// An empty GOFLAGS was recorded: that is a fact, not an absence.
+	if err := os.WriteFile(filepath.Join(dir, "env.txt"), []byte("GOFLAGS=\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if s, err = summarize(dir, cfg); err != nil || s.Env == nil || s.Env.GoFlags != "" {
+		t.Errorf("empty GOFLAGS: got %+v, %v", s.Env, err)
+	}
+
+	// A file without a GOFLAGS line records nothing.
+	if err := os.WriteFile(filepath.Join(dir, "env.txt"), []byte("OTHER=1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if s, err = summarize(dir, cfg); err != nil || s.Env != nil {
+		t.Errorf("no GOFLAGS line: got %+v, %v", s.Env, err)
+	}
+}
+
 func TestParseConfig(t *testing.T) {
 	got, err := parseConfig([]string{"runs=3", "sizes=100,300", "benchtime=1s"})
 	if err != nil {
@@ -310,12 +383,12 @@ func TestLosses(t *testing.T) {
 		t.Errorf("got %+v", l)
 	}
 
-	// Higher is better: ent caching more of the rebuild is a loss.
-	e := s.Build["ent"]["100"]
-	e["rebuild_cached"] = newStat([]float64{120}, false)
+	// ent rerunning a smaller share of the rebuild is a loss; more packages
+	// cached (rebuild_cached) is not a metric, so it is none.
+	s.Build["ent"]["100"]["rebuild_rerun_share"] = newStat([]float64{0.1}, true)
 	got = losses(s)
-	if len(got) != 2 || got[1].Metric != "rebuild_cached" || got[1].Winner != "ent" || got[1].Ratio != 1.2 {
-		t.Errorf("rebuild_cached case: got %+v", got)
+	if len(got) != 2 || got[1].Metric != "rebuild_rerun_share" || got[1].Winner != "ent" || math.Abs(got[1].Ratio-0.6) > 1e-9 {
+		t.Errorf("rebuild_rerun_share case: got %+v", got)
 	}
 
 	// A runtime loss: sec/op, B/op and allocs/op are lower-is-better.
@@ -342,6 +415,54 @@ func TestLosses(t *testing.T) {
 		if l.Metric == "cold_cpu_s" {
 			t.Errorf("a tie is a loss: %+v", l)
 		}
+	}
+}
+
+// TestLossesPerCompetitor checks that every ORM that beats velox2 has its own
+// loss, in the order of orms, so that a reader never learns of only the best.
+func TestLossesPerCompetitor(t *testing.T) {
+	s := fixtureSummary(t)
+	s.Build["oldvelox"]["100"]["cold_cpu_s"] = newStat([]float64{11}, true) // velox2 12, ent 10
+	var got []loss
+	for _, l := range losses(s) {
+		if l.Metric == "cold_cpu_s" {
+			got = append(got, l)
+		}
+	}
+	if len(got) != 2 || got[0].Winner != "oldvelox" || got[0].Best != 11 || got[1].Winner != "ent" || got[1].Best != 10 {
+		t.Fatalf("got %+v, want a loss to old velox (11) and one to ent (10)", got)
+	}
+	if math.Abs(got[0].Ratio-11.0/12) > 1e-9 || math.Abs(got[1].Ratio-10.0/12) > 1e-9 {
+		t.Errorf("ratios %v and %v", got[0].Ratio, got[1].Ratio)
+	}
+
+	// A runtime unit too, and only the ORM that beats velox2 has a loss.
+	s.Runtime["sqlite"]["oldvelox"]["Count"]["sec/op"] = newStat([]float64{1e-9}, true)
+	s.Runtime["sqlite"]["ent"]["Count"]["sec/op"] = newStat([]float64{1e-9}, true)
+	s.Runtime["sqlite"]["velox2"]["Count"]["sec/op"] = newStat([]float64{1e-6}, true)
+	var count []string
+	for _, l := range losses(s) {
+		if l.Section == "runtime" && l.Key == "sqlite" && l.Metric == "Count" && l.Unit == "sec/op" {
+			count = append(count, l.Winner)
+		}
+	}
+	if !slices.Equal(count, []string{"oldvelox", "ent"}) {
+		t.Errorf("Count sec/op losses to %v, want old velox and ent", count)
+	}
+}
+
+func TestBeaters(t *testing.T) {
+	st := func(v float64) stat { return newStat([]float64{v}, true) }
+	stats := map[string]stat{"velox2": st(5), "oldvelox": st(5), "ent": st(7)}
+	if got := beaters(stats, true); len(got) != 0 {
+		t.Errorf("lower is better: a tie and a worse ORM beat velox2: %v", got)
+	}
+	// The same numbers read the other way: ent is higher, and higher is better.
+	if got := beaters(stats, false); !slices.Equal(got, []string{"ent"}) {
+		t.Errorf("higher is better: got %v, want ent", got)
+	}
+	if got := beaters(map[string]stat{"ent": st(1)}, true); got != nil {
+		t.Errorf("without velox2: got %v", got)
 	}
 }
 

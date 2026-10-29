@@ -74,9 +74,9 @@ func writeReport(w io.Writer, s summary) error {
 
 	b.WriteString("# velox2 performance comparison: tables\n\n")
 	b.WriteString("How to read the tables: a cell is `median (worst)` of the runs, where worst is the largest run, ")
-	b.WriteString("or the smallest for `rebuild_cached`, the one metric where higher is better. ")
+	b.WriteString("or the smallest for a metric where higher is better (the tables say which). ")
 	b.WriteString("The ratio columns are the other ORM ÷ velox2, from the medians: for a lower-is-better metric, a ratio above 1 means velox2 is better; ")
-	b.WriteString("for `rebuild_cached`, a ratio below 1 does.\n\n")
+	b.WriteString("for a higher-is-better one, a ratio below 1 does.\n\n")
 	if len(s.Missing) > 0 {
 		b.WriteString("## Incomplete results\n\n")
 		b.WriteString("These results were not in the results directory when the summary was made, so the medians below may rest on fewer runs than planned, and the losses may be incomplete:\n\n")
@@ -95,6 +95,9 @@ func writeReport(w io.Writer, s summary) error {
 			dir = "higher is better"
 		}
 		fmt.Fprintf(&b, "### %s\n\n%s.\n\n", m.Key, dir)
+		if m.Doc != "" {
+			fmt.Fprintf(&b, "%s\n\n", m.Doc)
+		}
 		writeTableHead(&b, "size")
 		for _, n := range sizes {
 			k := strconv.Itoa(n)
@@ -103,7 +106,8 @@ func writeReport(w io.Writer, s summary) error {
 		}
 		b.WriteString("\n")
 	}
-	if late := timedOutBuilds(s.Steps); len(late) > 0 {
+	last := lastSteps(s.Steps)
+	if late := timedOutBuilds(last); len(late) > 0 {
 		fmt.Fprintf(&b, "**Timed-out load gate.** These builds started after their load gate timed out, so their numbers in every table above were taken under load: %s.\n\n", strings.Join(late, "; "))
 	}
 
@@ -113,13 +117,21 @@ func writeReport(w io.Writer, s summary) error {
 		for _, u := range runtimeUnits {
 			fmt.Fprintf(&b, "### %s (%s)\n\nLower is better.\n\n", u, d)
 			writeTableHead(&b, "benchmark")
+			noted := false
 			for _, name := range names {
 				get := func(orm string) (stat, bool) { st, ok := s.Runtime[d][orm][name][u]; return st, ok }
-				writeRow(&b, name, get)
+				label := name
+				if name == insertBulk {
+					label, noted = name+" ¹", true
+				}
+				writeRow(&b, label, get)
 			}
 			b.WriteString("\n")
+			if noted {
+				b.WriteString(insertBulkNote + "\n\n")
+			}
 		}
-		if late := timedOutRounds(s.Steps, d); len(late) > 0 {
+		if late := timedOutRounds(last, d); len(late) > 0 {
 			fmt.Fprintf(&b, "**Timed-out load gate.** These %s benchmark rounds started after their load gate timed out, so their samples in the tables above were taken under load: %s.\n\n", d, strings.Join(late, "; "))
 		}
 	}
@@ -157,6 +169,16 @@ func writeReport(w io.Writer, s summary) error {
 	return err
 }
 
+// insertBulk is the benchmark that does not do the same work in every ORM.
+const insertBulk = "InsertBulk100"
+
+// insertBulkNote is the footnote under every runtime table that has the
+// InsertBulk100 row.
+const insertBulkNote = "¹ InsertBulk100 is not the same work in every ORM: velox2's `InsertAll` reads no keys back, " +
+	"while ent and old velox send `INSERT ... RETURNING id`, scan the 100 ids and return 100 entities. " +
+	"The difference is by design and cannot be removed: ent has no bulk insert without the read-back. " +
+	"A velox2 advantage in this row is partly the advantage of doing less."
+
 var (
 	buildStepRE = regexp.MustCompile(`^build-([a-z0-9]+)-n(\d+)-r(\d+)$`)
 	gateStepRE  = regexp.MustCompile(`^gate-([a-z0-9]+)-(\d+)$`)
@@ -165,6 +187,34 @@ var (
 // gateNote says how long a timed-out gate waited and the load it gave up at.
 func gateNote(r stepRecord) string {
 	return fmt.Sprintf("gate waited %s s, load %s before", fmtNum(r.Gate.WaitedS), fmtNum(r.LoadBefore.One))
+}
+
+// lastSteps keeps the last record of each step name, in the order of those
+// records. After a resume the log holds the failed or interrupted attempt of
+// a step and the attempt that replaced it; only the last one counts.
+func lastSteps(steps []stepRecord) []stepRecord {
+	at := map[string]int{}
+	for i, r := range steps {
+		at[r.Name] = i
+	}
+	var out []stepRecord
+	for i, r := range steps {
+		if at[r.Name] == i {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// failedSteps names the steps whose last record has a non-zero exit.
+func failedSteps(steps []stepRecord) []string {
+	var out []string
+	for _, r := range lastSteps(steps) {
+		if r.Exit != 0 {
+			out = append(out, fmt.Sprintf("%s (exit %d)", r.Name, r.Exit))
+		}
+	}
+	return out
 }
 
 // timedOutBuilds names the builds whose load gate timed out.
@@ -234,6 +284,9 @@ func writeMachine(b *strings.Builder, s summary, sizes []int) {
 	b.WriteString("## Machine and load\n\n")
 	fmt.Fprintf(b, "- CPU: %s (%d CPUs)\n- Memory: %s GB\n- OS: %s\n- Go: %s\n",
 		or(m.CPU), m.CPUs, fmtNum(m.MemoryGB), or(m.OS), or(m.Go))
+	if e := s.Env; e != nil {
+		fmt.Fprintf(b, "- GOFLAGS of the run: `%s` (go env GOFLAGS when run.sh started); CPUs counted by Go: %d\n", e.GoFlags, e.NumCPU)
+	}
 	fmt.Fprintf(b, "- Runs: %d, services: %d, benchmark rounds: %d, benchtime: %s\n\n",
 		s.Config.Runs, s.Config.Services, s.Config.BenchCount, or(s.Config.Benchtime))
 
@@ -262,7 +315,7 @@ func writeMachine(b *strings.Builder, s summary, sizes []int) {
 	}
 
 	b.WriteString("\n### Steps\n\n")
-	b.WriteString("Load is the 1m, 5m and 15m load average. A step that waited at its load gate shows how long, and whether the wait timed out: it then ran under the load shown.\n\n")
+	b.WriteString("Load is the 1m, 5m and 15m load average. A step that waited at its load gate shows how long, and whether the wait timed out: it then ran under the load shown. After a resume the table lists every attempt of a step; the notes about timed-out gates and failed steps use only the last attempt.\n\n")
 	b.WriteString("| step | start | wall (s) | exit | load before | load after | gate waited (s) | gate |\n|---|---|---|---|---|---|---|---|\n")
 	for _, r := range s.Steps {
 		waited, gate := "-", "-"
@@ -277,6 +330,9 @@ func writeMachine(b *strings.Builder, s summary, sizes []int) {
 			fmtLoad(r.LoadBefore), fmtLoad(r.LoadAfter), waited, gate)
 	}
 	b.WriteString("\n")
+	if failed := failedSteps(s.Steps); len(failed) > 0 {
+		fmt.Fprintf(b, "**Failed steps.** The last record of these steps has a non-zero exit: %s.\n\n", strings.Join(failed, "; "))
+	}
 }
 
 func fmtLoad(l load) string {

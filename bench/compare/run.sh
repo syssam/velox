@@ -11,7 +11,8 @@
 #
 # The knobs, each optional (see the defaults below): COMPARE_SIZES, COMPARE_RUNS,
 # COMPARE_SERVICES, COMPARE_BENCH_COUNT, COMPARE_BENCHTIME, COMPARE_GATE,
-# COMPARE_GATE_WAIT, COMPARE_BENCH_GATE_WAIT, COMPARE_RESULTS.
+# COMPARE_GATE_WAIT, COMPARE_BENCH_GATE_WAIT, COMPARE_BUILD_TIMEOUT,
+# COMPARE_BENCH_TIMEOUT, COMPARE_RESULTS.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
@@ -22,6 +23,7 @@ fi
 : "${COMPARE_SIZES:=100 300}" "${COMPARE_RUNS:=3}" "${COMPARE_SERVICES:=20}"
 : "${COMPARE_BENCH_COUNT:=6}" "${COMPARE_BENCHTIME:=1s}" "${COMPARE_GATE:=12}"
 : "${COMPARE_GATE_WAIT:=60m}" "${COMPARE_BENCH_GATE_WAIT:=10m}"
+: "${COMPARE_BUILD_TIMEOUT:=180m}" "${COMPARE_BENCH_TIMEOUT:=60m}"
 
 case "$(go env GOVERSION)" in
   go1.27*) ;;
@@ -30,10 +32,15 @@ esac
 command -v docker >/dev/null || { echo "run.sh needs docker" >&2; exit 1; }
 
 compose=(docker compose -f docker-compose.ci.yml -p velox2-ci)
-if [ -n "$("${compose[@]}" ps -q)" ]; then
-  echo "velox2-ci is running: run.sh starts and stops its own" >&2
-  exit 1
-fi
+# Checked at the start and again right before `up`, hours later: a stack that
+# someone started in between would be joined, and then torn down.
+require_no_stack() {
+  if [ -n "$("${compose[@]}" ps -q)" ]; then
+    echo "velox2-ci is running: run.sh starts and stops its own" >&2
+    exit 1
+  fi
+}
+require_no_stack
 
 results=${COMPARE_RESULTS:-bench/compare/results/$(date -u +%Y%m%dT%H%M%SZ)}
 echo "results: $results"
@@ -53,6 +60,11 @@ if [ ! -s "$results/commit.txt" ]; then
   commit=$(git rev-parse --short HEAD)
   [ -z "$(git status --porcelain --untracked-files=no)" ] || commit=$commit-dirty
   echo "$commit" >"$results/commit.txt"
+fi
+# The GOFLAGS the run was started with (-p, for one), which summarize records.
+# Kept from the first start of a resumed run, like the commit.
+if [ ! -s "$results/env.txt" ]; then
+  echo "GOFLAGS=$(go env GOFLAGS)" >"$results/env.txt"
 fi
 
 orms=(velox2 oldvelox ent)
@@ -82,7 +94,7 @@ for ((r = 1; r <= COMPARE_RUNS; r++)); do
       name=build-$orm-n$n-r$r
       out=$raw/$name.json
       if [ -e "$out" ]; then echo "skip $name"; continue; fi
-      "${step[@]}" -name "$name" -gate "$COMPARE_GATE" -gate-wait "$COMPARE_GATE_WAIT" -timeout 180m -- \
+      "${step[@]}" -name "$name" -gate "$COMPARE_GATE" -gate-wait "$COMPARE_GATE_WAIT" -timeout "$COMPARE_BUILD_TIMEOUT" -- \
         "$tools/compare" build -orm "$orm" -n "$n" -s "$COMPARE_SERVICES" -run "$r" -tools "$tools" -raw "$raw" -out "$out"
     done
   done
@@ -123,7 +135,7 @@ bench() {
     for orm in $(rotated $((i - 1))); do
       out=$raw/bench-$d-$orm-$i.txt
       if [ -e "$out" ]; then echo "skip bench-$d-$orm-$i"; continue; fi
-      "${step[@]}" -name "bench-$d-$orm-$i" -timeout 60m -- env COMPARE_DIALECT="$d" sh -c \
+      "${step[@]}" -name "bench-$d-$orm-$i" -timeout "$COMPARE_BENCH_TIMEOUT" -- env COMPARE_DIALECT="$d" sh -c \
         '"$1" -test.run "^\$" -test.bench . -test.benchmem -test.count 1 -test.benchtime "$3" > "$2.tmp" && mv "$2.tmp" "$2"' \
         sh "$work/rt-$orm.test" "$out" "$COMPARE_BENCHTIME"
     done
@@ -139,6 +151,7 @@ if rounds_done postgres; then
     for orm in $(rotated $((i - 1))); do echo "skip bench-postgres-$orm-$i"; done
   done
 else
+  require_no_stack
   started=1
   "${compose[@]}" up -d --wait postgres
   # As ci-local.sh exports its DSN: in the environment only, never in an argv or the log.

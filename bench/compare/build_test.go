@@ -126,8 +126,10 @@ func TestColdMustBeCold(t *testing.T) {
 }
 
 // TestEditMustRebuild checks that a schema edit that changes no generated
-// file is an error (Review Focus 2). velox2's schema package is not compiled
-// by the build, so the comment changes nothing that is.
+// file is an error (Review Focus 2). The comment edit leaves velox-gen's output
+// byte-identical, so no action under the generated package reruns. The build
+// does compile the schema package (go build ./... compiles every package of
+// the app), but reranUnder looks only under the generated package.
 func TestEditMustRebuild(t *testing.T) {
 	if testing.Short() {
 		t.Skip("a code generation and builds")
