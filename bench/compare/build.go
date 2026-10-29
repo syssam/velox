@@ -20,13 +20,14 @@ const appPrefix = "example.com/tmp"
 
 // action is the part of a -debug-actiongraph action that the build
 // measurement reads. A build action with a Cmd ran the compiler; one without
-// was served from the cache. The same holds for link.
+// was served from the cache. The same holds for link. CmdUser and CmdSys are
+// the user and system CPU time of the commands it ran (under -toolexec, the
+// wrapper's, which include the tool's).
 type action struct {
-	Mode      string
-	Package   string
-	Cmd       []string
-	TimeStart time.Time
-	TimeDone  time.Time
+	Mode            string
+	Package         string
+	Cmd             []string
+	CmdUser, CmdSys time.Duration
 }
 
 // readActions reads the action graph that go build -debug-actiongraph wrote.
@@ -48,22 +49,24 @@ func under(pkg, prefix string) bool {
 }
 
 // actionCounts is what an action graph says a build did: its build (compile)
-// and link actions and how many of them reran, and the seconds that the build
-// actions of the app (AppS) and of everything else (DepS) took.
+// and link actions and how many of them reran, and the CPU seconds of the
+// build actions of the app (AppS) and of everything else (DepS).
 type actionCounts struct {
 	Build, BuildRerun, Link, LinkRerun int
 	AppS, DepS                         float64
 }
 
 // countActions counts the build and link actions of the action graph in path,
-// and the reruns among them. AppS and DepS sum TimeDone - TimeStart over the
-// build actions of the packages under appPrefix and over the others.
+// and the reruns among them. AppS and DepS sum CmdUser + CmdSys over the
+// build actions of the packages under appPrefix and over the others; a cached
+// action ran no command and adds nothing.
 func countActions(path, appPrefix string) (actionCounts, error) {
 	as, err := readActions(path)
 	if err != nil {
 		return actionCounts{}, err
 	}
 	var c actionCounts
+	var app, dep time.Duration
 	for _, a := range as {
 		switch a.Mode {
 		case "build":
@@ -71,11 +74,10 @@ func countActions(path, appPrefix string) (actionCounts, error) {
 			if len(a.Cmd) > 0 {
 				c.BuildRerun++
 			}
-			d := a.TimeDone.Sub(a.TimeStart).Seconds()
 			if under(a.Package, appPrefix) {
-				c.AppS += d
+				app += a.CmdUser + a.CmdSys
 			} else {
-				c.DepS += d
+				dep += a.CmdUser + a.CmdSys
 			}
 		case "link":
 			c.Link++
@@ -84,19 +86,20 @@ func countActions(path, appPrefix string) (actionCounts, error) {
 			}
 		}
 	}
+	c.AppS, c.DepS = app.Seconds(), dep.Seconds()
 	return c, nil
 }
 
 // reranUnder counts the build actions of the action graph in path that reran
-// for a package under prefix.
-func reranUnder(path, prefix string) (int, error) {
+// for a package under prefix but not under exclude (empty: nothing excluded).
+func reranUnder(path, prefix, exclude string) (int, error) {
 	as, err := readActions(path)
 	if err != nil {
 		return 0, err
 	}
 	n := 0
 	for _, a := range as {
-		if a.Mode == "build" && len(a.Cmd) > 0 && under(a.Package, prefix) {
+		if a.Mode == "build" && len(a.Cmd) > 0 && under(a.Package, prefix) && (exclude == "" || !under(a.Package, exclude)) {
 			n++
 		}
 	}
@@ -126,7 +129,7 @@ type buildReport struct {
 	GenLines     int     `json:"gen_lines"`
 	GenBytes     int     `json:"gen_bytes"`
 
-	// The cold build, with an empty GOCACHE, and the seconds of its build
+	// The cold build, with an empty GOCACHE, and the CPU seconds of its build
 	// actions of the app's packages and of the others (from the action graph).
 	ColdWallS      float64 `json:"cold_wall_s"`
 	ColdCPUS       float64 `json:"cold_cpu_s"`
@@ -159,7 +162,9 @@ type buildReport struct {
 var coldCache string
 
 // measureBuild measures c.ORM's build cost in a fresh temporary directory,
-// which it removes afterwards. It fails when the cold build took any build
+// which it removes afterwards. The code generation is timed with the ordinary
+// GOCACHE warm for that ORM's dependencies: a discarded code generation in a
+// throwaway app comes first. It fails when the cold build took any build
 // action from the cache, or when no action of the generated package reran
 // after the schema edit.
 func measureBuild(c buildConfig) (r buildReport, err error) {
@@ -215,7 +220,21 @@ func measureBuild(c buildConfig) (r buildReport, err error) {
 	if r.RefCPUBeforeS, _, err = buildcost.BuildReference(ref, filepath.Join(dir, "refcache-before"), wrapper); err != nil {
 		return r, err
 	}
-	// 3. The code generation, and 4. its size.
+	// A discarded code generation in a throwaway app with the same schemas,
+	// so that the ordinary GOCACHE is warm for this ORM's dependencies (ent's
+	// go list -export, old velox's loader). The measured app is new, so old
+	// velox's .velox cache in it is not shared.
+	warm := filepath.Join(dir, "warm")
+	if err := writeApp(warm, o.Schema(c.N)); err != nil {
+		return r, err
+	}
+	if _, _, err := codegen(warm, o, c.Tools); err != nil {
+		return r, fmt.Errorf("warm-up: %w", err)
+	}
+	if err := os.RemoveAll(warm); err != nil {
+		return r, err
+	}
+	// 3. The code generation, timed, and 4. its size.
 	if r.CodegenCPUS, r.CodegenWallS, err = codegen(app, o, c.Tools); err != nil {
 		return r, err
 	}
@@ -264,8 +283,9 @@ func measureBuild(c buildConfig) (r buildReport, err error) {
 		return r, err
 	}
 	r.RebuildRerun, r.RebuildCached, r.RebuildRelinks = edit.BuildRerun, edit.Build-edit.BuildRerun, edit.LinkRerun
+	// ent's schema package is inside its generated directory, and is not generated.
 	genPkg := appPrefix + "/" + filepath.ToSlash(o.GenDir)
-	if n, err := reranUnder(graph("edit"), genPkg); err != nil {
+	if n, err := reranUnder(graph("edit"), genPkg, appPrefix+"/"+filepath.ToSlash(o.SchemaDir)); err != nil {
 		return r, err
 	} else if n == 0 {
 		return r, fmt.Errorf("%s: no action of the generated package reran after the schema edit (%s)", o.Name, genPkg)

@@ -3,28 +3,47 @@
 		"ID": 0,
 		"Mode": "link",
 		"Package": "example.com/tmp/s0",
-		"Deps": [1],
+		"Deps": [
+			1
+		],
 		"TimeStart": "2026-10-29T10:00:02Z",
 		"TimeDone": "2026-10-29T10:00:03Z",
-		"Cmd": ["link -o s0"]
+		"Cmd": [
+			"link -o s0"
+		],
+		"CmdUser": 600000000,
+		"CmdSys": 100000000
 	},
 	{
 		"ID": 1,
 		"Mode": "build",
 		"Package": "example.com/tmp/s0",
-		"Deps": [2, 3],
+		"Deps": [
+			2,
+			3
+		],
 		"TimeStart": "2026-10-29T10:00:01.5Z",
 		"TimeDone": "2026-10-29T10:00:01.75Z",
-		"Cmd": ["compile -p main"]
+		"Cmd": [
+			"compile -p main"
+		],
+		"CmdUser": 200000000,
+		"CmdSys": 50000000
 	},
 	{
 		"ID": 2,
 		"Mode": "build",
 		"Package": "example.com/tmp/gen",
-		"Deps": [3],
+		"Deps": [
+			3
+		],
 		"TimeStart": "2026-10-29T10:00:01Z",
 		"TimeDone": "2026-10-29T10:00:01.5Z",
-		"Cmd": ["compile -p example.com/tmp/gen"]
+		"Cmd": [
+			"compile -p example.com/tmp/gen"
+		],
+		"CmdUser": 375000000,
+		"CmdSys": 125000000
 	},
 	{
 		"ID": 3,
@@ -32,6 +51,10 @@
 		"Package": "context",
 		"TimeStart": "2026-10-29T10:00:00Z",
 		"TimeDone": "2026-10-29T10:00:01Z",
-		"Cmd": ["compile -p context"]
+		"Cmd": [
+			"compile -p context"
+		],
+		"CmdUser": 750000000,
+		"CmdSys": 250000000
 	}
 ]

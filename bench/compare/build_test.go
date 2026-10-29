@@ -17,10 +17,12 @@ func TestCountActions(t *testing.T) {
 		file string
 		want actionCounts
 	}{
-		// cold.json: app actions of 0.25s and 0.5s, a dependency of 1s, all run.
+		// cold.json: all ran; the app's actions took 0.25 and 0.5 CPU seconds,
+		// the dependency 1.
 		{"cold.json", actionCounts{Build: 3, BuildRerun: 3, Link: 1, LinkRerun: 1, AppS: 0.75, DepS: 1}},
-		// edit.json: only the generated package reran; the other two were cached.
-		{"edit.json", actionCounts{Build: 3, BuildRerun: 1, Link: 1, LinkRerun: 1, AppS: 0.625, DepS: 0.25}},
+		// edit.json: only the generated package reran, 0.375 CPU seconds; the
+		// cached actions add none of their wall time.
+		{"edit.json", actionCounts{Build: 3, BuildRerun: 1, Link: 1, LinkRerun: 1, AppS: 0.375, DepS: 0}},
 	} {
 		got, err := countActions(filepath.Join("testdata", "actiongraph", tc.file), "example.com/tmp")
 		if err != nil {
@@ -30,17 +32,34 @@ func TestCountActions(t *testing.T) {
 			t.Errorf("%s: %+v, want %+v", tc.file, got, tc.want)
 		}
 	}
-	reran, err := reranUnder(filepath.Join("testdata", "actiongraph", "edit.json"), "example.com/tmp/gen")
-	if err != nil || reran != 1 {
-		t.Errorf("reranUnder(edit.json, gen) = %d, %v; want 1", reran, err)
-	}
-	// example.com/tmp/s0 is not under example.com/tmp/s.
-	if reran, err := reranUnder(filepath.Join("testdata", "actiongraph", "cold.json"), "example.com/tmp/s"); err != nil || reran != 0 {
-		t.Errorf("reranUnder(cold.json, s) = %d, %v; want 0", reran, err)
+	for _, tc := range []struct {
+		file, prefix, exclude string
+		want                  int
+	}{
+		{"edit.json", "example.com/tmp/gen", "", 1},
+		{"cold.json", "example.com/tmp", "", 2},
+		// The excluded package, as ent's schema under its generated directory.
+		{"cold.json", "example.com/tmp", "example.com/tmp/gen", 1},
+		// example.com/tmp/s0 is not under example.com/tmp/s.
+		{"cold.json", "example.com/tmp/s", "", 0},
+	} {
+		reran, err := reranUnder(filepath.Join("testdata", "actiongraph", tc.file), tc.prefix, tc.exclude)
+		if err != nil || reran != tc.want {
+			t.Errorf("reranUnder(%s, %q, %q) = %d, %v; want %d", tc.file, tc.prefix, tc.exclude, reran, err, tc.want)
+		}
 	}
 	if _, err := countActions(filepath.Join("testdata", "actiongraph", "missing.json"), "example.com/tmp"); err == nil {
 		t.Error("countActions of a missing file: no error")
 	}
+}
+
+// TestMain removes the generators that testTools built.
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if toolsDir != "" {
+		_ = os.RemoveAll(toolsDir)
+	}
+	os.Exit(code)
 }
 
 var (
@@ -50,7 +69,7 @@ var (
 )
 
 // testTools builds the three generators once, into a directory that the
-// tests of this package share. It is left behind in the temporary directory.
+// tests of this package share and TestMain removes.
 func testTools(t *testing.T) string {
 	t.Helper()
 	toolsOnce.Do(func() {
