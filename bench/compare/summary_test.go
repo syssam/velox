@@ -125,13 +125,6 @@ func TestSummarizeFixture(t *testing.T) {
 
 func TestSummarizeErrors(t *testing.T) {
 	fixtureSummary(t) // replaces the probes
-	copyFixture := func(t *testing.T) string {
-		dir := t.TempDir()
-		if err := os.CopyFS(dir, os.DirFS(filepath.Join("testdata", "summary"))); err != nil {
-			t.Fatal(err)
-		}
-		return dir
-	}
 	t.Run("size not in config", func(t *testing.T) {
 		_, err := summarize(copyFixture(t), map[string]any{"sizes": "300"})
 		if err == nil || !strings.Contains(err.Error(), "100") {
@@ -173,6 +166,94 @@ func TestSummarizeErrors(t *testing.T) {
 	})
 }
 
+// copyFixture copies testdata/summary into a temporary directory.
+func copyFixture(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.CopyFS(dir, os.DirFS(filepath.Join("testdata", "summary"))); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func TestSummarizeCompleteness(t *testing.T) {
+	fixtureSummary(t) // replaces the probes
+	cfg := map[string]any{"runs": 2, "bench_count": 2, "sizes": "100"}
+	dir := copyFixture(t)
+	for _, f := range []string{"build-ent-n100-r2.json", "bench-sqlite-ent-2.txt", "bench-postgres-velox2-1.txt", "bench-postgres-velox2-2.txt"} {
+		if err := os.Remove(filepath.Join(dir, "raw", f)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// One round file without one benchmark.
+	p := filepath.Join(dir, "raw", "bench-sqlite-oldvelox-1.txt")
+	b, _ := os.ReadFile(p)
+	var kept []string
+	for _, l := range strings.Split(string(b), "\n") {
+		if !strings.HasPrefix(l, "BenchmarkCount-") {
+			kept = append(kept, l)
+		}
+	}
+	if err := os.WriteFile(p, []byte(strings.Join(kept, "\n")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{
+		"build ent n=100 run 2",
+		"bench sqlite ent round 2",
+		"bench postgres velox2 round 1",
+		"bench postgres velox2 round 2",
+		"bench sqlite oldvelox round 1: Count sec/op",
+	}
+	_, err := summarize(dir, cfg)
+	if err == nil {
+		t.Fatal("incomplete results must be an error")
+	}
+	for _, w := range want {
+		if !strings.Contains(err.Error(), w+"\n") && !strings.HasSuffix(err.Error(), w) {
+			t.Errorf("the error does not name %q:\n%v", w, err)
+		}
+	}
+
+	s, err := summarizePartial(dir, cfg, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range want {
+		if !slices.Contains(s.Missing, w) {
+			t.Errorf("Missing lacks %q: %v", w, s.Missing)
+		}
+	}
+	if len(s.Build["ent"]["100"]["cold_cpu_s"].Runs) != 1 {
+		t.Error("the partial summary should hold the one run that exists")
+	}
+	if full := fixtureSummary(t); len(full.Missing) != 0 {
+		t.Errorf("the complete fixture has missing items: %v", full.Missing)
+	}
+	// The settings that config leaves out are the highest found.
+	if _, err := summarize(dir, nil); err == nil {
+		t.Error("derived runs and rounds must still find the missing items")
+	}
+}
+
+func TestSummarizeCommitFile(t *testing.T) {
+	fixtureSummary(t)
+	dir := copyFixture(t)
+	if err := os.WriteFile(filepath.Join(dir, "commit.txt"), []byte("deadbee\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s, err := summarize(dir, map[string]any{"sizes": "100"})
+	if err != nil || s.Versions["velox2"] != "deadbee" {
+		t.Errorf("got %q, %v; want deadbee from commit.txt", s.Versions["velox2"], err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "commit.txt"), []byte("\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if s, err = summarize(dir, nil); err != nil || s.Versions["velox2"] != "abc1234" {
+		t.Errorf("an empty commit.txt: got %q, %v; want the probe's abc1234", s.Versions["velox2"], err)
+	}
+}
+
 func TestParseConfig(t *testing.T) {
 	got, err := parseConfig([]string{"runs=3", "sizes=100,300", "benchtime=1s"})
 	if err != nil {
@@ -185,6 +266,9 @@ func TestParseConfig(t *testing.T) {
 	c, err = newConfig(map[string]any{"sizes": "300 100", "bench_count": 6.0})
 	if err != nil || !slices.Equal(c.Sizes, []int{100, 300}) || c.BenchCount != 6 {
 		t.Errorf("got %+v, %v", c, err)
+	}
+	if c, err := newConfig(map[string]any{"sizes": "100 100,300"}); err != nil || !slices.Equal(c.Sizes, []int{100, 300}) {
+		t.Errorf("duplicate sizes: got %+v, %v", c, err)
 	}
 	for _, bad := range []map[string]any{{"runs": "x"}, {"colour": "red"}, {"sizes": "10 x"}} {
 		if _, err := newConfig(bad); err == nil {

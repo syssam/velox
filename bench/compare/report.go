@@ -5,8 +5,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"os"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -18,7 +20,7 @@ var display = map[string]string{"velox2": "velox2", "oldvelox": "old velox", "en
 // versionOrder is the order of the versions table.
 var versionOrder = []string{"velox2", "oldvelox", "ent", "sqlite", "pgx", "x/tools"}
 
-// fmtNum prints v with four significant digits, or as a whole number.
+// fmtNum prints v with three significant digits; a whole number stays whole.
 func fmtNum(v float64) string {
 	switch {
 	case math.IsInf(v, 0) || math.IsNaN(v):
@@ -26,7 +28,17 @@ func fmtNum(v float64) string {
 	case v == math.Trunc(v) && math.Abs(v) < 1e15, math.Abs(v) >= 1000:
 		return strconv.FormatFloat(v, 'f', 0, 64)
 	}
-	return strconv.FormatFloat(v, 'g', 4, 64)
+	return strconv.FormatFloat(v, 'g', 3, 64)
+}
+
+// fmtPair prints a and b with as few significant digits as tell them apart
+// (at least three), so that two values that differ never read as equal.
+func fmtPair(a, b float64) (string, string) {
+	x, y := fmtNum(a), fmtNum(b)
+	for p := 4; x == y && a != b && p <= 17; p++ {
+		x, y = strconv.FormatFloat(a, 'g', p, 64), strconv.FormatFloat(b, 'g', p, 64)
+	}
+	return x, y
 }
 
 // cell is "median (worst)", or "-" for a measurement that was not made.
@@ -37,12 +49,12 @@ func cell(st stat, ok bool) string {
 	return fmt.Sprintf("%s (%s)", fmtNum(st.Median), fmtNum(st.Worst))
 }
 
-// ratioCell is the median of st over velox2's, to two decimals.
+// ratioCell is the median of st over velox2's, to three significant digits.
 func ratioCell(st stat, ok bool, v2 stat, v2ok bool) string {
 	if !ok || !v2ok || v2.Median == 0 && st.Median != 0 {
 		return "-"
 	}
-	return fmt.Sprintf("%.2f", ratio(st.Median, v2.Median))
+	return fmtNum(ratio(st.Median, v2.Median))
 }
 
 // esc keeps a text from breaking a Markdown table cell.
@@ -61,10 +73,21 @@ func writeReport(w io.Writer, s summary) error {
 	}
 
 	b.WriteString("# velox2 performance comparison: tables\n\n")
+	b.WriteString("How to read the tables: a cell is `median (worst)` of the runs, where worst is the largest run, ")
+	b.WriteString("or the smallest for `rebuild_cached`, the one metric where higher is better. ")
+	b.WriteString("The ratio columns are the other ORM ÷ velox2, from the medians: for a lower-is-better metric, a ratio above 1 means velox2 is better; ")
+	b.WriteString("for `rebuild_cached`, a ratio below 1 does.\n\n")
+	if len(s.Missing) > 0 {
+		b.WriteString("## Incomplete results\n\n")
+		b.WriteString("These results were not in the results directory when the summary was made, so the medians below may rest on fewer runs than planned, and the losses may be incomplete:\n\n")
+		for _, m := range s.Missing {
+			fmt.Fprintf(&b, "- %s\n", m)
+		}
+		b.WriteString("\n")
+	}
 	writeMachine(&b, s, sizes)
 
 	b.WriteString("## Build cost\n\n")
-	b.WriteString("Each cell is `median (worst)` over the runs; the ratios divide the medians. ")
 	b.WriteString("The `_x` metrics are CPU seconds over the reference build's CPU seconds.\n\n")
 	for _, m := range buildMetrics {
 		dir := "lower is better"
@@ -80,8 +103,11 @@ func writeReport(w io.Writer, s summary) error {
 		}
 		b.WriteString("\n")
 	}
+	if late := timedOutBuilds(s.Steps); len(late) > 0 {
+		fmt.Fprintf(&b, "**Timed-out load gate.** These builds started after their load gate timed out, so their numbers in every table above were taken under load: %s.\n\n", strings.Join(late, "; "))
+	}
 
-	for _, d := range slices.Sorted(mapKeys(s.Runtime)) {
+	for _, d := range slices.Sorted(maps.Keys(s.Runtime)) {
 		fmt.Fprintf(&b, "## Runtime: %s\n\n", d)
 		names := benchRows(s.Runtime[d])
 		for _, u := range runtimeUnits {
@@ -93,12 +119,18 @@ func writeReport(w io.Writer, s summary) error {
 			}
 			b.WriteString("\n")
 		}
+		if late := timedOutRounds(s.Steps, d); len(late) > 0 {
+			fmt.Fprintf(&b, "**Timed-out load gate.** These %s benchmark rounds started after their load gate timed out, so their samples in the tables above were taken under load: %s.\n\n", d, strings.Join(late, "; "))
+		}
 	}
 
 	b.WriteString("## Where velox2 loses\n\n")
 	b.WriteString("Every metric in which another ORM's median beats velox2's. There is no noise threshold: a difference of any size is listed.\n\n")
 	ls := losses(s)
-	if len(ls) == 0 {
+	switch {
+	case len(ls) == 0 && len(s.Missing) > 0:
+		b.WriteString("No loss among the results present, but the results are incomplete (see Incomplete results), so this does not show that velox2 is best.\n")
+	case len(ls) == 0:
 		b.WriteString("velox2 is best on every metric measured.\n")
 	}
 	for _, l := range ls {
@@ -113,28 +145,48 @@ func writeReport(w io.Writer, s summary) error {
 				}
 			}
 		}
+		best, v2 := fmtPair(l.Best, l.Velox2)
+		r := "n/a"
+		if !math.IsInf(l.Ratio, 0) {
+			r, _ = fmtPair(l.Ratio, 1)
+		}
 		fmt.Fprintf(&b, "- %s: %s %s vs velox2 %s (%s ÷ velox2 = %s, %s)\n",
-			where, display[l.Winner], fmtNum(l.Best), fmtNum(l.Velox2), display[l.Winner], fmtRatio(l.Ratio), dir)
+			where, display[l.Winner], best, v2, display[l.Winner], r, dir)
 	}
 	_, err := io.WriteString(w, b.String())
 	return err
 }
 
-func fmtRatio(r float64) string {
-	if math.IsInf(r, 0) {
-		return "n/a"
-	}
-	return fmt.Sprintf("%.2f", r)
+var (
+	buildStepRE = regexp.MustCompile(`^build-([a-z0-9]+)-n(\d+)-r(\d+)$`)
+	gateStepRE  = regexp.MustCompile(`^gate-([a-z0-9]+)-(\d+)$`)
+)
+
+// gateNote says how long a timed-out gate waited and the load it gave up at.
+func gateNote(r stepRecord) string {
+	return fmt.Sprintf("gate waited %s s, load %s before", fmtNum(r.Gate.WaitedS), fmtNum(r.LoadBefore.One))
 }
 
-func mapKeys[K comparable, V any](m map[K]V) func(yield func(K) bool) {
-	return func(yield func(K) bool) {
-		for k := range m {
-			if !yield(k) {
-				return
-			}
+// timedOutBuilds names the builds whose load gate timed out.
+func timedOutBuilds(steps []stepRecord) []string {
+	var out []string
+	for _, r := range steps {
+		if m := buildStepRE.FindStringSubmatch(r.Name); m != nil && r.Gate != nil && r.Gate.TimedOut {
+			out = append(out, fmt.Sprintf("%s n=%s run %s (%s)", display[m[1]], m[2], m[3], gateNote(r)))
 		}
 	}
+	return out
+}
+
+// timedOutRounds names the rounds of dialect d whose load gate timed out.
+func timedOutRounds(steps []stepRecord, d string) []string {
+	var out []string
+	for _, r := range steps {
+		if m := gateStepRE.FindStringSubmatch(r.Name); m != nil && m[1] == d && r.Gate != nil && r.Gate.TimedOut {
+			out = append(out, fmt.Sprintf("round %s (%s)", m[2], gateNote(r)))
+		}
+	}
+	return out
 }
 
 // benchRows are the benchmarks of any ORM in the dialect's results: the known
@@ -153,7 +205,7 @@ func benchRows(byORM map[string]map[string]map[string]stat) []string {
 			delete(seen, name)
 		}
 	}
-	return append(rows, slices.Sorted(mapKeys(seen))...)
+	return append(rows, slices.Sorted(maps.Keys(seen))...)
 }
 
 func writeTableHead(b *strings.Builder, first string) {
@@ -187,7 +239,7 @@ func writeMachine(b *strings.Builder, s summary, sizes []int) {
 
 	b.WriteString("### Versions\n\n| component | version |\n|---|---|\n")
 	keys := slices.Clone(versionOrder)
-	for _, k := range slices.Sorted(mapKeys(s.Versions)) {
+	for _, k := range slices.Sorted(maps.Keys(s.Versions)) {
 		if !slices.Contains(keys, k) {
 			keys = append(keys, k)
 		}

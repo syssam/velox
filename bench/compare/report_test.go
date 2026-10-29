@@ -36,6 +36,87 @@ func TestReportShowsTimedOutGate(t *testing.T) {
 	}
 }
 
+// section is the report from heading to the next "## " heading.
+func section(rep, heading string) string {
+	i := strings.Index(rep, heading)
+	if i < 0 {
+		return ""
+	}
+	rest := rep[i+len(heading):]
+	if j := strings.Index(rest, "\n## "); j >= 0 {
+		return rest[:j]
+	}
+	return rest
+}
+
+func TestReportMarksTimedOutGates(t *testing.T) {
+	s := fixtureSummary(t)
+	s.Steps = append(s.Steps, stepRecord{
+		Name: "gate-sqlite-2", LoadBefore: load{One: 31.5},
+		Gate: &gateResult{Max: 12, WaitedS: 600, TimedOut: true},
+	}, stepRecord{
+		Name: "gate-postgres-1", Gate: &gateResult{Max: 12, WaitedS: 5},
+	})
+	rep := fixtureReport(t, s)
+	sqlite, postgres := section(rep, "## Runtime: sqlite"), section(rep, "## Runtime: postgres")
+	if !strings.Contains(sqlite, "round 2 (gate waited 600 s, load 31.5 before)") || strings.Contains(postgres, "Timed-out") {
+		t.Errorf("a timed-out bench gate is not marked under its dialect's tables:\nsqlite: %s\npostgres: %s", sqlite, postgres)
+	}
+	build := section(rep, "## Build cost")
+	if !strings.Contains(build, "ent n=100 run 1 (gate waited 3600 s, load 29.6 before)") {
+		t.Errorf("a timed-out build gate is not marked under the build tables:\n%s", build)
+	}
+	if strings.Count(build, "Timed-out load gate") != 1 {
+		t.Error("the build gate note must appear once")
+	}
+}
+
+func TestReportLegendAndPrecision(t *testing.T) {
+	rep := fixtureReport(t, fixtureSummary(t))
+	if i, j := strings.Index(rep, "other ORM ÷ velox2"), strings.Index(rep, "## Machine and load"); i < 0 || i > j {
+		t.Error("the legend on the ratio columns is missing or comes after the first table")
+	}
+	// A small loss does not read as a tie.
+	s := fixtureSummary(t)
+	s.Build["ent"]["100"]["cold_cpu_s"] = newStat([]float64{11.97}, true)
+	rep = fixtureReport(t, s)
+	if !strings.Contains(rep, "ent 11.97 vs velox2 12 (ent ÷ velox2 = 0.998, lower is better)") {
+		t.Errorf("unexpected loss line:\n%s", section(rep, "## Where velox2 loses"))
+	}
+	// Three digits would print both as 12 and the ratio as 1: more are shown.
+	s.Build["ent"]["100"]["cold_cpu_s"] = newStat([]float64{11.9999}, true)
+	rep = fixtureReport(t, s)
+	if !strings.Contains(rep, "ent 11.9999 vs velox2 12 (ent ÷ velox2 = 0.99999, lower is better)") {
+		t.Errorf("the loss reads as a tie:\n%s", section(rep, "## Where velox2 loses"))
+	}
+	for in, want := range map[float64]string{12: "12", 11.25: "11.2", 0.8333333: "0.833", 1.234e-06: "1.23e-06", 123456.7: "123457"} {
+		if got := fmtNum(in); got != want {
+			t.Errorf("fmtNum(%v) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestReportIncomplete(t *testing.T) {
+	s := fixtureSummary(t)
+	s.Build["ent"]["100"]["cold_cpu_s"] = newStat([]float64{12, 14}, true) // no loss left
+	s.Missing = []string{"build ent n=100 run 3", "bench sqlite ent round 2"}
+	rep := fixtureReport(t, s)
+	if !strings.HasPrefix(rep[strings.Index(rep, "## "):], "## Incomplete results") {
+		t.Error("the report must start with the incomplete results")
+	}
+	for _, m := range s.Missing {
+		if !strings.Contains(rep, "- "+m+"\n") {
+			t.Errorf("the report does not list %q", m)
+		}
+	}
+	if strings.Contains(rep, "velox2 is best on every metric measured.") {
+		t.Error("an incomplete run claims velox2 is best on every metric")
+	}
+	if !strings.Contains(rep, "results are incomplete") {
+		t.Error("the loss section does not say the results are incomplete")
+	}
+}
+
 func TestReportTables(t *testing.T) {
 	s := fixtureSummary(t)
 	rep := fixtureReport(t, s)
@@ -43,7 +124,7 @@ func TestReportTables(t *testing.T) {
 		"## Machine and load",
 		"Fixture CPU",
 		"v0.14.6",
-		"| n=100 | 12 (13.5) | 24 (27) | 10 (11.25) | 2.00 | 0.83 |", // cold_cpu_s
+		"| n=100 | 12 (13.5) | 24 (27) | 10 (11.2) | 2 | 0.833 |", // cold_cpu_s
 		"## Where velox2 loses",
 		"cold_cpu_s",
 		"no noise threshold",
@@ -91,7 +172,7 @@ func TestReportMissingORM(t *testing.T) {
 	delete(s.Build, "ent")
 	delete(s.Reference, "ent")
 	rep := fixtureReport(t, s)
-	if !strings.Contains(rep, "| n=100 | 12 (13.5) | 24 (27) | - | 2.00 | - |") {
+	if !strings.Contains(rep, "| n=100 | 12 (13.5) | 24 (27) | - | 2 | - |") {
 		t.Errorf("a missing ORM must show as -:\n%s", rep)
 	}
 }

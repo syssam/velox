@@ -216,7 +216,9 @@ var harnessModules = []struct{ Key, Path string }{
 }
 
 // readVersions is velox2's commit and the versions the harness go.mod pins.
-func readVersions() (map[string]string, error) {
+// The commit is the one in results/commit.txt, which run.sh writes when the
+// run starts, if that file exists and is not empty; otherwise it is probed now.
+func readVersions(results string) (map[string]string, error) {
 	dir, err := harnessDir()
 	if err != nil {
 		return nil, err
@@ -233,7 +235,12 @@ func readVersions() (map[string]string, error) {
 	for _, r := range f.Require {
 		required[r.Mod.Path] = r.Mod.Version
 	}
-	v := map[string]string{"velox2": probeCommit(filepath.Join(dir, "..", ".."))}
+	v := map[string]string{}
+	if b, err := os.ReadFile(filepath.Join(results, "commit.txt")); err == nil && strings.TrimSpace(string(b)) != "" {
+		v["velox2"] = strings.TrimSpace(string(b))
+	} else {
+		v["velox2"] = probeCommit(filepath.Join(dir, "..", ".."))
+	}
 	for _, m := range harnessModules {
 		if required[m.Path] == "" {
 			return nil, fmt.Errorf("the harness go.mod does not require %s", m.Path)
@@ -294,7 +301,7 @@ func newConfig(cfg map[string]any) (config, error) {
 			return config{}, fmt.Errorf("config %s: %w", k, err)
 		}
 	}
-	slices.Sort(c.Sizes)
+	c.Sizes = slices.Compact(slices.Sorted(slices.Values(c.Sizes)))
 	return c, nil
 }
 
@@ -349,6 +356,8 @@ type summary struct {
 	Reference map[string]map[string]stat                       `json:"reference"` // orm → n
 	Runtime   map[string]map[string]map[string]map[string]stat `json:"runtime"`   // dialect → orm → benchmark → unit
 	Config    config                                           `json:"config"`
+	// Missing lists the results that were absent when -partial let them be.
+	Missing []string `json:"missing"`
 }
 
 var (
@@ -362,10 +371,25 @@ type numbered struct {
 	i    int
 }
 
+// benchDialects are the dialects every run measures.
+var benchDialects = []string{"sqlite", "postgres"}
+
 // summarize reads the results directory: raw/build-<orm>-n<N>-r<run>.json,
 // raw/bench-<dialect>-<orm>-<i>.txt and steps.jsonl. The runs of a build
-// metric, and the samples of a benchmark, are in run order.
+// metric, and the samples of a benchmark, are in run order. It fails unless
+// the results are complete (see summarizePartial).
 func summarize(results string, cfg map[string]any) (summary, error) {
+	return summarizePartial(results, cfg, false)
+}
+
+// summarizePartial is summarize with the completeness check made optional.
+// The results are complete when every ORM has a build JSON for every size and
+// every run 1..config.runs, and a round file holding all seven benchmarks, in
+// every unit, for every dialect and every round 1..bench_count. A setting that
+// config leaves out is the highest number found. Without partial, anything
+// missing is an error that names it; with partial, the summary lists it in
+// Missing.
+func summarizePartial(results string, cfg map[string]any, partial bool) (summary, error) {
 	c, err := newConfig(cfg)
 	if err != nil {
 		return summary{}, err
@@ -375,14 +399,16 @@ func summarize(results string, cfg map[string]any) (summary, error) {
 		Build:     map[string]map[string]map[string]stat{},
 		Reference: map[string]map[string]stat{},
 		Runtime:   map[string]map[string]map[string]map[string]stat{},
+		Missing:   []string{},
 	}
-	if s.Versions, err = readVersions(); err != nil {
+	if s.Versions, err = readVersions(results); err != nil {
 		return s, err
 	}
 	if s.Steps, err = readSteps(filepath.Join(results, "steps.jsonl")); err != nil {
 		return s, err
 	}
-	sizes, err := summarizeBuild(&s, filepath.Join(results, "raw"))
+	raw := filepath.Join(results, "raw")
+	sizes, haveBuild, err := summarizeBuild(&s, raw)
 	if err != nil {
 		return s, err
 	}
@@ -394,13 +420,75 @@ func summarize(results string, cfg map[string]any) (summary, error) {
 			return s, fmt.Errorf("build results for n=%d, which config sizes %v do not list", n, c.Sizes)
 		}
 	}
-	for _, n := range c.Sizes {
-		if !slices.Contains(sizes, n) {
-			return s, fmt.Errorf("config sizes list n=%d, which has no build results", n)
+	haveRounds, err := summarizeRuntime(&s, raw)
+	if err != nil {
+		return s, err
+	}
+	s.Missing = missingResults(&c, haveBuild, haveRounds)
+	s.Config = c
+	if len(s.Missing) > 0 && !partial {
+		list := s.Missing
+		more := ""
+		if len(list) > 20 {
+			list, more = list[:20], fmt.Sprintf("\n  and %d more", len(list)-20)
+		}
+		return s, fmt.Errorf("incomplete results (-partial summarizes them anyway), missing:\n  %s%s", strings.Join(list, "\n  "), more)
+	}
+	return s, nil
+}
+
+// buildKey is one build JSON; roundKey is one bench round file.
+type buildKey struct {
+	orm    string
+	n, run int
+}
+type roundKey struct {
+	dialect, orm string
+	round        int
+}
+
+// missingResults lists what the run should have produced and did not. It
+// fills in c.Runs and c.BenchCount when they are 0, as the highest number found.
+func missingResults(c *config, haveBuild map[buildKey]bool, haveRounds map[roundKey]map[string]map[string]bool) []string {
+	missing := []string{}
+	if c.Runs == 0 {
+		for k := range haveBuild {
+			c.Runs = max(c.Runs, k.run)
 		}
 	}
-	s.Config = c
-	return s, summarizeRuntime(&s, filepath.Join(results, "raw"))
+	if c.BenchCount == 0 {
+		for k := range haveRounds {
+			c.BenchCount = max(c.BenchCount, k.round)
+		}
+	}
+	for _, n := range c.Sizes {
+		for _, o := range orms {
+			for r := 1; r <= c.Runs; r++ {
+				if !haveBuild[buildKey{o.Name, n, r}] {
+					missing = append(missing, fmt.Sprintf("build %s n=%d run %d", o.Name, n, r))
+				}
+			}
+		}
+	}
+	for _, d := range benchDialects {
+		for _, o := range orms {
+			for i := 1; i <= max(c.BenchCount, 1); i++ {
+				got, ok := haveRounds[roundKey{d, o.Name, i}]
+				if !ok {
+					missing = append(missing, fmt.Sprintf("bench %s %s round %d", d, o.Name, i))
+					continue
+				}
+				for _, name := range benchNames {
+					for _, u := range runtimeUnits {
+						if !got[name][u] {
+							missing = append(missing, fmt.Sprintf("bench %s %s round %d: %s %s", d, o.Name, i, name, u))
+						}
+					}
+				}
+			}
+		}
+	}
+	return missing
 }
 
 // readSteps reads the step log, one stepRecord per line.
@@ -423,12 +511,12 @@ func readSteps(path string) ([]stepRecord, error) {
 	return steps, nil
 }
 
-// summarizeBuild fills s.Build and s.Ref from raw/build-*.json and returns the
-// sizes found, in numeric order.
-func summarizeBuild(s *summary, raw string) ([]int, error) {
+// summarizeBuild fills s.Build and s.Reference from raw/build-*.json and
+// returns the sizes found, in numeric order, and which builds exist.
+func summarizeBuild(s *summary, raw string) ([]int, map[buildKey]bool, error) {
 	files, err := filepath.Glob(filepath.Join(raw, "build-*.json"))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	type key struct {
 		orm string
@@ -439,6 +527,7 @@ func summarizeBuild(s *summary, raw string) ([]int, error) {
 		vals map[string]float64
 	}
 	groups := map[key][]sample{}
+	have := map[buildKey]bool{}
 	for _, p := range files {
 		m := buildFileRE.FindStringSubmatch(filepath.Base(p))
 		if m == nil {
@@ -446,33 +535,34 @@ func summarizeBuild(s *summary, raw string) ([]int, error) {
 		}
 		b, err := os.ReadFile(p)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		var r map[string]any
 		if err := json.Unmarshal(b, &r); err != nil {
-			return nil, fmt.Errorf("%s: %w", p, err)
+			return nil, nil, fmt.Errorf("%s: %w", p, err)
 		}
 		n, _ := strconv.Atoi(m[2])
 		run, _ := strconv.Atoi(m[3])
 		if _, err := ormByName(m[1]); err != nil {
-			return nil, fmt.Errorf("%s: %w", p, err)
+			return nil, nil, fmt.Errorf("%s: %w", p, err)
 		}
 		if r["orm"] != m[1] || r["n"] != float64(n) || r["run"] != float64(run) {
-			return nil, fmt.Errorf("%s: holds orm %v, n %v, run %v, which its name does not say", p, r["orm"], r["n"], r["run"])
+			return nil, nil, fmt.Errorf("%s: holds orm %v, n %v, run %v, which its name does not say", p, r["orm"], r["n"], r["run"])
 		}
 		vals := map[string]float64{}
 		for _, k := range append([]string{refMetric}, metricKeys()...) {
 			v, ok := r[k].(float64)
 			if !ok {
-				return nil, fmt.Errorf("%s: no number for %s", p, k)
+				return nil, nil, fmt.Errorf("%s: no number for %s", p, k)
 			}
 			vals[k] = v
 		}
 		k := key{orm: m[1], n: n}
 		groups[k] = append(groups[k], sample{run, vals})
+		have[buildKey{m[1], n, run}] = true
 	}
 	if len(groups) == 0 {
-		return nil, fmt.Errorf("no build-<orm>-n<N>-r<run>.json in %s", raw)
+		return nil, nil, fmt.Errorf("no build-<orm>-n<N>-r<run>.json in %s", raw)
 	}
 	var sizes []int
 	for k, ss := range groups {
@@ -491,7 +581,7 @@ func summarizeBuild(s *summary, raw string) ([]int, error) {
 		}
 	}
 	slices.Sort(sizes)
-	return sizes, nil
+	return sizes, have, nil
 }
 
 func column[T any](xs []T, f func(T) float64) []float64 {
@@ -511,20 +601,22 @@ func metricKeys() []string {
 }
 
 // summarizeRuntime fills s.Runtime from the round files raw/bench-<dialect>-<orm>-<i>.txt.
-// The per-ORM files that run.sh concatenates carry no round number and are not read.
-func summarizeRuntime(s *summary, raw string) error {
+// The per-ORM files that run.sh concatenates carry no round number and are not
+// read. It returns, for each round file, which benchmarks and units it holds.
+func summarizeRuntime(s *summary, raw string) (map[roundKey]map[string]map[string]bool, error) {
 	files, err := filepath.Glob(filepath.Join(raw, "bench-*.txt"))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	rounds := map[[2]string][]numbered{} // dialect, orm → files
+	have := map[roundKey]map[string]map[string]bool{}
 	for _, p := range files {
 		m := benchFileRE.FindStringSubmatch(filepath.Base(p))
 		if m == nil {
 			continue
 		}
 		if _, err := ormByName(m[2]); err != nil {
-			return fmt.Errorf("%s: %w", p, err)
+			return nil, fmt.Errorf("%s: %w", p, err)
 		}
 		i, _ := strconv.Atoi(m[3])
 		k := [2]string{m[1], m[2]}
@@ -536,21 +628,25 @@ func summarizeRuntime(s *summary, raw string) error {
 		for _, f := range fs {
 			fh, err := os.Open(f.path)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			got, err := parseBench(fh)
 			_ = fh.Close()
 			if err != nil {
-				return fmt.Errorf("%s: %w", f.path, err)
+				return nil, fmt.Errorf("%s: %w", f.path, err)
 			}
 			if len(got) == 0 {
-				return fmt.Errorf("%s: no benchmark results", f.path)
+				return nil, fmt.Errorf("%s: no benchmark results", f.path)
 			}
+			rk := roundKey{k[0], k[1], f.i}
+			have[rk] = map[string]map[string]bool{}
 			for name, units := range got {
+				have[rk][name] = map[string]bool{}
 				if samples[name] == nil {
 					samples[name] = map[string][]float64{}
 				}
 				for u, vs := range units {
+					have[rk][name][u] = true
 					samples[name][u] = append(samples[name][u], vs...)
 				}
 			}
@@ -567,7 +663,7 @@ func summarizeRuntime(s *summary, raw string) error {
 			}
 		}
 	}
-	return nil
+	return have, nil
 }
 
 // summarizeMain is compare summarize -results DIR -out summary.json [-config k=v…].
@@ -575,6 +671,7 @@ func summarizeMain(args []string) int {
 	fs := flag.NewFlagSet("summarize", flag.ContinueOnError)
 	results := fs.String("results", "", "the results directory")
 	out := fs.String("out", "", "the summary's JSON file")
+	partial := fs.Bool("partial", false, "summarize incomplete results too, and list what is missing")
 	var kvs configFlags
 	fs.Var(&kvs, "config", "a setting of the run, key=value (runs, services, bench_count, benchtime, sizes); repeatable")
 	if err := fs.Parse(args); err != nil {
@@ -589,7 +686,7 @@ func summarizeMain(args []string) int {
 		fmt.Fprintln(os.Stderr, "compare summarize:", err)
 		return 2
 	}
-	s, err := summarize(*results, cfg)
+	s, err := summarizePartial(*results, cfg, *partial)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "compare summarize:", err)
 		return 1
