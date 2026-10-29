@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"go/format"
+	"maps"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -129,6 +131,28 @@ func ormByName(name string) (orm, error) {
 		}
 	}
 	return orm{}, fmt.Errorf("unknown ORM %q (have velox2, oldvelox, ent)", name)
+}
+
+// runtimeVariants maps each runtime variant to the ORM whose runtime app it
+// runs: velox2pgx is velox2's app on velox.OpenPgx, measured on PostgreSQL
+// only. A variant has no build measurements and is never a loss.
+var runtimeVariants = map[string]string{"velox2pgx": "velox2"}
+
+// runtimeORMByName returns the ORM whose runtime app name runs: name itself
+// for an ORM, the variant's ORM for a variant.
+func runtimeORMByName(name string) (string, error) {
+	if o, ok := runtimeVariants[name]; ok {
+		return o, nil
+	}
+	if _, err := ormByName(name); err == nil {
+		return name, nil
+	}
+	names := make([]string, 0, len(orms)+len(runtimeVariants))
+	for _, o := range orms {
+		names = append(names, o.Name)
+	}
+	names = append(names, slices.Sorted(maps.Keys(runtimeVariants))...)
+	return "", fmt.Errorf("unknown ORM or variant %q (have %s)", name, strings.Join(names, ", "))
 }
 
 // Schema returns the schema package's files for n entities (path relative to

@@ -118,19 +118,22 @@ func TestGuardSQLite(t *testing.T) {
 }
 
 // TestGuardPostgres runs the guard of each ORM in turn against one database
-// (Review Focus 4): each ORM touches only its own schema, so every schema
-// keeps its rows after the later ORMs' guards.
+// (Review Focus 4): each ORM touches only its own schema; the velox2pgx run
+// reuses and reseeds velox2's. Every schema keeps its rows after the later
+// guards. The velox2pgx run passes only if newApp's probe found its
+// operations on the pgx pool.
 func TestGuardPostgres(t *testing.T) {
 	if testing.Short() {
-		t.Skip("three code generations and test builds")
+		t.Skip("four code generations and test builds")
 	}
 	dsn := os.Getenv("VELOX_COMPARE_POSTGRES")
 	if dsn == "" {
 		t.Skip("VELOX_COMPARE_POSTGRES is unset")
 	}
-	for _, o := range []orm{entORM, velox2ORM, oldVeloxORM} {
-		runGuard(t, o, "COMPARE_DIALECT=postgres")
-	}
+	runGuard(t, entORM, "COMPARE_DIALECT=postgres")
+	runGuard(t, velox2ORM, "COMPARE_DIALECT=postgres")
+	runGuard(t, velox2ORM, "COMPARE_DIALECT=postgres", "COMPARE_VELOX2_PGX=1")
+	runGuard(t, oldVeloxORM, "COMPARE_DIALECT=postgres")
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		t.Fatal(err)
@@ -143,7 +146,27 @@ func TestGuardPostgres(t *testing.T) {
 			t.Fatal(err)
 		}
 		if e1 != 500 {
-			t.Errorf("cmp_%s.e1s has %d rows after the three guards, want 500", name, e1)
+			t.Errorf("cmp_%s.e1s has %d rows after the four guards, want 500", name, e1)
+		}
+	}
+}
+
+func TestRuntimeORMByName(t *testing.T) {
+	if got, err := runtimeORMByName("velox2pgx"); err != nil || got != "velox2" {
+		t.Errorf("velox2pgx: got %q, %v; want velox2", got, err)
+	}
+	for _, o := range orms {
+		if got, err := runtimeORMByName(o.Name); err != nil || got != o.Name {
+			t.Errorf("%s: got %q, %v", o.Name, got, err)
+		}
+	}
+	_, err := runtimeORMByName("nope")
+	if err == nil {
+		t.Fatal("nope: no error")
+	}
+	for _, name := range []string{"velox2", "oldvelox", "ent", "velox2pgx"} {
+		if !strings.Contains(err.Error(), name) {
+			t.Errorf("the error %q does not name %s", err, name)
 		}
 	}
 }

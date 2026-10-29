@@ -206,11 +206,108 @@ func TestSummarizeErrors(t *testing.T) {
 // copyFixture copies testdata/summary into a temporary directory.
 func copyFixture(t *testing.T) string {
 	t.Helper()
+	return copyFixtureOf(t, "summary")
+}
+
+// copyFixtureOf copies testdata/<name> into a temporary directory.
+func copyFixtureOf(t *testing.T, name string) string {
+	t.Helper()
 	dir := t.TempDir()
-	if err := os.CopyFS(dir, os.DirFS(filepath.Join("testdata", "summary"))); err != nil {
+	if err := os.CopyFS(dir, os.DirFS(filepath.Join("testdata", name))); err != nil {
 		t.Fatal(err)
 	}
 	return dir
+}
+
+// variantConfig is the fixture's config with velox2pgx as a variant.
+func variantConfig() map[string]any {
+	return map[string]any{
+		"runs": 2, "services": 2, "bench_count": 2, "benchtime": "10x", "sizes": "100", "variants": "velox2pgx",
+	}
+}
+
+// TestSummarizeVariant checks that a configured variant's postgres rounds are
+// summarized and required, and that a variant's rounds without the config are
+// shown but not required.
+func TestSummarizeVariant(t *testing.T) {
+	fixtureSummary(t) // replaces the probes
+	dir := copyFixtureOf(t, "summary-variant")
+	s, err := summarize(dir, variantConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Runtime["postgres"]["velox2pgx"]["Query100"]["sec/op"]; len(got.Runs) != 2 || got.Median <= 0 {
+		t.Errorf("postgres velox2pgx Query100 sec/op %+v, want 2 runs", got)
+	}
+	if _, ok := s.Runtime["sqlite"]["velox2pgx"]; ok {
+		t.Error("velox2pgx has sqlite results")
+	}
+	if !slices.Equal(s.Config.Variants, []string{"velox2pgx"}) {
+		t.Errorf("config variants %v", s.Config.Variants)
+	}
+
+	cfg := variantConfig()
+	delete(cfg, "variants")
+	s, err = summarize(dir, cfg)
+	if err != nil {
+		t.Fatalf("an unconfigured variant's rounds: %v", err)
+	}
+	if got := s.Runtime["postgres"]["velox2pgx"]["Query100"]["sec/op"]; len(got.Runs) != 2 {
+		t.Errorf("an unconfigured variant is not shown: %+v", got)
+	}
+
+	if err := os.Remove(filepath.Join(dir, "raw", "bench-postgres-velox2pgx-2.txt")); err != nil {
+		t.Fatal(err)
+	}
+	_, err = summarize(dir, variantConfig())
+	if err == nil || !strings.Contains(err.Error(), "bench postgres velox2pgx round 2") {
+		t.Errorf("got %v, want an error naming bench postgres velox2pgx round 2", err)
+	}
+	if _, err := summarize(dir, cfg); err != nil {
+		t.Errorf("an unconfigured variant is required: %v", err)
+	}
+	if _, err := newConfig(map[string]any{"variants": "nope"}); err == nil {
+		t.Error("an unknown variant must fail")
+	}
+}
+
+// TestLossesIgnoreVariant checks that a variant of velox2 that beats velox2 is
+// no loss: it is velox2 too.
+func TestLossesIgnoreVariant(t *testing.T) {
+	fixtureSummary(t) // replaces the probes
+	s, err := summarize(copyFixtureOf(t, "summary-variant"), variantConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, units := range s.Runtime["postgres"]["velox2"] {
+		for u, st := range units {
+			s.Runtime["postgres"]["velox2pgx"][name][u] = newStat([]float64{st.Median / 2}, true)
+		}
+	}
+	for _, l := range losses(s) {
+		if l.Winner == "velox2pgx" {
+			t.Errorf("a loss to the variant: %+v", l)
+		}
+	}
+}
+
+// TestSummarizeRuntimeOnly checks that steps=runtime needs no build results.
+func TestSummarizeRuntimeOnly(t *testing.T) {
+	fixtureSummary(t) // replaces the probes
+	dir := copyFixtureOf(t, "summary-runtime")
+	s, err := summarize(dir, map[string]any{"bench_count": 2, "benchtime": "10x", "steps": "runtime", "variants": "velox2pgx"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.Build) != 0 || len(s.Missing) != 0 || s.Config.Steps != "runtime" {
+		t.Errorf("build %v, missing %v, config %+v", s.Build, s.Missing, s.Config)
+	}
+	if _, err := summarize(dir, map[string]any{"bench_count": 2}); err == nil || !strings.Contains(err.Error(), "no build-") {
+		t.Errorf("without steps: got %v, want an error naming no build-", err)
+	}
+	if _, err := newConfig(map[string]any{"steps": "build"}); err == nil {
+		t.Error("steps=build must fail")
+	}
 }
 
 func TestSummarizeCompleteness(t *testing.T) {

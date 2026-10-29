@@ -268,3 +268,32 @@ func TestReportRerunShare(t *testing.T) {
 		t.Error("rebuild_cached has a table, or a table is higher-is-better")
 	}
 }
+
+// TestReportRuntimeOnly checks that a runtime-only report has no build tables,
+// says so, and shows the velox2pgx column on postgres.
+func TestReportRuntimeOnly(t *testing.T) {
+	fixtureSummary(t) // replaces the probes
+	s, err := summarize(copyFixtureOf(t, "summary-runtime"), map[string]any{"bench_count": 2, "steps": "runtime", "variants": "velox2pgx"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep := fixtureReport(t, s)
+	if strings.Contains(rep, "## Build cost") || strings.Contains(rep, "### Reference build") {
+		t.Error("a runtime-only report has build tables")
+	}
+	if !strings.Contains(rep, "Runtime only: the build steps were not run.") {
+		t.Error("the report does not say it is runtime only")
+	}
+	head := "| benchmark | velox2 | velox2 (OpenPgx) | old velox | ent | velox2 (OpenPgx) ÷ velox2 | old velox ÷ velox2 | ent ÷ velox2 |"
+	pg := section(rep, "### sec/op (postgres)")
+	if !strings.Contains(pg, head) {
+		t.Errorf("the postgres sec/op table lacks the velox2 (OpenPgx) columns:\n%s", pg)
+	}
+	// The fixture's velox2pgx is 0.8 of velox2's sec/op.
+	if !strings.Contains(pg, "| 0.8 | ") {
+		t.Errorf("no 0.8 ratio in the postgres sec/op table:\n%s", pg)
+	}
+	if strings.Contains(section(rep, "## Runtime: sqlite"), "OpenPgx") {
+		t.Error("the sqlite tables have the velox2 (OpenPgx) column")
+	}
+}

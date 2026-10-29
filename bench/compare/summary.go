@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -324,7 +325,15 @@ type config struct {
 	BenchCount int    `json:"bench_count"`
 	Benchtime  string `json:"benchtime"`
 	Sizes      []int  `json:"sizes"`
+	// Variants are the runtime variants (see runtimeVariants) whose
+	// PostgreSQL rounds the run made, and which are therefore required.
+	Variants []string `json:"variants,omitempty"`
+	// Steps is what the run measured: all (build and runtime), or runtime.
+	Steps string `json:"steps,omitempty"`
 }
+
+// runtimeOnly reports whether the run skipped the build steps.
+func (c config) runtimeOnly() bool { return c.Steps == "runtime" }
 
 // parseConfig turns the -config k=v arguments into a map.
 func parseConfig(kvs []string) (map[string]any, error) {
@@ -340,8 +349,10 @@ func parseConfig(kvs []string) (map[string]any, error) {
 }
 
 // newConfig reads cfg: runs, services and bench_count are numbers (or their
-// decimal text), benchtime is a string, and sizes is a list of numbers or text
-// that separates them with spaces or commas. Any other key is an error.
+// decimal text), benchtime is a string, sizes is a list of numbers or text
+// that separates them with spaces or commas, variants is a list of runtime
+// variants in the same way, and steps is all (the default) or runtime. Any
+// other key is an error.
 func newConfig(cfg map[string]any) (config, error) {
 	var c config
 	for k, v := range cfg {
@@ -361,15 +372,59 @@ func newConfig(cfg map[string]any) (config, error) {
 			c.Benchtime = s
 		case "sizes":
 			c.Sizes, err = toInts(v)
+		case "variants":
+			c.Variants, err = toVariants(v)
+		case "steps":
+			s, ok := v.(string)
+			switch {
+			case !ok:
+				err = fmt.Errorf("%v is not a string", v)
+			case s == "all" || s == "runtime":
+				c.Steps = s
+			default:
+				err = fmt.Errorf("%q: want all or runtime", s)
+			}
 		default:
-			err = errors.New("unknown key (have runs, services, bench_count, benchtime, sizes)")
+			err = errors.New("unknown key (have runs, services, bench_count, benchtime, sizes, variants, steps)")
 		}
 		if err != nil {
 			return config{}, fmt.Errorf("config %s: %w", k, err)
 		}
 	}
 	c.Sizes = slices.Compact(slices.Sorted(slices.Values(c.Sizes)))
+	c.Variants = slices.Compact(slices.Sorted(slices.Values(c.Variants)))
+	if c.Steps == "" {
+		c.Steps = "all"
+	}
 	return c, nil
+}
+
+// toVariants reads a list of runtime variants: a list of strings, or text
+// that separates them with spaces or commas. An empty text is no variant.
+func toVariants(v any) ([]string, error) {
+	var out []string
+	switch v := v.(type) {
+	case []string:
+		out = slices.Clone(v)
+	case []any:
+		for _, e := range v {
+			s, ok := e.(string)
+			if !ok {
+				return nil, fmt.Errorf("%v is not a string", e)
+			}
+			out = append(out, s)
+		}
+	case string:
+		out = strings.FieldsFunc(v, func(r rune) bool { return r == ' ' || r == ',' })
+	default:
+		return nil, fmt.Errorf("%v is not a list of variants", v)
+	}
+	for _, name := range out {
+		if _, ok := runtimeVariants[name]; !ok {
+			return nil, fmt.Errorf("unknown variant %q (have %s)", name, strings.Join(slices.Sorted(maps.Keys(runtimeVariants)), ", "))
+		}
+	}
+	return out, nil
 }
 
 func toInt(v any) (int, error) {
@@ -453,11 +508,13 @@ func summarize(results string, cfg map[string]any) (summary, error) {
 
 // summarizePartial is summarize with the completeness check made optional.
 // The results are complete when every ORM has a build JSON for every size and
-// every run 1..config.runs, and a round file holding all seven benchmarks, in
-// every unit, for every dialect and every round 1..bench_count. A setting that
-// config leaves out is the highest number found. Without partial, anything
-// missing is an error that names it; with partial, the summary lists it in
-// Missing.
+// every run 1..config.runs (none under steps=runtime), and a round file
+// holding all seven benchmarks, in every unit, for every dialect and every
+// round 1..bench_count; each configured variant needs the same on postgres.
+// A variant's round files are summarized whether or not config lists it. A
+// setting that config leaves out is the highest number found. Without
+// partial, anything missing is an error that names it; with partial, the
+// summary lists it in Missing.
 func summarizePartial(results string, cfg map[string]any, partial bool) (summary, error) {
 	c, err := newConfig(cfg)
 	if err != nil {
@@ -478,7 +535,7 @@ func summarizePartial(results string, cfg map[string]any, partial bool) (summary
 		return s, err
 	}
 	raw := filepath.Join(results, "raw")
-	sizes, haveBuild, err := summarizeBuild(&s, raw, c.Services)
+	sizes, haveBuild, err := summarizeBuild(&s, raw, c.Services, c.runtimeOnly())
 	if err != nil {
 		return s, err
 	}
@@ -531,27 +588,36 @@ func missingResults(c *config, haveBuild map[buildKey]bool, haveRounds map[round
 			c.BenchCount = max(c.BenchCount, k.round)
 		}
 	}
-	for _, n := range c.Sizes {
-		for _, o := range orms {
-			for r := 1; r <= c.Runs; r++ {
-				if !haveBuild[buildKey{o.Name, n, r}] {
-					missing = append(missing, fmt.Sprintf("build %s n=%d run %d", o.Name, n, r))
+	if !c.runtimeOnly() {
+		for _, n := range c.Sizes {
+			for _, o := range orms {
+				for r := 1; r <= c.Runs; r++ {
+					if !haveBuild[buildKey{o.Name, n, r}] {
+						missing = append(missing, fmt.Sprintf("build %s n=%d run %d", o.Name, n, r))
+					}
 				}
 			}
 		}
 	}
 	for _, d := range benchDialects {
+		var names []string
 		for _, o := range orms {
+			names = append(names, o.Name)
+		}
+		if d == "postgres" {
+			names = append(names, c.Variants...)
+		}
+		for _, o := range names {
 			for i := 1; i <= max(c.BenchCount, 1); i++ {
-				got, ok := haveRounds[roundKey{d, o.Name, i}]
+				got, ok := haveRounds[roundKey{d, o, i}]
 				if !ok {
-					missing = append(missing, fmt.Sprintf("bench %s %s round %d", d, o.Name, i))
+					missing = append(missing, fmt.Sprintf("bench %s %s round %d", d, o, i))
 					continue
 				}
 				for _, name := range benchNames {
 					for _, u := range runtimeUnits {
 						if !got[name][u] {
-							missing = append(missing, fmt.Sprintf("bench %s %s round %d: %s %s", d, o.Name, i, name, u))
+							missing = append(missing, fmt.Sprintf("bench %s %s round %d: %s %s", d, o, i, name, u))
 						}
 					}
 				}
@@ -584,7 +650,8 @@ func readSteps(path string) ([]stepRecord, error) {
 // summarizeBuild fills s.Build and s.Reference from raw/build-*.json and
 // returns the sizes found, in numeric order, and which builds exist. If
 // services is not 0, every build JSON must have been made with that many.
-func summarizeBuild(s *summary, raw string, services int) ([]int, map[buildKey]bool, error) {
+// Finding no build JSON is an error unless runtimeOnly.
+func summarizeBuild(s *summary, raw string, services int, runtimeOnly bool) ([]int, map[buildKey]bool, error) {
 	files, err := filepath.Glob(filepath.Join(raw, "build-*.json"))
 	if err != nil {
 		return nil, nil, err
@@ -635,7 +702,7 @@ func summarizeBuild(s *summary, raw string, services int) ([]int, map[buildKey]b
 		groups[k] = append(groups[k], sample{run, vals})
 		have[buildKey{m[1], n, run}] = true
 	}
-	if len(groups) == 0 {
+	if len(groups) == 0 && !runtimeOnly {
 		return nil, nil, fmt.Errorf("no build-<orm>-n<N>-r<run>.json in %s", raw)
 	}
 	var sizes []int
@@ -671,7 +738,8 @@ func column[T any](xs []T, f func(T) float64) []float64 {
 	return out
 }
 
-// summarizeRuntime fills s.Runtime from the round files raw/bench-<dialect>-<orm>-<i>.txt.
+// summarizeRuntime fills s.Runtime from the round files raw/bench-<dialect>-<orm>-<i>.txt,
+// where <orm> is an ORM or a runtime variant.
 // The per-ORM files that run.sh concatenates carry no round number and are not
 // read. It returns, for each round file, which benchmarks and units it holds.
 func summarizeRuntime(s *summary, raw string) (map[roundKey]map[string]map[string]bool, error) {
@@ -686,7 +754,7 @@ func summarizeRuntime(s *summary, raw string) (map[roundKey]map[string]map[strin
 		if m == nil {
 			continue
 		}
-		if _, err := ormByName(m[2]); err != nil {
+		if _, err := runtimeORMByName(m[2]); err != nil {
 			return nil, fmt.Errorf("%s: %w", p, err)
 		}
 		i, _ := strconv.Atoi(m[3])
@@ -744,7 +812,7 @@ func summarizeMain(args []string) int {
 	out := fs.String("out", "", "the summary's JSON file")
 	partial := fs.Bool("partial", false, "summarize incomplete results too, and list what is missing")
 	var kvs configFlags
-	fs.Var(&kvs, "config", "a setting of the run, key=value (runs, services, bench_count, benchtime, sizes); repeatable")
+	fs.Var(&kvs, "config", "a setting of the run, key=value (runs, services, bench_count, benchtime, sizes, variants, steps); repeatable")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -796,7 +864,8 @@ type loss struct {
 
 // beaters lists the ORMs other than velox2 whose median in stats beats
 // velox2's in the metric's direction, in the order of orms. A tie does not
-// beat. stats without velox2 has no beaters.
+// beat. stats without velox2 has no beaters. A runtime variant is velox2's
+// own and never beats it.
 func beaters(stats map[string]stat, lowerIsBetter bool) []string {
 	v2, ok := stats["velox2"]
 	if !ok {

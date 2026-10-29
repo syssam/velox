@@ -5,11 +5,13 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"example.com/tmp/gen"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/syssam/velox2"
 )
 
@@ -46,7 +48,40 @@ func newApp(tb testing.TB, sqlDB *sql.DB) *app {
 			tb.Fatalf("%s: %v", st, err)
 		}
 	}
-	return &app{db: velox.Open(d, sqlDB)}
+	if os.Getenv("COMPARE_VELOX2_PGX") != "1" {
+		return &app{db: velox.Open(d, sqlDB)}
+	}
+	if d != velox.Postgres {
+		tb.Fatal("COMPARE_VELOX2_PGX needs postgres")
+	}
+	// The velox2pgx variant: the same app on a pgx pool of one connection, as
+	// sqlDB has one. sqlDB stays open: setup and TestGuard use it for ANALYZE
+	// and the schema checks.
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, pgDSN(tb)+"&pool_max_conns=1")
+	if err != nil {
+		// Not err: a parse error quotes the DSN.
+		tb.Fatal("velox2pgx: pgxpool.New cannot parse $VELOX_COMPARE_POSTGRES with pool_max_conns=1")
+	}
+	tb.Cleanup(pool.Close)
+	a := &app{db: velox.OpenPgx(pool)}
+	// The probe: an operation must acquire from the pool and leave sqlDB
+	// untouched. With no idle connection kept, a query on sqlDB would open a
+	// connection and close it on release, which MaxIdleClosed counts.
+	sqlDB.SetMaxIdleConns(0)
+	s0, n0 := sqlDB.Stats(), pool.Stat().AcquireCount()
+	if _, err := a.count(ctx); err != nil {
+		tb.Fatalf("velox2pgx: count: %v", err)
+	}
+	if n := pool.Stat().AcquireCount(); n <= n0 {
+		tb.Fatalf("velox2pgx: count acquired no pool connection (acquires %d, then %d)", n0, n)
+	}
+	s1 := sqlDB.Stats()
+	if s1.OpenConnections != s0.OpenConnections || s1.InUse != s0.InUse || s1.WaitCount != s0.WaitCount || s1.MaxIdleClosed != s0.MaxIdleClosed {
+		tb.Fatalf("velox2pgx: count used database/sql: stats %+v, then %+v", s0, s1)
+	}
+	sqlDB.SetMaxIdleConns(2) // database/sql's default
+	return a
 }
 
 func (a *app) seed(ctx context.Context) error {

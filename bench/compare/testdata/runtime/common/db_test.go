@@ -36,15 +36,12 @@ func openDB(tb testing.TB) *sql.DB {
 			tb.Fatal(err)
 		}
 	case "postgres":
-		dsn := os.Getenv("VELOX_COMPARE_POSTGRES")
-		if dsn == "" {
-			tb.Fatal("VELOX_COMPARE_POSTGRES is unset")
-		}
-		schema := "cmp_" + ormName
-		admin, err := sql.Open("pgx", dsn)
+		dsn := pgDSN(tb)
+		admin, err := sql.Open("pgx", os.Getenv("VELOX_COMPARE_POSTGRES"))
 		if err != nil {
 			tb.Fatal(err)
 		}
+		schema := "cmp_" + ormName
 		_, err = admin.Exec("DROP SCHEMA IF EXISTS " + schema + " CASCADE; CREATE SCHEMA " + schema)
 		if cerr := admin.Close(); err == nil {
 			err = cerr
@@ -52,11 +49,7 @@ func openDB(tb testing.TB) *sql.DB {
 		if err != nil {
 			tb.Fatal(err)
 		}
-		sep := "?"
-		if strings.Contains(dsn, "?") {
-			sep = "&"
-		}
-		if db, err = sql.Open("pgx", dsn+sep+"search_path="+schema); err != nil {
+		if db, err = sql.Open("pgx", dsn); err != nil {
 			tb.Fatal(err)
 		}
 	default:
@@ -65,6 +58,22 @@ func openDB(tb testing.TB) *sql.DB {
 	db.SetMaxOpenConns(1)
 	tb.Cleanup(func() { _ = db.Close() })
 	return db
+}
+
+// pgDSN is $VELOX_COMPARE_POSTGRES with search_path=cmp_<ormName> appended
+// as a query parameter, so it always holds a "?". It never reaches a log: a
+// failure names the variable, not its value.
+func pgDSN(tb testing.TB) string {
+	tb.Helper()
+	dsn := os.Getenv("VELOX_COMPARE_POSTGRES")
+	if dsn == "" {
+		tb.Fatal("VELOX_COMPARE_POSTGRES is unset")
+	}
+	sep := "?"
+	if strings.Contains(dsn, "?") {
+		sep = "&"
+	}
+	return dsn + sep + "search_path=cmp_" + ormName
 }
 
 // prevIDIndexed reports whether e1s has an index on prev_id.

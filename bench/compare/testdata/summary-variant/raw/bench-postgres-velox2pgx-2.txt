@@ -1,0 +1,13 @@
+goos: darwin
+goarch: arm64
+pkg: example.com/tmp
+cpu: Fixture CPU
+BenchmarkInsertOne-14   	    1000	     212500 ns/op	     4500 B/op	      54 allocs/op
+BenchmarkInsertBulk100-14   	    1000	    1275000 ns/op	    72000 B/op	     810 allocs/op
+BenchmarkGetByID-14   	    1000	     102000 ns/op	     2250 B/op	      36 allocs/op
+BenchmarkQuery100-14   	    1000	     255000 ns/op	    27000 B/op	     630 allocs/op
+BenchmarkEagerO2M100-14   	    1000	     765000 ns/op	    81000 B/op	    1350 allocs/op
+BenchmarkUpdateByID-14   	    1000	     204000 ns/op	     3600 B/op	      49 allocs/op
+BenchmarkCount-14   	    1000	      93500 ns/op	     1080 B/op	      22 allocs/op
+PASS
+ok  	example.com/tmp	3.210s

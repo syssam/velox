@@ -14,8 +14,11 @@ import (
 	"strings"
 )
 
-// display is how the report names each ORM.
-var display = map[string]string{"velox2": "velox2", "oldvelox": "old velox", "ent": "ent"}
+// display is how the report names each ORM and runtime variant.
+var display = map[string]string{"velox2": "velox2", "oldvelox": "old velox", "ent": "ent", "velox2pgx": "velox2 (OpenPgx)"}
+
+// buildColumns are the columns of a table after velox2's: the other ORMs.
+var buildColumns = []string{"oldvelox", "ent"}
 
 // versionOrder is the order of the versions table.
 var versionOrder = []string{"velox2", "oldvelox", "ent", "sqlite", "pgx", "x/tools"}
@@ -76,7 +79,8 @@ func writeReport(w io.Writer, s summary) error {
 	b.WriteString("How to read the tables: a cell is `median (worst)` of the runs, where worst is the largest run, ")
 	b.WriteString("or the smallest for a metric where higher is better (the tables say which). ")
 	b.WriteString("The ratio columns are the other ORM ÷ velox2, from the medians: for a lower-is-better metric, a ratio above 1 means velox2 is better; ")
-	b.WriteString("for a higher-is-better one, a ratio below 1 does.\n\n")
+	b.WriteString("for a higher-is-better one, a ratio below 1 does. ")
+	b.WriteString("A `velox2 (OpenPgx)` column, where there is one, is velox2's app on `velox.OpenPgx` (a pgx pool) instead of database/sql; it is velox2 too, so it is never a loss.\n\n")
 	if len(s.Missing) > 0 {
 		b.WriteString("## Incomplete results\n\n")
 		b.WriteString("These results were not in the results directory when the summary was made, so the medians below may rest on fewer runs than planned, and the losses may be incomplete:\n\n")
@@ -87,36 +91,20 @@ func writeReport(w io.Writer, s summary) error {
 	}
 	writeMachine(&b, s, sizes)
 
-	b.WriteString("## Build cost\n\n")
-	b.WriteString("The `_x` metrics are CPU seconds over the reference build's CPU seconds.\n\n")
-	for _, m := range buildMetrics {
-		dir := "lower is better"
-		if !m.LowerIsBetter {
-			dir = "higher is better"
-		}
-		fmt.Fprintf(&b, "### %s\n\n%s.\n\n", m.Key, dir)
-		if m.Doc != "" {
-			fmt.Fprintf(&b, "%s\n\n", m.Doc)
-		}
-		writeTableHead(&b, "size")
-		for _, n := range sizes {
-			k := strconv.Itoa(n)
-			get := func(orm string) (stat, bool) { st, ok := s.Build[orm][k][m.Key]; return st, ok }
-			writeRow(&b, "n="+k, get)
-		}
-		b.WriteString("\n")
-	}
-	last := lastSteps(s.Steps)
-	if late := timedOutBuilds(last); len(late) > 0 {
-		fmt.Fprintf(&b, "**Timed-out load gate.** These builds started after their load gate timed out, so their numbers in every table above were taken under load: %s.\n\n", strings.Join(late, "; "))
+	if s.Config.runtimeOnly() {
+		b.WriteString("Runtime only: the build steps were not run.\n\n")
+	} else {
+		writeBuild(&b, s, sizes)
 	}
 
+	last := lastSteps(s.Steps)
 	for _, d := range slices.Sorted(maps.Keys(s.Runtime)) {
 		fmt.Fprintf(&b, "## Runtime: %s\n\n", d)
 		names := benchRows(s.Runtime[d])
+		cols := runtimeColumns(s.Runtime[d])
 		for _, u := range runtimeUnits {
 			fmt.Fprintf(&b, "### %s (%s)\n\nLower is better.\n\n", u, d)
-			writeTableHead(&b, "benchmark")
+			writeTableHead(&b, "benchmark", cols)
 			noted := false
 			for _, name := range names {
 				get := func(orm string) (stat, bool) { st, ok := s.Runtime[d][orm][name][u]; return st, ok }
@@ -124,7 +112,7 @@ func writeReport(w io.Writer, s summary) error {
 				if name == insertBulk {
 					label, noted = name+" ¹", true
 				}
-				writeRow(&b, label, get)
+				writeRow(&b, label, cols, get)
 			}
 			b.WriteString("\n")
 			if noted {
@@ -167,6 +155,44 @@ func writeReport(w io.Writer, s summary) error {
 	}
 	_, err := io.WriteString(w, b.String())
 	return err
+}
+
+// writeBuild writes the build tables, one per build metric.
+func writeBuild(b *strings.Builder, s summary, sizes []int) {
+	b.WriteString("## Build cost\n\n")
+	b.WriteString("The `_x` metrics are CPU seconds over the reference build's CPU seconds.\n\n")
+	for _, m := range buildMetrics {
+		dir := "lower is better"
+		if !m.LowerIsBetter {
+			dir = "higher is better"
+		}
+		fmt.Fprintf(b, "### %s\n\n%s.\n\n", m.Key, dir)
+		if m.Doc != "" {
+			fmt.Fprintf(b, "%s\n\n", m.Doc)
+		}
+		writeTableHead(b, "size", buildColumns)
+		for _, n := range sizes {
+			k := strconv.Itoa(n)
+			get := func(orm string) (stat, bool) { st, ok := s.Build[orm][k][m.Key]; return st, ok }
+			writeRow(b, "n="+k, buildColumns, get)
+		}
+		b.WriteString("\n")
+	}
+	if late := timedOutBuilds(lastSteps(s.Steps)); len(late) > 0 {
+		fmt.Fprintf(b, "**Timed-out load gate.** These builds started after their load gate timed out, so their numbers in every table above were taken under load: %s.\n\n", strings.Join(late, "; "))
+	}
+}
+
+// runtimeColumns are the columns of a dialect's runtime tables after
+// velox2's: each runtime variant with results, then the other ORMs.
+func runtimeColumns(byORM map[string]map[string]map[string]stat) []string {
+	var cols []string
+	for _, v := range slices.Sorted(maps.Keys(runtimeVariants)) {
+		if _, ok := byORM[v]; ok {
+			cols = append(cols, v)
+		}
+	}
+	return append(cols, buildColumns...)
 }
 
 // insertBulk is the benchmark that does not do the same work in every ORM.
@@ -258,18 +284,33 @@ func benchRows(byORM map[string]map[string]map[string]stat) []string {
 	return append(rows, slices.Sorted(maps.Keys(seen))...)
 }
 
-func writeTableHead(b *strings.Builder, first string) {
-	fmt.Fprintf(b, "| %s | velox2 | old velox | ent | old velox ÷ velox2 | ent ÷ velox2 |\n|---|---|---|---|---|---|\n", first)
+// writeTableHead writes the head of a metric table: first, velox2, then
+// cols, then each of cols ÷ velox2.
+func writeTableHead(b *strings.Builder, first string, cols []string) {
+	fmt.Fprintf(b, "| %s | velox2 |", first)
+	for _, c := range cols {
+		fmt.Fprintf(b, " %s |", display[c])
+	}
+	for _, c := range cols {
+		fmt.Fprintf(b, " %s ÷ velox2 |", display[c])
+	}
+	b.WriteString("\n|---|---|" + strings.Repeat("---|", 2*len(cols)) + "\n")
 }
 
-// writeRow writes one row of a metric table; get finds an ORM's stat.
-func writeRow(b *strings.Builder, label string, get func(orm string) (stat, bool)) {
+// writeRow writes one row of a metric table, with the columns of
+// writeTableHead; get finds an ORM's stat.
+func writeRow(b *strings.Builder, label string, cols []string, get func(orm string) (stat, bool)) {
 	v2, v2ok := get("velox2")
-	old, oldok := get("oldvelox")
-	ent, entok := get("ent")
-	fmt.Fprintf(b, "| %s | %s | %s | %s | %s | %s |\n", label,
-		cell(v2, v2ok), cell(old, oldok), cell(ent, entok),
-		ratioCell(old, oldok, v2, v2ok), ratioCell(ent, entok, v2, v2ok))
+	fmt.Fprintf(b, "| %s | %s |", label, cell(v2, v2ok))
+	for _, c := range cols {
+		st, ok := get(c)
+		fmt.Fprintf(b, " %s |", cell(st, ok))
+	}
+	for _, c := range cols {
+		st, ok := get(c)
+		fmt.Fprintf(b, " %s |", ratioCell(st, ok, v2, v2ok))
+	}
+	b.WriteString("\n")
 }
 
 // writeMachine writes the machine and load section.
@@ -287,8 +328,12 @@ func writeMachine(b *strings.Builder, s summary, sizes []int) {
 	if e := s.Env; e != nil {
 		fmt.Fprintf(b, "- GOFLAGS of the run: `%s` (go env GOFLAGS when run.sh started); CPUs counted by Go: %d\n", e.GoFlags, e.NumCPU)
 	}
-	fmt.Fprintf(b, "- Runs: %d, services: %d, benchmark rounds: %d, benchtime: %s\n\n",
-		s.Config.Runs, s.Config.Services, s.Config.BenchCount, or(s.Config.Benchtime))
+	if s.Config.runtimeOnly() {
+		fmt.Fprintf(b, "- Benchmark rounds: %d, benchtime: %s (runtime only)\n\n", s.Config.BenchCount, or(s.Config.Benchtime))
+	} else {
+		fmt.Fprintf(b, "- Runs: %d, services: %d, benchmark rounds: %d, benchtime: %s\n\n",
+			s.Config.Runs, s.Config.Services, s.Config.BenchCount, or(s.Config.Benchtime))
+	}
 
 	b.WriteString("### Versions\n\n| component | version |\n|---|---|\n")
 	keys := slices.Clone(versionOrder)
@@ -303,15 +348,8 @@ func writeMachine(b *strings.Builder, s summary, sizes []int) {
 		}
 	}
 
-	b.WriteString("\n### Reference build\n\n")
-	b.WriteString("`ref_cpu_s`: the CPU seconds of a fixed reference build, taken around each measurement. It measures the machine's load, not an ORM; the `_x` metrics divide by it. Each cell is `median (worst)`.\n\n")
-	b.WriteString("| size | velox2 | old velox | ent |\n|---|---|---|---|\n")
-	for _, n := range sizes {
-		k := strconv.Itoa(n)
-		v2, ok1 := s.Reference["velox2"][k]
-		old, ok2 := s.Reference["oldvelox"][k]
-		ent, ok3 := s.Reference["ent"][k]
-		fmt.Fprintf(b, "| n=%s | %s | %s | %s |\n", k, cell(v2, ok1), cell(old, ok2), cell(ent, ok3))
+	if !s.Config.runtimeOnly() {
+		writeReference(b, s, sizes)
 	}
 
 	b.WriteString("\n### Steps\n\n")
@@ -332,6 +370,20 @@ func writeMachine(b *strings.Builder, s summary, sizes []int) {
 	b.WriteString("\n")
 	if failed := failedSteps(s.Steps); len(failed) > 0 {
 		fmt.Fprintf(b, "**Failed steps.** The last record of these steps has a non-zero exit: %s.\n\n", strings.Join(failed, "; "))
+	}
+}
+
+// writeReference writes the reference build's table.
+func writeReference(b *strings.Builder, s summary, sizes []int) {
+	b.WriteString("\n### Reference build\n\n")
+	b.WriteString("`ref_cpu_s`: the CPU seconds of a fixed reference build, taken around each measurement. It measures the machine's load, not an ORM; the `_x` metrics divide by it. Each cell is `median (worst)`.\n\n")
+	b.WriteString("| size | velox2 | old velox | ent |\n|---|---|---|---|\n")
+	for _, n := range sizes {
+		k := strconv.Itoa(n)
+		v2, ok1 := s.Reference["velox2"][k]
+		old, ok2 := s.Reference["oldvelox"][k]
+		ent, ok3 := s.Reference["ent"][k]
+		fmt.Fprintf(b, "| n=%s | %s | %s | %s |\n", k, cell(v2, ok1), cell(old, ok2), cell(ent, ok3))
 	}
 }
 
