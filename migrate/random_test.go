@@ -454,8 +454,10 @@ func TestMigrateRandom(t *testing.T) {
 			}
 			start := time.Now()
 			n := randomSeeds(d)
+			ran := 0 // under -run, fewer seeds run than n
 			for seed := uint64(1); seed <= n; seed++ {
 				t.Run(strconv.FormatUint(seed, 10), func(t *testing.T) {
+					ran++
 					a, b, from, to := seedModels(t, seed, d)
 					defer func() {
 						if t.Failed() {
@@ -465,7 +467,7 @@ func TestMigrateRandom(t *testing.T) {
 					migrateSchemas(t, d, from, to, planOptionsAllowing(t, from, to))
 				})
 			}
-			t.Logf("%d seeds on %v in %v", n, d, time.Since(start).Round(10*time.Millisecond))
+			t.Logf("%d seeds on %v in %v", ran, d, time.Since(start).Round(10*time.Millisecond))
 		})
 	}
 }
