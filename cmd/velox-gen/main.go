@@ -491,18 +491,25 @@ func relErrors(dir string, err error) error {
 // relInside matches the working directory, and its symlink-free form when
 // that differs, as the start of a path: the directory and its separator,
 // after anything but a path character. Its first group is what comes before.
-// It is nil when dir has no absolute form.
+// It is nil when dir has no absolute form, and for the filesystem root, which
+// every path is inside: cutting it would cut every slash.
 func relInside(dir string) *regexp.Regexp {
 	abs, err := filepath.Abs(dir)
 	if err != nil {
 		return nil
 	}
-	prefixes := []string{abs}
+	cands := []string{abs}
 	if r, err := filepath.EvalSymlinks(abs); err == nil && r != abs {
-		prefixes = append(prefixes, r)
+		cands = append(cands, r)
 	}
-	for i, p := range prefixes {
-		prefixes[i] = regexp.QuoteMeta(strings.TrimRight(p, string(filepath.Separator)) + string(filepath.Separator))
+	var prefixes []string
+	for _, p := range cands {
+		if filepath.Dir(p) != p {
+			prefixes = append(prefixes, regexp.QuoteMeta(strings.TrimRight(p, string(filepath.Separator))+string(filepath.Separator)))
+		}
+	}
+	if len(prefixes) == 0 {
+		return nil
 	}
 	return regexp.MustCompile(`(^|[^\w./\\-])(?:` + strings.Join(prefixes, "|") + `)`)
 }

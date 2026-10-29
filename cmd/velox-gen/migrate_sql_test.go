@@ -236,6 +236,9 @@ func TestRelErrorsKeepsWhatIsOutside(t *testing.T) {
 		{"inside with a line", in + ":2", "see (" + in + ":3)", "schema" + sep + "a.go:2", "see (schema" + sep + "a.go:3)"},
 		{"outside", outside, "see " + outside + ":3", outside, "see " + outside + ":3"},
 		{"outside with a line", outside + ":2", "see " + outside + ":3", outside + ":2", "see " + outside + ":3"},
+		{"repeated", in, in + ":1 and (" + in + ":2) and " + in + ":3", "schema" + sep + "a.go", "schema" + sep + "a.go:1 and (schema" + sep + "a.go:2) and schema" + sep + "a.go:3"},
+		{"directory at the end", "", "see " + dir, "", "see " + dir},
+		{"sibling", "", "see " + dir + "2" + sep + "c.go", "", "see " + dir + "2" + sep + "c.go"},
 		{"lookalike", "", "see " + lookalike, "", "see " + lookalike},
 		{"no position", "", "plain", "", "plain"},
 		{"relative", "schema/a.go:2", "plain", "schema/a.go:2", "plain"},
@@ -247,5 +250,16 @@ func TestRelErrorsKeepsWhatIsOutside(t *testing.T) {
 		if got.Pos != c.wantPos || got.Reason != c.wantReason {
 			t.Errorf("%s: got %q %q, want %q %q", c.name, got.Pos, got.Reason, c.wantPos, c.wantReason)
 		}
+	}
+}
+
+// The filesystem root holds every path, so relErrors cuts nothing from a
+// reason whose working directory is the root: a slash is not a prefix.
+func TestRelErrorsAtTheRoot(t *testing.T) {
+	root := string(filepath.Separator)
+	reason := "a " + root + " b and " + root + "usr" + root + "lib"
+	var got *gen.Error
+	if !errors.As(relErrors(root, &gen.Error{Reason: reason}), &got) || got.Reason != reason {
+		t.Errorf("got %v, want the reason %q as it was", got, reason)
 	}
 }
