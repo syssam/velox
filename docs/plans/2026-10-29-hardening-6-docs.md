@@ -558,6 +558,22 @@ Each was run at 669f8d2.
 10. **The root Examples' model.** Use internal/testmodel with inline SQLite DDL, or add a public example model package. **Recommend: testmodel.** A new package needs a coverage-floor line and a generator run, and the Examples read the same either way; the cost is that pkg.go.dev shows an internal import.
 11. **The CHANGELOG's shape.** One "Unreleased (1.0.0)" summary, or a per-wave history. **Recommend: the summary.** No release has been made, so there is no prior version to diff against.
 
+## Controller rulings
+
+The controller takes every recommendation in "Decisions for the controller":
+
+1. Fix the absolute paths now (Task 6).
+2. Non-ASCII schema names are documented only.
+3. The alias is `vgraphql`.
+4. The Write-frozen bidi partner stays a unique violation.
+5. A generated-code version bump replaces the constant, in a minor release with a CHANGELOG line.
+6. A newer velox reads every older snapshot and velox.json version and refuses a newer one.
+7. No deprecations before 1.0; after 1.0, `// Deprecated:` until the next major version.
+8. Security reports go through GitHub private vulnerability reporting.
+9. Historical specs are corrected in place with dated notes.
+10. The root Examples use internal/testmodel. The example programs are a separate module (example/go.mod), so the root package cannot import them.
+11. The CHANGELOG has one "Unreleased (1.0.0)" summary.
+
 ## Appendix: the followups map
 
 Each item is `id :<followups line> <commit(s)>`. A line with a letter (50a, 50b) is one of several ids on one line. Ids from other reviews have no line. G10 is resolved by 1d216d8 (Wave 1 Task 4), though the triage called it stale. C9 is closed by a test, Wave 5's ruling 1.
