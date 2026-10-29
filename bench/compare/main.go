@@ -15,6 +15,7 @@ const usage = `usage: compare <subcommand> [flags]
 
 subcommands:
   step   run one command, timed and logged, behind an optional load gate
+  build  measure one ORM's build cost at one size, as JSON
 `
 
 func main() {
@@ -25,6 +26,8 @@ func main() {
 	switch os.Args[1] {
 	case "step":
 		os.Exit(stepMain(os.Args[2:]))
+	case "build":
+		os.Exit(buildMain(os.Args[2:]))
 	default:
 		fmt.Fprintf(os.Stderr, "compare: unknown subcommand %q\n\n%s", os.Args[1], usage)
 		os.Exit(2)

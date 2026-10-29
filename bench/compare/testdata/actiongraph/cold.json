@@ -1,0 +1,37 @@
+[
+	{
+		"ID": 0,
+		"Mode": "link",
+		"Package": "example.com/tmp/s0",
+		"Deps": [1],
+		"TimeStart": "2026-10-29T10:00:02Z",
+		"TimeDone": "2026-10-29T10:00:03Z",
+		"Cmd": ["link -o s0"]
+	},
+	{
+		"ID": 1,
+		"Mode": "build",
+		"Package": "example.com/tmp/s0",
+		"Deps": [2, 3],
+		"TimeStart": "2026-10-29T10:00:01.5Z",
+		"TimeDone": "2026-10-29T10:00:01.75Z",
+		"Cmd": ["compile -p main"]
+	},
+	{
+		"ID": 2,
+		"Mode": "build",
+		"Package": "example.com/tmp/gen",
+		"Deps": [3],
+		"TimeStart": "2026-10-29T10:00:01Z",
+		"TimeDone": "2026-10-29T10:00:01.5Z",
+		"Cmd": ["compile -p example.com/tmp/gen"]
+	},
+	{
+		"ID": 3,
+		"Mode": "build",
+		"Package": "context",
+		"TimeStart": "2026-10-29T10:00:00Z",
+		"TimeDone": "2026-10-29T10:00:01Z",
+		"Cmd": ["compile -p context"]
+	}
+]
