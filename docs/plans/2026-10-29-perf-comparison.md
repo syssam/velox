@@ -496,3 +496,21 @@ These came from runs in a scratch directory on 2026-10-29, each with a 3-entity 
   8. **Limits.** The shared machine; one machine only; MySQL not measured; the services link two calls per entity, not a real application.
 - [ ] **Step 4: CHANGELOG.** Put the commit ids from Tasks 2–7 on the bench/compare line.
 - [ ] **Step 5: Run C** (root gofmt; nothing else changed). **Commit** `docs/reviews/2026-10-29-perf-comparison.md CHANGELOG.md`: `Review: velox2, old velox and ent compared, build and runtime`. The raw results stay git-ignored. Name the results path in the commit message body.
+
+## Rulings made during execution
+
+1. **Review.** Every task had a dispatched review except Task 1 (a pure move) and Task 7 (one script), which the controller reviewed inline; fix rounds were re-reviewed by the controller. Each task needed one fix round at most.
+2. **Task 2.** `compare step` handles SIGINT and SIGTERM by killing the child's group, kills nothing after a normal exit, and opens its log before running, so a late uptime failure keeps the record.
+3. **Task 3.** `countGenerated` skips a path relative to its dir (`orm.genSkip`); `TestSchemasEquivalent` checks the three DSLs entity by entity. The M2M pair exists only where i+5 < n.
+4. **Task 4.** A discarded warm-up codegen in a throwaway app comes before the timed one. `cold_app_action_s` and `cold_dep_action_s` are CPU seconds (CmdUser + CmdSys), not overlapping wall time. ent's `ent/schema` is out of the rerun check. Old velox's per-app `.velox` loader cache is used by its regen, as its users get it.
+5. **Task 5.** The plan said velox2's `InsertAll` writes keys back; it reads nothing back, so velox2's seed finds its ids by a query. The guard pins the filter (`count < 450`), the order, the ids and each table's index and foreign-key counts (all three agree), and old velox runs on PostgreSQL too. ANALYZE follows the seed.
+6. **Task 6.** summarize refuses incomplete results unless `-partial`, and the report marks timed-out gates beside the numbers they affect.
+7. **Final review** (ready with fixes; 0 Critical, 3 Important, 10 Minor). The working tree was frozen during the run, because each app builds velox2 from it. One fix wave after the run (4ebd51a): the rerun share replaces the cached-action count as a metric; one loss per competitor; GOFLAGS recorded; velox2-ci checked again before `up`; a services mismatch fails summarize; notes use each step's last record; build and bench timeouts are knobs; the InsertBulk100 rows carry a footnote. The plan's lines saying the cold build skips packages no service imports were wrong: `./...` compiles them all, and the report says so. Only summarize and report were rerun on the results.
+8. **The run** (12:14–12:58 UTC, load 4.4–11.6 before each step, no gate timed out) is 20261029T121411Z at d59c718. Its 83 steps all exited 0.
+9. **The PostgreSQL scan loss** was traced after the run by a profile, not by the measured data, and the report says so: under Go 1.27, database/sql calls pgx stdlib's `ScanColumn`, whose uncached `isSQLScanDestination` reflection check costs velox2's plain-pointer destinations on every column. Plan and generic PostgreSQL plans were ruled out.
+
+## Left by this plan (execution)
+
+- **Before 1.0 (velox2 runtime):** velox2's scan destinations on database/sql + pgx stdlib take pgx's slow `ScanColumn` path, so Query100 and EagerO2M100 on PostgreSQL are 2.6× and 3.5× slower than old velox. Fix it in velox2's scan path, re-run `bench/compare`, and measure `OpenPgx` too.
+- **Next run:** `runtime.GC()` before each benchmark's timer (final review F9); subtract the `-toolexec` wrapper's per-action cost (F11); EagerO2M100's extra bytes against old velox have no established cause.
+- **After the first push:** re-run on Linux CI hardware.
