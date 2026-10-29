@@ -63,8 +63,8 @@ func Example() {
 		}
 	}
 	invs, err := db.Query[testmodel.Invoice]().
-		Where(I.Number.HasPrefix("A-")).
-		OrderBy(I.Number.Asc()).
+		Where(testmodel.Invoices.Number.HasPrefix("A-")).
+		OrderBy(testmodel.Invoices.Number.Asc()).
 		Limit(2).
 		All(ctx)
 	if err != nil {
@@ -76,7 +76,7 @@ func Example() {
 	}
 	n, err := db.Query[testmodel.Invoice]().Count(ctx)
 	fmt.Println(n, err)
-	_, err = db.Query[testmodel.Invoice]().Where(I.Number.EQ("Z-9")).One(ctx)
+	_, err = db.Query[testmodel.Invoice]().Where(testmodel.Invoices.Number.EQ("Z-9")).One(ctx)
 	fmt.Println(velox.IsNotFound(err))
 	// Output:
 	// 2 A-1
@@ -91,9 +91,9 @@ func ExampleQuery_SQL() {
 	db := velox.Open(velox.Postgres, nil)
 	ctx := velox.WithTenant(context.Background(), 7)
 	text, args, err := db.Query[testmodel.Invoice]().
-		Columns(I.ID, I.Number).
-		Where(I.Total.GT(100), I.Paid.EQ(false)).
-		OrderBy(I.Number.Asc()).
+		Columns(testmodel.Invoices.ID, testmodel.Invoices.Number).
+		Where(testmodel.Invoices.Total.GT(100), testmodel.Invoices.Paid.EQ(false)).
+		OrderBy(testmodel.Invoices.Number.Asc()).
 		Limit(10).
 		SQL(ctx)
 	fmt.Println(text)
@@ -120,7 +120,7 @@ func ExampleQuery_With() {
 		fmt.Println(err)
 		return
 	}
-	got, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(inv.ID)).With(I.Items).One(ctx)
+	got, err := db.Query[testmodel.Invoice]().Where(testmodel.Invoices.ID.EQ(inv.ID)).With(testmodel.Invoices.Items).One(ctx)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -148,13 +148,13 @@ func ExampleDB_Tx() {
 	}
 	errDeclined := errors.New("card declined")
 	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
-		if _, err := tx.Update[testmodel.Invoice]().Set(I.Paid.Set(true)).Where(I.ID.EQ(inv.ID)).Exec(ctx); err != nil {
+		if _, err := tx.Update[testmodel.Invoice]().Set(testmodel.Invoices.Paid.Set(true)).Where(testmodel.Invoices.ID.EQ(inv.ID)).Exec(ctx); err != nil {
 			return err
 		}
 		return errDeclined
 	})
 	fmt.Println(errors.Is(err, errDeclined))
-	got, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(inv.ID)).One(ctx)
+	got, err := db.Query[testmodel.Invoice]().Where(testmodel.Invoices.ID.EQ(inv.ID)).One(ctx)
 	fmt.Println(got.Paid, err)
 	// Output:
 	// true
@@ -198,12 +198,12 @@ func ExampleInsertQuery_OnConflict() {
 		return
 	}
 	again := testmodel.Invoice{Number: "A-1", Total: 25, Data: []byte{}}
-	err := db.Insert(&again).OnConflict(I.OrgID, I.Number).Update(I.Total).Exec(ctx)
+	err := db.Insert(&again).OnConflict(testmodel.Invoices.OrgID, testmodel.Invoices.Number).Update(testmodel.Invoices.Total).Exec(ctx)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	got, err := db.Query[testmodel.Invoice]().Where(I.Number.EQ("A-1")).One(ctx)
+	got, err := db.Query[testmodel.Invoice]().Where(testmodel.Invoices.Number.EQ("A-1")).One(ctx)
 	if err != nil {
 		fmt.Println(err)
 		return
