@@ -31,7 +31,7 @@ database variables below, and runs what CI runs, module by module, in this
 order:
 
 1. The root module: `gofmt`, `go vet`, golangci-lint v2.14.0, then
-   `go test -race -count=1` with a coverage profile. Then the eight root fuzz
+   `go test -race -count=1` with a coverage profile. Then the nine root fuzz
    targets, `velox-gen -check` and `velox-gen verify` on the test models, and
    revive on their generated code.
 2. `example`: `gofmt`, `go vet`, golangci-lint, revive on the generated code,
@@ -147,16 +147,16 @@ value minus 1.0. The checker prints that value. The file's header has the rest.
 
 ## Fuzz targets
 
-There are nine. CI runs each for 10 or 20 seconds:
+There are ten. CI runs each for 10 or 20 seconds:
 
 ```sh
 go test -run XXX -fuzz '^FuzzRender$' -fuzztime 10s .
 ```
 
-The targets are `FuzzRender`, `FuzzQuote`, `FuzzScope`, `FuzzRenderWrite` and
-`FuzzConstraint` in the root, `FuzzLiteral` in `internal/ddl`, `FuzzSplit` and
-`FuzzDiff` in `migrate`, and `FuzzCost` in `contrib/graphql/veloxgql` (run from
-`contrib/graphql`). `.github/workflows/ci.yml` and `scripts/ci-local.sh` list
+The targets are `FuzzRender`, `FuzzQuote`, `FuzzScope`, `FuzzRenderWrite`,
+`FuzzConstraint` and `FuzzColumnScan` in the root, `FuzzLiteral` in
+`internal/ddl`, `FuzzSplit` and `FuzzDiff` in `migrate`, and `FuzzCost` in
+`contrib/graphql/veloxgql` (run from `contrib/graphql`). `.github/workflows/ci.yml` and `scripts/ci-local.sh` list
 them with their packages and times.
 
 A new target needs a line in `ci.yml` and one in `ci-local.sh`. Anchor its name

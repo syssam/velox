@@ -3,6 +3,7 @@ package velox
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
 	"reflect"
 	"strings"
@@ -539,4 +540,13 @@ func sameNode(a, b node) bool {
 		}
 	}
 	return true
+}
+
+// ScanWraps reports whether a destination of type t is wrapped in a colScanner.
+func ScanWraps(t reflect.Type) bool { return scanWraps(t) }
+
+// ColumnScan scans src into dst, a pointer to a field, through a colScanner and
+// database/sql's own entry, as pgx's stdlib driver calls it.
+func ColumnScan(dst, src any) error {
+	return sql.ConvertAssign(driver.ScanContext{}, &colScanner{dst: dst}, src)
 }
