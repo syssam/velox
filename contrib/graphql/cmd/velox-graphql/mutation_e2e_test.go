@@ -23,7 +23,8 @@ import (
 //     policy, in gen/article_policy.go, refuses the title "forbidden" on
 //     insert and lets no "locked" row change.
 //   - Circle is the M2M's other side, with a unique name; its policy, in
-//     gen/circle_policy.go, hides the circle named "hidden".
+//     gen/circle_policy.go, hides the circle named "hidden" and lets no
+//     "frozen" one change.
 //   - Profile holds the O2O's key; its policy, in gen/profile_policy.go,
 //     hides the profile whose handle is "hidden" and lets no "frozen" one
 //     change.
@@ -178,7 +179,8 @@ func (*Writer) Policy() velox.Policy[Writer] {
 `
 
 // e2eMutCirclePolicy is Circle's policy: its Read hides the circle named
-// "hidden".
+// "hidden", and its Write lets no circle named "frozen" change, though it
+// may be read.
 const e2eMutCirclePolicy = `package gen
 
 import (
@@ -187,10 +189,11 @@ import (
 	"github.com/syssam/velox2"
 )
 
-// Policy hides the circle named "hidden".
+// Policy hides the circle named "hidden", and lets no "frozen" circle change.
 func (*Circle) Policy() velox.Policy[Circle] {
 	return velox.Policy[Circle]{
-		Read: func(context.Context) (velox.Pred[Circle], error) { return Circles.Name.NEQ("hidden"), nil },
+		Read:  func(context.Context) (velox.Pred[Circle], error) { return Circles.Name.NEQ("hidden"), nil },
+		Write: func(context.Context) (velox.Pred[Circle], error) { return Circles.Name.NEQ("frozen"), nil },
 	}
 }
 `
@@ -897,6 +900,46 @@ func TestEdgeScope(t *testing.T) {
 		}
 		if got, err := e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(other.ID)).One(ctx8); err != nil || got.Name != "other" {
 			t.Errorf("tenant 8's writer: %v, %v: want it kept", got, err)
+		}
+	})
+}
+
+// TestM2MLinkNeedsReadOnly: a many-to-many link writes a join row, not the
+// target, so a circle the caller may read but not change can be linked, by
+// create and by update. The circle is left as it was, and updating it is
+// NOT_FOUND, which shows its Write policy is live.
+func TestM2MLinkNeedsReadOnly(t *testing.T) {
+	each(t, func(t *testing.T, e *env) {
+		frozen := &gen.Circle{Name: "frozen"}
+		insert(t, e.ctx, e.db, frozen)
+
+		w, err := gen.CreateWriter(e.ctx, gen.CreateWriterInput{Name: "w", Password: "x", CircleIDs: []string{circleID(frozen.ID)}})
+		if err != nil {
+			t.Fatalf("CreateWriter with the frozen circle: %v", err)
+		}
+		if got := circlesOf(t, e, w.ID); !reflect.DeepEqual(got, []string{"frozen"}) {
+			t.Errorf("the created writer's circles: %v, want [frozen]", got)
+		}
+
+		w2 := &gen.Writer{Name: "w2", Password: "x"}
+		insert(t, e.ctx, e.db, w2)
+		if _, err := gen.UpdateWriter(e.ctx, writerID(w2.ID), gen.UpdateWriterInput{AddCircleIDs: []string{circleID(frozen.ID)}}); err != nil {
+			t.Fatalf("UpdateWriter adding the frozen circle: %v", err)
+		}
+		if got := circlesOf(t, e, w2.ID); !reflect.DeepEqual(got, []string{"frozen"}) {
+			t.Errorf("the updated writer's circles: %v, want [frozen]", got)
+		}
+		if n := count(t, e.ctx, e.db.Query[gen.WriterCircle]()); n != 2 {
+			t.Errorf("%d join rows, want 2", n)
+		}
+
+		c, err := e.db.Query[gen.Circle]().Where(gen.Circles.ID.EQ(frozen.ID)).One(e.ctx)
+		if err != nil || c.Name != "frozen" {
+			t.Errorf("the frozen circle: %+v, %v", c, err)
+		}
+		_, err = gen.UpdateCircle(e.ctx, circleID(frozen.ID), gen.UpdateCircleInput{Name: ptr("thawed")})
+		if code(err) != veloxgql.CodeNotFound || err.Error() != "veloxgql: updateCircle: no Circle has this ID" {
+			t.Errorf("updating the frozen circle: %v (code %q), want NOT_FOUND", err, code(err))
 		}
 	})
 }
@@ -2427,7 +2470,7 @@ func TestMutationsRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
-	for _, name := range []string{"TestCreate", "TestCreateM2MBothSides", "TestRepeatedIDs", "TestEdgeScope", "TestAtomic", "TestCreateErrors", "TestRepoint", "TestRepointHiddenChild",
+	for _, name := range []string{"TestCreate", "TestCreateM2MBothSides", "TestRepeatedIDs", "TestEdgeScope", "TestM2MLinkNeedsReadOnly", "TestAtomic", "TestCreateErrors", "TestRepoint", "TestRepointHiddenChild",
 		"TestUpdate", "TestUpdateConflicts", "TestUpdatePolicy", "TestUpdateWriteScope", "TestUpdateReadBack", "TestUpdateEmpty", "TestUpdateErrors", "TestMutationWaitsOnTheLock",
 		"TestDelete", "TestDeletePolicy", "TestDeleteConstraint", "TestSelfM2M", "TestUnlinkScope", "TestValidateFirst", "TestRequiredSelfEdge", "TestBidiPeers", "TestBidiPartner", "TestWriteHiddenProfile"} {
 		if !strings.Contains(out, "--- PASS: "+name+" ") {

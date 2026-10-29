@@ -31,6 +31,10 @@ read-only target can still be linked many-to-many.
   write changes" and "A mutation returns the row as written".
 - `TestUpdateReadBack` and `TestEdgeScope`
   (contrib/graphql/cmd/velox-graphql/mutation_e2e_test.go).
+- `TestM2MLinkNeedsReadOnly` (the same file): a circle whose Write policy
+  hides it is linked by `CreateWriter` and by `UpdateWriter`'s
+  `addCircleIDs`, one join row each; the circle is unchanged, and
+  `UpdateCircle` on it is NOT_FOUND.
 - In the golden contrib/graphql/internal/gogen/testdata/golden/gql_post.go,
   the many-to-many IDs (`relatedIDs`, `addRelatedIDs`) are checked by
   `gqlimpl.CheckExists` on a plain `db.Query`, the Read scope, not
