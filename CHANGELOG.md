@@ -72,7 +72,7 @@ Documentation and tests
 - CI runs on PostgreSQL 14 and 18 and MySQL 8.4, pinned by digest (9c25cef),
   with fuzz targets, per-package coverage floors and benchmark baselines.
 - `bench/compare` measures velox2's build and runtime cost against old velox and
-  ent (`docs/reviews/2026-10-29-perf-comparison.md`).
+  ent (`docs/reviews/2026-10-29-perf-comparison.md`; 591c054, b7603fd..4ebd51a).
 
 ### Changed
 
