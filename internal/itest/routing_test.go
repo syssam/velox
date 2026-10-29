@@ -365,6 +365,10 @@ func TestRoutingSendsWhereItSays(t *testing.T) {
 		// included; once the window has passed, the replica again.
 		sctx := velox.WithSession(ctx)
 		wantNumbers(t, "read in a session before its write", readNumbers(t, sctx, db), []string{"REPLICA-SEED"})
+		// The pin starts inside insertInvoice, so the guard below measures
+		// from before it; the sleep after the window measures from after it,
+		// which is the later, and so the safe, side.
+		before := time.Now()
 		insertInvoice(t, sctx, db, 1, "IN-SESSION")
 		wrote := time.Now()
 		wantNumbers(t, "read in a session after its write", readNumbers(t, sctx, db), []string{"PRIMARY-SEED", "WRITTEN", "IN-SESSION"})
@@ -372,7 +376,7 @@ func TestRoutingSendsWhereItSays(t *testing.T) {
 		wantNumbers(t, "read with no session in the window", readNumbers(t, ctx, db), []string{"REPLICA-SEED"})
 		// The in-window reads must have finished inside the window, or their
 		// checks prove nothing about it.
-		if took := time.Since(wrote); took >= window {
+		if took := time.Since(before); took >= window {
 			t.Fatalf("the runner took %v for the in-window reads, past the %v window", took, window)
 		}
 		time.Sleep(time.Until(wrote.Add(window + 100*time.Millisecond)))
