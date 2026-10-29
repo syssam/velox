@@ -2338,6 +2338,34 @@ func TestRequiredSelfKeyIsNullable(t *testing.T) {
 	}
 }
 
+// reqSelfBound is a tree whose Required parent edge binds the key to a
+// field that is neither Optional nor Nillable.
+type reqSelfBound struct{ schema.Schema }
+
+func (reqSelfBound) Fields() []schema.Field {
+	return []schema.Field{field.Int64("parent_id")}
+}
+
+func (reqSelfBound) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("children", reqSelfBound.Type).From("parent").Unique().Required().Field("parent_id")}
+}
+
+// A Required edge to its own schema is NULL-able only through its implicit
+// key. A key bound to a field that is not Optional stays NOT NULL.
+func TestRequiredSelfBoundKeyIsNotNull(t *testing.T) {
+	g := mustBuild(t, reqSelfBound{})
+	e := g.Entity("reqSelfBound")
+	if f := e.Field("parent_id"); f == nil || f.Optional || f.Nillable {
+		t.Fatalf("parent_id %+v", f)
+	}
+	for _, d := range allDialects {
+		s := tables(t, d, reqSelfBound{})
+		if c := column(t, table(t, s, e.Table), "parent_id"); c.Nullable {
+			t.Errorf("%v: parent_id is NULL-able", d)
+		}
+	}
+}
+
 // noaOwner and noaPet are a one-to-many pair with a NULL-able key that sets
 // NoAction; noaM2M and noaM2M2 a many-to-many pair that sets it.
 type noaOwner struct{ schema.Schema }

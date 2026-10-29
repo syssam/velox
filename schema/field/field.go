@@ -159,7 +159,8 @@ func (t typed[B, V]) Default(v V) B { t.c.d.Default = v; return t.c.self }
 func (t typed[B, V]) DefaultFunc(fn any) B { t.c.d.DefaultFunc = fn; return t.c.self }
 
 // UpdateDefault sets a func() returning the field's Go type, called on every
-// update that does not set the field.
+// update that does not set the field. An upsert's update branch does not call
+// it.
 func (t typed[B, V]) UpdateDefault(fn any) B { t.c.d.UpdateDefault = fn; return t.c.self }
 
 // Validate adds a function that checks the field's value.

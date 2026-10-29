@@ -460,7 +460,8 @@ func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) EdgeDesc 
 // caller is in one. The clearing of the old partner is not scoped by tenant
 // or policy (WithAllTenants, WithoutPolicy, with a reason the hooks see): it
 // is the edge's integrity, as ent's is. The link of the new partner is
-// scoped as the caller's write, so a partner it cannot see cannot be linked.
+// scoped as the caller's write, so a partner it may not change cannot be
+// linked.
 // Delete writes only the deleted rows; the foreign key's ON DELETE acts on
 // their partners, and velox-gen's default for this NULL-able key, as ent's,
 // is SET NULL.
@@ -470,7 +471,7 @@ func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) EdgeDesc 
 // on Kind, not Constraint: Constraint is the database's name for the key's
 // unique index when the index refuses the write, and the key column's name
 // when velox's link of the partner does (a partner whose key points one way,
-// or one the caller cannot see).
+// or one the caller may not change).
 //
 // velox refuses, before anything is sent, what it could not keep both rows
 // of: an Update that sets the key and does not name one row by its primary

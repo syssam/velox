@@ -328,7 +328,8 @@ func (b *TimeBuilder) Default(fn func() time.Time) *TimeBuilder { b.d.Default = 
 
 // UpdateDefault sets a function, such as time.Now, called on every update that
 // does not set the field. With a GoType, the GoType must convert from
-// time.Time, and the generated code converts what fn returns.
+// time.Time, and the generated code converts what fn returns. An upsert's
+// update branch does not call it.
 func (b *TimeBuilder) UpdateDefault(fn func() time.Time) *TimeBuilder {
 	b.d.UpdateDefault = fn
 	return b

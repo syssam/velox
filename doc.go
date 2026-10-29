@@ -99,6 +99,12 @@
 //	n, err := db.Update[gen.Invoice]().Set(gen.Invoices.Status.Set(gen.InvoiceStatusPaid)).Where(gen.Invoices.ID.EQ(id)).Exec(ctx)
 //	err = db.Save(&inv, gen.Invoices.Number, gen.Invoices.TotalCents).Exec(ctx)
 //
+// A self-referencing edge with no inverse is bidirectional, as in ent. A
+// link writes both directions: both join rows of a many-to-many edge, or
+// both rows' keys of a one-to-one edge. An unlink removes both. Inserting a
+// join row fails when either row is there already;
+// OnConflict(...).DoNothing() is the idempotent insert.
+//
 // The tenant scope and the entity's policy apply to writes as to reads.
 //
 // # JSON fields

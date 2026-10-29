@@ -53,8 +53,11 @@ func columnIndexes[E any](cs []Column[E]) []int {
 // OnConflict names the columns of the unique key whose conflict the insert
 // resolves; follow it with Update or DoNothing. Without either, the insert
 // keeps the existing row (DO NOTHING). It replaces only the key columns: an
-// Update or DoNothing already chained stays. On MySQL, ON DUPLICATE KEY UPDATE resolves a conflict on any
-// unique key.
+// Update or DoNothing already chained stays. On MySQL, ON DUPLICATE KEY UPDATE
+// resolves a conflict on any unique key.
+//
+// An upsert's update branch writes only the columns Update names: an
+// UpdateDefault, such as an updated_at column's, does not fire, as in ent.
 func (q InsertQuery[E]) OnConflict[_ Lazy[E]](cols ...Column[E]) InsertQuery[E] {
 	var cf ConflictClause
 	if q.conflict != nil {
