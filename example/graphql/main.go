@@ -14,6 +14,7 @@ import (
 	"flag"
 	"fmt"
 	"io/fs"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -39,15 +40,21 @@ import (
 func main() {
 	addr := flag.String("addr", "localhost:8080", "the address to serve on")
 	flag.Parse()
-	if err := serve(context.Background(), *addr); err != nil {
+	ln, err := net.Listen("tcp", *addr)
+	if err == nil {
+		err = serve(context.Background(), ln)
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-// serve runs the server until it fails or the process gets SIGINT or SIGTERM,
-// then shuts it down, so that the deferred cleanup of the database runs.
-func serve(ctx context.Context, addr string) error {
+// serve serves on ln until it fails, ctx ends or the process gets SIGINT or
+// SIGTERM, then shuts the server down, so that the deferred cleanup of the
+// database runs. It closes ln.
+func serve(ctx context.Context, ln net.Listener) error {
+	defer func() { _ = ln.Close() }() // a second Close, once Serve has closed it, is harmless
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	dir, err := os.MkdirTemp("", "velox-graphql-")
@@ -69,8 +76,8 @@ func serve(ctx context.Context, addr string) error {
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/graphql", orgFromHeader(roleFromHeader(server(db))))
-	fmt.Printf("POST GraphQL to http://%s/graphql, with X-Org-ID: 1 or 2 for posts, and X-Role: admin for emails\n", addr)
-	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+	fmt.Printf("POST GraphQL to http://%s/graphql, with X-Org-ID: 1 or 2 for posts, and X-Role: admin for emails\n", ln.Addr())
+	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -79,7 +86,7 @@ func serve(ctx context.Context, addr string) error {
 		defer cancel()
 		_ = srv.Shutdown(sctx)
 	}()
-	if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+	if err := srv.Serve(ln); !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
 	<-done // in-flight requests are finished before the database closes

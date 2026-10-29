@@ -64,7 +64,7 @@ github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl 95.6
 github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared 0.0
 
 # example module
-github.com/syssam/velox2/example/graphql 47.9
+github.com/syssam/velox2/example/graphql 76.4
 github.com/syssam/velox2/example/graphql/gen 0.0
 github.com/syssam/velox2/example/graphql/graph 0.0
 github.com/syssam/velox2/example/graphql/schema 0.0

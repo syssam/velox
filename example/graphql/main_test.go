@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -16,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
@@ -1055,4 +1057,51 @@ func TestMutationInputShape(t *testing.T) {
 		want: `{"errors": [{"message": "CreatePostInput.title: invalid value: must not be empty", "path": ["createPost"],
 			"extensions": {"code": "BAD_USER_INPUT"}}], "data": null}`,
 	})
+}
+
+// TestServeShutsDownGracefully: serve answers requests on its listener, and
+// when its context ends it shuts the server down, returns nil and removes its
+// temporary database directory.
+func TestServeShutsDownGracefully(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp) // os.MkdirTemp reads it
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	result := make(chan error, 1)
+	go func() { result <- serve(ctx, ln) }()
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Post("http://"+ln.Addr().String()+"/graphql", "application/json",
+		strings.NewReader(`{"query":"{ __typename }"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), `"__typename":"Query"`) {
+		t.Fatalf("got %d %s", resp.StatusCode, body)
+	}
+	if left, _ := filepath.Glob(filepath.Join(tmp, "velox-graphql-*")); len(left) != 1 {
+		t.Errorf("while serving, the database directory is %v, want one", left)
+	}
+
+	cancel()
+	select {
+	case err := <-result:
+		if err != nil {
+			t.Errorf("serve returned %v after its context ended, want nil", err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("serve did not return after its context ended")
+	}
+	if left, _ := filepath.Glob(filepath.Join(tmp, "velox-graphql-*")); len(left) != 0 {
+		t.Errorf("serve left %v", left)
+	}
+	if _, err := net.Dial("tcp", ln.Addr().String()); err == nil {
+		t.Error("the listener still accepts after serve returned")
+	}
 }
