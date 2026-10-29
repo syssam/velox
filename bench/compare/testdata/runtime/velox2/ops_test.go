@@ -106,6 +106,8 @@ func (a *app) insertBulk(ctx context.Context) error {
 	return a.db.InsertAll(rows).Exec(ctx)
 }
 
+func (a *app) seededID(i int) int64 { return a.ids[i%100] }
+
 func (a *app) get(ctx context.Context, i int) (int64, string, error) {
 	x, err := a.db.Query[gen.E0]().Where(gen.E0s.ID.EQ(a.ids[i%100])).One(ctx)
 	if err != nil {
@@ -115,7 +117,7 @@ func (a *app) get(ctx context.Context, i int) (int64, string, error) {
 }
 
 func (a *app) query(ctx context.Context) ([]int, error) {
-	xs, err := a.db.Query[gen.E1]().Where(gen.E1s.Count.GTE(100)).OrderBy(gen.E1s.Count.Desc()).Limit(100).All(ctx)
+	xs, err := a.db.Query[gen.E1]().Where(gen.E1s.Count.LT(450)).OrderBy(gen.E1s.Count.Desc()).Limit(100).All(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -126,24 +128,26 @@ func (a *app) query(ctx context.Context) ([]int, error) {
 	return counts, nil
 }
 
-func (a *app) eager(ctx context.Context) (parents, children int, err error) {
+func (a *app) eager(ctx context.Context) (parents []int64, children int, err error) {
 	ps, err := a.db.Query[gen.E0]().OrderBy(gen.E0s.ID.Asc()).With(gen.E0s.Next).Limit(100).All(ctx)
 	if err != nil {
-		return 0, 0, err
+		return nil, 0, err
 	}
-	for _, p := range ps {
+	parents = make([]int64, len(ps))
+	for i, p := range ps {
+		parents[i] = p.ID
 		next, ok := p.Next.Get()
 		if !ok {
-			return 0, 0, fmt.Errorf("E0 %d: next is not loaded", p.ID)
+			return nil, 0, fmt.Errorf("E0 %d: next is not loaded", p.ID)
 		}
 		for _, c := range next {
 			if c.PrevID != p.ID {
-				return 0, 0, fmt.Errorf("E1 %d under E0 %d has prev_id %d", c.ID, p.ID, c.PrevID)
+				return nil, 0, fmt.Errorf("E1 %d under E0 %d has prev_id %d", c.ID, p.ID, c.PrevID)
 			}
 		}
 		children += len(next)
 	}
-	return len(ps), children, nil
+	return parents, children, nil
 }
 
 func (a *app) update(ctx context.Context, i int, name string) error {

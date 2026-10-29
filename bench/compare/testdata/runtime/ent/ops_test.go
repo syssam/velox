@@ -86,6 +86,8 @@ func (a *app) insertBulk(ctx context.Context) error {
 	return err
 }
 
+func (a *app) seededID(i int) int64 { return int64(a.ids[i%100]) }
+
 func (a *app) get(ctx context.Context, i int) (int64, string, error) {
 	x, err := a.client.E0.Get(ctx, a.ids[i%100])
 	if err != nil {
@@ -95,7 +97,7 @@ func (a *app) get(ctx context.Context, i int) (int64, string, error) {
 }
 
 func (a *app) query(ctx context.Context) ([]int, error) {
-	xs, err := a.client.E1.Query().Where(e1.CountGTE(100)).Order(ent.Desc(e1.FieldCount)).Limit(100).All(ctx)
+	xs, err := a.client.E1.Query().Where(e1.CountLT(450)).Order(ent.Desc(e1.FieldCount)).Limit(100).All(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -106,20 +108,22 @@ func (a *app) query(ctx context.Context) ([]int, error) {
 	return counts, nil
 }
 
-func (a *app) eager(ctx context.Context) (parents, children int, err error) {
+func (a *app) eager(ctx context.Context) (parents []int64, children int, err error) {
 	ps, err := a.client.E0.Query().Order(ent.Asc(e0.FieldID)).WithNext().Limit(100).All(ctx)
 	if err != nil {
-		return 0, 0, err
+		return nil, 0, err
 	}
-	for _, p := range ps {
+	parents = make([]int64, len(ps))
+	for i, p := range ps {
+		parents[i] = int64(p.ID)
 		for _, c := range p.Edges.Next {
 			if c.PrevID != p.ID {
-				return 0, 0, fmt.Errorf("E1 %d under E0 %d has prev_id %d", c.ID, p.ID, c.PrevID)
+				return nil, 0, fmt.Errorf("E1 %d under E0 %d has prev_id %d", c.ID, p.ID, c.PrevID)
 			}
 		}
 		children += len(p.Edges.Next)
 	}
-	return len(ps), children, nil
+	return parents, children, nil
 }
 
 func (a *app) update(ctx context.Context, i int, name string) error {

@@ -14,7 +14,7 @@ import (
 )
 
 // appMethods are the methods of *app that every ORM's ops_test.go defines.
-var appMethods = []string{"count", "eager", "get", "insertBulk", "insertOne", "query", "rows", "seed", "update"}
+var appMethods = []string{"count", "eager", "get", "insertBulk", "insertOne", "query", "rows", "seed", "seededID", "update"}
 
 // benchmarks are the Benchmark functions of common/bench_test.go.
 var benchmarks = []string{
@@ -117,36 +117,33 @@ func TestGuardSQLite(t *testing.T) {
 	}
 }
 
-// TestGuardPostgres runs the guard of ent, then velox2's, against one
-// database (Review Focus 4): each ORM touches only its own schema.
+// TestGuardPostgres runs the guard of each ORM in turn against one database
+// (Review Focus 4): each ORM touches only its own schema, so every schema
+// keeps its rows after the later ORMs' guards.
 func TestGuardPostgres(t *testing.T) {
 	if testing.Short() {
-		t.Skip("two code generations and test builds")
+		t.Skip("three code generations and test builds")
 	}
 	dsn := os.Getenv("VELOX_COMPARE_POSTGRES")
 	if dsn == "" {
 		t.Skip("VELOX_COMPARE_POSTGRES is unset")
 	}
-	runGuard(t, entORM, "COMPARE_DIALECT=postgres")
-	runGuard(t, velox2ORM, "COMPARE_DIALECT=postgres")
+	for _, o := range []orm{entORM, velox2ORM, oldVeloxORM} {
+		runGuard(t, o, "COMPARE_DIALECT=postgres")
+	}
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = db.Close() }()
 	ctx := context.Background()
-	var schemas int
-	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM information_schema.schemata WHERE schema_name IN ('cmp_ent', 'cmp_velox2')`).Scan(&schemas); err != nil {
-		t.Fatal(err)
-	}
-	if schemas != 2 {
-		t.Errorf("%d of the schemas cmp_ent and cmp_velox2 exist, want 2", schemas)
-	}
-	var e1 int
-	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM cmp_ent.e1s`).Scan(&e1); err != nil {
-		t.Fatal(err)
-	}
-	if e1 != 500 {
-		t.Errorf("cmp_ent.e1s has %d rows after velox2's guard, want 500", e1)
+	for _, name := range []string{"ent", "velox2", "oldvelox"} {
+		var e1 int
+		if err := db.QueryRowContext(ctx, `SELECT count(*) FROM cmp_`+name+`.e1s`).Scan(&e1); err != nil {
+			t.Fatal(err)
+		}
+		if e1 != 500 {
+			t.Errorf("cmp_%s.e1s has %d rows after the three guards, want 500", name, e1)
+		}
 	}
 }

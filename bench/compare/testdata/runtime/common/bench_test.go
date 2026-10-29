@@ -2,17 +2,34 @@ package bench
 
 import (
 	"context"
+	"maps"
 	"testing"
 )
 
-// setup opens a fresh database, creates the tables and seeds them.
+// setup opens a fresh database, creates the tables, seeds them and analyzes them.
 func setup(tb testing.TB) *app {
 	tb.Helper()
-	a := newApp(tb, openDB(tb))
+	db := openDB(tb)
+	a := newApp(tb, db)
 	if err := a.seed(context.Background()); err != nil {
 		tb.Fatal(err)
 	}
+	analyze(tb, db)
 	return a
+}
+
+// wantShape is the number of indexes and foreign keys of each table, the same
+// for every ORM: e1s..e3s have the prev_id index and foreign key. On postgres
+// the primary key's index counts too.
+func wantShape() map[string]tableShape {
+	pk := 0
+	if dbDialect() == "postgres" {
+		pk = 1
+	}
+	return map[string]tableShape{
+		"e0s": {Indexes: pk}, "e1s": {Indexes: pk + 1, FKs: 1},
+		"e2s": {Indexes: pk + 1, FKs: 1}, "e3s": {Indexes: pk + 1, FKs: 1},
+	}
 }
 
 // TestGuard checks that each operation does its work, so that no ORM wins by
@@ -24,8 +41,12 @@ func TestGuard(t *testing.T) {
 	if err := a.seed(ctx); err != nil {
 		t.Fatal(err)
 	}
+	analyze(t, db)
 	if !prevIDIndexed(t, db) {
 		t.Error("e1s has no index on prev_id")
+	}
+	if got, want := ddlShape(t, db), wantShape(); !maps.Equal(got, want) {
+		t.Errorf("the tables' indexes and foreign keys are %v, want %v", got, want)
 	}
 	if err := a.insertOne(ctx); err != nil {
 		t.Fatal(err)
@@ -39,15 +60,15 @@ func TestGuard(t *testing.T) {
 	if _, _, e3, err := a.rows(ctx); err != nil || e3 != 100 {
 		t.Errorf("after insertBulk: e3 rows %d, %v; want 100", e3, err)
 	}
-	if _, name, err := a.get(ctx, 7); err != nil || name != "p7" {
-		t.Errorf("get(7) = %q, %v; want p7", name, err)
+	if id, name, err := a.get(ctx, 7); err != nil || id != a.seededID(7) || name != "p7" {
+		t.Errorf("get(7) = %d, %q, %v; want %d, p7", id, name, err, a.seededID(7))
 	}
 	counts, err := a.query(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(counts) != 100 || counts[0] != 499 {
-		t.Errorf("query: %d values, the first %v; want 100, the first 499", len(counts), counts[:min(1, len(counts))])
+	if len(counts) != 100 || counts[0] != 449 {
+		t.Errorf("query: %d values, the first %v; want 100, the first 449", len(counts), counts[:min(1, len(counts))])
 	}
 	for i := 1; i < len(counts); i++ {
 		if counts[i] >= counts[i-1] {
@@ -55,8 +76,15 @@ func TestGuard(t *testing.T) {
 			break
 		}
 	}
-	if parents, children, err := a.eager(ctx); err != nil || parents != 100 || children != 500 {
-		t.Errorf("eager = %d parents, %d children, %v; want 100, 500", parents, children, err)
+	parents, children, err := a.eager(ctx)
+	if err != nil || len(parents) != 100 || children != 500 {
+		t.Errorf("eager = %d parents, %d children, %v; want 100, 500", len(parents), children, err)
+	}
+	for i := 1; i < len(parents); i++ {
+		if parents[i] <= parents[i-1] {
+			t.Errorf("eager: parent %d has id %d after %d, not strictly ascending", i, parents[i], parents[i-1])
+			break
+		}
 	}
 	if err := a.update(ctx, 7, "u"); err != nil {
 		t.Fatal(err)

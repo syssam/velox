@@ -22,7 +22,9 @@ func dbDialect() string {
 // openDB opens an empty database for this ORM, with one connection, closed
 // when tb ends. On sqlite it is a new file; on postgres it is the schema
 // cmp_<ormName>, dropped and created again, of the database
-// $VELOX_COMPARE_POSTGRES.
+// $VELOX_COMPARE_POSTGRES. That DSN must be a URL (postgres://...): the
+// search_path is appended to it as a query parameter, which a keyword/value
+// DSN would not parse.
 func openDB(tb testing.TB) *sql.DB {
 	tb.Helper()
 	var db *sql.DB
@@ -77,4 +79,45 @@ func prevIDIndexed(tb testing.TB, db *sql.DB) bool {
 		tb.Fatal(err)
 	}
 	return n > 0
+}
+
+// analyze runs ANALYZE, so that every ORM's queries are planned with the same
+// statistics, and autovacuum does not gather them while a benchmark runs.
+func analyze(tb testing.TB, db *sql.DB) {
+	tb.Helper()
+	if _, err := db.Exec("ANALYZE"); err != nil {
+		tb.Fatal(err)
+	}
+}
+
+// shapeTables are the tables whose DDL shape the guard checks.
+var shapeTables = []string{"e0s", "e1s", "e2s", "e3s"}
+
+// tableShape is the number of indexes and foreign keys of one table.
+type tableShape struct{ Indexes, FKs int }
+
+// ddlShape returns the shape of each of shapeTables. On sqlite the indexes are
+// pragma_index_list's (an INTEGER PRIMARY KEY has none); on postgres they are
+// pg_indexes', the primary key's included.
+func ddlShape(tb testing.TB, db *sql.DB) map[string]tableShape {
+	tb.Helper()
+	idx := `SELECT count(*) FROM pragma_index_list(?)`
+	fks := `SELECT count(*) FROM pragma_foreign_key_list(?)`
+	if dbDialect() == "postgres" {
+		idx = `SELECT count(*) FROM pg_indexes WHERE schemaname = current_schema() AND tablename = $1`
+		fks = `SELECT count(*) FROM pg_constraint c JOIN pg_class t ON t.oid = c.conrelid
+			WHERE t.relnamespace = current_schema()::regnamespace AND t.relname = $1 AND c.contype = 'f'`
+	}
+	shape := make(map[string]tableShape, len(shapeTables))
+	for _, t := range shapeTables {
+		var s tableShape
+		if err := db.QueryRow(idx, t).Scan(&s.Indexes); err != nil {
+			tb.Fatal(err)
+		}
+		if err := db.QueryRow(fks, t).Scan(&s.FKs); err != nil {
+			tb.Fatal(err)
+		}
+		shape[t] = s
+	}
+	return shape
 }
