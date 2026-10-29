@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -174,6 +175,33 @@ func TestORMByName(t *testing.T) {
 		o, _ := ormByName(c.name)
 		if got := o.Codegen("/t"); !reflect.DeepEqual(got, c.argv) {
 			t.Errorf("%s: Codegen = %q, want %q", c.name, got, c.argv)
+		}
+	}
+}
+
+// TestSchemasEquivalent pins what the comparison rests on: after the DSLs'
+// spellings are normalised, the three ORMs' schema files are the same, entity
+// by entity. What stays different is the index method, which velox2 does not write.
+func TestSchemasEquivalent(t *testing.T) {
+	const n = 20
+	importBlock := regexp.MustCompile(`(?s)import \(.*?\n\)\n`)
+	indexMethod := regexp.MustCompile(`(?s)\nfunc \(E\d+\) Indexes\(\).*?\n}\n`)
+	norm := func(o orm, src string) string {
+		src = importBlock.ReplaceAllString(src, "")
+		src = indexMethod.ReplaceAllString(src, "")
+		src = strings.NewReplacer(o.dsl.SchemaType, "SCHEMA", o.dsl.FieldType, "FIELD", o.dsl.EdgeType, "EDGE",
+			`field.`+o.dsl.FK+`("prev_id")`, `field.FK("prev_id")`).Replace(src)
+		return src
+	}
+	ref := orms[0].Schema(n)
+	for _, o := range orms[1:] {
+		got := o.Schema(n)
+		for i := range n {
+			name := "e" + strconv.Itoa(i) + ".go"
+			want := norm(orms[0], ref[filepath.Join(orms[0].SchemaDir, name)])
+			if g := norm(o, got[filepath.Join(o.SchemaDir, name)]); g != want {
+				t.Errorf("%s %s differs from velox2's:\n%s\nvs\n%s", o.Name, name, g, want)
+			}
 		}
 	}
 }

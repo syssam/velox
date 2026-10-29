@@ -108,6 +108,16 @@ func clientService(pkg, where string, es []int) string {
 		pkg, imports.String(), calls.String())
 }
 
+// genSkip is the directory of GenDir that countGenerated leaves out, relative
+// to GenDir: ent keeps its schema package inside the generated directory, and
+// the others have no such directory.
+func (o orm) genSkip() string {
+	if rel, err := filepath.Rel(o.GenDir, o.SchemaDir); err == nil && !strings.HasPrefix(rel, "..") {
+		return rel
+	}
+	return ""
+}
+
 // orms are the compared ORMs, velox2 first.
 var orms = []orm{velox2ORM, oldVeloxORM, entORM}
 

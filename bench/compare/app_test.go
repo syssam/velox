@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -87,7 +88,8 @@ func TestCountGenerated(t *testing.T) {
 	for name, src := range map[string]string{
 		"a.go":               "package a\n\nvar x = 1\n",
 		"sub/b.go":           "package b\n",
-		"ent/schema/skip.go": "package schema\n\n\n\n",
+		"schema/skip.go":     "package schema\n\n\n\n",
+		"sub/schema/keep.go": "package schema\n",
 		"readme.txt":         "not go\n",
 	} {
 		p := filepath.Join(dir, name)
@@ -99,14 +101,20 @@ func TestCountGenerated(t *testing.T) {
 		}
 	}
 	lines, bytes, err := countGenerated(dir, "")
-	if err != nil || lines != 3+1+4 || bytes != 21+10+18 {
+	if err != nil || lines != 3+1+4+1 || bytes != 21+10+18+15 {
 		t.Errorf("no skip: %d lines, %d bytes, %v", lines, bytes, err)
 	}
-	// Whether skip is given from the app ("ent/schema") or from the generated directory ("schema").
-	for _, skip := range []string{"ent/schema", "schema"} {
-		lines, bytes, err = countGenerated(dir, skip)
-		if err != nil || lines != 4 || bytes != 31 {
-			t.Errorf("skip %q: %d lines, %d bytes, %v", skip, lines, bytes, err)
+	// Only dir/schema is skipped, not sub/schema, and dir may be relative.
+	t.Chdir(dir)
+	for _, d := range []string{dir, ".", "./"} {
+		lines, bytes, err = countGenerated(d, "schema")
+		if err != nil || lines != 5 || bytes != 46 {
+			t.Errorf("dir %q, skip schema: %d lines, %d bytes, %v", d, lines, bytes, err)
+		}
+	}
+	for name, want := range map[string]string{"velox2": "", "oldvelox": "", "ent": "schema"} {
+		if o, _ := ormByName(name); o.genSkip() != want {
+			t.Errorf("%s: genSkip = %q, want %q", name, o.genSkip(), want)
 		}
 	}
 }
@@ -161,11 +169,16 @@ func TestGenerateCompiles(t *testing.T) {
 			if out, err := vet.CombinedOutput(); err != nil {
 				t.Fatalf("go vet: %v\n%s", err, out)
 			}
-			skip := ""
-			if o.Name == "ent" {
-				skip = "ent/schema"
+			for i := range n {
+				// velox2 generates a file per entity, the others a package.
+				name := "e" + strconv.Itoa(i)
+				if _, err := os.Stat(filepath.Join(app, o.GenDir, name+"_velox.go")); err != nil {
+					if fi, err := os.Stat(filepath.Join(app, o.GenDir, name)); err != nil || !fi.IsDir() {
+						t.Errorf("nothing generated for E%d under %s", i, o.GenDir)
+					}
+				}
 			}
-			l, b, err := countGenerated(filepath.Join(app, o.GenDir), skip)
+			l, b, err := countGenerated(filepath.Join(app, o.GenDir), o.genSkip())
 			if err != nil || l <= 0 || b <= 0 {
 				t.Fatalf("countGenerated = %d lines, %d bytes, %v", l, b, err)
 			}

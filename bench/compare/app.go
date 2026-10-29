@@ -106,16 +106,19 @@ func goEnv(extra ...string) []string {
 }
 
 // countGenerated counts the lines and bytes of the *.go files under dir,
-// leaving out the directories whose path ends in skip (ent's schema, which is
-// not generated; skip may be "ent/schema" or, from the ent directory,
-// "schema"). Empty skip leaves out nothing.
+// leaving out the directory skip, a path relative to dir (ent's schema, which
+// is not generated). Empty skip leaves out nothing. dir may be relative or
+// absolute. Call it as countGenerated(filepath.Join(app, o.GenDir), o.genSkip()).
 func countGenerated(dir, skip string) (lines, bytes int, err error) {
+	if skip != "" {
+		skip = filepath.Clean(skip)
+	}
 	err = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if d.IsDir() {
-			if skip != "" && strings.HasSuffix(filepath.ToSlash(p), "/"+filepath.ToSlash(skip)) {
+			if rel, err := filepath.Rel(dir, p); err == nil && skip != "" && rel == skip {
 				return filepath.SkipDir
 			}
 			return nil
