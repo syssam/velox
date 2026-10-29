@@ -6,9 +6,10 @@ Draft only; not filed.
 
 Under Go 1.27, database/sql hands each column to the driver's
 `driver.RowsColumnScanner`. The cost is new with that path: the driver's
-`Next` path, which database/sql used before, never ran the check. `stdlib.(*Rows).ScanColumn`
-(stdlib/sql_go1.27.go, pgx v5.11.0) calls `isSQLScanDestination(rv.Type())`
-on every column of every row, and the result is not cached.
+`Next` path, which database/sql used before, never ran the check.
+`stdlib.(*Rows).ScanColumn` (stdlib/sql_go1.27.go, pgx v5.11.0) calls
+`isSQLScanDestination(rv.Type())` on every column of every row, and the
+result is not cached.
 
 The function calls `reflect.Type.Implements` up to three times per pointer
 level. `Implements` resolves the name of every method of the type, so its
