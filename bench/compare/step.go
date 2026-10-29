@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"regexp"
 	"strconv"
 	"strings"
@@ -26,6 +27,7 @@ type load struct {
 // "load average: 1.00, 2.00, 3.00" (Linux).
 var loadRE = regexp.MustCompile(`load averages?:\s*([0-9.]+),?\s+([0-9.]+),?\s+([0-9.]+)`)
 
+// parseUptime reads the three load averages from an uptime line.
 func parseUptime(out string) (load, error) {
 	m := loadRE.FindStringSubmatch(out)
 	if m == nil {
@@ -42,9 +44,12 @@ func parseUptime(out string) (load, error) {
 	return load{One: v[0], Five: v[1], Fifteen: v[2]}, nil
 }
 
-// readUptime runs uptime and returns its raw line and the parsed load.
+// readUptime runs uptime and returns its raw line and the parsed load. It
+// runs in the C locale, so that the decimals have a point.
 func readUptime() (string, load, error) {
-	out, err := exec.Command("uptime").Output()
+	cmd := exec.Command("uptime")
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	out, err := cmd.Output()
 	if err != nil {
 		return "", load{}, fmt.Errorf("uptime: %w", err)
 	}
@@ -53,12 +58,14 @@ func readUptime() (string, load, error) {
 	return raw, l, err
 }
 
-// gate holds a step back until the one-minute load is below Max, for at most Wait.
+// gate holds a step back until the one-minute load is below Max, for at
+// most Wait. It polls every Poll.
 type gate struct {
 	Max        float64
 	Wait, Poll time.Duration
 }
 
+// gateResult is what the gate did, as the step record shows it.
 type gateResult struct {
 	Max      float64 `json:"max"`
 	WaitedS  float64 `json:"waited_s"`
@@ -66,7 +73,7 @@ type gateResult struct {
 }
 
 // waitLoad returns once read reports One < g.Max, or once g.Wait has passed
-// (TimedOut). It polls every g.Poll.
+// (TimedOut). It polls every g.Poll, and never sleeps past g.Wait.
 func waitLoad(ctx context.Context, g gate, read func() (load, error)) (gateResult, error) {
 	start := time.Now()
 	res := gateResult{Max: g.Max}
@@ -75,18 +82,19 @@ func waitLoad(ctx context.Context, g gate, read func() (load, error)) (gateResul
 		if err != nil {
 			return res, err
 		}
-		res.WaitedS = time.Since(start).Seconds()
+		elapsed := time.Since(start)
+		res.WaitedS = elapsed.Seconds()
 		if l.One < g.Max {
 			return res, nil
 		}
-		if time.Since(start) >= g.Wait {
+		if elapsed >= g.Wait {
 			res.TimedOut = true
 			return res, nil
 		}
 		select {
 		case <-ctx.Done():
 			return res, ctx.Err()
-		case <-time.After(g.Poll):
+		case <-time.After(min(g.Poll, g.Wait-elapsed)):
 		}
 	}
 }
@@ -106,15 +114,26 @@ type stepRecord struct {
 }
 
 // runStep runs argv, waiting first at g (nil: no gate), and appends one JSON
-// line to logPath. The command's stdout and stderr pass through. The record
-// holds no environment. The command leads its own process group, so a timeout
-// kills every child it started (a go command's compile and link processes).
-// A timeout, or a command that cannot start, records exit -1.
+// line to logPath. The log is opened before anything runs, so a bad path
+// fails at once. The command's stdout and stderr pass through. The record
+// holds argv as given and no environment: pass a secret, such as a DSN, in the
+// environment, never as an argument.
+//
+// The command leads its own process group. A timeout, or a cancelled ctx,
+// kills the whole group (a go command's compile and link processes too) and
+// records exit -1; so does a command that cannot start. After a normal exit
+// nothing is killed. The record is written whenever the command ran, even if
+// the uptime after it cannot be read.
 func runStep(ctx context.Context, name string, g *gate, timeout time.Duration, logPath string, argv []string) (stepRecord, error) {
 	rec := stepRecord{Name: name, Argv: argv}
 	if len(argv) == 0 {
 		return rec, errors.New("step: no command")
 	}
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return rec, err
+	}
+	defer func() { _ = f.Close() }()
 	if g != nil {
 		res, err := waitLoad(ctx, *g, func() (load, error) {
 			_, l, err := readUptime()
@@ -125,7 +144,6 @@ func runStep(ctx context.Context, name string, g *gate, timeout time.Duration, l
 		}
 		rec.Gate = &res
 	}
-	var err error
 	if rec.UptimeBefore, rec.LoadBefore, err = readUptime(); err != nil {
 		return rec, err
 	}
@@ -143,9 +161,8 @@ func runStep(ctx context.Context, name string, g *gate, timeout time.Duration, l
 		go func() { done <- cmd.Wait() }()
 		timer := time.NewTimer(timeout)
 		defer timer.Stop()
-		var werr error
 		select {
-		case werr = <-done:
+		case werr := <-done:
 			rec.Exit = exitCode(werr)
 		case <-timer.C:
 			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
@@ -158,23 +175,15 @@ func runStep(ctx context.Context, name string, g *gate, timeout time.Duration, l
 		}
 	}
 	rec.WallS = time.Since(start).Seconds()
-	// The command is done: its remaining children, if any, die with the group.
-	if cmd.Process != nil {
-		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-	}
 	if rec.UptimeAfter, rec.LoadAfter, err = readUptime(); err != nil {
-		return rec, err
+		fmt.Fprintf(os.Stderr, "compare step: load after the command: %v\n", err)
+		rec.UptimeAfter, rec.LoadAfter = "", load{}
 	}
 	line, err := json.Marshal(rec)
 	if err != nil {
 		return rec, err
 	}
-	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return rec, err
-	}
 	if _, err := f.Write(append(line, '\n')); err != nil {
-		_ = f.Close()
 		return rec, err
 	}
 	return rec, f.Close()
@@ -212,7 +221,11 @@ func stepMain(args []string) int {
 	if *gateMax > 0 {
 		g = &gate{Max: *gateMax, Wait: *gateWait, Poll: 10 * time.Second}
 	}
-	rec, err := runStep(context.Background(), *name, g, *timeout, *logPath, fs.Args())
+	// The command leads its own process group, so a signal to compare does
+	// not reach it: on SIGINT or SIGTERM runStep kills the group itself.
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	rec, err := runStep(ctx, *name, g, *timeout, *logPath, fs.Args())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "compare step: %v\n", err)
 		if rec.Exit == 0 {
