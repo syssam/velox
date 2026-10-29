@@ -14,8 +14,9 @@ import (
 const usage = `usage: compare <subcommand> [flags]
 
 subcommands:
-  step   run one command, timed and logged, behind an optional load gate
-  build  measure one ORM's build cost at one size, as JSON
+  step         run one command, timed and logged, behind an optional load gate
+  build        measure one ORM's build cost at one size, as JSON
+  runtime-app  write one ORM's runtime app: the n=10 schema, its code, the benchmarks
 `
 
 func main() {
@@ -28,6 +29,8 @@ func main() {
 		os.Exit(stepMain(os.Args[2:]))
 	case "build":
 		os.Exit(buildMain(os.Args[2:]))
+	case "runtime-app":
+		os.Exit(runtimeAppMain(os.Args[2:]))
 	default:
 		fmt.Fprintf(os.Stderr, "compare: unknown subcommand %q\n\n%s", os.Args[1], usage)
 		os.Exit(2)
