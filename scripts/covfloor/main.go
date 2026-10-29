@@ -89,6 +89,14 @@ func (c pkgCov) percent() float64 {
 	return 100 * float64(c.covered) / float64(c.total)
 }
 
+// rounded is the percentage to one decimal, as the messages print it and as
+// go test prints it, so that the comparison with a floor is the one the reader
+// sees: no "50.0% < 50.0%".
+func (c pkgCov) rounded() float64 {
+	r, _ := strconv.ParseFloat(fmt.Sprintf("%.1f", c.percent()), 64)
+	return r
+}
+
 // parseFloors reads "<import path> <percent>" lines.
 func parseFloors(r io.Reader) (map[string]float64, error) {
 	floors := map[string]float64{}
@@ -186,7 +194,7 @@ func mergeProfiles(rs []io.Reader) (map[string]pkgCov, error) {
 func check(cov map[string]pkgCov, floors map[string]float64, floorsFile string) []string {
 	var problems []string
 	for _, pkg := range sortedKeys(cov) {
-		got := cov[pkg].percent()
+		got := cov[pkg].rounded()
 		floor, ok := floors[pkg]
 		switch {
 		case !ok:

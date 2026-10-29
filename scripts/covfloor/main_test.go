@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -91,6 +92,20 @@ func TestRun(t *testing.T) {
 			if !strings.Contains(got[0], want) {
 				t.Errorf("%q does not contain %q", got[0], want)
 			}
+		}
+	})
+	t.Run("a near miss is compared as it is printed", func(t *testing.T) {
+		// 4996 of 10000 is 49.96%, which prints as 50.0%: it meets a floor of 50.0.
+		// 4994 of 10000 is 49.94%, which prints as 49.9%: it is short by 0.1.
+		near := func(covered int) string {
+			return fmt.Sprintf("mode: set\nexample.com/m/c/c.go:1.1,2.2 %d 1\nexample.com/m/c/c.go:3.1,4.2 %d 0\n", covered, 10000-covered)
+		}
+		if got := runWith(t, "example.com/m/c 50.0\n", near(4996)); len(got) != 0 {
+			t.Errorf("49.96%% against 50.0: problems = %q, want none", got)
+		}
+		got := runWith(t, "example.com/m/c 50.0\n", near(4994))
+		if len(got) != 1 || !strings.Contains(got[0], "49.9% < 50.0% (short by 0.1 points)") {
+			t.Errorf("49.94%% against 50.0: problems = %q", got)
 		}
 	})
 	t.Run("a package without a line", func(t *testing.T) {
