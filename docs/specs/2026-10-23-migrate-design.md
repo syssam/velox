@@ -179,7 +179,7 @@ type Enum struct { // a PostgreSQL CREATE TYPE … AS ENUM
 
 **Indexes,** sorted by name:
 1. Each declared index (`Graph.Indexes`), with its name (§6).
-2. Each `Unique` field that is not the ID: a unique index on that column, unless a declared unique index on that column alone exists. This is `lower.go`'s rule; the name is `indexName`'s (`<table>_<col>_unique`).
+2. Each `Unique` field that is not the ID: a unique index on that column, unless a declared unique index on that column alone exists. This is `lower.go`'s rule; the name is ent's: `<table>_<col>_key` on PostgreSQL and SQLite, and the column's name on MySQL. *(Updated 2026-10-29 by hardening wave 6: the name was `indexName`'s, `<table>_<col>_unique`. Commit 25e9e88 gave ent's index, unique and foreign-key names; the CREATE examples in §8.2 show them.)*
 3. **Foreign-key indexes (call).** Each foreign-key column that is not the leading column of the primary key or of another index gets a non-unique index `<table>_<col>`. A join table's target column is one. Why: velox loads edges by `WHERE fk IN (…)`, and MySQL's InnoDB creates exactly such an index for any foreign key without one. Modelling it keeps `inspect == model` true on MySQL and makes loads indexed on the others. Adding or dropping another index can therefore replace this one; Diff orders that case (ruling 46).
 
 **Foreign keys.** One per relation that holds a key (`Rel.Kind` O2M, M2O, O2O), on the table holding the column, referencing the target's ID. Its `OnDelete` is `Rel.OnDelete`. A join table has two, both `ON DELETE CASCADE` **(call)**: rule 45's message says join rows go with either end, and the database is where that holds for every writer. The names are §6's.
@@ -291,10 +291,10 @@ An expression the normaliser cannot match is reported by drift with both spellin
 - **Tables and columns** are the `Graph`'s: `Entity.Table` and `Field.Column`, join tables as `Build` derives them.
 - **Primary key:** PostgreSQL `<table>_pkey` (its own default), MySQL `PRIMARY`, SQLite none. The model holds it (`PrimaryKeyName`), so a table rename renames it (ruling 49).
 - **Identity sequence (PostgreSQL):** `<table>_<col>_seq`, named explicitly in the DDL.
-- **Declared index:** its `StorageKey`, else `indexName`: `<table>_<cols…>`, then `_unique` for a unique index, then `_<fnv-1a 32 of Where, 8 hex>` for a partial one. This is the existing derivation in `internal/gen/build.go`.
-- **Unique field:** `indexName` of a one-column unique index: `<table>_<col>_unique`.
-- **Foreign-key index:** `<table>_<col>`.
-- **Foreign key:** `edge.Symbol` (or, for a join table, `edge.Symbols(to, from)`, in the order of its columns), else `<table>_<col>_fkey`, PostgreSQL's own default.
+- **Declared index:** its `StorageKey`, else ent's name: the entity's name in lower case and the columns, joined by `_` (`<entity>_<cols…>`), the same for a unique index. A partial index adds `_<fnv-1a 32 of Where, 8 hex>` only when another index of its entity, or velox's foreign-key index, has the name without it. *(Updated 2026-10-29 by hardening wave 6: a unique index had a `_unique` suffix and every partial index the hash, and the name began with the table. Commit 25e9e88.)*
+- **Unique field:** `<table>_<col>_key` on PostgreSQL and SQLite, PostgreSQL's own name for a `UNIQUE` column's constraint; the column's name on MySQL, as ent names it. *(Updated 2026-10-29 by hardening wave 6: it was `<table>_<col>_unique` on every dialect. Commit 25e9e88.)*
+- **Foreign-key index:** `<table>_<col>` on PostgreSQL and SQLite. On MySQL it is the foreign key's name, which InnoDB's own index for the key takes.
+- **Foreign key:** `edge.Symbol` (or, for a join table, `edge.Symbols(to, from)`, in the order of its columns), else ent's name: `<table>_<referenced table>_<edge>`, or `<join table>_<column>` for a join table. *(Updated 2026-10-29 by hardening wave 6: the default was `<table>_<col>_fkey`, and the MySQL foreign-key index `<table>_<col>`. Commit 25e9e88.)*
 - **Enum check** (SQLite, and opted-out enums): `<table>_<col>_check`, PostgreSQL's own default.
 - **Enum type (PostgreSQL):** `<table>_<col>`, the snake-case Go type name for `EnumOf[T]`, or the `SchemaType` name (§3).
 - **Helpers the renderer makes:**
@@ -302,7 +302,7 @@ An expression the normaliser cannot match is reported by drift with both spellin
   - `velox_new_<table>`, SQLite's rebuild;
   - `<type>_velox_old`, PostgreSQL's enum swap.
 
-**The cap (call).** A derived name over 63 bytes becomes its first 54 bytes, cut back to a UTF-8 boundary, then `_`, then the 8 hex digits of the FNV-1a 32 hash of the whole uncapped name: 63 bytes at most. **The cap is applied after the suffix** (ruling 50): `indexName` caps `<table>_<cols>_unique_<hash>` as a whole, and each helper caps `<base>_velox_old` and `<base>_not_null` as a whole, never the base first. Otherwise PostgreSQL would truncate a 63-byte base plus a suffix back to the base, and the helper would collide with the object it stands beside. One cap on every dialect, so one schema works on all three: PostgreSQL truncates at 63, and MySQL refuses names over 64. velox-gen applies it, so the `Graph`'s index names, `describe` and the plugin model show the capped name.
+**The cap (call).** A derived name over 63 bytes becomes its first 54 bytes, cut back to a UTF-8 boundary, then `_`, then the 8 hex digits of the FNV-1a 32 hash of the whole uncapped name: 63 bytes at most. **The cap is applied after the suffix** (ruling 50): `indexName` caps `<entity>_<cols>_<hash>` as a whole, and each helper caps `<base>_velox_old` and `<base>_not_null` as a whole, never the base first. Otherwise PostgreSQL would truncate a 63-byte base plus a suffix back to the base, and the helper would collide with the object it stands beside. One cap on every dialect, so one schema works on all three: PostgreSQL truncates at 63, and MySQL refuses names over 64. velox-gen applies it, so the `Graph`'s index names, `describe` and the plugin model show the capped name.
 
 **Explicit names are not capped; they are refused** (rule 50, §15.2) when over 63 bytes: tables, columns, join tables, index `StorageKey`s, `Symbol`s and enum type names given by `SchemaType`. **(changed: the decision capped every identifier. Capping a name the author wrote would put a name in the database that appears nowhere in the schema.)**
 
@@ -418,46 +418,51 @@ Identifiers are always quoted: `"x"` on PostgreSQL and SQLite, `` `x` `` on MySQ
 
 The runner does not touch `sql_mode` (call). Under `NO_BACKSLASH_ESCAPES` a doubled backslash would store as two, so the runner refuses a MySQL file holding a backslash in a literal when the session has that mode, rather than store a different value.
 
-**CreateTable.**
+**CreateTable.** For an `orgs` table and a `users` table with `org_id` (a required edge from `orgs`, `ON DELETE CASCADE`), a unique `email` and an enum `role` (`viewer`, `admin`, default `viewer`, comment `c`), `velox-gen migrate diff` writes this for `users` (the statements for `orgs` are the same kind and are left out):
 ```sql
 -- PostgreSQL
 CREATE TYPE "users_role" AS ENUM ('viewer', 'admin');
 CREATE TABLE "users" (
-  "id" bigint GENERATED BY DEFAULT AS IDENTITY (SEQUENCE NAME "users_id_seq"),
+  "id" bigint GENERATED BY DEFAULT AS IDENTITY (SEQUENCE NAME "users_id_seq") NOT NULL,
   "org_id" bigint NOT NULL,
+  "email" text NOT NULL,
   "role" "users_role" NOT NULL DEFAULT 'viewer',
   CONSTRAINT "users_pkey" PRIMARY KEY ("id"),
-  CONSTRAINT "users_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "orgs" ("id") ON DELETE CASCADE
+  CONSTRAINT "users_orgs_users" FOREIGN KEY ("org_id") REFERENCES "orgs" ("id") ON DELETE CASCADE
 );
-CREATE UNIQUE INDEX "users_email_unique" ON "users" ("email");
+CREATE UNIQUE INDEX "users_email_key" ON "users" ("email");
 CREATE INDEX "users_org_id" ON "users" ("org_id");
-COMMENT ON TABLE "users" IS '…';   COMMENT ON COLUMN "users"."role" IS '…';
+COMMENT ON COLUMN "users"."role" IS 'c';
 
 -- MySQL
 CREATE TABLE `users` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `org_id` bigint NOT NULL,
-  `role` enum('viewer','admin') NOT NULL DEFAULT 'viewer' COMMENT '…',
+  `email` varchar(255) NOT NULL,
+  `role` enum('viewer','admin') NOT NULL DEFAULT 'viewer' COMMENT 'c',
   PRIMARY KEY (`id`),
-  UNIQUE INDEX `users_email_unique` (`email`),
-  INDEX `users_org_id` (`org_id`),
-  CONSTRAINT `users_org_id_fkey` FOREIGN KEY (`org_id`) REFERENCES `orgs` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin COMMENT='…';
+  UNIQUE INDEX `email` (`email`),
+  INDEX `users_orgs_users` (`org_id`),
+  CONSTRAINT `users_orgs_users` FOREIGN KEY (`org_id`) REFERENCES `orgs` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 
 -- SQLite
 CREATE TABLE "users" (
   "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
   "org_id" integer NOT NULL,
+  "email" text NOT NULL,
   "role" text NOT NULL DEFAULT 'viewer',
-  CONSTRAINT "users_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "orgs" ("id") ON DELETE CASCADE,
+  CONSTRAINT "users_orgs_users" FOREIGN KEY ("org_id") REFERENCES "orgs" ("id") ON DELETE CASCADE,
   CONSTRAINT "users_role_check" CHECK ("role" IN ('viewer', 'admin'))
 );
-CREATE UNIQUE INDEX "users_email_unique" ON "users" ("email");
+CREATE UNIQUE INDEX "users_email_key" ON "users" ("email");
+CREATE INDEX "users_org_id" ON "users" ("org_id");
 ```
+*(Updated 2026-10-29 by hardening wave 6: the examples are velox-gen's output now. They had the names from before commit 25e9e88, `users_email_unique` and `users_org_id_fkey`, and no `NOT NULL` on the identity column.)*
 - A table in a schema is qualified: `"billing"."invoices"` on PostgreSQL, `` `billing`.`invoices` `` on MySQL.
 - On PostgreSQL, a schema that no table of `from` uses is created first with `CREATE SCHEMA IF NOT EXISTS` (call). On MySQL the database must exist; the planner never creates databases (call).
 - A partial index is `CREATE INDEX … WHERE <Where>`.
-- A unique field or index is a unique index, never a `UNIQUE` constraint (call): one kind of object, which velox's `ON CONFLICT (cols)` reads like a constraint.
+- A unique field or index is a unique index, never a `UNIQUE` constraint (call): one kind of object, which velox's `ON CONFLICT (cols)` reads like a constraint. *(Updated 2026-10-29 by hardening wave 6: a PostgreSQL index with `Index.Constraint` set is a `UNIQUE` constraint, so a database that has one is modelled and rebuilt as one. `Constraint` is never set on MySQL or SQLite; migrate/model.go, `Index`. Baseline writes a PostgreSQL unique constraint as `CONSTRAINT … UNIQUE (…)` inside `CREATE TABLE`, not as a `CREATE UNIQUE INDEX` (measured on PostgreSQL 18, commit 1d76115).)*
 - A non-integer primary key on SQLite is a table constraint, `CONSTRAINT … PRIMARY KEY ("id")`, with the column `NOT NULL` (SQLite allows NULL keys otherwise).
 
 **Other changes.**
@@ -492,28 +497,25 @@ CREATE UNIQUE INDEX "users_email_unique" ON "users" ("email");
 
 - **MySQL `MODIFY COLUMN`** writes the whole definition (type, nullability, default, `AUTO_INCREMENT`, comment), as MySQL requires.
 - **A type change on a key** (an ID's type) drops the foreign keys on and to the column first, and re-adds them in step 7 (§7.3), since MySQL refuses to modify a column a foreign key uses.
-- **A table rename with its derived names (ruling 49),** renaming `users` to `accounts`:
+- **A table rename with its derived names (ruling 49),** renaming `users` to `accounts` (`velox-gen migrate diff -rename-table users=accounts`); the file also carries `-- review:` comments, which these examples leave out:
   ```sql
   -- PostgreSQL
   ALTER TABLE "users" RENAME TO "accounts";
   ALTER SEQUENCE "users_id_seq" RENAME TO "accounts_id_seq";
-  ALTER INDEX "users_email_unique" RENAME TO "accounts_email_unique";
+  ALTER INDEX "users_email_key" RENAME TO "accounts_email_key";
   ALTER INDEX "users_org_id" RENAME TO "accounts_org_id";
-  ALTER TABLE "accounts" RENAME CONSTRAINT "users_org_id_fkey" TO "accounts_org_id_fkey";
+  ALTER TABLE "accounts" RENAME CONSTRAINT "users_orgs_users" TO "accounts_orgs_users";
   ALTER TABLE "accounts" RENAME CONSTRAINT "users_pkey" TO "accounts_pkey";
   ALTER TYPE "users_role" RENAME TO "accounts_role";
 
-  -- MySQL
-  ALTER TABLE `users` DROP FOREIGN KEY `users_org_id_fkey`;
+  -- MySQL (the unique index is named by its column, so it keeps its name)
+  ALTER TABLE `users` DROP FOREIGN KEY `users_orgs_users`;
   RENAME TABLE `users` TO `accounts`;
-  ALTER TABLE `accounts` RENAME INDEX `users_email_unique` TO `accounts_email_unique`,
-    RENAME INDEX `users_org_id` TO `accounts_org_id`;
-  ALTER TABLE `accounts` ADD CONSTRAINT `accounts_org_id_fkey` FOREIGN KEY (`org_id`) REFERENCES `orgs` (`id`) ON DELETE CASCADE;
-
-  -- SQLite
-  ALTER TABLE "users" RENAME TO "accounts";
-  -- then one rebuild of "accounts" (§8.4): its indexes and constraints come back under the new names
+  ALTER TABLE `accounts` RENAME INDEX `users_orgs_users` TO `accounts_orgs_users`;
+  ALTER TABLE `accounts` ADD CONSTRAINT `accounts_orgs_users` FOREIGN KEY (`org_id`) REFERENCES `orgs` (`id`) ON DELETE CASCADE;
   ```
+  SQLite renames the table, then rebuilds it (§8.4) to rename the check and the foreign key; the rebuild drops the indexes first and creates them again under the new names.
+  *(Updated 2026-10-29 by hardening wave 6: the examples are velox-gen's output now, with ent's names. The old ones had the names from before commit 25e9e88, and the SQLite example stopped at a comment.)*
   The statements follow Diff's order: sequences, indexes, then constraints by name, then types. MySQL renames no constraint, and a foreign key's drop and add in one `ALTER TABLE` would need it to build in place, which a checked add cannot; so the key is dropped under its old name before the renames and added under the new one with the other keys (rulings of plan 1).
   On MySQL the primary key stays `PRIMARY` and the enum is inline, so neither needs a statement. On SQLite the rebuild carries `sqlite-rebuild`.
 - **Adding an identity to an existing PostgreSQL column (ruling 51):**
@@ -541,7 +543,7 @@ The online script is made of **units**, each a few statements written so that th
 - **an index on an existing table:** `DROP INDEX CONCURRENTLY IF EXISTS "n"; CREATE [UNIQUE] INDEX CONCURRENTLY "n" ON …`. A failed build leaves an invalid index, which the drop removes on the retry;
 - **an index it replaces** (§7.3 step 8): `DROP INDEX CONCURRENTLY IF EXISTS "old"`, a unit after the build;
 - **a foreign key or check on an existing table:** `ALTER TABLE t DROP CONSTRAINT IF EXISTS n; ALTER TABLE t ADD CONSTRAINT n … NOT VALID; ALTER TABLE t VALIDATE CONSTRAINT n`;
-- **`SET NOT NULL` on an existing column** (when allowed): `DROP CONSTRAINT IF EXISTS "<table>_<col>_not_null"; ADD CONSTRAINT … CHECK ("c" IS NOT NULL) NOT VALID; VALIDATE CONSTRAINT …; ALTER COLUMN "c" SET NOT NULL; DROP CONSTRAINT …`. PostgreSQL 12+ proves `NOT NULL` from the valid check without a scan.
+- **`SET NOT NULL` on an existing column** (when allowed): `DROP CONSTRAINT IF EXISTS "<table>_<col>_not_null"; ADD CONSTRAINT … CHECK ("c" IS NOT NULL) NOT VALID; VALIDATE CONSTRAINT …; ALTER COLUMN "c" SET NOT NULL; DROP CONSTRAINT …`. PostgreSQL 12+ proves `NOT NULL` from the valid check without a scan. *(Updated 2026-10-29 by hardening wave 6: every supported version does, since the minimum is PostgreSQL 14 (ruling 41).)*
 
 Each unit is marked by a `-- velox:unit` line before its first statement (§9).
 
@@ -1088,14 +1090,16 @@ Every refusal names the schema's file:line when the element has one, in velox-ge
 
 ```
 schema/user.go:14: schema User: index 0: MySQL has no partial indexes (Where); drop Where or use a separate MySQL schema
-schema/user.go:9: schema User: field "email": index users_email_unique is also schema Account's index 2 (rule 44)
-schema/order.go:11: schema Order: field "status": enum type order_status is also field "state" of schema Invoice (schema/invoice.go:8), with other values (rule 52)
+schema/user.go:13: schema User: field "email": name "users_email_key" is also schema Account's index 2; give index 2 another StorageKey
+schema/order.go:11: schema Order: field "status": enum type order_status is also field "state" of schema Invoice (schema/invoice.go:11), with other values
 schema/post.go: schema Post: MySQL rows hold at most 65535 bytes; these need 80012:
   schema/post.go:12: field "body": varchar(10000), 40002 bytes
   schema/post.go:13: field "summary": varchar(10000), 40002 bytes
   the other columns and the NULL bitmap: 8 bytes
   use Text() or a smaller MaxLen
 ```
+
+*(Updated 2026-10-29 by hardening wave 6: these are velox-gen's messages now, each printed after `velox-gen: `. The messages carry no `(rule N)` suffix; rule 44's names the second index's `StorageKey` as the fix, and rule 52's no longer ends in a rule number. Every position inside a message, such as `(schema/invoice.go:11)`, is relative to the working directory, as the one at the front is (commits 93ff800 and fa4f031).)*
 
 `diff` refusing destructive changes lists each with its code and the flag that allows it. A dropped element has no position in the schema, so it is named by table and column:
 
@@ -1141,10 +1145,11 @@ A rename flag naming nothing says where it looked: `-rename-column users.nme=ful
   - No function writes through its arguments (deep copies compared).
   - Output is the same twice.
 - **Fuzz.** The statement splitter (`FuzzSplit`) and the literal renderer (`FuzzLiteral`, round-tripped through each dialect's normaliser).
-- **Real-database itests** on PostgreSQL 16, MySQL 8.4 and SQLite, for every change kind. Each starts from a fresh database: a schema on PostgreSQL, a database through `VELOX_TEST_MYSQL_ADMIN` on MySQL, a file in `t.TempDir()` on SQLite. After each apply, three invariants hold:
+- **Real-database itests** on PostgreSQL 14 and 18 (CI's matrix; `scripts/ci-local.sh` runs 18, and 14 with `VELOX_CI_MATRIX=1`), MySQL 8.4 and SQLite, for every change kind. Each starts from a fresh database: a schema on PostgreSQL, a database through `VELOX_TEST_MYSQL_ADMIN` on MySQL, a file in `t.TempDir()` on SQLite. After each apply, three invariants hold:
   1. `Drift(Inspect, model)` finds no change;
   2. a second `Diff(snapshot, model)` is empty;
   3. `Drift(Inspect, snapshot)` finds no change and no warning.
+  *(Updated 2026-10-29 by hardening wave 6: the first line said PostgreSQL 16; builder ruling 16 moved CI to PostgreSQL 14 and 18.)*
 - **Targeted itests.**
   - The foreign-key index replaced and restored, applied on MySQL without error 1553 (ruling 46).
   - A literal with `'` and `\` in a default, an enum value and a comment, read back unchanged on each dialect (ruling 53).
@@ -1218,9 +1223,10 @@ env "velox" {
    - an existing migration directory (exit 1).
    It warns about:
    - a schema table missing from the database;
-   - a PostgreSQL UNIQUE constraint read as an index;
    - identity START/INCREMENT that is not the default;
-   - extensions.
+   - extensions;
+   - a PostgreSQL domain type, which it does not create (for nested domains, the nearest).
+   *(Updated 2026-10-29 by hardening wave 6: Baseline no longer warns of "a PostgreSQL UNIQUE constraint read as an index", since Inspect keeps it as `Index.Constraint` (Wave 4). It gained the domain warning. The notes Inspect writes are the sequence's, the extension type's and the domain's (`baselineNote` in migrate/inspect_postgres.go).)*
 7. `apply -baseline N`:
    - N must be a file's version, and 0 is valid, so WithBaseline carries a set flag. It refuses unless the history table has no rows (created first) and the database has at least one table besides it.
    - It records one row per file ≤ N, with the file's current checksum, duration 0 and statements 0, in one transaction under the lock (SQLite: BEGIN IMMEDIATE, then re-read the history). Report.Baselined lists them.
@@ -1446,7 +1452,7 @@ Plan 2 (`docs/plans/2026-10-24-migrate-2-runner.md`) made these calls where this
 22. Drift reports definitions and is silent on spellings: a predicate or check that differs only in what the normaliser removes is no difference; one whose normalised form differs is a change, so `Verify` fails on a hand-edited check; a predicate the normaliser cannot parse whose text differs, and an expression default that differs, are warnings. MySQL's `RESTRICT` and no action are one; SQLite's unnamed constraints match by definition; a primary-key difference is a warning.
 23. The predicate normaliser parses the predicates velox users write and prints them with the parentheses precedence needs; text it cannot parse is compared with its white space collapsed.
 24. A SQLite `integer PRIMARY KEY` without `AUTOINCREMENT` is not `Identity`.
-25. A `UNIQUE` constraint is modelled as its unique index; an index over an expression or a MySQL prefix is left out.
+25. A `UNIQUE` constraint is modelled as its unique index; an index over an expression or a MySQL prefix is left out. *(Updated 2026-10-29 by hardening wave 6: on PostgreSQL the index carries `Index.Constraint`, so Diff and Baseline keep it a constraint; on MySQL and SQLite the rule stands. Wave 4, migrate/model.go.)*
 26. `Inspect` reads the enum types the inspected columns use, and no others.
 27. Every change type has `String` (§14 addition).
 28. **(spec defect)** `migrate.LintFile`, and the destructive codes `delete-rows` and `update-rows` (§14 addition), so an `allow` can cover `TRUNCATE` and `DELETE` or `UPDATE` without `WHERE`. Files with velox-gen's header are not classified.
@@ -1516,7 +1522,7 @@ Plan 2 (`docs/plans/2026-10-24-migrate-2-runner.md`) made these calls where this
   - `-db` is parsed against the dialect before any connection, and a bad one is exit 2 with no part of it echoed; messages redact the whole DSN and a password only where a DSN holds it.
   - On SQLite, `status`, `drift` and `resolve` never create the database file; `apply` does.
   - `status` prints a dirty version on stdout and its error on stderr.
-- MySQL's row limit refuses `varchar(16382)` and wider with any ID wider than `tinyint`, as MySQL 8.4 does; the message points at `Text()` and `MaxLen`.
+- MySQL's row limit refuses a table whose columns sum past 65535 bytes, as MySQL 8.4 does. It names each `varchar` and `varbinary` column with its bytes, and the message points at `Text()` and `MaxLen`. A `MaxLen` above 16381 is `text`, so `varchar(16382)` is never written. *(Updated 2026-10-29 by hardening wave 6: this said the limit refuses `varchar(16382)` and wider with any ID wider than `tinyint`. Commit d139204 moved `varchar` up to 16381 and made the limit a sum over the row; `TestTablesRowLimit`.)*
 
 ## Rulings made in plan 3
 
@@ -1529,7 +1535,7 @@ Plan 3 (`docs/plans/2026-10-24-migrate-3-atlas-baseline.md`) made these calls wh
 3. Baseline's comparison is drift's, in an adopt mode, not a second comparer. Where drift takes the snapshot's form so that `Diff` reports the rest, adopt mode keeps the database's, since the snapshot must describe the database.
 4. `Dir.Add` names `migrate baseline` in the header when the name is `baseline` and the directory has no file. `migrate diff -name baseline` on a new directory says `migrate baseline` too.
 5. Baseline's refusals are all collected, sorted by object and joined, so one run names them all; a lone refusal is returned as itself, and callers use `errors.As`.
-6. What `0001_baseline.sql` loses is a baseline note, which drift skips: an owned sequence's start and increment, an extension's type, and a PostgreSQL unique constraint folded into its index. A MySQL table's `AUTO_INCREMENT` is its next value, not its start, so it is not reported.
+6. What `0001_baseline.sql` loses is a baseline note, which drift skips: an owned sequence's start and increment, an extension's type, and a PostgreSQL domain type, which it does not create (for nested domains, the nearest). A MySQL table's `AUTO_INCREMENT` is its next value, not its start, so it is not reported, and Baseline's doc says so (M21). *(Updated 2026-10-29 by hardening wave 6: the list had "a PostgreSQL unique constraint folded into its index", which Wave 4's `Index.Constraint` keeps; it gained the domain type, and the AUTO_INCREMENT sentence cites Baseline's doc. Commit bb9c2f4.)*
 7. Every `WithBaseline` refusal is Code `"baseline"`, before the run and under the lock alike; the checks that need no database run before the lock is taken.
 8. "Empty" for `apply -baseline` is no table in the connection's database besides the history. On PostgreSQL any user schema counts; `pg_%` schemas, `information_schema`, temporary tables and tables an extension owns do not, and the history is matched by schema and name. On MySQL only `DATABASE()` counts.
 9. Baseline reads only the schema's tables and enum types, never every table: an unknown table is never read, refused or warned about.

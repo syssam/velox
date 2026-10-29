@@ -311,7 +311,7 @@ Plan 1 (plugins and the SDL, `docs/plans/2026-10-19-graphql-1-sdl.md`) settled t
   - `Field.Nullable`, `Field.Enum` (the Go type's name, for a custom enum type too) and `Field.EnumValues` (the stored values, for every enum field).
   - `Comment` on entities, fields and edges, which become GraphQL descriptions.
   - `Entity.Imports`, the imports the Go files of plan 2 need for custom types.
-- The singular rule is `plugin.Singular`, in the stdlib-only `plugin` package. velox-gen's own names and a plugin's use the same function, so `<edge>IDs` and join names cannot drift. It singularizes only a name ending in `s`, so `children` becomes `childrenIDs` (entgql gives `childIDs`).
+- The singular rule is `plugin.Singular`, in the stdlib-only `plugin` package. velox-gen's own names and a plugin's use the same function, so `<edge>IDs` and join names cannot drift. Its rules are ent's, and they singularize irregular plurals, so `children` becomes `childIDs`, as entgql gives. *(Updated 2026-10-29 by hardening wave 6: the sentence said it singularizes only a name ending in `s`, so `children` became `childrenIDs`. `plugin.Singular` singularizes irregular plurals now; `TestSingular`, plugin/names_test.go.)*
 
 **Names and bindings (§3).**
 - A GraphQL enum is named after velox-gen's Go enum type (`<Schema><Field>`), not after the GraphQL type, so gqlgen's autobind finds it when `graphql.Type` renames the entity. A custom-Go-type enum gets the same GraphQL name; plan 2 binds it with `@goModel` to the type's import path.

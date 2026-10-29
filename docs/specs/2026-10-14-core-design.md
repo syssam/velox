@@ -849,7 +849,7 @@ measured. `bench/scale` no longer writes a tree of domain packages with
 struct-and-`Schema` entities. It writes N schemas (the schema DSL, `schema/e<i>.go`),
 generates them with velox-gen into one `gen` package, and builds S services
 that each query five entities of `gen`. One package has no leaves and roots, so
-the two rebuild rows became one, `schema_edit_rebuild_s`: add a field to one
+the two rebuild rows became one, `schema_edit_rebuild_s` (gated as a CPU-time ratio since 2026-10-29; see "Note, 2026-10-29: build cost is gated as CPU-time ratios" below): add a field to one
 schema, regenerate, and rebuild every service. The relation shape is the old
 one (`bench/scale/main.go`, `generate`). Measured on the same machine (M3 Max)
 at N=500, S=100, three runs at loads of 3.25 to 3.94 (the largest of each):
@@ -897,3 +897,5 @@ memory 1.5x (they were identical across loads; a 2x margin would pass the
 404 MB link peak of the build before the fix).
 
 **Note, 2026-10-22: the LIKE escape is `!`.** `HasPrefix`, `HasSuffix`, `Contains` and `Like` render `ESCAPE '!'` on every dialect. The backslash escape depended on server settings (MySQL's `NO_BACKSLASH_ESCAPES`, PostgreSQL's `standard_conforming_strings`) that velox cannot see; `!` does not. Behavior changes for `Like` only: a `\` in a pattern now matches a backslash, where it used to escape the next character, and `!` escapes `%`, `_` and itself. The other three escape their argument themselves and match as before. `TestLikeIgnoresServerSettings` runs both servers with the settings flipped.
+
+**Note, 2026-10-29: build cost is gated as CPU-time ratios.** Since hardening wave 5, `bench/scale` gates each phase's user and system CPU time as a ratio to a reference build in the same run (`cold_build_x`, `schema_edit_rebuild_x`). The reference is a small module built cold with a fresh `GOCACHE`. The ratio does not depend on `-p` or on how many cores are free. Wall-clock seconds (`cold_build_s`, `schema_edit_rebuild_s`) are printed for information and not checked. The thresholds in `bench/scale/thresholds.json`, for N=500: cold build 13.0 and schema edit 10.7; with GraphQL, 29.5 and 28.5. Each is 2x the largest of three runs, calibrated on darwin/arm64. The size and memory thresholds are unchanged. *(Updated 2026-10-29 by hardening wave 6; wave 5's ruling 6, docs/plans/2026-10-28-hardening-5-tests.md.)*
