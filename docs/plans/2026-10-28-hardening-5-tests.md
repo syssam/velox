@@ -615,3 +615,33 @@ None open. The nine of f5030e9 are ruled above.
 
 - **Wave 6 (docs):** decisions 2 and 4 as ruled; an upsert's update branch does not fire UpdateDefault, as in old velox and ent (controller ruling 2); the examples' README sections on migrations (Task 7 writes the short version); bench/scale's ratio thresholds and the benchmark baselines in the contributor docs.
 - **After 1.0:** G32 (a case-insensitive volume in CI); the itest's DDL (decision 1) if not ruled into this wave.
+
+## Rulings made during execution
+
+1. **The per-task check ran instead of the full gate.** It was lint, `go test -race` of the touched modules, G where goldens changed, and D where database tests changed. `scripts/ci-local.sh` ran once at Task 17, with `VELOX_CI_MATRIX=1`, and passed with rc 0 at 42edfb8.
+2. **Test-only tasks got the controller's inline review.** Tasks that changed examples, CI or bench/scale got a dispatched review or a hand check, and the final whole-branch review read every task critically.
+3. **Task 9:** recordError's qualified UPDATE stays untested by design. persist falls back to the pool, whose search_path is intact, so no test can observe it.
+4. **Task 12:** an upsert's conflict Where is not rendered on MySQL, by design. It comes only from a Rewrite hook, and the database layer refuses it on MySQL before rendering.
+5. **Task 13:** SQLite runs 200 seeds, not 500. Under -race, 500 took 67 s, past the 60 s box. PostgreSQL and MySQL run 50 each, and 500/600/600 seeds passed once by hand.
+6. **Task 14:** both variants gate on CPU ratios; the spreads were 3–12%, under 25%. Thresholds: 500 cold 13.0, edit 10.7; 500-graphql cold 29.5, edit 28.5. They were calibrated on darwin, and the Linux re-measure after the first push may move them.
+7. **Task 16:** floors are the DB-free `-race` measure minus 1.0, measured twice with identical results. internal/modeltest is exempt as test support. CI and the gate run the database tests too, which can only add coverage.
+8. **Final review: ready to merge, with 9 Minor findings.** One fix wave, 783c240..42edfb8, fixed:
+   - the over early-cancel retry;
+   - the routing guard's timestamp;
+   - a graphql serve test, with the floor going from 47.9 to 76.4;
+   - fuzz, scale and bench-compare on the PostgreSQL 18 leg only;
+   - covfloor rounding;
+   - `-name init` in the embed comments;
+   - the seed-count log.
+
+## Left by this plan (execution)
+
+- **After the first push (Linux CI):**
+  - re-measure bench/scale's CPU ratios on Linux;
+  - give the reference and app builds the same GOFLAGS, and `CGO_ENABLED=0` (final review F4, F5);
+  - re-record bench/baseline on an idle machine (`scripts/bench-compare.sh -update`).
+- **Wave 6 (docs):**
+  - docs/specs/2026-10-14-core-design.md:852 still names `schema_edit_rebuild_s` as the gated measure; document the `_x` CPU ratios and the reference build;
+  - an upsert's update branch does not fire UpdateDefault, as in old velox and ent;
+  - ClearProfile over a hidden link is a silent no-op;
+  - the nested With row-cap error drops the outer "loading Items" context. That waits until after 1.0.
