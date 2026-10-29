@@ -114,10 +114,10 @@ func To(name string, t any) *AssocBuilder {
 // Unique makes the edge point to at most one row.
 func (b *AssocBuilder) Unique() *AssocBuilder { b.d.Unique = true; return b }
 
-// Required makes the edge's foreign key NOT NULL. An edge to its own schema
-// is the exception, as in ent: its implicit key stays NULL-able, with ON
-// DELETE SET NULL by default. A key bound to a Field stays NOT NULL unless
-// the Field is Nillable; an Optional bound key on a Required edge is refused.
+// Required makes the edge's implicit foreign key NOT NULL, except on an edge
+// to its own schema, as in ent: that key stays NULL-able, with ON DELETE SET
+// NULL by default. A key bound to a Field is NOT NULL unless the Field is
+// Nillable, on any edge; an Optional bound key on a Required edge is refused.
 func (b *AssocBuilder) Required() *AssocBuilder { b.d.Required = true; return b }
 
 // Immutable refuses changes to the edge after create.
@@ -182,10 +182,10 @@ func (b *InverseBuilder) Ref(name string) *InverseBuilder { b.d.RefName = name; 
 // Unique makes the edge point to at most one row.
 func (b *InverseBuilder) Unique() *InverseBuilder { b.d.Unique = true; return b }
 
-// Required makes the edge's foreign key NOT NULL. An edge to its own schema
-// is the exception, as in ent: its implicit key stays NULL-able, with ON
-// DELETE SET NULL by default. A key bound to a Field stays NOT NULL unless
-// the Field is Nillable; an Optional bound key on a Required edge is refused.
+// Required makes the edge's implicit foreign key NOT NULL, except on an edge
+// to its own schema, as in ent: that key stays NULL-able, with ON DELETE SET
+// NULL by default. A key bound to a Field is NOT NULL unless the Field is
+// Nillable, on any edge; an Optional bound key on a Required edge is refused.
 func (b *InverseBuilder) Required() *InverseBuilder { b.d.Required = true; return b }
 
 // Immutable refuses changes to the edge after create.
