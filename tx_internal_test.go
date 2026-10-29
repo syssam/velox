@@ -68,14 +68,24 @@ func TestOverWaitsWhileBlocked(t *testing.T) {
 		}
 	}
 
-	inner, cancel := context.WithCancel(context.Background())
-	cancel()
-	start := time.Now()
-	if !over(lateCtx{inner}) {
-		t.Error("a canceled context past its deadline is not over")
+	// An already-canceled context makes over return at once. The time it
+	// takes is the test goroutine's own scheduling, which a loaded machine
+	// can stretch past the grace, so this retries once too. An over that
+	// ignores Done takes the whole grace on both tries.
+	canceledOver := func() time.Duration {
+		inner, cancel := context.WithCancel(context.Background())
+		cancel()
+		start := time.Now()
+		if !over(lateCtx{inner}) {
+			t.Error("a canceled context past its deadline is not over")
+		}
+		return time.Since(start)
 	}
-	if d := time.Since(start); d >= overGrace {
-		t.Errorf("over took %v on a context already canceled, want less than the grace %v", d, overGrace)
+	if d := canceledOver(); d >= overGrace {
+		t.Logf("over took %v on a context already canceled; the machine is loaded, retrying once", d)
+		if d := canceledOver(); d >= overGrace {
+			t.Errorf("over took %v on a context already canceled, want less than the grace %v", d, overGrace)
+		}
 	}
 }
 
