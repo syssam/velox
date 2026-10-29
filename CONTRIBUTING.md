@@ -5,7 +5,7 @@ a change has to keep true. Go 1.27 is required. The database tests need Docker.
 
 ## Layout
 
-There are four Go modules. A change that touches more than one is checked in
+There are five Go modules. A change that touches more than one is checked in
 each.
 
 - The root, `github.com/syssam/velox2`: the runtime, with `schema`, `migrate`,
@@ -18,6 +18,8 @@ each.
 - `contrib/veloxotel`: OpenTelemetry tracing and metrics.
 - `example`: the runnable examples. Each has its schema, its generated code and
   its migrations.
+- `bench/compare`: the harness that compares velox2's build and runtime cost
+  with old velox and ent. CI checks it but does not run it.
 
 ## Checks
 
@@ -40,10 +42,12 @@ order:
    a coverage profile.
 4. `contrib/graphql`: `gofmt`, `go vet`, golangci-lint, the tests with a
    coverage profile, then `FuzzCost`.
-5. The coverage floors.
-6. `bench/scale`, in plain and GraphQL form, against `bench/scale/thresholds.json`.
-7. `scripts/bench-compare.sh`, which only reports.
-8. `scripts/gqlgen-latest.sh`, which tests `velox-graphql` against the newest
+5. `bench/compare`: `go vet`, golangci-lint and `go test -race -short`. The
+   measurements never run here.
+6. The coverage floors.
+7. `bench/scale`, in plain and GraphQL form, against `bench/scale/thresholds.json`.
+8. `scripts/bench-compare.sh`, which only reports.
+9. `scripts/gqlgen-latest.sh`, which tests `velox-graphql` against the newest
    gqlgen in a copy of the tree.
 
 CI tests PostgreSQL 14 and 18. `VELOX_CI_MATRIX=1 bash scripts/ci-local.sh`
@@ -179,6 +183,10 @@ fails when a CPU-time ratio to a reference build passes
 go run ./bench/scale -n 500 -s 100 -check bench/scale/thresholds.json
 go run ./bench/scale -n 500 -s 100 -graphql -check bench/scale/thresholds.json
 ```
+
+`bash bench/compare/run.sh` measures velox2, old velox and ent. It takes hours,
+starts PostgreSQL, and writes `bench/compare/results/`. The last report is
+`docs/reviews/2026-10-29-perf-comparison.md`.
 
 ## Docs
 

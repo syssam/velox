@@ -116,6 +116,15 @@ go run github.com/mgechev/revive@v1.17.0 -config revive.toml -set_exit_status ./
   go test -run XXX -fuzz '^FuzzCost$' -fuzztime 10s ./veloxgql
 )
 
+# bench/compare is its own module: the comparison harness. CI checks it; the
+# measurements run only from bench/compare/run.sh.
+(
+  cd bench/compare
+  go vet ./...
+  go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
+  go test -race -short -count=1 ./...
+)
+
 # No package may fall below its floor, or lack one (scripts/coverage-floors.txt).
 go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-example.out cover-veloxotel.out cover-graphql.out
 

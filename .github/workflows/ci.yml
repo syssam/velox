@@ -136,6 +136,13 @@ jobs:
         if: matrix.pg == '18'
         working-directory: contrib/graphql
         run: go test -run XXX -fuzz '^FuzzCost$' -fuzztime 10s ./veloxgql
+      - name: bench/compare (the harness's checks; the measurements run only from run.sh)
+        if: matrix.pg == '18'
+        working-directory: bench/compare
+        run: |
+          go vet ./...
+          go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
+          go test -race -short -count=1 ./...
       - name: coverage floors
         run: go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-example.out cover-veloxotel.out cover-graphql.out
       - name: scale (n=500)
