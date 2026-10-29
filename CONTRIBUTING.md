@@ -185,6 +185,10 @@ go run ./bench/scale -n 500 -s 100 -check bench/scale/thresholds.json
 go run ./bench/scale -n 500 -s 100 -graphql -check bench/scale/thresholds.json
 ```
 
+`go test -run '^$' -bench '^BenchmarkScan$' -benchmem -count 6 ./internal/itest`
+(with the database variables set) measures the read path on every database;
+`docs/decisions/0018-pgx-stdlib-scan-wrapper.md` has its before and after.
+
 `bash bench/compare/run.sh` measures velox2, old velox and ent. It takes hours,
 starts PostgreSQL, and writes `bench/compare/results/`. The last report is
 `docs/reviews/2026-10-29-perf-comparison.md`.

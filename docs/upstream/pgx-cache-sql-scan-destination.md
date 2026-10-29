@@ -1,11 +1,12 @@
-Draft only; not filed (docs/plans/2026-10-29-pg-scan-path.md, Ruling 1).
+Draft only; not filed.
 
 # Issue: stdlib: cache isSQLScanDestination per reflect.Type
 
 ## What happens
 
 Under Go 1.27, database/sql hands each column to the driver's
-`driver.RowsColumnScanner`. `stdlib.(*Rows).ScanColumn`
+`driver.RowsColumnScanner`. The cost is new with that path: the driver's
+`Next` path, which database/sql used before, never ran the check. `stdlib.(*Rows).ScanColumn`
 (stdlib/sql_go1.27.go, pgx v5.11.0) calls `isSQLScanDestination(rv.Type())`
 on every column of every row, and the result is not cached.
 
@@ -24,13 +25,20 @@ Scanning the same column into an `sql.Scanner` halves the query's time
 ## Reproduction
 
 ```go
-rows, _ := db.QueryContext(ctx,
+rows, err := db.QueryContext(ctx,
 	`SELECT now() - g * interval '1 minute' FROM generate_series(1, 100) g`)
-for rows.Next() {
-	var t time.Time   // slow: isSQLScanDestination on every row
-	_ = rows.Scan(&t)
-	// var t sql.NullTime // fast: passes the Scanner check at once
+if err != nil {
+	return err
 }
+defer rows.Close()
+for rows.Next() {
+	var t time.Time // slow: isSQLScanDestination on every row
+	// var t sql.NullTime // fast: passes the Scanner check at once
+	if err := rows.Scan(&t); err != nil {
+		return err
+	}
+}
+return rows.Err()
 ```
 
 Benchmark the loop with `db` from `sql.Open("pgx", dsn)`, once with

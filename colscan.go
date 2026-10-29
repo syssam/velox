@@ -1,6 +1,6 @@
-// This file holds the scan destination that keeps pgx's stdlib driver from
-// inspecting a column's type on every row: colScanner, and scanWraps, the rule
-// for the destinations it wraps.
+// This file holds the scan destination that makes pgx's stdlib driver pass its
+// check of a column's type at the first step: colScanner, and scanWraps, the
+// rule for the destinations it wraps.
 
 package velox
 
@@ -35,7 +35,8 @@ func (s *colScanner) Scan(src any) error {
 // depth. It is false for a destination that is a sql.Scanner already, for one
 // that pgx hands to its own scan plans (pgtype's ArraySetter and BytesScanner),
 // for sql.RawBytes and for every other kind, whose handling stays as it is. A
-// pointer type that has a name of its own is left alone, as pgx leaves it.
+// pointer type that has a name of its own is not wrapped: pgx handles it as
+// before.
 func scanWrapsType(t reflect.Type) bool {
 	if t == nil || t.Kind() != reflect.Pointer || t.Name() != "" {
 		return false
@@ -100,8 +101,8 @@ type colSlot struct {
 
 // colRows are rows read through pgx's stdlib driver. Scan hands the driver a
 // colScanner, in place of each destination that scanWraps wraps, so the
-// driver skips its type check of the destination and converts as
-// database/sql does. slots and args are reused from row to row.
+// driver's type check of the destination passes at its first step, and the
+// conversion is database/sql's. slots and args are reused from row to row.
 type colRows struct {
 	*sql.Rows
 	slots []colSlot

@@ -24,11 +24,16 @@ pointer to one of them, at any depth. `colScanner.Scan` calls
 `sql.ConvertAssign` on the field itself, which is what pgx would have done for
 it. Every other destination, and every other driver, is scanned as before.
 
+The wrapper sits in the rows the executor reads, not in `scanDst` or in the
+generated code, so raw, aggregate and owner-key scans get it too and the
+generated code does not change.
+
 ## Consequences
 
 - A driver that wraps pgx's (a tracing or metrics wrapper with its own
-  `driver.Driver`) is not detected, and keeps the slower path; it stays
-  correct.
+  `driver.Driver`) is not detected. Its rows are read as before: they are
+  slower only if the wrapper's rows forward `driver.RowsColumnScanner` to
+  pgx's, and they stay correct.
 - A query on pgx's stdlib makes up to 3 more allocations (the rows value and
   its two slices), none per row.
 - No generated code changes: the generated scan destinations are unchanged,

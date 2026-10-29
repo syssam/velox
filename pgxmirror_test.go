@@ -61,6 +61,39 @@ func pgxIsSQLScanDestination(t reflect.Type) bool {
 	}
 }
 
+// pgxScanColumnText is a copy of (*Rows).ScanColumn from the same file. The
+// scan destination colScanner converts as the ScanColumn branch for a
+// sql.Scanner does: ConvertAssign on the value that valueFuncs gives. The copy
+// is not run; TestPgxMirrorIsCurrent compares it with the pgx the module uses,
+// so that a change to that branch, or to what runs before it, is noticed.
+const pgxScanColumnText = `func (r *Rows) ScanColumn(scanCtx driver.ScanContext, index int, dest any) error {
+	if dest == nil {
+		return errors.New("destination not a pointer")
+	}
+	rv := reflect.ValueOf(dest)
+	if rv.Kind() == reflect.Pointer && rv.IsNil() {
+		return errors.New("destination pointer is nil")
+	}
+
+	src := r.rows.RawValues()[index]
+	if isSQLScanDestination(rv.Type()) {
+		var value driver.Value
+		if src != nil {
+			r.initValueFuncs()
+			var err error
+			value, err = r.valueFuncs[index](src)
+			if err != nil {
+				return err
+			}
+		}
+		return sql.ConvertAssign(scanCtx, dest, value)
+	}
+
+	m := r.conn.conn.TypeMap()
+	fd := r.rows.FieldDescriptions()[index]
+	return m.Scan(fd.DataTypeOID, fd.Format, src, dest)
+}`
+
 // funcText is the text of the function that starts with the line head, up to
 // the first line that is exactly "}".
 func funcText(t *testing.T, src, head string) string {
@@ -122,5 +155,8 @@ func TestPgxMirrorIsCurrent(t *testing.T) {
 	want := strings.Replace(funcText(t, string(pgx), "func isSQLScanDestination("), "func isSQLScanDestination(", "func pgxIsSQLScanDestination(", 1)
 	if got := funcText(t, string(mine), "func pgxIsSQLScanDestination("); got != want {
 		t.Error("pgx's isSQLScanDestination changed: update the copy and re-check scanWrapsType")
+	}
+	if got := funcText(t, string(pgx), "func (r *Rows) ScanColumn("); got != pgxScanColumnText {
+		t.Error("pgx's ScanColumn changed: update the copy and re-check that colScanner still converts as its Scanner branch does")
 	}
 }
