@@ -1,11 +1,16 @@
 package main
 
 import (
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 
 	velox2 "github.com/syssam/velox2"
+	"github.com/syssam/velox2/internal/gen"
 	"github.com/syssam/velox2/migrate"
 )
 
@@ -134,5 +139,113 @@ func TestMigrateSQLRefusals(t *testing.T) {
 	code, out, errs = velox(t, empty, "migrate", "sql", "-dialect", "postgres")
 	if code != 1 || out != "" || !strings.HasPrefix(errs, "velox-gen: no schemas in ") {
 		t.Errorf("no schemas: exit %d, want 1\nstdout:\n%s\nstderr:\n%s", code, out, errs)
+	}
+}
+
+// A refusal prints every position, including the ones inside its reason, as
+// a path relative to the working directory.
+func TestMigrateSQLPositionsAreRelative(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a module")
+	}
+	const head = `package schema
+
+import (
+	"github.com/syssam/velox2/schema"
+	"github.com/syssam/velox2/schema/field"
+)
+
+`
+	// lineOf is the 1-based line of the first line of src that has sub.
+	lineOf := func(t *testing.T, src, sub string) int {
+		t.Helper()
+		for i, l := range strings.Split(src, "\n") {
+			if strings.Contains(l, sub) {
+				return i + 1
+			}
+		}
+		t.Fatalf("no %q in:\n%s", sub, src)
+		return 0
+	}
+
+	t.Run("row limit", func(t *testing.T) {
+		post := head + `type Post struct{ schema.Schema }
+
+func (Post) Fields() []schema.Field {
+	return []schema.Field{
+		field.String("body").MaxLen(10000),
+		field.String("summary").MaxLen(10000),
+	}
+}
+`
+		dir := tempModule(t, map[string]string{"schema/post.go": post})
+		code, out, errs := velox(t, dir, "migrate", "sql", "-dialect", "mysql")
+		want := "velox-gen: schema/post.go: schema Post: MySQL rows hold at most 65535 bytes; these need 80012:\n" +
+			fmt.Sprintf("  schema/post.go:%d: field \"body\": varchar(10000), 40002 bytes\n", lineOf(t, post, `"body"`)) +
+			fmt.Sprintf("  schema/post.go:%d: field \"summary\": varchar(10000), 40002 bytes\n", lineOf(t, post, `"summary"`)) +
+			"  the other columns and the NULL bitmap: 8 bytes\n" +
+			"  use Text() or a smaller MaxLen\n"
+		if code != 1 || out != "" || errs != want {
+			t.Errorf("exit %d, want 1\nstdout:\n%s\nstderr:\n%s\nwant:\n%s", code, out, errs, want)
+		}
+		if strings.Contains(errs, dir) {
+			t.Errorf("an absolute path is printed:\n%s", errs)
+		}
+	})
+
+	t.Run("shared enum", func(t *testing.T) {
+		enum := func(name, fieldName, values string) string {
+			return head + "type " + name + " struct{ schema.Schema }\n\n" +
+				"func (" + name + ") Fields() []schema.Field {\n\treturn []schema.Field{\n" +
+				"\t\tfield.Enum(\"" + fieldName + "\").Values(" + values + ").SchemaType(map[string]string{field.Postgres: \"order_status\"}),\n" +
+				"\t}\n}\n"
+		}
+		invoice := enum("Invoice", "state", `"paid", "new"`)
+		dir := tempModule(t, map[string]string{
+			"schema/order.go":   enum("Order", "status", `"new", "paid"`),
+			"schema/invoice.go": invoice,
+		})
+		code, out, errs := velox(t, dir, "migrate", "sql", "-dialect", "postgres")
+		want := fmt.Sprintf("(schema/invoice.go:%d), with other values", lineOf(t, invoice, `"state"`))
+		if code != 1 || out != "" || !strings.Contains(errs, want) {
+			t.Errorf("exit %d, want 1\nstdout:\n%s\nstderr:\n%s\nwant it to hold %s", code, out, errs, want)
+		}
+		if strings.Contains(errs, dir) {
+			t.Errorf("an absolute path is printed:\n%s", errs)
+		}
+	})
+}
+
+// relErrors leaves alone what is not inside the working directory: a file
+// outside it, a path that only ends like it, and an error with no position.
+func TestRelErrorsKeepsWhatIsOutside(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "app")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sep := string(filepath.Separator)
+	in := filepath.Join(dir, "schema", "a.go")
+	outside := filepath.Join(filepath.Dir(dir), "other", "b.go")
+	lookalike := filepath.Join("x", dir, "c.go")
+	for _, c := range []struct{ name, pos, reason, wantPos, wantReason string }{
+		{"inside", in, "see " + in + ":3", "schema" + sep + "a.go", "see schema" + sep + "a.go:3"},
+		{"inside with a line", in + ":2", "see (" + in + ":3)", "schema" + sep + "a.go:2", "see (schema" + sep + "a.go:3)"},
+		{"outside", outside, "see " + outside + ":3", outside, "see " + outside + ":3"},
+		{"outside with a line", outside + ":2", "see " + outside + ":3", outside + ":2", "see " + outside + ":3"},
+		{"lookalike", "", "see " + lookalike, "", "see " + lookalike},
+		{"no position", "", "plain", "", "plain"},
+		{"relative", "schema/a.go:2", "plain", "schema/a.go:2", "plain"},
+	} {
+		var got *gen.Error
+		if !errors.As(relErrors(dir, &gen.Error{Pos: c.pos, Reason: c.reason}), &got) {
+			t.Fatalf("%s: not a *gen.Error", c.name)
+		}
+		if got.Pos != c.wantPos || got.Reason != c.wantReason {
+			t.Errorf("%s: got %q %q, want %q %q", c.name, got.Pos, got.Reason, c.wantPos, c.wantReason)
+		}
 	}
 }

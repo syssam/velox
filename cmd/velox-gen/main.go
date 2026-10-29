@@ -246,6 +246,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/syssam/velox2/internal/gen"
@@ -456,20 +457,29 @@ func relPath(dir, path string) string {
 }
 
 // relErrors shows the positions of err's *gen.Error values, as errors.Join
-// joined them, relative to dir when their files are inside it.
+// joined them, relative to dir when their files are inside it. That covers
+// the positions inside a Reason too.
 func relErrors(dir string, err error) error {
 	errs := []error{err}
 	if j, ok := err.(interface{ Unwrap() []error }); ok {
 		errs = j.Unwrap()
 	}
+	inside := relInside(dir)
 	out := make([]error, len(errs))
 	changed := false
 	for i, e := range errs {
 		out[i] = e
-		if ge, ok := e.(*gen.Error); ok && ge.Pos != "" {
+		if ge, ok := e.(*gen.Error); ok {
 			c := *ge
-			c.Pos = relPos(dir, ge.Pos)
-			out[i], changed = &c, true
+			if ge.Pos != "" {
+				c.Pos = relPos(dir, ge.Pos)
+			}
+			if inside != nil {
+				c.Reason = inside.ReplaceAllString(ge.Reason, "${1}")
+			}
+			if c != *ge {
+				out[i], changed = &c, true
+			}
 		}
 	}
 	if !changed {
@@ -478,19 +488,38 @@ func relErrors(dir string, err error) error {
 	return errors.Join(out...)
 }
 
-// relPos shows a file:line position relative to dir when the file is inside
-// it.
-func relPos(dir, pos string) string {
-	i := strings.LastIndexByte(pos, ':')
-	if i < 0 {
-		return pos
+// relInside matches the working directory, and its symlink-free form when
+// that differs, as the start of a path: the directory and its separator,
+// after anything but a path character. Its first group is what comes before.
+// It is nil when dir has no absolute form.
+func relInside(dir string) *regexp.Regexp {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return nil
 	}
-	file := filepath.FromSlash(pos[:i])
+	prefixes := []string{abs}
+	if r, err := filepath.EvalSymlinks(abs); err == nil && r != abs {
+		prefixes = append(prefixes, r)
+	}
+	for i, p := range prefixes {
+		prefixes[i] = regexp.QuoteMeta(strings.TrimRight(p, string(filepath.Separator)) + string(filepath.Separator))
+	}
+	return regexp.MustCompile(`(^|[^\w./\\-])(?:` + strings.Join(prefixes, "|") + `)`)
+}
+
+// relPos shows a file:line position, or a file alone, relative to dir when
+// the file is inside it.
+func relPos(dir, pos string) string {
+	file, line := pos, ""
+	if i := strings.LastIndexByte(pos, ':'); i >= 0 && pos[i+1:] != "" && strings.Trim(pos[i+1:], "0123456789") == "" {
+		file, line = pos[:i], pos[i:]
+	}
+	file = filepath.FromSlash(file)
 	if !filepath.IsAbs(file) {
 		return pos
 	}
 	if r, err := filepath.EvalSymlinks(file); err == nil {
 		file = r
 	}
-	return relPath(dir, file) + pos[i:]
+	return relPath(dir, file) + line
 }
