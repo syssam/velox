@@ -205,7 +205,8 @@ func TestUpsertPolicyAndCache(t *testing.T) {
 	if err := q.Exec(as("admin", 7)); err != nil || strings.Contains(e.SQL, "WHERE") {
 		t.Errorf("admin again: %v %s", err, e.SQL)
 	}
-	// A policy that denies denies the upsert, as an update.
+	// A policy that denies the insert refuses the upsert: the Insert policy runs
+	// before the update branch's conditions.
 	err := q.Exec(velox.WithTenant(context.Background(), int64(7)))
 	wantPolicyError(t, err, velox.OpInsert) // the Insert policy runs first
 	// WithoutPolicy: no condition.

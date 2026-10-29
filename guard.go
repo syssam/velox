@@ -127,7 +127,7 @@ func alwaysFalse(n node) bool {
 // hasZero reports whether n is, or holds, the zero Predicate, which renders
 // as nothing.
 func hasZero(n node) bool {
-	if n.op == 0 {
+	if n.op == opZero {
 		return true
 	}
 	for _, k := range n.kids {

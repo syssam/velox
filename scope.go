@@ -63,10 +63,10 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 	if tenant {
 		extra++
 	}
-	if read.n.op != 0 {
+	if read.n.op != opZero {
 		extra++
 	}
-	if write.n.op != 0 {
+	if write.n.op != opZero {
 		extra++
 	}
 	if st.Where, err = sc.walk(st.Where, extra); err != nil {
@@ -76,10 +76,10 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 	if tenant {
 		st.Where = append(st.Where, tenantPredicate(in, id))
 	}
-	if read.n.op != 0 {
+	if read.n.op != opZero {
 		st.Where = append(st.Where, read)
 	}
-	if write.n.op != 0 {
+	if write.n.op != opZero {
 		st.Where = append(st.Where, write)
 	}
 	sc.record(st)
@@ -88,16 +88,17 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 
 // scopeInsert applies the context's tenant and the entity's policy to an
 // INSERT. prepareRow has filled and checked each row's tenant, and
-// insertAllowed has asked the Insert policy; scopeInsert checks that the Rewrite hooks left every row in
-// the tenant. An upsert that updates must reach neither another tenant's row
-// nor one the policy hides from an update. On PostgreSQL and SQLite its
-// conflict columns must hold the tenant column, and its update branch gets
-// the Read and Write conditions; an EXISTS a Rewrite hook put in that
-// branch's condition gets its target's tenant and Read, as one in a Where
-// does. MySQL's ON DUPLICATE KEY UPDATE resolves a conflict on any unique key
-// and takes no condition: every unique key must hold the tenant column, and
-// an entity with a Read or Write policy is refused. Keeping the existing row
-// (DoNothing) changes nothing, so it is exempt.
+// insertAllowed has asked the Insert policy; scopeInsert checks that the
+// Rewrite hooks left every row in the tenant. An upsert that updates must
+// reach neither another tenant's row nor one the policy hides from an update.
+// On PostgreSQL and SQLite its conflict columns must hold the tenant column,
+// and its update branch gets the Read and Write conditions; an EXISTS a
+// Rewrite hook put in that branch's condition gets its target's tenant and
+// Read, as one in a Where does. MySQL's ON DUPLICATE KEY UPDATE resolves a
+// conflict on any unique key and takes no condition: every unique key must
+// hold the tenant column, and an entity with a Read or Write policy is
+// refused. Keeping the existing row (DoNothing) changes nothing, so it is
+// exempt.
 func (db *DB) scopeInsert(ctx context.Context, st *Statement) error {
 	in := st.Entity
 	sc := scoper{ctx: ctx, entity: in.Name}
@@ -159,10 +160,10 @@ func (sc *scoper) conditionUpsert(in *EntityInfo, st *Statement, policy bool) er
 		}
 	}
 	extra := 0
-	if read.n.op != 0 {
+	if read.n.op != opZero {
 		extra++
 	}
-	if write.n.op != 0 {
+	if write.n.op != opZero {
 		extra++
 	}
 	if extra == 0 && len(st.Conflict.Where) == 0 {
@@ -174,10 +175,10 @@ func (sc *scoper) conditionUpsert(in *EntityInfo, st *Statement, policy bool) er
 		return err
 	}
 	cf.Where = where // the scope's own array, or nothing is appended to it
-	if read.n.op != 0 {
+	if read.n.op != opZero {
 		cf.Where = append(cf.Where, read)
 	}
-	if write.n.op != 0 {
+	if write.n.op != opZero {
 		cf.Where = append(cf.Where, write)
 	}
 	st.upsertPolicy = extra > 0
@@ -402,7 +403,7 @@ func (sc *scoper) policyCond(t *EntityInfo, op Op, which string, p Predicate, er
 	switch {
 	case err != nil:
 		return Predicate{}, &PolicyError{Entity: t.Name, Op: op, Err: err}
-	case p.n.op == 0:
+	case p.n.op == opZero:
 		return Predicate{}, fmt.Errorf("velox: %s: the %s policy returned the zero Pred; return velox.Allow[E]() for no restriction", t.Name, which)
 	case p.n.op == opAllow:
 		return Predicate{}, nil // no restriction
@@ -619,9 +620,9 @@ func withRoom(ps []Predicate, extra int) []Predicate {
 }
 
 // node returns n with the tenant and Read conditions added inside every
-// EXISTS on a target that has them, and
-// whether that changed anything. It never edits n: a changed node is a copy
-// with a new kids slice, and unchanged subtrees are shared with n.
+// EXISTS on a target that has them, and whether that changed anything. It
+// never edits n: a changed node is a copy with a new kids slice, and
+// unchanged subtrees are shared with n.
 func (sc *scoper) node(n node) (node, bool, error) {
 	switch n.op {
 	case opAnd, opOr, opNot:
@@ -676,14 +677,14 @@ func (sc *scoper) node(n node) (node, bool, error) {
 		if err != nil {
 			return n, false, sc.inExists(t, err)
 		}
-		if (tenant || read.n.op != 0) && kids == nil {
+		if (tenant || read.n.op != opZero) && kids == nil {
 			kids = make([]node, len(n.kids), len(n.kids)+2)
 			copy(kids, n.kids)
 		}
 		if tenant {
 			kids = append(kids, tenantPredicate(t, id).n)
 		}
-		if read.n.op != 0 {
+		if read.n.op != opZero {
 			kids = append(kids, read.n)
 		}
 	}

@@ -106,7 +106,7 @@ func (c *renderCache) size() int {
 	return c.n
 }
 
-func flag(b bool) byte {
+func bit(b bool) byte {
 	if b {
 		return 1
 	}
@@ -116,7 +116,7 @@ func flag(b bool) byte {
 // shapeKey encodes everything about a statement's shape except its entity,
 // which keys the outer map.
 func shapeKey(k []byte, d Dialect, st *Statement) []byte {
-	k = append(k, byte(d), byte(st.Op), flag(st.Count), flag(st.Exists), byte(st.Aggregate), byte(st.Lock), byte(st.LockWait), flag(st.Columns != nil), flag(st.Limit > 0), flag(st.Offset > 0))
+	k = append(k, byte(d), byte(st.Op), bit(st.Count), bit(st.Exists), byte(st.Aggregate), byte(st.Lock), byte(st.LockWait), bit(st.Columns != nil), bit(st.Limit > 0), bit(st.Offset > 0))
 	k = binary.AppendUvarint(k, uint64(len(st.Columns)))
 	for _, c := range st.Columns {
 		k = binary.AppendUvarint(k, uint64(c))
@@ -128,7 +128,7 @@ func shapeKey(k []byte, d Dialect, st *Statement) []byte {
 	k = binary.AppendUvarint(k, uint64(len(st.OrderBy)))
 	for _, o := range st.OrderBy {
 		k = binary.AppendUvarint(k, uint64(o.Column))
-		k = append(k, flag(o.Desc))
+		k = append(k, bit(o.Desc))
 	}
 	k = binary.AppendUvarint(k, uint64(len(st.Set)))
 	for _, a := range st.Set {
@@ -137,7 +137,7 @@ func shapeKey(k []byte, d Dialect, st *Statement) []byte {
 	}
 	k = binary.AppendUvarint(k, uint64(len(st.Rows)))
 	if cf := st.Conflict; cf != nil {
-		k = append(k, 1, flag(cf.DoNothing))
+		k = append(k, 1, bit(cf.DoNothing))
 		k = appendInts(k, cf.Columns)
 		k = appendInts(k, cf.Update)
 		k = binary.AppendUvarint(k, uint64(len(cf.Where)))
@@ -159,7 +159,7 @@ func eachKey(k []byte, c *EachClause) []byte {
 	if c == nil {
 		return append(k, 0)
 	}
-	k = append(k, 1, flag(c.Limit > 0))
+	k = append(k, 1, bit(c.Limit > 0))
 	k = binary.AppendUvarint(k, uint64(c.Column))
 	k = binary.AppendUvarint(k, uint64(len(c.Keys)))
 	if j := c.Join; j != nil {
@@ -196,7 +196,7 @@ func nodeKey(k []byte, n node) []byte {
 	k = binary.AppendUvarint(k, uint64(n.col))
 	switch n.op {
 	case opEQ, opNEQ:
-		k = append(k, flag(isNilArg(n.v)))
+		k = append(k, bit(isNilArg(n.v)))
 	case opIn, opNotIn:
 		k = binary.AppendUvarint(k, uint64(len(n.v.([]any))))
 	case opThrough:

@@ -9,7 +9,8 @@ import (
 type op uint8
 
 const (
-	opEQ op = iota + 1
+	opZero op = iota // the zero Pred[E]{}: no condition was given
+	opEQ
 	opNEQ
 	opIn
 	opNotIn
@@ -147,7 +148,7 @@ func allSound[E any](ps []Pred[E]) bool {
 
 func sound(n node) bool {
 	switch n.op {
-	case 0, opInvalid, opExists:
+	case opZero, opInvalid, opExists:
 		return false
 	}
 	for _, k := range n.kids {
