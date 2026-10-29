@@ -32,7 +32,7 @@ func main() {
 
 // The tables come from migrations/, made, in the example module, by
 //
-//	go tool velox-gen migrate diff -dialect sqlite -dir ./tx/migrations ./tx/schema
+//	go tool velox-gen migrate diff -dialect sqlite -name init -dir ./tx/migrations ./tx/schema
 //
 // and applied with migrate.Up. The temporary SQLite database is this demo's;
 // a real application opens its own.

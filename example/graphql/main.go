@@ -167,7 +167,7 @@ func admin(ctx context.Context, _ any, next gqlgen.Resolver) (any, error) {
 
 // The tables come from migrations/, made, in the example module, by
 //
-//	go tool velox-gen migrate diff -dialect sqlite -dir ./graphql/migrations ./graphql/schema
+//	go tool velox-gen migrate diff -dialect sqlite -name init -dir ./graphql/migrations ./graphql/schema
 //
 // and applied with migrate.Up. The temporary SQLite database is this demo's;
 // a real application opens its own.
