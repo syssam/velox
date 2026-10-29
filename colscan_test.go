@@ -122,7 +122,7 @@ func TestColumnScanRowsKeepCallerSlice(t *testing.T) {
 	raw.SetMaxOpenConns(1)
 	wrapped, plain := velox.OpenColumnScan(velox.SQLite, raw, true), velox.OpenColumnScan(velox.SQLite, raw, false)
 
-	r, err := velox.RawRows(wrapped, "SELECT 'a' UNION ALL SELECT 'b'", nil)
+	r, err := velox.RawRows(wrapped, "SELECT 'a' UNION ALL SELECT 'b' UNION ALL SELECT 'c' UNION ALL SELECT 'd'", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,6 +146,28 @@ func TestColumnScanRowsKeepCallerSlice(t *testing.T) {
 	}
 	if st != "b" {
 		t.Errorf("row 2: st = %q, want \"b\"", st)
+	}
+	// Row 3's destination is not wrapped, and row 4's is again: the column's
+	// wrap flag turns off and back on.
+	var ns sql.NullString
+	if !r.Next() {
+		t.Fatal("no third row")
+	}
+	if err := r.Scan([]any{&ns}...); err != nil {
+		t.Fatal(err)
+	}
+	if ns != (sql.NullString{String: "c", Valid: true}) {
+		t.Errorf("row 3: ns = %#v, want a valid \"c\"", ns)
+	}
+	var s4 string
+	if !r.Next() {
+		t.Fatal("no fourth row")
+	}
+	if err := r.Scan([]any{&s4}...); err != nil {
+		t.Fatal(err)
+	}
+	if s4 != "d" {
+		t.Errorf("row 4: s4 = %q, want \"d\"", s4)
 	}
 	r.Close()
 
