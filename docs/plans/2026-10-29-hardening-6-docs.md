@@ -602,3 +602,35 @@ Each item is `id :<followups line> <commit(s)>`. A line with a letter (50a, 50b)
 - **Blocked on the user** (7): C5 :20, C10 :40, C58 :111, C63 :117, G20 :233, M24 :408, M26 :410.
 - **This wave** (17): C1 :12, C2 :14, C13 :46, C14 :47, C16 :49, C36 :75, C50 :91, C56 :106, C61 :115, C76 :137, C90 :165, R7 (contrib review #17), R8 (contrib review #15; left out by spec §6c.16 with no follow-up), R10 (schema review #13), M9 :378, M21 :400, M25 :409.
 - **Withdrawn** (1): R9 (core review #5).
+
+## Rulings made during execution
+
+1. **The per-task check ran instead of the full gate.** It was vet, lint and `go test -race` of the touched modules, G where generated code changed, and D for Task 8 and F3. `scripts/ci-local.sh` ran once at Task 15, with `VELOX_CI_MATRIX=1`.
+2. **Review.** Doc-only tasks got the controller's inline review. Task 6, the one code fix, got a dispatched review and one fix round: the filesystem root as the working directory cuts nothing from Reason (fa4f031). The final whole-branch review read every task critically.
+3. **Task 1.** `m.mu.op` in scope_api.go is the exported `Op`, not the predicate `op`, so it keeps `!= 0`. Plan-check fix 7's grep exempts that line.
+4. **Task 4.** Required's self-edge clause says "ON DELETE SET NULL by default", since an explicit OnDelete(Cascade) gives CASCADE.
+5. **Task 8.** The WITHOUT OVERLAPS sentence takes the measured form: 0001_baseline.sql writes a plain `CONSTRAINT … UNIQUE (…)` inside CREATE TABLE, not a CREATE UNIQUE INDEX (1d76115). "It is compared without" is the notes' house phrase, at nine sites and pinned, and stays.
+6. **Task 9.** The migrate spec's §6 index and foreign-key names were corrected past the brief's "no `_unique`", so the spec agrees with its own CREATE examples. The note that a PostgreSQL `Index.Constraint` unique is rendered inline in CREATE TABLE holds in general, per render_postgres_test.go.
+7. **Task 10.** exampleDDL copies `migrate sql` output for testmodel. A dropped or renamed column fails the Examples; an added NULL-able one would not.
+8. **Task 14.** A fourth section, "From other reviews", holds the 16 ids with no line of their own (R1–R10, MS1–MS4, N1, N2). Every one of the 220 ids carries one mark.
+9. **Final review: ready to merge with fixes, 5 Important and 7 Minor.** One fix wave, dd8bdd8..994aa38, fixed:
+   - F1: a bound key's nullability follows Nillable, not Optional. The controller's 7a749b5 also corrected Required's first sentence.
+   - F2: a pnote case that fails when Write is ignored.
+   - F3: on PostgreSQL a failed RELEASE aborts the transaction, so the outer COMMIT fails. Measured on PostgreSQL 18.
+   - F4: Circle gains a Write policy, and TestM2MLinkNeedsReadOnly.
+   - F5: the velox.json version text is pinned.
+   - F6: the Examples are self-contained.
+   - F7: CONTRIBUTING gives ci-local.sh's order.
+   - F8 and F12: CHANGELOG lines.
+   - F9: Rewrite's remedy under table-per-tenant.
+   - F11: README's `-dialect`.
+10. **Gate.** `scripts/ci-local.sh` with `VELOX_CI_MATRIX=1` at 7a749b5 passed every step but one: the graphql scale run's schema edit was 42.53x, over 28.50, with wall time above CPU time while the machine swapped at load 27–33. The wave changes no non-test file under bench/ or the graphql generator. That step alone, rerun at load 11.7, gave 23.44x (cold 14.57x), and passed.
+
+## Left by this plan (execution)
+
+- **Release prep (at the first push):**
+  - enable GitHub private vulnerability reporting, which SECURITY.md relies on (final review F10);
+  - fill README's single licence placeholder once the licence is chosen.
+- **After 1.0, or when it bites:**
+  - velox-gen's relInside doesn't cut a Reason path through a symlink inside the module, and doesn't cut forward-slash paths on Windows. Its symlinked-working-directory branch has no test, only a hand check (Task 6 review F2, F3, F5).
+  - F9's claim that "With goes through the hooks" rests on a scratch run, not a committed pin.
