@@ -167,6 +167,10 @@ type Policy[E any] struct {
 	// does not check the new values (there is no WITH CHECK), so a writer may
 	// set a column the policy reads, such as an owner. Only the tenant column
 	// cannot be changed.
+	//
+	// A row Write hides is left alone, and that is not an error: an Update or
+	// Delete that matches only such rows affects 0 rows, as with SQL row-level
+	// security.
 	Write func(ctx context.Context) (Pred[E], error)
 	// Insert checks every inserted or upserted row, after the entity's
 	// hooks, the defaults, the tenant fill and the

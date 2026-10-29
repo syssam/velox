@@ -209,7 +209,7 @@ func (c StringCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E] {
 	return Pred[E]{node{op: opBetween, col: c.I, v: lo, w: hi}}
 }
 
-// Like is column LIKE pattern: % and _ are wildcards, and ! escapes them and itself (\ is an ordinary character: a \ in a pattern matches a backslash). Whether case is ignored follows the database: PostgreSQL's LIKE does not ignore it; MySQL's default collations and SQLite (for ASCII) do.
+// Like is column LIKE pattern: % and _ are wildcards, and ! escapes them and itself (\ is an ordinary character: a \ in a pattern matches a backslash). Whether case is ignored follows the database: PostgreSQL's LIKE does not ignore it; MySQL's default collations and SQLite (for ASCII) do. It takes a string, not the column's type, because a pattern is not a value of the column.
 func (c StringCol[E, V]) Like[_ Lazy[V]](pattern string) Pred[E] {
 	return Pred[E]{node{op: opLike, col: c.I, v: pattern}}
 }
@@ -229,7 +229,7 @@ func (c StringCol[E, V]) Contains[_ Lazy[V]](s V) Pred[E] {
 	return Pred[E]{node{op: opLike, col: c.I, v: "%" + escapeLike(string(s)) + "%"}}
 }
 
-// EqualFold is LOWER(column) = LOWER(s).
+// EqualFold is LOWER(column) = LOWER(s). SQLite's LOWER folds ASCII letters only, so on SQLite it ignores the case of those alone.
 func (c StringCol[E, V]) EqualFold[_ Lazy[V]](s V) Pred[E] {
 	return Pred[E]{node{op: opFold, col: c.I, v: string(s)}}
 }
@@ -526,7 +526,7 @@ func (c NullStringCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E] {
 	return Pred[E]{node{op: opBetween, col: c.I, v: lo, w: hi}}
 }
 
-// Like is column LIKE pattern: % and _ are wildcards, and ! escapes them and itself (\ is an ordinary character: a \ in a pattern matches a backslash). Whether case is ignored follows the database: PostgreSQL's LIKE does not ignore it; MySQL's default collations and SQLite (for ASCII) do.
+// Like is column LIKE pattern: % and _ are wildcards, and ! escapes them and itself (\ is an ordinary character: a \ in a pattern matches a backslash). Whether case is ignored follows the database: PostgreSQL's LIKE does not ignore it; MySQL's default collations and SQLite (for ASCII) do. It takes a string, not the column's type, because a pattern is not a value of the column.
 func (c NullStringCol[E, V]) Like[_ Lazy[V]](pattern string) Pred[E] {
 	return Pred[E]{node{op: opLike, col: c.I, v: pattern}}
 }
@@ -546,7 +546,7 @@ func (c NullStringCol[E, V]) Contains[_ Lazy[V]](s V) Pred[E] {
 	return Pred[E]{node{op: opLike, col: c.I, v: "%" + escapeLike(string(s)) + "%"}}
 }
 
-// EqualFold is LOWER(column) = LOWER(s).
+// EqualFold is LOWER(column) = LOWER(s). SQLite's LOWER folds ASCII letters only, so on SQLite it ignores the case of those alone.
 func (c NullStringCol[E, V]) EqualFold[_ Lazy[V]](s V) Pred[E] {
 	return Pred[E]{node{op: opFold, col: c.I, v: string(s)}}
 }

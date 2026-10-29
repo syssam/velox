@@ -2,7 +2,9 @@ package velox_test
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -708,4 +710,111 @@ func TestExistsErrorNamesThePath(t *testing.T) {
 	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{})
 	_, err := db.Query[pbox]().Where(pboxNote.HasWhere(pn.Invoice.Has())).Limit(1).All(context.Background())
 	want(t, err, velox.ErrNoTenant, "velox: velox_test.pbox: in the EXISTS on velox_test.pnote, then on testmodel.Invoice: no tenant in the context")
+}
+
+// policyDDL is velox-gen migrate sql -dialect sqlite's invoices and tickets
+// tables, for the testmodel schema.
+var policyDDL = []string{
+	`CREATE TABLE "invoices" (
+  "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "created_at" datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updated_at" datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "org_id" integer NOT NULL,
+  "number" text NOT NULL,
+  "total" real NOT NULL,
+  "paid" boolean NOT NULL,
+  "paid_at" datetime,
+  "note" text NOT NULL DEFAULT '',
+  "data" blob NOT NULL
+)`,
+	`CREATE UNIQUE INDEX "invoice_org_id_number" ON "invoices" ("org_id", "number")`,
+	`CREATE TABLE "tickets" (
+  "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "created_by" text NOT NULL,
+  "org_id" integer NOT NULL,
+  "owner" text NOT NULL,
+  "title" text NOT NULL,
+  "done" boolean NOT NULL,
+  "invoice_id" integer NOT NULL,
+  "parent_id" integer,
+  CONSTRAINT "tickets_invoices_invoice" FOREIGN KEY ("invoice_id") REFERENCES "invoices" ("id"),
+  CONSTRAINT "tickets_tickets_children" FOREIGN KEY ("parent_id") REFERENCES "tickets" ("id") ON DELETE SET NULL
+)`,
+	`CREATE UNIQUE INDEX "ticket_org_id_title" ON "tickets" ("org_id", "title")`,
+}
+
+// policyDB opens a SQLite database in a temporary file, with the invoices and
+// tickets tables.
+func policyDB(t *testing.T) *velox.DB {
+	t.Helper()
+	raw, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "policy.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw.SetMaxOpenConns(1)
+	t.Cleanup(func() { _ = raw.Close() })
+	for _, s := range policyDDL {
+		if _, err := raw.Exec(s); err != nil {
+			t.Fatalf("%s: %v", s, err)
+		}
+	}
+	return velox.Open(velox.SQLite, raw)
+}
+
+// TestWritePolicyFiltersToZeroRows: a row Write hides is left alone, and the
+// statement that matched only such rows affects 0 rows, without an error.
+func TestWritePolicyFiltersToZeroRows(t *testing.T) {
+	db := policyDB(t)
+	seed := velox.WithoutPolicy(velox.WithAllTenants(context.Background(), "test"), "seed")
+	inv := testmodel.Invoice{OrgID: 1, Number: "N1", Data: []byte("d")}
+	if err := db.Insert(&inv).Exec(seed); err != nil {
+		t.Fatal(err)
+	}
+	tk := testmodel.Ticket{OrgID: 1, Owner: "bob", Title: "T-1", Done: true, InvoiceID: inv.ID}
+	if err := db.Insert(&tk).Exec(seed); err != nil {
+		t.Fatal(err)
+	}
+	ann := testmodel.WithUser(velox.WithAllTenants(context.Background(), "test"), "ann")
+
+	n, err := db.Update[testmodel.Ticket]().Set(Tk.Title.Set("x")).Where(Tk.ID.EQ(tk.ID)).Exec(ann)
+	if n != 0 || err != nil {
+		t.Errorf("update as ann: %d, %v", n, err)
+	}
+	n, err = db.Delete[testmodel.Ticket]().Where(Tk.ID.EQ(tk.ID)).Exec(ann)
+	if n != 0 || err != nil {
+		t.Errorf("delete as ann: %d, %v", n, err)
+	}
+	got, err := db.Query[testmodel.Ticket]().Where(Tk.ID.EQ(tk.ID)).One(seed)
+	if err != nil || got.Title != "T-1" {
+		t.Fatalf("under WithoutPolicy: %+v, %v", got, err)
+	}
+
+	// The row is changeable by its owner: the zero rows were the policy's.
+	bob := testmodel.WithUser(velox.WithAllTenants(context.Background(), "test"), "bob")
+	n, err = db.Delete[testmodel.Ticket]().Where(Tk.ID.EQ(tk.ID)).Exec(bob)
+	if n != 1 || err != nil {
+		t.Errorf("delete as bob: %d, %v", n, err)
+	}
+}
+
+// TestEqualFoldIsASCIIOnSQLite: SQLite's LOWER folds ASCII letters only, so
+// EqualFold ignores the case of those alone.
+func TestEqualFoldIsASCIIOnSQLite(t *testing.T) {
+	db := policyDB(t)
+	ctx := velox.WithoutPolicy(velox.WithAllTenants(context.Background(), "test"), "seed")
+	if err := db.Insert(&testmodel.Invoice{OrgID: 1, Number: "ÉCOLE", Data: []byte("d")}).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		s    string
+		want int64
+	}{
+		{"ÉcOLE", 1}, // the É is the same; c and O differ in case only
+		{"école", 0}, // SQLite leaves É as it is, so it is not é
+	} {
+		n, err := db.Query[testmodel.Invoice]().Where(I.Number.EqualFold(c.s)).Count(ctx)
+		if err != nil || n != c.want {
+			t.Errorf("EqualFold(%q): %d, %v; want %d", c.s, n, err, c.want)
+		}
+	}
 }

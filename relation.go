@@ -23,6 +23,10 @@ type kit struct {
 }
 
 // One holds a to-one relation, filled by With. Its zero value means not loaded.
+// Every to-one edge velox-gen writes matches at most one row: its key is the
+// target's primary key, or, for a one-to-one edge, a unique column. A loaded
+// One holds that row, or nil when there is none.
+//
 // The value is held as any so that an entity's type does not reach the types of
 // the entities it relates to: every package that uses an instantiated generic
 // type compiles its type descriptor and everything the descriptor reaches.
