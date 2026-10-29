@@ -13,6 +13,10 @@ import (
 	"github.com/syssam/velox2/internal/testmodel/kind"
 )
 
+// fuzzMoment is a struct type that converts to time.Time, with no methods:
+// the case of scanWraps that database/sql converts by reflection.
+type fuzzMoment time.Time
+
 // fuzzDests are the destination types FuzzColumnScan scans into: the wrapped
 // types of scanWraps that tests outside the package can name.
 var fuzzDests = []reflect.Type{
@@ -41,6 +45,8 @@ var fuzzDests = []reflect.Type{
 	reflect.TypeFor[*kind.Status](),
 	reflect.TypeFor[**kind.Status](),
 	reflect.TypeFor[*kind.Cents](),
+	reflect.TypeFor[*fuzzMoment](),
+	reflect.TypeFor[**fuzzMoment](),
 }
 
 // fuzzDest is the index of t in fuzzDests.
@@ -79,6 +85,11 @@ func FuzzColumnScan(f *testing.F) {
 		} {
 			f.Add(pick, int64(300), 1.5, "42", []byte("7"), int64(1_700_000_000), fuzzDest(dst))
 		}
+	}
+	for _, dst := range []reflect.Type{reflect.TypeFor[*fuzzMoment](), reflect.TypeFor[**fuzzMoment]()} {
+		f.Add(uint8(6), int64(0), 0.0, "", []byte(nil), int64(1_700_000_000), fuzzDest(dst))
+		f.Add(uint8(0), int64(0), 0.0, "", []byte(nil), int64(0), fuzzDest(dst))
+		f.Add(uint8(4), int64(0), 0.0, "abc", []byte(nil), int64(0), fuzzDest(dst))
 	}
 	f.Add(uint8(1), int64(-1), 0.0, "", []byte(nil), int64(0), fuzzDest(reflect.TypeFor[*uint8]()))
 	f.Add(uint8(4), int64(0), 0.0, "abc", []byte(nil), int64(0), fuzzDest(reflect.TypeFor[*int64]()))

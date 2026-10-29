@@ -156,8 +156,9 @@ go test -run XXX -fuzz '^FuzzRender$' -fuzztime 10s .
 The targets are `FuzzRender`, `FuzzQuote`, `FuzzScope`, `FuzzRenderWrite`,
 `FuzzConstraint` and `FuzzColumnScan` in the root, `FuzzLiteral` in
 `internal/ddl`, `FuzzSplit` and `FuzzDiff` in `migrate`, and `FuzzCost` in
-`contrib/graphql/veloxgql` (run from `contrib/graphql`). `.github/workflows/ci.yml` and `scripts/ci-local.sh` list
-them with their packages and times.
+`contrib/graphql/veloxgql` (run from `contrib/graphql`).
+`.github/workflows/ci.yml` and `scripts/ci-local.sh` list them with their
+packages and times.
 
 A new target needs a line in `ci.yml` and one in `ci-local.sh`. Anchor its name
 with `^` and `$`. A crash writes a file under `testdata/fuzz`. Commit that

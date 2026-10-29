@@ -31,11 +31,11 @@ func (s *colScanner) Scan(src any) error {
 // colScanner: whether pgx's stdlib driver would check its type on every row,
 // and database/sql converts into it. t is a pointer to the field. It is true
 // for a pointer to a bool, an integer, a float, a string, a byte slice or a
-// struct that converts to time.Time, or to a pointer to one of them. It is
-// false for a destination that is a sql.Scanner already, for one that pgx hands
-// to its own scan plans (pgtype's ArraySetter and BytesScanner), for sql.RawBytes
-// and for every other kind, whose handling stays as it is. A pointer type that
-// has a name of its own is left alone, as pgx leaves it.
+// struct that converts to time.Time, or to pointers to one of them, at any
+// depth. It is false for a destination that is a sql.Scanner already, for one
+// that pgx hands to its own scan plans (pgtype's ArraySetter and BytesScanner),
+// for sql.RawBytes and for every other kind, whose handling stays as it is. A
+// pointer type that has a name of its own is left alone, as pgx leaves it.
 func scanWrapsType(t reflect.Type) bool {
 	if t == nil || t.Kind() != reflect.Pointer || t.Name() != "" {
 		return false

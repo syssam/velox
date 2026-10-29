@@ -110,9 +110,10 @@ func TestPgxMirrorIsCurrent(t *testing.T) {
 		t.Fatalf("go list: %v", err)
 	}
 	dir := strings.TrimSpace(string(out))
-	pgx, err := os.ReadFile(filepath.Join(dir, "stdlib", "sql_go1.27.go"))
+	file := filepath.Join(dir, "stdlib", "sql_go1.27.go")
+	pgx, err := os.ReadFile(file)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("pgx's isSQLScanDestination changed: %s cannot be read (%v): update the copy and re-check scanWrapsType", file, err)
 	}
 	mine, err := os.ReadFile("pgxmirror_test.go")
 	if err != nil {
