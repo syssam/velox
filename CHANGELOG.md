@@ -107,8 +107,10 @@ Schema and migrations
 Runtime
 - `WithTenant` converts predeclared integers and strings to the tenant column's
   type, entity by entity (b04ac97).
-- `Open` and `OpenShards` panic on an unknown dialect (06d3b4d). Rollbacks are bounded to 5
-  seconds, and savepoints keep the transaction's deadline (1642c74).
+- `Open` and `OpenShards` panic on an unknown dialect (06d3b4d). A rollback
+  velox sends after fn fails is bounded to 5 seconds (on a DB from `Open`, a
+  savepoint's ROLLBACK TO only), and savepoints keep the transaction's
+  deadline (1642c74).
 - Hooks cannot drop the bidi marker, the load pin or a bidi key (0785b33).
   The upsert policy flag moves to the Statement, and hooks cannot unguard an
   upsert (013fed4).
