@@ -128,7 +128,7 @@ func Open(d Dialect, db *sql.DB, opts ...Option) *DB {
 	if !d.valid() {
 		panic(fmt.Sprintf("velox: Open: unknown %v; use velox.Postgres, velox.MySQL or velox.SQLite", d))
 	}
-	return newDB(d, sqlExecutor{c: db, db: db}, opts)
+	return newDB(d, newSQLExecutor(db), opts)
 }
 
 // OpenPgx returns a DB for PostgreSQL that runs statements through pool with

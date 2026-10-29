@@ -25,3 +25,4 @@ contributor needs to know.
 | [0015](0015-contrib-graphql-path.md) | The module path stays contrib/graphql, imported as `vgraphql` beside gqlgen's graphql. |
 | [0016](0016-withtenant-converts.md) | WithTenant converts a predeclared integer or a string to the tenant column's type; a named id never converts. |
 | [0017](0017-upsert-skips-updatedefault.md) | An upsert's update branch does not fire UpdateDefault, as in old velox and ent. |
+| [0018](0018-pgx-stdlib-scan-wrapper.md) | On pgx's stdlib driver, scans go through a sql.Scanner, which skips pgx's per-column type check: 81% less time for a 100-row query. |

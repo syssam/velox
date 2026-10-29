@@ -550,3 +550,27 @@ func ScanWraps(t reflect.Type) bool { return scanWraps(t) }
 func ColumnScan(dst, src any) error {
 	return sql.ConvertAssign(driver.ScanContext{}, &colScanner{dst: dst}, src)
 }
+
+// OpenColumnScan returns a DB on db whose rows are colRows when wrap is set,
+// whatever db's driver.
+func OpenColumnScan(d Dialect, db *sql.DB, wrap bool) *DB {
+	return newDB(d, sqlExecutor{c: db, db: db, cols: wrap}, nil)
+}
+
+// PgxStdlib reports whether db's driver is pgx's stdlib driver.
+func PgxStdlib(db *sql.DB) bool { return pgxStdlib(db) }
+
+// RowsAreColumnScanning runs SELECT 1 on db, a DB made by Open, and reports
+// whether its rows are colRows.
+func RowsAreColumnScanning(db *DB) bool {
+	r, err := db.ex.query(context.Background(), "SELECT 1", nil)
+	if err != nil {
+		panic(err)
+	}
+	defer r.Close()
+	_, ok := r.(*colRows)
+	return ok
+}
+
+// ConnColumnScanning reports whether c's executor makes colRows.
+func ConnColumnScanning(c Conn) bool { return c.ex.(sqlExecutor).cols }

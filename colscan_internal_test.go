@@ -1,6 +1,7 @@
 package velox
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"reflect"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	_ "modernc.org/sqlite"
 )
 
 type (
@@ -98,5 +100,40 @@ func TestScanWrapsClassification(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestBeginKeepsColumnScan(t *testing.T) {
+	db, err := sql.Open("sqlite", "file::memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	ctx := context.Background()
+	for _, cols := range []bool{true, false} {
+		ex, tx, err := sqlExecutor{c: db, db: db, cols: cols}.begin(ctx, txOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, err := ex.query(ctx, "SELECT 1", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		switch r.(type) {
+		case *colRows:
+			if !cols {
+				t.Error("cols false: query gave colRows")
+			}
+		case sqlRows:
+			if cols {
+				t.Error("cols true: query gave sqlRows")
+			}
+		default:
+			t.Errorf("query gave %T", r)
+		}
+		r.Close()
+		if err := tx.rollback(ctx); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

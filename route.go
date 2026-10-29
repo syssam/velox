@@ -32,7 +32,7 @@ func SQLConn(db *sql.DB) Conn {
 	if db == nil {
 		panic("velox: SQLConn(nil)")
 	}
-	return Conn{ex: sqlExecutor{c: db, db: db}}
+	return Conn{ex: newSQLExecutor(db)}
 }
 
 // PgxConn returns a Conn that runs statements through pool with pgx's native

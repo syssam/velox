@@ -89,3 +89,58 @@ func scanWraps(t reflect.Type) bool {
 	scanWrapCache.Store(t, w)
 	return w
 }
+
+// colSlot is one column of a colRows: the destination type its last scan
+// was given, whether scanWraps wraps it, and the colScanner that does.
+type colSlot struct {
+	typ  reflect.Type
+	wrap bool
+	cs   colScanner
+}
+
+// colRows are rows read through pgx's stdlib driver. Scan hands the driver a
+// colScanner, in place of each destination that scanWraps wraps, so the
+// driver skips its type check of the destination and converts as
+// database/sql does. slots and args are reused from row to row.
+type colRows struct {
+	*sql.Rows
+	slots []colSlot
+	args  []any
+}
+
+func (r *colRows) Close() { _ = r.Rows.Close() }
+
+// Scan scans the row into dst as sql.Rows.Scan does, through a colScanner
+// for each wrapped destination. It never writes to dst. A nil pointer is
+// passed to the driver as it is, so the driver rejects it with its own error.
+func (r *colRows) Scan(dst ...any) error {
+	if len(r.slots) != len(dst) {
+		r.slots = make([]colSlot, len(dst))
+		r.args = make([]any, len(dst))
+	}
+	for i, d := range dst {
+		s := &r.slots[i]
+		if t := reflect.TypeOf(d); t != s.typ {
+			s.typ, s.wrap = t, scanWraps(t)
+		}
+		if s.wrap && !reflect.ValueOf(d).IsNil() {
+			s.cs.dst = d
+			r.args[i] = &s.cs
+		} else {
+			r.args[i] = d
+		}
+	}
+	return r.Rows.Scan(r.args...)
+}
+
+// pgxStdlib reports whether db's driver is pgx's stdlib driver, however db
+// was opened from it. A driver that wraps it is not detected. A nil db, which
+// Open allows for a DB that only renders, is not.
+func pgxStdlib(db *sql.DB) bool {
+	if db == nil {
+		return false
+	}
+	t := reflect.TypeOf(db.Driver())
+	return t != nil && t.Kind() == reflect.Pointer &&
+		t.Elem().Name() == "Driver" && t.Elem().PkgPath() == "github.com/jackc/pgx/v5/stdlib"
+}

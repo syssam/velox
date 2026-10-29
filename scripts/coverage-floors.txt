@@ -20,7 +20,7 @@
 # does not count. internal/itest has no statements and no line.
 
 # root module
-github.com/syssam/velox2 92.7
+github.com/syssam/velox2 92.8
 github.com/syssam/velox2/bench/scale 72.4
 github.com/syssam/velox2/cmd/velox-gen 89.3
 github.com/syssam/velox2/internal/bindmodel 6.7

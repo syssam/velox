@@ -57,12 +57,22 @@ type sqlConn interface {
 type sqlExecutor struct {
 	c  sqlConn
 	db *sql.DB // nil inside a transaction
+	// cols makes query return colRows: set when the driver is pgx's stdlib.
+	cols bool
+}
+
+// newSQLExecutor returns the executor for db, outside a transaction.
+func newSQLExecutor(db *sql.DB) sqlExecutor {
+	return sqlExecutor{c: db, db: db, cols: pgxStdlib(db)}
 }
 
 func (e sqlExecutor) query(ctx context.Context, s string, args []any) (rows, error) {
 	r, err := e.c.QueryContext(ctx, s, args...)
 	if err != nil {
 		return nil, err
+	}
+	if e.cols {
+		return &colRows{Rows: r}, nil
 	}
 	return sqlRows{r}, nil
 }
@@ -87,7 +97,7 @@ func (e sqlExecutor) begin(ctx context.Context, o txOptions) (executor, txContro
 	if err != nil {
 		return nil, nil, err
 	}
-	return sqlExecutor{c: tx}, sqlTx{tx}, nil
+	return sqlExecutor{c: tx, cols: e.cols}, sqlTx{tx}, nil
 }
 
 type sqlTx struct{ tx *sql.Tx }
