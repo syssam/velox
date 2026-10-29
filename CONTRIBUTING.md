@@ -25,19 +25,25 @@ each.
 before you push.
 
 It starts PostgreSQL 18 and MySQL 8.4 from `docker-compose.ci.yml`, sets the
-database variables below, and runs what CI runs, in this order:
+database variables below, and runs what CI runs, module by module, in this
+order:
 
-1. `gofmt`, `go vet` and golangci-lint v2.14.0, in the root and in each of the
-   other modules.
-2. `go test -race -count=1` in each module, with coverage profiles.
-3. The eight root fuzz targets, then `FuzzCost` in `contrib/graphql`.
-4. `velox-gen -check` and `velox-gen verify` on the test models and on every
-   example, the migrations replay, and gqlgen's output for `example/graphql`.
-5. revive on the generated code.
-6. The coverage floors.
-7. `bench/scale`, in plain and GraphQL form, against `bench/scale/thresholds.json`.
-8. `scripts/bench-compare.sh`, which only reports.
-9. `scripts/gqlgen-latest.sh`, which tests `velox-graphql` against the newest
+1. The root module: `gofmt`, `go vet`, golangci-lint v2.14.0, then
+   `go test -race -count=1` with a coverage profile. Then the eight root fuzz
+   targets, `velox-gen -check` and `velox-gen verify` on the test models, and
+   revive on their generated code.
+2. `example`: `gofmt`, `go vet`, golangci-lint, revive on the generated code,
+   then the tests with a coverage profile. Then `velox-gen -check` and
+   `velox-gen verify` on every example, the migrations replay, and gqlgen's
+   output for `example/graphql`.
+3. `contrib/veloxotel`: `gofmt`, `go vet`, golangci-lint, then the tests with
+   a coverage profile.
+4. `contrib/graphql`: `gofmt`, `go vet`, golangci-lint, the tests with a
+   coverage profile, then `FuzzCost`.
+5. The coverage floors.
+6. `bench/scale`, in plain and GraphQL form, against `bench/scale/thresholds.json`.
+7. `scripts/bench-compare.sh`, which only reports.
+8. `scripts/gqlgen-latest.sh`, which tests `velox-graphql` against the newest
    gqlgen in a copy of the tree.
 
 CI tests PostgreSQL 14 and 18. `VELOX_CI_MATRIX=1 bash scripts/ci-local.sh`
