@@ -447,13 +447,13 @@ func TestNoSchemasIsAnError(t *testing.T) {
 		args []string
 		want string
 	}{
-		{[]string{"./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is a struct that embeds schema.Schema\n"},
-		{[]string{"-out", "gen", "./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is a struct that embeds schema.Schema\n"},
-		{[]string{"-check", "./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is a struct that embeds schema.Schema\n"},
-		{[]string{"verify", "./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is a struct that embeds schema.Schema\n"},
-		{[]string{"example.com/app/plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is a struct that embeds schema.Schema\n"},
-		{[]string{"describe", "./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is a struct that embeds schema.Schema\n"},
-		{[]string{"describe", "-json", "./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is a struct that embeds schema.Schema\n"},
+		{[]string{"./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is a struct that embeds schema.Schema directly\n"},
+		{[]string{"-out", "gen", "./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is a struct that embeds schema.Schema directly\n"},
+		{[]string{"-check", "./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is a struct that embeds schema.Schema directly\n"},
+		{[]string{"verify", "./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is a struct that embeds schema.Schema directly\n"},
+		{[]string{"example.com/app/plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is a struct that embeds schema.Schema directly\n"},
+		{[]string{"describe", "./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is a struct that embeds schema.Schema directly\n"},
+		{[]string{"describe", "-json", "./plain"}, "velox-gen: no schemas in example.com/app/plain: a schema is a struct that embeds schema.Schema directly\n"},
 	} {
 		if code, out, errs := velox(t, dir, c.args...); code != 1 || out != "" || errs != c.want {
 			t.Errorf("%v: %d %q %q, want %q", c.args, code, out, errs, c.want)
@@ -577,7 +577,7 @@ func TestSchemaDirectoryWithoutSchemas(t *testing.T) {
 		t.Skip("builds a module")
 	}
 	dir := tempModule(t, map[string]string{"schema/doc.go": "package schema\n"})
-	const want = "velox-gen: no schemas in example.com/app/schema: a schema is a struct that embeds schema.Schema\n"
+	const want = "velox-gen: no schemas in example.com/app/schema: a schema is a struct that embeds schema.Schema directly\n"
 	// Named, and by default.
 	for _, args := range [][]string{{"./schema"}, {}, {"-check"}, {"verify"}} {
 		if code, out, errs := velox(t, dir, args...); code != 1 || out != "" || errs != want {
@@ -1071,5 +1071,35 @@ func TestGenerateKeepsYoursInALeftover(t *testing.T) {
 	}
 	if got := treeFiles(t, filepath.Join(gen, ".pb.gone-velox-1")); !reflect.DeepEqual(got, map[string]string{"mine.txt": "mine"}) {
 		t.Errorf("the leftover holds %v", got)
+	}
+}
+
+// A struct that embeds a struct that embeds schema.Schema is not a schema:
+// describe skips it without a message.
+func TestDescribeSkipsIndirectSchema(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a module")
+	}
+	dir := tempModule(t, map[string]string{"schema/s.go": `package schema
+
+import "github.com/syssam/velox2/schema"
+
+type Base struct{ schema.Schema }
+
+type Café struct{ Base }
+
+type Order struct{ Base }
+`})
+	code, out, errs := velox(t, dir, "describe", "./schema")
+	if code != 0 || errs != "" {
+		t.Fatalf("describe: %d %q %q", code, out, errs)
+	}
+	if !strings.Contains(out, "Base") {
+		t.Errorf("Base is not listed: %q", out)
+	}
+	for _, name := range []string{"Order", "Café"} {
+		if strings.Contains(out, name) {
+			t.Errorf("%s is listed: %q", name, out)
+		}
 	}
 }

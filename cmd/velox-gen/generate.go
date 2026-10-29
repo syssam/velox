@@ -78,7 +78,7 @@ func schemaPackage(dir string, patterns, env []string) (string, error) {
 		return "", err
 	}
 	if len(schemas) == 0 {
-		return "", fmt.Errorf("no schemas in %s: a schema is a struct that embeds schema.Schema", importPath)
+		return "", fmt.Errorf("no schemas in %s: a schema is a struct that embeds schema.Schema directly", importPath)
 	}
 	return pattern, nil
 }

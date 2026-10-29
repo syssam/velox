@@ -110,3 +110,16 @@ func TestEntNames(t *testing.T) {
 		t.Fatalf("golden has %d rows, want 105", rows)
 	}
 }
+
+// TestSnakeIsByteWise pins Snake to bytes: a letter outside ASCII is cut
+// into its UTF-8 bytes and comes out mangled, as it does in ent.
+func TestSnakeIsByteWise(t *testing.T) {
+	for in, want := range map[string]string{
+		"CaféBar": "caf_ã©bar",
+		"Ünit":    "ã\u009cnit",
+	} {
+		if got := plugin.Snake(in); got != want {
+			t.Errorf("Snake(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

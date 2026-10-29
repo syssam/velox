@@ -81,7 +81,7 @@ func Load(dir, pattern string, env []string) (*loadjson.Model, error) {
 		return nil, err
 	}
 	if len(names) == 0 {
-		return nil, fmt.Errorf("no schemas in %s: a schema is a struct that embeds schema.Schema", pkg.ImportPath)
+		return nil, fmt.Errorf("no schemas in %s: a schema is a struct that embeds schema.Schema directly", pkg.ImportPath)
 	}
 	tmp, err := os.MkdirTemp(pkg.Module.Dir, ".velox-gen-")
 	if err != nil {

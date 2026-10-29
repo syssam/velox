@@ -50,11 +50,13 @@ func GoName(s string) string {
 // Snake is the snake_case of an identifier: OrgID → org_id, HTTPServer →
 // http_server, S3Bucket → s3bucket, OAuth2Token → oauth2token. It is ent's
 // snake (entc/gen/func.go), ported exactly, so that labels, default tables and
-// foreign-key columns match ent's: an underscore goes before an upper-case
-// letter that is neither first nor last when the previous letter is lower
-// case, or when the next is lower case and the previous is a letter that did
-// not itself start a word. A digit never starts a word. Its output must never
-// change: it names tables, columns and labels that live in databases.
+// foreign-key columns match ent's. Like ent's, it works on bytes, so it is for
+// ASCII identifiers: a letter outside ASCII comes out mangled (CaféBar gives
+// caf_ã©bar). An underscore goes before an upper-case letter that is neither
+// first nor last when the previous letter is lower case, or when the next is
+// lower case and the previous is a letter that did not itself start a word. A
+// digit never starts a word. Its output must never change: it names tables,
+// columns and labels that live in databases.
 func Snake(s string) string {
 	var (
 		j int

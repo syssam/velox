@@ -4,7 +4,10 @@ import "github.com/syssam/velox2/schema/internal/desc"
 
 // Annotation is extra data attached to a schema, field, edge or index. Name
 // identifies it, and velox-gen passes annotations it does not know to the
-// generators that do.
+// generators that do. Two annotations of one name on one element merge when
+// the later implements Merger; otherwise the later replaces the earlier,
+// without a message. A third-party annotation should take a name no other
+// package uses, such as one that starts with its module path.
 type Annotation = desc.Annotation
 
 // Merger is implemented by an annotation that combines with another of the
@@ -48,7 +51,8 @@ type Interface interface {
 	Annotations() []Annotation
 }
 
-// Schema is embedded by every schema. Its methods declare nothing; a schema
+// Schema is embedded, directly, by every schema; velox-gen skips a struct that
+// embeds it through another struct. Its methods declare nothing; a schema
 // overrides the ones it needs.
 type Schema struct{}
 
