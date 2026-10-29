@@ -249,8 +249,10 @@ type Result struct {
 //
 // A hook that points st.Entity at another table changes the statement's own
 // table only: the tables in an EXISTS that Has or HasWhere adds keep their
-// names. To scope those by tenant, use the target's policy: its Read is
-// ANDed into every Has and HasWhere subquery.
+// names. The target's own tenant column and Read policy apply inside the
+// EXISTS, but a hook that moves tables cannot reach it. With a table per
+// tenant, avoid Has and HasWhere, or load the relation with With, which goes
+// through the hooks.
 type Rewrite func(ctx context.Context, st *Statement) error
 
 // Around is a hook that wraps a statement's execution. next runs the
