@@ -12,7 +12,9 @@ import (
 )
 
 // Caller is a statement's call site: the first stack frame outside velox and
-// the packages WithCallerSkip names.
+// the packages WithCallerSkip names. Caller is zero when none of the 64
+// frames above velox's call is outside velox and the packages WithCallerSkip
+// names.
 type Caller struct {
 	File string // relative to the module root when it can be determined, else the base name
 	Line int

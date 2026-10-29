@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/syssam/velox2"
+	"github.com/syssam/velox2/internal/testmodel"
 )
 
 // trace records the order hooks and the core ran in, per test.
@@ -1019,5 +1020,25 @@ func TestValueInOfAnotherType(t *testing.T) {
 	const text = `velox: velox_test.hFlex: hook: column "title" is assigned a value of type int, not string`
 	if err == nil || err.Error() != text || v != "" || ok {
 		t.Errorf("got %v, %q, %v; want %q", err, v, ok, text)
+	}
+}
+
+// TestRewriteLeavesExistsTables: a Rewrite hook that points Entity at
+// another table moves the statement's own table only. The tables in the
+// EXISTS that Has adds keep their names.
+func TestRewriteLeavesExistsTables(t *testing.T) {
+	moved := func(_ context.Context, st *velox.Statement) error {
+		info := *st.Entity
+		info.Table = "t_" + st.Entity.Table
+		st.Entity = &info
+		return nil
+	}
+	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{}, velox.WithRewrite(moved))
+	sql, _, err := db.Query[testmodel.Invoice]().Where(I.Items.Has()).Limit(1).SQL(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `FROM "t_invoices" WHERE EXISTS (SELECT 1 FROM "items" AS "vx1"`; !strings.Contains(sql, want) {
+		t.Errorf("SQL %s\nwant it to contain %s", sql, want)
 	}
 }

@@ -92,9 +92,12 @@ func TxRetries(opts ...TxOption) int {
 // shard too, and one whose context names another fails.
 //
 // Inside a transaction, Tx makes a savepoint instead, so an error in a nested
-// fn rolls back only that fn's work. A nested Tx (a savepoint) takes no
-// options and returns an error when given any, and passes fn the ctx it is
-// given, marked as the transaction's.
+// fn rolls back only that fn's work. When releasing the savepoint fails, the
+// nested Tx returns that error and does not roll back to the savepoint: its
+// fn's work stays in the transaction, which commits unless an enclosing fn
+// returns an error. A nested Tx (a savepoint) takes no options and returns an
+// error when given any, and passes fn the ctx it is given, marked as the
+// transaction's.
 //
 // tx is valid only inside fn: after Tx returns, statements on it fail (or, for
 // a nested tx, run in the enclosing transaction). tx is not safe for

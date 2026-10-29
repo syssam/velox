@@ -151,6 +151,10 @@ func OpenShards(d Dialect, shards map[string]Shard, opts ...Option) *DB {
 // SQL(ctx) dry run calls it too. Its error refuses the statement, which then
 // matches both ErrNoShard and the error.
 //
+// One write can call it more than once: an InsertAll split into two
+// statements calls it three times, for its transaction and for each
+// statement, and a Tx calls it when it begins and for each statement in it.
+//
 // f is called concurrently, from the goroutine of every statement, so it must
 // be safe for that, and fast: a map lookup or a hash, not a query.
 //

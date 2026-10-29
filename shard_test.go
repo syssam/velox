@@ -541,3 +541,52 @@ func TestSavepointChecksItsShard(t *testing.T) {
 		t.Errorf("eu's primary was sent %q, want %q", s.euP.Log, want)
 	}
 }
+
+// TestShardForCallsPerWrite: one write can call WithShardFor more than once.
+// An Insert asks once. An InsertAll split into two statements asks three
+// times, for its transaction and for each statement. A Tx asks when it
+// begins and for each statement in it.
+func TestShardForCallsPerWrite(t *testing.T) {
+	s := openShards(false)
+	tctx := velox.WithTenant(bg, int64(1))
+	s.euP.Rows = [][]any{{int64(1)}}
+
+	reset := func() {
+		s.lookups.Store(0)
+		s.euP.Calls = 0
+	}
+	check := func(name string, lookups int32, statements int) {
+		t.Helper()
+		if n := s.lookups.Load(); n != lookups {
+			t.Errorf("%s: WithShardFor called %d times, want %d", name, n, lookups)
+		}
+		if s.euP.Calls != statements {
+			t.Errorf("%s: %d statements, want %d", name, s.euP.Calls, statements)
+		}
+	}
+
+	reset()
+	if err := s.db.Insert(&testmodel.Invoice{Number: "N"}).Exec(tctx); err != nil {
+		t.Fatal(err)
+	}
+	check("Insert", 1, 1)
+
+	reset()
+	rows := make([]testmodel.Invoice, 8000)
+	for i := range rows {
+		rows[i] = testmodel.Invoice{Number: "N", Data: []byte{}}
+	}
+	if err := s.db.InsertAll(rows).Exec(tctx); err != nil {
+		t.Fatal(err)
+	}
+	check("InsertAll of 8000", 3, 2)
+
+	reset()
+	err := s.db.Tx(tctx, func(ctx context.Context, tx *velox.DB) error {
+		return tx.Insert(&testmodel.Invoice{Number: "N"}).Exec(ctx)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("Tx with one insert", 2, 1)
+}

@@ -836,3 +836,27 @@ func TestFailedSavepointRollbackAbortsTheTx(t *testing.T) {
 	}
 	notCommitted(t, e)
 }
+
+// TestNestedTxReleaseFails: when a savepoint's RELEASE fails, the nested Tx
+// returns that error and does not roll back to the savepoint. Its work stays
+// in the transaction, which commits when the enclosing fn returns nil.
+func TestNestedTxReleaseFails(t *testing.T) {
+	// BEGIN consumes nothing: SAVEPOINT, the UPDATE, then RELEASE.
+	e := &velox.FakeExec{Errs: []error{nil, nil, errors.New("release failed")}}
+	db := velox.OpenFake(velox.Postgres, e)
+	var nested error
+	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		nested = tx.Tx(ctx, touch)
+		return nil
+	})
+	if err != nil {
+		t.Errorf("outer Tx: %v, want nil", err)
+	}
+	if nested == nil || nested.Error() != "velox: release savepoint: release failed" {
+		t.Errorf("nested Tx: %v, want velox: release savepoint: release failed", nested)
+	}
+	want := []string{"BEGIN", "SAVEPOINT velox_1", touchSQL, "RELEASE SAVEPOINT velox_1", "COMMIT"}
+	if !reflect.DeepEqual(e.Log, want) {
+		t.Errorf("\n got %q\nwant %q", e.Log, want)
+	}
+}

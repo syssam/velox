@@ -145,7 +145,8 @@ func (c *EachClause) windowed(in *EntityInfo) bool { return c.Limit > 0 && !c.ke
 // The EntityInfo that Entity points to is shared by every query on the
 // entity, in every goroutine: treat it as read-only. A rewrite hook may point
 // Entity at an EntityInfo of its own (a copy with another Table, say), but
-// must never change the shared one.
+// must never change the shared one. Pointing it at another table does not
+// change the tables inside an EXISTS (see Rewrite).
 type Statement struct {
 	Op           Op
 	Entity       *EntityInfo // shared and read-only: replace it, never edit it
@@ -245,6 +246,11 @@ type Result struct {
 // set, so a hook must change nothing but the statement. They do not run for
 // raw SQL (OpRawQuery and OpRawExec), which has nothing to rewrite; Around
 // hooks see it.
+//
+// A hook that points st.Entity at another table changes the statement's own
+// table only: the tables in an EXISTS that Has or HasWhere adds keep their
+// names. To scope those by tenant, use the target's policy: its Read is
+// ANDed into every Has and HasWhere subquery.
 type Rewrite func(ctx context.Context, st *Statement) error
 
 // Around is a hook that wraps a statement's execution. next runs the
@@ -256,7 +262,9 @@ type Rewrite func(ctx context.Context, st *Statement) error
 // session (WithSession) found in the context the hook passes to next.
 //
 // A hook must call next, and return its error, unless it returns an error of
-// its own instead. It may call next again to retry after an error; running
+// its own instead. A hook must not assign to *st after next returns: velox
+// records in st where the statement ran, and the query's With loads read from
+// there. It may call next again to retry after an error; running
 // the statement again after Iter has yielded rows is an error. A retry is
 // sent where the route stage now points: a read that fell over to the
 // primary (Route.Fallback), on a connection error from its query or its rows,
