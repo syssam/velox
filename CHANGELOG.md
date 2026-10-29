@@ -68,7 +68,7 @@ Documentation and tests
   `InsertQuery.OnConflict`, `migrate.NewPlan` and `migrate.Up`, `veloxgql.Cost`
   and `veloxgql.DecodeID` (2236976). Every example's tables come from its
   committed migrations (M16, M17).
-- README.md, CONTRIBUTING.md, SECURITY.md and this file.
+- README.md, CONTRIBUTING.md, SECURITY.md and this file (9a5a474, 1cc5645).
 - CI runs on PostgreSQL 14 and 18 and MySQL 8.4, pinned by digest (9c25cef),
   with fuzz targets, per-package coverage floors and benchmark baselines.
 
