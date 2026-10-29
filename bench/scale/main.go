@@ -35,6 +35,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/syssam/velox2/internal/buildcost"
 	"github.com/syssam/velox2/internal/tempmod"
 )
 
@@ -156,7 +157,7 @@ func run(c config) (report, error) {
 		return r, fmt.Errorf("building velox-gen: %v\n%s", err, out)
 	}
 	wrapper := filepath.Join(tools, "linkmem")
-	if err := buildWrapper(wrapper); err != nil {
+	if err := buildcost.BuildWrapper(wrapper); err != nil {
 		return r, err
 	}
 	velox := func() (cpu float64, err error) {
@@ -174,7 +175,7 @@ func run(c config) (report, error) {
 		if err != nil {
 			return 0, fmt.Errorf("velox-gen: %v\n%s", err, out)
 		}
-		return cpuSeconds(cmd), nil
+		return buildcost.CPUSeconds(cmd), nil
 	}
 	if _, err := velox(); err != nil {
 		return r, err
@@ -192,18 +193,18 @@ func run(c config) (report, error) {
 	build := func() (cpu float64, err error) {
 		cmd := exec.Command("go", "build", "-toolexec", wrapper, "-o", bin+string(filepath.Separator), "./...")
 		cmd.Dir = app
-		cmd.Env = append(os.Environ(), "GOCACHE="+cache, "GOFLAGS="+tempmod.GoFlags("-mod=mod"), "GOPROXY=off", "GOWORK=off", "VELOX_LINKMEM="+memFile)
+		cmd.Env = append(os.Environ(), "GOCACHE="+cache, "GOFLAGS="+tempmod.GoFlags("-mod=mod"), "GOPROXY=off", "GOWORK=off", buildcost.LinkMemEnv+"="+memFile)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			return 0, fmt.Errorf("go build: %v\n%s%s", err, out, tempmod.Hint(string(out)))
 		}
-		return cpuSeconds(cmd), nil
+		return buildcost.CPUSeconds(cmd), nil
 	}
 	ref := filepath.Join(c.dir, "ref")
-	if err := writeReference(ref); err != nil {
+	if err := buildcost.WriteReference(ref); err != nil {
 		return r, err
 	}
-	if r.RefCPUBeforeS, r.RefWallBeforeS, err = buildReference(ref, filepath.Join(c.dir, "refcache-before"), wrapper); err != nil {
+	if r.RefCPUBeforeS, r.RefWallBeforeS, err = buildcost.BuildReference(ref, filepath.Join(c.dir, "refcache-before"), wrapper); err != nil {
 		return r, err
 	}
 	start := time.Now()
@@ -237,7 +238,7 @@ func run(c config) (report, error) {
 	}
 	r.SchemaEditRebuildS = time.Since(start).Seconds()
 	r.SchemaEditRebuildCPUS = genCPU + buildCPU
-	if r.RefCPUAfterS, r.RefWallAfterS, err = buildReference(ref, filepath.Join(c.dir, "refcache-after"), wrapper); err != nil {
+	if r.RefCPUAfterS, r.RefWallAfterS, err = buildcost.BuildReference(ref, filepath.Join(c.dir, "refcache-after"), wrapper); err != nil {
 		return r, err
 	}
 	r.RefCPUS = (r.RefCPUBeforeS + r.RefCPUAfterS) / 2
@@ -252,53 +253,8 @@ func run(c config) (report, error) {
 	} else {
 		return r, err
 	}
-	r.LinkPeakMB, err = peakMB(memFile)
+	r.LinkPeakMB, err = buildcost.PeakMB(memFile)
 	return r, err
-}
-
-// cpuSeconds is the user plus system CPU time of cmd, which has been waited
-// for. The rusage behind it counts the children cmd reaped: under go build,
-// the compiler, the linker and the -toolexec wrapper that runs them.
-func cpuSeconds(cmd *exec.Cmd) float64 {
-	return (cmd.ProcessState.UserTime() + cmd.ProcessState.SystemTime()).Seconds()
-}
-
-// referenceSrc is the reference module's program: a small binary whose cold
-// build compiles the standard library's net/http and what it imports.
-const referenceSrc = `package main
-
-import (
-	"fmt"
-	"net/http"
-)
-
-func main() { fmt.Println(http.StatusOK) }
-`
-
-// writeReference writes the reference module, ref, with its own go.mod, in dir.
-func writeReference(dir string) error {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module ref\n\ngo 1.27.0\n"), 0o644); err != nil {
-		return err
-	}
-	return os.WriteFile(filepath.Join(dir, "main.go"), []byte(referenceSrc), 0o644)
-}
-
-// buildReference builds the reference module in dir cold, with the fresh build
-// cache cache, under the same -toolexec wrapper as the application, and
-// returns its CPU and wall seconds. Its linker's peak memory goes to a file of
-// its own, not the application's.
-func buildReference(dir, cache, wrapper string) (cpu, wall float64, err error) {
-	cmd := exec.Command("go", "build", "-toolexec", wrapper, "-o", filepath.Join(dir, "ref"), ".")
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GOCACHE="+cache, "GOFLAGS=", "GOPROXY=off", "GOWORK=off", "VELOX_LINKMEM="+filepath.Join(dir, "linkmem.txt"))
-	start := time.Now()
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return 0, 0, fmt.Errorf("building the reference: %v\n%s", err, out)
-	}
-	return cpuSeconds(cmd), time.Since(start).Seconds(), nil
 }
 
 // noteField is the line of every schema that the edit appends a field after.
@@ -402,79 +358,6 @@ func (E%[1]d) Edges() []schema.Edge {
 			helper, use.String())
 	}
 	return schemas, svc
-}
-
-// buildWrapper builds the -toolexec program that runs each tool and, for the
-// linker, appends its peak memory in bytes to $VELOX_LINKMEM.
-func buildWrapper(path string) error {
-	dir, err := os.MkdirTemp("", "velox-linkmem-")
-	if err != nil {
-		return err
-	}
-	defer func() { _ = os.RemoveAll(dir) }()
-	src := `package main
-
-import (
-	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
-	"strings"
-	"syscall"
-)
-
-func main() {
-	cmd := exec.Command(os.Args[1], os.Args[2:]...)
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	err := cmd.Run()
-	if cmd.ProcessState != nil && strings.TrimSuffix(filepath.Base(os.Args[1]), ".exe") == "link" {
-		if ru, ok := cmd.ProcessState.SysUsage().(*syscall.Rusage); ok {
-			peak := int64(ru.Maxrss)
-			if runtime.GOOS == "linux" {
-				peak *= 1024 // kilobytes on Linux, bytes on macOS
-			}
-			if f, ferr := os.OpenFile(os.Getenv("VELOX_LINKMEM"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); ferr == nil {
-				fmt.Fprintln(f, peak)
-				f.Close()
-			}
-		}
-	}
-	if err != nil {
-		if ee, ok := err.(*exec.ExitError); ok {
-			os.Exit(ee.ExitCode())
-		}
-		fmt.Fprintln(os.Stderr, "linkmem:", err) // the tool did not start
-		os.Exit(1)
-	}
-}
-`
-	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte(src), 0o644); err != nil {
-		return err
-	}
-	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module linkmem\n\ngo 1.27.0\n"), 0o644); err != nil {
-		return err
-	}
-	cmd := exec.Command("go", "build", "-o", path, ".")
-	cmd.Dir = dir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("building the toolexec wrapper: %v\n%s", err, out)
-	}
-	return nil
-}
-
-func peakMB(file string) (float64, error) {
-	b, err := os.ReadFile(file)
-	if err != nil {
-		return 0, fmt.Errorf("no linker measurements: %w", err)
-	}
-	var peak int64
-	for _, line := range strings.Fields(string(b)) {
-		if v, err := strconv.ParseInt(line, 10, 64); err == nil && v > peak {
-			peak = v
-		}
-	}
-	return float64(peak) / (1 << 20), nil
 }
 
 // check compares r with the thresholds recorded under key ("500", or

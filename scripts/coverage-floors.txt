@@ -21,11 +21,12 @@
 
 # root module
 github.com/syssam/velox2 92.7
-github.com/syssam/velox2/bench/scale 73.1
+github.com/syssam/velox2/bench/scale 72.4
 github.com/syssam/velox2/cmd/velox-gen 89.3
 github.com/syssam/velox2/internal/bindmodel 6.7
 github.com/syssam/velox2/internal/bindmodel/bindtype 0.0
 github.com/syssam/velox2/internal/bindmodel/schema 0.0
+github.com/syssam/velox2/internal/buildcost 79.6
 github.com/syssam/velox2/internal/buildinfo 57.3
 github.com/syssam/velox2/internal/ddl 95.1
 github.com/syssam/velox2/internal/gen 94.8
