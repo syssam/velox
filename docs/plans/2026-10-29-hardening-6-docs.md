@@ -539,6 +539,7 @@ Each was run at 669f8d2.
 1. **(evidence) G44, G52, C55, C51, the Write-frozen bidi partner and Index.Constraint's SQLite form are documented already** (Scope).
 2. **(call) Each new behaviour sentence gets a pin test** where one runs without Docker. A [D] sentence is written only after its D run, recorded in the commit.
 3. **(call) The bound Required self key is a sentence on `edge.Required`,** not an ent-adoption caveat: ent's key is the same NULL-able one, and a bound non-Optional field keeps NOT NULL in both.
+   > **Note, 2026-10-29.** "Non-Optional" is wrong here: the bound key stays NOT NULL unless its field is Nillable, and an Optional bound key on a Required edge is refused (final review F1; `TestRequiredSelfBoundNillableKeyIsNullable`, `TestBuildRules` rule 13).
 4. **(call) The nested Tx's failed RELEASE is documented as velox behaves on every dialect** (the error, no rollback to the savepoint). What a server does to a transaction after a failed statement is the server's, and is not claimed.
 5. **(call) The ent adoption differences are in the followups' deferred list and Desc.Bidi's doc**, where they already are (desc.go:32-39 for the M2M mirror), not in a new user doc.
 6. **(evidence) Line :168 of the followups file is stale** (Task 14).

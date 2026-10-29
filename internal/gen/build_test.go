@@ -2351,7 +2351,9 @@ func (reqSelfBound) Edges() []schema.Edge {
 }
 
 // A Required edge to its own schema is NULL-able only through its implicit
-// key. A key bound to a field that is not Optional stays NOT NULL.
+// key. A key bound to a field stays NOT NULL unless the field is Nillable.
+// (An Optional bound key on a Required edge is refused: TestBuildRules, rule
+// 13.)
 func TestRequiredSelfBoundKeyIsNotNull(t *testing.T) {
 	g := mustBuild(t, reqSelfBound{})
 	e := g.Entity("reqSelfBound")
@@ -2362,6 +2364,33 @@ func TestRequiredSelfBoundKeyIsNotNull(t *testing.T) {
 		s := tables(t, d, reqSelfBound{})
 		if c := column(t, table(t, s, e.Table), "parent_id"); c.Nullable {
 			t.Errorf("%v: parent_id is NULL-able", d)
+		}
+	}
+}
+
+// reqSelfBoundNillable is reqSelfBound with a Nillable, not Optional, key.
+type reqSelfBoundNillable struct{ schema.Schema }
+
+func (reqSelfBoundNillable) Fields() []schema.Field {
+	return []schema.Field{field.Int64("parent_id").Nillable()}
+}
+
+func (reqSelfBoundNillable) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("children", reqSelfBoundNillable.Type).From("parent").Unique().Required().Field("parent_id")}
+}
+
+// A key bound to a Nillable field is NULL-able on a Required edge to its own
+// schema, though the field is not Optional.
+func TestRequiredSelfBoundNillableKeyIsNullable(t *testing.T) {
+	g := mustBuild(t, reqSelfBoundNillable{})
+	e := g.Entity("reqSelfBoundNillable")
+	if f := e.Field("parent_id"); f == nil || f.Optional || !f.Nillable {
+		t.Fatalf("parent_id %+v", f)
+	}
+	for _, d := range allDialects {
+		s := tables(t, d, reqSelfBoundNillable{})
+		if c := column(t, table(t, s, e.Table), "parent_id"); !c.Nullable {
+			t.Errorf("%v: parent_id is NOT NULL", d)
 		}
 	}
 }

@@ -116,8 +116,8 @@ func (b *AssocBuilder) Unique() *AssocBuilder { b.d.Unique = true; return b }
 
 // Required makes the edge's foreign key NOT NULL. An edge to its own schema
 // is the exception, as in ent: its implicit key stays NULL-able, with ON
-// DELETE SET NULL by default. A key bound to a Field that is not Optional
-// stays NOT NULL.
+// DELETE SET NULL by default. A key bound to a Field stays NOT NULL unless
+// the Field is Nillable; an Optional bound key on a Required edge is refused.
 func (b *AssocBuilder) Required() *AssocBuilder { b.d.Required = true; return b }
 
 // Immutable refuses changes to the edge after create.
@@ -184,8 +184,8 @@ func (b *InverseBuilder) Unique() *InverseBuilder { b.d.Unique = true; return b 
 
 // Required makes the edge's foreign key NOT NULL. An edge to its own schema
 // is the exception, as in ent: its implicit key stays NULL-able, with ON
-// DELETE SET NULL by default. A key bound to a Field that is not Optional
-// stays NOT NULL.
+// DELETE SET NULL by default. A key bound to a Field stays NOT NULL unless
+// the Field is Nillable; an Optional bound key on a Required edge is refused.
 func (b *InverseBuilder) Required() *InverseBuilder { b.d.Required = true; return b }
 
 // Immutable refuses changes to the edge after create.
