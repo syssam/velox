@@ -33,8 +33,8 @@ func TestRenderExists(t *testing.T) {
 			t.Errorf("%v:\n got %s\nwant %s", d, got, want)
 		}
 		var c renderCache
-		c.render(d, st)
-		if cached, _ := c.render(d, st); cached != want {
+		cachedRender(&c, d, st)
+		if cached, _ := cachedRender(&c, d, st); cached != want {
 			t.Errorf("%v cached: %s", d, cached)
 		}
 	}
@@ -49,8 +49,8 @@ func TestCacheKeepsRelationsApart(t *testing.T) {
 	boss, _ := infoRels(em)[0].resolve(em, targetOf[employee]())
 	comp, _ := infoRels(em)[1].resolve(em, targetOf[company]())
 	var c renderCache
-	a, _ := c.render(Postgres, &Statement{Op: OpSelect, Entity: em, Where: []Predicate{{node{op: opExists, col: 0, v: boss}}}})
-	b, _ := c.render(Postgres, &Statement{Op: OpSelect, Entity: em, Where: []Predicate{{node{op: opExists, col: 1, v: comp}}}})
+	a, _ := cachedRender(&c, Postgres, &Statement{Op: OpSelect, Entity: em, Where: []Predicate{{node{op: opExists, col: 0, v: boss}}}})
+	b, _ := cachedRender(&c, Postgres, &Statement{Op: OpSelect, Entity: em, Where: []Predicate{{node{op: opExists, col: 1, v: comp}}}})
 	if a == b {
 		t.Errorf("two relations share SQL: %s", a)
 	}
@@ -82,8 +82,8 @@ func TestCachedExistsRendersLikeRender(t *testing.T) {
 	}
 	for _, d := range []Dialect{Postgres, MySQL, SQLite} {
 		var c renderCache
-		c.render(d, mk(7, 3, 5)) // miss
-		hit, hitArgs := c.render(d, mk(8, 4, 6))
+		cachedRender(&c, d, mk(7, 3, 5)) // miss
+		hit, hitArgs := cachedRender(&c, d, mk(8, 4, 6))
 		want, wantArgs := render(d, mk(8, 4, 6))
 		if hit != want || !reflect.DeepEqual(hitArgs, wantArgs) || len(wantArgs) != 3 {
 			t.Errorf("%v:\n got %s %v\nwant %s %v", d, hit, hitArgs, want, wantArgs)

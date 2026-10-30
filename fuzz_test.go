@@ -155,8 +155,8 @@ func FuzzRender(f *testing.F) {
 				t.Fatalf("%v: the SQL depends on an argument's value:\n%s\n%s", d, sql, osql)
 			}
 			var c renderCache
-			c.render(d, st)
-			cached, cargs := c.render(d, fuzzStatement(ops, s))
+			cachedRender(&c, d, st)
+			cached, cargs := cachedRender(&c, d, fuzzStatement(ops, s))
 			if cached != sql || !argsEqual(cargs, args) {
 				t.Fatalf("%v: the cache renders differently:\n%s\n%s", d, sql, cached)
 			}
@@ -336,8 +336,8 @@ func FuzzRenderWrite(f *testing.F) {
 					t.Fatalf("%v: the SQL depends on an argument's value (%v):\n%s\n%s", d, err, sql, osql)
 				}
 				var c renderCache
-				c.render(d, st)
-				cached, cargs := c.render(d, fuzzWrites(ops, s)[kind])
+				cachedRender(&c, d, st)
+				cached, cargs := cachedRender(&c, d, fuzzWrites(ops, s)[kind])
 				if cached != sql || !argsEqual(cargs, args) {
 					t.Fatalf("%v: the cache renders differently:\n%s\n%s", d, sql, cached)
 				}

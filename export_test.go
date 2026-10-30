@@ -32,8 +32,8 @@ func render(d Dialect, st *Statement) (string, []any) {
 	return text, args
 }
 
-// render is get for the tests that look only at the text.
-func (c *renderCache) render(d Dialect, st *Statement) (string, []any) {
+// cachedRender is get for the tests that look only at the text.
+func cachedRender(c *renderCache, d Dialect, st *Statement) (string, []any) {
 	e, args, err := c.get(d, st)
 	if err != nil {
 		panic(err)

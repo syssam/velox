@@ -13,7 +13,7 @@ func TestCacheRendersLikeRender(t *testing.T) {
 		for _, rc := range renderCases() {
 			for d := range rc.sql {
 				want, wantArgs := render(d, rc.st())
-				got, args := c.render(d, rc.st())
+				got, args := cachedRender(&c, d, rc.st())
 				if got != want || !argsEqual(args, wantArgs) {
 					t.Errorf("%s, %v:\n got %s %v\nwant %s %v", rc.name, d, got, args, want, wantArgs)
 				}
@@ -27,19 +27,19 @@ func TestCacheRendersLikeRender(t *testing.T) {
 
 func TestCacheKeepsShapesApart(t *testing.T) {
 	var c renderCache
-	one, _ := c.render(Postgres, stmt(hID.In(1)))
-	two, _ := c.render(Postgres, stmt(hID.In(1, 2)))
+	one, _ := cachedRender(&c, Postgres, stmt(hID.In(1)))
+	two, _ := cachedRender(&c, Postgres, stmt(hID.In(1, 2)))
 	if one == two {
 		t.Error("In lists of different lengths share SQL")
 	}
 	some := stmt()
 	some.Columns = []int{0}
-	a, _ := c.render(Postgres, some)
-	b, _ := c.render(Postgres, stmt())
+	a, _ := cachedRender(&c, Postgres, some)
+	b, _ := cachedRender(&c, Postgres, stmt())
 	if a == b {
 		t.Error("a column subset shares SQL with every column")
 	}
-	m, _ := c.render(MySQL, stmt())
+	m, _ := cachedRender(&c, MySQL, stmt())
 	if m == b {
 		t.Error("dialects share SQL")
 	}
@@ -47,7 +47,7 @@ func TestCacheKeepsShapesApart(t *testing.T) {
 	other.Table = "archive"
 	st := stmt()
 	st.Entity = &other
-	if o, _ := c.render(Postgres, st); o == b {
+	if o, _ := cachedRender(&c, Postgres, st); o == b {
 		t.Error("entities share SQL")
 	}
 	// Each nil, Each with a per-owner Limit and without, Each through a join,
@@ -62,7 +62,7 @@ func TestCacheKeepsShapesApart(t *testing.T) {
 	for range 2 {
 		for i, st := range shapes {
 			want, _ := render(Postgres, st)
-			got, _ := ec.render(Postgres, st)
+			got, _ := cachedRender(&ec, Postgres, st)
 			if got != want {
 				t.Errorf("shape %d: cached\n %s\nwant %s", i, got, want)
 			}
@@ -81,8 +81,8 @@ func TestCacheKeepsNilApartFromAValue(t *testing.T) {
 	nilSt := func() *Statement { return stmt(Pred[inv]{node{op: opEQ, col: 1, v: nil}}) }
 	valSt := func() *Statement { return stmt(hOrg.EQ(1)) }
 	for range 2 {
-		n, nargs := c.render(Postgres, nilSt())
-		v, vargs := c.render(Postgres, valSt())
+		n, nargs := cachedRender(&c, Postgres, nilSt())
+		v, vargs := cachedRender(&c, Postgres, valSt())
 		if n != `SELECT `+pgCols+` FROM "invoices" WHERE "org_id" IS NULL` || len(nargs) != 0 {
 			t.Errorf("nil: %s %v", n, nargs)
 		}
@@ -101,7 +101,7 @@ func TestCacheIsSafeForConcurrentUse(t *testing.T) {
 		wg.Go(func() {
 			for i := range 200 {
 				v := int64(g*1000 + i)
-				text, args := c.render(Postgres, stmt(hOrg.EQ(v), hNumber.In("a", "b")))
+				text, args := cachedRender(&c, Postgres, stmt(hOrg.EQ(v), hNumber.In("a", "b")))
 				if text != want || args[0] != v || args[2] != "b" {
 					t.Errorf("goroutine %d: %s %v", g, text, args)
 					return
@@ -119,7 +119,7 @@ func TestCacheStopsGrowing(t *testing.T) {
 	for n := 1; n <= 10; n++ {
 		vs := make([]int64, n)
 		want, _ := render(Postgres, stmt(hID.In(vs...)))
-		if got, _ := c.render(Postgres, stmt(hID.In(vs...))); got != want {
+		if got, _ := cachedRender(&c, Postgres, stmt(hID.In(vs...))); got != want {
 			t.Fatalf("n=%d: %s", n, got)
 		}
 	}
@@ -134,21 +134,21 @@ func TestCacheStopsGrowing(t *testing.T) {
 
 func TestCacheKeepsWriteShapesApart(t *testing.T) {
 	var c renderCache
-	one, _ := c.render(Postgres, ins([]int{1}, [][]any{{int64(1)}}))
-	two, _ := c.render(Postgres, ins([]int{1}, [][]any{{int64(1)}, {int64(2)}}))
+	one, _ := cachedRender(&c, Postgres, ins([]int{1}, [][]any{{int64(1)}}))
+	two, _ := cachedRender(&c, Postgres, ins([]int{1}, [][]any{{int64(1)}, {int64(2)}}))
 	up := ins([]int{1}, [][]any{{int64(1)}})
 	up.Conflict = &ConflictClause{Columns: []int{1}, Update: []int{1}}
 	keep := ins([]int{1}, [][]any{{int64(1)}})
 	keep.Conflict = &ConflictClause{Columns: []int{1}, DoNothing: true}
-	upSQL, _ := c.render(Postgres, up)
-	keepSQL, _ := c.render(Postgres, keep)
+	upSQL, _ := cachedRender(&c, Postgres, up)
+	keepSQL, _ := cachedRender(&c, Postgres, keep)
 	set := &Statement{Op: OpUpdate, Entity: invInfo, Set: []Assignment{{Column: 3, Op: AssignSet, Value: 1.0}}}
 	add := &Statement{Op: OpUpdate, Entity: invInfo, Set: []Assignment{{Column: 3, Op: AssignAdd, Value: 1.0}}}
-	setSQL, _ := c.render(Postgres, set)
-	addSQL, _ := c.render(Postgres, add)
+	setSQL, _ := cachedRender(&c, Postgres, set)
+	addSQL, _ := cachedRender(&c, Postgres, add)
 	ret := ins([]int{1}, [][]any{{int64(1)}})
 	ret.Returning = []int{0}
-	retSQL, _ := c.render(Postgres, ret)
+	retSQL, _ := cachedRender(&c, Postgres, ret)
 	for _, p := range [][2]string{{one, two}, {upSQL, keepSQL}, {setSQL, addSQL}, {one, retSQL}} {
 		if p[0] == p[1] {
 			t.Errorf("two shapes share SQL: %s", p[0])
@@ -183,8 +183,8 @@ func TestCacheKeepsWriteColumnsApart(t *testing.T) {
 	} {
 		for _, d := range []Dialect{Postgres, SQLite} {
 			var cache renderCache
-			a, _ := cache.render(d, c.a)
-			b, _ := cache.render(d, c.b)
+			a, _ := cachedRender(&cache, d, c.a)
+			b, _ := cachedRender(&cache, d, c.b)
 			if a == b {
 				t.Errorf("%s, %v: two shapes share SQL: %s", c.name, d, a)
 			}
@@ -211,7 +211,7 @@ func TestCacheBoundedInBytes(t *testing.T) {
 			vs[i] = int64(i)
 		}
 		st := &Statement{Op: OpSelect, Entity: invInfo, Where: []Predicate{{node{op: opIn, col: 0, v: vs}}}}
-		got, args := c.render(Postgres, st)
+		got, args := cachedRender(&c, Postgres, st)
 		want, wantArgs := render(Postgres, st)
 		if got != want || len(args) != len(wantArgs) {
 			t.Fatalf("n=%d: cached render differs", n)
@@ -238,7 +238,7 @@ func TestCacheBytesCountTheFingerprint(t *testing.T) {
 	const shapes = 50
 	var c renderCache
 	for n := 1; n <= shapes; n++ {
-		c.render(Postgres, inShape(n))
+		cachedRender(&c, Postgres, inShape(n))
 	}
 	sum, held := 0, 0
 	for _, byKey := range c.m {
@@ -261,7 +261,7 @@ func TestCacheBytesCountTheFingerprint(t *testing.T) {
 	maxCacheBytes = sum - 1
 	var tight renderCache
 	for n := 1; n <= shapes; n++ {
-		tight.render(Postgres, inShape(n))
+		cachedRender(&tight, Postgres, inShape(n))
 	}
 	var buf [256]byte
 	last := shapeKey(buf[:0], Postgres, inShape(shapes))
@@ -293,12 +293,12 @@ func TestCacheKeysMoreShapes(t *testing.T) {
 	for i, v := range variants {
 		st := base()
 		v(st)
-		got, _ := c.render(Postgres, st)
+		got, _ := cachedRender(&c, Postgres, st)
 		if j, dup := seen[got]; dup {
 			t.Errorf("variants %d and %d share SQL %q", j, i, got)
 		}
 		seen[got] = i
-		if again, _ := c.render(Postgres, st); again != got {
+		if again, _ := cachedRender(&c, Postgres, st); again != got {
 			t.Errorf("variant %d: the cache answered %q for %q", i, again, got)
 		}
 	}
@@ -316,13 +316,13 @@ func TestCacheKeysTheUpsertCondition(t *testing.T) {
 	} {
 		st := ins([]int{1}, [][]any{{int64(1)}})
 		st.Conflict = &ConflictClause{Columns: []int{1}, Update: []int{1}, Where: where}
-		got, args := c.render(Postgres, st)
+		got, args := cachedRender(&c, Postgres, st)
 		if j, dup := seen[got]; dup {
 			t.Errorf("conditions %d and %d share SQL %q", j, i, got)
 		}
 		seen[got] = i
 		want, wantArgs := render(Postgres, st)
-		if again, againArgs := c.render(Postgres, st); again != want || got != want || len(args) != len(wantArgs) || len(againArgs) != len(wantArgs) {
+		if again, againArgs := cachedRender(&c, Postgres, st); again != want || got != want || len(args) != len(wantArgs) || len(againArgs) != len(wantArgs) {
 			t.Errorf("condition %d: the cache answered %q, render %q", i, again, want)
 		}
 	}
@@ -370,8 +370,8 @@ func TestExistsHasItsOwnShape(t *testing.T) {
 		ex.Exists, ex.Limit = true, 1
 		all := stmt(hOrg.EQ(1))
 		all.Limit = 1
-		a, _ := c.render(Postgres, ex)
-		b, _ := c.render(Postgres, all)
+		a, _ := cachedRender(&c, Postgres, ex)
+		b, _ := cachedRender(&c, Postgres, all)
 		if a == b || fingerprint(a) == fingerprint(b) {
 			t.Errorf("Exists and Limit(1).All share a shape: %s / %s", a, b)
 		}
@@ -392,7 +392,7 @@ func TestCacheKeysTheJoin(t *testing.T) {
 	seen := map[string]string{}
 	for range 2 { // the second pass is served from the cache
 		for name, st := range map[string]*Statement{"joins.a": through(join, 0), "joins.b": through(join, 1), "others.a": through(other, 0)} {
-			got, args := c.render(Postgres, st)
+			got, args := cachedRender(&c, Postgres, st)
 			if want, wantArgs := render(Postgres, st); got != want || !argsEqual(args, wantArgs) {
 				t.Errorf("%s: the cache renders %s %v, not %s %v", name, got, args, want, wantArgs)
 			}
@@ -413,7 +413,7 @@ func TestAggregateShapes(t *testing.T) {
 	agg := func(fn Aggregate, col int) string {
 		st := stmt()
 		st.Aggregate, st.Columns = fn, []int{col}
-		sql, _ := c.render(Postgres, st)
+		sql, _ := cachedRender(&c, Postgres, st)
 		return sql
 	}
 	sum, maxAgg, other := agg(AggregateSum, 3), agg(AggregateMax, 3), agg(AggregateSum, 1)
@@ -442,7 +442,7 @@ func TestLockShapes(t *testing.T) {
 			st := stmt(hID.EQ(1))
 			st.Limit, st.Lock, st.LockWait = 1, f.lock, f.wait
 			want, _ := render(MySQL, st)
-			if got, _ := c.render(MySQL, st); got != want {
+			if got, _ := cachedRender(&c, MySQL, st); got != want {
 				t.Errorf("cached %s, want %s", got, want)
 			}
 			texts[want] = true
