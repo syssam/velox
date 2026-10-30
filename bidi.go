@@ -215,7 +215,7 @@ func bidiUpdate(ctx context.Context, db *DB, mu *mutation, keys []bidiKey, k any
 		if err != nil {
 			return err
 		}
-		switch n = res.affected; {
+		switch n = res.Affected; {
 		case n == 0:
 			return nil
 		case n < 0:
@@ -364,9 +364,9 @@ func bidiLink(ctx context.Context, db *DB, in *EntityInfo, bk bidiKey, k, v any)
 	switch {
 	case err != nil:
 		return err
-	case res.affected < 0:
+	case res.Affected < 0:
 		return errLinkCount(in)
-	case res.affected > 0:
+	case res.Affected > 0:
 		return nil
 	}
 	probe := Statement{Op: OpSelect, Entity: in, InTx: db.inTx, Exists: true, Limit: 1, Writable: true,

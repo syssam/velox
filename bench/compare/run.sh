@@ -17,7 +17,7 @@
 #   COMPARE_STEPS   all (the default): the build steps and the runtime ones;
 #                   runtime: the runtime steps only.
 #   COMPARE_PGX     1 (the default): the PostgreSQL rounds also run velox2pgx,
-#                   velox2's app on velox.OpenPgx; 0: they do not.
+#                   velox2's app on veloxpgx.Open; 0: they do not.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
@@ -83,7 +83,7 @@ fi
 
 orms=(velox2 oldvelox ent)
 # What each dialect's rounds run: the ORMs, and on PostgreSQL also the
-# velox2pgx variant, velox2's app on velox.OpenPgx.
+# velox2pgx variant, velox2's app on veloxpgx.Open.
 sqlite_orms=(velox2 oldvelox ent)
 pg_orms=("${orms[@]}")
 pgx_config=()

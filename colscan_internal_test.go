@@ -111,11 +111,11 @@ func TestBeginKeepsColumnScan(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() })
 	ctx := context.Background()
 	for _, cols := range []bool{true, false} {
-		ex, tx, err := sqlExecutor{c: db, db: db, cols: cols}.begin(ctx, txOptions{})
+		ex, tx, err := sqlExecutor{c: db, db: db, cols: cols}.Begin(ctx, sql.TxOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
-		r, err := ex.query(ctx, "SELECT 1", nil)
+		r, err := ex.Query(ctx, "SELECT 1", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -132,7 +132,7 @@ func TestBeginKeepsColumnScan(t *testing.T) {
 			t.Errorf("query gave %T", r)
 		}
 		r.Close()
-		if err := tx.rollback(ctx); err != nil {
+		if err := tx.Rollback(ctx); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -13,6 +13,7 @@ import (
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/internal/testmodel"
+	"github.com/syssam/velox2/veloxpgx"
 )
 
 // replicaSet is a DB on a primary and two replica fakes, and the routes its
@@ -319,10 +320,9 @@ func TestRoutingMisconfigurationPanics(t *testing.T) {
 			velox.OpenFake(velox.Postgres, &velox.FakeExec{}, velox.WithReplicas(velox.Conn{}))
 		}, "replica 0 is the zero Conn"},
 		"a pgx replica on MySQL": {func() {
-			velox.Open(velox.MySQL, sqlDB, velox.WithReplicas(velox.SQLConn(sqlDB), velox.PgxConn(new(pgxpool.Pool))))
-		}, "replica 1 is a PgxConn, valid only for PostgreSQL"},
+			velox.Open(velox.MySQL, sqlDB, velox.WithReplicas(velox.SQLConn(sqlDB), veloxpgx.Conn(new(pgxpool.Pool))))
+		}, "replica 1 is valid only on postgres; the DB is mysql"},
 		"SQLConn(nil)":                {func() { velox.SQLConn(nil) }, "velox: SQLConn(nil)"},
-		"PgxConn(nil)":                {func() { velox.PgxConn(nil) }, "velox: PgxConn(nil)"},
 		"a negative replica back-off": {func() { velox.WithReplicaBackoff(-1) }, "velox: WithReplicaBackoff(-1ns): the back-off must not be negative"},
 		"OpenShards without WithShardFor": {func() {
 			velox.OpenShards(velox.Postgres, map[string]velox.Shard{"eu": {Primary: fake()}})
@@ -337,23 +337,31 @@ func TestRoutingMisconfigurationPanics(t *testing.T) {
 			velox.OpenShards(velox.Postgres, map[string]velox.Shard{"eu": {Primary: fake(), Replicas: []velox.Conn{fake(), {}}}}, shardFor)
 		}, `shard "eu"'s replica 1 is the zero Conn`},
 		"OpenShards with a pgx primary on MySQL": {func() {
-			velox.OpenShards(velox.MySQL, map[string]velox.Shard{"eu": {Primary: velox.PgxConn(new(pgxpool.Pool))}}, shardFor)
-		}, `shard "eu"'s Primary is a PgxConn, valid only for PostgreSQL`},
+			velox.OpenShards(velox.MySQL, map[string]velox.Shard{"eu": {Primary: veloxpgx.Conn(new(pgxpool.Pool))}}, shardFor)
+		}, `shard "eu"'s Primary is valid only on postgres; the DB is mysql`},
 		"OpenShards with a pgx replica on MySQL": {func() {
-			velox.OpenShards(velox.MySQL, map[string]velox.Shard{"eu": {Primary: fake(), Replicas: []velox.Conn{velox.PgxConn(new(pgxpool.Pool))}}}, shardFor)
-		}, `shard "eu"'s replica 0 is a PgxConn, valid only for PostgreSQL`},
+			velox.OpenShards(velox.MySQL, map[string]velox.Shard{"eu": {Primary: fake(), Replicas: []velox.Conn{veloxpgx.Conn(new(pgxpool.Pool))}}}, shardFor)
+		}, `shard "eu"'s replica 0 is valid only on postgres; the DB is mysql`},
 		"OpenShards with an unnamed shard": {func() {
 			velox.OpenShards(velox.Postgres, map[string]velox.Shard{"": {Primary: fake()}}, shardFor)
 		}, "OpenShards: a shard's name must not be empty"},
 		"WithReplicas given to OpenShards": {func() {
 			velox.OpenShards(velox.Postgres, map[string]velox.Shard{"eu": {Primary: fake()}}, shardFor, velox.WithReplicas(fake()))
-		}, "OpenShards: WithReplicas is for Open and OpenPgx"},
+		}, "OpenShards: WithReplicas is for Open and OpenConn"},
 		"WithShardFor given to Open": {func() {
 			velox.Open(velox.SQLite, sqlDB, shardFor)
 		}, "WithShardFor is for OpenShards"},
-		"WithShardFor given to OpenPgx": {func() {
-			velox.OpenPgx(new(pgxpool.Pool), shardFor)
+		"WithShardFor given to veloxpgx.Open": {func() {
+			// goes through OpenConn
+			veloxpgx.Open(new(pgxpool.Pool), shardFor)
 		}, "WithShardFor is for OpenShards"},
+		"OpenConn with a zero Conn": {func() { velox.OpenConn(velox.Postgres, velox.Conn{}) }, "OpenConn: the Conn is zero"},
+		"OpenConn with an unknown dialect": {func() {
+			velox.OpenConn(velox.Dialect(99), fake())
+		}, "OpenConn: unknown Dialect(99)"},
+		"OpenConn on another dialect": {func() {
+			velox.OpenConn(velox.MySQL, veloxpgx.Conn(new(pgxpool.Pool)))
+		}, "OpenConn: the Conn is valid only on postgres; the DB is mysql"},
 		"WithShardFor(nil)": {func() { velox.WithShardFor(nil) }, "velox: WithShardFor(nil)"},
 	} {
 		t.Run(name, func(t *testing.T) {

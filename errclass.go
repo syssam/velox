@@ -5,21 +5,26 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+)
 
-	"github.com/jackc/pgx/v5/pgconn"
+// pgconnPkg is the package of pgx's errors, and pgConnClosed and pgTxClosed the
+// text of its ErrConnClosed and ErrTxClosed. TestPgxErrorMirror pins them.
+const (
+	pgconnPkg    = "github.com/jackc/pgx/v5/pgconn"
+	pgConnClosed = "conn closed"
+	pgTxClosed   = "tx is closed"
 )
 
 // constraint reads a driver error as a violated constraint, or returns nil.
-// PostgreSQL's errors are read from pgx's fields. velox does not import the
-// MySQL and SQLite drivers, so their errors are recognized by type name and
-// read from their text.
+// velox does not import the drivers, so their errors are recognized by type
+// name; PostgreSQL's are read from pgx's fields by name, MySQL's and SQLite's
+// from their text.
 func constraint(entity string, err error) *ConstraintError {
 	var kind ConstraintKind
 	var name string
-	switch pg := pgError(err); {
-	case pg != nil:
+	if pg, ok := pgError(err); ok {
 		kind, name = pgKind(pg)
-	default:
+	} else {
 		if n, msg, ok := mysqlError(err); ok {
 			kind, name = mysqlKind(n, msg)
 		} else if code, msg, ok := sqliteError(err); ok {
@@ -32,24 +37,35 @@ func constraint(entity string, err error) *ConstraintError {
 	return &ConstraintError{Entity: entity, Kind: kind, Constraint: name, Err: err}
 }
 
-// pgError returns the first *pgconn.PgError in err's tree that is not a nil
-// pointer, or nil.
-func pgError(err error) *pgconn.PgError {
-	pg, _ := as[*pgconn.PgError](err)
-	return pg
+// pgErr is what velox reads of a *pgconn.PgError.
+type pgErr struct{ Code, ConstraintName, ColumnName string }
+
+// pgError reads the first *pgconn.PgError in err's tree that is not a nil
+// pointer.
+func pgError(err error) (pgErr, bool) {
+	e := driverError(err, pgconnPkg, "PgError")
+	if e == nil {
+		return pgErr{}, false
+	}
+	v := reflect.ValueOf(e).Elem()
+	return pgErr{
+		Code:           v.FieldByName("Code").String(),
+		ConstraintName: v.FieldByName("ConstraintName").String(),
+		ColumnName:     v.FieldByName("ColumnName").String(),
+	}, true
 }
 
 // locked reports a lock that could not be taken without waiting: PostgreSQL's
 // lock_not_available (55P03) or MySQL's 3572, NOWAIT's failure.
 func locked(err error) bool {
-	if pg := pgError(err); pg != nil {
+	if pg, ok := pgError(err); ok {
 		return pg.Code == "55P03"
 	}
 	n, _, ok := mysqlError(err)
 	return ok && n == 3572
 }
 
-func pgKind(pg *pgconn.PgError) (ConstraintKind, string) {
+func pgKind(pg pgErr) (ConstraintKind, string) {
 	switch pg.Code {
 	case "23505":
 		return ConstraintUnique, pg.ConstraintName
@@ -147,6 +163,16 @@ func driverError(err error, pkg, name string) error {
 		return false
 	})
 	return found
+}
+
+// driverSentinel reports whether err's tree holds a driver's errors.New with
+// this text: the sentinel of a package velox does not import, recognized by its
+// type and text.
+func driverSentinel(err error, text string) bool {
+	return walk(err, func(e error) bool {
+		t := reflect.TypeOf(e)
+		return t.Kind() == reflect.Pointer && t.Elem().PkgPath() == "errors" && t.Elem().Name() == "errorString" && e.Error() == text
+	})
 }
 
 // mysqlError reads a go-sql-driver/mysql error, whose text is
@@ -263,7 +289,7 @@ func between(s, from, to string) string {
 // through database/sql), github.com/go-sql-driver/mysql and
 // modernc.org/sqlite; another driver's error has no code here.
 func DriverCode(err error) (string, bool) {
-	if pg := pgError(err); pg != nil {
+	if pg, ok := pgError(err); ok {
 		return pg.Code, pg.Code != ""
 	}
 	if n, _, ok := mysqlError(err); ok {
@@ -278,7 +304,7 @@ func DriverCode(err error) (string, bool) {
 // retryable reports a serialization failure or a deadlock, after which
 // running the transaction again can succeed.
 func retryable(err error) bool {
-	if pg := pgError(err); pg != nil {
+	if pg, ok := pgError(err); ok {
 		return pg.Code == "40001" || pg.Code == "40P01"
 	}
 	if n, _, ok := mysqlError(err); ok {

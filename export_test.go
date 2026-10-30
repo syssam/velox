@@ -116,7 +116,7 @@ func (e *FakeExec) wait(ctx context.Context) error {
 	return ctx.Err()
 }
 
-func (e *FakeExec) query(ctx context.Context, sql string, args []any) (rows, error) {
+func (e *FakeExec) Query(ctx context.Context, sql string, args []any) (rows, error) {
 	if err := e.wait(ctx); err != nil {
 		return nil, err
 	}
@@ -140,7 +140,7 @@ func (e *FakeExec) query(ctx context.Context, sql string, args []any) (rows, err
 	return &fakeRows{data: data, cols: e.Cols, e: e, err: rerr}, nil
 }
 
-func (e *FakeExec) exec(ctx context.Context, sql string, args []any) (result, error) {
+func (e *FakeExec) Exec(ctx context.Context, sql string, args []any) (result, error) {
 	if err := e.wait(ctx); err != nil {
 		return result{}, err
 	}
@@ -165,10 +165,10 @@ func (e *FakeExec) exec(ctx context.Context, sql string, args []any) (result, er
 	if e.AffectedBy != nil {
 		affected = e.AffectedBy(sql)
 	}
-	return result{affected: affected, lastID: e.LastID, hasLastID: e.HasLastID}, nil
+	return result{Affected: affected, LastID: e.LastID, HasLastID: e.HasLastID}, nil
 }
 
-func (e *FakeExec) begin(_ context.Context, o txOptions) (executor, txControl, error) {
+func (e *FakeExec) Begin(_ context.Context, o sql.TxOptions) (executor, txControl, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.Log = append(e.Log, "BEGIN")
@@ -176,13 +176,13 @@ func (e *FakeExec) begin(_ context.Context, o txOptions) (executor, txControl, e
 	if e.BeginErr != nil {
 		return nil, nil, e.BeginErr
 	}
-	e.Isolation, e.ReadOnly = o.isolation, o.readOnly
+	e.Isolation, e.ReadOnly = o.Isolation, o.ReadOnly
 	return e, fakeTx{e}, nil
 }
 
 type fakeTx struct{ e *FakeExec }
 
-func (t fakeTx) commit(context.Context) error {
+func (t fakeTx) Commit(context.Context) error {
 	t.e.mu.Lock()
 	defer t.e.mu.Unlock()
 	t.e.Log = append(t.e.Log, "COMMIT")
@@ -190,7 +190,7 @@ func (t fakeTx) commit(context.Context) error {
 	return t.e.CommitErr
 }
 
-func (t fakeTx) rollback(ctx context.Context) error {
+func (t fakeTx) Rollback(ctx context.Context) error {
 	werr := t.e.rollbackWait(ctx)
 	t.e.mu.Lock()
 	defer t.e.mu.Unlock()
@@ -255,7 +255,7 @@ func RawRows(db *DB, sql string, args []any) (interface {
 	Scan(...any) error
 	Close()
 }, error) {
-	return db.ex.query(context.Background(), sql, args)
+	return db.ex.Query(context.Background(), sql, args)
 }
 
 type fakeRows struct {
@@ -563,7 +563,7 @@ func PgxStdlib(db *sql.DB) bool { return pgxStdlib(db) }
 // RowsAreColumnScanning runs SELECT 1 on db, a DB made by Open, and reports
 // whether its rows are colRows.
 func RowsAreColumnScanning(db *DB) bool {
-	r, err := db.ex.query(context.Background(), "SELECT 1", nil)
+	r, err := db.ex.Query(context.Background(), "SELECT 1", nil)
 	if err != nil {
 		panic(err)
 	}

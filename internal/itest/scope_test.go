@@ -13,6 +13,7 @@ import (
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/internal/testmodel"
+	"github.com/syssam/velox2/veloxpgx"
 )
 
 var Tk = testmodel.Tickets
@@ -490,7 +491,7 @@ func TestUpsertSchemaQualifiedPostgres(t *testing.T) {
 					t.Fatal(err)
 				}
 				t.Cleanup(pool.Close)
-				db = velox.OpenPgx(pool, move)
+				db = veloxpgx.Open(pool, move)
 			} else {
 				db = velox.Open(velox.Postgres, tg.direct, move)
 			}

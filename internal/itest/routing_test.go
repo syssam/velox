@@ -20,6 +20,7 @@ import (
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/internal/testmodel"
+	"github.com/syssam/velox2/veloxpgx"
 )
 
 // The routing tests stand a second and a third database in for a replica and
@@ -174,7 +175,7 @@ func (r routingDriver) handle(t *testing.T, db, addr string) handle {
 			t.Fatal(err)
 		}
 		t.Cleanup(pool.Close)
-		return handle{velox.PgxConn(pool), func(opts ...velox.Option) *velox.DB { return velox.OpenPgx(pool, opts...) }}
+		return handle{veloxpgx.Conn(pool), func(opts ...velox.Option) *velox.DB { return veloxpgx.Open(pool, opts...) }}
 	}
 	sdb := r.open(t, dsn)
 	return handle{velox.SQLConn(sdb), func(opts ...velox.Option) *velox.DB { return velox.Open(r.d, sdb, opts...) }}

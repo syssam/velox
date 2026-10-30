@@ -8,8 +8,6 @@ import (
 	"strconv"
 	"sync/atomic"
 	"time"
-
-	"github.com/jackc/pgx/v5"
 )
 
 // TxOption configures one call of DB.Tx: TxIsolation, TxReadOnly,
@@ -186,7 +184,7 @@ func (db *DB) attempts(ctx, tctx context.Context, fn func(context.Context, *DB) 
 // ended reports whether err says the driver already ended the transaction,
 // as it does after a canceled context; rolling back then has nothing to do.
 func ended(err error) bool {
-	return is(err, sql.ErrTxDone) || is(err, pgx.ErrTxClosed)
+	return is(err, sql.ErrTxDone) || driverSentinel(err, pgTxClosed)
 }
 
 // transaction runs fn once in a new transaction, and records how it ended in
@@ -222,7 +220,7 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 			txShard = sh
 		}
 	}
-	ex, ctl, err := primary.begin(ctx, o)
+	ex, ctl, err := primary.Begin(ctx, sql.TxOptions{Isolation: o.isolation, ReadOnly: o.readOnly})
 	if err != nil {
 		info.end(TxError)
 		return false, fmt.Errorf("velox: begin: %w", err)
@@ -281,7 +279,7 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 		}
 		return false, err
 	}
-	if err := ctl.commit(ctx); err != nil {
+	if err := ctl.Commit(ctx); err != nil {
 		info.end(TxError)
 		return true, fmt.Errorf("velox: commit: %w", err)
 	}
@@ -295,7 +293,7 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 func rollback(ctx context.Context, ctl txControl) error {
 	rctx, cancel := rollbackContext(ctx, time.Time{})
 	defer cancel()
-	return ctl.rollback(rctx)
+	return ctl.Rollback(rctx)
 }
 
 // rollbackTimeout bounds every rollback velox sends on a context it detached
@@ -377,7 +375,7 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 		defer cancel()
 	}
 	name := "velox_" + strconv.FormatUint(db.txRoot.savepoints.Add(1), 10)
-	if _, err := db.ex.exec(sctx, "SAVEPOINT "+name, nil); err != nil {
+	if _, err := db.ex.Exec(sctx, "SAVEPOINT "+name, nil); err != nil {
 		return savepointErr(sctx, "savepoint", err)
 	}
 	finished := false
@@ -399,7 +397,7 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 		return err
 	}
 	finished = true
-	if _, err := db.ex.exec(sctx, "RELEASE SAVEPOINT "+name, nil); err != nil {
+	if _, err := db.ex.Exec(sctx, "RELEASE SAVEPOINT "+name, nil); err != nil {
 		return savepointErr(sctx, "release savepoint", err)
 	}
 	return nil
@@ -438,10 +436,10 @@ func (db *DB) undoSavepoint(ctx context.Context, name string) error {
 // because PostgreSQL keeps a savepoint after ROLLBACK TO and a loop of failing
 // nested Tx would pile up subtransactions.
 func (db *DB) rollbackSavepoint(ctx context.Context, name string) error {
-	if _, err := db.ex.exec(ctx, "ROLLBACK TO SAVEPOINT "+name, nil); err != nil {
+	if _, err := db.ex.Exec(ctx, "ROLLBACK TO SAVEPOINT "+name, nil); err != nil {
 		return err
 	}
-	_, err := db.ex.exec(ctx, "RELEASE SAVEPOINT "+name, nil)
+	_, err := db.ex.Exec(ctx, "RELEASE SAVEPOINT "+name, nil)
 	return err
 }
 

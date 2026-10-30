@@ -284,17 +284,17 @@ func TestReportRuntimeOnly(t *testing.T) {
 	if !strings.Contains(rep, "Runtime only: the build steps were not run.") {
 		t.Error("the report does not say it is runtime only")
 	}
-	head := "| benchmark | velox2 | velox2 (OpenPgx) | old velox | ent | velox2 (OpenPgx) ÷ velox2 | old velox ÷ velox2 | ent ÷ velox2 |"
+	head := "| benchmark | velox2 | velox2 (veloxpgx) | old velox | ent | velox2 (veloxpgx) ÷ velox2 | old velox ÷ velox2 | ent ÷ velox2 |"
 	pg := section(rep, "### sec/op (postgres)")
 	if !strings.Contains(pg, head) {
-		t.Errorf("the postgres sec/op table lacks the velox2 (OpenPgx) columns:\n%s", pg)
+		t.Errorf("the postgres sec/op table lacks the velox2 (veloxpgx) columns:\n%s", pg)
 	}
 	// The fixture's velox2pgx is 0.8 of velox2's sec/op.
 	if !strings.Contains(pg, "| 0.8 | ") {
 		t.Errorf("no 0.8 ratio in the postgres sec/op table:\n%s", pg)
 	}
-	if strings.Contains(section(rep, "## Runtime: sqlite"), "OpenPgx") {
-		t.Error("the sqlite tables have the velox2 (OpenPgx) column")
+	if strings.Contains(section(rep, "## Runtime: sqlite"), "veloxpgx") {
+		t.Error("the sqlite tables have the velox2 (veloxpgx) column")
 	}
 	// A timed-out round gate is still reported without the build tables.
 	s.Steps = append(s.Steps, stepRecord{

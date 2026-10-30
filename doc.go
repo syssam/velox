@@ -167,7 +167,7 @@
 // or WithoutX, as WithTenant and WithoutPolicy, and read by XFromContext, as
 // RowScopeFromContext.
 //
-// An Option configures a DB, once, when it is opened (Open, OpenPgx, OpenShards).
+// An Option configures a DB, once, when it is opened (Open, OpenConn, veloxpgx.Open, OpenShards).
 // What a DB checks and bounds:
 //
 //   - WithMaxLimit and WithMaxRows cap a query's Limit and the rows it reads.

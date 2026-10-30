@@ -10,8 +10,6 @@ import (
 	"reflect"
 	"sync"
 	"time"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // colScanner is a scan destination for a column whose field is dst, a pointer
@@ -26,6 +24,18 @@ type colScanner struct {
 func (s *colScanner) Scan(src any) error {
 	return sql.ConvertAssign(driver.ScanContext{}, s.dst, src)
 }
+
+// pgBytesScanner is pgtype.BytesScanner, and pgArraySetter the part of
+// pgtype.ArraySetter that does not name a pgtype type; TestPgxTypesMirrored pins
+// both. A type that has only this part is not wrapped, which leaves its
+// handling as it was.
+type (
+	pgBytesScanner interface{ ScanBytes(v []byte) error }
+	pgArraySetter  interface {
+		ScanIndex(i int) any
+		ScanIndexType() any
+	}
+)
 
 // scanWrapsType reports whether a destination of type t is worth wrapping in a
 // colScanner: whether pgx's stdlib driver would check its type on every row,
@@ -42,8 +52,8 @@ func scanWrapsType(t reflect.Type) bool {
 		return false
 	}
 	scanner := reflect.TypeFor[sql.Scanner]()
-	arraySetter := reflect.TypeFor[pgtype.ArraySetter]()
-	bytesScanner := reflect.TypeFor[pgtype.BytesScanner]()
+	arraySetter := reflect.TypeFor[pgArraySetter]()
+	bytesScanner := reflect.TypeFor[pgBytesScanner]()
 	e := t
 	for {
 		if e.Implements(scanner) || e.Implements(arraySetter) || e.Implements(bytesScanner) {

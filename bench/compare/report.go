@@ -15,7 +15,7 @@ import (
 )
 
 // display is how the report names each ORM and runtime variant.
-var display = map[string]string{"velox2": "velox2", "oldvelox": "old velox", "ent": "ent", "velox2pgx": "velox2 (OpenPgx)"}
+var display = map[string]string{"velox2": "velox2", "oldvelox": "old velox", "ent": "ent", "velox2pgx": "velox2 (veloxpgx)"}
 
 // otherORMs are the ORMs other than velox2, in the order of their columns.
 var otherORMs = []string{"oldvelox", "ent"}
@@ -80,7 +80,7 @@ func writeReport(w io.Writer, s summary) error {
 	b.WriteString("or the smallest for a metric where higher is better (the tables say which). ")
 	b.WriteString("The ratio columns are the other ORM ÷ velox2, from the medians: for a lower-is-better metric, a ratio above 1 means velox2 is better; ")
 	b.WriteString("for a higher-is-better one, a ratio below 1 does. ")
-	b.WriteString("A `velox2 (OpenPgx)` column, where there is one, is velox2's app on `velox.OpenPgx` (a pgx pool) instead of database/sql; it is velox2 too, so it is never a loss.\n\n")
+	b.WriteString("A `velox2 (veloxpgx)` column, where there is one, is velox2's app on `veloxpgx.Open` (a pgx pool) instead of database/sql; it is velox2 too, so it is never a loss.\n\n")
 	if len(s.Missing) > 0 {
 		b.WriteString("## Incomplete results\n\n")
 		b.WriteString("These results were not in the results directory when the summary was made, so the medians below may rest on fewer runs than planned, and the losses may be incomplete:\n\n")

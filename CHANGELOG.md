@@ -24,6 +24,12 @@ This summarizes what a user of the tree before the hardening work must know.
 ### Added
 
 Runtime
+- The new package `veloxpgx` holds pgx's native path: `veloxpgx.Open(pool)` is
+  what `velox.OpenPgx(pool)` was and `veloxpgx.Conn(pool)` what `velox.PgxConn(pool)`
+  was; both of those are gone. `velox` itself no longer imports pgx, so an
+  application on SQLite or MySQL does not link it. `velox.Open` with pgx's stdlib
+  driver is unchanged, and its errors are classified as before. `velox.OpenConn`
+  opens a DB on a `Conn` (C53, decision 0019).
 - `velox.IsNotFound` (G50). `velox.ErrLocked` matches PostgreSQL's 55P03 and
   MySQL's 3572; `TxRetrySerializable` does not retry it (4b3ae1c).
 - `TxInfo.Route` says where a transaction runs (00b804b). veloxotel's
@@ -73,7 +79,7 @@ Documentation and tests
   with fuzz targets, per-package coverage floors and benchmark baselines.
 - `bench/compare` measures velox2's build and runtime cost against old velox and
   ent (`docs/reviews/2026-10-29-perf-comparison.md`; 591c054, b7603fd..4ebd51a).
-  `COMPARE_STEPS=runtime`, and an `OpenPgx` column (da2ee65, c57da87).
+  `COMPARE_STEPS=runtime`, and a `veloxpgx` column (da2ee65, c57da87).
 
 ### Changed
 

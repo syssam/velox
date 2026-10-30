@@ -12,6 +12,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/syssam/velox2"
+	"github.com/syssam/velox2/veloxpgx"
 	"github.com/syssam/velox2/contrib/veloxotel"
 	"github.com/syssam/velox2/internal/testmodel"
 )
@@ -53,7 +54,7 @@ func TestPgxPreparesACommentedStatementOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer pool.Close()
-	db := velox.OpenPgx(pool, veloxotel.Options(veloxotel.Config{
+	db := veloxpgx.Open(pool, veloxotel.Options(veloxotel.Config{
 		TracerProvider: sdktrace.NewTracerProvider(),
 		App:            "otel-test",
 		CommentTags:    []string{"route"},
@@ -118,7 +119,7 @@ func TestPgxOmitCallersPreparesOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer pool.Close()
-	db := velox.OpenPgx(pool, veloxotel.Options(veloxotel.Config{
+	db := veloxpgx.Open(pool, veloxotel.Options(veloxotel.Config{
 		TracerProvider: sdktrace.NewTracerProvider(),
 		App:            "otel-test",
 		OmitCallers:    true,
@@ -173,7 +174,7 @@ func TestPgStatusCode(t *testing.T) {
 	}
 	defer pool.Close()
 	exp := tracetest.NewInMemoryExporter()
-	db := velox.OpenPgx(pool, veloxotel.Options(veloxotel.Config{
+	db := veloxpgx.Open(pool, veloxotel.Options(veloxotel.Config{
 		TracerProvider: sdktrace.NewTracerProvider(sdktrace.WithSyncer(exp)),
 	})...)
 	c := velox.WithTenant(bg, int64(1))

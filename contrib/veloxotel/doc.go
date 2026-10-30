@@ -5,7 +5,7 @@
 // Options returns the velox options that trace every statement, to give to
 // velox.Open after any of the application's own:
 //
-//	db := velox.OpenPgx(pool, veloxotel.Options(veloxotel.Config{
+//	db := veloxpgx.Open(pool, veloxotel.Options(veloxotel.Config{
 //		TracerProvider: tp,        // default otel.GetTracerProvider()
 //		MeterProvider:  mp,        // default otel.GetMeterProvider()
 //		App:            "billing", // enables the SQL comment
@@ -49,7 +49,7 @@
 //
 //	opts := []velox.Option{velox.WithAround(retryOnDeadlock)} // the outer one
 //	opts = append(opts, veloxotel.Options(cfg)...)            // inside it
-//	db := velox.OpenPgx(pool, opts...)
+//	db := veloxpgx.Open(pool, opts...)
 //
 // The adapter is then inside it and makes one span and one duration point per
 // attempt. Given outside a retrying hook, it sees the whole retry as one

@@ -9,21 +9,19 @@ import (
 	"maps"
 	"math"
 	"net"
-	"reflect"
 	"slices"
 	"sync/atomic"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/syssam/velox2/internal/conn"
 )
 
 // Conn is a connection pool that velox can run statements on: a DB's primary
-// or one of its replicas. Make one with SQLConn or PgxConn; the zero Conn is
-// none, and a DB given one panics.
+// or one of its replicas. Make one with SQLConn or a driver package's Conn, such
+// as veloxpgx.Conn; the zero Conn is none, and a DB given one panics.
 type Conn struct {
-	ex  executor
-	pgx bool // pgx's native protocol, valid only for PostgreSQL
+	ex   executor
+	only Dialect // the one dialect the Conn is valid on, or 0 for the DB's
 }
 
 // SQLConn returns a Conn that runs statements through db, a *sql.DB the
@@ -35,18 +33,13 @@ func SQLConn(db *sql.DB) Conn {
 	return Conn{ex: newSQLExecutor(db)}
 }
 
-// PgxConn returns a Conn that runs statements through pool with pgx's native
-// protocol. It is valid only on a PostgreSQL DB; on another, Open panics. A
-// nil pool panics.
-func PgxConn(pool *pgxpool.Pool) Conn {
-	if pool == nil {
-		panic("velox: PgxConn(nil)")
-	}
-	return Conn{ex: pgxExecutor{c: pool, pool: pool}, pgx: true}
-}
+// DriverConn returns a Conn on ex, valid only on dialect d. It is for velox's
+// own driver packages, such as veloxpgx: nothing outside this module can
+// implement ex.
+func DriverConn(d Dialect, ex conn.Executor) Conn { return Conn{ex: ex, only: d} }
 
 // WithReplicas adds read replicas to a DB's primary, the connection Open or
-// OpenPgx was given. A read outside a transaction goes to a replica, each in
+// OpenConn was given. A read outside a transaction goes to a replica, each in
 // turn, unless its context is marked with WithPrimaryReads; a query's With
 // loads go to the replica the query read. Writes, and every statement in a
 // transaction, go to the primary. Statement.Route records the choice.
@@ -58,12 +51,12 @@ func PgxConn(pool *pgxpool.Pool) Conn {
 // and puts the replica in back-off; a dial still hanging when the request's
 // context ends is the context's error, and neither retries nor backs off.
 //
-// A zero Conn panics, and a PgxConn on a DB whose dialect is not PostgreSQL
+// A zero Conn panics, and a Conn valid only on another dialect
 // panics in Open.
 func WithReplicas(conns ...Conn) Option {
 	for i, c := range conns {
 		if c.ex == nil {
-			panic(fmt.Sprintf("velox: WithReplicas: replica %d is the zero Conn; make it with SQLConn or PgxConn", i))
+			panic(fmt.Sprintf("velox: WithReplicas: replica %d is the zero Conn; make it with SQLConn or a driver package's Conn", i))
 		}
 	}
 	conns = slices.Clone(conns)
@@ -103,7 +96,7 @@ type Shard struct {
 // WithShardFor is required, and WithReplicas is refused: each Shard has its
 // own Replicas. OpenShards panics on either mistake, on a d that is not
 // Postgres, MySQL or SQLite, on no shards, on a shard named "" and on a shard
-// whose Primary or a replica is the zero Conn, or a PgxConn when d is not
+// whose Primary or a replica is the zero Conn, or a Conn valid only on a dialect that is not
 // PostgreSQL.
 func OpenShards(d Dialect, shards map[string]Shard, opts ...Option) *DB {
 	if !d.valid() {
@@ -117,7 +110,7 @@ func OpenShards(d Dialect, shards map[string]Shard, opts ...Option) *DB {
 		panic("velox: OpenShards: WithShardFor is required, to find a statement's shard from its tenant")
 	}
 	if len(cfg.replicas) > 0 {
-		panic("velox: OpenShards: WithReplicas is for Open and OpenPgx; give each Shard its Replicas")
+		panic("velox: OpenShards: WithReplicas is for Open and OpenConn; give each Shard its Replicas")
 	}
 	rt := &router{shards: make(map[string]*shard, len(shards)), shardFor: cfg.shardFor}
 	for _, name := range slices.Sorted(maps.Keys(shards)) {
@@ -128,13 +121,13 @@ func OpenShards(d Dialect, shards map[string]Shard, opts ...Option) *DB {
 		what := fmt.Sprintf("OpenShards: shard %q's", name)
 		switch {
 		case s.Primary.ex == nil:
-			panic(fmt.Sprintf("velox: %s Primary is the zero Conn; make it with SQLConn or PgxConn", what))
-		case s.Primary.pgx && d != Postgres:
-			panic(fmt.Sprintf("velox: %s Primary is a PgxConn, valid only for PostgreSQL; the DB is %s", what, d))
+			panic(fmt.Sprintf("velox: %s Primary is the zero Conn; make it with SQLConn or a driver package's Conn", what))
+		case s.Primary.only != 0 && s.Primary.only != d:
+			panic(fmt.Sprintf("velox: %s Primary is valid only on %s; the DB is %s", what, s.Primary.only, d))
 		}
 		for i, c := range s.Replicas {
 			if c.ex == nil {
-				panic(fmt.Sprintf("velox: %s replica %d is the zero Conn; make it with SQLConn or PgxConn", what, i))
+				panic(fmt.Sprintf("velox: %s replica %d is the zero Conn; make it with SQLConn or a driver package's Conn", what, i))
 			}
 		}
 		sh := newShard(d, s.Primary.ex, s.Replicas, what)
@@ -158,7 +151,7 @@ func OpenShards(d Dialect, shards map[string]Shard, opts ...Option) *DB {
 // f is called concurrently, from the goroutine of every statement, so it must
 // be safe for that, and fast: a map lookup or a hash, not a query.
 //
-// It is required with OpenShards; given to Open or OpenPgx, it panics there.
+// It is required with OpenShards; given to Open or OpenConn, it panics there.
 // A nil f panics. WithShard names a statement's shard from its context instead.
 func WithShardFor(f func(ctx context.Context, tenant any) (string, error)) Option {
 	if f == nil {
@@ -367,19 +360,19 @@ type target struct {
 }
 
 // newRouter returns the router of an unsharded DB of dialect d on primary
-// and replicas. A PgxConn on a DB of another dialect panics.
+// and replicas. A Conn valid only on another dialect panics.
 func newRouter(d Dialect, primary executor, replicas []Conn) *router {
 	return &router{one: newShard(d, primary, replicas, "WithReplicas:")}
 }
 
 // newShard returns a shard of a DB of dialect d on primary and replicas. A
-// PgxConn replica on a DB of another dialect panics, in a message that
+// replica valid only on another dialect panics, in a message that
 // starts with what.
 func newShard(d Dialect, primary executor, replicas []Conn, what string) *shard {
 	sh := &shard{primary: primary}
 	for i, c := range replicas {
-		if c.pgx && d != Postgres {
-			panic(fmt.Sprintf("velox: %s replica %d is a PgxConn, valid only for PostgreSQL; the DB is %s", what, i, d))
+		if c.only != 0 && c.only != d {
+			panic(fmt.Sprintf("velox: %s replica %d is valid only on %s; the DB is %s", what, i, c.only, d))
 		}
 		sh.replicas = append(sh.replicas, &replica{ex: c.ex})
 	}
@@ -655,18 +648,18 @@ func failoverable(err error) bool {
 		is(err, net.ErrClosed) ||
 		is(err, io.EOF) ||
 		is(err, io.ErrUnexpectedEOF) ||
-		is(err, pgconn.ErrConnClosed) ||
+		driverSentinel(err, pgConnClosed) ||
 		safeToRetry(err) ||
 		mysqlInvalidConn(err) {
 		return true
 	}
-	if _, ok := as[*pgconn.ConnectError](err); ok {
+	if driverError(err, pgconnPkg, "ConnectError") != nil {
 		// Whatever the server said while connecting, such as too many
 		// connections (53300) or a failed login: pgx wraps its PgError in
 		// the ConnectError, so this comes before the PgError check.
 		return true
 	}
-	if pg := pgError(err); pg != nil {
+	if pg, ok := pgError(err); ok {
 		// admin_shutdown, crash_shutdown, cannot_connect_now
 		return pg.Code == "57P01" || pg.Code == "57P02" || pg.Code == "57P03"
 	}
@@ -681,7 +674,7 @@ func failoverable(err error) bool {
 	return !ne.Timeout() || ok && op.Op == "dial"
 }
 
-// safeToRetry is pgconn.SafeToRetry over as, so that a nil pointer in err's
+// safeToRetry is pgx's pgconn.SafeToRetry over as, so that a nil pointer in err's
 // tree cannot panic it.
 func safeToRetry(err error) bool {
 	r, ok := as[interface {
@@ -708,11 +701,5 @@ func mysqlConnectError(n int) bool {
 
 // mysqlInvalidConn reports whether err's tree holds go-sql-driver/mysql's
 // ErrInvalidConn, which the driver returns for a connection that broke. velox
-// does not import the driver (see constraint), so the sentinel, an
-// errors.New, is recognized by its type and text.
-func mysqlInvalidConn(err error) bool {
-	return walk(err, func(e error) bool {
-		t := reflect.TypeOf(e)
-		return t.Kind() == reflect.Pointer && t.Elem().PkgPath() == "errors" && t.Elem().Name() == "errorString" && e.Error() == "invalid connection"
-	})
-}
+// does not import the driver (see constraint).
+func mysqlInvalidConn(err error) bool { return driverSentinel(err, "invalid connection") }

@@ -13,6 +13,7 @@ import (
 	"example.com/tmp/gen"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/syssam/velox2"
+	"github.com/syssam/velox2/veloxpgx"
 )
 
 const ormName = "velox2"
@@ -64,7 +65,7 @@ func newApp(tb testing.TB, sqlDB *sql.DB) *app {
 		tb.Fatal("velox2pgx: pgxpool.New cannot parse $VELOX_COMPARE_POSTGRES with pool_max_conns=1")
 	}
 	tb.Cleanup(pool.Close)
-	a := &app{db: velox.OpenPgx(pool)}
+	a := &app{db: veloxpgx.Open(pool)}
 	// The probe: an operation must acquire from the pool and leave sqlDB
 	// untouched. With no idle connection kept, a query on sqlDB would open a
 	// connection and close it on release, which MaxIdleClosed counts.

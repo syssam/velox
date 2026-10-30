@@ -9,15 +9,13 @@ import (
 	"slices"
 	"sync/atomic"
 	"time"
-
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // DB runs statements, inside or outside a transaction. It is the only type
 // that does: generic methods cannot be in an interface, and one concrete type
 // means every function taking a *DB works in a transaction unchanged.
 //
-// A DB from Open, OpenPgx or OpenShards is safe for concurrent use by multiple
+// A DB from Open, OpenConn or OpenShards is safe for concurrent use by multiple
 // goroutines. The *DB that Tx gives its fn is not: see Tx.
 type DB struct {
 	d Dialect
@@ -65,7 +63,7 @@ type config struct {
 }
 
 // Option configures a DB's pipeline. The With functions make them; the zero
-// Option is not valid, and Open, OpenPgx and OpenShards panic on it.
+// Option is not valid, and Open, OpenConn and OpenShards panic on it.
 type Option struct{ apply func(*config) }
 
 // WithRewrite adds a rewrite hook. Rewrite hooks run in the order given. A
@@ -114,8 +112,8 @@ func WithAround(a Around) Option {
 }
 
 // Open returns a DB that runs statements through db, a *sql.DB the
-// application opened with a driver for dialect d. For PostgreSQL, OpenPgx is
-// faster.
+// application opened with a driver for dialect d. For PostgreSQL, veloxpgx.Open
+// is faster.
 //
 // For MySQL, include parseTime=true and clientFoundRows=true in the DSN: the
 // first scans DATETIME columns into time.Time, and clientFoundRows=true makes
@@ -131,11 +129,20 @@ func Open(d Dialect, db *sql.DB, opts ...Option) *DB {
 	return newDB(d, newSQLExecutor(db), opts)
 }
 
-// OpenPgx returns a DB for PostgreSQL that runs statements through pool with
-// pgx's native protocol, which makes about a quarter of the allocations of
-// database/sql with pgx's stdlib driver for a 100-row query.
-func OpenPgx(pool *pgxpool.Pool, opts ...Option) *DB {
-	return newDB(Postgres, pgxExecutor{c: pool, pool: pool}, opts)
+// OpenConn returns a DB of dialect d whose primary is c. veloxpgx.Open is this
+// with a veloxpgx.Conn. A zero Conn panics, as does a Conn that is valid only on
+// another dialect.
+func OpenConn(d Dialect, c Conn, opts ...Option) *DB {
+	if !d.valid() {
+		panic(fmt.Sprintf("velox: OpenConn: unknown %v; use velox.Postgres, velox.MySQL or velox.SQLite", d))
+	}
+	switch {
+	case c.ex == nil:
+		panic("velox: OpenConn: the Conn is zero; make it with SQLConn or a driver package's Conn")
+	case c.only != 0 && c.only != d:
+		panic(fmt.Sprintf("velox: OpenConn: the Conn is valid only on %s; the DB is %s", c.only, d))
+	}
+	return newDB(d, c.ex, opts)
 }
 
 // defaultPinWindow is how long a write pins its session unless WithPinWindow
@@ -159,7 +166,7 @@ func newConfig(opts []Option) *config {
 func newDB(d Dialect, ex executor, opts []Option) *DB {
 	cfg := newConfig(opts)
 	if cfg.shardFor != nil {
-		panic("velox: WithShardFor is for OpenShards; Open and OpenPgx open a DB on one shard")
+		panic("velox: WithShardFor is for OpenShards; Open and OpenConn open a DB on one shard")
 	}
 	if len(cfg.replicas) > 0 {
 		return &DB{d: d, rt: newRouter(d, ex, cfg.replicas), cfg: cfg}
@@ -770,7 +777,7 @@ func (db *DB) exec(ctx context.Context, st *Statement, t target, read func(rows)
 	}
 	st.ran = t
 	if read == nil {
-		r, err := t.ex.exec(ctx, st.SQL, st.Args)
+		r, err := t.ex.Exec(ctx, st.SQL, st.Args)
 		if !st.Op.Reads() {
 			// It reached the database: whether it failed or not, its
 			// outcome may be written.
@@ -779,13 +786,13 @@ func (db *DB) exec(ctx context.Context, st *Statement, t target, read func(rows)
 		if err != nil {
 			return dbErr(st.Entity, err)
 		}
-		st.Result.Affected = r.affected
+		st.Result.Affected = r.Affected
 		if res != nil {
 			*res = r
 		}
 		return nil
 	}
-	r, err := t.ex.query(ctx, st.SQL, st.Args)
+	r, err := t.ex.Query(ctx, st.SQL, st.Args)
 	if !st.Op.Reads() {
 		// As for exec: a write that reached the database pins, whatever
 		// came back. A write is not failed over, so it is sent only here.
@@ -796,7 +803,7 @@ func (db *DB) exec(ctx context.Context, st *Statement, t target, read func(rows)
 			return dbErr(st.Entity, err)
 		}
 		t = db.fallBack(st, t)
-		if r, err = t.ex.query(ctx, st.SQL, st.Args); err != nil {
+		if r, err = t.ex.Query(ctx, st.SQL, st.Args); err != nil {
 			return dbErr(st.Entity, err)
 		}
 	}
@@ -823,7 +830,7 @@ func (db *DB) exec(ctx context.Context, st *Statement, t target, read func(rows)
 			// caller: read on the primary, from the start. read starts
 			// anew, as for an Around hook's retry.
 			t = db.fallBack(st, t)
-			pr, err := t.ex.query(ctx, st.SQL, st.Args)
+			pr, err := t.ex.Query(ctx, st.SQL, st.Args)
 			if err != nil {
 				return dbErr(st.Entity, err)
 			}

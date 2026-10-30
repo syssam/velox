@@ -143,6 +143,7 @@ import (
 	"errors"
 
 	"github.com/syssam/velox2"
+	"github.com/syssam/velox2/veloxpgx"
 )
 
 // Policy refuses to insert an article titled "forbidden", and lets no
@@ -412,7 +413,7 @@ func targets(t *testing.T) []target {
 					t.Fatal(err)
 				}
 				t.Cleanup(pool.Close)
-				return sqlOpen(t, "pgx", dsn), velox.OpenPgx(pool, opts...)
+				return sqlOpen(t, "pgx", dsn), veloxpgx.Open(pool, opts...)
 			},
 		}, target{
 			name: "postgres", ddl: pgDDL, fkDDL: pgFKDDL, drop: dropDDL,

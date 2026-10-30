@@ -134,7 +134,7 @@ func ormByName(name string) (orm, error) {
 }
 
 // runtimeVariants maps each runtime variant to the ORM whose runtime app it
-// runs: velox2pgx is velox2's app on velox.OpenPgx, measured on PostgreSQL
+// runs: velox2pgx is velox2's app on veloxpgx.Open, measured on PostgreSQL
 // only. A variant has no build measurements and is never a loss.
 var runtimeVariants = map[string]string{"velox2pgx": "velox2"}
 

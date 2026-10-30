@@ -13,7 +13,7 @@ func TestWritesGoThroughExec(t *testing.T) {
 	db := OpenFake(Postgres, e)
 	st := Statement{Op: OpUpdate, Entity: invInfo, AllRows: true, Set: []Assignment{{Column: 3, Op: AssignSet, Value: 1.5}}}
 	res, err := execWrite(context.Background(), db, &st)
-	if err != nil || res.affected != 3 || res.lastID != 9 || !res.hasLastID {
+	if err != nil || res.Affected != 3 || res.LastID != 9 || !res.HasLastID {
 		t.Fatalf("%+v, %v", res, err)
 	}
 	if e.SQL != `UPDATE "invoices" SET "total" = $1` || !reflect.DeepEqual(e.Args, []any{1.5}) {

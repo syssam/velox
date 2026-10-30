@@ -28,6 +28,7 @@ import (
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/internal/testmodel"
+	"github.com/syssam/velox2/veloxpgx"
 )
 
 // TestMain refuses to run the itests, when VELOX_ITEST_REQUIRE=1, as CI and
@@ -143,7 +144,7 @@ const pgDDL = `CREATE TABLE invoices (created_at timestamptz NOT NULL, updated_a
 	total double precision NOT NULL, paid boolean NOT NULL, paid_at timestamptz, note text NOT NULL, data bytea NOT NULL,
 	CONSTRAINT invoices_org_number_uq UNIQUE (org_id, number))`
 
-// postgresTargets returns PostgreSQL twice: through native pgx (OpenPgx) and
+// postgresTargets returns PostgreSQL twice: through native pgx (veloxpgx.Open) and
 // through database/sql. Both are opened per test. The two targets share one
 // sqlDB for setup, so within a test its INSERT statement stays cached across
 // the second target's DROP and CREATE; that is harmless, because the schema is
@@ -162,7 +163,7 @@ func postgresTargets(t testing.TB, dsn string, opts []velox.Option) []target {
 	t.Cleanup(pool.Close)
 	exec := sqlExec(sqlDB, velox.Postgres)
 	return []target{
-		{name: "postgres-pgx", d: velox.Postgres, db: velox.OpenPgx(pool, opts...), exec: exec, ddl: pgDDL, items: pgItems, tickets: pgTickets, raw: sqlDB, direct: sqlDB},
+		{name: "postgres-pgx", d: velox.Postgres, db: veloxpgx.Open(pool, opts...), exec: exec, ddl: pgDDL, items: pgItems, tickets: pgTickets, raw: sqlDB, direct: sqlDB},
 		{name: "postgres-sql", d: velox.Postgres, db: velox.Open(velox.Postgres, sqlDB, opts...), exec: exec, ddl: pgDDL, items: pgItems, tickets: pgTickets, raw: sqlDB, direct: sqlDB},
 	}
 }
@@ -500,7 +501,7 @@ func nonStandardPostgres(t *testing.T, dsn string) []target {
 	t.Cleanup(pool.Close)
 	exec := sqlExec(sqlDB, velox.Postgres)
 	return []target{
-		{name: "postgres-pgx-nonstandard", d: velox.Postgres, db: velox.OpenPgx(pool), exec: exec, ddl: pgDDL, items: pgItems, tickets: pgTickets, raw: sqlDB, direct: sqlDB},
+		{name: "postgres-pgx-nonstandard", d: velox.Postgres, db: veloxpgx.Open(pool), exec: exec, ddl: pgDDL, items: pgItems, tickets: pgTickets, raw: sqlDB, direct: sqlDB},
 		{name: "postgres-sql-nonstandard", d: velox.Postgres, db: velox.Open(velox.Postgres, sqlDB), exec: exec, ddl: pgDDL, items: pgItems, tickets: pgTickets, raw: sqlDB, direct: sqlDB},
 	}
 }

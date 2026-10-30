@@ -4,11 +4,10 @@ import (
 	"context"
 	"fmt"
 	"iter"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
-
-	"github.com/jackc/pgx/v5"
 )
 
 // execInfo is the EntityInfo of Exec's statements: the name their errors and
@@ -42,7 +41,7 @@ func (db *DB) Exec(ctx context.Context, reason, query string, args ...any) (int6
 	if err := db.run(ctx, st, nil, &res); err != nil {
 		return 0, err
 	}
-	return res.affected, nil
+	return res.Affected, nil
 }
 
 // RawQuery is raw SQL whose rows scan into entity E, made by Raw and run by
@@ -202,7 +201,7 @@ func rawColumns(in *EntityInfo, r rows) ([]int, error) {
 
 // resultColumns returns the names of the columns r returns: database/sql's
 // rows and the test executor's report them with Columns, pgx's with
-// FieldDescriptions.
+// FieldDescriptions, which names a pgconn type, so it is called by its name.
 func resultColumns(r rows) ([]string, error) {
 	if c, ok := r.(*countedRows); ok {
 		r = c.rows
@@ -210,11 +209,12 @@ func resultColumns(r rows) ([]string, error) {
 	switch r := r.(type) {
 	case interface{ Columns() ([]string, error) }:
 		return r.Columns()
-	case pgx.Rows:
-		fds := r.FieldDescriptions()
-		names := make([]string, len(fds))
-		for i := range fds {
-			names[i] = fds[i].Name
+	}
+	if m := reflect.ValueOf(r).MethodByName("FieldDescriptions"); m.IsValid() && m.Type().NumIn() == 0 && m.Type().NumOut() == 1 {
+		fds := m.Call(nil)[0]
+		names := make([]string, fds.Len())
+		for i := range names {
+			names[i] = fds.Index(i).FieldByName("Name").String()
 		}
 		return names, nil
 	}

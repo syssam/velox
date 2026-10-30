@@ -86,6 +86,7 @@ import (
 	"context"
 
 	"github.com/syssam/velox2"
+	"github.com/syssam/velox2/veloxpgx"
 )
 
 // Policy hides the withdrawn reviews, those of 0 stars.
@@ -268,7 +269,7 @@ func targets(t *testing.T) []target {
 					t.Fatal(err)
 				}
 				t.Cleanup(pool.Close)
-				return sqlOpen(t, "pgx", dsn), velox.OpenPgx(pool, opts...)
+				return sqlOpen(t, "pgx", dsn), veloxpgx.Open(pool, opts...)
 			},
 		}, target{
 			name: "postgres", dialect: "postgres",

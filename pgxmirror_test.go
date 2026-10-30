@@ -2,14 +2,18 @@ package velox
 
 import (
 	"database/sql"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -158,5 +162,55 @@ func TestPgxMirrorIsCurrent(t *testing.T) {
 	}
 	if got := funcText(t, string(pgx), "func (r *Rows) ScanColumn("); got != pgxScanColumnText {
 		t.Error("pgx's ScanColumn changed: update the copy and re-check that colScanner still converts as its Scanner branch does")
+	}
+}
+
+// TestPgxTypesMirrored pins what the core knows of pgx without importing it, so
+// that a pgx upgrade that changes one of them fails here: a sentinel's text, the
+// fields read from a PgError, the type names, and the scan interfaces.
+func TestPgxTypesMirrored(t *testing.T) {
+	if got := pgconn.ErrConnClosed.Error(); got != pgConnClosed {
+		t.Errorf("pgconn.ErrConnClosed is %q, pgConnClosed %q", got, pgConnClosed)
+	}
+	if got := pgx.ErrTxClosed.Error(); got != pgTxClosed {
+		t.Errorf("pgx.ErrTxClosed is %q, pgTxClosed %q", got, pgTxClosed)
+	}
+	if !driverSentinel(fmt.Errorf("x: %w", pgconn.ErrConnClosed), pgConnClosed) || !ended(fmt.Errorf("x: %w", pgx.ErrTxClosed)) {
+		t.Error("pgx's sentinels are not recognized through a wrap")
+	}
+	if got := reflect.TypeFor[pgconn.PgError]().PkgPath(); got != pgconnPkg {
+		t.Errorf("PgError is in %q, pgconnPkg is %q", got, pgconnPkg)
+	}
+	pg, ok := pgError(fmt.Errorf("x: %w", &pgconn.PgError{Code: "23502", ConstraintName: "c", ColumnName: "k"}))
+	if want := (pgErr{Code: "23502", ConstraintName: "c", ColumnName: "k"}); !ok || pg != want {
+		t.Errorf("pgError read %+v, %v; want %+v", pg, ok, want)
+	}
+	if !reflect.TypeFor[pgtype.ArraySetter]().Implements(reflect.TypeFor[pgArraySetter]()) {
+		t.Error("pgtype.ArraySetter does not have pgArraySetter's methods")
+	}
+	if !reflect.TypeFor[pgtype.BytesScanner]().Implements(reflect.TypeFor[pgBytesScanner]()) {
+		t.Error("pgtype.BytesScanner does not have pgBytesScanner's methods")
+	}
+	if _, ok := reflect.TypeFor[pgx.Rows]().MethodByName("FieldDescriptions"); !ok {
+		t.Error("pgx.Rows has no FieldDescriptions")
+	}
+	if f, ok := reflect.TypeFor[pgconn.FieldDescription]().FieldByName("Name"); !ok || f.Type.Kind() != reflect.String {
+		t.Error("pgconn.FieldDescription has no string Name")
+	}
+}
+
+// pgxRowsNames is a fake with pgx.Rows's way of naming columns.
+type pgxRowsNames struct{ rows }
+
+func (pgxRowsNames) FieldDescriptions() []pgconn.FieldDescription {
+	return []pgconn.FieldDescription{{Name: "id"}, {Name: "number"}}
+}
+
+// TestResultColumnsOfPgxRows: rows that name their columns as pgx's do are read
+// without a pgx import in the core.
+func TestResultColumnsOfPgxRows(t *testing.T) {
+	got, err := resultColumns(pgxRowsNames{})
+	if err != nil || !slices.Equal(got, []string{"id", "number"}) {
+		t.Errorf("columns %v, error %v", got, err)
 	}
 }

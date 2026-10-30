@@ -432,7 +432,7 @@ func writeCore(ctx context.Context, db *DB, mu *mutation) error {
 	if err != nil {
 		return err
 	}
-	mu.affected = res.affected
+	mu.affected = res.Affected
 	return nil
 }
 

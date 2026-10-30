@@ -513,8 +513,8 @@ func sendOne(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen i
 		if err != nil {
 			return err
 		}
-		out.Affected = res.affected
-		return checkUpserted(st, res.affected)
+		out.Affected = res.Affected
+		return checkUpserted(st, res.Affected)
 	}
 	if db.d != MySQL {
 		var back int64 // the rows that came back
@@ -552,12 +552,12 @@ func sendOne(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen i
 	if err != nil {
 		return err
 	}
-	out.Affected = res.affected
+	out.Affected = res.Affected
 	// st.Conflict, not cf: a rewrite hook may have added or removed the clause.
 	// Without a conflict clause a successful insert wrote its row, whether
 	// the driver reported the count or not (-1).
-	if st.Conflict == nil && res.hasLastID && res.affected != 0 {
-		return setKey(in, gen, fieldAddr(in, p, gen), res.lastID)
+	if st.Conflict == nil && res.HasLastID && res.Affected != 0 {
+		return setKey(in, gen, fieldAddr(in, p, gen), res.LastID)
 	}
 	return nil
 }
@@ -861,13 +861,13 @@ func insertBatches[E any](ctx context.Context, db *DB, m *Meta[E], xs []E, cols 
 		if err != nil {
 			return 0, err
 		}
-		if err := checkUpserted(&st, res.affected); err != nil {
+		if err := checkUpserted(&st, res.Affected); err != nil {
 			return 0, err
 		}
-		if res.affected < 0 {
+		if res.Affected < 0 {
 			unknown = true
 		}
-		affected += res.affected
+		affected += res.Affected
 	}
 	if unknown {
 		return -1, nil
