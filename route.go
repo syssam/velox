@@ -2,12 +2,8 @@ package velox
 
 import (
 	"context"
-	"database/sql"
-	"database/sql/driver"
 	"fmt"
-	"io"
 	"maps"
-	"net"
 	"slices"
 	"time"
 
@@ -214,7 +210,7 @@ func (db *DB) routeTx(ctx context.Context, st *Statement) (engine.Target, error)
 // replica, with ctx still live: whether the read falls over. A context that
 // ended says nothing about the replica.
 func (db *DB) broken(ctx context.Context, t engine.Target, err error) bool {
-	return t.Replica >= 0 && ctx.Err() == nil && failoverable(err)
+	return t.Replica >= 0 && ctx.Err() == nil && engine.Failoverable(err)
 }
 
 // fallBack records that st's read on replica t failed with a connection error:
@@ -227,60 +223,4 @@ func (db *DB) fallBack(st *Statement, t engine.Target) engine.Target {
 	st.Route = Route{Shard: t.Sh.Name, Replica: -1, Fallback: true}
 	engine.SetStmtRan(st, p)
 	return p
-}
-
-// failoverable reports whether err, from a read on a replica (the query call or
-// its rows), is a connection error after which the read is retried on the
-// primary: the replica was not reached, its connection is gone, or its server
-// is shutting down or starting up. A query error (syntax, a constraint, a
-// permission) is not. Neither is a context that ended, which says nothing about
-// the replica: exec checks the statement's context before asking, and
-// context.DeadlineExceeded, itself a net.Error, is ruled out here too. A
-// net.Error that is a timeout counts only from a dial: a read that timed out
-// may be a slow query, not a dead replica. A MySQL error that is the server
-// refusing or ending the connection counts (MysqlConnectError), as a pgx
-// ConnectError does.
-func failoverable(err error) bool {
-	if engine.Is(err, context.Canceled) || engine.Is(err, context.DeadlineExceeded) {
-		return false
-	}
-	if engine.Is(err, driver.ErrBadConn) ||
-		engine.Is(err, sql.ErrConnDone) ||
-		engine.Is(err, net.ErrClosed) ||
-		engine.Is(err, io.EOF) ||
-		engine.Is(err, io.ErrUnexpectedEOF) ||
-		engine.DriverSentinel(err, engine.PgConnClosed) ||
-		safeToRetry(err) ||
-		engine.MysqlInvalidConn(err) {
-		return true
-	}
-	if engine.PgConnectError(err) {
-		// Whatever the server said while connecting, such as too many
-		// connections (53300) or a failed login: pgx wraps its PgError in
-		// the ConnectError, so this comes before the PgError check.
-		return true
-	}
-	if pg, ok := engine.PgErrorOf(err); ok {
-		// admin_shutdown, crash_shutdown, cannot_connect_now
-		return pg.Code == "57P01" || pg.Code == "57P02" || pg.Code == "57P03"
-	}
-	if n, _, ok := engine.MysqlError(err); ok {
-		return engine.MysqlConnectError(n)
-	}
-	ne, ok := as[net.Error](err)
-	if !ok {
-		return false
-	}
-	op, ok := as[*net.OpError](err)
-	return !ne.Timeout() || ok && op.Op == "dial"
-}
-
-// safeToRetry is pgx's pgconn.SafeToRetry over as, so that a nil pointer in err's
-// tree cannot panic it.
-func safeToRetry(err error) bool {
-	r, ok := as[interface {
-		error
-		SafeToRetry() bool
-	}](err)
-	return ok && r.SafeToRetry()
 }

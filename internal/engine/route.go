@@ -3,8 +3,11 @@ package engine
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
+	"io"
 	"math"
+	"net"
 	"slices"
 	"sync/atomic"
 	"time"
@@ -434,3 +437,59 @@ func ConnExec(c Conn) Executor { return c.ex }
 func ConnOnly(c Conn) Dialect { return c.only }
 
 func NewConn(ex Executor, only Dialect) Conn { return Conn{ex: ex, only: only} }
+
+// Failoverable reports whether err, from a read on a replica (the query call or
+// its rows), is a connection error after which the read is retried on the
+// primary: the replica was not reached, its connection is gone, or its server
+// is shutting down or starting up. A query error (syntax, a constraint, a
+// permission) is not. Neither is a context that ended, which says nothing about
+// the replica: exec checks the statement's context before asking, and
+// context.DeadlineExceeded, itself a net.Error, is ruled out here too. A
+// net.Error that is a timeout counts only from a dial: a read that timed out
+// may be a slow query, not a dead replica. A MySQL error that is the server
+// refusing or ending the connection counts (MysqlConnectError), as a pgx
+// ConnectError does.
+func Failoverable(err error) bool {
+	if Is(err, context.Canceled) || Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	if Is(err, driver.ErrBadConn) ||
+		Is(err, sql.ErrConnDone) ||
+		Is(err, net.ErrClosed) ||
+		Is(err, io.EOF) ||
+		Is(err, io.ErrUnexpectedEOF) ||
+		DriverSentinel(err, PgConnClosed) ||
+		safeToRetry(err) ||
+		MysqlInvalidConn(err) {
+		return true
+	}
+	if PgConnectError(err) {
+		// Whatever the server said while connecting, such as too many
+		// connections (53300) or a failed login: pgx wraps its PgError in
+		// the ConnectError, so this comes before the PgError check.
+		return true
+	}
+	if pg, ok := PgErrorOf(err); ok {
+		// admin_shutdown, crash_shutdown, cannot_connect_now
+		return pg.Code == "57P01" || pg.Code == "57P02" || pg.Code == "57P03"
+	}
+	if n, _, ok := MysqlError(err); ok {
+		return MysqlConnectError(n)
+	}
+	ne, ok := As[net.Error](err)
+	if !ok {
+		return false
+	}
+	op, ok := As[*net.OpError](err)
+	return !ne.Timeout() || ok && op.Op == "dial"
+}
+
+// safeToRetry is pgx's pgconn.SafeToRetry over as, so that a nil pointer in err's
+// tree cannot panic it.
+func safeToRetry(err error) bool {
+	r, ok := As[interface {
+		error
+		SafeToRetry() bool
+	}](err)
+	return ok && r.SafeToRetry()
+}

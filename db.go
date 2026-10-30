@@ -95,22 +95,6 @@ func newDB(d Dialect, ex engine.Executor, opts []Option) *DB {
 // Dialect returns the DB's dialect.
 func (db *DB) Dialect() Dialect { return db.d }
 
-// dbErr names the entity in an error from the database or the driver, turns
-// a violated constraint into a *ConstraintError, and wraps a lock that could
-// not be taken with ErrLocked.
-func dbErr(info *EntityInfo, err error) error {
-	if _, ok := as[*ConstraintError](err); ok {
-		return err // already classified
-	}
-	if ce := engine.Constraint(info.Name, err); ce != nil {
-		return ce
-	}
-	if engine.Locked(err) {
-		return fmt.Errorf("velox: %s: %w: %w", info.Name, ErrLocked, err)
-	}
-	return fmt.Errorf("velox: %s: %w", info.Name, err)
-}
-
 // hooked reports whether the pipeline has hooks: whether a statement must go
 // through run, or may take the shortcut of plain.
 func (db *DB) hooked() bool { return len(db.cfg.Rewrites) > 0 || len(db.cfg.Arounds) > 0 }
@@ -528,7 +512,7 @@ func (db *DB) exec(ctx context.Context, st *Statement, t engine.Target, read fun
 			db.wrote(ctx)
 		}
 		if err != nil {
-			return dbErr(st.Entity, err)
+			return engine.DBErr(st.Entity, err)
 		}
 		st.Result.Affected = r.Affected
 		if res != nil {
@@ -544,11 +528,11 @@ func (db *DB) exec(ctx context.Context, st *Statement, t engine.Target, read fun
 	}
 	if err != nil {
 		if !db.broken(ctx, t, err) {
-			return dbErr(st.Entity, err)
+			return engine.DBErr(st.Entity, err)
 		}
 		t = db.fallBack(st, t)
 		if r, err = t.Ex.Query(ctx, st.SQL, st.Args); err != nil {
-			return dbErr(st.Entity, err)
+			return engine.DBErr(st.Entity, err)
 		}
 	}
 	// Count the rows only when something reads the count: an Around hook
@@ -576,7 +560,7 @@ func (db *DB) exec(ctx context.Context, st *Statement, t engine.Target, read fun
 			t = db.fallBack(st, t)
 			pr, err := t.Ex.Query(ctx, st.SQL, st.Args)
 			if err != nil {
-				return dbErr(st.Entity, err)
+				return engine.DBErr(st.Entity, err)
 			}
 			r = pr
 			if counted != nil {
@@ -585,18 +569,18 @@ func (db *DB) exec(ctx context.Context, st *Statement, t engine.Target, read fun
 			}
 			again, againRows := engine.ReadRows(r, read)
 			if engine.Is(again, engine.ErrIterAgain) {
-				return dbErr(st.Entity, rowsErr) // the replica's error
+				return engine.DBErr(st.Entity, rowsErr) // the replica's error
 			}
 			rerr, rowsErr = again, againRows
 		}
 	}
 	switch {
 	case rerr != nil:
-		err = dbErr(st.Entity, rerr)
+		err = engine.DBErr(st.Entity, rerr)
 	case counted != nil && counted.Over:
 		err = fmt.Errorf("velox: %s: %w: more than %d; raise it with the query's MaxRows", st.Entity.Name, ErrTooManyRows, n)
 	case rowsErr != nil:
-		err = dbErr(st.Entity, rowsErr)
+		err = engine.DBErr(st.Entity, rowsErr)
 	}
 	if counted != nil {
 		st.Result.Rows = counted.N
