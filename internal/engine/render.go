@@ -42,7 +42,7 @@ func (w *writer) str(s string) {
 
 func (w *writer) ident(s string) {
 	if !w.argsOnly {
-		w.d.quote(&w.b, s)
+		quote(w.d, &w.b, s)
 	}
 }
 
@@ -60,7 +60,7 @@ func (w *writer) predCol(i int32) {
 func (w *writer) arg(v any) {
 	w.args = append(w.args, v)
 	if !w.argsOnly {
-		w.d.placeholder(&w.b, len(w.args))
+		placeholder(w.d, &w.b, len(w.args))
 	}
 }
 
@@ -187,7 +187,7 @@ func (w *writer) selectTail(st *Statement) {
 	if st.Offset > 0 {
 		if st.Limit == 0 && w.d != Postgres {
 			w.str(" LIMIT ")
-			w.str(w.d.noLimit())
+			w.str(noLimit(w.d))
 		}
 		w.str(" OFFSET ")
 		w.arg(st.Offset)

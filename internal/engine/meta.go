@@ -104,12 +104,6 @@ func rtype(v any) reflect.Type {
 // its body, compiled where it is called, holds no reflect.Type.
 func ElemType(p any) any { return reflect.TypeOf(p).Elem() }
 
-// IndexInfo describes one index.
-type IndexInfo struct {
-	Columns []int
-	Unique  bool
-}
-
 // IsRelation reports a One or Many field. It goes by the type's name: a marker
 // method would give every instantiation a method table, compiled into every
 // package that uses it.

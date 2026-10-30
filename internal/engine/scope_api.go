@@ -62,29 +62,6 @@ func WithoutPolicy(ctx context.Context, reason string) context.Context {
 	return context.WithValue(ctx, policyKey{}, reason)
 }
 
-// RowScope is what a context scopes statements by: WithTenant's id (nil when
-// none), the reasons of WithAllTenants and WithoutPolicy ("" when none), and
-// WithShard's shard, which holds other rows than another shard. A batcher that
-// reads for several callers in one statement compares their scopes, so that
-// callers of different scopes never share a read.
-//
-// RowScopes are compared with ==, which panics when Tenant holds a value
-// that cannot be compared. A tenant column's type is comparable (its
-// metadata is refused otherwise), but WithTenant takes any id, and an id of
-// another type, which a statement refuses, may not be: a caller that
-// compares guards against it with reflect.ValueOf(Tenant).Comparable(),
-// which checks the value, since a struct or an array of a comparable type
-// may hold an interface whose value is a slice or a map.
-type RowScope struct {
-	Tenant       any
-	TenantBypass string
-	PolicyBypass string
-	// Shard is WithShard's name, and HasShard whether WithShard was called: a
-	// shard named "" is told from none.
-	Shard    string
-	HasShard bool
-}
-
 // RowScopeFromContext returns ctx's row scope.
 func RowScopeFromContext(ctx context.Context) RowScope {
 	id, all := TenantFrom(ctx)
@@ -131,34 +108,6 @@ func PolicyBypassReason(ctx context.Context) string {
 	r, _ := ctx.Value(policyKey{}).(string)
 	return r
 }
-
-// PolicyError is a statement a policy denied; Err is the policy's error.
-// Every PolicyError matches ErrDenied.
-type PolicyError struct {
-	Entity string // the Go type, e.g. "billing.Invoice"
-	// Op is the kind of statement denied: the statement's own, or, for a
-	// denial of the target of an EXISTS (a Has or HasWhere, in the statement
-	// or in a policy's condition), OpSelect, since the EXISTS reads its target
-	// whatever the statement does. An upsert's update branch is OpUpdate.
-	Op  Op
-	Err error
-}
-
-// Error is "velox: <Entity>: <Op> denied by policy", then ": <Err>" when Err
-// is not nil.
-func (e *PolicyError) Error() string {
-	s := "velox: " + e.Entity + ": " + e.Op.String() + " denied by policy"
-	if e.Err == nil {
-		return s
-	}
-	return s + ": " + e.Err.Error()
-}
-
-// Unwrap returns the policy's error.
-func (e *PolicyError) Unwrap() error { return e.Err }
-
-// Is makes every PolicyError match ErrDenied.
-func (e *PolicyError) Is(target error) bool { return target == ErrDenied }
 
 // Deny returns an error for a policy function to deny a statement with: its
 // text is reason, and it matches ErrDenied.

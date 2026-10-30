@@ -212,18 +212,6 @@ func (s *session) Pinned() bool {
 	return u != 0 && time.Now().UnixNano() < u
 }
 
-// route is where a statement runs. The route stage sets Statement.Route
-// after the Rewrite hooks and before the Around hooks run. TxInfo.Route is a
-// transaction's.
-type Route struct {
-	Shard   string // "" on an unsharded DB
-	Replica int    // index into the replicas; -1 for the primary
-	// Fallback is set when a replica failed and the read was retried on the
-	// primary. It stays set for the statement's later executions, an Around
-	// hook's retry, which run on the primary.
-	Fallback bool
-}
-
 // RouteKey is the context key of the route marks. They share it, so that the
 // route stage reads them all in one lookup.
 type RouteKey struct{}

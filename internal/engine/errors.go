@@ -2,7 +2,6 @@ package engine
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 )
 
@@ -52,9 +51,6 @@ var (
 	// ErrTenantUpsert is returned by an upsert that updates, when the update
 	// could change another tenant's row.
 	ErrTenantUpsert = errors.New("upsert could cross tenants")
-	// ErrDenied is returned by a statement when a policy refuses it. Every
-	// *PolicyError matches it.
-	ErrDenied = errors.New("denied by policy")
 	// ErrPolicyUpsert is returned by an upsert that updates, on MySQL, of an
 	// entity whose policy has a Read or Write predicate, because MySQL cannot
 	// apply the predicate to the update.
@@ -87,75 +83,6 @@ var (
 // tree as errors.Is does, but skips a nil error in it: a typed-nil error that a
 // driver wraps does not panic. ent's IsNotFound is the precedent.
 func IsNotFound(err error) bool { return Is(err, ErrNotFound) }
-
-// SchemaError reports a mistake in an entity's generated metadata (its Desc,
-// or the Policy and Hooks methods it binds).
-type SchemaError struct {
-	Entity string // the Go type, e.g. "billing.Invoice"
-	Field  string // the Go field name; empty when the error is about the entity
-	Reason string
-}
-
-// Error is "velox: <Entity>: <Reason>", or "velox: <Entity>.<Field>: <Reason>"
-// for an error about a field.
-func (e *SchemaError) Error() string {
-	if e.Field == "" {
-		return "velox: " + e.Entity + ": " + e.Reason
-	}
-	return "velox: " + e.Entity + "." + e.Field + ": " + e.Reason
-}
-
-// ConstraintKind is the kind of constraint a statement violated.
-type ConstraintKind uint8
-
-// The kinds of constraint.
-const (
-	ConstraintUnique     ConstraintKind = iota + 1 // a unique index or primary key
-	ConstraintForeignKey                           // a foreign key
-	ConstraintNotNull                              // a NOT NULL column
-	ConstraintCheck                                // a CHECK constraint
-)
-
-// String is "unique", "foreign key", "not null" or "check"; "unknown" for any
-// other value.
-func (k ConstraintKind) String() string {
-	switch k {
-	case ConstraintUnique:
-		return "unique"
-	case ConstraintForeignKey:
-		return "foreign key"
-	case ConstraintNotNull:
-		return "not null"
-	case ConstraintCheck:
-		return "check"
-	}
-	return "unknown"
-}
-
-// ConstraintError reports a violated constraint, in the same form on every
-// dialect; find it with errors.As. Err is the driver's error.
-type ConstraintError struct {
-	Entity string
-	Kind   ConstraintKind
-	// Constraint is the constraint's name. SQLite reports the columns instead
-	// ("invoices.org_id, invoices.number"), and a NOT NULL error names the
-	// column.
-	Constraint string
-	Err        error
-}
-
-// Error is "velox: <Entity>: <Kind> constraint <Constraint> violated: <Err>",
-// with "(unnamed)" for an empty Constraint.
-func (e *ConstraintError) Error() string {
-	name := e.Constraint
-	if name == "" {
-		name = "(unnamed)"
-	}
-	return fmt.Sprintf("velox: %s: %s constraint %s violated: %v", e.Entity, e.Kind, name, e.Err)
-}
-
-// Unwrap is Err.
-func (e *ConstraintError) Unwrap() error { return e.Err }
 
 // StageError is the error of a hook stage: "velox: <Entity>: <stage>: <err>",
 // stage "hook" or "rewrite"; an err whose text starts "velox: <Entity>: " does

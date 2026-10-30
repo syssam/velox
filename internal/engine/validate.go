@@ -7,32 +7,6 @@ import (
 	"unsafe"
 )
 
-// ValidationError is a value a column's validators refused; nothing was sent.
-// Find it with errors.As; errors.Is reaches the validator's own error.
-//
-// What validators check:
-//   - For an insert, every column the statement sends.
-//   - For an update or Save, the value of every Set assignment; not Add or Sub.
-//   - A nil pointer, or a nil value, is never checked, because it is the
-//     absence of a value; a non-nil pointer is checked as its element.
-//
-// It is also a nil key of a column with a RequiredEdge (see ColumnDesc), in an
-// insert or a Set assignment: its Err says missing required edge
-// "<Type>.<edge>", as ent's does.
-type ValidationError struct {
-	Entity string // the Go type, e.g. "gen.User"
-	Field  string // the Go field name
-	Err    error  // the validator's error
-}
-
-// Error is "velox: <Entity>: <Field>: <Err>".
-func (e *ValidationError) Error() string {
-	return "velox: " + e.Entity + ": " + e.Field + ": " + e.Err.Error()
-}
-
-// Unwrap is Err.
-func (e *ValidationError) Unwrap() error { return e.Err }
-
 // ValidateRow checks the row of in at p: it refuses a nil key of a
 // RequiredEdge among cols, then checks every column in cols whose value is
 // not a nil pointer. Non-generic.

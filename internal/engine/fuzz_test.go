@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// unquote reverses Dialect.quote: it strips the outer quote characters and
+// unquote reverses quote: it strips the outer quote characters and
 // halves the doubled ones; ok is false when s is not one quoted identifier.
 func unquote(d Dialect, s string) (string, bool) {
 	q := byte('"')

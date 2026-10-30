@@ -42,12 +42,12 @@ func TestCommentKeysAreUnambiguous(t *testing.T) {
 		},
 		{
 			name:  "tag values",
-			tags1: []Tag{{"a", "a"}, {"b", "b\x00c"}}, tags2: []Tag{{"a", "a\x00b"}, {"b", "c"}},
+			tags1: []Tag{{Key: "a", Value: "a"}, {Key: "b", Value: "b\x00c"}}, tags2: []Tag{{Key: "a", Value: "a\x00b"}, {Key: "b", Value: "c"}},
 			want1: ` /*app='app',a='a',b='b%00c'*/`, want2: ` /*app='app',a='a%00b',b='c'*/`,
 		},
 		{
 			name:  "unset and empty",
-			tags1: nil, tags2: []Tag{{"a", ""}},
+			tags1: nil, tags2: []Tag{{Key: "a", Value: ""}},
 			want1: ` /*app='app'*/`, want2: ` /*app='app',a=''*/`,
 		},
 	} {
@@ -66,7 +66,7 @@ func TestCommentCacheEvictsTheOldest(t *testing.T) {
 	c := newCommenter("app", []string{"route"})
 	for i := range 10 {
 		v := string(rune('a' + i))
-		if got, want := commentFor(c, Caller{}, Tag{"route", v}), ` /*app='app',route='`+v+`'*/`; got != want {
+		if got, want := commentFor(c, Caller{}, Tag{Key: "route", Value: v}), ` /*app='app',route='`+v+`'*/`; got != want {
 			t.Errorf("%s: %q, want %q", v, got, want)
 		}
 	}
@@ -87,7 +87,7 @@ func TestCommentCacheEvictsTheOldest(t *testing.T) {
 // one tag route=v.
 func commentKey(c *commenter, v string) string {
 	var buf [256]byte
-	return string(c.key(buf[:0], &Statement{Tags: []Tag{{"route", v}}}))
+	return string(c.key(buf[:0], &Statement{Tags: []Tag{{Key: "route", Value: v}}}))
 }
 
 func TestCommentCacheBoundedInBytes(t *testing.T) {
@@ -96,7 +96,7 @@ func TestCommentCacheBoundedInBytes(t *testing.T) {
 	c := newCommenter("app", []string{"route"})
 	for i := range 50 {
 		v := strings.Repeat(string(rune('a'+i%26)), 18) + string(rune('a'+i/26)) + "z"
-		if got, want := commentFor(c, Caller{}, Tag{"route", v}), ` /*app='app',route='`+v+`'*/`; got != want {
+		if got, want := commentFor(c, Caller{}, Tag{Key: "route", Value: v}), ` /*app='app',route='`+v+`'*/`; got != want {
 			t.Errorf("%q, want %q", got, want)
 		}
 		if c.bytes > maxCommentBytes {
@@ -105,7 +105,7 @@ func TestCommentCacheBoundedInBytes(t *testing.T) {
 	}
 	held := len(c.m)
 	big := strings.Repeat("x", 400)
-	if got, want := commentFor(c, Caller{}, Tag{"route", big}), ` /*app='app',route='`+big+`'*/`; got != want {
+	if got, want := commentFor(c, Caller{}, Tag{Key: "route", Value: big}), ` /*app='app',route='`+big+`'*/`; got != want {
 		t.Errorf("the 400-byte value rendered %q", got)
 	}
 	if _, ok := c.m[commentKey(c, big)]; ok || len(c.m) != held {
@@ -128,7 +128,7 @@ func TestCommentCacheExactBytes(t *testing.T) {
 	c := newCommenter("app", []string{"route"})
 	for i := range 50 {
 		v := strings.Repeat(string(rune('a'+i%26)), 18) + string(rune('a'+i/26)) + "z"
-		commentFor(c, Caller{}, Tag{"route", v})
+		commentFor(c, Caller{}, Tag{Key: "route", Value: v})
 		if want := commentBytes(c); c.bytes != want || len(c.m) != i+1 {
 			t.Fatalf("after %d renders the cache counts %d bytes in %d entries, they add up to %d", i+1, c.bytes, len(c.m), want)
 		}
@@ -147,7 +147,7 @@ func TestCommentCacheConcurrentEviction(t *testing.T) {
 		wg.Go(func() {
 			for i := range 200 {
 				v := fmt.Sprintf("g%d-r%d", g, i)
-				if got, want := commentFor(c, Caller{}, Tag{"route", v}), ` /*app='app',route='`+v+`'*/`; got != want {
+				if got, want := commentFor(c, Caller{}, Tag{Key: "route", Value: v}), ` /*app='app',route='`+v+`'*/`; got != want {
 					t.Errorf("%q, want %q", got, want)
 					return
 				}

@@ -7,15 +7,6 @@ import (
 	"time"
 )
 
-// Deadlines are the time limits velox gives statements and transactions. A zero
-// field is off.
-type Deadlines struct {
-	Statement    time.Duration // a statement whose context has no deadline gets this one
-	MaxStatement time.Duration // no statement runs longer: a later deadline is brought forward
-	Tx           time.Duration // a transaction whose context has no deadline gets this one
-	MaxTx        time.Duration // no transaction runs longer, retries and commit included
-}
-
 // WithDeadlines sets the DB's time limits. A statement's limit covers its
 // Around hooks and, with Iter, the caller's loop body. A transaction's covers
 // fn, every TxRetrySerializable attempt and the commit.

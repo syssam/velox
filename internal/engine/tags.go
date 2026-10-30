@@ -5,10 +5,6 @@ import (
 	"slices"
 )
 
-// Tag is a string a context carries to every statement run with it, for the
-// hooks (Statement.Tags) and the SQL comment.
-type Tag struct{ Key, Value string }
-
 // tagsKey is the context key of the WithTags tags.
 type tagsKey struct{}
 
@@ -34,7 +30,7 @@ func WithTags(ctx context.Context, kv ...string) context.Context {
 		if j := slices.IndexFunc(tags, func(t Tag) bool { return t.Key == k }); j >= 0 {
 			tags[j].Value = v
 		} else {
-			tags = append(tags, Tag{k, v})
+			tags = append(tags, Tag{Key: k, Value: v})
 		}
 	}
 	return context.WithValue(ctx, tagsKey{}, tags)

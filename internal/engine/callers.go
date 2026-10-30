@@ -11,16 +11,6 @@ import (
 	"sync/atomic"
 )
 
-// Caller is a statement's call site: the first stack frame outside velox and
-// the packages WithCallerSkip names. Caller is zero when none of the 64
-// frames above velox's call is outside velox and the packages WithCallerSkip
-// names.
-type Caller struct {
-	File string // relative to the module root when it can be determined, else the base name
-	Line int
-	Func string // the function's full name, as runtime.Frame.Function gives it
-}
-
 // WithCallers records each statement's call site in Statement.Caller. It
 // costs one runtime.Callers per batch of up to 8 frames between velox and the
 // call site, usually one per statement, and nothing more once a call site's

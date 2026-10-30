@@ -2,70 +2,6 @@ package engine
 
 import (
 	"context"
-	"time"
-)
-
-// Op is the kind of a Statement.
-type Op uint8
-
-// The kinds of statement.
-const (
-	OpSelect Op = iota + 1
-	OpInsert
-	OpUpdate
-	OpDelete
-	// OpRawQuery is raw SQL run by DB.Raw, which velox treats as a read: its
-	// SQL and Args are the caller's.
-	OpRawQuery
-	// OpRawExec is raw SQL run by DB.Exec, which velox treats as a write: its
-	// SQL and Args are the caller's.
-	OpRawExec
-)
-
-// String returns the operation's SQL verb in lower case: "select", "insert",
-// "update" or "delete"; "raw query" and "raw exec" for raw SQL.
-func (o Op) String() string {
-	switch o {
-	case OpSelect:
-		return "select"
-	case OpInsert:
-		return "insert"
-	case OpUpdate:
-		return "update"
-	case OpDelete:
-		return "delete"
-	case OpRawQuery:
-		return "raw query"
-	case OpRawExec:
-		return "raw exec"
-	}
-	return "unknown"
-}
-
-// Raw reports whether o is raw SQL: OpRawQuery or OpRawExec.
-func (o Op) Raw() bool { return o == OpRawQuery || o == OpRawExec }
-
-// Reads reports whether o reads: OpSelect, or DB.Raw's query (OpRawQuery).
-// Every other Op writes, DB.Exec's raw SQL included.
-func (o Op) Reads() bool { return o == OpSelect || o == OpRawQuery }
-
-// Lock is the lock a locking read takes on the rows it reads.
-type Lock uint8
-
-// The locks.
-const (
-	LockForUpdate Lock = iota + 1 // FOR UPDATE
-	LockForShare                  // FOR SHARE
-)
-
-// LockWait is what a locking read does about rows another transaction has
-// locked. The zero value waits for them.
-type LockWait uint8
-
-// The ways of not waiting.
-const (
-	LockSkipLocked LockWait = iota + 1 // SKIP LOCKED: leave them out
-	LockNoWait                         // NOWAIT: fail at once
 )
 
 // lockSQL and lockWaitSQL are the clauses, after LIMIT and OFFSET.
@@ -73,23 +9,6 @@ var (
 	lockSQL     = [...]string{LockForUpdate: " FOR UPDATE", LockForShare: " FOR SHARE"}
 	lockWaitSQL = [...]string{LockSkipLocked: " SKIP LOCKED", LockNoWait: " NOWAIT"}
 )
-
-// AssignOp is how an UPDATE assigns a column.
-type AssignOp uint8
-
-// The assignment operators.
-const (
-	AssignSet AssignOp = iota + 1 // column = value
-	AssignAdd                     // column = column + value
-	AssignSub                     // column = column - value
-)
-
-// Assignment is one column an UPDATE sets.
-type Assignment struct {
-	Column int // index into EntityInfo.Columns
-	Op     AssignOp
-	Value  any
-}
 
 // ConflictClause is an INSERT's upsert clause.
 type ConflictClause struct {
@@ -217,27 +136,6 @@ type Statement struct {
 	// bidi is set on a statement of a bidirectional one-to-one write, whose
 	// Rewrite hooks' changes CheckBidiRewrite checks; nil otherwise.
 	bidi *BidiStep
-}
-
-// Result is what executing a statement did: a Statement's, which an Around
-// hook reads. An entity hook reads the rows its whole write affected from
-// Mutation.Affected instead.
-type Result struct {
-	// Rows counts the rows read, an INSERT … RETURNING's and Count's single
-	// row included. Rows are counted only when the DB has an Around hook or
-	// the statement a row cap: otherwise nothing can read it, and it is 0.
-	Rows int64
-	// Affected is the rows a write affected: the driver's count for one sent
-	// without RETURNING, the rows returned for one sent with it. It is -1
-	// for a read, for a failed statement, and for a write whose driver could
-	// not report its count.
-	Affected int64
-	// LoopBody is the time Iter's caller spent in the loop body, summed over
-	// the rows it yielded, the last one included when the loop broke or the
-	// body panicked on it. It grows while next runs and is final once next
-	// returns or panics. It is measured only when the DB has an Around hook,
-	// and is 0 otherwise and for every method but Iter.
-	LoopBody time.Duration
 }
 
 // Rewrite is a hook that may change a statement before it is rendered, or

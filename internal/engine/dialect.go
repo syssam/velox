@@ -5,35 +5,11 @@ import (
 	"strings"
 )
 
-// Dialect is a SQL dialect.
-type Dialect uint8
-
-// The dialects velox supports.
-const (
-	Postgres Dialect = iota + 1
-	MySQL
-	SQLite
-)
-
-// String is "postgres", "mysql" or "sqlite"; "Dialect(<n>)" for any other
-// value.
-func (d Dialect) String() string {
-	switch d {
-	case Postgres:
-		return "postgres"
-	case MySQL:
-		return "mysql"
-	case SQLite:
-		return "sqlite"
-	}
-	return "Dialect(" + strconv.Itoa(int(d)) + ")"
-}
-
 // valid reports whether d is Postgres, MySQL or SQLite.
 func ValidDialect(d Dialect) bool { return d == Postgres || d == MySQL || d == SQLite }
 
 // quote writes ident quoted, with the quote character doubled inside it.
-func (d Dialect) quote(b *strings.Builder, ident string) {
+func quote(d Dialect, b *strings.Builder, ident string) {
 	q := byte('"')
 	if d == MySQL {
 		q = '`'
@@ -49,7 +25,7 @@ func (d Dialect) quote(b *strings.Builder, ident string) {
 }
 
 // placeholder writes the n-th (from 1) parameter placeholder.
-func (d Dialect) placeholder(b *strings.Builder, n int) {
+func placeholder(d Dialect, b *strings.Builder, n int) {
 	if d == Postgres {
 		b.WriteByte('$')
 		b.WriteString(strconv.Itoa(n))
@@ -60,11 +36,11 @@ func (d Dialect) placeholder(b *strings.Builder, n int) {
 
 // noLimit is what goes after LIMIT when a query has an offset and no limit:
 // MySQL and SQLite accept OFFSET only after LIMIT.
-func (d Dialect) noLimit() string {
+func noLimit(d Dialect) string {
 	if d == MySQL {
 		return "18446744073709551615"
 	}
 	return "-1"
 }
 
-func QuoteIdent(d Dialect, b *strings.Builder, s string) { d.quote(b, s) }
+func QuoteIdent(d Dialect, b *strings.Builder, s string) { quote(d, b, s) }

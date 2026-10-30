@@ -60,13 +60,6 @@ func Group(o op, kids []Node) Node {
 // the untyped form of Pred, as OrderTerm is of Order.
 type Predicate struct{ n Node }
 
-// OrderTerm is an ordering by one column of a Statement's entity. It is the
-// untyped form of Order, as Predicate is of Pred.
-type OrderTerm struct {
-	Column int // index into EntityInfo.Columns
-	Desc   bool
-}
-
 // ColumnEQ returns the condition column = v, for hooks that add conditions;
 // column is an index into the statement's EntityInfo.Columns.
 func ColumnEQ(column int, v any) Predicate {
