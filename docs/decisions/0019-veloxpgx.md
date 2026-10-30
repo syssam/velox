@@ -15,9 +15,11 @@ neither of the other two drivers: it recognizes their errors by type name.
 - `veloxpgx.Open(pool)` and `veloxpgx.Conn(pool)` replace `velox.OpenPgx` and
   `velox.PgxConn`.
 - It is a package in this module, not a module of its own. The module still
-  requires pgx, for velox-gen and for tests; Go's module pruning keeps pgx out of
-  an application's go.mod unless it imports veloxpgx. A second module would add a
-  second tag to release in step with the first, for nothing an application sees.
+  requires pgx, for velox-gen and for tests. Go links only the packages an
+  application imports, so pgx is not in its binary unless it imports veloxpgx. Its
+  go.mod lists pgx as indirect only when velox-gen is a `tool` there, which needs
+  pgx to run; that is velox-gen's binary, not the application's. A second module
+  would add a second tag to release in step with the first, and change neither.
 - The driver interface is `internal/conn`, so it is no API: nothing outside the
   module can implement it. Two functions cross into the core: `velox.OpenConn`,
   which is useful as it stands, and `velox.DriverConn`, whose parameter an

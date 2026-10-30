@@ -8,7 +8,7 @@ import (
 )
 
 // pgconnPkg is the package of pgx's errors, and pgConnClosed and pgTxClosed the
-// text of its ErrConnClosed and ErrTxClosed. TestPgxErrorMirror pins them.
+// text of its ErrConnClosed and ErrTxClosed. TestPgxTypesMirrored pins them.
 const (
 	pgconnPkg    = "github.com/jackc/pgx/v5/pgconn"
 	pgConnClosed = "conn closed"

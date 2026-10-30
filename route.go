@@ -96,8 +96,8 @@ type Shard struct {
 // WithShardFor is required, and WithReplicas is refused: each Shard has its
 // own Replicas. OpenShards panics on either mistake, on a d that is not
 // Postgres, MySQL or SQLite, on no shards, on a shard named "" and on a shard
-// whose Primary or a replica is the zero Conn, or a Conn valid only on a dialect that is not
-// PostgreSQL.
+// whose Primary or a replica is the zero Conn, or a Conn valid only on another
+// dialect.
 func OpenShards(d Dialect, shards map[string]Shard, opts ...Option) *DB {
 	if !d.valid() {
 		panic(fmt.Sprintf("velox: OpenShards: unknown %v; use velox.Postgres, velox.MySQL or velox.SQLite", d))

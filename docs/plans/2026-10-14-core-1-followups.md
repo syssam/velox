@@ -290,7 +290,7 @@ From the final tasks of API plan 3 (2026-10-21). The plan's own items are done: 
 
 From the mutations (2026-10-22). The plan's items are done: the inputs with their directives, `gqlimpl`'s runtime, `CreateX`, `UpdateX` and `DeleteX` with their edges, the itest on every dialect, and the example's mutations. So are the final review's fixes: M2M `remove…IDs` and `clear…` scoped by the target's tenant and Read policy, the validators run before any statement (core `velox.Validate` and `ValidateSet`), `Statement.Writable` guarded against Rewrite hooks, and the example's `Post.views` `Optional`.
 
-- **G38: deferred after 1.0 (decision 0019).** `Open` still takes a `*sql.DB`, which hides the DSN, and the split did not change that; a `veloxmysql.Open(cfg)` that sets the flags itself is the way to close it. Moved to the pgx split (API plan 5 ruling 10: `Open` takes a `*sql.DB`, and neither database/sql nor go-sql-driver/mysql exposes the DSN or the client flags behind it; the split reshapes `Open(d, Conn)`, which can then take the MySQL configuration and refuse a missing flag). `Open`'s doc already says to set it. A core check of the MySQL DSN at `Open`: a DSN without `clientFoundRows=true` makes the `UPDATE`'s rows-affected count the rows changed, not matched, so `UpdateX` of an unchanged row can fail with NOT_FOUND. Documented now (`contrib/graphql` doc, `UpdatePost`); the core could refuse or warn at `Open`, since velox's own `Update` needs it too.
+- **G38: deferred after 1.0 (decision 0019).** `Open` still takes a `*sql.DB`, which hides the DSN, and the split did not change that; a `veloxmysql.Open(cfg)` that sets the flags itself is the way to close it. What follows is the item as it was written before the split, whose expectation that `Open` would change did not hold. Moved to the pgx split (API plan 5 ruling 10: `Open` takes a `*sql.DB`, and neither database/sql nor go-sql-driver/mysql exposes the DSN or the client flags behind it; the split reshapes `Open(d, Conn)`, which can then take the MySQL configuration and refuse a missing flag). `Open`'s doc already says to set it. A core check of the MySQL DSN at `Open`: a DSN without `clientFoundRows=true` makes the `UPDATE`'s rows-affected count the rows changed, not matched, so `UpdateX` of an unchanged row can fail with NOT_FOUND. Documented now (`contrib/graphql` doc, `UpdatePost`); the core could refuse or warn at `Open`, since velox's own `Update` needs it too.
 - [x] **G39: stale.** The same item as G17. Self-edges are written one way, as the core's loads read them (the plugin model has no `Bidi`). A symmetric edge (`friends`) needs both directions written: add `Bidi` to the model and write the inverse row.
 - **G40: deferred after 1.0.** A key the caller supplies is not in a create input (plan 1's refusal stands): an entity whose key is not generated cannot be created through GraphQL.
 - **G41: deferred after 1.0.** JSON append and other partial updates of a JSON field (old velox's `Append…`).
@@ -331,7 +331,7 @@ From the core additions (2026-10-22): `First` and `Exists`, `Sum`, `Avg`, `Min` 
 - [x] **G64: stale.** The same item as G38. The `clientFoundRows` check at `Open` moves to the pgx split (see "Left by GraphQL plan 3").
 - [x] Resolved in GraphQL plan 4, but for `Bidi` self-edges (see "Left by GraphQL plan 4"): the first/last-aware cost limit, `LoadedConnection`, a selected-columns accessor for `ConnectionOf` (`Query.Selects`), and adopting `ForUpdate` in `UpdateX`.
 - [x] Resolved in migrate plan 1 (the cap, rule 49 for `Nullable`, and `Index.Where` refused on MySQL). Left to the migration planner: the derived index-name cap, `ColumnInfo.Nullable` for interface JSON fields, and MySQL's `Index.Where`.
-- [x] **G65: closed by the pgx split.** See C53, G26 and G38. Left to the pgx split: `Save`'s `cols` allocation and the core's pgx dependency.
+- [x] **G65: ruled on by the pgx split.** See C53 and G26, closed, and G38, deferred. Left to the pgx split: `Save`'s `cols` allocation and the core's pgx dependency.
 - [x] **G66: stale.** A pointer list only (G28, G29, G30, G31). Left to velox-gen: rule errors without positions, mixin paths, plugin panic stacks, Unicode case folding.
 - [x] **G67: stale.** The same item as G53. Left to otel: `TxInfo`'s route (see "Left by API plan 4").
 - ~~The review's godoc nits: `type Mutation[E any] mutation`, `Option func(*config)` and `ColumnInfo.Codec`'s long doc.~~ Done in the final review's fixes: `Mutation`, `Option` and `TxOption` are structs with unexported fields, and the codec's rules are doc.go's `# JSON fields` section.
@@ -506,9 +506,10 @@ Also:
 
 ## Moved to the pgx split
 
-All closed by the split, 2026-10-30 (decision 0019):
+Ruled on by the split, 2026-10-30 (decision 0019):
 
 - C53: resolved; `veloxpgx` holds the native path and the core links no driver.
 - G26: closed without a change; see its entry.
 - G38: deferred after 1.0: `Open` still takes a `*sql.DB`; see its entry.
-- G65: the same item as G38, under "Left by API plan 5"; closed.
+- G65: its `Save` part is G26's and its dependency part C53's, both closed; its
+  `clientFoundRows` part is G38's, deferred.

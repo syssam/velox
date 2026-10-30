@@ -86,7 +86,6 @@ import (
 	"context"
 
 	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/veloxpgx"
 )
 
 // Policy hides the withdrawn reviews, those of 0 stars.
@@ -216,6 +215,7 @@ import (
 	"example.com/app/graph"
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+	"github.com/syssam/velox2/veloxpgx"
 )
 
 // TestMain refuses to run, when VELOX_ITEST_REQUIRE=1, as CI and

@@ -143,7 +143,6 @@ import (
 	"errors"
 
 	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/veloxpgx"
 )
 
 // Policy refuses to insert an article titled "forbidden", and lets no
@@ -353,6 +352,7 @@ import (
 	"example.com/app/gen"
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+	"github.com/syssam/velox2/veloxpgx"
 )
 
 // TestMain refuses to run, when VELOX_ITEST_REQUIRE=1, as CI and
