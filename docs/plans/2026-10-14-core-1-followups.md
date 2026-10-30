@@ -486,6 +486,10 @@ Left by the waves:
   - the itest's DDL stays hand-written (the examples alone moved to migrations);
   - the nested `With` row-cap error drops the outer "loading Items" context.
 
+## From example/tracker
+
+- **T1: open, for the 1.0 docs.** On SQLite, modernc.org/sqlite stores a `time.Time` as its `String()` by default, and velox does not convert it, so `ExpiresAt.GT(now)` compares text: times in different zones do not compare by the instant. The tracker writes UTC at both ends. `doc.go` or the SQLite notes should say so, and whether velox should normalize deserves a ruling. Reproduced: in a zone ahead of UTC, a session whose `expires_at` was written a minute ago in local time still passed a check against UTC now.
+
 ## Blocked on the user
 
 The 7 ids:

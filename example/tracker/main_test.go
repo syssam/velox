@@ -7,12 +7,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -205,12 +207,45 @@ func TestAuth(t *testing.T) {
 		// fails on the slug, or on validation, leaves nothing.
 		c.do("POST", "/signup", 409, obj{"org": "acme", "org_name": "x", "email": "a@b", "name": "n", "password": "correct horse"}, nil)
 		c.do("POST", "/signup", 422, obj{"org": "half", "org_name": "x", "email": "", "name": "n", "password": "correct horse"}, nil)
-		c.do("POST", "/login", 401, obj{"org": "half", "email": "", "password": "correct horse"}, nil)
 		c.do("POST", "/signup", 201, obj{"org": "half", "org_name": "x", "email": "a@b", "name": "n", "password": "correct horse"}, nil)
 		c.do("POST", "/signup", 422, obj{"org": "short", "org_name": "x", "email": "a@b", "name": "n", "password": "short"}, nil)
 
+		// Logging out ends this session, not another of the same user's.
+		var second tokenBody
+		c.do("POST", "/login", 200, obj{"org": "acme", "email": "admin@acme", "password": "correct horse"}, &second)
 		admin.do("POST", "/logout", 204, nil, nil)
 		admin.do("GET", "/me", 401, nil, nil)
+		c.as(second.Token).do("GET", "/me", 200, nil, nil)
+
+		// The scheme's name is case-insensitive, and a bare token is not a scheme.
+		for header, want := range map[string]int{"bearer " + second.Token: 200, second.Token: 401, "Basic " + second.Token: 401} {
+			req, err := http.NewRequestWithContext(t.Context(), "GET", c.url+"/me", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Header.Set("Authorization", header)
+			res, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_ = res.Body.Close()
+			if res.StatusCode != want {
+				t.Errorf("a scheme of %q: status %d, want %d", strings.SplitN(header, " ", 2)[0][:5], res.StatusCode, want)
+			}
+		}
+	})
+}
+
+// TestDeletedUser: a session outlives no user: its token stops working.
+func TestDeletedUser(t *testing.T) {
+	targets(t, func(t *testing.T, c *client) {
+		admin := c.signup("acme")
+		ann, annID := admin.member("acme", "ann")
+		ctx := velox.WithAllTenants(t.Context(), "test")
+		if _, err := c.db.Delete[gen.User]().Where(gen.Users.ID.EQ(annID)).Exec(ctx); err != nil {
+			t.Fatal(err)
+		}
+		ann.do("GET", "/me", 401, nil, nil)
 	})
 }
 
@@ -220,7 +255,7 @@ func TestExpiredSession(t *testing.T) {
 		admin := c.signup("acme")
 		S := gen.Sessions
 		n, err := c.db.Update[gen.Session]().
-			Set(S.ExpiresAt.Set(time.Now().Add(-time.Minute))).
+			Set(S.ExpiresAt.Set(time.Now().UTC().Add(-time.Minute))).
 			Where(S.TokenHash.EQ(hashToken(admin.token))).
 			Exec(t.Context())
 		if err != nil || n != 1 {
@@ -253,10 +288,41 @@ func TestTenants(t *testing.T) {
 		// Another org's user is no assignee.
 		acme.do("PATCH", path, 422, obj{"assignee_id": globexMember}, nil)
 
+		// One email can be in two orgs, and logs in to the org it names.
+		acme.do("POST", "/users", 201, obj{"email": "gina@globex", "name": "Other Gina", "password": "a different one"}, nil)
+		c.do("POST", "/login", 200, obj{"org": "acme", "email": "gina@globex", "password": "a different one"}, nil)
+		c.do("POST", "/login", 401, obj{"org": "globex", "email": "gina@globex", "password": "a different one"}, nil)
+
+		// One label name in two orgs is two labels: acme's filter finds only acme's
+		// issue, and globex's only globex's, each with its own label's id.
+		acme.issue(project, "Tagged", "shared")
+		globexProject := globex.project("Tagged")
+		globexIssue := globex.issue(globexProject, "Tagged too", "shared")
+		type labelled struct {
+			ID     int64 `json:"id"`
+			Labels []struct {
+				ID int64 `json:"id"`
+			} `json:"labels"`
+		}
+		var a, g pageBody[labelled]
+		acme.do("GET", fmt.Sprintf("/projects/%d/issues?label=shared", project), 200, nil, &a)
+		globex.do("GET", fmt.Sprintf("/projects/%d/issues?label=shared", globexProject), 200, nil, &g)
+		if len(a.Items) != 1 || len(g.Items) != 1 || g.Items[0].ID != globexIssue {
+			t.Fatalf("issues labelled shared: acme %+v, globex %+v", a.Items, g.Items)
+		}
+		if len(a.Items[0].Labels) != 1 || len(g.Items[0].Labels) != 1 || a.Items[0].Labels[0].ID == g.Items[0].Labels[0].ID {
+			t.Errorf("the orgs' labels: acme %+v, globex %+v; want one each, different", a.Items[0].Labels, g.Items[0].Labels)
+		}
+
+		// A count covers the org's own issues.
 		var page pageBody[projectView]
 		globex.do("GET", "/projects", 200, nil, &page)
-		if len(page.Items) != 1 || page.Items[0].OpenIssues != 0 {
-			t.Errorf("globex's projects: %+v", page.Items)
+		got := map[int64]int64{}
+		for _, p := range page.Items {
+			got[p.ID] = p.OpenIssues
+		}
+		if _, leaked := got[project]; leaked || got[globexProject] != 1 {
+			t.Errorf("globex's projects: %v", got)
 		}
 	})
 }
@@ -316,7 +382,8 @@ func TestPolicy(t *testing.T) {
 	})
 }
 
-// TestIssueTransaction: an issue whose label fails validation is not created.
+// TestIssueTransaction: an issue whose labels fail is not created: the issue's
+// insert, already sent, rolls back.
 func TestIssueTransaction(t *testing.T) {
 	targets(t, func(t *testing.T, c *client) {
 		admin := c.signup("acme")
@@ -328,9 +395,9 @@ func TestIssueTransaction(t *testing.T) {
 		if len(p.Items) != 0 {
 			t.Errorf("the failed transaction left %d issues", len(p.Items))
 		}
-		// The label valid on its own went with it, so nothing refers to a rolled-back
-		// row, and a later issue can use the name.
+		// The name that came with the failed issue stays usable.
 		admin.issue(project, "Whole", "ok")
+		admin.do("POST", path, 422, obj{"title": "Too many", "labels": strings.Split(strings.Repeat("x,", maxLabels)+"x", ",")}, nil)
 	})
 }
 
@@ -341,8 +408,8 @@ func TestIssueDetail(t *testing.T) {
 		ann, annID := admin.member("acme", "ann")
 		project := admin.project("Rocket")
 		issue := ann.issue(project, "Fuel leak", "urgent", "bug")
-		// A second issue reuses the labels.
-		other := ann.issue(project, "Valve", "bug")
+		// A second issue reuses a label; a name given twice, in any order, is one.
+		other := ann.issue(project, "Valve", "bug", "valve", "bug")
 		path := fmt.Sprintf("/issues/%d", issue)
 		admin.do("POST", path+"/comments", 201, obj{"body": "first"}, nil)
 		ann.do("POST", path+"/comments", 201, obj{"body": "second"}, nil)
@@ -377,7 +444,25 @@ func TestIssueDetail(t *testing.T) {
 		if len(x.Comments) != 2 || x.Comments[0].Body != "first" || x.Comments[0].Author.Name != "Admin" || x.Comments[1].Author.Name != "ann" {
 			t.Errorf("comments: %+v", x.Comments)
 		}
-		ann.do("GET", fmt.Sprintf("/issues/%d", other), 200, nil, nil)
+		var o struct {
+			Labels []struct {
+				ID   int64  `json:"id"`
+				Name string `json:"name"`
+			} `json:"labels"`
+		}
+		ann.do("GET", fmt.Sprintf("/issues/%d", other), 200, nil, &o)
+		if len(o.Labels) != 2 || o.Labels[0].Name != "bug" || o.Labels[1].Name != "valve" {
+			t.Errorf("the other issue's labels: %+v", o.Labels)
+		}
+		var issue1 struct {
+			Labels []struct {
+				ID int64 `json:"id"`
+			} `json:"labels"`
+		}
+		ann.do("GET", path, 200, nil, &issue1)
+		if issue1.Labels[0].ID != o.Labels[0].ID {
+			t.Errorf("bug has ids %d and %d: not reused", issue1.Labels[0].ID, o.Labels[0].ID)
+		}
 	})
 }
 
@@ -444,17 +529,22 @@ func TestBadRequests(t *testing.T) {
 		admin := c.signup("acme")
 		admin.do("GET", "/issues/x", 404, nil, nil)
 		admin.do("POST", "/projects", 400, obj{"name": "x", "extra": 1}, nil)
-		req, err := http.NewRequestWithContext(t.Context(), "POST", c.url+"/login", strings.NewReader(strings.Repeat("x", maxBody+1)))
-		if err != nil {
-			t.Fatal(err)
-		}
-		res, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		_ = res.Body.Close()
-		if res.StatusCode != 400 {
-			t.Errorf("an oversized body: %d", res.StatusCode)
+		for body, want := range map[string]int{
+			`{"org":"` + strings.Repeat("x", maxBody) + `"}`: 413,
+			`{"org":"acme"} {"org":"other"}`:                 400,
+		} {
+			req, err := http.NewRequestWithContext(t.Context(), "POST", c.url+"/login", strings.NewReader(body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			res, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_ = res.Body.Close()
+			if res.StatusCode != want {
+				t.Errorf("a body of %d bytes: status %d, want %d", len(body), res.StatusCode, want)
+			}
 		}
 	})
 }
@@ -464,10 +554,89 @@ func TestPassword(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !passwordMatches(h, "secret value") || passwordMatches(h, "other value") || passwordMatches("not base64!", "secret value") || passwordMatches("c2hvcnQ", "secret value") {
+	if !passwordMatches(h, "secret value") || passwordMatches(h, "other value") {
 		t.Error("passwordMatches is wrong")
+	}
+	for _, bad := range []string{"", "not base64!", "1$c2FsdA$c2hvcnQ", "x$c2FsdA$c2hvcnQ", "0$c2FsdA$c2hvcnQ", "1$!$c2hvcnQ"} {
+		if passwordMatches(bad, "secret value") {
+			t.Errorf("%q matches", bad)
+		}
+	}
+	// A hash made under an older work factor still matches after it rises.
+	defer func(n int) { hashIterations = n }(hashIterations)
+	hashIterations *= 2
+	if !passwordMatches(h, "secret value") {
+		t.Error("raising hashIterations broke an older hash")
 	}
 	if h2, _ := hashPassword("secret value"); h2 == h {
 		t.Error("two hashes of one password are equal: no salt")
+	}
+}
+
+// TestShutdownDrains: serveUntil returns only after a request in flight finished,
+// so that closing the database cannot cut it off.
+func TestShutdownDrains(t *testing.T) {
+	ln, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	started, release := make(chan struct{}), make(chan struct{})
+	var finished atomic.Bool
+	h := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		close(started)
+		<-release
+		finished.Store(true)
+		w.WriteHeader(http.StatusNoContent)
+	})
+	ctx, stop := context.WithCancel(t.Context())
+	defer stop()
+	served := make(chan error, 1)
+	go func() { served <- serveUntil(ctx, ln, h) }()
+	got := make(chan int, 1)
+	go func() {
+		res, err := http.Get("http://" + ln.Addr().String())
+		if err != nil {
+			got <- 0
+			return
+		}
+		_ = res.Body.Close()
+		got <- res.StatusCode
+	}()
+	<-started
+	stop()
+	select {
+	case err := <-served:
+		t.Fatalf("serveUntil returned with a request in flight: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(release)
+	if err := <-served; err != nil {
+		t.Fatal(err)
+	}
+	if !finished.Load() {
+		t.Error("serveUntil returned before the handler finished")
+	}
+	if code := <-got; code != http.StatusNoContent {
+		t.Errorf("the request in flight got %d", code)
+	}
+}
+
+// TestSQLiteDSNWithQuery: foreign keys are on when the path already has a query.
+func TestSQLiteDSNWithQuery(t *testing.T) {
+	db, closeDB, err := open(t.Context(), filepath.Join(t.TempDir(), "t.db")+"?_pragma=journal_mode(wal)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeDB()
+	c := serve(t, db)
+	admin := c.signup("acme")
+	project := admin.project("Rocket")
+	issue := admin.issue(project, "Fuel leak")
+	path := fmt.Sprintf("/issues/%d", issue)
+	admin.do("POST", path+"/comments", 201, obj{"body": "first"}, nil)
+	admin.do("DELETE", path, 204, nil, nil)
+	ctx := velox.WithAllTenants(gen.WithPrincipal(t.Context(), gen.Principal{Admin: true}), "test")
+	if n, err := db.Query[gen.Comment]().Where(gen.Comments.IssueID.EQ(issue)).Count(ctx); err != nil || n != 0 {
+		t.Errorf("comments after the delete: %d, %v; foreign keys are off", n, err)
 	}
 }

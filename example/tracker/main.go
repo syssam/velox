@@ -30,6 +30,13 @@ import (
 	"github.com/syssam/velox2/veloxpgx"
 )
 
+// shutdownWait is how long requests in flight get to finish. dbLimits bound what
+// any one of them can hold on to: on SQLite, whose one connection everyone shares,
+// a statement without a limit would queue every request behind it.
+const shutdownWait = 25 * time.Second
+
+var dbLimits = velox.WithDeadlines(velox.Deadlines{Statement: 10 * time.Second, Tx: 20 * time.Second})
+
 // The tables come from a directory per dialect, made, in the example module, by
 //
 //	go tool velox-gen migrate diff -dialect sqlite -name <name> -dir ./tracker/migrations ./tracker/schema
@@ -70,25 +77,36 @@ func run(addr, dsn string) error {
 	if err != nil {
 		return err
 	}
+	log.Printf("listening on http://%s", ln.Addr())
+	return serveUntil(ctx, ln, newServer(db))
+}
+
+// serveUntil serves on ln until ctx ends, then lets the requests in flight finish,
+// for up to shutdownWait. It returns only then, so that the caller can close the
+// database under no request.
+func serveUntil(ctx context.Context, ln net.Listener, h http.Handler) error {
 	srv := &http.Server{
-		Handler:           newServer(db),
+		Handler:           h,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 	}
+	drained := make(chan struct{})
 	go func() {
+		defer close(drained)
 		<-ctx.Done()
-		sctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		sctx, cancel := context.WithTimeout(context.Background(), shutdownWait)
 		defer cancel()
 		if err := srv.Shutdown(sctx); err != nil {
 			log.Printf("shutdown: %v", err)
+			_ = srv.Close()
 		}
 	}()
-	log.Printf("listening on http://%s", ln.Addr())
 	if err := srv.Serve(ln); !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
+	<-drained
 	return nil
 }
 
@@ -97,7 +115,11 @@ func open(ctx context.Context, dsn string) (*velox.DB, func(), error) {
 	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
 		return openPostgres(ctx, dsn)
 	}
-	sqlDB, err := sql.Open("sqlite", dsn+"?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)")
+	sep := "?"
+	if strings.Contains(dsn, "?") {
+		sep = "&"
+	}
+	sqlDB, err := sql.Open("sqlite", dsn+sep+"_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -107,7 +129,7 @@ func open(ctx context.Context, dsn string) (*velox.DB, func(), error) {
 		closeDB()
 		return nil, nil, err
 	}
-	return velox.Open(velox.SQLite, sqlDB), closeDB, nil
+	return velox.Open(velox.SQLite, sqlDB, dbLimits), closeDB, nil
 }
 
 // openPostgres migrates through database/sql, then runs statements on a pgx pool
@@ -125,7 +147,7 @@ func openPostgres(ctx context.Context, dsn string) (*velox.DB, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	return veloxpgx.Open(pool), pool.Close, nil
+	return veloxpgx.Open(pool, dbLimits), pool.Close, nil
 }
 
 // up applies the migrations of dir, an embedded directory.

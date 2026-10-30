@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,10 +29,13 @@ const (
 var hashIterations = 600_000
 
 // errBadLogin answers a wrong organization, email and password alike, so that a
-// caller cannot tell which of them exists.
+// caller cannot tell an email that exists from one that does not. An organization's
+// slug is not secret: signing up with a taken one has to say so.
 var errBadLogin = errors.New("wrong organization, email or password")
 
-// hashPassword returns the base64 of a new salt and the password's key.
+// hashPassword returns "<iterations>$<salt>$<key>", the last two in base64. The
+// stored count lets hashIterations rise without breaking the passwords hashed
+// before.
 func hashPassword(password string) (string, error) {
 	salt := make([]byte, saltLen)
 	if _, err := rand.Read(salt); err != nil {
@@ -41,28 +45,42 @@ func hashPassword(password string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return base64.RawStdEncoding.EncodeToString(append(salt, key...)), nil
+	enc := base64.RawStdEncoding
+	return strconv.Itoa(hashIterations) + "$" + enc.EncodeToString(salt) + "$" + enc.EncodeToString(key), nil
 }
 
 // passwordMatches reports whether password is the one hashed into stored.
 func passwordMatches(stored, password string) bool {
-	b, err := base64.RawStdEncoding.DecodeString(stored)
-	if err != nil || len(b) != saltLen+keyLen {
+	parts := strings.Split(stored, "$")
+	if len(parts) != 3 {
 		return false
 	}
-	key, err := pbkdf2.Key(sha256.New, password, b[:saltLen], hashIterations, keyLen)
-	return err == nil && subtle.ConstantTimeCompare(key, b[saltLen:]) == 1
+	iterations, err := strconv.Atoi(parts[0])
+	if err != nil || iterations < 1 {
+		return false
+	}
+	salt, err := base64.RawStdEncoding.DecodeString(parts[1])
+	if err != nil {
+		return false
+	}
+	want, err := base64.RawStdEncoding.DecodeString(parts[2])
+	if err != nil || len(want) != keyLen {
+		return false
+	}
+	key, err := pbkdf2.Key(sha256.New, password, salt, iterations, keyLen)
+	return err == nil && subtle.ConstantTimeCompare(key, want) == 1
 }
 
 // newSession inserts a session for u and returns its token. Only the token's hash
-// is stored.
+// is stored. Its expiry is in UTC, as the check in authed is: SQLite compares times
+// as text, so times in different zones would not compare by the instant.
 func newSession(ctx context.Context, db *velox.DB, u *gen.User) (string, error) {
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
 		return "", err
 	}
 	token := base64.RawURLEncoding.EncodeToString(raw)
-	s := gen.Session{TokenHash: hashToken(token), OrgID: u.OrgID, UserID: u.ID, ExpiresAt: time.Now().Add(sessionLife)}
+	s := gen.Session{TokenHash: hashToken(token), OrgID: u.OrgID, UserID: u.ID, ExpiresAt: time.Now().UTC().Add(sessionLife)}
 	if err := db.Insert(&s).Exec(ctx); err != nil {
 		return "", err
 	}
@@ -200,8 +218,13 @@ func (s *server) me(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, u)
 }
 
+// bearer returns the request's bearer token, or "". The scheme's name is
+// case-insensitive.
 func bearer(r *http.Request) string {
-	token, _ := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	scheme, token, ok := strings.Cut(r.Header.Get("Authorization"), " ")
+	if !ok || !strings.EqualFold(scheme, "Bearer") {
+		return ""
+	}
 	return token
 }
 
@@ -212,7 +235,7 @@ func (s *server) authed(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		sess, err := s.db.Query[gen.Session]().
-			Where(gen.Sessions.TokenHash.EQ(hashToken(bearer(r))), gen.Sessions.ExpiresAt.GT(time.Now())).
+			Where(gen.Sessions.TokenHash.EQ(hashToken(bearer(r))), gen.Sessions.ExpiresAt.GT(time.Now().UTC())).
 			One(ctx)
 		if velox.IsNotFound(err) {
 			writeJSON(w, http.StatusUnauthorized, errorBody{"log in first"})

@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"slices"
 	"strconv"
 
 	"github.com/syssam/velox2"
@@ -18,6 +20,7 @@ const (
 	maxBody      = 1 << 20
 	defaultLimit = 20
 	maxLimit     = 100
+	maxLabels    = 20
 )
 
 type server struct{ db *velox.DB }
@@ -150,6 +153,10 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &in) {
 		return
 	}
+	if len(in.Labels) > maxLabels {
+		writeJSON(w, http.StatusUnprocessableEntity, errorBody{fmt.Sprintf("an issue has at most %d labels", maxLabels)})
+		return
+	}
 	p, _ := gen.PrincipalFromContext(r.Context())
 	issue := gen.Issue{ProjectID: project, AuthorID: p.UserID, Title: in.Title, Body: in.Body}
 	err := s.db.Tx(r.Context(), func(ctx context.Context, tx *velox.DB) error {
@@ -173,11 +180,14 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 }
 
 // setLabels links an issue to the labels of these names, creating those that do
-// not exist yet.
+// not exist yet. Sorting the names makes two transactions take their locks in one
+// order: in the order of the request, ["a","b"] and ["b","a"] could deadlock on
+// PostgreSQL. A repeated name is one label.
 func setLabels(ctx context.Context, tx *velox.DB, issue int64, names []string) error {
 	if len(names) == 0 {
 		return nil
 	}
+	names = slices.Compact(slices.Sorted(slices.Values(names)))
 	L := gen.Labels
 	rows := make([]gen.Label, len(names))
 	for i, n := range names {
@@ -197,7 +207,7 @@ func setLabels(ctx context.Context, tx *velox.DB, issue int64, names []string) e
 	return tx.InsertAll(links).Exec(ctx)
 }
 
-// getIssue returns an issue with all it relates to, each relation one statement,
+// getIssue returns an issue with all it relates to, in a fixed number of statements,
 // however many comments there are.
 func (s *server) getIssue(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(w, r)
@@ -390,15 +400,25 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	}
 }
 
-// readJSON decodes the body into v, or answers the request and returns false.
+// readJSON decodes the body, one JSON value of v's fields, into v, or answers the
+// request and returns false.
 func readJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	d := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBody))
 	d.DisallowUnknownFields()
-	if err := d.Decode(v); err != nil {
-		writeJSON(w, http.StatusBadRequest, errorBody{"the body is not the JSON expected"})
-		return false
+	err := d.Decode(v)
+	if err == nil {
+		if _, more := d.Token(); !errors.Is(more, io.EOF) {
+			err = errors.New("data after the JSON value")
+		}
 	}
-	return true
+	var tooBig *http.MaxBytesError
+	switch {
+	case errors.As(err, &tooBig):
+		writeJSON(w, http.StatusRequestEntityTooLarge, errorBody{"the body is too large"})
+	case err != nil:
+		writeJSON(w, http.StatusBadRequest, errorBody{"the body is not the JSON expected"})
+	}
+	return err == nil
 }
 
 func pathID(w http.ResponseWriter, r *http.Request) (int64, bool) {

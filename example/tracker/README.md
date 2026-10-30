@@ -7,14 +7,15 @@ together in a real service. The others show one topic each.
 |---|---|
 | Entities, relations, a many-to-many, a cascading foreign key | `schema/schema.go` |
 | Tenants: each organization sees only its own rows | `field.Int64("org_id").Tenant()`; `authed` in `auth.go` names the tenant once per request |
-| Who may change what, enforced in the statements themselves | `gen/policy.go`, `gen/principal.go` |
+| Who may change what, enforced in the statements themselves for projects, issues and comments | `gen/policy.go`, `gen/principal.go`; `User` has no policy, as signing up inserts one before anyone is logged in, so `invite` checks the role itself |
 | Logins: salted password hashes, tokens stored only as hashes | `auth.go` |
 | Transactions | `signup` in `auth.go`, `createIssue` in `server.go` |
-| A label upsert that is safe under concurrency | `setLabels` in `server.go` |
+| A label upsert that is safe under concurrency, its names sorted so that transactions cannot deadlock | `setLabels` in `server.go` |
 | Eager loading, nested, with no N+1 | `getIssue` and `listIssues` in `server.go` |
 | A count per row in one statement | `CountEach` in `listProjects` |
 | Keyset paging | `page` and `cut` in `server.go` |
 | Mapping velox's errors to HTTP statuses | `fail` in `server.go` |
+| Deadlines on statements and transactions, and a shutdown that lets requests finish | `dbLimits` and `serveUntil` in `main.go` |
 | Migrations per dialect, applied at startup | `migrations/`, `migrations-postgres/`, `open` in `main.go` |
 | SQLite through database/sql, PostgreSQL through pgx's native protocol | `open` and `openPostgres` in `main.go` |
 
@@ -81,6 +82,8 @@ until it is null.
 
 ## What it leaves out
 
-It has no rate limiting on `/login`, no email verification, no password reset and
-no session cleanup: a service needs them, and none of them is about velox. Expired
-sessions stop working, but their rows stay until something deletes them.
+It has no rate limiting, which a service needs on `/login` and `/signup` above all:
+each hashes a password, which is slow on purpose. It has no email verification, no
+password reset and no session cleanup, and comments are not paged, so an issue with
+very many of them is costly to read. None of these is about velox. Expired sessions
+stop working, but their rows stay until something deletes them.
