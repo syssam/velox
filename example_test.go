@@ -6,10 +6,9 @@ import (
 	"errors"
 	"fmt"
 
-	_ "modernc.org/sqlite"
-
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/internal/testmodel"
+	_ "modernc.org/sqlite"
 )
 
 // exampleDDL is what velox-gen migrate sql -dialect sqlite prints for

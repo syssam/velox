@@ -7,6 +7,8 @@
 # commit minus 1.0 (at least 0.0), so that a small change does not trip it but a
 # real loss of tests does. The profiles are `go test -race -count=1 -coverprofile`,
 # per module (root, example, contrib/veloxotel, contrib/graphql), merged by block.
+# The root module's run adds -coverpkg=./..., as most of the root package's tests are
+# in internal/apitest and internal/itest.
 # The floors were measured without any database variable set, so the DB-gated
 # tests were skipped: CI runs them, which can only add coverage, so a floor that
 # holds here holds there. Measured twice, with identical per-package figures.
@@ -16,41 +18,44 @@
 #
 # Packages at 0.0 have no tests of their own: generated code (*/gen, */schema,
 # graphql/graph), the demo schemas and the committed golden helpers; they are
-# exercised only by other packages' tests, which -coverprofile without -coverpkg
-# does not count. internal/itest has no statements and no line.
+# outside the root module, exercised only by other packages' tests, which
+# -coverprofile without -coverpkg does not count. internal/itest and internal/apitest
+# have no statements and no line.
 
 # root module
-github.com/syssam/velox2 92.8
+github.com/syssam/velox2/internal/fakeconn 89.9
+github.com/syssam/velox2/internal/apitest/fixture 88.0
+github.com/syssam/velox2 93.2
 github.com/syssam/velox2/bench/scale 72.4
-github.com/syssam/velox2/cmd/velox-gen 89.3
+github.com/syssam/velox2/cmd/velox-gen 89.5
 github.com/syssam/velox2/example/tracker 77.3
 github.com/syssam/velox2/example/tracker/gen 0.0
 github.com/syssam/velox2/example/tracker/schema 0.0
-github.com/syssam/velox2/internal/bindmodel 6.7
-github.com/syssam/velox2/internal/bindmodel/bindtype 0.0
-github.com/syssam/velox2/internal/bindmodel/schema 0.0
+github.com/syssam/velox2/internal/bindmodel 77.8
+github.com/syssam/velox2/internal/bindmodel/bindtype 94.8
+github.com/syssam/velox2/internal/bindmodel/schema 99.0
 github.com/syssam/velox2/internal/buildcost 79.6
-github.com/syssam/velox2/internal/buildinfo 57.3
-github.com/syssam/velox2/internal/conn 90.7
-github.com/syssam/velox2/internal/ddl 95.1
-github.com/syssam/velox2/internal/gen 94.8
-github.com/syssam/velox2/internal/handlegen 0.0
+github.com/syssam/velox2/internal/buildinfo 65.6
+github.com/syssam/velox2/internal/conn 99.0
+github.com/syssam/velox2/internal/ddl 96.7
+github.com/syssam/velox2/internal/gen 94.9
+github.com/syssam/velox2/internal/handlegen 99.0
 github.com/syssam/velox2/internal/handlegen/gen 0.0
-github.com/syssam/velox2/internal/tempmod 82.3
-github.com/syssam/velox2/internal/testmodel 0.0
-github.com/syssam/velox2/internal/testmodel/kind 0.0
-github.com/syssam/velox2/internal/testmodel/schema 0.0
-github.com/syssam/velox2/internal/testrepo 0.0
+github.com/syssam/velox2/internal/tempmod 87.0
+github.com/syssam/velox2/internal/testmodel 70.2
+github.com/syssam/velox2/internal/testmodel/kind 99.0
+github.com/syssam/velox2/internal/testmodel/schema 10.7
+github.com/syssam/velox2/internal/testrepo 99.0
 github.com/syssam/velox2/migrate 81.2
 github.com/syssam/velox2/plugin 95.5
 github.com/syssam/velox2/schema 99.0
-github.com/syssam/velox2/schema/edge 71.9
-github.com/syssam/velox2/schema/field 84.8
+github.com/syssam/velox2/schema/edge 90.4
+github.com/syssam/velox2/schema/field 86.4
 github.com/syssam/velox2/schema/index 86.5
-github.com/syssam/velox2/schema/internal/desc 84.1
+github.com/syssam/velox2/schema/internal/desc 90.4
 github.com/syssam/velox2/schema/load 80.4
-github.com/syssam/velox2/schema/mixin 56.1
-github.com/syssam/velox2/scripts/covfloor 77.1
+github.com/syssam/velox2/schema/mixin 99.0
+github.com/syssam/velox2/scripts/covfloor 77.8
 
 # contrib/veloxotel
 github.com/syssam/velox2/contrib/veloxotel 95.8

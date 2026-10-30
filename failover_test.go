@@ -17,34 +17,9 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgproto3"
-
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/internal/testmodel"
 )
-
-// openFailover opens a replicaSet whose primary and replicas each hold an
-// invoice. Hooked, it records each statement's Route after next returns, as
-// failover leaves it.
-func openFailover(hooked bool, extra ...velox.Option) *replicaSet {
-	s := &replicaSet{}
-	if hooked {
-		extra = append(extra, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
-			err := next(ctx)
-			s.mu.Lock()
-			s.routes = append(s.routes, st.Route)
-			s.mu.Unlock()
-			return err
-		}))
-	}
-	o := openReplicas(false, extra...)
-	s.p, s.r0, s.r1, s.db = o.p, o.r0, o.r1, o.db
-	for _, e := range []*velox.FakeExec{s.p, s.r0, s.r1} {
-		e.Rows = [][]any{invoiceRow(1)}
-	}
-	return s
-}
-
-var fellOver = velox.Route{Replica: -1, Fallback: true}
 
 // connectError returns a *pgconn.ConnectError as pgx makes one: its fields
 // are unexported, so it is made by connecting to a Unix socket in a
@@ -110,14 +85,17 @@ func refusedConnectError(t *testing.T, code string) error {
 // safeToRetryError is an error pgx marks as raised before anything was sent.
 type safeToRetryError struct{}
 
-func (safeToRetryError) Error() string     { return "failed to write startup message" }
+func (safeToRetryError) Error() string { return "failed to write startup message" }
+
 func (safeToRetryError) SafeToRetry() bool { return true }
 
 // netTimeoutError is a net.Error that is a timeout, not from a dial.
 type netTimeoutError struct{}
 
-func (netTimeoutError) Error() string   { return "read: i/o timeout" }
-func (netTimeoutError) Timeout() bool   { return true }
+func (netTimeoutError) Error() string { return "read: i/o timeout" }
+
+func (netTimeoutError) Timeout() bool { return true }
+
 func (netTimeoutError) Temporary() bool { return true }
 
 // mysqlErr returns a class that is a real driver error with number n.
@@ -294,34 +272,6 @@ func TestBackoffExpires(t *testing.T) {
 	})
 }
 
-// TestAllReplicasDown: with every replica in back-off, reads go to the
-// primary, and are not fallbacks.
-func TestAllReplicasDown(t *testing.T) {
-	bothPaths(t, func(t *testing.T, hooked bool) {
-		s := openFailover(hooked)
-		s.r0.Err, s.r1.Err = driver.ErrBadConn, driver.ErrBadConn
-		for range 4 {
-			readOne(t, ctx, s.db)
-		}
-		s.check(t, hooked, [3]int{4, 1, 1}, fellOver, fellOver, onPrimary, onPrimary)
-	})
-}
-
-// TestRetryFailsReturnsPrimaryError: when the primary fails the retry too,
-// the caller gets the primary's error.
-func TestRetryFailsReturnsPrimaryError(t *testing.T) {
-	bothPaths(t, func(t *testing.T, hooked bool) {
-		s := openFailover(hooked)
-		x := &pgconn.PgError{Code: "57P03", Message: "the database system is starting up"}
-		s.r0.Errs, s.p.Err = []error{driver.ErrBadConn}, x
-		_, err := s.db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).One(ctx)
-		if !errors.Is(err, x) || errors.Is(err, driver.ErrBadConn) || !strings.HasPrefix(err.Error(), "velox: testmodel.Invoice: ") {
-			t.Fatalf("got %v, want the primary's error, named", err)
-		}
-		s.check(t, hooked, [3]int{1, 1, 0}, fellOver)
-	})
-}
-
 // TestRowsErrorFallsOver: a connection error the replica's rows report,
 // before any row reached the caller, falls over to the primary like one from
 // the query call; the read starts again there.
@@ -476,65 +426,6 @@ func TestPinnedLoadFallsOver(t *testing.T) {
 			t.Error("replica 0 is not in back-off")
 		}
 	})
-}
-
-// TestLoadsSkipAReplicaThatFailed: once one of a query's With loads has
-// fallen over, its later loads go straight to the primary.
-func TestLoadsSkipAReplicaThatFailed(t *testing.T) {
-	defer velox.SetMaxParams(velox.Postgres, 64+2)() // two keys per load
-	bothPaths(t, func(t *testing.T, hooked bool) {
-		s := openFailover(hooked)
-		s.r0.Results = [][][]any{{invoiceRow(1), invoiceRow(2), invoiceRow(3)}}
-		s.r0.Errs = []error{nil, driver.ErrBadConn} // the query reads; the first load fails
-		s.p.Results = [][][]any{{itemRow(10, 1, "A", 1), itemRow(11, 2, "B", 1)}, {itemRow(12, 3, "C", 1)}}
-		invs, err := s.db.Query[testmodel.Invoice]().With(I.Items).Limit(10).All(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if c, _ := invs[2].Items.Get(); len(c) != 1 || c[0].SKU != "C" {
-			t.Fatalf("invoice 3's items %v", c)
-		}
-		s.check(t, hooked, [3]int{2, 2, 0}, onR0, fellOver, fellOver)
-	})
-}
-
-// TestLoadsFollowAFallback: a query that fell over to the primary loads its
-// With relations there too.
-func TestLoadsFollowAFallback(t *testing.T) {
-	bothPaths(t, func(t *testing.T, hooked bool) {
-		s := openFailover(hooked)
-		s.r0.Errs = []error{driver.ErrBadConn}
-		s.p.Results = [][][]any{{invoiceRow(1), invoiceRow(2)}, {itemRow(10, 1, "A", 1), itemRow(11, 2, "B", 1)}}
-		invs, err := s.db.Query[testmodel.Invoice]().With(I.Items).Limit(10).All(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if items, ok := invs[1].Items.Get(); !ok || len(items) != 1 || items[0].SKU != "B" {
-			t.Fatalf("items %v, loaded %v", items, ok)
-		}
-		s.check(t, hooked, [3]int{2, 1, 0}, fellOver, onPrimary)
-	})
-}
-
-// TestAroundRetryAfterFallbackStaysOnThePrimary: an Around hook that retries
-// after a fallback whose retry failed sends the statement where its Route
-// says, the primary, not back to the failed replica.
-func TestAroundRetryAfterFallbackStaysOnThePrimary(t *testing.T) {
-	var routes []velox.Route
-	s := openFailover(false, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
-		err := next(ctx)
-		if err != nil {
-			err = next(ctx)
-		}
-		routes = append(routes, st.Route)
-		return err
-	}))
-	s.r0.Errs, s.p.Errs = []error{driver.ErrBadConn}, []error{errors.New("primary hiccup")}
-	readOne(t, ctx, s.db)
-	s.check(t, false, [3]int{2, 1, 0})
-	if len(routes) != 1 || routes[0] != fellOver {
-		t.Errorf("routes %+v, want one fallback", routes)
-	}
 }
 
 // TestDownReplicaTurnsSpreadEvenly: while one of three replicas is in

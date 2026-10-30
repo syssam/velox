@@ -17,12 +17,11 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
-	_ "modernc.org/sqlite"
-
-	velox "github.com/syssam/velox2"
+	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/internal/bindmodel/bindtype"
 	"github.com/syssam/velox2/internal/testmodel"
 	"github.com/syssam/velox2/internal/testmodel/kind"
+	_ "modernc.org/sqlite"
 )
 
 // unreachablePG is a PostgreSQL DSN that nothing listens on: the tests that

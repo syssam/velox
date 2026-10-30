@@ -8,6 +8,12 @@ linters:
       # gqlgen's output, which velox2 does not write and CI regenerates and diffs.
       - path: ^example/graphql/graph/generated\.go$
         linters: [staticcheck]
+      # Test entities, exported only because two test packages share them.
+      - path: ^internal/apitest/fixture/
+        linters: [revive]
+      - path: ^internal/apitest/fixture/
+        linters: [staticcheck]
+        text: ST102
   settings:
     staticcheck:
       # All, which is the default plus ST1003, ST1016, ST1020, ST1021 and ST1022;
