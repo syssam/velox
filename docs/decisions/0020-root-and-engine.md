@@ -37,12 +37,13 @@ The rest did not have to. Measured with the type checker: `Statement`, `Predicat
 
 ## Cost
 
-- `go doc velox.Statement` and pkg.go.dev show an alias, not a struct. The alias's
-  comment therefore lists its exported fields and methods, and
+- `go doc velox.Statement` and pkg.go.dev show an alias, not a struct. The comment of
+  an alias of an engine type therefore lists its exported fields and methods, and
   `TestAliasDocsListMembers` fails when they drift apart. It is still less than a real
-  declaration: no links per field.
-- The engine's exports are wide, about 240 names, because the root needs them. Only
-  this module can import them.
+  declaration: no links per field. Decision 0021 moved the plain data types to the
+  public package `dbtype`, whose aliases need no list.
+- The engine's exports are wide, 375 top-level names, 53 of them aliases of `dbtype`,
+  because the root needs them. Only this module can import them.
 - Caller capture and the check for `One` and `Many` knew one package, and now know both.
 
 `DB`'s pipeline was the last step, and is done: `run`, `prepare`, `exec`, `route`,

@@ -6,8 +6,8 @@ migrations. It is before 1.0: the API can still change.
 
 ## Modules
 
-- `github.com/syssam/velox2`: the runtime, with `schema`, `migrate`, `plugin`
-  and `cmd/velox-gen`.
+- `github.com/syssam/velox2`: the runtime, with `schema`, `migrate`, `plugin`,
+  `dbtype` and `cmd/velox-gen`.
 - `github.com/syssam/velox2/contrib/graphql`: the GraphQL generator and
   `veloxgql`.
 - `github.com/syssam/velox2/contrib/veloxotel`: OpenTelemetry tracing and

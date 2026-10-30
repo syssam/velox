@@ -26,6 +26,9 @@ This summarizes what a user of the tree before the hardening work must know.
 - `field.String(...).MinRuneLen` and `MaxRuneLen`: lengths in characters.
 - `schema.Check(name, expr)`: a CHECK constraint on a schema's table, which migrations
   plan and drift compares.
+- `dbtype`: the plain data types, such as `Result`, `ConstraintError` and `ColumnDesc`,
+  with real documentation. `velox.Result` and the rest are aliases of them, and code
+  that uses them does not change.
 
 ### Changed
 
