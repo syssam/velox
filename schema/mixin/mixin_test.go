@@ -43,3 +43,11 @@ func TestTimeSchemaDefault(t *testing.T) {
 		t.Fatalf("%d fields", len(fs))
 	}
 }
+
+// TestSchemaIsEmpty: an embedded Schema contributes nothing until a method overrides it.
+func TestSchemaIsEmpty(t *testing.T) {
+	var s mixin.Schema
+	if s.Fields() != nil || s.Indexes() != nil || s.Annotations() != nil {
+		t.Errorf("mixin.Schema: %v %v %v", s.Fields(), s.Indexes(), s.Annotations())
+	}
+}

@@ -208,6 +208,22 @@ starts PostgreSQL, and writes `bench/compare/results/`. The last report is
 Name the area, then what changed: `migrate: a PostgreSQL unique constraint is
 Index.Constraint`. Stage files by name. Run the checks above before you push.
 
+## Releases
+
+The root, `contrib/graphql` and `contrib/veloxotel` are published together, at one
+version. In the tree the contrib modules reach the root through a `replace`, which Go
+ignores in a dependency, so each tag must require a real version of the root.
+`scripts/release.sh` does that in three steps, and only prints what to push:
+
+```sh
+scripts/release.sh root v1.2.3     # then push the tag
+scripts/release.sh contrib v1.2.3  # then push the commit and the two tags
+scripts/release.sh dev v1.2.3      # then push the commit
+```
+
+After the first tag, compare the API with the last release before tagging:
+`go run golang.org/x/exp/cmd/apidiff@latest`.
+
 ## License
 
 See the License section of README.md.

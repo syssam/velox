@@ -149,3 +149,16 @@ func TestOnDelete(t *testing.T) {
 		}
 	}
 }
+
+// TestBuildersSetTheirFields covers each builder's setters, which velox-gen reads.
+func TestBuildersSetTheirFields(t *testing.T) {
+	type T = schema.Schema
+	to := edge.To("a", T.Type).Unique().Immutable().Field("a_id").Comment("c").Annotations(schema.Comment("x")).Descriptor()
+	if !to.Unique || !to.Immutable || to.Field != "a_id" || to.Comment != "c" || len(to.Annotations) != 1 {
+		t.Errorf("To: %+v", to)
+	}
+	from := edge.From("b", T.Type).Ref("a").Required().Immutable().StorageKey(edge.Column("b_id")).Comment("c").Annotations(schema.Comment("x")).Descriptor()
+	if !from.Required || !from.Immutable || len(from.Columns) != 1 || from.Columns[0] != "b_id" || from.Comment != "c" || len(from.Annotations) != 1 {
+		t.Errorf("From: %+v", from)
+	}
+}
