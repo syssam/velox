@@ -26,7 +26,7 @@ each.
 `bash scripts/ci-local.sh` is the local mirror of CI. It needs Docker. Run it
 before you push.
 
-It starts PostgreSQL 18 and MySQL 8.4 from `docker-compose.ci.yml`, sets the
+It starts PostgreSQL 18 and MySQL 8.4 from `scripts/docker-compose.ci.yml`, sets the
 database variables below, and runs what CI runs, module by module, in this
 order:
 
@@ -80,19 +80,19 @@ runs.
 | `VELOX_TEST_MYSQL_ADMIN` | MySQL's root DSN. The routing and migrate tests use it to make databases beside the test one. |
 | `VELOX_ITEST_REQUIRE` | When it is `1`, a test run fails if a database variable it needs is unset, rather than skipping. CI and `ci-local.sh` set it. |
 | `VELOX_DB` | The database DSN that `velox-gen migrate apply`, `status`, `drift`, `baseline` and `resolve` read when `-db` is not given. It is not a test variable. |
-| `VELOX_CI_POSTGRES_IMAGE` | The PostgreSQL image of `docker-compose.ci.yml`. The default is PostgreSQL 18. `VELOX_CI_MATRIX=1` sets it to 14. |
+| `VELOX_CI_POSTGRES_IMAGE` | The PostgreSQL image of `scripts/docker-compose.ci.yml`. The default is PostgreSQL 18. `VELOX_CI_MATRIX=1` sets it to 14. |
 
 To run the database tests without `ci-local.sh`, start the same databases and
-export the DSNs of `docker-compose.ci.yml`:
+export the DSNs of `scripts/docker-compose.ci.yml`:
 
 ```sh
-docker compose -f docker-compose.ci.yml -p velox2-ci up -d --wait
+docker compose -f scripts/docker-compose.ci.yml -p velox2-ci up -d --wait
 export VELOX_TEST_POSTGRES='postgres://velox:velox@127.0.0.1:55432/velox?sslmode=disable'
 export VELOX_TEST_MYSQL='velox:velox@tcp(127.0.0.1:53306)/velox?parseTime=true&clientFoundRows=true'
 export VELOX_TEST_MYSQL_ADMIN='root:velox@tcp(127.0.0.1:53306)/?parseTime=true&clientFoundRows=true'
 export VELOX_ITEST_REQUIRE=1
 go test -race -count=1 ./...
-docker compose -f docker-compose.ci.yml -p velox2-ci down -v
+docker compose -f scripts/docker-compose.ci.yml -p velox2-ci down -v
 ```
 
 Do not run this while `ci-local.sh` runs: both use the compose project

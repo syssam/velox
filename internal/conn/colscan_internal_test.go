@@ -1,4 +1,4 @@
-package velox
+package conn
 
 import (
 	"context"
@@ -66,7 +66,6 @@ var scanCases = []scanCase{
 	{reflect.TypeFor[*cents](), true},
 	{reflect.TypeFor[*moment](), true},
 
-	{reflect.TypeFor[*codecScanner](), false},
 	{reflect.TypeFor[*sql.NullString](), false},
 	{reflect.TypeFor[*scanned](), false},
 	{reflect.TypeFor[**scanned](), false},
@@ -111,7 +110,7 @@ func TestBeginKeepsColumnScan(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() })
 	ctx := context.Background()
 	for _, cols := range []bool{true, false} {
-		ex, tx, err := sqlExecutor{c: db, db: db, cols: cols}.Begin(ctx, sql.TxOptions{})
+		ex, tx, err := NewSQLCols(db, cols).Begin(ctx, sql.TxOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}

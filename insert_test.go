@@ -85,7 +85,7 @@ func TestInsertMySQLReadsLastInsertID(t *testing.T) {
 }
 
 // TestInsertMySQLReadsTheKeyWithAnUnknownCount: on MySQL, an insert whose
-// driver could not report its count (affected -1, as sqlExecutor gives for a
+// driver could not report its count (affected -1, as conn.SQL gives for a
 // RowsAffected error) still stores the key LastInsertId gave.
 func TestInsertMySQLReadsTheKeyWithAnUnknownCount(t *testing.T) {
 	e := &velox.FakeExec{Affected: -1, LastID: 9, HasLastID: true}

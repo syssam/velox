@@ -2,7 +2,7 @@
 // check of a column's type at the first step: colScanner, and scanWraps, the
 // rule for the destinations it wraps.
 
-package velox
+package conn
 
 import (
 	"database/sql"
@@ -26,7 +26,7 @@ func (s *colScanner) Scan(src any) error {
 }
 
 // pgBytesScanner is pgtype.BytesScanner, and pgArraySetter the part of
-// pgtype.ArraySetter that does not name a pgtype type; TestPgxTypesMirrored pins
+// pgtype.ArraySetter that does not name a pgtype type; TestPgxScanInterfacesMirrored pins
 // both. A type that has only this part is not wrapped, which leaves its
 // handling as it was.
 type (
@@ -144,10 +144,10 @@ func (r *colRows) Scan(dst ...any) error {
 	return r.Rows.Scan(r.args...)
 }
 
-// pgxStdlib reports whether db's driver is pgx's stdlib driver, however db
+// PgxStdlib reports whether db's driver is pgx's stdlib driver, however db
 // was opened from it. A driver that wraps it is not detected. A nil db, which
 // Open allows for a DB that only renders, is not.
-func pgxStdlib(db *sql.DB) bool {
+func PgxStdlib(db *sql.DB) bool {
 	if db == nil {
 		return false
 	}

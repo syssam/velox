@@ -45,7 +45,7 @@ case "$(go env GOVERSION)" in
 esac
 command -v docker >/dev/null || { echo "run.sh needs docker" >&2; exit 1; }
 
-compose=(docker compose -f docker-compose.ci.yml -p velox2-ci)
+compose=(docker compose -f scripts/docker-compose.ci.yml -p velox2-ci)
 # Checked at the start and again right before `up`, hours later: a stack that
 # someone started in between would be joined, and then torn down.
 require_no_stack() {

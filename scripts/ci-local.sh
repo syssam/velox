@@ -19,7 +19,7 @@ if [ "${VELOX_CI_MATRIX:-}" = 1 ]; then
   [ "$(printf '%s\n' "$pg14" | grep -c .)" = 1 ] || { echo "ci-local.sh: no single postgres:14 image in .github/workflows/ci.yml's matrix" >&2; exit 1; }
 fi
 
-compose=(docker compose -f docker-compose.ci.yml -p velox2-ci)
+compose=(docker compose -f scripts/docker-compose.ci.yml -p velox2-ci)
 # Registered before "up" so a failed or interrupted start still tears down.
 trap '"${compose[@]}" down -v' EXIT
 "${compose[@]}" up -d --wait
@@ -56,7 +56,7 @@ bin/velox-gen verify -out internal/testmodel ./internal/testmodel/schema
 bin/velox-gen -check -out internal/bindmodel -package bindmodel ./internal/bindmodel/schema
 bin/velox-gen verify -out internal/bindmodel ./internal/bindmodel/schema
 # golangci-lint's revive skips generated files; revive itself lints velox-gen's.
-go run github.com/mgechev/revive@v1.17.0 -config revive.toml -set_exit_status ./internal/testmodel ./internal/bindmodel
+go run github.com/mgechev/revive@v1.17.0 -config scripts/revive.toml -set_exit_status ./internal/testmodel ./internal/bindmodel
 
 # The example is its own module: its own vet, lint, tests and generated files.
 (
@@ -65,7 +65,7 @@ go run github.com/mgechev/revive@v1.17.0 -config revive.toml -set_exit_status ./
   go vet ./...
   go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
   # golangci-lint's revive skips generated files; revive itself lints velox-gen's.
-  go run github.com/mgechev/revive@v1.17.0 -config ../revive.toml -set_exit_status ./*/gen
+  go run github.com/mgechev/revive@v1.17.0 -config ../scripts/revive.toml -set_exit_status ./*/gen
   go test -race -count=1 -coverprofile="$root/cover-example.out" ./...
   for d in */schema; do
     x=${d%/schema}

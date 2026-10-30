@@ -8,7 +8,26 @@ import (
 	"strconv"
 	"sync/atomic"
 	"time"
+
+	"github.com/syssam/velox2/internal/conn"
 )
+
+// The driver-facing types are internal/conn's, so that velox's driver packages
+// can implement them.
+type (
+	rows      = conn.Rows
+	result    = conn.Result
+	txControl = conn.Tx
+	executor  = conn.Executor
+)
+
+// txOptions are a transaction's options; TxOption sets them.
+type txOptions struct {
+	isolation sql.IsolationLevel
+	readOnly  bool
+	retries   int
+	timeout   time.Duration // TxTimeout; 0: the DB's Tx default
+}
 
 // TxOption configures one call of DB.Tx: TxIsolation, TxReadOnly,
 // TxRetrySerializable and TxTimeout. The zero TxOption is not valid: TxRetries

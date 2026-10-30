@@ -3,13 +3,17 @@ package velox
 import (
 	"context"
 	"database/sql"
-	"database/sql/driver"
 	"fmt"
 	"reflect"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/syssam/velox2/internal/conn"
 )
+
+// A JSON column's destination must stay unwrapped: conn wraps no sql.Scanner.
+var _ sql.Scanner = (*codecScanner)(nil)
 
 // FakeExec is an executor that returns Rows for every query and records what
 // it was sent. Queries may run on it concurrently; read its fields only when
@@ -542,23 +546,14 @@ func sameNode(a, b node) bool {
 	return true
 }
 
-// ScanWraps reports whether a destination of type t is wrapped in a colScanner.
-func ScanWraps(t reflect.Type) bool { return scanWraps(t) }
-
-// ColumnScan scans src into dst, a pointer to a field, through a colScanner and
-// database/sql's own entry, as pgx's stdlib driver calls it.
-func ColumnScan(dst, src any) error {
-	return sql.ConvertAssign(driver.ScanContext{}, &colScanner{dst: dst}, src)
-}
-
 // OpenColumnScan returns a DB on db whose rows are colRows when wrap is set,
 // whatever db's driver.
 func OpenColumnScan(d Dialect, db *sql.DB, wrap bool) *DB {
-	return newDB(d, sqlExecutor{c: db, db: db, cols: wrap}, nil)
+	return newDB(d, conn.NewSQLCols(db, wrap), nil)
 }
 
 // PgxStdlib reports whether db's driver is pgx's stdlib driver.
-func PgxStdlib(db *sql.DB) bool { return pgxStdlib(db) }
+func PgxStdlib(db *sql.DB) bool { return conn.PgxStdlib(db) }
 
 // RowsAreColumnScanning runs SELECT 1 on db, a DB made by Open, and reports
 // whether its rows are colRows.
@@ -568,9 +563,8 @@ func RowsAreColumnScanning(db *DB) bool {
 		panic(err)
 	}
 	defer r.Close()
-	_, ok := r.(*colRows)
-	return ok
+	return conn.RowsColumnScanning(r)
 }
 
 // ConnColumnScanning reports whether c's executor makes colRows.
-func ConnColumnScanning(c Conn) bool { return c.ex.(sqlExecutor).cols }
+func ConnColumnScanning(c Conn) bool { return c.ex.(conn.SQL).ColumnScanning() }

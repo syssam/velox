@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// TestReviveConfigsAgree pins revive.toml, which CI runs on generated code, to
+// TestReviveConfigsAgree pins scripts/revive.toml, which CI runs on generated code, to
 // the revive rules of .golangci.yml: the same rules, in the same order, with
 // the same arguments.
 func TestReviveConfigsAgree(t *testing.T) {
@@ -16,7 +16,7 @@ func TestReviveConfigsAgree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	toml, err := os.ReadFile("revive.toml")
+	toml, err := os.ReadFile("scripts/revive.toml")
 	if err != nil {
 		t.Fatal(err)
 	}

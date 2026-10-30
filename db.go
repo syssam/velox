@@ -9,6 +9,8 @@ import (
 	"slices"
 	"sync/atomic"
 	"time"
+
+	"github.com/syssam/velox2/internal/conn"
 )
 
 // DB runs statements, inside or outside a transaction. It is the only type
@@ -126,7 +128,7 @@ func Open(d Dialect, db *sql.DB, opts ...Option) *DB {
 	if !d.valid() {
 		panic(fmt.Sprintf("velox: Open: unknown %v; use velox.Postgres, velox.MySQL or velox.SQLite", d))
 	}
-	return newDB(d, newSQLExecutor(db), opts)
+	return newDB(d, conn.NewSQL(db), opts)
 }
 
 // OpenConn returns a DB of dialect d whose primary is c. veloxpgx.Open is this

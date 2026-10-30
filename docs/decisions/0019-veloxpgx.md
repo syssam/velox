@@ -20,7 +20,8 @@ neither of the other two drivers: it recognizes their errors by type name.
   go.mod lists pgx as indirect only when velox-gen is a `tool` there, which needs
   pgx to run; that is velox-gen's binary, not the application's. A second module
   would add a second tag to release in step with the first, and change neither.
-- The driver interface is `internal/conn`, so it is no API: nothing outside the
+- The driver interface is `internal/conn`, beside the database/sql executor and
+  the scan wrapper of decision 0018, so it is no API: nothing outside the
   module can implement it. Two functions cross into the core: `velox.OpenConn`,
   which is useful as it stands, and `velox.DriverConn`, whose parameter an
   application cannot name. If third-party drivers are wanted later, `internal/conn`

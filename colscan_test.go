@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -18,7 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 
-	"github.com/syssam/velox2"
+	velox "github.com/syssam/velox2"
 	"github.com/syssam/velox2/internal/bindmodel/bindtype"
 	"github.com/syssam/velox2/internal/testmodel"
 	"github.com/syssam/velox2/internal/testmodel/kind"
@@ -232,17 +233,48 @@ func TestColumnScanAllocsPerQuery(t *testing.T) {
 	}
 }
 
+// matchMoment is a struct type that converts to time.Time, with no methods.
+type matchMoment time.Time
+
 // matchDests are the destination types TestColumnScanMatchesPlain scans
-// into: fuzzDests, and destinations that are left unwrapped.
+// into: the wrapped types that tests outside the package can name, and
+// destinations that are left unwrapped.
 func matchDests() []reflect.Type {
-	return append(append([]reflect.Type{}, fuzzDests...),
+	return []reflect.Type{
+		reflect.TypeFor[*int](),
+		reflect.TypeFor[*int8](),
+		reflect.TypeFor[*int16](),
+		reflect.TypeFor[*int32](),
+		reflect.TypeFor[*int64](),
+		reflect.TypeFor[*uint](),
+		reflect.TypeFor[*uint8](),
+		reflect.TypeFor[*uint16](),
+		reflect.TypeFor[*uint32](),
+		reflect.TypeFor[*uint64](),
+		reflect.TypeFor[*float32](),
+		reflect.TypeFor[*float64](),
+		reflect.TypeFor[*bool](),
+		reflect.TypeFor[*string](),
+		reflect.TypeFor[*[]byte](),
+		reflect.TypeFor[*time.Time](),
+		reflect.TypeFor[**string](),
+		reflect.TypeFor[**int64](),
+		reflect.TypeFor[**time.Time](),
+		reflect.TypeFor[**float64](),
+		reflect.TypeFor[**bool](),
+		reflect.TypeFor[*json.RawMessage](),
+		reflect.TypeFor[*kind.Status](),
+		reflect.TypeFor[**kind.Status](),
+		reflect.TypeFor[*kind.Cents](),
+		reflect.TypeFor[*matchMoment](),
+		reflect.TypeFor[**matchMoment](),
 		reflect.TypeFor[*kind.Moment](),
 		reflect.TypeFor[**kind.Moment](),
 		reflect.TypeFor[*bindtype.UUID](),
 		reflect.TypeFor[*bindtype.Level](),
 		reflect.TypeFor[*sql.NullInt64](),
 		reflect.TypeFor[*any](),
-	)
+	}
 }
 
 // sameTimeZone reports whether a and b, scanned destinations that agree,

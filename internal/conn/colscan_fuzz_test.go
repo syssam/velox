@@ -1,4 +1,4 @@
-package velox_test
+package conn_test
 
 import (
 	"database/sql"
@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox2/internal/conn"
 	"github.com/syssam/velox2/internal/testmodel/kind"
 )
 
@@ -115,7 +115,7 @@ func FuzzColumnScan(f *testing.F) {
 		}
 		typ := fuzzDests[int(which)%len(fuzzDests)]
 		d1, d2 := reflect.New(typ.Elem()), reflect.New(typ.Elem())
-		err1 := velox.ColumnScan(d1.Interface(), src)
+		err1 := conn.ColumnScan(d1.Interface(), src)
 		err2 := sql.ConvertAssign(driver.ScanContext{}, d2.Interface(), src)
 		if (err1 == nil) != (err2 == nil) {
 			t.Fatalf("%s from %#v: wrapped error %v, plain error %v", typ, src, err1, err2)

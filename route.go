@@ -30,7 +30,7 @@ func SQLConn(db *sql.DB) Conn {
 	if db == nil {
 		panic("velox: SQLConn(nil)")
 	}
-	return Conn{ex: newSQLExecutor(db)}
+	return Conn{ex: conn.NewSQL(db)}
 }
 
 // DriverConn returns a Conn on ex, valid only on dialect d. It is for velox's
