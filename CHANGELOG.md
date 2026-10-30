@@ -21,6 +21,17 @@ Each entry names the finding or the commit it comes from.
 
 This summarizes what a user of the tree before the hardening work must know.
 
+### Changed
+
+- `velox.WithTags` no longer panics on an odd number of strings: the last key takes
+  the value "".
+- A PostgreSQL error is recognized by its `SQLState` method, in any pgx version, and
+  no longer only by the type `*pgconn.PgError` of pgx v5.
+
+### Removed
+
+- `velox.DriverConn`, whose parameter no code outside the module could name.
+
 ### Added
 
 Examples

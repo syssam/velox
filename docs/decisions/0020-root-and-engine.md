@@ -36,7 +36,7 @@ The rest did not have to. Measured with the type checker: `Statement`, `Predicat
   `TestAliasDocsListMembers` fails when they drift apart. It is still less than a real
   declaration: no links per field.
 - The engine's exports are wide, about 240 names, because the root needs them. Only
-  this module can import them, and `DriverConn` already takes an internal type.
+  this module can import them.
 - Caller capture and the check for `One` and `Many` knew one package, and now know both.
 
 `DB`'s pipeline (`run`, `prepare`, `exec`, `route`, `scope`) is still in the root, about

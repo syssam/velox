@@ -20,6 +20,7 @@ import (
 
 	velox "github.com/syssam/velox2"
 	"github.com/syssam/velox2/internal/conn"
+	"github.com/syssam/velox2/internal/engine"
 )
 
 // Open returns a DB for PostgreSQL that runs statements through pool, which
@@ -36,7 +37,7 @@ func Conn(pool *pgxpool.Pool) velox.Conn {
 	if pool == nil {
 		panic("veloxpgx: Conn(nil)")
 	}
-	return velox.DriverConn(velox.Postgres, executor{c: pool, pool: pool})
+	return engine.DriverConn(velox.Postgres, executor{c: pool, pool: pool})
 }
 
 type queryer interface {

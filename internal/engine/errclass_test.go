@@ -56,8 +56,8 @@ func TestPgxTypesMirrored(t *testing.T) {
 	if !DriverSentinel(fmt.Errorf("x: %w", pgconn.ErrConnClosed), PgConnClosed) || !Ended(fmt.Errorf("x: %w", pgx.ErrTxClosed)) {
 		t.Error("pgx's sentinels are not recognized through a wrap")
 	}
-	if got := reflect.TypeFor[pgconn.PgError]().PkgPath(); got != PgconnPkg {
-		t.Errorf("PgError is in %q, pgconnPkg is %q", got, PgconnPkg)
+	if !PgConnectError(fmt.Errorf("x: %w", &pgconn.ConnectError{})) {
+		t.Error("PgConnectError does not recognize *pgconn.ConnectError")
 	}
 	pg, ok := PgErrorOf(fmt.Errorf("x: %w", &pgconn.PgError{Code: "23502", ConstraintName: "c", ColumnName: "k"}))
 	if want := (pgErr{Code: "23502", ConstraintName: "c", ColumnName: "k"}); !ok || pg != want {
@@ -84,5 +84,30 @@ func TestResultColumnsOfPgxRows(t *testing.T) {
 	got, err := resultColumns(pgxRowsNames{})
 	if err != nil || !slices.Equal(got, []string{"id", "number"}) {
 		t.Errorf("columns %v, error %v", got, err)
+	}
+}
+
+// otherPgError stands for the PgError of another pgx major version, or of another
+// PostgreSQL driver: what it shares with pgx's is the SQLState method.
+type otherPgError struct {
+	ConstraintName string
+	ColumnName     int // not a string: read as empty
+}
+
+func (*otherPgError) Error() string    { return "other" }
+func (*otherPgError) SQLState() string { return "23505" }
+
+func TestPgErrorOfReadsSQLState(t *testing.T) {
+	err := fmt.Errorf("x: %w", &otherPgError{ConstraintName: "c", ColumnName: 1})
+	pg, ok := PgErrorOf(err)
+	if !ok || pg != (pgErr{Code: "23505", ConstraintName: "c"}) {
+		t.Errorf("PgErrorOf = %+v, %v", pg, ok)
+	}
+	if ce := Constraint("e", err); ce == nil || ce.Kind != ConstraintUnique || ce.Constraint != "c" {
+		t.Errorf("Constraint = %+v", ce)
+	}
+	var nilPg *otherPgError
+	if _, ok := PgErrorOf(fmt.Errorf("x: %w", nilPg)); ok {
+		t.Error("PgErrorOf read a nil pointer")
 	}
 }

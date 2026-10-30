@@ -1,4 +1,4 @@
-package velox
+package repocheck
 
 import (
 	"fmt"
@@ -14,9 +14,10 @@ import (
 	"github.com/syssam/velox2/internal/tempmod"
 )
 
+// repoRoot is the repository's root, two directories above this file.
 func repoRoot() string {
 	_, file, _, _ := runtime.Caller(0)
-	return filepath.Dir(file)
+	return filepath.Join(filepath.Dir(file), "..", "..")
 }
 
 // entityDescSrc is the minimal entity velox-gen writes, with no Policy or
@@ -373,7 +374,7 @@ func TestGenericTypesCompileSmall(t *testing.T) {
 func TestObservabilityIsNotGeneric(t *testing.T) {
 	fset := token.NewFileSet()
 	for _, name := range []string{"internal/engine/tags.go", "internal/engine/callers.go", "internal/engine/comment.go", "internal/engine/txhook.go", "txhook.go"} {
-		f, err := parser.ParseFile(fset, name, nil, parser.SkipObjectResolution)
+		f, err := parser.ParseFile(fset, filepath.Join(repoRoot(), name), nil, parser.SkipObjectResolution)
 		if err != nil {
 			t.Fatal(err)
 		}

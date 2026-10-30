@@ -2,6 +2,8 @@ module github.com/syssam/velox2/bench/compare
 
 go 1.27.0
 
+toolchain go1.27.3
+
 replace github.com/syssam/velox2 => ../..
 
 require (

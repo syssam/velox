@@ -2,6 +2,8 @@ module github.com/syssam/velox2/contrib/veloxotel
 
 go 1.27.0
 
+toolchain go1.27.3
+
 require (
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/syssam/velox2 v0.0.0-00010101000000-000000000000
@@ -24,7 +26,7 @@ require (
 	go.opentelemetry.io/otel/log v1.47.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
-	golang.org/x/text v0.29.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
 )
 
 replace github.com/syssam/velox2 => ../..

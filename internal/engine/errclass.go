@@ -7,18 +7,17 @@ import (
 	"strings"
 )
 
-// PgconnPkg is the package of pgx's errors, and PgConnClosed and pgTxClosed the
-// text of its ErrConnClosed and ErrTxClosed. TestPgxTypesMirrored pins them.
+// PgConnClosed and pgTxClosed are the text of pgx's ErrConnClosed and ErrTxClosed.
+// TestPgxTypesMirrored pins them.
 const (
-	PgconnPkg    = "github.com/jackc/pgx/v5/pgconn"
 	PgConnClosed = "conn closed"
 	pgTxClosed   = "tx is closed"
 )
 
 // Constraint reads a driver error as a violated constraint, or returns nil.
-// velox does not import the drivers, so their errors are recognized by type
-// name; PostgreSQL's are read from pgx's fields by name, MySQL's and SQLite's
-// from their text.
+// velox does not import the drivers. A PostgreSQL error is one with a SQLState
+// method, whose constraint and column come from its fields by name; MySQL's and
+// SQLite's are recognized by type name and read from their text.
 func Constraint(entity string, err error) *ConstraintError {
 	var kind ConstraintKind
 	var name string
@@ -40,19 +39,44 @@ func Constraint(entity string, err error) *ConstraintError {
 // pgErr is what velox reads of a *pgconn.PgError.
 type pgErr struct{ Code, ConstraintName, ColumnName string }
 
-// PgErrorOf reads the first *pgconn.PgError in err's tree that is not a nil
-// pointer.
+// PgErrorOf reads the first error in err's tree that is not a nil pointer and
+// reports a SQLSTATE through a SQLState method, as *pgconn.PgError does in every
+// pgx version. A driver's fields of other names read as empty.
 func PgErrorOf(err error) (pgErr, bool) {
-	e := DriverError(err, PgconnPkg, "PgError")
-	if e == nil {
-		return pgErr{}, false
+	var pg pgErr
+	found := Walk(err, func(e error) bool {
+		s, ok := e.(interface{ SQLState() string })
+		if ok {
+			pg = pgErr{s.SQLState(), stringField(e, "ConstraintName"), stringField(e, "ColumnName")}
+		}
+		return ok
+	})
+	return pg, found
+}
+
+// stringField is the string field name of the struct e points to, or "".
+func stringField(e error, name string) string {
+	v := reflect.Indirect(reflect.ValueOf(e))
+	if v.Kind() != reflect.Struct {
+		return ""
 	}
-	v := reflect.ValueOf(e).Elem()
-	return pgErr{
-		Code:           v.FieldByName("Code").String(),
-		ConstraintName: v.FieldByName("ConstraintName").String(),
-		ColumnName:     v.FieldByName("ColumnName").String(),
-	}, true
+	f := v.FieldByName(name)
+	if f.Kind() != reflect.String {
+		return ""
+	}
+	return f.String()
+}
+
+// PgConnectError reports a *pgconn.ConnectError of any pgx version in err's tree.
+func PgConnectError(err error) bool {
+	return Walk(err, func(e error) bool {
+		t := reflect.TypeOf(e)
+		if t.Kind() != reflect.Pointer || t.Elem().Name() != "ConnectError" {
+			return false
+		}
+		path := t.Elem().PkgPath()
+		return strings.HasPrefix(path, "github.com/jackc/pgx/") && strings.HasSuffix(path, "/pgconn")
+	})
 }
 
 // Locked reports a lock that could not be taken without waiting: PostgreSQL's

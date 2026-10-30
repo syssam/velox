@@ -1,4 +1,4 @@
-package velox
+package repocheck
 
 import (
 	"os/exec"

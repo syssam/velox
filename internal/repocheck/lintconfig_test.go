@@ -1,7 +1,8 @@
-package velox_test
+package repocheck
 
 import (
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -12,11 +13,11 @@ import (
 // the revive rules of .golangci.yml: the same rules, in the same order, with
 // the same arguments.
 func TestReviveConfigsAgree(t *testing.T) {
-	yml, err := os.ReadFile(".golangci.yml")
+	yml, err := os.ReadFile(filepath.Join(repoRoot(), ".golangci.yml"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	toml, err := os.ReadFile("scripts/revive.toml")
+	toml, err := os.ReadFile(filepath.Join(repoRoot(), "scripts/revive.toml"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -2,7 +2,6 @@ package engine
 
 import (
 	"context"
-	"fmt"
 	"slices"
 )
 
@@ -15,10 +14,12 @@ type tagsKey struct{}
 
 // WithTags returns ctx with the tags kv (key, value, key, value, …) added: a
 // key already on ctx keeps its place and takes the new value; a new key is
-// appended. An odd number of strings panics; none returns ctx unchanged.
+// appended. A last key with no value takes the value "", as WithTags runs on a
+// request's path, where a mistake should cost a tag and not the request; no
+// strings return ctx unchanged.
 func WithTags(ctx context.Context, kv ...string) context.Context {
 	if len(kv)%2 != 0 {
-		panic(fmt.Sprintf("velox: WithTags: %d strings; it takes key, value pairs", len(kv)))
+		kv = append(slices.Clip(kv), "")
 	}
 	if len(kv) == 0 {
 		return ctx

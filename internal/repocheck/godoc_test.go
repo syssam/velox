@@ -1,4 +1,4 @@
-package velox
+package repocheck
 
 import (
 	"go/ast"
@@ -262,7 +262,7 @@ func firstDoc(gs ...*ast.CommentGroup) string {
 func TestAliasDocsListMembers(t *testing.T) {
 	fset := token.NewFileSet()
 	docs := map[string]string{}
-	f, err := parser.ParseFile(fset, "api.go", nil, parser.ParseComments)
+	f, err := parser.ParseFile(fset, filepath.Join(repoRoot(), "api.go"), nil, parser.ParseComments)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -275,7 +275,7 @@ func TestAliasDocsListMembers(t *testing.T) {
 			}
 		}
 	}
-	files, err := filepath.Glob("internal/engine/*.go")
+	files, err := filepath.Glob(filepath.Join(repoRoot(), "internal/engine/*.go"))
 	if err != nil {
 		t.Fatal(err)
 	}

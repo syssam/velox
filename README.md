@@ -72,6 +72,4 @@ adopting an existing database.
 
 ## License
 
-<!-- LICENSE: TBD -->
-
-The licence is not chosen yet.
+velox2 is licensed under the [Apache License 2.0](LICENSE).

@@ -6,7 +6,6 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/syssam/velox2/internal/conn"
 	"github.com/syssam/velox2/internal/engine"
 )
 
@@ -455,11 +454,6 @@ type Conn = engine.Conn
 // SQLConn returns a Conn that runs statements through db, a *sql.DB the
 // application opened with a driver for the DB's dialect. A nil db panics.
 func SQLConn(db *sql.DB) Conn { return engine.SQLConn(db) }
-
-// DriverConn returns a Conn on ex, valid only on dialect d. It is for velox's
-// own driver packages, such as veloxpgx: nothing outside this module can
-// implement ex.
-func DriverConn(d Dialect, ex conn.Executor) Conn { return engine.DriverConn(d, ex) }
 
 // WithReplicas adds read replicas to a DB's primary, the connection Open or
 // OpenConn was given. A read outside a transaction goes to a replica, each in
@@ -911,7 +905,9 @@ type Tag = engine.Tag
 
 // WithTags returns ctx with the tags kv (key, value, key, value, …) added: a
 // key already on ctx keeps its place and takes the new value; a new key is
-// appended. An odd number of strings panics; none returns ctx unchanged.
+// appended. A last key with no value takes the value "", as WithTags runs on a
+// request's path, where a mistake should cost a tag and not the request; no
+// strings return ctx unchanged.
 func WithTags(ctx context.Context, kv ...string) context.Context { return engine.WithTags(ctx, kv...) }
 
 // TxOption configures one call of DB.Tx: TxIsolation, TxReadOnly,

@@ -2,24 +2,30 @@ package apitest
 
 import (
 	"context"
-	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox2"
+	velox "github.com/syssam/velox2"
 	"github.com/syssam/velox2/internal/fakeconn"
 	"github.com/syssam/velox2/internal/testmodel"
 )
 
-func TestWithTagsOddCountPanics(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil || !strings.Contains(fmt.Sprint(r), "WithTags") {
-			t.Errorf("recovered %v", r)
-		}
-	}()
+func TestWithTagsOddCountTakesAnEmptyValue(t *testing.T) {
+	var tags []velox.Tag
+	db := openFake(velox.MySQL, &fakeconn.Exec{Rows: [][]any{invoiceRow(1)}}, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+		tags = st.Tags
+		return nil
+	}))
 	// Three strings, built at run time: staticcheck refuses an odd literal.
-	velox.WithTags(context.Background(), strings.Fields("route a user")...)
+	ctx := velox.WithTags(context.Background(), strings.Fields("route a user")...)
+	if _, err := db.Query[testmodel.Invoice]().Limit(1).All(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if want := []velox.Tag{{Key: "route", Value: "a"}, {Key: "user"}}; !slices.Equal(tags, want) {
+		t.Errorf("tags = %v, want %v", tags, want)
+	}
 }
 
 func TestHooksSeeTheTags(t *testing.T) {

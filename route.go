@@ -254,7 +254,7 @@ func failoverable(err error) bool {
 		engine.MysqlInvalidConn(err) {
 		return true
 	}
-	if engine.DriverError(err, engine.PgconnPkg, "ConnectError") != nil {
+	if engine.PgConnectError(err) {
 		// Whatever the server said while connecting, such as too many
 		// connections (53300) or a failed login: pgx wraps its PgError in
 		// the ConnectError, so this comes before the PgError check.

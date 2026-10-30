@@ -1,4 +1,4 @@
-package velox_test
+package repocheck
 
 import (
 	"go/ast"
@@ -6,8 +6,6 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -24,18 +22,12 @@ func (s srcImporter) Import(path string) (*types.Package, error) {
 	return s.imp.ImportFrom(path, s.dir, 0)
 }
 
-// moduleRoot is the directory of this file, the module's root.
-func moduleRoot() string {
-	_, file, _, _ := runtime.Caller(0)
-	return filepath.Dir(file)
-}
-
 // The file set and the importer are shared, so that the module's packages are
 // type-checked from source once.
 var (
 	srcFset = token.NewFileSet()
 	srcImp  = sync.OnceValue(func() types.Importer {
-		return srcImporter{moduleRoot(), importer.ForCompiler(srcFset, "source", nil).(types.ImporterFrom)}
+		return srcImporter{repoRoot(), importer.ForCompiler(srcFset, "source", nil).(types.ImporterFrom)}
 	})
 )
 

@@ -3,3 +3,4 @@
 .velox-verify-*/
 /cover-*.out
 /bench/compare/results/
+.DS_Store
