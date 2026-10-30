@@ -93,7 +93,7 @@ func TestHooksOnWrites(t *testing.T) {
 func TestHooksAndConditionsOfRelations(t *testing.T) {
 	ctx := context.Background()
 	co := (*company)(nil).VeloxMeta().info
-	staff, err := co.rels[0].resolve(co, targetOf[employee]())
+	staff, err := infoRels(co)[0].resolve(co, targetOf[employee]())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestHooksAndConditionsOfRelations(t *testing.T) {
 		}, "not a copy of it"},
 		"copy with another policy": {func(_ context.Context, st *Statement) error {
 			info := *st.Entity
-			info.policy = &policy{}
+			setInfoPolicy(&info, &policy{})
 			st.Entity = &info
 			return nil
 		}, "a copy whose tenant column or policy differs"},

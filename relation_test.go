@@ -35,9 +35,9 @@ func TestRelationsResolveWithoutDeadlock(t *testing.T) {
 		{em, 0, em, "boss_id", "id", targetOf[employee]()},    // One
 		{em, 1, co, "company_id", "id", targetOf[company]()},  // One: employee.CompanyID
 	} {
-		l, err := c.owner.rels[c.rel].resolve(c.owner, c.use)
+		l, err := infoRels(c.owner)[c.rel].resolve(c.owner, c.use)
 		if err != nil || l.target != c.target || c.owner.Columns[l.ownerCol].Name != c.ownerCol || l.target.Columns[l.targetCol].Name != c.col {
-			t.Errorf("%s.%s: %+v, %v", c.owner.Name, c.owner.rels[c.rel].name, l, err)
+			t.Errorf("%s.%s: %+v, %v", c.owner.Name, infoRels(c.owner)[c.rel].name, l, err)
 		}
 	}
 }
@@ -48,7 +48,7 @@ func TestResolveRefusesMismatchedKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = info.rels[0].resolve(info, targetOf[keyedLine]())
+	_, err = infoRels(info)[0].resolve(info, targetOf[keyedLine]())
 	var se *SchemaError
 	if !errors.As(err, &se) || !strings.Contains(err.Error(), "the key types differ: velox.keyed.ID is string and velox.keyedLine.KeyedID is int64") {
 		t.Errorf("%v", err)
@@ -84,7 +84,7 @@ func TestResolveWithoutATargetIsAnError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = info.rels[0].resolve(info, useTarget{})
+	_, err = infoRels(info)[0].resolve(info, useTarget{})
 	wantErr(t, err, "Lines: it has no target in the generated code")
 }
 
@@ -93,7 +93,7 @@ func TestNonComparableKeyIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = info.rels[0].resolve(info, targetOf[blobLine]())
+	_, err = infoRels(info)[0].resolve(info, targetOf[blobLine]())
 	wantErr(t, err, "Lines: a key of type []uint8 cannot be compared")
 }
 
@@ -103,7 +103,7 @@ func TestInvalidTargetIsNamed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = info.rels[0].resolve(info, targetOf[brokenTarget]())
+	_, err = infoRels(info)[0].resolve(info, targetOf[brokenTarget]())
 	wantErr(t, err, "T: its target github.com/syssam/velox2.brokenTarget is invalid: velox.brokenTarget: the generated metadata has no Addr; run go tool velox-gen")
 }
 
@@ -113,7 +113,7 @@ func TestInvalidTargetIsNamed(t *testing.T) {
 // relates to and, through them, the whole connected model (the use site names
 // the target: Rel; see TestServiceLinksOnlyItsEntities in bench/scale).
 func TestEdgeThroughKeepsItsJoin(t *testing.T) {
-	if r := EdgeThrough[company, employee]("Through", 0, 0, 0, 0); r.through == nil || r.through.join == nil {
+	if r := EdgeThrough[company, employee]("Through", 0, 0, 0, 0); edgeThrough(r) == nil || edgeThrough(r).join == nil {
 		t.Error("EdgeThrough lost its join entity")
 	}
 }

@@ -37,8 +37,8 @@ func TestSchemaPolicyHooks(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	if len(info.hooks) != 3 {
-		t.Fatalf("%d hooks, want 3", len(info.hooks))
+	if len(infoHooks(info)) != 3 {
+		t.Fatalf("%d hooks, want 3", len(infoHooks(info)))
 	}
 	e := &FakeExec{Rows: [][]any{{int64(1)}}, Affected: 1}
 	db := OpenFake(Postgres, e)
@@ -54,11 +54,11 @@ func TestSchemaPolicyHooks(t *testing.T) {
 		t.Fatalf("the insert hook, run before the write: Tag %q, err %v", x.Tag, err)
 	}
 
-	p := info.policy
+	p := infoPolicy(info)
 	if p == nil || p.read == nil || p.write != nil || p.insert == nil {
 		t.Fatalf("policy %+v", p)
 	}
-	if pr, err := p.read(ctx); err != nil || pr.n.op != opEQ || pr.n.col != 2 || pr.n.v != "r" {
+	if pr, err := p.read(ctx); err != nil || predNode(pr).op != opEQ || predNode(pr).col != 2 || predNode(pr).v != "r" {
 		t.Errorf("read: %+v, %v", pr, err)
 	}
 	x.Title = ""

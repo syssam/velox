@@ -66,3 +66,5 @@ func (d Dialect) noLimit() string {
 	}
 	return "-1"
 }
+
+func quoteIdent(d Dialect, b *strings.Builder, s string) { d.quote(b, s) }

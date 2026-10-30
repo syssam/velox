@@ -704,5 +704,6 @@ func mysqlConnectError(n int) bool {
 // does not import the driver (see constraint).
 func mysqlInvalidConn(err error) bool { return driverSentinel(err, "invalid connection") }
 
-func connExec(c Conn) executor { return c.ex }
-func connOnly(c Conn) Dialect  { return c.only }
+func connExec(c Conn) executor               { return c.ex }
+func connOnly(c Conn) Dialect                { return c.only }
+func newConn(ex executor, only Dialect) Conn { return Conn{ex: ex, only: only} }

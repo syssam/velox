@@ -406,7 +406,7 @@ func TestBidiDeleteKeepsTheStatement(t *testing.T) {
 		if mu.sql != want {
 			t.Errorf("render %d: %s, want %s", i, mu.sql, want)
 		}
-		if len(st.Where) != 1 || st.Where[0].n.op != opEQ || st.Where[0].n.col != 0 {
+		if len(st.Where) != 1 || predNode(st.Where[0]).op != opEQ || predNode(st.Where[0]).col != 0 {
 			t.Fatalf("render %d: the statement's Where became %+v", i, st.Where)
 		}
 	}

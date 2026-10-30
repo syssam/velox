@@ -36,7 +36,7 @@ func FuzzQuote(f *testing.F) {
 	f.Fuzz(func(t *testing.T, ident string) {
 		for _, d := range []Dialect{Postgres, MySQL, SQLite} {
 			var b strings.Builder
-			d.quote(&b, ident)
+			quoteIdent(d, &b, ident)
 			got, ok := unquote(d, b.String())
 			if !ok || got != ident {
 				t.Fatalf("%v: %q quoted as %s does not read back (%q, %v)", d, ident, b.String(), got, ok)
@@ -285,7 +285,7 @@ func FuzzRenderWrite(f *testing.F) {
 					t.Fatalf("%v: unbalanced quotes: %s", d, sql)
 				}
 				var quoted strings.Builder
-				d.quote(&quoted, invInfo.Table)
+				quoteIdent(d, &quoted, invInfo.Table)
 				if !strings.HasPrefix(sql, verb+quoted.String()) {
 					t.Fatalf("%v: not a %s on %s: %s", d, verb, quoted.String(), sql)
 				}

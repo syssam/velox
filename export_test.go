@@ -42,7 +42,7 @@ func (c *renderCache) render(d Dialect, st *Statement) (string, []any) {
 }
 
 // FakeConn returns a Conn that runs statements on e.
-func FakeConn(e *FakeExec) Conn { return Conn{ex: e} }
+func FakeConn(e *FakeExec) Conn { return newConn(e, 0) }
 
 // SetReplicaDown puts db's replica i in back-off until until.
 func SetReplicaDown(db *DB, i int, until time.Time) {
@@ -105,19 +105,19 @@ func Prepare(ctx context.Context, db *DB, st *Statement) error { return db.prepa
 // Kids returns p's sub-conditions: the operands of an And, Or or Not, or the
 // conditions an EXISTS puts on its target.
 func Kids(p Predicate) []Predicate {
-	out := make([]Predicate, len(p.n.kids))
-	for i, k := range p.n.kids {
-		out[i] = Predicate{k}
+	out := make([]Predicate, len(predNode(p).kids))
+	for i, k := range predNode(p).kids {
+		out[i] = newPredicate(k)
 	}
 	return out
 }
 
 // ExistsOn returns the target of an EXISTS; nil for any other condition.
 func ExistsOn(p Predicate) *EntityInfo {
-	if p.n.op != opExists {
+	if predNode(p).op != opExists {
 		return nil
 	}
-	l, ok := p.n.v.(link)
+	l, ok := predNode(p).v.(link)
 	if !ok {
 		return nil
 	}
@@ -141,7 +141,7 @@ func LoadDesc[E any](d Desc[E], targets ...UseTarget) (*EntityInfo, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
-	for i, r := range m.info.rels {
+	for i, r := range infoRels(m.info) {
 		var use useTarget
 		if i < len(targets) {
 			use = targets[i]
@@ -164,7 +164,7 @@ func SamePreds(a, b []Predicate) bool {
 		return false
 	}
 	for i := range a {
-		if !sameNode(a[i].n, b[i].n) {
+		if !sameNode(predNode(a[i]), predNode(b[i])) {
 			return false
 		}
 	}
@@ -212,4 +212,4 @@ func RowsAreColumnScanning(db *DB) bool {
 }
 
 // ConnColumnScanning reports whether c's executor makes colRows.
-func ConnColumnScanning(c Conn) bool { return c.ex.(conn.SQL).ColumnScanning() }
+func ConnColumnScanning(c Conn) bool { return connExec(c).(conn.SQL).ColumnScanning() }

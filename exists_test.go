@@ -13,11 +13,11 @@ import (
 func TestRenderExists(t *testing.T) {
 	em := (*employee)(nil).VeloxMeta().info
 	co := (*company)(nil).VeloxMeta().info
-	staff, err := co.rels[0].resolve(co, targetOf[employee]())
+	staff, err := infoRels(co)[0].resolve(co, targetOf[employee]())
 	if err != nil {
 		t.Fatal(err)
 	}
-	boss, err := em.rels[0].resolve(em, targetOf[employee]())
+	boss, err := infoRels(em)[0].resolve(em, targetOf[employee]())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,8 +46,8 @@ func TestRenderExists(t *testing.T) {
 
 func TestCacheKeepsRelationsApart(t *testing.T) {
 	em := (*employee)(nil).VeloxMeta().info
-	boss, _ := em.rels[0].resolve(em, targetOf[employee]())
-	comp, _ := em.rels[1].resolve(em, targetOf[company]())
+	boss, _ := infoRels(em)[0].resolve(em, targetOf[employee]())
+	comp, _ := infoRels(em)[1].resolve(em, targetOf[company]())
 	var c renderCache
 	a, _ := c.render(Postgres, &Statement{Op: OpSelect, Entity: em, Where: []Predicate{{node{op: opExists, col: 0, v: boss}}}})
 	b, _ := c.render(Postgres, &Statement{Op: OpSelect, Entity: em, Where: []Predicate{{node{op: opExists, col: 1, v: comp}}}})
@@ -63,11 +63,11 @@ func TestCacheKeepsRelationsApart(t *testing.T) {
 func TestCachedExistsRendersLikeRender(t *testing.T) {
 	em := (*employee)(nil).VeloxMeta().info
 	co := (*company)(nil).VeloxMeta().info
-	staff, err := co.rels[0].resolve(co, targetOf[employee]())
+	staff, err := infoRels(co)[0].resolve(co, targetOf[employee]())
 	if err != nil {
 		t.Fatal(err)
 	}
-	boss, err := em.rels[0].resolve(em, targetOf[employee]())
+	boss, err := infoRels(em)[0].resolve(em, targetOf[employee]())
 	if err != nil {
 		t.Fatal(err)
 	}

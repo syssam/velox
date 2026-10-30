@@ -280,12 +280,13 @@ type Around func(ctx context.Context, st *Statement, next func(context.Context) 
 
 // The functions below reach what Statement keeps private, for the code around
 // velox's generic API.
-func stmtBidi(st *Statement) *bidiStep       { return st.bidi }
-func setStmtBidi(st *Statement, b *bidiStep) { st.bidi = b }
-func stmtPin(st *Statement) target           { return st.pin }
-func setStmtPin(st *Statement, t target)     { st.pin = t }
-func stmtRan(st *Statement) target           { return st.ran }
-func setStmtRan(st *Statement, t target)     { st.ran = t }
-func stmtHanded(st *Statement) bool          { return st.handed }
-func setStmtHanded(st *Statement)            { st.handed = true }
-func stmtUpsertPolicy(st *Statement) bool    { return st.upsertPolicy }
+func stmtBidi(st *Statement) *bidiStep           { return st.bidi }
+func setStmtBidi(st *Statement, b *bidiStep)     { st.bidi = b }
+func stmtPin(st *Statement) target               { return st.pin }
+func setStmtPin(st *Statement, t target)         { st.pin = t }
+func stmtRan(st *Statement) target               { return st.ran }
+func setStmtRan(st *Statement, t target)         { st.ran = t }
+func stmtHanded(st *Statement) bool              { return st.handed }
+func setStmtHanded(st *Statement)                { st.handed = true }
+func stmtUpsertPolicy(st *Statement) bool        { return st.upsertPolicy }
+func setStmtUpsertPolicy(st *Statement, on bool) { st.upsertPolicy = on }

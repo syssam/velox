@@ -63,7 +63,7 @@ func TestHandleMethodsBuildNodes(t *testing.T) {
 		{"IsNull", ns.IsNull().n, node{op: opIsNull, col: 5}},
 		{"Not", Not(n.EQ(1)).n, node{op: opNot, kids: []node{{op: opEQ, col: 3, v: int64(1)}}}},
 		{"Or", Or(n.EQ(1), n.EQ(2)).n, node{op: opOr, kids: []node{{op: opEQ, col: 3, v: int64(1)}, {op: opEQ, col: 3, v: int64(2)}}}},
-		{"ColumnEQ", ColumnEQ(2, "t").n, node{op: opEQ, col: 2, v: "t"}},
+		{"ColumnEQ", predNode(ColumnEQ(2, "t")), node{op: opEQ, col: 2, v: "t"}},
 	}
 	for _, c := range cases {
 		if !reflect.DeepEqual(c.got, c.want) {

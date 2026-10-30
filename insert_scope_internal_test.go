@@ -58,7 +58,8 @@ func TestCheckColumnsAllow(t *testing.T) {
 // TestUnknownCountFailsClosed: a policy-conditioned upsert whose driver could
 // not count its rows (-1, as conn.SQL gives) fails closed.
 func TestUnknownCountFailsClosed(t *testing.T) {
-	st := &Statement{Op: OpInsert, Entity: invInfo, Rows: [][]any{{1}}, Conflict: &ConflictClause{}, upsertPolicy: true}
+	st := &Statement{Op: OpInsert, Entity: invInfo, Rows: [][]any{{1}}, Conflict: &ConflictClause{}}
+	setStmtUpsertPolicy(st, true)
 	var pe *PolicyError
 	if err := checkUpserted(st, -1); !errors.As(err, &pe) || !errors.Is(err, errUnknownAffected) {
 		t.Errorf("checkUpserted with -1: %v, want a *PolicyError wrapping errUnknownAffected", err)

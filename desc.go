@@ -529,3 +529,4 @@ func newEdgeDesc(name string, ownerCol, targetCol int, holders [2]any) EdgeDesc 
 }
 func setEdgeBidi(e *EdgeDesc, t any)         { e.bidi = t }
 func setEdgeThrough(e *EdgeDesc, t *through) { e.through = t }
+func edgeThrough(e EdgeDesc) *through        { return e.through }
