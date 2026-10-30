@@ -1,0 +1,467 @@
+{
+  "version": 1,
+  "dialect": "postgres",
+  "tables": [
+    {
+      "name": "comments",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "identity": true,
+          "sequence": "comments_id_seq"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "default": "now()"
+        },
+        {
+          "name": "org_id",
+          "type": "bigint"
+        },
+        {
+          "name": "issue_id",
+          "type": "bigint"
+        },
+        {
+          "name": "author_id",
+          "type": "bigint"
+        },
+        {
+          "name": "body",
+          "type": "text"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "comments_pkey",
+      "indexes": [
+        {
+          "name": "comments_author_id",
+          "columns": [
+            "author_id"
+          ]
+        },
+        {
+          "name": "comments_issue_id",
+          "columns": [
+            "issue_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": "comments_issues_comments",
+          "columns": [
+            "issue_id"
+          ],
+          "ref_table": {
+            "name": "issues"
+          },
+          "ref_columns": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
+        },
+        {
+          "name": "comments_users_author",
+          "columns": [
+            "author_id"
+          ],
+          "ref_table": {
+            "name": "users"
+          },
+          "ref_columns": [
+            "id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "issue_labels",
+      "columns": [
+        {
+          "name": "issue_id",
+          "type": "bigint"
+        },
+        {
+          "name": "label_id",
+          "type": "bigint"
+        }
+      ],
+      "primary_key": [
+        "issue_id",
+        "label_id"
+      ],
+      "primary_key_name": "issue_labels_pkey",
+      "indexes": [
+        {
+          "name": "issue_labels_label_id",
+          "columns": [
+            "label_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": "issue_labels_issue_id",
+          "columns": [
+            "issue_id"
+          ],
+          "ref_table": {
+            "name": "issues"
+          },
+          "ref_columns": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
+        },
+        {
+          "name": "issue_labels_label_id",
+          "columns": [
+            "label_id"
+          ],
+          "ref_table": {
+            "name": "labels"
+          },
+          "ref_columns": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
+        }
+      ]
+    },
+    {
+      "name": "issues",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "identity": true,
+          "sequence": "issues_id_seq"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "default": "now()"
+        },
+        {
+          "name": "org_id",
+          "type": "bigint"
+        },
+        {
+          "name": "project_id",
+          "type": "bigint"
+        },
+        {
+          "name": "author_id",
+          "type": "bigint"
+        },
+        {
+          "name": "assignee_id",
+          "type": "bigint",
+          "nullable": true
+        },
+        {
+          "name": "title",
+          "type": "character varying(200)"
+        },
+        {
+          "name": "body",
+          "type": "text"
+        },
+        {
+          "name": "status",
+          "type": "\"issues_status\"",
+          "default": "'open'"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "issues_pkey",
+      "indexes": [
+        {
+          "name": "issue_project_id_status_id",
+          "columns": [
+            "project_id",
+            "status",
+            "id"
+          ]
+        },
+        {
+          "name": "issues_assignee_id",
+          "columns": [
+            "assignee_id"
+          ]
+        },
+        {
+          "name": "issues_author_id",
+          "columns": [
+            "author_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": "issues_projects_issues",
+          "columns": [
+            "project_id"
+          ],
+          "ref_table": {
+            "name": "projects"
+          },
+          "ref_columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "issues_users_assignee",
+          "columns": [
+            "assignee_id"
+          ],
+          "ref_table": {
+            "name": "users"
+          },
+          "ref_columns": [
+            "id"
+          ],
+          "on_delete": "SET NULL"
+        },
+        {
+          "name": "issues_users_author",
+          "columns": [
+            "author_id"
+          ],
+          "ref_table": {
+            "name": "users"
+          },
+          "ref_columns": [
+            "id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "labels",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "identity": true,
+          "sequence": "labels_id_seq"
+        },
+        {
+          "name": "org_id",
+          "type": "bigint"
+        },
+        {
+          "name": "name",
+          "type": "character varying(50)"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "labels_pkey",
+      "indexes": [
+        {
+          "name": "label_org_id_name",
+          "columns": [
+            "org_id",
+            "name"
+          ],
+          "unique": true
+        }
+      ]
+    },
+    {
+      "name": "orgs",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "identity": true,
+          "sequence": "orgs_id_seq"
+        },
+        {
+          "name": "slug",
+          "type": "character varying(40)"
+        },
+        {
+          "name": "name",
+          "type": "character varying(100)"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "orgs_pkey",
+      "indexes": [
+        {
+          "name": "orgs_slug_key",
+          "columns": [
+            "slug"
+          ],
+          "unique": true
+        }
+      ]
+    },
+    {
+      "name": "projects",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "identity": true,
+          "sequence": "projects_id_seq"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "default": "now()"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "default": "now()"
+        },
+        {
+          "name": "org_id",
+          "type": "bigint"
+        },
+        {
+          "name": "name",
+          "type": "character varying(100)"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "projects_pkey",
+      "indexes": [
+        {
+          "name": "project_org_id_name",
+          "columns": [
+            "org_id",
+            "name"
+          ],
+          "unique": true
+        }
+      ]
+    },
+    {
+      "name": "sessions",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "identity": true,
+          "sequence": "sessions_id_seq"
+        },
+        {
+          "name": "token_hash",
+          "type": "text"
+        },
+        {
+          "name": "org_id",
+          "type": "bigint"
+        },
+        {
+          "name": "user_id",
+          "type": "bigint"
+        },
+        {
+          "name": "expires_at",
+          "type": "timestamp with time zone"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "sessions_pkey",
+      "indexes": [
+        {
+          "name": "sessions_token_hash_key",
+          "columns": [
+            "token_hash"
+          ],
+          "unique": true
+        }
+      ]
+    },
+    {
+      "name": "users",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "identity": true,
+          "sequence": "users_id_seq"
+        },
+        {
+          "name": "org_id",
+          "type": "bigint"
+        },
+        {
+          "name": "email",
+          "type": "character varying(200)"
+        },
+        {
+          "name": "name",
+          "type": "character varying(100)"
+        },
+        {
+          "name": "password_hash",
+          "type": "text"
+        },
+        {
+          "name": "role",
+          "type": "\"users_role\""
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "primary_key_name": "users_pkey",
+      "indexes": [
+        {
+          "name": "user_org_id_email",
+          "columns": [
+            "org_id",
+            "email"
+          ],
+          "unique": true
+        }
+      ]
+    }
+  ],
+  "enums": [
+    {
+      "name": "issues_status",
+      "values": [
+        "open",
+        "closed"
+      ]
+    },
+    {
+      "name": "users_role",
+      "values": [
+        "admin",
+        "member"
+      ]
+    }
+  ]
+}

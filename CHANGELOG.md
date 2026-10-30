@@ -23,6 +23,11 @@ This summarizes what a user of the tree before the hardening work must know.
 
 ### Added
 
+Examples
+- `example/tracker`, a whole service: an issue tracker's JSON API with tenants,
+  logins, policies, relations, transactions, keyset pages and migrations, on SQLite
+  or PostgreSQL.
+
 Runtime
 - The new package `veloxpgx` holds pgx's native path: `veloxpgx.Open(pool)` is
   what `velox.OpenPgx(pool)` was and `veloxpgx.Conn(pool)` what `velox.PgxConn(pool)`

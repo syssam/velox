@@ -1,0 +1,448 @@
+{
+  "version": 1,
+  "dialect": "sqlite",
+  "tables": [
+    {
+      "name": "comments",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "identity": true
+        },
+        {
+          "name": "created_at",
+          "type": "datetime",
+          "default": "CURRENT_TIMESTAMP"
+        },
+        {
+          "name": "updated_at",
+          "type": "datetime",
+          "default": "CURRENT_TIMESTAMP"
+        },
+        {
+          "name": "org_id",
+          "type": "integer"
+        },
+        {
+          "name": "issue_id",
+          "type": "integer"
+        },
+        {
+          "name": "author_id",
+          "type": "integer"
+        },
+        {
+          "name": "body",
+          "type": "text"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "comments_author_id",
+          "columns": [
+            "author_id"
+          ]
+        },
+        {
+          "name": "comments_issue_id",
+          "columns": [
+            "issue_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": "comments_issues_comments",
+          "columns": [
+            "issue_id"
+          ],
+          "ref_table": {
+            "name": "issues"
+          },
+          "ref_columns": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
+        },
+        {
+          "name": "comments_users_author",
+          "columns": [
+            "author_id"
+          ],
+          "ref_table": {
+            "name": "users"
+          },
+          "ref_columns": [
+            "id"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "issue_labels",
+      "columns": [
+        {
+          "name": "issue_id",
+          "type": "integer"
+        },
+        {
+          "name": "label_id",
+          "type": "integer"
+        }
+      ],
+      "primary_key": [
+        "issue_id",
+        "label_id"
+      ],
+      "indexes": [
+        {
+          "name": "issue_labels_label_id",
+          "columns": [
+            "label_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": "issue_labels_issue_id",
+          "columns": [
+            "issue_id"
+          ],
+          "ref_table": {
+            "name": "issues"
+          },
+          "ref_columns": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
+        },
+        {
+          "name": "issue_labels_label_id",
+          "columns": [
+            "label_id"
+          ],
+          "ref_table": {
+            "name": "labels"
+          },
+          "ref_columns": [
+            "id"
+          ],
+          "on_delete": "CASCADE"
+        }
+      ]
+    },
+    {
+      "name": "issues",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "identity": true
+        },
+        {
+          "name": "created_at",
+          "type": "datetime",
+          "default": "CURRENT_TIMESTAMP"
+        },
+        {
+          "name": "updated_at",
+          "type": "datetime",
+          "default": "CURRENT_TIMESTAMP"
+        },
+        {
+          "name": "org_id",
+          "type": "integer"
+        },
+        {
+          "name": "project_id",
+          "type": "integer"
+        },
+        {
+          "name": "author_id",
+          "type": "integer"
+        },
+        {
+          "name": "assignee_id",
+          "type": "integer",
+          "nullable": true
+        },
+        {
+          "name": "title",
+          "type": "text"
+        },
+        {
+          "name": "body",
+          "type": "text"
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "default": "'open'"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "issue_project_id_status_id",
+          "columns": [
+            "project_id",
+            "status",
+            "id"
+          ]
+        },
+        {
+          "name": "issues_assignee_id",
+          "columns": [
+            "assignee_id"
+          ]
+        },
+        {
+          "name": "issues_author_id",
+          "columns": [
+            "author_id"
+          ]
+        }
+      ],
+      "foreign_keys": [
+        {
+          "name": "issues_projects_issues",
+          "columns": [
+            "project_id"
+          ],
+          "ref_table": {
+            "name": "projects"
+          },
+          "ref_columns": [
+            "id"
+          ]
+        },
+        {
+          "name": "issues_users_assignee",
+          "columns": [
+            "assignee_id"
+          ],
+          "ref_table": {
+            "name": "users"
+          },
+          "ref_columns": [
+            "id"
+          ],
+          "on_delete": "SET NULL"
+        },
+        {
+          "name": "issues_users_author",
+          "columns": [
+            "author_id"
+          ],
+          "ref_table": {
+            "name": "users"
+          },
+          "ref_columns": [
+            "id"
+          ]
+        }
+      ],
+      "checks": [
+        {
+          "name": "issues_status_check",
+          "expr": "\"status\" IN ('open', 'closed')"
+        }
+      ]
+    },
+    {
+      "name": "labels",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "identity": true
+        },
+        {
+          "name": "org_id",
+          "type": "integer"
+        },
+        {
+          "name": "name",
+          "type": "text"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "label_org_id_name",
+          "columns": [
+            "org_id",
+            "name"
+          ],
+          "unique": true
+        }
+      ]
+    },
+    {
+      "name": "orgs",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "identity": true
+        },
+        {
+          "name": "slug",
+          "type": "text"
+        },
+        {
+          "name": "name",
+          "type": "text"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "orgs_slug_key",
+          "columns": [
+            "slug"
+          ],
+          "unique": true
+        }
+      ]
+    },
+    {
+      "name": "projects",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "identity": true
+        },
+        {
+          "name": "created_at",
+          "type": "datetime",
+          "default": "CURRENT_TIMESTAMP"
+        },
+        {
+          "name": "updated_at",
+          "type": "datetime",
+          "default": "CURRENT_TIMESTAMP"
+        },
+        {
+          "name": "org_id",
+          "type": "integer"
+        },
+        {
+          "name": "name",
+          "type": "text"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "project_org_id_name",
+          "columns": [
+            "org_id",
+            "name"
+          ],
+          "unique": true
+        }
+      ]
+    },
+    {
+      "name": "sessions",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "identity": true
+        },
+        {
+          "name": "token_hash",
+          "type": "text"
+        },
+        {
+          "name": "org_id",
+          "type": "integer"
+        },
+        {
+          "name": "user_id",
+          "type": "integer"
+        },
+        {
+          "name": "expires_at",
+          "type": "datetime"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "sessions_token_hash_key",
+          "columns": [
+            "token_hash"
+          ],
+          "unique": true
+        }
+      ]
+    },
+    {
+      "name": "users",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "identity": true
+        },
+        {
+          "name": "org_id",
+          "type": "integer"
+        },
+        {
+          "name": "email",
+          "type": "text"
+        },
+        {
+          "name": "name",
+          "type": "text"
+        },
+        {
+          "name": "password_hash",
+          "type": "text"
+        },
+        {
+          "name": "role",
+          "type": "text"
+        }
+      ],
+      "primary_key": [
+        "id"
+      ],
+      "indexes": [
+        {
+          "name": "user_org_id_email",
+          "columns": [
+            "org_id",
+            "email"
+          ],
+          "unique": true
+        }
+      ],
+      "checks": [
+        {
+          "name": "users_role_check",
+          "expr": "\"role\" IN ('admin', 'member')"
+        }
+      ]
+    }
+  ]
+}

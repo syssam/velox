@@ -10,6 +10,7 @@ tool (
 
 require (
 	github.com/99designs/gqlgen v0.17.86
+	github.com/jackc/pgx/v5 v5.11.0
 	github.com/syssam/velox2 v0.0.0-00010101000000-000000000000
 	github.com/syssam/velox2/contrib/graphql v0.0.0-00010101000000-000000000000
 	github.com/syssam/velox2/contrib/veloxotel v0.0.0-00010101000000-000000000000
@@ -36,7 +37,6 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/pgx/v5 v5.11.0 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect

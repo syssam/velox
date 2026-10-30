@@ -1,9 +1,9 @@
 # velox2 examples
 
-Small runnable programs, one topic each, on SQLite files in a temporary directory (routing uses one per database).
+Small runnable programs, one topic each but for tracker, a whole service, on SQLite files in a temporary directory (routing uses one per database).
 Each directory is a `main` package with its own `schema/` and `gen/` packages,
-a README, and a golden test of its output (graphql's test checks the
-responses of its server instead).
+a README, and a golden test of its output (tracker's and graphql's tests check the
+responses of their servers instead).
 
 | Example | What it shows | Run |
 |---|---|---|
@@ -16,6 +16,7 @@ responses of its server instead).
 | [routing](routing) | `OpenShards` with `WithShardFor` choosing a shard by tenant, a read replica, `WithSession` pinning a request's reads to the primary after its write, `WithPrimaryReads`, `WithShard`, `ErrNoShard`, and `Statement.Route`. SQLite files, one per database | `go run ./routing` |
 | [otel](otel) | Tracing and metrics with `contrib/veloxotel` on an in-memory exporter: the span tree of a request and its transaction, fingerprints, call sites, the SQL comment sent, and the metric points | `go run ./otel` |
 | [graphql](graphql) | A gqlgen server on the schema velox-graphql generates: `node`/`nodes` by global ID, keyset-paged connections with `orderBy` and `where`, edges (a many-to-many among them), a renamed type, tenant scoping through all of them, and a sensitive field left out. Its test sends real GraphQL over HTTP and checks the responses and the SQL | `go run ./graphql` |
+| [tracker](tracker) | A whole service: an issue tracker's JSON API with tenants, logins, policies, relations, transactions, keyset pages and migrations, on SQLite or PostgreSQL | `go run ./tracker` |
 | [tour](tour) | One walkthrough that touches everything once | `go run ./tour` |
 
 Run from this directory:

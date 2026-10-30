@@ -355,6 +355,11 @@ func (r Rel[E, T]) spec[_ Lazy[T]]() loadSpec {
 // not loaded. Tag the field json:",omitzero" to leave a relation that was not
 // loaded out. (An ordinary method on a generic type, not a generic one, because
 // encoding/json looks for it by name; its body is one call.)
+//
+// JSON goes one way: One and Many have no UnmarshalJSON, as decoding would need T,
+// which they do not reach (see One), so decoding an entity whose relations were
+// loaded fails. Decode into a struct of your own, or marshal the entity before
+// loading them.
 func (o One[T]) MarshalJSON() ([]byte, error) { return json.Marshal(o.v) }
 
 // MarshalJSON writes the related entities, or null when they were not

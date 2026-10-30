@@ -84,6 +84,8 @@ go run github.com/mgechev/revive@v1.17.0 -config scripts/revive.toml -set_exit_s
     go tool velox-gen migrate drift -dir "./$x/migrations" -db "$migdb/$x.db"
   done
   rm -rf "$migdb"
+  # tracker's PostgreSQL migrations: its tests apply them, under VELOX_TEST_POSTGRES.
+  go tool velox-gen migrate diff -check -dir ./tracker/migrations-postgres ./tracker/schema
   go tool velox-gen -check -out ./graphql/gen -plugin velox-graphql ./graphql/schema
   go tool velox-gen verify -out ./graphql/gen -plugin velox-graphql ./graphql/schema
   # gqlgen's output is checked in: regenerate it, and fail on any difference.
