@@ -19,8 +19,8 @@ import (
 var citation = regexp.MustCompile(`\x{00a7}|\bRuling \d|\b(design|spec) (section|note)\b|\bsection \d|\b(schema|policy|routing|observability|core|graphql) (design|spec)\b|\bdocs/(specs|plans|reviews)\b|\b(GraphQL|API|core|policy|schema)\s+plan\s+\d`)
 
 // TestGodocCitesNoSpec: no comment in the public packages of this module (the
-// root package, tests included; schema and its subpackages; plugin; and
-// cmd/velox-gen) and no string literal in them, which holds the messages a
+// root package and dbtype, tests included; schema and its subpackages; plugin;
+// and cmd/velox-gen) and no string literal in them, which holds the messages a
 // user sees, cites a design document or a ruling.
 func TestGodocCitesNoSpec(t *testing.T) {
 	root := repoRoot()
@@ -44,6 +44,7 @@ func TestGodocCitesNoSpec(t *testing.T) {
 		}
 	}
 	add(".", true, false)
+	add("dbtype", true, false)
 	add("schema", false, true)
 	add("plugin", false, false)
 	add("migrate", false, false)
@@ -78,7 +79,7 @@ func TestGodocCitesNoSpec(t *testing.T) {
 // TestGeneratedOnlyAPIIsMarked: exactly the declarations that the package
 // documentation lists under "Generated code" say "For generated code." just
 // after their first sentence, and the section names each of them as a whole
-// word.
+// word. A name that lives in dbtype says it in both packages' documentation.
 func TestGeneratedOnlyAPIIsMarked(t *testing.T) {
 	names := []string{"Desc", "ColumnDesc", "EdgeDesc", "EdgeTo", "EdgeBidi", "EdgeThrough", "Meta", "MetaOnce",
 		"BindPolicy", "BindHooks", "BoundPolicy", "BoundHooks", "Lazy", "Validate", "ValidateSet", "GeneratedCodeIsVersion6"}
@@ -86,23 +87,61 @@ func TestGeneratedOnlyAPIIsMarked(t *testing.T) {
 	for _, n := range names {
 		listed[n] = true
 	}
+	docs, pkgDoc := packageDocs(t, repoRoot(), "velox")
+	dbtypeDocs, _ := packageDocs(t, filepath.Join(repoRoot(), "dbtype"), "dbtype")
+	if _, ok := dbtypeDocs["ColumnDesc"]; !ok {
+		t.Fatal("dbtype declares no ColumnDesc: the check reads nothing there")
+	}
+	for pkg, docs := range map[string]map[string]string{"velox": docs, "dbtype": dbtypeDocs} {
+		for name, doc := range docs {
+			mentions := strings.Contains(strings.Join(strings.Fields(doc), " "), generatedMarker)
+			switch {
+			case mentions && !listed[name]:
+				t.Errorf("%s.%s is marked %q but is not in the generated-code list", pkg, name, generatedMarker)
+			case mentions && !markedGenerated(doc):
+				t.Errorf("%s.%s mentions %q but not after its first sentence", pkg, name, generatedMarker)
+			}
+		}
+	}
+	_, section, ok := strings.Cut(pkgDoc, "# Generated code\n")
+	if !ok {
+		t.Fatal("the package documentation has no Generated code section")
+	}
+	section, _, _ = strings.Cut(section, "\n# ")
+	for _, n := range names {
+		if !strings.Contains(strings.Join(strings.Fields(docs[n]), " "), generatedMarker) {
+			t.Errorf("%s: documentation %.40q does not say %q", n, docs[n], generatedMarker)
+		}
+		if doc, ok := dbtypeDocs[n]; ok && !strings.Contains(strings.Join(strings.Fields(doc), " "), generatedMarker) {
+			t.Errorf("dbtype.%s: documentation %.40q does not say %q", n, doc, generatedMarker)
+		}
+		if !regexp.MustCompile(`\b` + n + `\b`).MatchString(section) {
+			t.Errorf("the Generated code section does not name %s", n)
+		}
+	}
+}
+
+// packageDocs reads the non-test files of the package pkg in dir: the doc
+// comment of each top-level declaration by name, with a method as "(method)
+// Name", and the package documentation.
+func packageDocs(t *testing.T, dir, pkg string) (docs map[string]string, pkgDoc string) {
+	t.Helper()
 	fset := token.NewFileSet()
-	entries, err := os.ReadDir(repoRoot())
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	docs := map[string]string{}
-	var pkgDoc string
+	docs = map[string]string{}
 	for _, e := range entries {
 		name := e.Name()
 		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
 			continue
 		}
-		f, err := parser.ParseFile(fset, filepath.Join(repoRoot(), name), nil, parser.ParseComments)
+		f, err := parser.ParseFile(fset, filepath.Join(dir, name), nil, parser.ParseComments)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if f.Name.Name != "velox" {
+		if f.Name.Name != pkg {
 			continue
 		}
 		if f.Doc != nil {
@@ -130,28 +169,7 @@ func TestGeneratedOnlyAPIIsMarked(t *testing.T) {
 			}
 		}
 	}
-	for name, doc := range docs {
-		mentions := strings.Contains(strings.Join(strings.Fields(doc), " "), generatedMarker)
-		switch {
-		case mentions && !listed[name]:
-			t.Errorf("%s is marked %q but is not in the generated-code list", name, generatedMarker)
-		case mentions && !markedGenerated(doc):
-			t.Errorf("%s mentions %q but not after its first sentence", name, generatedMarker)
-		}
-	}
-	_, section, ok := strings.Cut(pkgDoc, "# Generated code\n")
-	if !ok {
-		t.Fatal("the package documentation has no Generated code section")
-	}
-	section, _, _ = strings.Cut(section, "\n# ")
-	for _, n := range names {
-		if !strings.Contains(strings.Join(strings.Fields(docs[n]), " "), generatedMarker) {
-			t.Errorf("%s: documentation %.40q does not say %q", n, docs[n], generatedMarker)
-		}
-		if !regexp.MustCompile(`\b` + n + `\b`).MatchString(section) {
-			t.Errorf("the Generated code section does not name %s", n)
-		}
-	}
+	return docs, pkgDoc
 }
 
 // generatedMarker marks a declaration that only generated code uses.
@@ -190,6 +208,7 @@ func TestExportedMethodsHaveDocs(t *testing.T) {
 		}
 	}
 	add(".", false)
+	add("dbtype", false)
 	add("migrate", false)
 	add("plugin", false)
 	add("schema", true)
@@ -258,7 +277,9 @@ func firstDoc(gs ...*ast.CommentGroup) string {
 }
 
 // TestAliasDocsListMembers: go doc shows neither the fields nor the methods of an
-// alias, so the doc comment of each alias of an engine type lists its exported ones.
+// alias of an internal type, so the doc comment of each alias of an engine type lists
+// its exported ones. An alias of a dbtype type lists none: its documentation is
+// public, and links through.
 func TestAliasDocsListMembers(t *testing.T) {
 	fset := token.NewFileSet()
 	docs := map[string]string{}
@@ -269,10 +290,25 @@ func TestAliasDocsListMembers(t *testing.T) {
 	for _, d := range f.Decls {
 		if g, ok := d.(*ast.GenDecl); ok && g.Tok == token.TYPE {
 			for _, s := range g.Specs {
-				if ts := s.(*ast.TypeSpec); ts.Assign.IsValid() {
+				ts := s.(*ast.TypeSpec)
+				if !ts.Assign.IsValid() {
+					continue
+				}
+				switch aliasedPackage(ts.Type) {
+				case "engine":
 					docs[ts.Name.Name] = g.Doc.Text()
+				case "dbtype":
+					if strings.Contains(g.Doc.Text(), "Its fields:") || strings.Contains(g.Doc.Text(), "Its methods:") {
+						t.Errorf("the alias %s lists members that dbtype documents", ts.Name.Name)
+					}
 				}
 			}
+		}
+	}
+	// Not vacuous: the aliases that cannot move are read.
+	for _, kept := range []string{"Statement", "Option", "Conn", "EntityInfo", "Predicate"} {
+		if _, ok := docs[kept]; !ok {
+			t.Errorf("%s is not an alias of an engine type: the check reads nothing", kept)
 		}
 	}
 	files, err := filepath.Glob(filepath.Join(repoRoot(), "internal/engine/*.go"))
@@ -323,6 +359,110 @@ func TestAliasDocsListMembers(t *testing.T) {
 					t.Errorf("the alias %s does not list its method %s", recv, d.Name.Name)
 				}
 			}
+		}
+	}
+}
+
+// aliasedPackage is the package an alias's right-hand side names; "" when it
+// names none.
+func aliasedPackage(e ast.Expr) string {
+	if ix, ok := e.(*ast.IndexExpr); ok {
+		e = ix.X
+	}
+	if sel, ok := e.(*ast.SelectorExpr); ok {
+		if id, ok := sel.X.(*ast.Ident); ok {
+			return id.Name
+		}
+	}
+	return ""
+}
+
+// TestDBTypeIsReExported: every exported name in dbtype is declared by the root
+// under the same name, as that name of dbtype, so application code never needs to
+// import it. dbtype's non-test files import only the standard library.
+func TestDBTypeIsReExported(t *testing.T) {
+	fset := token.NewFileSet()
+	dir := filepath.Join(repoRoot(), "dbtype")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var exported []string
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, filepath.Join(dir, e.Name()), nil, parser.SkipObjectResolution)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, im := range f.Imports {
+			// A standard-library path has no dot in its first element.
+			first, _, _ := strings.Cut(strings.Trim(im.Path.Value, `"`), "/")
+			if strings.Contains(first, ".") {
+				t.Errorf("%s imports %s: dbtype imports only the standard library", e.Name(), im.Path.Value)
+			}
+		}
+		for _, d := range f.Decls {
+			switch d := d.(type) {
+			case *ast.FuncDecl:
+				if d.Recv == nil && d.Name.IsExported() {
+					exported = append(exported, d.Name.Name)
+				}
+			case *ast.GenDecl:
+				for _, s := range d.Specs {
+					switch s := s.(type) {
+					case *ast.TypeSpec:
+						if s.Name.IsExported() {
+							exported = append(exported, s.Name.Name)
+						}
+					case *ast.ValueSpec:
+						for _, n := range s.Names {
+							if n.IsExported() {
+								exported = append(exported, n.Name)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	if len(exported) < 25 {
+		t.Fatalf("dbtype exports only %d names: %v", len(exported), exported)
+	}
+	root, err := parser.ParseFile(fset, filepath.Join(repoRoot(), "api.go"), nil, parser.SkipObjectResolution)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reexported := map[string]bool{}
+	mark := func(name string, value ast.Expr) {
+		if sel, ok := value.(*ast.SelectorExpr); ok && aliasedPackage(sel) == "dbtype" && sel.Sel.Name == name {
+			reexported[name] = true
+		}
+	}
+	for _, d := range root.Decls {
+		g, ok := d.(*ast.GenDecl)
+		if !ok {
+			continue
+		}
+		for _, s := range g.Specs {
+			switch s := s.(type) {
+			case *ast.TypeSpec:
+				if s.Assign.IsValid() {
+					mark(s.Name.Name, s.Type)
+				}
+			case *ast.ValueSpec:
+				for i, n := range s.Names {
+					if i < len(s.Values) {
+						mark(n.Name, s.Values[i])
+					}
+				}
+			}
+		}
+	}
+	for _, name := range exported {
+		if !reexported[name] {
+			t.Errorf("api.go does not declare %s = dbtype.%s", name, name)
 		}
 	}
 }
