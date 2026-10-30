@@ -37,11 +37,11 @@ func aggregate[E, T any](ctx context.Context, q Query[E], fn Aggregate, c int32)
 	var v *T
 	if q.db.e.Hooked() {
 		a := &aggRun[T]{st: st}
-		err = q.db.run(ctx, &a.st, func(r engine.Rows) error { return readAggregate(a, r) }, nil)
+		err = q.db.e.Run(ctx, &a.st, func(r engine.Rows) error { return readAggregate(a, r) }, nil)
 		v = a.v
 	} else {
 		a := aggRun[T]{st: st}
-		err = q.db.plain(ctx, &a.st, func(r engine.Rows) error { return readAggregate(&a, r) }, nil)
+		err = q.db.e.Plain(ctx, &a.st, func(r engine.Rows) error { return readAggregate(&a, r) }, nil)
 		v = a.v
 	}
 	if err != nil {

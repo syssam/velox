@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"iter"
-	"slices"
-	"strings"
 
 	"github.com/syssam/velox2/internal/engine"
 )
@@ -29,7 +27,7 @@ func (db *DB) Exec(ctx context.Context, reason, query string, args ...any) (int6
 	}
 	st := &Statement{Op: OpRawExec, Entity: &engine.ExecInfo, SQL: query, Args: args, TenantBypass: reason, PolicyBypass: reason, InTx: db.e.InTx}
 	var res engine.ExecResult
-	if err := db.run(ctx, st, nil, &res); err != nil {
+	if err := db.e.Run(ctx, st, nil, &res); err != nil {
 		return 0, err
 	}
 	return res.Affected, nil
@@ -161,29 +159,6 @@ func readRaw[E any](a *rawRun[E], r engine.Rows) error {
 	return nil
 }
 
-// prepareRaw is prepare's work for raw SQL, which is the caller's: there is
-// nothing to resolve, guard, rewrite, scope or render. It sets what the
-// Around hooks read (observe), gives them a copy of the arguments to change,
-// sets the fingerprint, of the caller's SQL, and appends the SQL comment,
-// after trimming trailing semicolons and white space: a comment after a
-// statement's terminator would make a second, empty statement, which MySQL
-// without multiStatements refuses. When the last line holds "--", the comment
-// goes on a line of its own, so that a line comment does not swallow it.
-func (db *DB) prepareRaw(ctx context.Context, st *Statement) {
-	db.e.Observe(ctx, st)
-	if len(db.e.Cfg.Arounds) > 0 {
-		st.Args = slices.Clone(st.Args)
-	}
-	st.Fingerprint = engine.Fingerprint(st.SQL)
-	if db.e.Cfg.Comment != nil {
-		q := strings.TrimRight(st.SQL, "; \t\r\n")
-		if strings.Contains(q[strings.LastIndexByte(q, '\n')+1:], "--") {
-			q += "\n"
-		}
-		st.SQL = q + db.e.Cfg.Comment.Text(st)
-	}
-}
-
 // All runs the query and returns every row.
 func (q RawQuery[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error) {
 	st, err := q.statement()
@@ -191,7 +166,7 @@ func (q RawQuery[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error) {
 		return nil, err
 	}
 	a := &rawRun[E]{st: st, m: q.meta}
-	if err := q.db.run(ctx, &a.st, func(r engine.Rows) error { return readRaw(a, r) }, nil); err != nil {
+	if err := q.db.e.Run(ctx, &a.st, func(r engine.Rows) error { return readRaw(a, r) }, nil); err != nil {
 		return nil, err
 	}
 	return a.out, nil
@@ -206,7 +181,7 @@ func (q RawQuery[E]) One[_ Lazy[E]](ctx context.Context) (*E, error) {
 		return nil, err
 	}
 	a := &rawRun[E]{st: st, m: q.meta, limit: 2}
-	if err := q.db.run(ctx, &a.st, func(r engine.Rows) error { return readRaw(a, r) }, nil); err != nil {
+	if err := q.db.e.Run(ctx, &a.st, func(r engine.Rows) error { return readRaw(a, r) }, nil); err != nil {
 		return nil, err
 	}
 	switch len(a.out) {
@@ -230,7 +205,7 @@ func (q RawQuery[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error] {
 			return
 		}
 		a := &rawRun[E]{st: st, m: q.meta, yield: yield, timed: len(q.db.e.Cfg.Arounds) > 0}
-		err = q.db.run(ctx, &a.st, func(r engine.Rows) error { return readRaw(a, r) }, nil)
+		err = q.db.e.Run(ctx, &a.st, func(r engine.Rows) error { return readRaw(a, r) }, nil)
 		if err != nil && !a.stopped {
 			var zero E
 			yield(zero, err)

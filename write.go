@@ -330,7 +330,7 @@ func write(ctx context.Context, db *DB, st *Statement, dry, save bool) (int64, s
 		}
 		return mu.Affected, mu.SQL, mu.Args, err
 	}
-	if err := db.guard(st); err != nil {
+	if err := db.e.Guard(st); err != nil {
 		return 0, "", nil, err
 	}
 	core := func(ctx context.Context, mu *engine.MutationState) error { return writeCore(ctx, db, mu) }
@@ -396,10 +396,10 @@ func writeCore(ctx context.Context, db *DB, mu *engine.MutationState) error {
 	}
 	if mu.Dry {
 		var err error
-		mu.SQL, mu.Args, err = db.dryRun(ctx, st)
+		mu.SQL, mu.Args, err = db.e.DryRun(ctx, st)
 		return err
 	}
-	res, err := execWrite(ctx, db, st)
+	res, err := engine.ExecWrite(ctx, &db.e, st)
 	if err != nil {
 		return err
 	}

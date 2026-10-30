@@ -35,7 +35,7 @@ func WithDeadlines(d Deadlines) Option { return Option{func(c *Config) { c.Deadl
 // enclosing transaction's deadline.
 func TxTimeout(d time.Duration) TxOption { return TxOption{func(o *TxOptions) { o.Timeout = d }} }
 
-// Bound returns ctx with velox's limits applied: def when ctx has no
+// bound returns ctx with velox's limits applied: def when ctx has no
 // deadline, at most maxd from now, and no later than also unless it is zero.
 // cancel is nil when ctx is returned unchanged. A deadline from def or maxd
 // has the cause ErrTimeout; one from also has alsoCause, and no cause of its
@@ -87,14 +87,14 @@ func TimeoutError(who string) error {
 	return fmt.Errorf("velox: %s: %w: %w", who, ErrTimeout, context.DeadlineExceeded)
 }
 
-// Timed reports whether a statement on db may get a deadline from velox.
-func (db *DB) Timed() bool {
+// timed reports whether a statement on db may get a deadline from velox.
+func (db *DB) timed() bool {
 	d := db.Cfg.Deadlines
 	return d.Statement > 0 || d.MaxStatement > 0 || !db.txDeadline.IsZero()
 }
 
-// Bound applies db's statement limits, and its transaction's deadline, to ctx.
-func (db *DB) Bound(ctx context.Context) (context.Context, context.CancelFunc) {
+// bound applies db's statement limits, and its transaction's deadline, to ctx.
+func (db *DB) bound(ctx context.Context) (context.Context, context.CancelFunc) {
 	return Bound(ctx, db.Cfg.Deadlines.Statement, db.Cfg.Deadlines.MaxStatement, db.txDeadline, db.txCause)
 }
 

@@ -227,7 +227,7 @@ func (q InsertQuery[E]) render[_ Lazy[E]](ctx context.Context, mu *engine.Mutati
 		st = batch(q.meta, q.many[:min(per, len(q.many))], cols, q.conflict, inTx)
 	}
 	var err error
-	mu.SQL, mu.Args, err = q.db.dryRun(ctx, &st)
+	mu.SQL, mu.Args, err = q.db.e.DryRun(ctx, &st)
 	return err
 }
 
@@ -350,7 +350,7 @@ func insertRow(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen
 func sendOne(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen int, out *Result) error {
 	in := st.Entity
 	if gen < 0 {
-		res, err := execWrite(ctx, db, st)
+		res, err := engine.ExecWrite(ctx, &db.e, st)
 		if err != nil {
 			return err
 		}
@@ -373,9 +373,9 @@ func sendOne(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen i
 		}
 		var err error
 		if db.e.Hooked() {
-			err = db.run(ctx, st, read, nil)
+			err = db.e.Run(ctx, st, read, nil)
 		} else {
-			err = db.plain(ctx, st, read, nil)
+			err = db.e.Plain(ctx, st, read, nil)
 		}
 		if err != nil {
 			return err
@@ -389,7 +389,7 @@ func sendOne(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen i
 		}
 		return engine.CheckUpserted(st, back)
 	}
-	res, err := execWrite(ctx, db, st)
+	res, err := engine.ExecWrite(ctx, &db.e, st)
 	if err != nil {
 		return err
 	}
@@ -498,7 +498,7 @@ func insertBatches[E any](ctx context.Context, db *DB, m *Meta[E], xs []E, cols 
 	unknown := false
 	for start := 0; start < len(xs); start += per {
 		st := batch(m, xs[start:min(start+per, len(xs))], cols, cf, db.e.InTx)
-		res, err := execWrite(ctx, db, &st)
+		res, err := engine.ExecWrite(ctx, &db.e, &st)
 		if err != nil {
 			return 0, err
 		}

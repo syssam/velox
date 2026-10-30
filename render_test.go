@@ -556,7 +556,7 @@ func TestNewClausesOnEveryDialect(t *testing.T) {
 	for _, c := range cases {
 		for _, d := range []Dialect{Postgres, MySQL, SQLite} {
 			want, ok := c.sql[d]
-			err := OpenFake(d, &FakeExec{}).guard(c.st())
+			err := OpenFake(d, &FakeExec{}).e.Guard(c.st())
 			if !ok {
 				const refusal = "velox: velox.inv: SQLite has no locking reads; its transactions lock the whole database"
 				if err == nil || err.Error() != refusal {

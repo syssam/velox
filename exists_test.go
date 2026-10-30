@@ -110,7 +110,7 @@ func TestRewriteHookMayAddAnUnresolvedRelation(t *testing.T) {
 		return nil
 	}))
 	st := Statement{Op: OpSelect, Entity: co, Columns: []int{0}, Limit: 1, Where: []Predicate{engine.NewPredicate(ref(0))}}
-	if err := db.run(context.Background(), &st, func(engine.Rows) error { return nil }, nil); err != nil {
+	if err := db.e.Run(context.Background(), &st, func(engine.Rows) error { return nil }, nil); err != nil {
 		t.Fatal(err)
 	}
 	if n := strings.Count(st.SQL, "EXISTS"); n != 2 {
@@ -119,7 +119,7 @@ func TestRewriteHookMayAddAnUnresolvedRelation(t *testing.T) {
 	// An unresolvable one fails the statement, and sends nothing.
 	e.Calls = 0
 	bad := Statement{Op: OpSelect, Entity: co, Columns: []int{0}, Limit: 1, Where: []Predicate{engine.NewPredicate(ref(9))}}
-	if err := db.run(context.Background(), &bad, func(engine.Rows) error { return nil }, nil); err == nil || !strings.Contains(err.Error(), "has no relation 9") || e.Calls != 0 {
+	if err := db.e.Run(context.Background(), &bad, func(engine.Rows) error { return nil }, nil); err == nil || !strings.Contains(err.Error(), "has no relation 9") || e.Calls != 0 {
 		t.Errorf("%v (calls %d)", err, e.Calls)
 	}
 }

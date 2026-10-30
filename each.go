@@ -264,9 +264,9 @@ func countEach(ctx context.Context, q eachQuery, owner *EntityInfo, ownerErr err
 	err = byChunks(len(p.Keys), per, func(lo, hi int) error {
 		c := engine.Chunk(st, ec, p.Keys[lo:hi])
 		if db.e.Hooked() {
-			return db.run(ctx, &c, read, nil)
+			return db.e.Run(ctx, &c, read, nil)
 		}
-		return db.plain(ctx, &c, read, nil)
+		return db.e.Plain(ctx, &c, read, nil)
 	})
 	if err != nil {
 		return nil, err

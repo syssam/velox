@@ -363,9 +363,9 @@ func readPart(ctx context.Context, db *DB, pin engine.Target, st *Statement, t *
 	}
 	var err error
 	if db.e.Hooked() {
-		err = db.run(ctx, st, read, nil)
+		err = db.e.Run(ctx, st, read, nil)
 	} else {
-		err = db.plain(ctx, st, read, nil)
+		err = db.e.Plain(ctx, st, read, nil)
 	}
 	return part, owners, err
 }

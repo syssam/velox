@@ -1,4 +1,4 @@
-package velox
+package engine
 
 import (
 	"math"
@@ -8,7 +8,11 @@ import (
 // TestRowCapAppliesToSelectsOnly: an insert's RETURNING and a COUNT are not
 // capped, whatever the DB's cap.
 func TestRowCapAppliesToSelectsOnly(t *testing.T) {
-	db := OpenFake(Postgres, &FakeExec{}, WithMaxRows(2))
+	invInfo := &EntityInfo{Name: "velox.inv", Tenant: -1}
+	itemInfo := &EntityInfo{Name: "velox.item", Tenant: -1, PrimaryKey: []int{0}}
+	tagInfo := &EntityInfo{Name: "velox.tag", Tenant: -1, PrimaryKey: []int{0}}
+	bookTagInfo := &EntityInfo{Name: "velox.bookTag", Tenant: -1, PrimaryKey: []int{0, 1}}
+	db := &DB{D: Postgres, Cfg: &Config{MaxRows: 2}}
 	for _, c := range []struct {
 		name string
 		st   Statement

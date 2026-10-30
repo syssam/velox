@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"slices"
@@ -67,4 +68,27 @@ func resultColumns(r Rows) ([]string, error) {
 		return names, nil
 	}
 	return nil, fmt.Errorf("the driver's rows (%T) do not name their columns", r)
+}
+
+// prepareRaw is prepare's work for raw SQL, which is the caller's: there is
+// nothing to resolve, guard, rewrite, scope or render. It sets what the
+// Around hooks read (observe), gives them a copy of the arguments to change,
+// sets the fingerprint, of the caller's SQL, and appends the SQL comment,
+// after trimming trailing semicolons and white space: a comment after a
+// statement's terminator would make a second, empty statement, which MySQL
+// without multiStatements refuses. When the last line holds "--", the comment
+// goes on a line of its own, so that a line comment does not swallow it.
+func (db *DB) prepareRaw(ctx context.Context, st *Statement) {
+	db.observe(ctx, st)
+	if len(db.Cfg.Arounds) > 0 {
+		st.Args = slices.Clone(st.Args)
+	}
+	st.Fingerprint = Fingerprint(st.SQL)
+	if db.Cfg.Comment != nil {
+		q := strings.TrimRight(st.SQL, "; \t\r\n")
+		if strings.Contains(q[strings.LastIndexByte(q, '\n')+1:], "--") {
+			q += "\n"
+		}
+		st.SQL = q + db.Cfg.Comment.Text(st)
+	}
 }

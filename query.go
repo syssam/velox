@@ -316,11 +316,11 @@ func (q Query[E]) read[_ Lazy[E]](ctx context.Context) (out []E, ran []int, at e
 	}
 	if q.db.e.Hooked() {
 		a := &allRun[E]{st: st, m: q.meta}
-		err = q.db.run(ctx, &a.st, func(r engine.Rows) error { return readAll(a, r) }, nil)
+		err = q.db.e.Run(ctx, &a.st, func(r engine.Rows) error { return readAll(a, r) }, nil)
 		out, ran, at = a.out, a.st.Columns, engine.StmtRan(&a.st)
 	} else {
 		a := allRun[E]{st: st, m: q.meta}
-		err = q.db.plain(ctx, &a.st, func(r engine.Rows) error { return readAll(&a, r) }, nil)
+		err = q.db.e.Plain(ctx, &a.st, func(r engine.Rows) error { return readAll(&a, r) }, nil)
 		out, ran, at = a.out, a.st.Columns, engine.StmtRan(&a.st)
 	}
 	if err != nil {
@@ -481,11 +481,11 @@ func (q Query[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error] {
 		var stopped bool
 		if q.db.e.Hooked() {
 			it := &iterRun[E]{st: st, m: q.meta, yield: yield, timed: len(q.db.e.Cfg.Arounds) > 0}
-			err = q.db.run(ctx, &it.st, func(r engine.Rows) error { return readIter(it, r) }, nil)
+			err = q.db.e.Run(ctx, &it.st, func(r engine.Rows) error { return readIter(it, r) }, nil)
 			stopped = it.stopped
 		} else {
 			it := iterRun[E]{st: st, m: q.meta, yield: yield}
-			err = q.db.plain(ctx, &it.st, func(r engine.Rows) error { return readIter(&it, r) }, nil)
+			err = q.db.e.Plain(ctx, &it.st, func(r engine.Rows) error { return readIter(&it, r) }, nil)
 			stopped = it.stopped
 		}
 		if err != nil && !stopped {
@@ -512,11 +512,11 @@ func (q Query[E]) Count[_ Lazy[E]](ctx context.Context) (int64, error) {
 	var n int64
 	if q.db.e.Hooked() {
 		c := &engine.CountRun{St: st}
-		err = q.db.run(ctx, &c.St, func(r engine.Rows) error { return engine.ReadCount(c, r) }, nil)
+		err = q.db.e.Run(ctx, &c.St, func(r engine.Rows) error { return engine.ReadCount(c, r) }, nil)
 		n = c.N
 	} else {
 		c := engine.CountRun{St: st}
-		err = q.db.plain(ctx, &c.St, func(r engine.Rows) error { return engine.ReadCount(&c, r) }, nil)
+		err = q.db.e.Plain(ctx, &c.St, func(r engine.Rows) error { return engine.ReadCount(&c, r) }, nil)
 		n = c.N
 	}
 	if err != nil {
@@ -543,11 +543,11 @@ func (q Query[E]) Exists[_ Lazy[E]](ctx context.Context) (bool, error) {
 	var found bool
 	if q.db.e.Hooked() {
 		x := &engine.ExistsRun{St: st}
-		err = q.db.run(ctx, &x.St, func(r engine.Rows) error { return engine.ReadExists(x, r) }, nil)
+		err = q.db.e.Run(ctx, &x.St, func(r engine.Rows) error { return engine.ReadExists(x, r) }, nil)
 		found = x.Found
 	} else {
 		x := engine.ExistsRun{St: st}
-		err = q.db.plain(ctx, &x.St, func(r engine.Rows) error { return engine.ReadExists(&x, r) }, nil)
+		err = q.db.e.Plain(ctx, &x.St, func(r engine.Rows) error { return engine.ReadExists(&x, r) }, nil)
 		found = x.Found
 	}
 	if err != nil {
@@ -583,7 +583,7 @@ func (q Query[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error) {
 	if err != nil {
 		return "", nil, err
 	}
-	text, args, err := q.db.dryRun(ctx, &st)
+	text, args, err := q.db.e.DryRun(ctx, &st)
 	if err != nil {
 		return "", nil, err
 	}

@@ -340,10 +340,10 @@ func As[T error](err error) (T, bool) {
 	return found, ok
 }
 
-// DBErr names the entity in an error from the database or the driver, turns
+// dbErr names the entity in an error from the database or the driver, turns
 // a violated constraint into a *ConstraintError, and wraps a lock that could
 // not be taken with ErrLocked.
-func DBErr(info *EntityInfo, err error) error {
+func dbErr(info *EntityInfo, err error) error {
 	if _, ok := As[*ConstraintError](err); ok {
 		return err // already classified
 	}

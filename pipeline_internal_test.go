@@ -14,7 +14,7 @@ func TestWritesGoThroughExec(t *testing.T) {
 	e := &FakeExec{Affected: 3, LastID: 9, HasLastID: true}
 	db := OpenFake(Postgres, e)
 	st := Statement{Op: OpUpdate, Entity: invInfo, AllRows: true, Set: []Assignment{{Column: 3, Op: AssignSet, Value: 1.5}}}
-	res, err := execWrite(context.Background(), db, &st)
+	res, err := engine.ExecWrite(context.Background(), &db.e, &st)
 	if err != nil || res.Affected != 3 || res.LastID != 9 || !res.HasLastID {
 		t.Fatalf("%+v, %v", res, err)
 	}
@@ -45,7 +45,7 @@ func TestHooksOnWrites(t *testing.T) {
 		db := OpenFake(Postgres, &FakeExec{}, WithRewrite(edit))
 		st := update()
 		set := st.Set
-		if _, err := execWrite(ctx, db, &st); err != nil {
+		if _, err := engine.ExecWrite(ctx, &db.e, &st); err != nil {
 			t.Fatal(err)
 		}
 		if set[0].Value != 1.5 {
@@ -54,7 +54,7 @@ func TestHooksOnWrites(t *testing.T) {
 		row := []any{"orig"}
 		cf := &ConflictClause{Columns: []int{1}, Update: []int{2}}
 		ins := Statement{Op: OpInsert, Entity: invInfo, Columns: []int{2}, Rows: [][]any{row}, Conflict: cf}
-		if _, err := execWrite(ctx, db, &ins); err != nil {
+		if _, err := engine.ExecWrite(ctx, &db.e, &ins); err != nil {
 			t.Fatal(err)
 		}
 		if row[0] != "orig" || cf.Update[0] != 2 {
@@ -82,7 +82,7 @@ func TestHooksOnWrites(t *testing.T) {
 			e := &FakeExec{}
 			db := OpenFake(Postgres, e, WithRewrite(c.hook))
 			st := c.st
-			if _, err := execWrite(ctx, db, &st); err == nil || !strings.Contains(err.Error(), c.want) || e.Calls != 0 {
+			if _, err := engine.ExecWrite(ctx, &db.e, &st); err == nil || !strings.Contains(err.Error(), c.want) || e.Calls != 0 {
 				t.Errorf("%v (calls %d), want an error containing %q", err, e.Calls, c.want)
 			}
 		})
@@ -123,7 +123,7 @@ func TestHooksAndConditionsOfRelations(t *testing.T) {
 			e := &FakeExec{}
 			db := OpenFake(Postgres, e, WithRewrite(c.hook))
 			st := Statement{Op: OpDelete, Entity: co, Where: []Predicate{engine.NewPredicate(engine.Node{Op: engine.OpExists, Col: 0, V: staff})}}
-			if _, err := execWrite(ctx, db, &st); err == nil || !strings.Contains(err.Error(), c.want) || e.Calls != 0 {
+			if _, err := engine.ExecWrite(ctx, &db.e, &st); err == nil || !strings.Contains(err.Error(), c.want) || e.Calls != 0 {
 				t.Errorf("%v (calls %d), want an error containing %q", err, e.Calls, c.want)
 			}
 		})

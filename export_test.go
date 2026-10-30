@@ -58,7 +58,7 @@ func ReplicaDownUntil(db *DB, i int) time.Time {
 
 // DryRun prepares and routes st as the SQL(ctx) methods do.
 func DryRun(ctx context.Context, db *DB, st *Statement) (string, []any, error) {
-	return db.dryRun(ctx, st)
+	return db.e.DryRun(ctx, st)
 }
 
 // OpenFake returns a DB of dialect d that runs statements on e.
@@ -98,7 +98,7 @@ func InfoOf[E any, PE Entity[E]]() *EntityInfo { return PE(nil).VeloxMeta().info
 
 // Prepare runs db's stages before execution on st, as run does: guard,
 // entity hooks, Rewrite hooks, scope, row cap and rendering.
-func Prepare(ctx context.Context, db *DB, st *Statement) error { return db.prepare(ctx, st) }
+func Prepare(ctx context.Context, db *DB, st *Statement) error { return db.e.Prepare(ctx, st) }
 
 // Kids returns p's sub-conditions: the operands of an And, Or or Not, or the
 // conditions an EXISTS puts on its target.

@@ -212,7 +212,7 @@ func (s *session) Pinned() bool {
 	return u != 0 && time.Now().UnixNano() < u
 }
 
-// Route is where a statement runs. The route stage sets Statement.Route
+// route is where a statement runs. The route stage sets Statement.Route
 // after the Rewrite hooks and before the Around hooks run. TxInfo.Route is a
 // transaction's.
 type Route struct {
@@ -438,7 +438,7 @@ func ConnOnly(c Conn) Dialect { return c.only }
 
 func NewConn(ex Executor, only Dialect) Conn { return Conn{ex: ex, only: only} }
 
-// Failoverable reports whether err, from a read on a replica (the query call or
+// failoverable reports whether err, from a read on a replica (the query call or
 // its rows), is a connection error after which the read is retried on the
 // primary: the replica was not reached, its connection is gone, or its server
 // is shutting down or starting up. A query error (syntax, a constraint, a
@@ -449,7 +449,7 @@ func NewConn(ex Executor, only Dialect) Conn { return Conn{ex: ex, only: only} }
 // may be a slow query, not a dead replica. A MySQL error that is the server
 // refusing or ending the connection counts (MysqlConnectError), as a pgx
 // ConnectError does.
-func Failoverable(err error) bool {
+func failoverable(err error) bool {
 	if Is(err, context.Canceled) || Is(err, context.DeadlineExceeded) {
 		return false
 	}
@@ -494,11 +494,11 @@ func safeToRetry(err error) bool {
 	return ok && r.SafeToRetry()
 }
 
-// Wrote records that a write reached the driver, whether or not it then
+// wrote records that a write reached the driver, whether or not it then
 // failed, as its outcome is unknown: in a transaction, in the flag its commit
 // reads; outside one, in the context's session. A DB without replicas keeps
 // no record.
-func (db *DB) Wrote(ctx context.Context) {
+func (db *DB) wrote(ctx context.Context) {
 	if db.InTx {
 		if db.txWrote != nil {
 			db.txWrote.Store(true)
@@ -545,7 +545,7 @@ func (db *DB) CtxShard(ctx context.Context) (*ShardConn, error) {
 	return sh, err
 }
 
-// Route is the route stage: it chooses the connection st runs on, and
+// route is the route stage: it chooses the connection st runs on, and
 // records the choice in st.Route.
 //
 // Writes, statements in a transaction, reads whose context is marked with
@@ -562,7 +562,7 @@ func (db *DB) CtxShard(ctx context.Context) (*ShardConn, error) {
 // sent.
 //
 // On a DB without a router it is one branch: no context lookup.
-func (db *DB) Route(ctx context.Context, st *Statement) (Target, error) {
+func (db *DB) route(ctx context.Context, st *Statement) (Target, error) {
 	if db.Rt == nil || db.InTx && db.txShard == nil {
 		// The DB's one connection, or the transaction's.
 		st.Route = Route{Replica: -1}
@@ -628,18 +628,18 @@ func (db *DB) routeTx(ctx context.Context, st *Statement) (Target, error) {
 	return Target{Ex: db.Ex, Replica: -1}, nil
 }
 
-// Broken reports whether err, from a read on t, is a connection error on a
+// broken reports whether err, from a read on t, is a connection error on a
 // replica, with ctx still live: whether the read falls over. A context that
 // ended says nothing about the replica.
-func (db *DB) Broken(ctx context.Context, t Target, err error) bool {
-	return t.Replica >= 0 && ctx.Err() == nil && Failoverable(err)
+func (db *DB) broken(ctx context.Context, t Target, err error) bool {
+	return t.Replica >= 0 && ctx.Err() == nil && failoverable(err)
 }
 
-// FallBack records that st's read on replica t failed with a connection error:
+// fallBack records that st's read on replica t failed with a connection error:
 // the replica is put in back-off for the DB's WithReplicaBackoff, and fallBack
 // returns the shard's primary for exec to retry st on, with st.Route and st.ran
 // saying so.
-func (db *DB) FallBack(st *Statement, t Target) Target {
+func (db *DB) fallBack(st *Statement, t Target) Target {
 	t.Sh.Replicas[t.Replica].Down(db.Cfg.Backoff)
 	p := Target{Ex: t.Sh.Primary, Sh: t.Sh, Replica: -1}
 	st.Route = Route{Shard: t.Sh.Name, Replica: -1, Fallback: true}

@@ -55,7 +55,7 @@ func bidiUpdate(ctx context.Context, db *DB, mu *engine.MutationState, keys []en
 	err := bidiTx(ctx, db, in, func(ctx context.Context, tx *DB) error {
 		st.InTx = true
 		engine.SetStmtBidi(st, &engine.BidiStep{Keys: keys, Vals: vs, Pinned: k})
-		res, err := execWrite(ctx, tx, st)
+		res, err := engine.ExecWrite(ctx, &tx.e, st)
 		engine.SetStmtBidi(st, nil)
 		if err != nil {
 			return err
@@ -73,7 +73,7 @@ func bidiUpdate(ctx context.Context, db *DB, mu *engine.MutationState, keys []en
 			unlink := Statement{Op: OpUpdate, Entity: in, InTx: true,
 				Set: []Assignment{{Column: bk.Col, Op: AssignSet}}, Where: []Predicate{ColumnEQ(bk.Col, k)}}
 			// Any number of rows, none included, is right: the count is not read.
-			if _, err := execWrite(free, tx, &unlink); err != nil {
+			if _, err := engine.ExecWrite(free, &tx.e, &unlink); err != nil {
 				return err
 			}
 		}
@@ -106,7 +106,7 @@ func bidiLink(ctx context.Context, db *DB, in *EntityInfo, bk engine.BidiKey, k,
 	st := Statement{Op: OpUpdate, Entity: in, InTx: db.e.InTx,
 		Set:   []Assignment{{Column: bk.Col, Op: AssignSet, Value: k}},
 		Where: []Predicate{ColumnEQ(pk, v), engine.NewPredicate(engine.Node{Op: engine.OpIsNull, Col: int32(bk.Col)})}}
-	res, err := execWrite(ctx, db, &st)
+	res, err := engine.ExecWrite(ctx, &db.e, &st)
 	switch {
 	case err != nil:
 		return err
@@ -123,9 +123,9 @@ func bidiLink(ctx context.Context, db *DB, in *EntityInfo, bk engine.BidiKey, k,
 		return nil
 	}
 	if db.e.Hooked() {
-		err = db.run(ctx, &probe, read, nil)
+		err = db.e.Run(ctx, &probe, read, nil)
 	} else {
-		err = db.plain(ctx, &probe, read, nil)
+		err = db.e.Plain(ctx, &probe, read, nil)
 	}
 	if err != nil {
 		return err

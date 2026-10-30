@@ -149,7 +149,7 @@ func TestConstraintErrors(t *testing.T) {
 		{fmt.Errorf("x: %w", myErr(1062, "Duplicate entry 'a' for key 'p.p_code_uq'")), ConstraintUnique, "p_code_uq"},
 		{errors.Join(io.EOF, myErr(1062, "Duplicate entry 'a' for key 'p.p_code_uq'")), ConstraintUnique, "p_code_uq"},
 	} {
-		got := DBErr(invInfo, c.err)
+		got := dbErr(invInfo, c.err)
 		var ce *ConstraintError
 		if !errors.As(got, &ce) || ce.Kind != c.kind || ce.Constraint != c.name || ce.Entity != "velox.inv" {
 			t.Errorf("%v: got %#v", c.err, got)
@@ -170,7 +170,7 @@ func TestOtherErrorsAreLeftAlone(t *testing.T) {
 	for _, err := range []error{io.EOF, &pgconn.PgError{Code: "42601"}, myErr(1064, "You have an error in your SQL syntax"),
 		// MySQL's 4025, not MariaDB's
 		myErr(4025, "The AUTOEXTEND_SIZE value is out of range")} {
-		got := DBErr(invInfo, err)
+		got := dbErr(invInfo, err)
 		var ce *ConstraintError
 		if errors.As(got, &ce) || !errors.Is(got, err) || got.Error() != "velox: velox.inv: "+err.Error() {
 			t.Errorf("%v became %v", err, got)
@@ -207,7 +207,7 @@ func TestLookAlikeErrorsAreLeftAlone(t *testing.T) {
 	for _, c := range []int{2067, 5} {
 		err := coder{c}
 		var ce *ConstraintError
-		if errors.As(DBErr(invInfo, err), &ce) || Retryable(err) {
+		if errors.As(dbErr(invInfo, err), &ce) || Retryable(err) {
 			t.Errorf("code %d was taken for a driver error", c)
 		}
 	}
@@ -222,7 +222,7 @@ func (*PgError) Error() string { return "look-alike" }
 func TestLookAlikeDriverTypeFromAnotherPackage(t *testing.T) {
 	err := &PgError{Code: "23505"}
 	var ce *ConstraintError
-	got := DBErr(invInfo, err)
+	got := dbErr(invInfo, err)
 	if errors.As(got, &ce) || Retryable(err) {
 		t.Errorf("a look-alike PgError was taken for the driver's: %v", got)
 	}
@@ -253,15 +253,15 @@ func TestTypedNilDriverErrors(t *testing.T) {
 		{"invalid conn wrapped", fmt.Errorf("x: %w", nilErrorString)},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			got := DBErr(invInfo, c.err)
+			got := dbErr(invInfo, c.err)
 			if _, ok := As[*ConstraintError](got); ok || Is(got, ErrLocked) {
 				t.Errorf("dbErr = %v", got)
 			}
 			if code, ok := DriverCode(c.err); code != "" || ok {
 				t.Errorf("DriverCode = %q, %v; want none", code, ok)
 			}
-			if Retryable(c.err) || Failoverable(c.err) {
-				t.Errorf("retryable %v, failoverable %v", Retryable(c.err), Failoverable(c.err))
+			if Retryable(c.err) || failoverable(c.err) {
+				t.Errorf("retryable %v, failoverable %v", Retryable(c.err), failoverable(c.err))
 			}
 		})
 	}
@@ -280,9 +280,9 @@ func TestTypedNilDriverErrors(t *testing.T) {
 		{"connect", errors.Join((*pgconn.ConnectError)(nil), io.ErrUnexpectedEOF), "", false, true},
 	} {
 		code, _ := DriverCode(c.err)
-		if code != c.code || Retryable(c.err) != c.retry || Failoverable(c.err) != c.failover {
+		if code != c.code || Retryable(c.err) != c.retry || failoverable(c.err) != c.failover {
 			t.Errorf("%s: DriverCode %q, retryable %v, failoverable %v; want %q, %v, %v",
-				c.name, code, Retryable(c.err), Failoverable(c.err), c.code, c.retry, c.failover)
+				c.name, code, Retryable(c.err), failoverable(c.err), c.code, c.retry, c.failover)
 		}
 	}
 }
@@ -295,7 +295,7 @@ func TestErrLocked(t *testing.T) {
 		&pgconn.PgError{Code: "55P03"},
 		myErr(3572, "Statement aborted because lock(s) could not be acquired immediately and NOWAIT is set."),
 	} {
-		got := DBErr(invInfo, err)
+		got := dbErr(invInfo, err)
 		if !errors.Is(got, ErrLocked) {
 			t.Errorf("%v: %v does not match ErrLocked", err, got)
 		}
@@ -307,24 +307,24 @@ func TestErrLocked(t *testing.T) {
 		if want := "velox: velox.inv: lock not available: "; !strings.HasPrefix(got.Error(), want) {
 			t.Errorf("%q does not start %q", got.Error(), want)
 		}
-		if Retryable(got) || Failoverable(got) {
-			t.Errorf("%v: retryable %v, failoverable %v; want neither", got, Retryable(got), Failoverable(got))
+		if Retryable(got) || failoverable(got) {
+			t.Errorf("%v: retryable %v, failoverable %v; want neither", got, Retryable(got), failoverable(got))
 		}
 	}
 	for _, err := range []error{&pgconn.PgError{Code: "40001"}, myErr(1205, "Lock wait timeout exceeded")} {
-		if got := DBErr(invInfo, err); errors.Is(got, ErrLocked) {
+		if got := dbErr(invInfo, err); errors.Is(got, ErrLocked) {
 			t.Errorf("%v matches ErrLocked", got)
 		}
 	}
 }
 
 func TestConstraintErrorIsNotWrappedTwice(t *testing.T) {
-	once := DBErr(invInfo, &pgconn.PgError{Code: "23505", ConstraintName: "uq"})
-	if twice := DBErr(invInfo, once); twice != once {
+	once := dbErr(invInfo, &pgconn.PgError{Code: "23505", ConstraintName: "uq"})
+	if twice := dbErr(invInfo, once); twice != once {
 		t.Errorf("%v became %v", once, twice)
 	}
 	wrapped := fmt.Errorf("velox: commit: %w", once)
-	if got := DBErr(invInfo, wrapped); got != wrapped {
+	if got := dbErr(invInfo, wrapped); got != wrapped {
 		t.Errorf("%v became %v", wrapped, got)
 	}
 }
@@ -438,7 +438,7 @@ func FuzzConstraint(f *testing.F) {
 		}
 
 		err := myErr(uint16(code), msg)
-		got := DBErr(invInfo, err)
+		got := dbErr(invInfo, err)
 		if !errors.Is(got, err) {
 			t.Fatalf("code %d, %q: the driver's error is not reachable from %v", code, msg, got)
 		}
