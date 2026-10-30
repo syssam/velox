@@ -144,33 +144,35 @@ func loadOne(ctx context.Context, db *DB, pin target, owner *EntityInfo, ptrs []
 	if owner.kit == nil || t.kit == nil || (l.join != nil && l.join.kit == nil) {
 		return fmt.Errorf("velox: %s: relation %s: the entities have no scan plan; run go tool velox-gen", owner.Name, r.name)
 	}
-	// The distinct keys, in the order the owners have them; and each owner's key.
+	// The distinct keys, in the order the owners have them; and each owner's,
+	// as its index into them, -1 for none.
+	group := make(map[any]int, len(ptrs))
 	keys := make([]any, 0, len(ptrs))
-	ownerKey := make([]any, len(ptrs))
-	seen := make(map[any]bool, len(ptrs))
+	ownerKey := make([]int, len(ptrs))
 	for i, p := range ptrs {
-		k, ok := keyOf(owner.kit.value(p, l.ownerCol))
-		if !ok {
-			continue
-		}
-		ownerKey[i] = k
-		if !seen[k] {
-			seen[k] = true
-			keys = append(keys, k)
+		ownerKey[i] = -1
+		if k, ok := keyOf(owner.kit.value(p, l.ownerCol)); ok {
+			g, added := addKey(group, k)
+			if added {
+				keys = append(keys, k)
+			}
+			ownerKey[i] = g
 		}
 	}
 	// Every owner is loaded, even one with no key or no related row.
-	byKey := make(map[any][]int, len(keys)) // key → indexes into the targets
-	var all any
+	var x keyRows // each key's rows
+	var all []any
 	var targets []unsafe.Pointer
 	switch {
 	case len(keys) == 0:
 	case l.join != nil && sp.each > 0:
-		if all, targets, err = fetchEach(ctx, db, pin, l, sp, keys, maxRows, byKey); err != nil {
+		var owners []any
+		if all, targets, owners, err = fetchEach(ctx, db, pin, l, sp, keys, maxRows); err != nil {
 			return &loadError{owner: owner.Name, rel: r.name, err: err}
 		}
+		x.fill(group, len(owners), func(i int) (any, bool) { return keyOf(owners[i]) })
 	case l.join != nil:
-		if all, targets, err = fetchThrough(ctx, db, pin, owner, r, l, sp, keys, maxRows, byKey); err != nil {
+		if all, targets, err = fetchThrough(ctx, db, pin, owner, r, l, sp, keys, maxRows, func(own any, rows []int) { x.set(group, own, rows) }); err != nil {
 			return err
 		}
 	default:
@@ -181,11 +183,7 @@ func loadOne(ctx context.Context, db *DB, pin target, owner *EntityInfo, ptrs []
 		if all, targets, err = fetch(ctx, db, pin, t, []int{l.targetCol}, sp, keys, maxRows, ec); err != nil {
 			return &loadError{owner: owner.Name, rel: r.name, err: err}
 		}
-		for i, p := range targets {
-			if k, ok := keyOf(t.kit.value(p, l.targetCol)); ok {
-				byKey[k] = append(byKey[k], i)
-			}
-		}
+		x.fill(group, len(targets), func(i int) (any, bool) { return keyOf(t.kit.value(targets[i], l.targetCol)) })
 	}
 	// When a query ran, all holds its parts, so it is not nil even when they
 	// hold no row; it is nil only when nothing was fetched (no owner had a
@@ -198,14 +196,14 @@ func loadOne(ctx context.Context, db *DB, pin target, owner *EntityInfo, ptrs []
 	var picked []any // each owner's []T, when r is to-many and a query ran
 	if r.many && all != nil {
 		idx := make([][]int, len(ptrs))
-		for i := range ptrs {
-			idx[i] = byKey[ownerKey[i]]
+		for i, g := range ownerKey {
+			idx[i] = x.of(g)
 		}
-		picked = t.kit.pick(targets, idx)
+		picked = t.kit.pick(all, targets, idx)
 	}
 	for i, p := range ptrs {
 		h := (*holder)(unsafe.Add(p, r.off))
-		idx := byKey[ownerKey[i]]
+		idx := x.of(ownerKey[i])
 		switch {
 		case r.many && all != nil:
 			h.v = picked[i]
@@ -223,8 +221,8 @@ func loadOne(ctx context.Context, db *DB, pin target, owner *EntityInfo, ptrs []
 
 // fetchThrough reads the targets of a many-to-many relation for the owner
 // keys: the join entity's rows for them, then the targets of the keys those
-// rows hold, which are the ones sp's options apply to. It fills byKey with
-// each owner key's targets, as indexes into the targets returned, in their
+// rows hold, which are the ones sp's options apply to. It calls set with each
+// owner key's targets, as indexes into the targets returned, in their
 // fetched order and each once. It returns a nil all when the join rows hold
 // no target key, and so no target was fetched. Its errors name the owner and
 // the relation.
@@ -237,7 +235,7 @@ func loadOne(ctx context.Context, db *DB, pin target, owner *EntityInfo, ptrs []
 // sent: the statements already read are kept, and the chunks from its first
 // owner on are built again, with as many fewer keys as it had too many, until
 // a chunk holds one key.
-func fetchThrough(ctx context.Context, db *DB, pin target, owner *EntityInfo, r *relation, l link, sp loadSpec, keys []any, maxRows int, byKey map[any][]int) (any, []unsafe.Pointer, error) {
+func fetchThrough(ctx context.Context, db *DB, pin target, owner *EntityInfo, r *relation, l link, sp loadSpec, keys []any, maxRows int, set func(own any, rows []int)) ([]any, []unsafe.Pointer, error) {
 	j := l.join
 	_, rows, err := fetch(ctx, db, pin, j, []int{l.joinOwner, l.joinTarget}, loadSpec{}, keys, maxRows, nil)
 	if err != nil {
@@ -255,7 +253,7 @@ func fetchThrough(ctx context.Context, db *DB, pin target, owner *EntityInfo, r 
 		seen[[2]any{own, tk}] = true
 		byOwner[own] = append(byOwner[own], tk)
 	}
-	return throughChunks(ctx, db, pin, owner, r, l, sp, keys, byOwner, maxRows, byKey)
+	return throughChunks(ctx, db, pin, owner, r, l, sp, keys, byOwner, maxRows, set)
 }
 
 // throughChunk is one statement of throughChunks: the distinct target keys of
@@ -308,7 +306,7 @@ func throughPlan(keys []any, byOwner map[any][]any, per int) (chunks []throughCh
 // byOwner holds each owner key's target keys. A statement over the parameter
 // limit is not sent: the chunks read are kept, and the ones from its first
 // owner on are planned again, with as many fewer keys as it had too many.
-func throughChunks(ctx context.Context, db *DB, pin target, owner *EntityInfo, r *relation, l link, sp loadSpec, keys []any, byOwner map[any][]any, maxRows int, byKey map[any][]int) (any, []unsafe.Pointer, error) {
+func throughChunks(ctx context.Context, db *DB, pin target, owner *EntityInfo, r *relation, l link, sp loadSpec, keys []any, byOwner map[any][]any, maxRows int, set func(own any, rows []int)) ([]any, []unsafe.Pointer, error) {
 	t := l.target
 	order, per := fetchPlan(db, t, sp)
 	var done []throughChunk // the chunks read
@@ -360,7 +358,7 @@ plan:
 				idx = append(idx, byTarget[tk]...)
 			}
 			slices.Sort(idx) // the fetched order, which sp's OrderBy set
-			byKey[own] = idx
+			set(own, idx)
 		}
 		start = end
 	}
@@ -372,7 +370,7 @@ plan:
 // (by the target's primary key when nothing is asked). cols are the columns
 // of t its caller reads, the keys' column first. With ec, each statement reads
 // each owner's rows apart, as ec says (fetchPart).
-func fetch(ctx context.Context, db *DB, pin target, t *EntityInfo, cols []int, sp loadSpec, keys []any, maxRows int, ec *EachClause) (any, []unsafe.Pointer, error) {
+func fetch(ctx context.Context, db *DB, pin target, t *EntityInfo, cols []int, sp loadSpec, keys []any, maxRows int, ec *EachClause) ([]any, []unsafe.Pointer, error) {
 	order, per := fetchPlan(db, t, sp)
 	if ec != nil {
 		order = tieBreak(t, order)
@@ -395,10 +393,9 @@ func fetch(ctx context.Context, db *DB, pin target, t *EntityInfo, cols []int, s
 // fetchEach reads the targets of a many-to-many relation with LimitEach for
 // the owner keys, each owner's first sp.each in sp's order, in one statement
 // per chunk of keys that joins the join entity and reads each row's owner key
-// from it. It fills byKey with each owner key's targets, as indexes into the
-// targets returned, in their order; a target of two owners is read, and held,
-// once for each.
-func fetchEach(ctx context.Context, db *DB, pin target, l link, sp loadSpec, keys []any, maxRows int, byKey map[any][]int) (any, []unsafe.Pointer, error) {
+// from it. It returns each target's owner key too, in the targets' order; a
+// target of two owners is read, and held, once for each.
+func fetchEach(ctx context.Context, db *DB, pin target, l link, sp loadSpec, keys []any, maxRows int) ([]any, []unsafe.Pointer, []any, error) {
 	t := l.target
 	order, per := fetchPlan(db, t, sp)
 	order = tieBreak(t, order)
@@ -413,15 +410,10 @@ func fetchEach(ctx context.Context, db *DB, pin target, l link, sp loadSpec, key
 		return err
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	all, targets := joinBlocks(parts)
-	for i, own := range owners {
-		if k, ok := keyOf(own); ok {
-			byKey[k] = append(byKey[k], i)
-		}
-	}
-	return all, targets, nil
+	return all, targets, owners, nil
 }
 
 // tieBreak returns order with t's primary key columns it lacks added, so
@@ -626,7 +618,7 @@ func (b *blocks) next() unsafe.Pointer {
 // joinBlocks returns the parts a kit's scans read, each a *blocks, as one
 // value that keeps their rows, and a pointer to each row, in order. A kit's
 // pick and ptr read the rows through the pointers.
-func joinBlocks(parts []any) (any, []unsafe.Pointer) {
+func joinBlocks(parts []any) ([]any, []unsafe.Pointer) {
 	n := 0
 	for _, p := range parts {
 		n += p.(*blocks).n
@@ -641,4 +633,120 @@ func joinBlocks(parts []any) (any, []unsafe.Pointer) {
 		}
 	}
 	return parts, ptrs
+}
+
+// inPlace sets keep[i] when the rows of owner i in a kit's pick, idx[i], as
+// indexes into the rows that joinBlocks gave of all, lie one after another in
+// one array of all's blocks, in that order, with no row another such owner
+// has: the owner's slice can then be that run of the array, without a copy.
+// used holds a flag for each row, all false. An owner with no row is not in
+// place. Rows next to each other in memory but in two arrays are not one run:
+// a slice of them would keep only the first array alive. It returns how many
+// rows the owners not in place have, which pick copies.
+func inPlace(all []any, idx [][]int, keep, used []bool) (copied int) {
+	for i, x := range idx {
+		// x rises (the order rows are read in), so it is a run of rows when
+		// its ends are as far apart as its length says.
+		if len(x) == 0 || x[len(x)-1]-x[0] != len(x)-1 || x[len(x)-1] >= arrayEnd(all, x[0]) ||
+			slices.Contains(used[x[0]:x[len(x)-1]+1], true) {
+			copied += len(x)
+			continue
+		}
+		for _, j := range x {
+			used[j] = true
+		}
+		keep[i] = true
+	}
+	return copied
+}
+
+// arrayEnd returns the index, into the rows that joinBlocks gives of parts,
+// after the last row of the array that holds row j.
+func arrayEnd(parts []any, j int) int {
+	n := 0
+	for _, p := range parts {
+		for _, k := range p.(*blocks).bs {
+			n += k.used
+			if j < n {
+				return n
+			}
+		}
+	}
+	return n
+}
+
+// addKey gives k, when it is new to group, the next index, and returns its
+// index, and whether it is new. group holds a load's distinct owner keys, each
+// with its index in the order the owners have them; the caller holds the keys
+// as a slice too.
+func addKey(group map[any]int, k any) (int, bool) {
+	g, ok := group[k]
+	if !ok {
+		g = len(group)
+		group[k] = g
+	}
+	return g, !ok
+}
+
+// keyRows holds each owner key's rows, as indexes into the targets read for
+// the keys, by the key's index (addKey). It does not hold the key map: escape
+// analysis follows a struct's fields as one, so the rows, which reach the
+// heap, would take the map, which need not leave the stack, with them.
+type keyRows struct {
+	// As fill leaves them: those of key g are flat[off[g]:off[g+1]]. set sets
+	// rows instead.
+	flat, off []int
+	rows      [][]int
+}
+
+// fill sets the rows of each key in group from n targets, in their order, with
+// one allocation: keyAt gives the key of the target at an index, or false when
+// it has none. A target whose key is not in group is in no key's rows.
+func (x *keyRows) fill(group map[any]int, n int, keyAt func(i int) (any, bool)) {
+	k := len(group)
+	buf := make([]int, 2*n+k+1)
+	at, off, flat := buf[:n], buf[n:n+k+1], buf[n+k+1:]
+	for i := range n {
+		at[i] = -1
+		if key, ok := keyAt(i); ok {
+			if g, ok := group[key]; ok {
+				at[i] = g
+				off[g]++
+			}
+		}
+	}
+	sum := 0
+	for g := range off {
+		sum += off[g]
+		off[g] = sum // the end of g's rows, until the loop below
+	}
+	for i := n - 1; i >= 0; i-- {
+		if g := at[i]; g >= 0 {
+			off[g]--
+			flat[off[g]] = i
+		}
+	}
+	x.flat, x.off = flat, off
+}
+
+// set sets the rows of k, a key in group.
+func (x *keyRows) set(group map[any]int, k any, rows []int) {
+	if x.rows == nil {
+		x.rows = make([][]int, len(group))
+	}
+	x.rows[group[k]] = rows
+}
+
+// of returns the rows of the key at index g; g is -1 for an owner with no
+// key, which has none.
+func (x *keyRows) of(g int) []int {
+	switch {
+	case g < 0:
+		return nil
+	case x.rows != nil:
+		return x.rows[g]
+	case x.off != nil:
+		return x.flat[x.off[g]:x.off[g+1]:x.off[g+1]]
+	}
+	return nil
 }

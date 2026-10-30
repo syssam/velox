@@ -242,33 +242,31 @@ func loadEach(ctx context.Context, q eachQuery, owner *EntityInfo, ownerErr erro
 		}
 		return out, nil
 	}
-	_, targets := joinBlocks(parts)
+	all, targets := joinBlocks(parts)
 	if len(loads) > 0 && len(targets) > 0 {
 		if err := loadRelations(ctx, db, db.loadPin(at), t, targets, loads, st.MaxRows); err != nil {
 			return nil, err
 		}
 	}
 	// Each owner key's rows, as indexes into targets, in the order read.
-	byKey := make(map[any][]int, len(p.keys))
-	for i, ptr := range targets {
-		var k any
-		ok := false
-		if l.join != nil {
-			k, ok = keyOf(owners[i])
-		} else {
-			k, ok = keyOf(t.kit.value(ptr, l.targetCol))
-		}
-		if ok {
-			byKey[k] = append(byKey[k], i)
-		}
+	group := make(map[any]int, len(p.keys))
+	for _, k := range p.keys {
+		addKey(group, k)
 	}
+	var x keyRows
+	x.fill(group, len(targets), func(i int) (any, bool) {
+		if l.join != nil {
+			return keyOf(owners[i])
+		}
+		return keyOf(t.kit.value(targets[i], l.targetCol))
+	})
 	idx := make([][]int, len(p.ownerKey))
 	for i, k := range p.ownerKey {
 		if k != nil {
-			idx[i] = byKey[k]
+			idx[i] = x.of(group[k])
 		}
 	}
-	picked := t.kit.pick(targets, idx)
+	picked := t.kit.pick(all, targets, idx)
 	for i, k := range p.ownerKey {
 		if k == nil {
 			out[i] = t.kit.empty()

@@ -195,6 +195,74 @@ func TestWithOneAcrossBlocks(t *testing.T) {
 	}
 }
 
+// TestWithManyOwnersAcrossBlocks: owners of three rows each, read one owner
+// after another, so that some owners' rows lie in one of the scan's arrays and
+// some straddle two; and owners whose rows are read out of turn. Each owner has
+// its own rows, in order, capped at its length.
+func TestWithManyOwnersAcrossBlocks(t *testing.T) {
+	const owners = 100
+	for _, interleaved := range []bool{false, true} {
+		t.Run(fmt.Sprintf("interleaved=%v", interleaved), func(t *testing.T) {
+			var invs, items [][]any
+			for o := range owners {
+				invs = append(invs, invoiceRow(int64(o+1)))
+			}
+			id := int64(0)
+			for o := range owners {
+				for k := range 3 {
+					owner := int64(o + 1)
+					if interleaved && k == 1 {
+						owner = int64(owners - o) // the middle row is another owner's
+					}
+					id++
+					items = append(items, itemRow(id, owner, fmt.Sprintf("%d-%d", owner, id), int64(k)))
+				}
+			}
+			want := map[int64][]int64{} // each owner's item ids, in order
+			for _, it := range items {
+				want[it[1].(int64)] = append(want[it[1].(int64)], it[0].(int64))
+			}
+			e := &velox.FakeExec{Results: [][][]any{invs, items}}
+			db := velox.OpenFake(velox.Postgres, e)
+			got, err := db.Query[testmodel.Invoice]().With(I.Items).Limit(owners).All(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, inv := range got {
+				xs, _ := inv.Items.Get()
+				var ids []int64
+				for _, it := range xs {
+					if it.InvoiceID != inv.ID || it.SKU != fmt.Sprintf("%d-%d", inv.ID, it.ID) {
+						t.Fatalf("invoice %d has item %+v", inv.ID, it)
+					}
+					ids = append(ids, it.ID)
+				}
+				if !slices.Equal(ids, want[inv.ID]) || cap(xs) != len(xs) {
+					t.Fatalf("invoice %d: items %v cap %d, want %v capped", inv.ID, ids, cap(xs), want[inv.ID])
+				}
+			}
+		})
+	}
+}
+
+// TestLoadEachOwnersOfOneKeyDoNotShareRows: two owners with the same key get
+// the same rows, but not the same memory.
+func TestLoadEachOwnersOfOneKeyDoNotShareRows(t *testing.T) {
+	e := &velox.FakeExec{Rows: [][]any{itemRow(10, 1, "A", 1), itemRow(11, 1, "B", 1)}}
+	db := velox.OpenFake(velox.Postgres, e)
+	got, err := velox.LoadEach(ctx, db.Query[testmodel.Item](), I.Items, []*testmodel.Invoice{{ID: 1}, {ID: 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || len(got[0]) != 2 || len(got[1]) != 2 {
+		t.Fatalf("got %v", got)
+	}
+	got[0][0].SKU = "changed"
+	if got[1][0].SKU != "A" {
+		t.Errorf("the second owner's first row is %+v, want SKU A", got[1][0])
+	}
+}
+
 // TestWithChunksUnderTheParameterLimit is Review Focus 4.
 func TestWithChunksUnderTheParameterLimit(t *testing.T) {
 	// 64 parameters of headroom for hooks' conditions, one for the filter, two keys per chunk.

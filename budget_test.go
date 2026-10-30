@@ -457,13 +457,13 @@ func TestLoadAllocationBudgets(t *testing.T) {
 		}
 	}
 	samples := velox.OpenFake(velox.Postgres, &velox.FakeExec{Rows: [][]any{sampleRow(1, int64(1))}}) // its own parent
-	measure("an All with one With load", 41, func() error {
+	measure("an All with one With load", 40, func() error {
 		_, err := samples.Query[testmodel.Sample]().With(testmodel.Samples.Parent).Limit(10).All(ctx)
 		return err
 	})
 	owners := []*testmodel.Invoice{{ID: 1}, {ID: 2}}
 	items := velox.OpenFake(velox.Postgres, &velox.FakeExec{Rows: [][]any{itemRow(10, 1, "A", 1), itemRow(11, 2, "B", 1)}})
-	measure("LoadEach", 33, func() error {
+	measure("LoadEach", 30, func() error {
 		_, err := velox.LoadEach(ctx, items.Query[testmodel.Item](), I.Items, owners)
 		return err
 	})

@@ -249,8 +249,10 @@ var genericObjects = []struct {
 	// it. entityDesc was remeasured on 2026-10-22 after Rel.LimitEach and
 	// Rel.MaxRows (+518 bytes: 130782 before); its bound was kept. It was
 	// remeasured on 2026-10-23, after SQLType left ColumnDesc (-38 bytes), and
-	// its bound was kept again.
-	{"entityDesc", "", entityDescSrc, 153600}, // measured 132332
+	// its bound was kept again. Remeasured on 2026-10-30, darwin/arm64, Go
+	// 1.27.x, after a to-many load's owners took their rows in place (+2800
+	// bytes: 130104 before, which the scan's blocks had cut from 132386).
+	{"entityDesc", "", entityDescSrc, 153600}, // measured 132904
 	// entityDescUse is held like entityDescHooks: its bound is the
 	// measurement plus about 1.2%, rounded up to the next KiB; remeasured on
 	// 2026-10-22, darwin/arm64, Go 1.27.1, after the locking reads (about
@@ -269,8 +271,10 @@ var genericObjects = []struct {
 	// Query.With and Rel.With stay methods: with both called, functions would
 	// have saved 1638 bytes, under the 1% that decides it.
 	// Remeasured on 2026-10-27, darwin/arm64, Go 1.27.x, after Wave 2 of the
-	// pre-1.0 hardening (763608 under 773120 before).
-	{"entityDescUse", "", entityDescUseSrc, 757760}, // measured 748016
+	// pre-1.0 hardening (763608 under 773120 before). Remeasured on
+	// 2026-10-30 after a to-many load's owners took their rows in place
+	// (+3042 bytes: 746162 before; the bound held).
+	{"entityDescUse", "", entityDescUseSrc, 757760}, // measured 749204
 	// entityDescHooks is held tighter than the rule above: a quarter of it
 	// would let it grow by 64 KiB unseen. Its bound is the measurement plus
 	// about 1.2%, rounded up to the next KiB, the headroom it had before
@@ -284,8 +288,10 @@ var genericObjects = []struct {
 	// SQLType left ColumnDesc (-90 bytes; the bound held), and remeasured on
 	// 2026-10-26 after Use called Rel.With (G18): 1058816 before.
 	// Remeasured on 2026-10-27, darwin/arm64, Go 1.27.x, after Wave 2 of the
-	// pre-1.0 hardening (1052142 under 1064960 before).
-	{"entityDescHooks", "", entityDescHooksBound, 1049600}, // measured 1037136
+	// pre-1.0 hardening (1052142 under 1064960 before). Remeasured on
+	// 2026-10-30 after a to-many load's owners took their rows in place
+	// (+3042 bytes: 1035248 before; the bound held).
+	{"entityDescHooks", "", entityDescHooksBound, 1049600}, // measured 1038290
 	{"Policy", "velox.Policy[E]", "", 8192},                // measured 4050
 	// Mutation was remeasured on 2026-10-22, when it became a struct
 	// holding the mutation instead of a defined type of it (4692 before),

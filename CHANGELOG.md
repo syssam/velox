@@ -116,10 +116,12 @@ Runtime
   f293a06).
 - `With` and `LoadEach` read a relation's rows into arrays that never move,
   and give the owners of a to-many relation one array between them, each
-  owner's slice capped at its length. EagerO2M100 on SQLite went from 261,168
-  to 190,800 B/op and from 4,699 to 4,606 allocs/op (`BenchmarkScan`). A row
-  kept from a to-many load keeps the rows of every owner loaded with it; copy
-  it to keep it alone (4e4e85a).
+  owner's slice capped at its length. An owner whose rows were read one after
+  another takes them where they were read, without a copy, and each owner's
+  rows are grouped in one array of indexes. EagerO2M100 on SQLite went from
+  261,168 to 151,600 B/op and from 4,699 to 4,204 allocs/op (`BenchmarkScan`).
+  A row kept from a to-many load keeps the rows of every owner loaded with it;
+  copy it to keep it alone (4e4e85a).
 - `WithTenant` converts predeclared integers and strings to the tenant column's
   type, entity by entity (b04ac97).
 - `Open` and `OpenShards` panic on an unknown dialect (06d3b4d). A rollback

@@ -242,25 +242,30 @@ func kitOf[E any](info *EntityInfo, addr func(*E, int) any) *kit {
 			}
 			return part, nil
 		},
-		pick: func(ptrs []unsafe.Pointer, idx [][]int) []any {
-			n := 0
-			for _, x := range idx {
-				n += len(x)
-			}
-			// One array for every owner's elements, so one allocation, not one
-			// per owner; each owner's slice is capped at its length, so an
-			// append to it copies first. An owner's slice keeps the whole
-			// array alive, as the owners loaded together usually live together.
-			buf := make([]E, n)
+		pick: func(all []any, ptrs []unsafe.Pointer, idx [][]int) []any {
+			// An owner whose rows lie one after another in one of the scan's
+			// arrays is that run of it; the others' rows are copied, all into
+			// one array, so one allocation, not one per owner. Each owner's
+			// slice is capped at its length, so an append to it copies first,
+			// and keeps the whole array it is in alive, as the owners loaded
+			// together usually live together.
+			flags := make([]bool, len(idx)+len(ptrs))
+			keep := flags[:len(idx)]
+			buf := make([]E, inPlace(all, idx, keep, flags[len(idx):]))
 			out := make([]any, len(idx))
 			at := 0
 			for i, x := range idx {
-				part := buf[at : at+len(x) : at+len(x)]
-				for k, j := range x {
-					part[k] = *(*E)(ptrs[j])
+				var part []E
+				if keep[i] {
+					part = unsafe.Slice((*E)(ptrs[x[0]]), len(x))
+				} else {
+					part = buf[at : at+len(x) : at+len(x)]
+					for k, j := range x {
+						part[k] = *(*E)(ptrs[j])
+					}
+					at += len(x)
 				}
 				out[i] = part
-				at += len(x)
 			}
 			return out
 		},
