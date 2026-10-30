@@ -160,7 +160,7 @@ func loadOne(ctx context.Context, db *DB, pin target, owner *EntityInfo, ptrs []
 		}
 	}
 	// Every owner is loaded, even one with no key or no related row.
-	byKey := make(map[any][]int, len(keys)) // key → indexes into all
+	byKey := make(map[any][]int, len(keys)) // key → indexes into the targets
 	var all any
 	var targets []unsafe.Pointer
 	switch {
@@ -312,7 +312,7 @@ func throughChunks(ctx context.Context, db *DB, pin target, owner *EntityInfo, r
 	t := l.target
 	order, per := fetchPlan(db, t, sp)
 	var done []throughChunk // the chunks read
-	var parts []any         // each one's []T
+	var parts []any         // each one's *blocks
 	var shrunk error        // the parameter error that last made per smaller
 	rest := keys            // the owners not read yet
 plan:
@@ -345,10 +345,10 @@ plan:
 		return nil, nil, nil
 	}
 	all, targets := joinBlocks(parts)
-	start := 0 // the chunk's first index into all
+	start := 0 // the chunk's first index into targets
 	for i, c := range done {
 		end := start + parts[i].(*blocks).n
-		byTarget := make(map[any][]int, end-start) // target key → indexes into all
+		byTarget := make(map[any][]int, end-start) // target key → indexes into targets
 		for k := start; k < end; k++ {
 			if tk, ok := keyOf(t.kit.value(targets[k], l.targetCol)); ok {
 				byTarget[tk] = append(byTarget[tk], k)
@@ -377,7 +377,7 @@ func fetch(ctx context.Context, db *DB, pin target, t *EntityInfo, cols []int, s
 	if ec != nil {
 		order = tieBreak(t, order)
 	}
-	var parts []any // each chunk's []T
+	var parts []any // each chunk's *blocks
 	err := byChunks(len(keys), per, func(lo, hi int) error {
 		part, _, err := fetchPart(ctx, db, pin, t, cols, sp, order, keys[lo:hi], maxRows, ec)
 		if err == nil {

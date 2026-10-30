@@ -120,7 +120,6 @@ func TestWithFilterAndOrder(t *testing.T) {
 	}
 }
 
-// TestWithChunksUnderTheParameterLimit is Review Focus 4.
 // TestWithManyOwnersDoNotShareRows: the owners' slices share one array, so
 // each is capped at its length; an append to one, or a change to one of its
 // rows, leaves the next owner's rows as they were.
@@ -196,6 +195,7 @@ func TestWithOneAcrossBlocks(t *testing.T) {
 	}
 }
 
+// TestWithChunksUnderTheParameterLimit is Review Focus 4.
 func TestWithChunksUnderTheParameterLimit(t *testing.T) {
 	// 64 parameters of headroom for hooks' conditions, one for the filter, two keys per chunk.
 	defer velox.SetMaxParams(velox.Postgres, 64+3)()
