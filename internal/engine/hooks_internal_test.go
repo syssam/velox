@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"slices"
 	"testing"
 )
@@ -53,5 +54,28 @@ func TestMutationSetClonesOnce(t *testing.T) {
 	})
 	if n != 1 {
 		t.Errorf("three Sets make %.0f allocations, want 1", n)
+	}
+}
+
+// TestBidiDeleteKeepsTheStatement: the core sends a bidirectional delete's
+// two-direction condition in a copy, so the hooks' statement keeps the Where
+// they gave, and a second render gives the same SQL.
+func TestBidiDeleteKeepsTheStatement(t *testing.T) {
+	in := &EntityInfo{Name: "links", Table: "links", Columns: []ColumnInfo{{Name: "a"}, {Name: "b"}}, PrimaryKey: []int{0, 1}, Tenant: -1}
+	SetInfoBidi(in, true)
+	st := &Statement{Op: OpDelete, Entity: in, Where: []Predicate{ColumnEQ(0, int64(1))}}
+	db := &DB{D: Postgres, Cfg: NewConfig(nil)}
+	const want = `DELETE FROM "links" WHERE ("a" = $1 OR "b" = $2)`
+	for i := range 2 {
+		mu := &MutationState{St: st, Dry: true}
+		if err := writeCore(context.Background(), db, mu); err != nil {
+			t.Fatal(err)
+		}
+		if mu.SQL != want {
+			t.Errorf("render %d: %s, want %s", i, mu.SQL, want)
+		}
+		if len(st.Where) != 1 || PredNode(st.Where[0]).Op != OpEQ || PredNode(st.Where[0]).Col != 0 {
+			t.Fatalf("render %d: the statement's Where became %+v", i, st.Where)
+		}
 	}
 }

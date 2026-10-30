@@ -78,55 +78,6 @@ func On[E any](h Hook[E], ops ...Op) Hook[E] {
 	}
 }
 
-// mutate runs in's hooks around core, which runs on db: the hooks reach it
-// as Mutation.DB. With no hooks it calls core alone. The writes call core
-// directly when in has no hooks, so that none of them pays for the closure
-// and the mutation this takes, or for setting mu.db.
-func mutate(ctx context.Context, db *DB, in *EntityInfo, mu *engine.MutationState, core engine.MutateFn) error {
-	if len(engine.InfoHooks(in)) == 0 {
-		return core(ctx, mu)
-	}
-	mu.DB = db
-	next := func(ctx context.Context, mu *engine.MutationState) error {
-		if mu.Called {
-			// Running the core again would send the write again.
-			if mu.Err == nil {
-				mu.Err = engine.ErrNextTwice
-			}
-			mu.Core = engine.NewStageError(in.Name, "hook", engine.ErrNextTwice)
-			return mu.Core
-		}
-		mu.Called = true
-		if mu.St != nil {
-			// The conditions as the caller and the hooks gave them: prepare
-			// only appends to st.Where, or replaces it with a copy.
-			mu.Where = mu.St.Where
-		}
-		if mu.Own && mu.Err == nil {
-			mu.Err = engine.ErrOwnAndNext
-		}
-		if mu.Err != nil {
-			// Refuse before sending: the misuse would otherwise be
-			// reported only after the write was made.
-			mu.Core = engine.NewStageError(in.Name, "hook", mu.Err)
-			return mu.Core
-		}
-		mu.Core = core(ctx, mu)
-		return mu.Core
-	}
-	for i := len(engine.InfoHooks(in)) - 1; i >= 0; i-- {
-		next = engine.InfoHooks(in)[i](next)
-	}
-	err := next(ctx, mu)
-	switch {
-	case err == nil && mu.Err != nil:
-		return engine.NewStageError(in.Name, "hook", mu.Err)
-	case err == nil, engine.Identical(err, mu.Core):
-		return err
-	}
-	return engine.NewStageError(in.Name, "hook", err)
-}
-
 // BindPolicy erases p's entity type, for Desc.Policy. For generated code.
 // velox-gen writes
 //

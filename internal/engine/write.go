@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"slices"
@@ -126,4 +127,120 @@ func SetElem(p, v any) {
 		ptr.Elem().Set(val)
 		dst.Set(ptr)
 	}
+}
+
+// Write runs st, an update or delete (an update that must find its row, with
+// save), inside its entity's hooks, or alone when it has none, without
+// allocating for them. Under SQL(ctx) (dry) it renders st instead of sending
+// it. It returns the rows affected, and what dry rendered.
+//
+// The guard runs on st as the caller built it before the hooks see it, and
+// again inside next, in the pipeline: a condition a hook adds never stands in
+// for the caller's Where. Without hooks, the pipeline's guard is the only one.
+//
+// An update or Save on the join entity of a bidirectional edge is refused
+// first, before any hook runs, so that a refused write has no hook's side
+// effects.
+func Write(ctx context.Context, db *DB, st *Statement, dry, save bool) (int64, string, []any, error) {
+	if st.Op == OpUpdate && InfoBidi(st.Entity) {
+		return 0, "", nil, ErrBidiUpdate(st.Entity)
+	}
+	if len(InfoHooks(st.Entity)) == 0 {
+		var err error
+		mu := MutationState{St: st, Dry: dry}
+		if save {
+			err = saveCore(ctx, db, &mu)
+		} else {
+			err = writeCore(ctx, db, &mu)
+		}
+		return mu.Affected, mu.SQL, mu.Args, err
+	}
+	if err := db.Guard(st); err != nil {
+		return 0, "", nil, err
+	}
+	core := func(ctx context.Context, mu *MutationState) error { return writeCore(ctx, db, mu) }
+	if save {
+		core = func(ctx context.Context, mu *MutationState) error { return saveCore(ctx, db, mu) }
+	}
+	mu := &MutationState{Op: st.Op, St: st, Dry: dry}
+	if err := Mutate(ctx, db, st.Entity, mu, core); err != nil && !DryRefused(mu, err) {
+		return 0, "", nil, err
+	}
+	if save && mu.Own {
+		// A hook made the write itself (SetAffected): velox wrote nothing,
+		// so Save's Exec, which returns no count, must not store st.Set in
+		// *x. 0 tells it so, as for a hook that skipped next.
+		return 0, "", nil, nil
+	}
+	return mu.Affected, mu.SQL, mu.Args, nil
+}
+
+// writeCore is an update's or delete's work inside the hooks, their next.
+// For an update it adds the UpdateDefault assignments, refuses a column
+// assigned twice or an Immutable one and runs the validators; then it sends
+// the statement through the pipeline, whose guard runs first, or under
+// SQL(ctx) renders it into mu.sql and mu.args. It sets mu.affected.
+//
+// An update that sets the key of a bidirectional one-to-one edge (EdgeBidi)
+// must name one row by its primary key, and is sent with the statements that
+// re-point both partners (bidiUpdate).
+//
+// On the join entity of a bidirectional edge (write refused an update), a
+// delete's conditions also match each row's mirror (BidiWhere), so that both
+// rows of a link go, as ent's clearM2MEdges removes them. It sends a copy of
+// the statement with that condition, so that the hooks' statement keeps the
+// Where they gave.
+func writeCore(ctx context.Context, db *DB, mu *MutationState) error {
+	st := mu.St
+	if InfoBidi(st.Entity) && len(st.Where) > 0 {
+		cp := *st
+		cp.Where = []Predicate{BidiWhere(st.Where)}
+		st = &cp
+	}
+	if st.Op == OpUpdate {
+		in := st.Entity
+		st.Set = WithUpdateDefaults(in, st.Set)
+		if err := CheckAssignedOnce(in, st.Set); err != nil {
+			return err
+		}
+		if err := ValidateSetters(in, st.Set); err != nil {
+			return err
+		}
+		if len(InfoBidiKeys(in)) > 0 {
+			if keys, vs := BidiSet(in, st.Set); len(keys) > 0 {
+				k, err := CheckBidiUpdate(st, keys, vs)
+				if err != nil {
+					return err
+				}
+				st.InTx = true // Exec sends it in a transaction, bidiUpdate's
+				if !mu.Dry {
+					return bidiUpdate(ctx, db, mu, keys, k, vs)
+				}
+			}
+		}
+	}
+	if mu.Dry {
+		var err error
+		mu.SQL, mu.Args, err = db.DryRun(ctx, st)
+		return err
+	}
+	res, err := ExecWrite(ctx, db, st)
+	if err != nil {
+		return err
+	}
+	mu.Affected = res.Affected
+	return nil
+}
+
+// saveCore is Save's core: writeCore, failing with ErrNotFound when no row
+// has the key and meets the conditions. A dry run sends nothing, so it cannot
+// find that out.
+func saveCore(ctx context.Context, db *DB, mu *MutationState) error {
+	if err := writeCore(ctx, db, mu); err != nil {
+		return err
+	}
+	if !mu.Dry && mu.Affected == 0 {
+		return fmt.Errorf("velox: %s: %w", mu.St.Entity.Name, ErrNotFound)
+	}
+	return nil
 }

@@ -366,3 +366,97 @@ func SelfLink(a, b any) bool {
 func ErrBidiUpdate(in *EntityInfo) error {
 	return fmt.Errorf("velox: %s: the join entity of a bidirectional edge cannot be updated; delete the link and insert it again", in.Name)
 }
+
+// InsertRow sends st, the insert of the row at p that oneStatement made with
+// its generated key column gen, and sets out.Affected. A row that sets the
+// key of a bidirectional one-to-one edge (EdgeBidi) is inserted with the
+// statement that links its partner (bidiInsert). It is not generic, so that
+// it is compiled once; the transaction's closure works on copies, made only
+// for such a row, so that no other insert allocates for it.
+func InsertRow(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen int, out *Result) error {
+	if in := st.Entity; len(InfoBidiKeys(in)) > 0 {
+		if keys, vs := BidiRow(in, p); len(keys) > 0 {
+			cp := *st
+			SetStmtBidi(&cp, &BidiStep{Keys: keys, Vals: vs, Insert: true})
+			var res Result
+			err := bidiInsert(ctx, db, in, p, keys, vs, gen >= 0, cp.Conflict != nil, func(ctx context.Context, tx *DB) error {
+				return sendOne(ctx, tx, p, &cp, gen, &res)
+			})
+			if err == nil {
+				out.Affected = res.Affected
+			}
+			return err
+		}
+	}
+	return sendOne(ctx, db, p, st, gen, out)
+}
+
+// sendOne sends st, the insert of the row at p with its generated key column
+// gen, on db, reads that key back into the row, and sets out.Affected.
+func sendOne(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen int, out *Result) error {
+	in := st.Entity
+	if gen < 0 {
+		res, err := ExecWrite(ctx, db, st)
+		if err != nil {
+			return err
+		}
+		out.Affected = res.Affected
+		return CheckUpserted(st, res.Affected)
+	}
+	if db.D != MySQL {
+		var back int64 // the rows that came back
+		read := func(r Rows) error {
+			if !r.Next() {
+				return nil
+			}
+			back = 1
+			// A hook may have redirected Returning: then the row does not
+			// hold the key.
+			if len(st.Returning) == 1 && st.Returning[0] == gen {
+				return r.Scan(ScanDst(in, gen, FieldAddr(in, p, gen)))
+			}
+			return nil
+		}
+		var err error
+		if db.Hooked() {
+			err = db.Run(ctx, st, read, nil)
+		} else {
+			err = db.Plain(ctx, st, read, nil)
+		}
+		if err != nil {
+			return err
+		}
+		out.Affected = back
+		if len(st.Returning) == 0 && !StmtUpsertPolicy(st) {
+			// Without RETURNING (a hook dropped it), no row tells nothing; a
+			// policy-conditioned upsert was rendered with it, as prepare
+			// checks, so no row back is a hidden row.
+			return nil
+		}
+		return CheckUpserted(st, back)
+	}
+	res, err := ExecWrite(ctx, db, st)
+	if err != nil {
+		return err
+	}
+	out.Affected = res.Affected
+	// st.Conflict, not cf: a rewrite hook may have added or removed the clause.
+	// Without a conflict clause a successful insert wrote its row, whether
+	// the driver reported the count or not (-1).
+	if st.Conflict == nil && res.HasLastID && res.Affected != 0 {
+		return SetKey(in, gen, FieldAddr(in, p, gen), res.LastID)
+	}
+	return nil
+}
+
+// ConditionedUpsert predicts, before the scope runs, whether it will give
+// the update branch of an InsertAll of n rows of entity in the policy's Read
+// or Write conditions. A row those conditions hide fails the upsert once the
+// statement has written the others, so such an InsertAll of several rows runs
+// in a transaction, which the failure rolls back. The scope conditions an
+// upsert that updates, on any dialect but MySQL (which refuses it), of an
+// entity with a Read or Write policy, unless WithoutPolicy.
+func ConditionedUpsert(ctx context.Context, db *DB, in *EntityInfo, cf *ConflictClause, n int) bool {
+	return n > 1 && cf != nil && !cf.DoNothing && len(cf.Update) > 0 && db.D != MySQL &&
+		InfoPolicy(in) != nil && (InfoPolicy(in).Read != nil || InfoPolicy(in).Write != nil) && PolicyBypassReason(ctx) == ""
+}

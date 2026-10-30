@@ -2,6 +2,7 @@ package velox
 
 import (
 	"context"
+	"unsafe"
 
 	"github.com/syssam/velox2/internal/engine"
 )
@@ -110,8 +111,8 @@ func (m *Mutation[E]) Rows[_ Lazy[E]]() []*E {
 // It is set only for the writes of entities that have hooks, which are the
 // only ones that see a Mutation.
 func (m *Mutation[E]) DB[_ Lazy[E]]() *DB {
-	db, _ := m.mu.DB.(*DB)
-	return db
+	db, _ := m.mu.DB.(*engine.DB)
+	return (*DB)(unsafe.Pointer(db))
 }
 
 // Conds returns the conditions of an update or a delete as the caller and

@@ -8,9 +8,9 @@ import (
 	"unsafe"
 )
 
-// MutationState is a write in flight, without E: what Mutation[E] holds. Its db is an
-// any, converted by Mutation.DB: EntityInfo reaches mutation, and a *DB field
-// made every Desc entity's package 79 KiB larger (compilecost_test.go).
+// MutationState is a write in flight, without E: what Mutation[E] holds. Its DB is an
+// any, a *DB that Mutation.DB converts: EntityInfo reaches mutation, and a *DB field
+// made every Desc entity's package 14 KiB larger (compilecost_test.go).
 type MutationState struct {
 	DB       any              // the *DB the write runs on; set only when in has hooks
 	Op       Op               // set before the hooks run: Mutation.Op reads it, since an insert has no st
@@ -116,3 +116,52 @@ func AddBoundHook(b *BoundHooks, h HookFn) { b.hs = append(b.hs, h) }
 
 // NewBoundPolicy wraps p.
 func NewBoundPolicy(p *EntityPolicy) BoundPolicy { return BoundPolicy{p} }
+
+// Mutate runs in's hooks around core, which runs on db: the hooks reach it
+// as Mutation.DB. With no hooks it calls core alone. The writes call core
+// directly when in has no hooks, so that none of them pays for the closure
+// and the mutation this takes, or for setting mu.db.
+func Mutate(ctx context.Context, db *DB, in *EntityInfo, mu *MutationState, core MutateFn) error {
+	if len(InfoHooks(in)) == 0 {
+		return core(ctx, mu)
+	}
+	mu.DB = db
+	next := func(ctx context.Context, mu *MutationState) error {
+		if mu.Called {
+			// Running the core again would send the write again.
+			if mu.Err == nil {
+				mu.Err = ErrNextTwice
+			}
+			mu.Core = NewStageError(in.Name, "hook", ErrNextTwice)
+			return mu.Core
+		}
+		mu.Called = true
+		if mu.St != nil {
+			// The conditions as the caller and the hooks gave them: prepare
+			// only appends to st.Where, or replaces it with a copy.
+			mu.Where = mu.St.Where
+		}
+		if mu.Own && mu.Err == nil {
+			mu.Err = ErrOwnAndNext
+		}
+		if mu.Err != nil {
+			// Refuse before sending: the misuse would otherwise be
+			// reported only after the write was made.
+			mu.Core = NewStageError(in.Name, "hook", mu.Err)
+			return mu.Core
+		}
+		mu.Core = core(ctx, mu)
+		return mu.Core
+	}
+	for i := len(InfoHooks(in)) - 1; i >= 0; i-- {
+		next = InfoHooks(in)[i](next)
+	}
+	err := next(ctx, mu)
+	switch {
+	case err == nil && mu.Err != nil:
+		return NewStageError(in.Name, "hook", mu.Err)
+	case err == nil, Identical(err, mu.Core):
+		return err
+	}
+	return NewStageError(in.Name, "hook", err)
+}

@@ -567,12 +567,3 @@ func (db *DB) Foreign(ctx context.Context) bool {
 	m, _ := ctx.Value(TxKey{}).(*txFrame)
 	return m != nil && m != db.txRoot && !m.ended.Load()
 }
-
-// TxBroken is the error of a savepoint that broke db's transaction
-// (txFrame.broken), or nil.
-func (db *DB) TxBroken() error {
-	if db.txRoot == nil {
-		return nil
-	}
-	return db.txRoot.broken
-}
