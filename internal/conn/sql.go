@@ -34,6 +34,7 @@ func RowsColumnScanning(r Rows) bool {
 	return ok
 }
 
+// Query runs a statement that returns rows.
 func (e SQL) Query(ctx context.Context, s string, args []any) (Rows, error) {
 	r, err := e.c.QueryContext(ctx, s, args...)
 	if err != nil {
@@ -45,6 +46,7 @@ func (e SQL) Query(ctx context.Context, s string, args []any) (Rows, error) {
 	return sqlRows{r}, nil
 }
 
+// Exec runs a statement that returns none.
 func (e SQL) Exec(ctx context.Context, s string, args []any) (Result, error) {
 	res, err := e.c.ExecContext(ctx, s, args...)
 	if err != nil {
@@ -60,6 +62,7 @@ func (e SQL) Exec(ctx context.Context, s string, args []any) (Result, error) {
 	return Result{Affected: n, LastID: id, HasLastID: idErr == nil}, nil
 }
 
+// Begin starts a transaction, whose statements the returned Executor runs.
 func (e SQL) Begin(ctx context.Context, o sql.TxOptions) (Executor, Tx, error) {
 	tx, err := e.db.BeginTx(ctx, &o)
 	if err != nil {
