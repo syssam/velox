@@ -412,3 +412,14 @@ The probes ran on 2026-10-29 between 23:43 and 23:49 local time. The machine was
 - **Other drivers with `ScanColumn`.** Should lib/pq or a future MySQL or SQLite driver implement `RowsColumnScanner`, it gets nothing from this fix until it is measured and added to the detection.
 - **migrate's own scans** (`migrate/inspect_*.go`, history.go) run once per command, not per request. They are out of scope.
 - **From the old review, not touched here:** EagerO2M100's extra bytes against old velox on both dialects; GetByID's small sec/op gap; `runtime.GC()` before each benchmark timer; subtracting the `-toolexec` wrapper's cost; a re-run on Linux CI hardware.
+
+## Rulings made during execution
+
+Each says what it costs if wrong.
+
+1. **Task 1's minor findings parked.** The count loop inside `b.Loop`, the row limit and the untimed seed stay as they are: changing the benchmark after the before-run would break the before/after comparison. If wrong: a slightly noisier EagerO2M100 number.
+2. **EagerO2M100's +6 allocations (Task 3).** It sends two queries, so +6 is "up to 3 per query"; the plan's "+3" was per query. If wrong: nothing.
+3. **The root benchmark's load mismatch accepted (Task 3).** The before run was at a load of 12 to 30 and the after run at 5 to 9. Record 0018 and the review state both loads, and the fair comparison is Task 6's same-run ratios. If wrong: 0018's percentages overstate the fix somewhat.
+4. **The final review before Task 6.** The whole-branch review and its fix wave ran on Tasks 1–5 before the runtime run, so the run and the gate measure the final code. The review document was then fact-checked on its own (7 wording errors, no number errors, all fixed). If wrong: a lighter review of the review document.
+5. **Task 6's headline is cross-run.** 961 µs → 415 µs and 4.32 ms → 1.42 ms compare two runs at different loads; the review and the CHANGELOG say so, and the same-run ratios against old velox and ent are the fair comparison. If wrong: nothing; it is stated.
+6. **The gate under load.** The full gate passed every step up to bench/scale's GraphQL run, which failed only on time (`schema_edit_rebuild_x` 37.30 over 28.50, a 1,482 s wall clock at a 1-minute load of 74, against 31.7 s in the core run). That step and the two after it were rerun alone, as in hardening 2's Ruling 1, and passed (17.28, under 28.50, at a load of 35 to 41). If wrong: a build-time regression hidden by load, in a sub-project that changed no generated code.
