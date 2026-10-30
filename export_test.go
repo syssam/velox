@@ -62,7 +62,9 @@ func DryRun(ctx context.Context, db *DB, st *Statement) (string, []any, error) {
 }
 
 // OpenFake returns a DB of dialect d that runs statements on e.
-func OpenFake(d Dialect, e *FakeExec, opts ...Option) *DB { return newDB(d, e, opts) }
+func OpenFake(d Dialect, e *FakeExec, opts ...Option) *DB {
+	return &DB{e: engine.NewDB(d, e, opts)}
+}
 
 // RawRows runs sql on db's executor, bypassing the pipeline: the baseline of
 // hand-written code.
@@ -97,8 +99,12 @@ func PolicyBypass(ctx context.Context) string { return engine.PolicyBypassReason
 func InfoOf[E any, PE Entity[E]]() *EntityInfo { return PE(nil).VeloxMeta().info }
 
 // Prepare runs db's stages before execution on st, as run does: guard,
-// entity hooks, Rewrite hooks, scope, row cap and rendering.
-func Prepare(ctx context.Context, db *DB, st *Statement) error { return db.e.Prepare(ctx, st) }
+// Rewrite hooks, scope, row cap and rendering. It goes through DryRun, which
+// also routes st and checks its parameters.
+func Prepare(ctx context.Context, db *DB, st *Statement) error {
+	_, _, err := db.e.DryRun(ctx, st)
+	return err
+}
 
 // Kids returns p's sub-conditions: the operands of an And, Or or Not, or the
 // conditions an EXISTS puts on its target.
@@ -192,7 +198,7 @@ func sameNode(a, b engine.Node) bool {
 // OpenColumnScan returns a DB on db whose rows are colRows when wrap is set,
 // whatever db's driver.
 func OpenColumnScan(d Dialect, db *sql.DB, wrap bool) *DB {
-	return newDB(d, conn.NewSQLCols(db, wrap), nil)
+	return &DB{e: engine.NewDB(d, conn.NewSQLCols(db, wrap), nil)}
 }
 
 // PgxStdlib reports whether db's driver is pgx's stdlib driver.

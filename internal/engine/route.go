@@ -522,15 +522,15 @@ func (db *DB) pinSession(ctx context.Context) {
 // sharded DB the one ctx names, on a DB with replicas its one shard, and nil
 // on a DB without a router. Its error is Tx's.
 func (db *DB) shardForTx(ctx context.Context) (*ShardConn, error) {
-	sh, err := db.CtxShard(ctx)
+	sh, err := db.ctxShard(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("velox: transaction: %w", err)
 	}
 	return sh, nil
 }
 
-// CtxShard is shardForTx's shard, and its error without the prefix.
-func (db *DB) CtxShard(ctx context.Context) (*ShardConn, error) {
+// ctxShard is shardForTx's shard, and its error without the prefix.
+func (db *DB) ctxShard(ctx context.Context) (*ShardConn, error) {
 	switch {
 	case db.Rt == nil:
 		return nil, nil

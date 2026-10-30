@@ -10,7 +10,8 @@ import (
 func TestRelFile(t *testing.T) {
 	mods := []string{"github.com/syssam/velox2/example", "github.com/syssam/velox2", "gopkg.in/yaml.v3"}
 	for _, c := range []struct{ file, fn, mainPkg, want string }{
-		{"/src/velox2/db.go", "github.com/syssam/velox2.(*DB).plain", "", "db.go"},
+		{"/src/velox2/db.go", "github.com/syssam/velox2.(*DB).Tx", "", "db.go"},
+		{"/src/velox2/internal/engine/pipeline.go", "github.com/syssam/velox2/internal/engine.(*DB).Plain", "", "internal/engine/pipeline.go"},
 		{"/src/velox2/internal/testrepo/testrepo.go", "github.com/syssam/velox2/internal/testrepo.FirstInvoice", "", "internal/testrepo/testrepo.go"},
 		// The longer module wins.
 		{"/src/velox2/example/billing/invoice.go", "github.com/syssam/velox2/example/billing.(*Invoice).Schema", "", "billing/invoice.go"},
@@ -33,12 +34,13 @@ func TestRelFile(t *testing.T) {
 
 func TestPkgOf(t *testing.T) {
 	for fn, want := range map[string]string{
-		"github.com/syssam/velox2.(*DB).plain": "github.com/syssam/velox2",
+		"github.com/syssam/velox2.(*DB).Tx":                                                                            "github.com/syssam/velox2",
+		"github.com/syssam/velox2/internal/engine.(*DB).Plain":                                                         "github.com/syssam/velox2/internal/engine",
 		"github.com/syssam/velox2.Query[go.shape.struct { github.com/syssam/velox2/internal/testmodel.ID int64 }].All": "github.com/syssam/velox2",
-		"github.com/syssam/velox2/example.run":      "github.com/syssam/velox2/example",
-		"github.com/syssam/velox2_test.TestX.func1": "github.com/syssam/velox2_test",
-		"gopkg.in/yaml%2ev3.Marshal":                "gopkg.in/yaml.v3",
-		"main.run.func1":                            "main",
+		"github.com/syssam/velox2/example.run":                                                                         "github.com/syssam/velox2/example",
+		"github.com/syssam/velox2_test.TestX.func1":                                                                    "github.com/syssam/velox2_test",
+		"gopkg.in/yaml%2ev3.Marshal":                                                                                   "gopkg.in/yaml.v3",
+		"main.run.func1":                                                                                               "main",
 	} {
 		if got := pkgOf(fn); got != want {
 			t.Errorf("pkgOf(%q) = %q, want %q", fn, got, want)

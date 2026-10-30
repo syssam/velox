@@ -1,4 +1,4 @@
-package velox
+package engine
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syssam/velox2/internal/engine"
+	"github.com/syssam/velox2/internal/fakeconn"
 )
 
 // lateCtx is past its deadline, but its timer has not fired yet: it ends only
@@ -27,15 +27,15 @@ func TestOverWaitsForAPassedDeadline(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 		cancel()
 	}()
-	if !engine.Over(lateCtx{inner}) {
+	if !Over(lateCtx{inner}) {
 		t.Error("a context past its deadline is not over")
 	}
-	if engine.Over(context.Background()) {
+	if Over(context.Background()) {
 		t.Error("a context with no deadline is over")
 	}
 	live, cancelLive := context.WithTimeout(context.Background(), time.Hour)
 	defer cancelLive()
-	if engine.Over(live) {
+	if Over(live) {
 		t.Error("a context before its deadline is over")
 	}
 }
@@ -52,7 +52,7 @@ func TestOverWaitsWhileBlocked(t *testing.T) {
 		done := make(chan time.Time, 1)
 		result := make(chan bool, 1)
 		go func() {
-			r := engine.Over(lateCtx{inner})
+			r := Over(lateCtx{inner})
 			done <- time.Now()
 			result <- r
 		}()
@@ -78,15 +78,15 @@ func TestOverWaitsWhileBlocked(t *testing.T) {
 		inner, cancel := context.WithCancel(context.Background())
 		cancel()
 		start := time.Now()
-		if !engine.Over(lateCtx{inner}) {
+		if !Over(lateCtx{inner}) {
 			t.Error("a canceled context past its deadline is not over")
 		}
 		return time.Since(start)
 	}
-	if d := canceledOver(); d >= engine.OverGrace {
+	if d := canceledOver(); d >= OverGrace {
 		t.Logf("over took %v on a context already canceled; the machine is loaded, retrying once", d)
-		if d := canceledOver(); d >= engine.OverGrace {
-			t.Errorf("over took %v on a context already canceled, want less than the grace %v", d, engine.OverGrace)
+		if d := canceledOver(); d >= OverGrace {
+			t.Errorf("over took %v on a context already canceled, want less than the grace %v", d, OverGrace)
 		}
 	}
 }
@@ -98,21 +98,21 @@ func TestOverDoesNotWaitForever(t *testing.T) {
 	stuck := lateCtx{context.Background()} // Background's Done never closes
 	start := time.Now()
 	ended := make(chan bool, 1)
-	go func() { ended <- engine.Over(stuck) }()
+	go func() { ended <- Over(stuck) }()
 	select {
 	case ok := <-ended:
 		if !ok {
 			t.Error("a context past its deadline is not over")
 		}
-		if d := time.Since(start); d < engine.OverGrace || d > engine.OverGrace+time.Second {
-			t.Errorf("over took %v, want about %v", d, engine.OverGrace)
+		if d := time.Since(start); d < OverGrace || d > OverGrace+time.Second {
+			t.Errorf("over took %v, want about %v", d, OverGrace)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("over waits for a Done that never closes")
 	}
 
-	e := &FakeExec{}
-	db := OpenFake(Postgres, e)
+	e := &fakeconn.Exec{}
+	db := &DB{D: Postgres, Ex: e, Cfg: NewConfig(nil)}
 	done := make(chan error, 1)
 	go func() { done <- db.Tx(stuck, func(context.Context, *DB) error { return nil }) }()
 	select {

@@ -155,7 +155,7 @@ func Write(ctx context.Context, db *DB, st *Statement, dry, save bool) (int64, s
 		}
 		return mu.Affected, mu.SQL, mu.Args, err
 	}
-	if err := db.Guard(st); err != nil {
+	if err := db.guard(st); err != nil {
 		return 0, "", nil, err
 	}
 	core := func(ctx context.Context, mu *MutationState) error { return writeCore(ctx, db, mu) }

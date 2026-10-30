@@ -335,7 +335,7 @@ func bidiTx(ctx context.Context, db *DB, in *EntityInfo, fn func(ctx context.Con
 		return fmt.Errorf("velox: %s: %w", in.Name, db.txRoot.broken)
 	}
 	if !db.InTx {
-		if _, err := db.CtxShard(ctx); err != nil {
+		if _, err := db.ctxShard(ctx); err != nil {
 			return fmt.Errorf("velox: %s: %w", in.Name, err)
 		}
 	}

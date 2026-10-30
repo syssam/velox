@@ -92,3 +92,16 @@ func (db *DB) prepareRaw(ctx context.Context, st *Statement) {
 		st.SQL = q + db.Cfg.Comment.Text(st)
 	}
 }
+
+// RawExec is DB.Exec, its arguments given as a slice.
+func (db *DB) RawExec(ctx context.Context, reason, query string, args []any) (int64, error) {
+	if NoReason(reason) {
+		return 0, ErrNoReason(ExecInfo.Name)
+	}
+	st := &Statement{Op: OpRawExec, Entity: &ExecInfo, SQL: query, Args: args, TenantBypass: reason, PolicyBypass: reason, InTx: db.InTx}
+	var res ExecResult
+	if err := db.Run(ctx, st, nil, &res); err != nil {
+		return 0, err
+	}
+	return res.Affected, nil
+}

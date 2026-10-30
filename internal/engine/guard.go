@@ -81,9 +81,9 @@ func ErrZeroPredicate(entity string) error {
 	return fmt.Errorf("velox: %s: a condition is the zero Predicate; make conditions with column handles, And, Or and Not", entity)
 }
 
-// Guard checks a statement as the caller built it, before any hook sees it:
+// guard checks a statement as the caller built it, before any hook sees it:
 // conditions velox or a hook adds later never count as the caller's.
-func (db *DB) Guard(st *Statement) error {
+func (db *DB) guard(st *Statement) error {
 	for _, p := range st.Where {
 		if HasZero(PredNode(p)) {
 			return ErrZeroPredicate(st.Entity.Name)

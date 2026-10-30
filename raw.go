@@ -22,15 +22,7 @@ import (
 //
 //	n, err := db.Exec(ctx, "nightly cleanup", "DELETE FROM sessions WHERE expires_at < $1", now)
 func (db *DB) Exec(ctx context.Context, reason, query string, args ...any) (int64, error) {
-	if engine.NoReason(reason) {
-		return 0, engine.ErrNoReason(engine.ExecInfo.Name)
-	}
-	st := &Statement{Op: OpRawExec, Entity: &engine.ExecInfo, SQL: query, Args: args, TenantBypass: reason, PolicyBypass: reason, InTx: db.e.InTx}
-	var res engine.ExecResult
-	if err := db.e.Run(ctx, st, nil, &res); err != nil {
-		return 0, err
-	}
-	return res.Affected, nil
+	return db.e.RawExec(ctx, reason, query, args)
 }
 
 // RawQuery is raw SQL whose rows scan into entity E, made by Raw and run by

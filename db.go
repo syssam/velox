@@ -3,10 +3,8 @@ package velox
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"unsafe"
 
-	"github.com/syssam/velox2/internal/conn"
 	"github.com/syssam/velox2/internal/engine"
 )
 
@@ -36,39 +34,38 @@ var _ [unsafe.Sizeof(DB{}) - unsafe.Sizeof(engine.DB{})]struct{} = [0]struct{}{}
 // only when the DSN asks for it (modernc.org/sqlite:
 // _pragma=foreign_keys(1)). Open panics on a d that is not Postgres, MySQL or
 // SQLite.
-func Open(d Dialect, db *sql.DB, opts ...Option) *DB {
-	if !engine.ValidDialect(d) {
-		panic(fmt.Sprintf("velox: Open: unknown %v; use velox.Postgres, velox.MySQL or velox.SQLite", d))
-	}
-	return newDB(d, conn.NewSQL(db), opts)
-}
+func Open(d Dialect, db *sql.DB, opts ...Option) *DB { return &DB{e: engine.Open(d, db, opts)} }
 
 // OpenConn returns a DB of dialect d whose primary is c. veloxpgx.Open is this
 // with a veloxpgx.Conn. A zero Conn panics, as does a Conn that is valid only on
 // another dialect.
-func OpenConn(d Dialect, c Conn, opts ...Option) *DB {
-	if !engine.ValidDialect(d) {
-		panic(fmt.Sprintf("velox: OpenConn: unknown %v; use velox.Postgres, velox.MySQL or velox.SQLite", d))
-	}
-	switch {
-	case engine.ConnExec(c) == nil:
-		panic("velox: OpenConn: the Conn is zero; make it with SQLConn or a driver package's Conn")
-	case engine.ConnOnly(c) != 0 && engine.ConnOnly(c) != d:
-		panic(fmt.Sprintf("velox: OpenConn: the Conn is valid only on %s; the DB is %s", engine.ConnOnly(c), d))
-	}
-	return newDB(d, engine.ConnExec(c), opts)
-}
+func OpenConn(d Dialect, c Conn, opts ...Option) *DB { return &DB{e: engine.OpenConn(d, c, opts)} }
 
-// newDB returns an unsharded DB of dialect d on ex, its primary.
-func newDB(d Dialect, ex engine.Executor, opts []Option) *DB {
-	cfg := engine.NewConfig(opts)
-	if cfg.ShardFor != nil {
-		panic("velox: WithShardFor is for OpenShards; Open and OpenConn open a DB on one shard")
-	}
-	if len(cfg.Replicas) > 0 {
-		return &DB{e: engine.DB{D: d, Rt: engine.NewRouter(d, ex, cfg.Replicas), Cfg: cfg}}
-	}
-	return &DB{e: engine.DB{D: d, Ex: ex, Cfg: cfg}}
+// OpenShards returns a DB of dialect d whose statements each run on one of
+// shards, chosen from the statement's context:
+//
+//  1. the shard WithShard names;
+//  2. otherwise, the one WithShardFor's function returns for the context's
+//     tenant (WithTenant); its error refuses the statement;
+//  3. otherwise none: the statement fails with ErrNoShard, as it does under
+//     WithAllTenants without WithShard.
+//
+// A name that is not one of shards fails with ErrNoShard too, naming it.
+// Within its shard a statement is routed as on a DB with replicas: writes to
+// the primary, reads to the replicas in turn, a failed replica read to the
+// shard's primary. Statement.Route.Shard names the shard.
+//
+// Tx picks its shard from its context at begin, and every statement in the
+// transaction runs there: one whose context names no shard as well, but one
+// whose context names another fails, and nothing is sent.
+//
+// WithShardFor is required, and WithReplicas is refused: each Shard has its
+// own Replicas. OpenShards panics on either mistake, on a d that is not
+// Postgres, MySQL or SQLite, on no shards, on a shard named "" and on a shard
+// whose Primary or a replica is the zero Conn, or a Conn valid only on another
+// dialect.
+func OpenShards(d Dialect, shards map[string]Shard, opts ...Option) *DB {
+	return &DB{e: engine.OpenShards(d, shards, opts)}
 }
 
 // Dialect returns the DB's dialect.

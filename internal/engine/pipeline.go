@@ -2,12 +2,16 @@ package engine
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 	"sync/atomic"
 	"time"
+
+	"github.com/syssam/velox2/internal/conn"
 )
 
 // DB is the root package's DB without what is generic: every statement's path
@@ -36,6 +40,80 @@ type DB struct {
 	// txRoot is, in a transaction, its frame: the identity the mark on its
 	// fn's ctx carries, which its savepoints share. Nil elsewhere.
 	txRoot *txFrame
+}
+
+// Open is velox.Open's DB, opts given as a slice.
+func Open(d Dialect, db *sql.DB, opts []Option) DB {
+	if !ValidDialect(d) {
+		panic(fmt.Sprintf("velox: Open: unknown %v; use velox.Postgres, velox.MySQL or velox.SQLite", d))
+	}
+	return NewDB(d, conn.NewSQL(db), opts)
+}
+
+// OpenConn is velox.OpenConn's DB.
+func OpenConn(d Dialect, c Conn, opts []Option) DB {
+	if !ValidDialect(d) {
+		panic(fmt.Sprintf("velox: OpenConn: unknown %v; use velox.Postgres, velox.MySQL or velox.SQLite", d))
+	}
+	switch {
+	case ConnExec(c) == nil:
+		panic("velox: OpenConn: the Conn is zero; make it with SQLConn or a driver package's Conn")
+	case ConnOnly(c) != 0 && ConnOnly(c) != d:
+		panic(fmt.Sprintf("velox: OpenConn: the Conn is valid only on %s; the DB is %s", ConnOnly(c), d))
+	}
+	return NewDB(d, ConnExec(c), opts)
+}
+
+// NewDB returns an unsharded DB of dialect d on ex, its primary.
+func NewDB(d Dialect, ex Executor, opts []Option) DB {
+	cfg := NewConfig(opts)
+	if cfg.ShardFor != nil {
+		panic("velox: WithShardFor is for OpenShards; Open and OpenConn open a DB on one shard")
+	}
+	if len(cfg.Replicas) > 0 {
+		return DB{D: d, Rt: NewRouter(d, ex, cfg.Replicas), Cfg: cfg}
+	}
+	return DB{D: d, Ex: ex, Cfg: cfg}
+}
+
+// OpenShards is velox.OpenShards's DB.
+func OpenShards(d Dialect, shards map[string]Shard, opts []Option) DB {
+	if !ValidDialect(d) {
+		panic(fmt.Sprintf("velox: OpenShards: unknown %v; use velox.Postgres, velox.MySQL or velox.SQLite", d))
+	}
+	if len(shards) == 0 {
+		panic("velox: OpenShards: no shards")
+	}
+	cfg := NewConfig(opts)
+	if cfg.ShardFor == nil {
+		panic("velox: OpenShards: WithShardFor is required, to find a statement's shard from its tenant")
+	}
+	if len(cfg.Replicas) > 0 {
+		panic("velox: OpenShards: WithReplicas is for Open and OpenConn; give each Shard its Replicas")
+	}
+	rt := &Router{Shards: make(map[string]*ShardConn, len(shards)), ShardFor: cfg.ShardFor}
+	for _, name := range slices.Sorted(maps.Keys(shards)) {
+		s := shards[name]
+		if name == "" {
+			panic("velox: OpenShards: a shard's name must not be empty")
+		}
+		what := fmt.Sprintf("OpenShards: shard %q's", name)
+		switch {
+		case ConnExec(s.Primary) == nil:
+			panic(fmt.Sprintf("velox: %s Primary is the zero Conn; make it with SQLConn or a driver package's Conn", what))
+		case ConnOnly(s.Primary) != 0 && ConnOnly(s.Primary) != d:
+			panic(fmt.Sprintf("velox: %s Primary is valid only on %s; the DB is %s", what, ConnOnly(s.Primary), d))
+		}
+		for i, c := range s.Replicas {
+			if ConnExec(c) == nil {
+				panic(fmt.Sprintf("velox: %s replica %d is the zero Conn; make it with SQLConn or a driver package's Conn", what, i))
+			}
+		}
+		sh := NewShard(d, ConnExec(s.Primary), s.Replicas, what)
+		sh.Name = name
+		rt.Shards[name] = sh
+	}
+	return DB{D: d, Rt: rt, Cfg: cfg}
 }
 
 // Hooked reports whether the pipeline has hooks: whether a statement must go
@@ -96,7 +174,7 @@ func (db *DB) Plain(ctx context.Context, st *Statement, read func(Rows) error, r
 	if err := ResolveStatement(st); err != nil {
 		return err
 	}
-	if err := db.Guard(st); err != nil {
+	if err := db.guard(st); err != nil {
 		return err
 	}
 	if err := db.scope(ctx, st); err != nil {
@@ -149,7 +227,7 @@ func (db *DB) Run(ctx context.Context, st *Statement, read func(Rows) error, res
 	if err := db.dryWrite(ctx, st); err != nil {
 		return err
 	}
-	if err := db.Prepare(ctx, st); err != nil {
+	if err := db.prepare(ctx, st); err != nil {
 		return err
 	}
 	t, err := db.route(ctx, st)
@@ -178,13 +256,13 @@ func (db *DB) Run(ctx context.Context, st *Statement, read func(Rows) error, res
 	return db.execute(ctx, st, t, read, res)
 }
 
-// Prepare takes a statement through every stage before execution, for run
+// prepare takes a statement through every stage before execution, for run
 // and for SQL(ctx): the transaction check (outsideTx), resolving the
 // relations in its conditions (HasWhere leaves them to the statement), guard,
 // observe, rewrite hooks and their checks, scope, the row cap, and rendering
 // into st.SQL (comment included) and st.Args. Raw SQL takes only the
 // transaction check and prepareRaw.
-func (db *DB) Prepare(ctx context.Context, st *Statement) error {
+func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	if err := db.outsideTx(ctx, st); err != nil {
 		return err
 	}
@@ -195,7 +273,7 @@ func (db *DB) Prepare(ctx context.Context, st *Statement) error {
 	if err := ResolveStatement(st); err != nil {
 		return err
 	}
-	if err := db.Guard(st); err != nil {
+	if err := db.guard(st); err != nil {
 		return err
 	}
 	db.observe(ctx, st)
@@ -346,7 +424,7 @@ func (db *DB) Prepare(ctx context.Context, st *Statement) error {
 // work. It never executes st, so no Around hook runs.
 func (db *DB) DryRun(ctx context.Context, st *Statement) (string, []any, error) {
 	st.DryRun = true
-	if err := db.Prepare(ctx, st); err != nil {
+	if err := db.prepare(ctx, st); err != nil {
 		return "", nil, err
 	}
 	if _, err := db.route(ctx, st); err != nil {
