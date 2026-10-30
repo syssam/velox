@@ -316,10 +316,10 @@ func (s SaveQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
 // first, before any hook runs, so that a refused write has no hook's side
 // effects.
 func write(ctx context.Context, db *DB, st *Statement, dry, save bool) (int64, string, []any, error) {
-	if st.Op == OpUpdate && st.Entity.bidi {
+	if st.Op == OpUpdate && infoBidi(st.Entity) {
 		return 0, "", nil, errBidiUpdate(st.Entity)
 	}
-	if len(st.Entity.hooks) == 0 {
+	if len(infoHooks(st.Entity)) == 0 {
 		var err error
 		mu := mutation{st: st, dry: dry}
 		if save {
@@ -396,7 +396,7 @@ func onlyDryRun(err error) bool {
 // Where they gave.
 func writeCore(ctx context.Context, db *DB, mu *mutation) error {
 	st := mu.st
-	if st.Entity.bidi && len(st.Where) > 0 {
+	if infoBidi(st.Entity) && len(st.Where) > 0 {
 		cp := *st
 		cp.Where = []Predicate{bidiWhere(st.Where)}
 		st = &cp
@@ -410,7 +410,7 @@ func writeCore(ctx context.Context, db *DB, mu *mutation) error {
 		if err := validateSet(in, st.Set); err != nil {
 			return err
 		}
-		if len(in.bidiKeys) > 0 {
+		if len(infoBidiKeys(in)) > 0 {
 			if keys, vs := bidiSet(in, st.Set); len(keys) > 0 {
 				k, err := checkBidiUpdate(st, keys, vs)
 				if err != nil {

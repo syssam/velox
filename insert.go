@@ -134,7 +134,7 @@ func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 	if q.one == nil && len(q.many) == 0 {
 		return nil
 	}
-	if len(q.meta.info.hooks) > 0 {
+	if len(infoHooks(q.meta.info)) > 0 {
 		return mutate(ctx, q.db, q.meta.info, q.mutation(false), func(ctx context.Context, mu *mutation) error { return q.send(ctx, mu) })
 	}
 	var mu mutation
@@ -166,7 +166,7 @@ func (q InsertQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, erro
 	if q.one == nil && len(q.many) == 0 {
 		return "", nil, nil
 	}
-	if len(q.meta.info.hooks) > 0 {
+	if len(infoHooks(q.meta.info)) > 0 {
 		mu := q.mutation(true)
 		if err := mutate(ctx, q.db, q.meta.info, mu, func(ctx context.Context, mu *mutation) error { return q.render(ctx, mu) }); err != nil && !dryRefused(mu, err) {
 			return "", nil, err
@@ -461,7 +461,7 @@ func oneStatement[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *Conf
 		return Statement{}, -1, err
 	}
 	st := Statement{Op: OpInsert, Entity: m.info, Columns: cols, Rows: [][]any{rowValues(m, p, cols)}, Conflict: cf, InTx: db.inTx}
-	if m.info.bidi {
+	if infoBidi(m.info) {
 		mirrorRows(&st)
 	}
 	if gen >= 0 && db.d != MySQL {
@@ -487,10 +487,10 @@ func insertOne[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *Conflic
 // it is compiled once; the transaction's closure works on copies, made only
 // for such a row, so that no other insert allocates for it.
 func insertRow(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen int, out *Result) error {
-	if in := st.Entity; len(in.bidiKeys) > 0 {
+	if in := st.Entity; len(infoBidiKeys(in)) > 0 {
 		if keys, vs := bidiRow(in, p); len(keys) > 0 {
 			cp := *st
-			cp.bidi = &bidiStep{keys: keys, vals: vs, insert: true}
+			setStmtBidi(&cp, &bidiStep{keys: keys, vals: vs, insert: true})
 			var res Result
 			err := bidiInsert(ctx, db, in, p, keys, vs, gen >= 0, cp.Conflict != nil, func(ctx context.Context, tx *DB) error {
 				return sendOne(ctx, tx, p, &cp, gen, &res)
@@ -540,7 +540,7 @@ func sendOne(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen i
 			return err
 		}
 		out.Affected = back
-		if len(st.Returning) == 0 && !st.upsertPolicy {
+		if len(st.Returning) == 0 && !stmtUpsertPolicy(st) {
 			// Without RETURNING (a hook dropped it), no row tells nothing; a
 			// policy-conditioned upsert was rendered with it, as prepare
 			// checks, so no row back is a hidden row.
@@ -766,7 +766,7 @@ func batch[E any](m *Meta[E], xs []E, cols []int, cf *ConflictClause, inTx bool)
 	for i := range xs {
 		st.Rows = append(st.Rows, rowValues(m, &xs[i], cols))
 	}
-	if m.info.bidi {
+	if infoBidi(m.info) {
 		mirrorRows(&st)
 	}
 	return st
@@ -884,5 +884,5 @@ func insertBatches[E any](ctx context.Context, db *DB, m *Meta[E], xs []E, cols 
 // entity with a Read or Write policy, unless WithoutPolicy.
 func conditionedUpsert(ctx context.Context, db *DB, in *EntityInfo, cf *ConflictClause, n int) bool {
 	return n > 1 && cf != nil && !cf.DoNothing && len(cf.Update) > 0 && db.d != MySQL &&
-		in.policy != nil && (in.policy.read != nil || in.policy.write != nil) && policyBypass(ctx) == ""
+		infoPolicy(in) != nil && (infoPolicy(in).read != nil || infoPolicy(in).write != nil) && policyBypass(ctx) == ""
 }

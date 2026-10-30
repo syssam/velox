@@ -125,7 +125,7 @@ func WithAround(a Around) Option {
 // _pragma=foreign_keys(1)). Open panics on a d that is not Postgres, MySQL or
 // SQLite.
 func Open(d Dialect, db *sql.DB, opts ...Option) *DB {
-	if !d.valid() {
+	if !validDialect(d) {
 		panic(fmt.Sprintf("velox: Open: unknown %v; use velox.Postgres, velox.MySQL or velox.SQLite", d))
 	}
 	return newDB(d, conn.NewSQL(db), opts)
@@ -135,16 +135,16 @@ func Open(d Dialect, db *sql.DB, opts ...Option) *DB {
 // with a veloxpgx.Conn. A zero Conn panics, as does a Conn that is valid only on
 // another dialect.
 func OpenConn(d Dialect, c Conn, opts ...Option) *DB {
-	if !d.valid() {
+	if !validDialect(d) {
 		panic(fmt.Sprintf("velox: OpenConn: unknown %v; use velox.Postgres, velox.MySQL or velox.SQLite", d))
 	}
 	switch {
-	case c.ex == nil:
+	case connExec(c) == nil:
 		panic("velox: OpenConn: the Conn is zero; make it with SQLConn or a driver package's Conn")
-	case c.only != 0 && c.only != d:
-		panic(fmt.Sprintf("velox: OpenConn: the Conn is valid only on %s; the DB is %s", c.only, d))
+	case connOnly(c) != 0 && connOnly(c) != d:
+		panic(fmt.Sprintf("velox: OpenConn: the Conn is valid only on %s; the DB is %s", connOnly(c), d))
 	}
-	return newDB(d, c.ex, opts)
+	return newDB(d, connExec(c), opts)
 }
 
 // defaultPinWindow is how long a write pins its session unless WithPinWindow
@@ -211,7 +211,7 @@ func (db *DB) plain(ctx context.Context, st *Statement, read func(rows) error, r
 	if err := db.outsideTx(ctx, st); err != nil {
 		return err
 	}
-	if err := st.resolve(); err != nil {
+	if err := resolveStatement(st); err != nil {
 		return err
 	}
 	if err := db.guard(st); err != nil {
@@ -310,7 +310,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 		db.prepareRaw(ctx, st)
 		return nil
 	}
-	if err := st.resolve(); err != nil {
+	if err := resolveStatement(st); err != nil {
 		return err
 	}
 	if err := db.guard(st); err != nil {
@@ -351,7 +351,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	entity, op, writable, count, exists, agg, lock, wait, inTx := st.Entity, st.Op, st.Writable, st.Count, st.Exists, st.Aggregate, st.Lock, st.LockWait, st.InTx
 	// velox's own marks, which no hook can set: a hook that replaces the
 	// whole struct (*st = Statement{…}) zeroes them, and they are restored.
-	bidi, pin := st.bidi, st.pin
+	bidi, pin := stmtBidi(st), stmtPin(st)
 	// each is the Each the hooks get, a copy of velox's (was) when there are
 	// hooks: a hook may not replace it or change it.
 	each := st.Each
@@ -361,7 +361,8 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 			return &stageError{entity.Name, "rewrite", err}
 		}
 	}
-	st.bidi, st.pin = bidi, pin
+	setStmtBidi(st, bidi)
+	setStmtPin(st, pin)
 	if st.Op != op {
 		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's kind", entity.Name)
 	}
@@ -402,11 +403,11 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	switch {
 	case st.Entity == nil:
 		return fmt.Errorf("velox: %s: a Rewrite hook set the statement's Entity to nil", entity.Name)
-	case st.Entity != entity && (st.Entity.kit != entity.kit || len(st.Entity.Columns) != len(entity.Columns)):
+	case st.Entity != entity && (infoKit(st.Entity) != infoKit(entity) || len(st.Entity.Columns) != len(entity.Columns)):
 		// A copy (info := *st.Entity) keeps the scan plan; anything else
 		// would scan rows into the wrong fields.
 		return fmt.Errorf("velox: %s: a Rewrite hook replaced the Entity with %s, which is not a copy of it", entity.Name, st.Entity.Name)
-	case st.Entity.Tenant != entity.Tenant || st.Entity.policy != entity.policy:
+	case st.Entity.Tenant != entity.Tenant || infoPolicy(st.Entity) != infoPolicy(entity):
 		// The scope reads both from the statement's Entity: a copy without
 		// them would unscope the statement.
 		return fmt.Errorf("velox: %s: a Rewrite hook replaced the Entity with a copy whose tenant column or policy differs", entity.Name)
@@ -431,7 +432,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	if err := db.scope(ctx, st); err != nil {
 		return err
 	}
-	if returning && len(st.Returning) == 0 && st.upsertPolicy {
+	if returning && len(st.Returning) == 0 && stmtUpsertPolicy(st) {
 		return fmt.Errorf("velox: %s: a Rewrite hook dropped the RETURNING of an upsert whose update branch the policy conditions; velox reads the row back to find a row the policy hides", entity.Name)
 	}
 	db.capLimit(st)
@@ -777,7 +778,7 @@ func (db *DB) exec(ctx context.Context, st *Statement, t target, read func(rows)
 		// its Route says, the primary.
 		t = target{ex: t.sh.primary, sh: t.sh, replica: -1}
 	}
-	st.ran = t
+	setStmtRan(st, t)
 	if read == nil {
 		r, err := t.ex.Exec(ctx, st.SQL, st.Args)
 		if !st.Op.Reads() {
@@ -823,7 +824,7 @@ func (db *DB) exec(ctx context.Context, st *Statement, t target, read func(rows)
 	// cleanly, while pgx also reports read's own scan error through
 	// rows.Err(), where a Scanner's io.ErrUnexpectedEOF would look like one.
 	if rerr == nil && rowsErr != nil && db.broken(ctx, t, rowsErr) {
-		if st.handed {
+		if stmtHanded(st) {
 			// Iter has handed the caller a row, which cannot be taken
 			// back: the error is returned, and only the replica pays.
 			t.sh.replicas[t.replica].down(db.cfg.backoff)

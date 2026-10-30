@@ -209,9 +209,9 @@ func bidiUpdate(ctx context.Context, db *DB, mu *mutation, keys []bidiKey, k any
 	var n int64
 	err := bidiTx(ctx, db, in, func(ctx context.Context, tx *DB) error {
 		st.InTx = true
-		st.bidi = &bidiStep{keys: keys, vals: vs, pinned: k}
+		setStmtBidi(st, &bidiStep{keys: keys, vals: vs, pinned: k})
 		res, err := execWrite(ctx, tx, st)
-		st.bidi = nil
+		setStmtBidi(st, nil)
 		if err != nil {
 			return err
 		}
@@ -458,7 +458,7 @@ func bidiInsert(ctx context.Context, db *DB, in *EntityInfo, p unsafe.Pointer, k
 	}
 	pk := in.PrimaryKey[0]
 	if !generated {
-		id := in.kit.value(p, pk)
+		id := infoKit(in).value(p, pk)
 		for i, v := range vs {
 			if selfLink(id, v) {
 				return errSelfLink(in, keys[i])
@@ -469,7 +469,7 @@ func bidiInsert(ctx context.Context, db *DB, in *EntityInfo, p unsafe.Pointer, k
 		if err := send(ctx, tx); err != nil {
 			return err
 		}
-		id := in.kit.value(p, pk)
+		id := infoKit(in).value(p, pk)
 		if generated {
 			if reflect.ValueOf(id).IsZero() {
 				// The database generated the key, and did not return it.

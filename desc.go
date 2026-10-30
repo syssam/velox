@@ -192,8 +192,8 @@ func (o *MetaOnce[E]) Load[_ Lazy[E]](desc func() Desc[E]) *Meta[E] {
 		}
 		o.m = &Meta[E]{info: info, addr: addr, err: err}
 		if info != nil {
-			info.kit = kitOf(info, addr)
-			info.check = d.Check
+			setInfoKit(info, kitOf(info, addr))
+			setInfoCheck(info, d.Check)
 		}
 	})
 	return o.m
@@ -440,10 +440,7 @@ func defaultOf(d any, ft reflect.Type) (any, bool) {
 // connected model. Where the relation is used, the handle Rel[E, T] says T, and
 // CheckRelation checks the target.
 func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) EdgeDesc {
-	return EdgeDesc{
-		name: name, explicit: true, ownerCol: ownerCol, targetCol: targetCol,
-		holders: [2]any{elemType((*One[T])(nil)), elemType((*Many[T])(nil))},
-	}
+	return newEdgeDesc(name, ownerCol, targetCol, [2]any{elemType((*One[T])(nil)), elemType((*Many[T])(nil))})
 }
 
 // EdgeBidi is the one-to-one relation of a self-referencing edge that has no
@@ -486,7 +483,7 @@ func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) EdgeDesc 
 // key's value, nor make such an insert an upsert.
 func EdgeBidi[T any, PT Entity[T]](name string, keyCol, idCol int) EdgeDesc {
 	r := EdgeTo[T, PT](name, keyCol, idCol)
-	r.bidi = elemType((*T)(nil))
+	setEdgeBidi(&r, elemType((*T)(nil)))
 	return r
 }
 
@@ -508,14 +505,14 @@ func EdgeBidi[T any, PT Entity[T]](name string, keyCol, idCol int) EdgeDesc {
 // deletes in a hook on J.
 func EdgeThrough[J, T any, PJ Entity[J], PT Entity[T]](name string, ownerCol, joinOwner, joinTarget, targetCol int) EdgeDesc {
 	r := EdgeTo[T, PT](name, ownerCol, targetCol)
-	r.through = &through{
+	setEdgeThrough(&r, &through{
 		join: func() (*EntityInfo, error) {
 			m := PJ(nil).VeloxMeta()
 			return m.info, m.err
 		},
 		ownerCol:  joinOwner,
 		targetCol: joinTarget,
-	}
+	})
 	return r
 }
 
@@ -526,3 +523,9 @@ type through struct {
 	ownerCol  int
 	targetCol int
 }
+
+func newEdgeDesc(name string, ownerCol, targetCol int, holders [2]any) EdgeDesc {
+	return EdgeDesc{name: name, explicit: true, ownerCol: ownerCol, targetCol: targetCol, holders: holders}
+}
+func setEdgeBidi(e *EdgeDesc, t any)         { e.bidi = t }
+func setEdgeThrough(e *EdgeDesc, t *through) { e.through = t }

@@ -278,7 +278,7 @@ func resolvePreds(ps []Predicate) ([]Predicate, error) {
 // resolve resolves the relations in st's conditions, before anything else
 // reads them: the guard, the Rewrite hooks, the scope and rendering see only
 // links. A relation that cannot be resolved fails the statement.
-func (st *Statement) resolve() error {
+func resolveStatement(st *Statement) error {
 	where, err := resolvePreds(st.Where)
 	if err != nil {
 		return err
@@ -321,3 +321,6 @@ var likeEscaper = sync.OnceValue(func() *strings.Replacer {
 
 // escapeLike makes s match itself in a LIKE pattern whose escape is !.
 func escapeLike(s string) string { return likeEscaper().Replace(s) }
+
+func predNode(p Predicate) node     { return p.n }
+func newPredicate(n node) Predicate { return Predicate{n} }

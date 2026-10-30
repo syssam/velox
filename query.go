@@ -308,7 +308,7 @@ func addAfter(st *Statement, in *EntityInfo, after unsafe.Pointer) error {
 			or = append(or, group(opAnd, and))
 		}
 	}
-	st.Where = append(st.Where, Predicate{group(opOr, or)})
+	st.Where = append(st.Where, newPredicate(group(opOr, or)))
 	return nil
 }
 
@@ -405,11 +405,11 @@ func (q Query[E]) read[_ Lazy[E]](ctx context.Context) (out []E, ran []int, at t
 	if q.db.hooked() {
 		a := &allRun[E]{st: st, m: q.meta}
 		err = q.db.run(ctx, &a.st, func(r rows) error { return readAll(a, r) }, nil)
-		out, ran, at = a.out, a.st.Columns, a.st.ran
+		out, ran, at = a.out, a.st.Columns, stmtRan(&a.st)
 	} else {
 		a := allRun[E]{st: st, m: q.meta}
 		err = q.db.plain(ctx, &a.st, func(r rows) error { return readAll(&a, r) }, nil)
-		out, ran, at = a.out, a.st.Columns, a.st.ran
+		out, ran, at = a.out, a.st.Columns, stmtRan(&a.st)
 	}
 	if err != nil {
 		return nil, nil, at, err
@@ -521,7 +521,8 @@ func readIter[E any](it *iterRun[E], r rows) error {
 		if err := scanRow(r, it.m, it.st.Columns, dst, &e); err != nil {
 			return err
 		}
-		it.yielded, it.st.handed = true, true
+		it.yielded = true
+		setStmtHanded(&it.st)
 		if !yieldRow(it.yield, e, it.timed, &it.st.Result.LoopBody) {
 			it.stopped = true
 			return nil

@@ -160,7 +160,8 @@ func readRaw[E any](a *rawRun[E], r rows) error {
 		if err := scanRow(r, a.m, cols, dst, &e); err != nil {
 			return err
 		}
-		a.yielded, a.st.handed = true, true
+		a.yielded = true
+		setStmtHanded(&a.st)
 		if !yieldRow(a.yield, e, a.timed, &a.st.Result.LoopBody) {
 			a.stopped = true
 			return nil

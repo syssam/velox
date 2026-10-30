@@ -30,7 +30,7 @@ func (d Dialect) String() string {
 }
 
 // valid reports whether d is Postgres, MySQL or SQLite.
-func (d Dialect) valid() bool { return d == Postgres || d == MySQL || d == SQLite }
+func validDialect(d Dialect) bool { return d == Postgres || d == MySQL || d == SQLite }
 
 // quote writes ident quoted, with the quote character doubled inside it.
 func (d Dialect) quote(b *strings.Builder, ident string) {

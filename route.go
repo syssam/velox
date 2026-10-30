@@ -99,7 +99,7 @@ type Shard struct {
 // whose Primary or a replica is the zero Conn, or a Conn valid only on another
 // dialect.
 func OpenShards(d Dialect, shards map[string]Shard, opts ...Option) *DB {
-	if !d.valid() {
+	if !validDialect(d) {
 		panic(fmt.Sprintf("velox: OpenShards: unknown %v; use velox.Postgres, velox.MySQL or velox.SQLite", d))
 	}
 	if len(shards) == 0 {
@@ -120,17 +120,17 @@ func OpenShards(d Dialect, shards map[string]Shard, opts ...Option) *DB {
 		}
 		what := fmt.Sprintf("OpenShards: shard %q's", name)
 		switch {
-		case s.Primary.ex == nil:
+		case connExec(s.Primary) == nil:
 			panic(fmt.Sprintf("velox: %s Primary is the zero Conn; make it with SQLConn or a driver package's Conn", what))
-		case s.Primary.only != 0 && s.Primary.only != d:
-			panic(fmt.Sprintf("velox: %s Primary is valid only on %s; the DB is %s", what, s.Primary.only, d))
+		case connOnly(s.Primary) != 0 && connOnly(s.Primary) != d:
+			panic(fmt.Sprintf("velox: %s Primary is valid only on %s; the DB is %s", what, connOnly(s.Primary), d))
 		}
 		for i, c := range s.Replicas {
-			if c.ex == nil {
+			if connExec(c) == nil {
 				panic(fmt.Sprintf("velox: %s replica %d is the zero Conn; make it with SQLConn or a driver package's Conn", what, i))
 			}
 		}
-		sh := newShard(d, s.Primary.ex, s.Replicas, what)
+		sh := newShard(d, connExec(s.Primary), s.Replicas, what)
 		sh.name = name
 		rt.shards[name] = sh
 	}
@@ -470,8 +470,8 @@ func (db *DB) route(ctx context.Context, st *Statement) (target, error) {
 	sh := db.rt.one
 	var rc routeCtx // read once, on a sharded DB here, else for a read below
 	switch {
-	case st.pin.ex != nil:
-		sh = st.pin.sh // a With load: its query's shard
+	case stmtPin(st).ex != nil:
+		sh = stmtPin(st).sh // a With load: its query's shard
 	case sh == nil:
 		rc, _ = ctx.Value(routeKey{}).(routeCtx)
 		var err error
@@ -486,8 +486,8 @@ func (db *DB) route(ctx context.Context, st *Statement) (target, error) {
 	fallback := false
 	switch {
 	case !st.Op.Reads(): // a write, Exec's raw SQL included
-	case st.pin.ex != nil:
-		t = st.pin
+	case stmtPin(st).ex != nil:
+		t = stmtPin(st)
 		if t.replica >= 0 && t.sh.replicas[t.replica].downUntil.Load() != 0 && !t.sh.replicas[t.replica].up(time.Now().UnixNano()) {
 			// The replica has failed since the query read it, on an earlier
 			// load: this one goes straight to the primary, as it would
@@ -624,7 +624,7 @@ func (db *DB) fallBack(st *Statement, t target) target {
 	t.sh.replicas[t.replica].down(db.cfg.backoff)
 	p := target{ex: t.sh.primary, sh: t.sh, replica: -1}
 	st.Route = Route{Shard: t.sh.name, Replica: -1, Fallback: true}
-	st.ran = p
+	setStmtRan(st, p)
 	return p
 }
 
@@ -703,3 +703,6 @@ func mysqlConnectError(n int) bool {
 // ErrInvalidConn, which the driver returns for a connection that broke. velox
 // does not import the driver (see constraint).
 func mysqlInvalidConn(err error) bool { return driverSentinel(err, "invalid connection") }
+
+func connExec(c Conn) executor { return c.ex }
+func connOnly(c Conn) Dialect  { return c.only }

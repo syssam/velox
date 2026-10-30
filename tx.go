@@ -54,7 +54,7 @@ func TxRetrySerializable(n int) TxOption { return TxOption{func(o *txOptions) { 
 func TxRetries(opts ...TxOption) int {
 	var o txOptions
 	for _, opt := range opts {
-		opt.apply(&o)
+		applyTxOption(opt, &o)
 	}
 	return o.retries
 }
@@ -138,7 +138,7 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error
 	}
 	var o txOptions
 	for _, opt := range opts {
-		opt.apply(&o)
+		applyTxOption(opt, &o)
 	}
 	def, maxd := db.cfg.deadlines.Tx, db.cfg.deadlines.MaxTx
 	if o.timeout > 0 {
@@ -241,7 +241,7 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 	}
 	ex, ctl, err := primary.Begin(ctx, sql.TxOptions{Isolation: o.isolation, ReadOnly: o.readOnly})
 	if err != nil {
-		info.end(TxError)
+		endTx(info, TxError)
 		return false, fmt.Errorf("velox: begin: %w", err)
 	}
 	f := newTxFrame(ctx, DB{d: db.d, ex: ex, rt: db.rt, cfg: db.cfg, inTx: true, txDeadline: deadline, txCause: cause, tx: info, txWrote: wrote, txShard: txShard}, nil)
@@ -249,16 +249,16 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 	finished := false
 	defer func() {
 		if !finished {
-			info.end(TxRollback)
+			endTx(info, TxRollback)
 			_ = rollback(ctx, ctl)
 		}
 	}()
 	if err := fn(&f.ctx, &f.db); err != nil {
 		finished = true
 		if ctx.Err() != nil || past(deadline) {
-			info.end(TxError)
+			endTx(info, TxError)
 		} else {
-			info.end(TxRollback)
+			endTx(info, TxRollback)
 		}
 		if rerr := rollback(ctx, ctl); rerr != nil && !ended(rerr) && !over(ctx) && !past(deadline) {
 			return false, errors.Join(err, fmt.Errorf("velox: rollback: %w", rerr))
@@ -272,7 +272,7 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 	}
 	finished = true
 	if over(ctx) || past(deadline) {
-		info.end(TxError)
+		endTx(info, TxError)
 		// Past the deadline, or canceled: roll back on every driver rather
 		// than leave it to the driver whether a late commit succeeds.
 		_ = rollback(ctx, ctl)
@@ -291,7 +291,7 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 	if f.broken != nil {
 		// A savepoint did not roll back: its fn's work may still be in the
 		// transaction, which must not commit it.
-		info.end(TxError)
+		endTx(info, TxError)
 		err := fmt.Errorf("velox: transaction: %w", f.broken)
 		if rerr := rollback(ctx, ctl); rerr != nil && !ended(rerr) {
 			return false, errors.Join(err, fmt.Errorf("velox: rollback: %w", rerr))
@@ -299,10 +299,10 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 		return false, err
 	}
 	if err := ctl.Commit(ctx); err != nil {
-		info.end(TxError)
+		endTx(info, TxError)
 		return true, fmt.Errorf("velox: commit: %w", err)
 	}
-	info.end(TxCommit)
+	endTx(info, TxCommit)
 	return true, nil
 }
 
@@ -565,3 +565,5 @@ func (db *DB) foreign(ctx context.Context) bool {
 	m, _ := ctx.Value(txKey{}).(*txFrame)
 	return m != nil && m != db.txRoot && !m.ended.Load()
 }
+
+func applyTxOption(opt TxOption, o *txOptions) { opt.apply(o) }

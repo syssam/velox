@@ -109,7 +109,7 @@ type hookFn func(next mutateFn) mutateFn
 // directly when in has no hooks, so that none of them pays for the closure
 // and the mutation this takes, or for setting mu.db.
 func mutate(ctx context.Context, db *DB, in *EntityInfo, mu *mutation, core mutateFn) error {
-	if len(in.hooks) == 0 {
+	if len(infoHooks(in)) == 0 {
 		return core(ctx, mu)
 	}
 	mu.db = db
@@ -140,8 +140,8 @@ func mutate(ctx context.Context, db *DB, in *EntityInfo, mu *mutation, core muta
 		mu.core = core(ctx, mu)
 		return mu.core
 	}
-	for i := len(in.hooks) - 1; i >= 0; i-- {
-		next = in.hooks[i](next)
+	for i := len(infoHooks(in)) - 1; i >= 0; i-- {
+		next = infoHooks(in)[i](next)
 	}
 	err := next(ctx, mu)
 	switch {
@@ -225,10 +225,10 @@ func BindHooks[E any](hs []Hook[E]) BoundHooks {
 	var b BoundHooks
 	for i, f := range hs {
 		if f == nil {
-			b.nilAt1 = i + 1
+			setBoundNil(&b, i+1)
 			return b
 		}
-		b.hs = append(b.hs, erase(f))
+		addBoundHook(&b, erase(f))
 	}
 	return b
 }
@@ -290,3 +290,6 @@ func recovered(entity, what string, f func()) (err error) {
 func errNilHook(entity string, i int) error {
 	return &SchemaError{Entity: entity, Reason: fmt.Sprintf("Hooks()[%d] is nil", i)}
 }
+
+func setBoundNil(b *BoundHooks, at1 int)   { b.nilAt1 = at1 }
+func addBoundHook(b *BoundHooks, h hookFn) { b.hs = append(b.hs, h) }

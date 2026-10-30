@@ -141,7 +141,7 @@ func loadOne(ctx context.Context, db *DB, pin target, owner *EntityInfo, ptrs []
 	if sp.maxRows > 0 {
 		maxRows = sp.maxRows // for its nested loads too
 	}
-	if owner.kit == nil || t.kit == nil || (l.join != nil && l.join.kit == nil) {
+	if infoKit(owner) == nil || infoKit(t) == nil || (l.join != nil && infoKit(l.join) == nil) {
 		return fmt.Errorf("velox: %s: relation %s: the entities have no scan plan; run go tool velox-gen", owner.Name, r.name)
 	}
 	// The distinct keys, in the order the owners have them; and each owner's,
@@ -151,7 +151,7 @@ func loadOne(ctx context.Context, db *DB, pin target, owner *EntityInfo, ptrs []
 	ownerKey := make([]int, len(ptrs))
 	for i, p := range ptrs {
 		ownerKey[i] = -1
-		if k, ok := keyOf(owner.kit.value(p, l.ownerCol)); ok {
+		if k, ok := keyOf(infoKit(owner).value(p, l.ownerCol)); ok {
 			g, added := addKey(group, k)
 			if added {
 				keys = append(keys, k)
@@ -183,7 +183,7 @@ func loadOne(ctx context.Context, db *DB, pin target, owner *EntityInfo, ptrs []
 		if all, targets, err = fetch(ctx, db, pin, t, []int{l.targetCol}, sp, keys, maxRows, ec); err != nil {
 			return &loadError{owner: owner.Name, rel: r.name, err: err}
 		}
-		x.fill(group, len(targets), func(i int) (any, bool) { return keyOf(t.kit.value(targets[i], l.targetCol)) })
+		x.fill(group, len(targets), func(i int) (any, bool) { return keyOf(infoKit(t).value(targets[i], l.targetCol)) })
 	}
 	// When a query ran, all holds its parts, so it is not nil even when they
 	// hold no row; it is nil only when nothing was fetched (no owner had a
@@ -199,7 +199,7 @@ func loadOne(ctx context.Context, db *DB, pin target, owner *EntityInfo, ptrs []
 		for i, g := range ownerKey {
 			idx[i] = x.of(g)
 		}
-		picked = t.kit.pick(all, targets, idx)
+		picked = infoKit(t).pick(all, targets, idx)
 	}
 	for i, p := range ptrs {
 		h := (*holder)(unsafe.Add(p, r.off))
@@ -208,9 +208,9 @@ func loadOne(ctx context.Context, db *DB, pin target, owner *EntityInfo, ptrs []
 		case r.many && all != nil:
 			h.v = picked[i]
 		case r.many:
-			h.v = t.kit.empty() // no keys, so nothing was fetched: still loaded, and empty
+			h.v = infoKit(t).empty() // no keys, so nothing was fetched: still loaded, and empty
 		case len(idx) > 0:
-			h.v = t.kit.ptr(targets[idx[0]])
+			h.v = infoKit(t).ptr(targets[idx[0]])
 		default:
 			h.v = nil
 		}
@@ -245,8 +245,8 @@ func fetchThrough(ctx context.Context, db *DB, pin target, owner *EntityInfo, r 
 	byOwner := make(map[any][]any, len(keys))
 	seen := make(map[[2]any]bool, len(rows))
 	for _, p := range rows {
-		own, okOwner := keyOf(j.kit.value(p, l.joinOwner))
-		tk, okTarget := keyOf(j.kit.value(p, l.joinTarget))
+		own, okOwner := keyOf(infoKit(j).value(p, l.joinOwner))
+		tk, okTarget := keyOf(infoKit(j).value(p, l.joinTarget))
 		if !okOwner || !okTarget || seen[[2]any{own, tk}] {
 			continue
 		}
@@ -348,7 +348,7 @@ plan:
 		end := start + parts[i].(*blocks).n
 		byTarget := make(map[any][]int, end-start) // target key → indexes into targets
 		for k := start; k < end; k++ {
-			if tk, ok := keyOf(t.kit.value(targets[k], l.targetCol)); ok {
+			if tk, ok := keyOf(infoKit(t).value(targets[k], l.targetCol)); ok {
 				byTarget[tk] = append(byTarget[tk], k)
 			}
 		}
@@ -506,7 +506,7 @@ func fetchPart(ctx context.Context, db *DB, pin target, t *EntityInfo, cols []in
 // owner key too, read from the join entity. st holds, once it returns, where
 // it ran. pin, when set, is where it runs: a With load's (DB.loadPin).
 func readPart(ctx context.Context, db *DB, pin target, st *Statement, t *EntityInfo, cols []int, with []loadSpec) (any, []any, error) {
-	st.pin = pin
+	setStmtPin(st, pin)
 	var part any
 	var owners []any
 	read := func(r rows) (err error) {
@@ -525,11 +525,11 @@ func readPart(ctx context.Context, db *DB, pin target, st *Statement, t *EntityI
 		}
 		if ec := st.Each; ec != nil && ec.Join != nil {
 			or := &ownerRows{rows: r, typ: GoType(ec.Join.Columns[ec.JoinOwner])}
-			part, err = t.kit.scan(or, st.Columns)
+			part, err = infoKit(t).scan(or, st.Columns)
 			owners = or.keys
 			return err
 		}
-		part, err = t.kit.scan(r, st.Columns)
+		part, err = infoKit(t).scan(r, st.Columns)
 		return err
 	}
 	var err error

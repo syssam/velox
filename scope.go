@@ -46,7 +46,7 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 	// The entity's own policy first, so that its denial is reported as the
 	// statement's, and an EXISTS on the same entity reuses its Read.
 	var read, write Predicate
-	if pol := in.policy; pol != nil {
+	if pol := infoPolicy(in); pol != nil {
 		if pol.read != nil && sc.policyOn() {
 			if read, err = sc.readOf(in, st.Op); err != nil {
 				return err
@@ -63,10 +63,10 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 	if tenant {
 		extra++
 	}
-	if read.n.op != opZero {
+	if predNode(read).op != opZero {
 		extra++
 	}
-	if write.n.op != opZero {
+	if predNode(write).op != opZero {
 		extra++
 	}
 	if st.Where, err = sc.walk(st.Where, extra); err != nil {
@@ -76,10 +76,10 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 	if tenant {
 		st.Where = append(st.Where, tenantPredicate(in, id))
 	}
-	if read.n.op != opZero {
+	if predNode(read).op != opZero {
 		st.Where = append(st.Where, read)
 	}
-	if write.n.op != opZero {
+	if predNode(write).op != opZero {
 		st.Where = append(st.Where, write)
 	}
 	sc.record(st)
@@ -111,7 +111,7 @@ func (db *DB) scopeInsert(ctx context.Context, st *Statement) error {
 			return err
 		}
 	}
-	pol := in.policy
+	pol := infoPolicy(in)
 	if pol != nil && pol.insert != nil {
 		sc.policyOn() // records a WithoutPolicy that insertAllowed obeyed
 	}
@@ -128,7 +128,7 @@ func (db *DB) scopeInsert(ctx context.Context, st *Statement) error {
 		if err := sc.conditionUpsert(in, st, conditioned); err != nil {
 			return err
 		}
-		if st.upsertPolicy && len(st.Rows) > 1 && !st.InTx {
+		if stmtUpsertPolicy(st) && len(st.Rows) > 1 && !st.InTx {
 			// conditionedUpsert runs every such InsertAll in a transaction:
 			// only a Rewrite hook gets here.
 			return fmt.Errorf("velox: %s: a Rewrite hook gave a multi-row upsert outside a transaction an update branch the policy conditions; a row the policy hides would fail it after the others were written", in.Name)

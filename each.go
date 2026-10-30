@@ -119,14 +119,14 @@ func planEach(fn string, q eachQuery, owner *EntityInfo, ownerErr error, sp load
 	if err != nil {
 		return p, err
 	}
-	if owner.kit == nil || l.target.kit == nil {
+	if infoKit(owner) == nil || infoKit(l.target) == nil {
 		return p, fmt.Errorf("velox: %s: relation %s: the entities have no scan plan; run go tool velox-gen", owner.Name, r.name)
 	}
 	if l.target != q.in {
 		return p, fmt.Errorf("velox: %s: %s: the relation %s is to %s, not to the query's %s", owner.Name, fn, r.name, l.target.Name, q.in.Name)
 	}
 	for _, c := range sp.where {
-		if err := resolveErr(c.n); err != nil {
+		if err := resolveErr(predNode(c)); err != nil {
 			return p, err
 		}
 	}
@@ -134,7 +134,7 @@ func planEach(fn string, q eachQuery, owner *EntityInfo, ownerErr error, sp load
 	p.ownerKey = make([]any, len(ps))
 	seen := make(map[any]bool, len(ps))
 	for i, o := range ps {
-		k, ok := keyOf(owner.kit.value(o, l.ownerCol))
+		k, ok := keyOf(infoKit(owner).value(o, l.ownerCol))
 		if !ok {
 			continue
 		}
@@ -227,7 +227,7 @@ func loadEach(ctx context.Context, q eachQuery, owner *EntityInfo, ownerErr erro
 			return err
 		}
 		if lo == 0 {
-			at = c.ran
+			at = stmtRan(&c)
 		}
 		parts = append(parts, part)
 		owners = append(owners, own...)
@@ -239,7 +239,7 @@ func loadEach(ctx context.Context, q eachQuery, owner *EntityInfo, ownerErr erro
 	out := make([]any, len(ps))
 	if len(parts) == 0 {
 		for i := range out {
-			out[i] = t.kit.empty()
+			out[i] = infoKit(t).empty()
 		}
 		return out, nil
 	}
@@ -259,7 +259,7 @@ func loadEach(ctx context.Context, q eachQuery, owner *EntityInfo, ownerErr erro
 		if l.join != nil {
 			return keyOf(owners[i])
 		}
-		return keyOf(t.kit.value(targets[i], l.targetCol))
+		return keyOf(infoKit(t).value(targets[i], l.targetCol))
 	})
 	idx := make([][]int, len(p.ownerKey))
 	for i, k := range p.ownerKey {
@@ -267,10 +267,10 @@ func loadEach(ctx context.Context, q eachQuery, owner *EntityInfo, ownerErr erro
 			idx[i] = x.of(group[k])
 		}
 	}
-	picked := t.kit.pick(all, targets, idx)
+	picked := infoKit(t).pick(all, targets, idx)
 	for i, k := range p.ownerKey {
 		if k == nil {
-			out[i] = t.kit.empty()
+			out[i] = infoKit(t).empty()
 			continue
 		}
 		out[i] = picked[i]

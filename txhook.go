@@ -92,7 +92,7 @@ func (db *DB) newTxInfo(o txOptions, sh *shard) *TxInfo {
 }
 
 // end records how the transaction's attempt ended; info may be nil.
-func (info *TxInfo) end(o TxOutcome) {
+func endTx(info *TxInfo, o TxOutcome) {
 	if info != nil {
 		info.Outcome = o
 	}

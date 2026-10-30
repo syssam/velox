@@ -289,3 +289,13 @@ func metaOf[E any]() (*Meta[E], error) {
 	m := p.VeloxMeta()
 	return m, m.err
 }
+
+// The functions below reach what EntityInfo keeps private, for the code around
+// velox's generic API.
+func infoKit(in *EntityInfo) *kit                               { return in.kit }
+func setInfoKit(in *EntityInfo, k *kit)                         { in.kit = k }
+func setInfoCheck(in *EntityInfo, f func(col int, v any) error) { in.check = f }
+func infoHooks(in *EntityInfo) []hookFn                         { return in.hooks }
+func infoBidi(in *EntityInfo) bool                              { return in.bidi }
+func infoBidiKeys(in *EntityInfo) []bidiKey                     { return in.bidiKeys }
+func infoPolicy(in *EntityInfo) *policy                         { return in.policy }

@@ -6,7 +6,7 @@ import "fmt"
 // conditions velox or a hook adds later never count as the caller's.
 func (db *DB) guard(st *Statement) error {
 	for _, p := range st.Where {
-		if hasZero(p.n) {
+		if hasZero(predNode(p)) {
 			return errZeroPredicate(st.Entity.Name)
 		}
 	}
@@ -38,7 +38,7 @@ func (db *DB) guard(st *Statement) error {
 		}
 		every := true
 		for _, p := range st.Where {
-			every = every && alwaysTrue(p.n)
+			every = every && alwaysTrue(predNode(p))
 		}
 		if every {
 			// And(conds...) of an empty conds renders WHERE 1 = 1.
