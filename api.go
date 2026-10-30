@@ -6,32 +6,23 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/syssam/velox2/dbtype"
 	"github.com/syssam/velox2/internal/engine"
 )
 
-// Aggregate is the function an aggregate read computes over its one column:
-// what Sum, Avg, Min and Max set.
-type Aggregate = engine.Aggregate
+// Aggregate is the function an aggregate read computes over its one column.
+type Aggregate = dbtype.Aggregate
 
 // The aggregate functions.
 const (
-	AggregateSum = engine.AggregateSum // SUM
-	AggregateAvg = engine.AggregateAvg // AVG
-	AggregateMin = engine.AggregateMin // MIN
-	AggregateMax = engine.AggregateMax // MAX
+	AggregateSum = dbtype.AggregateSum // SUM
+	AggregateAvg = dbtype.AggregateAvg // AVG
+	AggregateMin = dbtype.AggregateMin // MIN
+	AggregateMax = dbtype.AggregateMax // MAX
 )
 
-// Caller is a statement's call site: the first stack frame outside velox and
-// the packages WithCallerSkip names. Caller is zero when none of the 64
-// frames above velox's call is outside velox and the packages WithCallerSkip
-// names.
-//
-// Its fields:
-//
-//	File string // relative to the module root when it can be determined, else the base name
-//	Line int
-//	Func string // the function's full name, as runtime.Frame.Function gives it
-type Caller = engine.Caller
+// Caller is a statement's call site.
+type Caller = dbtype.Caller
 
 // WithCallers records each statement's call site in Statement.Caller. It
 // costs one runtime.Callers per batch of up to 8 frames between velox and the
@@ -106,16 +97,8 @@ func WithMaxRows(n int) Option { return engine.WithMaxRows(n) }
 // hook panics.
 func WithAround(a Around) Option { return engine.WithAround(a) }
 
-// Deadlines are the time limits velox gives statements and transactions. A zero
-// field is off.
-//
-// Its fields:
-//
-//	Statement time.Duration // a statement whose context has no deadline gets this one
-//	MaxStatement time.Duration // no statement runs longer: a later deadline is brought forward
-//	Tx time.Duration // a transaction whose context has no deadline gets this one
-//	MaxTx time.Duration // no transaction runs longer, retries and commit included
-type Deadlines = engine.Deadlines
+// Deadlines are the time limits velox gives statements and transactions.
+type Deadlines = dbtype.Deadlines
 
 // WithDeadlines sets the DB's time limits. A statement's limit covers its
 // Around hooks and, with Iter, the caller's loop body. A transaction's covers
@@ -136,70 +119,17 @@ func WithDeadlines(d Deadlines) Option { return engine.WithDeadlines(d) }
 // enclosing transaction's deadline.
 func TxTimeout(d time.Duration) TxOption { return engine.TxTimeout(d) }
 
-// ColumnDesc describes one column of a Desc. For generated code. ColumnInfo
-// is its runtime view.
-//
-// Its fields:
-//
-//	Field string // the Go field name
-//	Name string // the column name
-//	Default any // a value of the field's type (or of its element type, for a pointer field), not cyclic; nil when none
-//	DefaultFunc func() any // returns a value of the field's type (or of its element type, for a pointer field)
-//	UpdateDefault func() any
-//	Immutable bool
-//	Sensitive bool
-//	// Nullable says the column holds NULL though the field is no pointer:
-//	// a slice or a map, whose nil velox binds as NULL and reads NULL back
-//	// into. velox-gen sets it on a json field of an Optional or Nillable
-//	// schema field that is a slice or a map, and on a Nillable bytes field.
-//	// Without it, a nil slice or map in an encoded column binds what Encode
-//	// makes of it (json.Marshal's null), and a nil []byte is handed to the
-//	// driver as it is. A pointer field is nullable without it; on a field of
-//	// any other type it is refused.
-//	Nullable bool
-//	// RequiredEdge names the Required edge whose foreign key the column holds
-//	// when that key is NULL-able, as velox-gen makes the key of an edge to
-//	// the entity's own schema, so that the first row can have none. The
-//	// database cannot refuse it unset, so velox does, as ent's create check
-//	// does: Insert, InsertAll and an upsert refuse a row whose key is nil, and
-//	// Update and Save refuse setting it to nil, with a *ValidationError
-//	// `missing required edge "<Type>.<edge>"`, before anything is sent. Only
-//	// the database's ON DELETE SET NULL clears it. velox-gen leaves it empty
-//	// on a NOT NULL key, which the database enforces; on a column that cannot
-//	// be NULL it is refused. As with a field's validators and Immutable, a
-//	// Rewrite or Around hook can still edit the statement after the check.
-//	RequiredEdge string
-//	// Encode and Decode are the column's codec, both or neither: with them,
-//	// velox binds the bytes Encode returns for the field's value, and decodes
-//	// what it reads with Decode, into a pointer to the field. velox-gen sets
-//	// them to json.Marshal and json.Unmarshal for every json field, so the
-//	// generated file, not the core, imports encoding/json, and a program
-//	// whose entities hold no JSON does not link it. A hand-written Desc may
-//	// plug in another codec. Decode's data is valid only during the call: it
-//	// must neither change nor keep it. velox may hand it the bytes of a string
-//	// the driver returned, read in place, so a Decode that writes to them
-//	// writes to memory that may be read-only. Encode's result is kept in
-//	// Statement.Args until the statement has run, so Encode must return a new
-//	// slice on every call, never a buffer it reuses. A primary-key, tenant or
-//	// relation-key column cannot have a codec: conditions on it are refused,
-//	// so the metadata is. velox never guesses a codec from the Go type, as a
-//	// []byte field holds bytes, not JSON.
-//	Encode func(v any) ([]byte, error)
-//	Decode func(data []byte, v any) error
-type ColumnDesc = engine.ColumnDesc
+// ColumnDesc describes one column of a Desc. For generated code.
+type ColumnDesc = dbtype.ColumnDesc
 
 // Dialect is a SQL dialect.
-//
-// Its methods:
-//
-//	String (d Dialect) String() string
-type Dialect = engine.Dialect
+type Dialect = dbtype.Dialect
 
 // The dialects velox supports.
 const (
-	Postgres = engine.Postgres
-	MySQL    = engine.MySQL
-	SQLite   = engine.SQLite
+	Postgres = dbtype.Postgres
+	MySQL    = dbtype.MySQL
+	SQLite   = dbtype.SQLite
 )
 
 // DriverCode returns the database's code for err, as text, when err or an
@@ -266,7 +196,7 @@ var (
 	ErrTenantUpsert = engine.ErrTenantUpsert
 	// ErrDenied is returned by a statement when a policy refuses it. Every
 	// *PolicyError matches it.
-	ErrDenied = engine.ErrDenied
+	ErrDenied = dbtype.ErrDenied
 	// ErrPolicyUpsert is returned by an upsert that updates, on MySQL, of an
 	// entity whose policy has a Read or Write predicate, because MySQL cannot
 	// apply the predicate to the update.
@@ -300,53 +230,22 @@ var (
 // driver wraps does not panic. ent's IsNotFound is the precedent.
 func IsNotFound(err error) bool { return engine.IsNotFound(err) }
 
-// SchemaError reports a mistake in an entity's generated metadata (its Desc,
-// or the Policy and Hooks methods it binds).
-//
-// Its fields:
-//
-//	Entity string // the Go type, e.g. "billing.Invoice"
-//	Field string // the Go field name; empty when the error is about the entity
-//	Reason string
-//
-// Its methods:
-//
-//	Error (e *SchemaError) Error() string
-type SchemaError = engine.SchemaError
+// SchemaError reports a mistake in an entity's generated metadata.
+type SchemaError = dbtype.SchemaError
 
 // ConstraintKind is the kind of constraint a statement violated.
-//
-// Its methods:
-//
-//	String (k ConstraintKind) String() string
-type ConstraintKind = engine.ConstraintKind
+type ConstraintKind = dbtype.ConstraintKind
 
 // The kinds of constraint.
 const (
-	ConstraintUnique     = engine.ConstraintUnique     // a unique index or primary key
-	ConstraintForeignKey = engine.ConstraintForeignKey // a foreign key
-	ConstraintNotNull    = engine.ConstraintNotNull    // a NOT NULL column
-	ConstraintCheck      = engine.ConstraintCheck      // a CHECK constraint
+	ConstraintUnique     = dbtype.ConstraintUnique     // a unique index or primary key
+	ConstraintForeignKey = dbtype.ConstraintForeignKey // a foreign key
+	ConstraintNotNull    = dbtype.ConstraintNotNull    // a NOT NULL column
+	ConstraintCheck      = dbtype.ConstraintCheck      // a CHECK constraint
 )
 
-// ConstraintError reports a violated constraint, in the same form on every
-// dialect; find it with errors.As. Err is the driver's error.
-//
-// Its fields:
-//
-//	Entity string
-//	Kind ConstraintKind
-//	// Constraint is the constraint's name. SQLite reports the columns instead
-//	// ("invoices.org_id, invoices.number"), and a NOT NULL error names the
-//	// column.
-//	Constraint string
-//	Err error
-//
-// Its methods:
-//
-//	Error (e *ConstraintError) Error() string
-//	Unwrap (e *ConstraintError) Unwrap() error
-type ConstraintError = engine.ConstraintError
+// ConstraintError reports a violated constraint; find it with errors.As.
+type ConstraintError = dbtype.ConstraintError
 
 // BoundPolicy is an entity's Policy with E erased, made by BindPolicy for
 // Desc.Policy. For generated code. Its fields are not exported: only BindPolicy
@@ -417,25 +316,14 @@ type ColumnInfo = engine.ColumnInfo
 func GoType(c ColumnInfo) reflect.Type { return engine.GoType(c) }
 
 // IndexInfo describes one index.
-//
-// Its fields:
-//
-//	Columns []int
-//	Unique bool
-type IndexInfo = engine.IndexInfo
+type IndexInfo = dbtype.IndexInfo
 
 // Predicate is a condition in a Statement: the form hooks see and add. It is
 // the untyped form of Pred, as OrderTerm is of Order.
 type Predicate = engine.Predicate
 
-// OrderTerm is an ordering by one column of a Statement's entity. It is the
-// untyped form of Order, as Predicate is of Pred.
-//
-// Its fields:
-//
-//	Column int // index into EntityInfo.Columns
-//	Desc bool
-type OrderTerm = engine.OrderTerm
+// OrderTerm is an ordering by one column of a Statement's entity.
+type OrderTerm = dbtype.OrderTerm
 
 // ColumnEQ returns the condition column = v, for hooks that add conditions;
 // column is an index into the statement's EntityInfo.Columns.
@@ -558,19 +446,8 @@ func WithPinWindow(d time.Duration) Option { return engine.WithPinWindow(d) }
 // A negative d panics.
 func WithReplicaBackoff(d time.Duration) Option { return engine.WithReplicaBackoff(d) }
 
-// Route is where a statement runs. The route stage sets Statement.Route
-// after the Rewrite hooks and before the Around hooks run. TxInfo.Route is a
-// transaction's.
-//
-// Its fields:
-//
-//	Shard string // "" on an unsharded DB
-//	Replica int // index into the replicas; -1 for the primary
-//	// Fallback is set when a replica failed and the read was retried on the
-//	// primary. It stays set for the statement's later executions, an Around
-//	// hook's retry, which run on the primary.
-//	Fallback bool
-type Route = engine.Route
+// Route is where a statement runs.
+type Route = dbtype.Route
 
 // WithTenant returns ctx scoped to tenant id: statements on a tenant-scoped
 // entity read and change only that tenant's rows, and inserts fill or check
@@ -602,30 +479,8 @@ func WithoutPolicy(ctx context.Context, reason string) context.Context {
 	return engine.WithoutPolicy(ctx, reason)
 }
 
-// RowScope is what a context scopes statements by: WithTenant's id (nil when
-// none), the reasons of WithAllTenants and WithoutPolicy ("" when none), and
-// WithShard's shard, which holds other rows than another shard. A batcher that
-// reads for several callers in one statement compares their scopes, so that
-// callers of different scopes never share a read.
-//
-// RowScopes are compared with ==, which panics when Tenant holds a value
-// that cannot be compared. A tenant column's type is comparable (its
-// metadata is refused otherwise), but WithTenant takes any id, and an id of
-// another type, which a statement refuses, may not be: a caller that
-// compares guards against it with reflect.ValueOf(Tenant).Comparable(),
-// which checks the value, since a struct or an array of a comparable type
-// may hold an interface whose value is a slice or a map.
-//
-// Its fields:
-//
-//	Tenant any
-//	TenantBypass string
-//	PolicyBypass string
-//	// Shard is WithShard's name, and HasShard whether WithShard was called: a
-//	// shard named "" is told from none.
-//	Shard string
-//	HasShard bool
-type RowScope = engine.RowScope
+// RowScope is what a context scopes statements by.
+type RowScope = dbtype.RowScope
 
 // RowScopeFromContext returns ctx's row scope.
 func RowScopeFromContext(ctx context.Context) RowScope { return engine.RowScopeFromContext(ctx) }
@@ -642,90 +497,61 @@ func RowScopeFromContext(ctx context.Context) RowScope { return engine.RowScopeF
 // Mutation.DB does not happen and needs no check. Reads run as normal.
 func IsDryRun(ctx context.Context) bool { return engine.IsDryRun(ctx) }
 
-// PolicyError is a statement a policy denied; Err is the policy's error.
-// Every PolicyError matches ErrDenied.
-//
-// Its fields:
-//
-//	Entity string // the Go type, e.g. "billing.Invoice"
-//	// Op is the kind of statement denied: the statement's own, or, for a
-//	// denial of the target of an EXISTS (a Has or HasWhere, in the statement
-//	// or in a policy's condition), OpSelect, since the EXISTS reads its target
-//	// whatever the statement does. An upsert's update branch is OpUpdate.
-//	Op Op
-//	Err error
-//
-// Its methods:
-//
-//	Error (e *PolicyError) Error() string
-//	Is (e *PolicyError) Is(target error) bool
-//	Unwrap (e *PolicyError) Unwrap() error
-type PolicyError = engine.PolicyError
+// PolicyError is a statement a policy denied.
+type PolicyError = dbtype.PolicyError
 
 // Deny returns an error for a policy function to deny a statement with: its
 // text is reason, and it matches ErrDenied.
 func Deny(reason string) error { return engine.Deny(reason) }
 
 // Op is the kind of a Statement.
-//
-// Its methods:
-//
-//	Raw (o Op) Raw() bool
-//	Reads (o Op) Reads() bool
-//	String (o Op) String() string
-type Op = engine.Op
+type Op = dbtype.Op
 
 // The kinds of statement.
 const (
-	OpSelect = engine.OpSelect
-	OpInsert = engine.OpInsert
-	OpUpdate = engine.OpUpdate
-	OpDelete = engine.OpDelete
+	OpSelect = dbtype.OpSelect
+	OpInsert = dbtype.OpInsert
+	OpUpdate = dbtype.OpUpdate
+	OpDelete = dbtype.OpDelete
 	// OpRawQuery is raw SQL run by DB.Raw, which velox treats as a read: its
 	// SQL and Args are the caller's.
-	OpRawQuery = engine.OpRawQuery
+	OpRawQuery = dbtype.OpRawQuery
 	// OpRawExec is raw SQL run by DB.Exec, which velox treats as a write: its
 	// SQL and Args are the caller's.
-	OpRawExec = engine.OpRawExec
+	OpRawExec = dbtype.OpRawExec
 )
 
 // Lock is the lock a locking read takes on the rows it reads.
-type Lock = engine.Lock
+type Lock = dbtype.Lock
 
 // The locks.
 const (
-	LockForUpdate = engine.LockForUpdate // FOR UPDATE
-	LockForShare  = engine.LockForShare  // FOR SHARE
+	LockForUpdate = dbtype.LockForUpdate // FOR UPDATE
+	LockForShare  = dbtype.LockForShare  // FOR SHARE
 )
 
 // LockWait is what a locking read does about rows another transaction has
-// locked. The zero value waits for them.
-type LockWait = engine.LockWait
+// locked.
+type LockWait = dbtype.LockWait
 
 // The ways of not waiting.
 const (
-	LockSkipLocked = engine.LockSkipLocked // SKIP LOCKED: leave them out
-	LockNoWait     = engine.LockNoWait     // NOWAIT: fail at once
+	LockSkipLocked = dbtype.LockSkipLocked // SKIP LOCKED: leave them out
+	LockNoWait     = dbtype.LockNoWait     // NOWAIT: fail at once
 )
 
 // AssignOp is how an UPDATE assigns a column.
-type AssignOp = engine.AssignOp
+type AssignOp = dbtype.AssignOp
 
 // The assignment operators.
 const (
-	AssignSet = engine.AssignSet // column = value
-	AssignAdd = engine.AssignAdd // column = column + value
-	AssignSub = engine.AssignSub // column = column - value
+	AssignSet = dbtype.AssignSet // column = value
+	AssignAdd = dbtype.AssignAdd // column = column + value
+	AssignSub = dbtype.AssignSub // column = column - value
 )
 
 // Assignment is one column an UPDATE sets.
-//
-// Its fields:
-//
-//	Column int // index into EntityInfo.Columns
-//	Op AssignOp
-//	Value any
-type Assignment = engine.Assignment
+type Assignment = dbtype.Assignment
 
 // ConflictClause is an INSERT's upsert clause.
 //
@@ -834,28 +660,8 @@ type EachClause = engine.EachClause
 //	Result Result
 type Statement = engine.Statement
 
-// Result is what executing a statement did: a Statement's, which an Around
-// hook reads. An entity hook reads the rows its whole write affected from
-// Mutation.Affected instead.
-//
-// Its fields:
-//
-//	// Rows counts the rows read, an INSERT … RETURNING's and Count's single
-//	// row included. Rows are counted only when the DB has an Around hook or
-//	// the statement a row cap: otherwise nothing can read it, and it is 0.
-//	Rows int64
-//	// Affected is the rows a write affected: the driver's count for one sent
-//	// without RETURNING, the rows returned for one sent with it. It is -1
-//	// for a read, for a failed statement, and for a write whose driver could
-//	// not report its count.
-//	Affected int64
-//	// LoopBody is the time Iter's caller spent in the loop body, summed over
-//	// the rows it yielded, the last one included when the loop broke or the
-//	// body panicked on it. It grows while next runs and is final once next
-//	// returns or panics. It is measured only when the DB has an Around hook,
-//	// and is 0 otherwise and for every method but Iter.
-//	LoopBody time.Duration
-type Result = engine.Result
+// Result is what executing a statement did, which an Around hook reads.
+type Result = dbtype.Result
 
 // Rewrite is a hook that may change a statement before it is rendered, or
 // refuse it by returning an error. Rewrite hooks run in the order given to
@@ -895,13 +701,8 @@ type Rewrite = engine.Rewrite
 // recovered a loop body panic: let panics through.
 type Around = engine.Around
 
-// Tag is a string a context carries to every statement run with it, for the
-// hooks (Statement.Tags) and the SQL comment.
-//
-// Its fields:
-//
-//	Key, Value string
-type Tag = engine.Tag
+// Tag is a string a context carries to every statement run with it.
+type Tag = dbtype.Tag
 
 // WithTags returns ctx with the tags kv (key, value, key, value, …) added: a
 // key already on ctx keeps its place and takes the new value; a new key is
@@ -945,57 +746,23 @@ func TxRetries(opts ...TxOption) int { return engine.TxRetries(opts...) }
 // it waits until the transaction ends or its deadline passes.
 func WithoutTx(ctx context.Context) context.Context { return engine.WithoutTx(ctx) }
 
-// TxAround is a hook that wraps a transaction: a db.Tx call, every attempt
-// TxRetrySerializable makes and the commit included. It is called once per
-// db.Tx call, not for a nested Tx (a savepoint). A multi-batch InsertAll
-// outside a transaction runs in one db.Tx, so the hooks see it too.
-//
-// A hook must call next once, and return its error, unless it returns an
-// error of its own instead; a second call to next returns an error without
-// running anything. The context passed to next is the one the transaction
-// runs on, which Tx's fn gets; it must stay valid until next returns. The
-// hook's own context is not the transaction's: a statement the hook runs on
-// the DB, before or after next, runs outside the transaction. The first
-// TxAround given to Open is the outermost.
-type TxAround = engine.TxAround
+// TxAround is a hook that wraps a transaction.
+type TxAround = dbtype.TxAround
 
-// TxInfo describes a transaction to the hooks: a TxAround hook gets it, and
-// every statement in the transaction, a savepoint's included, has it in
-// Statement.Tx. velox makes one only when the DB has hooks of some kind.
-//
-// Its fields:
-//
-//	ID uint64 // unique within the process
-//	Isolation sql.IsolationLevel
-//	ReadOnly bool
-//	// Route is where the transaction runs: its shard ("" on an unsharded DB), on
-//	// the primary, so Replica is always -1 and Fallback always false.
-//	Route Route
-//	Attempt int // 1 for the first try; TxRetrySerializable increments it
-//	Retries []TxRetry // the attempts TxRetrySerializable retried, in order
-//	Outcome TxOutcome // how the last attempt ended; set before next returns
-type TxInfo = engine.TxInfo
+// TxInfo describes a transaction to the hooks.
+type TxInfo = dbtype.TxInfo
 
 // TxRetry is an attempt that TxRetrySerializable retried.
-//
-// Its fields:
-//
-//	Err error // what the attempt failed with
-//	At time.Time // when velox decided to retry
-type TxRetry = engine.TxRetry
+type TxRetry = dbtype.TxRetry
 
 // TxOutcome is how a transaction's attempt ended.
-//
-// Its methods:
-//
-//	String (o TxOutcome) String() string
-type TxOutcome = engine.TxOutcome
+type TxOutcome = dbtype.TxOutcome
 
 // The outcomes of an attempt.
 const (
-	TxCommit   = engine.TxCommit   // fn returned nil and the commit succeeded
-	TxRollback = engine.TxRollback // fn returned an error, or panicked
-	TxError    = engine.TxError    // begin or commit failed, or the transaction's deadline passed
+	TxCommit   = dbtype.TxCommit   // fn returned nil and the commit succeeded
+	TxRollback = dbtype.TxRollback // fn returned an error, or panicked
+	TxError    = dbtype.TxError    // begin or commit failed, or the transaction's deadline passed
 )
 
 // WithTxAround adds a transaction hook. The first one given is the
@@ -1003,29 +770,7 @@ const (
 func WithTxAround(h TxAround) Option { return engine.WithTxAround(h) }
 
 // ValidationError is a value a column's validators refused; nothing was sent.
-// Find it with errors.As; errors.Is reaches the validator's own error.
-//
-// What validators check:
-//   - For an insert, every column the statement sends.
-//   - For an update or Save, the value of every Set assignment; not Add or Sub.
-//   - A nil pointer, or a nil value, is never checked, because it is the
-//     absence of a value; a non-nil pointer is checked as its element.
-//
-// It is also a nil key of a column with a RequiredEdge (see ColumnDesc), in an
-// insert or a Set assignment: its Err says missing required edge
-// "<Type>.<edge>", as ent's does.
-//
-// Its fields:
-//
-//	Entity string // the Go type, e.g. "gen.User"
-//	Field string // the Go field name
-//	Err error // the validator's error
-//
-// Its methods:
-//
-//	Error (e *ValidationError) Error() string
-//	Unwrap (e *ValidationError) Unwrap() error
-type ValidationError = engine.ValidationError
+type ValidationError = dbtype.ValidationError
 
 // Pred is a condition on entity E, made by a column handle or by And, Or and
 // Not. It is the typed form of Predicate, as Order is of OrderTerm.
