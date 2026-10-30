@@ -119,7 +119,10 @@ Runtime
   owner's slice capped at its length. An owner whose rows were read one after
   another takes them where they were read, without a copy, and each owner's
   rows are grouped in one array of indexes. EagerO2M100 on SQLite went from
-  261,168 to 151,600 B/op and from 4,699 to 4,204 allocs/op (`BenchmarkScan`).
+  261,168 to 151,600 B/op and from 4,699 to 4,204 allocs/op (`BenchmarkScan`);
+  in the three-ORM comparison it is 209,188 B/op on SQLite and 202,040 on
+  PostgreSQL, under old velox's 259,516 and 251,707
+  (`docs/reviews/2026-10-30-eager-memory.md`).
   A row kept from a to-many load keeps the rows of every owner loaded with it,
   in the arrays they were read into (up to 1,024 rows each) and in the one the
   rest were copied to; copy it to keep it alone (4e4e85a, 9fbf19e).
