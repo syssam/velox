@@ -239,7 +239,7 @@ type RouteCtx struct {
 
 // Router is the connections of a DB with replicas or shards, among which the
 // route stage chooses. A DB with neither has none, and runs every statement
-// on db.ex.
+// on db.Ex.
 type Router struct {
 	One *ShardConn // Open's primary and WithReplicas's replicas; nil when sharded
 	// shards are OpenShards's, by name, and shardFor its WithShardFor; nil
@@ -492,4 +492,157 @@ func safeToRetry(err error) bool {
 		SafeToRetry() bool
 	}](err)
 	return ok && r.SafeToRetry()
+}
+
+// Wrote records that a write reached the driver, whether or not it then
+// failed, as its outcome is unknown: in a transaction, in the flag its commit
+// reads; outside one, in the context's session. A DB without replicas keeps
+// no record.
+func (db *DB) Wrote(ctx context.Context) {
+	if db.InTx {
+		if db.txWrote != nil {
+			db.txWrote.Store(true)
+		}
+		return
+	}
+	if db.Rt != nil {
+		db.pinSession(ctx)
+	}
+}
+
+// pinSession pins ctx's session, if it has one, for the DB's pin window from
+// now.
+func (db *DB) pinSession(ctx context.Context) {
+	if rc, _ := ctx.Value(RouteKey{}).(RouteCtx); rc.Sess != nil {
+		rc.Sess.Raise(time.Now().Add(db.Cfg.PinWindow).UnixNano())
+	}
+}
+
+// shardForTx returns the shard a transaction begun with ctx runs on: on a
+// sharded DB the one ctx names, on a DB with replicas its one shard, and nil
+// on a DB without a router. Its error is Tx's.
+func (db *DB) shardForTx(ctx context.Context) (*ShardConn, error) {
+	sh, err := db.CtxShard(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("velox: transaction: %w", err)
+	}
+	return sh, nil
+}
+
+// CtxShard is shardForTx's shard, and its error without the prefix.
+func (db *DB) CtxShard(ctx context.Context) (*ShardConn, error) {
+	switch {
+	case db.Rt == nil:
+		return nil, nil
+	case db.Rt.One != nil:
+		return db.Rt.One, nil
+	}
+	rc, _ := ctx.Value(RouteKey{}).(RouteCtx)
+	sh, err := db.Rt.ShardOf(ctx, rc)
+	if err == nil && sh == nil {
+		err = NoShard(ctx)
+	}
+	return sh, err
+}
+
+// Route is the route stage: it chooses the connection st runs on, and
+// records the choice in st.Route.
+//
+// Writes, statements in a transaction, reads whose context is marked with
+// WithPrimaryReads and reads of a session within its pin window go to the
+// primary. Exec's raw SQL is a write, and Raw's a read. A With load goes where
+// its query went. Any other read goes to the next replica in turn, skipping one
+// in back-off, or to the primary when every replica is. A dry run is routed as
+// the read would be, but takes no replica's turn: it sends nothing. exec, not
+// Route, falls a failed replica read over to the primary.
+//
+// On a sharded DB the statement's shard comes first: the one its context names
+// (shardOf), the pinned target's for a With load, the transaction's in a
+// transaction. A statement whose shard cannot be found fails, with nothing
+// sent.
+//
+// On a DB without a router it is one branch: no context lookup.
+func (db *DB) Route(ctx context.Context, st *Statement) (Target, error) {
+	if db.Rt == nil || db.InTx && db.txShard == nil {
+		// The DB's one connection, or the transaction's.
+		st.Route = Route{Replica: -1}
+		return Target{Ex: db.Ex, Replica: -1}, nil
+	}
+	if db.InTx {
+		return db.routeTx(ctx, st)
+	}
+	sh := db.Rt.One
+	var rc RouteCtx // read once, on a sharded DB here, else for a read below
+	switch {
+	case StmtPin(st).Ex != nil:
+		sh = StmtPin(st).Sh // a With load: its query's shard
+	case sh == nil:
+		rc, _ = ctx.Value(RouteKey{}).(RouteCtx)
+		var err error
+		if sh, err = db.Rt.ShardOf(ctx, rc); err == nil && sh == nil {
+			err = NoShard(ctx)
+		}
+		if err != nil {
+			return Target{}, StmtErr(st, err)
+		}
+	}
+	t := Target{Ex: sh.Primary, Sh: sh, Replica: -1}
+	fallback := false
+	switch {
+	case !st.Op.Reads(): // a write, Exec's raw SQL included
+	case StmtPin(st).Ex != nil:
+		t = StmtPin(st)
+		if t.Replica >= 0 && t.Sh.Replicas[t.Replica].DownUntil.Load() != 0 && !t.Sh.Replicas[t.Replica].Up(time.Now().UnixNano()) {
+			// The replica has failed since the query read it, on an earlier
+			// load: this one goes straight to the primary, as it would
+			// have fallen over there.
+			t, fallback = Target{Ex: t.Sh.Primary, Sh: t.Sh, Replica: -1}, true
+		}
+	case len(sh.Replicas) == 0: // a shard without replicas
+	default:
+		if db.Rt.One != nil {
+			rc, _ = ctx.Value(RouteKey{}).(RouteCtx)
+		}
+		if !rc.Primary && (rc.Sess == nil || !rc.Sess.Pinned()) {
+			t = sh.Pick(st.DryRun)
+		}
+	}
+	st.Route = Route{Shard: t.Sh.Name, Replica: t.Replica, Fallback: fallback}
+	return t, nil
+}
+
+// routeTx is route in a transaction on a sharded DB: the statement runs on the
+// transaction's connection, unless its context names another shard, or names
+// one that is not a shard, or WithShardFor fails. A context that names no shard
+// is the transaction's.
+func (db *DB) routeTx(ctx context.Context, st *Statement) (Target, error) {
+	rc, _ := ctx.Value(RouteKey{}).(RouteCtx)
+	sh, err := db.Rt.ShardOf(ctx, rc)
+	if err != nil {
+		return Target{}, StmtErr(st, err)
+	}
+	if sh != nil && sh != db.txShard {
+		return Target{}, fmt.Errorf("velox: %s: statement for shard %q in a transaction on shard %q", st.Entity.Name, sh.Name, db.txShard.Name)
+	}
+	st.Route = Route{Shard: db.txShard.Name, Replica: -1}
+	return Target{Ex: db.Ex, Replica: -1}, nil
+}
+
+// Broken reports whether err, from a read on t, is a connection error on a
+// replica, with ctx still live: whether the read falls over. A context that
+// ended says nothing about the replica.
+func (db *DB) Broken(ctx context.Context, t Target, err error) bool {
+	return t.Replica >= 0 && ctx.Err() == nil && Failoverable(err)
+}
+
+// FallBack records that st's read on replica t failed with a connection error:
+// the replica is put in back-off for the DB's WithReplicaBackoff, and fallBack
+// returns the shard's primary for exec to retry st on, with st.Route and st.ran
+// saying so.
+func (db *DB) FallBack(st *Statement, t Target) Target {
+	t.Sh.Replicas[t.Replica].Down(db.Cfg.Backoff)
+	p := Target{Ex: t.Sh.Primary, Sh: t.Sh, Replica: -1}
+	st.Route = Route{Shard: t.Sh.Name, Replica: -1, Fallback: true}
+	SetStmtRan(st, p)
+	return p
 }

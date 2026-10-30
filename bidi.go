@@ -19,14 +19,14 @@ func bidiTx(ctx context.Context, db *DB, in *EntityInfo, fn func(ctx context.Con
 	if IsDryRun(ctx) {
 		return fmt.Errorf("velox: %s: %w", in.Name, ErrDryRun)
 	}
-	if db.foreign(ctx) {
+	if db.e.Foreign(ctx) {
 		return fmt.Errorf("velox: %s: %w", in.Name, ErrOutsideTx)
 	}
-	if db.txRoot != nil && db.txRoot.broken != nil {
-		return fmt.Errorf("velox: %s: %w", in.Name, db.txRoot.broken)
+	if db.e.TxBroken() != nil {
+		return fmt.Errorf("velox: %s: %w", in.Name, db.e.TxBroken())
 	}
-	if !db.inTx {
-		if _, err := db.ctxShard(ctx); err != nil {
+	if !db.e.InTx {
+		if _, err := db.e.CtxShard(ctx); err != nil {
 			return fmt.Errorf("velox: %s: %w", in.Name, err)
 		}
 	}
@@ -103,7 +103,7 @@ func bidiUpdate(ctx context.Context, db *DB, mu *engine.MutationState, keys []en
 // ("row v cannot be linked").
 func bidiLink(ctx context.Context, db *DB, in *EntityInfo, bk engine.BidiKey, k, v any) error {
 	pk := in.PrimaryKey[0]
-	st := Statement{Op: OpUpdate, Entity: in, InTx: db.inTx,
+	st := Statement{Op: OpUpdate, Entity: in, InTx: db.e.InTx,
 		Set:   []Assignment{{Column: bk.Col, Op: AssignSet, Value: k}},
 		Where: []Predicate{ColumnEQ(pk, v), engine.NewPredicate(engine.Node{Op: engine.OpIsNull, Col: int32(bk.Col)})}}
 	res, err := execWrite(ctx, db, &st)
@@ -115,14 +115,14 @@ func bidiLink(ctx context.Context, db *DB, in *EntityInfo, bk engine.BidiKey, k,
 	case res.Affected > 0:
 		return nil
 	}
-	probe := Statement{Op: OpSelect, Entity: in, InTx: db.inTx, Exists: true, Limit: 1, Writable: true,
+	probe := Statement{Op: OpSelect, Entity: in, InTx: db.e.InTx, Exists: true, Limit: 1, Writable: true,
 		Where: []Predicate{ColumnEQ(pk, v)}}
 	var found bool
 	read := func(r engine.Rows) error {
 		found = r.Next()
 		return nil
 	}
-	if db.hooked() {
+	if db.e.Hooked() {
 		err = db.run(ctx, &probe, read, nil)
 	} else {
 		err = db.plain(ctx, &probe, read, nil)

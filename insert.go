@@ -223,7 +223,7 @@ func (q InsertQuery[E]) render[_ Lazy[E]](ctx context.Context, mu *engine.Mutati
 		if err != nil {
 			return err
 		}
-		inTx := q.db.inTx || len(q.many) > per || conditionedUpsert(ctx, q.db, q.meta.info, q.conflict, len(q.many))
+		inTx := q.db.e.InTx || len(q.many) > per || conditionedUpsert(ctx, q.db, q.meta.info, q.conflict, len(q.many))
 		st = batch(q.meta, q.many[:min(per, len(q.many))], cols, q.conflict, inTx)
 	}
 	var err error
@@ -301,11 +301,11 @@ func oneStatement[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *Conf
 	if err := engine.InsertAllowed(ctx, m.info, unsafe.Pointer(p)); err != nil {
 		return Statement{}, -1, err
 	}
-	st := Statement{Op: OpInsert, Entity: m.info, Columns: cols, Rows: [][]any{rowValues(m, p, cols)}, Conflict: cf, InTx: db.inTx}
+	st := Statement{Op: OpInsert, Entity: m.info, Columns: cols, Rows: [][]any{rowValues(m, p, cols)}, Conflict: cf, InTx: db.e.InTx}
 	if engine.InfoBidi(m.info) {
 		engine.MirrorRows(&st)
 	}
-	if gen >= 0 && db.d != MySQL {
+	if gen >= 0 && db.e.D != MySQL {
 		st.Returning = []int{gen}
 	}
 	engine.BidiInTx(&st, unsafe.Pointer(p))
@@ -357,7 +357,7 @@ func sendOne(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen i
 		out.Affected = res.Affected
 		return engine.CheckUpserted(st, res.Affected)
 	}
-	if db.d != MySQL {
+	if db.e.D != MySQL {
 		var back int64 // the rows that came back
 		read := func(r engine.Rows) error {
 			if !r.Next() {
@@ -372,7 +372,7 @@ func sendOne(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen i
 			return nil
 		}
 		var err error
-		if db.hooked() {
+		if db.e.Hooked() {
 			err = db.run(ctx, st, read, nil)
 		} else {
 			err = db.plain(ctx, st, read, nil)
@@ -439,7 +439,7 @@ func prepareMany[E any](ctx context.Context, db *DB, m *Meta[E], xs []E) (cols [
 			return nil, 0, err
 		}
 	}
-	return cols, engine.PerStatement(db.d, m.info, len(cols)), nil
+	return cols, engine.PerStatement(db.e.D, m.info, len(cols)), nil
 }
 
 // batch is the statement that inserts xs, prepared, in one statement.
@@ -465,7 +465,7 @@ func insertMany[E any](ctx context.Context, db *DB, m *Meta[E], xs []E, cf *Conf
 	if IsDryRun(ctx) {
 		return fmt.Errorf("velox: %s: %w", m.info.Name, ErrDryRun)
 	}
-	if db.foreign(ctx) {
+	if db.e.Foreign(ctx) {
 		return fmt.Errorf("velox: %s: %w", m.info.Name, ErrOutsideTx)
 	}
 	cols, per, err := prepareMany(ctx, db, m, xs)
@@ -497,7 +497,7 @@ func insertBatches[E any](ctx context.Context, db *DB, m *Meta[E], xs []E, cols 
 	var affected int64
 	unknown := false
 	for start := 0; start < len(xs); start += per {
-		st := batch(m, xs[start:min(start+per, len(xs))], cols, cf, db.inTx)
+		st := batch(m, xs[start:min(start+per, len(xs))], cols, cf, db.e.InTx)
 		res, err := execWrite(ctx, db, &st)
 		if err != nil {
 			return 0, err
@@ -524,6 +524,6 @@ func insertBatches[E any](ctx context.Context, db *DB, m *Meta[E], xs []E, cols 
 // upsert that updates, on any dialect but MySQL (which refuses it), of an
 // entity with a Read or Write policy, unless WithoutPolicy.
 func conditionedUpsert(ctx context.Context, db *DB, in *EntityInfo, cf *ConflictClause, n int) bool {
-	return n > 1 && cf != nil && !cf.DoNothing && len(cf.Update) > 0 && db.d != MySQL &&
+	return n > 1 && cf != nil && !cf.DoNothing && len(cf.Update) > 0 && db.e.D != MySQL &&
 		engine.InfoPolicy(in) != nil && (engine.InfoPolicy(in).Read != nil || engine.InfoPolicy(in).Write != nil) && engine.PolicyBypassReason(ctx) == ""
 }

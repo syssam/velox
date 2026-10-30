@@ -27,7 +27,7 @@ func (db *DB) Exec(ctx context.Context, reason, query string, args ...any) (int6
 	if engine.NoReason(reason) {
 		return 0, engine.ErrNoReason(engine.ExecInfo.Name)
 	}
-	st := &Statement{Op: OpRawExec, Entity: &engine.ExecInfo, SQL: query, Args: args, TenantBypass: reason, PolicyBypass: reason, InTx: db.inTx}
+	st := &Statement{Op: OpRawExec, Entity: &engine.ExecInfo, SQL: query, Args: args, TenantBypass: reason, PolicyBypass: reason, InTx: db.e.InTx}
 	var res engine.ExecResult
 	if err := db.run(ctx, st, nil, &res); err != nil {
 		return 0, err
@@ -109,7 +109,7 @@ func (q RawQuery[E]) statement[_ Lazy[E]]() (Statement, error) {
 		return Statement{}, engine.ErrNoReason(q.meta.info.Name)
 	}
 	return Statement{Op: OpRawQuery, Entity: q.meta.info, SQL: q.query, Args: q.args, MaxRows: q.maxRows,
-		TenantBypass: q.reason, PolicyBypass: q.reason, InTx: q.db.inTx}, nil
+		TenantBypass: q.reason, PolicyBypass: q.reason, InTx: q.db.e.InTx}, nil
 }
 
 // rawRun is the state of one run of a RawQuery: All's and One's rows go to
@@ -170,17 +170,17 @@ func readRaw[E any](a *rawRun[E], r engine.Rows) error {
 // without multiStatements refuses. When the last line holds "--", the comment
 // goes on a line of its own, so that a line comment does not swallow it.
 func (db *DB) prepareRaw(ctx context.Context, st *Statement) {
-	db.observe(ctx, st)
-	if len(db.cfg.Arounds) > 0 {
+	db.e.Observe(ctx, st)
+	if len(db.e.Cfg.Arounds) > 0 {
 		st.Args = slices.Clone(st.Args)
 	}
 	st.Fingerprint = engine.Fingerprint(st.SQL)
-	if db.cfg.Comment != nil {
+	if db.e.Cfg.Comment != nil {
 		q := strings.TrimRight(st.SQL, "; \t\r\n")
 		if strings.Contains(q[strings.LastIndexByte(q, '\n')+1:], "--") {
 			q += "\n"
 		}
-		st.SQL = q + db.cfg.Comment.Text(st)
+		st.SQL = q + db.e.Cfg.Comment.Text(st)
 	}
 }
 
@@ -229,7 +229,7 @@ func (q RawQuery[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error] {
 			yield(zero, err)
 			return
 		}
-		a := &rawRun[E]{st: st, m: q.meta, yield: yield, timed: len(q.db.cfg.Arounds) > 0}
+		a := &rawRun[E]{st: st, m: q.meta, yield: yield, timed: len(q.db.e.Cfg.Arounds) > 0}
 		err = q.db.run(ctx, &a.st, func(r engine.Rows) error { return readRaw(a, r) }, nil)
 		if err != nil && !a.stopped {
 			var zero E

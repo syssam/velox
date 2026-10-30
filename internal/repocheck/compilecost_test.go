@@ -373,7 +373,7 @@ func TestGenericTypesCompileSmall(t *testing.T) {
 // is instantiated per entity.
 func TestObservabilityIsNotGeneric(t *testing.T) {
 	fset := token.NewFileSet()
-	for _, name := range []string{"internal/engine/tags.go", "internal/engine/callers.go", "internal/engine/comment.go", "internal/engine/txhook.go", "txhook.go"} {
+	for _, name := range []string{"internal/engine/tags.go", "internal/engine/callers.go", "internal/engine/comment.go", "internal/engine/txhook.go"} {
 		f, err := parser.ParseFile(fset, filepath.Join(repoRoot(), name), nil, parser.SkipObjectResolution)
 		if err != nil {
 			t.Fatal(err)

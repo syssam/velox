@@ -30,7 +30,7 @@ func (db *DB) guard(st *Statement) error {
 		if st.Limit <= 0 && !st.Unbounded {
 			return fmt.Errorf("velox: %s: %w: add Limit, or Unbounded to read every row", st.Entity.Name, ErrUnbounded)
 		}
-		if m := db.cfg.MaxLimit; m > 0 && st.Limit > m {
+		if m := db.e.Cfg.MaxLimit; m > 0 && st.Limit > m {
 			return fmt.Errorf("velox: %s: %w: Limit %d, the maximum is %d", st.Entity.Name, ErrLimitTooLarge, st.Limit, m)
 		}
 	case OpUpdate, OpDelete:
@@ -59,7 +59,7 @@ func (db *DB) guardLock(st *Statement) error {
 	switch {
 	case st.Lock == 0:
 		return fmt.Errorf("velox: %s: SkipLocked and NoWait need ForUpdate or ForShare", name)
-	case db.d == SQLite:
+	case db.e.D == SQLite:
 		return fmt.Errorf("velox: %s: SQLite has no locking reads; its transactions lock the whole database", name)
 	case !st.InTx:
 		return fmt.Errorf("velox: %s: a locking read (ForUpdate or ForShare) runs only inside Tx", name)

@@ -7,8 +7,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
-	"sync/atomic"
-	"time"
+	"unsafe"
 
 	"github.com/syssam/velox2/internal/conn"
 	"github.com/syssam/velox2/internal/engine"
@@ -21,30 +20,13 @@ import (
 // A DB from Open, OpenConn or OpenShards is safe for concurrent use by multiple
 // goroutines. The *DB that Tx gives its fn is not: see Tx.
 type DB struct {
-	d Dialect
-	// ex runs the statements of a DB without replicas, and of a transaction;
-	// nil on a DB with replicas outside a transaction, whose rt chooses.
-	ex   engine.Executor
-	rt   *engine.Router // WithReplicas's; nil without replicas
-	cfg  *engine.Config
-	inTx bool
-	// txDeadline is, in a transaction, its deadline: velox's or the
-	// caller's, whichever is earlier; zero when none. txCause is ErrTimeout
-	// when the deadline is velox's, nil when it is the caller's.
-	txDeadline time.Time
-	txCause    error
-	tx         *TxInfo // the transaction's, when hooks are configured
-	// txWrote is, in a transaction on a DB with replicas, set by its first
-	// successful write; the commit then pins the session of the context given
-	// to Tx. Its savepoints share it. Nil elsewhere.
-	txWrote *atomic.Bool
-	// txShard is, in a transaction on a sharded DB, the shard it runs on;
-	// nil elsewhere.
-	txShard *engine.ShardConn
-	// txRoot is, in a transaction, its frame: the identity the mark on its
-	// fn's ctx carries, which its savepoints share. Nil elsewhere.
-	txRoot *txFrame
+	// e is the DB, without what is generic. It is the only field: a transaction
+	// gives its fn the *DB of an *engine.DB, a pointer to the same memory.
+	e engine.DB
 }
+
+// DB is the size of its engine.DB, which a *DB is cast from.
+var _ [unsafe.Sizeof(DB{}) - unsafe.Sizeof(engine.DB{})]struct{} = [0]struct{}{}
 
 // Open returns a DB that runs statements through db, a *sql.DB the
 // application opened with a driver for dialect d. For PostgreSQL, veloxpgx.Open
@@ -87,17 +69,80 @@ func newDB(d Dialect, ex engine.Executor, opts []Option) *DB {
 		panic("velox: WithShardFor is for OpenShards; Open and OpenConn open a DB on one shard")
 	}
 	if len(cfg.Replicas) > 0 {
-		return &DB{d: d, rt: engine.NewRouter(d, ex, cfg.Replicas), cfg: cfg}
+		return &DB{e: engine.DB{D: d, Rt: engine.NewRouter(d, ex, cfg.Replicas), Cfg: cfg}}
 	}
-	return &DB{d: d, ex: ex, cfg: cfg}
+	return &DB{e: engine.DB{D: d, Ex: ex, Cfg: cfg}}
 }
 
 // Dialect returns the DB's dialect.
-func (db *DB) Dialect() Dialect { return db.d }
+func (db *DB) Dialect() Dialect { return db.e.D }
 
-// hooked reports whether the pipeline has hooks: whether a statement must go
-// through run, or may take the shortcut of plain.
-func (db *DB) hooked() bool { return len(db.cfg.Rewrites) > 0 || len(db.cfg.Arounds) > 0 }
+// Tx runs fn in a transaction. fn's error rolls it back and is returned; nil
+// commits it; a panic in fn rolls it back and then panics again with the same
+// value, and runtime.Goexit rolls it back and carries on. tx is a *DB like any
+// other, so a function that takes a *DB works inside a transaction unchanged.
+//
+// fn's ctx is the context the transaction runs on: ctx, as the TxAround
+// hooks passed it on, with the values they added. It carries the
+// transaction's deadline, velox's or ctx's, whichever is earlier, unless a
+// TxAround hook passed on a context without it; the deadline bounds every
+// statement on tx either way.
+//
+// fn's ctx, and every context derived from it, is marked as the
+// transaction's. Under the mark, a statement on any *DB other than tx and its
+// savepoints fails before anything is sent, with ErrOutsideTx, as
+// "velox: <Entity>: statement outside its transaction". That includes db
+// itself, a DB from another Open, and another transaction's tx: such a
+// statement was most likely meant for tx. A Tx on such a *DB fails the same
+// way, as "velox: transaction: statement outside its transaction"; a nested
+// transaction is tx.Tx.
+//
+// The mark refuses nothing else. A statement under a context without the
+// mark runs as usual: one in a goroutine that fn starts with the ctx given to
+// Tx, for example. So does a statement under WithoutTx(ctx), which removes
+// the mark for work that must not join the transaction. Once the transaction
+// has ended, committed or rolled back, its mark counts as none.
+//
+// Under a dry-run context (IsDryRun), such as the one SQL(ctx) gives a hook,
+// Tx fails with ErrDryRun before BEGIN, nested or not: it is a write.
+//
+// WithDeadlines' Tx and MaxTx, and TxTimeout, bound the whole call. The
+// transaction's deadline, velox's or ctx's, whichever is earlier, bounds every
+// statement inside it, nested Tx included, whatever context the statement is
+// given. A transaction whose ctx has ended (past either deadline, or canceled)
+// is rolled back, never committed; its error matches ErrTimeout when velox's
+// deadline passed, and context.DeadlineExceeded or context.Canceled otherwise.
+//
+// A rollback velox sends after fn fails, or once ctx has ended, is bounded to
+// 5 seconds; database/sql's Tx.Rollback takes no context, so on a DB from Open
+// that bound covers a savepoint's ROLLBACK TO only.
+//
+// WithTxAround's hooks wrap the whole call: every attempt and the commit.
+//
+// On a DB with replicas the transaction runs on the primary. On a DB opened
+// with OpenShards it runs on the primary of the shard ctx names, as a
+// statement's context names one; when ctx names none, Tx fails with
+// ErrNoShard, as "velox: transaction: no shard for the statement: …", before
+// anything is sent or any TxAround hook runs. Its statements run on that
+// shard too, and one whose context names another fails.
+//
+// Inside a transaction, Tx makes a savepoint instead, so an error in a nested
+// fn rolls back only that fn's work. When releasing the savepoint fails, the
+// nested Tx returns that error and does not roll back to the savepoint.
+// Whether the enclosing transaction can still commit is the database's call:
+// PostgreSQL aborts it, so the outer COMMIT fails. A nested Tx (a savepoint)
+// takes no options and returns an error when given any, and passes fn the ctx
+// it is given, marked as the transaction's.
+//
+// tx is valid only inside fn: after Tx returns, statements on it fail (or, for
+// a nested tx, run in the enclosing transaction). tx is not safe for
+// concurrent use: run its statements from one goroutine at a time.
+func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error, opts ...TxOption) error {
+	// The two function types differ only in a pointer to the same memory (see
+	// DB). A closure over fn would escape, as the TxAround hooks keep it, and
+	// cost every transaction an allocation.
+	return db.e.Tx(ctx, *(*func(context.Context, *engine.DB) error)(unsafe.Pointer(&fn)), opts...)
+}
 
 // plain runs a statement on a DB with no hooks: the dry-run and transaction
 // checks (dryWrite, then outsideTx, in run's order), resolving relations,
@@ -105,10 +150,10 @@ func (db *DB) hooked() bool { return len(db.cfg.Rewrites) > 0 || len(db.cfg.Arou
 // Unlike run's, its st and read do not escape, so a caller's state and
 // reading closure can stay on the stack.
 func (db *DB) plain(ctx context.Context, st *Statement, read func(engine.Rows) error, res *engine.ExecResult) error {
-	if err := db.dryWrite(ctx, st); err != nil {
+	if err := db.e.DryWrite(ctx, st); err != nil {
 		return err
 	}
-	if err := db.outsideTx(ctx, st); err != nil {
+	if err := db.e.OutsideTx(ctx, st); err != nil {
 		return err
 	}
 	if err := engine.ResolveStatement(st); err != nil {
@@ -121,29 +166,29 @@ func (db *DB) plain(ctx context.Context, st *Statement, read func(engine.Rows) e
 		return err
 	}
 	db.capLimit(st)
-	if db.cfg.Comment != nil {
-		db.observe(ctx, st) // the comment reads the call site and tags
+	if db.e.Cfg.Comment != nil {
+		db.e.Observe(ctx, st) // the comment reads the call site and tags
 	} else {
-		st.Dialect = db.d
+		st.Dialect = db.e.D
 	}
-	e, args, err := db.cfg.Cache.Get(db.d, st)
+	e, args, err := db.e.Cfg.Cache.Get(db.e.D, st)
 	if err != nil {
 		return err
 	}
 	st.SQL, st.Fingerprint, st.Args = e.Text, e.Fp, args
-	if db.cfg.Comment != nil {
-		st.SQL += db.cfg.Comment.Text(st)
+	if db.e.Cfg.Comment != nil {
+		st.SQL += db.e.Cfg.Comment.Text(st)
 	}
-	t, err := db.route(ctx, st)
+	t, err := db.e.Route(ctx, st)
 	if err != nil {
 		return err
 	}
-	if !db.timed() {
+	if !db.e.Timed() {
 		return db.exec(ctx, st, t, read, res)
 	}
 	// tctx is ctx itself when ctx's deadline comes first: then it is velox's
 	// only on a context velox bounded, such as a transaction's fn's ctx.
-	tctx, cancel := db.bound(ctx)
+	tctx, cancel := db.e.Bound(ctx)
 	if cancel != nil {
 		defer cancel()
 	}
@@ -164,24 +209,24 @@ func (db *DB) plain(ctx context.Context, st *Statement, read func(engine.Rows) e
 // Hooks may keep the statement, and next (which holds read), so both escape;
 // a statement with no hooks of either kind uses plain.
 func (db *DB) run(ctx context.Context, st *Statement, read func(engine.Rows) error, res *engine.ExecResult) error {
-	if err := db.dryWrite(ctx, st); err != nil {
+	if err := db.e.DryWrite(ctx, st); err != nil {
 		return err
 	}
 	if err := db.prepare(ctx, st); err != nil {
 		return err
 	}
-	t, err := db.route(ctx, st)
+	t, err := db.e.Route(ctx, st)
 	if err != nil {
 		return err
 	}
 	// Before the around hooks, which never see a statement that cannot be
 	// sent; exec checks again, for a hook that changes Args.
-	if err := engine.CheckParams(db.d, st); err != nil {
+	if err := engine.CheckParams(db.e.D, st); err != nil {
 		return err
 	}
-	if db.timed() {
+	if db.e.Timed() {
 		// As in plain, tctx may be ctx, and its deadline velox's.
-		tctx, cancel := db.bound(ctx)
+		tctx, cancel := db.e.Bound(ctx)
 		if cancel != nil {
 			defer cancel()
 		}
@@ -203,7 +248,7 @@ func (db *DB) run(ctx context.Context, st *Statement, read func(engine.Rows) err
 // into st.SQL (comment included) and st.Args. Raw SQL takes only the
 // transaction check and prepareRaw.
 func (db *DB) prepare(ctx context.Context, st *Statement) error {
-	if err := db.outsideTx(ctx, st); err != nil {
+	if err := db.e.OutsideTx(ctx, st); err != nil {
 		return err
 	}
 	if st.Op.Raw() {
@@ -216,11 +261,11 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	if err := db.guard(st); err != nil {
 		return err
 	}
-	db.observe(ctx, st)
+	db.e.Observe(ctx, st)
 	// The query's own Columns: the hooks get a copy of them.
 	cols := st.Columns
 	was := st.Each
-	if db.hooked() {
+	if db.e.Hooked() {
 		// Hooks may edit the statement in place; give them copies so that
 		// the query the statement came from stays as it was. With no hooks
 		// nothing is copied.
@@ -256,7 +301,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	// hooks: a hook may not replace it or change it.
 	each := st.Each
 	returning := len(st.Returning) > 0
-	for _, rw := range db.cfg.Rewrites {
+	for _, rw := range db.e.Cfg.Rewrites {
 		if err := rw(ctx, st); err != nil {
 			return engine.NewStageError(entity.Name, "rewrite", err)
 		}
@@ -312,7 +357,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 		// them would unscope the statement.
 		return fmt.Errorf("velox: %s: a Rewrite hook replaced the Entity with a copy whose tenant column or policy differs", entity.Name)
 	}
-	if len(db.cfg.Rewrites) > 0 {
+	if len(db.e.Cfg.Rewrites) > 0 {
 		if err := engine.CheckColumns(st); err != nil {
 			return err
 		}
@@ -321,7 +366,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 		}
 		if cf := st.Conflict; cf != nil && len(cf.Where) > 0 {
 			switch {
-			case db.d == MySQL:
+			case db.e.D == MySQL:
 				return fmt.Errorf("velox: %s: a Rewrite hook gave the upsert a condition; MySQL's ON DUPLICATE KEY UPDATE takes none", entity.Name)
 			case cf.DoNothing || len(cf.Update) == 0:
 				// Rendering would drop it: there is no update branch.
@@ -337,7 +382,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	}
 	db.capLimit(st)
 	if st.Entity == entity {
-		e, args, err := db.cfg.Cache.Get(db.d, st)
+		e, args, err := db.e.Cfg.Cache.Get(db.e.D, st)
 		if err != nil {
 			return err
 		}
@@ -345,7 +390,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	} else {
 		// A hook pointed the statement at its own EntityInfo, likely one
 		// made for this statement alone; caching by it would fill the cache.
-		text, args, err := engine.RenderStmt(db.d, st)
+		text, args, err := engine.RenderStmt(db.e.D, st)
 		if err != nil {
 			return err
 		}
@@ -353,49 +398,10 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 		st.Fingerprint = engine.Fingerprint(st.SQL)
 	}
 	// After the fingerprint, which is of the text without the comment.
-	if db.cfg.Comment != nil {
-		st.SQL += db.cfg.Comment.Text(st)
+	if db.e.Cfg.Comment != nil {
+		st.SQL += db.e.Cfg.Comment.Text(st)
 	}
 	return nil
-}
-
-// outsideTx fails a statement, st, under a context marked by a transaction
-// that has not ended and that db is not in (foreign), with ErrOutsideTx: one
-// context lookup, and a pointer compare. In a transaction a savepoint broke
-// (txFrame.broken), it fails st with that error.
-func (db *DB) outsideTx(ctx context.Context, st *Statement) error {
-	if db.foreign(ctx) {
-		return engine.StmtErr(st, ErrOutsideTx)
-	}
-	if db.txRoot != nil && db.txRoot.broken != nil {
-		return engine.StmtErr(st, db.txRoot.broken)
-	}
-	return nil
-}
-
-// dryWrite fails a statement that writes, st, under a dry-run context
-// (IsDryRun), with ErrDryRun: nothing is sent. It is made where a statement
-// is sent, in plain and run, never in prepare, which SQL(ctx) renders
-// through; so the statement being dry-run is rendered, and every other write
-// a hook makes under its context is refused. Every write goes through plain
-// or run, Raw included, so this is the one place the rule is kept. Reads
-// pass without a context lookup.
-func (db *DB) dryWrite(ctx context.Context, st *Statement) error {
-	if !st.Op.Reads() && IsDryRun(ctx) {
-		return engine.StmtErr(st, ErrDryRun)
-	}
-	return nil
-}
-
-// observe sets what st's hooks and adapters read about it: its Dialect, its
-// Tags, its transaction's TxInfo and, with WithCallers, its Caller.
-func (db *DB) observe(ctx context.Context, st *Statement) {
-	st.Dialect = db.d
-	st.Tx = db.tx
-	st.Tags = engine.TagsFrom(ctx)
-	if c := db.cfg.Callers; c != nil {
-		st.Caller = c.Capture()
-	}
 }
 
 // dryRun prepares and routes st, with DryRun set, and returns what run would
@@ -406,10 +412,10 @@ func (db *DB) dryRun(ctx context.Context, st *Statement) (string, []any, error) 
 	if err := db.prepare(ctx, st); err != nil {
 		return "", nil, err
 	}
-	if _, err := db.route(ctx, st); err != nil {
+	if _, err := db.e.Route(ctx, st); err != nil {
 		return "", nil, err
 	}
-	if err := engine.CheckParams(db.d, st); err != nil {
+	if err := engine.CheckParams(db.e.D, st); err != nil {
 		return "", nil, err
 	}
 	return st.SQL, st.Args, nil
@@ -418,7 +424,7 @@ func (db *DB) dryRun(ctx context.Context, st *Statement) (string, []any, error) 
 // execute runs a rendered, routed statement through the around hooks; t is
 // where the route stage sent it.
 func (db *DB) execute(ctx context.Context, st *Statement, t engine.Target, read func(engine.Rows) error, res *engine.ExecResult) error {
-	if len(db.cfg.Arounds) == 0 {
+	if len(db.e.Cfg.Arounds) == 0 {
 		return db.exec(ctx, st, t, read, res)
 	}
 	// Reset here as well as in exec: a hook that returns before calling
@@ -431,8 +437,8 @@ func (db *DB) execute(ctx context.Context, st *Statement, t engine.Target, read 
 		last = db.exec(ctx, st, t, read, res)
 		return last
 	}
-	for i := len(db.cfg.Arounds) - 1; i >= 0; i-- {
-		a, inner := db.cfg.Arounds[i], next
+	for i := len(db.e.Cfg.Arounds) - 1; i >= 0; i-- {
+		a, inner := db.e.Cfg.Arounds[i], next
 		next = func(ctx context.Context) error { return a(ctx, st, inner) }
 	}
 	if err := next(ctx); err != nil {
@@ -461,7 +467,7 @@ func (db *DB) rowCap(st *Statement) int {
 	if n, ok := engine.EachBound(st); ok {
 		return n
 	}
-	return db.cfg.MaxRows
+	return db.e.Cfg.MaxRows
 }
 
 // capLimit lowers st's Limit to its row cap plus one, so that the database
@@ -495,7 +501,7 @@ func (db *DB) capLimit(st *Statement) {
 // returned and only the back-off happens. Neither happens once ctx has ended.
 func (db *DB) exec(ctx context.Context, st *Statement, t engine.Target, read func(engine.Rows) error, res *engine.ExecResult) error {
 	st.Result = Result{Affected: -1}
-	if err := engine.CheckParams(db.d, st); err != nil {
+	if err := engine.CheckParams(db.e.D, st); err != nil {
 		return err
 	}
 	if t.Replica >= 0 && st.Route.Fallback {
@@ -509,7 +515,7 @@ func (db *DB) exec(ctx context.Context, st *Statement, t engine.Target, read fun
 		if !st.Op.Reads() {
 			// It reached the database: whether it failed or not, its
 			// outcome may be written.
-			db.wrote(ctx)
+			db.e.Wrote(ctx)
 		}
 		if err != nil {
 			return engine.DBErr(st.Entity, err)
@@ -524,13 +530,13 @@ func (db *DB) exec(ctx context.Context, st *Statement, t engine.Target, read fun
 	if !st.Op.Reads() {
 		// As for exec: a write that reached the database pins, whatever
 		// came back. A write is not failed over, so it is sent only here.
-		db.wrote(ctx)
+		db.e.Wrote(ctx)
 	}
 	if err != nil {
-		if !db.broken(ctx, t, err) {
+		if !db.e.Broken(ctx, t, err) {
 			return engine.DBErr(st.Entity, err)
 		}
-		t = db.fallBack(st, t)
+		t = db.e.FallBack(st, t)
 		if r, err = t.Ex.Query(ctx, st.SQL, st.Args); err != nil {
 			return engine.DBErr(st.Entity, err)
 		}
@@ -539,7 +545,7 @@ func (db *DB) exec(ctx context.Context, st *Statement, t engine.Target, read fun
 	// reads Result.Rows, and the cap needs it. Wrapping them allocates.
 	n := db.rowCap(st)
 	var counted *engine.CountedRows
-	if n > 0 || len(db.cfg.Arounds) > 0 {
+	if n > 0 || len(db.e.Cfg.Arounds) > 0 {
 		counted = &engine.CountedRows{Rows: r, Left: n, Capped: n > 0}
 		r = counted
 	}
@@ -548,16 +554,16 @@ func (db *DB) exec(ctx context.Context, st *Statement, t engine.Target, read fun
 	// broken connection ends the rows with Next false, so read finishes
 	// cleanly, while pgx also reports read's own scan error through
 	// rows.Err(), where a Scanner's io.ErrUnexpectedEOF would look like one.
-	if rerr == nil && rowsErr != nil && db.broken(ctx, t, rowsErr) {
+	if rerr == nil && rowsErr != nil && db.e.Broken(ctx, t, rowsErr) {
 		if engine.StmtHanded(st) {
 			// Iter has handed the caller a row, which cannot be taken
 			// back: the error is returned, and only the replica pays.
-			t.Sh.Replicas[t.Replica].Down(db.cfg.Backoff)
+			t.Sh.Replicas[t.Replica].Down(db.e.Cfg.Backoff)
 		} else {
 			// The replica's connection broke before any row reached the
 			// caller: read on the primary, from the start. read starts
 			// anew, as for an Around hook's retry.
-			t = db.fallBack(st, t)
+			t = db.e.FallBack(st, t)
 			pr, err := t.Ex.Query(ctx, st.SQL, st.Args)
 			if err != nil {
 				return engine.DBErr(st.Entity, err)
@@ -597,7 +603,7 @@ func (db *DB) exec(ctx context.Context, st *Statement, t engine.Target, read fun
 func execWrite(ctx context.Context, db *DB, st *Statement) (engine.ExecResult, error) {
 	var res engine.ExecResult
 	var err error
-	if db.hooked() {
+	if db.e.Hooked() {
 		err = db.run(ctx, st, nil, &res)
 	} else {
 		err = db.plain(ctx, st, nil, &res)

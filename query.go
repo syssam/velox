@@ -30,7 +30,7 @@ type Query[E any] struct {
 //	db.Query[billing.Invoice]().Where(billing.Invoices.Paid.EQ(false)).Limit(50).All(ctx)
 func (db *DB) Query[E any, PE Entity[E]]() Query[E] {
 	m := PE(nil).VeloxMeta()
-	return Query[E]{db: db, meta: m, st: Statement{Op: OpSelect, Entity: m.info, InTx: db.inTx}}
+	return Query[E]{db: db, meta: m, st: Statement{Op: OpSelect, Entity: m.info, InTx: db.e.InTx}}
 }
 
 // Where returns the query with conditions added. All of a query's conditions
@@ -314,7 +314,7 @@ func (q Query[E]) read[_ Lazy[E]](ctx context.Context) (out []E, ran []int, at e
 	if err != nil {
 		return nil, nil, at, err
 	}
-	if q.db.hooked() {
+	if q.db.e.Hooked() {
 		a := &allRun[E]{st: st, m: q.meta}
 		err = q.db.run(ctx, &a.st, func(r engine.Rows) error { return readAll(a, r) }, nil)
 		out, ran, at = a.out, a.st.Columns, engine.StmtRan(&a.st)
@@ -479,8 +479,8 @@ func (q Query[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error] {
 			return
 		}
 		var stopped bool
-		if q.db.hooked() {
-			it := &iterRun[E]{st: st, m: q.meta, yield: yield, timed: len(q.db.cfg.Arounds) > 0}
+		if q.db.e.Hooked() {
+			it := &iterRun[E]{st: st, m: q.meta, yield: yield, timed: len(q.db.e.Cfg.Arounds) > 0}
 			err = q.db.run(ctx, &it.st, func(r engine.Rows) error { return readIter(it, r) }, nil)
 			stopped = it.stopped
 		} else {
@@ -510,7 +510,7 @@ func (q Query[E]) Count[_ Lazy[E]](ctx context.Context) (int64, error) {
 	}
 	st.Count, st.Columns, st.OrderBy, st.Limit, st.Offset = true, nil, nil, 0, 0
 	var n int64
-	if q.db.hooked() {
+	if q.db.e.Hooked() {
 		c := &engine.CountRun{St: st}
 		err = q.db.run(ctx, &c.St, func(r engine.Rows) error { return engine.ReadCount(c, r) }, nil)
 		n = c.N
@@ -541,7 +541,7 @@ func (q Query[E]) Exists[_ Lazy[E]](ctx context.Context) (bool, error) {
 	}
 	st.Exists, st.Columns, st.OrderBy, st.Limit, st.Offset = true, nil, nil, 1, 0
 	var found bool
-	if q.db.hooked() {
+	if q.db.e.Hooked() {
 		x := &engine.ExistsRun{St: st}
 		err = q.db.run(ctx, &x.St, func(r engine.Rows) error { return engine.ReadExists(x, r) }, nil)
 		found = x.Found

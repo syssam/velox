@@ -105,7 +105,7 @@ func (db *DB) scopeInsert(ctx context.Context, st *Statement) error {
 	if err != nil {
 		return err
 	}
-	if tenant && len(db.cfg.Rewrites) > 0 {
+	if tenant && len(db.e.Cfg.Rewrites) > 0 {
 		if err := engine.CheckTenantRows(in, st, id); err != nil {
 			return err
 		}
@@ -121,7 +121,7 @@ func (db *DB) scopeInsert(ctx context.Context, st *Statement) error {
 			}
 		}
 		conditioned := pol != nil && (pol.Read != nil || pol.Write != nil) && sc.PolicyOn()
-		if conditioned && db.d == MySQL {
+		if conditioned && db.e.D == MySQL {
 			return fmt.Errorf("velox: %s: %w: MySQL's ON DUPLICATE KEY UPDATE takes no condition, and the entity has a Read or Write policy; keep the existing row with DoNothing, or update it with Update or Save", in.Name, ErrPolicyUpsert)
 		}
 		if err := sc.ConditionUpsert(in, st, conditioned); err != nil {
@@ -143,7 +143,7 @@ func (db *DB) scopeInsert(ctx context.Context, st *Statement) error {
 // so the primary key and every unique index must hold it.
 func (db *DB) checkTenantUpsert(in *EntityInfo, cf *ConflictClause) error {
 	col := in.Columns[in.Tenant].Name
-	if db.d != MySQL {
+	if db.e.D != MySQL {
 		if slices.Contains(cf.Columns, in.Tenant) {
 			return nil
 		}

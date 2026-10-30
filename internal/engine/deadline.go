@@ -86,3 +86,20 @@ func CtxErr(ctx context.Context) error {
 func TimeoutError(who string) error {
 	return fmt.Errorf("velox: %s: %w: %w", who, ErrTimeout, context.DeadlineExceeded)
 }
+
+// Timed reports whether a statement on db may get a deadline from velox.
+func (db *DB) Timed() bool {
+	d := db.Cfg.Deadlines
+	return d.Statement > 0 || d.MaxStatement > 0 || !db.txDeadline.IsZero()
+}
+
+// Bound applies db's statement limits, and its transaction's deadline, to ctx.
+func (db *DB) Bound(ctx context.Context) (context.Context, context.CancelFunc) {
+	return Bound(ctx, db.Cfg.Deadlines.Statement, db.Cfg.Deadlines.MaxStatement, db.txDeadline, db.txCause)
+}
+
+// pastTxDeadline reports whether db is in a transaction whose deadline has
+// passed.
+func (db *DB) pastTxDeadline() bool {
+	return !db.txDeadline.IsZero() && !time.Now().Before(db.txDeadline)
+}

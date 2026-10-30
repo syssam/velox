@@ -170,7 +170,7 @@ func loadEach(ctx context.Context, q eachQuery, owner *EntityInfo, ownerErr erro
 		key = []int{l.TargetCol}
 	}
 	ec := engine.MakeEachClause(l, sp.Each)
-	per := engine.KeysPer(db.d, t, st.Where)
+	per := engine.KeysPer(db.e.D, t, st.Where)
 	var parts, owners []any
 	var at engine.Target
 	err = byChunks(len(p.Keys), per, func(lo, hi int) error {
@@ -246,7 +246,7 @@ func countEach(ctx context.Context, q eachQuery, owner *EntityInfo, ownerErr err
 		typ = GoType(l.Join.Columns[l.JoinOwner])
 	}
 	ec := engine.MakeEachClause(l, 0)
-	per := engine.KeysPer(db.d, t, st.Where)
+	per := engine.KeysPer(db.e.D, t, st.Where)
 	counts := make(map[any]int64, len(p.Keys))
 	read := func(r engine.Rows) error {
 		for r.Next() {
@@ -263,7 +263,7 @@ func countEach(ctx context.Context, q eachQuery, owner *EntityInfo, ownerErr err
 	}
 	err = byChunks(len(p.Keys), per, func(lo, hi int) error {
 		c := engine.Chunk(st, ec, p.Keys[lo:hi])
-		if db.hooked() {
+		if db.e.Hooked() {
 			return db.run(ctx, &c, read, nil)
 		}
 		return db.plain(ctx, &c, read, nil)

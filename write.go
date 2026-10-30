@@ -22,7 +22,7 @@ type UpdateQuery[E any] struct {
 //	db.Update[billing.Invoice]().Set(I.PaidAt.Set(now)).Where(I.ID.EQ(id)).Exec(ctx)
 func (db *DB) Update[E any, PE Entity[E]]() UpdateQuery[E] {
 	m := PE(nil).VeloxMeta()
-	return UpdateQuery[E]{db: db, meta: m, st: Statement{Op: OpUpdate, Entity: m.info, InTx: db.inTx}}
+	return UpdateQuery[E]{db: db, meta: m, st: Statement{Op: OpUpdate, Entity: m.info, InTx: db.e.InTx}}
 }
 
 // Set adds assignments, made by the handles' Set, SetNull, Add and Sub.
@@ -123,7 +123,7 @@ type DeleteQuery[E any] struct {
 // Delete starts a DELETE of entity E.
 func (db *DB) Delete[E any, PE Entity[E]]() DeleteQuery[E] {
 	m := PE(nil).VeloxMeta()
-	return DeleteQuery[E]{db: db, meta: m, st: Statement{Op: OpDelete, Entity: m.info, InTx: db.inTx}}
+	return DeleteQuery[E]{db: db, meta: m, st: Statement{Op: OpDelete, Entity: m.info, InTx: db.e.InTx}}
 }
 
 // Where adds conditions; all of them must hold.
@@ -234,7 +234,7 @@ func (s SaveQuery[E]) statement[_ Lazy[E]]() (Statement, error) {
 	if s.x == nil {
 		return Statement{}, fmt.Errorf("velox: %s: Save of a nil pointer", in.Name)
 	}
-	st := Statement{Op: OpUpdate, Entity: in, InTx: s.db.inTx}
+	st := Statement{Op: OpUpdate, Entity: in, InTx: s.db.e.InTx}
 	for _, c := range s.cols {
 		if c == nil {
 			return Statement{}, fmt.Errorf("velox: %s: Save names a nil column", in.Name)

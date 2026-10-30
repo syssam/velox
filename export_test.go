@@ -44,13 +44,13 @@ func FakeConn(e *FakeExec) Conn { return engine.NewConn(e, 0) }
 
 // SetReplicaDown puts db's replica i in back-off until until.
 func SetReplicaDown(db *DB, i int, until time.Time) {
-	db.rt.One.Replicas[i].DownUntil.Store(until.UnixNano())
+	db.e.Rt.One.Replicas[i].DownUntil.Store(until.UnixNano())
 }
 
 // ReplicaDownUntil returns the end of db's replica i's back-off; zero when
 // it has none.
 func ReplicaDownUntil(db *DB, i int) time.Time {
-	if u := db.rt.One.Replicas[i].DownUntil.Load(); u != 0 {
+	if u := db.e.Rt.One.Replicas[i].DownUntil.Load(); u != 0 {
 		return time.Unix(0, u)
 	}
 	return time.Time{}
@@ -71,7 +71,7 @@ func RawRows(db *DB, sql string, args []any) (interface {
 	Scan(...any) error
 	Close()
 }, error) {
-	return db.ex.Query(context.Background(), sql, args)
+	return db.e.Ex.Query(context.Background(), sql, args)
 }
 
 // SetMaxParams lowers a dialect's parameter limit for a test.
@@ -82,7 +82,7 @@ func SetMaxParams(d Dialect, n int) (restore func()) {
 }
 
 // CacheSize returns the number of shapes db's render cache holds.
-func CacheSize(db *DB) int { return db.cfg.Cache.Size() }
+func CacheSize(db *DB) int { return db.e.Cfg.Cache.Size() }
 
 // TenantOf returns the context's tenant state, as scope reads it.
 func TenantOf(ctx context.Context) (id any, all string) { return engine.TenantFrom(ctx) }
@@ -201,7 +201,7 @@ func PgxStdlib(db *sql.DB) bool { return conn.PgxStdlib(db) }
 // RowsAreColumnScanning runs SELECT 1 on db, a DB made by Open, and reports
 // whether its rows are colRows.
 func RowsAreColumnScanning(db *DB) bool {
-	r, err := db.ex.Query(context.Background(), "SELECT 1", nil)
+	r, err := db.e.Ex.Query(context.Background(), "SELECT 1", nil)
 	if err != nil {
 		panic(err)
 	}

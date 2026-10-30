@@ -35,7 +35,7 @@ func aggregate[E, T any](ctx context.Context, q Query[E], fn Aggregate, c int32)
 	}
 	st.Aggregate, st.Columns, st.OrderBy, st.Limit, st.Offset = fn, []int{int(c)}, nil, 0, 0
 	var v *T
-	if q.db.hooked() {
+	if q.db.e.Hooked() {
 		a := &aggRun[T]{st: st}
 		err = q.db.run(ctx, &a.st, func(r engine.Rows) error { return readAggregate(a, r) }, nil)
 		v = a.v

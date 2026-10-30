@@ -16,7 +16,7 @@ import (
 // missing for a parent read from one further ahead. On a sharded DB the loads
 // run on the query's shard without looking it up again.
 func (db *DB) loadPin(at engine.Target) engine.Target {
-	if db.rt == nil || db.inTx || at.Ex == nil {
+	if db.e.Rt == nil || db.e.InTx || at.Ex == nil {
 		return engine.Target{} // every read runs on one connection already
 	}
 	return at
@@ -286,7 +286,7 @@ func fetchPlan(db *DB, t *EntityInfo, sp engine.LoadSpec) ([]OrderTerm, int) {
 			order = append(order, OrderTerm{Column: k})
 		}
 	}
-	return order, engine.KeysPer(db.d, t, sp.Where)
+	return order, engine.KeysPer(db.e.D, t, sp.Where)
 }
 
 // byChunks runs read on keys[lo:hi] in chunks of at most per keys, in order.
@@ -318,7 +318,7 @@ func byChunks(n, per int, read func(lo, hi int) error) error {
 // ec's Limit. When ec has a Join, cols is nil and fetchPart returns each
 // row's owner key too, read from the join entity.
 func fetchPart(ctx context.Context, db *DB, pin engine.Target, t *EntityInfo, cols []int, sp engine.LoadSpec, order []OrderTerm, keys []any, maxRows int, ec *EachClause) (any, []any, error) {
-	st := Statement{Op: OpSelect, Entity: t, Unbounded: true, MaxRows: maxRows, InTx: db.inTx, OrderBy: order}
+	st := Statement{Op: OpSelect, Entity: t, Unbounded: true, MaxRows: maxRows, InTx: db.e.InTx, OrderBy: order}
 	if ec != nil {
 		each := *ec
 		each.Keys = keys
@@ -362,7 +362,7 @@ func readPart(ctx context.Context, db *DB, pin engine.Target, st *Statement, t *
 		return err
 	}
 	var err error
-	if db.hooked() {
+	if db.e.Hooked() {
 		err = db.run(ctx, st, read, nil)
 	} else {
 		err = db.plain(ctx, st, read, nil)
