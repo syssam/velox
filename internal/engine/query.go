@@ -78,7 +78,7 @@ func AddAfter(st *Statement, in *EntityInfo, after unsafe.Pointer) error {
 // CloneStatement copies a query's statement for one run, with its slices
 // capped so that anything velox itself appends to them (a rewrite hook's
 // condition, say) cannot reach the query's slices. It does not copy their
-// elements: DB.run does that before a hook, which may edit them, sees the
+// elements: DB.Run does that before a hook, which may edit them, sees the
 // statement.
 func CloneStatement(st *Statement) Statement {
 	c := *st

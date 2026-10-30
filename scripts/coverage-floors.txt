@@ -23,10 +23,10 @@
 # have no statements and no line.
 
 # root module
-github.com/syssam/velox2/internal/engine 94.6
+github.com/syssam/velox2/internal/engine 94.8
 github.com/syssam/velox2/internal/fakeconn 89.9
 github.com/syssam/velox2/internal/apitest/fixture 88.0
-github.com/syssam/velox2 92.0
+github.com/syssam/velox2 87.9
 github.com/syssam/velox2/bench/scale 72.4
 github.com/syssam/velox2/cmd/velox-gen 89.5
 github.com/syssam/velox2/example/tracker 77.3

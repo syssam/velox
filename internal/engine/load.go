@@ -407,7 +407,7 @@ func (db *DB) LoadPin(at Target) Target {
 // LoadRelations loads each spec's relation for the owners at ptrs. maxRows is
 // the owner query's MaxRows, which its loads, nested ones too, share unless a
 // load says MaxRows; 0 is the DB's cap. pin is the target their reads go
-// to (DB.loadPin).
+// to (DB.LoadPin).
 func LoadRelations(ctx context.Context, db *DB, pin Target, owner *EntityInfo, ptrs []unsafe.Pointer, specs []LoadSpec, maxRows int) error {
 	for _, sp := range specs {
 		if err := loadOne(ctx, db, pin, owner, ptrs, sp, maxRows); err != nil {
@@ -715,7 +715,7 @@ func fetchPart(ctx context.Context, db *DB, pin Target, t *EntityInfo, cols []in
 // not leave out any of cols, the columns the caller reads, nor a column the
 // loads with need. When st's Each has a Join, readPart returns each row's
 // owner key too, read from the join entity. st holds, once it returns, where
-// it ran. pin, when set, is where it runs: a With load's (DB.loadPin).
+// it ran. pin, when set, is where it runs: a With load's (DB.LoadPin).
 func readPart(ctx context.Context, db *DB, pin Target, st *Statement, t *EntityInfo, cols []int, with []LoadSpec) (any, []any, error) {
 	SetStmtPin(st, pin)
 	var part any

@@ -40,7 +40,7 @@ func Fingerprint(text string) string {
 //
 // It is keyed first by the statement's *EntityInfo. A key holds the pointer,
 // so an EntityInfo in the cache is never freed and its address never reused
-// for another. DB.run does not use the cache for a statement whose entity a
+// for another. DB.Run does not use the cache for a statement whose entity a
 // rewrite hook replaced, so a hook's per-statement EntityInfo never fills it.
 type RenderCache struct {
 	mu    sync.RWMutex

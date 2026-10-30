@@ -15,12 +15,18 @@ The rest did not have to. Measured with the type checker: `Statement`, `Predicat
 
 ## Decision
 
-- `internal/engine` holds what is not generic and does not name `DB`: statements,
-  conditions, metadata, rendering and its cache, most of scoping, loading, routing and
-  transactions' parts, errors, caller capture.
+- `internal/engine` holds what is not generic: statements, conditions, metadata,
+  rendering and its cache, scoping, loading, routing, transactions, errors, caller
+  capture, and `engine.DB`, the pipeline.
 - The root keeps `DB`, the generic API, and `api.go`: an alias, constant, variable or
   thin function for each public name the engine holds. `velox.Statement` is the same
   type as it was; generated code and applications do not change.
+- The root's `DB` holds an `engine.DB` by value, in its one unexported field: not
+  embedded, which would promote the engine's methods into the public API. Holding it by
+  value keeps a statement's path free of another pointer and a transaction's frame one
+  allocation. `Tx` gives its fn the `*DB` of the frame's `*engine.DB`, the same memory,
+  by an unsafe cast of the function value: a closure over fn would escape, as the
+  `TxAround` hooks keep it, and cost every transaction an allocation.
 - `Pred[E]` moved beside `Predicate`, as a generic alias, because `velox.Predicate(p)`
   is a public conversion, and two structs with an unexported field are identical only
   in one package.
@@ -39,6 +45,14 @@ The rest did not have to. Measured with the type checker: `Statement`, `Predicat
   this module can import them.
 - Caller capture and the check for `One` and `Many` knew one package, and now know both.
 
-`DB`'s pipeline (`run`, `prepare`, `exec`, `route`, `scope`) is still in the root, about
-1,500 lines, as it is written on `DB`. Moving it would need an engine type that `DB`
-wraps. That is the one further step left, if the root is to shrink more.
+`DB`'s pipeline was the last step, and is done: `run`, `prepare`, `exec`, `route`,
+`scope`, the guards, deadlines, transactions and their hooks, and the non-generic work
+of the writes, the bidirectional edges, the loads, `LoadEach` and `CountEach`, are
+methods and functions of `engine.DB`. The root went from 26 files and 7,454 lines of
+code to 17 files and 4,866 lines, and the engine from 7,271 to 9,888 lines.
+What is left in the root besides thin forwarding names `Meta[E]` or a generic API type:
+`oneStatement`, `prepareMany`, `insertMany` and `insertBatches`, the scanning, and the
+query builders.
+
+`MutationState.DB` stays an `any`, as `EntityInfo` reaches it: a `*DB` field made an
+entity's package 14 KiB larger (`entityDesc`, 130,162 to 144,268 bytes).
