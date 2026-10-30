@@ -354,7 +354,7 @@ func (q Query[E]) load[_ Lazy[E]](ctx context.Context, rows []E, ran []int, at e
 	for i := range rows {
 		ptrs[i] = unsafe.Pointer(&rows[i])
 	}
-	return loadRelations(ctx, q.db, q.db.loadPin(at), q.meta.info, ptrs, q.loads, q.st.MaxRows)
+	return engine.LoadRelations(ctx, &q.db.e, q.db.e.LoadPin(at), q.meta.info, ptrs, q.loads, q.st.MaxRows)
 }
 
 // All runs the query and returns every row.

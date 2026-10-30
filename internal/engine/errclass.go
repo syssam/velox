@@ -314,9 +314,9 @@ func Retryable(err error) bool {
 	return false
 }
 
-// As is errors.As over walk: it returns the first error in err's tree of
+// as is errors.As over walk: it returns the first error in err's tree of
 // type T, or that an As method gives as T, which is not a nil pointer.
-func As[T error](err error) (T, bool) {
+func as[T error](err error) (T, bool) {
 	var found T
 	ok := Walk(err, func(e error) bool {
 		if t, ok := e.(T); ok {
@@ -344,7 +344,7 @@ func As[T error](err error) (T, bool) {
 // a violated constraint into a *ConstraintError, and wraps a lock that could
 // not be taken with ErrLocked.
 func dbErr(info *EntityInfo, err error) error {
-	if _, ok := As[*ConstraintError](err); ok {
+	if _, ok := as[*ConstraintError](err); ok {
 		return err // already classified
 	}
 	if ce := Constraint(info.Name, err); ce != nil {

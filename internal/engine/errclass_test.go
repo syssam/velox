@@ -254,7 +254,7 @@ func TestTypedNilDriverErrors(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			got := dbErr(invInfo, c.err)
-			if _, ok := As[*ConstraintError](got); ok || Is(got, ErrLocked) {
+			if _, ok := as[*ConstraintError](got); ok || Is(got, ErrLocked) {
 				t.Errorf("dbErr = %v", got)
 			}
 			if code, ok := DriverCode(c.err); code != "" || ok {

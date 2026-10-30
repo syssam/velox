@@ -476,18 +476,18 @@ func failoverable(err error) bool {
 	if n, _, ok := MysqlError(err); ok {
 		return MysqlConnectError(n)
 	}
-	ne, ok := As[net.Error](err)
+	ne, ok := as[net.Error](err)
 	if !ok {
 		return false
 	}
-	op, ok := As[*net.OpError](err)
+	op, ok := as[*net.OpError](err)
 	return !ne.Timeout() || ok && op.Op == "dial"
 }
 
 // safeToRetry is pgx's pgconn.SafeToRetry over as, so that a nil pointer in err's
 // tree cannot panic it.
 func safeToRetry(err error) bool {
-	r, ok := As[interface {
+	r, ok := as[interface {
 		error
 		SafeToRetry() bool
 	}](err)
