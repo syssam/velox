@@ -132,8 +132,8 @@ func (db *DB) Dialect() Dialect { return db.e.D }
 // a nested tx, run in the enclosing transaction). tx is not safe for
 // concurrent use: run its statements from one goroutine at a time.
 func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error, opts ...TxOption) error {
-	// The two function types differ only in a pointer to the same memory (see
-	// DB). A closure over fn would escape, as the TxAround hooks keep it, and
-	// cost every transaction an allocation.
-	return db.e.Tx(ctx, *(*func(context.Context, *engine.DB) error)(unsafe.Pointer(&fn)), opts...)
+	// tx points to its DB's only field, so it is that DB (see DB).
+	return db.e.Tx(ctx, func(ctx context.Context, tx *engine.DB) error {
+		return fn(ctx, (*DB)(unsafe.Pointer(tx)))
+	}, opts...)
 }

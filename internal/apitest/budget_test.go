@@ -229,9 +229,10 @@ func TestTxAllocationBudget(t *testing.T) {
 
 // TestTxAroundAllocationBudget is TestTxAllocationBudget with one
 // pass-through WithTxAround hook. The hook makes the transaction build a
-// TxInfo and run through the hook's closure chain: measured 8 allocations
-// more than the read alone, against 3 without the hook (14 in the
-// transaction and 6 alone, the same under -race).
+// TxInfo and run through the hook's closure chain, which keeps the closure
+// the root's Tx wraps fn in: measured 9 allocations more than the read alone,
+// against 3 without the hook (15 in the transaction and 6 alone, the same under
+// -race).
 func TestTxAroundAllocationBudget(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{Rows: [][]any{invoiceRow(1)}},
 		velox.WithTxAround(func(ctx context.Context, _ *velox.TxInfo, next func(context.Context) error) error {
@@ -255,8 +256,8 @@ func TestTxAroundAllocationBudget(t *testing.T) {
 		}
 	})
 	t.Logf("a one-row read makes %.0f allocations in a transaction with a TxAround hook, %.0f alone", inTx, alone)
-	if inTx > alone+8 {
-		t.Errorf("a transaction with a TxAround hook adds %.0f allocations to its read: over the budget of 8", inTx-alone)
+	if inTx > alone+9 {
+		t.Errorf("a transaction with a TxAround hook adds %.0f allocations to its read: over the budget of 9", inTx-alone)
 	}
 }
 
