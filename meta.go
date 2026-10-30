@@ -248,7 +248,8 @@ func kitOf[E any](info *EntityInfo, addr func(*E, int) any) *kit {
 			// one array, so one allocation, not one per owner. Each owner's
 			// slice is capped at its length, so an append to it copies first,
 			// and keeps the whole array it is in alive, as the owners loaded
-			// together usually live together.
+			// together usually live together: an owner in place keeps a scan
+			// array of up to blockMax rows, the copied owners' among them.
 			flags := make([]bool, len(idx)+len(ptrs))
 			keep := flags[:len(idx)]
 			buf := make([]E, inPlace(all, idx, keep, flags[len(idx):]))

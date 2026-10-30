@@ -645,10 +645,11 @@ func joinBlocks(parts []any) ([]any, []unsafe.Pointer) {
 // rows the owners not in place have, which pick copies.
 func inPlace(all []any, idx [][]int, keep, used []bool) (copied int) {
 	for i, x := range idx {
-		// x rises (the order rows are read in), so it is a run of rows when
-		// its ends are as far apart as its length says.
-		if len(x) == 0 || x[len(x)-1]-x[0] != len(x)-1 || x[len(x)-1] >= arrayEnd(all, x[0]) ||
-			slices.Contains(used[x[0]:x[len(x)-1]+1], true) {
+		run := len(x) > 0 && x[len(x)-1] < arrayEnd(all, x[0])
+		for k := 0; run && k < len(x); k++ {
+			run = x[k] == x[0]+k && !used[x[k]]
+		}
+		if !run {
 			copied += len(x)
 			continue
 		}

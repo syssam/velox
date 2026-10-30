@@ -19,8 +19,9 @@ import (
 //
 // q's own With loads apply to the rows too. Each owner gets a slice of its
 // own, empty when it has no rows; owners with one key get equal slices. The
-// slices share one array, each capped at its length, so a row kept from one
-// keeps the others' rows alive too: copy it to keep it alone. The
+// slices share the arrays the rows were read into, and one array of the rows
+// copied out of them, each capped at its length, so a row kept from one keeps
+// the others' rows alive too: copy it to keep it alone. The
 // statements are q's entity's, so its tenant scope, Read policy and hooks see
 // them, and a row they hide takes no place in a page. Their cap is r's
 // MaxRows, else q's, else LimitEach's bound (LimitEach rows per owner), else

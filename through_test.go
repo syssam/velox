@@ -56,6 +56,31 @@ func TestThroughLoadSharedAndEmpty(t *testing.T) {
 	}
 }
 
+// TestThroughLoadOwnersDoNotShareRows: a target of two owners is in both
+// owners' slices, but not in the same memory; an append to one leaves the
+// next as it was.
+func TestThroughLoadOwnersDoNotShareRows(t *testing.T) {
+	e := &velox.FakeExec{Results: [][][]any{
+		{{int64(1), int64(1), "a"}, {int64(2), int64(1), "b"}, {int64(3), int64(1), "c"}},
+		{{int64(1), int64(1)}, {int64(1), int64(2)}, {int64(2), int64(2)}, {int64(3), int64(1)}},
+		{{int64(1), int64(7), "go"}, {int64(2), int64(7), "db"}},
+	}}
+	db := velox.OpenFake(velox.Postgres, e)
+	bs, err := db.Query[dBook]().With(dBooks.Tags).Limit(3).All(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, _ := bs[0].Tags.Get()
+	first[0].Name, first[1].Name = "changed", "changed"
+	_ = append(first, dTag{Name: "appended"})
+	if got := tagNames(t, bs[1].Tags); !reflect.DeepEqual(got, []string{"db"}) {
+		t.Errorf("book 2: tags %v, want [db]", got)
+	}
+	if got := tagNames(t, bs[2].Tags); !reflect.DeepEqual(got, []string{"go"}) {
+		t.Errorf("book 3: tags %v, want [go]", got)
+	}
+}
+
 // TestThroughLoadAppliesTheOptions: the relation's Where and OrderBy apply to
 // the targets, each owner's targets come in their fetched order, and a join
 // row repeated does not repeat a target.

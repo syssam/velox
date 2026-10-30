@@ -120,8 +120,9 @@ Runtime
   another takes them where they were read, without a copy, and each owner's
   rows are grouped in one array of indexes. EagerO2M100 on SQLite went from
   261,168 to 151,600 B/op and from 4,699 to 4,204 allocs/op (`BenchmarkScan`).
-  A row kept from a to-many load keeps the rows of every owner loaded with it;
-  copy it to keep it alone (4e4e85a).
+  A row kept from a to-many load keeps the rows of every owner loaded with it,
+  in the arrays they were read into (up to 1,024 rows each) and in the one the
+  rest were copied to; copy it to keep it alone (4e4e85a, 9fbf19e).
 - `WithTenant` converts predeclared integers and strings to the tenant column's
   type, entity by entity (b04ac97).
 - `Open` and `OpenShards` panic on an unknown dialect (06d3b4d). A rollback
