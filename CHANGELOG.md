@@ -73,6 +73,7 @@ Documentation and tests
   with fuzz targets, per-package coverage floors and benchmark baselines.
 - `bench/compare` measures velox2's build and runtime cost against old velox and
   ent (`docs/reviews/2026-10-29-perf-comparison.md`; 591c054, b7603fd..4ebd51a).
+  `COMPARE_STEPS=runtime`, and an `OpenPgx` column (da2ee65, c57da87).
 
 ### Changed
 
@@ -107,14 +108,20 @@ Schema and migrations
 - The history table is qualified by the session's schema or database (M14).
 
 Runtime
+- On database/sql with pgx's stdlib, velox scans through an `sql.Scanner`, so
+  pgx's per-column type check passes at its first step for each column of each
+  row. Query100 on PostgreSQL went from 961 µs to 415 µs and EagerO2M100 from
+  4.32 ms to 1.42 ms, in two runs at different loads
+  (`docs/reviews/2026-10-29-pg-scan-path.md`; 399d7fe, 00be03b, f023d4b,
+  f293a06).
 - `WithTenant` converts predeclared integers and strings to the tenant column's
   type, entity by entity (b04ac97).
 - `Open` and `OpenShards` panic on an unknown dialect (06d3b4d). A rollback
   velox sends after fn fails is bounded to 5 seconds (on a DB from `Open`, a
   savepoint's ROLLBACK TO only), and savepoints keep the transaction's
   deadline (1642c74).
-- Hooks cannot drop the bidi marker, the load pin or a bidi key (0785b33).
-  The upsert policy flag moves to the Statement, and hooks cannot unguard an
+- Hooks cannot drop the bidi marker, the load pin or a bidi key (0785b33). The
+  upsert policy flag moves to the Statement, and hooks cannot unguard an
   upsert (013fed4).
 - A savepoint's name is unique in its transaction (f4fbd6b).
 - veloxotel's `TargetFor` is deterministic for a Route (59a967b).

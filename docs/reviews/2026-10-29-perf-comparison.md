@@ -21,7 +21,8 @@ velox and 3.9% better than ent. On PostgreSQL, through database/sql and pgx,
 it loses: 2.6× slower than old velox on Query100 and 3.5× slower on
 EagerO2M100, the two benchmarks that scan many rows. The cause is in the
 scan path (see Where velox2 loses). That is the largest loss in this report,
-and it is a velox2 fix to make before 1.0.
+and it is a velox2 fix to make before 1.0. Fixed after this run; see
+[the PostgreSQL scan path review](2026-10-29-pg-scan-path.md).
 
 ## Machine and load
 
@@ -239,7 +240,8 @@ cause where the data shows one.
 
   This is velox2's to fix: its scan destinations on database/sql should not
   fall through pgx's slow path. velox2's native pgx path (`OpenPgx`) skips
-  `ScanColumn` but was not measured here.
+  `ScanColumn` but was not measured here. Fixed after this run; see
+  [the PostgreSQL scan path review](2026-10-29-pg-scan-path.md).
 - **EagerO2M100, B/op and allocs/op, both dialects.** velox2 allocates 1.8×
   old velox's bytes and 1.15× ent's; old velox also makes 10% fewer
   allocations. This run does not show why: the scan path above is
