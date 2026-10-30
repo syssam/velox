@@ -21,8 +21,17 @@ Each entry names the finding or the commit it comes from.
 
 This summarizes what a user of the tree before the hardening work must know.
 
+### Added
+
+- `field.String(...).MinRuneLen` and `MaxRuneLen`: lengths in characters.
+- `schema.Check(name, expr)`: a CHECK constraint on a schema's table, which migrations
+  plan and drift compares.
+
 ### Changed
 
+- `veloxgql.EncodeCursor` returns an error instead of panicking, and `veloxgql.Cursor` is a
+  context scalar (`MarshalGQLContext`, `UnmarshalGQLContext`), so gqlgen reports a cursor
+  that cannot be written on its field. Run `gqlgen generate` again.
 - `velox.WithTags` no longer panics on an odd number of strings: the last key takes
   the value "".
 - A PostgreSQL error is recognized by its `SQLState` method, in any pgx version, and

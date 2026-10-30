@@ -37,7 +37,7 @@ func TestCursorValues(t *testing.T) {
 	for i, v := range []any{"ann", big, when, true, 1.5, u, uint64(math.MaxUint64), veloxgql.Time(when.UTC()), []byte{0, 0xff}} {
 		terms = append(terms, veloxgql.CursorTerm{Field: "F" + strconv.Itoa(i), Direction: veloxgql.OrderDirectionAsc, Value: v})
 	}
-	d, err := veloxgql.DecodeCursor(veloxgql.EncodeCursor(veloxgql.Cursor{Type: "User", Terms: terms, Key: u}))
+	d, err := veloxgql.DecodeCursor(encode(t, veloxgql.Cursor{Type: "User", Terms: terms, Key: u}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestCursorValues(t *testing.T) {
 	}
 	expect(t, d.Key, u)
 
-	bigKey, err := veloxgql.DecodeCursor(veloxgql.EncodeCursor(veloxgql.Cursor{Type: "User", Key: int64(1<<62 + 3)}))
+	bigKey, err := veloxgql.DecodeCursor(encode(t, veloxgql.Cursor{Type: "User", Key: int64(1<<62 + 3)}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func TestCursorValues(t *testing.T) {
 	// Floats that JSON has no number for are strings.
 	for _, f := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
 		c := veloxgql.Cursor{Type: "User", Terms: []veloxgql.CursorTerm{{Field: "F", Direction: veloxgql.OrderDirectionAsc, Value: f}}, Key: 1}
-		d, err := veloxgql.DecodeCursor(veloxgql.EncodeCursor(c))
+		d, err := veloxgql.DecodeCursor(encode(t, c))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -144,7 +144,7 @@ func TestCursorCheck(t *testing.T) {
 		Terms: []veloxgql.CursorTerm{{Field: "NAME", Direction: veloxgql.OrderDirectionAsc, Value: "ann"}},
 		Key:   int64(1),
 	}
-	d, err := veloxgql.DecodeCursor(veloxgql.EncodeCursor(c))
+	d, err := veloxgql.DecodeCursor(encode(t, c))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +159,7 @@ func TestCursorCheck(t *testing.T) {
 	// Another type's cursor, with the same key type and order.
 	post := c
 	post.Type = "Post"
-	d, err = veloxgql.DecodeCursor(veloxgql.EncodeCursor(post))
+	d, err = veloxgql.DecodeCursor(encode(t, post))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,4 +190,14 @@ func TestCursorCheck(t *testing.T) {
 			t.Errorf("%s: %q echoes the fields", label, err)
 		}
 	}
+}
+
+// encode is EncodeCursor for a cursor that must encode.
+func encode(t *testing.T, c veloxgql.Cursor) string {
+	t.Helper()
+	s, err := veloxgql.EncodeCursor(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
 }

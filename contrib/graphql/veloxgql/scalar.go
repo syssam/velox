@@ -24,8 +24,6 @@ var (
 	_ graphql.Unmarshaler = (*JSON)(nil)
 	_ graphql.Marshaler   = (*Uint64)(nil)
 	_ graphql.Unmarshaler = (*Uint64)(nil)
-	_ graphql.Marshaler   = (*Cursor)(nil)
-	_ graphql.Unmarshaler = (*Cursor)(nil)
 	_ graphql.Marshaler   = (*OrderDirection)(nil)
 	_ graphql.Unmarshaler = (*OrderDirection)(nil)
 )

@@ -2,9 +2,11 @@ package veloxgql_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
 	"math"
 	"strconv"
 	"testing"
@@ -56,7 +58,7 @@ func TestCursorRoundTrip(t *testing.T) {
 		},
 		Key: int64(1<<62 + 3),
 	}
-	s := veloxgql.EncodeCursor(c)
+	s := encode(t, c)
 	const want = `{"v":1,"t":"User","o":[{"f":"NAME","d":"ASC","v":"ann"},{"f":"AGE","d":"DESC","v":9007199254740993}],"k":4611686018427387907}`
 	if got := cursorJSON(t, s); got != want {
 		t.Fatalf("cursor JSON\n got %s\nwant %s", got, want)
@@ -69,8 +71,8 @@ func TestCursorRoundTrip(t *testing.T) {
 		d.Terms[1].Field != "AGE" || d.Terms[1].Direction != veloxgql.OrderDirectionDesc {
 		t.Fatalf("decoded %+v", d)
 	}
-	if veloxgql.EncodeCursor(d) != s {
-		t.Errorf("a decoded cursor encodes to %q, want %q", veloxgql.EncodeCursor(d), s)
+	if encode(t, d) != s {
+		t.Errorf("a decoded cursor encodes to %q, want %q", encode(t, d), s)
 	}
 
 	// Every kind of order value.
@@ -79,7 +81,7 @@ func TestCursorRoundTrip(t *testing.T) {
 		Terms: terms("ann", big, when, true, 1.5, u, uint64(math.MaxUint64), veloxgql.Time(when.UTC()), []byte{0, 0xff}),
 		Key:   int64(1),
 	}
-	d, err = veloxgql.DecodeCursor(veloxgql.EncodeCursor(c))
+	d, err = veloxgql.DecodeCursor(encode(t, c))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,12 +102,12 @@ func TestCursorRoundTrip(t *testing.T) {
 		{u, `"0193a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b"`},
 		{[16]byte(u), `"0193a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b"`},
 	} {
-		s := veloxgql.EncodeCursor(veloxgql.Cursor{Type: "User", Key: k.key})
+		s := encode(t, veloxgql.Cursor{Type: "User", Key: k.key})
 		if want := `{"v":1,"t":"User","o":[],"k":` + k.json + `}`; cursorJSON(t, s) != want {
 			t.Errorf("key %v: %s, want %s", k.key, cursorJSON(t, s), want)
 		}
 	}
-	d, err = veloxgql.DecodeCursor(veloxgql.EncodeCursor(veloxgql.Cursor{Type: "User", Key: u}))
+	d, err = veloxgql.DecodeCursor(encode(t, veloxgql.Cursor{Type: "User", Key: u}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +117,7 @@ func TestCursorRoundTrip(t *testing.T) {
 
 	// Floats that JSON has no number for are strings.
 	for _, f := range []float64{math.NaN(), math.Inf(1), math.Inf(-1)} {
-		d, err := veloxgql.DecodeCursor(veloxgql.EncodeCursor(veloxgql.Cursor{Type: "User", Terms: terms(f), Key: 1}))
+		d, err := veloxgql.DecodeCursor(encode(t, veloxgql.Cursor{Type: "User", Terms: terms(f), Key: 1}))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -125,18 +127,20 @@ func TestCursorRoundTrip(t *testing.T) {
 	}
 
 	// The scalar: a JSON string on the wire, both ways.
-	s = veloxgql.EncodeCursor(c)
+	s = encode(t, c)
 	var buf bytes.Buffer
-	c.MarshalGQL(&buf)
-	if want := `"` + s + `"`; buf.String() != want {
-		t.Errorf("MarshalGQL = %s, want %s", &buf, want)
-	}
-	var back veloxgql.Cursor
-	if err := back.UnmarshalGQL(s); err != nil {
+	if err := c.MarshalGQLContext(context.Background(), &buf); err != nil {
 		t.Fatal(err)
 	}
-	if veloxgql.EncodeCursor(back) != s {
-		t.Errorf("UnmarshalGQL then EncodeCursor = %q, want %q", veloxgql.EncodeCursor(back), s)
+	if want := `"` + s + `"`; buf.String() != want {
+		t.Errorf("MarshalGQLContext = %s, want %s", &buf, want)
+	}
+	var back veloxgql.Cursor
+	if err := back.UnmarshalGQLContext(context.Background(), s); err != nil {
+		t.Fatal(err)
+	}
+	if encode(t, back) != s {
+		t.Errorf("UnmarshalGQLContext then EncodeCursor = %q, want %q", encode(t, back), s)
 	}
 }
 
@@ -191,20 +195,20 @@ func TestCursorMalformed(t *testing.T) {
 				t.Errorf("DecodeCursor = %v, want ErrBadCursor", err)
 			}
 			var c veloxgql.Cursor
-			if err := c.UnmarshalGQL(s); !errors.Is(err, veloxgql.ErrBadCursor) {
-				t.Errorf("UnmarshalGQL = %v, want ErrBadCursor", err)
+			if err := c.UnmarshalGQLContext(context.Background(), s); !errors.Is(err, veloxgql.ErrBadCursor) {
+				t.Errorf("UnmarshalGQLContext = %v, want ErrBadCursor", err)
 			}
 		})
 	}
 	var c veloxgql.Cursor
 	for _, v := range []any{int64(5), nil, json.Number("1")} {
-		if err := c.UnmarshalGQL(v); !errors.Is(err, veloxgql.ErrBadCursor) {
-			t.Errorf("UnmarshalGQL(%#v) = %v, want ErrBadCursor", v, err)
+		if err := c.UnmarshalGQLContext(context.Background(), v); !errors.Is(err, veloxgql.ErrBadCursor) {
+			t.Errorf("UnmarshalGQLContext(%#v) = %v, want ErrBadCursor", v, err)
 		}
 	}
 }
 
-func TestEncodeCursorPanics(t *testing.T) {
+func TestEncodeCursorRefuses(t *testing.T) {
 	for name, c := range map[string]veloxgql.Cursor{
 		"no key":            {Type: "User", Terms: terms(1)},
 		"no type":           {Terms: terms(1), Key: 1},
@@ -213,12 +217,22 @@ func TestEncodeCursorPanics(t *testing.T) {
 		"unencodable value": {Type: "User", Terms: terms(make(chan int)), Key: 1},
 	} {
 		t.Run(name, func(t *testing.T) {
-			defer func() {
-				if recover() == nil {
-					t.Error("EncodeCursor did not panic")
-				}
-			}()
-			veloxgql.EncodeCursor(c)
+			if s, err := veloxgql.EncodeCursor(c); err == nil {
+				t.Errorf("EncodeCursor = %q, want an error", s)
+			}
+			if err := c.MarshalGQLContext(context.Background(), io.Discard); err == nil {
+				t.Error("MarshalGQLContext wrote the cursor, want an error")
+			}
 		})
 	}
+}
+
+// encode is EncodeCursor for a cursor that must encode.
+func encode(t *testing.T, c veloxgql.Cursor) string {
+	t.Helper()
+	s, err := veloxgql.EncodeCursor(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
 }

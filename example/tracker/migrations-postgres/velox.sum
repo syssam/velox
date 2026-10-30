@@ -1,4 +1,5 @@
-h1:cL94BSHfwjFJif0+Xop2mvp88doneppLnEooipvQfOE=
+h1:3b5mlJYuuK23YsLr1tmVr6fMyKq4fOlkG6WvFNFruuI=
 0001_init.sql h1:qUhlJ5WdKahmUXaPsScVqM1Tg3eP9hFsCDIdZ6BK6gU=
-schema.json h1:BKQ5rv5hPh4dQS5VuZOYlHNDVEHUIvX6KI21sSs0RIg=
+0002_add_orgs_online.sql h1:4G8gMi7eti/aXp1bfCh+TMgpzOmPnllLLmzDnipExu4=
+schema.json h1:JQCI1poL2fiMBnhjpjJZQwz+EpJfAhZLF4am7e3rl3U=
 velox.json h1:K26+En/pVOuADr9VSQB0yTqIMGTHZsodqXWEuIeOpkI=

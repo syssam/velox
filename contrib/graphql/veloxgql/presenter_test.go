@@ -18,7 +18,7 @@ import (
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 
-	"github.com/syssam/velox2"
+	velox "github.com/syssam/velox2"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql"
 	"github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
 )
@@ -109,7 +109,7 @@ func TestErrorsAreCoded(t *testing.T) {
 		}(), veloxgql.ErrWrongIDType},
 		{"IDType", func() error { _, err := veloxgql.IDType("!"); return err }(), veloxgql.ErrBadID},
 		{"DecodeCursor", func() error { _, err := veloxgql.DecodeCursor("!"); return err }(), veloxgql.ErrBadCursor},
-		{"Cursor.UnmarshalGQL", new(veloxgql.Cursor).UnmarshalGQL(1), veloxgql.ErrBadCursor},
+		{"Cursor.UnmarshalGQLContext", new(veloxgql.Cursor).UnmarshalGQLContext(context.Background(), 1), veloxgql.ErrBadCursor},
 		{"cursor of another type", conn(gqlimpl.Args{After: &veloxgql.Cursor{Type: "Post", Key: int64(1)}}), veloxgql.ErrWrongIDType},
 		{"cursor value", conn(gqlimpl.Args{After: &badKey}), veloxgql.ErrBadCursor},
 		{"over MaxPage", conn(gqlimpl.Args{First: &over}), veloxgql.ErrPageTooLarge},

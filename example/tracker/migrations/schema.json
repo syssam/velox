@@ -314,6 +314,12 @@
           ],
           "unique": true
         }
+      ],
+      "checks": [
+        {
+          "name": "orgs_slug_lower",
+          "expr": "slug = lower(slug)"
+        }
       ]
     },
     {

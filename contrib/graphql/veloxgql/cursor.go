@@ -2,11 +2,12 @@ package veloxgql
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
-	"strconv"
 
 	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
 )
@@ -61,29 +62,29 @@ type cursorTermDoc struct {
 // their string form; NaN and infinite floats are the strings NaN, +Inf and
 // -Inf. A key is a number when it is an integer and a string otherwise.
 //
-// A cursor with no Type or Key, a term with no Field or an invalid
-// Direction, or a value json.Marshal cannot write is a mistake in the
-// generated code, and EncodeCursor panics.
-func EncodeCursor(c Cursor) string {
+// A cursor with no Type or Key, a term with no Field or an invalid Direction, or
+// a value json.Marshal cannot write, such as a custom type's whose MarshalJSON
+// fails, is an error.
+func EncodeCursor(c Cursor) (string, error) {
 	switch {
 	case c.Type == "":
-		panic("veloxgql: EncodeCursor: the cursor has no type")
+		return "", errors.New("veloxgql: EncodeCursor: the cursor has no type")
 	case c.Key == nil:
-		panic("veloxgql: EncodeCursor: the cursor has no key")
+		return "", errors.New("veloxgql: EncodeCursor: the cursor has no key")
 	}
 	v := cursorVersion
 	o := make([]cursorTermDoc, len(c.Terms))
 	for i, t := range c.Terms {
 		if t.Field == "" || !t.Direction.IsValid() {
-			panic("veloxgql: EncodeCursor: term " + strconv.Itoa(i) + " has no field or an invalid direction")
+			return "", fmt.Errorf("veloxgql: EncodeCursor: term %d has no field or an invalid direction", i)
 		}
 		o[i] = cursorTermDoc{F: &t.Field, D: &t.Direction, V: shared.JSONValue(base(t.Value))}
 	}
 	b, err := json.Marshal(cursorDoc{V: &v, T: &c.Type, O: &o, K: shared.JSONValue(base(c.Key))})
 	if err != nil {
-		panic("veloxgql: EncodeCursor: " + err.Error())
+		return "", fmt.Errorf("veloxgql: EncodeCursor: %w", err)
 	}
-	return base64.RawURLEncoding.EncodeToString(b)
+	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
 // DecodeCursor decodes s, a cursor EncodeCursor wrote. Its terms' Values and
@@ -160,13 +161,19 @@ func badCursor(why string) error {
 	return shared.InputErrorf("%w: %s", ErrBadCursor, why)
 }
 
-// MarshalGQL writes c as a JSON string, EncodeCursor's text.
-func (c Cursor) MarshalGQL(w io.Writer) {
-	_, _ = io.WriteString(w, `"`+EncodeCursor(c)+`"`)
+// MarshalGQLContext writes c as a JSON string, EncodeCursor's text. gqlgen reports
+// its error on the field.
+func (c Cursor) MarshalGQLContext(_ context.Context, w io.Writer) error {
+	s, err := EncodeCursor(c)
+	if err != nil {
+		return err
+	}
+	_, err = io.WriteString(w, `"`+s+`"`)
+	return err
 }
 
-// UnmarshalGQL decodes a cursor from v, a string; see DecodeCursor.
-func (c *Cursor) UnmarshalGQL(v any) error {
+// UnmarshalGQLContext decodes a cursor from v, a string; see DecodeCursor.
+func (c *Cursor) UnmarshalGQLContext(_ context.Context, v any) error {
 	s, ok := v.(string)
 	if !ok {
 		return badCursor("not a string")

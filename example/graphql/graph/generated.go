@@ -7939,12 +7939,12 @@ func (ec *executionContext) unmarshalNCreateUserInput2githubᚗcomᚋsyssamᚋve
 
 func (ec *executionContext) unmarshalNCursor2githubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐCursor(ctx context.Context, v any) (veloxgql.Cursor, error) {
 	var res veloxgql.Cursor
-	err := res.UnmarshalGQL(v)
+	err := res.UnmarshalGQLContext(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNCursor2githubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐCursor(ctx context.Context, sel ast.SelectionSet, v veloxgql.Cursor) graphql.Marshaler {
-	return v
+	return graphql.WrapContextMarshaler(ctx, v)
 }
 
 func (ec *executionContext) unmarshalNID2string(ctx context.Context, v any) (string, error) {
@@ -8750,7 +8750,7 @@ func (ec *executionContext) unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋvelox2�
 		return nil, nil
 	}
 	var res = new(veloxgql.Cursor)
-	err := res.UnmarshalGQL(v)
+	err := res.UnmarshalGQLContext(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
@@ -8758,7 +8758,7 @@ func (ec *executionContext) marshalOCursor2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋc
 	if v == nil {
 		return graphql.Null
 	}
-	return v
+	return graphql.WrapContextMarshaler(ctx, v)
 }
 
 func (ec *executionContext) unmarshalOID2ᚕstringᚄ(ctx context.Context, v any) ([]string, error) {

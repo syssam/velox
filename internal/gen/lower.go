@@ -687,6 +687,28 @@ func (s *entState) checks(e *Entity, col int, f *Field, o *OutField, where strin
 				fail("length is more than " + args[0])
 			}
 			line(1, "}")
+		case "MinRuneLen", "MaxRuneLen":
+			if f.Type != "string" {
+				s.fail(where, "check %s is for string fields, not %s", c.Kind, f.Type)
+				continue
+			}
+			if len(args) != 1 {
+				s.fail(where, "check %s needs one argument", c.Kind)
+				continue
+			}
+			if _, err := strconv.Atoi(args[0]); err != nil {
+				s.fail(where, "check %s: %s is not a length", c.Kind, args[0])
+				continue
+			}
+			s.useStd("unicode/utf8", where)
+			if c.Kind == "MinRuneLen" {
+				line(1, "if utf8.RuneCountInString(%s) < %s {", conv("string"), args[0])
+				fail("has fewer than " + args[0] + " characters")
+			} else {
+				line(1, "if utf8.RuneCountInString(%s) > %s {", conv("string"), args[0])
+				fail("has more than " + args[0] + " characters")
+			}
+			line(1, "}")
 		case "Match":
 			var pat string
 			if f.Type != "string" || len(args) != 1 || json.Unmarshal(c.Args[0], &pat) != nil {

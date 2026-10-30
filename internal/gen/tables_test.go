@@ -1940,3 +1940,48 @@ func TestFieldUniqueNotLostToWiderIndex(t *testing.T) {
 		}
 	}
 }
+
+type checkedSchema struct{ schema.Schema }
+
+func (checkedSchema) Fields() []schema.Field {
+	return []schema.Field{field.Int("total"), field.Enum("role").Values("a", "b")}
+}
+
+func (checkedSchema) Annotations() []schema.Annotation {
+	return []schema.Annotation{
+		schema.Check("total_positive", "total > 0"),
+		schema.Check("total_small", "total < 100"),
+	}
+}
+
+func TestDeclaredChecks(t *testing.T) {
+	got := table(t, tables(t, velox.Postgres, checkedSchema{}), "checked_schemas").Checks
+	want := []migrate.Check{{Name: "total_positive", Expr: "total > 0"}, {Name: "total_small", Expr: "total < 100"}}
+	if !checksEqual(got, want) {
+		t.Errorf("checks %+v, want %+v", got, want)
+	}
+	// On SQLite the enum adds its own check, which the declared ones sort among.
+	lite := table(t, tables(t, velox.SQLite, checkedSchema{}), "checked_schemas").Checks
+	if len(lite) != 3 {
+		t.Errorf("SQLite checks %+v", lite)
+	}
+}
+
+type badCheckSchema struct{ schema.Schema }
+
+func (badCheckSchema) Fields() []schema.Field { return []schema.Field{field.Enum("role").Values("a")} }
+func (badCheckSchema) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.Check("bad_check_schemas_role_check", "1 = 1"), schema.Check("", "1 = 1")}
+}
+
+func TestDeclaredChecksRefused(t *testing.T) {
+	_, err := Tables(mustBuild(t, badCheckSchema{}), velox.SQLite)
+	if err == nil {
+		t.Fatal("no error")
+	}
+	for _, want := range []string{"needs a name and an expression", "the check of an enum column"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("%v does not say %q", err, want)
+		}
+	}
+}

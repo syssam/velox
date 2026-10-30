@@ -567,7 +567,9 @@ func TestConnections(t *testing.T) {
 		t.Errorf("ann's posts: totalCount %d %v", n, err)
 	}
 	var after veloxgql.Cursor
-	if err := after.UnmarshalGQL(veloxgql.EncodeCursor(*info.EndCursor)); err != nil {
+	if s, err := veloxgql.EncodeCursor(*info.EndCursor); err != nil {
+		t.Fatal(err)
+	} else if err := after.UnmarshalGQLContext(ctx, s); err != nil {
 		t.Fatal(err)
 	}
 	if c, err = ann.PostsGQL(ctx, &after, intp(2), nil, nil, byTitle, nil); err != nil {
@@ -753,7 +755,9 @@ func TestConnectionOfLimitOffset(t *testing.T) {
 			break
 		}
 		after = new(veloxgql.Cursor)
-		if err := after.UnmarshalGQL(veloxgql.EncodeCursor(*info.EndCursor)); err != nil {
+		if s, err := veloxgql.EncodeCursor(*info.EndCursor); err != nil {
+		t.Fatal(err)
+	} else if err := after.UnmarshalGQLContext(ctx, s); err != nil {
 			t.Fatal(err)
 		}
 	}

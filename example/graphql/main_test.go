@@ -37,8 +37,15 @@ const (
 
 // userCursor is the cursor of the user with this key in a connection to User
 // in its default order, the key's.
-func userCursor(key int64) string {
-	return veloxgql.EncodeCursor(veloxgql.Cursor{Type: "User", Key: key})
+func userCursor(key int64) string { return cursorOf("User", key) }
+
+// cursorOf is the cursor of a row of GraphQL type typ, in its default order.
+func cursorOf(typ string, key int64) string {
+	s, err := veloxgql.EncodeCursor(veloxgql.Cursor{Type: typ, Key: key})
+	if err != nil {
+		panic(err) // the type and the key are given
+	}
+	return s
 }
 
 // testServer is the example's GraphQL endpoint on a seeded database, behind
@@ -258,7 +265,7 @@ func TestBadIDs(t *testing.T) {
 		want: `{"errors": [{"message": "ID: malformed ID: not canonical base64url without padding", "path": ["node"], "extensions": {"code": "BAD_USER_INPUT"}}],
 			"data": {"node": null}}`,
 	})
-	postCursor := veloxgql.EncodeCursor(veloxgql.Cursor{Type: "Post", Key: int64(1)})
+	postCursor := cursorOf("Post", 1)
 	s.do(t, request{
 		query: `query($c: Cursor) { users(first: 1, after: $c) { totalCount } }`,
 		vars:  map[string]any{"c": postCursor},

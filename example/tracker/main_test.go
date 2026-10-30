@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -18,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syssam/velox2"
+	velox "github.com/syssam/velox2"
 	"github.com/syssam/velox2/example/tracker/gen"
 )
 
@@ -237,6 +238,17 @@ func TestAuth(t *testing.T) {
 }
 
 // TestDeletedUser: a session outlives no user: its token stops working.
+// TestSlugCheck: the database holds a slug to lower case whatever code writes it.
+func TestSlugCheck(t *testing.T) {
+	targets(t, func(t *testing.T, c *client) {
+		err := c.db.Insert(&gen.Org{Slug: "Upper", Name: "x"}).Exec(t.Context())
+		var ce *velox.ConstraintError
+		if !errors.As(err, &ce) || ce.Kind != velox.ConstraintCheck {
+			t.Errorf("Insert = %v, want a check violation", err)
+		}
+	})
+}
+
 func TestDeletedUser(t *testing.T) {
 	targets(t, func(t *testing.T, c *client) {
 		admin := c.signup("acme")

@@ -288,7 +288,7 @@ func contradictions(d *desc.Field) {
 		v       any // the last value given
 		byRange bool
 	}
-	bs := map[string]*bound{"Min": {}, "Max": {}, "MinLen": {}, "MaxLen": {}}
+	bs := map[string]*bound{"Min": {}, "Max": {}, "MinLen": {}, "MaxLen": {}, "MinRuneLen": {}, "MaxRuneLen": {}}
 	set := func(kind string, v any, byRange bool) {
 		x := bs[kind]
 		x.n, x.v, x.byRange = x.n+1, v, byRange
@@ -296,7 +296,7 @@ func contradictions(d *desc.Field) {
 	ranges := 0
 	for _, c := range d.Checks {
 		switch c.Kind {
-		case "Min", "Max", "MinLen", "MaxLen":
+		case "Min", "Max", "MinLen", "MaxLen", "MinRuneLen", "MaxRuneLen":
 			set(c.Kind, c.Args[0], false)
 		case "Range":
 			ranges++
@@ -310,13 +310,16 @@ func contradictions(d *desc.Field) {
 	if ranges > 1 {
 		failOnce(d, "Range is given twice")
 	}
-	for _, k := range []string{"Min", "Max", "MinLen", "MaxLen"} {
+	for _, k := range []string{"Min", "Max", "MinLen", "MaxLen", "MinRuneLen", "MaxRuneLen"} {
 		// The bounds of a repeated Range alone are Range's error.
-		if n := bs[k].n; n > 1 && (ranges < 2 || n != ranges || k == "MinLen" || k == "MaxLen") {
+		if n := bs[k].n; n > 1 && (ranges < 2 || n != ranges || (k != "Min" && k != "Max")) {
 			failOnce(d, "%s is given twice", k)
 		}
 	}
-	for _, p := range [][2]string{{"Min", "Max"}, {"MinLen", "MaxLen"}} {
+	if bs["MaxLen"].n > 0 && bs["MaxRuneLen"].n > 0 {
+		failOnce(d, "MaxLen and MaxRuneLen both set the column's size; give one")
+	}
+	for _, p := range [][2]string{{"Min", "Max"}, {"MinLen", "MaxLen"}, {"MinRuneLen", "MaxRuneLen"}} {
 		lo, hi := bs[p[0]], bs[p[1]]
 		// A bound given twice is reported already; one Range is "empty".
 		if lo.n == 1 && hi.n == 1 && (!lo.byRange || !hi.byRange) && above(lo.v, hi.v) {

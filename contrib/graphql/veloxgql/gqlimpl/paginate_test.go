@@ -128,7 +128,7 @@ func peopleDB(t *testing.T) (*velox.DB, *statements) {
 // wire is c as the client sends it back: encoded and decoded.
 func wire(t *testing.T, c veloxgql.Cursor) *veloxgql.Cursor {
 	t.Helper()
-	d, err := veloxgql.DecodeCursor(veloxgql.EncodeCursor(c))
+	d, err := veloxgql.DecodeCursor(encode(t, c))
 	if err != nil {
 		t.Fatal(err)
 	}

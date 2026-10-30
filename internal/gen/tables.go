@@ -4,11 +4,12 @@ import (
 	"cmp"
 	"encoding/json"
 	"errors"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
 
-	"github.com/syssam/velox2"
+	velox "github.com/syssam/velox2"
 	"github.com/syssam/velox2/internal/ddl"
 	"github.com/syssam/velox2/migrate"
 )
@@ -133,6 +134,7 @@ func (t *tabler) entity(e *Entity) migrate.Table {
 	for i, f := range e.Fields {
 		tb.Columns = append(tb.Columns, t.column(e, i, f, &tb))
 	}
+	t.declaredChecks(e, &tb)
 
 	var keys [][]string // the leading columns of the non-partial indexes, for fkIndexed
 	var at []place      // the element that makes each index, for the checks
@@ -160,6 +162,33 @@ func (t *tabler) entity(e *Entity) migrate.Table {
 	}
 	t.check(e, &tb, at)
 	return tb
+}
+
+// declaredChecks adds the constraints of e's Check annotation to tb.
+func (t *tabler) declaredChecks(e *Entity, tb *migrate.Table) {
+	raw, ok := e.Annotations["Check"]
+	if !ok {
+		return
+	}
+	table := place{e, rankTable, 0, loc{pos: tb.Pos}}
+	var c struct {
+		Checks map[string]string `json:"checks"`
+	}
+	if err := json.Unmarshal(raw, &c); err != nil {
+		t.fail(table, "its Check annotation is not a list of constraints: %v", err)
+		return
+	}
+	for _, name := range slices.Sorted(maps.Keys(c.Checks)) {
+		expr := c.Checks[name]
+		switch {
+		case strings.TrimSpace(name) == "" || strings.TrimSpace(expr) == "":
+			t.fail(table, "schema.Check(%q, %q) needs a name and an expression", name, expr)
+		case slices.ContainsFunc(tb.Checks, func(x migrate.Check) bool { return strings.EqualFold(x.Name, name) }):
+			t.fail(table, "schema.Check names %q, the check of an enum column; give it another name", name)
+		default:
+			tb.Checks = append(tb.Checks, migrate.Check{Name: t.symbol(name, false), Expr: expr, Pos: tb.Pos})
+		}
+	}
 }
 
 // joinTable is the table of a many-to-many relation: its two key columns,

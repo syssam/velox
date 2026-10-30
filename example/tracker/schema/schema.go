@@ -23,6 +23,11 @@ func (Org) Fields() []schema.Field {
 	}
 }
 
+// Annotations holds the slug to lower case in the database too, whichever code writes it.
+func (Org) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.Check("orgs_slug_lower", "slug = lower(slug)")}
+}
+
 // User is a member of one Org. An email is unique within the Org.
 type User struct{ schema.Schema }
 

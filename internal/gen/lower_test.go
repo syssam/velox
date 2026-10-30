@@ -378,6 +378,23 @@ func (LwDefaults) Fields() []schema.Field {
 }
 
 // A Default never changes the Go type or the handle: only Nillable does.
+type lwRuneSchema struct{ schema.Schema }
+
+func (lwRuneSchema) Fields() []schema.Field {
+	return []schema.Field{field.String("title").MinRuneLen(2).MaxRuneLen(5)}
+}
+
+func TestLowerRuneLen(t *testing.T) {
+	src := mustLower(t, Config{SchemaPath: lowerSchemaPath}, lwRuneSchema{}).entity("lwRuneSchema").CheckCode
+	for _, want := range []string{
+		"utf8.RuneCountInString(x) < 2", `"has fewer than 2 characters"`,
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("the generated code has no %s:\n%s", want, src)
+		}
+	}
+}
+
 func TestLowerDefaultKeepsType(t *testing.T) {
 	e := mustLower(t, Config{SchemaPath: lowerSchemaPath}, LwDefaults{}).entity("LwDefaults")
 	for _, c := range []struct{ name, goType, handle string }{

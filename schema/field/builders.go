@@ -247,15 +247,28 @@ func Text(name string) *StringBuilder {
 // An Optional field's zero value means unset, and is not validated.
 func (b *StringBuilder) NotEmpty() *StringBuilder { return b.check("NotEmpty") }
 
-// MinLen requires at least n bytes.
+// MinLen requires at least n bytes; MinRuneLen counts characters.
 // An Optional field's zero value means unset, and is not validated.
 func (b *StringBuilder) MinLen(n int) *StringBuilder { return b.check("MinLen", n) }
 
-// MaxLen requires at most n bytes, and sets the column's size to n.
+// MinRuneLen requires at least n characters.
+// An Optional field's zero value means unset, and is not validated.
+func (b *StringBuilder) MinRuneLen(n int) *StringBuilder { return b.check("MinRuneLen", n) }
+
+// MaxLen requires at most n bytes, and sets the column's size to n. In UTF-8 a
+// character can take up to four bytes, so for text that is not ASCII use
+// MaxRuneLen, which counts as the column does.
 // An Optional field's zero value means unset, and is not validated.
 func (b *StringBuilder) MaxLen(n int) *StringBuilder {
 	b.d.Size = n
 	return b.check("MaxLen", n)
+}
+
+// MaxRuneLen requires at most n characters, and sets the column's size to n.
+// An Optional field's zero value means unset, and is not validated.
+func (b *StringBuilder) MaxRuneLen(n int) *StringBuilder {
+	b.d.Size = n
+	return b.check("MaxRuneLen", n)
 }
 
 // Match requires the string to match re.
