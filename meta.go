@@ -301,3 +301,4 @@ func infoBidiKeys(in *EntityInfo) []bidiKey                     { return in.bidi
 func infoPolicy(in *EntityInfo) *policy                         { return in.policy }
 func infoRels(in *EntityInfo) []*relation                       { return in.rels }
 func setInfoPolicy(in *EntityInfo, p *policy)                   { in.policy = p }
+func setInfoBidi(in *EntityInfo, on bool)                       { in.bidi = on }

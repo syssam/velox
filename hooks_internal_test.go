@@ -394,7 +394,8 @@ func TestSaveWhereIsTheStatementsWhere(t *testing.T) {
 // two-direction condition in a copy, so the hooks' statement keeps the Where
 // they gave, and a second render gives the same SQL.
 func TestBidiDeleteKeepsTheStatement(t *testing.T) {
-	in := &EntityInfo{Name: "links", Table: "links", Columns: []ColumnInfo{{Name: "a"}, {Name: "b"}}, PrimaryKey: []int{0, 1}, Tenant: -1, bidi: true}
+	in := &EntityInfo{Name: "links", Table: "links", Columns: []ColumnInfo{{Name: "a"}, {Name: "b"}}, PrimaryKey: []int{0, 1}, Tenant: -1}
+	setInfoBidi(in, true)
 	st := &Statement{Op: OpDelete, Entity: in, Where: []Predicate{ColumnEQ(0, int64(1))}}
 	db := OpenFake(Postgres, &FakeExec{})
 	const want = `DELETE FROM "links" WHERE ("a" = $1 OR "b" = $2)`
