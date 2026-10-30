@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/syssam/velox2/internal/engine"
 )
 
 func TestWritesGoThroughExec(t *testing.T) {
@@ -93,7 +95,7 @@ func TestHooksOnWrites(t *testing.T) {
 func TestHooksAndConditionsOfRelations(t *testing.T) {
 	ctx := context.Background()
 	co := (*company)(nil).VeloxMeta().info
-	staff, err := infoRels(co)[0].resolve(co, targetOf[employee]())
+	staff, err := engine.InfoRels(co)[0].Resolve(co, targetOf[employee]())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,19 +110,19 @@ func TestHooksAndConditionsOfRelations(t *testing.T) {
 		}, "not a copy of it"},
 		"copy with another policy": {func(_ context.Context, st *Statement) error {
 			info := *st.Entity
-			setInfoPolicy(&info, &policy{})
+			engine.SetInfoPolicy(&info, &engine.EntityPolicy{})
 			st.Entity = &info
 			return nil
 		}, "a copy whose tenant column or policy differs"},
 		"invalid predicate": {func(_ context.Context, st *Statement) error {
-			st.Where = append(st.Where, Predicate{node{op: opInvalid, v: broken}})
+			st.Where = append(st.Where, engine.NewPredicate(engine.Node{Op: engine.OpInvalid, V: broken}))
 			return nil
 		}, broken.Error()},
 	} {
 		t.Run(name, func(t *testing.T) {
 			e := &FakeExec{}
 			db := OpenFake(Postgres, e, WithRewrite(c.hook))
-			st := Statement{Op: OpDelete, Entity: co, Where: []Predicate{{node{op: opExists, col: 0, v: staff}}}}
+			st := Statement{Op: OpDelete, Entity: co, Where: []Predicate{engine.NewPredicate(engine.Node{Op: engine.OpExists, Col: 0, V: staff})}}
 			if _, err := execWrite(ctx, db, &st); err == nil || !strings.Contains(err.Error(), c.want) || e.Calls != 0 {
 				t.Errorf("%v (calls %d), want an error containing %q", err, e.Calls, c.want)
 			}

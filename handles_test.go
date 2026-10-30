@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/syssam/velox2/internal/engine"
 	"github.com/syssam/velox2/internal/handlegen"
 )
 
@@ -40,30 +41,30 @@ func TestHandleMethodsBuildNodes(t *testing.T) {
 	ns := NullStringCol[ent, string]{I: 5}
 	cases := []struct {
 		name      string
-		got, want node
+		got, want engine.Node
 	}{
-		{"EQ", n.EQ(7).n, node{op: opEQ, col: 3, v: int64(7)}},
-		{"In", n.In(1, 2).n, node{op: opIn, col: 3, v: []any{int64(1), int64(2)}}},
-		{"In with no values", n.In().n, node{op: opIn, col: 3, v: []any{}}},
-		{"NotIn", n.NotIn(1, 2).n, node{op: opNotIn, col: 3, v: []any{int64(1), int64(2)}}},
-		{"NotIn with no values", n.NotIn().n, node{op: opNotIn, col: 3, v: []any{}}},
-		{"NEQ", n.NEQ(7).n, node{op: opNEQ, col: 3, v: int64(7)}},
-		{"GT", n.GT(7).n, node{op: opGT, col: 3, v: int64(7)}},
-		{"GTE", n.GTE(7).n, node{op: opGTE, col: 3, v: int64(7)}},
-		{"LT", n.LT(7).n, node{op: opLT, col: 3, v: int64(7)}},
-		{"LTE", n.LTE(7).n, node{op: opLTE, col: 3, v: int64(7)}},
-		{"Col NEQ", Col[ent, bool]{I: 6}.NEQ(true).n, node{op: opNEQ, col: 6, v: true}},
-		{"Col NotIn", Col[ent, bool]{I: 6}.NotIn(true).n, node{op: opNotIn, col: 6, v: []any{true}}},
-		{"Between", n.Between(1, 9).n, node{op: opBetween, col: 3, v: int64(1), w: int64(9)}},
-		{"HasPrefix escapes", s.HasPrefix(`5%_!\`).n, node{op: opLike, col: 4, v: `5!%!_!!\%`}},
-		{"HasSuffix escapes", s.HasSuffix("!x_").n, node{op: opLike, col: 4, v: "%!!x!_"}},
-		{"Contains escapes", s.Contains("a%!").n, node{op: opLike, col: 4, v: "%a!%!!%"}},
-		{"Like is raw", s.Like("a%").n, node{op: opLike, col: 4, v: "a%"}},
-		{"EqualFold", s.EqualFold("Ab").n, node{op: opFold, col: 4, v: "Ab"}},
-		{"IsNull", ns.IsNull().n, node{op: opIsNull, col: 5}},
-		{"Not", Not(n.EQ(1)).n, node{op: opNot, kids: []node{{op: opEQ, col: 3, v: int64(1)}}}},
-		{"Or", Or(n.EQ(1), n.EQ(2)).n, node{op: opOr, kids: []node{{op: opEQ, col: 3, v: int64(1)}, {op: opEQ, col: 3, v: int64(2)}}}},
-		{"ColumnEQ", predNode(ColumnEQ(2, "t")), node{op: opEQ, col: 2, v: "t"}},
+		{"EQ", engine.PredNode(Predicate(n.EQ(7))), engine.Node{Op: engine.OpEQ, Col: 3, V: int64(7)}},
+		{"In", engine.PredNode(Predicate(n.In(1, 2))), engine.Node{Op: engine.OpIn, Col: 3, V: []any{int64(1), int64(2)}}},
+		{"In with no values", engine.PredNode(Predicate(n.In())), engine.Node{Op: engine.OpIn, Col: 3, V: []any{}}},
+		{"NotIn", engine.PredNode(Predicate(n.NotIn(1, 2))), engine.Node{Op: engine.OpNotIn, Col: 3, V: []any{int64(1), int64(2)}}},
+		{"NotIn with no values", engine.PredNode(Predicate(n.NotIn())), engine.Node{Op: engine.OpNotIn, Col: 3, V: []any{}}},
+		{"NEQ", engine.PredNode(Predicate(n.NEQ(7))), engine.Node{Op: engine.OpNEQ, Col: 3, V: int64(7)}},
+		{"GT", engine.PredNode(Predicate(n.GT(7))), engine.Node{Op: engine.OpGT, Col: 3, V: int64(7)}},
+		{"GTE", engine.PredNode(Predicate(n.GTE(7))), engine.Node{Op: engine.OpGTE, Col: 3, V: int64(7)}},
+		{"LT", engine.PredNode(Predicate(n.LT(7))), engine.Node{Op: engine.OpLT, Col: 3, V: int64(7)}},
+		{"LTE", engine.PredNode(Predicate(n.LTE(7))), engine.Node{Op: engine.OpLTE, Col: 3, V: int64(7)}},
+		{"Col NEQ", engine.PredNode(Predicate(Col[ent, bool]{I: 6}.NEQ(true))), engine.Node{Op: engine.OpNEQ, Col: 6, V: true}},
+		{"Col NotIn", engine.PredNode(Predicate(Col[ent, bool]{I: 6}.NotIn(true))), engine.Node{Op: engine.OpNotIn, Col: 6, V: []any{true}}},
+		{"Between", engine.PredNode(Predicate(n.Between(1, 9))), engine.Node{Op: engine.OpBetween, Col: 3, V: int64(1), W: int64(9)}},
+		{"HasPrefix escapes", engine.PredNode(Predicate(s.HasPrefix(`5%_!\`))), engine.Node{Op: engine.OpLike, Col: 4, V: `5!%!_!!\%`}},
+		{"HasSuffix escapes", engine.PredNode(Predicate(s.HasSuffix("!x_"))), engine.Node{Op: engine.OpLike, Col: 4, V: "%!!x!_"}},
+		{"Contains escapes", engine.PredNode(Predicate(s.Contains("a%!"))), engine.Node{Op: engine.OpLike, Col: 4, V: "%a!%!!%"}},
+		{"Like is raw", engine.PredNode(Predicate(s.Like("a%"))), engine.Node{Op: engine.OpLike, Col: 4, V: "a%"}},
+		{"EqualFold", engine.PredNode(Predicate(s.EqualFold("Ab"))), engine.Node{Op: engine.OpFold, Col: 4, V: "Ab"}},
+		{"IsNull", engine.PredNode(Predicate(ns.IsNull())), engine.Node{Op: engine.OpIsNull, Col: 5}},
+		{"Not", engine.PredNode(Predicate(Not(n.EQ(1)))), engine.Node{Op: engine.OpNot, Kids: []engine.Node{{Op: engine.OpEQ, Col: 3, V: int64(1)}}}},
+		{"Or", engine.PredNode(Predicate(Or(n.EQ(1), n.EQ(2)))), engine.Node{Op: engine.OpOr, Kids: []engine.Node{{Op: engine.OpEQ, Col: 3, V: int64(1)}, {Op: engine.OpEQ, Col: 3, V: int64(2)}}}},
+		{"ColumnEQ", engine.PredNode(ColumnEQ(2, "t")), engine.Node{Op: engine.OpEQ, Col: 2, V: "t"}},
 	}
 	for _, c := range cases {
 		if !reflect.DeepEqual(c.got, c.want) {

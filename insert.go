@@ -1,16 +1,12 @@
 package velox
 
 import (
-	"bytes"
 	"context"
-	"errors"
 	"fmt"
-	"reflect"
 	"unsafe"
-)
 
-// maxParams is each dialect's limit on the parameters of one statement.
-var maxParams = map[Dialect]int{Postgres: 65535, MySQL: 65535, SQLite: 32766}
+	"github.com/syssam/velox2/internal/engine"
+)
 
 // InsertQuery is an INSERT of one entity or of many, built by chaining and
 // run by Exec. Like Query it is a value: extending it leaves it as it was.
@@ -134,10 +130,10 @@ func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 	if q.one == nil && len(q.many) == 0 {
 		return nil
 	}
-	if len(infoHooks(q.meta.info)) > 0 {
-		return mutate(ctx, q.db, q.meta.info, q.mutation(false), func(ctx context.Context, mu *mutation) error { return q.send(ctx, mu) })
+	if len(engine.InfoHooks(q.meta.info)) > 0 {
+		return mutate(ctx, q.db, q.meta.info, q.mutation(false), func(ctx context.Context, mu *engine.MutationState) error { return q.send(ctx, mu) })
 	}
-	var mu mutation
+	var mu engine.MutationState
 	return q.send(ctx, &mu)
 }
 
@@ -159,37 +155,37 @@ func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error {
 // that sets the key of a bidirectional one-to-one edge (EdgeBidi), whose
 // partner Exec then links.
 func (q InsertQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error) {
-	ctx = dryRunContext(ctx) // first, so that every hook sees it
+	ctx = engine.DryRunContext(ctx) // first, so that every hook sees it
 	if err := q.check(); err != nil {
 		return "", nil, err
 	}
 	if q.one == nil && len(q.many) == 0 {
 		return "", nil, nil
 	}
-	if len(infoHooks(q.meta.info)) > 0 {
+	if len(engine.InfoHooks(q.meta.info)) > 0 {
 		mu := q.mutation(true)
-		if err := mutate(ctx, q.db, q.meta.info, mu, func(ctx context.Context, mu *mutation) error { return q.render(ctx, mu) }); err != nil && !dryRefused(mu, err) {
+		if err := mutate(ctx, q.db, q.meta.info, mu, func(ctx context.Context, mu *engine.MutationState) error { return q.render(ctx, mu) }); err != nil && !engine.DryRefused(mu, err) {
 			return "", nil, err
 		}
-		return mu.sql, mu.args, nil
+		return mu.SQL, mu.Args, nil
 	}
-	mu := mutation{dry: true}
+	mu := engine.MutationState{Dry: true}
 	if err := q.render(ctx, &mu); err != nil {
 		return "", nil, err
 	}
-	return mu.sql, mu.args, nil
+	return mu.SQL, mu.Args, nil
 }
 
 // mutation is the insert as its entity's hooks see it: its rows.
-func (q InsertQuery[E]) mutation[_ Lazy[E]](dry bool) *mutation {
-	mu := &mutation{op: OpInsert, dry: dry}
+func (q InsertQuery[E]) mutation[_ Lazy[E]](dry bool) *engine.MutationState {
+	mu := &engine.MutationState{Op: OpInsert, Dry: dry}
 	if q.one != nil {
-		mu.rows = []unsafe.Pointer{unsafe.Pointer(q.one)}
+		mu.Rows = []unsafe.Pointer{unsafe.Pointer(q.one)}
 		return mu
 	}
-	mu.rows = make([]unsafe.Pointer, len(q.many))
+	mu.Rows = make([]unsafe.Pointer, len(q.many))
 	for i := range q.many {
-		mu.rows[i] = unsafe.Pointer(&q.many[i])
+		mu.Rows[i] = unsafe.Pointer(&q.many[i])
 	}
 	return mu
 }
@@ -199,7 +195,7 @@ func (q InsertQuery[E]) mutation[_ Lazy[E]](dry bool) *mutation {
 // policy's Insert) and sends the statements. It sets mu.affected only when
 // they all succeeded, so that Mutation.Affected is 0 after an error whatever
 // order insertOne sets Affected and checks an upsert in.
-func (q InsertQuery[E]) send[_ Lazy[E]](ctx context.Context, mu *mutation) error {
+func (q InsertQuery[E]) send[_ Lazy[E]](ctx context.Context, mu *engine.MutationState) error {
 	var res Result
 	var err error
 	if q.one != nil {
@@ -208,14 +204,14 @@ func (q InsertQuery[E]) send[_ Lazy[E]](ctx context.Context, mu *mutation) error
 		err = insertMany(ctx, q.db, q.meta, q.many, q.conflict, &res)
 	}
 	if err == nil {
-		mu.affected = res.Affected
+		mu.Affected = res.Affected
 	}
 	return err
 }
 
 // render is SQL's work inside the hooks: it prepares the rows as send does,
 // and renders the first statement into mu.sql and mu.args.
-func (q InsertQuery[E]) render[_ Lazy[E]](ctx context.Context, mu *mutation) error {
+func (q InsertQuery[E]) render[_ Lazy[E]](ctx context.Context, mu *engine.MutationState) error {
 	var st Statement
 	if q.one != nil {
 		var err error
@@ -231,7 +227,7 @@ func (q InsertQuery[E]) render[_ Lazy[E]](ctx context.Context, mu *mutation) err
 		st = batch(q.meta, q.many[:min(per, len(q.many))], cols, q.conflict, inTx)
 	}
 	var err error
-	mu.sql, mu.args, err = q.db.dryRun(ctx, &st)
+	mu.SQL, mu.Args, err = q.db.dryRun(ctx, &st)
 	return err
 }
 
@@ -246,35 +242,7 @@ func (q InsertQuery[E]) check[_ Lazy[E]]() error {
 		return fmt.Errorf("velox: %s: Insert of a nil pointer", q.meta.info.Name)
 	}
 	if q.conflict != nil {
-		return checkConflict(q.meta.info, q.conflict, unsafe.Pointer(q.one))
-	}
-	return nil
-}
-
-// checkConflict refuses an upsert clause of entity in without the columns of
-// a unique key, one that updates an Immutable column, one that updates on
-// the join entity of a bidirectional edge, and an upsert of the row at one
-// (nil for InsertAll, whose prepareMany refuses it) that sets the key of a
-// bidirectional one-to-one edge. It is not generic, so that every entity's
-// InsertQuery does not compile it.
-func checkConflict(in *EntityInfo, cf *ConflictClause, one unsafe.Pointer) error {
-	if len(cf.Columns) == 0 {
-		return fmt.Errorf("velox: %s: an upsert needs OnConflict with the columns of a unique key", in.Name)
-	}
-	if one != nil && len(in.bidiKeys) > 0 {
-		if err := refuseBidiInsert(in, one, false); err != nil {
-			return err
-		}
-	}
-	if len(cf.Update) > 0 && in.bidi {
-		return errBidiUpdate(in)
-	}
-	if in.immutable {
-		for _, c := range cf.Update {
-			if col := &in.Columns[c]; col.Immutable {
-				return fmt.Errorf("velox: %s: %s: %w", in.Name, col.Field, ErrImmutable)
-			}
-		}
+		return engine.CheckConflict(q.meta.info, q.conflict, unsafe.Pointer(q.one))
 	}
 	return nil
 }
@@ -289,118 +257,8 @@ func checkConflict(in *EntityInfo, cf *ConflictClause, one unsafe.Pointer) error
 // number that is not Nillable.
 func fillDefaults[E any](m *Meta[E], p *E) {
 	for i := range m.info.Columns {
-		fillDefault(&m.info.Columns[i], m.addr(p, i))
+		engine.FillDefault(&m.info.Columns[i], m.addr(p, i))
 	}
-}
-
-// fillDefault sets the field that ptr points to as column c's Default or
-// DefaultFunc says. A DefaultFunc returns the element type of a pointer field
-// (velox-gen's Nillable), which is stored through a new pointer. It is not
-// generic, so that the reflect.Value it uses is not compiled into every
-// package that inserts.
-func fillDefault(c *ColumnInfo, ptr any) {
-	v := reflect.ValueOf(ptr).Elem()
-	switch {
-	case c.HasDefault && v.IsZero():
-		if c.copyDefault {
-			v.Set(defaultValue(c.Default))
-		} else {
-			v.Set(reflect.ValueOf(c.Default))
-		}
-	case c.DefaultFunc != nil && v.IsZero():
-		d := reflect.ValueOf(c.DefaultFunc())
-		if t := v.Type(); t.Kind() == reflect.Pointer && d.Type() != t {
-			p := reflect.New(t.Elem())
-			p.Elem().Set(d)
-			d = p
-		}
-		v.Set(d)
-	}
-}
-
-// defaultValue is a column's static default as a reflect.Value: a deep copy,
-// so that entities never share a pointee, a slice's array or a map.
-func defaultValue(d any) reflect.Value {
-	return cloneValue(reflect.ValueOf(d))
-}
-
-// holdsRefs reports whether a value of type t shares memory with its copy:
-// whether cloneValue has anything to copy in it.
-func holdsRefs(t reflect.Type) bool {
-	switch t.Kind() {
-	case reflect.Pointer, reflect.Slice, reflect.Map, reflect.Interface:
-		return true
-	case reflect.Array:
-		return t.Len() > 0 && holdsRefs(t.Elem())
-	case reflect.Struct:
-		for i := range t.NumField() {
-			if f := t.Field(i); f.IsExported() && holdsRefs(f.Type) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// cloneValue returns a deep copy of v, through pointers, slices, maps, arrays,
-// interfaces and exported struct fields; v must not be cyclic. A nil pointer,
-// slice, map or interface stays nil. A struct's unexported fields are copied
-// with the struct, shallowly; anything else is copied as is.
-func cloneValue(v reflect.Value) reflect.Value {
-	switch v.Kind() {
-	case reflect.Interface:
-		if v.IsNil() {
-			return v
-		}
-		r := reflect.New(v.Type()).Elem()
-		r.Set(cloneValue(v.Elem()))
-		return r
-	case reflect.Pointer:
-		if v.IsNil() {
-			return v
-		}
-		p := reflect.New(v.Type().Elem())
-		p.Elem().Set(cloneValue(v.Elem()))
-		return p
-	case reflect.Slice:
-		if v.IsNil() {
-			return v
-		}
-		s := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
-		if v.Type().Elem().Kind() == reflect.Uint8 {
-			reflect.Copy(s, v)
-			return s
-		}
-		for i := range v.Len() {
-			s.Index(i).Set(cloneValue(v.Index(i)))
-		}
-		return s
-	case reflect.Map:
-		if v.IsNil() {
-			return v
-		}
-		m := reflect.MakeMapWithSize(v.Type(), v.Len())
-		for it := v.MapRange(); it.Next(); {
-			m.SetMapIndex(it.Key(), cloneValue(it.Value()))
-		}
-		return m
-	case reflect.Array:
-		a := reflect.New(v.Type()).Elem()
-		for i := range v.Len() {
-			a.Index(i).Set(cloneValue(v.Index(i)))
-		}
-		return a
-	case reflect.Struct:
-		s := reflect.New(v.Type()).Elem()
-		s.Set(v)
-		for i := range v.NumField() {
-			if f := s.Field(i); f.CanSet() { // exported
-				f.Set(cloneValue(v.Field(i)))
-			}
-		}
-		return s
-	}
-	return v
 }
 
 // generatedKey is the index of a single integer primary key column holding
@@ -410,27 +268,10 @@ func generatedKey[E any](m *Meta[E], p *E) int {
 		return -1
 	}
 	k := m.info.PrimaryKey[0]
-	if zeroInt(m.addr(p, k)) {
+	if engine.ZeroInt(m.addr(p, k)) {
 		return k
 	}
 	return -1
-}
-
-// zeroInt reports whether ptr points to an integer holding zero.
-func zeroInt(ptr any) bool {
-	v := reflect.ValueOf(ptr).Elem()
-	return (v.CanInt() || v.CanUint()) && v.IsZero()
-}
-
-// insertColumns lists the columns an INSERT writes: every column but skip.
-func insertColumns(in *EntityInfo, skip int) []int {
-	cols := make([]int, 0, len(in.Columns))
-	for i := range in.Columns {
-		if i != skip {
-			cols = append(cols, i)
-		}
-	}
-	return cols
 }
 
 func rowValues[E any](m *Meta[E], p *E, cols []int) []any {
@@ -446,28 +287,28 @@ func rowValues[E any](m *Meta[E], p *E, cols []int) []any {
 // PostgreSQL and SQLite the statement reads that key back with RETURNING.
 func oneStatement[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *ConflictClause) (Statement, int, error) {
 	fillDefaults(m, p)
-	if err := prepareOne(ctx, m.info, unsafe.Pointer(p)); err != nil {
+	if err := engine.PrepareOne(ctx, m.info, unsafe.Pointer(p)); err != nil {
 		return Statement{}, -1, err
 	}
 	gen := generatedKey(m, p)
-	cols := insertColumns(m.info, gen)
+	cols := engine.InsertColumns(m.info, gen)
 	if len(cols) == 0 {
-		return Statement{}, -1, errNothingToInsert(m.info)
+		return Statement{}, -1, engine.ErrNothingToInsert(m.info)
 	}
-	if err := validateRow(m.info, unsafe.Pointer(p), cols); err != nil {
+	if err := engine.ValidateRow(m.info, unsafe.Pointer(p), cols); err != nil {
 		return Statement{}, -1, err
 	}
-	if err := insertAllowed(ctx, m.info, unsafe.Pointer(p)); err != nil {
+	if err := engine.InsertAllowed(ctx, m.info, unsafe.Pointer(p)); err != nil {
 		return Statement{}, -1, err
 	}
 	st := Statement{Op: OpInsert, Entity: m.info, Columns: cols, Rows: [][]any{rowValues(m, p, cols)}, Conflict: cf, InTx: db.inTx}
-	if infoBidi(m.info) {
-		mirrorRows(&st)
+	if engine.InfoBidi(m.info) {
+		engine.MirrorRows(&st)
 	}
 	if gen >= 0 && db.d != MySQL {
 		st.Returning = []int{gen}
 	}
-	bidiInTx(&st, unsafe.Pointer(p))
+	engine.BidiInTx(&st, unsafe.Pointer(p))
 	return st, gen, nil
 }
 
@@ -487,10 +328,10 @@ func insertOne[E any](ctx context.Context, db *DB, m *Meta[E], p *E, cf *Conflic
 // it is compiled once; the transaction's closure works on copies, made only
 // for such a row, so that no other insert allocates for it.
 func insertRow(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen int, out *Result) error {
-	if in := st.Entity; len(infoBidiKeys(in)) > 0 {
-		if keys, vs := bidiRow(in, p); len(keys) > 0 {
+	if in := st.Entity; len(engine.InfoBidiKeys(in)) > 0 {
+		if keys, vs := engine.BidiRow(in, p); len(keys) > 0 {
 			cp := *st
-			setStmtBidi(&cp, &bidiStep{keys: keys, vals: vs, insert: true})
+			engine.SetStmtBidi(&cp, &engine.BidiStep{Keys: keys, Vals: vs, Insert: true})
 			var res Result
 			err := bidiInsert(ctx, db, in, p, keys, vs, gen >= 0, cp.Conflict != nil, func(ctx context.Context, tx *DB) error {
 				return sendOne(ctx, tx, p, &cp, gen, &res)
@@ -514,11 +355,11 @@ func sendOne(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen i
 			return err
 		}
 		out.Affected = res.Affected
-		return checkUpserted(st, res.Affected)
+		return engine.CheckUpserted(st, res.Affected)
 	}
 	if db.d != MySQL {
 		var back int64 // the rows that came back
-		read := func(r rows) error {
+		read := func(r engine.Rows) error {
 			if !r.Next() {
 				return nil
 			}
@@ -526,7 +367,7 @@ func sendOne(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen i
 			// A hook may have redirected Returning: then the row does not
 			// hold the key.
 			if len(st.Returning) == 1 && st.Returning[0] == gen {
-				return r.Scan(scanDst(in, gen, fieldAddr(in, p, gen)))
+				return r.Scan(engine.ScanDst(in, gen, engine.FieldAddr(in, p, gen)))
 			}
 			return nil
 		}
@@ -540,13 +381,13 @@ func sendOne(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen i
 			return err
 		}
 		out.Affected = back
-		if len(st.Returning) == 0 && !stmtUpsertPolicy(st) {
+		if len(st.Returning) == 0 && !engine.StmtUpsertPolicy(st) {
 			// Without RETURNING (a hook dropped it), no row tells nothing; a
 			// policy-conditioned upsert was rendered with it, as prepare
 			// checks, so no row back is a hidden row.
 			return nil
 		}
-		return checkUpserted(st, back)
+		return engine.CheckUpserted(st, back)
 	}
 	res, err := execWrite(ctx, db, st)
 	if err != nil {
@@ -557,174 +398,25 @@ func sendOne(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen i
 	// Without a conflict clause a successful insert wrote its row, whether
 	// the driver reported the count or not (-1).
 	if st.Conflict == nil && res.HasLastID && res.Affected != 0 {
-		return setKey(in, gen, fieldAddr(in, p, gen), res.LastID)
+		return engine.SetKey(in, gen, engine.FieldAddr(in, p, gen), res.LastID)
 	}
-	return nil
-}
-
-// rowTenant is what an insert fills or checks its rows' tenant with: the
-// context's tenant converted to the tenant column's type (tenantFor), and the
-// WithAllTenants reason.
-type rowTenant struct {
-	id  any
-	all string
-}
-
-// insertTenant returns the rowTenant of an insert of entity in, converted
-// once for all its rows.
-func insertTenant(ctx context.Context, in *EntityInfo) (rowTenant, error) {
-	if in.Tenant < 0 {
-		return rowTenant{}, nil
-	}
-	id, all := tenantOf(ctx)
-	if id != nil {
-		var err error
-		if id, err = tenantFor(in, id); err != nil {
-			return rowTenant{}, err
-		}
-	}
-	return rowTenant{id, all}, nil
-}
-
-// prepareOne readies the one row at p, of entity in, as prepareRow does.
-func prepareOne(ctx context.Context, in *EntityInfo, p unsafe.Pointer) error {
-	tn, err := insertTenant(ctx, in)
-	if err != nil {
-		return err
-	}
-	return prepareRow(in, p, tn)
-}
-
-// prepareRow readies the row at p, of entity in, to be inserted, once its
-// defaults are filled: it fills or checks the tenant column with tn, from
-// insertTenant. The validators, then the policy's Insert (insertAllowed), run
-// after it. It changes the caller's entity, and the changes stay when the
-// insert then fails.
-func prepareRow(in *EntityInfo, p unsafe.Pointer, tn rowTenant) error {
-	if in.Tenant >= 0 {
-		return fillTenant(in, p, tn.id, tn.all)
-	}
-	return nil
-}
-
-// insertAllowed asks the policy's Insert about the row of in at p, prepared
-// and validated, unless WithoutPolicy.
-func insertAllowed(ctx context.Context, in *EntityInfo, p unsafe.Pointer) error {
-	if pol := in.policy; pol != nil && pol.insert != nil && policyBypass(ctx) == "" {
-		if err := pol.insert(ctx, p); err != nil {
-			return &PolicyError{Entity: in.Name, Op: OpInsert, Err: err}
-		}
-	}
-	return nil
-}
-
-// tenantField returns the tenant field of the row of in at p.
-func tenantField(in *EntityInfo, p unsafe.Pointer) reflect.Value {
-	c := &in.Columns[in.Tenant]
-	return reflect.NewAt(GoType(*c), unsafe.Add(p, c.off)).Elem()
-}
-
-// fillTenant sets the row's zero tenant field to the context's tenant id,
-// which insertTenant converted to the field's type, and checks one already
-// set. Under WithAllTenants (all) the row must name its tenant.
-func fillTenant(in *EntityInfo, p unsafe.Pointer, id any, all string) error {
-	if id != nil {
-		if v := tenantField(in, p); v.IsZero() {
-			v.Set(reflect.ValueOf(id))
-			return nil
-		}
-	}
-	return checkRowTenant(in, p, id, all, "the row has")
-}
-
-// checkRowTenant checks the row's tenant field against the context's tenant id,
-// converted to the field's type: under WithTenant the field must hold id, under
-// WithAllTenants (all) it must not be zero, and with neither the row has no
-// tenant. who says what put the value in the field.
-func checkRowTenant(in *EntityInfo, p unsafe.Pointer, id any, all, who string) error {
-	col := in.Columns[in.Tenant].Name
-	v := tenantField(in, p)
-	switch {
-	case all != "":
-		if v.IsZero() {
-			return fmt.Errorf("velox: %s: %w: under WithAllTenants the row names its tenant, and its %s is zero", in.Name, ErrNoTenant, col)
-		}
-		return nil
-	case id == nil:
-		return fmt.Errorf("velox: %s: %w", in.Name, ErrNoTenant)
-	case !v.Equal(reflect.ValueOf(id)):
-		return fmt.Errorf("velox: %s: %w: %s %s %v, the tenant is %v", in.Name, ErrTenantMismatch, who, col, v, id)
-	}
-	return nil
-}
-
-// errHiddenRow is why an upsert that affected fewer rows than it sent is
-// denied: the policy's condition kept a conflicting row from being updated.
-var errHiddenRow = errors.New("the existing row is hidden from this upsert")
-
-// errUnknownAffected is why an upsert conditioned on the policy is denied
-// when the driver did not report its count (-1).
-var errUnknownAffected = errors.New("the driver did not report the rows the upsert affected, so a hidden row cannot be told apart")
-
-// checkUpserted denies an upsert whose update branch the scope conditioned on
-// the policy, when it affected fewer rows than it sent: a conflicting row the
-// policy hides was neither inserted nor updated. Without the count (-1) a
-// hidden row cannot be told apart, so it fails closed.
-func checkUpserted(st *Statement, affected int64) error {
-	switch {
-	case !st.upsertPolicy:
-		return nil
-	case affected < 0:
-		return &PolicyError{Entity: st.Entity.Name, Op: OpUpdate, Err: errUnknownAffected}
-	case affected < int64(st.upsertRows):
-		return &PolicyError{Entity: st.Entity.Name, Op: OpUpdate, Err: errHiddenRow}
-	}
-	return nil
-}
-
-func errNothingToInsert(in *EntityInfo) error {
-	return fmt.Errorf("velox: %s: nothing to insert: the only column is the generated key", in.Name)
-}
-
-// fieldAddr is a pointer to the field of column col of the row of in at p,
-// as Meta's Addr returns it.
-func fieldAddr(in *EntityInfo, p unsafe.Pointer, col int) any {
-	c := &in.Columns[col]
-	return reflect.NewAt(GoType(*c), unsafe.Add(p, c.off)).Interface()
-}
-
-// setKey stores id in the integer field ptr points to, column gen of in. It
-// is not generic for the reason given on fillDefault.
-func setKey(in *EntityInfo, gen int, ptr any, id int64) error {
-	v := reflect.ValueOf(ptr).Elem()
-	if v.CanInt() {
-		if v.OverflowInt(id) {
-			return fmt.Errorf("velox: %s: LastInsertId %d overflows the key field %s", in.Name, id, in.Columns[gen].Field)
-		}
-		v.SetInt(id)
-		return nil
-	}
-	if id < 0 || v.OverflowUint(uint64(id)) {
-		return fmt.Errorf("velox: %s: LastInsertId %d overflows the key field %s", in.Name, id, in.Columns[gen].Field)
-	}
-	v.SetUint(uint64(id))
 	return nil
 }
 
 // prepareMany prepares every entity in xs, as InsertAll's Exec does, and
 // returns the columns to insert and the most rows one statement holds.
 func prepareMany[E any](ctx context.Context, db *DB, m *Meta[E], xs []E) (cols []int, per int, err error) {
-	tn, err := insertTenant(ctx, m.info)
+	tn, err := engine.InsertTenant(ctx, m.info)
 	if err != nil {
 		return nil, 0, err
 	}
 	for i := range xs {
 		fillDefaults(m, &xs[i])
-		if err := prepareRow(m.info, unsafe.Pointer(&xs[i]), tn); err != nil {
+		if err := engine.PrepareRow(m.info, unsafe.Pointer(&xs[i]), tn); err != nil {
 			return nil, 0, err
 		}
 	}
-	if err := refuseBidiRows(m.info, unsafe.Pointer(unsafe.SliceData(xs)), unsafe.Sizeof(xs[0]), len(xs)); err != nil {
+	if err := engine.RefuseBidiRows(m.info, unsafe.Pointer(unsafe.SliceData(xs)), unsafe.Sizeof(xs[0]), len(xs)); err != nil {
 		return nil, 0, err
 	}
 	gen := generatedKey(m, &xs[0])
@@ -733,31 +425,21 @@ func prepareMany[E any](ctx context.Context, db *DB, m *Meta[E], xs []E) (cols [
 			return nil, 0, fmt.Errorf("velox: %s: InsertAll needs every entity's key set, or every key left at zero", m.info.Name)
 		}
 	}
-	cols = insertColumns(m.info, gen)
+	cols = engine.InsertColumns(m.info, gen)
 	if len(cols) == 0 {
-		return nil, 0, errNothingToInsert(m.info)
+		return nil, 0, engine.ErrNothingToInsert(m.info)
 	}
 	for i := range xs {
-		if err := validateRow(m.info, unsafe.Pointer(&xs[i]), cols); err != nil {
+		if err := engine.ValidateRow(m.info, unsafe.Pointer(&xs[i]), cols); err != nil {
 			return nil, 0, err
 		}
 	}
 	for i := range xs {
-		if err := insertAllowed(ctx, m.info, unsafe.Pointer(&xs[i])); err != nil {
+		if err := engine.InsertAllowed(ctx, m.info, unsafe.Pointer(&xs[i])); err != nil {
 			return nil, 0, err
 		}
 	}
-	return cols, perStatement(db.d, m.info, len(cols)), nil
-}
-
-// perStatement is the most rows of n columns of entity in that one statement
-// holds on dialect d: half as many on the join entity of a bidirectional
-// edge, which also writes each row's mirror (mirrorRows).
-func perStatement(d Dialect, in *EntityInfo, n int) int {
-	if in.bidi {
-		n *= 2
-	}
-	return max(1, maxParams[d]/n)
+	return cols, engine.PerStatement(db.d, m.info, len(cols)), nil
 }
 
 // batch is the statement that inserts xs, prepared, in one statement.
@@ -766,51 +448,10 @@ func batch[E any](m *Meta[E], xs []E, cols []int, cf *ConflictClause, inTx bool)
 	for i := range xs {
 		st.Rows = append(st.Rows, rowValues(m, &xs[i], cols))
 	}
-	if infoBidi(m.info) {
-		mirrorRows(&st)
+	if engine.InfoBidi(m.info) {
+		engine.MirrorRows(&st)
 	}
 	return st
-}
-
-// mirrorRows gives each row of st, an insert on the join entity of a
-// bidirectional edge, its mirror after it: (b, a) for (a, b), unless a and b
-// are equal, as a self-link is one row. ent's addM2MEdges writes the mirror
-// the same way, as integrity maintenance: the entity's hooks and
-// Policy.Insert, which see the caller's rows, never judge it. A row holds the
-// two columns in order, as insertColumns lists them for an entity whose key
-// is not generated. It is not generic, and the generic callers only call it,
-// so that the entities that are no join entity compile none of it.
-func mirrorRows(st *Statement) {
-	rows := make([][]any, 0, 2*len(st.Rows))
-	for _, r := range st.Rows {
-		rows = append(rows, r)
-		if !selfLink(r[0], r[1]) {
-			rows = append(rows, []any{r[1], r[0]})
-		}
-	}
-	st.Rows = rows
-}
-
-// selfLink reports whether the key values a and b, of one Go type, are equal:
-// bytes.Equal for a byte slice of any named type, == otherwise. checkBidi and
-// checkEdgeBidi refuse, through linkKey, every other key type that == could
-// panic on: an interface, and a struct or an array that holds one.
-func selfLink(a, b any) bool {
-	if x, ok := a.([]byte); ok {
-		y, _ := b.([]byte)
-		return bytes.Equal(x, y)
-	}
-	if v := reflect.ValueOf(a); v.Kind() == reflect.Slice {
-		return bytes.Equal(v.Bytes(), reflect.ValueOf(b).Bytes())
-	}
-	return a == b
-}
-
-// errBidiUpdate is the error of an update, a Save or an upsert that updates,
-// on the join entity of a bidirectional edge: it would change one row of a
-// link.
-func errBidiUpdate(in *EntityInfo) error {
-	return fmt.Errorf("velox: %s: the join entity of a bidirectional edge cannot be updated; delete the link and insert it again", in.Name)
 }
 
 // insertMany inserts every entity in xs and sets out.Affected.
@@ -861,7 +502,7 @@ func insertBatches[E any](ctx context.Context, db *DB, m *Meta[E], xs []E, cols 
 		if err != nil {
 			return 0, err
 		}
-		if err := checkUpserted(&st, res.Affected); err != nil {
+		if err := engine.CheckUpserted(&st, res.Affected); err != nil {
 			return 0, err
 		}
 		if res.Affected < 0 {
@@ -884,5 +525,5 @@ func insertBatches[E any](ctx context.Context, db *DB, m *Meta[E], xs []E, cols 
 // entity with a Read or Write policy, unless WithoutPolicy.
 func conditionedUpsert(ctx context.Context, db *DB, in *EntityInfo, cf *ConflictClause, n int) bool {
 	return n > 1 && cf != nil && !cf.DoNothing && len(cf.Update) > 0 && db.d != MySQL &&
-		infoPolicy(in) != nil && (infoPolicy(in).read != nil || infoPolicy(in).write != nil) && policyBypass(ctx) == ""
+		engine.InfoPolicy(in) != nil && (engine.InfoPolicy(in).Read != nil || engine.InfoPolicy(in).Write != nil) && engine.PolicyBypassReason(ctx) == ""
 }

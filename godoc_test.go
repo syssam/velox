@@ -256,3 +256,73 @@ func firstDoc(gs ...*ast.CommentGroup) string {
 	}
 	return ""
 }
+
+// TestAliasDocsListMembers: go doc shows neither the fields nor the methods of an
+// alias, so the doc comment of each alias of an engine type lists its exported ones.
+func TestAliasDocsListMembers(t *testing.T) {
+	fset := token.NewFileSet()
+	docs := map[string]string{}
+	f, err := parser.ParseFile(fset, "api.go", nil, parser.ParseComments)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range f.Decls {
+		if g, ok := d.(*ast.GenDecl); ok && g.Tok == token.TYPE {
+			for _, s := range g.Specs {
+				if ts := s.(*ast.TypeSpec); ts.Assign.IsValid() {
+					docs[ts.Name.Name] = g.Doc.Text()
+				}
+			}
+		}
+	}
+	files, err := filepath.Glob("internal/engine/*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range files {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, name, nil, parser.SkipObjectResolution)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, d := range f.Decls {
+			switch d := d.(type) {
+			case *ast.GenDecl:
+				for _, s := range d.Specs {
+					ts, ok := s.(*ast.TypeSpec)
+					if !ok {
+						continue
+					}
+					st, isStruct := ts.Type.(*ast.StructType)
+					doc, aliased := docs[ts.Name.Name]
+					if !isStruct || !aliased {
+						continue
+					}
+					for _, fl := range st.Fields.List {
+						for _, n := range fl.Names {
+							if n.IsExported() && !strings.Contains(doc, n.Name) {
+								t.Errorf("the alias %s does not list its field %s", ts.Name.Name, n.Name)
+							}
+						}
+					}
+				}
+			case *ast.FuncDecl:
+				if d.Recv == nil || !d.Name.IsExported() {
+					continue
+				}
+				var recv string
+				ast.Inspect(d.Recv.List[0].Type, func(c ast.Node) bool {
+					if id, ok := c.(*ast.Ident); ok && recv == "" {
+						recv = id.Name
+					}
+					return true
+				})
+				if doc, aliased := docs[recv]; aliased && !strings.Contains(doc, d.Name.Name) {
+					t.Errorf("the alias %s does not list its method %s", recv, d.Name.Name)
+				}
+			}
+		}
+	}
+}

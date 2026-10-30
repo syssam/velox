@@ -1,6 +1,8 @@
 package velox
 
-import "testing"
+import (
+	"testing"
+)
 
 // buildOrder builds the metadata of a Desc entity from its literals, as the
 // first use of a generated entity does.

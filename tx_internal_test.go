@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/syssam/velox2/internal/engine"
 )
 
 // lateCtx is past its deadline, but its timer has not fired yet: it ends only
@@ -25,20 +27,20 @@ func TestOverWaitsForAPassedDeadline(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 		cancel()
 	}()
-	if !over(lateCtx{inner}) {
+	if !engine.Over(lateCtx{inner}) {
 		t.Error("a context past its deadline is not over")
 	}
-	if over(context.Background()) {
+	if engine.Over(context.Background()) {
 		t.Error("a context with no deadline is over")
 	}
 	live, cancelLive := context.WithTimeout(context.Background(), time.Hour)
 	defer cancelLive()
-	if over(live) {
+	if engine.Over(live) {
 		t.Error("a context before its deadline is over")
 	}
 }
 
-// TestOverWaitsWhileBlocked: over waits, up to overGrace, for the Done of a
+// TestOverWaitsWhileBlocked: over waits, up to OverGrace, for the Done of a
 // context past its deadline, and returns once it closes, not before. It
 // compares times taken in the test, not a fixed slack. The blocked case is
 // the one a loaded machine can disturb: a 10 ms sleep that overruns the grace
@@ -50,7 +52,7 @@ func TestOverWaitsWhileBlocked(t *testing.T) {
 		done := make(chan time.Time, 1)
 		result := make(chan bool, 1)
 		go func() {
-			r := over(lateCtx{inner})
+			r := engine.Over(lateCtx{inner})
 			done <- time.Now()
 			result <- r
 		}()
@@ -76,15 +78,15 @@ func TestOverWaitsWhileBlocked(t *testing.T) {
 		inner, cancel := context.WithCancel(context.Background())
 		cancel()
 		start := time.Now()
-		if !over(lateCtx{inner}) {
+		if !engine.Over(lateCtx{inner}) {
 			t.Error("a canceled context past its deadline is not over")
 		}
 		return time.Since(start)
 	}
-	if d := canceledOver(); d >= overGrace {
+	if d := canceledOver(); d >= engine.OverGrace {
 		t.Logf("over took %v on a context already canceled; the machine is loaded, retrying once", d)
-		if d := canceledOver(); d >= overGrace {
-			t.Errorf("over took %v on a context already canceled, want less than the grace %v", d, overGrace)
+		if d := canceledOver(); d >= engine.OverGrace {
+			t.Errorf("over took %v on a context already canceled, want less than the grace %v", d, engine.OverGrace)
 		}
 	}
 }
@@ -96,14 +98,14 @@ func TestOverDoesNotWaitForever(t *testing.T) {
 	stuck := lateCtx{context.Background()} // Background's Done never closes
 	start := time.Now()
 	ended := make(chan bool, 1)
-	go func() { ended <- over(stuck) }()
+	go func() { ended <- engine.Over(stuck) }()
 	select {
 	case ok := <-ended:
 		if !ok {
 			t.Error("a context past its deadline is not over")
 		}
-		if d := time.Since(start); d < overGrace || d > overGrace+time.Second {
-			t.Errorf("over took %v, want about %v", d, overGrace)
+		if d := time.Since(start); d < engine.OverGrace || d > engine.OverGrace+time.Second {
+			t.Errorf("over took %v, want about %v", d, engine.OverGrace)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("over waits for a Done that never closes")

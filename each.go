@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"slices"
 	"unsafe"
+
+	"github.com/syssam/velox2/internal/engine"
 )
 
 // LoadEach returns, for each of owners in order, its rows of q related
@@ -67,7 +69,7 @@ type eachQuery struct {
 	err   error // the query's metadata's or conditions' error
 	st    Statement
 	after unsafe.Pointer // After's row, or nil
-	loads []loadSpec
+	loads []engine.LoadSpec
 }
 
 func eachOf[T any](q Query[T]) eachQuery {
@@ -81,21 +83,10 @@ func eachOf[T any](q Query[T]) eachQuery {
 	return e
 }
 
-// eachPlan is what LoadEach and CountEach share: the relation, the owners'
-// distinct keys and each owner's (nil for an owner whose key is NULL), and
-// the statement every chunk starts from, with q's conditions, After's and
-// r's.
-type eachPlan struct {
-	l        link
-	keys     []any
-	ownerKey []any
-	st       Statement
-}
-
 // planEach checks fn's (LoadEach's or CountEach's) arguments and plans its
 // statements.
-func planEach(fn string, q eachQuery, owner *EntityInfo, ownerErr error, sp loadSpec, ps []unsafe.Pointer) (eachPlan, error) {
-	var p eachPlan
+func planEach(fn string, q eachQuery, owner *EntityInfo, ownerErr error, sp engine.LoadSpec, ps []unsafe.Pointer) (engine.EachPlan, error) {
+	var p engine.EachPlan
 	switch {
 	case ownerErr != nil:
 		return p, ownerErr
@@ -104,10 +95,10 @@ func planEach(fn string, q eachQuery, owner *EntityInfo, ownerErr error, sp load
 	case q.in == nil || q.db == nil:
 		return p, fmt.Errorf("velox: %s was given a Query that DB.Query did not make", fn)
 	}
-	if err := specErr(sp); err != nil {
+	if err := engine.SpecErr(sp); err != nil {
 		return p, err
 	}
-	if m := eachRefused(&q.st); m != "" {
+	if m := engine.EachRefused(&q.st); m != "" {
 		return p, fmt.Errorf("velox: %s: %s refuses a query with %s", q.in.Name, fn, m)
 	}
 	for _, o := range ps {
@@ -115,119 +106,81 @@ func planEach(fn string, q eachQuery, owner *EntityInfo, ownerErr error, sp load
 			return p, fmt.Errorf("velox: %s: %s was given a nil owner", owner.Name, fn)
 		}
 	}
-	r, l, err := specRelation(owner, sp)
+	r, l, err := engine.SpecRelation(owner, sp)
 	if err != nil {
 		return p, err
 	}
-	if infoKit(owner) == nil || infoKit(l.target) == nil {
-		return p, fmt.Errorf("velox: %s: relation %s: the entities have no scan plan; run go tool velox-gen", owner.Name, r.name)
+	if engine.InfoKit(owner) == nil || engine.InfoKit(l.Target) == nil {
+		return p, fmt.Errorf("velox: %s: relation %s: the entities have no scan plan; run go tool velox-gen", owner.Name, r.Name)
 	}
-	if l.target != q.in {
-		return p, fmt.Errorf("velox: %s: %s: the relation %s is to %s, not to the query's %s", owner.Name, fn, r.name, l.target.Name, q.in.Name)
+	if l.Target != q.in {
+		return p, fmt.Errorf("velox: %s: %s: the relation %s is to %s, not to the query's %s", owner.Name, fn, r.Name, l.Target.Name, q.in.Name)
 	}
-	for _, c := range sp.where {
-		if err := resolveErr(predNode(c)); err != nil {
+	for _, c := range sp.Where {
+		if err := engine.ResolveErr(engine.PredNode(c)); err != nil {
 			return p, err
 		}
 	}
-	p.l = l
-	p.ownerKey = make([]any, len(ps))
+	p.L = l
+	p.OwnerKey = make([]any, len(ps))
 	seen := make(map[any]bool, len(ps))
 	for i, o := range ps {
-		k, ok := keyOf(infoKit(owner).value(o, l.ownerCol))
+		k, ok := engine.KeyOf(engine.InfoKit(owner).Value(o, l.OwnerCol))
 		if !ok {
 			continue
 		}
-		p.ownerKey[i] = k
+		p.OwnerKey[i] = k
 		if !seen[k] {
 			seen[k] = true
-			p.keys = append(p.keys, k)
+			p.Keys = append(p.Keys, k)
 		}
 	}
-	p.st = cloneStatement(&q.st)
+	p.St = engine.CloneStatement(&q.st)
 	if q.after != nil {
-		if err := addAfter(&p.st, q.in, q.after); err != nil {
+		if err := engine.AddAfter(&p.St, q.in, q.after); err != nil {
 			return p, err
 		}
 	}
-	p.st.Where = slices.Clip(append(p.st.Where, sp.where...))
+	p.St.Where = slices.Clip(append(p.St.Where, sp.Where...))
 	return p, nil
 }
 
-// eachRefused names what of st LoadEach and CountEach refuse, or is "".
-func eachRefused(st *Statement) string {
-	switch {
-	case st.Limit > 0:
-		return "Limit; Rel.LimitEach limits each owner's rows"
-	case st.Offset > 0:
-		return "Offset; page each owner's rows with After"
-	case st.Lock == LockForUpdate:
-		return "ForUpdate; a per-owner read locks nothing"
-	case st.Lock == LockForShare:
-		return "ForShare; a per-owner read locks nothing"
-	case st.LockWait == LockSkipLocked:
-		return "SkipLocked; a per-owner read locks nothing"
-	case st.LockWait == LockNoWait:
-		return "NoWait; a per-owner read locks nothing"
-	}
-	return ""
-}
-
-// eachClause is the Each of a per-owner statement of l with per-owner limit
-// n, without its keys.
-func eachClause(l link, n int) EachClause {
-	if l.join != nil {
-		return EachClause{Join: l.join, JoinOwner: l.joinOwner, JoinTarget: l.joinTarget, Target: l.targetCol, Limit: n}
-	}
-	return EachClause{Column: l.targetCol, Limit: n}
-}
-
-// chunk is st with Each ec holding keys, for one statement of a chunk; its
-// slices are clipped, so that nothing appended to one chunk's reaches
-// another's.
-func chunk(st Statement, ec EachClause, keys []any) Statement {
-	ec.Keys = keys
-	st.Each = &ec
-	st.Where, st.OrderBy, st.Columns = slices.Clip(st.Where), slices.Clip(st.OrderBy), slices.Clip(st.Columns)
-	return st
-}
-
 // loadEach is LoadEach's body: each owner's rows, as a []T in an any.
-func loadEach(ctx context.Context, q eachQuery, owner *EntityInfo, ownerErr error, sp loadSpec, ps []unsafe.Pointer) ([]any, error) {
+func loadEach(ctx context.Context, q eachQuery, owner *EntityInfo, ownerErr error, sp engine.LoadSpec, ps []unsafe.Pointer) ([]any, error) {
 	p, err := planEach("LoadEach", q, owner, ownerErr, sp, ps)
 	if err != nil {
 		return nil, err
 	}
-	l, t, db := p.l, p.l.target, q.db
-	loads := append(slices.Clip(q.loads), sp.with...)
-	st := p.st
-	if st.Columns != nil && !slices.Contains(st.Columns, l.targetCol) {
-		st.Columns = append(slices.Clip(st.Columns), l.targetCol)
+	l, t, db := p.L, p.L.Target, q.db
+	loads := append(slices.Clip(q.loads), sp.With...)
+	st := p.St
+	if st.Columns != nil && !slices.Contains(st.Columns, l.TargetCol) {
+		st.Columns = append(slices.Clip(st.Columns), l.TargetCol)
 	}
-	if err := checkLoads(t, st.Columns, loads); err != nil {
+	if err := engine.CheckLoads(t, st.Columns, loads); err != nil {
 		return nil, err
 	}
 	st.Unbounded = true
-	st.OrderBy = tieBreak(t, append(slices.Clip(st.OrderBy), sp.order...))
-	if sp.maxRows > 0 {
-		st.MaxRows = sp.maxRows
+	st.OrderBy = engine.TieBreak(t, append(slices.Clip(st.OrderBy), sp.Order...))
+	if sp.MaxRows > 0 {
+		st.MaxRows = sp.MaxRows
 	}
 	var key []int // the column a Rewrite hook may not leave out
-	if l.join == nil {
-		key = []int{l.targetCol}
+	if l.Join == nil {
+		key = []int{l.TargetCol}
 	}
-	ec := eachClause(l, sp.each)
-	per := keysPer(db.d, t, st.Where)
+	ec := engine.MakeEachClause(l, sp.Each)
+	per := engine.KeysPer(db.d, t, st.Where)
 	var parts, owners []any
-	var at target
-	err = byChunks(len(p.keys), per, func(lo, hi int) error {
-		c := chunk(st, ec, p.keys[lo:hi])
-		part, own, err := readPart(ctx, db, target{}, &c, t, key, loads)
+	var at engine.Target
+	err = byChunks(len(p.Keys), per, func(lo, hi int) error {
+		c := engine.Chunk(st, ec, p.Keys[lo:hi])
+		part, own, err := readPart(ctx, db, engine.Target{}, &c, t, key, loads)
 		if err != nil {
 			return err
 		}
 		if lo == 0 {
-			at = stmtRan(&c)
+			at = engine.StmtRan(&c)
 		}
 		parts = append(parts, part)
 		owners = append(owners, own...)
@@ -239,38 +192,38 @@ func loadEach(ctx context.Context, q eachQuery, owner *EntityInfo, ownerErr erro
 	out := make([]any, len(ps))
 	if len(parts) == 0 {
 		for i := range out {
-			out[i] = infoKit(t).empty()
+			out[i] = engine.InfoKit(t).Empty()
 		}
 		return out, nil
 	}
-	all, targets := joinBlocks(parts)
+	all, targets := engine.JoinBlocks(parts)
 	if len(loads) > 0 && len(targets) > 0 {
 		if err := loadRelations(ctx, db, db.loadPin(at), t, targets, loads, st.MaxRows); err != nil {
 			return nil, err
 		}
 	}
 	// Each owner key's rows, as indexes into targets, in the order read.
-	group := make(map[any]int, len(p.keys))
-	for _, k := range p.keys {
-		addKey(group, k)
+	group := make(map[any]int, len(p.Keys))
+	for _, k := range p.Keys {
+		engine.AddKey(group, k)
 	}
-	var x keyRows
-	x.fill(group, len(targets), func(i int) (any, bool) {
-		if l.join != nil {
-			return keyOf(owners[i])
+	var x engine.KeyRows
+	x.Fill(group, len(targets), func(i int) (any, bool) {
+		if l.Join != nil {
+			return engine.KeyOf(owners[i])
 		}
-		return keyOf(infoKit(t).value(targets[i], l.targetCol))
+		return engine.KeyOf(engine.InfoKit(t).Value(targets[i], l.TargetCol))
 	})
-	idx := make([][]int, len(p.ownerKey))
-	for i, k := range p.ownerKey {
+	idx := make([][]int, len(p.OwnerKey))
+	for i, k := range p.OwnerKey {
 		if k != nil {
-			idx[i] = x.of(group[k])
+			idx[i] = x.Of(group[k])
 		}
 	}
-	picked := infoKit(t).pick(all, targets, idx)
-	for i, k := range p.ownerKey {
+	picked := engine.InfoKit(t).Pick(all, targets, idx)
+	for i, k := range p.OwnerKey {
 		if k == nil {
-			out[i] = infoKit(t).empty()
+			out[i] = engine.InfoKit(t).Empty()
 			continue
 		}
 		out[i] = picked[i]
@@ -279,37 +232,37 @@ func loadEach(ctx context.Context, q eachQuery, owner *EntityInfo, ownerErr erro
 }
 
 // countEach is CountEach's body.
-func countEach(ctx context.Context, q eachQuery, owner *EntityInfo, ownerErr error, sp loadSpec, ps []unsafe.Pointer) ([]int64, error) {
+func countEach(ctx context.Context, q eachQuery, owner *EntityInfo, ownerErr error, sp engine.LoadSpec, ps []unsafe.Pointer) ([]int64, error) {
 	p, err := planEach("CountEach", q, owner, ownerErr, sp, ps)
 	if err != nil {
 		return nil, err
 	}
-	l, t, db := p.l, p.l.target, q.db
-	st := p.st
+	l, t, db := p.L, p.L.Target, q.db
+	st := p.St
 	st.Count, st.Columns, st.OrderBy, st.MaxRows = true, nil, nil, 0
 	// The owner's key, as the statement reads it: the join's or the target's.
-	typ := GoType(t.Columns[l.targetCol])
-	if l.join != nil {
-		typ = GoType(l.join.Columns[l.joinOwner])
+	typ := GoType(t.Columns[l.TargetCol])
+	if l.Join != nil {
+		typ = GoType(l.Join.Columns[l.JoinOwner])
 	}
-	ec := eachClause(l, 0)
-	per := keysPer(db.d, t, st.Where)
-	counts := make(map[any]int64, len(p.keys))
-	read := func(r rows) error {
+	ec := engine.MakeEachClause(l, 0)
+	per := engine.KeysPer(db.d, t, st.Where)
+	counts := make(map[any]int64, len(p.Keys))
+	read := func(r engine.Rows) error {
 		for r.Next() {
 			k := reflect.New(typ)
 			var n int64
 			if err := r.Scan(k.Interface(), &n); err != nil {
 				return err
 			}
-			if key, ok := keyOf(k.Elem().Interface()); ok {
+			if key, ok := engine.KeyOf(k.Elem().Interface()); ok {
 				counts[key] = n // an around hook's retry reads the same
 			}
 		}
 		return nil
 	}
-	err = byChunks(len(p.keys), per, func(lo, hi int) error {
-		c := chunk(st, ec, p.keys[lo:hi])
+	err = byChunks(len(p.Keys), per, func(lo, hi int) error {
+		c := engine.Chunk(st, ec, p.Keys[lo:hi])
 		if db.hooked() {
 			return db.run(ctx, &c, read, nil)
 		}
@@ -319,7 +272,7 @@ func countEach(ctx context.Context, q eachQuery, owner *EntityInfo, ownerErr err
 		return nil, err
 	}
 	out := make([]int64, len(ps))
-	for i, k := range p.ownerKey {
+	for i, k := range p.OwnerKey {
 		if k != nil {
 			out[i] = counts[k]
 		}

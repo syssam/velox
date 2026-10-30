@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"unsafe"
+
+	"github.com/syssam/velox2/internal/engine"
 )
 
 func schemaErr(t *testing.T, err error, parts ...string) {
@@ -37,8 +39,8 @@ func TestSchemaPolicyHooks(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	if len(infoHooks(info)) != 3 {
-		t.Fatalf("%d hooks, want 3", len(infoHooks(info)))
+	if len(engine.InfoHooks(info)) != 3 {
+		t.Fatalf("%d hooks, want 3", len(engine.InfoHooks(info)))
 	}
 	e := &FakeExec{Rows: [][]any{{int64(1)}}, Affected: 1}
 	db := OpenFake(Postgres, e)
@@ -54,19 +56,19 @@ func TestSchemaPolicyHooks(t *testing.T) {
 		t.Fatalf("the insert hook, run before the write: Tag %q, err %v", x.Tag, err)
 	}
 
-	p := infoPolicy(info)
-	if p == nil || p.read == nil || p.write != nil || p.insert == nil {
+	p := engine.InfoPolicy(info)
+	if p == nil || p.Read == nil || p.Write != nil || p.Insert == nil {
 		t.Fatalf("policy %+v", p)
 	}
-	if pr, err := p.read(ctx); err != nil || predNode(pr).op != opEQ || predNode(pr).col != 2 || predNode(pr).v != "r" {
+	if pr, err := p.Read(ctx); err != nil || engine.PredNode(pr).Op != engine.OpEQ || engine.PredNode(pr).Col != 2 || engine.PredNode(pr).V != "r" {
 		t.Errorf("read: %+v, %v", pr, err)
 	}
 	x.Title = ""
-	if err := p.insert(ctx, unsafe.Pointer(&x)); !errors.Is(err, ErrDenied) {
+	if err := p.Insert(ctx, unsafe.Pointer(&x)); !errors.Is(err, ErrDenied) {
 		t.Errorf("insert of an untitled row: %v", err)
 	}
 	x.Title = "t"
-	if err := p.insert(ctx, unsafe.Pointer(&x)); err != nil {
+	if err := p.Insert(ctx, unsafe.Pointer(&x)); err != nil {
 		t.Errorf("insert of a titled row: %v", err)
 	}
 
@@ -91,7 +93,7 @@ func TestMutation(t *testing.T) {
 	}
 	set := []Assignment{{Column: 2, Op: AssignSet, Value: "t"}, {Column: 1, Op: AssignAdd, Value: "z"}}
 	st := Statement{Op: OpUpdate, Entity: info, Set: set[:2:2]}
-	m := &Mutation[hooked]{mu: mutation{st: &st}}
+	m := &Mutation[hooked]{mu: engine.MutationState{St: &st}}
 	if m.Op() != OpUpdate {
 		t.Errorf("Op %v", m.Op())
 	}
@@ -102,31 +104,31 @@ func TestMutation(t *testing.T) {
 		t.Errorf("ValueIn of a column assigned by Add = %v, %v; want nothing", v, ok)
 	}
 	m.Set(hookedTitle.Set("u"), hookedTag.Set("a"))
-	if want := []Assignment{{2, AssignSet, "u"}, {1, AssignSet, "a"}}; !reflect.DeepEqual(st.Set, want) {
+	if want := []Assignment{{Column: 2, Op: AssignSet, Value: "u"}, {Column: 1, Op: AssignSet, Value: "a"}}; !reflect.DeepEqual(st.Set, want) {
 		t.Errorf("set %+v, want %+v", st.Set, want)
 	}
 	if set[0].Value != "t" {
 		t.Error("Set changed the query's own assignments")
 	}
 	m.Where(hookedTitle.EQ("u"))
-	if m.mu.err != nil || len(st.Where) != 1 {
-		t.Fatalf("Where: err %v, %d conditions", m.mu.err, len(st.Where))
+	if m.mu.Err != nil || len(st.Where) != 1 {
+		t.Fatalf("Where: err %v, %d conditions", m.mu.Err, len(st.Where))
 	}
 	m.Where(Pred[hooked]{})
-	if m.mu.err == nil || !strings.Contains(m.mu.err.Error(), "zero Predicate") || len(st.Where) != 1 {
-		t.Errorf("a zero condition: err %v, %d conditions", m.mu.err, len(st.Where))
+	if m.mu.Err == nil || !strings.Contains(m.mu.Err.Error(), "zero Predicate") || len(st.Where) != 1 {
+		t.Errorf("a zero condition: err %v, %d conditions", m.mu.Err, len(st.Where))
 	}
 	bad := errors.New("unresolved")
-	m = &Mutation[hooked]{mu: mutation{st: &st}}
-	m.Where(Pred[hooked]{node{op: opInvalid, v: bad}})
-	if !errors.Is(m.mu.err, bad) || len(st.Where) != 1 {
-		t.Errorf("an invalid condition: err %v, %d conditions", m.mu.err, len(st.Where))
+	m = &Mutation[hooked]{mu: engine.MutationState{St: &st}}
+	m.Where(Pred[hooked](engine.NewPredicate(engine.Node{Op: engine.OpInvalid, V: bad})))
+	if !errors.Is(m.mu.Err, bad) || len(st.Where) != 1 {
+		t.Errorf("an invalid condition: err %v, %d conditions", m.mu.Err, len(st.Where))
 	}
 	del := Statement{Op: OpDelete, Entity: info}
-	m = &Mutation[hooked]{mu: mutation{st: &del}}
+	m = &Mutation[hooked]{mu: engine.MutationState{St: &del}}
 	m.Set(hookedTag.Set("x"))
-	if m.mu.err == nil || del.Set != nil {
-		t.Errorf("Set on a delete: err %v, set %+v", m.mu.err, del.Set)
+	if m.mu.Err == nil || del.Set != nil {
+		t.Errorf("Set on a delete: err %v, set %+v", m.mu.Err, del.Set)
 	}
 }
 

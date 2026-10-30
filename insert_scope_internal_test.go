@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/syssam/velox2/internal/engine"
 )
 
 // TestInsertHookCannotMoveTheTenant is Review Focus 4: the tenant is
@@ -24,44 +26,13 @@ func TestInsertHookCannotMoveTheTenant(t *testing.T) {
 	}
 }
 
-// A DefaultFunc returns a pointer field's element type, which fillDefault
-// stores through a new pointer; a set pointer keeps its value.
-func TestFillDefaultFuncOnPointer(t *testing.T) {
-	c := ColumnInfo{DefaultFunc: func() any { return 3 }}
-	var p *int
-	fillDefault(&c, &p)
-	if p == nil || *p != 3 {
-		t.Fatalf("unset pointer: %v", p)
-	}
-	zero := 0
-	p = &zero
-	fillDefault(&c, &p)
-	if *p != 0 {
-		t.Fatalf("a set 0 was replaced by %d", *p)
-	}
-	var v int
-	fillDefault(&c, &v)
-	if v != 3 {
-		t.Fatalf("value field: %d", v)
-	}
-}
-
-// TestCheckColumnsAllow: an Allow names no column, so checkColumns does not
-// check its col, which on an entity of no columns would be out of range.
-func TestCheckColumnsAllow(t *testing.T) {
-	st := &Statement{Op: OpSelect, Entity: &EntityInfo{Name: "none"}, Where: []Predicate{{node{op: opAllow}}}}
-	if err := checkColumns(st); err != nil {
-		t.Fatal(err)
-	}
-}
-
 // TestUnknownCountFailsClosed: a policy-conditioned upsert whose driver could
 // not count its rows (-1, as conn.SQL gives) fails closed.
 func TestUnknownCountFailsClosed(t *testing.T) {
 	st := &Statement{Op: OpInsert, Entity: invInfo, Rows: [][]any{{1}}, Conflict: &ConflictClause{}}
-	setStmtUpsertPolicy(st, true)
+	engine.SetStmtUpsertPolicy(st, true)
 	var pe *PolicyError
-	if err := checkUpserted(st, -1); !errors.As(err, &pe) || !errors.Is(err, errUnknownAffected) {
+	if err := engine.CheckUpserted(st, -1); !errors.As(err, &pe) || !errors.Is(err, engine.ErrUnknownAffected) {
 		t.Errorf("checkUpserted with -1: %v, want a *PolicyError wrapping errUnknownAffected", err)
 	}
 }

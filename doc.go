@@ -239,6 +239,8 @@
 // compile.
 package velox
 
+import ()
+
 //go:generate go run ./internal/handlegen/gen
 
 // GeneratedCodeIsVersion6 is referenced by every file velox-gen writes from a

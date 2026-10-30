@@ -1,0 +1,291 @@
+package engine
+
+import (
+	"fmt"
+	"reflect"
+	"strconv"
+	"strings"
+)
+
+// PgconnPkg is the package of pgx's errors, and PgConnClosed and pgTxClosed the
+// text of its ErrConnClosed and ErrTxClosed. TestPgxTypesMirrored pins them.
+const (
+	PgconnPkg    = "github.com/jackc/pgx/v5/pgconn"
+	PgConnClosed = "conn closed"
+	pgTxClosed   = "tx is closed"
+)
+
+// Constraint reads a driver error as a violated constraint, or returns nil.
+// velox does not import the drivers, so their errors are recognized by type
+// name; PostgreSQL's are read from pgx's fields by name, MySQL's and SQLite's
+// from their text.
+func Constraint(entity string, err error) *ConstraintError {
+	var kind ConstraintKind
+	var name string
+	if pg, ok := PgErrorOf(err); ok {
+		kind, name = pgKind(pg)
+	} else {
+		if n, msg, ok := MysqlError(err); ok {
+			kind, name = MysqlKind(n, msg)
+		} else if code, msg, ok := sqliteError(err); ok {
+			kind, name = SqliteKind(code, msg)
+		}
+	}
+	if kind == 0 {
+		return nil
+	}
+	return &ConstraintError{Entity: entity, Kind: kind, Constraint: name, Err: err}
+}
+
+// pgErr is what velox reads of a *pgconn.PgError.
+type pgErr struct{ Code, ConstraintName, ColumnName string }
+
+// PgErrorOf reads the first *pgconn.PgError in err's tree that is not a nil
+// pointer.
+func PgErrorOf(err error) (pgErr, bool) {
+	e := DriverError(err, PgconnPkg, "PgError")
+	if e == nil {
+		return pgErr{}, false
+	}
+	v := reflect.ValueOf(e).Elem()
+	return pgErr{
+		Code:           v.FieldByName("Code").String(),
+		ConstraintName: v.FieldByName("ConstraintName").String(),
+		ColumnName:     v.FieldByName("ColumnName").String(),
+	}, true
+}
+
+// Locked reports a lock that could not be taken without waiting: PostgreSQL's
+// lock_not_available (55P03) or MySQL's 3572, NOWAIT's failure.
+func Locked(err error) bool {
+	if pg, ok := PgErrorOf(err); ok {
+		return pg.Code == "55P03"
+	}
+	n, _, ok := MysqlError(err)
+	return ok && n == 3572
+}
+
+func pgKind(pg pgErr) (ConstraintKind, string) {
+	switch pg.Code {
+	case "23505":
+		return ConstraintUnique, pg.ConstraintName
+	case "23503":
+		return ConstraintForeignKey, pg.ConstraintName
+	case "23502":
+		return ConstraintNotNull, pg.ColumnName
+	case "23514":
+		return ConstraintCheck, pg.ConstraintName
+	}
+	return 0, ""
+}
+
+// Walk calls f on err and on each error it wraps, depth-first through both
+// Unwrap() error and Unwrap() []error, in errors.As's order, until f returns
+// true, and reports whether it did. A nil pointer is skipped and not
+// unwrapped, and the walk goes on past it: it is no driver's error, and its
+// methods (Error, Unwrap, Timeout) could panic on it.
+func Walk(err error, f func(error) bool) bool {
+	if err == nil {
+		return false
+	}
+	if v := reflect.ValueOf(err); v.Kind() == reflect.Pointer && v.IsNil() {
+		return false
+	}
+	if f(err) {
+		return true
+	}
+	switch u := err.(type) {
+	case interface{ Unwrap() error }:
+		return Walk(u.Unwrap(), f)
+	case interface{ Unwrap() []error }:
+		for _, e := range u.Unwrap() {
+			if Walk(e, f) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// Is is errors.Is over walk: a nil pointer in err's tree is passed over. A
+// nil target matches a nil err only, as with errors.Is.
+func Is(err, target error) bool {
+	if target == nil {
+		return err == nil
+	}
+	canEq := reflect.TypeOf(target).Comparable()
+	return Walk(err, func(e error) bool {
+		if canEq && e == target {
+			return true
+		}
+		x, ok := e.(interface{ Is(error) bool })
+		return ok && x.Is(target)
+	})
+}
+
+// DriverError returns the first error in err's tree (see walk) whose type is a
+// pointer to the named type pkg.name. Matching the package path and not only
+// the type's name keeps a look-alike type in another package from being taken
+// for the driver's.
+func DriverError(err error, pkg, name string) error {
+	var found error
+	Walk(err, func(e error) bool {
+		if t := reflect.TypeOf(e); t.Kind() == reflect.Pointer && t.Elem().PkgPath() == pkg && t.Elem().Name() == name {
+			found = e
+			return true
+		}
+		return false
+	})
+	return found
+}
+
+// DriverSentinel reports whether err's tree holds a driver's errors.New with
+// this text: the sentinel of a package velox does not import, recognized by its
+// type and text.
+func DriverSentinel(err error, text string) bool {
+	return Walk(err, func(e error) bool {
+		t := reflect.TypeOf(e)
+		return t.Kind() == reflect.Pointer && t.Elem().PkgPath() == "errors" && t.Elem().Name() == "errorString" && e.Error() == text
+	})
+}
+
+// MysqlError reads a go-sql-driver/mysql error, whose text is
+// "Error 1062 (23000): Duplicate entry 'a' for key 'p.p_code_uq'".
+func MysqlError(err error) (int, string, bool) {
+	e := DriverError(err, "github.com/go-sql-driver/mysql", "MySQLError")
+	if e == nil {
+		return 0, "", false
+	}
+	msg := e.Error()
+	var n int
+	if _, scanErr := fmt.Sscanf(msg, "Error %d", &n); scanErr != nil {
+		return 0, "", false
+	}
+	return n, msg, true
+}
+
+func MysqlKind(n int, msg string) (ConstraintKind, string) {
+	switch n {
+	case 1062:
+		// The key is the message's suffix. The duplicate value comes before
+		// it and can contain "for key '" itself, so read from the last one.
+		name := ""
+		if i := strings.LastIndex(msg, "for key '"); i >= 0 {
+			name = between(msg[i:], "for key '", "'")
+		}
+		if i := strings.LastIndexByte(name, '.'); i >= 0 {
+			name = name[i+1:] // MySQL 8 prefixes the table
+		}
+		return ConstraintUnique, name
+	case 1451, 1452:
+		return ConstraintForeignKey, between(msg, "CONSTRAINT `", "`")
+	case 1048:
+		return ConstraintNotNull, between(msg, "Column '", "'")
+	case 3819:
+		return ConstraintCheck, between(msg, "Check constraint '", "'")
+	case 1364: // strict mode: "Field 'code' doesn't have a default value"
+		return ConstraintNotNull, between(msg, "Field '", "'")
+	case 4025:
+		// MariaDB's ER_CONSTRAINT_FAILED, "CONSTRAINT `p_n_ck` failed for
+		// `velox`.`p`". MySQL 8.4's 4025 is ER_INNODB_AUTOEXTEND_SIZE_OUT_OF_RANGE,
+		// so only a message of MariaDB's form is a CHECK.
+		if name := between(msg, "CONSTRAINT `", "` failed for "); name != "" {
+			return ConstraintCheck, name
+		}
+	}
+	return 0, ""
+}
+
+// sqliteError reads a modernc.org/sqlite error, whose Code is SQLite's
+// extended result code and whose text ends with the constraint's subject:
+// "constraint failed: UNIQUE constraint failed: p.code (2067)".
+func sqliteError(err error) (int, string, bool) {
+	e := DriverError(err, "modernc.org/sqlite", "Error")
+	if c, ok := e.(interface{ Code() int }); ok {
+		return c.Code(), e.Error(), true
+	}
+	return 0, "", false
+}
+
+func SqliteKind(code int, msg string) (ConstraintKind, string) {
+	subject := ""
+	if i := strings.LastIndex(msg, "failed: "); i >= 0 {
+		subject = msg[i+len("failed: "):]
+		if j := strings.LastIndex(subject, " ("); j >= 0 {
+			subject = subject[:j]
+		}
+	}
+	if code == 787 {
+		subject = "" // "FOREIGN KEY constraint failed" names nothing
+	}
+	switch code {
+	case 2067, 1555: // SQLITE_CONSTRAINT_UNIQUE, SQLITE_CONSTRAINT_PRIMARYKEY
+		return ConstraintUnique, subject
+	case 787: // SQLITE_CONSTRAINT_FOREIGNKEY
+		return ConstraintForeignKey, subject
+	case 1299: // SQLITE_CONSTRAINT_NOTNULL
+		if i := strings.LastIndexByte(subject, '.'); i >= 0 {
+			subject = subject[i+1:] // the column, without its table
+		}
+		return ConstraintNotNull, subject
+	case 275: // SQLITE_CONSTRAINT_CHECK
+		return ConstraintCheck, subject
+	}
+	return 0, ""
+}
+
+// between returns the text of s after the first from and before the next to.
+func between(s, from, to string) string {
+	i := strings.Index(s, from)
+	if i < 0 {
+		return ""
+	}
+	s = s[i+len(from):]
+	j := strings.Index(s, to)
+	if j < 0 {
+		return ""
+	}
+	return s[:j]
+}
+
+// DriverCode returns the database's code for err, as text, when err or an
+// error it wraps came from the database: PostgreSQL's SQLSTATE ("23505"),
+// MySQL's error number ("1062"), or SQLite's extended result code
+// ("2067"). It looks through wrapping and errors.Join, as errors.As does.
+// When an errors.Join holds database errors of more than one driver, which
+// is unusual, PostgreSQL's wins, then MySQL's, then SQLite's, whatever their
+// order in the join; within one driver the first in errors.As's order wins.
+//
+// The code is for logs, traces and metrics, and for telling one database
+// error from another, such as a serialization failure ("40001") from a
+// deadlock ("40P01"). It names the database's internals, so it is not for a
+// message an end user sees. velox reads the errors of pgx (natively or
+// through database/sql), github.com/go-sql-driver/mysql and
+// modernc.org/sqlite; another driver's error has no code here.
+func DriverCode(err error) (string, bool) {
+	if pg, ok := PgErrorOf(err); ok {
+		return pg.Code, pg.Code != ""
+	}
+	if n, _, ok := MysqlError(err); ok {
+		return strconv.Itoa(n), true
+	}
+	if code, _, ok := sqliteError(err); ok {
+		return strconv.Itoa(code), true
+	}
+	return "", false
+}
+
+// Retryable reports a serialization failure or a deadlock, after which
+// running the transaction again can succeed.
+func Retryable(err error) bool {
+	if pg, ok := PgErrorOf(err); ok {
+		return pg.Code == "40001" || pg.Code == "40P01"
+	}
+	if n, _, ok := MysqlError(err); ok {
+		return n == 1213 || n == 1205
+	}
+	if code, _, ok := sqliteError(err); ok {
+		return code&0xff == 5 || code&0xff == 6 // SQLITE_BUSY, SQLITE_LOCKED and their extended codes
+	}
+	return false
+}

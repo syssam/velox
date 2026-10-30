@@ -1,4 +1,4 @@
-package velox
+package engine
 
 import (
 	"fmt"
@@ -22,7 +22,7 @@ func TestEncode(t *testing.T) {
 
 // commentFor renders c's comment for a statement with caller and tags.
 func commentFor(c *commenter, caller Caller, tags ...Tag) string {
-	return c.text(&Statement{Caller: caller, Tags: tags})
+	return c.Text(&Statement{Caller: caller, Tags: tags})
 }
 
 // TestCommentKeysAreUnambiguous is Review Focus 2: what naive concatenation

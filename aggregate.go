@@ -2,23 +2,9 @@ package velox
 
 import (
 	"context"
-	"fmt"
+
+	"github.com/syssam/velox2/internal/engine"
 )
-
-// Aggregate is the function an aggregate read computes over its one column:
-// what Sum, Avg, Min and Max set.
-type Aggregate uint8
-
-// The aggregate functions.
-const (
-	AggregateSum Aggregate = iota + 1 // SUM
-	AggregateAvg                      // AVG
-	AggregateMin                      // MIN
-	AggregateMax                      // MAX
-)
-
-// aggregateSQL names each function in the SQL.
-var aggregateSQL = [...]string{AggregateSum: "SUM", AggregateAvg: "AVG", AggregateMin: "MIN", AggregateMax: "MAX"}
 
 // aggRun is the state of one aggregate read: the value scanned, nil for NULL.
 type aggRun[T any] struct {
@@ -26,7 +12,7 @@ type aggRun[T any] struct {
 	v  *T
 }
 
-func readAggregate[T any](a *aggRun[T], r rows) error {
+func readAggregate[T any](a *aggRun[T], r engine.Rows) error {
 	a.v = nil
 	if r.Next() {
 		return r.Scan(&a.v)
@@ -51,11 +37,11 @@ func aggregate[E, T any](ctx context.Context, q Query[E], fn Aggregate, c int32)
 	var v *T
 	if q.db.hooked() {
 		a := &aggRun[T]{st: st}
-		err = q.db.run(ctx, &a.st, func(r rows) error { return readAggregate(a, r) }, nil)
+		err = q.db.run(ctx, &a.st, func(r engine.Rows) error { return readAggregate(a, r) }, nil)
 		v = a.v
 	} else {
 		a := aggRun[T]{st: st}
-		err = q.db.plain(ctx, &a.st, func(r rows) error { return readAggregate(&a, r) }, nil)
+		err = q.db.plain(ctx, &a.st, func(r engine.Rows) error { return readAggregate(&a, r) }, nil)
 		v = a.v
 	}
 	if err != nil {
@@ -109,10 +95,4 @@ func extreme[E, V any](ctx context.Context, q Query[E], fn Aggregate, c NumberCo
 		return zero, false, err
 	}
 	return *v, true, nil
-}
-
-// errAggregateChanged is the refusal of a Rewrite hook that changed the
-// statement's Aggregate: the scan depends on it.
-func errAggregateChanged(entity string) error {
-	return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's Aggregate", entity)
 }

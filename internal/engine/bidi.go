@@ -1,0 +1,318 @@
+package engine
+
+import (
+	"fmt"
+	"reflect"
+	"unsafe"
+)
+
+// This file is the bidirectional one-to-one edge's (EdgeBidi): both partners'
+// rows hold the key, so a write of one row's key writes the other's too, as
+// ent's sqlgraph does for a Bidi O2O edge (clearFKEdges, addFKEdges).
+
+// BidiKey is the key column of an EdgeBidi relation.
+type BidiKey struct {
+	Col  int    // the key column, an index into Columns
+	Edge string // the relation's name, for errors
+}
+
+// BidiReason is the WithoutPolicy and WithAllTenants reason of the statement
+// that clears the old partner's key: integrity maintenance, as ent's
+// clearFKEdges is, which no row scope may leave half done.
+const BidiReason = "velox: clearing the old partner of a bidirectional one-to-one edge"
+
+// checkEdgeBidi refuses the EdgeBidi relation r of the entity name, of Go
+// type t, unless it relates t to itself through a One field (rt), its id
+// column is the one-column primary key, and its key column is a nullable,
+// unencoded pointer field of the primary key's Go type, with no
+// RequiredEdge, neither the primary key nor the tenant, with a unique index
+// of its own: that index is what refuses a
+// partner that already has one before anything is cleared.
+func checkEdgeBidi(name string, t reflect.Type, d *DescFields, cols []ColumnInfo, r *EdgeDesc, rt reflect.Type) (BidiKey, error) {
+	fail := func(format string, args ...any) (BidiKey, error) {
+		return BidiKey{}, &SchemaError{Entity: name, Field: r.name, Reason: fmt.Sprintf(format, args...)}
+	}
+	if target := rtype(r.bidi); target != t {
+		return fail("EdgeBidi relates an entity to itself, not to %v", target)
+	}
+	if rt != r.holders[0] {
+		return fail("EdgeBidi's field is a %v; a one-to-one relation is a One", rt)
+	}
+	inRange := func(i int) bool { return i >= 0 && i < len(cols) }
+	if !inRange(r.targetCol) || len(d.PrimaryKey) != 1 || d.PrimaryKey[0] != r.targetCol {
+		col := fmt.Sprint(r.targetCol)
+		if inRange(r.targetCol) {
+			col = cols[r.targetCol].Name
+		}
+		return fail("EdgeBidi's id column %s is not the entity's one-column primary key", col)
+	}
+	if !inRange(r.ownerCol) {
+		return fail("EdgeBidi's key names column %d, of %d", r.ownerCol, len(cols))
+	}
+	k, id := cols[r.ownerCol], cols[r.targetCol]
+	switch {
+	case r.ownerCol == r.targetCol || r.ownerCol == d.Tenant:
+		return fail("EdgeBidi's key column %s is a primary-key or tenant column", k.Name)
+	case rtype(k.Type).Kind() != reflect.Pointer:
+		// A Nullable slice or map would read a NULL key back as an empty
+		// value, which a write would take for a partner.
+		return fail("EdgeBidi's key column %s is a %v; make its field a pointer, which a NULL key leaves nil", k.Name, rtype(k.Type))
+	case k.RequiredEdge != "":
+		// velox-gen refuses it (rule 53): step 2 of bidiUpdate clears the
+		// key past the RequiredEdge check.
+		return fail("EdgeBidi's key column %s has a RequiredEdge, and velox clears a partner's key whenever its partner re-points", k.Name)
+	case k.Codec:
+		return fail("EdgeBidi's key column %s has a codec (Encode and Decode): an encoded column cannot be compared", k.Name)
+	case base(k.Type) != rtype(id.Type):
+		return fail("EdgeBidi's key column %s holds %v, and the primary key %s %v", k.Name, base(k.Type), id.Name, rtype(id.Type))
+	case !linkKey(rtype(id.Type)):
+		return fail("EdgeBidi's key column %s holds %v, which cannot be compared; use a comparable type or a byte slice", k.Name, rtype(id.Type))
+	}
+	for _, ix := range d.Indexes {
+		if ix.Unique && len(ix.Columns) == 1 && ix.Columns[0] == r.ownerCol {
+			return BidiKey{Col: r.ownerCol, Edge: r.name}, nil
+		}
+	}
+	return fail("EdgeBidi's key column %s has no unique index of its own, which refuses a partner that already has one", k.Name)
+}
+
+// BidiSet returns the bidirectional keys set assigns and their values; a nil
+// value clears the key.
+func BidiSet(in *EntityInfo, set []Assignment) ([]BidiKey, []any) {
+	var keys []BidiKey
+	var vs []any
+	for _, bk := range in.bidiKeys {
+		for _, a := range set {
+			if a.Column == bk.Col {
+				v, _ := KeyOf(a.Value) // a nil pointer is nil
+				keys, vs = append(keys, bk), append(vs, v)
+				break
+			}
+		}
+	}
+	return keys, vs
+}
+
+// pinnedKey returns v when where holds, at its top level, the condition
+// <primary key> = v that Save writes and Where(pk.EQ(v)) adds.
+func pinnedKey(in *EntityInfo, where []Predicate) (any, bool) {
+	pk := int32(in.PrimaryKey[0]) // one column: checkEdgeBidi
+	var pinned func(n Node) (any, bool)
+	pinned = func(n Node) (any, bool) {
+		switch n.Op {
+		case OpEQ:
+			if n.Col == pk {
+				if v, ok := KeyOf(n.V); ok && v != nil {
+					return v, true
+				}
+			}
+		case OpAnd:
+			for _, k := range n.Kids {
+				if v, ok := pinned(k); ok {
+					return v, true
+				}
+			}
+		}
+		return nil, false
+	}
+	for _, p := range where {
+		if v, ok := pinned(p.n); ok {
+			return v, true
+		}
+	}
+	return nil, false
+}
+
+// CheckBidiUpdate refuses st, an update that assigns the bidirectional keys
+// keys the values vs (BidiSet), unless it sets them with Set on the one row
+// that its Where names by primary key, and none to that row itself. It
+// returns that row's key.
+func CheckBidiUpdate(st *Statement, keys []BidiKey, vs []any) (any, error) {
+	in := st.Entity
+	for _, a := range st.Set {
+		for _, bk := range keys {
+			if a.Column == bk.Col && a.Op != AssignSet {
+				return nil, fmt.Errorf("velox: %s: %s, the key of the bidirectional edge %s, can only be set", in.Name, in.Columns[bk.Col].Field, bk.Edge)
+			}
+		}
+	}
+	k, ok := pinnedKey(in, st.Where)
+	if !ok || st.AllRows {
+		pk := in.Columns[in.PrimaryKey[0]].Field
+		col := in.Columns[keys[0].Col].Field
+		return nil, fmt.Errorf("velox: %s: an update that sets %s, the key of the bidirectional edge %s, must name one row by its primary key (Where on %s.EQ), as velox re-points the other row too", in.Name, col, keys[0].Edge, pk)
+	}
+	for i, v := range vs {
+		if v != nil && SelfLink(k, v) {
+			return nil, ErrSelfLink(in, keys[i])
+		}
+	}
+	return k, nil
+}
+
+// ErrSelfLink is the error of a write that makes a row its own partner: a
+// *ValidationError on the key's field, as the value of one field is refused.
+func ErrSelfLink(in *EntityInfo, bk BidiKey) error {
+	return &ValidationError{Entity: in.Name, Field: in.Columns[bk.Col].Field, Err: fmt.Errorf("a row cannot be its own %s", bk.Edge)}
+}
+
+// ErrLinkCount is the error of a bidirectional write whose driver did not
+// report the rows a statement wrote (-1): whether the row was written, or
+// the partner linked, cannot be told, so the write fails closed.
+func ErrLinkCount(in *EntityInfo) error {
+	return fmt.Errorf("velox: %s: the driver did not report the rows the link wrote", in.Name)
+}
+
+// BidiStep marks a statement that a bidirectional write sends, for the
+// checks a Rewrite hook's changes get (CheckBidiRewrite).
+type BidiStep struct {
+	Keys   []BidiKey // the bidirectional keys the statement sets
+	Vals   []any     // their values, as KeyOf gives them, nil for a clear: what the write's later statements link
+	Pinned any       // step 1 of bidiUpdate: the key of the row its Where names
+	Insert bool      // bidiInsert's INSERT
+}
+
+// CheckBidiRewrite refuses what a Rewrite hook made of st, a statement of a
+// bidirectional write that b marks, that the write's later statements could
+// not follow: step 1 of an update re-targeted to another row, whose old
+// partner and new one steps 2 and 3 would then not re-point; an INSERT made
+// an upsert, whose row the link could not name; and a key's value changed or
+// dropped, in step 1's Set or the INSERT's row, which would leave the pair
+// one-way, as the later statements link the value set before the hooks.
+// prepare calls it, before the statement is sent, only when the DB has
+// Rewrite hooks, with b as it was before them: a hook that replaces the whole
+// statement cannot drop it.
+func CheckBidiRewrite(st *Statement, b *BidiStep) error {
+	if b == nil {
+		return nil
+	}
+	in := st.Entity
+	if b.Insert {
+		if st.Conflict != nil {
+			return fmt.Errorf("velox: %s: an upsert cannot set the key of the bidirectional edge %s; insert the row, then Save the key", in.Name, b.Keys[0].Edge)
+		}
+		for i, bk := range b.Keys {
+			if v, ok := insertedKey(st, bk.Col); !ok || !equalKey(v, b.Vals[i]) {
+				return errBidiValue(in, bk)
+			}
+		}
+		return nil
+	}
+	if k, ok := pinnedKey(in, st.Where); !ok || !equalKey(k, b.Pinned) {
+		return fmt.Errorf("velox: %s: a Rewrite hook changed the row that the update of the bidirectional key %s names", in.Name, in.Columns[b.Keys[0].Col].Field)
+	}
+	for i, bk := range b.Keys {
+		if v, ok := assignedKey(st.Set, bk.Col); !ok || !equalKey(v, b.Vals[i]) {
+			return errBidiValue(in, bk)
+		}
+	}
+	return nil
+}
+
+// errBidiValue is CheckBidiRewrite's error for a key a Rewrite hook changed.
+func errBidiValue(in *EntityInfo, bk BidiKey) error {
+	return fmt.Errorf("velox: %s: a Rewrite hook changed the value of %s, the key of the bidirectional edge %s", in.Name, in.Columns[bk.Col].Field, bk.Edge)
+}
+
+// assignedKey returns the value set gives column col, as KeyOf gives it,
+// when set assigns col exactly once, with AssignSet.
+func assignedKey(set []Assignment, col int) (any, bool) {
+	var v any
+	n := 0
+	for _, a := range set {
+		if a.Column == col {
+			if a.Op != AssignSet {
+				return nil, false
+			}
+			v, _ = KeyOf(a.Value)
+			n++
+		}
+	}
+	return v, n == 1
+}
+
+// insertedKey returns the value st, an insert, gives column col in its one
+// row, as KeyOf gives it, when it lists col exactly once.
+func insertedKey(st *Statement, col int) (any, bool) {
+	if len(st.Rows) != 1 {
+		return nil, false
+	}
+	at := -1
+	for i, c := range st.Columns {
+		if c == col {
+			if at >= 0 {
+				return nil, false
+			}
+			at = i
+		}
+	}
+	if at < 0 || at >= len(st.Rows[0]) {
+		return nil, false
+	}
+	v, _ := KeyOf(st.Rows[0][at])
+	return v, true
+}
+
+// equalKey reports whether the key values a and b, as KeyOf gives them, are
+// equal: both nil, or of one type and equal by SelfLink.
+func equalKey(a, b any) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return reflect.TypeOf(a) == reflect.TypeOf(b) && SelfLink(a, b)
+}
+
+// BidiRow returns the bidirectional keys the row of in at p sets, to a
+// non-nil value, and those values.
+func BidiRow(in *EntityInfo, p unsafe.Pointer) ([]BidiKey, []any) {
+	var keys []BidiKey
+	var vs []any
+	for _, bk := range in.bidiKeys {
+		if v, ok := KeyOf(in.kit.Value(p, bk.Col)); ok && v != nil {
+			keys, vs = append(keys, bk), append(vs, v)
+		}
+	}
+	return keys, vs
+}
+
+// RefuseBidiInsert refuses an upsert (many false) or an InsertAll (many true)
+// of a row of in at p that sets a bidirectional key. Both are stricter than
+// ent, which links through them: an upsert's DO NOTHING or DO UPDATE leaves
+// unknown whether the row that holds the key is the caller's, so the partner
+// to link is ambiguous, and InsertAll reads no generated key back, so velox
+// cannot name the rows to link.
+func RefuseBidiInsert(in *EntityInfo, p unsafe.Pointer, many bool) error {
+	keys, _ := BidiRow(in, p)
+	switch {
+	case len(keys) == 0:
+		return nil
+	case many:
+		return fmt.Errorf("velox: %s: InsertAll cannot set the key of the bidirectional edge %s; insert the rows, then Save each key", in.Name, keys[0].Edge)
+	}
+	return fmt.Errorf("velox: %s: an upsert cannot set the key of the bidirectional edge %s; insert the row, then Save the key", in.Name, keys[0].Edge)
+}
+
+// RefuseBidiRows refuses an InsertAll of the n rows of in, size bytes apart
+// from base, when one sets a bidirectional key (RefuseBidiInsert).
+func RefuseBidiRows(in *EntityInfo, base unsafe.Pointer, size uintptr, n int) error {
+	if len(in.bidiKeys) == 0 {
+		return nil
+	}
+	for i := range n {
+		if err := RefuseBidiInsert(in, unsafe.Add(base, uintptr(i)*size), true); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// BidiInTx sets InTx on st, the insert of the row at p, when Exec sends it in
+// bidiInsert's transaction: when the row sets a bidirectional key and st is
+// no upsert, which RefuseBidiInsert refuses.
+func BidiInTx(st *Statement, p unsafe.Pointer) {
+	if len(st.Entity.bidiKeys) > 0 && st.Conflict == nil {
+		if keys, _ := BidiRow(st.Entity, p); len(keys) > 0 {
+			st.InTx = true
+		}
+	}
+}

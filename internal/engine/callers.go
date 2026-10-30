@@ -1,4 +1,4 @@
-package velox
+package engine
 
 import (
 	"cmp"
@@ -27,9 +27,9 @@ type Caller struct {
 // program counters are cached: each is resolved once per DB, for up to 4,096
 // of them.
 func WithCallers() Option {
-	return Option{func(c *config) {
-		if c.callers == nil {
-			c.callers = &callers{}
+	return Option{func(c *Config) {
+		if c.Callers == nil {
+			c.Callers = &callers{}
 		}
 	}}
 }
@@ -38,11 +38,11 @@ func WithCallers() Option {
 // caller either, such as the application's own repository layer: the call
 // site is then the frame that called into them. It implies WithCallers.
 func WithCallerSkip(pkgPath ...string) Option {
-	return Option{func(c *config) {
-		if c.callers == nil {
-			c.callers = &callers{}
+	return Option{func(c *Config) {
+		if c.Callers == nil {
+			c.Callers = &callers{}
 		}
-		c.callers.skip = append(c.callers.skip, pkgPath...)
+		c.Callers.skip = append(c.Callers.skip, pkgPath...)
 	}}
 }
 
@@ -52,7 +52,7 @@ type callers struct {
 	skip []string // package paths that are not the caller, besides velox's own
 
 	once sync.Once
-	self string   // velox's package path, from a frame of its own
+	self string   // the root package's path, from a frame of velox's own
 	mods []string // module paths from the build info, longest first
 	main string   // BuildInfo.Path: the import path of package main
 
@@ -79,7 +79,7 @@ var maxPCs = 4096
 // the modules in the build.
 func (c *callers) load() {
 	pc, _, _, _ := runtime.Caller(0)
-	c.self = pkgOf(runtime.FuncForPC(pc).Name())
+	c.self = strings.TrimSuffix(pkgOf(runtime.FuncForPC(pc).Name()), "/internal/engine")
 	bi, ok := debug.ReadBuildInfo()
 	if !ok {
 		return
@@ -99,7 +99,7 @@ func (c *callers) load() {
 // within 64, outside velox and skip; zero when there is none. The first batch
 // is as many frames as the last call site was down (4 to 8, 4 at first), the
 // next ones 8, the last cut to end at the 64th.
-func (c *callers) capture() Caller {
+func (c *callers) Capture() Caller {
 	c.once.Do(c.load)
 	var pcs [8]uintptr
 	size := int(c.depth.Load())
@@ -186,7 +186,7 @@ func (c *callers) resolve(pc uintptr) pcFrame {
 
 // ours reports whether fn is velox's or in a package skip names.
 func (c *callers) ours(fn string) bool {
-	return inPkg(fn, c.self) || slices.ContainsFunc(c.skip, func(pkg string) bool { return inPkg(fn, pkg) })
+	return inPkg(fn, c.self) || inPkg(fn, c.self+"/internal/engine") || slices.ContainsFunc(c.skip, func(pkg string) bool { return inPkg(fn, pkg) })
 }
 
 // pkgOf returns the package path of a function name as the runtime gives it:

@@ -5,10 +5,12 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/syssam/velox2/internal/engine"
 )
 
 func TestCacheRendersLikeRender(t *testing.T) {
-	var c renderCache
+	var c engine.RenderCache
 	for range 2 { // the second pass is served from the cache
 		for _, rc := range renderCases() {
 			for d := range rc.sql {
@@ -20,13 +22,13 @@ func TestCacheRendersLikeRender(t *testing.T) {
 			}
 		}
 	}
-	if c.size() == 0 {
+	if c.Size() == 0 {
 		t.Error("nothing was cached")
 	}
 }
 
 func TestCacheKeepsShapesApart(t *testing.T) {
-	var c renderCache
+	var c engine.RenderCache
 	one, _ := cachedRender(&c, Postgres, stmt(hID.In(1)))
 	two, _ := cachedRender(&c, Postgres, stmt(hID.In(1, 2)))
 	if one == two {
@@ -53,10 +55,10 @@ func TestCacheKeepsShapesApart(t *testing.T) {
 	// Each nil, Each with a per-owner Limit and without, Each through a join,
 	// and the grouped counts, direct and through a join, are six shapes, each
 	// rendered as it renders uncached.
-	var ec renderCache
+	var ec engine.RenderCache
 	plain := eachItems(1, 0)
 	plain.Each = nil
-	shapes := []*Statement{plain, eachItems(1, 2), eachItems(1, 0), eachTags(2, Predicate{node{op: opEQ, col: 1, v: int64(7)}}),
+	shapes := []*Statement{plain, eachItems(1, 2), eachItems(1, 0), eachTags(2, engine.NewPredicate(engine.Node{Op: engine.OpEQ, Col: 1, V: int64(7)})),
 		countItems(), countTags(bookTagInfo, 0, 1)}
 	seen := map[string]bool{}
 	for range 2 {
@@ -69,16 +71,18 @@ func TestCacheKeepsShapesApart(t *testing.T) {
 			seen[got] = true
 		}
 	}
-	if len(seen) != 6 || ec.size() != 6 {
-		t.Errorf("%d texts, %d shapes cached; want 6 of each", len(seen), ec.size())
+	if len(seen) != 6 || ec.Size() != 6 {
+		t.Errorf("%d texts, %d shapes cached; want 6 of each", len(seen), ec.Size())
 	}
 }
 
 // TestCacheKeepsNilApartFromAValue: EQ(nil) renders IS NULL and EQ(1) renders
 // "= $1"; the two must not share a cached shape.
 func TestCacheKeepsNilApartFromAValue(t *testing.T) {
-	var c renderCache
-	nilSt := func() *Statement { return stmt(Pred[inv]{node{op: opEQ, col: 1, v: nil}}) }
+	var c engine.RenderCache
+	nilSt := func() *Statement {
+		return stmt(Pred[inv](engine.NewPredicate(engine.Node{Op: engine.OpEQ, Col: 1, V: nil})))
+	}
 	valSt := func() *Statement { return stmt(hOrg.EQ(1)) }
 	for range 2 {
 		n, nargs := cachedRender(&c, Postgres, nilSt())
@@ -94,7 +98,7 @@ func TestCacheKeepsNilApartFromAValue(t *testing.T) {
 
 // TestCacheIsSafeForConcurrentUse is Review Focus 5; run it with -race.
 func TestCacheIsSafeForConcurrentUse(t *testing.T) {
-	var c renderCache
+	var c engine.RenderCache
 	want := `SELECT ` + pgCols + ` FROM "invoices" WHERE "org_id" = $1 AND "number" IN ($2, $3)`
 	var wg sync.WaitGroup
 	for g := range 8 {
@@ -113,9 +117,9 @@ func TestCacheIsSafeForConcurrentUse(t *testing.T) {
 }
 
 func TestCacheStopsGrowing(t *testing.T) {
-	defer func(n int) { maxShapes = n }(maxShapes)
-	maxShapes = 3
-	var c renderCache
+	defer func(n int) { engine.MaxShapes = n }(engine.MaxShapes)
+	engine.MaxShapes = 3
+	var c engine.RenderCache
 	for n := 1; n <= 10; n++ {
 		vs := make([]int64, n)
 		want, _ := render(Postgres, stmt(hID.In(vs...)))
@@ -124,16 +128,16 @@ func TestCacheStopsGrowing(t *testing.T) {
 		}
 	}
 	held := 0
-	for _, shapes := range c.m {
+	for _, shapes := range c.M {
 		held += len(shapes)
 	}
-	if c.size() != 3 || held != 3 {
-		t.Errorf("cache holds %d shapes (counted %d), the limit is 3", held, c.size())
+	if c.Size() != 3 || held != 3 {
+		t.Errorf("cache holds %d shapes (counted %d), the limit is 3", held, c.Size())
 	}
 }
 
 func TestCacheKeepsWriteShapesApart(t *testing.T) {
-	var c renderCache
+	var c engine.RenderCache
 	one, _ := cachedRender(&c, Postgres, ins([]int{1}, [][]any{{int64(1)}}))
 	two, _ := cachedRender(&c, Postgres, ins([]int{1}, [][]any{{int64(1)}, {int64(2)}}))
 	up := ins([]int{1}, [][]any{{int64(1)}})
@@ -182,7 +186,7 @@ func TestCacheKeepsWriteColumnsApart(t *testing.T) {
 		{"Set column", set(3), set(2)},
 	} {
 		for _, d := range []Dialect{Postgres, SQLite} {
-			var cache renderCache
+			var cache engine.RenderCache
 			a, _ := cachedRender(&cache, d, c.a)
 			b, _ := cachedRender(&cache, d, c.b)
 			if a == b {
@@ -202,23 +206,23 @@ func TestCacheKeepsWriteColumnsApart(t *testing.T) {
 // grow the cache past its byte bound, and statements past it still render
 // right.
 func TestCacheBoundedInBytes(t *testing.T) {
-	defer func(n int) { maxCacheBytes = n }(maxCacheBytes)
-	maxCacheBytes = 2000
-	var c renderCache
+	defer func(n int) { engine.MaxCacheBytes = n }(engine.MaxCacheBytes)
+	engine.MaxCacheBytes = 2000
+	var c engine.RenderCache
 	for n := 1; n <= 200; n++ {
 		vs := make([]any, n)
 		for i := range vs {
 			vs[i] = int64(i)
 		}
-		st := &Statement{Op: OpSelect, Entity: invInfo, Where: []Predicate{{node{op: opIn, col: 0, v: vs}}}}
+		st := &Statement{Op: OpSelect, Entity: invInfo, Where: []Predicate{engine.NewPredicate(engine.Node{Op: engine.OpIn, Col: 0, V: vs})}}
 		got, args := cachedRender(&c, Postgres, st)
 		want, wantArgs := render(Postgres, st)
 		if got != want || len(args) != len(wantArgs) {
 			t.Fatalf("n=%d: cached render differs", n)
 		}
 	}
-	if c.bytes > maxCacheBytes {
-		t.Errorf("cache holds %d bytes, over its bound %d", c.bytes, maxCacheBytes)
+	if c.Bytes > engine.MaxCacheBytes {
+		t.Errorf("cache holds %d bytes, over its bound %d", c.Bytes, engine.MaxCacheBytes)
 	}
 }
 
@@ -228,7 +232,7 @@ func inShape(n int) *Statement {
 	for i := range vs {
 		vs[i] = int64(i)
 	}
-	return &Statement{Op: OpSelect, Entity: invInfo, Where: []Predicate{{node{op: opIn, col: 0, v: vs}}}}
+	return &Statement{Op: OpSelect, Entity: invInfo, Where: []Predicate{engine.NewPredicate(engine.Node{Op: engine.OpIn, Col: 0, V: vs})}}
 }
 
 // TestCacheBytesCountTheFingerprint: the bytes a cache holds are the key, the
@@ -236,45 +240,45 @@ func inShape(n int) *Statement {
 // the fingerprint: a bound one byte short of the sum leaves the last shape out.
 func TestCacheBytesCountTheFingerprint(t *testing.T) {
 	const shapes = 50
-	var c renderCache
+	var c engine.RenderCache
 	for n := 1; n <= shapes; n++ {
 		cachedRender(&c, Postgres, inShape(n))
 	}
 	sum, held := 0, 0
-	for _, byKey := range c.m {
+	for _, byKey := range c.M {
 		for key, e := range byKey {
-			if len(e.fp) != 16 {
-				t.Errorf("a fingerprint of %d bytes: %q", len(e.fp), e.fp)
+			if len(e.Fp) != 16 {
+				t.Errorf("a fingerprint of %d bytes: %q", len(e.Fp), e.Fp)
 			}
-			sum += len(key) + len(e.text) + len(e.fp)
+			sum += len(key) + len(e.Text) + len(e.Fp)
 			held++
 		}
 	}
-	if held != shapes || c.size() != shapes {
-		t.Fatalf("the cache holds %d shapes (size %d), want %d", held, c.size(), shapes)
+	if held != shapes || c.Size() != shapes {
+		t.Fatalf("the cache holds %d shapes (size %d), want %d", held, c.Size(), shapes)
 	}
-	if c.bytes != sum {
-		t.Errorf("the cache counts %d bytes, its entries sum to %d", c.bytes, sum)
+	if c.Bytes != sum {
+		t.Errorf("the cache counts %d bytes, its entries sum to %d", c.Bytes, sum)
 	}
 
-	defer func(n int) { maxCacheBytes = n }(maxCacheBytes)
-	maxCacheBytes = sum - 1
-	var tight renderCache
+	defer func(n int) { engine.MaxCacheBytes = n }(engine.MaxCacheBytes)
+	engine.MaxCacheBytes = sum - 1
+	var tight engine.RenderCache
 	for n := 1; n <= shapes; n++ {
 		cachedRender(&tight, Postgres, inShape(n))
 	}
 	var buf [256]byte
-	last := shapeKey(buf[:0], Postgres, inShape(shapes))
-	if _, ok := tight.m[invInfo][string(last)]; ok {
-		t.Errorf("the last shape is held, with a bound of %d bytes, one under the %d they need", maxCacheBytes, sum)
+	last := engine.ShapeKey(buf[:0], Postgres, inShape(shapes))
+	if _, ok := tight.M[invInfo][string(last)]; ok {
+		t.Errorf("the last shape is held, with a bound of %d bytes, one under the %d they need", engine.MaxCacheBytes, sum)
 	}
-	if tight.size() != shapes-1 || tight.bytes > maxCacheBytes {
-		t.Errorf("the tight cache holds %d shapes and %d bytes, want %d shapes within %d bytes", tight.size(), tight.bytes, shapes-1, maxCacheBytes)
+	if tight.Size() != shapes-1 || tight.Bytes > engine.MaxCacheBytes {
+		t.Errorf("the tight cache holds %d shapes and %d bytes, want %d shapes within %d bytes", tight.Size(), tight.Bytes, shapes-1, engine.MaxCacheBytes)
 	}
 }
 
 func TestCacheKeysMoreShapes(t *testing.T) {
-	var c renderCache
+	var c engine.RenderCache
 	base := func() *Statement { return &Statement{Op: OpSelect, Entity: invInfo} }
 	variants := []func(*Statement){
 		func(st *Statement) {},
@@ -283,10 +287,10 @@ func TestCacheKeysMoreShapes(t *testing.T) {
 		func(st *Statement) { st.OrderBy = []OrderTerm{{Column: 0}, {Column: 1}} },
 		func(st *Statement) { st.OrderBy = []OrderTerm{{Column: 1}, {Column: 0}} },
 		func(st *Statement) {
-			st.Where = []Predicate{{node{op: opAnd, kids: []node{{op: opEQ, col: 0, v: 1}, {op: opOr, kids: []node{{op: opEQ, col: 1, v: 1}}}}}}}
+			st.Where = []Predicate{engine.NewPredicate(engine.Node{Op: engine.OpAnd, Kids: []engine.Node{{Op: engine.OpEQ, Col: 0, V: 1}, {Op: engine.OpOr, Kids: []engine.Node{{Op: engine.OpEQ, Col: 1, V: 1}}}}})}
 		},
 		func(st *Statement) {
-			st.Where = []Predicate{{node{op: opAnd, kids: []node{{op: opOr, kids: []node{{op: opEQ, col: 0, v: 1}}}, {op: opEQ, col: 1, v: 1}}}}}
+			st.Where = []Predicate{engine.NewPredicate(engine.Node{Op: engine.OpAnd, Kids: []engine.Node{{Op: engine.OpOr, Kids: []engine.Node{{Op: engine.OpEQ, Col: 0, V: 1}}}, {Op: engine.OpEQ, Col: 1, V: 1}}})}
 		},
 	}
 	seen := map[string]int{}
@@ -306,7 +310,7 @@ func TestCacheKeysMoreShapes(t *testing.T) {
 
 // TestCacheKeysTheUpsertCondition: an upsert's condition is part of its shape.
 func TestCacheKeysTheUpsertCondition(t *testing.T) {
-	var c renderCache
+	var c engine.RenderCache
 	seen := map[string]int{}
 	for i, where := range [][]Predicate{
 		nil,
@@ -328,43 +332,36 @@ func TestCacheKeysTheUpsertCondition(t *testing.T) {
 	}
 }
 
-func TestFingerprintFormat(t *testing.T) {
-	// SHA-256 of the empty string starts e3b0c44298fc1c14.
-	if got := fingerprint(""); got != "e3b0c44298fc1c14" {
-		t.Errorf("fingerprint(\"\") = %s", got)
-	}
-}
-
 // TestCacheStoresTheFingerprint: a hit returns the fingerprint stored at the
 // miss, and a statement past the cache's bound gets the same one.
 func TestCacheStoresTheFingerprint(t *testing.T) {
-	var c renderCache
-	miss, _, err := c.get(Postgres, stmt(hOrg.EQ(7)))
+	var c engine.RenderCache
+	miss, _, err := c.Get(Postgres, stmt(hOrg.EQ(7)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	hit, _, err := c.get(Postgres, stmt(hOrg.EQ(8)))
+	hit, _, err := c.Get(Postgres, stmt(hOrg.EQ(8)))
 	if err != nil {
 		t.Fatal(err)
 	}
 	text, _ := render(Postgres, stmt(hOrg.EQ(7)))
-	if miss != hit || miss.text != text || miss.fp != fingerprint(text) {
+	if miss != hit || miss.Text != text || miss.Fp != engine.Fingerprint(text) {
 		t.Errorf("miss %+v, hit %+v, want text %s", miss, hit, text)
 	}
-	defer func(n int) { maxShapes = n }(maxShapes)
-	maxShapes = 0
-	var full renderCache
-	over, _, err := full.get(Postgres, stmt(hOrg.EQ(9)))
+	defer func(n int) { engine.MaxShapes = n }(engine.MaxShapes)
+	engine.MaxShapes = 0
+	var full engine.RenderCache
+	over, _, err := full.Get(Postgres, stmt(hOrg.EQ(9)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if over != miss || full.size() != 0 {
-		t.Errorf("past the bound: %+v, %d shapes held", over, full.size())
+	if over != miss || full.Size() != 0 {
+		t.Errorf("past the bound: %+v, %d shapes held", over, full.Size())
 	}
 }
 
 func TestExistsHasItsOwnShape(t *testing.T) {
-	var c renderCache
+	var c engine.RenderCache
 	for range 2 { // the second pass is served from the cache
 		ex := stmt(hOrg.EQ(1))
 		ex.Exists, ex.Limit = true, 1
@@ -372,7 +369,7 @@ func TestExistsHasItsOwnShape(t *testing.T) {
 		all.Limit = 1
 		a, _ := cachedRender(&c, Postgres, ex)
 		b, _ := cachedRender(&c, Postgres, all)
-		if a == b || fingerprint(a) == fingerprint(b) {
+		if a == b || engine.Fingerprint(a) == engine.Fingerprint(b) {
 			t.Errorf("Exists and Limit(1).All share a shape: %s / %s", a, b)
 		}
 	}
@@ -385,10 +382,10 @@ func TestCacheKeysTheJoin(t *testing.T) {
 	join := &EntityInfo{Name: "velox.join", Table: "joins", Tenant: -1, Columns: []ColumnInfo{{Name: "a"}, {Name: "b"}}}
 	other := &EntityInfo{Name: "velox.other", Table: "others", Tenant: -1, Columns: join.Columns}
 	through := func(j *EntityInfo, col int) *Statement {
-		return &Statement{Op: OpSelect, Entity: invInfo, Where: []Predicate{{node{op: opThrough, col: 0, v: j, w: col,
-			kids: []node{{op: opIn, col: 1, v: []any{int64(1)}}}}}}}
+		return &Statement{Op: OpSelect, Entity: invInfo, Where: []Predicate{engine.NewPredicate(engine.Node{Op: engine.OpThrough, Col: 0, V: j, W: col,
+			Kids: []engine.Node{{Op: engine.OpIn, Col: 1, V: []any{int64(1)}}}})}}
 	}
-	var c renderCache
+	var c engine.RenderCache
 	seen := map[string]string{}
 	for range 2 { // the second pass is served from the cache
 		for name, st := range map[string]*Statement{"joins.a": through(join, 0), "joins.b": through(join, 1), "others.a": through(other, 0)} {
@@ -409,7 +406,7 @@ func TestCacheKeysTheJoin(t *testing.T) {
 // TestAggregateShapes: an aggregate's function and column are part of its
 // shape, so none shares cached SQL with another.
 func TestAggregateShapes(t *testing.T) {
-	var c renderCache
+	var c engine.RenderCache
 	agg := func(fn Aggregate, col int) string {
 		st := stmt()
 		st.Aggregate, st.Columns = fn, []int{col}
@@ -420,18 +417,18 @@ func TestAggregateShapes(t *testing.T) {
 	if sum == maxAgg || sum == other || maxAgg == other {
 		t.Errorf("shapes share SQL: %s, %s, %s", sum, maxAgg, other)
 	}
-	if c.size() != 3 {
-		t.Errorf("cache holds %d shapes, want 3", c.size())
+	if c.Size() != 3 {
+		t.Errorf("cache holds %d shapes, want 3", c.Size())
 	}
-	if again := agg(AggregateSum, 3); again != sum || c.size() != 3 {
-		t.Errorf("a hit changed: %s, %d shapes", again, c.size())
+	if again := agg(AggregateSum, 3); again != sum || c.Size() != 3 {
+		t.Errorf("a hit changed: %s, %d shapes", again, c.Size())
 	}
 }
 
 // A read and its four locked forms are five shapes, and the cache never
 // returns one's text for another.
 func TestLockShapes(t *testing.T) {
-	var c renderCache
+	var c engine.RenderCache
 	forms := []struct {
 		lock Lock
 		wait LockWait
@@ -448,14 +445,14 @@ func TestLockShapes(t *testing.T) {
 			texts[want] = true
 		}
 	}
-	if len(texts) != 5 || c.size() != 5 {
-		t.Errorf("%d texts, %d shapes, want 5", len(texts), c.size())
+	if len(texts) != 5 || c.Size() != 5 {
+		t.Errorf("%d texts, %d shapes, want 5", len(texts), c.Size())
 	}
 }
 
-// TestInsertAllAboveCachedRows: an insert of more than maxCachedRows rows is
+// TestInsertAllAboveCachedRows: an insert of more than MaxCachedRows rows is
 // rendered without the cache, and still gets its fingerprint; one of
-// maxCachedRows rows is cached.
+// MaxCachedRows rows is cached.
 func TestInsertAllAboveCachedRows(t *testing.T) {
 	var fps []string
 	db := OpenFake(Postgres, &FakeExec{Affected: 1}, WithAround(func(ctx context.Context, st *Statement, next func(context.Context) error) error {
@@ -473,14 +470,14 @@ func TestInsertAllAboveCachedRows(t *testing.T) {
 		}
 	}
 	before := CacheSize(db)
-	insert(maxCachedRows + 1)
-	insert(maxCachedRows + 1)
+	insert(engine.MaxCachedRows + 1)
+	insert(engine.MaxCachedRows + 1)
 	if got := CacheSize(db); got != before {
-		t.Errorf("an insert of %d rows grew the cache from %d to %d shapes", maxCachedRows+1, before, got)
+		t.Errorf("an insert of %d rows grew the cache from %d to %d shapes", engine.MaxCachedRows+1, before, got)
 	}
-	insert(maxCachedRows)
+	insert(engine.MaxCachedRows)
 	if got := CacheSize(db); got != before+1 {
-		t.Errorf("an insert of %d rows left the cache at %d shapes, want %d", maxCachedRows, got, before+1)
+		t.Errorf("an insert of %d rows left the cache at %d shapes, want %d", engine.MaxCachedRows, got, before+1)
 	}
 	if len(fps) != 3 {
 		t.Fatalf("%d statements ran, want 3", len(fps))

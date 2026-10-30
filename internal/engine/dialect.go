@@ -1,4 +1,4 @@
-package velox
+package engine
 
 import (
 	"strconv"
@@ -30,7 +30,7 @@ func (d Dialect) String() string {
 }
 
 // valid reports whether d is Postgres, MySQL or SQLite.
-func validDialect(d Dialect) bool { return d == Postgres || d == MySQL || d == SQLite }
+func ValidDialect(d Dialect) bool { return d == Postgres || d == MySQL || d == SQLite }
 
 // quote writes ident quoted, with the quote character doubled inside it.
 func (d Dialect) quote(b *strings.Builder, ident string) {
@@ -67,4 +67,4 @@ func (d Dialect) noLimit() string {
 	return "-1"
 }
 
-func quoteIdent(d Dialect, b *strings.Builder, s string) { d.quote(b, s) }
+func QuoteIdent(d Dialect, b *strings.Builder, s string) { d.quote(b, s) }

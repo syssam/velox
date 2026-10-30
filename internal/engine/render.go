@@ -1,4 +1,4 @@
-package velox
+package engine
 
 import (
 	"fmt"
@@ -100,7 +100,7 @@ func textArg(d Dialect, bs []byte) bool {
 	return (d == SQLite || d == MySQL) && utf8.Valid(bs)
 }
 
-var cmpText = [...]string{opEQ: " = ", opNEQ: " <> ", opGT: " > ", opGTE: " >= ", opLT: " < ", opLTE: " <= "}
+var cmpText = [...]string{OpEQ: " = ", OpNEQ: " <> ", OpGT: " > ", OpGTE: " >= ", OpLT: " < ", OpLTE: " <= "}
 
 func (w *writer) selectStmt(st *Statement) {
 	if st.Each != nil {
@@ -427,37 +427,37 @@ func isNilArg(v any) bool {
 	return false
 }
 
-func (w *writer) pred(n node) {
-	if n.op >= opEQ && n.op <= opFold && w.in.Columns[n.col].Codec {
+func (w *writer) pred(n Node) {
+	if n.Op >= OpEQ && n.Op <= OpFold && w.in.Columns[n.Col].Codec {
 		// Every condition that holds a value; IsNull and NotNull hold none.
-		w.fail(errCodecCondition(w.in, int(n.col)))
+		w.fail(errCodecCondition(w.in, int(n.Col)))
 	}
-	if (n.op == opEQ || n.op == opNEQ) && isNilArg(n.v) {
-		w.predCol(n.col)
-		if n.op == opEQ {
+	if (n.Op == OpEQ || n.Op == OpNEQ) && isNilArg(n.V) {
+		w.predCol(n.Col)
+		if n.Op == OpEQ {
 			w.str(" IS NULL")
 		} else {
 			w.str(" IS NOT NULL")
 		}
 		return
 	}
-	switch n.op {
-	case opEQ, opNEQ, opGT, opGTE, opLT, opLTE:
-		w.predCol(n.col)
-		w.str(cmpText[n.op])
-		w.arg(n.v)
-	case opIn, opNotIn:
-		vs := n.v.([]any)
+	switch n.Op {
+	case OpEQ, OpNEQ, OpGT, OpGTE, OpLT, OpLTE:
+		w.predCol(n.Col)
+		w.str(cmpText[n.Op])
+		w.arg(n.V)
+	case OpIn, OpNotIn:
+		vs := n.V.([]any)
 		if len(vs) == 0 {
-			if n.op == opIn {
+			if n.Op == OpIn {
 				w.str("1 = 0")
 			} else {
 				w.str("1 = 1")
 			}
 			return
 		}
-		w.predCol(n.col)
-		if n.op == opNotIn {
+		w.predCol(n.Col)
+		if n.Op == OpNotIn {
 			w.str(" NOT IN (")
 		} else {
 			w.str(" IN (")
@@ -469,39 +469,39 @@ func (w *writer) pred(n node) {
 			w.arg(v)
 		}
 		w.str(")")
-	case opBetween:
-		w.predCol(n.col)
+	case OpBetween:
+		w.predCol(n.Col)
 		w.str(" BETWEEN ")
-		w.arg(n.v)
+		w.arg(n.V)
 		w.str(" AND ")
-		w.arg(n.w)
-	case opLike:
-		w.predCol(n.col)
+		w.arg(n.W)
+	case OpLike:
+		w.predCol(n.Col)
 		w.str(" LIKE ")
-		w.arg(n.v)
+		w.arg(n.V)
 		// ! escapes on every dialect: a backslash would read differently
 		// under MySQL's NO_BACKSLASH_ESCAPES and PostgreSQL's
 		// standard_conforming_strings, and ! means the same under both.
 		w.str(" ESCAPE '!'")
-	case opFold:
+	case OpFold:
 		w.str("LOWER(")
-		w.predCol(n.col)
+		w.predCol(n.Col)
 		w.str(") = LOWER(")
-		w.arg(n.v)
+		w.arg(n.V)
 		w.str(")")
-	case opIsNull:
-		w.predCol(n.col)
+	case OpIsNull:
+		w.predCol(n.Col)
 		w.str(" IS NULL")
-	case opNotNull:
-		w.predCol(n.col)
+	case OpNotNull:
+		w.predCol(n.Col)
 		w.str(" IS NOT NULL")
-	case opAllow:
+	case OpAllow:
 		// Only an Allow written into a Where or a Not reaches here: a
 		// policy's Allow is dropped before rendering.
 		w.str("1 = 1")
-	case opAnd, opOr:
-		if len(n.kids) == 0 {
-			if n.op == opAnd {
+	case OpAnd, OpOr:
+		if len(n.Kids) == 0 {
+			if n.Op == OpAnd {
 				w.str("1 = 1")
 			} else {
 				w.str("1 = 0")
@@ -509,9 +509,9 @@ func (w *writer) pred(n node) {
 			return
 		}
 		w.str("(")
-		for i, k := range n.kids {
+		for i, k := range n.Kids {
 			if i > 0 {
-				if n.op == opAnd {
+				if n.Op == OpAnd {
 					w.str(" AND ")
 				} else {
 					w.str(" OR ")
@@ -520,27 +520,27 @@ func (w *writer) pred(n node) {
 			w.pred(k)
 		}
 		w.str(")")
-	case opNot:
+	case OpNot:
 		w.str("NOT (")
-		w.pred(n.kids[0])
+		w.pred(n.Kids[0])
 		w.str(")")
-	case opExists:
+	case OpExists:
 		w.exists(n)
-	case opThrough:
+	case OpThrough:
 		w.through(n)
 	default:
-		w.fail(fmt.Errorf("velox: %s: a condition of unknown kind %d", w.in.Name, n.op))
+		w.fail(fmt.Errorf("velox: %s: a condition of unknown kind %d", w.in.Name, n.Op))
 	}
 }
 
 // through writes Of on a many-to-many relation: an EXISTS on the join entity,
 // correlated with the current table's column n.col, holding the conditions on
 // the join's rows.
-func (w *writer) through(n node) {
-	join := n.v.(*EntityInfo)
+func (w *writer) through(n Node) {
+	join := n.V.(*EntityInfo)
 	in, outer, depth := w.in, w.alias, w.depth
-	w.subquery(join, n.w.(int), in, int(n.col))
-	for _, k := range n.kids {
+	w.subquery(join, n.W.(int), in, int(n.Col))
+	for _, k := range n.Kids {
 		w.str(" AND ")
 		w.pred(k)
 	}
@@ -556,21 +556,21 @@ func (w *writer) through(n node) {
 // holding one on the target, which holds the conditions; the inner EXISTS is
 // written even with none: it asserts that the target row exists, and the
 // scope adds the target's tenant and Read conditions to it.
-func (w *writer) exists(n node) {
-	l := n.v.(link)
+func (w *writer) exists(n Node) {
+	l := n.V.(Link)
 	owner, outer, depth := w.in, w.alias, w.depth
-	if l.join != nil {
-		w.subquery(l.join, l.joinOwner, owner, l.ownerCol)
+	if l.Join != nil {
+		w.subquery(l.Join, l.JoinOwner, owner, l.OwnerCol)
 		w.str(" AND ")
-		w.subquery(l.target, l.targetCol, l.join, l.joinTarget)
+		w.subquery(l.Target, l.TargetCol, l.Join, l.JoinTarget)
 	} else {
-		w.subquery(l.target, l.targetCol, owner, l.ownerCol)
+		w.subquery(l.Target, l.TargetCol, owner, l.OwnerCol)
 	}
-	for _, k := range n.kids {
+	for _, k := range n.Kids {
 		w.str(" AND ")
 		w.pred(k)
 	}
-	if l.join != nil {
+	if l.Join != nil {
 		w.str(")")
 	}
 	w.str(")")
@@ -606,10 +606,10 @@ func (w *writer) subquery(in *EntityInfo, col int, from *EntityInfo, fromCol int
 	w.alias = alias
 }
 
-// renderStmt returns a statement's SQL and arguments, or why it cannot be
+// RenderStmt returns a statement's SQL and arguments, or why it cannot be
 // sent: a JSON value that does not encode, or a condition comparing a JSON
 // column.
-func renderStmt(d Dialect, st *Statement) (string, []any, error) {
+func RenderStmt(d Dialect, st *Statement) (string, []any, error) {
 	w := writer{d: d, in: st.Entity}
 	w.statement(st)
 	if w.err != nil {

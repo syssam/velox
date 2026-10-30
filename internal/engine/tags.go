@@ -1,4 +1,4 @@
-package velox
+package engine
 
 import (
 	"context"
@@ -25,7 +25,7 @@ func WithTags(ctx context.Context, kv ...string) context.Context {
 	}
 	// A new slice, never the parent's: contexts derived from the parent
 	// keep the tags they had.
-	old := tagsOf(ctx)
+	old := TagsFrom(ctx)
 	tags := make([]Tag, len(old), len(old)+len(kv)/2)
 	copy(tags, old)
 	for i := 0; i < len(kv); i += 2 {
@@ -39,9 +39,9 @@ func WithTags(ctx context.Context, kv ...string) context.Context {
 	return context.WithValue(ctx, tagsKey{}, tags)
 }
 
-// tagsOf returns the context's tags; nil when none. The slice is shared by
+// TagsFrom returns the context's tags; nil when none. The slice is shared by
 // every statement run with the context, and is never changed in place.
-func tagsOf(ctx context.Context) []Tag {
+func TagsFrom(ctx context.Context) []Tag {
 	t, _ := ctx.Value(tagsKey{}).([]Tag)
 	return t
 }

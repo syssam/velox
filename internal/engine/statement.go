@@ -1,4 +1,4 @@
-package velox
+package engine
 
 import (
 	"context"
@@ -201,8 +201,8 @@ type Statement struct {
 	// last attempt's.
 	Result Result
 
-	ran target // where exec sent it; its With loads run there
-	pin target // a With load's: the connection its query ran on, which its reads go to; zero otherwise
+	ran Target // where exec sent it; its With loads run there
+	pin Target // a With load's: the connection its query ran on, which its reads go to; zero otherwise
 	// handed is set once Iter has handed the caller a row: a broken
 	// connection is then not failed over, as the read cannot start again.
 	handed bool
@@ -211,12 +211,12 @@ type Statement struct {
 	// sent met a row the policy hides.
 	upsertPolicy bool
 	// upsertRows is the number of rows the statement had when the scope
-	// conditioned it: checkUpserted compares with it, not with Rows, which
+	// conditioned it: CheckUpserted compares with it, not with Rows, which
 	// an Around hook may change.
 	upsertRows int
 	// bidi is set on a statement of a bidirectional one-to-one write, whose
-	// Rewrite hooks' changes checkBidiRewrite checks; nil otherwise.
-	bidi *bidiStep
+	// Rewrite hooks' changes CheckBidiRewrite checks; nil otherwise.
+	bidi *BidiStep
 }
 
 // Result is what executing a statement did: a Statement's, which an Around
@@ -280,13 +280,22 @@ type Around func(ctx context.Context, st *Statement, next func(context.Context) 
 
 // The functions below reach what Statement keeps private, for the code around
 // velox's generic API.
-func stmtBidi(st *Statement) *bidiStep           { return st.bidi }
-func setStmtBidi(st *Statement, b *bidiStep)     { st.bidi = b }
-func stmtPin(st *Statement) target               { return st.pin }
-func setStmtPin(st *Statement, t target)         { st.pin = t }
-func stmtRan(st *Statement) target               { return st.ran }
-func setStmtRan(st *Statement, t target)         { st.ran = t }
-func stmtHanded(st *Statement) bool              { return st.handed }
-func setStmtHanded(st *Statement)                { st.handed = true }
-func stmtUpsertPolicy(st *Statement) bool        { return st.upsertPolicy }
-func setStmtUpsertPolicy(st *Statement, on bool) { st.upsertPolicy = on }
+func StmtBidi(st *Statement) *BidiStep { return st.bidi }
+
+func SetStmtBidi(st *Statement, b *BidiStep) { st.bidi = b }
+
+func StmtPin(st *Statement) Target { return st.pin }
+
+func SetStmtPin(st *Statement, t Target) { st.pin = t }
+
+func StmtRan(st *Statement) Target { return st.ran }
+
+func SetStmtRan(st *Statement, t Target) { st.ran = t }
+
+func StmtHanded(st *Statement) bool { return st.handed }
+
+func SetStmtHanded(st *Statement) { st.handed = true }
+
+func StmtUpsertPolicy(st *Statement) bool { return st.upsertPolicy }
+
+func SetStmtUpsertPolicy(st *Statement, on bool) { st.upsertPolicy = on }

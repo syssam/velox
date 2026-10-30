@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/syssam/velox2/internal/engine"
 )
 
 type inv struct{}
@@ -53,7 +55,7 @@ var (
 // eachItems is a per-owner read of the items of invoices 1 and 2, with sku
 // <> "x", in sku order, keyed by column col.
 func eachItems(col, limit int) *Statement {
-	return &Statement{Op: OpSelect, Entity: itemInfo, Where: []Predicate{{node{op: opNEQ, col: 2, v: "x"}}},
+	return &Statement{Op: OpSelect, Entity: itemInfo, Where: []Predicate{engine.NewPredicate(engine.Node{Op: engine.OpNEQ, Col: 2, V: "x"})},
 		OrderBy: []OrderTerm{{Column: 2, Desc: true}, {Column: 0}},
 		Each:    &EachClause{Keys: []any{int64(1), int64(2)}, Column: col, Limit: limit}}
 }
@@ -69,14 +71,14 @@ func eachTags(limit int, where Predicate) *Statement {
 // countItems is CountEach's statement for the items of invoices 1 and 2,
 // with sku <> "x".
 func countItems() *Statement {
-	return &Statement{Op: OpSelect, Entity: itemInfo, Count: true, Where: []Predicate{{node{op: opNEQ, col: 2, v: "x"}}},
+	return &Statement{Op: OpSelect, Entity: itemInfo, Count: true, Where: []Predicate{engine.NewPredicate(engine.Node{Op: engine.OpNEQ, Col: 2, V: "x"})},
 		Each: &EachClause{Keys: []any{int64(1), int64(2)}, Column: 1}}
 }
 
 // countTags is CountEach's statement for the tags of books 1 and 2 through
 // join, whose owner and target columns are owner and target, with org_id 7.
 func countTags(join *EntityInfo, owner, target int) *Statement {
-	return &Statement{Op: OpSelect, Entity: tagInfo, Count: true, Where: []Predicate{{node{op: opEQ, col: 1, v: int64(7)}}},
+	return &Statement{Op: OpSelect, Entity: tagInfo, Count: true, Where: []Predicate{engine.NewPredicate(engine.Node{Op: engine.OpEQ, Col: 1, V: int64(7)})},
 		Each: &EachClause{Keys: []any{int64(1), int64(2)}, Join: join, JoinOwner: owner, JoinTarget: target, Target: 0}}
 }
 
@@ -113,7 +115,7 @@ func TestRenderSchemaQualifiedTable(t *testing.T) {
 // it again.
 func TestRenderSchemaQualifiedWrites(t *testing.T) {
 	info := &EntityInfo{Name: "velox.inv", Schema: "billing", Table: "invoices", Tenant: -1, Columns: []ColumnInfo{{Name: "id"}, {Name: "org_id"}, {Name: "total"}}}
-	where := []Predicate{{node{op: opEQ, col: 1, v: int64(7)}}}
+	where := []Predicate{engine.NewPredicate(engine.Node{Op: engine.OpEQ, Col: 1, V: int64(7)})}
 	insert := func() *Statement {
 		return &Statement{Op: OpInsert, Entity: info, Columns: []int{1, 2}, Rows: [][]any{{int64(7), 1.5}}, Returning: []int{0}}
 	}
@@ -165,7 +167,7 @@ type renderCase struct {
 func renderCases() []renderCase {
 	return []renderCase{
 		{"eq nil", func() *Statement {
-			return stmt(Pred[inv]{node{op: opEQ, col: 4, v: nil}}, Pred[inv]{node{op: opNEQ, col: 4, v: []byte(nil)}})
+			return stmt(Pred[inv](engine.NewPredicate(engine.Node{Op: engine.OpEQ, Col: 4, V: nil})), Pred[inv](engine.NewPredicate(engine.Node{Op: engine.OpNEQ, Col: 4, V: []byte(nil)})))
 		}, map[Dialect]string{
 			Postgres: `SELECT ` + pgCols + ` FROM "invoices" WHERE "paid_at" IS NULL AND "paid_at" IS NOT NULL`,
 			MySQL:    "SELECT " + mysqlCols + " FROM `invoices` WHERE `paid_at` IS NULL AND `paid_at` IS NOT NULL",
@@ -314,26 +316,30 @@ func renderCases() []renderCase {
 			MySQL:    "SELECT `id`, `invoice_id`, `sku` FROM `items` WHERE `id` IN (?, ?) AND `sku` <> ? ORDER BY `sku` DESC, `id`",
 			SQLite:   `SELECT "id", "invoice_id", "sku" FROM "items" WHERE "id" IN (?, ?) AND "sku" <> ? ORDER BY "sku" DESC, "id"`,
 		}, []any{int64(1), int64(2), "x"}},
-		{"each: through", func() *Statement { return eachTags(1, Predicate{node{op: opEQ, col: 1, v: int64(7)}}) }, map[Dialect]string{
+		{"each: through", func() *Statement {
+			return eachTags(1, engine.NewPredicate(engine.Node{Op: engine.OpEQ, Col: 1, V: int64(7)}))
+		}, map[Dialect]string{
 			Postgres: `SELECT "id", "org_id", "name", "vx_owner" FROM (SELECT "tags"."id", "tags"."org_id", "tags"."name", "vx_j"."book_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."book_id" ORDER BY "tags"."name", "tags"."id") AS "vx_rn" FROM "tags" JOIN "book_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."book_id" IN ($1, $2) AND "tags"."org_id" = $3) AS "vx" WHERE "vx_rn" <= $4 ORDER BY "vx_rn"`,
 			MySQL:    "SELECT `id`, `org_id`, `name`, `vx_owner` FROM (SELECT `tags`.`id`, `tags`.`org_id`, `tags`.`name`, `vx_j`.`book_id` AS `vx_owner`, ROW_NUMBER() OVER (PARTITION BY `vx_j`.`book_id` ORDER BY `tags`.`name`, `tags`.`id`) AS `vx_rn` FROM `tags` JOIN `book_tags` AS `vx_j` ON `vx_j`.`tag_id` = `tags`.`id` WHERE `vx_j`.`book_id` IN (?, ?) AND `tags`.`org_id` = ?) AS `vx` WHERE `vx_rn` <= ? ORDER BY `vx_rn`",
 			SQLite:   `SELECT "id", "org_id", "name", "vx_owner" FROM (SELECT "tags"."id", "tags"."org_id", "tags"."name", "vx_j"."book_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."book_id" ORDER BY "tags"."name", "tags"."id") AS "vx_rn" FROM "tags" JOIN "book_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."book_id" IN (?, ?) AND "tags"."org_id" = ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn"`,
 		}, []any{int64(1), int64(2), int64(7), 1}},
-		{"each: through, no limit", func() *Statement { return eachTags(0, Predicate{node{op: opEQ, col: 1, v: int64(7)}}) }, map[Dialect]string{
+		{"each: through, no limit", func() *Statement {
+			return eachTags(0, engine.NewPredicate(engine.Node{Op: engine.OpEQ, Col: 1, V: int64(7)}))
+		}, map[Dialect]string{
 			Postgres: `SELECT "tags"."id", "tags"."org_id", "tags"."name", "vx_j"."book_id" AS "vx_owner" FROM "tags" JOIN "book_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."book_id" IN ($1, $2) AND "tags"."org_id" = $3 ORDER BY "tags"."name", "tags"."id"`,
 			MySQL:    "SELECT `tags`.`id`, `tags`.`org_id`, `tags`.`name`, `vx_j`.`book_id` AS `vx_owner` FROM `tags` JOIN `book_tags` AS `vx_j` ON `vx_j`.`tag_id` = `tags`.`id` WHERE `vx_j`.`book_id` IN (?, ?) AND `tags`.`org_id` = ? ORDER BY `tags`.`name`, `tags`.`id`",
 			SQLite:   `SELECT "tags"."id", "tags"."org_id", "tags"."name", "vx_j"."book_id" AS "vx_owner" FROM "tags" JOIN "book_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."book_id" IN (?, ?) AND "tags"."org_id" = ? ORDER BY "tags"."name", "tags"."id"`,
 		}, []any{int64(1), int64(2), int64(7)}},
 		{"each: through, a condition with EXISTS", func() *Statement {
-			notes := link{target: noteInfo, ownerCol: 0, targetCol: 1}
-			return eachTags(2, Predicate{node{op: opExists, v: notes, kids: []node{{op: opEQ, col: 2, v: "hi"}}}})
+			notes := engine.Link{Target: noteInfo, OwnerCol: 0, TargetCol: 1}
+			return eachTags(2, engine.NewPredicate(engine.Node{Op: engine.OpExists, V: notes, Kids: []engine.Node{{Op: engine.OpEQ, Col: 2, V: "hi"}}}))
 		}, map[Dialect]string{
 			Postgres: `SELECT "id", "org_id", "name", "vx_owner" FROM (SELECT "tags"."id", "tags"."org_id", "tags"."name", "vx_j"."book_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."book_id" ORDER BY "tags"."name", "tags"."id") AS "vx_rn" FROM "tags" JOIN "book_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."book_id" IN ($1, $2) AND EXISTS (SELECT 1 FROM "notes" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "body" = $3)) AS "vx" WHERE "vx_rn" <= $4 ORDER BY "vx_rn"`,
 			MySQL:    "SELECT `id`, `org_id`, `name`, `vx_owner` FROM (SELECT `tags`.`id`, `tags`.`org_id`, `tags`.`name`, `vx_j`.`book_id` AS `vx_owner`, ROW_NUMBER() OVER (PARTITION BY `vx_j`.`book_id` ORDER BY `tags`.`name`, `tags`.`id`) AS `vx_rn` FROM `tags` JOIN `book_tags` AS `vx_j` ON `vx_j`.`tag_id` = `tags`.`id` WHERE `vx_j`.`book_id` IN (?, ?) AND EXISTS (SELECT 1 FROM `notes` AS `vx1` WHERE `vx1`.`tag_id` = `tags`.`id` AND `body` = ?)) AS `vx` WHERE `vx_rn` <= ? ORDER BY `vx_rn`",
 			SQLite:   `SELECT "id", "org_id", "name", "vx_owner" FROM (SELECT "tags"."id", "tags"."org_id", "tags"."name", "vx_j"."book_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."book_id" ORDER BY "tags"."name", "tags"."id") AS "vx_rn" FROM "tags" JOIN "book_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."book_id" IN (?, ?) AND EXISTS (SELECT 1 FROM "notes" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "body" = ?)) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn"`,
 		}, []any{int64(1), int64(2), "hi", 2}},
 		{"each: through, schema-qualified", func() *Statement {
-			st := eachTags(1, Predicate{node{op: opEQ, col: 1, v: int64(7)}})
+			st := eachTags(1, engine.NewPredicate(engine.Node{Op: engine.OpEQ, Col: 1, V: int64(7)}))
 			st.Entity, st.Each.Join = inSchema(tagInfo, "billing"), inSchema(bookTagInfo, "billing")
 			return st
 		}, map[Dialect]string{
@@ -351,7 +357,7 @@ func renderCases() []renderCase {
 			SQLite:   `SELECT "id", "invoice_id", "sku" FROM (SELECT "id", "invoice_id", "sku", ROW_NUMBER() OVER (PARTITION BY "invoice_id" ORDER BY "sku" DESC, "id") AS "vx_rn" FROM "billing"."items" WHERE "invoice_id" IN (?, ?) AND "sku" <> ?) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn"`,
 		}, []any{int64(1), int64(2), "x", 2}},
 		{"each: through links that may repeat", func() *Statement {
-			st := eachTags(1, Predicate{node{op: opEQ, col: 1, v: int64(7)}})
+			st := eachTags(1, engine.NewPredicate(engine.Node{Op: engine.OpEQ, Col: 1, V: int64(7)}))
 			st.Each.Join, st.Each.JoinOwner, st.Each.JoinTarget = linkInfo, 1, 2
 			return st
 		}, map[Dialect]string{
@@ -402,15 +408,15 @@ func TestEachRefusesReservedNames(t *testing.T) {
 	for _, name := range []string{"vx_rn", "vx_owner"} {
 		in := *tagInfo
 		in.Columns = []ColumnInfo{{Name: "id"}, {Name: "org_id"}, {Name: name}}
-		st := eachTags(1, Predicate{node{op: opEQ, col: 1, v: int64(7)}})
+		st := eachTags(1, engine.NewPredicate(engine.Node{Op: engine.OpEQ, Col: 1, V: int64(7)}))
 		st.Entity = &in
-		_, _, err := renderStmt(Postgres, st)
+		_, _, err := engine.RenderStmt(Postgres, st)
 		if err == nil || !strings.Contains(err.Error(), "velox.tag") || !strings.Contains(err.Error(), `"`+name+`"`) {
 			t.Errorf("%s: %v, want an error naming the entity and the column", name, err)
 		}
 		// Without a limit there is no window, and no clash.
 		st.Each.Limit = 0
-		if _, _, err := renderStmt(Postgres, st); err != nil {
+		if _, _, err := engine.RenderStmt(Postgres, st); err != nil {
 			t.Errorf("%s, no limit: %v", name, err)
 		}
 	}
@@ -446,12 +452,6 @@ func TestRenderQuotesIdentifiers(t *testing.T) {
 		if got, _ := render(d, st); got != want {
 			t.Errorf("%v:\n got %s\nwant %s", d, got, want)
 		}
-	}
-}
-
-func TestDialectString(t *testing.T) {
-	if Postgres.String() != "postgres" || MySQL.String() != "mysql" || SQLite.String() != "sqlite" {
-		t.Error(Postgres, MySQL, SQLite)
 	}
 }
 
@@ -535,8 +535,8 @@ func TestNewClausesOnEveryDialect(t *testing.T) {
 		}, []any{int64(1)}},
 		{"of through a join", func() *Statement {
 			st := stmt(hOrg.EQ(1))
-			st.Where = append(st.Where, Predicate{node{op: opThrough, col: 0, v: join, w: 0,
-				kids: []node{{op: opIn, col: 1, v: []any{int64(7), int64(8)}}}}})
+			st.Where = append(st.Where, engine.NewPredicate(engine.Node{Op: engine.OpThrough, Col: 0, V: join, W: 0,
+				Kids: []engine.Node{{Op: engine.OpIn, Col: 1, V: []any{int64(7), int64(8)}}}}))
 			st.Limit = 5
 			return st
 		}, map[Dialect]string{
@@ -578,7 +578,7 @@ func TestNewClausesOnEveryDialect(t *testing.T) {
 // TestUnknownOpIsRefused: a condition of a kind the renderer does not know
 // fails rendering with an error instead of rendering nothing.
 func TestUnknownOpIsRefused(t *testing.T) {
-	_, _, err := renderStmt(Postgres, &Statement{Op: OpSelect, Entity: invInfo, Where: []Predicate{{node{op: 200}}}})
+	_, _, err := engine.RenderStmt(Postgres, &Statement{Op: OpSelect, Entity: invInfo, Where: []Predicate{engine.NewPredicate(engine.Node{Op: 200})}})
 	if want := "velox: velox.inv: a condition of unknown kind 200"; err == nil || err.Error() != want {
 		t.Errorf("got %v, want %q", err, want)
 	}

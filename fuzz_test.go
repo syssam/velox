@@ -3,54 +3,16 @@ package velox
 import (
 	"strings"
 	"testing"
+
+	"github.com/syssam/velox2/internal/engine"
 )
-
-// unquote reverses Dialect.quote: it strips the outer quote characters and
-// halves the doubled ones; ok is false when s is not one quoted identifier.
-func unquote(d Dialect, s string) (string, bool) {
-	q := byte('"')
-	if d == MySQL {
-		q = '`'
-	}
-	if len(s) < 2 || s[0] != q || s[len(s)-1] != q {
-		return "", false
-	}
-	var b strings.Builder
-	in := s[1 : len(s)-1]
-	for i := 0; i < len(in); i++ {
-		if in[i] == q {
-			if i+1 >= len(in) || in[i+1] != q {
-				return "", false // a lone quote would end the identifier
-			}
-			i++
-		}
-		b.WriteByte(in[i])
-	}
-	return b.String(), true
-}
-
-func FuzzQuote(f *testing.F) {
-	for _, s := range []string{"id", `a"b`, "a`b", `""`, "``", "", "x y", `\`} {
-		f.Add(s)
-	}
-	f.Fuzz(func(t *testing.T, ident string) {
-		for _, d := range []Dialect{Postgres, MySQL, SQLite} {
-			var b strings.Builder
-			quoteIdent(d, &b, ident)
-			got, ok := unquote(d, b.String())
-			if !ok || got != ident {
-				t.Fatalf("%v: %q quoted as %s does not read back (%q, %v)", d, ident, b.String(), got, ok)
-			}
-		}
-	})
-}
 
 // fuzzStatement builds a statement on invInfo from fuzz input: each byte picks
 // an operation, a column and whether the value is s.
 func fuzzStatement(ops []byte, s string) *Statement {
 	st := &Statement{Op: OpSelect, Entity: invInfo}
 	n := len(invInfo.Columns)
-	var preds []node
+	var preds []engine.Node
 	for i, b := range ops {
 		col := int32(int(b>>4) % n)
 		var v any = s
@@ -59,31 +21,31 @@ func fuzzStatement(ops []byte, s string) *Statement {
 		}
 		switch b % 7 {
 		case 0:
-			preds = append(preds, node{op: opEQ, col: col, v: v})
+			preds = append(preds, engine.Node{Op: engine.OpEQ, Col: col, V: v})
 		case 1:
-			in := node{op: opIn, col: col, v: []any{v, s}}
+			in := engine.Node{Op: engine.OpIn, Col: col, V: []any{v, s}}
 			if b&2 == 2 { // Of through a join entity, invInfo itself
-				in = node{op: opThrough, col: col, v: invInfo, w: int(b>>5) % n, kids: []node{in}}
+				in = engine.Node{Op: engine.OpThrough, Col: col, V: invInfo, W: int(b>>5) % n, Kids: []engine.Node{in}}
 			}
 			preds = append(preds, in)
 		case 2:
-			preds = append(preds, node{op: opLike, col: col, v: s})
+			preds = append(preds, engine.Node{Op: engine.OpLike, Col: col, V: s})
 		case 3:
-			preds = append(preds, node{op: opBetween, col: col, v: v, w: s})
+			preds = append(preds, engine.Node{Op: engine.OpBetween, Col: col, V: v, W: s})
 		case 4:
 			if len(preds) > 1 {
-				preds = []node{{op: opOr, kids: preds}}
+				preds = []engine.Node{{Op: engine.OpOr, Kids: preds}}
 			}
 		case 5:
 			if len(preds) > 0 {
-				preds[len(preds)-1] = node{op: opNot, kids: []node{preds[len(preds)-1]}}
+				preds[len(preds)-1] = engine.Node{Op: engine.OpNot, Kids: []engine.Node{preds[len(preds)-1]}}
 			}
 		case 6:
 			st.OrderBy = append(st.OrderBy, OrderTerm{Column: int(col), Desc: b&2 == 2})
 		}
 	}
 	for _, p := range preds {
-		st.Where = append(st.Where, Predicate{p})
+		st.Where = append(st.Where, engine.NewPredicate(p))
 	}
 	if len(ops) > 0 && ops[0]&8 == 8 {
 		st.Op, st.OrderBy = OpUpdate, nil
@@ -154,7 +116,7 @@ func FuzzRender(f *testing.F) {
 			if osql, _ := render(d, fuzzStatement(ops, other)); osql != sql {
 				t.Fatalf("%v: the SQL depends on an argument's value:\n%s\n%s", d, sql, osql)
 			}
-			var c renderCache
+			var c engine.RenderCache
 			cachedRender(&c, d, st)
 			cached, cargs := cachedRender(&c, d, fuzzStatement(ops, s))
 			if cached != sql || !argsEqual(cargs, args) {
@@ -270,7 +232,7 @@ func FuzzRenderWrite(f *testing.F) {
 		for kind, verb := range verbs {
 			for _, d := range []Dialect{Postgres, MySQL, SQLite} {
 				st := fuzzWrites(ops, s)[kind]
-				sql, args, err := renderStmt(d, st)
+				sql, args, err := engine.RenderStmt(d, st)
 				if err != nil {
 					continue
 				}
@@ -285,7 +247,7 @@ func FuzzRenderWrite(f *testing.F) {
 					t.Fatalf("%v: unbalanced quotes: %s", d, sql)
 				}
 				var quoted strings.Builder
-				quoteIdent(d, &quoted, invInfo.Table)
+				engine.QuoteIdent(d, &quoted, invInfo.Table)
 				if !strings.HasPrefix(sql, verb+quoted.String()) {
 					t.Fatalf("%v: not a %s on %s: %s", d, verb, quoted.String(), sql)
 				}
@@ -332,10 +294,10 @@ func FuzzRenderWrite(f *testing.F) {
 					}
 				}
 				other := s + "\x00~"
-				if osql, _, err := renderStmt(d, fuzzWrites(ops, other)[kind]); err != nil || osql != sql {
+				if osql, _, err := engine.RenderStmt(d, fuzzWrites(ops, other)[kind]); err != nil || osql != sql {
 					t.Fatalf("%v: the SQL depends on an argument's value (%v):\n%s\n%s", d, err, sql, osql)
 				}
-				var c renderCache
+				var c engine.RenderCache
 				cachedRender(&c, d, st)
 				cached, cargs := cachedRender(&c, d, fuzzWrites(ops, s)[kind])
 				if cached != sql || !argsEqual(cargs, args) {

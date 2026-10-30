@@ -1,4 +1,4 @@
-package velox
+package engine
 
 import (
 	"runtime"
@@ -75,16 +75,16 @@ func TestPCCacheIsBounded(t *testing.T) {
 	c := &callers{}
 	c.once.Do(func() { c.self = "velox.invalid/none" })
 	want := func(line int) Caller {
-		return Caller{File: "callers_internal_test.go", Line: line, Func: "github.com/syssam/velox2.TestPCCacheIsBounded"}
+		return Caller{File: "callers_internal_test.go", Line: line, Func: "github.com/syssam/velox2/internal/engine.TestPCCacheIsBounded"}
 	}
 	for i := range 3 {
-		if got, line := c.capture(), thisLine(); got != want(line) {
+		if got, line := c.Capture(), thisLine(); got != want(line) {
 			t.Errorf("round %d, first site: %+v, want line %d", i, got, line)
 		}
-		if got, line := c.capture(), thisLine(); got != want(line) {
+		if got, line := c.Capture(), thisLine(); got != want(line) {
 			t.Errorf("round %d, second site: %+v, want line %d", i, got, line)
 		}
-		if got, line := c.capture(), thisLine(); got != want(line) {
+		if got, line := c.Capture(), thisLine(); got != want(line) {
 			t.Errorf("round %d, third site: %+v, want line %d", i, got, line)
 		}
 		if len(c.pcs) > 2 {
@@ -114,11 +114,11 @@ func TestPCCacheConcurrentAtBound(t *testing.T) {
 				}
 			}
 			for range 100 {
-				got, line := c.capture(), thisLine()
+				got, line := c.Capture(), thisLine()
 				check("first", got, line)
-				got, line = c.capture(), thisLine()
+				got, line = c.Capture(), thisLine()
 				check("second", got, line)
-				got, line = c.capture(), thisLine()
+				got, line = c.Capture(), thisLine()
 				check("third", got, line)
 			}
 		})
@@ -136,7 +136,7 @@ func descend(c *callers, n int) Caller {
 	if n > 0 {
 		return descend(c, n-1)
 	}
-	return c.capture()
+	return c.Capture()
 }
 
 // TestCaptureReadsDeepStacks: the first unwinding is sized by the last call
@@ -188,7 +188,7 @@ func TestCaptureReadsAtMost64Frames(t *testing.T) {
 func TestDepthHintIsAtLeast4(t *testing.T) {
 	c := &callers{}
 	c.once.Do(func() { c.self = "velox.invalid/none" })
-	if got := c.capture(); got.Func != "github.com/syssam/velox2.TestDepthHintIsAtLeast4" {
+	if got := c.Capture(); got.Func != "github.com/syssam/velox2/internal/engine.TestDepthHintIsAtLeast4" {
 		t.Fatalf("call site %+v", got)
 	}
 	if d := c.depth.Load(); d != 4 {

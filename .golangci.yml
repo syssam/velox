@@ -9,6 +9,17 @@ linters:
       - path: ^example/graphql/graph/generated\.go$
         linters: [staticcheck]
       # Test entities, exported only because two test packages share them.
+      # The engine's exports are for the root package; its public types are documented
+      # on their aliases in api.go, which TestAliasDocsListMembers checks.
+      - path: ^internal/engine/
+        linters: [revive]
+        text: "^exported:"
+      - path: ^internal/engine/
+        linters: [staticcheck]
+        text: ST102
+      - path: ^internal/engine/
+        linters: [revive]
+        text: "^unexported-return:"
       - path: ^internal/apitest/fixture/
         linters: [revive]
       - path: ^internal/apitest/fixture/

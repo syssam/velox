@@ -1,4 +1,4 @@
-package velox
+package engine
 
 import (
 	"encoding/binary"
@@ -48,7 +48,7 @@ func WithSQLComment(app string, tags ...string) Option {
 		}
 	}
 	tags = slices.Clone(tags)
-	return Option{func(c *config) { c.comment = newCommenter(app, tags) }}
+	return Option{func(c *Config) { c.Comment = newCommenter(app, tags) }}
 }
 
 // commenter renders and caches a DB's SQL comments.
@@ -78,7 +78,7 @@ func newCommenter(app string, tags []string) *commenter {
 
 // text returns the comment, with its leading space, for the statement's
 // Caller and Tags. It does not keep st.
-func (c *commenter) text(st *Statement) string {
+func (c *commenter) Text(st *Statement) string {
 	var buf [256]byte
 	key := c.key(buf[:0], st)
 	c.mu.RLock()

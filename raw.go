@@ -4,20 +4,11 @@ import (
 	"context"
 	"fmt"
 	"iter"
-	"reflect"
 	"slices"
-	"strconv"
 	"strings"
+
+	"github.com/syssam/velox2/internal/engine"
 )
-
-// execInfo is the EntityInfo of Exec's statements: the name their errors and
-// the Around hooks see. Exec scans nothing, so it has no table or columns.
-var execInfo = EntityInfo{Name: "Exec", Tenant: -1}
-
-// errNoReason is the error of raw SQL run without a reason.
-func errNoReason(name string) error {
-	return fmt.Errorf("velox: %s: raw SQL needs a reason, as it applies neither the tenant scope nor the policy", name)
-}
 
 // Exec runs query, raw SQL that returns no rows, with args, and returns the
 // number of rows it affected, as the driver counts them, or -1 when the
@@ -33,11 +24,11 @@ func errNoReason(name string) error {
 //
 //	n, err := db.Exec(ctx, "nightly cleanup", "DELETE FROM sessions WHERE expires_at < $1", now)
 func (db *DB) Exec(ctx context.Context, reason, query string, args ...any) (int64, error) {
-	if noReason(reason) {
-		return 0, errNoReason(execInfo.Name)
+	if engine.NoReason(reason) {
+		return 0, engine.ErrNoReason(engine.ExecInfo.Name)
 	}
-	st := &Statement{Op: OpRawExec, Entity: &execInfo, SQL: query, Args: args, TenantBypass: reason, PolicyBypass: reason, InTx: db.inTx}
-	var res result
+	st := &Statement{Op: OpRawExec, Entity: &engine.ExecInfo, SQL: query, Args: args, TenantBypass: reason, PolicyBypass: reason, InTx: db.inTx}
+	var res engine.ExecResult
 	if err := db.run(ctx, st, nil, &res); err != nil {
 		return 0, err
 	}
@@ -114,8 +105,8 @@ func (q RawQuery[E]) statement[_ Lazy[E]]() (Statement, error) {
 	if q.meta.err != nil {
 		return Statement{}, q.meta.err
 	}
-	if noReason(q.reason) {
-		return Statement{}, errNoReason(q.meta.info.Name)
+	if engine.NoReason(q.reason) {
+		return Statement{}, engine.ErrNoReason(q.meta.info.Name)
 	}
 	return Statement{Op: OpRawQuery, Entity: q.meta.info, SQL: q.query, Args: q.args, MaxRows: q.maxRows,
 		TenantBypass: q.reason, PolicyBypass: q.reason, InTx: q.db.inTx}, nil
@@ -135,11 +126,11 @@ type rawRun[E any] struct {
 }
 
 // readRaw reads r's rows by column name, anew should an Around hook retry.
-func readRaw[E any](a *rawRun[E], r rows) error {
+func readRaw[E any](a *rawRun[E], r engine.Rows) error {
 	if a.yield != nil && (a.yielded || a.stopped) {
-		return errIterAgain
+		return engine.ErrIterAgain
 	}
-	cols, err := rawColumns(a.m.info, r)
+	cols, err := engine.RawColumns(a.m.info, r)
 	if err != nil {
 		return err
 	}
@@ -161,65 +152,13 @@ func readRaw[E any](a *rawRun[E], r rows) error {
 			return err
 		}
 		a.yielded = true
-		setStmtHanded(&a.st)
+		engine.SetStmtHanded(&a.st)
 		if !yieldRow(a.yield, e, a.timed, &a.st.Result.LoopBody) {
 			a.stopped = true
 			return nil
 		}
 	}
 	return nil
-}
-
-// rawColumns maps the columns r returns, by name, to in's columns. It refuses
-// a column in has no field for, and a column returned twice, which would
-// scan into one field twice.
-func rawColumns(in *EntityInfo, r rows) ([]int, error) {
-	names, err := resultColumns(r)
-	if err != nil {
-		return nil, err
-	}
-	cols := make([]int, len(names))
-	seen := make(map[int]bool, len(names))
-	var unknown, twice []string
-	for i, name := range names {
-		c, ok := in.Column(name)
-		switch {
-		case !ok:
-			unknown = append(unknown, strconv.Quote(name))
-		case seen[c] && !slices.Contains(twice, strconv.Quote(name)):
-			twice = append(twice, strconv.Quote(name))
-		}
-		seen[c], cols[i] = true, c
-	}
-	if len(unknown) > 0 {
-		return nil, fmt.Errorf("the raw SQL returned %s, which %s has no field for", strings.Join(unknown, ", "), in.Name)
-	}
-	if len(twice) > 0 {
-		return nil, fmt.Errorf("the raw SQL returned %s more than once", strings.Join(twice, ", "))
-	}
-	return cols, nil
-}
-
-// resultColumns returns the names of the columns r returns: database/sql's
-// rows and the test executor's report them with Columns, pgx's with
-// FieldDescriptions, which names a pgconn type, so it is called by its name.
-func resultColumns(r rows) ([]string, error) {
-	if c, ok := r.(*countedRows); ok {
-		r = c.rows
-	}
-	switch r := r.(type) {
-	case interface{ Columns() ([]string, error) }:
-		return r.Columns()
-	}
-	if m := reflect.ValueOf(r).MethodByName("FieldDescriptions"); m.IsValid() && m.Type().NumIn() == 0 && m.Type().NumOut() == 1 {
-		fds := m.Call(nil)[0]
-		names := make([]string, fds.Len())
-		for i := range names {
-			names[i] = fds.Index(i).FieldByName("Name").String()
-		}
-		return names, nil
-	}
-	return nil, fmt.Errorf("the driver's rows (%T) do not name their columns", r)
 }
 
 // prepareRaw is prepare's work for raw SQL, which is the caller's: there is
@@ -232,16 +171,16 @@ func resultColumns(r rows) ([]string, error) {
 // goes on a line of its own, so that a line comment does not swallow it.
 func (db *DB) prepareRaw(ctx context.Context, st *Statement) {
 	db.observe(ctx, st)
-	if len(db.cfg.arounds) > 0 {
+	if len(db.cfg.Arounds) > 0 {
 		st.Args = slices.Clone(st.Args)
 	}
-	st.Fingerprint = fingerprint(st.SQL)
-	if db.cfg.comment != nil {
+	st.Fingerprint = engine.Fingerprint(st.SQL)
+	if db.cfg.Comment != nil {
 		q := strings.TrimRight(st.SQL, "; \t\r\n")
 		if strings.Contains(q[strings.LastIndexByte(q, '\n')+1:], "--") {
 			q += "\n"
 		}
-		st.SQL = q + db.cfg.comment.text(st)
+		st.SQL = q + db.cfg.Comment.Text(st)
 	}
 }
 
@@ -252,7 +191,7 @@ func (q RawQuery[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error) {
 		return nil, err
 	}
 	a := &rawRun[E]{st: st, m: q.meta}
-	if err := q.db.run(ctx, &a.st, func(r rows) error { return readRaw(a, r) }, nil); err != nil {
+	if err := q.db.run(ctx, &a.st, func(r engine.Rows) error { return readRaw(a, r) }, nil); err != nil {
 		return nil, err
 	}
 	return a.out, nil
@@ -267,7 +206,7 @@ func (q RawQuery[E]) One[_ Lazy[E]](ctx context.Context) (*E, error) {
 		return nil, err
 	}
 	a := &rawRun[E]{st: st, m: q.meta, limit: 2}
-	if err := q.db.run(ctx, &a.st, func(r rows) error { return readRaw(a, r) }, nil); err != nil {
+	if err := q.db.run(ctx, &a.st, func(r engine.Rows) error { return readRaw(a, r) }, nil); err != nil {
 		return nil, err
 	}
 	switch len(a.out) {
@@ -290,8 +229,8 @@ func (q RawQuery[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error] {
 			yield(zero, err)
 			return
 		}
-		a := &rawRun[E]{st: st, m: q.meta, yield: yield, timed: len(q.db.cfg.arounds) > 0}
-		err = q.db.run(ctx, &a.st, func(r rows) error { return readRaw(a, r) }, nil)
+		a := &rawRun[E]{st: st, m: q.meta, yield: yield, timed: len(q.db.cfg.Arounds) > 0}
+		err = q.db.run(ctx, &a.st, func(r engine.Rows) error { return readRaw(a, r) }, nil)
 		if err != nil && !a.stopped {
 			var zero E
 			yield(zero, err)

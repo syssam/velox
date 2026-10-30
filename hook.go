@@ -2,11 +2,10 @@ package velox
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"reflect"
 	"slices"
 	"unsafe"
+
+	"github.com/syssam/velox2/internal/engine"
 )
 
 // Mutator applies a write of entity E.
@@ -79,111 +78,53 @@ func On[E any](h Hook[E], ops ...Op) Hook[E] {
 	}
 }
 
-// mutation is a write in flight, without E: what Mutation[E] holds. Its db is an
-// any, converted by Mutation.DB: EntityInfo reaches mutation, and a *DB field
-// made every Desc entity's package 79 KiB larger (compilecost_test.go).
-type mutation struct {
-	db       any              // the *DB the write runs on; set only when in has hooks
-	op       Op               // set before the hooks run: Mutation.Op reads it, since an insert has no st
-	st       *Statement       // the update or delete; nil for an insert
-	rows     []unsafe.Pointer // an insert's rows
-	affected int64            // the rows the write affected, for Mutation.Affected
-	where    []Predicate      // st.Where when next was called, for Mutation.Conds
-	own      bool             // the hook called SetAffected: it made the write itself
-	ownSet   bool             // st.Set is the mutation's own array, cloned once
-	err      error            // a misuse recorded by ValueIn, Set, Where or SetAffected
-	core     error            // the error next returned, to pass through unwrapped
-	called   bool             // next has been called
-	dry      bool             // under SQL(ctx): the core renders and does not send
-	sql      string
-	args     []any // what the core rendered under SQL(ctx)
-}
-
-type mutateFn func(ctx context.Context, mu *mutation) error
-
-// hookFn is a Hook[E] with E erased, made once when the metadata is built.
-type hookFn func(next mutateFn) mutateFn
-
 // mutate runs in's hooks around core, which runs on db: the hooks reach it
 // as Mutation.DB. With no hooks it calls core alone. The writes call core
 // directly when in has no hooks, so that none of them pays for the closure
 // and the mutation this takes, or for setting mu.db.
-func mutate(ctx context.Context, db *DB, in *EntityInfo, mu *mutation, core mutateFn) error {
-	if len(infoHooks(in)) == 0 {
+func mutate(ctx context.Context, db *DB, in *EntityInfo, mu *engine.MutationState, core engine.MutateFn) error {
+	if len(engine.InfoHooks(in)) == 0 {
 		return core(ctx, mu)
 	}
-	mu.db = db
-	next := func(ctx context.Context, mu *mutation) error {
-		if mu.called {
+	mu.DB = db
+	next := func(ctx context.Context, mu *engine.MutationState) error {
+		if mu.Called {
 			// Running the core again would send the write again.
-			if mu.err == nil {
-				mu.err = errNextTwice
+			if mu.Err == nil {
+				mu.Err = engine.ErrNextTwice
 			}
-			mu.core = &stageError{in.Name, "hook", errNextTwice}
-			return mu.core
+			mu.Core = engine.NewStageError(in.Name, "hook", engine.ErrNextTwice)
+			return mu.Core
 		}
-		mu.called = true
-		if mu.st != nil {
+		mu.Called = true
+		if mu.St != nil {
 			// The conditions as the caller and the hooks gave them: prepare
 			// only appends to st.Where, or replaces it with a copy.
-			mu.where = mu.st.Where
+			mu.Where = mu.St.Where
 		}
-		if mu.own && mu.err == nil {
-			mu.err = errOwnAndNext
+		if mu.Own && mu.Err == nil {
+			mu.Err = engine.ErrOwnAndNext
 		}
-		if mu.err != nil {
+		if mu.Err != nil {
 			// Refuse before sending: the misuse would otherwise be
 			// reported only after the write was made.
-			mu.core = &stageError{in.Name, "hook", mu.err}
-			return mu.core
+			mu.Core = engine.NewStageError(in.Name, "hook", mu.Err)
+			return mu.Core
 		}
-		mu.core = core(ctx, mu)
-		return mu.core
+		mu.Core = core(ctx, mu)
+		return mu.Core
 	}
-	for i := len(infoHooks(in)) - 1; i >= 0; i-- {
-		next = infoHooks(in)[i](next)
+	for i := len(engine.InfoHooks(in)) - 1; i >= 0; i-- {
+		next = engine.InfoHooks(in)[i](next)
 	}
 	err := next(ctx, mu)
 	switch {
-	case err == nil && mu.err != nil:
-		return &stageError{in.Name, "hook", mu.err}
-	case err == nil, identical(err, mu.core):
+	case err == nil && mu.Err != nil:
+		return engine.NewStageError(in.Name, "hook", mu.Err)
+	case err == nil, engine.Identical(err, mu.Core):
 		return err
 	}
-	return &stageError{in.Name, "hook", err}
-}
-
-// identical reports whether err is core itself. An error whose type cannot be
-// compared is not, rather than a panic.
-func identical(err, core error) bool {
-	if core == nil {
-		return false
-	}
-	t := reflect.TypeOf(err)
-	return t == reflect.TypeOf(core) && t.Comparable() && err == core
-}
-
-var (
-	// errNilMutator is the error of a hook that returned a nil Mutator.
-	errNilMutator = errors.New("a hook returned a nil Mutator")
-	// errNextTwice is the error of a hook that called next twice.
-	errNextTwice = errors.New("a hook called next twice")
-	// errOwnAndNext is the error of a hook that called both SetAffected and
-	// next.
-	errOwnAndNext = errors.New("SetAffected is for a hook that makes the write itself; it called next too")
-)
-
-// BoundPolicy is an entity's Policy with E erased, made by BindPolicy for
-// Desc.Policy. For generated code. Its fields are not exported: only BindPolicy
-// makes one.
-type BoundPolicy struct{ p *policy }
-
-// BoundHooks is an entity's hooks with E erased, made by BindHooks for
-// Desc.Hooks. For generated code. Its fields are not exported: only BindHooks
-// makes one.
-type BoundHooks struct {
-	hs     []hookFn
-	nilAt1 int // 1 + the index of the first nil hook; 0 when none
+	return engine.NewStageError(in.Name, "hook", err)
 }
 
 // BindPolicy erases p's entity type, for Desc.Policy. For generated code.
@@ -197,19 +138,19 @@ type BoundHooks struct {
 // the method runs on a nil *E and must not read its receiver, nor, in its
 // body outside the functions it returns, the entity's own metadata (see
 // Policy).
-func BindPolicy[E any](p Policy[E]) BoundPolicy { return BoundPolicy{policyOf(p)} }
+func BindPolicy[E any](p Policy[E]) BoundPolicy { return engine.NewBoundPolicy(policyOf(p)) }
 
 // policyOf is p with E erased.
-func policyOf[E any](p Policy[E]) *policy {
-	pol := &policy{}
+func policyOf[E any](p Policy[E]) *engine.EntityPolicy {
+	pol := &engine.EntityPolicy{}
 	if r := p.Read; r != nil {
-		pol.read = func(ctx context.Context) (Predicate, error) { q, err := r(ctx); return Predicate(q), err }
+		pol.Read = func(ctx context.Context) (Predicate, error) { q, err := r(ctx); return Predicate(q), err }
 	}
 	if w := p.Write; w != nil {
-		pol.write = func(ctx context.Context) (Predicate, error) { q, err := w(ctx); return Predicate(q), err }
+		pol.Write = func(ctx context.Context) (Predicate, error) { q, err := w(ctx); return Predicate(q), err }
 	}
 	if ins := p.Insert; ins != nil {
-		pol.insert = func(ctx context.Context, x unsafe.Pointer) error { return ins(ctx, (*E)(x)) }
+		pol.Insert = func(ctx context.Context, x unsafe.Pointer) error { return ins(ctx, (*E)(x)) }
 	}
 	return pol
 }
@@ -225,71 +166,24 @@ func BindHooks[E any](hs []Hook[E]) BoundHooks {
 	var b BoundHooks
 	for i, f := range hs {
 		if f == nil {
-			setBoundNil(&b, i+1)
+			engine.SetBoundNil(&b, i+1)
 			return b
 		}
-		addBoundHook(&b, erase(f))
+		engine.AddBoundHook(&b, erase(f))
 	}
 	return b
 }
 
 // erase returns h with E erased.
-func erase[E any](h Hook[E]) hookFn {
-	return func(next mutateFn) mutateFn {
+func erase[E any](h Hook[E]) engine.HookFn {
+	return func(next engine.MutateFn) engine.MutateFn {
 		typed := h(MutateFunc[E](func(ctx context.Context, m *Mutation[E]) error { return next(ctx, &m.mu) }))
-		return func(ctx context.Context, mu *mutation) error {
+		return func(ctx context.Context, mu *engine.MutationState) error {
 			if typed == nil {
-				return errNilMutator
+				return engine.ErrNilMutator
 			}
 			// A Mutation[E] is a mutation and nothing else, so mu is one.
 			return typed.Mutate(ctx, (*Mutation[E])(unsafe.Pointer(mu)))
 		}
 	}
 }
-
-// bindPolicy calls f, the Desc's Policy, and keeps its result in info. On the
-// join entity of a bidirectional edge (Desc.Bidi) it refuses a Read or Write.
-func bindPolicy(info *EntityInfo, f func() BoundPolicy) error {
-	var b BoundPolicy
-	if err := recovered(info.Name, "Policy()", func() { b = f() }); err != nil {
-		return err
-	}
-	info.policy = b.p
-	if info.bidi && b.p != nil && (b.p.read != nil || b.p.write != nil) {
-		return &SchemaError{Entity: info.Name, Reason: "the join entity of a bidirectional edge cannot have a Read or Write policy: " +
-			"its conditions would show or delete one row of a link; check links in Policy.Insert and deletes in a hook"}
-	}
-	return nil
-}
-
-// bindHooks calls f, the Desc's Hooks, and keeps its hooks in info. A nil
-// hook is refused.
-func bindHooks(info *EntityInfo, f func() BoundHooks) error {
-	var b BoundHooks
-	if err := recovered(info.Name, "Hooks()", func() { b = f() }); err != nil {
-		return err
-	}
-	if b.nilAt1 != 0 {
-		return errNilHook(info.Name, b.nilAt1-1)
-	}
-	info.hooks = append(info.hooks, b.hs...)
-	return nil
-}
-
-// recovered calls f, recovering a panic as the entity's *SchemaError.
-func recovered(entity, what string, f func()) (err error) {
-	defer func() {
-		if p := recover(); p != nil {
-			err = &SchemaError{Entity: entity, Reason: fmt.Sprintf("%s panicked: %v; it is called on a nil receiver", what, p)}
-		}
-	}()
-	f()
-	return nil
-}
-
-func errNilHook(entity string, i int) error {
-	return &SchemaError{Entity: entity, Reason: fmt.Sprintf("Hooks()[%d] is nil", i)}
-}
-
-func setBoundNil(b *BoundHooks, at1 int)   { b.nilAt1 = at1 }
-func addBoundHook(b *BoundHooks, h hookFn) { b.hs = append(b.hs, h) }

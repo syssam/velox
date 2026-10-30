@@ -2,135 +2,9 @@ package velox
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"reflect"
-	"slices"
-	"strconv"
-	"strings"
+
+	"github.com/syssam/velox2/internal/engine"
 )
-
-// tenantKey is the context key of a tenantScope: WithTenant and WithAllTenants
-// share it, so that the later of the two on a context wins.
-type tenantKey struct{}
-
-// tenantScope is the tenant state a context carries: an ID, or the reason
-// for reading every tenant.
-type tenantScope struct {
-	id  any
-	all string
-}
-
-// policyKey is the context key of a WithoutPolicy reason.
-type policyKey struct{}
-
-// WithTenant returns ctx scoped to tenant id: statements on a tenant-scoped
-// entity read and change only that tenant's rows, and inserts fill or check
-// the tenant column. id is converted to the tenant column's Go type when it
-// is of a predeclared integer type (an untyped constant is an int) and the
-// column's type, predeclared or named such as an OrgID int64, is an integer
-// type whose range holds it; or when it is a string and the column's kind is
-// string. An id of a named type is never converted: it must be the column's
-// type, so a UserID never serves an OrgID column. Any other id fails the
-// statement with ErrTenantMismatch. A nil id, or the type's zero value (what
-// parsing a missing claim gives), scopes nothing: such statements fail with
-// ErrNoTenant. It replaces an earlier WithTenant or WithAllTenants on ctx.
-func WithTenant(ctx context.Context, id any) context.Context {
-	return context.WithValue(ctx, tenantKey{}, tenantScope{id: id})
-}
-
-// WithAllTenants returns ctx unscoped: statements on a tenant-scoped entity
-// reach every tenant's rows. The reason is required and is shown to hooks as
-// Statement.TenantBypass; with a reason that is empty or only white space
-// WithAllTenants returns ctx unchanged, so a statement without a tenant still
-// fails. It replaces an earlier WithTenant or WithAllTenants on ctx.
-func WithAllTenants(ctx context.Context, reason string) context.Context {
-	if noReason(reason) {
-		return ctx
-	}
-	return context.WithValue(ctx, tenantKey{}, tenantScope{all: reason})
-}
-
-// WithoutPolicy returns ctx with every entity's policy switched off. The reason
-// is required and is shown to hooks as Statement.PolicyBypass; with a reason
-// that is empty or only white space WithoutPolicy returns ctx unchanged. It
-// does not lift tenant scoping: see WithAllTenants.
-func WithoutPolicy(ctx context.Context, reason string) context.Context {
-	if noReason(reason) {
-		return ctx
-	}
-	return context.WithValue(ctx, policyKey{}, reason)
-}
-
-// RowScope is what a context scopes statements by: WithTenant's id (nil when
-// none), the reasons of WithAllTenants and WithoutPolicy ("" when none), and
-// WithShard's shard, which holds other rows than another shard. A batcher that
-// reads for several callers in one statement compares their scopes, so that
-// callers of different scopes never share a read.
-//
-// RowScopes are compared with ==, which panics when Tenant holds a value
-// that cannot be compared. A tenant column's type is comparable (its
-// metadata is refused otherwise), but WithTenant takes any id, and an id of
-// another type, which a statement refuses, may not be: a caller that
-// compares guards against it with reflect.ValueOf(Tenant).Comparable(),
-// which checks the value, since a struct or an array of a comparable type
-// may hold an interface whose value is a slice or a map.
-type RowScope struct {
-	Tenant       any
-	TenantBypass string
-	PolicyBypass string
-	// Shard is WithShard's name, and HasShard whether WithShard was called: a
-	// shard named "" is told from none.
-	Shard    string
-	HasShard bool
-}
-
-// RowScopeFromContext returns ctx's row scope.
-func RowScopeFromContext(ctx context.Context) RowScope {
-	id, all := tenantOf(ctx)
-	rc, _ := ctx.Value(routeKey{}).(routeCtx)
-	return RowScope{Tenant: id, TenantBypass: all, PolicyBypass: policyBypass(ctx), Shard: rc.shard, HasShard: rc.onShard}
-}
-
-// noReason reports whether reason, a bypass's (WithAllTenants, WithoutPolicy,
-// Raw, Exec), says nothing: it is empty or only white space.
-func noReason(reason string) bool { return strings.TrimSpace(reason) == "" }
-
-// dryRunKey is the context key the SQL(ctx) methods mark their context with.
-type dryRunKey struct{}
-
-// IsDryRun reports whether ctx is that of a SQL(ctx) method: the statement
-// being built will not be sent. The SQL(ctx) methods mark the context before
-// anything runs, so everything handed that context sees it: the entity's
-// hooks (Hooks), the Policy functions and the Rewrite hooks. A Rewrite hook
-// can also read it from Statement.DryRun.
-//
-// A write made under such a context is refused: Exec of an Insert, InsertAll,
-// Update or Delete, Save, an upsert, DB.Exec (raw SQL) and Tx fail with
-// ErrDryRun before anything is sent, on any *DB, so a hook's audit write through
-// Mutation.DB does not happen and needs no check. Reads run as normal.
-func IsDryRun(ctx context.Context) bool {
-	dry, _ := ctx.Value(dryRunKey{}).(bool)
-	return dry
-}
-
-// dryRunContext returns ctx marked for IsDryRun.
-func dryRunContext(ctx context.Context) context.Context {
-	return context.WithValue(ctx, dryRunKey{}, true)
-}
-
-// tenantOf returns the context's tenant state: the tenant's id (nil when
-// none), and the WithAllTenants reason ("" when none). At most one is set.
-func tenantOf(ctx context.Context) (id any, all string) {
-	s, _ := ctx.Value(tenantKey{}).(tenantScope)
-	return s.id, s.all
-}
-
-// policyBypass returns the context's WithoutPolicy reason; "" when none.
-func policyBypass(ctx context.Context) string {
-	r, _ := ctx.Value(policyKey{}).(string)
-	return r
-}
 
 // Policy is entity E's row-level policy, declared once: by a method on the
 // entity's pointer type,
@@ -178,46 +52,6 @@ type Policy[E any] struct {
 	Insert func(ctx context.Context, x *E) error
 }
 
-// PolicyError is a statement a policy denied; Err is the policy's error.
-// Every PolicyError matches ErrDenied.
-type PolicyError struct {
-	Entity string // the Go type, e.g. "billing.Invoice"
-	// Op is the kind of statement denied: the statement's own, or, for a
-	// denial of the target of an EXISTS (a Has or HasWhere, in the statement
-	// or in a policy's condition), OpSelect, since the EXISTS reads its target
-	// whatever the statement does. An upsert's update branch is OpUpdate.
-	Op  Op
-	Err error
-}
-
-// Error is "velox: <Entity>: <Op> denied by policy", then ": <Err>" when Err
-// is not nil.
-func (e *PolicyError) Error() string {
-	s := "velox: " + e.Entity + ": " + e.Op.String() + " denied by policy"
-	if e.Err == nil {
-		return s
-	}
-	return s + ": " + e.Err.Error()
-}
-
-// Unwrap returns the policy's error.
-func (e *PolicyError) Unwrap() error { return e.Err }
-
-// Is makes every PolicyError match ErrDenied.
-func (e *PolicyError) Is(target error) bool { return target == ErrDenied }
-
-// Deny returns an error for a policy function to deny a statement with: its
-// text is reason, and it matches ErrDenied.
-func Deny(reason string) error { return denial(reason) }
-
-// denial is the error Deny returns.
-type denial string
-
-func (d denial) Error() string { return string(d) }
-
-// Is makes a denial match ErrDenied.
-func (d denial) Is(target error) bool { return target == ErrDenied }
-
 // Mutation is the write that an entity's hooks (Hooks) see and may change.
 // A misuse (Set on a delete, a zero or invalid condition, a handle's
 // ValueIn, Set, Where or SetAffected on an insert, ValueIn of a value of
@@ -244,27 +78,24 @@ func (d denial) Is(target error) bool { return target == ErrDenied }
 // The update adds the tenant's and the policy's conditions itself. Under
 // SQL(ctx) such a delete fails with ErrDryRun: the hook's update is a write,
 // and there is no DELETE to render.
-type Mutation[E any] struct{ mu mutation }
-
-// errInsertMutation is the misuse of ValueIn, Set or Where on an insert.
-var errInsertMutation = errors.New("Set and Where are for updates and deletes; change Rows")
+type Mutation[E any] struct{ mu engine.MutationState }
 
 // Op returns the write's kind: OpInsert, OpUpdate or OpDelete.
 func (m *Mutation[E]) Op[_ Lazy[E]]() Op {
-	if m.mu.op != 0 {
-		return m.mu.op
+	if m.mu.Op != 0 {
+		return m.mu.Op
 	}
-	return m.mu.st.Op
+	return m.mu.St.Op
 }
 
 // Rows returns an insert's rows, which a hook may change before next; nil
 // for an update or delete.
 func (m *Mutation[E]) Rows[_ Lazy[E]]() []*E {
-	if m.mu.rows == nil {
+	if m.mu.Rows == nil {
 		return nil
 	}
-	out := make([]*E, len(m.mu.rows))
-	for i, p := range m.mu.rows {
+	out := make([]*E, len(m.mu.Rows))
+	for i, p := range m.mu.Rows {
 		out[i] = (*E)(p)
 	}
 	return out
@@ -279,7 +110,7 @@ func (m *Mutation[E]) Rows[_ Lazy[E]]() []*E {
 // It is set only for the writes of entities that have hooks, which are the
 // only ones that see a Mutation.
 func (m *Mutation[E]) DB[_ Lazy[E]]() *DB {
-	db, _ := m.mu.db.(*DB)
+	db, _ := m.mu.DB.(*DB)
 	return db
 }
 
@@ -292,12 +123,12 @@ func (m *Mutation[E]) DB[_ Lazy[E]]() *DB {
 // hook's conditions, which next adds. It is empty only when the statement
 // said All, and nil for an insert. Mutation shows a soft delete built on it.
 func (m *Mutation[E]) Conds[_ Lazy[E]]() []Pred[E] {
-	if m.mu.st == nil {
+	if m.mu.St == nil {
 		return nil
 	}
-	w := m.mu.st.Where
-	if m.mu.called {
-		w = m.mu.where
+	w := m.mu.St.Where
+	if m.mu.Called {
+		w = m.mu.Where
 	}
 	out := make([]Pred[E], len(w))
 	for i, p := range w {
@@ -312,7 +143,7 @@ func (m *Mutation[E]) Conds[_ Lazy[E]]() []Pred[E] {
 // statement succeeded and no upsert was denied), under SQL(ctx), which sends
 // nothing, and when a hook skipped next without calling SetAffected. It is
 // -1 for a write whose driver could not report its count.
-func (m *Mutation[E]) Affected[_ Lazy[E]]() int64 { return m.mu.affected }
+func (m *Mutation[E]) Affected[_ Lazy[E]]() int64 { return m.mu.Affected }
 
 // SetAffected is for a hook that makes an update or a delete itself instead
 // of calling next, such as a soft delete (see Mutation): n is the rows its
@@ -323,65 +154,37 @@ func (m *Mutation[E]) Affected[_ Lazy[E]]() int64 { return m.mu.affected }
 // order, with a negative n other than -1, or on an insert, whose count is its
 // rows, is a misuse.
 func (m *Mutation[E]) SetAffected[_ Lazy[E]](n int64) {
-	m.mu.setAffected(n)
+	m.mu.SetAffected(n)
 }
-
-// setAffected is SetAffected's work, not generic.
-func (mu *mutation) setAffected(n int64) {
-	switch {
-	case mu.st == nil:
-		mu.record(errInsertAffected)
-	case mu.called:
-		mu.record(errOwnAndNext)
-	case n < -1:
-		mu.record(errNegativeAffected)
-	default:
-		mu.affected, mu.own = n, true
-	}
-}
-
-// errInsertAffected is the misuse of SetAffected on an insert.
-var errInsertAffected = errors.New("SetAffected is for updates and deletes; an insert's count is its rows")
-
-// errNegativeAffected is the misuse of SetAffected with a negative count
-// other than -1, the unknown count.
-var errNegativeAffected = errors.New("SetAffected of a negative count other than -1")
 
 // Set adds assignments to an update; each replaces the statement's
 // assignment of the same column, if there is one. Set on a delete or an
 // insert is an error.
 func (m *Mutation[E]) Set[_ Lazy[E]](ss ...Setter[E]) {
-	if m.mu.st == nil {
+	if m.mu.St == nil {
 		m.misuse()
 		return
 	}
 	for _, s := range ss {
-		mutateSet(&m.mu, s.a)
+		engine.MutateSet(&m.mu, s.a)
 	}
 }
 
 // Where narrows the rows the statement changes: all of the conditions must
 // hold, with the statement's own. Where on an insert is an error.
 func (m *Mutation[E]) Where[_ Lazy[E]](ps ...Pred[E]) {
-	if m.mu.st == nil {
+	if m.mu.St == nil {
 		m.misuse()
 		return
 	}
 	for _, p := range ps {
-		mutateWhere(m.mu.st, &m.mu.err, Predicate(p))
+		engine.MutateWhere(m.mu.St, &m.mu.Err, Predicate(p))
 	}
 }
 
 // misuse records the error of ValueIn, Set or Where on an insert, keeping
 // the first.
-func (m *Mutation[E]) misuse[_ Lazy[E]]() { m.mu.record(errInsertMutation) }
-
-// record records err as the mutation's misuse, keeping the first.
-func (mu *mutation) record(err error) {
-	if mu.err == nil {
-		mu.err = err
-	}
-}
+func (m *Mutation[E]) misuse[_ Lazy[E]]() { m.mu.Record(engine.ErrInsertMutation) }
 
 // valueIn is a handle's ValueIn: the value m's update assigns to column col
 // with AssignSet, as a V. On an insert it records the misuse; a value of
@@ -389,17 +192,17 @@ func (mu *mutation) record(err error) {
 // one too, and reports no value.
 func valueIn[E, V any](m *Mutation[E], col int32) (V, bool) {
 	var zero V
-	if m.mu.st == nil {
+	if m.mu.St == nil {
 		m.misuse()
 		return zero, false
 	}
-	a, ok := assigned(m.mu.st, int(col))
+	a, ok := engine.Assigned(m.mu.St, int(col))
 	if !ok {
 		return zero, false
 	}
 	v, ok := a.(V)
 	if !ok {
-		m.mu.wrongType(int(col), a, (*V)(nil))
+		m.mu.WrongType(int(col), a, (*V)(nil))
 		return zero, false
 	}
 	return v, true
@@ -409,11 +212,11 @@ func valueIn[E, V any](m *Mutation[E], col int32) (V, bool) {
 // pointer to a copy of the value, which Set gives as a V and Save as a *V.
 // Any other value it records as valueIn does.
 func nullValueIn[E, V any](m *Mutation[E], col int32) (*V, bool) {
-	if m.mu.st == nil {
+	if m.mu.St == nil {
 		m.misuse()
 		return nil, false
 	}
-	a, ok := assigned(m.mu.st, int(col))
+	a, ok := engine.Assigned(m.mu.St, int(col))
 	if !ok {
 		return nil, false
 	}
@@ -429,70 +232,6 @@ func nullValueIn[E, V any](m *Mutation[E], col int32) (*V, bool) {
 		c := *v
 		return &c, true
 	}
-	m.mu.wrongType(int(col), a, (*V)(nil))
+	m.mu.WrongType(int(col), a, (*V)(nil))
 	return nil, false
-}
-
-// wrongType records that column col is assigned got, which is not of the
-// type want points to. It is not generic, so that fmt and reflect are not
-// compiled into every package that calls ValueIn.
-func (mu *mutation) wrongType(col int, got, want any) {
-	name := fmt.Sprintf("%d", col)
-	if in := mu.st.Entity; in != nil && col < len(in.Columns) {
-		name = strconv.Quote(in.Columns[col].Name)
-	}
-	mu.record(fmt.Errorf("column %s is assigned a value of type %T, not %v", name, got, reflect.TypeOf(want).Elem()))
-}
-
-// assigned returns the value st assigns to column col with AssignSet.
-func assigned(st *Statement, col int) (any, bool) {
-	for _, a := range st.Set {
-		if a.Column == col && a.Op == AssignSet {
-			return a.Value, true
-		}
-	}
-	return nil, false
-}
-
-// mutateSet replaces the assignment of a.Column in mu's statement with a, or
-// appends a. The first change copies st.Set, whose elements may be the
-// query's own, and sets mu.ownSet; later ones write in place. It records an
-// error, keeping the first, when the statement is a delete.
-func mutateSet(mu *mutation, a Assignment) {
-	st := mu.st
-	if st.Op == OpDelete {
-		mu.record(errors.New("a delete assigns no columns: Set is for updates"))
-		return
-	}
-	i := slices.IndexFunc(st.Set, func(s Assignment) bool { return s.Column == a.Column })
-	switch {
-	case i >= 0 && !mu.ownSet:
-		st.Set = slices.Clone(st.Set)
-	case i < 0 && !mu.ownSet:
-		st.Set = slices.Clip(st.Set) // append copies
-	}
-	mu.ownSet = true
-	if i >= 0 {
-		st.Set[i] = a
-	} else {
-		st.Set = append(st.Set, a)
-	}
-}
-
-// mutateWhere appends p to st's conditions, or records its error in *errp,
-// keeping the first, when it is or holds the zero Predicate or is invalid.
-func mutateWhere(st *Statement, errp *error, p Predicate) {
-	var err error
-	if hasZero(p.n) {
-		err = errors.New("a condition is the zero Predicate; make conditions with column handles, And, Or and Not")
-	} else {
-		err = predErr(p.n)
-	}
-	if err != nil {
-		if *errp == nil {
-			*errp = err
-		}
-		return
-	}
-	st.Where = append(slices.Clip(st.Where), p)
 }

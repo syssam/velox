@@ -2,25 +2,31 @@
 
 package velox
 
+import "github.com/syssam/velox2/internal/engine"
+
 // Col is the handle of a column of entity E whose values, of type V, are neither ordered nor text: bool, []byte and other types. I is the column's index; velox-gen sets it.
 type Col[E, V any] struct{ I int32 }
 
 func (c Col[E, V]) column(*E) int32 { return c.I }
 
 // EQ is column = v.
-func (c Col[E, V]) EQ[_ Lazy[V]](v V) Pred[E] { return Pred[E]{node{op: opEQ, col: c.I, v: v}} }
+func (c Col[E, V]) EQ[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpEQ, Col: c.I, V: v}))
+}
 
 // NEQ is column <> v.
-func (c Col[E, V]) NEQ[_ Lazy[V]](v V) Pred[E] { return Pred[E]{node{op: opNEQ, col: c.I, v: v}} }
+func (c Col[E, V]) NEQ[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNEQ, Col: c.I, V: v}))
+}
 
 // In is column IN (vs...). With no values it is false.
 func (c Col[E, V]) In[_ Lazy[V]](vs ...V) Pred[E] {
-	return Pred[E]{node{op: opIn, col: c.I, v: list(vs)}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpIn, Col: c.I, V: list(vs)}))
 }
 
 // NotIn is column NOT IN (vs...). With no values it is true.
 func (c Col[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E] {
-	return Pred[E]{node{op: opNotIn, col: c.I, v: list(vs)}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotIn, Col: c.I, V: list(vs)}))
 }
 
 // Asc orders by the column, ascending.
@@ -45,21 +51,23 @@ type OrderedCol[E, V any] struct{ I int32 }
 func (c OrderedCol[E, V]) column(*E) int32 { return c.I }
 
 // EQ is column = v.
-func (c OrderedCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E] { return Pred[E]{node{op: opEQ, col: c.I, v: v}} }
+func (c OrderedCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpEQ, Col: c.I, V: v}))
+}
 
 // NEQ is column <> v.
 func (c OrderedCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E] {
-	return Pred[E]{node{op: opNEQ, col: c.I, v: v}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNEQ, Col: c.I, V: v}))
 }
 
 // In is column IN (vs...). With no values it is false.
 func (c OrderedCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E] {
-	return Pred[E]{node{op: opIn, col: c.I, v: list(vs)}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpIn, Col: c.I, V: list(vs)}))
 }
 
 // NotIn is column NOT IN (vs...). With no values it is true.
 func (c OrderedCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E] {
-	return Pred[E]{node{op: opNotIn, col: c.I, v: list(vs)}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotIn, Col: c.I, V: list(vs)}))
 }
 
 // Asc orders by the column, ascending.
@@ -71,24 +79,28 @@ func (c OrderedCol[E, V]) Desc[_ Lazy[V]]() Order[E] {
 }
 
 // GT is column > v.
-func (c OrderedCol[E, V]) GT[_ Lazy[V]](v V) Pred[E] { return Pred[E]{node{op: opGT, col: c.I, v: v}} }
+func (c OrderedCol[E, V]) GT[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpGT, Col: c.I, V: v}))
+}
 
 // GTE is column >= v.
 func (c OrderedCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E] {
-	return Pred[E]{node{op: opGTE, col: c.I, v: v}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpGTE, Col: c.I, V: v}))
 }
 
 // LT is column < v.
-func (c OrderedCol[E, V]) LT[_ Lazy[V]](v V) Pred[E] { return Pred[E]{node{op: opLT, col: c.I, v: v}} }
+func (c OrderedCol[E, V]) LT[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLT, Col: c.I, V: v}))
+}
 
 // LTE is column <= v.
 func (c OrderedCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E] {
-	return Pred[E]{node{op: opLTE, col: c.I, v: v}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLTE, Col: c.I, V: v}))
 }
 
 // Between is column BETWEEN lo AND hi.
 func (c OrderedCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E] {
-	return Pred[E]{node{op: opBetween, col: c.I, v: lo, w: hi}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpBetween, Col: c.I, V: lo, W: hi}))
 }
 
 // Set sets the column to v.
@@ -105,19 +117,23 @@ type NumberCol[E, V any] struct{ I int32 }
 func (c NumberCol[E, V]) column(*E) int32 { return c.I }
 
 // EQ is column = v.
-func (c NumberCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E] { return Pred[E]{node{op: opEQ, col: c.I, v: v}} }
+func (c NumberCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpEQ, Col: c.I, V: v}))
+}
 
 // NEQ is column <> v.
-func (c NumberCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E] { return Pred[E]{node{op: opNEQ, col: c.I, v: v}} }
+func (c NumberCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNEQ, Col: c.I, V: v}))
+}
 
 // In is column IN (vs...). With no values it is false.
 func (c NumberCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E] {
-	return Pred[E]{node{op: opIn, col: c.I, v: list(vs)}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpIn, Col: c.I, V: list(vs)}))
 }
 
 // NotIn is column NOT IN (vs...). With no values it is true.
 func (c NumberCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E] {
-	return Pred[E]{node{op: opNotIn, col: c.I, v: list(vs)}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotIn, Col: c.I, V: list(vs)}))
 }
 
 // Asc orders by the column, ascending.
@@ -129,20 +145,28 @@ func (c NumberCol[E, V]) Desc[_ Lazy[V]]() Order[E] {
 }
 
 // GT is column > v.
-func (c NumberCol[E, V]) GT[_ Lazy[V]](v V) Pred[E] { return Pred[E]{node{op: opGT, col: c.I, v: v}} }
+func (c NumberCol[E, V]) GT[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpGT, Col: c.I, V: v}))
+}
 
 // GTE is column >= v.
-func (c NumberCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E] { return Pred[E]{node{op: opGTE, col: c.I, v: v}} }
+func (c NumberCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpGTE, Col: c.I, V: v}))
+}
 
 // LT is column < v.
-func (c NumberCol[E, V]) LT[_ Lazy[V]](v V) Pred[E] { return Pred[E]{node{op: opLT, col: c.I, v: v}} }
+func (c NumberCol[E, V]) LT[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLT, Col: c.I, V: v}))
+}
 
 // LTE is column <= v.
-func (c NumberCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E] { return Pred[E]{node{op: opLTE, col: c.I, v: v}} }
+func (c NumberCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLTE, Col: c.I, V: v}))
+}
 
 // Between is column BETWEEN lo AND hi.
 func (c NumberCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E] {
-	return Pred[E]{node{op: opBetween, col: c.I, v: lo, w: hi}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpBetween, Col: c.I, V: lo, W: hi}))
 }
 
 // Set sets the column to v.
@@ -169,19 +193,23 @@ type StringCol[E any, V ~string] struct{ I int32 }
 func (c StringCol[E, V]) column(*E) int32 { return c.I }
 
 // EQ is column = v.
-func (c StringCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E] { return Pred[E]{node{op: opEQ, col: c.I, v: v}} }
+func (c StringCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpEQ, Col: c.I, V: v}))
+}
 
 // NEQ is column <> v.
-func (c StringCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E] { return Pred[E]{node{op: opNEQ, col: c.I, v: v}} }
+func (c StringCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNEQ, Col: c.I, V: v}))
+}
 
 // In is column IN (vs...). With no values it is false.
 func (c StringCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E] {
-	return Pred[E]{node{op: opIn, col: c.I, v: list(vs)}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpIn, Col: c.I, V: list(vs)}))
 }
 
 // NotIn is column NOT IN (vs...). With no values it is true.
 func (c StringCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E] {
-	return Pred[E]{node{op: opNotIn, col: c.I, v: list(vs)}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotIn, Col: c.I, V: list(vs)}))
 }
 
 // Asc orders by the column, ascending.
@@ -193,45 +221,53 @@ func (c StringCol[E, V]) Desc[_ Lazy[V]]() Order[E] {
 }
 
 // GT is column > v.
-func (c StringCol[E, V]) GT[_ Lazy[V]](v V) Pred[E] { return Pred[E]{node{op: opGT, col: c.I, v: v}} }
+func (c StringCol[E, V]) GT[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpGT, Col: c.I, V: v}))
+}
 
 // GTE is column >= v.
-func (c StringCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E] { return Pred[E]{node{op: opGTE, col: c.I, v: v}} }
+func (c StringCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpGTE, Col: c.I, V: v}))
+}
 
 // LT is column < v.
-func (c StringCol[E, V]) LT[_ Lazy[V]](v V) Pred[E] { return Pred[E]{node{op: opLT, col: c.I, v: v}} }
+func (c StringCol[E, V]) LT[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLT, Col: c.I, V: v}))
+}
 
 // LTE is column <= v.
-func (c StringCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E] { return Pred[E]{node{op: opLTE, col: c.I, v: v}} }
+func (c StringCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLTE, Col: c.I, V: v}))
+}
 
 // Between is column BETWEEN lo AND hi.
 func (c StringCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E] {
-	return Pred[E]{node{op: opBetween, col: c.I, v: lo, w: hi}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpBetween, Col: c.I, V: lo, W: hi}))
 }
 
 // Like is column LIKE pattern: % and _ are wildcards, and ! escapes them and itself (\ is an ordinary character: a \ in a pattern matches a backslash). Whether case is ignored follows the database: PostgreSQL's LIKE does not ignore it; MySQL's default collations and SQLite (for ASCII) do. It takes a string, not the column's type, because a pattern is not a value of the column.
 func (c StringCol[E, V]) Like[_ Lazy[V]](pattern string) Pred[E] {
-	return Pred[E]{node{op: opLike, col: c.I, v: pattern}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLike, Col: c.I, V: pattern}))
 }
 
 // HasPrefix is true when the column starts with s, taken literally. Whether case is ignored follows the database: PostgreSQL's LIKE does not ignore it; MySQL's default collations and SQLite (for ASCII) do.
 func (c StringCol[E, V]) HasPrefix[_ Lazy[V]](s V) Pred[E] {
-	return Pred[E]{node{op: opLike, col: c.I, v: escapeLike(string(s)) + "%"}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLike, Col: c.I, V: engine.EscapeLike(string(s)) + "%"}))
 }
 
 // HasSuffix is true when the column ends with s, taken literally. Whether case is ignored follows the database: PostgreSQL's LIKE does not ignore it; MySQL's default collations and SQLite (for ASCII) do.
 func (c StringCol[E, V]) HasSuffix[_ Lazy[V]](s V) Pred[E] {
-	return Pred[E]{node{op: opLike, col: c.I, v: "%" + escapeLike(string(s))}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLike, Col: c.I, V: "%" + engine.EscapeLike(string(s))}))
 }
 
 // Contains is true when the column contains s, taken literally. Whether case is ignored follows the database: PostgreSQL's LIKE does not ignore it; MySQL's default collations and SQLite (for ASCII) do.
 func (c StringCol[E, V]) Contains[_ Lazy[V]](s V) Pred[E] {
-	return Pred[E]{node{op: opLike, col: c.I, v: "%" + escapeLike(string(s)) + "%"}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLike, Col: c.I, V: "%" + engine.EscapeLike(string(s)) + "%"}))
 }
 
 // EqualFold is LOWER(column) = LOWER(s). SQLite's LOWER folds ASCII letters only, so on SQLite it ignores the case of those alone.
 func (c StringCol[E, V]) EqualFold[_ Lazy[V]](s V) Pred[E] {
-	return Pred[E]{node{op: opFold, col: c.I, v: string(s)}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpFold, Col: c.I, V: string(s)}))
 }
 
 // Set sets the column to v.
@@ -248,19 +284,23 @@ type NullCol[E, V any] struct{ I int32 }
 func (c NullCol[E, V]) column(*E) int32 { return c.I }
 
 // EQ is column = v.
-func (c NullCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E] { return Pred[E]{node{op: opEQ, col: c.I, v: v}} }
+func (c NullCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpEQ, Col: c.I, V: v}))
+}
 
 // NEQ is column <> v.
-func (c NullCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E] { return Pred[E]{node{op: opNEQ, col: c.I, v: v}} }
+func (c NullCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNEQ, Col: c.I, V: v}))
+}
 
 // In is column IN (vs...). With no values it is false.
 func (c NullCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E] {
-	return Pred[E]{node{op: opIn, col: c.I, v: list(vs)}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpIn, Col: c.I, V: list(vs)}))
 }
 
 // NotIn is column NOT IN (vs...). With no values it is true.
 func (c NullCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E] {
-	return Pred[E]{node{op: opNotIn, col: c.I, v: list(vs)}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotIn, Col: c.I, V: list(vs)}))
 }
 
 // Asc orders by the column, ascending.
@@ -287,10 +327,14 @@ func (c NullCol[E, V]) SetNull[_ Lazy[V]]() Setter[E] {
 }
 
 // IsNull is column IS NULL.
-func (c NullCol[E, V]) IsNull[_ Lazy[V]]() Pred[E] { return Pred[E]{node{op: opIsNull, col: c.I}} }
+func (c NullCol[E, V]) IsNull[_ Lazy[V]]() Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpIsNull, Col: c.I}))
+}
 
 // NotNull is column IS NOT NULL.
-func (c NullCol[E, V]) NotNull[_ Lazy[V]]() Pred[E] { return Pred[E]{node{op: opNotNull, col: c.I}} }
+func (c NullCol[E, V]) NotNull[_ Lazy[V]]() Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotNull, Col: c.I}))
+}
 
 // NullOrderedCol is OrderedCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it.
 type NullOrderedCol[E, V any] struct{ I int32 }
@@ -299,22 +343,22 @@ func (c NullOrderedCol[E, V]) column(*E) int32 { return c.I }
 
 // EQ is column = v.
 func (c NullOrderedCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E] {
-	return Pred[E]{node{op: opEQ, col: c.I, v: v}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpEQ, Col: c.I, V: v}))
 }
 
 // NEQ is column <> v.
 func (c NullOrderedCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E] {
-	return Pred[E]{node{op: opNEQ, col: c.I, v: v}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNEQ, Col: c.I, V: v}))
 }
 
 // In is column IN (vs...). With no values it is false.
 func (c NullOrderedCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E] {
-	return Pred[E]{node{op: opIn, col: c.I, v: list(vs)}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpIn, Col: c.I, V: list(vs)}))
 }
 
 // NotIn is column NOT IN (vs...). With no values it is true.
 func (c NullOrderedCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E] {
-	return Pred[E]{node{op: opNotIn, col: c.I, v: list(vs)}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotIn, Col: c.I, V: list(vs)}))
 }
 
 // Asc orders by the column, ascending.
@@ -327,27 +371,27 @@ func (c NullOrderedCol[E, V]) Desc[_ Lazy[V]]() Order[E] {
 
 // GT is column > v.
 func (c NullOrderedCol[E, V]) GT[_ Lazy[V]](v V) Pred[E] {
-	return Pred[E]{node{op: opGT, col: c.I, v: v}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpGT, Col: c.I, V: v}))
 }
 
 // GTE is column >= v.
 func (c NullOrderedCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E] {
-	return Pred[E]{node{op: opGTE, col: c.I, v: v}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpGTE, Col: c.I, V: v}))
 }
 
 // LT is column < v.
 func (c NullOrderedCol[E, V]) LT[_ Lazy[V]](v V) Pred[E] {
-	return Pred[E]{node{op: opLT, col: c.I, v: v}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLT, Col: c.I, V: v}))
 }
 
 // LTE is column <= v.
 func (c NullOrderedCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E] {
-	return Pred[E]{node{op: opLTE, col: c.I, v: v}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLTE, Col: c.I, V: v}))
 }
 
 // Between is column BETWEEN lo AND hi.
 func (c NullOrderedCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E] {
-	return Pred[E]{node{op: opBetween, col: c.I, v: lo, w: hi}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpBetween, Col: c.I, V: lo, W: hi}))
 }
 
 // Set sets the column to v.
@@ -367,12 +411,12 @@ func (c NullOrderedCol[E, V]) SetNull[_ Lazy[V]]() Setter[E] {
 
 // IsNull is column IS NULL.
 func (c NullOrderedCol[E, V]) IsNull[_ Lazy[V]]() Pred[E] {
-	return Pred[E]{node{op: opIsNull, col: c.I}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpIsNull, Col: c.I}))
 }
 
 // NotNull is column IS NOT NULL.
 func (c NullOrderedCol[E, V]) NotNull[_ Lazy[V]]() Pred[E] {
-	return Pred[E]{node{op: opNotNull, col: c.I}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotNull, Col: c.I}))
 }
 
 // NullNumberCol is NumberCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it.
@@ -382,22 +426,22 @@ func (c NullNumberCol[E, V]) column(*E) int32 { return c.I }
 
 // EQ is column = v.
 func (c NullNumberCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E] {
-	return Pred[E]{node{op: opEQ, col: c.I, v: v}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpEQ, Col: c.I, V: v}))
 }
 
 // NEQ is column <> v.
 func (c NullNumberCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E] {
-	return Pred[E]{node{op: opNEQ, col: c.I, v: v}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNEQ, Col: c.I, V: v}))
 }
 
 // In is column IN (vs...). With no values it is false.
 func (c NullNumberCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E] {
-	return Pred[E]{node{op: opIn, col: c.I, v: list(vs)}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpIn, Col: c.I, V: list(vs)}))
 }
 
 // NotIn is column NOT IN (vs...). With no values it is true.
 func (c NullNumberCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E] {
-	return Pred[E]{node{op: opNotIn, col: c.I, v: list(vs)}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotIn, Col: c.I, V: list(vs)}))
 }
 
 // Asc orders by the column, ascending.
@@ -410,27 +454,27 @@ func (c NullNumberCol[E, V]) Desc[_ Lazy[V]]() Order[E] {
 
 // GT is column > v.
 func (c NullNumberCol[E, V]) GT[_ Lazy[V]](v V) Pred[E] {
-	return Pred[E]{node{op: opGT, col: c.I, v: v}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpGT, Col: c.I, V: v}))
 }
 
 // GTE is column >= v.
 func (c NullNumberCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E] {
-	return Pred[E]{node{op: opGTE, col: c.I, v: v}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpGTE, Col: c.I, V: v}))
 }
 
 // LT is column < v.
 func (c NullNumberCol[E, V]) LT[_ Lazy[V]](v V) Pred[E] {
-	return Pred[E]{node{op: opLT, col: c.I, v: v}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLT, Col: c.I, V: v}))
 }
 
 // LTE is column <= v.
 func (c NullNumberCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E] {
-	return Pred[E]{node{op: opLTE, col: c.I, v: v}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLTE, Col: c.I, V: v}))
 }
 
 // Between is column BETWEEN lo AND hi.
 func (c NullNumberCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E] {
-	return Pred[E]{node{op: opBetween, col: c.I, v: lo, w: hi}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpBetween, Col: c.I, V: lo, W: hi}))
 }
 
 // Set sets the column to v.
@@ -460,12 +504,12 @@ func (c NullNumberCol[E, V]) SetNull[_ Lazy[V]]() Setter[E] {
 
 // IsNull is column IS NULL.
 func (c NullNumberCol[E, V]) IsNull[_ Lazy[V]]() Pred[E] {
-	return Pred[E]{node{op: opIsNull, col: c.I}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpIsNull, Col: c.I}))
 }
 
 // NotNull is column IS NOT NULL.
 func (c NullNumberCol[E, V]) NotNull[_ Lazy[V]]() Pred[E] {
-	return Pred[E]{node{op: opNotNull, col: c.I}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotNull, Col: c.I}))
 }
 
 // NullStringCol is StringCol for a column that allows NULL: a field of type *V. I is the column's index; velox-gen sets it.
@@ -475,22 +519,22 @@ func (c NullStringCol[E, V]) column(*E) int32 { return c.I }
 
 // EQ is column = v.
 func (c NullStringCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E] {
-	return Pred[E]{node{op: opEQ, col: c.I, v: v}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpEQ, Col: c.I, V: v}))
 }
 
 // NEQ is column <> v.
 func (c NullStringCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E] {
-	return Pred[E]{node{op: opNEQ, col: c.I, v: v}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNEQ, Col: c.I, V: v}))
 }
 
 // In is column IN (vs...). With no values it is false.
 func (c NullStringCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E] {
-	return Pred[E]{node{op: opIn, col: c.I, v: list(vs)}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpIn, Col: c.I, V: list(vs)}))
 }
 
 // NotIn is column NOT IN (vs...). With no values it is true.
 func (c NullStringCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E] {
-	return Pred[E]{node{op: opNotIn, col: c.I, v: list(vs)}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotIn, Col: c.I, V: list(vs)}))
 }
 
 // Asc orders by the column, ascending.
@@ -503,52 +547,52 @@ func (c NullStringCol[E, V]) Desc[_ Lazy[V]]() Order[E] {
 
 // GT is column > v.
 func (c NullStringCol[E, V]) GT[_ Lazy[V]](v V) Pred[E] {
-	return Pred[E]{node{op: opGT, col: c.I, v: v}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpGT, Col: c.I, V: v}))
 }
 
 // GTE is column >= v.
 func (c NullStringCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E] {
-	return Pred[E]{node{op: opGTE, col: c.I, v: v}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpGTE, Col: c.I, V: v}))
 }
 
 // LT is column < v.
 func (c NullStringCol[E, V]) LT[_ Lazy[V]](v V) Pred[E] {
-	return Pred[E]{node{op: opLT, col: c.I, v: v}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLT, Col: c.I, V: v}))
 }
 
 // LTE is column <= v.
 func (c NullStringCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E] {
-	return Pred[E]{node{op: opLTE, col: c.I, v: v}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLTE, Col: c.I, V: v}))
 }
 
 // Between is column BETWEEN lo AND hi.
 func (c NullStringCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E] {
-	return Pred[E]{node{op: opBetween, col: c.I, v: lo, w: hi}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpBetween, Col: c.I, V: lo, W: hi}))
 }
 
 // Like is column LIKE pattern: % and _ are wildcards, and ! escapes them and itself (\ is an ordinary character: a \ in a pattern matches a backslash). Whether case is ignored follows the database: PostgreSQL's LIKE does not ignore it; MySQL's default collations and SQLite (for ASCII) do. It takes a string, not the column's type, because a pattern is not a value of the column.
 func (c NullStringCol[E, V]) Like[_ Lazy[V]](pattern string) Pred[E] {
-	return Pred[E]{node{op: opLike, col: c.I, v: pattern}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLike, Col: c.I, V: pattern}))
 }
 
 // HasPrefix is true when the column starts with s, taken literally. Whether case is ignored follows the database: PostgreSQL's LIKE does not ignore it; MySQL's default collations and SQLite (for ASCII) do.
 func (c NullStringCol[E, V]) HasPrefix[_ Lazy[V]](s V) Pred[E] {
-	return Pred[E]{node{op: opLike, col: c.I, v: escapeLike(string(s)) + "%"}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLike, Col: c.I, V: engine.EscapeLike(string(s)) + "%"}))
 }
 
 // HasSuffix is true when the column ends with s, taken literally. Whether case is ignored follows the database: PostgreSQL's LIKE does not ignore it; MySQL's default collations and SQLite (for ASCII) do.
 func (c NullStringCol[E, V]) HasSuffix[_ Lazy[V]](s V) Pred[E] {
-	return Pred[E]{node{op: opLike, col: c.I, v: "%" + escapeLike(string(s))}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLike, Col: c.I, V: "%" + engine.EscapeLike(string(s))}))
 }
 
 // Contains is true when the column contains s, taken literally. Whether case is ignored follows the database: PostgreSQL's LIKE does not ignore it; MySQL's default collations and SQLite (for ASCII) do.
 func (c NullStringCol[E, V]) Contains[_ Lazy[V]](s V) Pred[E] {
-	return Pred[E]{node{op: opLike, col: c.I, v: "%" + escapeLike(string(s)) + "%"}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpLike, Col: c.I, V: "%" + engine.EscapeLike(string(s)) + "%"}))
 }
 
 // EqualFold is LOWER(column) = LOWER(s). SQLite's LOWER folds ASCII letters only, so on SQLite it ignores the case of those alone.
 func (c NullStringCol[E, V]) EqualFold[_ Lazy[V]](s V) Pred[E] {
-	return Pred[E]{node{op: opFold, col: c.I, v: string(s)}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpFold, Col: c.I, V: string(s)}))
 }
 
 // Set sets the column to v.
@@ -568,12 +612,12 @@ func (c NullStringCol[E, V]) SetNull[_ Lazy[V]]() Setter[E] {
 
 // IsNull is column IS NULL.
 func (c NullStringCol[E, V]) IsNull[_ Lazy[V]]() Pred[E] {
-	return Pred[E]{node{op: opIsNull, col: c.I}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpIsNull, Col: c.I}))
 }
 
 // NotNull is column IS NOT NULL.
 func (c NullStringCol[E, V]) NotNull[_ Lazy[V]]() Pred[E] {
-	return Pred[E]{node{op: opNotNull, col: c.I}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotNull, Col: c.I}))
 }
 
 // JSONCol is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column and neither compares nor orders by it, as equality and order of JSON differ by dialect. I is the column's index; velox-gen sets it.
@@ -610,9 +654,11 @@ func (c NullJSONCol[E, V]) SetNull[_ Lazy[V]]() Setter[E] {
 }
 
 // IsNull is column IS NULL.
-func (c NullJSONCol[E, V]) IsNull[_ Lazy[V]]() Pred[E] { return Pred[E]{node{op: opIsNull, col: c.I}} }
+func (c NullJSONCol[E, V]) IsNull[_ Lazy[V]]() Pred[E] {
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpIsNull, Col: c.I}))
+}
 
 // NotNull is column IS NOT NULL.
 func (c NullJSONCol[E, V]) NotNull[_ Lazy[V]]() Pred[E] {
-	return Pred[E]{node{op: opNotNull, col: c.I}}
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpNotNull, Col: c.I}))
 }

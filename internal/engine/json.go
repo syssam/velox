@@ -1,11 +1,4 @@
-// This file holds the encoding and decoding of the columns whose ColumnDesc
-// supplies a codec (Encode and Decode): velox-gen's json fields, with
-// encoding/json's. The core never imports encoding/json itself, so a program
-// whose entities hold no JSON does not link it. The nil handling uses reflect,
-// so none of this is generic: the generic code calls scanDst, and the writer
-// colArg.
-
-package velox
+package engine
 
 import (
 	"errors"
@@ -47,7 +40,7 @@ func encodeCol(in *EntityInfo, col int, v any) (any, error) {
 }
 
 // errNoCodec is the error for a column flagged as encoded (ColumnInfo.Codec)
-// without its codec: an EntityInfo a hook built or edited, as buildDesc
+// without its codec: an EntityInfo a hook built or edited, as BuildDesc
 // refuses a Desc that gives only one of Encode and Decode.
 func errNoCodec(in *EntityInfo, col int) error {
 	return fmt.Errorf("velox: %s: column %s is an encoded column (Codec) but has no Encode and Decode", in.Name, in.Columns[col].Name)
@@ -61,11 +54,11 @@ type codecScanner struct {
 	col int
 }
 
-// scanDst is what a scan of column col of entity in reads into, given addr,
+// ScanDst is what a scan of column col of entity in reads into, given addr,
 // a pointer to the column's field: addr itself, or, for an encoded column, a
 // codecScanner decoding into it, the one allocation such a column costs a
 // row.
-func scanDst(in *EntityInfo, col int, addr any) any {
+func ScanDst(in *EntityInfo, col int, addr any) any {
 	if !in.Columns[col].Codec {
 		return addr
 	}

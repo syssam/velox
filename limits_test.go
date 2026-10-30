@@ -247,7 +247,7 @@ func TestWithChunksUnderTheParameterLimit(t *testing.T) {
 }
 
 func TestLoadReChunksOnParameterOverflow(t *testing.T) {
-	// keysPer leaves 36 keys: with the policy's 80 values, 116 parameters,
+	// KeysPer leaves 36 keys: with the policy's 80 values, 116 parameters,
 	// 16 too many, so the chunks hold 20 keys.
 	defer velox.SetMaxParams(velox.Postgres, 100)()
 	pctx := ovReading(80)

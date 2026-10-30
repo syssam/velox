@@ -25,7 +25,7 @@ func TestDescMetadata(t *testing.T) {
 	}
 }
 
-// dRow is a model for the refusals of buildDesc.
+// dRow is a model for the refusals of BuildDesc.
 type dRow struct {
 	ID     int64
 	Flag   bool
@@ -62,7 +62,7 @@ func TestDescAcceptsAndConverts(t *testing.T) {
 		t.Fatalf("%+v", info)
 	}
 	// A pointer field's Default is given as a value of its element type and
-	// held as a pointer, which fillDefault copies for every row.
+	// held as a pointer, which FillDefault copies for every row.
 	if opt := info.Columns[2]; !opt.HasDefault {
 		t.Fatalf("opt %+v", opt)
 	} else if p, _ := opt.Default.(*bool); p == nil || !*p {

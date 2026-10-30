@@ -2,24 +2,11 @@ package velox
 
 import (
 	"encoding/json"
-	"fmt"
-	"reflect"
 	"slices"
-	"strings"
-	"sync"
 	"unsafe"
-)
 
-// kit is the code velox needs to handle an entity whose type it does not
-// know at the point of use: loading a relation to it. MetaOnce.Load builds
-// it, so it is compiled once, in the entity's own package.
-type kit struct {
-	value func(p unsafe.Pointer, col int) any                       // the value of column col of the entity at p
-	scan  func(r rows, cols []int) (any, error)                     // every row, into a new *blocks; cols as in Statement.Columns
-	pick  func(all []any, ptrs []unsafe.Pointer, idx [][]int) []any // for each idx, a []E of the rows at ptrs[idx...], which joinBlocks gave of all; see inPlace
-	ptr   func(p unsafe.Pointer) any                                // p as *E
-	empty func() any                                                // []E{}
-}
+	"github.com/syssam/velox2/internal/engine"
+)
 
 // One holds a to-one relation, filled by With. Its zero value means not loaded.
 // Every to-one edge velox-gen writes matches at most one row: its key is the
@@ -56,209 +43,11 @@ func (m Many[T]) Get[_ Lazy[T]]() ([]T, bool) {
 	return s, m.loaded
 }
 
-// holder has the layout of One[T] and Many[T], so that velox's non-generic
-// loader can fill a relation field through its offset (TestHolderLayout).
-type holder struct {
-	v      any
-	loaded bool
-}
-
-// EdgeDesc is one relation field of a generated Desc: its name and the columns
-// that key it. For generated code. EdgeTo, EdgeBidi and EdgeThrough make it. It carries
-// no target entity: the use site supplies that (see EdgeTo).
-type EdgeDesc struct {
-	name string
-
-	explicit  bool     // EdgeTo or EdgeThrough made it; a literal EdgeDesc is refused
-	ownerCol  int      // an index into the owner's Columns
-	targetCol int      // an index into the target's Columns
-	through   *through // EdgeThrough's join entity; nil for any other relation
-	bidi      any      // EdgeBidi made it: the reflect.Type of T, which must be the owner; nil otherwise
-
-	// holders are the reflect.Types of One[T] and Many[T] for the target T:
-	// the types the relation's field may have.
-	holders [2]any
-}
-
-// relation is a relation field of an entity, resolved on first use.
-// Resolving reads the target's EntityInfo, never the target's relations, so
-// relations that point at each other, or at their own entity, cannot wait on
-// each other.
-type relation struct {
-	name string
-	many bool
-	off  uintptr // the field's offset in the owner
-	typ  any     // the reflect.Type of One[T] or Many[T]
-
-	// The key, as EdgeTo and EdgeThrough wrote it.
-	ownerCol  int
-	targetCol int
-	through   *through // EdgeThrough's join entity; nil for any other relation
-
-	once sync.Once
-	link link
-	err  error
-}
-
-// link is a resolved relation: owner.Columns[ownerCol] equals
-// target.Columns[targetCol] or, for a many-to-many relation, the owner's and
-// the target's columns each equal a column of a row of the join entity.
-type link struct {
-	target     *EntityInfo
-	ownerCol   int
-	targetCol  int
-	join       *EntityInfo // many-to-many: the join entity; nil otherwise
-	joinOwner  int         // join's column equal to owner.Columns[ownerCol]
-	joinTarget int         // join's column equal to target.Columns[targetCol]
-}
-
-// useTarget is a relation's target as the use site names it: the getter of
-// the target's metadata, and the reflect.Types of One[T] and Many[T], which
-// the owner's field must be one of. The types are type descriptors only
-// (One and Many hold their value as any), so naming them does not link T's
-// metadata or its code. The zero value names no target.
-type useTarget struct {
-	get       func() (*EntityInfo, error)
-	one, many any
-}
-
 // targetOf is the use site's target for a relation to entity T. It calls
-// elemType with a nil pointer where non-generic code would use reflect.TypeFor,
+// ElemType with a nil pointer where non-generic code would use reflect.TypeFor,
 // so that no reflect.Type is compiled into the generic code.
-func targetOf[T any]() useTarget {
-	return useTarget{get: ownerOf[T], one: elemType((*One[T])(nil)), many: elemType((*Many[T])(nil))}
-}
-
-// resolve returns the relation's link. A relation has no target of its own,
-// so that the owner's metadata does not keep the target's code in every
-// program that links the owner: the use site, which names the target's type,
-// passes use. Every resolution checks that use names the entity the field
-// holds, before the cached link is consulted: the link is built from the
-// owner's and the target's columns, never from the handle, so a handle that
-// fails the check neither gets the good handle's link nor spoils it. The check
-// is two comparisons and allocates nothing.
-func (r *relation) resolve(owner *EntityInfo, use useTarget) (link, error) {
-	if use.get == nil {
-		return link{}, r.fail(owner, "it has no target in the generated code; run go tool velox-gen")
-	}
-	// The handle's T must be the entity the field holds, or loading would
-	// fill the field with rows of another type and Get would find none.
-	if ft := rtype(r.typ); ft != rtype(use.one) && ft != rtype(use.many) {
-		return link{}, r.fail(owner, "the field is a %v, but the Rel handle names %s; run go tool velox-gen", ft, targetName(rtype(use.one)))
-	}
-	r.once.Do(func() { r.link, r.err = r.build(owner, use) })
-	return r.link, r.err
-}
-
-// fail is a *SchemaError about r, an error of owner's relation.
-func (r *relation) fail(owner *EntityInfo, format string, args ...any) error {
-	return &SchemaError{Entity: owner.Name, Field: r.name, Reason: fmt.Sprintf(format, args...)}
-}
-
-// build resolves the relation against use, whose handle resolve has checked.
-func (r *relation) build(owner *EntityInfo, use useTarget) (link, error) {
-	fail := func(format string, args ...any) (link, error) {
-		return link{}, r.fail(owner, format, args...)
-	}
-	t, err := use.get()
-	if err != nil {
-		return fail("its target %s is invalid: %s", targetName(rtype(r.typ)), strings.TrimPrefix(err.Error(), "velox: "))
-	}
-	l := link{target: t}
-	// The indexes are literals in generated code: an index out of range
-	// is stale or hand-edited code, and would panic on first use.
-	if r.ownerCol < 0 || r.ownerCol >= len(owner.Columns) {
-		return fail("its key names column %d of %s, which has %d", r.ownerCol, owner.Name, len(owner.Columns))
-	}
-	if r.targetCol < 0 || r.targetCol >= len(t.Columns) {
-		return fail("its key names column %d of %s, which has %d", r.targetCol, t.Name, len(t.Columns))
-	}
-	l.ownerCol, l.targetCol = r.ownerCol, r.targetCol
-	if r.through != nil {
-		return r.buildThrough(owner, l, fail)
-	}
-	if err := sameKey(owner, l.ownerCol, t, l.targetCol); err != nil {
-		return fail("%v", err)
-	}
-	return l, nil
-}
-
-// buildThrough resolves a many-to-many relation, l with its owner's and
-// target's columns checked, by adding the join entity and its columns.
-func (r *relation) buildThrough(owner *EntityInfo, l link, fail func(string, ...any) (link, error)) (link, error) {
-	if !r.many {
-		return fail("a many-to-many relation needs a Many field")
-	}
-	j, err := r.through.join()
-	if err != nil {
-		return fail("its join entity is invalid: %s", strings.TrimPrefix(err.Error(), "velox: "))
-	}
-	// Has reads the join rows inside its EXISTS, where nothing scopes them,
-	// while loading reads them with a query of their own, which would be
-	// scoped: the two would disagree. So a join entity can have neither a
-	// tenant column nor a Read policy. Its Insert and Write policies apply
-	// only to writes of its rows, which they may check: join rows are not
-	// tenant-scoped, so a link's endpoints are checked there or in a hook.
-	if j.Tenant != -1 {
-		return fail("its join entity %s has a tenant column; join rows are not scoped, so a join entity can have neither a tenant column nor a Read policy", j.Name)
-	}
-	if p := j.policy; p != nil && p.read != nil {
-		return fail("its join entity %s has a Read policy; join rows are not scoped, so a join entity can have neither a tenant column nor a Read policy", j.Name)
-	}
-	for _, c := range [...]int{r.through.ownerCol, r.through.targetCol} {
-		if c < 0 || c >= len(j.Columns) {
-			return fail("its key names column %d of %s, which has %d", c, j.Name, len(j.Columns))
-		}
-	}
-	l.join, l.joinOwner, l.joinTarget = j, r.through.ownerCol, r.through.targetCol
-	if err := sameKey(owner, l.ownerCol, j, l.joinOwner); err != nil {
-		return fail("%v", err)
-	}
-	if err := sameKey(j, l.joinTarget, l.target, l.targetCol); err != nil {
-		return fail("%v", err)
-	}
-	return l, nil
-}
-
-// sameKey reports whether a.Columns[ac] and b.Columns[bc] can key a
-// relation: neither is encoded, and their types, without a pointer, are one
-// comparable type.
-func sameKey(a *EntityInfo, ac int, b *EntityInfo, bc int) error {
-	x, y := a.Columns[ac], b.Columns[bc]
-	for _, k := range [...]struct {
-		e *EntityInfo
-		c ColumnInfo
-	}{{a, x}, {b, y}} {
-		if k.c.Codec {
-			return fmt.Errorf("the key %s.%s is an encoded column, which cannot be compared", k.e.Name, k.c.Field)
-		}
-	}
-	if base(x.Type) != base(y.Type) {
-		return fmt.Errorf("the key types differ: %s.%s is %v and %s.%s is %v", a.Name, x.Field, base(x.Type), b.Name, y.Field, base(y.Type))
-	}
-	if !base(x.Type).Comparable() {
-		return fmt.Errorf("a key of type %v cannot be compared", base(x.Type))
-	}
-	return nil
-}
-
-// base is the reflect.Type v holds without one level of pointer: *int64 and
-// int64 are the same key.
-func base(v any) reflect.Type {
-	t := rtype(v)
-	if t.Kind() == reflect.Pointer {
-		return t.Elem()
-	}
-	return t
-}
-
-// targetName is the name of T in the relation field type One[T] or Many[T].
-func targetName(t reflect.Type) string {
-	n := t.Name()
-	if i := strings.IndexByte(n, '['); i >= 0 && strings.HasSuffix(n, "]") {
-		return n[i+1 : len(n)-1]
-	}
-	return n
+func targetOf[T any]() engine.RelTarget {
+	return engine.RelTarget{Get: ownerOf[T], One: engine.ElemType((*One[T])(nil)), Many: engine.ElemType((*Many[T])(nil))}
 }
 
 // Rel is the handle of a relation of entity E to entity T, written by
@@ -269,7 +58,7 @@ type Rel[E, T any] struct {
 	I       int32
 	where   []Predicate
 	order   []OrderTerm
-	with    []loadSpec
+	with    []engine.LoadSpec
 	each    int // LimitEach's n; 0: no limit
 	maxRows int // MaxRows's n; 0: the owner's cap
 	err     error
@@ -281,7 +70,7 @@ func (r Rel[E, T]) Where[_ Lazy[T]](ps ...Pred[T]) Rel[E, T] {
 	r.where = slices.Clip(r.where)
 	for _, p := range ps {
 		if r.err == nil {
-			r.err = predErr(p.n)
+			r.err = engine.PredErr(engine.PredNode(Predicate(p)))
 		}
 		r.where = append(r.where, Predicate(p))
 	}
@@ -340,15 +129,15 @@ func (r Rel[E, T]) MaxRows[_ Lazy[T]](n int) Rel[E, T] {
 func (r Rel[E, T]) With[U any](next Rel[T, U]) Rel[E, T] {
 	sp := next.spec()
 	if r.err == nil {
-		r.err = specErr(sp)
+		r.err = engine.SpecErr(sp)
 	}
 	r.with = append(slices.Clip(r.with), sp)
 	return r
 }
 
 // spec is the relation's load options, without types.
-func (r Rel[E, T]) spec[_ Lazy[T]]() loadSpec {
-	return loadSpec{rel: r.I, target: targetOf[T](), where: r.where, order: r.order, with: r.with, each: r.each, maxRows: r.maxRows, err: r.err}
+func (r Rel[E, T]) spec[_ Lazy[T]]() engine.LoadSpec {
+	return engine.LoadSpec{Rel: r.I, Target: targetOf[T](), Where: r.where, Order: r.order, With: r.with, Each: r.each, MaxRows: r.maxRows, Err: r.err}
 }
 
 // MarshalJSON writes the related entity, or null when there is none or it was
@@ -366,18 +155,7 @@ func (o One[T]) MarshalJSON() ([]byte, error) { return json.Marshal(o.v) }
 // loaded; see One.MarshalJSON.
 func (m Many[T]) MarshalJSON() ([]byte, error) { return json.Marshal(m.v) }
 
-// relRef names relation i of an entity without reading the entity's
-// metadata: the owner function reads it, and runs only when the statement
-// that holds the condition does (resolve). Building a condition inside an
-// entity's Policy or Hooks, which Load calls while it builds that entity's
-// metadata, then does not wait on itself.
-type relRef struct {
-	owner  func() (*EntityInfo, error)
-	target useTarget // the relation's target, named by the use site
-	i      int32
-}
-
-// ownerOf is relRef.owner for entity E, and the getter in useTarget for the
+// ownerOf is RelRef.owner for entity E, and the getter in RelTarget for the
 // target E of a relation.
 func ownerOf[E any]() (*EntityInfo, error) {
 	m, err := metaOf[E]()
@@ -387,25 +165,13 @@ func ownerOf[E any]() (*EntityInfo, error) {
 	return m.info, nil
 }
 
-// link resolves the relation.
-func (r relRef) link() (link, error) {
-	in, err := r.owner()
-	if err != nil {
-		return link{}, err
-	}
-	if r.i < 0 || int(r.i) >= len(in.rels) {
-		return link{}, fmt.Errorf("velox: %s: has no relation %d; run go tool velox-gen", in.Name, r.i)
-	}
-	return in.rels[r.i].resolve(in, r.target)
-}
-
 // CheckRelation resolves the relation that r names and returns what is wrong
 // with it: its target is not an entity or has invalid metadata, or its key is
 // missing or mistyped. CheckEntity cannot do this, because a relation of
 // generated code names its target only where it is used. velox-gen verify
 // calls it for every relation: velox.CheckRelation(gen.Users.Posts).
 func CheckRelation[E, T any](r Rel[E, T]) error {
-	_, err := relRef{owner: ownerOf[E], target: targetOf[T](), i: r.I}.link()
+	_, err := engine.RelRef{Owner: ownerOf[E], Target: targetOf[T](), I: r.I}.Link()
 	return err
 }
 
@@ -424,13 +190,13 @@ func (r Rel[E, T]) Has[_ Lazy[T]]() Pred[E] { return r.HasWhere() }
 // the statement that holds the condition, not HasWhere.
 func (r Rel[E, T]) HasWhere[_ Lazy[T]](ps ...Pred[T]) Pred[E] {
 	for _, p := range ps {
-		if err := predErr(p.n); err != nil {
-			return Pred[E]{node{op: opInvalid, v: err}}
+		if err := engine.PredErr(engine.PredNode(Predicate(p))); err != nil {
+			return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpInvalid, V: err}))
 		}
 	}
 	// The relation resolves when a statement holding the condition runs, not
-	// here: see relRef.
-	return Pred[E]{node{op: opExists, col: r.I, v: relRef{owner: ownerOf[E], target: targetOf[T](), i: r.I}, kids: nodes(ps)}}
+	// here: see RelRef.
+	return Pred[E](engine.NewPredicate(engine.Node{Op: engine.OpExists, Col: r.I, V: engine.RelRef{Owner: ownerOf[E], Target: targetOf[T](), I: r.I}, Kids: nodes(ps)}))
 }
 
 // Of is true for the entities related through r to any of owners: the
@@ -451,44 +217,5 @@ func (r Rel[E, T]) Of[_ Lazy[T]](owners ...*E) Pred[T] {
 	// A []*E has the layout of a []unsafe.Pointer; the work is not generic,
 	// so that it is compiled once, not into every package that uses a Rel.
 	ps := unsafe.Slice((*unsafe.Pointer)(unsafe.Pointer(unsafe.SliceData(owners))), len(owners))
-	return Pred[T]{ofNode(relRef{owner: ownerOf[E], target: targetOf[T](), i: r.I}, r.where, r.err, ps)}
-}
-
-// ofNode is Rel.Of's condition for the relation ref names, with its Where
-// conditions where and their error err, for the owners at ps.
-func ofNode(ref relRef, where []Predicate, err error, ps []unsafe.Pointer) node {
-	if err != nil {
-		return node{op: opInvalid, v: err}
-	}
-	l, err := ref.link()
-	if err != nil {
-		return node{op: opInvalid, v: err}
-	}
-	owner, _ := ref.owner() // link read it without an error
-	keys := make([]any, 0, len(ps))
-	for _, p := range ps {
-		if p == nil {
-			return node{op: opInvalid, v: fmt.Errorf("velox: %s: Of was given a nil owner", owner.Name)}
-		}
-		if k, ok := keyOf(owner.kit.value(p, l.ownerCol)); ok {
-			keys = append(keys, k)
-		}
-	}
-	n := node{op: opIn, col: int32(l.targetCol), v: keys}
-	if l.join != nil {
-		// The join rows are not scoped: a join entity has neither a tenant
-		// column nor a Read policy (buildThrough). The target's own scope
-		// applies to the statement that holds the condition.
-		n = node{op: opThrough, col: int32(l.targetCol), v: l.join, w: l.joinTarget,
-			kids: []node{{op: opIn, col: int32(l.joinOwner), v: keys}}}
-	}
-	if len(where) == 0 {
-		return n
-	}
-	kids := make([]node, 0, 1+len(where))
-	kids = append(kids, n)
-	for _, p := range where {
-		kids = append(kids, p.n)
-	}
-	return group(opAnd, kids)
+	return Pred[T](engine.NewPredicate(engine.OfNode(engine.RelRef{Owner: ownerOf[E], Target: targetOf[T](), I: r.I}, r.where, r.err, ps)))
 }

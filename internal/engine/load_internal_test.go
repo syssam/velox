@@ -1,4 +1,4 @@
-package velox
+package engine
 
 import (
 	"reflect"
@@ -9,11 +9,11 @@ import (
 // TestInPlace: an owner's rows are used in place only when they are a run of
 // one of the scan's arrays that no other owner in place has.
 func TestInPlace(t *testing.T) {
-	b := newBlocks(reflect.TypeFor[int64]())
+	b := NewBlocks(reflect.TypeFor[int64]())
 	for range 10 { // arrays of 4 and 8 rows: rows 0 to 3, then 4 to 9
-		b.next()
+		b.Next()
 	}
-	all, ptrs := joinBlocks([]any{b})
+	all, ptrs := JoinBlocks([]any{b})
 	idx := [][]int{
 		{0, 1, 2}, // a run in the first array
 		{3, 4},    // straddles the arrays
@@ -24,7 +24,7 @@ func TestInPlace(t *testing.T) {
 		{6},       // one row
 	}
 	keep := make([]bool, len(idx))
-	if n := inPlace(all, idx, keep, make([]bool, len(ptrs))); n != 6 {
+	if n := InPlace(all, idx, keep, make([]bool, len(ptrs))); n != 6 {
 		t.Errorf("%d rows to copy, want 6", n)
 	}
 	want := []bool{true, false, false, false, true, false, true}
@@ -38,21 +38,21 @@ func TestInPlace(t *testing.T) {
 func TestKeyRowsFill(t *testing.T) {
 	group := map[any]int{}
 	for _, k := range []any{int64(7), int64(3), int64(9)} {
-		addKey(group, k)
+		AddKey(group, k)
 	}
-	if g, added := addKey(group, int64(3)); g != 1 || added {
+	if g, added := AddKey(group, int64(3)); g != 1 || added {
 		t.Errorf("adding 3 again gives %d, %v; want 1, false", g, added)
 	}
 	keys := []any{int64(3), nil, int64(7), int64(3), int64(5), int64(7), int64(3)}
-	var x keyRows
-	x.fill(group, len(keys), func(i int) (any, bool) { return keys[i], keys[i] != nil })
+	var x KeyRows
+	x.Fill(group, len(keys), func(i int) (any, bool) { return keys[i], keys[i] != nil })
 	for g, want := range [][]int{{2, 5}, {0, 3, 6}, nil} {
-		got := x.of(g)
+		got := x.Of(g)
 		if !slices.Equal(got, want) || cap(got) != len(got) {
 			t.Errorf("key %d: rows %v cap %d, want %v capped", g, got, cap(got), want)
 		}
 	}
-	if got := x.of(-1); got != nil {
+	if got := x.Of(-1); got != nil {
 		t.Errorf("no key: rows %v, want none", got)
 	}
 }

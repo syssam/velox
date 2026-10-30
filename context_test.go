@@ -57,10 +57,10 @@ func TestWithTagsMerges(t *testing.T) {
 	bg := context.Background()
 	parent := velox.WithTags(bg, "route", "a", "user", "1")
 	child := velox.WithTags(parent, "route", "b", "team", "x")
-	if got, want := velox.TagsOf(child), []velox.Tag{{"route", "b"}, {"user", "1"}, {"team", "x"}}; !reflect.DeepEqual(got, want) {
+	if got, want := velox.TagsOf(child), []velox.Tag{{Key: "route", Value: "b"}, {Key: "user", Value: "1"}, {Key: "team", Value: "x"}}; !reflect.DeepEqual(got, want) {
 		t.Errorf("child: %v, want %v", got, want)
 	}
-	if got, want := velox.TagsOf(parent), []velox.Tag{{"route", "a"}, {"user", "1"}}; !reflect.DeepEqual(got, want) {
+	if got, want := velox.TagsOf(parent), []velox.Tag{{Key: "route", Value: "a"}, {Key: "user", Value: "1"}}; !reflect.DeepEqual(got, want) {
 		t.Errorf("parent: %v, want %v", got, want)
 	}
 	if got := velox.TagsOf(bg); got != nil {
@@ -77,7 +77,7 @@ func TestWithTagsNoPairs(t *testing.T) {
 	if got := velox.WithTags(parent); got != parent {
 		t.Errorf("WithTags(parent) = %v, want parent itself", got)
 	}
-	if got, want := velox.TagsOf(velox.WithTags(parent)), []velox.Tag{{"route", "a"}}; !reflect.DeepEqual(got, want) {
+	if got, want := velox.TagsOf(velox.WithTags(parent)), []velox.Tag{{Key: "route", Value: "a"}}; !reflect.DeepEqual(got, want) {
 		t.Errorf("tags %v, want %v", got, want)
 	}
 }
@@ -91,7 +91,7 @@ func TestTagsEditedByAHookStayInTheStatement(t *testing.T) {
 	if _, err := db.Query[testmodel.Invoice]().Limit(1).All(tctx); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := velox.TagsOf(tctx), []velox.Tag{{"route", "a"}}; !reflect.DeepEqual(got, want) {
+	if got, want := velox.TagsOf(tctx), []velox.Tag{{Key: "route", Value: "a"}}; !reflect.DeepEqual(got, want) {
 		t.Errorf("context's tags: %v, want %v", got, want)
 	}
 }

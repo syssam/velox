@@ -7,6 +7,8 @@ import (
 	"sync"
 	"testing"
 	"unsafe"
+
+	"github.com/syssam/velox2/internal/engine"
 )
 
 // TestRelationsResolveWithoutDeadlock is half of Review Focus 1.
@@ -29,15 +31,15 @@ func TestRelationsResolveWithoutDeadlock(t *testing.T) {
 		rel           int
 		target        *EntityInfo
 		ownerCol, col string
-		use           useTarget // the target as the use site names it
+		use           engine.RelTarget // the target as the use site names it
 	}{
 		{co, 0, em, "id", "company_id", targetOf[employee]()}, // Many: employee.CompanyID
 		{em, 0, em, "boss_id", "id", targetOf[employee]()},    // One
 		{em, 1, co, "company_id", "id", targetOf[company]()},  // One: employee.CompanyID
 	} {
-		l, err := infoRels(c.owner)[c.rel].resolve(c.owner, c.use)
-		if err != nil || l.target != c.target || c.owner.Columns[l.ownerCol].Name != c.ownerCol || l.target.Columns[l.targetCol].Name != c.col {
-			t.Errorf("%s.%s: %+v, %v", c.owner.Name, infoRels(c.owner)[c.rel].name, l, err)
+		l, err := engine.InfoRels(c.owner)[c.rel].Resolve(c.owner, c.use)
+		if err != nil || l.Target != c.target || c.owner.Columns[l.OwnerCol].Name != c.ownerCol || l.Target.Columns[l.TargetCol].Name != c.col {
+			t.Errorf("%s.%s: %+v, %v", c.owner.Name, engine.InfoRels(c.owner)[c.rel].Name, l, err)
 		}
 	}
 }
@@ -48,7 +50,7 @@ func TestResolveRefusesMismatchedKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = infoRels(info)[0].resolve(info, targetOf[keyedLine]())
+	_, err = engine.InfoRels(info)[0].Resolve(info, targetOf[keyedLine]())
 	var se *SchemaError
 	if !errors.As(err, &se) || !strings.Contains(err.Error(), "the key types differ: velox.keyed.ID is string and velox.keyedLine.KeyedID is int64") {
 		t.Errorf("%v", err)
@@ -58,9 +60,9 @@ func TestResolveRefusesMismatchedKeys(t *testing.T) {
 func TestHolderLayout(t *testing.T) {
 	var o One[int]
 	var m Many[int]
-	var h holder
+	var h engine.Holder
 	if unsafe.Sizeof(o) != unsafe.Sizeof(h) || unsafe.Sizeof(m) != unsafe.Sizeof(h) ||
-		unsafe.Offsetof(o.loaded) != unsafe.Offsetof(h.loaded) || unsafe.Offsetof(m.loaded) != unsafe.Offsetof(h.loaded) {
+		unsafe.Offsetof(o.loaded) != unsafe.Offsetof(h.Loaded) || unsafe.Offsetof(m.loaded) != unsafe.Offsetof(h.Loaded) {
 		t.Fatal("One and Many must have holder's layout")
 	}
 }
@@ -84,7 +86,7 @@ func TestResolveWithoutATargetIsAnError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = infoRels(info)[0].resolve(info, useTarget{})
+	_, err = engine.InfoRels(info)[0].Resolve(info, engine.RelTarget{})
 	wantErr(t, err, "Lines: it has no target in the generated code")
 }
 
@@ -93,7 +95,7 @@ func TestNonComparableKeyIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = infoRels(info)[0].resolve(info, targetOf[blobLine]())
+	_, err = engine.InfoRels(info)[0].Resolve(info, targetOf[blobLine]())
 	wantErr(t, err, "Lines: a key of type []uint8 cannot be compared")
 }
 
@@ -103,7 +105,7 @@ func TestInvalidTargetIsNamed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = infoRels(info)[0].resolve(info, targetOf[brokenTarget]())
+	_, err = engine.InfoRels(info)[0].Resolve(info, targetOf[brokenTarget]())
 	wantErr(t, err, "T: its target github.com/syssam/velox2.brokenTarget is invalid: velox.brokenTarget: the generated metadata has no Addr; run go tool velox-gen")
 }
 
@@ -113,20 +115,20 @@ func TestInvalidTargetIsNamed(t *testing.T) {
 // relates to and, through them, the whole connected model (the use site names
 // the target: Rel; see TestServiceLinksOnlyItsEntities in bench/scale).
 func TestEdgeThroughKeepsItsJoin(t *testing.T) {
-	if r := EdgeThrough[company, employee]("Through", 0, 0, 0, 0); edgeThrough(r) == nil || edgeThrough(r).join == nil {
+	if r := EdgeThrough[company, employee]("Through", 0, 0, 0, 0); engine.EdgeThroughOf(r) == nil || engine.EdgeThroughOf(r).Join == nil {
 		t.Error("EdgeThrough lost its join entity")
 	}
 }
 
-// TestCheckColumnsChecksTheJoin: an opThrough's join column and its kids'
+// TestCheckColumnsChecksTheJoin: an OpThrough's join column and its kids'
 // columns index the join entity's columns, not the statement's.
 func TestCheckColumnsChecksTheJoin(t *testing.T) {
 	join := &EntityInfo{Name: "velox.join", Table: "joins", Tenant: -1, Columns: []ColumnInfo{{Name: "a"}, {Name: "b"}}}
 	st := func(w int, kid int32) *Statement {
-		return &Statement{Op: OpSelect, Entity: invInfo, Where: []Predicate{{node{op: opThrough, col: 4, v: join, w: w,
-			kids: []node{{op: opIn, col: kid, v: []any{int64(1)}}}}}}}
+		return &Statement{Op: OpSelect, Entity: invInfo, Where: []Predicate{engine.NewPredicate(engine.Node{Op: engine.OpThrough, Col: 4, V: join, W: w,
+			Kids: []engine.Node{{Op: engine.OpIn, Col: kid, V: []any{int64(1)}}}})}}
 	}
-	if err := checkColumns(st(1, 0)); err != nil {
+	if err := engine.CheckColumns(st(1, 0)); err != nil {
 		t.Errorf("valid: %v", err)
 	}
 	for _, c := range []struct {
@@ -135,7 +137,7 @@ func TestCheckColumnsChecksTheJoin(t *testing.T) {
 		bad int
 	}{{2, 0, 2}, {0, 2, 2}, {-1, 0, -1}} {
 		want := fmt.Sprintf("velox: velox.inv: a condition names column %d of velox.join, which has 2", c.bad)
-		if err := checkColumns(st(c.w, c.kid)); err == nil || err.Error() != want {
+		if err := engine.CheckColumns(st(c.w, c.kid)); err == nil || err.Error() != want {
 			t.Errorf("%+v: %v", c, err)
 		}
 	}

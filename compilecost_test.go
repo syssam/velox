@@ -261,11 +261,11 @@ var genericObjects = []struct {
 	// and again after the final review's fixes (782738 before), and after
 	// Rel.LimitEach and Rel.MaxRows (+1404 bytes: 782716 under 792576
 	// before), and after LoadEach and CountEach, whose After condition moved
-	// out of Query's generic prepare into addAfter, compiled once (-26846
+	// out of Query's generic prepare into AddAfter, compiled once (-26846
 	// bytes: 784120 under 793600 before), and after SQLType left ColumnDesc
 	// (-88 bytes; the bound held), and remeasured on 2026-10-26 after Use
 	// called Rel.With (G18): 766976 before. Sum, Avg, Min and Max stay
-	// functions: as Query methods they measured 800636 (before addAfter),
+	// functions: as Query methods they measured 800636 (before AddAfter),
 	// since a method of Query whose signature names NumberCol[E, V] puts that
 	// in the export data of every package that uses a Query, called or not.
 	// Query.With and Rel.With stay methods: with both called, functions would
@@ -284,7 +284,7 @@ var genericObjects = []struct {
 	// and again when Mutation became a struct holding the mutation (-2708
 	// bytes: 1073952 under 1087488 before), and after Rel.LimitEach and
 	// Rel.MaxRows (+1398 bytes: 1071244 under 1084416 before), and after
-	// addAfter (-26882 bytes: 1072642 under 1086464 before), and after
+	// AddAfter (-26882 bytes: 1072642 under 1086464 before), and after
 	// SQLType left ColumnDesc (-90 bytes; the bound held), and remeasured on
 	// 2026-10-26 after Use called Rel.With (G18): 1058816 before.
 	// Remeasured on 2026-10-27, darwin/arm64, Go 1.27.x, after Wave 2 of the
@@ -305,7 +305,9 @@ var genericObjects = []struct {
 // the generics velox instantiates for E (BindPolicy, BindHooks, On, the
 // Mutator and Mutation methods) and the export data of the types the
 // functions mention.
-const policyGrowthMax = 348160 // measured 289120
+const policyGrowthMax = 348160
+
+// measured 289120
 
 // TestGenericTypesCompileSmall enforces the compile-cost rules for one
 // package: it measures each row's own object cost, the bytes its package
@@ -370,7 +372,7 @@ func TestGenericTypesCompileSmall(t *testing.T) {
 // is instantiated per entity.
 func TestObservabilityIsNotGeneric(t *testing.T) {
 	fset := token.NewFileSet()
-	for _, name := range []string{"tags.go", "callers.go", "comment.go", "txhook.go"} {
+	for _, name := range []string{"internal/engine/tags.go", "internal/engine/callers.go", "internal/engine/comment.go", "internal/engine/txhook.go", "txhook.go"} {
 		f, err := parser.ParseFile(fset, name, nil, parser.SkipObjectResolution)
 		if err != nil {
 			t.Fatal(err)

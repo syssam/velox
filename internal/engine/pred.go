@@ -1,0 +1,238 @@
+package engine
+
+import (
+	"slices"
+	"strings"
+	"sync"
+)
+
+type op uint8
+
+const (
+	OpZero op = iota // the zero Pred[E]{}: no condition was given
+	OpEQ
+	OpNEQ
+	OpIn
+	OpNotIn
+	OpGT
+	OpGTE
+	OpLT
+	OpLTE
+	OpBetween
+	OpLike
+	OpFold
+	OpIsNull
+	OpNotNull
+	OpAnd
+	OpOr
+	OpNot
+	OpAllow   // matches every row and renders to nothing in a policy
+	OpExists  // col is the relation index, v its RelRef, or its link once resolved, kids the target's conditions
+	OpInvalid // v is the error
+	OpThrough // col is the target's column, v the join *EntityInfo, w the join's column equal to it, kids the join's conditions
+)
+
+// Node is a condition, typed by nothing: the generic API wraps it.
+type Node struct {
+	Op   op
+	Deep bool // an OpExists is among the kids, at any depth; set by group
+	Col  int32
+	V, W any
+	Kids []Node
+}
+
+// Group is the And, Or or Not (o) of kids. It marks the node deep when an
+// EXISTS is among the kids, at any depth: the scope and ResolveNode skip a
+// node that is not. And, Or, Not and every And or Or velox makes are made by
+// it, and node is unexported, so a Rewrite hook's conditions are too.
+func Group(o op, kids []Node) Node {
+	n := Node{Op: o, Kids: kids}
+	for _, k := range kids {
+		if k.Op == OpExists || k.Deep {
+			n.Deep = true
+			break
+		}
+	}
+	return n
+}
+
+// Predicate is a condition in a Statement: the form hooks see and add. It is
+// the untyped form of Pred, as OrderTerm is of Order.
+type Predicate struct{ n Node }
+
+// OrderTerm is an ordering by one column of a Statement's entity. It is the
+// untyped form of Order, as Predicate is of Pred.
+type OrderTerm struct {
+	Column int // index into EntityInfo.Columns
+	Desc   bool
+}
+
+// ColumnEQ returns the condition column = v, for hooks that add conditions;
+// column is an index into the statement's EntityInfo.Columns.
+func ColumnEQ(column int, v any) Predicate {
+	return Predicate{Node{Op: OpEQ, Col: int32(column), V: v}}
+}
+
+func Sound(n Node) bool {
+	switch n.Op {
+	case OpZero, OpInvalid, OpExists:
+		return false
+	}
+	for _, k := range n.Kids {
+		if !Sound(k) {
+			return false
+		}
+	}
+	return true
+}
+
+// PredErr returns the error a condition carries: a relation that could not be
+// resolved when the condition was made.
+func PredErr(n Node) error {
+	if n.Op == OpInvalid {
+		return n.V.(error)
+	}
+	if n.Op == OpExists {
+		// An unresolved RelRef is valid: the statement resolves it, and
+		// fails with the relation's error. Its kids were checked when
+		// HasWhere made it.
+		return nil
+	}
+	for _, k := range n.Kids {
+		if err := PredErr(k); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// existsLink returns the link of the OpExists node n: its own once resolved,
+// else the RelRef's, which resolves the relation.
+func existsLink(n Node) (Link, error) {
+	if r, ok := n.V.(RelRef); ok {
+		return r.Link()
+	}
+	return n.V.(Link), nil
+}
+
+// ResolveNode returns n with every OpExists in it resolved, and whether that
+// changed anything. It never edits n: a changed node is a copy, with a new
+// kids slice when a kid changed, and unchanged subtrees are shared with n,
+// which may be in a Pred other goroutines hold (scoper.node's rule).
+func ResolveNode(n Node) (Node, bool, error) {
+	switch n.Op {
+	case OpAnd, OpOr, OpNot:
+		if !n.Deep {
+			return n, false, nil // no EXISTS in it
+		}
+	case OpExists:
+	default: // an OpThrough is resolved already: Of resolves its relation
+		return n, false, nil
+	}
+	var kids []Node // nil until a kid changes
+	for i, k := range n.Kids {
+		nk, changed, err := ResolveNode(k)
+		if err != nil {
+			return n, false, err
+		}
+		if !changed {
+			continue
+		}
+		if kids == nil {
+			kids = slices.Clone(n.Kids)
+		}
+		kids[i] = nk
+	}
+	changed := kids != nil
+	if r, ok := n.V.(RelRef); ok && n.Op == OpExists {
+		l, err := r.Link()
+		if err != nil {
+			return n, false, err
+		}
+		n.V, changed = l, true // n is a copy
+	}
+	if kids != nil {
+		n.Kids = kids
+	}
+	return n, changed, nil
+}
+
+// ResolveErr returns the error resolving n would fail with, without
+// allocating.
+func ResolveErr(n Node) error {
+	if r, ok := n.V.(RelRef); ok && n.Op == OpExists {
+		if _, err := r.Link(); err != nil {
+			return err
+		}
+	}
+	for _, k := range n.Kids {
+		if err := ResolveErr(k); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// resolvePreds returns ps with every relation resolved, on a copy when any
+// was not: ps may be the query's, shared with other runs.
+func resolvePreds(ps []Predicate) ([]Predicate, error) {
+	out := ps
+	for i, p := range ps {
+		n, changed, err := ResolveNode(p.n)
+		if err != nil {
+			return nil, err
+		}
+		if !changed {
+			continue
+		}
+		if &out[0] == &ps[0] {
+			out = slices.Clone(ps)
+		}
+		out[i] = Predicate{n}
+	}
+	return out, nil
+}
+
+// resolve resolves the relations in st's conditions, before anything else
+// reads them: the guard, the Rewrite hooks, the scope and rendering see only
+// links. A relation that cannot be resolved fails the statement.
+func ResolveStatement(st *Statement) error {
+	where, err := resolvePreds(st.Where)
+	if err != nil {
+		return err
+	}
+	st.Where = where
+	if cf := st.Conflict; cf != nil && len(cf.Where) > 0 {
+		cw, err := resolvePreds(cf.Where)
+		if err != nil {
+			return err
+		}
+		if &cw[0] != &cf.Where[0] {
+			c := *cf // the caller's clause may be shared with other runs
+			c.Where = cw
+			st.Conflict = &c
+		}
+	}
+	return nil
+}
+
+// likeEscaper is built on first use, not at program start.
+var likeEscaper = sync.OnceValue(func() *strings.Replacer {
+	return strings.NewReplacer(`!`, `!!`, `%`, `!%`, `_`, `!_`)
+})
+
+// EscapeLike makes s match itself in a LIKE pattern whose escape is !.
+func EscapeLike(s string) string { return likeEscaper().Replace(s) }
+
+func PredNode(p Predicate) Node { return p.n }
+
+func NewPredicate(n Node) Predicate { return Predicate{n} }
+
+// Pred is a condition on entity E, made by a column handle or by And, Or and
+// Not. It is the typed form of Predicate, as Order is of OrderTerm.
+//
+// Predicate(p) converts it, so its one field must be Predicate's, though nothing
+// reads it here: the root package converts first.
+type Pred[E any] struct {
+	n Node //nolint:unused // see above
+}

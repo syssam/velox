@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/syssam/velox2/internal/engine"
 )
 
 type other struct{ ID int64 }
@@ -29,7 +31,7 @@ func TestRelationHolders(t *testing.T) {
 	if v, loaded := (One[other]{}).Get(); loaded || v != nil {
 		t.Error("a zero One reports loaded")
 	}
-	if !isRelation(reflect.TypeFor[Many[other]]()) || isRelation(reflect.TypeFor[time.Time]()) {
+	if !engine.IsRelation(reflect.TypeFor[Many[other]]()) || engine.IsRelation(reflect.TypeFor[time.Time]()) {
 		t.Error("isRelation")
 	}
 }

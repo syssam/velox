@@ -6,6 +6,8 @@ import (
 	"slices"
 	"testing"
 	"time"
+
+	"github.com/syssam/velox2/internal/engine"
 )
 
 // withHook returns a context whose hnote hooks run f.
@@ -81,32 +83,6 @@ func TestSaveStoresWhatItSent(t *testing.T) {
 	}
 	if x.Due == nil || *x.Due != 7 || five != 5 {
 		t.Errorf("Due %v, five %d", x.Due, five)
-	}
-}
-
-// TestMutateSetClonesOnce: the first assignment a hook appends copies the
-// statement's Set, whose array may be the query's, once; later ones, an
-// append or a replacement, write the copy in place.
-func TestMutateSetClonesOnce(t *testing.T) {
-	query := make([]Assignment, 1, 4) // spare capacity an append would write
-	query[0] = Assignment{Column: 1, Op: AssignSet, Value: "a"}
-	st := &Statement{Op: OpUpdate}
-	mu := mutation{st: st}
-	run := func() {
-		st.Set, mu.ownSet = query, false
-		mutateSet(&mu, Assignment{Column: 2, Op: AssignSet, Value: "b"}) // append: the one copy
-		mutateSet(&mu, Assignment{Column: 2, Op: AssignSet, Value: "c"}) // in place
-		mutateSet(&mu, Assignment{Column: 1, Op: AssignSet, Value: "d"}) // in place
-	}
-	if allocs := testing.AllocsPerRun(100, run); allocs != 1 {
-		t.Errorf("%.0f allocations, want the one copy", allocs)
-	}
-	want := []Assignment{{Column: 1, Op: AssignSet, Value: "d"}, {Column: 2, Op: AssignSet, Value: "c"}}
-	if !slices.Equal(st.Set, want) {
-		t.Errorf("Set %v, want %v", st.Set, want)
-	}
-	if query[0].Value != "a" || query[:2][1] != (Assignment{}) {
-		t.Errorf("the query's array was written: %v", query[:2])
 	}
 }
 
@@ -222,24 +198,24 @@ func TestValueInRecordsAnotherType(t *testing.T) {
 		t.Fatal(err)
 	}
 	st := Statement{Op: OpUpdate, Entity: info, Set: []Assignment{{Column: 4, Op: AssignSet, Value: "x"}, {Column: 1, Op: AssignSet, Value: 5}}}
-	m := &Mutation[hnote]{mu: mutation{st: &st}}
+	m := &Mutation[hnote]{mu: engine.MutationState{St: &st}}
 	if v, ok := hn.Due.ValueIn(m); v != nil || ok {
 		t.Errorf("Due: %v, %v", v, ok)
 	}
 	const first = `column "due" is assigned a value of type string, not int64`
-	if m.mu.err == nil || m.mu.err.Error() != first {
-		t.Fatalf("recorded %v, want %q", m.mu.err, first)
+	if m.mu.Err == nil || m.mu.Err.Error() != first {
+		t.Fatalf("recorded %v, want %q", m.mu.Err, first)
 	}
 	if v, ok := hn.Title.ValueIn(m); v != "" || ok {
 		t.Errorf("Title: %q, %v", v, ok)
 	}
-	if m.mu.err.Error() != first {
-		t.Errorf("the second replaced the first: %v", m.mu.err)
+	if m.mu.Err.Error() != first {
+		t.Errorf("the second replaced the first: %v", m.mu.Err)
 	}
-	m = &Mutation[hnote]{mu: mutation{st: &st}}
+	m = &Mutation[hnote]{mu: engine.MutationState{St: &st}}
 	hn.Title.ValueIn(m)
-	if want := `column "title" is assigned a value of type int, not string`; m.mu.err == nil || m.mu.err.Error() != want {
-		t.Errorf("recorded %v, want %q", m.mu.err, want)
+	if want := `column "title" is assigned a value of type int, not string`; m.mu.Err == nil || m.mu.Err.Error() != want {
+		t.Errorf("recorded %v, want %q", m.mu.Err, want)
 	}
 }
 
@@ -268,7 +244,7 @@ func TestValueInEveryKind(t *testing.T) {
 		nb.Set(true), no.Set(at), nn.Set(4), ns.SetNull(), nj.Set([]string{"a"}), nk.SetNull()} {
 		set = append(set, x.a)
 	}
-	m := &Mutation[hnote]{mu: mutation{st: &Statement{Op: OpUpdate, Set: set}}}
+	m := &Mutation[hnote]{mu: engine.MutationState{St: &Statement{Op: OpUpdate, Set: set}}}
 	if v, ok := b.ValueIn(m); !v || !ok {
 		t.Errorf("Col: %v, %v", v, ok)
 	}
@@ -302,11 +278,11 @@ func TestValueInEveryKind(t *testing.T) {
 	if v, ok := nk.ValueIn(m); v != nil || !ok {
 		t.Errorf("NullJSONCol after SetNull: %v, %v", v, ok)
 	}
-	if m.mu.err != nil {
-		t.Errorf("recorded %v", m.mu.err)
+	if m.mu.Err != nil {
+		t.Errorf("recorded %v", m.mu.Err)
 	}
 	// Unassigned, and an Add.
-	m = &Mutation[hnote]{mu: mutation{st: &Statement{Op: OpUpdate, Set: []Assignment{n.Add(1).a, nn.Add(1).a}}}}
+	m = &Mutation[hnote]{mu: engine.MutationState{St: &Statement{Op: OpUpdate, Set: []Assignment{n.Add(1).a, nn.Add(1).a}}}}
 	if v, ok := n.ValueIn(m); v != 0 || ok {
 		t.Errorf("NumberCol after Add: %v, %v", v, ok)
 	}
@@ -327,10 +303,10 @@ func TestValueInEveryKind(t *testing.T) {
 		func(m *Mutation[hnote]) { no.ValueIn(m) }, func(m *Mutation[hnote]) { nn.ValueIn(m) },
 		func(m *Mutation[hnote]) { ns.ValueIn(m) }, func(m *Mutation[hnote]) { nj.ValueIn(m) },
 	} {
-		m := &Mutation[hnote]{mu: mutation{op: OpInsert}}
+		m := &Mutation[hnote]{mu: engine.MutationState{Op: OpInsert}}
 		f(m)
-		if m.mu.err != errInsertMutation {
-			t.Errorf("on an insert recorded %v", m.mu.err)
+		if m.mu.Err != engine.ErrInsertMutation {
+			t.Errorf("on an insert recorded %v", m.mu.Err)
 		}
 	}
 }
@@ -349,7 +325,7 @@ func TestMutationErrors(t *testing.T) {
 		{func(m *Mutation[hnote]) error { m.Where(Pred[hnote]{}); return nil },
 			"velox: velox.hnote: hook: a condition is the zero Predicate; make conditions with column handles, And, Or and Not"},
 		{func(m *Mutation[hnote]) error {
-			m.Where(Pred[hnote]{node{op: opInvalid, v: errors.Join(errors.New("velox: velox.hnote: has no relation 3"), bad)}})
+			m.Where(Pred[hnote](engine.NewPredicate(engine.Node{Op: engine.OpInvalid, V: errors.Join(errors.New("velox: velox.hnote: has no relation 3"), bad)})))
 			return nil
 		}, "velox: velox.hnote: hook: has no relation 3\nbad"},
 		{func(*Mutation[hnote]) error { return errors.Join(errors.New("velox: testmodel.Other: x"), bad) },
@@ -395,45 +371,20 @@ func TestSaveWhereIsTheStatementsWhere(t *testing.T) {
 // they gave, and a second render gives the same SQL.
 func TestBidiDeleteKeepsTheStatement(t *testing.T) {
 	in := &EntityInfo{Name: "links", Table: "links", Columns: []ColumnInfo{{Name: "a"}, {Name: "b"}}, PrimaryKey: []int{0, 1}, Tenant: -1}
-	setInfoBidi(in, true)
+	engine.SetInfoBidi(in, true)
 	st := &Statement{Op: OpDelete, Entity: in, Where: []Predicate{ColumnEQ(0, int64(1))}}
 	db := OpenFake(Postgres, &FakeExec{})
 	const want = `DELETE FROM "links" WHERE ("a" = $1 OR "b" = $2)`
 	for i := range 2 {
-		mu := &mutation{st: st, dry: true}
+		mu := &engine.MutationState{St: st, Dry: true}
 		if err := writeCore(context.Background(), db, mu); err != nil {
 			t.Fatal(err)
 		}
-		if mu.sql != want {
-			t.Errorf("render %d: %s, want %s", i, mu.sql, want)
+		if mu.SQL != want {
+			t.Errorf("render %d: %s, want %s", i, mu.SQL, want)
 		}
-		if len(st.Where) != 1 || predNode(st.Where[0]).op != opEQ || predNode(st.Where[0]).col != 0 {
+		if len(st.Where) != 1 || engine.PredNode(st.Where[0]).Op != engine.OpEQ || engine.PredNode(st.Where[0]).Col != 0 {
 			t.Fatalf("render %d: the statement's Where became %+v", i, st.Where)
 		}
-	}
-}
-
-// TestMutationSetClonesOnce: a hook's Set copies the statement's assignments
-// once, on its first change, and writes in place after.
-func TestMutationSetClonesOnce(t *testing.T) {
-	orig := []Assignment{{Column: 1, Op: AssignSet, Value: "a"}, {Column: 2, Op: AssignSet, Value: "b"}}
-	want := slices.Clone(orig)
-	set := func(st *Statement) {
-		mu := &mutation{st: st}
-		for i := range 3 {
-			mutateSet(mu, Assignment{Column: orig[0].Column, Op: AssignSet, Value: i})
-		}
-	}
-	st := &Statement{Op: OpUpdate, Set: orig}
-	set(st)
-	if !slices.Equal(orig, want) || st.Set[0].Value != 2 || len(st.Set) != 2 {
-		t.Errorf("orig %v, Set %v", orig, st.Set)
-	}
-	n := testing.AllocsPerRun(100, func() {
-		st := Statement{Op: OpUpdate, Set: orig}
-		set(&st)
-	})
-	if n != 1 {
-		t.Errorf("three Sets make %.0f allocations, want 1", n)
 	}
 }
