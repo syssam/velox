@@ -187,24 +187,32 @@ func loadOne(ctx context.Context, db *DB, pin target, owner *EntityInfo, ptrs []
 			}
 		}
 	}
-	// When a query ran, all holds its []T, so it is not nil even when the
-	// []T is empty; it is nil only when nothing was fetched (no owner had a
+	// When a query ran, all holds its parts, so it is not nil even when they
+	// hold no row; it is nil only when nothing was fetched (no owner had a
 	// key, or no join row held a target key), and there is nothing to load.
 	if all != nil && len(sp.with) > 0 {
 		if err := loadRelations(ctx, db, pin, t, targets, sp.with, maxRows); err != nil {
 			return err
 		}
 	}
+	var picked []any // each owner's []T, when r is to-many and a query ran
+	if r.many && all != nil {
+		idx := make([][]int, len(ptrs))
+		for i := range ptrs {
+			idx[i] = byKey[ownerKey[i]]
+		}
+		picked = t.kit.pick(targets, idx)
+	}
 	for i, p := range ptrs {
 		h := (*holder)(unsafe.Add(p, r.off))
 		idx := byKey[ownerKey[i]]
 		switch {
 		case r.many && all != nil:
-			h.v = t.kit.pick(all, idx)
+			h.v = picked[i]
 		case r.many:
 			h.v = t.kit.empty() // no keys, so nothing was fetched: still loaded, and empty
 		case len(idx) > 0:
-			h.v = t.kit.ptr(all, idx[0])
+			h.v = t.kit.ptr(targets[idx[0]])
 		default:
 			h.v = nil
 		}
@@ -336,10 +344,10 @@ plan:
 	if len(done) == 0 {
 		return nil, nil, nil
 	}
-	all, targets := t.kit.join(parts)
+	all, targets := joinBlocks(parts)
 	start := 0 // the chunk's first index into all
 	for i, c := range done {
-		end := start + reflect.ValueOf(parts[i]).Len()
+		end := start + parts[i].(*blocks).n
 		byTarget := make(map[any][]int, end-start) // target key → indexes into all
 		for k := start; k < end; k++ {
 			if tk, ok := keyOf(t.kit.value(targets[k], l.targetCol)); ok {
@@ -380,7 +388,7 @@ func fetch(ctx context.Context, db *DB, pin target, t *EntityInfo, cols []int, s
 	if err != nil {
 		return nil, nil, err
 	}
-	all, ptrs := t.kit.join(parts) // pointers into the one slice pick and ptr index
+	all, ptrs := joinBlocks(parts) // all holds the rows; pick and ptr read them through ptrs
 	return all, ptrs, nil
 }
 
@@ -407,7 +415,7 @@ func fetchEach(ctx context.Context, db *DB, pin target, l link, sp loadSpec, key
 	if err != nil {
 		return nil, nil, err
 	}
-	all, targets := t.kit.join(parts)
+	all, targets := joinBlocks(parts)
 	for i, own := range owners {
 		if k, ok := keyOf(own); ok {
 			byKey[k] = append(byKey[k], i)
@@ -560,4 +568,77 @@ func (r *ownerRows) Scan(dst ...any) error {
 	}
 	r.keys = append(r.keys, p.Elem().Interface())
 	return nil
+}
+
+// blocks holds the rows a kit's scan reads, in arrays of its type that never
+// move once made, each twice the size of the one before up to blockMax rows,
+// so that a pointer to a row stays valid and no row is copied as more arrive.
+// It is not generic, so that it is compiled once, not in every entity's
+// package, and its fields name no reflect type.
+type blocks struct {
+	typ  any     // a row's reflect.Type
+	size uintptr // a row's size
+	bs   []block
+	n    int      // rows in all of bs
+	in   [6]block // bs's first arrays, up to 252 rows, without an allocation
+}
+
+// newBlocks returns an empty blocks of rows of typ, a reflect.Type held as
+// any, as elemType returns it. It and next are not inlined: inlined into a
+// kit's generic scan, their reflect calls would compile reflect's methods into
+// every entity's package (TestGenericTypesCompileSmall).
+//
+//go:noinline
+func newBlocks(typ any) *blocks {
+	b := &blocks{typ: typ, size: typ.(reflect.Type).Size()}
+	b.bs = b.in[:0]
+	return b
+}
+
+// block is one array of blocks: its first row, its rows in use and its size.
+type block struct {
+	at        unsafe.Pointer
+	used, cap int
+}
+
+// blockMax is the most rows in one array of blocks.
+const blockMax = 1024
+
+// next returns a pointer to a new zero row after the others.
+//
+//go:noinline
+func (b *blocks) next() unsafe.Pointer {
+	if len(b.bs) == 0 || b.bs[len(b.bs)-1].used == b.bs[len(b.bs)-1].cap {
+		size := 4
+		if len(b.bs) > 0 {
+			size = min(2*b.bs[len(b.bs)-1].cap, blockMax)
+		}
+		v := reflect.MakeSlice(reflect.SliceOf(b.typ.(reflect.Type)), size, size)
+		b.bs = append(b.bs, block{at: v.UnsafePointer(), cap: size})
+	}
+	k := &b.bs[len(b.bs)-1]
+	p := unsafe.Add(k.at, uintptr(k.used)*b.size)
+	k.used++
+	b.n++
+	return p
+}
+
+// joinBlocks returns the parts a kit's scans read, each a *blocks, as one
+// value that keeps their rows, and a pointer to each row, in order. A kit's
+// pick and ptr read the rows through the pointers.
+func joinBlocks(parts []any) (any, []unsafe.Pointer) {
+	n := 0
+	for _, p := range parts {
+		n += p.(*blocks).n
+	}
+	ptrs := make([]unsafe.Pointer, 0, n)
+	for _, p := range parts {
+		b := p.(*blocks)
+		for _, k := range b.bs {
+			for i := range k.used {
+				ptrs = append(ptrs, unsafe.Add(k.at, uintptr(i)*b.size))
+			}
+		}
+	}
+	return parts, ptrs
 }

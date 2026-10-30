@@ -225,6 +225,7 @@ func CheckEntity[E any, PE Entity[E]]() error {
 // kitOf builds entity E's kit from its scan plan.
 func kitOf[E any](info *EntityInfo, addr func(*E, int) any) *kit {
 	m := &Meta[E]{info: info, addr: addr}
+	typ := elemType((*E)(nil))
 	return &kit{
 		value: func(p unsafe.Pointer, col int) any { return elem(addr((*E)(p), col)) },
 		scan: func(r rows, cols []int) (any, error) {
@@ -233,35 +234,37 @@ func kitOf[E any](info *EntityInfo, addr func(*E, int) any) *kit {
 				n = len(cols)
 			}
 			dst := make([]any, n)
-			var part []E
+			part := newBlocks(typ)
 			for r.Next() {
-				part = append(part, *new(E))
-				if err := scanRow(r, m, cols, dst, &part[len(part)-1]); err != nil {
+				if err := scanRow(r, m, cols, dst, (*E)(part.next())); err != nil {
 					return nil, err
 				}
 			}
 			return part, nil
 		},
-		join: func(parts []any) (any, []unsafe.Pointer) {
-			var all []E
-			for _, p := range parts {
-				all = append(all, p.([]E)...)
+		pick: func(ptrs []unsafe.Pointer, idx [][]int) []any {
+			n := 0
+			for _, x := range idx {
+				n += len(x)
 			}
-			ptrs := make([]unsafe.Pointer, len(all))
-			for i := range all {
-				ptrs[i] = unsafe.Pointer(&all[i])
-			}
-			return all, ptrs
-		},
-		pick: func(all any, idx []int) any {
-			s := all.([]E)
-			out := make([]E, len(idx))
-			for i, j := range idx {
-				out[i] = s[j]
+			// One array for every owner's elements, so one allocation, not one
+			// per owner; each owner's slice is capped at its length, so an
+			// append to it copies first. An owner's slice keeps the whole
+			// array alive, as the owners loaded together usually live together.
+			buf := make([]E, n)
+			out := make([]any, len(idx))
+			at := 0
+			for i, x := range idx {
+				part := buf[at : at+len(x) : at+len(x)]
+				for k, j := range x {
+					part[k] = *(*E)(ptrs[j])
+				}
+				out[i] = part
+				at += len(x)
 			}
 			return out
 		},
-		ptr:   func(all any, i int) any { return &all.([]E)[i] },
+		ptr:   func(p unsafe.Pointer) any { return (*E)(p) },
 		empty: func() any { return []E{} },
 	}
 }

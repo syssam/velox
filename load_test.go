@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"slices"
 	"strings"
@@ -120,6 +121,81 @@ func TestWithFilterAndOrder(t *testing.T) {
 }
 
 // TestWithChunksUnderTheParameterLimit is Review Focus 4.
+// TestWithManyOwnersDoNotShareRows: the owners' slices share one array, so
+// each is capped at its length; an append to one, or a change to one of its
+// rows, leaves the next owner's rows as they were.
+func TestWithManyOwnersDoNotShareRows(t *testing.T) {
+	e := &velox.FakeExec{Results: [][][]any{
+		{invoiceRow(1), invoiceRow(2)},
+		{itemRow(10, 1, "A", 1), itemRow(11, 2, "B", 1)},
+	}}
+	db := velox.OpenFake(velox.Postgres, e)
+	invs, err := db.Query[testmodel.Invoice]().With(I.Items).Limit(10).All(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, _ := invs[0].Items.Get()
+	second, _ := invs[1].Items.Get()
+	if len(first) != 1 || cap(first) != 1 {
+		t.Fatalf("len %d cap %d, want 1 and 1", len(first), cap(first))
+	}
+	first[0].SKU = "changed"
+	_ = append(first, testmodel.Item{SKU: "appended"})
+	if len(second) != 1 || second[0].SKU != "B" {
+		t.Errorf("the second owner's rows are %v, want one row B", second)
+	}
+}
+
+// TestWithManyRowsAcrossBlocks reads more rows than one array of the scan's
+// blocks holds, and than the arrays inside it: every row arrives once, in
+// order, with its own values.
+func TestWithManyRowsAcrossBlocks(t *testing.T) {
+	const n = 1500
+	items := make([][]any, n)
+	for i := range items {
+		items[i] = itemRow(int64(i+1), 1, fmt.Sprint(i), int64(i))
+	}
+	e := &velox.FakeExec{Results: [][][]any{{invoiceRow(1)}, items}}
+	db := velox.OpenFake(velox.Postgres, e)
+	invs, err := db.Query[testmodel.Invoice]().With(I.Items).Limit(10).All(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := invs[0].Items.Get()
+	if len(got) != n {
+		t.Fatalf("%d rows, want %d", len(got), n)
+	}
+	for i, it := range got {
+		if it.ID != int64(i+1) || it.SKU != fmt.Sprint(i) || it.Qty != int64(i) {
+			t.Fatalf("row %d is %+v", i, it)
+		}
+	}
+}
+
+// TestWithOneAcrossBlocks: a to-one load's targets span the scan's arrays, and
+// each owner points at its own.
+func TestWithOneAcrossBlocks(t *testing.T) {
+	const n = 300
+	items := make([][]any, n)
+	invs := make([][]any, n)
+	for i := range n {
+		items[i] = itemRow(int64(i+1), int64(i+1), "s", 1)
+		invs[i] = invoiceRow(int64(i + 1))
+	}
+	e := &velox.FakeExec{Results: [][][]any{items, invs}}
+	db := velox.OpenFake(velox.Postgres, e)
+	got, err := db.Query[testmodel.Item]().With(It.Invoice).Limit(n).All(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, it := range got {
+		inv, ok := it.Invoice.Get()
+		if !ok || inv == nil || inv.ID != it.InvoiceID || inv.Number != fmt.Sprintf("INV-%d", it.InvoiceID) {
+			t.Fatalf("item %d: invoice %+v, loaded %v", i, inv, ok)
+		}
+	}
+}
+
 func TestWithChunksUnderTheParameterLimit(t *testing.T) {
 	// 64 parameters of headroom for hooks' conditions, one for the filter, two keys per chunk.
 	defer velox.SetMaxParams(velox.Postgres, 64+3)()

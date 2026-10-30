@@ -240,13 +240,13 @@ func loadEach(ctx context.Context, q eachQuery, owner *EntityInfo, ownerErr erro
 		}
 		return out, nil
 	}
-	all, targets := t.kit.join(parts)
+	_, targets := joinBlocks(parts)
 	if len(loads) > 0 && len(targets) > 0 {
 		if err := loadRelations(ctx, db, db.loadPin(at), t, targets, loads, st.MaxRows); err != nil {
 			return nil, err
 		}
 	}
-	// Each owner key's rows, as indexes into all, in the order read.
+	// Each owner key's rows, as indexes into targets, in the order read.
 	byKey := make(map[any][]int, len(p.keys))
 	for i, ptr := range targets {
 		var k any
@@ -260,12 +260,19 @@ func loadEach(ctx context.Context, q eachQuery, owner *EntityInfo, ownerErr erro
 			byKey[k] = append(byKey[k], i)
 		}
 	}
+	idx := make([][]int, len(p.ownerKey))
+	for i, k := range p.ownerKey {
+		if k != nil {
+			idx[i] = byKey[k]
+		}
+	}
+	picked := t.kit.pick(targets, idx)
 	for i, k := range p.ownerKey {
 		if k == nil {
 			out[i] = t.kit.empty()
 			continue
 		}
-		out[i] = t.kit.pick(all, byKey[k])
+		out[i] = picked[i]
 	}
 	return out, nil
 }

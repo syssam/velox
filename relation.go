@@ -14,12 +14,11 @@ import (
 // know at the point of use: loading a relation to it. MetaOnce.Load builds
 // it, so it is compiled once, in the entity's own package.
 type kit struct {
-	value func(p unsafe.Pointer, col int) any       // the value of column col of the entity at p
-	scan  func(r rows, cols []int) (any, error)     // every row, into a new []E; cols as in Statement.Columns
-	join  func(parts []any) (any, []unsafe.Pointer) // one []E of the parts, and a pointer to each element
-	pick  func(all any, idx []int) any              // a new []E of all's elements at idx
-	ptr   func(all any, i int) any                  // &all[i], as *E
-	empty func() any                                // []E{}
+	value func(p unsafe.Pointer, col int) any            // the value of column col of the entity at p
+	scan  func(r rows, cols []int) (any, error)          // every row, into a new *blocks; cols as in Statement.Columns
+	pick  func(ptrs []unsafe.Pointer, idx [][]int) []any // for each idx, a []E of the rows at ptrs[idx...], all in one new array
+	ptr   func(p unsafe.Pointer) any                     // p as *E
+	empty func() any                                     // []E{}
 }
 
 // One holds a to-one relation, filled by With. Its zero value means not loaded.
