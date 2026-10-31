@@ -35,7 +35,7 @@ trap 'chmod -R u+w "$tmp" 2>/dev/null || true; rm -rf "$tmp"' EXIT
   env -u CI go test -count=1 ./...
 )
 
-cd "$tmp/example"
+cd "$tmp/examples"
 go get github.com/99designs/gqlgen@latest
 go mod tidy
 # The new gqlgen's output is built and tested, not compared with the checked-in one.

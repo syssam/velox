@@ -64,7 +64,7 @@ bin/velox-gen verify -out internal/testbind ./internal/testbind/schema
 # golangci-lint's revive skips generated files; revive itself lints velox-gen's.
 go run github.com/mgechev/revive@v1.17.0 -config scripts/revive.toml -set_exit_status ./internal/testmodel ./internal/testbind
 
-# The example is its own module: its own vet, lint, tests and generated files.
+# The examples are their own module: its own vet, lint, tests and generated files.
 (
   cd examples
   test -z "$(gofmt -l .)" || { echo "gofmt needed in examples:"; gofmt -l .; exit 1; }
