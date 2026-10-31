@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"reflect"
+	"strings"
 	"sync"
 	"time"
 )
@@ -152,6 +153,9 @@ func PgxStdlib(db *sql.DB) bool {
 		return false
 	}
 	t := reflect.TypeOf(db.Driver())
-	return t != nil && t.Kind() == reflect.Pointer &&
-		t.Elem().Name() == "Driver" && t.Elem().PkgPath() == "github.com/jackc/pgx/v5/stdlib"
+	if t == nil || t.Kind() != reflect.Pointer || t.Elem().Name() != "Driver" {
+		return false
+	}
+	path := t.Elem().PkgPath()
+	return strings.HasPrefix(path, "github.com/jackc/pgx/") && strings.HasSuffix(path, "/stdlib")
 }

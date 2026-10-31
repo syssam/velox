@@ -64,9 +64,18 @@ func OpenConn(d Dialect, c Conn, opts []Option) DB {
 	return NewDB(d, ConnExec(c), opts)
 }
 
+// dialectExecutor is ex with what dialect d needs of every statement.
+func dialectExecutor(d Dialect, ex Executor) Executor {
+	if d == SQLite {
+		return conn.SQLiteTimes(ex)
+	}
+	return ex
+}
+
 // NewDB returns an unsharded DB of dialect d on ex, its primary.
 func NewDB(d Dialect, ex Executor, opts []Option) DB {
 	cfg := NewConfig(opts)
+	ex = dialectExecutor(d, ex)
 	if cfg.ShardFor != nil {
 		panic("velox: WithShardFor is for OpenShards; Open and OpenConn open a DB on one shard")
 	}

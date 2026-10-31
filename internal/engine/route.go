@@ -275,7 +275,7 @@ func NewShard(d Dialect, primary Executor, replicas []Conn, what string) *ShardC
 		if c.only != 0 && c.only != d {
 			panic(fmt.Sprintf("velox: %s replica %d is valid only on %s; the DB is %s", what, i, c.only, d))
 		}
-		sh.Replicas = append(sh.Replicas, &replica{ex: c.ex})
+		sh.Replicas = append(sh.Replicas, &replica{ex: dialectExecutor(d, c.ex)})
 	}
 	return sh
 }

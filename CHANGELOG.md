@@ -32,6 +32,10 @@ This summarizes what a user of the tree before the hardening work must know.
 
 ### Changed
 
+- On SQLite, velox writes every time argument as UTC text of one width, so times store
+  and compare by the instant whatever their zone. A time then reads back in UTC. Rows a
+  tree before this wrote with another zone keep their old text: rewrite them, or they
+  still compare as that text.
 - `veloxgql.EncodeCursor` returns an error instead of panicking, and `veloxgql.Cursor` is a
   context scalar (`MarshalGQLContext`, `UnmarshalGQLContext`), so gqlgen reports a cursor
   that cannot be written on its field. Run `gqlgen generate` again.
