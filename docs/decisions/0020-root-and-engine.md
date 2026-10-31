@@ -25,8 +25,9 @@ The rest did not have to. Measured with the type checker: `Statement`, `Predicat
   embedded, which would promote the engine's methods into the public API. Holding it by
   value keeps a statement's path free of another pointer and a transaction's frame one
   allocation. `Tx` gives its fn the `*DB` of the frame's `*engine.DB`, the same memory,
-  by an unsafe cast of the function value: a closure over fn would escape, as the
-  `TxAround` hooks keep it, and cost every transaction an allocation.
+  through a closure over fn, which costs a transaction with a `TxAround` hook one
+  allocation. An unsafe cast of the function value would save it, but package unsafe
+  does not allow that.
 - `Pred[E]` moved beside `Predicate`, as a generic alias, because `velox.Predicate(p)`
   is a public conversion, and two structs with an unexported field are identical only
   in one package.

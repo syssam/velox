@@ -10,12 +10,15 @@
 #   scripts/release.sh contrib v1.2.3  commits contrib's requires, tags contrib
 #   scripts/release.sh dev v1.2.3      puts the replaces back for development
 #
-# example and bench/compare are not published, and keep their replaces.
+# example and bench/compare are not published, and keep their replaces. example
+# requires contrib, so it is tidied with it at each step; bench/compare needs nothing.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 root=github.com/syssam/velox2
 contribs=(contrib/graphql contrib/veloxotel)
+# What the tree requires of the root between releases, with a replace.
+placeholder=v0.0.0-00010101000000-000000000000
 
 usage() { echo "usage: $0 root|contrib|dev vMAJOR.MINOR.PATCH" >&2; exit 2; }
 [ $# = 2 ] || usage
@@ -35,6 +38,8 @@ root)
 contrib)
   clean
   git rev-parse -q --verify "refs/tags/$version" >/dev/null || { echo "release: no tag $version; run $0 root $version" >&2; exit 1; }
+  # A failed tidy, such as of a tag not pushed yet, leaves the tree as it was.
+  trap 'git checkout -- contrib example' ERR
   tags=()
   for m in "${contribs[@]}"; do
     (
@@ -45,6 +50,9 @@ contrib)
     git add "$m/go.mod" "$m/go.sum"
     tags+=("$m/$version")
   done
+  (cd example && GOWORK=off go mod tidy)
+  git add example/go.mod example/go.sum
+  trap - ERR
   git commit -q -m "release: contrib requires the root's $version"
   for t in "${tags[@]}"; do git tag -a "$t" -m "$t"; done
   echo "Next: git push origin HEAD ${tags[*]}, then $0 dev $version"
@@ -52,9 +60,11 @@ contrib)
 dev)
   clean
   for m in "${contribs[@]}"; do
-    (cd "$m" && go mod edit -replace="$root=../.." && GOWORK=off go mod tidy)
+    (cd "$m" && go mod edit -require="$root@$placeholder" -replace="$root=../.." && GOWORK=off go mod tidy)
     git add "$m/go.mod" "$m/go.sum"
   done
+  (cd example && go mod edit -require="$root@$placeholder" && GOWORK=off go mod tidy)
+  git add example/go.mod example/go.sum
   git commit -q -m "release: contrib builds against the tree again, after $version"
   echo "Next: git push origin HEAD"
   ;;

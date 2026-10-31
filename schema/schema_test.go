@@ -39,7 +39,7 @@ func TestAnnotationJSON(t *testing.T) {
 func TestCheckMerge(t *testing.T) {
 	a := schema.Check("a", "x > 0")
 	m, ok := a.Merge(schema.Check("b", "y > 0")).(*schema.CheckAnnotation)
-	if !ok || m.Checks["a"] != "x > 0" || m.Checks["b"] != "y > 0" || len(a.Checks) != 1 {
+	if !ok || len(m.Checks) != 2 || len(a.Checks) != 1 {
 		t.Errorf("Merge = %+v, a = %+v", m, a)
 	}
 	if got := a.Merge(schema.Table("t")); got != schema.Annotation(a) {

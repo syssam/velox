@@ -1967,21 +1967,80 @@ func TestDeclaredChecks(t *testing.T) {
 	}
 }
 
-type badCheckSchema struct{ schema.Schema }
+type unnamedCheckSchema struct{ schema.Schema }
 
-func (badCheckSchema) Fields() []schema.Field { return []schema.Field{field.Enum("role").Values("a")} }
-func (badCheckSchema) Annotations() []schema.Annotation {
-	return []schema.Annotation{schema.Check("bad_check_schemas_role_check", "1 = 1"), schema.Check("", "1 = 1")}
+func (unnamedCheckSchema) Fields() []schema.Field { return []schema.Field{field.Int("total")} }
+func (unnamedCheckSchema) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.Check("", "1 = 1")}
 }
 
-func TestDeclaredChecksRefused(t *testing.T) {
-	_, err := Tables(mustBuild(t, badCheckSchema{}), velox.SQLite)
-	if err == nil {
-		t.Fatal("no error")
+func TestDeclaredCheckNeedsAName(t *testing.T) {
+	_, err := Tables(mustBuild(t, unnamedCheckSchema{}), velox.SQLite)
+	if err == nil || !strings.Contains(err.Error(), "needs a name and an expression") {
+		t.Errorf("err = %v", err)
 	}
-	for _, want := range []string{"needs a name and an expression", "the check of an enum column"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("%v does not say %q", err, want)
-		}
+}
+
+type enumCheckSchema struct{ schema.Schema }
+
+func (enumCheckSchema) Fields() []schema.Field { return []schema.Field{field.Enum("role").Values("a")} }
+func (enumCheckSchema) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.Check("enum_check_schemas_role_check", "1 = 1")}
+}
+
+func TestDeclaredCheckTakesAnEnumsName(t *testing.T) {
+	if _, err := build(t, enumCheckSchema{}); err == nil || !strings.Contains(err.Error(), "check of field") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+type repeatedCheckSchema struct{ schema.Schema }
+
+func (repeatedCheckSchema) Fields() []schema.Field { return []schema.Field{field.Int("total")} }
+func (repeatedCheckSchema) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.Check("c", "total > 1"), schema.Check("c", "total > 2")}
+}
+
+func TestDeclaredCheckNamedTwice(t *testing.T) {
+	_, err := Tables(mustBuild(t, repeatedCheckSchema{}), velox.Postgres)
+	if err == nil || !strings.Contains(err.Error(), `names "c" twice`) {
+		t.Errorf("err = %v", err)
+	}
+}
+
+type sameCheckA struct{ schema.Schema }
+
+func (sameCheckA) Fields() []schema.Field { return []schema.Field{field.Int("total")} }
+func (sameCheckA) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.Check("positive", "total > 0")}
+}
+
+type sameCheckB struct{ schema.Schema }
+
+func (sameCheckB) Fields() []schema.Field { return []schema.Field{field.Int("total")} }
+func (sameCheckB) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.Check("positive", "total > 0")}
+}
+
+// TestDeclaredCheckNamespace: MySQL's check names are unique per database, so two
+// tables cannot share one there, and can on PostgreSQL.
+func TestDeclaredCheckNamespace(t *testing.T) {
+	_, err := build(t, sameCheckA{}, sameCheckB{})
+	if err == nil || !strings.Contains(err.Error(), "positive") {
+		t.Errorf("err = %v, want a refusal of the shared name", err)
+	}
+}
+
+type longCheckSchema struct{ schema.Schema }
+
+func (longCheckSchema) Fields() []schema.Field { return []schema.Field{field.Int("total")} }
+func (longCheckSchema) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.Check(strings.Repeat("c", 80), "total > 0")}
+}
+
+func TestDeclaredCheckNameLength(t *testing.T) {
+	_, err := build(t, longCheckSchema{})
+	if err == nil || !strings.Contains(err.Error(), "check name") {
+		t.Errorf("err = %v, want a refusal of the long name", err)
 	}
 }

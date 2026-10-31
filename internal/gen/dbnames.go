@@ -438,6 +438,13 @@ func objects(g *Graph, refused map[*Index]bool) []object {
 				add(spaceConstraints, ddl.NotNull(e.Table, f.Column), "not-null check of "+of, fieldLoc(f))
 			}
 		}
+		// A bad annotation is declaredChecks's error.
+		declared, _ := checksOf(e)
+		for i, c := range declared { // sorted; a repeated name is declaredChecks's error
+			if i == 0 || declared[i-1].Name != c.Name {
+				add(spaceConstraints, c.Name, "check of table "+e.Table, tableLoc(e))
+			}
+		}
 	}
 	for _, jt := range jts {
 		tables[tableKey{jt.Schema, jt.Table}] = &keys{pk: jt.Columns[:]}

@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"encoding/json"
 	"errors"
-	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -166,29 +165,48 @@ func (t *tabler) entity(e *Entity) migrate.Table {
 
 // declaredChecks adds the constraints of e's Check annotation to tb.
 func (t *tabler) declaredChecks(e *Entity, tb *migrate.Table) {
-	raw, ok := e.Annotations["Check"]
-	if !ok {
-		return
-	}
 	table := place{e, rankTable, 0, loc{pos: tb.Pos}}
-	var c struct {
-		Checks map[string]string `json:"checks"`
-	}
-	if err := json.Unmarshal(raw, &c); err != nil {
+	checks, err := checksOf(e)
+	if err != nil {
 		t.fail(table, "its Check annotation is not a list of constraints: %v", err)
 		return
 	}
-	for _, name := range slices.Sorted(maps.Keys(c.Checks)) {
-		expr := c.Checks[name]
+	seen := map[string]string{}
+	for _, c := range checks {
+		old, again := seen[c.Name]
+		seen[c.Name] = c.Expr
 		switch {
-		case strings.TrimSpace(name) == "" || strings.TrimSpace(expr) == "":
-			t.fail(table, "schema.Check(%q, %q) needs a name and an expression", name, expr)
-		case slices.ContainsFunc(tb.Checks, func(x migrate.Check) bool { return strings.EqualFold(x.Name, name) }):
-			t.fail(table, "schema.Check names %q, the check of an enum column; give it another name", name)
+		case strings.TrimSpace(c.Name) == "" || strings.TrimSpace(c.Expr) == "":
+			t.fail(table, "schema.Check(%q, %q) needs a name and an expression", c.Name, c.Expr)
+		case again && old != c.Expr:
+			t.fail(table, "schema.Check names %q twice, as %q and as %q", c.Name, old, c.Expr)
+		case again:
 		default:
-			tb.Checks = append(tb.Checks, migrate.Check{Name: t.symbol(name, false), Expr: expr, Pos: tb.Pos})
+			tb.Checks = append(tb.Checks, migrate.Check{Name: c.Name, Expr: c.Expr, Pos: tb.Pos})
 		}
 	}
+}
+
+// declaredCheck is one constraint of a Check annotation.
+type declaredCheck struct {
+	Name string `json:"name"`
+	Expr string `json:"expr"`
+}
+
+// checksOf is the constraints of e's Check annotation, sorted by name.
+func checksOf(e *Entity) ([]declaredCheck, error) {
+	raw, ok := e.Annotations["Check"]
+	if !ok {
+		return nil, nil
+	}
+	var c struct {
+		Checks []declaredCheck `json:"checks"`
+	}
+	if err := json.Unmarshal(raw, &c); err != nil {
+		return nil, err
+	}
+	slices.SortStableFunc(c.Checks, func(a, b declaredCheck) int { return strings.Compare(a.Name, b.Name) })
+	return c.Checks, nil
 }
 
 // joinTable is the table of a many-to-many relation: its two key columns,

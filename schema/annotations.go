@@ -1,6 +1,6 @@
 package schema
 
-import "maps"
+import "slices"
 
 // TableAnnotation names the table a schema is stored in, and optionally the
 // database schema that holds it.
@@ -34,31 +34,35 @@ func (*CommentAnnotation) Name() string { return "Comment" }
 // Comment sets the comment of a schema.
 func Comment(text string) *CommentAnnotation { return &CommentAnnotation{Text: text} }
 
-// CheckAnnotation holds a schema's CHECK constraints: their expressions by name.
+// CheckAnnotation holds a schema's CHECK constraints.
 type CheckAnnotation struct {
-	Checks map[string]string `json:"checks"`
+	Checks []CheckConstraint `json:"checks"`
+}
+
+// CheckConstraint is one CHECK constraint.
+type CheckConstraint struct {
+	Name string `json:"name"`
+	Expr string `json:"expr"`
 }
 
 // Name returns "Check".
 func (*CheckAnnotation) Name() string { return "Check" }
 
-// Merge returns the constraints of a and of other. Of one name given twice, other's
-// expression wins.
+// Merge returns the constraints of a and of other, as schema.Check's repeated
+// calls on one schema, or a mixin's and its schema's, combine. velox-gen refuses
+// one name given two expressions.
 func (a *CheckAnnotation) Merge(other Annotation) Annotation {
 	o, ok := other.(*CheckAnnotation)
 	if !ok {
 		return a
 	}
-	m := make(map[string]string, len(a.Checks)+len(o.Checks))
-	maps.Copy(m, a.Checks)
-	maps.Copy(m, o.Checks)
-	return &CheckAnnotation{Checks: m}
+	return &CheckAnnotation{Checks: slices.Concat(o.Checks, a.Checks)}
 }
 
 // Check adds the CHECK constraint name to a schema's table. expr is SQL of the
-// schema's dialect, and velox2 writes it as it is, so its identifiers must be quoted
-// the dialect's way if at all. Give it once per constraint. A violation fails the
-// statement with a *velox.ConstraintError of kind ConstraintCheck.
+// schema's dialect, and velox2 writes it as it is, so its identifiers must be
+// quoted the dialect's way if at all. A violation fails the statement with a
+// *velox.ConstraintError of kind ConstraintCheck.
 //
 //	func (Invoice) Annotations() []schema.Annotation {
 //		return []schema.Annotation{
@@ -67,5 +71,5 @@ func (a *CheckAnnotation) Merge(other Annotation) Annotation {
 //		}
 //	}
 func Check(name, expr string) *CheckAnnotation {
-	return &CheckAnnotation{Checks: map[string]string{name: expr}}
+	return &CheckAnnotation{Checks: []CheckConstraint{{Name: name, Expr: expr}}}
 }

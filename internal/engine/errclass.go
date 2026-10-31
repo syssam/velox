@@ -60,8 +60,12 @@ func stringField(e error, name string) string {
 	if v.Kind() != reflect.Struct {
 		return ""
 	}
-	f := v.FieldByName(name)
-	if f.Kind() != reflect.String {
+	sf, ok := v.Type().FieldByName(name)
+	if !ok {
+		return ""
+	}
+	f, err := v.FieldByIndexErr(sf.Index) // fails through a nil embedded pointer
+	if err != nil || f.Kind() != reflect.String {
 		return ""
 	}
 	return f.String()

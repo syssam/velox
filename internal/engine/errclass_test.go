@@ -452,3 +452,18 @@ func FuzzConstraint(f *testing.F) {
 		}
 	})
 }
+
+type embeddedPgFields struct{ ConstraintName string }
+
+// nilEmbeddedPgError reaches its fields through a nil embedded pointer.
+type nilEmbeddedPgError struct{ *embeddedPgFields }
+
+func (nilEmbeddedPgError) Error() string    { return "embedded" }
+func (nilEmbeddedPgError) SQLState() string { return "23505" }
+
+func TestPgErrorOfNilEmbedded(t *testing.T) {
+	pg, ok := PgErrorOf(nilEmbeddedPgError{})
+	if !ok || pg != (pgErr{Code: "23505"}) {
+		t.Errorf("PgErrorOf = %+v, %v", pg, ok)
+	}
+}

@@ -681,6 +681,11 @@ func (b *builder) nameLengths() {
 		for i, li := range n.schema.Indexes {
 			long(e.Name, indexLoc(i, e.Indexes[i]), "index name", li.StorageKey, "")
 		}
+		// A bad annotation is declaredChecks's error.
+		declared, _ := checksOf(e)
+		for _, c := range declared {
+			long(e.Name, tableLoc(e), "check name", c.Name, "")
+		}
 		for _, s := range n.edges {
 			for _, sym := range s.le.Symbols {
 				long(e.Name, edgeLoc(s.ed), "symbol", sym, "")
