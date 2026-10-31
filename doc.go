@@ -162,7 +162,7 @@
 //
 // # Raw SQL
 //
-// Raw SQL is the escape hatch for CTEs, GROUP BY and anything else the
+// Raw SQL is the escape hatch for CTEs, a GROUP BY of several keys and anything else the
 // builder cannot express: DB.Exec runs a statement, and DB.Raw scans a
 // query's rows into an entity by column name. velox applies neither the
 // tenant scope nor any policy to raw SQL, so tenant scoping is the caller's,
