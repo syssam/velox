@@ -99,6 +99,10 @@ func (db *DB) guard(st *Statement) error {
 	}
 	switch st.Op {
 	case OpSelect:
+		if st.GroupBy != 0 && !st.Unbounded {
+			// A key may be unique, so the groups are as many as the rows.
+			return fmt.Errorf("velox: %s: %w: a grouped aggregate ignores Limit; add Unbounded to read every group", st.Entity.Name, ErrUnbounded)
+		}
 		if st.Count || st.Exists || st.Aggregate != 0 {
 			break
 		}

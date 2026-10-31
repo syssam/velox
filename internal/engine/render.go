@@ -108,6 +108,10 @@ func (w *writer) selectStmt(st *Statement) {
 		return
 	}
 	w.str("SELECT ")
+	if st.GroupBy != 0 {
+		w.groupKey(st.GroupBy - 1)
+		w.str(", ")
+	}
 	switch {
 	case st.Count:
 		w.str("COUNT(*)")
@@ -128,8 +132,20 @@ func (w *writer) selectStmt(st *Statement) {
 	w.str(" FROM ")
 	w.table()
 	w.where(st.Where)
+	if st.GroupBy != 0 {
+		w.str(" GROUP BY ")
+		w.groupKey(st.GroupBy - 1)
+	}
 	w.orderBy(st.OrderBy, false)
 	w.selectTail(st)
+}
+
+// groupKey writes a grouped aggregate's key column.
+func (w *writer) groupKey(col int) {
+	if w.in.Columns[col].Codec {
+		w.fail(errCodecGroupBy(w.in, col))
+	}
+	w.col(int32(col))
 }
 
 // selectColumns writes the columns cs of a SELECT, every column when cs is

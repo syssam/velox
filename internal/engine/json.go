@@ -113,6 +113,11 @@ func errCodecOrderBy(in *EntityInfo, col int) error {
 	return fmt.Errorf("velox: %s: column %s is an encoded column (JSON in velox-gen), which a query cannot order by: the order of encoded values differs by dialect", in.Name, in.Columns[col].Name)
 }
 
+// errCodecGroupBy is the error for grouping by the encoded column col of in.
+func errCodecGroupBy(in *EntityInfo, col int) error {
+	return fmt.Errorf("velox: %s: column %s is an encoded column (JSON in velox-gen), which a query cannot group by: encoded values compare differently by dialect", in.Name, in.Columns[col].Name)
+}
+
 // errCodecAdd is the error for adding to or subtracting from the encoded
 // column col of in.
 func errCodecAdd(in *EntityInfo, col int) error {

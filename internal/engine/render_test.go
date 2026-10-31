@@ -253,6 +253,24 @@ func renderCases() []renderCase {
 			velox.MySQL:    "SELECT SUM(`total`) FROM `invoices` WHERE `org_id` = ?",
 			velox.SQLite:   `SELECT SUM("total") FROM "invoices" WHERE "org_id" = ?`,
 		}, []any{int64(1)}},
+		{"count by", func() *velox.Statement {
+			st := stmt(hOrg.EQ(1))
+			st.Count, st.GroupBy, st.OrderBy = true, 3, []velox.OrderTerm{{Column: 2}}
+			return st
+		}, map[velox.Dialect]string{
+			velox.Postgres: `SELECT "number", COUNT(*) FROM "invoices" WHERE "org_id" = $1 GROUP BY "number" ORDER BY "number"`,
+			velox.MySQL:    "SELECT `number`, COUNT(*) FROM `invoices` WHERE `org_id` = ? GROUP BY `number` ORDER BY `number`",
+			velox.SQLite:   `SELECT "number", COUNT(*) FROM "invoices" WHERE "org_id" = ? GROUP BY "number" ORDER BY "number"`,
+		}, []any{int64(1)}},
+		{"sum by, the first column", func() *velox.Statement {
+			st := stmt(hOrg.EQ(1))
+			st.Aggregate, st.Columns, st.GroupBy, st.OrderBy = velox.AggregateSum, []int{3}, 1, []velox.OrderTerm{{Column: 0}}
+			return st
+		}, map[velox.Dialect]string{
+			velox.Postgres: `SELECT "id", SUM("total") FROM "invoices" WHERE "org_id" = $1 GROUP BY "id" ORDER BY "id"`,
+			velox.MySQL:    "SELECT `id`, SUM(`total`) FROM `invoices` WHERE `org_id` = ? GROUP BY `id` ORDER BY `id`",
+			velox.SQLite:   `SELECT "id", SUM("total") FROM "invoices" WHERE "org_id" = ? GROUP BY "id" ORDER BY "id"`,
+		}, []any{int64(1)}},
 		{"offset without limit", func() *velox.Statement { st := stmt(); st.Offset = 20; return st }, map[velox.Dialect]string{
 			velox.Postgres: `SELECT ` + pgCols + ` FROM "invoices" OFFSET $1`,
 			velox.MySQL:    "SELECT " + mysqlCols + " FROM `invoices` LIMIT 18446744073709551615 OFFSET ?",

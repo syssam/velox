@@ -427,6 +427,38 @@ func TestAggregateShapes(t *testing.T) {
 	}
 }
 
+// TestGroupShapes: the key column is part of a grouped aggregate's shape, apart
+// from the ordering beside it, so two keys never share cached SQL, nor does a
+// grouped statement share with a plain one; column 0 is a key like any other.
+func TestGroupShapes(t *testing.T) {
+	var c engine.RenderCache
+	group := func(by int, sum bool) string {
+		st := stmt()
+		st.GroupBy = by
+		if sum {
+			st.Aggregate, st.Columns = velox.AggregateSum, []int{3}
+		} else {
+			st.Count = true
+		}
+		sql, _ := cachedRender(&c, velox.Postgres, st)
+		return sql
+	}
+	shapes := []string{group(0, false), group(1, false), group(3, false), group(0, true), group(1, true), group(3, true)}
+	for i, a := range shapes {
+		for _, b := range shapes[i+1:] {
+			if a == b {
+				t.Errorf("shapes share SQL: %s", a)
+			}
+		}
+	}
+	if c.Size() != len(shapes) {
+		t.Errorf("cache holds %d shapes, want %d", c.Size(), len(shapes))
+	}
+	if again := group(3, true); again != shapes[5] || c.Size() != len(shapes) {
+		t.Errorf("a hit changed: %s, %d shapes", again, c.Size())
+	}
+}
+
 // A read and its four locked forms are five shapes, and the cache never
 // returns one's text for another.
 func TestLockShapes(t *testing.T) {

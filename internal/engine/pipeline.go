@@ -317,7 +317,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 			st.Each = &ec
 		}
 	}
-	entity, op, writable, count, exists, agg, lock, wait, inTx := st.Entity, st.Op, st.Writable, st.Count, st.Exists, st.Aggregate, st.Lock, st.LockWait, st.InTx
+	entity, op, writable, count, exists, agg, group, lock, wait, inTx := st.Entity, st.Op, st.Writable, st.Count, st.Exists, st.Aggregate, st.GroupBy, st.Lock, st.LockWait, st.InTx
 	// velox's own marks, which no hook can set: a hook that replaces the
 	// whole struct (*st = Statement{…}) zeroes them, and they are restored.
 	bidi, pin := StmtBidi(st), StmtPin(st)
@@ -356,6 +356,10 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	}
 	if st.Aggregate != agg {
 		return ErrAggregateChanged(entity.Name)
+	}
+	if st.GroupBy != group {
+		// The scan depends on it: a key, then a value.
+		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's GroupBy", entity.Name)
 	}
 	if (count || exists || agg != 0) && !slices.Equal(st.Columns, cols) {
 		// The scan depends on them: one value, of the column's type.
@@ -480,9 +484,10 @@ func (db *DB) execute(ctx context.Context, st *Statement, t Target, read func(Ro
 // rowCap is the most rows st may return: its own MaxRows, else, for a
 // per-owner read bounded by construction, that bound (EachBound), else the
 // DB's; 0 for no cap. Raw's read is capped too, Exec not; so is a per-owner
-// count, by its owners, but not Count.
+// count, by its owners, and a grouped aggregate, by its groups, but not Count
+// or an aggregate of one row.
 func (db *DB) rowCap(st *Statement) int {
-	if !st.Op.Reads() || (st.Count && st.Each == nil) || st.Exists || st.Aggregate != 0 {
+	if !st.Op.Reads() || st.Exists || (st.GroupBy == 0 && ((st.Count && st.Each == nil) || st.Aggregate != 0)) {
 		return 0
 	}
 	if st.MaxRows > 0 {

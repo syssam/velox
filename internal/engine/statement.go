@@ -72,6 +72,7 @@ type Statement struct {
 	Count        bool        // SELECT COUNT(*): Count clears Columns, OrderBy, Limit and Offset; a Rewrite hook may not change it, or set Columns, and one that sets the others gets them rendered
 	Exists       bool        // SELECT 1 … LIMIT 1: Exists clears Columns, OrderBy and Offset and sets Limit to 1; a Rewrite hook may not change it, or set Columns
 	Aggregate    Aggregate   // SELECT SUM(c) …: Columns holds c alone; like Count, it clears OrderBy, Limit and Offset; a Rewrite hook may not change it, or Columns
+	GroupBy      int         // SELECT with Count or Aggregate: the key column's index plus one, 0 for none: one row per key, the key first; velox orders by the key, and a Rewrite hook may not change it
 	Each         *EachClause // SELECT: a relation read or counted per owner; a Rewrite hook may not change it
 	Lock         Lock        // SELECT: ForUpdate or ForShare; 0 for a read that locks nothing; a Rewrite hook may not change it
 	LockWait     LockWait    // SELECT: SkipLocked or NoWait; a Rewrite hook may not change it

@@ -117,6 +117,7 @@ func bit(b bool) byte {
 // which keys the outer map.
 func ShapeKey(k []byte, d Dialect, st *Statement) []byte {
 	k = append(k, byte(d), byte(st.Op), bit(st.Count), bit(st.Exists), byte(st.Aggregate), byte(st.Lock), byte(st.LockWait), bit(st.Columns != nil), bit(st.Limit > 0), bit(st.Offset > 0))
+	k = binary.AppendUvarint(k, uint64(st.GroupBy))
 	k = binary.AppendUvarint(k, uint64(len(st.Columns)))
 	for _, c := range st.Columns {
 		k = binary.AppendUvarint(k, uint64(c))
