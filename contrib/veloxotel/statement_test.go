@@ -126,6 +126,32 @@ func TestEveryOperation(t *testing.T) {
 		absent []attribute.Key
 	}{
 		{
+			name: "count by",
+			f:    &fakeDB{cols: []string{"org_id", "count"}, rows: [][]driver.Value{{int64(1), int64(4)}}},
+			run: func(db *velox.DB) error {
+				_, err := velox.CountBy(ctx, db.Query[testmodel.Invoice]().Unbounded(), I.OrgID.Key())
+				return err
+			},
+			span: "SELECT invoices",
+			want: map[attribute.Key]attribute.Value{
+				"db.operation.name": attribute.StringValue("SELECT"),
+				"db.query.summary":  attribute.StringValue("SELECT invoices"),
+			},
+		},
+		{
+			name: "sum by",
+			f:    &fakeDB{cols: []string{"org_id", "sum"}, rows: [][]driver.Value{{int64(1), 4.0}}},
+			run: func(db *velox.DB) error {
+				_, err := velox.SumBy(ctx, db.Query[testmodel.Invoice]().Unbounded(), I.OrgID.Key(), I.Total)
+				return err
+			},
+			span: "SELECT invoices",
+			want: map[attribute.Key]attribute.Value{
+				"db.operation.name": attribute.StringValue("SELECT"),
+				"db.query.summary":  attribute.StringValue("SELECT invoices"),
+			},
+		},
+		{
 			name: "count",
 			f:    &fakeDB{cols: []string{"count"}, rows: [][]driver.Value{{int64(4)}}},
 			run: func(db *velox.DB) error {

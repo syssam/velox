@@ -33,14 +33,14 @@ func TestHandlesFileIsCurrent(t *testing.T) {
 // wrong kind, or dropped from the right one, fails here.
 func TestHandleMethodSets(t *testing.T) {
 	want := map[string]string{
-		"Col":            "Asc Desc EQ In NEQ NotIn Set ValueIn column",
-		"OrderedCol":     "Asc Between Desc EQ GT GTE In LT LTE NEQ NotIn Set ValueIn column",
-		"NumberCol":      "Add Asc Between Desc EQ GT GTE In LT LTE NEQ NotIn Set Sub ValueIn column",
-		"StringCol":      "Asc Between Contains Desc EQ EqualFold GT GTE HasPrefix HasSuffix In LT LTE Like NEQ NotIn Set ValueIn column",
-		"NullCol":        "Asc Desc EQ In IsNull NEQ NotIn NotNull Set SetNull ValueIn column",
-		"NullOrderedCol": "Asc Between Desc EQ GT GTE In IsNull LT LTE NEQ NotIn NotNull Set SetNull ValueIn column",
-		"NullNumberCol":  "Add Asc Between Desc EQ GT GTE In IsNull LT LTE NEQ NotIn NotNull Set SetNull Sub ValueIn column",
-		"NullStringCol":  "Asc Between Contains Desc EQ EqualFold GT GTE HasPrefix HasSuffix In IsNull LT LTE Like NEQ NotIn NotNull Set SetNull ValueIn column",
+		"Col":            "Asc Desc EQ In Key NEQ NotIn Set ValueIn column",
+		"OrderedCol":     "Asc Between Desc EQ GT GTE In Key LT LTE NEQ NotIn Set ValueIn column",
+		"NumberCol":      "Add Asc Between Desc EQ GT GTE In Key LT LTE NEQ NotIn Set Sub ValueIn column",
+		"StringCol":      "Asc Between Contains Desc EQ EqualFold GT GTE HasPrefix HasSuffix In Key LT LTE Like NEQ NotIn Set ValueIn column",
+		"NullCol":        "Asc Desc EQ In IsNull Key NEQ NotIn NotNull Set SetNull ValueIn column",
+		"NullOrderedCol": "Asc Between Desc EQ GT GTE In IsNull Key LT LTE NEQ NotIn NotNull Set SetNull ValueIn column",
+		"NullNumberCol":  "Add Asc Between Desc EQ GT GTE In IsNull Key LT LTE NEQ NotIn NotNull Set SetNull Sub ValueIn column",
+		"NullStringCol":  "Asc Between Contains Desc EQ EqualFold GT GTE HasPrefix HasSuffix In IsNull Key LT LTE Like NEQ NotIn NotNull Set SetNull ValueIn column",
 		"JSONCol":        "Set ValueIn column",
 		"NullJSONCol":    "IsNull NotNull Set SetNull ValueIn column",
 	}

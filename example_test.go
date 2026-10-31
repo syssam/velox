@@ -186,6 +186,35 @@ func ExampleWithTenant() {
 	// velox: testmodel.Invoice: no tenant in the context
 }
 
+// SumBy adds up a column per value of a key column. The tenant scope applies:
+// with WithAllTenants, the key's values are the tenants.
+func ExampleSumBy() {
+	db := exampleDB()
+	for _, w := range []struct {
+		org   int64
+		total float64
+	}{{1, 10}, {1, 20}, {2, 5}} {
+		c := velox.WithTenant(context.Background(), w.org)
+		inv := testmodel.Invoice{Number: fmt.Sprint(w.total), Total: w.total, Data: []byte{}}
+		if err := db.Insert(&inv).Exec(c); err != nil {
+			fmt.Println(err)
+			return
+		}
+	}
+	all := velox.WithAllTenants(context.Background(), "the example's report")
+	groups, err := velox.SumBy(all, db.Query[testmodel.Invoice]().Unbounded(), testmodel.Invoices.OrgID.Key(), testmodel.Invoices.Total)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	for _, g := range groups {
+		fmt.Println(g.Key, g.Value)
+	}
+	// Output:
+	// 1 30
+	// 2 5
+}
+
 // An upsert's update branch writes only the columns Update names: an
 // UpdateDefault, such as mixin.Time's updated_at, does not fire.
 func ExampleInsertQuery_OnConflict() {

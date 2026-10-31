@@ -29,3 +29,4 @@ contributor needs to know.
 | [0019](0019-veloxpgx.md) | pgx's native path is the package veloxpgx in this module; the core reads pgx's errors by type name, so it links no driver. |
 | [0020](0020-root-and-engine.md) | The root package is the generic API and `internal/engine` is the rest: the root's `DB` holds an `engine.DB`, its public names are aliases, and each test lives by the code it tests. |
 | [0021](0021-dbtype.md) | The plain data types are in the public package `dbtype`, which the root re-exports, so their fields and methods have real documentation; what reaches a private field stays in the engine. |
+| [0022](0022-group-by.md) | Grouped aggregates take `handle.Key()`, a generic method, since an ordinary method or a phantom field costs every entity package; a group list obeys `Unbounded` and the row cap; NULL keys are nil, NULL sums 0, and an empty group has no average, least or greatest. |

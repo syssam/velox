@@ -56,6 +56,14 @@ var (
 		{"Set", "sets the column to v.", "(v V) Setter[E]",
 			"return Setter[E]{Assignment{Column: int(c.I), Op: AssignSet, Value: v}}"},
 	}
+	key = []method{
+		{"Key", "is the column as the key of a grouped aggregate: CountBy, SumBy, AvgBy, MinBy or MaxBy.", "() GroupKey[E, V]",
+			"return GroupKey[E, V]{c.I}"},
+	}
+	nullKey = []method{
+		{"Key", "is the column as the key of a grouped aggregate: CountBy, SumBy, AvgBy, MinBy or MaxBy. NULL is one group, whose Key is nil.", "() GroupKey[E, *V]",
+			"return GroupKey[E, *V]{c.I}"},
+	}
 	valueIn          = []method{valueInMethod("")}
 	valueInArith     = []method{valueInMethod(addNote)}
 	nullValueIn      = []method{nullValueInMethod("")}
@@ -98,14 +106,14 @@ type kind struct {
 }
 
 var kinds = []kind{
-	{"Col", "[E, V any]", "is the handle of a column of entity E whose values, of type V, are neither ordered nor text: bool, []byte and other types.", [][]method{base, set, valueIn}},
-	{"OrderedCol", "[E, V any]", "is the handle of an ordered column: time.Time and types registered as ordered.", [][]method{base, ordered, set, valueIn}},
-	{"NumberCol", "[E, V any]", "is the handle of a numeric column.", [][]method{base, ordered, set, valueInArith, arith}},
-	{"StringCol", "[E any, V ~string]", "is the handle of a text column.", [][]method{base, ordered, text, set, valueIn}},
-	{"NullCol", "[E, V any]", "is Col for a column that allows NULL: a field of type *V.", [][]method{base, set, nullValueIn, null}},
-	{"NullOrderedCol", "[E, V any]", "is OrderedCol for a column that allows NULL: a field of type *V.", [][]method{base, ordered, set, nullValueIn, null}},
-	{"NullNumberCol", "[E, V any]", "is NumberCol for a column that allows NULL: a field of type *V.", [][]method{base, ordered, set, nullValueInArith, arith, null}},
-	{"NullStringCol", "[E any, V ~string]", "is StringCol for a column that allows NULL: a field of type *V.", [][]method{base, ordered, text, set, nullValueIn, null}},
+	{"Col", "[E, V any]", "is the handle of a column of entity E whose values, of type V, are neither ordered nor text: bool, []byte and other types.", [][]method{base, key, set, valueIn}},
+	{"OrderedCol", "[E, V any]", "is the handle of an ordered column: time.Time and types registered as ordered.", [][]method{base, key, ordered, set, valueIn}},
+	{"NumberCol", "[E, V any]", "is the handle of a numeric column.", [][]method{base, key, ordered, set, valueInArith, arith}},
+	{"StringCol", "[E any, V ~string]", "is the handle of a text column.", [][]method{base, key, ordered, text, set, valueIn}},
+	{"NullCol", "[E, V any]", "is Col for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, set, nullValueIn, null}},
+	{"NullOrderedCol", "[E, V any]", "is OrderedCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, set, nullValueIn, null}},
+	{"NullNumberCol", "[E, V any]", "is NumberCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, set, nullValueInArith, arith, null}},
+	{"NullStringCol", "[E any, V ~string]", "is StringCol for a column that allows NULL: a field of type *V.", [][]method{base, nullKey, ordered, text, set, nullValueIn, null}},
 	{"JSONCol", "[E, V any]", "is the handle of an encoded column: a json field, whose value is stored as JSON. It sets the column and neither compares nor orders by it, as equality and order of JSON differ by dialect.", [][]method{set, valueIn}},
 	{"NullJSONCol", "[E, V any]", "is JSONCol for a column that allows NULL: a field of type *V.", [][]method{set, nullValueIn, null}},
 }

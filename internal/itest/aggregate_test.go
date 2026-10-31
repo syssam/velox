@@ -1,7 +1,11 @@
 package itest
 
 import (
+	"context"
+	"errors"
 	"math"
+	"slices"
+	"strconv"
 	"testing"
 
 	"github.com/syssam/velox2"
@@ -186,6 +190,173 @@ func TestAggregateIsTenantScoped(t *testing.T) {
 		}
 		if v, err := velox.Sum(velox.WithTenant(velox.WithoutPolicy(ctx, "test"), int64(2)), q, I.Total); err != nil || v != 50 {
 			t.Errorf("org 2: %v, %v", v, err)
+		}
+	})
+}
+
+// CountBy, SumBy, AvgBy, MinBy and MaxBy on every dialect: the keys' types, their
+// order, the values' Go types from what each database answers with, and NULLs.
+func TestGroupedOnRealDatabases(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		I := testmodel.Invoices
+		q := tg.db.Query[testmodel.Invoice]().Unbounded()
+		key := I.OrgID.Key()
+		counts, err := velox.CountBy(ctx, q, key)
+		if want := []velox.Group[int64, int64]{{Key: 1, Value: 4}, {Key: 2, Value: 1}}; err != nil || !slices.Equal(counts, want) {
+			t.Errorf("CountBy: %v, %v", counts, err)
+		}
+		sums, err := velox.SumBy(ctx, q, key, I.Total)
+		if want := []velox.Group[int64, float64]{{Key: 1, Value: 100}, {Key: 2, Value: 50}}; err != nil || !slices.Equal(sums, want) {
+			t.Errorf("SumBy: %v, %v", sums, err)
+		}
+		avgs, err := velox.AvgBy(ctx, q, key, I.Total)
+		if want := []velox.Group[int64, float64]{{Key: 1, Value: 25}, {Key: 2, Value: 50}}; err != nil || !slices.Equal(avgs, want) {
+			t.Errorf("AvgBy: %v, %v", avgs, err)
+		}
+		mins, err := velox.MinBy(ctx, q, key, I.Total)
+		if want := []velox.Group[int64, float64]{{Key: 1, Value: 10}, {Key: 2, Value: 50}}; err != nil || !slices.Equal(mins, want) {
+			t.Errorf("MinBy: %v, %v", mins, err)
+		}
+		maxs, err := velox.MaxBy(ctx, q, key, I.Total)
+		if want := []velox.Group[int64, float64]{{Key: 1, Value: 40}, {Key: 2, Value: 50}}; err != nil || !slices.Equal(maxs, want) {
+			t.Errorf("MaxBy: %v, %v", maxs, err)
+		}
+		// The conditions apply; the ordering and limit do not.
+		paid, err := velox.SumBy(ctx, q.Where(I.Paid.EQ(true)).OrderBy(I.ID.Desc()).Limit(1), key, I.Total)
+		if want := []velox.Group[int64, float64]{{Key: 1, Value: 40}, {Key: 2, Value: 50}}; err != nil || !slices.Equal(paid, want) {
+			t.Errorf("paid: %v, %v", paid, err)
+		}
+		if got, err := velox.CountBy(ctx, q.Where(I.ID.EQ(99)), key); err != nil || len(got) != 0 {
+			t.Errorf("no row: %v, %v", got, err)
+		}
+		// Each row's own group, with a text key.
+		byNumber, err := velox.CountBy(ctx, q, I.Number.Key())
+		if err != nil || len(byNumber) != 5 {
+			t.Errorf("by number: %v, %v", byNumber, err)
+		}
+		// A nullable time: nil for the unpaid, a time for the paid.
+		byPaidAt, err := velox.CountBy(ctx, q, I.PaidAt.Key())
+		if err != nil || len(byPaidAt) != 2 {
+			t.Fatalf("by paid_at: %v, %v", byPaidAt, err)
+		}
+		nullAt, valueAt := 0, 1
+		if tg.d == velox.Postgres { // NULLs last there, first elsewhere
+			nullAt, valueAt = 1, 0
+		}
+		if g := byPaidAt[nullAt]; g.Key != nil || g.Value != 2 {
+			t.Errorf("NULL key: %+v", g)
+		}
+		if g := byPaidAt[valueAt]; g.Key == nil || !g.Key.Equal(t0) || g.Value != 3 {
+			t.Errorf("time key: %+v", g)
+		}
+		byPaid, err := velox.CountBy(ctx, q, I.Paid.Key())
+		if want := []velox.Group[bool, int64]{{Key: false, Value: 2}, {Key: true, Value: 3}}; err != nil || !slices.Equal(byPaid, want) {
+			t.Errorf("by paid: %v, %v", byPaid, err)
+		}
+
+		// A named key and named values, DECIMAL on MySQL and numeric on
+		// PostgreSQL, and a group of NULLs.
+		S := testmodel.Samples
+		tg.exec(t, "DROP TABLE IF EXISTS samples")
+		tg.exec(t, sampleDDL(tg.d))
+		t.Cleanup(func() { tg.exec(t, "DROP TABLE IF EXISTS samples") })
+		add := func(status string, price int64, prev, score any) {
+			t.Helper()
+			ins := "INSERT INTO samples (name, status, prev, price, flag, " + quoted(tg.d, "when") + ", " + quoted(tg.d, "blob") + ", score) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+			tg.exec(t, ins, "s", status, prev, price, false, t0, []byte("b"), score)
+		}
+		add("a", 100, nil, nil)
+		add("a", 250, "x", nil)
+		add("b", 1, "x", int64(4))
+		add("b", 1, nil, int64(8))
+		samples := tg.db.Query[testmodel.Sample]().Unbounded()
+		cents, err := velox.SumBy(ctx, samples, S.Status.Key(), S.Price)
+		if want := []velox.Group[kind.Status, kind.Cents]{{Key: "a", Value: 350}, {Key: "b", Value: 2}}; err != nil || !slices.Equal(cents, want) {
+			t.Errorf("Cents: %v, %v", cents, err)
+		}
+		scores, err := velox.SumBy(ctx, samples, S.Status.Key(), S.Score)
+		if want := []velox.Group[kind.Status, kind.Score]{{Key: "a", Value: 0}, {Key: "b", Value: 12}}; err != nil || !slices.Equal(scores, want) {
+			t.Errorf("Sum, a group of NULLs: %v, %v", scores, err)
+		}
+		avg, err := velox.AvgBy(ctx, samples, S.Status.Key(), S.Score)
+		if want := []velox.Group[kind.Status, float64]{{Key: "b", Value: 6}}; err != nil || !slices.Equal(avg, want) {
+			t.Errorf("Avg, a group of NULLs: %v, %v", avg, err)
+		}
+		least, err := velox.MinBy(ctx, samples, S.Status.Key(), S.Score)
+		if want := []velox.Group[kind.Status, kind.Score]{{Key: "b", Value: 4}}; err != nil || !slices.Equal(least, want) {
+			t.Errorf("Min, a group of NULLs: %v, %v", least, err)
+		}
+		most, err := velox.MaxBy(ctx, samples, S.Status.Key(), S.Score)
+		if want := []velox.Group[kind.Status, kind.Score]{{Key: "b", Value: 8}}; err != nil || !slices.Equal(most, want) {
+			t.Errorf("Max, a group of NULLs: %v, %v", most, err)
+		}
+		byPrev, err := velox.SumBy(ctx, samples, S.Prev.Key(), S.Price)
+		if err != nil || len(byPrev) != 2 {
+			t.Fatalf("by prev: %v, %v", byPrev, err)
+		}
+		nullAt, valueAt = 0, 1
+		if tg.d == velox.Postgres {
+			nullAt, valueAt = 1, 0
+		}
+		if g := byPrev[nullAt]; g.Key != nil || g.Value != 101 {
+			t.Errorf("NULL key: %+v", g)
+		}
+		if g := byPrev[valueAt]; g.Key == nil || *g.Key != "x" || g.Value != 251 {
+			t.Errorf("text key: %+v", g)
+		}
+	})
+}
+
+// A grouped aggregate takes the tenant scope and the Read policy, and its
+// groups count against the row cap, all in the database's own answer.
+func TestGroupedIsScopedAndCapped(t *testing.T) {
+	each(t, func(t *testing.T, tg target) {
+		I := testmodel.Invoices
+		q := tg.db.Query[testmodel.Invoice]().Unbounded()
+		org := func(id int64) context.Context { return velox.WithTenant(velox.WithoutPolicy(ctx, "test"), id) }
+		got, err := velox.SumBy(org(2), q, I.OrgID.Key(), I.Total)
+		if want := []velox.Group[int64, float64]{{Key: 2, Value: 50}}; err != nil || !slices.Equal(got, want) {
+			t.Errorf("org 2: %v, %v", got, err)
+		}
+		// A tenant's rows only: by paid, org 1 has 2 and 2, org 2 has one.
+		paid, err := velox.CountBy(org(1), q, I.Paid.Key())
+		if want := []velox.Group[bool, int64]{{Key: false, Value: 2}, {Key: true, Value: 2}}; err != nil || !slices.Equal(paid, want) {
+			t.Errorf("org 1: %v, %v", paid, err)
+		}
+		if _, err := velox.CountBy(context.Background(), q, I.OrgID.Key()); !errors.Is(err, velox.ErrNoTenant) {
+			t.Errorf("no tenant: %v", err)
+		}
+		// The row cap: five numbers, four allowed by the query.
+		if _, err := velox.CountBy(ctx, q.MaxRows(4), I.Number.Key()); !errors.Is(err, velox.ErrTooManyRows) {
+			t.Errorf("past the cap: %v", err)
+		}
+		if got, err := velox.CountBy(ctx, q.MaxRows(5), I.Number.Key()); err != nil || len(got) != 5 {
+			t.Errorf("at the cap: %v, %v", got, err)
+		}
+		if _, err := velox.CountBy(ctx, tg.db.Query[testmodel.Invoice](), I.OrgID.Key()); !errors.Is(err, velox.ErrUnbounded) {
+			t.Errorf("no Unbounded: %v", err)
+		}
+
+		// The policy: tickets of ann's only.
+		T := testmodel.Tickets
+		tq := tg.db.Query[testmodel.Ticket]().Unbounded()
+		tg.exec(t, "DELETE FROM tickets")
+		for i, r := range []struct {
+			org, invoice int64
+			owner        string
+		}{{1, 1, "ann"}, {1, 2, "ann"}, {1, 4, "bob"}, {2, 5, "ann"}} {
+			tg.exec(t, "INSERT INTO tickets (created_by, id, org_id, owner, title, done, invoice_id, parent_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+				"seed", int64(i+1), r.org, r.owner, strconv.Itoa(i), false, r.invoice, nil)
+		}
+		ann := testmodel.WithUser(velox.WithTenant(context.Background(), int64(1)), "ann")
+		tickets, err := velox.SumBy(ann, tq, T.Owner.Key(), T.InvoiceID)
+		if want := []velox.Group[string, int64]{{Key: "ann", Value: 3}}; err != nil || !slices.Equal(tickets, want) {
+			t.Errorf("ann: %v, %v", tickets, err)
+		}
+		admin := testmodel.WithUser(velox.WithTenant(context.Background(), int64(1)), "admin")
+		tickets, err = velox.SumBy(admin, tq, T.Owner.Key(), T.InvoiceID)
+		if want := []velox.Group[string, int64]{{Key: "ann", Value: 3}, {Key: "bob", Value: 4}}; err != nil || !slices.Equal(tickets, want) {
+			t.Errorf("admin: %v, %v", tickets, err)
 		}
 	})
 }
