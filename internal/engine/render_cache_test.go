@@ -1,4 +1,4 @@
-package velox
+package engine_test
 
 import (
 	"context"
@@ -6,7 +6,9 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/internal/engine"
+	"github.com/syssam/velox2/internal/fakeconn"
 )
 
 func TestCacheRendersLikeRender(t *testing.T) {
@@ -29,19 +31,19 @@ func TestCacheRendersLikeRender(t *testing.T) {
 
 func TestCacheKeepsShapesApart(t *testing.T) {
 	var c engine.RenderCache
-	one, _ := cachedRender(&c, Postgres, stmt(hID.In(1)))
-	two, _ := cachedRender(&c, Postgres, stmt(hID.In(1, 2)))
+	one, _ := cachedRender(&c, velox.Postgres, stmt(hID.In(1)))
+	two, _ := cachedRender(&c, velox.Postgres, stmt(hID.In(1, 2)))
 	if one == two {
 		t.Error("In lists of different lengths share SQL")
 	}
 	some := stmt()
 	some.Columns = []int{0}
-	a, _ := cachedRender(&c, Postgres, some)
-	b, _ := cachedRender(&c, Postgres, stmt())
+	a, _ := cachedRender(&c, velox.Postgres, some)
+	b, _ := cachedRender(&c, velox.Postgres, stmt())
 	if a == b {
 		t.Error("a column subset shares SQL with every column")
 	}
-	m, _ := cachedRender(&c, MySQL, stmt())
+	m, _ := cachedRender(&c, velox.MySQL, stmt())
 	if m == b {
 		t.Error("dialects share SQL")
 	}
@@ -49,7 +51,7 @@ func TestCacheKeepsShapesApart(t *testing.T) {
 	other.Table = "archive"
 	st := stmt()
 	st.Entity = &other
-	if o, _ := cachedRender(&c, Postgres, st); o == b {
+	if o, _ := cachedRender(&c, velox.Postgres, st); o == b {
 		t.Error("entities share SQL")
 	}
 	// Each nil, Each with a per-owner Limit and without, Each through a join,
@@ -58,13 +60,13 @@ func TestCacheKeepsShapesApart(t *testing.T) {
 	var ec engine.RenderCache
 	plain := eachItems(1, 0)
 	plain.Each = nil
-	shapes := []*Statement{plain, eachItems(1, 2), eachItems(1, 0), eachTags(2, engine.NewPredicate(engine.Node{Op: engine.OpEQ, Col: 1, V: int64(7)})),
+	shapes := []*velox.Statement{plain, eachItems(1, 2), eachItems(1, 0), eachTags(2, engine.NewPredicate(engine.Node{Op: engine.OpEQ, Col: 1, V: int64(7)})),
 		countItems(), countTags(bookTagInfo, 0, 1)}
 	seen := map[string]bool{}
 	for range 2 {
 		for i, st := range shapes {
-			want, _ := render(Postgres, st)
-			got, _ := cachedRender(&ec, Postgres, st)
+			want, _ := render(velox.Postgres, st)
+			got, _ := cachedRender(&ec, velox.Postgres, st)
 			if got != want {
 				t.Errorf("shape %d: cached\n %s\nwant %s", i, got, want)
 			}
@@ -80,13 +82,13 @@ func TestCacheKeepsShapesApart(t *testing.T) {
 // "= $1"; the two must not share a cached shape.
 func TestCacheKeepsNilApartFromAValue(t *testing.T) {
 	var c engine.RenderCache
-	nilSt := func() *Statement {
-		return stmt(Pred[inv](engine.NewPredicate(engine.Node{Op: engine.OpEQ, Col: 1, V: nil})))
+	nilSt := func() *velox.Statement {
+		return stmt(velox.Pred[inv](engine.NewPredicate(engine.Node{Op: engine.OpEQ, Col: 1, V: nil})))
 	}
-	valSt := func() *Statement { return stmt(hOrg.EQ(1)) }
+	valSt := func() *velox.Statement { return stmt(hOrg.EQ(1)) }
 	for range 2 {
-		n, nargs := cachedRender(&c, Postgres, nilSt())
-		v, vargs := cachedRender(&c, Postgres, valSt())
+		n, nargs := cachedRender(&c, velox.Postgres, nilSt())
+		v, vargs := cachedRender(&c, velox.Postgres, valSt())
 		if n != `SELECT `+pgCols+` FROM "invoices" WHERE "org_id" IS NULL` || len(nargs) != 0 {
 			t.Errorf("nil: %s %v", n, nargs)
 		}
@@ -105,7 +107,7 @@ func TestCacheIsSafeForConcurrentUse(t *testing.T) {
 		wg.Go(func() {
 			for i := range 200 {
 				v := int64(g*1000 + i)
-				text, args := cachedRender(&c, Postgres, stmt(hOrg.EQ(v), hNumber.In("a", "b")))
+				text, args := cachedRender(&c, velox.Postgres, stmt(hOrg.EQ(v), hNumber.In("a", "b")))
 				if text != want || args[0] != v || args[2] != "b" {
 					t.Errorf("goroutine %d: %s %v", g, text, args)
 					return
@@ -122,8 +124,8 @@ func TestCacheStopsGrowing(t *testing.T) {
 	var c engine.RenderCache
 	for n := 1; n <= 10; n++ {
 		vs := make([]int64, n)
-		want, _ := render(Postgres, stmt(hID.In(vs...)))
-		if got, _ := cachedRender(&c, Postgres, stmt(hID.In(vs...))); got != want {
+		want, _ := render(velox.Postgres, stmt(hID.In(vs...)))
+		if got, _ := cachedRender(&c, velox.Postgres, stmt(hID.In(vs...))); got != want {
 			t.Fatalf("n=%d: %s", n, got)
 		}
 	}
@@ -138,21 +140,21 @@ func TestCacheStopsGrowing(t *testing.T) {
 
 func TestCacheKeepsWriteShapesApart(t *testing.T) {
 	var c engine.RenderCache
-	one, _ := cachedRender(&c, Postgres, ins([]int{1}, [][]any{{int64(1)}}))
-	two, _ := cachedRender(&c, Postgres, ins([]int{1}, [][]any{{int64(1)}, {int64(2)}}))
+	one, _ := cachedRender(&c, velox.Postgres, ins([]int{1}, [][]any{{int64(1)}}))
+	two, _ := cachedRender(&c, velox.Postgres, ins([]int{1}, [][]any{{int64(1)}, {int64(2)}}))
 	up := ins([]int{1}, [][]any{{int64(1)}})
-	up.Conflict = &ConflictClause{Columns: []int{1}, Update: []int{1}}
+	up.Conflict = &velox.ConflictClause{Columns: []int{1}, Update: []int{1}}
 	keep := ins([]int{1}, [][]any{{int64(1)}})
-	keep.Conflict = &ConflictClause{Columns: []int{1}, DoNothing: true}
-	upSQL, _ := cachedRender(&c, Postgres, up)
-	keepSQL, _ := cachedRender(&c, Postgres, keep)
-	set := &Statement{Op: OpUpdate, Entity: invInfo, Set: []Assignment{{Column: 3, Op: AssignSet, Value: 1.0}}}
-	add := &Statement{Op: OpUpdate, Entity: invInfo, Set: []Assignment{{Column: 3, Op: AssignAdd, Value: 1.0}}}
-	setSQL, _ := cachedRender(&c, Postgres, set)
-	addSQL, _ := cachedRender(&c, Postgres, add)
+	keep.Conflict = &velox.ConflictClause{Columns: []int{1}, DoNothing: true}
+	upSQL, _ := cachedRender(&c, velox.Postgres, up)
+	keepSQL, _ := cachedRender(&c, velox.Postgres, keep)
+	set := &velox.Statement{Op: velox.OpUpdate, Entity: invInfo, Set: []velox.Assignment{{Column: 3, Op: velox.AssignSet, Value: 1.0}}}
+	add := &velox.Statement{Op: velox.OpUpdate, Entity: invInfo, Set: []velox.Assignment{{Column: 3, Op: velox.AssignAdd, Value: 1.0}}}
+	setSQL, _ := cachedRender(&c, velox.Postgres, set)
+	addSQL, _ := cachedRender(&c, velox.Postgres, add)
 	ret := ins([]int{1}, [][]any{{int64(1)}})
 	ret.Returning = []int{0}
-	retSQL, _ := cachedRender(&c, Postgres, ret)
+	retSQL, _ := cachedRender(&c, velox.Postgres, ret)
 	for _, p := range [][2]string{{one, two}, {upSQL, keepSQL}, {setSQL, addSQL}, {one, retSQL}} {
 		if p[0] == p[1] {
 			t.Errorf("two shapes share SQL: %s", p[0])
@@ -163,29 +165,29 @@ func TestCacheKeepsWriteShapesApart(t *testing.T) {
 // TestCacheKeepsWriteColumnsApart: statements that differ only in which
 // columns a clause names do not share a cached shape.
 func TestCacheKeepsWriteColumnsApart(t *testing.T) {
-	upsert := func(key, update []int) *Statement {
+	upsert := func(key, update []int) *velox.Statement {
 		st := ins([]int{1, 2, 3}, [][]any{{int64(1), "n", 1.0}})
-		st.Conflict = &ConflictClause{Columns: key, Update: update}
+		st.Conflict = &velox.ConflictClause{Columns: key, Update: update}
 		return st
 	}
-	returning := func(cols []int) *Statement {
+	returning := func(cols []int) *velox.Statement {
 		st := ins([]int{1}, [][]any{{int64(1)}})
 		st.Returning = cols
 		return st
 	}
-	set := func(col int) *Statement {
-		return &Statement{Op: OpUpdate, Entity: invInfo, Set: []Assignment{{Column: col, Op: AssignSet, Value: 1.0}}}
+	set := func(col int) *velox.Statement {
+		return &velox.Statement{Op: velox.OpUpdate, Entity: invInfo, Set: []velox.Assignment{{Column: col, Op: velox.AssignSet, Value: 1.0}}}
 	}
 	for _, c := range []struct {
 		name string
-		a, b *Statement
+		a, b *velox.Statement
 	}{
 		{"Conflict.Columns", upsert([]int{1}, []int{3}), upsert([]int{2}, []int{3})},
 		{"Conflict.Update", upsert([]int{1}, []int{3}), upsert([]int{1}, []int{2})},
 		{"Returning", returning([]int{0}), returning([]int{1})},
 		{"Set column", set(3), set(2)},
 	} {
-		for _, d := range []Dialect{Postgres, SQLite} {
+		for _, d := range []velox.Dialect{velox.Postgres, velox.SQLite} {
 			var cache engine.RenderCache
 			a, _ := cachedRender(&cache, d, c.a)
 			b, _ := cachedRender(&cache, d, c.b)
@@ -214,9 +216,9 @@ func TestCacheBoundedInBytes(t *testing.T) {
 		for i := range vs {
 			vs[i] = int64(i)
 		}
-		st := &Statement{Op: OpSelect, Entity: invInfo, Where: []Predicate{engine.NewPredicate(engine.Node{Op: engine.OpIn, Col: 0, V: vs})}}
-		got, args := cachedRender(&c, Postgres, st)
-		want, wantArgs := render(Postgres, st)
+		st := &velox.Statement{Op: velox.OpSelect, Entity: invInfo, Where: []velox.Predicate{engine.NewPredicate(engine.Node{Op: engine.OpIn, Col: 0, V: vs})}}
+		got, args := cachedRender(&c, velox.Postgres, st)
+		want, wantArgs := render(velox.Postgres, st)
 		if got != want || len(args) != len(wantArgs) {
 			t.Fatalf("n=%d: cached render differs", n)
 		}
@@ -227,12 +229,12 @@ func TestCacheBoundedInBytes(t *testing.T) {
 }
 
 // inShape is a SELECT whose In list has n values: each n is a shape of its own.
-func inShape(n int) *Statement {
+func inShape(n int) *velox.Statement {
 	vs := make([]any, n)
 	for i := range vs {
 		vs[i] = int64(i)
 	}
-	return &Statement{Op: OpSelect, Entity: invInfo, Where: []Predicate{engine.NewPredicate(engine.Node{Op: engine.OpIn, Col: 0, V: vs})}}
+	return &velox.Statement{Op: velox.OpSelect, Entity: invInfo, Where: []velox.Predicate{engine.NewPredicate(engine.Node{Op: engine.OpIn, Col: 0, V: vs})}}
 }
 
 // TestCacheBytesCountTheFingerprint: the bytes a cache holds are the key, the
@@ -242,7 +244,7 @@ func TestCacheBytesCountTheFingerprint(t *testing.T) {
 	const shapes = 50
 	var c engine.RenderCache
 	for n := 1; n <= shapes; n++ {
-		cachedRender(&c, Postgres, inShape(n))
+		cachedRender(&c, velox.Postgres, inShape(n))
 	}
 	sum, held := 0, 0
 	for _, byKey := range c.M {
@@ -265,10 +267,10 @@ func TestCacheBytesCountTheFingerprint(t *testing.T) {
 	engine.MaxCacheBytes = sum - 1
 	var tight engine.RenderCache
 	for n := 1; n <= shapes; n++ {
-		cachedRender(&tight, Postgres, inShape(n))
+		cachedRender(&tight, velox.Postgres, inShape(n))
 	}
 	var buf [256]byte
-	last := engine.ShapeKey(buf[:0], Postgres, inShape(shapes))
+	last := engine.ShapeKey(buf[:0], velox.Postgres, inShape(shapes))
 	if _, ok := tight.M[invInfo][string(last)]; ok {
 		t.Errorf("the last shape is held, with a bound of %d bytes, one under the %d they need", engine.MaxCacheBytes, sum)
 	}
@@ -279,30 +281,30 @@ func TestCacheBytesCountTheFingerprint(t *testing.T) {
 
 func TestCacheKeysMoreShapes(t *testing.T) {
 	var c engine.RenderCache
-	base := func() *Statement { return &Statement{Op: OpSelect, Entity: invInfo} }
-	variants := []func(*Statement){
-		func(st *Statement) {},
-		func(st *Statement) { st.Limit = 1 },
-		func(st *Statement) { st.Offset = 1 },
-		func(st *Statement) { st.OrderBy = []OrderTerm{{Column: 0}, {Column: 1}} },
-		func(st *Statement) { st.OrderBy = []OrderTerm{{Column: 1}, {Column: 0}} },
-		func(st *Statement) {
-			st.Where = []Predicate{engine.NewPredicate(engine.Node{Op: engine.OpAnd, Kids: []engine.Node{{Op: engine.OpEQ, Col: 0, V: 1}, {Op: engine.OpOr, Kids: []engine.Node{{Op: engine.OpEQ, Col: 1, V: 1}}}}})}
+	base := func() *velox.Statement { return &velox.Statement{Op: velox.OpSelect, Entity: invInfo} }
+	variants := []func(*velox.Statement){
+		func(st *velox.Statement) {},
+		func(st *velox.Statement) { st.Limit = 1 },
+		func(st *velox.Statement) { st.Offset = 1 },
+		func(st *velox.Statement) { st.OrderBy = []velox.OrderTerm{{Column: 0}, {Column: 1}} },
+		func(st *velox.Statement) { st.OrderBy = []velox.OrderTerm{{Column: 1}, {Column: 0}} },
+		func(st *velox.Statement) {
+			st.Where = []velox.Predicate{engine.NewPredicate(engine.Node{Op: engine.OpAnd, Kids: []engine.Node{{Op: engine.OpEQ, Col: 0, V: 1}, {Op: engine.OpOr, Kids: []engine.Node{{Op: engine.OpEQ, Col: 1, V: 1}}}}})}
 		},
-		func(st *Statement) {
-			st.Where = []Predicate{engine.NewPredicate(engine.Node{Op: engine.OpAnd, Kids: []engine.Node{{Op: engine.OpOr, Kids: []engine.Node{{Op: engine.OpEQ, Col: 0, V: 1}}}, {Op: engine.OpEQ, Col: 1, V: 1}}})}
+		func(st *velox.Statement) {
+			st.Where = []velox.Predicate{engine.NewPredicate(engine.Node{Op: engine.OpAnd, Kids: []engine.Node{{Op: engine.OpOr, Kids: []engine.Node{{Op: engine.OpEQ, Col: 0, V: 1}}}, {Op: engine.OpEQ, Col: 1, V: 1}}})}
 		},
 	}
 	seen := map[string]int{}
 	for i, v := range variants {
 		st := base()
 		v(st)
-		got, _ := cachedRender(&c, Postgres, st)
+		got, _ := cachedRender(&c, velox.Postgres, st)
 		if j, dup := seen[got]; dup {
 			t.Errorf("variants %d and %d share SQL %q", j, i, got)
 		}
 		seen[got] = i
-		if again, _ := cachedRender(&c, Postgres, st); again != got {
+		if again, _ := cachedRender(&c, velox.Postgres, st); again != got {
 			t.Errorf("variant %d: the cache answered %q for %q", i, again, got)
 		}
 	}
@@ -312,21 +314,21 @@ func TestCacheKeysMoreShapes(t *testing.T) {
 func TestCacheKeysTheUpsertCondition(t *testing.T) {
 	var c engine.RenderCache
 	seen := map[string]int{}
-	for i, where := range [][]Predicate{
+	for i, where := range [][]velox.Predicate{
 		nil,
-		{ColumnEQ(1, int64(1))},
-		{ColumnEQ(1, int64(1)), ColumnEQ(2, "x")},
-		{ColumnEQ(2, "x")},
+		{velox.ColumnEQ(1, int64(1))},
+		{velox.ColumnEQ(1, int64(1)), velox.ColumnEQ(2, "x")},
+		{velox.ColumnEQ(2, "x")},
 	} {
 		st := ins([]int{1}, [][]any{{int64(1)}})
-		st.Conflict = &ConflictClause{Columns: []int{1}, Update: []int{1}, Where: where}
-		got, args := cachedRender(&c, Postgres, st)
+		st.Conflict = &velox.ConflictClause{Columns: []int{1}, Update: []int{1}, Where: where}
+		got, args := cachedRender(&c, velox.Postgres, st)
 		if j, dup := seen[got]; dup {
 			t.Errorf("conditions %d and %d share SQL %q", j, i, got)
 		}
 		seen[got] = i
-		want, wantArgs := render(Postgres, st)
-		if again, againArgs := cachedRender(&c, Postgres, st); again != want || got != want || len(args) != len(wantArgs) || len(againArgs) != len(wantArgs) {
+		want, wantArgs := render(velox.Postgres, st)
+		if again, againArgs := cachedRender(&c, velox.Postgres, st); again != want || got != want || len(args) != len(wantArgs) || len(againArgs) != len(wantArgs) {
 			t.Errorf("condition %d: the cache answered %q, render %q", i, again, want)
 		}
 	}
@@ -336,22 +338,22 @@ func TestCacheKeysTheUpsertCondition(t *testing.T) {
 // miss, and a statement past the cache's bound gets the same one.
 func TestCacheStoresTheFingerprint(t *testing.T) {
 	var c engine.RenderCache
-	miss, _, err := c.Get(Postgres, stmt(hOrg.EQ(7)))
+	miss, _, err := c.Get(velox.Postgres, stmt(hOrg.EQ(7)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	hit, _, err := c.Get(Postgres, stmt(hOrg.EQ(8)))
+	hit, _, err := c.Get(velox.Postgres, stmt(hOrg.EQ(8)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	text, _ := render(Postgres, stmt(hOrg.EQ(7)))
+	text, _ := render(velox.Postgres, stmt(hOrg.EQ(7)))
 	if miss != hit || miss.Text != text || miss.Fp != engine.Fingerprint(text) {
 		t.Errorf("miss %+v, hit %+v, want text %s", miss, hit, text)
 	}
 	defer func(n int) { engine.MaxShapes = n }(engine.MaxShapes)
 	engine.MaxShapes = 0
 	var full engine.RenderCache
-	over, _, err := full.Get(Postgres, stmt(hOrg.EQ(9)))
+	over, _, err := full.Get(velox.Postgres, stmt(hOrg.EQ(9)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -367,8 +369,8 @@ func TestExistsHasItsOwnShape(t *testing.T) {
 		ex.Exists, ex.Limit = true, 1
 		all := stmt(hOrg.EQ(1))
 		all.Limit = 1
-		a, _ := cachedRender(&c, Postgres, ex)
-		b, _ := cachedRender(&c, Postgres, all)
+		a, _ := cachedRender(&c, velox.Postgres, ex)
+		b, _ := cachedRender(&c, velox.Postgres, all)
 		if a == b || engine.Fingerprint(a) == engine.Fingerprint(b) {
 			t.Errorf("Exists and Limit(1).All share a shape: %s / %s", a, b)
 		}
@@ -379,18 +381,18 @@ func TestExistsHasItsOwnShape(t *testing.T) {
 // their shape when the join entity or its column differs, though their
 // target column and owners agree.
 func TestCacheKeysTheJoin(t *testing.T) {
-	join := &EntityInfo{Name: "velox.join", Table: "joins", Tenant: -1, Columns: []ColumnInfo{{Name: "a"}, {Name: "b"}}}
-	other := &EntityInfo{Name: "velox.other", Table: "others", Tenant: -1, Columns: join.Columns}
-	through := func(j *EntityInfo, col int) *Statement {
-		return &Statement{Op: OpSelect, Entity: invInfo, Where: []Predicate{engine.NewPredicate(engine.Node{Op: engine.OpThrough, Col: 0, V: j, W: col,
+	join := &velox.EntityInfo{Name: "velox.join", Table: "joins", Tenant: -1, Columns: []velox.ColumnInfo{{Name: "a"}, {Name: "b"}}}
+	other := &velox.EntityInfo{Name: "velox.other", Table: "others", Tenant: -1, Columns: join.Columns}
+	through := func(j *velox.EntityInfo, col int) *velox.Statement {
+		return &velox.Statement{Op: velox.OpSelect, Entity: invInfo, Where: []velox.Predicate{engine.NewPredicate(engine.Node{Op: engine.OpThrough, Col: 0, V: j, W: col,
 			Kids: []engine.Node{{Op: engine.OpIn, Col: 1, V: []any{int64(1)}}}})}}
 	}
 	var c engine.RenderCache
 	seen := map[string]string{}
 	for range 2 { // the second pass is served from the cache
-		for name, st := range map[string]*Statement{"joins.a": through(join, 0), "joins.b": through(join, 1), "others.a": through(other, 0)} {
-			got, args := cachedRender(&c, Postgres, st)
-			if want, wantArgs := render(Postgres, st); got != want || !argsEqual(args, wantArgs) {
+		for name, st := range map[string]*velox.Statement{"joins.a": through(join, 0), "joins.b": through(join, 1), "others.a": through(other, 0)} {
+			got, args := cachedRender(&c, velox.Postgres, st)
+			if want, wantArgs := render(velox.Postgres, st); got != want || !argsEqual(args, wantArgs) {
 				t.Errorf("%s: the cache renders %s %v, not %s %v", name, got, args, want, wantArgs)
 			}
 			for n, s := range seen {
@@ -407,20 +409,20 @@ func TestCacheKeysTheJoin(t *testing.T) {
 // shape, so none shares cached SQL with another.
 func TestAggregateShapes(t *testing.T) {
 	var c engine.RenderCache
-	agg := func(fn Aggregate, col int) string {
+	agg := func(fn velox.Aggregate, col int) string {
 		st := stmt()
 		st.Aggregate, st.Columns = fn, []int{col}
-		sql, _ := cachedRender(&c, Postgres, st)
+		sql, _ := cachedRender(&c, velox.Postgres, st)
 		return sql
 	}
-	sum, maxAgg, other := agg(AggregateSum, 3), agg(AggregateMax, 3), agg(AggregateSum, 1)
+	sum, maxAgg, other := agg(velox.AggregateSum, 3), agg(velox.AggregateMax, 3), agg(velox.AggregateSum, 1)
 	if sum == maxAgg || sum == other || maxAgg == other {
 		t.Errorf("shapes share SQL: %s, %s, %s", sum, maxAgg, other)
 	}
 	if c.Size() != 3 {
 		t.Errorf("cache holds %d shapes, want 3", c.Size())
 	}
-	if again := agg(AggregateSum, 3); again != sum || c.Size() != 3 {
+	if again := agg(velox.AggregateSum, 3); again != sum || c.Size() != 3 {
 		t.Errorf("a hit changed: %s, %d shapes", again, c.Size())
 	}
 }
@@ -430,16 +432,16 @@ func TestAggregateShapes(t *testing.T) {
 func TestLockShapes(t *testing.T) {
 	var c engine.RenderCache
 	forms := []struct {
-		lock Lock
-		wait LockWait
-	}{{0, 0}, {LockForUpdate, 0}, {LockForShare, 0}, {LockForUpdate, LockSkipLocked}, {LockForUpdate, LockNoWait}}
+		lock velox.Lock
+		wait velox.LockWait
+	}{{0, 0}, {velox.LockForUpdate, 0}, {velox.LockForShare, 0}, {velox.LockForUpdate, velox.LockSkipLocked}, {velox.LockForUpdate, velox.LockNoWait}}
 	texts := make(map[string]bool)
 	for range 2 {
 		for _, f := range forms {
 			st := stmt(hID.EQ(1))
 			st.Limit, st.Lock, st.LockWait = 1, f.lock, f.wait
-			want, _ := render(MySQL, st)
-			if got, _ := cachedRender(&c, MySQL, st); got != want {
+			want, _ := render(velox.MySQL, st)
+			if got, _ := cachedRender(&c, velox.MySQL, st); got != want {
 				t.Errorf("cached %s, want %s", got, want)
 			}
 			texts[want] = true
@@ -455,7 +457,7 @@ func TestLockShapes(t *testing.T) {
 // MaxCachedRows rows is cached.
 func TestInsertAllAboveCachedRows(t *testing.T) {
 	var fps []string
-	db := OpenFake(Postgres, &FakeExec{Affected: 1}, WithAround(func(ctx context.Context, st *Statement, next func(context.Context) error) error {
+	db := openFake(velox.Postgres, &fakeconn.Exec{Affected: 1}, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
 		fps = append(fps, st.Fingerprint) // set by rendering, after the Rewrite hooks
 		return next(ctx)
 	}))
@@ -469,14 +471,14 @@ func TestInsertAllAboveCachedRows(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	before := CacheSize(db)
+	before := cacheSize(db)
 	insert(engine.MaxCachedRows + 1)
 	insert(engine.MaxCachedRows + 1)
-	if got := CacheSize(db); got != before {
+	if got := cacheSize(db); got != before {
 		t.Errorf("an insert of %d rows grew the cache from %d to %d shapes", engine.MaxCachedRows+1, before, got)
 	}
 	insert(engine.MaxCachedRows)
-	if got := CacheSize(db); got != before+1 {
+	if got := cacheSize(db); got != before+1 {
 		t.Errorf("an insert of %d rows left the cache at %d shapes, want %d", engine.MaxCachedRows, got, before+1)
 	}
 	if len(fps) != 3 {

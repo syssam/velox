@@ -151,12 +151,11 @@ value minus 1.0. The checker prints that value. The file's header has the rest.
 There are ten. CI runs each for 10 or 20 seconds:
 
 ```sh
-go test -run XXX -fuzz '^FuzzRender$' -fuzztime 10s .
+go test -run XXX -fuzz '^FuzzRender$' -fuzztime 10s ./internal/engine
 ```
 
-The targets are `FuzzRender` and `FuzzRenderWrite` in the root, `FuzzQuote`,
-`FuzzScope` and `FuzzConstraint` in `internal/engine`, `FuzzColumnScan` in
-`internal/conn`, `FuzzLiteral` in `internal/ddl`, `FuzzSplit` and `FuzzDiff` in
+The targets are `FuzzRender`, `FuzzRenderWrite`, `FuzzQuote`, `FuzzScope` and
+`FuzzConstraint` in `internal/engine`, `FuzzColumnScan` in `internal/conn`, `FuzzLiteral` in `internal/ddl`, `FuzzSplit` and `FuzzDiff` in
 `migrate`, and `FuzzCost` in `contrib/graphql/veloxgql` (run from
 `contrib/graphql`). `.github/workflows/ci.yml` and `scripts/ci-local.sh` list
 them with their packages and times.

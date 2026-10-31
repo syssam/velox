@@ -490,3 +490,7 @@ func hookedDesc() Desc[hooked] {
 		},
 	}
 }
+
+var invInfo = &EntityInfo{Name: "velox.inv", Table: "invoices", Tenant: -1, Columns: []ColumnInfo{
+	{Name: "id"}, {Name: "org_id"}, {Name: "number"}, {Name: "total"}, {Name: "paid_at"},
+}}

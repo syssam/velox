@@ -1,16 +1,17 @@
-package velox
+package engine_test
 
 import (
 	"strings"
 	"testing"
 
+	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/internal/engine"
 )
 
 // fuzzStatement builds a statement on invInfo from fuzz input: each byte picks
 // an operation, a column and whether the value is s.
-func fuzzStatement(ops []byte, s string) *Statement {
-	st := &Statement{Op: OpSelect, Entity: invInfo}
+func fuzzStatement(ops []byte, s string) *velox.Statement {
+	st := &velox.Statement{Op: velox.OpSelect, Entity: invInfo}
 	n := len(invInfo.Columns)
 	var preds []engine.Node
 	for i, b := range ops {
@@ -41,15 +42,15 @@ func fuzzStatement(ops []byte, s string) *Statement {
 				preds[len(preds)-1] = engine.Node{Op: engine.OpNot, Kids: []engine.Node{preds[len(preds)-1]}}
 			}
 		case 6:
-			st.OrderBy = append(st.OrderBy, OrderTerm{Column: int(col), Desc: b&2 == 2})
+			st.OrderBy = append(st.OrderBy, velox.OrderTerm{Column: int(col), Desc: b&2 == 2})
 		}
 	}
 	for _, p := range preds {
 		st.Where = append(st.Where, engine.NewPredicate(p))
 	}
 	if len(ops) > 0 && ops[0]&8 == 8 {
-		st.Op, st.OrderBy = OpUpdate, nil
-		st.Set = []Assignment{{Column: 1, Op: AssignSet, Value: s}}
+		st.Op, st.OrderBy = velox.OpUpdate, nil
+		st.Set = []velox.Assignment{{Column: 1, Op: velox.AssignSet, Value: s}}
 	}
 	if len(ops) > 0 && ops[0]&64 == 64 {
 		st.Limit = len(ops)
@@ -58,9 +59,9 @@ func fuzzStatement(ops []byte, s string) *Statement {
 }
 
 // placeholders counts the placeholders outside quoted identifiers.
-func placeholders(d Dialect, sql string) int {
+func placeholders(d velox.Dialect, sql string) int {
 	q := byte('"')
-	if d == MySQL {
+	if d == velox.MySQL {
 		q = '`'
 	}
 	n, quoted := 0, false
@@ -70,9 +71,9 @@ func placeholders(d Dialect, sql string) int {
 		case c == q:
 			quoted = !quoted
 		case quoted:
-		case d == Postgres && c == '$':
+		case d == velox.Postgres && c == '$':
 			n++
-		case d != Postgres && c == '?':
+		case d != velox.Postgres && c == '?':
 			n++
 		}
 	}
@@ -94,14 +95,14 @@ func FuzzRender(f *testing.F) {
 		if len(ops) > 64 {
 			ops = ops[:64]
 		}
-		for _, d := range []Dialect{Postgres, MySQL, SQLite} {
+		for _, d := range []velox.Dialect{velox.Postgres, velox.MySQL, velox.SQLite} {
 			st := fuzzStatement(ops, s)
 			sql, args := render(d, st)
 			if got := placeholders(d, sql); got != len(args) {
 				t.Fatalf("%v: %d placeholders for %d arguments: %s", d, got, len(args), sql)
 			}
 			q := `"`
-			if d == MySQL {
+			if d == velox.MySQL {
 				q = "`"
 			}
 			if strings.Count(sql, q)%2 != 0 {
@@ -135,7 +136,7 @@ func FuzzRender(f *testing.F) {
 //   - UPDATE: 1-3 assignments, each AssignSet, AssignAdd or AssignSub, with
 //     fuzzStatement's predicates as Where;
 //   - DELETE: fuzzStatement's predicates as Where.
-func fuzzWrites(ops []byte, s string) [3]*Statement {
+func fuzzWrites(ops []byte, s string) [3]*velox.Statement {
 	n := len(invInfo.Columns)
 	pick := func(k int) byte {
 		if len(ops) == 0 {
@@ -152,7 +153,7 @@ func fuzzWrites(ops []byte, s string) [3]*Statement {
 	where := fuzzStatement(ops, s).Where
 	head := pick(0)
 
-	ins := &Statement{Op: OpInsert, Entity: invInfo}
+	ins := &velox.Statement{Op: velox.OpInsert, Entity: invInfo}
 	var seen uint
 	for k := 0; k < 3 && k < len(ops); k++ {
 		if c := int(ops[k]>>4) % n; seen&(1<<c) == 0 {
@@ -171,7 +172,7 @@ func fuzzWrites(ops []byte, s string) [3]*Statement {
 		ins.Rows = append(ins.Rows, row)
 	}
 	if head&1 == 1 {
-		ins.Conflict = &ConflictClause{Columns: []int{ins.Columns[0]}, DoNothing: head&2 == 2, Where: where}
+		ins.Conflict = &velox.ConflictClause{Columns: []int{ins.Columns[0]}, DoNothing: head&2 == 2, Where: where}
 		if head&4 == 4 {
 			ins.Conflict.Update = ins.Columns
 		}
@@ -180,13 +181,13 @@ func fuzzWrites(ops []byte, s string) [3]*Statement {
 		ins.Returning = []int{0, int(pick(1)) % n}
 	}
 
-	upd := &Statement{Op: OpUpdate, Entity: invInfo, Where: where}
+	upd := &velox.Statement{Op: velox.OpUpdate, Entity: invInfo, Where: where}
 	for i := range 1 + int(pick(1))%3 {
 		b := pick(i + 2)
-		upd.Set = append(upd.Set, Assignment{Column: int(b>>4) % n, Op: AssignSet + AssignOp(b%3), Value: val(i + 2)})
+		upd.Set = append(upd.Set, velox.Assignment{Column: int(b>>4) % n, Op: velox.AssignSet + velox.AssignOp(b%3), Value: val(i + 2)})
 	}
 
-	return [3]*Statement{ins, upd, {Op: OpDelete, Entity: invInfo, Where: where}}
+	return [3]*velox.Statement{ins, upd, {Op: velox.OpDelete, Entity: invInfo, Where: where}}
 }
 
 func btoi(b bool) int {
@@ -230,7 +231,7 @@ func FuzzRenderWrite(f *testing.F) {
 		}
 		verbs := [...]string{"INSERT INTO ", "UPDATE ", "DELETE FROM "}
 		for kind, verb := range verbs {
-			for _, d := range []Dialect{Postgres, MySQL, SQLite} {
+			for _, d := range []velox.Dialect{velox.Postgres, velox.MySQL, velox.SQLite} {
 				st := fuzzWrites(ops, s)[kind]
 				sql, args, err := engine.RenderStmt(d, st)
 				if err != nil {
@@ -240,7 +241,7 @@ func FuzzRenderWrite(f *testing.F) {
 					t.Fatalf("%v: %d placeholders for %d arguments: %s", d, got, len(args), sql)
 				}
 				q := `"`
-				if d == MySQL {
+				if d == velox.MySQL {
 					q = "`"
 				}
 				if strings.Count(sql, q)%2 != 0 {
@@ -267,15 +268,15 @@ func FuzzRenderWrite(f *testing.F) {
 				// when it keeps the existing row.
 				hasWhere := len(st.Where) > 0
 				if upsert {
-					hasWhere = len(st.Conflict.Where) > 0 && d != MySQL && !st.Conflict.DoNothing && len(st.Conflict.Update) > 0
+					hasWhere = len(st.Conflict.Where) > 0 && d != velox.MySQL && !st.Conflict.DoNothing && len(st.Conflict.Update) > 0
 				}
 				for _, c := range []struct {
 					text string
 					want bool
 				}{
-					{" RETURNING ", len(st.Returning) > 0 && d != MySQL},
-					{" ON CONFLICT (", upsert && d != MySQL},
-					{" ON DUPLICATE KEY UPDATE ", upsert && d == MySQL},
+					{" RETURNING ", len(st.Returning) > 0 && d != velox.MySQL},
+					{" ON CONFLICT (", upsert && d != velox.MySQL},
+					{" ON DUPLICATE KEY UPDATE ", upsert && d == velox.MySQL},
 					{" WHERE ", hasWhere},
 				} {
 					if got := strings.Contains(sql, c.text); got != c.want {
@@ -286,8 +287,8 @@ func FuzzRenderWrite(f *testing.F) {
 					set, _, _ := strings.Cut(sql, " WHERE ")
 					var adds, subs int
 					for _, a := range st.Set {
-						adds += btoi(a.Op == AssignAdd)
-						subs += btoi(a.Op == AssignSub)
+						adds += btoi(a.Op == velox.AssignAdd)
+						subs += btoi(a.Op == velox.AssignSub)
 					}
 					if strings.Count(set, " + ") != adds || strings.Count(set, " - ") != subs {
 						t.Fatalf("%v: %d additions and %d subtractions expected: %s", d, adds, subs, sql)

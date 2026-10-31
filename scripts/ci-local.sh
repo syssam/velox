@@ -41,12 +41,12 @@ go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
 # Per-package coverage floors (scripts/coverage-floors.txt) are checked over the four modules' profiles
 # below, which are measured as CI measures them: with -race, and with the database tests as run.
 go test -race -count=1 -timeout 20m -coverpkg=./... -coverprofile="$root/cover-root.out" ./...
-go test -run XXX -fuzz '^FuzzRender$' -fuzztime 20s .
+go test -run XXX -fuzz '^FuzzRender$' -fuzztime 20s ./internal/engine
 go test -run XXX -fuzz '^FuzzQuote$' -fuzztime 10s ./internal/engine
 go test -run XXX -fuzz '^FuzzScope$' -fuzztime 10s ./internal/engine
 go test -run XXX -fuzz '^FuzzLiteral$' -fuzztime 10s ./internal/ddl
 go test -run XXX -fuzz '^FuzzSplit$' -fuzztime 10s ./migrate
-go test -run XXX -fuzz '^FuzzRenderWrite$' -fuzztime 10s .
+go test -run XXX -fuzz '^FuzzRenderWrite$' -fuzztime 10s ./internal/engine
 go test -run XXX -fuzz '^FuzzConstraint$' -fuzztime 10s ./internal/engine
 go test -run XXX -fuzz '^FuzzDiff$' -fuzztime 10s ./migrate
 go test -run XXX -fuzz '^FuzzColumnScan$' -fuzztime 10s ./internal/conn

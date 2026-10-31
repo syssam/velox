@@ -358,3 +358,21 @@ func loadDesc[E any](d velox.Desc[E], targets ...engine.RelTarget) (*velox.Entit
 	}
 	return info, nil
 }
+
+// render is RenderStmt for the tests that render statements that cannot fail.
+func render(d velox.Dialect, st *velox.Statement) (string, []any) {
+	text, args, err := engine.RenderStmt(d, st)
+	if err != nil {
+		panic(err)
+	}
+	return text, args
+}
+
+// cachedRender is get for the tests that look only at the text.
+func cachedRender(c *engine.RenderCache, d velox.Dialect, st *velox.Statement) (string, []any) {
+	e, args, err := c.Get(d, st)
+	if err != nil {
+		panic(err)
+	}
+	return e.Text, args
+}
