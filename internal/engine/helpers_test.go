@@ -62,8 +62,6 @@ func openFailover(hooked bool, extra ...velox.Option) *replicaSet {
 
 var fellOver = velox.Route{Replica: -1, Fallback: true}
 
-// invoiceRow is declared in query_test.go; It is declared there too.
-
 func itemRow(id, invoice int64, sku string, qty int64) []any {
 	return []any{id, invoice, sku, qty}
 }
