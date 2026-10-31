@@ -5,10 +5,10 @@ package schema
 import (
 	"time"
 
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/edge"
-	"github.com/syssam/velox2/schema/field"
-	"github.com/syssam/velox2/schema/index"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/edge"
+	"github.com/syssam/velox/schema/field"
+	"github.com/syssam/velox/schema/index"
 )
 
 // User is the central entity of the port fixture.

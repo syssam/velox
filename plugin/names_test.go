@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox2/plugin"
+	"github.com/syssam/velox/plugin"
 )
 
 func TestSingular(t *testing.T) {

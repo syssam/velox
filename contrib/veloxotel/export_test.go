@@ -1,6 +1,6 @@
 package veloxotel
 
-import "github.com/syssam/velox2"
+import "github.com/syssam/velox"
 
 // AroundOf returns the statement hook alone, for tests of it without the
 // rest of Options.

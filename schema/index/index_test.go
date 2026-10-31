@@ -5,8 +5,8 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/syssam/velox2/schema/index"
-	"github.com/syssam/velox2/schema/internal/desc"
+	"github.com/syssam/velox/schema/index"
+	"github.com/syssam/velox/schema/internal/desc"
 )
 
 func TestIndex(t *testing.T) {

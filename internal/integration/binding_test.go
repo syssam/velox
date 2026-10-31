@@ -11,14 +11,14 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/codegen"
-	"github.com/syssam/velox2/internal/codegen/loadjson"
-	"github.com/syssam/velox2/internal/testbind"
-	"github.com/syssam/velox2/internal/testbind/bindtype"
-	bindschema "github.com/syssam/velox2/internal/testbind/schema"
-	"github.com/syssam/velox2/migrate"
-	"github.com/syssam/velox2/schema/load"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/codegen"
+	"github.com/syssam/velox/internal/codegen/loadjson"
+	"github.com/syssam/velox/internal/testbind"
+	"github.com/syssam/velox/internal/testbind/bindtype"
+	bindschema "github.com/syssam/velox/internal/testbind/schema"
+	"github.com/syssam/velox/migrate"
+	"github.com/syssam/velox/schema/load"
 )
 
 var B = testbind.Binds
@@ -27,7 +27,7 @@ var B = testbind.Binds
 // process as velox-gen loads it.
 func bindTables(t *testing.T, d velox.Dialect) *migrate.Schema {
 	t.Helper()
-	b, err := load.Marshal("github.com/syssam/velox2/internal/testbind/schema", bindschema.Bind{})
+	b, err := load.Marshal("github.com/syssam/velox/internal/testbind/schema", bindschema.Bind{})
 	if err != nil {
 		t.Fatal(err)
 	}

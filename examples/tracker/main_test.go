@@ -19,8 +19,8 @@ import (
 	"testing"
 	"time"
 
-	velox "github.com/syssam/velox2"
-	"github.com/syssam/velox2/examples/tracker/gen"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/examples/tracker/gen"
 )
 
 func TestMain(m *testing.M) {

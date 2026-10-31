@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox2/examples/internal/golden"
+	"github.com/syssam/velox/examples/internal/golden"
 )
 
 // TestOutput runs the tour and compares what it prints with

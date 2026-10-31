@@ -58,8 +58,8 @@ func TestSaveNamesAColumnAtCompileTime(t *testing.T) {
 	const head = `package snippet
 
 import (
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/testmodel"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/testmodel"
 )
 
 func save(db *velox.DB, x *testmodel.Invoice) {
@@ -87,10 +87,10 @@ func TestGroupKeyAtCompileTime(t *testing.T) {
 import (
 	"context"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/apitest/fixture"
-	"github.com/syssam/velox2/internal/testmodel"
-	"github.com/syssam/velox2/internal/testmodel/kind"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/apitest/fixture"
+	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/internal/testmodel/kind"
 )
 
 var (

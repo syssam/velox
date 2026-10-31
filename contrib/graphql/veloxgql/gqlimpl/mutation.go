@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/contrib/graphql/internal/english"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/internal/english"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/shared"
 )
 
 // Atomic runs fn in db.Tx(ctx, fn), on the DB veloxgql.DBFromContext(ctx)

@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/syssam/velox2/schema/internal/desc"
+	"github.com/syssam/velox/schema/internal/desc"
 )
 
 // newField makes the descriptor of a field whose standard Go type is rt,

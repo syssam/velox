@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/buildinfo"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/buildinfo"
 )
 
 // Config is a directory's settings, the content of velox.json.
@@ -342,7 +342,7 @@ func ReadDir(fsys fs.FS) (*Dir, error) {
 	return d, nil
 }
 
-// generator is "velox-gen" and the version of the velox2 module the program
+// generator is "velox-gen" and the version of the velox module the program
 // is built from, "(devel)" when the build does not say, as velox-gen version
 // prints it.
 func generator() string { return buildinfo.Generator() }

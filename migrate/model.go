@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // A Schema is the database as one dialect sees it. The struct tags on it and

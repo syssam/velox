@@ -1,7 +1,7 @@
 // Package loadjson holds the load model: the versioned JSON that schema/load's
 // Marshal writes and velox-gen reads back. The program velox-gen writes imports
 // the schema package, calls Marshal and prints the model. The format is
-// internal to velox2: it changes with Version, and only velox-gen reads it.
+// internal to velox: it changes with Version, and only velox-gen reads it.
 package loadjson
 
 import "encoding/json"
@@ -11,7 +11,7 @@ const Version = 3
 
 // SchemaPath is the import path of the schema DSL package. velox-gen uses it
 // to find the schemas of a package by their embedding of schema.Schema.
-const SchemaPath = "github.com/syssam/velox2/schema"
+const SchemaPath = "github.com/syssam/velox/schema"
 
 // Model describes the schemas of one package.
 type Model struct {

@@ -35,8 +35,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/syssam/velox2/internal/buildcost"
-	"github.com/syssam/velox2/internal/tempmod"
+	"github.com/syssam/velox/internal/buildcost"
+	"github.com/syssam/velox/internal/tempmod"
 )
 
 type config struct {
@@ -300,7 +300,7 @@ func generate(n, services int, graphql bool) (schemas, svc map[string]string) {
 		if graphql {
 			nameField = `field.String("name").Annotations(graphql.OrderField("NAME"), graphql.WhereOps())`
 			annotations = fmt.Sprintf("\nfunc (E%[1]d) Annotations() []schema.Annotation {\n\treturn []schema.Annotation{graphql.QueryField(\"e%[1]ds\")}\n}\n", i)
-			gqlImport = "\t\"github.com/syssam/velox2/contrib/graphql\"\n"
+			gqlImport = "\t\"github.com/syssam/velox/contrib/graphql\"\n"
 		}
 		fields.WriteString("\t\t" + nameField + ",\n\t\tfield.Float(\"amount\"),\n\t\tfield.Time(\"created_at\"),\n\t\t" + noteField + "\n")
 		switch {
@@ -320,9 +320,9 @@ func generate(n, services int, graphql bool) (schemas, svc map[string]string) {
 		schemas[filepath.Join("schema", fmt.Sprintf("e%d.go", i))] = fmt.Sprintf(`package schema
 
 import (
-%[4]s	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/edge"
-	"github.com/syssam/velox2/schema/field"
+%[4]s	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/edge"
+	"github.com/syssam/velox/schema/field"
 )
 
 // E%[1]d is a generated schema.
@@ -354,7 +354,7 @@ func (E%[1]d) Edges() []schema.Edge {
 			helper = "\nfunc gqlSink(v any, err error) { fmt.Println(v == nil, err) }\n"
 		}
 		svc[filepath.Join(fmt.Sprintf("s%d", s), "main.go")] = fmt.Sprintf(
-			"package main\n\nimport (\n\t\"context\"\n\t\"fmt\"\n\n\t\"github.com/syssam/velox2\"\n\t\"example.com/tmp/gen\"\n)\n\nfunc sink(s string, _ []any, _ error) { fmt.Println(len(s)) }\n%s\nfunc main() {\n\tctx := context.Background()\n\tdb := velox.Open(velox.Postgres, nil)\n%s}\n",
+			"package main\n\nimport (\n\t\"context\"\n\t\"fmt\"\n\n\t\"github.com/syssam/velox\"\n\t\"example.com/tmp/gen\"\n)\n\nfunc sink(s string, _ []any, _ error) { fmt.Println(len(s)) }\n%s\nfunc main() {\n\tctx := context.Background()\n\tdb := velox.Open(velox.Postgres, nil)\n%s}\n",
 			helper, use.String())
 	}
 	return schemas, svc

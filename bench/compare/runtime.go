@@ -11,7 +11,7 @@ import (
 	"path"
 	"path/filepath"
 
-	"github.com/syssam/velox2/internal/tempmod"
+	"github.com/syssam/velox/internal/tempmod"
 )
 
 // runtimeFS holds the runtime apps' test files: common/ is the same in every
@@ -21,16 +21,16 @@ import (
 var runtimeFS embed.FS
 
 // writeRuntimeApp writes o's runtime app in dir: the n=10 schema, its
-// generated code, for velox2 the DDL of both dialects, and the test files of
+// generated code, for velox the DDL of both dialects, and the test files of
 // common/ and of o, all at the app root.
 func writeRuntimeApp(dir string, o orm, tools string) error {
-	if err := writeApp(dir, o.Schema(10)); err != nil {
+	if err := writeApp(o, dir, o.Schema(10)); err != nil {
 		return err
 	}
 	if _, _, err := codegen(dir, o, tools); err != nil {
 		return err
 	}
-	if o.Name == velox2ORM.Name {
+	if o.Name == veloxORM.Name {
 		for _, d := range []string{"sqlite", "postgres"} {
 			cmd := exec.Command(filepath.Join(tools, "velox-gen"), "migrate", "sql", "-dialect", d, "./schema")
 			var stderr bytes.Buffer
@@ -66,7 +66,7 @@ func writeRuntimeApp(dir string, o orm, tools string) error {
 // runtimeAppMain is compare runtime-app: it writes one ORM's runtime app.
 func runtimeAppMain(args []string) int {
 	fs := flag.NewFlagSet("runtime-app", flag.ContinueOnError)
-	name := fs.String("orm", "", "the ORM: velox2, oldvelox or ent")
+	name := fs.String("orm", "", "the ORM: velox, veloxe or ent")
 	tools := fs.String("tools", "", "the directory of the generator binaries")
 	dir := fs.String("dir", "", "the app's directory")
 	if err := fs.Parse(args); err != nil {

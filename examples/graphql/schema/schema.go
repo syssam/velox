@@ -7,10 +7,10 @@
 package schema
 
 import (
-	"github.com/syssam/velox2/contrib/graphql"
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/edge"
-	"github.com/syssam/velox2/schema/field"
+	"github.com/syssam/velox/contrib/graphql"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/edge"
+	"github.com/syssam/velox/schema/field"
 )
 
 // User writes posts. It is not tenant-scoped: users are shared, their posts

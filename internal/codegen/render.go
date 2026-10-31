@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/syssam/velox2/plugin"
+	"github.com/syssam/velox/plugin"
 )
 
 // header starts every file velox-gen writes: velox-gen rewrites and deletes
@@ -94,7 +94,7 @@ func renderPackage(o *Out) string {
 	}
 	w.p("package %s", o.Package)
 	w.p("")
-	w.p(`import "github.com/syssam/velox2"`)
+	w.p(`import "github.com/syssam/velox"`)
 	w.p("")
 	w.p("const _ = velox.GeneratedCodeIsVersion%d", GeneratedCodeVersion)
 	for _, en := range o.Enums {
@@ -164,7 +164,7 @@ func renderEntity(o *Out, e *OutEntity) string {
 // then the others, velox and the schema package among them.
 func entityImports(w *writer, o *Out, e *OutEntity) {
 	std := []string{"fmt"} // String uses fmt
-	other := []string{"github.com/syssam/velox2"}
+	other := []string{"github.com/syssam/velox"}
 	for _, p := range e.Imports {
 		if first, _, _ := strings.Cut(p, "/"); strings.Contains(first, ".") {
 			other = append(other, p)

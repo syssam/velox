@@ -3,8 +3,8 @@
 package schema
 
 import (
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/field"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/field"
 )
 
 // Note belongs to an organisation: org_id is its tenant.

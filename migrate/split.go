@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // A piece is a statement or a directive line, in the order of the file.

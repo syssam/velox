@@ -9,8 +9,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/ddl"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/ddl"
 )
 
 // A Warning is a difference between a database and its snapshot that is not

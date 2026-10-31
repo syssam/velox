@@ -5,9 +5,9 @@
 package schema
 
 import (
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/field"
-	"github.com/syssam/velox2/schema/mixin"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/field"
+	"github.com/syssam/velox/schema/mixin"
 )
 
 // CreatedBy is a mixin: it adds a created_by column to each entity that lists

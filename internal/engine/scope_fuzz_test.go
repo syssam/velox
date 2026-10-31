@@ -7,10 +7,10 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/engine"
-	"github.com/syssam/velox2/internal/fakeconn"
-	"github.com/syssam/velox2/internal/testmodel"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/engine"
+	"github.com/syssam/velox/internal/fakeconn"
+	"github.com/syssam/velox/internal/testmodel"
 )
 
 // scopeGen builds Ticket conditions from fuzz input: each byte read picks the

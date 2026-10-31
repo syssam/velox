@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	velox "github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // Baseline reads the tables and enum types want names from db, a database

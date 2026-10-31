@@ -18,9 +18,9 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/testmodel"
-	"github.com/syssam/velox2/veloxpgx"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/veloxpgx"
 )
 
 // The routing tests stand a second and a third database in for a replica and

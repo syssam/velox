@@ -5,7 +5,7 @@
 ## Context
 
 In ent, a self-referencing `edge.To` with no inverse, such as friends or a
-spouse, is bidirectional. velox2 stored one direction only (G17). Building it
+spouse, is bidirectional. velox stored one direction only (G17). Building it
 later would change what existing data means, so it was built before 1.0.
 
 ## Decision

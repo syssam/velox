@@ -16,9 +16,9 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/contrib/veloxotel"
-	"github.com/syssam/velox2/internal/testmodel"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/veloxotel"
+	"github.com/syssam/velox/internal/testmodel"
 )
 
 func byName(spans tracetest.SpanStubs) map[string][]tracetest.SpanStub {

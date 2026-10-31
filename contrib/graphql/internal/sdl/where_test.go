@@ -7,8 +7,8 @@ import (
 
 	"github.com/vektah/gqlparser/v2/ast"
 
-	"github.com/syssam/velox2/contrib/graphql"
-	"github.com/syssam/velox2/plugin"
+	"github.com/syssam/velox/contrib/graphql"
+	"github.com/syssam/velox/plugin"
 )
 
 // logic is the head of every where input.

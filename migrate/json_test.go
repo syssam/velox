@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 func TestSnapshotRoundTrip(t *testing.T) {

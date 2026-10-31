@@ -36,7 +36,7 @@ type scanCase struct {
 	want bool
 }
 
-// scanCases lists the destinations velox2 supports and the ones it leaves
+// scanCases lists the destinations velox supports and the ones it leaves
 // alone.
 var scanCases = []scanCase{
 	{reflect.TypeFor[*int](), true},

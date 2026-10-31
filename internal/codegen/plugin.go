@@ -6,9 +6,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/ddl"
-	"github.com/syssam/velox2/plugin"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/ddl"
+	"github.com/syssam/velox/plugin"
 )
 
 // PluginModel is the model velox-gen hands to a plugin: g and o in the plugin

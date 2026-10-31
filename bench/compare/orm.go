@@ -16,6 +16,7 @@ type orm struct {
 	Name      string
 	GenDir    string // the generated code's directory, relative to the app
 	SchemaDir string // the schema package's directory, relative to the app
+	ModDir    string // the directory of its go.mod, relative to the harness: empty for the harness's
 	dsl       dsl
 	// Codegen is the generator's argv, run in the app directory. tools is the
 	// directory of the generator binaries.
@@ -38,12 +39,12 @@ type dsl struct {
 	IndexImport string
 }
 
-var velox2ORM = orm{
-	Name: "velox2", GenDir: "gen", SchemaDir: "schema",
+var veloxORM = orm{
+	Name: "velox", GenDir: "gen", SchemaDir: "schema",
 	dsl: dsl{
-		Imports: `"github.com/syssam/velox2/schema"
-"github.com/syssam/velox2/schema/edge"
-"github.com/syssam/velox2/schema/field"`,
+		Imports: `"github.com/syssam/velox/schema"
+"github.com/syssam/velox/schema/edge"
+"github.com/syssam/velox/schema/field"`,
 		SchemaType: "schema.Schema", FieldType: "schema.Field", EdgeType: "schema.Edge", FK: "Int64",
 	},
 	Codegen: func(tools string) []string {
@@ -51,7 +52,7 @@ var velox2ORM = orm{
 	},
 	Service: func(es []int) string {
 		var b strings.Builder
-		b.WriteString("package main\n\nimport (\n\t\"context\"\n\n\t\"example.com/tmp/gen\"\n\t\"github.com/syssam/velox2\"\n)\n\n")
+		b.WriteString("package main\n\nimport (\n\t\"context\"\n\n\t\"example.com/tmp/gen\"\n\t\"github.com/syssam/velox\"\n)\n\n")
 		b.WriteString("func main() {\n\tctx := context.Background()\n\tdb := velox.Open(velox.Postgres, nil)\n")
 		for _, k := range es {
 			fmt.Fprintf(&b, "\tdb.Query[gen.E%[1]d]().Where(gen.E%[1]ds.ID.EQ(1)).Limit(1).All(ctx)\n\tdb.Query[gen.E%[1]d]().Count(ctx)\n", k)
@@ -61,8 +62,8 @@ var velox2ORM = orm{
 	},
 }
 
-var oldVeloxORM = orm{
-	Name: "oldvelox", GenDir: "velox", SchemaDir: "schema",
+var veloxeORM = orm{
+	Name: "veloxe", GenDir: "velox", SchemaDir: "schema", ModDir: "veloxe",
 	dsl: dsl{
 		Imports: `"github.com/syssam/velox"
 "github.com/syssam/velox/schema/edge"
@@ -120,8 +121,8 @@ func (o orm) genSkip() string {
 	return ""
 }
 
-// orms are the compared ORMs, velox2 first.
-var orms = []orm{velox2ORM, oldVeloxORM, entORM}
+// orms are the compared ORMs, velox first.
+var orms = []orm{veloxORM, veloxeORM, entORM}
 
 // ormByName returns the ORM called name.
 func ormByName(name string) (orm, error) {
@@ -130,13 +131,13 @@ func ormByName(name string) (orm, error) {
 			return o, nil
 		}
 	}
-	return orm{}, fmt.Errorf("unknown ORM %q (have velox2, oldvelox, ent)", name)
+	return orm{}, fmt.Errorf("unknown ORM %q (have velox, veloxe, ent)", name)
 }
 
 // runtimeVariants maps each runtime variant to the ORM whose runtime app it
-// runs: velox2pgx is velox2's app on veloxpgx.Open, measured on PostgreSQL
+// runs: veloxpgx is velox's app on veloxpgx.Open, measured on PostgreSQL
 // only. A variant has no build measurements and is never a loss.
-var runtimeVariants = map[string]string{"velox2pgx": "velox2"}
+var runtimeVariants = map[string]string{"veloxpgx": "velox"}
 
 // runtimeORMByName returns the ORM whose runtime app name runs: name itself
 // for an ORM, the variant's ORM for a variant.
@@ -188,7 +189,7 @@ func (o orm) entity(i, n int) string {
 	}
 	b.WriteString("\t}\n}\n")
 	if d.IndexType != "" && i > 0 {
-		// The edge key's index, which velox2's DDL creates by itself.
+		// The edge key's index, which velox's DDL creates by itself.
 		fmt.Fprintf(&b, "\nfunc (E%d) Indexes() []%s {\n\treturn []%s{index.Fields(\"prev_id\")}\n}\n", i, d.IndexType, d.IndexType)
 	}
 	src, err := format.Source([]byte(b.String()))

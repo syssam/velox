@@ -1,16 +1,16 @@
-# velox2
+# velox
 
-velox2 is an ORM for Go. A schema is a Go struct in an ent-style DSL. velox-gen
-generates typed queries from it, and velox2 plans and applies its own
+velox is an ORM for Go. A schema is a Go struct in an ent-style DSL. velox-gen
+generates typed queries from it, and velox plans and applies its own
 migrations. It is before 1.0: the API can still change.
 
 ## Modules
 
-- `github.com/syssam/velox2`: the runtime, with `schema`, `migrate`, `plugin`,
+- `github.com/syssam/velox`: the runtime, with `schema`, `migrate`, `plugin`,
   `dbtype` and `cmd/velox-gen`.
-- `github.com/syssam/velox2/contrib/graphql`: the GraphQL generator and
+- `github.com/syssam/velox/contrib/graphql`: the GraphQL generator and
   `veloxgql`.
-- `github.com/syssam/velox2/contrib/veloxotel`: OpenTelemetry tracing and
+- `github.com/syssam/velox/contrib/veloxotel`: OpenTelemetry tracing and
   metrics.
 
 `examples/` is a module of runnable examples.
@@ -25,8 +25,8 @@ migrations. It is before 1.0: the API can still change.
 In your module:
 
 ```sh
-go get github.com/syssam/velox2
-go get -tool github.com/syssam/velox2/cmd/velox-gen
+go get github.com/syssam/velox
+go get -tool github.com/syssam/velox/cmd/velox-gen
 go tool velox-gen ./schema
 ```
 
@@ -41,8 +41,8 @@ A schema is a struct with its fields:
 package schema
 
 import (
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/field"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/field"
 )
 
 type User struct{ schema.Schema }
@@ -112,14 +112,14 @@ adopting an existing database.
 ## Documentation
 
 - Each module's API is on pkg.go.dev, with runnable examples:
-  [velox2](https://pkg.go.dev/github.com/syssam/velox2),
-  [contrib/graphql](https://pkg.go.dev/github.com/syssam/velox2/contrib/graphql),
-  [contrib/veloxotel](https://pkg.go.dev/github.com/syssam/velox2/contrib/veloxotel).
+  [velox](https://pkg.go.dev/github.com/syssam/velox),
+  [contrib/graphql](https://pkg.go.dev/github.com/syssam/velox/contrib/graphql),
+  [contrib/veloxotel](https://pkg.go.dev/github.com/syssam/velox/contrib/veloxotel).
 - [docs/decisions/](docs/decisions/) records the design decisions.
 - [CHANGELOG.md](CHANGELOG.md) lists the changes.
-- [CONTRIBUTING.md](CONTRIBUTING.md) explains how to work on velox2.
+- [CONTRIBUTING.md](CONTRIBUTING.md) explains how to work on velox.
 - [SECURITY.md](SECURITY.md) explains how to report a vulnerability.
 
 ## License
 
-velox2 is licensed under the [Apache License 2.0](LICENSE).
+velox is licensed under the [Apache License 2.0](LICENSE).

@@ -1,6 +1,6 @@
 package engine
 
-import "github.com/syssam/velox2/dbtype"
+import "github.com/syssam/velox/dbtype"
 
 // The plain data types, which package dbtype documents.
 type (

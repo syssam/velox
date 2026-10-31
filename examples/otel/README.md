@@ -1,7 +1,7 @@
 # otel
 
 Tracing and metrics with `contrib/veloxotel`, the OpenTelemetry adapter, a module
-of its own (`github.com/syssam/velox2/contrib/veloxotel`) so that velox itself
+of its own (`github.com/syssam/velox/contrib/veloxotel`) so that velox itself
 depends on no OpenTelemetry package. A request pays an invoice in a
 transaction; the program prints the spans and metric points that made.
 

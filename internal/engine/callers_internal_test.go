@@ -8,19 +8,19 @@ import (
 )
 
 func TestRelFile(t *testing.T) {
-	mods := []string{"github.com/syssam/velox2/examples", "github.com/syssam/velox2", "gopkg.in/yaml.v3"}
+	mods := []string{"github.com/syssam/velox/examples", "github.com/syssam/velox", "gopkg.in/yaml.v3"}
 	for _, c := range []struct{ file, fn, mainPkg, want string }{
-		{"/src/velox2/db.go", "github.com/syssam/velox2.(*DB).Tx", "", "db.go"},
-		{"/src/velox2/internal/engine/pipeline.go", "github.com/syssam/velox2/internal/engine.(*DB).Plain", "", "internal/engine/pipeline.go"},
-		{"/src/velox2/internal/testrepo/testrepo.go", "github.com/syssam/velox2/internal/testrepo.FirstInvoice", "", "internal/testrepo/testrepo.go"},
+		{"/src/velox/db.go", "github.com/syssam/velox.(*DB).Tx", "", "db.go"},
+		{"/src/velox/internal/engine/pipeline.go", "github.com/syssam/velox/internal/engine.(*DB).Plain", "", "internal/engine/pipeline.go"},
+		{"/src/velox/internal/testrepo/testrepo.go", "github.com/syssam/velox/internal/testrepo.FirstInvoice", "", "internal/testrepo/testrepo.go"},
 		// The longer module wins.
-		{"/src/velox2/examples/billing/invoice.go", "github.com/syssam/velox2/examples/billing.(*Invoice).Schema", "", "billing/invoice.go"},
-		{"/src/velox2/examples/main.go", "main.run.func1", "github.com/syssam/velox2/examples", "main.go"},
-		{"/src/velox2/examples/tool/main.go", "main.run", "github.com/syssam/velox2/examples/tool", "tool/main.go"},
-		{"/src/velox2/callers_test.go", "github.com/syssam/velox2_test.TestX", "", "callers_test.go"},
-		{"/src/velox2/internal/testrepo/x_test.go", "github.com/syssam/velox2/internal/testrepo_test.TestX", "", "internal/testrepo/x_test.go"},
+		{"/src/velox/examples/billing/invoice.go", "github.com/syssam/velox/examples/billing.(*Invoice).Schema", "", "billing/invoice.go"},
+		{"/src/velox/examples/main.go", "main.run.func1", "github.com/syssam/velox/examples", "main.go"},
+		{"/src/velox/examples/tool/main.go", "main.run", "github.com/syssam/velox/examples/tool", "tool/main.go"},
+		{"/src/velox/callers_test.go", "github.com/syssam/velox_test.TestX", "", "callers_test.go"},
+		{"/src/velox/internal/testrepo/x_test.go", "github.com/syssam/velox/internal/testrepo_test.TestX", "", "internal/testrepo/x_test.go"},
 		// -trimpath file names.
-		{"github.com/syssam/velox2/examples/billing/invoice.go", "github.com/syssam/velox2/examples/billing.F", "", "billing/invoice.go"},
+		{"github.com/syssam/velox/examples/billing/invoice.go", "github.com/syssam/velox/examples/billing.F", "", "billing/invoice.go"},
 		{"gopkg.in/yaml.v3@v3.0.1/decode.go", "gopkg.in/yaml%2ev3.(*decoder).unmarshal", "", "decode.go"},
 		{"/src/yaml/decode.go", "gopkg.in/yaml%2ev3.Unmarshal", "", "decode.go"},
 		// No module: the base name.
@@ -34,13 +34,13 @@ func TestRelFile(t *testing.T) {
 
 func TestPkgOf(t *testing.T) {
 	for fn, want := range map[string]string{
-		"github.com/syssam/velox2.(*DB).Tx":                                                                            "github.com/syssam/velox2",
-		"github.com/syssam/velox2/internal/engine.(*DB).Plain":                                                         "github.com/syssam/velox2/internal/engine",
-		"github.com/syssam/velox2.Query[go.shape.struct { github.com/syssam/velox2/internal/testmodel.ID int64 }].All": "github.com/syssam/velox2",
-		"github.com/syssam/velox2/examples.run":                                                                        "github.com/syssam/velox2/examples",
-		"github.com/syssam/velox2_test.TestX.func1":                                                                    "github.com/syssam/velox2_test",
-		"gopkg.in/yaml%2ev3.Marshal":                                                                                   "gopkg.in/yaml.v3",
-		"main.run.func1":                                                                                               "main",
+		"github.com/syssam/velox.(*DB).Tx":                                                                           "github.com/syssam/velox",
+		"github.com/syssam/velox/internal/engine.(*DB).Plain":                                                        "github.com/syssam/velox/internal/engine",
+		"github.com/syssam/velox.Query[go.shape.struct { github.com/syssam/velox/internal/testmodel.ID int64 }].All": "github.com/syssam/velox",
+		"github.com/syssam/velox/examples.run":                                                                       "github.com/syssam/velox/examples",
+		"github.com/syssam/velox_test.TestX.func1":                                                                   "github.com/syssam/velox_test",
+		"gopkg.in/yaml%2ev3.Marshal":                                                                                 "gopkg.in/yaml.v3",
+		"main.run.func1":                                                                                             "main",
 	} {
 		if got := pkgOf(fn); got != want {
 			t.Errorf("pkgOf(%q) = %q, want %q", fn, got, want)
@@ -49,14 +49,14 @@ func TestPkgOf(t *testing.T) {
 }
 
 func TestInPkg(t *testing.T) {
-	const velox = "github.com/syssam/velox2"
+	const velox = "github.com/syssam/velox"
 	for _, c := range []struct {
 		fn, pkg string
 		want    bool
 	}{
-		{"github.com/syssam/velox2.Query[go.shape.struct { github.com/syssam/velox2/internal/testmodel.ID int64 }].All", velox, true},
-		{"github.com/syssam/velox2/examples.run", velox, false},
-		{"github.com/syssam/velox2_test.TestX", velox, false},
+		{"github.com/syssam/velox.Query[go.shape.struct { github.com/syssam/velox/internal/testmodel.ID int64 }].All", velox, true},
+		{"github.com/syssam/velox/examples.run", velox, false},
+		{"github.com/syssam/velox_test.TestX", velox, false},
 		{"gopkg.in/yaml%2ev3.Marshal", "gopkg.in/yaml.v3", true},
 	} {
 		if got := inPkg(c.fn, c.pkg); got != c.want {
@@ -77,7 +77,7 @@ func TestPCCacheIsBounded(t *testing.T) {
 	c := &callers{}
 	c.once.Do(func() { c.self = "velox.invalid/none" })
 	want := func(line int) Caller {
-		return Caller{File: "callers_internal_test.go", Line: line, Func: "github.com/syssam/velox2/internal/engine.TestPCCacheIsBounded"}
+		return Caller{File: "callers_internal_test.go", Line: line, Func: "github.com/syssam/velox/internal/engine.TestPCCacheIsBounded"}
 	}
 	for i := range 3 {
 		if got, line := c.Capture(), thisLine(); got != want(line) {
@@ -190,7 +190,7 @@ func TestCaptureReadsAtMost64Frames(t *testing.T) {
 func TestDepthHintIsAtLeast4(t *testing.T) {
 	c := &callers{}
 	c.once.Do(func() { c.self = "velox.invalid/none" })
-	if got := c.Capture(); got.Func != "github.com/syssam/velox2/internal/engine.TestDepthHintIsAtLeast4" {
+	if got := c.Capture(); got.Func != "github.com/syssam/velox/internal/engine.TestDepthHintIsAtLeast4" {
 		t.Fatalf("call site %+v", got)
 	}
 	if d := c.depth.Load(); d != 4 {

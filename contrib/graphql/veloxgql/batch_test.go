@@ -15,10 +15,10 @@ import (
 
 	"github.com/99designs/gqlgen/graphql"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/shared"
 )
 
 // keeper and pet are hand-written entities, as velox-gen would write them,

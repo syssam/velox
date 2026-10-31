@@ -6,7 +6,7 @@ import (
 )
 
 // modulePath is this module's path: the instrumentation scope's name.
-const modulePath = "github.com/syssam/velox2/contrib/veloxotel"
+const modulePath = "github.com/syssam/velox/contrib/veloxotel"
 
 // moduleVersion is the version of this module that bi records: the main
 // module's when this is the main module, else the dependency's, or its

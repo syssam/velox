@@ -4,7 +4,7 @@ import (
 	"testing"
 	"unsafe"
 
-	"github.com/syssam/velox2/internal/engine"
+	"github.com/syssam/velox/internal/engine"
 )
 
 func TestHolderLayout(t *testing.T) {

@@ -4,7 +4,7 @@
 
 ## Context
 
-velox2 has four version numbers besides its release: the generated-code
+velox has four version numbers besides its release: the generated-code
 constants of velox and veloxgql, the plugin protocol and model, and the two
 files a migration directory holds. Each needs a rule a user can plan around.
 

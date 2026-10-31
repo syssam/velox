@@ -1,6 +1,6 @@
 package integration
 
-import "github.com/syssam/velox2"
+import "github.com/syssam/velox"
 
 // The many-to-many model: books and tags through bookTag, written by hand as
 // velox-gen writes a Desc, like the root package's test model. Tags are

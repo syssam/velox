@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/syssam/velox2/internal/testmodel"
+	"github.com/syssam/velox/internal/testmodel"
 )
 
 // BenchmarkScan measures the read path on every database: 100 invoices (two

@@ -8,7 +8,7 @@
 // schema. It writes ./gen; with -check it writes nothing and fails when ./gen
 // is out of date:
 //
-//	go get -tool github.com/syssam/velox2/cmd/velox-gen
+//	go get -tool github.com/syssam/velox/cmd/velox-gen
 //	go tool velox-gen ./schema
 //	go tool velox-gen -check ./schema
 //

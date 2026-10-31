@@ -8,7 +8,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 
 	"example.com/tmp/gen"
 )

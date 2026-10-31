@@ -12,11 +12,11 @@ import (
 	"strings"
 )
 
-// Write creates a module example.com/tmp in dir that requires velox2 from
+// Write creates a module example.com/tmp in dir that requires velox from
 // repo (by replace), with the given files (path → content), and resolves its
 // requirements from the module cache only. files is not changed.
 func Write(dir, repo string, files map[string]string) error {
-	mod := fmt.Sprintf("module example.com/tmp\n\ngo 1.27.0\n\nrequire github.com/syssam/velox2 v0.0.0\n\nreplace github.com/syssam/velox2 => %s\n", repo)
+	mod := fmt.Sprintf("module example.com/tmp\n\ngo 1.27.0\n\nrequire github.com/syssam/velox v0.0.0\n\nreplace github.com/syssam/velox => %s\n", repo)
 	return write(dir, mod, []string{"go.sum"}, repo, files, "mod", "tidy")
 }
 
@@ -31,18 +31,18 @@ func WriteGraphQL(dir, repo string, files map[string]string) error {
 go 1.27.0
 
 tool (
-	github.com/syssam/velox2/cmd/velox-gen
-	github.com/syssam/velox2/contrib/graphql/cmd/velox-graphql
+	github.com/syssam/velox/cmd/velox-gen
+	github.com/syssam/velox/contrib/graphql/cmd/velox-graphql
 )
 
 require (
-	github.com/syssam/velox2 v0.0.0
-	github.com/syssam/velox2/contrib/graphql v0.0.0
+	github.com/syssam/velox v0.0.0
+	github.com/syssam/velox/contrib/graphql v0.0.0
 )
 
 replace (
-	github.com/syssam/velox2 => %[1]s
-	github.com/syssam/velox2/contrib/graphql => %[2]s
+	github.com/syssam/velox => %[1]s
+	github.com/syssam/velox/contrib/graphql => %[2]s
 )
 `, repo, filepath.Join(repo, "contrib", "graphql"))
 	// -e: tidy also looks for the test dependencies of gqlparser's levenshtein,

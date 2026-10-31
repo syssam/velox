@@ -21,16 +21,16 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/syssam/velox2/contrib/graphql/internal/english"
-	"github.com/syssam/velox2/contrib/graphql/internal/sdl"
-	"github.com/syssam/velox2/plugin"
+	"github.com/syssam/velox/contrib/graphql/internal/english"
+	"github.com/syssam/velox/contrib/graphql/internal/sdl"
+	"github.com/syssam/velox/plugin"
 )
 
 // The import paths of the packages the generated code uses.
 const (
-	veloxPath    = "github.com/syssam/velox2"
-	veloxgqlPath = "github.com/syssam/velox2/contrib/graphql/veloxgql"
-	gqlimplPath  = "github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
+	veloxPath    = "github.com/syssam/velox"
+	veloxgqlPath = "github.com/syssam/velox/contrib/graphql/veloxgql"
+	gqlimplPath  = "github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
 // Render returns the Go files of m's GraphQL types, for the generated

@@ -26,9 +26,9 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/testmodel"
-	"github.com/syssam/velox2/veloxpgx"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/veloxpgx"
 )
 
 // TestMain refuses to run the itests, when VELOX_ITEST_REQUIRE=1, as CI and

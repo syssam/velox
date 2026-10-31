@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/migrate"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/migrate"
 )
 
 // genHeader is the first line Dir.Add writes.

@@ -3,7 +3,7 @@ package index_test
 import (
 	"fmt"
 
-	"github.com/syssam/velox2/schema/index"
+	"github.com/syssam/velox/schema/index"
 )
 
 // Where makes the index partial, on PostgreSQL and SQLite: here an email is unique

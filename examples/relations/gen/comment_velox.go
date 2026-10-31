@@ -5,7 +5,7 @@ package gen
 import (
 	"fmt"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 const _ = velox.GeneratedCodeIsVersion6

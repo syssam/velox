@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"unsafe"
 
-	"github.com/syssam/velox2/internal/engine"
+	"github.com/syssam/velox/internal/engine"
 )
 
 // DB runs statements, inside or outside a transaction. It is the only type

@@ -2,7 +2,7 @@
 
 package velox
 
-import "github.com/syssam/velox2/internal/engine"
+import "github.com/syssam/velox/internal/engine"
 
 // Col is the handle of a column of entity E whose values, of type V, are neither ordered nor text: bool, []byte and other types. I is the column's index; velox-gen sets it.
 type Col[E, V any] struct{ I int32 }

@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	velox2 "github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/codegen"
-	"github.com/syssam/velox2/migrate"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/codegen"
+	"github.com/syssam/velox/migrate"
 )
 
 // sqlSchema is a schema package of User and Post with an enum, a unique
@@ -21,10 +21,10 @@ func sqlSchema(userIndexes string) map[string]string {
 		"schema/user.go": `package schema
 
 import (
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/edge"
-	"github.com/syssam/velox2/schema/field"
-	"github.com/syssam/velox2/schema/index"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/edge"
+	"github.com/syssam/velox/schema/field"
+	"github.com/syssam/velox/schema/index"
 )
 
 type User struct{ schema.Schema }
@@ -45,8 +45,8 @@ func (User) Indexes() []schema.Index { return []schema.Index{` + userIndexes + `
 		"schema/post.go": `package schema
 
 import (
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/edge"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/edge"
 )
 
 type Post struct{ schema.Schema }
@@ -60,7 +60,7 @@ func (Post) Edges() []schema.Edge {
 
 // firstFile is the statements of the first file migrate diff -dry-run
 // prints for the new directory fresh.
-func firstFile(t *testing.T, d velox2.Dialect, out string) []string {
+func firstFile(t *testing.T, d velox.Dialect, out string) []string {
 	t.Helper()
 	_, rest, ok := strings.Cut(out, "== fresh/0001_")
 	if !ok {
@@ -82,23 +82,23 @@ func TestMigrateSQL(t *testing.T) {
 		t.Skip("builds a module")
 	}
 	dir := tempModule(t, sqlSchema(`index.Fields("role")`))
-	for _, d := range []velox2.Dialect{velox2.Postgres, velox2.MySQL, velox2.SQLite} {
+	for _, d := range []velox.Dialect{velox.Postgres, velox.MySQL, velox.SQLite} {
 		t.Run(d.String(), func(t *testing.T) {
-			code, out, errs := velox(t, dir, "migrate", "sql", "-dialect", d.String())
+			code, out, errs := runCLI(t, dir, "migrate", "sql", "-dialect", d.String())
 			if code != 0 || errs != "" {
 				t.Fatalf("sql: exit %d\nstderr:\n%s", code, errs)
 			}
-			code, diff, errs := velox(t, dir, "migrate", "diff", "-dialect", d.String(), "-dry-run", "-dir", "fresh")
+			code, diff, errs := runCLI(t, dir, "migrate", "diff", "-dialect", d.String(), "-dry-run", "-dir", "fresh")
 			if code != 0 {
 				t.Fatalf("diff: exit %d\nstderr:\n%s", code, errs)
 			}
 			if w := strings.Join(firstFile(t, d, diff), ";\n") + ";\n"; out != w {
 				t.Errorf("sql:\n%s\nwant:\n%s", out, w)
 			}
-			if d == velox2.Postgres && (!strings.HasPrefix(out, "CREATE TYPE") || !strings.Contains(out, "COMMENT ON")) {
+			if d == velox.Postgres && (!strings.HasPrefix(out, "CREATE TYPE") || !strings.Contains(out, "COMMENT ON")) {
 				t.Errorf("sql: no CREATE TYPE first or no COMMENT ON:\n%s", out)
 			}
-			_, again, _ := velox(t, dir, "migrate", "sql", "-dialect", d.String())
+			_, again, _ := runCLI(t, dir, "migrate", "sql", "-dialect", d.String())
 			if again != out {
 				t.Errorf("a second run differs:\n%s\nwant:\n%s", again, out)
 			}
@@ -119,16 +119,16 @@ func TestMigrateSQLRefusals(t *testing.T) {
 		"dir":          {"-dialect", "sqlite", "-dir", "x"},
 		"two packages": {"-dialect", "sqlite", "./schema", "./other"},
 	} {
-		code, out, errs := velox(t, dir, append([]string{"migrate", "sql"}, args...)...)
+		code, out, errs := runCLI(t, dir, append([]string{"migrate", "sql"}, args...)...)
 		if code != 2 || out != "" {
 			t.Errorf("%s: exit %d, want 2\nstdout:\n%s\nstderr:\n%s", name, code, out, errs)
 		}
 	}
-	code, _, errs := velox(t, dir, "migrate", "sql")
+	code, _, errs := runCLI(t, dir, "migrate", "sql")
 	if !strings.HasPrefix(errs, "velox-gen: migrate sql needs -dialect postgres, mysql or sqlite\n") {
 		t.Errorf("no dialect: exit %d\nstderr:\n%s", code, errs)
 	}
-	code, out, errs := velox(t, dir, "migrate", "sql", "-dialect", "mysql")
+	code, out, errs := runCLI(t, dir, "migrate", "sql", "-dialect", "mysql")
 	if code != 1 || out != "" || !regexp.MustCompile(`^velox-gen: schema/user\.go:[0-9]+: `).MatchString(errs) {
 		t.Errorf("mysql Where: exit %d, want 1\nstdout:\n%s\nstderr:\n%s", code, out, errs)
 	}
@@ -136,7 +136,7 @@ func TestMigrateSQLRefusals(t *testing.T) {
 	// An empty output would be an empty schema to Atlas, which drops every
 	// table, so a package with no schemas is refused.
 	empty := tempModule(t, map[string]string{"schema/doc.go": "// Package schema has no entities.\npackage schema\n"})
-	code, out, errs = velox(t, empty, "migrate", "sql", "-dialect", "postgres")
+	code, out, errs = runCLI(t, empty, "migrate", "sql", "-dialect", "postgres")
 	if code != 1 || out != "" || !strings.HasPrefix(errs, "velox-gen: no schemas in ") {
 		t.Errorf("no schemas: exit %d, want 1\nstdout:\n%s\nstderr:\n%s", code, out, errs)
 	}
@@ -151,8 +151,8 @@ func TestMigrateSQLPositionsAreRelative(t *testing.T) {
 	const head = `package schema
 
 import (
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/field"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/field"
 )
 
 `
@@ -179,7 +179,7 @@ func (Post) Fields() []schema.Field {
 }
 `
 		dir := tempModule(t, map[string]string{"schema/post.go": post})
-		code, out, errs := velox(t, dir, "migrate", "sql", "-dialect", "mysql")
+		code, out, errs := runCLI(t, dir, "migrate", "sql", "-dialect", "mysql")
 		want := "velox-gen: schema/post.go: schema Post: MySQL rows hold at most 65535 bytes; these need 80012:\n" +
 			fmt.Sprintf("  schema/post.go:%d: field \"body\": varchar(10000), 40002 bytes\n", lineOf(t, post, `"body"`)) +
 			fmt.Sprintf("  schema/post.go:%d: field \"summary\": varchar(10000), 40002 bytes\n", lineOf(t, post, `"summary"`)) +
@@ -205,7 +205,7 @@ func (Post) Fields() []schema.Field {
 			"schema/order.go":   enum("Order", "status", `"new", "paid"`),
 			"schema/invoice.go": invoice,
 		})
-		code, out, errs := velox(t, dir, "migrate", "sql", "-dialect", "postgres")
+		code, out, errs := runCLI(t, dir, "migrate", "sql", "-dialect", "postgres")
 		want := fmt.Sprintf("(schema/invoice.go:%d), with other values", lineOf(t, invoice, `"state"`))
 		if code != 1 || out != "" || !strings.Contains(errs, want) {
 			t.Errorf("exit %d, want 1\nstdout:\n%s\nstderr:\n%s\nwant it to hold %s", code, out, errs, want)

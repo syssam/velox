@@ -9,7 +9,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/syssam/velox2/internal/codegen/loadjson"
+	"github.com/syssam/velox/internal/codegen/loadjson"
 )
 
 // Graph is the resolved model of one schema package.

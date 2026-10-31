@@ -3,9 +3,9 @@
 package schema
 
 import (
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/field"
-	"github.com/syssam/velox2/schema/index"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/field"
+	"github.com/syssam/velox/schema/index"
 )
 
 // Project belongs to one organization, the tenant. Its name is unique within

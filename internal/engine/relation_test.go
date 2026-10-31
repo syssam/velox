@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/engine"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/engine"
 )
 
 // TestRelationsResolveWithoutDeadlock is half of Review Focus 1.
@@ -98,7 +98,7 @@ func TestInvalidTargetIsNamed(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = engine.InfoRels(info)[0].Resolve(info, targetOf[brokenTarget]())
-	wantErr(t, err, "T: its target github.com/syssam/velox2/internal/engine_test.brokenTarget is invalid: engine_test.brokenTarget: the generated metadata has no Addr; run go tool velox-gen")
+	wantErr(t, err, "T: its target github.com/syssam/velox/internal/engine_test.brokenTarget is invalid: engine_test.brokenTarget: the generated metadata has no Addr; run go tool velox-gen")
 }
 
 // TestEdgeThroughKeepsItsJoin: EdgeThrough names its join entity, which has

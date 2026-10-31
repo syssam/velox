@@ -4,13 +4,13 @@
 
 ## Context
 
-ent's `Optional` makes a column NULL-able. Old velox, which velox2's schema DSL
+ent's `Optional` makes a column NULL-able. veloxe, which velox's schema DSL
 follows, keeps it NOT NULL and uses `Nillable` for NULL. One rule had to hold
 across the DSL, velox-gen, the plugin model and the runtime.
 
 ## Decision
 
-Old velox's rule. `Optional()` means the field need not be given on create: the
+veloxe's rule. `Optional()` means the field need not be given on create: the
 column stays NOT NULL, the Go field is a value, and an unset field writes its
 `Default` or its zero value. `Nillable()` makes the column NULL-able, the Go
 field a pointer, and adds a `Null*` handle. `Optional().Nillable()` is both. An
@@ -20,7 +20,7 @@ slice or a map has no zero value to write.
 ## Consequences
 
 An ent schema that relies on `Optional` for NULL needs `Nillable` added in
-velox2. velox-gen refuses an `Optional` field whose zero value cannot be stored
+velox. velox-gen refuses an `Optional` field whose zero value cannot be stored
 or means nothing (an enum, bytes or time with neither a Default nor Nillable;
 an edge field that is not Nillable).
 

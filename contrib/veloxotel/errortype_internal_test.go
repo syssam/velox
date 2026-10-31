@@ -9,7 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // TestErrorType maps errors to error.type without running a statement.

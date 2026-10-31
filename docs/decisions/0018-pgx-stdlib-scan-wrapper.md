@@ -9,7 +9,7 @@ On Go 1.27, pgx v5.11.0's stdlib driver implements
 uncached reflection walk over the destination's type, on every column of
 every row, to choose between database/sql's conversion and pgx's own scan
 plans. A destination that is a `sql.Scanner` passes that check at its first
-step. On `postgres-sql` (database/sql over pgx's stdlib) this made velox2's
+step. On `postgres-sql` (database/sql over pgx's stdlib) this made velox's
 100-row query about 7 times slower than on `postgres-pgx`.
 
 ## Decision
@@ -38,10 +38,10 @@ generated code does not change.
   its two slices), none per row.
 - No generated code changes: the generated scan destinations are unchanged,
   and only the rows they are scanned from differ.
-- `TestPgxMirrorIsCurrent` guards only the pgx that velox2's go.mod selects.
+- `TestPgxMirrorIsCurrent` guards only the pgx that velox's go.mod selects.
   An application can select a newer pgx v5 through MVS. If that pgx narrowed
   `isSQLScanDestination`, velox could wrap a type that pgx no longer converts
-  with `ConvertAssign`. A pgx upgrade in velox2 re-runs the mirror test.
+  with `ConvertAssign`. A pgx upgrade in velox re-runs the mirror test.
   Checking the linked pgx version at run time through `debug.ReadBuildInfo`
   was considered and left out: it would also refuse harmless upgrades.
 

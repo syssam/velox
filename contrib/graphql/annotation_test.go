@@ -9,9 +9,9 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/syssam/velox2/contrib/graphql"
-	"github.com/syssam/velox2/internal/tempmod"
-	"github.com/syssam/velox2/schema"
+	"github.com/syssam/velox/contrib/graphql"
+	"github.com/syssam/velox/internal/tempmod"
+	"github.com/syssam/velox/schema"
 )
 
 type annotationCase struct {
@@ -197,10 +197,10 @@ func TestMerge(t *testing.T) {
 const loaderSchema = `package schema
 
 import (
-	"github.com/syssam/velox2/contrib/graphql"
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/edge"
-	"github.com/syssam/velox2/schema/field"
+	"github.com/syssam/velox/contrib/graphql"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/edge"
+	"github.com/syssam/velox/schema/field"
 )
 
 type Pet struct{ schema.Schema }
@@ -253,14 +253,14 @@ func TestThroughTheLoader(t *testing.T) {
 		t.Fatal(err)
 	}
 	mod := "module example.com/app\n\ngo 1.27.0\n\n" +
-		"tool github.com/syssam/velox2/cmd/velox-gen\n\n" +
+		"tool github.com/syssam/velox/cmd/velox-gen\n\n" +
 		"require (\n" +
-		"\tgithub.com/syssam/velox2 v0.0.0\n" +
-		"\tgithub.com/syssam/velox2/contrib/graphql v0.0.0\n" +
+		"\tgithub.com/syssam/velox v0.0.0\n" +
+		"\tgithub.com/syssam/velox/contrib/graphql v0.0.0\n" +
 		")\n\n" +
 		"replace (\n" +
-		"\tgithub.com/syssam/velox2 => " + repo + "\n" +
-		"\tgithub.com/syssam/velox2/contrib/graphql => " + filepath.Join(repo, "contrib/graphql") + "\n" +
+		"\tgithub.com/syssam/velox => " + repo + "\n" +
+		"\tgithub.com/syssam/velox/contrib/graphql => " + filepath.Join(repo, "contrib/graphql") + "\n" +
 		")\n"
 	for name, src := range map[string]string{"go.mod": mod, "go.sum": string(sum), "schema/schema.go": loaderSchema} {
 		p := filepath.Join(dir, name)

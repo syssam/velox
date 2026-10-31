@@ -1,4 +1,4 @@
-module github.com/syssam/velox2
+module github.com/syssam/velox
 
 go 1.27.0
 

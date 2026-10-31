@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox2/internal/tempmod"
+	"github.com/syssam/velox/internal/tempmod"
 )
 
-// repoRoot returns the directory of the velox2 module, found by walking up
+// repoRoot returns the directory of the velox module, found by walking up
 // from the working directory to the go.mod that declares it.
 func repoRoot(t *testing.T) string {
 	t.Helper()
@@ -23,7 +23,7 @@ func repoRoot(t *testing.T) string {
 	for {
 		if f, err := os.Open(filepath.Join(dir, "go.mod")); err == nil {
 			sc := bufio.NewScanner(f)
-			found := sc.Scan() && strings.TrimSpace(sc.Text()) == "module github.com/syssam/velox2"
+			found := sc.Scan() && strings.TrimSpace(sc.Text()) == "module github.com/syssam/velox"
 			_ = f.Close()
 			if found {
 				return dir
@@ -31,7 +31,7 @@ func repoRoot(t *testing.T) string {
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			t.Fatal("no go.mod for github.com/syssam/velox2 above the working directory")
+			t.Fatal("no go.mod for github.com/syssam/velox above the working directory")
 		}
 		dir = parent
 	}
@@ -40,8 +40,8 @@ func repoRoot(t *testing.T) string {
 const userSchema = `package schema
 
 import (
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/field"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/field"
 )
 
 type User struct{ schema.Schema }
@@ -106,7 +106,7 @@ func TestInspect(t *testing.T) {
 		"schema/user.go":  userSchema,
 		"plain/doc.go":    "package plain\n",
 		"plain/sub/b.go":  "package sub\n",
-		"unexp/schema.go": "package unexp\n\nimport \"github.com/syssam/velox2/schema\"\n\ntype user struct{ schema.Schema }\n",
+		"unexp/schema.go": "package unexp\n\nimport \"github.com/syssam/velox/schema\"\n\ntype user struct{ schema.Schema }\n",
 		"empty/notes.txt": "no Go here\n",
 		"mixed/a.go":      "package a\n",
 		"mixed/b.go":      "package b\n",

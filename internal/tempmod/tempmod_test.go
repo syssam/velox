@@ -31,7 +31,7 @@ func TestWriteGraphQL(t *testing.T) {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
-	files := map[string]string{"use/use.go": "package use\n\nimport _ \"github.com/syssam/velox2/contrib/graphql/veloxgql\"\n"}
+	files := map[string]string{"use/use.go": "package use\n\nimport _ \"github.com/syssam/velox/contrib/graphql/veloxgql\"\n"}
 	if err := WriteGraphQL(dir, repo, files); err != nil {
 		t.Fatal(err)
 	}
@@ -43,10 +43,10 @@ func TestWriteGraphQL(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"github.com/syssam/velox2/cmd/velox-gen",
-		"github.com/syssam/velox2/contrib/graphql/cmd/velox-graphql",
-		"github.com/syssam/velox2 => " + repo,
-		"github.com/syssam/velox2/contrib/graphql => " + filepath.Join(repo, "contrib", "graphql"),
+		"github.com/syssam/velox/cmd/velox-gen",
+		"github.com/syssam/velox/contrib/graphql/cmd/velox-graphql",
+		"github.com/syssam/velox => " + repo,
+		"github.com/syssam/velox/contrib/graphql => " + filepath.Join(repo, "contrib", "graphql"),
 	} {
 		if !strings.Contains(string(mod), want) {
 			t.Errorf("go.mod lacks %q:\n%s", want, mod)

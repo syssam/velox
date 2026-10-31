@@ -3,7 +3,7 @@
 All notable changes are listed here, in the shape of
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-velox2 is before 1.0, and its API can still change. Two rules hold already:
+velox is before 1.0, and its API can still change. Two rules hold already:
 
 - A change to the generated code replaces `velox.GeneratedCodeIsVersionN` (and
   `veloxgql.GeneratedCodeIsVersionN`) with the next number, in a minor release,
@@ -112,7 +112,7 @@ Documentation and tests
 - README.md, CONTRIBUTING.md, SECURITY.md and this file (9a5a474, 1cc5645).
 - CI runs on PostgreSQL 14 and 18 and MySQL 8.4, pinned by digest (9c25cef),
   with fuzz targets, per-package coverage floors and benchmark baselines.
-- `bench/compare` measures velox2's build and runtime cost against old velox and
+- `bench/compare` measures velox's build and runtime cost against veloxe and
   ent (`docs/reviews/2026-10-29-perf-comparison.md`; 591c054, b7603fd..4ebd51a).
   `COMPARE_STEPS=runtime`, and a `veloxpgx` column (da2ee65, c57da87).
 
@@ -139,7 +139,7 @@ Generated code
 Schema and migrations
 - Names follow ent: its inflection (1d216d8), and the index, unique and
   foreign-key names, capped as ent caps them (25e9e88). A table's name comes
-  from the entity's Go name. A name may differ from the one an earlier velox2
+  from the entity's Go name. A name may differ from the one an earlier velox
   wrote: read the next `migrate diff` before you apply it.
 - ent's foreign-key defaults: a one-to-one key is unique, and a NULL-able key
   is ON DELETE SET NULL (e29e619).
@@ -162,7 +162,7 @@ Runtime
   rows are grouped in one array of indexes. EagerO2M100 on SQLite went from
   261,168 to 151,600 B/op and from 4,699 to 4,204 allocs/op (`BenchmarkScan`);
   in the three-ORM comparison it is 209,188 B/op on SQLite and 202,040 on
-  PostgreSQL, under old velox's 259,516 and 251,707
+  PostgreSQL, under veloxe's 259,516 and 251,707
   (`docs/reviews/2026-10-30-eager-memory.md`).
   A row kept from a to-many load keeps the rows of every owner loaded with it,
   in the arrays they were read into (up to 1,024 rows each) and in the one the

@@ -20,10 +20,10 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	_ "modernc.org/sqlite"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/contrib/veloxotel"
-	"github.com/syssam/velox2/examples/otel/gen"
-	"github.com/syssam/velox2/migrate"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/veloxotel"
+	"github.com/syssam/velox/examples/otel/gen"
+	"github.com/syssam/velox/migrate"
 )
 
 func main() {

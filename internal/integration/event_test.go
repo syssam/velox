@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/testmodel"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/testmodel"
 )
 
 // eventDDL is the table of testmodel.Event: two time columns, the second

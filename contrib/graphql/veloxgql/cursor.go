@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/shared"
 )
 
 // Cursor is a connection cursor: where a row is in a query's order. It is

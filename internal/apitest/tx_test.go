@@ -14,9 +14,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/fakeconn"
-	"github.com/syssam/velox2/internal/testmodel"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/fakeconn"
+	"github.com/syssam/velox/internal/testmodel"
 )
 
 func touch(ctx context.Context, tx *velox.DB) error {

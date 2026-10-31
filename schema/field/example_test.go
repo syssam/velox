@@ -3,7 +3,7 @@ package field_test
 import (
 	"fmt"
 
-	"github.com/syssam/velox2/schema/field"
+	"github.com/syssam/velox/schema/field"
 )
 
 // MaxLen counts bytes and MaxRuneLen characters. Both set the column's size.

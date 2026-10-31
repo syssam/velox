@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // Hooks declares Task's hooks. velox-gen binds it into Task's metadata, and

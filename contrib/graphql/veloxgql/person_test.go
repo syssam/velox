@@ -3,7 +3,7 @@ package veloxgql_test
 import (
 	_ "modernc.org/sqlite"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // person is a hand-written entity, as velox-gen would write it, for the

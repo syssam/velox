@@ -16,7 +16,7 @@ const ModelVersion = 2
 // Request is what velox-gen writes to a plugin's standard input.
 type Request struct {
 	Protocol   int    `json:"plugin_protocol"` // the protocol version, [ProtocolVersion]; a plugin checks it
-	Generator  string `json:"generator"`       // "velox-gen " and the version of the velox2 module, e.g. "velox-gen v1.2.3", "velox-gen (devel)"; for messages, not for output
+	Generator  string `json:"generator"`       // "velox-gen " and the version of the velox module, e.g. "velox-gen v1.2.3", "velox-gen (devel)"; for messages, not for output
 	OutPackage string `json:"out_package"`     // the generated package's name
 	OutPath    string `json:"out_path"`        // the generated package's import path
 	// Options are the plugin's options from the command line,

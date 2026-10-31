@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/apitest/fixture"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/apitest/fixture"
 )
 
 func TestDescMetadata(t *testing.T) {
@@ -171,10 +171,10 @@ func TestEdgeToHolderMismatch(t *testing.T) {
 	}{
 		{"EdgeTo at a One of another entity", func(d *velox.Desc[dRow]) {
 			d.Edges = []velox.EdgeDesc{velox.EdgeTo[fixture.DBook]("Author", 0, 0)}
-		}, "velox: engine_test.dRow.Author: relation Author is a velox.One[github.com/syssam/velox2/internal/apitest/fixture.DAuthor], not a One or Many of github.com/syssam/velox2/internal/apitest/fixture.DBook"},
+		}, "velox: engine_test.dRow.Author: relation Author is a velox.One[github.com/syssam/velox/internal/apitest/fixture.DAuthor], not a One or Many of github.com/syssam/velox/internal/apitest/fixture.DBook"},
 		{"EdgeThrough at a One of another entity", func(d *velox.Desc[dRow]) {
 			d.Edges = []velox.EdgeDesc{velox.EdgeThrough[fixture.DBookTag, fixture.DBook]("Author", 0, 0, 1, 0)}
-		}, "velox: engine_test.dRow.Author: relation Author is a velox.One[github.com/syssam/velox2/internal/apitest/fixture.DAuthor], not a One or Many of github.com/syssam/velox2/internal/apitest/fixture.DBook"},
+		}, "velox: engine_test.dRow.Author: relation Author is a velox.One[github.com/syssam/velox/internal/apitest/fixture.DAuthor], not a One or Many of github.com/syssam/velox/internal/apitest/fixture.DBook"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			d := rowDesc()

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 	_ "modernc.org/sqlite"
 )
 

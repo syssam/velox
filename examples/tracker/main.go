@@ -25,9 +25,9 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib" // migrations run through database/sql
 	_ "modernc.org/sqlite"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/migrate"
-	"github.com/syssam/velox2/veloxpgx"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/migrate"
+	"github.com/syssam/velox/veloxpgx"
 )
 
 // shutdownWait is how long requests in flight get to finish. dbLimits bound what

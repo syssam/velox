@@ -3,7 +3,7 @@ package gen
 import (
 	"context"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // Policy declares Doc's policy. velox-gen binds it into Doc's metadata, and

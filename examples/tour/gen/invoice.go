@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // Policy says who may see and change invoices. velox-gen binds it into

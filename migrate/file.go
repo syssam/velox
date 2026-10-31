@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // A File is one migration file of a directory.

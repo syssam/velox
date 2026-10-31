@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/fakeconn"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/fakeconn"
 )
 
 // rtree is a tree whose parent edge is Required, its key NULL-able, as

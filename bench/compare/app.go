@@ -14,8 +14,8 @@ import (
 
 	"golang.org/x/mod/modfile"
 
-	"github.com/syssam/velox2/internal/buildcost"
-	"github.com/syssam/velox2/internal/tempmod"
+	"github.com/syssam/velox/internal/buildcost"
+	"github.com/syssam/velox/internal/tempmod"
 )
 
 // harnessDir is the directory of this module, bench/compare, which holds the
@@ -28,10 +28,10 @@ func harnessDir() (string, error) {
 	return filepath.Dir(file), nil
 }
 
-// appGoMod turns the harness's go.mod into the go.mod of a temporary app:
-// module example.com/tmp, no tool directives, every requirement with its
-// version, and the replace of velox2 pointing at root. Nothing is tidied, so
-// the three apps resolve the same versions of what they share.
+// appGoMod turns a harness go.mod into the go.mod of a temporary app: module
+// example.com/tmp, no tool directives, every requirement with its version, and,
+// unless root is empty, the replace of velox pointing at root. Nothing is
+// tidied, so the three apps resolve the same versions of what they share.
 func appGoMod(harnessMod []byte, root string) ([]byte, error) {
 	f, err := modfile.Parse("go.mod", harnessMod, nil)
 	if err != nil {
@@ -45,38 +45,43 @@ func appGoMod(harnessMod []byte, root string) ([]byte, error) {
 			return nil, err
 		}
 	}
-	const velox2 = "github.com/syssam/velox2"
-	if err := f.DropReplace(velox2, ""); err != nil {
+	const velox = "github.com/syssam/velox"
+	if err := f.DropReplace(velox, ""); err != nil {
 		return nil, err
 	}
-	if err := f.AddReplace(velox2, "", root, ""); err != nil {
-		return nil, err
+	if root != "" {
+		if err := f.AddReplace(velox, "", root, ""); err != nil {
+			return nil, err
+		}
 	}
 	f.Cleanup()
 	return f.Format()
 }
 
-// writeApp writes the app in dir: the go.mod that appGoMod makes of the
-// harness's, the harness's go.sum as it is, and files (path relative to dir →
-// source).
-func writeApp(dir string, files map[string]string) error {
+// writeApp writes o's app in dir: the go.mod that appGoMod makes of the one
+// o's module has, that module's go.sum as it is, and files (path relative to
+// dir → source). Only an ORM in the harness's own module builds on this
+// repository.
+func writeApp(o orm, dir string, files map[string]string) error {
 	hd, err := harnessDir()
 	if err != nil {
 		return err
 	}
-	mod, err := os.ReadFile(filepath.Join(hd, "go.mod"))
+	mod, err := os.ReadFile(filepath.Join(hd, o.ModDir, "go.mod"))
 	if err != nil {
 		return err
 	}
-	root, err := filepath.Abs(filepath.Join(hd, "..", ".."))
-	if err != nil {
-		return err
+	root := ""
+	if o.ModDir == "" {
+		if root, err = filepath.Abs(filepath.Join(hd, "..", "..")); err != nil {
+			return err
+		}
 	}
 	appMod, err := appGoMod(mod, root)
 	if err != nil {
 		return err
 	}
-	sum, err := os.ReadFile(filepath.Join(hd, "go.sum"))
+	sum, err := os.ReadFile(filepath.Join(hd, o.ModDir, "go.sum"))
 	if err != nil {
 		return err
 	}

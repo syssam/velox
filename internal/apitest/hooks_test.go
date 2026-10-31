@@ -5,10 +5,10 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/apitest/fixture"
-	"github.com/syssam/velox2/internal/fakeconn"
-	"github.com/syssam/velox2/internal/testmodel"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/apitest/fixture"
+	"github.com/syssam/velox/internal/fakeconn"
+	"github.com/syssam/velox/internal/testmodel"
 )
 
 func TestUpdateHookRefusesAnEmptyTitle(t *testing.T) {

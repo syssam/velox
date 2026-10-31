@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"strings"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // For the tests of package migrate_test.

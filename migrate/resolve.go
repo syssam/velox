@@ -8,7 +8,7 @@ import (
 	"io/fs"
 	"slices"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // A Resolution is how a human ended a dirty version.

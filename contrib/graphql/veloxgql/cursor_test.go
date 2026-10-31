@@ -14,7 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
 // terms are order terms F0, F1, … ascending with the values vs.

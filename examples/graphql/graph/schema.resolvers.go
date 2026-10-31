@@ -11,8 +11,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/syssam/velox2/contrib/graphql/veloxgql"
-	"github.com/syssam/velox2/examples/graphql/gen"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/examples/graphql/gen"
 )
 
 // CreatePost is the resolver for the createPost field.

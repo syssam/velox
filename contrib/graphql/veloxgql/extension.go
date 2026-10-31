@@ -12,8 +12,8 @@ import (
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/shared"
 )
 
 // Extension is the gqlgen handler extension that serves a schema on a DB.

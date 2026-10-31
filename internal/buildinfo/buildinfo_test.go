@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox2/internal/buildinfo"
+	"github.com/syssam/velox/internal/buildinfo"
 )
 
 func TestGenerator(t *testing.T) {

@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/fakeconn"
-	"github.com/syssam/velox2/internal/testmodel"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/fakeconn"
+	"github.com/syssam/velox/internal/testmodel"
 )
 
 // lastStatement returns an Around hook that copies each statement it sees

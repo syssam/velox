@@ -19,10 +19,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/field"
-	"github.com/syssam/velox2/schema/internal/desc"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/field"
+	"github.com/syssam/velox/schema/internal/desc"
 )
 
 type id [16]byte
@@ -298,7 +298,7 @@ func TestBuildersAreDocumented(t *testing.T) {
 		}
 		parsed = append(parsed, f)
 	}
-	pkg, err := doc.NewFromFiles(fset, parsed, "github.com/syssam/velox2/schema/field")
+	pkg, err := doc.NewFromFiles(fset, parsed, "github.com/syssam/velox/schema/field")
 	if err != nil {
 		t.Fatal(err)
 	}

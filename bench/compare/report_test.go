@@ -24,7 +24,7 @@ func TestReportShowsTimedOutGate(t *testing.T) {
 			if !strings.Contains(line, "timed out") || !strings.Contains(line, "3600") {
 				t.Errorf("the timed-out step's row lacks the gate: %q", line)
 			}
-		case strings.Contains(line, "build-velox2-n100-r1"), strings.Contains(line, "bench-sqlite-velox2-1"):
+		case strings.Contains(line, "build-velox-n100-r1"), strings.Contains(line, "bench-sqlite-velox-1"):
 			other++
 			if strings.Contains(line, "timed out") {
 				t.Errorf("a step that did not time out says so: %q", line)
@@ -73,21 +73,21 @@ func TestReportMarksTimedOutGates(t *testing.T) {
 
 func TestReportLegendAndPrecision(t *testing.T) {
 	rep := fixtureReport(t, fixtureSummary(t))
-	if i, j := strings.Index(rep, "other ORM ÷ velox2"), strings.Index(rep, "## Machine and load"); i < 0 || i > j {
+	if i, j := strings.Index(rep, "other ORM ÷ velox"), strings.Index(rep, "## Machine and load"); i < 0 || i > j {
 		t.Error("the legend on the ratio columns is missing or comes after the first table")
 	}
 	// A small loss does not read as a tie.
 	s := fixtureSummary(t)
 	s.Build["ent"]["100"]["cold_cpu_s"] = newStat([]float64{11.97}, true)
 	rep = fixtureReport(t, s)
-	if !strings.Contains(rep, "ent 11.97 vs velox2 12 (ent ÷ velox2 = 0.998, lower is better)") {
-		t.Errorf("unexpected loss line:\n%s", section(rep, "## Where velox2 loses"))
+	if !strings.Contains(rep, "ent 11.97 vs velox 12 (ent ÷ velox = 0.998, lower is better)") {
+		t.Errorf("unexpected loss line:\n%s", section(rep, "## Where velox loses"))
 	}
 	// Three digits would print both as 12 and the ratio as 1: more are shown.
 	s.Build["ent"]["100"]["cold_cpu_s"] = newStat([]float64{11.9999}, true)
 	rep = fixtureReport(t, s)
-	if !strings.Contains(rep, "ent 11.9999 vs velox2 12 (ent ÷ velox2 = 0.99999, lower is better)") {
-		t.Errorf("the loss reads as a tie:\n%s", section(rep, "## Where velox2 loses"))
+	if !strings.Contains(rep, "ent 11.9999 vs velox 12 (ent ÷ velox = 0.99999, lower is better)") {
+		t.Errorf("the loss reads as a tie:\n%s", section(rep, "## Where velox loses"))
 	}
 	for in, want := range map[float64]string{12: "12", 11.25: "11.2", 0.8333333: "0.833", 1.234e-06: "1.23e-06", 123456.7: "123457"} {
 		if got := fmtNum(in); got != want {
@@ -109,8 +109,8 @@ func TestReportIncomplete(t *testing.T) {
 			t.Errorf("the report does not list %q", m)
 		}
 	}
-	if strings.Contains(rep, "velox2 is best on every metric measured.") {
-		t.Error("an incomplete run claims velox2 is best on every metric")
+	if strings.Contains(rep, "velox is best on every metric measured.") {
+		t.Error("an incomplete run claims velox is best on every metric")
 	}
 	if !strings.Contains(rep, "results are incomplete") {
 		t.Error("the loss section does not say the results are incomplete")
@@ -125,7 +125,7 @@ func TestReportTables(t *testing.T) {
 		"Fixture CPU",
 		"v0.14.6",
 		"| n=100 | 12 (13.5) | 24 (27) | 10 (11.2) | 2 | 0.833 |", // cold_cpu_s
-		"## Where velox2 loses",
+		"## Where velox loses",
 		"cold_cpu_s",
 		"no noise threshold",
 		"sec/op",
@@ -152,8 +152,8 @@ func TestReportTables(t *testing.T) {
 		t.Error("the reference CPU is not shown in the machine and load section")
 	}
 	// The report names cold_cpu_s as the one loss, with ent as the winner.
-	tail := rep[strings.Index(rep, "## Where velox2 loses"):]
-	if n := strings.Count(tail, "\n- "); n != 1 || !strings.Contains(tail, "ent 10 vs velox2 12") {
+	tail := rep[strings.Index(rep, "## Where velox loses"):]
+	if n := strings.Count(tail, "\n- "); n != 1 || !strings.Contains(tail, "ent 10 vs velox 12") {
 		t.Errorf("losses section: %q", tail)
 	}
 }
@@ -162,8 +162,8 @@ func TestReportBestOnEveryMetric(t *testing.T) {
 	s := fixtureSummary(t)
 	s.Build["ent"]["100"]["cold_cpu_s"] = newStat([]float64{12, 14}, true)
 	rep := fixtureReport(t, s)
-	if !strings.Contains(rep, "velox2 is best on every metric measured.") {
-		t.Errorf("no best-everywhere line:\n%s", rep[strings.Index(rep, "## Where velox2 loses"):])
+	if !strings.Contains(rep, "velox is best on every metric measured.") {
+		t.Errorf("no best-everywhere line:\n%s", rep[strings.Index(rep, "## Where velox loses"):])
 	}
 }
 
@@ -270,10 +270,10 @@ func TestReportRerunShare(t *testing.T) {
 }
 
 // TestReportRuntimeOnly checks that a runtime-only report has no build tables,
-// says so, and shows the velox2pgx column on postgres.
+// says so, and shows the veloxpgx column on postgres.
 func TestReportRuntimeOnly(t *testing.T) {
 	fixtureSummary(t) // replaces the probes
-	s, err := summarize(copyFixtureOf(t, "summary-runtime"), map[string]any{"bench_count": 2, "steps": "runtime", "variants": "velox2pgx"})
+	s, err := summarize(copyFixtureOf(t, "summary-runtime"), map[string]any{"bench_count": 2, "steps": "runtime", "variants": "veloxpgx"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -284,17 +284,17 @@ func TestReportRuntimeOnly(t *testing.T) {
 	if !strings.Contains(rep, "Runtime only: the build steps were not run.") {
 		t.Error("the report does not say it is runtime only")
 	}
-	head := "| benchmark | velox2 | velox2 (veloxpgx) | old velox | ent | velox2 (veloxpgx) ÷ velox2 | old velox ÷ velox2 | ent ÷ velox2 |"
+	head := "| benchmark | velox | velox (veloxpgx) | veloxe | ent | velox (veloxpgx) ÷ velox | veloxe ÷ velox | ent ÷ velox |"
 	pg := section(rep, "### sec/op (postgres)")
 	if !strings.Contains(pg, head) {
-		t.Errorf("the postgres sec/op table lacks the velox2 (veloxpgx) columns:\n%s", pg)
+		t.Errorf("the postgres sec/op table lacks the velox (veloxpgx) columns:\n%s", pg)
 	}
-	// The fixture's velox2pgx is 0.8 of velox2's sec/op.
+	// The fixture's veloxpgx is 0.8 of velox's sec/op.
 	if !strings.Contains(pg, "| 0.8 | ") {
 		t.Errorf("no 0.8 ratio in the postgres sec/op table:\n%s", pg)
 	}
 	if strings.Contains(section(rep, "## Runtime: sqlite"), "veloxpgx") {
-		t.Error("the sqlite tables have the velox2 (veloxpgx) column")
+		t.Error("the sqlite tables have the velox (veloxpgx) column")
 	}
 	// A timed-out round gate is still reported without the build tables.
 	s.Steps = append(s.Steps, stepRecord{

@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/ddl"
-	"github.com/syssam/velox2/plugin"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/ddl"
+	"github.com/syssam/velox/plugin"
 )
 
 // The names of what the graph puts in a database that velox derives. Build's

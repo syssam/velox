@@ -9,8 +9,8 @@ import (
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/shared"
 )
 
 // The codes ErrorPresenter writes as extensions.code: Apollo's, NOT_FOUND

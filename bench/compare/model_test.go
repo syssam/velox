@@ -156,7 +156,7 @@ func TestEditSchema(t *testing.T) {
 }
 
 func TestORMByName(t *testing.T) {
-	for _, name := range []string{"velox2", "oldvelox", "ent"} {
+	for _, name := range []string{"velox", "veloxe", "ent"} {
 		if o, err := ormByName(name); err != nil || o.Name != name {
 			t.Errorf("ormByName(%q) = %q, %v", name, o.Name, err)
 		}
@@ -168,8 +168,8 @@ func TestORMByName(t *testing.T) {
 		name string
 		argv []string
 	}{
-		{"velox2", []string{"/t/velox-gen", "-out", "gen", "./schema"}},
-		{"oldvelox", []string{"/t/velox", "generate", "--target", "./velox", "./schema"}},
+		{"velox", []string{"/t/velox-gen", "-out", "gen", "./schema"}},
+		{"veloxe", []string{"/t/velox", "generate", "--target", "./velox", "./schema"}},
 		{"ent", []string{"/t/ent", "generate", "./ent/schema"}},
 	} {
 		o, _ := ormByName(c.name)
@@ -181,7 +181,7 @@ func TestORMByName(t *testing.T) {
 
 // TestSchemasEquivalent pins what the comparison rests on: after the DSLs'
 // spellings are normalised, the three ORMs' schema files are the same, entity
-// by entity. What stays different is the index method, which velox2 does not write.
+// by entity. What stays different is the index method, which velox does not write.
 func TestSchemasEquivalent(t *testing.T) {
 	const n = 20
 	importBlock := regexp.MustCompile(`(?s)import \(.*?\n\)\n`)
@@ -200,7 +200,7 @@ func TestSchemasEquivalent(t *testing.T) {
 			name := "e" + strconv.Itoa(i) + ".go"
 			want := norm(orms[0], ref[filepath.Join(orms[0].SchemaDir, name)])
 			if g := norm(o, got[filepath.Join(o.SchemaDir, name)]); g != want {
-				t.Errorf("%s %s differs from velox2's:\n%s\nvs\n%s", o.Name, name, g, want)
+				t.Errorf("%s %s differs from velox's:\n%s\nvs\n%s", o.Name, name, g, want)
 			}
 		}
 	}

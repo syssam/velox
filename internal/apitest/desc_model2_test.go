@@ -3,8 +3,8 @@ package apitest
 import (
 	"context"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/apitest/fixture"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/apitest/fixture"
 )
 
 func pnoteReading(p velox.Pred[fixture.Pnote], err error) context.Context {

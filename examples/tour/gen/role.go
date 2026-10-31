@@ -7,7 +7,7 @@ package gen
 import (
 	"context"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // Role is what a user may do with billing data.

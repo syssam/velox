@@ -6,7 +6,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // Config configures the adapter. The zero Config traces into the global

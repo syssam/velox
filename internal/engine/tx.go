@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/syssam/velox2/internal/conn"
+	"github.com/syssam/velox/internal/conn"
 )
 
 // The driver-facing types are internal/conn's, so that velox's driver packages

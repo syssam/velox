@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // userKey is the context key of the user the tests act as.

@@ -3,8 +3,8 @@ package gqlimpl
 import (
 	"context"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
 // Paginate is NewConnection and Page in one call, for the tests.

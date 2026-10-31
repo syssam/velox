@@ -1,11 +1,11 @@
 // Package graphql holds the annotations that shape the GraphQL schema velox
 // generates, and nothing else. A schema package imports it, so it imports only
-// the standard library and velox2/schema: the schema package, velox-gen's
+// the standard library and velox/schema: the schema package, velox-gen's
 // loader and the application's schema code compile no GraphQL library.
 //
 // A file that also imports gqlgen's graphql package names this one:
 //
-//	import vgraphql "github.com/syssam/velox2/contrib/graphql"
+//	import vgraphql "github.com/syssam/velox/contrib/graphql"
 //
 // Every constructor returns the same type, Annotation, named "graphql". A
 // schema, field or edge lists as many as it likes in Annotations(), and the
@@ -112,8 +112,8 @@
 // module. Install both as tools of the application's module and run velox-gen
 // with the plugin:
 //
-//	go get -tool github.com/syssam/velox2/cmd/velox-gen
-//	go get -tool github.com/syssam/velox2/contrib/graphql/cmd/velox-graphql
+//	go get -tool github.com/syssam/velox/cmd/velox-gen
+//	go get -tool github.com/syssam/velox/contrib/graphql/cmd/velox-graphql
 //	go tool velox-gen -out gen -plugin velox-graphql ./schema
 //
 // That writes the entities, as velox-gen always does, and gen/velox.graphqls,
@@ -181,7 +181,7 @@
 //
 // The application writes the root query's resolvers, one call each: Node
 // and Nodes for node and nodes, and the root connection function for each
-// QueryField. The example in examples/graphql in the velox2 repository is a
+// QueryField. The example in examples/graphql in the velox repository is a
 // whole server: a schema, its gqlgen.yml and its resolvers.
 //
 // # Mutations
@@ -441,7 +441,7 @@
 //	  - <module>/gen
 //	models:
 //	  Node:
-//	    model: github.com/syssam/velox2/contrib/graphql/veloxgql.Noder
+//	    model: github.com/syssam/velox/contrib/graphql/veloxgql.Noder
 //	  Int:
 //	    model:
 //	      - github.com/99designs/gqlgen/graphql.Int
@@ -455,25 +455,25 @@
 //	  Float:
 //	    model:
 //	      - github.com/99designs/gqlgen/graphql.FloatContext
-//	      - github.com/syssam/velox2/contrib/graphql/veloxgql.Float32
+//	      - github.com/syssam/velox/contrib/graphql/veloxgql.Float32
 //	  Uint64:
 //	    model:
-//	      - github.com/syssam/velox2/contrib/graphql/veloxgql.Uint64
-//	      - github.com/syssam/velox2/contrib/graphql/veloxgql.Uint
+//	      - github.com/syssam/velox/contrib/graphql/veloxgql.Uint64
+//	      - github.com/syssam/velox/contrib/graphql/veloxgql.Uint
 //	  Time:
-//	    model: github.com/syssam/velox2/contrib/graphql/veloxgql.Time
+//	    model: github.com/syssam/velox/contrib/graphql/veloxgql.Time
 //	  UUID:
-//	    model: github.com/syssam/velox2/contrib/graphql/veloxgql.UUID
+//	    model: github.com/syssam/velox/contrib/graphql/veloxgql.UUID
 //	  Bytes:
-//	    model: github.com/syssam/velox2/contrib/graphql/veloxgql.Bytes
+//	    model: github.com/syssam/velox/contrib/graphql/veloxgql.Bytes
 //	  JSON:
-//	    model: github.com/syssam/velox2/contrib/graphql/veloxgql.JSON
+//	    model: github.com/syssam/velox/contrib/graphql/veloxgql.JSON
 //	  Cursor:
-//	    model: github.com/syssam/velox2/contrib/graphql/veloxgql.Cursor
+//	    model: github.com/syssam/velox/contrib/graphql/veloxgql.Cursor
 //	  OrderDirection:
-//	    model: github.com/syssam/velox2/contrib/graphql/veloxgql.OrderDirection
+//	    model: github.com/syssam/velox/contrib/graphql/veloxgql.OrderDirection
 //	  PageInfo:
-//	    model: github.com/syssam/velox2/contrib/graphql/veloxgql.PageInfo
+//	    model: github.com/syssam/velox/contrib/graphql/veloxgql.PageInfo
 //
 // An enum field of the application's own Go type is an SDL enum that
 // velox.graphqls binds to that type with @goModel(model: "<package

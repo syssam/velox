@@ -9,8 +9,8 @@ package mixin
 import (
 	"time"
 
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/field"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/field"
 )
 
 // Schema is embedded by every mixin. Its methods declare nothing; a mixin

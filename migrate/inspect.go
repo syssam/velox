@@ -8,8 +8,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/ddl"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/ddl"
 )
 
 // Inspect reads the tables of db, a database of dialect d, as a Schema:

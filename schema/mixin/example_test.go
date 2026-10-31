@@ -3,8 +3,8 @@ package mixin_test
 import (
 	"fmt"
 
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/mixin"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/mixin"
 )
 
 // Time adds created_at and updated_at to every schema that lists it.

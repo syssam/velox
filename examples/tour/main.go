@@ -1,4 +1,4 @@
-// Command tour walks through velox2 on a SQLite file made by its migrations: it
+// Command tour walks through velox on a SQLite file made by its migrations: it
 // inserts, reads and changes the invoices of package gen as two
 // organizations, and prints what each step did.
 package main
@@ -18,9 +18,9 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/examples/tour/gen"
-	"github.com/syssam/velox2/migrate"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/examples/tour/gen"
+	"github.com/syssam/velox/migrate"
 )
 
 func main() {

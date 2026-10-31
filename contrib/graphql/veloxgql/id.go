@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/shared"
 )
 
 // Noder is the Go type of the GraphQL Node interface: gqlgen binds Node to

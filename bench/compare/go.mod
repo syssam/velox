@@ -1,14 +1,14 @@
-module github.com/syssam/velox2/bench/compare
+module github.com/syssam/velox/bench/compare
 
 go 1.27.0
 
 toolchain go1.27.3
 
-replace github.com/syssam/velox2 => ../..
+replace github.com/syssam/velox => ../..
 
 require (
 	github.com/jackc/pgx/v5 v5.11.0
-	github.com/syssam/velox2 v0.0.0
+	github.com/syssam/velox v0.0.0
 	golang.org/x/mod v0.42.0
 	modernc.org/sqlite v1.60.1
 )
@@ -23,10 +23,8 @@ require (
 	github.com/clipperhouse/displaywidth v0.6.2 // indirect
 	github.com/clipperhouse/stringish v0.1.1 // indirect
 	github.com/clipperhouse/uax29/v2 v2.3.0 // indirect
-	github.com/dave/jennifer v1.7.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fatih/color v1.18.0 // indirect
-	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-openapi/inflect v0.21.5 // indirect
 	github.com/go-sql-driver/mysql v1.10.1 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
@@ -46,9 +44,9 @@ require (
 	github.com/olekukonko/ll v0.1.4-0.20260115111900-9e59c2286df0 // indirect
 	github.com/olekukonko/tablewriter v1.1.3 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
+	github.com/rogpeppe/go-internal v1.16.0 // indirect
 	github.com/spf13/cobra v1.7.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/syssam/velox v0.3.1-0.20261028051754-a7d44fb423b0 // indirect
 	github.com/zclconf/go-cty v1.17.0 // indirect
 	github.com/zclconf/go-cty-yaml v1.2.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
@@ -64,6 +62,5 @@ require (
 
 tool (
 	entgo.io/ent/cmd/ent
-	github.com/syssam/velox/cmd/velox
-	github.com/syssam/velox2/cmd/velox-gen
+	github.com/syssam/velox/cmd/velox-gen
 )

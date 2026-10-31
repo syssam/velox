@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/syssam/velox2/internal/conn"
+	"github.com/syssam/velox/internal/conn"
 )
 
 func TestTxOptions(t *testing.T) {

@@ -5,9 +5,9 @@ package schema
 import (
 	"errors"
 
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/edge"
-	"github.com/syssam/velox2/schema/field"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/edge"
+	"github.com/syssam/velox/schema/field"
 )
 
 type Post struct{ schema.Schema }

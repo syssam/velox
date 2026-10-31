@@ -3,7 +3,7 @@ package sdl
 import (
 	"fmt"
 
-	"github.com/syssam/velox2/contrib/graphql"
+	"github.com/syssam/velox/contrib/graphql"
 )
 
 // order is an entity's order: input XOrder and enum XOrderField.

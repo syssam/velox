@@ -6,8 +6,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/syssam/velox2/internal/codegen"
-	"github.com/syssam/velox2/migrate"
+	"github.com/syssam/velox/internal/codegen"
+	"github.com/syssam/velox/migrate"
 )
 
 // runMigrateSQL is velox-gen migrate sql: the CREATE statements of the

@@ -7,10 +7,10 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/apitest/fixture"
-	"github.com/syssam/velox2/internal/fakeconn"
-	"github.com/syssam/velox2/internal/testmodel"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/apitest/fixture"
+	"github.com/syssam/velox/internal/fakeconn"
+	"github.com/syssam/velox/internal/testmodel"
 )
 
 // sqlOK returns SQL(ctx)'s text and args, failing t on its error:

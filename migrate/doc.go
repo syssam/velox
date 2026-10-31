@@ -171,7 +171,7 @@
 //
 // # Adopting a database
 //
-// A database made before the directory, by ent, by old velox or by hand,
+// A database made before the directory, by ent, by veloxe or by hand,
 // is adopted in five steps. In a program, [Baseline] is step 1 and
 // [WithBaseline] step 3:
 //
@@ -223,7 +223,7 @@
 // migrate sql prints the schema package's CREATE statements, the first file
 // migrate diff would write for a new directory, as plain DDL for Atlas's
 // external_schema. Add velox-gen to the module with go get -tool
-// github.com/syssam/velox2/cmd/velox-gen, and run atlas from the module root
+// github.com/syssam/velox/cmd/velox-gen, and run atlas from the module root
 // with this atlas.hcl:
 //
 //	data "external_schema" "velox" {

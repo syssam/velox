@@ -1,4 +1,4 @@
-# velox2 examples
+# velox examples
 
 Small runnable programs, one topic each but for tracker, a whole service, on SQLite files in a temporary directory (routing uses one per database).
 Each directory is a `main` package with its own `schema/` and `gen/` packages,
@@ -55,7 +55,7 @@ velox's own `migrate` and Atlas are alternatives for one directory.
   `go tool velox-gen migrate apply -db <dsn>` applies the pending ones.
 - **Atlas.** `go tool velox-gen migrate sql` prints the schema package's
   `CREATE` statements, which Atlas reads through its `external_schema`. Add
-  the tool with `go get -tool github.com/syssam/velox2/cmd/velox-gen`, then
+  the tool with `go get -tool github.com/syssam/velox/cmd/velox-gen`, then
   run `atlas` from the module root with this `atlas.hcl`:
 
   ```hcl
@@ -79,7 +79,7 @@ velox's own `migrate` and Atlas are alternatives for one directory.
 
 ### Adopting an existing database
 
-A database made before the directory (by ent, by old velox or by hand) joins
+A database made before the directory (by ent, by veloxe or by hand) joins
 velox's planner in five steps:
 
 1. Run `go tool velox-gen migrate baseline -dialect postgres -db <dsn>`
@@ -132,12 +132,12 @@ go -C graphql tool gqlgen generate
 CI checks both: velox-gen with `-check`, and gqlgen by running it and failing
 when the checked-in `graphql/graph` differs.
 
-This directory is its own Go module, so the velox2 module does not depend on
+This directory is its own Go module, so the velox module does not depend on
 anything the examples use. In a module of your own, add the tool with
-`go get -tool github.com/syssam/velox2/cmd/velox-gen` (and, for GraphQL,
-`github.com/syssam/velox2/contrib/graphql/cmd/velox-graphql` and
+`go get -tool github.com/syssam/velox/cmd/velox-gen` (and, for GraphQL,
+`github.com/syssam/velox/contrib/graphql/cmd/velox-graphql` and
 `github.com/99designs/gqlgen`). This module instead points
-`github.com/syssam/velox2` (which holds the generator), `contrib/veloxotel` and
+`github.com/syssam/velox` (which holds the generator), `contrib/veloxotel` and
 `contrib/graphql` at the directories beside it with `replace` lines, so it
 always builds against the code there. Only the otel example uses the
 OpenTelemetry SDK, and only the graphql example gqlgen.

@@ -8,17 +8,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox2/contrib/graphql/internal/sdl"
-	"github.com/syssam/velox2/internal/tempmod"
+	"github.com/syssam/velox/contrib/graphql/internal/sdl"
+	"github.com/syssam/velox/internal/tempmod"
 )
 
 const e2eSchema = `package schema
 
 import (
-	"github.com/syssam/velox2/contrib/graphql"
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/edge"
-	"github.com/syssam/velox2/schema/field"
+	"github.com/syssam/velox/contrib/graphql"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/edge"
+	"github.com/syssam/velox/schema/field"
 )
 
 type User struct{ schema.Schema }
@@ -137,8 +137,8 @@ func app(t *testing.T, files map[string]string, withGqlgen ...bool) (string, fun
 	}
 	var sum []byte
 	sums := []string{"go.sum", "contrib/graphql/go.sum"}
-	tools := "\tgithub.com/syssam/velox2/cmd/velox-gen\n" +
-		"\tgithub.com/syssam/velox2/contrib/graphql/cmd/velox-graphql\n"
+	tools := "\tgithub.com/syssam/velox/cmd/velox-gen\n" +
+		"\tgithub.com/syssam/velox/contrib/graphql/cmd/velox-graphql\n"
 	pins := ""
 	if gql {
 		sums = append(sums, "examples/go.sum")
@@ -155,12 +155,12 @@ func app(t *testing.T, files map[string]string, withGqlgen ...bool) (string, fun
 	mod := "module example.com/app\n\ngo 1.27.0\n\n" +
 		"tool (\n" + tools + ")\n\n" +
 		"require (\n" +
-		"\tgithub.com/syssam/velox2 v0.0.0\n" +
-		"\tgithub.com/syssam/velox2/contrib/graphql v0.0.0\n" +
+		"\tgithub.com/syssam/velox v0.0.0\n" +
+		"\tgithub.com/syssam/velox/contrib/graphql v0.0.0\n" +
 		")\n\n" + pins +
 		"replace (\n" +
-		"\tgithub.com/syssam/velox2 => " + repo + "\n" +
-		"\tgithub.com/syssam/velox2/contrib/graphql => " + filepath.Join(repo, "contrib", "graphql") + "\n" +
+		"\tgithub.com/syssam/velox => " + repo + "\n" +
+		"\tgithub.com/syssam/velox/contrib/graphql => " + filepath.Join(repo, "contrib", "graphql") + "\n" +
 		")\n"
 	all := map[string]string{"go.mod": mod, "go.sum": string(sum)}
 	maps.Copy(all, files)
@@ -294,10 +294,10 @@ import (
 
 	"example.com/app/ids"
 	"example.com/app/levels"
-	"github.com/syssam/velox2/contrib/graphql"
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/edge"
-	"github.com/syssam/velox2/schema/field"
+	"github.com/syssam/velox/contrib/graphql"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/edge"
+	"github.com/syssam/velox/schema/field"
 )
 
 type Event struct{ schema.Schema }
@@ -456,8 +456,8 @@ import (
 	_ "modernc.org/sqlite"
 
 	"example.com/app/gen"
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
 const ddl = ` + "`" + `
@@ -788,8 +788,8 @@ import (
 	"example.com/app/gen"
 	"example.com/app/ids"
 	"example.com/app/levels"
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
 const ddl = ` + "`" + `

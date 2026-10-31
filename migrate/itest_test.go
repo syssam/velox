@@ -13,13 +13,13 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/codegen"
-	"github.com/syssam/velox2/internal/codegen/loadjson"
-	"github.com/syssam/velox2/migrate"
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/edge"
-	"github.com/syssam/velox2/schema/field"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/codegen"
+	"github.com/syssam/velox/internal/codegen/loadjson"
+	"github.com/syssam/velox/migrate"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/edge"
+	"github.com/syssam/velox/schema/field"
 )
 
 // sqlFiles is every .sql file of fsys with its text, for a failure's

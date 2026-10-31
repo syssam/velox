@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
 // The application's own Go types of person's columns, which a where input

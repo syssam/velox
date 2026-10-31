@@ -13,7 +13,7 @@ func TestModuleVersion(t *testing.T) {
 		return &debug.BuildInfo{
 			Main: debug.Module{Path: "example.com/app", Version: "(devel)"},
 			Deps: []*debug.Module{
-				{Path: "github.com/syssam/velox2", Version: "v0.0.0-00010101000000-000000000000", Replace: &debug.Module{Path: "../.."}},
+				{Path: "github.com/syssam/velox", Version: "v0.0.0-00010101000000-000000000000", Replace: &debug.Module{Path: "../.."}},
 				{Path: modulePath, Version: v, Replace: r},
 			},
 		}

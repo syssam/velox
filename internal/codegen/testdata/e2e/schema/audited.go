@@ -6,9 +6,9 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/field"
-	"github.com/syssam/velox2/schema/mixin"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/field"
+	"github.com/syssam/velox/schema/mixin"
 )
 
 // Audited records who created a row; the name must be lower case.

@@ -3,7 +3,7 @@ package gen
 import (
 	"context"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // The tenant column already confines every statement to the caller's Org. These

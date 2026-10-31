@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync/atomic"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // HookRuns counts the inserts of Users that the hook saw.

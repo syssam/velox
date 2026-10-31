@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/fakeconn"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/fakeconn"
 )
 
 // ovOwner has notes, and picks of notes through ovPick; ovNote's Read policy

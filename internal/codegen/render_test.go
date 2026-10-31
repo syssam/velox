@@ -92,7 +92,7 @@ func goldenGraph(t *testing.T, name string) *Graph {
 			t.Fatal(err)
 		}
 		// The first line is the //go:build ignore that keeps go vet ./...
-		// from type-checking the fixture as a package of velox2.
+		// from type-checking the fixture as a package of velox.
 		_, src, _ := bytes.Cut(b, []byte("\n"))
 		files["schema/"+filepath.Base(p)] = string(src)
 	}

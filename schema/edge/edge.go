@@ -14,8 +14,8 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/internal/desc"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/internal/desc"
 )
 
 // typ returns the name and the package path of the schema type that t, a

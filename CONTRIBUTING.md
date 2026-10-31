@@ -1,4 +1,4 @@
-# Contributing to velox2
+# Contributing to velox
 
 This page says how the repository is laid out, how to check a change, and what
 a change has to keep true. Go 1.27 is required. The database tests need Docker.
@@ -8,7 +8,7 @@ a change has to keep true. Go 1.27 is required. The database tests need Docker.
 There are five Go modules. A change that touches more than one is checked in
 each.
 
-- The root, `github.com/syssam/velox2`: the runtime, with `schema`, `migrate`,
+- The root, `github.com/syssam/velox`: the runtime, with `schema`, `migrate`,
   `plugin`, `dbtype` (the plain data types the root re-exports) and
   `cmd/velox-gen`. `internal/` holds the non-generic runtime (`engine`), the
   generator (`codegen`), the DDL writer (`ddl`), the generated test models
@@ -21,8 +21,8 @@ each.
 - `contrib/veloxotel`: OpenTelemetry tracing and metrics.
 - `examples`: the runnable examples. Each has its schema, its generated code and
   its migrations.
-- `bench/compare`: the harness that compares velox2's build and runtime cost
-  with old velox and ent. CI checks it but does not run it.
+- `bench/compare`: the harness that compares velox's build and runtime cost
+  with veloxe and ent. CI checks it but does not run it.
 
 ## Checks
 
@@ -89,17 +89,17 @@ To run the database tests without `ci-local.sh`, start the same databases and
 export the DSNs of `scripts/docker-compose.ci.yml`:
 
 ```sh
-docker compose -f scripts/docker-compose.ci.yml -p velox2-ci up -d --wait
+docker compose -f scripts/docker-compose.ci.yml -p velox-ci up -d --wait
 export VELOX_TEST_POSTGRES='postgres://velox:velox@127.0.0.1:55432/velox?sslmode=disable'
 export VELOX_TEST_MYSQL='velox:velox@tcp(127.0.0.1:53306)/velox?parseTime=true&clientFoundRows=true'
 export VELOX_TEST_MYSQL_ADMIN='root:velox@tcp(127.0.0.1:53306)/?parseTime=true&clientFoundRows=true'
 export VELOX_ITEST_REQUIRE=1
 go test -race -count=1 ./...
-docker compose -f scripts/docker-compose.ci.yml -p velox2-ci down -v
+docker compose -f scripts/docker-compose.ci.yml -p velox-ci down -v
 ```
 
 Do not run this while `ci-local.sh` runs: both use the compose project
-`velox2-ci`.
+`velox-ci`.
 
 ## Generated code
 
@@ -193,7 +193,7 @@ go run ./bench/scale -n 500 -s 100 -graphql -check bench/scale/thresholds.json
 (with the database variables set) measures the read path on every database;
 `docs/decisions/0018-pgx-stdlib-scan-wrapper.md` has its before and after.
 
-`bash bench/compare/run.sh` measures velox2, old velox and ent. It takes hours,
+`bash bench/compare/run.sh` measures velox, veloxe and ent. It takes hours,
 starts PostgreSQL, and writes `bench/compare/results/`. The last report is
 `docs/reviews/2026-10-29-perf-comparison.md`.
 

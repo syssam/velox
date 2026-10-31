@@ -19,14 +19,14 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/syssam/velox2/internal/codegen"
+	"github.com/syssam/velox/internal/codegen"
 )
 
 // defaultSchema is the schema package when no package is named.
 const defaultSchema = "./schema"
 
 // veloxPath is the import path of the velox library.
-const veloxPath = "github.com/syssam/velox2"
+const veloxPath = "github.com/syssam/velox"
 
 // header is the first line of every file velox-gen writes. velox-gen deletes
 // a file that starts with it when no entity produces that file any more, and

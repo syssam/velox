@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/codegen"
-	"github.com/syssam/velox2/internal/codegen/loadjson"
-	"github.com/syssam/velox2/migrate"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/codegen"
+	"github.com/syssam/velox/internal/codegen/loadjson"
+	"github.com/syssam/velox/migrate"
 )
 
 // The generator behind TestMigrateRandom and FuzzDiff: a model of 1 to 4

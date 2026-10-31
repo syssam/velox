@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox2/internal/engine"
+	"github.com/syssam/velox/internal/engine"
 )
 
 func TestMutation(t *testing.T) {

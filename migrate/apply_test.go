@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // applyChanges is s with changes applied as a model: what a database that

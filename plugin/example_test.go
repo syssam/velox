@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/syssam/velox2/plugin"
+	"github.com/syssam/velox/plugin"
 )
 
 // Run reads a Request and writes a Response, and a plugin's main calls Main, which

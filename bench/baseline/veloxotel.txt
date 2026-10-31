@@ -3,7 +3,7 @@
 # load (1, 5, 15 min, before the run): 5.57 6.09 7.37
 goos: darwin
 goarch: arm64
-pkg: github.com/syssam/velox2/contrib/veloxotel
+pkg: github.com/syssam/velox/contrib/veloxotel
 cpu: Apple M3 Max
 BenchmarkAdapter-14     	   36366	      6840 ns/op	    9354 B/op	      42 allocs/op
 BenchmarkAdapter-14     	   31305	      7656 ns/op	    9364 B/op	      42 allocs/op
@@ -18,4 +18,4 @@ BenchmarkBareSpan-14    	   88707	      2682 ns/op	    3191 B/op	      25 allocs
 BenchmarkBareSpan-14    	   91880	      2563 ns/op	    3188 B/op	      25 allocs/op
 BenchmarkBareSpan-14    	   94755	      2503 ns/op	    3206 B/op	      25 allocs/op
 PASS
-ok  	github.com/syssam/velox2/contrib/veloxotel	3.374s
+ok  	github.com/syssam/velox/contrib/veloxotel	3.374s

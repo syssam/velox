@@ -3,7 +3,7 @@ package gqlimpl
 import (
 	"errors"
 
-	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/shared"
 )
 
 // errPanicked is a connection's error, for the callers of Page or

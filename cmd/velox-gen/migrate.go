@@ -14,8 +14,8 @@ import (
 	"strconv"
 	"strings"
 
-	velox2 "github.com/syssam/velox2"
-	"github.com/syssam/velox2/migrate"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/migrate"
 )
 
 // defaultMigrations is the migration directory when -dir is not given.
@@ -212,7 +212,7 @@ func (c *migrateCmd) readDir(dir string, staleCode int) (*migrate.Dir, int, bool
 }
 
 // dialectFlag is -dialect: postgres, mysql or sqlite.
-type dialectFlag struct{ d velox2.Dialect }
+type dialectFlag struct{ d velox.Dialect }
 
 func (f *dialectFlag) String() string {
 	if f == nil || f.d == 0 {
@@ -222,7 +222,7 @@ func (f *dialectFlag) String() string {
 }
 
 func (f *dialectFlag) Set(s string) error {
-	for _, d := range [...]velox2.Dialect{velox2.Postgres, velox2.MySQL, velox2.SQLite} {
+	for _, d := range [...]velox.Dialect{velox.Postgres, velox.MySQL, velox.SQLite} {
 		if d.String() == s {
 			f.d = d
 			return nil

@@ -7,8 +7,8 @@ import (
 
 	"github.com/vektah/gqlparser/v2/ast"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
 // TestSelectedConnection: through a connection, the fields selected on its

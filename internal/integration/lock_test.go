@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/testmodel"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/testmodel"
 )
 
 // lockWaiter returns a function reporting whether a session running the

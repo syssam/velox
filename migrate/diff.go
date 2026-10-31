@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // Diff returns the changes that turn from, the snapshot, into to, the desired

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // DAuthor is tenant-scoped, has an immutable creation time, a validated name

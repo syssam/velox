@@ -17,9 +17,9 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/contrib/veloxotel"
-	"github.com/syssam/velox2/internal/testmodel"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/veloxotel"
+	"github.com/syssam/velox/internal/testmodel"
 )
 
 var (
@@ -82,7 +82,7 @@ func TestSelectSpan(t *testing.T) {
 		"velox.tag.team":      attribute.StringValue("billing"),
 		"code.file.path":      attribute.StringValue("statement_test.go"),
 		"code.line.number":    attribute.Int64Value(int64(line)),
-		"code.function.name":  attribute.StringValue("github.com/syssam/velox2/contrib/veloxotel_test.TestSelectSpan"),
+		"code.function.name":  attribute.StringValue("github.com/syssam/velox/contrib/veloxotel_test.TestSelectSpan"),
 	} {
 		if a[k] != want {
 			t.Errorf("%s = %v, want %v", k, a[k].String(), want.String())

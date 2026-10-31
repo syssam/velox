@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/syssam/velox2/internal/buildcost"
-	"github.com/syssam/velox2/internal/tempmod"
+	"github.com/syssam/velox/internal/buildcost"
+	"github.com/syssam/velox/internal/tempmod"
 )
 
 // appPrefix is the import path of every app's module.
@@ -213,7 +213,7 @@ func measureBuild(c buildConfig) (r buildReport, err error) {
 	}
 
 	// 1. The app, with its schemas.
-	if err := writeApp(app, o.Schema(c.N)); err != nil {
+	if err := writeApp(o, app, o.Schema(c.N)); err != nil {
 		return r, err
 	}
 	// 2. The reference build, before.
@@ -222,10 +222,10 @@ func measureBuild(c buildConfig) (r buildReport, err error) {
 	}
 	// A discarded code generation in a throwaway app with the same schemas,
 	// so that the ordinary GOCACHE is warm for this ORM's dependencies (ent's
-	// go list -export, old velox's loader). The measured app is new, so old
+	// go list -export, veloxe's loader). The measured app is new, so old
 	// velox's .velox cache in it is not shared.
 	warm := filepath.Join(dir, "warm")
-	if err := writeApp(warm, o.Schema(c.N)); err != nil {
+	if err := writeApp(o, warm, o.Schema(c.N)); err != nil {
 		return r, err
 	}
 	if _, _, err := codegen(warm, o, c.Tools); err != nil {
@@ -316,7 +316,7 @@ func measureBuild(c buildConfig) (r buildReport, err error) {
 // is complete.
 func buildMain(args []string) int {
 	fs := flag.NewFlagSet("build", flag.ContinueOnError)
-	name := fs.String("orm", "", "the ORM: velox2, oldvelox or ent")
+	name := fs.String("orm", "", "the ORM: velox, veloxe or ent")
 	var c buildConfig
 	fs.IntVar(&c.N, "n", 100, "entities (a multiple of 10)")
 	fs.IntVar(&c.Services, "s", 20, "services")

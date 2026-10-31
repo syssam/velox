@@ -18,9 +18,9 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/examples/tx/gen"
-	"github.com/syssam/velox2/migrate"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/examples/tx/gen"
+	"github.com/syssam/velox/migrate"
 )
 
 func main() {

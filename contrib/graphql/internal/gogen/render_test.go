@@ -18,11 +18,11 @@ import (
 
 	gqlast "github.com/vektah/gqlparser/v2/ast"
 
-	"github.com/syssam/velox2/contrib/graphql"
-	"github.com/syssam/velox2/contrib/graphql/internal/english"
-	"github.com/syssam/velox2/contrib/graphql/internal/modeltest"
-	"github.com/syssam/velox2/contrib/graphql/internal/sdl"
-	"github.com/syssam/velox2/plugin"
+	"github.com/syssam/velox/contrib/graphql"
+	"github.com/syssam/velox/contrib/graphql/internal/english"
+	"github.com/syssam/velox/contrib/graphql/internal/modeltest"
+	"github.com/syssam/velox/contrib/graphql/internal/sdl"
+	"github.com/syssam/velox/plugin"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden Go files")
@@ -660,7 +660,7 @@ func TestGeneratedFilesCarryTheGuard(t *testing.T) {
 			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion3\n"); n != 1 {
 				t.Errorf("%s: %s has the guard %d times, want once", label, name, n)
 			}
-			if !strings.Contains(src, `"github.com/syssam/velox2/contrib/graphql/veloxgql"`) {
+			if !strings.Contains(src, `"github.com/syssam/velox/contrib/graphql/veloxgql"`) {
 				t.Errorf("%s: %s does not import veloxgql", label, name)
 			}
 		}
@@ -1481,7 +1481,7 @@ func deleteOnlyModel(t *testing.T) *plugin.Model {
 // name the type with its article ("an Account", "a Post"), and Delete<T>
 // names the join rows exactly when the type has a many-to-many edge.
 func TestMutationGodocPoints(t *testing.T) {
-	const pointer = `See "Mutations" in the documentation of package github.com/syssam/velox2/contrib/graphql`
+	const pointer = `See "Mutations" in the documentation of package github.com/syssam/velox/contrib/graphql`
 	seen := map[string]int{}
 	article := map[string]string{}
 	joinRows := map[string]bool{}

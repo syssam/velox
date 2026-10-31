@@ -12,8 +12,8 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/testmodel"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/testmodel"
 )
 
 // unreachable is a connector to no database: a dry run never connects.

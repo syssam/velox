@@ -16,10 +16,10 @@ import (
 const e2eCollectSchema = `package schema
 
 import (
-	"github.com/syssam/velox2/contrib/graphql"
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/edge"
-	"github.com/syssam/velox2/schema/field"
+	"github.com/syssam/velox/contrib/graphql"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/edge"
+	"github.com/syssam/velox/schema/field"
 )
 
 type Author struct{ schema.Schema }
@@ -85,7 +85,7 @@ const e2eCollectPolicy = `package gen
 import (
 	"context"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // Policy hides the withdrawn reviews, those of 0 stars.
@@ -118,7 +118,7 @@ autobind:
   - example.com/app/gen
 models:
   Node:
-    model: github.com/syssam/velox2/contrib/graphql/veloxgql.Noder
+    model: github.com/syssam/velox/contrib/graphql/veloxgql.Noder
   Int:
     model:
       - github.com/99designs/gqlgen/graphql.Int
@@ -132,25 +132,25 @@ models:
   Float:
     model:
       - github.com/99designs/gqlgen/graphql.FloatContext
-      - github.com/syssam/velox2/contrib/graphql/veloxgql.Float32
+      - github.com/syssam/velox/contrib/graphql/veloxgql.Float32
   Uint64:
     model:
-      - github.com/syssam/velox2/contrib/graphql/veloxgql.Uint64
-      - github.com/syssam/velox2/contrib/graphql/veloxgql.Uint
+      - github.com/syssam/velox/contrib/graphql/veloxgql.Uint64
+      - github.com/syssam/velox/contrib/graphql/veloxgql.Uint
   Time:
-    model: github.com/syssam/velox2/contrib/graphql/veloxgql.Time
+    model: github.com/syssam/velox/contrib/graphql/veloxgql.Time
   UUID:
-    model: github.com/syssam/velox2/contrib/graphql/veloxgql.UUID
+    model: github.com/syssam/velox/contrib/graphql/veloxgql.UUID
   Bytes:
-    model: github.com/syssam/velox2/contrib/graphql/veloxgql.Bytes
+    model: github.com/syssam/velox/contrib/graphql/veloxgql.Bytes
   JSON:
-    model: github.com/syssam/velox2/contrib/graphql/veloxgql.JSON
+    model: github.com/syssam/velox/contrib/graphql/veloxgql.JSON
   Cursor:
-    model: github.com/syssam/velox2/contrib/graphql/veloxgql.Cursor
+    model: github.com/syssam/velox/contrib/graphql/veloxgql.Cursor
   OrderDirection:
-    model: github.com/syssam/velox2/contrib/graphql/veloxgql.OrderDirection
+    model: github.com/syssam/velox/contrib/graphql/veloxgql.OrderDirection
   PageInfo:
-    model: github.com/syssam/velox2/contrib/graphql/veloxgql.PageInfo
+    model: github.com/syssam/velox/contrib/graphql/veloxgql.PageInfo
 `
 
 // e2eCollectResolvers are the root query's resolvers, one line each; gqlgen
@@ -161,7 +161,7 @@ import (
 	"context"
 
 	"example.com/app/gen"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
 // Node is the resolver for the node field.
@@ -213,9 +213,9 @@ import (
 	_ "modernc.org/sqlite"
 
 	"example.com/app/graph"
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql"
-	"github.com/syssam/velox2/veloxpgx"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/veloxpgx"
 )
 
 // TestMain refuses to run, when VELOX_ITEST_REQUIRE=1, as CI and

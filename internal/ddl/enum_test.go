@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 var trickyValues = [][]string{

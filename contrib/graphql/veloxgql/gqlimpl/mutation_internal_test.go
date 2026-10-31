@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/syssam/velox2/contrib/graphql/veloxgql"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/shared"
 )
 
 // codeOf is the code of err's *shared.Error, or "".

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox2/internal/tempmod"
+	"github.com/syssam/velox/internal/tempmod"
 )
 
 // repoRoot is the repository's root, two directories above this file.
@@ -24,7 +24,7 @@ func repoRoot() string {
 // Hooks method.
 const entityDescSrc = `package p
 
-import "github.com/syssam/velox2"
+import "github.com/syssam/velox"
 
 type E struct{ ID int64 }
 
@@ -52,7 +52,7 @@ const entityDescUseSrc = `package p
 import (
 	"context"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 type E struct {
@@ -322,11 +322,11 @@ func TestGenericTypesCompileSmall(t *testing.T) {
 		t.Skip("builds packages; run without -short")
 	}
 	dir := t.TempDir()
-	files := map[string]string{"base/base.go": "package base\n\nimport \"github.com/syssam/velox2\"\n\ntype E struct{ ID int64 }\n\nvar x velox.Dialect\n"}
+	files := map[string]string{"base/base.go": "package base\n\nimport \"github.com/syssam/velox\"\n\ntype E struct{ ID int64 }\n\nvar x velox.Dialect\n"}
 	for _, g := range genericObjects {
 		src := g.src
 		if src == "" {
-			src = fmt.Sprintf("package p\n\nimport \"github.com/syssam/velox2\"\n\ntype E struct{ ID int64 }\n\nvar x %s\n", g.decl)
+			src = fmt.Sprintf("package p\n\nimport \"github.com/syssam/velox\"\n\ntype E struct{ ID int64 }\n\nvar x %s\n", g.decl)
 		}
 		files[g.name+"/p.go"] = src
 	}

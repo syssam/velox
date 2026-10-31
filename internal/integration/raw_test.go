@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/testmodel"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/testmodel"
 )
 
 // TestRaw: Raw and Exec on every driver. Raw scans by column name, whatever

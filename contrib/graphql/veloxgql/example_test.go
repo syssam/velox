@@ -7,7 +7,7 @@ import (
 	"github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
 
-	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
 // An ID names its GraphQL type, so DecodeID refuses an ID of another

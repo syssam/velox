@@ -10,10 +10,10 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/codegen/loadjson"
-	"github.com/syssam/velox2/internal/ddl"
-	"github.com/syssam/velox2/migrate"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/codegen/loadjson"
+	"github.com/syssam/velox/internal/ddl"
+	"github.com/syssam/velox/migrate"
 )
 
 // MySQL's limits, and PostgreSQL's.

@@ -18,12 +18,12 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/conn"
-	"github.com/syssam/velox2/internal/engine"
-	"github.com/syssam/velox2/internal/testbind/bindtype"
-	"github.com/syssam/velox2/internal/testmodel"
-	"github.com/syssam/velox2/internal/testmodel/kind"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/conn"
+	"github.com/syssam/velox/internal/engine"
+	"github.com/syssam/velox/internal/testbind/bindtype"
+	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/internal/testmodel/kind"
 	_ "modernc.org/sqlite"
 )
 

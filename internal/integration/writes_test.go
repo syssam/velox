@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/testmodel"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/testmodel"
 )
 
 func newInvoice(org int64, number string) testmodel.Invoice {
@@ -278,7 +278,7 @@ func TestSaveBuilder(t *testing.T) {
 // TestUpsertUpdateBranchReadBack: the update branch writes only the columns it
 // names. Row 1 keeps the seed's note and paid, and takes the new total; the
 // update branch does not fire UpdatedAt's UpdateDefault, so updated_at stays
-// t0. That is as in old velox and ent, which do not fire it on an upsert's
+// t0. That is as in veloxe and ent, which do not fire it on an upsert's
 // update branch either (plan decision 5): pinned as correct, not as a gap.
 func TestUpsertUpdateBranchReadBack(t *testing.T) {
 	each(t, func(t *testing.T, tg target) {

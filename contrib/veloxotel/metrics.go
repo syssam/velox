@@ -7,7 +7,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // The histograms' boundaries: those semconv v1.43.0 advises, for durations in

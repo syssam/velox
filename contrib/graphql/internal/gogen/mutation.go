@@ -11,9 +11,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/syssam/velox2/contrib/graphql/internal/english"
-	"github.com/syssam/velox2/contrib/graphql/internal/sdl"
-	"github.com/syssam/velox2/plugin"
+	"github.com/syssam/velox/contrib/graphql/internal/english"
+	"github.com/syssam/velox/contrib/graphql/internal/sdl"
+	"github.com/syssam/velox/plugin"
 )
 
 // fieldGQLFunc is the unexported function of t's entity that names, for a
@@ -451,7 +451,7 @@ func (r *renderer) writeCreate(f *file, t *sdl.Type, in string) error {
 	}
 
 	f.p("")
-	f.doc("", fmt.Sprintf("%s creates %s %s from input, with its edges, as the mutation %s does, and returns the row as written. It runs atomically on the DB veloxgql.DBFromContext reads from ctx, under the tenant scope and the policies. See \"Mutations\" in the documentation of package github.com/syssam/velox2/contrib/graphql for what each input field does, what the caller may link and change, and the errors.", fn, english.Article(n), n, "create"+n))
+	f.doc("", fmt.Sprintf("%s creates %s %s from input, with its edges, as the mutation %s does, and returns the row as written. It runs atomically on the DB veloxgql.DBFromContext reads from ctx, under the tenant scope and the policies. See \"Mutations\" in the documentation of package github.com/syssam/velox/contrib/graphql for what each input field does, what the caller may link and change, and the errors.", fn, english.Article(n), n, "create"+n))
 	f.p("func %s(ctx %s.Context, input %s) (*%s, error) {", fn, ctx, in, e.Name)
 	writeDecodes(f, t.Create, dec, order, nil)
 
@@ -788,7 +788,7 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 	}
 
 	f.p("")
-	f.doc("", fmt.Sprintf("%s updates the %s with the ID id from input, as the mutation %s does, and returns the row as written. It runs atomically on the DB veloxgql.DBFromContext reads from ctx, under the tenant scope and the policies. See \"Mutations\" in the documentation of package github.com/syssam/velox2/contrib/graphql for what each input field does, what the caller may link and change, and the errors.", fn, n, mutation))
+	f.doc("", fmt.Sprintf("%s updates the %s with the ID id from input, as the mutation %s does, and returns the row as written. It runs atomically on the DB veloxgql.DBFromContext reads from ctx, under the tenant scope and the policies. See \"Mutations\" in the documentation of package github.com/syssam/velox/contrib/graphql for what each input field does, what the caller may link and change, and the errors.", fn, n, mutation))
 	f.p("func %s(ctx %s.Context, id string, input %s) (*%s, error) {", fn, ctx, in, e.Name)
 	writeDecodes(f, fs, dec, order, selfDec)
 
@@ -1173,7 +1173,7 @@ func (r *renderer) writeDelete(f *file, t *sdl.Type) error {
 	if len(joins) > 0 {
 		joinRows = ", and the join rows that hold its key"
 	}
-	doc := fmt.Sprintf("%s deletes the %s with the ID id%s, as the mutation %s does, and returns id encoded again from the key. It runs atomically on the DB veloxgql.DBFromContext reads from ctx, under the tenant scope and the policies. See \"Mutations\" in the documentation of package github.com/syssam/velox2/contrib/graphql for what it deletes and the errors.", fn, n, joinRows, mutation)
+	doc := fmt.Sprintf("%s deletes the %s with the ID id%s, as the mutation %s does, and returns id encoded again from the key. It runs atomically on the DB veloxgql.DBFromContext reads from ctx, under the tenant scope and the policies. See \"Mutations\" in the documentation of package github.com/syssam/velox/contrib/graphql for what it deletes and the errors.", fn, n, joinRows, mutation)
 	f.doc("", doc)
 	f.p("func %s(ctx %s.Context, id string) (string, error) {", fn, ctx)
 	f.p("\tkey, err := %s.DecodeID%s(%q, id, %q%s)", impl, self.args, mutation+".id", n, self.conv)

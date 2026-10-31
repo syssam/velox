@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/engine"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/engine"
 )
 
 // fuzzStatement builds a statement on invInfo from fuzz input: each byte picks

@@ -14,7 +14,7 @@
 // before FAKEPLUGIN_FILES, so that two plugins answer differently.
 //
 // With none of these it writes fake.graphqls and fake_gql.go. It answers
-// through plugin.Main, but for the modes that a plugin of velox2 cannot
+// through plugin.Main, but for the modes that a plugin of velox cannot
 // answer.
 package main
 
@@ -27,7 +27,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/syssam/velox2/plugin"
+	"github.com/syssam/velox/plugin"
 )
 
 // getenv is the setting for this tool: FAKEPLUGIN2_FILES for fakeplugin2,

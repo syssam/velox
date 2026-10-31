@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/syssam/velox2/internal/conn"
+	"github.com/syssam/velox/internal/conn"
 )
 
 var _ conn.Executor = (*Exec)(nil)

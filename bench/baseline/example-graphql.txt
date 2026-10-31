@@ -3,7 +3,7 @@
 # load (1, 5, 15 min, before the run): 5.57 6.09 7.37
 goos: darwin
 goarch: arm64
-pkg: github.com/syssam/velox2/examples/graphql
+pkg: github.com/syssam/velox/examples/graphql
 cpu: Apple M3 Max
 BenchmarkNestedRequest/n=10-14         	      54	   4356258 ns/op	       710.0 nodes/op	         5.000 stmts/op	 2176033 B/op	   32299 allocs/op
 BenchmarkNestedRequest/n=10-14         	      60	   3954577 ns/op	       710.0 nodes/op	         5.000 stmts/op	 2176302 B/op	   32293 allocs/op
@@ -18,4 +18,4 @@ BenchmarkNestedRequest/n=50-14         	      14	  16512967 ns/op	      3550 nod
 BenchmarkNestedRequest/n=50-14         	      13	  16312337 ns/op	      3550 nodes/op	         5.000 stmts/op	10622913 B/op	  159689 allocs/op
 BenchmarkNestedRequest/n=50-14         	      14	  15728304 ns/op	      3550 nodes/op	         5.000 stmts/op	10558263 B/op	  159679 allocs/op
 PASS
-ok  	github.com/syssam/velox2/examples/graphql	3.426s
+ok  	github.com/syssam/velox/examples/graphql	3.426s

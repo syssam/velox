@@ -3,7 +3,7 @@ package ddl
 import (
 	"strings"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // Literal is s as a string literal of the dialect: ' doubled, and on MySQL \

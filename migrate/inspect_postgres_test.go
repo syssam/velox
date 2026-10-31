@@ -13,8 +13,8 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/migrate"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/migrate"
 )
 
 // needPostgres skips t without VELOX_TEST_POSTGRES.

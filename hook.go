@@ -5,7 +5,7 @@ import (
 	"slices"
 	"unsafe"
 
-	"github.com/syssam/velox2/internal/engine"
+	"github.com/syssam/velox/internal/engine"
 )
 
 // Mutator applies a write of entity E.

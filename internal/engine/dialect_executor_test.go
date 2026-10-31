@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syssam/velox2/internal/conn"
+	"github.com/syssam/velox/internal/conn"
 )
 
 type lastArg struct{ arg any }

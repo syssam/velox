@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/testmodel"
-	"github.com/syssam/velox2/internal/testmodel/kind"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/internal/testmodel/kind"
 )
 
 // sampleDDL is the table of testmodel.Sample, with score NULL-able so that an

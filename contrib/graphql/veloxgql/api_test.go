@@ -133,7 +133,7 @@ func parseDoc(t *testing.T, dir, path string) *doc.Package {
 // "Type.Method", sorted.
 func exportedNames(t *testing.T, dir string) []string {
 	t.Helper()
-	d := parseDoc(t, dir, "github.com/syssam/velox2/contrib/graphql/veloxgql")
+	d := parseDoc(t, dir, "github.com/syssam/velox/contrib/graphql/veloxgql")
 	var names []string
 	values := func(vs []*doc.Value) {
 		for _, v := range vs {
@@ -182,7 +182,7 @@ func TestPublicAPI(t *testing.T) {
 // code, and what guards the pair; the version constant says so too, just
 // after its first sentence.
 func TestGqlimplIsForGeneratedCode(t *testing.T) {
-	d := parseDoc(t, "gqlimpl", "github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl")
+	d := parseDoc(t, "gqlimpl", "github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl")
 	if !strings.HasPrefix(d.Doc, "Package gqlimpl is for generated code.") {
 		t.Errorf("gqlimpl's doc starts %q", firstLine(d.Doc))
 	}
@@ -191,7 +191,7 @@ func TestGqlimplIsForGeneratedCode(t *testing.T) {
 	}
 
 	found := false
-	for _, v := range parseDoc(t, ".", "github.com/syssam/velox2/contrib/graphql/veloxgql").Consts {
+	for _, v := range parseDoc(t, ".", "github.com/syssam/velox/contrib/graphql/veloxgql").Consts {
 		if slices.Contains(v.Names, "GeneratedCodeIsVersion3") {
 			found = true
 			if _, rest, ok := strings.Cut(strings.Join(strings.Fields(v.Doc), " "), ". "); !ok || !strings.HasPrefix(rest, "For generated code.") {

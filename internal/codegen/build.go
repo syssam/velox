@@ -9,10 +9,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/codegen/loadjson"
-	"github.com/syssam/velox2/internal/ddl"
-	"github.com/syssam/velox2/plugin"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/codegen/loadjson"
+	"github.com/syssam/velox/internal/ddl"
+	"github.com/syssam/velox/plugin"
 )
 
 // Build resolves m into a Graph and checks every rule of the model. It returns

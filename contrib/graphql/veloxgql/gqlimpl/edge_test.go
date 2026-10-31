@@ -13,10 +13,10 @@ import (
 	"github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
-	gqlshared "github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
+	gqlshared "github.com/syssam/velox/contrib/graphql/veloxgql/internal/shared"
 )
 
 // owner, child, tag and ownerTag are hand-written entities, as velox-gen

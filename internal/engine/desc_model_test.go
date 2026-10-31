@@ -2,7 +2,7 @@ package engine_test
 
 import (
 	"context"
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // The Desc entities of the engine's tests. Each is described as velox-gen

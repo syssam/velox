@@ -9,9 +9,9 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/contrib/veloxotel"
-	"github.com/syssam/velox2/internal/testmodel"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/veloxotel"
+	"github.com/syssam/velox/internal/testmodel"
 )
 
 // The adapter's own cost (reported, not budgeted) is BenchmarkAdapter's time

@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
 // raw is the ID of the text s, written by hand, to build malformed IDs.

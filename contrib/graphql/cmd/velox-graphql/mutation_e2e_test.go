@@ -34,10 +34,10 @@ import (
 const e2eMutSchema = `package schema
 
 import (
-	"github.com/syssam/velox2/contrib/graphql"
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/edge"
-	"github.com/syssam/velox2/schema/field"
+	"github.com/syssam/velox/contrib/graphql"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/edge"
+	"github.com/syssam/velox/schema/field"
 )
 
 type Writer struct{ schema.Schema }
@@ -142,7 +142,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // Policy refuses to insert an article titled "forbidden", and lets no
@@ -167,7 +167,7 @@ const e2eMutWriterPolicy = `package gen
 import (
 	"context"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // Policy lets no "frozen" writer change.
@@ -186,7 +186,7 @@ const e2eMutCirclePolicy = `package gen
 import (
 	"context"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // Policy hides the circle named "hidden", and lets no "frozen" circle change.
@@ -206,7 +206,7 @@ const e2eMutProfilePolicy = `package gen
 import (
 	"context"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // Policy hides the profile whose handle is "hidden", and lets no "frozen"
@@ -233,8 +233,8 @@ import (
 	"testing"
 
 	"example.com/app/gen"
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
 // countless is a driver whose results report no count.
@@ -350,9 +350,9 @@ import (
 	_ "modernc.org/sqlite"
 
 	"example.com/app/gen"
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql"
-	"github.com/syssam/velox2/veloxpgx"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/veloxpgx"
 )
 
 // TestMain refuses to run, when VELOX_ITEST_REQUIRE=1, as CI and
@@ -2504,7 +2504,7 @@ import (
 	"context"
 
 	"example.com/app/gen"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
 // Node is the resolver for the node field.
@@ -2549,8 +2549,8 @@ import (
 	_ "modernc.org/sqlite"
 
 	"example.com/app/graph"
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
 // TestFolderServed: a folder's parent and prev, which are Required, read as

@@ -6,9 +6,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/syssam/velox2/contrib/graphql/internal/english"
-	"github.com/syssam/velox2/contrib/graphql/internal/sdl"
-	"github.com/syssam/velox2/plugin"
+	"github.com/syssam/velox/contrib/graphql/internal/english"
+	"github.com/syssam/velox/contrib/graphql/internal/sdl"
+	"github.com/syssam/velox/plugin"
 )
 
 // lowerFirst is name with its first letter in lower case, as velox-gen names

@@ -1,5 +1,5 @@
-// Command compare is the harness that compares velox2's build and runtime cost
-// with old velox and ent. Each subcommand is one stage of bench/compare/run.sh.
+// Command compare is the harness that compares velox's build and runtime cost
+// with veloxe and ent. Each subcommand is one stage of bench/compare/run.sh.
 package main
 
 import (

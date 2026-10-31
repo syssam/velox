@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/migrate"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/migrate"
 )
 
 // A predicateCase is a block of testdata/predicates: a predicate as written,

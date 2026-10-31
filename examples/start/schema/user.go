@@ -3,8 +3,8 @@
 package schema
 
 import (
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/field"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/field"
 )
 
 // User is a schema: a struct that embeds schema.Schema. Its table is "users",

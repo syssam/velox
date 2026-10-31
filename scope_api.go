@@ -4,7 +4,7 @@ import (
 	"context"
 	"unsafe"
 
-	"github.com/syssam/velox2/internal/engine"
+	"github.com/syssam/velox/internal/engine"
 )
 
 // Policy is entity E's row-level policy, declared once: by a method on the

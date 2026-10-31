@@ -1,12 +1,12 @@
-// Package buildinfo names the velox2 module a program is built from.
+// Package buildinfo names the velox module a program is built from.
 package buildinfo
 
 import "runtime/debug"
 
 // modulePath is the import path of the velox library.
-const modulePath = "github.com/syssam/velox2"
+const modulePath = "github.com/syssam/velox"
 
-// Generator is "velox-gen" and the version of the velox2 module the program
+// Generator is "velox-gen" and the version of the velox module the program
 // is built from, "(devel)" when the build does not say, as velox-gen version
 // prints it.
 func Generator() string {

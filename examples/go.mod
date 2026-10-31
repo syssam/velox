@@ -1,4 +1,4 @@
-module github.com/syssam/velox2/examples
+module github.com/syssam/velox/examples
 
 go 1.27.0
 
@@ -6,16 +6,16 @@ toolchain go1.27.3
 
 tool (
 	github.com/99designs/gqlgen
-	github.com/syssam/velox2/cmd/velox-gen
-	github.com/syssam/velox2/contrib/graphql/cmd/velox-graphql
+	github.com/syssam/velox/cmd/velox-gen
+	github.com/syssam/velox/contrib/graphql/cmd/velox-graphql
 )
 
 require (
 	github.com/99designs/gqlgen v0.17.86
 	github.com/jackc/pgx/v5 v5.11.0
-	github.com/syssam/velox2 v0.0.0-00010101000000-000000000000
-	github.com/syssam/velox2/contrib/graphql v0.0.0-00010101000000-000000000000
-	github.com/syssam/velox2/contrib/veloxotel v0.0.0-00010101000000-000000000000
+	github.com/syssam/velox v0.0.0-00010101000000-000000000000
+	github.com/syssam/velox/contrib/graphql v0.0.0-00010101000000-000000000000
+	github.com/syssam/velox/contrib/veloxotel v0.0.0-00010101000000-000000000000
 	github.com/vektah/gqlparser/v2 v2.5.59
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/sdk v1.47.0
@@ -58,8 +58,8 @@ require (
 	modernc.org/memory v1.12.1 // indirect
 )
 
-replace github.com/syssam/velox2 => ../
+replace github.com/syssam/velox => ../
 
-replace github.com/syssam/velox2/contrib/veloxotel => ../contrib/veloxotel
+replace github.com/syssam/velox/contrib/veloxotel => ../contrib/veloxotel
 
-replace github.com/syssam/velox2/contrib/graphql => ../contrib/graphql
+replace github.com/syssam/velox/contrib/graphql => ../contrib/graphql

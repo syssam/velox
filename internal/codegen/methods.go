@@ -160,7 +160,7 @@ func userFiles(dir string, mode parser.Mode, fn func(fset *token.FileSet, path s
 func policyConds(f *ast.File, d *ast.FuncDecl, e string) token.Pos {
 	name := ""
 	for _, im := range f.Imports {
-		if p, _ := strconv.Unquote(im.Path.Value); p == "github.com/syssam/velox2" {
+		if p, _ := strconv.Unquote(im.Path.Value); p == "github.com/syssam/velox" {
 			name = "velox"
 			if im.Name != nil {
 				name = im.Name.Name

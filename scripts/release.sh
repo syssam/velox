@@ -15,7 +15,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-root=github.com/syssam/velox2
+root=github.com/syssam/velox
 contribs=(contrib/graphql contrib/veloxotel)
 # What the tree requires of the root between releases, with a replace.
 placeholder=v0.0.0-00010101000000-000000000000

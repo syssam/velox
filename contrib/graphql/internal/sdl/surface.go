@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/syssam/velox2/contrib/graphql"
-	"github.com/syssam/velox2/plugin"
+	"github.com/syssam/velox/contrib/graphql"
+	"github.com/syssam/velox/plugin"
 )
 
 // Surface is the GraphQL surface of a model: the types velox.graphqls
@@ -255,7 +255,7 @@ func goOf(name, goName string) string {
 
 // The import paths of the Go types a scalar binds to.
 const (
-	veloxgqlPath = "github.com/syssam/velox2/contrib/graphql/veloxgql"
+	veloxgqlPath = "github.com/syssam/velox/contrib/graphql/veloxgql"
 	uuidPath     = "github.com/google/uuid"
 )
 

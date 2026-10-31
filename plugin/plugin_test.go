@@ -6,19 +6,19 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox2/plugin"
+	"github.com/syssam/velox/plugin"
 )
 
 // TestPluginPackageImportsNothing pins that package plugin depends on the
 // standard library alone.
 func TestPluginPackageImportsNothing(t *testing.T) {
-	out, err := exec.Command("go", "list", "-deps", "-f", "{{if not .Standard}}{{.ImportPath}}{{end}}", "github.com/syssam/velox2/plugin").CombinedOutput()
+	out, err := exec.Command("go", "list", "-deps", "-f", "{{if not .Standard}}{{.ImportPath}}{{end}}", "github.com/syssam/velox/plugin").CombinedOutput()
 	if err != nil {
 		t.Fatalf("go list: %v\n%s", err, out)
 	}
 	var extra []string
 	for _, p := range strings.Fields(string(out)) {
-		if p != "github.com/syssam/velox2/plugin" {
+		if p != "github.com/syssam/velox/plugin" {
 			extra = append(extra, p)
 		}
 	}

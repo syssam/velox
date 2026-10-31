@@ -16,7 +16,7 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' \
 ## What the application writes
 
 1. The schema, `schema/schema.go`, with `graphql.*` annotations from
-   `github.com/syssam/velox2/contrib/graphql`: `QueryField` makes a root
+   `github.com/syssam/velox/contrib/graphql`: `QueryField` makes a root
    connection, `OrderField` an `orderBy` value, `WhereOps` and `WhereEdge`
    the predicates of the `where` input, `MultiOrder` a list `orderBy`, and
    `Type` renames an entity's GraphQL type (`Tag` is `Label`), and

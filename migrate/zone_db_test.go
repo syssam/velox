@@ -10,8 +10,8 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/migrate"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/migrate"
 )
 
 // zoned is a fresh database of d whose new sessions start in UTC+8.

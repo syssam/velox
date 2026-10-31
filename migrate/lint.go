@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/ddl"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/ddl"
 )
 
 // A Class says how much care a change needs. A change with no finding is

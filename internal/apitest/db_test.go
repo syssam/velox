@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/fakeconn"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/fakeconn"
 )
 
 // panicText runs f and returns what it panicked with, as text; "" when it

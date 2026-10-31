@@ -4,9 +4,9 @@ Date: 2026-10-30
 
 ## Context
 
-velox2's root package held the whole runtime: 34 code files, 13,348 lines, and 82 test
-files beside them. ent's root holds 3 files of shared types. velox2 cannot be ent here:
-ent generates its query builders into the application, and velox2 keeps them generic
+velox's root package held the whole runtime: 34 code files, 13,348 lines, and 82 test
+files beside them. ent's root holds 3 files of shared types. velox cannot be ent here:
+ent generates its query builders into the application, and velox keeps them generic
 in the root so that a schema's build cost stays flat. Go requires a generic type's
 methods in its package, so the generic API has to stay.
 

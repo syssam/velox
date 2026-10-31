@@ -5,8 +5,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/syssam/velox2/contrib/graphql"
-	"github.com/syssam/velox2/plugin"
+	"github.com/syssam/velox/contrib/graphql"
+	"github.com/syssam/velox/plugin"
 )
 
 // The arguments a predicate takes.

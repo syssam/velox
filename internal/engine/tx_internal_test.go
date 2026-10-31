@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syssam/velox2/internal/fakeconn"
+	"github.com/syssam/velox/internal/fakeconn"
 )
 
 // lateCtx is past its deadline, but its timer has not fired yet: it ends only

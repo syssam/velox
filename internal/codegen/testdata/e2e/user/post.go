@@ -3,7 +3,7 @@ package gen
 import (
 	"context"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // viewerKey marks a context as a viewer's: such a context reads only

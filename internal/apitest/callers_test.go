@@ -5,10 +5,10 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/fakeconn"
-	"github.com/syssam/velox2/internal/testmodel"
-	"github.com/syssam/velox2/internal/testrepo"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/fakeconn"
+	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/internal/testrepo"
 )
 
 // callerOf returns a DB with opts whose Rewrite hook records each
@@ -27,7 +27,7 @@ func TestCallerIsTheApplicationFrame(t *testing.T) {
 	if _, err := db.Query[testmodel.Invoice]().Limit(1).All(ctx); err != nil {
 		t.Fatal(err)
 	}
-	want := velox.Caller{File: "internal/apitest/callers_test.go", Line: line, Func: "github.com/syssam/velox2/internal/apitest.TestCallerIsTheApplicationFrame"}
+	want := velox.Caller{File: "internal/apitest/callers_test.go", Line: line, Func: "github.com/syssam/velox/internal/apitest.TestCallerIsTheApplicationFrame"}
 	if got != want {
 		t.Errorf("All: %+v, want %+v", got, want)
 	}
@@ -48,7 +48,7 @@ func TestCallerIsTheApplicationFrame(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Line != line || got.Func != "github.com/syssam/velox2/internal/apitest.TestCallerIsTheApplicationFrame.func1" {
+	if got.Line != line || got.Func != "github.com/syssam/velox/internal/apitest.TestCallerIsTheApplicationFrame.func1" {
 		t.Errorf("in Tx: %+v, want line %d in func1", got, line)
 	}
 }
@@ -68,10 +68,10 @@ func TestCallerSkipsWrapperPackages(t *testing.T) {
 	if err := testrepo.FirstInvoice(ctx, callerOf(&got, velox.WithCallers())); err != nil {
 		t.Fatal(err)
 	}
-	if got.File != "internal/testrepo/testrepo.go" || got.Func != "github.com/syssam/velox2/internal/testrepo.FirstInvoice" {
+	if got.File != "internal/testrepo/testrepo.go" || got.Func != "github.com/syssam/velox/internal/testrepo.FirstInvoice" {
 		t.Errorf("unskipped: %+v", got)
 	}
-	db := callerOf(&got, velox.WithCallerSkip("github.com/syssam/velox2/internal/testrepo"))
+	db := callerOf(&got, velox.WithCallerSkip("github.com/syssam/velox/internal/testrepo"))
 	line := here() + 1
 	if err := testrepo.FirstInvoice(ctx, db); err != nil {
 		t.Fatal(err)

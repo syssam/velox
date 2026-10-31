@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/apitest/fixture"
-	"github.com/syssam/velox2/internal/fakeconn"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/apitest/fixture"
+	"github.com/syssam/velox/internal/fakeconn"
 )
 
 // jDocCols are Col handles of jDoc's encoded columns, as a hand-written Desc

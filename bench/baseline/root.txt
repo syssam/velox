@@ -3,7 +3,7 @@
 # load (1, 5, 15 min, before the run): 5.57 6.09 7.37
 goos: darwin
 goarch: arm64
-pkg: github.com/syssam/velox2
+pkg: github.com/syssam/velox
 cpu: Apple M3 Max
 BenchmarkMetadataFirstUse-14      	  172024	      1401 ns/op	    2760 B/op	      19 allocs/op
 BenchmarkMetadataFirstUse-14      	  174512	      1376 ns/op	    2760 B/op	      19 allocs/op
@@ -42,4 +42,4 @@ BenchmarkOneRowObserved-14        	  178971	      1284 ns/op	     987 B/op	     
 BenchmarkOneRowObserved-14        	  176199	      1312 ns/op	     989 B/op	       7 allocs/op
 BenchmarkOneRowObserved-14        	  179269	      1288 ns/op	    1017 B/op	       7 allocs/op
 PASS
-ok  	github.com/syssam/velox2	9.603s
+ok  	github.com/syssam/velox	9.603s

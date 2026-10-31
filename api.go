@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/syssam/velox2/dbtype"
-	"github.com/syssam/velox2/internal/engine"
+	"github.com/syssam/velox/dbtype"
+	"github.com/syssam/velox/internal/engine"
 )
 
 // Aggregate is the function an aggregate read computes over its one column.

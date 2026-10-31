@@ -3,7 +3,7 @@ package ddl
 import (
 	"strings"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // EnumType is the column type of the PostgreSQL enum type name in the

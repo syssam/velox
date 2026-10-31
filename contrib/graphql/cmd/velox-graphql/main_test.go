@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox2/plugin"
+	"github.com/syssam/velox/plugin"
 )
 
 // supports is what main passes plugin.Main.
@@ -39,7 +39,7 @@ func request(t *testing.T, r plugin.Request) string {
 
 func TestSupportsThisVelox(t *testing.T) {
 	if supports.Protocol != plugin.ProtocolVersion || supports.Model != plugin.ModelVersion {
-		t.Errorf("velox-graphql is written for protocol %d and model %d; velox2 has %d and %d: update it", supports.Protocol, supports.Model, plugin.ProtocolVersion, plugin.ModelVersion)
+		t.Errorf("velox-graphql is written for protocol %d and model %d; velox has %d and %d: update it", supports.Protocol, supports.Model, plugin.ProtocolVersion, plugin.ModelVersion)
 	}
 }
 

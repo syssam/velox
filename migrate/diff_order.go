@@ -3,7 +3,7 @@ package migrate
 import (
 	"slices"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // createTables creates the tables of to that from lacks, sorted, each after

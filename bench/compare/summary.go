@@ -259,7 +259,7 @@ func parseMemInfo(s string) float64 {
 	return 0
 }
 
-// probeCommit is velox2's version: the short commit of root's HEAD, plus
+// probeCommit is velox's version: the short commit of root's HEAD, plus
 // -dirty when a tracked file differs. Untracked files do not count: an
 // untracked .DS_Store would mark every run dirty. It is "" if git fails.
 var probeCommit = func(root string) string {
@@ -273,17 +273,17 @@ var probeCommit = func(root string) string {
 	return rev
 }
 
-// harnessModules are the summary's versions that come from the harness's
-// go.mod: the key → the module path.
-var harnessModules = []struct{ Key, Path string }{
-	{"oldvelox", "github.com/syssam/velox"},
-	{"ent", "entgo.io/ent"},
-	{"sqlite", "modernc.org/sqlite"},
-	{"pgx", "github.com/jackc/pgx/v5"},
-	{"x/tools", "golang.org/x/tools"},
+// harnessModules are the summary's versions that come from a harness go.mod:
+// the key → the module path and the directory of the go.mod that pins it.
+var harnessModules = []struct{ Key, Path, ModDir string }{
+	{"veloxe", "github.com/syssam/velox", veloxeORM.ModDir},
+	{"ent", "entgo.io/ent", ""},
+	{"sqlite", "modernc.org/sqlite", ""},
+	{"pgx", "github.com/jackc/pgx/v5", ""},
+	{"x/tools", "golang.org/x/tools", ""},
 }
 
-// readVersions is velox2's commit and the versions the harness go.mod pins.
+// readVersions is velox's commit and the versions the harness go.mod pins.
 // The commit is the one in results/commit.txt, which run.sh writes when the
 // run starts, if that file exists and is not empty; otherwise it is probed now.
 func readVersions(results string) (map[string]string, error) {
@@ -291,7 +291,28 @@ func readVersions(results string) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	src, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+	v := map[string]string{}
+	if b, err := os.ReadFile(filepath.Join(results, "commit.txt")); err == nil && strings.TrimSpace(string(b)) != "" {
+		v["velox"] = strings.TrimSpace(string(b))
+	} else {
+		v["velox"] = probeCommit(filepath.Join(dir, "..", ".."))
+	}
+	for _, m := range harnessModules {
+		required, err := requirements(filepath.Join(dir, m.ModDir, "go.mod"))
+		if err != nil {
+			return nil, err
+		}
+		if required[m.Path] == "" {
+			return nil, fmt.Errorf("%s does not require %s", filepath.Join(m.ModDir, "go.mod"), m.Path)
+		}
+		v[m.Key] = required[m.Path]
+	}
+	return v, nil
+}
+
+// requirements is what the go.mod at path requires: the module path → the version.
+func requirements(path string) (map[string]string, error) {
+	src, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
@@ -303,19 +324,7 @@ func readVersions(results string) (map[string]string, error) {
 	for _, r := range f.Require {
 		required[r.Mod.Path] = r.Mod.Version
 	}
-	v := map[string]string{}
-	if b, err := os.ReadFile(filepath.Join(results, "commit.txt")); err == nil && strings.TrimSpace(string(b)) != "" {
-		v["velox2"] = strings.TrimSpace(string(b))
-	} else {
-		v["velox2"] = probeCommit(filepath.Join(dir, "..", ".."))
-	}
-	for _, m := range harnessModules {
-		if required[m.Path] == "" {
-			return nil, fmt.Errorf("the harness go.mod does not require %s", m.Path)
-		}
-		v[m.Key] = required[m.Path]
-	}
-	return v, nil
+	return required, nil
 }
 
 // config is the run's settings, as the summary records them.
@@ -852,8 +861,8 @@ type configFlags []string
 func (c *configFlags) String() string     { return strings.Join(*c, " ") }
 func (c *configFlags) Set(v string) error { *c = append(*c, v); return nil }
 
-// loss is one metric in which one other ORM's median beats velox2's: Winner
-// is that ORM, and an ORM that also beats velox2 has a loss of its own. Section
+// loss is one metric in which one other ORM's median beats velox's: Winner
+// is that ORM, and an ORM that also beats velox has a loss of its own. Section
 // is "build" (Key the size, Metric the build metric, Unit empty) or "runtime"
 // (Key the dialect, Metric the benchmark, Unit its unit). Best is Winner's
 // median, and Ratio is Best over Velox2.
@@ -862,12 +871,12 @@ type loss struct {
 	Velox2, Best, Ratio                float64
 }
 
-// beaters lists the ORMs other than velox2 whose median in stats beats
-// velox2's in the metric's direction, in the order of orms. A tie does not
-// beat. stats without velox2 has no beaters. A runtime variant is velox2's
+// beaters lists the ORMs other than velox whose median in stats beats
+// velox's in the metric's direction, in the order of orms. A tie does not
+// beat. stats without velox has no beaters. A runtime variant is velox's
 // own and never beats it.
 func beaters(stats map[string]stat, lowerIsBetter bool) []string {
-	v2, ok := stats["velox2"]
+	v2, ok := stats["velox"]
 	if !ok {
 		return nil
 	}
@@ -885,18 +894,18 @@ func beaters(stats map[string]stat, lowerIsBetter bool) []string {
 }
 
 // losses lists every build metric per size, and every runtime unit per dialect
-// and benchmark, where another ORM's median beats velox2's in the metric's
-// direction: one loss for each ORM that beats velox2. There is no noise
+// and benchmark, where another ORM's median beats velox's in the metric's
+// direction: one loss for each ORM that beats velox. There is no noise
 // threshold. The result is sorted by Section, Key, Metric and Unit, and, for
 // the same metric, in the order of orms.
 func losses(s summary) []loss {
 	var out []loss
 	consider := func(section, key, metric, unit string, lowerIsBetter bool, stats map[string]stat) {
 		for _, w := range beaters(stats, lowerIsBetter) {
-			out = append(out, loss{section, key, metric, unit, w, stats["velox2"].Median, stats[w].Median, ratio(stats[w].Median, stats["velox2"].Median)})
+			out = append(out, loss{section, key, metric, unit, w, stats["velox"].Median, stats[w].Median, ratio(stats[w].Median, stats["velox"].Median)})
 		}
 	}
-	for n := range s.Build["velox2"] {
+	for n := range s.Build["velox"] {
 		for _, m := range buildMetrics {
 			stats := map[string]stat{}
 			for orm, bySize := range s.Build {
@@ -908,7 +917,7 @@ func losses(s summary) []loss {
 		}
 	}
 	for d, byORM := range s.Runtime {
-		for name, units := range byORM["velox2"] {
+		for name, units := range byORM["velox"] {
 			for u := range units {
 				stats := map[string]stat{}
 				for orm, byName := range byORM {

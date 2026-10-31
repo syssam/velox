@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/syssam/velox2/schema"
+	"github.com/syssam/velox/schema"
 )
 
 type User struct{ schema.Schema }

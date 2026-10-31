@@ -4,9 +4,9 @@ import (
 	"cmp"
 	"fmt"
 
-	"github.com/syssam/velox2/contrib/graphql"
-	"github.com/syssam/velox2/contrib/graphql/internal/sdl"
-	"github.com/syssam/velox2/plugin"
+	"github.com/syssam/velox/contrib/graphql"
+	"github.com/syssam/velox/contrib/graphql/internal/sdl"
+	"github.com/syssam/velox/plugin"
 )
 
 // The kinds of value a predicate's helper takes.

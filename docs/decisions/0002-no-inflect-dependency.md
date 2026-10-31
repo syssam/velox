@@ -20,8 +20,8 @@ never change within a major version, for any input; helpers may be added.
 ## Consequences
 
 The plural of a name is the same whatever the user's module graph holds, and
-is ent's. A rule fix upstream does not reach velox2 until a major version.
-velox2 has no go.mod line for inflect.
+is ent's. A rule fix upstream does not reach velox until a major version.
+velox has no go.mod line for inflect.
 
 ## Evidence
 

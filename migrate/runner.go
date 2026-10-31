@@ -11,7 +11,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // An Option changes how Up, Status and Resolve run. Each says which of them

@@ -18,8 +18,8 @@ import (
 
 	sqlitedriver "modernc.org/sqlite"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/migrate"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/migrate"
 )
 
 // historyRow is a row of the history table, as stored.

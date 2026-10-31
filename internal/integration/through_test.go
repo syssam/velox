@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // throughSetup creates books 1–4, tags 1 "go" and 2 "db" of org 1 and 3 "x"

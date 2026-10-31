@@ -9,7 +9,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // around is the Around hook: one client span per execution of a statement,

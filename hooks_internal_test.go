@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syssam/velox2/internal/engine"
+	"github.com/syssam/velox/internal/engine"
 )
 
 // TestValueInRecordsAnotherType: a value of another type gives no value and

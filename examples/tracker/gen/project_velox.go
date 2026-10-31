@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/syssam/velox2"
-	sch "github.com/syssam/velox2/examples/tracker/schema"
+	"github.com/syssam/velox"
+	sch "github.com/syssam/velox/examples/tracker/schema"
 )
 
 const _ = velox.GeneratedCodeIsVersion6

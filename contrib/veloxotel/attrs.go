@@ -6,7 +6,7 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // schemaURL is the semantic-conventions release whose names this file holds.

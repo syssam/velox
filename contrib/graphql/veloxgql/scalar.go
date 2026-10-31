@@ -9,7 +9,7 @@ import (
 
 	"github.com/99designs/gqlgen/graphql"
 
-	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/shared"
 )
 
 // The scalars, the Cursor and the OrderDirection enum are gqlgen marshalers.

@@ -69,7 +69,7 @@ fixed. The named-pointer cycle guard stays inside the uncached function.
 ## Workaround
 
 Callers can avoid the cost today by scanning into an `sql.Scanner`, which
-passes the first check at once. velox2 now does this on pgx's stdlib driver:
+passes the first check at once. velox now does this on pgx's stdlib driver:
 it wraps each destination in a `Scanner` that calls `sql.ConvertAssign`, so
 values and errors are the same as before.
 

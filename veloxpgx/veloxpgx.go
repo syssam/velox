@@ -18,9 +18,9 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	velox "github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/conn"
-	"github.com/syssam/velox2/internal/engine"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/conn"
+	"github.com/syssam/velox/internal/engine"
 )
 
 // Open returns a DB for PostgreSQL that runs statements through pool, which

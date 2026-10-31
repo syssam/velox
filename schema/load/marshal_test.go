@@ -12,14 +12,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox2/internal/codegen"
-	"github.com/syssam/velox2/internal/codegen/loadjson"
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/edge"
-	"github.com/syssam/velox2/schema/field"
-	"github.com/syssam/velox2/schema/index"
-	"github.com/syssam/velox2/schema/load"
-	"github.com/syssam/velox2/schema/mixin"
+	"github.com/syssam/velox/internal/codegen"
+	"github.com/syssam/velox/internal/codegen/loadjson"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/edge"
+	"github.com/syssam/velox/schema/field"
+	"github.com/syssam/velox/schema/index"
+	"github.com/syssam/velox/schema/load"
+	"github.com/syssam/velox/schema/mixin"
 )
 
 type User struct{ schema.Schema }
@@ -365,7 +365,7 @@ func TestMarshalPositions(t *testing.T) {
 			t.Errorf("field %s: pos %q", f.Name, f.Pos)
 		}
 	}
-	// A field of velox2's mixin.Time is at the line of User's Mixin method,
+	// A field of velox's mixin.Time is at the line of User's Mixin method,
 	// which the user wrote.
 	pc := reflect.ValueOf(User.Mixin).Pointer()
 	_, line := runtime.FuncForPC(pc).FileLine(pc)

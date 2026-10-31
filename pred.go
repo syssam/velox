@@ -1,7 +1,7 @@
 package velox
 
 import (
-	"github.com/syssam/velox2/internal/engine"
+	"github.com/syssam/velox/internal/engine"
 )
 
 // Order is an ordering by one column of entity E, made by a handle's Asc or

@@ -3,9 +3,9 @@
 package schema
 
 import (
-	"github.com/syssam/velox2/internal/testbind/bindtype"
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/field"
+	"github.com/syssam/velox/internal/testbind/bindtype"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/field"
 )
 
 // Bind has one field of each type of the planner's type table.

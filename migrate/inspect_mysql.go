@@ -10,8 +10,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/ddl"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/ddl"
 )
 
 // inspectMySQL reads tables through information_schema, the default schema

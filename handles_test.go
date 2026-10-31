@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/syssam/velox2/internal/engine"
+	"github.com/syssam/velox/internal/engine"
 )
 
 type ent struct{}

@@ -3,7 +3,7 @@ package gen
 import (
 	"context"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // Policy has no Read, so anyone in the organization may read lines; only

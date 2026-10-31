@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/syssam/velox2/internal/codegen"
+	"github.com/syssam/velox/internal/codegen"
 )
 
 // runDescribe is velox-gen describe: it loads the schema package, builds its

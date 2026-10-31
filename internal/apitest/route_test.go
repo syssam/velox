@@ -9,11 +9,11 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/engine"
-	"github.com/syssam/velox2/internal/fakeconn"
-	"github.com/syssam/velox2/internal/testmodel"
-	"github.com/syssam/velox2/veloxpgx"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/engine"
+	"github.com/syssam/velox/internal/fakeconn"
+	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/veloxpgx"
 )
 
 // replicaSet is a DB on a primary and two replica fakes, and the routes its

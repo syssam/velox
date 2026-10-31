@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/apitest/fixture"
-	"github.com/syssam/velox2/internal/fakeconn"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/apitest/fixture"
+	"github.com/syssam/velox/internal/fakeconn"
 	_ "modernc.org/sqlite"
 )
 
@@ -255,7 +255,7 @@ func TestHasWhereErrorAtStatement(t *testing.T) {
 	if lzLateLoads != before {
 		t.Fatalf("HasWhere built the owner's metadata (%d loads, were %d)", lzLateLoads, before)
 	}
-	const lwant = "velox: apitest.lzLate.Bad: its target github.com/syssam/velox2/internal/apitest.badDesc is invalid: apitest.badDesc: the tenant names column 3, of 1"
+	const lwant = "velox: apitest.lzLate.Bad: its target github.com/syssam/velox/internal/apitest.badDesc is invalid: apitest.badDesc: the tenant names column 3, of 1"
 	if _, err := ldb.Query[lzLate]().Where(lp).Limit(1).All(ctx); err == nil || err.Error() != lwant {
 		t.Errorf("All: %v, want %s", err, lwant)
 	}
@@ -411,7 +411,7 @@ func TestCheckRelation(t *testing.T) {
 	if err := velox.CheckRelation(lzTasks.Project); err != nil {
 		t.Errorf("a valid relation: %v", err)
 	}
-	const want = "velox: apitest.lzLate.Bad: its target github.com/syssam/velox2/internal/apitest.badDesc is invalid: apitest.badDesc: the tenant names column 3, of 1"
+	const want = "velox: apitest.lzLate.Bad: its target github.com/syssam/velox/internal/apitest.badDesc is invalid: apitest.badDesc: the tenant names column 3, of 1"
 	if err := velox.CheckRelation(lzLates.Bad); err == nil || err.Error() != want {
 		t.Errorf("an invalid target: %v, want %s", err, want)
 	}
@@ -506,7 +506,7 @@ func TestHandleMustNameTheFieldsEntity(t *testing.T) {
 	if err := velox.CheckRelation(mmBs.Items); err != nil {
 		t.Fatalf("a matching handle: %v", err)
 	}
-	const want = "velox: apitest.mmA.Items: the field is a velox.Many[github.com/syssam/velox2/internal/apitest.mmItem], but the Rel handle names github.com/syssam/velox2/internal/apitest.mmOther; run go tool velox-gen"
+	const want = "velox: apitest.mmA.Items: the field is a velox.Many[github.com/syssam/velox/internal/apitest.mmItem], but the Rel handle names github.com/syssam/velox/internal/apitest.mmOther; run go tool velox-gen"
 	err := velox.CheckRelation(mmAs.Items)
 	var se *velox.SchemaError
 	if !errors.As(err, &se) || err.Error() != want {
@@ -596,7 +596,7 @@ func TestHandleIsCheckedOnEveryUse(t *testing.T) {
 					switch {
 					case good && err != nil:
 						t.Errorf("round %d, good handle, %s: %v", n, use, err)
-					case !good && (err == nil || !strings.Contains(err.Error(), "the field is a velox.Many[github.com/syssam/velox2/internal/apitest.mmItem], but the Rel handle names github.com/syssam/velox2/internal/apitest.mmOther")):
+					case !good && (err == nil || !strings.Contains(err.Error(), "the field is a velox.Many[github.com/syssam/velox/internal/apitest.mmItem], but the Rel handle names github.com/syssam/velox/internal/apitest.mmOther")):
 						t.Errorf("round %d, stale handle, %s: %v", n, use, err)
 					}
 				}

@@ -3,9 +3,9 @@ package schema
 import (
 	"time"
 
-	"github.com/syssam/velox2/internal/testmodel/kind"
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/field"
+	"github.com/syssam/velox/internal/testmodel/kind"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/field"
 )
 
 // Event has a time GoType with a Default, once a value and once Nillable: the

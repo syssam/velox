@@ -20,7 +20,7 @@ if [ "${VELOX_CI_MATRIX:-}" = 1 ]; then
   [ "$(printf '%s\n' "$pg14" | grep -c .)" = 1 ] || { echo "ci-local.sh: no single postgres:14 image in .github/workflows/ci.yml's matrix" >&2; exit 1; }
 fi
 
-compose=(docker compose -f scripts/docker-compose.ci.yml -p velox2-ci)
+compose=(docker compose -f scripts/docker-compose.ci.yml -p velox-ci)
 # Registered before "up" so a failed or interrupted start still tears down.
 trap '"${compose[@]}" down -v' EXIT
 "${compose[@]}" up -d --wait

@@ -5,7 +5,7 @@
 ## Context
 
 An `updated_at` column usually has an `UpdateDefault`. On an upsert that hits
-a conflict, the update branch could set it or leave it. Old velox
+a conflict, the update branch could set it or leave it. veloxe
 (`genCreateUpsert`) and ent (entc's upsert.tmpl) do not fire it.
 
 ## Decision

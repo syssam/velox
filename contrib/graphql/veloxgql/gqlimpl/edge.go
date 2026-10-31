@@ -8,9 +8,9 @@ import (
 
 	"github.com/99designs/gqlgen/graphql"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/shared"
 )
 
 // The edges batch: the first edge field gqlgen resolves on any row of a

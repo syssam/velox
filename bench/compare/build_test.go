@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/syssam/velox2/internal/buildcost"
+	"github.com/syssam/velox/internal/buildcost"
 )
 
 func TestCountActions(t *testing.T) {
@@ -81,13 +81,13 @@ func testTools(t *testing.T) string {
 		if toolsDir, errTools = os.MkdirTemp("", "compare-tools-"); errTools != nil {
 			return
 		}
-		args := []string{"build", "-o", toolsDir + string(filepath.Separator)}
 		for _, o := range orms {
-			args = append(args, toolPkgs[o.Name])
-		}
-		cmd := exec.Command("go", args...)
-		cmd.Dir, cmd.Env = hd, goEnv()
-		if out, err := cmd.CombinedOutput(); err != nil {
+			cmd := exec.Command("go", "build", "-o", toolsDir+string(filepath.Separator), toolPkgs[o.Name])
+			cmd.Dir, cmd.Env = filepath.Join(hd, o.ModDir), goEnv()
+			out, err := cmd.CombinedOutput()
+			if err == nil {
+				continue
+			}
 			errTools = err
 			t.Logf("building the generators:\n%s", out)
 		}
@@ -119,7 +119,7 @@ func TestColdMustBeCold(t *testing.T) {
 	}
 	coldCache = cache
 	t.Cleanup(func() { coldCache = "" })
-	_, err := measureBuild(buildConfig{ORM: velox2ORM, N: 10, Services: 2, Run: 1, Tools: tools, Raw: t.TempDir()})
+	_, err := measureBuild(buildConfig{ORM: veloxORM, N: 10, Services: 2, Run: 1, Tools: tools, Raw: t.TempDir()})
 	if err == nil || !strings.Contains(err.Error(), "cold build reused") {
 		t.Fatalf("measureBuild with a warm cache: %v; want an error that contains %q", err, "cold build reused")
 	}
@@ -138,7 +138,7 @@ func TestEditMustRebuild(t *testing.T) {
 	old := editLine
 	editLine = "// extra"
 	t.Cleanup(func() { editLine = old })
-	_, err := measureBuild(buildConfig{ORM: velox2ORM, N: 10, Services: 2, Run: 1, Tools: tools, Raw: t.TempDir()})
+	_, err := measureBuild(buildConfig{ORM: veloxORM, N: 10, Services: 2, Run: 1, Tools: tools, Raw: t.TempDir()})
 	const want = "no action of the generated package reran"
 	if err == nil || !strings.Contains(err.Error(), want) {
 		t.Fatalf("measureBuild with a comment edit: %v; want an error that contains %q", err, want)

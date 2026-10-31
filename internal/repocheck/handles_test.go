@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox2/internal/handlegen"
+	"github.com/syssam/velox/internal/handlegen"
 )
 
 func TestHandlesFileIsCurrent(t *testing.T) {

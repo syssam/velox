@@ -118,9 +118,9 @@ func TestGuardSQLite(t *testing.T) {
 }
 
 // TestGuardPostgres runs the guard of each ORM in turn against one database
-// (Review Focus 4): each ORM touches only its own schema; the velox2pgx run
-// reuses and reseeds velox2's. Every schema keeps its rows after the later
-// guards. The velox2pgx run passes only if newApp's probe found its
+// (Review Focus 4): each ORM touches only its own schema; the veloxpgx run
+// reuses and reseeds velox's. Every schema keeps its rows after the later
+// guards. The veloxpgx run passes only if newApp's probe found its
 // operations on the pgx pool.
 func TestGuardPostgres(t *testing.T) {
 	if testing.Short() {
@@ -131,16 +131,16 @@ func TestGuardPostgres(t *testing.T) {
 		t.Skip("VELOX_COMPARE_POSTGRES is unset")
 	}
 	runGuard(t, entORM, "COMPARE_DIALECT=postgres")
-	runGuard(t, velox2ORM, "COMPARE_DIALECT=postgres")
-	runGuard(t, velox2ORM, "COMPARE_DIALECT=postgres", "COMPARE_VELOX2_PGX=1")
-	runGuard(t, oldVeloxORM, "COMPARE_DIALECT=postgres")
+	runGuard(t, veloxORM, "COMPARE_DIALECT=postgres")
+	runGuard(t, veloxORM, "COMPARE_DIALECT=postgres", "COMPARE_VELOX_PGX=1")
+	runGuard(t, veloxeORM, "COMPARE_DIALECT=postgres")
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = db.Close() }()
 	ctx := context.Background()
-	for _, name := range []string{"ent", "velox2", "oldvelox"} {
+	for _, name := range []string{"ent", "velox", "veloxe"} {
 		var e1 int
 		if err := db.QueryRowContext(ctx, `SELECT count(*) FROM cmp_`+name+`.e1s`).Scan(&e1); err != nil {
 			t.Fatal(err)
@@ -152,8 +152,8 @@ func TestGuardPostgres(t *testing.T) {
 }
 
 func TestRuntimeORMByName(t *testing.T) {
-	if got, err := runtimeORMByName("velox2pgx"); err != nil || got != "velox2" {
-		t.Errorf("velox2pgx: got %q, %v; want velox2", got, err)
+	if got, err := runtimeORMByName("veloxpgx"); err != nil || got != "velox" {
+		t.Errorf("veloxpgx: got %q, %v; want velox", got, err)
 	}
 	for _, o := range orms {
 		if got, err := runtimeORMByName(o.Name); err != nil || got != o.Name {
@@ -164,7 +164,7 @@ func TestRuntimeORMByName(t *testing.T) {
 	if err == nil {
 		t.Fatal("nope: no error")
 	}
-	for _, name := range []string{"velox2", "oldvelox", "ent", "velox2pgx"} {
+	for _, name := range []string{"velox", "veloxe", "ent", "veloxpgx"} {
 		if !strings.Contains(err.Error(), name) {
 			t.Errorf("the error %q does not name %s", err, name)
 		}

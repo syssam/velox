@@ -13,7 +13,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // freshDB is a new, empty database of dialect d, closed and dropped when t

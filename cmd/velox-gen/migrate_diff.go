@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/syssam/velox2/internal/codegen"
-	"github.com/syssam/velox2/migrate"
+	"github.com/syssam/velox/internal/codegen"
+	"github.com/syssam/velox/migrate"
 )
 
 // allowFlag is -allow: the destructive changes allowed, as ParseAllow reads

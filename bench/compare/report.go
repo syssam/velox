@@ -15,13 +15,13 @@ import (
 )
 
 // display is how the report names each ORM and runtime variant.
-var display = map[string]string{"velox2": "velox2", "oldvelox": "old velox", "ent": "ent", "velox2pgx": "velox2 (veloxpgx)"}
+var display = map[string]string{"velox": "velox", "veloxe": "veloxe", "ent": "ent", "veloxpgx": "velox (veloxpgx)"}
 
-// otherORMs are the ORMs other than velox2, in the order of their columns.
-var otherORMs = []string{"oldvelox", "ent"}
+// otherORMs are the ORMs other than velox, in the order of their columns.
+var otherORMs = []string{"veloxe", "ent"}
 
 // versionOrder is the order of the versions table.
-var versionOrder = []string{"velox2", "oldvelox", "ent", "sqlite", "pgx", "x/tools"}
+var versionOrder = []string{"velox", "veloxe", "ent", "sqlite", "pgx", "x/tools"}
 
 // fmtNum prints v with three significant digits; a whole number stays whole.
 func fmtNum(v float64) string {
@@ -52,7 +52,7 @@ func cell(st stat, ok bool) string {
 	return fmt.Sprintf("%s (%s)", fmtNum(st.Median), fmtNum(st.Worst))
 }
 
-// ratioCell is the median of st over velox2's, to three significant digits.
+// ratioCell is the median of st over velox's, to three significant digits.
 func ratioCell(st stat, ok bool, v2 stat, v2ok bool) string {
 	if !ok || !v2ok || v2.Median == 0 && st.Median != 0 {
 		return "-"
@@ -68,19 +68,19 @@ func writeReport(w io.Writer, s summary) error {
 	var b strings.Builder
 	sizes := s.Config.Sizes
 	if len(sizes) == 0 {
-		for n := range s.Build["velox2"] {
+		for n := range s.Build["velox"] {
 			x, _ := strconv.Atoi(n)
 			sizes = append(sizes, x)
 		}
 		slices.Sort(sizes)
 	}
 
-	b.WriteString("# velox2 performance comparison: tables\n\n")
+	b.WriteString("# velox performance comparison: tables\n\n")
 	b.WriteString("How to read the tables: a cell is `median (worst)` of the runs, where worst is the largest run, ")
 	b.WriteString("or the smallest for a metric where higher is better (the tables say which). ")
-	b.WriteString("The ratio columns are the other ORM ÷ velox2, from the medians: for a lower-is-better metric, a ratio above 1 means velox2 is better; ")
+	b.WriteString("The ratio columns are the other ORM ÷ velox, from the medians: for a lower-is-better metric, a ratio above 1 means velox is better; ")
 	b.WriteString("for a higher-is-better one, a ratio below 1 does. ")
-	b.WriteString("A `velox2 (veloxpgx)` column, where there is one, is velox2's app on `veloxpgx.Open` (a pgx pool) instead of database/sql; it is velox2 too, so it is never a loss.\n\n")
+	b.WriteString("A `velox (veloxpgx)` column, where there is one, is velox's app on `veloxpgx.Open` (a pgx pool) instead of database/sql; it is velox too, so it is never a loss.\n\n")
 	if len(s.Missing) > 0 {
 		b.WriteString("## Incomplete results\n\n")
 		b.WriteString("These results were not in the results directory when the summary was made, so the medians below may rest on fewer runs than planned, and the losses may be incomplete:\n\n")
@@ -124,14 +124,14 @@ func writeReport(w io.Writer, s summary) error {
 		}
 	}
 
-	b.WriteString("## Where velox2 loses\n\n")
-	b.WriteString("Every metric in which another ORM's median beats velox2's. There is no noise threshold: a difference of any size is listed.\n\n")
+	b.WriteString("## Where velox loses\n\n")
+	b.WriteString("Every metric in which another ORM's median beats velox's. There is no noise threshold: a difference of any size is listed.\n\n")
 	ls := losses(s)
 	switch {
 	case len(ls) == 0 && len(s.Missing) > 0:
-		b.WriteString("No loss among the results present, but the results are incomplete (see Incomplete results), so this does not show that velox2 is best.\n")
+		b.WriteString("No loss among the results present, but the results are incomplete (see Incomplete results), so this does not show that velox is best.\n")
 	case len(ls) == 0:
-		b.WriteString("velox2 is best on every metric measured.\n")
+		b.WriteString("velox is best on every metric measured.\n")
 	}
 	for _, l := range ls {
 		dir := "lower is better"
@@ -150,7 +150,7 @@ func writeReport(w io.Writer, s summary) error {
 		if !math.IsInf(l.Ratio, 0) {
 			r, _ = fmtPair(l.Ratio, 1)
 		}
-		fmt.Fprintf(&b, "- %s: %s %s vs velox2 %s (%s ÷ velox2 = %s, %s)\n",
+		fmt.Fprintf(&b, "- %s: %s %s vs velox %s (%s ÷ velox = %s, %s)\n",
 			where, display[l.Winner], best, v2, display[l.Winner], r, dir)
 	}
 	_, err := io.WriteString(w, b.String())
@@ -184,7 +184,7 @@ func writeBuild(b *strings.Builder, s summary, sizes []int) {
 }
 
 // runtimeColumns are the columns of a dialect's runtime tables after
-// velox2's: each runtime variant with results, then the other ORMs.
+// velox's: each runtime variant with results, then the other ORMs.
 func runtimeColumns(byORM map[string]map[string]map[string]stat) []string {
 	var cols []string
 	for _, v := range slices.Sorted(maps.Keys(runtimeVariants)) {
@@ -200,10 +200,10 @@ const insertBulk = "InsertBulk100"
 
 // insertBulkNote is the footnote under every runtime table that has the
 // InsertBulk100 row.
-const insertBulkNote = "¹ InsertBulk100 is not the same work in every ORM: velox2's `InsertAll` reads no keys back, " +
-	"while ent and old velox send `INSERT ... RETURNING id`, scan the 100 ids and return 100 entities. " +
+const insertBulkNote = "¹ InsertBulk100 is not the same work in every ORM: velox's `InsertAll` reads no keys back, " +
+	"while ent and veloxe send `INSERT ... RETURNING id`, scan the 100 ids and return 100 entities. " +
 	"The difference is by design and cannot be removed: ent has no bulk insert without the read-back. " +
-	"A velox2 advantage in this row is partly the advantage of doing less."
+	"A velox advantage in this row is partly the advantage of doing less."
 
 var (
 	buildStepRE = regexp.MustCompile(`^build-([a-z0-9]+)-n(\d+)-r(\d+)$`)
@@ -284,15 +284,15 @@ func benchRows(byORM map[string]map[string]map[string]stat) []string {
 	return append(rows, slices.Sorted(maps.Keys(seen))...)
 }
 
-// writeTableHead writes the head of a metric table: first, velox2, then
-// cols, then each of cols ÷ velox2.
+// writeTableHead writes the head of a metric table: first, velox, then
+// cols, then each of cols ÷ velox.
 func writeTableHead(b *strings.Builder, first string, cols []string) {
-	fmt.Fprintf(b, "| %s | velox2 |", first)
+	fmt.Fprintf(b, "| %s | velox |", first)
 	for _, c := range cols {
 		fmt.Fprintf(b, " %s |", display[c])
 	}
 	for _, c := range cols {
-		fmt.Fprintf(b, " %s ÷ velox2 |", display[c])
+		fmt.Fprintf(b, " %s ÷ velox |", display[c])
 	}
 	b.WriteString("\n|---|---|" + strings.Repeat("---|", 2*len(cols)) + "\n")
 }
@@ -300,7 +300,7 @@ func writeTableHead(b *strings.Builder, first string, cols []string) {
 // writeRow writes one row of a metric table, with the columns of
 // writeTableHead; get finds an ORM's stat.
 func writeRow(b *strings.Builder, label string, cols []string, get func(orm string) (stat, bool)) {
-	v2, v2ok := get("velox2")
+	v2, v2ok := get("velox")
 	fmt.Fprintf(b, "| %s | %s |", label, cell(v2, v2ok))
 	for _, c := range cols {
 		st, ok := get(c)
@@ -377,11 +377,11 @@ func writeMachine(b *strings.Builder, s summary, sizes []int) {
 func writeReference(b *strings.Builder, s summary, sizes []int) {
 	b.WriteString("\n### Reference build\n\n")
 	b.WriteString("`ref_cpu_s`: the CPU seconds of a fixed reference build, taken around each measurement. It measures the machine's load, not an ORM; the `_x` metrics divide by it. Each cell is `median (worst)`.\n\n")
-	b.WriteString("| size | velox2 | old velox | ent |\n|---|---|---|---|\n")
+	b.WriteString("| size | velox | veloxe | ent |\n|---|---|---|---|\n")
 	for _, n := range sizes {
 		k := strconv.Itoa(n)
-		v2, ok1 := s.Reference["velox2"][k]
-		old, ok2 := s.Reference["oldvelox"][k]
+		v2, ok1 := s.Reference["velox"][k]
+		old, ok2 := s.Reference["veloxe"][k]
 		ent, ok3 := s.Reference["ent"][k]
 		fmt.Fprintf(b, "| n=%s | %s | %s | %s |\n", k, cell(v2, ok1), cell(old, ok2), cell(ent, ok3))
 	}

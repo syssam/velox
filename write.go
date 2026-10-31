@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/syssam/velox2/internal/engine"
+	"github.com/syssam/velox/internal/engine"
 )
 
 // UpdateQuery is an UPDATE of entity E, built by chaining and run by Exec.

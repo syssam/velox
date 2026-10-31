@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // A session is the one connection a run holds, checked against the

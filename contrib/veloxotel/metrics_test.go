@@ -14,9 +14,9 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/contrib/veloxotel"
-	"github.com/syssam/velox2/internal/testmodel"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/veloxotel"
+	"github.com/syssam/velox/internal/testmodel"
 )
 
 // The boundaries semconv v1.43.0 advises, for durations and for rows.
@@ -46,7 +46,7 @@ func collect(t *testing.T, r *sdkmetric.ManualReader) map[string]metricdata.Metr
 	}
 	m := map[string]metricdata.Metrics{}
 	for _, sm := range rm.ScopeMetrics {
-		if sm.Scope.Name != "github.com/syssam/velox2/contrib/veloxotel" {
+		if sm.Scope.Name != "github.com/syssam/velox/contrib/veloxotel" {
 			t.Errorf("scope %q", sm.Scope.Name)
 		}
 		for _, x := range sm.Metrics {
@@ -257,7 +257,7 @@ func TestScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const name, schema = "github.com/syssam/velox2/contrib/veloxotel", "https://opentelemetry.io/schemas/1.43.0"
+	const name, schema = "github.com/syssam/velox/contrib/veloxotel", "https://opentelemetry.io/schemas/1.43.0"
 	spans := exp.GetSpans()
 	if len(spans) != 2 {
 		t.Fatalf("%d spans, want 2", len(spans))

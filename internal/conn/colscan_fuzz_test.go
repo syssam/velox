@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syssam/velox2/internal/conn"
-	"github.com/syssam/velox2/internal/testmodel/kind"
+	"github.com/syssam/velox/internal/conn"
+	"github.com/syssam/velox/internal/testmodel/kind"
 )
 
 // fuzzMoment is a struct type that converts to time.Time, with no methods:

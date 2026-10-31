@@ -3,7 +3,7 @@ package edge_test
 import (
 	"fmt"
 
-	"github.com/syssam/velox2/schema/edge"
+	"github.com/syssam/velox/schema/edge"
 )
 
 // An edge names its target by a method expression, and its inverse by the name of

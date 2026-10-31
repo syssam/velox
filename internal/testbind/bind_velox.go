@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/testbind/bindtype"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/testbind/bindtype"
 )
 
 const _ = velox.GeneratedCodeIsVersion6

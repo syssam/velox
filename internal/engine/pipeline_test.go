@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/engine"
-	"github.com/syssam/velox2/internal/fakeconn"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/engine"
+	"github.com/syssam/velox/internal/fakeconn"
 )
 
 func TestWritesGoThroughExec(t *testing.T) {

@@ -64,7 +64,7 @@ func edgeLine(e edgeSpec) string {
 
 // fieldLines returns the DSL calls for the fields of entity i, without the
 // trailing commas. fk is the DSL's type for the foreign key, "Int64" for
-// velox2 and "Int" for the others.
+// velox and "Int" for the others.
 func fieldLines(i int, fk string) []string {
 	ls := []string{
 		`field.String("name")`,

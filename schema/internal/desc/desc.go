@@ -103,7 +103,7 @@ func collectImports(t reflect.Type, out []string) []string {
 
 // FuncOf returns the function of a counter that Caller returned, as
 // runtime.Frame.Function reports it (the package path, then the name, as in
-// github.com/syssam/velox2/schema/mixin.Time.Fields), or "" for 0.
+// github.com/syssam/velox/schema/mixin.Time.Fields), or "" for 0.
 func FuncOf(pc uintptr) string {
 	if pc == 0 {
 		return ""

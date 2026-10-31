@@ -4,7 +4,7 @@ import (
 	"context"
 	"unsafe"
 
-	"github.com/syssam/velox2/internal/engine"
+	"github.com/syssam/velox/internal/engine"
 )
 
 // LoadEach returns, for each of owners in order, its rows of q related

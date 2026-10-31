@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // The JSON fields' model, written by hand as velox-gen writes a Desc: a

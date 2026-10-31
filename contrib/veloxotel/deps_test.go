@@ -31,7 +31,7 @@ func TestNoSDKDependency(t *testing.T) {
 		t.Fatalf("%v: %s", err, out)
 	}
 	allowed := []string{
-		"github.com/syssam/velox2",
+		"github.com/syssam/velox",
 		"go.opentelemetry.io/otel",
 		"go.opentelemetry.io/otel/attribute",
 		"go.opentelemetry.io/otel/codes",

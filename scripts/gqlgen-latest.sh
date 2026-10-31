@@ -17,7 +17,7 @@ trap 'chmod -R u+w "$tmp" 2>/dev/null || true; rm -rf "$tmp"' EXIT
   cd "$tmp/contrib/graphql"
   go get github.com/99designs/gqlgen@latest
   go mod tidy
-  # The itests build applications offline that require velox2 and this
+  # The itests build applications offline that require velox and this
   # module, with velox-gen and velox-graphql as tools: TestThroughTheLoader
   # (annotation_test.go) and app (cmd/velox-graphql/e2e_test.go) write their
   # go.mod, which this one mirrors. Their module graph is not this module's
@@ -26,7 +26,7 @@ trap 'chmod -R u+w "$tmp" 2>/dev/null || true; rm -rf "$tmp"' EXIT
   # read. Its go line is the repository's.
   goline=$(sed -n 's/^go //p' "$tmp/go.mod")
   mkdir "$tmp/warm"
-  printf 'module example.com/warm\n\ngo %s\n\ntool (\n\tgithub.com/syssam/velox2/cmd/velox-gen\n\tgithub.com/syssam/velox2/contrib/graphql/cmd/velox-graphql\n)\n\nrequire (\n\tgithub.com/syssam/velox2 v0.0.0\n\tgithub.com/syssam/velox2/contrib/graphql v0.0.0\n)\n\nreplace (\n\tgithub.com/syssam/velox2 => %s\n\tgithub.com/syssam/velox2/contrib/graphql => %s\n)\n' \
+  printf 'module example.com/warm\n\ngo %s\n\ntool (\n\tgithub.com/syssam/velox/cmd/velox-gen\n\tgithub.com/syssam/velox/contrib/graphql/cmd/velox-graphql\n)\n\nrequire (\n\tgithub.com/syssam/velox v0.0.0\n\tgithub.com/syssam/velox/contrib/graphql v0.0.0\n)\n\nreplace (\n\tgithub.com/syssam/velox => %s\n\tgithub.com/syssam/velox/contrib/graphql => %s\n)\n' \
     "$goline" "$tmp" "$tmp/contrib/graphql" > "$tmp/warm/go.mod"
   (cd "$tmp/warm" && go mod tidy)
   go vet ./...

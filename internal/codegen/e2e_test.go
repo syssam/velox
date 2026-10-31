@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox2/internal/tempmod"
+	"github.com/syssam/velox/internal/tempmod"
 )
 
 // e2eModule writes a temporary module holding testdata/e2e/schema, generates
@@ -31,7 +31,7 @@ func e2eModule(t *testing.T, cfg Config, userDirs []string, testFile string) str
 	}
 	for _, p := range matches {
 		// The first line is the //go:build ignore that keeps the fixture out of
-		// the packages of velox2.
+		// the packages of velox.
 		_, src, _ := bytes.Cut(read(p), []byte("\n"))
 		files["schema/"+filepath.Base(p)] = string(src)
 	}

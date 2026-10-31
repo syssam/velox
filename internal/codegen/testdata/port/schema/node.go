@@ -3,8 +3,8 @@
 package schema
 
 import (
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/edge"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/edge"
 )
 
 // Node references itself: a tree and a friends list.

@@ -3,7 +3,7 @@ package ddl
 import (
 	"testing"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 func TestNormalizeType(t *testing.T) {

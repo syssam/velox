@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // Trace records the order hooks and the core ran in, per test.

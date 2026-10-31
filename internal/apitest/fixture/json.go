@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // JShape is a struct stored as JSON.

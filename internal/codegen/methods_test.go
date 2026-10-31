@@ -295,10 +295,10 @@ func TestMethodsFindsPolicyConds(t *testing.T) {
 	dir := methodsDir(t, map[string]string{
 		// Read is nil, and Other's literal is another entity's: the Write
 		// key is the first that counts.
-		"friend.go": "package gen\n\nimport \"github.com/syssam/velox2\"\n\nfunc (*UserFriend) Policy() velox.Policy[UserFriend] {\n\t_ = velox.Policy[Other]{Read: r}\n\treturn velox.Policy[UserFriend]{\n\t\tInsert: ins,\n\t\tRead:   nil,\n\t\tWrite:  w,\n\t\tRead:   r,\n\t}\n}\n",
-		"group.go":  "package gen\n\nimport vx \"github.com/syssam/velox2\"\n\nfunc (*UserGroup) Policy() vx.Policy[UserGroup] {\n\treturn vx.Policy[UserGroup]{Insert: ins, Write: nil}\n}\n",
+		"friend.go": "package gen\n\nimport \"github.com/syssam/velox\"\n\nfunc (*UserFriend) Policy() velox.Policy[UserFriend] {\n\t_ = velox.Policy[Other]{Read: r}\n\treturn velox.Policy[UserFriend]{\n\t\tInsert: ins,\n\t\tRead:   nil,\n\t\tWrite:  w,\n\t\tRead:   r,\n\t}\n}\n",
+		"group.go":  "package gen\n\nimport vx \"github.com/syssam/velox\"\n\nfunc (*UserGroup) Policy() vx.Policy[UserGroup] {\n\treturn vx.Policy[UserGroup]{Insert: ins, Write: nil}\n}\n",
 		// A positional literal is left to the runtime's check.
-		"pair.go": "package gen\n\nimport \"github.com/syssam/velox2\"\n\nfunc (*UserPair) Policy() velox.Policy[UserPair] {\n\treturn velox.Policy[UserPair]{r, w, nil}\n}\n",
+		"pair.go": "package gen\n\nimport \"github.com/syssam/velox\"\n\nfunc (*UserPair) Policy() velox.Policy[UserPair] {\n\treturn velox.Policy[UserPair]{r, w, nil}\n}\n",
 	})
 	got, err := Methods(dir, []string{"UserFriend", "UserGroup", "UserPair"})
 	if err != nil {
@@ -318,7 +318,7 @@ func TestMethodsFindsPolicyConds(t *testing.T) {
 // bidirectional edge, with a Policy that sets Write fails at its line.
 func TestGenerateRefusesABidiPolicy(t *testing.T) {
 	dir := methodsDir(t, map[string]string{
-		"friend.go": "package gen\n\nimport \"github.com/syssam/velox2\"\n\nfunc (*UserFriend) Policy() velox.Policy[UserFriend] {\n\treturn velox.Policy[UserFriend]{Write: w}\n}\n",
+		"friend.go": "package gen\n\nimport \"github.com/syssam/velox\"\n\nfunc (*UserFriend) Policy() velox.Policy[UserFriend] {\n\treturn velox.Policy[UserFriend]{Write: w}\n}\n",
 	})
 	bound, err := Methods(dir, []string{"UserFriend"})
 	if err != nil {

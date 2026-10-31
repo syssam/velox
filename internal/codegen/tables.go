@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	velox "github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/ddl"
-	"github.com/syssam/velox2/migrate"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/ddl"
+	"github.com/syssam/velox/migrate"
 )
 
 // Tables builds the database model of g for the dialect d: one table per

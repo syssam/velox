@@ -13,22 +13,22 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/codegen/internal/other"
-	"github.com/syssam/velox2/internal/codegen/loadjson"
-	"github.com/syssam/velox2/internal/ddl"
-	"github.com/syssam/velox2/migrate"
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/edge"
-	"github.com/syssam/velox2/schema/field"
-	"github.com/syssam/velox2/schema/index"
-	"github.com/syssam/velox2/schema/load"
-	"github.com/syssam/velox2/schema/mixin"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/codegen/internal/other"
+	"github.com/syssam/velox/internal/codegen/loadjson"
+	"github.com/syssam/velox/internal/ddl"
+	"github.com/syssam/velox/migrate"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/edge"
+	"github.com/syssam/velox/schema/field"
+	"github.com/syssam/velox/schema/index"
+	"github.com/syssam/velox/schema/load"
+	"github.com/syssam/velox/schema/mixin"
 )
 
 func build(t *testing.T, ss ...schema.Interface) (*Graph, error) {
 	t.Helper()
-	b, err := load.Marshal("github.com/syssam/velox2/internal/codegen", ss...)
+	b, err := load.Marshal("github.com/syssam/velox/internal/codegen", ss...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1334,7 +1334,7 @@ func TestBuildFKHintOnlyWithoutGoType(t *testing.T) {
 // Two Go types that print alike, codegen.Cents, but are of two packages: a
 // foreign key of one cannot hold an ID of the other.
 func TestBuildFKOfAnotherPackagesType(t *testing.T) {
-	b, err := load.Marshal("github.com/syssam/velox2/internal/codegen", fkOtherPkg{})
+	b, err := load.Marshal("github.com/syssam/velox/internal/codegen", fkOtherPkg{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1353,7 +1353,7 @@ func TestBuildFKOfAnotherPackagesType(t *testing.T) {
 	g.PkgPath, g.Imports = "example.com/other/gen", []string{"example.com/other/gen"}
 	id.GoType = &g
 	_, err = Build(&m)
-	want := `schema fkOtherPkg: edge "parent": field "parent_id" is codegen.Cents of github.com/syssam/velox2/internal/codegen; fkOtherPkg's ID is codegen.Cents of example.com/other/gen`
+	want := `schema fkOtherPkg: edge "parent": field "parent_id" is codegen.Cents of github.com/syssam/velox/internal/codegen; fkOtherPkg's ID is codegen.Cents of example.com/other/gen`
 	if err == nil || plain(err) != want {
 		t.Fatalf("got %v, want %q", err, want)
 	}
@@ -2311,7 +2311,7 @@ func (reqSelfCascade) Edges() []schema.Edge {
 }
 
 // A Required edge to its own schema keeps its implicit key NULL-able, as
-// ent's and old velox's tables do (n != e.Type), so its default is SET NULL;
+// ent's and veloxe's tables do (n != e.Type), so its default is SET NULL;
 // the edge stays Required.
 func TestRequiredSelfKeyIsNullable(t *testing.T) {
 	g := mustBuild(t, reqSelf{}, reqSelfCascade{})

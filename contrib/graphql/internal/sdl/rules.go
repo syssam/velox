@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/syssam/velox2/contrib/graphql"
-	"github.com/syssam/velox2/contrib/graphql/internal/english"
-	"github.com/syssam/velox2/plugin"
+	"github.com/syssam/velox/contrib/graphql"
+	"github.com/syssam/velox/contrib/graphql/internal/english"
+	"github.com/syssam/velox/plugin"
 )
 
 // The kinds of element an annotation is on.

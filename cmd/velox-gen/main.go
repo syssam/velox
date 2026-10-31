@@ -8,7 +8,7 @@
 //
 // Install it as a tool of your module and run it from the module root:
 //
-//	go get -tool github.com/syssam/velox2/cmd/velox-gen
+//	go get -tool github.com/syssam/velox/cmd/velox-gen
 //	go tool velox-gen ./schema
 //
 // Usage:
@@ -81,7 +81,7 @@
 // it for several. Options for the plugin follow
 // a colon, -plugin velox-grpc:go_package=x/pb,mode=a; an option without "=",
 // with an empty key, or a key given twice is a usage error (exit 2). velox-gen
-// speaks plugin protocol 2, which package github.com/syssam/velox2/plugin
+// speaks plugin protocol 2, which package github.com/syssam/velox/plugin
 // documents: a plugin reads a JSON request on standard input,
 // {"plugin_protocol": 2, "generator": "velox-gen <version>", "out_package":
 // name, "out_path": the package's import path, "options": {key: value},
@@ -135,7 +135,7 @@
 //
 // migrate works on a migration directory, ./migrations unless -dir names
 // another, which holds velox.json, schema.json, the migration files and
-// velox.sum, as package github.com/syssam/velox2/migrate reads them. Each
+// velox.sum, as package github.com/syssam/velox/migrate reads them. Each
 // path it prints is joined to -dir, and each error is printed as
 // "velox-gen: migrate <subcommand>: <text>".
 //
@@ -249,8 +249,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/syssam/velox2/internal/codegen"
-	"github.com/syssam/velox2/plugin"
+	"github.com/syssam/velox/internal/codegen"
+	"github.com/syssam/velox/plugin"
 )
 
 func main() {

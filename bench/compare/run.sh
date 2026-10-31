@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs the comparison of velox2 with old velox and ent: the build measurements,
+# Runs the comparison of velox with veloxe and ent: the build measurements,
 # then the runtime benchmarks on SQLite and on PostgreSQL, then the summary and
 # its tables. Every command is one `compare step`, timed, logged to
 # <results>/steps.jsonl with the load before and after, and, where it measures,
@@ -16,8 +16,8 @@
 # COMPARE_BENCH_TIMEOUT, COMPARE_RESULTS, and:
 #   COMPARE_STEPS   all (the default): the build steps and the runtime ones;
 #                   runtime: the runtime steps only.
-#   COMPARE_PGX     1 (the default): the PostgreSQL rounds also run velox2pgx,
-#                   velox2's app on veloxpgx.Open; 0: they do not.
+#   COMPARE_PGX     1 (the default): the PostgreSQL rounds also run veloxpgx,
+#                   velox's app on veloxpgx.Open; 0: they do not.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
@@ -45,12 +45,12 @@ case "$(go env GOVERSION)" in
 esac
 command -v docker >/dev/null || { echo "run.sh needs docker" >&2; exit 1; }
 
-compose=(docker compose -f scripts/docker-compose.ci.yml -p velox2-ci)
+compose=(docker compose -f scripts/docker-compose.ci.yml -p velox-ci)
 # Checked at the start and again right before `up`, hours later: a stack that
 # someone started in between would be joined, and then torn down.
 require_no_stack() {
   if [ -n "$("${compose[@]}" ps -q)" ]; then
-    echo "velox2-ci is running: run.sh starts and stops its own" >&2
+    echo "velox-ci is running: run.sh starts and stops its own" >&2
     exit 1
   fi
 }
@@ -81,15 +81,15 @@ if [ ! -s "$results/env.txt" ]; then
   echo "GOFLAGS=$(go env GOFLAGS)" >"$results/env.txt"
 fi
 
-orms=(velox2 oldvelox ent)
+orms=(velox veloxe ent)
 # What each dialect's rounds run: the ORMs, and on PostgreSQL also the
-# velox2pgx variant, velox2's app on veloxpgx.Open.
-sqlite_orms=(velox2 oldvelox ent)
+# veloxpgx variant, velox's app on veloxpgx.Open.
+sqlite_orms=(velox veloxe ent)
 pg_orms=("${orms[@]}")
 pgx_config=()
 if [ "$COMPARE_PGX" = 1 ]; then
-  pg_orms+=(velox2pgx)
-  pgx_config=(-config variants=velox2pgx)
+  pg_orms+=(veloxpgx)
+  pgx_config=(-config variants=veloxpgx)
 fi
 
 # dialect_orms d: what dialect d's rounds run, on one line. Callers assign
@@ -106,7 +106,7 @@ dialect_orms() {
 # test_bin orm: the runtime test binary that runs orm; a variant runs its ORM's.
 test_bin() {
   case $1 in
-    velox2pgx) echo "$work/rt-velox2.test" ;;
+    veloxpgx) echo "$work/rt-velox.test" ;;
     *) echo "$work/rt-$1.test" ;;
   esac
 }
@@ -114,7 +114,7 @@ test_bin() {
 # test_env orm: the environment, beyond the dialect, that orm's runs need.
 test_env() {
   case $1 in
-    velox2pgx) echo COMPARE_VELOX2_PGX=1 ;;
+    veloxpgx) echo COMPARE_VELOX_PGX=1 ;;
   esac
 }
 
@@ -136,9 +136,9 @@ mkdir -p "$tools" "$work/boot"
 go -C bench/compare build -o "$work/boot/compare" .
 "$work/boot/compare" step -log "$results/steps.jsonl" -name tools -- sh -c '
   go -C bench/compare build -o "$1/compare" . &&
-  go -C bench/compare build -o "$1/velox-gen" github.com/syssam/velox2/cmd/velox-gen &&
+  go -C bench/compare build -o "$1/velox-gen" github.com/syssam/velox/cmd/velox-gen &&
   go -C bench/compare build -o "$1/ent" entgo.io/ent/cmd/ent &&
-  go -C bench/compare build -o "$1/velox" github.com/syssam/velox/cmd/velox' sh "$tools"
+  go -C bench/compare/veloxe build -o "$1/velox" github.com/syssam/velox/cmd/velox' sh "$tools"
 step=("$tools/compare" step -log "$results/steps.jsonl")
 
 # Build: every ORM at every size, RUNS times.

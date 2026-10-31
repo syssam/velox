@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox2/plugin"
+	"github.com/syssam/velox/plugin"
 )
 
 // run is plugin.Run on the request in, and the response it writes, decoded,
@@ -60,13 +60,13 @@ func TestRunChecksLiterals(t *testing.T) {
 		want string
 	}{
 		{"plugin written for protocol 1", plugin.Supports{Protocol: 1, Model: 2}, good(t),
-			"this plugin was written for plugin protocol 1; the velox2 it is built with speaks 2: update the plugin"},
+			"this plugin was written for plugin protocol 1; the velox it is built with speaks 2: update the plugin"},
 		{"plugin written for model 1", plugin.Supports{Protocol: 2, Model: 1}, good(t),
-			"this plugin was written for model 1; the velox2 it is built with has model 2: update the plugin"},
+			"this plugin was written for model 1; the velox it is built with has model 2: update the plugin"},
 		{"plugin written for protocol 3", plugin.Supports{Protocol: 3, Model: 2}, good(t),
-			"this plugin was written for plugin protocol 3; the velox2 it is built with speaks 2: build it with a newer velox2"},
+			"this plugin was written for plugin protocol 3; the velox it is built with speaks 2: build it with a newer velox"},
 		{"plugin written for model 3", plugin.Supports{Protocol: 2, Model: 3}, good(t),
-			"this plugin was written for model 3; the velox2 it is built with has model 2: build it with a newer velox2"},
+			"this plugin was written for model 3; the velox it is built with has model 2: build it with a newer velox"},
 		{"request of protocol 1", current, request(t, plugin.Request{Protocol: 1, Model: &plugin.Model{Version: 2}}),
 			"the request is plugin protocol 1; this plugin speaks 2"},
 		{"no model", current, request(t, plugin.Request{Protocol: 2}), "the request has no model"},

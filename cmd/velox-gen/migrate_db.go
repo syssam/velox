@@ -20,13 +20,13 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib" // the pgx driver
 	_ "modernc.org/sqlite"             // the sqlite driver
 
-	velox2 "github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // openDB opens dsn with the driver of d: "pgx", "mysql" or "sqlite", whose
 // packages this file imports. dsn is -db, else $VELOX_DB from env.
-func openDB(d velox2.Dialect, dsn string) (*sql.DB, error) {
-	driver := map[velox2.Dialect]string{velox2.Postgres: "pgx", velox2.MySQL: "mysql", velox2.SQLite: "sqlite"}[d]
+func openDB(d velox.Dialect, dsn string) (*sql.DB, error) {
+	driver := map[velox.Dialect]string{velox.Postgres: "pgx", velox.MySQL: "mysql", velox.SQLite: "sqlite"}[d]
 	if driver == "" {
 		return nil, fmt.Errorf("no driver for the dialect %q", d.String())
 	}
@@ -75,8 +75,8 @@ type secret struct {
 // secrets is the secret of dsn, read with d's driver and as each way of
 // writing a DSN may hold its password, plain and escaped. A SQLite DSN is a
 // path, which messages name, unless it carries parameters.
-func secrets(d velox2.Dialect, dsn string) secret {
-	if d == velox2.SQLite {
+func secrets(d velox.Dialect, dsn string) secret {
+	if d == velox.SQLite {
 		if strings.Contains(dsn, "?") {
 			return secret{dsns: []string{dsn}}
 		}
@@ -84,11 +84,11 @@ func secrets(d velox2.Dialect, dsn string) secret {
 	}
 	var pws []string
 	switch d {
-	case velox2.Postgres:
+	case velox.Postgres:
 		if c, err := pgconn.ParseConfig(dsn); err == nil {
 			pws = append(pws, c.Password)
 		}
-	case velox2.MySQL:
+	case velox.MySQL:
 		if c, err := mysql.ParseDSN(dsn); err == nil {
 			pws = append(pws, c.Passwd)
 		}
@@ -112,7 +112,7 @@ func secrets(d velox2.Dialect, dsn string) secret {
 	for _, m := range keywordPassword.FindAllStringSubmatch(dsn, -1) {
 		pws = append(pws, m[1], strings.Trim(m[1], "'"))
 	}
-	return secret{dsns: spellings([]string{dsn}), passwords: spellings(pws), pg: d == velox2.Postgres}
+	return secret{dsns: spellings([]string{dsn}), passwords: spellings(pws), pg: d == velox.Postgres}
 }
 
 // spellings is each of ss plain, unescaped and escaped, without "",
@@ -176,25 +176,25 @@ func (s secret) redact(text string) string {
 // DSN or the parser's text. A PostgreSQL DSN naming a file that cannot be
 // read, such as sslrootcert, says so and names that file, and nothing else of
 // the DSN.
-func dsnForm(d velox2.Dialect, dsn, src, whose string) error {
+func dsnForm(d velox.Dialect, dsn, src, whose string) error {
 	var name string
 	ok := true
 	switch d {
-	case velox2.Postgres:
+	case velox.Postgres:
 		name = "a PostgreSQL connection string"
 		_, err := pgconn.ParseConfig(dsn)
 		if pe := (*fs.PathError)(nil); errors.As(err, &pe) {
 			return fmt.Errorf("%s names a file that cannot be read: %v", src, pe)
 		}
 		ok = err == nil
-	case velox2.MySQL:
+	case velox.MySQL:
 		name = "a MySQL DSN"
 		if strings.Contains(dsn, "://") {
 			return fmt.Errorf("%s is not %s (%s is mysql); MySQL DSNs look like user:pass@tcp(host:3306)/db", src, name, whose)
 		}
 		_, err := mysql.ParseDSN(dsn)
 		ok = err == nil
-	case velox2.SQLite:
+	case velox.SQLite:
 		name = "a SQLite path or URI"
 		if scheme, _, found := strings.Cut(dsn, "://"); found && scheme != "file" {
 			ok = false

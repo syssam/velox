@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/syssam/velox2/dbtype"
+	"github.com/syssam/velox/dbtype"
 )
 
 // An application reads the error's fields, in the same form on every dialect.

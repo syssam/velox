@@ -9,7 +9,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // txAround is the TxAround hook: one internal span per db.Tx call, around

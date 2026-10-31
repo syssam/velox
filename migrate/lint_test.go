@@ -11,11 +11,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/codegen/loadjson"
-	"github.com/syssam/velox2/migrate"
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/field"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/codegen/loadjson"
+	"github.com/syssam/velox/migrate"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/field"
 )
 
 var update = flag.Bool("update", false, "write the golden files")

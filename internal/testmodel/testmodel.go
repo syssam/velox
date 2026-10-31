@@ -6,7 +6,7 @@
 // Ticket's Policy and Hooks, WithUser and the aliases below are written by hand.
 package testmodel
 
-import "github.com/syssam/velox2/internal/testmodel/kind"
+import "github.com/syssam/velox/internal/testmodel/kind"
 
 // Status is a named string type: its handle is a StringCol.
 type Status = kind.Status

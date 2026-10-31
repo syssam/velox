@@ -8,7 +8,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/syssam/velox2/internal/engine"
+	"github.com/syssam/velox/internal/engine"
 )
 
 // Query is a SELECT on entity E, built by chaining and run by All, One, Iter

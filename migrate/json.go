@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // snapshotVersion is the version of the JSON this package reads and writes.

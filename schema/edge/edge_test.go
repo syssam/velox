@@ -13,9 +13,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/edge"
-	"github.com/syssam/velox2/schema/internal/desc"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/edge"
+	"github.com/syssam/velox/schema/internal/desc"
 )
 
 type User struct{ schema.Schema }
@@ -23,7 +23,7 @@ type Post struct{ schema.Schema }
 
 func TestTo(t *testing.T) {
 	d := edge.To("posts", Post.Type).Required().StorageKey(edge.Column("author_id"), edge.Symbol("posts_author")).Comment("c").Descriptor()
-	if len(d.Errs) != 0 || d.Name != "posts" || d.Type != "Post" || d.TypePkg != "github.com/syssam/velox2/schema/edge_test" ||
+	if len(d.Errs) != 0 || d.Name != "posts" || d.Type != "Post" || d.TypePkg != "github.com/syssam/velox/schema/edge_test" ||
 		d.Inverse || !d.Required || d.Columns[0] != "author_id" || d.Symbols[0] != "posts_author" || d.Comment != "c" {
 		t.Fatalf("%+v", d)
 	}
@@ -99,7 +99,7 @@ func TestBuildersAreDocumented(t *testing.T) {
 		}
 		parsed = append(parsed, f)
 	}
-	pkg, err := doc.NewFromFiles(fset, parsed, "github.com/syssam/velox2/schema/edge")
+	pkg, err := doc.NewFromFiles(fset, parsed, "github.com/syssam/velox/schema/edge")
 	if err != nil {
 		t.Fatal(err)
 	}

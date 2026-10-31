@@ -3,7 +3,7 @@ package gen
 import (
 	"context"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // Policy declares Comment's policy by inheritance: a comment is visible when

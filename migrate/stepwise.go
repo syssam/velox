@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // maxLockWaitTimeout is the most MySQL's lock_wait_timeout takes: a year.

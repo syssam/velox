@@ -3,9 +3,9 @@ package gen
 import (
 	"context"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
 const _ = veloxgql.GeneratedCodeIsVersion3

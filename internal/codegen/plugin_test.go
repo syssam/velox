@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syssam/velox2/plugin"
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/edge"
-	"github.com/syssam/velox2/schema/field"
+	"github.com/syssam/velox/plugin"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/edge"
+	"github.com/syssam/velox/schema/field"
 )
 
 // blogModel loads the golden blog schema and lowers it, as TestGolden does.
@@ -344,7 +344,7 @@ func TestPluginModel2Imports(t *testing.T) {
 	}
 	m := PluginModel(g, o)
 	doc := pluginEntity(t, m, "PlDoc")
-	const self = "github.com/syssam/velox2/internal/codegen"
+	const self = "github.com/syssam/velox/internal/codegen"
 	// A time GoType's own package alone: its type mentions no other.
 	for name, want := range map[string]string{"id": self, "stamps": "time", "at": self} {
 		if got := strings.Join(pluginField(t, doc, name).Imports, ","); got != want {
@@ -386,7 +386,7 @@ func TestPluginModel2JoinFieldsTyped(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := PluginModel(g, o)
-	const self = "github.com/syssam/velox2/internal/codegen"
+	const self = "github.com/syssam/velox/internal/codegen"
 	for _, c := range []struct{ owner, edge, want string }{{"PlHolder", "badges", "uuid array"}, {"PlReader", "docs", "string string"}} {
 		holder, edge, want := pluginEntity(t, m, c.owner), c.edge, c.want
 		j := pluginEntity(t, m, pluginEdge(t, holder, edge).Join)
@@ -541,10 +541,10 @@ func TestPluginModelJoinTypesAndComments(t *testing.T) {
 	// An enum with a Go type declares no enum type: the field names the Go
 	// type, and holds the values.
 	st := pluginField(t, owner, "st")
-	if st.Enum != "LwStatus" || strings.Join(st.EnumValues, ",") != "on,off" || st.Nullable || st.ElemType != "codegen.LwStatus" || st.PkgPath != "github.com/syssam/velox2/internal/codegen" || st.Kind != "string" {
+	if st.Enum != "LwStatus" || strings.Join(st.EnumValues, ",") != "on,off" || st.Nullable || st.ElemType != "codegen.LwStatus" || st.PkgPath != "github.com/syssam/velox/internal/codegen" || st.Kind != "string" {
 		t.Errorf("st %+v", st)
 	}
-	if strings.Join(st.Imports, ",") != "github.com/syssam/velox2/internal/codegen" {
+	if strings.Join(st.Imports, ",") != "github.com/syssam/velox/internal/codegen" {
 		t.Errorf("st imports %v", st.Imports)
 	}
 	// The foreign key of an O2M is in the target's table; of an M2M, none.

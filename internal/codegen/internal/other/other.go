@@ -2,7 +2,7 @@
 // package gen: an edge to it is an edge out of the schema package.
 package other
 
-import "github.com/syssam/velox2/schema"
+import "github.com/syssam/velox/schema"
 
 // Thing is a schema of a package other than the one under test.
 type Thing struct{ schema.Schema }

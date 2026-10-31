@@ -20,7 +20,7 @@ import (
 	"example.com/tmp/velox/e3"
 )
 
-const ormName = "oldvelox"
+const ormName = "veloxe"
 
 // created is every row's created_at.
 var created = time.Date(2026, 10, 29, 0, 0, 0, 0, time.UTC)

@@ -60,7 +60,7 @@ func (a *CheckAnnotation) Merge(other Annotation) Annotation {
 }
 
 // Check adds the CHECK constraint name to a schema's table. expr is SQL of the
-// schema's dialect, and velox2 writes it as it is, so its identifiers must be
+// schema's dialect, and velox writes it as it is, so its identifiers must be
 // quoted the dialect's way if at all. A violation fails the statement with a
 // *velox.ConstraintError of kind ConstraintCheck.
 //

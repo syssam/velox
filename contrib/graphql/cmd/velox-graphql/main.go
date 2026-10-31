@@ -4,12 +4,12 @@
 // gen/gql_*.go. An application adds it as a tool of its module and names it
 // to velox-gen:
 //
-//	go get -tool github.com/syssam/velox2/contrib/graphql/cmd/velox-graphql
+//	go get -tool github.com/syssam/velox/contrib/graphql/cmd/velox-graphql
 //	go tool velox-gen -out gen -plugin velox-graphql ./schema
 //
 // velox-gen runs it with the request, the resolved model as JSON, on its
 // standard input, and it answers with the files on its standard output (see
-// package github.com/syssam/velox2/plugin). velox-gen writes them, with the
+// package github.com/syssam/velox/plugin). velox-gen writes them, with the
 // generated-file header, and owns them from then on. It takes no options:
 // -plugin velox-graphql:key=value fails the run.
 package main
@@ -20,9 +20,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/syssam/velox2/contrib/graphql/internal/gogen"
-	"github.com/syssam/velox2/contrib/graphql/internal/sdl"
-	"github.com/syssam/velox2/plugin"
+	"github.com/syssam/velox/contrib/graphql/internal/gogen"
+	"github.com/syssam/velox/contrib/graphql/internal/sdl"
+	"github.com/syssam/velox/plugin"
 )
 
 func main() {

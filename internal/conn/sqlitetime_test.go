@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syssam/velox2/internal/conn"
+	"github.com/syssam/velox/internal/conn"
 )
 
 // argsExec records the arguments of its last statement.

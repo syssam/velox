@@ -5,7 +5,7 @@ import (
 	"slices"
 	"unsafe"
 
-	"github.com/syssam/velox2/internal/engine"
+	"github.com/syssam/velox/internal/engine"
 )
 
 // One holds a to-one relation, filled by With. Its zero value means not loaded.

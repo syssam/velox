@@ -4,10 +4,10 @@
 
 ## Context
 
-Old velox forked ent's `sql/schema` on Atlas. Three dialects and one model are
+veloxe forked ent's `sql/schema` on Atlas. Three dialects and one model are
 small enough to plan and apply in velox, which keeps its dependency rules,
 deterministic output and safety checks. Teams that already run Atlas want to
-keep it, and migrations are not velox2's focus.
+keep it, and migrations are not velox's focus.
 
 ## Decision
 

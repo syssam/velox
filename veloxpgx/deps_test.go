@@ -13,7 +13,7 @@ func TestCoreLinksNoDriver(t *testing.T) {
 	if testing.Short() {
 		t.Skip("runs go list")
 	}
-	out, err := exec.Command("go", "list", "-deps", "github.com/syssam/velox2").CombinedOutput()
+	out, err := exec.Command("go", "list", "-deps", "github.com/syssam/velox").CombinedOutput()
 	if err != nil {
 		t.Fatalf("%v: %s", err, out)
 	}

@@ -3,7 +3,7 @@ package velox
 import (
 	"context"
 
-	"github.com/syssam/velox2/internal/engine"
+	"github.com/syssam/velox/internal/engine"
 )
 
 // aggRun is the state of one aggregate read: the value scanned, nil for NULL.

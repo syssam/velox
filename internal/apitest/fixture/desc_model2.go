@@ -6,8 +6,8 @@ import (
 	"context"
 	"sync/atomic"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/testmodel"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/testmodel"
 )
 
 // More Desc entities for the tests that need a shape internal/testmodel does

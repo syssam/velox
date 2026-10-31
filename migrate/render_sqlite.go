@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/syssam/velox2/internal/ddl"
+	"github.com/syssam/velox/internal/ddl"
 )
 
 // sqlite renders the changes for SQLite. A table Lint finds rebuilt is

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox2/contrib/graphql"
-	"github.com/syssam/velox2/plugin"
+	"github.com/syssam/velox/contrib/graphql"
+	"github.com/syssam/velox/plugin"
 )
 
 // blogInputs is a model whose User and Post have every kind of input field.

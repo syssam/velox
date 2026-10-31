@@ -15,8 +15,8 @@ import (
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/99designs/gqlgen/graphql/introspection"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql"
-	"github.com/syssam/velox2/examples/graphql/gen"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/examples/graphql/gen"
 	gqlparser "github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
 )
@@ -1093,7 +1093,7 @@ var parsedSchema = gqlparser.MustLoadSchema(sources...)
 func (ec *executionContext) field_Label_posts_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
 	if err != nil {
 		return nil, err
 	}
@@ -1103,7 +1103,7 @@ func (ec *executionContext) field_Label_posts_args(ctx context.Context, rawArgs 
 		return nil, err
 	}
 	args["first"] = arg1
-	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
 	if err != nil {
 		return nil, err
 	}
@@ -1113,12 +1113,12 @@ func (ec *executionContext) field_Label_posts_args(ctx context.Context, rawArgs 
 		return nil, err
 	}
 	args["last"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOPostOrder2ᚕᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostOrderᚄ)
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOPostOrder2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostOrderᚄ)
 	if err != nil {
 		return nil, err
 	}
 	args["orderBy"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOPostWhereInput2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostWhereInput)
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOPostWhereInput2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostWhereInput)
 	if err != nil {
 		return nil, err
 	}
@@ -1129,7 +1129,7 @@ func (ec *executionContext) field_Label_posts_args(ctx context.Context, rawArgs 
 func (ec *executionContext) field_Mutation_createLabel_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateLabelInput2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐCreateLabelInput)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateLabelInput2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐCreateLabelInput)
 	if err != nil {
 		return nil, err
 	}
@@ -1140,7 +1140,7 @@ func (ec *executionContext) field_Mutation_createLabel_args(ctx context.Context,
 func (ec *executionContext) field_Mutation_createPost_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreatePostInput2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐCreatePostInput)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreatePostInput2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐCreatePostInput)
 	if err != nil {
 		return nil, err
 	}
@@ -1151,7 +1151,7 @@ func (ec *executionContext) field_Mutation_createPost_args(ctx context.Context, 
 func (ec *executionContext) field_Mutation_createUser_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateUserInput2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐCreateUserInput)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateUserInput2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐCreateUserInput)
 	if err != nil {
 		return nil, err
 	}
@@ -1178,7 +1178,7 @@ func (ec *executionContext) field_Mutation_updateLabel_args(ctx context.Context,
 		return nil, err
 	}
 	args["id"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateLabelInput2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUpdateLabelInput)
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateLabelInput2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUpdateLabelInput)
 	if err != nil {
 		return nil, err
 	}
@@ -1194,7 +1194,7 @@ func (ec *executionContext) field_Mutation_updatePost_args(ctx context.Context, 
 		return nil, err
 	}
 	args["id"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdatePostInput2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUpdatePostInput)
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdatePostInput2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUpdatePostInput)
 	if err != nil {
 		return nil, err
 	}
@@ -1210,7 +1210,7 @@ func (ec *executionContext) field_Mutation_updateUser_args(ctx context.Context, 
 		return nil, err
 	}
 	args["id"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateUserInput2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUpdateUserInput)
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateUserInput2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUpdateUserInput)
 	if err != nil {
 		return nil, err
 	}
@@ -1221,7 +1221,7 @@ func (ec *executionContext) field_Mutation_updateUser_args(ctx context.Context, 
 func (ec *executionContext) field_Post_tags_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
 	if err != nil {
 		return nil, err
 	}
@@ -1231,7 +1231,7 @@ func (ec *executionContext) field_Post_tags_args(ctx context.Context, rawArgs ma
 		return nil, err
 	}
 	args["first"] = arg1
-	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
 	if err != nil {
 		return nil, err
 	}
@@ -1241,12 +1241,12 @@ func (ec *executionContext) field_Post_tags_args(ctx context.Context, rawArgs ma
 		return nil, err
 	}
 	args["last"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOLabelOrder2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐLabelOrder)
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOLabelOrder2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐLabelOrder)
 	if err != nil {
 		return nil, err
 	}
 	args["orderBy"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOLabelWhereInput2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐLabelWhereInput)
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOLabelWhereInput2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐLabelWhereInput)
 	if err != nil {
 		return nil, err
 	}
@@ -1268,7 +1268,7 @@ func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs
 func (ec *executionContext) field_Query_labels_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
 	if err != nil {
 		return nil, err
 	}
@@ -1278,7 +1278,7 @@ func (ec *executionContext) field_Query_labels_args(ctx context.Context, rawArgs
 		return nil, err
 	}
 	args["first"] = arg1
-	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
 	if err != nil {
 		return nil, err
 	}
@@ -1288,12 +1288,12 @@ func (ec *executionContext) field_Query_labels_args(ctx context.Context, rawArgs
 		return nil, err
 	}
 	args["last"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOLabelOrder2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐLabelOrder)
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOLabelOrder2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐLabelOrder)
 	if err != nil {
 		return nil, err
 	}
 	args["orderBy"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOLabelWhereInput2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐLabelWhereInput)
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOLabelWhereInput2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐLabelWhereInput)
 	if err != nil {
 		return nil, err
 	}
@@ -1326,7 +1326,7 @@ func (ec *executionContext) field_Query_nodes_args(ctx context.Context, rawArgs 
 func (ec *executionContext) field_Query_posts_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
 	if err != nil {
 		return nil, err
 	}
@@ -1336,7 +1336,7 @@ func (ec *executionContext) field_Query_posts_args(ctx context.Context, rawArgs 
 		return nil, err
 	}
 	args["first"] = arg1
-	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
 	if err != nil {
 		return nil, err
 	}
@@ -1346,12 +1346,12 @@ func (ec *executionContext) field_Query_posts_args(ctx context.Context, rawArgs 
 		return nil, err
 	}
 	args["last"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOPostOrder2ᚕᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostOrderᚄ)
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOPostOrder2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostOrderᚄ)
 	if err != nil {
 		return nil, err
 	}
 	args["orderBy"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOPostWhereInput2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostWhereInput)
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOPostWhereInput2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostWhereInput)
 	if err != nil {
 		return nil, err
 	}
@@ -1362,7 +1362,7 @@ func (ec *executionContext) field_Query_posts_args(ctx context.Context, rawArgs 
 func (ec *executionContext) field_Query_publishedPosts_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
 	if err != nil {
 		return nil, err
 	}
@@ -1372,7 +1372,7 @@ func (ec *executionContext) field_Query_publishedPosts_args(ctx context.Context,
 		return nil, err
 	}
 	args["first"] = arg1
-	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
 	if err != nil {
 		return nil, err
 	}
@@ -1382,12 +1382,12 @@ func (ec *executionContext) field_Query_publishedPosts_args(ctx context.Context,
 		return nil, err
 	}
 	args["last"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOPostOrder2ᚕᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostOrderᚄ)
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOPostOrder2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostOrderᚄ)
 	if err != nil {
 		return nil, err
 	}
 	args["orderBy"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOPostWhereInput2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostWhereInput)
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOPostWhereInput2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostWhereInput)
 	if err != nil {
 		return nil, err
 	}
@@ -1398,7 +1398,7 @@ func (ec *executionContext) field_Query_publishedPosts_args(ctx context.Context,
 func (ec *executionContext) field_Query_users_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
 	if err != nil {
 		return nil, err
 	}
@@ -1408,7 +1408,7 @@ func (ec *executionContext) field_Query_users_args(ctx context.Context, rawArgs 
 		return nil, err
 	}
 	args["first"] = arg1
-	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
 	if err != nil {
 		return nil, err
 	}
@@ -1418,12 +1418,12 @@ func (ec *executionContext) field_Query_users_args(ctx context.Context, rawArgs 
 		return nil, err
 	}
 	args["last"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOUserOrder2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserOrder)
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOUserOrder2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserOrder)
 	if err != nil {
 		return nil, err
 	}
 	args["orderBy"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOUserWhereInput2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserWhereInput)
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOUserWhereInput2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserWhereInput)
 	if err != nil {
 		return nil, err
 	}
@@ -1434,7 +1434,7 @@ func (ec *executionContext) field_Query_users_args(ctx context.Context, rawArgs 
 func (ec *executionContext) field_User_posts_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
 	if err != nil {
 		return nil, err
 	}
@@ -1444,7 +1444,7 @@ func (ec *executionContext) field_User_posts_args(ctx context.Context, rawArgs m
 		return nil, err
 	}
 	args["first"] = arg1
-	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐCursor)
 	if err != nil {
 		return nil, err
 	}
@@ -1454,12 +1454,12 @@ func (ec *executionContext) field_User_posts_args(ctx context.Context, rawArgs m
 		return nil, err
 	}
 	args["last"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOPostOrder2ᚕᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostOrderᚄ)
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "orderBy", ec.unmarshalOPostOrder2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostOrderᚄ)
 	if err != nil {
 		return nil, err
 	}
 	args["orderBy"] = arg4
-	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOPostWhereInput2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostWhereInput)
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "where", ec.unmarshalOPostWhereInput2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostWhereInput)
 	if err != nil {
 		return nil, err
 	}
@@ -1617,7 +1617,7 @@ func (ec *executionContext) _Label_posts(ctx context.Context, field graphql.Coll
 			return obj.PostsGQL(ctx, fc.Args["after"].(*veloxgql.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*veloxgql.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].([]*gen.PostOrder), fc.Args["where"].(*gen.PostWhereInput))
 		},
 		nil,
-		ec.marshalNPostConnection2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostConnection,
+		ec.marshalNPostConnection2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostConnection,
 		true,
 		true,
 	)
@@ -1665,7 +1665,7 @@ func (ec *executionContext) _LabelConnection_edges(ctx context.Context, field gr
 			return obj.Edges(ctx)
 		},
 		nil,
-		ec.marshalNLabelEdge2ᚕᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐLabelEdgeᚄ,
+		ec.marshalNLabelEdge2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐLabelEdgeᚄ,
 		true,
 		true,
 	)
@@ -1700,7 +1700,7 @@ func (ec *executionContext) _LabelConnection_pageInfo(ctx context.Context, field
 			return obj.PageInfo(ctx)
 		},
 		nil,
-		ec.marshalNPageInfo2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐPageInfo,
+		ec.marshalNPageInfo2ᚖgithubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐPageInfo,
 		true,
 		true,
 	)
@@ -1768,7 +1768,7 @@ func (ec *executionContext) _LabelEdge_node(ctx context.Context, field graphql.C
 			return obj.Node, nil
 		},
 		nil,
-		ec.marshalNLabel2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐTag,
+		ec.marshalNLabel2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐTag,
 		true,
 		true,
 	)
@@ -1807,7 +1807,7 @@ func (ec *executionContext) _LabelEdge_cursor(ctx context.Context, field graphql
 			return obj.Cursor, nil
 		},
 		nil,
-		ec.marshalNCursor2githubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐCursor,
+		ec.marshalNCursor2githubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐCursor,
 		true,
 		true,
 	)
@@ -1837,7 +1837,7 @@ func (ec *executionContext) _Mutation_createPost(ctx context.Context, field grap
 			return ec.resolvers.Mutation().CreatePost(ctx, fc.Args["input"].(gen.CreatePostInput))
 		},
 		nil,
-		ec.marshalNPost2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPost,
+		ec.marshalNPost2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPost,
 		true,
 		true,
 	)
@@ -1894,7 +1894,7 @@ func (ec *executionContext) _Mutation_updatePost(ctx context.Context, field grap
 			return ec.resolvers.Mutation().UpdatePost(ctx, fc.Args["id"].(string), fc.Args["input"].(gen.UpdatePostInput))
 		},
 		nil,
-		ec.marshalNPost2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPost,
+		ec.marshalNPost2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPost,
 		true,
 		true,
 	)
@@ -1992,7 +1992,7 @@ func (ec *executionContext) _Mutation_createLabel(ctx context.Context, field gra
 			return ec.resolvers.Mutation().CreateLabel(ctx, fc.Args["input"].(gen.CreateLabelInput))
 		},
 		nil,
-		ec.marshalNLabel2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐTag,
+		ec.marshalNLabel2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐTag,
 		true,
 		true,
 	)
@@ -2043,7 +2043,7 @@ func (ec *executionContext) _Mutation_updateLabel(ctx context.Context, field gra
 			return ec.resolvers.Mutation().UpdateLabel(ctx, fc.Args["id"].(string), fc.Args["input"].(gen.UpdateLabelInput))
 		},
 		nil,
-		ec.marshalNLabel2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐTag,
+		ec.marshalNLabel2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐTag,
 		true,
 		true,
 	)
@@ -2094,7 +2094,7 @@ func (ec *executionContext) _Mutation_createUser(ctx context.Context, field grap
 			return ec.resolvers.Mutation().CreateUser(ctx, fc.Args["input"].(gen.CreateUserInput))
 		},
 		nil,
-		ec.marshalNUser2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUser,
+		ec.marshalNUser2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUser,
 		true,
 		true,
 	)
@@ -2151,7 +2151,7 @@ func (ec *executionContext) _Mutation_updateUser(ctx context.Context, field grap
 			return ec.resolvers.Mutation().UpdateUser(ctx, fc.Args["id"].(string), fc.Args["input"].(gen.UpdateUserInput))
 		},
 		nil,
-		ec.marshalNUser2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUser,
+		ec.marshalNUser2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUser,
 		true,
 		true,
 	)
@@ -2265,7 +2265,7 @@ func (ec *executionContext) _PageInfo_startCursor(ctx context.Context, field gra
 			return obj.StartCursor, nil
 		},
 		nil,
-		ec.marshalOCursor2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐCursor,
+		ec.marshalOCursor2ᚖgithubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐCursor,
 		true,
 		false,
 	)
@@ -2294,7 +2294,7 @@ func (ec *executionContext) _PageInfo_endCursor(ctx context.Context, field graph
 			return obj.EndCursor, nil
 		},
 		nil,
-		ec.marshalOCursor2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐCursor,
+		ec.marshalOCursor2ᚖgithubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐCursor,
 		true,
 		false,
 	)
@@ -2381,7 +2381,7 @@ func (ec *executionContext) _Post_status(ctx context.Context, field graphql.Coll
 			return obj.Status, nil
 		},
 		nil,
-		ec.marshalNPostStatus2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostStatus,
+		ec.marshalNPostStatus2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostStatus,
 		true,
 		true,
 	)
@@ -2468,7 +2468,7 @@ func (ec *executionContext) _Post_author(ctx context.Context, field graphql.Coll
 			return obj.AuthorGQL(ctx)
 		},
 		nil,
-		ec.marshalNUser2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUser,
+		ec.marshalNUser2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUser,
 		true,
 		true,
 	)
@@ -2514,7 +2514,7 @@ func (ec *executionContext) _Post_tags(ctx context.Context, field graphql.Collec
 			return obj.TagsGQL(ctx, fc.Args["after"].(*veloxgql.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*veloxgql.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*gen.LabelOrder), fc.Args["where"].(*gen.LabelWhereInput))
 		},
 		nil,
-		ec.marshalNLabelConnection2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐLabelConnection,
+		ec.marshalNLabelConnection2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐLabelConnection,
 		true,
 		true,
 	)
@@ -2562,7 +2562,7 @@ func (ec *executionContext) _PostConnection_edges(ctx context.Context, field gra
 			return obj.Edges(ctx)
 		},
 		nil,
-		ec.marshalNPostEdge2ᚕᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostEdgeᚄ,
+		ec.marshalNPostEdge2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostEdgeᚄ,
 		true,
 		true,
 	)
@@ -2597,7 +2597,7 @@ func (ec *executionContext) _PostConnection_pageInfo(ctx context.Context, field 
 			return obj.PageInfo(ctx)
 		},
 		nil,
-		ec.marshalNPageInfo2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐPageInfo,
+		ec.marshalNPageInfo2ᚖgithubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐPageInfo,
 		true,
 		true,
 	)
@@ -2665,7 +2665,7 @@ func (ec *executionContext) _PostEdge_node(ctx context.Context, field graphql.Co
 			return obj.Node, nil
 		},
 		nil,
-		ec.marshalNPost2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPost,
+		ec.marshalNPost2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPost,
 		true,
 		true,
 	)
@@ -2710,7 +2710,7 @@ func (ec *executionContext) _PostEdge_cursor(ctx context.Context, field graphql.
 			return obj.Cursor, nil
 		},
 		nil,
-		ec.marshalNCursor2githubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐCursor,
+		ec.marshalNCursor2githubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐCursor,
 		true,
 		true,
 	)
@@ -2740,7 +2740,7 @@ func (ec *executionContext) _Query_node(ctx context.Context, field graphql.Colle
 			return ec.resolvers.Query().Node(ctx, fc.Args["id"].(string))
 		},
 		nil,
-		ec.marshalONode2githubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐNoder,
+		ec.marshalONode2githubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐNoder,
 		true,
 		false,
 	)
@@ -2781,7 +2781,7 @@ func (ec *executionContext) _Query_nodes(ctx context.Context, field graphql.Coll
 			return ec.resolvers.Query().Nodes(ctx, fc.Args["ids"].([]string))
 		},
 		nil,
-		ec.marshalNNode2ᚕgithubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐNoder,
+		ec.marshalNNode2ᚕgithubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐNoder,
 		true,
 		true,
 	)
@@ -2822,7 +2822,7 @@ func (ec *executionContext) _Query_posts(ctx context.Context, field graphql.Coll
 			return ec.resolvers.Query().Posts(ctx, fc.Args["after"].(*veloxgql.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*veloxgql.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].([]*gen.PostOrder), fc.Args["where"].(*gen.PostWhereInput))
 		},
 		nil,
-		ec.marshalNPostConnection2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostConnection,
+		ec.marshalNPostConnection2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostConnection,
 		true,
 		true,
 	)
@@ -2871,7 +2871,7 @@ func (ec *executionContext) _Query_labels(ctx context.Context, field graphql.Col
 			return ec.resolvers.Query().Labels(ctx, fc.Args["after"].(*veloxgql.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*veloxgql.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*gen.LabelOrder), fc.Args["where"].(*gen.LabelWhereInput))
 		},
 		nil,
-		ec.marshalNLabelConnection2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐLabelConnection,
+		ec.marshalNLabelConnection2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐLabelConnection,
 		true,
 		true,
 	)
@@ -2920,7 +2920,7 @@ func (ec *executionContext) _Query_users(ctx context.Context, field graphql.Coll
 			return ec.resolvers.Query().Users(ctx, fc.Args["after"].(*veloxgql.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*veloxgql.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].(*gen.UserOrder), fc.Args["where"].(*gen.UserWhereInput))
 		},
 		nil,
-		ec.marshalNUserConnection2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserConnection,
+		ec.marshalNUserConnection2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserConnection,
 		true,
 		true,
 	)
@@ -2969,7 +2969,7 @@ func (ec *executionContext) _Query_publishedPosts(ctx context.Context, field gra
 			return ec.resolvers.Query().PublishedPosts(ctx, fc.Args["after"].(*veloxgql.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*veloxgql.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].([]*gen.PostOrder), fc.Args["where"].(*gen.PostWhereInput))
 		},
 		nil,
-		ec.marshalNPostConnection2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostConnection,
+		ec.marshalNPostConnection2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostConnection,
 		true,
 		true,
 	)
@@ -3225,7 +3225,7 @@ func (ec *executionContext) _User_role(ctx context.Context, field graphql.Collec
 			return obj.Role, nil
 		},
 		nil,
-		ec.marshalNUserRole2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserRole,
+		ec.marshalNUserRole2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserRole,
 		true,
 		true,
 	)
@@ -3284,7 +3284,7 @@ func (ec *executionContext) _User_posts(ctx context.Context, field graphql.Colle
 			return obj.PostsGQL(ctx, fc.Args["after"].(*veloxgql.Cursor), fc.Args["first"].(*int), fc.Args["before"].(*veloxgql.Cursor), fc.Args["last"].(*int), fc.Args["orderBy"].([]*gen.PostOrder), fc.Args["where"].(*gen.PostWhereInput))
 		},
 		nil,
-		ec.marshalNPostConnection2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostConnection,
+		ec.marshalNPostConnection2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostConnection,
 		true,
 		true,
 	)
@@ -3361,7 +3361,7 @@ func (ec *executionContext) _UserConnection_edges(ctx context.Context, field gra
 			return obj.Edges(ctx)
 		},
 		nil,
-		ec.marshalNUserEdge2ᚕᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserEdgeᚄ,
+		ec.marshalNUserEdge2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserEdgeᚄ,
 		true,
 		true,
 	)
@@ -3396,7 +3396,7 @@ func (ec *executionContext) _UserConnection_pageInfo(ctx context.Context, field 
 			return obj.PageInfo(ctx)
 		},
 		nil,
-		ec.marshalNPageInfo2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐPageInfo,
+		ec.marshalNPageInfo2ᚖgithubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐPageInfo,
 		true,
 		true,
 	)
@@ -3464,7 +3464,7 @@ func (ec *executionContext) _UserEdge_node(ctx context.Context, field graphql.Co
 			return obj.Node, nil
 		},
 		nil,
-		ec.marshalNUser2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUser,
+		ec.marshalNUser2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUser,
 		true,
 		true,
 	)
@@ -3509,7 +3509,7 @@ func (ec *executionContext) _UserEdge_cursor(ctx context.Context, field graphql.
 			return obj.Cursor, nil
 		},
 		nil,
-		ec.marshalNCursor2githubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐCursor,
+		ec.marshalNCursor2githubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐCursor,
 		true,
 		true,
 	)
@@ -5038,7 +5038,7 @@ func (ec *executionContext) unmarshalInputCreatePostInput(ctx context.Context, o
 			it.Title = data
 		case "status":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("status"))
-			data, err := ec.unmarshalOPostStatus2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostStatus(ctx, v)
+			data, err := ec.unmarshalOPostStatus2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostStatus(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -5122,7 +5122,7 @@ func (ec *executionContext) unmarshalInputCreateUserInput(ctx context.Context, o
 			}
 		case "role":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("role"))
-			data, err := ec.unmarshalOUserRole2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserRole(ctx, v)
+			data, err := ec.unmarshalOUserRole2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserRole(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -5167,14 +5167,14 @@ func (ec *executionContext) unmarshalInputLabelOrder(ctx context.Context, obj an
 		switch k {
 		case "direction":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("direction"))
-			data, err := ec.unmarshalNOrderDirection2githubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐOrderDirection(ctx, v)
+			data, err := ec.unmarshalNOrderDirection2githubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐOrderDirection(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Direction = data
 		case "field":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("field"))
-			data, err := ec.unmarshalNLabelOrderField2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐLabelOrderField(ctx, v)
+			data, err := ec.unmarshalNLabelOrderField2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐLabelOrderField(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -5201,21 +5201,21 @@ func (ec *executionContext) unmarshalInputLabelWhereInput(ctx context.Context, o
 		switch k {
 		case "not":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("not"))
-			data, err := ec.unmarshalOLabelWhereInput2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐLabelWhereInput(ctx, v)
+			data, err := ec.unmarshalOLabelWhereInput2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐLabelWhereInput(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Not = data
 		case "and":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("and"))
-			data, err := ec.unmarshalOLabelWhereInput2ᚕᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐLabelWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOLabelWhereInput2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐLabelWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.And = data
 		case "or":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("or"))
-			data, err := ec.unmarshalOLabelWhereInput2ᚕᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐLabelWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOLabelWhereInput2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐLabelWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -5407,14 +5407,14 @@ func (ec *executionContext) unmarshalInputPostOrder(ctx context.Context, obj any
 		switch k {
 		case "direction":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("direction"))
-			data, err := ec.unmarshalNOrderDirection2githubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐOrderDirection(ctx, v)
+			data, err := ec.unmarshalNOrderDirection2githubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐOrderDirection(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Direction = data
 		case "field":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("field"))
-			data, err := ec.unmarshalNPostOrderField2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostOrderField(ctx, v)
+			data, err := ec.unmarshalNPostOrderField2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostOrderField(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -5441,21 +5441,21 @@ func (ec *executionContext) unmarshalInputPostWhereInput(ctx context.Context, ob
 		switch k {
 		case "not":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("not"))
-			data, err := ec.unmarshalOPostWhereInput2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostWhereInput(ctx, v)
+			data, err := ec.unmarshalOPostWhereInput2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostWhereInput(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Not = data
 		case "and":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("and"))
-			data, err := ec.unmarshalOPostWhereInput2ᚕᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOPostWhereInput2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.And = data
 		case "or":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("or"))
-			data, err := ec.unmarshalOPostWhereInput2ᚕᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOPostWhereInput2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -5595,28 +5595,28 @@ func (ec *executionContext) unmarshalInputPostWhereInput(ctx context.Context, ob
 			it.TitleHasSuffix = data
 		case "status":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("status"))
-			data, err := ec.unmarshalOPostStatus2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostStatus(ctx, v)
+			data, err := ec.unmarshalOPostStatus2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostStatus(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Status = data
 		case "statusNEQ":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("statusNEQ"))
-			data, err := ec.unmarshalOPostStatus2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostStatus(ctx, v)
+			data, err := ec.unmarshalOPostStatus2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostStatus(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.StatusNEQ = data
 		case "statusIn":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("statusIn"))
-			data, err := ec.unmarshalOPostStatus2ᚕgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostStatusᚄ(ctx, v)
+			data, err := ec.unmarshalOPostStatus2ᚕgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostStatusᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.StatusIn = data
 		case "statusNotIn":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("statusNotIn"))
-			data, err := ec.unmarshalOPostStatus2ᚕgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostStatusᚄ(ctx, v)
+			data, err := ec.unmarshalOPostStatus2ᚕgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostStatusᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -5700,7 +5700,7 @@ func (ec *executionContext) unmarshalInputPostWhereInput(ctx context.Context, ob
 			it.HasTags = data
 		case "hasTagsWith":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hasTagsWith"))
-			data, err := ec.unmarshalOLabelWhereInput2ᚕᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐLabelWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOLabelWhereInput2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐLabelWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -5789,7 +5789,7 @@ func (ec *executionContext) unmarshalInputUpdatePostInput(ctx context.Context, o
 			it.Title = data
 		case "status":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("status"))
-			data, err := ec.unmarshalOPostStatus2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostStatus(ctx, v)
+			data, err := ec.unmarshalOPostStatus2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostStatus(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -5896,7 +5896,7 @@ func (ec *executionContext) unmarshalInputUpdateUserInput(ctx context.Context, o
 			}
 		case "role":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("role"))
-			data, err := ec.unmarshalOUserRole2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserRole(ctx, v)
+			data, err := ec.unmarshalOUserRole2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserRole(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -5941,14 +5941,14 @@ func (ec *executionContext) unmarshalInputUserOrder(ctx context.Context, obj any
 		switch k {
 		case "direction":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("direction"))
-			data, err := ec.unmarshalNOrderDirection2githubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐOrderDirection(ctx, v)
+			data, err := ec.unmarshalNOrderDirection2githubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐOrderDirection(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Direction = data
 		case "field":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("field"))
-			data, err := ec.unmarshalNUserOrderField2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserOrderField(ctx, v)
+			data, err := ec.unmarshalNUserOrderField2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserOrderField(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -5975,21 +5975,21 @@ func (ec *executionContext) unmarshalInputUserWhereInput(ctx context.Context, ob
 		switch k {
 		case "not":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("not"))
-			data, err := ec.unmarshalOUserWhereInput2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserWhereInput(ctx, v)
+			data, err := ec.unmarshalOUserWhereInput2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserWhereInput(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Not = data
 		case "and":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("and"))
-			data, err := ec.unmarshalOUserWhereInput2ᚕᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOUserWhereInput2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.And = data
 		case "or":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("or"))
-			data, err := ec.unmarshalOUserWhereInput2ᚕᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOUserWhereInput2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -6269,28 +6269,28 @@ func (ec *executionContext) unmarshalInputUserWhereInput(ctx context.Context, ob
 			}
 		case "role":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("role"))
-			data, err := ec.unmarshalOUserRole2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserRole(ctx, v)
+			data, err := ec.unmarshalOUserRole2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserRole(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.Role = data
 		case "roleNEQ":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("roleNEQ"))
-			data, err := ec.unmarshalOUserRole2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserRole(ctx, v)
+			data, err := ec.unmarshalOUserRole2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserRole(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.RoleNEQ = data
 		case "roleIn":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("roleIn"))
-			data, err := ec.unmarshalOUserRole2ᚕgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserRoleᚄ(ctx, v)
+			data, err := ec.unmarshalOUserRole2ᚕgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserRoleᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
 			it.RoleIn = data
 		case "roleNotIn":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("roleNotIn"))
-			data, err := ec.unmarshalOUserRole2ᚕgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserRoleᚄ(ctx, v)
+			data, err := ec.unmarshalOUserRole2ᚕgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserRoleᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -6304,7 +6304,7 @@ func (ec *executionContext) unmarshalInputUserWhereInput(ctx context.Context, ob
 			it.HasPosts = data
 		case "hasPostsWith":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("hasPostsWith"))
-			data, err := ec.unmarshalOPostWhereInput2ᚕᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostWhereInputᚄ(ctx, v)
+			data, err := ec.unmarshalOPostWhereInput2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostWhereInputᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -7922,28 +7922,28 @@ func (ec *executionContext) marshalNBoolean2bool(ctx context.Context, sel ast.Se
 	return res
 }
 
-func (ec *executionContext) unmarshalNCreateLabelInput2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐCreateLabelInput(ctx context.Context, v any) (gen.CreateLabelInput, error) {
+func (ec *executionContext) unmarshalNCreateLabelInput2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐCreateLabelInput(ctx context.Context, v any) (gen.CreateLabelInput, error) {
 	res, err := ec.unmarshalInputCreateLabelInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNCreatePostInput2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐCreatePostInput(ctx context.Context, v any) (gen.CreatePostInput, error) {
+func (ec *executionContext) unmarshalNCreatePostInput2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐCreatePostInput(ctx context.Context, v any) (gen.CreatePostInput, error) {
 	res, err := ec.unmarshalInputCreatePostInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNCreateUserInput2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐCreateUserInput(ctx context.Context, v any) (gen.CreateUserInput, error) {
+func (ec *executionContext) unmarshalNCreateUserInput2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐCreateUserInput(ctx context.Context, v any) (gen.CreateUserInput, error) {
 	res, err := ec.unmarshalInputCreateUserInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNCursor2githubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐCursor(ctx context.Context, v any) (veloxgql.Cursor, error) {
+func (ec *executionContext) unmarshalNCursor2githubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐCursor(ctx context.Context, v any) (veloxgql.Cursor, error) {
 	var res veloxgql.Cursor
 	err := res.UnmarshalGQLContext(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNCursor2githubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐCursor(ctx context.Context, sel ast.SelectionSet, v veloxgql.Cursor) graphql.Marshaler {
+func (ec *executionContext) marshalNCursor2githubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐCursor(ctx context.Context, sel ast.SelectionSet, v veloxgql.Cursor) graphql.Marshaler {
 	return graphql.WrapContextMarshaler(ctx, v)
 }
 
@@ -8041,11 +8041,11 @@ func (ec *executionContext) marshalNInt2int8(ctx context.Context, sel ast.Select
 	return res
 }
 
-func (ec *executionContext) marshalNLabel2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐTag(ctx context.Context, sel ast.SelectionSet, v gen.Tag) graphql.Marshaler {
+func (ec *executionContext) marshalNLabel2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐTag(ctx context.Context, sel ast.SelectionSet, v gen.Tag) graphql.Marshaler {
 	return ec._Label(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNLabel2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐTag(ctx context.Context, sel ast.SelectionSet, v *gen.Tag) graphql.Marshaler {
+func (ec *executionContext) marshalNLabel2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐTag(ctx context.Context, sel ast.SelectionSet, v *gen.Tag) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -8055,11 +8055,11 @@ func (ec *executionContext) marshalNLabel2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋex
 	return ec._Label(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNLabelConnection2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐLabelConnection(ctx context.Context, sel ast.SelectionSet, v gen.LabelConnection) graphql.Marshaler {
+func (ec *executionContext) marshalNLabelConnection2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐLabelConnection(ctx context.Context, sel ast.SelectionSet, v gen.LabelConnection) graphql.Marshaler {
 	return ec._LabelConnection(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNLabelConnection2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐLabelConnection(ctx context.Context, sel ast.SelectionSet, v *gen.LabelConnection) graphql.Marshaler {
+func (ec *executionContext) marshalNLabelConnection2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐLabelConnection(ctx context.Context, sel ast.SelectionSet, v *gen.LabelConnection) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -8069,7 +8069,7 @@ func (ec *executionContext) marshalNLabelConnection2ᚖgithubᚗcomᚋsyssamᚋv
 	return ec._LabelConnection(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNLabelEdge2ᚕᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐLabelEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*gen.LabelEdge) graphql.Marshaler {
+func (ec *executionContext) marshalNLabelEdge2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐLabelEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*gen.LabelEdge) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -8093,7 +8093,7 @@ func (ec *executionContext) marshalNLabelEdge2ᚕᚖgithubᚗcomᚋsyssamᚋvelo
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNLabelEdge2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐLabelEdge(ctx, sel, v[i])
+			ret[i] = ec.marshalNLabelEdge2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐLabelEdge(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -8113,7 +8113,7 @@ func (ec *executionContext) marshalNLabelEdge2ᚕᚖgithubᚗcomᚋsyssamᚋvelo
 	return ret
 }
 
-func (ec *executionContext) marshalNLabelEdge2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐLabelEdge(ctx context.Context, sel ast.SelectionSet, v *gen.LabelEdge) graphql.Marshaler {
+func (ec *executionContext) marshalNLabelEdge2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐLabelEdge(ctx context.Context, sel ast.SelectionSet, v *gen.LabelEdge) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -8123,22 +8123,22 @@ func (ec *executionContext) marshalNLabelEdge2ᚖgithubᚗcomᚋsyssamᚋvelox2�
 	return ec._LabelEdge(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNLabelOrderField2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐLabelOrderField(ctx context.Context, v any) (gen.LabelOrderField, error) {
+func (ec *executionContext) unmarshalNLabelOrderField2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐLabelOrderField(ctx context.Context, v any) (gen.LabelOrderField, error) {
 	var res gen.LabelOrderField
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNLabelOrderField2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐLabelOrderField(ctx context.Context, sel ast.SelectionSet, v gen.LabelOrderField) graphql.Marshaler {
+func (ec *executionContext) marshalNLabelOrderField2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐLabelOrderField(ctx context.Context, sel ast.SelectionSet, v gen.LabelOrderField) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalNLabelWhereInput2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐLabelWhereInput(ctx context.Context, v any) (*gen.LabelWhereInput, error) {
+func (ec *executionContext) unmarshalNLabelWhereInput2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐLabelWhereInput(ctx context.Context, v any) (*gen.LabelWhereInput, error) {
 	res, err := ec.unmarshalInputLabelWhereInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNNode2ᚕgithubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐNoder(ctx context.Context, sel ast.SelectionSet, v []veloxgql.Noder) graphql.Marshaler {
+func (ec *executionContext) marshalNNode2ᚕgithubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐNoder(ctx context.Context, sel ast.SelectionSet, v []veloxgql.Noder) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -8162,7 +8162,7 @@ func (ec *executionContext) marshalNNode2ᚕgithubᚗcomᚋsyssamᚋvelox2ᚋcon
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalONode2githubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐNoder(ctx, sel, v[i])
+			ret[i] = ec.marshalONode2githubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐNoder(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -8176,17 +8176,17 @@ func (ec *executionContext) marshalNNode2ᚕgithubᚗcomᚋsyssamᚋvelox2ᚋcon
 	return ret
 }
 
-func (ec *executionContext) unmarshalNOrderDirection2githubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐOrderDirection(ctx context.Context, v any) (veloxgql.OrderDirection, error) {
+func (ec *executionContext) unmarshalNOrderDirection2githubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐOrderDirection(ctx context.Context, v any) (veloxgql.OrderDirection, error) {
 	var res veloxgql.OrderDirection
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNOrderDirection2githubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐOrderDirection(ctx context.Context, sel ast.SelectionSet, v veloxgql.OrderDirection) graphql.Marshaler {
+func (ec *executionContext) marshalNOrderDirection2githubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐOrderDirection(ctx context.Context, sel ast.SelectionSet, v veloxgql.OrderDirection) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) marshalNPageInfo2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐPageInfo(ctx context.Context, sel ast.SelectionSet, v *veloxgql.PageInfo) graphql.Marshaler {
+func (ec *executionContext) marshalNPageInfo2ᚖgithubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐPageInfo(ctx context.Context, sel ast.SelectionSet, v *veloxgql.PageInfo) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -8196,11 +8196,11 @@ func (ec *executionContext) marshalNPageInfo2ᚖgithubᚗcomᚋsyssamᚋvelox2�
 	return ec._PageInfo(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNPost2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPost(ctx context.Context, sel ast.SelectionSet, v gen.Post) graphql.Marshaler {
+func (ec *executionContext) marshalNPost2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPost(ctx context.Context, sel ast.SelectionSet, v gen.Post) graphql.Marshaler {
 	return ec._Post(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNPost2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPost(ctx context.Context, sel ast.SelectionSet, v *gen.Post) graphql.Marshaler {
+func (ec *executionContext) marshalNPost2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPost(ctx context.Context, sel ast.SelectionSet, v *gen.Post) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -8210,11 +8210,11 @@ func (ec *executionContext) marshalNPost2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexa
 	return ec._Post(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNPostConnection2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostConnection(ctx context.Context, sel ast.SelectionSet, v gen.PostConnection) graphql.Marshaler {
+func (ec *executionContext) marshalNPostConnection2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostConnection(ctx context.Context, sel ast.SelectionSet, v gen.PostConnection) graphql.Marshaler {
 	return ec._PostConnection(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNPostConnection2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostConnection(ctx context.Context, sel ast.SelectionSet, v *gen.PostConnection) graphql.Marshaler {
+func (ec *executionContext) marshalNPostConnection2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostConnection(ctx context.Context, sel ast.SelectionSet, v *gen.PostConnection) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -8224,7 +8224,7 @@ func (ec *executionContext) marshalNPostConnection2ᚖgithubᚗcomᚋsyssamᚋve
 	return ec._PostConnection(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNPostEdge2ᚕᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*gen.PostEdge) graphql.Marshaler {
+func (ec *executionContext) marshalNPostEdge2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*gen.PostEdge) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -8248,7 +8248,7 @@ func (ec *executionContext) marshalNPostEdge2ᚕᚖgithubᚗcomᚋsyssamᚋvelox
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNPostEdge2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostEdge(ctx, sel, v[i])
+			ret[i] = ec.marshalNPostEdge2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostEdge(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -8268,7 +8268,7 @@ func (ec *executionContext) marshalNPostEdge2ᚕᚖgithubᚗcomᚋsyssamᚋvelox
 	return ret
 }
 
-func (ec *executionContext) marshalNPostEdge2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostEdge(ctx context.Context, sel ast.SelectionSet, v *gen.PostEdge) graphql.Marshaler {
+func (ec *executionContext) marshalNPostEdge2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostEdge(ctx context.Context, sel ast.SelectionSet, v *gen.PostEdge) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -8278,32 +8278,32 @@ func (ec *executionContext) marshalNPostEdge2ᚖgithubᚗcomᚋsyssamᚋvelox2�
 	return ec._PostEdge(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNPostOrder2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostOrder(ctx context.Context, v any) (*gen.PostOrder, error) {
+func (ec *executionContext) unmarshalNPostOrder2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostOrder(ctx context.Context, v any) (*gen.PostOrder, error) {
 	res, err := ec.unmarshalInputPostOrder(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNPostOrderField2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostOrderField(ctx context.Context, v any) (gen.PostOrderField, error) {
+func (ec *executionContext) unmarshalNPostOrderField2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostOrderField(ctx context.Context, v any) (gen.PostOrderField, error) {
 	var res gen.PostOrderField
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNPostOrderField2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostOrderField(ctx context.Context, sel ast.SelectionSet, v gen.PostOrderField) graphql.Marshaler {
+func (ec *executionContext) marshalNPostOrderField2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostOrderField(ctx context.Context, sel ast.SelectionSet, v gen.PostOrderField) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalNPostStatus2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostStatus(ctx context.Context, v any) (gen.PostStatus, error) {
+func (ec *executionContext) unmarshalNPostStatus2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostStatus(ctx context.Context, v any) (gen.PostStatus, error) {
 	var res gen.PostStatus
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNPostStatus2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostStatus(ctx context.Context, sel ast.SelectionSet, v gen.PostStatus) graphql.Marshaler {
+func (ec *executionContext) marshalNPostStatus2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostStatus(ctx context.Context, sel ast.SelectionSet, v gen.PostStatus) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalNPostWhereInput2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostWhereInput(ctx context.Context, v any) (*gen.PostWhereInput, error) {
+func (ec *executionContext) unmarshalNPostWhereInput2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostWhereInput(ctx context.Context, v any) (*gen.PostWhereInput, error) {
 	res, err := ec.unmarshalInputPostWhereInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
@@ -8340,26 +8340,26 @@ func (ec *executionContext) marshalNTime2timeᚐTime(ctx context.Context, sel as
 	return res
 }
 
-func (ec *executionContext) unmarshalNUpdateLabelInput2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUpdateLabelInput(ctx context.Context, v any) (gen.UpdateLabelInput, error) {
+func (ec *executionContext) unmarshalNUpdateLabelInput2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUpdateLabelInput(ctx context.Context, v any) (gen.UpdateLabelInput, error) {
 	res, err := ec.unmarshalInputUpdateLabelInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNUpdatePostInput2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUpdatePostInput(ctx context.Context, v any) (gen.UpdatePostInput, error) {
+func (ec *executionContext) unmarshalNUpdatePostInput2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUpdatePostInput(ctx context.Context, v any) (gen.UpdatePostInput, error) {
 	res, err := ec.unmarshalInputUpdatePostInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNUpdateUserInput2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUpdateUserInput(ctx context.Context, v any) (gen.UpdateUserInput, error) {
+func (ec *executionContext) unmarshalNUpdateUserInput2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUpdateUserInput(ctx context.Context, v any) (gen.UpdateUserInput, error) {
 	res, err := ec.unmarshalInputUpdateUserInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNUser2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUser(ctx context.Context, sel ast.SelectionSet, v gen.User) graphql.Marshaler {
+func (ec *executionContext) marshalNUser2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUser(ctx context.Context, sel ast.SelectionSet, v gen.User) graphql.Marshaler {
 	return ec._User(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNUser2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUser(ctx context.Context, sel ast.SelectionSet, v *gen.User) graphql.Marshaler {
+func (ec *executionContext) marshalNUser2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUser(ctx context.Context, sel ast.SelectionSet, v *gen.User) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -8369,11 +8369,11 @@ func (ec *executionContext) marshalNUser2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexa
 	return ec._User(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNUserConnection2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserConnection(ctx context.Context, sel ast.SelectionSet, v gen.UserConnection) graphql.Marshaler {
+func (ec *executionContext) marshalNUserConnection2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserConnection(ctx context.Context, sel ast.SelectionSet, v gen.UserConnection) graphql.Marshaler {
 	return ec._UserConnection(ctx, sel, &v)
 }
 
-func (ec *executionContext) marshalNUserConnection2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserConnection(ctx context.Context, sel ast.SelectionSet, v *gen.UserConnection) graphql.Marshaler {
+func (ec *executionContext) marshalNUserConnection2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserConnection(ctx context.Context, sel ast.SelectionSet, v *gen.UserConnection) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -8383,7 +8383,7 @@ func (ec *executionContext) marshalNUserConnection2ᚖgithubᚗcomᚋsyssamᚋve
 	return ec._UserConnection(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNUserEdge2ᚕᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*gen.UserEdge) graphql.Marshaler {
+func (ec *executionContext) marshalNUserEdge2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*gen.UserEdge) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	var wg sync.WaitGroup
 	isLen1 := len(v) == 1
@@ -8407,7 +8407,7 @@ func (ec *executionContext) marshalNUserEdge2ᚕᚖgithubᚗcomᚋsyssamᚋvelox
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNUserEdge2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserEdge(ctx, sel, v[i])
+			ret[i] = ec.marshalNUserEdge2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserEdge(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -8427,7 +8427,7 @@ func (ec *executionContext) marshalNUserEdge2ᚕᚖgithubᚗcomᚋsyssamᚋvelox
 	return ret
 }
 
-func (ec *executionContext) marshalNUserEdge2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserEdge(ctx context.Context, sel ast.SelectionSet, v *gen.UserEdge) graphql.Marshaler {
+func (ec *executionContext) marshalNUserEdge2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserEdge(ctx context.Context, sel ast.SelectionSet, v *gen.UserEdge) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
@@ -8437,27 +8437,27 @@ func (ec *executionContext) marshalNUserEdge2ᚖgithubᚗcomᚋsyssamᚋvelox2�
 	return ec._UserEdge(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNUserOrderField2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserOrderField(ctx context.Context, v any) (gen.UserOrderField, error) {
+func (ec *executionContext) unmarshalNUserOrderField2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserOrderField(ctx context.Context, v any) (gen.UserOrderField, error) {
 	var res gen.UserOrderField
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNUserOrderField2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserOrderField(ctx context.Context, sel ast.SelectionSet, v gen.UserOrderField) graphql.Marshaler {
+func (ec *executionContext) marshalNUserOrderField2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserOrderField(ctx context.Context, sel ast.SelectionSet, v gen.UserOrderField) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalNUserRole2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserRole(ctx context.Context, v any) (gen.UserRole, error) {
+func (ec *executionContext) unmarshalNUserRole2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserRole(ctx context.Context, v any) (gen.UserRole, error) {
 	var res gen.UserRole
 	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNUserRole2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserRole(ctx context.Context, sel ast.SelectionSet, v gen.UserRole) graphql.Marshaler {
+func (ec *executionContext) marshalNUserRole2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserRole(ctx context.Context, sel ast.SelectionSet, v gen.UserRole) graphql.Marshaler {
 	return v
 }
 
-func (ec *executionContext) unmarshalNUserWhereInput2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserWhereInput(ctx context.Context, v any) (*gen.UserWhereInput, error) {
+func (ec *executionContext) unmarshalNUserWhereInput2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserWhereInput(ctx context.Context, v any) (*gen.UserWhereInput, error) {
 	res, err := ec.unmarshalInputUserWhereInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
@@ -8745,7 +8745,7 @@ func (ec *executionContext) marshalOBoolean2ᚖbool(ctx context.Context, sel ast
 	return res
 }
 
-func (ec *executionContext) unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐCursor(ctx context.Context, v any) (*veloxgql.Cursor, error) {
+func (ec *executionContext) unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐCursor(ctx context.Context, v any) (*veloxgql.Cursor, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -8754,7 +8754,7 @@ func (ec *executionContext) unmarshalOCursor2ᚖgithubᚗcomᚋsyssamᚋvelox2�
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOCursor2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐCursor(ctx context.Context, sel ast.SelectionSet, v *veloxgql.Cursor) graphql.Marshaler {
+func (ec *executionContext) marshalOCursor2ᚖgithubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐCursor(ctx context.Context, sel ast.SelectionSet, v *veloxgql.Cursor) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -8905,7 +8905,7 @@ func (ec *executionContext) marshalOInt2ᚖint8(ctx context.Context, sel ast.Sel
 	return res
 }
 
-func (ec *executionContext) unmarshalOLabelOrder2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐLabelOrder(ctx context.Context, v any) (*gen.LabelOrder, error) {
+func (ec *executionContext) unmarshalOLabelOrder2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐLabelOrder(ctx context.Context, v any) (*gen.LabelOrder, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -8913,7 +8913,7 @@ func (ec *executionContext) unmarshalOLabelOrder2ᚖgithubᚗcomᚋsyssamᚋvelo
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalOLabelWhereInput2ᚕᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐLabelWhereInputᚄ(ctx context.Context, v any) ([]*gen.LabelWhereInput, error) {
+func (ec *executionContext) unmarshalOLabelWhereInput2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐLabelWhereInputᚄ(ctx context.Context, v any) ([]*gen.LabelWhereInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -8923,7 +8923,7 @@ func (ec *executionContext) unmarshalOLabelWhereInput2ᚕᚖgithubᚗcomᚋsyssa
 	res := make([]*gen.LabelWhereInput, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNLabelWhereInput2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐLabelWhereInput(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNLabelWhereInput2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐLabelWhereInput(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -8931,7 +8931,7 @@ func (ec *executionContext) unmarshalOLabelWhereInput2ᚕᚖgithubᚗcomᚋsyssa
 	return res, nil
 }
 
-func (ec *executionContext) unmarshalOLabelWhereInput2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐLabelWhereInput(ctx context.Context, v any) (*gen.LabelWhereInput, error) {
+func (ec *executionContext) unmarshalOLabelWhereInput2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐLabelWhereInput(ctx context.Context, v any) (*gen.LabelWhereInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -8939,14 +8939,14 @@ func (ec *executionContext) unmarshalOLabelWhereInput2ᚖgithubᚗcomᚋsyssam�
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalONode2githubᚗcomᚋsyssamᚋvelox2ᚋcontribᚋgraphqlᚋveloxgqlᚐNoder(ctx context.Context, sel ast.SelectionSet, v veloxgql.Noder) graphql.Marshaler {
+func (ec *executionContext) marshalONode2githubᚗcomᚋsyssamᚋveloxᚋcontribᚋgraphqlᚋveloxgqlᚐNoder(ctx context.Context, sel ast.SelectionSet, v veloxgql.Noder) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
 	return ec._Node(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalOPostOrder2ᚕᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostOrderᚄ(ctx context.Context, v any) ([]*gen.PostOrder, error) {
+func (ec *executionContext) unmarshalOPostOrder2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostOrderᚄ(ctx context.Context, v any) ([]*gen.PostOrder, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -8956,7 +8956,7 @@ func (ec *executionContext) unmarshalOPostOrder2ᚕᚖgithubᚗcomᚋsyssamᚋve
 	res := make([]*gen.PostOrder, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNPostOrder2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostOrder(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNPostOrder2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostOrder(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -8964,7 +8964,7 @@ func (ec *executionContext) unmarshalOPostOrder2ᚕᚖgithubᚗcomᚋsyssamᚋve
 	return res, nil
 }
 
-func (ec *executionContext) unmarshalOPostStatus2ᚕgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostStatusᚄ(ctx context.Context, v any) ([]gen.PostStatus, error) {
+func (ec *executionContext) unmarshalOPostStatus2ᚕgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostStatusᚄ(ctx context.Context, v any) ([]gen.PostStatus, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -8974,7 +8974,7 @@ func (ec *executionContext) unmarshalOPostStatus2ᚕgithubᚗcomᚋsyssamᚋvelo
 	res := make([]gen.PostStatus, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNPostStatus2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostStatus(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNPostStatus2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostStatus(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -8982,7 +8982,7 @@ func (ec *executionContext) unmarshalOPostStatus2ᚕgithubᚗcomᚋsyssamᚋvelo
 	return res, nil
 }
 
-func (ec *executionContext) marshalOPostStatus2ᚕgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostStatusᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.PostStatus) graphql.Marshaler {
+func (ec *executionContext) marshalOPostStatus2ᚕgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostStatusᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.PostStatus) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -9009,7 +9009,7 @@ func (ec *executionContext) marshalOPostStatus2ᚕgithubᚗcomᚋsyssamᚋvelox2
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNPostStatus2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostStatus(ctx, sel, v[i])
+			ret[i] = ec.marshalNPostStatus2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostStatus(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -9029,7 +9029,7 @@ func (ec *executionContext) marshalOPostStatus2ᚕgithubᚗcomᚋsyssamᚋvelox2
 	return ret
 }
 
-func (ec *executionContext) unmarshalOPostStatus2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostStatus(ctx context.Context, v any) (*gen.PostStatus, error) {
+func (ec *executionContext) unmarshalOPostStatus2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostStatus(ctx context.Context, v any) (*gen.PostStatus, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -9038,14 +9038,14 @@ func (ec *executionContext) unmarshalOPostStatus2ᚖgithubᚗcomᚋsyssamᚋvelo
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOPostStatus2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostStatus(ctx context.Context, sel ast.SelectionSet, v *gen.PostStatus) graphql.Marshaler {
+func (ec *executionContext) marshalOPostStatus2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostStatus(ctx context.Context, sel ast.SelectionSet, v *gen.PostStatus) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
 	return v
 }
 
-func (ec *executionContext) unmarshalOPostWhereInput2ᚕᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostWhereInputᚄ(ctx context.Context, v any) ([]*gen.PostWhereInput, error) {
+func (ec *executionContext) unmarshalOPostWhereInput2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostWhereInputᚄ(ctx context.Context, v any) ([]*gen.PostWhereInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -9055,7 +9055,7 @@ func (ec *executionContext) unmarshalOPostWhereInput2ᚕᚖgithubᚗcomᚋsyssam
 	res := make([]*gen.PostWhereInput, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNPostWhereInput2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostWhereInput(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNPostWhereInput2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostWhereInput(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -9063,7 +9063,7 @@ func (ec *executionContext) unmarshalOPostWhereInput2ᚕᚖgithubᚗcomᚋsyssam
 	return res, nil
 }
 
-func (ec *executionContext) unmarshalOPostWhereInput2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐPostWhereInput(ctx context.Context, v any) (*gen.PostWhereInput, error) {
+func (ec *executionContext) unmarshalOPostWhereInput2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐPostWhereInput(ctx context.Context, v any) (*gen.PostWhereInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -9179,7 +9179,7 @@ func (ec *executionContext) marshalOTime2ᚖtimeᚐTime(ctx context.Context, sel
 	return res
 }
 
-func (ec *executionContext) unmarshalOUserOrder2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserOrder(ctx context.Context, v any) (*gen.UserOrder, error) {
+func (ec *executionContext) unmarshalOUserOrder2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserOrder(ctx context.Context, v any) (*gen.UserOrder, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -9187,7 +9187,7 @@ func (ec *executionContext) unmarshalOUserOrder2ᚖgithubᚗcomᚋsyssamᚋvelox
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalOUserRole2ᚕgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserRoleᚄ(ctx context.Context, v any) ([]gen.UserRole, error) {
+func (ec *executionContext) unmarshalOUserRole2ᚕgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserRoleᚄ(ctx context.Context, v any) ([]gen.UserRole, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -9197,7 +9197,7 @@ func (ec *executionContext) unmarshalOUserRole2ᚕgithubᚗcomᚋsyssamᚋvelox2
 	res := make([]gen.UserRole, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNUserRole2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserRole(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNUserRole2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserRole(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -9205,7 +9205,7 @@ func (ec *executionContext) unmarshalOUserRole2ᚕgithubᚗcomᚋsyssamᚋvelox2
 	return res, nil
 }
 
-func (ec *executionContext) marshalOUserRole2ᚕgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserRoleᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.UserRole) graphql.Marshaler {
+func (ec *executionContext) marshalOUserRole2ᚕgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserRoleᚄ(ctx context.Context, sel ast.SelectionSet, v []gen.UserRole) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
@@ -9232,7 +9232,7 @@ func (ec *executionContext) marshalOUserRole2ᚕgithubᚗcomᚋsyssamᚋvelox2�
 			if !isLen1 {
 				defer wg.Done()
 			}
-			ret[i] = ec.marshalNUserRole2githubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserRole(ctx, sel, v[i])
+			ret[i] = ec.marshalNUserRole2githubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserRole(ctx, sel, v[i])
 		}
 		if isLen1 {
 			f(i)
@@ -9252,7 +9252,7 @@ func (ec *executionContext) marshalOUserRole2ᚕgithubᚗcomᚋsyssamᚋvelox2�
 	return ret
 }
 
-func (ec *executionContext) unmarshalOUserRole2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserRole(ctx context.Context, v any) (*gen.UserRole, error) {
+func (ec *executionContext) unmarshalOUserRole2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserRole(ctx context.Context, v any) (*gen.UserRole, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -9261,14 +9261,14 @@ func (ec *executionContext) unmarshalOUserRole2ᚖgithubᚗcomᚋsyssamᚋvelox2
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalOUserRole2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserRole(ctx context.Context, sel ast.SelectionSet, v *gen.UserRole) graphql.Marshaler {
+func (ec *executionContext) marshalOUserRole2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserRole(ctx context.Context, sel ast.SelectionSet, v *gen.UserRole) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
 	}
 	return v
 }
 
-func (ec *executionContext) unmarshalOUserWhereInput2ᚕᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserWhereInputᚄ(ctx context.Context, v any) ([]*gen.UserWhereInput, error) {
+func (ec *executionContext) unmarshalOUserWhereInput2ᚕᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserWhereInputᚄ(ctx context.Context, v any) ([]*gen.UserWhereInput, error) {
 	if v == nil {
 		return nil, nil
 	}
@@ -9278,7 +9278,7 @@ func (ec *executionContext) unmarshalOUserWhereInput2ᚕᚖgithubᚗcomᚋsyssam
 	res := make([]*gen.UserWhereInput, len(vSlice))
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNUserWhereInput2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserWhereInput(ctx, vSlice[i])
+		res[i], err = ec.unmarshalNUserWhereInput2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserWhereInput(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}
@@ -9286,7 +9286,7 @@ func (ec *executionContext) unmarshalOUserWhereInput2ᚕᚖgithubᚗcomᚋsyssam
 	return res, nil
 }
 
-func (ec *executionContext) unmarshalOUserWhereInput2ᚖgithubᚗcomᚋsyssamᚋvelox2ᚋexamplesᚋgraphqlᚋgenᚐUserWhereInput(ctx context.Context, v any) (*gen.UserWhereInput, error) {
+func (ec *executionContext) unmarshalOUserWhereInput2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserWhereInput(ctx context.Context, v any) (*gen.UserWhereInput, error) {
 	if v == nil {
 		return nil, nil
 	}

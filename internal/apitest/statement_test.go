@@ -3,7 +3,7 @@ package apitest
 import (
 	"testing"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // TestOpRawAndReads pins which Ops are raw SQL and which read.

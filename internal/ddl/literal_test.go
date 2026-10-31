@@ -3,7 +3,7 @@ package ddl
 import (
 	"testing"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 var dialects = [...]velox.Dialect{velox.Postgres, velox.MySQL, velox.SQLite}

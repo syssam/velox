@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	velox2 "github.com/syssam/velox2"
-	"github.com/syssam/velox2/migrate"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/migrate"
 )
 
 // A dbCmd is a migrate subcommand that opens a database: -dir and -db.
@@ -53,12 +53,12 @@ func (c *dbCmd) dsn(env []string) (dsn, src string, ok bool) {
 // form is exit 2, before it is used. With existing, a SQLite file that is
 // not there is exit 1, and the file is opened without creating it. It
 // reports false, with the exit code, when it fails.
-func (c *dbCmd) open(d velox2.Dialect, dsn, src string, existing bool) (*sql.DB, int, bool) {
+func (c *dbCmd) open(d velox.Dialect, dsn, src string, existing bool) (*sql.DB, int, bool) {
 	if err := dsnForm(d, dsn, src, c.dialectOf()); err != nil {
 		return nil, c.fail(2, err), false
 	}
 	c.secret = secrets(d, dsn).joined(func(s string) string { return dirFile.ReplaceAllStringFunc(s, c.path) })
-	if d == velox2.SQLite && existing {
+	if d == velox.SQLite && existing {
 		if path := sqlitePath(dsn); path != "" {
 			if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
 				return nil, c.fail(1, fmt.Errorf("%s: no such database", path)), false
@@ -205,7 +205,7 @@ func runMigrateApply(args []string, dir string, env []string, stdout, stderr io.
 		if !ok {
 			return code
 		}
-		if d.Config.Dialect == velox2.SQLite && dsnForm(d.Config.Dialect, dsn, src, c.dialectOf()) == nil {
+		if d.Config.Dialect == velox.SQLite && dsnForm(d.Config.Dialect, dsn, src, c.dialectOf()) == nil {
 			if _, err := os.Stat(sqlitePath(dsn)); errors.Is(err, fs.ErrNotExist) {
 				return show(d.Files)
 			}

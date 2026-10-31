@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/testmodel/kind"
-	sch "github.com/syssam/velox2/internal/testmodel/schema"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/testmodel/kind"
+	sch "github.com/syssam/velox/internal/testmodel/schema"
 )
 
 const _ = velox.GeneratedCodeIsVersion6

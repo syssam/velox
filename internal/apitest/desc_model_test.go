@@ -1,8 +1,8 @@
 package apitest
 
 import (
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/apitest/fixture"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/apitest/fixture"
 )
 
 var dBookTags = struct {

@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/syssam/velox2/schema/mixin"
+	"github.com/syssam/velox/schema/mixin"
 )
 
 func TestMixinPkg(t *testing.T) {

@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syssam/velox2/internal/fakeconn"
-	"github.com/syssam/velox2/internal/testmodel"
+	"github.com/syssam/velox/internal/fakeconn"
+	"github.com/syssam/velox/internal/testmodel"
 )
 
 // TestRouteSkipsADownReplica: a replica in back-off is skipped until its

@@ -1,6 +1,6 @@
 package schema
 
-import "github.com/syssam/velox2/schema/internal/desc"
+import "github.com/syssam/velox/schema/internal/desc"
 
 // Annotation is extra data attached to a schema, field, edge or index. Name
 // identifies it, and velox-gen passes annotations it does not know to the
@@ -15,17 +15,17 @@ type Annotation = desc.Annotation
 type Merger interface{ Merge(Annotation) Annotation }
 
 // Field is implemented only by the builders of the field package. Descriptor
-// is for velox-gen: the descriptor's type is internal to velox2, and neither
-// its fields nor their values are covered by velox2's compatibility promise.
+// is for velox-gen: the descriptor's type is internal to velox, and neither
+// its fields nor their values are covered by velox's compatibility promise.
 type Field interface{ Descriptor() *desc.Field }
 
 // Edge is implemented only by the builders of the edge package. As with
-// [Field], the descriptor's type is internal to velox2 and outside its
+// [Field], the descriptor's type is internal to velox and outside its
 // compatibility promise.
 type Edge interface{ Descriptor() *desc.Edge }
 
 // Index is implemented only by the builders of the index package. As with
-// [Field], the descriptor's type is internal to velox2 and outside its
+// [Field], the descriptor's type is internal to velox and outside its
 // compatibility promise.
 type Index interface{ Descriptor() *desc.Index }
 

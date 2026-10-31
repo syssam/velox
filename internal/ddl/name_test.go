@@ -10,7 +10,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 var update = flag.Bool("update", false, "write the golden files")

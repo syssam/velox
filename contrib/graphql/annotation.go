@@ -5,7 +5,7 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/syssam/velox2/schema"
+	"github.com/syssam/velox/schema"
 )
 
 // SkipMode is a set of the parts of the GraphQL surface an element leaves out.
@@ -127,7 +127,7 @@ type Annotation struct {
 func (Annotation) Name() string { return "graphql" }
 
 // Merge combines the annotation with other, an earlier one of the same element
-// (velox2's loader calls later.Merge(earlier)), field by field:
+// (velox's loader calls later.Merge(earlier)), field by field:
 //   - bitmasks (Skip, WhereOps) are ORed;
 //   - lists (Mutations, Directives) are other's followed by the receiver's,
 //     and a mutation kind listed twice is kept once;

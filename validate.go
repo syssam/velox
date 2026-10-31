@@ -3,7 +3,7 @@ package velox
 import (
 	"unsafe"
 
-	"github.com/syssam/velox2/internal/engine"
+	"github.com/syssam/velox/internal/engine"
 )
 
 // Validate runs the validators of the columns cs of x on the values x holds

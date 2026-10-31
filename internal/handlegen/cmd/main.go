@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/syssam/velox2/internal/handlegen"
+	"github.com/syssam/velox/internal/handlegen"
 )
 
 func main() {

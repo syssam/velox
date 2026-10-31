@@ -31,7 +31,7 @@ func TestImports(t *testing.T) {
 		for _, imp := range f.Imports {
 			path, _ := strconv.Unquote(imp.Path.Value)
 			switch {
-			case path == "github.com/syssam/velox2", path == "github.com/syssam/velox2/internal/ddl", path == "github.com/syssam/velox2/internal/buildinfo":
+			case path == "github.com/syssam/velox", path == "github.com/syssam/velox/internal/ddl", path == "github.com/syssam/velox/internal/buildinfo":
 			case !strings.Contains(strings.SplitN(path, "/", 2)[0], "."):
 			default:
 				t.Errorf("%s imports %s", name, path)

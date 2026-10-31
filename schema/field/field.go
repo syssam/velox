@@ -7,8 +7,8 @@ import (
 	"slices"
 	"time"
 
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/internal/desc"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/internal/desc"
 )
 
 // common holds the options every field has. B is the builder that embeds it,
@@ -115,7 +115,7 @@ func (c common[B]) Annotations(as ...schema.Annotation) B {
 }
 
 // Descriptor returns the field's descriptor, for velox-gen; its type is
-// internal to velox2 (see schema.Field). It checks the options that depend on
+// internal to velox (see schema.Field). It checks the options that depend on
 // one another, so it may be called more than once.
 func (c common[B]) Descriptor() *desc.Field { finish(c.d); return c.d }
 

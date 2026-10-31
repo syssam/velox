@@ -8,7 +8,7 @@ import (
 )
 
 // TestPortEntSchema loads a representative ent schema, with ent's import paths
-// changed to velox2's, and checks the relations of its graph.
+// changed to velox's, and checks the relations of its graph.
 func TestPortEntSchema(t *testing.T) {
 	files := map[string]string{}
 	matches, err := filepath.Glob("testdata/port/schema/*.go")
@@ -21,7 +21,7 @@ func TestPortEntSchema(t *testing.T) {
 			t.Fatal(err)
 		}
 		// The first line is the //go:build ignore that keeps go vet ./...
-		// from type-checking the fixture as a package of velox2.
+		// from type-checking the fixture as a package of velox.
 		_, src, _ := bytes.Cut(b, []byte("\n"))
 		files["schema/"+filepath.Base(p)] = string(src)
 	}

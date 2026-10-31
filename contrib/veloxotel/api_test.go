@@ -14,8 +14,8 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/syssam/velox2/contrib/veloxotel"
-	"github.com/syssam/velox2/internal/testmodel"
+	"github.com/syssam/velox/contrib/veloxotel"
+	"github.com/syssam/velox/internal/testmodel"
 )
 
 // TestPublicAPI: the package's exported names are exactly these. A task that
@@ -37,7 +37,7 @@ func TestPublicAPI(t *testing.T) {
 		}
 		files = append(files, f)
 	}
-	d, err := doc.NewFromFiles(fset, files, "github.com/syssam/velox2/contrib/veloxotel")
+	d, err := doc.NewFromFiles(fset, files, "github.com/syssam/velox/contrib/veloxotel")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/ddl"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/ddl"
 )
 
 // normalizePredicate is expr in one canonical spelling, for comparing what a

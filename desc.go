@@ -3,7 +3,7 @@ package velox
 import (
 	"unsafe"
 
-	"github.com/syssam/velox2/internal/engine"
+	"github.com/syssam/velox/internal/engine"
 )
 
 // Desc is an entity's metadata as velox-gen writes it: literals, read on the

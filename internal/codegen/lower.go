@@ -14,8 +14,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/syssam/velox2/internal/codegen/loadjson"
-	"github.com/syssam/velox2/plugin"
+	"github.com/syssam/velox/internal/codegen/loadjson"
+	"github.com/syssam/velox/plugin"
 )
 
 // reserved are the Go names of the methods an entity has, which no field or
@@ -37,7 +37,7 @@ func Lower(g *Graph, cfg Config) (*Out, error) {
 		joins: map[string]*join{},
 	}
 	l.owned = map[string]string{
-		"velox": "github.com/syssam/velox2", "sch": l.out.SchemaPath, "errors": "errors", "fmt": "fmt",
+		"velox": "github.com/syssam/velox", "sch": l.out.SchemaPath, "errors": "errors", "fmt": "fmt",
 		"regexp": "regexp", "time": "time", "json": "encoding/json",
 	}
 	l.entities()

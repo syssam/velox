@@ -15,9 +15,9 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/syssam/velox2/internal/buildinfo"
-	"github.com/syssam/velox2/internal/codegen"
-	"github.com/syssam/velox2/plugin"
+	"github.com/syssam/velox/internal/buildinfo"
+	"github.com/syssam/velox/internal/codegen"
+	"github.com/syssam/velox/plugin"
 )
 
 // pluginSpec is one -plugin flag: name[:key=value[,key=value]...].
@@ -66,7 +66,7 @@ func (p *pluginFlag) Set(raw string) error {
 	return nil
 }
 
-// generator is Request.Generator: velox-gen and the version of the velox2
+// generator is Request.Generator: velox-gen and the version of the velox
 // module it is built from, "(devel)" when the build does not say.
 func generator() string { return buildinfo.Generator() }
 
@@ -190,14 +190,14 @@ func runPlugin(name, modDir string, req []byte, env []string, stderr io.Writer) 
 	return &resp, nil
 }
 
-// knownTools are the package paths of the plugins velox2 ships, by tool
+// knownTools are the package paths of the plugins velox ships, by tool
 // name, for the hint of a module that lacks one.
 var knownTools = map[string]string{
-	"velox-graphql": "github.com/syssam/velox2/contrib/graphql/cmd/velox-graphql",
+	"velox-graphql": "github.com/syssam/velox/contrib/graphql/cmd/velox-graphql",
 }
 
 // toolPath is what to go get -tool for the plugin name: its package path when
-// velox2 ships it, else a placeholder.
+// velox ships it, else a placeholder.
 func toolPath(name string) string {
 	if p, ok := knownTools[name]; ok {
 		return p

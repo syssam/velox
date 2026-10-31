@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/examples/graphql/gen"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/examples/graphql/gen"
 )
 
 // nested is the request the benchmark serves: users, each with a page of its

@@ -3,7 +3,7 @@ package veloxgql
 import (
 	"context"
 
-	"github.com/syssam/velox2/contrib/graphql/veloxgql/internal/shared"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/shared"
 )
 
 // Batch makes rows one batch for their edges: the first edge field gqlgen

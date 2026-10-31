@@ -3,8 +3,8 @@ package engine_test
 import (
 	"testing"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/testmodel"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/testmodel"
 )
 
 func TestTicketMetadata(t *testing.T) {

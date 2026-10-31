@@ -11,9 +11,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/testmodel"
-	"github.com/syssam/velox2/veloxpgx"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/testmodel"
+	"github.com/syssam/velox/veloxpgx"
 )
 
 var Tk = testmodel.Tickets

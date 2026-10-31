@@ -3,8 +3,8 @@ package migrate
 import (
 	"strings"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/ddl"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/ddl"
 )
 
 // renameIdent is the SQL expression expr with the column from renamed to:

@@ -4,7 +4,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/syssam/velox2/internal/ddl"
+	"github.com/syssam/velox/internal/ddl"
 )
 
 // createType is the CREATE TYPE of the enum type ref.

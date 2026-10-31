@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // LintFile checks f as velox-gen migrate lint does. Its error, *Error values

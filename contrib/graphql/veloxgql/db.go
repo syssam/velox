@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // state is what the extension puts in an operation's context: the DB and

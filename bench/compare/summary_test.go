@@ -73,13 +73,13 @@ func TestSummarizeFixture(t *testing.T) {
 	}
 	// rebuild_cached counts packages, not a faster rebuild: it is not a metric,
 	// and the share that reran, rerun ÷ (rerun + cached), replaces it.
-	if got := s.Build["oldvelox"]["100"]["rebuild_rerun_share"]; math.Abs(got.Median-40.0/130) > 1e-9 || math.Abs(got.Worst-40.0/130) > 1e-9 {
-		t.Errorf("oldvelox rebuild_rerun_share %+v, want 40/130", got)
+	if got := s.Build["veloxe"]["100"]["rebuild_rerun_share"]; math.Abs(got.Median-40.0/130) > 1e-9 || math.Abs(got.Worst-40.0/130) > 1e-9 {
+		t.Errorf("veloxe rebuild_rerun_share %+v, want 40/130", got)
 	}
-	if got := s.Build["oldvelox"]["100"]["rebuild_rerun"]; got.Median != 40 {
-		t.Errorf("oldvelox rebuild_rerun %+v, want 40", got)
+	if got := s.Build["veloxe"]["100"]["rebuild_rerun"]; got.Median != 40 {
+		t.Errorf("veloxe rebuild_rerun %+v, want 40", got)
 	}
-	if _, ok := s.Build["oldvelox"]["100"]["rebuild_cached"]; ok {
+	if _, ok := s.Build["veloxe"]["100"]["rebuild_cached"]; ok {
 		t.Error("rebuild_cached is a metric")
 	}
 	for _, k := range []string{"ref_cpu_s", "orm", "n", "services", "run", "ref_cpu_before_s"} {
@@ -96,13 +96,13 @@ func TestSummarizeFixture(t *testing.T) {
 	if s.Versions["ent"] != "v0.14.6" {
 		t.Errorf("ent version %q, want v0.14.6", s.Versions["ent"])
 	}
-	for _, k := range []string{"velox2", "oldvelox", "sqlite", "pgx", "x/tools"} {
+	for _, k := range []string{"velox", "veloxe", "sqlite", "pgx", "x/tools"} {
 		if s.Versions[k] == "" {
 			t.Errorf("no version for %s: %v", k, s.Versions)
 		}
 	}
-	if s.Versions["velox2"] != "abc1234" {
-		t.Errorf("velox2 version %q", s.Versions["velox2"])
+	if s.Versions["velox"] != "abc1234" {
+		t.Errorf("velox version %q", s.Versions["velox"])
 	}
 	if len(s.Steps) != 3 {
 		t.Fatalf("%d steps, want 3", len(s.Steps))
@@ -116,9 +116,9 @@ func TestSummarizeFixture(t *testing.T) {
 	if timedOut != 1 {
 		t.Errorf("%d steps timed out, want 1", timedOut)
 	}
-	got := s.Runtime["postgres"]["oldvelox"]["Count"]["sec/op"]
+	got := s.Runtime["postgres"]["veloxe"]["Count"]["sec/op"]
 	if len(got.Runs) != 2 || got.Median <= 0 {
-		t.Errorf("postgres oldvelox Count sec/op %+v", got)
+		t.Errorf("postgres veloxe Count sec/op %+v", got)
 	}
 	if len(s.Runtime) != 2 || len(s.Runtime["sqlite"]) != 3 || len(s.Runtime["sqlite"]["ent"]) != 7 || len(s.Runtime["sqlite"]["ent"]["Count"]) != 3 {
 		t.Errorf("runtime has the wrong shape: %d dialects", len(s.Runtime))
@@ -219,10 +219,10 @@ func copyFixtureOf(t *testing.T, name string) string {
 	return dir
 }
 
-// variantConfig is the fixture's config with velox2pgx as a variant.
+// variantConfig is the fixture's config with veloxpgx as a variant.
 func variantConfig() map[string]any {
 	return map[string]any{
-		"runs": 2, "services": 2, "bench_count": 2, "benchtime": "10x", "sizes": "100", "variants": "velox2pgx",
+		"runs": 2, "services": 2, "bench_count": 2, "benchtime": "10x", "sizes": "100", "variants": "veloxpgx",
 	}
 }
 
@@ -236,13 +236,13 @@ func TestSummarizeVariant(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := s.Runtime["postgres"]["velox2pgx"]["Query100"]["sec/op"]; len(got.Runs) != 2 || got.Median <= 0 {
-		t.Errorf("postgres velox2pgx Query100 sec/op %+v, want 2 runs", got)
+	if got := s.Runtime["postgres"]["veloxpgx"]["Query100"]["sec/op"]; len(got.Runs) != 2 || got.Median <= 0 {
+		t.Errorf("postgres veloxpgx Query100 sec/op %+v, want 2 runs", got)
 	}
-	if _, ok := s.Runtime["sqlite"]["velox2pgx"]; ok {
-		t.Error("velox2pgx has sqlite results")
+	if _, ok := s.Runtime["sqlite"]["veloxpgx"]; ok {
+		t.Error("veloxpgx has sqlite results")
 	}
-	if !slices.Equal(s.Config.Variants, []string{"velox2pgx"}) {
+	if !slices.Equal(s.Config.Variants, []string{"veloxpgx"}) {
 		t.Errorf("config variants %v", s.Config.Variants)
 	}
 
@@ -252,16 +252,16 @@ func TestSummarizeVariant(t *testing.T) {
 	if err != nil {
 		t.Fatalf("an unconfigured variant's rounds: %v", err)
 	}
-	if got := s.Runtime["postgres"]["velox2pgx"]["Query100"]["sec/op"]; len(got.Runs) != 2 {
+	if got := s.Runtime["postgres"]["veloxpgx"]["Query100"]["sec/op"]; len(got.Runs) != 2 {
 		t.Errorf("an unconfigured variant is not shown: %+v", got)
 	}
 
-	if err := os.Remove(filepath.Join(dir, "raw", "bench-postgres-velox2pgx-2.txt")); err != nil {
+	if err := os.Remove(filepath.Join(dir, "raw", "bench-postgres-veloxpgx-2.txt")); err != nil {
 		t.Fatal(err)
 	}
 	_, err = summarize(dir, variantConfig())
-	if err == nil || !strings.Contains(err.Error(), "bench postgres velox2pgx round 2") {
-		t.Errorf("got %v, want an error naming bench postgres velox2pgx round 2", err)
+	if err == nil || !strings.Contains(err.Error(), "bench postgres veloxpgx round 2") {
+		t.Errorf("got %v, want an error naming bench postgres veloxpgx round 2", err)
 	}
 	if _, err := summarize(dir, cfg); err != nil {
 		t.Errorf("an unconfigured variant is required: %v", err)
@@ -271,21 +271,21 @@ func TestSummarizeVariant(t *testing.T) {
 	}
 }
 
-// TestLossesIgnoreVariant checks that a variant of velox2 that beats velox2 is
-// no loss: it is velox2 too.
+// TestLossesIgnoreVariant checks that a variant of velox that beats velox is
+// no loss: it is velox too.
 func TestLossesIgnoreVariant(t *testing.T) {
 	fixtureSummary(t) // replaces the probes
 	s, err := summarize(copyFixtureOf(t, "summary-variant"), variantConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
-	for name, units := range s.Runtime["postgres"]["velox2"] {
+	for name, units := range s.Runtime["postgres"]["velox"] {
 		for u, st := range units {
-			s.Runtime["postgres"]["velox2pgx"][name][u] = newStat([]float64{st.Median / 2}, true)
+			s.Runtime["postgres"]["veloxpgx"][name][u] = newStat([]float64{st.Median / 2}, true)
 		}
 	}
 	for _, l := range losses(s) {
-		if l.Winner == "velox2pgx" {
+		if l.Winner == "veloxpgx" {
 			t.Errorf("a loss to the variant: %+v", l)
 		}
 	}
@@ -295,7 +295,7 @@ func TestLossesIgnoreVariant(t *testing.T) {
 func TestSummarizeRuntimeOnly(t *testing.T) {
 	fixtureSummary(t) // replaces the probes
 	dir := copyFixtureOf(t, "summary-runtime")
-	s, err := summarize(dir, map[string]any{"bench_count": 2, "benchtime": "10x", "steps": "runtime", "variants": "velox2pgx"})
+	s, err := summarize(dir, map[string]any{"bench_count": 2, "benchtime": "10x", "steps": "runtime", "variants": "veloxpgx"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -314,13 +314,13 @@ func TestSummarizeCompleteness(t *testing.T) {
 	fixtureSummary(t) // replaces the probes
 	cfg := map[string]any{"runs": 2, "bench_count": 2, "sizes": "100"}
 	dir := copyFixture(t)
-	for _, f := range []string{"build-ent-n100-r2.json", "bench-sqlite-ent-2.txt", "bench-postgres-velox2-1.txt", "bench-postgres-velox2-2.txt"} {
+	for _, f := range []string{"build-ent-n100-r2.json", "bench-sqlite-ent-2.txt", "bench-postgres-velox-1.txt", "bench-postgres-velox-2.txt"} {
 		if err := os.Remove(filepath.Join(dir, "raw", f)); err != nil {
 			t.Fatal(err)
 		}
 	}
 	// One round file without one benchmark.
-	p := filepath.Join(dir, "raw", "bench-sqlite-oldvelox-1.txt")
+	p := filepath.Join(dir, "raw", "bench-sqlite-veloxe-1.txt")
 	b, _ := os.ReadFile(p)
 	var kept []string
 	for _, l := range strings.Split(string(b), "\n") {
@@ -335,9 +335,9 @@ func TestSummarizeCompleteness(t *testing.T) {
 	want := []string{
 		"build ent n=100 run 2",
 		"bench sqlite ent round 2",
-		"bench postgres velox2 round 1",
-		"bench postgres velox2 round 2",
-		"bench sqlite oldvelox round 1: Count sec/op",
+		"bench postgres velox round 1",
+		"bench postgres velox round 2",
+		"bench sqlite veloxe round 1: Count sec/op",
 	}
 	_, err := summarize(dir, cfg)
 	if err == nil {
@@ -377,14 +377,14 @@ func TestSummarizeCommitFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	s, err := summarize(dir, map[string]any{"sizes": "100"})
-	if err != nil || s.Versions["velox2"] != "deadbee" {
-		t.Errorf("got %q, %v; want deadbee from commit.txt", s.Versions["velox2"], err)
+	if err != nil || s.Versions["velox"] != "deadbee" {
+		t.Errorf("got %q, %v; want deadbee from commit.txt", s.Versions["velox"], err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "commit.txt"), []byte("\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if s, err = summarize(dir, nil); err != nil || s.Versions["velox2"] != "abc1234" {
-		t.Errorf("an empty commit.txt: got %q, %v; want the probe's abc1234", s.Versions["velox2"], err)
+	if s, err = summarize(dir, nil); err != nil || s.Versions["velox"] != "abc1234" {
+		t.Errorf("an empty commit.txt: got %q, %v; want the probe's abc1234", s.Versions["velox"], err)
 	}
 }
 
@@ -468,8 +468,8 @@ func TestSummaryHasNoSecret(t *testing.T) {
 
 func TestLosses(t *testing.T) {
 	s := fixtureSummary(t)
-	// The fixture: ent's cold_cpu_s median is 10 and velox2's 12; ent's
-	// ref_cpu_s is lower than velox2's, and that is no loss.
+	// The fixture: ent's cold_cpu_s median is 10 and velox's 12; ent's
+	// ref_cpu_s is lower than velox's, and that is no loss.
 	got := losses(s)
 	if len(got) != 1 {
 		t.Fatalf("got %d losses %+v, want 1", len(got), got)
@@ -489,7 +489,7 @@ func TestLosses(t *testing.T) {
 	}
 
 	// A runtime loss: sec/op, B/op and allocs/op are lower-is-better.
-	s.Runtime["postgres"]["oldvelox"]["GetByID"]["B/op"] = newStat([]float64{1}, true)
+	s.Runtime["postgres"]["veloxe"]["GetByID"]["B/op"] = newStat([]float64{1}, true)
 	got = losses(s)
 	var rt []loss
 	for _, l := range got {
@@ -497,7 +497,7 @@ func TestLosses(t *testing.T) {
 			rt = append(rt, l)
 		}
 	}
-	if len(rt) != 1 || rt[0].Key != "postgres" || rt[0].Metric != "GetByID" || rt[0].Unit != "B/op" || rt[0].Winner != "oldvelox" {
+	if len(rt) != 1 || rt[0].Key != "postgres" || rt[0].Metric != "GetByID" || rt[0].Unit != "B/op" || rt[0].Winner != "veloxe" {
 		t.Errorf("runtime losses %+v", rt)
 	}
 	if !slices.IsSortedFunc(got, func(a, b loss) int {
@@ -507,7 +507,7 @@ func TestLosses(t *testing.T) {
 	}
 
 	// A tie is no loss.
-	s.Build["ent"]["100"]["cold_cpu_s"] = s.Build["velox2"]["100"]["cold_cpu_s"]
+	s.Build["ent"]["100"]["cold_cpu_s"] = s.Build["velox"]["100"]["cold_cpu_s"]
 	for _, l := range losses(s) {
 		if l.Metric == "cold_cpu_s" {
 			t.Errorf("a tie is a loss: %+v", l)
@@ -515,51 +515,51 @@ func TestLosses(t *testing.T) {
 	}
 }
 
-// TestLossesPerCompetitor checks that every ORM that beats velox2 has its own
+// TestLossesPerCompetitor checks that every ORM that beats velox has its own
 // loss, in the order of orms, so that a reader never learns of only the best.
 func TestLossesPerCompetitor(t *testing.T) {
 	s := fixtureSummary(t)
-	s.Build["oldvelox"]["100"]["cold_cpu_s"] = newStat([]float64{11}, true) // velox2 12, ent 10
+	s.Build["veloxe"]["100"]["cold_cpu_s"] = newStat([]float64{11}, true) // velox 12, ent 10
 	var got []loss
 	for _, l := range losses(s) {
 		if l.Metric == "cold_cpu_s" {
 			got = append(got, l)
 		}
 	}
-	if len(got) != 2 || got[0].Winner != "oldvelox" || got[0].Best != 11 || got[1].Winner != "ent" || got[1].Best != 10 {
-		t.Fatalf("got %+v, want a loss to old velox (11) and one to ent (10)", got)
+	if len(got) != 2 || got[0].Winner != "veloxe" || got[0].Best != 11 || got[1].Winner != "ent" || got[1].Best != 10 {
+		t.Fatalf("got %+v, want a loss to veloxe (11) and one to ent (10)", got)
 	}
 	if math.Abs(got[0].Ratio-11.0/12) > 1e-9 || math.Abs(got[1].Ratio-10.0/12) > 1e-9 {
 		t.Errorf("ratios %v and %v", got[0].Ratio, got[1].Ratio)
 	}
 
-	// A runtime unit too, and only the ORM that beats velox2 has a loss.
-	s.Runtime["sqlite"]["oldvelox"]["Count"]["sec/op"] = newStat([]float64{1e-9}, true)
+	// A runtime unit too, and only the ORM that beats velox has a loss.
+	s.Runtime["sqlite"]["veloxe"]["Count"]["sec/op"] = newStat([]float64{1e-9}, true)
 	s.Runtime["sqlite"]["ent"]["Count"]["sec/op"] = newStat([]float64{1e-9}, true)
-	s.Runtime["sqlite"]["velox2"]["Count"]["sec/op"] = newStat([]float64{1e-6}, true)
+	s.Runtime["sqlite"]["velox"]["Count"]["sec/op"] = newStat([]float64{1e-6}, true)
 	var count []string
 	for _, l := range losses(s) {
 		if l.Section == "runtime" && l.Key == "sqlite" && l.Metric == "Count" && l.Unit == "sec/op" {
 			count = append(count, l.Winner)
 		}
 	}
-	if !slices.Equal(count, []string{"oldvelox", "ent"}) {
-		t.Errorf("Count sec/op losses to %v, want old velox and ent", count)
+	if !slices.Equal(count, []string{"veloxe", "ent"}) {
+		t.Errorf("Count sec/op losses to %v, want veloxe and ent", count)
 	}
 }
 
 func TestBeaters(t *testing.T) {
 	st := func(v float64) stat { return newStat([]float64{v}, true) }
-	stats := map[string]stat{"velox2": st(5), "oldvelox": st(5), "ent": st(7)}
+	stats := map[string]stat{"velox": st(5), "veloxe": st(5), "ent": st(7)}
 	if got := beaters(stats, true); len(got) != 0 {
-		t.Errorf("lower is better: a tie and a worse ORM beat velox2: %v", got)
+		t.Errorf("lower is better: a tie and a worse ORM beat velox: %v", got)
 	}
 	// The same numbers read the other way: ent is higher, and higher is better.
 	if got := beaters(stats, false); !slices.Equal(got, []string{"ent"}) {
 		t.Errorf("higher is better: got %v, want ent", got)
 	}
 	if got := beaters(map[string]stat{"ent": st(1)}, true); got != nil {
-		t.Errorf("without velox2: got %v", got)
+		t.Errorf("without velox: got %v", got)
 	}
 }
 

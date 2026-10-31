@@ -26,14 +26,14 @@ resolver:
 # The generated package holds the Go of every entity, connection, edge, order
 # and where type, named as in the schema.
 autobind:
-  - github.com/syssam/velox2/examples/graphql/gen
+  - github.com/syssam/velox/examples/graphql/gen
 
 # Node and the scalars bind to veloxgql. A scalar lists one model for each Go
 # type velox entities hold, since gqlgen binds a field only to a model of its
 # own Go type (contrib/graphql's package documentation).
 models:
   Node:
-    model: github.com/syssam/velox2/contrib/graphql/veloxgql.Noder
+    model: github.com/syssam/velox/contrib/graphql/veloxgql.Noder
   Int:
     model:
       - github.com/99designs/gqlgen/graphql.Int
@@ -47,22 +47,22 @@ models:
   Float:
     model:
       - github.com/99designs/gqlgen/graphql.FloatContext
-      - github.com/syssam/velox2/contrib/graphql/veloxgql.Float32
+      - github.com/syssam/velox/contrib/graphql/veloxgql.Float32
   Uint64:
     model:
-      - github.com/syssam/velox2/contrib/graphql/veloxgql.Uint64
-      - github.com/syssam/velox2/contrib/graphql/veloxgql.Uint
+      - github.com/syssam/velox/contrib/graphql/veloxgql.Uint64
+      - github.com/syssam/velox/contrib/graphql/veloxgql.Uint
   Time:
-    model: github.com/syssam/velox2/contrib/graphql/veloxgql.Time
+    model: github.com/syssam/velox/contrib/graphql/veloxgql.Time
   UUID:
-    model: github.com/syssam/velox2/contrib/graphql/veloxgql.UUID
+    model: github.com/syssam/velox/contrib/graphql/veloxgql.UUID
   Bytes:
-    model: github.com/syssam/velox2/contrib/graphql/veloxgql.Bytes
+    model: github.com/syssam/velox/contrib/graphql/veloxgql.Bytes
   JSON:
-    model: github.com/syssam/velox2/contrib/graphql/veloxgql.JSON
+    model: github.com/syssam/velox/contrib/graphql/veloxgql.JSON
   Cursor:
-    model: github.com/syssam/velox2/contrib/graphql/veloxgql.Cursor
+    model: github.com/syssam/velox/contrib/graphql/veloxgql.Cursor
   OrderDirection:
-    model: github.com/syssam/velox2/contrib/graphql/veloxgql.OrderDirection
+    model: github.com/syssam/velox/contrib/graphql/veloxgql.OrderDirection
   PageInfo:
-    model: github.com/syssam/velox2/contrib/graphql/veloxgql.PageInfo
+    model: github.com/syssam/velox/contrib/graphql/veloxgql.PageInfo

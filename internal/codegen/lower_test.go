@@ -12,18 +12,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syssam/velox2/internal/codegen/loadjson"
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/edge"
-	"github.com/syssam/velox2/schema/field"
-	"github.com/syssam/velox2/schema/index"
-	"github.com/syssam/velox2/schema/mixin"
+	"github.com/syssam/velox/internal/codegen/loadjson"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/edge"
+	"github.com/syssam/velox/schema/field"
+	"github.com/syssam/velox/schema/index"
+	"github.com/syssam/velox/schema/mixin"
 
-	errpkg "github.com/syssam/velox2/internal/codegen/internal/errors"
-	schpkg "github.com/syssam/velox2/internal/codegen/internal/sch"
+	errpkg "github.com/syssam/velox/internal/codegen/internal/errors"
+	schpkg "github.com/syssam/velox/internal/codegen/internal/sch"
 )
 
-const lowerSchemaPath = "github.com/syssam/velox2/internal/codegen"
+const lowerSchemaPath = "github.com/syssam/velox/internal/codegen"
 
 // The schemas of the lowering tests. The prefix Lw makes the label lw_user, so
 // that the join entity of lw_user_groups is LwUserGroup. (snake("LUser") is
@@ -497,7 +497,7 @@ func TestLowerMixinPosition(t *testing.T) {
 			}
 		}
 	}
-	if !reflect.DeepEqual(e.Imports, []string{"encoding/json", "errors", "github.com/syssam/velox2/internal/codegen", "time"}) {
+	if !reflect.DeepEqual(e.Imports, []string{"encoding/json", "errors", "github.com/syssam/velox/internal/codegen", "time"}) {
 		t.Errorf("imports %v", e.Imports)
 	}
 }
@@ -618,7 +618,7 @@ func TestLowerTenantIndexGoTypes(t *testing.T) {
 	}
 
 	o = mustLower(t, Config{}, Account{}, Profile{}, Role{}, Home{})
-	const pkg = "github.com/syssam/velox2/internal/codegen"
+	const pkg = "github.com/syssam/velox/internal/codegen"
 	a, h := o.entity("Account"), o.entity("Home")
 	if f := h.field("id"); f.GoType != "codegen.UUIDValue" || f.Handle != "velox.Col[Home, codegen.UUIDValue]" || f.Pointer {
 		t.Errorf("home id %+v", f)
@@ -877,8 +877,8 @@ func TestLowerPackageNameClash(t *testing.T) {
 		t.Fatal("no error")
 	}
 	for _, w := range []string{
-		`schema LwPkgClash: field "a": imports github.com/syssam/velox2/internal/codegen/internal/errors, but the generated code uses the name errors for errors`,
-		`schema LwPkgClash: field "b": imports github.com/syssam/velox2/internal/codegen/internal/sch, but the generated code uses the name sch for ` + lowerSchemaPath,
+		`schema LwPkgClash: field "a": imports github.com/syssam/velox/internal/codegen/internal/errors, but the generated code uses the name errors for errors`,
+		`schema LwPkgClash: field "b": imports github.com/syssam/velox/internal/codegen/internal/sch, but the generated code uses the name sch for ` + lowerSchemaPath,
 	} {
 		if !strings.Contains(err.Error(), w) {
 			t.Errorf("error lacks %q: %v", w, err)

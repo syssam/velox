@@ -7,8 +7,8 @@
 package index
 
 import (
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/internal/desc"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/internal/desc"
 )
 
 // Builder builds an index.

@@ -31,7 +31,7 @@
 //
 //   - plugin_protocol is [ProtocolVersion], the shape of the request and the
 //     response and the rules below.
-//   - generator names velox-gen and the version of velox2 it was built with,
+//   - generator names velox-gen and the version of velox it was built with,
 //     "(devel)" when the build does not say. It is for messages: a file that
 //     held it would change with every release.
 //   - out_package and out_path are the name and the import path of the
@@ -122,10 +122,10 @@
 // plugin panicked: " and the panic's value, without the stack.
 //
 // [Supports] holds the versions the plugin was written for, as literals.
-// Built with a velox2 of another protocol or model, the plugin answers with
+// Built with a velox of another protocol or model, the plugin answers with
 // an error that says to update it; given a request of another protocol, or a
 // model of another version, it answers with an error that says to use
-// velox-gen and the plugin of one velox2 release. A plugin that does not use
+// velox-gen and the plugin of one velox release. A plugin that does not use
 // Main makes the same checks itself, and always sets plugin_protocol. Tests
 // call [Run] with a request in memory.
 //

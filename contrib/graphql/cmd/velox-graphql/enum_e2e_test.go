@@ -15,9 +15,9 @@ const e2eEnumSchema = `package schema
 
 import (
 	"example.com/app/levels"
-	"github.com/syssam/velox2/contrib/graphql"
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/field"
+	"github.com/syssam/velox/contrib/graphql"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/field"
 )
 
 type Alarm struct{ schema.Schema }
@@ -80,7 +80,7 @@ import (
 	"context"
 
 	"example.com/app/gen"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
 // Node is the resolver for the node field.
@@ -123,8 +123,8 @@ import (
 
 	"example.com/app/gen"
 	"example.com/app/graph"
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
 // TestTagIDGT: a string key's idGT compiles, to Tags.ID.GT, and compares

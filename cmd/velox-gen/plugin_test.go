@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox2/plugin"
+	"github.com/syssam/velox/plugin"
 )
 
 // pluginModule is genModule with the fake plugin (testdata/fakeplugin) added
@@ -131,13 +131,13 @@ func TestPluginFilesAreOwned(t *testing.T) {
 	}
 
 	// -check without -plugin: the plugin's files are left over.
-	code, _, errs = velox(t, dir, "-check", "./schema")
+	code, _, errs = runCLI(t, dir, "-check", "./schema")
 	if code != 3 || !strings.Contains(errs, "gen/fake.graphqls is out of date") || !strings.Contains(errs, "gen/fake_gql.go is out of date") {
 		t.Fatalf("-check without the plugin: %d %q", code, errs)
 	}
 
 	// Without -plugin the next generate removes both files, and only those.
-	code, out, errs = velox(t, dir, "./schema")
+	code, out, errs = runCLI(t, dir, "./schema")
 	if code != 0 || !strings.Contains(out, "gen/fake.graphqls\n") || !strings.Contains(out, "gen/fake_gql.go\n") {
 		t.Fatalf("generate without the plugin: %d %q %q", code, out, errs)
 	}
@@ -153,7 +153,7 @@ func TestPluginFilesAreOwned(t *testing.T) {
 // generate does.
 func TestVerifyRefusesAPluginPathOfVeloxGen(t *testing.T) {
 	dir := pluginModule(t)
-	if code, _, errs := velox(t, dir, "./schema"); code != 0 {
+	if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
 		t.Fatalf("generate: %d %q", code, errs)
 	}
 	env := fakeEnv(filesEnv(t, plugin.File{Path: "User_velox.go", Content: "package gen\n"}))
@@ -394,7 +394,7 @@ func TestPluginErrors(t *testing.T) {
 		{"exit", "fakeplugin", []string{"FAKEPLUGIN_MODE=exit"}, "the fake plugin crashed"},
 		{"malformed", "fakeplugin", []string{"FAKEPLUGIN_MODE=malformed"}, "response"},
 		{"unknown", "nosuchplugin", nil, "the module has no tool nosuchplugin: add it with go get -tool <its package path>\n"},
-		{"unknown velox-graphql", "velox-graphql", nil, "the module has no tool velox-graphql: add it with go get -tool github.com/syssam/velox2/contrib/graphql/cmd/velox-graphql\n"},
+		{"unknown velox-graphql", "velox-graphql", nil, "the module has no tool velox-graphql: add it with go get -tool github.com/syssam/velox/contrib/graphql/cmd/velox-graphql\n"},
 		{"panic", "fakeplugin", []string{"FAKEPLUGIN_MODE=panic"}, "the plugin panicked: the fake plugin panics"},
 		{"panic traced", "fakeplugin", []string{"FAKEPLUGIN_MODE=panic", "VELOX_PLUGIN_TRACE=1"}, "the plugin panicked: the fake plugin panics\n"},
 	}
@@ -570,13 +570,13 @@ func TestStaleNestedFiles(t *testing.T) {
 	}
 
 	// -check without the plugin names the left-over files.
-	code, _, errs := velox(t, dir, "-check", "./schema")
+	code, _, errs := runCLI(t, dir, "-check", "./schema")
 	if code != 3 || !strings.Contains(errs, "gen/pb/a.go is out of date") || !strings.Contains(errs, "gen/pb/sub/b.proto is out of date") {
 		t.Fatalf("-check: %d %q", code, errs)
 	}
 
 	// pb/sub held only the plugin's file and goes; pb holds .git and stays.
-	code, out, errs := velox(t, dir, "./schema")
+	code, out, errs := runCLI(t, dir, "./schema")
 	if code != 0 || out != "gen/pb/a.go\ngen/pb/sub/b.proto\n" {
 		t.Fatalf("without the plugin: %d %q %q", code, out, errs)
 	}
@@ -661,7 +661,7 @@ func TestPluginOptions(t *testing.T) {
 	}
 }
 
-// TestPluginProtocol1 pins the error a plugin built with a velox2 of protocol
+// TestPluginProtocol1 pins the error a plugin built with a velox of protocol
 // 1 gets: its responses say no protocol.
 func TestPluginProtocol1(t *testing.T) {
 	dir := pluginModule(t)
@@ -883,7 +883,7 @@ func TestPluginSymlinks(t *testing.T) {
 			t.Errorf("%d %q %q", code, out, errs)
 		}
 		// Without the plugin, the sweep does not enter it.
-		if code, _, errs := velox(t, dir, "./schema"); code != 0 {
+		if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
 			t.Fatalf("%d %q", code, errs)
 		}
 		if read(t, filepath.Join(elsewhere, "x.go")) != hdr {
@@ -908,7 +908,7 @@ func TestPluginSymlinks(t *testing.T) {
 			t.Error("the file behind the link changed")
 		}
 		// Without the plugin, the sweep leaves the link alone.
-		if code, _, errs := velox(t, dir, "./schema"); code != 0 {
+		if code, _, errs := runCLI(t, dir, "./schema"); code != 0 {
 			t.Fatalf("%d %q", code, errs)
 		}
 		if _, err := os.Lstat(filepath.Join(gen, "x.go")); err != nil {

@@ -5,11 +5,11 @@ package schema
 import (
 	"regexp"
 
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/edge"
-	"github.com/syssam/velox2/schema/field"
-	"github.com/syssam/velox2/schema/index"
-	"github.com/syssam/velox2/schema/mixin"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/edge"
+	"github.com/syssam/velox/schema/field"
+	"github.com/syssam/velox/schema/index"
+	"github.com/syssam/velox/schema/mixin"
 )
 
 type User struct{ schema.Schema }

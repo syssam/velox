@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 func TestPolicyError(t *testing.T) {

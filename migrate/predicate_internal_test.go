@@ -3,7 +3,7 @@ package migrate
 import (
 	"testing"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // TestSamePredicateKnownLimits pins the documented exception to Drift's

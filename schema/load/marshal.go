@@ -1,6 +1,6 @@
 // Package load is for the program velox-gen writes, and for nothing else. That
 // program imports the schema package, passes its schemas to Marshal and prints
-// the result, which velox-gen reads back. The JSON is internal to velox2: its
+// the result, which velox-gen reads back. The JSON is internal to velox: its
 // format changes with velox-gen, which is the only reader.
 package load
 
@@ -15,9 +15,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/syssam/velox2/internal/codegen/loadjson"
-	"github.com/syssam/velox2/schema"
-	"github.com/syssam/velox2/schema/internal/desc"
+	"github.com/syssam/velox/internal/codegen/loadjson"
+	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/internal/desc"
 )
 
 // Marshal describes the schemas of the package pkgPath, in JSON. The program
@@ -71,10 +71,10 @@ type loader struct {
 
 // mixinPkg prefixes the functions of package schema/mixin, whose elements
 // are declared on the line of the schema's Mixin method instead.
-const mixinPkg = "github.com/syssam/velox2/schema/mixin."
+const mixinPkg = "github.com/syssam/velox/schema/mixin."
 
 // pos is the file:line of a counter that desc.Caller returned: the line of
-// the schema's Mixin method for an element that a mixin of velox2 declares,
+// the schema's Mixin method for an element that a mixin of velox declares,
 // since the user wrote that line and not the mixin's, else the
 // constructor's call.
 func (l *loader) pos(pc uintptr) string {

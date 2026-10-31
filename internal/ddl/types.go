@@ -3,7 +3,7 @@ package ddl
 import (
 	"strings"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // pgAliases maps PostgreSQL's aliases of built-in types to the names it

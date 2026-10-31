@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // full is a schema with every field of every type set.

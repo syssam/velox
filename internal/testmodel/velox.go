@@ -2,6 +2,6 @@
 
 package testmodel
 
-import "github.com/syssam/velox2"
+import "github.com/syssam/velox"
 
 const _ = velox.GeneratedCodeIsVersion6

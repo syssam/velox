@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/ddl"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/ddl"
 )
 
 // pgTable is a table inspectPostgres reads: its oid, its schema as the

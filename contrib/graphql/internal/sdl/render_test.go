@@ -11,9 +11,9 @@ import (
 
 	"github.com/vektah/gqlparser/v2/ast"
 
-	"github.com/syssam/velox2/contrib/graphql"
-	"github.com/syssam/velox2/contrib/graphql/internal/modeltest"
-	"github.com/syssam/velox2/plugin"
+	"github.com/syssam/velox/contrib/graphql"
+	"github.com/syssam/velox/contrib/graphql/internal/modeltest"
+	"github.com/syssam/velox/plugin"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden SDL")

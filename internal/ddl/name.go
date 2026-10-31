@@ -6,7 +6,7 @@ import (
 	"hash/fnv"
 	"unicode/utf8"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // MaxName is the length in bytes of the longest database name: PostgreSQL

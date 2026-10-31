@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/syssam/velox2/internal/codegen"
-	"github.com/syssam/velox2/migrate"
+	"github.com/syssam/velox/internal/codegen"
+	"github.com/syssam/velox/migrate"
 )
 
 // runMigrateBaseline is velox-gen migrate baseline: it reads the schema

@@ -6,7 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/syssam/velox2/veloxpgx"
+	"github.com/syssam/velox/veloxpgx"
 )
 
 // Open needs a reachable database, so this example is compiled and not run.

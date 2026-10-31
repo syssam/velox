@@ -7,7 +7,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 	"go.opentelemetry.io/otel/semconv/v1.43.0/dbconv"
 
-	"github.com/syssam/velox2"
+	"github.com/syssam/velox"
 )
 
 // TestNamesMatchSemconv: the names attrs.go writes out are those of the

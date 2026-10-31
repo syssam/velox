@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql"
-	"github.com/syssam/velox2/contrib/graphql/veloxgql/gqlimpl"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
 const _ = veloxgql.GeneratedCodeIsVersion3
@@ -266,7 +266,7 @@ func (in CreateCategoryInput) GoString() string { return in.String() }
 // createCategory does, and returns the row as written. It runs atomically on
 // the DB veloxgql.DBFromContext reads from ctx, under the tenant scope and the
 // policies. See "Mutations" in the documentation of package
-// github.com/syssam/velox2/contrib/graphql for what each input field does, what
+// github.com/syssam/velox/contrib/graphql for what each input field does, what
 // the caller may link and change, and the errors.
 func CreateCategory(ctx context.Context, input CreateCategoryInput) (*Category, error) {
 	var (
@@ -355,7 +355,7 @@ func (in UpdateCategoryInput) GoString() string { return in.String() }
 // mutation updateCategory does, and returns the row as written. It runs
 // atomically on the DB veloxgql.DBFromContext reads from ctx, under the tenant
 // scope and the policies. See "Mutations" in the documentation of package
-// github.com/syssam/velox2/contrib/graphql for what each input field does, what
+// github.com/syssam/velox/contrib/graphql for what each input field does, what
 // the caller may link and change, and the errors.
 func UpdateCategory(ctx context.Context, id string, input UpdateCategoryInput) (*Category, error) {
 	var (

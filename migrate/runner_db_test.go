@@ -15,8 +15,8 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/migrate"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/migrate"
 )
 
 // columnsOf is the history table's columns, "<name> <type>", by position.

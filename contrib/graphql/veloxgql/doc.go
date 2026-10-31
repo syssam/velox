@@ -126,7 +126,7 @@
 // entities hold (time.Time, uuid.UUID, []byte, uint64, uint, float32): gqlgen
 // prefers a model's function marshalers to its type. The gqlgen.yml models
 // that map each scalar are in the documentation of package
-// github.com/syssam/velox2/contrib/graphql.
+// github.com/syssam/velox/contrib/graphql.
 //
 // Uint64 is a decimal string on the wire both ways, since a JSON number loses
 // precision above 2^53 in many clients.

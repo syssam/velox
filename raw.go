@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"iter"
 
-	"github.com/syssam/velox2/internal/engine"
+	"github.com/syssam/velox/internal/engine"
 )
 
 // Exec runs query, raw SQL that returns no rows, with args, and returns the

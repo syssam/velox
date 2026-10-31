@@ -9,9 +9,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/apitest/fixture"
-	"github.com/syssam/velox2/internal/testmodel"
+	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/apitest/fixture"
+	"github.com/syssam/velox/internal/testmodel"
 )
 
 // eUser has posts; ePost is tenant-scoped and has a Read policy that hides

@@ -28,7 +28,7 @@ func TestAppGoMod(t *testing.T) {
 	for _, want := range []string{
 		"module example.com/tmp",
 		"entgo.io/ent v0.14.6",
-		"github.com/syssam/velox v0.3.1-0.20261028051754-a7d44fb423b0",
+		"github.com/syssam/velox v0.0.0",
 		"golang.org/x/tools v0.52.0",
 		"=> /r",
 	} {
@@ -49,9 +49,59 @@ func TestAppGoMod(t *testing.T) {
 	}
 }
 
+// TestVeloxeApp: veloxe's app pins veloxe from the module's go.mod and go.sum,
+// and has no replace, which would build it on this repository.
+func TestVeloxeApp(t *testing.T) {
+	dir := t.TempDir()
+	if err := writeApp(veloxeORM, dir, nil); err != nil {
+		t.Fatal(err)
+	}
+	mod, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := modfile.Parse("go.mod", mod, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.Replace) != 0 {
+		t.Errorf("go.mod has a replace:\n%s", mod)
+	}
+	if !strings.Contains(string(mod), "github.com/syssam/velox v0.3.1-") {
+		t.Errorf("go.mod does not pin veloxe:\n%s", mod)
+	}
+	hd, _ := harnessDir()
+	want, _ := os.ReadFile(filepath.Join(hd, "veloxe", "go.sum"))
+	if got, err := os.ReadFile(filepath.Join(dir, "go.sum")); err != nil || string(got) != string(want) {
+		t.Errorf("go.sum is not veloxe's module's: %v", err)
+	}
+}
+
+// TestVeloxeModuleMatchesHarness: what the two go.mods share is at one version,
+// or the apps would compare different dependencies.
+func TestVeloxeModuleMatchesHarness(t *testing.T) {
+	hd, err := harnessDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	harness, err := requirements(filepath.Join(hd, "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	veloxe, err := requirements(filepath.Join(hd, "veloxe", "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for path, v := range harness {
+		if w, ok := veloxe[path]; ok && path != "github.com/syssam/velox" && w != v {
+			t.Errorf("%s: %s in the harness, %s in veloxe/go.mod", path, v, w)
+		}
+	}
+}
+
 func TestWriteApp(t *testing.T) {
 	dir := t.TempDir()
-	if err := writeApp(dir, map[string]string{"a/b.go": "package a\n"}); err != nil {
+	if err := writeApp(veloxORM, dir, map[string]string{"a/b.go": "package a\n"}); err != nil {
 		t.Fatal(err)
 	}
 	hd, _ := harnessDir()
@@ -112,7 +162,7 @@ func TestCountGenerated(t *testing.T) {
 			t.Errorf("dir %q, skip schema: %d lines, %d bytes, %v", d, lines, bytes, err)
 		}
 	}
-	for name, want := range map[string]string{"velox2": "", "oldvelox": "", "ent": "schema"} {
+	for name, want := range map[string]string{"velox": "", "veloxe": "", "ent": "schema"} {
 		if o, _ := ormByName(name); o.genSkip() != want {
 			t.Errorf("%s: genSkip = %q, want %q", name, o.genSkip(), want)
 		}
@@ -121,9 +171,9 @@ func TestCountGenerated(t *testing.T) {
 
 // toolPkgs maps an ORM to the package of its generator, which TestGenerateCompiles builds.
 var toolPkgs = map[string]string{
-	"velox2":   "github.com/syssam/velox2/cmd/velox-gen",
-	"oldvelox": "github.com/syssam/velox/cmd/velox",
-	"ent":      "entgo.io/ent/cmd/ent",
+	"velox":  "github.com/syssam/velox/cmd/velox-gen",
+	"veloxe": "github.com/syssam/velox/cmd/velox",
+	"ent":    "entgo.io/ent/cmd/ent",
 }
 
 // TestGenerateCompiles runs each ORM's code generator on 20 entities in a
@@ -142,12 +192,12 @@ func TestGenerateCompiles(t *testing.T) {
 	for _, o := range orms {
 		t.Run(o.Name, func(t *testing.T) {
 			build := exec.Command("go", "build", "-o", tools+string(filepath.Separator), toolPkgs[o.Name])
-			build.Dir, build.Env = hd, goEnv()
+			build.Dir, build.Env = filepath.Join(hd, o.ModDir), goEnv()
 			if out, err := build.CombinedOutput(); err != nil {
 				t.Fatalf("building the generator: %v\n%s", err, out)
 			}
 			app := t.TempDir()
-			if err := writeApp(app, o.Schema(n)); err != nil {
+			if err := writeApp(o, app, o.Schema(n)); err != nil {
 				t.Fatal(err)
 			}
 			cpu, wall, err := codegen(app, o, tools)
@@ -170,7 +220,7 @@ func TestGenerateCompiles(t *testing.T) {
 				t.Fatalf("go vet: %v\n%s", err, out)
 			}
 			for i := range n {
-				// velox2 generates a file per entity, the others a package.
+				// velox generates a file per entity, the others a package.
 				name := "e" + strconv.Itoa(i)
 				if _, err := os.Stat(filepath.Join(app, o.GenDir, name+"_velox.go")); err != nil {
 					if fi, err := os.Stat(filepath.Join(app, o.GenDir, name)); err != nil || !fi.IsDir() {
@@ -186,7 +236,7 @@ func TestGenerateCompiles(t *testing.T) {
 			lines[o.Name] = l
 		})
 	}
-	if lines["velox2"] > 0 && lines["ent"] > 0 && lines["velox2"] >= lines["ent"] {
-		t.Errorf("velox2 generated %d lines, ent %d: velox2 should generate less", lines["velox2"], lines["ent"])
+	if lines["velox"] > 0 && lines["ent"] > 0 && lines["velox"] >= lines["ent"] {
+		t.Errorf("velox generated %d lines, ent %d: velox should generate less", lines["velox"], lines["ent"])
 	}
 }
