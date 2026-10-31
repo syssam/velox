@@ -1,4 +1,4 @@
-package velox_test
+package engine_test
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/syssam/velox2"
+	"github.com/syssam/velox2/internal/fakeconn"
 )
 
 // ovOwner has notes, and picks of notes through ovPick; ovNote's Read policy
@@ -121,10 +122,10 @@ func (s *ovSent) around(ctx context.Context, st *velox.Statement, next func(cont
 
 // ovRun opens a fake PostgreSQL database answering with results, whose
 // Around hook records into the ovSent returned.
-func ovRun(results [][][]any) (*velox.DB, *velox.FakeExec, *ovSent) {
-	e := &velox.FakeExec{Results: results}
+func ovRun(results [][][]any) (*velox.DB, *fakeconn.Exec, *ovSent) {
+	e := &fakeconn.Exec{Results: results}
 	s := &ovSent{}
-	return velox.OpenFake(velox.Postgres, e, velox.WithAround(s.around)), e, s
+	return openFake(velox.Postgres, e, velox.WithAround(s.around)), e, s
 }
 
 // ovOwnerRows are owners 1–n.
@@ -139,7 +140,7 @@ func ovOwnerRows(n int) [][]any {
 // checkSent fails t unless every statement the fake received was one the
 // Around hooks saw, of at most 100 parameters, and the statements had want
 // parameters each.
-func checkSent(t *testing.T, e *velox.FakeExec, s *ovSent, want []int) {
+func checkSent(t *testing.T, e *fakeconn.Exec, s *ovSent, want []int) {
 	t.Helper()
 	if e.Calls != len(s.args) {
 		t.Errorf("%d statements reached the database, the Around hooks saw %d", e.Calls, len(s.args))

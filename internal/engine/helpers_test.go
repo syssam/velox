@@ -303,3 +303,10 @@ func setRollbackTimeout(d time.Duration) (restore func()) {
 
 // cacheSize returns the number of shapes db's render cache holds.
 func cacheSize(db *velox.DB) int { return engineOf(db).Cfg.Cache.Size() }
+
+// setMaxParams lowers a dialect's parameter limit for a test.
+func setMaxParams(d velox.Dialect, n int) (restore func()) {
+	old := engine.MaxParams[d]
+	engine.MaxParams[d] = n
+	return func() { engine.MaxParams[d] = old }
+}
