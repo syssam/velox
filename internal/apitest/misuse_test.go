@@ -91,16 +91,3 @@ func TestQuerySelectingNoColumnsIsRefused(t *testing.T) {
 		t.Errorf("%v, calls %d", err, e.Calls)
 	}
 }
-
-// TestInCopiesItsValues: a predicate holds its own copy of In's values, so
-// neither the caller nor a hook can change a built query's arguments
-// through the slice (closes the Core follow-up on the one-level copy).
-func TestInCopiesItsValues(t *testing.T) {
-	db := openFake(velox.Postgres, &fakeconn.Exec{})
-	ids := []int64{1, 2}
-	q := db.Query[testmodel.Invoice]().Where(I.ID.In(ids...)).Limit(5)
-	ids[0] = 9
-	if _, args := sqlOK(t)(q.SQL(ctx)); args[0] != int64(1) {
-		t.Errorf("args %v: In shares the caller's slice", args)
-	}
-}

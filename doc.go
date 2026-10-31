@@ -247,7 +247,7 @@
 // compile.
 package velox
 
-//go:generate go run ./internal/handlegen/cmd
+//go:generate go run ./internal/cmd/handlegen
 
 // GeneratedCodeIsVersion6 is referenced by every file velox-gen writes from a
 // schema package, so that generated code and this library fail to compile

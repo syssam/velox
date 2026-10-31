@@ -44,7 +44,7 @@ github.com/syssam/velox/internal/conn 99.0
 github.com/syssam/velox/internal/ddl 96.7
 github.com/syssam/velox/internal/codegen 94.9
 github.com/syssam/velox/internal/handlegen 99.0
-github.com/syssam/velox/internal/handlegen/cmd 0.0
+github.com/syssam/velox/internal/cmd/handlegen 0.0
 github.com/syssam/velox/internal/tempmod 87.0
 github.com/syssam/velox/internal/testmodel 70.2
 github.com/syssam/velox/internal/testmodel/kind 99.0
