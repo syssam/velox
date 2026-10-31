@@ -33,4 +33,4 @@ velox has no go.mod line for inflect.
   plugin/inflect_test.go:7).
 - `go list -deps ./plugin` lists no package outside the standard library but
   the plugin package itself; `git grep inflect -- '*go.mod'` prints nothing.
-- Builder ruling 3, docs/specs/2026-10-25-pre-1.0-hardening-design.md:152.
+- Builder ruling 3, docs/history/specs/2026-10-25-pre-1.0-hardening-design.md:152.

@@ -9,7 +9,7 @@ import (
 
 	"github.com/99designs/gqlgen/graphql"
 
-	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/shared"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
 // The scalars, the Cursor and the OrderDirection enum are gqlgen marshalers.
@@ -42,11 +42,11 @@ func (t Time) MarshalGQL(w io.Writer) {
 func (t *Time) UnmarshalGQL(v any) error {
 	s, ok := v.(string)
 	if !ok {
-		return shared.InputErrorf("Time must be an RFC 3339 string")
+		return gqlcore.InputErrorf("Time must be an RFC 3339 string")
 	}
 	x, err := time.Parse(time.RFC3339Nano, s)
 	if err != nil {
-		return shared.InputErrorf("Time must be an RFC 3339 string")
+		return gqlcore.InputErrorf("Time must be an RFC 3339 string")
 	}
 	*t = Time(x)
 	return nil
@@ -57,22 +57,22 @@ func (t *Time) UnmarshalGQL(v any) error {
 type UUID [16]byte
 
 // String is u's hyphenated lower-case form.
-func (u UUID) String() string { return shared.FormatUUID(u) }
+func (u UUID) String() string { return gqlcore.FormatUUID(u) }
 
 // MarshalGQL writes u as its hyphenated lower-case string.
 func (u UUID) MarshalGQL(w io.Writer) {
-	_, _ = io.WriteString(w, `"`+shared.FormatUUID(u)+`"`)
+	_, _ = io.WriteString(w, `"`+gqlcore.FormatUUID(u)+`"`)
 }
 
 // UnmarshalGQL sets u from v, a hyphenated hexadecimal string.
 func (u *UUID) UnmarshalGQL(v any) error {
 	s, ok := v.(string)
 	if !ok {
-		return shared.InputErrorf("UUID must be a string")
+		return gqlcore.InputErrorf("UUID must be a string")
 	}
-	x, ok := shared.ParseUUID(s)
+	x, ok := gqlcore.ParseUUID(s)
 	if !ok {
-		return shared.InputErrorf("UUID must be of the form xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+		return gqlcore.InputErrorf("UUID must be of the form xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
 	}
 	*u = x
 	return nil
@@ -90,11 +90,11 @@ func (b Bytes) MarshalGQL(w io.Writer) {
 func (b *Bytes) UnmarshalGQL(v any) error {
 	s, ok := v.(string)
 	if !ok {
-		return shared.InputErrorf("Bytes must be a base64 string")
+		return gqlcore.InputErrorf("Bytes must be a base64 string")
 	}
 	x, err := base64.StdEncoding.DecodeString(s)
 	if err != nil {
-		return shared.InputErrorf("Bytes must be a standard base64 string with padding")
+		return gqlcore.InputErrorf("Bytes must be a standard base64 string with padding")
 	}
 	*b = x
 	return nil
@@ -119,7 +119,7 @@ func (j JSON) MarshalGQL(w io.Writer) {
 func (j *JSON) UnmarshalGQL(v any) error {
 	b, err := json.Marshal(v)
 	if err != nil {
-		return shared.InputErrorf("JSON is not a JSON value")
+		return gqlcore.InputErrorf("JSON is not a JSON value")
 	}
 	*j = b
 	return nil
@@ -139,11 +139,11 @@ func (u Uint64) MarshalGQL(w io.Writer) {
 func (u *Uint64) UnmarshalGQL(v any) error {
 	s, ok := v.(string)
 	if !ok {
-		return shared.InputErrorf("Uint64 must be a decimal string")
+		return gqlcore.InputErrorf("Uint64 must be a decimal string")
 	}
 	n, err := strconv.ParseUint(s, 10, 64)
 	if err != nil {
-		return shared.InputErrorf("Uint64 must be a decimal string of at most 2^64-1")
+		return gqlcore.InputErrorf("Uint64 must be a decimal string of at most 2^64-1")
 	}
 	*u = Uint64(n)
 	return nil
@@ -151,7 +151,7 @@ func (u *Uint64) UnmarshalGQL(v any) error {
 
 // base is v with a scalar of this package unwrapped to its base type (Time to
 // time.Time, UUID to [16]byte, Uint64 to uint64, Bytes to []byte), which is
-// what package shared handles; any other v is returned as it is.
+// what package gqlcore handles; any other v is returned as it is.
 func base(v any) any {
 	switch x := v.(type) {
 	case Time:

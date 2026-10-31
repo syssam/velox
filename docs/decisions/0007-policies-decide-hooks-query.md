@@ -24,8 +24,8 @@ cross-row rule is written as a hook, and runs inside the write's transaction.
 
 ## Evidence
 
-- `Policy`'s doc, scope_api.go: "A policy function decides from ctx and, for
+- `Policy`'s doc, policy.go: "A policy function decides from ctx and, for
   Insert, the row; it does not query."
 - `TestMutationDBIsTheTransaction` (lazy_test.go:353): a hook's writes
   through `Mutation.DB` run in the write's transaction.
-- Ruling 13, docs/specs/2026-10-25-pre-1.0-hardening-design.md:51.
+- Ruling 13, docs/history/specs/2026-10-25-pre-1.0-hardening-design.md:51.

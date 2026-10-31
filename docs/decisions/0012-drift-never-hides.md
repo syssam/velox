@@ -31,4 +31,4 @@ is not, and the package doc says so.
   meaning depends on the column's type".
 - `TestSamePredicateKnownLimits` (migrate/predicate_internal_test.go:14) pins
   both pairs as matching, and an interval cast as not.
-- Builder ruling 6, docs/specs/2026-10-25-pre-1.0-hardening-design.md:161.
+- Builder ruling 6, docs/history/specs/2026-10-25-pre-1.0-hardening-design.md:161.

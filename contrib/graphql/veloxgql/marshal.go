@@ -9,7 +9,7 @@ import (
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/google/uuid"
 
-	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/shared"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
 // The function marshalers bind the scalars to the Go types velox entities
@@ -59,7 +59,7 @@ func MarshalUint(u uint) graphql.Marshaler { return Uint64(u) }
 func UnmarshalUint(v any) (uint, error) {
 	n, err := UnmarshalUint64(v)
 	if err == nil && uint64(uint(n)) != n {
-		return 0, shared.InputErrorf("Uint64 is over the largest uint")
+		return 0, gqlcore.InputErrorf("Uint64 is over the largest uint")
 	}
 	return uint(n), err
 }
@@ -93,9 +93,9 @@ func UnmarshalFloat32(v any) (float32, error) {
 	f, err := graphql.UnmarshalFloat(v)
 	switch {
 	case err != nil:
-		return 0, shared.InputErrorf("Float must be a number")
+		return 0, gqlcore.InputErrorf("Float must be a number")
 	case math.Abs(f) > math.MaxFloat32:
-		return 0, shared.InputErrorf("Float is beyond the range of a float32")
+		return 0, gqlcore.InputErrorf("Float is beyond the range of a float32")
 	}
 	return float32(f), nil
 }

@@ -13,7 +13,7 @@ import (
 	"github.com/vektah/gqlparser/v2/gqlerror"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/shared"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
 // Extension is the gqlgen handler extension that serves a schema on a DB.
@@ -254,7 +254,7 @@ func (e *Extension) MutateOperationContext(_ context.Context, rc *graphql.Operat
 	if cost >= 0 && cost <= e.limits.MaxCost {
 		return nil
 	}
-	err := &shared.Error{
+	err := &gqlcore.Error{
 		Code: CodeTooCostly,
 		Msg:  fmt.Sprintf("%v: it costs %d, and the most is %d", ErrTooCostly, cost, e.limits.MaxCost),
 		Err:  ErrTooCostly,
@@ -286,7 +286,7 @@ func (e *Extension) InterceptOperation(ctx context.Context, next graphql.Operati
 // operation, passes through. A subscription's event is a response: its
 // rows are let go of when it is made.
 func (e *Extension) InterceptResponse(ctx context.Context, next graphql.ResponseHandler) *graphql.Response {
-	ctx = shared.WithTable(ctx, e.schema, e.batchScope)
+	ctx = gqlcore.WithTable(ctx, e.schema, e.batchScope)
 	m, _ := ctx.Value(mutationKey{}).(*mutation)
 	if m == nil || m.plain || m.started.Swap(true) {
 		return next(ctx)
@@ -308,7 +308,7 @@ func (e *Extension) InterceptResponse(ctx context.Context, next graphql.Response
 		*out = *resp
 		out.Data = nil
 	}
-	if !shared.Is(err, errRollback) {
+	if !gqlcore.Is(err, errRollback) {
 		// Begin or commit failed, or the transaction's deadline or the
 		// request's context ended it.
 		rctx := graphql.WithFreshResponseContext(ctx)

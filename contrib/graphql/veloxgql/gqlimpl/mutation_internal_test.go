@@ -5,12 +5,12 @@ import (
 	"testing"
 
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/shared"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
-// codeOf is the code of err's *shared.Error, or "".
+// codeOf is the code of err's *gqlcore.Error, or "".
 func codeOf(err error) string {
-	var e *shared.Error
+	var e *gqlcore.Error
 	if !errors.As(err, &e) {
 		return ""
 	}

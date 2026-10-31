@@ -1,7 +1,7 @@
 # Per-package statement-coverage floors, checked by scripts/covfloor in CI and in
 # scripts/ci-local.sh:
 #
-#   go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-example.out cover-veloxotel.out cover-graphql.out
+#   go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-examples.out cover-veloxotel.out cover-graphql.out
 #
 # One "<import path> <percent>" per line. A floor is the coverage measured at its
 # commit minus 1.0 (at least 0.0), so that a small change does not trip it but a

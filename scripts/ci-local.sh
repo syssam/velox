@@ -72,7 +72,7 @@ go run github.com/mgechev/revive@v1.17.0 -config scripts/revive.toml -set_exit_s
   go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run --allow-serial-runners ./...
   # golangci-lint's revive skips generated files; revive itself lints velox-gen's.
   go run github.com/mgechev/revive@v1.17.0 -config ../scripts/revive.toml -set_exit_status ./*/gen
-  go test -race -count=1 -coverprofile="$root/cover-example.out" ./...
+  go test -race -count=1 -coverprofile="$root/cover-examples.out" ./...
   for d in */schema; do
     x=${d%/schema}
     [ "$x" = graphql ] && continue # its own lines below, with the plugin
@@ -83,15 +83,16 @@ go run github.com/mgechev/revive@v1.17.0 -config scripts/revive.toml -set_exit_s
   # schema package, and on SQL that does not replay to its schema.json (applied to a
   # temporary SQLite file, then compared with drift).
   migdb=$(mktemp -d)
-  for d in */migrations; do
-    x=${d%/migrations}
-    go tool velox-gen migrate diff -check -dir "./$x/migrations" "./$x/schema"
-    go tool velox-gen migrate apply -dir "./$x/migrations" -db "$migdb/$x.db"
-    go tool velox-gen migrate drift -dir "./$x/migrations" -db "$migdb/$x.db"
+  for f in */migrations/schema.json */migrations/sqlite/schema.json; do
+    d=${f%/schema.json}
+    x=${d%%/*}
+    go tool velox-gen migrate diff -check -dir "./$d" "./$x/schema"
+    go tool velox-gen migrate apply -dir "./$d" -db "$migdb/$x.db"
+    go tool velox-gen migrate drift -dir "./$d" -db "$migdb/$x.db"
   done
   rm -rf "$migdb"
   # tracker's PostgreSQL migrations: its tests apply them, under VELOX_TEST_POSTGRES.
-  go tool velox-gen migrate diff -check -dir ./tracker/migrations-postgres ./tracker/schema
+  go tool velox-gen migrate diff -check -dir ./tracker/migrations/postgres ./tracker/schema
   go tool velox-gen -check -out ./graphql/gen -plugin velox-graphql ./graphql/schema
   go tool velox-gen verify -out ./graphql/gen -plugin velox-graphql ./graphql/schema
   # gqlgen's output is checked in: regenerate it, and fail on any difference.
@@ -136,7 +137,7 @@ go run github.com/mgechev/revive@v1.17.0 -config scripts/revive.toml -set_exit_s
 )
 
 # No package may fall below its floor, or lack one (scripts/coverage-floors.txt).
-go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-example.out cover-veloxotel.out cover-graphql.out
+go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-examples.out cover-veloxotel.out cover-graphql.out
 
 go run ./bench/scale -n 500 -s 100 -check bench/scale/thresholds.json
 go run ./bench/scale -n 500 -s 100 -graphql -check bench/scale/thresholds.json

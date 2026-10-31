@@ -10,7 +10,7 @@
 #   scripts/release.sh contrib v1.2.3  commits contrib's requires, tags contrib
 #   scripts/release.sh dev v1.2.3      puts the replaces back for development
 #
-# example and bench/compare are not published, and keep their replaces. example
+# examples and bench/compare are not published, and keep their replaces. examples
 # requires contrib, so it is tidied with it at each step; bench/compare needs nothing.
 set -euo pipefail
 cd "$(dirname "$0")/.."

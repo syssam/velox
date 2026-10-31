@@ -1,4 +1,4 @@
-// Command gen writes handles.go. go generate runs it in the module root.
+// Command handlegen writes handles.go. go generate runs it in the module root.
 package main
 
 import (

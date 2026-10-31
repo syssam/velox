@@ -8,7 +8,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/shared"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 	"github.com/syssam/velox/plugin"
 )
 
@@ -127,7 +127,7 @@ func NewConnection[E any](ctx context.Context, q velox.Query[E], typ string, arg
 	lim := veloxgql.LimitsFromContext(ctx)
 	n, back, err := pageSize(args, lim.MaxPage)
 	if err != nil {
-		return nil, shared.Within(typ+" connection", err)
+		return nil, gqlcore.Within(typ+" connection", err)
 	}
 	if len(key) == 0 {
 		return nil, fmt.Errorf("veloxgql: %s connection: no key to order by last", typ)
@@ -240,7 +240,7 @@ func (c *Connection[E]) run[_ velox.Lazy[E]](ctx context.Context) (*Page[E], err
 	}
 	if c.edge == nil {
 		// A batch made its rows a group already.
-		shared.Add(ctx, p.Rows)
+		gqlcore.Add(ctx, p.Rows)
 	}
 	if c.back {
 		p.Info.HasPreviousPage = more
@@ -287,11 +287,11 @@ func (c *Connection[E]) row[_ velox.Lazy[E]](cur veloxgql.Cursor) (*E, error) {
 	x := new(E)
 	for i, t := range c.terms[:last] {
 		if err := t.set(x, cur.Terms[i].Value); err != nil {
-			return nil, shared.Within(c.typ+" cursor", err)
+			return nil, gqlcore.Within(c.typ+" cursor", err)
 		}
 	}
 	if err := c.terms[last].set(x, cur.Key); err != nil {
-		return nil, shared.Within(c.typ+" cursor", err)
+		return nil, gqlcore.Within(c.typ+" cursor", err)
 	}
 	return x, nil
 }

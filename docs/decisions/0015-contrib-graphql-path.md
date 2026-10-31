@@ -26,5 +26,5 @@ taken by gqlgen or entgql.
 
 - contrib/graphql/go.mod: `module github.com/syssam/velox/contrib/graphql`.
 - contrib/graphql/doc.go, its first paragraphs (commit 1d233f4).
-- Spec ruling 19, docs/specs/2026-10-25-pre-1.0-hardening-design.md:57.
-- Decision 3 and controller ruling 3, docs/plans/2026-10-29-hardening-6-docs.md.
+- Spec ruling 19, docs/history/specs/2026-10-25-pre-1.0-hardening-design.md:57.
+- Decision 3 and controller ruling 3, docs/history/plans/2026-10-29-hardening-6-docs.md.

@@ -25,6 +25,6 @@ bytes, under the 1% (7670 bytes).
 
 - Commit a21f54a: the measurement, and compilecost_test.go's `entityDescUse`
   row, whose comment says "Query.With and Rel.With stay methods".
-- docs/specs/2026-10-20-api-cleanup-design.md, ruling 21 (:282).
+- docs/history/specs/2026-10-20-api-cleanup-design.md, ruling 21 (:282).
 - Ruling 11 and builder ruling 10,
-  docs/specs/2026-10-25-pre-1.0-hardening-design.md:49, :165.
+  docs/history/specs/2026-10-25-pre-1.0-hardening-design.md:49, :165.

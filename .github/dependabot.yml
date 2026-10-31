@@ -4,7 +4,7 @@ updates:
     directory: /
     schedule: {interval: weekly}
   - package-ecosystem: gomod
-    directories: ["/", "/contrib/graphql", "/contrib/veloxotel", "/example", "/bench/compare"]
+    directories: ["/", "/contrib/graphql", "/contrib/veloxotel", "/examples", "/bench/compare"]
     schedule: {interval: weekly}
     groups:
       go-modules:

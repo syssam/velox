@@ -10,7 +10,7 @@ import (
 	"github.com/vektah/gqlparser/v2/gqlerror"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/shared"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
 // The codes ErrorPresenter writes as extensions.code: Apollo's, NOT_FOUND
@@ -20,14 +20,14 @@ const (
 	// a cursor, paging arguments, a filter or a scalar that veloxgql,
 	// generated code or gqlgen's integer types refused, a value a validator
 	// refused, or a violated constraint.
-	CodeBadUserInput = shared.CodeBadUserInput
+	CodeBadUserInput = gqlcore.CodeBadUserInput
 	// CodeForbidden: a policy denied the statement (velox.ErrDenied).
 	CodeForbidden = "FORBIDDEN"
 	// CodeUnauthenticated: the request has no tenant (velox.ErrNoTenant).
 	CodeUnauthenticated = "UNAUTHENTICATED"
 	// CodeNotFound: the generated mutations return it for an ID that names
 	// no row the caller may see or change.
-	CodeNotFound = shared.CodeNotFound
+	CodeNotFound = gqlcore.CodeNotFound
 	// CodeTooCostly: the request costs more than Limits.MaxCost allows
 	// (ErrTooCostly). It is not a bad argument: the client can ask for less.
 	CodeTooCostly = "COST_LIMIT_EXCEEDED"
@@ -136,9 +136,9 @@ func ErrorPresenter(log func(ctx context.Context, err error), opts ...PresenterO
 			log = p.canceled
 		}
 		out := &gqlerror.Error{Path: graphql.GetPath(ctx)}
-		if gqlErr, ok := shared.As[*gqlerror.Error](err); ok {
+		if gqlErr, ok := gqlcore.As[*gqlerror.Error](err); ok {
 			if gqlErr.Err == nil {
-				if c, _ := shared.Coded(err); c == nil {
+				if c, _ := gqlcore.Coded(err); c == nil {
 					if len(leaves) > 0 {
 						log(ctx, err)
 					}
@@ -194,7 +194,7 @@ func slogCanceled(ctx context.Context, err error) {
 // operation's name if any, and err.
 func logAttrs(ctx context.Context, err error) []any {
 	path := graphql.GetPath(ctx)
-	if gqlErr, ok := shared.As[*gqlerror.Error](err); ok && gqlErr.Path != nil {
+	if gqlErr, ok := gqlcore.As[*gqlerror.Error](err); ok && gqlErr.Path != nil {
 		path = gqlErr.Path
 	}
 	attrs := []any{"path", path.String()}
@@ -215,13 +215,13 @@ func logAttrs(ctx context.Context, err error) []any {
 // velox's policy, validation and constraint errors. An application's coded
 // error is searched, so one that wraps a driver's error is logged.
 func internalLeaves(err error, out []error) []error {
-	if err == nil || shared.NilPointer(err) {
+	if err == nil || gqlcore.NilPointer(err) {
 		// A nil pointer, a driver's typed nil, is no error, and its methods
-		// could panic on it: it is passed over, as shared.Walk does.
+		// could panic on it: it is passed over, as gqlcore.Walk does.
 		return out
 	}
 	switch e := err.(type) {
-	case *shared.Error:
+	case *gqlcore.Error:
 		if e.Code != "" {
 			return out
 		}
@@ -249,7 +249,7 @@ func internalLeaves(err error, out []error) []error {
 // the cancellation of a context: the error is only the cancellation.
 func canceledOnly(leaves []error) bool {
 	for _, l := range leaves {
-		if !shared.Is(l, context.Canceled) {
+		if !gqlcore.Is(l, context.Canceled) {
 			return false
 		}
 	}
@@ -258,10 +258,10 @@ func canceledOnly(leaves []error) bool {
 
 // internal reports whether err, presented alone, is an internal error.
 func internal(err error) bool {
-	if c, _ := shared.Coded(err); c != nil {
+	if c, _ := gqlcore.Coded(err); c != nil {
 		return false
 	}
-	if gqlErr, ok := shared.As[*gqlerror.Error](err); ok && gqlErr.Err == nil {
+	if gqlErr, ok := gqlcore.As[*gqlerror.Error](err); ok && gqlErr.Err == nil {
 		return false
 	}
 	code, _ := present(err)
@@ -270,27 +270,27 @@ func internal(err error) bool {
 
 // present is the code and the message the client sees for err.
 func present(err error) (code, msg string) {
-	if c, code := shared.Coded(err); c != nil {
+	if c, code := gqlcore.Coded(err); c != nil {
 		return code, strings.TrimPrefix(c.Error(), "veloxgql: ")
 	}
 	// Through shared's Is and As: a driver's typed nil in err's tree
 	// cannot panic.
 	switch {
-	case shared.Is(err, velox.ErrNoTenant):
+	case gqlcore.Is(err, velox.ErrNoTenant):
 		return CodeUnauthenticated, "unauthenticated"
-	case shared.Is(err, velox.ErrDenied):
+	case gqlcore.Is(err, velox.ErrDenied):
 		return CodeForbidden, "forbidden"
 	}
-	if validation, ok := shared.As[*velox.ValidationError](err); ok {
+	if validation, ok := gqlcore.As[*velox.ValidationError](err); ok {
 		if validation.Err == nil {
 			return CodeBadUserInput, "invalid value"
 		}
 		return CodeBadUserInput, "invalid value: " + validation.Err.Error()
 	}
-	if constraint, ok := shared.As[*velox.ConstraintError](err); ok {
+	if constraint, ok := gqlcore.As[*velox.ConstraintError](err); ok {
 		return CodeBadUserInput, constraint.Kind.String() + " constraint violated"
 	}
-	if integer, ok := shared.As[*graphql.IntegerError](err); ok {
+	if integer, ok := gqlcore.As[*graphql.IntegerError](err); ok {
 		return CodeBadUserInput, integer.Message
 	}
 	return CodeInternal, "internal error"

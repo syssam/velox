@@ -16,7 +16,7 @@ together in a real service. The others show one topic each.
 | Keyset paging | `page` and `cut` in `server.go` |
 | Mapping velox's errors to HTTP statuses | `fail` in `server.go` |
 | Deadlines on statements and transactions, and a shutdown that lets requests finish | `dbLimits` and `serveUntil` in `main.go` |
-| Migrations per dialect, applied at startup | `migrations/`, `migrations-postgres/`, `open` in `main.go` |
+| Migrations per dialect, applied at startup | `migrations/sqlite/`, `migrations/postgres/`, `open` in `main.go` |
 | SQLite through database/sql, PostgreSQL through pgx's native protocol | `open` and `openPostgres` in `main.go` |
 
 ## Run it

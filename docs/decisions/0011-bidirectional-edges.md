@@ -29,4 +29,4 @@ cannot drop the bidi marker or a bidi key.
 - `TestBidiLinks` (bidi_test.go:152) and `TestBidiOne` (bidi_test.go:337).
 - `TestBidiPeers` and `TestBidiPartner`
   (contrib/graphql/cmd/velox-graphql/mutation_e2e_test.go).
-- Builder ruling 18, docs/specs/2026-10-25-pre-1.0-hardening-design.md:173.
+- Builder ruling 18, docs/history/specs/2026-10-25-pre-1.0-hardening-design.md:173.

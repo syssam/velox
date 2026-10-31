@@ -28,5 +28,5 @@ upgrades. The runtime itself makes no such check.
   nothing: no code outside migrate checks the version.
 - .github/workflows/ci.yml, the postgres:14 and postgres:18 matrix and
   mysql:8.4.
-- Builder ruling 16, docs/specs/2026-10-25-pre-1.0-hardening-design.md:171;
-  migrate spec ruling 41, docs/specs/2026-10-23-migrate-design.md:1323.
+- Builder ruling 16, docs/history/specs/2026-10-25-pre-1.0-hardening-design.md:171;
+  migrate spec ruling 41, docs/history/specs/2026-10-23-migrate-design.md:1323.

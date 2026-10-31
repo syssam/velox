@@ -18,7 +18,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/shared"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
 // keeper and pet are hand-written entities, as velox-gen would write them,
@@ -389,10 +389,10 @@ func TestSubscriptionEventsLetGo(t *testing.T) {
 	var events [][]*keeper
 	var found []bool // per event: whether its own rows, then the event before's, are in its table
 	srv := batchServer(db, func(ctx context.Context, rows []*keeper) {
-		_, _, _, own := shared.Find(shared.TableFromContext(ctx), rows[0])
+		_, _, _, own := gqlcore.Find(gqlcore.TableFromContext(ctx), rows[0])
 		found = append(found, own)
 		if len(events) > 0 {
-			_, _, _, old := shared.Find(shared.TableFromContext(ctx), events[len(events)-1][0])
+			_, _, _, old := gqlcore.Find(gqlcore.TableFromContext(ctx), events[len(events)-1][0])
 			found = append(found, old)
 		}
 		events = append(events, rows)

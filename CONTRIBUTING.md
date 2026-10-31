@@ -5,24 +5,37 @@ a change has to keep true. Go 1.27 is required. The database tests need Docker.
 
 ## Layout
 
-There are five Go modules. A change that touches more than one is checked in
+There are five Go modules, and one more that only pins a tool. A change that touches more than one is checked in
 each.
 
 - The root, `github.com/syssam/velox`: the runtime, with `schema`, `migrate`,
-  `plugin`, `veloxtype` (the plain data types the root re-exports) and
-  `cmd/velox-gen`. `internal/` holds the non-generic runtime (`engine`), the
-  generator (`codegen`), the DDL writer (`ddl`), the generated test models
-  (`testmodel`, `testbind`), the database tests (`integration`), the tests of the
-  public API (`apitest`) and the tests of the repository itself (`repocheck`).
-  `bench/` holds the baselines and the scale check. `scripts/` holds CI's
-  scripts.
+  `plugin`, `veloxtype` (the plain data types the root re-exports), `veloxpgx`
+  (pgx's native path) and `cmd/velox-gen`. `bench/` holds the baselines and the
+  scale check. `scripts/` holds CI's scripts and their configuration. Under
+  `internal/`:
+  - The product: the non-generic runtime (`engine`), the executors (`conn`), the
+    generator (`codegen`), the DDL writer (`ddl`), the writer of the root's
+    `handles.go` (`handlegen`) and the name of the module a program is built from (`buildinfo`).
+  - The tests: of the public API (`apitest`), against real databases
+    (`integration`) and of the repository itself (`repocheck`).
+  - What the tests use: the generated models (`testmodel`, `testbind`), a fake
+    executor (`fakeconn`), a repository layer for caller capture (`testrepo`),
+    temporary modules (`tempmod`) and build measurement (`buildcost`).
 - `contrib/graphql`: the annotations, the `velox-graphql` plugin and the
   `veloxgql` runtime.
 - `contrib/veloxotel`: OpenTelemetry tracing and metrics.
 - `examples`: the runnable examples. Each has its schema, its generated code and
   its migrations.
 - `bench/compare`: the harness that compares velox's build and runtime cost
-  with veloxe and ent. CI checks it but does not run it.
+  with veloxe and ent. CI checks it but does not run it. `bench/compare/veloxe`
+  is a small module beside it that pins veloxe, whose `go.mod` declares this
+  module's path. It is not tidied, and a test keeps it at the harness's versions.
+
+`docs/decisions` records why the code is as it is. `docs/history` holds the specs,
+plans and reviews that built it, as written.
+
+Generated Go files end `_velox.go`, or `_gql.go` for velox-graphql, so that no
+entity's name can make the file a test or tie it to one operating system.
 
 ## Checks
 
@@ -141,7 +154,7 @@ floor is the coverage measured at its commit minus 1.0. `scripts/covfloor`
 checks the merged profiles of the four modules against them:
 
 ```sh
-go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-example.out cover-veloxotel.out cover-graphql.out
+go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-examples.out cover-veloxotel.out cover-graphql.out
 ```
 
 The profiles are the `-coverprofile` files of the test runs above. A new
@@ -195,7 +208,7 @@ go run ./bench/scale -n 500 -s 100 -graphql -check bench/scale/thresholds.json
 
 `bash bench/compare/run.sh` measures velox, veloxe and ent. It takes hours,
 starts PostgreSQL, and writes `bench/compare/results/`. The last report is
-`docs/reviews/2026-10-29-perf-comparison.md`.
+`docs/history/reviews/2026-10-29-perf-comparison.md`.
 
 ## Docs
 

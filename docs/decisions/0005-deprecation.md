@@ -24,4 +24,4 @@ stays through every release of its major version.
 
 - `git grep -nP '//\s*Deprecated:' -- '*.go'` prints nothing.
 - CHANGELOG.md, its opening rules.
-- Controller ruling 7, docs/plans/2026-10-29-hardening-6-docs.md.
+- Controller ruling 7, docs/history/plans/2026-10-29-hardening-6-docs.md.

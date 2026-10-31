@@ -31,5 +31,5 @@ an edge field that is not Nillable).
   "optional" is NOT NULL and "nillable" is NULL-able.
 - `TestLowerNullable` (internal/codegen/lower_test.go:1151): the plugin model and
   the core agree.
-- docs/specs/2026-10-20-api-cleanup-design.md §3 ruling 1 (:72), after old
+- docs/history/specs/2026-10-20-api-cleanup-design.md §3 ruling 1 (:72), after old
   velox's `compiler/gen/type_field.go`.

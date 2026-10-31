@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/shared"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
 // Cursor is a connection cursor: where a row is in a query's order. It is
@@ -78,9 +78,9 @@ func EncodeCursor(c Cursor) (string, error) {
 		if t.Field == "" || !t.Direction.IsValid() {
 			return "", fmt.Errorf("veloxgql: EncodeCursor: term %d has no field or an invalid direction", i)
 		}
-		o[i] = cursorTermDoc{F: &t.Field, D: &t.Direction, V: shared.JSONValue(base(t.Value))}
+		o[i] = cursorTermDoc{F: &t.Field, D: &t.Direction, V: gqlcore.JSONValue(base(t.Value))}
 	}
-	b, err := json.Marshal(cursorDoc{V: &v, T: &c.Type, O: &o, K: shared.JSONValue(base(c.Key))})
+	b, err := json.Marshal(cursorDoc{V: &v, T: &c.Type, O: &o, K: gqlcore.JSONValue(base(c.Key))})
 	if err != nil {
 		return "", fmt.Errorf("veloxgql: EncodeCursor: %w", err)
 	}
@@ -158,7 +158,7 @@ func decodeBase64(s string) ([]byte, bool) {
 }
 
 func badCursor(why string) error {
-	return shared.InputErrorf("%w: %s", ErrBadCursor, why)
+	return gqlcore.InputErrorf("%w: %s", ErrBadCursor, why)
 }
 
 // MarshalGQLContext writes c as a JSON string, EncodeCursor's text. gqlgen reports
@@ -226,7 +226,7 @@ func (d OrderDirection) MarshalGQL(w io.Writer) {
 func (d *OrderDirection) UnmarshalGQL(v any) error {
 	s, ok := v.(string)
 	if !ok || !OrderDirection(s).IsValid() {
-		return shared.InputErrorf("OrderDirection must be ASC or DESC")
+		return gqlcore.InputErrorf("OrderDirection must be ASC or DESC")
 	}
 	*d = OrderDirection(s)
 	return nil

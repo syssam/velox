@@ -8,7 +8,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/internal/english"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/shared"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
 // Atomic runs fn in db.Tx(ctx, fn), on the DB veloxgql.DBFromContext(ctx)
@@ -36,7 +36,7 @@ func Atomic(ctx context.Context, fn func(ctx context.Context, db *velox.DB) erro
 func DecodeID[K any](at, id, typ string) (K, error) {
 	k, err := veloxgql.DecodeID[K](id, typ)
 	if err != nil {
-		return k, shared.Within(at, err)
+		return k, gqlcore.Within(at, err)
 	}
 	return k, nil
 }
@@ -119,7 +119,7 @@ func matched(got int64, n int, at, typ string) error {
 	case got < int64(n) && n == 1:
 		return NotFound(at, typ)
 	case got < int64(n):
-		return shared.NotFoundf("%s: %d of the %d IDs name no %s", at, int64(n)-got, n, typ)
+		return gqlcore.NotFoundf("%s: %d of the %d IDs name no %s", at, int64(n)-got, n, typ)
 	case got > int64(n):
 		return fmt.Errorf("veloxgql: %s: %d rows for %d IDs: the IDs are not distinct keys", at, got, n)
 	}
@@ -245,7 +245,7 @@ func Disjoint[K comparable](input, add, remove string, a, b []K) error {
 // the caller may change: "veloxgql: <at>: no <typ> has this ID". For generated
 // code.
 func NotFound(at, typ string) error {
-	return shared.NotFoundf("%s: no %s has this ID", at, typ)
+	return gqlcore.NotFoundf("%s: no %s has this ID", at, typ)
 }
 
 // CountUnknown is the internal error of a write at whose driver did not report
@@ -287,7 +287,7 @@ func WriteError(err error, input, entity string, name func(goField string) strin
 	if v.Err != nil {
 		msg += ": " + v.Err.Error()
 	}
-	return &shared.Error{Code: shared.CodeBadUserInput, Msg: msg, Err: err}
+	return &gqlcore.Error{Code: gqlcore.CodeBadUserInput, Msg: msg, Err: err}
 }
 
 // FromJSON decodes j into a T for the input field at; on failure, a

@@ -1,0 +1,283 @@
+package velox
+
+import (
+	"reflect"
+
+	"github.com/syssam/velox/internal/engine"
+	"github.com/syssam/velox/veloxtype"
+)
+
+// Aggregate is the function an aggregate read computes over its one column.
+type Aggregate = veloxtype.Aggregate
+
+// The aggregate functions.
+const (
+	AggregateSum = veloxtype.AggregateSum // SUM
+	AggregateAvg = veloxtype.AggregateAvg // AVG
+	AggregateMin = veloxtype.AggregateMin // MIN
+	AggregateMax = veloxtype.AggregateMax // MAX
+)
+
+// ColumnDesc describes one column of a Desc. For generated code.
+type ColumnDesc = veloxtype.ColumnDesc
+
+// Dialect is a SQL dialect.
+type Dialect = veloxtype.Dialect
+
+// The dialects velox supports.
+const (
+	Postgres = veloxtype.Postgres
+	MySQL    = veloxtype.MySQL
+	SQLite   = veloxtype.SQLite
+)
+
+// BoundPolicy is an entity's Policy with E erased, made by BindPolicy for
+// Desc.Policy. For generated code. Its fields are not exported: only BindPolicy
+// makes one.
+type BoundPolicy = engine.BoundPolicy
+
+// BoundHooks is an entity's hooks with E erased, made by BindHooks for
+// Desc.Hooks. For generated code. Its fields are not exported: only BindHooks
+// makes one.
+type BoundHooks = engine.BoundHooks
+
+// EntityInfo is what velox knows about an entity, built once on its first use.
+// It is the non-generic view that hooks see in a Statement, and the runtime
+// view of the generated Desc it is built from.
+//
+// One EntityInfo is shared by every query on the entity, in every goroutine,
+// so it must be treated as read-only, slices included. A hook that needs
+// different metadata for a statement copies it and points Statement.Entity
+// at the copy; it never changes the shared one.
+//
+// Its fields:
+//
+//	Name string // the Go type, e.g. "billing.Invoice"
+//	Table string
+//	Schema string // the schema holding Table; empty for the default
+//	Columns []ColumnInfo
+//	PrimaryKey []int // indexes into Columns
+//	Tenant int // index into Columns; -1 when the entity has none
+//	Indexes []IndexInfo
+//
+// Its methods:
+//
+//	Column (in *EntityInfo) Column(name string) (int, bool)
+type EntityInfo = engine.EntityInfo
+
+// ColumnInfo describes one column. It is the runtime view of the generated
+// ColumnDesc it is built from.
+//
+// Its fields:
+//
+//	Field string // the Go field name
+//	Name string // the column name
+//	Type any // the field's Go type, a reflect.Type: read it with GoType
+//	Nullable bool // the column holds NULL: the field is a pointer, or its ColumnDesc says Nullable
+//	Default any
+//	HasDefault bool
+//	DefaultFunc func() any // nil when none
+//	// UpdateDefault is the function whose result every update writes to the
+//	// column; an insert does not (Default and DefaultFunc fill an insert's);
+//	// nil when none.
+//	UpdateDefault func() any
+//	Immutable bool // an update may not assign the column
+//	Sensitive bool // the column holds a secret (velox logs no values)
+//	// RequiredEdge is ColumnDesc.RequiredEdge: the Required edge whose
+//	// NULL-able key the column holds, which a write may not leave nil; "" when
+//	// none.
+//	RequiredEdge string
+//	// Codec says the column's value is encoded: its ColumnDesc gave Encode
+//	// and Decode, as velox-gen does for every json field. The package
+//	// documentation's JSON fields section says how such a column binds and reads.
+//	Codec bool
+type ColumnInfo = engine.ColumnInfo
+
+// GoType returns the Go type of column c's field. ColumnInfo.Type holds it as
+// any, and this is a function rather than a method, so that no velox type
+// reaches reflect.Type: every package that reaches it compiles about 134 KiB of
+// wrappers for reflect's iterator types.
+func GoType(c ColumnInfo) reflect.Type { return engine.GoType(c) }
+
+// IndexInfo describes one index.
+type IndexInfo = veloxtype.IndexInfo
+
+// Predicate is a condition in a Statement: the form hooks see and add. It is
+// the untyped form of Pred, as OrderTerm is of Order.
+type Predicate = engine.Predicate
+
+// OrderTerm is an ordering by one column of a Statement's entity.
+type OrderTerm = veloxtype.OrderTerm
+
+// ColumnEQ returns the condition column = v, for hooks that add conditions;
+// column is an index into the statement's EntityInfo.Columns.
+func ColumnEQ(column int, v any) Predicate { return engine.ColumnEQ(column, v) }
+
+// EdgeDesc is one relation field of a generated Desc: its name and the columns
+// that key it. For generated code. EdgeTo, EdgeBidi and EdgeThrough make it. It carries
+// no target entity: the use site supplies that (see EdgeTo).
+type EdgeDesc = engine.EdgeDesc
+
+// Op is the kind of a Statement.
+type Op = veloxtype.Op
+
+// The kinds of statement.
+const (
+	OpSelect = veloxtype.OpSelect
+	OpInsert = veloxtype.OpInsert
+	OpUpdate = veloxtype.OpUpdate
+	OpDelete = veloxtype.OpDelete
+	// OpRawQuery is raw SQL run by DB.Raw, which velox treats as a read: its
+	// SQL and Args are the caller's.
+	OpRawQuery = veloxtype.OpRawQuery
+	// OpRawExec is raw SQL run by DB.Exec, which velox treats as a write: its
+	// SQL and Args are the caller's.
+	OpRawExec = veloxtype.OpRawExec
+)
+
+// Lock is the lock a locking read takes on the rows it reads.
+type Lock = veloxtype.Lock
+
+// The locks.
+const (
+	LockForUpdate = veloxtype.LockForUpdate // FOR UPDATE
+	LockForShare  = veloxtype.LockForShare  // FOR SHARE
+)
+
+// LockWait is what a locking read does about rows another transaction has
+// locked.
+type LockWait = veloxtype.LockWait
+
+// The ways of not waiting.
+const (
+	LockSkipLocked = veloxtype.LockSkipLocked // SKIP LOCKED: leave them out
+	LockNoWait     = veloxtype.LockNoWait     // NOWAIT: fail at once
+)
+
+// AssignOp is how an UPDATE assigns a column.
+type AssignOp = veloxtype.AssignOp
+
+// The assignment operators.
+const (
+	AssignSet = veloxtype.AssignSet // column = value
+	AssignAdd = veloxtype.AssignAdd // column = column + value
+	AssignSub = veloxtype.AssignSub // column = column - value
+)
+
+// Assignment is one column an UPDATE sets.
+type Assignment = veloxtype.Assignment
+
+// ConflictClause is an INSERT's upsert clause.
+//
+// Its fields:
+//
+//	Columns []int // the unique key whose conflict the insert resolves
+//	Update []int // columns overwritten with the inserted row's values
+//	DoNothing bool // keep the existing row; also what an empty Update means
+//	// Where is the condition of the update branch, on the existing row: a
+//	// conflicting row it rejects is neither updated nor replaced. PostgreSQL
+//	// and SQLite render it; velox refuses it on MySQL.
+//	Where []Predicate
+type ConflictClause = engine.ConflictClause
+
+// EachClause makes a SELECT read, or count, the rows of each owner apart: the
+// rows whose owner column holds one of Keys. velox sets it for a With load
+// with Rel.LimitEach, for LoadEach and for CountEach; a Rewrite hook may not
+// change it. With Count, the statement reads each owner's key and its count,
+// one row per owner that has rows.
+//
+// Its fields:
+//
+//	Keys []any // the owners' keys, distinct
+//	Column int // without Join: the column of Entity that holds an owner's key
+//	// Join is the join entity of a many-to-many relation; nil otherwise. The
+//	// statement joins it on Join.Columns[JoinTarget] = Entity.Columns[Target]
+//	// and partitions by Join.Columns[JoinOwner].
+//	Join *EntityInfo
+//	JoinOwner, JoinTarget int
+//	Target int
+//	// Limit is the most rows per owner, in the statement's OrderBy; 0 is no
+//	// limit, and is always 0 on a Count.
+//	Limit int
+type EachClause = engine.EachClause
+
+// Statement is one operation on its way to the database. Every query becomes
+// one, and the pipeline's hooks see and may change it: rewrite hooks before it
+// is rendered, around hooks while it runs.
+//
+// Raw SQL (OpRawQuery and OpRawExec) is not rendered: Rewrite hooks do not see
+// it, and its SQL, Args and Fingerprint are set when it is made. Its Entity is
+// the entity Raw scans into, or for Exec an EntityInfo named "Exec" with no
+// table or columns. Its TenantBypass and PolicyBypass both hold the caller's
+// reason, as given, untrimmed (so does a WithAllTenants or WithoutPolicy
+// reason).
+//
+// The EntityInfo that Entity points to is shared by every query on the
+// entity, in every goroutine: treat it as read-only. A rewrite hook may point
+// Entity at an EntityInfo of its own (a copy with another Table, say), but
+// must never change the shared one. Pointing it at another table does not
+// change the tables inside an EXISTS (see Rewrite).
+//
+// Its fields:
+//
+//	Op Op
+//	Entity *EntityInfo // shared and read-only: replace it, never edit it
+//	Count bool // SELECT COUNT(*): Count clears Columns, OrderBy, Limit and Offset; a Rewrite hook may not change it, or set Columns, and one that sets the others gets them rendered
+//	Exists bool // SELECT 1 … LIMIT 1: Exists clears Columns, OrderBy and Offset and sets Limit to 1; a Rewrite hook may not change it, or set Columns
+//	Aggregate Aggregate // SELECT SUM(c) …: Columns holds c alone; like Count, it clears OrderBy, Limit and Offset; a Rewrite hook may not change it, or Columns
+//	GroupBy int // SELECT with Count or Aggregate: the key column's index plus one, 0 for none: one row per key, the key first; velox orders by the key, and a Rewrite hook may not change it
+//	Each *EachClause // SELECT: a relation read or counted per owner; a Rewrite hook may not change it
+//	Lock Lock // SELECT: ForUpdate or ForShare; 0 for a read that locks nothing; a Rewrite hook may not change it
+//	LockWait LockWait // SELECT: SkipLocked or NoWait; a Rewrite hook may not change it
+//	Columns []int // SELECT: the selected columns, nil selects all; INSERT: the columns written
+//	Where []Predicate // all must hold
+//	OrderBy []OrderTerm
+//	Limit int // 0: no limit; after the Rewrite hooks, velox lowers it to the row cap + 1
+//	Offset int
+//	Unbounded bool // the query said Unbounded
+//	Writable bool // SELECT: the query said Writable; the scope adds the Write policy, and a Rewrite hook may not change it
+//	MaxRows int // SELECT and OpRawQuery: the most rows it may return; 0: the DB's WithMaxRows, or, with Each, its bound by construction (Rel.MaxRows sets it)
+//	Set []Assignment // UPDATE: the assignments
+//	Rows [][]any // INSERT: the rows, one value per Columns entry
+//	Conflict *ConflictClause // INSERT: the upsert clause, if any
+//	Returning []int // INSERT: columns read back (PostgreSQL and SQLite)
+//	AllRows bool // UPDATE and DELETE: the statement said All
+//	Tenant any // the tenant scope applied, as the type of the entity's tenant column; nil when unscoped; when the entity is unscoped but the statement reads a scoped entity, the id as WithTenant was given it
+//	TenantBypass string // the WithAllTenants reason, when it applied; raw SQL's reason
+//	PolicyBypass string // the WithoutPolicy reason, when it applied; raw SQL's reason
+//	DryRun bool // built for SQL(ctx), not sent
+//	InTx bool // set by velox: the statement runs in a transaction, inside db.Tx or one velox opens for it (a split InsertAll, a policy-conditioned upsert, an EdgeBidi write); a Rewrite hook may not change it
+//	Tx *TxInfo // the transaction the statement runs in, when the DB has hooks; nil otherwise
+//	Dialect Dialect // the DB's: an Around hook has only the statement
+//	// Tags are the context's WithTags tags, set before the hooks run. A
+//	// Rewrite hook gets its own copy; it may change them, and the SQL
+//	// comment is rendered from what it leaves.
+//	Tags []Tag
+//	// Caller is the statement's call site, with WithCallers; zero
+//	// otherwise. A Rewrite hook may change it, as Tags.
+//	Caller Caller
+//	SQL string // set by rendering, after the rewrite hooks: the text sent, WithSQLComment's comment included
+//	Fingerprint string // set by rendering: the shape's ID, the hash of SQL without the comment
+//	Args []any // set by rendering
+//	// Route is where the statement runs: set by the route stage, after
+//	// rendering. Rewrite hooks run before it and see it unset (zero, not
+//	// Replica -1); Around hooks, and everything after them, see it set. An
+//	// Around hook reads it, with one exception: setting Route.Fallback to true
+//	// sends the hook's retry to the primary. Changing WithPrimaryReads,
+//	// WithShard or WithSession in the context passed to next does not re-route
+//	// the statement, as routing happens before the Around hooks. A fallback
+//	// keeps Route.Fallback set for the hook's later calls to next; a hook
+//	// that counts failovers compares it with its value before next.
+//	Route Route
+//	// Result is reset before the Around hooks run, and set by each
+//	// execution before next returns to them; a hook that retries sees the
+//	// last attempt's.
+//	Result Result
+type Statement = engine.Statement
+
+// Result is what executing a statement did, which an Around hook reads.
+type Result = veloxtype.Result
+
+// Pred is a condition on entity E, made by a column handle or by And, Or and
+// Not. It is the typed form of Predicate, as Order is of OrderTerm.
+type Pred[E any] = engine.Pred[E]

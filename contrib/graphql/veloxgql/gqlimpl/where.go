@@ -6,7 +6,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/shared"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
 // Filter is a where input of E's being turned into a condition: the
@@ -130,7 +130,7 @@ func (f *Filter[E]) refuse[_ velox.Lazy[E]](field string, err error) {
 	if field != "" {
 		at += "." + field
 	}
-	f.err = shared.Within(at, err)
+	f.err = gqlcore.Within(at, err)
 }
 
 // add adds p to the filter's conditions, a predicate of field, which counts

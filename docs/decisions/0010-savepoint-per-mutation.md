@@ -27,4 +27,4 @@ trip.
   savepoint".
 - `TestAtomicSavepoint` (contrib/graphql/veloxgql/gqlimpl/mutation_test.go:410).
 - Ruling 18 and builder ruling 9,
-  docs/specs/2026-10-25-pre-1.0-hardening-design.md:56, :164.
+  docs/history/specs/2026-10-25-pre-1.0-hardening-design.md:56, :164.

@@ -276,6 +276,27 @@ func firstDoc(gs ...*ast.CommentGroup) string {
 	return ""
 }
 
+// rootDecls is the declarations of the root package's non-test files.
+func rootDecls(t *testing.T, fset *token.FileSet, mode parser.Mode) []ast.Decl {
+	t.Helper()
+	paths, err := filepath.Glob(filepath.Join(repoRoot(), "*.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decls []ast.Decl
+	for _, p := range paths {
+		if strings.HasSuffix(p, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, p, nil, mode)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decls = append(decls, f.Decls...)
+	}
+	return decls
+}
+
 // TestAliasDocsListMembers: go doc shows neither the fields nor the methods of an
 // alias of an internal type, so the doc comment of each alias of an engine type lists
 // its exported ones. An alias of a veloxtype type lists none: its documentation is
@@ -283,11 +304,7 @@ func firstDoc(gs ...*ast.CommentGroup) string {
 func TestAliasDocsListMembers(t *testing.T) {
 	fset := token.NewFileSet()
 	docs := map[string]string{}
-	f, err := parser.ParseFile(fset, filepath.Join(repoRoot(), "api.go"), nil, parser.ParseComments)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, d := range f.Decls {
+	for _, d := range rootDecls(t, fset, parser.ParseComments) {
 		if g, ok := d.(*ast.GenDecl); ok && g.Tok == token.TYPE {
 			for _, s := range g.Specs {
 				ts := s.(*ast.TypeSpec)
@@ -430,17 +447,13 @@ func TestVeloxTypeIsReExported(t *testing.T) {
 	if len(exported) < 25 {
 		t.Fatalf("veloxtype exports only %d names: %v", len(exported), exported)
 	}
-	root, err := parser.ParseFile(fset, filepath.Join(repoRoot(), "api.go"), nil, parser.SkipObjectResolution)
-	if err != nil {
-		t.Fatal(err)
-	}
 	reexported := map[string]bool{}
 	mark := func(name string, value ast.Expr) {
 		if sel, ok := value.(*ast.SelectorExpr); ok && aliasedPackage(sel) == "veloxtype" && sel.Sel.Name == name {
 			reexported[name] = true
 		}
 	}
-	for _, d := range root.Decls {
+	for _, d := range rootDecls(t, fset, parser.SkipObjectResolution) {
 		g, ok := d.(*ast.GenDecl)
 		if !ok {
 			continue
@@ -462,7 +475,7 @@ func TestVeloxTypeIsReExported(t *testing.T) {
 	}
 	for _, name := range exported {
 		if !reexported[name] {
-			t.Errorf("api.go does not declare %s = veloxtype.%s", name, name)
+			t.Errorf("the root does not declare %s = veloxtype.%s", name, name)
 		}
 	}
 }

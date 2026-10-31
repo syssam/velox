@@ -16,7 +16,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
-	gqlshared "github.com/syssam/velox/contrib/graphql/veloxgql/internal/shared"
+	gqlshared "github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
 // owner, child, tag and ownerTag are hand-written entities, as velox-gen

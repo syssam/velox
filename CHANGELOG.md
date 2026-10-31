@@ -113,7 +113,7 @@ Documentation and tests
 - CI runs on PostgreSQL 14 and 18 and MySQL 8.4, pinned by digest (9c25cef),
   with fuzz targets, per-package coverage floors and benchmark baselines.
 - `bench/compare` measures velox's build and runtime cost against veloxe and
-  ent (`docs/reviews/2026-10-29-perf-comparison.md`; 591c054, b7603fd..4ebd51a).
+  ent (`docs/history/reviews/2026-10-29-perf-comparison.md`; 591c054, b7603fd..4ebd51a).
   `COMPARE_STEPS=runtime`, and a `veloxpgx` column (da2ee65, c57da87).
 
 ### Changed
@@ -153,7 +153,7 @@ Runtime
   pgx's per-column type check passes at its first step for each column of each
   row. Query100 on PostgreSQL went from 961 µs to 415 µs and EagerO2M100 from
   4.32 ms to 1.42 ms, in two runs at different loads
-  (`docs/reviews/2026-10-29-pg-scan-path.md`; 399d7fe, 00be03b, f023d4b,
+  (`docs/history/reviews/2026-10-29-pg-scan-path.md`; 399d7fe, 00be03b, f023d4b,
   f293a06).
 - `With` and `LoadEach` read a relation's rows into arrays that never move,
   and give the owners of a to-many relation one array between them, each
@@ -163,7 +163,7 @@ Runtime
   261,168 to 151,600 B/op and from 4,699 to 4,204 allocs/op (`BenchmarkScan`);
   in the three-ORM comparison it is 209,188 B/op on SQLite and 202,040 on
   PostgreSQL, under veloxe's 259,516 and 251,707
-  (`docs/reviews/2026-10-30-eager-memory.md`).
+  (`docs/history/reviews/2026-10-30-eager-memory.md`).
   A row kept from a to-many load keeps the rows of every owner loaded with it,
   in the arrays they were read into (up to 1,024 rows each) and in the one the
   rest were copied to; copy it to keep it alone (4e4e85a, 9fbf19e).

@@ -8,7 +8,7 @@ import (
 	"github.com/vektah/gqlparser/v2/ast"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/shared"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
 // Selected returns the names of the fields selected on the objects of the
@@ -36,7 +36,7 @@ func Selected(ctx context.Context, typ string) (fields []string, ok bool) {
 		return nil, false
 	}
 	oc := graphql.GetOperationContext(ctx)
-	f, t := fc.Field, shared.TableFromContext(ctx)
+	f, t := fc.Field, gqlcore.TableFromContext(ctx)
 	return t.Selected(f.Field, f.Selections, typ, func() ([]string, bool) {
 		return selected(oc, t.Schema(), f, typ)
 	})

@@ -7,7 +7,7 @@ import (
 
 	"github.com/syssam/velox/contrib/graphql/internal/english"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/shared"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
 // cursorOrder is one term of a query's order, as checkCursor compares it
@@ -47,20 +47,20 @@ func checkCursor(c veloxgql.Cursor, typ string, order []cursorOrder) error {
 // A v of another type fails with veloxgql.ErrBadCursor.
 func cursorValue[T any](v any) (T, error) {
 	var t T
-	switch err := shared.SetValue(basePtr(&t), v); {
-	case errors.Is(err, shared.ErrUnsupported):
+	switch err := gqlcore.SetValue(basePtr(&t), v); {
+	case errors.Is(err, gqlcore.ErrUnsupported):
 		var zero T
-		return zero, fmt.Errorf("veloxgql: a cursor value of the Go type %s, which is not supported", shared.TypeName[T]())
+		return zero, fmt.Errorf("veloxgql: a cursor value of the Go type %s, which is not supported", gqlcore.TypeName[T]())
 	case err != nil:
 		var zero T
-		n := shared.TypeName[T]()
+		n := gqlcore.TypeName[T]()
 		return zero, InputErrorf("%w: a value is not %s %s", veloxgql.ErrBadCursor, english.Article(n), n)
 	}
 	return t, nil
 }
 
 // basePtr is p, a pointer to a veloxgql scalar, as a pointer to its base type,
-// which is all package shared handles; any other p is returned as it is.
+// which is all package gqlcore handles; any other p is returned as it is.
 func basePtr(p any) any {
 	switch x := p.(type) {
 	case *veloxgql.Time:

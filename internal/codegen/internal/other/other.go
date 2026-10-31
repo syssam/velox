@@ -1,5 +1,5 @@
 // Package other declares a schema in a second package, for the tests of
-// package gen: an edge to it is an edge out of the schema package.
+// package codegen: an edge to it is an edge out of the schema package.
 package other
 
 import "github.com/syssam/velox/schema"

@@ -3,7 +3,7 @@ package veloxgql
 import (
 	"context"
 
-	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/shared"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
 // Batch makes rows one batch for their edges: the first edge field gqlgen
@@ -28,5 +28,5 @@ import (
 // WithBatchScope: a directive or a field middleware that varies the context per
 // parent row needs it.
 func Batch[E any](ctx context.Context, rows []*E) {
-	shared.Add(ctx, rows)
+	gqlcore.Add(ctx, rows)
 }

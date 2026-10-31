@@ -2,8 +2,8 @@
 
 Each record is a binding decision of velox's design, with its context, its
 consequences and where it is enforced: a test, the code, or the spec line it
-came from. The specs in [docs/specs](../specs/) and the plans in
-[docs/plans](../plans/) hold every ruling; these are the ones a user or a
+came from. The specs in [docs/history/specs](../history/specs/) and the plans in
+[docs/history/plans](../history/plans/) hold every ruling; these are the ones a user or a
 contributor needs to know.
 
 | Record | Decision |

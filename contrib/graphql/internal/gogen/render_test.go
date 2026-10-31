@@ -115,8 +115,11 @@ func TestGoGolden(t *testing.T) {
 func TestGoFileNameBuildsEverywhere(t *testing.T) {
 	for _, name := range []string{"Android", "Windows", "Linux", "Arm", "Wasm", "Test"} {
 		t.Run(name, func(t *testing.T) {
-			files := render(t, &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{entity(name, "int64")}})
-			base := strings.ToLower(name) + "_gql.go"
+			m := modeltest.Model(t)
+			u := m.Entities[slices.IndexFunc(m.Entities, func(e *plugin.Entity) bool { return e.Name == "User" })]
+			u.Label = strings.ToLower(name)
+			files := render(t, m)
+			base := u.Label + "_gql.go"
 			src, ok := files[base]
 			if !ok {
 				t.Fatalf("no %s", base)

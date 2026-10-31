@@ -9,7 +9,7 @@ linters:
       - path: ^examples/graphql/graph/generated\.go$
         linters: [staticcheck]
       # The engine's exports are for the root package; its public types are documented
-      # on their aliases in api.go, which TestAliasDocsListMembers checks, or in veloxtype.
+      # on their aliases in the root, which TestAliasDocsListMembers checks, or in veloxtype.
       - path: ^internal/engine/
         linters: [revive]
         text: "^exported:"

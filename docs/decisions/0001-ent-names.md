@@ -32,5 +32,5 @@ applied (CHANGELOG, "Schema and migrations"). The names are frozen: see 0002.
   baseline, then the next diff renames nothing.
 - Commits 1d216d8 (inflection) and 25e9e88 (index, unique and foreign-key
   names).
-- docs/specs/2026-10-25-pre-1.0-hardening-design.md: rulings 1–2 (:33-34) and
+- docs/history/specs/2026-10-25-pre-1.0-hardening-design.md: rulings 1–2 (:33-34) and
   builder rulings 1 and 4 (:150, :153).

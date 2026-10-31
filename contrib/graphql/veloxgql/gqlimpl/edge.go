@@ -10,7 +10,7 @@ import (
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
-	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/shared"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
 // The edges batch: the first edge field gqlgen resolves on any row of a
@@ -105,7 +105,7 @@ func EdgeOne[E, T any](ctx context.Context, q velox.Query[T], x *E, r velox.Rel[
 		if err != nil {
 			return nil, err
 		}
-		shared.Add(ctx, []*T{v})
+		gqlcore.Add(ctx, []*T{v})
 		return v, nil
 	}
 	parts, err := loadBatch(ctx, b, q, r.LimitEach(1), owners, func(rows []T) int { return len(rows) })
@@ -136,7 +136,7 @@ func EdgeList[E, T any](ctx context.Context, q velox.Query[T], x *E, r velox.Rel
 	}
 	b, owners, i := batchOf(ctx, x, r, field, most, nil)
 	if b == nil {
-		b, owners, i = new(shared.Batch), []*E{x}, 0
+		b, owners, i = new(gqlcore.Batch), []*E{x}, 0
 	}
 	parts, err := loadBatch(ctx, b, q, rel, owners, keep)
 	if err != nil {
@@ -181,7 +181,7 @@ type batchKey struct {
 // nil, and x reads alone, when ctx is in no gqlgen field or not in field, when x
 // is in no group of ctx's table, when the key cannot be compared, or when
 // the batch was made with other arguments.
-func batchOf[E, T any](ctx context.Context, x *E, r velox.Rel[E, T], field string, most int, args any) (*shared.Batch, []*E, int) {
+func batchOf[E, T any](ctx context.Context, x *E, r velox.Rel[E, T], field string, most int, args any) (*gqlcore.Batch, []*E, int) {
 	fc := graphql.GetFieldContext(ctx)
 	if fc == nil || fc.Field.Field == nil {
 		return nil, nil, 0
@@ -189,8 +189,8 @@ func batchOf[E, T any](ctx context.Context, x *E, r velox.Rel[E, T], field strin
 	if typ, name, _ := strings.Cut(field, "."); fc.Object != typ || fc.Field.Name != name {
 		return nil, nil, 0
 	}
-	t := shared.TableFromContext(ctx)
-	g, rows, i, ok := shared.Find(t, x)
+	t := gqlcore.TableFromContext(ctx)
+	g, rows, i, ok := gqlcore.Find(t, x)
 	if !ok {
 		return nil, nil, 0
 	}
@@ -228,7 +228,7 @@ func canCompare(v any) bool {
 // loadBatch returns b's rows: each owner's, read by velox.LoadEach(ctx, q,
 // r, owners) on the first call. The first keep(rows) rows of each owner
 // become one group.
-func loadBatch[E, T any](ctx context.Context, b *shared.Batch, q velox.Query[T], r velox.Rel[E, T], owners []*E, keep func([]T) int) ([][]T, error) {
+func loadBatch[E, T any](ctx context.Context, b *gqlcore.Batch, q velox.Query[T], r velox.Rel[E, T], owners []*E, keep func([]T) int) ([][]T, error) {
 	v, err := b.Rows(func() (any, error) {
 		parts, err := velox.LoadEach(ctx, q, r, owners)
 		if err != nil {
@@ -245,7 +245,7 @@ func loadBatch[E, T any](ctx context.Context, b *shared.Batch, q velox.Query[T],
 				}
 			}
 		}
-		shared.Add(ctx, group)
+		gqlcore.Add(ctx, group)
 		return parts, nil
 	})
 	if err != nil {

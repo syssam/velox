@@ -43,4 +43,4 @@ for it. A migration directory written by an older velox stays readable.
   "version 2; this velox reads version 1", and `TestConfig`
   (migrate/dir_test.go:74) pins the whole text: "migrate: velox.json:
   version 2; this velox reads version 1".
-- Controller rulings 5 and 6, docs/plans/2026-10-29-hardening-6-docs.md.
+- Controller rulings 5 and 6, docs/history/plans/2026-10-29-hardening-6-docs.md.

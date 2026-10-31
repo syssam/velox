@@ -39,4 +39,4 @@ read-only target can still be linked many-to-many.
   the many-to-many IDs (`relatedIDs`, `addRelatedIDs`) are checked by
   `gqlimpl.CheckExists` on a plain `db.Query`, the Read scope, not
   `.Writable()`.
-- Rulings 20–21, docs/specs/2026-10-25-pre-1.0-hardening-design.md:61-62.
+- Rulings 20–21, docs/history/specs/2026-10-25-pre-1.0-hardening-design.md:61-62.

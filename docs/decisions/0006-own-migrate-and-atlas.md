@@ -27,5 +27,5 @@ lints and applies with Atlas, and does not mix in `velox-gen migrate apply`.
 - migrate/doc.go, "# Atlas": the atlas.hcl and the one-directory rule.
 - `TestMigrateSQL`, `TestMigrateSQLRefusals` and
   `TestMigrateSQLPositionsAreRelative` (cmd/velox-gen/migrate_sql_test.go).
-- docs/specs/2026-10-23-migrate-design.md: decision 1 (:1276) and §18
+- docs/history/specs/2026-10-23-migrate-design.md: decision 1 (:1276) and §18
   (:1179, :1208).

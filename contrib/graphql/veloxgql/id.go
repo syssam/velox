@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/shared"
+	"github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
 // Noder is the Go type of the GraphQL Node interface: gqlgen binds Node to
@@ -61,19 +61,19 @@ func DecodeID[K any](id, typ string) (K, error) {
 	case t == "":
 		return zero, badID(typ, "an empty type")
 	case t != typ:
-		return zero, shared.InputErrorf("%s ID: %w", typ, ErrWrongIDType)
+		return zero, gqlcore.InputErrorf("%s ID: %w", typ, ErrWrongIDType)
 	}
 	var k K
-	switch err := shared.SetValue(basePtr(&k), shared.Text(key)); {
-	case errors.Is(err, shared.ErrUnsupported):
-		return zero, fmt.Errorf("veloxgql: DecodeID: %s is not a supported key type", shared.TypeName[K]())
+	switch err := gqlcore.SetValue(basePtr(&k), gqlcore.Text(key)); {
+	case errors.Is(err, gqlcore.ErrUnsupported):
+		return zero, fmt.Errorf("veloxgql: DecodeID: %s is not a supported key type", gqlcore.TypeName[K]())
 	case err != nil:
 		return zero, badID(typ, "the key does not parse")
 	}
 	canon, ok := keyText(k)
 	switch {
 	case !ok:
-		return zero, fmt.Errorf("veloxgql: DecodeID: %s is not a supported key type", shared.TypeName[K]())
+		return zero, fmt.Errorf("veloxgql: DecodeID: %s is not a supported key type", gqlcore.TypeName[K]())
 	case canon != key:
 		return zero, badID(typ, "the key is not in its canonical form")
 	}
@@ -88,24 +88,24 @@ func DecodeID[K any](id, typ string) (K, error) {
 func IDType(id string) (string, error) {
 	b, ok := decodeBase64(id)
 	if !ok {
-		return "", shared.InputErrorf("ID: %w: not canonical base64url without padding", ErrBadID)
+		return "", gqlcore.InputErrorf("ID: %w: not canonical base64url without padding", ErrBadID)
 	}
 	t, _, ok := strings.Cut(string(b), ":")
 	if !ok || t == "" {
-		return "", shared.InputErrorf("ID: %w: no type", ErrBadID)
+		return "", gqlcore.InputErrorf("ID: %w: no type", ErrBadID)
 	}
 	return t, nil
 }
 
 func badID(typ, why string) error {
-	return shared.InputErrorf("%s ID: %w: %s", typ, ErrBadID, why)
+	return gqlcore.InputErrorf("%s ID: %w: %s", typ, ErrBadID, why)
 }
 
-// keyText is shared.KeyText of key, a UUID unwrapped to its [16]byte: the one
+// keyText is gqlcore.KeyText of key, a UUID unwrapped to its [16]byte: the one
 // scalar of this package that is a key type.
 func keyText(key any) (string, bool) {
 	if u, ok := key.(UUID); ok {
 		key = [16]byte(u)
 	}
-	return shared.KeyText(key)
+	return gqlcore.KeyText(key)
 }

@@ -39,10 +39,10 @@ var dbLimits = velox.WithDeadlines(velox.Deadlines{Statement: 10 * time.Second, 
 
 // The tables come from a directory per dialect, made, in the example module, by
 //
-//	go tool velox-gen migrate diff -dialect sqlite -name <name> -dir ./tracker/migrations ./tracker/schema
-//	go tool velox-gen migrate diff -dialect postgres -name <name> -dir ./tracker/migrations-postgres ./tracker/schema
+//	go tool velox-gen migrate diff -dialect sqlite -name <name> -dir ./tracker/migrations/sqlite ./tracker/schema
+//	go tool velox-gen migrate diff -dialect postgres -name <name> -dir ./tracker/migrations/postgres ./tracker/schema
 //
-//go:embed migrations migrations-postgres
+//go:embed migrations/sqlite migrations/postgres
 var migrations embed.FS
 
 func main() {
@@ -125,7 +125,7 @@ func open(ctx context.Context, dsn string) (*velox.DB, func(), error) {
 	}
 	sqlDB.SetMaxOpenConns(1) // SQLite has one writer
 	closeDB := func() { _ = sqlDB.Close() }
-	if err := up(ctx, sqlDB, "migrations"); err != nil {
+	if err := up(ctx, sqlDB, "migrations/sqlite"); err != nil {
 		closeDB()
 		return nil, nil, err
 	}
@@ -140,7 +140,7 @@ func openPostgres(ctx context.Context, dsn string) (*velox.DB, func(), error) {
 		return nil, nil, err
 	}
 	defer func() { _ = sqlDB.Close() }()
-	if err := up(ctx, sqlDB, "migrations-postgres"); err != nil {
+	if err := up(ctx, sqlDB, "migrations/postgres"); err != nil {
 		return nil, nil, err
 	}
 	pool, err := pgxpool.New(ctx, dsn)
