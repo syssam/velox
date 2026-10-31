@@ -1,4 +1,4 @@
-package velox_test
+package engine_test
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 )
 
 func TestDescMetadata(t *testing.T) {
-	info := velox.InfoOf[fixture.DAuthor]() // export_test.go: the entity's EntityInfo, or the test fails on its error
+	info := infoOf[fixture.DAuthor]() // export_test.go: the entity's EntityInfo, or the test fails on its error
 	if info.Name != "fixture.DAuthor" || info.Table != "authors" || info.Tenant != 1 || len(info.PrimaryKey) != 1 {
 		t.Fatalf("%+v", info)
 	}
@@ -54,7 +54,7 @@ func rowDesc() velox.Desc[dRow] {
 }
 
 func TestDescAcceptsAndConverts(t *testing.T) {
-	info, err := velox.LoadDesc(rowDesc())
+	info, err := loadDesc(rowDesc())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestDescAcceptsAndConverts(t *testing.T) {
 func TestDescDefaultRules(t *testing.T) {
 	d := rowDesc()
 	d.Columns[0].DefaultFunc = func() any { return int64(5) } // a numeric field
-	info, err := velox.LoadDesc(d)
+	info, err := loadDesc(d)
 	if err != nil {
 		t.Fatalf("DefaultFunc on a numeric field: %v", err)
 	}
@@ -83,7 +83,7 @@ func TestDescDefaultRules(t *testing.T) {
 		t.Errorf("id %+v", c)
 	}
 	// Opt is a *bool: its Default is accepted (rowDesc gives it one).
-	if info, err = velox.LoadDesc(rowDesc()); err != nil || !info.Columns[2].HasDefault {
+	if info, err = loadDesc(rowDesc()); err != nil || !info.Columns[2].HasDefault {
 		t.Errorf("Default on a pointer field: %v", err)
 	}
 }
@@ -138,7 +138,7 @@ func TestDescRefusals(t *testing.T) {
 		}, "relation 0 was not made by EdgeTo or EdgeThrough"},
 		{"EdgeTo owner column out of range", func(d *velox.Desc[dRow]) {
 			d.Edges = []velox.EdgeDesc{velox.EdgeTo[fixture.DAuthor]("Author", 9, 0)}
-		}, "dRow.Author: its key names column 9 of velox_test.dRow, which has 4"},
+		}, "dRow.Author: its key names column 9 of engine_test.dRow, which has 4"},
 		{"EdgeTo target column out of range", func(d *velox.Desc[dRow]) {
 			d.Edges = []velox.EdgeDesc{velox.EdgeTo[fixture.DAuthor]("Author", 0, 5)}
 		}, "its key names column 5 of fixture.DAuthor, which has 5"},
@@ -154,9 +154,9 @@ func TestDescRefusals(t *testing.T) {
 			c.edit(&d)
 			// The relations of these cases all target dAuthor, as a use site
 			// of the handle would say.
-			_, err := velox.LoadDesc(d, velox.TargetOf[fixture.DAuthor]())
+			_, err := loadDesc(d, targetOf[fixture.DAuthor]())
 			var se *velox.SchemaError
-			if !errors.As(err, &se) || !strings.HasPrefix(err.Error(), "velox: velox_test.dRow") || !strings.Contains(err.Error(), c.want) {
+			if !errors.As(err, &se) || !strings.HasPrefix(err.Error(), "velox: engine_test.dRow") || !strings.Contains(err.Error(), c.want) {
 				t.Fatalf("got %v, want a *SchemaError containing %q", err, c.want)
 			}
 		})
@@ -171,15 +171,15 @@ func TestEdgeToHolderMismatch(t *testing.T) {
 	}{
 		{"EdgeTo at a One of another entity", func(d *velox.Desc[dRow]) {
 			d.Edges = []velox.EdgeDesc{velox.EdgeTo[fixture.DBook]("Author", 0, 0)}
-		}, "velox: velox_test.dRow.Author: relation Author is a velox.One[github.com/syssam/velox2/internal/apitest/fixture.DAuthor], not a One or Many of github.com/syssam/velox2/internal/apitest/fixture.DBook"},
+		}, "velox: engine_test.dRow.Author: relation Author is a velox.One[github.com/syssam/velox2/internal/apitest/fixture.DAuthor], not a One or Many of github.com/syssam/velox2/internal/apitest/fixture.DBook"},
 		{"EdgeThrough at a One of another entity", func(d *velox.Desc[dRow]) {
 			d.Edges = []velox.EdgeDesc{velox.EdgeThrough[fixture.DBookTag, fixture.DBook]("Author", 0, 0, 1, 0)}
-		}, "velox: velox_test.dRow.Author: relation Author is a velox.One[github.com/syssam/velox2/internal/apitest/fixture.DAuthor], not a One or Many of github.com/syssam/velox2/internal/apitest/fixture.DBook"},
+		}, "velox: engine_test.dRow.Author: relation Author is a velox.One[github.com/syssam/velox2/internal/apitest/fixture.DAuthor], not a One or Many of github.com/syssam/velox2/internal/apitest/fixture.DBook"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			d := rowDesc()
 			c.edit(&d)
-			_, err := velox.LoadDesc(d)
+			_, err := loadDesc(d)
 			var se *velox.SchemaError
 			if !errors.As(err, &se) || err.Error() != c.want {
 				t.Fatalf("got %v, want a *SchemaError %q", err, c.want)
@@ -187,7 +187,7 @@ func TestEdgeToHolderMismatch(t *testing.T) {
 		})
 	}
 	// A One or a Many of the right entity is accepted.
-	if _, err := velox.LoadDesc(rowDesc()); err != nil {
+	if _, err := loadDesc(rowDesc()); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -227,7 +227,7 @@ type (
 )
 
 func TestBidiDescRefused(t *testing.T) {
-	_, err := velox.LoadDesc(velox.Desc[dBidiSlice]{
+	_, err := loadDesc(velox.Desc[dBidiSlice]{
 		Table:      "links",
 		Columns:    []velox.ColumnDesc{{Field: "A", Name: "a"}, {Field: "B", Name: "b"}},
 		PrimaryKey: []int{0, 1},
@@ -235,10 +235,10 @@ func TestBidiDescRefused(t *testing.T) {
 		Bidi:       true,
 		Addr:       func(x *dBidiSlice, i int) any { return [...]any{&x.A, &x.B}[i] },
 	})
-	if want := "velox: velox_test.dBidiSlice: the join entity of a bidirectional edge has columns of type []int, which cannot be compared; use a comparable type or a byte slice"; err == nil || err.Error() != want {
+	if want := "velox: engine_test.dBidiSlice: the join entity of a bidirectional edge has columns of type []int, which cannot be compared; use a comparable type or a byte slice"; err == nil || err.Error() != want {
 		t.Errorf("a slice key: %v, want %s", err, want)
 	}
-	_, err = velox.LoadDesc(velox.Desc[dBidiIface]{
+	_, err = loadDesc(velox.Desc[dBidiIface]{
 		Table:      "links",
 		Columns:    []velox.ColumnDesc{{Field: "A", Name: "a"}, {Field: "B", Name: "b"}},
 		PrimaryKey: []int{0, 1},
@@ -246,10 +246,10 @@ func TestBidiDescRefused(t *testing.T) {
 		Bidi:       true,
 		Addr:       func(x *dBidiIface, i int) any { return [...]any{&x.A, &x.B}[i] },
 	})
-	if want := "velox: velox_test.dBidiIface: the join entity of a bidirectional edge has columns of type velox_test.ifaceKey, which cannot be compared; use a comparable type or a byte slice"; err == nil || err.Error() != want {
+	if want := "velox: engine_test.dBidiIface: the join entity of a bidirectional edge has columns of type engine_test.ifaceKey, which cannot be compared; use a comparable type or a byte slice"; err == nil || err.Error() != want {
 		t.Errorf("a struct key holding an interface: %v, want %s", err, want)
 	}
-	_, err = velox.LoadDesc(velox.Desc[dBidiArray]{
+	_, err = loadDesc(velox.Desc[dBidiArray]{
 		Table:      "links",
 		Columns:    []velox.ColumnDesc{{Field: "A", Name: "a"}, {Field: "B", Name: "b"}},
 		PrimaryKey: []int{0, 1},
@@ -257,18 +257,18 @@ func TestBidiDescRefused(t *testing.T) {
 		Bidi:       true,
 		Addr:       func(x *dBidiArray, i int) any { return [...]any{&x.A, &x.B}[i] },
 	})
-	if want := "velox: velox_test.dBidiArray: the join entity of a bidirectional edge has columns of type [2]interface {}, which cannot be compared; use a comparable type or a byte slice"; err == nil || err.Error() != want {
+	if want := "velox: engine_test.dBidiArray: the join entity of a bidirectional edge has columns of type [2]interface {}, which cannot be compared; use a comparable type or a byte slice"; err == nil || err.Error() != want {
 		t.Errorf("an array key of interfaces: %v, want %s", err, want)
 	}
 	allow := func(context.Context) (velox.Pred[dBidi], error) { return velox.Allow[dBidi](), nil }
-	if _, err := velox.LoadDesc(bidiDesc()); err != nil {
+	if _, err := loadDesc(bidiDesc()); err != nil {
 		t.Fatalf("a valid Desc: %v", err)
 	}
 	ok := bidiDesc()
 	ok.Policy = func() velox.BoundPolicy {
 		return velox.BindPolicy(velox.Policy[dBidi]{Insert: func(context.Context, *dBidi) error { return nil }})
 	}
-	if _, err := velox.LoadDesc(ok); err != nil {
+	if _, err := loadDesc(ok); err != nil {
 		t.Fatalf("a Policy with Insert only: %v", err)
 	}
 	for _, c := range []struct {
@@ -295,10 +295,10 @@ func TestBidiDescRefused(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			d := bidiDesc()
 			c.edit(&d)
-			_, err := velox.LoadDesc(d)
+			_, err := loadDesc(d)
 			var se *velox.SchemaError
-			if !errors.As(err, &se) || err.Error() != "velox: velox_test.dBidi: "+c.want {
-				t.Errorf("err = %v,\nwant a SchemaError: velox: velox_test.dBidi: %s", err, c.want)
+			if !errors.As(err, &se) || err.Error() != "velox: engine_test.dBidi: "+c.want {
+				t.Errorf("err = %v,\nwant a SchemaError: velox: engine_test.dBidi: %s", err, c.want)
 			}
 		})
 	}
@@ -339,7 +339,7 @@ func spouseDesc() velox.Desc[dSpouse] {
 }
 
 func TestBidiOneDescRefused(t *testing.T) {
-	if _, err := velox.LoadDesc(spouseDesc()); err != nil {
+	if _, err := loadDesc(spouseDesc()); err != nil {
 		t.Fatalf("a valid Desc: %v", err)
 	}
 	for _, c := range []struct {
@@ -375,10 +375,10 @@ func TestBidiOneDescRefused(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			d := spouseDesc()
 			c.edit(&d)
-			_, err := velox.LoadDesc(d)
+			_, err := loadDesc(d)
 			var se *velox.SchemaError
-			if !errors.As(err, &se) || err.Error() != "velox: velox_test.dSpouse."+c.want {
-				t.Errorf("err = %v,\nwant a SchemaError: velox: velox_test.dSpouse.%s", err, c.want)
+			if !errors.As(err, &se) || err.Error() != "velox: engine_test.dSpouse."+c.want {
+				t.Errorf("err = %v,\nwant a SchemaError: velox: engine_test.dSpouse.%s", err, c.want)
 			}
 		})
 	}

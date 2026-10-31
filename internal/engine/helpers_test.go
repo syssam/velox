@@ -310,3 +310,51 @@ func setMaxParams(d velox.Dialect, n int) (restore func()) {
 	engine.MaxParams[d] = n
 	return func() { engine.MaxParams[d] = old }
 }
+
+// targetOf is the target of a relation to T as a use site names it: what Rel
+// puts in a load or a condition.
+func targetOf[T any]() engine.RelTarget { return relRef[T, T]().Target }
+
+// loadDesc builds entity E's metadata from d as MetaOnce.Load does on the
+// entity's first use, without the scan plan the root keeps in its Meta, which
+// these tests do not scan with. It then resolves its relations, as
+// CheckRelation does: relation i of an EdgeTo takes the target targets[i], which
+// a use site would name. A relation with no target there is left unresolved.
+func loadDesc[E any](d velox.Desc[E], targets ...engine.RelTarget) (*velox.EntityInfo, error) {
+	x := new(E)
+	info, err := engine.BuildDesc(x, unsafe.Pointer(x), func() engine.DescView {
+		v := engine.DescView{D: &engine.DescFields{Table: d.Table, Schema: d.Schema, Columns: d.Columns, PrimaryKey: d.PrimaryKey,
+			Tenant: d.Tenant, Bidi: d.Bidi, Indexes: d.Indexes, Relations: d.Edges, Check: d.Check,
+			Policy: d.Policy != nil, Hooks: d.Hooks != nil}}
+		if a := d.Addr; a != nil {
+			v.Addr = func(i int) any { return a(x, i) }
+		}
+		if a := d.EdgeAddr; a != nil {
+			v.RelAddr = func(i int) any { return a(x, i) }
+		}
+		return v
+	})
+	if err == nil && d.Policy != nil {
+		err = engine.ErasePolicy(info, d.Policy)
+	}
+	if err == nil && d.Hooks != nil {
+		err = engine.EraseHooks(info, d.Hooks)
+	}
+	if err != nil {
+		return nil, err
+	}
+	engine.SetInfoCheck(info, d.Check)
+	for i, r := range engine.InfoRels(info) {
+		var use engine.RelTarget
+		if i < len(targets) {
+			use = targets[i]
+		}
+		if use.Get == nil {
+			continue
+		}
+		if _, err := r.Resolve(info, use); err != nil {
+			return info, err
+		}
+	}
+	return info, nil
+}

@@ -1,4 +1,4 @@
-package velox_test
+package engine_test
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/internal/apitest/fixture"
+	"github.com/syssam/velox2/internal/fakeconn"
 )
 
 // TestJSONWrites: every write binds a JSON column's value as the bytes of its
@@ -18,8 +19,8 @@ import (
 // the JSON null. Hooks and the entity keep Go values.
 func TestJSONWrites(t *testing.T) {
 	t.Run("Insert", func(t *testing.T) {
-		e := &velox.FakeExec{Affected: 1}
-		db := velox.OpenFake(velox.Postgres, e)
+		e := &fakeconn.Exec{Affected: 1}
+		db := openFake(velox.Postgres, e)
 		x, want := fixture.JFull()
 		if err := db.Insert(&x).Exec(ctx); err != nil {
 			t.Fatal(err)
@@ -30,8 +31,8 @@ func TestJSONWrites(t *testing.T) {
 		}
 	})
 	t.Run("InsertNil", func(t *testing.T) {
-		e := &velox.FakeExec{Affected: 1}
-		db := velox.OpenFake(velox.Postgres, e)
+		e := &fakeconn.Exec{Affected: 1}
+		db := openFake(velox.Postgres, e)
 		x := fixture.JDoc{ID: 1, OwnerID: 2}
 		if err := db.Insert(&x).Exec(ctx); err != nil {
 			t.Fatal(err)
@@ -39,8 +40,8 @@ func TestJSONWrites(t *testing.T) {
 		fixture.SameArgs(t, "Insert of nil values", e.Args, []any{int64(1), int64(2), []byte("null"), []byte("null"), []byte(`{"w":0,"h":0}`), nil})
 	})
 	t.Run("InsertAll", func(t *testing.T) {
-		e := &velox.FakeExec{Affected: 2}
-		db := velox.OpenFake(velox.MySQL, e)
+		e := &fakeconn.Exec{Affected: 2}
+		db := openFake(velox.MySQL, e)
 		x, want := fixture.JFull()
 		y := fixture.JDoc{ID: 3, OwnerID: 2, Tags: []string{}, Nums: new([]int)} // a pointer to a nil slice: NULL
 		if err := db.InsertAll([]fixture.JDoc{x, y}).Exec(ctx); err != nil {
@@ -50,8 +51,8 @@ func TestJSONWrites(t *testing.T) {
 		fixture.SameArgs(t, "InsertAll", e.Args, fixture.Bound(want))
 	})
 	t.Run("Update", func(t *testing.T) {
-		e := &velox.FakeExec{Affected: 1}
-		db := velox.OpenFake(velox.Postgres, e)
+		e := &fakeconn.Exec{Affected: 1}
+		db := openFake(velox.Postgres, e)
 		_, err := db.Update[fixture.JDoc]().Set(fixture.JDocs.Tags.Set([]string{"x"}), fixture.JDocs.Shape.Set(fixture.JShape{W: 1, H: 2}), fixture.JDocs.Nums.Set([]int{7})).
 			Where(fixture.JDocs.ID.EQ(1)).Exec(ctx)
 		if err != nil {
@@ -68,8 +69,8 @@ func TestJSONWrites(t *testing.T) {
 		fixture.SameArgs(t, "Update of a nullable column to a nil slice", e.Args, []any{nil, int64(1)})
 	})
 	t.Run("Save", func(t *testing.T) {
-		e := &velox.FakeExec{Affected: 1}
-		db := velox.OpenFake(velox.Postgres, e)
+		e := &fakeconn.Exec{Affected: 1}
+		db := openFake(velox.Postgres, e)
 		x, _ := fixture.JFull()
 		if err := db.Save(&x, fixture.JDocs.Tags, fixture.JDocs.Attrs, fixture.JDocs.Nums).Exec(ctx); err != nil {
 			t.Fatal(err)
@@ -90,8 +91,8 @@ func TestJSONWrites(t *testing.T) {
 	})
 	t.Run("Upsert", func(t *testing.T) {
 		for _, d := range []velox.Dialect{velox.Postgres, velox.MySQL, velox.SQLite} {
-			e := &velox.FakeExec{Affected: 1}
-			db := velox.OpenFake(d, e)
+			e := &fakeconn.Exec{Affected: 1}
+			db := openFake(d, e)
 			x, want := fixture.JFull()
 			if err := db.Insert(&x).OnConflict(fixture.JDocs.ID).Update(fixture.JDocs.Tags, fixture.JDocs.Attrs, fixture.JDocs.Nums).Exec(ctx); err != nil {
 				t.Fatal(err)
@@ -110,8 +111,8 @@ func TestJSONWrites(t *testing.T) {
 		// Rows and Set, and the bytes in Args.
 		var rewritten, around []any
 		var args []any
-		e := &velox.FakeExec{Affected: 1}
-		db := velox.OpenFake(velox.Postgres, e,
+		e := &fakeconn.Exec{Affected: 1}
+		db := openFake(velox.Postgres, e,
 			velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
 				if st.Op == velox.OpInsert {
 					rewritten = append([]any(nil), st.Rows[0]...)
@@ -147,7 +148,7 @@ func TestJSONWrites(t *testing.T) {
 		fixture.SameArgs(t, "Statement.Args", args, []any{[]byte(`["x"]`), int64(1)})
 	})
 	t.Run("SQL", func(t *testing.T) {
-		db := velox.OpenFake(velox.Postgres, &velox.FakeExec{})
+		db := openFake(velox.Postgres, &fakeconn.Exec{})
 		x, want := fixture.JFull()
 		_, args, err := db.Insert(&x).SQL(ctx)
 		if err != nil {
@@ -156,7 +157,7 @@ func TestJSONWrites(t *testing.T) {
 		fixture.SameArgs(t, "Insert SQL", args, want)
 	})
 	t.Run("Unencodable", func(t *testing.T) {
-		db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Affected: 1})
+		db := openFake(velox.Postgres, &fakeconn.Exec{Affected: 1})
 		// The first insert renders the shape and caches it; the second
 		// only collects its arguments.
 		x := fixture.JDoc{ID: 1}
@@ -170,9 +171,9 @@ func TestJSONWrites(t *testing.T) {
 		}
 	})
 	t.Run("AddRefused", func(t *testing.T) {
-		db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Affected: 1})
-		st := &velox.Statement{Op: velox.OpUpdate, Entity: velox.InfoOf[fixture.JDoc](), Set: []velox.Assignment{{Column: 2, Op: velox.AssignAdd, Value: 1}}, AllRows: true}
-		if _, _, err := velox.DryRun(ctx, db, st); err == nil || !strings.Contains(err.Error(), "tags") || !strings.Contains(err.Error(), "an encoded column") {
+		db := openFake(velox.Postgres, &fakeconn.Exec{Affected: 1})
+		st := &velox.Statement{Op: velox.OpUpdate, Entity: infoOf[fixture.JDoc](), Set: []velox.Assignment{{Column: 2, Op: velox.AssignAdd, Value: 1}}, AllRows: true}
+		if _, _, err := dryRun(ctx, db, st); err == nil || !strings.Contains(err.Error(), "tags") || !strings.Contains(err.Error(), "an encoded column") {
 			t.Fatalf("Add on a JSON column: %v", err)
 		}
 	})
@@ -185,7 +186,7 @@ func TestCodecNeedsBoth(t *testing.T) {
 		{Field: "Words", Name: "words", Encode: fixture.WrapWords},
 		{Field: "Words", Name: "words", Decode: fixture.UnwrapWords},
 	} {
-		_, err := velox.LoadDesc(velox.Desc[fixture.JList]{
+		_, err := loadDesc(velox.Desc[fixture.JList]{
 			Table:      "j_lists",
 			Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}, c},
 			PrimaryKey: []int{0},
@@ -202,7 +203,7 @@ func TestCodecNeedsBoth(t *testing.T) {
 			t.Errorf("got %v, want a *SchemaError naming the column", err)
 		}
 	}
-	if info := velox.InfoOf[fixture.JList](); info.Columns[0].Codec || !info.Columns[1].Codec {
+	if info := infoOf[fixture.JList](); info.Columns[0].Codec || !info.Columns[1].Codec {
 		t.Errorf("Codec is not derived from the codec: %+v", info.Columns)
 	}
 }
@@ -211,19 +212,19 @@ func TestCodecNeedsBoth(t *testing.T) {
 // column that has no codec fails the write, naming the column, as does a
 // value a hook set to an untyped nil in a column that has one: NULL.
 func TestCodecFlagWithoutCodec(t *testing.T) {
-	e := &velox.FakeExec{Affected: 1}
-	db := velox.OpenFake(velox.Postgres, e)
-	in := *velox.InfoOf[fixture.JDoc]()
+	e := &fakeconn.Exec{Affected: 1}
+	db := openFake(velox.Postgres, e)
+	in := *infoOf[fixture.JDoc]()
 	in.Columns = slices.Clone(in.Columns)
 	in.Columns[1].Codec = true // owner_id: no Encode or Decode
 	st := &velox.Statement{Op: velox.OpUpdate, Entity: &in, Set: []velox.Assignment{{Column: 1, Op: velox.AssignSet, Value: int64(7)}}, AllRows: true}
-	_, _, err := velox.DryRun(ctx, db, st)
+	_, _, err := dryRun(ctx, db, st)
 	if err == nil || !strings.Contains(err.Error(), "owner_id") || !strings.Contains(err.Error(), "no Encode and Decode") {
 		t.Fatalf("got %v, want an error naming the column and the missing codec", err)
 	}
 	// An untyped nil binds NULL, in a column that is not nullable too.
-	st = &velox.Statement{Op: velox.OpUpdate, Entity: velox.InfoOf[fixture.JDoc](), Set: []velox.Assignment{{Column: 2, Op: velox.AssignSet, Value: nil}}, AllRows: true}
-	_, args, err := velox.DryRun(ctx, db, st)
+	st = &velox.Statement{Op: velox.OpUpdate, Entity: infoOf[fixture.JDoc](), Set: []velox.Assignment{{Column: 2, Op: velox.AssignSet, Value: nil}}, AllRows: true}
+	_, args, err := dryRun(ctx, db, st)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +286,7 @@ func (*jKid) VeloxMeta() *velox.Meta[jKid] {
 // Save, scope and load compares it; so is a relation keyed by its target's
 // encoded column, when the relation is resolved.
 func TestEncodedKeyRefused(t *testing.T) {
-	if _, err := velox.LoadDesc(jKeyDesc(1)); err != nil {
+	if _, err := loadDesc(jKeyDesc(1)); err != nil {
 		t.Fatalf("without a codec: %v", err)
 	}
 	for _, c := range []struct {
@@ -297,13 +298,13 @@ func TestEncodedKeyRefused(t *testing.T) {
 		{"tenant", 1, 1, "Org", "tenant"},
 		{"relation key", -1, 2, "Parent", "relation Kids"},
 	} {
-		_, err := velox.LoadDesc(jKeyDesc(c.tenant, c.col))
+		_, err := loadDesc(jKeyDesc(c.tenant, c.col))
 		var se *velox.SchemaError
 		if !errors.As(err, &se) || se.Field != c.field || !strings.Contains(err.Error(), c.reason) || !strings.Contains(err.Error(), "codec") {
 			t.Errorf("%s: got %v, want a *SchemaError naming %s", c.name, err, c.field)
 		}
 	}
-	_, err := velox.LoadDesc(jKeyDesc(-1), velox.TargetOf[jKid]())
+	_, err := loadDesc(jKeyDesc(-1), targetOf[jKid]())
 	if err == nil || !strings.Contains(err.Error(), "jKid.Ref") || !strings.Contains(err.Error(), "encoded column") {
 		t.Errorf("a target's encoded key: got %v", err)
 	}
@@ -367,12 +368,12 @@ func jOptDesc() velox.Desc[jOpt] {
 // []byte in a Nullable column without a codec binds an untyped nil: NULL,
 // whatever the driver makes of a nil []byte.
 func TestJSONNullableNoPointer(t *testing.T) {
-	info := velox.InfoOf[jOpt]()
+	info := infoOf[jOpt]()
 	if !info.Columns[1].Nullable || !info.Columns[2].Nullable || info.Columns[3].Nullable || !info.Columns[4].Nullable {
 		t.Errorf("Nullable: %v %v %v, want true true false", info.Columns[1].Nullable, info.Columns[2].Nullable, info.Columns[3].Nullable)
 	}
-	e := &velox.FakeExec{Affected: 1}
-	db := velox.OpenFake(velox.Postgres, e)
+	e := &fakeconn.Exec{Affected: 1}
+	db := openFake(velox.Postgres, e)
 	if err := db.Insert(&jOpt{ID: 1}).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -405,7 +406,7 @@ func TestJSONNullableNoPointer(t *testing.T) {
 // TestNullableNeedsNil: Nullable on a column whose field cannot be nil, nor
 // is a pointer, is refused when the metadata is built, naming the column.
 func TestNullableNeedsNil(t *testing.T) {
-	_, err := velox.LoadDesc(velox.Desc[fixture.JList]{
+	_, err := loadDesc(velox.Desc[fixture.JList]{
 		Table:      "j_lists",
 		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id", Nullable: true}, {Field: "Words", Name: "words"}},
 		PrimaryKey: []int{0},
