@@ -35,7 +35,7 @@ read-only target can still be linked many-to-many.
   hides it is linked by `CreateWriter` and by `UpdateWriter`'s
   `addCircleIDs`, one join row each; the circle is unchanged, and
   `UpdateCircle` on it is NOT_FOUND.
-- In the golden contrib/graphql/internal/gogen/testdata/golden/gql_post.go,
+- In the golden contrib/graphql/internal/gogen/testdata/golden/post_gql.go,
   the many-to-many IDs (`relatedIDs`, `addRelatedIDs`) are checked by
   `gqlimpl.CheckExists` on a plain `db.Query`, the Read scope, not
   `.Writable()`.

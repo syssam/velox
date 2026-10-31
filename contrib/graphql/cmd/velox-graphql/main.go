@@ -1,7 +1,7 @@
 // Command velox-graphql is the velox-gen plugin that writes the GraphQL
 // schema of a velox schema package, gen/velox.graphqls, and the Go code in the
 // generated package that gqlgen's autobind binds the schema's types to,
-// gen/gql_*.go. An application adds it as a tool of its module and names it
+// gen/*_gql.go. An application adds it as a tool of its module and names it
 // to velox-gen:
 //
 //	go get -tool github.com/syssam/velox/contrib/graphql/cmd/velox-graphql

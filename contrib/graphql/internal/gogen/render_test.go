@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"go/ast"
+	"go/build"
 	"go/parser"
 	"go/printer"
 	"go/token"
@@ -101,11 +102,39 @@ func TestGoGolden(t *testing.T) {
 		}
 		t.Fatalf("%s: got %d lines, want %d (run go test -update to accept)", n, len(gl), len(wl))
 	}
-	if _, ok := got["gql_session.go"]; ok {
+	if _, ok := got["session_gql.go"]; ok {
 		t.Error("Session's type is skipped, and it has a Go file")
 	}
-	if _, ok := got["gql_user_group.go"]; ok {
+	if _, ok := got["user_group_gql.go"]; ok {
 		t.Error("a join entity has a Go file")
+	}
+}
+
+// TestGoFileNameBuildsEverywhere: a schema may be named like a system, an
+// architecture or a test, and its Go file is still in every build.
+func TestGoFileNameBuildsEverywhere(t *testing.T) {
+	for _, name := range []string{"Android", "Windows", "Linux", "Arm", "Wasm", "Test"} {
+		t.Run(name, func(t *testing.T) {
+			files := render(t, &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{entity(name, "int64")}})
+			base := strings.ToLower(name) + "_gql.go"
+			src, ok := files[base]
+			if !ok {
+				t.Fatalf("no %s", base)
+			}
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, base), []byte(src), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			for _, goos := range []string{"linux", "darwin", "plan9"} {
+				ctx := build.Context{GOOS: goos, GOARCH: "riscv64", Compiler: "gc"}
+				if ok, err := ctx.MatchFile(dir, base); err != nil || !ok {
+					t.Errorf("%s/riscv64 leaves out %s: %v", goos, base, err)
+				}
+			}
+			if strings.HasSuffix(base, "_test.go") {
+				t.Errorf("%s is a test file", base)
+			}
+		})
 	}
 }
 
@@ -442,7 +471,7 @@ func TestGoTypes(t *testing.T) {
 	files := render(t, typesModel(t))
 	// Compared with the spaces squashed, as gofmt aligns them.
 	squash := func(s string) string { return " " + strings.Join(strings.Fields(s), " ") + " " }
-	ev, owner, node := squash(files["gql_event.go"]), squash(files["gql_owner.go"]), squash(files["gql_node.go"])
+	ev, owner, node := squash(files["event_gql.go"]), squash(files["owner_gql.go"]), squash(files["node_gql.go"])
 	for _, want := range []string{
 		`func (x *Event) IDGQL() string { return veloxgql.EncodeID("Event", [16]byte(x.ID)) }`,
 		// The columns' own Go types, which bind through veloxgql's function
@@ -535,9 +564,9 @@ func TestNoNodes(t *testing.T) {
 			{Name: "b", GoName: "B", Type: "int64", GoType: "int64", ElemType: "int64"},
 		},
 	}}}
-	node := render(t, m)["gql_node.go"]
+	node := render(t, m)["node_gql.go"]
 	if !strings.Contains(node, "func Node(_ context.Context, id string) (veloxgql.Noder, error) {") || strings.Contains(node, "DBFromContext(ctx)") {
-		t.Errorf("gql_node.go:\n%s", node)
+		t.Errorf("node_gql.go:\n%s", node)
 	}
 }
 
@@ -559,7 +588,7 @@ func TestRenderErrors(t *testing.T) {
 			e := entity("Node", "int64")
 			e.Annotations = map[string]json.RawMessage{"graphql": json.RawMessage(`{"type":"Vertex"}`)}
 			return e
-		}()}}, "schema Node: its Go file would be gql_node.go"},
+		}()}}, "schema Node: its Go file would be node_gql.go"},
 		"sdl": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{entity("Query", "int64")}}, "Query"},
 		"an edge to a key of two columns": {&plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{func() *plugin.Entity {
 			e := entity("Author", "int64")
@@ -683,10 +712,10 @@ func TestEnumErrorPercent(t *testing.T) {
 			en.Values = []string{"public", "50% off"}
 		}
 	}
-	src := render(t, m)["gql_group.go"]
+	src := render(t, m)["group_gql.go"]
 	_, rest, ok := strings.Cut(src, "gqlimpl.InputErrorf(")
 	if !ok {
-		t.Fatalf("gql_group.go calls no gqlimpl.InputErrorf:\n%s", src)
+		t.Fatalf("group_gql.go calls no gqlimpl.InputErrorf:\n%s", src)
 	}
 	lit, _, _ := strings.Cut(rest, ")\n")
 	format, err := strconv.Unquote(lit)
@@ -932,7 +961,7 @@ func TestUpdateInputs(t *testing.T) {
 				if funcs[gql] == nil {
 					t.Errorf("no func %s, which %s names", gql, fn)
 				}
-				if src := files["gql_"+ty.Entity.Label+".go"]; !strings.Contains(src, ", "+gql+")") {
+				if src := files[ty.Entity.Label+"_gql.go"]; !strings.Contains(src, ", "+gql+")") {
 					t.Errorf("%s does not name %s", fn, gql)
 				}
 			}
@@ -958,7 +987,7 @@ func ptrUnless(required bool, typ string) string {
 func TestCreateConversions(t *testing.T) {
 	files := render(t, mutationsModel(t))
 	squash := func(s string) string { return " " + strings.Join(strings.Fields(s), " ") + " " }
-	ev, owner := squash(files["gql_event.go"]), squash(files["gql_owner.go"])
+	ev, owner := squash(files["event_gql.go"]), squash(files["owner_gql.go"])
 	for _, want := range []string{
 		` OwnerID *string `,
 		` Tags veloxgql.JSON `,
@@ -1002,7 +1031,7 @@ func TestInputStringHidesSensitive(t *testing.T) {
 				continue
 			}
 			n++
-			src := files["gql_"+ty.Entity.Label+".go"]
+			src := files[ty.Entity.Label+"_gql.go"]
 			sig := "func (in Create" + ty.Name + "Input) String() string {"
 			_, body, ok := strings.Cut(src, sig)
 			if !ok {
@@ -1093,7 +1122,7 @@ func TestDeleteJoinRows(t *testing.T) {
 	files := render(t, m)
 	squash := func(s string) string { return " " + strings.Join(strings.Fields(s), " ") + " " }
 	for file, wants := range map[string][]string{
-		"gql_user.go": {
+		"user_gql.go": {
 			`func DeleteAccount(ctx context.Context, id string) (string, error) {`,
 			`chk := db.Query[User]().Where(Users.ID.EQ(key)).Writable() if db.Dialect() != velox.SQLite { chk = chk.ForUpdate() } if ok, err := chk.Exists(ctx);`,
 			`return gqlimpl.NotFound("deleteAccount", "Account")`,
@@ -1102,7 +1131,7 @@ func TestDeleteJoinRows(t *testing.T) {
 			`db.Delete[User]().Where(Users.ID.EQ(key)).Exec(ctx)`,
 			`return veloxgql.EncodeID("Account", key), nil`,
 		},
-		"gql_group.go": {
+		"group_gql.go": {
 			`chk := db.Query[Group]().Where(Groups.ID.EQ(key)).Writable() if db.Dialect() != velox.SQLite { chk = chk.ForUpdate() } if ok, err := chk.Exists(ctx);`,
 			`db.Delete[UserGroup]().Where(UserGroups.GroupID.EQ(key)).Exec(ctx)`,
 			`db.Delete[Group]().Where(Groups.ID.EQ(key)).Exec(ctx)`,
@@ -1152,14 +1181,14 @@ func TestUpdateEdgeToRenamedType(t *testing.T) {
 			setMutations(t, e, "update")
 		}
 	}
-	src := strings.Join(strings.Fields(render(t, m)["gql_group.go"]), " ")
+	src := strings.Join(strings.Fields(render(t, m)["group_gql.go"]), " ")
 	for _, w := range []string{
 		`func UpdateGroup(ctx context.Context, id string, input UpdateGroupInput) (*Group, error) {`,
 		`db.Delete[UserGroup]().Where(UserGroups.GroupID.EQ(key), UserGroups.UserID.In(`,
 		`db.Query[User]().Where(Users.ID.In(`,
 	} {
 		if !strings.Contains(src, w) {
-			t.Errorf("gql_group.go: no %q in\n%s", w, src)
+			t.Errorf("group_gql.go: no %q in\n%s", w, src)
 		}
 	}
 }
@@ -1574,8 +1603,8 @@ func TestSingleOwnerKeyEQ(t *testing.T) {
 		}
 	}
 	const want = `Users.ID.EQ(k7)), 1, "CreatePostInput.writerID"`
-	if !strings.Contains(files["gql_post.go"], want) {
-		t.Errorf("gql_post.go lacks %s", want)
+	if !strings.Contains(files["post_gql.go"], want) {
+		t.Errorf("post_gql.go lacks %s", want)
 	}
 }
 

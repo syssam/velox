@@ -6,23 +6,23 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/syssam/velox/dbtype"
 	"github.com/syssam/velox/internal/engine"
+	"github.com/syssam/velox/veloxtype"
 )
 
 // Aggregate is the function an aggregate read computes over its one column.
-type Aggregate = dbtype.Aggregate
+type Aggregate = veloxtype.Aggregate
 
 // The aggregate functions.
 const (
-	AggregateSum = dbtype.AggregateSum // SUM
-	AggregateAvg = dbtype.AggregateAvg // AVG
-	AggregateMin = dbtype.AggregateMin // MIN
-	AggregateMax = dbtype.AggregateMax // MAX
+	AggregateSum = veloxtype.AggregateSum // SUM
+	AggregateAvg = veloxtype.AggregateAvg // AVG
+	AggregateMin = veloxtype.AggregateMin // MIN
+	AggregateMax = veloxtype.AggregateMax // MAX
 )
 
 // Caller is a statement's call site.
-type Caller = dbtype.Caller
+type Caller = veloxtype.Caller
 
 // WithCallers records each statement's call site in Statement.Caller. It
 // costs one runtime.Callers per batch of up to 8 frames between velox and the
@@ -98,7 +98,7 @@ func WithMaxRows(n int) Option { return engine.WithMaxRows(n) }
 func WithAround(a Around) Option { return engine.WithAround(a) }
 
 // Deadlines are the time limits velox gives statements and transactions.
-type Deadlines = dbtype.Deadlines
+type Deadlines = veloxtype.Deadlines
 
 // WithDeadlines sets the DB's time limits. A statement's limit covers its
 // Around hooks and, with Iter, the caller's loop body. A transaction's covers
@@ -120,16 +120,16 @@ func WithDeadlines(d Deadlines) Option { return engine.WithDeadlines(d) }
 func TxTimeout(d time.Duration) TxOption { return engine.TxTimeout(d) }
 
 // ColumnDesc describes one column of a Desc. For generated code.
-type ColumnDesc = dbtype.ColumnDesc
+type ColumnDesc = veloxtype.ColumnDesc
 
 // Dialect is a SQL dialect.
-type Dialect = dbtype.Dialect
+type Dialect = veloxtype.Dialect
 
 // The dialects velox supports.
 const (
-	Postgres = dbtype.Postgres
-	MySQL    = dbtype.MySQL
-	SQLite   = dbtype.SQLite
+	Postgres = veloxtype.Postgres
+	MySQL    = veloxtype.MySQL
+	SQLite   = veloxtype.SQLite
 )
 
 // DriverCode returns the database's code for err, as text, when err or an
@@ -196,7 +196,7 @@ var (
 	ErrTenantUpsert = engine.ErrTenantUpsert
 	// ErrDenied is returned by a statement when a policy refuses it. Every
 	// *PolicyError matches it.
-	ErrDenied = dbtype.ErrDenied
+	ErrDenied = veloxtype.ErrDenied
 	// ErrPolicyUpsert is returned by an upsert that updates, on MySQL, of an
 	// entity whose policy has a Read or Write predicate, because MySQL cannot
 	// apply the predicate to the update.
@@ -231,21 +231,21 @@ var (
 func IsNotFound(err error) bool { return engine.IsNotFound(err) }
 
 // SchemaError reports a mistake in an entity's generated metadata.
-type SchemaError = dbtype.SchemaError
+type SchemaError = veloxtype.SchemaError
 
 // ConstraintKind is the kind of constraint a statement violated.
-type ConstraintKind = dbtype.ConstraintKind
+type ConstraintKind = veloxtype.ConstraintKind
 
 // The kinds of constraint.
 const (
-	ConstraintUnique     = dbtype.ConstraintUnique     // a unique index or primary key
-	ConstraintForeignKey = dbtype.ConstraintForeignKey // a foreign key
-	ConstraintNotNull    = dbtype.ConstraintNotNull    // a NOT NULL column
-	ConstraintCheck      = dbtype.ConstraintCheck      // a CHECK constraint
+	ConstraintUnique     = veloxtype.ConstraintUnique     // a unique index or primary key
+	ConstraintForeignKey = veloxtype.ConstraintForeignKey // a foreign key
+	ConstraintNotNull    = veloxtype.ConstraintNotNull    // a NOT NULL column
+	ConstraintCheck      = veloxtype.ConstraintCheck      // a CHECK constraint
 )
 
 // ConstraintError reports a violated constraint; find it with errors.As.
-type ConstraintError = dbtype.ConstraintError
+type ConstraintError = veloxtype.ConstraintError
 
 // BoundPolicy is an entity's Policy with E erased, made by BindPolicy for
 // Desc.Policy. For generated code. Its fields are not exported: only BindPolicy
@@ -316,14 +316,14 @@ type ColumnInfo = engine.ColumnInfo
 func GoType(c ColumnInfo) reflect.Type { return engine.GoType(c) }
 
 // IndexInfo describes one index.
-type IndexInfo = dbtype.IndexInfo
+type IndexInfo = veloxtype.IndexInfo
 
 // Predicate is a condition in a Statement: the form hooks see and add. It is
 // the untyped form of Pred, as OrderTerm is of Order.
 type Predicate = engine.Predicate
 
 // OrderTerm is an ordering by one column of a Statement's entity.
-type OrderTerm = dbtype.OrderTerm
+type OrderTerm = veloxtype.OrderTerm
 
 // ColumnEQ returns the condition column = v, for hooks that add conditions;
 // column is an index into the statement's EntityInfo.Columns.
@@ -447,7 +447,7 @@ func WithPinWindow(d time.Duration) Option { return engine.WithPinWindow(d) }
 func WithReplicaBackoff(d time.Duration) Option { return engine.WithReplicaBackoff(d) }
 
 // Route is where a statement runs.
-type Route = dbtype.Route
+type Route = veloxtype.Route
 
 // WithTenant returns ctx scoped to tenant id: statements on a tenant-scoped
 // entity read and change only that tenant's rows, and inserts fill or check
@@ -480,7 +480,7 @@ func WithoutPolicy(ctx context.Context, reason string) context.Context {
 }
 
 // RowScope is what a context scopes statements by.
-type RowScope = dbtype.RowScope
+type RowScope = veloxtype.RowScope
 
 // RowScopeFromContext returns ctx's row scope.
 func RowScopeFromContext(ctx context.Context) RowScope { return engine.RowScopeFromContext(ctx) }
@@ -498,60 +498,60 @@ func RowScopeFromContext(ctx context.Context) RowScope { return engine.RowScopeF
 func IsDryRun(ctx context.Context) bool { return engine.IsDryRun(ctx) }
 
 // PolicyError is a statement a policy denied.
-type PolicyError = dbtype.PolicyError
+type PolicyError = veloxtype.PolicyError
 
 // Deny returns an error for a policy function to deny a statement with: its
 // text is reason, and it matches ErrDenied.
 func Deny(reason string) error { return engine.Deny(reason) }
 
 // Op is the kind of a Statement.
-type Op = dbtype.Op
+type Op = veloxtype.Op
 
 // The kinds of statement.
 const (
-	OpSelect = dbtype.OpSelect
-	OpInsert = dbtype.OpInsert
-	OpUpdate = dbtype.OpUpdate
-	OpDelete = dbtype.OpDelete
+	OpSelect = veloxtype.OpSelect
+	OpInsert = veloxtype.OpInsert
+	OpUpdate = veloxtype.OpUpdate
+	OpDelete = veloxtype.OpDelete
 	// OpRawQuery is raw SQL run by DB.Raw, which velox treats as a read: its
 	// SQL and Args are the caller's.
-	OpRawQuery = dbtype.OpRawQuery
+	OpRawQuery = veloxtype.OpRawQuery
 	// OpRawExec is raw SQL run by DB.Exec, which velox treats as a write: its
 	// SQL and Args are the caller's.
-	OpRawExec = dbtype.OpRawExec
+	OpRawExec = veloxtype.OpRawExec
 )
 
 // Lock is the lock a locking read takes on the rows it reads.
-type Lock = dbtype.Lock
+type Lock = veloxtype.Lock
 
 // The locks.
 const (
-	LockForUpdate = dbtype.LockForUpdate // FOR UPDATE
-	LockForShare  = dbtype.LockForShare  // FOR SHARE
+	LockForUpdate = veloxtype.LockForUpdate // FOR UPDATE
+	LockForShare  = veloxtype.LockForShare  // FOR SHARE
 )
 
 // LockWait is what a locking read does about rows another transaction has
 // locked.
-type LockWait = dbtype.LockWait
+type LockWait = veloxtype.LockWait
 
 // The ways of not waiting.
 const (
-	LockSkipLocked = dbtype.LockSkipLocked // SKIP LOCKED: leave them out
-	LockNoWait     = dbtype.LockNoWait     // NOWAIT: fail at once
+	LockSkipLocked = veloxtype.LockSkipLocked // SKIP LOCKED: leave them out
+	LockNoWait     = veloxtype.LockNoWait     // NOWAIT: fail at once
 )
 
 // AssignOp is how an UPDATE assigns a column.
-type AssignOp = dbtype.AssignOp
+type AssignOp = veloxtype.AssignOp
 
 // The assignment operators.
 const (
-	AssignSet = dbtype.AssignSet // column = value
-	AssignAdd = dbtype.AssignAdd // column = column + value
-	AssignSub = dbtype.AssignSub // column = column - value
+	AssignSet = veloxtype.AssignSet // column = value
+	AssignAdd = veloxtype.AssignAdd // column = column + value
+	AssignSub = veloxtype.AssignSub // column = column - value
 )
 
 // Assignment is one column an UPDATE sets.
-type Assignment = dbtype.Assignment
+type Assignment = veloxtype.Assignment
 
 // ConflictClause is an INSERT's upsert clause.
 //
@@ -662,7 +662,7 @@ type EachClause = engine.EachClause
 type Statement = engine.Statement
 
 // Result is what executing a statement did, which an Around hook reads.
-type Result = dbtype.Result
+type Result = veloxtype.Result
 
 // Rewrite is a hook that may change a statement before it is rendered, or
 // refuse it by returning an error. Rewrite hooks run in the order given to
@@ -703,7 +703,7 @@ type Rewrite = engine.Rewrite
 type Around = engine.Around
 
 // Tag is a string a context carries to every statement run with it.
-type Tag = dbtype.Tag
+type Tag = veloxtype.Tag
 
 // WithTags returns ctx with the tags kv (key, value, key, value, …) added: a
 // key already on ctx keeps its place and takes the new value; a new key is
@@ -748,22 +748,22 @@ func TxRetries(opts ...TxOption) int { return engine.TxRetries(opts...) }
 func WithoutTx(ctx context.Context) context.Context { return engine.WithoutTx(ctx) }
 
 // TxAround is a hook that wraps a transaction.
-type TxAround = dbtype.TxAround
+type TxAround = veloxtype.TxAround
 
 // TxInfo describes a transaction to the hooks.
-type TxInfo = dbtype.TxInfo
+type TxInfo = veloxtype.TxInfo
 
 // TxRetry is an attempt that TxRetrySerializable retried.
-type TxRetry = dbtype.TxRetry
+type TxRetry = veloxtype.TxRetry
 
 // TxOutcome is how a transaction's attempt ended.
-type TxOutcome = dbtype.TxOutcome
+type TxOutcome = veloxtype.TxOutcome
 
 // The outcomes of an attempt.
 const (
-	TxCommit   = dbtype.TxCommit   // fn returned nil and the commit succeeded
-	TxRollback = dbtype.TxRollback // fn returned an error, or panicked
-	TxError    = dbtype.TxError    // begin or commit failed, or the transaction's deadline passed
+	TxCommit   = veloxtype.TxCommit   // fn returned nil and the commit succeeded
+	TxRollback = veloxtype.TxRollback // fn returned an error, or panicked
+	TxError    = veloxtype.TxError    // begin or commit failed, or the transaction's deadline passed
 )
 
 // WithTxAround adds a transaction hook. The first one given is the
@@ -771,7 +771,7 @@ const (
 func WithTxAround(h TxAround) Option { return engine.WithTxAround(h) }
 
 // ValidationError is a value a column's validators refused; nothing was sent.
-type ValidationError = dbtype.ValidationError
+type ValidationError = veloxtype.ValidationError
 
 // Pred is a condition on entity E, made by a column handle or by And, Or and
 // Not. It is the typed form of Predicate, as Order is of OrderTerm.

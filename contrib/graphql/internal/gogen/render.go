@@ -1,9 +1,9 @@
 // Package gogen writes the Go code velox.graphqls binds to: the Go types
 // gqlgen's autobind finds in the generated package, named after the SDL types
 // they bind to, and the methods and functions their fields resolve through.
-// It writes gql_<label>.go for each entity with a GraphQL type (its types,
+// It writes <label>_gql.go for each entity with a GraphQL type (its types,
 // its edge methods, its root connection function, and its mutation inputs
-// and mutations, which mutation.go writes), and gql_node.go with Node and
+// and mutations, which mutation.go writes), and node_gql.go with Node and
 // Nodes.
 //
 // Every name comes from sdl.Build, which the SDL is rendered from too, so the
@@ -68,7 +68,7 @@ func Render(m *plugin.Model, outPath, outPkg string) ([]plugin.File, error) {
 			return nil, fmt.Errorf("schema %s: the model gives it no label or no handles, which velox-gen names its Go after", e.Name)
 		}
 		if e.Label == "node" {
-			return nil, fmt.Errorf("schema %s: its Go file would be gql_node.go, which holds Node and Nodes; rename the schema", e.Name)
+			return nil, fmt.Errorf("schema %s: its Go file would be node_gql.go, which holds Node and Nodes; rename the schema", e.Name)
 		}
 		f, err := r.typeFile(t)
 		if err != nil {
@@ -213,7 +213,7 @@ func (f *file) finish(name, pkg string) (plugin.File, error) {
 	return plugin.File{Path: name, Content: string(out)}, nil
 }
 
-// typeFile is gql_<label>.go, t's Go types.
+// typeFile is <label>_gql.go, t's Go types.
 func (r *renderer) typeFile(t *sdl.Type) (plugin.File, error) {
 	e := t.Entity
 	f := newFile()
@@ -262,7 +262,7 @@ func (r *renderer) typeFile(t *sdl.Type) (plugin.File, error) {
 	if err := r.writeMutations(f, t); err != nil {
 		return plugin.File{}, err
 	}
-	return f.finish("gql_"+e.Label+".go", r.outPkg)
+	return f.finish(e.Label+"_gql.go", r.outPkg)
 }
 
 func (r *renderer) writeNode(f *file, t *sdl.Type) error {
@@ -602,7 +602,7 @@ func (r *renderer) whereType(f *file, t *sdl.Type, w sdl.WhereField) (string, er
 	return "*" + elem, nil
 }
 
-// nodeFile is gql_node.go: Node and Nodes, which look up the nodes of the
+// nodeFile is node_gql.go: Node and Nodes, which look up the nodes of the
 // Node types by their IDs.
 func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 	for _, name := range []string{"Node", "Nodes"} {
@@ -719,7 +719,7 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 		f.p("\t}")
 		f.p("\treturn []%s.Noder{}, nil", vgql)
 		f.p("}")
-		return f.finish("gql_node.go", r.outPkg)
+		return f.finish("node_gql.go", r.outPkg)
 	}
 	f.p("// Nodes returns the nodes with the global IDs ids, in their order, with nil")
 	f.p("// for an ID no row has. It decodes every ID first, and then looks up each")
@@ -794,7 +794,7 @@ func (r *renderer) nodeFile(s *sdl.Surface) (plugin.File, error) {
 	}
 	f.p("\treturn out, nil")
 	f.p("}")
-	return f.finish("gql_node.go", r.outPkg)
+	return f.finish("node_gql.go", r.outPkg)
 }
 
 // quoteList is vs as Go string literals, separated by commas.

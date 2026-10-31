@@ -46,8 +46,8 @@ The rest did not have to. Measured with the type checker: `Statement`, `Predicat
   an alias of an engine type therefore lists its exported fields and methods, and
   `TestAliasDocsListMembers` fails when they drift apart. It is still less than a real
   declaration: no links per field. Decision 0021 moved the plain data types to the
-  public package `dbtype`, whose aliases need no list.
-- The engine's exports are wide, 375 top-level names, 53 of them aliases of `dbtype`,
+  public package `veloxtype`, whose aliases need no list.
+- The engine's exports are wide, 375 top-level names, 53 of them aliases of `veloxtype`,
   because the root needs them. Only this module can import them.
 - Caller capture and the check for `One` and `Many` knew one package, and now know both.
 

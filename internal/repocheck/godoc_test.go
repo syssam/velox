@@ -19,7 +19,7 @@ import (
 var citation = regexp.MustCompile(`\x{00a7}|\bRuling \d|\b(design|spec) (section|note)\b|\bsection \d|\b(schema|policy|routing|observability|core|graphql) (design|spec)\b|\bdocs/(specs|plans|reviews)\b|\b(GraphQL|API|core|policy|schema)\s+plan\s+\d`)
 
 // TestGodocCitesNoSpec: no comment in the public packages of this module (the
-// root package and dbtype, tests included; schema and its subpackages; plugin;
+// root package and veloxtype, tests included; schema and its subpackages; plugin;
 // and cmd/velox-gen) and no string literal in them, which holds the messages a
 // user sees, cites a design document or a ruling.
 func TestGodocCitesNoSpec(t *testing.T) {
@@ -44,7 +44,7 @@ func TestGodocCitesNoSpec(t *testing.T) {
 		}
 	}
 	add(".", true, false)
-	add("dbtype", true, false)
+	add("veloxtype", true, false)
 	add("schema", false, true)
 	add("plugin", false, false)
 	add("migrate", false, false)
@@ -79,7 +79,7 @@ func TestGodocCitesNoSpec(t *testing.T) {
 // TestGeneratedOnlyAPIIsMarked: exactly the declarations that the package
 // documentation lists under "Generated code" say "For generated code." just
 // after their first sentence, and the section names each of them as a whole
-// word. A name that lives in dbtype says it in both packages' documentation.
+// word. A name that lives in veloxtype says it in both packages' documentation.
 func TestGeneratedOnlyAPIIsMarked(t *testing.T) {
 	names := []string{"Desc", "ColumnDesc", "EdgeDesc", "EdgeTo", "EdgeBidi", "EdgeThrough", "Meta", "MetaOnce",
 		"BindPolicy", "BindHooks", "BoundPolicy", "BoundHooks", "Lazy", "Validate", "ValidateSet", "GeneratedCodeIsVersion6"}
@@ -88,11 +88,11 @@ func TestGeneratedOnlyAPIIsMarked(t *testing.T) {
 		listed[n] = true
 	}
 	docs, pkgDoc := packageDocs(t, repoRoot(), "velox")
-	dbtypeDocs, _ := packageDocs(t, filepath.Join(repoRoot(), "dbtype"), "dbtype")
-	if _, ok := dbtypeDocs["ColumnDesc"]; !ok {
-		t.Fatal("dbtype declares no ColumnDesc: the check reads nothing there")
+	veloxtypeDocs, _ := packageDocs(t, filepath.Join(repoRoot(), "veloxtype"), "veloxtype")
+	if _, ok := veloxtypeDocs["ColumnDesc"]; !ok {
+		t.Fatal("veloxtype declares no ColumnDesc: the check reads nothing there")
 	}
-	for pkg, docs := range map[string]map[string]string{"velox": docs, "dbtype": dbtypeDocs} {
+	for pkg, docs := range map[string]map[string]string{"velox": docs, "veloxtype": veloxtypeDocs} {
 		for name, doc := range docs {
 			mentions := strings.Contains(strings.Join(strings.Fields(doc), " "), generatedMarker)
 			switch {
@@ -112,8 +112,8 @@ func TestGeneratedOnlyAPIIsMarked(t *testing.T) {
 		if !strings.Contains(strings.Join(strings.Fields(docs[n]), " "), generatedMarker) {
 			t.Errorf("%s: documentation %.40q does not say %q", n, docs[n], generatedMarker)
 		}
-		if doc, ok := dbtypeDocs[n]; ok && !strings.Contains(strings.Join(strings.Fields(doc), " "), generatedMarker) {
-			t.Errorf("dbtype.%s: documentation %.40q does not say %q", n, doc, generatedMarker)
+		if doc, ok := veloxtypeDocs[n]; ok && !strings.Contains(strings.Join(strings.Fields(doc), " "), generatedMarker) {
+			t.Errorf("veloxtype.%s: documentation %.40q does not say %q", n, doc, generatedMarker)
 		}
 		if !regexp.MustCompile(`\b` + n + `\b`).MatchString(section) {
 			t.Errorf("the Generated code section does not name %s", n)
@@ -208,7 +208,7 @@ func TestExportedMethodsHaveDocs(t *testing.T) {
 		}
 	}
 	add(".", false)
-	add("dbtype", false)
+	add("veloxtype", false)
 	add("migrate", false)
 	add("plugin", false)
 	add("schema", true)
@@ -278,7 +278,7 @@ func firstDoc(gs ...*ast.CommentGroup) string {
 
 // TestAliasDocsListMembers: go doc shows neither the fields nor the methods of an
 // alias of an internal type, so the doc comment of each alias of an engine type lists
-// its exported ones. An alias of a dbtype type lists none: its documentation is
+// its exported ones. An alias of a veloxtype type lists none: its documentation is
 // public, and links through.
 func TestAliasDocsListMembers(t *testing.T) {
 	fset := token.NewFileSet()
@@ -297,9 +297,9 @@ func TestAliasDocsListMembers(t *testing.T) {
 				switch aliasedPackage(ts.Type) {
 				case "engine":
 					docs[ts.Name.Name] = g.Doc.Text()
-				case "dbtype":
+				case "veloxtype":
 					if strings.Contains(g.Doc.Text(), "Its fields:") || strings.Contains(g.Doc.Text(), "Its methods:") {
-						t.Errorf("the alias %s lists members that dbtype documents", ts.Name.Name)
+						t.Errorf("the alias %s lists members that veloxtype documents", ts.Name.Name)
 					}
 				}
 			}
@@ -377,12 +377,12 @@ func aliasedPackage(e ast.Expr) string {
 	return ""
 }
 
-// TestDBTypeIsReExported: every exported name in dbtype is declared by the root
-// under the same name, as that name of dbtype, so application code never needs to
-// import it. dbtype's non-test files import only the standard library.
-func TestDBTypeIsReExported(t *testing.T) {
+// TestVeloxTypeIsReExported: every exported name in veloxtype is declared by the root
+// under the same name, as that name of veloxtype, so application code never needs to
+// import it. veloxtype's non-test files import only the standard library.
+func TestVeloxTypeIsReExported(t *testing.T) {
 	fset := token.NewFileSet()
-	dir := filepath.Join(repoRoot(), "dbtype")
+	dir := filepath.Join(repoRoot(), "veloxtype")
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -400,7 +400,7 @@ func TestDBTypeIsReExported(t *testing.T) {
 			// A standard-library path has no dot in its first element.
 			first, _, _ := strings.Cut(strings.Trim(im.Path.Value, `"`), "/")
 			if strings.Contains(first, ".") {
-				t.Errorf("%s imports %s: dbtype imports only the standard library", e.Name(), im.Path.Value)
+				t.Errorf("%s imports %s: veloxtype imports only the standard library", e.Name(), im.Path.Value)
 			}
 		}
 		for _, d := range f.Decls {
@@ -428,7 +428,7 @@ func TestDBTypeIsReExported(t *testing.T) {
 		}
 	}
 	if len(exported) < 25 {
-		t.Fatalf("dbtype exports only %d names: %v", len(exported), exported)
+		t.Fatalf("veloxtype exports only %d names: %v", len(exported), exported)
 	}
 	root, err := parser.ParseFile(fset, filepath.Join(repoRoot(), "api.go"), nil, parser.SkipObjectResolution)
 	if err != nil {
@@ -436,7 +436,7 @@ func TestDBTypeIsReExported(t *testing.T) {
 	}
 	reexported := map[string]bool{}
 	mark := func(name string, value ast.Expr) {
-		if sel, ok := value.(*ast.SelectorExpr); ok && aliasedPackage(sel) == "dbtype" && sel.Sel.Name == name {
+		if sel, ok := value.(*ast.SelectorExpr); ok && aliasedPackage(sel) == "veloxtype" && sel.Sel.Name == name {
 			reexported[name] = true
 		}
 	}
@@ -462,7 +462,7 @@ func TestDBTypeIsReExported(t *testing.T) {
 	}
 	for _, name := range exported {
 		if !reexported[name] {
-			t.Errorf("api.go does not declare %s = dbtype.%s", name, name)
+			t.Errorf("api.go does not declare %s = veloxtype.%s", name, name)
 		}
 	}
 }

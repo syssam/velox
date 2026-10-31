@@ -1,4 +1,4 @@
-package dbtype
+package veloxtype
 
 import (
 	"errors"

@@ -389,7 +389,7 @@ func TestGoCompiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate: %v\n%s", err, out)
 	}
-	for _, name := range []string{"gql_node.go", "gql_user.go", "gql_post.go", "gql_group.go", "gql_category.go", "gql_event.go", "gql_owner.go"} {
+	for _, name := range []string{"node_gql.go", "user_gql.go", "post_gql.go", "group_gql.go", "category_gql.go", "event_gql.go", "owner_gql.go"} {
 		if !strings.Contains(out, "gen/"+name+"\n") {
 			t.Errorf("no gen/%s in\n%s", name, out)
 		}
@@ -401,7 +401,7 @@ func TestGoCompiles(t *testing.T) {
 			t.Errorf("%s does not start with the one header:\n%s", name, got)
 		}
 	}
-	for _, name := range []string{"gql_secret.go", "gql_user_group.go", "gql_group_peer.go"} {
+	for _, name := range []string{"secret_gql.go", "user_group_gql.go", "group_peer_gql.go"} {
 		if _, err := os.Stat(filepath.Join(dir, "gen", name)); !os.IsNotExist(err) {
 			t.Errorf("%s: %v, want none: the type is skipped, or a join entity", name, err)
 		}
@@ -411,7 +411,7 @@ func TestGoCompiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner, err := os.ReadFile(filepath.Join(dir, "gen", "gql_owner.go"))
+	owner, err := os.ReadFile(filepath.Join(dir, "gen", "owner_gql.go"))
 	if err != nil {
 		t.Fatal(err)
 	}

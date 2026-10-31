@@ -373,8 +373,8 @@ func TestGenericTypesCompileSmall(t *testing.T) {
 // is instantiated per entity.
 func TestObservabilityIsNotGeneric(t *testing.T) {
 	fset := token.NewFileSet()
-	// Tag, Caller and the transaction hooks' types are in dbtype.
-	for _, name := range []string{"internal/engine/tags.go", "internal/engine/callers.go", "internal/engine/comment.go", "internal/engine/txhook.go", "dbtype/statement.go", "dbtype/tx.go"} {
+	// Tag, Caller and the transaction hooks' types are in veloxtype.
+	for _, name := range []string{"internal/engine/tags.go", "internal/engine/callers.go", "internal/engine/comment.go", "internal/engine/txhook.go", "veloxtype/statement.go", "veloxtype/tx.go"} {
 		f, err := parser.ParseFile(fset, filepath.Join(repoRoot(), name), nil, parser.SkipObjectResolution)
 		if err != nil {
 			t.Fatal(err)

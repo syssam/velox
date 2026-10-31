@@ -145,8 +145,8 @@
 // @goModel binds types to it and to the application's enum types.
 //
 // The plugin also writes the Go that gqlgen's autobind binds the SDL's types
-// to, in the generated package: gen/gql_<label>.go for each entity with a
-// type, and gen/gql_node.go with Node and Nodes. Each entity's file has:
+// to, in the generated package: gen/<label>_gql.go for each entity with a
+// type, and gen/node_gql.go with Node and Nodes. Each entity's file has:
 //   - IsNode and IDGQL on a Node, and the <Field>GQL getters;
 //   - the connection, edge, order and where types, each named after its
 //     GraphQL type, and the marshalers of velox-gen's enum types;

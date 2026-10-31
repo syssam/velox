@@ -56,7 +56,7 @@ func TestRun(t *testing.T) {
 			t.Errorf("%s has the generated-file header, which velox-gen adds", f.Path)
 		}
 	}
-	if resp.Error != "" || len(resp.Warnings) != 0 || strings.Join(paths, " ") != "velox.graphqls gql_node.go gql_user.go" ||
+	if resp.Error != "" || len(resp.Warnings) != 0 || strings.Join(paths, " ") != "velox.graphqls node_gql.go user_gql.go" ||
 		!strings.Contains(resp.Files[0].Content, "type User implements Node {\n") ||
 		!strings.HasPrefix(resp.Files[2].Content, "package gen\n") || !strings.Contains(resp.Files[2].Content, "type UserConnection struct {") {
 		t.Errorf("%+v", resp)
@@ -76,7 +76,7 @@ func TestRun(t *testing.T) {
 			Name: "Node", Label: "node", Handles: "Nodes", Tenant: -1, PrimaryKey: []int{0},
 			Fields:      []*plugin.Field{{Name: "id", GoName: "ID", Type: "int64"}, {Name: "x", GoName: "X", Type: "string"}},
 			Annotations: map[string]json.RawMessage{"graphql": json.RawMessage(`{"type":"Vertex"}`)},
-		}}}}), "gql_node.go"},
+		}}}}), "node_gql.go"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			resp := respond(t, c.in)

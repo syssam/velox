@@ -36,7 +36,7 @@ curl -s -H 'Content-Type: application/json' -H 'X-Org-ID: 1' \
    `email` has `graphql.Directives(graphql.Directive{Name: "admin"})`: see
    below.
 2. velox-gen with the plugin, which writes `gen/`: the entities, the GraphQL
-   schema `gen/velox.graphqls`, and the `gql_*.go` files it binds to (IDs,
+   schema `gen/velox.graphqls`, and the `*_gql.go` files it binds to (IDs,
    connections, edges, orders, where inputs, `Node` and `Nodes`):
 
    ```sh

@@ -9,7 +9,7 @@ There are five Go modules. A change that touches more than one is checked in
 each.
 
 - The root, `github.com/syssam/velox`: the runtime, with `schema`, `migrate`,
-  `plugin`, `dbtype` (the plain data types the root re-exports) and
+  `plugin`, `veloxtype` (the plain data types the root re-exports) and
   `cmd/velox-gen`. `internal/` holds the non-generic runtime (`engine`), the
   generator (`codegen`), the DDL writer (`ddl`), the generated test models
   (`testmodel`, `testbind`), the database tests (`integration`), the tests of the

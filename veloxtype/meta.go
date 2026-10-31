@@ -1,4 +1,4 @@
-package dbtype
+package veloxtype
 
 // ColumnDesc describes one column of a velox.Desc. For generated code.
 // velox.ColumnInfo is its runtime view.

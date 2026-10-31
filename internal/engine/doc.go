@@ -2,5 +2,5 @@
 // metadata, rendering, scoping, relations' loading, routing, transactions, and DB, the
 // pipeline every statement goes through. Its types are public through aliases in the
 // root package, which documents them; the root's DB wraps this one. The plain data types
-// are in package dbtype, and dbtype.go aliases them for the rest of this package.
+// are in package veloxtype, and veloxtype.go aliases them for the rest of this package.
 package engine
