@@ -1,4 +1,4 @@
-package velox_test
+package conn_test
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5"
@@ -19,6 +20,8 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/internal/bindmodel/bindtype"
+	"github.com/syssam/velox2/internal/conn"
+	"github.com/syssam/velox2/internal/engine"
 	"github.com/syssam/velox2/internal/testmodel"
 	"github.com/syssam/velox2/internal/testmodel/kind"
 	_ "modernc.org/sqlite"
@@ -71,37 +74,37 @@ func TestPgxStdlibDetected(t *testing.T) {
 		{"wrapped connector", sql.OpenDB(wrapConnector{stdlib.GetConnector(*cfg)}), false},
 	} {
 		t.Cleanup(func() { _ = c.db.Close() })
-		if got := velox.PgxStdlib(c.db); got != c.want {
+		if got := conn.PgxStdlib(c.db); got != c.want {
 			t.Errorf("%s: PgxStdlib = %v, want %v", c.name, got, c.want)
 		}
 	}
 }
 
 func TestSQLConnDetects(t *testing.T) {
-	if !velox.ConnColumnScanning(velox.SQLConn(openSQL(t, "pgx", unreachablePG))) {
+	if !connColumnScanning(velox.SQLConn(openSQL(t, "pgx", unreachablePG))) {
 		t.Error("SQLConn of a pgx stdlib DB does not scan through colRows")
 	}
-	if velox.ConnColumnScanning(velox.SQLConn(openSQL(t, "sqlite", ":memory:"))) {
+	if connColumnScanning(velox.SQLConn(openSQL(t, "sqlite", ":memory:"))) {
 		t.Error("SQLConn of a SQLite DB scans through colRows")
 	}
 }
 
 func TestSQLiteAndMySQLKeepPlainRows(t *testing.T) {
-	if velox.RowsAreColumnScanning(velox.Open(velox.SQLite, openSQL(t, "sqlite", ":memory:"))) {
+	if rowsAreColumnScanning(velox.Open(velox.SQLite, openSQL(t, "sqlite", ":memory:"))) {
 		t.Error("SQLite's rows are colRows")
 	}
 	dsn := os.Getenv("VELOX_TEST_MYSQL")
 	if dsn == "" {
 		return
 	}
-	if velox.RowsAreColumnScanning(velox.Open(velox.MySQL, openSQL(t, "mysql", dsn))) {
+	if rowsAreColumnScanning(velox.Open(velox.MySQL, openSQL(t, "mysql", dsn))) {
 		t.Error("MySQL's rows are colRows")
 	}
 }
 
 // scanOne runs sql on db and scans its first row into dst.
 func scanOne(db *velox.DB, sql string, dst ...any) (err error) {
-	r, err := velox.RawRows(db, sql, nil)
+	r, err := rawRows(db, sql, nil)
 	if err != nil {
 		return err
 	}
@@ -120,9 +123,9 @@ func scanOne(db *velox.DB, sql string, dst ...any) (err error) {
 func TestColumnScanRowsKeepCallerSlice(t *testing.T) {
 	raw := openSQL(t, "sqlite", "file::memory:")
 	raw.SetMaxOpenConns(1)
-	wrapped, plain := velox.OpenColumnScan(velox.SQLite, raw, true), velox.OpenColumnScan(velox.SQLite, raw, false)
+	wrapped, plain := openColumnScan(velox.SQLite, raw, true), openColumnScan(velox.SQLite, raw, false)
 
-	r, err := velox.RawRows(wrapped, "SELECT 'a' UNION ALL SELECT 'b' UNION ALL SELECT 'c' UNION ALL SELECT 'd'", nil)
+	r, err := rawRows(wrapped, "SELECT 'a' UNION ALL SELECT 'b' UNION ALL SELECT 'c' UNION ALL SELECT 'd'", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +188,7 @@ func TestColumnScanRowsKeepCallerSlice(t *testing.T) {
 	}
 	pg := openSQL(t, "pgx", dsn)
 	for _, wrap := range []bool{true, false} {
-		err := scanOne(velox.OpenColumnScan(velox.Postgres, pg, wrap), "SELECT 'a'", (*time.Time)(nil))
+		err := scanOne(openColumnScan(velox.Postgres, pg, wrap), "SELECT 'a'", (*time.Time)(nil))
 		if err == nil || !strings.Contains(err.Error(), "destination pointer is nil") {
 			t.Errorf("PostgreSQL, wrap %v: error %v, want destination pointer is nil", wrap, err)
 		}
@@ -208,7 +211,7 @@ func TestColumnScanAllocsPerQuery(t *testing.T) {
 	}
 	ctx := velox.WithAllTenants(context.Background(), "test")
 	allocs := func(wrap bool, limit int) float64 {
-		db := velox.OpenColumnScan(velox.SQLite, raw, wrap)
+		db := openColumnScan(velox.SQLite, raw, wrap)
 		return testing.AllocsPerRun(50, func() {
 			invs, err := db.Query[testmodel.Invoice]().Limit(limit).All(ctx)
 			if err != nil || len(invs) != limit {
@@ -321,7 +324,7 @@ func TestColumnScanMatchesPlain(t *testing.T) {
 		t.Fatal("VELOX_ITEST_REQUIRE=1 and VELOX_TEST_POSTGRES is unset")
 	}
 	for _, tg := range targets {
-		wrapped, plain := velox.OpenColumnScan(tg.d, tg.db, true), velox.OpenColumnScan(tg.d, tg.db, false)
+		wrapped, plain := openColumnScan(tg.d, tg.db, true), openColumnScan(tg.d, tg.db, false)
 		cells := 0
 		for _, expr := range tg.exprs {
 			for _, typ := range matchDests() {
@@ -348,3 +351,39 @@ func TestColumnScanMatchesPlain(t *testing.T) {
 		}
 	}
 }
+
+var t0 = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+// engineOf returns db's engine.DB: a DB holds nothing else, which the root's Tx
+// also relies on when it gives its fn the DB of an engine.DB.
+func engineOf(db *velox.DB) *engine.DB { return (*engine.DB)(unsafe.Pointer(db)) }
+
+// openColumnScan returns a DB on db whose rows are colRows when wrap is set,
+// whatever db's driver.
+func openColumnScan(d velox.Dialect, db *sql.DB, wrap bool) *velox.DB {
+	return velox.OpenConn(d, engine.NewConn(conn.NewSQLCols(db, wrap), 0))
+}
+
+// rawRows runs sql on db's executor, bypassing the pipeline: the baseline of
+// hand-written code.
+func rawRows(db *velox.DB, sql string, args []any) (interface {
+	Next() bool
+	Scan(...any) error
+	Close()
+}, error) {
+	return engineOf(db).Ex.Query(context.Background(), sql, args)
+}
+
+// rowsAreColumnScanning runs SELECT 1 on db, a DB made by Open, and reports
+// whether its rows are colRows.
+func rowsAreColumnScanning(db *velox.DB) bool {
+	r, err := engineOf(db).Ex.Query(context.Background(), "SELECT 1", nil)
+	if err != nil {
+		panic(err)
+	}
+	defer r.Close()
+	return conn.RowsColumnScanning(r)
+}
+
+// connColumnScanning reports whether c's executor makes colRows.
+func connColumnScanning(c velox.Conn) bool { return engine.ConnExec(c).(conn.SQL).ColumnScanning() }
