@@ -75,14 +75,13 @@ func dialectExecutor(d Dialect, ex Executor) Executor {
 // NewDB returns an unsharded DB of dialect d on ex, its primary.
 func NewDB(d Dialect, ex Executor, opts []Option) DB {
 	cfg := NewConfig(opts)
-	ex = dialectExecutor(d, ex)
 	if cfg.ShardFor != nil {
 		panic("velox: WithShardFor is for OpenShards; Open and OpenConn open a DB on one shard")
 	}
 	if len(cfg.Replicas) > 0 {
 		return DB{D: d, Rt: NewRouter(d, ex, cfg.Replicas), Cfg: cfg}
 	}
-	return DB{D: d, Ex: ex, Cfg: cfg}
+	return DB{D: d, Ex: dialectExecutor(d, ex), Cfg: cfg}
 }
 
 // OpenShards is velox.OpenShards's DB.

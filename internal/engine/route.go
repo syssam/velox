@@ -270,7 +270,7 @@ func NewRouter(d Dialect, primary Executor, replicas []Conn) *Router {
 // replica valid only on another dialect panics, in a message that
 // starts with what.
 func NewShard(d Dialect, primary Executor, replicas []Conn, what string) *ShardConn {
-	sh := &ShardConn{Primary: primary}
+	sh := &ShardConn{Primary: dialectExecutor(d, primary)}
 	for i, c := range replicas {
 		if c.only != 0 && c.only != d {
 			panic(fmt.Sprintf("velox: %s replica %d is valid only on %s; the DB is %s", what, i, c.only, d))
