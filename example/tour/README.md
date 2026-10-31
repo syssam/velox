@@ -44,8 +44,7 @@ go run ./tour
    from a unique-constraint violation.
 8. A report across tenants with `velox.WithAllTenants` and a reason: the paid
    invoices summed by the database with `velox.Sum`, and its per-tenant
-   totals with raw SQL (`db.Raw`), which the builder cannot express (a
-   `GROUP BY`) and which also takes a reason.
+   totals with `velox.SumBy`, a `GROUP BY`.
 9. Deadlines set at `Open` with `velox.WithDeadlines`, and a transaction that
    runs past its `velox.TxTimeout`.
 
