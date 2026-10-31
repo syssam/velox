@@ -126,5 +126,5 @@ func Hint(out string) string {
 	if !strings.Contains(out, offlineMessage) {
 		return ""
 	}
-	return "\nthe module cache lacks a dependency of the test modules (it is read offline): run go mod download in the repository's root module and in contrib/graphql\n"
+	return "\nthe module cache lacks a dependency of the test modules (it is read offline): run go mod download all in the repository's root module and in contrib/graphql\n"
 }

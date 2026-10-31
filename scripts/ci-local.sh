@@ -41,6 +41,9 @@ go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run --allow-serial-runners ./...
 # Per-package coverage floors (scripts/coverage-floors.txt) are checked over the four modules' profiles
 # below, which are measured as CI measures them: with -race, and with the database tests as run.
+# The tests build modules offline, with gqlgen as a tool: they need its dependencies too,
+# which "go mod download" alone leaves out.
+go mod download all
 go test -race -count=1 -timeout 20m -coverpkg=./... -coverprofile="$root/cover-root.out" ./...
 go test -run XXX -fuzz '^FuzzRender$' -fuzztime 20s ./internal/engine
 go test -run XXX -fuzz '^FuzzQuote$' -fuzztime 10s ./internal/engine
@@ -113,7 +116,7 @@ go run github.com/mgechev/revive@v1.17.0 -config scripts/revive.toml -set_exit_s
 (
   cd contrib/graphql
   # The collection integration test builds an application offline, with gqlgen as a tool.
-  go mod download
+  go mod download all
   test -z "$(gofmt -l .)" || { echo "gofmt needed in contrib/graphql:"; gofmt -l .; exit 1; }
   go vet ./...
   go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run --allow-serial-runners ./...
