@@ -33,6 +33,56 @@ go tool velox-gen ./schema
 The last command reads the schema package `./schema` and writes the `gen`
 package.
 
+## A first look
+
+A schema is a struct with its fields:
+
+```go
+package schema
+
+import (
+	"github.com/syssam/velox2/schema"
+	"github.com/syssam/velox2/schema/field"
+)
+
+type User struct{ schema.Schema }
+
+func (User) Fields() []schema.Field {
+	return []schema.Field{
+		field.String("name"),
+		field.String("email").Unique(),
+		field.Int64("age"),
+	}
+}
+```
+
+`go tool velox-gen ./schema` writes the struct `gen.User` and its column handles
+`gen.Users`. A wrong column or value type does not compile:
+
+```go
+db := velox.Open(velox.SQLite, sqlDB)
+U := gen.Users
+
+ada := gen.User{Name: "Ada", Email: "ada@example.com", Age: 36}
+if err := db.Insert(&ada).Exec(ctx); err != nil { // sets ada.ID
+	return err
+}
+
+over30, err := db.Query[gen.User]().
+	Where(U.Age.GT(30)).
+	OrderBy(U.Age.Desc()).
+	Limit(10).
+	All(ctx)
+if err != nil {
+	return err
+}
+
+n, err := db.Update[gen.User]().
+	Set(U.Age.Add(1)).
+	Where(U.Email.EQ("ada@example.com")).
+	Exec(ctx)
+```
+
 ## Start
 
 [example/start](example/start/README.md) is the first example: create, read,
