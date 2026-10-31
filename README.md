@@ -13,7 +13,7 @@ migrations. It is before 1.0: the API can still change.
 - `github.com/syssam/velox2/contrib/veloxotel`: OpenTelemetry tracing and
   metrics.
 
-`example/` is a module of runnable examples.
+`examples/` is a module of runnable examples.
 
 ## Requirements
 
@@ -85,12 +85,12 @@ n, err := db.Update[gen.User]().
 
 ## Start
 
-[example/start](example/start/README.md) is the first example: create, read,
-update and delete on one entity. [example/README.md](example/README.md) lists
+[examples/start](examples/start/README.md) is the first example: create, read,
+update and delete on one entity. [examples/README.md](examples/README.md) lists
 the others.
 
 ```sh
-cd example
+cd examples
 go run ./start
 ```
 
@@ -106,7 +106,7 @@ There are two paths, and a directory is managed by one of them.
   schema package's `CREATE` statements, which Atlas reads through its
   `external_schema`.
 
-See [example/README.md](example/README.md#migrations) for both, and for
+See [examples/README.md](examples/README.md#migrations) for both, and for
 adopting an existing database.
 
 ## Documentation

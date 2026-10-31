@@ -27,9 +27,9 @@ an edge field that is not Nillable).
 ## Evidence
 
 - `Optional` and `Nillable` docs, schema/field/field.go.
-- `TestTablesNullable` (internal/gen/tables_test.go:453): on every dialect
+- `TestTablesNullable` (internal/codegen/tables_test.go:453): on every dialect
   "optional" is NOT NULL and "nillable" is NULL-able.
-- `TestLowerNullable` (internal/gen/lower_test.go:1151): the plugin model and
+- `TestLowerNullable` (internal/codegen/lower_test.go:1151): the plugin model and
   the core agree.
 - docs/specs/2026-10-20-api-cleanup-design.md §3 ruling 1 (:72), after old
   velox's `compiler/gen/type_field.go`.

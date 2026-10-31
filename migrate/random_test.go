@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/gen"
-	"github.com/syssam/velox2/internal/gen/loadjson"
+	"github.com/syssam/velox2/internal/codegen"
+	"github.com/syssam/velox2/internal/codegen/loadjson"
 	"github.com/syssam/velox2/migrate"
 )
 
@@ -405,11 +405,11 @@ func seedModels(t testing.TB, seed uint64, d velox.Dialect) (a, b *loadjson.Mode
 	a = randomModel(r)
 	b = mutate(r, a)
 	tables := func(what string, m *loadjson.Model) *migrate.Schema {
-		g, err := gen.Build(m)
+		g, err := codegen.Build(m)
 		if err != nil {
 			t.Fatalf("seed %d: Build refuses the generated %s model: %v\n%s", seed, what, err, modelJSON(m))
 		}
-		s, err := gen.Tables(g, d)
+		s, err := codegen.Tables(g, d)
 		if err != nil {
 			t.Fatalf("seed %d: Tables on %v refuses the generated %s model: %v\n%s", seed, d, what, err, modelJSON(m))
 		}

@@ -30,7 +30,7 @@ trap 'rm -rf "$tmp"' EXIT
 targets=(
   "root . ."
   "veloxotel contrib/veloxotel ."
-  "example-graphql example ./graphql"
+  "example-graphql examples ./graphql"
 )
 
 for t in "${targets[@]}"; do

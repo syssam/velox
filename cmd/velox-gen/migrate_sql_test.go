@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	velox2 "github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/gen"
+	"github.com/syssam/velox2/internal/codegen"
 	"github.com/syssam/velox2/migrate"
 )
 
@@ -243,8 +243,8 @@ func TestRelErrorsKeepsWhatIsOutside(t *testing.T) {
 		{"no position", "", "plain", "", "plain"},
 		{"relative", "schema/a.go:2", "plain", "schema/a.go:2", "plain"},
 	} {
-		var got *gen.Error
-		if !errors.As(relErrors(dir, &gen.Error{Pos: c.pos, Reason: c.reason}), &got) {
+		var got *codegen.Error
+		if !errors.As(relErrors(dir, &codegen.Error{Pos: c.pos, Reason: c.reason}), &got) {
 			t.Fatalf("%s: not a *gen.Error", c.name)
 		}
 		if got.Pos != c.wantPos || got.Reason != c.wantReason {
@@ -258,8 +258,8 @@ func TestRelErrorsKeepsWhatIsOutside(t *testing.T) {
 func TestRelErrorsAtTheRoot(t *testing.T) {
 	root := string(filepath.Separator)
 	reason := "a " + root + " b and " + root + "usr" + root + "lib"
-	var got *gen.Error
-	if !errors.As(relErrors(root, &gen.Error{Reason: reason}), &got) || got.Reason != reason {
+	var got *codegen.Error
+	if !errors.As(relErrors(root, &codegen.Error{Reason: reason}), &got) || got.Reason != reason {
 		t.Errorf("got %v, want the reason %q as it was", got, reason)
 	}
 }

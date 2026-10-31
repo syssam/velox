@@ -30,7 +30,7 @@ trap 'chmod -R u+w "$tmp" 2>/dev/null || true; rm -rf "$tmp"' EXIT
     "$goline" "$tmp" "$tmp/contrib/graphql" > "$tmp/warm/go.mod"
   (cd "$tmp/warm" && go mod tidy)
   go vet ./...
-  # CI unset: this job has no databases, and the mutation itest's TestMain
+  # CI unset: this job has no databases, and the mutation integration test's TestMain
   # fails a CI run without them. It runs on SQLite here.
   env -u CI go test -count=1 ./...
 )

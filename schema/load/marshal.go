@@ -15,7 +15,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/syssam/velox2/internal/gen/loadjson"
+	"github.com/syssam/velox2/internal/codegen/loadjson"
 	"github.com/syssam/velox2/schema"
 	"github.com/syssam/velox2/schema/internal/desc"
 )

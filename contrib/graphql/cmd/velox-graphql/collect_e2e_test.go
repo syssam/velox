@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// e2eCollectSchema is the schema of the collection itest: nested connections
+// e2eCollectSchema is the schema of the collection integration test: nested connections
 // and edges served through real gqlgen. Its tables share no name with the
 // other e2e apps'.
 //   - Author and Book are tenant-scoped.
@@ -97,7 +97,7 @@ func (*Review) Policy() velox.Policy[Review] {
 `
 
 // e2eCollectGqlgen is the application's gqlgen.yml.
-const e2eCollectGqlgen = `# gqlgen's configuration, as example/graphql/gqlgen.yml has it. skip_mod_tidy:
+const e2eCollectGqlgen = `# gqlgen's configuration, as examples/graphql/gqlgen.yml has it. skip_mod_tidy:
 # the test runs offline, and go mod tidy would look for the test dependencies
 # of gqlgen's own dependencies.
 skip_mod_tidy: true
@@ -901,7 +901,7 @@ func TestListEdgeCap(t *testing.T) {
 }
 `
 
-// TestCollectRun is the collection itest: it generates the application with
+// TestCollectRun is the collection integration test: it generates the application with
 // velox-gen and the plugin, then gqlgen, and runs its tests, which serve the
 // schema through gqlgen on SQLite always and on PostgreSQL (pgx and
 // database/sql) and MySQL when VELOX_TEST_POSTGRES and VELOX_TEST_MYSQL name

@@ -8,7 +8,7 @@ import (
 
 // e2eMutSchema is the schema of the mutation tests: every kind of edge a
 // create input sets, and a field of each kind the input treats apart. Its
-// tables share no name with internal/itest's.
+// tables share no name with internal/integration's.
 //   - Writer is tenant-scoped, with a validator (name), a Nillable field
 //     (bio), an Optional one with a Default (nick), an Optional number
 //     without one (score), a sensitive field (password) and an Optional JSON

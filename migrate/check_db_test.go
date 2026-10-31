@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/gen"
+	"github.com/syssam/velox2/internal/codegen"
 	"github.com/syssam/velox2/migrate"
 	"github.com/syssam/velox2/schema"
 	"github.com/syssam/velox2/schema/field"
@@ -38,18 +38,18 @@ func (ChkOrder) Annotations() []schema.Annotation {
 	}
 }
 
-// TestCheckOnRealDatabases: schema.Check goes from a schema through gen.Tables
+// TestCheckOnRealDatabases: schema.Check goes from a schema through codegen.Tables
 // and a plan to a fresh database, which enforces it, names it in a
 // *velox.ConstraintError and reads it back as no drift. A row that breaks no
 // check goes in.
 func TestCheckOnRealDatabases(t *testing.T) {
 	for _, d := range []velox.Dialect{velox.SQLite, velox.Postgres, velox.MySQL} {
 		t.Run(d.String(), func(t *testing.T) {
-			g, err := gen.Build(marshal(ChkOrder{}))
+			g, err := codegen.Build(marshal(ChkOrder{}))
 			if err != nil {
 				t.Fatal(err)
 			}
-			model, err := gen.Tables(g, d)
+			model, err := codegen.Tables(g, d)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -67,7 +67,7 @@ func TestCheckOnRealDatabases(t *testing.T) {
 
 			// The control: a check that differs is seen, on every dialect, so
 			// the empty report above is a comparison, not a blind spot.
-			other, err := gen.Tables(g, d)
+			other, err := codegen.Tables(g, d)
 			if err != nil {
 				t.Fatal(err)
 			}

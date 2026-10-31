@@ -181,7 +181,7 @@
 //
 // The application writes the root query's resolvers, one call each: Node
 // and Nodes for node and nodes, and the root connection function for each
-// QueryField. The example example/graphql in the velox2 repository is a
+// QueryField. The example in examples/graphql in the velox2 repository is a
 // whole server: a schema, its gqlgen.yml and its resolvers.
 //
 // # Mutations

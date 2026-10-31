@@ -15,7 +15,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/gen/loadjson"
+	"github.com/syssam/velox2/internal/codegen/loadjson"
 	"github.com/syssam/velox2/migrate"
 	"github.com/syssam/velox2/schema/field"
 	"github.com/syssam/velox2/schema/index"

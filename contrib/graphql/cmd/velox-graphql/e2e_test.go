@@ -141,7 +141,7 @@ func app(t *testing.T, files map[string]string, withGqlgen ...bool) (string, fun
 		"\tgithub.com/syssam/velox2/contrib/graphql/cmd/velox-graphql\n"
 	pins := ""
 	if gql {
-		sums = append(sums, "example/go.sum")
+		sums = append(sums, "examples/go.sum")
 		tools += "\tgithub.com/99designs/gqlgen\n"
 		pins = gqlgenPins(t, repo)
 	}

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/syssam/velox2/internal/gen"
+	"github.com/syssam/velox2/internal/codegen"
 	"github.com/syssam/velox2/migrate"
 )
 
@@ -190,15 +190,15 @@ func runMigrateDiff(args []string, dir string, env []string, stdout, stderr io.W
 		return 1
 	}
 	to, err := func() (*migrate.Schema, error) {
-		m, err := gen.Load(dir, pattern, env)
+		m, err := codegen.Load(dir, pattern, env)
 		if err != nil {
 			return nil, err
 		}
-		g, err := gen.Build(m)
+		g, err := codegen.Build(m)
 		if err != nil {
 			return nil, err
 		}
-		return gen.Tables(g, d.Config.Dialect)
+		return codegen.Tables(g, d.Config.Dialect)
 	}()
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", relErrors(dir, err))

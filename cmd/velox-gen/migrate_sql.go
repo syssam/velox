@@ -6,7 +6,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/syssam/velox2/internal/gen"
+	"github.com/syssam/velox2/internal/codegen"
 	"github.com/syssam/velox2/migrate"
 )
 
@@ -44,15 +44,15 @@ func runMigrateSQL(args []string, dir string, env []string, stdout, stderr io.Wr
 		return 1
 	}
 	to, err := func() (*migrate.Schema, error) {
-		m, err := gen.Load(dir, pattern, env)
+		m, err := codegen.Load(dir, pattern, env)
 		if err != nil {
 			return nil, err
 		}
-		g, err := gen.Build(m)
+		g, err := codegen.Build(m)
 		if err != nil {
 			return nil, err
 		}
-		return gen.Tables(g, dialect.d)
+		return codegen.Tables(g, dialect.d)
 	}()
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "velox-gen: %v\n", relErrors(dir, err))

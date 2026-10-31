@@ -39,7 +39,7 @@ contrib)
   clean
   git rev-parse -q --verify "refs/tags/$version" >/dev/null || { echo "release: no tag $version; run $0 root $version" >&2; exit 1; }
   # A failed tidy, such as of a tag not pushed yet, leaves the tree as it was.
-  trap 'git checkout -- contrib example' ERR
+  trap 'git checkout -- contrib examples' ERR
   tags=()
   for m in "${contribs[@]}"; do
     (
@@ -50,8 +50,8 @@ contrib)
     git add "$m/go.mod" "$m/go.sum"
     tags+=("$m/$version")
   done
-  (cd example && GOWORK=off go mod tidy)
-  git add example/go.mod example/go.sum
+  (cd examples && GOWORK=off go mod tidy)
+  git add examples/go.mod examples/go.sum
   trap - ERR
   git commit -q -m "release: contrib requires the root's $version"
   for t in "${tags[@]}"; do git tag -a "$t" -m "$t"; done
@@ -63,8 +63,8 @@ dev)
     (cd "$m" && go mod edit -require="$root@$placeholder" -replace="$root=../.." && GOWORK=off go mod tidy)
     git add "$m/go.mod" "$m/go.sum"
   done
-  (cd example && go mod edit -require="$root@$placeholder" && GOWORK=off go mod tidy)
-  git add example/go.mod example/go.sum
+  (cd examples && go mod edit -require="$root@$placeholder" && GOWORK=off go mod tidy)
+  git add examples/go.mod examples/go.sum
   git commit -q -m "release: contrib builds against the tree again, after $version"
   echo "Next: git push origin HEAD"
   ;;

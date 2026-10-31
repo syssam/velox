@@ -8,19 +8,19 @@ import (
 )
 
 func TestRelFile(t *testing.T) {
-	mods := []string{"github.com/syssam/velox2/example", "github.com/syssam/velox2", "gopkg.in/yaml.v3"}
+	mods := []string{"github.com/syssam/velox2/examples", "github.com/syssam/velox2", "gopkg.in/yaml.v3"}
 	for _, c := range []struct{ file, fn, mainPkg, want string }{
 		{"/src/velox2/db.go", "github.com/syssam/velox2.(*DB).Tx", "", "db.go"},
 		{"/src/velox2/internal/engine/pipeline.go", "github.com/syssam/velox2/internal/engine.(*DB).Plain", "", "internal/engine/pipeline.go"},
 		{"/src/velox2/internal/testrepo/testrepo.go", "github.com/syssam/velox2/internal/testrepo.FirstInvoice", "", "internal/testrepo/testrepo.go"},
 		// The longer module wins.
-		{"/src/velox2/example/billing/invoice.go", "github.com/syssam/velox2/example/billing.(*Invoice).Schema", "", "billing/invoice.go"},
-		{"/src/velox2/example/main.go", "main.run.func1", "github.com/syssam/velox2/example", "main.go"},
-		{"/src/velox2/example/tool/main.go", "main.run", "github.com/syssam/velox2/example/tool", "tool/main.go"},
+		{"/src/velox2/examples/billing/invoice.go", "github.com/syssam/velox2/examples/billing.(*Invoice).Schema", "", "billing/invoice.go"},
+		{"/src/velox2/examples/main.go", "main.run.func1", "github.com/syssam/velox2/examples", "main.go"},
+		{"/src/velox2/examples/tool/main.go", "main.run", "github.com/syssam/velox2/examples/tool", "tool/main.go"},
 		{"/src/velox2/callers_test.go", "github.com/syssam/velox2_test.TestX", "", "callers_test.go"},
 		{"/src/velox2/internal/testrepo/x_test.go", "github.com/syssam/velox2/internal/testrepo_test.TestX", "", "internal/testrepo/x_test.go"},
 		// -trimpath file names.
-		{"github.com/syssam/velox2/example/billing/invoice.go", "github.com/syssam/velox2/example/billing.F", "", "billing/invoice.go"},
+		{"github.com/syssam/velox2/examples/billing/invoice.go", "github.com/syssam/velox2/examples/billing.F", "", "billing/invoice.go"},
 		{"gopkg.in/yaml.v3@v3.0.1/decode.go", "gopkg.in/yaml%2ev3.(*decoder).unmarshal", "", "decode.go"},
 		{"/src/yaml/decode.go", "gopkg.in/yaml%2ev3.Unmarshal", "", "decode.go"},
 		// No module: the base name.
@@ -37,7 +37,7 @@ func TestPkgOf(t *testing.T) {
 		"github.com/syssam/velox2.(*DB).Tx":                                                                            "github.com/syssam/velox2",
 		"github.com/syssam/velox2/internal/engine.(*DB).Plain":                                                         "github.com/syssam/velox2/internal/engine",
 		"github.com/syssam/velox2.Query[go.shape.struct { github.com/syssam/velox2/internal/testmodel.ID int64 }].All": "github.com/syssam/velox2",
-		"github.com/syssam/velox2/example.run":                                                                         "github.com/syssam/velox2/example",
+		"github.com/syssam/velox2/examples.run":                                                                        "github.com/syssam/velox2/examples",
 		"github.com/syssam/velox2_test.TestX.func1":                                                                    "github.com/syssam/velox2_test",
 		"gopkg.in/yaml%2ev3.Marshal":                                                                                   "gopkg.in/yaml.v3",
 		"main.run.func1":                                                                                               "main",
@@ -55,7 +55,7 @@ func TestInPkg(t *testing.T) {
 		want    bool
 	}{
 		{"github.com/syssam/velox2.Query[go.shape.struct { github.com/syssam/velox2/internal/testmodel.ID int64 }].All", velox, true},
-		{"github.com/syssam/velox2/example.run", velox, false},
+		{"github.com/syssam/velox2/examples.run", velox, false},
 		{"github.com/syssam/velox2_test.TestX", velox, false},
 		{"gopkg.in/yaml%2ev3.Marshal", "gopkg.in/yaml.v3", true},
 	} {

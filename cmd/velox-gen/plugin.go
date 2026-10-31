@@ -16,7 +16,7 @@ import (
 	"unicode"
 
 	"github.com/syssam/velox2/internal/buildinfo"
-	"github.com/syssam/velox2/internal/gen"
+	"github.com/syssam/velox2/internal/codegen"
 	"github.com/syssam/velox2/plugin"
 )
 
@@ -299,11 +299,11 @@ func goIgnored(base string) bool { return !goBuilds(base, "package p\n", "") }
 
 // goBuilds reports whether go build builds, in every build, a .go file named
 // base that holds src, in a module of go version goVersion
-// (gen.GoFileSystems, which also decides the user's files in the output
+// (codegen.GoFileSystems, which also decides the user's files in the output
 // directory).
 func goBuilds(base, src, goVersion string) bool {
-	sys, _ := gen.GoFileSystems(base, []byte(src), goVersion)
-	return sys == gen.EverySystem
+	sys, _ := codegen.GoFileSystems(base, []byte(src), goVersion)
+	return sys == codegen.EverySystem
 }
 
 // checkPluginGo refuses a plugin's .go file whose build constraints, such as
@@ -339,8 +339,8 @@ func pluginFiles(f genFlags, gm *genModel, pattern, dir, pkg string, env []strin
 	if err != nil {
 		return nil, nil, err
 	}
-	req := plugin.Request{Protocol: plugin.ProtocolVersion, Generator: generator(), OutPackage: pkg, OutPath: outPath, Model: gen.PluginModel(gm.graph, gm.out)}
-	rel, byPlugin, err := runPlugins(f.plugins, mod, gen.ModuleGoVersion(out), req, env, stderr)
+	req := plugin.Request{Protocol: plugin.ProtocolVersion, Generator: generator(), OutPackage: pkg, OutPath: outPath, Model: codegen.PluginModel(gm.graph, gm.out)}
+	rel, byPlugin, err := runPlugins(f.plugins, mod, codegen.ModuleGoVersion(out), req, env, stderr)
 	if err != nil {
 		return nil, nil, err
 	}

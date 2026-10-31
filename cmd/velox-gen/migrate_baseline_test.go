@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	velox2 "github.com/syssam/velox2"
+	"github.com/syssam/velox2/internal/codegen"
 	"github.com/syssam/velox2/internal/ddl"
-	"github.com/syssam/velox2/internal/gen"
 	"github.com/syssam/velox2/migrate"
 )
 
@@ -159,15 +159,15 @@ func baselineEnt(t *testing.T, d velox2.Dialect) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, err := gen.Load(dir, "./schema", offlineEnv())
+	m, err := codegen.Load(dir, "./schema", offlineEnv())
 	if err != nil {
 		t.Fatal(err)
 	}
-	g, err := gen.Build(m)
+	g, err := codegen.Build(m)
 	if err != nil {
 		t.Fatal(err)
 	}
-	to, err := gen.Tables(g, d)
+	to, err := codegen.Tables(g, d)
 	if err != nil {
 		t.Fatal(err)
 	}

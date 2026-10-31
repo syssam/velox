@@ -11,8 +11,8 @@ import (
 	"unicode"
 
 	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/gen"
-	"github.com/syssam/velox2/internal/gen/loadjson"
+	"github.com/syssam/velox2/internal/codegen"
+	"github.com/syssam/velox2/internal/codegen/loadjson"
 	"github.com/syssam/velox2/migrate"
 	"github.com/syssam/velox2/schema"
 	"github.com/syssam/velox2/schema/edge"
@@ -290,11 +290,11 @@ func tables(d velox.Dialect, edit func(*loadjson.Model)) (*migrate.Schema, error
 	if edit != nil {
 		edit(m)
 	}
-	g, err := gen.Build(m)
+	g, err := codegen.Build(m)
 	if err != nil {
 		return nil, err
 	}
-	return gen.Tables(g, d)
+	return codegen.Tables(g, d)
 }
 
 // mustTables is tables for a hand-made from.

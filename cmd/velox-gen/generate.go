@@ -19,7 +19,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/syssam/velox2/internal/gen"
+	"github.com/syssam/velox2/internal/codegen"
 )
 
 // defaultSchema is the schema package when no package is named.
@@ -74,7 +74,7 @@ func schemaPackage(dir string, patterns, env []string) (string, error) {
 	if len(patterns) == 1 {
 		pattern = patterns[0]
 	}
-	importPath, schemas, err := gen.Inspect(dir, pattern, env)
+	importPath, schemas, err := codegen.Inspect(dir, pattern, env)
 	if err != nil {
 		return "", err
 	}
@@ -123,8 +123,8 @@ func (f genFlags) packageName(dir string) (string, error) {
 // genModel is the generator's view of a schema package: what Lower made of its
 // graph, and the names of every generated entity, join entities included.
 type genModel struct {
-	graph      *gen.Graph
-	out        *gen.Out // what Lower made of graph, for the plugins' model
+	graph      *codegen.Graph
+	out        *codegen.Out // what Lower made of graph, for the plugins' model
 	importPath string
 	names      []string
 	rels       []string // every relation's handle, e.g. "Users.Posts", join entities included
@@ -133,19 +133,19 @@ type genModel struct {
 // loadModel loads and builds the schema package at pattern and lowers it to
 // the names of its generated entities.
 func loadModel(dir, pattern, pkg string, env []string) (*genModel, error) {
-	importPath, _, err := gen.Inspect(dir, pattern, env)
+	importPath, _, err := codegen.Inspect(dir, pattern, env)
 	if err != nil {
 		return nil, err
 	}
-	m, err := gen.Load(dir, pattern, env)
+	m, err := codegen.Load(dir, pattern, env)
 	if err != nil {
 		return nil, relErrors(dir, err)
 	}
-	g, err := gen.Build(m)
+	g, err := codegen.Build(m)
 	if err != nil {
 		return nil, relErrors(dir, err)
 	}
-	o, err := gen.Lower(g, gen.Config{Package: pkg, SchemaPath: importPath})
+	o, err := codegen.Lower(g, codegen.Config{Package: pkg, SchemaPath: importPath})
 	if err != nil {
 		return nil, err
 	}
@@ -177,22 +177,22 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 	out := f.outDir(dir)
 	// A *FileError names a user's file: relative to dir, as other paths are.
 	failFile := func(err error) int {
-		if fe := (*gen.FileError)(nil); errors.As(err, &fe) {
+		if fe := (*codegen.FileError)(nil); errors.As(err, &fe) {
 			c := *fe
 			c.Path = relPath(dir, fe.Path)
 			return fail(&c)
 		}
 		return fail(err)
 	}
-	bound, err := gen.Methods(out, gm.names)
+	bound, err := codegen.Methods(out, gm.names)
 	if err != nil {
 		return failFile(err)
 	}
-	userDoc, err := gen.HasPackageDoc(out)
+	userDoc, err := codegen.HasPackageDoc(out)
 	if err != nil {
 		return fail(err)
 	}
-	files, err := gen.Generate(gm.graph, gen.Config{Package: pkg, SchemaPath: gm.importPath, Bound: bound, UserDoc: userDoc})
+	files, err := codegen.Generate(gm.graph, codegen.Config{Package: pkg, SchemaPath: gm.importPath, Bound: bound, UserDoc: userDoc})
 	if err != nil {
 		return failFile(err)
 	}
@@ -516,7 +516,7 @@ func runGenerateVerify(f genFlags, pattern, dir string, env []string, stdout, st
 	if fi, err := os.Stat(out); err != nil || !fi.IsDir() {
 		return fail(fmt.Errorf("%s is not a directory; run velox-gen to generate it first", relPath(dir, out)))
 	}
-	outPath, _, err := gen.Inspect(dir, out, env)
+	outPath, _, err := codegen.Inspect(dir, out, env)
 	if err != nil {
 		return fail(err)
 	}
@@ -532,7 +532,7 @@ func runGenerateVerify(f genFlags, pattern, dir string, env []string, stdout, st
 	}
 	// A plugin path that collides with a file of velox-gen's fails as it does
 	// in generate.
-	files, err := gen.Generate(gm.graph, gen.Config{Package: pkg, SchemaPath: gm.importPath})
+	files, err := codegen.Generate(gm.graph, codegen.Config{Package: pkg, SchemaPath: gm.importPath})
 	if err != nil {
 		return fail(err)
 	}

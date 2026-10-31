@@ -158,7 +158,7 @@
 // WithSession keeps a request reading its own writes from the primary for a
 // short window after a write; a replica that fails a read falls over to the
 // primary. OpenShards runs each statement on one shard, chosen from the
-// context's tenant (WithShardFor) or WithShard. See example/routing.
+// context's tenant (WithShardFor) or WithShard. See examples/routing.
 //
 // # Raw SQL
 //
@@ -247,7 +247,7 @@
 // compile.
 package velox
 
-//go:generate go run ./internal/handlegen/gen
+//go:generate go run ./internal/handlegen/cmd
 
 // GeneratedCodeIsVersion6 is referenced by every file velox-gen writes from a
 // schema package, so that generated code and this library fail to compile

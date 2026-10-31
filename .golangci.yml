@@ -6,7 +6,7 @@ linters:
     generated: disable
     rules:
       # gqlgen's output, which velox2 does not write and CI regenerates and diffs.
-      - path: ^example/graphql/graph/generated\.go$
+      - path: ^examples/graphql/graph/generated\.go$
         linters: [staticcheck]
       # The engine's exports are for the root package; its public types are documented
       # on their aliases in api.go, which TestAliasDocsListMembers checks, or in dbtype.

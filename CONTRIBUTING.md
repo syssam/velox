@@ -11,15 +11,15 @@ each.
 - The root, `github.com/syssam/velox2`: the runtime, with `schema`, `migrate`,
   `plugin`, `dbtype` (the plain data types the root re-exports) and
   `cmd/velox-gen`. `internal/` holds the non-generic runtime (`engine`), the
-  generator (`gen`), the DDL writer (`ddl`), the generated test models
-  (`testmodel`, `bindmodel`), the database tests (`itest`), the tests of the
+  generator (`codegen`), the DDL writer (`ddl`), the generated test models
+  (`testmodel`, `testbind`), the database tests (`integration`), the tests of the
   public API (`apitest`) and the tests of the repository itself (`repocheck`).
   `bench/` holds the baselines and the scale check. `scripts/` holds CI's
   scripts.
 - `contrib/graphql`: the annotations, the `velox-graphql` plugin and the
   `veloxgql` runtime.
 - `contrib/veloxotel`: OpenTelemetry tracing and metrics.
-- `example`: the runnable examples. Each has its schema, its generated code and
+- `examples`: the runnable examples. Each has its schema, its generated code and
   its migrations.
 - `bench/compare`: the harness that compares velox2's build and runtime cost
   with old velox and ent. CI checks it but does not run it.
@@ -37,10 +37,10 @@ order:
    `go test -race -count=1` with a coverage profile. Then the nine root fuzz
    targets, `velox-gen -check` and `velox-gen verify` on the test models, and
    revive on their generated code.
-2. `example`: `gofmt`, `go vet`, golangci-lint, revive on the generated code,
+2. `examples`: `gofmt`, `go vet`, golangci-lint, revive on the generated code,
    then the tests with a coverage profile. Then `velox-gen -check` and
    `velox-gen verify` on every example, the migrations replay, and gqlgen's
-   output for `example/graphql`.
+   output for `examples/graphql`.
 3. `contrib/veloxotel`: `gofmt`, `go vet`, golangci-lint, then the tests with
    a coverage profile.
 4. `contrib/graphql`: `gofmt`, `go vet`, golangci-lint, the tests with a
@@ -68,7 +68,7 @@ go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run ./...
 go test -race -count=1 ./...
 ```
 
-Run them in the root, in `example`, in `contrib/veloxotel` and in
+Run them in the root, in `examples`, in `contrib/veloxotel` and in
 `contrib/graphql`.
 
 ## Database tests
@@ -112,24 +112,24 @@ CI fails when a generated file is stale.
 
   ```sh
   go run ./cmd/velox-gen -out internal/testmodel -package testmodel ./internal/testmodel/schema
-  go run ./cmd/velox-gen -out internal/bindmodel -package bindmodel ./internal/bindmodel/schema
-  cd example && go tool velox-gen -out ./start/gen ./start/schema
+  go run ./cmd/velox-gen -out internal/testbind -package testbind ./internal/testbind/schema
+  cd examples && go tool velox-gen -out ./start/gen ./start/schema
   ```
 
-  Do the last line for each example directory. `example/graphql` also needs
+  Do the last line for each example directory. `examples/graphql` also needs
   `-plugin velox-graphql` and `go -C graphql tool gqlgen generate`. The commands
   CI runs to check them are in `scripts/ci-local.sh`.
 - Golden files are rewritten with the test package's `-update` flag. Run it for
   one package, and read the diff before you commit it:
 
   ```sh
-  go test ./internal/gen -update
+  go test ./internal/codegen -update
   ```
 
-  The root module's packages with the flag are `internal/gen`, `internal/ddl`,
+  The root module's packages with the flag are `internal/codegen`, `internal/ddl`,
   `migrate` and `cmd/velox-gen`. In `contrib/graphql` they are
   `internal/gogen` and `internal/sdl`. Each example's test has it too, for its
-  `testdata/output.golden`: run `go test ./start -update` in `example`.
+  `testdata/output.golden`: run `go test ./start -update` in `examples`.
 
 A change to the generated code's shape replaces `GeneratedCodeIsVersionN` with
 `N+1`, in a minor release, with a line in `CHANGELOG.md`.
@@ -171,7 +171,7 @@ file with the fix, so that the fix keeps a test.
 ## Benchmarks
 
 `scripts/bench-compare.sh` runs the benchmarks of the root, `contrib/veloxotel`
-and `example/graphql`, and compares them with `bench/baseline` using benchstat.
+and `examples/graphql`, and compares them with `bench/baseline` using benchstat.
 It only reports: the baselines come from one machine, so read allocs/op and B/op
 across machines and sec/op only on the same hardware. The budget tests enforce
 allocation counts.
@@ -189,7 +189,7 @@ go run ./bench/scale -n 500 -s 100 -check bench/scale/thresholds.json
 go run ./bench/scale -n 500 -s 100 -graphql -check bench/scale/thresholds.json
 ```
 
-`go test -run '^$' -bench '^BenchmarkScan$' -benchmem -count 6 ./internal/itest`
+`go test -run '^$' -bench '^BenchmarkScan$' -benchmem -count 6 ./internal/integration`
 (with the database variables set) measures the read path on every database;
 `docs/decisions/0018-pgx-stdlib-scan-wrapper.md` has its before and after.
 

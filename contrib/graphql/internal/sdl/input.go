@@ -360,9 +360,9 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]edgeInput, error) {
 // is NULL-able, such as a self edge's. velox refuses such a key nil
 // (velox.ColumnDesc.RequiredEdge), and the database's ON DELETE SET NULL can
 // still clear it. velox-gen marks the same columns: a Nillable field held by
-// a Required edge that owns it (internal/gen/lower.go, OutField.RequiredEdge),
+// a Required edge that owns it (internal/codegen/lower.go, OutField.RequiredEdge),
 // which the plugin model gives as Required, OwnsKey and Field
-// (internal/gen/plugin.go), with the field Nullable.
+// (internal/codegen/plugin.go), with the field Nullable.
 func requiredKey(t *plugin.Entity, fk *plugin.Field) bool {
 	if t == nil || fk == nil || !fk.Nullable {
 		return false

@@ -249,7 +249,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/syssam/velox2/internal/gen"
+	"github.com/syssam/velox2/internal/codegen"
 	"github.com/syssam/velox2/plugin"
 )
 
@@ -391,7 +391,7 @@ func runVersion(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	_, _ = fmt.Fprintf(stdout, "%s (generated code %d, plugin protocol %d, model %d)\n",
-		generator(), gen.GeneratedCodeVersion, plugin.ProtocolVersion, plugin.ModelVersion)
+		generator(), codegen.GeneratedCodeVersion, plugin.ProtocolVersion, plugin.ModelVersion)
 	return 0
 }
 
@@ -456,7 +456,7 @@ func relPath(dir, path string) string {
 	return path
 }
 
-// relErrors shows the positions of err's *gen.Error values, as errors.Join
+// relErrors shows the positions of err's *codegen.Error values, as errors.Join
 // joined them, relative to dir when their files are inside it. That covers
 // the positions inside a Reason too.
 func relErrors(dir string, err error) error {
@@ -469,7 +469,7 @@ func relErrors(dir string, err error) error {
 	changed := false
 	for i, e := range errs {
 		out[i] = e
-		if ge, ok := e.(*gen.Error); ok {
+		if ge, ok := e.(*codegen.Error); ok {
 			c := *ge
 			if ge.Pos != "" {
 				c.Pos = relPos(dir, ge.Pos)

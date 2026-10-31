@@ -95,7 +95,7 @@ func TestDiffSelfIsEmpty(t *testing.T) {
 			}
 		}
 	})
-	paths, err := filepath.Glob("../internal/gen/testdata/tables/*.json")
+	paths, err := filepath.Glob("../internal/codegen/testdata/tables/*.json")
 	if err != nil || len(paths) != 3 {
 		t.Fatalf("goldens %v, %v", paths, err)
 	}

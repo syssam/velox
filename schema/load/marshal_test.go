@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/syssam/velox2/internal/gen"
-	"github.com/syssam/velox2/internal/gen/loadjson"
+	"github.com/syssam/velox2/internal/codegen"
+	"github.com/syssam/velox2/internal/codegen/loadjson"
 	"github.com/syssam/velox2/schema"
 	"github.com/syssam/velox2/schema/edge"
 	"github.com/syssam/velox2/schema/field"
@@ -437,18 +437,18 @@ func TestTypedConstructorsEqualGoType(t *testing.T) {
 		},
 	} {
 		var out [2]string
-		var lowered [2]*gen.Out
+		var lowered [2]*codegen.Out
 		for i, f := range c {
 			m := marshal(t, pair{f: f})
 			lf := m.Schemas[0].Fields[0]
 			if lf.Pos == "" {
 				t.Fatalf("%s: no position", name)
 			}
-			g, err := gen.Build(m)
+			g, err := codegen.Build(m)
 			if err != nil {
 				t.Fatalf("%s: build: %v", name, err)
 			}
-			if lowered[i], err = gen.Lower(g, gen.Config{}); err != nil {
+			if lowered[i], err = codegen.Lower(g, codegen.Config{}); err != nil {
 				t.Fatalf("%s: lower: %v", name, err)
 			}
 			lf.Pos = ""

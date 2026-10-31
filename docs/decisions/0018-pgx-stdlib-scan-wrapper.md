@@ -56,7 +56,7 @@ generated code does not change.
 - `TestColumnScanRowsKeepCallerSlice`, `TestColumnScanAllocsPerQuery`,
   `FuzzColumnScan`, `TestScanWrapsClassification` and
   `TestPgxMirrorIsCurrent`.
-- `BenchmarkScan` (internal/itest), 6 runs each on an Apple M3 Max, before at
+- `BenchmarkScan` (internal/integration), 6 runs each on an Apple M3 Max, before at
   load 12–30 and after at load 5–9; benchstat's `postgres-sql` rows:
 
 ```

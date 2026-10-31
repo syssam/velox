@@ -14,8 +14,8 @@ import (
 	"testing/fstest"
 
 	"github.com/syssam/velox2"
-	"github.com/syssam/velox2/internal/gen"
-	"github.com/syssam/velox2/internal/gen/loadjson"
+	"github.com/syssam/velox2/internal/codegen"
+	"github.com/syssam/velox2/internal/codegen/loadjson"
 	"github.com/syssam/velox2/migrate"
 	"github.com/syssam/velox2/schema"
 	"github.com/syssam/velox2/schema/edge"
@@ -589,11 +589,11 @@ func (RowOver) Fields() []schema.Field {
 func TestMigrateMySQLRowLimit(t *testing.T) {
 	d := velox.MySQL
 	build := func(s schema.Interface) (*migrate.Schema, error) {
-		g, err := gen.Build(marshal(s))
+		g, err := codegen.Build(marshal(s))
 		if err != nil {
 			return nil, err
 		}
-		return gen.Tables(g, d)
+		return codegen.Tables(g, d)
 	}
 	if _, err := build(RowOver{}); err == nil || !strings.Contains(err.Error(), "these need 65536") {
 		t.Errorf("65536 bytes: %v; want the row limit's refusal", err)
@@ -637,11 +637,11 @@ func (NaMember) Edges() []schema.Edge {
 func TestDriftNoAction(t *testing.T) {
 	for _, d := range []velox.Dialect{velox.Postgres, velox.MySQL} {
 		t.Run(d.String(), func(t *testing.T) {
-			g, err := gen.Build(marshal(NaTeam{}, NaMember{}))
+			g, err := codegen.Build(marshal(NaTeam{}, NaMember{}))
 			if err != nil {
 				t.Fatal(err)
 			}
-			model, err := gen.Tables(g, d)
+			model, err := codegen.Tables(g, d)
 			if err != nil {
 				t.Fatal(err)
 			}

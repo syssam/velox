@@ -22,7 +22,7 @@ names the column. An application that wants the upsert time names it.
 ## Evidence
 
 - `InsertQuery.OnConflict`'s doc, insert.go (commit d8c039d).
-- `TestUpsertUpdateBranchReadBack` (internal/itest/writes_test.go:283), on
+- `TestUpsertUpdateBranchReadBack` (internal/integration/writes_test.go:283), on
   every database: `updated_at` stays `t0`.
 - `ExampleInsertQuery_OnConflict` (example_test.go:192).
 - Controller ruling 2, docs/plans/2026-10-28-hardening-5-tests.md.

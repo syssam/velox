@@ -1,0 +1,49 @@
+package codegen
+
+import (
+	"bytes"
+	"strings"
+	"testing"
+
+	"github.com/syssam/velox2/schema"
+	"github.com/syssam/velox2/schema/field"
+	"github.com/syssam/velox2/schema/index"
+)
+
+func TestDescribeText(t *testing.T) {
+	var b bytes.Buffer
+	if err := Describe(&b, mustBuild(t, User{}, Post{}, Group{}), false); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"User (users)", "org_id", "tenant", "O2M → Post", "M2M → Group", "user_groups(user_id, group_id)", "pointer"} {
+		if !strings.Contains(b.String(), want) {
+			t.Errorf("missing %q in\n%s", want, b.String())
+		}
+	}
+}
+
+type partial struct{ schema.Schema }
+
+func (partial) Fields() []schema.Field { return []schema.Field{field.Int64("a"), field.Int64("b")} }
+func (partial) Indexes() []schema.Index {
+	return []schema.Index{index.Fields("a").Where("a < b AND b > 0 & 1")}
+}
+
+func TestDescribeJSONDoesNotEscapeHTML(t *testing.T) {
+	var b bytes.Buffer
+	if err := Describe(&b, mustBuild(t, partial{}), true); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(b.String(), `"where": "a < b AND b > 0 & 1"`) || !strings.HasSuffix(b.String(), "}\n") {
+		t.Fatalf("got\n%s", b.String())
+	}
+}
+
+func TestDescribeDeterministic(t *testing.T) {
+	var a, b bytes.Buffer
+	_ = Describe(&a, mustBuild(t, User{}, Post{}, Group{}, Node{}), true)
+	_ = Describe(&b, mustBuild(t, Node{}, Group{}, Post{}, User{}), true)
+	if a.String() != b.String() || !strings.HasPrefix(a.String(), "{") {
+		t.Fatal("describe -json depends on the order of the schemas")
+	}
+}

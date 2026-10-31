@@ -55,15 +55,15 @@ go test -run XXX -fuzz '^FuzzColumnScan$' -fuzztime 10s ./internal/conn
 go build -o bin/velox-gen ./cmd/velox-gen
 bin/velox-gen -check -out internal/testmodel -package testmodel ./internal/testmodel/schema
 bin/velox-gen verify -out internal/testmodel ./internal/testmodel/schema
-bin/velox-gen -check -out internal/bindmodel -package bindmodel ./internal/bindmodel/schema
-bin/velox-gen verify -out internal/bindmodel ./internal/bindmodel/schema
+bin/velox-gen -check -out internal/testbind -package testbind ./internal/testbind/schema
+bin/velox-gen verify -out internal/testbind ./internal/testbind/schema
 # golangci-lint's revive skips generated files; revive itself lints velox-gen's.
-go run github.com/mgechev/revive@v1.17.0 -config scripts/revive.toml -set_exit_status ./internal/testmodel ./internal/bindmodel
+go run github.com/mgechev/revive@v1.17.0 -config scripts/revive.toml -set_exit_status ./internal/testmodel ./internal/testbind
 
 # The example is its own module: its own vet, lint, tests and generated files.
 (
-  cd example
-  test -z "$(gofmt -l .)" || { echo "gofmt needed in example:"; gofmt -l .; exit 1; }
+  cd examples
+  test -z "$(gofmt -l .)" || { echo "gofmt needed in examples:"; gofmt -l .; exit 1; }
   go vet ./...
   go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run --allow-serial-runners ./...
   # golangci-lint's revive skips generated files; revive itself lints velox-gen's.
@@ -112,7 +112,7 @@ go run github.com/mgechev/revive@v1.17.0 -config scripts/revive.toml -set_exit_s
 # under VELOX_TEST_POSTGRES and VELOX_TEST_MYSQL, exported above.
 (
   cd contrib/graphql
-  # The collection itest builds an application offline, with gqlgen as a tool.
+  # The collection integration test builds an application offline, with gqlgen as a tool.
   go mod download
   test -z "$(gofmt -l .)" || { echo "gofmt needed in contrib/graphql:"; gofmt -l .; exit 1; }
   go vet ./...
@@ -149,7 +149,7 @@ if [ "${VELOX_CI_MATRIX:-}" = 1 ]; then
   "${compose[@]}" down -v
   VELOX_CI_POSTGRES_IMAGE=$pg14 "${compose[@]}" up -d --wait
   go test -race -count=1 -timeout 20m ./...
-  (cd example && go test -race -count=1 ./...)
+  (cd examples && go test -race -count=1 ./...)
   (cd contrib/veloxotel && go test -race -count=1 ./...)
   (cd contrib/graphql && go test -race -count=1 ./...)
 fi

@@ -2,7 +2,7 @@
 
 `root.txt`, `veloxotel.txt` and `example-graphql.txt` are `go test -bench` output
 (`-count 6 -benchtime 200ms -benchmem`) for the root module, `contrib/veloxotel`
-and `example`'s `./graphql`. `scripts/bench-compare.sh` runs the same
+and `examples`'s `./graphql`. `scripts/bench-compare.sh` runs the same
 benchmarks and compares them with these files using benchstat (pinned in the
 script). CI and `scripts/ci-local.sh` run it after the scale steps.
 
