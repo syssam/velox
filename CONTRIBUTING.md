@@ -154,15 +154,16 @@ There are ten. CI runs each for 10 or 20 seconds:
 go test -run XXX -fuzz '^FuzzRender$' -fuzztime 10s .
 ```
 
-The targets are `FuzzRender`, `FuzzQuote`, `FuzzScope`, `FuzzRenderWrite`,
-`FuzzConstraint` and `FuzzColumnScan` in the root, `FuzzLiteral` in
-`internal/ddl`, `FuzzSplit` and `FuzzDiff` in `migrate`, and `FuzzCost` in
-`contrib/graphql/veloxgql` (run from `contrib/graphql`).
-`.github/workflows/ci.yml` and `scripts/ci-local.sh` list them with their
-packages and times.
+The targets are `FuzzRender`, `FuzzScope` and `FuzzRenderWrite` in the root,
+`FuzzQuote` and `FuzzConstraint` in `internal/engine`, `FuzzColumnScan` in
+`internal/conn`, `FuzzLiteral` in `internal/ddl`, `FuzzSplit` and `FuzzDiff` in
+`migrate`, and `FuzzCost` in `contrib/graphql/veloxgql` (run from
+`contrib/graphql`). `.github/workflows/ci.yml` and `scripts/ci-local.sh` list
+them with their packages and times.
 
 A new target needs a line in `ci.yml` and one in `ci-local.sh`. Anchor its name
-with `^` and `$`. A crash writes a file under `testdata/fuzz`. Commit that
+with `^` and `$`. `go test -fuzz` exits 0 when its pattern matches nothing, so
+`TestFuzzLinesNameRealTargets` checks each line against its package. A crash writes a file under `testdata/fuzz`. Commit that
 file with the fix, so that the fix keeps a test.
 
 ## Benchmarks

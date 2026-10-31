@@ -66,14 +66,14 @@ jobs:
         if: matrix.pg == '18'
         run: |
           go test -run XXX -fuzz '^FuzzRender$' -fuzztime 20s .
-          go test -run XXX -fuzz '^FuzzQuote$' -fuzztime 10s .
+          go test -run XXX -fuzz '^FuzzQuote$' -fuzztime 10s ./internal/engine
           go test -run XXX -fuzz '^FuzzScope$' -fuzztime 10s .
           go test -run XXX -fuzz '^FuzzLiteral$' -fuzztime 10s ./internal/ddl
           go test -run XXX -fuzz '^FuzzSplit$' -fuzztime 10s ./migrate
           go test -run XXX -fuzz '^FuzzRenderWrite$' -fuzztime 10s .
-          go test -run XXX -fuzz '^FuzzConstraint$' -fuzztime 10s .
+          go test -run XXX -fuzz '^FuzzConstraint$' -fuzztime 10s ./internal/engine
           go test -run XXX -fuzz '^FuzzDiff$' -fuzztime 10s ./migrate
-          go test -run XXX -fuzz '^FuzzColumnScan$' -fuzztime 10s .
+          go test -run XXX -fuzz '^FuzzColumnScan$' -fuzztime 10s ./internal/conn
       - name: generated files are current and every entity is valid
         run: |
           go build -o bin/velox-gen ./cmd/velox-gen
