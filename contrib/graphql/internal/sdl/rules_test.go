@@ -397,7 +397,7 @@ func TestDefaultOnNonNillableNumber(t *testing.T) {
 // zeroIsUnset's kinds are those of velox-gen's rule 36: bool, and the types
 // of its numeric set, read from its source so that the two cannot drift.
 func TestZeroIsUnsetMatchesVeloxGen(t *testing.T) {
-	path := filepath.Join("..", "..", "..", "..", "internal", "gen", "build.go")
+	path := filepath.Join("..", "..", "..", "..", "internal", "codegen", "build.go")
 	f, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
 	if err != nil {
 		t.Fatal(err)
