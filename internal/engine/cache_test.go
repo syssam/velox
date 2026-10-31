@@ -1,4 +1,4 @@
-package velox_test
+package engine_test
 
 import (
 	"context"
@@ -7,18 +7,19 @@ import (
 	"testing"
 
 	"github.com/syssam/velox2"
+	"github.com/syssam/velox2/internal/fakeconn"
 	"github.com/syssam/velox2/internal/testmodel"
 )
 
 // TestOneRowUsesTheCache: the budget above assumes the shape is cached.
 func TestOneRowUsesTheCache(t *testing.T) {
-	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Rows: [][]any{invoiceRow(1)}})
+	db := openFake(velox.Postgres, &fakeconn.Exec{Rows: [][]any{invoiceRow(1)}})
 	for range 3 {
 		if _, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(ctx); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if n := velox.CacheSize(db); n != 1 {
+	if n := cacheSize(db); n != 1 {
 		t.Errorf("cache holds %d shapes after one shape ran three times", n)
 	}
 }
@@ -28,7 +29,7 @@ func TestOneRowUsesTheCache(t *testing.T) {
 // entity's table, even when the garbage collector reuses the memory of an
 // EntityInfo an earlier statement used.
 func TestRewriteCanReplaceTheEntity(t *testing.T) {
-	e := &velox.FakeExec{}
+	e := &fakeconn.Exec{}
 	tables := [2]string{"invoices_a", "invoices_b"}
 	var chose string
 	call := 0
@@ -40,7 +41,7 @@ func TestRewriteCanReplaceTheEntity(t *testing.T) {
 		st.Entity = &info
 		return nil
 	}
-	db := velox.OpenFake(velox.Postgres, e, velox.WithRewrite(perTenant))
+	db := openFake(velox.Postgres, e, velox.WithRewrite(perTenant))
 	q := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1)
 	wrong := 0
 	for i := range 3000 {
@@ -63,13 +64,13 @@ func TestRewriteCanReplaceTheEntity(t *testing.T) {
 
 	// The statement whose entity a hook replaced is rendered without the
 	// cache: running it again does not grow the cache.
-	before := velox.CacheSize(db)
+	before := cacheSize(db)
 	for range 3 {
 		if _, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1).All(ctx); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if after := velox.CacheSize(db); after != before {
+	if after := cacheSize(db); after != before {
 		t.Errorf("cache grew from %d to %d shapes for statements whose entity a hook replaced", before, after)
 	}
 }

@@ -1,4 +1,4 @@
-package velox_test
+package engine_test
 
 import (
 	"context"
@@ -9,13 +9,14 @@ import (
 	"time"
 
 	"github.com/syssam/velox2"
+	"github.com/syssam/velox2/internal/fakeconn"
 )
 
 // TestRollbackIsBounded: a rollback velox sends on a context it detached
 // from the caller's is bounded, so a dead connection cannot hang Tx: after fn
 // fails, after a nested fn fails, and after fn's ctx was canceled.
 func TestRollbackIsBounded(t *testing.T) {
-	defer velox.SetRollbackTimeout(50 * time.Millisecond)()
+	defer setRollbackTimeout(50 * time.Millisecond)()
 	boom := errors.New("boom")
 	bounded := func(t *testing.T, what string, start, dl time.Time) {
 		t.Helper()
@@ -33,15 +34,15 @@ func TestRollbackIsBounded(t *testing.T) {
 		}
 	}
 
-	e := &velox.FakeExec{BlockRollback: true}
-	db := velox.OpenFake(velox.Postgres, e)
+	e := &fakeconn.Exec{BlockRollback: true}
+	db := openFake(velox.Postgres, e)
 	start := time.Now()
 	err := db.Tx(ctx, func(context.Context, *velox.DB) error { return boom })
 	unbounded(t, "ROLLBACK", err, start)
 	bounded(t, "ROLLBACK", start, e.RollbackDeadline)
 
-	e = &velox.FakeExec{BlockRollback: true}
-	db = velox.OpenFake(velox.Postgres, e)
+	e = &fakeconn.Exec{BlockRollback: true}
+	db = openFake(velox.Postgres, e)
 	var nested error
 	var nestedStart, nestedDeadline time.Time
 	_ = db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
@@ -56,8 +57,8 @@ func TestRollbackIsBounded(t *testing.T) {
 		t.Errorf("ROLLBACK TO: %v, want it to say so", nested)
 	}
 
-	e = &velox.FakeExec{BlockRollback: true}
-	db = velox.OpenFake(velox.Postgres, e)
+	e = &fakeconn.Exec{BlockRollback: true}
+	db = openFake(velox.Postgres, e)
 	cctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	start = time.Now()

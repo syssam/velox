@@ -1,4 +1,4 @@
-package velox_test
+package engine_test
 
 import (
 	"context"
@@ -8,20 +8,22 @@ import (
 	"time"
 
 	"github.com/syssam/velox2"
+	"github.com/syssam/velox2/internal/engine"
+	"github.com/syssam/velox2/internal/fakeconn"
 	"github.com/syssam/velox2/internal/testmodel"
 )
 
 func TestTenantContextLaterWins(t *testing.T) {
 	bg := context.Background()
 	ctx := velox.WithAllTenants(velox.WithTenant(bg, int64(7)), "nightly billing")
-	if id, all := velox.TenantOf(ctx); id != nil || all != "nightly billing" {
+	if id, all := engine.TenantFrom(ctx); id != nil || all != "nightly billing" {
 		t.Errorf("WithTenant then WithAllTenants: id %v, all %q", id, all)
 	}
 	ctx = velox.WithTenant(velox.WithAllTenants(bg, "nightly billing"), int64(7))
-	if id, all := velox.TenantOf(ctx); id != int64(7) || all != "" {
+	if id, all := engine.TenantFrom(ctx); id != int64(7) || all != "" {
 		t.Errorf("WithAllTenants then WithTenant: id %v, all %q", id, all)
 	}
-	if id, all := velox.TenantOf(bg); id != nil || all != "" {
+	if id, all := engine.TenantFrom(bg); id != nil || all != "" {
 		t.Errorf("no tenant: id %v, all %q", id, all)
 	}
 }
@@ -33,7 +35,7 @@ func TestTenantBypassNeedsAReason(t *testing.T) {
 			t.Errorf("WithAllTenants with the reason %q changed the context", reason)
 		}
 	}
-	if id, all := velox.TenantOf(velox.WithAllTenants(ctx, "")); id != int64(7) || all != "" {
+	if id, all := engine.TenantFrom(velox.WithAllTenants(ctx, "")); id != int64(7) || all != "" {
 		t.Errorf("WithAllTenants with no reason: id %v, all %q", id, all)
 	}
 }
@@ -45,10 +47,10 @@ func TestSkipPolicyNeedsAReason(t *testing.T) {
 			t.Errorf("WithoutPolicy with the reason %q changed the context", reason)
 		}
 	}
-	if got := velox.PolicyBypass(velox.WithoutPolicy(ctx, "support tool")); got != "support tool" {
+	if got := engine.PolicyBypassReason(velox.WithoutPolicy(ctx, "support tool")); got != "support tool" {
 		t.Errorf("PolicyBypass = %q", got)
 	}
-	if got := velox.PolicyBypass(ctx); got != "" {
+	if got := engine.PolicyBypassReason(ctx); got != "" {
 		t.Errorf("PolicyBypass of a plain context = %q", got)
 	}
 }
@@ -57,13 +59,13 @@ func TestWithTagsMerges(t *testing.T) {
 	bg := context.Background()
 	parent := velox.WithTags(bg, "route", "a", "user", "1")
 	child := velox.WithTags(parent, "route", "b", "team", "x")
-	if got, want := velox.TagsOf(child), []velox.Tag{{Key: "route", Value: "b"}, {Key: "user", Value: "1"}, {Key: "team", Value: "x"}}; !reflect.DeepEqual(got, want) {
+	if got, want := engine.TagsFrom(child), []velox.Tag{{Key: "route", Value: "b"}, {Key: "user", Value: "1"}, {Key: "team", Value: "x"}}; !reflect.DeepEqual(got, want) {
 		t.Errorf("child: %v, want %v", got, want)
 	}
-	if got, want := velox.TagsOf(parent), []velox.Tag{{Key: "route", Value: "a"}, {Key: "user", Value: "1"}}; !reflect.DeepEqual(got, want) {
+	if got, want := engine.TagsFrom(parent), []velox.Tag{{Key: "route", Value: "a"}, {Key: "user", Value: "1"}}; !reflect.DeepEqual(got, want) {
 		t.Errorf("parent: %v, want %v", got, want)
 	}
-	if got := velox.TagsOf(bg); got != nil {
+	if got := engine.TagsFrom(bg); got != nil {
 		t.Errorf("no tags: %v", got)
 	}
 }
@@ -77,13 +79,13 @@ func TestWithTagsNoPairs(t *testing.T) {
 	if got := velox.WithTags(parent); got != parent {
 		t.Errorf("WithTags(parent) = %v, want parent itself", got)
 	}
-	if got, want := velox.TagsOf(velox.WithTags(parent)), []velox.Tag{{Key: "route", Value: "a"}}; !reflect.DeepEqual(got, want) {
+	if got, want := engine.TagsFrom(velox.WithTags(parent)), []velox.Tag{{Key: "route", Value: "a"}}; !reflect.DeepEqual(got, want) {
 		t.Errorf("tags %v, want %v", got, want)
 	}
 }
 
 func TestTagsEditedByAHookStayInTheStatement(t *testing.T) {
-	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Rows: [][]any{invoiceRow(1)}}, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+	db := openFake(velox.Postgres, &fakeconn.Exec{Rows: [][]any{invoiceRow(1)}}, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
 		st.Tags[0].Value = "changed"
 		return nil
 	}))
@@ -91,7 +93,7 @@ func TestTagsEditedByAHookStayInTheStatement(t *testing.T) {
 	if _, err := db.Query[testmodel.Invoice]().Limit(1).All(tctx); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := velox.TagsOf(tctx), []velox.Tag{{Key: "route", Value: "a"}}; !reflect.DeepEqual(got, want) {
+	if got, want := engine.TagsFrom(tctx), []velox.Tag{{Key: "route", Value: "a"}}; !reflect.DeepEqual(got, want) {
 		t.Errorf("context's tags: %v, want %v", got, want)
 	}
 }
@@ -102,14 +104,14 @@ func TestWithoutTx(t *testing.T) {
 	if got := velox.WithoutTx(ctx); got != ctx {
 		t.Error("WithoutTx changed a context without the mark")
 	}
-	db := velox.OpenFake(velox.Postgres, &velox.FakeExec{Rows: [][]any{invoiceRow(1)}})
+	db := openFake(velox.Postgres, &fakeconn.Exec{Rows: [][]any{invoiceRow(1)}})
 	tagged := velox.WithTags(ctx, "route", "POST /pay")
 	err := db.Tx(tagged, func(ctx context.Context, tx *velox.DB) error {
 		free := velox.WithoutTx(ctx)
-		if got, want := velox.TagsOf(free), velox.TagsOf(ctx); !reflect.DeepEqual(got, want) || len(got) == 0 {
+		if got, want := engine.TagsFrom(free), engine.TagsFrom(ctx); !reflect.DeepEqual(got, want) || len(got) == 0 {
 			t.Errorf("tags %v, want %v", got, want)
 		}
-		if id, all := velox.TenantOf(free); id != nil || all == "" {
+		if id, all := engine.TenantFrom(free); id != nil || all == "" {
 			t.Errorf("tenant %v, %q: the WithAllTenants of the caller's ctx is lost", id, all)
 		}
 		if a, _ := free.Deadline(); !a.Equal(func() time.Time { d, _ := ctx.Deadline(); return d }()) {
