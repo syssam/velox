@@ -26,6 +26,7 @@ neither of the other two drivers: it recognizes their errors by type name.
   which is useful as it stands, and `velox.DriverConn`, whose parameter an
   application cannot name. If third-party drivers are wanted later, `internal/conn`
   can be promoted without breaking anything; the reverse could not be done.
+  (`velox.DriverConn` was removed on 2026-10-31: veloxpgx calls the engine directly.)
 - The core treats pgx as it treats the other two drivers: `*pgconn.PgError` and
   `*pgconn.ConnectError` by type name, PgError's fields by name, `ErrConnClosed`
   and `ErrTxClosed` by type and text, `pgx.Rows`'s columns through a method called

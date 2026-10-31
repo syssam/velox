@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"go/token"
 	"io"
+	"io/fs"
 	"maps"
 	"os"
 	"os/exec"
@@ -294,8 +295,10 @@ func runGenerate(f genFlags, pattern, dir string, env []string, stdout, stderr i
 func checkEntry(dir, p string, isDir bool) error {
 	fi, err := os.Lstat(p)
 	switch {
-	case err != nil:
+	case errors.Is(err, fs.ErrNotExist):
 		return nil
+	case err != nil:
+		return err
 	case fi.Mode()&os.ModeSymlink != 0:
 		return fmt.Errorf("%s is a symbolic link; velox-gen writes only regular files below real directories; move it", relPath(dir, p))
 	case isDir && !fi.IsDir():

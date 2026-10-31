@@ -1,7 +1,7 @@
 package ddl
 
 import (
-	"crypto/md5"
+	"crypto/md5" //nolint:gosec // it shortens a name, and protects nothing
 	"fmt"
 	"hash/fnv"
 	"unicode/utf8"

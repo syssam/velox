@@ -5,6 +5,10 @@ on:
   pull_request: {}
 permissions:
   contents: read
+# A new push to a pull request replaces its run; main's runs all finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   test:
     name: test (PostgreSQL ${{ matrix.pg }})
@@ -17,6 +21,7 @@ jobs:
           - pg: "18"
             postgres-image: postgres:18@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     services:
       postgres:
         image: ${{ matrix.postgres-image }}
@@ -45,8 +50,8 @@ jobs:
       # The itests fail, rather than skip, when a database variable is unset.
       VELOX_ITEST_REQUIRE: "1"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
       - name: gofmt
@@ -165,9 +170,10 @@ jobs:
   # velox-graphql against the newest gqlgen. A red job says gqlgen moved.
   gqlgen-latest:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
       - run: scripts/gqlgen-latest.sh

@@ -387,7 +387,7 @@ func (lwRuneSchema) Fields() []schema.Field {
 func TestLowerRuneLen(t *testing.T) {
 	src := mustLower(t, Config{SchemaPath: lowerSchemaPath}, lwRuneSchema{}).entity("lwRuneSchema").CheckCode
 	for _, want := range []string{
-		"utf8.RuneCountInString(x) < 2", `"has fewer than 2 characters"`,
+		"utf8.RuneCountInString(x) < 2", `"length in characters is less than 2"`,
 	} {
 		if !strings.Contains(src, want) {
 			t.Errorf("the generated code has no %s:\n%s", want, src)

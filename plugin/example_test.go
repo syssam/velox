@@ -2,7 +2,6 @@ package plugin_test
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/syssam/velox2/plugin"
@@ -14,11 +13,15 @@ import (
 func ExampleRun() {
 	in := strings.NewReader(`{"plugin_protocol":2,"generator":"velox-gen","out_package":"gen","out_path":"example.com/app/gen",
 		"model":{"version":2,"schema_path":"example.com/app/schema","entities":[{"name":"User"}]}}`)
-	err := plugin.Run(plugin.Supports{}, in, os.Stdout, func(req *plugin.Request) ([]plugin.File, []string, error) {
-		fmt.Fprintln(os.Stderr, req.Model.Entities[0].Name)
+	var out strings.Builder
+	err := plugin.Run(plugin.Supports{Protocol: plugin.ProtocolVersion, Model: plugin.ModelVersion}, in, &out, func(req *plugin.Request) ([]plugin.File, []string, error) {
+		fmt.Println("entity", req.Model.Entities[0].Name)
 		return nil, nil, nil
 	})
 	fmt.Println(err)
+	// Output:
+	// entity User
+	// <nil>
 }
 
 // Snake, GoName and Plural are the names velox-gen derives, for a plugin to agree

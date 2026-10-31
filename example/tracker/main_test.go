@@ -238,6 +238,19 @@ func TestAuth(t *testing.T) {
 }
 
 // TestDeletedUser: a session outlives no user: its token stops working.
+// TestOrgNameCountsCharacters: the limit on an Org's name is in characters, so 100
+// characters of Chinese, 300 bytes, are valid and 101 are not.
+func TestOrgNameCountsCharacters(t *testing.T) {
+	org := gen.Org{Slug: "x", Name: strings.Repeat("陳", 100)}
+	if err := velox.Validate[gen.Org](&org, gen.Orgs.Name); err != nil {
+		t.Errorf("100 characters: %v", err)
+	}
+	org.Name += "陳"
+	if err := velox.Validate[gen.Org](&org, gen.Orgs.Name); err == nil {
+		t.Error("101 characters are valid")
+	}
+}
+
 // TestSlugCheck: the database holds a slug to lower case whatever code writes it.
 func TestSlugCheck(t *testing.T) {
 	targets(t, func(t *testing.T, c *client) {

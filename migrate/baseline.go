@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/syssam/velox2"
+	velox "github.com/syssam/velox2"
 )
 
 // Baseline reads the tables and enum types want names from db, a database
@@ -88,7 +88,7 @@ func adopt(inspected *Schema, notes []note, want *Schema) (*Schema, []Warning, e
 	if err := snap.validate("the baseline"); err != nil {
 		return nil, nil, err
 	}
-	warnings := append(c.warnings, missing...)
+	warnings := slices.Concat(c.warnings, missing)
 	sortWarnings(warnings)
 	return snap, warnings, nil
 }

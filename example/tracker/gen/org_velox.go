@@ -5,6 +5,7 @@ package gen
 import (
 	"errors"
 	"fmt"
+	"unicode/utf8"
 
 	"github.com/syssam/velox2"
 )
@@ -73,8 +74,8 @@ func orgDesc() velox.Desc[Org] {
 				if x == "" {
 					return errors.New("must not be empty")
 				}
-				if len(x) > 100 {
-					return errors.New("length is more than 100")
+				if utf8.RuneCountInString(x) > 100 {
+					return errors.New("length in characters is more than 100")
 				}
 			}
 			return nil

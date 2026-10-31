@@ -19,7 +19,7 @@ type Org struct{ schema.Schema }
 func (Org) Fields() []schema.Field {
 	return []schema.Field{
 		field.String("slug").NotEmpty().MaxLen(40).Unique(),
-		field.String("name").NotEmpty().MaxLen(100),
+		field.String("name").NotEmpty().MaxRuneLen(100), // in characters: a name may be Chinese
 	}
 }
 

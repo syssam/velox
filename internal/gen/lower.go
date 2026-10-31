@@ -703,10 +703,10 @@ func (s *entState) checks(e *Entity, col int, f *Field, o *OutField, where strin
 			s.useStd("unicode/utf8", where)
 			if c.Kind == "MinRuneLen" {
 				line(1, "if utf8.RuneCountInString(%s) < %s {", conv("string"), args[0])
-				fail("has fewer than " + args[0] + " characters")
+				fail("length in characters is less than " + args[0])
 			} else {
 				line(1, "if utf8.RuneCountInString(%s) > %s {", conv("string"), args[0])
-				fail("has more than " + args[0] + " characters")
+				fail("length in characters is more than " + args[0])
 			}
 			line(1, "}")
 		case "Match":
