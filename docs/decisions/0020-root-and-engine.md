@@ -32,8 +32,12 @@ The rest did not have to. Measured with the type checker: `Statement`, `Predicat
   in one package.
 - Private fields of public types stay private. The root reaches them through functions
   of the engine, so `Statement` and `EntityInfo` gain no public field.
-- The tests that need no internals are in `internal/apitest`, those that need the
-  engine's alone in `internal/engine`, and those that need the root's in the root.
+- Each test lives by the code it tests. A test of the engine's behaviour is in
+  `internal/engine`, in `package engine_test` when it goes through the root or
+  generated entities, which that package may import, so `go test -cover
+  ./internal/engine` means something on its own. A test of the rest of the public
+  API is in `internal/apitest`, one of the repository in `internal/repocheck`, and
+  only one that needs the root's private fields, or a Go example, in the root.
 
 ## Cost
 

@@ -27,4 +27,5 @@ contributor needs to know.
 | [0017](0017-upsert-skips-updatedefault.md) | An upsert's update branch does not fire UpdateDefault, as in old velox and ent. |
 | [0018](0018-pgx-stdlib-scan-wrapper.md) | On pgx's stdlib driver, scans go through a sql.Scanner, so pgx's per-column type check passes at its first step: 81% less time for a 100-row query with time columns (the before and after runs had different loads). |
 | [0019](0019-veloxpgx.md) | pgx's native path is the package veloxpgx in this module; the core reads pgx's errors by type name, so it links no driver. |
+| [0020](0020-root-and-engine.md) | The root package is the generic API and `internal/engine` is the rest: the root's `DB` holds an `engine.DB`, its public names are aliases, and each test lives by the code it tests. |
 | [0021](0021-dbtype.md) | The plain data types are in the public package `dbtype`, which the root re-exports, so their fields and methods have real documentation; what reaches a private field stays in the engine. |

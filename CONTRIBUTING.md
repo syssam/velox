@@ -10,10 +10,12 @@ each.
 
 - The root, `github.com/syssam/velox2`: the runtime, with `schema`, `migrate`,
   `plugin`, `dbtype` (the plain data types the root re-exports) and
-  `cmd/velox-gen`. `internal/` holds the generator (`gen`), the
-  DDL writer (`ddl`), the generated test models (`testmodel`, `bindmodel`) and
-  the database tests (`itest`). `bench/` holds the baselines and the scale
-  check. `scripts/` holds CI's scripts.
+  `cmd/velox-gen`. `internal/` holds the non-generic runtime (`engine`), the
+  generator (`gen`), the DDL writer (`ddl`), the generated test models
+  (`testmodel`, `bindmodel`), the database tests (`itest`), the tests of the
+  public API (`apitest`) and the tests of the repository itself (`repocheck`).
+  `bench/` holds the baselines and the scale check. `scripts/` holds CI's
+  scripts.
 - `contrib/graphql`: the annotations, the `velox-graphql` plugin and the
   `veloxgql` runtime.
 - `contrib/veloxotel`: OpenTelemetry tracing and metrics.
@@ -160,6 +162,7 @@ The targets are `FuzzRender`, `FuzzRenderWrite`, `FuzzQuote`, `FuzzScope` and
 `contrib/graphql`). `.github/workflows/ci.yml` and `scripts/ci-local.sh` list
 them with their packages and times.
 
+There is no committed corpus yet: the targets' seeds are their `f.Add` calls.
 A new target needs a line in `ci.yml` and one in `ci-local.sh`. Anchor its name
 with `^` and `$`. `go test -fuzz` exits 0 when its pattern matches nothing, so
 `TestFuzzLinesNameRealTargets` checks each line against its package. A crash writes a file under `testdata/fuzz`. Commit that
@@ -222,8 +225,13 @@ scripts/release.sh contrib v1.2.3  # then push the commit and the two tags
 scripts/release.sh dev v1.2.3      # then push the commit
 ```
 
-After the first tag, compare the API with the last release before tagging:
-`go run golang.org/x/exp/cmd/apidiff@latest`.
+Before you tag, check the release on a clean tree. `-base=none` is for the first
+tag, which has no earlier release to compare with. After it, `-base` names the last
+release, so that the check compares the API:
+
+```sh
+go run golang.org/x/exp/cmd/gorelease@latest -base=none -version=v0.1.0
+```
 
 ## License
 

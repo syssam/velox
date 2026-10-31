@@ -12,7 +12,7 @@ import (
 )
 
 func TestDescMetadata(t *testing.T) {
-	info := infoOf[fixture.DAuthor]() // export_test.go: the entity's EntityInfo, or the test fails on its error
+	info := infoOf[fixture.DAuthor]() // helpers_test.go: the entity's EntityInfo, or the test fails on its error
 	if info.Name != "fixture.DAuthor" || info.Table != "authors" || info.Tenant != 1 || len(info.PrimaryKey) != 1 {
 		t.Fatalf("%+v", info)
 	}
