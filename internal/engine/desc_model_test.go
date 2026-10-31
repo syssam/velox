@@ -3,7 +3,6 @@ package engine_test
 import (
 	"context"
 	"github.com/syssam/velox2"
-	"time"
 )
 
 // The Desc entities of the engine's tests. Each is described as velox-gen
@@ -302,43 +301,6 @@ func brokenTargetDesc() velox.Desc[brokenTarget] {
 		Columns:    []velox.ColumnDesc{{Field: "ID", Name: "id"}},
 		PrimaryKey: []int{0},
 		Tenant:     -1,
-	}
-}
-
-type stampCols struct {
-	CreatedAt time.Time
-	UpdatedAt time.Time
-}
-
-// ordered has an embedded struct, a nullable column, a column name that is
-// not its field's, an SQL type, a default and an update default.
-type ordered struct {
-	stampCols
-	ID       int64
-	TenantID int64
-	Code     string
-	Total    float64
-	ShipAt   *time.Time
-}
-
-func orderedDesc() velox.Desc[ordered] {
-	return velox.Desc[ordered]{
-		Table: "orders",
-		Columns: []velox.ColumnDesc{
-			{Field: "CreatedAt", Name: "created_at"},
-			{Field: "UpdatedAt", Name: "updated_at", UpdateDefault: func() any { return time.Now() }},
-			{Field: "ID", Name: "id"},
-			{Field: "TenantID", Name: "tenant_id"},
-			{Field: "Code", Name: "order_code", Default: "none"},
-			{Field: "Total", Name: "total"},
-			{Field: "ShipAt", Name: "ship_at"},
-		},
-		PrimaryKey: []int{2},
-		Tenant:     3,
-		Indexes:    []velox.IndexInfo{{Columns: []int{3, 4}, Unique: true}},
-		Addr: func(x *ordered, i int) any {
-			return [...]any{&x.CreatedAt, &x.UpdatedAt, &x.ID, &x.TenantID, &x.Code, &x.Total, &x.ShipAt}[i]
-		},
 	}
 }
 
