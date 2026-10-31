@@ -1,4 +1,4 @@
-package velox_test
+package engine_test
 
 import (
 	"context"
@@ -39,8 +39,8 @@ func TestDryRunIsRouted(t *testing.T) {
 	if err != nil || !strings.Contains(text, `FROM "items"`) {
 		t.Fatalf("SQL with a tenant: %q, %v", text, err)
 	}
-	st := velox.Statement{Op: velox.OpSelect, Entity: velox.InfoOf[testmodel.Item](), Limit: 1}
-	if _, _, err := velox.DryRun(tctx, s.db, &st); err != nil {
+	st := velox.Statement{Op: velox.OpSelect, Entity: infoOf[testmodel.Item](), Limit: 1}
+	if _, _, err := dryRun(tctx, s.db, &st); err != nil {
 		t.Fatal(err)
 	}
 	s.euR.Rows = [][]any{itemRow(1, 1, "A", 1)}

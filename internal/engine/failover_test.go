@@ -1,4 +1,4 @@
-package velox_test
+package engine_test
 
 import (
 	"context"
@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgproto3"
 	"github.com/syssam/velox2"
+	"github.com/syssam/velox2/internal/fakeconn"
 	"github.com/syssam/velox2/internal/testmodel"
 )
 
@@ -159,8 +160,8 @@ func TestFailoverClasses(t *testing.T) {
 				// replica 0 fails and the primary serves the read; then
 				// replica 1, and replica 1 again in replica 0's turn.
 				s.check(t, hooked, [3]int{1, 1, 2}, fellOver, onR1, onR1)
-				if velox.ReplicaDownUntil(s.db, 0).Before(time.Now().Add(4 * time.Second)) {
-					t.Errorf("replica 0 is in back-off until %v, want about 5s from now", velox.ReplicaDownUntil(s.db, 0))
+				if replicaDownUntil(s.db, 0).Before(time.Now().Add(4 * time.Second)) {
+					t.Errorf("replica 0 is in back-off until %v, want about 5s from now", replicaDownUntil(s.db, 0))
 				}
 			})
 		})
@@ -193,7 +194,7 @@ func TestNoFailoverOnQueryErrors(t *testing.T) {
 				readOne(t, ctx, s.db)
 				readOne(t, ctx, s.db)
 				s.check(t, hooked, [3]int{0, 2, 1}, onR0, onR1, onR0)
-				if d := velox.ReplicaDownUntil(s.db, 0); !d.IsZero() {
+				if d := replicaDownUntil(s.db, 0); !d.IsZero() {
 					t.Errorf("replica 0 is in back-off until %v", d)
 				}
 			})
@@ -236,7 +237,7 @@ func TestCancelledReadIsNotAFailover(t *testing.T) {
 				if s.p.Calls != 0 {
 					t.Errorf("the primary was sent %d statements", s.p.Calls)
 				}
-				if d := velox.ReplicaDownUntil(s.db, 0); !d.IsZero() {
+				if d := replicaDownUntil(s.db, 0); !d.IsZero() {
 					t.Errorf("replica 0 is in back-off until %v", d)
 				}
 				if hooked && (len(s.routes) != 1 || s.routes[0] != onR0) {
@@ -256,17 +257,17 @@ func TestBackoffExpires(t *testing.T) {
 		before := time.Now()
 		readOne(t, ctx, s.db) // replica 0 fails
 		after := time.Now()
-		if d := velox.ReplicaDownUntil(s.db, 0); d.Before(before.Add(time.Minute)) || d.After(after.Add(time.Minute)) {
+		if d := replicaDownUntil(s.db, 0); d.Before(before.Add(time.Minute)) || d.After(after.Add(time.Minute)) {
 			t.Errorf("replica 0 is in back-off until %v, want a minute from the read", d)
 		}
 		readOne(t, ctx, s.db) // replica 1
 		readOne(t, ctx, s.db) // replica 0's turn, skipped: replica 1
 		// End the back-off, rather than wait for it.
-		velox.SetReplicaDown(s.db, 0, time.Now().Add(-time.Millisecond))
+		setReplicaDown(s.db, 0, time.Now().Add(-time.Millisecond))
 		readOne(t, ctx, s.db) // replica 1's turn
 		readOne(t, ctx, s.db) // replica 0's, and it is back
 		s.check(t, hooked, [3]int{1, 2, 3}, fellOver, onR1, onR1, onR1, onR0)
-		if d := velox.ReplicaDownUntil(s.db, 0); !d.IsZero() {
+		if d := replicaDownUntil(s.db, 0); !d.IsZero() {
 			t.Errorf("replica 0's ended back-off is still recorded, until %v", d)
 		}
 	})
@@ -290,7 +291,7 @@ func TestRowsErrorFallsOver(t *testing.T) {
 				t.Errorf("read %+v, want the primary's two invoices once each", invs)
 			}
 			s.check(t, hooked, [3]int{1, 1, 0}, fellOver)
-			if velox.ReplicaDownUntil(s.db, 0).Before(time.Now()) {
+			if replicaDownUntil(s.db, 0).Before(time.Now()) {
 				t.Error("replica 0 is not in back-off")
 			}
 		})
@@ -345,7 +346,7 @@ func TestRowsErrorFallsOver(t *testing.T) {
 				t.Fatalf("yielded %v and errors %v; want row 1, then the replica's error", ids, errs)
 			}
 			s.check(t, hooked, [3]int{0, 1, 0}, onR0)
-			if velox.ReplicaDownUntil(s.db, 0).Before(time.Now()) {
+			if replicaDownUntil(s.db, 0).Before(time.Now()) {
 				t.Error("replica 0 is not in back-off")
 			}
 		})
@@ -381,7 +382,7 @@ func TestRowsErrorFallsOver(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), "destinations") || !strings.HasPrefix(err.Error(), "velox: testmodel.Invoice: ") {
 				t.Fatalf("got %v, want the reader's scan error, named", err)
 			}
-			if d := velox.ReplicaDownUntil(s.db, 0); !d.IsZero() {
+			if d := replicaDownUntil(s.db, 0); !d.IsZero() {
 				t.Errorf("replica 0 is in back-off until %v", d)
 			}
 			s.check(t, hooked, [3]int{0, 1, 0}, onR0)
@@ -398,7 +399,7 @@ func TestRowsErrorFallsOver(t *testing.T) {
 		if _, err := s.db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).One(ctx); err == nil {
 			t.Fatal("the read should fail")
 		}
-		if d := velox.ReplicaDownUntil(s.db, 0); !d.IsZero() {
+		if d := replicaDownUntil(s.db, 0); !d.IsZero() {
 			t.Errorf("replica 0 is in back-off until %v", d)
 		}
 		s.check(t, false, [3]int{0, 1, 0})
@@ -422,7 +423,7 @@ func TestPinnedLoadFallsOver(t *testing.T) {
 		}
 		// The query reads replica 0; its load fails there and falls over.
 		s.check(t, hooked, [3]int{1, 2, 0}, onR0, fellOver)
-		if velox.ReplicaDownUntil(s.db, 0).Before(time.Now()) {
+		if replicaDownUntil(s.db, 0).Before(time.Now()) {
 			t.Error("replica 0 is not in back-off")
 		}
 	})
@@ -431,13 +432,13 @@ func TestPinnedLoadFallsOver(t *testing.T) {
 // TestDownReplicaTurnsSpreadEvenly: while one of three replicas is in
 // back-off, its turns are shared evenly by the other two.
 func TestDownReplicaTurnsSpreadEvenly(t *testing.T) {
-	p := &velox.FakeExec{}
-	rs := []*velox.FakeExec{{}, {}, {}}
+	p := &fakeconn.Exec{}
+	rs := []*fakeconn.Exec{{}, {}, {}}
 	for _, e := range rs {
 		e.Rows = [][]any{invoiceRow(1)}
 	}
-	db := velox.OpenFake(velox.Postgres, p, velox.WithReplicas(velox.FakeConn(rs[0]), velox.FakeConn(rs[1]), velox.FakeConn(rs[2])))
-	velox.SetReplicaDown(db, 1, time.Now().Add(time.Hour))
+	db := openFake(velox.Postgres, p, velox.WithReplicas(fakeConn(rs[0]), fakeConn(rs[1]), fakeConn(rs[2])))
+	setReplicaDown(db, 1, time.Now().Add(time.Hour))
 	for range 60 {
 		readOne(t, ctx, db)
 	}
@@ -450,9 +451,9 @@ func TestDownReplicaTurnsSpreadEvenly(t *testing.T) {
 // on the path that does not read the clock.
 func TestEndedBackoffIsCleared(t *testing.T) {
 	s := openFailover(false)
-	velox.SetReplicaDown(s.db, 0, time.Now().Add(-time.Second))
+	setReplicaDown(s.db, 0, time.Now().Add(-time.Second))
 	readOne(t, ctx, s.db)
-	if d := velox.ReplicaDownUntil(s.db, 0); !d.IsZero() {
+	if d := replicaDownUntil(s.db, 0); !d.IsZero() {
 		t.Errorf("replica 0's ended back-off is still recorded, until %v", d)
 	}
 	s.check(t, false, [3]int{0, 1, 0})
