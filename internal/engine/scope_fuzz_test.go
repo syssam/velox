@@ -1,4 +1,4 @@
-package velox_test
+package engine_test
 
 import (
 	"context"
@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/syssam/velox2"
+	"github.com/syssam/velox2/internal/engine"
+	"github.com/syssam/velox2/internal/fakeconn"
 	"github.com/syssam/velox2/internal/testmodel"
 )
 
@@ -69,7 +71,7 @@ func (g *scopeGen) preds(depth int) []velox.Pred[testmodel.Ticket] {
 func scopeCase(ops []byte, s string) (*velox.Statement, []velox.Option) {
 	g := &scopeGen{b: ops, s: s}
 	head := g.next()
-	st := &velox.Statement{Entity: velox.InfoOf[testmodel.Ticket](), Op: velox.OpSelect, Limit: 10}
+	st := &velox.Statement{Entity: infoOf[testmodel.Ticket](), Op: velox.OpSelect, Limit: 10}
 	switch head % 4 {
 	case 1:
 		st.Count, st.Limit = true, 0
@@ -137,9 +139,9 @@ func FuzzScope(f *testing.F) {
 		st, opts := scopeCase(ops, s)
 		want, _ := scopeCase(ops, s) // the same conditions, built again: a copy no run touches
 		in := st.Where
-		db := velox.OpenFake(velox.Postgres, &velox.FakeExec{}, opts...)
+		db := openFake(velox.Postgres, &fakeconn.Exec{}, opts...)
 		ctx := testmodel.WithUser(velox.WithTenant(context.Background(), n), "ann")
-		err := velox.Prepare(ctx, db, st)
+		err := prepare(ctx, db, st)
 		if n == 0 {
 			// The zero tenant scopes nothing: the statement fails closed.
 			if !errors.Is(err, velox.ErrNoTenant) {
@@ -151,7 +153,7 @@ func FuzzScope(f *testing.F) {
 			t.Fatalf("%v", err)
 		}
 
-		ticket, invoice := st.Entity, velox.InfoOf[testmodel.Invoice]()
+		ticket, invoice := st.Entity, infoOf[testmodel.Invoice]()
 		owner := velox.Predicate(Tk.Owner.EQ("ann"))
 		ticketTenant := velox.ColumnEQ(int(Tk.OrgID.I), n)
 		invoiceTenant := velox.ColumnEQ(int(testmodel.Invoices.OrgID.I), n)
@@ -163,8 +165,8 @@ func FuzzScope(f *testing.F) {
 		}
 		var walk func(p velox.Predicate, depth int)
 		walk = func(p velox.Predicate, depth int) {
-			kids := velox.Kids(p)
-			switch velox.ExistsOn(p) {
+			kids := kids(p)
+			switch existsOn(p) {
 			case ticket:
 				if !has(kids, ticketTenant) || !has(kids, owner) {
 					t.Fatalf("an EXISTS on Ticket at depth %d lacks the tenant or the owner condition: %#v", depth, kids)
@@ -182,8 +184,73 @@ func FuzzScope(f *testing.F) {
 			walk(p, 0)
 		}
 
-		if !velox.SamePreds(in, want.Where) {
+		if !samePreds(in, want.Where) {
 			t.Fatalf("the run changed the caller's conditions:\n got %#v\nwant %#v", in, want.Where)
 		}
 	})
+}
+
+// prepare runs db's stages before execution on st, as run does: guard,
+// Rewrite hooks, scope, row cap and rendering. It goes through DryRun, which
+// also routes st and checks its parameters.
+func prepare(ctx context.Context, db *velox.DB, st *velox.Statement) error {
+	_, _, err := engineOf(db).DryRun(ctx, st)
+	return err
+}
+
+// kids returns p's sub-conditions: the operands of an And, Or or Not, or the
+// conditions an EXISTS puts on its target.
+func kids(p velox.Predicate) []velox.Predicate {
+	out := make([]velox.Predicate, len(engine.PredNode(p).Kids))
+	for i, k := range engine.PredNode(p).Kids {
+		out[i] = engine.NewPredicate(k)
+	}
+	return out
+}
+
+// existsOn returns the target of an EXISTS; nil for any other condition.
+func existsOn(p velox.Predicate) *velox.EntityInfo {
+	if engine.PredNode(p).Op != engine.OpExists {
+		return nil
+	}
+	l, ok := engine.PredNode(p).V.(engine.Link)
+	if !ok {
+		return nil
+	}
+	return l.Target
+}
+
+// samePreds reports whether a and b are the same conditions. A relation not
+// yet resolved is a RelRef, which holds a function: reflect.DeepEqual never
+// finds two equal, so relRefs are compared by their relation index.
+func samePreds(a, b []velox.Predicate) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if !sameNode(engine.PredNode(a[i]), engine.PredNode(b[i])) {
+			return false
+		}
+	}
+	return true
+}
+
+func sameNode(a, b engine.Node) bool {
+	if a.Op != b.Op || a.Col != b.Col || len(a.Kids) != len(b.Kids) || !reflect.DeepEqual(a.W, b.W) {
+		return false
+	}
+	ra, aok := a.V.(engine.RelRef)
+	rb, bok := b.V.(engine.RelRef)
+	switch {
+	case aok != bok || aok && ra.I != rb.I:
+		return false
+	case !aok && !reflect.DeepEqual(a.V, b.V):
+		return false
+	}
+	for i := range a.Kids {
+		if !sameNode(a.Kids[i], b.Kids[i]) {
+			return false
+		}
+	}
+	return true
 }
