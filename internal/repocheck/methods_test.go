@@ -1,4 +1,4 @@
-package velox
+package repocheck
 
 import (
 	"fmt"
@@ -109,7 +109,7 @@ func genericOwnTypeParam(fd *ast.FuncDecl) bool {
 // a Column[E], MarshalJSON on One and Many, and Mutate on MutateFunc.
 func TestMethodsOfGenericTypesAreGeneric(t *testing.T) {
 	fset := token.NewFileSet()
-	files, err := filepath.Glob("*.go")
+	files, err := filepath.Glob(filepath.Join(repoRoot(), "*.go"))
 	if err != nil {
 		t.Fatal(err)
 	}
