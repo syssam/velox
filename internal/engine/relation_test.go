@@ -3,9 +3,11 @@ package engine_test
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/syssam/velox2"
 	"github.com/syssam/velox2/internal/engine"
@@ -130,5 +132,19 @@ func TestCheckColumnsChecksTheJoin(t *testing.T) {
 		if err := engine.CheckColumns(st(c.w, c.kid)); err == nil || err.Error() != want {
 			t.Errorf("%+v: %v", c, err)
 		}
+	}
+}
+
+type other struct{ ID int64 }
+
+func TestRelationHolders(t *testing.T) {
+	if _, loaded := (velox.Many[other]{}).Get(); loaded {
+		t.Error("a zero Many reports loaded")
+	}
+	if v, loaded := (velox.One[other]{}).Get(); loaded || v != nil {
+		t.Error("a zero One reports loaded")
+	}
+	if !engine.IsRelation(reflect.TypeFor[velox.Many[other]]()) || engine.IsRelation(reflect.TypeFor[time.Time]()) {
+		t.Error("isRelation")
 	}
 }

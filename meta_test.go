@@ -4,8 +4,6 @@ import (
 	"reflect"
 	"testing"
 	"time"
-
-	"github.com/syssam/velox2/internal/engine"
 )
 
 type other struct{ ID int64 }
@@ -21,18 +19,6 @@ func TestMetaOnceBuildsOnce(t *testing.T) {
 	a, b := o.Load(desc), o.Load(desc)
 	if calls != 1 || a != b || a.err != nil || a.info.Table != "other" {
 		t.Fatalf("calls %d, same %v, meta %+v", calls, a == b, a)
-	}
-}
-
-func TestRelationHolders(t *testing.T) {
-	if _, loaded := (Many[other]{}).Get(); loaded {
-		t.Error("a zero Many reports loaded")
-	}
-	if v, loaded := (One[other]{}).Get(); loaded || v != nil {
-		t.Error("a zero One reports loaded")
-	}
-	if !engine.IsRelation(reflect.TypeFor[Many[other]]()) || engine.IsRelation(reflect.TypeFor[time.Time]()) {
-		t.Error("isRelation")
 	}
 }
 
