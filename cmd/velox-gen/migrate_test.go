@@ -283,15 +283,18 @@ func TestMigrateHashAndLint(t *testing.T) {
 	want(t, "hash", code, out, errs, 0, "velox.sum\n", "")
 	code, out, errs = run("hash")
 	want(t, "hash again", code, out, errs, 0, "", "")
-	if err := os.Chmod(filepath.Join(dir, "velox.sum"), 0); err != nil {
-		t.Fatal(err)
-	}
-	code, out, errs = run("hash")
-	if err := os.Chmod(filepath.Join(dir, "velox.sum"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if code != 1 || out != "" || !strings.Contains(errs, "permission denied") {
-		t.Errorf("unreadable velox.sum: %d %q %q; want exit 1", code, out, errs)
+	// Root reads a file whatever its mode, so there the file is not unreadable.
+	if os.Geteuid() != 0 {
+		if err := os.Chmod(filepath.Join(dir, "velox.sum"), 0); err != nil {
+			t.Fatal(err)
+		}
+		code, out, errs = run("hash")
+		if err := os.Chmod(filepath.Join(dir, "velox.sum"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if code != 1 || out != "" || !strings.Contains(errs, "permission denied") {
+			t.Errorf("unreadable velox.sum: %d %q %q; want exit 1", code, out, errs)
+		}
 	}
 	sum, err := os.ReadFile(filepath.Join(dir, "velox.sum"))
 	if err != nil {
