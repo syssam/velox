@@ -10,7 +10,7 @@ import (
 // An application reads the error's fields, in the same form on every dialect.
 // It writes velox.ConstraintError, which is this type.
 func ExampleConstraintError() {
-	var err error = fmt.Errorf("create invoice: %w", &dbtype.ConstraintError{
+	err := fmt.Errorf("create invoice: %w", &dbtype.ConstraintError{
 		Entity:     "billing.Invoice",
 		Kind:       dbtype.ConstraintUnique,
 		Constraint: "invoices_number_key",
@@ -39,7 +39,7 @@ func ExamplePolicyError() {
 // errors.As finds the column a validator refused, and errors.Is its reason.
 func ExampleValidationError() {
 	tooLong := errors.New("too long")
-	var err error = fmt.Errorf("save: %w", &dbtype.ValidationError{Entity: "gen.User", Field: "Name", Err: tooLong})
+	err := fmt.Errorf("save: %w", &dbtype.ValidationError{Entity: "gen.User", Field: "Name", Err: tooLong})
 
 	var ve *dbtype.ValidationError
 	if errors.As(err, &ve) {
