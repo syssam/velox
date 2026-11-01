@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -19,7 +20,7 @@ type File struct {
 	Version    uint64
 	Name       string // "add_users_email"
 	Path       string // "0002_add_users_email.sql"
-	Sum        string // "h1:…"
+	Sum        string // "h1:…", as the history holds it: see historySum
 	Directives Directives
 	Statements []string
 	Units      []int // the index of each unit's first statement
@@ -73,7 +74,7 @@ func ParseFile(d velox.Dialect, path string, data []byte) (File, error) {
 		return File{}, &Error{Code: "file", Pos: path, Reason: "the name is not <version>_<name>.sql, with a version of at least four digits and a name of a-z, 0-9 and _"}
 	}
 	data = asText(data)
-	f := File{Version: version, Name: m[2], Path: path, Sum: sum(data)}
+	f := File{Version: version, Name: m[2], Path: path}
 	f.generated = strings.HasPrefix(string(data), generatedPrefix)
 	s := splitter{d: d, src: string(data)}
 	refuse := func(line int, format string, args ...any) error {
@@ -85,6 +86,7 @@ func ParseFile(d velox.Dialect, path string, data []byte) (File, error) {
 		return File{}, e
 	}
 	f.backslash, f.dquote = s.backslash, s.dquote
+	f.Sum = historySum(data, s.out)
 	seen := map[string]bool{}
 	unitLine := 0     // the first unit line
 	unitNext := false // a unit line since the last statement
@@ -167,11 +169,8 @@ func ParseFile(d velox.Dialect, path string, data []byte) (File, error) {
 			dd.Allow = append(dd.Allow, Allow{Code: code, Target: target})
 		case "drops":
 			target, ok := dropsTarget(p.Directive)
-			switch {
-			case !ok:
+			if !ok {
 				return File{}, malformed("write drops <target>")
-			case d != velox.SQLite:
-				return File{}, refuse(p.Line, "drops is SQLite's only")
 			}
 			dd.Drops = append(dd.Drops, target)
 		case "unit":
@@ -192,6 +191,29 @@ func ParseFile(d velox.Dialect, path string, data []byte) (File, error) {
 		f.Units = starts
 	}
 	return f, nil
+}
+
+// historySum is what the history records of a file and compares it with: sum of
+// data without its allow and drops lines, which say what the file accepts and
+// change no statement. So an environment that applied a file does not stop when
+// another needs a directive added to it. velox.sum is over the whole file.
+func historySum(data []byte, pieces []piece) string {
+	var skip []int // the lines left out, from 1, in order
+	for _, p := range pieces {
+		if fields := strings.Fields(p.Directive); len(fields) > 0 && (fields[0] == "allow" || fields[0] == "drops") {
+			skip = append(skip, p.Line)
+		}
+	}
+	if len(skip) == 0 {
+		return sum(data)
+	}
+	var kept []byte
+	for i, line := range bytes.SplitAfter(data, []byte("\n")) {
+		if !slices.Contains(skip, i+1) {
+			kept = append(kept, line...)
+		}
+	}
+	return sum(kept)
 }
 
 // allowParts reads an allow directive: its code and its target, one word or

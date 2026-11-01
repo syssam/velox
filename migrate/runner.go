@@ -159,12 +159,14 @@ var errAppliedMeanwhile = errors.New("migrate: applied by another runner")
 // not copy, and a column's type, NOT NULL, default or AUTOINCREMENT, an index, a
 // foreign key, a check or what the model cannot hold, that the new table lacks;
 // a view or another table's trigger that uses it) and a DROP TABLE of a table an
-// unaccounted table references; a MySQL MODIFY, CHANGE or CONVERT TO, and a
-// PostgreSQL ALTER COLUMN TYPE, that does not write what the model cannot hold of
-// the column; and a foreign key dropped and added again without it. The SQLite
-// file is rolled back; the others do not start. A plan's own drops are listed in
-// the file as -- velox:drops, and -- velox:allow unmodeled-loss [<object>] accepts
-// a loss, but for a view or trigger's use, which SQLite refuses whatever it says.
+// unaccounted table references or that leaves a view or trigger naming it; a MySQL
+// MODIFY, CHANGE or CONVERT TO, and a PostgreSQL ALTER COLUMN TYPE, that does not
+// write what the column has; a foreign key or an index dropped and made again
+// without what it has; and a MySQL rename or drop that a view or trigger uses, or a
+// DROP COLUMN that shrinks an index. The SQLite file is rolled back; the others do
+// not start. A plan's own drops are listed in the file as -- velox:drops, by the
+// attribute where it can, and -- velox:allow unmodeled-loss [<object>] accepts a
+// loss, but for a view or trigger's use that a SQLite rebuild's RENAME needs gone.
 // Up checks each file as it comes to it, so files before it stay applied.
 //
 // A file runs in a transaction with its history row on PostgreSQL and
@@ -176,7 +178,10 @@ var errAppliedMeanwhile = errors.New("migrate: applied by another runner")
 // holds the files applied before it.
 //
 // Up uses one connection of db for its run and closes it after, so nothing
-// a file sets on its session reaches db's other connections. Files run with
+// a file sets on its session reaches db's other connections. A SQLite database
+// in memory ends with its connection, so Up would apply to it and leave nothing:
+// it is an *Error of Code "session", but for a shared-cache one a second
+// connection of db shares, which Up holds to its end. Files run with
 // the session in UTC on PostgreSQL and MySQL, so a time literal in a file
 // means one instant whatever the server's zone. Each file starts with the
 // session as Up was given it, settings made before Up took the connection
@@ -204,6 +209,9 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 		return nil, err
 	}
 	defer s.close()
+	if err := s.lasting(ctx); err != nil {
+		return nil, err
+	}
 	unlock, err := s.lock(ctx, o.lockWait)
 	if err != nil {
 		return nil, err
@@ -242,13 +250,14 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 		}
 		return r, nil
 	}
-	var todo []File
+	var todo, past []File // past: pending beyond the target, which the guard still reads
 	if resumed != nil {
 		todo = append(todo, *resumed)
 	}
 	for _, f := range st.Pending {
 		if o.targetSet && f.Version > o.target {
-			break
+			past = append(past, f)
+			continue
 		}
 		todo = append(todo, f)
 	}
@@ -269,7 +278,7 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 				return r, wrap(ctx, "resetting the session after "+todo[i-1].Path, err)
 			}
 		}
-		s.later = todo[i+1:]
+		s.later = slices.Concat(todo[i+1:], past)
 		var a Applied
 		var err error
 		switch {

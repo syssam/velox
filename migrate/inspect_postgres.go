@@ -209,7 +209,8 @@ const pgColumnsQuery = `SELECT a.attnum, a.attname, format_type(a.atttypid, a.at
 	coalesce(seq.seqstart, 1), coalesce(seq.seqincrement, 1),
 	coalesce((SELECT quote_ident(co.collname) FROM pg_collation co
 		WHERE co.oid = a.attcollation AND a.attcollation <> t.typcollation AND a.attcollation <> 0), ''),
-	coalesce(w.ext, ''), coalesce(w.over, ''), coalesce(w.dom, '')
+	coalesce(w.ext, ''), coalesce(w.over, ''), coalesce(w.dom, ''),
+	CASE WHEN a.attstorage <> t.typstorage THEN a.attstorage::text ELSE '' END, a.attcompression::text
 FROM pg_attribute a
 JOIN pg_type t ON t.oid = a.atttypid
 JOIN pg_namespace tn ON tn.oid = t.typnamespace
@@ -251,6 +252,12 @@ LEFT JOIN LATERAL (
 WHERE a.attrelid = $1::bigint::oid AND a.attnum > 0 AND NOT a.attisdropped
 ORDER BY a.attnum`
 
+// pgStorages and pgCompressions name pg_attribute's codes.
+var (
+	pgStorages     = map[string]string{"p": "PLAIN", "e": "EXTERNAL", "m": "MAIN", "x": "EXTENDED"}
+	pgCompressions = map[string]string{"p": "pglz", "l": "lz4"}
+)
+
 // columns reads pt's columns, and returns their names by number. A
 // collation other than the type's is a note. An owned sequence that does
 // not start and increment by 1, an extension's type, once per extension,
@@ -264,16 +271,25 @@ func (r *pgReader) columns(pt *pgTable) (map[int]string, error) {
 			typ, typtype, tnsp, tname, def            string
 			identity, generated, seqNsp, seqName, reg string
 			collation, ext, over, domain              string
+			storage, compression                      string
 			typOID, start, increment                  int64
 			notNull                                   bool
 		)
 		if err := rows.Scan(&num, &c.Name, &typ, &typtype, &typOID, &tnsp, &tname, &notNull, &def,
-			&identity, &generated, &c.Comment, &seqNsp, &seqName, &reg, &start, &increment, &collation, &ext, &over, &domain); err != nil {
+			&identity, &generated, &c.Comment, &seqNsp, &seqName, &reg, &start, &increment, &collation, &ext, &over, &domain, &storage, &compression); err != nil {
 			return err
 		}
 		if collation != "" {
 			r.note(pt, c.Name, "the column has COLLATE "+collation+", which the model cannot hold; it is compared without")
 			r.notes[len(r.notes)-1].keeps = []keep{{"COLLATE " + collation, []string{"COLLATE"}}}
+		}
+		if name := pgStorages[storage]; name != "" {
+			r.note(pt, c.Name, "the column has STORAGE "+name+", which the model cannot hold; it is compared without")
+			r.notes[len(r.notes)-1].keeps = []keep{{"STORAGE " + name, []string{"STORAGE"}}}
+		}
+		if name := pgCompressions[compression]; name != "" {
+			r.note(pt, c.Name, "the column has COMPRESSION "+name+", which the model cannot hold; it is compared without")
+			r.notes[len(r.notes)-1].keeps = []keep{{"COMPRESSION " + name, []string{"COMPRESSION"}}}
 		}
 		names[num] = c.Name
 		c.Nullable = !notNull

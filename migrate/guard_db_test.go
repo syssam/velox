@@ -195,7 +195,7 @@ func TestMySQLUpStaysStrict(t *testing.T) {
 	mustUp(t, db, fsys)
 	mustExec(t, db, "INSERT INTO t (id, c) VALUES (1, 'abcdefgh')")
 	fsys = extend(t, fsys, d, files("0002_off.sql", "SET SESSION sql_mode = '';\n"))
-	fsys = extend(t, fsys, d, files("0003_cut.sql", "ALTER TABLE t MODIFY COLUMN c varchar(3) NULL;\n"))
+	fsys = extend(t, fsys, d, files("0003_cut.sql", "-- velox:drops t.c:type\nALTER TABLE t MODIFY COLUMN c varchar(3) NULL;\n"))
 	_, err := migrate.Up(context.Background(), db, fsys)
 	var de *migrate.DirtyError
 	if !errors.As(err, &de) || de.Version != 3 {
