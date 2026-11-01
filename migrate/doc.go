@@ -130,10 +130,11 @@
 // file, velox.sum too, is read with CRLF as LF. [ReadDir] reads one and
 // returns a [*SumError] when velox.sum does not match; [Dir.Add] writes the
 // next files of a plan. [LintFile] checks a file as velox-gen migrate lint
-// does: what cannot run in its transaction, and, in a file not written by
-// Dir.Add, the destructive statements it can read, with the codes
-// delete-rows and update-rows beside Lint's for TRUNCATE, and DELETE or
-// UPDATE without WHERE.
+// does: what cannot run in its transaction, and the destructive statements it
+// can read, with the codes delete-rows and update-rows beside Lint's for
+// TRUNCATE, and DELETE or UPDATE without a WHERE that can leave a row out, and
+// drop-schema and drop-database. A file with Dir.Add's header is read too, but
+// for what Render writes uncovered: a rebuild's drop and any alter-type.
 //
 // [Up] applies a directory's pending files to a database, under a lock. On
 // PostgreSQL and SQLite each runs in a transaction with its row in the

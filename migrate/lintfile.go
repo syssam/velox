@@ -8,25 +8,33 @@ import (
 	"strings"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/ddl"
 )
 
 // LintFile checks f as velox-gen migrate lint does. Its error, *Error values
 // with Code "file" joined, is for CONCURRENTLY or ALTER TYPE … ADD VALUE in
 // a PostgreSQL file run in a transaction, and for BEGIN, START, COMMIT,
 // ROLLBACK or END leading a statement of a PostgreSQL or SQLite file run in
-// one, but ROLLBACK TO a savepoint. Its findings, for a file that is not
-// generated (f.generated), are the destructive statements it reads: DROP
-// TABLE t (drop-table t), ALTER TABLE t DROP COLUMN c (drop-column t.c),
-// ALTER TABLE t ALTER COLUMN c [SET DATA] TYPE and MODIFY COLUMN c
-// (alter-type t.c), ALTER COLUMN c SET NOT NULL (set-not-null t.c),
-// TRUNCATE t and DELETE FROM t without WHERE (delete-rows t), UPDATE t
-// without WHERE (update-rows t); Pos is "<path>:<line>", Change the
-// statement's index.
+// one, but ROLLBACK TO a savepoint. Its findings are the destructive
+// statements it reads: DROP TABLE t (drop-table t), DROP SCHEMA s
+// (drop-schema s), DROP DATABASE d (drop-database d), ALTER TABLE t DROP
+// COLUMN c (drop-column t.c), ALTER TABLE t ALTER COLUMN c [SET DATA] TYPE,
+// MODIFY COLUMN c and CHANGE COLUMN c (alter-type t.c), ALTER COLUMN c SET
+// NOT NULL (set-not-null t.c), TRUNCATE t and DELETE FROM t without WHERE
+// (delete-rows t), UPDATE t without WHERE (update-rows t); Pos is
+// "<path>:<line>", Change the statement's index.
 //
-// A WHERE counts only outside parentheses, so a subquery's does not. A
-// DELETE or UPDATE may follow a WITH clause; MySQL's multi-table DELETE t1,
-// t2 FROM … (aliases read as their tables) and UPDATE t1, t2 SET … name
-// each table. PostgreSQL's ABORT counts as ROLLBACK.
+// A file that starts with Dir.Add's header (f.generated) is read too, since
+// anyone can add to it, but for what Render writes with no allow directive
+// to cover it: a rebuild's DROP TABLE, and any alter-type, as a widening or a
+// change of a column's comment is. A type change added by hand to such a file
+// therefore goes unseen.
+//
+// A WHERE counts only outside parentheses, so a subquery's does not, and
+// only if it can leave a row out: WHERE true, WHERE 1 and WHERE 1 = 1 are
+// none. A DELETE or UPDATE may follow a WITH clause; MySQL's multi-table
+// DELETE t1, t2 FROM … (aliases read as their tables) and UPDATE t1, t2
+// SET … name each table. PostgreSQL's ABORT counts as ROLLBACK.
 //
 // A target is "<table>" or "<schema>.<table>", and a column's adds
 // ".<column>": a quoted name as written, an unquoted one folded to lower
@@ -37,6 +45,15 @@ func LintFile(d velox.Dialect, f File) ([]Finding, error) {
 	var errs []error
 	var out []Finding
 	inTx := d == velox.SQLite || d == velox.Postgres && !f.Directives.NoTransaction
+	rebuilt := map[string]bool{} // the tables a rebuild of f drops and makes again
+	if f.generated {
+		for _, sql := range f.Statements {
+			l := &fileLinter{d: d, ws: lex(d, sql)}
+			if t, ok := l.rebuildRename(); ok {
+				rebuilt[t] = true
+			}
+		}
+	}
 	for i, sql := range f.Statements {
 		pos := f.Path
 		if i < len(f.lines) {
@@ -58,9 +75,11 @@ func LintFile(d velox.Dialect, f File) ([]Finding, error) {
 				refuse("ALTER TYPE … ADD VALUE in a transaction leaves the value unusable until it commits; put the statement in a file with -- velox:no-transaction")
 			}
 		}
-		if !f.generated {
-			l.classify()
-			out = append(out, l.out...)
+		l.classify()
+		for _, fd := range l.out {
+			if !f.generated || fd.Code != "alter-type" && !(fd.Code == "drop-table" && rebuilt[fd.Target]) {
+				out = append(out, fd)
+			}
 		}
 	}
 	return out, errors.Join(errs...)
@@ -100,6 +119,27 @@ func checkTxControl(d velox.Dialect, f File) error {
 		}
 	}
 	return nil
+}
+
+// rebuildRename reads the last step of a table's rebuild, ALTER TABLE
+// <ddl.Rebuild(t)> RENAME TO t, and is t, with the schema the statement gives.
+func (l *fileLinter) rebuildRename() (string, bool) {
+	if l.upper(0) != "ALTER" || l.upper(1) != "TABLE" {
+		return "", false
+	}
+	tmp, i := l.name(2)
+	if tmp == "" || l.upper(i) != "RENAME" || l.upper(i+1) != "TO" {
+		return "", false
+	}
+	to, _ := l.name(i + 2)
+	schema, name := "", tmp
+	if j := strings.LastIndexByte(tmp, '.'); j >= 0 {
+		schema, name = tmp[:j+1], tmp[j+1:]
+	}
+	if to == "" || name != ddl.Rebuild(to) {
+		return "", false
+	}
+	return schema + to, true
 }
 
 // fileLinter reads one statement of a file for LintFile.
@@ -216,6 +256,8 @@ func (l *fileLinter) names(i int, code, format string) {
 func (l *fileLinter) classify() {
 	const (
 		dropTable  = "drops table %s and its rows"
+		dropSchema = "drops schema %s and everything in it"
+		dropDB     = "drops database %s and everything in it"
 		deleteRows = "deletes every row of %s"
 		updateRows = "updates every row of %s"
 	)
@@ -225,8 +267,16 @@ func (l *fileLinter) classify() {
 	}
 	switch l.upper(b) {
 	case "DROP":
-		if b == 0 && l.upper(1) == "TABLE" {
+		if b != 0 {
+			return
+		}
+		switch l.upper(1) {
+		case "TABLE":
 			l.names(l.skip(2, "IF", "EXISTS"), "drop-table", dropTable)
+		case "SCHEMA":
+			l.names(l.skip(2, "IF", "EXISTS"), "drop-schema", dropSchema)
+		case "DATABASE":
+			l.names(l.skip(2, "IF", "EXISTS"), "drop-database", dropDB)
 		}
 	case "TRUNCATE":
 		if b == 0 {
@@ -306,7 +356,7 @@ func (l *fileLinter) afterWith() int {
 }
 
 // topWhere reports whether a WHERE from word b on is the statement's own,
-// outside parentheses.
+// outside parentheses, and can leave a row out.
 func (l *fileLinter) topWhere(b int) bool {
 	depth := 0
 	for i := b; i < len(l.ws); i++ {
@@ -316,10 +366,95 @@ func (l *fileLinter) topWhere(b int) bool {
 		case l.punct(i, ")"):
 			depth--
 		case depth == 0 && l.upper(i) == "WHERE":
-			return true
+			end := i + 1
+			for d := 0; end < len(l.ws); end++ {
+				if l.punct(end, "(") {
+					d++
+				} else if l.punct(end, ")") {
+					d--
+				}
+				if d == 0 && slices.Contains([]string{"RETURNING", "ORDER", "LIMIT"}, l.upper(end)) {
+					break
+				}
+			}
+			return !l.alwaysTrue(i+1, end)
 		}
 	}
 	return false
+}
+
+// alwaysTrue reports whether the condition in words [i, j) holds for every
+// row: TRUE, a number but 0, NOT FALSE, a literal or number equal to itself,
+// a name equal to itself, and those joined by AND and OR. A literal is no
+// word, so 'a' = 'b' reads as 'a' = 'a': a condition nobody writes, and the
+// finding errs on the safe side.
+func (l *fileLinter) alwaysTrue(i, j int) bool {
+	for i < j && l.punct(i, "(") && l.closes(i) == j-1 {
+		i, j = i+1, j-1
+	}
+	if i >= j {
+		return false
+	}
+	for _, kw := range [...]string{"OR", "AND"} {
+		var cuts []int // the top-level kw's
+		for k, depth := i, 0; k < j; k++ {
+			if l.punct(k, "(") {
+				depth++
+			} else if l.punct(k, ")") {
+				depth--
+			}
+			if depth == 0 && l.upper(k) == kw {
+				cuts = append(cuts, k)
+			}
+		}
+		if len(cuts) == 0 {
+			continue
+		}
+		cuts = append(cuts, j)
+		from, some, every := i, false, true
+		for _, k := range cuts {
+			t := l.alwaysTrue(from, k)
+			some, every = some || t, every && t
+			from = k + 1
+		}
+		if kw == "OR" {
+			return some
+		}
+		return every
+	}
+	number := func(k int) (int, bool) {
+		if l.ws[k].quoted {
+			return 0, false
+		}
+		n, err := strconv.Atoi(l.ws[k].text)
+		return n, err == nil
+	}
+	switch j - i {
+	case 1:
+		n, isNumber := number(i)
+		return l.upper(i) == "TRUE" || isNumber && n != 0 || l.punct(i, "=")
+	case 2:
+		n, isNumber := number(i + 1)
+		return l.upper(i) == "NOT" && (l.upper(i+1) == "FALSE" || isNumber && n == 0)
+	case 3:
+		return l.punct(i+1, "=") && l.isName(i) && l.isName(i+2) && l.ws[i].text == l.ws[i+2].text && l.ws[i].quoted == l.ws[i+2].quoted
+	}
+	return false
+}
+
+// closes is the index of the parenthesis that closes the one at i, or -1.
+func (l *fileLinter) closes(i int) int {
+	depth := 0
+	for k := i; k < len(l.ws); k++ {
+		if l.punct(k, "(") {
+			depth++
+		} else if l.punct(k, ")") {
+			if depth--; depth == 0 {
+				return k
+			}
+		}
+	}
+	return -1
 }
 
 // punct reports whether the i-th word is the punctuation p.
@@ -429,7 +564,7 @@ func (l *fileLinter) action(table string, i, end int) {
 		if c, _ := column(i + 1); c != "" {
 			l.add("drop-column", table+"."+c, "drops column %s and its data")
 		}
-	case "MODIFY":
+	case "MODIFY", "CHANGE":
 		if c, _ := column(i + 1); c != "" {
 			l.add("alter-type", table+"."+c, "changes the type of column %s, which can fail or change values")
 		}
