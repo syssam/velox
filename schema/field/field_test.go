@@ -486,6 +486,21 @@ func TestContradictions(t *testing.T) {
 		{"bytes MinLen above MaxLen", field.Bytes("b").MaxLen(5).MinLen(10), []string{"MinLen 10 is above MaxLen 5"}},
 		{"Immutable with UpdateDefault", field.Int64("n").UpdateDefault(now).Immutable(), []string{"an Immutable field cannot have an UpdateDefault"}},
 		{"Immutable time with UpdateDefault", field.Time("t").Immutable().UpdateDefault(time.Now), []string{"an Immutable field cannot have an UpdateDefault"}},
+		{"Default over MaxLen", field.String("s").MaxLen(3).Default("toolong"), []string{`Default "toolong" fails its own check: length is more than 3`}},
+		{"Default under MinLen", field.String("s").Default("a").MinLen(3), []string{`Default "a" fails its own check: length is less than 3`}},
+		{"Default over MaxRuneLen", field.String("s").MaxRuneLen(2).Default("éééé"), []string{`Default "éééé" fails its own check: length in characters is more than 2`}},
+		{"Default under MinRuneLen", field.String("s").MinRuneLen(3).Default("éé"), []string{`Default "éé" fails its own check: length in characters is less than 3`}},
+		{"empty Default, NotEmpty", field.String("s").NotEmpty().Default(""), []string{`Default "" fails its own check: must not be empty`}},
+		{"Default fails Match", field.String("s").Match(regexp.MustCompile(`^[a-z]+$`)).Default("A1"), []string{`Default "A1" fails its own check: does not match ^[a-z]+$`}},
+		{"bytes Default over MaxLen", field.Bytes("b").MaxLen(1).Default([]byte("xy")), []string{`Default "xy" fails its own check: length is more than 1`}},
+		{"bytes Default empty, NotEmpty", field.Bytes("b").NotEmpty().Default([]byte{}), []string{`Default "" fails its own check: must not be empty`}},
+		{"Default under Min", field.Int("n").Nillable().Min(5).Default(1), []string{"Default 1 fails its own check: is less than 5"}},
+		{"Default over Max", field.Number[cents]("n").Nillable().Max(5).Default(9), []string{"Default 9 fails its own check: is more than 5"}},
+		{"Default outside Range", field.Float("n").Nillable().Range(1, 2).Default(2.5), []string{"Default 2.5 fails its own check: is more than 2"}},
+		{"Default not Positive", field.Int("n").Nillable().Positive().Default(-1), []string{"Default -1 fails its own check: is not positive"}},
+		{"Default not Negative", field.Int("n").Nillable().Negative().Default(1), []string{"Default 1 fails its own check: is not negative"}},
+		{"Default negative, NonNegative", field.Int("n").Nillable().NonNegative().Default(-1), []string{"Default -1 fails its own check: is negative"}},
+		{"uint64 Default over Max", field.Uint64("n").Nillable().Max(1).Default(math.MaxUint64), []string{"Default 18446744073709551615 fails its own check: is more than 1"}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			c.f.Descriptor()
@@ -499,13 +514,17 @@ func TestContradictions(t *testing.T) {
 		})
 	}
 	for name, f := range map[string]interface{ Descriptor() *desc.Field }{
-		"Min equal to Max":     field.Int("n").Min(3).Max(3),
-		"one-value Range":      field.Int("n").Range(3, 3),
-		"MinLen equal MaxLen":  field.String("s").MinLen(4).MaxLen(4),
-		"Immutable Default":    field.Time("t").Default(time.Now).Immutable(),
-		"UpdateDefault alone":  field.Time("t").UpdateDefault(time.Now),
-		"bounds of each kind":  field.Int("n").Min(1).Max(9).Positive(),
-		"negative Min and Max": field.Int8("n").Min(-9).Max(-1),
+		"Min equal to Max":                 field.Int("n").Min(3).Max(3),
+		"one-value Range":                  field.Int("n").Range(3, 3),
+		"MinLen equal MaxLen":              field.String("s").MinLen(4).MaxLen(4),
+		"Immutable Default":                field.Time("t").Default(time.Now).Immutable(),
+		"UpdateDefault alone":              field.Time("t").UpdateDefault(time.Now),
+		"bounds of each kind":              field.Int("n").Min(1).Max(9).Positive(),
+		"negative Min and Max":             field.Int8("n").Min(-9).Max(-1),
+		"Default within bounds":            field.String("s").NotEmpty().MinLen(2).MaxLen(3).Default("abc"),
+		"Default within Range":             field.Int("n").Nillable().Range(1, 5).Default(5),
+		"zero Default, Optional, is unset": field.String("s").Optional().NotEmpty().Default(""),
+		"bytes Default within MaxLen":      field.Bytes("b").MaxLen(2).Default([]byte("xy")),
 	} {
 		if errs := f.Descriptor().Errs; len(errs) != 0 {
 			t.Errorf("%s: %v", name, errs)

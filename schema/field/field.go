@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"maps"
 	"reflect"
+	"regexp"
 	"slices"
 	"time"
+	"unicode/utf8"
 
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/internal/desc"
@@ -149,7 +151,10 @@ func newTyped[B, V any](c *common[B]) typed[B, V] { return typed[B, V]{c: c} }
 // changes the Go type. A field that is not a pointer is unset when it holds its
 // zero value, so velox-gen refuses a Default on a bool or number that is not
 // Nillable, which could then never store false or 0: make the field Nillable
-// or drop the Default.
+// or drop the Default. On a string that is not Nillable, "" is unset and takes
+// the Default: Insert cannot store it, though Update can. A Default that the
+// field's own built-in checks refuse is an error: every row that left the field
+// unset would fail to insert. A custom validator is not called on it.
 func (t typed[B, V]) Default(v V) B { t.c.d.Default = v; return t.c.self }
 
 // DefaultFunc sets a func() returning the field's Go type, called when a new
@@ -220,6 +225,7 @@ func sameKind(t, base reflect.Type) bool {
 // Descriptor call and records each error only once.
 func finish(d *desc.Field) {
 	contradictions(d)
+	defaultPasses(d)
 	if d.Default != nil && d.DefaultFunc != nil {
 		failOnce(d, "Default and DefaultFunc are both set")
 	}
@@ -326,6 +332,98 @@ func contradictions(d *desc.Field) {
 			failOnce(d, "%s %v is above %s %v", p[0], lo.v, p[1], hi.v)
 		}
 	}
+}
+
+// defaultPasses records a literal Default that its own built-in checks refuse:
+// every row that left the field unset would fail to insert. A zero Default on
+// an Optional field is unset, which the checks let pass. A custom validator is
+// not called: it is the application's code, and Descriptor runs at each start.
+func defaultPasses(d *desc.Field) {
+	if d.Default == nil {
+		return
+	}
+	v := reflect.ValueOf(d.Default)
+	if v.Kind() == reflect.Func || (d.Optional && v.IsZero()) {
+		return
+	}
+	for _, c := range d.Checks {
+		if why := refusal(c, v); why != "" {
+			shown := d.Default
+			switch v.Kind() {
+			case reflect.Slice:
+				shown = fmt.Sprintf("%q", v.Bytes())
+			case reflect.String:
+				shown = fmt.Sprintf("%q", v.String())
+			}
+			failOnce(d, "Default %v fails its own check: %s", shown, why)
+			return
+		}
+	}
+}
+
+// refusal is what check c says of v, a string, a byte slice or a number: ""
+// when it passes. The texts are the generated validators'.
+func refusal(c desc.Check, v reflect.Value) string {
+	var length int
+	if v.Kind() == reflect.String || v.Kind() == reflect.Slice {
+		length = v.Len()
+	}
+	zero := reflect.Zero(v.Type()).Interface()
+	x := v.Interface()
+	switch c.Kind {
+	case "NotEmpty":
+		if length == 0 {
+			return "must not be empty"
+		}
+	case "MinLen":
+		if n := c.Args[0].(int); length < n {
+			return fmt.Sprintf("length is less than %d", n)
+		}
+	case "MaxLen":
+		if n := c.Args[0].(int); length > n {
+			return fmt.Sprintf("length is more than %d", n)
+		}
+	case "MinRuneLen":
+		if n := c.Args[0].(int); utf8.RuneCountInString(v.String()) < n {
+			return fmt.Sprintf("length in characters is less than %d", n)
+		}
+	case "MaxRuneLen":
+		if n := c.Args[0].(int); utf8.RuneCountInString(v.String()) > n {
+			return fmt.Sprintf("length in characters is more than %d", n)
+		}
+	case "Match":
+		if p := c.Args[0].(string); !regexp.MustCompile(p).MatchString(v.String()) {
+			return "does not match " + p
+		}
+	case "Min":
+		if above(c.Args[0], x) {
+			return fmt.Sprintf("is less than %v", c.Args[0])
+		}
+	case "Max":
+		if above(x, c.Args[0]) {
+			return fmt.Sprintf("is more than %v", c.Args[0])
+		}
+	case "Range":
+		if above(c.Args[0], x) {
+			return fmt.Sprintf("is less than %v", c.Args[0])
+		}
+		if above(x, c.Args[1]) {
+			return fmt.Sprintf("is more than %v", c.Args[1])
+		}
+	case "Positive":
+		if !above(x, zero) {
+			return "is not positive"
+		}
+	case "Negative":
+		if !above(zero, x) {
+			return "is not negative"
+		}
+	case "NonNegative":
+		if above(zero, x) {
+			return "is negative"
+		}
+	}
+	return ""
 }
 
 // above reports whether a > b, two values of one integer or float type.
