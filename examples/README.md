@@ -101,10 +101,13 @@ velox's planner in five steps:
    besides the history.
 4. Run `go tool velox-gen migrate drift -db <dsn>` on each environment,
    since baseline read only one.
-5. Run `go tool velox-gen migrate diff` as usual. An ent database's names
-   come back as renames, and its varchar enums as `alter-type` changes,
-   which are destructive and need `-allow` (as
-   `-allow alter-type=users.role`).
+5. Run `go tool velox-gen migrate diff` as usual. An ent database renames
+   nothing, since velox keeps ent's names. The diff holds only what velox
+   spells differently from ent. On PostgreSQL and SQLite, that is an index on
+   each foreign key. On PostgreSQL, also a serial key becoming an identity, and
+   a varchar enum becoming an enum type: an `alter-type` change, which is
+   destructive and needs `-allow` (as `-allow alter-type=users.role`). On
+   SQLite, also an enum's CHECK, which rebuilds the table. On MySQL, nothing.
 
 ## Regenerate
 
