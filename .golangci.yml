@@ -10,6 +10,11 @@ linters:
         linters: [staticcheck]
       # The engine's exports are for the root package; its public types are documented
       # on their aliases in the root, which TestAliasDocsListMembers checks, or in veloxtype.
+      # Each of these is documented where it is declared, in veloxtype. Revive checks a
+      # group's comment against each name, which one sentence cannot satisfy.
+      - path: ^internal/engine/veloxtype\.go$
+        linters: [revive]
+        text: "^exported:"
       - path: ^internal/engine/
         linters: [staticcheck]
         text: ST102
