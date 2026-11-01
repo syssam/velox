@@ -53,8 +53,7 @@ func TestDocumentShapes(t *testing.T) {
 		{"7000 spreads of no definition", spreads(7000), "501 fragments, and the most is 500"},
 		{"501 spreads of no definition", spreads(501), "501 fragments, and the most is 500"},
 		{"501 fragments never spread", `{ id } ` + spell(501, func(i int) string { return fmt.Sprintf("fragment F%d on T { id }", i) }), "501 fragments"},
-		{"2001 spreads of one fragment", `{ ` + strings.Repeat("...F ", 2001) + ` } fragment F on T { id }`, "2001 spreads"},
-		{"2001 inline fragments", `{ ` + strings.Repeat("... { id } ", 2001) + ` }`, "2001 spreads"},
+		{"5001 spreads of one fragment", `{ ` + strings.Repeat("...F ", 5001) + ` } fragment F on T { id }`, "5001 spreads"},
 
 		{"selections 65 deep", nest(65, "{ a ", "{ b }", "}"), "nests over 64"},
 		{"inline fragments 65 deep", nest(65, "{ ... ", "{ b }", "}"), "nests over 64"},
@@ -119,7 +118,7 @@ func TestDocumentPairs(t *testing.T) {
 			return fmt.Sprintf("fragment F%d on T { %s }", i, spell(13, func(j int) string { return differ(i*13 + j) }))
 		}), "over 10000 pairs of its fields differ"},
 		{"in 8 levels of inline fragments, compared at each", nest(8, "{ ... ", "{ "+spell(50, differ)+" }", "}"), "over 10000 pairs of its fields differ"},
-		{"900 that agree", `{ ` + strings.Repeat("a: f ", 900) + ` }`, "over 400000 pairs of its fields share a response name"},
+		{"1500 that agree", `{ ` + strings.Repeat("a: f ", 1500) + ` }`, "over 1000000 pairs of its fields share a response name"},
 	} {
 		if got := refusal(t, veloxgql.Limits{}, &graphql.RawParams{Query: c.query}); !strings.Contains(got, c.want) {
 			t.Errorf("%s: %q, want %q", c.name, got, c.want)
@@ -172,11 +171,11 @@ func TestVariablesShapes(t *testing.T) {
 	}{
 		{"65 deep", `query($w: T) { a(w: $w) }`, map[string]any{"w": deep(65)}, "nest over 64"},
 		{"3700 deep", `query($w: T) { a(w: $w) }`, map[string]any{"w": deep(3700)}, "nest over 64"},
-		{"a list of 25001", `query($w: [Int]) { a(w: $w) }`, map[string]any{"w": list(25001, 1)}, "over 25000 nodes"},
-		{"not declared", `{ id }`, map[string]any{"w": list(25001, 1)}, "over 25000 nodes"},
+		{"a list of 100001", `query($w: [Int]) { a(w: $w) }`, map[string]any{"w": list(100001, 1)}, "over 100000 nodes"},
+		{"not declared", `{ id }`, map[string]any{"w": list(100001, 1)}, "over 100000 nodes"},
 		{"over its bytes", `{ id }`, map[string]any{"w": strings.Repeat("s", 1<<20+1)}, "over 1048576 bytes"},
 		{"over its bytes, in a key", `{ id }`, map[string]any{"w": map[string]any{strings.Repeat("s", 1<<20+1): 1}}, "over 1048576 bytes"},
-		{"sent by its hash, no query", "", map[string]any{"w": list(25001, 1)}, "over 25000 nodes"},
+		{"sent by its hash, no query", "", map[string]any{"w": list(100001, 1)}, "over 100000 nodes"},
 	} {
 		got := refusal(t, veloxgql.Limits{}, &graphql.RawParams{Query: c.query, Variables: c.vars})
 		if !strings.Contains(got, c.want) || !strings.Contains(got, "request is too large") {
@@ -188,7 +187,7 @@ func TestVariablesShapes(t *testing.T) {
 		vars map[string]any
 	}{
 		{"64 deep", map[string]any{"w": deep(63)}},
-		{"25000 in a list", map[string]any{"w": list(24999, 1)}},
+		{"100000 in a list", map[string]any{"w": list(99999, 1)}},
 		{"numbers, nulls and booleans", map[string]any{"a": 1, "b": nil, "c": true, "d": 1.5}},
 		{"a value gqlgen gave", map[string]any{"a": graphql.Upload{}}},
 	} {

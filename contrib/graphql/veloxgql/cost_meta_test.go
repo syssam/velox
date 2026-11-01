@@ -45,6 +45,12 @@ fragment TypeRef on __Type {
 // mutations.
 func richSchema(t testing.TB, n int) *ast.Schema {
 	t.Helper()
+	return richSchemaOf(t, n)
+}
+
+// richSchemaOf is richSchema with these annotations on every field but the key.
+func richSchemaOf(t testing.TB, n int, field ...graphql.Annotation) *ast.Schema {
+	t.Helper()
 	enc := func(as ...graphql.Annotation) map[string]json.RawMessage {
 		var a graphql.Annotation
 		for _, x := range as {
@@ -59,7 +65,7 @@ func richSchema(t testing.TB, n int) *ast.Schema {
 	f := func(name, typ string) *plugin.Field {
 		return &plugin.Field{
 			Name: name, GoName: strings.ToUpper(name[:1]) + name[1:], Column: name, Type: typ, ElemType: map[string]string{"time": "time.Time"}[typ], PkgPath: map[string]string{"time": "time"}[typ],
-			Annotations: enc(graphql.OrderField(strings.ToUpper(name))),
+			Annotations: enc(append(field, graphql.OrderField(strings.ToUpper(name)))...),
 		}
 	}
 	m := &plugin.Model{Version: plugin.ModelVersion}
@@ -125,6 +131,23 @@ func TestGraphiQLOnARichSchema(t *testing.T) {
 		}
 		if n == 30 && got < 40000 {
 			t.Errorf("30 entities cost %d: the schema is not rich", got)
+		}
+	}
+}
+
+// TestGraphiQLWithWhereOps: a where input of every field's predicates costs more: with
+// WhereOps on each of the 18 fields the default admits GraphiQL's query on fewer entities
+// than richSchema's 150, which limits.go, doc.go and decision 0027 say.
+func TestGraphiQLWithWhereOps(t *testing.T) {
+	if testing.Short() {
+		t.Skip("renders 100 entities")
+	}
+	l := veloxgql.DefaultLimits()
+	for n, fits := range map[int]bool{95: true, 105: false} {
+		got := metaCost(t, richSchemaOf(t, n, graphql.WhereOps()), graphiQL, veloxgql.Limits{MaxIntrospectionCost: 1 << 30})
+		t.Logf("%d entities: %d", n, got)
+		if (got <= l.MaxIntrospectionCost) != fits {
+			t.Errorf("%d entities cost %d, and the limit is %d", n, got, l.MaxIntrospectionCost)
 		}
 	}
 }

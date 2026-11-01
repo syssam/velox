@@ -50,7 +50,8 @@ type Limits struct {
 
 	// MaxCost is the most a request may cost (Cost): the bound on a whole
 	// request that the other limits, each of one argument, do not give. More
-	// is ErrTooCostly, before any statement runs. It bounds the statements too,
+	// is ErrTooCostly, before any statement runs. It cannot see a value's size,
+	// which is MaxResponseBytes, or how long a statement takes, which is Timeout. It bounds the statements too,
 	// at 100 each, so 1500 by default. Two levels of full pages with 12 fields in
 	// each row cost about 144000, and pass. A list edge costs MaxList for each
 	// parent, so under the defaults one full page with two list edges, posts(first:
@@ -63,7 +64,8 @@ type Limits struct {
 	// MaxIntrospectionCost is the most the __schema and __type of a request may
 	// cost, one for each field of their response. More is ErrTooCostly. The
 	// default admits GraphiQL's query on a schema of 150 rich entities (about
-	// 210000), and no data comes under it: raising it does not loosen MaxCost,
+	// 210000), or of about 100 with graphql.WhereOps on every field, and no data
+	// comes under it: raising it does not loosen MaxCost,
 	// nor MaxCost it. A request at this limit allocates about 160 MB through
 	// gqlgen. A larger schema raises it, at about 640 bytes a unit; a server open
 	// to strangers lowers it, or has no extension.Introspection.
@@ -78,9 +80,9 @@ type Limits struct {
 	// repeat and an alias each counting one, and the most spreads and inline
 	// fragments. More is ErrRequestTooLarge, BAD_USER_INPUT, before gqlgen validates
 	// the query: validation is quadratic in the fields that share a response name,
-	// so of those a query may hold 5 times MaxFields pairs that differ, whose errors
+	// so of those a query may hold 2 times MaxFields pairs that differ, whose errors
 	// are the cost, and 200 times MaxFields pairs that agree, each fragment counted
-	// where it is spread; and its spreads may reach 100 times MaxFields fields.
+	// where it is spread; and its spreads may reach 40 times MaxFields fields.
 	MaxFields int
 
 	// MaxFragments is the most fragments a request's query may name, defined or
@@ -103,10 +105,10 @@ type Limits struct {
 	MaxLiteralBytes int
 
 	// MaxVariableNodes is the most values and objects a request's variables may
-	// hold. An object of an input type weighs 1 more for each 16 of the type's
-	// fields, as gqlgen does work for each of them; a JSON scalar's objects weigh 1.
-	// Of a query sent by its hash the types are not known yet, and an object weighs
-	// as the schema's widest input does. More is ErrRequestTooLarge, before gqlgen
+	// hold. An object of an input type weighs 4, and 4 more for each 16 of the
+	// type's fields, as gqlgen does work for each of them; a plain value, a list and
+	// a JSON scalar's objects weigh 1. Of a query sent by its hash the types are not
+	// known yet, and an object weighs as the schema's widest input does. More is ErrRequestTooLarge, before gqlgen
 	// reads any of them.
 	MaxVariableNodes int
 
@@ -139,14 +141,14 @@ type Limits struct {
 
 // DefaultLimits returns MaxPage 100, MaxList 1000, MaxFilterDepth 5,
 // MaxFilterWidth 100, MaxFilterNodes 1000, MaxOrderTerms 5, MaxCost 150000,
-// MaxIntrospectionCost 250000, MaxTokens 15000, MaxFields 2000, MaxFragments 500,
-// MaxDepth 64, MaxNameBytes 128, MaxLiteralBytes 64 KiB, MaxVariableNodes 25000,
+// MaxIntrospectionCost 250000, MaxTokens 15000, MaxFields 5000, MaxFragments 500,
+// MaxDepth 64, MaxNameBytes 128, MaxLiteralBytes 64 KiB, MaxVariableNodes 100000,
 // MaxErrors 100, MaxBodyBytes 1 MiB, MaxResponseBytes 32 MiB and Timeout 30 s.
 func DefaultLimits() Limits {
 	return Limits{
 		MaxPage: 100, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 5,
-		MaxCost: 150000, MaxIntrospectionCost: 250000, MaxTokens: 15000, MaxFields: 2000, MaxFragments: 500, MaxDepth: 64,
-		MaxNameBytes: 128, MaxLiteralBytes: 64 << 10, MaxVariableNodes: 25000, MaxErrors: 100, MaxBodyBytes: 1 << 20,
+		MaxCost: 150000, MaxIntrospectionCost: 250000, MaxTokens: 15000, MaxFields: 5000, MaxFragments: 500, MaxDepth: 64,
+		MaxNameBytes: 128, MaxLiteralBytes: 64 << 10, MaxVariableNodes: 100000, MaxErrors: 100, MaxBodyBytes: 1 << 20,
 		MaxResponseBytes: 32 << 20, Timeout: 30 * time.Second,
 	}
 }

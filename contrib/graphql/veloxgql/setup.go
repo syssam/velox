@@ -52,9 +52,12 @@ type Server interface {
 // takes the extensions off the upgrade, so no message is compressed: what a client sends
 // is what is counted.
 //
+// How many messages or connections a client opens is not bounded here: a rate limit in
+// front is.
+//
 // Call SetErrorPresenter again, after it, to give another presenter. Without
-// Setup, the Extension still enforces the limits of the document and the variables,
-// and no body limit holds, nor one of validation's errors.
+// Setup, the Extension still enforces the limits of the document, the variables and the
+// response, and no body or websocket limit holds, nor one of validation's errors.
 func Setup(srv Server, db *velox.DB, opts ...Option) http.Handler {
 	e := NewExtension(db, opts...)
 	srv.Use(e)
@@ -129,10 +132,10 @@ func validationRules(most int) *rules.Rules {
 // bodyLimit refuses a body of more than most bytes.
 func bodyLimit(next http.Handler, most int64) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// A header is no reason to skip the body's limit: a POST may name it too.
 		if r.Header.Get("Upgrade") != "" {
 			r.Header.Del("Sec-WebSocket-Extensions")
-			next.ServeHTTP(&wsLimitWriter{ResponseWriter: w, most: most}, r)
-			return
+			w = &wsLimitWriter{ResponseWriter: w, most: most}
 		}
 		switch {
 		case r.ContentLength > most:
@@ -166,8 +169,8 @@ type wsLimitWriter struct {
 	most int64
 }
 
-// Hijack implements http.Hijacker. A client must wait for the upgrade's answer (RFC 6455,
-// section 4.1), so what it sent before that, which the server has read past the
+// Hijack implements http.Hijacker. A client must wait for the upgrade's answer, so what it
+// sent before that, which the server has read past the
 // connection given here, is refused.
 func (w *wsLimitWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	rc := http.NewResponseController(w.ResponseWriter)
@@ -192,7 +195,7 @@ var (
 	errWebsocketEarly    = errors.New("veloxgql: a websocket client sent frames before the upgrade's answer")
 )
 
-// wsLimitConn reads a client's websocket frames (RFC 6455, section 5.2) as they pass, and
+// wsLimitConn reads a client's websocket frames as they pass, and
 // closes the connection when a message's payload passes most.
 type wsLimitConn struct {
 	net.Conn

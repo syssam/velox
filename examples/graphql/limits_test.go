@@ -84,7 +84,7 @@ func TestValidationAttacks(t *testing.T) {
 	for _, c := range []struct{ name, query, want string }{
 		{"12 KB of conflicts", onUser(repeat(2000, aliasField)), "BAD_USER_INPUT"},
 		{"as many tokens as the limit", onUser(repeat(4990, func(int) string { return "a:id" })), "BAD_USER_INPUT"},
-		{"as many distinct fields as the limit", onUser(repeat(4990, func(i int) string { return fmt.Sprintf("a%d:id", i) })), "BAD_USER_INPUT"},
+		{"as many distinct fields as the limit", onUser(repeat(5100, func(i int) string { return fmt.Sprintf("f%d", i) })), "BAD_USER_INPUT"},
 		{"over the token limit", onUser(repeat(16000, func(int) string { return "id" })), "GRAPHQL_PARSE_FAILED"},
 		// Over the pairs by one, then at them: validation's own errors, and all it makes of them.
 		{"one over the pairs", onUser(repeat(202, aliasField)), "BAD_USER_INPUT"},
@@ -97,7 +97,7 @@ func TestValidationAttacks(t *testing.T) {
 		{"at the pairs, merged below", `{ ` + repeat(100, func(i int) string {
 			return "u: users { edges { node { " + aliasField(i) + " } } }"
 		}) + ` }`, "GRAPHQL_VALIDATION_FAILED"},
-		{"unknown fields at the limit", onUser(repeat(1990, func(i int) string { return fmt.Sprintf("f%d", i) })), "GRAPHQL_VALIDATION_FAILED"},
+		{"unknown fields at the limit", onUser(repeat(4990, func(i int) string { return fmt.Sprintf("f%d", i) })), "GRAPHQL_VALIDATION_FAILED"},
 		{"a DAG of fragments", onUser("...F0") + repeat(40, func(i int) string {
 			return fmt.Sprintf("fragment F%d on User { friends: id x: id y { ...F%d } z { ...F%d } }", i, i+1, i+1)
 		}) + `fragment F40 on User { id }`, "BAD_USER_INPUT"},
@@ -130,11 +130,11 @@ func TestLargeQueriesPass(t *testing.T) {
 	s.seedRows(t, 100)
 	// As a client's code generator writes one: fragments colocated with their
 	// components, each repeating the common fields.
-	common := `__typename id name role joinedAt a: name b: name c: name d: name e: name`
+	common := `__typename id name role joinedAt a: name b: name c: name d: name e: name f: name g: name h: name i: name`
 	for name, c := range map[string]struct {
 		frags, spread int
 		mb            uint64
-	}{"50 fragments of 10 common fields": {50, 50, 32}, "190 fragments of 10 common fields": {190, 190, 64}} {
+	}{"50 fragments of 14 common fields": {50, 50, 32}, "150 fragments of 14 common fields": {150, 150, 64}, "340 fragments of 14 common fields": {340, 340, 200}} {
 		codegen := `query Page { users(first: 2) { edges { node { ` + repeat(c.spread, func(i int) string { return fmt.Sprintf("...C%d", i) }) + ` } } } } ` +
 			repeat(c.frags, func(i int) string { return fmt.Sprintf("fragment C%d on User { %s }", i, common) })
 		var got string

@@ -147,7 +147,7 @@
 // validator or a violated constraint (CodeBadUserInput); gqlgen's text for an
 // integer that an Int8…Uint32 argument cannot hold (CodeBadUserInput); and
 // "internal error" (CodeInternal) for anything else, which it logs: a
-// driver's error, a timeout, a list edge over MaxList, ErrNoDB. An error
+// driver's error, a deadline of the application's, a list edge over MaxList, ErrNoDB. An error
 // that is only the cancellation of the request, the client gone, is not
 // logged as an internal error. So no driver text, SQL, tenant, entity or constraint name reaches a
 // client. gqlgen's default presenter shows every error's text, and no code.
@@ -157,12 +157,12 @@
 // Limits caps what a client may ask for: MaxPage, MaxList, MaxFilterDepth,
 // MaxFilterWidth, MaxFilterNodes, MaxOrderTerms, MaxCost, MaxIntrospectionCost,
 // MaxTokens, MaxFields, MaxFragments, MaxDepth, MaxNameBytes, MaxLiteralBytes,
-// MaxVariableNodes, MaxErrors and MaxBodyBytes. An Extension has
+// MaxVariableNodes, MaxErrors, MaxBodyBytes, MaxResponseBytes and Timeout. An Extension has
 // its own (WithLimits; a zero field is the default), which it puts in each
 // operation's context, and generated code reads them with LimitsFromContext,
 // which gives DefaultLimits() in a context without them. The Extension refuses
 // a negative limit. MaxList is how many rows a list edge reads, and more fail
-// with velox.ErrTooManyRows.
+// with velox.ErrTooManyRows; graphql.MaxList(n) lowers it for one edge, and its cost.
 //
 // Every one of them but MaxCost bounds one argument or one edge, not a whole
 // request: connections nested in connections multiply (MaxPage rows, and a
@@ -189,8 +189,14 @@
 //
 // MaxTokens, MaxFields, MaxFragments, MaxDepth, MaxNameBytes, MaxLiteralBytes and
 // MaxVariableNodes bound the document and its variables, before gqlgen parses or validates
-// it, which the Extension does on its own. MaxBodyBytes bounds the request's body,
-// in the handler Setup returns, the one call a server needs.
+// it, which the Extension does on its own. MaxBodyBytes bounds the request's body and a
+// websocket's message, in the handler Setup returns, the one call a server needs.
+//
+// Cost cannot see the size of a value, or how long a statement takes. MaxResponseBytes
+// holds a response's strings, bytes and JSON, counted as its fields resolve; MaxErrors its
+// errors; and Timeout a query or a mutation's time. Over any of them the request stops,
+// with one error (ErrResponseTooLarge, ErrTooManyErrors, ErrTimeout) and data null, and a
+// mutation rolls back.
 //
 // Nothing in the package runs at program start.
 package veloxgql

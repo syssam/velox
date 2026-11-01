@@ -165,6 +165,14 @@ func TestSetupKeepsOtherTransports(t *testing.T) {
 	if got := post(t, t.Context(), h, `{ slow }`); got != `{"data":{"slow":1}}` {
 		t.Errorf("a POST: %s", got)
 	}
+	// A POST that names an upgrade keeps the body's limit.
+	over := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(strings.Repeat("x", 1<<20+1)))
+	over.Header.Set("Upgrade", "websocket")
+	w0 := httptest.NewRecorder()
+	h.ServeHTTP(w0, over)
+	if w0.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("a body over the limit, naming an upgrade: %d", w0.Code)
+	}
 	r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{}`))
 	r.Header.Set("Upgrade", "websocket")
 	w := httptest.NewRecorder()

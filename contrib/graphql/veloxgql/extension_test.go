@@ -1095,10 +1095,10 @@ func TestDocumentRefused(t *testing.T) {
 }
 
 // TestDocumentMergePairs: fields that differ under one response name count in pairs,
-// however they merge: at MaxFields 12, 60 pairs.
+// however they merge: at MaxFields 30, 60 pairs.
 func TestDocumentMergePairs(t *testing.T) {
 	db, _ := handlerDB(t)
-	srv := serve(db, handlerResolvers(db, nil), veloxgql.WithLimits(veloxgql.Limits{MaxFields: 12}))
+	srv := serve(db, handlerResolvers(db, nil), veloxgql.WithLimits(veloxgql.Limits{MaxFields: 30}))
 	next := 0
 	a := func(n int) string {
 		return spell(n, func(int) string {

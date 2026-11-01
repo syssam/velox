@@ -93,6 +93,13 @@ import (
 // extension.AutomaticPersistedQuery, so that the cache never stores a refused
 // query.
 //
+// Cost cannot see a value's size or a statement's time, so the Extension also holds a
+// response to MaxResponseBytes and MaxErrors and a query or a mutation to Timeout, and
+// stops the request there: what is not yet resolved does not run, and a
+// statement running is cancelled. A subscription has no Timeout, and each of its events
+// has its own counts. Only values of a string, bytes or JSON kind, and a []string, are
+// counted: a custom scalar of a struct's is not.
+//
 // The server's Use panics when the DB is nil, when a limit is negative, or
 // when WithTxOptions asks for velox.TxRetrySerializable: Validate refuses
 // it, naming the limit or the option.

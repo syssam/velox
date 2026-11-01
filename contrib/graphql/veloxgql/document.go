@@ -17,17 +17,22 @@ const (
 	// conflictPairsPerField is the pairs of fields under one response name that
 	// differ that a document may hold, for each of Limits.MaxFields. Validation
 	// makes an error of each, whether it is returned or not.
-	conflictPairsPerField = 5
+	conflictPairsPerField = 2
 	// agreeingPairsPerField is the same of pairs that agree, which validation only
 	// compares: colocated fragments repeat fields, and need many.
 	agreeingPairsPerField = 200
 	// mergeStepsPerField is the fields and spreads the walk may visit, each fragment
 	// once for each place it is spread, for each of Limits.MaxFields.
-	mergeStepsPerField = 100
+	mergeStepsPerField = 40
 	// inputFieldsPerUnit is the fields of an input object that weigh one more:
 	// gqlgen's coercion and its unmarshalInput each do work for every field of the
 	// type, set or not, so an empty object of a rich where input takes 6.6 KB.
 	inputFieldsPerUnit = 16
+	// inputObjectNodes is what an object of an input type weighs among a request's
+	// variables, for each inputWeight: validating one and coercing it take over 4 KB,
+	// and a plain value a few hundred bytes, so a GeoJSON of plain numbers passes where
+	// as many objects would not.
+	inputObjectNodes = 4
 )
 
 // inputWeight is what an object of the input type d weighs, among a request's
@@ -515,9 +520,11 @@ func (w *varWalk) value(v any, d *ast.Definition, depth int) bool {
 	case string:
 		w.bytes += len(x)
 	case map[string]any:
-		weight = inputWeight(d)
-		if w.unknown {
-			weight = w.widest
+		switch {
+		case w.unknown:
+			weight = w.widest * inputObjectNodes
+		case d != nil && d.Kind == ast.InputObject:
+			weight = inputWeight(d) * inputObjectNodes
 		}
 	}
 	w.nodes += int(weight)
