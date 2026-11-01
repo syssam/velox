@@ -43,6 +43,7 @@ entity's name can make the file a test or tie it to one operating system.
 packages. If `TestPublicAPISnapshot` fails and the change is meant, regenerate it
 with `go test ./internal/repocheck -run TestPublicAPISnapshot -update-api`. Read
 the diff first: after 1.0, a removed line or a changed signature breaks users.
+Before 1.0 nothing is released, so nothing is kept for compatibility.
 
 ## Checks
 
@@ -250,8 +251,16 @@ tag, which has no earlier release to compare with. After it, `-base` names the l
 release, so that the check compares the API:
 
 ```sh
-go run golang.org/x/exp/cmd/gorelease@latest -base=none -version=v0.1.0
+go run golang.org/x/exp/cmd/gorelease@latest -base=none -version=v1.0.0
 ```
+
+Nothing is released yet. The first tag is `v1.0.0`. Never tag `v0.1.0`, `v0.2.0`,
+`v0.2.1` or `v0.3.0`: the Go checksum database holds another project's contents for
+those versions at this path (`docs/decisions/0023-module-path.md`).
+
+For the first release, the repository must first be published as `syssam/velox`,
+with private vulnerability reporting turned on. Then remove the "Not released yet"
+section of `README.md` and the marked paragraph of `SECURITY.md`.
 
 ## License
 
