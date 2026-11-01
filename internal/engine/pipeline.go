@@ -647,9 +647,10 @@ func (db *DB) exec(ctx context.Context, st *Statement, t Target, read func(Rows)
 		return nil
 	}
 	r, err := t.Ex.Query(ctx, st.SQL, st.Args)
-	if !st.Op.Reads() {
+	if !st.Op.Reads() || (db.InTx && st.Op == OpRawQuery) {
 		// As for exec: a write that reached the database pins, whatever
 		// came back. A write is not failed over, so it is sent only here.
+		// Raw SQL in a transaction may be a write, as velox cannot tell.
 		db.wrote(ctx)
 	}
 	if err != nil {

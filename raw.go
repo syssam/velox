@@ -71,7 +71,9 @@ type RawQuery[E any] struct {
 // velox treats Raw as a read: it goes to a replica unless WithPrimaryReads or a
 // pinned session says otherwise, and runs under a dry run (IsDryRun). Run a
 // write that returns rows (UPDATE … RETURNING) in a transaction, or under
-// WithPrimaryReads, and never under a dry run.
+// WithPrimaryReads, and never under a dry run. In a transaction Raw counts as a
+// write, since velox cannot tell one from a read: its commit pins the session
+// (WithSession). Outside one, a write through Raw does not pin it.
 //
 // On a DB opened with OpenShards, Raw and Exec run on the shard the context
 // names, as every statement does: WithShard's, else the one WithShardFor gives
