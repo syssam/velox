@@ -23,7 +23,9 @@ import (
 //	srv := handler.New(graph.NewExecutableSchema(cfg))
 //	srv.Use(veloxgql.NewExtension(db))
 //	srv.SetErrorPresenter(veloxgql.ErrorPresenter(nil))
-//	srv.SetParserTokenLimit(15000)
+//
+// or let Setup do that, with a limit on the body too, which no extension can
+// set.
 //
 // Every operation's context gets the DB, which DBFromContext reads, and the
 // extension's limits, which LimitsFromContext reads, so queries and
@@ -87,7 +89,8 @@ import (
 // when WithTxOptions asks for velox.TxRetrySerializable: Validate refuses
 // it, naming the limit or the option.
 //
-// The extension mutates the operation's context, to refuse a request over
+// The extension mutates the operation's parameters, to refuse a document over
+// MaxTokens or MaxFields; the operation's context, to refuse a request over
 // MaxCost; intercepts the operation, to put the DB and the limits in
 // its context, which the executable schema runs in; the response, because a
 // mutation's resolvers run while gqlgen makes its response (inside the
@@ -195,11 +198,12 @@ func (e *Extension) NewContext(ctx context.Context) context.Context {
 }
 
 var (
-	_ graphql.HandlerExtension        = (*Extension)(nil)
-	_ graphql.OperationContextMutator = (*Extension)(nil)
-	_ graphql.OperationInterceptor    = (*Extension)(nil)
-	_ graphql.ResponseInterceptor     = (*Extension)(nil)
-	_ graphql.FieldInterceptor        = (*Extension)(nil)
+	_ graphql.HandlerExtension          = (*Extension)(nil)
+	_ graphql.OperationParameterMutator = (*Extension)(nil)
+	_ graphql.OperationContextMutator   = (*Extension)(nil)
+	_ graphql.OperationInterceptor      = (*Extension)(nil)
+	_ graphql.ResponseInterceptor       = (*Extension)(nil)
+	_ graphql.FieldInterceptor          = (*Extension)(nil)
 )
 
 // mutationKey is the context key of a mutation operation's *mutation.
@@ -243,6 +247,17 @@ func (e *Extension) Validate(es graphql.ExecutableSchema) error {
 		return fmt.Errorf("veloxgql.WithTxOptions: TxRetrySerializable(%d) would run the mutation again, and gqlgen makes its response once", n)
 	}
 	return nil
+}
+
+// MutateOperationParameters implements graphql.OperationParameterMutator: it
+// refuses a document over MaxTokens or MaxFields. gqlgen runs it before it parses
+// or validates, whichever the transport. An empty query, that an APQ extension
+// after this one fills, passed here when it was stored.
+func (e *Extension) MutateOperationParameters(_ context.Context, p *graphql.RawParams) *gqlerror.Error {
+	if p.Query == "" {
+		return nil
+	}
+	return checkDocument(p.Query, e.limits)
 }
 
 // MutateOperationContext implements graphql.OperationContextMutator: it

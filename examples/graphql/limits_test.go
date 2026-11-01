@@ -1,0 +1,170 @@
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"runtime"
+	"strings"
+	"testing"
+	"time"
+)
+
+// allocated is what the process allocated while f ran, and how long f took.
+func allocated(f func()) (uint64, time.Duration) {
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	start := time.Now()
+	f()
+	d := time.Since(start)
+	runtime.ReadMemStats(&after)
+	return after.TotalAlloc - before.TotalAlloc, d
+}
+
+// postBody posts body and returns the status and the response.
+func (s *testServer) postBody(t *testing.T, body io.Reader) (int, string) {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, s.url, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Org-ID", "1")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	got, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp.StatusCode, string(got)
+}
+
+func (s *testServer) postQuery(t *testing.T, query string) string {
+	t.Helper()
+	body, err := json.Marshal(map[string]any{"query": query})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, got := s.postBody(t, bytes.NewReader(body))
+	return got
+}
+
+// repeat is f(0) to f(n-1), joined by a space.
+func repeat(n int, f func(i int) string) string {
+	var b strings.Builder
+	for i := range n {
+		b.WriteString(f(i))
+		b.WriteByte(' ')
+	}
+	return b.String()
+}
+
+// onUser is sels on a User, in the root field users.
+func onUser(sels string) string { return `{ users { edges { node { ` + sels + ` } } } }` }
+
+// aliasField is one of two fields under one response name: each pair of
+// different ones conflicts.
+func aliasField(i int) string { return "a:" + []string{"id", "name"}[i%2] }
+
+// TestValidationAttacks: what would make gqlparser's validation quadratic is
+// refused before it, cleanly and under 50 MB each, up to the bound of what it lets
+// through. An unbounded one took 3.49 GB and returned 250 MB.
+func TestValidationAttacks(t *testing.T) {
+	s := newServer(t)
+	const most = 50 << 20
+	for _, c := range []struct{ name, query, want string }{
+		{"12 KB of conflicts", onUser(repeat(2000, aliasField)), "BAD_USER_INPUT"},
+		{"as many tokens as the limit", onUser(repeat(4990, func(int) string { return "a:id" })), "BAD_USER_INPUT"},
+		{"as many distinct fields as the limit", onUser(repeat(4990, func(i int) string { return fmt.Sprintf("a%d:id", i) })), "BAD_USER_INPUT"},
+		{"over the token limit", onUser(repeat(16000, func(int) string { return "id" })), "GRAPHQL_PARSE_FAILED"},
+		// Over the pairs by one, then at them: validation's own errors, and all it makes of them.
+		{"one over the pairs", onUser(repeat(142, aliasField)), "BAD_USER_INPUT"},
+		{"at the pairs", onUser(repeat(141, aliasField)), "GRAPHQL_VALIDATION_FAILED"},
+		{"at the pairs, each pair conflicting", onUser(repeat(99, func(i int) string {
+			return fmt.Sprintf("a:posts(first: %d) { totalCount }", i)
+		})), "GRAPHQL_VALIDATION_FAILED"},
+		{"at the pairs, in fragments", onUser(repeat(141, func(i int) string { return fmt.Sprintf("...F%d", i) })) +
+			repeat(141, func(i int) string { return fmt.Sprintf("fragment F%d on User { %s }", i, aliasField(i)) }), "GRAPHQL_VALIDATION_FAILED"},
+		{"at the pairs, merged below", `{ ` + repeat(70, func(i int) string {
+			return "u: users { edges { node { " + aliasField(i) + " } } }"
+		}) + ` }`, "GRAPHQL_VALIDATION_FAILED"},
+		{"unknown fields at the limit", onUser(repeat(1990, func(i int) string { return fmt.Sprintf("f%d", i) })), "GRAPHQL_VALIDATION_FAILED"},
+		{"a DAG of fragments", onUser("...F0") + repeat(40, func(i int) string {
+			return fmt.Sprintf("fragment F%d on User { friends: id x: id y { ...F%d } z { ...F%d } }", i, i+1, i+1)
+		}) + `fragment F40 on User { id }`, "BAD_USER_INPUT"},
+	} {
+		var got string
+		n, d := allocated(func() { got = s.postQuery(t, c.query) })
+		t.Logf("%-40s %6d B of query: %7.1f MB, %10v, %d B of response", c.name, len(c.query), float64(n)/(1<<20), d.Round(time.Microsecond), len(got))
+		if !strings.Contains(got, `"code":"`+c.want+`"`) {
+			t.Errorf("%s: no %s in %.300s", c.name, c.want, got)
+		}
+		if n > most {
+			t.Errorf("%s: allocated %d MB", c.name, n>>20)
+		}
+	}
+}
+
+// TestLargeQueriesPass: what the limits leave to ordinary clients: GraphiQL's
+// query, and a large page of aliases, a shared fragment and a repeated field.
+func TestLargeQueriesPass(t *testing.T) {
+	s := newServer(t)
+	if got := s.postQuery(t, introspection); !strings.HasPrefix(got, `{"data":{"__schema"`) {
+		t.Errorf("GraphiQL's query: %.300s", got)
+	}
+	large := `query Large { ` + repeat(200, func(i int) string {
+		return fmt.Sprintf("a%d: users(first: 2) { edges { cursor node { id name id ...U } } pageInfo { hasNextPage } }", i)
+	}) + ` } fragment U on User { id name role joinedAt posts(first: 1) { totalCount } }`
+	if got := s.postQuery(t, large); !strings.HasPrefix(got, `{"data":{"a0":`) || strings.Contains(got, `"errors"`) {
+		t.Errorf("a large query, of %d B: %.300s", len(large), got)
+	}
+}
+
+// TestBodyLimit: a body over MaxBodyBytes is refused, its length known or not, and
+// one under it serves.
+func TestBodyLimit(t *testing.T) {
+	s := newServer(t)
+	ids := `{"query":"{ __typename }","variables":{"ids":[` + strings.Repeat(`"abcdefgh",`, 200000) + `"x"]}}` // 2.2 MB
+	for name, r := range map[string]func() io.Reader{
+		"length known":   func() io.Reader { return strings.NewReader(ids) },
+		"length unknown": func() io.Reader { return io.MultiReader(strings.NewReader(ids)) },
+	} {
+		var status int
+		var got string
+		n, _ := allocated(func() { status, got = s.postBody(t, r()) })
+		if status != http.StatusRequestEntityTooLarge || !strings.Contains(got, `"code":"BAD_USER_INPUT"`) || !strings.Contains(got, "request is too large") {
+			t.Errorf("%s: %d %.300s", name, status, got)
+		}
+		if n > 16<<20 {
+			t.Errorf("%s: allocated %d MB", name, n>>20)
+		}
+	}
+	small := `{"query":"{ __typename }","variables":{"ids":[` + strings.Repeat(`"abcdefgh",`, 90000) + `"x"]}}`
+	if status, got := s.postBody(t, io.MultiReader(strings.NewReader(small))); status != http.StatusOK || !strings.Contains(got, `"__typename":"Query"`) {
+		t.Errorf("under the limit: %d %.300s", status, got)
+	}
+}
+
+// TestIntrospectionAtItsLimit: what one request costs at MaxIntrospectionCost,
+// as a tenth of it, on the example's schema: GraphiQL's query, repeated under
+// aliases to about 100000 units. decision 0027 holds the full figure.
+func TestIntrospectionAtItsLimit(t *testing.T) {
+	s := newServer(t)
+	frags := introspection[strings.Index(introspection, "fragment FullType"):]
+	const aliases = 29 // about 3500 units each
+	q := `{ ` + repeat(aliases, func(i int) string { return fmt.Sprintf("a%d: __schema { types { ...FullType } }", i) }) + ` } ` + frags
+	var got string
+	n, d := allocated(func() { got = s.postQuery(t, q) })
+	t.Logf("%d aliases: %.1f MB, %v, %d B of response", aliases, float64(n)/(1<<20), d.Round(time.Millisecond), len(got))
+	if !strings.HasPrefix(got, `{"data":{"a0":`) {
+		t.Errorf("%.300s", got)
+	}
+	if n > 256<<20 {
+		t.Errorf("allocated %d MB", n>>20)
+	}
+}

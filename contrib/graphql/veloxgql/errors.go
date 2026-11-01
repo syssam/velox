@@ -46,6 +46,9 @@ var (
 	// Extension's limits. It is returned with the code CodeTooCostly, before
 	// any statement runs.
 	ErrTooCostly = errors.New("request is too costly")
+	// ErrRequestTooLarge: a request whose query is over the MaxFields, or whose
+	// body is over the MaxBodyBytes, of the limits. Nothing of it was validated.
+	ErrRequestTooLarge = errors.New("request is too large")
 	// ErrNoDB: a resolver ran with no DB in its context, which the
 	// Extension puts there.
 	ErrNoDB = errors.New("no DB in the context")

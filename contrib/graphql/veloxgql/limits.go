@@ -60,17 +60,39 @@ type Limits struct {
 	// cost, one for each field of their response. More is ErrTooCostly. The
 	// default admits GraphiQL's query on a schema of 500 rich entities (about
 	// 700000), and no data comes under it: raising it does not loosen MaxCost,
-	// nor MaxCost it. A request at this limit allocates about 1 KB a unit
-	// through gqlgen: give a server open to strangers a lower one, or no
+	// nor MaxCost it. A request at this limit allocates about 640 MB through
+	// gqlgen: give a server open to strangers a lower one, or no
 	// extension.Introspection.
 	MaxIntrospectionCost int
+
+	// MaxTokens is the most lexer tokens a request's query may have. More is the
+	// parser's error, GRAPHQL_PARSE_FAILED, before any of it is validated. The
+	// Extension enforces it, and Setup gives it to gqlgen too.
+	MaxTokens int
+
+	// MaxFields is the most fields a request's query may hold, as written, a
+	// repeat and an alias each counting one. More is ErrRequestTooLarge,
+	// BAD_USER_INPUT, before gqlgen validates the query: validation is quadratic
+	// in the fields that share a response name, so 5 times MaxFields is the most
+	// pairs of those a query may hold, each fragment counted where it is spread,
+	// and 100 times MaxFields the most fields its spreads reach.
+	MaxFields int
+
+	// MaxBodyBytes is the most bytes the body of a request may have, its
+	// variables and any upload included. More is refused with 413, by the handler
+	// Setup returns, as nothing else bounds it.
+	MaxBodyBytes int
 }
 
 // DefaultLimits returns MaxPage 100, MaxList 1000, MaxFilterDepth 5,
-// MaxFilterWidth 100, MaxFilterNodes 1000, MaxOrderTerms 5, MaxCost 100000 and
-// MaxIntrospectionCost 1000000.
+// MaxFilterWidth 100, MaxFilterNodes 1000, MaxOrderTerms 5, MaxCost 100000,
+// MaxIntrospectionCost 1000000, MaxTokens 15000, MaxFields 2000 and MaxBodyBytes
+// 1 MiB.
 func DefaultLimits() Limits {
-	return Limits{MaxPage: 100, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 5, MaxCost: 100000, MaxIntrospectionCost: 1000000}
+	return Limits{
+		MaxPage: 100, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 5,
+		MaxCost: 100000, MaxIntrospectionCost: 1000000, MaxTokens: 15000, MaxFields: 2000, MaxBodyBytes: 1 << 20,
+	}
 }
 
 // LimitsFromContext returns the limits the extension put in ctx, or
@@ -95,6 +117,9 @@ func (l Limits) orDefault() Limits {
 		MaxCost:        cmp.Or(l.MaxCost, d.MaxCost),
 
 		MaxIntrospectionCost: cmp.Or(l.MaxIntrospectionCost, d.MaxIntrospectionCost),
+		MaxTokens:            cmp.Or(l.MaxTokens, d.MaxTokens),
+		MaxFields:            cmp.Or(l.MaxFields, d.MaxFields),
+		MaxBodyBytes:         cmp.Or(l.MaxBodyBytes, d.MaxBodyBytes),
 	}
 }
 
@@ -115,5 +140,8 @@ func (l Limits) fields() []struct {
 		{"MaxOrderTerms", l.MaxOrderTerms},
 		{"MaxCost", l.MaxCost},
 		{"MaxIntrospectionCost", l.MaxIntrospectionCost},
+		{"MaxTokens", l.MaxTokens},
+		{"MaxFields", l.MaxFields},
+		{"MaxBodyBytes", l.MaxBodyBytes},
 	}
 }

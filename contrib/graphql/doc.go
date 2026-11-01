@@ -438,23 +438,46 @@
 // except a selection that @skip(if: true) or @include(if: false) leaves out,
 // which costs nothing, its condition a literal or a variable's value (a missing
 // variable's default, when it has one); one whose condition is not a boolean, a
-// variable missing with no default or null, counts. __schema and __type cost
-// what they select, counted over the schema: one for each field of the response,
-// and a walk that passes MaxCost stops. GraphiQL's introspection query costs 3478
-// on the example's schema of three entities, and a schema's cost grows with its
-// where inputs; if it passes MaxCost, raise MaxCost on the server that offers
-// introspection. Variables are read; sums and products saturate, so huge
-// arguments cannot wrap the cost, and a named fragment is costed once for each
-// page size it is spread under. Two levels of full connection pages cost about
-// 20000 and pass the default; three do not. A list edge costs MaxList (1000) for
-// each parent, so posts(first: 100) { edges { node { likes { id } } } } costs
+// variable missing with no default or null, counts. The value above it is read
+// all the same, so an object whose every selection is left out costs what one
+// that selects __typename does. Variables are read; sums and products saturate,
+// so huge arguments cannot wrap the cost, and a named fragment is costed once for
+// each page size it is spread under. Two levels of full connection pages cost
+// about 20000 and pass the default; three do not. A list edge costs MaxList (1000)
+// for each parent, so posts(first: 100) { edges { node { likes { id } } } } costs
 // 100402 and is refused by default: raise MaxCost, or lower MaxList. gqlgen's
 // extension.FixedComplexityLimit counts fields, not rows, and is not needed
 // with it.
 //
-// Parsing runs before the Extension, and gqlgen sets no limit on it, nor can an
-// extension: give the server one, as srv.SetParserTokenLimit(15000), which
-// GraphiQL's query is far under.
+// __schema and __type have a limit of their own, veloxgql.Limits.MaxIntrospectionCost,
+// 1000000 by default: they cost what they select, counted over the schema, one
+// for each field of the response, and a walk that passes the limit stops.
+// GraphiQL's query costs 3478 on the example's schema of three entities and about
+// 1400 for each rich entity, so the default admits it on 500 of them. Neither limit
+// loosens the other. A request at this one allocates about 640 MB through gqlgen:
+// give a server open to strangers a lower one, or no extension.Introspection.
+//
+// # What a server must call
+//
+// A server calls veloxgql.Setup first, and serves what it returns:
+//
+//	srv := handler.New(graph.NewExecutableSchema(cfg))
+//	h := veloxgql.Setup(srv, db)
+//	srv.AddTransport(transport.POST{})
+//	http.Handle("/graphql", h)
+//
+// Setup uses the Extension and ErrorPresenter on srv, and refuses a body over
+// Limits.MaxBodyBytes, 1 MiB by default, which nothing else in a request bounds.
+//
+// gqlgen validates a request before any resolver, and before the extension's cost,
+// and validation is quadratic in the fields that share a response name: 12 KB of
+// a: id a: name took 3.49 GB and returned 250 MB of errors. So before gqlgen parses
+// a request, on every transport, the Extension parses it, once more where gqlgen's
+// parse follows, and refuses one over Limits.MaxTokens, 15000 by default, or over
+// Limits.MaxFields, 2000 by default, with BAD_USER_INPUT. MaxFields also bounds the
+// pairs of fields under one response name, at 5 times it, the fragments spread where
+// they are, so that any request validation sees allocates under 50 MB. GraphiQL's
+// query is far under each limit.
 //
 // # gqlgen.yml
 //

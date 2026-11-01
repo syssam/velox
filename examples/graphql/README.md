@@ -254,9 +254,10 @@ Every alias and every branch of a fragment counts, except a
 selection that `@skip(if: true)` or `@include(if: false)` leaves out (its
 condition a literal or a variable's value, or a missing variable's default;
 one whose condition is not a boolean, such as a missing variable with no
-default, counts). Introspection costs one for each field of its response:
-GraphiQL's query costs 3478 here, and a schema with many where inputs may need
-a higher `MaxCost` on the server that offers it. A request over
+default, counts); the value above it is read all the same, and costs as if it
+selected `__typename`. Introspection costs one for each field of its response, and
+answers to its own `Limits.MaxIntrospectionCost` (1000000 by default): GraphiQL's
+query costs 3478 here, and about 1400 for each rich entity. A request over
 the limit fails with `COST_LIMIT_EXCEEDED` and runs no statement. Two levels
 of full connection pages (about 20000) pass; three do not (about two million).
 `main_test.go`'s `TestRequestCost` shows both. A list edge (one whose field
@@ -265,8 +266,15 @@ full page with a list edge, `posts(first: 100) { edges { node { likes { id }
 } } }`, costs 100402 and is refused by default: raise `MaxCost`, or lower
 `MaxList`, with `WithLimits`. gqlgen's `extension.FixedComplexityLimit` counted
 fields, not rows, and is not used. Choose the limit for your schema and
-clients. Parsing runs before the extension, and gqlgen sets no limit on it, so
-`main.go` calls `srv.SetParserTokenLimit(15000)`.
+clients.
+
+gqlgen validates a request before any of this, and validation is quadratic in the
+fields that share a response name. So the extension parses a request first, and
+refuses one over `Limits.MaxTokens` (15000) or `Limits.MaxFields` (2000), or with
+more than 5 times `MaxFields` pairs under one response name, with `BAD_USER_INPUT`.
+`main.go` calls `veloxgql.Setup`, which does what a server needs: it uses the
+extension and `ErrorPresenter`, and the handler it returns refuses a body over
+`Limits.MaxBodyBytes` (1 MiB). `limits_test.go` shows what each costs.
 
 ### A nested request
 
@@ -325,6 +333,7 @@ gqlgen only).
 | `initials`, the application's own field on `User` (`graph/app.graphqls`) | every column, since velox-graphql cannot see what its resolver reads |
 | the same edge twice under aliases, with different arguments | one statement each, each alias its own page |
 | a request over `MaxCost` | a `COST_LIMIT_EXCEEDED` error naming the cost, and no statement |
+| a query over `MaxTokens` or `MaxFields`, or a body over `MaxBodyBytes` | `GRAPHQL_PARSE_FAILED` over the tokens, otherwise `BAD_USER_INPUT` naming the limit, and nothing validated or run |
 | an `orderBy` list of more than `MaxOrderTerms` terms | an error naming the limit, and no statement |
 | `email`, or a `where` on it, without `X-Role: admin` | a `FORBIDDEN` error; the filter runs no statement |
 | `Post` with tenant 1, 2 or none | only that organization's posts, through `node`, connections, edges and `where`; `unauthenticated` without one |
