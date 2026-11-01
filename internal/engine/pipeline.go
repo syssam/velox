@@ -607,7 +607,16 @@ func (db *DB) capLimit(st *Statement) {
 	}
 }
 
-// exec sends a rendered statement to t, the connection the route stage
+// exec is send, and marks a transaction the server has rolled back.
+func (db *DB) exec(ctx context.Context, st *Statement, t Target, read func(Rows) error, res *execResult) error {
+	err := db.send(ctx, st, t, read, res)
+	if err != nil && db.D == MySQL && db.txRoot != nil {
+		db.noteServerRollback(ctx, err)
+	}
+	return err
+}
+
+// send sends a rendered statement to t, the connection the route stage
 // chose, reads its rows with read and closes them; with a nil read it sends a
 // statement that returns no rows and fills *res. Either way it sets
 // st.Result, and records where it ran in st.ran. Errors from the database,
@@ -619,7 +628,7 @@ func (db *DB) capLimit(st *Statement) {
 // put in back-off. read runs again from the start, as it does when an Around
 // hook retries. Once Iter has handed the caller a row, the replica's error is
 // returned and only the back-off happens. Neither happens once ctx has ended.
-func (db *DB) exec(ctx context.Context, st *Statement, t Target, read func(Rows) error, res *execResult) error {
+func (db *DB) send(ctx context.Context, st *Statement, t Target, read func(Rows) error, res *execResult) error {
 	st.Result = Result{Affected: -1}
 	if err := checkParams(db.D, st); err != nil {
 		return err

@@ -204,6 +204,11 @@ func applyTxOption(opt TxOption, o *txOptions) { opt.apply(o) }
 // is rolled back, never committed; its error matches ErrTimeout when velox's
 // deadline passed, and context.DeadlineExceeded or context.Canceled otherwise.
 //
+// On MySQL, a deadlock (1213) rolls the whole transaction back, as does a lock
+// wait timeout (1205) under innodb_rollback_on_timeout, which velox asks the
+// server after one. Should fn swallow the error, its later statements fail
+// unsent and its nil returns the error: nothing runs outside the transaction.
+//
 // A rollback velox sends after fn fails, or once ctx has ended, is bounded to
 // 5 seconds; database/sql's Tx.Rollback takes no context, so on a DB from Open
 // that bound covers a savepoint's ROLLBACK TO only.
@@ -535,6 +540,39 @@ func (db *DB) breakOn(err error) {
 	}
 }
 
+// noteServerRollback breaks db's transaction when err, a statement's on MySQL,
+// says the server rolled all of it back. The connection is then in autocommit:
+// a statement after an fn that swallowed err would commit on its own, and the
+// COMMIT would succeed with nothing to commit. A deadlock (1213) always does
+// that; a lock wait timeout (1205) only under innodb_rollback_on_timeout.
+func (db *DB) noteServerRollback(ctx context.Context, err error) {
+	if db.txRoot.broken != nil {
+		return
+	}
+	n, _, ok := mysqlError(err)
+	if ok && (n == 1213 || n == 1205 && db.rollsBackOnTimeout(ctx)) {
+		db.txRoot.broken = fmt.Errorf("the database rolled the transaction back, so it can only roll back: %w", err)
+	}
+}
+
+// rollsBackOnTimeout asks the server, on the transaction's connection, whether
+// a lock wait timeout rolls the transaction back. No answer counts as yes: a
+// transaction wrongly refused fails, and one wrongly trusted loses its writes.
+func (db *DB) rollsBackOnTimeout(ctx context.Context) bool {
+	qctx, cancel := rollbackContext(ctx, db.txDeadline)
+	defer cancel()
+	r, err := db.Ex.Query(qctx, "SELECT @@innodb_rollback_on_timeout", nil)
+	if err != nil {
+		return true
+	}
+	defer r.Close()
+	var on int64
+	if !r.Next() || r.Scan(&on) != nil {
+		return true
+	}
+	return on != 0
+}
+
 // undoSavepoint is rollbackSavepoint on rollbackContext, bounded by the
 // transaction's deadline too.
 func (db *DB) undoSavepoint(ctx context.Context, name string) error {
@@ -584,8 +622,9 @@ func (c *txCtx) String() string { return fmt.Sprint(c.Context) + ".WithTx" }
 // root), once the transaction has committed or rolled back.
 //
 // broken is set, on the root, once a savepoint's ROLLBACK TO or its RELEASE
-// has failed: the savepoint's work may still be in the transaction. From then
-// on the transaction does not commit, and its statements and nested Tx fail
+// has failed, as the savepoint's work may still be in the transaction, or once
+// the server has rolled it back (noteServerRollback). From then on the
+// transaction does not commit, and its statements and nested Tx fail
 // with broken before anything is sent. A savepoint that encloses the broken
 // one and whose fn then returns nil still sends its RELEASE, which the
 // transaction's rollback undoes with the rest. Like the rest of tx, it is

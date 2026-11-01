@@ -150,6 +150,11 @@ func (db *DB) Dialect() Dialect { return db.e.D }
 // is rolled back, never committed; its error matches ErrTimeout when velox's
 // deadline passed, and context.DeadlineExceeded or context.Canceled otherwise.
 //
+// On MySQL, a deadlock (1213) rolls the whole transaction back, as does a lock
+// wait timeout (1205) under innodb_rollback_on_timeout, which velox asks the
+// server after one. Should fn swallow the error, its later statements fail
+// unsent and its nil returns the error: nothing runs outside the transaction.
+//
 // A rollback velox sends after fn fails, or once ctx has ended, is bounded to
 // 5 seconds; database/sql's Tx.Rollback takes no context, so on a DB from Open
 // that bound covers a savepoint's ROLLBACK TO only.
