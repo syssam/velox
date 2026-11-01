@@ -615,7 +615,7 @@ func (db *DB) exec(ctx context.Context, st *Statement, t Target, read func(Rows)
 	if db.txRoot != nil && db.txRoot.broken != nil {
 		return stmtErr(st, db.txRoot.broken)
 	}
-	if err := waitsForConn(db); err != nil {
+	if err := waitsForConn(ctx, db); err != nil {
 		return stmtErr(st, err)
 	}
 	err := db.send(ctx, st, t, read, res)

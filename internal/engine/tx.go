@@ -203,7 +203,9 @@ func applyTxOption(opt TxOption, o *txOptions) { opt.apply(o) }
 // On a pool of one connection, as Connect makes on SQLite, the transaction holds
 // the connection, so a statement on db in fn's goroutine would wait for itself. It
 // fails, whatever its context. One on another goroutine, or on another DB over the
-// same *sql.DB, waits, and cannot be told from one that fn does not wait for.
+// same *sql.DB, waits, and cannot be told from one that fn does not wait for: so does
+// one on velox.Pool(db), with no deadline but its own. Once the context of the
+// statement or of the Tx has ended, the statement's error says so and matches it.
 //
 // Under a dry-run context (IsDryRun), such as the one SQL(ctx) gives a hook,
 // Tx fails with ErrDryRun before BEGIN, nested or not: it is a write.
@@ -415,7 +417,7 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 			txShard = sh
 		}
 	}
-	if err := waitsForConn(db); err != nil {
+	if err := waitsForConn(ctx, db); err != nil {
 		endTx(info, TxError)
 		return false, fmt.Errorf("velox: transaction: %w", err)
 	}
@@ -424,8 +426,12 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 		endTx(info, TxError)
 		return false, fmt.Errorf("velox: begin: %w", err)
 	}
-	defer releaseConn(db, holdConn(db, 1)) // deferred first, so it runs last: after the rollback
 	f := newTxFrame(ctx, DB{D: db.D, Ex: ex, Rt: db.Rt, Cfg: db.Cfg, InTx: true, txDeadline: deadline, txCause: cause, tx: info, txWrote: wrote, txShard: txShard}, nil)
+	h := holdConn(db, 1)
+	if h != 0 {
+		db.Cfg.connTx.Store(f)
+	}
+	defer releaseConn(db, h) // deferred first, so it runs last: after the rollback
 	defer f.ended.Store(true) // before the note, and after the rollback
 	finished := false
 	defer func() {

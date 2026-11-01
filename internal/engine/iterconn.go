@@ -1,8 +1,10 @@
 package engine
 
 import (
+	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"runtime"
 )
 
@@ -35,13 +37,21 @@ func onePool(db *DB) bool {
 
 // waitsForConn is the error of a statement of this goroutine on db that would wait
 // for the connection the goroutine holds; nil for any other. It is one atomic load
-// unless the connection is held.
-func waitsForConn(db *DB) error {
+// unless the connection is held. Once ctx, or the context of the Tx that holds the
+// connection, has ended, nothing would wait forever, as database/sql has rolled the Tx
+// back: the error says the context ended, and matches its error.
+func waitsForConn(ctx context.Context, db *DB) error {
 	h := db.Cfg.connHolder.Load()
 	if h == 0 || db.InTx || !onePool(db) || h>>1 != goid() {
 		return nil
 	}
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("the statement's context ended: %w", err)
+	}
 	if h&1 != 0 {
+		if f, _ := db.Cfg.connTx.Load().(*txFrame); f != nil && f.ctx.Err() != nil {
+			return fmt.Errorf("the context of the Tx whose fn this is ended: %w", f.ctx.Err())
+		}
 		return errTxConn
 	}
 	return errIterConn
@@ -63,6 +73,9 @@ func holdConn(db *DB, tx uint64) uint64 {
 // may hold the connection this one released.
 func releaseConn(db *DB, h uint64) {
 	if h != 0 {
+		if h&1 != 0 {
+			db.Cfg.connTx.Store((*txFrame)(nil))
+		}
 		db.Cfg.connHolder.CompareAndSwap(h, 0)
 	}
 }
