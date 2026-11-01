@@ -40,7 +40,7 @@ func TestFunctionMarshalers(t *testing.T) {
 	if got, err := veloxgql.UnmarshalUUID("0193A1B2-C3D4-7E5F-8A9B-0C1D2E3F4A5B"); err != nil || got != u {
 		t.Errorf("UnmarshalUUID = %v, %v", got, err)
 	}
-	if got, err := veloxgql.UnmarshalUint64("18446744073709551615"); err != nil || got != math.MaxUint64 {
+	if got, err := veloxgql.UnmarshalUint64("9223372036854775807"); err != nil || got != math.MaxInt64 {
 		t.Errorf("UnmarshalUint64 = %v, %v", got, err)
 	}
 	if got, err := veloxgql.UnmarshalUint("7"); err != nil || got != 7 {

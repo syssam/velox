@@ -344,6 +344,7 @@ func TestCostStatements(t *testing.T) {
 		want        int
 	}{
 		{"a list edge", `{ users(first: 100) { edges { node { friends { id } } } } }`, 100402},
+		{"two list edges", `{ users(first: 100) { edges { node { a: friends { id } b: friends { id } } } } }`, 200602},
 		{"two levels", `{ users(first: 100) { edges { node { posts(first: 100) { edges { node { id } } } } } } }`, 20502},
 	} {
 		if got := costOf(t, c.query, nil, l); got != c.want {
@@ -686,4 +687,137 @@ func FuzzCost(f *testing.F) {
 			}
 		}
 	})
+}
+
+// TestCostInputWeighs: an object weighs what its input type does, nested too, as
+// gqlgen does work for each field of the type; a string by its bytes, so that a large
+// one used many times is refused; a JSON scalar's objects by their nodes.
+func TestCostInputWeighs(t *testing.T) {
+	var wide strings.Builder
+	for i := range 40 {
+		fmt.Fprintf(&wide, "f%d: String ", i)
+	}
+	schema := gqlparser.MustLoadSchema(&ast.Source{Input: costSDL + `
+scalar JSON
+input Wide { or: [Wide!] not: Wide j: JSON name: String ` + wide.String() + ` }
+extend type Query { filtered(where: Wide): UserConnection! }`})
+	cost := func(query string, vars map[string]any) int {
+		t.Helper()
+		doc, errs := gqlparser.LoadQueryWithRules(schema, query, nil)
+		if len(errs) > 0 {
+			t.Fatalf("%s: %v", query, errs)
+		}
+		return veloxgql.Cost(schema, doc.Operations[0], vars, veloxgql.DefaultLimits())
+	}
+	const byVar = `query ($w: Wide) { filtered(where: $w) { totalCount } }`
+	base := cost(`{ filtered { totalCount } }`, nil)
+	const obj = 1 + 44/16 // of Wide
+	for _, c := range []struct {
+		name string
+		lit  string
+		v    any
+		want int
+	}{
+		{"empty", `{}`, map[string]any{}, obj},
+		{"nested", `{not: {}}`, map[string]any{"not": map[string]any{}}, 2 * obj},
+		{"a list", `{or: [{}, {}]}`, map[string]any{"or": []any{map[string]any{}, map[string]any{}}}, 3 * obj},
+		{"a short string", `{name: "a"}`, map[string]any{"name": "a"}, obj + 1},
+		{"a string of 1 KB", `{name: "` + strings.Repeat("s", 1024) + `"}`, map[string]any{"name": strings.Repeat("s", 1024)}, obj + 1 + 8},
+		{"a JSON scalar", `{j: {a: {b: 1}}}`, map[string]any{"j": map[string]any{"a": map[string]any{"b": 1}}}, obj + 3},
+		{"an unknown key of a JSON scalar", `{j: {name: {}}}`, map[string]any{"j": map[string]any{"name": map[string]any{}}}, obj + 2},
+	} {
+		if got := cost(`{ filtered(where: `+c.lit+`) { totalCount } }`, nil) - base; got != c.want {
+			t.Errorf("%s, a literal: cost %d, want %d", c.name, got, c.want)
+		}
+		if got := cost(byVar, map[string]any{"w": c.v}) - base; got != c.want {
+			t.Errorf("%s, a variable: cost %d, want %d", c.name, got, c.want)
+		}
+	}
+	// A string of 1 MB at 30 places is 30 MB, read for each.
+	long := strings.Repeat("s", 1<<20-100)
+	var uses strings.Builder
+	for i := range 30 {
+		fmt.Fprintf(&uses, "a%d: filtered(where: $w) { totalCount } ", i)
+	}
+	if got, most := cost(`query ($w: Wide) { `+uses.String()+` }`, map[string]any{"w": map[string]any{"name": long}}), veloxgql.DefaultLimits().MaxCost; got < most {
+		t.Errorf("a string of 1 MB at 30 places: cost %d, under %d", got, most)
+	}
+}
+
+// TestCostNodesByType: nodes sends one statement for each type among its IDs: an ID
+// not well formed fails before any, and costs none, and no ID still counts the field.
+func TestCostNodesByType(t *testing.T) {
+	schema := gqlparser.MustLoadSchema(&ast.Source{Input: `
+interface Node { id: ID! }
+type User implements Node { id: ID! }
+type Query { nodes(ids: [ID!]!): [Node]! node(id: ID!): Node }`})
+	id := func(typ string) string { return veloxgql.EncodeID(typ, 1) }
+	cost := func(query string, vars map[string]any) int {
+		t.Helper()
+		doc, errs := gqlparser.LoadQueryWithRules(schema, query, nil)
+		if len(errs) > 0 {
+			t.Fatalf("%s: %v", query, errs)
+		}
+		return veloxgql.Cost(schema, doc.Operations[0], vars, veloxgql.DefaultLimits())
+	}
+	base := cost(`{ nodes(ids: []) { id } }`, nil)
+	for _, c := range []struct {
+		name string
+		ids  []string
+		want int
+	}{
+		{"one type", []string{id("User")}, 0},
+		{"one type twice", []string{id("User"), id("User")}, 0},
+		{"three types", []string{id("User"), id("Post"), id("Label")}, 200},
+		{"not an ID", []string{"!", id("User")}, 0},
+	} {
+		vars := make([]any, len(c.ids))
+		lit := make([]string, len(c.ids))
+		for i, s := range c.ids {
+			vars[i], lit[i] = s, fmt.Sprintf("%q", s)
+		}
+		// The rows part follows the IDs: one row costs 1 and its id 1.
+		rows := len(c.ids)
+		if got := cost(`{ nodes(ids: [`+strings.Join(lit, ",")+`]) { id } }`, nil) - base; got != c.want+rows {
+			t.Errorf("%s, a literal: %d, want %d", c.name, got, c.want+rows)
+		}
+		if got := cost(`query ($v: [ID!]!) { nodes(ids: $v) { id } }`, map[string]any{"v": vars}) - base; got != c.want+rows {
+			t.Errorf("%s, a variable: %d, want %d", c.name, got, c.want+rows)
+		}
+	}
+	// A single ID, as a list of one coerces.
+	if got, want := cost(`query ($v: [ID!]!) { nodes(ids: $v) { id } }`, map[string]any{"v": id("User")}), base+1; got < want-1 {
+		t.Errorf("one ID, not in a list: %d, want %d", got, want)
+	}
+}
+
+// TestCostDeleteStatements: a delete<T> sends a check and a statement for each join
+// its type has connections to, as the generated code does, beyond its own.
+func TestCostDeleteStatements(t *testing.T) {
+	schema := gqlparser.MustLoadSchema(&ast.Source{Input: `
+type PageInfo { hasNextPage: Boolean! }
+type LabelEdge { node: Label cursor: String! }
+type LabelConnection { edges: [LabelEdge] pageInfo: PageInfo! totalCount: Int! }
+type Label { id: ID! }
+type Post { id: ID! labels: LabelConnection! likes: [Label!] author: Label }
+type Query { post: Post }
+type Mutation { deletePost(id: ID!): ID! deleteLabel(id: ID!): ID! deleteNothing(id: ID!): ID! }
+`})
+	cost := func(query string) int {
+		t.Helper()
+		doc, errs := gqlparser.LoadQueryWithRules(schema, query, nil)
+		if len(errs) > 0 {
+			t.Fatalf("%s: %v", query, errs)
+		}
+		return veloxgql.Cost(schema, doc.Operations[0], nil, veloxgql.DefaultLimits())
+	}
+	if got, want := cost(`mutation { deletePost(id: "1") }`), 1+100+300; got != want {
+		t.Errorf("two joins: cost %d, want %d", got, want)
+	}
+	if got, want := cost(`mutation { deleteLabel(id: "1") }`), 1+100; got != want {
+		t.Errorf("no joins: cost %d, want %d", got, want)
+	}
+	if got, want := cost(`mutation { deleteNothing(id: "1") }`), 1+100; got != want {
+		t.Errorf("no such type: cost %d, want %d", got, want)
+	}
 }

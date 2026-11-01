@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 
 	"github.com/99designs/gqlgen/graphql"
+	"github.com/99designs/gqlgen/graphql/errcode"
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 
@@ -86,8 +87,9 @@ import (
 //
 // Before gqlgen parses a request, whose validation is quadratic in the fields
 // that share a response name, the extension parses it and refuses one over
-// MaxTokens or MaxFields, on every transport. That is a second parse, which a
-// query cache of gqlgen's does not spare. Use it before
+// MaxTokens, MaxFields, MaxFragments, MaxDepth, MaxNameBytes or MaxLiteralBytes, or
+// whose variables are over MaxDepth or MaxVariableNodes, on every transport. That is a
+// second parse, which a query cache of gqlgen's does not spare. Use it before
 // extension.AutomaticPersistedQuery, so that the cache never stores a refused
 // query.
 //
@@ -95,8 +97,8 @@ import (
 // when WithTxOptions asks for velox.TxRetrySerializable: Validate refuses
 // it, naming the limit or the option.
 //
-// The extension mutates the operation's parameters, to refuse a document over
-// MaxTokens or MaxFields; the operation's context, to refuse a request over
+// The extension mutates the operation's parameters, to refuse a document or variables
+// over those; the operation's context, to refuse a request over
 // MaxCost; intercepts the operation, to put the DB and the limits in
 // its context, which the executable schema runs in; the response, because a
 // mutation's resolvers run while gqlgen makes its response (inside the
@@ -108,6 +110,8 @@ type Extension struct {
 	limits Limits
 	// schema is the server's, which Validate stores; nil for Validate(nil).
 	schema *ast.Schema
+	// bounds is what the check of a request reads, of the limits and the schema.
+	bounds bounds
 	// txOpts are the options of a mutation's transaction.
 	txOpts []velox.TxOption
 	// txFilter decides whether a mutation runs in a transaction; nil means
@@ -241,6 +245,7 @@ func (e *Extension) Validate(es graphql.ExecutableSchema) error {
 	if es != nil {
 		e.schema = es.Schema()
 	}
+	e.bounds = newBounds(e.limits, e.schema)
 	if e.db == nil {
 		return errors.New("veloxgql.NewExtension: nil DB")
 	}
@@ -256,14 +261,14 @@ func (e *Extension) Validate(es graphql.ExecutableSchema) error {
 }
 
 // MutateOperationParameters implements graphql.OperationParameterMutator: it
-// refuses a document over MaxTokens or MaxFields. gqlgen runs it before it parses
-// or validates, whichever the transport. An empty query, that an APQ extension
-// after this one fills, passed here when it was stored.
+// refuses a request whose document or variables are over a limit. gqlgen runs it
+// before it parses or validates, whichever the transport.
 func (e *Extension) MutateOperationParameters(_ context.Context, p *graphql.RawParams) *gqlerror.Error {
-	if p.Query == "" {
-		return nil
+	b := e.bounds
+	if e.schema == nil {
+		b = newBounds(e.limits, nil) // before Validate, for a test
 	}
-	return checkDocument(p.Query, e.limits)
+	return checkRequest(p, b)
 }
 
 // MutateOperationContext implements graphql.OperationContextMutator: it
@@ -289,8 +294,15 @@ func (e *Extension) MutateOperationContext(_ context.Context, rc *graphql.Operat
 // InterceptOperation implements graphql.OperationInterceptor: it puts the
 // DB and the limits in the operation's context, and marks a mutation's.
 func (e *Extension) InterceptOperation(ctx context.Context, next graphql.OperationHandler) graphql.ResponseHandler {
+	rc := graphql.GetOperationContext(ctx)
+	// After every extension's MutateOperationContext, extension.Introspection's too.
+	if rc.DisableIntrospection && rc.Operation != nil && asksIntrospection(rc.Operation.SelectionSet, nil) {
+		err := gqlerror.Errorf("introspection is disabled")
+		errcode.Set(err, errcode.ValidationFailed)
+		return graphql.OneShot(&graphql.Response{Errors: gqlerror.List{err}})
+	}
 	ctx = withState(ctx, e.db, e.limits)
-	if op := graphql.GetOperationContext(ctx).Operation; op != nil && op.Operation == ast.Mutation {
+	if op := rc.Operation; op != nil && op.Operation == ast.Mutation {
 		m := new(mutation)
 		m.plain = e.txFilter != nil && !e.txFilter(ctx, op)
 		if m.plain {
@@ -301,6 +313,36 @@ func (e *Extension) InterceptOperation(ctx context.Context, next graphql.Operati
 		ctx = context.WithValue(ctx, mutationKey{}, m)
 	}
 	return next(ctx)
+}
+
+// asksIntrospection reports whether set, a root selection, holds __schema or __type,
+// each fragment read once. gqlgen's own answer to them, with introspection off, is an
+// error ErrorPresenter could only call internal.
+func asksIntrospection(set ast.SelectionSet, seen map[string]bool) bool {
+	for _, s := range set {
+		switch s := s.(type) {
+		case *ast.Field:
+			if s.Name == "__schema" || s.Name == "__type" {
+				return true
+			}
+		case *ast.InlineFragment:
+			if asksIntrospection(s.SelectionSet, seen) {
+				return true
+			}
+		case *ast.FragmentSpread:
+			if s.Definition == nil || seen[s.Name] {
+				continue
+			}
+			if seen == nil {
+				seen = map[string]bool{}
+			}
+			seen[s.Name] = true
+			if asksIntrospection(s.Definition.SelectionSet, seen) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // InterceptResponse implements graphql.ResponseInterceptor: it gives each

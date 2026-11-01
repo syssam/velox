@@ -1,10 +1,12 @@
 package gqlimpl
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/vektah/gqlparser/v2/ast"
@@ -279,15 +281,33 @@ func NotZero[V any](at string, v V) error {
 // field whose argument has another name, it finds no null and refuses nothing. For
 // generated code.
 func NotNull(ctx context.Context, at, arg, name string) error {
-	fc := graphql.GetFieldContext(ctx)
-	if fc == nil || fc.Field.Field == nil || !graphql.HasOperationContext(ctx) {
-		return nil
-	}
-	a := fc.Field.Arguments.ForName(arg)
-	if a == nil || !givenNull(a.Value, name, graphql.GetOperationContext(ctx).Variables) {
+	if !nullGiven(ctx, arg, name) {
 		return nil
 	}
 	return InputErrorf("%s: invalid value: null cannot be stored on create, where it means the field's default; leave the field out, or clear it with an update", at)
+}
+
+// NullClears refuses a null the client gave the input field name, of the argument
+// arg of the running field, on an update: an update's nil pointer leaves the field
+// as it is, and a client that says null means to clear it, which clearField, the input's
+// other field, does. The client gets BAD_USER_INPUT, naming at and clearField. Called
+// outside a gqlgen field, or from a field whose argument has another name, it finds
+// no null and refuses nothing. For generated code.
+func NullClears(ctx context.Context, at, arg, name, clearField string) error {
+	if !nullGiven(ctx, arg, name) {
+		return nil
+	}
+	return InputErrorf("%s: invalid value: null would leave it as it is; give %s: true to clear it, or leave the field out", at, clearField)
+}
+
+// nullGiven reports whether the running field's argument arg gives name as null.
+func nullGiven(ctx context.Context, arg, name string) bool {
+	fc := graphql.GetFieldContext(ctx)
+	if fc == nil || fc.Field.Field == nil || !graphql.HasOperationContext(ctx) {
+		return false
+	}
+	a := fc.Field.Arguments.ForName(arg)
+	return a != nil && givenNull(a.Value, name, graphql.GetOperationContext(ctx).Variables)
 }
 
 // givenNull reports whether the input object v, a literal or a variable, gives
@@ -353,11 +373,103 @@ func WriteError(err error, input, entity string, name func(goField string) strin
 // FromJSON decodes j into a T for the input field at; on failure, a
 // BAD_USER_INPUT error naming at, which does not echo the decoder's text (it
 // names Go types). For generated code.
+//
+// What it stores is what the client gave, or it refuses. A number in an any is a
+// json.Number, so it keeps its digits: a hook that reads one finds that, not a
+// float64. A key that no field of a struct has is refused, as json.Unmarshal would
+// drop it, and so is a null where the type holds none, a string in a []string as much
+// as a field of a struct, as it would store the zero value. A type with its own
+// UnmarshalJSON decides for itself. Reading a row back into an any is velox's scan,
+// which gives a float64.
 func FromJSON[T any](at string, j veloxgql.JSON) (T, error) {
-	var t T
-	if err := json.Unmarshal(j, &t); err != nil {
-		var zero T
+	var t, zero T
+	dec := json.NewDecoder(bytes.NewReader(j))
+	dec.UseNumber()
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&t); err != nil {
+		if key, ok := strings.CutPrefix(err.Error(), "json: unknown field "); ok {
+			return zero, InputErrorf("%s: invalid value: the key %s is not in the field's type", at, key)
+		}
 		return zero, InputErrorf("%s: invalid value: not a JSON value of the field's type", at)
+	}
+	if bytes.Contains(j, []byte("null")) {
+		var v any
+		dec := json.NewDecoder(bytes.NewReader(j))
+		dec.UseNumber()
+		// j decoded once into T, so it is a JSON value.
+		if err := dec.Decode(&v); err == nil && nullInto(reflect.TypeFor[T](), v) {
+			return zero, InputErrorf("%s: invalid value: null where the field's type holds none", at)
+		}
 	}
 	return t, nil
 }
+
+// nullInto reports whether v, decoded JSON, holds a null where a value of the type t
+// has no way to hold one, so that decoding it gives the zero value.
+func nullInto(t reflect.Type, v any) bool {
+	if t.Implements(jsonUnmarshaler) || reflect.PointerTo(t).Implements(jsonUnmarshaler) {
+		return false
+	}
+	switch t.Kind() {
+	case reflect.Interface:
+		return false
+	case reflect.Pointer:
+		return v != nil && nullInto(t.Elem(), v)
+	case reflect.Slice, reflect.Array:
+		list, _ := v.([]any)
+		for _, e := range list {
+			if nullInto(t.Elem(), e) {
+				return true
+			}
+		}
+		return v == nil && t.Kind() == reflect.Array
+	case reflect.Map:
+		m, _ := v.(map[string]any)
+		for _, e := range m {
+			if nullInto(t.Elem(), e) {
+				return true
+			}
+		}
+		return false
+	case reflect.Struct:
+		if v == nil {
+			return true
+		}
+		m, _ := v.(map[string]any)
+		for k, e := range m {
+			if f, ok := jsonField(t, k); ok && nullInto(f.Type, e) {
+				return true
+			}
+		}
+		return false
+	}
+	return v == nil
+}
+
+// jsonField is the field of the struct t that encoding/json decodes the key k into:
+// by its tag or its name, the exact one first, then in any case.
+func jsonField(t reflect.Type, k string) (reflect.StructField, bool) {
+	var fold reflect.StructField
+	found := false
+	for _, f := range reflect.VisibleFields(t) {
+		if !f.IsExported() {
+			continue
+		}
+		name, _, _ := strings.Cut(f.Tag.Get("json"), ",")
+		switch name {
+		case "-":
+			continue
+		case "":
+			name = f.Name
+		}
+		if name == k {
+			return f, true
+		}
+		if !found && strings.EqualFold(name, k) {
+			fold, found = f, true
+		}
+	}
+	return fold, found
+}
+
+var jsonUnmarshaler = reflect.TypeFor[json.Unmarshaler]()

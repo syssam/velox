@@ -1094,12 +1094,18 @@ func TestDocumentRefused(t *testing.T) {
 	}
 }
 
-// TestDocumentMergePairs: fields under one response name count in pairs, however
-// they merge: at MaxFields 12, 60 pairs.
+// TestDocumentMergePairs: fields that differ under one response name count in pairs,
+// however they merge: at MaxFields 12, 60 pairs.
 func TestDocumentMergePairs(t *testing.T) {
 	db, _ := handlerDB(t)
 	srv := serve(db, handlerResolvers(db, nil), veloxgql.WithLimits(veloxgql.Limits{MaxFields: 12}))
-	a := func(n int) string { return strings.Repeat("a: count ", n) }
+	next := 0
+	a := func(n int) string {
+		return spell(n, func(int) string {
+			next++
+			return fmt.Sprintf("a: count(n: %d)", next)
+		})
+	}
 	for _, c := range []struct {
 		name, query string
 		refused     bool
@@ -1195,6 +1201,75 @@ func TestSetup(t *testing.T) {
 	over := `{"query":"{ a: count b: count c: count }"}`
 	if _, got := do(strings.NewReader(over), int64(len(over))); got != `{"errors":[{"message":"request is too large: it has 3 fields, and the most is 2","extensions":{"code":"BAD_USER_INPUT"}}],"data":null}` {
 		t.Errorf("over MaxFields: %s", got)
+	}
+}
+
+// TestValidationErrorsBounded: a server Setup made returns MaxErrors of validation's
+// errors, and says there are more.
+func TestValidationErrorsBounded(t *testing.T) {
+	db, _ := handlerDB(t)
+	srv := handler.New(testSchema(handlerResolvers(db, nil)))
+	h := veloxgql.Setup(srv, db, veloxgql.WithLimits(veloxgql.Limits{MaxErrors: 3}))
+	srv.AddTransport(transport.POST{})
+	do := func(query string) string {
+		body, err := json.Marshal(map[string]string{"query": query})
+		if err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		return w.Body.String()
+	}
+	got := do(`{ a b c d e f }`)
+	if n := strings.Count(got, `"message"`); n != 4 || !strings.Contains(got, "over 3 validation errors") || !strings.Contains(got, `"code":"GRAPHQL_VALIDATION_FAILED"`) {
+		t.Errorf("6 unknown fields: %d errors: %s", n, got)
+	}
+	if got := do(`{ a b c }`); strings.Contains(got, "validation errors") || strings.Count(got, `"message"`) != 3 {
+		t.Errorf("at the limit: %s", got)
+	}
+	// gqlgen adds its rules for no suggestions to these under SetDisableSuggestion,
+	// unless they are there: each error comes once, at every version.
+	for _, q := range []string{`{ a }`, `{ count { __typename } }`} {
+		if got := do(q); strings.Count(got, `"message"`) != 1 {
+			t.Errorf("%s: %s", q, got)
+		}
+	}
+}
+
+// TestIntrospectionOff: with no extension.Introspection, __schema and __type are a
+// client's error before any resolver runs, however they are spelled. With one they
+// run, the extensions in either order.
+func TestIntrospectionOff(t *testing.T) {
+	db, l := handlerDB(t)
+	srv := serve(db, handlerResolvers(db, nil))
+	const want = `{"errors":[{"message":"introspection is disabled","extensions":{"code":"GRAPHQL_VALIDATION_FAILED"}}],"data":null}`
+	for _, q := range []string{
+		`{ __schema { queryType { name } } }`,
+		`{ __type(name: "Query") { name } }`,
+		`{ count ...F } fragment F on Query { __schema { queryType { name } } }`,
+		`{ ... { a: __schema { queryType { name } } } }`,
+		`{ ...F } fragment F on Query { ...G } fragment G on Query { __schema { queryType { name } } }`,
+	} {
+		if got := post(t, context.Background(), srv, q); got != want {
+			t.Errorf("%s: %s", q, got)
+		}
+	}
+	if stmts, _ := l.take(); len(stmts) != 0 {
+		t.Errorf("refused, it ran %v", stmts)
+	}
+	if got := post(t, context.Background(), srv, `{ __typename count }`); strings.Contains(got, "introspection") {
+		t.Errorf("__typename: %s", got)
+	}
+	// A fragment that spreads itself, which validation refuses first, ends the walk too.
+	if got := post(t, context.Background(), srv, `{ ...F } fragment F on Query { ...F }`); strings.Contains(got, "introspection") {
+		t.Errorf("a cycle: %s", got)
+	}
+	on := serve(db, handlerResolvers(db, nil))
+	on.Use(extension.Introspection{})
+	if got := post(t, context.Background(), on, `{ count }`); !strings.Contains(got, `"count"`) {
+		t.Errorf("with it on: %s", got)
 	}
 }
 

@@ -50,10 +50,13 @@ type Limits struct {
 	// MaxCost is the most a request may cost (Cost): the bound on a whole
 	// request that the other limits, each of one argument, do not give. More
 	// is ErrTooCostly, before any statement runs. It bounds the statements too,
-	// at 100 each. A list edge costs MaxList for each parent, so under the
-	// defaults one full page with a list edge, posts(first: 100) { edges { node
-	// { likes { id } } } }, costs 100402 and is refused: raise MaxCost, or lower
-	// MaxList. Introspection has its own limit.
+	// at 100 each, so 1500 by default. Two levels of full pages with 12 fields in
+	// each row cost about 144000, and pass. A list edge costs MaxList for each
+	// parent, so under the defaults one full page with two list edges, posts(first:
+	// 100) { edges { node { likes { id } tags { id } } } }, costs 200602 and is
+	// refused: raise MaxCost, or lower MaxList. The worst shape measured, 128-byte
+	// aliases over rows, allocates about 2 KB a unit, so 290 MB at the default.
+	// Introspection has its own limit.
 	MaxCost int
 
 	// MaxIntrospectionCost is the most the __schema and __type of a request may
@@ -71,12 +74,46 @@ type Limits struct {
 	MaxTokens int
 
 	// MaxFields is the most fields a request's query may hold, as written, a
-	// repeat and an alias each counting one. More is ErrRequestTooLarge,
-	// BAD_USER_INPUT, before gqlgen validates the query: validation is quadratic
-	// in the fields that share a response name, so 5 times MaxFields is the most
-	// pairs of those a query may hold, each fragment counted where it is spread,
-	// and 100 times MaxFields the most fields its spreads reach.
+	// repeat and an alias each counting one, and the most spreads and inline
+	// fragments. More is ErrRequestTooLarge, BAD_USER_INPUT, before gqlgen validates
+	// the query: validation is quadratic in the fields that share a response name,
+	// so of those a query may hold 5 times MaxFields pairs that differ, whose errors
+	// are the cost, and 200 times MaxFields pairs that agree, each fragment counted
+	// where it is spread; and its spreads may reach 100 times MaxFields fields.
 	MaxFields int
+
+	// MaxFragments is the most fragments a request's query may name, defined or
+	// spread. Validation stores a pair of any two spread together, so this is what
+	// bounds them, at about 145 bytes a pair. More is ErrRequestTooLarge.
+	MaxFragments int
+
+	// MaxDepth is how deep a request's selections, fragments spread included, its
+	// values and its variables may nest. Validation reads a value again at each
+	// level above it. More is ErrRequestTooLarge.
+	MaxDepth int
+
+	// MaxNameBytes is the longest name or alias a request's query may hold, which
+	// each row and error repeats. It is the schema's longest name when that is
+	// longer. More is ErrRequestTooLarge.
+	MaxNameBytes int
+
+	// MaxLiteralBytes is the longest string literal a request's query may hold: an
+	// error repeats it. A variable has no such limit. More is ErrRequestTooLarge.
+	MaxLiteralBytes int
+
+	// MaxVariableNodes is the most values and objects a request's variables may
+	// hold. An object of an input type weighs 1 more for each 16 of the type's
+	// fields, as gqlgen does work for each of them; a JSON scalar's objects weigh 1.
+	// Of a query sent by its hash the types are not known yet, and an object weighs
+	// as the schema's widest input does. More is ErrRequestTooLarge, before gqlgen
+	// reads any of them.
+	MaxVariableNodes int
+
+	// MaxErrors is the most of validation's errors a response may hold, and one that
+	// says there are more, on a server Setup made. Each pair of fields that differ
+	// and each unknown name makes one, and a response of them is built by each
+	// request that asks.
+	MaxErrors int
 
 	// MaxBodyBytes is the most bytes the body of a request may have, its
 	// variables and any upload included. More is refused with 413, by the handler
@@ -85,13 +122,15 @@ type Limits struct {
 }
 
 // DefaultLimits returns MaxPage 100, MaxList 1000, MaxFilterDepth 5,
-// MaxFilterWidth 100, MaxFilterNodes 1000, MaxOrderTerms 5, MaxCost 100000,
-// MaxIntrospectionCost 1000000, MaxTokens 15000, MaxFields 2000 and MaxBodyBytes
-// 1 MiB.
+// MaxFilterWidth 100, MaxFilterNodes 1000, MaxOrderTerms 5, MaxCost 150000,
+// MaxIntrospectionCost 250000, MaxTokens 15000, MaxFields 2000, MaxFragments 500,
+// MaxDepth 64, MaxNameBytes 128, MaxLiteralBytes 64 KiB, MaxVariableNodes 25000,
+// MaxErrors 100 and MaxBodyBytes 1 MiB.
 func DefaultLimits() Limits {
 	return Limits{
 		MaxPage: 100, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 5,
-		MaxCost: 100000, MaxIntrospectionCost: 250000, MaxTokens: 15000, MaxFields: 2000, MaxBodyBytes: 1 << 20,
+		MaxCost: 150000, MaxIntrospectionCost: 250000, MaxTokens: 15000, MaxFields: 2000, MaxFragments: 500, MaxDepth: 64,
+		MaxNameBytes: 128, MaxLiteralBytes: 64 << 10, MaxVariableNodes: 25000, MaxErrors: 100, MaxBodyBytes: 1 << 20,
 	}
 }
 
@@ -119,6 +158,12 @@ func (l Limits) orDefault() Limits {
 		MaxIntrospectionCost: cmp.Or(l.MaxIntrospectionCost, d.MaxIntrospectionCost),
 		MaxTokens:            cmp.Or(l.MaxTokens, d.MaxTokens),
 		MaxFields:            cmp.Or(l.MaxFields, d.MaxFields),
+		MaxFragments:         cmp.Or(l.MaxFragments, d.MaxFragments),
+		MaxDepth:             cmp.Or(l.MaxDepth, d.MaxDepth),
+		MaxNameBytes:         cmp.Or(l.MaxNameBytes, d.MaxNameBytes),
+		MaxLiteralBytes:      cmp.Or(l.MaxLiteralBytes, d.MaxLiteralBytes),
+		MaxVariableNodes:     cmp.Or(l.MaxVariableNodes, d.MaxVariableNodes),
+		MaxErrors:            cmp.Or(l.MaxErrors, d.MaxErrors),
 		MaxBodyBytes:         cmp.Or(l.MaxBodyBytes, d.MaxBodyBytes),
 	}
 }
@@ -142,6 +187,12 @@ func (l Limits) fields() []struct {
 		{"MaxIntrospectionCost", l.MaxIntrospectionCost},
 		{"MaxTokens", l.MaxTokens},
 		{"MaxFields", l.MaxFields},
+		{"MaxFragments", l.MaxFragments},
+		{"MaxDepth", l.MaxDepth},
+		{"MaxNameBytes", l.MaxNameBytes},
+		{"MaxLiteralBytes", l.MaxLiteralBytes},
+		{"MaxVariableNodes", l.MaxVariableNodes},
+		{"MaxErrors", l.MaxErrors},
 		{"MaxBodyBytes", l.MaxBodyBytes},
 	}
 }

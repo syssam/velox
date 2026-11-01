@@ -411,3 +411,51 @@ func AsBool[V, W ~bool](w W) V { return V(w) }
 
 // AsUUID converts a UUID, or the [16]byte of a key, to the UUID type V.
 func AsUUID[V, W ~[16]byte](w W) V { return V(w) }
+
+// The FK helpers scope a predicate on a foreign key to what its target's Read policy
+// lets the reader see, as the edge is: a row the policy hides reads as null, to the
+// edge and so to every predicate of its key, or a filter would say which hidden row
+// another row links to. has is the edge's Has, which holds that policy. With no Read
+// policy on the target T the predicate is the column's alone, and there is no EXISTS.
+// For generated code.
+//
+// Only a Read policy counts: a WithRewrite in the application's own query is not
+// known here, nor is it to the edge's has.
+
+// FK scopes a predicate of one key.
+func FK[T, E, V any](op func(V) velox.Pred[E], has func() velox.Pred[E]) func(V) velox.Pred[E] {
+	if !hasReadPolicy[T]() {
+		return op
+	}
+	return func(v V) velox.Pred[E] { return velox.And(op(v), has()) }
+}
+
+// FKList scopes a predicate of a list of keys.
+func FKList[T, E, V any](op func(...V) velox.Pred[E], has func() velox.Pred[E]) func(...V) velox.Pred[E] {
+	if !hasReadPolicy[T]() {
+		return op
+	}
+	return func(vs ...V) velox.Pred[E] { return velox.And(op(vs...), has()) }
+}
+
+// FKIsNull is the key's IsNull: a hidden target counts as none.
+func FKIsNull[T, E any](op, has func() velox.Pred[E]) func() velox.Pred[E] {
+	if !hasReadPolicy[T]() {
+		return op
+	}
+	return func() velox.Pred[E] { return velox.Not(has()) }
+}
+
+// FKNotNull is the key's NotNull: a hidden target counts as none.
+func FKNotNull[T, E any](op, has func() velox.Pred[E]) func() velox.Pred[E] {
+	if !hasReadPolicy[T]() {
+		return op
+	}
+	return has
+}
+
+// hasReadPolicy reports whether the entity T has a Read policy.
+func hasReadPolicy[T any]() bool {
+	p, ok := any((*T)(nil)).(interface{ Policy() velox.Policy[T] })
+	return ok && p.Policy().Read != nil
+}

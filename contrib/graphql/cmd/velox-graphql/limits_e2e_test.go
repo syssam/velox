@@ -34,7 +34,48 @@ type Member struct{ schema.Schema }
 
 func (Member) Fields() []schema.Field { return []schema.Field{field.String("name")} }
 
-func (Member) Edges() []schema.Edge { return []schema.Edge{edge.To("posts", Post.Type)} }
+func (Member) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("posts", Post.Type), edge.To("docs", Doc.Type)}
+}
+
+type Doc struct{ schema.Schema }
+
+func (Doc) Fields() []schema.Field {
+	return []schema.Field{
+		field.String("title"),
+		field.Int64("member_id").Optional().Nillable().Annotations(graphql.WhereOps(graphql.OpsEquality | graphql.OpsNullable)),
+	}
+}
+
+func (Doc) Edges() []schema.Edge {
+	return []schema.Edge{edge.From("member", Member.Type).Ref("docs").Unique().Field("member_id").Annotations(graphql.WhereEdge())}
+}
+
+func (Doc) Annotations() []schema.Annotation {
+	return []schema.Annotation{graphql.QueryField("docs"), graphql.Mutations(graphql.MutationUpdate)}
+}
+
+// Shape is the Go type of a JSON field.
+type Shape struct {
+	A string
+	N *int
+}
+
+type Item struct{ schema.Schema }
+
+func (Item) Fields() []schema.Field {
+	return []schema.Field{
+		field.String("s_nil").Optional().Nillable(),
+		field.JSON("j_map", map[string]any{}).Optional(),
+		field.Strings("ss").Optional(),
+		field.JSON("j_struct", Shape{}).Optional().Nillable(),
+		field.Uint64("big").Optional(),
+	}
+}
+
+func (Item) Annotations() []schema.Annotation {
+	return []schema.Annotation{graphql.QueryField("items"), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
+}
 
 type Post struct{ schema.Schema }
 
@@ -191,6 +232,31 @@ func (r *mutationResolver) UpdateAcct(ctx context.Context, id string, input gen.
 	return gen.UpdateAcct(ctx, id, input)
 }
 
+// Docs is the resolver for the docs field.
+func (r *queryResolver) Docs(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int, where *gen.DocWhereInput) (*gen.DocConnection, error) {
+	return gen.DocsConnection(ctx, after, first, before, last, where)
+}
+
+// UpdateDoc is the resolver for the updateDoc field.
+func (r *mutationResolver) UpdateDoc(ctx context.Context, id string, input gen.UpdateDocInput) (*gen.Doc, error) {
+	return gen.UpdateDoc(ctx, id, input)
+}
+
+// Items is the resolver for the items field.
+func (r *queryResolver) Items(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*gen.ItemConnection, error) {
+	return gen.ItemsConnection(ctx, after, first, before, last)
+}
+
+// CreateItem is the resolver for the createItem field.
+func (r *mutationResolver) CreateItem(ctx context.Context, input gen.CreateItemInput) (*gen.Item, error) {
+	return gen.CreateItem(ctx, input)
+}
+
+// UpdateItem is the resolver for the updateItem field.
+func (r *mutationResolver) UpdateItem(ctx context.Context, id string, input gen.UpdateItemInput) (*gen.Item, error) {
+	return gen.UpdateItem(ctx, id, input)
+}
+
 // Mutation returns MutationResolver implementation.
 func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
 
@@ -245,10 +311,13 @@ func serve(t *testing.T) served {
 		"CREATE TABLE accts (id INTEGER PRIMARY KEY, handle TEXT NOT NULL, joined DATETIME NOT NULL)",
 		"CREATE TABLE things (id INTEGER PRIMARY KEY, b BLOB NOT NULL, maybe BLOB, j JSON NOT NULL, n INTEGER)",
 		"CREATE TABLE types (id INTEGER PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL)",
+		"CREATE TABLE docs (id INTEGER PRIMARY KEY, title TEXT NOT NULL, member_id INTEGER REFERENCES members (id))",
+		"CREATE TABLE items (id INTEGER PRIMARY KEY, s_nil TEXT, j_map JSON DEFAULT ~{}~, ss JSON DEFAULT ~[]~, j_struct JSON, big INTEGER DEFAULT 0)",
 		"INSERT INTO orgs (id, name) VALUES (1, ~o1~), (2, ~o2~)",
 		"INSERT INTO members (id, name) VALUES (1, ~seen~), (2, ~hidden~)",
 		"INSERT INTO posts (id, org_id, member_id, title) VALUES (1, 1, 1, ~p1~), (2, 1, 2, ~p2~)",
 		"INSERT INTO types (id, name, kind) VALUES (1, ~t~, ~a~)",
+		"INSERT INTO docs (id, title, member_id) VALUES (1, ~d1~, 1), (4, ~d4~, 2), (5, ~d5~, NULL)",
 	} {
 		if _, err := db.Exec(s); err != nil {
 			t.Fatalf("%s: %v", s, err)
@@ -399,6 +468,130 @@ func TestExplicitNullRefused(t *testing.T) {
 	s.want("clear", fmt.Sprintf("mutation { updateThing(id: %q, input: {clearN: true}) { n } }", id), '{"data":{"updateThing":{"n":null}}}')
 }
 
+// TestForeignKeyFilterHidden: a foreign key whose target a policy hides reads as null
+// to every predicate on it, as the edge does: no filter tells the hidden row is
+// linked, or which row it is.
+func TestForeignKeyFilterHidden(t *testing.T) {
+	s := serve(t)
+	seen, hidden := veloxgql.EncodeID("Member", 1), veloxgql.EncodeID("Member", 2)
+	titles := func(where string) string {
+		got := s.do("{ docs(where: {" + where + "}) { edges { node { title } } } }")
+		if strings.Contains(got, "errors") {
+			t.Errorf("%s: %s", where, got)
+		}
+		var out []string
+		for _, part := range strings.Split(got, '"title":"')[1:] {
+			out = append(out, part[:strings.Index(part, '"')])
+		}
+		return strings.Join(out, ",")
+	}
+	for _, c := range []struct{ where, want string }{
+		{fmt.Sprintf("memberID: %q", seen), "d1"},
+		{fmt.Sprintf("memberID: %q", hidden), ""},
+		{fmt.Sprintf("memberIDNEQ: %q", seen), ""},
+		{fmt.Sprintf("memberIDNEQ: %q", hidden), "d1"},
+		{fmt.Sprintf("memberIDIn: [%q, %q]", seen, hidden), "d1"},
+		{fmt.Sprintf("memberIDNotIn: [%q]", hidden), "d1"},
+		{"memberIDIsNil: true", "d4,d5"},
+		{"memberIDIsNil: false", "d1"},
+		{"memberIDNotNil: true", "d1"},
+		{"memberIDNotNil: false", "d4,d5"},
+		{"hasMember: false", "d4,d5"},
+		{"hasMember: true", "d1"},
+	} {
+		if got := titles(c.where); got != c.want {
+			t.Errorf("%s: %q, want %q", c.where, got, c.want)
+		}
+	}
+	s.want("it reads null", "{ docs { edges { node { title member { name } } } } }",
+		'{"data":{"docs":{"edges":[{"node":{"title":"d1","member":{"name":"seen"}}},{"node":{"title":"d4","member":null}},{"node":{"title":"d5","member":null}}]}}}')
+}
+
+// TestUpdateNullRefused: an update that gives null to a field or an edge with a
+// clear input is refused, literal or variable, naming that input: it would keep the
+// old value. Left out, it keeps it; clear stores NULL.
+func TestUpdateNullRefused(t *testing.T) {
+	s := serve(t)
+	s.want("create", 'mutation { createItem(input: {sNil: "a"}) { sNil } }', '{"data":{"createItem":{"sNil":"a"}}}')
+	id := veloxgql.EncodeID("Item", 1)
+	const q = 'mutation ($id: ID!, $i: UpdateItemInput!) { updateItem(id: $id, input: $i) { sNil } }'
+	const qn = 'mutation ($id: ID!, $n: String) { updateItem(id: $id, input: {sNil: $n}) { sNil } }'
+	for name, got := range map[string]string{
+		"literal":        s.do(fmt.Sprintf("mutation { updateItem(id: %q, input: {sNil: null}) { sNil } }", id)),
+		"whole variable": s.doVars(q, map[string]any{"id": id, "i": map[string]any{"sNil": nil}}),
+		"one variable":   s.doVars(qn, map[string]any{"id": id, "n": nil}),
+	} {
+		if !strings.Contains(got, "BAD_USER_INPUT") || !strings.Contains(got, "UpdateItemInput.sNil: invalid value: null") || !strings.Contains(got, "clearSNil") {
+			t.Errorf("%s: %s", name, got)
+		}
+	}
+	doc := veloxgql.EncodeID("Doc", 1)
+	if got := s.do(fmt.Sprintf("mutation { updateDoc(id: %q, input: {memberID: null}) { title } }", doc)); !strings.Contains(got, "BAD_USER_INPUT") || !strings.Contains(got, "clearMember") {
+		t.Errorf("an edge: %s", got)
+	}
+	s.want("left out", fmt.Sprintf("mutation { updateItem(id: %q, input: {}) { sNil } }", id), '{"data":{"updateItem":{"sNil":"a"}}}')
+	if got := s.doVars(qn, map[string]any{"id": id}); got != '{"data":{"updateItem":{"sNil":"a"}}}' {
+		t.Errorf("a variable left out: %s", got)
+	}
+	s.want("null with clear", fmt.Sprintf("mutation { updateItem(id: %q, input: {sNil: null, clearSNil: true}) { sNil } }", id), '{"data":{"updateItem":{"sNil":null}}}')
+}
+
+// TestJSONInputExact: what a JSON field stores is what the client gave, or refused:
+// a number keeps its digits, a null in a list of strings is no empty string, and a
+// key the type has not is not dropped.
+func TestJSONInputExact(t *testing.T) {
+	s := serve(t)
+	stored := func() string {
+		t.Helper()
+		var j string
+		if err := s.db.QueryRow("SELECT j_map FROM items ORDER BY id DESC LIMIT 1").Scan(&j); err != nil {
+			t.Fatal(err)
+		}
+		return j
+	}
+	const q = 'mutation ($m: JSON) { createItem(input: {jMap: $m}) { id } }'
+	if got := s.doVars(q, map[string]any{"m": map[string]any{"n": json.Number("9007199254740993")}}); strings.Contains(got, "errors") {
+		t.Fatal(got)
+	}
+	if got := stored(); got != '{"n":9007199254740993}' {
+		t.Errorf("a variable's number: %s", got)
+	}
+	if got := s.do('mutation { createItem(input: {jMap: {n: 9007199254740993}}) { id } }'); strings.Contains(got, "errors") {
+		t.Fatal(got)
+	}
+	if got := stored(); got != '{"n":9007199254740993}' {
+		t.Errorf("a literal's number: %s", got)
+	}
+	// The row keeps the digits. Reading it back into a map[string]any gives a float64,
+	// which velox's scan decides: 9007199254740992 (0027's Consequences).
+	s.want("read back", "{ items(last: 1) { edges { node { jMap } } } }", '{"data":{"items":{"edges":[{"node":{"jMap":{"n":9007199254740992}}}]}}}')
+	n := s.count("items")
+	for name, q := range map[string]string{
+		"null in a list":  'mutation { createItem(input: {ss: ["a", null]}) { id } }',
+		"null in a struct": 'mutation { createItem(input: {jStruct: {A: null}}) { id } }',
+		"an unknown key":   'mutation { createItem(input: {jStruct: {b: 1}}) { id } }',
+	} {
+		if got := s.do(q); !strings.Contains(got, "BAD_USER_INPUT") {
+			t.Errorf("%s: %s", name, got)
+		}
+	}
+	if got := s.count("items"); got != n {
+		t.Errorf("%d rows after the refusals, was %d", got, n)
+	}
+	s.want("a pointer may be null", 'mutation { createItem(input: {jStruct: {A: "x", N: null}}) { jStruct } }', '{"data":{"createItem":{"jStruct":{"A":"x","N":null}}}}')
+}
+
+// TestUint64HighBit: a Uint64 over 2^63-1 is the client's error, naming the limit; at
+// it, it stores.
+func TestUint64HighBit(t *testing.T) {
+	s := serve(t)
+	got := s.do('mutation { createItem(input: {big: "18446744073709551615"}) { big } }')
+	if !strings.Contains(got, "BAD_USER_INPUT") || !strings.Contains(got, "9223372036854775807") {
+		t.Errorf("over: %s", got)
+	}
+	s.want("at the limit", 'mutation { createItem(input: {big: "9223372036854775807"}) { big } }', '{"data":{"createItem":{"big":"9223372036854775807"}}}')
+}
+
 // TestOrEmptyMatchesNone: or: [] matches no row, as titleIn: [] would.
 func TestOrEmptyMatchesNone(t *testing.T) {
 	s := serve(t)
@@ -454,7 +647,7 @@ func TestLimitsServed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
-	for _, name := range []string{"TestRequiredEdgeHidden", "TestTenantKeyFilled", "TestExplicitZeroRefused", "TestOrEmptyMatchesNone", "TestIntrospectionTypeNames", "TestEmptyBytes", "TestEmptyJSONLiteral", "TestExplicitNullRefused"} {
+	for _, name := range []string{"TestRequiredEdgeHidden", "TestTenantKeyFilled", "TestExplicitZeroRefused", "TestOrEmptyMatchesNone", "TestIntrospectionTypeNames", "TestEmptyBytes", "TestEmptyJSONLiteral", "TestExplicitNullRefused", "TestForeignKeyFilterHidden", "TestUpdateNullRefused", "TestJSONInputExact", "TestUint64HighBit"} {
 		if !strings.Contains(out, "--- PASS: "+name+" ") {
 			t.Errorf("no PASS of %s in\n%s", name, out)
 		}
