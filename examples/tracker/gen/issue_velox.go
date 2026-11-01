@@ -97,9 +97,9 @@ func issueDesc() velox.Desc[Issue] {
 			{Columns: []int{4, 9, 0}},
 		},
 		TenantRefs: []velox.TenantRef{
-			{Column: 4, Table: "projects", Key: "id", Tenant: "org_id"},
-			{Column: 5, Table: "users", Key: "id", Tenant: "org_id"},
-			{Column: 6, Table: "users", Key: "id", Tenant: "org_id"},
+			{Column: 4, Table: "projects", Key: "id", Tenant: "org_id", TenantKind: "int64"},
+			{Column: 5, Table: "users", Key: "id", Tenant: "org_id", TenantKind: "int64"},
+			{Column: 6, Table: "users", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 		},
 		Edges: []velox.EdgeDesc{
 			velox.EdgeTo[Project]("Project", 4, 0),

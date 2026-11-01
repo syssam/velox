@@ -372,8 +372,8 @@ func TestThroughRefusals(t *testing.T) {
 		{dBadThroughs.Target.Has(), "velox: apitest.dBadThrough.Target: the key types differ: fixture.DBookTag.TagID is int64 and fixture.DAuthor.Name is string"},
 		{dBadThroughs.Single.Has(), "velox: apitest.dBadThrough.Single: a many-to-many relation needs a Many field"},
 		{dBadThroughs.BadJoin.Has(), "velox: apitest.dBadThrough.BadJoin: its join entity is invalid: apitest.badDesc: the tenant names column 3, of 1"},
-		{dBadThroughs.TenantJ.Has(), "velox: apitest.dBadThrough.TenantJ: its join entity fixture.DAuthor has a tenant column; join rows are not scoped, so a join entity can have neither a tenant column nor a Read policy"},
-		{dBadThroughs.PolicyJ.Has(), "velox: apitest.dBadThrough.PolicyJ: its join entity apitest.dPolicyJoin has a Read policy; join rows are not scoped, so a join entity can have neither a tenant column nor a Read policy"},
+		{dBadThroughs.TenantJ.Has(), "velox: apitest.dBadThrough.TenantJ: its join entity fixture.DAuthor has a tenant column; a join entity is scoped through its TenantRefs, and can have neither a tenant column nor a Read policy"},
+		{dBadThroughs.PolicyJ.Has(), "velox: apitest.dBadThrough.PolicyJ: its join entity apitest.dPolicyJoin has a Read policy; a join entity is scoped through its TenantRefs, and can have neither a tenant column nor a Read policy"},
 	} {
 		_, _, err := db.Query[dBadThrough]().Where(c.p).Limit(1).SQL(ctx)
 		var se *velox.SchemaError

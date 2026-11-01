@@ -411,7 +411,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	entity, op, writable, count, exists, agg, group, lock, wait, inTx := st.Entity, st.Op, st.Writable, st.Count, st.Exists, st.Aggregate, st.GroupBy, st.Lock, st.LockWait, st.InTx
 	// velox's own marks, which no hook can set: a hook that replaces the
 	// whole struct (*st = Statement{…}) zeroes them, and they are restored.
-	bidi, pin, iter := stmtBidi(st), stmtPin(st), st.iter
+	bidi, pin, iter, loaded := stmtBidi(st), stmtPin(st), st.iter, st.loaded
 	// each is the Each the hooks get, a copy of velox's (was) when there are
 	// hooks: a hook may not replace it or change it.
 	each := st.Each
@@ -423,7 +423,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	}
 	setStmtBidi(st, bidi)
 	setStmtPin(st, pin)
-	st.iter = iter
+	st.iter, st.loaded = iter, loaded
 	if st.Op != op {
 		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's kind", entity.Name)
 	}

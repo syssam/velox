@@ -26,7 +26,39 @@ func Generate(g *Graph, cfg Config) ([]File, error) {
 	if err != nil {
 		return nil, err
 	}
+	tenantKinds(o, g)
 	return Render(o)
+}
+
+// tenantKinds states, in each TenantRef of o, the reflect kind of the Go type of its
+// target's tenant column: a plain string, so that the entity's file imports nothing
+// for it and its metadata names no target's.
+func tenantKinds(o *Out, g *Graph) {
+	for _, e := range o.Entities {
+		for i := range e.TenantRefs {
+			r := &e.TenantRefs[i]
+			for _, to := range g.Entities {
+				if to.Table == r.Table && to.TableSchema == r.Schema && to.Tenant != "" {
+					r.Kind = tenantKind(to.Fields[fieldIndex(to, to.Tenant)])
+					break
+				}
+			}
+		}
+	}
+}
+
+// tenantKind is the reflect kind of tenant field f's Go type.
+func tenantKind(f *Field) string {
+	if k := goKindOf(f); k != "" {
+		return k
+	}
+	switch f.Type {
+	case "enum":
+		return "string"
+	case "time":
+		return "struct"
+	}
+	return f.Type // velox's standard types are named for their Go types
 }
 
 // Render writes one file per entity, <label>_velox.go (the join entities too),
@@ -307,7 +339,7 @@ func entityDesc(w *writer, e *OutEntity) {
 			if r.Schema != "" {
 				schema = "Schema: " + strconv.Quote(r.Schema) + ", "
 			}
-			w.p("{Column: %d, %sTable: %q, Key: %q, Tenant: %q},", r.Column, schema, r.Table, r.Key, r.Tenant)
+			w.p("{Column: %d, %sTable: %q, Key: %q, Tenant: %q, TenantKind: %q},", r.Column, schema, r.Table, r.Key, r.Tenant, r.Kind)
 		}
 		w.p("},")
 	}

@@ -73,8 +73,8 @@ func commentDesc() velox.Desc[Comment] {
 		PrimaryKey: []int{0},
 		Tenant:     3,
 		TenantRefs: []velox.TenantRef{
-			{Column: 4, Table: "issues", Key: "id", Tenant: "org_id"},
-			{Column: 5, Table: "users", Key: "id", Tenant: "org_id"},
+			{Column: 4, Table: "issues", Key: "id", Tenant: "org_id", TenantKind: "int64"},
+			{Column: 5, Table: "users", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 		},
 		Edges: []velox.EdgeDesc{
 			velox.EdgeTo[Issue]("Issue", 4, 0),

@@ -77,7 +77,8 @@ type Desc[E any] struct {
 }
 
 // TenantRef says that Column, a foreign key, refers to Key of Schema.Table, which
-// is tenant-scoped by its column Tenant. For generated code.
+// is tenant-scoped by its column Tenant, whose Go type is of reflect kind TenantKind,
+// to which the context's tenant converts. For generated code.
 //
 // velox-gen writes one for a column of a tenant-scoped entity whose edge's target
 // is tenant-scoped, and for each side of a many-to-many edge's join entity whose
@@ -86,6 +87,9 @@ type Desc[E any] struct {
 // IN (…) AND Tenant = ?, for the distinct values, after the hooks and on the
 // statement's transaction or connection, and fails with ErrTenantRef unless each
 // is the tenant's. WithAllTenants skips it. Around hooks do not see it.
+//
+// On a join entity, reads, updates and deletes under a tenant also hold, for each
+// TenantRef, Column IN (SELECT Key FROM Table WHERE Tenant = ?). See WithTenant.
 type TenantRef = engine.TenantRef
 
 // Load returns the entity's Meta, building it from desc the first time. A
@@ -204,12 +208,11 @@ func EdgeBidi[T any, PT Entity[T]](name string, keyCol, idCol int) EdgeDesc {
 // they hold, and Has is an EXISTS on J holding an EXISTS on T. T's tenant and
 // Read policy apply, as they do to any relation's target. J can have neither
 // a tenant column nor a Read policy: the relation is refused when it
-// resolves. Join rows are therefore not tenant-scoped. An insert or update of
-// one under a tenant checks that each endpoint with a Desc.TenantRefs entry is
-// the tenant's (ErrTenantRef), and with no tenant fails with ErrNoTenant; a
-// delete of one checks nothing. velox does not check that an endpoint is a row
-// the caller may see or change: an application that writes links, or deletes
-// them, checks both endpoints itself, in J's Policy (Insert, and Write for
+// resolves. A J with Desc.TenantRefs, as velox-gen writes one for each
+// tenant-scoped side, is scoped through them: see WithTenant. A J without them
+// is not scoped at all. velox does not check that an endpoint is a row the
+// caller's policies let it see or change: an application that writes links, or
+// deletes them, checks both endpoints itself, in J's Policy (Insert, and Write for
 // updates and deletes) or in a hook on J. When J is the join entity of a bidirectional edge (Desc.Bidi), its Policy cannot
 // have Write either, since a condition would delete one row of a link: check
 // deletes in a hook on J.

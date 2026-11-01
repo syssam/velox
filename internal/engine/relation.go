@@ -149,17 +149,16 @@ func (r *relation) buildThrough(owner *EntityInfo, l Link, fail func(string, ...
 	if err != nil {
 		return fail("its join entity is invalid: %s", strings.TrimPrefix(err.Error(), "velox: "))
 	}
-	// Has reads the join rows inside its EXISTS, where nothing scopes them,
-	// while loading reads them with a query of their own, which would be
-	// scoped: the two would disagree. So a join entity can have neither a
-	// tenant column nor a Read policy. Its Insert and Write policies apply
-	// only to writes of its rows, which they may check: join rows are not
-	// tenant-scoped, so a link's endpoints are checked there or in a hook.
+	// Has reads the join rows inside its EXISTS, bound to the owner and the target,
+	// which are scoped, while a query of their own would need a condition: the two
+	// could disagree. So a join entity can have neither a tenant column nor a Read
+	// policy, and is scoped through its TenantRefs alone (Scoper.joinWhere). Its Insert
+	// and Write policies apply only to writes of its rows, which they may check.
 	if j.Tenant != -1 {
-		return fail("its join entity %s has a tenant column; join rows are not scoped, so a join entity can have neither a tenant column nor a Read policy", j.Name)
+		return fail("its join entity %s has a tenant column; a join entity is scoped through its TenantRefs, and can have neither a tenant column nor a Read policy", j.Name)
 	}
 	if p := j.policy; p != nil && p.Read != nil {
-		return fail("its join entity %s has a Read policy; join rows are not scoped, so a join entity can have neither a tenant column nor a Read policy", j.Name)
+		return fail("its join entity %s has a Read policy; a join entity is scoped through its TenantRefs, and can have neither a tenant column nor a Read policy", j.Name)
 	}
 	for _, c := range [...]int{r.through.OwnerCol, r.through.TargetCol} {
 		if c < 0 || c >= len(j.Columns) {
@@ -262,9 +261,8 @@ func OfNode(ref RelRef, where []Predicate, err error, ps []unsafe.Pointer) Node 
 	}
 	n := Node{Op: OpIn, Col: int32(l.TargetCol), V: keys}
 	if l.Join != nil {
-		// The join rows are not scoped: a join entity has neither a tenant
-		// column nor a Read policy (buildThrough). The target's own scope
-		// applies to the statement that holds the condition.
+		// The target's own scope applies to the statement that holds the
+		// condition, and the join's TenantRefs to its rows (Scoper.through).
 		n = Node{Op: OpThrough, Col: int32(l.TargetCol), V: l.Join, W: l.JoinTarget,
 			Kids: []Node{{Op: OpIn, Col: int32(l.JoinOwner), V: keys}}}
 	}

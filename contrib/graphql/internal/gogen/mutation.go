@@ -997,8 +997,8 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 			}
 			jo, jt := j.Handles+"."+own.GoName, j.Handles+"."+other.GoName
 			if clr >= 0 || rm >= 0 {
-				// Join rows are scoped by no tenant or policy: only those to a
-				// target the caller may read, under the tenant scope and the
+				// Join rows are scoped by their sides' tenants, by no policy:
+				// only those to a target the caller may read, under the tenant scope and the
 				// target's Read policy, as add's CheckExists checks, are
 				// deleted. A link to a target hidden from the caller stays.
 				k, err := r.idKeyOf(f, e, tt)
@@ -1208,7 +1208,7 @@ func (r *renderer) writeDelete(f *file, t *sdl.Type) error {
 	f.p("\terr = %s.Atomic(ctx, func(ctx %s.Context, db *%s.DB) error {", impl, ctx, velox)
 	if len(joins) > 0 {
 		// The row is checked under the DELETE's scope before its join rows,
-		// which no tenant or policy scopes, are touched: those of a row the
+		// which no policy scopes, are touched: those of a row the
 		// caller may not delete are never deleted.
 		r.lockedCheck(f, e, pk, mutation, n, impl, velox, "\t\t")
 		for _, j := range joins {

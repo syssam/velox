@@ -882,8 +882,8 @@ func TestEdgeScope(t *testing.T) {
 			t.Errorf("w7: %v, %v: want no mentor", got, err)
 		}
 
-		// On delete: tenant 8's writer is NOT_FOUND, and its join rows,
-		// which no tenant scopes, are all still there.
+		// On delete: tenant 8's writer is NOT_FOUND, and its join rows, which only
+		// tenant 8 sees, are all still there.
 		// other is tenant 8's, whom a join row's foreign key is checked against.
 		insert(t, velox.WithTenant(e.ctx, int64(8)), e.db, &gen.WriterCircle{WriterID: other.ID, CircleID: visible.ID})
 		insert(t, velox.WithTenant(e.ctx, int64(8)), e.db, &gen.WriterCircle{WriterID: other.ID, CircleID: hidden.ID})
@@ -897,7 +897,7 @@ func TestEdgeScope(t *testing.T) {
 				t.Errorf("sent %s", s)
 			}
 		}
-		if n := count(t, e.ctx, e.db.Query[gen.WriterCircle]().Where(gen.WriterCircles.WriterID.EQ(other.ID))); n != 2 {
+		if n := count(t, ctx8, e.db.Query[gen.WriterCircle]().Where(gen.WriterCircles.WriterID.EQ(other.ID))); n != 2 {
 			t.Errorf("%d join rows of tenant 8's writer, want 2", n)
 		}
 		if got, err := e.db.Query[gen.Writer]().Where(gen.Writers.ID.EQ(other.ID)).One(ctx8); err != nil || got.Name != "other" {
@@ -1874,9 +1874,10 @@ func TestSelfM2M(t *testing.T) {
 func TestUnlinkScope(t *testing.T) {
 	each(t, func(t *testing.T, e *env) {
 		ctx8 := velox.WithTenant(e.ctx, int64(8))
+		all := velox.WithAllTenants(e.ctx, "the test's view")
 		linked := func(w, c int64) bool {
 			t.Helper()
-			return count(t, e.ctx, e.db.Query[gen.WriterCircle]().Where(gen.WriterCircles.WriterID.EQ(w), gen.WriterCircles.CircleID.EQ(c))) == 1
+			return count(t, all, e.db.Query[gen.WriterCircle]().Where(gen.WriterCircles.WriterID.EQ(w), gen.WriterCircles.CircleID.EQ(c))) == 1
 		}
 		// As the tenant of the writer, whom a join row's foreign key is checked against.
 		linkIn := func(ctx context.Context, w, c int64) { t.Helper(); insert(t, ctx, e.db, &gen.WriterCircle{WriterID: w, CircleID: c}) }
@@ -1940,7 +1941,7 @@ func TestUnlinkScope(t *testing.T) {
 		if _, err := gen.UpdateCircle(paged, circleID(big.ID), gen.UpdateCircleInput{ClearWriters: true}); err != nil {
 			t.Fatal(err)
 		}
-		if n := count(t, e.ctx, e.db.Query[gen.WriterCircle]().Where(gen.WriterCircles.CircleID.EQ(big.ID))); n != 2 {
+		if n := count(t, all, e.db.Query[gen.WriterCircle]().Where(gen.WriterCircles.CircleID.EQ(big.ID))); n != 2 {
 			t.Errorf("%d join rows of the big circle after clearWriters, want tenant 8's 2", n)
 		}
 		if n := count(t, ctx8, e.db.Query[gen.Writer]().Where(gen.Writers.Circles.Has())); n != 3 {

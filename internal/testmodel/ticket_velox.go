@@ -78,8 +78,8 @@ func ticketDesc() velox.Desc[Ticket] {
 			{Columns: []int{2, 4}, Unique: true},
 		},
 		TenantRefs: []velox.TenantRef{
-			{Column: 6, Table: "invoices", Key: "id", Tenant: "org_id"},
-			{Column: 7, Table: "tickets", Key: "id", Tenant: "org_id"},
+			{Column: 6, Table: "invoices", Key: "id", Tenant: "org_id", TenantKind: "int64"},
+			{Column: 7, Table: "tickets", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 		},
 		Edges: []velox.EdgeDesc{
 			velox.EdgeTo[Invoice]("Invoice", 6, 0),

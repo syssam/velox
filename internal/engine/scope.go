@@ -115,6 +115,8 @@ type Scoper struct {
 	Ctx    context.Context
 	Entity string // the statement's entity, which every error names
 
+	scopedRows bool // the entity the conditions being walked are on is tenant-scoped: see through
+
 	tenantRead bool   // id and all are looked up
 	id         any    // the context's tenant, as given; nil when none
 	all        string // the WithAllTenants reason
@@ -256,7 +258,10 @@ func (sc *Scoper) PolicyCond(t *EntityInfo, op Op, which string, p Predicate, er
 	if err := PredErr(p.n); err != nil {
 		return Predicate{}, fmt.Errorf("velox: %s: the %s policy's condition: %w", t.Name, which, err)
 	}
+	outer := sc.scopedRows
+	sc.scopedRows = t.Tenant >= 0
 	n, _, err := sc.Node(p.n)
+	sc.scopedRows = outer
 	return Predicate{n}, err
 }
 
@@ -280,10 +285,14 @@ func tenantPredicate(in *EntityInfo, id any) Predicate { return ColumnEQ(in.Tena
 // allocating below 256; only a named column type goes through reflect.
 func tenantFor(in *EntityInfo, id any) (any, error) {
 	c := in.Columns[in.Tenant]
-	t := GoType(c)
+	return tenantAs(in.Name, c.Name, GoType(c), id)
+}
+
+// tenantAs is tenantFor for a column col of type t, of an entity called name.
+func tenantAs(name, col string, t reflect.Type, id any) (any, error) {
 	if reflect.TypeOf(id) == t {
 		if reflect.ValueOf(id).IsZero() {
-			return nil, zeroTenant(in)
+			return nil, zeroTenant(name)
 		}
 		return id, nil
 	}
@@ -315,30 +324,30 @@ func tenantFor(in *EntityInfo, id any) (any, error) {
 		u, unsigned = x, true
 	case string:
 		if t.Kind() != reflect.String {
-			return nil, tenantMismatch(in, id)
+			return nil, tenantMismatch(name, col, t, id)
 		}
 		if x == "" {
-			return nil, zeroTenant(in)
+			return nil, zeroTenant(name)
 		}
 		// A predeclared string column took the exact path: t is named.
 		return reflect.ValueOf(x).Convert(t).Interface(), nil
 	default:
-		return nil, tenantMismatch(in, id)
+		return nil, tenantMismatch(name, col, t, id)
 	}
 	var out any
 	switch k := t.Kind(); k {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		if unsigned {
 			if u > math.MaxInt64 {
-				return nil, tenantMisfit(in, id)
+				return nil, tenantMisfit(name, col, t, id)
 			}
 			s = int64(u)
 		}
 		if t.OverflowInt(s) {
-			return nil, tenantMisfit(in, id)
+			return nil, tenantMisfit(name, col, t, id)
 		}
 		if s == 0 {
-			return nil, zeroTenant(in)
+			return nil, zeroTenant(name)
 		}
 		switch k {
 		case reflect.Int:
@@ -355,15 +364,15 @@ func tenantFor(in *EntityInfo, id any) (any, error) {
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		if !unsigned {
 			if s < 0 {
-				return nil, tenantMisfit(in, id)
+				return nil, tenantMisfit(name, col, t, id)
 			}
 			u = uint64(s)
 		}
 		if t.OverflowUint(u) {
-			return nil, tenantMisfit(in, id)
+			return nil, tenantMisfit(name, col, t, id)
 		}
 		if u == 0 {
-			return nil, zeroTenant(in)
+			return nil, zeroTenant(name)
 		}
 		switch k {
 		case reflect.Uint:
@@ -378,7 +387,7 @@ func tenantFor(in *EntityInfo, id any) (any, error) {
 			out = u
 		}
 	default:
-		return nil, tenantMismatch(in, id)
+		return nil, tenantMismatch(name, col, t, id)
 	}
 	if reflect.TypeOf(out) != t {
 		out = reflect.ValueOf(out).Convert(t).Interface() // a named column type
@@ -386,23 +395,21 @@ func tenantFor(in *EntityInfo, id any) (any, error) {
 	return out, nil
 }
 
-// tenantMismatch is the error of a tenant id that never serves in's tenant
-// column.
-func tenantMismatch(in *EntityInfo, id any) error {
-	c := in.Columns[in.Tenant]
-	return fmt.Errorf("velox: %s: %w: the context's tenant is a %T, the column %s is a %s", in.Name, ErrTenantMismatch, id, c.Name, GoType(c))
+// tenantMismatch is the error of a tenant id that never serves the tenant column
+// col of type t.
+func tenantMismatch(name, col string, t, id any) error {
+	return fmt.Errorf("velox: %s: %w: the context's tenant is a %T, the column %s is a %v", name, ErrTenantMismatch, id, col, t)
 }
 
-// tenantMisfit is the error of a tenant id that would convert into in's
-// tenant column, but whose value the column's type cannot hold.
-func tenantMisfit(in *EntityInfo, id any) error {
-	c := in.Columns[in.Tenant]
-	return fmt.Errorf("velox: %s: %w: the context's tenant %v (a %T) does not fit the column %s, a %s", in.Name, ErrTenantMismatch, id, id, c.Name, GoType(c))
+// tenantMisfit is the error of a tenant id that would convert into the tenant
+// column col, but whose value the column's type t cannot hold.
+func tenantMisfit(name, col string, t, id any) error {
+	return fmt.Errorf("velox: %s: %w: the context's tenant %v (a %T) does not fit the column %s, a %v", name, ErrTenantMismatch, id, id, col, t)
 }
 
 // zeroTenant is the error of a tenant id that is the zero value.
-func zeroTenant(in *EntityInfo) error {
-	return fmt.Errorf("velox: %s: %w: the tenant is the zero value", in.Name, ErrNoTenant)
+func zeroTenant(name string) error {
+	return fmt.Errorf("velox: %s: %w: the tenant is the zero value", name, ErrNoTenant)
 }
 
 // checkTenantAssignments refuses an assignment that would move a row to
@@ -473,9 +480,9 @@ func (sc *Scoper) Node(n Node) (Node, bool, error) {
 			return n, false, nil // no EXISTS in it: nothing to scope
 		}
 	case OpExists:
+	case OpThrough:
+		return sc.through(n)
 	default:
-		// An OpThrough reads only join rows, which are never scoped: a join
-		// entity has neither a tenant column nor a Read policy.
 		return n, false, nil
 	}
 	// An EXISTS's relation first: an error from inside it names its target.
@@ -490,6 +497,10 @@ func (sc *Scoper) Node(n Node) (Node, bool, error) {
 			return n, false, err
 		}
 		t = l.Target
+	}
+	outer := sc.scopedRows
+	if t != nil {
+		sc.scopedRows = t.Tenant >= 0 // an EXISTS's kids are on its target's rows
 	}
 	var kids []Node // nil until a kid changes
 	for i, k := range n.Kids {
@@ -509,6 +520,7 @@ func (sc *Scoper) Node(n Node) (Node, bool, error) {
 		}
 		kids[i] = nk
 	}
+	sc.scopedRows = outer
 	resolved := false
 	if n.Op == OpExists {
 		// A relation is resolved here when the condition came from a policy
@@ -536,6 +548,94 @@ func (sc *Scoper) Node(n Node) (Node, bool, error) {
 	}
 	n.Kids = kids // n is a copy
 	return n, true, nil
+}
+
+// through scopes Of's condition on a many-to-many relation: the join rows of owners
+// the caller named, which may be another tenant's. On a scoped entity's rows it needs
+// nothing: they are the tenant's, however they are linked. On a target with no tenant,
+// the condition is all that stands between a tenant and another's links.
+func (sc *Scoper) through(n Node) (Node, bool, error) {
+	j := n.V.(*EntityInfo)
+	if sc.scopedRows || len(j.refs) == 0 {
+		return n, false, nil
+	}
+	var kids []Node
+	for i := range j.refs {
+		id, ok, err := sc.refOf(j, &j.refs[i])
+		if err != nil {
+			return n, false, err
+		}
+		if ok {
+			if kids == nil {
+				kids = slices.Clone(n.Kids)
+			}
+			kids = append(kids, Node{Op: OpTenantRef, Col: int32(i), V: id})
+		}
+	}
+	if kids == nil {
+		return n, false, nil
+	}
+	n.Kids = kids // n is a copy
+	return n, true, nil
+}
+
+// refOf is the tenant as the tenant column of r, a TenantRef of entity in, holds it,
+// and whether there is one to hold: not under WithAllTenants. With neither, it fails
+// as a statement on r's target does.
+func (sc *Scoper) refOf(in *EntityInfo, r *tenantRef) (any, bool, error) {
+	if !sc.tenantRead {
+		sc.id, sc.all = TenantFrom(sc.Ctx)
+		sc.tenantRead = true
+	}
+	sc.scoped = true
+	switch {
+	case sc.all != "":
+		return nil, false, nil
+	case sc.id == nil:
+		return nil, false, fmt.Errorf("velox: %s: %w", in.Name, ErrNoTenant)
+	}
+	id, err := refTenant(in.Name, r, sc.id)
+	return id, err == nil, err
+}
+
+// joinWhere is the conditions that scope a read, update or delete of in, a join
+// entity with TenantRefs, to the tenant: one for each side. A With load's are none, as
+// its owners are read under the scope and its targets get it, but it still needs a
+// tenant.
+func (sc *Scoper) joinWhere(in *EntityInfo, loaded bool) ([]Predicate, error) {
+	var ps []Predicate
+	for i := range in.refs {
+		id, ok, err := sc.refOf(in, &in.refs[i])
+		if err != nil {
+			return nil, err
+		}
+		if ok && !loaded {
+			ps = append(ps, Predicate{Node{Op: OpTenantRef, Col: int32(i), V: id}})
+		}
+	}
+	return ps, nil
+}
+
+// eachOwner scopes the join rows of st, a per-owner read of a target with no tenant
+// for owners the caller gave, as through does Of's.
+func (sc *Scoper) eachOwner(st *Statement) error {
+	c := st.Each
+	for i := range c.Join.refs {
+		r := &c.Join.refs[i]
+		if r.Column != c.JoinOwner {
+			continue
+		}
+		id, ok, err := sc.refOf(c.Join, r)
+		if err != nil {
+			return err
+		}
+		if ok {
+			scoped := *c
+			scoped.ownerRef, scoped.ownerTenant = r, id
+			st.Each = &scoped
+		}
+	}
+	return nil
 }
 
 // target returns what an EXISTS on entity t gets: whether the tenant
@@ -608,13 +708,24 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 		return nil
 	}
 	in := st.Entity
-	sc := Scoper{Ctx: ctx, Entity: in.Name}
+	sc := Scoper{Ctx: ctx, Entity: in.Name, scopedRows: in.Tenant >= 0}
 	id, tenant, err := sc.TenantOf(in)
 	if err != nil {
 		return err
 	}
 	if tenant {
 		if err := checkTenantAssignments(in, st.Set, id); err != nil {
+			return err
+		}
+	}
+	var join []Predicate
+	if in.Tenant < 0 && len(in.refs) > 0 {
+		if join, err = sc.joinWhere(in, st.loaded); err != nil {
+			return err
+		}
+	}
+	if c := st.Each; c != nil && c.Join != nil && !st.loaded && in.Tenant < 0 && len(c.Join.refs) > 0 {
+		if err := sc.eachOwner(st); err != nil {
 			return err
 		}
 	}
@@ -634,7 +745,7 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 			}
 		}
 	}
-	extra := 0
+	extra := len(join)
 	if tenant {
 		extra++
 	}
@@ -651,6 +762,7 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 	if tenant {
 		st.Where = append(st.Where, tenantPredicate(in, id))
 	}
+	st.Where = append(st.Where, join...)
 	if PredNode(read).Op != opZero {
 		st.Where = append(st.Where, read)
 	}
@@ -659,7 +771,7 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 	}
 	sc.Record(st)
 	if len(in.refs) > 0 && st.Op == OpUpdate {
-		return scopeRefs(ctx, st)
+		return db.scopeRefs(ctx, st)
 	}
 	return nil
 }
@@ -714,7 +826,37 @@ func (db *DB) scopeInsert(ctx context.Context, st *Statement) error {
 	}
 	sc.Record(st)
 	if len(in.refs) > 0 {
-		return scopeRefs(ctx, st)
+		return db.scopeRefs(ctx, st)
+	}
+	return nil
+}
+
+// checkJoinUpsert refuses an upsert of a join entity that updates and whose conflict
+// could be with a row of another tenant: the checked values reach the existing row
+// only in conflict columns, which must so hold every TenantRef's. MySQL resolves a
+// conflict on any unique key, so the primary key and every unique index must.
+func (db *DB) checkJoinUpsert(in *EntityInfo, cf *ConflictClause) error {
+	holds := func(cols []int) bool {
+		for i := range in.refs {
+			if !slices.Contains(cols, in.refs[i].Column) {
+				return false
+			}
+		}
+		return true
+	}
+	if db.D != MySQL {
+		if holds(cf.Columns) {
+			return nil
+		}
+		return fmt.Errorf("velox: %s: %w: the conflict columns (%s) do not hold each foreign key to a tenant-scoped row", in.Name, ErrTenantUpsert, columnNames(in, cf.Columns))
+	}
+	if !holds(in.PrimaryKey) {
+		return fmt.Errorf("velox: %s: %w: MySQL's ON DUPLICATE KEY UPDATE resolves a conflict on any unique key, and the primary key does not hold each foreign key to a tenant-scoped row", in.Name, ErrTenantUpsert)
+	}
+	for _, ix := range in.Indexes {
+		if ix.Unique && !holds(ix.Columns) {
+			return fmt.Errorf("velox: %s: %w: MySQL's ON DUPLICATE KEY UPDATE resolves a conflict on any unique key, and the unique index (%s) does not hold each foreign key to a tenant-scoped row", in.Name, ErrTenantUpsert, columnNames(in, ix.Columns))
+		}
 	}
 	return nil
 }

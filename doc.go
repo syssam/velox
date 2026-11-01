@@ -122,8 +122,9 @@
 //
 // The tenant scope and the entity's policy apply to writes as to reads. A
 // write under a tenant that sets a foreign key to a tenant-scoped row first
-// checks that the row is the tenant's, and fails with ErrTenantRef: see
-// WithTenant.
+// checks that the row is the tenant's, and fails with ErrTenantRef, at the cost of
+// one SELECT per such column, which Around hooks do not see. A join entity's rows are
+// scoped through their foreign keys. See WithTenant.
 //
 // # JSON fields
 //

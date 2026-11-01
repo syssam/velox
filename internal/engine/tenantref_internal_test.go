@@ -58,6 +58,7 @@ func TestRefValues(t *testing.T) {
 		"distinct bytes":    {r, ins([]any{0, []byte("a")}, []any{0, []byte("a")}, []any{0, bs("b")}), []any{[]byte("a"), bs("b")}},
 		"own rows":          {self, ins([]any{int64(1), &two}, []any{int64(2), &one}), []any{}},
 		"another's":         {self, ins([]any{int64(1), &two}), []any{int64(2)}},
+		"an upsert's own":   {self, &Statement{Op: OpInsert, Columns: []int{0, 1}, Rows: [][]any{{int64(2), &two}}, Conflict: &ConflictClause{DoNothing: true}}, []any{int64(2)}},
 		"a generated key":   {self, &Statement{Op: OpInsert, Columns: []int{1}, Rows: [][]any{{&two}}}, []any{int64(2)}},
 		"uncomparable":      {r, ins([]any{0, []int{1}}, []any{0, []int{1}}), []any{[]int{1}}},
 		"an update":         {r, &Statement{Op: OpUpdate, Set: []Assignment{{Column: 1, Op: AssignSet, Value: &one}}}, []any{int64(1)}},
@@ -74,18 +75,19 @@ func TestRefValues(t *testing.T) {
 func TestBuildTenantRefsRefuses(t *testing.T) {
 	cols := []ColumnInfo{{Name: "id", Field: "ID"}, {Name: "fk", Field: "FK"}}
 	for name, r := range map[string]TenantRef{
-		"out of range": {Column: 2, Table: "t", Key: "id", Tenant: "org"},
-		"negative":     {Column: -1, Table: "t", Key: "id", Tenant: "org"},
-		"no table":     {Column: 1, Key: "id", Tenant: "org"},
-		"no key":       {Column: 1, Table: "t", Tenant: "org"},
-		"no tenant":    {Column: 1, Table: "t", Key: "id"},
+		"out of range": {Column: 2, Table: "t", Key: "id", Tenant: "org", TenantKind: "int64"},
+		"negative":     {Column: -1, Table: "t", Key: "id", Tenant: "org", TenantKind: "int64"},
+		"no table":     {Column: 1, Key: "id", Tenant: "org", TenantKind: "int64"},
+		"no key":       {Column: 1, Table: "t", Tenant: "org", TenantKind: "int64"},
+		"no tenant":    {Column: 1, Table: "t", Key: "id", TenantKind: "int64"},
+		"no kind":      {Column: 1, Table: "t", Key: "id", Tenant: "org"},
 	} {
 		if _, err := buildTenantRefs("x", &DescFields{Table: "x", TenantRefs: []TenantRef{r}}, cols); err == nil {
 			t.Errorf("%s: no error", name)
 		}
 	}
 	refs, err := buildTenantRefs("x", &DescFields{Table: "x", TenantRefs: []TenantRef{
-		{Column: 1, Table: "x", Key: "id", Tenant: "org"}, {Column: 1, Schema: "other", Table: "x", Key: "id", Tenant: "org"}, {Column: 1, Table: "y", Key: "id", Tenant: "org"},
+		{Column: 1, Table: "x", Key: "id", Tenant: "org", TenantKind: "int64"}, {Column: 1, Schema: "other", Table: "x", Key: "id", Tenant: "org", TenantKind: "int64"}, {Column: 1, Table: "y", Key: "id", Tenant: "org", TenantKind: "int64"},
 	}}, cols)
 	if err != nil || refs[0].self != 0 || refs[1].self != -1 || refs[2].self != -1 {
 		t.Errorf("%+v, %v", refs, err)

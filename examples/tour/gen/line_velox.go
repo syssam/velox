@@ -56,7 +56,7 @@ func lineDesc() velox.Desc[Line] {
 		PrimaryKey: []int{0},
 		Tenant:     1,
 		TenantRefs: []velox.TenantRef{
-			{Column: 2, Table: "invoices", Key: "id", Tenant: "org_id"},
+			{Column: 2, Table: "invoices", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 		},
 		Edges: []velox.EdgeDesc{
 			velox.EdgeTo[Invoice]("Invoice", 2, 0),

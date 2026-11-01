@@ -64,6 +64,28 @@ func (TrGlobal) Edges() []schema.Edge {
 	return []schema.Edge{edge.From("projects", TrProject.Type).Ref("globals")}
 }
 
+type (
+	trCents int64
+	TrKinds struct{ schema.Schema }
+)
+
+func (TrKinds) Fields() []schema.Field {
+	return []schema.Field{
+		field.Int64("a"), field.String("b"), field.Enum("c").Values("x"), field.Number[trCents]("d"), field.Uint8("e"),
+		field.Time("g"),
+	}
+}
+
+// TestTenantKind: the kind a TenantRef states of each type a tenant field may have.
+func TestTenantKind(t *testing.T) {
+	e := mustBuild(t, TrKinds{}).Entities[0]
+	for name, want := range map[string]string{"a": "int64", "b": "string", "c": "string", "d": "int64", "e": "uint8", "g": "struct"} {
+		if got := tenantKind(e.Fields[fieldIndex(e, name)]); got != want {
+			t.Errorf("%s: %q, want %q", name, got, want)
+		}
+	}
+}
+
 // TestLowerTenantRefs: a tenant-scoped entity's foreign key to a tenant-scoped target,
 // from either side of the edge, and each tenant-scoped side of a join entity. Nothing
 // for a target without a tenant, or an entity without one that is no join entity. The
@@ -93,14 +115,14 @@ func TestLowerTenantRefs(t *testing.T) {
 			t.Errorf("%s: %+v, want %+v", name, e.TenantRefs, want)
 		}
 	}
-	files, err := Render(o)
+	files, err := Generate(mustBuild(t, TrProject{}, TrTask{}, TrNote{}, TrLog{}, TrLabel{}, TrGlobal{}), Config{Package: "gen", SchemaPath: lowerSchemaPath})
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, f := range files {
 		if strings.HasSuffix(f.Name, "tr_task_velox.go") {
 			s := string(f.Data)
-			if !strings.Contains(s, `{Column: 2, Table: "tr_projects", Key: "id", Tenant: "project_org"},`) {
+			if !strings.Contains(s, `{Column: 2, Table: "tr_projects", Key: "id", Tenant: "project_org", TenantKind: "int64"},`) {
 				t.Errorf("the Desc does not hold the reference:\n%s", s)
 			}
 			return
