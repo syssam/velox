@@ -80,10 +80,16 @@ import (
 // last, counts every alias, every statement and every branch of a fragment; a
 // request over MaxCost, or whose introspection, counted by the fields of its
 // response, is over MaxIntrospectionCost, fails with ErrTooCostly, the code
-// CodeTooCostly and data null, and sends no statement. It reads the schema the server's Use gives Validate; gqlgen's
-// extension.FixedComplexityLimit counts fields, not rows, and is not needed with
-// it. Parsing runs before the extension, which cannot limit it, and gqlgen sets no
-// limit: give the server one, as srv.SetParserTokenLimit(15000).
+// CodeTooCostly and data null, and sends no statement. It reads the schema the
+// server's Use gives Validate; gqlgen's extension.FixedComplexityLimit counts
+// fields, not rows, and is not needed with it.
+//
+// Before gqlgen parses a request, whose validation is quadratic in the fields
+// that share a response name, the extension parses it and refuses one over
+// MaxTokens or MaxFields, on every transport. That is a second parse, which a
+// query cache of gqlgen's does not spare. Use it before
+// extension.AutomaticPersistedQuery, so that the cache never stores a refused
+// query.
 //
 // The server's Use panics when the DB is nil, when a limit is negative, or
 // when WithTxOptions asks for velox.TxRetrySerializable: Validate refuses

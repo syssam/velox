@@ -477,8 +477,8 @@
 // gqlgen validates a request before any resolver, and before the extension's cost,
 // and validation is quadratic in the fields that share a response name: 12 KB of
 // a: id a: name took 3.49 GB and returned 250 MB of errors. So before gqlgen parses
-// a request, on every transport, the Extension parses it, once more where gqlgen's
-// parse follows, and refuses one over Limits.MaxTokens, 15000 by default, or over
+// a request, on every transport, the Extension parses it, a second parse that a
+// query cache of gqlgen's does not spare, and refuses one over Limits.MaxTokens, 15000 by default, or over
 // Limits.MaxFields, 2000 by default, with BAD_USER_INPUT. MaxFields also bounds the
 // pairs of fields under one response name, at 5 times it, the fragments spread where
 // they are, so that any request validation sees allocates under 50 MB. GraphiQL's

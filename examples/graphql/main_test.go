@@ -652,6 +652,12 @@ func TestRequestCost(t *testing.T) {
 		want: `{"errors": [{"message": "request is too costly: it costs 2030602, and the most is 100000",
 			"extensions": {"code": "COST_LIMIT_EXCEEDED"}}], "data": null}`,
 	})
+	// The rows are read with their leaf skipped too.
+	s.do(t, request{
+		query: `{ users(first: 100) { edges { node { posts(first: 100) { edges { node { tags(first: 100) { edges { cursor @skip(if: true) } } } } } } } } }`,
+		want: `{"errors": [{"message": "request is too costly: it costs 1030602, and the most is 100000",
+			"extensions": {"code": "COST_LIMIT_EXCEEDED"}}], "data": null}`,
+	})
 	// Aliases of a COUNT with first: 0 run a statement each: 1000 of them cost
 	// 2 fields and 2 statements each.
 	var aliases strings.Builder
