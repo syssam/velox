@@ -209,7 +209,8 @@ func TestWhereLogic(t *testing.T) {
 		{"fields and logic", &personWhere{NameIn: []string{"a", "b"}, Or: []*personWhere{{Age: i64p(98)}, {Age: i64p(92)}}}, []int64{2, 8}},
 		// An empty and or or list says nothing: no condition.
 		{"and []", &personWhere{And: []*personWhere{}}, all},
-		{"or []", &personWhere{Or: []*personWhere{}}, all},
+		{"or []", &personWhere{Or: []*personWhere{}}, nil},
+		{"not of or []", &personWhere{Not: &personWhere{Or: []*personWhere{}}}, all},
 		// An empty input holds for every row: so not of it for none, and an
 		// or with it for every row.
 		{"not {}", &personWhere{Not: &personWhere{}}, nil},
