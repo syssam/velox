@@ -213,14 +213,22 @@
 // holds: one that another owner holds is refused with BAD_USER_INPUT,
 // "already linked", and not taken from it.
 //
-// A Required one-to-one or many-to-one edge whose key is NULL-able can read
-// null, so its field is nullable in the SDL, parent: T, where entgql gives T!:
-// a non-null field that read NULL would null the object around it. On the side
-// that owns the key, as a Required self edge's parent does, velox refuses the
-// key nil on every write (velox.ColumnDesc.RequiredEdge), but the database's ON
-// DELETE SET NULL clears it when the target is deleted. On the other side
-// velox does not refuse it: no child need hold the row. Create<T>Input still
-// requires a Required edge's <edge>ID. When the owning side's key is one velox
+// A Required one-to-one or many-to-one edge is nullable in the SDL, author: T,
+// where entgql gives T!. Required says a row is written with its key; it does
+// not say the caller can read the target. A row reads the target in a statement
+// of its own, under the target's tenant scope and Read policy, the DB's Rewrite
+// hooks and a replica that may lag, and any of them can leave it empty. A
+// non-null field that read null would null the page around the row, with an
+// error for each such row, which tells the client that a hidden row exists. The
+// generator cannot know them all (the plugin's model holds no policy, and a
+// Rewrite hook is the DB's), so the field reads null, with no error, and a
+// mutation that returns the edge commits. A NULL-able key can read null too: on
+// the side that owns the key, as a Required self edge's parent does, velox
+// refuses the key nil on every write (velox.ColumnDesc.RequiredEdge), but the
+// database's ON DELETE SET NULL clears it when the target is deleted. On the
+// other side velox does not refuse it: no child need hold the row. Create<T>Input
+// still requires a Required edge's <edge>ID, which must name a row the caller may
+// read. When the owning side's key is one velox
 // refuses nil, an update on the other side only adds: a one-to-many edge has
 // add<Edge>IDs but no remove<Edge>IDs or clear<Edge>, and a one-to-one edge has
 // neither <edge>ID nor clear<Edge>, since each would unlink a child and leave

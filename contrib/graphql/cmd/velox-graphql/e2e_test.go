@@ -242,7 +242,7 @@ func TestPluginThroughVeloxGen(t *testing.T) {
 		"  seenAt: Time\n",
 		"  posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: PostOrder, where: PostWhereInput): PostConnection! @goField(name: \"PostsGQL\")\n",
 		"  groups: [Group!]! @goField(name: \"GroupsGQL\")\n",
-		"  author: Account! @goField(name: \"AuthorGQL\")\n",
+		"  author: Account @goField(name: \"AuthorGQL\")\n",
 		"enum UserRole {\n  ADMIN\n  REVIEWING\n}\n",
 		"  accounts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: AccountOrder, where: AccountWhereInput): AccountConnection!\n",
 		"  posts(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: PostOrder, where: PostWhereInput): PostConnection!\n",

@@ -413,7 +413,7 @@ func TestTypeMapping(t *testing.T) {
 				t.Errorf("%s.%s is exposed as %s", typ, name, got)
 			}
 		}
-		if got := typeOf(s, "Post", "author"); got != "User!" {
+		if got := typeOf(s, "Post", "author"); got != "User" {
 			t.Errorf("Post.author: %q", got)
 		}
 		if got := typeOf(s, "Category", "parent"); got != "Category" {
@@ -505,7 +505,7 @@ func TestTypeMapping(t *testing.T) {
 			{"Account", "role", "UserRole!"},
 			{"AccountConnection", "edges", "[AccountEdge!]!"},
 			{"AccountEdge", "node", "Account!"},
-			{"Post", "author", "Account!"},
+			{"Post", "author", "Account"},
 			{"Group", "users", "AccountConnection!"},
 			{"Query", "accounts", "AccountConnection!"},
 		} {
@@ -625,9 +625,8 @@ func TestEdges(t *testing.T) {
 	plain := edge("tags", plugin.M2M, "Group")
 	plain.Annotations = ann(t, graphql.Connection(false))
 	user.Edges = append(user.Edges, plain)
-	// A Required edge whose key is NOT NULL is never empty: T!. One whose key
-	// is NULL-able (a Required self edge's) is emptied by ON DELETE SET NULL:
-	// T.
+	// A Required edge is nullable whatever its key: T. A policy or a tenant may
+	// hide its target, and T! would null the page around the row.
 	post := entity("Post", field("author_id", "int64"))
 	author := edge("author", plugin.M2O, "User")
 	author.Required, author.Field, author.FieldOn = true, "author_id", "Post"
@@ -647,7 +646,7 @@ func TestEdges(t *testing.T) {
 	for _, c := range [][4]string{
 		{"Category", "parent", "Category", "ParentGQL"},
 		{"Category", "children", "CategoryConnection!", "ChildrenGQL"},
-		{"Post", "author", "User!", "AuthorGQL"},
+		{"Post", "author", "User", "AuthorGQL"},
 		{"Folder", "parent", "Folder", "ParentGQL"},
 		{"Folder", "prev", "Folder", "PrevGQL"},
 		{"Folder", "next", "Folder", "NextGQL"},
@@ -719,7 +718,7 @@ func TestCompositeKey(t *testing.T) {
 	if def == nil || len(def.Interfaces) != 0 {
 		t.Fatalf("Like: %+v", def)
 	}
-	for name, want := range map[string]string{"id": "", "userID": "", "day": "String!", "weight": "Int!", "user": "User!"} {
+	for name, want := range map[string]string{"id": "", "userID": "", "day": "String!", "weight": "Int!", "user": "User"} {
 		if got := typeOf(s, "Like", name); got != want {
 			t.Errorf("Like.%s: %q, want %q", name, got, want)
 		}
