@@ -50,16 +50,9 @@ func insertT(ctx context.Context, db *velox.DB, id string) error {
 // write would be durable alone and the first lost. Later statements fail unsent,
 // and fn's nil returns the failure.
 func TestSQLiteServerRollbackBreaksTheTransaction(t *testing.T) {
-	const big = "WITH RECURSIVE c(x) AS (SELECT 10 UNION ALL SELECT x + 1 FROM c WHERE x < 100000000) INSERT INTO t SELECT x FROM c"
 	for name, fail := range map[string]func(context.Context, *velox.DB) error{
 		"INSERT OR ROLLBACK": func(ctx context.Context, tx *velox.DB) error {
 			_, err := tx.Exec(ctx, "test", "INSERT OR ROLLBACK INTO t (id) VALUES (1)")
-			return err
-		},
-		"an interrupt": func(ctx context.Context, tx *velox.DB) error {
-			sctx, cancel := context.WithTimeout(ctx, 5*time.Millisecond)
-			defer cancel()
-			_, err := tx.Exec(sctx, "test", big)
 			return err
 		},
 	} {
@@ -82,6 +75,42 @@ func TestSQLiteServerRollbackBreaksTheTransaction(t *testing.T) {
 			}
 			if n := tableRows(t, db); n != 0 {
 				t.Errorf("%d rows survive a transaction that failed", n)
+			}
+			if err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { return insertT(ctx, tx, "3") }); err != nil {
+				t.Errorf("the next transaction: %v", err)
+			}
+		})
+	}
+}
+
+// TestSQLiteInterruptIsAllOrNothing: a deadline that interrupts a statement may roll
+// the whole transaction back, or only the statement, or stop it before it starts,
+// which depends on the machine's load. Whichever happened, fn's writes are all kept
+// or all lost: never the later one alone.
+func TestSQLiteInterruptIsAllOrNothing(t *testing.T) {
+	const big = "WITH RECURSIVE c(x) AS (SELECT 10 UNION ALL SELECT x + 1 FROM c WHERE x < 100000000) INSERT INTO t SELECT x FROM c"
+	for name, wait := range map[string]time.Duration{"already past": 0, "while it runs": 5 * time.Millisecond} {
+		t.Run(name, func(t *testing.T) {
+			db := sqliteTable(t)
+			var failure, later error
+			err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+				if err := insertT(ctx, tx, "1"); err != nil {
+					return err
+				}
+				sctx, cancel := context.WithTimeout(ctx, wait)
+				defer cancel()
+				_, failure = tx.Exec(sctx, "test", big)
+				later = insertT(ctx, tx, "2")
+				return nil
+			})
+			if failure == nil {
+				t.Fatal("the statement did not fail")
+			}
+			switch n := tableRows(t, db); {
+			case later == nil && err == nil && n == 2: // it took only the statement
+			case errors.Is(later, failure) && errors.Is(err, failure) && n == 0: // it took the transaction
+			default:
+				t.Errorf("failure %v; later %v; Tx %v; %d rows", failure, later, err, n)
 			}
 			if err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error { return insertT(ctx, tx, "3") }); err != nil {
 				t.Errorf("the next transaction: %v", err)
