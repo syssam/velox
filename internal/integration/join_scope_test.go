@@ -149,6 +149,11 @@ type jsProjectKind struct {
 	KindID    int64
 }
 
+var jsPK = struct {
+	ProjectID velox.NumberCol[jsProjectKind, int64]
+	KindID    velox.NumberCol[jsProjectKind, int64]
+}{velox.NumberCol[jsProjectKind, int64]{I: 0}, velox.NumberCol[jsProjectKind, int64]{I: 1}}
+
 var jsProjectKindMeta velox.MetaOnce[jsProjectKind]
 
 func (*jsProjectKind) VeloxMeta() *velox.Meta[jsProjectKind] {
@@ -479,6 +484,20 @@ func TestJoinOwnersGivenAreScoped(t *testing.T) {
 			}
 			if got, err := q.Where(JsProjects.Kinds.Of(theirs)).All(ctx); err != nil || len(got) != 1 {
 				t.Errorf("WithAllTenants: %+v, %v", got, err)
+			}
+		})
+		t.Run("Of inside an EXISTS of a scoped statement", func(t *testing.T) {
+			// Project 1 is linked to kind 2, tenant 2's project's. Its count would tell
+			// tenant 1 that the two share it.
+			if err := tg.db.Insert(&jsProjectKind{1, 2}).Exec(t1); err != nil {
+				t.Fatal(err)
+			}
+			n, err := tg.db.Query[jsProject]().Where(JsProjects.Kinds.HasWhere(JsProjects.Kinds.Of(theirs))).Count(t1)
+			if err != nil || n != 0 {
+				t.Errorf("%d, %v", n, err)
+			}
+			if _, err := tg.db.Delete[jsProjectKind]().Where(jsPK.ProjectID.EQ(1), jsPK.KindID.EQ(2)).Exec(t1); err != nil {
+				t.Fatal(err)
 			}
 		})
 		t.Run("LoadEach", func(t *testing.T) {

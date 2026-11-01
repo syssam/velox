@@ -115,7 +115,7 @@ type Scoper struct {
 	Ctx    context.Context
 	Entity string // the statement's entity, which every error names
 
-	scopedRows bool // the statement's entity is tenant-scoped: see through
+	scopedRows bool // the entity the conditions being walked are on is tenant-scoped: see through
 
 	tenantRead bool   // id and all are looked up
 	id         any    // the context's tenant, as given; nil when none
@@ -258,7 +258,10 @@ func (sc *Scoper) PolicyCond(t *EntityInfo, op Op, which string, p Predicate, er
 	if err := PredErr(p.n); err != nil {
 		return Predicate{}, fmt.Errorf("velox: %s: the %s policy's condition: %w", t.Name, which, err)
 	}
+	outer := sc.scopedRows
+	sc.scopedRows = t.Tenant >= 0
 	n, _, err := sc.Node(p.n)
+	sc.scopedRows = outer
 	return Predicate{n}, err
 }
 
@@ -495,6 +498,10 @@ func (sc *Scoper) Node(n Node) (Node, bool, error) {
 		}
 		t = l.Target
 	}
+	outer := sc.scopedRows
+	if t != nil {
+		sc.scopedRows = t.Tenant >= 0 // an EXISTS's kids are on its target's rows
+	}
 	var kids []Node // nil until a kid changes
 	for i, k := range n.Kids {
 		nk, changed, err := sc.Node(k)
@@ -513,6 +520,7 @@ func (sc *Scoper) Node(n Node) (Node, bool, error) {
 		}
 		kids[i] = nk
 	}
+	sc.scopedRows = outer
 	resolved := false
 	if n.Op == OpExists {
 		// A relation is resolved here when the condition came from a policy
@@ -543,9 +551,9 @@ func (sc *Scoper) Node(n Node) (Node, bool, error) {
 }
 
 // through scopes Of's condition on a many-to-many relation: the join rows of owners
-// the caller named, which may be another tenant's. A scoped statement needs nothing:
-// what it returns are its tenant's rows, however they are linked. To a target with no
-// tenant, the condition is all that stands between a tenant and another's links.
+// the caller named, which may be another tenant's. On a scoped entity's rows it needs
+// nothing: they are the tenant's, however they are linked. On a target with no tenant,
+// the condition is all that stands between a tenant and another's links.
 func (sc *Scoper) through(n Node) (Node, bool, error) {
 	j := n.V.(*EntityInfo)
 	if sc.scopedRows || len(j.refs) == 0 {
@@ -559,7 +567,7 @@ func (sc *Scoper) through(n Node) (Node, bool, error) {
 		}
 		if ok {
 			if kids == nil {
-				kids = slices.Clip(slices.Clone(n.Kids))
+				kids = slices.Clone(n.Kids)
 			}
 			kids = append(kids, Node{Op: OpTenantRef, Col: int32(i), V: id})
 		}
