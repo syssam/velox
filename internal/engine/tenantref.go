@@ -31,9 +31,12 @@ type TenantRef struct {
 
 // tenantRef is a TenantRef as EntityInfo holds it; self is the column of the
 // entity itself that Key names, on a reference to its own table, and -1 otherwise.
+// sameSchema says its table is in the entity's schema, so that a Rewrite moving the
+// statement to another schema, as one schema to a tenant does, moves the check too.
 type tenantRef struct {
 	TenantRef
-	self int
+	self       int
+	sameSchema bool
 }
 
 // buildTenantRefs is d's TenantRefs for the metadata, refusing what names no
@@ -50,7 +53,7 @@ func buildTenantRefs(name string, d *DescFields, cols []ColumnInfo) ([]tenantRef
 		if r.Table == "" || r.Key == "" || r.Tenant == "" {
 			return nil, &SchemaError{Entity: name, Field: cols[r.Column].Field, Reason: "a TenantRef needs a Table, a Key and a Tenant; run go tool velox-gen"}
 		}
-		refs[i] = tenantRef{TenantRef: r, self: -1}
+		refs[i] = tenantRef{TenantRef: r, self: -1, sameSchema: r.Schema == d.Schema}
 		if r.Table == d.Table && r.Schema == d.Schema {
 			refs[i].self = slices.IndexFunc(cols, func(c ColumnInfo) bool { return c.Name == r.Key })
 		}
@@ -114,8 +117,12 @@ func (db *DB) checkRefs(ctx context.Context, st *Statement, t Target) error {
 		w.str("SELECT ")
 		w.ident(r.Key)
 		w.str(" FROM ")
-		if r.Schema != "" {
-			w.ident(r.Schema)
+		schema := r.Schema
+		if r.sameSchema {
+			schema = in.Schema
+		}
+		if schema != "" {
+			w.ident(schema)
 			w.str(".")
 		}
 		w.ident(r.Table)

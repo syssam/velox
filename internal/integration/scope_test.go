@@ -474,6 +474,8 @@ func TestUpsertSchemaQualifiedPostgres(t *testing.T) {
 			tg.exec(t, "CREATE SCHEMA vx_billing")
 			t.Cleanup(func() { tg.exec(t, "DROP SCHEMA vx_billing CASCADE") })
 			tg.exec(t, "CREATE TABLE vx_billing.tickets (LIKE public.tickets INCLUDING ALL)")
+			tg.exec(t, "CREATE TABLE vx_billing.invoices (LIKE public.invoices INCLUDING ALL)")
+			tg.exec(t, "INSERT INTO vx_billing.invoices SELECT * FROM public.invoices")
 			for _, r := range seedTickets {
 				tg.exec(t, "INSERT INTO vx_billing.tickets (created_by, id, org_id, owner, title, done, invoice_id, parent_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
 					"seed", r.id, r.org, r.owner, r.title, r.done, r.invoice, r.parent)
@@ -517,7 +519,7 @@ func TestUpsertSchemaQualifiedPostgres(t *testing.T) {
 			upsert := func(x *testmodel.Ticket) error {
 				return db.Insert(x).OnConflict(Tk.OrgID, Tk.Title).Update(Tk.Done).Exec(ann.ctx)
 			}
-			a1 := testmodel.Ticket{Owner: "ann", Title: "A1", Done: true}
+			a1 := testmodel.Ticket{Owner: "ann", Title: "A1", Done: true, InvoiceID: 1}
 			if err := upsert(&a1); err != nil {
 				t.Fatal(err)
 			}
@@ -528,7 +530,7 @@ func TestUpsertSchemaQualifiedPostgres(t *testing.T) {
 			wantIDs(t, done("public.tickets"), []int64{2, 3, 8})
 
 			// B1 is bob's ticket 3: ann's upsert is refused, and nothing changes.
-			b1 := testmodel.Ticket{Owner: "ann", Title: "B1", Done: false}
+			b1 := testmodel.Ticket{Owner: "ann", Title: "B1", Done: false, InvoiceID: 1}
 			err := upsert(&b1)
 			var pe *velox.PolicyError
 			if !errors.As(err, &pe) || pe.Op != velox.OpUpdate || !strings.Contains(err.Error(), "the existing row is hidden from this upsert") {

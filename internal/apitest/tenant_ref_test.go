@@ -397,3 +397,22 @@ func BenchmarkTenantInsert(b *testing.B) {
 		}
 	})
 }
+
+// TestTenantRefFollowsARewrite: a Rewrite that moves the statement to another schema,
+// as one schema to a tenant does, moves its check there too, so it reads the rows the
+// write will refer to.
+func TestTenantRefFollowsARewrite(t *testing.T) {
+	e := &fakeconn.Exec{Affected: 1, Answer: passRefs}
+	db := openFake(velox.Postgres, e, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+		in := *st.Entity
+		in.Schema = "t7"
+		st.Entity = &in
+		return nil
+	}))
+	if _, err := db.Update[testmodel.Ticket]().Set(Tk.InvoiceID.Set(5)).Where(Tk.ID.EQ(1)).Exec(tenant(int64(7))); err != nil {
+		t.Fatal(err)
+	}
+	if want := `SELECT "id" FROM "t7"."invoices" WHERE "id" IN ($1) AND "org_id" = $2`; len(e.Log) != 2 || e.Log[0] != want {
+		t.Errorf("%q, want first %q", e.Log, want)
+	}
+}

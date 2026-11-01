@@ -118,7 +118,9 @@ at the call to a silent outcome.
   that there is no oracle; the write is not sent. `WithAllTenants` skips it. A row may
   name a key its own insert sets. Arithmetic on such a column under a tenant is refused:
   its value is not known. A join entity has no tenant column, so its write now reads
-  the tenant itself, and fails with `ErrNoTenant` with none.
+  the tenant itself, and fails with `ErrNoTenant` with none. A Rewrite that moves the
+  statement to another schema moves the check of a reference in the entity's own
+  schema with it (`TestTenantRefFollowsARewrite`); one in a named other schema stays.
 
   This is a check, not a constraint. What it does not do: a target deleted after it,
   which is the database foreign key's job; a composite foreign key is the stronger
