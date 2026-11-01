@@ -44,8 +44,9 @@ func TxIsolation(level sql.IsolationLevel) TxOption {
 }
 
 // TxReadOnly starts a read-only transaction. On SQLite it runs under PRAGMA
-// query_only, on the transaction's connection, which can write again once the
-// transaction has ended, however it ended; a write in it fails.
+// query_only, on the transaction's connection, where the setting is as it was once
+// the transaction has ended, however it ended; a write in it fails. Under a DSN's
+// _txlock=immediate it holds SQLite's write lock all the same.
 func TxReadOnly() TxOption { return TxOption{func(o *txOptions) { o.ReadOnly = true }} }
 
 // TxRetrySerializable runs the transaction again, up to n more times, when it

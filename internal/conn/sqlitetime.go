@@ -142,8 +142,8 @@ func (e sqliteTimes) Exec(ctx context.Context, s string, args []any) (Result, er
 // Drivers ignore a transaction's options on SQLite, so velox keeps them. Every
 // SQLite transaction is serializable, so that level is the default and another
 // is refused. A read-only one runs under PRAGMA query_only, a setting of the
-// connection, and not of the transaction: it is off again before the
-// connection serves another statement.
+// connection, and not of the transaction: it is as it was, which a DSN may have
+// turned on, before the connection serves another statement.
 func (e sqliteTimes) Begin(ctx context.Context, o sql.TxOptions) (Executor, Tx, error) {
 	if o.Isolation != sql.LevelDefault && o.Isolation != sql.LevelSerializable {
 		return nil, nil, fmt.Errorf("SQLite's transactions are serializable; it has no isolation level %s", o.Isolation)
@@ -155,7 +155,7 @@ func (e sqliteTimes) Begin(ctx context.Context, o sql.TxOptions) (Executor, Tx, 
 		err error
 	)
 	if s, ok := e.Executor.(SQL); ok && o.ReadOnly {
-		ex, tx, err = s.BeginOnConn(ctx, sql.TxOptions{}, "PRAGMA query_only = ON", "PRAGMA query_only = OFF")
+		ex, tx, err = s.BeginOnConn(ctx, sql.TxOptions{}, ConnSetting{"PRAGMA query_only", "PRAGMA query_only = ON", "PRAGMA query_only = OFF"})
 	} else {
 		ex, tx, err = e.Executor.Begin(ctx, o)
 	}

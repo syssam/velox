@@ -23,8 +23,11 @@ at the call to a silent outcome.
 - **SQLite's transaction options.** `TxReadOnly` runs under `PRAGMA query_only`.
   The transaction holds a `*sql.Conn`, as database/sql hands a transaction's
   connection back once its context ends, and a setting left on would make that
-  connection read-only for good. The setting goes off after the transaction ends,
-  on a detached context; if that fails the connection is discarded.
+  connection read-only for good. velox reads the setting first, and it returns to
+  that value after the transaction ends, on a detached context; if that fails the
+  connection is discarded. So a DSN's `_pragma=query_only(1)` stays on. The setting goes
+  on after BEGIN, off for it if it was on, as it refuses the BEGIN IMMEDIATE of a DSN's
+  `_txlock=immediate`, whose read-only transaction therefore takes the write lock.
   `TxIsolation(LevelSerializable)` is what SQLite gives; other levels are refused.
 - **Raw in a transaction is a write.** velox cannot read the SQL, and a
   transaction is where `Raw`'s documentation sends a write that returns rows. So
@@ -105,6 +108,7 @@ BEGIN.
   `TestMySQLDeadlockBreaksTheTransaction`, `TestMySQLLockTimeout`,
   `TestBrokenTransactionSendsNothing`, `TestSQLiteServerRollbackBreaksTheTransaction`,
   `TestSQLiteProbe`, `TestRetryEndedMatchesTheContext`, `TestTxNestedStatementFails`,
-  `TestTxConcurrentStatementWaits`.
+  `TestTxConcurrentStatementWaits`, `TestSQLiteReadOnlyKeepsTheDSNsSetting`,
+  `TestSQLiteReadOnlyWithTxLock`, `TestSQLiteTxReadOnlyUnderTheDSN`.
 - `TestMySQLDeadlockSwallowedDoesNotCommit` runs only against a real MySQL
   (`VELOX_TEST_MYSQL`).

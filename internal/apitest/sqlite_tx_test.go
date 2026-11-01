@@ -3,6 +3,9 @@ package apitest
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -92,6 +95,81 @@ func TestSQLiteTxReadOnly(t *testing.T) {
 		}
 		after(t, db, raw, 0)
 	})
+}
+
+// TestSQLiteTxReadOnlyUnderTheDSN: TxReadOnly works under a DSN's _txlock, whose
+// BEGIN IMMEDIATE query_only would refuse, and leaves a DSN's query_only on. However
+// fn ends, the connection is as it was.
+func TestSQLiteTxReadOnlyUnderTheDSN(t *testing.T) {
+	ends := map[string]func(*velox.DB) error{
+		"nil": func(db *velox.DB) error {
+			return db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+				_, err := tx.Exec(ctx, "test", "INSERT INTO t DEFAULT VALUES")
+				if err == nil || !strings.Contains(err.Error(), "readonly") {
+					t.Errorf("a write: %v", err)
+				}
+				return nil
+			}, velox.TxReadOnly())
+		},
+		"an error": func(db *velox.DB) error {
+			if err := db.Tx(ctx, func(context.Context, *velox.DB) error { return errors.New("boom") }, velox.TxReadOnly()); err == nil {
+				t.Error("no error")
+			}
+			return nil
+		},
+		"a panic": func(db *velox.DB) error {
+			defer func() { _ = recover() }()
+			return db.Tx(ctx, func(context.Context, *velox.DB) error { panic("boom") }, velox.TxReadOnly())
+		},
+		"Goexit": func(db *velox.DB) error {
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				_ = db.Tx(ctx, func(context.Context, *velox.DB) error { runtime.Goexit(); return nil }, velox.TxReadOnly())
+			}()
+			<-done
+			return nil
+		},
+		"a canceled context": func(db *velox.DB) error {
+			cctx, cancel := context.WithCancel(ctx)
+			defer cancel()
+			if err := db.Tx(cctx, func(context.Context, *velox.DB) error { cancel(); return nil }, velox.TxReadOnly()); err == nil {
+				t.Error("a canceled transaction committed")
+			}
+			return nil
+		},
+	}
+	for dsn, writable := range map[string]bool{
+		"?_txlock=immediate":                       true,
+		"?_txlock=immediate&_pragma=query_only(1)": false,
+		"?_pragma=query_only(1)":                   false,
+	} {
+		for name, end := range ends {
+			t.Run(dsn+"/"+name, func(t *testing.T) {
+				file := filepath.Join(t.TempDir(), "t.db")
+				raw, err := sql.Open("sqlite", file)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer func() { _ = raw.Close() }()
+				if _, err := raw.Exec("CREATE TABLE t (id integer PRIMARY KEY)"); err != nil {
+					t.Fatal(err)
+				}
+				db, err := velox.Connect("sqlite", "file:"+file+dsn)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer func() { _ = db.Close() }()
+				if err := end(db); err != nil {
+					t.Errorf("Tx: %v", err)
+				}
+				_, err = db.Exec(ctx, "test", "INSERT INTO t DEFAULT VALUES")
+				if wrote := err == nil; wrote != writable {
+					t.Errorf("writable %v, after: %v", writable, err)
+				}
+			})
+		}
+	}
 }
 
 // TestSQLiteTxIsolation: Serializable is what SQLite gives; another level is
