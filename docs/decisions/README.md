@@ -33,3 +33,4 @@ contributor needs to know.
 | [0023](0023-module-path.md) | The module is `github.com/syssam/velox`; the earlier project is veloxe, and its tags are never reused |
 | [0024](0024-public-surface.md) | The public API is pinned by a snapshot; `migrate.Change` is opaque; `internal/engine` exports only what crosses it |
 | [0025](0025-connect.md) | `velox.Connect` opens a database in one call; `DB.Close` closes only what it opened; `velox.Pool` is the `*sql.DB` under it |
+| [0027](0027-graphql-limits.md) | The cost charges statements and introspection's response; a Required edge is nullable; the generator refuses what could only fail later; an explicit zero value on a Default is refused in GraphQL and stays unset in the core |
