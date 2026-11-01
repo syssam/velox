@@ -288,6 +288,9 @@ func (r *renderer) pgAlterColumn(c alterColumn) (pgParts, error) {
 		if c.To.Default != "" {
 			act("SET DEFAULT " + c.To.Default)
 		}
+		if seq, ok := r.serialSequence(c); ok {
+			pc.stmts = append(pc.stmts, "ALTER SEQUENCE "+seq+" AS "+c.To.Type)
+		}
 	case c.What&columnDefault != 0 && c.To.Default == "":
 		act("DROP DEFAULT")
 	case c.What&columnDefault != 0:
@@ -348,6 +351,29 @@ func (r *renderer) pgAlterColumn(c alterColumn) (pgParts, error) {
 		pc.stmts = append(pc.stmts, r.columnComment(c.Table, c.To))
 	}
 	return pc, nil
+}
+
+// serialSequence is the sequence of c's column, retyped to an integer type,
+// when the column is and stays a serial: a sequence that keeps its type stops
+// at that type's top, and pgCreate writes it with the column's. An identity's
+// follows its column on its own, and one not read from the default is left.
+func (r *renderer) serialSequence(c alterColumn) (string, bool) {
+	switch c.To.Type {
+	case "smallint", "integer", "bigint":
+	default:
+		return "", false
+	}
+	if c.From.Identity || c.To.Identity || !strings.HasPrefix(c.To.Default, "nextval(") {
+		return "", false
+	}
+	if c.To.Sequence != "" {
+		return r.indexName(c.Table, c.To.Sequence), true
+	}
+	ref, ok := nextvalSequence(c.To.Default)
+	if !ok {
+		return "", false
+	}
+	return r.table(ref), true
 }
 
 // pgUsing is the USING clause of a column's change from type from to type to,
