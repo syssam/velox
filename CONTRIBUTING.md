@@ -234,6 +234,9 @@ starts PostgreSQL, and writes `bench/compare/results/`. The last report is
 
 ## Docs
 
+- `TestReadmeQuickStart` runs the quick start of `README.md` in a temporary module.
+  After a change to its steps, keep each block in order and each Go block's first
+  line naming its file.
 - Godoc is for the user of the package. It cites no spec, plan, ruling or wave
   (`TestGodocCitesNoSpec`).
 - Every exported method has a doc comment (`TestExportedMethodsHaveDocs`).
