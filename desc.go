@@ -129,6 +129,7 @@ func (o *MetaOnce[E]) Load[_ Lazy[E]](desc func() Desc[E]) *Meta[E] {
 		}
 		o.m = &Meta[E]{info: info, addr: addr, err: err}
 		if info != nil {
+			o.m.nilCols = nilColumns(info)
 			engine.SetInfoKit(info, kitOf(info, addr))
 			engine.SetInfoCheck(info, d.Check)
 		}

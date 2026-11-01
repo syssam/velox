@@ -1,7 +1,10 @@
 package velox
 
 import (
+	"database/sql"
+	"database/sql/driver"
 	"fmt"
+	"reflect"
 	"sync"
 	"unsafe"
 
@@ -13,6 +16,41 @@ type Meta[E any] struct {
 	info *EntityInfo
 	addr func(*E, int) any
 	err  error
+	// nilCols marks the columns nilScanner reads; nil when there are none.
+	nilCols []bool
+}
+
+// nilColumns are the columns of a slice or a map that database/sql cannot read a NULL
+// into, nil when there are none: it knows of []byte alone, and its error fails each
+// page holding the row. A pointer it reads, an encoded column and a type's own Scan
+// are told of NULL themselves.
+func nilColumns(info *EntityInfo) []bool {
+	var cols []bool
+	for i := range info.Columns {
+		c := &info.Columns[i]
+		t, _ := c.Type.(reflect.Type)
+		if t == nil || c.Codec || t.Kind() != reflect.Slice && t.Kind() != reflect.Map || t == reflect.TypeFor[[]byte]() ||
+			reflect.PointerTo(t).Implements(reflect.TypeFor[sql.Scanner]()) {
+			continue
+		}
+		if cols == nil {
+			cols = make([]bool, len(info.Columns))
+		}
+		cols[i] = true
+	}
+	return cols
+}
+
+// nilScanner reads a column of nilColumns into its field, dst a pointer to it: a NULL
+// is nil, and any other value converts as database/sql does.
+type nilScanner struct{ dst any }
+
+func (s *nilScanner) Scan(src any) error {
+	if src == nil {
+		reflect.ValueOf(s.dst).Elem().SetZero()
+		return nil
+	}
+	return sql.ConvertAssign(driver.ScanContext{}, s.dst, src)
 }
 
 // MetaOnce builds an entity's Meta on first use. For generated code. Its zero
@@ -43,7 +81,7 @@ func CheckEntity[E any, PE Entity[E]]() error {
 
 // kitOf builds entity E's kit from its scan plan.
 func kitOf[E any](info *EntityInfo, addr func(*E, int) any) *engine.Kit {
-	m := &Meta[E]{info: info, addr: addr}
+	m := &Meta[E]{info: info, addr: addr, nilCols: nilColumns(info)}
 	typ := engine.ElemType((*E)(nil))
 	return &engine.Kit{
 		Value: func(p unsafe.Pointer, col int) any { return engine.Elem(addr((*E)(p), col)) },
