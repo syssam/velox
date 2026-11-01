@@ -48,7 +48,8 @@ func TxReadOnly() TxOption { return TxOption{func(o *txOptions) { o.ReadOnly = t
 // fails on a serialization failure or a deadlock: PostgreSQL 40001 and 40P01,
 // MySQL 1213 and 1205, SQLite BUSY and LOCKED. fn must be safe to run again.
 // Each retry waits first, a random time from 5 ms that grows to at most a
-// second; the wait ends with ctx, and a retry past the deadline is not made.
+// second; the transaction's deadline or ctx's end stops the wait, and the
+// retry.
 func TxRetrySerializable(n int) TxOption { return TxOption{func(o *txOptions) { o.Retries = n }} }
 
 // TxRetries returns the n of the last TxRetrySerializable in opts, or 0 when
@@ -218,10 +219,11 @@ func applyTxOption(opt TxOption, o *txOptions) { opt.apply(o) }
 //
 // Inside a transaction, Tx makes a savepoint instead, so an error in a nested
 // fn rolls back only that fn's work. When releasing the savepoint fails, the
-// nested Tx returns that error and does not roll back to the savepoint.
-// Whether the enclosing transaction can still commit is the database's call:
-// PostgreSQL aborts it, so the outer COMMIT fails. A nested Tx (a savepoint)
-// takes no options and returns an error when given any, and passes fn the ctx
+// nested Tx rolls back to the savepoint, on a context without ctx's
+// cancellation, and returns the error, so an error always means the nested
+// work is undone. When that rollback fails too, or a rollback after fn's error
+// does, the transaction is broken: its statements fail, and the outer fn's nil
+// rolls it back with an error. A nested Tx (a savepoint) takes no options and returns an error when given any, and passes fn the ctx
 // it is given, marked as the transaction's.
 //
 // tx is valid only inside fn: after Tx returns, statements on it fail (or, for
@@ -302,11 +304,10 @@ func (db *DB) attempts(ctx, tctx context.Context, fn func(context.Context, *DB) 
 		if err == nil || attempt > o.Retries || !retryable(err) || ctx.Err() != nil || tctx.Err() != nil {
 			return err
 		}
-		d := retryDelay(attempt)
-		if !deadline.IsZero() && time.Now().Add(d).After(deadline) {
-			return err // the deadline would cut the retry off
-		}
-		if !retryWait(ctx, tctx, d) {
+		if !retryWait(ctx, tctx, retryDelay(attempt)) {
+			if cause != nil && timedOut(tctx) {
+				err = errors.Join(timeoutError("transaction"), err)
+			}
 			return err
 		}
 		if info != nil {
@@ -459,8 +460,9 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 // names a shard other than the transaction's, or one that is not a shard, is
 // refused before SAVEPOINT, as a statement's is; one that names none passes.
 //
-// A rollback of the savepoint that fails, after fn's error or its panic,
-// breaks the transaction: see txFrame.broken.
+// A RELEASE that fails rolls back to the savepoint, as fn's error does. A
+// rollback of the savepoint that fails, after any of them or fn's panic, breaks
+// the transaction: see txFrame.broken.
 //
 // The savepoints of a transaction are named velox_1, velox_2, and so on, in
 // the order they are made, and no name is used twice: MySQL replaces a
@@ -509,7 +511,15 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 	}
 	finished = true
 	if _, err := db.Ex.Exec(sctx, "RELEASE SAVEPOINT "+name, nil); err != nil {
-		return savepointErr(sctx, "release savepoint", err)
+		// The nested Tx fails, so its work must not commit with the
+		// transaction: undo it, or break the transaction when that fails too.
+		err = savepointErr(sctx, "release savepoint", err)
+		rerr := db.undoSavepoint(ctx, name)
+		db.breakOn(rerr)
+		if rerr != nil && !ended(rerr) && !db.pastTxDeadline() {
+			return errors.Join(err, fmt.Errorf("velox: rollback to savepoint: %w", rerr))
+		}
+		return err
 	}
 	return nil
 }

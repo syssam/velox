@@ -32,7 +32,8 @@ func TxReadOnly() TxOption { return engine.TxReadOnly() }
 // fails on a serialization failure or a deadlock: PostgreSQL 40001 and 40P01,
 // MySQL 1213 and 1205, SQLite BUSY and LOCKED. fn must be safe to run again.
 // Each retry waits first, a random time from 5 ms that grows to at most a
-// second; the wait ends with ctx, and a retry past the deadline is not made.
+// second; the transaction's deadline or ctx's end stops the wait, and the
+// retry.
 func TxRetrySerializable(n int) TxOption { return engine.TxRetrySerializable(n) }
 
 // TxRetries returns the n of the last TxRetrySerializable in opts, or 0 when

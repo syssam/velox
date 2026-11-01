@@ -97,10 +97,9 @@ func TestRetryWaitEndsWithContext(t *testing.T) {
 	}
 }
 
-// TestRetryStopsAtTheDeadline: a retry the transaction's deadline would cut
-// off does not wait for it.
-func TestRetryStopsAtTheDeadline(t *testing.T) {
-	waits := recordRetryWaits(t)
+// TestRetryWaitStopsAtTheTimeout: velox's deadline ends the wait, and the
+// error says so.
+func TestRetryWaitStopsAtTheTimeout(t *testing.T) {
 	was := retryBase
 	retryBase = time.Hour
 	defer func() { retryBase = was }()
@@ -109,12 +108,10 @@ func TestRetryStopsAtTheDeadline(t *testing.T) {
 	defer func() { retryMax = wasMax }()
 	dead := &mysql.MySQLError{Number: 1213, Message: "Deadlock found"}
 	db := newDB(MySQL, &fakeconn.Exec{}, nil)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
 	calls := 0
-	err := db.Tx(ctx, func(context.Context, *DB) error { calls++; return dead }, TxRetrySerializable(3))
-	if !is(err, dead) || calls != 1 || len(*waits) != 0 {
-		t.Errorf("%v after %d attempts and %d waits", err, calls, len(*waits))
+	err := db.Tx(context.Background(), func(context.Context, *DB) error { calls++; return dead }, TxRetrySerializable(3), TxTimeout(5*time.Millisecond))
+	if !is(err, dead) || !is(err, ErrTimeout) || calls != 1 {
+		t.Errorf("%v after %d attempts", err, calls)
 	}
 }
 
