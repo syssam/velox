@@ -90,7 +90,7 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
   at most 100 errors. Null on a Nillable update field is refused, naming `clear<Field>`.
   `FromJSON` is strict, and a hook sees `json.Number`. `Uint64` input stops at 2^63-1.
 - `All` allocates at most 16 rows ahead of `Limit`, then eightfold as they fill.
-- `GeneratedCodeIsVersion7` and `veloxgql.GeneratedCodeIsVersion6`: regenerate.
+- `GeneratedCodeIsVersion7` and `veloxgql.GeneratedCodeIsVersion7`: regenerate.
 - GraphQL: explicit `null` on a Nillable field with a `Default` is refused on create.
   `@skip` no longer lowers the rows charged, and a mutation's cost counts its statements.
   GraphiQL has its own budget, enough for 150 rich entities: raise
