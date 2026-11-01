@@ -175,12 +175,14 @@ jobs:
           go test -race -short -count=1 ./...
       - name: coverage floors
         run: go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-examples.out cover-veloxotel.out cover-graphql.out
-      - name: scale (n=500)
+      # Report-only here until a Linux run recalibrates thresholds.json, which was
+      # measured on darwin/arm64 only. A run that fails still fails the step.
+      - name: scale (n=500, report-only)
         if: matrix.pg == '18'
-        run: go run ./bench/scale -n 500 -s 100 -check bench/scale/thresholds.json
-      - name: scale (n=500, GraphQL)
+        run: scripts/scale-check.sh -n 500 -s 100
+      - name: scale (n=500, GraphQL, report-only)
         if: matrix.pg == '18'
-        run: go run ./bench/scale -n 500 -s 100 -graphql -check bench/scale/thresholds.json
+        run: scripts/scale-check.sh -n 500 -s 100 -graphql
       # Report-only: the baselines in bench/baseline come from other hardware, so
       # the time deltas are informational. Allocation counts are enforced by the
       # budget tests.

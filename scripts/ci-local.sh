@@ -148,8 +148,9 @@ go run github.com/mgechev/revive@v1.17.0 -config scripts/revive.toml -set_exit_s
 # No package may fall below its floor, or lack one (scripts/coverage-floors.txt).
 go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-examples.out cover-veloxotel.out cover-graphql.out
 
-go run ./bench/scale -n 500 -s 100 -check bench/scale/thresholds.json
-go run ./bench/scale -n 500 -s 100 -graphql -check bench/scale/thresholds.json
+# It fails over a threshold only where they were measured, darwin/arm64; CI only reports.
+scripts/scale-check.sh -n 500 -s 100
+scripts/scale-check.sh -n 500 -s 100 -graphql
 
 # Benchmarks against the committed baselines (bench/baseline). Report-only: the
 # baselines come from other hardware, so the deltas inform and never fail.

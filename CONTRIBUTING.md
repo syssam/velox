@@ -73,7 +73,8 @@ govulncheck.
 5. `bench/compare`: `go vet`, golangci-lint and `go test -race -short`. The
    measurements never run here.
 6. The coverage floors.
-7. `bench/scale`, in plain and GraphQL form, against `bench/scale/thresholds.json`.
+7. `scripts/scale-check.sh`, which runs `bench/scale`, in plain and GraphQL form,
+   against `bench/scale/thresholds.json`.
 8. `scripts/bench-compare.sh`, which only reports.
 9. `scripts/gqlgen-latest.sh`, which tests `velox-graphql` against the newest
    gqlgen in a copy of the tree.
@@ -208,14 +209,19 @@ allocation counts.
 machine, and commit the three files with the reason. `bench/baseline/README.md`
 has the provenance.
 
-`bench/scale` measures the build and link cost of a large generated model and
-fails when a CPU-time ratio to a reference build passes
-`bench/scale/thresholds.json`:
+`bench/scale` measures the build and link cost of a large generated model, and
+`scripts/scale-check.sh` compares it with `bench/scale/thresholds.json`:
 
 ```sh
-go run ./bench/scale -n 500 -s 100 -check bench/scale/thresholds.json
-go run ./bench/scale -n 500 -s 100 -graphql -check bench/scale/thresholds.json
+scripts/scale-check.sh -n 500 -s 100
+scripts/scale-check.sh -n 500 -s 100 -graphql
 ```
+
+The thresholds were measured only on darwin/arm64. Binary size and link memory differ
+by platform, so going over one fails only on darwin/arm64, and elsewhere, CI's Linux
+included, is a warning. A failed build fails everywhere. To gate CI, recalibrate the
+file from its Linux runs, by the rule in its `_measured` notes, and drop the platform
+check from the script.
 
 `go test -run '^$' -bench '^BenchmarkScan$' -benchmem -count 6 ./internal/integration`
 (with the database variables set) measures the read path on every database;
