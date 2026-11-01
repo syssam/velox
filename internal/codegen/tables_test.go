@@ -843,16 +843,27 @@ func TestTablesComments(t *testing.T) {
 	}
 }
 
+type tbCollated struct{ schema.Schema }
+
+func (tbCollated) Annotations() []schema.Annotation {
+	return []schema.Annotation{schema.Collation("utf8mb4_0900_ai_ci")}
+}
+
+// TestTablesMySQLCollation: a table states a collation only by its annotation, and on
+// MySQL alone, so that a plan never converts a table whose model says nothing.
 func TestTablesMySQLCollation(t *testing.T) {
 	for _, d := range allDialects {
 		for _, tb := range tables(t, d, tbCmUser{}, tbCmPet{}, tbCmGroup{}).Tables {
-			want := ""
-			if d == velox.MySQL {
-				want = "utf8mb4_bin"
+			if tb.Collation != "" {
+				t.Errorf("%v: %s collation %q, want none", d, tb.Name, tb.Collation)
 			}
-			if tb.Collation != want {
-				t.Errorf("%v: %s collation %q, want %q", d, tb.Name, tb.Collation, want)
-			}
+		}
+		want := ""
+		if d == velox.MySQL {
+			want = "utf8mb4_0900_ai_ci"
+		}
+		if got := tables(t, d, tbCollated{}).Tables[0].Collation; got != want {
+			t.Errorf("%v: a stated collation is %q, want %q", d, got, want)
 		}
 	}
 }

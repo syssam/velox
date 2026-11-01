@@ -34,6 +34,19 @@ func (*CommentAnnotation) Name() string { return "Comment" }
 // Comment sets the comment of a schema.
 func Comment(text string) *CommentAnnotation { return &CommentAnnotation{Text: text} }
 
+// CollationAnnotation is the collation of a schema's table on MySQL.
+type CollationAnnotation struct {
+	Collation string `json:"collation"`
+}
+
+// Name returns "Collation".
+func (*CollationAnnotation) Name() string { return "Collation" }
+
+// Collation states the collation of a schema's table on MySQL, and says nothing on
+// the other dialects. Without it a new table gets utf8mb4_bin and one that exists
+// keeps what it has: a plan changes a table's collation only when one is stated.
+func Collation(name string) *CollationAnnotation { return &CollationAnnotation{Collation: name} }
+
 // CheckAnnotation holds a schema's CHECK constraints.
 type CheckAnnotation struct {
 	Checks []CheckConstraint `json:"checks"`

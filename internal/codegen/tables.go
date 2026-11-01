@@ -91,14 +91,6 @@ func (t *tabler) pkName(table string) string {
 	return ""
 }
 
-// collation is a planned table's collation on the dialect.
-func (t *tabler) collation() string {
-	if t.d == velox.MySQL {
-		return "utf8mb4_bin"
-	}
-	return ""
-}
-
 // idType is the column type of the ID id: an integer ID is bigint on
 // PostgreSQL when it is unsigned 64-bit, as an identity cannot be numeric,
 // and integer on SQLite, its rowid.
@@ -119,7 +111,16 @@ func (t *tabler) idType(id *Field) string {
 func (t *tabler) entity(e *Entity) migrate.Table {
 	tb := migrate.Table{
 		Schema: e.TableSchema, Name: e.Table, PrimaryKey: []string{e.Fields[0].Column}, PrimaryKeyName: t.pkName(e.Table),
-		Collation: t.collation(), Pos: tableLoc(e).pos,
+		Pos: tableLoc(e).pos,
+	}
+	if raw, ok := e.Annotations["Collation"]; ok && t.d == velox.MySQL {
+		var c struct {
+			Collation string `json:"collation"`
+		}
+		if err := json.Unmarshal(raw, &c); err != nil {
+			t.fail(place{e, rankTable, 0, loc{pos: tb.Pos}}, "its Collation annotation is not a collation: %v", err)
+		}
+		tb.Collation = c.Collation
 	}
 	if raw, ok := e.Annotations["Comment"]; ok {
 		var c struct {
@@ -214,8 +215,7 @@ func checksOf(e *Entity) ([]declaredCheck, error) {
 func (t *tabler) joinTable(jt joinTable) migrate.Table {
 	pos := jt.Edge.Pos
 	tb := migrate.Table{
-		Schema: jt.Schema, Name: jt.Table, PrimaryKey: slices.Clone(jt.Columns[:]), PrimaryKeyName: t.pkName(jt.Table),
-		Collation: t.collation(), Pos: pos,
+		Schema: jt.Schema, Name: jt.Table, PrimaryKey: slices.Clone(jt.Columns[:]), PrimaryKeyName: t.pkName(jt.Table), Pos: pos,
 	}
 	for i, ref := range []*Entity{jt.Owner, jt.Target} {
 		c := jt.Columns[i]

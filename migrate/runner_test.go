@@ -193,15 +193,16 @@ INSERT INTO u VALUES (1, 1);
 `
 	for _, c := range []struct {
 		name, orphan, file string
-		fails              string
+		fails, noted       string
 	}{
 		{name: "unrelated", orphan: "u", file: "CREATE TABLE new_p (id integer PRIMARY KEY);\nINSERT INTO new_p SELECT id FROM p;\nDROP TABLE p;\nALTER TABLE new_p RENAME TO p;\n"},
 		{name: "index only", orphan: "u", file: "CREATE INDEX p_id ON p (id);\n"},
 		{name: "child", file: "DELETE FROM p;\n", fails: "row 1 of c"},
 		{name: "touched", orphan: "u", file: "UPDATE u SET id = 2;\n", fails: "of u"},
-		{name: "parent of an orphan touched", orphan: "u", file: "DELETE FROM lone WHERE id = 5;\n", fails: "of u"},
-		{name: "unread", orphan: "u", file: "WITH x AS (SELECT 1) DELETE FROM p WHERE id = 5;\n", fails: "of u"},
-		{name: "rebuilt with a trigger elsewhere", orphan: "u", file: "UPDATE p SET id = id;\n", fails: "of u"},
+		{name: "parent of an orphan touched", orphan: "u", file: "DELETE FROM lone WHERE id = 5;\n", noted: "of u"},
+		{name: "unread", orphan: "u", file: "WITH x AS (SELECT 1) DELETE FROM p WHERE id = 5;\n", noted: "of u"},
+		{name: "rebuilt with a trigger elsewhere", orphan: "u", file: "UPDATE p SET id = id;\n", noted: "of u"},
+		{name: "unread makes one", file: "WITH x AS (SELECT 1) DELETE FROM p WHERE id = 1;\n", fails: "row 1 of c"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			db, _ := freshDB(t, velox.SQLite)
@@ -216,12 +217,15 @@ INSERT INTO u VALUES (1, 1);
 				mustExec(t, db, "CREATE TRIGGER p_u AFTER UPDATE ON p BEGIN UPDATE lone SET id = id; END")
 			}
 			fsys = extend(t, fsys, velox.SQLite, files("0002_x.sql", "-- velox:foreign-keys off\n"+c.file))
-			_, err := migrate.Up(context.Background(), db, fsys)
+			var notes []string
+			_, err := migrate.Up(context.Background(), db, fsys, migrate.WithNotes(func(n string) { notes = append(notes, n) }))
 			switch {
 			case c.fails == "" && err != nil:
 				t.Errorf("Up: %v", err)
 			case c.fails != "" && (err == nil || !strings.Contains(err.Error(), c.fails)):
 				t.Errorf("Up: %v, want it to name %q", err, c.fails)
+			case c.noted != "" && (len(notes) != 1 || !strings.Contains(notes[0], c.noted)):
+				t.Errorf("the notes %q, want one that names %q", notes, c.noted)
 			}
 		})
 	}

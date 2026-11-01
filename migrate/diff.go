@@ -42,8 +42,9 @@ import (
 // from "" ("primary-key"), or a rename names a table or column from does not
 // have, or one to does not have or from already has ("rename"). Without an
 // error, Diff gives no change exactly when from.Equal(to), on SQLite the
-// names of foreign keys aside, and a type or default spelled otherwise than
-// the server prints it aside. Diff does not change from or to.
+// names of foreign keys aside, a type or default spelled otherwise than the
+// server prints it aside, and a table of to that states no Collation aside,
+// as its table keeps the one it has. Diff does not change from or to.
 func Diff(from, to *Schema, opts DiffOptions) ([]Change, error) {
 	if from == nil || to == nil {
 		return nil, &Error{Code: "nil", Reason: "Diff needs two schemas"}
@@ -393,7 +394,7 @@ func (d *differ) alterTable(t, u *Table) {
 	if t.Comment != u.Comment {
 		d.add(setTableComment{Table: ref, From: t.Comment, To: u.Comment}, 5, 2, ref, 0, "")
 	}
-	if t.Collation != u.Collation {
+	if u.Collation != "" && t.Collation != u.Collation { // none stated: what is there stays
 		d.add(setTableCollation{Table: ref, From: t.Collation, To: u.Collation}, 5, 3, ref, 0, "")
 	}
 

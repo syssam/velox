@@ -83,8 +83,7 @@
 					],
 					"on_delete": "SET NULL"
 				}
-			],
-			"collation": "utf8mb4_bin"
+			]
 		},
 		{
 			"name": "tb_groups",
@@ -103,8 +102,7 @@
 			"primary_key": [
 				"id"
 			],
-			"primary_key_name": "PRIMARY",
-			"collation": "utf8mb4_bin"
+			"primary_key_name": "PRIMARY"
 		},
 		{
 			"name": "tb_profiles",
@@ -150,8 +148,7 @@
 						"id"
 					]
 				}
-			],
-			"collation": "utf8mb4_bin"
+			]
 		},
 		{
 			"name": "tb_tokens",
@@ -228,8 +225,7 @@
 					],
 					"on_delete": "CASCADE"
 				}
-			],
-			"collation": "utf8mb4_bin"
+			]
 		},
 		{
 			"name": "tb_user_friends",
@@ -283,8 +279,7 @@
 					],
 					"on_delete": "CASCADE"
 				}
-			],
-			"collation": "utf8mb4_bin"
+			]
 		},
 		{
 			"name": "tb_user_groups",
@@ -338,8 +333,7 @@
 					],
 					"on_delete": "CASCADE"
 				}
-			],
-			"collation": "utf8mb4_bin"
+			]
 		},
 		{
 			"name": "tb_users",
@@ -471,8 +465,7 @@
 					"expr": "`tier` IN ('free', 'pro')"
 				}
 			],
-			"comment": "a person",
-			"collation": "utf8mb4_bin"
+			"comment": "a person"
 		},
 		{
 			"schema": "billing",
@@ -496,8 +489,7 @@
 				"id"
 			],
 			"primary_key_name": "PRIMARY",
-			"comment": "a bill",
-			"collation": "utf8mb4_bin"
+			"comment": "a bill"
 		}
 	]
 }
