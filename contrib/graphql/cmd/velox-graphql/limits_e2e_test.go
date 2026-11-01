@@ -57,6 +57,21 @@ func (Post) Annotations() []schema.Annotation {
 	return []schema.Annotation{graphql.QueryField("posts"), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
 }
 
+type Thing struct{ schema.Schema }
+
+func (Thing) Fields() []schema.Field {
+	return []schema.Field{
+		field.Bytes("b"),
+		field.Bytes("maybe").Optional().Nillable(),
+		field.Strings("j"),
+		field.Int("n").Optional().Nillable().Default(7),
+	}
+}
+
+func (Thing) Annotations() []schema.Annotation {
+	return []schema.Annotation{graphql.QueryField("things"), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
+}
+
 type Acct struct{ schema.Schema }
 
 func (Acct) Fields() []schema.Field {
@@ -151,6 +166,21 @@ func (r *mutationResolver) UpdatePost(ctx context.Context, id string, input gen.
 	return gen.UpdatePost(ctx, id, input)
 }
 
+// Things is the resolver for the things field.
+func (r *queryResolver) Things(ctx context.Context, after *veloxgql.Cursor, first *int, before *veloxgql.Cursor, last *int) (*gen.ThingConnection, error) {
+	return gen.ThingsConnection(ctx, after, first, before, last)
+}
+
+// CreateThing is the resolver for the createThing field.
+func (r *mutationResolver) CreateThing(ctx context.Context, input gen.CreateThingInput) (*gen.Thing, error) {
+	return gen.CreateThing(ctx, input)
+}
+
+// UpdateThing is the resolver for the updateThing field.
+func (r *mutationResolver) UpdateThing(ctx context.Context, id string, input gen.UpdateThingInput) (*gen.Thing, error) {
+	return gen.UpdateThing(ctx, id, input)
+}
+
 // CreateAcct is the resolver for the createAcct field.
 func (r *mutationResolver) CreateAcct(ctx context.Context, input gen.CreateAcctInput) (*gen.Acct, error) {
 	return gen.CreateAcct(ctx, input)
@@ -211,6 +241,7 @@ func serve(t *testing.T) served {
 		"CREATE TABLE members (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
 		"CREATE TABLE posts (id INTEGER PRIMARY KEY, org_id INTEGER NOT NULL REFERENCES orgs (id), member_id INTEGER NOT NULL REFERENCES members (id), title TEXT NOT NULL)",
 		"CREATE TABLE accts (id INTEGER PRIMARY KEY, handle TEXT NOT NULL, joined DATETIME NOT NULL)",
+		"CREATE TABLE things (id INTEGER PRIMARY KEY, b BLOB NOT NULL, maybe BLOB, j JSON NOT NULL, n INTEGER)",
 		"CREATE TABLE types (id INTEGER PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL)",
 		"INSERT INTO orgs (id, name) VALUES (1, ~o1~), (2, ~o2~)",
 		"INSERT INTO members (id, name) VALUES (1, ~seen~), (2, ~hidden~)",
@@ -309,6 +340,35 @@ func TestExplicitZeroRefused(t *testing.T) {
 	s.want("update", fmt.Sprintf("mutation { updateAcct(id: %q, input: {handle: %q}) { handle } }", id, ""), '{"data":{"updateAcct":{"handle":""}}}')
 }
 
+// TestEmptyBytes: an empty blob reads back "" in Bytes!, where SQLite's driver
+// gives nil, and a page holding one has its data. A Nillable one reads null.
+func TestEmptyBytes(t *testing.T) {
+	s := serve(t)
+	s.want("create", 'mutation { createThing(input: {b: "", j: []}) { b maybe } }', '{"data":{"createThing":{"b":"","maybe":null}}}')
+	s.want("create, not empty", 'mutation { createThing(input: {b: "QQ==", j: []}) { b } }', '{"data":{"createThing":{"b":"QQ=="}}}')
+	s.want("the page", "{ things { edges { node { b } } } }", '{"data":{"things":{"edges":[{"node":{"b":""}},{"node":{"b":"QQ=="}}]}}}')
+	id := veloxgql.EncodeID("Thing", 2)
+	s.want("update", fmt.Sprintf("mutation { updateThing(id: %q, input: {b: %q}) { b } }", id, ""), '{"data":{"updateThing":{"b":""}}}')
+	var n int
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM things WHERE b = x~~").Scan(&n); err != nil || n != 2 {
+		t.Errorf("%d empty blobs stored: %v", n, err)
+	}
+}
+
+// TestEmptyJSONLiteral: a literal [] stores [], on create and on update, as a
+// variable's does.
+func TestEmptyJSONLiteral(t *testing.T) {
+	s := serve(t)
+	s.want("create", 'mutation { createThing(input: {b: "QQ==", j: []}) { j } }', '{"data":{"createThing":{"j":[]}}}')
+	s.want("create, not empty", 'mutation { createThing(input: {b: "QQ==", j: ["a"]}) { j } }', '{"data":{"createThing":{"j":["a"]}}}')
+	id := veloxgql.EncodeID("Thing", 2)
+	s.want("update", fmt.Sprintf("mutation { updateThing(id: %q, input: {j: []}) { j } }", id), '{"data":{"updateThing":{"j":[]}}}')
+	var j string
+	if err := s.db.QueryRow("SELECT j FROM things WHERE id = 2").Scan(&j); err != nil || j != "[]" {
+		t.Errorf("stored %q: %v", j, err)
+	}
+}
+
 // TestOrEmptyMatchesNone: or: [] matches no row, as titleIn: [] would.
 func TestOrEmptyMatchesNone(t *testing.T) {
 	s := serve(t)
@@ -364,7 +424,7 @@ func TestLimitsServed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
-	for _, name := range []string{"TestRequiredEdgeHidden", "TestTenantKeyFilled", "TestExplicitZeroRefused", "TestOrEmptyMatchesNone", "TestIntrospectionTypeNames"} {
+	for _, name := range []string{"TestRequiredEdgeHidden", "TestTenantKeyFilled", "TestExplicitZeroRefused", "TestOrEmptyMatchesNone", "TestIntrospectionTypeNames", "TestEmptyBytes", "TestEmptyJSONLiteral"} {
 		if !strings.Contains(out, "--- PASS: "+name+" ") {
 			t.Errorf("no PASS of %s in\n%s", name, out)
 		}

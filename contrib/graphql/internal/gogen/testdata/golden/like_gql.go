@@ -10,7 +10,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion4
+const _ = veloxgql.GeneratedCodeIsVersion5
 
 // UserGQL is the edge user: the Account it leads to, or nil when there is none.
 // It is read with the edge of every row read with x, in one query.

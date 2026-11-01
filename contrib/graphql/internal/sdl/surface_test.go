@@ -44,7 +44,8 @@ func TestNodeKeyTypes(t *testing.T) {
 
 // A field whose Go type is the application's own binds to a getter, which
 // converts it to the Go type its scalar binds to; a JSON field always does.
-// Velox's own Go types, and enum types, bind as they are.
+// Velox's own Go types, and enum types, bind as they are, but for a Bytes!, whose
+// getter reads a nil as empty.
 func TestGetters(t *testing.T) {
 	f := func(name, typ, elem, pkg string) *plugin.Field {
 		fd := field(name, typ)
@@ -53,6 +54,8 @@ func TestGetters(t *testing.T) {
 	}
 	renamed := f("email", "string", "types.Email", "example.com/types")
 	renamed.Annotations = ann(t, graphql.FieldName("mail"))
+	maybe := f("maybe", "bytes", "[]byte", "")
+	maybe.Nullable = true
 	e := entity("Thing",
 		f("name", "string", "string", ""),
 		renamed,
@@ -64,11 +67,12 @@ func TestGetters(t *testing.T) {
 		f("size", "uint64", "uint64", ""),
 		f("tags", "json", "[]string", ""),
 		f("blob", "bytes", "[]byte", ""),
+		maybe,
 	)
 	s, sdl := load(t, model(e))
 	for name, want := range map[string]string{
 		"name": "", "mail": "EmailGQL", "rank": "RankGQL", "at": "", "seen": "SeenGQL",
-		"ref": "", "other": "OtherGQL", "size": "", "tags": "TagsGQL", "blob": "",
+		"ref": "", "other": "OtherGQL", "size": "", "tags": "TagsGQL", "blob": "BlobGQL", "maybe": "",
 	} {
 		if got := goField(s, "Thing", name); got != want {
 			t.Errorf("Thing.%s: @goField(name: %q), want %q\n%s", name, got, want, sdl)
@@ -82,7 +86,7 @@ func TestGetters(t *testing.T) {
 	for _, g := range surf.Types[0].Getters {
 		got = append(got, g.Method+" "+g.Returns+" "+g.Pkg)
 	}
-	want := []string{"EmailGQL string ", "RankGQL int8 ", "SeenGQL veloxgql.Time " + veloxgqlPath, "OtherGQL veloxgql.UUID " + veloxgqlPath, "TagsGQL veloxgql.JSON " + veloxgqlPath}
+	want := []string{"EmailGQL string ", "RankGQL int8 ", "SeenGQL veloxgql.Time " + veloxgqlPath, "OtherGQL veloxgql.UUID " + veloxgqlPath, "TagsGQL veloxgql.JSON " + veloxgqlPath, "BlobGQL veloxgql.Bytes " + veloxgqlPath}
 	if len(got) != len(want) {
 		t.Fatalf("getters %q, want %q", got, want)
 	}

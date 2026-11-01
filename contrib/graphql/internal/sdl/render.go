@@ -374,9 +374,10 @@ func (g *graph) fill(o *object) error {
 		}
 		var dirs []directive
 		switch v := g.goValue(f, a); {
-		case !v.own:
+		case !v.own || f.Type == "bytes" && !f.Nullable:
 			// gqlgen binds a field only to the Go type of its scalar: a getter
-			// converts the field's own.
+			// converts the field's own. An empty blob of a Bytes! needs one too:
+			// modernc.org/sqlite reads it as nil, which gqlgen refuses in a T!.
 			gt := Getter{Field: i, Method: f.GoName + "GQL", Returns: v.getter, Pkg: v.getterPkg}
 			o.getters = append(o.getters, gt)
 			dirs = append(dirs, bindTo(gt.Method))

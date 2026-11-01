@@ -10,7 +10,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion4
+const _ = veloxgql.GeneratedCodeIsVersion5
 
 // Node returns the node with the global ID id, or nil when no row has its
 // key. It reads the ID's type, decodes the key as that type's, and looks
