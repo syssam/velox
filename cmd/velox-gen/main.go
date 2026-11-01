@@ -131,7 +131,7 @@
 // describe prints the entities, columns and relations that the schema package
 // (default ./schema) declares; with -json, the model that a plugin receives as
 // "model", indented. version prints one line, such as
-// "velox-gen v1.2.3 (generated code 6, plugin protocol 2, model 2)".
+// "velox-gen v1.2.3 (generated code 7, plugin protocol 2, model 2)".
 //
 // migrate works on a migration directory, ./migrations unless -dir names
 // another, which holds velox.json, schema.json, the migration files and
