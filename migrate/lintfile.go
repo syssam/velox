@@ -16,8 +16,10 @@ import (
 // ROLLBACK or END leading a statement of a PostgreSQL or SQLite file run in
 // one, but ROLLBACK TO a savepoint. Its findings are the destructive
 // statements it reads: DROP TABLE t (drop-table t), DROP SCHEMA s
-// (drop-schema s), DROP DATABASE d (drop-database d), ALTER TABLE t DROP
-// COLUMN c (drop-column t.c), ALTER TABLE t ALTER COLUMN c [SET DATA] TYPE,
+// (drop-schema s), DROP DATABASE d (drop-database d), DROP DOMAIN, TYPE or
+// COLLATION x (drop-domain x, drop-type x, drop-collation x), ALTER TABLE t DROP
+// COLUMN c (drop-column t.c), ALTER TABLE t DROP PARTITION p (drop-partition t.p),
+// ALTER TABLE t TRUNCATE PARTITION p (delete-rows t.p), ALTER TABLE t ALTER COLUMN c [SET DATA] TYPE,
 // MODIFY COLUMN c and CHANGE COLUMN c (alter-type t.c), ALTER COLUMN c SET
 // NOT NULL (set-not-null t.c), TRUNCATE t and DELETE FROM t without WHERE
 // (delete-rows t), UPDATE t without WHERE (update-rows t); Pos is
@@ -25,9 +27,9 @@ import (
 //
 // A file that starts with Dir.Add's header (f.generated) is read too, since
 // anyone can add to it, but for what Render writes with no allow directive
-// to cover it: a rebuild's DROP TABLE, and any alter-type, as a widening or a
-// change of a column's comment is. A type change added by hand to such a file
-// therefore goes unseen.
+// to cover it: a rebuild's DROP TABLE, a DROP TYPE without CASCADE, and any
+// alter-type, as a widening or a change of a column's comment is. A type change
+// added by hand to such a file therefore goes unseen.
 //
 // A WHERE counts only outside parentheses, so a subquery's does not, and
 // only if it can leave a row out: WHERE true, WHERE 1 and WHERE 1 = 1 are
@@ -90,7 +92,8 @@ func LintFile(d velox.Dialect, f File) ([]Finding, error) {
 		}
 		l.classify()
 		for _, fd := range l.out {
-			rendered := fd.Code == "alter-type" || fd.Code == "drop-table" && rebuilt[fd.Target]
+			rendered := fd.Code == "alter-type" || fd.Code == "drop-table" && rebuilt[fd.Target] ||
+				fd.Code == "drop-type" && !l.has("CASCADE")
 			if !f.generated || !rendered {
 				out = append(out, fd)
 			}
@@ -322,6 +325,7 @@ func (l *fileLinter) classify() {
 		dropTable  = "drops table %s and its rows"
 		dropSchema = "drops schema %s and everything in it"
 		dropDB     = "drops database %s and everything in it"
+		dropType   = "drops %s; with CASCADE, the columns of that type and their data go too"
 		deleteRows = "deletes every row of %s"
 		updateRows = "updates every row of %s"
 	)
@@ -342,6 +346,10 @@ func (l *fileLinter) classify() {
 			l.names(l.skip(2, "IF", "EXISTS"), "drop-schema", dropSchema)
 		case "DATABASE":
 			l.names(l.skip(2, "IF", "EXISTS"), "drop-database", dropDB)
+		case "DOMAIN", "TYPE":
+			l.names(l.skip(2, "IF", "EXISTS"), "drop-"+strings.ToLower(l.upper(1)), dropType)
+		case "COLLATION":
+			l.names(l.skip(2, "IF", "EXISTS"), "drop-collation", "drops collation %s; with CASCADE, the columns that use it and their data go too")
 		}
 	case "TRUNCATE":
 		if b == 0 {
@@ -620,6 +628,9 @@ func (l *fileLinter) alterTable() {
 	}
 	// Each action runs to a comma outside parentheses.
 	for i < len(l.ws) {
+		if l.partitions(table, i) {
+			return
+		}
 		end, depth := i, 0
 		for ; end < len(l.ws); end++ {
 			w := l.ws[end]
@@ -638,6 +649,30 @@ func (l *fileLinter) alterTable() {
 		}
 		l.action(table, i, end)
 		i = end + 1
+	}
+}
+
+// partitions adds the findings of MySQL's DROP or TRUNCATE PARTITION at word i,
+// whose names, joined by commas, end the statement, and reports whether it is one.
+func (l *fileLinter) partitions(table string, i int) bool {
+	code, format := "drop-partition", "drops partition %s and its rows"
+	switch {
+	case l.upper(i) == "DROP" && l.upper(i+1) == "PARTITION":
+	case l.upper(i) == "TRUNCATE" && l.upper(i+1) == "PARTITION":
+		code, format = "delete-rows", "deletes every row of partition %s"
+	default:
+		return false
+	}
+	for j := i + 2; ; {
+		n, k := l.name(j)
+		if n == "" {
+			return true
+		}
+		l.add(code, table+"."+n, format)
+		if !l.punct(k, ",") {
+			return true
+		}
+		j = k + 1
 	}
 }
 

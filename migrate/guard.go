@@ -180,21 +180,19 @@ func sqliteRef(ref TableRef) string {
 	return ddl.Ident(velox.SQLite, ref.Schema) + "." + ddl.Ident(velox.SQLite, ref.Name)
 }
 
-// children refuses what DROP TABLE ref does to the tables that reference ref. A
-// plain drop leaves them a key to nothing, or with foreign keys on deletes their
-// rows, unless the file drops or rebuilds them too. A rebuild, which makes ref
-// again, does that only with foreign keys on, as a file without foreign-keys off
-// runs: then every child counts, as the rows are gone before a later statement.
+// children refuses what DROP TABLE ref does to the tables that reference ref.
+// With foreign keys on it deletes their rows at once, so only a child already gone
+// by the drop counts: rebuilding it later copies nothing. With them off a rebuild
+// of ref does nothing to its children, and a plain drop leaves them a key to
+// nothing unless the file goes on to drop or rebuild them.
 func (g *rebuildGuard) children(ctx context.Context, ref TableRef) error {
 	rebuild := g.rebuilt[foldRef(ref)]
-	if rebuild {
-		var on int
-		if err := g.s.conn.QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&on); err != nil {
-			return fmt.Errorf("reading foreign_keys: %w", err)
-		}
-		if on == 0 {
-			return nil
-		}
+	var on int
+	if err := g.s.conn.QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&on); err != nil {
+		return fmt.Errorf("reading foreign_keys: %w", err)
+	}
+	if rebuild && on == 0 {
+		return nil
 	}
 	db := cmp.Or(ref.Schema, "main")
 	q := `SELECT DISTINCT m.name FROM ` + ddl.Ident(velox.SQLite, db) + `.sqlite_schema m, pragma_foreign_key_list(m.name, ?) k
@@ -206,7 +204,7 @@ WHERE m.type = 'table' AND k."table" = ? COLLATE NOCASE AND m.name <> ? COLLATE 
 			return err
 		}
 		child := TableRef{Schema: ref.Schema, Name: name}
-		if !rebuild && g.gone[foldRef(child)] || lossAllowed(g.f, child.String()) {
+		if on == 0 && g.gone[foldRef(child)] || lossAllowed(g.f, child.String()) {
 			return nil
 		}
 		lines = append(lines, "the table "+child.String()+" has a foreign key to it, whose rows its DROP TABLE would delete or leave pointing at nothing")
@@ -219,7 +217,7 @@ WHERE m.type = 'table' AND k."table" = ? COLLATE NOCASE AND m.name <> ? COLLATE 
 	if len(lines) == 0 {
 		return nil
 	}
-	keep := "to keep them, drop or rebuild the child in the file"
+	keep := "to keep them, drop the child first, or write -- velox:foreign-keys off above the file's first statement and drop or rebuild it in the file"
 	if rebuild {
 		keep = "to keep them, write -- velox:foreign-keys off above the file's first statement"
 	}

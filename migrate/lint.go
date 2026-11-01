@@ -50,12 +50,14 @@ type Finding struct {
 type Allow struct{ Code, Target string } // Target "" covers every target of Code
 
 // destructive are the codes an Allow can name. Lint gives the first nine;
-// delete-rows, update-rows, drop-schema and drop-database are LintFile's only;
+// delete-rows, update-rows, drop-schema, drop-database, drop-domain, drop-type,
+// drop-collation and drop-partition are LintFile's only;
 // lossCode is Up's, which no plan can give.
 var destructive = []string{
 	"drop-table", "drop-column", "alter-type", "set-not-null", "add-required-column",
 	"add-unique", "drop-enum-value", "reorder-enum", "convert-collation",
-	"delete-rows", "update-rows", "drop-schema", "drop-database", lossCode,
+	"delete-rows", "update-rows", "drop-schema", "drop-database",
+	"drop-domain", "drop-type", "drop-collation", "drop-partition", lossCode,
 }
 
 // ParseAllow reads the items of the -allow flag, joined by commas, each a
