@@ -230,6 +230,27 @@ func TestCostSkipInclude(t *testing.T) {
 	}
 }
 
+// TestCostSkipStillReads: a directive leaves a field out of the response, not the
+// rows of the field above it, which are read anyway.
+func TestCostSkipStillReads(t *testing.T) {
+	l := veloxgql.DefaultLimits()
+	for _, c := range []struct{ name, kept, skipped string }{
+		{"edges", `{ users(first: 100) { edges { __typename } } }`, `{ users(first: 100) { edges { cursor @skip(if: true) } } }`},
+		{"node", `{ users(first: 100) { edges { node { __typename } } } }`, `{ users(first: 100) { edges { node { name @include(if: false) } } } }`},
+		{"list", `{ users(first: 100) { edges { node { friends { __typename } } } } }`, `{ users(first: 100) { edges { node { friends { id @skip(if: true) } } } } }`},
+		{"variable", `{ users(first: 100) { edges { __typename } } }`, `query ($s: Boolean = true) { users(first: 100) { edges { cursor @skip(if: $s) } } }`},
+		{"inline fragment", `{ users(first: 100) { edges { __typename } } }`, `{ users(first: 100) { edges { ... @skip(if: true) { cursor } } } }`},
+		{"spread", `{ users(first: 100) { edges { __typename } } }`, `{ users(first: 100) { edges { ...E @skip(if: true) } } } fragment E on UserEdge { cursor }`},
+		{"nested", `{ users(first: 100) { edges { node { posts(first: 100) { edges { __typename } } } } } }`, `{ users(first: 100) { edges { node { posts(first: 100) { edges { cursor @skip(if: true) } } } } } }`},
+		{"first level", `{ __schema { types { __typename } } }`, `{ __schema { types { name @skip(if: true) } } }`},
+	} {
+		kept, skipped := costOf(t, c.kept, nil, l), costOf(t, c.skipped, nil, l)
+		if skipped != kept {
+			t.Errorf("%s: cost %d with the leaf skipped, and %d with it kept", c.name, skipped, kept)
+		}
+	}
+}
+
 func TestCostNodesAndLists(t *testing.T) {
 	l := veloxgql.DefaultLimits()
 	l.MaxList = 20

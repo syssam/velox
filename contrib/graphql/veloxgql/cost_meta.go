@@ -127,8 +127,15 @@ func (m *metaWalk) field(f *ast.Field, v metaValue) int64 {
 	}
 	n := int64(1)
 	if len(f.SelectionSet) > 0 {
-		for _, child := range m.children(f.Name, v) {
-			n = add(n, m.set(f.SelectionSet, child))
+		children := m.children(f.Name, v)
+		// A value costs its work, its selections skipped or not.
+		m.steps += len(children)
+		if limit := m.c.l.MaxCost; limit > 0 && m.steps > limit {
+			m.over = true
+			return maxCost
+		}
+		for _, child := range children {
+			n = add(n, max(m.set(f.SelectionSet, child), 1))
 		}
 	}
 	m.memo[key] = n

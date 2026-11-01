@@ -32,7 +32,8 @@ const statementCost = 100
 //     literal or a variable's value (a missing variable's default, when it
 //     has one); one whose condition is not a boolean (a variable that is
 //     missing with no default, or null) counts, as the cost is an upper
-//     bound;
+//     bound. The value above it is read all the same: an object whose every
+//     selection is left out costs what one that selects __typename does;
 //   - __schema and __type cost what they select, counted over the schema
 //     itself: one for each field of the response. A walk that passes
 //     l.MaxCost stops, saturated, so it does no more work than the limit.
@@ -208,6 +209,11 @@ func (c *coster) field(f *ast.Field, parent *ast.Definition, page int64) cost {
 		childPage = c.pageOf(f)
 	}
 	children := c.set(f.SelectionSet, child, childPage)
+	if len(f.SelectionSet) > 0 {
+		// A directive leaves a selection out of the response, and each value it
+		// was on is read all the same.
+		children.rows = max(children.rows, 1)
+	}
 	n := cost{
 		rows:       add(1, mul(children.rows, c.multiplier(f, def, parent, child, page))),
 		statements: add(children.statements, c.inputs(f, def)),
