@@ -84,6 +84,12 @@ at the call to a silent outcome.
 - **Unsent means at the send.** A broken transaction is checked where a statement
   is sent as well as before its hooks, so an Around hook that calls next again
   after the statement that broke it gets the error and sends nothing.
+- **SQLite's integer overflow.** SQLite stores an integer that overflows as a REAL,
+  which no later Scan reads. `Add` and `Sub` on an integer column render
+  `CASE WHEN typeof(x) = 'real' THEN abs(-9223372036854775808) ELSE x END`, abs of
+  the least integer being SQLite's error, and `x NOT BETWEEN lo AND hi` for a field
+  narrower than int64, whose read would fail the same way. It costs a second
+  parameter. Other dialects raise by themselves.
 
 ## Consequences
 
@@ -111,7 +117,9 @@ BEGIN.
   `TestBrokenTransactionSendsNothing`, `TestSQLiteServerRollbackBreaksTheTransaction`,
   `TestSQLiteProbe`, `TestRetryEndedMatchesTheContext`, `TestTxNestedStatementFails`,
   `TestTxConcurrentStatementWaits`, `TestSQLiteReadOnlyKeepsTheDSNsSetting`,
-  `TestSQLiteReadOnlyWithTxLock`, `TestSQLiteTxReadOnlyUnderTheDSN`.
+  `TestSQLiteReadOnlyWithTxLock`, `TestSQLiteTxReadOnlyUnderTheDSN`,
+  `TestSQLiteArithmeticOverflowFails`, `TestSQLiteArithmeticRendering`, `TestIntRange`,
+  `TestTxEndedContextIsNotWaitingForever`, `TestLimitIsNotASize`.
 - `TestMySQLDeadlockSwallowedDoesNotCommit` and
   `TestMySQLDeadlockRetriedByAHookDoesNotCommit` run only against a real MySQL
   (`VELOX_TEST_MYSQL`).
