@@ -156,6 +156,28 @@ func TestUpWithTarget(t *testing.T) {
 	}
 }
 
+// TestUpWithTargetZero: 0 is a target like any other: it applies a file 0000_*
+// and nothing above it, and on a directory that starts higher, nothing.
+func TestUpWithTargetZero(t *testing.T) {
+	db, _ := freshDB(t, velox.SQLite)
+	fsys := dirOf(t, velox.SQLite, files(
+		"0000_a.sql", "CREATE TABLE a (x integer);",
+		"0001_b.sql", "DROP TABLE a;"))
+	if r := mustUp(t, db, fsys, migrate.WithTarget(0)); !slices.Equal(versions(r.Applied), []uint64{0}) {
+		t.Errorf("applied %v; want 0", versions(r.Applied))
+	}
+	mustExec(t, db, "SELECT x FROM a")
+
+	db, _ = freshDB(t, velox.SQLite)
+	high := dirOf(t, velox.SQLite, files("0001_b.sql", "CREATE TABLE b (x integer);"))
+	if r := mustUp(t, db, high, migrate.WithTarget(0)); len(r.Applied) != 0 {
+		t.Errorf("applied %v; want none", versions(r.Applied))
+	}
+	if _, err := migrate.Up(context.Background(), db, fsys, migrate.WithTarget(0), migrate.WithBaseline(1)); err == nil || !strings.Contains(err.Error(), "the target 0 is below the baseline 1") {
+		t.Errorf("baseline above the target: %v", err)
+	}
+}
+
 // TestUpRollsBack: a failing statement rolls its file back, and the error
 // names the file and the statement and wraps the driver's.
 func TestUpRollsBack(t *testing.T) {

@@ -19,10 +19,11 @@ import (
 type Option struct{ apply func(*options) }
 
 type options struct {
-	target   uint64        // 0: every file
-	lockWait time.Duration // default 5m
-	logger   *slog.Logger  // nil: none
-	resume   bool
+	target    uint64        // with targetSet: the last version to apply
+	targetSet bool          // 0 is a version: 0000 is a valid file
+	lockWait  time.Duration // default 5m
+	logger    *slog.Logger  // nil: none
+	resume    bool
 
 	baseline    uint64
 	baselineSet bool // 0 is a version: 0000 is a valid file
@@ -52,9 +53,10 @@ func optionsOf(opts []Option) options {
 }
 
 // WithTarget makes Up apply the pending files up to version, and none
-// above it.
+// above it. 0 is a version like any other: it applies a file 0000_* and
+// nothing after it. Without WithTarget, Up applies every pending file.
 func WithTarget(version uint64) Option {
-	return Option{func(o *options) { o.target = version }}
+	return Option{func(o *options) { o.target, o.targetSet = version, true }}
 }
 
 // WithResume makes Up continue a dirty version before the pending files,
@@ -225,7 +227,7 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 		todo = append(todo, *resumed)
 	}
 	for _, f := range st.Pending {
-		if o.target != 0 && f.Version > o.target {
+		if o.targetSet && f.Version > o.target {
 			break
 		}
 		todo = append(todo, f)
@@ -276,7 +278,7 @@ func (o options) checkBaseline(d *Dir) error {
 	switch {
 	case o.resume:
 		return refuse("a baseline cannot resume a dirty version")
-	case o.target != 0 && o.target < o.baseline:
+	case o.targetSet && o.target < o.baseline:
 		return refuse("the target %d is below the baseline %d", o.target, o.baseline)
 	case !slices.ContainsFunc(d.Files, func(f File) bool { return f.Version == o.baseline }):
 		return refuse("the directory has no file of version %d", o.baseline)

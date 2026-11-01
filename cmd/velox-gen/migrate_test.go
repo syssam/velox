@@ -742,6 +742,42 @@ func TestMigrateAhead(t *testing.T) {
 	want(t, "drift", code, out, errs, 1, "", "velox-gen: migrate drift: the database is not at the directory's last version: version 3 is applied above the directory's last file\n")
 }
 
+// TestMigrateVersionZero: 0 is a version to -to and to resolve's -version.
+func TestMigrateVersionZero(t *testing.T) {
+	dir := t.TempDir()
+	mig := filepath.Join(dir, "migrations")
+	writeMigrations(t, mig, velox.SQLite, usersSchema)
+	first := filepath.Join(mig, "0001_create_users.sql")
+	if err := os.WriteFile(filepath.Join(mig, "0000_start.sql"), []byte("CREATE TABLE start (x integer);\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, errs := runCLI(t, dir, "migrate", "hash"); code != 0 {
+		t.Fatal(errs)
+	}
+	dsn := filepath.Join(dir, "app.db")
+	m := func(args ...string) (int, string, string) {
+		return runCLI(t, dir, append(append([]string{"migrate"}, args...), "-db", dsn)...)
+	}
+	code, out, errs := m("apply", "-to", "0", "-dry-run")
+	if code != 0 || !strings.Contains(out, "0000_start.sql") || strings.Contains(out, filepath.Base(first)) {
+		t.Errorf("apply -to 0 -dry-run: %d %q %q", code, out, errs)
+	}
+	code, out, errs = m("apply", "-to", "0")
+	if code != 0 || !strings.Contains(out, "0000_start.sql") || strings.Contains(out, filepath.Base(first)) {
+		t.Errorf("apply -to 0: %d %q %q", code, out, errs)
+	}
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	if _, err := db.Exec("UPDATE velox_migrations SET dirty = true WHERE version = 0"); err != nil {
+		t.Fatal(err)
+	}
+	code, out, errs = m("resolve", "-version", "0", "-undone")
+	want(t, "resolve -version 0", code, out, errs, 0, "resolved version 0 as undone\n", "")
+}
+
 func TestMigrateResolve(t *testing.T) {
 	dir := t.TempDir()
 	mig := filepath.Join(dir, "migrations")
@@ -769,7 +805,7 @@ func TestMigrateResolve(t *testing.T) {
 	want(t, "clean", code, out, errs, 1, "", "velox-gen: migrate resolve: version 1 is not dirty\n")
 	code, out, errs = m("resolve", "-version", "2", "-undone")
 	want(t, "absent", code, out, errs, 1, "", "velox-gen: migrate resolve: version 2 is not in the history table velox_migrations\n")
-	for _, args := range [][]string{{"-version", "1"}, {"-applied"}, {"-version", "1", "-applied", "-undone"}, {"-version", "0", "-undone"}, {"-version", "1", "-undone", "extra"}} {
+	for _, args := range [][]string{{"-version", "1"}, {"-applied"}, {"-version", "1", "-applied", "-undone"}, {"-version", "1", "-undone", "extra"}} {
 		code, out, errs := m(append([]string{"resolve"}, args...)...)
 		if code != 2 || out != "" || !strings.Contains(errs, "Flags of migrate resolve:") {
 			t.Errorf("resolve %v: %d %q %q", args, code, out, errs)
