@@ -18,6 +18,18 @@ import (
 // statement with ErrTenantMismatch. A nil id, or the type's zero value (what
 // parsing a missing claim gives), scopes nothing: such statements fail with
 // ErrNoTenant. It replaces an earlier WithTenant or WithAllTenants on ctx.
+//
+// A write under a tenant that sets a foreign key to a tenant-scoped row first
+// asks whether that row is the tenant's, with one SELECT per column on the
+// write's connection, and fails unsent with ErrTenantRef if not, whether the row
+// is another tenant's or is not there. It covers Insert, InsertAll, Update, Save
+// and upserts, with the values hooks left, and the join rows of a many-to-many
+// edge, which have no tenant of their own and so need WithTenant or
+// WithAllTenants like any scoped write. It does not make the reference safe by
+// itself: a target deleted after the check is the database foreign key's to
+// refuse, and a composite foreign key, (org_id, project_id) to (org_id, id), is
+// the stronger guarantee, as it also holds for writes that do not go through
+// velox. WithAllTenants sends no check, and a delete of a join row checks nothing.
 func WithTenant(ctx context.Context, id any) context.Context { return engine.WithTenant(ctx, id) }
 
 // WithAllTenants returns ctx unscoped: statements on a tenant-scoped entity
