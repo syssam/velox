@@ -21,6 +21,11 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- `graphql.MaxList(n)`, a per-edge bound on rows and on what they are charged.
+- `veloxgql.Limits`: `MaxResponseBytes` (32 MiB) and `Timeout` (30 s), with `CodeTimeout`.
+  `Setup` also caps resolver errors and websocket messages.
+- `migrate resolve -statements`, `-adopt` and `-forget`; `-applied` works on a pending file;
+  `diff -db`; `schema.Collation`. `docs/migrations-operations.md` covers merges and recovery.
 - `ErrTenantRef`, `TenantRef` and `Desc.TenantRefs`; `ErrTxControl`.
 - `veloxgql.Limits`: `MaxFragments`, `MaxDepth`, `MaxNameBytes`, `MaxLiteralBytes`,
   `MaxVariableNodes` and `MaxErrors`. The `Server` interface `Setup` takes gains
@@ -59,6 +64,17 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- Join entities with `TenantRefs` are tenant-scoped on every read and write, and fail with
+  `ErrNoTenant` without a tenant. `TenantRef.TenantKind` is new: regenerate.
+- GraphQL: an explicit `null` on a Nillable field in an update clears it. `null` on an
+  `<edge>ID` stays refused and names `clear<Edge>`. A JSON input number is `float64` when
+  that is exact, and `json.Number` only when it would not be. `MaxFields` is 5000 and
+  `MaxVariableNodes` 100000.
+- A plan's attribute line records the value it expects, and `Up` refuses a mismatch.
+- A MySQL table whose model states no collation keeps what the database holds.
+- MySQL: a DDL statement refused with nothing changed leaves no dirty version; the new
+  `Error` code `retry` replaces `*DirtyError` there.
+- A plain index narrowed by a MySQL `DROP COLUMN` is a note, not a refusal.
 - A write under a tenant checks each foreign key to a tenant-scoped row, with one more
   statement per column set, and fails with `ErrTenantRef` for another tenant's row or a
   missing one alike. `WithAllTenants` skips it. A join row needs a tenant or
@@ -106,6 +122,16 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- A `NULL` scans into a nil-able Go type, such as `GoType(net.IP{})`, instead of failing
+  every page that selects it.
+- GraphQL: a foreign key predicate holds the target's tenant as well as its policy, and a
+  JSON array of the wrong length is refused. The documented worst case is now measured:
+  583 MB allocated and a 47 MB response under the defaults.
+- An upsert's own key no longer excuses a tenant foreign key.
+- SQLite: only foreign key orphans a file made fail its migration. Drift reads `timestamp`,
+  `time` and similar types in one form.
+- Refused before running: `CONCURRENTLY` on a PostgreSQL partitioned table, `INPLACE` on
+  MyISAM, and a rename or drop that a trigger function names.
 - A request's shape is bounded before validation: spreads, value depth, name length,
   literal size and variable nodes. Attacks that took 2 to 3.5 GB are refused under 21 MB.
 - GraphQL: `nodes` and deletes count their real statements; a foreign key predicate holds
