@@ -554,6 +554,7 @@ func Open(pool *pgxpool.Pool, opts ...velox.Option) *velox.DB
 package schema
 Annotation is interface{ Name() string }
 func (*CheckAnnotation) Name() string
+func (*CollationAnnotation) Name() string
 func (*CommentAnnotation) Name() string
 func (*TableAnnotation) Name() string
 func (Schema) Annotations() []Annotation
@@ -564,12 +565,14 @@ func (Schema) Mixin() []Mixin
 func (Schema) Type()
 func (a *CheckAnnotation) Merge(other Annotation) Annotation
 func Check(name, expr string) *CheckAnnotation
+func Collation(name string) *CollationAnnotation
 func Comment(text string) *CommentAnnotation
 func Table(name string) *TableAnnotation
 func TableIn(schema, table string) *TableAnnotation
 type Annotation = desc.Annotation
 type CheckAnnotation struct { Checks []CheckConstraint }
 type CheckConstraint struct { Name string Expr string }
+type CollationAnnotation struct { Collation string }
 type CommentAnnotation struct { Text string }
 type Edge interface{ Descriptor() *desc.Edge }
 type Field interface{ Descriptor() *desc.Field }
@@ -752,7 +755,10 @@ type UpdateTime struct { Schema }
 
 package migrate
 const Destructive
+const ResolveAdopted
 const ResolveApplied Resolution
+const ResolveForgotten
+const ResolveStatements
 const ResolveUndone
 const Review
 const Safe Class
@@ -781,6 +787,7 @@ func Baseline(ctx context.Context, db *sql.DB, want *Schema) (*Schema, []Warning
 func Blocked(findings []Finding, allow []Allow) []Finding
 func Diff(from, to *Schema, opts DiffOptions) ([]Change, error)
 func Drift(ctx context.Context, db *sql.DB, snapshot *Schema) (*DriftReport, error)
+func History(ctx context.Context, db *sql.DB, dir fs.FS) ([]Applied, error)
 func Inspect(ctx context.Context, db *sql.DB, d velox.Dialect, tables []TableRef) (*Schema, error)
 func Lint(from *Schema, changes []Change) []Finding
 func LintFile(d velox.Dialect, f File) ([]Finding, error)
@@ -798,7 +805,9 @@ func Verify(ctx context.Context, db *sql.DB, dir fs.FS) error
 func WithBaseline(version uint64) Option
 func WithLockWait(d time.Duration) Option
 func WithLogger(l *slog.Logger) Option
+func WithNotes(f func(note string)) Option
 func WithResume() Option
+func WithStatements(k int) Option
 func WithTarget(version uint64) Option
 type Allow struct { Code, Target string }
 type Applied struct { Version uint64 Name string Sum string AppliedAt time.Time Duration time.Duration Dirty bool Statements int Error string }

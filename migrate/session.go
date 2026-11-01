@@ -38,6 +38,14 @@ type session struct {
 	given    pgSession     // PostgreSQL: the session as open was given it
 	keeper   *sql.Conn     // SQLite: what keeps a shared database in memory open past conn
 	tidy     bool          // conn goes back to the pool: Up refused it untouched, and its database is that connection
+	notify   func(string)  // Up's: passes on what stops nothing
+}
+
+// say passes on what stops nothing.
+func (s *session) say(note string) {
+	if s.notify != nil {
+		s.notify(note)
+	}
 }
 
 // pgSession is what a PostgreSQL session was set to by SET: its settings

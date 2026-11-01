@@ -730,6 +730,20 @@ func TestDirGolden(t *testing.T) {
 	}
 }
 
+// collatedAs is model, its tables that state no collation at what snap holds.
+func collatedAs(model, snap *migrate.Schema) *migrate.Schema {
+	out := *model
+	out.Tables = slices.Clone(model.Tables)
+	for i := range out.Tables {
+		for _, t := range snap.Tables {
+			if t.Ref() == out.Tables[i].Ref() && out.Tables[i].Collation == "" {
+				out.Tables[i].Collation = t.Collation
+			}
+		}
+	}
+	return &out
+}
+
 // TestDirReadsWhatAddWrites: ReadDir of a directory Add wrote has the model
 // that made it as its snapshot, and the statements Render wrote as its last
 // files'.
@@ -742,7 +756,7 @@ func TestDirReadsWhatAddWrites(t *testing.T) {
 				t.Errorf("%s on %v: %v", c.name, d, err)
 				continue
 			}
-			if !dir.Snapshot.Equal(to) {
+			if !dir.Snapshot.Equal(collatedAs(to, dir.Snapshot)) {
 				t.Errorf("%s on %v: the snapshot is not the model", c.name, d)
 			}
 			changes := diff(t, from, to, c.opts)

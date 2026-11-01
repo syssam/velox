@@ -282,8 +282,9 @@ func (r *renderer) pgAlterColumn(c alterColumn) (pgParts, error) {
 	identity := c.What&columnIdentity != 0 && !c.From.Identity && c.To.Identity
 	switch {
 	case c.What&columnType != 0:
+		r.drops = append(r.drops, colTarget(c.Table, c.To.Name)+":type="+c.From.Type)
 		if c.What&columnDefault != 0 {
-			r.drops = append(r.drops, colTarget(c.Table, c.To.Name)+":default")
+			r.drops = append(r.drops, colTarget(c.Table, c.To.Name)+":default="+c.From.Default)
 		}
 		if c.From.Default != "" {
 			act("DROP DEFAULT")
@@ -675,6 +676,18 @@ func (r *renderer) pgIndex(table TableRef, ix Index, online bool) string {
 	return s
 }
 
+// notRetypes is drops without a retype's lines, which only the main script's
+// statements answer to.
+func notRetypes(drops []string) []string {
+	var out []string
+	for _, d := range drops {
+		if !strings.Contains(d, ":type=") && !strings.Contains(d, ":default=") {
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
 // postgresScripts is the scripts in run order: the enum script, then main,
 // then the online script, each left out when it has no statement. An
 // allowance goes in each script that holds a statement of its change, and
@@ -708,6 +721,7 @@ func (r *renderer) postgresScripts(main Script, opts RenderOptions) []Script {
 		d := main.Directives
 		d.NoTransaction = true
 		d.Allow = allowIn(func(i int) bool { return enum[i] })
+		d.Drops = notRetypes(main.Directives.Drops)
 		out = append(out, Script{Kind: ScriptEnum, Directives: d, Statements: r.enum})
 	}
 	if len(r.out) > 0 {
@@ -716,7 +730,7 @@ func (r *renderer) postgresScripts(main Script, opts RenderOptions) []Script {
 		out = append(out, main)
 	}
 	if len(r.online) > 0 {
-		d := Directives{NoTransaction: true, Allow: allowIn(func(i int) bool { return online[i] }), Drops: main.Directives.Drops}
+		d := Directives{NoTransaction: true, Allow: allowIn(func(i int) bool { return online[i] }), Drops: notRetypes(main.Directives.Drops)}
 		out = append(out, Script{Kind: ScriptOnline, Directives: d, Statements: r.online})
 	}
 	return out

@@ -9,28 +9,53 @@ import (
 // pgAliases maps PostgreSQL's aliases of built-in types to the names it
 // prints.
 var pgAliases = map[string]string{
-	"varchar":     "character varying",
-	"char":        "character",
-	"int4":        "integer",
-	"int8":        "bigint",
-	"float8":      "double precision",
-	"bool":        "boolean",
-	"timestamptz": "timestamp with time zone",
-	"decimal":     "numeric",
-	"int":         "integer",
+	"varchar": "character varying",
+	"varbit":  "bit varying",
+	"char":    "character",
+	"int2":    "smallint",
+	"int4":    "integer",
+	"int8":    "bigint",
+	"float4":  "real",
+	"float8":  "double precision",
+	"float":   "double precision",
+	"bool":    "boolean",
+	"decimal": "numeric",
+	"int":     "integer",
+}
+
+// pgClocks are PostgreSQL's time types as it prints them: a name, the precision
+// after it, then the zone.
+var pgClocks = map[string][2]string{
+	"timestamp":   {"timestamp", " without time zone"},
+	"time":        {"time", " without time zone"},
+	"timestamptz": {"timestamp", " with time zone"},
+	"timetz":      {"time", " with time zone"},
+}
+
+// mysqlAliases are MySQL's aliases of built-in types, to the names it prints.
+var mysqlAliases = map[string]string{
+	"integer": "int",
+	"numeric": "decimal",
+	"dec":     "decimal",
+	"fixed":   "decimal",
+	"real":    "double",
 }
 
 // mysqlInts are MySQL's integer types, whose display width it no longer
 // prints.
 var mysqlInts = map[string]bool{"tinyint": true, "smallint": true, "mediumint": true, "int": true, "integer": true, "bigint": true}
 
-// NormalizeType is t in the dialect's canonical spelling: lower case and
-// white space collapsed, but quoted text kept as written; PostgreSQL's
-// aliases varchar, char, int4, int8, float8, bool, timestamptz, decimal and
-// int mapped to character varying, character, integer, bigint, double
-// precision, boolean, timestamp with time zone, numeric and integer (with a
-// length or precision kept); MySQL's integer display widths dropped, but for
-// tinyint(1).
+// NormalizeType is t in the one form the dialect's server prints, so that what a
+// schema states and what the server reports compare: lower case and white space
+// collapsed, but quoted text kept as written. On PostgreSQL an alias is its
+// printed name (varchar, varbit, char, int2, int4, int8, float, float4, float8,
+// bool, decimal, int, with a length or precision kept), a bare char is
+// character(1), and a time type says its zone after its precision: timestamp(6)
+// is timestamp(6) without time zone, timestamptz timestamp with time zone. On
+// MySQL an alias is its printed name (integer, numeric, dec, fixed, real, bool,
+// boolean, double precision, character varying, character), an integer loses its
+// display width but for tinyint(1), a bare decimal is decimal(10,0), a bare char,
+// binary or bit has its (1), and a time type loses a precision of 0.
 func NormalizeType(d velox.Dialect, t string) string {
 	t = collapse(d, t)
 	word, rest := t, ""
@@ -39,25 +64,68 @@ func NormalizeType(d velox.Dialect, t string) string {
 	}
 	switch d {
 	case velox.Postgres:
-		alias, ok := pgAliases[word]
-		if !ok {
-			return t
-		}
-		if word == "timestamptz" && strings.HasPrefix(rest, "(") {
-			// PostgreSQL prints the precision after timestamp.
-			if j := strings.IndexByte(rest, ')'); j >= 0 {
-				return "timestamp" + rest[:j+1] + " with time zone" + rest[j+1:]
-			}
-		}
-		return alias + rest
+		return pgType(t, word, rest)
 	case velox.MySQL:
-		if mysqlInts[word] && strings.HasPrefix(rest, "(") && !strings.HasPrefix(t, "tinyint(1)") {
-			if j := strings.IndexByte(rest, ')'); j >= 0 {
-				return word + rest[j+1:]
-			}
-		}
+		return mysqlType(t, word, rest)
 	}
 	return t
+}
+
+// pgType is NormalizeType on PostgreSQL of t, its leading word and the rest.
+func pgType(t, word, rest string) string {
+	if clock, ok := pgClocks[word]; ok {
+		precision := ""
+		if strings.HasPrefix(rest, "(") {
+			j := strings.IndexByte(rest, ')')
+			if j < 0 {
+				return t
+			}
+			precision, rest = rest[:j+1], rest[j+1:]
+		}
+		if strings.HasPrefix(rest, " with") { // said already
+			return t
+		}
+		return clock[0] + precision + clock[1] + rest
+	}
+	if (word == "char" || word == "character") && (rest == "" || strings.HasPrefix(rest, "[")) {
+		return "character(1)" + rest
+	}
+	if alias, ok := pgAliases[word]; ok {
+		return alias + rest
+	}
+	return t
+}
+
+// mysqlType is NormalizeType on MySQL of t, its leading word and the rest.
+func mysqlType(t, word, rest string) string {
+	switch word {
+	case "bool", "boolean":
+		return "tinyint(1)" + rest
+	case "double":
+		return "double" + strings.TrimPrefix(rest, " precision")
+	case "character":
+		word = "char"
+		if r, ok := strings.CutPrefix(rest, " varying"); ok {
+			word, rest = "varchar", r
+		}
+	default:
+		if alias, ok := mysqlAliases[word]; ok {
+			word = alias
+		}
+	}
+	switch {
+	case mysqlInts[word] && strings.HasPrefix(rest, "(") && !strings.HasPrefix(t, "tinyint(1)"):
+		if j := strings.IndexByte(rest, ')'); j >= 0 {
+			return word + rest[j+1:]
+		}
+	case word == "decimal" && !strings.HasPrefix(rest, "("):
+		return "decimal(10,0)" + rest
+	case rest == "" && (word == "char" || word == "binary" || word == "bit"):
+		return word + "(1)"
+	case (word == "datetime" || word == "timestamp" || word == "time") && strings.HasPrefix(rest, "(0)"):
+		return word + rest[3:]
+	}
+	return word + rest
 }
 
 // notWord reports whether r ends a type's leading word.

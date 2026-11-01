@@ -11,7 +11,7 @@ Usage:
         protocol and of the model
   velox-gen migrate diff [-dir ./migrations] [-dialect d] [-name n] [-allow code[=target],...]
         [-rename-table old=new]... [-rename-column table.old=new]...
-        [-lock-timeout 5s] [-check] [-dry-run] [package]
+        [-lock-timeout 5s] [-check] [-dry-run] [-db dsn] [package]
         write the migration that brings the directory's schema.json to the
         schema package
   velox-gen migrate apply [-dir ./migrations] [-db dsn] [-to version] [-resume]
@@ -27,8 +27,8 @@ Usage:
         check the migration files
   velox-gen migrate hash [-dir ./migrations] [-check]
         rewrite velox.sum
-  velox-gen migrate resolve [-dir ./migrations] [-db dsn] -version n (-applied | -undone)
-        end a dirty version that was finished or undone by hand
+  velox-gen migrate resolve [-dir ./migrations] [-db dsn] -version n (-applied | -undone | -statements k | -adopt | -forget)
+        tell the history what was done by hand
   velox-gen migrate sql -dialect postgres|mysql|sqlite [package]
         print the schema package's DDL, for Atlas's external_schema
 

@@ -276,6 +276,52 @@ func mysqlDefault(typ string, expr bool, def sql.NullString) string {
 	return s
 }
 
+// mysqlClocks are the spellings of MySQL's one clock default.
+var mysqlClocks = []string{"now", "current_timestamp", "localtime", "localtimestamp"}
+
+// mysqlOneDefault is a default of a column of type typ as MySQL prints it: a clock
+// as CURRENT_TIMESTAMP[(n)], true and false on a number as 1 and 0, and a quoted
+// number on a number as the number. Any other is as it is.
+func mysqlOneDefault(typ, def string) string {
+	lower := strings.ToLower(def)
+	for _, w := range mysqlClocks {
+		rest, ok := strings.CutPrefix(lower, w)
+		if !ok {
+			continue
+		}
+		switch {
+		case rest == "" && w != "now", rest == "()", rest == "(0)":
+			return "CURRENT_TIMESTAMP"
+		case len(rest) > 2 && rest[0] == '(' && rest[len(rest)-1] == ')' && strings.Trim(rest[1:len(rest)-1], "0123456789") == "":
+			return "CURRENT_TIMESTAMP" + rest
+		}
+	}
+	if !numberType(velox.MySQL, typ) {
+		return def
+	}
+	switch lower {
+	case "true":
+		return "1"
+	case "false":
+		return "0"
+	}
+	if v, ok := ddl.Unquote(velox.MySQL, def); ok && numberLiteral.MatchString(v) {
+		return v
+	}
+	return def
+}
+
+// mysqlSameBinary reports whether a and b are literals of one value of the binary
+// type typ, each however it is written.
+func mysqlSameBinary(typ, a, b string) bool {
+	if !mysqlBinaryType(typ) {
+		return false
+	}
+	x, okx := mysqlBinaryBytes(typ, a)
+	y, oky := mysqlBinaryBytes(typ, b)
+	return okx && oky && bytes.Equal(x, y)
+}
+
 // typeWord is typ's first word: varbinary of varbinary(8).
 func typeWord(typ string) string {
 	if i := strings.IndexAny(typ, "( "); i >= 0 {

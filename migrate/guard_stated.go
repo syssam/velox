@@ -95,31 +95,7 @@ func mysqlStatedType(raw string) string {
 	if values, ok := ddl.ParseMySQLEnum(t); ok {
 		return ddl.MySQLEnum(values)
 	}
-	word, rest := t, ""
-	if i := strings.IndexAny(t, "( "); i >= 0 {
-		word, rest = t[:i], t[i:]
-	}
-	switch word {
-	case "integer":
-		word = "int"
-	case "numeric", "dec", "fixed":
-		word = "decimal"
-	case "bool", "boolean":
-		return "tinyint(1)"
-	case "real":
-		word = "double"
-	case "double":
-		rest = strings.TrimPrefix(rest, " precision")
-	}
-	if rest == "" {
-		switch word {
-		case "decimal":
-			rest = "(10,0)"
-		case "char", "binary", "bit":
-			rest = "(1)"
-		}
-	}
-	return word + rest
+	return t
 }
 
 // statedChanges is what stated changes of live, spellings of one value apart, as
@@ -141,7 +117,10 @@ func statedChanges(d velox.Dialect, live, stated Column) columnMask {
 	if live.Type != stated.Type {
 		mask |= columnType
 	}
-	if a.Default == b.Default {
+	if d == velox.MySQL {
+		a.Default, b.Default = mysqlOneDefault(a.Type, a.Default), mysqlOneDefault(a.Type, b.Default)
+	}
+	if a.Default == b.Default || d == velox.MySQL && mysqlSameBinary(a.Type, a.Default, b.Default) {
 		return mask
 	}
 	if a.Default != "" && b.Default != "" && !literalDefault(d, a.Default) && !literalDefault(d, b.Default) {
@@ -172,32 +151,153 @@ func (w *recreates) mysqlReplaced(l *fileLinter, st *tableState, ref TableRef, o
 	target := colTarget(ref, name)
 	lines := statedLines(velox.MySQL, live, stated, statedChanges(velox.MySQL, live, stated))
 	for _, attr := range slices.Sorted(maps.Keys(lines)) {
-		w.lost(ref, []string{target}, target+":"+attr, target+":"+attr+": "+lines[attr])
+		w.attrLost(ref, target, attr, lines[attr], columnValue(live, attr), func(want string) bool { return sameColumnValue(velox.MySQL, live, attr, want) })
 	}
 	st.def.Columns[k].Type, st.def.Columns[k].Nullable, st.def.Columns[k].Default = stated.Type, stated.Nullable, stated.Default
 	st.def.Columns[k].Comment, st.def.Columns[k].Identity = stated.Comment, stated.Identity
 }
 
-// pgRetyped compares a default the statement that retypes the column drops or sets
-// with the one the database holds: the statement says the type itself, and leaves a
-// default it does not name alone.
-func (w *recreates) pgRetyped(l *fileLinter, st *tableState, ref TableRef, origin, name string) {
+// pgRetyped compares what the statement that retypes the column writes in [i, end)
+// with the column the database holds. It says the type itself, so a type is compared
+// only with what a line of the file expects of it; and it leaves a default it does
+// not name alone, so one it drops or sets is compared.
+func (w *recreates) pgRetyped(l *fileLinter, st *tableState, ref TableRef, origin, name string, i, end int) {
 	k := slices.IndexFunc(st.def.Columns, func(c Column) bool { return c.Name == origin })
 	if k < 0 {
 		return
+	}
+	live := st.def.Columns[k]
+	target := colTarget(ref, name)
+	for j := i; j < end; j++ {
+		if l.upper(j) == "COLLATE" {
+			end = j
+		}
+	}
+	if typ := ddl.NormalizeType(velox.Postgres, l.raw(i, end)); typ != live.Type && w.expects(ref, target+":type") {
+		w.attrLost(ref, target, "type", "the column is "+live.Type+", and the statement writes "+typ, live.Type,
+			func(want string) bool { return sameColumnValue(velox.Postgres, live, "type", want) })
 	}
 	def, set := l.defaultOf(w, name)
 	if !set {
 		return
 	}
-	live := st.def.Columns[k]
 	stated := live
 	stated.Default = def
-	target := colTarget(ref, name)
 	lines := statedLines(velox.Postgres, live, stated, statedChanges(velox.Postgres, live, stated)&columnDefault)
 	for _, attr := range slices.Sorted(maps.Keys(lines)) {
-		w.lost(ref, []string{target}, target+":"+attr, target+":"+attr+": "+lines[attr])
+		w.attrLost(ref, target, attr, lines[attr], columnValue(live, attr), func(want string) bool { return sameColumnValue(velox.Postgres, live, attr, want) })
 	}
+}
+
+// columnValue is the attribute attr of c as a velox:drops line records it. The plan
+// writes the line with what it believes, and Up compares it with what is there.
+func columnValue(c Column, attr string) string {
+	switch attr {
+	case "type":
+		return c.Type
+	case "not-null":
+		if c.Nullable {
+			return "nullable"
+		}
+		return "not-null"
+	case "default":
+		return c.Default
+	case "identity":
+		if c.Identity {
+			return "identity"
+		}
+		return "none"
+	case "comment":
+		return c.Comment
+	}
+	return ""
+}
+
+// sameColumnValue reports whether want, a line's value, is what c holds of attr,
+// spellings of one value apart.
+func sameColumnValue(d velox.Dialect, c Column, attr, want string) bool {
+	switch attr {
+	case "type":
+		return mysqlEnumOrType(d, want) == c.Type
+	case "default":
+		stated := c
+		stated.Default = normalizeDefault(d, want)
+		return statedChanges(d, c, stated)&columnDefault == 0
+	}
+	return columnValue(c, attr) == want
+}
+
+// mysqlEnumOrType is a type as a line records it, in Inspect's spelling.
+func mysqlEnumOrType(d velox.Dialect, typ string) string {
+	if d == velox.MySQL {
+		return mysqlStatedType(typ)
+	}
+	return ddl.NormalizeType(d, typ)
+}
+
+// expected is what a line of f records the attribute object to be: "-- velox:drops
+// t.c:type=int" says int. A line with no value expects nothing and accepts any.
+func expected(f File, object string) (string, bool) {
+	for _, line := range f.Directives.Drops {
+		if v, ok := strings.CutPrefix(line, object+"="); ok {
+			return v, true
+		}
+	}
+	return "", false
+}
+
+// spellings is a target as the walk names it and as a plan may: with the schema or
+// not, as its table is.
+func (w *recreates) spellings(ref TableRef, o string) []string {
+	out := []string{o}
+	if ref.Schema == "" && w.s.home() != "" {
+		out = append(out, w.s.home()+"."+o)
+	} else if bare, ok := strings.CutPrefix(o, ref.Schema+"."); ok {
+		out = append(out, bare)
+	}
+	return out
+}
+
+// expectedOf is what a line of the file being read or the one checked records of
+// object, under any of its spellings.
+func (w *recreates) expectedOf(ref TableRef, object string) (string, bool) {
+	for _, n := range w.spellings(ref, object) {
+		for _, f := range []File{w.f, w.file} {
+			if v, ok := expected(f, n); ok {
+				return v, true
+			}
+		}
+	}
+	return "", false
+}
+
+// expects reports whether a line records a value of object.
+func (w *recreates) expects(ref TableRef, object string) bool {
+	_, ok := w.expectedOf(ref, object)
+	return ok
+}
+
+// attrLost records what the statement changes of the attribute attr of target, the
+// database holding holds, unless a line of the file expects what is there or a line
+// with no value or a directive accepts it. line says what changes. A line that expects
+// something else is a plan made over another database: a hand edit it would undo.
+func (w *recreates) attrLost(ref TableRef, target, attr, line, holds string, same func(want string) bool) {
+	object := target + ":" + attr
+	want, ok := w.expectedOf(ref, object)
+	switch {
+	case !ok:
+		w.lost(ref, []string{target}, object, object+": "+line)
+	case !same(want):
+		w.lost(ref, []string{target}, object, object+": the plan expects "+orNone(want)+", and the database holds "+orNone(holds)+": "+line)
+	}
+}
+
+// orNone is a value in a line, or "nothing" for an empty one.
+func orNone(s string) string {
+	if s == "" {
+		return "nothing"
+	}
+	return s
 }
 
 // defaultOf is the default the statement leaves the column name with, when one of

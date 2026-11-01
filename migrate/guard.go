@@ -30,7 +30,8 @@ func lossError(f File, object, what string, lines, targets []string, keep string
 	for _, l := range lines {
 		b.WriteString("\n  " + l)
 	}
-	b.WriteString("\n  " + keep + "; or to accept the loss, add above the file's first statement:")
+	b.WriteString("\n  " + keep + ", on a file not yet applied anywhere (an environment that applied it has its checksum, and refuses the edit with a ChecksumError); else in a new migration")
+	b.WriteString("\n  or to accept the loss with a directive line, which does not change the checksum, add above the file's first statement:")
 	for _, t := range targets {
 		b.WriteString("\n    -- velox:allow " + lossCode + " " + allowTarget(t))
 	}
@@ -150,7 +151,7 @@ func (g *rebuildGuard) before(ctx context.Context, i int) error {
 		for _, d := range deps {
 			b.WriteString("\n  " + d.line(t))
 		}
-		b.WriteString("\n  SQLite's RENAME fails on them. Add DROP VIEW above the rebuild in the file and CREATE VIEW after it, then run velox-gen migrate hash; a trigger, which a file cannot hold, is dropped by hand before applying and made again after")
+		b.WriteString("\n  SQLite's RENAME fails on them. Add DROP VIEW above the rebuild in the file and CREATE VIEW after it, on a file not yet applied anywhere (an environment that applied it has its checksum, and refuses the edit with a ChecksumError), then run velox-gen migrate hash; a trigger, which a file cannot hold, is dropped by hand before applying and made again after")
 		return &Error{Code: "unmodeled", Pos: g.f.Path, Object: t.String(), Reason: b.String()}
 	}
 	schema, notes, err := inspectSQLite(ctx, s.conn, []TableRef{t})
@@ -460,10 +461,14 @@ func (g *rebuildGuard) rebuildLoss(seen rebuildSeen, c rowCopy, now Table, lost 
 	if err != nil {
 		return err
 	}
-	attr := func(col, name, what string) {
-		object := colTarget(t, col)
-		if !lossAllowed(g.f, object+":"+name) && !lossAllowed(g.f, object) {
+	attr := func(col Column, name, what string) {
+		object := colTarget(t, col.Name)
+		switch want, ok := expected(g.f, object+":"+name); {
+		case lossAllowed(g.f, object+":"+name) || lossAllowed(g.f, object):
+		case !ok:
 			lost(object+":"+name, object+": "+what)
+		case !sameColumnValue(velox.SQLite, col, name, want):
+			lost(object+":"+name, object+":"+name+": the plan expects "+orNone(want)+", and the database holds "+orNone(columnValue(col, name)))
 		}
 	}
 	object := func(object, what string) {
@@ -476,16 +481,16 @@ func (g *rebuildGuard) rebuildLoss(seen rebuildSeen, c rowCopy, now Table, lost 
 		case alterColumn:
 			from, to := ch.From, ch.To
 			if ch.What&columnType != 0 {
-				attr(to.Name, "type", "the column is "+from.Type+", and its rebuild makes it "+to.Type)
+				attr(from, "type", "the column is "+from.Type+", and its rebuild makes it "+to.Type)
 			}
 			if ch.What&columnNullable != 0 && !from.Nullable {
-				attr(to.Name, "not-null", "the column is NOT NULL, and its rebuild makes it nullable")
+				attr(from, "not-null", "the column is NOT NULL, and its rebuild makes it nullable")
 			}
 			if ch.What&columnDefault != 0 && from.Default != "" {
-				attr(to.Name, "default", "the column has the default "+from.Default+", and its rebuild does not keep it")
+				attr(from, "default", "the column has the default "+from.Default+", and its rebuild does not keep it")
 			}
 			if ch.What&columnIdentity != 0 && from.Identity {
-				attr(to.Name, "identity", "the column is AUTOINCREMENT, and its rebuild does not keep it")
+				attr(from, "identity", "the column is AUTOINCREMENT, and its rebuild does not keep it")
 			}
 		case dropIndex:
 			if !over(ch.Index.Columns, ch.Index.Where) {
@@ -525,7 +530,7 @@ func (g *rebuildGuard) rebuildLoss(seen rebuildSeen, c rowCopy, now Table, lost 
 			continue
 		}
 		if same, _ := cmpr.same(col.Default, u.Default); !same {
-			attr(col.Name, "default", "the column has the default "+col.Default+", and its rebuild does not keep it")
+			attr(col, "default", "the column has the default "+col.Default+", and its rebuild does not keep it")
 		}
 	}
 	return nil

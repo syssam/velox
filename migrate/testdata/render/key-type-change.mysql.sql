@@ -1,7 +1,7 @@
 -- script: main
 -- velox:lock-timeout 5s
--- velox:drops orgs.id:type
--- velox:drops users.org_id:type
+-- velox:drops orgs.id:type=int
+-- velox:drops users.org_id:type=int
 
 ALTER TABLE `users` DROP FOREIGN KEY `users_orgs_users`;
 -- review: widen-type: widens column orgs.id from int to bigint; the table is rewritten under an exclusive lock

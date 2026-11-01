@@ -1,6 +1,7 @@
 package migrate
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -8,6 +9,9 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/ddl"
 )
+
+// defaultMySQLCollation is the collation of a new table whose model states none.
+const defaultMySQLCollation = "utf8mb4_bin"
 
 // The steps of Diff's order whose MySQL actions on one table join one
 // ALTER TABLE when their changes are consecutive.
@@ -214,7 +218,7 @@ func (r *renderer) mysqlAlterColumn(c alterColumn) string {
 		}
 	}
 	for _, attr := range columnAttrs(c.What) {
-		r.drops = append(r.drops, colTarget(c.Table, c.To.Name)+":"+attr)
+		r.drops = append(r.drops, colTarget(c.Table, c.To.Name)+":"+attr+"="+columnValue(c.From, attr))
 	}
 	return "MODIFY COLUMN " + r.mysqlColumn(c.To)
 }
@@ -259,10 +263,7 @@ func (r *renderer) mysqlCreate(t *Table) string {
 	for _, ck := range t.Checks {
 		defs = append(defs, "CONSTRAINT "+r.ident(ck.Name)+" CHECK ("+ck.Expr+")")
 	}
-	collation := t.Collation
-	if collation == "" {
-		collation = "utf8mb4_bin"
-	}
+	collation := cmp.Or(t.Collation, defaultMySQLCollation)
 	charset, _, _ := strings.Cut(collation, "_") // a collation names its character set
 	s := "CREATE TABLE " + r.table(t.Ref()) + " (\n  " + strings.Join(defs, ",\n  ") +
 		"\n) ENGINE=InnoDB DEFAULT CHARSET=" + charset + " COLLATE=" + collation

@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/ddl"
 )
 
 // Diff returns the changes that turn from, the snapshot, into to, the desired
@@ -41,7 +42,9 @@ import (
 // from "" ("primary-key"), or a rename names a table or column from does not
 // have, or one to does not have or from already has ("rename"). Without an
 // error, Diff gives no change exactly when from.Equal(to), on SQLite the
-// names of foreign keys aside. Diff does not change from or to.
+// names of foreign keys aside, a type or default spelled otherwise than the
+// server prints it aside, and a table of to that states no Collation aside,
+// as its table keeps the one it has. Diff does not change from or to.
 func Diff(from, to *Schema, opts DiffOptions) ([]Change, error) {
 	if from == nil || to == nil {
 		return nil, &Error{Code: "nil", Reason: "Diff needs two schemas"}
@@ -58,6 +61,7 @@ func Diff(from, to *Schema, opts DiffOptions) ([]Change, error) {
 	d := &differ{orig: from.clone(), mid: from.clone(), to: to.clone(), fromRef: map[TableRef]TableRef{}, colFrom: map[TableRef]map[string]string{}}
 	for _, s := range [...]*Schema{d.orig, d.mid, d.to} {
 		s.sort()
+		s.oneForm()
 	}
 	if err := d.renameTables(opts.RenameTables); err != nil {
 		return nil, err
@@ -79,6 +83,22 @@ func Diff(from, to *Schema, opts DiffOptions) ([]Change, error) {
 		d.keepKeysIndexed()
 	}
 	return d.changes(), nil
+}
+
+// oneForm gives s's columns the form the server prints of a type and a default,
+// so that a spelling of one value is no change. A schema may hold any: a model's
+// SchemaType, an older snapshot.
+func (s *Schema) oneForm() {
+	for i := range s.Tables {
+		cols := s.Tables[i].Columns
+		for j := range cols {
+			cols[j].Type = ddl.NormalizeType(s.Dialect, cols[j].Type)
+			cols[j].Default = normalizeDefault(s.Dialect, cols[j].Default)
+			if s.Dialect == velox.MySQL {
+				cols[j].Default = mysqlOneDefault(cols[j].Type, cols[j].Default)
+			}
+		}
+	}
 }
 
 // differ holds the state of one Diff. mid is from with each rename applied
@@ -374,7 +394,7 @@ func (d *differ) alterTable(t, u *Table) {
 	if t.Comment != u.Comment {
 		d.add(setTableComment{Table: ref, From: t.Comment, To: u.Comment}, 5, 2, ref, 0, "")
 	}
-	if t.Collation != u.Collation {
+	if u.Collation != "" && t.Collation != u.Collation { // none stated: what is there stays
 		d.add(setTableCollation{Table: ref, From: t.Collation, To: u.Collation}, 5, 3, ref, 0, "")
 	}
 

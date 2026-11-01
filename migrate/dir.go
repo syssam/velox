@@ -508,11 +508,24 @@ func (d *Dir) Add(name string, p *Plan, to *Schema) (map[string][]byte, error) {
 // same Unique and Columns, from's columns mapped through changes'
 // renameColumn of that table, and to's Where empty. A redefined index is
 // a new one, and plain, and so is every index of a table changes create,
-// even under the name of one renamed away. It returns a clone; from and to
-// are not changed.
+// even under the name of one renamed away. A MySQL table that states no
+// collation gets what its table has: from's, or a new one's. It returns a
+// clone; from and to are not changed.
 func carryConstraints(from, to *Schema, changes []Change) *Schema {
 	out := to.clone()
+	stated := func(t, was *Table) {
+		if to.Dialect != velox.MySQL || t.Collation != "" {
+			return
+		}
+		t.Collation = defaultMySQLCollation
+		if was != nil && was.Collation != "" {
+			t.Collation = was.Collation
+		}
+	}
 	if from == nil {
+		for i := range out.Tables {
+			stated(&out.Tables[i], nil)
+		}
 		return out
 	}
 	tables := map[TableRef]TableRef{}           // from's name of a table, by to's
@@ -541,6 +554,7 @@ func carryConstraints(from, to *Schema, changes []Change) *Schema {
 		t := &out.Tables[i]
 		ref := t.Ref()
 		if created[ref] {
+			stated(t, nil)
 			continue
 		}
 		oref := ref
@@ -548,6 +562,7 @@ func carryConstraints(from, to *Schema, changes []Change) *Schema {
 			oref = r
 		}
 		ft := from.table(oref)
+		stated(t, ft)
 		if ft == nil {
 			continue
 		}

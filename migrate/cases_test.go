@@ -523,7 +523,7 @@ var cases = []testCase{
 		s := mustTables(d, nil)
 		table(s, "users").Collation = "utf8mb4_0900_ai_ci"
 		return s
-	}},
+	}, to: func(m *loadjson.Model) { annotate(m, "User", schema.Collation("utf8mb4_bin")) }},
 	{name: "rebuild-parent", dialects: sqlite, allow: allow("alter-type"), to: func(m *loadjson.Model) { fieldOf(m, "User", "logins").Type = "float64" }},
 	{name: "rename-table-drop-column", allow: allow("drop-column"), to: func(m *loadjson.Model) {
 		annotate(m, "User", schema.Table("accounts"))

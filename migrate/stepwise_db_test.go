@@ -139,8 +139,8 @@ func TestUpMySQLLockTimeout(t *testing.T) {
 	fsys := dirOf(t, velox.MySQL, files("0001_t.sql", "-- velox:lock-timeout 1s\nALTER TABLE t ADD COLUMN y int;\n"))
 	start := time.Now()
 	_, err = migrate.Up(ctx, db, fsys)
-	if de := dirtyOf(t, err); de.Statement != 1 || mysqlNumber(err) != 1205 {
-		t.Errorf("%v; want error 1205 at statement 1", err)
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "retry" || mysqlNumber(err) != 1205 {
+		t.Errorf("%v; want error 1205, to retry", err)
 	}
 	if d := time.Since(start); d > 5*time.Second {
 		t.Errorf("Up took %s", d)
@@ -148,7 +148,7 @@ func TestUpMySQLLockTimeout(t *testing.T) {
 	if _, err := other.ExecContext(ctx, "ROLLBACK"); err != nil {
 		t.Fatal(err)
 	}
-	if rows := historyOf(t, db); len(rows) != 1 || !rows[0].Dirty || !strings.Contains(rows[0].Error, "1205") {
+	if rows := historyOf(t, db); len(rows) != 0 {
 		t.Errorf("history %+v", rows)
 	}
 }
@@ -424,7 +424,7 @@ func TestUpMySQLOwnTransaction(t *testing.T) {
 	fsys := dirOf(t, velox.MySQL, files("0001_tx.sql", "START TRANSACTION;\nINSERT INTO t VALUES (1);\nINSERT INTO nope VALUES (1);\nCOMMIT;\n"))
 	_, err := migrate.Up(ctx, db, fsys)
 	if de := dirtyOf(t, err); de.Statement != 3 || mysqlNumber(err) != 1146 ||
-		!strings.HasSuffix(err.Error(), "\n  version 1 is dirty; fix the cause and run migrate apply -resume, or run migrate resolve -version 1 -undone") {
+		!strings.Contains(err.Error(), "\n  version 1 is dirty; fix the cause and run migrate apply -resume, or run migrate resolve -version 1 -undone\n") {
 		t.Errorf("%v; want 1146 at statement 3, with nothing to undo", err)
 	}
 	if rows := historyOf(t, other); len(rows) != 1 || !rows[0].Dirty || rows[0].Statements != 0 || !strings.Contains(rows[0].Error, "1146") {

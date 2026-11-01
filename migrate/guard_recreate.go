@@ -242,14 +242,7 @@ func (w *recreates) inspect(refs []TableRef) (*Schema, []note, error) {
 // already does.
 func (w *recreates) lost(ref TableRef, objects []string, target, line string) {
 	for _, o := range append(objects, target) {
-		spelled := []string{o}
-		// A plan's name has the schema or not, as its table does.
-		if ref.Schema == "" && w.s.home() != "" {
-			spelled = append(spelled, w.s.home()+"."+o)
-		} else if bare, ok := strings.CutPrefix(o, ref.Schema+"."); ok {
-			spelled = append(spelled, bare)
-		}
-		for _, n := range spelled {
+		for _, n := range w.spellings(ref, o) {
 			if lossAllowed(w.f, n) || lossAllowed(w.file, n) {
 				return
 			}
@@ -305,6 +298,20 @@ func (w *recreates) statement(l *fileLinter) error {
 					ref.Schema = w.word(l, i+1)
 				}
 				w.put(w.norm(ref), nil)
+			}
+		}
+		if err := w.partitionedCreate(l); err != nil {
+			return err
+		}
+		if w.s.d == velox.MySQL && !w.quiet && (l.upper(1) == "INDEX" || slices.Contains([]string{"UNIQUE", "FULLTEXT", "SPATIAL"}, l.upper(1))) {
+			j := 1
+			for j < len(l.ws) && l.upper(j) != "ON" {
+				j++
+			}
+			if ref, _, ok := w.tableAt(l, j+1); ok {
+				if err := w.myisamOnline(l, w.state(ref), ref); err != nil {
+					return err
+				}
 			}
 		}
 		w.createIndex(l)
@@ -411,6 +418,11 @@ func (w *recreates) alter(l *fileLinter) error {
 	st := w.state(ref)
 	view := maps.Clone(st.cols)
 	if w.s.d == velox.MySQL { // an action's DROP INDEX stands wherever in the list it is
+		if !l.metadataOnly(i) {
+			if err := w.myisamOnline(l, st, ref); err != nil {
+				return err
+			}
+		}
 		if err := w.mysqlIndexDrops(l, st, i); err != nil {
 			return err
 		}
@@ -485,7 +497,7 @@ func (w *recreates) replaces(l *fileLinter, st *tableState, ref TableRef, origin
 	if w.s.d == velox.MySQL {
 		w.mysqlReplaced(l, st, ref, origin, name, i, end)
 	} else {
-		w.pgRetyped(l, st, ref, origin, name)
+		w.pgRetyped(l, st, ref, origin, name, i, end)
 	}
 	return nil
 }
@@ -763,6 +775,9 @@ func (w *recreates) postgresAction(l *fileLinter, st *tableState, ref TableRef, 
 				return st, ref, w.unknown(l, st, ref)
 			}
 			origin := w.origin(view, a)
+			if err := w.pgFunctionsBreak(st, ref, origin); err != nil {
+				return st, ref, err
+			}
 			st.cols[w.key(a)] = ""
 			st.cols[w.key(b)] = origin
 		}
@@ -792,6 +807,9 @@ func (w *recreates) postgresAction(l *fileLinter, st *tableState, ref TableRef, 
 		}
 		j := l.skip(l.skip(i+1, "COLUMN"), "IF", "EXISTS")
 		if col, _, ok := w.columnAt(l, j); ok {
+			if err := w.pgFunctionsBreak(st, ref, w.origin(view, col)); err != nil {
+				return st, ref, err
+			}
 			st.cols[w.key(col)] = ""
 		}
 	case "VALIDATE", "RESET", "OWNER", "ENABLE", "DISABLE", "CLUSTER", "INHERIT", "NO", "OF", "NOT", "REPLICA", "FORCE", "ATTACH", "DETACH":

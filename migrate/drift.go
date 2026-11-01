@@ -112,6 +112,8 @@ func compare(inspected *Schema, notes []note, snapshot *Schema, adopt bool) (*dr
 	if inspected.Dialect != snapshot.Dialect {
 		return nil, &Error{Code: "dialect", Reason: fmt.Sprintf("the database is %s and %s %s", inspected.Dialect, name, snapshot.Dialect)}
 	}
+	snapshot = snapshot.clone()
+	snapshot.oneForm()
 	c := &drifter{d: snapshot.Dialect, db: inspected.clone(), snap: snapshot, adopt: adopt, other: name,
 		enums: enumCasts(&Schema{Dialect: snapshot.Dialect, Enums: append(slices.Clone(snapshot.Enums), inspected.Enums...)})}
 	c.db.Tables = slices.DeleteFunc(c.db.Tables, func(t Table) bool { return snapshot.table(t.Ref()) == nil })

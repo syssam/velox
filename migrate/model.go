@@ -39,7 +39,7 @@ type Table struct {
 	ForeignKeys    []ForeignKey `json:"foreign_keys,omitempty"`     // sorted by Name
 	Checks         []Check      `json:"checks,omitempty"`           // sorted by Name
 	Comment        string       `json:"comment,omitempty"`          // "" on SQLite
-	Collation      string       `json:"collation,omitempty"`        // MySQL: the table's collation, "utf8mb4_bin" for planned tables; "" elsewhere
+	Collation      string       `json:"collation,omitempty"`        // MySQL: the table's collation; in a model, "" states none, so a new table gets utf8mb4_bin and one that exists keeps its own; "" on other dialects
 	Pos            string       `json:"-"`                          // the schema's file:line, when known; never serialized or compared
 }
 
