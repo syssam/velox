@@ -340,13 +340,13 @@ func TestTooCostlyPresented(t *testing.T) {
 	}
 	gerr := ext.MutateOperationContext(context.Background(), &graphql.OperationContext{Operation: doc.Operations[0], Doc: doc})
 	if gerr == nil {
-		t.Fatal("no error for cost 3 over MaxCost 2")
+		t.Fatal("no error for cost 202 over MaxCost 2")
 	}
 	if !errors.Is(gerr, veloxgql.ErrTooCostly) || codeOf(gerr) != veloxgql.CodeTooCostly {
 		t.Errorf("error %v: is ErrTooCostly %v, code %q", gerr, errors.Is(gerr, veloxgql.ErrTooCostly), codeOf(gerr))
 	}
 	got := veloxgql.ErrorPresenter(l.log)(context.Background(), gerr)
-	if want := "request is too costly: it costs 3, and the most is 2"; got.Message != want || got.Extensions["code"] != "COST_LIMIT_EXCEEDED" {
+	if want := "request is too costly: it costs 202, and the most is 2"; got.Message != want || got.Extensions["code"] != "COST_LIMIT_EXCEEDED" {
 		t.Errorf("got %q %v, want %q and COST_LIMIT_EXCEEDED", got.Message, got.Extensions, want)
 	}
 	if errs := l.take(); len(errs) != 0 {

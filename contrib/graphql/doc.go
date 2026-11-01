@@ -423,22 +423,38 @@
 // before any resolver runs, with veloxgql.ErrTooCostly (the code
 // COST_LIMIT_EXCEEDED, veloxgql.CodeTooCostly) and no statement.
 //
-// A field costs 1 plus its children's cost times its multiplier. A connection
-// multiplies by its first or last, or by MaxPage when it has neither; nodes by
-// the number of its ids; any other list of objects by MaxList. Every alias
-// counts, and so does every branch of a fragment (an upper bound), except a
-// selection that @skip(if: true) or @include(if: false) leaves out, which costs
-// nothing, its condition a literal or a variable's value (a missing variable's
-// default, when it has one); one whose condition is not a boolean, a variable
-// missing with no default or null, counts. __schema and __type cost nothing, so
-// introspection works. Variables are read; sums and products saturate, so huge
-// arguments cannot wrap the cost, and a named fragment is costed once however
-// often it is spread. Two levels of full connection pages cost about 30000 and
-// pass the default; three do not. A list edge costs MaxList (1000) for each
-// parent, so posts(first: 100) { edges { node { likes { id } } } } costs 100301
-// and is refused by default: raise MaxCost, or lower MaxList. gqlgen's
+// A cost has two parts, added. The rows: a field costs 1 plus its children's cost
+// times its multiplier. A connection's edges multiply by its first or last, or
+// by MaxPage when it has neither; nodes by the number of its ids; any other list
+// of objects by MaxList. The statements: a field that runs a statement adds 100,
+// with no multiplier, as a batch reads all its parents in one statement. Those
+// are a root field, a connection, its totalCount and any other field of an object
+// or a list of objects, so first: 0 and an alias still count, and the default
+// allows at most 1000 statements. An input object argument, as a where, adds its
+// size at each use: one for each object and value in it, read from the variables,
+// so one variable reused counts each time.
+//
+// Every alias counts, and so does every branch of a fragment (an upper bound),
+// except a selection that @skip(if: true) or @include(if: false) leaves out,
+// which costs nothing, its condition a literal or a variable's value (a missing
+// variable's default, when it has one); one whose condition is not a boolean, a
+// variable missing with no default or null, counts. __schema and __type cost
+// what they select, counted over the schema: one for each field of the response,
+// and a walk that passes MaxCost stops. GraphiQL's introspection query costs 3478
+// on the example's schema of three entities, and a schema's cost grows with its
+// where inputs; if it passes MaxCost, raise MaxCost on the server that offers
+// introspection. Variables are read; sums and products saturate, so huge
+// arguments cannot wrap the cost, and a named fragment is costed once for each
+// page size it is spread under. Two levels of full connection pages cost about
+// 20000 and pass the default; three do not. A list edge costs MaxList (1000) for
+// each parent, so posts(first: 100) { edges { node { likes { id } } } } costs
+// 100402 and is refused by default: raise MaxCost, or lower MaxList. gqlgen's
 // extension.FixedComplexityLimit counts fields, not rows, and is not needed
 // with it.
+//
+// Parsing runs before the Extension, and gqlgen sets no limit on it, nor can an
+// extension: give the server one, as srv.SetParserTokenLimit(15000), which
+// GraphiQL's query is far under.
 //
 // # gqlgen.yml
 //

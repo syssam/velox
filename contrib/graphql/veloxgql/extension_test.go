@@ -1001,30 +1001,31 @@ func TestTxFilterSkipsTheFieldLock(t *testing.T) {
 // TestTooCostlyPresented for ErrorPresenter); one at the limit runs (Review Focus 4).
 func TestTooCostlyRunsNothing(t *testing.T) {
 	db, l := handlerDB(t)
-	srv := serve(db, handlerResolvers(db, nil), veloxgql.WithLimits(veloxgql.Limits{MaxCost: 30}))
+	srv := serve(db, handlerResolvers(db, nil), veloxgql.WithLimits(veloxgql.Limits{MaxCost: 202}))
 
-	// people(first: 30) { totalCount } costs 1 + 30 * 1.
-	got := post(t, context.Background(), srv, `{ people(first: 30) { totalCount } }`)
-	const want = `{"errors":[{"message":"veloxgql: request is too costly: it costs 31, and the most is 30","extensions":{"code":"COST_LIMIT_EXCEEDED"}}],"data":null}`
+	// people(first: 30) { totalCount } costs 2 fields and 2 statements, 202; a
+	// __typename more is over.
+	got := post(t, context.Background(), srv, `{ people(first: 30) { totalCount __typename } }`)
+	const want = `{"errors":[{"message":"veloxgql: request is too costly: it costs 203, and the most is 202","extensions":{"code":"COST_LIMIT_EXCEEDED"}}],"data":null}`
 	if got != want {
-		t.Errorf("cost 31:\n got %s\nwant %s", got, want)
+		t.Errorf("cost 203:\n got %s\nwant %s", got, want)
 	}
 	if stmts, _ := l.take(); len(stmts) != 0 {
-		t.Errorf("cost 31 ran statements: %v", stmts)
+		t.Errorf("cost 203 ran statements: %v", stmts)
 	}
 
-	got = post(t, context.Background(), srv, `{ people(first: 29) { totalCount } }`)
+	got = post(t, context.Background(), srv, `{ people(first: 30) { totalCount } }`)
 	if want := `{"data":{"people":{"totalCount":0}}}`; got != want {
-		t.Errorf("cost 30:\n got %s\nwant %s", got, want)
+		t.Errorf("cost 202:\n got %s\nwant %s", got, want)
 	}
 	if stmts, _ := l.take(); len(stmts) != 1 {
-		t.Errorf("cost 30 ran %v, want one select", stmts)
+		t.Errorf("cost 202 ran %v, want one select", stmts)
 	}
 
 	// A mutation is checked as well, before its transaction.
 	got = post(t, context.Background(), srv, `mutation { a: page(first: 1) b: page(first: 1) c: page(first: 1) d: page(first: 1) e: page(first: 1) f: page(first: 1) g: page(first: 1) h: page(first: 1) i: page(first: 1) j: page(first: 1) k: page(first: 1) l: page(first: 1) m: page(first: 1) n: page(first: 1) o: page(first: 1) p: page(first: 1) q: page(first: 1) r: page(first: 1) s: page(first: 1) t: page(first: 1) u: page(first: 1) v: page(first: 1) w: page(first: 1) x: page(first: 1) y: page(first: 1) z: page(first: 1) a1: page(first: 1) b1: page(first: 1) c1: page(first: 1) d1: page(first: 1) e1: page(first: 1) }`)
 	if !strings.Contains(got, `COST_LIMIT_EXCEEDED`) {
-		t.Errorf("a mutation of cost 31: %s", got)
+		t.Errorf("a mutation over the limit: %s", got)
 	}
 	if stmts, txs := l.take(); len(stmts) != 0 || len(txs) != 0 {
 		t.Errorf("a refused mutation ran %v, %v", stmts, txs)

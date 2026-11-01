@@ -168,18 +168,21 @@
 // client writes it. MaxCost bounds the request. Cost computes what an
 // operation costs, as gqlgen's complexity recipe does: a field costs 1 plus
 // its children's cost times its multiplier, which is first or last for a
-// connection, the number of ids for nodes and MaxList for another list of
-// objects; every alias and every branch of a fragment counts, except a
+// connection's edges, the number of ids for nodes and MaxList for another list
+// of objects. On top of that, with no multiplier, a field that runs a statement
+// adds 100, so first: 0 and aliases count, and an input object adds its size at
+// each use. Every alias and every branch of a fragment counts, except a
 // selection that @skip(if: true) or @include(if: false) leaves out, which
 // costs nothing, its condition a literal or a variable's value (a missing
 // variable's default, when it has one; a condition that is not a boolean
-// counts), and introspection is free. The Extension refuses a
+// counts). Introspection costs one for each field of its response, counted over
+// the schema. The Extension refuses a
 // request over MaxCost with ErrTooCostly (CodeTooCostly, COST_LIMIT_EXCEEDED),
 // before any resolver, so before any statement. The default MaxCost, 100000,
-// lets two levels of full connection pages through (about 30000) and not
-// three. A list edge costs MaxList for each parent: under the defaults,
-// posts(first: 100) { edges { node { likes { id } } } } costs 100301 and is
-// refused; raise MaxCost, or lower MaxList, to let it through.
+// lets two levels of full connection pages through (about 20000) and not
+// three, and at most 1000 statements. A list edge costs MaxList for each parent:
+// under the defaults, posts(first: 100) { edges { node { likes { id } } } } costs
+// 100402 and is refused; raise MaxCost, or lower MaxList, to let it through.
 //
 // Nothing in the package runs at program start.
 package veloxgql

@@ -49,5 +49,5 @@ func ExampleCost() {
 	l := veloxgql.Limits{MaxPage: 100, MaxList: 100}
 	fmt.Println(veloxgql.Cost(schema, doc.Operations[0], nil, l))
 	// Output:
-	// 191
+	// 342
 }

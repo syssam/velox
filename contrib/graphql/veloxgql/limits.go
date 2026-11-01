@@ -49,10 +49,11 @@ type Limits struct {
 
 	// MaxCost is the most a request may cost (Cost): the bound on a whole
 	// request that the other limits, each of one argument, do not give. More
-	// is ErrTooCostly, before any statement runs. A list edge costs MaxList
-	// for each parent, so under the defaults one full page with a list edge,
-	// posts(first: 100) { edges { node { likes { id } } } }, costs 100301 and
-	// is refused: raise MaxCost, or lower MaxList.
+	// is ErrTooCostly, before any statement runs. It bounds the statements too,
+	// at 100 each, and introspection, by the fields of its response. A list edge
+	// costs MaxList for each parent, so under the defaults one full page with a
+	// list edge, posts(first: 100) { edges { node { likes { id } } } }, costs
+	// 100402 and is refused: raise MaxCost, or lower MaxList.
 	MaxCost int
 }
 
