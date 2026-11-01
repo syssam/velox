@@ -103,8 +103,10 @@ type DirtyError struct {
 	Statement, Statements int
 	Err                   error
 
-	applied *int // the statements still applied, when the runner rolled back the file's own transaction
-	missing bool // found dirty, and the directory has no file for it
+	applied *int   // the statements still applied, when the runner rolled back the file's own transaction
+	missing bool   // found dirty, and the directory has no file for it
+	retry   bool   // a lock kept the next statement from running: Up goes on unasked
+	guide   string // MySQL: what ran, and how to tell the history
 }
 
 // undoHint is the way out of dirty version v by undoing it.
@@ -124,7 +126,9 @@ func undoHint(v uint64) string {
 // applied statements and run migrate resolve -version <Version> -undone". A
 // version found dirty whose file the directory lacks is "migrate: version
 // <Version> is dirty: <Err>", then a line that says the file is missing and
-// to resume with the directory that has it, or undo and resolve.
+// to resume with the directory that has it, or undo and resolve. On MySQL
+// lines follow with the file's statements, and how to say which ran; when a
+// lock kept the next statement from running, a line says apply retries it.
 func (e *DirtyError) Error() string {
 	var b strings.Builder
 	cause := ""
@@ -139,6 +143,7 @@ func (e *DirtyError) Error() string {
 	if e.Statement == 0 {
 		fmt.Fprintf(&b, "migrate: %s: version %d is dirty%s\n  fix the cause and run migrate apply -resume, or %s",
 			e.Path, e.Version, cause, undoHint(e.Version))
+		b.WriteString(e.tail())
 		return b.String()
 	}
 	fmt.Fprintf(&b, "migrate: %s: statement %d of %d%s\n  version %d is dirty; fix the cause and run migrate apply -resume, or ",
@@ -154,7 +159,16 @@ func (e *DirtyError) Error() string {
 		fmt.Fprintf(&b, "undo statements 1 to %d and ", k)
 	}
 	fmt.Fprintf(&b, "run migrate resolve -version %d -undone", e.Version)
+	b.WriteString(e.tail())
 	return b.String()
+}
+
+// tail is what Error says after the way out.
+func (e *DirtyError) tail() string {
+	if e.retry {
+		return "\n  a lock kept the statement from running: migrate apply retries it, with no -resume"
+	}
+	return e.guide
 }
 
 // Unwrap is Err.

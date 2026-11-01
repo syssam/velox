@@ -255,6 +255,7 @@ func runMigrateApply(args []string, dir string, env []string, stdout, stderr io.
 	if baselineSet {
 		opts = append(opts, migrate.WithBaseline(baseline))
 	}
+	opts = append(opts, migrate.WithNotes(func(n string) { _, _ = fmt.Fprintf(stderr, "velox-gen: note: %s\n", c.text(n)) }))
 	r, err := migrate.Up(ctx, db, fsys, opts...)
 	if r != nil {
 		for _, v := range r.Baselined {
@@ -496,8 +497,9 @@ func runMigrateDrift(args []string, dir string, env []string, stdout, stderr io.
 func runMigrateResolve(args []string, dir string, env []string, stdout, stderr io.Writer) int {
 	c := newDBCmd("resolve", stderr)
 	version := c.fs.Uint64("version", 0, "the dirty `version`")
-	applied := c.fs.Bool("applied", false, "the version was finished by hand: mark it applied")
+	c.fs.Bool("applied", false, "the version was finished by hand: mark it applied")
 	undone := c.fs.Bool("undone", false, "the version's applied statements were reverted by hand: delete its row")
+	statements := c.fs.Int("statements", 0, "the first `k` statements of the dirty version ran: record that, so that apply -resume goes on from statement k+1")
 	rest, code, done := parseFlags(c.fs, args)
 	if done {
 		return code
@@ -505,8 +507,14 @@ func runMigrateResolve(args []string, dir string, env []string, stdout, stderr i
 	if len(rest) > 0 {
 		return c.noArgs()
 	}
-	if !given(c.fs, "version") || *applied == *undone {
-		_, _ = fmt.Fprintf(stderr, "velox-gen: migrate resolve needs -version and one of -applied and -undone\n")
+	ways := 0
+	for _, way := range []string{"applied", "undone", "statements"} {
+		if given(c.fs, way) {
+			ways++
+		}
+	}
+	if !given(c.fs, "version") || ways != 1 {
+		_, _ = fmt.Fprintf(stderr, "velox-gen: migrate resolve needs -version and one of -applied, -undone and -statements\n")
 		c.fs.Usage()
 		return 2
 	}
@@ -537,11 +545,15 @@ func runMigrateResolve(args []string, dir string, env []string, stdout, stderr i
 	defer func() { _ = db.Close() }()
 	ctx, stop := signalContext()
 	defer stop()
-	r, how := migrate.ResolveApplied, "applied"
-	if *undone {
+	r, how, opts := migrate.ResolveApplied, "applied", []migrate.Option{migrate.WithNotes(func(n string) { _, _ = fmt.Fprintf(stderr, "velox-gen: note: %s\n", c.text(n)) })}
+	switch {
+	case *undone:
 		r, how = migrate.ResolveUndone, "undone"
+	case given(c.fs, "statements"):
+		r, how = migrate.ResolveStatements, fmt.Sprintf("%d statements run, to resume", *statements)
+		opts = append(opts, migrate.WithStatements(*statements))
 	}
-	if err := migrate.Resolve(ctx, db, os.DirFS(c.abs(dir)), *version, r); err != nil {
+	if err := migrate.Resolve(ctx, db, os.DirFS(c.abs(dir)), *version, r, opts...); err != nil {
 		return c.fail(1, err)
 	}
 	_, _ = fmt.Fprintf(stdout, "resolved version %d as %s\n", *version, how)

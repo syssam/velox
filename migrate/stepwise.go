@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/syssam/velox"
@@ -15,8 +17,9 @@ const maxLockWaitTimeout = 31536000
 // applyStepwise runs a file statement by statement, as every MySQL file and
 // a PostgreSQL no-transaction file run. It inserts the history row dirty,
 // with no statements (row, a dirty row to resume, is kept instead), sets
-// the lock timeout, and runs the file a unit at a time, from the first
-// statement of the first incomplete unit, recording after each unit the
+// the lock timeout, and runs the file a unit at a time, from the statement
+// after those the row counts, which is the first of a unit unless
+// Resolve's ResolveStatements said otherwise, recording after each unit the
 // statements of the completed ones. On success the row is clean, with the
 // duration and applied_at now. The row is written though ctx is gone, and
 // ctx is checked before each unit, so a cancel keeps the count exact; a
@@ -24,20 +27,16 @@ const maxLockWaitTimeout = 31536000
 // lost is never written through another, and the error says so. A
 // failing statement, a cancel, or a file that leaves a transaction open
 // leaves the row dirty, with the error, and is a *DirtyError; a
-// transaction the file opened is rolled back first.
+// transaction the file opened is rolled back first. On MySQL a statement
+// the server refused with nothing changed is less: the first of a file not
+// yet recorded takes its row away, an *Error of Code "retry", and a lock's
+// at the head of a unit leaves a row Up goes on from by itself.
 func (s *session) applyStepwise(ctx context.Context, f File, row *Applied, o options) (Applied, error) {
 	n := len(f.Statements)
 	units := f.Units // ParseFile gives every file with statements a unit at 0
 	from := 0
 	if row != nil {
-		for _, u := range units {
-			if u <= row.Statements {
-				from = u
-			}
-		}
-		if row.Statements >= n {
-			from = n
-		}
+		from = min(row.Statements, n)
 	}
 	if err := s.checkRecreates(ctx, f, from); err != nil {
 		return Applied{}, err
@@ -57,18 +56,29 @@ func (s *session) applyStepwise(ctx context.Context, f File, row *Applied, o opt
 	table := s.historyTable()
 	last := from // the first statement of the last unit run
 	for u, first := range units {
-		if first < from {
-			continue
-		}
-		if err := ctx.Err(); err != nil {
-			return Applied{}, s.failed(ctx, f, first, err, o)
-		}
 		end := n
 		if u+1 < len(units) {
 			end = units[u+1]
 		}
+		if end <= from {
+			continue
+		}
+		first = max(first, from)
+		if err := ctx.Err(); err != nil {
+			return Applied{}, s.failed(ctx, f, first, err, o)
+		}
 		for i := first; i < end; i++ {
 			if _, err := s.conn.ExecContext(ctx, f.Statements[i]); err != nil {
+				if s.d == velox.MySQL && ctx.Err() == nil {
+					if row == nil && i == 0 && nothingChanged(f.Statements[0], err) {
+						if refused := s.notRecorded(ctx, f, err); refused != nil {
+							return Applied{}, refused
+						}
+					}
+					if open, oerr := s.inTransaction(ctx); i == first && lockFailure(err) && !open && oerr == nil {
+						err = &retryError{err}
+					}
+				}
 				return Applied{}, s.failed(ctx, f, i, err, o)
 			}
 		}
@@ -114,6 +124,49 @@ func (s *session) applyStepwise(ctx context.Context, f File, row *Applied, o opt
 		o.logger.InfoContext(ctx, "migrate: applied", "version", a.Version, "path", f.Path, "duration", a.Duration)
 	}
 	return a, nil
+}
+
+// retryMark begins a dirty row's error when a lock kept the statement after those it
+// counts from running: Up goes on from there unasked.
+const retryMark = "retry: "
+
+// A retryError is a failure of a statement to get a lock, to retry.
+type retryError struct{ err error }
+
+func (e *retryError) Error() string { return retryMark + e.err.Error() }
+func (e *retryError) Unwrap() error { return e.err }
+
+// lockFailure reports whether err is MySQL's lock wait timeout or deadlock: the
+// statement had changed nothing, and InnoDB took back any row it wrote.
+func lockFailure(err error) bool {
+	code, _ := velox.DriverCode(err)
+	return code == "1205" || code == "1213"
+}
+
+// nothingChanged reports whether MySQL's err means q changed nothing: a lock's, or the
+// server's refusal of a DDL statement, which InnoDB runs atomically. A DML statement
+// on MyISAM can stop part-way, and a server stopping or a statement killed says
+// nothing of how far it went.
+func nothingChanged(q string, err error) bool {
+	if lockFailure(err) {
+		return true
+	}
+	code, _ := velox.DriverCode(err)
+	if code == "" || slices.Contains([]string{"1053", "1317", "1927", "3024"}, code) {
+		return false
+	}
+	return slices.Contains([]string{"ALTER", "CREATE", "DROP", "RENAME", "TRUNCATE"}, (&fileLinter{d: velox.MySQL, ws: lex(velox.MySQL, q)}).upper(0))
+}
+
+// notRecorded takes back the row of f, whose first statement the server refused with
+// err and nothing changed, and is the refusal. It is nil when the row stays.
+func (s *session) notRecorded(ctx context.Context, f File, err error) error {
+	q := fmt.Sprintf("DELETE FROM %s WHERE %s = %s", s.historyTable(), s.q("version"), s.ph(1))
+	if s.persist(ctx, q, int64(f.Version)) != nil {
+		return nil
+	}
+	return &Error{Code: "retry", Pos: f.Path, cause: err, Reason: fmt.Sprintf("statement 1 of %d: %v\n  the server changed nothing, and version %d is not recorded; fix the cause, if it is not a lock, and run migrate apply again",
+		len(f.Statements), err, f.Version)}
 }
 
 // write runs a write to the history on the session alone, though ctx is
@@ -265,6 +318,11 @@ func (s *session) failed(ctx context.Context, f File, i int, err error, o option
 		k := s.completed(ctx, f.Version, i)
 		e.applied = &k
 	}
+	var re *retryError
+	e.retry = errors.As(err, &re)
+	if s.d == velox.MySQL && !e.retry {
+		e.guide = mysqlGuide(f, s.completed(ctx, f.Version, i))
+	}
 	return e
 }
 
@@ -283,4 +341,24 @@ func (s *session) recordError(ctx context.Context, f File, err error, o options)
 		defer cancel()
 		o.logger.ErrorContext(c, "migrate: recording the error of a dirty version", "version", f.Version, "path", f.Path, "error", werr)
 	}
+}
+
+// mysqlGuide is what a dirty MySQL version needs said, whose row counts k of f's
+// statements: MySQL undoes no statement, and a run that died may have left one running.
+func mysqlGuide(f File, k int) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "\n  the history counts %d of %d statements as run. A statement still on the server when the run died may have finished since: see SHOW FULL PROCESSLIST, and SHOW CREATE TABLE against these:", k, len(f.Statements))
+	for i, q := range f.Statements {
+		if i == 20 {
+			fmt.Fprintf(&b, "\n    and %d more", len(f.Statements)-i)
+			break
+		}
+		q = strings.Join(strings.Fields(q), " ")
+		if len(q) > 100 {
+			q = q[:100] + "..."
+		}
+		fmt.Fprintf(&b, "\n    %d. %s", i+1, q)
+	}
+	fmt.Fprintf(&b, "\n  if the first K ran and the history counts otherwise, run migrate resolve -version %d -statements K, then migrate apply -resume", f.Version)
+	return b.String()
 }

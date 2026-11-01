@@ -905,8 +905,9 @@ func TestMigrateDirtyMySQL(t *testing.T) {
 	code, out, errs := m("apply")
 	if code != 1 || !regexp.MustCompile(`^`+appliedLine("0001_a.sql")+`$`).MatchString(out) ||
 		!strings.HasPrefix(errs, "velox-gen: migrate apply: 0002_b.sql: statement 2 of 2: Error 1050 (42S01): Table 'a' already exists\n") ||
-		!strings.HasSuffix(errs, "\n  version 2 is dirty; fix the cause and run migrate apply -resume, or undo statement 1 and run migrate resolve -version 2 -undone\n") ||
-		strings.Count(errs, "\n") != 2 {
+		!strings.Contains(errs, "\n  version 2 is dirty; fix the cause and run migrate apply -resume, or undo statement 1 and run migrate resolve -version 2 -undone\n") ||
+		!strings.Contains(errs, "counts 1 of 2 statements") || !strings.Contains(errs, "2. CREATE TABLE a (id int)") ||
+		!strings.HasSuffix(errs, "run migrate resolve -version 2 -statements K, then migrate apply -resume\n") {
 		t.Errorf("apply: %d\n%s\n%s", code, out, errs)
 	}
 	code, out, errs = m("status")
@@ -944,7 +945,7 @@ func TestMigrateCancel(t *testing.T) {
 			code, out, errs := runCLI(t, dir, "migrate", "apply", "-dir", ".", "-db", dsn)
 			if code != 1 || out != "" || time.Since(start) > 20*time.Second ||
 				!strings.HasPrefix(errs, "velox-gen: migrate apply: 0001_slow.sql: statement 2 of 3: ") ||
-				!strings.HasSuffix(errs, "\n  version 1 is dirty; fix the cause and run migrate apply -resume, or undo statement 1 and run migrate resolve -version 1 -undone\n") {
+				!strings.Contains(errs, "\n  version 1 is dirty; fix the cause and run migrate apply -resume, or undo statement 1 and run migrate resolve -version 1 -undone\n") {
 				t.Errorf("apply: %d %v\n%s\n%s", code, time.Since(start), out, errs)
 			}
 			signalContext = notifyContext

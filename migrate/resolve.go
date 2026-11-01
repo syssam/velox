@@ -14,13 +14,22 @@ import (
 // A Resolution is how a human ended a dirty version.
 type Resolution uint8
 
-// The two ways Resolve ends a dirty version.
+// The ways Resolve ends a dirty version or mends the history.
 const (
-	ResolveApplied Resolution = iota + 1 // a human finished the version
-	ResolveUndone                        // a human reverted it; the row is deleted
+	ResolveApplied    Resolution = iota + 1 // a human finished the version
+	ResolveUndone                           // a human reverted it; the row is deleted
+	ResolveStatements                       // WithStatements' count of the file ran; the version stays dirty, to resume
 )
 
+// WithStatements is how many of the file's statements ResolveStatements records as run.
+func WithStatements(k int) Option {
+	return Option{func(o *options) { o.statements, o.statementsSet = k, true }}
+}
+
 // Resolve ends the dirty version of db's history, under the migration lock.
+// ResolveStatements records that the first k of its file's statements ran, for
+// WithStatements' k from 0 to their number: a run that died may have left the count
+// behind what the server finished, and WithResume then goes on from statement k+1.
 // ResolveApplied marks it applied, with every statement of its file, which
 // must be in dir with the row's checksum (else a *ChecksumError);
 // ResolveUndone deletes its row, so the file may be edited and applied
@@ -28,17 +37,21 @@ const (
 // velox.sum does not stop it. Resolve reads the history itself, not against
 // dir's other files, so an edited file does not stop it either. A version
 // that is not dirty, or not in the history, is an *Error of Code "history";
-// a Resolution other than the two, one of Code "resolution". Like Up, it
-// uses one connection of db, its session in UTC, and closes it after. Of
-// the Options, it takes WithLockWait and WithLogger.
+// an unknown Resolution, or a count out of range, one of Code "resolution".
+// Like Up, it uses one connection of db, its session in UTC, and closes it
+// after. Of the Options, it takes WithLockWait, WithLogger, WithNotes and
+// WithStatements.
 func Resolve(ctx context.Context, db *sql.DB, dir fs.FS, version uint64, r Resolution, opts ...Option) error {
-	if r != ResolveApplied && r != ResolveUndone {
-		return &Error{Code: "resolution", Reason: fmt.Sprintf("no resolution %d; use ResolveApplied or ResolveUndone", r)}
+	if r < ResolveApplied || r > ResolveStatements {
+		return &Error{Code: "resolution", Reason: fmt.Sprintf("no resolution %d; use ResolveApplied, ResolveUndone or ResolveStatements", r)}
 	}
 	o := optionsOf(opts)
+	if r == ResolveStatements && !o.statementsSet {
+		return &Error{Code: "resolution", Reason: "ResolveStatements needs WithStatements"}
+	}
 	var d *Dir
 	var cfg Config
-	if r == ResolveApplied {
+	if r != ResolveUndone {
 		var err error
 		if d, err = ReadDir(dir); err != nil {
 			return err
@@ -75,7 +88,7 @@ func Resolve(ctx context.Context, db *sql.DB, dir fs.FS, version uint64, r Resol
 			return wrap(ctx, what, err)
 		}
 	}
-	err = s.resolve(ctx, d, version, r)
+	err = s.resolve(ctx, d, version, r, o)
 	if s.d == velox.SQLite {
 		if err == nil {
 			if _, cerr := s.conn.ExecContext(ctx, "COMMIT"); cerr != nil {
@@ -96,7 +109,7 @@ func Resolve(ctx context.Context, db *sql.DB, dir fs.FS, version uint64, r Resol
 }
 
 // resolve is Resolve's read and write of the history.
-func (s *session) resolve(ctx context.Context, dir *Dir, version uint64, r Resolution) error {
+func (s *session) resolve(ctx context.Context, dir *Dir, version uint64, r Resolution, o options) error {
 	what := fmt.Sprintf("resolving version %d in %s", version, s.cfg.Table)
 	rows, _, err := s.history(ctx)
 	if err != nil {
@@ -122,6 +135,14 @@ func (s *session) resolve(ctx context.Context, dir *Dir, version uint64, r Resol
 	f := dir.Files[j]
 	if f.Sum != row.Sum {
 		return &ChecksumError{Version: version, Path: f.Path, Applied: row.Sum, Now: f.Sum}
+	}
+	if r == ResolveStatements {
+		if o.statements < 0 || o.statements > len(f.Statements) {
+			return &Error{Code: "resolution", Pos: f.Path, Reason: fmt.Sprintf("%d statements: the file has %d", o.statements, len(f.Statements))}
+		}
+		q := fmt.Sprintf("UPDATE %s SET %s = %s WHERE %s = %s", table, s.q("statements"), s.ph(1), where, s.ph(2))
+		_, err = s.conn.ExecContext(ctx, q, o.statements, int64(version))
+		return wrap(ctx, what, err)
 	}
 	q := fmt.Sprintf("UPDATE %s SET %s = %s, %s = %s, %s = %s WHERE %s = %s", table,
 		s.q("dirty"), s.ph(1), s.q("statements"), s.ph(2), s.q("error"), s.ph(3), where, s.ph(4))

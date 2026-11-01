@@ -22,12 +22,14 @@ import (
 type Option struct{ apply func(*options) }
 
 type options struct {
-	target    uint64        // with targetSet: the last version to apply
-	targetSet bool          // 0 is a version: 0000 is a valid file
-	lockWait  time.Duration // default 5m
-	logger    *slog.Logger  // nil: none
-	notes     func(string)  // nil: none
-	resume    bool
+	target        uint64        // with targetSet: the last version to apply
+	targetSet     bool          // 0 is a version: 0000 is a valid file
+	lockWait      time.Duration // default 5m
+	logger        *slog.Logger  // nil: none
+	notes         func(string)  // nil: none
+	statements    int           // ResolveStatements': WithStatements
+	statementsSet bool
+	resume        bool
 
 	baseline    uint64
 	baselineSet bool // 0 is a version: 0000 is a valid file
@@ -260,7 +262,7 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 	}
 	st, err := reading(d, rows)
 	var resumed *File
-	if de := (*DirtyError)(nil); errors.As(err, &de) && o.resume {
+	if de := (*DirtyError)(nil); errors.As(err, &de) && (o.resume || de.retry) {
 		resumed, err = s.resuming(d, st)
 	}
 	if err != nil {
@@ -522,6 +524,10 @@ func reading(dir *Dir, rows []Applied) (*State, error) {
 		}
 		if r.Error != "" {
 			e.Err = errors.New(r.Error)
+			e.retry = strings.HasPrefix(r.Error, retryMark)
+		}
+		if i := slices.IndexFunc(dir.Files, func(f File) bool { return f.Version == r.Version }); i >= 0 && dir.Config.Dialect == velox.MySQL && !e.retry {
+			e.guide = mysqlGuide(dir.Files[i], r.Statements)
 		}
 		return st, e
 	}

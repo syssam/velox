@@ -167,7 +167,7 @@ func TestMySQLUpIsStrict(t *testing.T) {
 			nonStrict(t, db)
 			fsys = extend(t, fsys, d, step{to: oneTable(d, migrate.Column{Name: "c", Type: c.to, Nullable: c.nullable && !c.narrow}), name: "narrow", opts: allowAll(c.allow)})
 			_, err := migrate.Up(context.Background(), db, fsys)
-			if _, ok := errors.AsType[*migrate.DirtyError](err); !ok {
+			if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "retry" {
 				t.Fatalf("Up: %v\n%s", err, sqlFiles(fsys))
 			}
 			var after sql.NullString
@@ -197,8 +197,7 @@ func TestMySQLUpStaysStrict(t *testing.T) {
 	fsys = extend(t, fsys, d, files("0002_off.sql", "SET SESSION sql_mode = '';\n"))
 	fsys = extend(t, fsys, d, files("0003_cut.sql", "-- velox:drops t.c:type\nALTER TABLE t MODIFY COLUMN c varchar(3) NULL;\n"))
 	_, err := migrate.Up(context.Background(), db, fsys)
-	var de *migrate.DirtyError
-	if !errors.As(err, &de) || de.Version != 3 {
+	if e, ok := errors.AsType[*migrate.Error](err); !ok || e.Code != "retry" || mysqlNumber(err) != 1265 {
 		t.Errorf("Up: %v", err)
 	}
 }
