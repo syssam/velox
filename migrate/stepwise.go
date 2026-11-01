@@ -162,11 +162,11 @@ func nothingChanged(q string, err error) bool {
 // err and nothing changed, and is the refusal. It is nil when the row stays.
 func (s *session) notRecorded(ctx context.Context, f File, err error) error {
 	q := fmt.Sprintf("DELETE FROM %s WHERE %s = %s", s.historyTable(), s.q("version"), s.ph(1))
-	if s.persist(ctx, q, int64(f.Version)) != nil {
-		return nil
+	if s.persist(ctx, q, int64(f.Version)) == nil {
+		return &Error{Code: "retry", Pos: f.Path, cause: err, Reason: fmt.Sprintf("statement 1 of %d: %v\n  the server changed nothing, and version %d is not recorded; fix the cause, if it is not a lock, and run migrate apply again",
+			len(f.Statements), err, f.Version)}
 	}
-	return &Error{Code: "retry", Pos: f.Path, cause: err, Reason: fmt.Sprintf("statement 1 of %d: %v\n  the server changed nothing, and version %d is not recorded; fix the cause, if it is not a lock, and run migrate apply again",
-		len(f.Statements), err, f.Version)}
+	return nil
 }
 
 // write runs a write to the history on the session alone, though ctx is

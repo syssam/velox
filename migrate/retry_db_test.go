@@ -88,7 +88,7 @@ func TestMySQLLockWaitLeavesNoDirtyVersion(t *testing.T) {
 		db, _ := freshDB(t, d)
 		bad := dirOf(t, d, files("0001_t.sql", "INSERT INTO missing VALUES (1);\n"))
 		_, err := migrate.Up(ctx, db, bad)
-		dirtyOf(t, err)
+		_ = dirtyOf(t, err)
 	})
 }
 
