@@ -215,6 +215,8 @@ func TestErrorPresenter(t *testing.T) {
 		{"wrapped ErrBadID", fmt.Errorf("resolver: %w", codedBadID), "BAD_USER_INPUT", "User ID: malformed ID: not canonical base64url without padding", `["node"]`, false},
 		{"no tenant", fmt.Errorf("velox: gen.Post: %w", velox.ErrNoTenant), "UNAUTHENTICATED", "unauthenticated", `["node"]`, false},
 		{"denied", fmt.Errorf("velox: gen.Post: %w", velox.ErrDenied), "FORBIDDEN", "forbidden", `["node"]`, false},
+		{"tenant mismatch", fmt.Errorf("velox: gen.Post: %w: a row's org_id is 2, the tenant is 1", velox.ErrTenantMismatch), "FORBIDDEN", "forbidden", `["node"]`, false},
+		{"tenant immutable", fmt.Errorf("velox: gen.Post: %w: the statement sets org_id to 2, the tenant is 1", velox.ErrTenantImmutable), "FORBIDDEN", "forbidden", `["node"]`, false},
 		// A driver's typed nil, whose Unwrap panics, is passed over.
 		{"denied, past a typed nil", errors.Join((*pgconn.ConnectError)(nil), fmt.Errorf("velox: gen.Post: %w", velox.ErrDenied)), "FORBIDDEN", "forbidden", `["node"]`, false},
 		{"constraint, past a typed nil", errors.Join((*pgconn.ConnectError)(nil), &velox.ConstraintError{Entity: "gen.User", Kind: velox.ConstraintUnique, Err: driverErr}), "BAD_USER_INPUT", "unique constraint violated", `["node"]`, false},
@@ -338,13 +340,13 @@ func TestTooCostlyPresented(t *testing.T) {
 	}
 	gerr := ext.MutateOperationContext(context.Background(), &graphql.OperationContext{Operation: doc.Operations[0], Doc: doc})
 	if gerr == nil {
-		t.Fatal("no error for cost 3 over MaxCost 2")
+		t.Fatal("no error for cost 202 over MaxCost 2")
 	}
 	if !errors.Is(gerr, veloxgql.ErrTooCostly) || codeOf(gerr) != veloxgql.CodeTooCostly {
 		t.Errorf("error %v: is ErrTooCostly %v, code %q", gerr, errors.Is(gerr, veloxgql.ErrTooCostly), codeOf(gerr))
 	}
 	got := veloxgql.ErrorPresenter(l.log)(context.Background(), gerr)
-	if want := "request is too costly: it costs 3, and the most is 2"; got.Message != want || got.Extensions["code"] != "COST_LIMIT_EXCEEDED" {
+	if want := "request is too costly: it costs 202, and the most is 2"; got.Message != want || got.Extensions["code"] != "COST_LIMIT_EXCEEDED" {
 		t.Errorf("got %q %v, want %q and COST_LIMIT_EXCEEDED", got.Message, got.Extensions, want)
 	}
 	if errs := l.take(); len(errs) != 0 {

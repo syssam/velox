@@ -161,7 +161,7 @@
 //
 // They use the runtime package veloxgql, and its package gqlimpl for what
 // only generated code calls; every file carries
-// "const _ = veloxgql.GeneratedCodeIsVersion3", so that generated code and
+// "const _ = veloxgql.GeneratedCodeIsVersion4", so that generated code and
 // the module fail to compile together when they disagree. A connection is
 // keyset-paged by its cursors, and runs its page query and its COUNT only
 // when gqlgen asks for edges or pageInfo, and for totalCount; see "Loading"
@@ -189,7 +189,10 @@
 // For an entity with graphql.MutationCreate, its file also has Create<T>Input
 // and Create<T>(ctx, input), which createX's resolver returns; with
 // graphql.MutationUpdate, Update<T>Input and Update<T>(ctx, id, input), which
-// updateX's resolver returns. In an update input a field not given is left as
+// updateX's resolver returns. A create input that gives a field with a Default
+// its zero value ("" or the zero time) is refused with BAD_USER_INPUT, since an
+// insert would store the Default in its place; an update stores it. In an update
+// input a field not given is left as
 // it is, clear<Field> sets a nullable one to NULL, and an edge is cleared, then
 // its remove<Edge>IDs removed, then its add<Edge>IDs added; a field given with
 // its clear, or an ID both to add and to remove, is refused with
@@ -203,8 +206,9 @@
 // targets the caller may read, under the tenant scope and the target's Read
 // policy; a link to one they hide stays.
 //
-// An edge's inputs follow its foreign key. A key on the entity's own row is
-// set by <edge>ID. A key on the target's rows is re-pointed from the owner
+// An edge's inputs follow its foreign key. A key that is the tenant column has
+// none: the tenant scope fills it, and an edge to the tenants' entity reads it.
+// A key on the entity's own row is set by <edge>ID. A key on the target's rows is re-pointed from the owner
 // by <edge>ID, <edge>IDs or add<Edge>IDs, but only a key that is nullable
 // and mutable: one that is never NULL always holds an owner, and one that is
 // immutable cannot move, so the owner's inputs have no such field, and the
@@ -213,14 +217,22 @@
 // holds: one that another owner holds is refused with BAD_USER_INPUT,
 // "already linked", and not taken from it.
 //
-// A Required one-to-one or many-to-one edge whose key is NULL-able can read
-// null, so its field is nullable in the SDL, parent: T, where entgql gives T!:
-// a non-null field that read NULL would null the object around it. On the side
-// that owns the key, as a Required self edge's parent does, velox refuses the
-// key nil on every write (velox.ColumnDesc.RequiredEdge), but the database's ON
-// DELETE SET NULL clears it when the target is deleted. On the other side
-// velox does not refuse it: no child need hold the row. Create<T>Input still
-// requires a Required edge's <edge>ID. When the owning side's key is one velox
+// A Required one-to-one or many-to-one edge is nullable in the SDL, author: T,
+// where entgql gives T!. Required says a row is written with its key; it does
+// not say the caller can read the target. A row reads the target in a statement
+// of its own, under the target's tenant scope and Read policy, the DB's Rewrite
+// hooks and a replica that may lag, and any of them can leave it empty. A
+// non-null field that read null would null the page around the row, with an
+// error for each such row, which tells the client that a hidden row exists. The
+// generator cannot know them all (the plugin's model holds no policy, and a
+// Rewrite hook is the DB's), so the field reads null, with no error, and a
+// mutation that returns the edge commits. A NULL-able key can read null too: on
+// the side that owns the key, as a Required self edge's parent does, velox
+// refuses the key nil on every write (velox.ColumnDesc.RequiredEdge), but the
+// database's ON DELETE SET NULL clears it when the target is deleted. On the
+// other side velox does not refuse it: no child need hold the row. Create<T>Input
+// still requires a Required edge's <edge>ID, which must name a row the caller may
+// read. When the owning side's key is one velox
 // refuses nil, an update on the other side only adds: a one-to-many edge has
 // add<Edge>IDs but no remove<Edge>IDs or clear<Edge>, and a one-to-one edge has
 // neither <edge>ID nor clear<Edge>, since each would unlink a child and leave
@@ -411,22 +423,38 @@
 // before any resolver runs, with veloxgql.ErrTooCostly (the code
 // COST_LIMIT_EXCEEDED, veloxgql.CodeTooCostly) and no statement.
 //
-// A field costs 1 plus its children's cost times its multiplier. A connection
-// multiplies by its first or last, or by MaxPage when it has neither; nodes by
-// the number of its ids; any other list of objects by MaxList. Every alias
-// counts, and so does every branch of a fragment (an upper bound), except a
-// selection that @skip(if: true) or @include(if: false) leaves out, which costs
-// nothing, its condition a literal or a variable's value (a missing variable's
-// default, when it has one); one whose condition is not a boolean, a variable
-// missing with no default or null, counts. __schema and __type cost nothing, so
-// introspection works. Variables are read; sums and products saturate, so huge
-// arguments cannot wrap the cost, and a named fragment is costed once however
-// often it is spread. Two levels of full connection pages cost about 30000 and
-// pass the default; three do not. A list edge costs MaxList (1000) for each
-// parent, so posts(first: 100) { edges { node { likes { id } } } } costs 100301
-// and is refused by default: raise MaxCost, or lower MaxList. gqlgen's
+// A cost has two parts, added. The rows: a field costs 1 plus its children's cost
+// times its multiplier. A connection's edges multiply by its first or last, or
+// by MaxPage when it has neither; nodes by the number of its ids; any other list
+// of objects by MaxList. The statements: a field that runs a statement adds 100,
+// with no multiplier, as a batch reads all its parents in one statement. Those
+// are a root field, a connection, its totalCount and any other field of an object
+// or a list of objects, so first: 0 and an alias still count, and the default
+// allows at most 1000 statements. An input object argument, as a where, adds its
+// size at each use: one for each object and value in it, read from the variables,
+// so one variable reused counts each time.
+//
+// Every alias counts, and so does every branch of a fragment (an upper bound),
+// except a selection that @skip(if: true) or @include(if: false) leaves out,
+// which costs nothing, its condition a literal or a variable's value (a missing
+// variable's default, when it has one); one whose condition is not a boolean, a
+// variable missing with no default or null, counts. __schema and __type cost
+// what they select, counted over the schema: one for each field of the response,
+// and a walk that passes MaxCost stops. GraphiQL's introspection query costs 3478
+// on the example's schema of three entities, and a schema's cost grows with its
+// where inputs; if it passes MaxCost, raise MaxCost on the server that offers
+// introspection. Variables are read; sums and products saturate, so huge
+// arguments cannot wrap the cost, and a named fragment is costed once for each
+// page size it is spread under. Two levels of full connection pages cost about
+// 20000 and pass the default; three do not. A list edge costs MaxList (1000) for
+// each parent, so posts(first: 100) { edges { node { likes { id } } } } costs
+// 100402 and is refused by default: raise MaxCost, or lower MaxList. gqlgen's
 // extension.FixedComplexityLimit counts fields, not rows, and is not needed
 // with it.
+//
+// Parsing runs before the Extension, and gqlgen sets no limit on it, nor can an
+// extension: give the server one, as srv.SetParserTokenLimit(15000), which
+// GraphiQL's query is far under.
 //
 // # gqlgen.yml
 //

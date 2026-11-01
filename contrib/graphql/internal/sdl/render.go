@@ -408,12 +408,11 @@ func (g *graph) fill(o *object) error {
 		ef := edgeField{edge: i, name: name, target: t}
 		switch {
 		case ed.Unique:
-			// A Required edge whose key is NULL-able (a Required self
-			// edge's) is emptied by the database's ON DELETE SET NULL.
+			// Nullable even when Required: a row reads the edge's target in a
+			// statement of its own, which a tenant, a policy, a hook, a replica's
+			// lag or a delete may leave empty, and a non-null field that read
+			// null would null the page around it.
 			f.typ, ef.kind = t.name, EdgeUnique
-			if fk := g.keyField(ed); ed.Required && (fk == nil || !fk.Nullable) {
-				f.typ += "!"
-			}
 		case a.Connection != nil && !*a.Connection:
 			f.typ, ef.kind = "["+t.name+"!]!", EdgeList
 		default:
@@ -871,6 +870,16 @@ func (g *graph) write(w *writer) {
 
 	for _, o := range g.objects {
 		g.writeObject(w, o)
+	}
+
+	if binds := g.types.introspectionBinds(); binds != "" {
+		w.line()
+		w.line("# GraphQL's own types keep gqlgen's models: the generated package has a Go")
+		w.line("# type of each of these names, which gqlgen's autobind would bind instead.")
+		w.line()
+		for l := range strings.SplitSeq(strings.TrimSuffix(binds, "\n"), "\n") {
+			w.line(l)
+		}
 	}
 }
 

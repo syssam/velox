@@ -89,7 +89,7 @@ type Post implements Node {
   status: PostStatus!
   views: Int!
   publishedAt: Time
-  author: User! @goField(name: "AuthorGQL")
+  author: User @goField(name: "AuthorGQL")
   tags(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: LabelOrder, where: LabelWhereInput): LabelConnection! @goField(name: "TagsGQL")
 }
 

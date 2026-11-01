@@ -190,8 +190,8 @@ enum GroupOrderField {
 type Like {
   weight: Int!
   createdAt: Time!
-  user: Account! @goField(name: "UserGQL")
-  post: Post! @goField(name: "PostGQL")
+  user: Account @goField(name: "UserGQL")
+  post: Post @goField(name: "PostGQL")
 }
 
 """A connection to a list of Like."""
@@ -234,7 +234,7 @@ type Post implements Node {
   """Who last edited the post; the update default fills it."""
   editedBy: String!
   """The user who wrote the post."""
-  writer: Account! @goField(name: "AuthorGQL")
+  writer: Account @goField(name: "AuthorGQL")
   likes: [Like!]! @goField(name: "LikesGQL")
   """Posts this post links to; a join of Post to itself."""
   related(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: [PostOrder!], where: PostWhereInput): PostConnection! @goField(name: "RelatedGQL")

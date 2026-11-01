@@ -638,19 +638,32 @@ func TestSensitiveFieldAbsent(t *testing.T) {
 // TestRequestCost: veloxgql's limits each bound one argument, so
 // Limits.MaxCost bounds a whole request. A request over it fails with
 // COST_LIMIT_EXCEEDED before it runs a statement; the same shape with smaller
-// pages runs; the introspection query GraphiQL sends costs nothing.
+// pages runs; the introspection query GraphiQL sends is within the limit, and
+// one that nests it over and over is not. A long request fails in the parser.
 func TestRequestCost(t *testing.T) {
 	s := newServer(t)
 	// 100 users, each with 100 posts, each with 100 tags: a million rows.
 	// users(first: 100) { edges { node { posts(first: 100) { edges { node {
-	// tags(first: 100) { totalCount } } } } } } } costs
-	// tags 1+100 = 101; its node 102 and edges 103; posts 1+100*103 = 10301; the user node 10302, edges 10303; users 1+100*10303 = 1030301.
+	// tags(first: 100) { edges { node { name } } } } } } } } } } costs, in rows,
+	// tags 1+1+100*2 = 202; posts 1+1+100*(1+202) = 20302; users
+	// 1+1+100*(1+20302) = 2030302; and 3 statements, 300.
 	s.do(t, request{
-		query: `{ users(first: 100) { edges { node { posts(first: 100) { edges { node { tags(first: 100) { totalCount } } } } } } } }`,
-		want: `{"errors": [{"message": "request is too costly: it costs 1030301, and the most is 100000",
+		query: `{ users(first: 100) { edges { node { posts(first: 100) { edges { node { tags(first: 100) { edges { node { name } } } } } } } } } }`,
+		want: `{"errors": [{"message": "request is too costly: it costs 2030602, and the most is 100000",
 			"extensions": {"code": "COST_LIMIT_EXCEEDED"}}], "data": null}`,
 	})
-	// With first: 5 at each level: 1 + 5*(2+(1+5*(2+(1+5*1)))) = 1 + 5*(2+1+5*8) = 216.
+	// Aliases of a COUNT with first: 0 run a statement each: 1000 of them cost
+	// 2 fields and 2 statements each.
+	var aliases strings.Builder
+	for i := range 1000 {
+		fmt.Fprintf(&aliases, "a%d: users(first: 0) { totalCount } ", i)
+	}
+	s.do(t, request{
+		query: `{ ` + aliases.String() + ` }`,
+		want: `{"errors": [{"message": "request is too costly: it costs 202000, and the most is 100000",
+			"extensions": {"code": "COST_LIMIT_EXCEEDED"}}], "data": null}`,
+	})
+	// With first: 5 at each level the rows are few, and it runs.
 	s.do(t, request{
 		org:   "1",
 		query: `{ users(first: 5) { edges { node { posts(first: 5) { edges { node { tags(first: 5) { totalCount } } } } } } } }`,
@@ -664,26 +677,43 @@ func TestRequestCost(t *testing.T) {
 			`SELECT "vx_j"."post_id", COUNT(*) FROM "tags" JOIN "post_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."post_id" IN (?, ?, ?, ?) GROUP BY "vx_j"."post_id" [1 2 3 4]`,
 		},
 	})
-	body, err := json.Marshal(map[string]any{"query": introspection})
-	if err != nil {
-		t.Fatal(err)
+	post := func(query string) string {
+		t.Helper()
+		body, err := json.Marshal(map[string]any{"query": query})
+		if err != nil {
+			t.Fatal(err)
+		}
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, s.url, bytes.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(got)
 	}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, s.url, bytes.NewReader(body))
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got, err := io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := post(introspection)
 	if !strings.HasPrefix(string(got), `{"data":{"__schema"`) {
 		t.Errorf("the introspection query: %.300s", got)
+	}
+	// Introspection nested as deep as gqlparser's rule allows, under aliases.
+	var nested strings.Builder
+	for i := range 200 {
+		fmt.Fprintf(&nested, "a%d: __schema { types { fields { name args { name } type { kind ofType { name fields { name type { kind name } } } } } } } ", i)
+	}
+	if got := post(`{ ` + nested.String() + ` }`); !strings.Contains(got, "COST_LIMIT_EXCEEDED") {
+		t.Errorf("nested introspection: %.300s", got)
+	}
+	// More tokens than the server's limit: refused before it is parsed whole.
+	if got := post(`{ ` + strings.Repeat("__typename ", 20000) + `}`); !strings.Contains(got, "exceeded token limit") {
+		t.Errorf("a long request: %.300s", got)
 	}
 }
 

@@ -413,7 +413,7 @@ func TestTypeMapping(t *testing.T) {
 				t.Errorf("%s.%s is exposed as %s", typ, name, got)
 			}
 		}
-		if got := typeOf(s, "Post", "author"); got != "User!" {
+		if got := typeOf(s, "Post", "author"); got != "User" {
 			t.Errorf("Post.author: %q", got)
 		}
 		if got := typeOf(s, "Category", "parent"); got != "Category" {
@@ -505,7 +505,7 @@ func TestTypeMapping(t *testing.T) {
 			{"Account", "role", "UserRole!"},
 			{"AccountConnection", "edges", "[AccountEdge!]!"},
 			{"AccountEdge", "node", "Account!"},
-			{"Post", "author", "Account!"},
+			{"Post", "author", "Account"},
 			{"Group", "users", "AccountConnection!"},
 			{"Query", "accounts", "AccountConnection!"},
 		} {
@@ -625,9 +625,8 @@ func TestEdges(t *testing.T) {
 	plain := edge("tags", plugin.M2M, "Group")
 	plain.Annotations = ann(t, graphql.Connection(false))
 	user.Edges = append(user.Edges, plain)
-	// A Required edge whose key is NOT NULL is never empty: T!. One whose key
-	// is NULL-able (a Required self edge's) is emptied by ON DELETE SET NULL:
-	// T.
+	// A Required edge is nullable whatever its key: T. A policy or a tenant may
+	// hide its target, and T! would null the page around the row.
 	post := entity("Post", field("author_id", "int64"))
 	author := edge("author", plugin.M2O, "User")
 	author.Required, author.Field, author.FieldOn = true, "author_id", "Post"
@@ -647,7 +646,7 @@ func TestEdges(t *testing.T) {
 	for _, c := range [][4]string{
 		{"Category", "parent", "Category", "ParentGQL"},
 		{"Category", "children", "CategoryConnection!", "ChildrenGQL"},
-		{"Post", "author", "User!", "AuthorGQL"},
+		{"Post", "author", "User", "AuthorGQL"},
 		{"Folder", "parent", "Folder", "ParentGQL"},
 		{"Folder", "prev", "Folder", "PrevGQL"},
 		{"Folder", "next", "Folder", "NextGQL"},
@@ -719,7 +718,7 @@ func TestCompositeKey(t *testing.T) {
 	if def == nil || len(def.Interfaces) != 0 {
 		t.Fatalf("Like: %+v", def)
 	}
-	for name, want := range map[string]string{"id": "", "userID": "", "day": "String!", "weight": "Int!", "user": "User!"} {
+	for name, want := range map[string]string{"id": "", "userID": "", "day": "String!", "weight": "Int!", "user": "User"} {
 		if got := typeOf(s, "Like", name); got != want {
 			t.Errorf("Like.%s: %q, want %q", name, got, want)
 		}
@@ -1010,4 +1009,38 @@ func TestGoModelRefused(t *testing.T) {
 	user := entity("User")
 	user.Annotations = ann(t, goModel)
 	renderErr(t, model(user), "schema User", want)
+}
+
+// TestIntrospectionTypeNames: an entity, or an enum, whose Go name autobind
+// would take for one of GraphQL's own types gets the line that keeps that
+// type's model, and an SDL without one has none.
+func TestIntrospectionTypeNames(t *testing.T) {
+	_, plain := load(t, model(entity("Post")))
+	if strings.Contains(plain, "__") {
+		t.Errorf("an SDL with no such name has:\n%s", plain)
+	}
+	kind := field("kind", "enum")
+	kind.Enum, kind.EnumValues = "TypeKind", []string{"a"}
+	typ := entity("Type", kind)
+	m := model(typ, entity("Schema"))
+	m.Enums = []*plugin.Enum{{Type: "TypeKind", Values: []string{"a"}}}
+	_, sdl := load(t, m)
+	for _, want := range []string{
+		`extend type __Type @goModel(model: "github.com/99designs/gqlgen/graphql/introspection.Type")`,
+		`extend enum __TypeKind @goModel(model: "github.com/99designs/gqlgen/graphql.String")`,
+		`extend type __Schema @goModel(model: "github.com/99designs/gqlgen/graphql/introspection.Schema")`,
+	} {
+		if !strings.Contains(sdl, want) {
+			t.Errorf("no %q in\n%s", want, sdl)
+		}
+	}
+	if strings.Contains(sdl, "__Field") {
+		t.Errorf("a type nothing takes is bound:\n%s", sdl)
+	}
+	// A renamed entity's Go alias takes the name too.
+	r := entity("Thing")
+	r.Annotations = ann(t, graphql.Type("Field"))
+	if _, sdl := load(t, model(r)); !strings.Contains(sdl, "extend type __Field") {
+		t.Errorf("graphql.Type(%q):\n%s", "Field", sdl)
+	}
 }

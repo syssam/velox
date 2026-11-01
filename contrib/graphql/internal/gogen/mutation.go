@@ -515,6 +515,13 @@ func (r *renderer) writeCreate(f *file, t *sdl.Type, in string) error {
 		default:
 			setKey(f, indent, dst, "*"+src, conv, tmp, fd.Pointer)
 		}
+		// An insert fills the Default into a zero value, so the client's "" or
+		// zero time would not be what it stores. An enum's input is never "".
+		if fd.HasDefault && !fd.Pointer && fd.Type != "enum" {
+			f.p("%sif err := %s.NotZero(%s, %s); err != nil {", indent, impl, at(fi), dst)
+			f.p("%s\treturn nil, err", indent)
+			f.p("%s}", indent)
+		}
 		col()
 		end()
 	}

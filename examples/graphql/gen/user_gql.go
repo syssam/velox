@@ -14,7 +14,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion3
+const _ = veloxgql.GeneratedCodeIsVersion4
 
 // IsNode marks User as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.

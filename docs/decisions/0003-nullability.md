@@ -22,7 +22,9 @@ slice or a map has no zero value to write.
 An ent schema that relies on `Optional` for NULL needs `Nillable` added in
 velox. velox-gen refuses an `Optional` field whose zero value cannot be stored
 or means nothing (an enum, bytes or time with neither a Default nor Nillable;
-an edge field that is not Nillable).
+an edge field that is not Nillable), and a `Unique` `Optional` field that is not
+`Nillable` and has no `DefaultFunc` or `SchemaDefault`, whose unset rows would all
+hold one value, so that the second fails on the index.
 
 ## Evidence
 

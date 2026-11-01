@@ -13,7 +13,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion3
+const _ = veloxgql.GeneratedCodeIsVersion4
 
 // Account is User under its GraphQL type name, so that gqlgen's autobind finds
 // the Go type of the GraphQL type Account.
@@ -485,10 +485,16 @@ func CreateAccount(ctx context.Context, input CreateAccountInput) (*User, error)
 	cols := []velox.Column[User]{Users.Name, Users.Email, Users.PasswordHash, Users.Quota}
 	if input.CreatedAt != nil {
 		x.CreatedAt = *input.CreatedAt
+		if err := gqlimpl.NotZero("CreateAccountInput.createdAt", x.CreatedAt); err != nil {
+			return nil, err
+		}
 		cols = append(cols, Users.CreatedAt)
 	}
 	if input.UpdatedAt != nil {
 		x.UpdatedAt = *input.UpdatedAt
+		if err := gqlimpl.NotZero("CreateAccountInput.updatedAt", x.UpdatedAt); err != nil {
+			return nil, err
+		}
 		cols = append(cols, Users.UpdatedAt)
 	}
 	x.Name = input.DisplayName
@@ -516,6 +522,9 @@ func CreateAccount(ctx context.Context, input CreateAccountInput) (*User, error)
 	}
 	if input.ExternalID != nil {
 		x.ExternalID = *input.ExternalID
+		if err := gqlimpl.NotZero("CreateAccountInput.externalID", x.ExternalID); err != nil {
+			return nil, err
+		}
 		cols = append(cols, Users.ExternalID)
 	}
 	if input.Avatar != nil {

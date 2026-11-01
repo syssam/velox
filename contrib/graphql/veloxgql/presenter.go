@@ -21,7 +21,9 @@ const (
 	// generated code or gqlgen's integer types refused, a value a validator
 	// refused, or a violated constraint.
 	CodeBadUserInput = gqlcore.CodeBadUserInput
-	// CodeForbidden: a policy denied the statement (velox.ErrDenied).
+	// CodeForbidden: a policy denied the statement (velox.ErrDenied), or it
+	// wrote another tenant's key (velox.ErrTenantMismatch,
+	// velox.ErrTenantImmutable).
 	CodeForbidden = "FORBIDDEN"
 	// CodeUnauthenticated: the request has no tenant (velox.ErrNoTenant).
 	CodeUnauthenticated = "UNAUTHENTICATED"
@@ -64,6 +66,8 @@ const (
 //     Err nil to show the client a message of the application's.
 //   - velox.ErrNoTenant: UNAUTHENTICATED, "unauthenticated".
 //   - velox.ErrDenied, or a *velox.PolicyError: FORBIDDEN, "forbidden".
+//   - velox.ErrTenantMismatch or velox.ErrTenantImmutable, a write of another
+//     tenant's key: FORBIDDEN, "forbidden". It names no tenant or column.
 //   - A *velox.ValidationError: BAD_USER_INPUT, "invalid value: " and the
 //     validator's text.
 //   - A *velox.ConstraintError: BAD_USER_INPUT, "<kind> constraint
@@ -278,7 +282,7 @@ func present(err error) (code, msg string) {
 	switch {
 	case gqlcore.Is(err, velox.ErrNoTenant):
 		return CodeUnauthenticated, "unauthenticated"
-	case gqlcore.Is(err, velox.ErrDenied):
+	case gqlcore.Is(err, velox.ErrDenied), gqlcore.Is(err, velox.ErrTenantMismatch), gqlcore.Is(err, velox.ErrTenantImmutable):
 		return CodeForbidden, "forbidden"
 	}
 	if validation, ok := gqlcore.As[*velox.ValidationError](err); ok {

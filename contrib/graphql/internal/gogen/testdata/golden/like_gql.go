@@ -10,7 +10,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion3
+const _ = veloxgql.GeneratedCodeIsVersion4
 
 // UserGQL is the edge user: the Account it leads to, or nil when there is none.
 // It is read with the edge of every row read with x, in one query.
@@ -229,6 +229,9 @@ func CreateLike(ctx context.Context, input CreateLikeInput) (*Like, error) {
 	}
 	if input.CreatedAt != nil {
 		x.CreatedAt = *input.CreatedAt
+		if err := gqlimpl.NotZero("CreateLikeInput.createdAt", x.CreatedAt); err != nil {
+			return nil, err
+		}
 		cols = append(cols, Likes.CreatedAt)
 	}
 	if err := velox.Validate(&x, cols...); err != nil {

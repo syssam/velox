@@ -101,7 +101,9 @@ func serve(ctx context.Context, ln net.Listener) error {
 // only what is safe, with a code: gqlgen's default presenter would show it
 // every error's text, the driver's and velox's, which name tables, entities
 // and constraints. It logs the rest with slog, and says "internal error".
-// The directive @admin is the function admin.
+// The directive @admin is the function admin. SetParserTokenLimit bounds what
+// parsing a request costs, which runs before any limit of the Extension: gqlgen
+// has no limit by default, and an extension cannot set one.
 func server(db *velox.DB) http.Handler {
 	srv := handler.New(graph.NewExecutableSchema(graph.Config{
 		Resolvers:  &graph.Resolver{},
@@ -109,6 +111,7 @@ func server(db *velox.DB) http.Handler {
 	}))
 	srv.Use(veloxgql.NewExtension(db))
 	srv.SetErrorPresenter(veloxgql.ErrorPresenter(nil))
+	srv.SetParserTokenLimit(15000)
 	srv.AddTransport(transport.POST{})
 	srv.Use(extension.Introspection{})
 	return srv

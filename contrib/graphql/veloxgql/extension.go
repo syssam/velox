@@ -23,6 +23,7 @@ import (
 //	srv := handler.New(graph.NewExecutableSchema(cfg))
 //	srv.Use(veloxgql.NewExtension(db))
 //	srv.SetErrorPresenter(veloxgql.ErrorPresenter(nil))
+//	srv.SetParserTokenLimit(15000)
 //
 // Every operation's context gets the DB, which DBFromContext reads, and the
 // extension's limits, which LimitsFromContext reads, so queries and
@@ -74,11 +75,13 @@ import (
 // rows, and aliases repeat a field as many times as the client writes it.
 // Limits.MaxCost bounds the whole request. Before any resolver runs, the
 // extension computes the operation's Cost, which multiplies by first and
-// last, counts every alias and every branch of a fragment, and makes
-// introspection free; a request over MaxCost fails with ErrTooCostly, the
-// code CodeTooCostly and data null, and sends no statement. It reads the
-// schema the server's Use gives Validate; gqlgen's extension.
-// FixedComplexityLimit counts fields, not rows, and is not needed with it.
+// last, counts every alias, every statement and every branch of a fragment, and
+// counts introspection by the fields of its response; a request over MaxCost
+// fails with ErrTooCostly, the code CodeTooCostly and data null, and sends no
+// statement. It reads the schema the server's Use gives Validate; gqlgen's
+// extension.FixedComplexityLimit counts fields, not rows, and is not needed with
+// it. Parsing runs before the extension, which cannot limit it, and gqlgen sets no
+// limit: give the server one, as srv.SetParserTokenLimit(15000).
 //
 // The server's Use panics when the DB is nil, when a limit is negative, or
 // when WithTxOptions asks for velox.TxRetrySerializable: Validate refuses

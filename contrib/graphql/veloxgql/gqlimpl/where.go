@@ -229,15 +229,15 @@ func And[E, T any, W Input[E, T]](f *Filter[E], field string, ws []W) {
 }
 
 // Or adds ws, the input's or: a node matches when it matches one of ws. An
-// empty ws adds nothing, as an empty and does, rather than matching no
-// node. More than MaxFilterWidth fails with ErrFilterTooWide.
+// empty ws matches no node, as an empty In does; a nil ws adds nothing. More
+// than MaxFilterWidth fails with ErrFilterTooWide.
 func Or[E, T any, W Input[E, T]](f *Filter[E], field string, ws []W) {
 	if f.err != nil || ws == nil {
 		return
 	}
 	ps, ok := list(f, field, ws)
 	switch {
-	case !ok || len(ps) == 0:
+	case !ok:
 	case len(ps) == 1:
 		add(f, field, 0, ps[0])
 	default:

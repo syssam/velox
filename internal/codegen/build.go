@@ -8,6 +8,7 @@ import (
 	"path"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/codegen/loadjson"
@@ -24,7 +25,7 @@ import (
 func Build(m *loadjson.Model) (*Graph, error) {
 	b := &builder{
 		pkg: m.Package, g: &Graph{Package: m.Package, Entities: []*Entity{}},
-		refused: map[*Index]bool{}, implicits: map[*Field]*edgeState{},
+		refused: map[*Index]bool{}, implicits: map[*Field]*edgeState{}, keyEdges: map[*Field]*edgeState{},
 	}
 	b.entities(m)
 	b.resolveEdges()
@@ -54,6 +55,7 @@ type builder struct {
 	errs      []ruleError
 	refused   map[*Index]bool       // the indexes an index rule refuses, whose names are not compared
 	implicits map[*Field]*edgeState // the edge each implicit foreign key was added for
+	keyEdges  map[*Field]*edgeState // the edge each declared foreign key is bound to
 }
 
 // ruleError is an Error with the number of the rule it reports, which orders
@@ -499,6 +501,10 @@ func (b *builder) foreignKey(n *node, s *edgeState) {
 		if ed.Rel.Kind == "O2O" {
 			f.Unique = true // every one-to-one key is unique, as ent's fkColumn
 		}
+		if other := b.keyEdges[f]; other != nil && other != s && other != s.pair {
+			b.fail(55, n.ent.Name, edgeLoc(ed), "binds field %q, which holds edge %q's foreign key: a key holds one row's ID; declare a field for each edge", f.Name, other.ed.Name)
+		}
+		b.keyEdges[f] = s
 		b.bind(s, f.Name, f.Column)
 		return
 	}
@@ -811,11 +817,30 @@ func shown(goName string) string {
 	return goName
 }
 
+// ascii reports whether s is ASCII. plugin.Snake and plugin.Plural work on
+// bytes, as ent's do, and their outputs never change (rule 56).
+func ascii(s string) bool {
+	return strings.IndexFunc(s, func(r rune) bool { return r >= utf8.RuneSelf }) < 0
+}
+
 // validateNames checks the Go names the generator generates from (rule 30): each
 // field's and edge's must be an identifier, unique among the fields and among
 // the edges, and each enum value's unique within its field. An edge with a
 // field's Go name is rule 4; elements of one name are rules 1, 2 and 3.
 func (b *builder) validateNames(e *Entity) {
+	if !ascii(e.Name) {
+		b.fail(56, e.Name, loc{}, "its name is not ASCII, and velox derives table, column and Go names from it: rename the schema")
+	}
+	for _, f := range e.Fields {
+		if !ascii(f.Name) && isDeclared(f) {
+			b.fail(56, e.Name, fieldLoc(f), "its name is not ASCII, and velox derives column and Go names from it: rename it, and give the column its name with StorageKey")
+		}
+	}
+	for _, ed := range e.Edges {
+		if !ascii(ed.Name) {
+			b.fail(56, e.Name, edgeLoc(ed), "its name is not ASCII, and velox derives column and Go names from it: rename it")
+		}
+	}
 	for i, f := range e.Fields {
 		if !ident(f.GoName) {
 			b.fail(30, e.Name, fieldLoc(f), "its Go name %s is not a Go identifier", shown(f.GoName))
@@ -939,6 +964,9 @@ func (b *builder) validateFields(e *Entity) {
 		if (len(f.Default) > 0 || f.DefaultFunc) && !f.Nillable && !f.Tenant && (f.Type == "bool" || numeric[f.Type]) {
 			b.fail(36, e.Name, fieldLoc(f), "a Default or DefaultFunc on a bool or number that is not Nillable cannot be told from unset; make the field Nillable or drop the Default")
 		}
+		if b.keyEdges[f] == nil && uniqueUnset(e, f) { // a bound key is rule 38's
+			b.fail(54, e.Name, fieldLoc(f), "an Optional field that is Unique holds one value on every unset row, so the second row without it fails; make it Nillable, whose NULLs do not collide")
+		}
 		for _, r := range optionalNeeds {
 			if f.Type == r.typ && f.Optional && !f.Nillable && len(f.Default) == 0 && (!r.funcOK || !f.DefaultFunc) {
 				b.fail(r.rule, e.Name, fieldLoc(f), "an Optional %s needs a Default or Nillable", r.noun)
@@ -990,6 +1018,20 @@ func (b *builder) validateFields(e *Entity) {
 			b.fail(22, e.Name, fieldLoc(id), "the ID cannot be of type %s", id.Type)
 		}
 	}
+}
+
+// uniqueUnset reports whether every unset row of e holds one value of f, and a
+// unique index of f alone refuses the second: f is Optional, not Nillable, and
+// nothing gives each row its own value (a DefaultFunc, or the database's
+// SchemaDefault, may). A partial index need not cover the unset rows, and a
+// JSON field cannot be Unique (rule 41).
+func uniqueUnset(e *Entity, f *Field) bool {
+	if !f.Optional || f.Nillable || f.DefaultFunc || len(f.SchemaDefault) > 0 || f.Type == "json" {
+		return false
+	}
+	return f.Unique || slices.ContainsFunc(e.Indexes, func(ix *Index) bool {
+		return ix.Unique && ix.Where == "" && len(ix.Columns) == 1 && ix.Columns[0] == f.Column
+	})
 }
 
 func (b *builder) validateEnum(e *Entity, f *Field) {
