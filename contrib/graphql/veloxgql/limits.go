@@ -71,12 +71,40 @@ type Limits struct {
 	MaxTokens int
 
 	// MaxFields is the most fields a request's query may hold, as written, a
-	// repeat and an alias each counting one. More is ErrRequestTooLarge,
-	// BAD_USER_INPUT, before gqlgen validates the query: validation is quadratic
-	// in the fields that share a response name, so 5 times MaxFields is the most
-	// pairs of those a query may hold, each fragment counted where it is spread,
-	// and 100 times MaxFields the most fields its spreads reach.
+	// repeat and an alias each counting one, and the most spreads and inline
+	// fragments. More is ErrRequestTooLarge, BAD_USER_INPUT, before gqlgen validates
+	// the query: validation is quadratic in the fields that share a response name,
+	// so of those a query may hold 5 times MaxFields pairs that differ, whose errors
+	// are the cost, and 200 times MaxFields pairs that agree, each fragment counted
+	// where it is spread; and its spreads may reach 100 times MaxFields fields.
 	MaxFields int
+
+	// MaxFragments is the most fragments a request's query may name, defined or
+	// spread. Validation stores a pair of any two spread together, so this is what
+	// bounds them, at about 145 bytes a pair. More is ErrRequestTooLarge.
+	MaxFragments int
+
+	// MaxDepth is how deep a request's selections, fragments spread included, its
+	// values and its variables may nest. Validation reads a value again at each
+	// level above it. More is ErrRequestTooLarge.
+	MaxDepth int
+
+	// MaxNameBytes is the longest name or alias a request's query may hold, which
+	// each row and error repeats. It is the schema's longest name when that is
+	// longer. More is ErrRequestTooLarge.
+	MaxNameBytes int
+
+	// MaxLiteralBytes is the longest string literal a request's query may hold: an
+	// error repeats it. A variable has no such limit. More is ErrRequestTooLarge.
+	MaxLiteralBytes int
+
+	// MaxVariableNodes is the most values and objects a request's variables may
+	// hold. An object of an input type weighs 1 more for each 16 of the type's
+	// fields, as gqlgen does work for each of them; a JSON scalar's objects weigh 1.
+	// Of a query sent by its hash the types are not known yet, and an object weighs
+	// as the schema's widest input does. More is ErrRequestTooLarge, before gqlgen
+	// reads any of them.
+	MaxVariableNodes int
 
 	// MaxBodyBytes is the most bytes the body of a request may have, its
 	// variables and any upload included. More is refused with 413, by the handler
@@ -86,12 +114,14 @@ type Limits struct {
 
 // DefaultLimits returns MaxPage 100, MaxList 1000, MaxFilterDepth 5,
 // MaxFilterWidth 100, MaxFilterNodes 1000, MaxOrderTerms 5, MaxCost 100000,
-// MaxIntrospectionCost 1000000, MaxTokens 15000, MaxFields 2000 and MaxBodyBytes
-// 1 MiB.
+// MaxIntrospectionCost 250000, MaxTokens 15000, MaxFields 2000, MaxFragments 500,
+// MaxDepth 64, MaxNameBytes 128, MaxLiteralBytes 64 KiB, MaxVariableNodes 25000 and
+// MaxBodyBytes 1 MiB.
 func DefaultLimits() Limits {
 	return Limits{
 		MaxPage: 100, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 5,
-		MaxCost: 100000, MaxIntrospectionCost: 250000, MaxTokens: 15000, MaxFields: 2000, MaxBodyBytes: 1 << 20,
+		MaxCost: 100000, MaxIntrospectionCost: 250000, MaxTokens: 15000, MaxFields: 2000, MaxFragments: 500, MaxDepth: 64,
+		MaxNameBytes: 128, MaxLiteralBytes: 64 << 10, MaxVariableNodes: 25000, MaxBodyBytes: 1 << 20,
 	}
 }
 
@@ -119,6 +149,11 @@ func (l Limits) orDefault() Limits {
 		MaxIntrospectionCost: cmp.Or(l.MaxIntrospectionCost, d.MaxIntrospectionCost),
 		MaxTokens:            cmp.Or(l.MaxTokens, d.MaxTokens),
 		MaxFields:            cmp.Or(l.MaxFields, d.MaxFields),
+		MaxFragments:         cmp.Or(l.MaxFragments, d.MaxFragments),
+		MaxDepth:             cmp.Or(l.MaxDepth, d.MaxDepth),
+		MaxNameBytes:         cmp.Or(l.MaxNameBytes, d.MaxNameBytes),
+		MaxLiteralBytes:      cmp.Or(l.MaxLiteralBytes, d.MaxLiteralBytes),
+		MaxVariableNodes:     cmp.Or(l.MaxVariableNodes, d.MaxVariableNodes),
 		MaxBodyBytes:         cmp.Or(l.MaxBodyBytes, d.MaxBodyBytes),
 	}
 }
@@ -142,6 +177,11 @@ func (l Limits) fields() []struct {
 		{"MaxIntrospectionCost", l.MaxIntrospectionCost},
 		{"MaxTokens", l.MaxTokens},
 		{"MaxFields", l.MaxFields},
+		{"MaxFragments", l.MaxFragments},
+		{"MaxDepth", l.MaxDepth},
+		{"MaxNameBytes", l.MaxNameBytes},
+		{"MaxLiteralBytes", l.MaxLiteralBytes},
+		{"MaxVariableNodes", l.MaxVariableNodes},
 		{"MaxBodyBytes", l.MaxBodyBytes},
 	}
 }

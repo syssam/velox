@@ -87,14 +87,14 @@ func TestValidationAttacks(t *testing.T) {
 		{"as many distinct fields as the limit", onUser(repeat(4990, func(i int) string { return fmt.Sprintf("a%d:id", i) })), "BAD_USER_INPUT"},
 		{"over the token limit", onUser(repeat(16000, func(int) string { return "id" })), "GRAPHQL_PARSE_FAILED"},
 		// Over the pairs by one, then at them: validation's own errors, and all it makes of them.
-		{"one over the pairs", onUser(repeat(142, aliasField)), "BAD_USER_INPUT"},
-		{"at the pairs", onUser(repeat(141, aliasField)), "GRAPHQL_VALIDATION_FAILED"},
+		{"one over the pairs", onUser(repeat(202, aliasField)), "BAD_USER_INPUT"},
+		{"at the pairs", onUser(repeat(200, aliasField)), "GRAPHQL_VALIDATION_FAILED"},
 		{"at the pairs, each pair conflicting", onUser(repeat(99, func(i int) string {
 			return fmt.Sprintf("a:posts(first: %d) { totalCount }", i)
 		})), "GRAPHQL_VALIDATION_FAILED"},
-		{"at the pairs, in fragments", onUser(repeat(141, func(i int) string { return fmt.Sprintf("...F%d", i) })) +
-			repeat(141, func(i int) string { return fmt.Sprintf("fragment F%d on User { %s }", i, aliasField(i)) }), "GRAPHQL_VALIDATION_FAILED"},
-		{"at the pairs, merged below", `{ ` + repeat(70, func(i int) string {
+		{"at the pairs, in fragments", onUser(repeat(200, func(i int) string { return fmt.Sprintf("...F%d", i) })) +
+			repeat(200, func(i int) string { return fmt.Sprintf("fragment F%d on User { %s }", i, aliasField(i)) }), "GRAPHQL_VALIDATION_FAILED"},
+		{"at the pairs, merged below", `{ ` + repeat(100, func(i int) string {
 			return "u: users { edges { node { " + aliasField(i) + " } } }"
 		}) + ` }`, "GRAPHQL_VALIDATION_FAILED"},
 		{"unknown fields at the limit", onUser(repeat(1990, func(i int) string { return fmt.Sprintf("f%d", i) })), "GRAPHQL_VALIDATION_FAILED"},
@@ -148,7 +148,7 @@ func TestBodyLimit(t *testing.T) {
 			t.Errorf("%s: allocated %d MB", name, n>>20)
 		}
 	}
-	small := `{"query":"{ __typename }","variables":{"ids":[` + strings.Repeat(`"abcdefgh",`, 90000) + `"x"]}}`
+	small := `{"query":"{ __typename }","variables":{"ids":[` + strings.Repeat(`"abcdefgh",`, 24000) + `"x"]}}`
 	if status, got := s.postBody(t, io.MultiReader(strings.NewReader(small))); status != http.StatusOK || !strings.Contains(got, `"__typename":"Query"`) {
 		t.Errorf("under the limit: %d %.300s", status, got)
 	}

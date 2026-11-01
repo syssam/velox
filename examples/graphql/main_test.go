@@ -55,6 +55,7 @@ type testServer struct {
 	url   string
 	mu    sync.Mutex
 	stmts []string
+	sql   *sql.DB
 }
 
 func newServer(t *testing.T) *testServer {
@@ -65,6 +66,7 @@ func newServer(t *testing.T) *testServer {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = sqlDB.Close() })
+	s.sql = sqlDB
 	recording := false
 	db, err := open(t.Context(), sqlDB, velox.WithAround(func(ctx context.Context, st *velox.Statement, next func(context.Context) error) error {
 		s.mu.Lock()

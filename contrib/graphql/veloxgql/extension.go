@@ -108,6 +108,8 @@ type Extension struct {
 	limits Limits
 	// schema is the server's, which Validate stores; nil for Validate(nil).
 	schema *ast.Schema
+	// bounds is what the check of a request reads, of the limits and the schema.
+	bounds bounds
 	// txOpts are the options of a mutation's transaction.
 	txOpts []velox.TxOption
 	// txFilter decides whether a mutation runs in a transaction; nil means
@@ -241,6 +243,7 @@ func (e *Extension) Validate(es graphql.ExecutableSchema) error {
 	if es != nil {
 		e.schema = es.Schema()
 	}
+	e.bounds = newBounds(e.limits, e.schema)
 	if e.db == nil {
 		return errors.New("veloxgql.NewExtension: nil DB")
 	}
@@ -256,14 +259,14 @@ func (e *Extension) Validate(es graphql.ExecutableSchema) error {
 }
 
 // MutateOperationParameters implements graphql.OperationParameterMutator: it
-// refuses a document over MaxTokens or MaxFields. gqlgen runs it before it parses
-// or validates, whichever the transport. An empty query, that an APQ extension
-// after this one fills, passed here when it was stored.
+// refuses a request whose document or variables are over a limit. gqlgen runs it
+// before it parses or validates, whichever the transport.
 func (e *Extension) MutateOperationParameters(_ context.Context, p *graphql.RawParams) *gqlerror.Error {
-	if p.Query == "" {
-		return nil
+	b := e.bounds
+	if e.schema == nil {
+		b = newBounds(e.limits, nil) // before Validate, for a test
 	}
-	return checkDocument(p.Query, e.limits)
+	return checkRequest(p, b)
 }
 
 // MutateOperationContext implements graphql.OperationContextMutator: it
