@@ -36,12 +36,15 @@ type txOptions struct {
 type TxOption struct{ apply func(*txOptions) }
 
 // TxIsolation sets the transaction's isolation level; the default is the
-// database's.
+// database's. SQLite's transactions are serializable: LevelSerializable is
+// accepted, and any other level fails Tx as "velox: begin: …".
 func TxIsolation(level sql.IsolationLevel) TxOption {
 	return TxOption{func(o *txOptions) { o.Isolation = level }}
 }
 
-// TxReadOnly starts a read-only transaction.
+// TxReadOnly starts a read-only transaction. On SQLite it runs under PRAGMA
+// query_only, on the transaction's connection, which can write again once the
+// transaction has ended, however it ended; a write in it fails.
 func TxReadOnly() TxOption { return TxOption{func(o *txOptions) { o.ReadOnly = true }} }
 
 // TxRetrySerializable runs the transaction again, up to n more times, when it
