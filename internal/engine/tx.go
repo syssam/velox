@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -46,6 +47,8 @@ func TxReadOnly() TxOption { return TxOption{func(o *txOptions) { o.ReadOnly = t
 // TxRetrySerializable runs the transaction again, up to n more times, when it
 // fails on a serialization failure or a deadlock: PostgreSQL 40001 and 40P01,
 // MySQL 1213 and 1205, SQLite BUSY and LOCKED. fn must be safe to run again.
+// Each retry waits first, a random time from 5 ms that grows to at most a
+// second; the wait ends with ctx, and a retry past the deadline is not made.
 func TxRetrySerializable(n int) TxOption { return TxOption{func(o *txOptions) { o.Retries = n }} }
 
 // TxRetries returns the n of the last TxRetrySerializable in opts, or 0 when
@@ -299,10 +302,52 @@ func (db *DB) attempts(ctx, tctx context.Context, fn func(context.Context, *DB) 
 		if err == nil || attempt > o.Retries || !retryable(err) || ctx.Err() != nil || tctx.Err() != nil {
 			return err
 		}
+		d := retryDelay(attempt)
+		if !deadline.IsZero() && time.Now().Add(d).After(deadline) {
+			return err // the deadline would cut the retry off
+		}
+		if !retryWait(ctx, tctx, d) {
+			return err
+		}
 		if info != nil {
 			info.Retries = append(info.Retries, TxRetry{Err: err, At: time.Now()})
 		}
 	}
+}
+
+// retryBase and retryMax bound the wait before a transaction's retry: the
+// first is at most retryBase, each later at most twice the one before, none
+// more than retryMax. Vars, so that a test can change them.
+var (
+	retryBase = 10 * time.Millisecond
+	retryMax  = time.Second
+)
+
+// retryWait waits before a retry. A var, so that a test can record it.
+var retryWait = waitRetry
+
+// retryDelay is the wait after the given failed attempt, from 1: half its
+// ceiling and a random part, so that transactions that deadlocked together do
+// not retry together.
+func retryDelay(attempt int) time.Duration {
+	ceiling := retryMax
+	if c := retryBase << min(attempt-1, 30); c > 0 && c < ceiling {
+		ceiling = c
+	}
+	return ceiling/2 + rand.N(ceiling/2+1)
+}
+
+// waitRetry waits d, and reports false when ctx or tctx ends first.
+func waitRetry(ctx, tctx context.Context, d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-t.C:
+		return true
+	case <-ctx.Done():
+	case <-tctx.Done():
+	}
+	return false
 }
 
 // transaction runs fn once in a new transaction, and records how it ended in
