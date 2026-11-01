@@ -267,11 +267,15 @@ func scanRow[E any](r engine.Rows, m *Meta[E], cols []int, dst []any, p *E) erro
 // none, the struct is a local and plain is used, which keeps it, and the
 // closure reading the rows, on the stack.
 
-// firstRows is the most rows All allocates ahead. BenchmarkLimitBound on a 168-byte
-// entity: Limit(1000) returning one row costs 3.5 KB at 16, 6.6 KB at 32, 11 KB at
-// 64, against 173 KB at 1024; returning all 1000 it costs 603 KB at 16, against 196
-// KB at 1024.
-const firstRows = 16
+// firstRows is the most rows All allocates ahead, and rowGrowth how much further
+// each time they fill, up to Limit. BenchmarkLimitBound on a 168-byte entity:
+// Limit(1000) returning one row costs 3.5 KB at 16, 6.6 KB at 32, 11 KB at 64,
+// against 173 KB at 1024. Growing by append, all 1000 rows cost 603 KB against 196
+// KB at 1024; a read past 16 rows is likely a long one, so it grows eightfold.
+const (
+	firstRows = 16
+	rowGrowth = 8
+)
 
 // allRun is the state of one All.
 type allRun[E any] struct {
@@ -284,14 +288,18 @@ type allRun[E any] struct {
 func readAll[E any](a *allRun[E], r engine.Rows) error {
 	dst := make([]any, engine.ColumnCount(&a.st))
 	// Limit is mandatory, so it is a bound and not a likely size: at most firstRows
-	// are allocated ahead for it, and append grows from there. The Limit of an
-	// Unbounded read is the row cap's (cap+1): nothing is allocated ahead for it.
+	// are allocated ahead for it, then rowGrowth times as many as they fill. The
+	// Limit of an Unbounded read is the row cap's (cap+1): nothing is allocated
+	// ahead for it, and append grows it.
 	n := 0
 	if !a.st.Unbounded {
 		n = min(a.st.Limit, firstRows)
 	}
 	a.out = make([]E, 0, n)
 	for r.Next() {
+		if l := len(a.out); l == cap(a.out) && !a.st.Unbounded {
+			a.out = slices.Grow(a.out, max(min(a.st.Limit, l*rowGrowth)-l, 1))
+		}
 		a.out = append(a.out, *new(E))
 		if err := scanRow(r, a.m, a.st.Columns, dst, &a.out[len(a.out)-1]); err != nil {
 			return err

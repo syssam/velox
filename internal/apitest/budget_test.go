@@ -522,3 +522,26 @@ func BenchmarkLimitBound(b *testing.B) {
 		})
 	}
 }
+
+// TestLongReadGrowsInSteps: a read that fills Limit does not pay for append's
+// small steps: 1000 rows cost at most about half again what the rows themselves do.
+func TestLongReadGrowsInSteps(t *testing.T) {
+	rows := make([][]any, 1000)
+	for i := range rows {
+		rows[i] = invoiceRow(int64(i))
+	}
+	e := &fakeconn.Exec{Rows: rows}
+	db := openFake(velox.Postgres, e)
+	grown := bytesPerRun(func() {
+		e.Log, e.ArgLog = e.Log[:0], e.ArgLog[:0]
+		got, err := db.Query[testmodel.Invoice]().Limit(1000).All(ctx)
+		if err != nil || len(got) != 1000 {
+			t.Fatal(len(got), err)
+		}
+	})
+	if size := float64(unsafe.Sizeof(testmodel.Invoice{})) * 1000; grown > size*2.5 {
+		t.Errorf("1000 rows of %.0f bytes cost %.0f bytes", size, grown)
+	} else {
+		t.Logf("1000 rows of %.0f bytes cost %.0f bytes", size, grown)
+	}
+}

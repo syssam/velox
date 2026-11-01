@@ -21,6 +21,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- `ErrTenantRef`, `TenantRef` and `Desc.TenantRefs`; `ErrTxControl`.
+- `veloxgql.Limits`: `MaxFragments`, `MaxDepth`, `MaxNameBytes`, `MaxLiteralBytes`,
+  `MaxVariableNodes` and `MaxErrors`. The `Server` interface `Setup` takes gains
+  `SetValidationRulesFn`.
+- `migrate.LintFile` codes `drop-domain`, `drop-type`, `drop-collation` and
+  `drop-partition`; `TRUNCATE PARTITION` is `delete-rows`.
 - `veloxgql.Setup` and `Limits.MaxTokens`, `MaxFields`, `MaxBodyBytes` and
   `MaxIntrospectionCost`, with `ErrRequestTooLarge`: an oversized document is refused
   before it is parsed. A public server should call `Setup`.
@@ -53,13 +59,27 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
-- `veloxgql.GeneratedCodeIsVersion5`: regenerate (this supersedes version 4).
+- A write under a tenant checks each foreign key to a tenant-scoped row, with one more
+  statement per column set, and fails with `ErrTenantRef` for another tenant's row or a
+  missing one alike. `WithAllTenants` skips it. A join row needs a tenant or
+  `WithAllTenants`.
+- In a transaction, `Raw` and `Exec` refuse what would end it, `COMMIT`, `ROLLBACK` and the
+  like (`ErrTxControl`), and MySQL DDL, which commits implicitly.
+- `Up`'s history checksum ignores `velox:allow` and `velox:drops` lines, so accepting a loss
+  for one environment does not strand another that already applied the file.
+- `velox:drops` names the attribute it accounts for, on every dialect. `Up` compares MySQL
+  `MODIFY`/`CHANGE`, PostgreSQL retype defaults and remade indexes with the database.
+- `Up` refuses an in-memory SQLite database, whose tables would be gone with its connection.
+- GraphQL: `MaxCost` is 150000. Under `Setup`, validation offers no suggestions and returns
+  at most 100 errors. Null on a Nillable update field is refused, naming `clear<Field>`.
+  `FromJSON` is strict, and a hook sees `json.Number`. `Uint64` input stops at 2^63-1.
+- `All` allocates at most 16 rows ahead of `Limit`, then eightfold as they fill.
+- `GeneratedCodeIsVersion7` and `veloxgql.GeneratedCodeIsVersion6`: regenerate.
 - GraphQL: explicit `null` on a Nillable field with a `Default` is refused on create.
   `@skip` no longer lowers the rows charged, and a mutation's cost counts its statements.
   GraphiQL has its own budget, enough for 150 rich entities: raise
   `MaxIntrospectionCost` for a larger schema.
 - MySQL `Up` runs in strict mode, in its own session only.
-- `veloxgql.GeneratedCodeIsVersion4`: regenerate.
 - GraphQL: a Required unique edge is `T`, not `T!`, since a policy or tenant can hide its
   target. `or: []` matches nothing. A tenant key is never an input. `Create<T>` refuses an
   explicit zero on a field with a `Default`. Tenant errors present as `FORBIDDEN`.
@@ -86,6 +106,15 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- A request's shape is bounded before validation: spreads, value depth, name length,
+  literal size and variable nodes. Attacks that took 2 to 3.5 GB are refused under 21 MB.
+- GraphQL: `nodes` and deletes count their real statements; a foreign key predicate holds
+  the target's Read policy; introspection switched off is a client error.
+- Migrations: MySQL refuses a rename or drop that a view or trigger uses, and a `DROP COLUMN`
+  that would shrink an index; SQLite `DROP TABLE` refuses broken dependents and counts
+  children still present; `PRIMARY KEY (id DESC)` is refused in a rebuild; the guard resolves
+  `search_path` and reads past `-to`.
+- SQLite integer `Add` and `Sub` raise on overflow rather than turn the column to REAL.
 - Migrations: `Up` refuses what a file would lose unaccounted, on every dialect, including
   columns and constraints added outside the snapshot, collations, and foreign key options.
   A pending generated SQLite file from before this change needs `velox:drops` or an allow.
