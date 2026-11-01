@@ -126,7 +126,7 @@ func TestRequestBounded(t *testing.T) {
 
 		{name: "an alias of 1 MB", query: `{ __schema { types { inputFields { ` + strings.Repeat("a", 1<<20-100) + `: name } } } }`, want: "BAD_USER_INPUT", refused: true, mb: 16},
 		{name: "1990 long aliases", query: `{ users(first: 1) { edges { node { ` + alias(1990) + ` } } } }`, want: `"data":{"users"`, mb: 100},
-		{name: "long aliases at MaxCost, on rows", query: `{ users(first: 100) { edges { node { ` + alias(990) + ` } } } }`, want: `"data":{"users"`, mb: 400},
+		{name: "long aliases at MaxCost, on rows", query: `{ users(first: 100) { edges { node { ` + alias(1490) + ` } } } }`, want: `"data":{"users"`, mb: 400},
 		{name: "long aliases at MaxIntrospectionCost", query: `{ __schema { types { inputFields { ` + repeat(800, func(i int) string { return longName(i) + ":name" }) + ` } } } }`, want: "__schema", mb: 400},
 		{name: "141 conflicts under a long alias", query: onUser(repeat(141, func(i int) string { return longName(0) + ":" + aliasField(i)[2:] })), want: "GRAPHQL_VALIDATION_FAILED", mb: 50},
 		{name: "141 conflicts in 141 fragments", query: onUser(spreads(141)) + frags(141, func(i int) string {
@@ -134,7 +134,7 @@ func TestRequestBounded(t *testing.T) {
 		}), want: "GRAPHQL_VALIDATION_FAILED", mb: 50},
 		{name: "conflicts compared again under 8 inline fragments", query: onUser(strings.Repeat("... { ", 8) + repeat(47, aliasField) + strings.Repeat(" }", 8)), want: "GRAPHQL_VALIDATION_FAILED", mb: 50},
 		{name: "800 fields that agree", query: onUser(strings.Repeat("a: id ", 800)), want: `"data":{"users"`, mb: 50},
-		{name: "600 connections that agree", query: `{ users(first: 1) { edges { node { ` + strings.Repeat("a: posts(first: 1, where: {title: \"t\"}) { totalCount } ", 600) + ` } } } }`, want: "COST_LIMIT_EXCEEDED", mb: 100},
+		{name: "600 connections that agree", query: `{ users(first: 1) { edges { node { ` + strings.Repeat("a: posts(first: 1, where: {title: \"t\"}) { totalCount } ", 600) + ` } } } }`, want: `"data":{"users"`, mb: 100},
 		{name: "1900 unknown fields", query: onUser(repeat(1900, func(i int) string { return longName(i) })), want: "GRAPHQL_VALIDATION_FAILED", mb: 50},
 		{name: "3000 unknown arguments", query: `{ users(` + repeat(3000, func(i int) string { return fmt.Sprintf("a%d: 1", i) }) + `) { totalCount } }`, want: "GRAPHQL_VALIDATION_FAILED", mb: 50},
 		{name: "4000 unknown directives", query: `{ users { totalCount ` + strings.Repeat("@d ", 4000) + ` } }`, want: "GRAPHQL_VALIDATION_FAILED", mb: 50},
@@ -149,7 +149,7 @@ func TestRequestBounded(t *testing.T) {
 		{name: "or: [] of 8300, at every use", query: `query($w: PostWhereInput) { ` + repeat(50, func(i int) string { return fmt.Sprintf("a%d: posts(where: $w) { totalCount }", i) }) + ` }`, vars: map[string]any{"w": map[string]any{"or": listOf(8300, map[string]any{})}}, want: "COST_LIMIT_EXCEEDED", mb: 150},
 		{name: "or: [] of 1600, at each of 20 uses", query: `query($w: PostWhereInput) { ` + repeat(20, func(i int) string { return fmt.Sprintf("a%d: posts(where: $w) { totalCount }", i) }) + ` }`, vars: map[string]any{"w": map[string]any{"or": listOf(1600, map[string]any{})}}, want: "BAD_USER_INPUT", mb: 300},
 		{name: "24000 IDs", query: `query($v: [ID!]!) { nodes(ids: $v) { id } }`, vars: map[string]any{"v": listOf(24000, post1)}, want: "BAD_USER_INPUT", mb: 50},
-		{name: "a string of 1 MB at each use", query: `query($v: String!) { ` + repeat(30, func(i int) string { return fmt.Sprintf("a%d: posts(where: {title: $v}) { totalCount }", i) }) + ` }`, vars: map[string]any{"v": strings.Repeat("s", 1<<20-5000)}, want: `"data":{`, mb: 100},
+		{name: "a string of 1 MB at each use", query: `query($v: String!) { ` + repeat(30, func(i int) string { return fmt.Sprintf("a%d: posts(where: {title: $v}) { totalCount }", i) }) + ` }`, vars: map[string]any{"v": strings.Repeat("s", 1<<20-5000)}, want: "COST_LIMIT_EXCEEDED", mb: 100},
 
 		{name: "two levels of pages", query: `{ users(first: 100) { edges { node { ` + field + ` posts(first: 100) { edges { node { id title status views publishedAt } } } } } } }`, want: `"data":{"users"`, mb: 300},
 	} {

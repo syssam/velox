@@ -50,10 +50,13 @@ type Limits struct {
 	// MaxCost is the most a request may cost (Cost): the bound on a whole
 	// request that the other limits, each of one argument, do not give. More
 	// is ErrTooCostly, before any statement runs. It bounds the statements too,
-	// at 100 each. A list edge costs MaxList for each parent, so under the
-	// defaults one full page with a list edge, posts(first: 100) { edges { node
-	// { likes { id } } } }, costs 100402 and is refused: raise MaxCost, or lower
-	// MaxList. Introspection has its own limit.
+	// at 100 each, so 1500 by default. Two levels of full pages with 12 fields in
+	// each row cost about 144000, and pass. A list edge costs MaxList for each
+	// parent, so under the defaults one full page with two list edges, posts(first:
+	// 100) { edges { node { likes { id } tags { id } } } }, costs 200602 and is
+	// refused: raise MaxCost, or lower MaxList. The worst shape measured, 128-byte
+	// aliases over rows, allocates about 2 KB a unit, so 290 MB at the default.
+	// Introspection has its own limit.
 	MaxCost int
 
 	// MaxIntrospectionCost is the most the __schema and __type of a request may
@@ -119,14 +122,14 @@ type Limits struct {
 }
 
 // DefaultLimits returns MaxPage 100, MaxList 1000, MaxFilterDepth 5,
-// MaxFilterWidth 100, MaxFilterNodes 1000, MaxOrderTerms 5, MaxCost 100000,
+// MaxFilterWidth 100, MaxFilterNodes 1000, MaxOrderTerms 5, MaxCost 150000,
 // MaxIntrospectionCost 250000, MaxTokens 15000, MaxFields 2000, MaxFragments 500,
 // MaxDepth 64, MaxNameBytes 128, MaxLiteralBytes 64 KiB, MaxVariableNodes 25000,
 // MaxErrors 100 and MaxBodyBytes 1 MiB.
 func DefaultLimits() Limits {
 	return Limits{
 		MaxPage: 100, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 5,
-		MaxCost: 100000, MaxIntrospectionCost: 250000, MaxTokens: 15000, MaxFields: 2000, MaxFragments: 500, MaxDepth: 64,
+		MaxCost: 150000, MaxIntrospectionCost: 250000, MaxTokens: 15000, MaxFields: 2000, MaxFragments: 500, MaxDepth: 64,
 		MaxNameBytes: 128, MaxLiteralBytes: 64 << 10, MaxVariableNodes: 25000, MaxErrors: 100, MaxBodyBytes: 1 << 20,
 	}
 }

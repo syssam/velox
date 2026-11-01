@@ -14,8 +14,12 @@ import (
 const maxCost = 1 << 62
 
 // statementCost is what a field that runs a statement adds to a request's cost,
-// however many rows it reads: the default MaxCost allows 1000 of them.
+// however many rows it reads: the default MaxCost allows 1500 of them.
 const statementCost = 100
+
+// stringUnit is the bytes of a string in an input that cost one more: the default
+// MaxCost allows 19 MB of them, each use counted.
+const stringUnit = 128
 
 // Cost is what op costs under l, with vars its variables. Two parts add up:
 //
@@ -43,16 +47,19 @@ const statementCost = 100
 // the rows of a batch share one statement however many parents they have:
 //   - a field that runs a statement adds 100: a root field, a connection, its
 //     totalCount (a COUNT of its own) and any other field of an object or a list
-//     of objects. first: 0 still counts: a COUNT or a filter still runs;
+//     of objects. first: 0 still counts: a COUNT or a filter still runs. The root
+//     field nodes adds 100 for each type among its IDs;
 //   - an input object argument (a where, an orderBy, a mutation's input) adds
-//     its size at each use: one for each object and value in it, nested inputs
-//     and lists included, read from the variables. A variable used twice counts
-//     twice;
+//     its size at each use: one for each value in it, nested inputs and lists
+//     included, read from the variables; a string one more for each 128 of its
+//     bytes, and an object one and one for each 16 of its type's fields, as gqlgen
+//     does work for each. A variable used twice counts twice;
 //   - on a mutation, an input object adds a statement for the row it reads back,
 //     two for a non-empty <edge>IDs, add<Edge>IDs or remove<Edge>IDs, one for an
 //     <edge>ID, and three for a clear<Edge>: true, a page of its links, the targets
-//     and the delete, a page being up to MaxPage. An application's own mutation
-//     that names its input fields so counts the same.
+//     and the delete, a page being up to MaxPage. A delete<T> of a type with
+//     connections or lists adds a statement for its check and one for each. An
+//     application's own mutation that names its fields so counts the same.
 //
 // Sums and products saturate at 1<<62 (math.MaxInt where int is smaller),
 // checked before they are computed, so huge arguments and many aliases cannot
@@ -237,9 +244,62 @@ func (c *coster) field(f *ast.Field, parent *ast.Definition, page int64) cost {
 		n.statements = add(n.statements, statementCost)
 	}
 	if parent != nil && parent == c.schema.Mutation {
-		n.statements = add(n.statements, c.writes(f, def))
+		n.statements = add(n.statements, add(c.writes(f, def), c.deletes(f)))
+	}
+	if parent != nil && parent == c.schema.Query && f.Name == "nodes" {
+		n.statements = add(n.statements, c.nodesByType(f))
 	}
 	return n
+}
+
+// nodesByType is what f, the root field nodes, sends beyond its one statement: one
+// for each other type among its IDs. An ID that is not well formed fails it, before
+// any statement.
+func (c *coster) nodesByType(f *ast.Field) int64 {
+	a := f.Arguments.ForName("ids")
+	if a == nil || a.Value == nil {
+		return 0
+	}
+	v, err := a.Value.Value(c.vars)
+	ids, ok := v.([]any)
+	if err != nil || !ok {
+		return 0
+	}
+	types := map[string]bool{}
+	for _, id := range ids {
+		if s, ok := id.(string); ok {
+			if t, err := IDType(s); err == nil {
+				types[t] = true
+			}
+		}
+	}
+	return mul(max(int64(len(types))-1, 0), statementCost)
+}
+
+// deletes is what f, a mutation's field, sends beyond its one statement when it is
+// a delete<T>: with M2M edges, a check of the row, and a delete of the links of each.
+// The type has a field for each, which an O2M edge's looks like: the cost is an
+// upper bound.
+func (c *coster) deletes(f *ast.Field) int64 {
+	name, ok := strings.CutPrefix(f.Name, "delete")
+	if !ok {
+		return 0
+	}
+	d := c.schema.Types[name]
+	if d == nil {
+		return 0
+	}
+	var joins int64
+	for _, fd := range d.Fields {
+		child := c.schema.Types[fd.Type.Name()]
+		if isConnection(child) || fd.Type.Elem != nil && isObjectKind(child) {
+			joins++
+		}
+	}
+	if joins == 0 {
+		return 0
+	}
+	return mul(1+joins, statementCost)
 }
 
 // pageOf is the page size of f, a connection field: its first or last, or
@@ -310,11 +370,12 @@ func (c *coster) inputs(f *ast.Field, def *ast.FieldDefinition) int64 {
 		for named.Elem != nil {
 			named = named.Elem
 		}
-		if d := c.schema.Types[named.NamedType]; d == nil || d.Kind != ast.InputObject {
+		d := c.schema.Types[named.NamedType]
+		if d == nil || d.Kind != ast.InputObject {
 			continue
 		}
 		if a := f.Arguments.ForName(ad.Name); a != nil {
-			sum = add(sum, c.size(a.Value))
+			sum = add(sum, c.size(a.Value, d))
 		}
 	}
 	return sum
@@ -360,8 +421,10 @@ func (c *coster) writes(f *ast.Field, def *ast.FieldDefinition) int64 {
 	return sum
 }
 
-// size is the number of objects and values in v, a literal or a variable.
-func (c *coster) size(v *ast.Value) int64 {
+// size is the size of v, a literal or a variable, of the input type d (nil within a
+// scalar): one for each value, with a string one more for each stringUnit of its
+// bytes; an object, inputWeight of its type, and its values; a list, its elements.
+func (c *coster) size(v *ast.Value, d *ast.Definition) int64 {
 	if v == nil {
 		return 0
 	}
@@ -372,25 +435,32 @@ func (c *coster) size(v *ast.Value) int64 {
 		}
 		var n int64
 		if val, ok := c.vars[v.Raw]; ok {
-			n = sizeOf(reflect.ValueOf(val))
+			n = c.sizeOf(reflect.ValueOf(val), d)
 		} else if v.VariableDefinition != nil {
-			n = c.size(v.VariableDefinition.DefaultValue)
+			n = c.size(v.VariableDefinition.DefaultValue, d)
 		}
 		c.sizes[v.Raw] = n
 		return n
-	case ast.ObjectValue, ast.ListValue:
-		n := boolInt(v.Kind == ast.ObjectValue)
+	case ast.ObjectValue:
+		n := inputWeight(d)
 		for _, child := range v.Children {
-			n = add(n, c.size(child.Value))
+			n = add(n, c.size(child.Value, c.inputField(d, child.Name)))
 		}
 		return n
+	case ast.ListValue:
+		var n int64
+		for _, child := range v.Children {
+			n = add(n, c.size(child.Value, d))
+		}
+		return n
+	case ast.StringValue, ast.BlockValue:
+		return 1 + int64(len(v.Raw))/stringUnit
 	}
 	return 1
 }
 
-// sizeOf is size of a variable's value: a map is one and its values, a slice its
-// elements, anything else one.
-func sizeOf(v reflect.Value) int64 {
+// sizeOf is size of a variable's value.
+func (c *coster) sizeOf(v reflect.Value, d *ast.Definition) int64 {
 	for v.IsValid() && (v.Kind() == reflect.Interface || v.Kind() == reflect.Pointer) {
 		v = v.Elem()
 	}
@@ -400,18 +470,36 @@ func sizeOf(v reflect.Value) int64 {
 	var n int64
 	switch v.Kind() {
 	case reflect.Map:
-		n = 1
+		n = inputWeight(d)
 		for it := v.MapRange(); it.Next(); {
-			n = add(n, sizeOf(it.Value()))
+			var fd *ast.Definition
+			if it.Key().Kind() == reflect.String {
+				fd = c.inputField(d, it.Key().String())
+			}
+			n = add(n, c.sizeOf(it.Value(), fd))
 		}
 	case reflect.Slice, reflect.Array:
 		for i := range v.Len() {
-			n = add(n, sizeOf(v.Index(i)))
+			n = add(n, c.sizeOf(v.Index(i), d))
 		}
+	case reflect.String:
+		n = 1 + int64(v.Len())/stringUnit
 	default:
 		n = 1
 	}
 	return n
+}
+
+// inputField is the input type of the field name of the input type d, or nil.
+func (c *coster) inputField(d *ast.Definition, name string) *ast.Definition {
+	if d == nil || d.Kind != ast.InputObject {
+		return nil
+	}
+	f := d.Fields.ForName(name)
+	if f == nil {
+		return nil
+	}
+	return c.schema.Types[f.Type.Name()]
 }
 
 // isConnection reports whether d has edges and pageInfo fields.

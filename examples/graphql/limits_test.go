@@ -127,6 +127,40 @@ func TestLargeQueriesPass(t *testing.T) {
 	if got := s.postQuery(t, large); !strings.HasPrefix(got, `{"data":{"a0":`) || strings.Contains(got, `"errors"`) {
 		t.Errorf("a large query, of %d B: %.300s", len(large), got)
 	}
+	s.seedRows(t, 100)
+	// As a client's code generator writes one: fragments colocated with their
+	// components, each repeating the common fields.
+	common := `__typename id name role joinedAt a: name b: name c: name d: name e: name`
+	for name, c := range map[string]struct {
+		frags, spread int
+		mb            uint64
+	}{"50 fragments of 10 common fields": {50, 50, 32}, "190 fragments of 10 common fields": {190, 190, 64}} {
+		codegen := `query Page { users(first: 2) { edges { node { ` + repeat(c.spread, func(i int) string { return fmt.Sprintf("...C%d", i) }) + ` } } } } ` +
+			repeat(c.frags, func(i int) string { return fmt.Sprintf("fragment C%d on User { %s }", i, common) })
+		var got string
+		n, d := allocated(func() { got = s.postQuery(t, codegen) })
+		t.Logf("%s: %d B: %.1f MB, %v", name, len(codegen), float64(n)/(1<<20), d.Round(time.Millisecond))
+		if !strings.HasPrefix(got, `{"data":{"users":`) || strings.Contains(got, `"errors"`) {
+			t.Errorf("%s: %.300s", name, got)
+		}
+		if n > c.mb<<20 {
+			t.Errorf("%s: allocated %d MB", name, n>>20)
+		}
+	}
+	// Two levels of full pages, 10 fields selected at each, that read all they ask.
+	fields := func(of string) string {
+		return `__typename id ` + repeat(8, func(i int) string { return fmt.Sprintf("a%d: %s", i, of) })
+	}
+	two := `{ users(first: 100) { edges { cursor node { ` + fields("name") + ` posts(first: 100) { edges { cursor node { ` + fields("title") + ` } } } } } } }`
+	var got string
+	n, d := allocated(func() { got = s.postQuery(t, two) })
+	t.Logf("two levels of pages: %.1f MB, %v, %d B of response", float64(n)/(1<<20), d.Round(time.Millisecond), len(got))
+	if !strings.HasPrefix(got, `{"data":{"users":`) || strings.Contains(got, `"errors"`) {
+		t.Errorf("two levels of pages: %.300s", got)
+	}
+	if n > 200<<20 {
+		t.Errorf("two levels of pages: allocated %d MB", n>>20)
+	}
 }
 
 // TestBodyLimit: a body over MaxBodyBytes is refused, its length known or not, and
@@ -207,6 +241,34 @@ func TestMutationStatementsCounted(t *testing.T) {
 		t.Logf("%-70s sent %3d, cost %d", in, sent, cost)
 		if cost < 100*sent {
 			t.Errorf("%s: sent %d statements, and cost %d", in, sent, cost)
+		}
+	}
+	// nodes sends one for each type among its IDs, and a delete of a Post with tags
+	// three, as a review measured when they counted as one each: 960 and 950 of them
+	// fit the limit, and sent 2880 and 2850.
+	for name, query := range map[string]string{
+		"nodes of three types": `{ ` + repeat(30, func(i int) string {
+			return fmt.Sprintf(`a%d: nodes(ids: ["%s", "%s", "%s"]) { id }`, i, user1, post1, label1)
+		}) + ` }`,
+		"deletePost": `mutation { ` + repeat(1, func(i int) string { return fmt.Sprintf(`a%d: deletePost(id: "%s")`, i, post1) }) + ` }`,
+	} {
+		doc, errs := gqlparser.LoadQueryWithRules(schema, query, nil)
+		if len(errs) > 0 {
+			t.Fatal(errs)
+		}
+		s.mu.Lock()
+		s.stmts = nil
+		s.mu.Unlock()
+		if got := s.postQuery(t, query); strings.Contains(got, `"errors"`) {
+			t.Fatalf("%s: %.300s", name, got)
+		}
+		s.mu.Lock()
+		sent := len(s.stmts)
+		s.mu.Unlock()
+		cost := veloxgql.Cost(schema, doc.Operations[0], nil, veloxgql.DefaultLimits())
+		t.Logf("%-70s sent %3d, cost %d", name, sent, cost)
+		if cost < 100*sent || sent < 3 {
+			t.Errorf("%s: sent %d statements, and cost %d", name, sent, cost)
 		}
 	}
 }
