@@ -54,6 +54,10 @@ It starts PostgreSQL 18 and MySQL 8.4 from `scripts/docker-compose.ci.yml`, sets
 database variables below, and runs what CI runs, module by module, in this
 order:
 
+Each of the first five also runs `go mod tidy -diff`, which fails on a `go.mod` or
+`go.sum` that is not tidy. `bench/compare/veloxe` is left out. The first four run
+govulncheck.
+
 1. The root module: `gofmt`, `go vet`, golangci-lint v2.14.0, then
    `go test -race -count=1` with a coverage profile. Then the nine root fuzz
    targets, `velox-gen -check` and `velox-gen verify` on the test models, and
@@ -76,7 +80,10 @@ order:
 
 CI tests PostgreSQL 14 and 18. `VELOX_CI_MATRIX=1 bash scripts/ci-local.sh`
 runs the tests again on PostgreSQL 14 at the end, in every module. It reads the
-image from `.github/workflows/ci.yml`.
+image from `.github/workflows/ci.yml`. The root module's tests have a 40-minute
+timeout on PostgreSQL 14, and 20 minutes on 18.
+
+`TestCILocalMirrorsCI` fails when the two scripts stop running the same commands.
 
 The script stops at the first failure. It removes its containers on exit. It
 does not push.
