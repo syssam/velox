@@ -300,6 +300,11 @@ func (w *recreates) dropIndex(l *fileLinter) error {
 		if raw.Schema != "" {
 			ref.Schema = w.word(l, i)
 		}
+		if l.upper(2) == "CONCURRENTLY" {
+			if err := w.partitionedDrop(ref); err != nil {
+				return err
+			}
+		}
 		if err := w.pgIndexDrop(ref); err != nil {
 			return err
 		}
@@ -568,8 +573,9 @@ func shapeValue(s indexShape, attr string) string {
 	return ""
 }
 
-// shrunk records each multi-column index of st the drop of the column col leaves
-// narrower, as MySQL does in silence: a UNIQUE (a, b) becomes a UNIQUE (a). An index
+// shrunk records each UNIQUE index of st the drop of the column col leaves narrower,
+// as MySQL does in silence: a UNIQUE (a, b) becomes a UNIQUE (a), which holds rows to
+// more than it did. A plain index only serves other queries, and gets a note. An index
 // the file drops itself, or all of whose columns go, is no loss.
 func (w *recreates) shrunk(l *fileLinter, st *tableState, ref TableRef, col string) error {
 	if w.quiet || st.made || col == "" {
@@ -595,6 +601,10 @@ func (w *recreates) shrunk(l *fileLinter, st *tableState, ref TableRef, col stri
 			continue
 		}
 		object := colTarget(ref, name)
+		if !s.unique {
+			w.s.say(w.f.Path + ": " + object + ": DROP COLUMN " + col + " leaves the index over (" + strings.Join(left, ", ") + ")")
+			continue
+		}
 		w.lost(ref, nil, object, object+": the index is over "+strconv.Itoa(len(s.keys))+" columns, and DROP COLUMN "+col+" leaves it over ("+strings.Join(left, ", ")+"), which holds rows to more than it did; drop the index in the file")
 	}
 	return nil
@@ -676,8 +686,152 @@ func (w *recreates) mysqlUsesOf(db string) ([]mysqlUse, error) {
 	return uses, nil
 }
 
-// fileRemakes reports whether the file drops, makes or replaces the view or trigger name,
-// or, for a table, makes it.
+// pgFunctionsBreak records each PL/pgSQL function of a trigger on st whose body names
+// the column col, which the statement renames or drops: PostgreSQL lets it, as it does
+// not read the body until the trigger fires, and every write to the table then fails.
+// The body is read as words, which errs on the safe side; a name built into an
+// EXECUTE's string is not seen.
+func (w *recreates) pgFunctionsBreak(st *tableState, ref TableRef, col string) error {
+	if w.quiet || st.made || col == "" {
+		return nil
+	}
+	name := ddl.Ident(velox.Postgres, st.ref.Name)
+	if st.ref.Schema != "" {
+		name = ddl.Ident(velox.Postgres, st.ref.Schema) + "." + name
+	}
+	err := eachRow(w.ctx, w.s.conn, `SELECT t.tgname, p.proname, p.prosrc
+FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid JOIN pg_language g ON g.oid = p.prolang
+WHERE t.tgrelid = to_regclass($1) AND NOT t.tgisinternal AND g.lanname = 'plpgsql'
+ORDER BY t.tgname`, []any{name}, func(rows *sql.Rows) error {
+		var trigger, function, body string
+		if err := rows.Scan(&trigger, &function, &body); err != nil {
+			return err
+		}
+		hit := slices.ContainsFunc(lex(velox.Postgres, body), func(wd word) bool { return strings.EqualFold(wd.text, col) })
+		if hit && !w.fileRemakes(function) && !w.fileRemakes(trigger) {
+			w.lost(ref, nil, function, fmt.Sprintf("the function %s of the trigger %s names %s, and every write to the table fails once the statement has renamed or dropped it; replace the function in the file", function, trigger, colTarget(ref, col)))
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("migrate: %s: reading the triggers of %s: %w", w.f.Path, ref, err)
+	}
+	return nil
+}
+
+// statesOnline reports whether the statement says ALGORITHM=INPLACE or LOCK=NONE.
+func (l *fileLinter) statesOnline() bool {
+	for i := range l.ws {
+		j := i + 1
+		if l.punct(j, "=") {
+			j++
+		}
+		if l.upper(i) == "ALGORITHM" && l.upper(j) == "INPLACE" || l.upper(i) == "LOCK" && l.upper(j) == "NONE" {
+			return true
+		}
+	}
+	return false
+}
+
+// metadataOnly reports whether each action of the ALTER TABLE from i on only renames
+// or sets a default, which is all MyISAM runs as ALGORITHM=INPLACE or LOCK=NONE.
+func (l *fileLinter) metadataOnly(i int) bool {
+	for depth, lead := 0, true; i < len(l.ws); i++ {
+		switch {
+		case l.punct(i, "("):
+			depth++
+		case l.punct(i, ")"):
+			depth--
+		case depth == 0 && l.punct(i, ","):
+			lead = true
+		case lead:
+			if !slices.Contains([]string{"RENAME", "ALTER", "ALGORITHM", "LOCK"}, l.upper(i)) {
+				return false
+			}
+			lead = false
+		}
+	}
+	return true
+}
+
+// myisamOnline refuses a statement that says ALGORITHM=INPLACE or LOCK=NONE on a
+// MyISAM table, as the server does with 1845 once the file is under way. It is only
+// for MyISAM that this was tried, and other engines are left to the server.
+func (w *recreates) myisamOnline(l *fileLinter, st *tableState, ref TableRef) error {
+	if w.quiet || st.made || !l.statesOnline() {
+		return nil
+	}
+	engine := ""
+	err := eachRow(w.ctx, w.s.conn, `SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?`,
+		[]any{cmp.Or(st.ref.Schema, w.s.home()), st.ref.Name}, func(rows *sql.Rows) error {
+			var e sql.NullString
+			err := rows.Scan(&e)
+			engine = e.String
+			return err
+		})
+	if err != nil {
+		return fmt.Errorf("migrate: %s: reading the engine of %s: %w", w.f.Path, ref, err)
+	}
+	if !strings.EqualFold(engine, "MyISAM") {
+		return nil
+	}
+	return &Error{Code: "unsupported", Pos: w.f.Path, Object: ref.String(), Reason: "the table is MyISAM, which cannot run " + l.lead() +
+		" under ALGORITHM=INPLACE or LOCK=NONE, and nothing was changed: take those out of a file not yet applied anywhere, or first run ALTER TABLE " + ref.String() + " ENGINE=InnoDB"}
+}
+
+// pgRelkind is pg_class's kind of the table or index ref, "" for none.
+func (w *recreates) pgRelkind(ref TableRef) (string, error) {
+	name := ddl.Ident(velox.Postgres, ref.Name)
+	if ref.Schema != "" {
+		name = ddl.Ident(velox.Postgres, ref.Schema) + "." + name
+	}
+	kind := ""
+	err := eachRow(w.ctx, w.s.conn, `SELECT relkind::text FROM pg_class WHERE oid = to_regclass($1)`, []any{name}, func(rows *sql.Rows) error {
+		return rows.Scan(&kind)
+	})
+	if err != nil {
+		return "", fmt.Errorf("migrate: %s: reading %s: %w", w.f.Path, ref, err)
+	}
+	return kind, nil
+}
+
+// partitionedCreate refuses CREATE INDEX CONCURRENTLY on a partitioned table, which
+// the server refuses with the file under way.
+func (w *recreates) partitionedCreate(l *fileLinter) error {
+	if w.quiet || w.s.d != velox.Postgres {
+		return nil
+	}
+	i := l.skip(1, "UNIQUE")
+	if l.upper(i) != "INDEX" || l.upper(i+1) != "CONCURRENTLY" {
+		return nil
+	}
+	for i < len(l.ws) && l.upper(i) != "ON" {
+		i++
+	}
+	ref, _, ok := w.tableAt(l, l.skip(i+1, "ONLY"))
+	if !ok || w.state(ref).made {
+		return nil
+	}
+	kind, err := w.pgRelkind(ref)
+	if err != nil || kind != "p" {
+		return err
+	}
+	return &Error{Code: "unsupported", Pos: w.f.Path, Object: ref.String(), Reason: "the table is partitioned, and PostgreSQL has no CREATE INDEX CONCURRENTLY on one; nothing was changed. " +
+		"Build the index with CONCURRENTLY on each partition, then CREATE INDEX ON ONLY the parent and ALTER INDEX ... ATTACH PARTITION each, in place of this statement on a file not yet applied anywhere, or in a new migration"}
+}
+
+// partitionedDrop refuses DROP INDEX CONCURRENTLY of a partitioned index.
+func (w *recreates) partitionedDrop(ref TableRef) error {
+	kind, err := w.pgRelkind(ref)
+	if err != nil || kind != "I" {
+		return err
+	}
+	return &Error{Code: "unsupported", Pos: w.f.Path, Object: ref.String(), Reason: "the index is partitioned, and PostgreSQL has no DROP INDEX CONCURRENTLY of one; nothing was changed. " +
+		"Drop it without CONCURRENTLY, which locks the parent and its partitions, in place of this statement on a file not yet applied anywhere, or in a new migration"}
+}
+
+// fileRemakes reports whether the file drops, makes or replaces the view, trigger or
+// function name, or, for a table, makes it.
 func (w *recreates) fileRemakes(name string) bool {
 	if w.remakes == nil {
 		w.remakes = map[string]bool{}
@@ -687,10 +841,13 @@ func (w *recreates) fileRemakes(name string) bool {
 			if lead != "DROP" && lead != "CREATE" && lead != "ALTER" {
 				continue
 			}
-			i := slices.IndexFunc(l.ws, func(wd word) bool {
-				up := strings.ToUpper(wd.text)
-				return !wd.quoted && (up == "VIEW" || up == "TRIGGER" && lead == "DROP" || up == "TABLE" && lead == "CREATE")
-			})
+			i := l.skip(1, "OR", "REPLACE") // CREATE TRIGGER's EXECUTE FUNCTION makes none
+			if lead == "ALTER" || l.upper(i) != "FUNCTION" {
+				i = slices.IndexFunc(l.ws, func(wd word) bool {
+					up := strings.ToUpper(wd.text)
+					return !wd.quoted && (up == "VIEW" || up == "TRIGGER" && lead == "DROP" || up == "TABLE" && lead == "CREATE")
+				})
+			}
 			if i < 0 {
 				continue
 			}

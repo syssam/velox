@@ -41,6 +41,13 @@ type session struct {
 	notify   func(string)  // Up's: passes on what stops nothing
 }
 
+// say passes on what stops nothing.
+func (s *session) say(note string) {
+	if s.notify != nil {
+		s.notify(note)
+	}
+}
+
 // pgSession is what a PostgreSQL session was set to by SET: its settings
 // whose source is the session, by name, and its role ("none" for none).
 type pgSession struct {

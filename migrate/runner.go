@@ -764,8 +764,8 @@ func (s *session) foreignKeyCheck(ctx context.Context, f File, triggers map[stri
 			kept = append(kept, r.text())
 		}
 	}
-	if len(kept) > 0 && s.notify != nil {
-		s.notify(fmt.Sprintf("%s: PRAGMA foreign_key_check reports %s, as it did before this file", f.Path, overTen(kept)))
+	if len(kept) > 0 {
+		s.say(fmt.Sprintf("%s: PRAGMA foreign_key_check reports %s, as it did before this file", f.Path, overTen(kept)))
 	}
 	return nil
 }
