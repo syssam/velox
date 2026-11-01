@@ -619,7 +619,7 @@ func (db *DB) exec(ctx context.Context, st *Statement, t Target, read func(Rows)
 		return stmtErr(st, errIterConn)
 	}
 	err := db.send(ctx, st, t, read, res)
-	if err != nil && db.D == MySQL && db.txRoot != nil {
+	if err != nil && db.txRoot != nil {
 		db.noteServerRollback(ctx, err)
 	}
 	return err

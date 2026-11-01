@@ -62,6 +62,15 @@ at the call to a silent outcome.
   statement, unless `innodb_rollback_on_timeout` is on: velox asks the server on
   the transaction's connection after a 1205, and no answer counts as on. The
   broken transaction's error wraps the deadlock, so `TxRetrySerializable` retries it.
+- **SQLite's rollback.** An interrupted statement (its context ended), `INSERT OR
+  ROLLBACK` and some errors roll the whole transaction back, with the same result as
+  MySQL's deadlock. No error says so, so after any failed statement in a transaction
+  velox sends `BEGIN` on a detached context. `ROLLBACK TO` an unknown savepoint
+  cannot ask: on modernc.org/sqlite it says "no such savepoint" either way. In a
+  transaction BEGIN fails, "within a transaction", and changes nothing. Without one
+  it opens an empty transaction, which the broken transaction's ROLLBACK ends, and
+  the transaction is broken. No answer counts as gone. Only failures pay. A `ROLLBACK`
+  sent as raw SQL that succeeds is not noticed.
 - **Unsent means at the send.** A broken transaction is checked where a statement
   is sent as well as before its hooks, so an Around hook that calls next again
   after the statement that broke it gets the error and sends nothing.
@@ -74,7 +83,8 @@ theirs. Rebuilds keep the rows' text, so rows written by `CURRENT_TIMESTAMP` sti
 sort below parameters until rewritten.
 
 A nested Tx's failed RELEASE costs one or two more statements. A 1205 in a MySQL
-transaction costs one query.
+transaction costs one query. A failed statement in a SQLite transaction costs one
+BEGIN.
 
 ## Evidence
 
@@ -87,6 +97,7 @@ transaction costs one query.
   `TestIterNestedStatementFails`, `TestIterConcurrentStatementWaits`,
   `TestMutationDBAtomicOnlyInTx`, `TestRetryBacksOff`,
   `TestMySQLDeadlockBreaksTheTransaction`, `TestMySQLLockTimeout`,
-  `TestBrokenTransactionSendsNothing`.
+  `TestBrokenTransactionSendsNothing`, `TestSQLiteServerRollbackBreaksTheTransaction`,
+  `TestSQLiteProbe`.
 - `TestMySQLDeadlockSwallowedDoesNotCommit` runs only against a real MySQL
   (`VELOX_TEST_MYSQL`).

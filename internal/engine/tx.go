@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -209,8 +210,10 @@ func applyTxOption(opt TxOption, o *txOptions) { opt.apply(o) }
 //
 // On MySQL, a deadlock (1213) rolls the whole transaction back, as does a lock
 // wait timeout (1205) under innodb_rollback_on_timeout, which velox asks the
-// server after one. Should fn swallow the error, its later statements fail
-// unsent and its nil returns the error: nothing runs outside the transaction.
+// server after one. On SQLite, an interrupted statement (one whose context ended)
+// or INSERT OR ROLLBACK can do the same, so velox asks after any failed statement.
+// Should fn swallow the error, its later statements fail unsent and its nil
+// returns the error: nothing runs outside the transaction.
 //
 // A rollback velox sends after fn fails, or once ctx has ended, is bounded to
 // 5 seconds; database/sql's Tx.Rollback takes no context, so on a DB from Open
@@ -547,19 +550,44 @@ func (db *DB) breakOn(err error) {
 	}
 }
 
-// noteServerRollback breaks db's transaction when err, a statement's on MySQL,
-// says the server rolled all of it back. The connection is then in autocommit:
-// a statement after an fn that swallowed err would commit on its own, and the
-// COMMIT would succeed with nothing to commit. A deadlock (1213) always does
-// that; a lock wait timeout (1205) only under innodb_rollback_on_timeout.
+// noteServerRollback breaks db's transaction when err, a statement's, means the
+// database rolled all of it back. The connection is then in autocommit: a
+// statement after an fn that swallowed err would commit on its own. On MySQL a
+// deadlock (1213) always does that, and a lock wait timeout (1205) under
+// innodb_rollback_on_timeout. On SQLite an interrupt, a conflict clause of
+// ROLLBACK and some errors do, which only asking can tell. PostgreSQL keeps the
+// transaction, aborted, and refuses its COMMIT itself.
 func (db *DB) noteServerRollback(ctx context.Context, err error) {
 	if db.txRoot.broken != nil {
 		return
 	}
-	n, _, ok := mysqlError(err)
-	if ok && (n == 1213 || n == 1205 && db.rollsBackOnTimeout(ctx)) {
+	gone := false
+	switch db.D {
+	case MySQL:
+		n, _, ok := mysqlError(err)
+		gone = ok && (n == 1213 || n == 1205 && db.rollsBackOnTimeout(ctx))
+	case SQLite:
+		gone = db.sqliteRolledBack(ctx)
+	}
+	if gone {
 		db.txRoot.broken = fmt.Errorf("the database rolled the transaction back, so it can only roll back: %w", err)
 	}
+}
+
+// sqliteRolledBack reports whether SQLite's transaction has gone, after a failed
+// statement. BEGIN asks: ROLLBACK TO an unknown savepoint says the same with a
+// transaction and without. In one, BEGIN fails and changes nothing. Without one it
+// opens an empty transaction, for the ROLLBACK that a broken transaction ends in.
+// No answer counts as gone, as in rollsBackOnTimeout. A transaction past its
+// deadline, or one database/sql has ended, can send nothing more anyway.
+func (db *DB) sqliteRolledBack(ctx context.Context) bool {
+	if db.pastTxDeadline() {
+		return false
+	}
+	pctx, cancel := rollbackContext(ctx, db.txDeadline)
+	defer cancel()
+	_, err := db.Ex.Exec(pctx, "BEGIN", nil)
+	return err == nil || !ended(err) && !strings.Contains(err.Error(), "within a transaction")
 }
 
 // rollsBackOnTimeout asks the server, on the transaction's connection, whether
