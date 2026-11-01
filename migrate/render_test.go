@@ -218,7 +218,7 @@ func TestRenderSQLiteRebuild(t *testing.T) {
 			reviews = append(reviews, st.Review)
 		}
 	}
-	if len(reviews) != 1 || !strings.HasPrefix(reviews[0], "sqlite-rebuild: ") || strings.Count(reviews[0], "sqlite-rebuild") != 1 {
+	if len(reviews) != 1 || !strings.Contains(reviews[0], "sqlite-rebuild: ") || strings.Count(reviews[0], "sqlite-rebuild") != 1 {
 		t.Errorf("reviews %q, want one sqlite-rebuild line", reviews)
 	}
 

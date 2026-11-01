@@ -78,6 +78,7 @@
 2 add-check review users.users_role_check [cases_test.go]: adds check users.users_role_check; it fails if any row breaks it
 2 sqlite-rebuild review users [cases_test.go]: adds check users_role_check; SQLite rebuilds table users: it copies every row into a new table
 == rebuild-parent
+0 alter-type destructive users.logins [cases_test.go]: changes column users.logins from integer to real, which can fail or change values
 0 sqlite-rebuild review users [cases_test.go]: changes the type of column users.logins; SQLite rebuilds table users: it copies every row into a new table
 == rename-table-drop-column
 1 rename-table review accounts: renames table users to accounts; code that uses the old name breaks while old and new versions run together
