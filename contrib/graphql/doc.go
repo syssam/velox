@@ -203,8 +203,9 @@
 // targets the caller may read, under the tenant scope and the target's Read
 // policy; a link to one they hide stays.
 //
-// An edge's inputs follow its foreign key. A key on the entity's own row is
-// set by <edge>ID. A key on the target's rows is re-pointed from the owner
+// An edge's inputs follow its foreign key. A key that is the tenant column has
+// none: the tenant scope fills it, and an edge to the tenants' entity reads it.
+// A key on the entity's own row is set by <edge>ID. A key on the target's rows is re-pointed from the owner
 // by <edge>ID, <edge>IDs or add<Edge>IDs, but only a key that is nullable
 // and mutable: one that is never NULL always holds an owner, and one that is
 // immutable cannot move, so the owner's inputs have no such field, and the

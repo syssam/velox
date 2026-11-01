@@ -215,6 +215,8 @@ func TestErrorPresenter(t *testing.T) {
 		{"wrapped ErrBadID", fmt.Errorf("resolver: %w", codedBadID), "BAD_USER_INPUT", "User ID: malformed ID: not canonical base64url without padding", `["node"]`, false},
 		{"no tenant", fmt.Errorf("velox: gen.Post: %w", velox.ErrNoTenant), "UNAUTHENTICATED", "unauthenticated", `["node"]`, false},
 		{"denied", fmt.Errorf("velox: gen.Post: %w", velox.ErrDenied), "FORBIDDEN", "forbidden", `["node"]`, false},
+		{"tenant mismatch", fmt.Errorf("velox: gen.Post: %w: a row's org_id is 2, the tenant is 1", velox.ErrTenantMismatch), "FORBIDDEN", "forbidden", `["node"]`, false},
+		{"tenant immutable", fmt.Errorf("velox: gen.Post: %w: the statement sets org_id to 2, the tenant is 1", velox.ErrTenantImmutable), "FORBIDDEN", "forbidden", `["node"]`, false},
 		// A driver's typed nil, whose Unwrap panics, is passed over.
 		{"denied, past a typed nil", errors.Join((*pgconn.ConnectError)(nil), fmt.Errorf("velox: gen.Post: %w", velox.ErrDenied)), "FORBIDDEN", "forbidden", `["node"]`, false},
 		{"constraint, past a typed nil", errors.Join((*pgconn.ConnectError)(nil), &velox.ConstraintError{Entity: "gen.User", Kind: velox.ConstraintUnique, Err: driverErr}), "BAD_USER_INPUT", "unique constraint violated", `["node"]`, false},

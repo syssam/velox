@@ -530,3 +530,37 @@ func folder(t *testing.T) *plugin.Entity {
 	f.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate))
 	return f
 }
+
+// TestTenantKeyIsNoInput: a tenant column that an edge holds is the tenant,
+// never an input, on either input; the edge stays in the type.
+func TestTenantKeyIsNoInput(t *testing.T) {
+	org := entity("Org", field("name", "string"))
+	posts := edge("posts", plugin.O2M, "Post")
+	posts.Field, posts.FieldOn, posts.Ref = "org_id", "Post", "org"
+	org.Edges = []*plugin.Edge{posts}
+	org.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate))
+	post := entity("Post", field("org_id", "int64"), field("title", "string"))
+	post.Tenant = 1
+	o := edge("org", plugin.M2O, "Org")
+	o.Required, o.Inverse, o.Field, o.FieldOn, o.Ref = true, true, "org_id", "Post", "posts"
+	post.Edges = []*plugin.Edge{o}
+	post.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate))
+	s, _ := load(t, model(org, post))
+	for _, in := range []string{"CreatePostInput", "UpdatePostInput"} {
+		if got, want := fieldsOf(s, in), []string{"title: String"}; in == "UpdatePostInput" && !slices.Equal(got, want) {
+			t.Errorf("%s: %v, want %v", in, got, want)
+		}
+		if slices.ContainsFunc(fieldsOf(s, in), func(f string) bool { return strings.Contains(f, "orgID") }) {
+			t.Errorf("%s has the tenant: %v", in, fieldsOf(s, in))
+		}
+	}
+	if got := typeOf(s, "Post", "org"); got != "Org" {
+		t.Errorf("Post.org: %q", got)
+	}
+	// The owner cannot re-point a tenant key either: it is never NULL.
+	for _, in := range []string{"CreateOrgInput", "UpdateOrgInput"} {
+		if slices.ContainsFunc(fieldsOf(s, in), func(f string) bool { return strings.Contains(strings.ToLower(f), "post") }) {
+			t.Errorf("%s re-points the tenant: %v", in, fieldsOf(s, in))
+		}
+	}
+}

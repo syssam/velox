@@ -230,6 +230,8 @@ type edgeInput struct {
 //     O2O nothing; create keeps its inputs, which only link;
 //   - an immutable key on o's row is set on create only;
 //   - an M2M edge writes join rows: <edge>IDs, add/remove/clear;
+//   - a key on o's row that is the tenant has no input: the tenant scope fills
+//     it, as it does a tenant with no edge;
 //   - an edge to a type that is not a Node has no ID and no input. When that
 //     edge is required and holds its key on o's row, createX could never
 //     succeed: an error.
@@ -257,6 +259,9 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]edgeInput, error) {
 		return nil, err
 	}
 	fk := g.keyField(ed)
+	if ed.OwnsKey && ed.FieldOn == o.ent.Name && o.ent.Tenant >= 0 && fk == o.ent.Fields[o.ent.Tenant] {
+		return nil, nil // the tenant scope fills the key
+	}
 	immutable := ed.Immutable || fk != nil && fk.Immutable
 	nullable := fk == nil || fk.Nullable
 	dirs, err := directives(o.eanns[i].Directives, where)
