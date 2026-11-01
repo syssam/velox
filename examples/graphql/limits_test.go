@@ -10,6 +10,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/examples/graphql/graph"
+	"github.com/vektah/gqlparser/v2"
 )
 
 // allocated is what the process allocated while f ran, and how long f took.
@@ -166,5 +170,43 @@ func TestIntrospectionAtItsLimit(t *testing.T) {
 	}
 	if n > 256<<20 {
 		t.Errorf("allocated %d MB", n>>20)
+	}
+}
+
+// TestMutationStatementsCounted: what a mutation's input makes it send counts in
+// its cost, as an upper bound: 30 updatePost with clearTags and addTagIDs cost
+// what they send, not one statement each.
+func TestMutationStatementsCounted(t *testing.T) {
+	s := newServer(t)
+	schema := graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}, Directives: graph.DirectiveRoot{Admin: admin}}).Schema()
+	tag := `["` + label1 + `"]`
+	for _, in := range []string{
+		`title: "x"`,
+		`addTagIDs: ` + tag,
+		`removeTagIDs: ` + tag,
+		`clearTags: true`,
+		`title: "x", clearTags: true, addTagIDs: ` + tag,
+	} {
+		query := `mutation { ` + repeat(30, func(i int) string {
+			return fmt.Sprintf(`a%d: updatePost(id: "%s", input: {%s}) { id }`, i, post1, in)
+		}) + ` }`
+		doc, errs := gqlparser.LoadQueryWithRules(schema, query, nil)
+		if len(errs) > 0 {
+			t.Fatal(errs)
+		}
+		s.mu.Lock()
+		s.stmts = nil
+		s.mu.Unlock()
+		if got := s.postQuery(t, query); strings.Contains(got, `"errors"`) {
+			t.Fatalf("%s: %.300s", in, got)
+		}
+		s.mu.Lock()
+		sent := len(s.stmts)
+		s.mu.Unlock()
+		cost := veloxgql.Cost(schema, doc.Operations[0], nil, veloxgql.DefaultLimits())
+		t.Logf("%-70s sent %3d, cost %d", in, sent, cost)
+		if cost < 100*sent {
+			t.Errorf("%s: sent %d statements, and cost %d", in, sent, cost)
+		}
 	}
 }

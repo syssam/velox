@@ -47,7 +47,12 @@ const statementCost = 100
 //   - an input object argument (a where, an orderBy, a mutation's input) adds
 //     its size at each use: one for each object and value in it, nested inputs
 //     and lists included, read from the variables. A variable used twice counts
-//     twice.
+//     twice;
+//   - on a mutation, an input object adds a statement for the row it reads back,
+//     two for a non-empty <edge>IDs, add<Edge>IDs or remove<Edge>IDs, one for an
+//     <edge>ID, and three for a clear<Edge>: true, a page of its links, the targets
+//     and the delete, a page being up to MaxPage. An application's own mutation
+//     that names its input fields so counts the same.
 //
 // Sums and products saturate at 1<<62 (math.MaxInt where int is smaller),
 // checked before they are computed, so huge arguments and many aliases cannot
@@ -231,6 +236,9 @@ func (c *coster) field(f *ast.Field, parent *ast.Definition, page int64) cost {
 	if c.runsStatement(f, parent, child) {
 		n.statements = add(n.statements, statementCost)
 	}
+	if parent != nil && parent == c.schema.Mutation {
+		n.statements = add(n.statements, c.writes(f, def))
+	}
 	return n
 }
 
@@ -308,6 +316,46 @@ func (c *coster) inputs(f *ast.Field, def *ast.FieldDefinition) int64 {
 		if a := f.Arguments.ForName(ad.Name); a != nil {
 			sum = add(sum, c.size(a.Value))
 		}
+	}
+	return sum
+}
+
+// writes is what the input objects of f, a mutation's field, make it send beyond
+// its one statement.
+func (c *coster) writes(f *ast.Field, def *ast.FieldDefinition) int64 {
+	var sum int64
+	for _, ad := range def.Arguments {
+		named := ad.Type
+		for named.Elem != nil {
+			named = named.Elem
+		}
+		d := c.schema.Types[named.NamedType]
+		a := f.Arguments.ForName(ad.Name)
+		if d == nil || d.Kind != ast.InputObject || a == nil || a.Value == nil {
+			continue
+		}
+		v, err := a.Value.Value(c.vars)
+		m, ok := v.(map[string]any)
+		if err != nil || !ok {
+			continue
+		}
+		n := int64(1) // the row read back
+		for k, val := range m {
+			switch {
+			case strings.HasPrefix(k, "clear") && len(k) > 5:
+				// clear<Field> of a column is part of the UPDATE.
+				if val == true && d.Fields.ForName(strings.ToLower(k[5:6])+k[6:]) == nil {
+					n += 3
+				}
+			case strings.HasSuffix(k, "IDs"):
+				if list, ok := val.([]any); ok && len(list) > 0 {
+					n += 2
+				}
+			case strings.HasSuffix(k, "ID") && val != nil:
+				n++
+			}
+		}
+		sum = add(sum, mul(n, statementCost))
 	}
 	return sum
 }
