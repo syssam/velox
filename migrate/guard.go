@@ -30,7 +30,8 @@ func lossError(f File, object, what string, lines, targets []string, keep string
 	for _, l := range lines {
 		b.WriteString("\n  " + l)
 	}
-	b.WriteString("\n  " + keep + "; or to accept the loss, add above the file's first statement:")
+	b.WriteString("\n  " + keep + ", on a file not yet applied anywhere (an environment that applied it has its checksum, and refuses the edit with a ChecksumError); else in a new migration")
+	b.WriteString("\n  or to accept the loss with a directive line, which does not change the checksum, add above the file's first statement:")
 	for _, t := range targets {
 		b.WriteString("\n    -- velox:allow " + lossCode + " " + allowTarget(t))
 	}
@@ -150,7 +151,7 @@ func (g *rebuildGuard) before(ctx context.Context, i int) error {
 		for _, d := range deps {
 			b.WriteString("\n  " + d.line(t))
 		}
-		b.WriteString("\n  SQLite's RENAME fails on them. Add DROP VIEW above the rebuild in the file and CREATE VIEW after it, then run velox-gen migrate hash; a trigger, which a file cannot hold, is dropped by hand before applying and made again after")
+		b.WriteString("\n  SQLite's RENAME fails on them. Add DROP VIEW above the rebuild in the file and CREATE VIEW after it, on a file not yet applied anywhere (an environment that applied it has its checksum, and refuses the edit with a ChecksumError), then run velox-gen migrate hash; a trigger, which a file cannot hold, is dropped by hand before applying and made again after")
 		return &Error{Code: "unmodeled", Pos: g.f.Path, Object: t.String(), Reason: b.String()}
 	}
 	schema, notes, err := inspectSQLite(ctx, s.conn, []TableRef{t})

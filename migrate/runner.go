@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -25,6 +26,7 @@ type options struct {
 	targetSet bool          // 0 is a version: 0000 is a valid file
 	lockWait  time.Duration // default 5m
 	logger    *slog.Logger  // nil: none
+	notes     func(string)  // nil: none
 	resume    bool
 
 	baseline    uint64
@@ -104,6 +106,26 @@ func WithLockWait(d time.Duration) Option {
 // resolves, to l.
 func WithLogger(l *slog.Logger) Option {
 	return Option{func(o *options) { o.logger = l }}
+}
+
+// WithNotes makes Up and Resolve call f with what they have to tell an operator and
+// that stops nothing: a SQLite orphan row from before a file, an index a MySQL
+// DROP COLUMN leaves narrower, what the database keeps of a version Resolve forgets.
+// WithLogger's logger gets each too, as a warning.
+func WithNotes(f func(note string)) Option {
+	return Option{func(o *options) { o.notes = f }}
+}
+
+// notify is o's way to pass on a note.
+func (o options) notify(ctx context.Context) func(string) {
+	return func(note string) {
+		if o.logger != nil {
+			o.logger.WarnContext(ctx, "migrate: "+note)
+		}
+		if o.notes != nil {
+			o.notes(note)
+		}
+	}
 }
 
 // Applied is a version of the history: a file the runner applied.
@@ -209,6 +231,7 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 		return nil, err
 	}
 	defer s.close()
+	s.notify = o.notify(ctx)
 	if err := s.lasting(ctx); err != nil {
 		return nil, err
 	}
@@ -629,10 +652,14 @@ func (s *session) applyTx(ctx context.Context, f File, o options) (Applied, erro
 		}
 	}
 	var triggers map[string]bool
+	var orphans map[orphanRow]int
 	if fkOff {
 		var err error
 		if triggers, err = s.triggered(ctx); err != nil {
 			return Applied{}, rolledBack("reading the triggers: %w", err)
+		}
+		if orphans, err = s.orphansBefore(ctx); err != nil {
+			return Applied{}, rolledBack("%w", err)
 		}
 	}
 	start := time.Now()
@@ -652,7 +679,7 @@ func (s *session) applyTx(ctx context.Context, f File, o options) (Applied, erro
 		return Applied{}, guardError(err, rolledBack)
 	}
 	if fkOff {
-		if err := s.foreignKeyCheck(ctx, f, triggers); err != nil {
+		if err := s.foreignKeyCheck(ctx, f, triggers, orphans); err != nil {
 			return Applied{}, rolledBack("%w", err)
 		}
 	}
@@ -689,25 +716,83 @@ func (s *session) triggered(ctx context.Context) (map[string]bool, error) {
 	return out, err
 }
 
-// foreignKeyCheck is PRAGMA foreign_key_check's first row, as an error, for
-// the tables f touches and those with a foreign key to one, a table f dropped
-// among them: an orphan row elsewhere was there before f, and f did nothing to
-// it. A statement of f touchedTables cannot read, or a trigger on a table it
-// touches, which may write anywhere, makes it the check of the whole database:
-// a trigger the table had before f, in triggers, or has now.
-func (s *session) foreignKeyCheck(ctx context.Context, f File, triggers map[string]bool) error {
+// An orphanRow is a row of PRAGMA foreign_key_check, as it compares across a file: a
+// rebuild keeps the row's table and rowid, and may renumber its keys.
+type orphanRow struct {
+	table  string
+	rowid  int64
+	parent string
+}
+
+// orphansBefore is the rows of foreign_key_check of the whole database, before a file.
+func (s *session) orphansBefore(ctx context.Context) (map[orphanRow]int, error) {
+	rows, err := s.orphans(ctx, "PRAGMA foreign_key_check")
+	if err != nil {
+		return nil, err
+	}
+	out := map[orphanRow]int{}
+	for _, r := range rows {
+		out[r.row]++
+	}
+	return out, nil
+}
+
+// foreignKeyCheck refuses, as an error, the first row of PRAGMA foreign_key_check
+// that is not one of before: a row the file orphaned. One of before stops nothing, as
+// SQLite's foreign keys default off and such rows are common, and is passed on as a
+// note. It reads the tables f touches and those with a foreign key to one, a table f
+// dropped among them. A statement of f touchedTables cannot read, or a trigger on a
+// table it touches, which may write anywhere, makes it the check of the whole
+// database: a trigger the table had before f, in triggers, or has now.
+func (s *session) foreignKeyCheck(ctx context.Context, f File, triggers map[string]bool, before map[orphanRow]int) error {
+	queries, err := s.keyChecks(ctx, f, triggers)
+	if err != nil {
+		return fmt.Errorf("PRAGMA foreign_key_check: %w", err)
+	}
+	left := maps.Clone(before)
+	var kept []string
+	for _, q := range queries {
+		rows, err := s.orphans(ctx, q)
+		if err != nil {
+			return err
+		}
+		for _, r := range rows {
+			if left[r.row] == 0 {
+				return errors.New("PRAGMA foreign_key_check reports " + r.text() + ", which it did not before this file")
+			}
+			left[r.row]--
+			kept = append(kept, r.text())
+		}
+	}
+	if len(kept) > 0 && s.notify != nil {
+		s.notify(fmt.Sprintf("%s: PRAGMA foreign_key_check reports %s, as it did before this file", f.Path, overTen(kept)))
+	}
+	return nil
+}
+
+// overTen is lines joined, the first ten of them, with how many more there are.
+func overTen(lines []string) string {
+	if len(lines) <= 10 {
+		return strings.Join(lines, "; ")
+	}
+	return fmt.Sprintf("%s; and %d more", strings.Join(lines[:10], "; "), len(lines)-10)
+}
+
+// keyChecks is the forms of PRAGMA foreign_key_check that foreignKeyCheck reads.
+func (s *session) keyChecks(ctx context.Context, f File, triggers map[string]bool) ([]string, error) {
+	whole := []string{"PRAGMA foreign_key_check"}
 	touched, known := touchedTables(s.d, f)
 	if !known {
-		return s.checkKeys(ctx, "PRAGMA foreign_key_check")
+		return whole, nil
 	}
 	lower := func(name string) string { return strings.ToLower(name) }
 	now, err := s.triggered(ctx)
 	if err != nil {
-		return fmt.Errorf("PRAGMA foreign_key_check: %w", err)
+		return nil, err
 	}
 	for table := range touched {
 		if triggers[table] || now[table] {
-			return s.checkKeys(ctx, "PRAGMA foreign_key_check")
+			return whole, nil
 		}
 	}
 	var check []string
@@ -723,34 +808,44 @@ LEFT JOIN pragma_foreign_key_list(m.name) k WHERE m.type = 'table' ORDER BY m.na
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("PRAGMA foreign_key_check: %w", err)
+		return nil, err
 	}
-	for _, table := range check {
-		if err := s.checkKeys(ctx, "PRAGMA foreign_key_check("+ddl.Ident(velox.SQLite, table)+")"); err != nil {
-			return err
-		}
+	queries := make([]string, len(check))
+	for i, table := range check {
+		queries[i] = "PRAGMA foreign_key_check(" + ddl.Ident(velox.SQLite, table) + ")"
 	}
-	return nil
+	return queries, nil
 }
 
-// checkKeys is q's first row, as q is one form of PRAGMA foreign_key_check,
-// as an error.
-func (s *session) checkKeys(ctx context.Context, q string) error {
-	rows, err := s.conn.QueryContext(ctx, q)
+// An orphan is one row of PRAGMA foreign_key_check.
+type orphan struct {
+	row orphanRow
+	fk  int
+}
+
+// text is the orphan as an error or a note says it.
+func (o orphan) text() string {
+	return fmt.Sprintf("row %d of %s, whose foreign key %d names no row of %s", o.row.rowid, o.row.table, o.fk, o.row.parent)
+}
+
+// orphans is q's rows, q being one form of PRAGMA foreign_key_check. A table
+// WITHOUT ROWID says no rowid, and its rows count as one by table and parent.
+func (s *session) orphans(ctx context.Context, q string) ([]orphan, error) {
+	var out []orphan
+	err := eachRow(ctx, s.conn, q, nil, func(rows *sql.Rows) error {
+		var o orphan
+		var rowid sql.NullInt64
+		if err := rows.Scan(&o.row.table, &rowid, &o.row.parent, &o.fk); err != nil {
+			return err
+		}
+		o.row.rowid = rowid.Int64
+		out = append(out, o)
+		return nil
+	})
 	if err != nil {
-		return fmt.Errorf("PRAGMA foreign_key_check: %w", err)
+		return nil, fmt.Errorf("PRAGMA foreign_key_check: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
-	if !rows.Next() {
-		return rows.Err()
-	}
-	var table, parent string
-	var rowid sql.NullInt64
-	var fk int
-	if err := rows.Scan(&table, &rowid, &parent, &fk); err != nil {
-		return fmt.Errorf("PRAGMA foreign_key_check: %w", err)
-	}
-	return fmt.Errorf("PRAGMA foreign_key_check reports row %d of %s, whose foreign key %d names no row of %s", rowid.Int64, table, fk, parent)
+	return out, nil
 }
 
 // ownsTx reports whether the transaction applyTx began is open still, after
