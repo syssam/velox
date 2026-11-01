@@ -245,23 +245,28 @@ request: connections nested in connections multiply (each level reads up to
 as often as the client writes it. So `Limits.MaxCost` (100000 by default)
 bounds the whole request. The extension computes the request's cost before
 any resolver runs: a field costs 1 plus its children's cost times its
-multiplier, which is `first` or `last` for a connection (`MaxPage` when
-neither is given), the number of ids for `nodes`, and `MaxList` for another
-list of objects. Every alias and every branch of a fragment counts, except a
+multiplier, which is `first` or `last` for a connection's `edges` (`MaxPage`
+when neither is given), the number of ids for `nodes`, and `MaxList` for another
+list of objects. On top of that, with no multiplier, a field that runs a
+statement adds 100, so `first: 0` and aliases count and the default allows 1000
+statements, and an input object such as a `where` adds its size at each use.
+Every alias and every branch of a fragment counts, except a
 selection that `@skip(if: true)` or `@include(if: false)` leaves out (its
 condition a literal or a variable's value, or a missing variable's default;
 one whose condition is not a boolean, such as a missing variable with no
-default, counts), and
-introspection costs nothing. A request over
+default, counts). Introspection costs one for each field of its response:
+GraphiQL's query costs 3478 here, and a schema with many where inputs may need
+a higher `MaxCost` on the server that offers it. A request over
 the limit fails with `COST_LIMIT_EXCEEDED` and runs no statement. Two levels
-of full connection pages (about 30000) pass; three do not (about a million).
+of full connection pages (about 20000) pass; three do not (about two million).
 `main_test.go`'s `TestRequestCost` shows both. A list edge (one whose field
 is a list, not a connection) costs `MaxList`, 1000, for each parent, so one
 full page with a list edge, `posts(first: 100) { edges { node { likes { id }
-} } }`, costs 100301 and is refused by default: raise `MaxCost`, or lower
+} } }`, costs 100402 and is refused by default: raise `MaxCost`, or lower
 `MaxList`, with `WithLimits`. gqlgen's `extension.FixedComplexityLimit` counted
 fields, not rows, and is not used. Choose the limit for your schema and
-clients.
+clients. Parsing runs before the extension, and gqlgen sets no limit on it, so
+`main.go` calls `srv.SetParserTokenLimit(15000)`.
 
 ### A nested request
 
