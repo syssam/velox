@@ -3,6 +3,7 @@ package veloxgql
 import (
 	"cmp"
 	"context"
+	"time"
 )
 
 // Limits caps what a client may ask for. Each bounds one argument or one
@@ -109,28 +110,44 @@ type Limits struct {
 	// reads any of them.
 	MaxVariableNodes int
 
-	// MaxErrors is the most of validation's errors a response may hold, and one that
-	// says there are more, on a server Setup made. Each pair of fields that differ
-	// and each unknown name makes one, and a response of them is built by each
-	// request that asks.
+	// MaxErrors is the most errors a response may hold, and one that says there are
+	// more. Each pair of fields that differ and each unknown name makes one of
+	// validation's, held to this on a server Setup made; a list of a field that a
+	// directive refuses makes one for each row, and over the limit the request stops
+	// (ErrTooManyErrors) with data null, under the Extension and ErrorPresenter.
 	MaxErrors int
 
 	// MaxBodyBytes is the most bytes the body of a request may have, its
 	// variables and any upload included. More is refused with 413, by the handler
-	// Setup returns, as nothing else bounds it.
+	// Setup returns, as nothing else bounds it. The same handler holds a websocket's
+	// messages to it, and closes the connection of one over.
 	MaxBodyBytes int
+
+	// MaxResponseBytes is the most bytes the strings, the bytes and the JSON of a
+	// response may write, counted as its fields resolve, a string as it is escaped. Cost
+	// cannot see the size of a value: one stored string of 900 KB under 300 aliases
+	// answered with 270 MB. More is ErrResponseTooLarge, with data null, and the fields
+	// not yet resolved do not run. A subscription's event has its own count.
+	MaxResponseBytes int
+
+	// Timeout is how long a query or a mutation may run: more cancels the context its
+	// statements use, and is ErrTimeout, with data null, and a mutation rolls back. A
+	// resolver that ignores its context holds the response until it returns. A
+	// subscription has no such limit.
+	Timeout time.Duration
 }
 
 // DefaultLimits returns MaxPage 100, MaxList 1000, MaxFilterDepth 5,
 // MaxFilterWidth 100, MaxFilterNodes 1000, MaxOrderTerms 5, MaxCost 150000,
 // MaxIntrospectionCost 250000, MaxTokens 15000, MaxFields 2000, MaxFragments 500,
 // MaxDepth 64, MaxNameBytes 128, MaxLiteralBytes 64 KiB, MaxVariableNodes 25000,
-// MaxErrors 100 and MaxBodyBytes 1 MiB.
+// MaxErrors 100, MaxBodyBytes 1 MiB, MaxResponseBytes 32 MiB and Timeout 30 s.
 func DefaultLimits() Limits {
 	return Limits{
 		MaxPage: 100, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 5,
 		MaxCost: 150000, MaxIntrospectionCost: 250000, MaxTokens: 15000, MaxFields: 2000, MaxFragments: 500, MaxDepth: 64,
 		MaxNameBytes: 128, MaxLiteralBytes: 64 << 10, MaxVariableNodes: 25000, MaxErrors: 100, MaxBodyBytes: 1 << 20,
+		MaxResponseBytes: 32 << 20, Timeout: 30 * time.Second,
 	}
 }
 
@@ -165,6 +182,8 @@ func (l Limits) orDefault() Limits {
 		MaxVariableNodes:     cmp.Or(l.MaxVariableNodes, d.MaxVariableNodes),
 		MaxErrors:            cmp.Or(l.MaxErrors, d.MaxErrors),
 		MaxBodyBytes:         cmp.Or(l.MaxBodyBytes, d.MaxBodyBytes),
+		MaxResponseBytes:     cmp.Or(l.MaxResponseBytes, d.MaxResponseBytes),
+		Timeout:              cmp.Or(l.Timeout, d.Timeout),
 	}
 }
 
@@ -194,5 +213,6 @@ func (l Limits) fields() []struct {
 		{"MaxVariableNodes", l.MaxVariableNodes},
 		{"MaxErrors", l.MaxErrors},
 		{"MaxBodyBytes", l.MaxBodyBytes},
+		{"MaxResponseBytes", l.MaxResponseBytes},
 	}
 }

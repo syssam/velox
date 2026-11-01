@@ -175,6 +175,108 @@ func TestRequestBounded(t *testing.T) {
 	}
 }
 
+// seedLargeTitle gives one post a title of n bytes, in the tenant the requests name.
+func (s *testServer) seedLargeTitle(t *testing.T, n int) {
+	t.Helper()
+	if _, err := s.sql.ExecContext(t.Context(), `INSERT INTO posts (id, org_id, author_id, title, status, views) VALUES (900001, 1, 1, ?, 'draft', 1)`, strings.Repeat("x", n)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestLargeValuesBounded: cost cannot see a value's size. One title of 900 KB under 300
+// aliases, a query of 22 KB, allocated 3.7 GB and answered with 270 MB, as nothing
+// counted what a response held. MaxResponseBytes stops it with a clean error.
+func TestLargeValuesBounded(t *testing.T) {
+	s := newServer(t)
+	s.seedLargeTitle(t, 900<<10)
+	query := `{ ` + repeat(300, func(i int) string {
+		return fmt.Sprintf("a%d: posts(first: 1, where: {titleHasPrefix: \"xxxx\"}) { edges { node { title } } }", i)
+	}) + ` }`
+	var got string
+	n, d := allocated(func() { got = s.postQuery(t, query) })
+	t.Logf("%d B of query: %.1f MB, %v, %d B of response", len(query), float64(n)/(1<<20), d.Round(time.Millisecond), len(got))
+	if !strings.Contains(got, "response is too large") || !strings.Contains(got, "COST_LIMIT_EXCEEDED") || strings.Contains(got, "xxx") {
+		t.Fatalf("%.300s", got)
+	}
+	if n > 1500<<20 {
+		t.Errorf("allocated %d MB, the budget is 1500", n>>20)
+	}
+}
+
+// TestResponseAtItsLimit is the most a response under MaxResponseBytes takes: its
+// allocations are this budget, which decision 0027 and doc.go state.
+func TestResponseAtItsLimit(t *testing.T) {
+	s := newServer(t)
+	// A few large values, then as many aliased small ones as MaxCost lets.
+	s.seedLargeTitle(t, 900<<10)
+	large := `{ ` + repeat(36, func(i int) string {
+		return fmt.Sprintf("a%d: posts(first: 1, where: {titleHasPrefix: \"xxxx\"}) { edges { node { title } } }", i)
+	}) + ` }`
+	var got string
+	n, d := allocated(func() { got = s.postQuery(t, large) })
+	t.Logf("large values: %.1f MB, %v, %d B of response", float64(n)/(1<<20), d.Round(time.Millisecond), len(got))
+	if !strings.Contains(got, `"data":{"a0"`) {
+		t.Fatalf("%.300s", got)
+	}
+	if n > 500<<20 {
+		t.Errorf("large values: allocated %d MB, the budget is 500", n>>20)
+	}
+
+	s = newServer(t)
+	title := strings.Repeat("t", 200)
+	s.seedRows(t, 11)
+	if _, err := s.sql.ExecContext(t.Context(), `UPDATE posts SET title = ?`, title); err != nil {
+		t.Fatal(err)
+	}
+	small := `{ posts(first: 100) { edges { node { ` + repeat(1400, func(i int) string { return longName(i) + ":title" }) + ` } } } }`
+	n, d = allocated(func() { got = s.postQuery(t, small) })
+	t.Logf("aliases at MaxCost: %.1f MB, %v, %d B of response", float64(n)/(1<<20), d.Round(time.Millisecond), len(got))
+	if !strings.Contains(got, `"data":{"posts"`) {
+		t.Fatalf("%.300s", got)
+	}
+	if n > 700<<20 {
+		t.Errorf("aliases at MaxCost: allocated %d MB, the budget is 700", n>>20)
+	}
+}
+
+// TestFieldErrorsBounded: a field a directive refuses on every row made an error for each:
+// a query of 1.4 KB over @admin fields, 97k errors and 516 MB. It stops at MaxErrors.
+func TestFieldErrorsBounded(t *testing.T) {
+	s := newServer(t)
+	s.seedRows(t, 100)
+	query := `{ users(first: 100) { edges { node { ` + repeat(100, func(i int) string { return fmt.Sprintf("a%d: email", i) }) + ` } } } }`
+	var got string
+	n, d := allocated(func() { got = s.postQuery(t, query) })
+	errs := strings.Count(got, `"message"`)
+	t.Logf("%d B of query: %.1f MB, %v, %d B of response, %d errors", len(query), float64(n)/(1<<20), d.Round(time.Millisecond), len(got), errs)
+	if errs != 101 || !strings.Contains(got, "too many errors") || !strings.Contains(got, `"data":null`) {
+		t.Errorf("%d errors: %.300s", errs, got)
+	}
+	if n > 100<<20 {
+		t.Errorf("allocated %d MB, the budget is 100", n>>20)
+	}
+}
+
+// TestTimeoutCancelsStatements: a statement of a query past Limits.Timeout is interrupted,
+// and does not run to its end: 700 LIKE scans over 90k rows ran 13.6 s. These are 600 over
+// 22500.
+func TestTimeoutCancelsStatements(t *testing.T) {
+	s := newServer(t, veloxgql.WithLimits(veloxgql.Limits{Timeout: 100 * time.Millisecond}))
+	s.seedRows(t, 150)
+	query := `{ ` + repeat(600, func(i int) string {
+		return fmt.Sprintf(`a%d: posts(where: {titleContains: "nothing%d"}) { totalCount }`, i, i)
+	}) + ` }`
+	var got string
+	_, d := allocated(func() { got = s.postQuery(t, query) })
+	t.Logf("%v: %.200s", d.Round(time.Millisecond), got)
+	if !strings.Contains(got, `"code":"TIMEOUT"`) || !strings.Contains(got, `"data":null`) || strings.Count(got, `"message"`) != 1 {
+		t.Errorf("%.300s", got)
+	}
+	if d > 5*time.Second {
+		t.Errorf("took %v, with a Timeout of 100ms", d)
+	}
+}
+
 // TestIntrospectionOffShowsNothing: with introspection off, as decision 0027 says a
 // server open to strangers should be, validation names nothing of the schema a client
 // did not, in a field, an argument, an input field, an enum value or a type, and

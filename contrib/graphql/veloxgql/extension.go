@@ -254,6 +254,9 @@ func (e *Extension) Validate(es graphql.ExecutableSchema) error {
 			return fmt.Errorf("veloxgql.NewExtension: Limits.%s is %d, and a limit must not be negative (zero is the default)", l.name, l.n)
 		}
 	}
+	if e.limits.Timeout < 0 {
+		return fmt.Errorf("veloxgql.NewExtension: Limits.Timeout is %v, and a limit must not be negative (zero is the default)", e.limits.Timeout)
+	}
 	if n := velox.TxRetries(e.txOpts...); n > 0 {
 		return fmt.Errorf("veloxgql.WithTxOptions: TxRetrySerializable(%d) would run the mutation again, and gqlgen makes its response once", n)
 	}
@@ -306,6 +309,9 @@ func (e *Extension) InterceptOperation(ctx context.Context, next graphql.Operati
 		return graphql.OneShot(&graphql.Response{Errors: gqlerror.List{err}})
 	}
 	ctx = withState(ctx, e.db, e.limits)
+	if rc.Operation == nil || rc.Operation.Operation != ast.Subscription {
+		ctx = context.WithValue(ctx, operationKey{}, new(operation))
+	}
 	if op := rc.Operation; op != nil && op.Operation == ast.Mutation {
 		m := new(mutation)
 		m.plain = e.txFilter != nil && !e.txFilter(ctx, op)
@@ -351,27 +357,39 @@ func asksIntrospection(set ast.SelectionSet, seen map[string]bool) bool {
 
 // InterceptResponse implements graphql.ResponseInterceptor: it gives each
 // response a table of the rows it reads, whose edges batch (Batch), and
-// makes a mutation's first response in a transaction. Every other
-// response, and an error response gqlgen makes without running the
-// operation, passes through. A subscription's event is a response: its
+// makes a mutation's first response in a transaction. A query's or a mutation's first
+// response starts its Timeout, and every response holds to MaxResponseBytes and MaxErrors:
+// one over them is replaced, with one error for what stopped it and data null, and a
+// mutation rolls back. Every other response, and an error response gqlgen makes without
+// running the operation, passes through. A subscription's event is a response: its
 // rows are let go of when it is made.
 func (e *Extension) InterceptResponse(ctx context.Context, next graphql.ResponseHandler) *graphql.Response {
+	given := ctx
 	ctx = gqlcore.WithTable(ctx, e.schema, e.batchScope)
+	ctx, r, done := e.operationResponse(ctx)
 	m, _ := ctx.Value(mutationKey{}).(*mutation)
 	if m == nil || m.plain || m.started.Swap(true) {
-		return next(ctx)
+		resp := next(ctx)
+		r.expired(ctx)
+		done(resp)
+		return e.finish(given, r, resp)
 	}
 	var resp *graphql.Response
 	err := e.db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 		// The transaction's ctx: its deadline, and the TxAround hooks' values.
 		resp = next(withState(ctx, tx, e.limits))
-		if resp != nil && len(resp.Errors) > 0 {
+		if resp != nil && len(resp.Errors) > 0 || r.why.Load() != 0 {
 			return errRollback
 		}
 		return nil
 	}, e.txOpts...)
+	r.expired(ctx)
+	done(resp)
 	if err == nil {
 		return resp
+	}
+	if r.why.Load() != 0 {
+		return e.finish(given, r, resp)
 	}
 	out := &graphql.Response{}
 	if resp != nil {
@@ -393,13 +411,25 @@ func (e *Extension) InterceptResponse(ctx context.Context, next graphql.Response
 // concurrently. The lock cannot nest: gqlgen calls the field interceptors
 // around the field's resolver alone (graphql.ResolveField passes the
 // resolver to OperationContext.ResolverMiddleware), and resolves the field's
-// children after they return.
+// children after they return. It counts what a field gives its response, and a field of
+// a response that has stopped does nothing.
 func (*Extension) InterceptField(ctx context.Context, next graphql.Resolver) (any, error) {
-	m, _ := ctx.Value(mutationKey{}).(*mutation)
-	if m == nil || m.plain {
+	r, _ := ctx.Value(responseKey{}).(*response)
+	if r == nil {
 		return next(ctx)
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return next(ctx)
+	if r.why.Load() != 0 {
+		return nil, nil
+	}
+	if m := r.mutation; m != nil {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+	}
+	v, err := next(ctx)
+	if err != nil {
+		r.fieldError()
+		return v, err
+	}
+	r.count(v)
+	return v, nil
 }

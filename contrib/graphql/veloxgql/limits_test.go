@@ -11,13 +11,14 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
 
 func TestDefaultLimits(t *testing.T) {
-	want := veloxgql.Limits{MaxPage: 100, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 5, MaxCost: 150000, MaxIntrospectionCost: 250000, MaxTokens: 15000, MaxFields: 2000, MaxFragments: 500, MaxDepth: 64, MaxNameBytes: 128, MaxLiteralBytes: 64 << 10, MaxVariableNodes: 25000, MaxErrors: 100, MaxBodyBytes: 1 << 20}
+	want := veloxgql.Limits{MaxPage: 100, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 5, MaxCost: 150000, MaxIntrospectionCost: 250000, MaxTokens: 15000, MaxFields: 2000, MaxFragments: 500, MaxDepth: 64, MaxNameBytes: 128, MaxLiteralBytes: 64 << 10, MaxVariableNodes: 25000, MaxErrors: 100, MaxBodyBytes: 1 << 20, MaxResponseBytes: 32 << 20, Timeout: 30 * time.Second}
 	if got := veloxgql.DefaultLimits(); got != want {
 		t.Errorf("DefaultLimits() = %+v, want %+v", got, want)
 	}
@@ -58,7 +59,7 @@ func TestWithLimitsZeroIsDefault(t *testing.T) {
 	db := &velox.DB{}
 	ctx := context.Background()
 	got := veloxgql.LimitsFromContext(veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2})).NewContext(ctx))
-	if want := (veloxgql.Limits{MaxPage: 2, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 5, MaxCost: 150000, MaxIntrospectionCost: 250000, MaxTokens: 15000, MaxFields: 2000, MaxFragments: 500, MaxDepth: 64, MaxNameBytes: 128, MaxLiteralBytes: 64 << 10, MaxVariableNodes: 25000, MaxErrors: 100, MaxBodyBytes: 1 << 20}); got != want {
+	if want := (veloxgql.Limits{MaxPage: 2, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 5, MaxCost: 150000, MaxIntrospectionCost: 250000, MaxTokens: 15000, MaxFields: 2000, MaxFragments: 500, MaxDepth: 64, MaxNameBytes: 128, MaxLiteralBytes: 64 << 10, MaxVariableNodes: 25000, MaxErrors: 100, MaxBodyBytes: 1 << 20, MaxResponseBytes: 32 << 20, Timeout: 30 * time.Second}); got != want {
 		t.Errorf("WithLimits(Limits{MaxPage: 2}): %+v, want %+v", got, want)
 	}
 	if got := veloxgql.LimitsFromContext(veloxgql.NewExtension(db).NewContext(ctx)); got != veloxgql.DefaultLimits() {
@@ -68,7 +69,7 @@ func TestWithLimitsZeroIsDefault(t *testing.T) {
 		veloxgql.WithLimits(veloxgql.Limits{MaxPage: 2, MaxList: 3}),
 		veloxgql.WithLimits(veloxgql.Limits{MaxOrderTerms: 4, MaxCost: 150000}),
 	).NewContext(ctx))
-	if want := (veloxgql.Limits{MaxPage: 100, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 4, MaxCost: 150000, MaxIntrospectionCost: 250000, MaxTokens: 15000, MaxFields: 2000, MaxFragments: 500, MaxDepth: 64, MaxNameBytes: 128, MaxLiteralBytes: 64 << 10, MaxVariableNodes: 25000, MaxErrors: 100, MaxBodyBytes: 1 << 20}); got != want {
+	if want := (veloxgql.Limits{MaxPage: 100, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 4, MaxCost: 150000, MaxIntrospectionCost: 250000, MaxTokens: 15000, MaxFields: 2000, MaxFragments: 500, MaxDepth: 64, MaxNameBytes: 128, MaxLiteralBytes: 64 << 10, MaxVariableNodes: 25000, MaxErrors: 100, MaxBodyBytes: 1 << 20, MaxResponseBytes: 32 << 20, Timeout: 30 * time.Second}); got != want {
 		t.Errorf("WithLimits twice: %+v, want the last's, %+v", got, want)
 	}
 	if d, err := veloxgql.DBFromContext(veloxgql.NewExtension(db).NewContext(ctx)); d != db || err != nil {

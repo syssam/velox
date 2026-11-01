@@ -87,7 +87,10 @@ func TestFromJSONArrayLength(t *testing.T) {
 		{`[]`, func() error { _, err := gqlimpl.FromJSON[*[3]int](at, veloxgql.JSON(`[]`)); return err }},
 		{`[[1]]`, func() error { _, err := gqlimpl.FromJSON[[][2]int](at, veloxgql.JSON(`[[1]]`)); return err }},
 		{`{"T":["a"]}`, func() error { _, err := gqlimpl.FromJSON[inner](at, veloxgql.JSON(`{"T":["a"]}`)); return err }},
-		{`{"k":[1]}`, func() error { _, err := gqlimpl.FromJSON[map[string][2]int](at, veloxgql.JSON(`{"k":[1]}`)); return err }},
+		{`{"k":[1]}`, func() error {
+			_, err := gqlimpl.FromJSON[map[string][2]int](at, veloxgql.JSON(`{"k":[1]}`))
+			return err
+		}},
 	} {
 		err := c.fail()
 		if codeOf(err) != veloxgql.CodeBadUserInput || !strings.Contains(err.Error(), "In.j: invalid value: a list of") || strings.Contains(err.Error(), "gqlimpl_test") {
