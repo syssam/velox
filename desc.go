@@ -77,7 +77,8 @@ type Desc[E any] struct {
 }
 
 // TenantRef says that Column, a foreign key, refers to Key of Schema.Table, which
-// is tenant-scoped by its column Tenant. For generated code.
+// is tenant-scoped by its column Tenant, whose Go type is of reflect kind TenantKind,
+// to which the context's tenant converts. For generated code.
 //
 // velox-gen writes one for a column of a tenant-scoped entity whose edge's target
 // is tenant-scoped, and for each side of a many-to-many edge's join entity whose
@@ -86,6 +87,9 @@ type Desc[E any] struct {
 // IN (…) AND Tenant = ?, for the distinct values, after the hooks and on the
 // statement's transaction or connection, and fails with ErrTenantRef unless each
 // is the tenant's. WithAllTenants skips it. Around hooks do not see it.
+//
+// On a join entity, reads, updates and deletes under a tenant also hold, for each
+// TenantRef, Column IN (SELECT Key FROM Table WHERE Tenant = ?). See WithTenant.
 type TenantRef = engine.TenantRef
 
 // Load returns the entity's Meta, building it from desc the first time. A

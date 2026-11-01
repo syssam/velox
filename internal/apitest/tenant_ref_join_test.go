@@ -30,8 +30,8 @@ func (*refLink) VeloxMeta() *velox.Meta[refLink] {
 			PrimaryKey: []int{0, 1},
 			Tenant:     -1,
 			TenantRefs: []velox.TenantRef{
-				{Column: 0, Table: "tickets", Key: "id", Tenant: "org_id"},
-				{Column: 1, Table: "invoices", Key: "id", Tenant: "org_id"},
+				{Column: 0, Table: "tickets", Key: "id", Tenant: "org_id", TenantKind: "int64"},
+				{Column: 1, Table: "invoices", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 			},
 			Addr: func(x *refLink, i int) any {
 				if i == 0 {

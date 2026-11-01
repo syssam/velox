@@ -60,6 +60,7 @@ type OutEntity struct {
 type OutTenantRef struct {
 	Column                     int
 	Schema, Table, Key, Tenant string
+	Kind                       string // the reflect kind of Tenant's Go type: Generate states it (tenantKinds)
 }
 
 // OutField is a column of an entity.

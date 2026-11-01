@@ -40,8 +40,8 @@ func issueLabelDesc() velox.Desc[IssueLabel] {
 		PrimaryKey: []int{0, 1},
 		Tenant:     -1,
 		TenantRefs: []velox.TenantRef{
-			{Column: 0, Table: "issues", Key: "id", Tenant: "org_id"},
-			{Column: 1, Table: "labels", Key: "id", Tenant: "org_id"},
+			{Column: 0, Table: "issues", Key: "id", Tenant: "org_id", TenantKind: "int64"},
+			{Column: 1, Table: "labels", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 		},
 		Addr: func(x *IssueLabel, i int) any {
 			switch i {

@@ -280,10 +280,14 @@ func tenantPredicate(in *EntityInfo, id any) Predicate { return ColumnEQ(in.Tena
 // allocating below 256; only a named column type goes through reflect.
 func tenantFor(in *EntityInfo, id any) (any, error) {
 	c := in.Columns[in.Tenant]
-	t := GoType(c)
+	return tenantAs(in.Name, c.Name, GoType(c), id)
+}
+
+// tenantAs is tenantFor for a column col of type t, of an entity called name.
+func tenantAs(name, col string, t reflect.Type, id any) (any, error) {
 	if reflect.TypeOf(id) == t {
 		if reflect.ValueOf(id).IsZero() {
-			return nil, zeroTenant(in)
+			return nil, zeroTenant(name)
 		}
 		return id, nil
 	}
@@ -315,30 +319,30 @@ func tenantFor(in *EntityInfo, id any) (any, error) {
 		u, unsigned = x, true
 	case string:
 		if t.Kind() != reflect.String {
-			return nil, tenantMismatch(in, id)
+			return nil, tenantMismatch(name, col, t, id)
 		}
 		if x == "" {
-			return nil, zeroTenant(in)
+			return nil, zeroTenant(name)
 		}
 		// A predeclared string column took the exact path: t is named.
 		return reflect.ValueOf(x).Convert(t).Interface(), nil
 	default:
-		return nil, tenantMismatch(in, id)
+		return nil, tenantMismatch(name, col, t, id)
 	}
 	var out any
 	switch k := t.Kind(); k {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		if unsigned {
 			if u > math.MaxInt64 {
-				return nil, tenantMisfit(in, id)
+				return nil, tenantMisfit(name, col, t, id)
 			}
 			s = int64(u)
 		}
 		if t.OverflowInt(s) {
-			return nil, tenantMisfit(in, id)
+			return nil, tenantMisfit(name, col, t, id)
 		}
 		if s == 0 {
-			return nil, zeroTenant(in)
+			return nil, zeroTenant(name)
 		}
 		switch k {
 		case reflect.Int:
@@ -355,15 +359,15 @@ func tenantFor(in *EntityInfo, id any) (any, error) {
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		if !unsigned {
 			if s < 0 {
-				return nil, tenantMisfit(in, id)
+				return nil, tenantMisfit(name, col, t, id)
 			}
 			u = uint64(s)
 		}
 		if t.OverflowUint(u) {
-			return nil, tenantMisfit(in, id)
+			return nil, tenantMisfit(name, col, t, id)
 		}
 		if u == 0 {
-			return nil, zeroTenant(in)
+			return nil, zeroTenant(name)
 		}
 		switch k {
 		case reflect.Uint:
@@ -378,7 +382,7 @@ func tenantFor(in *EntityInfo, id any) (any, error) {
 			out = u
 		}
 	default:
-		return nil, tenantMismatch(in, id)
+		return nil, tenantMismatch(name, col, t, id)
 	}
 	if reflect.TypeOf(out) != t {
 		out = reflect.ValueOf(out).Convert(t).Interface() // a named column type
@@ -386,23 +390,21 @@ func tenantFor(in *EntityInfo, id any) (any, error) {
 	return out, nil
 }
 
-// tenantMismatch is the error of a tenant id that never serves in's tenant
-// column.
-func tenantMismatch(in *EntityInfo, id any) error {
-	c := in.Columns[in.Tenant]
-	return fmt.Errorf("velox: %s: %w: the context's tenant is a %T, the column %s is a %s", in.Name, ErrTenantMismatch, id, c.Name, GoType(c))
+// tenantMismatch is the error of a tenant id that never serves the tenant column
+// col of type t.
+func tenantMismatch(name, col string, t, id any) error {
+	return fmt.Errorf("velox: %s: %w: the context's tenant is a %T, the column %s is a %v", name, ErrTenantMismatch, id, col, t)
 }
 
-// tenantMisfit is the error of a tenant id that would convert into in's
-// tenant column, but whose value the column's type cannot hold.
-func tenantMisfit(in *EntityInfo, id any) error {
-	c := in.Columns[in.Tenant]
-	return fmt.Errorf("velox: %s: %w: the context's tenant %v (a %T) does not fit the column %s, a %s", in.Name, ErrTenantMismatch, id, id, c.Name, GoType(c))
+// tenantMisfit is the error of a tenant id that would convert into the tenant
+// column col, but whose value the column's type t cannot hold.
+func tenantMisfit(name, col string, t, id any) error {
+	return fmt.Errorf("velox: %s: %w: the context's tenant %v (a %T) does not fit the column %s, a %v", name, ErrTenantMismatch, id, id, col, t)
 }
 
 // zeroTenant is the error of a tenant id that is the zero value.
-func zeroTenant(in *EntityInfo) error {
-	return fmt.Errorf("velox: %s: %w: the tenant is the zero value", in.Name, ErrNoTenant)
+func zeroTenant(name string) error {
+	return fmt.Errorf("velox: %s: %w: the tenant is the zero value", name, ErrNoTenant)
 }
 
 // checkTenantAssignments refuses an assignment that would move a row to

@@ -18,15 +18,16 @@ import (
 // entity's: see EdgeTo.
 
 // TenantRef says that column Column, a foreign key, refers to Key of Schema.Table,
-// which is tenant-scoped by its column Tenant. velox-gen writes one for such a
-// column of a tenant-scoped entity, and for each side of a many-to-many edge's
-// join entity whose target is tenant-scoped.
+// which is tenant-scoped by its column Tenant, whose Go type is of reflect kind
+// TenantKind. velox-gen writes one for such a column of a tenant-scoped entity, and
+// for each side of a many-to-many edge's join entity whose target is tenant-scoped.
 type TenantRef struct {
-	Column int
-	Schema string // "" for the default
-	Table  string
-	Key    string
-	Tenant string
+	Column     int
+	Schema     string // "" for the default
+	Table      string
+	Key        string
+	Tenant     string
+	TenantKind string // "int64", "string", "array"…: the tenant converts to it (refTenant)
 }
 
 // tenantRef is a TenantRef as EntityInfo holds it; self is the column of the
@@ -50,8 +51,8 @@ func buildTenantRefs(name string, d *DescFields, cols []ColumnInfo) ([]tenantRef
 		if r.Column < 0 || r.Column >= len(cols) {
 			return nil, &SchemaError{Entity: name, Reason: fmt.Sprintf("a TenantRef names column %d, of %d", r.Column, len(cols))}
 		}
-		if r.Table == "" || r.Key == "" || r.Tenant == "" {
-			return nil, &SchemaError{Entity: name, Field: cols[r.Column].Field, Reason: "a TenantRef needs a Table, a Key and a Tenant; run go tool velox-gen"}
+		if r.Table == "" || r.Key == "" || r.Tenant == "" || r.TenantKind == "" {
+			return nil, &SchemaError{Entity: name, Field: cols[r.Column].Field, Reason: "a TenantRef needs a Table, a Key, a Tenant and a TenantKind; run go tool velox-gen"}
 		}
 		refs[i] = tenantRef{TenantRef: r, self: -1, sameSchema: r.Schema == d.Schema}
 		if r.Table == d.Table && r.Schema == d.Schema {
@@ -59,6 +60,55 @@ func buildTenantRefs(name string, d *DescFields, cols []ColumnInfo) ([]tenantRef
 		}
 	}
 	return refs, nil
+}
+
+// refTenant is id, the context's tenant or an entity's, as the tenant column of r's
+// target holds it, as tenantFor gives it for a column of a scoped entity: the join
+// entity it serves names no target's metadata, so the type it goes by is the kind r
+// states. A named id of that kind therefore passes where the column's own type would
+// be asked for, as the column's type is not known here: a UserID serves an OrgID
+// column of its kind. Any other id is refused, as it would be left to the database's
+// coercion: MySQL takes "2x" for 2, and 2 for any text starting with it.
+func refTenant(name string, r *tenantRef, id any) (any, error) {
+	if t := kindType(r.TenantKind); t != nil && reflect.TypeOf(id).PkgPath() == "" {
+		return tenantAs(name, r.Tenant, t, id)
+	}
+	switch v := reflect.ValueOf(id); {
+	case v.Kind().String() != r.TenantKind:
+		return nil, tenantMismatch(name, r.Tenant, r.TenantKind, id)
+	case v.IsZero():
+		return nil, zeroTenant(name)
+	}
+	return id, nil
+}
+
+// kindType is the predeclared type of a kind tenantAs converts to; nil for any other.
+func kindType(kind string) reflect.Type {
+	switch kind {
+	case "int":
+		return reflect.TypeFor[int]()
+	case "int8":
+		return reflect.TypeFor[int8]()
+	case "int16":
+		return reflect.TypeFor[int16]()
+	case "int32":
+		return reflect.TypeFor[int32]()
+	case "int64":
+		return reflect.TypeFor[int64]()
+	case "uint":
+		return reflect.TypeFor[uint]()
+	case "uint8":
+		return reflect.TypeFor[uint8]()
+	case "uint16":
+		return reflect.TypeFor[uint16]()
+	case "uint32":
+		return reflect.TypeFor[uint32]()
+	case "uint64":
+		return reflect.TypeFor[uint64]()
+	case "string":
+		return reflect.TypeFor[string]()
+	}
+	return nil
 }
 
 // scopeRefs is the scope's part in a write of an entity with TenantRefs. It leaves
@@ -76,13 +126,16 @@ func scopeRefs(ctx context.Context, st *Statement) error {
 			return nil
 		case id == nil:
 			return fmt.Errorf("velox: %s: %w", in.Name, ErrNoTenant)
-		case reflect.ValueOf(id).IsZero():
-			return fmt.Errorf("velox: %s: %w: the tenant is the zero value", in.Name, ErrNoTenant)
 		}
 		st.Tenant = id
 	}
 	if st.Tenant == nil {
 		return nil
+	}
+	for i := range in.refs {
+		if _, err := refTenant(in.Name, &in.refs[i], st.Tenant); err != nil {
+			return err
+		}
 	}
 	for _, a := range st.Set {
 		if a.Op != AssignSet && slices.ContainsFunc(in.refs, func(r tenantRef) bool { return r.Column == a.Column }) {
@@ -113,6 +166,10 @@ func (db *DB) checkRefs(ctx context.Context, st *Statement, t Target) error {
 		if len(vals) == 0 {
 			continue
 		}
+		tenant, err := refTenant(in.Name, r, st.Tenant)
+		if err != nil {
+			return err
+		}
 		w := writer{d: db.D, args: make([]any, 0, len(vals)+1)}
 		w.str("SELECT ")
 		w.ident(r.Key)
@@ -138,7 +195,7 @@ func (db *DB) checkRefs(ctx context.Context, st *Statement, t Target) error {
 		w.str(") AND ")
 		w.ident(r.Tenant)
 		w.str(" = ")
-		w.arg(st.Tenant)
+		w.arg(tenant)
 		rows, err := t.Ex.Query(ctx, w.b.String(), w.args)
 		if err != nil {
 			return dbErr(in, err)

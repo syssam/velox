@@ -115,7 +115,7 @@ func userDesc() velox.Desc[User] {
 			{Columns: []int{13}, Unique: true},
 		},
 		TenantRefs: []velox.TenantRef{
-			{Column: 13, Table: "users", Key: "id", Tenant: "org_id"},
+			{Column: 13, Table: "users", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 		},
 		Edges: []velox.EdgeDesc{
 			velox.EdgeTo[Post]("Posts", 0, 1),

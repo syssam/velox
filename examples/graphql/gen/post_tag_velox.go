@@ -40,7 +40,7 @@ func postTagDesc() velox.Desc[PostTag] {
 		PrimaryKey: []int{0, 1},
 		Tenant:     -1,
 		TenantRefs: []velox.TenantRef{
-			{Column: 0, Table: "posts", Key: "id", Tenant: "org_id"},
+			{Column: 0, Table: "posts", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 		},
 		Addr: func(x *PostTag, i int) any {
 			switch i {

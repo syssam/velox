@@ -75,18 +75,19 @@ func TestRefValues(t *testing.T) {
 func TestBuildTenantRefsRefuses(t *testing.T) {
 	cols := []ColumnInfo{{Name: "id", Field: "ID"}, {Name: "fk", Field: "FK"}}
 	for name, r := range map[string]TenantRef{
-		"out of range": {Column: 2, Table: "t", Key: "id", Tenant: "org"},
-		"negative":     {Column: -1, Table: "t", Key: "id", Tenant: "org"},
-		"no table":     {Column: 1, Key: "id", Tenant: "org"},
-		"no key":       {Column: 1, Table: "t", Tenant: "org"},
-		"no tenant":    {Column: 1, Table: "t", Key: "id"},
+		"out of range": {Column: 2, Table: "t", Key: "id", Tenant: "org", TenantKind: "int64"},
+		"negative":     {Column: -1, Table: "t", Key: "id", Tenant: "org", TenantKind: "int64"},
+		"no table":     {Column: 1, Key: "id", Tenant: "org", TenantKind: "int64"},
+		"no key":       {Column: 1, Table: "t", Tenant: "org", TenantKind: "int64"},
+		"no tenant":    {Column: 1, Table: "t", Key: "id", TenantKind: "int64"},
+		"no kind":      {Column: 1, Table: "t", Key: "id", Tenant: "org"},
 	} {
 		if _, err := buildTenantRefs("x", &DescFields{Table: "x", TenantRefs: []TenantRef{r}}, cols); err == nil {
 			t.Errorf("%s: no error", name)
 		}
 	}
 	refs, err := buildTenantRefs("x", &DescFields{Table: "x", TenantRefs: []TenantRef{
-		{Column: 1, Table: "x", Key: "id", Tenant: "org"}, {Column: 1, Schema: "other", Table: "x", Key: "id", Tenant: "org"}, {Column: 1, Table: "y", Key: "id", Tenant: "org"},
+		{Column: 1, Table: "x", Key: "id", Tenant: "org", TenantKind: "int64"}, {Column: 1, Schema: "other", Table: "x", Key: "id", Tenant: "org", TenantKind: "int64"}, {Column: 1, Table: "y", Key: "id", Tenant: "org", TenantKind: "int64"},
 	}}, cols)
 	if err != nil || refs[0].self != 0 || refs[1].self != -1 || refs[2].self != -1 {
 		t.Errorf("%+v, %v", refs, err)

@@ -41,8 +41,8 @@ func userFriendDesc() velox.Desc[UserFriend] {
 		Tenant:     -1,
 		Bidi:       true,
 		TenantRefs: []velox.TenantRef{
-			{Column: 0, Table: "users", Key: "id", Tenant: "org_id"},
-			{Column: 1, Table: "users", Key: "id", Tenant: "org_id"},
+			{Column: 0, Table: "users", Key: "id", Tenant: "org_id", TenantKind: "int64"},
+			{Column: 1, Table: "users", Key: "id", Tenant: "org_id", TenantKind: "int64"},
 		},
 		Addr: func(x *UserFriend, i int) any {
 			switch i {

@@ -73,6 +73,7 @@ TenantRef.Key string
 TenantRef.Schema string
 TenantRef.Table string
 TenantRef.Tenant string
+TenantRef.TenantKind string
 const AggregateAvg
 const AggregateMax
 const AggregateMin
