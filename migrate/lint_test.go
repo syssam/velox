@@ -233,8 +233,9 @@ func TestLintWidenType(t *testing.T) {
 		{my, "text", "blob", alter, migrate.Destructive},
 		{my, "tinyint(1)", "tinyint", alter, migrate.Destructive},
 		{my, "datetime(6)", "datetime", alter, migrate.Destructive},
-		{lite, "integer", "real", "", migrate.Safe},
-		{lite, "text", "integer", "", migrate.Safe},
+		{lite, "integer", "real", alter, migrate.Destructive},
+		{lite, "text", "integer", alter, migrate.Destructive},
+		{lite, "text", "varchar(10)", "", migrate.Safe},
 	} {
 		t.Run(fmt.Sprintf("%v/%s/%s", r.d, r.from, r.to), func(t *testing.T) {
 			ref := migrate.TableRef{Name: "t"}
@@ -673,6 +674,51 @@ func TestLintNilChange(t *testing.T) {
 		fs := migrate.Lint(s, []migrate.Change{nil, drop})
 		if slices.ContainsFunc(fs, func(f migrate.Finding) bool { return f.Change == 0 }) || !slices.ContainsFunc(fs, func(f migrate.Finding) bool { return f.Change == 1 }) {
 			t.Errorf("%v: %+v", d, fs)
+		}
+	}
+}
+
+// TestLintSQLiteTypeAffinity: a rebuild copies each row through the new
+// column's affinity, so a type change is destructive where that can change a
+// value, and silent where the affinity keeps them.
+func TestLintSQLiteTypeAffinity(t *testing.T) {
+	d := velox.SQLite
+	for _, c := range []struct {
+		from, to string
+		blocked  bool
+	}{
+		{"text", "integer", true},            // '007' becomes 7
+		{"varchar(10)", "bigint", true},      //
+		{"text", "datetime", true},           // NUMERIC: '1e3' becomes 1000
+		{"text", "json", true},               //
+		{"text", "real", true},               //
+		{"integer", "text", true},            // 7 becomes '7'
+		{"integer", "real", true},            // above 2^53, rounded
+		{"numeric", "real", true},            //
+		{"blob", "text", true},               // a number stored there becomes text
+		{"blob", "integer", true},            //
+		{"text", "varchar(10)", false},       // TEXT and TEXT
+		{"varchar(5)", "varchar(10)", false}, //
+		{"varchar(10)", "clob", false},       //
+		{"integer", "bigint", false},         // INTEGER and INTEGER
+		{"real", "double precision", false},  // REAL and REAL
+		{"decimal(10,2)", "boolean", false},  // NUMERIC and NUMERIC
+		{"integer", "numeric", false},        // a number keeps its value
+		{"numeric", "integer", false},        //
+		{"real", "numeric", false},           //
+		{"real", "integer", false},           //
+		{"text", "blob", false},              // BLOB converts nothing
+		{"integer", "blob", false},           //
+	} {
+		from := oneTable(d, migrate.Column{Name: "c", Type: c.from, Nullable: true})
+		to := oneTable(d, migrate.Column{Name: "c", Type: c.to, Nullable: true})
+		_, err := migrate.NewPlan(from, to, migrate.PlanOptions{})
+		var blocked *migrate.BlockedError
+		if got := errors.As(err, &blocked); got != c.blocked {
+			t.Errorf("%s to %s: %v, want blocked %v", c.from, c.to, err, c.blocked)
+		}
+		if blocked != nil && (len(blocked.Findings) != 1 || blocked.Findings[0].Code != "alter-type" || blocked.Findings[0].Target != "t.c") {
+			t.Errorf("%s to %s: %+v", c.from, c.to, blocked.Findings)
 		}
 	}
 }

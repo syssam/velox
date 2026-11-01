@@ -91,7 +91,8 @@ type Directives struct {
 //
 // Each statement carries the review and destructive findings of its changes
 // as its review line, and each destructive finding an Allow covers is
-// recorded as an allow directive. A script with no statement is left out.
+// recorded as an allow directive, as is an Allow of unmodeled-loss on MySQL and
+// SQLite, for Up. A script with no statement is left out.
 //
 // Its errors are *Error values: either schema is nil ("nil"), the dialects
 // differ or one is not PostgreSQL, MySQL or SQLite ("dialect"), or a change
@@ -142,6 +143,11 @@ func Render(from, to *Schema, changes []Change, opts RenderOptions) ([]Script, e
 	}
 	main.Statements = r.out
 	main.Directives.Allow = allowed(l.out, opts.Allow)
+	for _, a := range opts.Allow {
+		if a.Code == lossCode { // no plan finds it; Up reads it
+			main.Directives.Allow = append(main.Directives.Allow, a)
+		}
+	}
 	return []Script{main}, nil
 }
 
@@ -287,7 +293,8 @@ func (r *renderer) foreignKey(fk ForeignKey) string {
 }
 
 // writeScript writes s as the body of its file: the directives (no-transaction,
-// foreign-keys off, lock-timeout <d>, then each allow <code> <target>, sorted),
+// foreign-keys off, lock-timeout <d>, then each allow <code> <target>, sorted,
+// the target as allowTarget writes it),
 // a blank line, then each statement: a "-- velox:unit" line before a unit's
 // first statement in a no-transaction script, a "-- review: <text>" line when
 // it has one, and the SQL with ";". Plan 2's directory writes files with it.
@@ -307,7 +314,7 @@ func writeScript(b *strings.Builder, s Script) {
 	for _, a := range allow {
 		b.WriteString("-- velox:allow " + a.Code)
 		if a.Target != "" {
-			b.WriteString(" " + a.Target)
+			b.WriteString(" " + allowTarget(a.Target))
 		}
 		b.WriteString("\n")
 	}

@@ -101,3 +101,43 @@ func TestVerifyMySQL(t *testing.T) {
 		t.Errorf("Verify: %v", err)
 	}
 }
+
+// TestVerifyStrayTable: a table a file makes and schema.json does not know
+// fails Verify, naming it, on each dialect; on PostgreSQL in any schema, but a
+// table of an extension's. A file's row of the history table is no stray.
+func TestVerifyStrayTable(t *testing.T) {
+	for _, d := range []velox.Dialect{velox.SQLite, velox.Postgres, velox.MySQL} {
+		t.Run(d.String(), func(t *testing.T) {
+			if d == velox.Postgres {
+				needPostgres(t)
+			}
+			if d == velox.MySQL {
+				needMySQL(t)
+			}
+			ctx := context.Background()
+			fsys := caseDir(t, caseNamed("add-index"), d)
+			edited := rewrite(t, fsys, lastFile(t, fsys), func(s string) string {
+				return s + "CREATE TABLE stray (x integer);\n"
+			})
+			db, _ := freshDB(t, d)
+			e := verifyErr(t, migrate.Verify(ctx, db, edited))
+			if e.Code != "drift" || !strings.Contains(e.Reason, "table stray") {
+				t.Errorf("Verify: %q (%s)", e.Error(), e.Code)
+			}
+		})
+	}
+	t.Run("postgres schema", func(t *testing.T) {
+		needPostgres(t)
+		ctx := context.Background()
+		d := velox.Postgres
+		fsys := caseDir(t, caseNamed("add-index"), d)
+		edited := rewrite(t, fsys, lastFile(t, fsys), func(s string) string {
+			return s + "CREATE SCHEMA other;\nCREATE TABLE other.stray (x integer);\n"
+		})
+		db, _ := freshDB(t, d)
+		e := verifyErr(t, migrate.Verify(ctx, db, edited))
+		if e.Code != "drift" || !strings.Contains(e.Reason, "table other.stray") {
+			t.Errorf("Verify: %q (%s)", e.Error(), e.Code)
+		}
+	})
+}

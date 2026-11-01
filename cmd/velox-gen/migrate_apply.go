@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"io/fs"
@@ -113,6 +114,14 @@ func (c *dbCmd) connect(dir string, env []string, staleCode int, existing bool) 
 	return d, db, 0, true
 }
 
+// given reports whether the command line set the flag name: 0 is a version,
+// so a version flag's value cannot say.
+func given(flags *flag.FlagSet, name string) bool {
+	set := false
+	flags.Visit(func(f *flag.Flag) { set = set || f.Name == name })
+	return set
+}
+
 // filePath is the path of a's file in d, or the path migrate gives a
 // version without one.
 func filePath(d *migrate.Dir, a migrate.Applied) string { return d.PathOf(a.Version, a.Name) }
@@ -164,6 +173,7 @@ func runMigrateApply(args []string, dir string, env []string, stdout, stderr io.
 	if len(rest) > 0 {
 		return c.noArgs()
 	}
+	toSet := given(c.fs, "to") // -to 0 is a version: 0000 is a valid file
 	if baselineSet {
 		misuse := ""
 		switch {
@@ -171,7 +181,7 @@ func runMigrateApply(args []string, dir string, env []string, stdout, stderr io.
 			misuse = "-baseline and -resume cannot be combined"
 		case *dryRun:
 			misuse = "-baseline and -dry-run cannot be combined"
-		case *to != 0 && *to < baseline:
+		case toSet && *to < baseline:
 			misuse = fmt.Sprintf("-to %d is below -baseline %d", *to, baseline)
 		}
 		if misuse != "" {
@@ -183,7 +193,7 @@ func runMigrateApply(args []string, dir string, env []string, stdout, stderr io.
 	fsys := os.DirFS(c.abs(dir))
 	show := func(files []migrate.File) int {
 		for _, f := range files {
-			if *to != 0 && f.Version > *to {
+			if toSet && f.Version > *to {
 				break
 			}
 			data, err := fs.ReadFile(fsys, f.Path)
@@ -235,7 +245,10 @@ func runMigrateApply(args []string, dir string, env []string, stdout, stderr io.
 		return show(st.Pending)
 	}
 
-	opts := []migrate.Option{migrate.WithTarget(*to), migrate.WithLockWait(*lockWait)}
+	opts := []migrate.Option{migrate.WithLockWait(*lockWait)}
+	if toSet {
+		opts = append(opts, migrate.WithTarget(*to))
+	}
 	if *resume {
 		opts = append(opts, migrate.WithResume())
 	}
@@ -492,7 +505,7 @@ func runMigrateResolve(args []string, dir string, env []string, stdout, stderr i
 	if len(rest) > 0 {
 		return c.noArgs()
 	}
-	if *version == 0 || *applied == *undone {
+	if !given(c.fs, "version") || *applied == *undone {
 		_, _ = fmt.Fprintf(stderr, "velox-gen: migrate resolve needs -version and one of -applied and -undone\n")
 		c.fs.Usage()
 		return 2

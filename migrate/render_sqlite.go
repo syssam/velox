@@ -10,9 +10,11 @@ import (
 
 // sqlite renders the changes for SQLite. A table Lint finds rebuilt is
 // rebuilt once, at its last change; its other changes write nothing, but
-// for its rename, which runs first, and its index drops and renames, which
+// for its rename, which runs first, its index drops and renames, which
 // drop the index at once to free its name for another table's index (the
-// rebuild drops the old indexes anyway, and makes the renamed one).
+// rebuild drops the old indexes anyway, and makes the renamed one), and the
+// rename of a column another table's foreign key references, which only
+// ALTER TABLE carries to that key.
 func (r *renderer) sqlite() error {
 	last := map[TableRef]int{}      // a rebuilt table's last change, by its name in from
 	name := map[TableRef]TableRef{} // a rebuilt table's name after its rename
@@ -59,6 +61,12 @@ func (r *renderer) sqlite() error {
 			if c.From != "" {
 				r.emit("DROP INDEX "+r.indexName(c.Table, c.From), i)
 			}
+		case renameColumn:
+			if r.referenced(k, c.From) {
+				if err := r.sqliteChange(i, c); err != nil {
+					return err
+				}
+			}
 		}
 		if last[k] == i {
 			ref := k
@@ -71,6 +79,16 @@ func (r *renderer) sqlite() error {
 		}
 	}
 	return nil
+}
+
+// referenced reports whether a foreign key of another table of from names
+// the column col of its table k.
+func (r *renderer) referenced(k TableRef, col string) bool {
+	return slices.ContainsFunc(r.from.Tables, func(t Table) bool {
+		return t.Ref() != k && slices.ContainsFunc(t.ForeignKeys, func(fk ForeignKey) bool {
+			return fk.RefTable == k && slices.Contains(fk.RefColumns, col)
+		})
+	})
 }
 
 // dropsCycle reports whether a dropped table is referenced by one dropped
@@ -150,6 +168,7 @@ func (r *renderer) rebuild(i int, k, ref TableRef) error {
 		return err
 	}
 	renamed := map[string]string{} // a column's name in from, by its new name
+	inPlace := map[string]bool{}   // a new name the table has before the copy
 	added := map[string]bool{}
 	var folded []int
 	for j, c := range r.cs {
@@ -163,6 +182,7 @@ func (r *renderer) rebuild(i int, k, ref TableRef) error {
 		switch c := c.(type) {
 		case renameColumn:
 			renamed[c.To] = c.From
+			inPlace[c.To] = r.referenced(k, c.From)
 		case addColumn:
 			added[c.Column.Name] = true
 		}
@@ -184,6 +204,9 @@ func (r *renderer) rebuild(i int, k, ref TableRef) error {
 		}
 		if added[c.Name] || ft == nil || ft.column(s) == nil {
 			continue
+		}
+		if inPlace[c.Name] {
+			s = c.Name
 		}
 		cols, src = append(cols, r.ident(c.Name)), append(src, r.ident(s))
 	}

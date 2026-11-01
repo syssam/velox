@@ -190,9 +190,12 @@ func (d *differ) tables() {
 }
 
 // keepKeysIndexed, on MySQL, drops in step 1 a foreign key whose every
-// index step 1 drops, as MySQL refuses to drop a key's last index (error
+// index the plan drops, as MySQL refuses to drop a key's last index (error
 // 1553), and adds it back in step 7, after the indexes. A key renamed in
-// step 2 is dropped under its from name instead.
+// step 2 is dropped under its from name instead. An index dropped in step 8
+// is left there when to has another that covers the key, made in step 7, and
+// otherwise goes to step 1 with the key, so that MySQL makes the key's own
+// index when it is added back.
 func (d *differ) keepKeysIndexed() {
 	for i := range d.to.Tables {
 		u := &d.to.Tables[i]
@@ -204,12 +207,15 @@ func (d *differ) keepKeysIndexed() {
 		if r, ok := d.fromRef[ref]; ok {
 			oref = r
 		}
-		dropped, keys := map[string]bool{}, map[string]bool{}
+		dropped, late, keys := map[string]bool{}, map[string]bool{}, map[string]bool{}
 		for _, p := range d.out {
 			switch c := p.c.(type) {
 			case dropIndex:
 				if p.step == 1 && c.Table == oref {
 					dropped[c.Index.Name] = true
+				}
+				if p.step == 8 && c.Table == ref {
+					late[c.Index.Name] = true
 				}
 			case dropForeignKey:
 				if p.step == 1 && c.Table == oref {
@@ -227,9 +233,16 @@ func (d *differ) keepKeysIndexed() {
 				return len(cols) >= len(fk.Columns) && slices.Equal(cols[:len(fk.Columns)], fk.Columns)
 			}
 			if keys[name] || leads(t.PrimaryKey) || slices.ContainsFunc(t.Indexes, func(ix Index) bool {
-				return !dropped[ix.Name] && leads(ix.Columns)
+				return !dropped[ix.Name] && !late[ix.Name] && leads(ix.Columns)
 			}) {
 				continue
+			}
+			if !slices.ContainsFunc(t.Indexes, func(ix Index) bool { return dropped[ix.Name] && leads(ix.Columns) }) &&
+				slices.ContainsFunc(u.Indexes, func(ix Index) bool { return leads(ix.Columns) }) {
+				continue // the new index is made before the old one goes
+			}
+			if !slices.ContainsFunc(u.Indexes, func(ix Index) bool { return leads(ix.Columns) }) {
+				d.dropEarly(ref, oref, leads)
 			}
 			if rename != nil {
 				rename.c = nil
@@ -241,6 +254,18 @@ func (d *differ) keepKeysIndexed() {
 		}
 	}
 	d.out = slices.DeleteFunc(d.out, func(p planned) bool { return p.c == nil })
+}
+
+// dropEarly moves to step 1 the step 8 drops of table ref's indexes whose
+// columns leads, oref its name in from.
+func (d *differ) dropEarly(ref, oref TableRef, leads func([]string) bool) {
+	for i := range d.out {
+		p := &d.out[i]
+		if c, ok := p.c.(dropIndex); ok && p.step == 8 && c.Table == ref && leads(c.Index.Columns) {
+			c.Table, c.Index = oref, d.origIndex(ref, d.orig.table(oref), c.Index)
+			*p = planned{c: c, step: 1, sub: 2, ref: oref, name: c.Index.Name}
+		}
+	}
 }
 
 // keyRename is the planned rename of table ref's foreign key to name, or

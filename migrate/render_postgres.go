@@ -284,13 +284,12 @@ func (r *renderer) pgAlterColumn(c alterColumn) (pgParts, error) {
 		if c.From.Default != "" {
 			act("DROP DEFAULT")
 		}
-		using := col + "::" + c.To.Type
-		if strings.HasPrefix(c.To.Type, `"`) {
-			using = col + "::text::" + c.To.Type
-		}
-		act("TYPE " + c.To.Type + " USING " + using)
+		act("TYPE " + c.To.Type + pgUsing(col, c.From.Type, c.To.Type))
 		if c.To.Default != "" {
 			act("SET DEFAULT " + c.To.Default)
+		}
+		if seq, ok := r.serialSequence(c); ok {
+			pc.stmts = append(pc.stmts, "ALTER SEQUENCE "+seq+" AS "+c.To.Type)
 		}
 	case c.What&columnDefault != 0 && c.To.Default == "":
 		act("DROP DEFAULT")
@@ -352,6 +351,70 @@ func (r *renderer) pgAlterColumn(c alterColumn) (pgParts, error) {
 		pc.stmts = append(pc.stmts, r.columnComment(c.Table, c.To))
 	}
 	return pc, nil
+}
+
+// serialSequence is the sequence of c's column, retyped to an integer type,
+// when the column is and stays a serial: a sequence that keeps its type stops
+// at that type's top, and pgCreate writes it with the column's. An identity's
+// follows its column on its own, and one not read from the default is left.
+func (r *renderer) serialSequence(c alterColumn) (string, bool) {
+	switch c.To.Type {
+	case "smallint", "integer", "bigint":
+	default:
+		return "", false
+	}
+	if c.From.Identity || c.To.Identity || !strings.HasPrefix(c.To.Default, "nextval(") {
+		return "", false
+	}
+	if c.To.Sequence != "" {
+		return r.indexName(c.Table, c.To.Sequence), true
+	}
+	ref, ok := nextvalSequence(c.To.Default)
+	if !ok {
+		return "", false
+	}
+	return r.table(ref), true
+}
+
+// pgUsing is the USING clause of a column's change from type from to type to,
+// or "" where the cast would hide a loss. An explicit cast to a string or bit
+// type of limited length cuts what does not fit, silently, where the
+// assignment cast it leaves to fails on it: a row over the length stops the
+// file. The other types read the same either way, or have no assignment
+// cast, as text to integer has not, and keep USING.
+func pgUsing(col, from, to string) string {
+	if strings.HasPrefix(to, `"`) {
+		return " USING " + col + "::text::" + to
+	}
+	if pgLimited(from, to) {
+		return ""
+	}
+	return " USING " + col + "::" + to
+}
+
+// pgLimited reports whether to is a string or bit type of limited length
+// that from reaches by an assignment cast: any type, to a string; a bit
+// string, to a bit string; never a scalar to an array. Bare character and bit
+// are of length 1; bare character varying and bit varying have no limit.
+func pgLimited(from, to string) bool {
+	base, array := strings.CutSuffix(to, "[]")
+	fromBase, fromArray := strings.CutSuffix(from, "[]")
+	if array && !fromArray {
+		return false
+	}
+	word, _, sized := strings.Cut(base, "(")
+	bits := func(t string) bool { return strings.HasPrefix(t, "bit") || strings.HasPrefix(t, "varbit") }
+	switch word {
+	case "character", "char":
+		return true
+	case "character varying", "varchar":
+		return sized
+	case "bit":
+		return bits(fromBase)
+	case "bit varying", "varbit":
+		return sized && bits(fromBase)
+	}
+	return false
 }
 
 // unnamedSequence is the refusal of an identity change that needs the name

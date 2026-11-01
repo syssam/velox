@@ -50,11 +50,12 @@ type Finding struct {
 type Allow struct{ Code, Target string } // Target "" covers every target of Code
 
 // destructive are the codes an Allow can name. Lint gives the first nine;
-// delete-rows and update-rows are LintFile's only.
+// delete-rows, update-rows, drop-schema and drop-database are LintFile's only;
+// lossCode is Up's, which no plan can give.
 var destructive = []string{
 	"drop-table", "drop-column", "alter-type", "set-not-null", "add-required-column",
 	"add-unique", "drop-enum-value", "reorder-enum", "convert-collation",
-	"delete-rows", "update-rows",
+	"delete-rows", "update-rows", "drop-schema", "drop-database", lossCode,
 }
 
 // ParseAllow reads the items of the -allow flag, joined by commas, each a
@@ -413,7 +414,7 @@ func (l *linter) addColumn(i int, c addColumn) {
 
 func (l *linter) alterColumn(i int, c alterColumn) {
 	target := colTarget(c.Table, c.To.Name)
-	if c.What&columnType != 0 && l.d != velox.SQLite {
+	if c.What&columnType != 0 {
 		l.alterType(i, c, target)
 	}
 	if c.What&columnNullable != 0 && c.From.Nullable && !c.To.Nullable {
@@ -438,9 +439,13 @@ func (l *linter) alterColumn(i int, c alterColumn) {
 }
 
 // alterType classifies a type change: an enum losing or moving values, a
-// widening, or any other change.
+// widening, or any other change. On SQLite one that keeps every value is no
+// finding of its own, only its rebuild's.
 func (l *linter) alterType(i int, c alterColumn, target string) {
 	from, to := c.From.Type, c.To.Type
+	if l.d == velox.SQLite && sqliteKeepsValues(from, to) {
+		return
+	}
 	if l.d == velox.MySQL {
 		if a, ok := ddl.ParseMySQLEnum(from); ok {
 			if b, ok := ddl.ParseMySQLEnum(to); ok {
@@ -648,6 +653,37 @@ func literalDefault(d velox.Dialect, s string) bool {
 	}
 	_, err := strconv.ParseFloat(s, 64)
 	return err == nil
+}
+
+// sqliteAffinity is the affinity SQLite gives a column of type typ, by its
+// rules in order.
+func sqliteAffinity(typ string) string {
+	t := strings.ToUpper(typ)
+	has := func(words ...string) bool {
+		return slices.ContainsFunc(words, func(w string) bool { return strings.Contains(t, w) })
+	}
+	switch {
+	case has("INT"):
+		return "INTEGER"
+	case has("CHAR", "CLOB", "TEXT"):
+		return "TEXT"
+	case has("BLOB") || t == "":
+		return "BLOB"
+	case has("REAL", "FLOA", "DOUB"): //nolint:misspell // SQLite's rule is these substrings
+		return "REAL"
+	}
+	return "NUMERIC"
+}
+
+// sqliteKeepsValues reports whether a row copied from a column of type from
+// into one of type to keeps its value: the same affinity; BLOB, which
+// converts nothing; or a number going to INTEGER or NUMERIC, which hold a
+// number as it is. TEXT to a number turns '007' into 7, a number to TEXT 7
+// into '7', and INTEGER to REAL rounds above 2^53; BLOB to anything converts
+// what the column stored as text or a number.
+func sqliteKeepsValues(from, to string) bool {
+	a, b := sqliteAffinity(from), sqliteAffinity(to)
+	return a == b || b == "BLOB" || (a == "INTEGER" || a == "NUMERIC" || a == "REAL") && (b == "INTEGER" || b == "NUMERIC")
 }
 
 // widening says whether changing a column from type from to type to only

@@ -173,8 +173,13 @@ func (r *myReader) columns(mt *myTable) error {
 		}
 		c.Identity = has("auto_increment")
 		var unheld []string
+		var keeps []keep
+		held := func(what string, words ...string) {
+			unheld = append(unheld, what)
+			keeps = append(keeps, keep{what, words})
+		}
 		if has("VIRTUAL") || has("STORED") { // VIRTUAL GENERATED, STORED GENERATED
-			unheld = append(unheld, "generated from an expression")
+			held("generated from an expression", "AS")
 		} else {
 			c.Default = mysqlDefault(c.Type, has("DEFAULT_GENERATED"), def)
 			if def.Valid && !has("DEFAULT_GENERATED") && mysqlBinaryType(c.Type) {
@@ -183,17 +188,18 @@ func (r *myReader) columns(mt *myTable) error {
 		}
 		for i, w := range words {
 			if strings.EqualFold(w, "update") && i > 0 && strings.EqualFold(words[i-1], "on") && i+1 < len(words) {
-				unheld = append(unheld, "ON UPDATE "+words[i+1])
+				held("ON UPDATE "+words[i+1], "UPDATE")
 			}
 		}
 		if has("INVISIBLE") {
-			unheld = append(unheld, "invisible")
+			held("invisible", "INVISIBLE", "VISIBLE")
 		}
 		if collated != "" && collated != mt.t.Collation {
-			unheld = append(unheld, "the collation "+collated+", not the table's "+mt.t.Collation)
+			held("the collation "+collated+", not the table's "+mt.t.Collation, "COLLATE")
 		}
 		if len(unheld) > 0 {
 			r.note(mt, c.Name, "the column is "+strings.Join(unheld, ", ")+", which the model cannot hold; it is compared without")
+			r.notes[len(r.notes)-1].keeps = keeps
 		}
 		mt.t.Columns = append(mt.t.Columns, c)
 		return nil

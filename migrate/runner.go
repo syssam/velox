@@ -9,9 +9,11 @@ import (
 	"io/fs"
 	"log/slog"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/ddl"
 )
 
 // An Option changes how Up, Status and Resolve run. Each says which of them
@@ -19,10 +21,11 @@ import (
 type Option struct{ apply func(*options) }
 
 type options struct {
-	target   uint64        // 0: every file
-	lockWait time.Duration // default 5m
-	logger   *slog.Logger  // nil: none
-	resume   bool
+	target    uint64        // with targetSet: the last version to apply
+	targetSet bool          // 0 is a version: 0000 is a valid file
+	lockWait  time.Duration // default 5m
+	logger    *slog.Logger  // nil: none
+	resume    bool
 
 	baseline    uint64
 	baselineSet bool // 0 is a version: 0000 is a valid file
@@ -52,9 +55,10 @@ func optionsOf(opts []Option) options {
 }
 
 // WithTarget makes Up apply the pending files up to version, and none
-// above it.
+// above it. 0 is a version like any other: it applies a file 0000_* and
+// nothing after it. Without WithTarget, Up applies every pending file.
 func WithTarget(version uint64) Option {
-	return Option{func(o *options) { o.target = version }}
+	return Option{func(o *options) { o.target, o.targetSet = version, true }}
 }
 
 // WithResume makes Up continue a dirty version before the pending files,
@@ -149,6 +153,17 @@ var errAppliedMeanwhile = errors.New("migrate: applied by another runner")
 // refused too, as LintFile refuses it: an *Error of Code "file" at the
 // statement's line.
 //
+// A generated SQLite rebuild of a table that holds what the model cannot
+// (a trigger, an expression index, a collation, a generated column, a foreign
+// key's ON UPDATE or DEFERRABLE, ON CONFLICT, STRICT or WITHOUT ROWID), or
+// that a view or another table's trigger names, and a MySQL MODIFY or CHANGE
+// COLUMN that does not write a column's ON UPDATE, collation, INVISIBLE or
+// generation, are refused with an *Error of Code "unmodeled" naming each: the
+// rebuild's transaction is rolled back, and the MySQL file does not start. A
+// directive -- velox:allow unmodeled-loss [<object>] accepts the loss, but for
+// a view or trigger's use, which SQLite refuses whatever it says. Up checks
+// each file as it comes to it, so files before it stay applied.
+//
 // A file runs in a transaction with its history row on PostgreSQL and
 // SQLite; one that fails is rolled back, and Up stops with an error naming
 // the file and the statement that wraps the driver's. A MySQL file, or a
@@ -225,7 +240,7 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 		todo = append(todo, *resumed)
 	}
 	for _, f := range st.Pending {
-		if o.target != 0 && f.Version > o.target {
+		if o.targetSet && f.Version > o.target {
 			break
 		}
 		todo = append(todo, f)
@@ -276,7 +291,7 @@ func (o options) checkBaseline(d *Dir) error {
 	switch {
 	case o.resume:
 		return refuse("a baseline cannot resume a dirty version")
-	case o.target != 0 && o.target < o.baseline:
+	case o.targetSet && o.target < o.baseline:
 		return refuse("the target %d is below the baseline %d", o.target, o.baseline)
 	case !slices.ContainsFunc(d.Files, func(f File) bool { return f.Version == o.baseline }):
 		return refuse("the directory has no file of version %d", o.baseline)
@@ -540,8 +555,10 @@ func (s *session) resuming(dir *Dir, st *State) (*File, error) {
 
 // applyTx runs a file in one transaction, its history row included: BEGIN
 // (BEGIN IMMEDIATE on SQLite), the lock timeout on PostgreSQL, the
-// statements, a check that the file left the transaction open, PRAGMA
-// foreign_key_check on SQLite with foreign keys off, the row, COMMIT, then
+// statements, a check that the file left the transaction open, the check of
+// what a SQLite rebuild lost, PRAGMA foreign_key_check on SQLite with foreign
+// keys off, of the tables the file
+// touches and their children, the row, COMMIT, then
 // a line to o's logger. On SQLite, foreign keys are turned off before BEGIN
 // when the file asks and set back after, and a file another runner applied
 // since the history was read is skipped with errAppliedMeanwhile. That
@@ -590,7 +607,11 @@ func (s *session) applyTx(ctx context.Context, f File, o options) (Applied, erro
 		}
 	}
 	start := time.Now()
+	guard := s.guardRebuilds(f)
 	for i, q := range f.Statements {
+		if err := guard.before(ctx, i); err != nil {
+			return Applied{}, guardError(err, rolledBack)
+		}
 		if _, err := s.conn.ExecContext(ctx, q); err != nil {
 			return Applied{}, rolledBack("statement %d of %d: %w", i+1, len(f.Statements), err)
 		}
@@ -598,8 +619,11 @@ func (s *session) applyTx(ctx context.Context, f File, o options) (Applied, erro
 	if !s.ownsTx(ctx) {
 		return Applied{}, fmt.Errorf("migrate: %s: the file ended the runner's transaction, so what it ran is committed in part; version %d is not recorded", f.Path, f.Version)
 	}
+	if err := guard.after(ctx); err != nil {
+		return Applied{}, guardError(err, rolledBack)
+	}
 	if fkOff {
-		if err := s.foreignKeyCheck(ctx); err != nil {
+		if err := s.foreignKeyCheck(ctx, f); err != nil {
 			return Applied{}, rolledBack("%w", err)
 		}
 	}
@@ -624,9 +648,57 @@ func (s *session) applyTx(ctx context.Context, f File, o options) (Applied, erro
 	return a, nil
 }
 
-// foreignKeyCheck is PRAGMA foreign_key_check's first row, as an error.
-func (s *session) foreignKeyCheck(ctx context.Context) error {
-	rows, err := s.conn.QueryContext(ctx, "PRAGMA foreign_key_check")
+// foreignKeyCheck is PRAGMA foreign_key_check's first row, as an error, for
+// the tables f touches and those with a foreign key to one: an orphan row
+// elsewhere was there before f, and f did nothing to it. A statement of f
+// touchedTables cannot read, or a trigger on a table it touches, which may
+// write anywhere, makes it the check of the whole database.
+func (s *session) foreignKeyCheck(ctx context.Context, f File) error {
+	touched, known := touchedTables(s.d, f)
+	if !known {
+		return s.checkKeys(ctx, "PRAGMA foreign_key_check")
+	}
+	lower := func(name string) string { return strings.ToLower(name) }
+	trigger := false
+	err := eachRow(ctx, s.conn, `SELECT tbl_name FROM main.sqlite_schema WHERE type = 'trigger'`, nil, func(rows *sql.Rows) error {
+		var table string
+		err := rows.Scan(&table)
+		trigger = trigger || touched[lower(table)]
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("PRAGMA foreign_key_check: %w", err)
+	}
+	if trigger {
+		return s.checkKeys(ctx, "PRAGMA foreign_key_check")
+	}
+	var check []string
+	err = eachRow(ctx, s.conn, `SELECT m.name, coalesce(k."table", '') FROM main.sqlite_schema m
+LEFT JOIN pragma_foreign_key_list(m.name) k WHERE m.type = 'table' ORDER BY m.name`, nil, func(rows *sql.Rows) error {
+		var table, parent string
+		if err := rows.Scan(&table, &parent); err != nil {
+			return err
+		}
+		if (touched[lower(table)] || touched[lower(parent)]) && !slices.Contains(check, table) {
+			check = append(check, table)
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("PRAGMA foreign_key_check: %w", err)
+	}
+	for _, table := range check {
+		if err := s.checkKeys(ctx, "PRAGMA foreign_key_check("+ddl.Ident(velox.SQLite, table)+")"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkKeys is q's first row, as q is one form of PRAGMA foreign_key_check,
+// as an error.
+func (s *session) checkKeys(ctx context.Context, q string) error {
+	rows, err := s.conn.QueryContext(ctx, q)
 	if err != nil {
 		return fmt.Errorf("PRAGMA foreign_key_check: %w", err)
 	}

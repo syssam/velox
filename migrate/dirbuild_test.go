@@ -19,6 +19,38 @@ type step struct {
 	files map[string]string // hand-written files added after the plan's, by path
 }
 
+// oneTable is a schema of one table t, with an integer key and the columns.
+func oneTable(d velox.Dialect, cols ...migrate.Column) *migrate.Schema {
+	all := append([]migrate.Column{{Name: "id", Type: "integer"}}, cols...)
+	t := migrate.Table{Name: "t", Columns: all, PrimaryKey: []string{"id"}}
+	switch d {
+	case velox.Postgres:
+		t.PrimaryKeyName = "t_pkey"
+	case velox.MySQL:
+		t.PrimaryKeyName = "PRIMARY"
+		t.Collation = "utf8mb4_bin"
+	}
+	return &migrate.Schema{Dialect: d, Tables: []migrate.Table{t}}
+}
+
+// allowAll allows code for every target.
+func allowAll(code string) migrate.PlanOptions {
+	return migrate.PlanOptions{Allow: []migrate.Allow{{Code: code}}}
+}
+
+// rewrite is fsys with path's content edited by f and velox.sum made again.
+func rewrite(t *testing.T, fsys fstest.MapFS, path string, f func(string) string) fstest.MapFS {
+	t.Helper()
+	out := cloneFS(fsys)
+	out[path].Data = []byte(f(string(out[path].Data)))
+	sum, err := migrate.Sum(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out["velox.sum"] = &fstest.MapFile{Data: sum}
+	return out
+}
+
 // cloneFS is a copy of fsys.
 func cloneFS(fsys fstest.MapFS) fstest.MapFS {
 	out := fstest.MapFS{}
