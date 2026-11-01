@@ -61,6 +61,35 @@ var builtins = []string{
 
 const builtin = "velox-graphql"
 
+// introspection lists GraphQL's own types and the models gqlgen gives them. Its
+// autobind runs first, and looks in the generated package for a Go type of the
+// name without the "__", so a Go type there named Type would take __Type, and
+// the generated server would not build. (introspectionBinds.)
+var introspection = []struct{ goName, typ, kw, model string }{
+	{"Directive", "__Directive", "type", "github.com/99designs/gqlgen/graphql/introspection.Directive"},
+	{"DirectiveLocation", "__DirectiveLocation", "enum", "github.com/99designs/gqlgen/graphql.String"},
+	{"EnumValue", "__EnumValue", "type", "github.com/99designs/gqlgen/graphql/introspection.EnumValue"},
+	{"Field", "__Field", "type", "github.com/99designs/gqlgen/graphql/introspection.Field"},
+	{"InputValue", "__InputValue", "type", "github.com/99designs/gqlgen/graphql/introspection.InputValue"},
+	{"Schema", "__Schema", "type", "github.com/99designs/gqlgen/graphql/introspection.Schema"},
+	{"Type", "__Type", "type", "github.com/99designs/gqlgen/graphql/introspection.Type"},
+	{"TypeKind", "__TypeKind", "enum", "github.com/99designs/gqlgen/graphql.String"},
+}
+
+// introspectionBinds is the SDL that keeps gqlgen's models on GraphQL's own
+// types whose Go names the generated package takes: "" when it takes none.
+func (n typeNames) introspectionBinds() string {
+	var b strings.Builder
+	for _, t := range introspection {
+		_, typed := n.declared[t.goName] // a GraphQL type's Go name is its own
+		if _, declared := n.goNames[t.goName]; !typed && !declared {
+			continue
+		}
+		fmt.Fprintf(&b, "extend %s %s @goModel(model: %s)\n", t.kw, t.typ, quote(t.model))
+	}
+	return b.String()
+}
+
 // typeNames records which element declares each GraphQL type name, so that
 // two that would declare one name fail with both named. It also knows the Go
 // names velox-gen declares in the generated package, which gqlgen's autobind

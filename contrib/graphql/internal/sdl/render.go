@@ -871,6 +871,16 @@ func (g *graph) write(w *writer) {
 	for _, o := range g.objects {
 		g.writeObject(w, o)
 	}
+
+	if binds := g.types.introspectionBinds(); binds != "" {
+		w.line()
+		w.line("# GraphQL's own types keep gqlgen's models: the generated package has a Go")
+		w.line("# type of each of these names, which gqlgen's autobind would bind instead.")
+		w.line()
+		for l := range strings.SplitSeq(strings.TrimSuffix(binds, "\n"), "\n") {
+			w.line(l)
+		}
+	}
 }
 
 func (g *graph) writeObject(w *writer, o *object) {

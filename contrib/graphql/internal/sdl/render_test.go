@@ -1010,3 +1010,37 @@ func TestGoModelRefused(t *testing.T) {
 	user.Annotations = ann(t, goModel)
 	renderErr(t, model(user), "schema User", want)
 }
+
+// TestIntrospectionTypeNames: an entity, or an enum, whose Go name autobind
+// would take for one of GraphQL's own types gets the line that keeps that
+// type's model, and an SDL without one has none.
+func TestIntrospectionTypeNames(t *testing.T) {
+	_, plain := load(t, model(entity("Post")))
+	if strings.Contains(plain, "__") {
+		t.Errorf("an SDL with no such name has:\n%s", plain)
+	}
+	kind := field("kind", "enum")
+	kind.Enum, kind.EnumValues = "TypeKind", []string{"a"}
+	typ := entity("Type", kind)
+	m := model(typ, entity("Schema"))
+	m.Enums = []*plugin.Enum{{Type: "TypeKind", Values: []string{"a"}}}
+	_, sdl := load(t, m)
+	for _, want := range []string{
+		`extend type __Type @goModel(model: "github.com/99designs/gqlgen/graphql/introspection.Type")`,
+		`extend enum __TypeKind @goModel(model: "github.com/99designs/gqlgen/graphql.String")`,
+		`extend type __Schema @goModel(model: "github.com/99designs/gqlgen/graphql/introspection.Schema")`,
+	} {
+		if !strings.Contains(sdl, want) {
+			t.Errorf("no %q in\n%s", want, sdl)
+		}
+	}
+	if strings.Contains(sdl, "__Field") {
+		t.Errorf("a type nothing takes is bound:\n%s", sdl)
+	}
+	// A renamed entity's Go alias takes the name too.
+	r := entity("Thing")
+	r.Annotations = ann(t, graphql.Type("Field"))
+	if _, sdl := load(t, model(r)); !strings.Contains(sdl, "extend type __Field") {
+		t.Errorf("graphql.Type(%q):\n%s", "Field", sdl)
+	}
+}
