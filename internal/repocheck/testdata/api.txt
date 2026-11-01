@@ -1,0 +1,970 @@
+package .
+ColumnInfo.Codec bool
+ColumnInfo.Default any
+ColumnInfo.DefaultFunc func() any
+ColumnInfo.Field string
+ColumnInfo.HasDefault bool
+ColumnInfo.Immutable bool
+ColumnInfo.Name string
+ColumnInfo.Nullable bool
+ColumnInfo.RequiredEdge string
+ColumnInfo.Sensitive bool
+ColumnInfo.Type any
+ColumnInfo.UpdateDefault func() any
+ConflictClause.Columns []int
+ConflictClause.DoNothing bool
+ConflictClause.Update []int
+ConflictClause.Where []Predicate
+EachClause.Column int
+EachClause.Join *EntityInfo
+EachClause.JoinOwner int
+EachClause.JoinTarget int
+EachClause.Keys []any
+EachClause.Limit int
+EachClause.Target int
+EntityInfo.Column(name string) (int, bool)
+EntityInfo.Columns []ColumnInfo
+EntityInfo.Indexes []IndexInfo
+EntityInfo.Name string
+EntityInfo.PrimaryKey []int
+EntityInfo.Schema string
+EntityInfo.Table string
+EntityInfo.Tenant int
+Shard.Primary Conn
+Shard.Replicas []Conn
+Statement.Aggregate Aggregate
+Statement.AllRows bool
+Statement.Args []any
+Statement.Caller Caller
+Statement.Columns []int
+Statement.Conflict *ConflictClause
+Statement.Count bool
+Statement.Dialect Dialect
+Statement.DryRun bool
+Statement.Each *EachClause
+Statement.Entity *EntityInfo
+Statement.Exists bool
+Statement.Fingerprint string
+Statement.GroupBy int
+Statement.InTx bool
+Statement.Limit int
+Statement.Lock Lock
+Statement.LockWait LockWait
+Statement.MaxRows int
+Statement.Offset int
+Statement.Op Op
+Statement.OrderBy []OrderTerm
+Statement.PolicyBypass string
+Statement.Result Result
+Statement.Returning []int
+Statement.Route Route
+Statement.Rows [][]any
+Statement.SQL string
+Statement.Set []Assignment
+Statement.Tags []Tag
+Statement.Tenant any
+Statement.TenantBypass string
+Statement.Tx *TxInfo
+Statement.Unbounded bool
+Statement.Where []Predicate
+Statement.Writable bool
+const AggregateAvg
+const AggregateMax
+const AggregateMin
+const AggregateSum
+const AssignAdd
+const AssignSet
+const AssignSub
+const ConstraintCheck
+const ConstraintForeignKey
+const ConstraintNotNull
+const ConstraintUnique
+const GeneratedCodeIsVersion6
+const LockForShare
+const LockForUpdate
+const LockNoWait
+const LockSkipLocked
+const MySQL
+const OpDelete
+const OpInsert
+const OpRawExec
+const OpRawQuery
+const OpSelect
+const OpUpdate
+const Postgres
+const SQLite
+const TxCommit
+const TxError
+const TxRollback
+func (c Col[E, V]) Asc[_ Lazy[V]]() Order[E]
+func (c Col[E, V]) Desc[_ Lazy[V]]() Order[E]
+func (c Col[E, V]) EQ[_ Lazy[V]](v V) Pred[E]
+func (c Col[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
+func (c Col[E, V]) Key[_ Lazy[V]]() GroupKey[E, V]
+func (c Col[E, V]) NEQ[_ Lazy[V]](v V) Pred[E]
+func (c Col[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
+func (c Col[E, V]) Set[_ Lazy[V]](v V) Setter[E]
+func (c Col[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (V, bool)
+func (c JSONCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
+func (c JSONCol[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (V, bool)
+func (c NullCol[E, V]) Asc[_ Lazy[V]]() Order[E]
+func (c NullCol[E, V]) Desc[_ Lazy[V]]() Order[E]
+func (c NullCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E]
+func (c NullCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
+func (c NullCol[E, V]) IsNull[_ Lazy[V]]() Pred[E]
+func (c NullCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, *V]
+func (c NullCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E]
+func (c NullCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
+func (c NullCol[E, V]) NotNull[_ Lazy[V]]() Pred[E]
+func (c NullCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
+func (c NullCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
+func (c NullCol[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (*V, bool)
+func (c NullJSONCol[E, V]) IsNull[_ Lazy[V]]() Pred[E]
+func (c NullJSONCol[E, V]) NotNull[_ Lazy[V]]() Pred[E]
+func (c NullJSONCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
+func (c NullJSONCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
+func (c NullJSONCol[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (*V, bool)
+func (c NullNumberCol[E, V]) Add[_ Lazy[V]](v V) Setter[E]
+func (c NullNumberCol[E, V]) Asc[_ Lazy[V]]() Order[E]
+func (c NullNumberCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
+func (c NullNumberCol[E, V]) Desc[_ Lazy[V]]() Order[E]
+func (c NullNumberCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E]
+func (c NullNumberCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E]
+func (c NullNumberCol[E, V]) GT[_ Lazy[V]](v V) Pred[E]
+func (c NullNumberCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
+func (c NullNumberCol[E, V]) IsNull[_ Lazy[V]]() Pred[E]
+func (c NullNumberCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, *V]
+func (c NullNumberCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E]
+func (c NullNumberCol[E, V]) LT[_ Lazy[V]](v V) Pred[E]
+func (c NullNumberCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E]
+func (c NullNumberCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
+func (c NullNumberCol[E, V]) NotNull[_ Lazy[V]]() Pred[E]
+func (c NullNumberCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
+func (c NullNumberCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
+func (c NullNumberCol[E, V]) Sub[_ Lazy[V]](v V) Setter[E]
+func (c NullNumberCol[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (*V, bool)
+func (c NullOrderedCol[E, V]) Asc[_ Lazy[V]]() Order[E]
+func (c NullOrderedCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
+func (c NullOrderedCol[E, V]) Desc[_ Lazy[V]]() Order[E]
+func (c NullOrderedCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E]
+func (c NullOrderedCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E]
+func (c NullOrderedCol[E, V]) GT[_ Lazy[V]](v V) Pred[E]
+func (c NullOrderedCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
+func (c NullOrderedCol[E, V]) IsNull[_ Lazy[V]]() Pred[E]
+func (c NullOrderedCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, *V]
+func (c NullOrderedCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E]
+func (c NullOrderedCol[E, V]) LT[_ Lazy[V]](v V) Pred[E]
+func (c NullOrderedCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E]
+func (c NullOrderedCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
+func (c NullOrderedCol[E, V]) NotNull[_ Lazy[V]]() Pred[E]
+func (c NullOrderedCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
+func (c NullOrderedCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
+func (c NullOrderedCol[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (*V, bool)
+func (c NullStringCol[E, V]) Asc[_ Lazy[V]]() Order[E]
+func (c NullStringCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
+func (c NullStringCol[E, V]) Contains[_ Lazy[V]](s V) Pred[E]
+func (c NullStringCol[E, V]) Desc[_ Lazy[V]]() Order[E]
+func (c NullStringCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E]
+func (c NullStringCol[E, V]) EqualFold[_ Lazy[V]](s V) Pred[E]
+func (c NullStringCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E]
+func (c NullStringCol[E, V]) GT[_ Lazy[V]](v V) Pred[E]
+func (c NullStringCol[E, V]) HasPrefix[_ Lazy[V]](s V) Pred[E]
+func (c NullStringCol[E, V]) HasSuffix[_ Lazy[V]](s V) Pred[E]
+func (c NullStringCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
+func (c NullStringCol[E, V]) IsNull[_ Lazy[V]]() Pred[E]
+func (c NullStringCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, *V]
+func (c NullStringCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E]
+func (c NullStringCol[E, V]) LT[_ Lazy[V]](v V) Pred[E]
+func (c NullStringCol[E, V]) Like[_ Lazy[V]](pattern string) Pred[E]
+func (c NullStringCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E]
+func (c NullStringCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
+func (c NullStringCol[E, V]) NotNull[_ Lazy[V]]() Pred[E]
+func (c NullStringCol[E, V]) SetNull[_ Lazy[V]]() Setter[E]
+func (c NullStringCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
+func (c NullStringCol[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (*V, bool)
+func (c NumberCol[E, V]) Add[_ Lazy[V]](v V) Setter[E]
+func (c NumberCol[E, V]) Asc[_ Lazy[V]]() Order[E]
+func (c NumberCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
+func (c NumberCol[E, V]) Desc[_ Lazy[V]]() Order[E]
+func (c NumberCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E]
+func (c NumberCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E]
+func (c NumberCol[E, V]) GT[_ Lazy[V]](v V) Pred[E]
+func (c NumberCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
+func (c NumberCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, V]
+func (c NumberCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E]
+func (c NumberCol[E, V]) LT[_ Lazy[V]](v V) Pred[E]
+func (c NumberCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E]
+func (c NumberCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
+func (c NumberCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
+func (c NumberCol[E, V]) Sub[_ Lazy[V]](v V) Setter[E]
+func (c NumberCol[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (V, bool)
+func (c OrderedCol[E, V]) Asc[_ Lazy[V]]() Order[E]
+func (c OrderedCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
+func (c OrderedCol[E, V]) Desc[_ Lazy[V]]() Order[E]
+func (c OrderedCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E]
+func (c OrderedCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E]
+func (c OrderedCol[E, V]) GT[_ Lazy[V]](v V) Pred[E]
+func (c OrderedCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
+func (c OrderedCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, V]
+func (c OrderedCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E]
+func (c OrderedCol[E, V]) LT[_ Lazy[V]](v V) Pred[E]
+func (c OrderedCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E]
+func (c OrderedCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
+func (c OrderedCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
+func (c OrderedCol[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (V, bool)
+func (c StringCol[E, V]) Asc[_ Lazy[V]]() Order[E]
+func (c StringCol[E, V]) Between[_ Lazy[V]](lo, hi V) Pred[E]
+func (c StringCol[E, V]) Contains[_ Lazy[V]](s V) Pred[E]
+func (c StringCol[E, V]) Desc[_ Lazy[V]]() Order[E]
+func (c StringCol[E, V]) EQ[_ Lazy[V]](v V) Pred[E]
+func (c StringCol[E, V]) EqualFold[_ Lazy[V]](s V) Pred[E]
+func (c StringCol[E, V]) GTE[_ Lazy[V]](v V) Pred[E]
+func (c StringCol[E, V]) GT[_ Lazy[V]](v V) Pred[E]
+func (c StringCol[E, V]) HasPrefix[_ Lazy[V]](s V) Pred[E]
+func (c StringCol[E, V]) HasSuffix[_ Lazy[V]](s V) Pred[E]
+func (c StringCol[E, V]) In[_ Lazy[V]](vs ...V) Pred[E]
+func (c StringCol[E, V]) Key[_ Lazy[V]]() GroupKey[E, V]
+func (c StringCol[E, V]) LTE[_ Lazy[V]](v V) Pred[E]
+func (c StringCol[E, V]) LT[_ Lazy[V]](v V) Pred[E]
+func (c StringCol[E, V]) Like[_ Lazy[V]](pattern string) Pred[E]
+func (c StringCol[E, V]) NEQ[_ Lazy[V]](v V) Pred[E]
+func (c StringCol[E, V]) NotIn[_ Lazy[V]](vs ...V) Pred[E]
+func (c StringCol[E, V]) Set[_ Lazy[V]](v V) Setter[E]
+func (c StringCol[E, V]) ValueIn[_ Lazy[V]](m *Mutation[E]) (V, bool)
+func (d DeleteQuery[E]) All[_ Lazy[E]]() DeleteQuery[E]
+func (d DeleteQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error)
+func (d DeleteQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
+func (d DeleteQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) DeleteQuery[E]
+func (db *DB) Delete[E any, PE Entity[E]]() DeleteQuery[E]
+func (db *DB) Dialect() Dialect
+func (db *DB) Exec(ctx context.Context, reason, query string, args ...any) (int64, error)
+func (db *DB) InsertAll[E any, PE Entity[E]](xs []E) InsertQuery[E]
+func (db *DB) Insert[E any, PE Entity[E]](x PE) InsertQuery[E]
+func (db *DB) Query[E any, PE Entity[E]]() Query[E]
+func (db *DB) Raw[E any, PE Entity[E]](reason, query string, args ...any) RawQuery[E]
+func (db *DB) Save[E any, PE Entity[E]](x PE, col Column[E], more ...Column[E]) SaveQuery[E]
+func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error, opts ...TxOption) error
+func (db *DB) Update[E any, PE Entity[E]]() UpdateQuery[E]
+func (f MutateFunc[E]) Mutate(ctx context.Context, m *Mutation[E]) error
+func (m *Mutation[E]) Affected[_ Lazy[E]]() int64
+func (m *Mutation[E]) Conds[_ Lazy[E]]() []Pred[E]
+func (m *Mutation[E]) DB[_ Lazy[E]]() *DB
+func (m *Mutation[E]) Op[_ Lazy[E]]() Op
+func (m *Mutation[E]) Rows[_ Lazy[E]]() []*E
+func (m *Mutation[E]) SetAffected[_ Lazy[E]](n int64)
+func (m *Mutation[E]) Set[_ Lazy[E]](ss ...Setter[E])
+func (m *Mutation[E]) Where[_ Lazy[E]](ps ...Pred[E])
+func (m Many[T]) Get[_ Lazy[T]]() ([]T, bool)
+func (m Many[T]) MarshalJSON() ([]byte, error)
+func (o *MetaOnce[E]) Load[_ Lazy[E]](desc func() Desc[E]) *Meta[E]
+func (o One[T]) Get[_ Lazy[T]]() (*T, bool)
+func (o One[T]) MarshalJSON() ([]byte, error)
+func (q InsertQuery[E]) DoNothing[_ Lazy[E]]() InsertQuery[E]
+func (q InsertQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error
+func (q InsertQuery[E]) OnConflict[_ Lazy[E]](cols ...Column[E]) InsertQuery[E]
+func (q InsertQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
+func (q InsertQuery[E]) Update[_ Lazy[E]](cols ...Column[E]) InsertQuery[E]
+func (q Query[E]) After[_ Lazy[E]](x *E) Query[E]
+func (q Query[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error)
+func (q Query[E]) Columns[_ Lazy[E]](cs ...Column[E]) Query[E]
+func (q Query[E]) Count[_ Lazy[E]](ctx context.Context) (int64, error)
+func (q Query[E]) Exists[_ Lazy[E]](ctx context.Context) (bool, error)
+func (q Query[E]) First[_ Lazy[E]](ctx context.Context) (*E, error)
+func (q Query[E]) ForShare[_ Lazy[E]]() Query[E]
+func (q Query[E]) ForUpdate[_ Lazy[E]]() Query[E]
+func (q Query[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error]
+func (q Query[E]) Limit[_ Lazy[E]](n int) Query[E]
+func (q Query[E]) MaxRows[_ Lazy[E]](n int) Query[E]
+func (q Query[E]) NoWait[_ Lazy[E]]() Query[E]
+func (q Query[E]) Offset[_ Lazy[E]](n int) Query[E]
+func (q Query[E]) Omit[_ Lazy[E]](cs ...Column[E]) Query[E]
+func (q Query[E]) One[_ Lazy[E]](ctx context.Context) (*E, error)
+func (q Query[E]) OrderBy[_ Lazy[E]](os ...Order[E]) Query[E]
+func (q Query[E]) Ordered[_ Lazy[E]]() bool
+func (q Query[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
+func (q Query[E]) Selects[_ Lazy[E]](cs ...Column[E]) bool
+func (q Query[E]) SkipLocked[_ Lazy[E]]() Query[E]
+func (q Query[E]) Unbounded[_ Lazy[E]]() Query[E]
+func (q Query[E]) Where[_ Lazy[E]](ps ...Pred[E]) Query[E]
+func (q Query[E]) With[T any](r Rel[E, T]) Query[E]
+func (q Query[E]) Writable[_ Lazy[E]]() Query[E]
+func (q RawQuery[E]) All[_ Lazy[E]](ctx context.Context) ([]E, error)
+func (q RawQuery[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error]
+func (q RawQuery[E]) MaxRows[_ Lazy[E]](n int) RawQuery[E]
+func (q RawQuery[E]) One[_ Lazy[E]](ctx context.Context) (*E, error)
+func (r Rel[E, T]) HasWhere[_ Lazy[T]](ps ...Pred[T]) Pred[E]
+func (r Rel[E, T]) Has[_ Lazy[T]]() Pred[E]
+func (r Rel[E, T]) LimitEach[_ Lazy[T]](n int) Rel[E, T]
+func (r Rel[E, T]) MaxRows[_ Lazy[T]](n int) Rel[E, T]
+func (r Rel[E, T]) Of[_ Lazy[T]](owners ...*E) Pred[T]
+func (r Rel[E, T]) OrderBy[_ Lazy[T]](os ...Order[T]) Rel[E, T]
+func (r Rel[E, T]) Where[_ Lazy[T]](ps ...Pred[T]) Rel[E, T]
+func (r Rel[E, T]) With[U any](next Rel[T, U]) Rel[E, T]
+func (s SaveQuery[E]) Exec[_ Lazy[E]](ctx context.Context) error
+func (s SaveQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
+func (s SaveQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) SaveQuery[E]
+func (u UpdateQuery[E]) All[_ Lazy[E]]() UpdateQuery[E]
+func (u UpdateQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error)
+func (u UpdateQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
+func (u UpdateQuery[E]) Set[_ Lazy[E]](ss ...Setter[E]) UpdateQuery[E]
+func (u UpdateQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) UpdateQuery[E]
+func Allow[E any]() Pred[E]
+func And[E any](ps ...Pred[E]) Pred[E]
+func AvgBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, float64], error)
+func Avg[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (float64, bool, error)
+func BindHooks[E any](hs []Hook[E]) BoundHooks
+func BindPolicy[E any](p Policy[E]) BoundPolicy
+func CheckEntity[E any, PE Entity[E]]() error
+func CheckRelation[E, T any](r Rel[E, T]) error
+func ColumnEQ(column int, v any) Predicate
+func CountBy[E, K any](ctx context.Context, q Query[E], key GroupKey[E, K]) ([]Group[K, int64], error)
+func CountEach[E, T any](ctx context.Context, q Query[T], r Rel[E, T], owners []*E) ([]int64, error)
+func Deny(reason string) error
+func DriverCode(err error) (string, bool)
+func EdgeBidi[T any, PT Entity[T]](name string, keyCol, idCol int) EdgeDesc
+func EdgeThrough[J, T any, PJ Entity[J], PT Entity[T]](name string, ownerCol, joinOwner, joinTarget, targetCol int) EdgeDesc
+func EdgeTo[T any, PT Entity[T]](name string, ownerCol, targetCol int) EdgeDesc
+func GoType(c ColumnInfo) reflect.Type
+func IsDryRun(ctx context.Context) bool
+func IsNotFound(err error) bool
+func LoadEach[E, T any](ctx context.Context, q Query[T], r Rel[E, T], owners []*E) ([][]T, error)
+func MaxBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, V], error)
+func Max[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (V, bool, error)
+func MinBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, V], error)
+func Min[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (V, bool, error)
+func Not[E any](p Pred[E]) Pred[E]
+func On[E any](h Hook[E], ops ...Op) Hook[E]
+func Open(d Dialect, db *sql.DB, opts ...Option) *DB
+func OpenConn(d Dialect, c Conn, opts ...Option) *DB
+func OpenShards(d Dialect, shards map[string]Shard, opts ...Option) *DB
+func Or[E any](ps ...Pred[E]) Pred[E]
+func PinUntil(ctx context.Context, t time.Time)
+func PinnedUntil(ctx context.Context) time.Time
+func RowScopeFromContext(ctx context.Context) RowScope
+func SQLConn(db *sql.DB) Conn
+func SumBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, V], error)
+func Sum[E, V any](ctx context.Context, q Query[E], c NumberCol[E, V]) (V, error)
+func TxIsolation(level sql.IsolationLevel) TxOption
+func TxReadOnly() TxOption
+func TxRetries(opts ...TxOption) int
+func TxRetrySerializable(n int) TxOption
+func TxTimeout(d time.Duration) TxOption
+func ValidateSet[E any, PE Entity[E]](set ...Setter[E]) error
+func Validate[E any, PE Entity[E]](x PE, cs ...Column[E]) error
+func WithAllTenants(ctx context.Context, reason string) context.Context
+func WithAround(a Around) Option
+func WithCallerSkip(pkgPath ...string) Option
+func WithCallers() Option
+func WithDeadlines(d Deadlines) Option
+func WithMaxLimit(n int) Option
+func WithMaxRows(n int) Option
+func WithPinWindow(d time.Duration) Option
+func WithPrimaryReads(ctx context.Context) context.Context
+func WithReplicaBackoff(d time.Duration) Option
+func WithReplicas(conns ...Conn) Option
+func WithRewrite(r Rewrite) Option
+func WithSQLComment(app string, tags ...string) Option
+func WithSession(ctx context.Context) context.Context
+func WithShard(ctx context.Context, name string) context.Context
+func WithShardFor(f func(ctx context.Context, tenant any) (string, error)) Option
+func WithTags(ctx context.Context, kv ...string) context.Context
+func WithTenant(ctx context.Context, id any) context.Context
+func WithTxAround(h TxAround) Option
+func WithoutPolicy(ctx context.Context, reason string) context.Context
+func WithoutTx(ctx context.Context) context.Context
+type Aggregate = veloxtype.Aggregate
+type Around = engine.Around
+type AssignOp = veloxtype.AssignOp
+type Assignment = veloxtype.Assignment
+type BoundHooks = engine.BoundHooks
+type BoundPolicy = engine.BoundPolicy
+type Caller = veloxtype.Caller
+type Col[E, V any] struct { I int32 }
+type ColumnDesc = veloxtype.ColumnDesc
+type ColumnInfo = engine.ColumnInfo
+type Column[E any] interface{ column(*E) int32 }
+type ConflictClause = engine.ConflictClause
+type Conn = engine.Conn
+type ConstraintError = veloxtype.ConstraintError
+type ConstraintKind = veloxtype.ConstraintKind
+type DB struct { }
+type Deadlines = veloxtype.Deadlines
+type DeleteQuery[E any] struct { }
+type Desc[E any] struct { Table string Schema string Columns []ColumnDesc PrimaryKey []int Tenant int Bidi bool Indexes []IndexInfo Edges []EdgeDesc Addr func(x *E, i int) any EdgeAddr func(x *E, i int) any Check func(col int, v any) error Policy func() BoundPolicy Hooks func() BoundHooks }
+type Dialect = veloxtype.Dialect
+type EachClause = engine.EachClause
+type EdgeDesc = engine.EdgeDesc
+type EntityInfo = engine.EntityInfo
+type Entity[E any] interface { *E VeloxMeta() *Meta[E] }
+type GroupKey[E, K any] struct { }
+type Group[K, V any] struct { Key K Value V }
+type Hook[E any] func(next Mutator[E]) Mutator[E]
+type IndexInfo = veloxtype.IndexInfo
+type InsertQuery[E any] struct { }
+type JSONCol[E, V any] struct { I int32 }
+type Lazy[T any] interface{ *T }
+type Lock = veloxtype.Lock
+type LockWait = veloxtype.LockWait
+type Many[T any] struct { }
+type MetaOnce[E any] struct { }
+type Meta[E any] struct { }
+type MutateFunc[E any] func(ctx context.Context, m *Mutation[E]) error
+type Mutation[E any] struct { }
+type Mutator[E any] interface { Mutate(ctx context.Context, m *Mutation[E]) error }
+type NullCol[E, V any] struct { I int32 }
+type NullJSONCol[E, V any] struct { I int32 }
+type NullNumberCol[E, V any] struct { I int32 }
+type NullOrderedCol[E, V any] struct { I int32 }
+type NullStringCol[E any, V ~string] struct { I int32 }
+type NumberCol[E, V any] struct { I int32 }
+type One[T any] struct { }
+type Op = veloxtype.Op
+type Option = engine.Option
+type OrderTerm = veloxtype.OrderTerm
+type Order[E any] struct { }
+type OrderedCol[E, V any] struct { I int32 }
+type PolicyError = veloxtype.PolicyError
+type Policy[E any] struct { Read func(ctx context.Context) (Pred[E], error) Write func(ctx context.Context) (Pred[E], error) Insert func(ctx context.Context, x *E) error }
+type Pred[E any] = engine.Pred[E]
+type Predicate = engine.Predicate
+type Query[E any] struct { }
+type RawQuery[E any] struct { }
+type Rel[E, T any] struct { I int32 }
+type Result = veloxtype.Result
+type Rewrite = engine.Rewrite
+type Route = veloxtype.Route
+type RowScope = veloxtype.RowScope
+type SaveQuery[E any] struct { }
+type SchemaError = veloxtype.SchemaError
+type Setter[E any] struct { }
+type Shard = engine.Shard
+type Statement = engine.Statement
+type StringCol[E any, V ~string] struct { I int32 }
+type Tag = veloxtype.Tag
+type TxAround = veloxtype.TxAround
+type TxInfo = veloxtype.TxInfo
+type TxOption = engine.TxOption
+type TxOutcome = veloxtype.TxOutcome
+type TxRetry = veloxtype.TxRetry
+type UpdateQuery[E any] struct { }
+type ValidationError = veloxtype.ValidationError
+var ErrDenied
+var ErrDryRun
+var ErrImmutable
+var ErrLimitTooLarge
+var ErrLocked
+var ErrNoShard
+var ErrNoTenant
+var ErrNoWhere
+var ErrNotFound
+var ErrNotSingular
+var ErrOutsideTx
+var ErrPolicyUpsert
+var ErrTenantImmutable
+var ErrTenantMismatch
+var ErrTenantUpsert
+var ErrTimeout
+var ErrTooManyRows
+var ErrUnbounded
+
+package veloxtype
+const AggregateAvg
+const AggregateMax
+const AggregateMin
+const AggregateSum Aggregate
+const AssignAdd
+const AssignSet AssignOp
+const AssignSub
+const ConstraintCheck
+const ConstraintForeignKey
+const ConstraintNotNull
+const ConstraintUnique ConstraintKind
+const LockForShare
+const LockForUpdate Lock
+const LockNoWait
+const LockSkipLocked LockWait
+const MySQL
+const OpDelete
+const OpInsert
+const OpRawExec
+const OpRawQuery
+const OpSelect Op
+const OpUpdate
+const Postgres Dialect
+const SQLite
+const TxCommit TxOutcome
+const TxError
+const TxRollback
+func (d Dialect) String() string
+func (e *ConstraintError) Error() string
+func (e *ConstraintError) Unwrap() error
+func (e *PolicyError) Error() string
+func (e *PolicyError) Is(target error) bool
+func (e *PolicyError) Unwrap() error
+func (e *SchemaError) Error() string
+func (e *ValidationError) Error() string
+func (e *ValidationError) Unwrap() error
+func (k ConstraintKind) String() string
+func (o Op) Raw() bool
+func (o Op) Reads() bool
+func (o Op) String() string
+func (o TxOutcome) String() string
+type Aggregate uint8
+type AssignOp uint8
+type Assignment struct { Column int Op AssignOp Value any }
+type Caller struct { File string Line int Func string }
+type ColumnDesc struct { Field string Name string Default any DefaultFunc func() any UpdateDefault func() any Immutable bool Sensitive bool Nullable bool RequiredEdge string Encode func(v any) ([]byte, error) Decode func(data []byte, v any) error }
+type ConstraintError struct { Entity string Kind ConstraintKind Constraint string Err error }
+type ConstraintKind uint8
+type Deadlines struct { Statement time.Duration MaxStatement time.Duration Tx time.Duration MaxTx time.Duration }
+type Dialect uint8
+type IndexInfo struct { Columns []int Unique bool }
+type Lock uint8
+type LockWait uint8
+type Op uint8
+type OrderTerm struct { Column int Desc bool }
+type PolicyError struct { Entity string Op Op Err error }
+type Result struct { Rows int64 Affected int64 LoopBody time.Duration }
+type Route struct { Shard string Replica int Fallback bool }
+type RowScope struct { Tenant any TenantBypass string PolicyBypass string Shard string HasShard bool }
+type SchemaError struct { Entity string Field string Reason string }
+type Tag struct { Key, Value string }
+type TxAround func(ctx context.Context, tx *TxInfo, next func(context.Context) error) error
+type TxInfo struct { ID uint64 Isolation sql.IsolationLevel ReadOnly bool Route Route Attempt int Retries []TxRetry Outcome TxOutcome }
+type TxOutcome uint8
+type TxRetry struct { Err error At time.Time }
+type ValidationError struct { Entity string Field string Err error }
+var ErrDenied
+
+package veloxpgx
+func Conn(pool *pgxpool.Pool) velox.Conn
+func Open(pool *pgxpool.Pool, opts ...velox.Option) *velox.DB
+
+package schema
+func (*CheckAnnotation) Name() string
+func (*CommentAnnotation) Name() string
+func (*TableAnnotation) Name() string
+func (Schema) Annotations() []Annotation
+func (Schema) Edges() []Edge
+func (Schema) Fields() []Field
+func (Schema) Indexes() []Index
+func (Schema) Mixin() []Mixin
+func (Schema) Type()
+func (a *CheckAnnotation) Merge(other Annotation) Annotation
+func Check(name, expr string) *CheckAnnotation
+func Comment(text string) *CommentAnnotation
+func Table(name string) *TableAnnotation
+func TableIn(schema, table string) *TableAnnotation
+type Annotation = desc.Annotation
+type CheckAnnotation struct { Checks []CheckConstraint }
+type CheckConstraint struct { Name string Expr string }
+type CommentAnnotation struct { Text string }
+type Edge interface{ Descriptor() *desc.Edge }
+type Field interface{ Descriptor() *desc.Field }
+type Index interface{ Descriptor() *desc.Index }
+type Interface interface { Type() Fields() []Field Edges() []Edge Indexes() []Index Mixin() []Mixin Annotations() []Annotation }
+type Merger interface{ Merge(Annotation) Annotation }
+type Mixin interface { Fields() []Field Edges() []Edge Indexes() []Index Annotations() []Annotation }
+type Schema struct { }
+type TableAnnotation struct { Schema string Table string }
+
+package schema/edge
+const Cascade Action
+const NoAction Action
+const Restrict Action
+const SetNull Action
+func (b *AssocBuilder) Annotations(as ...schema.Annotation) *AssocBuilder
+func (b *AssocBuilder) Comment(s string) *AssocBuilder
+func (b *AssocBuilder) Descriptor() *desc.Edge
+func (b *AssocBuilder) Field(name string) *AssocBuilder
+func (b *AssocBuilder) From(name string) *InverseBuilder
+func (b *AssocBuilder) Immutable() *AssocBuilder
+func (b *AssocBuilder) OnDelete(a Action) *AssocBuilder
+func (b *AssocBuilder) Required() *AssocBuilder
+func (b *AssocBuilder) StorageKey(opts ...StorageOption) *AssocBuilder
+func (b *AssocBuilder) Unique() *AssocBuilder
+func (b *InverseBuilder) Annotations(as ...schema.Annotation) *InverseBuilder
+func (b *InverseBuilder) Comment(s string) *InverseBuilder
+func (b *InverseBuilder) Descriptor() *desc.Edge
+func (b *InverseBuilder) Field(name string) *InverseBuilder
+func (b *InverseBuilder) Immutable() *InverseBuilder
+func (b *InverseBuilder) OnDelete(a Action) *InverseBuilder
+func (b *InverseBuilder) Ref(name string) *InverseBuilder
+func (b *InverseBuilder) Required() *InverseBuilder
+func (b *InverseBuilder) StorageKey(opts ...StorageOption) *InverseBuilder
+func (b *InverseBuilder) Unique() *InverseBuilder
+func Column(name string) StorageOption
+func Columns(to, from string) StorageOption
+func From(name string, t any) *InverseBuilder
+func Symbol(s string) StorageOption
+func Symbols(to, from string) StorageOption
+func Table(name string) StorageOption
+func To(name string, t any) *AssocBuilder
+type Action string
+type AssocBuilder struct { }
+type InverseBuilder struct { }
+type StorageOption func(*desc.Edge)
+
+package schema/field
+const MySQL
+const Postgres
+const SQLite
+func (b *BytesBuilder) MaxLen(n int) *BytesBuilder
+func (b *BytesBuilder) MinLen(n int) *BytesBuilder
+func (b *BytesBuilder) NotEmpty() *BytesBuilder
+func (b *EnumBuilder) Default(v string) *EnumBuilder
+func (b *EnumBuilder) GoType(ev EnumValues) *EnumBuilder
+func (b *EnumBuilder) NamedValues(pairs ...string) *EnumBuilder
+func (b *EnumBuilder) Values(vs ...string) *EnumBuilder
+func (b *EnumOfBuilder[T]) Default(v T) *EnumOfBuilder[T]
+func (b *JSONBuilder) Default(v any) *JSONBuilder
+func (b *NumberBuilder[T]) Default(v T) *NumberBuilder[T]
+func (b *NumberBuilder[T]) Max(v T) *NumberBuilder[T]
+func (b *NumberBuilder[T]) Min(v T) *NumberBuilder[T]
+func (b *NumberBuilder[T]) Negative() *NumberBuilder[T]
+func (b *NumberBuilder[T]) NonNegative() *NumberBuilder[T]
+func (b *NumberBuilder[T]) Positive() *NumberBuilder[T]
+func (b *NumberBuilder[T]) Range(lo, hi T) *NumberBuilder[T]
+func (b *NumberBuilder[T]) Validate(fn func(T) error) *NumberBuilder[T]
+func (b *OtherBuilder) Default(v any) *OtherBuilder
+func (b *StringBuilder) Match(re *regexp.Regexp) *StringBuilder
+func (b *StringBuilder) MaxLen(n int) *StringBuilder
+func (b *StringBuilder) MaxRuneLen(n int) *StringBuilder
+func (b *StringBuilder) MinLen(n int) *StringBuilder
+func (b *StringBuilder) MinRuneLen(n int) *StringBuilder
+func (b *StringBuilder) NotEmpty() *StringBuilder
+func (b *TimeBuilder) Default(fn func() time.Time) *TimeBuilder
+func (b *TimeBuilder) GoType(typ any) *TimeBuilder
+func (b *TimeBuilder) UpdateDefault(fn func() time.Time) *TimeBuilder
+func (b *UUIDBuilder) Default(fn any) *UUIDBuilder
+func (b *UUIDOfBuilder[T]) Default(fn func() T) *UUIDOfBuilder[T]
+func Bool(name string) *BoolBuilder
+func Bytes(name string) *BytesBuilder
+func Enum(name string) *EnumBuilder
+func EnumOf[T EnumType](name string) *EnumOfBuilder[T]
+func Float(name string) *NumberBuilder[float64]
+func Float32(name string) *NumberBuilder[float32]
+func Floats(name string) *JSONBuilder
+func Int(name string) *NumberBuilder[int]
+func Int16(name string) *NumberBuilder[int16]
+func Int32(name string) *NumberBuilder[int32]
+func Int64(name string) *NumberBuilder[int64]
+func Int8(name string) *NumberBuilder[int8]
+func Ints(name string) *JSONBuilder
+func JSON(name string, typ any) *JSONBuilder
+func Number[T Numeric](name string) *NumberBuilder[T]
+func Other(name string, typ driver.Valuer) *OtherBuilder
+func String(name string) *StringBuilder
+func Strings(name string) *JSONBuilder
+func Text(name string) *StringBuilder
+func Time(name string) *TimeBuilder
+func UUID(name string, typ driver.Valuer) *UUIDBuilder
+func UUIDOf[T driver.Valuer](name string) *UUIDOfBuilder[T]
+func Uint(name string) *NumberBuilder[uint]
+func Uint16(name string) *NumberBuilder[uint16]
+func Uint32(name string) *NumberBuilder[uint32]
+func Uint64(name string) *NumberBuilder[uint64]
+func Uint8(name string) *NumberBuilder[uint8]
+type BoolBuilder struct { }
+type BytesBuilder struct { }
+type EnumBuilder struct { }
+type EnumOfBuilder[T EnumType] struct { }
+type EnumType interface { ~string Values() []string }
+type EnumValues interface{ Values() []string }
+type JSONBuilder struct { }
+type NumberBuilder[T Numeric] struct { }
+type Numeric interface { ~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~float32 | ~float64 }
+type OtherBuilder struct { }
+type StringBuilder struct { }
+type TimeBuilder struct { }
+type UUIDBuilder struct { }
+type UUIDOfBuilder[T driver.Valuer] struct { }
+
+package schema/index
+func (b *Builder) Annotations(as ...schema.Annotation) *Builder
+func (b *Builder) Descriptor() *desc.Index
+func (b *Builder) Edges(edges ...string) *Builder
+func (b *Builder) Fields(fields ...string) *Builder
+func (b *Builder) StorageKey(name string) *Builder
+func (b *Builder) Unique() *Builder
+func (b *Builder) Where(sql string) *Builder
+func Edges(edges ...string) *Builder
+func Fields(fields ...string) *Builder
+type Builder struct { }
+
+package schema/mixin
+func (CreateTime) Fields() []schema.Field
+func (Schema) Annotations() []schema.Annotation
+func (Schema) Edges() []schema.Edge
+func (Schema) Fields() []schema.Field
+func (Schema) Indexes() []schema.Index
+func (Time) Fields() []schema.Field
+func (UpdateTime) Fields() []schema.Field
+type CreateTime struct { Schema }
+type Schema struct { }
+type Time struct { Schema }
+type UpdateTime struct { Schema }
+
+package migrate
+const Destructive
+const ResolveApplied Resolution
+const ResolveUndone
+const Review
+const Safe Class
+const ScriptEnum
+const ScriptMain ScriptKind
+const ScriptOnline
+func (c Class) String() string
+func (d *Dir) Add(name string, p *Plan, to *Schema) (map[string][]byte, error)
+func (d *Dir) PathOf(version uint64, name string) string
+func (e *BlockedError) Error() string
+func (e *ChecksumError) Error() string
+func (e *DirtyError) Error() string
+func (e *DirtyError) Unwrap() error
+func (e *Error) Error() string
+func (e *Error) Unwrap() error
+func (e *SumError) Error() string
+func (k ScriptKind) String() string
+func (r TableRef) String() string
+func (s *Schema) Equal(t *Schema) bool
+func (s *Schema) Table(ref TableRef) (*Table, bool)
+func (s *Schema) UnmarshalJSON(data []byte) error
+func (s Schema) MarshalJSON() ([]byte, error)
+func (t *Table) Ref() TableRef
+func (w Warning) String() string
+func Baseline(ctx context.Context, db *sql.DB, want *Schema) (*Schema, []Warning, error)
+func Blocked(findings []Finding, allow []Allow) []Finding
+func Diff(from, to *Schema, opts DiffOptions) ([]Change, error)
+func Drift(ctx context.Context, db *sql.DB, snapshot *Schema) (*DriftReport, error)
+func Inspect(ctx context.Context, db *sql.DB, d velox.Dialect, tables []TableRef) (*Schema, error)
+func Lint(from *Schema, changes []Change) []Finding
+func LintFile(d velox.Dialect, f File) ([]Finding, error)
+func NewDir(c Config) (*Dir, error)
+func NewPlan(from, to *Schema, opts PlanOptions) (*Plan, error)
+func ParseAllow(s string) ([]Allow, error)
+func ParseFile(d velox.Dialect, path string, data []byte) (File, error)
+func ReadDir(fsys fs.FS) (*Dir, error)
+func Render(from, to *Schema, changes []Change, opts RenderOptions) ([]Script, error)
+func Resolve(ctx context.Context, db *sql.DB, dir fs.FS, version uint64, r Resolution, opts ...Option) error
+func Status(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*State, error)
+func Sum(fsys fs.FS) ([]byte, error)
+func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, error)
+func Verify(ctx context.Context, db *sql.DB, dir fs.FS) error
+func WithBaseline(version uint64) Option
+func WithLockWait(d time.Duration) Option
+func WithLogger(l *slog.Logger) Option
+func WithResume() Option
+func WithTarget(version uint64) Option
+type Allow struct { Code, Target string }
+type Applied struct { Version uint64 Name string Sum string AppliedAt time.Time Duration time.Duration Dirty bool Statements int Error string }
+type BlockedError struct { Findings []Finding }
+type Change interface { Kind() Kind Target() TableRef String() string isChange() }
+type Check struct { Name string Expr string Pos string }
+type ChecksumError struct { Version uint64 Path string Applied, Now string }
+type Class uint8
+type Column struct { Name string Type string Nullable bool Default string Identity bool Sequence string Comment string Pos string }
+type ColumnRef struct { Table TableRef Column string }
+type Config struct { Dialect velox.Dialect Table string LockTimeout time.Duration }
+type DiffOptions struct { RenameTables map[TableRef]TableRef RenameColumns map[ColumnRef]string }
+type Dir struct { Config Config Files []File Snapshot *Schema }
+type Directives struct { NoTransaction bool ForeignKeysOff bool LockTimeout time.Duration LockTimeoutSet bool Allow []Allow }
+type DirtyError struct { Version uint64 Path string Statement, Statements int Err error }
+type DriftReport struct { Changes []Change Warnings []Warning }
+type Enum struct { Schema string Name string Values []string Pos string }
+type Error struct { Pos string Object string Code string Reason string }
+type File struct { Version uint64 Name string Path string Sum string Directives Directives Statements []string Units []int }
+type Finding struct { Code string Class Class Change int Target string Pos string Message string }
+type ForeignKey struct { Name string Columns []string RefTable TableRef RefColumns []string OnDelete string Pos string }
+type Index struct { Name string Columns []string Unique bool Where string Constraint bool Pos string }
+type Kind string
+type Option struct { }
+type Plan struct { Changes []Change Findings []Finding Scripts []Script }
+type PlanOptions struct { Diff DiffOptions Allow []Allow LockTimeout time.Duration }
+type RenderOptions struct { LockTimeout time.Duration Allow []Allow }
+type Report struct { Applied []Applied Baselined []uint64 Ahead bool }
+type Resolution uint8
+type Schema struct { Dialect velox.Dialect Tables []Table Enums []Enum }
+type Script struct { Kind ScriptKind Directives Directives Statements []Statement }
+type ScriptKind uint8
+type State struct { Applied []Applied Pending []File Ahead []Applied Dirty *Applied }
+type Statement struct { SQL string Change int Unit int Review string }
+type SumError struct { Path string }
+type Table struct { Schema string Name string Columns []Column PrimaryKey []string PrimaryKeyName string Indexes []Index ForeignKeys []ForeignKey Checks []Check Comment string Collation string Pos string }
+type TableRef struct { Schema string Name string }
+type Warning struct { Object string Message string }
+var ErrLockWait
+
+package plugin
+const M2M EdgeKind
+const M2O EdgeKind
+const ModelVersion
+const O2M EdgeKind
+const O2O EdgeKind
+const ProtocolVersion
+func GoName(s string) string
+func GoPlural(name string) string
+func Main(s Supports, gen GenerateFunc)
+func Plural(s string) string
+func Run(s Supports, in io.Reader, out io.Writer, gen GenerateFunc) error
+func Singular(s string) string
+func Snake(s string) string
+type Check struct { Kind string Args []json.RawMessage }
+type Edge struct { Name string GoName string Target string Ref string Kind EdgeKind Unique bool Required bool Inverse bool Immutable bool Field string FieldOn string OwnsKey bool Comment string Join string Annotations map[string]json.RawMessage }
+type EdgeKind string
+type Entity struct { Name string Label string Handles string Table string TableSchema string Join bool Comment string Fields []*Field Edges []*Edge Indexes []*Index PrimaryKey []int Tenant int Annotations map[string]json.RawMessage }
+type Enum struct { Type string Values []string }
+type Field struct { Name string GoName string Column string Type string GoType string ElemType string PkgPath string Imports []string Kind string Pointer bool Nullable bool Optional bool Immutable bool Sensitive bool Unique bool AutoID bool Size int HasDefault bool Default json.RawMessage UpdateDefault bool Implicit string Enum string EnumValues []string Checks []Check SchemaType map[string]string Comment string Annotations map[string]json.RawMessage }
+type File struct { Path string Content string }
+type GenerateFunc func(req *Request) (files []File, warnings []string, err error)
+type Index struct { Name string Fields []string Unique bool Where string }
+type Model struct { Version int SchemaPath string Entities []*Entity Enums []*Enum }
+type Request struct { Protocol int Generator string OutPackage string OutPath string Options map[string]string Model *Model }
+type Response struct { Protocol int Files []File Warnings []string Error string }
+type Supports struct { Protocol, Model int }
+
+package contrib/graphql
+const OpContains
+const OpEQ WhereOp
+const OpGT
+const OpGTE
+const OpHasPrefix
+const OpHasSuffix
+const OpIn
+const OpIsNil
+const OpLT
+const OpLTE
+const OpNEQ
+const OpNotIn
+const OpNotNil
+const OpsAll
+const OpsComparison
+const OpsDefault WhereOp
+const OpsEquality
+const OpsNullable
+const OpsString
+const SkipAll
+const SkipEnumField
+const SkipMutationCreateInput
+const SkipMutationUpdateInput
+const SkipOrderField
+const SkipType SkipMode
+const SkipWhereInput
+func (Annotation) Name() string
+func (a Annotation) Merge(other schema.Annotation) schema.Annotation
+func Connection(on bool) Annotation
+func CreateInput(on bool) Annotation
+func Directives(ds ...Directive) Annotation
+func EnumValues(m map[string]string) Annotation
+func FieldName(name string) Annotation
+func MultiOrder() Annotation
+func MutationCreate() MutationKind
+func MutationDelete() MutationKind
+func MutationUpdate() MutationKind
+func Mutations(kinds ...MutationKind) Annotation
+func OrderField(name string) Annotation
+func OrderUnguarded() Annotation
+func QueryField(name string) Annotation
+func Skip(modes ...SkipMode) Annotation
+func Type(name string) Annotation
+func UpdateInput(on bool) Annotation
+func WhereEdge() Annotation
+func WhereOps(ops ...WhereOp) Annotation
+type Annotation struct { Skip SkipMode Type string QueryField string Mutations []MutationKind MultiOrder bool FieldName string OrderField string OrderUnguarded bool WhereOps WhereOp WhereEdge bool Connection *bool CreateInput *bool UpdateInput *bool EnumValues map[string]string Directives []Directive }
+type Directive struct { Name string Args map[string]any }
+type MutationKind string
+type SkipMode uint16
+type WhereOp uint32
+
+package contrib/graphql/veloxgql
+const CodeBadUserInput
+const CodeForbidden
+const CodeInternal
+const CodeNotFound
+const CodeTooCostly
+const CodeUnauthenticated
+const GeneratedCodeIsVersion3
+const OrderDirectionAsc OrderDirection
+const OrderDirectionDesc OrderDirection
+func (*Extension) ExtensionName() string
+func (*Extension) InterceptField(ctx context.Context, next graphql.Resolver) (any, error)
+func (b *Bytes) UnmarshalGQL(v any) error
+func (b Bytes) MarshalGQL(w io.Writer)
+func (c *Cursor) UnmarshalGQLContext(_ context.Context, v any) error
+func (c Cursor) MarshalGQLContext(_ context.Context, w io.Writer) error
+func (d *OrderDirection) UnmarshalGQL(v any) error
+func (d OrderDirection) IsValid() bool
+func (d OrderDirection) MarshalGQL(w io.Writer)
+func (d OrderDirection) String() string
+func (e *Extension) InterceptOperation(ctx context.Context, next graphql.OperationHandler) graphql.ResponseHandler
+func (e *Extension) InterceptResponse(ctx context.Context, next graphql.ResponseHandler) *graphql.Response
+func (e *Extension) MutateOperationContext(_ context.Context, rc *graphql.OperationContext) *gqlerror.Error
+func (e *Extension) NewContext(ctx context.Context) context.Context
+func (e *Extension) Validate(es graphql.ExecutableSchema) error
+func (j *JSON) UnmarshalGQL(v any) error
+func (j JSON) MarshalGQL(w io.Writer)
+func (t *Time) UnmarshalGQL(v any) error
+func (t Time) MarshalGQL(w io.Writer)
+func (u *UUID) UnmarshalGQL(v any) error
+func (u *Uint64) UnmarshalGQL(v any) error
+func (u UUID) MarshalGQL(w io.Writer)
+func (u UUID) String() string
+func (u Uint64) MarshalGQL(w io.Writer)
+func Batch[E any](ctx context.Context, rows []*E)
+func Cost(schema *ast.Schema, op *ast.OperationDefinition, vars map[string]any, l Limits) int
+func DBFromContext(ctx context.Context) (*velox.DB, error)
+func DecodeCursor(s string) (Cursor, error)
+func DecodeID[K any](id, typ string) (K, error)
+func DefaultLimits() Limits
+func EncodeCursor(c Cursor) (string, error)
+func EncodeID(typ string, key any) string
+func ErrorPresenter(log func(ctx context.Context, err error), opts ...PresenterOption) graphql.ErrorPresenterFunc
+func IDType(id string) (string, error)
+func LimitsFromContext(ctx context.Context) Limits
+func MarshalBytes(b []byte) graphql.Marshaler
+func MarshalFloat32(f float32) graphql.Marshaler
+func MarshalTime(t time.Time) graphql.Marshaler
+func MarshalUUID(u uuid.UUID) graphql.Marshaler
+func MarshalUint(u uint) graphql.Marshaler
+func MarshalUint64(u uint64) graphql.Marshaler
+func NewExtension(db *velox.DB, opts ...Option) *Extension
+func OnCanceled(f func(ctx context.Context, err error)) PresenterOption
+func UnmarshalBytes(v any) ([]byte, error)
+func UnmarshalFloat32(v any) (float32, error)
+func UnmarshalTime(v any) (time.Time, error)
+func UnmarshalUUID(v any) (uuid.UUID, error)
+func UnmarshalUint(v any) (uint, error)
+func UnmarshalUint64(v any) (uint64, error)
+func WithBatchScope(f func(context.Context) any) Option
+func WithLimits(l Limits) Option
+func WithTxFilter(f func(ctx context.Context, op *ast.OperationDefinition) bool) Option
+func WithTxOptions(opts ...velox.TxOption) Option
+type Bytes []byte
+type Cursor struct { Type string Terms []CursorTerm Key any }
+type CursorTerm struct { Field string Direction OrderDirection Value any }
+type Extension struct { }
+type JSON json.RawMessage
+type Limits struct { MaxPage int MaxList int MaxFilterDepth int MaxFilterWidth int MaxFilterNodes int MaxOrderTerms int MaxCost int }
+type Noder interface { IsNode() IDGQL() string }
+type Option struct { }
+type OrderDirection string
+type PageInfo struct { HasNextPage bool HasPreviousPage bool StartCursor *Cursor EndCursor *Cursor }
+type PresenterOption struct { }
+type Time time.Time
+type UUID [16]byte
+type Uint64 uint64
+var ErrBadCursor
+var ErrBadID
+var ErrBadPagination
+var ErrFilterTooDeep
+var ErrFilterTooLarge
+var ErrFilterTooWide
+var ErrNoDB
+var ErrPageTooLarge
+var ErrTooCostly
+var ErrWrongIDType
+
+package contrib/veloxotel
+func Options(cfg Config) []velox.Option
+type Config struct { TracerProvider trace.TracerProvider MeterProvider metric.MeterProvider App string CommentTags []string OmitCallers bool OmitQueryText bool RecordTenant bool RecordMetricFingerprint bool RecordReturnedRows bool Target Target TargetFor func(r velox.Route) Target }
+type Target struct { Namespace string Address string Port int }
+

@@ -7,27 +7,27 @@ import (
 	"strings"
 )
 
-// PgConnClosed and pgTxClosed are the text of pgx's ErrConnClosed and ErrTxClosed.
+// pgConnClosed and pgTxClosed are the text of pgx's ErrConnClosed and ErrTxClosed.
 // TestPgxTypesMirrored pins them.
 const (
-	PgConnClosed = "conn closed"
+	pgConnClosed = "conn closed"
 	pgTxClosed   = "tx is closed"
 )
 
-// Constraint reads a driver error as a violated constraint, or returns nil.
+// constraint reads a driver error as a violated constraint, or returns nil.
 // velox does not import the drivers. A PostgreSQL error is one with a SQLState
 // method, whose constraint and column come from its fields by name; MySQL's and
 // SQLite's are recognized by type name and read from their text.
-func Constraint(entity string, err error) *ConstraintError {
+func constraint(entity string, err error) *ConstraintError {
 	var kind ConstraintKind
 	var name string
-	if pg, ok := PgErrorOf(err); ok {
+	if pg, ok := pgErrorOf(err); ok {
 		kind, name = pgKind(pg)
 	} else {
-		if n, msg, ok := MysqlError(err); ok {
-			kind, name = MysqlKind(n, msg)
+		if n, msg, ok := mysqlError(err); ok {
+			kind, name = mysqlKind(n, msg)
 		} else if code, msg, ok := sqliteError(err); ok {
-			kind, name = SqliteKind(code, msg)
+			kind, name = sqliteKind(code, msg)
 		}
 	}
 	if kind == 0 {
@@ -39,12 +39,12 @@ func Constraint(entity string, err error) *ConstraintError {
 // pgErr is what velox reads of a *pgconn.PgError.
 type pgErr struct{ Code, ConstraintName, ColumnName string }
 
-// PgErrorOf reads the first error in err's tree that is not a nil pointer and
+// pgErrorOf reads the first error in err's tree that is not a nil pointer and
 // reports a SQLSTATE through a SQLState method, as *pgconn.PgError does in every
 // pgx version. A driver's fields of other names read as empty.
-func PgErrorOf(err error) (pgErr, bool) {
+func pgErrorOf(err error) (pgErr, bool) {
 	var pg pgErr
-	found := Walk(err, func(e error) bool {
+	found := walk(err, func(e error) bool {
 		s, ok := e.(interface{ SQLState() string })
 		if ok {
 			pg = pgErr{s.SQLState(), stringField(e, "ConstraintName"), stringField(e, "ColumnName")}
@@ -71,9 +71,9 @@ func stringField(e error, name string) string {
 	return f.String()
 }
 
-// PgConnectError reports a *pgconn.ConnectError of any pgx version in err's tree.
-func PgConnectError(err error) bool {
-	return Walk(err, func(e error) bool {
+// pgConnectError reports a *pgconn.ConnectError of any pgx version in err's tree.
+func pgConnectError(err error) bool {
+	return walk(err, func(e error) bool {
 		t := reflect.TypeOf(e)
 		if t.Kind() != reflect.Pointer || t.Elem().Name() != "ConnectError" {
 			return false
@@ -83,13 +83,13 @@ func PgConnectError(err error) bool {
 	})
 }
 
-// Locked reports a lock that could not be taken without waiting: PostgreSQL's
+// locked reports a lock that could not be taken without waiting: PostgreSQL's
 // lock_not_available (55P03) or MySQL's 3572, NOWAIT's failure.
-func Locked(err error) bool {
-	if pg, ok := PgErrorOf(err); ok {
+func locked(err error) bool {
+	if pg, ok := pgErrorOf(err); ok {
 		return pg.Code == "55P03"
 	}
-	n, _, ok := MysqlError(err)
+	n, _, ok := mysqlError(err)
 	return ok && n == 3572
 }
 
@@ -107,12 +107,12 @@ func pgKind(pg pgErr) (ConstraintKind, string) {
 	return 0, ""
 }
 
-// Walk calls f on err and on each error it wraps, depth-first through both
+// walk calls f on err and on each error it wraps, depth-first through both
 // Unwrap() error and Unwrap() []error, in errors.As's order, until f returns
 // true, and reports whether it did. A nil pointer is skipped and not
 // unwrapped, and the walk goes on past it: it is no driver's error, and its
 // methods (Error, Unwrap, Timeout) could panic on it.
-func Walk(err error, f func(error) bool) bool {
+func walk(err error, f func(error) bool) bool {
 	if err == nil {
 		return false
 	}
@@ -124,10 +124,10 @@ func Walk(err error, f func(error) bool) bool {
 	}
 	switch u := err.(type) {
 	case interface{ Unwrap() error }:
-		return Walk(u.Unwrap(), f)
+		return walk(u.Unwrap(), f)
 	case interface{ Unwrap() []error }:
 		for _, e := range u.Unwrap() {
-			if Walk(e, f) {
+			if walk(e, f) {
 				return true
 			}
 		}
@@ -135,14 +135,14 @@ func Walk(err error, f func(error) bool) bool {
 	return false
 }
 
-// Is is errors.Is over walk: a nil pointer in err's tree is passed over. A
+// is is errors.Is over walk: a nil pointer in err's tree is passed over. A
 // nil target matches a nil err only, as with errors.Is.
-func Is(err, target error) bool {
+func is(err, target error) bool {
 	if target == nil {
 		return err == nil
 	}
 	canEq := reflect.TypeOf(target).Comparable()
-	return Walk(err, func(e error) bool {
+	return walk(err, func(e error) bool {
 		if canEq && e == target {
 			return true
 		}
@@ -151,13 +151,13 @@ func Is(err, target error) bool {
 	})
 }
 
-// DriverError returns the first error in err's tree (see walk) whose type is a
+// driverError returns the first error in err's tree (see walk) whose type is a
 // pointer to the named type pkg.name. Matching the package path and not only
 // the type's name keeps a look-alike type in another package from being taken
 // for the driver's.
-func DriverError(err error, pkg, name string) error {
+func driverError(err error, pkg, name string) error {
 	var found error
-	Walk(err, func(e error) bool {
+	walk(err, func(e error) bool {
 		if t := reflect.TypeOf(e); t.Kind() == reflect.Pointer && t.Elem().PkgPath() == pkg && t.Elem().Name() == name {
 			found = e
 			return true
@@ -167,20 +167,20 @@ func DriverError(err error, pkg, name string) error {
 	return found
 }
 
-// DriverSentinel reports whether err's tree holds a driver's errors.New with
+// driverSentinel reports whether err's tree holds a driver's errors.New with
 // this text: the sentinel of a package velox does not import, recognized by its
 // type and text.
-func DriverSentinel(err error, text string) bool {
-	return Walk(err, func(e error) bool {
+func driverSentinel(err error, text string) bool {
+	return walk(err, func(e error) bool {
 		t := reflect.TypeOf(e)
 		return t.Kind() == reflect.Pointer && t.Elem().PkgPath() == "errors" && t.Elem().Name() == "errorString" && e.Error() == text
 	})
 }
 
-// MysqlError reads a go-sql-driver/mysql error, whose text is
+// mysqlError reads a go-sql-driver/mysql error, whose text is
 // "Error 1062 (23000): Duplicate entry 'a' for key 'p.p_code_uq'".
-func MysqlError(err error) (int, string, bool) {
-	e := DriverError(err, "github.com/go-sql-driver/mysql", "MySQLError")
+func mysqlError(err error) (int, string, bool) {
+	e := driverError(err, "github.com/go-sql-driver/mysql", "MySQLError")
 	if e == nil {
 		return 0, "", false
 	}
@@ -192,7 +192,7 @@ func MysqlError(err error) (int, string, bool) {
 	return n, msg, true
 }
 
-func MysqlKind(n int, msg string) (ConstraintKind, string) {
+func mysqlKind(n int, msg string) (ConstraintKind, string) {
 	switch n {
 	case 1062:
 		// The key is the message's suffix. The duplicate value comes before
@@ -228,14 +228,14 @@ func MysqlKind(n int, msg string) (ConstraintKind, string) {
 // extended result code and whose text ends with the constraint's subject:
 // "constraint failed: UNIQUE constraint failed: p.code (2067)".
 func sqliteError(err error) (int, string, bool) {
-	e := DriverError(err, "modernc.org/sqlite", "Error")
+	e := driverError(err, "modernc.org/sqlite", "Error")
 	if c, ok := e.(interface{ Code() int }); ok {
 		return c.Code(), e.Error(), true
 	}
 	return 0, "", false
 }
 
-func SqliteKind(code int, msg string) (ConstraintKind, string) {
+func sqliteKind(code int, msg string) (ConstraintKind, string) {
 	subject := ""
 	if i := strings.LastIndex(msg, "failed: "); i >= 0 {
 		subject = msg[i+len("failed: "):]
@@ -291,10 +291,10 @@ func between(s, from, to string) string {
 // through database/sql), github.com/go-sql-driver/mysql and
 // modernc.org/sqlite; another driver's error has no code here.
 func DriverCode(err error) (string, bool) {
-	if pg, ok := PgErrorOf(err); ok {
+	if pg, ok := pgErrorOf(err); ok {
 		return pg.Code, pg.Code != ""
 	}
-	if n, _, ok := MysqlError(err); ok {
+	if n, _, ok := mysqlError(err); ok {
 		return strconv.Itoa(n), true
 	}
 	if code, _, ok := sqliteError(err); ok {
@@ -303,13 +303,13 @@ func DriverCode(err error) (string, bool) {
 	return "", false
 }
 
-// Retryable reports a serialization failure or a deadlock, after which
+// retryable reports a serialization failure or a deadlock, after which
 // running the transaction again can succeed.
-func Retryable(err error) bool {
-	if pg, ok := PgErrorOf(err); ok {
+func retryable(err error) bool {
+	if pg, ok := pgErrorOf(err); ok {
 		return pg.Code == "40001" || pg.Code == "40P01"
 	}
-	if n, _, ok := MysqlError(err); ok {
+	if n, _, ok := mysqlError(err); ok {
 		return n == 1213 || n == 1205
 	}
 	if code, _, ok := sqliteError(err); ok {
@@ -322,7 +322,7 @@ func Retryable(err error) bool {
 // type T, or that an As method gives as T, which is not a nil pointer.
 func as[T error](err error) (T, bool) {
 	var found T
-	ok := Walk(err, func(e error) bool {
+	ok := walk(err, func(e error) bool {
 		if t, ok := e.(T); ok {
 			found = t
 			return true
@@ -351,10 +351,10 @@ func dbErr(info *EntityInfo, err error) error {
 	if _, ok := as[*ConstraintError](err); ok {
 		return err // already classified
 	}
-	if ce := Constraint(info.Name, err); ce != nil {
+	if ce := constraint(info.Name, err); ce != nil {
 		return ce
 	}
-	if Locked(err) {
+	if locked(err) {
 		return fmt.Errorf("velox: %s: %w: %w", info.Name, ErrLocked, err)
 	}
 	return fmt.Errorf("velox: %s: %w", info.Name, err)

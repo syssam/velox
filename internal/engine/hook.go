@@ -28,14 +28,15 @@ type MutationState struct {
 	Args     []any // what the core rendered under SQL(ctx)
 }
 
+// MutateFn is the non-generic form of a mutation hook's next step.
 type MutateFn func(ctx context.Context, mu *MutationState) error
 
 // HookFn is a Hook[E] with E erased, made once when the metadata is built.
 type HookFn func(next MutateFn) MutateFn
 
-// Identical reports whether err is core itself. An error whose type cannot be
+// identical reports whether err is core itself. An error whose type cannot be
 // compared is not, rather than a panic.
-func Identical(err, core error) bool {
+func identical(err, core error) bool {
 	if core == nil {
 		return false
 	}
@@ -46,11 +47,11 @@ func Identical(err, core error) bool {
 var (
 	// ErrNilMutator is the error of a hook that returned a nil Mutator.
 	ErrNilMutator = errors.New("a hook returned a nil Mutator")
-	// ErrNextTwice is the error of a hook that called next twice.
-	ErrNextTwice = errors.New("a hook called next twice")
-	// ErrOwnAndNext is the error of a hook that called both SetAffected and
+	// errNextTwice is the error of a hook that called next twice.
+	errNextTwice = errors.New("a hook called next twice")
+	// errOwnAndNext is the error of a hook that called both SetAffected and
 	// next.
-	ErrOwnAndNext = errors.New("SetAffected is for a hook that makes the write itself; it called next too")
+	errOwnAndNext = errors.New("SetAffected is for a hook that makes the write itself; it called next too")
 )
 
 // BoundPolicy is an entity's Policy with E erased, made by BindPolicy for
@@ -110,8 +111,10 @@ func errNilHook(entity string, i int) error {
 	return &SchemaError{Entity: entity, Reason: fmt.Sprintf("Hooks()[%d] is nil", i)}
 }
 
+// SetBoundNil records that hook at1-1 is nil: at1 is 1 + its index, and 0 means none.
 func SetBoundNil(b *BoundHooks, at1 int) { b.nilAt1 = at1 }
 
+// AddBoundHook appends h to b's hooks.
 func AddBoundHook(b *BoundHooks, h HookFn) { b.hs = append(b.hs, h) }
 
 // NewBoundPolicy wraps p.
@@ -130,9 +133,9 @@ func Mutate(ctx context.Context, db *DB, in *EntityInfo, mu *MutationState, core
 		if mu.Called {
 			// Running the core again would send the write again.
 			if mu.Err == nil {
-				mu.Err = ErrNextTwice
+				mu.Err = errNextTwice
 			}
-			mu.Core = NewStageError(in.Name, "hook", ErrNextTwice)
+			mu.Core = newStageError(in.Name, "hook", errNextTwice)
 			return mu.Core
 		}
 		mu.Called = true
@@ -142,12 +145,12 @@ func Mutate(ctx context.Context, db *DB, in *EntityInfo, mu *MutationState, core
 			mu.Where = mu.St.Where
 		}
 		if mu.Own && mu.Err == nil {
-			mu.Err = ErrOwnAndNext
+			mu.Err = errOwnAndNext
 		}
 		if mu.Err != nil {
 			// Refuse before sending: the misuse would otherwise be
 			// reported only after the write was made.
-			mu.Core = NewStageError(in.Name, "hook", mu.Err)
+			mu.Core = newStageError(in.Name, "hook", mu.Err)
 			return mu.Core
 		}
 		mu.Core = core(ctx, mu)
@@ -159,9 +162,9 @@ func Mutate(ctx context.Context, db *DB, in *EntityInfo, mu *MutationState, core
 	err := next(ctx, mu)
 	switch {
 	case err == nil && mu.Err != nil:
-		return NewStageError(in.Name, "hook", mu.Err)
-	case err == nil, Identical(err, mu.Core):
+		return newStageError(in.Name, "hook", mu.Err)
+	case err == nil, identical(err, mu.Core):
 		return err
 	}
-	return NewStageError(in.Name, "hook", err)
+	return newStageError(in.Name, "hook", err)
 }

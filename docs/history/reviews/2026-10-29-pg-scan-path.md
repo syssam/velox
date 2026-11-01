@@ -36,7 +36,7 @@ Now, on a `*sql.DB` whose driver is pgx's stdlib, velox2 reads rows through
 `colRows`, whose `Scan` hands pgx a `colScanner` (an `sql.Scanner` that calls
 `sql.ConvertAssign` on the field) in place of each destination pgx would
 convert that way. The decision is record
-[0018](../decisions/0018-pgx-stdlib-scan-wrapper.md), and the change is
+[0018](../../decisions/0018-pgx-stdlib-scan-wrapper.md), and the change is
 commit f023d4b, with the scanner from 399d7fe.
 
 ## Machine and load

@@ -100,7 +100,7 @@ func TestCheckTenantRows(t *testing.T) {
 		{"the column is not written", Statement{Columns: []int{0}, Rows: [][]any{{1}}}, "the statement does not write org"},
 		{"another tenant's row", Statement{Columns: []int{1}, Rows: [][]any{{int64(7)}, {int64(8)}}}, "a row's org is 8, the tenant is 7"},
 	} {
-		err := CheckTenantRows(in, &c.st, int64(7))
+		err := checkTenantRows(in, &c.st, int64(7))
 		if c.want == "" {
 			if err != nil {
 				t.Errorf("%s: %v", c.name, err)
@@ -125,7 +125,7 @@ func TestCheckTenantAssignments(t *testing.T) {
 		{"arithmetic", []Assignment{{Column: 1, Op: AssignAdd, Value: int64(1)}}, "the statement does arithmetic on org"},
 		{"another tenant", []Assignment{{Column: 1, Op: AssignSet, Value: int64(8)}}, "the statement sets org to 8, the tenant is 7"},
 	} {
-		err := CheckTenantAssignments(in, c.set, int64(7))
+		err := checkTenantAssignments(in, c.set, int64(7))
 		if c.want == "" {
 			if err != nil {
 				t.Errorf("%s: %v", c.name, err)
@@ -141,7 +141,7 @@ func TestCheckTenantAssignments(t *testing.T) {
 func TestColumnNames(t *testing.T) {
 	in := &EntityInfo{Columns: []ColumnInfo{{Name: "a"}, {Name: "b"}, {Name: "c"}}}
 	for want, cols := range map[string][]int{"": nil, "b": {1}, "c, a": {2, 0}} {
-		if got := ColumnNames(in, cols); got != want {
+		if got := columnNames(in, cols); got != want {
 			t.Errorf("%v: %q, want %q", cols, got, want)
 		}
 	}

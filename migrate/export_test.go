@@ -195,3 +195,40 @@ func InspectMySQLQueries(ctx context.Context, db *sql.DB, tables []TableRef) (*S
 	s, _, err := inspectMySQL(ctx, r, tables)
 	return s, r.queries, err
 }
+
+// The kinds of change, which only the tests name: an application reads a Change
+// through its Kind, Target and String.
+type (
+	CreateTable       = createTable
+	AddCheck          = addCheck
+	AddColumn         = addColumn
+	AddForeignKey     = addForeignKey
+	AddIndex          = addIndex
+	AlterColumn       = alterColumn
+	AlterEnum         = alterEnum
+	ColumnChange      = columnMask
+	CreateEnum        = createEnum
+	DropCheck         = dropCheck
+	DropColumn        = dropColumn
+	DropEnum          = dropEnum
+	DropForeignKey    = dropForeignKey
+	DropIndex         = dropIndex
+	DropTable         = dropTable
+	RenameColumn      = renameColumn
+	RenameConstraint  = renameConstraint
+	RenameEnum        = renameEnum
+	RenameIndex       = renameIndex
+	RenameSequence    = renameSequence
+	RenameTable       = renameTable
+	SetTableCollation = setTableCollation
+	SetTableComment   = setTableComment
+)
+
+// The bits of a columnMask.
+const (
+	ColumnComment  = columnComment
+	ColumnDefault  = columnDefault
+	ColumnIdentity = columnIdentity
+	ColumnNullable = columnNullable
+	ColumnType     = columnType
+)

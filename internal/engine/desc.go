@@ -120,8 +120,8 @@ func BuildDesc(x any, base unsafe.Pointer, load func() DescView) (info *EntityIn
 			return nil, err
 		}
 	}
-	rels := make([]*Relation, len(d.Relations))
-	var bidiKeys []BidiKey
+	rels := make([]*relation, len(d.Relations))
+	var bidiKeys []bidiKey
 	if len(rels) > 0 && v.RelAddr == nil {
 		return fail("", "the generated metadata has relations but no EdgeAddr; run go tool velox-gen")
 	}
@@ -147,7 +147,7 @@ func BuildDesc(x any, base unsafe.Pointer, load func() DescView) (info *EntityIn
 			}
 			bidiKeys = append(bidiKeys, bk)
 		}
-		rels[i] = &Relation{Name: r.name, Many: strings.HasPrefix(rt.Name(), "Many["), Off: off, typ: rt, ownerCol: r.ownerCol, targetCol: r.targetCol, through: r.through}
+		rels[i] = &relation{Name: r.name, Many: strings.HasPrefix(rt.Name(), "Many["), Off: off, typ: rt, ownerCol: r.ownerCol, targetCol: r.targetCol, through: r.through}
 	}
 	info = &EntityInfo{Name: name, Table: d.Table, Schema: d.Schema, Columns: cols, PrimaryKey: d.PrimaryKey, Tenant: d.Tenant,
 		Indexes: d.Indexes, rels: rels, immutable: anyImmutable, required: anyRequired, bidi: d.Bidi, bidiKeys: bidiKeys}
@@ -161,7 +161,7 @@ func BuildDesc(x any, base unsafe.Pointer, load func() DescView) (info *EntityIn
 // two columns, of one Go type, are its primary key, and it has no tenant: the
 // mirror of a row swaps them. The type is a byte slice or one that == compares
 // without panicking (linkKey), as a self-link is told by comparing the two
-// (SelfLink).
+// (selfLink).
 func checkBidi(name string, d *DescFields, cols []ColumnInfo) error {
 	fail := func(format string, args ...any) error {
 		return &SchemaError{Entity: name, Reason: "the join entity of a bidirectional edge " + fmt.Sprintf(format, args...)}
@@ -270,12 +270,17 @@ type Through struct {
 	TargetCol int
 }
 
+// NewEdgeDesc returns the description of an edge named name, with the columns that
+// hold its owner and target keys and the two holders of the relation.
 func NewEdgeDesc(name string, ownerCol, targetCol int, holders [2]any) EdgeDesc {
 	return EdgeDesc{name: name, explicit: true, ownerCol: ownerCol, targetCol: targetCol, holders: holders}
 }
 
+// SetEdgeBidi marks e as bidirectional, with t its edge's type.
 func SetEdgeBidi(e *EdgeDesc, t any) { e.bidi = t }
 
+// SetEdgeThrough makes e an edge through the join entity t.
 func SetEdgeThrough(e *EdgeDesc, t *Through) { e.through = t }
 
+// EdgeThroughOf is the join entity of e; nil when e has none.
 func EdgeThroughOf(e EdgeDesc) *Through { return e.through }

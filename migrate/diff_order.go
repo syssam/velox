@@ -29,13 +29,13 @@ func (d *differ) createTables(tables []*Table) {
 		for _, fk := range t.ForeignKeys {
 			later := fk.RefTable != ref && pending[fk.RefTable]
 			if d.to.Dialect != velox.SQLite && (later || d.keyRetyped(ref, fk)) {
-				d.add(AddForeignKey{Table: ref, ForeignKey: fk}, 7, 2, ref, 0, fk.Name)
+				d.add(addForeignKey{Table: ref, ForeignKey: fk}, 7, 2, ref, 0, fk.Name)
 				continue
 			}
 			tb.ForeignKeys = append(tb.ForeignKeys, fk)
 		}
 		delete(pending, ref)
-		d.out = append(d.out, planned{c: CreateTable{Table: tb}, step: 4, ord: ord, ref: ref})
+		d.out = append(d.out, planned{c: createTable{Table: tb}, step: 4, ord: ord, ref: ref})
 	}
 }
 
@@ -63,7 +63,7 @@ func (d *differ) dropTables(tables []*Table) {
 						if fk.RefTable != t.Ref() {
 							return false
 						}
-						d.add(DropForeignKey{Table: r.Ref(), ForeignKey: *d.orig.table(r.Ref()).foreignKey(fk.Name)}, 1, 0, r.Ref(), 0, fk.Name)
+						d.add(dropForeignKey{Table: r.Ref(), ForeignKey: *d.orig.table(r.Ref()).foreignKey(fk.Name)}, 1, 0, r.Ref(), 0, fk.Name)
 						return true
 					})
 				}
@@ -71,6 +71,6 @@ func (d *differ) dropTables(tables []*Table) {
 		}
 		t := tables[i]
 		tables = slices.Delete(tables, i, i+1)
-		d.out = append(d.out, planned{c: DropTable{Table: *d.orig.table(t.Ref())}, step: 9, ord: ord, ref: t.Ref()})
+		d.out = append(d.out, planned{c: dropTable{Table: *d.orig.table(t.Ref())}, step: 9, ord: ord, ref: t.Ref()})
 	}
 }

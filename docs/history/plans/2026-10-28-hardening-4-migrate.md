@@ -21,7 +21,7 @@
 
 **Spec:** `docs/history/specs/2026-10-25-pre-1.0-hardening-design.md`. Its final block, **"Rulings on the builder check"**, is binding and overrides the rulings above it.
 - "Spec ruling N" is item N of the spec's Rulings, and "builder ruling N" is item N of the final block.
-- The evidence for each id is in `docs/history/reviews/2026-10-25-triage-M.md`.
+- The evidence for each id is in `docs/history/reviews/2026-10-25-triage-migrate.md`.
 - The migrate design is `docs/history/specs/2026-10-23-migrate-design.md`, with plans `docs/history/plans/2026-10-2{3,4}-migrate-*.md`.
 - Every file:line below was read at c33cf95.
 - The builder check of this plan (at 7a27429, `scratchpad/hardening-4-plan-check.md`) ran the [D] probes on PostgreSQL 18.6 and MySQL 8.4.13. Its findings are cited as "check finding N", and the controller's rulings on them are under "Controller rulings". Where a [D] value below was measured by the check, it says "measured".

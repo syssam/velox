@@ -35,6 +35,13 @@ This summarizes what a user of the tree before the hardening work must know.
 
 ### Changed
 
+- The module is `github.com/syssam/velox` (decision 0023). The project that had this
+  path is now veloxe.
+- `dbtype` is `veloxtype`, and velox-graphql's Go files are `<label>_gql.go`: an entity
+  named Android, Windows or Test can now have a GraphQL type.
+- `migrate.Change` is opaque: read a change through `Kind`, `Target` and `String`. The
+  structs behind it, and `ColumnChange`, are unexported (decision 0024).
+
 - On SQLite, velox writes every time argument as UTC text of one width, so times store
   and compare by the instant whatever their zone. A time then reads back in UTC. Rows a
   tree before this wrote with another zone keep their old text: rewrite them, or they

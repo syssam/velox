@@ -32,10 +32,10 @@ func TestEveryConnectionOfADialectIsWrapped(t *testing.T) {
 	at := time.Date(2026, 10, 31, 8, 0, 0, 0, time.UTC)
 	for _, d := range []Dialect{SQLite, Postgres, MySQL} {
 		primary, replica, plain := &lastArg{}, &lastArg{}, &lastArg{}
-		sh := NewShard(d, primary, []Conn{{ex: replica}}, "test:")
-		db := NewDB(d, plain, nil)
+		sh := newShard(d, primary, []Conn{{ex: replica}}, "test:")
+		db := newDB(d, plain, nil)
 		for name, ex := range map[string]struct {
-			run Executor
+			run executor
 			rec *lastArg
 		}{
 			"primary": {sh.Primary, primary},

@@ -87,13 +87,13 @@ func (r *renderer) newSchemas() map[string]bool {
 // createsIn is the database schema c puts a table or a type in, or "".
 func createsIn(c Change) string {
 	switch c := c.(type) {
-	case CreateTable:
+	case createTable:
 		return c.Table.Schema
-	case CreateEnum:
+	case createEnum:
 		return c.Enum.Schema
-	case RenameTable:
+	case renameTable:
 		return c.To.Schema
-	case RenameEnum:
+	case renameEnum:
 		return c.To.Schema
 	}
 	return ""
@@ -118,11 +118,11 @@ func (r *renderer) unit(i int, stmts ...string) {
 // the enum script's and online script's statements are added.
 func (r *renderer) pgChange(i int, c Change) (pgParts, error) {
 	switch c := c.(type) {
-	case CreateTable:
+	case createTable:
 		return pgParts{stmts: r.pgCreate(&c.Table)}, nil
-	case DropTable:
+	case dropTable:
 		return pgParts{stmts: []string{"DROP TABLE " + r.table(c.Table.Ref())}}, nil
-	case RenameTable:
+	case renameTable:
 		var stmts []string
 		at := c.From
 		if c.From.Name != c.To.Name {
@@ -133,21 +133,21 @@ func (r *renderer) pgChange(i int, c Change) (pgParts, error) {
 			stmts = append(stmts, "ALTER TABLE "+r.table(at)+" SET SCHEMA "+r.ident(schemaName(c.To.Schema)))
 		}
 		return pgParts{stmts: stmts}, nil
-	case AddColumn:
+	case addColumn:
 		pc := pgParts{table: r.table(c.Table), phase: phaseColumn, actions: []string{"ADD COLUMN " + r.pgColumn(c.Column)}}
 		if c.Column.Comment != "" {
 			pc.stmts = append(pc.stmts, r.columnComment(c.Table, c.Column))
 		}
 		return pc, nil
-	case DropColumn:
+	case dropColumn:
 		return pgParts{table: r.table(c.Table), phase: phaseDropColumn, actions: []string{"DROP COLUMN " + r.ident(c.Column.Name)}}, nil
-	case RenameColumn:
+	case renameColumn:
 		return pgParts{stmts: []string{"ALTER TABLE " + r.table(c.Table) + " RENAME COLUMN " + r.ident(c.From) + " TO " + r.ident(c.To)}}, nil
-	case AlterColumn:
+	case alterColumn:
 		return r.pgAlterColumn(c)
-	case RenameSequence:
+	case renameSequence:
 		return pgParts{stmts: []string{"ALTER SEQUENCE " + r.indexName(c.Table, c.From) + " RENAME TO " + r.ident(c.To)}}, nil
-	case AddIndex:
+	case addIndex:
 		if c.Index.Constraint {
 			return pgParts{stmts: []string{"ALTER TABLE " + r.table(c.Table) + " ADD CONSTRAINT " + r.ident(c.Index.Name) + " UNIQUE (" + r.idents(c.Index.Columns) + ")"}}, nil
 		}
@@ -156,7 +156,7 @@ func (r *renderer) pgChange(i int, c Change) (pgParts, error) {
 			return pgParts{}, nil
 		}
 		return pgParts{stmts: []string{r.pgIndex(c.Table, c.Index, false)}}, nil
-	case DropIndex:
+	case dropIndex:
 		if r.dropOnline(c) {
 			r.unit(i, "DROP INDEX CONCURRENTLY IF EXISTS "+r.indexName(r.afterRename(c.Table), c.Index.Name))
 			return pgParts{}, nil
@@ -165,26 +165,26 @@ func (r *renderer) pgChange(i int, c Change) (pgParts, error) {
 			return pgParts{stmts: []string{"ALTER TABLE " + r.table(c.Table) + " DROP CONSTRAINT " + r.ident(c.Index.Name)}}, nil
 		}
 		return pgParts{stmts: []string{"DROP INDEX " + r.indexName(c.Table, c.Index.Name)}}, nil
-	case RenameIndex:
+	case renameIndex:
 		if r.renamesConstraint(c) {
 			return pgParts{stmts: []string{"ALTER TABLE " + r.table(c.Table) + " RENAME CONSTRAINT " + r.ident(c.From) + " TO " + r.ident(c.To)}}, nil
 		}
 		return pgParts{stmts: []string{"ALTER INDEX " + r.indexName(c.Table, c.From) + " RENAME TO " + r.ident(c.To)}}, nil
-	case AddForeignKey:
+	case addForeignKey:
 		return r.pgConstraint(i, c.Table, c.ForeignKey.Name, r.foreignKey(c.ForeignKey)), nil
-	case AddCheck:
+	case addCheck:
 		return r.pgConstraint(i, c.Table, c.Check.Name, "CHECK ("+c.Check.Expr+")"), nil
-	case DropForeignKey:
+	case dropForeignKey:
 		return pgParts{table: r.table(c.Table), phase: phaseDrop, actions: []string{"DROP CONSTRAINT " + r.ident(c.ForeignKey.Name)}}, nil
-	case DropCheck:
+	case dropCheck:
 		return pgParts{table: r.table(c.Table), phase: phaseDrop, actions: []string{"DROP CONSTRAINT " + r.ident(c.Check.Name)}}, nil
-	case RenameConstraint:
+	case renameConstraint:
 		return pgParts{stmts: []string{"ALTER TABLE " + r.table(c.Table) + " RENAME CONSTRAINT " + r.ident(c.From) + " TO " + r.ident(c.To)}}, nil
-	case SetTableComment:
+	case setTableComment:
 		return pgParts{stmts: []string{"COMMENT ON TABLE " + r.table(c.Table) + " IS " + r.commentText(c.To)}}, nil
-	case CreateEnum:
+	case createEnum:
 		return pgParts{stmts: []string{r.createType(c.Enum.ref(), c.Enum.Values)}}, nil
-	case RenameEnum:
+	case renameEnum:
 		var stmts []string
 		at := c.From
 		if c.From.Name != c.To.Name {
@@ -195,13 +195,13 @@ func (r *renderer) pgChange(i int, c Change) (pgParts, error) {
 			stmts = append(stmts, "ALTER TYPE "+r.table(at)+" SET SCHEMA "+r.ident(schemaName(c.To.Schema)))
 		}
 		return pgParts{stmts: stmts}, nil
-	case AlterEnum:
+	case alterEnum:
 		if added, ok := addedValues(c.From.Values, c.To.Values); ok {
 			r.addValues(i, c, added)
 			return pgParts{}, nil
 		}
 		return pgParts{stmts: r.swapEnum(c.To)}, nil
-	case DropEnum:
+	case dropEnum:
 		return pgParts{stmts: []string{"DROP TYPE " + r.table(c.Enum.ref())}}, nil
 	}
 	return pgParts{}, r.refuse(i, fmt.Sprintf("PostgreSQL has no %s", c.Kind()))
@@ -236,13 +236,13 @@ func (r *renderer) pgConstraint(i int, table TableRef, name, def string) pgParts
 // which DROP INDEX CONCURRENTLY cannot drop. The others are dropped in the
 // main script: with a table or column that goes anyway, in time to free the
 // name for another index, or as the constraint.
-func (r *renderer) dropOnline(c DropIndex) bool {
+func (r *renderer) dropOnline(c dropIndex) bool {
 	k := r.l.canon(c.Table)
 	if c.Index.Constraint || !r.l.existing(c.Table) || r.l.dropped[k] {
 		return false
 	}
 	for _, o := range r.cs {
-		if dc, ok := o.(DropColumn); ok && r.l.canon(dc.Table) == k && slices.Contains(c.Index.Columns, dc.Column.Name) {
+		if dc, ok := o.(dropColumn); ok && r.l.canon(dc.Table) == k && slices.Contains(c.Index.Columns, dc.Column.Name) {
 			return false
 		}
 	}
@@ -251,7 +251,7 @@ func (r *renderer) dropOnline(c DropIndex) bool {
 
 // renamesConstraint reports whether c renames a unique constraint's index:
 // from's index c.From of c.Table is a constraint's.
-func (r *renderer) renamesConstraint(c RenameIndex) bool {
+func (r *renderer) renamesConstraint(c renameIndex) bool {
 	t := r.from.table(r.l.canon(c.Table))
 	if t == nil {
 		return false
@@ -264,7 +264,7 @@ func (r *renderer) renamesConstraint(c RenameIndex) bool {
 // script's renames.
 func (r *renderer) afterRename(ref TableRef) TableRef {
 	for _, c := range r.cs {
-		if rt, ok := c.(RenameTable); ok && rt.From == ref {
+		if rt, ok := c.(renameTable); ok && rt.From == ref {
 			return rt.To
 		}
 	}
@@ -274,13 +274,13 @@ func (r *renderer) afterRename(ref TableRef) TableRef {
 // pgAlterColumn renders the alteration of a column. A type change drops
 // the default before it and sets it after, as PostgreSQL cannot cast a
 // default; SET NOT NULL is an online unit through a validated check.
-func (r *renderer) pgAlterColumn(c AlterColumn) (pgParts, error) {
+func (r *renderer) pgAlterColumn(c alterColumn) (pgParts, error) {
 	pc := pgParts{table: r.table(c.Table), phase: phaseColumn}
 	col := r.ident(c.To.Name)
 	act := func(s string) { pc.actions = append(pc.actions, "ALTER COLUMN "+col+" "+s) }
-	identity := c.What&ColumnIdentity != 0 && !c.From.Identity && c.To.Identity
+	identity := c.What&columnIdentity != 0 && !c.From.Identity && c.To.Identity
 	switch {
-	case c.What&ColumnType != 0:
+	case c.What&columnType != 0:
 		if c.From.Default != "" {
 			act("DROP DEFAULT")
 		}
@@ -292,12 +292,12 @@ func (r *renderer) pgAlterColumn(c AlterColumn) (pgParts, error) {
 		if c.To.Default != "" {
 			act("SET DEFAULT " + c.To.Default)
 		}
-	case c.What&ColumnDefault != 0 && c.To.Default == "":
+	case c.What&columnDefault != 0 && c.To.Default == "":
 		act("DROP DEFAULT")
-	case c.What&ColumnDefault != 0:
+	case c.What&columnDefault != 0:
 		act("SET DEFAULT " + c.To.Default)
 	}
-	if c.What&ColumnNullable != 0 {
+	if c.What&columnNullable != 0 {
 		switch {
 		case c.To.Nullable:
 			act("DROP NOT NULL")
@@ -316,7 +316,7 @@ func (r *renderer) pgAlterColumn(c AlterColumn) (pgParts, error) {
 			})
 		}
 	}
-	if c.What&ColumnIdentity != 0 {
+	if c.What&columnIdentity != 0 {
 		switch {
 		case identity:
 			// A serial's default is dropped above; its sequence goes
@@ -348,7 +348,7 @@ func (r *renderer) pgAlterColumn(c AlterColumn) (pgParts, error) {
 			pc.stmts = append(pc.stmts, "ALTER SEQUENCE "+r.indexName(c.Table, c.From.Sequence)+" RENAME TO "+r.ident(c.To.Sequence))
 		}
 	}
-	if c.What&ColumnComment != 0 {
+	if c.What&columnComment != 0 {
 		pc.stmts = append(pc.stmts, r.columnComment(c.Table, c.To))
 	}
 	return pc, nil
@@ -356,7 +356,7 @@ func (r *renderer) pgAlterColumn(c AlterColumn) (pgParts, error) {
 
 // unnamedSequence is the refusal of an identity change that needs the name
 // of a sequence from does not give.
-func unnamedSequence(c AlterColumn) error {
+func unnamedSequence(c alterColumn) error {
 	return &Error{Object: colTarget(c.Table, c.To.Name), Code: "render",
 		Reason: "the identity's sequence is not named in the snapshot; run velox-gen migrate baseline, or rename it by hand"}
 }

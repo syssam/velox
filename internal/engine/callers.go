@@ -17,7 +17,7 @@ import (
 // program counters are cached: each is resolved once per DB, for up to 4,096
 // of them.
 func WithCallers() Option {
-	return Option{func(c *Config) {
+	return Option{func(c *config) {
 		if c.Callers == nil {
 			c.Callers = &callers{}
 		}
@@ -28,7 +28,7 @@ func WithCallers() Option {
 // caller either, such as the application's own repository layer: the call
 // site is then the frame that called into them. It implies WithCallers.
 func WithCallerSkip(pkgPath ...string) Option {
-	return Option{func(c *Config) {
+	return Option{func(c *config) {
 		if c.Callers == nil {
 			c.Callers = &callers{}
 		}

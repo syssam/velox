@@ -29,4 +29,4 @@ beyond that the write changed nothing.
   Write hides it, the update and the delete affect 0 rows, the row is
   unchanged, and a query still finds it. With Write ignored, that update
   affects 1 row and the test fails.
-- docs/history/reviews/2026-10-25-triage-C.md, C56; docs/history/specs/2026-10-25-pre-1.0-hardening-design.md:94.
+- docs/history/reviews/2026-10-25-triage-core.md, C56; docs/history/specs/2026-10-25-pre-1.0-hardening-design.md:94.

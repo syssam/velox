@@ -90,6 +90,7 @@ func CloneStatement(st *Statement) Statement {
 	return c
 }
 
+// ColumnCount is how many columns st reads: its Columns, or all of its entity's.
 func ColumnCount(st *Statement) int {
 	if st.Columns != nil {
 		return len(st.Columns)
@@ -110,6 +111,7 @@ type CountRun struct {
 	N  int64
 }
 
+// ReadCount reads a count's one row from r into c.N, which stays 0 when r has none.
 func ReadCount(c *CountRun, r Rows) error {
 	c.N = 0
 	if r.Next() {

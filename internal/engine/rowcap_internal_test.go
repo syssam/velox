@@ -12,7 +12,7 @@ func TestRowCapAppliesToSelectsOnly(t *testing.T) {
 	itemInfo := &EntityInfo{Name: "velox.item", Tenant: -1, PrimaryKey: []int{0}}
 	tagInfo := &EntityInfo{Name: "velox.tag", Tenant: -1, PrimaryKey: []int{0}}
 	bookTagInfo := &EntityInfo{Name: "velox.bookTag", Tenant: -1, PrimaryKey: []int{0, 1}}
-	db := &DB{D: Postgres, Cfg: &Config{MaxRows: 2}}
+	db := &DB{D: Postgres, Cfg: &config{MaxRows: 2}}
 	for _, c := range []struct {
 		name string
 		st   Statement

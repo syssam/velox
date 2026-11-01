@@ -4,23 +4,23 @@ import (
 	"fmt"
 )
 
-// AlwaysTrue reports whether n holds for every row, judged by its structure
+// alwaysTrue reports whether n holds for every row, judged by its structure
 // alone, as render writes it: an empty And, or NotIn of nothing, is 1 = 1. An
 // OpThrough never is: a row without a join row does not meet it.
-func AlwaysTrue(n Node) bool {
+func alwaysTrue(n Node) bool {
 	switch n.Op {
 	case OpAllow:
 		return true
 	case OpAnd:
 		for _, k := range n.Kids {
-			if !AlwaysTrue(k) {
+			if !alwaysTrue(k) {
 				return false
 			}
 		}
 		return true
 	case OpOr:
 		for _, k := range n.Kids {
-			if AlwaysTrue(k) {
+			if alwaysTrue(k) {
 				return true
 			}
 		}
@@ -52,7 +52,7 @@ func alwaysFalse(n Node) bool {
 		}
 		return true
 	case OpNot:
-		return AlwaysTrue(n.Kids[0])
+		return alwaysTrue(n.Kids[0])
 	case OpIn:
 		return len(n.V.([]any)) == 0
 	case OpThrough:
@@ -63,21 +63,21 @@ func alwaysFalse(n Node) bool {
 	return false
 }
 
-// HasZero reports whether n is, or holds, the zero Predicate, which renders
+// hasZero reports whether n is, or holds, the zero Predicate, which renders
 // as nothing.
-func HasZero(n Node) bool {
-	if n.Op == OpZero {
+func hasZero(n Node) bool {
+	if n.Op == opZero {
 		return true
 	}
 	for _, k := range n.Kids {
-		if HasZero(k) {
+		if hasZero(k) {
 			return true
 		}
 	}
 	return false
 }
 
-func ErrZeroPredicate(entity string) error {
+func errZeroPredicate(entity string) error {
 	return fmt.Errorf("velox: %s: a condition is the zero Predicate; make conditions with column handles, And, Or and Not", entity)
 }
 
@@ -85,8 +85,8 @@ func ErrZeroPredicate(entity string) error {
 // conditions velox or a hook adds later never count as the caller's.
 func (db *DB) guard(st *Statement) error {
 	for _, p := range st.Where {
-		if HasZero(PredNode(p)) {
-			return ErrZeroPredicate(st.Entity.Name)
+		if hasZero(PredNode(p)) {
+			return errZeroPredicate(st.Entity.Name)
 		}
 	}
 	if st.Op == OpSelect && !st.Count && !st.Exists && st.Aggregate == 0 && st.Columns != nil && len(st.Columns) == 0 {
@@ -121,7 +121,7 @@ func (db *DB) guard(st *Statement) error {
 		}
 		every := true
 		for _, p := range st.Where {
-			every = every && AlwaysTrue(PredNode(p))
+			every = every && alwaysTrue(PredNode(p))
 		}
 		if every {
 			// And(conds...) of an empty conds renders WHERE 1 = 1.

@@ -37,6 +37,13 @@ plans and reviews that built it, as written.
 Generated Go files end `_velox.go`, or `_gql.go` for velox-graphql, so that no
 entity's name can make the file a test or tie it to one operating system.
 
+## The public API
+
+`internal/repocheck/testdata/api.txt` lists every exported name of the public
+packages. If `TestPublicAPISnapshot` fails and the change is meant, regenerate it
+with `go test ./internal/repocheck -run TestPublicAPISnapshot -update-api`. Read
+the diff first: after 1.0, a removed line or a changed signature breaks users.
+
 ## Checks
 
 `bash scripts/ci-local.sh` is the local mirror of CI. It needs Docker. Run it

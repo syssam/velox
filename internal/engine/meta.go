@@ -25,13 +25,13 @@ type EntityInfo struct {
 	PrimaryKey []int // indexes into Columns
 	Tenant     int   // index into Columns; -1 when the entity has none
 	Indexes    []IndexInfo
-	rels       []*Relation                // in the order of the generated shape
+	rels       []*relation                // in the order of the generated shape
 	kit        *Kit                       // set by MetaOnce.Load
 	check      func(col int, v any) error // Desc.Check; nil when the entity has no validators
 	immutable  bool                       // some column is Immutable
 	required   bool                       // some column has a RequiredEdge
 	bidi       bool                       // Desc.Bidi: a link is two rows, (a, b) and (b, a)
-	bidiKeys   []BidiKey                  // the keys of the EdgeBidi relations, which both partners' rows hold
+	bidiKeys   []bidiKey                  // the keys of the EdgeBidi relations, which both partners' rows hold
 	hooks      []HookFn                   // the Hooks method's, outermost first
 
 	// The entity's policy, bound once from its Policy method.
@@ -188,25 +188,32 @@ func Elem(p any) any { return reflect.ValueOf(p).Elem().Interface() }
 
 // The functions below reach what EntityInfo keeps private, for the code around
 // velox's generic API.
-func InfoKit(in *EntityInfo) *Kit { return in.kit }
+func infoKit(in *EntityInfo) *Kit { return in.kit }
 
+// SetInfoKit sets in's kit.
 func SetInfoKit(in *EntityInfo, k *Kit) { in.kit = k }
 
+// SetInfoCheck sets the function that checks a column's value, Desc.Check.
 func SetInfoCheck(in *EntityInfo, f func(col int, v any) error) { in.check = f }
 
+// InfoHooks is in's hooks, outermost first.
 func InfoHooks(in *EntityInfo) []HookFn { return in.hooks }
 
+// InfoBidi reports whether a link of in is two rows, (a, b) and (b, a).
 func InfoBidi(in *EntityInfo) bool { return in.bidi }
 
-func InfoBidiKeys(in *EntityInfo) []BidiKey { return in.bidiKeys }
+func infoBidiKeys(in *EntityInfo) []bidiKey { return in.bidiKeys }
 
+// InfoPolicy is in's policy; nil when it has none.
 func InfoPolicy(in *EntityInfo) *EntityPolicy { return in.policy }
 
-func InfoRels(in *EntityInfo) []*Relation { return in.rels }
+// InfoRels is in's relations, in the order of the generated shape.
+func InfoRels(in *EntityInfo) []*relation { return in.rels }
 
+// SetInfoPolicy sets in's policy.
 func SetInfoPolicy(in *EntityInfo, p *EntityPolicy) { in.policy = p }
 
-func SetInfoBidi(in *EntityInfo, on bool) { in.bidi = on }
+func setInfoBidi(in *EntityInfo, on bool) { in.bidi = on }
 
 // rootPkg is the import path of the root package, which holds One and Many.
 var rootPkg = strings.TrimSuffix(reflect.TypeFor[Holder]().PkgPath(), "/internal/engine")

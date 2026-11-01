@@ -135,8 +135,8 @@ type Statement struct {
 	// an Around hook may change.
 	upsertRows int
 	// bidi is set on a statement of a bidirectional one-to-one write, whose
-	// Rewrite hooks' changes CheckBidiRewrite checks; nil otherwise.
-	bidi *BidiStep
+	// Rewrite hooks' changes checkBidiRewrite checks; nil otherwise.
+	bidi *bidiStep
 }
 
 // Rewrite is a hook that may change a statement before it is rendered, or
@@ -179,22 +179,25 @@ type Around func(ctx context.Context, st *Statement, next func(context.Context) 
 
 // The functions below reach what Statement keeps private, for the code around
 // velox's generic API.
-func StmtBidi(st *Statement) *BidiStep { return st.bidi }
+func stmtBidi(st *Statement) *bidiStep { return st.bidi }
 
-func SetStmtBidi(st *Statement, b *BidiStep) { st.bidi = b }
+func setStmtBidi(st *Statement, b *bidiStep) { st.bidi = b }
 
-func StmtPin(st *Statement) Target { return st.pin }
+func stmtPin(st *Statement) Target { return st.pin }
 
-func SetStmtPin(st *Statement, t Target) { st.pin = t }
+func setStmtPin(st *Statement, t Target) { st.pin = t }
 
+// StmtRan is where st was sent.
 func StmtRan(st *Statement) Target { return st.ran }
 
-func SetStmtRan(st *Statement, t Target) { st.ran = t }
+func setStmtRan(st *Statement, t Target) { st.ran = t }
 
-func StmtHanded(st *Statement) bool { return st.handed }
+func stmtHanded(st *Statement) bool { return st.handed }
 
+// SetStmtHanded records that Iter has handed the caller a row of st.
 func SetStmtHanded(st *Statement) { st.handed = true }
 
-func StmtUpsertPolicy(st *Statement) bool { return st.upsertPolicy }
+func stmtUpsertPolicy(st *Statement) bool { return st.upsertPolicy }
 
+// SetStmtUpsertPolicy sets st's record that the scope added the policy's conditions to its upsert.
 func SetStmtUpsertPolicy(st *Statement, on bool) { st.upsertPolicy = on }

@@ -11,9 +11,6 @@ linters:
       # The engine's exports are for the root package; its public types are documented
       # on their aliases in the root, which TestAliasDocsListMembers checks, or in veloxtype.
       - path: ^internal/engine/
-        linters: [revive]
-        text: "^exported:"
-      - path: ^internal/engine/
         linters: [staticcheck]
         text: ST102
       - path: ^internal/engine/

@@ -9,9 +9,9 @@ import (
 	"strings"
 )
 
-// ExecInfo is the EntityInfo of Exec's statements: the name their errors and
+// execInfo is the EntityInfo of Exec's statements: the name their errors and
 // the Around hooks see. Exec scans nothing, so it has no table or columns.
-var ExecInfo = EntityInfo{Name: "Exec", Tenant: -1}
+var execInfo = EntityInfo{Name: "Exec", Tenant: -1}
 
 // ErrNoReason is the error of raw SQL run without a reason.
 func ErrNoReason(name string) error {
@@ -52,7 +52,7 @@ func RawColumns(in *EntityInfo, r Rows) ([]int, error) {
 // rows and the test executor's report them with Columns, pgx's with
 // FieldDescriptions, which names a pgconn type, so it is called by its name.
 func resultColumns(r Rows) ([]string, error) {
-	if c, ok := r.(*CountedRows); ok {
+	if c, ok := r.(*countedRows); ok {
 		r = c.Rows
 	}
 	switch r := r.(type) {
@@ -96,10 +96,10 @@ func (db *DB) prepareRaw(ctx context.Context, st *Statement) {
 // RawExec is DB.Exec, its arguments given as a slice.
 func (db *DB) RawExec(ctx context.Context, reason, query string, args []any) (int64, error) {
 	if NoReason(reason) {
-		return 0, ErrNoReason(ExecInfo.Name)
+		return 0, ErrNoReason(execInfo.Name)
 	}
-	st := &Statement{Op: OpRawExec, Entity: &ExecInfo, SQL: query, Args: args, TenantBypass: reason, PolicyBypass: reason, InTx: db.InTx}
-	var res ExecResult
+	st := &Statement{Op: OpRawExec, Entity: &execInfo, SQL: query, Args: args, TenantBypass: reason, PolicyBypass: reason, InTx: db.InTx}
+	var res execResult
 	if err := db.Run(ctx, st, nil, &res); err != nil {
 		return 0, err
 	}

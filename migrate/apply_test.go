@@ -28,14 +28,14 @@ func applyChanges(s *Schema, changes []Change) (*Schema, error) {
 
 func apply(s *Schema, c Change) error {
 	switch c := c.(type) {
-	case CreateTable:
+	case createTable:
 		if _, ok := s.Table(c.Table.Ref()); ok {
 			return fmt.Errorf("the table exists")
 		}
 		s.Tables = append(s.Tables, c.Table)
 		s.Tables = s.clone().Tables // own the new table's lists
 		return nil
-	case DropTable:
+	case dropTable:
 		n := len(s.Tables)
 		s.Tables = slices.DeleteFunc(s.Tables, func(t Table) bool { return t.Ref() == c.Table.Ref() })
 		if len(s.Tables) == n {
@@ -50,7 +50,7 @@ func apply(s *Schema, c Change) error {
 			}
 		}
 		return nil
-	case RenameTable:
+	case renameTable:
 		t, err := tableOf(s, c.From)
 		if err != nil {
 			return err
@@ -67,7 +67,7 @@ func apply(s *Schema, c Change) error {
 			}
 		}
 		return nil
-	case CreateEnum:
+	case createEnum:
 		if slices.ContainsFunc(s.Enums, func(e Enum) bool { return e.ref() == c.Enum.ref() }) {
 			return fmt.Errorf("the enum exists")
 		}
@@ -75,7 +75,7 @@ func apply(s *Schema, c Change) error {
 		e.Values = slices.Clone(e.Values)
 		s.Enums = append(s.Enums, e)
 		return nil
-	case DropEnum:
+	case dropEnum:
 		n := len(s.Enums)
 		s.Enums = slices.DeleteFunc(s.Enums, func(e Enum) bool { return e.ref() == c.Enum.ref() })
 		if len(s.Enums) == n {
@@ -90,7 +90,7 @@ func apply(s *Schema, c Change) error {
 			}
 		}
 		return nil
-	case RenameEnum:
+	case renameEnum:
 		e, err := enumOf(s, c.From)
 		if err != nil {
 			return err
@@ -105,7 +105,7 @@ func apply(s *Schema, c Change) error {
 			}
 		}
 		return nil
-	case AlterEnum:
+	case alterEnum:
 		e, err := enumOf(s, c.From.ref())
 		if err != nil {
 			return err
@@ -122,12 +122,12 @@ func apply(s *Schema, c Change) error {
 		return err
 	}
 	switch c := c.(type) {
-	case AddColumn:
+	case addColumn:
 		if colOf(t, c.Column.Name) != nil {
 			return fmt.Errorf("column %s exists", c.Column.Name)
 		}
 		t.Columns = append(t.Columns, c.Column)
-	case DropColumn:
+	case dropColumn:
 		if err := mysqlColumnUse(s.Dialect, t, c.Column.Name, true); err != nil {
 			return err
 		}
@@ -141,7 +141,7 @@ func apply(s *Schema, c Change) error {
 				t.Indexes[i].Columns = slices.DeleteFunc(t.Indexes[i].Columns, func(col string) bool { return col == c.Column.Name })
 			}
 		}
-	case RenameColumn:
+	case renameColumn:
 		if err := mysqlColumnUse(s.Dialect, t, c.From, false); err != nil {
 			return err
 		}
@@ -175,7 +175,7 @@ func apply(s *Schema, c Change) error {
 				}
 			}
 		}
-	case AlterColumn:
+	case alterColumn:
 		col := colOf(t, c.From.Name)
 		if col == nil {
 			return fmt.Errorf("no column %s", c.From.Name)
@@ -183,71 +183,71 @@ func apply(s *Schema, c Change) error {
 		if c.What == 0 || c.From.Name != c.To.Name {
 			return fmt.Errorf("an empty or renaming alter")
 		}
-		if c.What&ColumnType != 0 {
+		if c.What&columnType != 0 {
 			col.Type = c.To.Type
 		}
-		if c.What&ColumnNullable != 0 {
+		if c.What&columnNullable != 0 {
 			col.Nullable = c.To.Nullable
 		}
-		if c.What&ColumnDefault != 0 {
+		if c.What&columnDefault != 0 {
 			col.Default = c.To.Default
 		}
-		if c.What&ColumnIdentity != 0 {
+		if c.What&columnIdentity != 0 {
 			col.Identity, col.Sequence = c.To.Identity, c.To.Sequence
 		}
-		if c.What&ColumnComment != 0 {
+		if c.What&columnComment != 0 {
 			col.Comment = c.To.Comment
 		}
-	case RenameSequence:
+	case renameSequence:
 		col := colOf(t, c.Column)
 		if col == nil || col.Sequence != c.From {
 			return fmt.Errorf("no sequence %s on %s", c.From, c.Column)
 		}
 		col.Sequence = c.To
-	case AddIndex:
+	case addIndex:
 		if slices.ContainsFunc(t.Indexes, func(ix Index) bool { return ix.Name == c.Index.Name }) {
 			return fmt.Errorf("index %s exists", c.Index.Name)
 		}
 		ix := c.Index
 		ix.Columns = slices.Clone(ix.Columns)
 		t.Indexes = append(t.Indexes, ix)
-	case DropIndex:
+	case dropIndex:
 		n := len(t.Indexes)
 		t.Indexes = slices.DeleteFunc(t.Indexes, func(ix Index) bool { return ix.Name == c.Index.Name })
 		if len(t.Indexes) == n {
 			return fmt.Errorf("no index %s", c.Index.Name)
 		}
-	case RenameIndex:
+	case renameIndex:
 		i := slices.IndexFunc(t.Indexes, func(ix Index) bool { return ix.Name == c.From })
 		if i < 0 {
 			return fmt.Errorf("no index %s", c.From)
 		}
 		t.Indexes[i].Name = c.To
-	case AddForeignKey:
+	case addForeignKey:
 		if slices.ContainsFunc(t.ForeignKeys, func(fk ForeignKey) bool { return fk.Name == c.ForeignKey.Name }) {
 			return fmt.Errorf("foreign key %s exists", c.ForeignKey.Name)
 		}
 		fk := c.ForeignKey
 		fk.Columns, fk.RefColumns = slices.Clone(fk.Columns), slices.Clone(fk.RefColumns)
 		t.ForeignKeys = append(t.ForeignKeys, fk)
-	case DropForeignKey:
+	case dropForeignKey:
 		n := len(t.ForeignKeys)
 		t.ForeignKeys = slices.DeleteFunc(t.ForeignKeys, func(fk ForeignKey) bool { return fk.Name == c.ForeignKey.Name })
 		if len(t.ForeignKeys) == n {
 			return fmt.Errorf("no foreign key %s", c.ForeignKey.Name)
 		}
-	case AddCheck:
+	case addCheck:
 		if slices.ContainsFunc(t.Checks, func(ck Check) bool { return ck.Name == c.Check.Name }) {
 			return fmt.Errorf("check %s exists", c.Check.Name)
 		}
 		t.Checks = append(t.Checks, c.Check)
-	case DropCheck:
+	case dropCheck:
 		n := len(t.Checks)
 		t.Checks = slices.DeleteFunc(t.Checks, func(ck Check) bool { return ck.Name == c.Check.Name })
 		if len(t.Checks) == n {
 			return fmt.Errorf("no check %s", c.Check.Name)
 		}
-	case RenameConstraint:
+	case renameConstraint:
 		switch {
 		case t.PrimaryKeyName == c.From:
 			t.PrimaryKeyName = c.To
@@ -258,12 +258,12 @@ func apply(s *Schema, c Change) error {
 		default:
 			return fmt.Errorf("no constraint %s", c.From)
 		}
-	case SetTableComment:
+	case setTableComment:
 		if t.Comment != c.From {
 			return fmt.Errorf("the comment is %q, not %q", t.Comment, c.From)
 		}
 		t.Comment = c.To
-	case SetTableCollation:
+	case setTableCollation:
 		if t.Collation != c.From {
 			return fmt.Errorf("the collation is %q, not %q", t.Collation, c.From)
 		}

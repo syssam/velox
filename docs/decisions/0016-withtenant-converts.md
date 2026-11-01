@@ -28,6 +28,6 @@ fails with `ErrNoTenant`.
 
 - `WithTenant`'s doc, tenant.go.
 - `TestTenantConversion` (tenant_test.go:698).
-- Commit b04ac97; docs/history/reviews/2026-10-25-triage-C.md, C51.
+- Commit b04ac97; docs/history/reviews/2026-10-25-triage-core.md, C51.
 - Ruling 12 and builder ruling 8,
   docs/history/specs/2026-10-25-pre-1.0-hardening-design.md:50, :163.

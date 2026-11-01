@@ -6,7 +6,7 @@ import (
 )
 
 // valid reports whether d is Postgres, MySQL or SQLite.
-func ValidDialect(d Dialect) bool { return d == Postgres || d == MySQL || d == SQLite }
+func validDialect(d Dialect) bool { return d == Postgres || d == MySQL || d == SQLite }
 
 // quote writes ident quoted, with the quote character doubled inside it.
 func quote(d Dialect, b *strings.Builder, ident string) {
@@ -43,4 +43,5 @@ func noLimit(d Dialect) string {
 	return "-1"
 }
 
+// QuoteIdent writes the identifier s to b, quoted for d.
 func QuoteIdent(d Dialect, b *strings.Builder, s string) { quote(d, b, s) }

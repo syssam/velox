@@ -28,7 +28,7 @@ func TestSQLiteKind(t *testing.T) {
 		{2067, "constraint failed: UNIQUE constraint failed: p.code (2067)", ConstraintUnique, "p.code"},
 		{1299, "constraint failed: NOT NULL constraint failed: p.code (1299)", ConstraintNotNull, "code"},
 	} {
-		if kind, name := SqliteKind(c.code, c.msg); kind != c.kind || name != c.name {
+		if kind, name := sqliteKind(c.code, c.msg); kind != c.kind || name != c.name {
 			t.Errorf("sqliteKind(%d, %q) = %v, %q", c.code, c.msg, kind, name)
 		}
 	}
@@ -41,7 +41,7 @@ func TestSQLiteKind(t *testing.T) {
 // only.
 func TestIsNilTarget(t *testing.T) {
 	for _, err := range []error{nil, errors.New("x"), (*pgconn.PgError)(nil), fmt.Errorf("x: %w", io.EOF)} {
-		if got, want := Is(err, nil), errors.Is(err, nil); got != want {
+		if got, want := is(err, nil), errors.Is(err, nil); got != want {
 			t.Errorf("is(%#v, nil) = %v, errors.Is says %v", err, got, want)
 		}
 	}
@@ -51,19 +51,19 @@ func TestIsNilTarget(t *testing.T) {
 // that a pgx upgrade that changes one of them fails here: a sentinel's text, the
 // fields read from a PgError, and the type names.
 func TestPgxTypesMirrored(t *testing.T) {
-	if got := pgconn.ErrConnClosed.Error(); got != PgConnClosed {
-		t.Errorf("pgconn.ErrConnClosed is %q, pgConnClosed %q", got, PgConnClosed)
+	if got := pgconn.ErrConnClosed.Error(); got != pgConnClosed {
+		t.Errorf("pgconn.ErrConnClosed is %q, pgConnClosed %q", got, pgConnClosed)
 	}
 	if got := pgx.ErrTxClosed.Error(); got != pgTxClosed {
 		t.Errorf("pgx.ErrTxClosed is %q, pgTxClosed %q", got, pgTxClosed)
 	}
-	if !DriverSentinel(fmt.Errorf("x: %w", pgconn.ErrConnClosed), PgConnClosed) || !Ended(fmt.Errorf("x: %w", pgx.ErrTxClosed)) {
+	if !driverSentinel(fmt.Errorf("x: %w", pgconn.ErrConnClosed), pgConnClosed) || !ended(fmt.Errorf("x: %w", pgx.ErrTxClosed)) {
 		t.Error("pgx's sentinels are not recognized through a wrap")
 	}
-	if !PgConnectError(fmt.Errorf("x: %w", &pgconn.ConnectError{})) {
+	if !pgConnectError(fmt.Errorf("x: %w", &pgconn.ConnectError{})) {
 		t.Error("PgConnectError does not recognize *pgconn.ConnectError")
 	}
-	pg, ok := PgErrorOf(fmt.Errorf("x: %w", &pgconn.PgError{Code: "23502", ConstraintName: "c", ColumnName: "k"}))
+	pg, ok := pgErrorOf(fmt.Errorf("x: %w", &pgconn.PgError{Code: "23502", ConstraintName: "c", ColumnName: "k"}))
 	if want := (pgErr{Code: "23502", ConstraintName: "c", ColumnName: "k"}); !ok || pg != want {
 		t.Errorf("pgError read %+v, %v; want %+v", pg, ok, want)
 	}
@@ -103,15 +103,15 @@ func (*otherPgError) SQLState() string { return "23505" }
 
 func TestPgErrorOfReadsSQLState(t *testing.T) {
 	err := fmt.Errorf("x: %w", &otherPgError{ConstraintName: "c", ColumnName: 1})
-	pg, ok := PgErrorOf(err)
+	pg, ok := pgErrorOf(err)
 	if !ok || pg != (pgErr{Code: "23505", ConstraintName: "c"}) {
 		t.Errorf("PgErrorOf = %+v, %v", pg, ok)
 	}
-	if ce := Constraint("e", err); ce == nil || ce.Kind != ConstraintUnique || ce.Constraint != "c" {
+	if ce := constraint("e", err); ce == nil || ce.Kind != ConstraintUnique || ce.Constraint != "c" {
 		t.Errorf("Constraint = %+v", ce)
 	}
 	var nilPg *otherPgError
-	if _, ok := PgErrorOf(fmt.Errorf("x: %w", nilPg)); ok {
+	if _, ok := pgErrorOf(fmt.Errorf("x: %w", nilPg)); ok {
 		t.Error("PgErrorOf read a nil pointer")
 	}
 }
@@ -190,7 +190,7 @@ func TestRetryable(t *testing.T) {
 		fmt.Errorf("velox: commit: %w", &pgconn.PgError{Code: "40001"}): true,
 		io.EOF: false,
 	} {
-		if got := Retryable(err); got != want {
+		if got := retryable(err); got != want {
 			t.Errorf("retryable(%v) = %v, want %v", err, got, want)
 		}
 	}
@@ -207,14 +207,14 @@ func TestLookAlikeErrorsAreLeftAlone(t *testing.T) {
 	for _, c := range []int{2067, 5} {
 		err := coder{c}
 		var ce *ConstraintError
-		if errors.As(dbErr(invInfo, err), &ce) || Retryable(err) {
+		if errors.As(dbErr(invInfo, err), &ce) || retryable(err) {
 			t.Errorf("code %d was taken for a driver error", c)
 		}
 	}
 }
 
 // PgError has the shape of pgconn's error and the name, but is not the
-// driver's type: DriverError checks the package path.
+// driver's type: driverError checks the package path.
 type PgError struct{ Code string }
 
 func (*PgError) Error() string { return "look-alike" }
@@ -223,7 +223,7 @@ func TestLookAlikeDriverTypeFromAnotherPackage(t *testing.T) {
 	err := &PgError{Code: "23505"}
 	var ce *ConstraintError
 	got := dbErr(invInfo, err)
-	if errors.As(got, &ce) || Retryable(err) {
+	if errors.As(got, &ce) || retryable(err) {
 		t.Errorf("a look-alike PgError was taken for the driver's: %v", got)
 	}
 	if code, ok := DriverCode(err); ok || code != "" {
@@ -254,14 +254,14 @@ func TestTypedNilDriverErrors(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			got := dbErr(invInfo, c.err)
-			if _, ok := as[*ConstraintError](got); ok || Is(got, ErrLocked) {
+			if _, ok := as[*ConstraintError](got); ok || is(got, ErrLocked) {
 				t.Errorf("dbErr = %v", got)
 			}
 			if code, ok := DriverCode(c.err); code != "" || ok {
 				t.Errorf("DriverCode = %q, %v; want none", code, ok)
 			}
-			if Retryable(c.err) || failoverable(c.err) {
-				t.Errorf("retryable %v, failoverable %v", Retryable(c.err), failoverable(c.err))
+			if retryable(c.err) || failoverable(c.err) {
+				t.Errorf("retryable %v, failoverable %v", retryable(c.err), failoverable(c.err))
 			}
 		})
 	}
@@ -280,9 +280,9 @@ func TestTypedNilDriverErrors(t *testing.T) {
 		{"connect", errors.Join((*pgconn.ConnectError)(nil), io.ErrUnexpectedEOF), "", false, true},
 	} {
 		code, _ := DriverCode(c.err)
-		if code != c.code || Retryable(c.err) != c.retry || failoverable(c.err) != c.failover {
+		if code != c.code || retryable(c.err) != c.retry || failoverable(c.err) != c.failover {
 			t.Errorf("%s: DriverCode %q, retryable %v, failoverable %v; want %q, %v, %v",
-				c.name, code, Retryable(c.err), failoverable(c.err), c.code, c.retry, c.failover)
+				c.name, code, retryable(c.err), failoverable(c.err), c.code, c.retry, c.failover)
 		}
 	}
 }
@@ -307,8 +307,8 @@ func TestErrLocked(t *testing.T) {
 		if want := "velox: velox.inv: lock not available: "; !strings.HasPrefix(got.Error(), want) {
 			t.Errorf("%q does not start %q", got.Error(), want)
 		}
-		if Retryable(got) || failoverable(got) {
-			t.Errorf("%v: retryable %v, failoverable %v; want neither", got, Retryable(got), failoverable(got))
+		if retryable(got) || failoverable(got) {
+			t.Errorf("%v: retryable %v, failoverable %v; want neither", got, retryable(got), failoverable(got))
 		}
 	}
 	for _, err := range []error{&pgconn.PgError{Code: "40001"}, myErr(1205, "Lock wait timeout exceeded")} {
@@ -388,8 +388,8 @@ func TestDriverCode(t *testing.T) {
 // reports, the classifiers are deterministic and name a constraint that the
 // text contains (the empty name too); and classifying a MySQL error through
 // dbErr never panics, keeps the driver's error reachable, and agrees with
-// MysqlKind on the text the driver gives (the message after "Error N
-// (state): ") - a constraint error exactly when MysqlKind names a kind, and
+// mysqlKind on the text the driver gives (the message after "Error N
+// (state): ") - a constraint error exactly when mysqlKind names a kind, and
 // ErrLocked exactly for 3572.
 func FuzzConstraint(f *testing.F) {
 	for _, c := range []struct {
@@ -422,15 +422,15 @@ func FuzzConstraint(f *testing.F) {
 		f.Add(c.code, c.msg)
 	}
 	f.Fuzz(func(t *testing.T, code int, msg string) {
-		mk, mn := MysqlKind(code, msg)
-		if mk2, mn2 := MysqlKind(code, msg); mk2 != mk || mn2 != mn {
+		mk, mn := mysqlKind(code, msg)
+		if mk2, mn2 := mysqlKind(code, msg); mk2 != mk || mn2 != mn {
 			t.Fatalf("mysqlKind(%d, %q) is not deterministic: %v %q, then %v %q", code, msg, mk, mn, mk2, mn2)
 		}
 		if !strings.Contains(msg, mn) {
 			t.Fatalf("mysqlKind(%d, %q) names %q, which the message does not contain", code, msg, mn)
 		}
-		sk, sn := SqliteKind(code, msg)
-		if sk2, sn2 := SqliteKind(code, msg); sk2 != sk || sn2 != sn {
+		sk, sn := sqliteKind(code, msg)
+		if sk2, sn2 := sqliteKind(code, msg); sk2 != sk || sn2 != sn {
 			t.Fatalf("sqliteKind(%d, %q) is not deterministic: %v %q, then %v %q", code, msg, sk, sn, sk2, sn2)
 		}
 		if !strings.Contains(msg, sn) {
@@ -442,7 +442,7 @@ func FuzzConstraint(f *testing.F) {
 		if !errors.Is(got, err) {
 			t.Fatalf("code %d, %q: the driver's error is not reachable from %v", code, msg, got)
 		}
-		kind, name := MysqlKind(int(uint16(code)), err.Error())
+		kind, name := mysqlKind(int(uint16(code)), err.Error())
 		var ce *ConstraintError
 		if errors.As(got, &ce) != (kind != 0) || ce != nil && (ce.Kind != kind || ce.Constraint != name || ce.Entity != "velox.inv") {
 			t.Fatalf("code %d, %q: dbErr gave %#v, mysqlKind %v %q", code, msg, got, kind, name)
@@ -462,7 +462,7 @@ func (nilEmbeddedPgError) Error() string    { return "embedded" }
 func (nilEmbeddedPgError) SQLState() string { return "23505" }
 
 func TestPgErrorOfNilEmbedded(t *testing.T) {
-	pg, ok := PgErrorOf(nilEmbeddedPgError{})
+	pg, ok := pgErrorOf(nilEmbeddedPgError{})
 	if !ok || pg != (pgErr{Code: "23505"}) {
 		t.Errorf("PgErrorOf = %+v, %v", pg, ok)
 	}

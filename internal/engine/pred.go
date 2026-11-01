@@ -8,8 +8,9 @@ import (
 
 type op uint8
 
+// OpEQ and the rest are the operators of a condition's Node.
 const (
-	OpZero op = iota // the zero Pred[E]{}: no condition was given
+	opZero op = iota // the zero Pred[E]{}: no condition was given
 	OpEQ
 	OpNEQ
 	OpIn
@@ -66,9 +67,11 @@ func ColumnEQ(column int, v any) Predicate {
 	return Predicate{Node{Op: OpEQ, Col: int32(column), V: v}}
 }
 
+// Sound reports whether n and its children hold no zero or invalid operator and
+// no EXISTS: a condition that a rewrite hook may build with the public API.
 func Sound(n Node) bool {
 	switch n.Op {
-	case OpZero, OpInvalid, OpExists:
+	case opZero, OpInvalid, OpExists:
 		return false
 	}
 	for _, k := range n.Kids {
@@ -186,7 +189,7 @@ func resolvePreds(ps []Predicate) ([]Predicate, error) {
 	return out, nil
 }
 
-// resolve resolves the relations in st's conditions, before anything else
+// ResolveStatement resolves the relations in st's conditions, before anything else
 // reads them: the guard, the Rewrite hooks, the scope and rendering see only
 // links. A relation that cannot be resolved fails the statement.
 func ResolveStatement(st *Statement) error {
@@ -217,8 +220,10 @@ var likeEscaper = sync.OnceValue(func() *strings.Replacer {
 // EscapeLike makes s match itself in a LIKE pattern whose escape is !.
 func EscapeLike(s string) string { return likeEscaper().Replace(s) }
 
+// PredNode is the tree of p.
 func PredNode(p Predicate) Node { return p.n }
 
+// NewPredicate is the predicate whose tree is n.
 func NewPredicate(n Node) Predicate { return Predicate{n} }
 
 // Pred is a condition on entity E, made by a column handle or by And, Or and

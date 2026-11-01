@@ -13,7 +13,7 @@ func TestInPlace(t *testing.T) {
 	for range 10 { // arrays of 4 and 8 rows: rows 0 to 3, then 4 to 9
 		b.Next()
 	}
-	all, ptrs := JoinBlocks([]any{b})
+	all, ptrs := joinBlocks([]any{b})
 	idx := [][]int{
 		{0, 1, 2}, // a run in the first array
 		{3, 4},    // straddles the arrays
@@ -38,13 +38,13 @@ func TestInPlace(t *testing.T) {
 func TestKeyRowsFill(t *testing.T) {
 	group := map[any]int{}
 	for _, k := range []any{int64(7), int64(3), int64(9)} {
-		AddKey(group, k)
+		addKey(group, k)
 	}
-	if g, added := AddKey(group, int64(3)); g != 1 || added {
+	if g, added := addKey(group, int64(3)); g != 1 || added {
 		t.Errorf("adding 3 again gives %d, %v; want 1, false", g, added)
 	}
 	keys := []any{int64(3), nil, int64(7), int64(3), int64(5), int64(7), int64(3)}
-	var x KeyRows
+	var x keyRows
 	x.Fill(group, len(keys), func(i int) (any, bool) { return keys[i], keys[i] != nil })
 	for g, want := range [][]int{{2, 5}, {0, 3, 6}, nil} {
 		got := x.Of(g)

@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// conditionUpsert scopes the condition of the update branch of st's upsert:
+// ConditionUpsert scopes the condition of the update branch of st's upsert:
 // every EXISTS in it, a Rewrite hook's included, gets its target's tenant and
 // Read condition, as in a Where, and with policy it gains entity in's Read
 // and Write conditions. It works on a copy of the clause: the caller's
@@ -31,10 +31,10 @@ func (sc *Scoper) ConditionUpsert(in *EntityInfo, st *Statement, policy bool) er
 		}
 	}
 	extra := 0
-	if read.n.Op != OpZero {
+	if read.n.Op != opZero {
 		extra++
 	}
-	if write.n.Op != OpZero {
+	if write.n.Op != opZero {
 		extra++
 	}
 	if extra == 0 && len(st.Conflict.Where) == 0 {
@@ -46,10 +46,10 @@ func (sc *Scoper) ConditionUpsert(in *EntityInfo, st *Statement, policy bool) er
 		return err
 	}
 	cf.Where = where // the scope's own array, or nothing is appended to it
-	if read.n.Op != OpZero {
+	if read.n.Op != opZero {
 		cf.Where = append(cf.Where, read)
 	}
-	if write.n.Op != OpZero {
+	if write.n.Op != opZero {
 		cf.Where = append(cf.Where, write)
 	}
 	st.upsertPolicy = extra > 0
@@ -58,7 +58,7 @@ func (sc *Scoper) ConditionUpsert(in *EntityInfo, st *Statement, policy bool) er
 	return nil
 }
 
-// record shows hooks the scope that applied to st: the tenant as the type of
+// Record shows hooks the scope that applied to st: the tenant as the type of
 // the statement entity's tenant column, which scope converted first; when
 // that entity is unscoped but an EXISTS target is scoped, the id as
 // WithTenant was given it, since the targets' column types may differ.
@@ -78,9 +78,9 @@ func (sc *Scoper) Record(st *Statement) {
 	}
 }
 
-// CheckTenantRows refuses an INSERT whose rows, as the Rewrite hooks left
+// checkTenantRows refuses an INSERT whose rows, as the Rewrite hooks left
 // them, are not all in tenant id.
-func CheckTenantRows(in *EntityInfo, st *Statement, id any) error {
+func checkTenantRows(in *EntityInfo, st *Statement, id any) error {
 	col := in.Columns[in.Tenant].Name
 	j := slices.Index(st.Columns, in.Tenant)
 	if j < 0 {
@@ -96,8 +96,8 @@ func CheckTenantRows(in *EntityInfo, st *Statement, id any) error {
 	return nil
 }
 
-// ColumnNames lists the names of in's columns cols, separated by commas.
-func ColumnNames(in *EntityInfo, cols []int) string {
+// columnNames lists the names of in's columns cols, separated by commas.
+func columnNames(in *EntityInfo, cols []int) string {
 	var b strings.Builder
 	for i, c := range cols {
 		if i > 0 {
@@ -146,7 +146,7 @@ type readCond struct {
 	p      Predicate
 }
 
-// TenantFrom reports whether entity t's rows get the tenant condition, and
+// TenantOf reports whether entity t's rows get the tenant condition, and
 // returns the tenant converted to t's tenant column type (tenantFor): ok when
 // t is tenant-scoped and the context has a tenant that serves t. It fails
 // when t is scoped and the context has neither a tenant nor WithAllTenants,
@@ -186,7 +186,7 @@ func (sc *Scoper) TenantOf(t *EntityInfo) (id any, ok bool, err error) {
 	return id, true, nil
 }
 
-// policyOn reports whether a policy applies: false under WithoutPolicy, which
+// PolicyOn reports whether a policy applies: false under WithoutPolicy, which
 // is then recorded as applied.
 func (sc *Scoper) PolicyOn() bool {
 	if !sc.skipRead {
@@ -200,7 +200,7 @@ func (sc *Scoper) PolicyOn() bool {
 	return true
 }
 
-// readOf returns entity t's Read condition, calling its policy the first time
+// ReadOf returns entity t's Read condition, calling its policy the first time
 // only; a denial is a *PolicyError for op. The EXISTS in the condition get
 // their targets' Read conditions in turn; a condition that reaches t's own
 // Read again, directly or through other entities, cannot be made, and the
@@ -235,7 +235,7 @@ func (e *cycleError) Error() string {
 	return "velox: " + e.entity + ": the Read policy of " + e.policy + " reaches its own Read through an EXISTS; such a policy cannot be applied"
 }
 
-// policyCond checks what entity t's policy (which, "Read" or "Write")
+// PolicyCond checks what entity t's policy (which, "Read" or "Write")
 // returned for a statement of kind op: an error denies the statement, a zero
 // Pred fails it (a policy says Allow for no restriction), Allow is no
 // condition, and a condition is refused when it holds the zero Pred or is
@@ -246,11 +246,11 @@ func (sc *Scoper) PolicyCond(t *EntityInfo, op Op, which string, p Predicate, er
 	switch {
 	case err != nil:
 		return Predicate{}, &PolicyError{Entity: t.Name, Op: op, Err: err}
-	case p.n.Op == OpZero:
+	case p.n.Op == opZero:
 		return Predicate{}, fmt.Errorf("velox: %s: the %s policy returned the zero Pred; return velox.Allow[E]() for no restriction", t.Name, which)
 	case p.n.Op == OpAllow:
 		return Predicate{}, nil // no restriction
-	case HasZero(p.n):
+	case hasZero(p.n):
 		return Predicate{}, fmt.Errorf("velox: %s: the %s policy's condition holds the zero Pred", t.Name, which)
 	}
 	if err := PredErr(p.n); err != nil {
@@ -260,8 +260,8 @@ func (sc *Scoper) PolicyCond(t *EntityInfo, op Op, which string, p Predicate, er
 	return Predicate{n}, err
 }
 
-// TenantPredicate is the condition that scopes entity in's rows to tenant id.
-func TenantPredicate(in *EntityInfo, id any) Predicate { return ColumnEQ(in.Tenant, id) }
+// tenantPredicate is the condition that scopes entity in's rows to tenant id.
+func tenantPredicate(in *EntityInfo, id any) Predicate { return ColumnEQ(in.Tenant, id) }
 
 // tenantFor returns id as the Go type of in's tenant column: unchanged when it
 // is of that type; converted when it is of a predeclared integer type and the
@@ -405,10 +405,10 @@ func zeroTenant(in *EntityInfo) error {
 	return fmt.Errorf("velox: %s: %w: the tenant is the zero value", in.Name, ErrNoTenant)
 }
 
-// CheckTenantAssignments refuses an assignment that would move a row to
+// checkTenantAssignments refuses an assignment that would move a row to
 // another tenant: one that sets the tenant column to anything but id, or adds
 // to or subtracts from it.
-func CheckTenantAssignments(in *EntityInfo, set []Assignment, id any) error {
+func checkTenantAssignments(in *EntityInfo, set []Assignment, id any) error {
 	for _, a := range set {
 		if a.Column != in.Tenant {
 			continue
@@ -520,14 +520,14 @@ func (sc *Scoper) Node(n Node) (Node, bool, error) {
 		if err != nil {
 			return n, false, sc.inExists(t, err)
 		}
-		if (tenant || read.n.Op != OpZero) && kids == nil {
+		if (tenant || read.n.Op != opZero) && kids == nil {
 			kids = make([]Node, len(n.Kids), len(n.Kids)+2)
 			copy(kids, n.Kids)
 		}
 		if tenant {
-			kids = append(kids, TenantPredicate(t, id).n)
+			kids = append(kids, tenantPredicate(t, id).n)
 		}
-		if read.n.Op != OpZero {
+		if read.n.Op != opZero {
 			kids = append(kids, read.n)
 		}
 	}
@@ -614,7 +614,7 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 		return err
 	}
 	if tenant {
-		if err := CheckTenantAssignments(in, st.Set, id); err != nil {
+		if err := checkTenantAssignments(in, st.Set, id); err != nil {
 			return err
 		}
 	}
@@ -638,10 +638,10 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 	if tenant {
 		extra++
 	}
-	if PredNode(read).Op != OpZero {
+	if PredNode(read).Op != opZero {
 		extra++
 	}
-	if PredNode(write).Op != OpZero {
+	if PredNode(write).Op != opZero {
 		extra++
 	}
 	if st.Where, err = sc.Walk(st.Where, extra); err != nil {
@@ -649,12 +649,12 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 	}
 	// st.Where is now the scope's own array, or nothing is appended to it.
 	if tenant {
-		st.Where = append(st.Where, TenantPredicate(in, id))
+		st.Where = append(st.Where, tenantPredicate(in, id))
 	}
-	if PredNode(read).Op != OpZero {
+	if PredNode(read).Op != opZero {
 		st.Where = append(st.Where, read)
 	}
-	if PredNode(write).Op != OpZero {
+	if PredNode(write).Op != opZero {
 		st.Where = append(st.Where, write)
 	}
 	sc.Record(st)
@@ -682,7 +682,7 @@ func (db *DB) scopeInsert(ctx context.Context, st *Statement) error {
 		return err
 	}
 	if tenant && len(db.Cfg.Rewrites) > 0 {
-		if err := CheckTenantRows(in, st, id); err != nil {
+		if err := checkTenantRows(in, st, id); err != nil {
 			return err
 		}
 	}
@@ -703,7 +703,7 @@ func (db *DB) scopeInsert(ctx context.Context, st *Statement) error {
 		if err := sc.ConditionUpsert(in, st, conditioned); err != nil {
 			return err
 		}
-		if StmtUpsertPolicy(st) && len(st.Rows) > 1 && !st.InTx {
+		if stmtUpsertPolicy(st) && len(st.Rows) > 1 && !st.InTx {
 			// conditionedUpsert runs every such InsertAll in a transaction:
 			// only a Rewrite hook gets here.
 			return fmt.Errorf("velox: %s: a Rewrite hook gave a multi-row upsert outside a transaction an update branch the policy conditions; a row the policy hides would fail it after the others were written", in.Name)
@@ -723,7 +723,7 @@ func (db *DB) checkTenantUpsert(in *EntityInfo, cf *ConflictClause) error {
 		if slices.Contains(cf.Columns, in.Tenant) {
 			return nil
 		}
-		return fmt.Errorf("velox: %s: %w: the conflict columns (%s) do not hold the tenant column %s; name the tenant column in OnConflict", in.Name, ErrTenantUpsert, ColumnNames(in, cf.Columns), col)
+		return fmt.Errorf("velox: %s: %w: the conflict columns (%s) do not hold the tenant column %s; name the tenant column in OnConflict", in.Name, ErrTenantUpsert, columnNames(in, cf.Columns), col)
 	}
 	what, cols := "the primary key", in.PrimaryKey
 	if slices.Contains(cols, in.Tenant) {
@@ -738,5 +738,5 @@ func (db *DB) checkTenantUpsert(in *EntityInfo, cf *ConflictClause) error {
 	if what == "" {
 		return nil
 	}
-	return fmt.Errorf("velox: %s: %w: MySQL's ON DUPLICATE KEY UPDATE resolves a conflict on any unique key, and %s (%s) does not hold the tenant column %s", in.Name, ErrTenantUpsert, what, ColumnNames(in, cols), col)
+	return fmt.Errorf("velox: %s: %w: MySQL's ON DUPLICATE KEY UPDATE resolves a conflict on any unique key, and %s (%s) does not hold the tenant column %s", in.Name, ErrTenantUpsert, what, columnNames(in, cols), col)
 }

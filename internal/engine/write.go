@@ -37,10 +37,10 @@ func onlyDryRun(err error) bool {
 	return err == ErrDryRun
 }
 
-// BidiWhere is the condition that ps, a bidirectional join entity's
+// bidiWhere is the condition that ps, a bidirectional join entity's
 // conditions, hold for a row or for its mirror: Or(And(ps…), And(swap(ps)…)),
 // or Or(p, swap(p)) for one p.
-func BidiWhere(ps []Predicate) Predicate {
+func bidiWhere(ps []Predicate) Predicate {
 	if len(ps) == 1 {
 		return Predicate{Group(OpOr, []Node{ps[0].n, swapCols(ps[0].n)})}
 	}
@@ -78,9 +78,9 @@ func swapCols(n Node) Node {
 	return m
 }
 
-// CheckAssignedOnce refuses a column assigned twice: PostgreSQL rejects it
+// checkAssignedOnce refuses a column assigned twice: PostgreSQL rejects it
 // while MySQL and SQLite accept it, so velox refuses it everywhere.
-func CheckAssignedOnce(info *EntityInfo, set []Assignment) error {
+func checkAssignedOnce(info *EntityInfo, set []Assignment) error {
 	seen := make(map[int]bool, len(set))
 	for _, a := range set {
 		if seen[a.Column] {
@@ -91,9 +91,9 @@ func CheckAssignedOnce(info *EntityInfo, set []Assignment) error {
 	return nil
 }
 
-// WithUpdateDefaults appends an assignment for every column with an
+// withUpdateDefaults appends an assignment for every column with an
 // UpdateDefault that set does not assign.
-func WithUpdateDefaults(info *EntityInfo, set []Assignment) []Assignment {
+func withUpdateDefaults(info *EntityInfo, set []Assignment) []Assignment {
 	named := make(map[int]bool, len(set))
 	for _, a := range set {
 		named[a.Column] = true
@@ -143,7 +143,7 @@ func SetElem(p, v any) {
 // effects.
 func Write(ctx context.Context, db *DB, st *Statement, dry, save bool) (int64, string, []any, error) {
 	if st.Op == OpUpdate && InfoBidi(st.Entity) {
-		return 0, "", nil, ErrBidiUpdate(st.Entity)
+		return 0, "", nil, errBidiUpdate(st.Entity)
 	}
 	if len(InfoHooks(st.Entity)) == 0 {
 		var err error
@@ -186,7 +186,7 @@ func Write(ctx context.Context, db *DB, st *Statement, dry, save bool) (int64, s
 // re-point both partners (bidiUpdate).
 //
 // On the join entity of a bidirectional edge (write refused an update), a
-// delete's conditions also match each row's mirror (BidiWhere), so that both
+// delete's conditions also match each row's mirror (bidiWhere), so that both
 // rows of a link go, as ent's clearM2MEdges removes them. It sends a copy of
 // the statement with that condition, so that the hooks' statement keeps the
 // Where they gave.
@@ -194,21 +194,21 @@ func writeCore(ctx context.Context, db *DB, mu *MutationState) error {
 	st := mu.St
 	if InfoBidi(st.Entity) && len(st.Where) > 0 {
 		cp := *st
-		cp.Where = []Predicate{BidiWhere(st.Where)}
+		cp.Where = []Predicate{bidiWhere(st.Where)}
 		st = &cp
 	}
 	if st.Op == OpUpdate {
 		in := st.Entity
-		st.Set = WithUpdateDefaults(in, st.Set)
-		if err := CheckAssignedOnce(in, st.Set); err != nil {
+		st.Set = withUpdateDefaults(in, st.Set)
+		if err := checkAssignedOnce(in, st.Set); err != nil {
 			return err
 		}
 		if err := ValidateSetters(in, st.Set); err != nil {
 			return err
 		}
-		if len(InfoBidiKeys(in)) > 0 {
-			if keys, vs := BidiSet(in, st.Set); len(keys) > 0 {
-				k, err := CheckBidiUpdate(st, keys, vs)
+		if len(infoBidiKeys(in)) > 0 {
+			if keys, vs := bidiSet(in, st.Set); len(keys) > 0 {
+				k, err := checkBidiUpdate(st, keys, vs)
 				if err != nil {
 					return err
 				}

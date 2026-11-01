@@ -314,17 +314,17 @@ func TestCarryConstraints(t *testing.T) {
 	}{
 		{"same", from, tbl("users", email("users_email_key")), nil, true},
 		{"renamed", from, tbl("users", email("users_mail_key")),
-			[]Change{RenameIndex{Table: users, From: "users_email_key", To: "users_mail_key"}}, true},
+			[]Change{renameIndex{Table: users, From: "users_email_key", To: "users_mail_key"}}, true},
 		{"table renamed", from, tbl("accounts", email("accounts_email_key")),
-			[]Change{RenameTable{From: users, To: accounts}, RenameIndex{Table: accounts, From: "users_email_key", To: "accounts_email_key"}}, true},
+			[]Change{renameTable{From: users, To: accounts}, renameIndex{Table: accounts, From: "users_email_key", To: "accounts_email_key"}}, true},
 		{"column renamed", from, tbl("users", email("users_email_key", "mail")),
-			[]Change{RenameColumn{Table: users, From: "email", To: "mail"}}, true},
+			[]Change{renameColumn{Table: users, From: "email", To: "mail"}}, true},
 		{"redefined", from, tbl("users", email("users_email_key", "email", "name")),
-			[]Change{DropIndex{Table: users, Index: from.Tables[0].Indexes[0]}, AddIndex{Table: users, Index: email("users_email_key", "email", "name")}}, false},
+			[]Change{dropIndex{Table: users, Index: from.Tables[0].Indexes[0]}, addIndex{Table: users, Index: email("users_email_key", "email", "name")}}, false},
 		{"another index", from, tbl("users", Index{Name: "users_email_idx", Columns: []string{"email"}}), nil, false},
 		{"partial", from, tbl("users", partial), nil, false},
 		{"baseline", &Schema{Dialect: velox.Postgres}, tbl("users", flagged(email("users_email_key"))),
-			[]Change{CreateTable{Table: tbl("users", flagged(email("users_email_key"))).Tables[0]}}, true},
+			[]Change{createTable{Table: tbl("users", flagged(email("users_email_key"))).Tables[0]}}, true},
 	} {
 		fromBefore, toBefore := c.from.clone(), c.to.clone()
 		got := carryConstraints(c.from, c.to, c.changes)
@@ -346,9 +346,9 @@ func TestCarryConstraints(t *testing.T) {
 	fresh := tbl("users", email("users_email_key")).Tables[0]
 	to := &Schema{Dialect: velox.Postgres, Tables: []Table{old, fresh}}
 	got := carryConstraints(from, to, []Change{
-		RenameTable{From: users, To: TableRef{Name: "users_old"}},
-		RenameIndex{Table: TableRef{Name: "users_old"}, From: "users_email_key", To: "users_old_email_key"},
-		CreateTable{Table: fresh},
+		renameTable{From: users, To: TableRef{Name: "users_old"}},
+		renameIndex{Table: TableRef{Name: "users_old"}, From: "users_email_key", To: "users_old_email_key"},
+		createTable{Table: fresh},
 	})
 	if ix := got.table(TableRef{Name: "users"}).Indexes[0]; ix.Constraint {
 		t.Errorf("replaced: the new table's index %+v carries the flag", ix)

@@ -12,17 +12,17 @@ import (
 	"github.com/syssam/velox/internal/conn"
 )
 
-// The driver-facing types are internal/conn's, so that velox's driver packages
+// Rows and the rest of the driver-facing types are internal/conn's, so that velox's driver packages
 // can implement them.
 type (
 	Rows       = conn.Rows
-	ExecResult = conn.Result
+	execResult = conn.Result
 	txControl  = conn.Tx
-	Executor   = conn.Executor
+	executor   = conn.Executor
 )
 
-// TxOptions are a transaction's options; TxOption sets them.
-type TxOptions struct {
+// txOptions are a transaction's options; TxOption sets them.
+type txOptions struct {
 	Isolation sql.IsolationLevel
 	ReadOnly  bool
 	Retries   int
@@ -32,44 +32,44 @@ type TxOptions struct {
 // TxOption configures one call of DB.Tx: TxIsolation, TxReadOnly,
 // TxRetrySerializable and TxTimeout. The zero TxOption is not valid: TxRetries
 // panics on it, and so does DB.Tx when it begins the transaction.
-type TxOption struct{ apply func(*TxOptions) }
+type TxOption struct{ apply func(*txOptions) }
 
 // TxIsolation sets the transaction's isolation level; the default is the
 // database's.
 func TxIsolation(level sql.IsolationLevel) TxOption {
-	return TxOption{func(o *TxOptions) { o.Isolation = level }}
+	return TxOption{func(o *txOptions) { o.Isolation = level }}
 }
 
 // TxReadOnly starts a read-only transaction.
-func TxReadOnly() TxOption { return TxOption{func(o *TxOptions) { o.ReadOnly = true }} }
+func TxReadOnly() TxOption { return TxOption{func(o *txOptions) { o.ReadOnly = true }} }
 
 // TxRetrySerializable runs the transaction again, up to n more times, when it
 // fails on a serialization failure or a deadlock: PostgreSQL 40001 and 40P01,
 // MySQL 1213 and 1205, SQLite BUSY and LOCKED. fn must be safe to run again.
-func TxRetrySerializable(n int) TxOption { return TxOption{func(o *TxOptions) { o.Retries = n }} }
+func TxRetrySerializable(n int) TxOption { return TxOption{func(o *txOptions) { o.Retries = n }} }
 
 // TxRetries returns the n of the last TxRetrySerializable in opts, or 0 when
 // there is none. It reads options and is not one. It is for code that runs a
 // transaction's fn on an application's behalf and cannot run it again.
 func TxRetries(opts ...TxOption) int {
-	var o TxOptions
+	var o txOptions
 	for _, opt := range opts {
-		ApplyTxOption(opt, &o)
+		applyTxOption(opt, &o)
 	}
 	return o.Retries
 }
 
-// Ended reports whether err says the driver already ended the transaction,
+// ended reports whether err says the driver already ended the transaction,
 // as it does after a canceled context; rolling back then has nothing to do.
-func Ended(err error) bool {
-	return Is(err, sql.ErrTxDone) || DriverSentinel(err, pgTxClosed)
+func ended(err error) bool {
+	return is(err, sql.ErrTxDone) || driverSentinel(err, pgTxClosed)
 }
 
-// Rollback rolls the transaction ctl controls back on RollbackContext. Its
+// rollback rolls the transaction ctl controls back on rollbackContext. Its
 // deadline is RollbackTimeout's alone: the transaction's ROLLBACK must run
 // after the transaction's deadline has passed.
-func Rollback(ctx context.Context, ctl txControl) error {
-	rctx, cancel := RollbackContext(ctx, time.Time{})
+func rollback(ctx context.Context, ctl txControl) error {
+	rctx, cancel := rollbackContext(ctx, time.Time{})
 	defer cancel()
 	return ctl.Rollback(rctx)
 }
@@ -79,9 +79,9 @@ func Rollback(ctx context.Context, ctl txControl) error {
 // ROLLBACK TO and its RELEASE. A var, so that a test can lower it.
 var RollbackTimeout = 5 * time.Second
 
-// RollbackContext is ctx without its cancellation, with RollbackTimeout from
+// rollbackContext is ctx without its cancellation, with RollbackTimeout from
 // now; for a savepoint also no later than the transaction's deadline (also).
-func RollbackContext(ctx context.Context, also time.Time) (context.Context, context.CancelFunc) {
+func rollbackContext(ctx context.Context, also time.Time) (context.Context, context.CancelFunc) {
 	dl := time.Now().Add(RollbackTimeout)
 	if !also.IsZero() && also.Before(dl) {
 		dl = also
@@ -89,24 +89,24 @@ func RollbackContext(ctx context.Context, also time.Time) (context.Context, cont
 	return context.WithDeadline(context.WithoutCancel(ctx), dl)
 }
 
-// Past reports whether deadline is set and has passed.
-func Past(deadline time.Time) bool {
+// past reports whether deadline is set and has passed.
+func past(deadline time.Time) bool {
 	return !deadline.IsZero() && !time.Now().Before(deadline)
 }
 
-// OverGrace is how long over waits for the Done of a context whose deadline
+// overGrace is how long over waits for the Done of a context whose deadline
 // has passed.
-const OverGrace = 50 * time.Millisecond
+const overGrace = 50 * time.Millisecond
 
-// Over reports whether ctx has ended. Once its deadline has passed, it is
+// over reports whether ctx has ended. Once its deadline has passed, it is
 // over: a statement in the transaction carries the same deadline on a timer
 // of its own, which may fire first, and the statement's timeout must not find
 // the transaction still live. over then waits for ctx to end, so that its
-// error says why, but at most OverGrace: a context whose Done never closes
+// error says why, but at most overGrace: a context whose Done never closes
 // must not hang the transaction.
-func Over(ctx context.Context) bool {
+func over(ctx context.Context) bool {
 	if dl, ok := ctx.Deadline(); ok && !time.Now().Before(dl) {
-		t := time.NewTimer(OverGrace)
+		t := time.NewTimer(overGrace)
 		defer t.Stop()
 		select {
 		case <-ctx.Done():
@@ -117,12 +117,12 @@ func Over(ctx context.Context) bool {
 	return ctx.Err() != nil
 }
 
-// SavepointErr is the error of a SAVEPOINT or RELEASE (what) that failed
+// savepointErr is the error of a SAVEPOINT or RELEASE (what) that failed
 // with err on sctx; it matches ErrTimeout when velox's deadline ended sctx.
-func SavepointErr(sctx context.Context, what string, err error) error {
+func savepointErr(sctx context.Context, what string, err error) error {
 	err = fmt.Errorf("velox: %s: %w", what, err)
-	if TimedOut(sctx) {
-		return errors.Join(TimeoutError(what), err)
+	if timedOut(sctx) {
+		return errors.Join(timeoutError(what), err)
 	}
 	return err
 }
@@ -139,7 +139,7 @@ func SavepointErr(sctx context.Context, what string, err error) error {
 // transaction holds one: on a pool of one connection, as SQLite often has,
 // it waits until the transaction ends or its deadline passes.
 func WithoutTx(ctx context.Context) context.Context {
-	if ctx.Value(TxKey{}) == nil {
+	if ctx.Value(txKey{}) == nil {
 		return ctx
 	}
 	return noTxCtx{ctx}
@@ -148,9 +148,9 @@ func WithoutTx(ctx context.Context) context.Context {
 // noTxCtx is WithoutTx's context: its parent without the transaction's mark.
 type noTxCtx struct{ context.Context }
 
-// Value returns nil for TxKey, and the parent context's value otherwise.
+// Value returns nil for txKey, and the parent context's value otherwise.
 func (c noTxCtx) Value(key any) any {
-	if _, ok := key.(TxKey); ok {
+	if _, ok := key.(txKey); ok {
 		return nil
 	}
 	return c.Context.Value(key)
@@ -159,10 +159,10 @@ func (c noTxCtx) Value(key any) any {
 // String names the context as the context package's do.
 func (c noTxCtx) String() string { return fmt.Sprint(c.Context) + ".WithoutTx" }
 
-// TxKey is the context key of the mark a transaction's fn's context carries.
-type TxKey struct{}
+// txKey is the context key of the mark a transaction's fn's context carries.
+type txKey struct{}
 
-func ApplyTxOption(opt TxOption, o *TxOptions) { opt.apply(o) }
+func applyTxOption(opt TxOption, o *txOptions) { opt.apply(o) }
 
 // Tx runs fn in a transaction. fn's error rolls it back and is returned; nil
 // commits it; a panic in fn rolls it back and then panics again with the same
@@ -241,9 +241,9 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error
 	if err != nil {
 		return err
 	}
-	var o TxOptions
+	var o txOptions
 	for _, opt := range opts {
-		ApplyTxOption(opt, &o)
+		applyTxOption(opt, &o)
 	}
 	def, maxd := db.Cfg.Deadlines.Tx, db.Cfg.Deadlines.MaxTx
 	if o.Timeout > 0 {
@@ -252,7 +252,7 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error
 			maxd = o.Timeout
 		}
 	}
-	tctx, cancel := Bound(ctx, def, maxd, time.Time{}, nil)
+	tctx, cancel := bound(ctx, def, maxd, time.Time{}, nil)
 	// The deadline, velox's or the caller's, bounds the statements in fn
 	// whatever context they are given; it is velox's when bound set one.
 	deadline, _ := tctx.Deadline()
@@ -278,7 +278,7 @@ func (db *DB) Tx(ctx context.Context, fn func(ctx context.Context, tx *DB) error
 // ErrTimeout when the deadline is velox's. info, when not nil, is updated
 // before each attempt and each retry. sh is the shard the transaction runs
 // on; nil on a DB without a router.
-func (db *DB) attempts(ctx, tctx context.Context, fn func(context.Context, *DB) error, o TxOptions, deadline time.Time, cause error, info *TxInfo, sh *ShardConn) error {
+func (db *DB) attempts(ctx, tctx context.Context, fn func(context.Context, *DB) error, o txOptions, deadline time.Time, cause error, info *TxInfo, sh *shardConn) error {
 	for attempt := 1; ; attempt++ {
 		if info != nil {
 			info.Attempt = attempt
@@ -293,10 +293,10 @@ func (db *DB) attempts(ctx, tctx context.Context, fn func(context.Context, *DB) 
 			// reached the database: it pins too.
 			db.pinSession(tctx) // the context given to Tx, not a TxAround hook's
 		}
-		if err != nil && cause != nil && TimedOut(tctx) && !Is(err, ErrTimeout) {
-			err = errors.Join(TimeoutError("transaction"), err)
+		if err != nil && cause != nil && timedOut(tctx) && !is(err, ErrTimeout) {
+			err = errors.Join(timeoutError("transaction"), err)
 		}
-		if err == nil || attempt > o.Retries || !Retryable(err) || ctx.Err() != nil || tctx.Err() != nil {
+		if err == nil || attempt > o.Retries || !retryable(err) || ctx.Err() != nil || tctx.Err() != nil {
 			return err
 		}
 		if info != nil {
@@ -308,7 +308,7 @@ func (db *DB) attempts(ctx, tctx context.Context, fn func(context.Context, *DB) 
 // transaction runs fn once in a new transaction, and records how it ended in
 // info, which may be nil. A transaction that did not finish, because fn
 // panicked or called runtime.Goexit, is rolled back by the deferred function.
-// Rollback uses RollbackContext, without ctx's cancellation, so a canceled ctx
+// rollback uses rollbackContext, without ctx's cancellation, so a canceled ctx
 // still rolls back, and bounded, so a dead connection cannot hang it.
 //
 // Once ctx has ended, a rollback's error is not reported: the driver may have
@@ -329,9 +329,9 @@ func (db *DB) attempts(ctx, tctx context.Context, fn func(context.Context, *DB) 
 // returns, after the commit or the rollback.
 //
 // committed reports whether COMMIT was sent, whether or not it then failed.
-func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) error, o TxOptions, deadline time.Time, cause error, info *TxInfo, wrote *atomic.Bool, sh *ShardConn) (committed bool, _ error) {
+func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) error, o txOptions, deadline time.Time, cause error, info *TxInfo, wrote *atomic.Bool, sh *shardConn) (committed bool, _ error) {
 	primary := db.Ex
-	var txShard *ShardConn // its statements check their shard against it
+	var txShard *shardConn // its statements check their shard against it
 	if sh != nil {
 		primary = sh.Primary // a transaction runs on the primary
 		if db.Rt.One == nil {
@@ -340,7 +340,7 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 	}
 	ex, ctl, err := primary.Begin(ctx, sql.TxOptions{Isolation: o.Isolation, ReadOnly: o.ReadOnly})
 	if err != nil {
-		EndTx(info, TxError)
+		endTx(info, TxError)
 		return false, fmt.Errorf("velox: begin: %w", err)
 	}
 	f := newTxFrame(ctx, DB{D: db.D, Ex: ex, Rt: db.Rt, Cfg: db.Cfg, InTx: true, txDeadline: deadline, txCause: cause, tx: info, txWrote: wrote, txShard: txShard}, nil)
@@ -348,41 +348,41 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 	finished := false
 	defer func() {
 		if !finished {
-			EndTx(info, TxRollback)
-			_ = Rollback(ctx, ctl)
+			endTx(info, TxRollback)
+			_ = rollback(ctx, ctl)
 		}
 	}()
 	if err := fn(&f.ctx, &f.db); err != nil {
 		finished = true
-		if ctx.Err() != nil || Past(deadline) {
-			EndTx(info, TxError)
+		if ctx.Err() != nil || past(deadline) {
+			endTx(info, TxError)
 		} else {
-			EndTx(info, TxRollback)
+			endTx(info, TxRollback)
 		}
-		if rerr := Rollback(ctx, ctl); rerr != nil && !Ended(rerr) && !Over(ctx) && !Past(deadline) {
+		if rerr := rollback(ctx, ctl); rerr != nil && !ended(rerr) && !over(ctx) && !past(deadline) {
 			return false, errors.Join(err, fmt.Errorf("velox: rollback: %w", rerr))
 		}
-		if cause != nil && Past(deadline) && !Is(err, ErrTimeout) {
+		if cause != nil && past(deadline) && !is(err, ErrTimeout) {
 			// velox's deadline passed, whatever context fn's statements ran
 			// on: say so without waiting for the deadline's timer.
-			return false, errors.Join(TimeoutError("transaction"), err)
+			return false, errors.Join(timeoutError("transaction"), err)
 		}
 		return false, err
 	}
 	finished = true
-	if Over(ctx) || Past(deadline) {
-		EndTx(info, TxError)
-		// Past the deadline, or canceled: roll back on every driver rather
+	if over(ctx) || past(deadline) {
+		endTx(info, TxError)
+		// past the deadline, or canceled: roll back on every driver rather
 		// than leave it to the driver whether a late commit succeeds.
-		_ = Rollback(ctx, ctl)
+		_ = rollback(ctx, ctl)
 		// velox's deadline is the cause even when a TxAround hook passed on
 		// a context without it.
-		if TimedOut(ctx) || cause != nil && Past(deadline) {
-			return false, TimeoutError("transaction")
+		if timedOut(ctx) || cause != nil && past(deadline) {
+			return false, timeoutError("transaction")
 		}
-		err := CtxErr(ctx)
+		err := ctxErr(ctx)
 		if err == nil {
-			// Past its deadline, its Done not closed within the grace.
+			// past its deadline, its Done not closed within the grace.
 			err = context.DeadlineExceeded
 		}
 		return false, fmt.Errorf("velox: transaction: %w", err)
@@ -390,18 +390,18 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 	if f.broken != nil {
 		// A savepoint did not roll back: its fn's work may still be in the
 		// transaction, which must not commit it.
-		EndTx(info, TxError)
+		endTx(info, TxError)
 		err := fmt.Errorf("velox: transaction: %w", f.broken)
-		if rerr := Rollback(ctx, ctl); rerr != nil && !Ended(rerr) {
+		if rerr := rollback(ctx, ctl); rerr != nil && !ended(rerr) {
 			return false, errors.Join(err, fmt.Errorf("velox: rollback: %w", rerr))
 		}
 		return false, err
 	}
 	if err := ctl.Commit(ctx); err != nil {
-		EndTx(info, TxError)
+		endTx(info, TxError)
 		return true, fmt.Errorf("velox: commit: %w", err)
 	}
-	EndTx(info, TxCommit)
+	endTx(info, TxCommit)
 	return true, nil
 }
 
@@ -427,7 +427,7 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 		return fmt.Errorf("velox: savepoint: %w", err)
 	}
 	if db.txShard != nil {
-		rc, _ := ctx.Value(RouteKey{}).(RouteCtx)
+		rc, _ := ctx.Value(routeKey{}).(routeCtx)
 		sh, err := db.Rt.ShardOf(ctx, rc)
 		if err != nil {
 			return fmt.Errorf("velox: savepoint: %w", err)
@@ -436,13 +436,13 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 			return fmt.Errorf("velox: savepoint: for shard %q in a transaction on shard %q", sh.Name, db.txShard.Name)
 		}
 	}
-	sctx, cancel := Bound(ctx, 0, 0, db.txDeadline, db.txCause)
+	sctx, cancel := bound(ctx, 0, 0, db.txDeadline, db.txCause)
 	if cancel != nil {
 		defer cancel()
 	}
 	name := "velox_" + strconv.FormatUint(db.txRoot.savepoints.Add(1), 10)
 	if _, err := db.Ex.Exec(sctx, "SAVEPOINT "+name, nil); err != nil {
-		return SavepointErr(sctx, "savepoint", err)
+		return savepointErr(sctx, "savepoint", err)
 	}
 	finished := false
 	defer func() {
@@ -457,14 +457,14 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 		// connection may be gone and the rollback's error is noise.
 		rerr := db.undoSavepoint(ctx, name)
 		db.breakOn(rerr)
-		if rerr != nil && !Ended(rerr) && ctx.Err() == nil && !db.pastTxDeadline() {
+		if rerr != nil && !ended(rerr) && ctx.Err() == nil && !db.pastTxDeadline() {
 			return errors.Join(err, fmt.Errorf("velox: rollback to savepoint: %w", rerr))
 		}
 		return err
 	}
 	finished = true
 	if _, err := db.Ex.Exec(sctx, "RELEASE SAVEPOINT "+name, nil); err != nil {
-		return SavepointErr(sctx, "release savepoint", err)
+		return savepointErr(sctx, "release savepoint", err)
 	}
 	return nil
 }
@@ -480,10 +480,10 @@ func (db *DB) breakOn(err error) {
 	}
 }
 
-// undoSavepoint is rollbackSavepoint on RollbackContext, bounded by the
+// undoSavepoint is rollbackSavepoint on rollbackContext, bounded by the
 // transaction's deadline too.
 func (db *DB) undoSavepoint(ctx context.Context, name string) error {
-	rctx, cancel := RollbackContext(ctx, db.txDeadline)
+	rctx, cancel := rollbackContext(ctx, db.txDeadline)
 	defer cancel()
 	return db.rollbackSavepoint(rctx, name)
 }
@@ -501,7 +501,7 @@ func (db *DB) rollbackSavepoint(ctx context.Context, name string) error {
 
 // txCtx is the context a transaction's or a savepoint's fn gets: the context
 // it runs on, marked with the transaction's root frame, which Value returns
-// for TxKey. The root frame is the transaction's identity, which its
+// for txKey. The root frame is the transaction's identity, which its
 // savepoints share. Under a mark whose transaction has not ended, a
 // statement on a DB of another transaction, or of none, fails with
 // ErrOutsideTx (foreign). It is a context type of its own, rather than
@@ -512,10 +512,10 @@ type txCtx struct {
 	root *txFrame
 }
 
-// Value returns the transaction's root frame for TxKey, and the parent
+// Value returns the transaction's root frame for txKey, and the parent
 // context's value otherwise.
 func (c *txCtx) Value(key any) any {
-	if _, ok := key.(TxKey); ok {
+	if _, ok := key.(txKey); ok {
 		return c.root
 	}
 	return c.Context.Value(key)
@@ -564,6 +564,6 @@ func newTxFrame(ctx context.Context, db DB, root *txFrame) *txFrame {
 // Foreign reports whether ctx carries the mark of a transaction that has not
 // ended and that db is not in: db is in no transaction, or in another.
 func (db *DB) Foreign(ctx context.Context) bool {
-	m, _ := ctx.Value(TxKey{}).(*txFrame)
+	m, _ := ctx.Value(txKey{}).(*txFrame)
 	return m != nil && m != db.txRoot && !m.ended.Load()
 }

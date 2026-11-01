@@ -127,14 +127,14 @@ func (d *differ) enums() {
 		t := d.mid.enum(u.ref())
 		switch {
 		case t == nil:
-			d.add(CreateEnum{Enum: u}, 3, 0, u.ref(), 0, "")
+			d.add(createEnum{Enum: u}, 3, 0, u.ref(), 0, "")
 		case !slices.Equal(t.Values, u.Values):
 			d.alterEnum(*t, u)
 		}
 	}
 	for _, t := range d.mid.Enums {
 		if d.to.enum(t.ref()) == nil {
-			d.add(DropEnum{Enum: t}, 9, 2, t.ref(), 0, "")
+			d.add(dropEnum{Enum: t}, 9, 2, t.ref(), 0, "")
 		}
 	}
 }
@@ -150,7 +150,7 @@ func (d *differ) alterEnum(from, to Enum) {
 		}
 	}
 	if j == len(from.Values) {
-		d.add(AlterEnum{From: from, To: to}, 3, 1, to.ref(), 0, "")
+		d.add(alterEnum{From: from, To: to}, 3, 1, to.ref(), 0, "")
 		return
 	}
 	mid := from
@@ -161,9 +161,9 @@ func (d *differ) alterEnum(from, to Enum) {
 		}
 	}
 	if len(mid.Values) > len(from.Values) {
-		d.add(AlterEnum{From: from, To: mid}, 3, 1, to.ref(), 0, "")
+		d.add(alterEnum{From: from, To: mid}, 3, 1, to.ref(), 0, "")
 	}
-	d.add(AlterEnum{From: mid, To: to}, 9, 1, to.ref(), 0, "")
+	d.add(alterEnum{From: mid, To: to}, 9, 1, to.ref(), 0, "")
 }
 
 // tables creates, alters and drops the tables, renames applied.
@@ -207,11 +207,11 @@ func (d *differ) keepKeysIndexed() {
 		dropped, keys := map[string]bool{}, map[string]bool{}
 		for _, p := range d.out {
 			switch c := p.c.(type) {
-			case DropIndex:
+			case dropIndex:
 				if p.step == 1 && c.Table == oref {
 					dropped[c.Index.Name] = true
 				}
-			case DropForeignKey:
+			case dropForeignKey:
 				if p.step == 1 && c.Table == oref {
 					keys[c.ForeignKey.Name] = true
 				}
@@ -221,7 +221,7 @@ func (d *differ) keepKeysIndexed() {
 			name := fk.Name
 			rename := d.keyRename(ref, fk.Name)
 			if rename != nil {
-				name = rename.c.(RenameConstraint).From
+				name = rename.c.(renameConstraint).From
 			}
 			leads := func(cols []string) bool {
 				return len(cols) >= len(fk.Columns) && slices.Equal(cols[:len(fk.Columns)], fk.Columns)
@@ -234,9 +234,9 @@ func (d *differ) keepKeysIndexed() {
 			if rename != nil {
 				rename.c = nil
 			}
-			d.add(DropForeignKey{Table: oref, ForeignKey: *d.orig.table(oref).foreignKey(name)}, 1, 0, oref, 0, name)
+			d.add(dropForeignKey{Table: oref, ForeignKey: *d.orig.table(oref).foreignKey(name)}, 1, 0, oref, 0, name)
 			if uf := u.foreignKey(fk.Name); uf != nil {
-				d.add(AddForeignKey{Table: ref, ForeignKey: *uf}, 7, 2, ref, 0, uf.Name)
+				d.add(addForeignKey{Table: ref, ForeignKey: *uf}, 7, 2, ref, 0, uf.Name)
 			}
 		}
 	}
@@ -247,7 +247,7 @@ func (d *differ) keepKeysIndexed() {
 // nil.
 func (d *differ) keyRename(ref TableRef, name string) *planned {
 	for i := range d.out {
-		if rc, ok := d.out[i].c.(RenameConstraint); ok && d.out[i].keyRename && rc.Table == ref && rc.To == name {
+		if rc, ok := d.out[i].c.(renameConstraint); ok && d.out[i].keyRename && rc.Table == ref && rc.To == name {
 			return &d.out[i]
 		}
 	}
@@ -284,7 +284,7 @@ func (d *differ) freeNames(t *Table) {
 	if d.to.Dialect != velox.MySQL {
 		for _, ix := range t.Indexes {
 			if d.nameTaken(ref, ix.Name) {
-				d.add(DropIndex{Table: ref, Index: ix}, 1, 2, ref, 0, ix.Name)
+				d.add(dropIndex{Table: ref, Index: ix}, 1, 2, ref, 0, ix.Name)
 			}
 		}
 	}
@@ -295,12 +295,12 @@ func (d *differ) freeNames(t *Table) {
 		if !d.toHas(ref.Schema, func(u *Table) bool { return u.foreignKey(fk.Name) != nil }) {
 			return false
 		}
-		d.add(DropForeignKey{Table: ref, ForeignKey: *d.orig.table(ref).foreignKey(fk.Name)}, 1, 0, ref, 0, fk.Name)
+		d.add(dropForeignKey{Table: ref, ForeignKey: *d.orig.table(ref).foreignKey(fk.Name)}, 1, 0, ref, 0, fk.Name)
 		return true
 	})
 	for _, ck := range t.Checks {
 		if d.toHas(ref.Schema, func(u *Table) bool { return u.check(ck.Name) != nil }) {
-			d.add(DropCheck{Table: ref, Check: ck}, 1, 1, ref, 0, ck.Name)
+			d.add(dropCheck{Table: ref, Check: ck}, 1, 1, ref, 0, ck.Name)
 		}
 	}
 }
@@ -333,34 +333,34 @@ func (d *differ) alterTable(t, u *Table) {
 	for i, uc := range u.Columns {
 		tc := t.column(uc.Name)
 		if tc == nil {
-			d.add(AddColumn{Table: ref, Column: uc}, 5, 0, ref, i, "")
+			d.add(addColumn{Table: ref, Column: uc}, 5, 0, ref, i, "")
 			continue
 		}
 		if w := columnChange(*tc, uc); w != 0 {
-			d.add(AlterColumn{Table: ref, From: *tc, To: uc, What: w}, 5, 1, ref, i, "")
+			d.add(alterColumn{Table: ref, From: *tc, To: uc, What: w}, 5, 1, ref, i, "")
 		}
 	}
 	for i, tc := range t.Columns {
 		if u.column(tc.Name) == nil {
 			gone[tc.Name] = true
-			d.add(DropColumn{Table: ref, Column: tc}, 6, 0, ref, i, "")
+			d.add(dropColumn{Table: ref, Column: tc}, 6, 0, ref, i, "")
 		}
 	}
 	if t.Comment != u.Comment {
-		d.add(SetTableComment{Table: ref, From: t.Comment, To: u.Comment}, 5, 2, ref, 0, "")
+		d.add(setTableComment{Table: ref, From: t.Comment, To: u.Comment}, 5, 2, ref, 0, "")
 	}
 	if t.Collation != u.Collation {
-		d.add(SetTableCollation{Table: ref, From: t.Collation, To: u.Collation}, 5, 3, ref, 0, "")
+		d.add(setTableCollation{Table: ref, From: t.Collation, To: u.Collation}, 5, 3, ref, 0, "")
 	}
 
 	tu, ut := pairIndexes(t.Indexes, u.Indexes)
 	for j, ui := range u.Indexes {
 		ti := at(t.Indexes, ut[j])
 		if ti != nil && !sameIndex(*ti, ui) {
-			d.add(DropIndex{Table: oref, Index: d.origIndex(ref, ot, *ti)}, 1, 2, oref, 0, ti.Name)
+			d.add(dropIndex{Table: oref, Index: d.origIndex(ref, ot, *ti)}, 1, 2, oref, 0, ti.Name)
 		}
 		if ti == nil || !sameIndex(*ti, ui) {
-			d.add(AddIndex{Table: ref, Index: ui}, 7, 0, ref, 0, ui.Name)
+			d.add(addIndex{Table: ref, Index: ui}, 7, 0, ref, 0, ui.Name)
 		}
 	}
 	for k, ti := range t.Indexes {
@@ -379,9 +379,9 @@ func (d *differ) alterTable(t, u *Table) {
 			onGone = !slices.ContainsFunc(ti.Columns, func(c string) bool { return !gone[c] })
 		}
 		if onGone || d.nameTaken(ref, ti.Name) {
-			d.add(DropIndex{Table: oref, Index: d.origIndex(ref, ot, ti)}, 1, 2, oref, 0, ti.Name)
+			d.add(dropIndex{Table: oref, Index: d.origIndex(ref, ot, ti)}, 1, 2, oref, 0, ti.Name)
 		} else {
-			d.add(DropIndex{Table: ref, Index: ti}, 8, 0, ref, 0, ti.Name)
+			d.add(dropIndex{Table: ref, Index: ti}, 8, 0, ref, 0, ti.Name)
 		}
 	}
 
@@ -389,16 +389,16 @@ func (d *differ) alterTable(t, u *Table) {
 	for j, uf := range u.ForeignKeys {
 		tf := at(t.ForeignKeys, ut[j])
 		if tf != nil && (!sameForeignKey(*tf, uf) || d.keyRetyped(ref, uf)) {
-			d.add(DropForeignKey{Table: oref, ForeignKey: d.origKey(ref, ot, *tf)}, 1, 0, oref, 0, tf.Name)
+			d.add(dropForeignKey{Table: oref, ForeignKey: d.origKey(ref, ot, *tf)}, 1, 0, oref, 0, tf.Name)
 			tf = nil
 		}
 		if tf == nil {
-			d.add(AddForeignKey{Table: ref, ForeignKey: uf}, 7, 2, ref, 0, uf.Name)
+			d.add(addForeignKey{Table: ref, ForeignKey: uf}, 7, 2, ref, 0, uf.Name)
 		}
 	}
 	for k, tf := range t.ForeignKeys {
 		if tu[k] < 0 {
-			d.add(DropForeignKey{Table: oref, ForeignKey: d.origKey(ref, ot, tf)}, 1, 0, oref, 0, tf.Name)
+			d.add(dropForeignKey{Table: oref, ForeignKey: d.origKey(ref, ot, tf)}, 1, 0, oref, 0, tf.Name)
 		}
 	}
 
@@ -406,36 +406,36 @@ func (d *differ) alterTable(t, u *Table) {
 	for j, uc := range u.Checks {
 		tc := at(t.Checks, ut[j])
 		if tc != nil && tc.Expr != uc.Expr {
-			d.add(DropCheck{Table: oref, Check: d.origCheck(ref, ot, *tc)}, 1, 1, oref, 0, tc.Name)
+			d.add(dropCheck{Table: oref, Check: d.origCheck(ref, ot, *tc)}, 1, 1, oref, 0, tc.Name)
 		}
 		if tc == nil || tc.Expr != uc.Expr {
-			d.add(AddCheck{Table: ref, Check: uc}, 7, 1, ref, 0, uc.Name)
+			d.add(addCheck{Table: ref, Check: uc}, 7, 1, ref, 0, uc.Name)
 		}
 	}
 	for k, tc := range t.Checks {
 		if tu[k] < 0 {
-			d.add(DropCheck{Table: oref, Check: d.origCheck(ref, ot, tc)}, 1, 1, oref, 0, tc.Name)
+			d.add(dropCheck{Table: oref, Check: d.origCheck(ref, ot, tc)}, 1, 1, oref, 0, tc.Name)
 		}
 	}
 }
 
 // columnChange is what differs between a and b.
-func columnChange(a, b Column) ColumnChange {
-	var w ColumnChange
+func columnChange(a, b Column) columnMask {
+	var w columnMask
 	if a.Type != b.Type {
-		w |= ColumnType
+		w |= columnType
 	}
 	if a.Nullable != b.Nullable {
-		w |= ColumnNullable
+		w |= columnNullable
 	}
 	if a.Default != b.Default {
-		w |= ColumnDefault
+		w |= columnDefault
 	}
 	if a.Identity != b.Identity || a.Sequence != b.Sequence {
-		w |= ColumnIdentity
+		w |= columnIdentity
 	}
 	if a.Comment != b.Comment {
-		w |= ColumnComment
+		w |= columnComment
 	}
 	return w
 }

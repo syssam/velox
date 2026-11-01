@@ -48,7 +48,7 @@ func WithSQLComment(app string, tags ...string) Option {
 		}
 	}
 	tags = slices.Clone(tags)
-	return Option{func(c *Config) { c.Comment = newCommenter(app, tags) }}
+	return Option{func(c *config) { c.Comment = newCommenter(app, tags) }}
 }
 
 // commenter renders and caches a DB's SQL comments.

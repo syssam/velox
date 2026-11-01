@@ -20,9 +20,9 @@ type DB struct {
 	D Dialect
 	// Ex runs the statements of a DB without replicas, and of a transaction;
 	// nil on a DB with replicas outside a transaction, whose Rt chooses.
-	Ex   Executor
-	Rt   *Router // WithReplicas's; nil without replicas
-	Cfg  *Config
+	Ex   executor
+	Rt   *router // WithReplicas's; nil without replicas
+	Cfg  *config
 	InTx bool
 	// txDeadline is, in a transaction, its deadline: velox's or the
 	// caller's, whichever is earlier; zero when none. txCause is ErrTimeout
@@ -36,7 +36,7 @@ type DB struct {
 	txWrote *atomic.Bool
 	// txShard is, in a transaction on a sharded DB, the shard it runs on;
 	// nil elsewhere.
-	txShard *ShardConn
+	txShard *shardConn
 	// txRoot is, in a transaction, its frame: the identity the mark on its
 	// fn's ctx carries, which its savepoints share. Nil elsewhere.
 	txRoot *txFrame
@@ -44,62 +44,62 @@ type DB struct {
 
 // Open is velox.Open's DB, opts given as a slice.
 func Open(d Dialect, db *sql.DB, opts []Option) DB {
-	if !ValidDialect(d) {
+	if !validDialect(d) {
 		panic(fmt.Sprintf("velox: Open: unknown %v; use velox.Postgres, velox.MySQL or velox.SQLite", d))
 	}
-	return NewDB(d, conn.NewSQL(db), opts)
+	return newDB(d, conn.NewSQL(db), opts)
 }
 
 // OpenConn is velox.OpenConn's DB.
 func OpenConn(d Dialect, c Conn, opts []Option) DB {
-	if !ValidDialect(d) {
+	if !validDialect(d) {
 		panic(fmt.Sprintf("velox: OpenConn: unknown %v; use velox.Postgres, velox.MySQL or velox.SQLite", d))
 	}
 	switch {
 	case ConnExec(c) == nil:
 		panic("velox: OpenConn: the Conn is zero; make it with SQLConn or a driver package's Conn")
-	case ConnOnly(c) != 0 && ConnOnly(c) != d:
-		panic(fmt.Sprintf("velox: OpenConn: the Conn is valid only on %s; the DB is %s", ConnOnly(c), d))
+	case connOnly(c) != 0 && connOnly(c) != d:
+		panic(fmt.Sprintf("velox: OpenConn: the Conn is valid only on %s; the DB is %s", connOnly(c), d))
 	}
-	return NewDB(d, ConnExec(c), opts)
+	return newDB(d, ConnExec(c), opts)
 }
 
 // dialectExecutor is ex with what dialect d needs of every statement.
-func dialectExecutor(d Dialect, ex Executor) Executor {
+func dialectExecutor(d Dialect, ex executor) executor {
 	if d == SQLite {
 		return conn.SQLiteTimes(ex)
 	}
 	return ex
 }
 
-// NewDB returns an unsharded DB of dialect d on ex, its primary.
-func NewDB(d Dialect, ex Executor, opts []Option) DB {
-	cfg := NewConfig(opts)
+// newDB returns an unsharded DB of dialect d on ex, its primary.
+func newDB(d Dialect, ex executor, opts []Option) DB {
+	cfg := newConfig(opts)
 	if cfg.ShardFor != nil {
 		panic("velox: WithShardFor is for OpenShards; Open and OpenConn open a DB on one shard")
 	}
 	if len(cfg.Replicas) > 0 {
-		return DB{D: d, Rt: NewRouter(d, ex, cfg.Replicas), Cfg: cfg}
+		return DB{D: d, Rt: newRouter(d, ex, cfg.Replicas), Cfg: cfg}
 	}
 	return DB{D: d, Ex: dialectExecutor(d, ex), Cfg: cfg}
 }
 
 // OpenShards is velox.OpenShards's DB.
 func OpenShards(d Dialect, shards map[string]Shard, opts []Option) DB {
-	if !ValidDialect(d) {
+	if !validDialect(d) {
 		panic(fmt.Sprintf("velox: OpenShards: unknown %v; use velox.Postgres, velox.MySQL or velox.SQLite", d))
 	}
 	if len(shards) == 0 {
 		panic("velox: OpenShards: no shards")
 	}
-	cfg := NewConfig(opts)
+	cfg := newConfig(opts)
 	if cfg.ShardFor == nil {
 		panic("velox: OpenShards: WithShardFor is required, to find a statement's shard from its tenant")
 	}
 	if len(cfg.Replicas) > 0 {
 		panic("velox: OpenShards: WithReplicas is for Open and OpenConn; give each Shard its Replicas")
 	}
-	rt := &Router{Shards: make(map[string]*ShardConn, len(shards)), ShardFor: cfg.ShardFor}
+	rt := &router{Shards: make(map[string]*shardConn, len(shards)), ShardFor: cfg.ShardFor}
 	for _, name := range slices.Sorted(maps.Keys(shards)) {
 		s := shards[name]
 		if name == "" {
@@ -109,15 +109,15 @@ func OpenShards(d Dialect, shards map[string]Shard, opts []Option) DB {
 		switch {
 		case ConnExec(s.Primary) == nil:
 			panic(fmt.Sprintf("velox: %s Primary is the zero Conn; make it with SQLConn or a driver package's Conn", what))
-		case ConnOnly(s.Primary) != 0 && ConnOnly(s.Primary) != d:
-			panic(fmt.Sprintf("velox: %s Primary is valid only on %s; the DB is %s", what, ConnOnly(s.Primary), d))
+		case connOnly(s.Primary) != 0 && connOnly(s.Primary) != d:
+			panic(fmt.Sprintf("velox: %s Primary is valid only on %s; the DB is %s", what, connOnly(s.Primary), d))
 		}
 		for i, c := range s.Replicas {
 			if ConnExec(c) == nil {
 				panic(fmt.Sprintf("velox: %s replica %d is the zero Conn; make it with SQLConn or a driver package's Conn", what, i))
 			}
 		}
-		sh := NewShard(d, ConnExec(s.Primary), s.Replicas, what)
+		sh := newShard(d, ConnExec(s.Primary), s.Replicas, what)
 		sh.Name = name
 		rt.Shards[name] = sh
 	}
@@ -134,10 +134,10 @@ func (db *DB) Hooked() bool { return len(db.Cfg.Rewrites) > 0 || len(db.Cfg.Arou
 // (txFrame.broken), it fails st with that error.
 func (db *DB) outsideTx(ctx context.Context, st *Statement) error {
 	if db.Foreign(ctx) {
-		return StmtErr(st, ErrOutsideTx)
+		return stmtErr(st, ErrOutsideTx)
 	}
 	if db.txRoot != nil && db.txRoot.broken != nil {
-		return StmtErr(st, db.txRoot.broken)
+		return stmtErr(st, db.txRoot.broken)
 	}
 	return nil
 }
@@ -151,7 +151,7 @@ func (db *DB) outsideTx(ctx context.Context, st *Statement) error {
 // pass without a context lookup.
 func (db *DB) dryWrite(ctx context.Context, st *Statement) error {
 	if !st.Op.Reads() && IsDryRun(ctx) {
-		return StmtErr(st, ErrDryRun)
+		return stmtErr(st, ErrDryRun)
 	}
 	return nil
 }
@@ -172,7 +172,7 @@ func (db *DB) observe(ctx context.Context, st *Statement) {
 // guard, scope, rendering (the SQL comment included), routing and execution.
 // Unlike run's, its st and read do not escape, so a caller's state and
 // reading closure can stay on the stack.
-func (db *DB) Plain(ctx context.Context, st *Statement, read func(Rows) error, res *ExecResult) error {
+func (db *DB) Plain(ctx context.Context, st *Statement, read func(Rows) error, res *execResult) error {
 	if err := db.dryWrite(ctx, st); err != nil {
 		return err
 	}
@@ -216,8 +216,8 @@ func (db *DB) Plain(ctx context.Context, st *Statement, read func(Rows) error, r
 		defer cancel()
 	}
 	if err := db.exec(tctx, st, t, read, res); err != nil {
-		if TimedOut(tctx) {
-			return errors.Join(TimeoutError(st.Entity.Name), err)
+		if timedOut(tctx) {
+			return errors.Join(timeoutError(st.Entity.Name), err)
 		}
 		return err
 	}
@@ -225,13 +225,13 @@ func (db *DB) Plain(ctx context.Context, st *Statement, read func(Rows) error, r
 }
 
 // Run takes a statement through the pipeline: prepare's stages, the route
-// stage, the parameter limit (CheckParams), then the around hooks wrapping
+// stage, the parameter limit (checkParams), then the around hooks wrapping
 // execution, which is sending the statement and reading its rows. read reads
 // them; it is called once per execution (an around hook that retries runs it
 // again) and must not close them: run does, before it returns, on every path.
 // Hooks may keep the statement, and next (which holds read), so both escape;
 // a statement with no hooks of either kind uses plain.
-func (db *DB) Run(ctx context.Context, st *Statement, read func(Rows) error, res *ExecResult) error {
+func (db *DB) Run(ctx context.Context, st *Statement, read func(Rows) error, res *execResult) error {
 	if err := db.dryWrite(ctx, st); err != nil {
 		return err
 	}
@@ -244,7 +244,7 @@ func (db *DB) Run(ctx context.Context, st *Statement, read func(Rows) error, res
 	}
 	// Before the around hooks, which never see a statement that cannot be
 	// sent; exec checks again, for a hook that changes Args.
-	if err := CheckParams(db.D, st); err != nil {
+	if err := checkParams(db.D, st); err != nil {
 		return err
 	}
 	if db.timed() {
@@ -254,8 +254,8 @@ func (db *DB) Run(ctx context.Context, st *Statement, read func(Rows) error, res
 			defer cancel()
 		}
 		if err := db.execute(tctx, st, t, read, res); err != nil {
-			if TimedOut(tctx) {
-				return errors.Join(TimeoutError(st.Entity.Name), err)
+			if timedOut(tctx) {
+				return errors.Join(timeoutError(st.Entity.Name), err)
 			}
 			return err
 		}
@@ -319,18 +319,18 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	entity, op, writable, count, exists, agg, group, lock, wait, inTx := st.Entity, st.Op, st.Writable, st.Count, st.Exists, st.Aggregate, st.GroupBy, st.Lock, st.LockWait, st.InTx
 	// velox's own marks, which no hook can set: a hook that replaces the
 	// whole struct (*st = Statement{…}) zeroes them, and they are restored.
-	bidi, pin := StmtBidi(st), StmtPin(st)
+	bidi, pin := stmtBidi(st), stmtPin(st)
 	// each is the Each the hooks get, a copy of velox's (was) when there are
 	// hooks: a hook may not replace it or change it.
 	each := st.Each
 	returning := len(st.Returning) > 0
 	for _, rw := range db.Cfg.Rewrites {
 		if err := rw(ctx, st); err != nil {
-			return NewStageError(entity.Name, "rewrite", err)
+			return newStageError(entity.Name, "rewrite", err)
 		}
 	}
-	SetStmtBidi(st, bidi)
-	SetStmtPin(st, pin)
+	setStmtBidi(st, bidi)
+	setStmtPin(st, pin)
 	if st.Op != op {
 		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's kind", entity.Name)
 	}
@@ -354,7 +354,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's Exists", entity.Name)
 	}
 	if st.Aggregate != agg {
-		return ErrAggregateChanged(entity.Name)
+		return errAggregateChanged(entity.Name)
 	}
 	if st.GroupBy != group {
 		// The scan depends on it: a key, then a value.
@@ -368,14 +368,14 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 		// The guard checked them.
 		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's lock", entity.Name)
 	}
-	if st.Each != each || (each != nil && !SameEach(each, was)) {
+	if st.Each != each || (each != nil && !sameEach(each, was)) {
 		// The load reads the rows by it: each owner's, in its order.
 		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's Each", entity.Name)
 	}
 	switch {
 	case st.Entity == nil:
 		return fmt.Errorf("velox: %s: a Rewrite hook set the statement's Entity to nil", entity.Name)
-	case st.Entity != entity && (InfoKit(st.Entity) != InfoKit(entity) || len(st.Entity.Columns) != len(entity.Columns)):
+	case st.Entity != entity && (infoKit(st.Entity) != infoKit(entity) || len(st.Entity.Columns) != len(entity.Columns)):
 		// A copy (info := *st.Entity) keeps the scan plan; anything else
 		// would scan rows into the wrong fields.
 		return fmt.Errorf("velox: %s: a Rewrite hook replaced the Entity with %s, which is not a copy of it", entity.Name, st.Entity.Name)
@@ -388,7 +388,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 		if err := CheckColumns(st); err != nil {
 			return err
 		}
-		if err := CheckBidiRewrite(st, bidi); err != nil {
+		if err := checkBidiRewrite(st, bidi); err != nil {
 			return err
 		}
 		if cf := st.Conflict; cf != nil && len(cf.Where) > 0 {
@@ -404,7 +404,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	if err := db.scope(ctx, st); err != nil {
 		return err
 	}
-	if returning && len(st.Returning) == 0 && StmtUpsertPolicy(st) {
+	if returning && len(st.Returning) == 0 && stmtUpsertPolicy(st) {
 		return fmt.Errorf("velox: %s: a Rewrite hook dropped the RETURNING of an upsert whose update branch the policy conditions; velox reads the row back to find a row the policy hides", entity.Name)
 	}
 	db.capLimit(st)
@@ -442,7 +442,7 @@ func (db *DB) DryRun(ctx context.Context, st *Statement) (string, []any, error) 
 	if _, err := db.route(ctx, st); err != nil {
 		return "", nil, err
 	}
-	if err := CheckParams(db.D, st); err != nil {
+	if err := checkParams(db.D, st); err != nil {
 		return "", nil, err
 	}
 	return st.SQL, st.Args, nil
@@ -450,7 +450,7 @@ func (db *DB) DryRun(ctx context.Context, st *Statement) (string, []any, error) 
 
 // execute runs a rendered, routed statement through the around hooks; t is
 // where the route stage sent it.
-func (db *DB) execute(ctx context.Context, st *Statement, t Target, read func(Rows) error, res *ExecResult) error {
+func (db *DB) execute(ctx context.Context, st *Statement, t Target, read func(Rows) error, res *execResult) error {
 	if len(db.Cfg.Arounds) == 0 {
 		return db.exec(ctx, st, t, read, res)
 	}
@@ -481,7 +481,7 @@ func (db *DB) execute(ctx context.Context, st *Statement, t Target, read func(Ro
 }
 
 // rowCap is the most rows st may return: its own MaxRows, else, for a
-// per-owner read bounded by construction, that bound (EachBound), else the
+// per-owner read bounded by construction, that bound (eachBound), else the
 // DB's; 0 for no cap. Raw's read is capped too, Exec not; so is a per-owner
 // count, by its owners, and a grouped aggregate, by its groups, but not Count
 // or an aggregate of one row.
@@ -492,7 +492,7 @@ func (db *DB) rowCap(st *Statement) int {
 	if st.MaxRows > 0 {
 		return st.MaxRows
 	}
-	if n, ok := EachBound(st); ok {
+	if n, ok := eachBound(st); ok {
 		return n
 	}
 	return db.Cfg.MaxRows
@@ -500,13 +500,13 @@ func (db *DB) rowCap(st *Statement) int {
 
 // capLimit lowers st's Limit to its row cap plus one, so that the database
 // stops at the row that trips the cap instead of sending every row; exec's
-// CountedRows still does the counting. It runs just before rendering: the
+// countedRows still does the counting. It runs just before rendering: the
 // guard and the Rewrite hooks have seen the caller's Limit. A per-owner read
 // whose cap is its bound by construction needs no LIMIT, and gets none.
 func (db *DB) capLimit(st *Statement) {
 	n := db.rowCap(st)
 	if st.Each != nil && st.MaxRows == 0 {
-		if _, ok := EachBound(st); ok {
+		if _, ok := eachBound(st); ok {
 			return
 		}
 	}
@@ -527,9 +527,9 @@ func (db *DB) capLimit(st *Statement) {
 // put in back-off. read runs again from the start, as it does when an Around
 // hook retries. Once Iter has handed the caller a row, the replica's error is
 // returned and only the back-off happens. Neither happens once ctx has ended.
-func (db *DB) exec(ctx context.Context, st *Statement, t Target, read func(Rows) error, res *ExecResult) error {
+func (db *DB) exec(ctx context.Context, st *Statement, t Target, read func(Rows) error, res *execResult) error {
 	st.Result = Result{Affected: -1}
-	if err := CheckParams(db.D, st); err != nil {
+	if err := checkParams(db.D, st); err != nil {
 		return err
 	}
 	if t.Replica >= 0 && st.Route.Fallback {
@@ -537,7 +537,7 @@ func (db *DB) exec(ctx context.Context, st *Statement, t Target, read func(Rows)
 		// its Route says, the primary.
 		t = Target{Ex: t.Sh.Primary, Sh: t.Sh, Replica: -1}
 	}
-	SetStmtRan(st, t)
+	setStmtRan(st, t)
 	if read == nil {
 		r, err := t.Ex.Exec(ctx, st.SQL, st.Args)
 		if !st.Op.Reads() {
@@ -572,18 +572,18 @@ func (db *DB) exec(ctx context.Context, st *Statement, t Target, read func(Rows)
 	// Count the rows only when something reads the count: an Around hook
 	// reads Result.Rows, and the cap needs it. Wrapping them allocates.
 	n := db.rowCap(st)
-	var counted *CountedRows
+	var counted *countedRows
 	if n > 0 || len(db.Cfg.Arounds) > 0 {
-		counted = &CountedRows{Rows: r, Left: n, Capped: n > 0}
+		counted = &countedRows{Rows: r, Left: n, Capped: n > 0}
 		r = counted
 	}
-	rerr, rowsErr := ReadRows(r, read)
+	rerr, rowsErr := readRows(r, read)
 	// The rows error counts for failover only when read returned nil: a
 	// broken connection ends the rows with Next false, so read finishes
 	// cleanly, while pgx also reports read's own scan error through
 	// rows.Err(), where a Scanner's io.ErrUnexpectedEOF would look like one.
 	if rerr == nil && rowsErr != nil && db.broken(ctx, t, rowsErr) {
-		if StmtHanded(st) {
+		if stmtHanded(st) {
 			// Iter has handed the caller a row, which cannot be taken
 			// back: the error is returned, and only the replica pays.
 			t.Sh.Replicas[t.Replica].Down(db.Cfg.Backoff)
@@ -598,11 +598,11 @@ func (db *DB) exec(ctx context.Context, st *Statement, t Target, read func(Rows)
 			}
 			r = pr
 			if counted != nil {
-				*counted = CountedRows{Rows: pr, Left: n, Capped: n > 0}
+				*counted = countedRows{Rows: pr, Left: n, Capped: n > 0}
 				r = counted
 			}
-			again, againRows := ReadRows(r, read)
-			if Is(again, ErrIterAgain) {
+			again, againRows := readRows(r, read)
+			if is(again, ErrIterAgain) {
 				return dbErr(st.Entity, rowsErr) // the replica's error
 			}
 			rerr, rowsErr = again, againRows
@@ -628,8 +628,8 @@ func (db *DB) exec(ctx context.Context, st *Statement, t Target, read func(Rows)
 
 // ExecWrite runs a statement that returns no rows through the pipeline: run
 // when the DB or the statement's entity has hooks for it, else plain.
-func ExecWrite(ctx context.Context, db *DB, st *Statement) (ExecResult, error) {
-	var res ExecResult
+func ExecWrite(ctx context.Context, db *DB, st *Statement) (execResult, error) {
+	var res execResult
 	var err error
 	if db.Hooked() {
 		err = db.Run(ctx, st, nil, &res)

@@ -2,7 +2,7 @@ package engine
 
 import "github.com/syssam/velox/veloxtype"
 
-// The plain data types, which package veloxtype documents.
+// AssignOp and the rest are the plain data types, which package veloxtype documents.
 type (
 	Aggregate       = veloxtype.Aggregate
 	AssignOp        = veloxtype.AssignOp

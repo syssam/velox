@@ -19,7 +19,7 @@ import (
 // or one of its replicas. Make one with SQLConn or a driver package's Conn, such
 // as veloxpgx.Conn; the zero Conn is none, and a DB given one panics.
 type Conn struct {
-	ex   Executor
+	ex   executor
 	only Dialect // the one dialect the Conn is valid on, or 0 for the DB's
 }
 
@@ -59,7 +59,7 @@ func WithReplicas(conns ...Conn) Option {
 		}
 	}
 	conns = slices.Clone(conns)
-	return Option{func(c *Config) { c.Replicas = append(c.Replicas, conns...) }}
+	return Option{func(c *config) { c.Replicas = append(c.Replicas, conns...) }}
 }
 
 // Shard is one shard of a DB opened with OpenShards: a primary and its read
@@ -94,7 +94,7 @@ func WithShardFor(f func(ctx context.Context, tenant any) (string, error)) Optio
 	if f == nil {
 		panic("velox: WithShardFor(nil)")
 	}
-	return Option{func(c *Config) { c.ShardFor = f }}
+	return Option{func(c *config) { c.ShardFor = f }}
 }
 
 // WithShard returns a context whose statements, on a DB opened with
@@ -103,18 +103,18 @@ func WithShardFor(f func(ctx context.Context, tenant any) (string, error)) Optio
 // replaces it. On a DB opened otherwise it is ignored. Without it, the shard
 // is the one WithShardFor gives for the context's tenant.
 func WithShard(ctx context.Context, name string) context.Context {
-	rc, _ := ctx.Value(RouteKey{}).(RouteCtx)
+	rc, _ := ctx.Value(routeKey{}).(routeCtx)
 	rc.shard, rc.onShard = name, true
-	return context.WithValue(ctx, RouteKey{}, rc)
+	return context.WithValue(ctx, routeKey{}, rc)
 }
 
 // WithPrimaryReads returns a context whose reads go to the primary, on a DB
 // with replicas: for a read that must see a write the replicas may not have
 // yet.
 func WithPrimaryReads(ctx context.Context) context.Context {
-	rc, _ := ctx.Value(RouteKey{}).(RouteCtx)
+	rc, _ := ctx.Value(routeKey{}).(routeCtx)
 	rc.Primary = true
-	return context.WithValue(ctx, RouteKey{}, rc)
+	return context.WithValue(ctx, routeKey{}, rc)
 }
 
 // WithSession returns a context carrying a new session, typically one
@@ -129,9 +129,9 @@ func WithPrimaryReads(ctx context.Context) context.Context {
 // concurrent use and lives only in its context; a context derived from a
 // session's keeps it, and WithSession on one starts a new one.
 func WithSession(ctx context.Context) context.Context {
-	rc, _ := ctx.Value(RouteKey{}).(RouteCtx)
+	rc, _ := ctx.Value(routeKey{}).(routeCtx)
 	rc.Sess = new(session)
-	return context.WithValue(ctx, RouteKey{}, rc)
+	return context.WithValue(ctx, routeKey{}, rc)
 }
 
 // PinUntil pins ctx's session to the primary until t, if that is later than
@@ -141,7 +141,7 @@ func WithSession(ctx context.Context) context.Context {
 // without a session. A t after 2262, past what PinnedUntil can return, pins
 // until then: until the end of the session, in effect.
 func PinUntil(ctx context.Context, t time.Time) {
-	rc, _ := ctx.Value(RouteKey{}).(RouteCtx)
+	rc, _ := ctx.Value(routeKey{}).(routeCtx)
 	if rc.Sess == nil || !t.After(time.Unix(0, 0)) {
 		return // a time before 1970 is past: it pins nothing
 	}
@@ -156,7 +156,7 @@ func PinUntil(ctx context.Context, t time.Time) {
 // the latest of its writes' pin windows and PinUntil's times. It is zero on a
 // context without a session, and on a session that has not been pinned.
 func PinnedUntil(ctx context.Context) time.Time {
-	rc, _ := ctx.Value(RouteKey{}).(RouteCtx)
+	rc, _ := ctx.Value(routeKey{}).(routeCtx)
 	if rc.Sess == nil {
 		return time.Time{}
 	}
@@ -173,7 +173,7 @@ func WithPinWindow(d time.Duration) Option {
 	if d < 0 {
 		panic(fmt.Sprintf("velox: WithPinWindow(%v): the window must not be negative", d))
 	}
-	return Option{func(c *Config) { c.PinWindow = d }}
+	return Option{func(c *config) { c.PinWindow = d }}
 }
 
 // WithReplicaBackoff sets how long a replica is skipped after a read sent to
@@ -187,7 +187,7 @@ func WithReplicaBackoff(d time.Duration) Option {
 	if d < 0 {
 		panic(fmt.Sprintf("velox: WithReplicaBackoff(%v): the back-off must not be negative", d))
 	}
-	return Option{func(c *Config) { c.Backoff = d }}
+	return Option{func(c *config) { c.Backoff = d }}
 }
 
 // session is a context's record of when its reads may leave the primary
@@ -212,41 +212,41 @@ func (s *session) Pinned() bool {
 	return u != 0 && time.Now().UnixNano() < u
 }
 
-// RouteKey is the context key of the route marks. They share it, so that the
+// routeKey is the context key of the route marks. They share it, so that the
 // route stage reads them all in one lookup.
-type RouteKey struct{}
+type routeKey struct{}
 
-// RouteCtx is a context's route marks. Each function that sets one copies
-// the context's RouteCtx, changes it, and stores the copy.
-type RouteCtx struct {
+// routeCtx is a context's route marks. Each function that sets one copies
+// the context's routeCtx, changes it, and stores the copy.
+type routeCtx struct {
 	Sess    *session // WithSession's; nil: none
 	shard   string   // WithShard's name, when onShard is set
 	Primary bool     // WithPrimaryReads: reads go to the primary
 	onShard bool     // WithShard: statements go to the shard named shard
 }
 
-// Router is the connections of a DB with replicas or shards, among which the
+// router is the connections of a DB with replicas or shards, among which the
 // route stage chooses. A DB with neither has none, and runs every statement
 // on db.Ex.
-type Router struct {
-	One *ShardConn // Open's primary and WithReplicas's replicas; nil when sharded
+type router struct {
+	One *shardConn // Open's primary and WithReplicas's replicas; nil when sharded
 	// shards are OpenShards's, by name, and shardFor its WithShardFor; nil
 	// on a DB that is not sharded.
-	Shards   map[string]*ShardConn
+	Shards   map[string]*shardConn
 	ShardFor func(ctx context.Context, tenant any) (string, error)
 }
 
-// ShardConn is a primary and its replicas.
-type ShardConn struct {
+// shardConn is a primary and its replicas.
+type shardConn struct {
 	Name     string // "" on an unsharded DB
-	Primary  Executor
+	Primary  executor
 	Replicas []*replica
 	next     atomic.Uint32 // the reads sent to replicas: the round-robin's turn
 }
 
 // replica is one of a shard's replicas.
 type replica struct {
-	ex Executor
+	ex executor
 	// downUntil is the time, in Unix nanoseconds, until which the replica is
 	// in back-off and skipped; 0 when it never was.
 	DownUntil atomic.Int64
@@ -255,22 +255,22 @@ type replica struct {
 // Target is the connection the route stage chose for a statement: exec sends
 // it there.
 type Target struct {
-	Ex      Executor
-	Sh      *ShardConn // the shard it is on; nil on a DB without a router and in a transaction
+	Ex      executor
+	Sh      *shardConn // the shard it is on; nil on a DB without a router and in a transaction
 	Replica int        // index into sh.replicas; -1 for the primary
 }
 
-// NewRouter returns the router of an unsharded DB of dialect d on primary
+// newRouter returns the router of an unsharded DB of dialect d on primary
 // and replicas. A Conn valid only on another dialect panics.
-func NewRouter(d Dialect, primary Executor, replicas []Conn) *Router {
-	return &Router{One: NewShard(d, primary, replicas, "WithReplicas:")}
+func newRouter(d Dialect, primary executor, replicas []Conn) *router {
+	return &router{One: newShard(d, primary, replicas, "WithReplicas:")}
 }
 
-// NewShard returns a shard of a DB of dialect d on primary and replicas. A
+// newShard returns a shard of a DB of dialect d on primary and replicas. A
 // replica valid only on another dialect panics, in a message that
 // starts with what.
-func NewShard(d Dialect, primary Executor, replicas []Conn, what string) *ShardConn {
-	sh := &ShardConn{Primary: dialectExecutor(d, primary)}
+func newShard(d Dialect, primary executor, replicas []Conn, what string) *shardConn {
+	sh := &shardConn{Primary: dialectExecutor(d, primary)}
 	for i, c := range replicas {
 		if c.only != 0 && c.only != d {
 			panic(fmt.Sprintf("velox: %s replica %d is valid only on %s; the DB is %s", what, i, c.only, d))
@@ -285,7 +285,7 @@ func NewShard(d Dialect, primary Executor, replicas []Conn, what string) *ShardC
 // nil and no error when ctx names none, and an error wrapping ErrNoShard for a
 // name that is not a shard and for WithShardFor's error. Only without an
 // WithShard does it look the tenant up.
-func (rt *Router) ShardOf(ctx context.Context, rc RouteCtx) (*ShardConn, error) {
+func (rt *router) ShardOf(ctx context.Context, rc routeCtx) (*shardConn, error) {
 	if rc.onShard {
 		if sh := rt.Shards[rc.shard]; sh != nil {
 			return sh, nil
@@ -306,17 +306,17 @@ func (rt *Router) ShardOf(ctx context.Context, rc RouteCtx) (*ShardConn, error) 
 	return nil, fmt.Errorf("%w: WithShardFor gave %q, which is not a shard of the DB", ErrNoShard, name)
 }
 
-// NoShard is the error, wrapping ErrNoShard, of a statement or Tx whose
+// noShard is the error, wrapping ErrNoShard, of a statement or Tx whose
 // context ctx names no shard, outside a transaction.
-func NoShard(ctx context.Context) error {
+func noShard(ctx context.Context) error {
 	if _, all := TenantFrom(ctx); all != "" {
 		return fmt.Errorf("%w: WithAllTenants names no shard; name one with WithShard", ErrNoShard)
 	}
 	return fmt.Errorf("%w: the context has neither WithShard nor a tenant (WithTenant)", ErrNoShard)
 }
 
-// StmtErr names st's entity in err, which the route stage found.
-func StmtErr(st *Statement, err error) error {
+// stmtErr names st's entity in err, which the route stage found.
+func stmtErr(st *Statement, err error) error {
 	return fmt.Errorf("velox: %s: %w", st.Entity.Name, err)
 }
 
@@ -328,7 +328,7 @@ func StmtErr(st *Statement, err error) error {
 // reads are spread evenly over them rather than all falling to its
 // neighbour. Only that path reads the clock: with every replica up, pick is
 // one atomic add and one load.
-func (sh *ShardConn) Pick(peek bool) Target {
+func (sh *shardConn) Pick(peek bool) Target {
 	var turn uint32
 	if peek {
 		turn = sh.next.Load()
@@ -345,7 +345,7 @@ func (sh *ShardConn) Pick(peek bool) Target {
 // pickUp is pick's path when the replica whose turn it is has been in
 // back-off: that replica when its back-off has ended, else the
 // (turn/n mod up)th of the up replicas, else the primary.
-func (sh *ShardConn) pickUp(turn uint32, now int64) Target {
+func (sh *shardConn) pickUp(turn uint32, now int64) Target {
 	n := uint32(len(sh.Replicas))
 	if i := turn % n; sh.Replicas[i].Up(now) {
 		return Target{Ex: sh.Replicas[i].ex, Sh: sh, Replica: int(i)}
@@ -400,14 +400,14 @@ func (r *replica) Down(d time.Duration) {
 	r.DownUntil.Store(time.Now().Add(d).UnixNano())
 }
 
-// MysqlConnectError reports whether MySQL error number n is the server
+// mysqlConnectError reports whether MySQL error number n is the server
 // refusing or ending a connection, as PostgreSQL's connect errors are: the
 // way the server says that it cannot take the client now, not a fault of the
 // statement. The numbers are too many connections (1040), the user's
 // connection limits (1203, 1226), access denied (1045), host blocked (1129),
 // host not allowed (1130), shutdown in progress (1053) and connection killed
 // (1927).
-func MysqlConnectError(n int) bool {
+func mysqlConnectError(n int) bool {
 	switch n {
 	case 1040, 1203, 1226, 1045, 1129, 1130, 1053, 1927:
 		return true
@@ -415,16 +415,18 @@ func MysqlConnectError(n int) bool {
 	return false
 }
 
-// MysqlInvalidConn reports whether err's tree holds go-sql-driver/mysql's
+// mysqlInvalidConn reports whether err's tree holds go-sql-driver/mysql's
 // ErrInvalidConn, which the driver returns for a connection that broke. velox
 // does not import the driver (see constraint).
-func MysqlInvalidConn(err error) bool { return DriverSentinel(err, "invalid connection") }
+func mysqlInvalidConn(err error) bool { return driverSentinel(err, "invalid connection") }
 
-func ConnExec(c Conn) Executor { return c.ex }
+// ConnExec is c's executor.
+func ConnExec(c Conn) executor { return c.ex }
 
-func ConnOnly(c Conn) Dialect { return c.only }
+func connOnly(c Conn) Dialect { return c.only }
 
-func NewConn(ex Executor, only Dialect) Conn { return Conn{ex: ex, only: only} }
+// NewConn is the Conn on ex, valid only on the dialect only.
+func NewConn(ex executor, only Dialect) Conn { return Conn{ex: ex, only: only} }
 
 // failoverable reports whether err, from a read on a replica (the query call or
 // its rows), is a connection error after which the read is retried on the
@@ -435,34 +437,34 @@ func NewConn(ex Executor, only Dialect) Conn { return Conn{ex: ex, only: only} }
 // context.DeadlineExceeded, itself a net.Error, is ruled out here too. A
 // net.Error that is a timeout counts only from a dial: a read that timed out
 // may be a slow query, not a dead replica. A MySQL error that is the server
-// refusing or ending the connection counts (MysqlConnectError), as a pgx
+// refusing or ending the connection counts (mysqlConnectError), as a pgx
 // ConnectError does.
 func failoverable(err error) bool {
-	if Is(err, context.Canceled) || Is(err, context.DeadlineExceeded) {
+	if is(err, context.Canceled) || is(err, context.DeadlineExceeded) {
 		return false
 	}
-	if Is(err, driver.ErrBadConn) ||
-		Is(err, sql.ErrConnDone) ||
-		Is(err, net.ErrClosed) ||
-		Is(err, io.EOF) ||
-		Is(err, io.ErrUnexpectedEOF) ||
-		DriverSentinel(err, PgConnClosed) ||
+	if is(err, driver.ErrBadConn) ||
+		is(err, sql.ErrConnDone) ||
+		is(err, net.ErrClosed) ||
+		is(err, io.EOF) ||
+		is(err, io.ErrUnexpectedEOF) ||
+		driverSentinel(err, pgConnClosed) ||
 		safeToRetry(err) ||
-		MysqlInvalidConn(err) {
+		mysqlInvalidConn(err) {
 		return true
 	}
-	if PgConnectError(err) {
+	if pgConnectError(err) {
 		// Whatever the server said while connecting, such as too many
 		// connections (53300) or a failed login: pgx wraps its PgError in
 		// the ConnectError, so this comes before the PgError check.
 		return true
 	}
-	if pg, ok := PgErrorOf(err); ok {
+	if pg, ok := pgErrorOf(err); ok {
 		// admin_shutdown, crash_shutdown, cannot_connect_now
 		return pg.Code == "57P01" || pg.Code == "57P02" || pg.Code == "57P03"
 	}
-	if n, _, ok := MysqlError(err); ok {
-		return MysqlConnectError(n)
+	if n, _, ok := mysqlError(err); ok {
+		return mysqlConnectError(n)
 	}
 	ne, ok := as[net.Error](err)
 	if !ok {
@@ -501,7 +503,7 @@ func (db *DB) wrote(ctx context.Context) {
 // pinSession pins ctx's session, if it has one, for the DB's pin window from
 // now.
 func (db *DB) pinSession(ctx context.Context) {
-	if rc, _ := ctx.Value(RouteKey{}).(RouteCtx); rc.Sess != nil {
+	if rc, _ := ctx.Value(routeKey{}).(routeCtx); rc.Sess != nil {
 		rc.Sess.Raise(time.Now().Add(db.Cfg.PinWindow).UnixNano())
 	}
 }
@@ -509,7 +511,7 @@ func (db *DB) pinSession(ctx context.Context) {
 // shardForTx returns the shard a transaction begun with ctx runs on: on a
 // sharded DB the one ctx names, on a DB with replicas its one shard, and nil
 // on a DB without a router. Its error is Tx's.
-func (db *DB) shardForTx(ctx context.Context) (*ShardConn, error) {
+func (db *DB) shardForTx(ctx context.Context) (*shardConn, error) {
 	sh, err := db.ctxShard(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("velox: transaction: %w", err)
@@ -518,17 +520,17 @@ func (db *DB) shardForTx(ctx context.Context) (*ShardConn, error) {
 }
 
 // ctxShard is shardForTx's shard, and its error without the prefix.
-func (db *DB) ctxShard(ctx context.Context) (*ShardConn, error) {
+func (db *DB) ctxShard(ctx context.Context) (*shardConn, error) {
 	switch {
 	case db.Rt == nil:
 		return nil, nil
 	case db.Rt.One != nil:
 		return db.Rt.One, nil
 	}
-	rc, _ := ctx.Value(RouteKey{}).(RouteCtx)
+	rc, _ := ctx.Value(routeKey{}).(routeCtx)
 	sh, err := db.Rt.ShardOf(ctx, rc)
 	if err == nil && sh == nil {
-		err = NoShard(ctx)
+		err = noShard(ctx)
 	}
 	return sh, err
 }
@@ -560,26 +562,26 @@ func (db *DB) route(ctx context.Context, st *Statement) (Target, error) {
 		return db.routeTx(ctx, st)
 	}
 	sh := db.Rt.One
-	var rc RouteCtx // read once, on a sharded DB here, else for a read below
+	var rc routeCtx // read once, on a sharded DB here, else for a read below
 	switch {
-	case StmtPin(st).Ex != nil:
-		sh = StmtPin(st).Sh // a With load: its query's shard
+	case stmtPin(st).Ex != nil:
+		sh = stmtPin(st).Sh // a With load: its query's shard
 	case sh == nil:
-		rc, _ = ctx.Value(RouteKey{}).(RouteCtx)
+		rc, _ = ctx.Value(routeKey{}).(routeCtx)
 		var err error
 		if sh, err = db.Rt.ShardOf(ctx, rc); err == nil && sh == nil {
-			err = NoShard(ctx)
+			err = noShard(ctx)
 		}
 		if err != nil {
-			return Target{}, StmtErr(st, err)
+			return Target{}, stmtErr(st, err)
 		}
 	}
 	t := Target{Ex: sh.Primary, Sh: sh, Replica: -1}
 	fallback := false
 	switch {
 	case !st.Op.Reads(): // a write, Exec's raw SQL included
-	case StmtPin(st).Ex != nil:
-		t = StmtPin(st)
+	case stmtPin(st).Ex != nil:
+		t = stmtPin(st)
 		if t.Replica >= 0 && t.Sh.Replicas[t.Replica].DownUntil.Load() != 0 && !t.Sh.Replicas[t.Replica].Up(time.Now().UnixNano()) {
 			// The replica has failed since the query read it, on an earlier
 			// load: this one goes straight to the primary, as it would
@@ -589,7 +591,7 @@ func (db *DB) route(ctx context.Context, st *Statement) (Target, error) {
 	case len(sh.Replicas) == 0: // a shard without replicas
 	default:
 		if db.Rt.One != nil {
-			rc, _ = ctx.Value(RouteKey{}).(RouteCtx)
+			rc, _ = ctx.Value(routeKey{}).(routeCtx)
 		}
 		if !rc.Primary && (rc.Sess == nil || !rc.Sess.Pinned()) {
 			t = sh.Pick(st.DryRun)
@@ -604,10 +606,10 @@ func (db *DB) route(ctx context.Context, st *Statement) (Target, error) {
 // one that is not a shard, or WithShardFor fails. A context that names no shard
 // is the transaction's.
 func (db *DB) routeTx(ctx context.Context, st *Statement) (Target, error) {
-	rc, _ := ctx.Value(RouteKey{}).(RouteCtx)
+	rc, _ := ctx.Value(routeKey{}).(routeCtx)
 	sh, err := db.Rt.ShardOf(ctx, rc)
 	if err != nil {
-		return Target{}, StmtErr(st, err)
+		return Target{}, stmtErr(st, err)
 	}
 	if sh != nil && sh != db.txShard {
 		return Target{}, fmt.Errorf("velox: %s: statement for shard %q in a transaction on shard %q", st.Entity.Name, sh.Name, db.txShard.Name)
@@ -631,6 +633,6 @@ func (db *DB) fallBack(st *Statement, t Target) Target {
 	t.Sh.Replicas[t.Replica].Down(db.Cfg.Backoff)
 	p := Target{Ex: t.Sh.Primary, Sh: t.Sh, Replica: -1}
 	st.Route = Route{Shard: t.Sh.Name, Replica: -1, Fallback: true}
-	SetStmtRan(st, p)
+	setStmtRan(st, p)
 	return p
 }

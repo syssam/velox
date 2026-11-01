@@ -18,7 +18,7 @@ func (r *renderer) sqlite() error {
 	name := map[TableRef]TableRef{} // a rebuilt table's name after its rename
 	folds := func(c Change) (TableRef, bool) {
 		switch c.(type) {
-		case CreateTable, DropTable:
+		case createTable, dropTable:
 			return TableRef{}, false
 		}
 		k := r.l.canon(c.Target())
@@ -30,7 +30,7 @@ func (r *renderer) sqlite() error {
 			continue
 		}
 		last[k] = i
-		if rt, ok := c.(RenameTable); ok {
+		if rt, ok := c.(renameTable); ok {
 			name[k] = rt.To
 		}
 	}
@@ -45,17 +45,17 @@ func (r *renderer) sqlite() error {
 		}
 		// A UNIQUE constraint's index goes with the old table.
 		switch c := c.(type) {
-		case RenameTable:
+		case renameTable:
 			if err := r.sqliteChange(i, c); err != nil {
 				return err
 			}
-		case DropIndex:
+		case dropIndex:
 			if !tableUnique(c.Index) {
 				if err := r.sqliteChange(i, c); err != nil {
 					return err
 				}
 			}
-		case RenameIndex:
+		case renameIndex:
 			if c.From != "" {
 				r.emit("DROP INDEX "+r.indexName(c.Table, c.From), i)
 			}
@@ -78,12 +78,12 @@ func (r *renderer) sqlite() error {
 // still points at the table.
 func (r *renderer) dropsCycle() bool {
 	for i, c := range r.cs {
-		d, ok := c.(DropTable)
+		d, ok := c.(dropTable)
 		if !ok {
 			continue
 		}
 		for _, o := range r.cs[i+1:] {
-			if e, ok := o.(DropTable); ok && slices.ContainsFunc(e.Table.ForeignKeys, func(fk ForeignKey) bool {
+			if e, ok := o.(dropTable); ok && slices.ContainsFunc(e.Table.ForeignKeys, func(fk ForeignKey) bool {
 				return fk.RefTable == d.Table.Ref() && e.Table.Ref() != d.Table.Ref()
 			}) {
 				return true
@@ -96,31 +96,31 @@ func (r *renderer) dropsCycle() bool {
 // sqliteChange writes change i, of a table that is not rebuilt.
 func (r *renderer) sqliteChange(i int, c Change) error {
 	switch c := c.(type) {
-	case CreateTable:
+	case createTable:
 		r.emit(r.sqliteCreate(c.Table.Ref(), &c.Table), i)
 		for _, ix := range c.Table.Indexes {
 			if !tableUnique(ix) {
 				r.emit(r.sqliteIndex(c.Table.Ref(), ix), i)
 			}
 		}
-	case DropTable:
+	case dropTable:
 		r.emit("DROP TABLE "+r.table(c.Table.Ref()), i)
-	case RenameTable:
+	case renameTable:
 		if c.From.Schema != c.To.Schema {
 			return r.refuse(i, "SQLite moves no table between schemas")
 		}
 		r.emit("ALTER TABLE "+r.table(c.From)+" RENAME TO "+r.ident(c.To.Name), i)
-	case AddColumn:
+	case addColumn:
 		r.emit("ALTER TABLE "+r.table(c.Table)+" ADD COLUMN "+r.sqliteColumn(c.Column, false), i)
-	case DropColumn:
+	case dropColumn:
 		r.emit("ALTER TABLE "+r.table(c.Table)+" DROP COLUMN "+r.ident(c.Column.Name), i)
-	case RenameColumn:
+	case renameColumn:
 		r.emit("ALTER TABLE "+r.table(c.Table)+" RENAME COLUMN "+r.ident(c.From)+" TO "+r.ident(c.To), i)
-	case AddIndex:
+	case addIndex:
 		r.emit(r.sqliteIndex(c.Table, c.Index), i)
-	case DropIndex:
+	case dropIndex:
 		r.emit("DROP INDEX "+r.indexName(c.Table, c.Index.Name), i)
-	case RenameIndex:
+	case renameIndex:
 		// SQLite renames no index: it is dropped and made again.
 		t, err := r.toTable(i, c.Table)
 		if err != nil {
@@ -132,7 +132,7 @@ func (r *renderer) sqliteChange(i int, c Change) error {
 		}
 		r.emit("DROP INDEX "+r.indexName(c.Table, c.From), i)
 		r.emit(r.sqliteIndex(c.Table, *ix), i)
-	case AlterColumn, AddForeignKey, DropForeignKey, AddCheck, DropCheck, RenameConstraint:
+	case alterColumn, addForeignKey, dropForeignKey, addCheck, dropCheck, renameConstraint:
 		return r.refuse(i, fmt.Sprintf("SQLite makes a %s only by rebuilding table %v, and Lint finds no rebuild", c.Kind(), c.Target()))
 	default:
 		return r.refuse(i, fmt.Sprintf("SQLite has no %s", c.Kind()))
@@ -154,20 +154,20 @@ func (r *renderer) rebuild(i int, k, ref TableRef) error {
 	var folded []int
 	for j, c := range r.cs {
 		switch c.(type) {
-		case CreateTable, DropTable:
+		case createTable, dropTable:
 			continue
 		}
 		if r.l.canon(c.Target()) != k {
 			continue
 		}
 		switch c := c.(type) {
-		case RenameColumn:
+		case renameColumn:
 			renamed[c.To] = c.From
-		case AddColumn:
+		case addColumn:
 			added[c.Column.Name] = true
 		}
 		switch c.(type) {
-		case RenameTable, DropIndex, RenameIndex:
+		case renameTable, dropIndex, renameIndex:
 			if r.l.rebuild[j] {
 				folded = append(folded, j) // a UNIQUE constraint's index
 			}

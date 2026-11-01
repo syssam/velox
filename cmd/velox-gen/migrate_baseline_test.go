@@ -196,24 +196,14 @@ func entChange(d velox.Dialect, ch migrate.Change) bool {
 	if d == velox.MySQL {
 		return false
 	}
-	switch c := ch.(type) {
-	case migrate.AddIndex:
-		return c.Table.Name == "posts" && (c.Index.Name == "posts_user_posts" ||
-			c.Index.Name == ddl.Cap("posts_user_drafts_written_but_never_published_by_this_user_so_far"))
-	case migrate.AddCheck:
-		return d == velox.SQLite && c.Table.Name == "users" && c.Check.Name == "users_role_check"
-	}
-	if d != velox.Postgres {
-		return false
-	}
-	switch c := ch.(type) {
-	case migrate.CreateEnum:
-		return c.Enum.Name == "users_role"
-	case migrate.AlterColumn:
-		serialToIdentity := c.What&^migrate.ColumnDefault == migrate.ColumnIdentity &&
-			strings.HasPrefix(c.From.Default, "nextval(") && !c.From.Identity && c.To.Identity
-		return c.Table.Name == "users" && (c.From.Name == "role" && c.What == migrate.ColumnType ||
-			c.From.Name == "id" && serialToIdentity)
+	switch ch.String() {
+	case "add-index posts.posts_user_posts", "add-index posts." + ddl.Cap("posts_user_drafts_written_but_never_published_by_this_user_so_far"):
+		return true
+	case "add-check users.users_role_check":
+		return d == velox.SQLite
+	case "create-enum users_role", "alter-column users.role (type)",
+		"alter-column users.id (identity)", "alter-column users.id (default|identity)":
+		return d == velox.Postgres
 	}
 	return false
 }

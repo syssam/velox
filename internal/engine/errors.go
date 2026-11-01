@@ -82,17 +82,17 @@ var (
 // IsNotFound reports whether err is, or wraps, ErrNotFound. It walks err's
 // tree as errors.Is does, but skips a nil error in it: a typed-nil error that a
 // driver wraps does not panic. ent's IsNotFound is the precedent.
-func IsNotFound(err error) bool { return Is(err, ErrNotFound) }
+func IsNotFound(err error) bool { return is(err, ErrNotFound) }
 
-// StageError is the error of a hook stage: "velox: <Entity>: <stage>: <err>",
+// stageError is the error of a hook stage: "velox: <Entity>: <stage>: <err>",
 // stage "hook" or "rewrite"; an err whose text starts "velox: <Entity>: " does
 // not name the entity twice.
-type StageError struct {
+type stageError struct {
 	entity, stage string
 	err           error
 }
 
-func (e *StageError) Error() string {
+func (e *stageError) Error() string {
 	msg := e.err.Error()
 	if p := "velox: " + e.entity + ": "; strings.HasPrefix(msg, p) {
 		msg = msg[len(p):]
@@ -100,9 +100,9 @@ func (e *StageError) Error() string {
 	return "velox: " + e.entity + ": " + e.stage + ": " + msg
 }
 
-func (e *StageError) Unwrap() error { return e.err }
+func (e *stageError) Unwrap() error { return e.err }
 
-// NewStageError returns the error of a stage of entity's statement.
-func NewStageError(entity, stage string, err error) *StageError {
-	return &StageError{entity, stage, err}
+// newStageError returns the error of a stage of entity's statement.
+func newStageError(entity, stage string, err error) *stageError {
+	return &stageError{entity, stage, err}
 }

@@ -5,12 +5,12 @@ import (
 	"strings"
 )
 
-// createTable is what the CREATE TABLE text of sqlite_schema names that the
+// sqliteCreateTable is what the CREATE TABLE text of sqlite_schema names that the
 // pragmas do not: constraint names, CHECK texts and AUTOINCREMENT, and what
 // inspect notes: a column's collation, a DEFERRABLE key, and the table's
 // options. A column a constraint names is the column's declared name,
 // matched by ASCII case as SQLite matches it, and a text has no comments.
-type createTable struct {
+type sqliteCreateTable struct {
 	autoincrement bool
 	checks        []Check           // in order; Name "" for an unnamed one
 	foreignKeys   []textKey         // in order
@@ -103,15 +103,15 @@ func tokenText(src string, toks []sqlTok, from, to int, cols []string) string {
 // velox's own shape and the hand-written forms, with CONSTRAINT <name>
 // FOREIGN KEY or CHECK, unnamed CHECK (…), column-level REFERENCES and
 // CHECK, the four quote forms and comments. false: not a form it reads.
-func parseCreateTable(sql string) (createTable, bool) {
+func parseCreateTable(sql string) (sqliteCreateTable, bool) {
 	toks, ok := lexSQL(sql)
 	if !ok {
-		return createTable{}, false
+		return sqliteCreateTable{}, false
 	}
-	p := &ctParser{src: sql, toks: toks, ct: createTable{defaults: map[string]string{}, collations: map[string]string{}},
+	p := &ctParser{src: sql, toks: toks, ct: sqliteCreateTable{defaults: map[string]string{}, collations: map[string]string{}},
 		defaults: map[string][2]int{}}
 	if !p.parse() {
-		return createTable{}, false
+		return sqliteCreateTable{}, false
 	}
 	// The columns are all declared now: a check may name a later one.
 	for _, c := range p.checks {
@@ -255,7 +255,7 @@ type ctParser struct {
 	src      string
 	toks     []sqlTok
 	i        int
-	ct       createTable
+	ct       sqliteCreateTable
 	cols     []string          // the declared columns, in order
 	autoinc  bool              // names read AUTOINCREMENT
 	checks   []textCheck       // made texts once every column is declared

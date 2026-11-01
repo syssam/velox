@@ -23,12 +23,12 @@ func CheckConflict(in *EntityInfo, cf *ConflictClause, one unsafe.Pointer) error
 		return fmt.Errorf("velox: %s: an upsert needs OnConflict with the columns of a unique key", in.Name)
 	}
 	if one != nil && len(in.bidiKeys) > 0 {
-		if err := RefuseBidiInsert(in, one, false); err != nil {
+		if err := refuseBidiInsert(in, one, false); err != nil {
 			return err
 		}
 	}
 	if len(cf.Update) > 0 && in.bidi {
-		return ErrBidiUpdate(in)
+		return errBidiUpdate(in)
 	}
 	if in.immutable {
 		for _, c := range cf.Update {
@@ -287,20 +287,22 @@ func CheckUpserted(st *Statement, affected int64) error {
 	return nil
 }
 
+// ErrNothingToInsert is the error of an insert into in when its only column is
+// the generated key.
 func ErrNothingToInsert(in *EntityInfo) error {
 	return fmt.Errorf("velox: %s: nothing to insert: the only column is the generated key", in.Name)
 }
 
-// FieldAddr is a pointer to the field of column col of the row of in at p,
+// fieldAddr is a pointer to the field of column col of the row of in at p,
 // as Meta's Addr returns it.
-func FieldAddr(in *EntityInfo, p unsafe.Pointer, col int) any {
+func fieldAddr(in *EntityInfo, p unsafe.Pointer, col int) any {
 	c := &in.Columns[col]
 	return reflect.NewAt(GoType(*c), unsafe.Add(p, c.off)).Interface()
 }
 
-// SetKey stores id in the integer field ptr points to, column gen of in. It
+// setKey stores id in the integer field ptr points to, column gen of in. It
 // is not generic for the reason given on FillDefault.
-func SetKey(in *EntityInfo, gen int, ptr any, id int64) error {
+func setKey(in *EntityInfo, gen int, ptr any, id int64) error {
 	v := reflect.ValueOf(ptr).Elem()
 	if v.CanInt() {
 		if v.OverflowInt(id) {
@@ -338,18 +340,18 @@ func MirrorRows(st *Statement) {
 	rows := make([][]any, 0, 2*len(st.Rows))
 	for _, r := range st.Rows {
 		rows = append(rows, r)
-		if !SelfLink(r[0], r[1]) {
+		if !selfLink(r[0], r[1]) {
 			rows = append(rows, []any{r[1], r[0]})
 		}
 	}
 	st.Rows = rows
 }
 
-// SelfLink reports whether the key values a and b, of one Go type, are equal:
+// selfLink reports whether the key values a and b, of one Go type, are equal:
 // bytes.Equal for a byte slice of any named type, == otherwise. checkBidi and
 // checkEdgeBidi refuse, through linkKey, every other key type that == could
 // panic on: an interface, and a struct or an array that holds one.
-func SelfLink(a, b any) bool {
+func selfLink(a, b any) bool {
 	if x, ok := a.([]byte); ok {
 		y, _ := b.([]byte)
 		return bytes.Equal(x, y)
@@ -360,10 +362,10 @@ func SelfLink(a, b any) bool {
 	return a == b
 }
 
-// ErrBidiUpdate is the error of an update, a Save or an upsert that updates,
+// errBidiUpdate is the error of an update, a Save or an upsert that updates,
 // on the join entity of a bidirectional edge: it would change one row of a
 // link.
-func ErrBidiUpdate(in *EntityInfo) error {
+func errBidiUpdate(in *EntityInfo) error {
 	return fmt.Errorf("velox: %s: the join entity of a bidirectional edge cannot be updated; delete the link and insert it again", in.Name)
 }
 
@@ -374,10 +376,10 @@ func ErrBidiUpdate(in *EntityInfo) error {
 // it is compiled once; the transaction's closure works on copies, made only
 // for such a row, so that no other insert allocates for it.
 func InsertRow(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen int, out *Result) error {
-	if in := st.Entity; len(InfoBidiKeys(in)) > 0 {
-		if keys, vs := BidiRow(in, p); len(keys) > 0 {
+	if in := st.Entity; len(infoBidiKeys(in)) > 0 {
+		if keys, vs := bidiRow(in, p); len(keys) > 0 {
 			cp := *st
-			SetStmtBidi(&cp, &BidiStep{Keys: keys, Vals: vs, Insert: true})
+			setStmtBidi(&cp, &bidiStep{Keys: keys, Vals: vs, Insert: true})
 			var res Result
 			err := bidiInsert(ctx, db, in, p, keys, vs, gen >= 0, cp.Conflict != nil, func(ctx context.Context, tx *DB) error {
 				return sendOne(ctx, tx, p, &cp, gen, &res)
@@ -413,7 +415,7 @@ func sendOne(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen i
 			// A hook may have redirected Returning: then the row does not
 			// hold the key.
 			if len(st.Returning) == 1 && st.Returning[0] == gen {
-				return r.Scan(ScanDst(in, gen, FieldAddr(in, p, gen)))
+				return r.Scan(ScanDst(in, gen, fieldAddr(in, p, gen)))
 			}
 			return nil
 		}
@@ -427,7 +429,7 @@ func sendOne(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen i
 			return err
 		}
 		out.Affected = back
-		if len(st.Returning) == 0 && !StmtUpsertPolicy(st) {
+		if len(st.Returning) == 0 && !stmtUpsertPolicy(st) {
 			// Without RETURNING (a hook dropped it), no row tells nothing; a
 			// policy-conditioned upsert was rendered with it, as prepare
 			// checks, so no row back is a hidden row.
@@ -444,7 +446,7 @@ func sendOne(ctx context.Context, db *DB, p unsafe.Pointer, st *Statement, gen i
 	// Without a conflict clause a successful insert wrote its row, whether
 	// the driver reported the count or not (-1).
 	if st.Conflict == nil && res.HasLastID && res.Affected != 0 {
-		return SetKey(in, gen, FieldAddr(in, p, gen), res.LastID)
+		return setKey(in, gen, fieldAddr(in, p, gen), res.LastID)
 	}
 	return nil
 }

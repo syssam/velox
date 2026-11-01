@@ -171,25 +171,25 @@ func (l *linter) existing(ref TableRef) bool {
 func (l *linter) scan() {
 	for _, c := range l.cs {
 		switch c := c.(type) {
-		case RenameTable:
+		case renameTable:
 			l.renamed[c.To] = c.From
-		case RenameEnum:
+		case renameEnum:
 			l.enumFrom[c.To] = c.From
-		case CreateTable:
+		case createTable:
 			l.created[c.Table.Ref()] = true
-		case DropTable:
+		case dropTable:
 			l.dropped[c.Table.Ref()] = true
 		}
 	}
 	// A foreign key dropped and added again as it was, around a column's
 	// type change or an index's replacement, is no change of its own.
 	for i, c := range l.cs {
-		d, ok := c.(DropForeignKey)
+		d, ok := c.(dropForeignKey)
 		if !ok {
 			continue
 		}
 		for j, a := range l.cs {
-			if a, ok := a.(AddForeignKey); ok && l.canon(a.Table) == l.canon(d.Table) && l.sameKey(d.ForeignKey, a.ForeignKey) {
+			if a, ok := a.(addForeignKey); ok && l.canon(a.Table) == l.canon(d.Table) && l.sameKey(d.ForeignKey, a.ForeignKey) {
 				l.quiet[i], l.quiet[j] = true, true
 			}
 		}
@@ -221,9 +221,9 @@ func (l *linter) rebuilds(c Change) bool {
 		return false
 	}
 	switch c := c.(type) {
-	case AlterColumn:
-		return c.What&(ColumnType|ColumnNullable|ColumnDefault|ColumnIdentity) != 0
-	case AddColumn:
+	case alterColumn:
+		return c.What&(columnType|columnNullable|columnDefault|columnIdentity) != 0
+	case addColumn:
 		col := c.Column
 		if col.Identity {
 			return false
@@ -232,16 +232,16 @@ func (l *linter) rebuilds(c Change) bool {
 			return !col.Nullable
 		}
 		return !literalDefault(l.d, col.Default)
-	case DropColumn:
+	case dropColumn:
 		t := l.from.table(l.canon(c.Table))
 		return t != nil && l.uses(t, c.Column.Name)
-	case AddForeignKey, DropForeignKey, AddCheck, DropCheck, RenameConstraint:
+	case addForeignKey, dropForeignKey, addCheck, dropCheck, renameConstraint:
 		return true
-	case AddIndex:
+	case addIndex:
 		return tableUnique(c.Index)
-	case DropIndex:
+	case dropIndex:
 		return tableUnique(c.Index)
-	case RenameIndex:
+	case renameIndex:
 		return c.From == "" // a UNIQUE constraint's index, which no DROP INDEX drops
 	}
 	return false
@@ -280,47 +280,47 @@ func (l *linter) uses(t *Table, col string) bool {
 
 func (l *linter) change(i int, c Change) {
 	switch c := c.(type) {
-	case DropTable:
+	case dropTable:
 		l.add(i, "drop-table", Destructive, c.Table.Ref().String(), "", "drops table %s and its rows", c.Table.Ref())
-	case RenameTable:
+	case renameTable:
 		l.add(i, "rename-table", Review, c.To.String(), "", "renames table %s to %s; code that uses the old name breaks while old and new versions run together", c.From, c.To)
-	case SetTableCollation:
+	case setTableCollation:
 		l.add(i, "convert-collation", Destructive, c.Table.String(), "", "converts table %s from collation %s to %s, a rewrite that can make values equal that were not", c.Table, c.From, c.To)
-	case AddColumn:
+	case addColumn:
 		l.addColumn(i, c)
-	case DropColumn:
+	case dropColumn:
 		l.add(i, "drop-column", Destructive, colTarget(c.Table, c.Column.Name), "", "drops column %s and its data", colTarget(c.Table, c.Column.Name))
 		l.rebuildFinding(i, "drops column %s, which a key, index or constraint uses", colTarget(c.Table, c.Column.Name))
-	case RenameColumn:
+	case renameColumn:
 		l.add(i, "rename-column", Review, colTarget(c.Table, c.To), "", "renames column %s to %s; code that uses the old name breaks while old and new versions run together", colTarget(c.Table, c.From), c.To)
-	case AlterColumn:
+	case alterColumn:
 		l.alterColumn(i, c)
-	case AddIndex:
+	case addIndex:
 		l.addIndex(i, c)
-	case DropIndex:
+	case dropIndex:
 		l.dropIndex(i, c)
-	case RenameIndex:
+	case renameIndex:
 		l.rebuildFinding(i, "renames the index of a UNIQUE constraint%s to %s", l.renamedUnique(c), c.To)
-	case AddForeignKey:
+	case addForeignKey:
 		if l.existing(c.Table) && !l.quiet[i] {
 			l.add(i, "add-foreign-key", Review, keyObject(c.Table, c.ForeignKey), c.ForeignKey.Pos, "adds foreign key %s; it fails if rows have no match in %s", keyLabel(c.ForeignKey), c.ForeignKey.RefTable)
 		}
 		l.rebuildFinding(i, "adds foreign key %s", keyLabel(c.ForeignKey))
-	case DropForeignKey:
+	case dropForeignKey:
 		if !l.quiet[i] && !l.dropped[l.canon(c.Table)] && !l.rebuild[i] && !l.replacesKey(c) {
 			l.add(i, "drop-foreign-key", Review, keyObject(c.Table, c.ForeignKey), "", "drops foreign key %s; rows are no longer checked against %s", keyLabel(c.ForeignKey), c.ForeignKey.RefTable)
 		}
 		l.rebuildFinding(i, "drops foreign key %s", keyLabel(c.ForeignKey))
-	case AddCheck:
+	case addCheck:
 		l.addCheck(i, c)
-	case DropCheck:
+	case dropCheck:
 		if !l.dropped[l.canon(c.Table)] && !l.rebuild[i] && !l.replacesCheck(c) {
 			l.add(i, "drop-check", Review, checkObject(c.Table, c.Check), "", "drops %s; rows are no longer limited by it", checkNoun(c.Check))
 		}
 		l.rebuildFinding(i, "drops %s", checkNoun(c.Check))
-	case RenameConstraint:
+	case renameConstraint:
 		l.rebuildFinding(i, "renames constraint %s to %s", source(c.From, c.def), c.To)
-	case AlterEnum:
+	case alterEnum:
 		l.alterEnum(i, c)
 	}
 }
@@ -346,13 +346,13 @@ func rebuildMessage(what string, table TableRef) string {
 // element has none.
 func changePos(c Change) string {
 	switch c := c.(type) {
-	case AddColumn:
+	case addColumn:
 		return c.Column.Pos
-	case AlterColumn:
+	case alterColumn:
 		return c.To.Pos
-	case AddForeignKey:
+	case addForeignKey:
 		return c.ForeignKey.Pos
-	case AddCheck:
+	case addCheck:
 		return c.Check.Pos
 	}
 	return ""
@@ -398,7 +398,7 @@ func indexObject(t TableRef, ix Index) string    { return colTarget(t, indexLabe
 func keyObject(t TableRef, fk ForeignKey) string { return colTarget(t, keyLabel(fk)) }
 func checkObject(t TableRef, ck Check) string    { return colTarget(t, checkLabel(ck)) }
 
-func (l *linter) addColumn(i int, c AddColumn) {
+func (l *linter) addColumn(i int, c addColumn) {
 	col, target := c.Column, colTarget(c.Table, c.Column.Name)
 	if l.existing(c.Table) {
 		if !col.Nullable && col.Default == "" && !col.Identity {
@@ -411,15 +411,15 @@ func (l *linter) addColumn(i int, c AddColumn) {
 	l.rebuildFinding(i, "adds column %s, which SQLite cannot add in place", target)
 }
 
-func (l *linter) alterColumn(i int, c AlterColumn) {
+func (l *linter) alterColumn(i int, c alterColumn) {
 	target := colTarget(c.Table, c.To.Name)
-	if c.What&ColumnType != 0 && l.d != velox.SQLite {
+	if c.What&columnType != 0 && l.d != velox.SQLite {
 		l.alterType(i, c, target)
 	}
-	if c.What&ColumnNullable != 0 && c.From.Nullable && !c.To.Nullable {
+	if c.What&columnNullable != 0 && c.From.Nullable && !c.To.Nullable {
 		l.add(i, "set-not-null", Destructive, target, c.To.Pos, "makes column %s NOT NULL; it fails if any row holds NULL", target)
 	}
-	if c.What&ColumnIdentity != 0 && l.d == velox.Postgres && !c.From.Identity && c.To.Identity {
+	if c.What&columnIdentity != 0 && l.d == velox.Postgres && !c.From.Identity && c.To.Identity {
 		l.add(i, "add-identity", Review, target, c.To.Pos, "adds an identity to column %s and sets its counter past the column's largest value", target)
 		if strings.HasPrefix(c.From.Default, "nextval(") {
 			l.add(i, "serial-to-identity", Review, target, c.To.Pos, "turns serial column %s into an identity: its default and sequence are dropped", target)
@@ -427,9 +427,9 @@ func (l *linter) alterColumn(i int, c AlterColumn) {
 	}
 	var what []string
 	for _, w := range [...]struct {
-		bit  ColumnChange
+		bit  columnMask
 		name string
-	}{{ColumnType, "type"}, {ColumnNullable, "nullability"}, {ColumnDefault, "default"}, {ColumnIdentity, "identity"}} {
+	}{{columnType, "type"}, {columnNullable, "nullability"}, {columnDefault, "default"}, {columnIdentity, "identity"}} {
 		if c.What&w.bit != 0 {
 			what = append(what, w.name)
 		}
@@ -439,7 +439,7 @@ func (l *linter) alterColumn(i int, c AlterColumn) {
 
 // alterType classifies a type change: an enum losing or moving values, a
 // widening, or any other change.
-func (l *linter) alterType(i int, c AlterColumn, target string) {
+func (l *linter) alterType(i int, c alterColumn, target string) {
 	from, to := c.From.Type, c.To.Type
 	if l.d == velox.MySQL {
 		if a, ok := ddl.ParseMySQLEnum(from); ok {
@@ -504,7 +504,7 @@ func (l *linter) enumDelta(i int, target, pos string, from, to []string, kind in
 	}
 }
 
-func (l *linter) alterEnum(i int, c AlterEnum) {
+func (l *linter) alterEnum(i int, c alterEnum) {
 	ref := c.To.ref()
 	orig := c.From.Values
 	from := ref
@@ -517,7 +517,7 @@ func (l *linter) alterEnum(i int, c AlterEnum) {
 	l.enumDelta(i, ref.String(), c.To.Pos, orig, c.To.Values, enumType, "enum type "+ref.String())
 }
 
-func (l *linter) addIndex(i int, c AddIndex) {
+func (l *linter) addIndex(i int, c addIndex) {
 	if !l.existing(c.Table) {
 		return
 	}
@@ -530,7 +530,7 @@ func (l *linter) addIndex(i int, c AddIndex) {
 	l.add(i, "add-index", Review, target, c.Index.Pos, "adds index %s; building it scans the table", target)
 }
 
-func (l *linter) dropIndex(i int, c DropIndex) {
+func (l *linter) dropIndex(i int, c dropIndex) {
 	target := indexObject(c.Table, c.Index)
 	defer l.rebuildFinding(i, "drops the index of a UNIQUE constraint on %s", target)
 	if l.dropped[l.canon(c.Table)] || (l.rebuilt[l.canon(c.Table)] && !l.rebuild[i]) || l.replacesIndex(c) {
@@ -542,7 +542,7 @@ func (l *linter) dropIndex(i int, c DropIndex) {
 // renamedUnique is " on <table>.(<columns>)", the UNIQUE constraint's index
 // c renames by the columns of to's index c.To, which a rename by definition
 // shares; "" when the linter has no to.
-func (l *linter) renamedUnique(c RenameIndex) string {
+func (l *linter) renamedUnique(c renameIndex) string {
 	if l.to == nil {
 		return ""
 	}
@@ -558,9 +558,9 @@ func (l *linter) renamedUnique(c RenameIndex) string {
 // dropped one did: its columns lead the new index's, under the same
 // predicate, and a unique one is replaced by a unique one over the same
 // columns.
-func (l *linter) replacesIndex(d DropIndex) bool {
+func (l *linter) replacesIndex(d dropIndex) bool {
 	for _, c := range l.cs {
-		a, ok := c.(AddIndex)
+		a, ok := c.(addIndex)
 		if !ok || l.canon(a.Table) != l.canon(d.Table) || a.Index.Where != d.Index.Where {
 			continue
 		}
@@ -577,9 +577,9 @@ func (l *linter) replacesIndex(d DropIndex) bool {
 
 // replacesKey reports whether the plan adds a foreign key of the dropped
 // one's name.
-func (l *linter) replacesKey(d DropForeignKey) bool {
+func (l *linter) replacesKey(d dropForeignKey) bool {
 	return slices.ContainsFunc(l.cs, func(c Change) bool {
-		a, ok := c.(AddForeignKey)
+		a, ok := c.(addForeignKey)
 		return ok && l.canon(a.Table) == l.canon(d.Table) && a.ForeignKey.Name != "" && a.ForeignKey.Name == d.ForeignKey.Name
 	})
 }
@@ -587,26 +587,26 @@ func (l *linter) replacesKey(d DropForeignKey) bool {
 // replacesCheck reports whether the plan adds a check of the dropped one's
 // name, or one with its expression once the plan's column renames are applied
 // to it (MySQL drops a check around the rename of its column).
-func (l *linter) replacesCheck(d DropCheck) bool {
+func (l *linter) replacesCheck(d dropCheck) bool {
 	expr := d.Check.Expr
 	for _, c := range l.cs {
-		if r, ok := c.(RenameColumn); ok && l.canon(r.Table) == l.canon(d.Table) {
+		if r, ok := c.(renameColumn); ok && l.canon(r.Table) == l.canon(d.Table) {
 			expr = renameIdent(l.d, expr, r.From, r.To)
 		}
 	}
 	return slices.ContainsFunc(l.cs, func(c Change) bool {
-		a, ok := c.(AddCheck)
+		a, ok := c.(addCheck)
 		return ok && l.canon(a.Table) == l.canon(d.Table) && (a.Check.Name != "" && a.Check.Name == d.Check.Name || a.Check.Expr == expr)
 	})
 }
 
-func (l *linter) addCheck(i int, c AddCheck) {
+func (l *linter) addCheck(i int, c addCheck) {
 	if l.existing(c.Table) {
 		target := checkObject(c.Table, c.Check)
 		// A check that replaces one over the same column, listing fewer
 		// values, removes values from an enum.
 		for _, o := range l.cs {
-			if d, ok := o.(DropCheck); ok && l.canon(d.Table) == l.canon(c.Table) && c.Check.Name != "" && d.Check.Name == c.Check.Name {
+			if d, ok := o.(dropCheck); ok && l.canon(d.Table) == l.canon(c.Table) && c.Check.Name != "" && d.Check.Name == c.Check.Name {
 				if from, ok := l.checkEnum(d.Check.Expr); ok {
 					if to, ok := l.checkEnum(c.Check.Expr); ok {
 						l.enumDelta(i, target, c.Check.Pos, from, to, enumCheck, "check "+target)

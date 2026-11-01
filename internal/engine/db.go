@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-type Config struct {
+type config struct {
 	Rewrites  []Rewrite
 	Arounds   []Around
 	Cache     RenderCache
@@ -29,7 +29,7 @@ type Config struct {
 
 // Option configures a DB's pipeline. The With functions make them; the zero
 // Option is not valid, and Open, OpenConn and OpenShards panic on it.
-type Option struct{ apply func(*Config) }
+type Option struct{ apply func(*config) }
 
 // WithRewrite adds a rewrite hook. Rewrite hooks run in the order given. A
 // nil hook panics.
@@ -37,7 +37,7 @@ func WithRewrite(r Rewrite) Option {
 	if r == nil {
 		panic("velox: WithRewrite(nil)")
 	}
-	return Option{func(c *Config) { c.Rewrites = append(c.Rewrites, r) }}
+	return Option{func(c *config) { c.Rewrites = append(c.Rewrites, r) }}
 }
 
 // WithMaxLimit refuses, with ErrLimitTooLarge, a query whose Limit is over n.
@@ -46,7 +46,7 @@ func WithMaxLimit(n int) Option {
 	if n < 2 {
 		panic(fmt.Sprintf("velox: WithMaxLimit(%d): the maximum must be at least 2, the limit One uses", n))
 	}
-	return Option{func(c *Config) { c.MaxLimit = n }}
+	return Option{func(c *config) { c.MaxLimit = n }}
 }
 
 // WithMaxRows fails, with ErrTooManyRows, a query that returns more than n
@@ -64,7 +64,7 @@ func WithMaxRows(n int) Option {
 	if n == 1 {
 		panic("velox: WithMaxRows(1): the cap must be at least 2, the rows One reads")
 	}
-	return Option{func(c *Config) { c.MaxRows = max(n, 0) }}
+	return Option{func(c *config) { c.MaxRows = max(n, 0) }}
 }
 
 // WithAround adds an around hook. The first one given is the outermost. A nil
@@ -73,7 +73,7 @@ func WithAround(a Around) Option {
 	if a == nil {
 		panic("velox: WithAround(nil)")
 	}
-	return Option{func(c *Config) { c.Arounds = append(c.Arounds, a) }}
+	return Option{func(c *config) { c.Arounds = append(c.Arounds, a) }}
 }
 
 // defaultPinWindow is how long a write pins its session unless WithPinWindow
@@ -84,9 +84,9 @@ const (
 	defaultBackoff   = 5 * time.Second
 )
 
-// NewConfig returns the configuration opts make.
-func NewConfig(opts []Option) *Config {
-	cfg := &Config{PinWindow: defaultPinWindow, Backoff: defaultBackoff}
+// newConfig returns the configuration opts make.
+func newConfig(opts []Option) *config {
+	cfg := &config{PinWindow: defaultPinWindow, Backoff: defaultBackoff}
 	for _, o := range opts {
 		o.apply(cfg)
 	}
@@ -190,8 +190,8 @@ func CheckColumns(st *Statement) error {
 		for _, p := range ps {
 			// walk does not enter an EXISTS's kids, so look for the zero
 			// Predicate first.
-			if HasZero(p.n) {
-				return ErrZeroPredicate(st.Entity.Name)
+			if hasZero(p.n) {
+				return errZeroPredicate(st.Entity.Name)
 			}
 			if err := walk(p.n); err != nil {
 				return err
@@ -208,9 +208,9 @@ func CheckColumns(st *Statement) error {
 	return nil
 }
 
-// SameEach reports whether a hook's Each, a, holds what velox's, b, does. A
+// sameEach reports whether a hook's Each, a, holds what velox's, b, does. A
 // key velox set is comparable, so comparing it with any value cannot panic.
-func SameEach(a, b *EachClause) bool {
+func sameEach(a, b *EachClause) bool {
 	if a.Column != b.Column || a.Join != b.Join || a.JoinOwner != b.JoinOwner || a.JoinTarget != b.JoinTarget ||
 		a.Target != b.Target || a.Limit != b.Limit || len(a.Keys) != len(b.Keys) {
 		return false
@@ -223,11 +223,11 @@ func SameEach(a, b *EachClause) bool {
 	return true
 }
 
-// EachBound is the most rows a per-owner read can return by construction, and
+// eachBound is the most rows a per-owner read can return by construction, and
 // whether it has such a bound: Limit for each owner of a windowed read, one
 // for each key of a count or of a read by the target's one-column primary
 // key.
-func EachBound(st *Statement) (int, bool) {
+func eachBound(st *Statement) (int, bool) {
 	c := st.Each
 	switch {
 	case c == nil:
@@ -243,9 +243,9 @@ func EachBound(st *Statement) (int, bool) {
 	return 0, false
 }
 
-// CountedRows counts the rows read and, when capped, ends them after
+// countedRows counts the rows read and, when capped, ends them after
 // left of them and records that there were more.
-type CountedRows struct {
+type countedRows struct {
 	Rows
 	N      int64
 	Left   int
@@ -253,7 +253,7 @@ type CountedRows struct {
 	Over   bool
 }
 
-func (c *CountedRows) Next() bool {
+func (c *countedRows) Next() bool {
 	if !c.Rows.Next() {
 		return false
 	}
@@ -268,11 +268,11 @@ func (c *CountedRows) Next() bool {
 	return true
 }
 
-// ReadRows runs read on r and closes r, and returns read's error and the
+// readRows runs read on r and closes r, and returns read's error and the
 // error r reports once closed: pgx reports some errors only then. r is
 // closed even when read panics, as the loop body of an Iter, which runs
 // inside read, may.
-func ReadRows(r Rows, read func(Rows) error) (readErr, rowsErr error) {
+func readRows(r Rows, read func(Rows) error) (readErr, rowsErr error) {
 	defer func() {
 		r.Close()
 		rowsErr = r.Err()
@@ -280,23 +280,23 @@ func ReadRows(r Rows, read func(Rows) error) (readErr, rowsErr error) {
 	return read(r), nil
 }
 
-// CheckParams refuses a rendered statement with more parameters than
-// dialect d allows, with a *ParamsError.
-func CheckParams(d Dialect, st *Statement) error {
+// checkParams refuses a rendered statement with more parameters than
+// dialect d allows, with a *paramsError.
+func checkParams(d Dialect, st *Statement) error {
 	if lim := MaxParams[d]; len(st.Args) > lim {
-		return &ParamsError{entity: st.Entity.Name, d: d, N: len(st.Args), Max: lim}
+		return &paramsError{entity: st.Entity.Name, d: d, N: len(st.Args), Max: lim}
 	}
 	return nil
 }
 
-// ParamsError is a rendered statement with more parameters than its dialect
-// allows; nothing was sent. Its text is CheckParams's.
-type ParamsError struct {
+// paramsError is a rendered statement with more parameters than its dialect
+// allows; nothing was sent. Its text is checkParams's.
+type paramsError struct {
 	entity string
 	d      Dialect
 	N, Max int
 }
 
-func (e *ParamsError) Error() string {
+func (e *paramsError) Error() string {
 	return fmt.Sprintf("velox: %s: the statement has %d parameters; %s allows %d", e.entity, e.N, e.d, e.Max)
 }

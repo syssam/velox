@@ -43,11 +43,11 @@ type EdgeDesc struct {
 	holders [2]any
 }
 
-// Relation is a relation field of an entity, resolved on first use.
+// relation is a relation field of an entity, resolved on first use.
 // Resolving reads the target's EntityInfo, never the target's relations, so
 // relations that point at each other, or at their own entity, cannot wait on
 // each other.
-type Relation struct {
+type relation struct {
 	Name string
 	Many bool
 	Off  uintptr // the field's offset in the owner
@@ -93,7 +93,7 @@ type RelTarget struct {
 // owner's and the target's columns, never from the handle, so a handle that
 // fails the check neither gets the good handle's link nor spoils it. The check
 // is two comparisons and allocates nothing.
-func (r *Relation) Resolve(owner *EntityInfo, use RelTarget) (Link, error) {
+func (r *relation) Resolve(owner *EntityInfo, use RelTarget) (Link, error) {
 	if use.Get == nil {
 		return Link{}, r.fail(owner, "it has no target in the generated code; run go tool velox-gen")
 	}
@@ -107,12 +107,12 @@ func (r *Relation) Resolve(owner *EntityInfo, use RelTarget) (Link, error) {
 }
 
 // fail is a *SchemaError about r, an error of owner's relation.
-func (r *Relation) fail(owner *EntityInfo, format string, args ...any) error {
+func (r *relation) fail(owner *EntityInfo, format string, args ...any) error {
 	return &SchemaError{Entity: owner.Name, Field: r.Name, Reason: fmt.Sprintf(format, args...)}
 }
 
 // build resolves the relation against use, whose handle resolve has checked.
-func (r *Relation) build(owner *EntityInfo, use RelTarget) (Link, error) {
+func (r *relation) build(owner *EntityInfo, use RelTarget) (Link, error) {
 	fail := func(format string, args ...any) (Link, error) {
 		return Link{}, r.fail(owner, format, args...)
 	}
@@ -141,7 +141,7 @@ func (r *Relation) build(owner *EntityInfo, use RelTarget) (Link, error) {
 
 // buildThrough resolves a many-to-many relation, l with its owner's and
 // target's columns checked, by adding the join entity and its columns.
-func (r *Relation) buildThrough(owner *EntityInfo, l Link, fail func(string, ...any) (Link, error)) (Link, error) {
+func (r *relation) buildThrough(owner *EntityInfo, l Link, fail func(string, ...any) (Link, error)) (Link, error) {
 	if !r.Many {
 		return fail("a many-to-many relation needs a Many field")
 	}
@@ -256,7 +256,7 @@ func OfNode(ref RelRef, where []Predicate, err error, ps []unsafe.Pointer) Node 
 		if p == nil {
 			return Node{Op: OpInvalid, V: fmt.Errorf("velox: %s: Of was given a nil owner", owner.Name)}
 		}
-		if k, ok := KeyOf(owner.kit.Value(p, l.OwnerCol)); ok {
+		if k, ok := keyOf(owner.kit.Value(p, l.OwnerCol)); ok {
 			keys = append(keys, k)
 		}
 	}

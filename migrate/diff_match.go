@@ -53,7 +53,7 @@ func (d *differ) renameTables(m map[TableRef]TableRef) error {
 			}
 		}
 		d.fromRef[dst] = src
-		d.add(RenameTable{From: src, To: dst}, 2, 0, src, 0, "")
+		d.add(renameTable{From: src, To: dst}, 2, 0, src, 0, "")
 	}
 	return nil
 }
@@ -135,7 +135,7 @@ func (d *differ) renameColumns(tables map[TableRef]TableRef, m map[ColumnRef]str
 			}
 		}
 		u := d.to.table(ref)
-		d.add(RenameColumn{Table: ref, From: k.Column, To: dst}, 2, 2, ref, slices.IndexFunc(u.Columns, func(c Column) bool { return c.Name == dst }), "")
+		d.add(renameColumn{Table: ref, From: k.Column, To: dst}, 2, 2, ref, slices.IndexFunc(u.Columns, func(c Column) bool { return c.Name == dst }), "")
 	}
 	return nil
 }
@@ -212,7 +212,7 @@ func (d *differ) renameEnums() {
 					}
 				}
 			}
-			d.add(RenameEnum{From: e.ref(), To: f.ref()}, 2, 5, e.ref(), 0, "")
+			d.add(renameEnum{From: e.ref(), To: f.ref()}, 2, 5, e.ref(), 0, "")
 			e.Schema, e.Name = f.Schema, f.Name
 			fresh[j] = nil
 			break
@@ -233,13 +233,13 @@ func (d *differ) renameObjects() {
 		}
 		ref := u.Ref()
 		if t.PrimaryKeyName != u.PrimaryKeyName && t.PrimaryKeyName != "" && u.PrimaryKeyName != "" {
-			d.add(RenameConstraint{Table: ref, From: t.PrimaryKeyName, To: u.PrimaryKeyName}, 2, 4, ref, 0, t.PrimaryKeyName)
+			d.add(renameConstraint{Table: ref, From: t.PrimaryKeyName, To: u.PrimaryKeyName}, 2, 4, ref, 0, t.PrimaryKeyName)
 			t.PrimaryKeyName = u.PrimaryKeyName
 		}
 		for j, uc := range u.Columns {
 			tc := t.column(uc.Name)
 			if tc != nil && tc.Identity == uc.Identity && tc.Sequence != "" && uc.Sequence != "" && tc.Sequence != uc.Sequence {
-				d.add(RenameSequence{Table: ref, Column: uc.Name, From: tc.Sequence, To: uc.Sequence}, 2, 1, ref, j, "")
+				d.add(renameSequence{Table: ref, Column: uc.Name, From: tc.Sequence, To: uc.Sequence}, 2, 1, ref, j, "")
 				tc.Sequence = uc.Sequence
 			}
 		}
@@ -254,7 +254,7 @@ func (d *differ) renameObjects() {
 			}
 			for k, ui := range u.Indexes {
 				if ut[k] < 0 && ui.Name != "" && sameIndex(*ti, ui) {
-					d.add(RenameIndex{Table: ref, From: ti.Name, To: ui.Name, def: indexLabel(Index{Columns: ti.Columns})}, 2, 3, ref, 0, ti.Name)
+					d.add(renameIndex{Table: ref, From: ti.Name, To: ui.Name, def: indexLabel(Index{Columns: ti.Columns})}, 2, 3, ref, 0, ti.Name)
 					ti.Name, ut[k] = ui.Name, j
 					break
 				}
@@ -276,7 +276,7 @@ func (d *differ) renameObjects() {
 						tf.Name, ut[k] = uf.Name, j
 						break
 					}
-					d.out = append(d.out, planned{c: RenameConstraint{Table: ref, From: tf.Name, To: uf.Name, def: keyLabel(ForeignKey{Columns: tf.Columns})}, step: 2, sub: 4, ref: ref, name: tf.Name, keyRename: true})
+					d.out = append(d.out, planned{c: renameConstraint{Table: ref, From: tf.Name, To: uf.Name, def: keyLabel(ForeignKey{Columns: tf.Columns})}, step: 2, sub: 4, ref: ref, name: tf.Name, keyRename: true})
 					tf.Name, ut[k] = uf.Name, j
 					break
 				}
@@ -290,7 +290,7 @@ func (d *differ) renameObjects() {
 			}
 			for k, uc := range u.Checks {
 				if ut[k] < 0 && uc.Name != "" && tc.Expr == uc.Expr {
-					d.add(RenameConstraint{Table: ref, From: tc.Name, To: uc.Name, def: checkLabel(Check{Expr: tc.Expr})}, 2, 4, ref, 0, tc.Name)
+					d.add(renameConstraint{Table: ref, From: tc.Name, To: uc.Name, def: checkLabel(Check{Expr: tc.Expr})}, 2, 4, ref, 0, tc.Name)
 					tc.Name, ut[k] = uc.Name, j
 					break
 				}

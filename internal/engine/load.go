@@ -35,8 +35,8 @@ func SpecErr(sp LoadSpec) error {
 	return nil
 }
 
-// SpecRelation resolves the relation a load names on owner.
-func SpecRelation(owner *EntityInfo, sp LoadSpec) (*Relation, Link, error) {
+// specRelation resolves the relation a load names on owner.
+func specRelation(owner *EntityInfo, sp LoadSpec) (*relation, Link, error) {
 	if int(sp.Rel) < 0 || int(sp.Rel) >= len(owner.rels) {
 		return nil, Link{}, fmt.Errorf("velox: %s: has no relation %d; run go tool velox-gen", owner.Name, sp.Rel)
 	}
@@ -62,7 +62,7 @@ func CheckLoads(owner *EntityInfo, cols []int, specs []LoadSpec) error {
 				return err
 			}
 		}
-		r, l, err := SpecRelation(owner, sp)
+		r, l, err := specRelation(owner, sp)
 		if err != nil {
 			return err
 		}
@@ -76,23 +76,23 @@ func CheckLoads(owner *EntityInfo, cols []int, specs []LoadSpec) error {
 	return nil
 }
 
-// LoadError is the error of a relation load: err, the target's error, named
+// loadError is the error of a relation load: err, the target's error, named
 // by the owner and relation. Its text drops err's own "velox: ", so the
 // prefix does not double; errors.Is and As still see err.
-type LoadError struct {
+type loadError struct {
 	Owner, Rel string
 	Err        error
 }
 
-func (e *LoadError) Error() string {
+func (e *loadError) Error() string {
 	return "velox: " + e.Owner + ": loading " + e.Rel + ": " + strings.TrimPrefix(e.Err.Error(), "velox: ")
 }
 
-func (e *LoadError) Unwrap() error { return e.Err }
+func (e *loadError) Unwrap() error { return e.Err }
 
-// KeyOf returns a key value as a map key: a pointer is followed, and a nil
+// keyOf returns a key value as a map key: a pointer is followed, and a nil
 // pointer is no key.
-func KeyOf(v any) (any, bool) {
+func keyOf(v any) (any, bool) {
 	rv := reflect.ValueOf(v)
 	if rv.Kind() == reflect.Pointer {
 		if rv.IsNil() {
@@ -103,18 +103,18 @@ func KeyOf(v any) (any, bool) {
 	return v, true
 }
 
-// ThroughChunk is one statement of throughChunks: the distinct target keys of
+// throughChunk is one statement of throughChunks: the distinct target keys of
 // a run of whole owners.
-type ThroughChunk struct{ Keys, Owners []any }
+type throughChunk struct{ Keys, Owners []any }
 
-// ThroughPlan returns the chunks of the owner keys keys, each the target keys
+// throughPlan returns the chunks of the owner keys keys, each the target keys
 // of a run of whole owners, in the owners' order, at most per of them. An
 // owner with more than per, whose rows cannot come from one statement, ends
 // it: it returns no chunk, and that owner's count of target keys (over).
 // byOwner holds each owner key's target keys; an owner with none is in no
 // chunk.
-func ThroughPlan(keys []any, byOwner map[any][]any, per int) (chunks []ThroughChunk, over int) {
-	var cur ThroughChunk
+func throughPlan(keys []any, byOwner map[any][]any, per int) (chunks []throughChunk, over int) {
+	var cur throughChunk
 	inCur := map[any]bool{}
 	for _, own := range keys {
 		tks := byOwner[own]
@@ -132,7 +132,7 @@ func ThroughPlan(keys []any, byOwner map[any][]any, per int) (chunks []ThroughCh
 		}
 		if len(cur.Keys)+added > per {
 			chunks = append(chunks, cur)
-			cur, inCur = ThroughChunk{}, map[any]bool{}
+			cur, inCur = throughChunk{}, map[any]bool{}
 		}
 		for _, tk := range tks {
 			if !inCur[tk] {
@@ -148,9 +148,9 @@ func ThroughPlan(keys []any, byOwner map[any][]any, per int) (chunks []ThroughCh
 	return chunks, 0
 }
 
-// TieBreak returns order with t's primary key columns it lacks added, so
+// tieBreak returns order with t's primary key columns it lacks added, so
 // that rows equal in order are ranked, and paged, the same way every time.
-func TieBreak(t *EntityInfo, order []OrderTerm) []OrderTerm {
+func tieBreak(t *EntityInfo, order []OrderTerm) []OrderTerm {
 	out := slices.Clip(order)
 	for _, k := range t.PrimaryKey {
 		if !slices.ContainsFunc(order, func(o OrderTerm) bool { return o.Column == k }) {
@@ -160,11 +160,11 @@ func TieBreak(t *EntityInfo, order []OrderTerm) []OrderTerm {
 	return out
 }
 
-// KeysPer is how many keys one statement on t holds beside the conditions
+// keysPer is how many keys one statement on t holds beside the conditions
 // ps: 64 parameters are left for conditions that rewrite hooks add, such as a
 // tenant's. A statement that still overflows, because a policy's or a hook's
 // conditions take more, is split again (byChunks).
-func KeysPer(d Dialect, t *EntityInfo, ps []Predicate) int {
+func keysPer(d Dialect, t *EntityInfo, ps []Predicate) int {
 	// The relations in ps resolve with the statement; one that does not
 	// fails it there. Writing needs them resolved.
 	ps, err := resolvePreds(ps)
@@ -180,16 +180,16 @@ func KeysPer(d Dialect, t *EntityInfo, ps []Predicate) int {
 	return max(1, MaxParams[d]-fixed-64)
 }
 
-// OwnerRows reads, after the columns its Scan is given, one more: the owner
+// ownerRows reads, after the columns its Scan is given, one more: the owner
 // key a many-to-many read selects last, into a new value of type typ (the join
 // column's), which it keeps in keys, one per row.
-type OwnerRows struct {
+type ownerRows struct {
 	Rows
 	Typ  reflect.Type
 	Keys []any
 }
 
-func (r *OwnerRows) Scan(dst ...any) error {
+func (r *ownerRows) Scan(dst ...any) error {
 	p := reflect.New(r.Typ)
 	all := make([]any, len(dst)+1)
 	copy(all, dst)
@@ -201,12 +201,12 @@ func (r *OwnerRows) Scan(dst ...any) error {
 	return nil
 }
 
-// Blocks holds the rows a kit's scan reads, in arrays of its type that never
+// blocks holds the rows a kit's scan reads, in arrays of its type that never
 // move once made, each twice the size of the one before up to blockMax rows,
 // so that a pointer to a row stays valid and no row is copied as more arrive.
 // It is not generic, so that it is compiled once, not in every entity's
 // package, and its fields name no reflect type.
-type Blocks struct {
+type blocks struct {
 	typ  any     // a row's reflect.Type
 	size uintptr // a row's size
 	bs   []block
@@ -220,8 +220,8 @@ type Blocks struct {
 // every entity's package (TestGenericTypesCompileSmall).
 //
 //go:noinline
-func NewBlocks(typ any) *Blocks {
-	b := &Blocks{typ: typ, size: typ.(reflect.Type).Size()}
+func NewBlocks(typ any) *blocks {
+	b := &blocks{typ: typ, size: typ.(reflect.Type).Size()}
 	b.bs = b.in[:0]
 	return b
 }
@@ -238,7 +238,7 @@ const blockMax = 1024
 // next returns a pointer to a new zero row after the others.
 //
 //go:noinline
-func (b *Blocks) Next() unsafe.Pointer {
+func (b *blocks) Next() unsafe.Pointer {
 	if len(b.bs) == 0 || b.bs[len(b.bs)-1].used == b.bs[len(b.bs)-1].cap {
 		size := 4
 		if len(b.bs) > 0 {
@@ -254,17 +254,17 @@ func (b *Blocks) Next() unsafe.Pointer {
 	return p
 }
 
-// JoinBlocks returns the parts a kit's scans read, each a *blocks, as one
+// joinBlocks returns the parts a kit's scans read, each a *blocks, as one
 // value that keeps their rows, and a pointer to each row, in order. A kit's
 // pick and ptr read the rows through the pointers.
-func JoinBlocks(parts []any) ([]any, []unsafe.Pointer) {
+func joinBlocks(parts []any) ([]any, []unsafe.Pointer) {
 	n := 0
 	for _, p := range parts {
-		n += p.(*Blocks).N
+		n += p.(*blocks).N
 	}
 	ptrs := make([]unsafe.Pointer, 0, n)
 	for _, p := range parts {
-		b := p.(*Blocks)
+		b := p.(*blocks)
 		for _, k := range b.bs {
 			for i := range k.used {
 				ptrs = append(ptrs, unsafe.Add(k.at, uintptr(i)*b.size))
@@ -275,7 +275,7 @@ func JoinBlocks(parts []any) ([]any, []unsafe.Pointer) {
 }
 
 // InPlace sets keep[i] when the rows of owner i in a kit's pick, idx[i], as
-// indexes into the rows that JoinBlocks gave of all, lie one after another in
+// indexes into the rows that joinBlocks gave of all, lie one after another in
 // one array of all's blocks, in that order, with no row another such owner
 // has: the owner's slice can then be that run of the array, without a copy.
 // used holds a flag for each row, all false. An owner with no row is not in
@@ -300,12 +300,12 @@ func InPlace(all []any, idx [][]int, keep, used []bool) (copied int) {
 	return copied
 }
 
-// arrayEnd returns the index, into the rows that JoinBlocks gives of parts,
+// arrayEnd returns the index, into the rows that joinBlocks gives of parts,
 // after the last row of the array that holds row j.
 func arrayEnd(parts []any, j int) int {
 	n := 0
 	for _, p := range parts {
-		for _, k := range p.(*Blocks).bs {
+		for _, k := range p.(*blocks).bs {
 			n += k.used
 			if j < n {
 				return n
@@ -315,11 +315,11 @@ func arrayEnd(parts []any, j int) int {
 	return n
 }
 
-// AddKey gives k, when it is new to group, the next index, and returns its
+// addKey gives k, when it is new to group, the next index, and returns its
 // index, and whether it is new. group holds a load's distinct owner keys, each
 // with its index in the order the owners have them; the caller holds the keys
 // as a slice too.
-func AddKey(group map[any]int, k any) (int, bool) {
+func addKey(group map[any]int, k any) (int, bool) {
 	g, ok := group[k]
 	if !ok {
 		g = len(group)
@@ -328,11 +328,11 @@ func AddKey(group map[any]int, k any) (int, bool) {
 	return g, !ok
 }
 
-// KeyRows holds each owner key's rows, as indexes into the targets read for
-// the keys, by the key's index (AddKey). It does not hold the key map: escape
+// keyRows holds each owner key's rows, as indexes into the targets read for
+// the keys, by the key's index (addKey). It does not hold the key map: escape
 // analysis follows a struct's fields as one, so the rows, which reach the
 // heap, would take the map, which need not leave the stack, with them.
-type KeyRows struct {
+type keyRows struct {
 	// As fill leaves them: those of key g are flat[off[g]:off[g+1]]. set sets
 	// rows instead.
 	flat, off []int
@@ -342,7 +342,7 @@ type KeyRows struct {
 // fill sets the rows of each key in group from n targets, in their order, with
 // one allocation: keyAt gives the key of the target at an index, or false when
 // it has none. A target whose key is not in group is in no key's rows.
-func (x *KeyRows) Fill(group map[any]int, n int, keyAt func(i int) (any, bool)) {
+func (x *keyRows) Fill(group map[any]int, n int, keyAt func(i int) (any, bool)) {
 	k := len(group)
 	buf := make([]int, 2*n+k+1)
 	at, off, flat := buf[:n], buf[n:n+k+1], buf[n+k+1:]
@@ -370,7 +370,7 @@ func (x *KeyRows) Fill(group map[any]int, n int, keyAt func(i int) (any, bool)) 
 }
 
 // set sets the rows of k, a key in group.
-func (x *KeyRows) Set(group map[any]int, k any, rows []int) {
+func (x *keyRows) Set(group map[any]int, k any, rows []int) {
 	if x.rows == nil {
 		x.rows = make([][]int, len(group))
 	}
@@ -379,7 +379,7 @@ func (x *KeyRows) Set(group map[any]int, k any, rows []int) {
 
 // of returns the rows of the key at index g; g is -1 for an owner with no
 // key, which has none.
-func (x *KeyRows) Of(g int) []int {
+func (x *keyRows) Of(g int) []int {
 	switch {
 	case g < 0:
 		return nil
@@ -421,7 +421,7 @@ func loadOne(ctx context.Context, db *DB, pin Target, owner *EntityInfo, ptrs []
 	if sp.Err != nil {
 		return sp.Err
 	}
-	r, l, err := SpecRelation(owner, sp)
+	r, l, err := specRelation(owner, sp)
 	if err != nil {
 		return err
 	}
@@ -429,7 +429,7 @@ func loadOne(ctx context.Context, db *DB, pin Target, owner *EntityInfo, ptrs []
 	if sp.MaxRows > 0 {
 		maxRows = sp.MaxRows // for its nested loads too
 	}
-	if InfoKit(owner) == nil || InfoKit(t) == nil || (l.Join != nil && InfoKit(l.Join) == nil) {
+	if infoKit(owner) == nil || infoKit(t) == nil || (l.Join != nil && infoKit(l.Join) == nil) {
 		return fmt.Errorf("velox: %s: relation %s: the entities have no scan plan; run go tool velox-gen", owner.Name, r.Name)
 	}
 	// The distinct keys, in the order the owners have them; and each owner's,
@@ -439,8 +439,8 @@ func loadOne(ctx context.Context, db *DB, pin Target, owner *EntityInfo, ptrs []
 	ownerKey := make([]int, len(ptrs))
 	for i, p := range ptrs {
 		ownerKey[i] = -1
-		if k, ok := KeyOf(InfoKit(owner).Value(p, l.OwnerCol)); ok {
-			g, added := AddKey(group, k)
+		if k, ok := keyOf(infoKit(owner).Value(p, l.OwnerCol)); ok {
+			g, added := addKey(group, k)
 			if added {
 				keys = append(keys, k)
 			}
@@ -448,7 +448,7 @@ func loadOne(ctx context.Context, db *DB, pin Target, owner *EntityInfo, ptrs []
 		}
 	}
 	// Every owner is loaded, even one with no key or no related row.
-	var x KeyRows // each key's rows
+	var x keyRows // each key's rows
 	var all []any
 	var targets []unsafe.Pointer
 	switch {
@@ -456,9 +456,9 @@ func loadOne(ctx context.Context, db *DB, pin Target, owner *EntityInfo, ptrs []
 	case l.Join != nil && sp.Each > 0:
 		var owners []any
 		if all, targets, owners, err = fetchEach(ctx, db, pin, l, sp, keys, maxRows); err != nil {
-			return &LoadError{Owner: owner.Name, Rel: r.Name, Err: err}
+			return &loadError{Owner: owner.Name, Rel: r.Name, Err: err}
 		}
-		x.Fill(group, len(owners), func(i int) (any, bool) { return KeyOf(owners[i]) })
+		x.Fill(group, len(owners), func(i int) (any, bool) { return keyOf(owners[i]) })
 	case l.Join != nil:
 		if all, targets, err = fetchThrough(ctx, db, pin, owner, r, l, sp, keys, maxRows, func(own any, rows []int) { x.Set(group, own, rows) }); err != nil {
 			return err
@@ -469,9 +469,9 @@ func loadOne(ctx context.Context, db *DB, pin Target, owner *EntityInfo, ptrs []
 			ec = &EachClause{Column: l.TargetCol, Limit: sp.Each}
 		}
 		if all, targets, err = fetch(ctx, db, pin, t, []int{l.TargetCol}, sp, keys, maxRows, ec); err != nil {
-			return &LoadError{Owner: owner.Name, Rel: r.Name, Err: err}
+			return &loadError{Owner: owner.Name, Rel: r.Name, Err: err}
 		}
-		x.Fill(group, len(targets), func(i int) (any, bool) { return KeyOf(InfoKit(t).Value(targets[i], l.TargetCol)) })
+		x.Fill(group, len(targets), func(i int) (any, bool) { return keyOf(infoKit(t).Value(targets[i], l.TargetCol)) })
 	}
 	// When a query ran, all holds its parts, so it is not nil even when they
 	// hold no row; it is nil only when nothing was fetched (no owner had a
@@ -487,7 +487,7 @@ func loadOne(ctx context.Context, db *DB, pin Target, owner *EntityInfo, ptrs []
 		for i, g := range ownerKey {
 			idx[i] = x.Of(g)
 		}
-		picked = InfoKit(t).Pick(all, targets, idx)
+		picked = infoKit(t).Pick(all, targets, idx)
 	}
 	for i, p := range ptrs {
 		h := (*Holder)(unsafe.Add(p, r.Off))
@@ -496,9 +496,9 @@ func loadOne(ctx context.Context, db *DB, pin Target, owner *EntityInfo, ptrs []
 		case r.Many && all != nil:
 			h.V = picked[i]
 		case r.Many:
-			h.V = InfoKit(t).Empty() // no keys, so nothing was fetched: still loaded, and empty
+			h.V = infoKit(t).Empty() // no keys, so nothing was fetched: still loaded, and empty
 		case len(idx) > 0:
-			h.V = InfoKit(t).Ptr(targets[idx[0]])
+			h.V = infoKit(t).Ptr(targets[idx[0]])
 		default:
 			h.V = nil
 		}
@@ -519,22 +519,22 @@ func loadOne(ctx context.Context, db *DB, pin Target, owner *EntityInfo, ptrs []
 // of whole owners, so that each owner's come from one query, in the order it
 // asked for; a target of owners in two statements is read, and held, twice.
 // When one statement has more parameters than the dialect allows, because a
-// policy's or a hook's conditions take more than KeysPer left them, it was not
+// policy's or a hook's conditions take more than keysPer left them, it was not
 // sent: the statements already read are kept, and the chunks from its first
 // owner on are built again, with as many fewer keys as it had too many, until
 // a chunk holds one key.
-func fetchThrough(ctx context.Context, db *DB, pin Target, owner *EntityInfo, r *Relation, l Link, sp LoadSpec, keys []any, maxRows int, set func(own any, rows []int)) ([]any, []unsafe.Pointer, error) {
+func fetchThrough(ctx context.Context, db *DB, pin Target, owner *EntityInfo, r *relation, l Link, sp LoadSpec, keys []any, maxRows int, set func(own any, rows []int)) ([]any, []unsafe.Pointer, error) {
 	j := l.Join
 	_, rows, err := fetch(ctx, db, pin, j, []int{l.JoinOwner, l.JoinTarget}, LoadSpec{}, keys, maxRows, nil)
 	if err != nil {
-		return nil, nil, &LoadError{Owner: owner.Name, Rel: r.Name, Err: err}
+		return nil, nil, &loadError{Owner: owner.Name, Rel: r.Name, Err: err}
 	}
 	// Each owner key's target keys, in join-row order and each once.
 	byOwner := make(map[any][]any, len(keys))
 	seen := make(map[[2]any]bool, len(rows))
 	for _, p := range rows {
-		own, okOwner := KeyOf(InfoKit(j).Value(p, l.JoinOwner))
-		tk, okTarget := KeyOf(InfoKit(j).Value(p, l.JoinTarget))
+		own, okOwner := keyOf(infoKit(j).Value(p, l.JoinOwner))
+		tk, okTarget := keyOf(infoKit(j).Value(p, l.JoinTarget))
 		if !okOwner || !okTarget || seen[[2]any{own, tk}] {
 			continue
 		}
@@ -545,20 +545,20 @@ func fetchThrough(ctx context.Context, db *DB, pin Target, owner *EntityInfo, r 
 }
 
 // throughChunks is fetchThrough's reading of the targets, in the statements
-// ThroughPlan makes of keys, the owner keys, with KeysPer keys at most.
+// throughPlan makes of keys, the owner keys, with keysPer keys at most.
 // byOwner holds each owner key's target keys. A statement over the parameter
 // limit is not sent: the chunks read are kept, and the ones from its first
 // owner on are planned again, with as many fewer keys as it had too many.
-func throughChunks(ctx context.Context, db *DB, pin Target, owner *EntityInfo, r *Relation, l Link, sp LoadSpec, keys []any, byOwner map[any][]any, maxRows int, set func(own any, rows []int)) ([]any, []unsafe.Pointer, error) {
+func throughChunks(ctx context.Context, db *DB, pin Target, owner *EntityInfo, r *relation, l Link, sp LoadSpec, keys []any, byOwner map[any][]any, maxRows int, set func(own any, rows []int)) ([]any, []unsafe.Pointer, error) {
 	t := l.Target
 	order, per := fetchPlan(db, t, sp)
-	var done []ThroughChunk // the chunks read
+	var done []throughChunk // the chunks read
 	var parts []any         // each one's *blocks
 	var shrunk error        // the parameter error that last made per smaller
 	rest := keys            // the owners not read yet
 plan:
 	for len(rest) > 0 {
-		chunks, n := ThroughPlan(rest, byOwner, per)
+		chunks, n := throughPlan(rest, byOwner, per)
 		if n > 0 {
 			err := fmt.Errorf("velox: %s: relation %s: an owner has %d related rows, more than one statement can load in order", owner.Name, r.Name, n)
 			if shrunk != nil {
@@ -569,14 +569,14 @@ plan:
 		}
 		for _, c := range chunks {
 			part, _, err := fetchPart(ctx, db, pin, t, []int{l.TargetCol}, sp, order, c.Keys, maxRows, nil)
-			if pe, ok := as[*ParamsError](err); ok && per > 1 {
+			if pe, ok := as[*paramsError](err); ok && per > 1 {
 				per = max(1, min(per, len(c.Keys))-(pe.N-pe.Max))
 				shrunk = pe
 				rest = rest[slices.Index(rest, c.Owners[0]):]
 				continue plan
 			}
 			if err != nil {
-				return nil, nil, &LoadError{Owner: owner.Name, Rel: r.Name, Err: err}
+				return nil, nil, &loadError{Owner: owner.Name, Rel: r.Name, Err: err}
 			}
 			done, parts = append(done, c), append(parts, part)
 		}
@@ -585,13 +585,13 @@ plan:
 	if len(done) == 0 {
 		return nil, nil, nil
 	}
-	all, targets := JoinBlocks(parts)
+	all, targets := joinBlocks(parts)
 	start := 0 // the chunk's first index into targets
 	for i, c := range done {
-		end := start + parts[i].(*Blocks).N
+		end := start + parts[i].(*blocks).N
 		byTarget := make(map[any][]int, end-start) // target key → indexes into targets
 		for k := start; k < end; k++ {
-			if tk, ok := KeyOf(InfoKit(t).Value(targets[k], l.TargetCol)); ok {
+			if tk, ok := keyOf(infoKit(t).Value(targets[k], l.TargetCol)); ok {
 				byTarget[tk] = append(byTarget[tk], k)
 			}
 		}
@@ -616,7 +616,7 @@ plan:
 func fetch(ctx context.Context, db *DB, pin Target, t *EntityInfo, cols []int, sp LoadSpec, keys []any, maxRows int, ec *EachClause) ([]any, []unsafe.Pointer, error) {
 	order, per := fetchPlan(db, t, sp)
 	if ec != nil {
-		order = TieBreak(t, order)
+		order = tieBreak(t, order)
 	}
 	var parts []any // each chunk's *blocks
 	err := byChunks(len(keys), per, func(lo, hi int) error {
@@ -629,7 +629,7 @@ func fetch(ctx context.Context, db *DB, pin Target, t *EntityInfo, cols []int, s
 	if err != nil {
 		return nil, nil, err
 	}
-	all, ptrs := JoinBlocks(parts) // all holds the rows; pick and ptr read them through ptrs
+	all, ptrs := joinBlocks(parts) // all holds the rows; pick and ptr read them through ptrs
 	return all, ptrs, nil
 }
 
@@ -641,7 +641,7 @@ func fetch(ctx context.Context, db *DB, pin Target, t *EntityInfo, cols []int, s
 func fetchEach(ctx context.Context, db *DB, pin Target, l Link, sp LoadSpec, keys []any, maxRows int) ([]any, []unsafe.Pointer, []any, error) {
 	t := l.Target
 	order, per := fetchPlan(db, t, sp)
-	order = TieBreak(t, order)
+	order = tieBreak(t, order)
 	ec := &EachClause{Join: l.Join, JoinOwner: l.JoinOwner, JoinTarget: l.JoinTarget, Target: l.TargetCol, Limit: sp.Each}
 	var parts, owners []any
 	err := byChunks(len(keys), per, func(lo, hi int) error {
@@ -655,12 +655,12 @@ func fetchEach(ctx context.Context, db *DB, pin Target, l Link, sp LoadSpec, key
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	all, targets := JoinBlocks(parts)
+	all, targets := joinBlocks(parts)
 	return all, targets, owners, nil
 }
 
 // fetchPlan returns the order a relation's rows are read in, and how many
-// keys one statement holds (KeysPer).
+// keys one statement holds (keysPer).
 func fetchPlan(db *DB, t *EntityInfo, sp LoadSpec) ([]OrderTerm, int) {
 	order := sp.Order
 	if len(order) == 0 {
@@ -668,18 +668,18 @@ func fetchPlan(db *DB, t *EntityInfo, sp LoadSpec) ([]OrderTerm, int) {
 			order = append(order, OrderTerm{Column: k})
 		}
 	}
-	return order, KeysPer(db.D, t, sp.Where)
+	return order, keysPer(db.D, t, sp.Where)
 }
 
 // byChunks runs read on keys[lo:hi] in chunks of at most per keys, in order.
-// A chunk whose statement had too many parameters (*ParamsError) and more than
+// A chunk whose statement had too many parameters (*paramsError) and more than
 // one key is read again, from lo, in chunks smaller by the excess, and the rest
 // use the smaller size; with one key, the error is returned.
 func byChunks(n, per int, read func(lo, hi int) error) error {
 	for lo := 0; lo < n; {
 		hi := min(lo+per, n)
 		err := read(lo, hi)
-		if pe, ok := as[*ParamsError](err); ok && hi-lo > 1 {
+		if pe, ok := as[*paramsError](err); ok && hi-lo > 1 {
 			per = max(1, hi-lo-(pe.N-pe.Max))
 			continue
 		}
@@ -717,7 +717,7 @@ func fetchPart(ctx context.Context, db *DB, pin Target, t *EntityInfo, cols []in
 // owner key too, read from the join entity. st holds, once it returns, where
 // it ran. pin, when set, is where it runs: a With load's (DB.LoadPin).
 func readPart(ctx context.Context, db *DB, pin Target, st *Statement, t *EntityInfo, cols []int, with []LoadSpec) (any, []any, error) {
-	SetStmtPin(st, pin)
+	setStmtPin(st, pin)
 	var part any
 	var owners []any
 	read := func(r Rows) (err error) {
@@ -735,12 +735,12 @@ func readPart(ctx context.Context, db *DB, pin Target, st *Statement, t *EntityI
 			}
 		}
 		if ec := st.Each; ec != nil && ec.Join != nil {
-			or := &OwnerRows{Rows: r, Typ: GoType(ec.Join.Columns[ec.JoinOwner])}
-			part, err = InfoKit(t).Scan(or, st.Columns)
+			or := &ownerRows{Rows: r, Typ: GoType(ec.Join.Columns[ec.JoinOwner])}
+			part, err = infoKit(t).Scan(or, st.Columns)
 			owners = or.Keys
 			return err
 		}
-		part, err = InfoKit(t).Scan(r, st.Columns)
+		part, err = infoKit(t).Scan(r, st.Columns)
 		return err
 	}
 	var err error

@@ -85,10 +85,10 @@ func (r *renderer) mysql() error {
 	return nil
 }
 
-// keyRename is a foreign key's RenameConstraint, change i.
+// keyRename is a foreign key's renameConstraint, change i.
 type keyRename struct {
 	i  int
-	c  RenameConstraint
+	c  renameConstraint
 	fk ForeignKey // as to has it
 }
 
@@ -100,7 +100,7 @@ type keyRename struct {
 // after them or the table drops begin (place add).
 func (r *renderer) mysqlKeyRenames() (keys []keyRename, drop, add int, err error) {
 	for i, c := range r.cs {
-		rc, ok := c.(RenameConstraint)
+		rc, ok := c.(renameConstraint)
 		if !ok {
 			continue
 		}
@@ -121,7 +121,7 @@ func (r *renderer) mysqlKeyRenames() (keys []keyRename, drop, add int, err error
 	}
 	drop = slices.IndexFunc(r.cs, func(c Change) bool {
 		switch c.(type) {
-		case DropForeignKey, DropCheck, DropIndex:
+		case dropForeignKey, dropCheck, dropIndex:
 			return false
 		}
 		return true
@@ -130,7 +130,7 @@ func (r *renderer) mysqlKeyRenames() (keys []keyRename, drop, add int, err error
 	add = len(r.cs)
 	for j := last + 1; j < len(r.cs); j++ {
 		switch r.cs[j].(type) {
-		case DropIndex, DropTable:
+		case dropIndex, dropTable:
 			add = j
 		}
 		if add < len(r.cs) {
@@ -142,7 +142,7 @@ func (r *renderer) mysqlKeyRenames() (keys []keyRename, drop, add int, err error
 
 // primaryKeyName reports whether rc renames a primary key: from or to
 // names PRIMARY, or the primary key's name of its table in from or to.
-func (r *renderer) primaryKeyName(rc RenameConstraint) bool {
+func (r *renderer) primaryKeyName(rc renameConstraint) bool {
 	pk := func(t *Table) bool {
 		return t != nil && t.PrimaryKeyName != "" && (rc.From == t.PrimaryKeyName || rc.To == t.PrimaryKeyName)
 	}
@@ -154,31 +154,31 @@ func (r *renderer) primaryKeyName(rc RenameConstraint) bool {
 // phase, or as whole statements.
 func (r *renderer) mysqlChange(i int, c Change) (table string, phase int, action string, stmts []string, err error) {
 	switch c := c.(type) {
-	case CreateTable:
+	case createTable:
 		return "", 0, "", []string{r.mysqlCreate(&c.Table)}, nil
-	case DropTable:
+	case dropTable:
 		return "", 0, "", []string{"DROP TABLE " + r.table(c.Table.Ref())}, nil
-	case RenameTable:
+	case renameTable:
 		return "", 0, "", []string{"RENAME TABLE " + r.table(c.From) + " TO " + r.table(c.To)}, nil
-	case AddColumn:
+	case addColumn:
 		return r.table(c.Table), phaseColumn, "ADD COLUMN " + r.mysqlColumn(c.Column), nil, nil
-	case DropColumn:
+	case dropColumn:
 		return r.table(c.Table), phaseDropColumn, "DROP COLUMN " + r.ident(c.Column.Name), nil, nil
-	case RenameColumn:
+	case renameColumn:
 		return r.table(c.Table), phaseRename, "RENAME COLUMN " + r.ident(c.From) + " TO " + r.ident(c.To), nil, nil
-	case AlterColumn:
+	case alterColumn:
 		return r.table(c.Table), phaseColumn, r.mysqlAlterColumn(c), nil, nil
-	case RenameIndex:
+	case renameIndex:
 		return r.table(c.Table), phaseRename, "RENAME INDEX " + r.ident(c.From) + " TO " + r.ident(c.To), nil, nil
-	case AddForeignKey:
+	case addForeignKey:
 		return r.table(c.Table), phaseAdd, "ADD CONSTRAINT " + r.ident(c.ForeignKey.Name) + " " + r.foreignKey(c.ForeignKey), nil, nil
-	case DropForeignKey:
+	case dropForeignKey:
 		return r.table(c.Table), phaseDrop, "DROP FOREIGN KEY " + r.ident(c.ForeignKey.Name), nil, nil
-	case AddCheck:
+	case addCheck:
 		return r.table(c.Table), phaseAdd, "ADD CONSTRAINT " + r.ident(c.Check.Name) + " CHECK (" + c.Check.Expr + ")", nil, nil
-	case DropCheck:
+	case dropCheck:
 		return r.table(c.Table), phaseDrop, "DROP CHECK " + r.ident(c.Check.Name), nil, nil
-	case RenameConstraint:
+	case renameConstraint:
 		// MySQL renames no constraint: the old check is dropped and the
 		// new one added. A foreign key's is mysqlKeyRenames'.
 		t, err := r.toTable(i, c.Table)
@@ -189,9 +189,9 @@ func (r *renderer) mysqlChange(i int, c Change) (table string, phase int, action
 			return r.table(c.Table), phaseRename, "DROP CHECK " + r.ident(c.From) + ", ADD CONSTRAINT " + r.ident(c.To) + " CHECK (" + ck.Expr + ")", nil, nil
 		}
 		return "", 0, "", nil, r.refuse(i, fmt.Sprintf("table %v of to has no check %s", c.Table, c.To))
-	case SetTableComment:
+	case setTableComment:
 		return r.table(c.Table), phaseColumn, "COMMENT = " + ddl.Literal(velox.MySQL, c.To), nil, nil
-	case SetTableCollation:
+	case setTableCollation:
 		return r.table(c.Table), phaseColumn, "CONVERT TO CHARACTER SET utf8mb4 COLLATE " + c.To, nil, nil
 	}
 	return "", 0, "", nil, r.refuse(i, fmt.Sprintf("MySQL has no %s", c.Kind()))
@@ -200,8 +200,8 @@ func (r *renderer) mysqlChange(i int, c Change) (table string, phase int, action
 // mysqlAlterColumn is the action that alters a column: a default alone
 // changes in place when it is a literal or an expression in parentheses,
 // and anything else rewrites the whole definition, as MySQL requires.
-func (r *renderer) mysqlAlterColumn(c AlterColumn) string {
-	if c.What == ColumnDefault {
+func (r *renderer) mysqlAlterColumn(c alterColumn) string {
+	if c.What == columnDefault {
 		switch def := c.To.Default; {
 		case def == "":
 			return "ALTER COLUMN " + r.ident(c.To.Name) + " DROP DEFAULT"
@@ -306,7 +306,7 @@ func (g *indexGroup) sql(r *renderer) string {
 func (r *renderer) mysqlIndexes() (at map[int]*indexGroup, absorbed map[int]bool) {
 	dropsColumn := map[TableRef]map[string]int{} // a dropped column's change, by table and column
 	for i, c := range r.cs {
-		if dc, ok := c.(DropColumn); ok {
+		if dc, ok := c.(dropColumn); ok {
 			k := r.l.canon(dc.Table)
 			if dropsColumn[k] == nil {
 				dropsColumn[k] = map[string]int{}
@@ -314,7 +314,7 @@ func (r *renderer) mysqlIndexes() (at map[int]*indexGroup, absorbed map[int]bool
 			dropsColumn[k][dc.Column.Name] = i
 		}
 	}
-	pinned := func(i int, d DropIndex) bool {
+	pinned := func(i int, d dropIndex) bool {
 		return slices.ContainsFunc(d.Index.Columns, func(col string) bool {
 			j, ok := dropsColumn[r.l.canon(d.Table)][col]
 			return ok && j > i
@@ -331,13 +331,13 @@ func (r *renderer) mysqlIndexes() (at map[int]*indexGroup, absorbed map[int]bool
 	members := map[TableRef][]member{}
 	for i, c := range r.cs {
 		switch c := c.(type) {
-		case AddIndex:
+		case addIndex:
 			k := r.l.canon(c.Table)
 			if members[k] == nil {
 				order = append(order, k)
 			}
 			members[k] = append(members[k], member{i: i, ix: c.Index, to: c.Table, up: true})
-		case DropIndex:
+		case dropIndex:
 			if pinned(i, c) {
 				at[i] = &indexGroup{table: c.Table, changes: []int{i}, drops: []string{c.Index.Name}}
 				continue

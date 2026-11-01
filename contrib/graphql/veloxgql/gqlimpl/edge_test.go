@@ -16,7 +16,7 @@ import (
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
-	gqlshared "github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
+	gqlcore "github.com/syssam/velox/contrib/graphql/veloxgql/internal/gqlcore"
 )
 
 // owner, child, tag and ownerTag are hand-written entities, as velox-gen
@@ -286,7 +286,7 @@ func operationIn(t *testing.T, db *velox.DB, query string, schema *ast.Schema, o
 	if errs != nil {
 		t.Fatal(errs)
 	}
-	ctx := gqlshared.WithTable(veloxgql.NewExtension(db, opts...).NewContext(context.Background()), schema, nil)
+	ctx := gqlcore.WithTable(veloxgql.NewExtension(db, opts...).NewContext(context.Background()), schema, nil)
 	return graphql.WithOperationContext(ctx, &graphql.OperationContext{RawQuery: query, Doc: doc, Operation: doc.Operations[0], Variables: map[string]any{}})
 }
 
@@ -967,12 +967,12 @@ func TestNoFieldNoGroup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, _, ok := gqlshared.Find(gqlshared.TableFromContext(ctx), p.Rows[0]); ok {
+	if _, _, _, ok := gqlcore.Find(gqlcore.TableFromContext(ctx), p.Rows[0]); ok {
 		t.Error("a page outside a field is a group")
 	}
 	if xs := ownersPage(t, ctx, db, db.Query[owner](), gqlimpl.Args{}); len(xs) == 0 {
 		t.Fatal("no owners")
-	} else if _, _, _, ok := gqlshared.Find(gqlshared.TableFromContext(ctx), xs[0]); !ok {
+	} else if _, _, _, ok := gqlcore.Find(gqlcore.TableFromContext(ctx), xs[0]); !ok {
 		t.Error("a page in a field is no group")
 	}
 }

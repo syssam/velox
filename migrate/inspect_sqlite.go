@@ -46,7 +46,7 @@ type liteReader struct {
 type liteTable struct {
 	db   string
 	sql  string
-	ct   createTable
+	ct   sqliteCreateTable
 	t    Table
 	cols []string // every column's name, generated ones too
 	says []string

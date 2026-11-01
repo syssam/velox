@@ -65,7 +65,7 @@ func WithoutPolicy(ctx context.Context, reason string) context.Context {
 // RowScopeFromContext returns ctx's row scope.
 func RowScopeFromContext(ctx context.Context) RowScope {
 	id, all := TenantFrom(ctx)
-	rc, _ := ctx.Value(RouteKey{}).(RouteCtx)
+	rc, _ := ctx.Value(routeKey{}).(routeCtx)
 	return RowScope{Tenant: id, TenantBypass: all, PolicyBypass: PolicyBypassReason(ctx), Shard: rc.shard, HasShard: rc.onShard}
 }
 
@@ -124,13 +124,13 @@ func (d denial) Is(target error) bool { return target == ErrDenied }
 // ErrInsertMutation is the misuse of ValueIn, Set or Where on an insert.
 var ErrInsertMutation = errors.New("Set and Where are for updates and deletes; change Rows")
 
-// setAffected is SetAffected's work, not generic.
+// SetAffected is SetAffected's work, not generic.
 func (mu *MutationState) SetAffected(n int64) {
 	switch {
 	case mu.St == nil:
 		mu.Record(errInsertAffected)
 	case mu.Called:
-		mu.Record(ErrOwnAndNext)
+		mu.Record(errOwnAndNext)
 	case n < -1:
 		mu.Record(errNegativeAffected)
 	default:
@@ -145,14 +145,14 @@ var errInsertAffected = errors.New("SetAffected is for updates and deletes; an i
 // other than -1, the unknown count.
 var errNegativeAffected = errors.New("SetAffected of a negative count other than -1")
 
-// record records err as the mutation's misuse, keeping the first.
+// Record records err as the mutation's misuse, keeping the first.
 func (mu *MutationState) Record(err error) {
 	if mu.Err == nil {
 		mu.Err = err
 	}
 }
 
-// wrongType records that column col is assigned got, which is not of the
+// WrongType records that column col is assigned got, which is not of the
 // type want points to. It is not generic, so that fmt and reflect are not
 // compiled into every package that calls ValueIn.
 func (mu *MutationState) WrongType(col int, got, want any) {
@@ -202,7 +202,7 @@ func MutateSet(mu *MutationState, a Assignment) {
 // keeping the first, when it is or holds the zero Predicate or is invalid.
 func MutateWhere(st *Statement, errp *error, p Predicate) {
 	var err error
-	if HasZero(p.n) {
+	if hasZero(p.n) {
 		err = errors.New("a condition is the zero Predicate; make conditions with column handles, And, Or and Not")
 	} else {
 		err = PredErr(p.n)

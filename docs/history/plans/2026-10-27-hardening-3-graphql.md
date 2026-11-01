@@ -26,7 +26,7 @@ Everything is in contrib/graphql and example/graphql, except Task 3's `velox.IsN
 
 **Spec:** `docs/history/specs/2026-10-25-pre-1.0-hardening-design.md`. Its final block, **"Rulings on the builder check"**, is binding and overrides the rulings above it where they differ.
 - "Spec ruling N" is item N of the spec's Rulings, and "builder ruling N" is item N of that final block.
-- The evidence for each id is in `docs/history/reviews/2026-10-25-triage-G.md`.
+- The evidence for each id is in `docs/history/reviews/2026-10-25-triage-graphql.md`.
 - Wave 2's leftovers are in `docs/history/plans/2026-10-26-hardening-2-core-runtime.md`, "Left by this plan", and its execution rulings 9 and 10.
 - Every file:line below was taken at 23d0dee. Abbreviation: **CG** is `contrib/graphql`.
 - The builder check of this plan (at 110a775) is applied: its findings are cited as "check finding N", and the controller's rulings on it are under "Controller rulings".

@@ -12,14 +12,14 @@ func WithTxAround(h TxAround) Option {
 	if h == nil {
 		panic("velox: WithTxAround(nil)")
 	}
-	return Option{func(c *Config) { c.TxArounds = append(c.TxArounds, h) }}
+	return Option{func(c *config) { c.TxArounds = append(c.TxArounds, h) }}
 }
 
-// TxIDs numbers transactions; the first is 1.
-var TxIDs atomic.Uint64
+// txIDs numbers transactions; the first is 1.
+var txIDs atomic.Uint64
 
 // end records how the transaction's attempt ended; info may be nil.
-func EndTx(info *TxInfo, o TxOutcome) {
+func endTx(info *TxInfo, o TxOutcome) {
 	if info != nil {
 		info.Outcome = o
 	}
@@ -27,11 +27,11 @@ func EndTx(info *TxInfo, o TxOutcome) {
 
 // newTxInfo returns the TxInfo of a transaction with options o on shard sh
 // (nil on a DB without a router), or nil when db has no hooks to read it.
-func (db *DB) newTxInfo(o TxOptions, sh *ShardConn) *TxInfo {
+func (db *DB) newTxInfo(o txOptions, sh *shardConn) *TxInfo {
 	if !db.Hooked() && len(db.Cfg.TxArounds) == 0 {
 		return nil
 	}
-	info := &TxInfo{ID: TxIDs.Add(1), Isolation: o.Isolation, ReadOnly: o.ReadOnly, Route: Route{Replica: -1}}
+	info := &TxInfo{ID: txIDs.Add(1), Isolation: o.Isolation, ReadOnly: o.ReadOnly, Route: Route{Replica: -1}}
 	if sh != nil {
 		info.Route.Shard = sh.Name
 	}

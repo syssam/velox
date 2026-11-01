@@ -35,7 +35,7 @@ func addedValues(from, to []string) ([]string, bool) {
 // script, a unit each, before the next value of to that the type already
 // has. The type has its name in from, as the script runs before the main
 // one renames it.
-func (r *renderer) addValues(i int, c AlterEnum, added []string) {
+func (r *renderer) addValues(i int, c alterEnum, added []string) {
 	ref := c.To.ref()
 	if f, ok := r.l.enumFrom[ref]; ok {
 		ref = f
@@ -107,7 +107,7 @@ func (r *renderer) swapEnum(e Enum) []string {
 		}
 		// An index the online script drops later still stands here.
 		for _, c := range r.cs {
-			if d, ok := c.(DropIndex); ok && r.afterRename(d.Table) == tref && casts(d.Index.Where) && r.dropOnline(d) {
+			if d, ok := c.(dropIndex); ok && r.afterRename(d.Table) == tref && casts(d.Index.Where) && r.dropOnline(d) {
 				out = append(out, "DROP INDEX "+r.indexName(tref, d.Index.Name))
 			}
 		}
@@ -127,9 +127,9 @@ func (r *renderer) addsOnline(ref TableRef, name string) bool {
 	}
 	return slices.ContainsFunc(r.cs, func(c Change) bool {
 		switch c := c.(type) {
-		case AddIndex:
+		case addIndex:
 			return c.Table == ref && c.Index.Name == name
-		case AddCheck:
+		case addCheck:
 			return c.Table == ref && c.Check.Name == name
 		}
 		return false

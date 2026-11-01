@@ -378,15 +378,15 @@ func defaultName(changes []Change) string {
 		parts = append(parts, t.Name)
 	}
 	switch c := c.(type) {
-	case AddColumn:
+	case addColumn:
 		parts = append(parts, c.Column.Name)
-	case DropColumn:
+	case dropColumn:
 		parts = append(parts, c.Column.Name)
-	case RenameColumn:
+	case renameColumn:
 		parts = append(parts, c.To)
-	case AlterColumn:
+	case alterColumn:
 		parts = append(parts, c.To.Name)
-	case RenameSequence:
+	case renameSequence:
 		parts = append(parts, c.Column)
 	}
 	b := []byte(strings.ToLower(strings.Join(parts, "_")))
@@ -504,9 +504,9 @@ func (d *Dir) Add(name string, p *Plan, to *Schema) (map[string][]byte, error) {
 // carryConstraints is to with Constraint set on each index that has it in
 // to already (a baseline's, read from the database), or whose index in
 // from, the snapshot, is a constraint: the same table, after changes'
-// RenameTable, and the same name, after changes' RenameIndex, with the
+// renameTable, and the same name, after changes' renameIndex, with the
 // same Unique and Columns, from's columns mapped through changes'
-// RenameColumn of that table, and to's Where empty. A redefined index is
+// renameColumn of that table, and to's Where empty. A redefined index is
 // a new one, and plain, and so is every index of a table changes create,
 // even under the name of one renamed away. It returns a clone; from and to
 // are not changed.
@@ -527,13 +527,13 @@ func carryConstraints(from, to *Schema, changes []Change) *Schema {
 	}
 	for _, c := range changes {
 		switch c := c.(type) {
-		case RenameTable:
+		case renameTable:
 			tables[c.To] = c.From
-		case CreateTable:
+		case createTable:
 			created[c.Table.Ref()] = true
-		case RenameIndex:
+		case renameIndex:
 			put(indexes, c.Table, c.To, c.From)
-		case RenameColumn:
+		case renameColumn:
 			put(columns, c.Table, c.From, c.To)
 		}
 	}

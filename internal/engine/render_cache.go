@@ -49,7 +49,7 @@ type RenderCache struct {
 	Bytes int                               // key, text and fingerprint bytes held
 }
 
-// get returns the shape's cached text and fingerprint, and the statement's
+// Get returns the shape's cached text and fingerprint, and the statement's
 // arguments, or RenderStmt's error. A shape past the cache's bounds, and an
 // insert of more than MaxCachedRows rows, is rendered each time, and gets its
 // fingerprint each time. A shape whose rendering fails is not cached.
@@ -99,7 +99,7 @@ func (c *RenderCache) Get(d Dialect, st *Statement) (cached, []any, error) {
 	return e, args, nil
 }
 
-// size returns the number of shapes held.
+// Size returns the number of shapes held.
 func (c *RenderCache) Size() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
