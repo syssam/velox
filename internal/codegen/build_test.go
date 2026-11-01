@@ -1381,6 +1381,7 @@ func TestBuildRulesAreSingle(t *testing.T) {
 		{enumOrder{}, enumTicket{}}, {jsonFuncField{}}, {jsonChanField{}}, {jsonUnsafeField{}}, {jsonComplexField{}},
 		{jsonComplex64Field{}}, {jsonFuncMarshalerField{}}, {jsonOptionalFuncField{}},
 		{fkNamedType{}}, {fkCustomInt{}},
+		{uniqueOptional{}}, {uniqueOptionalDefault{}}, {uniqueOptionalIndex{}}, {twoEdgesOneKey{}, keyTargetB{}, keyTargetC{}}, {Café{}},
 	} {
 		_, err := build(t, ss...)
 		if n := len(err.(interface{ Unwrap() []error }).Unwrap()); n != 1 {

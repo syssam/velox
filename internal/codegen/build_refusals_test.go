@@ -108,3 +108,29 @@ func TestBuildTwoEdgesOnOneKeyRefused(t *testing.T) {
 	}
 }
 
+// A name that is not ASCII has no table, column or label velox can derive:
+// plugin.Snake and plugin.Plural work on bytes, as ent's do.
+type Café struct{ schema.Schema }
+
+type accents struct{ schema.Schema }
+
+func (accents) Fields() []schema.Field { return []schema.Field{field.String("prénom")} }
+
+func (accents) Edges() []schema.Edge { return []schema.Edge{edge.To("é", Pet.Type)} }
+
+func TestBuildNonASCIINamesRefused(t *testing.T) {
+	_, err := build(t, Café{})
+	want := `schema Café: its name is not ASCII, and velox derives table, column and Go names from it: rename the schema`
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("got %v\nwant %s", err, want)
+	}
+	_, err = build(t, accents{}, Pet{})
+	for _, want := range []string{
+		`schema accents: field "prénom": its name is not ASCII, and velox derives column and Go names from it: rename it, and give the column its name with StorageKey`,
+		`schema accents: edge "é": its name is not ASCII, and velox derives column and Go names from it: rename it`,
+	} {
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("got %v\nwant %s", err, want)
+		}
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"path"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/codegen/loadjson"
@@ -816,11 +817,30 @@ func shown(goName string) string {
 	return goName
 }
 
+// ascii reports whether s is ASCII. plugin.Snake and plugin.Plural work on
+// bytes, as ent's do, and their outputs never change (rule 56).
+func ascii(s string) bool {
+	return strings.IndexFunc(s, func(r rune) bool { return r >= utf8.RuneSelf }) < 0
+}
+
 // validateNames checks the Go names the generator generates from (rule 30): each
 // field's and edge's must be an identifier, unique among the fields and among
 // the edges, and each enum value's unique within its field. An edge with a
 // field's Go name is rule 4; elements of one name are rules 1, 2 and 3.
 func (b *builder) validateNames(e *Entity) {
+	if !ascii(e.Name) {
+		b.fail(56, e.Name, loc{}, "its name is not ASCII, and velox derives table, column and Go names from it: rename the schema")
+	}
+	for _, f := range e.Fields {
+		if !ascii(f.Name) && isDeclared(f) {
+			b.fail(56, e.Name, fieldLoc(f), "its name is not ASCII, and velox derives column and Go names from it: rename it, and give the column its name with StorageKey")
+		}
+	}
+	for _, ed := range e.Edges {
+		if !ascii(ed.Name) {
+			b.fail(56, e.Name, edgeLoc(ed), "its name is not ASCII, and velox derives column and Go names from it: rename it")
+		}
+	}
 	for i, f := range e.Fields {
 		if !ident(f.GoName) {
 			b.fail(30, e.Name, fieldLoc(f), "its Go name %s is not a Go identifier", shown(f.GoName))
