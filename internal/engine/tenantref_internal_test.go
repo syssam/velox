@@ -58,6 +58,7 @@ func TestRefValues(t *testing.T) {
 		"distinct bytes":    {r, ins([]any{0, []byte("a")}, []any{0, []byte("a")}, []any{0, bs("b")}), []any{[]byte("a"), bs("b")}},
 		"own rows":          {self, ins([]any{int64(1), &two}, []any{int64(2), &one}), []any{}},
 		"another's":         {self, ins([]any{int64(1), &two}), []any{int64(2)}},
+		"an upsert's own":   {self, &Statement{Op: OpInsert, Columns: []int{0, 1}, Rows: [][]any{{int64(2), &two}}, Conflict: &ConflictClause{DoNothing: true}}, []any{int64(2)}},
 		"a generated key":   {self, &Statement{Op: OpInsert, Columns: []int{1}, Rows: [][]any{{&two}}}, []any{int64(2)}},
 		"uncomparable":      {r, ins([]any{0, []int{1}}, []any{0, []int{1}}), []any{[]int{1}}},
 		"an update":         {r, &Statement{Op: OpUpdate, Set: []Assignment{{Column: 1, Op: AssignSet, Value: &one}}}, []any{int64(1)}},

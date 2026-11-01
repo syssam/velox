@@ -160,7 +160,9 @@ func (db *DB) checkRefs(ctx context.Context, st *Statement, t Target) error {
 
 // refValues is what st sets r's column to, without NULL, each value once. An insert's
 // reference to a row it inserts itself is the database's to check, within the
-// statement: those rows are not there yet, and are the tenant's (scopeInsert).
+// statement: those rows are not there yet, and are the tenant's (scopeInsert). An
+// upsert may insert none of its rows, as a row's key may be taken, by another tenant's
+// row too: it names rows the tenant must already hold, and excuses nothing.
 func refValues(st *Statement, r *tenantRef) []any {
 	if st.Op == OpUpdate {
 		for _, a := range st.Set {
@@ -177,7 +179,7 @@ func refValues(st *Statement, r *tenantRef) []any {
 		return nil
 	}
 	self := -1
-	if r.self >= 0 {
+	if r.self >= 0 && st.Conflict == nil {
 		self = slices.Index(st.Columns, r.self)
 	}
 	if len(st.Rows) == 1 && self < 0 {
