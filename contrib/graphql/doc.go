@@ -161,7 +161,7 @@
 //
 // They use the runtime package veloxgql, and its package gqlimpl for what
 // only generated code calls; every file carries
-// "const _ = veloxgql.GeneratedCodeIsVersion4", so that generated code and
+// "const _ = veloxgql.GeneratedCodeIsVersion5", so that generated code and
 // the module fail to compile together when they disagree. A connection is
 // keyset-paged by its cursors, and runs its page query and its COUNT only
 // when gqlgen asks for edges or pageInfo, and for totalCount; see "Loading"
@@ -191,8 +191,10 @@
 // graphql.MutationUpdate, Update<T>Input and Update<T>(ctx, id, input), which
 // updateX's resolver returns. A create input that gives a field with a Default
 // its zero value ("" or the zero time) is refused with BAD_USER_INPUT, since an
-// insert would store the Default in its place; an update stores it. In an update
-// input a field not given is left as
+// insert would store the Default in its place; an update stores it. So is a null
+// given to a Nillable field with a Default, literal or variable, on the create<T>
+// field: leave it out for the Default, or clear it with an update, as an insert
+// does not store NULL there. In an update input a field not given is left as
 // it is, clear<Field> sets a nullable one to NULL, and an edge is cleared, then
 // its remove<Edge>IDs removed, then its add<Edge>IDs added; a field given with
 // its clear, or an ID both to add and to remove, is refused with
@@ -432,29 +434,55 @@
 // or a list of objects, so first: 0 and an alias still count, and the default
 // allows at most 1000 statements. An input object argument, as a where, adds its
 // size at each use: one for each object and value in it, read from the variables,
-// so one variable reused counts each time.
+// so one variable reused counts each time. On a mutation, an input object adds a
+// statement for the row it reads back, two for a non-empty <edge>IDs, add<Edge>IDs
+// or remove<Edge>IDs, one for an <edge>ID and three for a clear<Edge>: true, a page
+// of links, which a longer edge repeats.
 //
 // Every alias counts, and so does every branch of a fragment (an upper bound),
 // except a selection that @skip(if: true) or @include(if: false) leaves out,
 // which costs nothing, its condition a literal or a variable's value (a missing
 // variable's default, when it has one); one whose condition is not a boolean, a
-// variable missing with no default or null, counts. __schema and __type cost
-// what they select, counted over the schema: one for each field of the response,
-// and a walk that passes MaxCost stops. GraphiQL's introspection query costs 3478
-// on the example's schema of three entities, and a schema's cost grows with its
-// where inputs; if it passes MaxCost, raise MaxCost on the server that offers
-// introspection. Variables are read; sums and products saturate, so huge
-// arguments cannot wrap the cost, and a named fragment is costed once for each
-// page size it is spread under. Two levels of full connection pages cost about
-// 20000 and pass the default; three do not. A list edge costs MaxList (1000) for
-// each parent, so posts(first: 100) { edges { node { likes { id } } } } costs
+// variable missing with no default or null, counts. The value above it is read
+// all the same, so an object whose every selection is left out costs what one
+// that selects __typename does. Variables are read; sums and products saturate,
+// so huge arguments cannot wrap the cost, and a named fragment is costed once for
+// each page size it is spread under. Two levels of full connection pages cost
+// about 20000 and pass the default; three do not. A list edge costs MaxList (1000)
+// for each parent, so posts(first: 100) { edges { node { likes { id } } } } costs
 // 100402 and is refused by default: raise MaxCost, or lower MaxList. gqlgen's
 // extension.FixedComplexityLimit counts fields, not rows, and is not needed
 // with it.
 //
-// Parsing runs before the Extension, and gqlgen sets no limit on it, nor can an
-// extension: give the server one, as srv.SetParserTokenLimit(15000), which
-// GraphiQL's query is far under.
+// __schema and __type have a limit of their own, veloxgql.Limits.MaxIntrospectionCost,
+// 1000000 by default: they cost what they select, counted over the schema, one
+// for each field of the response, and a walk that passes the limit stops.
+// GraphiQL's query costs 3478 on the example's schema of three entities and about
+// 1400 for each rich entity, so the default admits it on 500 of them. Neither limit
+// loosens the other. A request at this one allocates about 640 MB through gqlgen:
+// give a server open to strangers a lower one, or no extension.Introspection.
+//
+// # What a server must call
+//
+// A server calls veloxgql.Setup first, and serves what it returns:
+//
+//	srv := handler.New(graph.NewExecutableSchema(cfg))
+//	h := veloxgql.Setup(srv, db)
+//	srv.AddTransport(transport.POST{})
+//	http.Handle("/graphql", h)
+//
+// Setup uses the Extension and ErrorPresenter on srv, and refuses a body over
+// Limits.MaxBodyBytes, 1 MiB by default, which nothing else in a request bounds.
+//
+// gqlgen validates a request before any resolver, and before the extension's cost,
+// and validation is quadratic in the fields that share a response name: 12 KB of
+// a: id a: name took 3.49 GB and returned 250 MB of errors. So before gqlgen parses
+// a request, on every transport, the Extension parses it, a second parse that a
+// query cache of gqlgen's does not spare, and refuses one over Limits.MaxTokens, 15000 by default, or over
+// Limits.MaxFields, 2000 by default, with BAD_USER_INPUT. MaxFields also bounds the
+// pairs of fields under one response name, at 5 times it, the fragments spread where
+// they are, so that any request validation sees allocates under 50 MB. GraphiQL's
+// query is far under each limit.
 //
 // # gqlgen.yml
 //

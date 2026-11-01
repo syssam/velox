@@ -94,27 +94,23 @@ func serve(ctx context.Context, ln net.Listener) error {
 }
 
 // server is the GraphQL endpoint: gqlgen's server on the generated schema,
-// with veloxgql.NewExtension first, so that every operation's context holds
-// db and the default limits, where the generated code reads them, and a
-// limit on the cost of a request (Limits.MaxCost, 100000 by default).
-// veloxgql.ErrorPresenter shows a client
-// only what is safe, with a code: gqlgen's default presenter would show it
-// every error's text, the driver's and velox's, which name tables, entities
-// and constraints. It logs the rest with slog, and says "internal error".
-// The directive @admin is the function admin. SetParserTokenLimit bounds what
-// parsing a request costs, which runs before any limit of the Extension: gqlgen
-// has no limit by default, and an extension cannot set one.
+// made safe by veloxgql.Setup. Every operation's context holds db and the default
+// limits, where the generated code reads them; a request has a limit on its body,
+// its query's tokens and fields, what it costs and its introspection, before any
+// of it is validated or run. veloxgql.ErrorPresenter shows a client only what is
+// safe, with a code: gqlgen's default presenter would show it every error's text,
+// the driver's and velox's, which name tables, entities and constraints. It logs
+// the rest with slog, and says "internal error". The directive @admin is the
+// function admin.
 func server(db *velox.DB) http.Handler {
 	srv := handler.New(graph.NewExecutableSchema(graph.Config{
 		Resolvers:  &graph.Resolver{},
 		Directives: graph.DirectiveRoot{Admin: admin},
 	}))
-	srv.Use(veloxgql.NewExtension(db))
-	srv.SetErrorPresenter(veloxgql.ErrorPresenter(nil))
-	srv.SetParserTokenLimit(15000)
+	h := veloxgql.Setup(srv, db)
 	srv.AddTransport(transport.POST{})
 	srv.Use(extension.Introspection{})
-	return srv
+	return h
 }
 
 // orgFromHeader puts the tenant, the organization the X-Org-ID header names,

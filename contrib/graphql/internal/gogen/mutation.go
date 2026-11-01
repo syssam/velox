@@ -486,6 +486,13 @@ func (r *renderer) writeCreate(f *file, t *sdl.Type, in string) error {
 		}
 		fd := e.Fields[fi.Field]
 		dst, tmp := "x."+fd.GoName, "v"+strconv.Itoa(i)
+		// An insert fills the Default into NULL as well, and the input's nil
+		// pointer cannot say the client gave null.
+		if fd.Nullable && fd.HasDefault && !fi.Required {
+			f.p("\tif err := %s.NotNull(ctx, %s, %q, %q); err != nil {", impl, at(fi), "input", fi.Name)
+			f.p("\t\treturn nil, err")
+			f.p("\t}")
+		}
 		indent, end := given("\t", i)
 		col := func() {
 			if !fi.Required {

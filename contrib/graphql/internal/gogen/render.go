@@ -204,7 +204,7 @@ func (f *file) finish(name, pkg string) (plugin.File, error) {
 	}
 	// Generated code and veloxgql fail to compile together when they
 	// disagree on the version, as the core's files do.
-	fmt.Fprintf(&src, "const _ = %s.GeneratedCodeIsVersion4\n\n", guard)
+	fmt.Fprintf(&src, "const _ = %s.GeneratedCodeIsVersion5\n\n", guard)
 	src.Write(f.Bytes())
 	out, err := format.Source(src.Bytes())
 	if err != nil {
@@ -308,6 +308,18 @@ func (r *renderer) writeGetter(f *file, t *sdl.Type, g sdl.Getter) error {
 		return nil
 	}
 	f.doc("", fmt.Sprintf("%s is the field %s as %s %s, the Go type its GraphQL scalar binds to: gqlgen binds the field to it.", g.Method, fd.Name, english.Article(ret), ret))
+	if fd.Type == "bytes" && !fd.Nullable {
+		// Its column is NOT NULL, so nil is an empty blob, which gqlgen would
+		// refuse in a Bytes! as a null.
+		f.p("func (x *%s) %s() %s {", e.Name, g.Method, ret)
+		f.p("	if x.%s == nil {", fd.GoName)
+		f.p("		return %s{}", ret)
+		f.p("	}")
+		f.p("	return %s(x.%s)", ret, fd.GoName)
+		f.p("}")
+		f.p("")
+		return nil
+	}
 	if !fd.Pointer {
 		f.p("func (x *%s) %s() %s { return %s(x.%s) }", e.Name, g.Method, ret, ret, fd.GoName)
 		f.p("")

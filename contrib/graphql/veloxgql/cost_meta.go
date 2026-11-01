@@ -45,7 +45,7 @@ type metaWalk struct {
 	memo  map[metaKey]int64
 	types map[string]*ast.Type // the interned lists and non-nulls
 	steps int                  // the fields visited
-	over  bool                 // the steps passed MaxCost
+	over  bool                 // the steps passed MaxIntrospectionCost
 }
 
 // introspection is the cost of f, a field __schema or __type, on the root.
@@ -120,19 +120,32 @@ func (m *metaWalk) field(f *ast.Field, v metaValue) int64 {
 	if n, ok := m.memo[key]; ok {
 		return n
 	}
-	m.steps++
-	if limit := m.c.l.MaxCost; limit > 0 && m.steps > limit {
-		m.over = true
+	if m.step(1) {
 		return maxCost
 	}
 	n := int64(1)
 	if len(f.SelectionSet) > 0 {
-		for _, child := range m.children(f.Name, v) {
-			n = add(n, m.set(f.SelectionSet, child))
+		children := m.children(f.Name, v)
+		// A value costs its work, its selections skipped or not.
+		if m.step(len(children)) {
+			return maxCost
+		}
+		for _, child := range children {
+			n = add(n, max(m.set(f.SelectionSet, child), 1))
 		}
 	}
 	m.memo[key] = n
 	return n
+}
+
+// step counts n steps, and reports whether they passed the limit. A walk with no
+// limit, one Limits{} gives Cost, goes on: the document and the schema bound it.
+func (m *metaWalk) step(n int) bool {
+	m.steps += n
+	if limit := m.c.l.MaxIntrospectionCost; limit > 0 && m.steps > limit {
+		m.over = true
+	}
+	return m.over
 }
 
 // children are what field name of v returns, as gqlgen's Schema, Type, Field and

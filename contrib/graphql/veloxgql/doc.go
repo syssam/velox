@@ -3,7 +3,7 @@
 // the scalars, and the limits on what a client may ask for.
 //
 // What only generated code calls is in package gqlimpl, whose names are
-// stable by GeneratedCodeIsVersion4 and not by semantic versioning. Where a
+// stable by GeneratedCodeIsVersion5 and not by semantic versioning. Where a
 // name below belongs to gqlimpl it is written gqlimpl.Name.
 //
 // # IDs
@@ -155,7 +155,8 @@
 // # Limits
 //
 // Limits caps what a client may ask for: MaxPage, MaxList, MaxFilterDepth,
-// MaxFilterWidth, MaxFilterNodes, MaxOrderTerms and MaxCost. An Extension has
+// MaxFilterWidth, MaxFilterNodes, MaxOrderTerms, MaxCost, MaxIntrospectionCost,
+// MaxTokens, MaxFields and MaxBodyBytes. An Extension has
 // its own (WithLimits; a zero field is the default), which it puts in each
 // operation's context, and generated code reads them with LimitsFromContext,
 // which gives DefaultLimits() in a context without them. The Extension refuses
@@ -175,20 +176,25 @@
 // selection that @skip(if: true) or @include(if: false) leaves out, which
 // costs nothing, its condition a literal or a variable's value (a missing
 // variable's default, when it has one; a condition that is not a boolean
-// counts). Introspection costs one for each field of its response, counted over
-// the schema. The Extension refuses a
-// request over MaxCost with ErrTooCostly (CodeTooCostly, COST_LIMIT_EXCEEDED),
+// counts); the value above it is read all the same, and costs as if it selected
+// __typename. Introspection costs one for each field of its response, counted over
+// the schema, and answers to MaxIntrospectionCost. The Extension refuses a
+// request over either with ErrTooCostly (CodeTooCostly, COST_LIMIT_EXCEEDED),
 // before any resolver, so before any statement. The default MaxCost, 100000,
 // lets two levels of full connection pages through (about 20000) and not
 // three, and at most 1000 statements. A list edge costs MaxList for each parent:
 // under the defaults, posts(first: 100) { edges { node { likes { id } } } } costs
 // 100402 and is refused; raise MaxCost, or lower MaxList, to let it through.
 //
+// MaxTokens and MaxFields bound the document, before gqlgen parses or validates
+// it, which the Extension does on its own. MaxBodyBytes bounds the request's body,
+// in the handler Setup returns, the one call a server needs.
+//
 // Nothing in the package runs at program start.
 package veloxgql
 
-// GeneratedCodeIsVersion4 is referenced by every Go file velox-graphql writes,
+// GeneratedCodeIsVersion5 is referenced by every Go file velox-graphql writes,
 // so that generated code and this module fail to compile together when they
-// disagree. For generated code. It is replaced by GeneratedCodeIsVersion4 when
+// disagree. For generated code. It is replaced by GeneratedCodeIsVersion6 when
 // generated code must change.
-const GeneratedCodeIsVersion4 = true
+const GeneratedCodeIsVersion5 = true

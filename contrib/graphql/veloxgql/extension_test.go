@@ -3,7 +3,9 @@ package veloxgql_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,6 +22,8 @@ import (
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/99designs/gqlgen/graphql/handler"
+	"github.com/99designs/gqlgen/graphql/handler/extension"
+	"github.com/99designs/gqlgen/graphql/handler/lru"
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
@@ -487,13 +491,17 @@ func TestExtensionRefusesNegativeLimits(t *testing.T) {
 		t.Fatalf("zero limits: %v", err)
 	}
 	for name, set := range map[string]func(*veloxgql.Limits){
-		"MaxPage":        func(l *veloxgql.Limits) { l.MaxPage = -1 },
-		"MaxList":        func(l *veloxgql.Limits) { l.MaxList = -1 },
-		"MaxFilterDepth": func(l *veloxgql.Limits) { l.MaxFilterDepth = -1 },
-		"MaxFilterWidth": func(l *veloxgql.Limits) { l.MaxFilterWidth = -1 },
-		"MaxFilterNodes": func(l *veloxgql.Limits) { l.MaxFilterNodes = -1 },
-		"MaxOrderTerms":  func(l *veloxgql.Limits) { l.MaxOrderTerms = -1 },
-		"MaxCost":        func(l *veloxgql.Limits) { l.MaxCost = -1 },
+		"MaxPage":              func(l *veloxgql.Limits) { l.MaxPage = -1 },
+		"MaxList":              func(l *veloxgql.Limits) { l.MaxList = -1 },
+		"MaxFilterDepth":       func(l *veloxgql.Limits) { l.MaxFilterDepth = -1 },
+		"MaxFilterWidth":       func(l *veloxgql.Limits) { l.MaxFilterWidth = -1 },
+		"MaxFilterNodes":       func(l *veloxgql.Limits) { l.MaxFilterNodes = -1 },
+		"MaxOrderTerms":        func(l *veloxgql.Limits) { l.MaxOrderTerms = -1 },
+		"MaxCost":              func(l *veloxgql.Limits) { l.MaxCost = -1 },
+		"MaxIntrospectionCost": func(l *veloxgql.Limits) { l.MaxIntrospectionCost = -1 },
+		"MaxTokens":            func(l *veloxgql.Limits) { l.MaxTokens = -1 },
+		"MaxFields":            func(l *veloxgql.Limits) { l.MaxFields = -1 },
+		"MaxBodyBytes":         func(l *veloxgql.Limits) { l.MaxBodyBytes = -1 },
 	} {
 		var l veloxgql.Limits
 		set(&l)
@@ -1029,5 +1037,177 @@ func TestTooCostlyRunsNothing(t *testing.T) {
 	}
 	if stmts, txs := l.take(); len(stmts) != 0 || len(txs) != 0 {
 		t.Errorf("a refused mutation ran %v, %v", stmts, txs)
+	}
+}
+
+// TestIntrospectionLimit: introspection answers to MaxIntrospectionCost alone, and
+// data to MaxCost alone, so that neither loosens the other. Both run no statement
+// when refused.
+func TestIntrospectionLimit(t *testing.T) {
+	db, l := handlerDB(t)
+	const meta = `{ __type(name: "Query") { name } }` // 2
+	over := veloxgql.WithLimits(veloxgql.Limits{MaxIntrospectionCost: 1})
+	got := post(t, context.Background(), serve(db, handlerResolvers(db, nil), over), meta)
+	const want = `{"errors":[{"message":"veloxgql: request is too costly: its introspection costs 2, and the most is 1","extensions":{"code":"COST_LIMIT_EXCEEDED"}}],"data":null}`
+	if got != want {
+		t.Errorf("over MaxIntrospectionCost:\n got %s\nwant %s", got, want)
+	}
+	tiny := veloxgql.WithLimits(veloxgql.Limits{MaxCost: 1})
+	if got := post(t, context.Background(), serve(db, handlerResolvers(db, nil), tiny), meta); strings.Contains(got, "COST_LIMIT_EXCEEDED") {
+		t.Errorf("a MaxCost of 1 limits introspection: %s", got)
+	}
+	big := veloxgql.WithLimits(veloxgql.Limits{MaxCost: 202, MaxIntrospectionCost: 1 << 40})
+	got = post(t, context.Background(), serve(db, handlerResolvers(db, nil), big), `{ people(first: 30) { totalCount __typename } }`)
+	if !strings.Contains(got, "COST_LIMIT_EXCEEDED") {
+		t.Errorf("a large MaxIntrospectionCost loosened MaxCost: %s", got)
+	}
+	if stmts, _ := l.take(); len(stmts) != 0 {
+		t.Errorf("refused requests ran %v", stmts)
+	}
+}
+
+// TestDocumentRefused: the Extension alone, with no Setup, refuses a document over
+// MaxTokens or MaxFields before gqlgen parses or validates it, and says of a syntax
+// error what gqlgen says.
+func TestDocumentRefused(t *testing.T) {
+	db, l := handlerDB(t)
+	const tooMany = `{"errors":[{"message":"veloxgql: request is too large: it has 3 fields, and the most is 2","extensions":{"code":"BAD_USER_INPUT"}}],"data":null}`
+	for _, c := range []struct {
+		name  string
+		lim   veloxgql.Limits
+		query string
+		want  string
+	}{
+		{"over MaxFields", veloxgql.Limits{MaxFields: 2}, `{ a: count b: count c: count }`, tooMany},
+		{"in a fragment", veloxgql.Limits{MaxFields: 2}, `{ ...F } fragment F on Query { a: count b: count c: count }`, tooMany},
+		{"at MaxFields", veloxgql.Limits{MaxFields: 2}, `{ a: count b: count }`, `{"data":`},
+		{"over MaxTokens", veloxgql.Limits{MaxTokens: 3}, `{ a b c d }`, `"code":"GRAPHQL_PARSE_FAILED"`},
+		{"a syntax error", veloxgql.Limits{}, `{`, `"code":"GRAPHQL_PARSE_FAILED"`},
+	} {
+		srv := serve(db, handlerResolvers(db, nil), veloxgql.WithLimits(c.lim))
+		if got := post(t, context.Background(), srv, c.query); !strings.Contains(got, c.want) {
+			t.Errorf("%s: %s, want %s", c.name, got, c.want)
+		}
+		if stmts, _ := l.take(); len(stmts) != 0 && c.want != `{"data":` {
+			t.Errorf("%s: refused, it ran %v", c.name, stmts)
+		}
+	}
+}
+
+// TestDocumentMergePairs: fields under one response name count in pairs, however
+// they merge: at MaxFields 12, 60 pairs.
+func TestDocumentMergePairs(t *testing.T) {
+	db, _ := handlerDB(t)
+	srv := serve(db, handlerResolvers(db, nil), veloxgql.WithLimits(veloxgql.Limits{MaxFields: 12}))
+	a := func(n int) string { return strings.Repeat("a: count ", n) }
+	for _, c := range []struct {
+		name, query string
+		refused     bool
+	}{
+		{"11 siblings, 55 pairs", `{ ` + a(11) + ` }`, false},
+		{"12 siblings, 66 pairs", `{ ` + a(12) + ` }`, true},
+		{"in an inline fragment", `{ ... { ` + a(12) + ` } }`, true},
+		{"through two fragments", `{ ...A ...B } fragment A on Query { ` + a(6) + ` } fragment B on Query { ` + a(6) + ` }`, true},
+		{"a fragment spread twice counts once", `{ ...A ...A } fragment A on Query { ` + a(8) + ` }`, false},
+		{"other response names", `{ ` + a(6) + strings.Repeat("b: count ", 6) + ` }`, false},
+	} {
+		got := post(t, context.Background(), srv, c.query)
+		if refused := strings.Contains(got, "over 60 pairs"); refused != c.refused {
+			t.Errorf("%s: %s", c.name, got)
+		}
+	}
+	// Fragments that spread two of the next reach 2^n fields, in a document of few.
+	var dag strings.Builder
+	for i := range 40 {
+		fmt.Fprintf(&dag, "fragment F%d on Query { x: __schema { ...F%d } y: __schema { ...F%d } } ", i, i+1, i+1)
+	}
+	srv = serve(db, handlerResolvers(db, nil), veloxgql.WithLimits(veloxgql.Limits{MaxTokens: 10000}))
+	if got := post(t, context.Background(), srv, `{ ...F0 } `+dag.String()+`fragment F40 on Query { a: count }`); !strings.Contains(got, "its fragments spread to over 200000 fields") {
+		t.Errorf("a DAG of fragments: %.300s", got)
+	}
+}
+
+// TestDocumentAndAPQ: a document refused is not what APQ stores, the Extension
+// being first; one APQ fills from its cache was checked when it was stored.
+func TestDocumentAndAPQ(t *testing.T) {
+	db, _ := handlerDB(t)
+	es := testSchema(handlerResolvers(db, nil))
+	srv := handler.New(es)
+	srv.Use(veloxgql.NewExtension(db, veloxgql.WithLimits(veloxgql.Limits{MaxFields: 2})))
+	srv.Use(extension.AutomaticPersistedQuery{Cache: lru.New[string](10)})
+	srv.AddTransport(transport.POST{})
+	const query = `{ a: count b: count c: count }`
+	sum := sha256.Sum256([]byte(query))
+	apq := func(q string) string {
+		ext := `"extensions":{"persistedQuery":{"version":1,"sha256Hash":"` + hex.EncodeToString(sum[:]) + `"}}`
+		body := `{` + ext + `}`
+		if q != "" {
+			body = `{"query":"` + q + `",` + ext + `}`
+		}
+		req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, req)
+		return w.Body.String()
+	}
+	if got := apq(query); !strings.Contains(got, "BAD_USER_INPUT") {
+		t.Errorf("sent whole: %s", got)
+	}
+	if got := apq(""); !strings.Contains(got, "PersistedQueryNotFound") {
+		t.Errorf("sent by its hash: %s", got)
+	}
+}
+
+// TestSetup: a server Setup made has the extension, the presenter and the limits
+// on tokens and on the body, of either kind of body.
+func TestSetup(t *testing.T) {
+	db, _ := handlerDB(t)
+	srv := handler.New(testSchema(handlerResolvers(db, nil)))
+	h := veloxgql.Setup(srv, db, veloxgql.WithLimits(veloxgql.Limits{MaxBodyBytes: 100, MaxFields: 2, MaxTokens: 1000}))
+	srv.AddTransport(transport.POST{})
+	do := func(body io.Reader, length int64) (int, string) {
+		req := httptest.NewRequest(http.MethodPost, "/", body)
+		req.Header.Set("Content-Type", "application/json")
+		req.ContentLength = length
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		return w.Code, w.Body.String()
+	}
+	ok := `{"query":"{ count }"}`
+	if code, got := do(strings.NewReader(ok), int64(len(ok))); code != http.StatusOK || !strings.Contains(got, `"count"`) {
+		t.Errorf("under the limits: %d %s", code, got)
+	}
+	if code, got := do(strings.NewReader(ok), -1); code != http.StatusOK || !strings.Contains(got, `"count"`) {
+		t.Errorf("of unknown length: %d %s", code, got)
+	}
+	long := `{"query":"{ count }","extensions":{"x":"` + strings.Repeat("x", 100) + `"}}`
+	const want = `{"data":null,"errors":[{"extensions":{"code":"BAD_USER_INPUT"},"message":"request is too large: its body is over 100 bytes"}]}` + "\n"
+	for _, length := range []int64{int64(len(long)), -1} {
+		if code, got := do(strings.NewReader(long), length); code != http.StatusRequestEntityTooLarge || got != want {
+			t.Errorf("length %d: %d %s", length, code, got)
+		}
+	}
+	// A length that lies, under the limit, is cut by it.
+	if code, got := do(strings.NewReader(long), 50); code == http.StatusOK && !strings.Contains(got, "errors") {
+		t.Errorf("a lying length: %d %s", code, got)
+	}
+	// ErrorPresenter's: gqlgen's own would show "veloxgql: " too.
+	over := `{"query":"{ a: count b: count c: count }"}`
+	if _, got := do(strings.NewReader(over), int64(len(over))); got != `{"errors":[{"message":"request is too large: it has 3 fields, and the most is 2","extensions":{"code":"BAD_USER_INPUT"}}],"data":null}` {
+		t.Errorf("over MaxFields: %s", got)
+	}
+}
+
+// BenchmarkCheckDocument is what the Extension adds to each request: a parse and
+// a walk of GraphiQL's query, which gqlgen's cache would have spared.
+func BenchmarkCheckDocument(b *testing.B) {
+	db := &velox.DB{}
+	e := veloxgql.NewExtension(db)
+	p := &graphql.RawParams{Query: graphiQL}
+	b.ReportAllocs()
+	for b.Loop() {
+		if err := e.MutateOperationParameters(context.Background(), p); err != nil {
+			b.Fatal(err)
+		}
 	}
 }

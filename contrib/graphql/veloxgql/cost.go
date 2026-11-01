@@ -32,10 +32,12 @@ const statementCost = 100
 //     literal or a variable's value (a missing variable's default, when it
 //     has one); one whose condition is not a boolean (a variable that is
 //     missing with no default, or null) counts, as the cost is an upper
-//     bound;
+//     bound. The value above it is read all the same: an object whose every
+//     selection is left out costs what one that selects __typename does;
 //   - __schema and __type cost what they select, counted over the schema
 //     itself: one for each field of the response. A walk that passes
-//     l.MaxCost stops, saturated, so it does no more work than the limit.
+//     l.MaxIntrospectionCost stops, saturated, so it does no more work than the
+//     limit.
 //
 // The statements part is what the request sends, and takes no multiplier, as
 // the rows of a batch share one statement however many parents they have:
@@ -45,18 +47,32 @@ const statementCost = 100
 //   - an input object argument (a where, an orderBy, a mutation's input) adds
 //     its size at each use: one for each object and value in it, nested inputs
 //     and lists included, read from the variables. A variable used twice counts
-//     twice.
+//     twice;
+//   - on a mutation, an input object adds a statement for the row it reads back,
+//     two for a non-empty <edge>IDs, add<Edge>IDs or remove<Edge>IDs, one for an
+//     <edge>ID, and three for a clear<Edge>: true, a page of its links, the targets
+//     and the delete, a page being up to MaxPage. An application's own mutation
+//     that names its input fields so counts the same.
 //
 // Sums and products saturate at 1<<62 (math.MaxInt where int is smaller),
 // checked before they are computed, so huge arguments and many aliases cannot
 // wrap the cost to a small or negative number. A named
 // fragment is costed once for each page size it is spread under, so the walk is
 // linear in the document. schema is the server's; op is a parsed and validated
-// operation. Extension refuses a request whose Cost is over Limits.MaxCost
-// before any statement runs.
+// operation. Cost is the sum of what Extension holds to two limits, before any
+// statement runs: the introspection part to Limits.MaxIntrospectionCost, and the
+// rest to Limits.MaxCost.
 func Cost(schema *ast.Schema, op *ast.OperationDefinition, vars map[string]any, l Limits) int {
+	t := costOf(schema, op, vars, l)
+	// On a platform whose int is 32 bits a cost over math.MaxInt is
+	// math.MaxInt, which is over any limit.
+	return int(min(add(add(t.rows, t.statements), t.meta), math.MaxInt))
+}
+
+// costOf is Cost, by its parts.
+func costOf(schema *ast.Schema, op *ast.OperationDefinition, vars map[string]any, l Limits) cost {
 	if schema == nil || op == nil {
-		return 0
+		return cost{}
 	}
 	c := &coster{schema: schema, vars: vars, l: l, frags: map[fragKey]cost{}, sizes: map[string]int64{}}
 	var root *ast.Definition
@@ -68,17 +84,16 @@ func Cost(schema *ast.Schema, op *ast.OperationDefinition, vars map[string]any, 
 	default:
 		root = schema.Query
 	}
-	t := c.set(op.SelectionSet, root, 0)
-	// On a platform whose int is 32 bits a cost over math.MaxInt is
-	// math.MaxInt, which is over any limit.
-	return int(min(add(t.rows, t.statements), math.MaxInt))
+	return c.set(op.SelectionSet, root, 0)
 }
 
-// cost is a selection's cost, in its two parts: a multiplier applies to rows
-// alone.
-type cost struct{ rows, statements int64 }
+// cost is a selection's cost, by its parts: a multiplier applies to rows alone,
+// and meta, introspection's, has its own limit.
+type cost struct{ rows, statements, meta int64 }
 
-func (a cost) plus(b cost) cost { return cost{add(a.rows, b.rows), add(a.statements, b.statements)} }
+func (a cost) plus(b cost) cost {
+	return cost{add(a.rows, b.rows), add(a.statements, b.statements), add(a.meta, b.meta)}
+}
 
 // fragKey is a named fragment under a page size: one on a connection's type
 // costs its edges by the page of the connection it is spread in.
@@ -186,7 +201,7 @@ func (c *coster) spread(s *ast.FragmentSpread, page int64) cost {
 func (c *coster) field(f *ast.Field, parent *ast.Definition, page int64) cost {
 	switch f.Name {
 	case "__schema", "__type":
-		return cost{rows: c.introspection(f)}
+		return cost{meta: c.introspection(f)}
 	case "__typename":
 		return cost{rows: 1}
 	}
@@ -208,12 +223,21 @@ func (c *coster) field(f *ast.Field, parent *ast.Definition, page int64) cost {
 		childPage = c.pageOf(f)
 	}
 	children := c.set(f.SelectionSet, child, childPage)
+	if len(f.SelectionSet) > 0 {
+		// A directive leaves a selection out of the response, and each value it
+		// was on is read all the same.
+		children.rows = max(children.rows, 1)
+	}
 	n := cost{
 		rows:       add(1, mul(children.rows, c.multiplier(f, def, parent, child, page))),
 		statements: add(children.statements, c.inputs(f, def)),
+		meta:       children.meta,
 	}
 	if c.runsStatement(f, parent, child) {
 		n.statements = add(n.statements, statementCost)
+	}
+	if parent != nil && parent == c.schema.Mutation {
+		n.statements = add(n.statements, c.writes(f, def))
 	}
 	return n
 }
@@ -292,6 +316,46 @@ func (c *coster) inputs(f *ast.Field, def *ast.FieldDefinition) int64 {
 		if a := f.Arguments.ForName(ad.Name); a != nil {
 			sum = add(sum, c.size(a.Value))
 		}
+	}
+	return sum
+}
+
+// writes is what the input objects of f, a mutation's field, make it send beyond
+// its one statement.
+func (c *coster) writes(f *ast.Field, def *ast.FieldDefinition) int64 {
+	var sum int64
+	for _, ad := range def.Arguments {
+		named := ad.Type
+		for named.Elem != nil {
+			named = named.Elem
+		}
+		d := c.schema.Types[named.NamedType]
+		a := f.Arguments.ForName(ad.Name)
+		if d == nil || d.Kind != ast.InputObject || a == nil || a.Value == nil {
+			continue
+		}
+		v, err := a.Value.Value(c.vars)
+		m, ok := v.(map[string]any)
+		if err != nil || !ok {
+			continue
+		}
+		n := int64(1) // the row read back
+		for k, val := range m {
+			switch {
+			case strings.HasPrefix(k, "clear") && len(k) > 5:
+				// clear<Field> of a column is part of the UPDATE.
+				if val == true && d.Fields.ForName(strings.ToLower(k[5:6])+k[6:]) == nil {
+					n += 3
+				}
+			case strings.HasSuffix(k, "IDs"):
+				if list, ok := val.([]any); ok && len(list) > 0 {
+					n += 2
+				}
+			case strings.HasSuffix(k, "ID") && val != nil:
+				n++
+			}
+		}
+		sum = add(sum, mul(n, statementCost))
 	}
 	return sum
 }

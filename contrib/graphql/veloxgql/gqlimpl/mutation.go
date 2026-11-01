@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/99designs/gqlgen/graphql"
+	"github.com/vektah/gqlparser/v2/ast"
+
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/internal/english"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
@@ -266,6 +269,51 @@ func NotZero[V any](at string, v V) error {
 		return InputErrorf("%s: invalid value: the empty value cannot be stored on create, where it means the field's default; leave the field out, or set it with an update", at)
 	}
 	return nil
+}
+
+// NotNull refuses a null the client gave the input field name, of the argument
+// arg of the running field, on a Nillable field that has a Default: an insert
+// would store the Default in its place, as it does for a field left out, and an
+// input's nil pointer cannot tell them apart. So NotNull reads the request. The
+// client gets BAD_USER_INPUT, naming at. Called outside a gqlgen field, or from a
+// field whose argument has another name, it finds no null and refuses nothing. For
+// generated code.
+func NotNull(ctx context.Context, at, arg, name string) error {
+	fc := graphql.GetFieldContext(ctx)
+	if fc == nil || fc.Field.Field == nil || !graphql.HasOperationContext(ctx) {
+		return nil
+	}
+	a := fc.Field.Arguments.ForName(arg)
+	if a == nil || !givenNull(a.Value, name, graphql.GetOperationContext(ctx).Variables) {
+		return nil
+	}
+	return InputErrorf("%s: invalid value: null cannot be stored on create, where it means the field's default; leave the field out, or clear it with an update", at)
+}
+
+// givenNull reports whether the input object v, a literal or a variable, gives
+// name as null: a variable left out gives nothing.
+func givenNull(v *ast.Value, name string, vars map[string]any) bool {
+	if v == nil {
+		return false
+	}
+	switch v.Kind {
+	case ast.Variable:
+		m, _ := vars[v.Raw].(map[string]any)
+		x, ok := m[name]
+		return ok && x == nil
+	case ast.ObjectValue:
+		c := v.Children.ForName(name)
+		switch {
+		case c == nil:
+			return false
+		case c.Kind == ast.NullValue:
+			return true
+		case c.Kind == ast.Variable:
+			x, ok := vars[c.Raw]
+			return ok && x == nil
+		}
+	}
+	return false
 }
 
 // WriteError is err from a write of entity (the name velox reports, as

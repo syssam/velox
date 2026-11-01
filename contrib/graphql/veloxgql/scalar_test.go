@@ -8,9 +8,40 @@ import (
 	"time"
 
 	"github.com/99designs/gqlgen/graphql"
+	"github.com/vektah/gqlparser/v2/ast"
+	"github.com/vektah/gqlparser/v2/parser"
 
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
 )
+
+// TestJSONEmptyLiteral: a literal [] reaches UnmarshalGQL as gqlparser's nil
+// slice, and stays [] wherever it is, as it does through a variable.
+func TestJSONEmptyLiteral(t *testing.T) {
+	for _, c := range []struct{ query, want string }{
+		{`{ f(j: []) }`, `[]`},
+		{`{ f(j: {}) }`, `{}`},
+		{`{ f(j: [[]]) }`, `[[]]`},
+		{`{ f(j: {a: [], b: [{c: []}]}) }`, `{"a":[],"b":[{"c":[]}]}`},
+		{`{ f(j: null) }`, `null`},
+		{`{ f(j: [1]) }`, `[1]`},
+	} {
+		doc, err := parser.ParseQuery(&ast.Source{Input: c.query})
+		if err != nil {
+			t.Fatal(err)
+		}
+		v, err := doc.Operations[0].SelectionSet[0].(*ast.Field).Arguments[0].Value.Value(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var j veloxgql.JSON
+		if err := j.UnmarshalGQL(v); err != nil {
+			t.Fatal(err)
+		}
+		if string(j) != c.want {
+			t.Errorf("%s: %s, want %s", c.query, j, c.want)
+		}
+	}
+}
 
 // scalar is a pointer to a veloxgql scalar, as gqlgen holds one to unmarshal
 // into.

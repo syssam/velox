@@ -53,7 +53,7 @@ func (uniqueOptionalOK) Indexes() []schema.Index {
 }
 
 func TestBuildUniqueOptionalRefused(t *testing.T) {
-	const why = "an Optional field that is Unique holds one value on every unset row, so the second row without it fails; make it Nillable, whose NULLs do not collide"
+	const why = "an Optional field that is Unique holds one value on every unset row, so the second row without it fails; make it Nillable, whose NULLs do not collide, or give it a DefaultFunc that a value a hook fills can stand in for, as velox-gen cannot see a hook"
 	for _, c := range []struct {
 		s    schema.Interface
 		want string

@@ -23,7 +23,9 @@ import (
 //	srv := handler.New(graph.NewExecutableSchema(cfg))
 //	srv.Use(veloxgql.NewExtension(db))
 //	srv.SetErrorPresenter(veloxgql.ErrorPresenter(nil))
-//	srv.SetParserTokenLimit(15000)
+//
+// or let Setup do that, with a limit on the body too, which no extension can
+// set.
 //
 // Every operation's context gets the DB, which DBFromContext reads, and the
 // extension's limits, which LimitsFromContext reads, so queries and
@@ -75,19 +77,26 @@ import (
 // rows, and aliases repeat a field as many times as the client writes it.
 // Limits.MaxCost bounds the whole request. Before any resolver runs, the
 // extension computes the operation's Cost, which multiplies by first and
-// last, counts every alias, every statement and every branch of a fragment, and
-// counts introspection by the fields of its response; a request over MaxCost
-// fails with ErrTooCostly, the code CodeTooCostly and data null, and sends no
-// statement. It reads the schema the server's Use gives Validate; gqlgen's
-// extension.FixedComplexityLimit counts fields, not rows, and is not needed with
-// it. Parsing runs before the extension, which cannot limit it, and gqlgen sets no
-// limit: give the server one, as srv.SetParserTokenLimit(15000).
+// last, counts every alias, every statement and every branch of a fragment; a
+// request over MaxCost, or whose introspection, counted by the fields of its
+// response, is over MaxIntrospectionCost, fails with ErrTooCostly, the code
+// CodeTooCostly and data null, and sends no statement. It reads the schema the
+// server's Use gives Validate; gqlgen's extension.FixedComplexityLimit counts
+// fields, not rows, and is not needed with it.
+//
+// Before gqlgen parses a request, whose validation is quadratic in the fields
+// that share a response name, the extension parses it and refuses one over
+// MaxTokens or MaxFields, on every transport. That is a second parse, which a
+// query cache of gqlgen's does not spare. Use it before
+// extension.AutomaticPersistedQuery, so that the cache never stores a refused
+// query.
 //
 // The server's Use panics when the DB is nil, when a limit is negative, or
 // when WithTxOptions asks for velox.TxRetrySerializable: Validate refuses
 // it, naming the limit or the option.
 //
-// The extension mutates the operation's context, to refuse a request over
+// The extension mutates the operation's parameters, to refuse a document over
+// MaxTokens or MaxFields; the operation's context, to refuse a request over
 // MaxCost; intercepts the operation, to put the DB and the limits in
 // its context, which the executable schema runs in; the response, because a
 // mutation's resolvers run while gqlgen makes its response (inside the
@@ -195,11 +204,12 @@ func (e *Extension) NewContext(ctx context.Context) context.Context {
 }
 
 var (
-	_ graphql.HandlerExtension        = (*Extension)(nil)
-	_ graphql.OperationContextMutator = (*Extension)(nil)
-	_ graphql.OperationInterceptor    = (*Extension)(nil)
-	_ graphql.ResponseInterceptor     = (*Extension)(nil)
-	_ graphql.FieldInterceptor        = (*Extension)(nil)
+	_ graphql.HandlerExtension          = (*Extension)(nil)
+	_ graphql.OperationParameterMutator = (*Extension)(nil)
+	_ graphql.OperationContextMutator   = (*Extension)(nil)
+	_ graphql.OperationInterceptor      = (*Extension)(nil)
+	_ graphql.ResponseInterceptor       = (*Extension)(nil)
+	_ graphql.FieldInterceptor          = (*Extension)(nil)
 )
 
 // mutationKey is the context key of a mutation operation's *mutation.
@@ -245,6 +255,17 @@ func (e *Extension) Validate(es graphql.ExecutableSchema) error {
 	return nil
 }
 
+// MutateOperationParameters implements graphql.OperationParameterMutator: it
+// refuses a document over MaxTokens or MaxFields. gqlgen runs it before it parses
+// or validates, whichever the transport. An empty query, that an APQ extension
+// after this one fills, passed here when it was stored.
+func (e *Extension) MutateOperationParameters(_ context.Context, p *graphql.RawParams) *gqlerror.Error {
+	if p.Query == "" {
+		return nil
+	}
+	return checkDocument(p.Query, e.limits)
+}
+
 // MutateOperationContext implements graphql.OperationContextMutator: it
 // refuses a request whose Cost is over MaxCost with ErrTooCostly. gqlgen runs
 // it after validation and before any resolver, so no statement is sent.
@@ -252,16 +273,16 @@ func (e *Extension) MutateOperationContext(_ context.Context, rc *graphql.Operat
 	if e.schema == nil || rc.Operation == nil {
 		return nil
 	}
-	cost := Cost(e.schema, rc.Operation, rc.Variables, e.limits)
-	// A negative cost cannot come from Cost; it is refused as saturated.
-	if cost >= 0 && cost <= e.limits.MaxCost {
+	c := costOf(e.schema, rc.Operation, rc.Variables, e.limits)
+	var msg string
+	if meta := c.meta; meta > int64(e.limits.MaxIntrospectionCost) {
+		msg = fmt.Sprintf("%v: its introspection costs %d, and the most is %d", ErrTooCostly, meta, e.limits.MaxIntrospectionCost)
+	} else if data := add(c.rows, c.statements); data > int64(e.limits.MaxCost) {
+		msg = fmt.Sprintf("%v: it costs %d, and the most is %d", ErrTooCostly, data, e.limits.MaxCost)
+	} else {
 		return nil
 	}
-	err := &gqlcore.Error{
-		Code: CodeTooCostly,
-		Msg:  fmt.Sprintf("%v: it costs %d, and the most is %d", ErrTooCostly, cost, e.limits.MaxCost),
-		Err:  ErrTooCostly,
-	}
+	err := &gqlcore.Error{Code: CodeTooCostly, Msg: msg, Err: ErrTooCostly}
 	return &gqlerror.Error{Err: err, Message: err.Error(), Extensions: err.Extensions()}
 }
 

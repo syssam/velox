@@ -919,7 +919,7 @@ const CodeInternal
 const CodeNotFound
 const CodeTooCostly
 const CodeUnauthenticated
-const GeneratedCodeIsVersion4
+const GeneratedCodeIsVersion5
 const OrderDirectionAsc OrderDirection
 const OrderDirectionDesc OrderDirection
 func (*Extension) ExtensionName() string
@@ -935,6 +935,7 @@ func (d OrderDirection) String() string
 func (e *Extension) InterceptOperation(ctx context.Context, next graphql.OperationHandler) graphql.ResponseHandler
 func (e *Extension) InterceptResponse(ctx context.Context, next graphql.ResponseHandler) *graphql.Response
 func (e *Extension) MutateOperationContext(_ context.Context, rc *graphql.OperationContext) *gqlerror.Error
+func (e *Extension) MutateOperationParameters(_ context.Context, p *graphql.RawParams) *gqlerror.Error
 func (e *Extension) NewContext(ctx context.Context) context.Context
 func (e *Extension) Validate(es graphql.ExecutableSchema) error
 func (j *JSON) UnmarshalGQL(v any) error
@@ -965,6 +966,7 @@ func MarshalUint(u uint) graphql.Marshaler
 func MarshalUint64(u uint64) graphql.Marshaler
 func NewExtension(db *velox.DB, opts ...Option) *Extension
 func OnCanceled(f func(ctx context.Context, err error)) PresenterOption
+func Setup(srv Server, db *velox.DB, opts ...Option) http.Handler
 func UnmarshalBytes(v any) ([]byte, error)
 func UnmarshalFloat32(v any) (float32, error)
 func UnmarshalTime(v any) (time.Time, error)
@@ -980,12 +982,13 @@ type Cursor struct { Type string Terms []CursorTerm Key any }
 type CursorTerm struct { Field string Direction OrderDirection Value any }
 type Extension struct { }
 type JSON json.RawMessage
-type Limits struct { MaxPage int MaxList int MaxFilterDepth int MaxFilterWidth int MaxFilterNodes int MaxOrderTerms int MaxCost int }
+type Limits struct { MaxPage int MaxList int MaxFilterDepth int MaxFilterWidth int MaxFilterNodes int MaxOrderTerms int MaxCost int MaxIntrospectionCost int MaxTokens int MaxFields int MaxBodyBytes int }
 type Noder interface { IsNode() IDGQL() string }
 type Option struct { }
 type OrderDirection string
 type PageInfo struct { HasNextPage bool HasPreviousPage bool StartCursor *Cursor EndCursor *Cursor }
 type PresenterOption struct { }
+type Server interface { http.Handler Use(graphql.HandlerExtension) SetErrorPresenter(graphql.ErrorPresenterFunc) SetParserTokenLimit(int) SetDisableSuggestion(bool) }
 type Time time.Time
 type UUID [16]byte
 type Uint64 uint64
@@ -997,6 +1000,7 @@ var ErrFilterTooLarge
 var ErrFilterTooWide
 var ErrNoDB
 var ErrPageTooLarge
+var ErrRequestTooLarge
 var ErrTooCostly
 var ErrWrongIDType
 
