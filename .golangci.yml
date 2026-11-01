@@ -7,7 +7,7 @@ linters:
     rules:
       # gqlgen's output, which velox does not write and CI regenerates and diffs.
       - path: ^examples/graphql/graph/generated\.go$
-        linters: [staticcheck]
+        linters: [staticcheck, modernize]
       # The engine's exports are for the root package; its public types are documented
       # on their aliases in the root, which TestAliasDocsListMembers checks, or in veloxtype.
       # Each of these is documented where it is declared, in veloxtype. Revive checks a

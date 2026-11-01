@@ -220,7 +220,7 @@ func TestAuth(t *testing.T) {
 
 		// The scheme's name is case-insensitive, and a bare token is not a scheme.
 		for header, want := range map[string]int{"bearer " + second.Token: 200, second.Token: 401, "Basic " + second.Token: 401} {
-			req, err := http.NewRequestWithContext(t.Context(), "GET", c.url+"/me", nil)
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, c.url+"/me", nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -558,7 +558,7 @@ func TestBadRequests(t *testing.T) {
 			`{"org":"` + strings.Repeat("x", maxBody) + `"}`: 413,
 			`{"org":"acme"} {"org":"other"}`:                 400,
 		} {
-			req, err := http.NewRequestWithContext(t.Context(), "POST", c.url+"/login", strings.NewReader(body))
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, c.url+"/login", strings.NewReader(body))
 			if err != nil {
 				t.Fatal(err)
 			}
