@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"io"
+	"math"
 	"strconv"
 	"time"
 
@@ -164,15 +165,17 @@ func (u Uint64) MarshalGQL(w io.Writer) {
 }
 
 // UnmarshalGQL sets u from v, a decimal string. A number is an error: the
-// scalar is a string both ways.
+// scalar is a string both ways. So is one over 2^63-1, which database/sql refuses to
+// send, as its default converter does a uint64 with the high bit set: the client's
+// error here, an internal one at the statement. MarshalGQL still writes any value.
 func (u *Uint64) UnmarshalGQL(v any) error {
 	s, ok := v.(string)
 	if !ok {
 		return gqlcore.InputErrorf("Uint64 must be a decimal string")
 	}
 	n, err := strconv.ParseUint(s, 10, 64)
-	if err != nil {
-		return gqlcore.InputErrorf("Uint64 must be a decimal string of at most 2^64-1")
+	if err != nil || n > math.MaxInt64 {
+		return gqlcore.InputErrorf("Uint64 must be a decimal string of at most 9223372036854775807")
 	}
 	*u = Uint64(n)
 	return nil
