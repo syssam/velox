@@ -31,8 +31,9 @@ type common[B any] struct {
 // whose zero value "" is no value; an Optional bytes field with neither,
 // whose zero value nil binds NULL; an Optional time field with neither, whose
 // zero time MySQL's strict mode refuses; and an Optional edge field that is
-// not Nillable, whose zero value is no row's key. A field that is unique only
-// when present needs Nillable: every unset row holds the same zero value.
+// not Nillable, whose zero value is no row's key. It refuses a Unique Optional
+// field that is not Nillable, unless a DefaultFunc or a SchemaDefault gives each
+// row its own value: every unset row would hold one value, and the second fail.
 func (c common[B]) Optional() B { c.d.Optional = true; return c.self }
 
 // Nillable makes the column NULL-able and the Go field a pointer, nil for

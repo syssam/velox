@@ -939,6 +939,9 @@ func (b *builder) validateFields(e *Entity) {
 		if (len(f.Default) > 0 || f.DefaultFunc) && !f.Nillable && !f.Tenant && (f.Type == "bool" || numeric[f.Type]) {
 			b.fail(36, e.Name, fieldLoc(f), "a Default or DefaultFunc on a bool or number that is not Nillable cannot be told from unset; make the field Nillable or drop the Default")
 		}
+		if b.keyEdges[f] == nil && uniqueUnset(e, f) { // a bound key is rule 38's
+			b.fail(54, e.Name, fieldLoc(f), "an Optional field that is Unique holds one value on every unset row, so the second row without it fails; make it Nillable, whose NULLs do not collide")
+		}
 		for _, r := range optionalNeeds {
 			if f.Type == r.typ && f.Optional && !f.Nillable && len(f.Default) == 0 && (!r.funcOK || !f.DefaultFunc) {
 				b.fail(r.rule, e.Name, fieldLoc(f), "an Optional %s needs a Default or Nillable", r.noun)
@@ -990,6 +993,20 @@ func (b *builder) validateFields(e *Entity) {
 			b.fail(22, e.Name, fieldLoc(id), "the ID cannot be of type %s", id.Type)
 		}
 	}
+}
+
+// uniqueUnset reports whether every unset row of e holds one value of f, and a
+// unique index of f alone refuses the second: f is Optional, not Nillable, and
+// nothing gives each row its own value (a DefaultFunc, or the database's
+// SchemaDefault, may). A partial index need not cover the unset rows, and a
+// JSON field cannot be Unique (rule 41).
+func uniqueUnset(e *Entity, f *Field) bool {
+	if !f.Optional || f.Nillable || f.DefaultFunc || len(f.SchemaDefault) > 0 || f.Type == "json" {
+		return false
+	}
+	return f.Unique || slices.ContainsFunc(e.Indexes, func(ix *Index) bool {
+		return ix.Unique && ix.Where == "" && len(ix.Columns) == 1 && ix.Columns[0] == f.Column
+	})
 }
 
 func (b *builder) validateEnum(e *Entity, f *Field) {
