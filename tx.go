@@ -52,9 +52,10 @@ func TxRetries(opts ...TxOption) int { return engine.TxRetries(opts...) }
 // begins a transaction of its own. A statement on tx under it still runs in
 // the transaction. On a context without the mark it returns ctx.
 //
-// A statement on db under it needs a second connection while the
-// transaction holds one: on a pool of one connection, as SQLite often has,
-// it waits until the transaction ends or its deadline passes.
+// A statement on db under it needs a second connection while the transaction
+// holds one. On a pool of one connection, as SQLite often has, it fails on the
+// goroutine running fn, which that connection waits for, and on another goroutine
+// waits until the transaction ends or its deadline passes.
 func WithoutTx(ctx context.Context) context.Context { return engine.WithoutTx(ctx) }
 
 // TxAround is a hook that wraps a transaction.

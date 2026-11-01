@@ -143,9 +143,10 @@ func savepointErr(sctx context.Context, what string, err error) error {
 // begins a transaction of its own. A statement on tx under it still runs in
 // the transaction. On a context without the mark it returns ctx.
 //
-// A statement on db under it needs a second connection while the
-// transaction holds one: on a pool of one connection, as SQLite often has,
-// it waits until the transaction ends or its deadline passes.
+// A statement on db under it needs a second connection while the transaction
+// holds one. On a pool of one connection, as SQLite often has, it fails on the
+// goroutine running fn, which that connection waits for, and on another goroutine
+// waits until the transaction ends or its deadline passes.
 func WithoutTx(ctx context.Context) context.Context {
 	if ctx.Value(txKey{}) == nil {
 		return ctx
@@ -197,6 +198,11 @@ func applyTxOption(opt TxOption, o *txOptions) { opt.apply(o) }
 // Tx, for example. So does a statement under WithoutTx(ctx), which removes
 // the mark for work that must not join the transaction. Once the transaction
 // has ended, committed or rolled back, its mark counts as none.
+//
+// On a pool of one connection, as Connect makes on SQLite, the transaction holds
+// the connection, so a statement on db in fn's goroutine would wait for itself. It
+// fails, whatever its context. One on another goroutine, or on another DB over the
+// same *sql.DB, waits, and cannot be told from one that fn does not wait for.
 //
 // Under a dry-run context (IsDryRun), such as the one SQL(ctx) gives a hook,
 // Tx fails with ErrDryRun before BEGIN, nested or not: it is a write.
@@ -408,17 +414,18 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 			txShard = sh
 		}
 	}
-	if waitsForIter(db) {
+	if err := waitsForConn(db); err != nil {
 		endTx(info, TxError)
-		return false, fmt.Errorf("velox: transaction: %w", errIterConn)
+		return false, fmt.Errorf("velox: transaction: %w", err)
 	}
 	ex, ctl, err := primary.Begin(ctx, sql.TxOptions{Isolation: o.Isolation, ReadOnly: o.ReadOnly})
 	if err != nil {
 		endTx(info, TxError)
 		return false, fmt.Errorf("velox: begin: %w", err)
 	}
+	defer releaseConn(db, holdConn(db, 1)) // deferred first, so it runs last: after the rollback
 	f := newTxFrame(ctx, DB{D: db.D, Ex: ex, Rt: db.Rt, Cfg: db.Cfg, InTx: true, txDeadline: deadline, txCause: cause, tx: info, txWrote: wrote, txShard: txShard}, nil)
-	defer f.ended.Store(true) // deferred first, so it runs last: after the rollback
+	defer f.ended.Store(true) // before the note, and after the rollback
 	finished := false
 	defer func() {
 		if !finished {

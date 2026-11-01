@@ -43,7 +43,7 @@ func noHang(t *testing.T, f func()) {
 	select {
 	case <-done:
 	case <-time.After(10 * time.Second):
-		t.Fatal("hung: a statement inside a loop over Iter waited for the connection the loop holds")
+		t.Fatal("hung: a statement waited for the connection its own loop or Tx holds")
 	}
 }
 

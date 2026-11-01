@@ -6,15 +6,24 @@ import (
 	"runtime"
 )
 
-// This file refuses the statement that would wait forever: one made in the body
-// of a loop over Iter, on a pool of one connection, which the loop holds until
-// the body returns. config.iterConn is the goroutine of the loop that holds it.
-// A pool of one has one such loop. Only a statement on that goroutine is
-// refused, as the wait of any other ends with the loop.
+// This file refuses the statement that would wait forever: one made on the DB
+// by the goroutine that holds its pool's one connection, in the body of a loop
+// over Iter or in a Tx's fn. config.connHolder notes that goroutine. A pool of one
+// has one holder at a time. Only a statement on that goroutine is refused, as the
+// wait of any other ends with the loop or the Tx.
+//
+// The holder is the DB's: another DB on the same *sql.DB (a second Open, or OpenConn
+// with SQLConn) sees none, and waits. Finding the pool would cost those DBs a lookup
+// in a process-wide table, for each statement.
 
-// errIterConn is the error of a statement that waits for its own loop.
-var errIterConn = errors.New("a statement inside a loop over Iter would wait forever for the one connection of the pool, which the loop holds; " +
-	"read the rows with All first, run both in a Tx, or raise the pool with velox.Pool(db).SetMaxOpenConns")
+var (
+	// errIterConn is the error of a statement that waits for its own loop.
+	errIterConn = errors.New("a statement inside a loop over Iter would wait forever for the one connection of the pool, which the loop holds; " +
+		"collect the rows with All first, or run both in a Tx")
+	// errTxConn is the error of a statement that waits for its own Tx.
+	errTxConn = errors.New("a statement outside a Tx, on the goroutine running it, would wait forever for the one connection of the pool, which the Tx holds; " +
+		"run it on the tx that fn was given, or after the Tx returns")
+)
 
 // onePool reports whether db runs its statements on a pool of one connection.
 // With replicas, a read may hold a replica's connection and leave the primary
@@ -24,30 +33,56 @@ func onePool(db *DB) bool {
 	return ok && db.Rt == nil && p.Stats().MaxOpenConnections == 1
 }
 
-// waitsForIter reports whether a statement of this goroutine on db would wait
-// for the loop it is inside. It is one atomic load unless such a loop is open.
-func waitsForIter(db *DB) bool {
-	g := db.Cfg.iterConn.Load()
-	return g != 0 && !db.InTx && g == goid() && onePool(db)
+// waitsForConn is the error of a statement of this goroutine on db that would wait
+// for the connection the goroutine holds; nil for any other. It is one atomic load
+// unless the connection is held.
+func waitsForConn(db *DB) error {
+	h := db.Cfg.connHolder.Load()
+	if h == 0 || db.InTx || !onePool(db) || h>>1 != goid() {
+		return nil
+	}
+	if h&1 != 0 {
+		return errTxConn
+	}
+	return errIterConn
 }
 
-// readHeld is readRows, which notes the goroutine of an Iter that holds the
-// pool's one connection while its loop runs. It lets go only of its own note:
-// by then another goroutine's loop may hold the connection readRows released.
+// holdConn notes this goroutine as the holder of db's one connection, and returns
+// the note to give to releaseConn; 0 on any other pool. A holder is the goroutine's
+// ID doubled, plus one for a Tx.
+func holdConn(db *DB, tx uint64) uint64 {
+	if !onePool(db) {
+		return 0
+	}
+	h := goid()<<1 | tx
+	db.Cfg.connHolder.Store(h)
+	return h
+}
+
+// releaseConn lets go of h, only if it is still the note: by then another goroutine
+// may hold the connection this one released.
+func releaseConn(db *DB, h uint64) {
+	if h != 0 {
+		db.Cfg.connHolder.CompareAndSwap(h, 0)
+	}
+}
+
+// readHeld is readRows, with the goroutine of an Iter noted as the holder of the
+// pool's one connection while its loop runs.
 func readHeld(db *DB, st *Statement, r Rows, read func(Rows) error) (readErr, rowsErr error) {
-	if !st.iter || db.InTx || !onePool(db) {
+	if !st.iter || db.InTx {
 		return readRows(r, read)
 	}
-	g := goid()
-	db.Cfg.iterConn.Store(g)
-	defer db.Cfg.iterConn.CompareAndSwap(g, 0)
+	defer releaseConn(db, holdConn(db, 0))
 	return readRows(r, read)
 }
 
 // goid is the current goroutine's ID, which the runtime never reuses and writes
-// first in a stack trace: "goroutine 123 [running]:". It costs about two
-// microseconds (BenchmarkGoid), paid by an Iter on a pool of one and by a
-// statement made while one is open.
+// first in a stack trace: "goroutine 123 [running]:". The buffer does not bound its
+// cost, as runtime.Stack walks the whole stack however little it keeps, and nothing
+// else gives the ID without a link to the runtime's internals: it grows with the
+// depth of the caller (BenchmarkGoid). It is paid by an Iter or a Tx on a pool of
+// one, and by a statement made while one is open.
 func goid() uint64 {
 	var buf [40]byte
 	b := buf[:runtime.Stack(buf[:], false)]

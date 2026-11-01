@@ -42,8 +42,8 @@ var _ [unsafe.Sizeof(DB{}) - unsafe.Sizeof(engine.DB{})]struct{} = [0]struct{}{}
 // has one connection, on a file too: each connection to ":memory:" is its own
 // database, and SQLite has one writer, so that on several connections concurrent
 // writes fail with SQLITE_BUSY rather than take turns. With one, they take
-// turns, and a statement in the body of a loop over Iter, which holds the
-// connection, fails (see Query.Iter). Raise it with
+// turns, and a statement on the DB in the body of a loop over Iter or in a Tx's fn,
+// which hold the connection, fails (see Query.Iter and DB.Tx). Raise it with
 // velox.Pool(db).SetMaxOpenConns on a file that takes concurrent reads, with a
 // busy_timeout in the dsn. Foreign keys are enforced only when the dsn asks, as
 // Open says. For PostgreSQL, veloxpgx.Open is faster.
@@ -143,6 +143,11 @@ func (db *DB) Dialect() Dialect { return db.e.D }
 // Tx, for example. So does a statement under WithoutTx(ctx), which removes
 // the mark for work that must not join the transaction. Once the transaction
 // has ended, committed or rolled back, its mark counts as none.
+//
+// On a pool of one connection, as Connect makes on SQLite, the transaction holds
+// the connection, so a statement on db in fn's goroutine would wait for itself. It
+// fails, whatever its context. One on another goroutine, or on another DB over the
+// same *sql.DB, waits, and cannot be told from one that fn does not wait for.
 //
 // Under a dry-run context (IsDryRun), such as the one SQL(ctx) gives a hook,
 // Tx fails with ErrDryRun before BEGIN, nested or not: it is a write.
