@@ -273,6 +273,7 @@ func (r *pgReader) columns(pt *pgTable) (map[int]string, error) {
 		}
 		if collation != "" {
 			r.note(pt, c.Name, "the column has COLLATE "+collation+", which the model cannot hold; it is compared without")
+			r.notes[len(r.notes)-1].keeps = []keep{{"COLLATE " + collation, []string{"COLLATE"}}}
 		}
 		names[num] = c.Name
 		c.Nullable = !notNull
@@ -501,23 +502,30 @@ func (r *pgReader) constraints(pt *pgTable) error {
 			says = append(says, "the constraint is NOT VALID: the rows from before it are not checked; VALIDATE CONSTRAINT checks them")
 		}
 		var has []string
+		var keeps []keep
+		held := func(what, word string) {
+			has = append(has, what)
+			keeps = append(keeps, keep{what, []string{word}})
+		}
 		if typ == "x" {
-			has = append(has, "an exclusion constraint")
+			held("an exclusion constraint", "EXCLUDE")
 		}
 		if deferrable {
-			has = append(has, "DEFERRABLE")
+			held("DEFERRABLE", "DEFERRABLE")
 		}
 		if typ == "f" && onUpdate != "a" {
-			has = append(has, "ON UPDATE "+pgOnDelete[onUpdate])
+			held("ON UPDATE "+pgOnDelete[onUpdate], "UPDATE")
 		}
 		if typ == "f" && match == "f" {
-			has = append(has, "MATCH FULL")
+			held("MATCH FULL", "MATCH")
 		}
 		if len(has) > 0 {
 			says = append(says, "the constraint is "+strings.Join(has, ", ")+", which the model cannot hold; it is compared without")
 		}
 		if len(says) > 0 {
 			r.note(pt, name, strings.Join(says, "; "))
+			r.notes[len(r.notes)-1].keeps = keeps
+			r.notes[len(r.notes)-1].constraint = true
 		}
 		switch typ {
 		case "p":

@@ -209,6 +209,10 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 		return nil, err
 	}
 	defer unlock()
+	if err := s.strict(ctx); err != nil {
+		return nil, err
+	}
+	defer s.unstrict(ctx)
 	rows, err := s.prepare(ctx)
 	if err != nil {
 		return nil, err
@@ -265,6 +269,7 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 				return r, wrap(ctx, "resetting the session after "+todo[i-1].Path, err)
 			}
 		}
+		s.later = todo[i+1:]
 		var a Applied
 		var err error
 		switch {
@@ -580,6 +585,11 @@ func (s *session) applyTx(ctx context.Context, f File, o options) (Applied, erro
 		defer s.undo(ctx, fmt.Sprintf("PRAGMA foreign_keys = %d", was))
 		if _, err := s.conn.ExecContext(ctx, "PRAGMA foreign_keys = OFF"); err != nil {
 			return Applied{}, wrap(ctx, f.Path+": turning foreign keys off", err)
+		}
+	}
+	if s.d == velox.Postgres {
+		if err := s.checkRecreates(ctx, f, 0); err != nil {
+			return Applied{}, err
 		}
 	}
 	if err := s.begin(ctx); err != nil {

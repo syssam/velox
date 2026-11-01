@@ -92,8 +92,8 @@ type Directives struct {
 //
 // Each statement carries the review and destructive findings of its changes
 // as its review line, and each destructive finding an Allow covers is
-// recorded as an allow directive, as is an Allow of unmodeled-loss on MySQL and
-// SQLite, for Up. A SQLite rebuild's own removals, which Up compares the table
+// recorded as an allow directive, as is an Allow of unmodeled-loss, for Up.
+// A SQLite rebuild's own removals, which Up compares the table
 // with, are listed as drops directives. A script with no statement is left out.
 //
 // Its errors are *Error values: either schema is nil ("nil"), the dialects

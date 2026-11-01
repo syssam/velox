@@ -39,10 +39,8 @@ func (s *session) applyStepwise(ctx context.Context, f File, row *Applied, o opt
 			from = n
 		}
 	}
-	if s.d == velox.MySQL {
-		if err := s.checkModify(ctx, f, from); err != nil {
-			return Applied{}, err
-		}
+	if err := s.checkRecreates(ctx, f, from); err != nil {
+		return Applied{}, err
 	}
 	if row == nil {
 		a := Applied{Version: f.Version, Name: f.Name, Sum: f.Sum, AppliedAt: time.Now().UTC().Truncate(time.Microsecond), Dirty: true}

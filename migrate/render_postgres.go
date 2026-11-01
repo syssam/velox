@@ -692,7 +692,13 @@ func (r *renderer) postgresScripts(main Script, opts RenderOptions) []Script {
 				fs = append(fs, f)
 			}
 		}
-		return allowed(fs, opts.Allow)
+		allow := allowed(fs, opts.Allow)
+		for _, a := range opts.Allow {
+			if a.Code == lossCode { // no plan finds it; Up reads it
+				allow = append(allow, a)
+			}
+		}
+		return allow
 	}
 	var out []Script
 	if len(r.enum) > 0 {

@@ -35,11 +35,12 @@ type DriftReport struct {
 // engine other than InnoDB, an invalid PostgreSQL index, a NOT VALID
 // constraint, a GENERATED ALWAYS identity. The model holds no notes.
 type note struct {
-	table    TableRef
-	object   string // as a Warning's Object: "users", "users.users_x"
-	message  string // as a Warning's Message
-	baseline bool   // only Baseline reports it: what a build from the snapshot loses, not a difference; drift skips it
-	keeps    []keep // MySQL: what of a column a MODIFY COLUMN must write to keep
+	table      TableRef
+	object     string // as a Warning's Object: "users", "users.users_x"
+	message    string // as a Warning's Message
+	baseline   bool   // only Baseline reports it: what a build from the snapshot loses, not a difference; drift skips it
+	keeps      []keep // what a statement that replaces the object must write to keep
+	constraint bool   // the object is a constraint, not a column
 }
 
 // A keep is an attribute of a column the model cannot hold: what it is, and
