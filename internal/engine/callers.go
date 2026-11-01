@@ -85,7 +85,7 @@ func (c *callers) load() {
 	slices.SortStableFunc(c.mods, func(a, b string) int { return cmp.Compare(len(b), len(a)) })
 }
 
-// capture returns the call site of the statement being run: the first frame,
+// Capture returns the call site of the statement being run: the first frame,
 // within 64, outside velox and skip; zero when there is none. The first batch
 // is as many frames as the last call site was down (4 to 8, 4 at first), the
 // next ones 8, the last cut to end at the 64th.

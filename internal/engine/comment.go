@@ -76,7 +76,7 @@ func newCommenter(app string, tags []string) *commenter {
 	return c
 }
 
-// text returns the comment, with its leading space, for the statement's
+// Text returns the comment, with its leading space, for the statement's
 // Caller and Tags. It does not keep st.
 func (c *commenter) Text(st *Statement) string {
 	var buf [256]byte

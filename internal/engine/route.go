@@ -196,7 +196,7 @@ type session struct {
 	until atomic.Int64 // the end of the pin, in Unix nanoseconds; 0: none
 }
 
-// raise moves the pin's end to t, unless it is later already.
+// Raise moves the pin's end to t, unless it is later already.
 func (s *session) Raise(t int64) {
 	for {
 		u := s.until.Load()
@@ -206,7 +206,7 @@ func (s *session) Raise(t int64) {
 	}
 }
 
-// pinned reports whether the session's reads must go to the primary now.
+// Pinned reports whether the session's reads must go to the primary now.
 func (s *session) Pinned() bool {
 	u := s.until.Load()
 	return u != 0 && time.Now().UnixNano() < u
@@ -280,7 +280,7 @@ func newShard(d Dialect, primary executor, replicas []Conn, what string) *shardC
 	return sh
 }
 
-// shardOf returns the shard ctx names on a sharded DB, whose route marks are
+// ShardOf returns the shard ctx names on a sharded DB, whose route marks are
 // rc: WithShard's, else the one WithShardFor gives for ctx's tenant. It returns
 // nil and no error when ctx names none, and an error wrapping ErrNoShard for a
 // name that is not a shard and for WithShardFor's error. Only without an
@@ -320,7 +320,7 @@ func stmtErr(st *Statement, err error) error {
 	return fmt.Errorf("velox: %s: %w", st.Entity.Name, err)
 }
 
-// pick returns the next replica in turn that is not in back-off, or the
+// Pick returns the next replica in turn that is not in back-off, or the
 // primary when every one is. With peek set it leaves the turn where it was.
 //
 // When the replica whose turn it is is in back-off, the turn goes to one of
@@ -380,7 +380,7 @@ func (sh *shardConn) pickUp(turn uint32, now int64) Target {
 	return Target{Ex: sh.Primary, Sh: sh, Replica: -1}
 }
 
-// up reports whether r is out of back-off at now, in Unix nanoseconds. A
+// Up reports whether r is out of back-off at now, in Unix nanoseconds. A
 // back-off that has ended is cleared, which returns r to pick's path that
 // does not read the clock.
 func (r *replica) Up(now int64) bool {
@@ -395,7 +395,7 @@ func (r *replica) Up(now int64) bool {
 	return true
 }
 
-// down puts r in back-off for d from now.
+// Down puts r in back-off for d from now.
 func (r *replica) Down(d time.Duration) {
 	r.DownUntil.Store(time.Now().Add(d).UnixNano())
 }

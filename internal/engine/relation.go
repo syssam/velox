@@ -85,7 +85,7 @@ type RelTarget struct {
 	One, Many any
 }
 
-// resolve returns the relation's link. A relation has no target of its own,
+// Resolve returns the relation's link. A relation has no target of its own,
 // so that the owner's metadata does not keep the target's code in every
 // program that links the owner: the use site, which names the target's type,
 // passes use. Every resolution checks that use names the entity the field

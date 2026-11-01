@@ -235,7 +235,7 @@ type block struct {
 // blockMax is the most rows in one array of blocks.
 const blockMax = 1024
 
-// next returns a pointer to a new zero row after the others.
+// Next returns a pointer to a new zero row after the others.
 //
 //go:noinline
 func (b *blocks) Next() unsafe.Pointer {
@@ -339,7 +339,7 @@ type keyRows struct {
 	rows      [][]int
 }
 
-// fill sets the rows of each key in group from n targets, in their order, with
+// Fill sets the rows of each key in group from n targets, in their order, with
 // one allocation: keyAt gives the key of the target at an index, or false when
 // it has none. A target whose key is not in group is in no key's rows.
 func (x *keyRows) Fill(group map[any]int, n int, keyAt func(i int) (any, bool)) {
@@ -369,7 +369,7 @@ func (x *keyRows) Fill(group map[any]int, n int, keyAt func(i int) (any, bool)) 
 	x.flat, x.off = flat, off
 }
 
-// set sets the rows of k, a key in group.
+// Set sets the rows of k, a key in group.
 func (x *keyRows) Set(group map[any]int, k any, rows []int) {
 	if x.rows == nil {
 		x.rows = make([][]int, len(group))
@@ -377,7 +377,7 @@ func (x *keyRows) Set(group map[any]int, k any, rows []int) {
 	x.rows[group[k]] = rows
 }
 
-// of returns the rows of the key at index g; g is -1 for an owner with no
+// Of returns the rows of the key at index g; g is -1 for an owner with no
 // key, which has none.
 func (x *keyRows) Of(g int) []int {
 	switch {
