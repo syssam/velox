@@ -74,34 +74,55 @@ func (e SQL) Begin(ctx context.Context, o sql.TxOptions) (Executor, Tx, error) {
 	return SQL{c: tx, cols: e.cols}, sqlTx{tx}, nil
 }
 
-// BeginOnConn starts a transaction on a connection of its own, on which set
-// runs first and which unset runs on after the transaction ends, however it
-// ends; only then does the connection go back to the pool. It holds the
-// connection because database/sql hands it back as soon as a transaction's
-// context ends, with no way to reach it from the transaction.
-func (e SQL) BeginOnConn(ctx context.Context, o sql.TxOptions, set, unset string) (Executor, Tx, error) {
+// Setting is a setting of a connection, on or off: the statements that read it
+// and that turn it on and off.
+type Setting struct{ Read, On, Off string }
+
+// BeginOnConn starts a transaction, on a connection of its own, with s turned on.
+// s goes back to the value it had after the transaction ends, however it ends; only
+// then does the connection go back to the pool. It holds the connection because
+// database/sql hands it back as soon as a transaction's context ends, with no way
+// to reach it from the transaction.
+//
+// s is off for the BEGIN and on after it, as a setting such as SQLite's query_only
+// would refuse a driver's BEGIN IMMEDIATE.
+func (e SQL) BeginOnConn(ctx context.Context, o sql.TxOptions, s Setting) (Executor, Tx, error) {
 	c, err := e.db.Conn(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	if _, err := c.ExecContext(ctx, set); err != nil {
+	var was int
+	if err := c.QueryRowContext(ctx, s.Read).Scan(&was); err != nil {
 		_ = c.Close()
 		return nil, nil, err
 	}
+	restore := s.Off
+	if was != 0 {
+		restore = s.On
+		if _, err := c.ExecContext(ctx, s.Off); err != nil {
+			_ = c.Close()
+			return nil, nil, err
+		}
+	}
 	tx, err := c.BeginTx(ctx, &o)
 	if err != nil {
-		restoreConn(ctx, c, unset)
+		restoreConn(ctx, c, restore)
 		return nil, nil, err
 	}
-	return SQL{c: tx, cols: e.cols}, &connTx{tx: tx, c: c, unset: unset}, nil
+	if _, err := tx.ExecContext(ctx, s.On); err != nil {
+		_ = tx.Rollback()
+		restoreConn(ctx, c, restore)
+		return nil, nil, err
+	}
+	return SQL{c: tx, cols: e.cols}, &connTx{tx: tx, c: c, restore: restore}, nil
 }
 
 // connTx is a transaction of BeginOnConn.
 type connTx struct {
-	tx    *sql.Tx
-	c     *sql.Conn
-	unset string
-	once  sync.Once
+	tx      *sql.Tx
+	c       *sql.Conn
+	restore string
+	once    sync.Once
 }
 
 // Commit commits, and restores the connection. A commit that fails can leave
@@ -114,7 +135,7 @@ func (t *connTx) Commit(ctx context.Context) error {
 			defer cancel()
 			_, _ = t.c.ExecContext(rctx, "ROLLBACK")
 		}
-		restoreConn(ctx, t.c, t.unset)
+		restoreConn(ctx, t.c, t.restore)
 	})
 	return err
 }
@@ -122,7 +143,7 @@ func (t *connTx) Commit(ctx context.Context) error {
 // Rollback rolls back, and restores the connection.
 func (t *connTx) Rollback(ctx context.Context) error {
 	err := t.tx.Rollback()
-	t.once.Do(func() { restoreConn(ctx, t.c, t.unset) })
+	t.once.Do(func() { restoreConn(ctx, t.c, t.restore) })
 	return err
 }
 
@@ -135,12 +156,12 @@ func restoreContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.WithoutCancel(ctx), restoreTimeout)
 }
 
-// restoreConn runs unset on c and hands c back to the pool, or closes the
-// connection when unset fails, as it must not reach another statement unset.
-func restoreConn(ctx context.Context, c *sql.Conn, unset string) {
+// restoreConn runs restore on c and hands c back to the pool, or closes the
+// connection when restore fails, as it must not reach another statement otherwise.
+func restoreConn(ctx context.Context, c *sql.Conn, restore string) {
 	rctx, cancel := restoreContext(ctx)
 	defer cancel()
-	if _, err := c.ExecContext(rctx, unset); err != nil {
+	if _, err := c.ExecContext(rctx, restore); err != nil {
 		_ = c.Raw(func(any) error { return driver.ErrBadConn })
 	}
 	_ = c.Close()

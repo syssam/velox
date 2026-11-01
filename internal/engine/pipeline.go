@@ -608,13 +608,18 @@ func (db *DB) capLimit(st *Statement) {
 	}
 }
 
-// exec is send, and marks a transaction the server has rolled back.
+// exec is send, and marks a transaction the server has rolled back. A broken
+// transaction fails here as well as in outsideTx, as an Around hook may call next
+// again after the statement that broke it.
 func (db *DB) exec(ctx context.Context, st *Statement, t Target, read func(Rows) error, res *execResult) error {
-	if waitsForIter(db) {
-		return stmtErr(st, errIterConn)
+	if db.txRoot != nil && db.txRoot.broken != nil {
+		return stmtErr(st, db.txRoot.broken)
+	}
+	if err := waitsForConn(db); err != nil {
+		return stmtErr(st, err)
 	}
 	err := db.send(ctx, st, t, read, res)
-	if err != nil && db.D == MySQL && db.txRoot != nil {
+	if err != nil && db.txRoot != nil {
 		db.noteServerRollback(ctx, err)
 	}
 	return err

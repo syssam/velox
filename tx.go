@@ -27,8 +27,9 @@ type TxOption = engine.TxOption
 func TxIsolation(level sql.IsolationLevel) TxOption { return engine.TxIsolation(level) }
 
 // TxReadOnly starts a read-only transaction. On SQLite it runs under PRAGMA
-// query_only, on the transaction's connection, which can write again once the
-// transaction has ended, however it ended; a write in it fails.
+// query_only, on the transaction's connection, where the setting is as it was once
+// the transaction has ended, however it ended; a write in it fails. Under a DSN's
+// _txlock=immediate it holds SQLite's write lock all the same.
 func TxReadOnly() TxOption { return engine.TxReadOnly() }
 
 // TxRetrySerializable runs the transaction again, up to n more times, when it
@@ -52,9 +53,10 @@ func TxRetries(opts ...TxOption) int { return engine.TxRetries(opts...) }
 // begins a transaction of its own. A statement on tx under it still runs in
 // the transaction. On a context without the mark it returns ctx.
 //
-// A statement on db under it needs a second connection while the
-// transaction holds one: on a pool of one connection, as SQLite often has,
-// it waits until the transaction ends or its deadline passes.
+// A statement on db under it needs a second connection while the transaction
+// holds one. On a pool of one connection, as SQLite often has, it fails on the
+// goroutine running fn, which that connection waits for, and on another goroutine
+// waits until the transaction ends or its deadline passes.
 func WithoutTx(ctx context.Context) context.Context { return engine.WithoutTx(ctx) }
 
 // TxAround is a hook that wraps a transaction.

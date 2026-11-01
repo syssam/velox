@@ -42,8 +42,8 @@ var _ [unsafe.Sizeof(DB{}) - unsafe.Sizeof(engine.DB{})]struct{} = [0]struct{}{}
 // has one connection, on a file too: each connection to ":memory:" is its own
 // database, and SQLite has one writer, so that on several connections concurrent
 // writes fail with SQLITE_BUSY rather than take turns. With one, they take
-// turns, and a statement in the body of a loop over Iter, which holds the
-// connection, fails (see Query.Iter). Raise it with
+// turns, and a statement on the DB in the body of a loop over Iter or in a Tx's fn,
+// which hold the connection, fails (see Query.Iter and DB.Tx). Raise it with
 // velox.Pool(db).SetMaxOpenConns on a file that takes concurrent reads, with a
 // busy_timeout in the dsn. Foreign keys are enforced only when the dsn asks, as
 // Open says. For PostgreSQL, veloxpgx.Open is faster.
@@ -144,6 +144,11 @@ func (db *DB) Dialect() Dialect { return db.e.D }
 // the mark for work that must not join the transaction. Once the transaction
 // has ended, committed or rolled back, its mark counts as none.
 //
+// On a pool of one connection, as Connect makes on SQLite, the transaction holds
+// the connection, so a statement on db in fn's goroutine would wait for itself. It
+// fails, whatever its context. One on another goroutine, or on another DB over the
+// same *sql.DB, waits, and cannot be told from one that fn does not wait for.
+//
 // Under a dry-run context (IsDryRun), such as the one SQL(ctx) gives a hook,
 // Tx fails with ErrDryRun before BEGIN, nested or not: it is a write.
 //
@@ -156,8 +161,10 @@ func (db *DB) Dialect() Dialect { return db.e.D }
 //
 // On MySQL, a deadlock (1213) rolls the whole transaction back, as does a lock
 // wait timeout (1205) under innodb_rollback_on_timeout, which velox asks the
-// server after one. Should fn swallow the error, its later statements fail
-// unsent and its nil returns the error: nothing runs outside the transaction.
+// server after one. On SQLite, an interrupted statement (one whose context ended)
+// or INSERT OR ROLLBACK can do the same, so velox asks after any failed statement.
+// Should fn swallow the error, its later statements fail unsent and its nil
+// returns the error: nothing runs outside the transaction.
 //
 // A rollback velox sends after fn fails, or once ctx has ended, is bounded to
 // 5 seconds; database/sql's Tx.Rollback takes no context, so on a DB from Open

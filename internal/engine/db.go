@@ -19,8 +19,10 @@ type config struct {
 	Callers   *callers   // WithCallers; nil: off
 	Comment   *commenter // WithSQLComment; nil: off
 	TxArounds []TxAround
-	iterConn  atomic.Uint64 // the goroutine of the Iter that holds a pool's one connection; 0: none (iterconn.go)
-	Replicas  []Conn        // WithReplicas
+	// connHolder is the goroutine of the Iter or Tx that holds a pool's one
+	// connection; 0: none (iterconn.go).
+	connHolder atomic.Uint64
+	Replicas   []Conn // WithReplicas
 	// pinWindow is WithPinWindow's: how long a write pins its session.
 	PinWindow time.Duration
 	// backoff is WithReplicaBackoff's: how long a failed replica is skipped.

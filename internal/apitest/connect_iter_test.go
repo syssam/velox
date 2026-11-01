@@ -43,7 +43,7 @@ func noHang(t *testing.T, f func()) {
 	select {
 	case <-done:
 	case <-time.After(10 * time.Second):
-		t.Fatal("hung: a statement inside a loop over Iter waited for the connection the loop holds")
+		t.Fatal("hung: a statement waited for the connection its own loop or Tx holds")
 	}
 }
 
@@ -82,7 +82,9 @@ func TestIterNestedStatementFails(t *testing.T) {
 									return
 								}
 								rows++
-								if err := stmt(); err == nil || !strings.Contains(err.Error(), want) {
+								// A raised pool is no cure: :memory: has a database per
+								// connection, and a nested write on a file is SQLITE_BUSY.
+								if err := stmt(); err == nil || !strings.Contains(err.Error(), want) || !strings.Contains(err.Error(), "with All first") || strings.Contains(err.Error(), "raise") {
 									t.Errorf("nested: %v", err)
 								}
 							}

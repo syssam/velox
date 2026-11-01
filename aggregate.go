@@ -29,6 +29,7 @@ func aggregate[E, T any](ctx context.Context, q Query[E], fn Aggregate, c int32)
 	if q.err != nil {
 		return nil, q.err
 	}
+	q.st.Columns = nil // as in Count
 	st, err := q.prepare()
 	if err != nil {
 		return nil, err
@@ -147,6 +148,7 @@ func grouped[E, K, V any](ctx context.Context, q Query[E], fn Aggregate, key Gro
 	if q.err != nil {
 		return nil, q.err
 	}
+	q.st.Columns = nil // as in Count
 	st, err := q.prepare()
 	if err != nil {
 		return nil, err

@@ -152,7 +152,7 @@ it to you. On PostgreSQL, `veloxpgx.Open` takes a pgx pool and is faster.
   `SumBy` and the like).
 - `Raw` scans only into entities. For a report, run your own SQL on
   `velox.Pool(db)`, the `*sql.DB` under a DB. It is nil on a transaction's DB and
-  on a DB from `veloxpgx`, where you hold the pool.
+  on a DB from `OpenConn`, `OpenShards` or `veloxpgx`, where you hold the pool.
 - No down migrations. To undo one, change the schema back and diff forward.
 - No composite primary keys on entities: an entity's key is one column. The one
   composite key velox makes is the join table of a many-to-many edge. For a

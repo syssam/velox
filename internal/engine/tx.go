@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -43,8 +44,9 @@ func TxIsolation(level sql.IsolationLevel) TxOption {
 }
 
 // TxReadOnly starts a read-only transaction. On SQLite it runs under PRAGMA
-// query_only, on the transaction's connection, which can write again once the
-// transaction has ended, however it ended; a write in it fails.
+// query_only, on the transaction's connection, where the setting is as it was once
+// the transaction has ended, however it ended; a write in it fails. Under a DSN's
+// _txlock=immediate it holds SQLite's write lock all the same.
 func TxReadOnly() TxOption { return TxOption{func(o *txOptions) { o.ReadOnly = true }} }
 
 // TxRetrySerializable runs the transaction again, up to n more times, when it
@@ -142,9 +144,10 @@ func savepointErr(sctx context.Context, what string, err error) error {
 // begins a transaction of its own. A statement on tx under it still runs in
 // the transaction. On a context without the mark it returns ctx.
 //
-// A statement on db under it needs a second connection while the
-// transaction holds one: on a pool of one connection, as SQLite often has,
-// it waits until the transaction ends or its deadline passes.
+// A statement on db under it needs a second connection while the transaction
+// holds one. On a pool of one connection, as SQLite often has, it fails on the
+// goroutine running fn, which that connection waits for, and on another goroutine
+// waits until the transaction ends or its deadline passes.
 func WithoutTx(ctx context.Context) context.Context {
 	if ctx.Value(txKey{}) == nil {
 		return ctx
@@ -197,6 +200,11 @@ func applyTxOption(opt TxOption, o *txOptions) { opt.apply(o) }
 // the mark for work that must not join the transaction. Once the transaction
 // has ended, committed or rolled back, its mark counts as none.
 //
+// On a pool of one connection, as Connect makes on SQLite, the transaction holds
+// the connection, so a statement on db in fn's goroutine would wait for itself. It
+// fails, whatever its context. One on another goroutine, or on another DB over the
+// same *sql.DB, waits, and cannot be told from one that fn does not wait for.
+//
 // Under a dry-run context (IsDryRun), such as the one SQL(ctx) gives a hook,
 // Tx fails with ErrDryRun before BEGIN, nested or not: it is a write.
 //
@@ -209,8 +217,10 @@ func applyTxOption(opt TxOption, o *txOptions) { opt.apply(o) }
 //
 // On MySQL, a deadlock (1213) rolls the whole transaction back, as does a lock
 // wait timeout (1205) under innodb_rollback_on_timeout, which velox asks the
-// server after one. Should fn swallow the error, its later statements fail
-// unsent and its nil returns the error: nothing runs outside the transaction.
+// server after one. On SQLite, an interrupted statement (one whose context ended)
+// or INSERT OR ROLLBACK can do the same, so velox asks after any failed statement.
+// Should fn swallow the error, its later statements fail unsent and its nil
+// returns the error: nothing runs outside the transaction.
 //
 // A rollback velox sends after fn fails, or once ctx has ended, is bounded to
 // 5 seconds; database/sql's Tx.Rollback takes no context, so on a DB from Open
@@ -309,19 +319,32 @@ func (db *DB) attempts(ctx, tctx context.Context, fn func(context.Context, *DB) 
 		if err != nil && cause != nil && timedOut(tctx) && !is(err, ErrTimeout) {
 			err = errors.Join(timeoutError("transaction"), err)
 		}
-		if err == nil || attempt > o.Retries || !retryable(err) || ctx.Err() != nil || tctx.Err() != nil {
+		if err == nil || attempt > o.Retries || !retryable(err) {
 			return err
 		}
-		if !retryWait(ctx, tctx, retryDelay(attempt)) {
-			if cause != nil && timedOut(tctx) {
-				err = errors.Join(timeoutError("transaction"), err)
-			}
-			return err
+		if ctx.Err() != nil || tctx.Err() != nil || !retryWait(ctx, tctx, retryDelay(attempt)) {
+			return retryEnded(ctx, tctx, cause, err)
 		}
 		if info != nil {
 			info.Retries = append(info.Retries, TxRetry{Err: err, At: time.Now()})
 		}
 	}
+}
+
+// retryEnded is the error of a transaction whose ctx or tctx ended before the
+// retry of err, the last attempt's failure, which it shows: as Tx documents, it
+// matches why they ended, ErrTimeout when that is velox's deadline.
+func retryEnded(ctx, tctx context.Context, cause, err error) error {
+	switch {
+	case cause != nil && timedOut(tctx):
+		if is(err, ErrTimeout) {
+			return err
+		}
+		return errors.Join(timeoutError("transaction"), err)
+	case ctx.Err() != nil:
+		return errors.Join(fmt.Errorf("velox: transaction: %w", ctxErr(ctx)), err)
+	}
+	return errors.Join(fmt.Errorf("velox: transaction: %w", ctxErr(tctx)), err)
 }
 
 // retryBase and retryMax bound the wait before a transaction's retry: the
@@ -392,17 +415,18 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 			txShard = sh
 		}
 	}
-	if waitsForIter(db) {
+	if err := waitsForConn(db); err != nil {
 		endTx(info, TxError)
-		return false, fmt.Errorf("velox: transaction: %w", errIterConn)
+		return false, fmt.Errorf("velox: transaction: %w", err)
 	}
 	ex, ctl, err := primary.Begin(ctx, sql.TxOptions{Isolation: o.Isolation, ReadOnly: o.ReadOnly})
 	if err != nil {
 		endTx(info, TxError)
 		return false, fmt.Errorf("velox: begin: %w", err)
 	}
+	defer releaseConn(db, holdConn(db, 1)) // deferred first, so it runs last: after the rollback
 	f := newTxFrame(ctx, DB{D: db.D, Ex: ex, Rt: db.Rt, Cfg: db.Cfg, InTx: true, txDeadline: deadline, txCause: cause, tx: info, txWrote: wrote, txShard: txShard}, nil)
-	defer f.ended.Store(true) // deferred first, so it runs last: after the rollback
+	defer f.ended.Store(true) // before the note, and after the rollback
 	finished := false
 	defer func() {
 		if !finished {
@@ -547,19 +571,44 @@ func (db *DB) breakOn(err error) {
 	}
 }
 
-// noteServerRollback breaks db's transaction when err, a statement's on MySQL,
-// says the server rolled all of it back. The connection is then in autocommit:
-// a statement after an fn that swallowed err would commit on its own, and the
-// COMMIT would succeed with nothing to commit. A deadlock (1213) always does
-// that; a lock wait timeout (1205) only under innodb_rollback_on_timeout.
+// noteServerRollback breaks db's transaction when err, a statement's, means the
+// database rolled all of it back. The connection is then in autocommit: a
+// statement after an fn that swallowed err would commit on its own. On MySQL a
+// deadlock (1213) always does that, and a lock wait timeout (1205) under
+// innodb_rollback_on_timeout. On SQLite an interrupt, a conflict clause of
+// ROLLBACK and some errors do, which only asking can tell. PostgreSQL keeps the
+// transaction, aborted, and refuses its COMMIT itself.
 func (db *DB) noteServerRollback(ctx context.Context, err error) {
 	if db.txRoot.broken != nil {
 		return
 	}
-	n, _, ok := mysqlError(err)
-	if ok && (n == 1213 || n == 1205 && db.rollsBackOnTimeout(ctx)) {
+	gone := false
+	switch db.D {
+	case MySQL:
+		n, _, ok := mysqlError(err)
+		gone = ok && (n == 1213 || n == 1205 && db.rollsBackOnTimeout(ctx))
+	case SQLite:
+		gone = db.sqliteRolledBack(ctx)
+	}
+	if gone {
 		db.txRoot.broken = fmt.Errorf("the database rolled the transaction back, so it can only roll back: %w", err)
 	}
+}
+
+// sqliteRolledBack reports whether SQLite's transaction has gone, after a failed
+// statement. BEGIN asks: ROLLBACK TO an unknown savepoint says the same with a
+// transaction and without. In one, BEGIN fails and changes nothing. Without one it
+// opens an empty transaction, for the ROLLBACK that a broken transaction ends in.
+// No answer counts as gone, as in rollsBackOnTimeout. A transaction past its
+// deadline, or one database/sql has ended, can send nothing more anyway.
+func (db *DB) sqliteRolledBack(ctx context.Context) bool {
+	if db.pastTxDeadline() {
+		return false
+	}
+	pctx, cancel := rollbackContext(ctx, db.txDeadline)
+	defer cancel()
+	_, err := db.Ex.Exec(pctx, "BEGIN", nil)
+	return err == nil || !ended(err) && !strings.Contains(err.Error(), "within a transaction")
 }
 
 // rollsBackOnTimeout asks the server, on the transaction's connection, whether
