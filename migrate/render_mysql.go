@@ -192,6 +192,10 @@ func (r *renderer) mysqlChange(i int, c Change) (table string, phase int, action
 	case setTableComment:
 		return r.table(c.Table), phaseColumn, "COMMENT = " + ddl.Literal(velox.MySQL, c.To), nil, nil
 	case setTableCollation:
+		if !strings.HasPrefix(c.To, "utf8mb4_") {
+			return "", 0, "", nil, &Error{Object: c.Table.String(), Code: "render",
+				Reason: fmt.Sprintf("the collation %q is not one of utf8mb4, the character set the plan converts to, so CONVERT TO would fail every time the file ran; use a utf8mb4 collation, or convert the table by hand and write a baseline", c.To)}
+		}
 		return r.table(c.Table), phaseColumn, "CONVERT TO CHARACTER SET utf8mb4 COLLATE " + c.To, nil, nil
 	}
 	return "", 0, "", nil, r.refuse(i, fmt.Sprintf("MySQL has no %s", c.Kind()))

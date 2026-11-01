@@ -60,10 +60,19 @@ func (r *renderer) addValues(i int, c alterEnum, added []string) {
 // change, and the old type dropped. The partial indexes and checks that
 // name the type or such a column hold casts to the old type, which
 // PostgreSQL cannot rebuild against the new one: they are dropped before
-// the columns change and made again after.
-func (r *renderer) swapEnum(e Enum) []string {
+// the columns change and made again after. A column that holds an array of the
+// type is refused: DROP TYPE would fail on it, every time the file ran.
+func (r *renderer) swapEnum(e Enum) ([]string, error) {
 	ref := e.ref()
 	typ := enumTypeName(ref)
+	for _, t := range r.to.Tables {
+		for _, c := range t.Columns {
+			if ct := pgTypeOf(c.Type); ct.array && ct.base == typ {
+				return nil, &Error{Object: colTarget(t.Ref(), c.Name), Code: "render",
+					Reason: "the column holds an array of the enum type " + ref.String() + ", and moving or removing a value replaces the type, which the array blocks; change the column to text[] in a plan before this one and back in one after, or only add values"}
+			}
+		}
+	}
 	old := TableRef{Schema: ref.Schema, Name: ddl.OldEnum(ref.Name)}
 	out := []string{
 		"ALTER TYPE " + r.table(ref) + " RENAME TO " + r.ident(old.Name),
@@ -116,7 +125,7 @@ func (r *renderer) swapEnum(e Enum) []string {
 	}
 	out = append(out, alters...)
 	out = append(out, remake...)
-	return append(out, "DROP TYPE "+r.table(old))
+	return append(out, "DROP TYPE "+r.table(old)), nil
 }
 
 // addsOnline reports whether the online script adds the index or check
