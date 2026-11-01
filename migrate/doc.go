@@ -79,7 +79,8 @@
 //   - "resolution": Resolve was given neither ResolveApplied nor
 //     ResolveUndone.
 //   - "drift": Verify was given a database that is not empty, or the
-//     database differs from schema.json after the directory's files ran.
+//     database differs from schema.json after the directory's files ran, a
+//     table schema.json does not name included.
 //   - "baseline": Baseline found none of the schema's tables, a foreign key
 //     to a table outside them, or a sequence default the column does not
 //     own; or Up was given WithBaseline where it cannot record.
@@ -164,8 +165,9 @@
 // that starts with a backslash, are refused on PostgreSQL. An applied file
 // edited or gone is a [*ChecksumError], and a lock held past the wait
 // [ErrLockWait]. [Verify] applies a directory to an empty database and fails
-// when Drift then finds a change against schema.json: a test's check that the
-// files make what the snapshot says. On SQLite, Verify, Up and Drift need a
+// when Drift then finds a change against schema.json, or the database holds a
+// table schema.json does not name: a test's check that the files make what
+// the snapshot says. On SQLite, Verify, Up and Drift need a
 // file database, since each run opens a connection of its own and a
 // connection to :memory: is a new, empty database.
 //
