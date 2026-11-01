@@ -703,12 +703,13 @@ func TestRequestCost(t *testing.T) {
 	if !strings.HasPrefix(got, `{"data":{"__schema"`) {
 		t.Errorf("the introspection query: %.300s", got)
 	}
-	// Introspection nested as deep as gqlparser's rule allows, under aliases.
+	// GraphiQL's query, past MaxIntrospectionCost under aliases.
 	var nested strings.Builder
-	for i := range 200 {
-		fmt.Fprintf(&nested, "a%d: __schema { types { fields { name args { name } type { kind ofType { name fields { name type { kind name } } } } } } } ", i)
+	for i := range 400 {
+		fmt.Fprintf(&nested, "a%d: __schema { types { ...FullType } } ", i)
 	}
-	if got := post(`{ ` + nested.String() + ` }`); !strings.Contains(got, "COST_LIMIT_EXCEEDED") {
+	frags := introspection[strings.Index(introspection, "fragment FullType"):]
+	if got := post(`{ ` + nested.String() + ` } ` + frags); !strings.Contains(got, "its introspection costs") || !strings.Contains(got, "COST_LIMIT_EXCEEDED") {
 		t.Errorf("nested introspection: %.300s", got)
 	}
 	// More tokens than the server's limit: refused before it is parsed whole.

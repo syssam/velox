@@ -487,13 +487,14 @@ func TestExtensionRefusesNegativeLimits(t *testing.T) {
 		t.Fatalf("zero limits: %v", err)
 	}
 	for name, set := range map[string]func(*veloxgql.Limits){
-		"MaxPage":        func(l *veloxgql.Limits) { l.MaxPage = -1 },
-		"MaxList":        func(l *veloxgql.Limits) { l.MaxList = -1 },
-		"MaxFilterDepth": func(l *veloxgql.Limits) { l.MaxFilterDepth = -1 },
-		"MaxFilterWidth": func(l *veloxgql.Limits) { l.MaxFilterWidth = -1 },
-		"MaxFilterNodes": func(l *veloxgql.Limits) { l.MaxFilterNodes = -1 },
-		"MaxOrderTerms":  func(l *veloxgql.Limits) { l.MaxOrderTerms = -1 },
-		"MaxCost":        func(l *veloxgql.Limits) { l.MaxCost = -1 },
+		"MaxPage":              func(l *veloxgql.Limits) { l.MaxPage = -1 },
+		"MaxList":              func(l *veloxgql.Limits) { l.MaxList = -1 },
+		"MaxFilterDepth":       func(l *veloxgql.Limits) { l.MaxFilterDepth = -1 },
+		"MaxFilterWidth":       func(l *veloxgql.Limits) { l.MaxFilterWidth = -1 },
+		"MaxFilterNodes":       func(l *veloxgql.Limits) { l.MaxFilterNodes = -1 },
+		"MaxOrderTerms":        func(l *veloxgql.Limits) { l.MaxOrderTerms = -1 },
+		"MaxCost":              func(l *veloxgql.Limits) { l.MaxCost = -1 },
+		"MaxIntrospectionCost": func(l *veloxgql.Limits) { l.MaxIntrospectionCost = -1 },
 	} {
 		var l veloxgql.Limits
 		set(&l)
@@ -1029,5 +1030,31 @@ func TestTooCostlyRunsNothing(t *testing.T) {
 	}
 	if stmts, txs := l.take(); len(stmts) != 0 || len(txs) != 0 {
 		t.Errorf("a refused mutation ran %v, %v", stmts, txs)
+	}
+}
+
+// TestIntrospectionLimit: introspection answers to MaxIntrospectionCost alone, and
+// data to MaxCost alone, so that neither loosens the other. Both run no statement
+// when refused.
+func TestIntrospectionLimit(t *testing.T) {
+	db, l := handlerDB(t)
+	const meta = `{ __type(name: "Query") { name } }` // 2
+	over := veloxgql.WithLimits(veloxgql.Limits{MaxIntrospectionCost: 1})
+	got := post(t, context.Background(), serve(db, handlerResolvers(db, nil), over), meta)
+	const want = `{"errors":[{"message":"veloxgql: request is too costly: its introspection costs 2, and the most is 1","extensions":{"code":"COST_LIMIT_EXCEEDED"}}],"data":null}`
+	if got != want {
+		t.Errorf("over MaxIntrospectionCost:\n got %s\nwant %s", got, want)
+	}
+	tiny := veloxgql.WithLimits(veloxgql.Limits{MaxCost: 1})
+	if got := post(t, context.Background(), serve(db, handlerResolvers(db, nil), tiny), meta); strings.Contains(got, "COST_LIMIT_EXCEEDED") {
+		t.Errorf("a MaxCost of 1 limits introspection: %s", got)
+	}
+	big := veloxgql.WithLimits(veloxgql.Limits{MaxCost: 202, MaxIntrospectionCost: 1 << 40})
+	got = post(t, context.Background(), serve(db, handlerResolvers(db, nil), big), `{ people(first: 30) { totalCount __typename } }`)
+	if !strings.Contains(got, "COST_LIMIT_EXCEEDED") {
+		t.Errorf("a large MaxIntrospectionCost loosened MaxCost: %s", got)
+	}
+	if stmts, _ := l.take(); len(stmts) != 0 {
+		t.Errorf("refused requests ran %v", stmts)
 	}
 }

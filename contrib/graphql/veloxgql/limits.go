@@ -50,18 +50,27 @@ type Limits struct {
 	// MaxCost is the most a request may cost (Cost): the bound on a whole
 	// request that the other limits, each of one argument, do not give. More
 	// is ErrTooCostly, before any statement runs. It bounds the statements too,
-	// at 100 each, and introspection, by the fields of its response. A list edge
-	// costs MaxList for each parent, so under the defaults one full page with a
-	// list edge, posts(first: 100) { edges { node { likes { id } } } }, costs
-	// 100402 and is refused: raise MaxCost, or lower MaxList.
+	// at 100 each. A list edge costs MaxList for each parent, so under the
+	// defaults one full page with a list edge, posts(first: 100) { edges { node
+	// { likes { id } } } }, costs 100402 and is refused: raise MaxCost, or lower
+	// MaxList. Introspection has its own limit.
 	MaxCost int
+
+	// MaxIntrospectionCost is the most the __schema and __type of a request may
+	// cost, one for each field of their response. More is ErrTooCostly. The
+	// default admits GraphiQL's query on a schema of 500 rich entities (about
+	// 700000), and no data comes under it: raising it does not loosen MaxCost,
+	// nor MaxCost it. A request at this limit allocates about 1 KB a unit
+	// through gqlgen: give a server open to strangers a lower one, or no
+	// extension.Introspection.
+	MaxIntrospectionCost int
 }
 
 // DefaultLimits returns MaxPage 100, MaxList 1000, MaxFilterDepth 5,
-// MaxFilterWidth 100, MaxFilterNodes 1000, MaxOrderTerms 5 and MaxCost
-// 100000.
+// MaxFilterWidth 100, MaxFilterNodes 1000, MaxOrderTerms 5, MaxCost 100000 and
+// MaxIntrospectionCost 1000000.
 func DefaultLimits() Limits {
-	return Limits{MaxPage: 100, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 5, MaxCost: 100000}
+	return Limits{MaxPage: 100, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 5, MaxCost: 100000, MaxIntrospectionCost: 1000000}
 }
 
 // LimitsFromContext returns the limits the extension put in ctx, or
@@ -84,6 +93,8 @@ func (l Limits) orDefault() Limits {
 		MaxFilterNodes: cmp.Or(l.MaxFilterNodes, d.MaxFilterNodes),
 		MaxOrderTerms:  cmp.Or(l.MaxOrderTerms, d.MaxOrderTerms),
 		MaxCost:        cmp.Or(l.MaxCost, d.MaxCost),
+
+		MaxIntrospectionCost: cmp.Or(l.MaxIntrospectionCost, d.MaxIntrospectionCost),
 	}
 }
 
@@ -103,5 +114,6 @@ func (l Limits) fields() []struct {
 		{"MaxFilterNodes", l.MaxFilterNodes},
 		{"MaxOrderTerms", l.MaxOrderTerms},
 		{"MaxCost", l.MaxCost},
+		{"MaxIntrospectionCost", l.MaxIntrospectionCost},
 	}
 }

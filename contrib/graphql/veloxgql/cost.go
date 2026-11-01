@@ -36,7 +36,8 @@ const statementCost = 100
 //     selection is left out costs what one that selects __typename does;
 //   - __schema and __type cost what they select, counted over the schema
 //     itself: one for each field of the response. A walk that passes
-//     l.MaxCost stops, saturated, so it does no more work than the limit.
+//     l.MaxIntrospectionCost stops, saturated, so it does no more work than the
+//     limit.
 //
 // The statements part is what the request sends, and takes no multiplier, as
 // the rows of a batch share one statement however many parents they have:
@@ -53,11 +54,20 @@ const statementCost = 100
 // wrap the cost to a small or negative number. A named
 // fragment is costed once for each page size it is spread under, so the walk is
 // linear in the document. schema is the server's; op is a parsed and validated
-// operation. Extension refuses a request whose Cost is over Limits.MaxCost
-// before any statement runs.
+// operation. Cost is the sum of what Extension holds to two limits, before any
+// statement runs: the introspection part to Limits.MaxIntrospectionCost, and the
+// rest to Limits.MaxCost.
 func Cost(schema *ast.Schema, op *ast.OperationDefinition, vars map[string]any, l Limits) int {
+	t := costOf(schema, op, vars, l)
+	// On a platform whose int is 32 bits a cost over math.MaxInt is
+	// math.MaxInt, which is over any limit.
+	return int(min(add(add(t.rows, t.statements), t.meta), math.MaxInt))
+}
+
+// costOf is Cost, by its parts.
+func costOf(schema *ast.Schema, op *ast.OperationDefinition, vars map[string]any, l Limits) cost {
 	if schema == nil || op == nil {
-		return 0
+		return cost{}
 	}
 	c := &coster{schema: schema, vars: vars, l: l, frags: map[fragKey]cost{}, sizes: map[string]int64{}}
 	var root *ast.Definition
@@ -69,17 +79,16 @@ func Cost(schema *ast.Schema, op *ast.OperationDefinition, vars map[string]any, 
 	default:
 		root = schema.Query
 	}
-	t := c.set(op.SelectionSet, root, 0)
-	// On a platform whose int is 32 bits a cost over math.MaxInt is
-	// math.MaxInt, which is over any limit.
-	return int(min(add(t.rows, t.statements), math.MaxInt))
+	return c.set(op.SelectionSet, root, 0)
 }
 
-// cost is a selection's cost, in its two parts: a multiplier applies to rows
-// alone.
-type cost struct{ rows, statements int64 }
+// cost is a selection's cost, by its parts: a multiplier applies to rows alone,
+// and meta, introspection's, has its own limit.
+type cost struct{ rows, statements, meta int64 }
 
-func (a cost) plus(b cost) cost { return cost{add(a.rows, b.rows), add(a.statements, b.statements)} }
+func (a cost) plus(b cost) cost {
+	return cost{add(a.rows, b.rows), add(a.statements, b.statements), add(a.meta, b.meta)}
+}
 
 // fragKey is a named fragment under a page size: one on a connection's type
 // costs its edges by the page of the connection it is spread in.
@@ -187,7 +196,7 @@ func (c *coster) spread(s *ast.FragmentSpread, page int64) cost {
 func (c *coster) field(f *ast.Field, parent *ast.Definition, page int64) cost {
 	switch f.Name {
 	case "__schema", "__type":
-		return cost{rows: c.introspection(f)}
+		return cost{meta: c.introspection(f)}
 	case "__typename":
 		return cost{rows: 1}
 	}
@@ -217,6 +226,7 @@ func (c *coster) field(f *ast.Field, parent *ast.Definition, page int64) cost {
 	n := cost{
 		rows:       add(1, mul(children.rows, c.multiplier(f, def, parent, child, page))),
 		statements: add(children.statements, c.inputs(f, def)),
+		meta:       children.meta,
 	}
 	if c.runsStatement(f, parent, child) {
 		n.statements = add(n.statements, statementCost)

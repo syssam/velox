@@ -75,10 +75,10 @@ import (
 // rows, and aliases repeat a field as many times as the client writes it.
 // Limits.MaxCost bounds the whole request. Before any resolver runs, the
 // extension computes the operation's Cost, which multiplies by first and
-// last, counts every alias, every statement and every branch of a fragment, and
-// counts introspection by the fields of its response; a request over MaxCost
-// fails with ErrTooCostly, the code CodeTooCostly and data null, and sends no
-// statement. It reads the schema the server's Use gives Validate; gqlgen's
+// last, counts every alias, every statement and every branch of a fragment; a
+// request over MaxCost, or whose introspection, counted by the fields of its
+// response, is over MaxIntrospectionCost, fails with ErrTooCostly, the code
+// CodeTooCostly and data null, and sends no statement. It reads the schema the server's Use gives Validate; gqlgen's
 // extension.FixedComplexityLimit counts fields, not rows, and is not needed with
 // it. Parsing runs before the extension, which cannot limit it, and gqlgen sets no
 // limit: give the server one, as srv.SetParserTokenLimit(15000).
@@ -252,16 +252,16 @@ func (e *Extension) MutateOperationContext(_ context.Context, rc *graphql.Operat
 	if e.schema == nil || rc.Operation == nil {
 		return nil
 	}
-	cost := Cost(e.schema, rc.Operation, rc.Variables, e.limits)
-	// A negative cost cannot come from Cost; it is refused as saturated.
-	if cost >= 0 && cost <= e.limits.MaxCost {
+	c := costOf(e.schema, rc.Operation, rc.Variables, e.limits)
+	var msg string
+	if meta := c.meta; meta > int64(e.limits.MaxIntrospectionCost) {
+		msg = fmt.Sprintf("%v: its introspection costs %d, and the most is %d", ErrTooCostly, meta, e.limits.MaxIntrospectionCost)
+	} else if data := add(c.rows, c.statements); data > int64(e.limits.MaxCost) {
+		msg = fmt.Sprintf("%v: it costs %d, and the most is %d", ErrTooCostly, data, e.limits.MaxCost)
+	} else {
 		return nil
 	}
-	err := &gqlcore.Error{
-		Code: CodeTooCostly,
-		Msg:  fmt.Sprintf("%v: it costs %d, and the most is %d", ErrTooCostly, cost, e.limits.MaxCost),
-		Err:  ErrTooCostly,
-	}
+	err := &gqlcore.Error{Code: CodeTooCostly, Msg: msg, Err: ErrTooCostly}
 	return &gqlerror.Error{Err: err, Message: err.Error(), Extensions: err.Extensions()}
 }
 

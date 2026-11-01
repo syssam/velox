@@ -482,10 +482,11 @@ func TestCostIntrospection(t *testing.T) {
 	}
 }
 
-// TestCostIntrospectionStopsAtMaxCost: a walk that passes MaxCost saturates.
-func TestCostIntrospectionStopsAtMaxCost(t *testing.T) {
+// TestCostIntrospectionStopsAtItsLimit: a walk that passes MaxIntrospectionCost
+// saturates.
+func TestCostIntrospectionStopsAtItsLimit(t *testing.T) {
 	l := veloxgql.DefaultLimits()
-	l.MaxCost = 5
+	l.MaxIntrospectionCost = 5
 	if got := costOf(t, `{ __schema { types { name } } }`, nil, l); got != saturated {
 		t.Errorf("cost %d, want the saturated %d", got, saturated)
 	}

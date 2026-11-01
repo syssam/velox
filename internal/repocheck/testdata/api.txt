@@ -980,7 +980,7 @@ type Cursor struct { Type string Terms []CursorTerm Key any }
 type CursorTerm struct { Field string Direction OrderDirection Value any }
 type Extension struct { }
 type JSON json.RawMessage
-type Limits struct { MaxPage int MaxList int MaxFilterDepth int MaxFilterWidth int MaxFilterNodes int MaxOrderTerms int MaxCost int }
+type Limits struct { MaxPage int MaxList int MaxFilterDepth int MaxFilterWidth int MaxFilterNodes int MaxOrderTerms int MaxCost int MaxIntrospectionCost int }
 type Noder interface { IsNode() IDGQL() string }
 type Option struct { }
 type OrderDirection string
