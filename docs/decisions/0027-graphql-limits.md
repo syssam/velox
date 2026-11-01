@@ -40,10 +40,12 @@ costed once, and the walk stops at `Limits.MaxIntrospectionCost`, so its work is
 It is its own limit because GraphiQL's query cost 42266, 110966, 207146 and 688046 on
 velox-graphql's schema of 30, 80, 150 and 500 rich entities (`richSchema`; a review
 measured 45536, 119686 and 223496), and raising `MaxCost` to admit it loosened the data
-budget. The default, 1000000, admits it on 500 and leaves 45% over. At that bound a
-request allocates 640 MB and takes 490 ms through gqlgen, and answers with 17 MB: 285
-aliases of GraphiQL's selection on the example's schema, about 640 bytes a unit. That is
-real, and much: a server open to strangers lowers it, or has no `extension.Introspection`.
+budget. The default, 250000, admits it on 150 and leaves 20% over. A bound of 1000000 was
+measured at 640 MB and 490 ms through gqlgen, answering with 17 MB: 285 aliases of
+GraphiQL's selection on the example's schema, about 640 bytes a unit. That is too much
+to allow by default for the sake of schemas few have, so 250000 is about 160 MB at that
+rate: a larger schema raises it, and a server open to strangers lowers it, or has no
+`extension.Introspection`.
 
 **A document is refused before gqlgen parses it.** gqlgen's `graphql.OperationParameterMutator`
 runs first, on every transport, at v0.17.86 and at v0.17.98. The Extension parses the

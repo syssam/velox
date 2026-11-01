@@ -21,6 +21,10 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Added
 
+- `veloxgql.Setup` and `Limits.MaxTokens`, `MaxFields`, `MaxBodyBytes` and
+  `MaxIntrospectionCost`, with `ErrRequestTooLarge`: an oversized document is refused
+  before it is parsed. A public server should call `Setup`.
+- `-- velox:drops`, the plan's list of what a generated file removes.
 - `velox-gen` refuses `Unique` with `Optional`, two edges on one foreign key, non-ASCII
   names, and a `Default` that fails the field's built-in checks.
 - `migrate.LintFile` reports `DROP SCHEMA`, `DROP DATABASE`, MySQL `CHANGE COLUMN` and
@@ -49,6 +53,12 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Changed
 
+- `veloxgql.GeneratedCodeIsVersion5`: regenerate (this supersedes version 4).
+- GraphQL: explicit `null` on a Nillable field with a `Default` is refused on create.
+  `@skip` no longer lowers the rows charged, and a mutation's cost counts its statements.
+  GraphiQL has its own budget, enough for 150 rich entities: raise
+  `MaxIntrospectionCost` for a larger schema.
+- MySQL `Up` runs in strict mode, in its own session only.
 - `veloxgql.GeneratedCodeIsVersion4`: regenerate.
 - GraphQL: a Required unique edge is `T`, not `T!`, since a policy or tenant can hide its
   target. `or: []` matches nothing. A tenant key is never an input. `Create<T>` refuses an
@@ -76,6 +86,20 @@ next major version. Before 1.0, nothing is deprecated: it changes or goes.
 
 ### Fixed
 
+- Migrations: `Up` refuses what a file would lose unaccounted, on every dialect, including
+  columns and constraints added outside the snapshot, collations, and foreign key options.
+  A pending generated SQLite file from before this change needs `velox:drops` or an allow.
+- Migrations: SQLite rebuilds keep rowids and refuse an unaccounted child on `DROP TABLE`.
+  Plans refuse truncating casts, enum arrays and a foreign `CONVERT TO`. `LintFile` reads
+  `WITH`, `MERGE` and `UPDATE OR`, and flags a rebuild without `foreign-keys off`.
+- SQLite: a transaction rolled back by an interrupt or `INSERT OR ROLLBACK` is broken, so
+  later writes fail unsent instead of committing alone. A broken transaction refuses at the
+  send, including an Around hook's retry.
+- A statement on `db` inside `Tx`'s fn, on a one-connection pool, fails rather than hanging.
+- `TxReadOnly` restores `query_only` and works under `_txlock=immediate`. A retry stopped by
+  its context matches the context's error. `After` with `Columns` is allowed on `Count`,
+  `Exists` and aggregates.
+- GraphQL: an empty `Bytes` reads as `""` in `Bytes!`, and a literal `[]` stays `[]`.
 - Migrations: `Up` refuses a SQLite rebuild or MySQL `MODIFY COLUMN` that would lose what
   the model cannot hold (`*Error` of Code `unmodeled`); `-- velox:allow unmodeled-loss`
   accepts it. A SQLite rebuild with a dependent view is refused.

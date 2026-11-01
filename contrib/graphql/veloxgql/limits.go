@@ -58,11 +58,11 @@ type Limits struct {
 
 	// MaxIntrospectionCost is the most the __schema and __type of a request may
 	// cost, one for each field of their response. More is ErrTooCostly. The
-	// default admits GraphiQL's query on a schema of 500 rich entities (about
-	// 700000), and no data comes under it: raising it does not loosen MaxCost,
-	// nor MaxCost it. A request at this limit allocates about 640 MB through
-	// gqlgen: give a server open to strangers a lower one, or no
-	// extension.Introspection.
+	// default admits GraphiQL's query on a schema of 150 rich entities (about
+	// 210000), and no data comes under it: raising it does not loosen MaxCost,
+	// nor MaxCost it. A request at this limit allocates about 160 MB through
+	// gqlgen. A larger schema raises it, at about 640 bytes a unit; a server open
+	// to strangers lowers it, or has no extension.Introspection.
 	MaxIntrospectionCost int
 
 	// MaxTokens is the most lexer tokens a request's query may have. More is the
@@ -91,7 +91,7 @@ type Limits struct {
 func DefaultLimits() Limits {
 	return Limits{
 		MaxPage: 100, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 5,
-		MaxCost: 100000, MaxIntrospectionCost: 1000000, MaxTokens: 15000, MaxFields: 2000, MaxBodyBytes: 1 << 20,
+		MaxCost: 100000, MaxIntrospectionCost: 250000, MaxTokens: 15000, MaxFields: 2000, MaxBodyBytes: 1 << 20,
 	}
 }
 

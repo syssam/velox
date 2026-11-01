@@ -455,12 +455,13 @@
 // with it.
 //
 // __schema and __type have a limit of their own, veloxgql.Limits.MaxIntrospectionCost,
-// 1000000 by default: they cost what they select, counted over the schema, one
+// 250000 by default: they cost what they select, counted over the schema, one
 // for each field of the response, and a walk that passes the limit stops.
 // GraphiQL's query costs 3478 on the example's schema of three entities and about
-// 1400 for each rich entity, so the default admits it on 500 of them. Neither limit
-// loosens the other. A request at this one allocates about 640 MB through gqlgen:
-// give a server open to strangers a lower one, or no extension.Introspection.
+// 1400 for each rich entity, so the default admits it on 150 of them. Neither limit
+// loosens the other. A request at this one allocates about 160 MB through gqlgen:
+// a larger schema raises it, at about 640 bytes a unit, and a server open to
+// strangers lowers it, or has no extension.Introspection.
 //
 // # What a server must call
 //

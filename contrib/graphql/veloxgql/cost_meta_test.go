@@ -110,13 +110,13 @@ func metaCost(t testing.TB, schema *ast.Schema, query string, l veloxgql.Limits)
 // query on 500 rich entities, and the walk stays bounded past it.
 func TestGraphiQLOnARichSchema(t *testing.T) {
 	if testing.Short() {
-		t.Skip("renders 500 entities")
+		t.Skip("renders 150 entities")
 	}
 	l := veloxgql.DefaultLimits()
 	if l.MaxIntrospectionCost <= l.MaxCost {
 		t.Fatalf("MaxIntrospectionCost %d, MaxCost %d", l.MaxIntrospectionCost, l.MaxCost)
 	}
-	for _, n := range []int{30, 80, 150, 500} {
+	for _, n := range []int{30, 80, 150} {
 		schema := richSchema(t, n)
 		got := metaCost(t, schema, graphiQL, l)
 		t.Logf("%d entities: %d", n, got)
