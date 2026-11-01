@@ -700,7 +700,7 @@ func TestRequestCost(t *testing.T) {
 		return string(got)
 	}
 	got := post(introspection)
-	if !strings.HasPrefix(string(got), `{"data":{"__schema"`) {
+	if !strings.HasPrefix(got, `{"data":{"__schema"`) {
 		t.Errorf("the introspection query: %.300s", got)
 	}
 	// Introspection nested as deep as gqlparser's rule allows, under aliases.
