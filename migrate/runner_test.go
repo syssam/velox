@@ -281,7 +281,7 @@ func TestUpChecksum(t *testing.T) {
 	if !errors.As(err, &ce) || *ce != (migrate.ChecksumError{Version: 1, Path: "0001_a.sql", Applied: old, Now: nd.Files[0].Sum}) {
 		t.Fatalf("edited: %#v", err)
 	}
-	if want := "migrate: 0001_a.sql was applied with checksum " + old + " and is now " + nd.Files[0].Sum; err.Error() != want {
+	if want := "migrate: 0001_a.sql was applied with checksum " + old + " and is now " + nd.Files[0].Sum + "\n  restore the file; or, if the database holds what this file does, run migrate resolve -version 1 -adopt"; !strings.HasPrefix(err.Error(), want) {
 		t.Errorf("edited: %q\nwant %q", err, want)
 	}
 
@@ -292,7 +292,7 @@ func TestUpChecksum(t *testing.T) {
 	if !errors.As(err, &ce) || ce.Version != 1 || ce.Now != "" || ce.Applied != old {
 		t.Fatalf("gone: %#v", err)
 	}
-	if want := "migrate: version 1 is applied but the directory has no file for it"; err.Error() != want {
+	if want := "migrate: version 1 is applied but the directory has no file for it\n  restore the file; or, "; !strings.HasPrefix(err.Error(), want) || !strings.Contains(err.Error(), "resolve -version 1 -forget") {
 		t.Errorf("gone: %q\nwant %q", err, want)
 	}
 }

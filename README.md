@@ -211,6 +211,8 @@ adopting an existing database.
   [contrib/graphql](https://pkg.go.dev/github.com/syssam/velox/contrib/graphql),
   [contrib/veloxotel](https://pkg.go.dev/github.com/syssam/velox/contrib/veloxotel).
 - [docs/decisions/](docs/decisions/) records the design decisions.
+- [docs/migrations-operations.md](docs/migrations-operations.md) says what to do when
+  `migrate apply` refuses.
 - [CHANGELOG.md](CHANGELOG.md) lists the changes.
 - [CONTRIBUTING.md](CONTRIBUTING.md) explains how to work on velox.
 - [SECURITY.md](SECURITY.md) explains how to report a vulnerability.

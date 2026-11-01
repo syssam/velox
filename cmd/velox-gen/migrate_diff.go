@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -121,6 +122,34 @@ func tableRef(s string) (migrate.TableRef, bool) {
 	return migrate.TableRef{Schema: schema, Name: name}, simpleName(schema) && simpleName(name)
 }
 
+// versionsFree refuses a directory behind the database at dsn: a version in its
+// history above the directory's last file is one the next file would reuse, as two
+// branches do. It reports false, with the exit code, when it refuses.
+func (c *migrateCmd) versionsFree(d *migrate.Dir, dir, dsn string) (int, bool) {
+	bc := &dbCmd{migrateCmd: c, db: &dsn}
+	db, code, ok := bc.open(d.Config.Dialect, dsn, "-db", true)
+	if !ok {
+		return code, false
+	}
+	defer func() { _ = db.Close() }()
+	ctx, stop := signalContext()
+	defer stop()
+	rows, err := migrate.History(ctx, db, os.DirFS(c.abs(dir)))
+	if err != nil {
+		return bc.fail(1, err), false
+	}
+	var last uint64
+	if n := len(d.Files); n > 0 {
+		last = d.Files[n-1].Version
+	}
+	for _, r := range rows {
+		if r.Version > last {
+			return bc.fail(1, fmt.Errorf("version %d (%s) is in the database's history and not in the directory, and the next file would reuse its number; merge the branch that has it, or, if its file is gone for good, run migrate resolve -version %d -forget", r.Version, r.Name, r.Version)), false
+		}
+	}
+	return 0, true
+}
+
 // runMigrateDiff is velox-gen migrate diff: it plans the schema package
 // against the directory's snapshot and writes the files Dir.Add makes.
 func runMigrateDiff(args []string, dir string, env []string, stdout, stderr io.Writer) int {
@@ -137,6 +166,7 @@ func runMigrateDiff(args []string, dir string, env []string, stdout, stderr io.W
 	c.fs.Var(&lockTimeout, "lock-timeout", "the lock timeout the files carry; 0 writes none, so velox.json's applies (default: velox.json's)")
 	check := c.fs.Bool("check", false, "write nothing; exit 3 when the schema differs from schema.json or velox.sum is out of date")
 	dryRun := c.fs.Bool("dry-run", false, "print the files instead of writing them")
+	seen := c.fs.String("db", "", "a database whose history to look at first: refuse if it holds a version above the directory's last, which a new file would reuse")
 	patterns, code, done := parseFlags(c.fs, args)
 	if done {
 		return code
@@ -181,6 +211,12 @@ func runMigrateDiff(args []string, dir string, env []string, stdout, stderr io.W
 	opts, err := renameOptions(d.Snapshot, renames)
 	if err != nil {
 		return c.fail(1, err)
+	}
+
+	if *seen != "" && !*check && state == migrationDir {
+		if code, ok := c.versionsFree(d, dir, *seen); !ok {
+			return code
+		}
 	}
 
 	// The schema package, as the directory's dialect sees it.

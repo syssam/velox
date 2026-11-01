@@ -19,7 +19,7 @@
 //	velox-gen version
 //	velox-gen migrate diff [-dir ./migrations] [-dialect d] [-name n] [-allow code[=target],...]
 //	                       [-rename-table old=new]... [-rename-column table.old=new]...
-//	                       [-lock-timeout 5s] [-check] [-dry-run] [package]
+//	                       [-lock-timeout 5s] [-check] [-dry-run] [-db dsn] [package]
 //	velox-gen migrate apply [-dir ./migrations] [-db dsn] [-to version] [-resume] [-lock-wait 5m] [-dry-run]
 //	                        [-baseline version]
 //	velox-gen migrate status [-dir ./migrations] [-db dsn] [-json]
@@ -27,7 +27,7 @@
 //	velox-gen migrate baseline [-dir ./migrations] -dialect d [-db dsn] [package]
 //	velox-gen migrate lint [-dir ./migrations] [-since version]
 //	velox-gen migrate hash [-dir ./migrations] [-check]
-//	velox-gen migrate resolve [-dir ./migrations] [-db dsn] -version n (-applied | -undone)
+//	velox-gen migrate resolve [-dir ./migrations] [-db dsn] -version n (-applied | -undone | -statements k | -adopt | -forget)
 //	velox-gen migrate sql -dialect postgres|mysql|sqlite [package]
 //
 // Each subcommand has its own flags; a flag it does not take is a usage
@@ -235,8 +235,12 @@
 //
 // migrate resolve ends a dirty version a human finished (-applied, which
 // needs its file unchanged) or reverted (-undone, which deletes its row, so
-// the file may be edited and applied again). A version that is not dirty is
-// exit 1; no -version, or neither or both of -applied and -undone, is exit 2.
+// the file may be edited and applied again), says how many statements of one
+// ran (-statements, for apply -resume), records a pending file as applied
+// (-applied again), accepts a changed file for an applied version (-adopt)
+// and removes the row of a version whose file is gone, differs or never ran
+// (-forget). A version not in the state its way needs is exit 1; no -version,
+// or not exactly one way, is exit 2. docs/migrations-operations.md has when.
 package main
 
 import (
@@ -410,7 +414,7 @@ func printUsage(w io.Writer) {
         protocol and of the model
   velox-gen migrate diff [-dir ./migrations] [-dialect d] [-name n] [-allow code[=target],...]
         [-rename-table old=new]... [-rename-column table.old=new]...
-        [-lock-timeout 5s] [-check] [-dry-run] [package]
+        [-lock-timeout 5s] [-check] [-dry-run] [-db dsn] [package]
         write the migration that brings the directory's schema.json to the
         schema package
   velox-gen migrate apply [-dir ./migrations] [-db dsn] [-to version] [-resume]
@@ -426,8 +430,8 @@ func printUsage(w io.Writer) {
         check the migration files
   velox-gen migrate hash [-dir ./migrations] [-check]
         rewrite velox.sum
-  velox-gen migrate resolve [-dir ./migrations] [-db dsn] -version n (-applied | -undone)
-        end a dirty version that was finished or undone by hand
+  velox-gen migrate resolve [-dir ./migrations] [-db dsn] -version n (-applied | -undone | -statements k | -adopt | -forget)
+        tell the history what was done by hand
   velox-gen migrate sql -dialect postgres|mysql|sqlite [package]
         print the schema package's DDL, for Atlas's external_schema
 

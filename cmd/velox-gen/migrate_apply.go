@@ -496,9 +496,11 @@ func runMigrateDrift(args []string, dir string, env []string, stdout, stderr io.
 // -version with migrate.Resolve, as applied (-applied) or undone (-undone).
 func runMigrateResolve(args []string, dir string, env []string, stdout, stderr io.Writer) int {
 	c := newDBCmd("resolve", stderr)
-	version := c.fs.Uint64("version", 0, "the dirty `version`")
+	version := c.fs.Uint64("version", 0, "the `version` to resolve")
 	c.fs.Bool("applied", false, "the version was finished by hand: mark it applied")
 	undone := c.fs.Bool("undone", false, "the version's applied statements were reverted by hand: delete its row")
+	adopt := c.fs.Bool("adopt", false, "the directory's file is what this applied version is now: record its checksum, running nothing")
+	forget := c.fs.Bool("forget", false, "the file of this clean version is gone or never ran: delete its row, undoing nothing")
 	statements := c.fs.Int("statements", 0, "the first `k` statements of the dirty version ran: record that, so that apply -resume goes on from statement k+1")
 	rest, code, done := parseFlags(c.fs, args)
 	if done {
@@ -508,13 +510,13 @@ func runMigrateResolve(args []string, dir string, env []string, stdout, stderr i
 		return c.noArgs()
 	}
 	ways := 0
-	for _, way := range []string{"applied", "undone", "statements"} {
+	for _, way := range []string{"applied", "undone", "statements", "adopt", "forget"} {
 		if given(c.fs, way) {
 			ways++
 		}
 	}
 	if !given(c.fs, "version") || ways != 1 {
-		_, _ = fmt.Fprintf(stderr, "velox-gen: migrate resolve needs -version and one of -applied, -undone and -statements\n")
+		_, _ = fmt.Fprintf(stderr, "velox-gen: migrate resolve needs -version and one of -applied, -undone, -statements, -adopt and -forget\n")
 		c.fs.Usage()
 		return 2
 	}
@@ -549,6 +551,10 @@ func runMigrateResolve(args []string, dir string, env []string, stdout, stderr i
 	switch {
 	case *undone:
 		r, how = migrate.ResolveUndone, "undone"
+	case *adopt:
+		r, how = migrate.ResolveAdopted, "adopted"
+	case *forget:
+		r, how = migrate.ResolveForgotten, "forgotten"
 	case given(c.fs, "statements"):
 		r, how = migrate.ResolveStatements, fmt.Sprintf("%d statements run, to resume", *statements)
 		opts = append(opts, migrate.WithStatements(*statements))

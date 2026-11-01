@@ -66,7 +66,8 @@ func WithTarget(version uint64) Option {
 }
 
 // WithResume makes Up continue a dirty version before the pending files,
-// from the first statement of its first incomplete unit. Its file must be
+// from the statement after those its row counts: the first of its first
+// incomplete unit, unless ResolveStatements said otherwise. Its file must be
 // unchanged: a changed or missing one is a *ChecksumError; a dirty version
 // beside versions above the directory's last file is not resumed, an *Error
 // of Code "history". A run killed while a statement ran may have applied
@@ -186,20 +187,25 @@ var errAppliedMeanwhile = errors.New("migrate: applied by another runner")
 // unaccounted table references or that leaves a view or trigger naming it; a MySQL
 // MODIFY, CHANGE or CONVERT TO, and a PostgreSQL ALTER COLUMN TYPE, that does not
 // write what the column has; a foreign key or an index dropped and made again
-// without what it has; and a MySQL rename or drop that a view or trigger uses, or a
-// DROP COLUMN that shrinks an index. The SQLite file is rolled back; the others do
-// not start. A plan's own drops are listed in the file as -- velox:drops, by the
-// attribute where it can, and -- velox:allow unmodeled-loss [<object>] accepts a
-// loss, but for a view or trigger's use that a SQLite rebuild's RENAME needs gone.
-// Up checks each file as it comes to it, so files before it stay applied.
+// without what it has; a MySQL rename or drop that a view or trigger uses, or a
+// DROP COLUMN that shrinks a UNIQUE index; and a PostgreSQL rename or drop that a
+// PL/pgSQL function of a trigger on the table names. The SQLite file is rolled back;
+// the others do not start. A plan's own drops are listed in the file as -- velox:drops,
+// by the attribute where it can and with the value it expects where it has one, which
+// Up compares, and -- velox:allow unmodeled-loss [<object>] accepts a loss, but for a
+// view or trigger's use that a SQLite rebuild's RENAME needs gone. Up checks each file
+// as it comes to it, so files before it stay applied.
 //
 // A file runs in a transaction with its history row on PostgreSQL and
 // SQLite; one that fails is rolled back, and Up stops with an error naming
 // the file and the statement that wraps the driver's. A MySQL file, or a
 // PostgreSQL no-transaction one, runs statement by statement: one that fails
 // leaves its version dirty and is a *DirtyError, which stops every later run
-// until WithResume continues it or Resolve ends it. Either way the Report
-// holds the files applied before it.
+// until WithResume continues it or Resolve ends it. On MySQL a failure with nothing
+// changed is less. A lock wait timeout or deadlock, or the server's refusal of a DDL
+// statement, as a file's first statement, leaves no row, an *Error of Code "retry"; a
+// lock's at the head of a later unit leaves a row Up goes on from without WithResume.
+// Either way the Report holds the files applied before it.
 //
 // Up uses one connection of db for its run and closes it after, so nothing
 // a file sets on its session reaches db's other connections. A SQLite database
@@ -266,6 +272,9 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 		resumed, err = s.resuming(d, st)
 	}
 	if err != nil {
+		return nil, err
+	}
+	if err := checkSquash(d, st); err != nil {
 		return nil, err
 	}
 	if len(st.Ahead) > 0 {
@@ -537,13 +546,21 @@ func reading(dir *Dir, rows []Applied) (*State, error) {
 // check is reading's refusals of the clean rows: an applied file edited or
 // gone, and a pending file below the highest applied version.
 func (st *State) check(dir *Dir) error {
+	floor := squashedBelow(dir)
 	for _, r := range st.Applied {
 		i := slices.IndexFunc(dir.Files, func(f File) bool { return f.Version == r.Version })
 		if i < 0 {
+			if r.Version < floor {
+				continue
+			}
 			return &ChecksumError{Version: r.Version, Path: dir.PathOf(r.Version, r.Name), Applied: r.Sum}
 		}
 		if f := dir.Files[i]; f.Sum != r.Sum {
-			return &ChecksumError{Version: r.Version, Path: f.Path, Applied: r.Sum, Now: f.Sum}
+			e := &ChecksumError{Version: r.Version, Path: f.Path, Applied: r.Sum, Now: f.Sum}
+			if r.Name != f.Name {
+				e.was = versionFile(r.Version, r.Name)
+			}
+			return e
 		}
 	}
 	var highest uint64
@@ -561,6 +578,26 @@ func (st *State) check(dir *Dir) error {
 		}
 	}
 	return nil
+}
+
+// squashedBelow is the version of a directory's first file when that is a baseline
+// made from later history, whose versions below it were squashed away: an applied row
+// below it is no missing file. It is 0 when the first file is no baseline.
+func squashedBelow(dir *Dir) uint64 {
+	if len(dir.Files) > 0 && dir.Files[0].Name == "baseline" {
+		return dir.Files[0].Version
+	}
+	return 0
+}
+
+// checkSquash refuses to run a squashed baseline over a history from before it: it
+// makes every table, which the database has.
+func checkSquash(dir *Dir, st *State) error {
+	floor := squashedBelow(dir)
+	if floor == 0 || len(st.Pending) == 0 || st.Pending[0].Version != floor || len(st.Applied) == 0 {
+		return nil
+	}
+	return &Error{Code: "history", Pos: st.Pending[0].Path, Reason: fmt.Sprintf("the database has versions below this baseline, and it would make again what they made; once the database is at what the baseline holds, run migrate resolve -version %d -applied", floor)}
 }
 
 // stepwise reports whether f runs statement by statement: every MySQL file,

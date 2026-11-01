@@ -75,8 +75,9 @@
 //   - "history": the history table holds what the runner cannot read, a
 //     file is pending below the highest applied version, a dirty version
 //     to resume runs in a transaction or has versions above the
-//     directory's last file beside it, or the version Resolve was given is
-//     not dirty or not in the history.
+//     directory's last file beside it, a baseline is pending over versions
+//     below it, or the version Resolve was given is not in the state its
+//     Resolution needs.
 //   - "unmodeled": Up found that a file would lose what the database holds
 //     and its change list does not say: a SQLite rebuild of a table with a column
 //     its INSERT does not copy, a check, a trigger and the like, or that a view
@@ -85,11 +86,19 @@
 //     a PostgreSQL ALTER COLUMN TYPE, that does not write what the column has, in
 //     the model or not, and the file does not name; a foreign key or index made
 //     again without what it has; a MySQL rename or drop that a view or trigger
-//     uses, or a DROP COLUMN that shrinks an index; or a statement it cannot read
-//     on such a table. It names each, and a directive -- velox:allow unmodeled-loss
-//     accepts the loss.
-//   - "resolution": Resolve was given neither ResolveApplied nor
-//     ResolveUndone.
+//     uses, or a DROP COLUMN that shrinks a UNIQUE index; a PostgreSQL rename or
+//     drop that a PL/pgSQL function of a trigger on the table names; a value a
+//     file's velox:drops line expects and the database does not hold; or a
+//     statement it cannot read on such a table. It names each, and a directive
+//     -- velox:allow unmodeled-loss accepts the loss.
+//   - "unsupported": Up found a statement the server would refuse with the file
+//     under way: CONCURRENTLY on a PostgreSQL partitioned table or index,
+//     ALGORITHM=INPLACE or LOCK=NONE on a MyISAM table.
+//   - "retry": MySQL refused a file's first statement with nothing changed, and
+//     no version is recorded: run Up again, once the cause is gone if it is not
+//     a lock.
+//   - "resolution": Resolve was given no Resolution it knows, or a count its file
+//     does not have.
 //   - "drift": Verify was given a database that is not empty, or the
 //     database differs from schema.json after the directory's files ran, a
 //     table schema.json does not name included.

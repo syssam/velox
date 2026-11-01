@@ -78,21 +78,27 @@ type ChecksumError struct {
 	Path         string
 	Applied, Now string // Now is "" when the file is missing
 
-	dirty bool // the version is dirty: WithResume found no file to resume
+	dirty bool   // the version is dirty: WithResume found no file to resume
+	was   string // the row's name, when it is not the file's: two files took one number
 }
 
 // Error is "migrate: <Path> was applied with checksum <Applied> and is now
 // <Now>", or, when Now is "", "migrate: version <Version> is applied but the
-// directory has no file for it". For a dirty version to resume whose file is
-// missing it says the version is dirty, and how to go on.
+// directory has no file for it". Each goes on to the ways out: migrate resolve
+// -adopt and -forget. For a dirty version to resume whose file is missing it says the
+// version is dirty, and how to go on.
 func (e *ChecksumError) Error() string {
 	if e.Now == "" && e.dirty {
 		return fmt.Sprintf("migrate: version %d is dirty, and the directory has no file for it; resume it with the directory that has its file, or %s", e.Version, undoHint(e.Version))
 	}
 	if e.Now == "" {
-		return fmt.Sprintf("migrate: version %d is applied but the directory has no file for it", e.Version)
+		return fmt.Sprintf("migrate: version %d is applied but the directory has no file for it\n  restore the file; or, if another branch's history moved it or it was reverted by hand, run migrate resolve -version %d -forget", e.Version, e.Version)
 	}
-	return "migrate: " + e.Path + " was applied with checksum " + e.Applied + " and is now " + e.Now
+	head := "migrate: " + e.Path + " was applied with checksum " + e.Applied + " and is now " + e.Now
+	if e.was != "" {
+		head = fmt.Sprintf("migrate: version %d was applied as %s, with checksum %s, and the directory's file for it is %s, with checksum %s", e.Version, e.was, e.Applied, e.Path, e.Now)
+	}
+	return head + fmt.Sprintf("\n  restore the file; or, if the database holds what this file does, run migrate resolve -version %d -adopt; or, once what the old file did is undone by hand, run migrate resolve -version %d -forget", e.Version, e.Version)
 }
 
 // A DirtyError is a version left part-way: by a file that failed now, at

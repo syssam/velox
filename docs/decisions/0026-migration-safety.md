@@ -111,9 +111,16 @@ follows the edit.
   one value apart, as drift reads them; what differs needs `t.c:type`, `t.c:not-null`,
   `t.c:default`, `t.c:comment` or `t.c:identity`. A hand `MODIFY` that means to change
   the type says so with the same line, which is the price of telling it from a stale
-  plan. A PostgreSQL `ALTER COLUMN TYPE` states the type and nothing else, so the type
-  needs no line; a default that its statement drops or sets is compared, under
+  plan. A PostgreSQL `ALTER COLUMN TYPE` states the type and nothing else, so a hand
+  file's needs no line; a default that its statement drops or sets is compared, under
   `t.c:default`. A storage or compression must be set again by a statement of the file.
+- A plan's attribute line records what the plan expects: `-- velox:drops
+  "t.c:type=int"`, and `:default=`, `:comment=`, `:not-null=`, `:identity=`, and an
+  index's `:columns=`, `:unique=`, `:where=`. `Up` compares it with what is there, on
+  MySQL and on PostgreSQL's retype too, and refuses another value, naming both: a plan
+  of `int` to `bigint` over a hand `numeric(12,4)` would have cut the fraction, printed
+  as a widening. A line with no value stays an acceptance, for a human to write. These
+  lines are outside the history's checksum, like all of `velox:drops` and `velox:allow`.
 - An index dropped and made again under one name, here or in a later pending file, is
   compared with the statement that makes it: `unique`, `columns`, `where`, `method`,
   `key-options` (operator class, collation, `DESC`, prefix), `include`, `with`,
@@ -124,9 +131,19 @@ follows the edit.
   `DROP TABLE` read the database's views and triggers as words. One that names the
   table and the column, or a trigger of the table that names the column, is refused
   by its name unless the file drops or remakes it or a directive accepts it. A table's
-  own trigger moves and goes with it. `DROP COLUMN` of a multi-column index's column
-  is refused as `t.x`, which `-allow drop-column` does not cover, unless the file drops
-  the index or all its columns go.
+  own trigger moves and goes with it. `DROP COLUMN` of a column of a `UNIQUE`
+  multi-column index is refused as `t.x`, which `-allow drop-column` does not cover,
+  unless the file drops the index or all its columns go. A plain index only serves
+  other queries: it is let through, with a note.
+- PostgreSQL's `RENAME COLUMN` and `DROP COLUMN` read as words the bodies of the
+  PL/pgSQL functions of the table's triggers, which PostgreSQL does not read until one
+  fires, so every write to the table would fail after. One that names the column is
+  refused by the function's name, unless the file replaces it or drops it or the
+  trigger, or a directive accepts it.
+- What the server refuses with a file under way, its earlier statements kept, is
+  refused first, as Code `unsupported`: `CONCURRENTLY` on a PostgreSQL partitioned table
+  or index, and on a MyISAM table `ALGORITHM=INPLACE` or `LOCK=NONE` on anything but a
+  rename or a default, the set a run against MySQL 8.4 showed it takes.
 - A plan cannot read a collation, so widening a collated PostgreSQL column stays
   written without it, and this guard refuses it until the file writes it.
 - MySQL's `Up` adds `STRICT_ALL_TABLES` to its own session's `sql_mode` when it is
@@ -140,7 +157,25 @@ The checks of a pending file run when `Up` reaches it, as an earlier pending fil
 may add or remove the object. Files before it stay applied.
 
 `migrate drift` cannot do this job: it refuses while a file is pending, and the
-directory holds no snapshot per version to compare an applied state with.
+directory holds no snapshot per version to compare an applied state with. It stays so.
+The lines above are what stands in for it: a hand edit under a pending plan is seen
+at `Up`, for what the plan touches.
+
+A refusal's advice to change a statement says on a file not yet applied anywhere, as
+an environment that applied it would give a `ChecksumError`; elsewhere it is a
+directive line, which does not change the checksum, or a new migration.
+
+A MySQL statement that failed with nothing changed leaves nothing to clear: 1205 or
+1213, or the server's refusal of a file's first DDL statement, takes the row back, as
+Code `retry`, and a lock at the head of a later unit leaves a row `Up` goes on from
+unasked. A model states a collation only by `schema.Collation`: without one a new table
+gets `utf8mb4_bin`, and a table that exists keeps what it has, no diff and no `CONVERT`.
+
+`resolve` mends what a history and a directory disagree on, as
+[docs/migrations-operations.md](../migrations-operations.md) shows, each by a test:
+`-statements`, `-adopt`, `-forget`, and `-applied` of a pending file. An applied version
+below a directory's first file, when that is named `baseline`, is no missing file.
+`diff -db` refuses a version above the directory's last in the database's history.
 
 Beside this, in the same spirit, each found by running it:
 
@@ -161,6 +196,11 @@ Beside this, in the same spirit, each found by running it:
   whole database when a statement cannot be read or a touched table has a trigger.
 - `foreign_key_check` also covers the whole database when a table the file touched,
   and dropped, had a trigger, which may have written anywhere first.
+- `foreign_key_check` is read before the file too, and only a row that was not there
+  fails it. One that was is a note: SQLite's foreign keys default off, so these are
+  common, and one blocked every rebuild of its table with no directive to pass it.
+- A type or default as a schema spells it is the one its server prints, for `Diff` and
+  drift alike: `int4` and `integer`, `now(6)` and `CURRENT_TIMESTAMP(6)`, `true` and `1`.
 - `LintFile` reads files with the generated header, as a header proves nothing, and
   `WITH` bodies, `MERGE` and `UPDATE OR`. `DROP DOMAIN`, `DROP TYPE`, `DROP COLLATION`
   and `DROP PARTITION` are `drop-domain`, `drop-type`, `drop-collation` and
@@ -197,10 +237,11 @@ Beside this, in the same spirit, each found by running it:
   not recognised, nor a MySQL shape swap done with `RENAME TABLE` around a new table.
 - Statements are read as written. `ON UPDATE` with another expression, or `NOT
   DEFERRABLE`, counts as kept. Any name in a rebuild's `SELECT` list counts as copied.
-- A line for an attribute accepts whatever the database holds of it: a plan that
-  widens `decimal(12,2)` to `(14,2)` over a hand `(12,4)` rounds unseen, on MySQL behind
-  `t.c:type`, on PostgreSQL because a retype's type is not compared at all. The same
-  goes for `:default`, and for an index's `:columns`.
+- A line with no value accepts whatever the database holds of it. So does a file from
+  before values were written, and SQLite's lines for a foreign key's attribute, and for
+  `:not-null` and `:identity`, which carry none. A hand edit that happens to be the
+  value the plan expects is not seen. A value is compared as the server prints it after
+  the normaliser, so a spelling it does not know is refused, the safe side.
 - A file from before these lines is refused on MySQL at its first `MODIFY` that
   changes something, and on PostgreSQL and MySQL at an index it changes, until it gets
   the line: the safe side. `migrate hash` follows; the history's checksum stays.
@@ -217,8 +258,10 @@ Beside this, in the same spirit, each found by running it:
   refused until `t.x:columns` says it.
 - Views and triggers are read as words: an alias of a column's name refuses falsely,
   and a routine, an event, another database's view, or a view whose text the user may
-  not read (no `SHOW VIEW`) is not seen. PostgreSQL follows a rename in views itself,
-  but a PL/pgSQL body naming the old name breaks unseen.
+  not read (no `SHOW VIEW`) is not seen. PostgreSQL follows a rename in views itself. Of
+  its functions only a PL/pgSQL one a trigger on the table runs is read: another that
+  one calls, one a view or a default calls, and a name built into an `EXECUTE` string
+  break unseen.
 - The walk resolves a name when it reads it. A `CREATE TABLE` without a schema is taken
   as made in `Up`'s, the first of the path.
 - A shared-cache database whose only other connection belongs to another pool is
@@ -232,8 +275,24 @@ Beside this, in the same spirit, each found by running it:
 - A pending generated SQLite file from before `velox:drops` is refused until it gets
   the directive or an allow: the safe side.
 - A hand-written `velox:drops` line is an allow by another name.
-- Whether a MySQL `DROP COLUMN` of an index's column would break the index's uniqueness
+- Whether a MySQL `DROP COLUMN` of a `UNIQUE` index's column would break its uniqueness
   is not read from the rows; it is refused in any case.
+- A MySQL version stays dirty for a failure inside a unit, a first statement that is not
+  DDL, and a statement killed. A multi-table DDL on an engine that is not atomic, as
+  `DROP TABLE` of two MyISAM tables, can stop part-way though the server refused it, and
+  no row is left to say so. The count is written after each unit, so a run killed with a
+  statement on the server leaves a human to say which ran, by `-statements`.
+- The `INPLACE` refusal is for MyISAM alone; another engine fails on the server with the
+  file under way.
+- A SQLite orphan is matched by table, rowid and parent. A file that renames the table,
+  or rebuilds it without keeping rowids, makes its old orphans look new, and is refused:
+  the safe side.
+- `diff` sees a database only under `-db`, and only one, so two branches that have not
+  met are found at the merge or at `apply`. `-forget` undoes nothing. `-adopt` and
+  `-applied` run nothing and check nothing against the database.
+- Nothing checks that a database was at the last version before a squash's `-applied`.
+- A new MySQL table at `utf8mb4_bin` with a string key to a table kept at another
+  collation fails 3780 until `schema.Collation` states one for it.
 - SQLite check text is compared by the normaliser, so a check spelled otherwise in a
   rewritten rebuild, which it cannot parse as the same, is refused.
 - `LintFile` judges `MERGE` by its `WHEN` clauses, not by what they reach.
