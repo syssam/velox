@@ -431,7 +431,7 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 	if h != 0 {
 		db.Cfg.connTx.Store(f)
 	}
-	defer releaseConn(db, h) // deferred first, so it runs last: after the rollback
+	defer releaseConn(db, h)  // deferred first, so it runs last: after the rollback
 	defer f.ended.Store(true) // before the note, and after the rollback
 	finished := false
 	defer func() {

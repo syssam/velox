@@ -25,8 +25,8 @@ type config struct {
 	// connTx is the *txFrame of the Tx that holds it, whose context may have ended. A
 	// Value: an atomic.Pointer would put txFrame in the export data of every package
 	// that uses a DB (TestGenericTypesCompileSmall).
-	connTx atomic.Value
-	Replicas   []Conn // WithReplicas
+	connTx   atomic.Value
+	Replicas []Conn // WithReplicas
 	// pinWindow is WithPinWindow's: how long a write pins its session.
 	PinWindow time.Duration
 	// backoff is WithReplicaBackoff's: how long a failed replica is skipped.
