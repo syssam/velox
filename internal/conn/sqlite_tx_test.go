@@ -231,7 +231,7 @@ func TestBeginOnConnFailures(t *testing.T) {
 		return db, conn.NewSQL(db)
 	}
 	const off = "SELECT 0" // a setting that was off, read
-	fails := map[string]conn.ConnSetting{
+	fails := map[string]conn.Setting{
 		"reading it":     {Read: "NOT SQL", On: "SELECT 1", Off: "SELECT 1"},
 		"turning it off": {Read: "SELECT 1", On: "SELECT 1", Off: "NOT SQL"},
 		"turning it on":  {Read: off, On: "NOT SQL", Off: "SELECT 1"},
@@ -251,7 +251,7 @@ func TestBeginOnConnFailures(t *testing.T) {
 	t.Run("the pool is closed", func(t *testing.T) {
 		db, s := on(t)
 		_ = db.Close()
-		if _, _, err := s.BeginOnConn(ctx, sql.TxOptions{}, conn.ConnSetting{Read: off, On: "SELECT 1", Off: "SELECT 1"}); err == nil {
+		if _, _, err := s.BeginOnConn(ctx, sql.TxOptions{}, conn.Setting{Read: off, On: "SELECT 1", Off: "SELECT 1"}); err == nil {
 			t.Error("no error")
 		}
 	})
@@ -259,7 +259,7 @@ func TestBeginOnConnFailures(t *testing.T) {
 	// runs read-only on it: the next one is on a new, empty :memory: database.
 	t.Run("restoring it fails", func(t *testing.T) {
 		db, s := on(t)
-		_, ctl, err := s.BeginOnConn(ctx, sql.TxOptions{}, conn.ConnSetting{Read: off, On: "PRAGMA query_only = ON", Off: "NOT SQL"})
+		_, ctl, err := s.BeginOnConn(ctx, sql.TxOptions{}, conn.Setting{Read: off, On: "PRAGMA query_only = ON", Off: "NOT SQL"})
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -155,7 +155,7 @@ func (e sqliteTimes) Begin(ctx context.Context, o sql.TxOptions) (Executor, Tx, 
 		err error
 	)
 	if s, ok := e.Executor.(SQL); ok && o.ReadOnly {
-		ex, tx, err = s.BeginOnConn(ctx, sql.TxOptions{}, ConnSetting{"PRAGMA query_only", "PRAGMA query_only = ON", "PRAGMA query_only = OFF"})
+		ex, tx, err = s.BeginOnConn(ctx, sql.TxOptions{}, Setting{"PRAGMA query_only", "PRAGMA query_only = ON", "PRAGMA query_only = OFF"})
 	} else {
 		ex, tx, err = e.Executor.Begin(ctx, o)
 	}

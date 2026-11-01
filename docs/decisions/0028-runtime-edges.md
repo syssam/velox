@@ -112,5 +112,6 @@ BEGIN.
   `TestSQLiteProbe`, `TestRetryEndedMatchesTheContext`, `TestTxNestedStatementFails`,
   `TestTxConcurrentStatementWaits`, `TestSQLiteReadOnlyKeepsTheDSNsSetting`,
   `TestSQLiteReadOnlyWithTxLock`, `TestSQLiteTxReadOnlyUnderTheDSN`.
-- `TestMySQLDeadlockSwallowedDoesNotCommit` runs only against a real MySQL
+- `TestMySQLDeadlockSwallowedDoesNotCommit` and
+  `TestMySQLDeadlockRetriedByAHookDoesNotCommit` run only against a real MySQL
   (`VELOX_TEST_MYSQL`).

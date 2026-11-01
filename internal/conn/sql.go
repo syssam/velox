@@ -74,9 +74,9 @@ func (e SQL) Begin(ctx context.Context, o sql.TxOptions) (Executor, Tx, error) {
 	return SQL{c: tx, cols: e.cols}, sqlTx{tx}, nil
 }
 
-// ConnSetting is a setting of a connection, on or off: the statements that read it
+// Setting is a setting of a connection, on or off: the statements that read it
 // and that turn it on and off.
-type ConnSetting struct{ Read, On, Off string }
+type Setting struct{ Read, On, Off string }
 
 // BeginOnConn starts a transaction, on a connection of its own, with s turned on.
 // s goes back to the value it had after the transaction ends, however it ends; only
@@ -86,7 +86,7 @@ type ConnSetting struct{ Read, On, Off string }
 //
 // s is off for the BEGIN and on after it, as a setting such as SQLite's query_only
 // would refuse a driver's BEGIN IMMEDIATE.
-func (e SQL) BeginOnConn(ctx context.Context, o sql.TxOptions, s ConnSetting) (Executor, Tx, error) {
+func (e SQL) BeginOnConn(ctx context.Context, o sql.TxOptions, s Setting) (Executor, Tx, error) {
 	c, err := e.db.Conn(ctx)
 	if err != nil {
 		return nil, nil, err
