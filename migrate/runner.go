@@ -176,7 +176,10 @@ var errAppliedMeanwhile = errors.New("migrate: applied by another runner")
 // holds the files applied before it.
 //
 // Up uses one connection of db for its run and closes it after, so nothing
-// a file sets on its session reaches db's other connections. Files run with
+// a file sets on its session reaches db's other connections. A SQLite database
+// in memory ends with its connection, so Up would apply to it and leave nothing:
+// it is an *Error of Code "session", but for a shared-cache one a second
+// connection of db shares, which Up holds to its end. Files run with
 // the session in UTC on PostgreSQL and MySQL, so a time literal in a file
 // means one instant whatever the server's zone. Each file starts with the
 // session as Up was given it, settings made before Up took the connection
@@ -204,6 +207,9 @@ func Up(ctx context.Context, db *sql.DB, dir fs.FS, opts ...Option) (*Report, er
 		return nil, err
 	}
 	defer s.close()
+	if err := s.lasting(ctx); err != nil {
+		return nil, err
+	}
 	unlock, err := s.lock(ctx, o.lockWait)
 	if err != nil {
 		return nil, err

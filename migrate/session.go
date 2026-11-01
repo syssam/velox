@@ -36,6 +36,8 @@ type session struct {
 	wait     time.Duration // SQLite: how long BEGIN IMMEDIATE waits, and busy_timeout
 	busyWas  int64         // SQLite: the connection's busy_timeout before open set it
 	given    pgSession     // PostgreSQL: the session as open was given it
+	keeper   *sql.Conn     // SQLite: what keeps a shared database in memory open past conn
+	tidy     bool          // conn goes back to the pool: Up refused it untouched, and its database is that connection
 }
 
 // pgSession is what a PostgreSQL session was set to by SET: its settings
@@ -337,7 +339,73 @@ func (s *session) checkModes(files []File) error {
 // change any setting of the session, and a failed clean-up may leave the
 // lock or the run's settings on it, so none of it reaches the application's
 // other connections.
-func (s *session) close() { discard(s.conn) }
+func (s *session) close() {
+	if s.tidy {
+		_ = s.conn.Close()
+		return
+	}
+	discard(s.conn)
+	if s.keeper != nil {
+		_ = s.keeper.Close()
+	}
+}
+
+// probeTable is what lasting makes, for another connection to look for.
+const probeTable = "velox_migrate_memory_probe"
+
+// lasting refuses a SQLite database in memory that ends with the session's
+// connection: Up would apply to it, report success and leave nothing. A second
+// connection of the pool that sees a table made on the first shares the database,
+// a shared-cache one, and is held to the end of the run. The pool's connection,
+// which may hold the application's only copy, goes back untouched.
+func (s *session) lasting(ctx context.Context) error {
+	if s.d != velox.SQLite {
+		return nil
+	}
+	var file string
+	if err := s.conn.QueryRowContext(ctx, `SELECT file FROM pragma_database_list WHERE name = 'main'`).Scan(&file); err != nil {
+		return wrap(ctx, "reading the database's file", err)
+	}
+	if file != "" {
+		return nil
+	}
+	refuse := func() error {
+		s.undo(ctx, fmt.Sprintf("PRAGMA busy_timeout = %d", s.busyWas))
+		s.tidy = true
+		return refuseSession("the SQLite database is in memory, which ends with this connection, so Up would leave nothing; name a file, or a shared-cache database (file:x?mode=memory&cache=shared) in a pool of two or more connections")
+	}
+	if s.pool.Stats().MaxOpenConnections == 1 {
+		return refuse()
+	}
+	c, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	other, err := s.pool.Conn(c)
+	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return refuse()
+	}
+	if _, err := s.conn.ExecContext(ctx, "CREATE TABLE "+probeTable+" (x integer)"); err != nil {
+		_ = other.Close()
+		return wrap(ctx, "looking for a second connection to the database in memory", err)
+	}
+	var shared int
+	err = other.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_schema WHERE name = ?`, probeTable).Scan(&shared)
+	if _, derr := s.conn.ExecContext(ctx, "DROP TABLE "+probeTable); err == nil {
+		err = derr
+	}
+	if err != nil {
+		_ = other.Close()
+		return wrap(ctx, "looking for a second connection to the database in memory", err)
+	}
+	if shared == 0 {
+		discard(other) // a database of its own, which nothing wants
+		return refuse()
+	}
+	s.keeper = other
+	return nil
+}
 
 // discard closes conn so that it never returns to the pool.
 func discard(conn *sql.Conn) {
