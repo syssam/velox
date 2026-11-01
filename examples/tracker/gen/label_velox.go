@@ -9,7 +9,7 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion6
+const _ = velox.GeneratedCodeIsVersion7
 
 // Label is the entity of schema Label.
 type Label struct {

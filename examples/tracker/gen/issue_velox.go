@@ -11,7 +11,7 @@ import (
 	sch "github.com/syssam/velox/examples/tracker/schema"
 )
 
-const _ = velox.GeneratedCodeIsVersion6
+const _ = velox.GeneratedCodeIsVersion7
 
 // Issue is the entity of schema Issue.
 type Issue struct {
@@ -95,6 +95,11 @@ func issueDesc() velox.Desc[Issue] {
 		Tenant:     3,
 		Indexes: []velox.IndexInfo{
 			{Columns: []int{4, 9, 0}},
+		},
+		TenantRefs: []velox.TenantRef{
+			{Column: 4, Table: "projects", Key: "id", Tenant: "org_id"},
+			{Column: 5, Table: "users", Key: "id", Tenant: "org_id"},
+			{Column: 6, Table: "users", Key: "id", Tenant: "org_id"},
 		},
 		Edges: []velox.EdgeDesc{
 			velox.EdgeTo[Project]("Project", 4, 0),

@@ -11,7 +11,7 @@ import (
 	sch "github.com/syssam/velox/examples/tracker/schema"
 )
 
-const _ = velox.GeneratedCodeIsVersion6
+const _ = velox.GeneratedCodeIsVersion7
 
 // Comment is the entity of schema Comment.
 type Comment struct {
@@ -72,6 +72,10 @@ func commentDesc() velox.Desc[Comment] {
 		},
 		PrimaryKey: []int{0},
 		Tenant:     3,
+		TenantRefs: []velox.TenantRef{
+			{Column: 4, Table: "issues", Key: "id", Tenant: "org_id"},
+			{Column: 5, Table: "users", Key: "id", Tenant: "org_id"},
+		},
 		Edges: []velox.EdgeDesc{
 			velox.EdgeTo[Issue]("Issue", 4, 0),
 			velox.EdgeTo[User]("Author", 5, 0),

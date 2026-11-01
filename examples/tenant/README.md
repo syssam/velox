@@ -30,5 +30,12 @@ It fails closed:
 | inserting a row whose `OrgID` names another tenant | `velox.ErrTenantMismatch` |
 | `Set` of the tenant column to another tenant | `velox.ErrTenantImmutable` |
 | an upsert that updates, whose `OnConflict` lacks the tenant column | `velox.ErrTenantUpsert` |
+| setting a foreign key to a tenant-scoped row that is not this tenant's, or is not there | `velox.ErrTenantRef` |
+
+The last costs one `SELECT` per foreign key set, on the write's connection, and
+`WithAllTenants` skips it. It says what is true when it runs: a target deleted
+after it is the database foreign key's to refuse. A composite foreign key,
+`(org_id, project_id)` to `(org_id, id)`, is the stronger guarantee, as it holds
+for every writer of the table; `velox-gen` does not write one for you.
 
 The output is in `testdata/output.golden`.

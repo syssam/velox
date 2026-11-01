@@ -79,11 +79,55 @@ at the call to a silent outcome.
   cannot ask: on modernc.org/sqlite it says "no such savepoint" either way. In a
   transaction BEGIN fails, "within a transaction", and changes nothing. Without one
   it opens an empty transaction, which the broken transaction's ROLLBACK ends, and
-  the transaction is broken. No answer counts as gone. Only failures pay. A `ROLLBACK`
-  sent as raw SQL that succeeds is not noticed.
+  the transaction is broken. No answer counts as gone. Failures pay, and raw SQL.
+- **Raw SQL that ends the transaction.** `tx.Exec("COMMIT")`, then an insert, then an
+  error left the insert durable and Tx returning an error; after a raw `ROLLBACK` a
+  nested Tx committed alone, as SAVEPOINT opens a transaction and RELEASE commits it.
+  In a transaction, Raw and Exec refuse, unsent (`ErrTxControl`), a statement whose
+  first keyword after comments is COMMIT, END, ROLLBACK but not ROLLBACK TO, ABORT,
+  BEGIN, START or PREPARE TRANSACTION. MySQL's DDL commits too, and the same keyword
+  finds it: CREATE, ALTER, DROP, TRUNCATE and RENAME, unless of a TEMPORARY table, are
+  refused there. Velox reads the first statement only, since a trigger's or a
+  function's body holds semicolons. So on SQLite, which runs all of a text, the probe
+  above also runs after each raw statement that succeeds in a transaction, and breaks
+  it if it is gone: one failed BEGIN per raw statement in a transaction, on SQLite.
+  **Not caught:** text that ends the transaction and begins another, on SQLite;
+  anything past the first statement where a driver runs multi-statement text (MySQL's
+  `multiStatements`, lib/pq without arguments); and MySQL's other implicit commits,
+  such as GRANT, LOCK TABLES or SET autocommit. The Tx docs say so.
 - **Unsent means at the send.** A broken transaction is checked where a statement
   is sent as well as before its hooks, so an Around hook that calls next again
   after the statement that broke it gets the error and sends nothing.
+- **SQLite's integer overflow.** SQLite stores an integer that overflows as a REAL,
+  which no later Scan reads. `Add` and `Sub` on an integer column render
+  `CASE WHEN typeof(x) = 'real' THEN abs(-9223372036854775808) ELSE x END`, abs of
+  the least integer being SQLite's error, and `x NOT BETWEEN lo AND hi` for a field
+  narrower than int64, whose read would fail the same way. It costs a second
+  parameter. Other dialects raise by themselves.
+- **A foreign key to another tenant's row.** The tenant scope reads and writes the
+  tenant's rows, but a foreign key names a row by its key alone. Under tenant A, an
+  insert naming B's project succeeded: B could then not delete its own project, for a
+  row it cannot see, and success against a foreign key failure told A which of B's IDs
+  exist. `velox-gen` now writes `Desc.TenantRefs`, plain strings so that a relation's
+  metadata still names no other entity's, for each foreign key of a tenant-scoped
+  entity whose target is tenant-scoped and each such side of a join entity. A write
+  under a tenant that sets one, non-NULL, sends
+  `SELECT key FROM target WHERE key IN (...) AND tenant = ?`, one per column, of
+  distinct values, in the pipeline's send on the write's connection, after hooks. A row
+  of another tenant and no row get one error, `ErrTenantRef` in a `ConstraintError`, so
+  that there is no oracle; the write is not sent. `WithAllTenants` skips it. A row may
+  name a key its own insert sets. Arithmetic on such a column under a tenant is refused:
+  its value is not known. A join entity has no tenant column, so its write now reads
+  the tenant itself, and fails with `ErrNoTenant` with none.
+
+  This is a check, not a constraint. What it does not do: a target deleted after it,
+  which is the database foreign key's job; a composite foreign key is the stronger
+  guarantee. Deleting a join row is neither scoped nor checked. Around hooks do not see
+  its SELECT, and one that changes Args or the context passes it. It ignores the
+  target's Read policy. Under snapshot isolation it may refuse a target committed after
+  the snapshot, and MySQL's case-insensitive string keys and a deferred key to a row
+  inserted later may refuse falsely, all failing closed. A DoNothing upsert is checked
+  too. A non-join entity with no tenant may still name a tenant-scoped row.
 
 ## Consequences
 
@@ -94,7 +138,13 @@ sort below parameters until rewritten.
 
 A nested Tx's failed RELEASE costs one or two more statements. A 1205 in a MySQL
 transaction costs one query. A failed statement in a SQLite transaction costs one
-BEGIN.
+BEGIN, and so does a raw statement in one. A MySQL migration that runs DDL through
+`tx.Exec` now fails, where it committed part way.
+
+A write under a tenant costs one SELECT per foreign key it sets to a tenant-scoped
+row, and generated code is version 7: rerun `velox-gen`. Writing a join row with no
+tenant now fails with `ErrNoTenant`: an application that links across tenants says
+`WithAllTenants`.
 
 ## Evidence
 
@@ -111,7 +161,13 @@ BEGIN.
   `TestBrokenTransactionSendsNothing`, `TestSQLiteServerRollbackBreaksTheTransaction`,
   `TestSQLiteProbe`, `TestRetryEndedMatchesTheContext`, `TestTxNestedStatementFails`,
   `TestTxConcurrentStatementWaits`, `TestSQLiteReadOnlyKeepsTheDSNsSetting`,
-  `TestSQLiteReadOnlyWithTxLock`, `TestSQLiteTxReadOnlyUnderTheDSN`.
+  `TestSQLiteReadOnlyWithTxLock`, `TestSQLiteTxReadOnlyUnderTheDSN`,
+  `TestSQLiteArithmeticOverflowFails`, `TestSQLiteArithmeticRendering`, `TestIntRange`,
+  `TestTxEndedContextIsNotWaitingForever`, `TestLimitIsNotASize`,
+  `TestRawSQLCannotEndTheTransaction`, `TestSQLiteRawTextEndingTheTransaction`,
+  `TestMySQLDDLInATransaction`, `TestTenantRefRefusesAnotherTenantsRow`,
+  `TestTenantRefAllowsTheTenantsOwn`, `TestTenantRefBypass`, `TestTenantRefStatement`,
+  `TestTenantRefJoinRows`, `TestCheckRefsCostsNothingUnset`, `TestLowerTenantRefs`.
 - `TestMySQLDeadlockSwallowedDoesNotCommit` and
   `TestMySQLDeadlockRetriedByAHookDoesNotCommit` run only against a real MySQL
   (`VELOX_TEST_MYSQL`).

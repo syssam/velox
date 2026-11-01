@@ -5,7 +5,7 @@ package gen
 
 import "github.com/syssam/velox"
 
-const _ = velox.GeneratedCodeIsVersion6
+const _ = velox.GeneratedCodeIsVersion7
 
 // InvoiceStatus is an enum of the model.
 type InvoiceStatus string

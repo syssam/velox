@@ -10,7 +10,7 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion6
+const _ = velox.GeneratedCodeIsVersion7
 
 // User is the entity of schema User.
 type User struct {

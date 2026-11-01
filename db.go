@@ -60,6 +60,11 @@ func Connect(driver, dsn string, opts ...Option) (*DB, error) {
 // DB from OpenConn or OpenShards, and for a transaction's DB, whose statements
 // must not leave the transaction.
 //
+// On a pool of one connection, as Connect makes on SQLite, a statement on the *sql.DB
+// in a Tx's fn, or in the body of a loop over Iter, waits for the connection they hold,
+// which they do not release until fn or the body returns: it hangs, with no deadline
+// but its own context's. velox sees only what runs on the DB, so it cannot refuse it.
+//
 // It is a function, not a method: a method of DB mentioning *sql.DB would make
 // every package that uses a DB larger to compile.
 func Pool(db *DB) *sql.DB { return engine.Pool(&db.e) }

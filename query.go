@@ -267,6 +267,12 @@ func scanRow[E any](r engine.Rows, m *Meta[E], cols []int, dst []any, p *E) erro
 // none, the struct is a local and plain is used, which keeps it, and the
 // closure reading the rows, on the stack.
 
+// firstRows is the most rows All allocates ahead. BenchmarkLimitBound on a 168-byte
+// entity: Limit(1000) returning one row costs 3.5 KB at 16, 6.6 KB at 32, 11 KB at
+// 64, against 173 KB at 1024; returning all 1000 it costs 603 KB at 16, against 196
+// KB at 1024.
+const firstRows = 16
+
 // allRun is the state of one All.
 type allRun[E any] struct {
 	st  Statement
@@ -277,11 +283,12 @@ type allRun[E any] struct {
 // readAll reads every row into a.out, anew should an around hook retry.
 func readAll[E any](a *allRun[E], r engine.Rows) error {
 	dst := make([]any, engine.ColumnCount(&a.st))
-	// The Limit of an Unbounded read is the row cap's (cap+1): a bound, not a
-	// likely size, so nothing is allocated ahead for it.
+	// Limit is mandatory, so it is a bound and not a likely size: at most firstRows
+	// are allocated ahead for it, and append grows from there. The Limit of an
+	// Unbounded read is the row cap's (cap+1): nothing is allocated ahead for it.
 	n := 0
 	if !a.st.Unbounded {
-		n = min(a.st.Limit, 1024)
+		n = min(a.st.Limit, firstRows)
 	}
 	a.out = make([]E, 0, n)
 	for r.Next() {

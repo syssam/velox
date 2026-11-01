@@ -33,6 +33,7 @@ type EntityInfo struct {
 	bidi       bool                       // Desc.Bidi: a link is two rows, (a, b) and (b, a)
 	bidiKeys   []bidiKey                  // the keys of the EdgeBidi relations, which both partners' rows hold
 	hooks      []HookFn                   // the Hooks method's, outermost first
+	refs       []tenantRef                // Desc.TenantRefs: the foreign keys a write under a tenant checks
 
 	// The entity's policy, bound once from its Policy method.
 	policy *EntityPolicy // nil when none

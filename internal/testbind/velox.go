@@ -4,7 +4,7 @@ package testbind
 
 import "github.com/syssam/velox"
 
-const _ = velox.GeneratedCodeIsVersion6
+const _ = velox.GeneratedCodeIsVersion7
 
 // BindKind is an enum of the model.
 type BindKind string

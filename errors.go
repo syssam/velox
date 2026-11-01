@@ -64,6 +64,12 @@ var (
 	// ErrTenantImmutable is returned by an update when it assigns another
 	// tenant to the tenant column.
 	ErrTenantImmutable = engine.ErrTenantImmutable
+	// ErrTenantRef is returned by an insert or update under a tenant that sets a
+	// foreign key to a row that is not the tenant's: it does not exist, or it is
+	// another tenant's, which the error does not tell apart. It is the Err of a
+	// *ConstraintError of kind ConstraintForeignKey, and nothing was written. An
+	// update that does arithmetic on such a key fails with it too.
+	ErrTenantRef = engine.ErrTenantRef
 	// ErrTenantUpsert is returned by an upsert that updates, when the update
 	// could change another tenant's row.
 	ErrTenantUpsert = engine.ErrTenantUpsert
@@ -89,6 +95,11 @@ var (
 	// ended: it was most likely meant for the transaction's DB. Nothing was
 	// sent. WithoutTx lifts the check.
 	ErrOutsideTx = engine.ErrOutsideTx
+	// ErrTxControl is returned by raw SQL, in a transaction, that would end it:
+	// COMMIT, END, ROLLBACK (ROLLBACK TO is allowed), ABORT, BEGIN, START, PREPARE
+	// TRANSACTION, and on MySQL DDL, which commits. Nothing was sent. On SQLite it
+	// is also the error, once the statement has run, of text that went on to end it.
+	ErrTxControl = engine.ErrTxControl
 	// ErrDryRun is returned by a write, or a Tx, under a context IsDryRun
 	// reports true for, such as the one SQL(ctx) gives a hook: Insert,
 	// InsertAll, Update and Delete's Exec, Save, an upsert, DB.Exec (raw SQL)

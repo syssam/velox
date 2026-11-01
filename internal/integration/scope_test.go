@@ -347,8 +347,8 @@ func TestScopeInsert(t *testing.T) {
 		// Ann's tickets: the tenant is filled from the context, and CreatedBy
 		// from its user (anyone has none); under WithAllTenants the row names
 		// its org.
-		one := testmodel.Ticket{Owner: "ann", Title: "N1"}
-		two := []testmodel.Ticket{{Owner: "ann", Title: "N2"}, {Owner: "ann", Title: "N3"}}
+		one := testmodel.Ticket{InvoiceID: 1, Owner: "ann", Title: "N1"}
+		two := []testmodel.Ticket{{InvoiceID: 1, Owner: "ann", Title: "N2"}, {InvoiceID: 1, Owner: "ann", Title: "N3"}}
 		org, by := int64(1), c.name
 		if c.name == "anyone" {
 			org, by = 2, ""
@@ -372,8 +372,8 @@ func TestScopeInsert(t *testing.T) {
 			}
 		}
 		// Bob's ticket, alone and among others: ann may not create it.
-		bob := testmodel.Ticket{OrgID: org, Owner: "bob", Title: "N4"}
-		mixed := []testmodel.Ticket{{OrgID: org, Owner: "ann", Title: "N5"}, {OrgID: org, Owner: "bob", Title: "N6"}}
+		bob := testmodel.Ticket{InvoiceID: 1, OrgID: org, Owner: "bob", Title: "N4"}
+		mixed := []testmodel.Ticket{{InvoiceID: 1, OrgID: org, Owner: "ann", Title: "N5"}, {InvoiceID: 1, OrgID: org, Owner: "bob", Title: "N6"}}
 		errOne, errAll := tg.db.Insert(&bob).Exec(c.ctx), tg.db.InsertAll(mixed).Exec(c.ctx)
 		news := []string{"N1", "N2", "N3", "N4", "N5", "N6"}
 		if c.name == "ann" {
@@ -385,7 +385,7 @@ func TestScopeInsert(t *testing.T) {
 			}
 			news = news[:3]
 			// Another org's ticket.
-			other := testmodel.Ticket{OrgID: 2, Owner: "ann", Title: "N7"}
+			other := testmodel.Ticket{InvoiceID: 1, OrgID: 2, Owner: "ann", Title: "N7"}
 			if err := tg.db.Insert(&other).Exec(c.ctx); !errors.Is(err, velox.ErrTenantMismatch) {
 				t.Errorf("org 2's ticket: %v", err)
 			}
@@ -410,7 +410,7 @@ func TestScopeUpsert(t *testing.T) {
 		}
 		done := func() []int64 { return rowIDs(ticketRows(t, tg), func(r ticketRow) bool { return r.done }) }
 		// A1 is ticket 1 in org 1 and ticket 6 in org 2, neither done.
-		a1 := testmodel.Ticket{Owner: "ann", Title: "A1", Done: true}
+		a1 := testmodel.Ticket{InvoiceID: 1, Owner: "ann", Title: "A1", Done: true}
 		id, want := int64(1), []int64{1, 2, 3, 8}
 		if c.name == "anyone" {
 			a1.OrgID = 2
@@ -435,7 +435,7 @@ func TestScopeUpsert(t *testing.T) {
 		wantIDs(t, done(), want)
 
 		// B1 in org 1 is bob's ticket 3, done. Ann's upsert must not touch it.
-		b1 := testmodel.Ticket{Owner: "ann", Title: "B1", Done: false}
+		b1 := testmodel.Ticket{InvoiceID: 1, Owner: "ann", Title: "B1", Done: false}
 		if c.name == "anyone" {
 			b1.OrgID = 1
 		}

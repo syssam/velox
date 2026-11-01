@@ -2,6 +2,8 @@ package engine
 
 import (
 	"fmt"
+	"math"
+	"reflect"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -770,18 +772,70 @@ func (w *writer) updateStmt(st *Statement) {
 		w.str(" = ")
 		switch a.Op {
 		case AssignAdd:
-			w.col(int32(a.Column))
-			w.str(" + ")
+			w.arith(a, " + ")
+			continue
 		case AssignSub:
-			w.col(int32(a.Column))
-			w.str(" - ")
-		}
-		if a.Op != AssignSet && w.in.Columns[a.Column].Codec {
-			w.fail(errCodecAdd(w.in, a.Column))
+			w.arith(a, " - ")
+			continue
 		}
 		w.colArg(a.Column, a.Value)
 	}
 	w.where(st.Where)
+}
+
+// arith writes the column plus or minus the value. PostgreSQL and MySQL raise on
+// an integer that overflows. SQLite makes it a REAL and stores it, and a later Scan
+// of the row fails; nor does it know the field's range. So there an integer column
+// writes CASE WHEN … THEN abs(-9223372036854775808) ELSE x END, as abs of the least
+// integer is SQLite's error of integer overflow. An int64's condition is
+// typeof(x) = 'real', as the REAL below the least integer rounds to it and compares
+// equal; a narrower field's is x NOT BETWEEN its range. A NULL column stays NULL.
+func (w *writer) arith(a Assignment, op string) {
+	if w.in.Columns[a.Column].Codec {
+		w.fail(errCodecAdd(w.in, a.Column))
+	}
+	x := func() {
+		w.col(int32(a.Column))
+		w.str(op)
+		w.colArg(a.Column, a.Value)
+	}
+	lo, hi, ok := intRange(w.in.Columns[a.Column].Type)
+	if w.d != SQLite || !ok {
+		x()
+		return
+	}
+	if lo == math.MinInt64 {
+		w.str("CASE WHEN typeof(")
+		x()
+		w.str(") = 'real'")
+	} else {
+		w.str("CASE WHEN ")
+		x()
+		w.str(" NOT BETWEEN " + strconv.FormatInt(lo, 10) + " AND " + strconv.FormatInt(hi, 10))
+	}
+	w.str(" THEN abs(-9223372036854775808) ELSE ")
+	x()
+	w.str(" END")
+}
+
+// intRange is what a field of type t, a reflect.Type, can hold that SQLite can: the
+// range of an integer kind, or of a pointer to one; ok is false for any other kind.
+// A uint or uint64 stops at SQLite's largest integer.
+func intRange(t any) (lo, hi int64, ok bool) {
+	if rtype(t) == nil {
+		return 0, 0, false
+	}
+	b := base(t)
+	switch b.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return -1 << (b.Bits() - 1), 1<<(b.Bits()-1) - 1, true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		if b.Bits() == 64 {
+			return 0, math.MaxInt64, true
+		}
+		return 0, 1<<b.Bits() - 1, true
+	}
+	return 0, 0, false
 }
 
 func (w *writer) deleteStmt(st *Statement) {

@@ -18,6 +18,7 @@ type DescFields struct {
 	Bidi       bool
 	Indexes    []IndexInfo
 	Relations  []EdgeDesc
+	TenantRefs []TenantRef
 	Check      func(col int, v any) error
 	Policy     bool // Desc.Policy is set
 	Hooks      bool // Desc.Hooks is set
@@ -149,8 +150,12 @@ func BuildDesc(x any, base unsafe.Pointer, load func() DescView) (info *EntityIn
 		}
 		rels[i] = &relation{Name: r.name, Many: strings.HasPrefix(rt.Name(), "Many["), Off: off, typ: rt, ownerCol: r.ownerCol, targetCol: r.targetCol, through: r.through}
 	}
+	refs, err := buildTenantRefs(name, d, cols)
+	if err != nil {
+		return nil, err
+	}
 	info = &EntityInfo{Name: name, Table: d.Table, Schema: d.Schema, Columns: cols, PrimaryKey: d.PrimaryKey, Tenant: d.Tenant,
-		Indexes: d.Indexes, rels: rels, immutable: anyImmutable, required: anyRequired, bidi: d.Bidi, bidiKeys: bidiKeys}
+		Indexes: d.Indexes, rels: rels, immutable: anyImmutable, required: anyRequired, bidi: d.Bidi, bidiKeys: bidiKeys, refs: refs}
 	if err := validate(info); err != nil {
 		return nil, err
 	}

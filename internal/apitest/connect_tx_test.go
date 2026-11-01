@@ -158,3 +158,27 @@ func TestTxNestedOnARaisedPool(t *testing.T) {
 		}
 	})
 }
+
+// TestTxEndedContextIsNotWaitingForever: database/sql rolls a transaction back when
+// its context ends, so the connection is free, and a statement on db in fn would not
+// wait forever. It says the context ended, whichever context it runs under.
+func TestTxEndedContextIsNotWaitingForever(t *testing.T) {
+	db := connectInvoices(t, ":memory:")
+	noHang(t, func() {
+		cctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		_ = db.Tx(cctx, func(fctx context.Context, tx *velox.DB) error {
+			cancel()
+			for name, c := range map[string]context.Context{"its context": velox.WithoutTx(fctx), "another": ctx} {
+				_, err := db.Query[testmodel.Invoice]().Count(c)
+				if !errors.Is(err, context.Canceled) || strings.Contains(err.Error(), "wait forever") {
+					t.Errorf("%s: %v", name, err)
+				}
+			}
+			return nil
+		})
+	})
+	if _, err := db.Query[testmodel.Invoice]().Count(ctx); err != nil {
+		t.Errorf("after the Tx: %v", err)
+	}
+}

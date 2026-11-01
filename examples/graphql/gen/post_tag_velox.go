@@ -8,7 +8,7 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion6
+const _ = velox.GeneratedCodeIsVersion7
 
 // PostTag is the join entity of table post_tags.
 type PostTag struct {
@@ -39,6 +39,9 @@ func postTagDesc() velox.Desc[PostTag] {
 		},
 		PrimaryKey: []int{0, 1},
 		Tenant:     -1,
+		TenantRefs: []velox.TenantRef{
+			{Column: 0, Table: "posts", Key: "id", Tenant: "org_id"},
+		},
 		Addr: func(x *PostTag, i int) any {
 			switch i {
 			case 0:

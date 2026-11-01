@@ -2,9 +2,12 @@ package apitest
 
 import (
 	"context"
+	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/internal/fakeconn"
@@ -461,4 +464,61 @@ func TestLoadAllocationBudgets(t *testing.T) {
 		_, err := velox.CountEach(ctx, counts.Query[testmodel.Item](), I.Items, owners)
 		return err
 	})
+}
+
+// bytesPerRun is the bytes f allocates, averaged over a run.
+func bytesPerRun(f func()) float64 {
+	const runs = 100
+	var a, b runtime.MemStats
+	runtime.ReadMemStats(&a)
+	for range runs {
+		f()
+	}
+	runtime.ReadMemStats(&b)
+	return float64(b.TotalAlloc-a.TotalAlloc) / runs
+}
+
+// TestLimitIsNotASize pins All's first allocation: Limit is mandatory, so it is
+// a bound and not a likely size. Limit(1000) returning one row pays about what
+// Limit(1) does, not 1000 rows' memory: at most the first allocation's 16 rows
+// more, and what its size class rounds them up to.
+func TestLimitIsNotASize(t *testing.T) {
+	e := &fakeconn.Exec{Rows: [][]any{invoiceRow(1)}}
+	db := openFake(velox.Postgres, e)
+	read := func(limit int) func() {
+		return func() {
+			e.Log, e.ArgLog = e.Log[:0], e.ArgLog[:0]
+			if _, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(limit).All(ctx); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	read(1)()
+	read(1000)()
+	one, bound := bytesPerRun(read(1)), bytesPerRun(read(1000))
+	t.Logf("Limit(1) %.0f bytes, Limit(1000) %.0f bytes", one, bound)
+	if over := int(unsafe.Sizeof(testmodel.Invoice{})) * 20; bound > one+float64(over) {
+		t.Errorf("Limit(1000) returning one row costs %.0f bytes and Limit(1) %.0f: more than %d bytes over", bound, one, over)
+	}
+}
+
+// BenchmarkLimitBound is a query that bounds with Limit, at the rows it returns.
+func BenchmarkLimitBound(b *testing.B) {
+	for _, n := range []int{1, 16, 32, 64, 100, 1000} {
+		rows := make([][]any, n)
+		for i := range rows {
+			rows[i] = invoiceRow(int64(i))
+		}
+		e := &fakeconn.Exec{Rows: rows}
+		db := openFake(velox.Postgres, e)
+		b.Run(strconv.Itoa(n), func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				e.Log, e.ArgLog = e.Log[:0], e.ArgLog[:0]
+				if _, err := db.Query[testmodel.Invoice]().Where(I.ID.EQ(1)).Limit(1000).All(ctx); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
 }

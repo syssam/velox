@@ -8,7 +8,7 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion6
+const _ = velox.GeneratedCodeIsVersion7
 
 // IssueLabel is the join entity of table issue_labels.
 type IssueLabel struct {
@@ -39,6 +39,10 @@ func issueLabelDesc() velox.Desc[IssueLabel] {
 		},
 		PrimaryKey: []int{0, 1},
 		Tenant:     -1,
+		TenantRefs: []velox.TenantRef{
+			{Column: 0, Table: "issues", Key: "id", Tenant: "org_id"},
+			{Column: 1, Table: "labels", Key: "id", Tenant: "org_id"},
+		},
 		Addr: func(x *IssueLabel, i int) any {
 			switch i {
 			case 0:

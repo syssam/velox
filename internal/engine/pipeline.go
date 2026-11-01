@@ -356,12 +356,17 @@ func (db *DB) Run(ctx context.Context, st *Statement, read func(Rows) error, res
 // relations in its conditions (HasWhere leaves them to the statement), guard,
 // observe, rewrite hooks and their checks, scope, the row cap, and rendering
 // into st.SQL (comment included) and st.Args. Raw SQL takes only the
-// transaction check and prepareRaw.
+// transaction check, in a transaction refuseTxEnd, and prepareRaw.
 func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	if err := db.outsideTx(ctx, st); err != nil {
 		return err
 	}
 	if st.Op.Raw() {
+		if db.InTx {
+			if err := refuseTxEnd(db.D, st); err != nil {
+				return err
+			}
+		}
 		db.prepareRaw(ctx, st)
 		return nil
 	}
@@ -615,12 +620,22 @@ func (db *DB) exec(ctx context.Context, st *Statement, t Target, read func(Rows)
 	if db.txRoot != nil && db.txRoot.broken != nil {
 		return stmtErr(st, db.txRoot.broken)
 	}
-	if err := waitsForConn(db); err != nil {
+	if err := waitsForConn(ctx, db); err != nil {
 		return stmtErr(st, err)
 	}
-	err := db.send(ctx, st, t, read, res)
-	if err != nil && db.txRoot != nil {
-		db.noteServerRollback(ctx, err)
+	err := db.checkRefs(ctx, st, t)
+	if err == nil {
+		err = db.send(ctx, st, t, read, res)
+	}
+	if db.txRoot != nil {
+		switch {
+		case is(err, ErrTenantRef):
+			// velox's refusal: no failed statement to ask about.
+		case err != nil:
+			db.noteServerRollback(ctx, err)
+		case db.D == SQLite && st.Op.Raw():
+			return db.noteRawEnd(ctx, st)
+		}
 	}
 	return err
 }

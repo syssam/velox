@@ -658,6 +658,9 @@ func (db *DB) scope(ctx context.Context, st *Statement) error {
 		st.Where = append(st.Where, write)
 	}
 	sc.Record(st)
+	if len(in.refs) > 0 && st.Op == OpUpdate {
+		return scopeRefs(ctx, st)
+	}
 	return nil
 }
 
@@ -710,6 +713,9 @@ func (db *DB) scopeInsert(ctx context.Context, st *Statement) error {
 		}
 	}
 	sc.Record(st)
+	if len(in.refs) > 0 {
+		return scopeRefs(ctx, st)
+	}
 	return nil
 }
 
