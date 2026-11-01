@@ -117,12 +117,41 @@ func (j JSON) MarshalGQL(w io.Writer) {
 // UnmarshalGQL sets j to the JSON of v, the value gqlgen decoded from the
 // request.
 func (j *JSON) UnmarshalGQL(v any) error {
-	b, err := json.Marshal(v)
+	b, err := json.Marshal(emptyLists(v))
 	if err != nil {
 		return gqlcore.InputErrorf("JSON is not a JSON value")
 	}
 	*j = b
 	return nil
+}
+
+// emptyLists is v with each nil []any made empty: gqlparser gives a literal []
+// as one, which json.Marshal writes as null. It writes to v only where it finds
+// one, which a variable's value never holds, so it does not race on a variable
+// that fields resolving concurrently share.
+func emptyLists(v any) any {
+	switch x := v.(type) {
+	case []any:
+		if x == nil {
+			return []any{}
+		}
+		for i, e := range x {
+			if s, ok := e.([]any); ok && s == nil {
+				x[i] = []any{}
+			} else {
+				emptyLists(e)
+			}
+		}
+	case map[string]any:
+		for k, e := range x {
+			if s, ok := e.([]any); ok && s == nil {
+				x[k] = []any{}
+			} else {
+				emptyLists(e)
+			}
+		}
+	}
+	return v
 }
 
 // Uint64 is the Uint64 scalar: a decimal string both ways, since a JSON
