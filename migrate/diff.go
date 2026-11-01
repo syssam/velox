@@ -93,6 +93,9 @@ func (s *Schema) oneForm() {
 		for j := range cols {
 			cols[j].Type = ddl.NormalizeType(s.Dialect, cols[j].Type)
 			cols[j].Default = normalizeDefault(s.Dialect, cols[j].Default)
+			if s.Dialect == velox.MySQL {
+				cols[j].Default = mysqlOneDefault(cols[j].Type, cols[j].Default)
+			}
 		}
 	}
 }

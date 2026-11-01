@@ -134,6 +134,45 @@ func TestMySQLModifyComparesEveryAttribute(t *testing.T) {
 	})
 }
 
+// TestMySQLModifyReadsDefaultSpellings: a statement's default spelled otherwise than
+// the server prints it is one value, so a comment change is no refusal.
+func TestMySQLModifyReadsDefaultSpellings(t *testing.T) {
+	d := velox.MySQL
+	for _, c := range []struct{ typ, def string }{
+		{"datetime(6)", "now(6)"},
+		{"datetime(6)", "CURRENT_TIMESTAMP(6)"},
+		{"datetime", "now()"},
+		{"timestamp", "current_timestamp()"},
+		{"timestamp", "LOCALTIMESTAMP"},
+		{"tinyint(1)", "true"},
+		{"tinyint(1)", "FALSE"},
+		{"binary(1)", "0x00"},
+		{"varbinary(4)", "x'6162'"},
+		{"int", "'5'"},
+		{"decimal(4,2)", "'1.50'"},
+	} {
+		t.Run(c.typ+" "+c.def, func(t *testing.T) {
+			base := migrate.Column{Name: "c", Type: c.typ, Nullable: true, Default: c.def}
+			to := base
+			to.Comment = "x"
+			db, fsys := planned(t, d, base, to, migrate.PlanOptions{})
+			mustUp(t, db, fsys)
+			r, err := migrate.Drift(context.Background(), db, oneTable(d, to))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(r.Changes) > 0 {
+				t.Errorf("drift:\n%s", reportText(r))
+			}
+		})
+	}
+	// Another value is still one.
+	base := migrate.Column{Name: "c", Type: "int", Nullable: true, Default: "'5'"}
+	to := migrate.Column{Name: "c", Type: "int", Nullable: true, Default: "'5'", Comment: "x"}
+	db, fsys := planned(t, d, base, to, migrate.PlanOptions{}, "ALTER TABLE t ALTER COLUMN c SET DEFAULT 6")
+	refused(t, db, fsys, "t.c:default")
+}
+
 // TestPostgresRetypeReadsTheDefault: a retype drops the snapshot's default and sets
 // it after, which replaced a hand default, 42 with 1. Up refuses; a default the plan
 // changes passes, and one the statement leaves alone stays.

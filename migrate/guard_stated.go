@@ -117,7 +117,10 @@ func statedChanges(d velox.Dialect, live, stated Column) columnMask {
 	if live.Type != stated.Type {
 		mask |= columnType
 	}
-	if a.Default == b.Default {
+	if d == velox.MySQL {
+		a.Default, b.Default = mysqlOneDefault(a.Type, a.Default), mysqlOneDefault(a.Type, b.Default)
+	}
+	if a.Default == b.Default || d == velox.MySQL && mysqlSameBinary(a.Type, a.Default, b.Default) {
 		return mask
 	}
 	if a.Default != "" && b.Default != "" && !literalDefault(d, a.Default) && !literalDefault(d, b.Default) {
