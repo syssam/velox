@@ -3,6 +3,7 @@ package veloxgql
 import (
 	"cmp"
 	"context"
+	"time"
 )
 
 // Limits caps what a client may ask for. Each bounds one argument or one
@@ -49,7 +50,8 @@ type Limits struct {
 
 	// MaxCost is the most a request may cost (Cost): the bound on a whole
 	// request that the other limits, each of one argument, do not give. More
-	// is ErrTooCostly, before any statement runs. It bounds the statements too,
+	// is ErrTooCostly, before any statement runs. It cannot see a value's size,
+	// which is MaxResponseBytes, or how long a statement takes, which is Timeout. It bounds the statements too,
 	// at 100 each, so 1500 by default. Two levels of full pages with 12 fields in
 	// each row cost about 144000, and pass. A list edge costs MaxList for each
 	// parent, so under the defaults one full page with two list edges, posts(first:
@@ -62,7 +64,8 @@ type Limits struct {
 	// MaxIntrospectionCost is the most the __schema and __type of a request may
 	// cost, one for each field of their response. More is ErrTooCostly. The
 	// default admits GraphiQL's query on a schema of 150 rich entities (about
-	// 210000), and no data comes under it: raising it does not loosen MaxCost,
+	// 210000), or of about 100 with graphql.WhereOps on every field, and no data
+	// comes under it: raising it does not loosen MaxCost,
 	// nor MaxCost it. A request at this limit allocates about 160 MB through
 	// gqlgen. A larger schema raises it, at about 640 bytes a unit; a server open
 	// to strangers lowers it, or has no extension.Introspection.
@@ -77,9 +80,9 @@ type Limits struct {
 	// repeat and an alias each counting one, and the most spreads and inline
 	// fragments. More is ErrRequestTooLarge, BAD_USER_INPUT, before gqlgen validates
 	// the query: validation is quadratic in the fields that share a response name,
-	// so of those a query may hold 5 times MaxFields pairs that differ, whose errors
+	// so of those a query may hold 2 times MaxFields pairs that differ, whose errors
 	// are the cost, and 200 times MaxFields pairs that agree, each fragment counted
-	// where it is spread; and its spreads may reach 100 times MaxFields fields.
+	// where it is spread; and its spreads may reach 40 times MaxFields fields.
 	MaxFields int
 
 	// MaxFragments is the most fragments a request's query may name, defined or
@@ -102,35 +105,51 @@ type Limits struct {
 	MaxLiteralBytes int
 
 	// MaxVariableNodes is the most values and objects a request's variables may
-	// hold. An object of an input type weighs 1 more for each 16 of the type's
-	// fields, as gqlgen does work for each of them; a JSON scalar's objects weigh 1.
-	// Of a query sent by its hash the types are not known yet, and an object weighs
-	// as the schema's widest input does. More is ErrRequestTooLarge, before gqlgen
+	// hold. An object of an input type weighs 4, and 4 more for each 16 of the
+	// type's fields, as gqlgen does work for each of them; a plain value, a list and
+	// a JSON scalar's objects weigh 1. Of a query sent by its hash the types are not
+	// known yet, and an object weighs as the schema's widest input does. More is ErrRequestTooLarge, before gqlgen
 	// reads any of them.
 	MaxVariableNodes int
 
-	// MaxErrors is the most of validation's errors a response may hold, and one that
-	// says there are more, on a server Setup made. Each pair of fields that differ
-	// and each unknown name makes one, and a response of them is built by each
-	// request that asks.
+	// MaxErrors is the most errors a response may hold, and one that says there are
+	// more. Each pair of fields that differ and each unknown name makes one of
+	// validation's, held to this on a server Setup made; a list of a field that a
+	// directive refuses makes one for each row, and over the limit the request stops
+	// (ErrTooManyErrors) with data null, under the Extension and ErrorPresenter.
 	MaxErrors int
 
 	// MaxBodyBytes is the most bytes the body of a request may have, its
 	// variables and any upload included. More is refused with 413, by the handler
-	// Setup returns, as nothing else bounds it.
+	// Setup returns, as nothing else bounds it. The same handler holds a websocket's
+	// messages to it, and closes the connection of one over.
 	MaxBodyBytes int
+
+	// MaxResponseBytes is the most bytes the strings, the bytes and the JSON of a
+	// response may write, counted as its fields resolve, a string as it is escaped. Cost
+	// cannot see the size of a value: one stored string of 900 KB under 300 aliases
+	// answered with 270 MB. More is ErrResponseTooLarge, with data null, and the fields
+	// not yet resolved do not run. A subscription's event has its own count.
+	MaxResponseBytes int
+
+	// Timeout is how long a query or a mutation may run: more cancels the context its
+	// statements use, and is ErrTimeout, with data null, and a mutation rolls back. A
+	// resolver that ignores its context holds the response until it returns. A
+	// subscription has no such limit.
+	Timeout time.Duration
 }
 
 // DefaultLimits returns MaxPage 100, MaxList 1000, MaxFilterDepth 5,
 // MaxFilterWidth 100, MaxFilterNodes 1000, MaxOrderTerms 5, MaxCost 150000,
-// MaxIntrospectionCost 250000, MaxTokens 15000, MaxFields 2000, MaxFragments 500,
-// MaxDepth 64, MaxNameBytes 128, MaxLiteralBytes 64 KiB, MaxVariableNodes 25000,
-// MaxErrors 100 and MaxBodyBytes 1 MiB.
+// MaxIntrospectionCost 250000, MaxTokens 15000, MaxFields 5000, MaxFragments 500,
+// MaxDepth 64, MaxNameBytes 128, MaxLiteralBytes 64 KiB, MaxVariableNodes 100000,
+// MaxErrors 100, MaxBodyBytes 1 MiB, MaxResponseBytes 32 MiB and Timeout 30 s.
 func DefaultLimits() Limits {
 	return Limits{
 		MaxPage: 100, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 5,
-		MaxCost: 150000, MaxIntrospectionCost: 250000, MaxTokens: 15000, MaxFields: 2000, MaxFragments: 500, MaxDepth: 64,
-		MaxNameBytes: 128, MaxLiteralBytes: 64 << 10, MaxVariableNodes: 25000, MaxErrors: 100, MaxBodyBytes: 1 << 20,
+		MaxCost: 150000, MaxIntrospectionCost: 250000, MaxTokens: 15000, MaxFields: 5000, MaxFragments: 500, MaxDepth: 64,
+		MaxNameBytes: 128, MaxLiteralBytes: 64 << 10, MaxVariableNodes: 100000, MaxErrors: 100, MaxBodyBytes: 1 << 20,
+		MaxResponseBytes: 32 << 20, Timeout: 30 * time.Second,
 	}
 }
 
@@ -165,6 +184,8 @@ func (l Limits) orDefault() Limits {
 		MaxVariableNodes:     cmp.Or(l.MaxVariableNodes, d.MaxVariableNodes),
 		MaxErrors:            cmp.Or(l.MaxErrors, d.MaxErrors),
 		MaxBodyBytes:         cmp.Or(l.MaxBodyBytes, d.MaxBodyBytes),
+		MaxResponseBytes:     cmp.Or(l.MaxResponseBytes, d.MaxResponseBytes),
+		Timeout:              cmp.Or(l.Timeout, d.Timeout),
 	}
 }
 
@@ -194,5 +215,6 @@ func (l Limits) fields() []struct {
 		{"MaxVariableNodes", l.MaxVariableNodes},
 		{"MaxErrors", l.MaxErrors},
 		{"MaxBodyBytes", l.MaxBodyBytes},
+		{"MaxResponseBytes", l.MaxResponseBytes},
 	}
 }

@@ -248,12 +248,16 @@ func (q Query[E]) prepare[_ Lazy[E]]() (Statement, error) {
 }
 
 // scanRow scans the current row into p through the entity's scan plan; a
-// JSON column through a decoder (ScanDst).
+// JSON column through a decoder (ScanDst), and one of nilColumns through nilScanner.
 func scanRow[E any](r engine.Rows, m *Meta[E], cols []int, dst []any, p *E) error {
 	for i := range dst {
 		c := i
 		if cols != nil {
 			c = cols[i]
+		}
+		if m.nilCols != nil && m.nilCols[c] {
+			dst[i] = &nilScanner{dst: m.addr(p, c)}
+			continue
 		}
 		dst[i] = engine.ScanDst(m.info, c, m.addr(p, c))
 	}

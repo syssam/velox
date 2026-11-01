@@ -651,7 +651,7 @@ func TestEdgeFromAppField(t *testing.T) {
 				t.Errorf("%s %s: totalCount %d, want %d", x.Name, c.name, n, wn)
 			}
 		}
-		rows, err := gqlimpl.EdgeList(nctx, db.Query[tag](), x, owners.Tags, "Owner.tags")
+		rows, err := gqlimpl.EdgeList(nctx, db.Query[tag](), x, owners.Tags, "Owner.tags", 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -795,7 +795,7 @@ func TestEdgeListCap(t *testing.T) {
 		log.take("")
 		got, errs := map[int64][]int64{}, map[int64]error{}
 		for _, x := range xs {
-			rows, err := gqlimpl.EdgeList(tctx, db.Query[tag](), x, owners.Tags, "Owner.tags")
+			rows, err := gqlimpl.EdgeList(tctx, db.Query[tag](), x, owners.Tags, "Owner.tags", 0)
 			if err != nil {
 				errs[x.ID] = err
 				continue

@@ -913,6 +913,7 @@ func CreateInput(on bool) Annotation
 func Directives(ds ...Directive) Annotation
 func EnumValues(m map[string]string) Annotation
 func FieldName(name string) Annotation
+func MaxList(n int) Annotation
 func MultiOrder() Annotation
 func Mutations(kinds ...MutationKind) Annotation
 func OrderField(name string) Annotation
@@ -923,7 +924,7 @@ func Type(name string) Annotation
 func UpdateInput(on bool) Annotation
 func WhereEdge() Annotation
 func WhereOps(ops ...WhereOp) Annotation
-type Annotation struct { Skip SkipMode Type string QueryField string Mutations []MutationKind MultiOrder bool FieldName string OrderField string OrderUnguarded bool WhereOps WhereOp WhereEdge bool Connection *bool CreateInput *bool UpdateInput *bool EnumValues map[string]string Directives []Directive }
+type Annotation struct { Skip SkipMode Type string QueryField string Mutations []MutationKind MultiOrder bool FieldName string OrderField string OrderUnguarded bool WhereOps WhereOp WhereEdge bool Connection *bool MaxList int CreateInput *bool UpdateInput *bool EnumValues map[string]string Directives []Directive }
 type Directive struct { Name string Args map[string]any }
 type MutationKind string
 type SkipMode uint16
@@ -934,9 +935,10 @@ const CodeBadUserInput
 const CodeForbidden
 const CodeInternal
 const CodeNotFound
+const CodeTimeout
 const CodeTooCostly
 const CodeUnauthenticated
-const GeneratedCodeIsVersion6
+const GeneratedCodeIsVersion7
 const OrderDirectionAsc OrderDirection
 const OrderDirectionDesc OrderDirection
 func (*Extension) ExtensionName() string
@@ -999,7 +1001,7 @@ type Cursor struct { Type string Terms []CursorTerm Key any }
 type CursorTerm struct { Field string Direction OrderDirection Value any }
 type Extension struct { }
 type JSON json.RawMessage
-type Limits struct { MaxPage int MaxList int MaxFilterDepth int MaxFilterWidth int MaxFilterNodes int MaxOrderTerms int MaxCost int MaxIntrospectionCost int MaxTokens int MaxFields int MaxFragments int MaxDepth int MaxNameBytes int MaxLiteralBytes int MaxVariableNodes int MaxErrors int MaxBodyBytes int }
+type Limits struct { MaxPage int MaxList int MaxFilterDepth int MaxFilterWidth int MaxFilterNodes int MaxOrderTerms int MaxCost int MaxIntrospectionCost int MaxTokens int MaxFields int MaxFragments int MaxDepth int MaxNameBytes int MaxLiteralBytes int MaxVariableNodes int MaxErrors int MaxBodyBytes int MaxResponseBytes int Timeout time.Duration }
 type Noder interface { IsNode() IDGQL() string }
 type Option struct { }
 type OrderDirection string
@@ -1018,7 +1020,10 @@ var ErrFilterTooWide
 var ErrNoDB
 var ErrPageTooLarge
 var ErrRequestTooLarge
+var ErrResponseTooLarge
+var ErrTimeout
 var ErrTooCostly
+var ErrTooManyErrors
 var ErrWrongIDType
 
 package contrib/veloxotel

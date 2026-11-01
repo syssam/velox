@@ -114,6 +114,8 @@ type Edge struct {
 	Kind   EdgeKind
 	Target *Type  // the type of the edge's nodes
 	Method string // <GoName>GQL
+	// MaxList is a list edge's graphql.MaxList; 0 when it has none.
+	MaxList int
 }
 
 // Enum is an enum field in GraphQL: an enum type named after the field's Go
@@ -235,7 +237,7 @@ func Build(m *plugin.Model) (*Surface, error) {
 			}
 		}
 		for _, ef := range o.edges {
-			t.Edges = append(t.Edges, Edge{Edge: ef.edge, Name: ef.name, Kind: ef.kind, Target: types[ef.target], Method: o.ent.Edges[ef.edge].GoName + "GQL"})
+			t.Edges = append(t.Edges, Edge{Edge: ef.edge, Name: ef.name, Kind: ef.kind, Target: types[ef.target], Method: o.ent.Edges[ef.edge].GoName + "GQL", MaxList: o.eanns[ef.edge].MaxList})
 		}
 		s.Types = append(s.Types, t)
 	}

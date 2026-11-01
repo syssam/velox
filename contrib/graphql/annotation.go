@@ -1,6 +1,7 @@
 package graphql
 
 import (
+	"cmp"
 	"fmt"
 	"maps"
 	"slices"
@@ -111,6 +112,9 @@ type Annotation struct {
 	// Connection says whether a to-many edge is a connection (the default) or
 	// a plain list. Nil leaves the default.
 	Connection *bool `json:"connection,omitempty"`
+	// MaxList is the most rows a list edge reads for each parent, and what the cost
+	// charges for each; zero leaves veloxgql.Limits.MaxList.
+	MaxList int `json:"max_list,omitempty"`
 	// CreateInput says whether a field is in the create input. Nil leaves the
 	// default.
 	CreateInput *bool `json:"create_input,omitempty"`
@@ -158,6 +162,7 @@ func (a Annotation) Merge(other schema.Annotation) schema.Annotation {
 		WhereOps:       o.WhereOps | a.WhereOps,
 		WhereEdge:      o.WhereEdge || a.WhereEdge,
 		Connection:     pickPtr(a.Connection, o.Connection),
+		MaxList:        cmp.Or(a.MaxList, o.MaxList),
 		CreateInput:    pickPtr(a.CreateInput, o.CreateInput),
 		UpdateInput:    pickPtr(a.UpdateInput, o.UpdateInput),
 	}
@@ -279,6 +284,13 @@ func WhereEdge() Annotation { return Annotation{WhereEdge: true} }
 
 // Connection makes a to-many edge a connection (true) or a plain list (false).
 func Connection(on bool) Annotation { return Annotation{Connection: &on} }
+
+// MaxList lowers what a list edge (Connection(false)) reads for each parent from
+// veloxgql.Limits.MaxList to n, and what the cost charges for each, so that lists nest
+// under MaxCost. A parent with more fails the edge, as one over Limits.MaxList does, and
+// no rows are dropped: give an edge that may hold more a Connection. Limits.MaxList still
+// holds when it is the lower.
+func MaxList(n int) Annotation { return Annotation{MaxList: n} }
 
 // CreateInput puts the field in the create input (true) or leaves it out.
 func CreateInput(on bool) Annotation { return Annotation{CreateInput: &on} }

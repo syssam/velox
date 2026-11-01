@@ -502,8 +502,8 @@ func TestGoTypes(t *testing.T) {
 		` gqlimpl.Value(f, "atLT", w.AtLT, Events.At.LT) `,
 		` gqlimpl.Is(f, "atIsNil", w.AtIsNil, Events.At.IsNull) `,
 		` gqlimpl.Value(f, "refNEQ", w.RefNEQ, Events.Ref.NEQ) `,
-		` gqlimpl.IDAs(f, "ownerID", w.OwnerID, "Owner", gqlimpl.AsInt[idspkg.UserID, int64], gqlimpl.FK[Owner](Events.OwnerID.EQ, Events.Owner.Has)) `,
-		` gqlimpl.IDListAs(f, "ownerIDNotIn", w.OwnerIDNotIn, "Owner", gqlimpl.AsInt[idspkg.UserID, int64], gqlimpl.FKList[Owner](Events.OwnerID.NotIn, Events.Owner.Has)) `,
+		` gqlimpl.IDAs(f, "ownerID", w.OwnerID, "Owner", gqlimpl.AsInt[idspkg.UserID, int64], gqlimpl.FK[Owner](false, Events.OwnerID.EQ, Events.Owner.Has)) `,
+		` gqlimpl.IDListAs(f, "ownerIDNotIn", w.OwnerIDNotIn, "Owner", gqlimpl.AsInt[idspkg.UserID, int64], gqlimpl.FKList[Owner](false, Events.OwnerID.NotIn, Events.Owner.Has)) `,
 		` gqlimpl.Is(f, "hasOwner", w.HasOwner, Events.Owner.Has) `,
 		` gqlimpl.HasWith(f, "hasOwnerWith", w.HasOwnerWith, Events.Owner.HasWhere) `,
 	} {
@@ -689,7 +689,7 @@ func TestGeneratedFilesCarryTheGuard(t *testing.T) {
 			t.Fatalf("%s: no files", label)
 		}
 		for name, src := range files {
-			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion6\n"); n != 1 {
+			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion7\n"); n != 1 {
 				t.Errorf("%s: %s has the guard %d times, want once", label, name, n)
 			}
 			if !strings.Contains(src, `"github.com/syssam/velox/contrib/graphql/veloxgql"`) {
@@ -1327,7 +1327,7 @@ func TestEdgesBatch(t *testing.T) {
 				want := map[sdl.EdgeKind]string{
 					sdl.EdgeConnection: "gqlimpl.EdgeConnection(ctx, c.c, x, " + e.Handles + "." + pe.GoName + ", " + field + ", []any{" + connArgs(ed.Target) + "})",
 					sdl.EdgeUnique:     "gqlimpl.EdgeOne(ctx, q, x, " + e.Handles + "." + pe.GoName + ", " + field + ")",
-					sdl.EdgeList:       "gqlimpl.EdgeList(ctx, q, x, " + e.Handles + "." + pe.GoName + ", " + field + ")",
+					sdl.EdgeList:       "gqlimpl.EdgeList(ctx, q, x, " + e.Handles + "." + pe.GoName + ", " + field + ", 0)",
 				}[ed.Kind]
 				if !strings.Contains(src, want) {
 					t.Errorf("%s: %s.%s: no %q in\n%s", label, e.Name, ed.Method, want, src)
@@ -1649,6 +1649,25 @@ func TestRepointO2OOrder(t *testing.T) {
 			t.Errorf("UpdateOwner: %s comes before the step ahead of it:\n%s", s, src)
 		}
 		at = i
+	}
+}
+
+// TestMethodNameTaken: a field or an edge whose Go name is a method the plugin writes on
+// the row is refused here, naming it, where it failed in gqlgen's build.
+func TestMethodNameTaken(t *testing.T) {
+	for _, name := range []struct{ name, goName string }{{"is_node", "IsNode"}, {"id_gql", "IDGQL"}, {"title_gql", "TitleGQL"}} {
+		m := &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
+			Name: "Thing", Label: "thing", Handles: "Things", Tenant: -1, PrimaryKey: []int{0}, Edges: []*plugin.Edge{},
+			Fields: []*plugin.Field{
+				{Name: "id", GoName: "ID", Type: "int64", GoType: "int64", ElemType: "int64"},
+				{Name: "title", GoName: "Title", Type: "string", GoType: "MyTitle", ElemType: "MyTitle", Kind: "string"},
+				{Name: name.name, GoName: name.goName, Type: "string", GoType: "string", ElemType: "string", Kind: "string"},
+			},
+		}}}
+		_, err := Render(m, "example.com/app/gen", "gen")
+		if err == nil || !strings.Contains(err.Error(), "Thing."+name.goName) || !strings.Contains(err.Error(), name.name) {
+			t.Errorf("%s: %v", name.name, err)
+		}
 	}
 }
 

@@ -47,7 +47,7 @@
 // The annotations of an entity are Skip, Type, QueryField, Mutations,
 // MultiOrder and Directives; of a field, FieldName, Skip, OrderField,
 // OrderUnguarded, WhereOps, CreateInput, UpdateInput, EnumValues and
-// Directives; of an edge, Skip, FieldName, WhereEdge, Connection and
+// Directives; of an edge, Skip, FieldName, WhereEdge, Connection, MaxList and
 // Directives. One on an element it does not apply to makes the generator
 // fail, naming the schema and the element.
 //
@@ -161,7 +161,7 @@
 //
 // They use the runtime package veloxgql, and its package gqlimpl for what
 // only generated code calls; every file carries
-// "const _ = veloxgql.GeneratedCodeIsVersion6", so that generated code and
+// "const _ = veloxgql.GeneratedCodeIsVersion7", so that generated code and
 // the module fail to compile together when they disagree. A connection is
 // keyset-paged by its cursors, and runs its page query and its COUNT only
 // when gqlgen asks for edges or pageInfo, and for totalCount; see "Loading"
@@ -171,7 +171,9 @@
 // and a filter nested deeper than MaxFilterDepth, wider than MaxFilterWidth
 // or larger in all than MaxFilterNodes, before any query runs. A list edge
 // (graphql.Connection(false)) reads at most MaxList rows and fails with
-// velox.ErrTooManyRows beyond them, whatever the DB's cap. The limits are
+// velox.ErrTooManyRows beyond them, whatever the DB's cap; graphql.MaxList(n), which an
+// edge may set under the limit, lowers that and what the edge costs, and a request
+// refused for a list edge's cost names the edge and these two ways out: it or a connection. The limits are
 // veloxgql.LimitsFromContext(ctx): the ones given to veloxgql.NewExtension with
 // veloxgql.WithLimits, or veloxgql.DefaultLimits().
 //
@@ -195,9 +197,9 @@
 // given to a Nillable field with a Default, literal or variable, on the create<T>
 // field: leave it out for the Default, or clear it with an update, as an insert
 // does not store NULL there. In an update input a field not given is left as
-// it is, clear<Field> sets a nullable one to NULL, and a null given to a field or an
-// edge with a clear input is refused with BAD_USER_INPUT, naming that input, as it would
-// leave the old value; a Required field has none, and its null is a field not given.
+// it is, and clear<Field> or a null given sets a nullable one to NULL. A null given to an
+// edge's <edge>ID is refused with BAD_USER_INPUT, naming clear<Edge>; a Required field
+// has no clear input, and its null is a field not given.
 // An edge is cleared, then
 // its remove<Edge>IDs removed, then its add<Edge>IDs added; a field given with
 // its clear, or an ID both to add and to remove, is refused with
@@ -451,7 +453,7 @@
 // that selects __typename does. Variables are read; sums and products saturate,
 // so huge arguments cannot wrap the cost, and a named fragment is costed once for
 // each page size it is spread under. Two levels of full connection pages cost
-// about 20000 and pass the default; three do not. A list edge costs MaxList (1000)
+// about 20000 and pass the default; three do not. A list edge costs MaxList (1000, or its graphql.MaxList)
 // for each parent, so a: likes { id } b: likes { id } under posts(first: 100) cost
 // 200602 and are refused by default: raise MaxCost, or lower MaxList. gqlgen's
 // extension.FixedComplexityLimit counts fields, not rows, and is not needed
@@ -460,8 +462,9 @@
 // __schema and __type have a limit of their own, veloxgql.Limits.MaxIntrospectionCost,
 // 250000 by default: they cost what they select, counted over the schema, one
 // for each field of the response, and a walk that passes the limit stops.
-// GraphiQL's query costs 3478 on the example's schema of three entities and about
-// 1400 for each rich entity, so the default admits it on 150 of them. Neither limit
+// GraphiQL's query costs 3478 on the example's schema of three entities, about
+// 1400 for each rich entity, and about 2500 with graphql.WhereOps on every field, so the
+// default admits it on 150 of the first and about 100 of the second. Neither limit
 // loosens the other. A request at this one allocates about 160 MB through gqlgen:
 // a larger schema raises it, at about 640 bytes a unit, and a server open to
 // strangers lowers it, or has no extension.Introspection.
@@ -476,7 +479,12 @@
 //	http.Handle("/graphql", h)
 //
 // Setup uses the Extension and ErrorPresenter on srv, and refuses a body over
-// Limits.MaxBodyBytes, 1 MiB by default, which nothing else in a request bounds.
+// Limits.MaxBodyBytes, 1 MiB by default, which nothing else in a request bounds. It holds
+// a websocket's messages to the same: a connection whose message goes over is closed
+// before the message is read, and no message is compressed. So a public websocket is
+// bounded in the size of a message, under Setup; a server that calls only the Extension
+// has no such limit. How many connections and messages a client sends is outside the
+// bound at either: a rate limit in front has that.
 //
 // gqlgen validates a request before any resolver, and before the extension's cost,
 // and validation is quadratic in the fields that share a response name: 12 KB of
@@ -484,15 +492,32 @@
 // a request, on every transport, the Extension parses it, a second parse that a
 // query cache of gqlgen's does not spare, and checks all of it and its variables that a
 // later stage grows with, refusing one over any limit with BAD_USER_INPUT:
-// Limits.MaxTokens, 15000 by default; MaxFields, 2000, of fields, spreads and inline
+// Limits.MaxTokens, 15000 by default; MaxFields, 5000, of fields, spreads and inline
 // fragments; MaxFragments, 500; MaxDepth, 64, of selections, values and types;
 // MaxNameBytes, 128, or the schema's longest; MaxLiteralBytes, 64 KiB; and
-// MaxVariableNodes, 25000. MaxFields also bounds the pairs of fields under one response
-// name, the fragments spread where they are, at 5 times it for pairs that differ and 200
-// times for pairs that agree. In TestRequestBounded's shapes, validation allocates under 40 MB through
-// veloxgql.Setup, which also stops at MaxErrors errors and shows no suggestions, and
-// what runs after it answers to the cost: 290 MB is the most a request allocates at the
-// default MaxCost, on the example. GraphiQL's query is far under each limit.
+// MaxVariableNodes, 100000, where an object of an input type weighs at least 4. MaxFields
+// also bounds the pairs of fields under one response name, the fragments spread where they
+// are, at 2 times it for pairs that differ and 200 times for pairs that agree, so that 340
+// colocated fragments of 14 common fields pass. In TestRequestBounded's shapes, validation
+// allocates under 40 MB through veloxgql.Setup, which also stops at MaxErrors errors and
+// shows no suggestions, and what runs after it answers to the cost. GraphiQL's query is
+// far under each limit.
+//
+// Cost does not see a value's size: one string of 900 KB under 300 aliases took 3.7 GB.
+// So the Extension counts a response as its fields resolve, its strings as they are
+// escaped, its bytes and its JSON, and stops at Limits.MaxResponseBytes, 32 MiB; it stops
+// at MaxErrors of the errors its fields make, where 97000 of them took 516 MB; and it
+// stops a query or a mutation at Limits.Timeout, 30 s, cancelling the statements' context.
+// Each answers one clean error and data null, COST_LIMIT_EXCEEDED or TIMEOUT, and a
+// mutation rolls back. What remains, plainly: 583 MB is the most a request was measured
+// to allocate at the defaults, 33 MB of strings under aliases at MaxCost, so that the
+// response is 47 MB, as aliases and numbers are not counted; rows being read when the limit
+// is passed are read before they are counted, one per connection a client aliased; a
+// custom scalar's value that is not a string, bytes or JSON kind is not counted; a resolver
+// that ignores its context holds the response until it returns; a presenter of the
+// application's that does not call veloxgql.ErrorPresenter makes the errors of fields
+// that stop before they are dropped. Time and bytes are per request: many of them are for
+// what is in front.
 // docs/decisions/0027-graphql-limits.md has the measurements.
 //
 // # gqlgen.yml

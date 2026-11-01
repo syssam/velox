@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/99designs/gqlgen/graphql"
@@ -281,27 +282,30 @@ func NotZero[V any](at string, v V) error {
 // field whose argument has another name, it finds no null and refuses nothing. For
 // generated code.
 func NotNull(ctx context.Context, at, arg, name string) error {
-	if !nullGiven(ctx, arg, name) {
+	if !NullGiven(ctx, arg, name) {
 		return nil
 	}
 	return InputErrorf("%s: invalid value: null cannot be stored on create, where it means the field's default; leave the field out, or clear it with an update", at)
 }
 
-// NullClears refuses a null the client gave the input field name, of the argument
-// arg of the running field, on an update: an update's nil pointer leaves the field
-// as it is, and a client that says null means to clear it, which clearField, the input's
-// other field, does. The client gets BAD_USER_INPUT, naming at and clearField. Called
-// outside a gqlgen field, or from a field whose argument has another name, it finds
-// no null and refuses nothing. For generated code.
-func NullClears(ctx context.Context, at, arg, name, clearField string) error {
-	if !nullGiven(ctx, arg, name) {
+// NullEdge refuses a null the client gave the input field name, of the argument arg
+// of the running field, on an update of an edge's <edge>ID: clearing an edge unlinks a
+// row, so it is said by clearField, the input's other field. The client gets
+// BAD_USER_INPUT, naming at and clearField. Called outside a gqlgen field, or from a
+// field whose argument has another name, it finds no null and refuses nothing. For
+// generated code.
+func NullEdge(ctx context.Context, at, arg, name, clearField string) error {
+	if !NullGiven(ctx, arg, name) {
 		return nil
 	}
 	return InputErrorf("%s: invalid value: null would leave it as it is; give %s: true to clear it, or leave the field out", at, clearField)
 }
 
-// nullGiven reports whether the running field's argument arg gives name as null.
-func nullGiven(ctx context.Context, arg, name string) bool {
+// NullGiven reports whether the running field's argument arg gives the input field
+// name as null, which an input's nil pointer cannot tell from a field left out: an
+// update clears a nullable field by it. Outside a gqlgen field, or in a field whose
+// argument has another name, it finds none. For generated code.
+func NullGiven(ctx context.Context, arg, name string) bool {
 	fc := graphql.GetFieldContext(ctx)
 	if fc == nil || fc.Field.Field == nil || !graphql.HasOperationContext(ctx) {
 		return false
@@ -375,12 +379,13 @@ func WriteError(err error, input, entity string, name func(goField string) strin
 // names Go types). For generated code.
 //
 // What it stores is what the client gave, or it refuses. A number in an any is a
-// json.Number, so it keeps its digits: a hook that reads one finds that, not a
-// float64. A key that no field of a struct has is refused, as json.Unmarshal would
-// drop it, and so is a null where the type holds none, a string in a []string as much
-// as a field of a struct, as it would store the zero value. A type with its own
-// UnmarshalJSON decides for itself. Reading a row back into an any is velox's scan,
-// which gives a float64.
+// float64, as encoding/json and a hook expect, when that says the same number
+// (exactFloat), and a json.Number when it would not, so that it keeps its digits. A key
+// that no field of a struct has is refused, as json.Unmarshal would drop it; so is a null
+// where the type holds none, a string in a []string as much as a field of a struct, as
+// it would store the zero value; and a list that is not the length of a Go array, which
+// it would pad or cut. A type with its own UnmarshalJSON decides for itself. Reading a
+// row back into an any is velox's scan, which gives a float64.
 func FromJSON[T any](at string, j veloxgql.JSON) (T, error) {
 	var t, zero T
 	dec := json.NewDecoder(bytes.NewReader(j))
@@ -392,58 +397,202 @@ func FromJSON[T any](at string, j veloxgql.JSON) (T, error) {
 		}
 		return zero, InputErrorf("%s: invalid value: not a JSON value of the field's type", at)
 	}
-	if bytes.Contains(j, []byte("null")) {
+	typ := reflect.TypeFor[T]()
+	if bytes.Contains(j, []byte("null")) || typeHolds(typ, reflect.Array, nil) {
 		var v any
 		dec := json.NewDecoder(bytes.NewReader(j))
 		dec.UseNumber()
 		// j decoded once into T, so it is a JSON value.
-		if err := dec.Decode(&v); err == nil && nullInto(reflect.TypeFor[T](), v) {
-			return zero, InputErrorf("%s: invalid value: null where the field's type holds none", at)
+		if err := dec.Decode(&v); err == nil {
+			if why := misfit(typ, v); why != "" {
+				return zero, InputErrorf("%s: invalid value: %s", at, why)
+			}
 		}
+	}
+	if typeHolds(typ, reflect.Interface, nil) {
+		floatNumbers(reflect.ValueOf(&t).Elem())
 	}
 	return t, nil
 }
 
-// nullInto reports whether v, decoded JSON, holds a null where a value of the type t
-// has no way to hold one, so that decoding it gives the zero value.
-func nullInto(t reflect.Type, v any) bool {
-	if t.Implements(jsonUnmarshaler) || reflect.PointerTo(t).Implements(jsonUnmarshaler) {
+// typeHolds reports whether a value of the type t may hold one of the kind, in a place
+// the decoder fills itself.
+func typeHolds(t reflect.Type, kind reflect.Kind, seen map[reflect.Type]bool) bool {
+	if t.Kind() == kind {
+		return !t.Implements(jsonUnmarshaler)
+	}
+	if t.Implements(jsonUnmarshaler) || reflect.PointerTo(t).Implements(jsonUnmarshaler) || seen[t] {
 		return false
 	}
 	switch t.Kind() {
-	case reflect.Interface:
-		return false
-	case reflect.Pointer:
-		return v != nil && nullInto(t.Elem(), v)
-	case reflect.Slice, reflect.Array:
-		list, _ := v.([]any)
-		for _, e := range list {
-			if nullInto(t.Elem(), e) {
+	case reflect.Pointer, reflect.Slice, reflect.Array, reflect.Map, reflect.Struct:
+		if seen == nil {
+			seen = map[reflect.Type]bool{}
+		}
+		seen[t] = true
+	}
+	switch t.Kind() {
+	case reflect.Pointer, reflect.Slice, reflect.Array, reflect.Map:
+		return typeHolds(t.Elem(), kind, seen)
+	case reflect.Struct:
+		for _, f := range reflect.VisibleFields(t) {
+			if f.IsExported() && typeHolds(f.Type, kind, seen) {
 				return true
 			}
 		}
-		return v == nil && t.Kind() == reflect.Array
+	}
+	return false
+}
+
+// floatNumbers makes each json.Number in an any under v a float64, when exactFloat says
+// that keeps it. v is settable.
+func floatNumbers(v reflect.Value) {
+	if t := v.Type(); t.Kind() != reflect.Interface && (t.Implements(jsonUnmarshaler) || reflect.PointerTo(t).Implements(jsonUnmarshaler)) {
+		return
+	}
+	switch v.Kind() {
+	case reflect.Interface:
+		if v.NumMethod() == 0 && !v.IsNil() {
+			v.Set(reflect.ValueOf(floatsOf(v.Interface())).Convert(v.Type()))
+		}
+	case reflect.Pointer:
+		if !v.IsNil() {
+			floatNumbers(v.Elem())
+		}
+	case reflect.Slice, reflect.Array:
+		for i := range v.Len() {
+			floatNumbers(v.Index(i))
+		}
+	case reflect.Map:
+		for it := v.MapRange(); it.Next(); {
+			e := reflect.New(v.Type().Elem()).Elem()
+			e.Set(it.Value())
+			floatNumbers(e)
+			v.SetMapIndex(it.Key(), e)
+		}
+	case reflect.Struct:
+		for i := range v.NumField() {
+			if v.Type().Field(i).IsExported() {
+				floatNumbers(v.Field(i))
+			}
+		}
+	}
+}
+
+// floatsOf is x, a value the decoder put in an any, with floatNumbers's change made.
+func floatsOf(x any) any {
+	switch x := x.(type) {
+	case json.Number:
+		if f, ok := exactFloat(string(x)); ok {
+			return f
+		}
+	case []any:
+		for i := range x {
+			x[i] = floatsOf(x[i])
+		}
+	case map[string]any:
+		for k := range x {
+			x[k] = floatsOf(x[k])
+		}
+	}
+	return x
+}
+
+// exactFloat is the number s as a float64, and whether that says the same number: its
+// shortest decimal, which is what JSON writes of it, has the value s has. So 0.1 is
+// kept, and 9007199254740993, 1e400 and 1e-400 are not. It works on the text, whatever
+// the exponent, as a big.Rat of 1e999999 takes milliseconds.
+func exactFloat(s string) (float64, bool) {
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0, false
+	}
+	return f, decimal(s) == decimal(strconv.FormatFloat(f, 'e', -1, 64))
+}
+
+// decimal is the JSON number s as its digits, without zeros at either end, and the
+// exponent of the last: two numbers are equal when these are. Its sign is no part of
+// it, as ParseFloat keeps that. An exponent out of range is "", which equals no number
+// ParseFloat took.
+func decimal(s string) string {
+	s = strings.TrimPrefix(s, "-")
+	exp := 0
+	if i := strings.IndexAny(s, "eE"); i >= 0 {
+		var err error
+		if exp, err = strconv.Atoi(s[i+1:]); err != nil {
+			return ""
+		}
+		s = s[:i]
+	}
+	whole, frac, _ := strings.Cut(s, ".")
+	digits := strings.TrimLeft(whole+frac, "0")
+	exp -= len(frac)
+	trimmed := strings.TrimRight(digits, "0")
+	exp += len(digits) - len(trimmed)
+	if trimmed == "" {
+		return "0"
+	}
+	return trimmed + "e" + strconv.Itoa(exp)
+}
+
+// misfit says what in v, decoded JSON, a value of the type t cannot hold, so that
+// decoding it gives another value: a null it has no way to hold, or a list that is not
+// the length of its array. It is "" for none.
+func misfit(t reflect.Type, v any) string {
+	if t.Implements(jsonUnmarshaler) || reflect.PointerTo(t).Implements(jsonUnmarshaler) {
+		return ""
+	}
+	const null = "null where the field's type holds none"
+	switch t.Kind() {
+	case reflect.Interface:
+		return ""
+	case reflect.Pointer:
+		if v == nil {
+			return ""
+		}
+		return misfit(t.Elem(), v)
+	case reflect.Slice, reflect.Array:
+		list, isList := v.([]any)
+		if t.Kind() == reflect.Array {
+			if v == nil {
+				return null
+			}
+			if isList && len(list) != t.Len() {
+				return fmt.Sprintf("a list of %d where the field's type holds %d", len(list), t.Len())
+			}
+		}
+		for _, e := range list {
+			if why := misfit(t.Elem(), e); why != "" {
+				return why
+			}
+		}
+		return ""
 	case reflect.Map:
 		m, _ := v.(map[string]any)
 		for _, e := range m {
-			if nullInto(t.Elem(), e) {
-				return true
+			if why := misfit(t.Elem(), e); why != "" {
+				return why
 			}
 		}
-		return false
+		return ""
 	case reflect.Struct:
 		if v == nil {
-			return true
+			return null
 		}
 		m, _ := v.(map[string]any)
 		for k, e := range m {
-			if f, ok := jsonField(t, k); ok && nullInto(f.Type, e) {
-				return true
+			if f, ok := jsonField(t, k); ok {
+				if why := misfit(f.Type, e); why != "" {
+					return why
+				}
 			}
 		}
-		return false
+		return ""
 	}
-	return v == nil
+	if v == nil {
+		return null
+	}
+	return ""
 }
 
 // jsonField is the field of the struct t that encoding/json decodes the key k into:

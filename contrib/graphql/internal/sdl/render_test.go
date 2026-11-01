@@ -615,6 +615,37 @@ func TestSkip(t *testing.T) {
 	})
 }
 
+// TestEdgeMaxList: graphql.MaxList reaches the SDL, where Cost reads it, and the
+// surface, where the edge's read does.
+func TestEdgeMaxList(t *testing.T) {
+	user := entity("User")
+	short := edge("friends", plugin.M2M, "Group")
+	short.Annotations = ann(t, graphql.Connection(false), graphql.MaxList(5))
+	plain := edge("tags", plugin.M2M, "Group")
+	plain.Annotations = ann(t, graphql.Connection(false))
+	user.Edges = []*plugin.Edge{short, plain}
+	m := model(entity("Group"), user)
+	_, got := load(t, m)
+	for _, want := range []string{
+		`friends: [Group!]! @goField(name: "FriendsGQL", maxList: 5)`,
+		`tags: [Group!]! @goField(name: "TagsGQL")`,
+		`directive @goField(forceResolver: Boolean, name: String, omittable: Boolean, type: String, maxList: Int) on`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("no %q in\n%s", want, got)
+		}
+	}
+	s, err := Build(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ty := range s.Types {
+		if ty.Name == "User" && (ty.Edges[0].MaxList != 5 || ty.Edges[1].MaxList != 0) {
+			t.Errorf("MaxList: %d, %d", ty.Edges[0].MaxList, ty.Edges[1].MaxList)
+		}
+	}
+}
+
 func TestEdges(t *testing.T) {
 	cat := entity("Category")
 	parent := edge("parent", plugin.M2O, "Category")
@@ -624,7 +655,9 @@ func TestEdges(t *testing.T) {
 	user.Edges = []*plugin.Edge{edge("posts", plugin.O2M, "Post"), edge("groups", plugin.M2M, "Group"), edge("profile", plugin.O2O, "Profile")}
 	plain := edge("tags", plugin.M2M, "Group")
 	plain.Annotations = ann(t, graphql.Connection(false))
-	user.Edges = append(user.Edges, plain)
+	short := edge("friends", plugin.M2M, "Group")
+	short.Annotations = ann(t, graphql.Connection(false), graphql.MaxList(5))
+	user.Edges = append(user.Edges, plain, short)
 	// A Required edge is nullable whatever its key: T. A policy or a tenant may
 	// hide its target, and T! would null the page around the row.
 	post := entity("Post", field("author_id", "int64"))
@@ -891,7 +924,7 @@ func TestVocabulary(t *testing.T) {
 	_, sdl := load(t, model(entity("User")))
 	for _, want := range []string{
 		"scalar Time\n", "scalar UUID\n", "scalar Bytes\n", "scalar JSON\n", "scalar Uint64\n", "scalar Cursor\n",
-		"directive @goField(forceResolver: Boolean, name: String, omittable: Boolean, type: String) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION\n",
+		"directive @goField(forceResolver: Boolean, name: String, omittable: Boolean, type: String, maxList: Int) on INPUT_FIELD_DEFINITION | FIELD_DEFINITION\n",
 		"directive @goModel(model: String, models: [String!], forceGenerate: Boolean) on OBJECT | INPUT_OBJECT | SCALAR | ENUM | INTERFACE | UNION\n",
 		"interface Node {\n", "  id: ID!\n",
 		"type PageInfo {\n", "  hasNextPage: Boolean!\n", "  hasPreviousPage: Boolean!\n", "  startCursor: Cursor\n", "  endCursor: Cursor\n",

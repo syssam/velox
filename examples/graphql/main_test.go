@@ -58,7 +58,7 @@ type testServer struct {
 	sql   *sql.DB
 }
 
-func newServer(t *testing.T) *testServer {
+func newServer(t *testing.T, opts ...veloxgql.Option) *testServer {
 	t.Helper()
 	s := &testServer{}
 	sqlDB, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "graphql.db"))
@@ -83,7 +83,7 @@ func newServer(t *testing.T) *testServer {
 		t.Fatal(err)
 	}
 	recording = true
-	srv := httptest.NewServer(orgFromHeader(roleFromHeader(server(db))))
+	srv := httptest.NewServer(orgFromHeader(roleFromHeader(server(db, opts...))))
 	t.Cleanup(srv.Close)
 	s.url = srv.URL
 	return s

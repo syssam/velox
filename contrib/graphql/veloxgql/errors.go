@@ -8,10 +8,12 @@ import "errors"
 // an ID: the client sent it, and the message names only what the server
 // wanted.
 //
-// Each but ErrNoDB and ErrTooCostly is an error in the client's input, and is
-// returned in an error with the code CodeBadUserInput, which ErrorPresenter
-// shows the client. ErrTooCostly has its own code, CodeTooCostly. ErrNoDB is a programming error, which has no code: ErrorPresenter
-// logs it and shows "internal error".
+// Each but ErrNoDB, ErrTooCostly, ErrResponseTooLarge, ErrTooManyErrors and ErrTimeout
+// is an error in the client's input, and is returned in an error with the code
+// CodeBadUserInput, which ErrorPresenter shows the client. ErrTooCostly,
+// ErrResponseTooLarge and ErrTooManyErrors have the code CodeTooCostly, and ErrTimeout
+// CodeTimeout. ErrNoDB is a programming error, which has no code: ErrorPresenter logs it
+// and shows "internal error".
 var (
 	// ErrBadID: an ID that is not base64url without padding of
 	// "<Type>:<key>", or whose key is not the canonical text of a key of the
@@ -49,6 +51,15 @@ var (
 	// ErrRequestTooLarge: a request whose query is over the MaxFields, or whose
 	// body is over the MaxBodyBytes, of the limits. Nothing of it was validated.
 	ErrRequestTooLarge = errors.New("request is too large")
+	// ErrResponseTooLarge: the strings and bytes of a response are over the
+	// MaxResponseBytes of the limits. The request stops there, and its data is null.
+	ErrResponseTooLarge = errors.New("response is too large")
+	// ErrTooManyErrors: a response made more than the MaxErrors of the limits. The
+	// request stops there, and its data is null.
+	ErrTooManyErrors = errors.New("response has too many errors")
+	// ErrTimeout: a query or a mutation ran over the Timeout of the limits, whose
+	// statements were cancelled. Its data is null.
+	ErrTimeout = errors.New("request timed out")
 	// ErrNoDB: a resolver ran with no DB in its context, which the
 	// Extension puts there.
 	ErrNoDB = errors.New("no DB in the context")

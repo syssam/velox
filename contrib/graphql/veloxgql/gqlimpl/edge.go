@@ -123,10 +123,14 @@ func EdgeOne[E, T any](ctx context.Context, q velox.Query[T], x *E, r velox.Rel[
 // LimitEach of MaxList + 1: an owner with more than MaxList fails with
 // velox.ErrTooManyRows, in an error naming field, and the others do not.
 //
-// MaxList is that of veloxgql.LimitsFromContext(ctx). Read alone, x's nodes are
-// one LoadEach of x, a group of their own.
-func EdgeList[E, T any](ctx context.Context, q velox.Query[T], x *E, r velox.Rel[E, T], field string) ([]*T, error) {
+// MaxList is that of veloxgql.LimitsFromContext(ctx), or maxList, the edge's
+// graphql.MaxList, when that is lower and not 0. Read alone, x's nodes are one
+// LoadEach of x, a group of their own.
+func EdgeList[E, T any](ctx context.Context, q velox.Query[T], x *E, r velox.Rel[E, T], field string, maxList int) ([]*T, error) {
 	most := veloxgql.LimitsFromContext(ctx).MaxList
+	if maxList > 0 {
+		most = min(most, maxList)
+	}
 	rel := r.LimitEach(most + 1)
 	keep := func(rows []T) int {
 		if len(rows) > most {
@@ -144,7 +148,7 @@ func EdgeList[E, T any](ctx context.Context, q velox.Query[T], x *E, r velox.Rel
 	}
 	rows := parts[i]
 	if len(rows) > most {
-		return nil, fmt.Errorf("veloxgql: %s: %w: more than %d, the MaxList of the limits", field, velox.ErrTooManyRows, most)
+		return nil, fmt.Errorf("veloxgql: %s: %w: more than %d, the edge's MaxList", field, velox.ErrTooManyRows, most)
 	}
 	out := make([]*T, len(rows))
 	for k := range rows {

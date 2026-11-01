@@ -1,12 +1,15 @@
 package veloxgql
 
 import (
+	"bufio"
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"maps"
+	"net"
 	"net/http"
 	"slices"
 	"sync"
@@ -44,11 +47,17 @@ type Server interface {
 // MaxErrors errors, and one that says there are more. The handler it returns refuses a
 // body over the limits' MaxBodyBytes with 413, and BAD_USER_INPUT wrapping
 // ErrRequestTooLarge; nothing else in a request bounds one. It holds the whole of
-// a body of unknown length, up to that.
+// a body of unknown length, up to that. A websocket's messages are held to the same: the
+// connection of one over closes before it is read, whichever transport or gqlgen. It
+// takes the extensions off the upgrade, so no message is compressed: what a client sends
+// is what is counted.
+//
+// How many messages or connections a client opens is not bounded here: a rate limit in
+// front is.
 //
 // Call SetErrorPresenter again, after it, to give another presenter. Without
-// Setup, the Extension still enforces the limits of the document and the variables,
-// and no body limit holds, nor one of validation's errors.
+// Setup, the Extension still enforces the limits of the document, the variables and the
+// response, and no body or websocket limit holds, nor one of validation's errors.
 func Setup(srv Server, db *velox.DB, opts ...Option) http.Handler {
 	e := NewExtension(db, opts...)
 	srv.Use(e)
@@ -123,6 +132,11 @@ func validationRules(most int) *rules.Rules {
 // bodyLimit refuses a body of more than most bytes.
 func bodyLimit(next http.Handler, most int64) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// A header is no reason to skip the body's limit: a POST may name it too.
+		if r.Header.Get("Upgrade") != "" {
+			r.Header.Del("Sec-WebSocket-Extensions")
+			w = &wsLimitWriter{ResponseWriter: w, most: most}
+		}
 		switch {
 		case r.ContentLength > most:
 			refuseBody(w, most)
@@ -145,6 +159,115 @@ func bodyLimit(next http.Handler, most int64) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// wsLimitWriter gives a websocket library a connection that holds each message to most
+// bytes: neither gqlgen's Upgrader at v0.17.86 nor its Implementation since has a limit
+// the other has, and a message is decoded in full before any extension sees it.
+type wsLimitWriter struct {
+	http.ResponseWriter
+	most int64
+}
+
+// Hijack implements http.Hijacker. A client must wait for the upgrade's answer, so what it
+// sent before that, which the server has read past the
+// connection given here, is refused.
+func (w *wsLimitWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	rc := http.NewResponseController(w.ResponseWriter)
+	conn, brw, err := rc.Hijack()
+	if err != nil {
+		return nil, nil, err
+	}
+	if brw.Reader.Buffered() > 0 {
+		_ = conn.Close()
+		return nil, nil, errWebsocketEarly
+	}
+	c := &wsLimitConn{Conn: conn, most: w.most}
+	brw.Reader.Reset(c)
+	return c, brw, nil
+}
+
+// Unwrap is for http.ResponseController.
+func (w *wsLimitWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+var (
+	errWebsocketTooLarge = errors.New("veloxgql: a websocket message over Limits.MaxBodyBytes")
+	errWebsocketEarly    = errors.New("veloxgql: a websocket client sent frames before the upgrade's answer")
+)
+
+// wsLimitConn reads a client's websocket frames as they pass, and
+// closes the connection when a message's payload passes most.
+type wsLimitConn struct {
+	net.Conn
+	most int64
+	// header is the frame's header so far; skip the payload of it left to pass; message
+	// the payload of the message so far, of its data frames.
+	header  [14]byte
+	headerN int
+	skip    uint64
+	message uint64
+}
+
+// Read implements net.Conn.
+func (c *wsLimitConn) Read(p []byte) (int, error) {
+	n, err := c.Conn.Read(p)
+	if !c.read(p[:n]) {
+		_ = c.Close()
+		return 0, errWebsocketTooLarge
+	}
+	return n, err
+}
+
+// read passes b, and reports whether its messages are within the limit.
+func (c *wsLimitConn) read(b []byte) bool {
+	for len(b) > 0 {
+		if c.skip > 0 {
+			k := min(c.skip, uint64(len(b)))
+			c.skip -= k
+			b = b[k:]
+			continue
+		}
+		c.header[c.headerN] = b[0]
+		c.headerN++
+		b = b[1:]
+		need := 2
+		if c.headerN >= 2 {
+			switch c.header[1] & 0x7f {
+			case 126:
+				need += 2
+			case 127:
+				need += 8
+			}
+			if c.header[1]&0x80 != 0 {
+				need += 4 // the mask
+			}
+		}
+		if c.headerN < need {
+			continue
+		}
+		c.headerN = 0
+		var size uint64
+		switch payload := c.header[1] & 0x7f; payload {
+		case 126:
+			size = uint64(binary.BigEndian.Uint16(c.header[2:]))
+		case 127:
+			size = binary.BigEndian.Uint64(c.header[2:])
+		default:
+			size = uint64(payload)
+		}
+		c.skip = size
+		if c.header[0]&0x08 != 0 { // a control frame, between a message's frames
+			continue
+		}
+		if size > uint64(c.most) || c.message+size > uint64(c.most) {
+			return false
+		}
+		c.message += size
+		if c.header[0]&0x80 != 0 { // its last frame
+			c.message = 0
+		}
+	}
+	return true
 }
 
 // refuseBody writes bodyLimit's response.

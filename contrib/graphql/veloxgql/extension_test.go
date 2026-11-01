@@ -1095,10 +1095,10 @@ func TestDocumentRefused(t *testing.T) {
 }
 
 // TestDocumentMergePairs: fields that differ under one response name count in pairs,
-// however they merge: at MaxFields 12, 60 pairs.
+// however they merge: at MaxFields 30, 60 pairs.
 func TestDocumentMergePairs(t *testing.T) {
 	db, _ := handlerDB(t)
-	srv := serve(db, handlerResolvers(db, nil), veloxgql.WithLimits(veloxgql.Limits{MaxFields: 12}))
+	srv := serve(db, handlerResolvers(db, nil), veloxgql.WithLimits(veloxgql.Limits{MaxFields: 30}))
 	next := 0
 	a := func(n int) string {
 		return spell(n, func(int) string {
@@ -1201,6 +1201,23 @@ func TestSetup(t *testing.T) {
 	over := `{"query":"{ a: count b: count c: count }"}`
 	if _, got := do(strings.NewReader(over), int64(len(over))); got != `{"errors":[{"message":"request is too large: it has 3 fields, and the most is 2","extensions":{"code":"BAD_USER_INPUT"}}],"data":null}` {
 		t.Errorf("over MaxFields: %s", got)
+	}
+}
+
+// TestListCostNamesTheFix: a client cannot lower what a list costs, as it can a page, so
+// the refusal says what can: the schema's annotation, or a connection.
+func TestListCostNamesTheFix(t *testing.T) {
+	db, _ := handlerDB(t)
+	srv := serveSchema(testSchemaOf(`type Query { items: [Item!]! one: Int } type Item { id: ID! }`, nil), db, veloxgql.WithLimits(veloxgql.Limits{MaxCost: 500}))
+	got := post(t, context.Background(), srv, `{ items { id } }`)
+	for _, want := range []string{"COST_LIMIT_EXCEEDED", "Query.items", "graphql.MaxList", "a Connection"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("no %q in %s", want, got)
+		}
+	}
+	srv = serveSchema(testSchemaOf(`type Query { one: Int }`, nil), db, veloxgql.WithLimits(veloxgql.Limits{MaxCost: 2}))
+	if got := post(t, context.Background(), srv, `{ a: one b: one c: one }`); strings.Contains(got, "MaxList") {
+		t.Errorf("no list in the request: %s", got)
 	}
 }
 

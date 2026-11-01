@@ -43,6 +43,7 @@ var annotationCases = []annotationCase{
 	{"WhereEdge", graphql.WhereEdge(), `{"where_edge":true}`},
 	{"Connection(false)", graphql.Connection(false), `{"connection":false}`},
 	{"Connection(true)", graphql.Connection(true), `{"connection":true}`},
+	{"MaxList", graphql.MaxList(5), `{"max_list":5}`},
 	{"CreateInput(false)", graphql.CreateInput(false), `{"create_input":false}`},
 	{"UpdateInput(true)", graphql.UpdateInput(true), `{"update_input":true}`},
 	{"EnumValues", graphql.EnumValues(map[string]string{"b": "B", "a": "A"}), `{"enum_values":{"a":"A","b":"B"}}`},

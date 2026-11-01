@@ -33,8 +33,11 @@ const (
 	// CodeTooCostly: the request costs more than Limits.MaxCost allows
 	// (ErrTooCostly). It is not a bad argument: the client can ask for less.
 	CodeTooCostly = "COST_LIMIT_EXCEEDED"
+	// CodeTimeout: the request ran over Limits.Timeout (ErrTimeout).
+	CodeTimeout = "TIMEOUT"
 	// CodeInternal: anything else, which the client cannot fix, such as a
-	// driver's error, a timeout, a list edge over MaxList or ErrNoDB.
+	// driver's error, a deadline of the application's, a list edge over MaxList or
+	// ErrNoDB.
 	CodeInternal = "INTERNAL_SERVER_ERROR"
 )
 
@@ -119,6 +122,12 @@ const (
 //	})
 //
 // gqlgen's default presenter shows every error's text, and no codes.
+//
+// It is what holds a response to Limits.MaxErrors as its errors are made: under the
+// Extension it returns nil, which gqlgen drops, once a response has MaxErrors or has
+// stopped. A presenter of the application's that does not call it keeps the limit on
+// what a resolver returns, as the request stops there, and its errors are made and
+// dropped at the end.
 func ErrorPresenter(log func(ctx context.Context, err error), opts ...PresenterOption) graphql.ErrorPresenterFunc {
 	p := presenter{log: log, canceled: func(context.Context, error) {}}
 	if log == nil {
@@ -132,6 +141,9 @@ func ErrorPresenter(log func(ctx context.Context, err error), opts ...PresenterO
 	}
 	return func(ctx context.Context, err error) *gqlerror.Error {
 		if err == nil {
+			return nil
+		}
+		if r, _ := ctx.Value(responseKey{}).(*response); r != nil && !r.admit() {
 			return nil
 		}
 		leaves := internalLeaves(err, nil)
