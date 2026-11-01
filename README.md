@@ -145,6 +145,22 @@ A test runs these steps as written (`TestReadmeQuickStart`). To set up the pool
 yourself, or to wrap it, open it and pass it to `velox.Open`, which leaves closing
 it to you. On PostgreSQL, `veloxpgx.Open` takes a pgx pool and is faster.
 
+## What velox doesn't do
+
+- No joins API, `DISTINCT`, `UNION` or `HAVING`, and no subqueries beyond the
+  `EXISTS` of `Has`, `HasWhere` and `Of`. `GROUP BY` is one key (`CountBy`,
+  `SumBy` and the like).
+- `Raw` scans only into entities. For a report, run your own SQL on
+  `velox.Pool(db)`, the `*sql.DB` under a DB. It is nil on a transaction's DB and
+  on a DB from `veloxpgx`, where you hold the pool.
+- No down migrations. To undo one, change the schema back and diff forward.
+- No composite primary keys on entities: an entity's key is one column. The one
+  composite key velox makes is the join table of a many-to-many edge. For a
+  natural key, keep the `id` and add `index.Fields("org_id", "name").Unique()`.
+- Go 1.27 or newer only: the API is built on generic methods.
+- `Query` can't sit behind an interface, because a generic method doesn't satisfy
+  one. So there is nothing to mock: tests use a real SQLite database.
+
 ## Modules
 
 - `github.com/syssam/velox`: the runtime, with `schema`, `migrate`, `plugin`,
