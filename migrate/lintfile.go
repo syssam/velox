@@ -142,6 +142,77 @@ func (l *fileLinter) rebuildRename() (string, bool) {
 	return schema + to, true
 }
 
+// touchedTables is the tables of main f's statements write rows or
+// definitions of, lower-cased. known is false when a statement is not one
+// it reads, or names a table of another database.
+func touchedTables(d velox.Dialect, f File) (tables map[string]bool, known bool) {
+	tables = map[string]bool{}
+	for _, sql := range f.Statements {
+		l := &fileLinter{d: d, ws: lex(d, sql)}
+		add := func(i int) (int, bool) {
+			n, j := l.name(i)
+			n = strings.TrimPrefix(n, "main.")
+			tables[strings.ToLower(n)] = true
+			return j, n != "" && !strings.Contains(n, ".")
+		}
+		ok := true
+		switch l.upper(0) {
+		case "SELECT", "SAVEPOINT", "RELEASE", "ROLLBACK", "ANALYZE", "REINDEX", "":
+		case "CREATE":
+			switch l.upper(1) {
+			case "INDEX", "UNIQUE", "VIEW":
+			case "TABLE":
+				_, ok = add(l.skip(2, "IF", "NOT", "EXISTS"))
+			default:
+				return nil, false
+			}
+		case "DROP":
+			switch l.upper(1) {
+			case "INDEX", "VIEW", "TRIGGER":
+			case "TABLE":
+				_, ok = add(l.skip(2, "IF", "EXISTS"))
+			default:
+				return nil, false
+			}
+		case "ALTER":
+			if l.upper(1) != "TABLE" {
+				return nil, false
+			}
+			var j int
+			j, ok = add(2)
+			if ok && l.upper(j) == "RENAME" && l.upper(j+1) == "TO" {
+				_, ok = add(j + 2)
+			}
+		case "INSERT", "REPLACE":
+			i := 1
+			if l.upper(1) == "OR" {
+				i = 3
+			}
+			if l.upper(i) != "INTO" {
+				return nil, false
+			}
+			_, ok = add(i + 1)
+		case "UPDATE":
+			i := 1
+			if l.upper(1) == "OR" {
+				i = 3
+			}
+			_, ok = add(i)
+		case "DELETE":
+			if l.upper(1) != "FROM" {
+				return nil, false
+			}
+			_, ok = add(2)
+		default:
+			return nil, false
+		}
+		if !ok {
+			return nil, false
+		}
+	}
+	return tables, true
+}
+
 // fileLinter reads one statement of a file for LintFile.
 type fileLinter struct {
 	d      velox.Dialect

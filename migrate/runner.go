@@ -9,9 +9,11 @@ import (
 	"io/fs"
 	"log/slog"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/ddl"
 )
 
 // An Option changes how Up, Status and Resolve run. Each says which of them
@@ -543,7 +545,8 @@ func (s *session) resuming(dir *Dir, st *State) (*File, error) {
 // applyTx runs a file in one transaction, its history row included: BEGIN
 // (BEGIN IMMEDIATE on SQLite), the lock timeout on PostgreSQL, the
 // statements, a check that the file left the transaction open, PRAGMA
-// foreign_key_check on SQLite with foreign keys off, the row, COMMIT, then
+// foreign_key_check on SQLite with foreign keys off, of the tables the file
+// touches and their children, the row, COMMIT, then
 // a line to o's logger. On SQLite, foreign keys are turned off before BEGIN
 // when the file asks and set back after, and a file another runner applied
 // since the history was read is skipped with errAppliedMeanwhile. That
@@ -601,7 +604,7 @@ func (s *session) applyTx(ctx context.Context, f File, o options) (Applied, erro
 		return Applied{}, fmt.Errorf("migrate: %s: the file ended the runner's transaction, so what it ran is committed in part; version %d is not recorded", f.Path, f.Version)
 	}
 	if fkOff {
-		if err := s.foreignKeyCheck(ctx); err != nil {
+		if err := s.foreignKeyCheck(ctx, f); err != nil {
 			return Applied{}, rolledBack("%w", err)
 		}
 	}
@@ -626,9 +629,57 @@ func (s *session) applyTx(ctx context.Context, f File, o options) (Applied, erro
 	return a, nil
 }
 
-// foreignKeyCheck is PRAGMA foreign_key_check's first row, as an error.
-func (s *session) foreignKeyCheck(ctx context.Context) error {
-	rows, err := s.conn.QueryContext(ctx, "PRAGMA foreign_key_check")
+// foreignKeyCheck is PRAGMA foreign_key_check's first row, as an error, for
+// the tables f touches and those with a foreign key to one: an orphan row
+// elsewhere was there before f, and f did nothing to it. A statement of f
+// touchedTables cannot read, or a trigger on a table it touches, which may
+// write anywhere, makes it the check of the whole database.
+func (s *session) foreignKeyCheck(ctx context.Context, f File) error {
+	touched, known := touchedTables(s.d, f)
+	if !known {
+		return s.checkKeys(ctx, "PRAGMA foreign_key_check")
+	}
+	lower := func(name string) string { return strings.ToLower(name) }
+	trigger := false
+	err := eachRow(ctx, s.conn, `SELECT tbl_name FROM main.sqlite_schema WHERE type = 'trigger'`, nil, func(rows *sql.Rows) error {
+		var table string
+		err := rows.Scan(&table)
+		trigger = trigger || touched[lower(table)]
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("PRAGMA foreign_key_check: %w", err)
+	}
+	if trigger {
+		return s.checkKeys(ctx, "PRAGMA foreign_key_check")
+	}
+	var check []string
+	err = eachRow(ctx, s.conn, `SELECT m.name, coalesce(k."table", '') FROM main.sqlite_schema m
+LEFT JOIN pragma_foreign_key_list(m.name) k WHERE m.type = 'table' ORDER BY m.name`, nil, func(rows *sql.Rows) error {
+		var table, parent string
+		if err := rows.Scan(&table, &parent); err != nil {
+			return err
+		}
+		if (touched[lower(table)] || touched[lower(parent)]) && !slices.Contains(check, table) {
+			check = append(check, table)
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("PRAGMA foreign_key_check: %w", err)
+	}
+	for _, table := range check {
+		if err := s.checkKeys(ctx, "PRAGMA foreign_key_check("+ddl.Ident(velox.SQLite, table)+")"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkKeys is q's first row, as q is one form of PRAGMA foreign_key_check,
+// as an error.
+func (s *session) checkKeys(ctx context.Context, q string) error {
+	rows, err := s.conn.QueryContext(ctx, q)
 	if err != nil {
 		return fmt.Errorf("PRAGMA foreign_key_check: %w", err)
 	}

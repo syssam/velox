@@ -178,6 +178,55 @@ func TestUpWithTargetZero(t *testing.T) {
 	}
 }
 
+// TestUpForeignKeyCheckScope: with foreign keys off, an orphan row in a table
+// the file does not touch stops nothing; one in a table it touches or in a
+// child of one, or anywhere when a statement cannot be read, rolls it back.
+func TestUpForeignKeyCheckScope(t *testing.T) {
+	const tables = `CREATE TABLE p (id integer PRIMARY KEY);
+CREATE TABLE c (id integer PRIMARY KEY, p integer REFERENCES p (id));
+CREATE TABLE lone (id integer PRIMARY KEY);
+CREATE TABLE u (id integer PRIMARY KEY, lone integer REFERENCES lone (id));
+INSERT INTO p VALUES (1);
+INSERT INTO c VALUES (1, 1);
+INSERT INTO lone VALUES (1);
+INSERT INTO u VALUES (1, 1);
+`
+	for _, c := range []struct {
+		name, orphan, file string
+		fails              string
+	}{
+		{name: "unrelated", orphan: "u", file: "CREATE TABLE new_p (id integer PRIMARY KEY);\nINSERT INTO new_p SELECT id FROM p;\nDROP TABLE p;\nALTER TABLE new_p RENAME TO p;\n"},
+		{name: "index only", orphan: "u", file: "CREATE INDEX p_id ON p (id);\n"},
+		{name: "child", file: "DELETE FROM p;\n", fails: "row 1 of c"},
+		{name: "touched", orphan: "u", file: "UPDATE u SET id = 2;\n", fails: "of u"},
+		{name: "parent of an orphan touched", orphan: "u", file: "DELETE FROM lone WHERE id = 5;\n", fails: "of u"},
+		{name: "unread", orphan: "u", file: "WITH x AS (SELECT 1) DELETE FROM p WHERE id = 5;\n", fails: "of u"},
+		{name: "rebuilt with a trigger elsewhere", orphan: "u", file: "UPDATE p SET id = id;\n", fails: "of u"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			db, _ := freshDB(t, velox.SQLite)
+			fsys := dirOf(t, velox.SQLite, files("0001_base.sql", tables))
+			mustUp(t, db, fsys)
+			if c.orphan != "" {
+				mustExec(t, db, "PRAGMA foreign_keys = OFF")
+				mustExec(t, db, "UPDATE "+c.orphan+" SET lone = 99")
+				mustExec(t, db, "PRAGMA foreign_keys = ON")
+			}
+			if strings.HasPrefix(c.name, "rebuilt with a trigger") {
+				mustExec(t, db, "CREATE TRIGGER p_u AFTER UPDATE ON p BEGIN UPDATE lone SET id = id; END")
+			}
+			fsys = extend(t, fsys, velox.SQLite, files("0002_x.sql", "-- velox:foreign-keys off\n"+c.file))
+			_, err := migrate.Up(context.Background(), db, fsys)
+			switch {
+			case c.fails == "" && err != nil:
+				t.Errorf("Up: %v", err)
+			case c.fails != "" && (err == nil || !strings.Contains(err.Error(), c.fails)):
+				t.Errorf("Up: %v, want it to name %q", err, c.fails)
+			}
+		})
+	}
+}
+
 // TestUpRollsBack: a failing statement rolls its file back, and the error
 // names the file and the statement and wraps the driver's.
 func TestUpRollsBack(t *testing.T) {
