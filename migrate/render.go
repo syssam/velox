@@ -287,7 +287,8 @@ func (r *renderer) foreignKey(fk ForeignKey) string {
 }
 
 // writeScript writes s as the body of its file: the directives (no-transaction,
-// foreign-keys off, lock-timeout <d>, then each allow <code> <target>, sorted),
+// foreign-keys off, lock-timeout <d>, then each allow <code> <target>, sorted,
+// the target as allowTarget writes it),
 // a blank line, then each statement: a "-- velox:unit" line before a unit's
 // first statement in a no-transaction script, a "-- review: <text>" line when
 // it has one, and the SQL with ";". Plan 2's directory writes files with it.
@@ -307,7 +308,7 @@ func writeScript(b *strings.Builder, s Script) {
 	for _, a := range allow {
 		b.WriteString("-- velox:allow " + a.Code)
 		if a.Target != "" {
-			b.WriteString(" " + a.Target)
+			b.WriteString(" " + allowTarget(a.Target))
 		}
 		b.WriteString("\n")
 	}

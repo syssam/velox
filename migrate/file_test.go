@@ -265,3 +265,40 @@ func TestWriteScriptParses(t *testing.T) {
 		t.Fatal("no scripts")
 	}
 }
+
+// TestAllowTargetRoundTrips: a dropped column of any legal name, allowed under
+// -allow, writes a directive ParseFile reads back, whose target LintFile's
+// finding matches. A target of one plain word stays as it was written before.
+func TestAllowTargetRoundTrips(t *testing.T) {
+	for _, d := range []velox.Dialect{velox.SQLite, velox.Postgres, velox.MySQL} {
+		for _, name := range []string{"plain", "my col", `a"b`, `"q"`, `"open`, "it's", `sp ace"s`, "tab\there", "new\nline", `back\slash`, "a,b"} {
+			base := oneTable(d, migrate.Column{Name: "keep", Type: "integer", Nullable: true}, migrate.Column{Name: name, Type: "integer", Nullable: true})
+			fsys := dirOf(t, d, step{to: base, name: "base"}, step{to: oneTable(d, migrate.Column{Name: "keep", Type: "integer", Nullable: true}), name: "drop", opts: allowAll("drop-column")})
+			dir, err := migrate.ReadDir(fsys)
+			if err != nil {
+				t.Errorf("%v %q: ReadDir: %v", d, name, err)
+				continue
+			}
+			f := dir.Files[len(dir.Files)-1]
+			want := []migrate.Allow{{Code: "drop-column", Target: "t." + name}}
+			if !reflect.DeepEqual(f.Directives.Allow, want) {
+				t.Errorf("%v %q: allow %+v, want %+v", d, name, f.Directives.Allow, want)
+			}
+			findings, err := migrate.LintFile(d, f)
+			if err != nil {
+				t.Errorf("%v %q: LintFile: %v", d, name, err)
+			}
+			if b := migrate.Blocked(findings, f.Directives.Allow); len(b) != 0 {
+				t.Errorf("%v %q: blocked %+v", d, name, b)
+			}
+		}
+	}
+	if want, got := "-- velox:allow drop-column t.plain", string(dirOf(t, velox.SQLite, step{to: oneTable(velox.SQLite, migrate.Column{Name: "plain", Type: "integer", Nullable: true}), name: "base"}, step{to: oneTable(velox.SQLite), name: "drop", opts: allowAll("drop-column")})["0002_drop.sql"].Data); !strings.Contains(got, want+"\n") {
+		t.Errorf("a plain target: %s", got)
+	}
+	for _, src := range []string{"-- velox:allow drop-column a b\nSELECT 1;", "-- velox:allow drop-column \"a\" b\nSELECT 1;"} {
+		if _, err := migrate.ParseFile(velox.SQLite, "0001_x.sql", []byte(src)); err == nil {
+			t.Errorf("%q: no error", src)
+		}
+	}
+}
