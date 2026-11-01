@@ -79,8 +79,22 @@ at the call to a silent outcome.
   cannot ask: on modernc.org/sqlite it says "no such savepoint" either way. In a
   transaction BEGIN fails, "within a transaction", and changes nothing. Without one
   it opens an empty transaction, which the broken transaction's ROLLBACK ends, and
-  the transaction is broken. No answer counts as gone. Only failures pay. A `ROLLBACK`
-  sent as raw SQL that succeeds is not noticed.
+  the transaction is broken. No answer counts as gone. Failures pay, and raw SQL.
+- **Raw SQL that ends the transaction.** `tx.Exec("COMMIT")`, then an insert, then an
+  error left the insert durable and Tx returning an error; after a raw `ROLLBACK` a
+  nested Tx committed alone, as SAVEPOINT opens a transaction and RELEASE commits it.
+  In a transaction, Raw and Exec refuse, unsent (`ErrTxControl`), a statement whose
+  first keyword after comments is COMMIT, END, ROLLBACK but not ROLLBACK TO, ABORT,
+  BEGIN, START or PREPARE TRANSACTION. MySQL's DDL commits too, and the same keyword
+  finds it: CREATE, ALTER, DROP, TRUNCATE and RENAME, unless of a TEMPORARY table, are
+  refused there. Velox reads the first statement only, since a trigger's or a
+  function's body holds semicolons. So on SQLite, which runs all of a text, the probe
+  above also runs after each raw statement that succeeds in a transaction, and breaks
+  it if it is gone: one failed BEGIN per raw statement in a transaction, on SQLite.
+  **Not caught:** text that ends the transaction and begins another, on SQLite;
+  anything past the first statement where a driver runs multi-statement text (MySQL's
+  `multiStatements`, lib/pq without arguments); and MySQL's other implicit commits,
+  such as GRANT, LOCK TABLES or SET autocommit. The Tx docs say so.
 - **Unsent means at the send.** A broken transaction is checked where a statement
   is sent as well as before its hooks, so an Around hook that calls next again
   after the statement that broke it gets the error and sends nothing.
@@ -100,7 +114,8 @@ sort below parameters until rewritten.
 
 A nested Tx's failed RELEASE costs one or two more statements. A 1205 in a MySQL
 transaction costs one query. A failed statement in a SQLite transaction costs one
-BEGIN.
+BEGIN, and so does a raw statement in one. A MySQL migration that runs DDL through
+`tx.Exec` now fails, where it committed part way.
 
 ## Evidence
 
@@ -119,7 +134,9 @@ BEGIN.
   `TestTxConcurrentStatementWaits`, `TestSQLiteReadOnlyKeepsTheDSNsSetting`,
   `TestSQLiteReadOnlyWithTxLock`, `TestSQLiteTxReadOnlyUnderTheDSN`,
   `TestSQLiteArithmeticOverflowFails`, `TestSQLiteArithmeticRendering`, `TestIntRange`,
-  `TestTxEndedContextIsNotWaitingForever`, `TestLimitIsNotASize`.
+  `TestTxEndedContextIsNotWaitingForever`, `TestLimitIsNotASize`,
+  `TestRawSQLCannotEndTheTransaction`, `TestSQLiteRawTextEndingTheTransaction`,
+  `TestMySQLDDLInATransaction`.
 - `TestMySQLDeadlockSwallowedDoesNotCommit` and
   `TestMySQLDeadlockRetriedByAHookDoesNotCommit` run only against a real MySQL
   (`VELOX_TEST_MYSQL`).

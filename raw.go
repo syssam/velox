@@ -18,7 +18,8 @@ import (
 // velox treats Exec as a write (OpRawExec), whatever its SQL: it goes to the
 // primary, pins the session (WithSession), and fails with ErrDryRun under a
 // dry run (IsDryRun). Its errors, and the Around hooks, name its statement
-// "Exec".
+// "Exec". In a transaction SQL that would end it is refused (ErrTxControl): see
+// DB.Tx.
 //
 //	n, err := db.Exec(ctx, "nightly cleanup", "DELETE FROM sessions WHERE expires_at < $1", now)
 func (db *DB) Exec(ctx context.Context, reason, query string, args ...any) (int64, error) {
@@ -73,7 +74,8 @@ type RawQuery[E any] struct {
 // write that returns rows (UPDATE … RETURNING) in a transaction, or under
 // WithPrimaryReads, and never under a dry run. In a transaction Raw counts as a
 // write, since velox cannot tell one from a read: its commit pins the session
-// (WithSession). Outside one, a write through Raw does not pin it.
+// (WithSession). Outside one, a write through Raw does not pin it. In a transaction
+// SQL that would end it is refused (ErrTxControl): see DB.Tx.
 //
 // On a DB opened with OpenShards, Raw and Exec run on the shard the context
 // names, as every statement does: WithShard's, else the one WithShardFor gives

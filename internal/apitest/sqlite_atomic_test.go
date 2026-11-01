@@ -168,7 +168,7 @@ func TestSQLiteProbe(t *testing.T) {
 		"ended":     {sql.ErrTxDone, false},
 	} {
 		t.Run(name, func(t *testing.T) {
-			e := &fakeconn.Exec{Errs: []error{failed, c.probe}}
+			e := &fakeconn.Exec{Errs: []error{failed, c.probe, nil, alive}} // the statement, its probe, the later one, its probe
 			var later error
 			err := openFake(velox.SQLite, e).Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
 				_, _ = tx.Exec(ctx, "test", "UPDATE t SET a = 1")

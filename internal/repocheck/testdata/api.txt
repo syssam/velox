@@ -468,6 +468,7 @@ var ErrTenantMismatch
 var ErrTenantUpsert
 var ErrTimeout
 var ErrTooManyRows
+var ErrTxControl
 var ErrUnbounded
 
 package veloxtype
