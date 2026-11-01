@@ -32,7 +32,8 @@ each.
   module's path. It is not tidied, and a test keeps it at the harness's versions.
 
 `docs/decisions` records why the code is as it is. `docs/history` holds the specs,
-plans and reviews that built it, as written.
+plans and reviews that built it, as written. It is a historical record: nothing
+depends on it, and it is not kept up to date.
 
 Generated Go files end `_velox.go`, or `_gql.go` for velox-graphql, so that no
 entity's name can make the file a test or tie it to one operating system.
