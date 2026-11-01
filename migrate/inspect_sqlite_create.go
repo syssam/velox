@@ -17,6 +17,7 @@ type sqliteCreateTable struct {
 	defaults      map[string]string // a column's DEFAULT as written, parentheses kept, by column
 	collations    map[string]string // a column's COLLATE, by column
 	options       []string          // WITHOUT ROWID, STRICT
+	onConflict    bool              // a constraint has an ON CONFLICT clause
 }
 
 // textKey is a foreign key as the CREATE TABLE text gives it: its
@@ -516,6 +517,7 @@ func (p *ctParser) conflict() bool {
 	if !p.word("ON") {
 		return true
 	}
+	p.ct.onConflict = true
 	return p.word("CONFLICT") && p.word("ROLLBACK", "ABORT", "FAIL", "IGNORE", "REPLACE")
 }
 

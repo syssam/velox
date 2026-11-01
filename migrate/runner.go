@@ -153,6 +153,17 @@ var errAppliedMeanwhile = errors.New("migrate: applied by another runner")
 // refused too, as LintFile refuses it: an *Error of Code "file" at the
 // statement's line.
 //
+// A generated SQLite rebuild of a table that holds what the model cannot
+// (a trigger, an expression index, a collation, a generated column, a foreign
+// key's ON UPDATE or DEFERRABLE, ON CONFLICT, STRICT or WITHOUT ROWID), or
+// that a view or another table's trigger names, and a MySQL MODIFY or CHANGE
+// COLUMN that does not write a column's ON UPDATE, collation, INVISIBLE or
+// generation, are refused with an *Error of Code "unmodeled" naming each: the
+// rebuild's transaction is rolled back, and the MySQL file does not start. A
+// directive -- velox:allow unmodeled-loss [<object>] accepts the loss, but for
+// a view or trigger's use, which SQLite refuses whatever it says. Up checks
+// each file as it comes to it, so files before it stay applied.
+//
 // A file runs in a transaction with its history row on PostgreSQL and
 // SQLite; one that fails is rolled back, and Up stops with an error naming
 // the file and the statement that wraps the driver's. A MySQL file, or a
@@ -544,8 +555,9 @@ func (s *session) resuming(dir *Dir, st *State) (*File, error) {
 
 // applyTx runs a file in one transaction, its history row included: BEGIN
 // (BEGIN IMMEDIATE on SQLite), the lock timeout on PostgreSQL, the
-// statements, a check that the file left the transaction open, PRAGMA
-// foreign_key_check on SQLite with foreign keys off, of the tables the file
+// statements, a check that the file left the transaction open, the check of
+// what a SQLite rebuild lost, PRAGMA foreign_key_check on SQLite with foreign
+// keys off, of the tables the file
 // touches and their children, the row, COMMIT, then
 // a line to o's logger. On SQLite, foreign keys are turned off before BEGIN
 // when the file asks and set back after, and a file another runner applied
@@ -595,13 +607,20 @@ func (s *session) applyTx(ctx context.Context, f File, o options) (Applied, erro
 		}
 	}
 	start := time.Now()
+	guard := s.guardRebuilds(f)
 	for i, q := range f.Statements {
+		if err := guard.before(ctx, i); err != nil {
+			return Applied{}, guardError(err, rolledBack)
+		}
 		if _, err := s.conn.ExecContext(ctx, q); err != nil {
 			return Applied{}, rolledBack("statement %d of %d: %w", i+1, len(f.Statements), err)
 		}
 	}
 	if !s.ownsTx(ctx) {
 		return Applied{}, fmt.Errorf("migrate: %s: the file ended the runner's transaction, so what it ran is committed in part; version %d is not recorded", f.Path, f.Version)
+	}
+	if err := guard.after(ctx); err != nil {
+		return Applied{}, guardError(err, rolledBack)
 	}
 	if fkOff {
 		if err := s.foreignKeyCheck(ctx, f); err != nil {

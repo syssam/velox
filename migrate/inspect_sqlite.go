@@ -127,6 +127,9 @@ func (r *liteReader) table(lt *liteTable) error {
 	} else if len(lt.ct.options) > 0 {
 		lt.says = append(lt.says, "the table is "+strings.Join(lt.ct.options, ", ")+", which the model cannot hold; it is compared without")
 	}
+	if lt.ct.onConflict {
+		lt.says = append(lt.says, "a constraint has ON CONFLICT, which the model cannot hold; it is compared without")
+	}
 	if err := r.columns(lt); err != nil {
 		return err
 	}
@@ -137,10 +140,26 @@ func (r *liteReader) table(lt *liteTable) error {
 		return err
 	}
 	lt.t.Checks = slices.Clone(lt.ct.checks)
+	if err := r.triggers(lt); err != nil {
+		return err
+	}
 	if len(lt.says) > 0 {
 		r.note(lt, "", strings.Join(lt.says, "; "))
 	}
 	return nil
+}
+
+// triggers notes the triggers on lt, each by its name.
+func (r *liteReader) triggers(lt *liteTable) error {
+	q := `SELECT name FROM ` + ddl.Ident(velox.SQLite, lt.db) + `.sqlite_schema WHERE type = 'trigger' AND tbl_name = ? COLLATE NOCASE ORDER BY name`
+	return r.each(q, []any{lt.t.Name}, func(rows *sql.Rows) error {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return err
+		}
+		r.note(lt, name, "the table has this trigger, which the model cannot hold; it is not compared")
+		return nil
+	})
 }
 
 const liteColumnsQuery = `SELECT name, type, "notnull", dflt_value, pk, hidden

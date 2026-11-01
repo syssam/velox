@@ -39,6 +39,14 @@ type note struct {
 	object   string // as a Warning's Object: "users", "users.users_x"
 	message  string // as a Warning's Message
 	baseline bool   // only Baseline reports it: what a build from the snapshot loses, not a difference; drift skips it
+	keeps    []keep // MySQL: what of a column a MODIFY COLUMN must write to keep
+}
+
+// A keep is an attribute of a column the model cannot hold: what it is, and
+// the words a MODIFY COLUMN writes to keep it, any of them.
+type keep struct {
+	what  string
+	words []string
 }
 
 // drift compares an inspected schema and its notes with snapshot: the

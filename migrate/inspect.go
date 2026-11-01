@@ -35,7 +35,8 @@ func Inspect(ctx context.Context, db *sql.DB, d velox.Dialect, tables []TableRef
 // other than InnoDB, a column's collation other than the table's on MySQL,
 // its type's on PostgreSQL or BINARY on SQLite, an UNLOGGED or TEMPORARY
 // PostgreSQL table, an invalid index, a NOT VALID constraint, a GENERATED
-// ALWAYS identity, a STRICT SQLite table). It never reads a table snapshot
+// ALWAYS identity, a STRICT SQLite table, its triggers and a constraint's
+// ON CONFLICT). It never reads a table snapshot
 // does not name, and on SQLite it waits for a writer as Inspect does.
 func Drift(ctx context.Context, db *sql.DB, snapshot *Schema) (*DriftReport, error) {
 	if snapshot == nil {

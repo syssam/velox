@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/syssam/velox"
-	"github.com/syssam/velox/internal/ddl"
 )
 
 // LintFile checks f as velox-gen migrate lint does. Its error, *Error values
@@ -49,8 +48,8 @@ func LintFile(d velox.Dialect, f File) ([]Finding, error) {
 	if f.generated {
 		for _, sql := range f.Statements {
 			l := &fileLinter{d: d, ws: lex(d, sql)}
-			if t, ok := l.rebuildRename(); ok {
-				rebuilt[t] = true
+			if t, ok := l.rebuildTarget(); ok {
+				rebuilt[t.String()] = true
 			}
 		}
 	}
@@ -119,27 +118,6 @@ func checkTxControl(d velox.Dialect, f File) error {
 		}
 	}
 	return nil
-}
-
-// rebuildRename reads the last step of a table's rebuild, ALTER TABLE
-// <ddl.Rebuild(t)> RENAME TO t, and is t, with the schema the statement gives.
-func (l *fileLinter) rebuildRename() (string, bool) {
-	if l.upper(0) != "ALTER" || l.upper(1) != "TABLE" {
-		return "", false
-	}
-	tmp, i := l.name(2)
-	if tmp == "" || l.upper(i) != "RENAME" || l.upper(i+1) != "TO" {
-		return "", false
-	}
-	to, _ := l.name(i + 2)
-	schema, name := "", tmp
-	if j := strings.LastIndexByte(tmp, '.'); j >= 0 {
-		schema, name = tmp[:j+1], tmp[j+1:]
-	}
-	if to == "" || name != ddl.Rebuild(to) {
-		return "", false
-	}
-	return schema + to, true
 }
 
 // touchedTables is the tables of main f's statements write rows or

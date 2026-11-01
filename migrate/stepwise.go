@@ -29,12 +29,7 @@ func (s *session) applyStepwise(ctx context.Context, f File, row *Applied, o opt
 	n := len(f.Statements)
 	units := f.Units // ParseFile gives every file with statements a unit at 0
 	from := 0
-	if row == nil {
-		a := Applied{Version: f.Version, Name: f.Name, Sum: f.Sum, AppliedAt: time.Now().UTC().Truncate(time.Microsecond), Dirty: true}
-		if err := s.record(ctx, a); err != nil {
-			return Applied{}, wrap(ctx, fmt.Sprintf("%s: recording version %d in %s", f.Path, f.Version, s.cfg.Table), err)
-		}
-	} else {
+	if row != nil {
 		for _, u := range units {
 			if u <= row.Statements {
 				from = u
@@ -42,6 +37,17 @@ func (s *session) applyStepwise(ctx context.Context, f File, row *Applied, o opt
 		}
 		if row.Statements >= n {
 			from = n
+		}
+	}
+	if s.d == velox.MySQL {
+		if err := s.checkModify(ctx, f, from); err != nil {
+			return Applied{}, err
+		}
+	}
+	if row == nil {
+		a := Applied{Version: f.Version, Name: f.Name, Sum: f.Sum, AppliedAt: time.Now().UTC().Truncate(time.Microsecond), Dirty: true}
+		if err := s.record(ctx, a); err != nil {
+			return Applied{}, wrap(ctx, fmt.Sprintf("%s: recording version %d in %s", f.Path, f.Version, s.cfg.Table), err)
 		}
 	}
 	start := time.Now()

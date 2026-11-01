@@ -778,6 +778,59 @@ func TestMigrateVersionZero(t *testing.T) {
 	want(t, "resolve -version 0", code, out, errs, 0, "resolved version 0 as undone\n", "")
 }
 
+// TestMigrateApplyRefusesRebuildLoss: apply stops a rebuild that would lose a
+// trigger, saying what to do, and the directive it names, once hashed, lets it
+// through.
+func TestMigrateApplyRefusesRebuildLoss(t *testing.T) {
+	dir := t.TempDir()
+	mig := filepath.Join(dir, "migrations")
+	writeMigrations(t, mig, velox.SQLite, usersSchema)
+	dsn := filepath.Join(dir, "app.db")
+	m := func(args ...string) (int, string, string) {
+		return runCLI(t, dir, append(append([]string{"migrate"}, args...), "-db", dsn)...)
+	}
+	if code, _, errs := m("apply"); code != 0 {
+		t.Fatal(errs)
+	}
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	if _, err := db.Exec("CREATE TRIGGER users_ai AFTER INSERT ON users BEGIN SELECT 1; END"); err != nil {
+		t.Fatal(err)
+	}
+	var create string
+	if err := db.QueryRow("SELECT sql FROM sqlite_schema WHERE name = 'users'").Scan(&create); err != nil {
+		t.Fatal(err)
+	}
+	rebuild := strings.Replace(create, `"users"`, `"velox_new_users"`, 1) + ";\nDROP TABLE \"users\";\nALTER TABLE \"velox_new_users\" RENAME TO \"users\";\n"
+	file := filepath.Join(mig, "0002_rebuild.sql")
+	write := func(head string) {
+		t.Helper()
+		if err := os.WriteFile(file, []byte(head+rebuild), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if code, _, errs := runCLI(t, dir, "migrate", "hash"); code != 0 {
+			t.Fatal(errs)
+		}
+	}
+	write("")
+	code, _, errs := m("apply")
+	if code != 1 {
+		t.Errorf("apply: exit %d", code)
+	}
+	for _, want := range []string{filepath.Join("migrations", "0002_rebuild.sql"), "users.users_ai", "-- velox:allow unmodeled-loss users.users_ai", "migrate hash"} {
+		if !strings.Contains(errs, want) {
+			t.Errorf("stderr does not say %q:\n%s", want, errs)
+		}
+	}
+	write("-- velox:allow unmodeled-loss users.users_ai\n")
+	if code, _, errs := m("apply"); code != 0 {
+		t.Errorf("apply with the directive: %d %s", code, errs)
+	}
+}
+
 func TestMigrateResolve(t *testing.T) {
 	dir := t.TempDir()
 	mig := filepath.Join(dir, "migrations")

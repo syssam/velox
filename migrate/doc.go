@@ -76,6 +76,12 @@
 //     to resume runs in a transaction or has versions above the
 //     directory's last file beside it, or the version Resolve was given is
 //     not dirty or not in the history.
+//   - "unmodeled": Up found that a file would destroy what the model cannot
+//     hold: a generated SQLite rebuild of a table with a trigger, an expression
+//     index, a collation and the like, or that a view names, or a MySQL
+//     MODIFY or CHANGE COLUMN that does not write a column's ON UPDATE or
+//     collation. It names each, and a directive -- velox:allow unmodeled-loss
+//     accepts the loss.
 //   - "resolution": Resolve was given neither ResolveApplied nor
 //     ResolveUndone.
 //   - "drift": Verify was given a database that is not empty, or the
@@ -135,6 +141,10 @@
 // TRUNCATE, and DELETE or UPDATE without a WHERE that can leave a row out, and
 // drop-schema and drop-database. A file with Dir.Add's header is read too, but
 // for what Render writes uncovered: a rebuild's drop and any alter-type.
+//
+// A plan is made with no database, so it cannot see what the model has no
+// place for. [Up] looks, on the database, before such a file does harm: see
+// its doc, and Code "unmodeled" above.
 //
 // [Up] applies a directory's pending files to a database, under a lock. On
 // PostgreSQL and SQLite each runs in a transaction with its row in the
