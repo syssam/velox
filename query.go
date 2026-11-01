@@ -515,6 +515,7 @@ func (q Query[E]) Count[_ Lazy[E]](ctx context.Context) (int64, error) {
 	if q.err != nil {
 		return 0, q.err
 	}
+	q.st.Columns = nil // ignored, so After does not need its order columns in them
 	st, err := q.prepare()
 	if err != nil {
 		return 0, err
@@ -546,6 +547,7 @@ func (q Query[E]) Exists[_ Lazy[E]](ctx context.Context) (bool, error) {
 	if q.err != nil {
 		return false, q.err
 	}
+	q.st.Columns = nil // as in Count
 	st, err := q.prepare()
 	if err != nil {
 		return false, err

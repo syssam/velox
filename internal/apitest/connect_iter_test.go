@@ -82,7 +82,9 @@ func TestIterNestedStatementFails(t *testing.T) {
 									return
 								}
 								rows++
-								if err := stmt(); err == nil || !strings.Contains(err.Error(), want) {
+								// A raised pool is no cure: :memory: has a database per
+								// connection, and a nested write on a file is SQLITE_BUSY.
+								if err := stmt(); err == nil || !strings.Contains(err.Error(), want) || !strings.Contains(err.Error(), "with All first") || strings.Contains(err.Error(), "raise") {
 									t.Errorf("nested: %v", err)
 								}
 							}

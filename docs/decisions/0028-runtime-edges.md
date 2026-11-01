@@ -12,7 +12,8 @@ at the call to a silent outcome.
 ## Decision
 
 - **After and Columns.** `After` fails, naming the column, when an order column
-  is not selected: the row holds its zero value there.
+  is not selected: the row holds its zero value there. Count, Exists and the
+  aggregates ignore Columns, so they do not ask.
 - **A failed RELEASE.** A nested Tx that returns an error has undone its work.
   After a failed RELEASE it sends ROLLBACK TO on a context without the caller's
   cancellation. If that fails too, the transaction is broken: statements fail
@@ -97,7 +98,8 @@ BEGIN.
 
 ## Evidence
 
-- `TestAfterRefusesAnOrderColumnNotSelected`, `TestNestedTxReleaseFails`,
+- `TestAfterRefusesAnOrderColumnNotSelected`, `TestAfterWithColumnsOnWhatIgnoresThem`,
+  `TestNestedTxReleaseFails`,
   `TestNestedTxReleaseAndRollbackFail`,
   `TestNestedTxCanceledBeforeReleaseDoesNotCommit`,
   `TestBidiUpsertRefusesToUpdateTheKey`, `TestSQLiteTxReadOnly`,
