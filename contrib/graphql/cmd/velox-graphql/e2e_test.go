@@ -1159,7 +1159,7 @@ func TestWhereLogic(t *testing.T) {
 		ev("nested", &in{Not: &in{Or: []*in{{Kind: ptr(gen.EventKindInFlight)}, {And: []*in{{Done: ptr(true)}, {AtIsNil: ptr(true)}}}}}}, 1, 5),
 		ev("fields and or", &in{Done: ptr(true), Or: []*in{{Rank: ptr[int8](1)}, {Rank: ptr[int8](3)}, {Rank: ptr[int8](4)}}}, 1, 3),
 		ev("and []", &in{And: []*in{}}, 1, 2, 3, 4, 5),
-		ev("or []", &in{Or: []*in{}}, 1, 2, 3, 4, 5),
+		ev("or []", &in{Or: []*in{}}),
 		ev("not {}", &in{Not: &in{}}),
 		ev("or with {}", &in{Or: []*in{{}, {Rank: ptr[int8](1)}}}, 1, 2, 3, 4, 5),
 		ev("in []", &in{RankIn: []int8{}}),
