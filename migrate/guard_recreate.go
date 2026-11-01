@@ -3,12 +3,14 @@ package migrate
 import (
 	"cmp"
 	"context"
+	"database/sql"
 	"fmt"
 	"maps"
 	"slices"
 	"strings"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/ddl"
 )
 
 // checkRecreates refuses f's statements from index from on when one replaces
@@ -22,7 +24,7 @@ import (
 func (s *session) checkRecreates(ctx context.Context, f File, from int) error {
 	w := &recreates{s: s, ctx: ctx, f: f, file: f, cur: s.home(), tables: map[string]*tableState{}}
 	for _, q := range f.Statements[from:] {
-		if err := w.statement(&fileLinter{d: s.d, ws: lex(s.d, q)}); err != nil {
+		if err := w.statement(&fileLinter{d: s.d, src: q, ws: lex(s.d, q)}); err != nil {
 			return err
 		}
 	}
@@ -33,10 +35,13 @@ func (s *session) checkRecreates(ctx context.Context, f File, from int) error {
 		}
 		w.file = later
 		for _, q := range later.Statements {
-			if err := w.statement(&fileLinter{d: s.d, ws: lex(s.d, q)}); err != nil {
+			if err := w.statement(&fileLinter{d: s.d, src: q, ws: lex(s.d, q)}); err != nil {
 				return err
 			}
 		}
+	}
+	if w.fail != nil {
+		return w.fail
 	}
 	if len(w.lines) == 0 {
 		return nil
@@ -64,6 +69,11 @@ type recreates struct {
 	read           bool // every table's notes were lost: once is enough
 	lines, targets []string
 	object         string
+	fail           error // reading what a name resolves to
+	indexes        []droppedIndex
+	uses           map[string][]mysqlUse // MySQL: by database
+	remakes        map[string]bool       // MySQL: the views and triggers the file makes or drops
+	where          map[string]string     // PostgreSQL: the schema of an unqualified table
 }
 
 // A tableState is a table of the walk: where it is in the database, its notes
@@ -77,6 +87,8 @@ type tableState struct {
 	notes   []note
 	cols    map[string]string
 	dropped []droppedKey
+	shapes  map[string]indexShape // MySQL: its indexes, as mysqlShapes reads them
+	enums   map[string]bool       // the enum types it uses, as enumCasts
 }
 
 // A droppedKey is a constraint with a keep the file dropped.
@@ -87,6 +99,9 @@ type droppedKey struct {
 }
 
 func (w *recreates) anyDropped() bool {
+	if len(w.indexes) > 0 {
+		return true
+	}
 	for _, st := range w.tables {
 		if len(st.dropped) > 0 {
 			return true
@@ -120,8 +135,36 @@ func (w *recreates) tableAt(l *fileLinter, i int) (TableRef, int, bool) {
 	ref := TableRef{Name: w.word(l, j-1)}
 	if raw.Schema != "" {
 		ref.Schema = w.word(l, i)
+	} else {
+		ref.Schema = w.resolve(ref.Name)
 	}
 	return w.norm(ref), j, true
+}
+
+// resolve is the schema of the table an unqualified name reads on PostgreSQL, by
+// the search path as the server walks it, unless the walk knows the name in Up's
+// schema already; "" for Up's.
+func (w *recreates) resolve(name string) string {
+	if w.s.d != velox.Postgres {
+		return ""
+	}
+	if _, ok := w.tables[name]; ok {
+		return ""
+	}
+	if nsp, ok := w.where[name]; ok {
+		return nsp
+	}
+	var nsp string
+	err := eachRow(w.ctx, w.s.conn, `SELECT n.nspname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.oid = to_regclass($1)`,
+		[]any{ddl.Ident(velox.Postgres, name)}, func(rows *sql.Rows) error { return rows.Scan(&nsp) })
+	if err != nil {
+		w.fail = cmp.Or(w.fail, fmt.Errorf("migrate: %s: resolving %s: %w", w.f.Path, name, err))
+	}
+	if w.where == nil {
+		w.where = map[string]string{}
+	}
+	w.where[name] = nsp
+	return nsp
 }
 
 // norm is ref with its database written only when it is not Up's.
@@ -183,6 +226,7 @@ func (w *recreates) load(st *tableState) error {
 	if len(schema.Tables) > 0 {
 		st.def = schema.Tables[0]
 	}
+	st.enums = enumCasts(schema)
 	st.notes = slices.DeleteFunc(notes, func(n note) bool { return len(n.keeps) == 0 })
 	return nil
 }
@@ -198,8 +242,17 @@ func (w *recreates) inspect(refs []TableRef) (*Schema, []note, error) {
 // already does.
 func (w *recreates) lost(ref TableRef, objects []string, target, line string) {
 	for _, o := range append(objects, target) {
-		if lossAllowed(w.f, o) || lossAllowed(w.file, o) {
-			return
+		spelled := []string{o}
+		// A plan's name has the schema or not, as its table does.
+		if ref.Schema == "" && w.s.home() != "" {
+			spelled = append(spelled, w.s.home()+"."+o)
+		} else if bare, ok := strings.CutPrefix(o, ref.Schema+"."); ok {
+			spelled = append(spelled, bare)
+		}
+		for _, n := range spelled {
+			if lossAllowed(w.f, n) || lossAllowed(w.file, n) {
+				return
+			}
 		}
 	}
 	w.object = cmp.Or(w.object, ref.String())
@@ -231,6 +284,9 @@ func (w *recreates) statement(l *fileLinter) error {
 			if !ok {
 				return w.opaque(l)
 			}
+			if err := w.breaks(w.state(a), a, ""); err != nil {
+				return err
+			}
 			w.rename(a, b)
 			if !l.punct(k, ",") {
 				return nil
@@ -243,11 +299,19 @@ func (w *recreates) statement(l *fileLinter) error {
 			i++
 		}
 		if l.upper(i) == "TABLE" && l.upper(i+1) != "IF" {
-			if ref, _, ok := w.tableAt(l, i+1); ok {
-				w.put(ref, nil)
+			if raw, j, ok := l.tableRef(i + 1); ok && !l.punct(j, ".") { // made where the first schema is, not resolved
+				ref := TableRef{Name: w.word(l, j-1)}
+				if raw.Schema != "" {
+					ref.Schema = w.word(l, i+1)
+				}
+				w.put(w.norm(ref), nil)
 			}
 		}
+		w.createIndex(l)
 	case "DROP":
+		if l.upper(1) == "INDEX" {
+			return w.dropIndex(l)
+		}
 		if l.upper(1) != "TABLE" {
 			return nil
 		}
@@ -255,6 +319,9 @@ func (w *recreates) statement(l *fileLinter) error {
 			ref, j, ok := w.tableAt(l, i)
 			if !ok {
 				return nil
+			}
+			if err := w.breaks(w.state(ref), ref, ""); err != nil {
+				return err
 			}
 			w.put(ref, nil)
 			if !l.punct(j, ",") {
@@ -343,6 +410,11 @@ func (w *recreates) alter(l *fileLinter) error {
 	}
 	st := w.state(ref)
 	view := maps.Clone(st.cols)
+	if w.s.d == velox.MySQL { // an action's DROP INDEX stands wherever in the list it is
+		if err := w.mysqlIndexDrops(l, st, i); err != nil {
+			return err
+		}
+	}
 	for i < len(l.ws) {
 		end, depth := i, 0
 		for ; end < len(l.ws); end++ {
@@ -368,7 +440,7 @@ func (w *recreates) alter(l *fileLinter) error {
 		}
 		i = end + 1
 	}
-	return nil
+	return w.defaultsSet(l, st)
 }
 
 // origin is what the column is in the database, by view.
@@ -386,7 +458,8 @@ func (st *tableState) notePart(n note) string {
 
 // replaces checks a statement that replaces the column, in the database origin,
 // and that writes [i, end) of it, which ref.name is afterwards. A type that holds
-// no text has no collation to keep.
+// no text has no collation to keep. A storage or compression can be set again by a
+// statement of its own, as nothing else writes it.
 func (w *recreates) replaces(l *fileLinter, st *tableState, ref TableRef, origin, name string, i, end int) error {
 	if w.quiet || origin == "" {
 		return nil
@@ -403,11 +476,16 @@ func (w *recreates) replaces(l *fileLinter, st *tableState, ref TableRef, origin
 		}
 		target := colTarget(ref, name)
 		for _, k := range n.keeps {
-			if l.writes(i, end, k.words) || slices.Contains(k.words, "COLLATE") && noCollation(l.upper(i)) {
+			if l.writes(i, end, k.words) || slices.Contains(k.words, "COLLATE") && noCollation(l.upper(i)) || w.setsAgain(name, k.words) {
 				continue
 			}
 			w.lost(ref, []string{n.object}, target, target+": "+k.what)
 		}
+	}
+	if w.s.d == velox.MySQL {
+		w.mysqlReplaced(l, st, ref, origin, name, i, end)
+	} else {
+		w.pgRetyped(l, st, ref, origin, name)
 	}
 	return nil
 }
@@ -520,6 +598,11 @@ func (w *recreates) mysqlAction(l *fileLinter, st *tableState, ref TableRef, vie
 			k++
 			st.cols[w.key(col)] = ""
 			st.cols[w.key(name)] = origin
+			if w.key(col) != w.key(name) {
+				if err := w.breaks(st, ref, origin); err != nil {
+					return st, ref, err
+				}
+			}
 		}
 		return st, ref, w.replaces(l, st, ref, origin, name, k, end)
 	case "RENAME":
@@ -536,6 +619,9 @@ func (w *recreates) mysqlAction(l *fileLinter, st *tableState, ref TableRef, vie
 			origin := w.origin(view, a)
 			st.cols[w.key(a)] = ""
 			st.cols[w.key(b)] = origin
+			if err := w.breaks(st, ref, origin); err != nil {
+				return st, ref, err
+			}
 		case "INDEX", "KEY":
 		default:
 			j := i + 1
@@ -546,14 +632,20 @@ func (w *recreates) mysqlAction(l *fileLinter, st *tableState, ref TableRef, vie
 			if !ok {
 				return st, ref, w.unknown(l, st, ref)
 			}
+			if err := w.breaks(st, ref, ""); err != nil {
+				return st, ref, err
+			}
 			w.rename(ref, b)
 			return w.state(b), b, nil
 		}
 	case "ADD":
 		switch l.upper(i + 1) {
-		case "INDEX", "KEY", "FULLTEXT", "SPATIAL", "PARTITION":
+		case "PARTITION":
+		case "INDEX", "KEY", "FULLTEXT", "SPATIAL":
+			w.mysqlIndexAdd(l, st, ref, i+1, end)
 		case "CONSTRAINT", "UNIQUE", "PRIMARY", "FOREIGN", "CHECK":
 			w.added(l, st, ref, i+1, end)
+			w.mysqlIndexAdd(l, st, ref, i+1, end)
 		default:
 			j := l.skip(i+1, "COLUMN")
 			if l.punct(j, "(") {
@@ -585,7 +677,14 @@ func (w *recreates) mysqlAction(l *fileLinter, st *tableState, ref TableRef, vie
 			}
 		default:
 			if col, _, ok := w.columnAt(l, l.skip(i+1, "COLUMN")); ok {
+				origin := w.origin(view, col)
 				st.cols[w.key(col)] = ""
+				if err := w.breaks(st, ref, origin); err != nil {
+					return st, ref, err
+				}
+				if err := w.shrunk(l, st, ref, origin); err != nil {
+					return st, ref, err
+				}
 			}
 		}
 	case "CONVERT":

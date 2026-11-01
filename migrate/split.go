@@ -340,8 +340,9 @@ func dollarTag(src string, i int) string {
 // A word is a token of a statement outside literals and comments: a word as
 // written, a quoted name unquoted, or a byte of punctuation.
 type word struct {
-	text   string
-	quoted bool // a quoted name
+	text       string
+	quoted     bool // a quoted name
+	start, end int  // its bytes in the statement
 }
 
 // lex is sql's words as d reads them. An unterminated quote or comment runs
@@ -407,17 +408,17 @@ func lex(d velox.Dialect, sql string) []word {
 				}
 				b.WriteByte(sql[j])
 			}
-			out = append(out, word{text: b.String(), quoted: true})
-			i = min(j+1, len(sql))
+			i, j = min(j+1, len(sql)), i
+			out = append(out, word{text: b.String(), quoted: true, start: j, end: i})
 		case wordByte(c):
 			j := i + 1
 			for j < len(sql) && (wordByte(sql[j]) || d == velox.Postgres && sql[j] == '$') {
 				j++
 			}
-			out = append(out, word{text: sql[i:j]})
+			out = append(out, word{text: sql[i:j], start: i, end: j})
 			i = j
 		default:
-			out = append(out, word{text: sql[i : i+1]})
+			out = append(out, word{text: sql[i : i+1], start: i, end: i + 1})
 			i++
 		}
 	}

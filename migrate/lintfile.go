@@ -213,6 +213,7 @@ func touchedTables(d velox.Dialect, f File) (tables map[string]bool, known bool)
 type fileLinter struct {
 	d      velox.Dialect
 	ws     []word
+	src    string // the statement, for what lies between words: the guard's
 	pos    string
 	change int
 	out    []Finding

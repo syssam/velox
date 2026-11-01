@@ -70,7 +70,8 @@
 //     SQLite 3.35; MariaDB is refused), names no MySQL database, or is a
 //     PostgreSQL session with standard_conforming_strings off; or a MySQL
 //     session whose sql_mode holds NO_BACKSLASH_ESCAPES or ANSI_QUOTES when
-//     a file to apply holds a literal the mode would read otherwise.
+//     a file to apply holds a literal the mode would read otherwise; or a
+//     SQLite database in memory that would end with Up's connection.
 //   - "history": the history table holds what the runner cannot read, a
 //     file is pending below the highest applied version, a dirty version
 //     to resume runs in a transaction or has versions above the
@@ -79,11 +80,14 @@
 //   - "unmodeled": Up found that a file would lose what the database holds
 //     and its change list does not say: a SQLite rebuild of a table with a column
 //     its INSERT does not copy, a check, a trigger and the like, or that a view
-//     uses; a SQLite DROP TABLE of a table an unaccounted one references; a MySQL
-//     MODIFY, CHANGE or CONVERT TO, or a PostgreSQL ALTER COLUMN TYPE, that does
-//     not write what the model cannot hold of a column; a foreign key added again
-//     without it; or a statement it cannot read on such a table. It names each,
-//     and a directive -- velox:allow unmodeled-loss accepts the loss.
+//     uses; a SQLite DROP TABLE of a table an unaccounted one references, or that
+//     leaves a view or trigger naming it; a MySQL MODIFY, CHANGE or CONVERT TO, or
+//     a PostgreSQL ALTER COLUMN TYPE, that does not write what the column has, in
+//     the model or not, and the file does not name; a foreign key or index made
+//     again without what it has; a MySQL rename or drop that a view or trigger
+//     uses, or a DROP COLUMN that shrinks an index; or a statement it cannot read
+//     on such a table. It names each, and a directive -- velox:allow unmodeled-loss
+//     accepts the loss.
 //   - "resolution": Resolve was given neither ResolveApplied nor
 //     ResolveUndone.
 //   - "drift": Verify was given a database that is not empty, or the
@@ -182,7 +186,8 @@
 // table schema.json does not name: a test's check that the files make what
 // the snapshot says. On SQLite, Verify, Up and Drift need a
 // file database, since each run opens a connection of its own and a
-// connection to :memory: is a new, empty database.
+// connection to :memory: is a new, empty database; Up refuses one, and takes
+// a shared-cache one another connection keeps.
 //
 // # Adopting a database
 //

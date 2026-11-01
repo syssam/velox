@@ -125,17 +125,18 @@ func Render(from, to *Schema, changes []Change, opts RenderOptions) ([]Script, e
 		if err := r.postgres(); err != nil {
 			return nil, err
 		}
+		main.Directives.Drops = r.dropLines()
 		return r.postgresScripts(main, opts), nil
 	case velox.MySQL:
 		err = r.mysql()
 		for i := range r.out {
 			r.out[i].Unit = i
 		}
+		main.Directives.Drops = r.dropLines()
 	case velox.SQLite:
 		err = r.sqlite()
 		main.Directives.ForeignKeysOff = r.fkOff
-		slices.Sort(r.drops)
-		main.Directives.Drops = slices.Compact(r.drops)
+		main.Directives.Drops = r.dropLines()
 	default:
 		return nil, &Error{Code: "dialect", Reason: fmt.Sprintf("Render has no dialect %s", r.d)}
 	}
@@ -153,6 +154,31 @@ func Render(from, to *Schema, changes []Change, opts RenderOptions) ([]Script, e
 		}
 	}
 	return []Script{main}, nil
+}
+
+// dropLines is what the plan changes on purpose, by the guard's names, sorted. An
+// index dropped and made again under its name says what differs; SQLite's rebuilds
+// say the rest themselves.
+func (r *renderer) dropLines() []string {
+	if r.d != velox.SQLite {
+		for _, c := range r.cs {
+			d, ok := c.(dropIndex)
+			if !ok || d.Index.Constraint {
+				continue
+			}
+			for _, o := range r.cs {
+				a, ok := o.(addIndex)
+				if !ok || a.Index.Constraint || a.Index.Name != d.Index.Name || r.l.canon(a.Table) != r.l.canon(d.Table) {
+					continue
+				}
+				for attr := range shapeDiffers(r.d, enumCasts(r.to), modelShape(d.Index), modelShape(a.Index)) {
+					r.drops = append(r.drops, colTarget(a.Table, a.Index.Name)+":"+attr)
+				}
+			}
+		}
+	}
+	slices.Sort(r.drops)
+	return slices.Compact(r.drops)
 }
 
 // reviewed is the review and destructive findings of each of n changes,

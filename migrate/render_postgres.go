@@ -282,6 +282,9 @@ func (r *renderer) pgAlterColumn(c alterColumn) (pgParts, error) {
 	identity := c.What&columnIdentity != 0 && !c.From.Identity && c.To.Identity
 	switch {
 	case c.What&columnType != 0:
+		if c.What&columnDefault != 0 {
+			r.drops = append(r.drops, colTarget(c.Table, c.To.Name)+":default")
+		}
 		if c.From.Default != "" {
 			act("DROP DEFAULT")
 		}
@@ -713,7 +716,7 @@ func (r *renderer) postgresScripts(main Script, opts RenderOptions) []Script {
 		out = append(out, main)
 	}
 	if len(r.online) > 0 {
-		d := Directives{NoTransaction: true, Allow: allowIn(func(i int) bool { return online[i] })}
+		d := Directives{NoTransaction: true, Allow: allowIn(func(i int) bool { return online[i] }), Drops: main.Directives.Drops}
 		out = append(out, Script{Kind: ScriptOnline, Directives: d, Statements: r.online})
 	}
 	return out
