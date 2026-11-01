@@ -982,13 +982,13 @@ type Cursor struct { Type string Terms []CursorTerm Key any }
 type CursorTerm struct { Field string Direction OrderDirection Value any }
 type Extension struct { }
 type JSON json.RawMessage
-type Limits struct { MaxPage int MaxList int MaxFilterDepth int MaxFilterWidth int MaxFilterNodes int MaxOrderTerms int MaxCost int MaxIntrospectionCost int MaxTokens int MaxFields int MaxFragments int MaxDepth int MaxNameBytes int MaxLiteralBytes int MaxVariableNodes int MaxBodyBytes int }
+type Limits struct { MaxPage int MaxList int MaxFilterDepth int MaxFilterWidth int MaxFilterNodes int MaxOrderTerms int MaxCost int MaxIntrospectionCost int MaxTokens int MaxFields int MaxFragments int MaxDepth int MaxNameBytes int MaxLiteralBytes int MaxVariableNodes int MaxErrors int MaxBodyBytes int }
 type Noder interface { IsNode() IDGQL() string }
 type Option struct { }
 type OrderDirection string
 type PageInfo struct { HasNextPage bool HasPreviousPage bool StartCursor *Cursor EndCursor *Cursor }
 type PresenterOption struct { }
-type Server interface { http.Handler Use(graphql.HandlerExtension) SetErrorPresenter(graphql.ErrorPresenterFunc) SetParserTokenLimit(int) SetDisableSuggestion(bool) }
+type Server interface { http.Handler Use(graphql.HandlerExtension) SetErrorPresenter(graphql.ErrorPresenterFunc) SetParserTokenLimit(int) SetDisableSuggestion(bool) SetValidationRulesFn(func() *rules.Rules) }
 type Time time.Time
 type UUID [16]byte
 type Uint64 uint64

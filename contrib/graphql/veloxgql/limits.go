@@ -106,6 +106,12 @@ type Limits struct {
 	// reads any of them.
 	MaxVariableNodes int
 
+	// MaxErrors is the most of validation's errors a response may hold, and one that
+	// says there are more, on a server Setup made. Each pair of fields that differ
+	// and each unknown name makes one, and a response of them is built by each
+	// request that asks.
+	MaxErrors int
+
 	// MaxBodyBytes is the most bytes the body of a request may have, its
 	// variables and any upload included. More is refused with 413, by the handler
 	// Setup returns, as nothing else bounds it.
@@ -115,13 +121,13 @@ type Limits struct {
 // DefaultLimits returns MaxPage 100, MaxList 1000, MaxFilterDepth 5,
 // MaxFilterWidth 100, MaxFilterNodes 1000, MaxOrderTerms 5, MaxCost 100000,
 // MaxIntrospectionCost 250000, MaxTokens 15000, MaxFields 2000, MaxFragments 500,
-// MaxDepth 64, MaxNameBytes 128, MaxLiteralBytes 64 KiB, MaxVariableNodes 25000 and
-// MaxBodyBytes 1 MiB.
+// MaxDepth 64, MaxNameBytes 128, MaxLiteralBytes 64 KiB, MaxVariableNodes 25000,
+// MaxErrors 100 and MaxBodyBytes 1 MiB.
 func DefaultLimits() Limits {
 	return Limits{
 		MaxPage: 100, MaxList: 1000, MaxFilterDepth: 5, MaxFilterWidth: 100, MaxFilterNodes: 1000, MaxOrderTerms: 5,
 		MaxCost: 100000, MaxIntrospectionCost: 250000, MaxTokens: 15000, MaxFields: 2000, MaxFragments: 500, MaxDepth: 64,
-		MaxNameBytes: 128, MaxLiteralBytes: 64 << 10, MaxVariableNodes: 25000, MaxBodyBytes: 1 << 20,
+		MaxNameBytes: 128, MaxLiteralBytes: 64 << 10, MaxVariableNodes: 25000, MaxErrors: 100, MaxBodyBytes: 1 << 20,
 	}
 }
 
@@ -154,6 +160,7 @@ func (l Limits) orDefault() Limits {
 		MaxNameBytes:         cmp.Or(l.MaxNameBytes, d.MaxNameBytes),
 		MaxLiteralBytes:      cmp.Or(l.MaxLiteralBytes, d.MaxLiteralBytes),
 		MaxVariableNodes:     cmp.Or(l.MaxVariableNodes, d.MaxVariableNodes),
+		MaxErrors:            cmp.Or(l.MaxErrors, d.MaxErrors),
 		MaxBodyBytes:         cmp.Or(l.MaxBodyBytes, d.MaxBodyBytes),
 	}
 }
@@ -182,6 +189,7 @@ func (l Limits) fields() []struct {
 		{"MaxNameBytes", l.MaxNameBytes},
 		{"MaxLiteralBytes", l.MaxLiteralBytes},
 		{"MaxVariableNodes", l.MaxVariableNodes},
+		{"MaxErrors", l.MaxErrors},
 		{"MaxBodyBytes", l.MaxBodyBytes},
 	}
 }

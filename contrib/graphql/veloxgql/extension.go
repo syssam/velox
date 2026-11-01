@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 
 	"github.com/99designs/gqlgen/graphql"
+	"github.com/99designs/gqlgen/graphql/errcode"
 	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 
@@ -292,8 +293,15 @@ func (e *Extension) MutateOperationContext(_ context.Context, rc *graphql.Operat
 // InterceptOperation implements graphql.OperationInterceptor: it puts the
 // DB and the limits in the operation's context, and marks a mutation's.
 func (e *Extension) InterceptOperation(ctx context.Context, next graphql.OperationHandler) graphql.ResponseHandler {
+	rc := graphql.GetOperationContext(ctx)
+	// After every extension's MutateOperationContext, extension.Introspection's too.
+	if rc.DisableIntrospection && rc.Operation != nil && asksIntrospection(rc.Operation.SelectionSet, nil) {
+		err := gqlerror.Errorf("introspection is disabled")
+		errcode.Set(err, errcode.ValidationFailed)
+		return graphql.OneShot(&graphql.Response{Errors: gqlerror.List{err}})
+	}
 	ctx = withState(ctx, e.db, e.limits)
-	if op := graphql.GetOperationContext(ctx).Operation; op != nil && op.Operation == ast.Mutation {
+	if op := rc.Operation; op != nil && op.Operation == ast.Mutation {
 		m := new(mutation)
 		m.plain = e.txFilter != nil && !e.txFilter(ctx, op)
 		if m.plain {
@@ -304,6 +312,36 @@ func (e *Extension) InterceptOperation(ctx context.Context, next graphql.Operati
 		ctx = context.WithValue(ctx, mutationKey{}, m)
 	}
 	return next(ctx)
+}
+
+// asksIntrospection reports whether set, a root selection, holds __schema or __type,
+// each fragment read once. gqlgen's own answer to them, with introspection off, is an
+// error ErrorPresenter could only call internal.
+func asksIntrospection(set ast.SelectionSet, seen map[string]bool) bool {
+	for _, s := range set {
+		switch s := s.(type) {
+		case *ast.Field:
+			if s.Name == "__schema" || s.Name == "__type" {
+				return true
+			}
+		case *ast.InlineFragment:
+			if asksIntrospection(s.SelectionSet, seen) {
+				return true
+			}
+		case *ast.FragmentSpread:
+			if s.Definition == nil || seen[s.Name] {
+				continue
+			}
+			if seen == nil {
+				seen = map[string]bool{}
+			}
+			seen[s.Name] = true
+			if asksIntrospection(s.Definition.SelectionSet, seen) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // InterceptResponse implements graphql.ResponseInterceptor: it gives each

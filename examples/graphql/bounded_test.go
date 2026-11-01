@@ -3,16 +3,22 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
+	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/99designs/gqlgen/graphql"
+	"github.com/99designs/gqlgen/graphql/handler"
+	"github.com/99designs/gqlgen/graphql/handler/transport"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/veloxgql"
+	"github.com/syssam/velox/examples/graphql/graph"
 )
 
 // postVars posts a query with its variables, and returns the response.
@@ -167,4 +173,55 @@ func TestRequestBounded(t *testing.T) {
 			t.Errorf("%s: allocated %d MB, the budget is %d", c.name, n>>20, c.mb)
 		}
 	}
+}
+
+// TestIntrospectionOffShowsNothing: with introspection off, as decision 0027 says a
+// server open to strangers should be, validation names nothing of the schema a client
+// did not, in a field, an argument, an input field, an enum value or a type, and
+// __schema is a client's error.
+func TestIntrospectionOffShowsNothing(t *testing.T) {
+	db, err := open(t.Context(), mustSQLite(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := seed(t.Context(), db); err != nil {
+		t.Fatal(err)
+	}
+	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}, Directives: graph.DirectiveRoot{Admin: admin}}))
+	h := veloxgql.Setup(srv, db)
+	srv.AddTransport(transport.POST{})
+	ts := httptest.NewServer(orgFromHeader(roleFromHeader(h)))
+	t.Cleanup(ts.Close)
+	s := &testServer{url: ts.URL}
+	for name, q := range map[string]string{
+		"a field":             `{ users { edges { node { emai } } } }`,
+		"an input field":      `{ users(where: { emai: "x" }) { totalCount } }`,
+		"an argument":         `{ users(frist: 1) { totalCount } }`,
+		"an enum value":       `{ users(where: { role: ADMN }) { totalCount } }`,
+		"a string for enum":   `{ users(where: { role: "ADMN" }) { totalCount } }`,
+		"a type":              `query($v: UserWhereInpt) { users(where: $v) { totalCount } }`,
+		"a scalar's subfield": `{ users { edges { node { name { x } } } } }`,
+	} {
+		got := s.postQuery(t, q)
+		if strings.Contains(got, "Did you mean") || !strings.Contains(got, "GRAPHQL_VALIDATION_FAILED") {
+			t.Errorf("%s: %s", name, got)
+		}
+	}
+	for _, q := range []string{`{ __schema { queryType { name } } }`, `{ __type(name: "User") { name } }`} {
+		const want = `{"errors":[{"message":"introspection is disabled","extensions":{"code":"GRAPHQL_VALIDATION_FAILED"}}],"data":null}`
+		if got := s.postQuery(t, q); got != want {
+			t.Errorf("%s: %s", q, got)
+		}
+	}
+}
+
+// mustSQLite is an empty database.
+func mustSQLite(t *testing.T) *sql.DB {
+	t.Helper()
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "graphql.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	return db
 }
