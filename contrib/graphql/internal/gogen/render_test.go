@@ -1651,3 +1651,29 @@ func TestRepointO2OOrder(t *testing.T) {
 		at = i
 	}
 }
+
+// TestBytesGetter: a NOT NULL bytes column reads as an empty value, never the nil
+// gqlgen refuses in a Bytes!, whatever the driver gives for an empty blob; a
+// Nillable one keeps its nil, which is NULL.
+func TestBytesGetter(t *testing.T) {
+	blob := func(name, goName string, nullable bool) *plugin.Field {
+		return &plugin.Field{Name: name, GoName: goName, Type: "bytes", GoType: "[]byte", ElemType: "[]byte", Kind: "slice", Nullable: nullable, Pointer: nullable}
+	}
+	m := &plugin.Model{Version: plugin.ModelVersion, Entities: []*plugin.Entity{{
+		Name: "Thing", Label: "thing", Handles: "Things", Tenant: -1, PrimaryKey: []int{0}, Edges: []*plugin.Edge{},
+		Fields: []*plugin.Field{
+			{Name: "id", GoName: "ID", Type: "int64", GoType: "int64", ElemType: "int64"},
+			blob("data", "Data", false),
+			blob("opt", "Opt", true),
+		},
+	}}}
+	got := strings.Join(strings.Fields(render(t, m)["thing_gql.go"]), " ")
+	for _, want := range []string{"if x.Data == nil {", "return veloxgql.Bytes{}"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("no %q in:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "if x.Opt == nil { return veloxgql.Bytes{}") {
+		t.Errorf("a Nillable field lost its null:\n%s", got)
+	}
+}

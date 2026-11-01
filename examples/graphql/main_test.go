@@ -1149,3 +1149,18 @@ func TestServeShutsDownGracefully(t *testing.T) {
 		t.Error("the listener still accepts after serve returned")
 	}
 }
+
+// TestOrgHeaderNotANumber: a tenant header that is no number is the client's error,
+// and nothing runs.
+func TestOrgHeaderNotANumber(t *testing.T) {
+	h := orgFromHeader(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Error("the handler ran")
+	}))
+	req := httptest.NewRequest(http.MethodPost, "/query", nil)
+	req.Header.Set("X-Org-ID", "seven")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status %d, want 400", w.Code)
+	}
+}
