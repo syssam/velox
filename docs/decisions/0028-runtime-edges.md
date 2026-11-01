@@ -62,6 +62,9 @@ at the call to a silent outcome.
   statement, unless `innodb_rollback_on_timeout` is on: velox asks the server on
   the transaction's connection after a 1205, and no answer counts as on. The
   broken transaction's error wraps the deadlock, so `TxRetrySerializable` retries it.
+- **Unsent means at the send.** A broken transaction is checked where a statement
+  is sent as well as before its hooks, so an Around hook that calls next again
+  after the statement that broke it gets the error and sends nothing.
 
 ## Consequences
 
@@ -83,6 +86,7 @@ transaction costs one query.
   `TestSQLiteDefaultTimePagesWithAfter`, `TestSQLiteRawScansTextTimes`,
   `TestIterNestedStatementFails`, `TestIterConcurrentStatementWaits`,
   `TestMutationDBAtomicOnlyInTx`, `TestRetryBacksOff`,
-  `TestMySQLDeadlockBreaksTheTransaction`, `TestMySQLLockTimeout`.
+  `TestMySQLDeadlockBreaksTheTransaction`, `TestMySQLLockTimeout`,
+  `TestBrokenTransactionSendsNothing`.
 - `TestMySQLDeadlockSwallowedDoesNotCommit` runs only against a real MySQL
   (`VELOX_TEST_MYSQL`).

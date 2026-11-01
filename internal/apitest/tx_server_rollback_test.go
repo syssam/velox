@@ -120,3 +120,28 @@ func TestOtherDatabasesKeepTheirTransaction(t *testing.T) {
 		})
 	}
 }
+
+// TestBrokenTransactionSendsNothing: the check is where a statement is sent, so
+// an Around hook that retries next after a 1213 cannot run it in autocommit, and
+// the statement fails rather than return the retry's nil.
+func TestBrokenTransactionSendsNothing(t *testing.T) {
+	dead := &mysql.MySQLError{Number: 1213, Message: "Deadlock found"}
+	e := &fakeconn.Exec{Errs: []error{dead}}
+	db := openFake(velox.MySQL, e, velox.WithAround(func(ctx context.Context, _ *velox.Statement, next func(context.Context) error) error {
+		if err := next(ctx); err == nil {
+			return nil
+		}
+		return next(ctx)
+	}))
+	var stmt error
+	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		_, stmt = tx.Exec(ctx, "test", "UPDATE t SET a = 1")
+		return nil
+	})
+	if !errors.Is(stmt, dead) || !errors.Is(err, dead) {
+		t.Errorf("the statement %v; Tx %v", stmt, err)
+	}
+	if want := []string{"BEGIN", "UPDATE t SET a = 1", "ROLLBACK"}; !slices.Equal(e.Log, want) {
+		t.Errorf("sent %q, want %q", e.Log, want)
+	}
+}
