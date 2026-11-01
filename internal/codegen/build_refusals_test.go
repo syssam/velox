@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/syssam/velox/schema"
+	"github.com/syssam/velox/schema/edge"
 	"github.com/syssam/velox/schema/field"
 	"github.com/syssam/velox/schema/index"
 )
@@ -71,5 +72,39 @@ func TestBuildUniqueOptionalRefused(t *testing.T) {
 		}
 	}
 	mustBuild(t, uniqueOptionalOK{})
+}
+
+// Two edges cannot share one foreign-key field: the key holds one row's ID.
+type twoEdgesOneKey struct{ schema.Schema }
+
+func (twoEdgesOneKey) Fields() []schema.Field {
+	return []schema.Field{field.Int64("target_id")}
+}
+
+func (twoEdgesOneKey) Edges() []schema.Edge {
+	return []schema.Edge{
+		edge.From("b", keyTargetB.Type).Ref("rows").Unique().Required().Field("target_id"),
+		edge.From("c", keyTargetC.Type).Ref("rows").Unique().Required().Field("target_id"),
+	}
+}
+
+type keyTargetB struct{ schema.Schema }
+
+func (keyTargetB) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("rows", twoEdgesOneKey.Type)}
+}
+
+type keyTargetC struct{ schema.Schema }
+
+func (keyTargetC) Edges() []schema.Edge {
+	return []schema.Edge{edge.To("rows", twoEdgesOneKey.Type)}
+}
+
+func TestBuildTwoEdgesOnOneKeyRefused(t *testing.T) {
+	_, err := build(t, twoEdgesOneKey{}, keyTargetB{}, keyTargetC{})
+	want := `schema twoEdgesOneKey: edge "c": binds field "target_id", which holds edge "b"'s foreign key: a key holds one row's ID; declare a field for each edge`
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("got %v\nwant %s", err, want)
+	}
 }
 

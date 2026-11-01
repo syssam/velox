@@ -24,7 +24,7 @@ import (
 func Build(m *loadjson.Model) (*Graph, error) {
 	b := &builder{
 		pkg: m.Package, g: &Graph{Package: m.Package, Entities: []*Entity{}},
-		refused: map[*Index]bool{}, implicits: map[*Field]*edgeState{},
+		refused: map[*Index]bool{}, implicits: map[*Field]*edgeState{}, keyEdges: map[*Field]*edgeState{},
 	}
 	b.entities(m)
 	b.resolveEdges()
@@ -54,6 +54,7 @@ type builder struct {
 	errs      []ruleError
 	refused   map[*Index]bool       // the indexes an index rule refuses, whose names are not compared
 	implicits map[*Field]*edgeState // the edge each implicit foreign key was added for
+	keyEdges  map[*Field]*edgeState // the edge each declared foreign key is bound to
 }
 
 // ruleError is an Error with the number of the rule it reports, which orders
@@ -499,6 +500,10 @@ func (b *builder) foreignKey(n *node, s *edgeState) {
 		if ed.Rel.Kind == "O2O" {
 			f.Unique = true // every one-to-one key is unique, as ent's fkColumn
 		}
+		if other := b.keyEdges[f]; other != nil && other != s && other != s.pair {
+			b.fail(55, n.ent.Name, edgeLoc(ed), "binds field %q, which holds edge %q's foreign key: a key holds one row's ID; declare a field for each edge", f.Name, other.ed.Name)
+		}
+		b.keyEdges[f] = s
 		b.bind(s, f.Name, f.Column)
 		return
 	}
