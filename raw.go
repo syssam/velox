@@ -189,7 +189,8 @@ func (q RawQuery[E]) One[_ Lazy[E]](ctx context.Context) (*E, error) {
 
 // Iter runs the query and yields one row at a time; only the current row is
 // held in memory. As with Query.Iter, the loop body runs inside the Around
-// hooks and under the statement's deadline.
+// hooks and under the statement's deadline, and on a pool of one connection a
+// statement in the body fails, as Query.Iter says.
 func (q RawQuery[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error] {
 	return func(yield func(E, error) bool) {
 		st, err := q.statement()
@@ -198,6 +199,7 @@ func (q RawQuery[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error] {
 			yield(zero, err)
 			return
 		}
+		engine.SetStmtIter(&st)
 		a := &rawRun[E]{st: st, m: q.meta, yield: yield, timed: len(q.db.e.Cfg.Arounds) > 0}
 		err = q.db.e.Run(ctx, &a.st, func(r engine.Rows) error { return readRaw(a, r) }, nil)
 		if err != nil && !a.stopped {

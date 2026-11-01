@@ -39,10 +39,14 @@ var _ [unsafe.Sizeof(DB{}) - unsafe.Sizeof(engine.DB{})]struct{} = [0]struct{}{}
 //
 // A MySQL dsn must set parseTime=true and clientFoundRows=true, for the reasons
 // Open gives; Connect returns an error when it does not. On SQLite, the pool
-// has one connection, since each connection to ":memory:" is its own database
-// and SQLite has one writer. Raise it with velox.Pool(db).SetMaxOpenConns on a file
-// that takes concurrent reads. Foreign keys are enforced only when the dsn asks,
-// as Open says. For PostgreSQL, veloxpgx.Open is faster.
+// has one connection, on a file too: each connection to ":memory:" is its own
+// database, and SQLite has one writer, so that on several connections concurrent
+// writes fail with SQLITE_BUSY rather than take turns. With one, they take
+// turns, and a statement in the body of a loop over Iter, which holds the
+// connection, fails (see Query.Iter). Raise it with
+// velox.Pool(db).SetMaxOpenConns on a file that takes concurrent reads, with a
+// busy_timeout in the dsn. Foreign keys are enforced only when the dsn asks, as
+// Open says. For PostgreSQL, veloxpgx.Open is faster.
 func Connect(driver, dsn string, opts ...Option) (*DB, error) {
 	e, err := engine.Connect(driver, dsn, opts)
 	if err != nil {

@@ -392,6 +392,10 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 			txShard = sh
 		}
 	}
+	if waitsForIter(db) {
+		endTx(info, TxError)
+		return false, fmt.Errorf("velox: transaction: %w", errIterConn)
+	}
 	ex, ctl, err := primary.Begin(ctx, sql.TxOptions{Isolation: o.Isolation, ReadOnly: o.ReadOnly})
 	if err != nil {
 		endTx(info, TxError)

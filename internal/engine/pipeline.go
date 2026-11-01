@@ -406,7 +406,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	entity, op, writable, count, exists, agg, group, lock, wait, inTx := st.Entity, st.Op, st.Writable, st.Count, st.Exists, st.Aggregate, st.GroupBy, st.Lock, st.LockWait, st.InTx
 	// velox's own marks, which no hook can set: a hook that replaces the
 	// whole struct (*st = Statement{…}) zeroes them, and they are restored.
-	bidi, pin := stmtBidi(st), stmtPin(st)
+	bidi, pin, iter := stmtBidi(st), stmtPin(st), st.iter
 	// each is the Each the hooks get, a copy of velox's (was) when there are
 	// hooks: a hook may not replace it or change it.
 	each := st.Each
@@ -418,6 +418,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	}
 	setStmtBidi(st, bidi)
 	setStmtPin(st, pin)
+	st.iter = iter
 	if st.Op != op {
 		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's kind", entity.Name)
 	}
@@ -609,6 +610,9 @@ func (db *DB) capLimit(st *Statement) {
 
 // exec is send, and marks a transaction the server has rolled back.
 func (db *DB) exec(ctx context.Context, st *Statement, t Target, read func(Rows) error, res *execResult) error {
+	if waitsForIter(db) {
+		return stmtErr(st, errIterConn)
+	}
 	err := db.send(ctx, st, t, read, res)
 	if err != nil && db.D == MySQL && db.txRoot != nil {
 		db.noteServerRollback(ctx, err)
@@ -679,7 +683,7 @@ func (db *DB) send(ctx context.Context, st *Statement, t Target, read func(Rows)
 		counted = &countedRows{Rows: r, Left: n, Capped: n > 0}
 		r = counted
 	}
-	rerr, rowsErr := readRows(r, read)
+	rerr, rowsErr := readHeld(db, st, r, read)
 	// The rows error counts for failover only when read returned nil: a
 	// broken connection ends the rows with Next false, so read finishes
 	// cleanly, while pgx also reports read's own scan error through

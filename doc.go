@@ -189,6 +189,9 @@
 // is not so strict: a time field scans every text form of SQLite's date
 // functions, the result of MAX(created_at) included.
 //
+// Connect opens one connection, as SQLite has one writer. A loop over Iter holds
+// it, so a statement in the loop's body fails: see Query.Iter.
+//
 // # Options
 //
 // Open's options are WithX, as WithMaxRows; a transaction's are TxIsolation,
