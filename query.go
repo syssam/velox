@@ -219,11 +219,12 @@ func (q Query[E]) Omit[_ Lazy[E]](cs ...Column[E]) Query[E] {
 // when rows are added between pages, and costs the same on every page. The
 // query's OrderBy must include every column of the primary key or of a
 // unique index, and no column that can be NULL or that is encoded (a json
-// field). x must be a row a query returned: its values carry the columns'
-// stored precision, which a value made in memory (a time with nanoseconds in
-// a column that keeps microseconds) may not, and the comparison would then
-// skip or repeat a row. Count applies
-// After's condition too.
+// field). With Columns or Omit, the query must select every column of its
+// OrderBy, or it fails: a row without one holds its zero value there. x must
+// be a row a query returned: its values carry the columns' stored precision,
+// which a value made in memory (a time with nanoseconds in a column that keeps
+// microseconds) may not, and the comparison would then skip or repeat a row.
+// Count applies After's condition too.
 func (q Query[E]) After[_ Lazy[E]](x *E) Query[E] {
 	if x == nil {
 		if q.err == nil && q.meta.err == nil {
