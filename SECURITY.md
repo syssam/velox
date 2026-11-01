@@ -7,6 +7,14 @@ repository. Open the repository's Security tab, choose "Report a vulnerability",
 and describe the problem there. Do not open a public issue, a pull request or a
 discussion for it.
 
+<!-- Remove this paragraph when the repository is published as syssam/velox. -->
+
+This repository is not published yet. Until it is, `github.com/syssam/velox`
+leads to an older, different project, whose Security tab is not for this code
+and which takes no private reports. So send the report privately to whoever
+gave you this checkout, with what the next list asks for, and open nothing
+public on that project.
+
 A report helps most when it has:
 
 - the version or commit, and the database and its version;
@@ -17,8 +25,8 @@ Please give us time to fix the problem before you make it public.
 
 ## Supported versions
 
-Before 1.0, the supported version is `main`. After 1.0, it is the latest minor
-release.
+No version is released yet, so the supported version is `main`. After 1.0, it is
+the latest minor release.
 
 ## Scope
 

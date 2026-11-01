@@ -32,7 +32,8 @@ each.
   module's path. It is not tidied, and a test keeps it at the harness's versions.
 
 `docs/decisions` records why the code is as it is. `docs/history` holds the specs,
-plans and reviews that built it, as written.
+plans and reviews that built it, as written. It is a historical record: nothing
+depends on it, and it is not kept up to date.
 
 Generated Go files end `_velox.go`, or `_gql.go` for velox-graphql, so that no
 entity's name can make the file a test or tie it to one operating system.
@@ -43,6 +44,7 @@ entity's name can make the file a test or tie it to one operating system.
 packages. If `TestPublicAPISnapshot` fails and the change is meant, regenerate it
 with `go test ./internal/repocheck -run TestPublicAPISnapshot -update-api`. Read
 the diff first: after 1.0, a removed line or a changed signature breaks users.
+Before 1.0 nothing is released, so nothing is kept for compatibility.
 
 ## Checks
 
@@ -52,6 +54,10 @@ before you push.
 It starts PostgreSQL 18 and MySQL 8.4 from `scripts/docker-compose.ci.yml`, sets the
 database variables below, and runs what CI runs, module by module, in this
 order:
+
+Each of the first five also runs `go mod tidy -diff`, which fails on a `go.mod` or
+`go.sum` that is not tidy. `bench/compare/veloxe` is left out. The first four run
+govulncheck.
 
 1. The root module: `gofmt`, `go vet`, golangci-lint v2.14.0, then
    `go test -race -count=1` with a coverage profile. Then the nine root fuzz
@@ -68,14 +74,18 @@ order:
 5. `bench/compare`: `go vet`, golangci-lint and `go test -race -short`. The
    measurements never run here.
 6. The coverage floors.
-7. `bench/scale`, in plain and GraphQL form, against `bench/scale/thresholds.json`.
+7. `scripts/scale-check.sh`, which runs `bench/scale`, in plain and GraphQL form,
+   against `bench/scale/thresholds.json`.
 8. `scripts/bench-compare.sh`, which only reports.
 9. `scripts/gqlgen-latest.sh`, which tests `velox-graphql` against the newest
    gqlgen in a copy of the tree.
 
 CI tests PostgreSQL 14 and 18. `VELOX_CI_MATRIX=1 bash scripts/ci-local.sh`
 runs the tests again on PostgreSQL 14 at the end, in every module. It reads the
-image from `.github/workflows/ci.yml`.
+image from `.github/workflows/ci.yml`. The root module's tests have a 40-minute
+timeout on PostgreSQL 14, and 20 minutes on 18.
+
+`TestCILocalMirrorsCI` fails when the two scripts stop running the same commands.
 
 The script stops at the first failure. It removes its containers on exit. It
 does not push.
@@ -200,14 +210,19 @@ allocation counts.
 machine, and commit the three files with the reason. `bench/baseline/README.md`
 has the provenance.
 
-`bench/scale` measures the build and link cost of a large generated model and
-fails when a CPU-time ratio to a reference build passes
-`bench/scale/thresholds.json`:
+`bench/scale` measures the build and link cost of a large generated model, and
+`scripts/scale-check.sh` compares it with `bench/scale/thresholds.json`:
 
 ```sh
-go run ./bench/scale -n 500 -s 100 -check bench/scale/thresholds.json
-go run ./bench/scale -n 500 -s 100 -graphql -check bench/scale/thresholds.json
+scripts/scale-check.sh -n 500 -s 100
+scripts/scale-check.sh -n 500 -s 100 -graphql
 ```
+
+The thresholds were measured only on darwin/arm64. Binary size and link memory differ
+by platform, so going over one fails only on darwin/arm64, and elsewhere, CI's Linux
+included, is a warning. A failed build fails everywhere. To gate CI, recalibrate the
+file from its Linux runs, by the rule in its `_measured` notes, and drop the platform
+check from the script.
 
 `go test -run '^$' -bench '^BenchmarkScan$' -benchmem -count 6 ./internal/integration`
 (with the database variables set) measures the read path on every database;
@@ -219,6 +234,9 @@ starts PostgreSQL, and writes `bench/compare/results/`. The last report is
 
 ## Docs
 
+- `TestReadmeQuickStart` runs the quick start of `README.md` in a temporary module.
+  After a change to its steps, keep each block in order and each Go block's first
+  line naming its file.
 - Godoc is for the user of the package. It cites no spec, plan, ruling or wave
   (`TestGodocCitesNoSpec`).
 - Every exported method has a doc comment (`TestExportedMethodsHaveDocs`).
@@ -250,8 +268,16 @@ tag, which has no earlier release to compare with. After it, `-base` names the l
 release, so that the check compares the API:
 
 ```sh
-go run golang.org/x/exp/cmd/gorelease@latest -base=none -version=v0.1.0
+go run golang.org/x/exp/cmd/gorelease@latest -base=none -version=v1.0.0
 ```
+
+Nothing is released yet. The first tag is `v1.0.0`. Never tag `v0.1.0`, `v0.2.0`,
+`v0.2.1` or `v0.3.0`: the Go checksum database holds another project's contents for
+those versions at this path (`docs/decisions/0023-module-path.md`).
+
+For the first release, the repository must first be published as `syssam/velox`,
+with private vulnerability reporting turned on. Then remove the "Not released yet"
+section of `README.md` and the marked paragraph of `SECURITY.md`.
 
 ## License
 

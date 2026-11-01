@@ -42,7 +42,9 @@ go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run --allo
 # Per-package coverage floors (scripts/coverage-floors.txt) are checked over the four modules' profiles
 # below, which are measured as CI measures them: with -race, and with the database tests as run.
 # The tests build modules offline, with gqlgen as a tool: they need its dependencies too,
-# which "go mod download" alone leaves out.
+# which "go mod download" alone leaves out. The tidy check comes first: download all
+# dirties go.sum, and the tidy after it restores it.
+go mod tidy -diff
 go mod download all
 go mod tidy # download all adds to go.sum what tidy leaves out
 go test -race -count=1 -timeout 20m -coverpkg=./... -coverprofile="$root/cover-root.out" ./...
@@ -67,8 +69,10 @@ go run github.com/mgechev/revive@v1.17.0 -config scripts/revive.toml -set_exit_s
 # The examples are their own module: its own vet, lint, tests and generated files.
 (
   cd examples
+  go mod tidy -diff
   test -z "$(gofmt -l .)" || { echo "gofmt needed in examples:"; gofmt -l .; exit 1; }
   go vet ./...
+  go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
   go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run --allow-serial-runners ./...
   # golangci-lint's revive skips generated files; revive itself lints velox-gen's.
   go run github.com/mgechev/revive@v1.17.0 -config ../scripts/revive.toml -set_exit_status ./*/gen
@@ -105,8 +109,10 @@ go run github.com/mgechev/revive@v1.17.0 -config scripts/revive.toml -set_exit_s
 # test runs under VELOX_TEST_POSTGRES, exported above.
 (
   cd contrib/veloxotel
+  go mod tidy -diff
   test -z "$(gofmt -l .)" || { echo "gofmt needed in contrib/veloxotel:"; gofmt -l .; exit 1; }
   go vet ./...
+  go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
   go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run --allow-serial-runners ./...
   go test -race -count=1 -coverprofile="$root/cover-veloxotel.out" ./...
 )
@@ -117,11 +123,13 @@ go run github.com/mgechev/revive@v1.17.0 -config scripts/revive.toml -set_exit_s
 # under VELOX_TEST_POSTGRES and VELOX_TEST_MYSQL, exported above.
 (
   cd contrib/graphql
+  go mod tidy -diff
   # The collection integration test builds an application offline, with gqlgen as a tool.
   go mod download all
   go mod tidy # download all adds to go.sum what tidy leaves out
   test -z "$(gofmt -l .)" || { echo "gofmt needed in contrib/graphql:"; gofmt -l .; exit 1; }
   go vet ./...
+  go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
   go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run --allow-serial-runners ./...
   go test -race -count=1 -coverprofile="$root/cover-graphql.out" ./...
   go test -run XXX -fuzz '^FuzzCost$' -fuzztime 10s ./veloxgql
@@ -131,6 +139,7 @@ go run github.com/mgechev/revive@v1.17.0 -config scripts/revive.toml -set_exit_s
 # measurements run only from bench/compare/run.sh.
 (
   cd bench/compare
+  go mod tidy -diff
   go vet ./...
   go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 run --allow-serial-runners ./...
   go test -race -short -count=1 ./...
@@ -139,8 +148,9 @@ go run github.com/mgechev/revive@v1.17.0 -config scripts/revive.toml -set_exit_s
 # No package may fall below its floor, or lack one (scripts/coverage-floors.txt).
 go run ./scripts/covfloor -floors scripts/coverage-floors.txt cover-root.out cover-examples.out cover-veloxotel.out cover-graphql.out
 
-go run ./bench/scale -n 500 -s 100 -check bench/scale/thresholds.json
-go run ./bench/scale -n 500 -s 100 -graphql -check bench/scale/thresholds.json
+# It fails over a threshold only where they were measured, darwin/arm64; CI only reports.
+scripts/scale-check.sh -n 500 -s 100
+scripts/scale-check.sh -n 500 -s 100 -graphql
 
 # Benchmarks against the committed baselines (bench/baseline). Report-only: the
 # baselines come from other hardware, so the deltas inform and never fail.
@@ -154,7 +164,7 @@ scripts/gqlgen-latest.sh
 if [ "${VELOX_CI_MATRIX:-}" = 1 ]; then
   "${compose[@]}" down -v
   VELOX_CI_POSTGRES_IMAGE=$pg14 "${compose[@]}" up -d --wait
-  go test -race -count=1 -timeout 20m ./...
+  go test -race -count=1 -timeout 40m ./...
   (cd examples && go test -race -count=1 ./...)
   (cd contrib/veloxotel && go test -race -count=1 ./...)
   (cd contrib/graphql && go test -race -count=1 ./...)

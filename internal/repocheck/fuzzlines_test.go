@@ -1,12 +1,10 @@
 package repocheck
 
 import (
-	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -22,44 +20,25 @@ type fuzzLine struct {
 }
 
 var (
-	fuzzCommand = regexp.MustCompile(`^(?:run: )?go test -run XXX -fuzz '\^(Fuzz\w+)\$' -fuzztime \w+ (\.[\w./]*)$`)
-	workingDir  = regexp.MustCompile(`^working-directory: ([\w./-]+)$`)
-	changeDir   = regexp.MustCompile(`^cd ([\w./-]+)$`)
+	fuzzCommand = regexp.MustCompile(`^go test -run XXX -fuzz '\^(Fuzz\w+)\$' -fuzztime \w+ (\.[\w./]*)$`)
 )
 
 // fuzzLines returns the -fuzz commands of a script, each with its package's
-// directory: CI's steps name theirs with working-directory, ci-local.sh's
-// subshells with cd. A -fuzz line of any other form fails the test, so a changed
-// form cannot hide a line from the check.
+// directory. A -fuzz line of any other form fails the test, so a changed form
+// cannot hide a line from the check.
 func fuzzLines(t *testing.T, script string) []fuzzLine {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(repoRoot(), script))
-	if err != nil {
-		t.Fatal(err)
-	}
 	var out []fuzzLine
-	wd := "."
-	for i, raw := range strings.Split(string(data), "\n") {
-		l := strings.TrimSpace(raw)
-		if strings.HasPrefix(l, "- name:") || strings.HasPrefix(l, "- run:") || raw == ")" {
-			wd = "." // a new step, or the end of a subshell
-		}
-		if m := workingDir.FindStringSubmatch(l); m != nil {
-			wd = m[1]
-		}
-		if m := changeDir.FindStringSubmatch(l); m != nil {
-			wd = m[1]
-		}
-		if !strings.Contains(l, "-fuzz ") {
+	for _, l := range scriptLines(t, script) {
+		if !strings.Contains(l.text, "-fuzz ") {
 			continue
 		}
-		where := fmt.Sprintf("%s:%d", script, i+1)
-		m := fuzzCommand.FindStringSubmatch(l)
+		m := fuzzCommand.FindStringSubmatch(l.text)
 		if m == nil {
-			t.Errorf("%s: a -fuzz line this test cannot read: %q", where, l)
+			t.Errorf("%s: a -fuzz line this test cannot read: %q", l.where, l.text)
 			continue
 		}
-		out = append(out, fuzzLine{where, m[1], filepath.ToSlash(filepath.Join(wd, m[2]))})
+		out = append(out, fuzzLine{l.where, m[1], filepath.ToSlash(filepath.Join(l.dir, m[2]))})
 	}
 	return out
 }
@@ -95,7 +74,7 @@ func fuzzTargets(t *testing.T, dir string) []string {
 func TestFuzzLinesNameRealTargets(t *testing.T) {
 	listed := map[string]string{}
 	var targets []string // the first script's, sorted
-	for _, script := range []string{".github/workflows/ci.yml", "scripts/ci-local.sh"} {
+	for _, script := range []string{ciWorkflow, ciLocal} {
 		lines := fuzzLines(t, script)
 		if len(lines) == 0 {
 			t.Fatalf("%s: no -fuzz lines", script)
