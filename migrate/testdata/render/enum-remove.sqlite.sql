@@ -1,6 +1,7 @@
 -- script: main
 -- velox:foreign-keys off
 -- velox:allow drop-enum-value users.users_role_check
+-- velox:drops users.users_role_check
 
 -- review: sqlite-rebuild: drops check users_role_check, adds check users_role_check; SQLite rebuilds table users: it copies every row into a new table; drop-enum-value: removes 'admin' from check users.users_role_check; rows that hold it fail or change; add-check: adds check users.users_role_check; it fails if any row breaks it
 CREATE TABLE "velox_new_users" (

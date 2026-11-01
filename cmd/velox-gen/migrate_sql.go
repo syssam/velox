@@ -87,5 +87,5 @@ func runMigrateSQL(args []string, dir string, env []string, stdout, stderr io.Wr
 // plainDirectives reports whether d asks for nothing: a file with them
 // needs no -- velox: line.
 func plainDirectives(d migrate.Directives) bool {
-	return !d.NoTransaction && !d.ForeignKeysOff && !d.LockTimeoutSet && len(d.Allow) == 0
+	return !d.NoTransaction && !d.ForeignKeysOff && !d.LockTimeoutSet && len(d.Allow) == 0 && len(d.Drops) == 0
 }

@@ -70,6 +70,7 @@ type Directives struct {
 	LockTimeout    time.Duration // 0: the Config's, or off in a PostgreSQL no-transaction file
 	LockTimeoutSet bool          // the file gave lock-timeout, 0 included
 	Allow          []Allow
+	Drops          []string // SQLite: what a rebuild of the file takes away on purpose, by the guard's names
 }
 
 // Render writes the scripts that make changes, the output of Diff from from
@@ -92,7 +93,8 @@ type Directives struct {
 // Each statement carries the review and destructive findings of its changes
 // as its review line, and each destructive finding an Allow covers is
 // recorded as an allow directive, as is an Allow of unmodeled-loss on MySQL and
-// SQLite, for Up. A script with no statement is left out.
+// SQLite, for Up. A SQLite rebuild's own removals, which Up compares the table
+// with, are listed as drops directives. A script with no statement is left out.
 //
 // Its errors are *Error values: either schema is nil ("nil"), the dialects
 // differ or one is not PostgreSQL, MySQL or SQLite ("dialect"), or a change
@@ -132,6 +134,8 @@ func Render(from, to *Schema, changes []Change, opts RenderOptions) ([]Script, e
 	case velox.SQLite:
 		err = r.sqlite()
 		main.Directives.ForeignKeysOff = r.fkOff
+		slices.Sort(r.drops)
+		main.Directives.Drops = slices.Compact(r.drops)
 	default:
 		return nil, &Error{Code: "dialect", Reason: fmt.Sprintf("Render has no dialect %s", r.d)}
 	}
@@ -189,7 +193,8 @@ type renderer struct {
 	findings [][]Finding // each change's review and destructive findings
 	taken    []bool      // the change's first statement has its review line
 	out      []Statement
-	fkOff    bool // SQLite: the script needs foreign keys off
+	fkOff    bool     // SQLite: the script needs foreign keys off
+	drops    []string // SQLite: what its rebuilds take away
 
 	enum, online []Statement // PostgreSQL: the enum and online scripts'
 }
@@ -294,7 +299,7 @@ func (r *renderer) foreignKey(fk ForeignKey) string {
 
 // writeScript writes s as the body of its file: the directives (no-transaction,
 // foreign-keys off, lock-timeout <d>, then each allow <code> <target>, sorted,
-// the target as allowTarget writes it),
+// the target as allowTarget writes it, then each drops <target>),
 // a blank line, then each statement: a "-- velox:unit" line before a unit's
 // first statement in a no-transaction script, a "-- review: <text>" line when
 // it has one, and the SQL with ";". Plan 2's directory writes files with it.
@@ -317,6 +322,9 @@ func writeScript(b *strings.Builder, s Script) {
 			b.WriteString(" " + allowTarget(a.Target))
 		}
 		b.WriteString("\n")
+	}
+	for _, t := range d.Drops {
+		b.WriteString("-- velox:drops " + allowTarget(t) + "\n")
 	}
 	b.WriteString("\n")
 	for i, st := range s.Statements {

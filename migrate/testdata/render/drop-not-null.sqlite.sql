@@ -1,5 +1,6 @@
 -- script: main
 -- velox:foreign-keys off
+-- velox:drops users.name:not-null
 
 -- review: sqlite-rebuild: changes the nullability of column users.name; SQLite rebuilds table users: it copies every row into a new table
 CREATE TABLE "velox_new_users" (

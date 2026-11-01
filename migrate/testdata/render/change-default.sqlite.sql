@@ -1,5 +1,6 @@
 -- script: main
 -- velox:foreign-keys off
+-- velox:drops users.role:default
 
 -- review: sqlite-rebuild: changes the default of column users.role; SQLite rebuilds table users: it copies every row into a new table
 CREATE TABLE "velox_new_users" (

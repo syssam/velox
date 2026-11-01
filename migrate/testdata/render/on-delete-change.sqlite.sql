@@ -1,5 +1,6 @@
 -- script: main
 -- velox:foreign-keys off
+-- velox:drops posts.posts_users_posts
 
 -- review: sqlite-rebuild: drops foreign key posts_users_posts, adds foreign key posts_users_posts; SQLite rebuilds table posts: it copies every row into a new table; add-foreign-key: adds foreign key posts_users_posts; it fails if rows have no match in users
 CREATE TABLE "velox_new_posts" (

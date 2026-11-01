@@ -153,16 +153,19 @@ var errAppliedMeanwhile = errors.New("migrate: applied by another runner")
 // refused too, as LintFile refuses it: an *Error of Code "file" at the
 // statement's line.
 //
-// A generated SQLite rebuild of a table that holds what the model cannot
-// (a trigger, an expression index, a collation, a generated column, a foreign
-// key's ON UPDATE or DEFERRABLE, ON CONFLICT, STRICT or WITHOUT ROWID), or
-// that a view or another table's trigger names, and a MySQL MODIFY or CHANGE
-// COLUMN that does not write a column's ON UPDATE, collation, INVISIBLE or
-// generation, are refused with an *Error of Code "unmodeled" naming each: the
-// rebuild's transaction is rolled back, and the MySQL file does not start. A
-// directive -- velox:allow unmodeled-loss [<object>] accepts the loss, but for
-// a view or trigger's use, which SQLite refuses whatever it says. Up checks
-// each file as it comes to it, so files before it stay applied.
+// A file is refused with an *Error of Code "unmodeled" naming each object, when
+// it would lose what the database holds and its change list does not say. Up
+// reads the tables a statement replaces: a SQLite rebuild (what the INSERT does
+// not copy, and a column's type, NOT NULL, default or AUTOINCREMENT, an index, a
+// foreign key, a check or what the model cannot hold, that the new table lacks;
+// a view or another table's trigger that uses it) and a DROP TABLE of a table an
+// unaccounted table references; a MySQL MODIFY, CHANGE or CONVERT TO, and a
+// PostgreSQL ALTER COLUMN TYPE, that does not write what the model cannot hold of
+// the column; and a foreign key dropped and added again without it. The SQLite
+// file is rolled back; the others do not start. A plan's own drops are listed in
+// the file as -- velox:drops, and -- velox:allow unmodeled-loss [<object>] accepts
+// a loss, but for a view or trigger's use, which SQLite refuses whatever it says.
+// Up checks each file as it comes to it, so files before it stay applied.
 //
 // A file runs in a transaction with its history row on PostgreSQL and
 // SQLite; one that fails is rolled back, and Up stops with an error naming
@@ -606,6 +609,13 @@ func (s *session) applyTx(ctx context.Context, f File, o options) (Applied, erro
 			return Applied{}, rolledBack("setting the lock timeout: %w", err)
 		}
 	}
+	var triggers map[string]bool
+	if fkOff {
+		var err error
+		if triggers, err = s.triggered(ctx); err != nil {
+			return Applied{}, rolledBack("reading the triggers: %w", err)
+		}
+	}
 	start := time.Now()
 	guard := s.guardRebuilds(f)
 	for i, q := range f.Statements {
@@ -623,7 +633,7 @@ func (s *session) applyTx(ctx context.Context, f File, o options) (Applied, erro
 		return Applied{}, guardError(err, rolledBack)
 	}
 	if fkOff {
-		if err := s.foreignKeyCheck(ctx, f); err != nil {
+		if err := s.foreignKeyCheck(ctx, f, triggers); err != nil {
 			return Applied{}, rolledBack("%w", err)
 		}
 	}
@@ -648,29 +658,38 @@ func (s *session) applyTx(ctx context.Context, f File, o options) (Applied, erro
 	return a, nil
 }
 
+// triggered is the tables with a trigger, lower-cased.
+func (s *session) triggered(ctx context.Context) (map[string]bool, error) {
+	out := map[string]bool{}
+	err := eachRow(ctx, s.conn, `SELECT tbl_name FROM main.sqlite_schema WHERE type = 'trigger'`, nil, func(rows *sql.Rows) error {
+		var table string
+		err := rows.Scan(&table)
+		out[strings.ToLower(table)] = true
+		return err
+	})
+	return out, err
+}
+
 // foreignKeyCheck is PRAGMA foreign_key_check's first row, as an error, for
-// the tables f touches and those with a foreign key to one: an orphan row
-// elsewhere was there before f, and f did nothing to it. A statement of f
-// touchedTables cannot read, or a trigger on a table it touches, which may
-// write anywhere, makes it the check of the whole database.
-func (s *session) foreignKeyCheck(ctx context.Context, f File) error {
+// the tables f touches and those with a foreign key to one, a table f dropped
+// among them: an orphan row elsewhere was there before f, and f did nothing to
+// it. A statement of f touchedTables cannot read, or a trigger on a table it
+// touches, which may write anywhere, makes it the check of the whole database:
+// a trigger the table had before f, in triggers, or has now.
+func (s *session) foreignKeyCheck(ctx context.Context, f File, triggers map[string]bool) error {
 	touched, known := touchedTables(s.d, f)
 	if !known {
 		return s.checkKeys(ctx, "PRAGMA foreign_key_check")
 	}
 	lower := func(name string) string { return strings.ToLower(name) }
-	trigger := false
-	err := eachRow(ctx, s.conn, `SELECT tbl_name FROM main.sqlite_schema WHERE type = 'trigger'`, nil, func(rows *sql.Rows) error {
-		var table string
-		err := rows.Scan(&table)
-		trigger = trigger || touched[lower(table)]
-		return err
-	})
+	now, err := s.triggered(ctx)
 	if err != nil {
 		return fmt.Errorf("PRAGMA foreign_key_check: %w", err)
 	}
-	if trigger {
-		return s.checkKeys(ctx, "PRAGMA foreign_key_check")
+	for table := range touched {
+		if triggers[table] || now[table] {
+			return s.checkKeys(ctx, "PRAGMA foreign_key_check")
+		}
 	}
 	var check []string
 	err = eachRow(ctx, s.conn, `SELECT m.name, coalesce(k."table", '') FROM main.sqlite_schema m

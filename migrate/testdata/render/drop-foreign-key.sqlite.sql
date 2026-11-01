@@ -1,5 +1,6 @@
 -- script: main
 -- velox:foreign-keys off
+-- velox:drops posts.posts_users_reviewer
 
 DROP INDEX "posts_reviewer_id";
 -- review: sqlite-rebuild: drops foreign key posts_users_reviewer; SQLite rebuilds table posts: it copies every row into a new table
