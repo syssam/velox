@@ -45,9 +45,9 @@ func readHeld(db *DB, st *Statement, r Rows, read func(Rows) error) (readErr, ro
 }
 
 // goid is the current goroutine's ID, which the runtime never reuses and writes
-// first in a stack trace: "goroutine 123 [running]:". It costs about a
-// microsecond, paid by an Iter on a pool of one and by a statement made while
-// one is open.
+// first in a stack trace: "goroutine 123 [running]:". It costs about two
+// microseconds (BenchmarkGoid), paid by an Iter on a pool of one and by a
+// statement made while one is open.
 func goid() uint64 {
 	var buf [40]byte
 	b := buf[:runtime.Stack(buf[:], false)]
