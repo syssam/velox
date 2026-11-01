@@ -1,4 +1,5 @@
-h1:U1QCcHKolS2emW/h7Qq5sBD4fPOtxRNJeQhJZaDn4go=
+h1:BUruU5Yx4cpJXNkmucyJqUb+nWqqcHcn/9Uax9b4q7M=
 0001_init.sql h1:zKUYPbbrTHzrWNeos4HuJ8jT95UY4wH/G9wX8RxFQ/E=
-schema.json h1:QAhiHteWd/LpJDR30b/npKiSmuVwKgCb1ozCgPd4OMw=
+0002_time_default.sql h1:waZZWaAKlYi181I71RR8kXFdIMPQP/J6OLEVdvvN7PA=
+schema.json h1:HDZqa323ukVnLLq0VeckO6H/ZcWKXtdAr2mB3lp4GB8=
 velox.json h1:kwGXDUmLy0YS8XIgvaPehFkSYOwxr3lcNqybqvcDGRc=

@@ -31,8 +31,12 @@ func (Schema) Indexes() []schema.Index { return nil }
 func (Schema) Annotations() []schema.Annotation { return nil }
 
 // nowDefault is the database default of created_at and updated_at. Each call
-// of SchemaDefault copies it.
-var nowDefault = map[string]string{field.Postgres: "now()", field.MySQL: "CURRENT_TIMESTAMP(6)", field.SQLite: "CURRENT_TIMESTAMP"}
+// of SchemaDefault copies it. SQLite compares a time's text, so its default
+// writes the form velox binds a time in, with its zone and nine fractional
+// digits, of which SQLite knows three: CURRENT_TIMESTAMP's form sorts below a
+// parameter of the same instant.
+var nowDefault = map[string]string{field.Postgres: "now()", field.MySQL: "CURRENT_TIMESTAMP(6)",
+	field.SQLite: "(strftime('%Y-%m-%d %H:%M:%f000000+00:00','now'))"}
 
 // Time adds created_at and updated_at: the first is set once when the row is
 // created, the second on every update.

@@ -32,7 +32,7 @@ func TestTime(t *testing.T) {
 }
 
 func TestTimeSchemaDefault(t *testing.T) {
-	want := map[string]string{field.Postgres: "now()", field.MySQL: "CURRENT_TIMESTAMP(6)", field.SQLite: "CURRENT_TIMESTAMP"}
+	want := map[string]string{field.Postgres: "now()", field.MySQL: "CURRENT_TIMESTAMP(6)", field.SQLite: "(strftime('%Y-%m-%d %H:%M:%f000000+00:00','now'))"}
 	fs := mixin.Time{}.Fields()
 	for _, f := range fs {
 		if d := f.Descriptor(); !maps.Equal(d.SchemaDefault, want) {
