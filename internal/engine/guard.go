@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"slices"
 )
 
 // alwaysTrue reports whether n holds for every row, judged by its structure
@@ -19,12 +20,7 @@ func alwaysTrue(n Node) bool {
 		}
 		return true
 	case OpOr:
-		for _, k := range n.Kids {
-			if alwaysTrue(k) {
-				return true
-			}
-		}
-		return false
+		return slices.ContainsFunc(n.Kids, alwaysTrue)
 	case OpNot:
 		return alwaysFalse(n.Kids[0])
 	case OpNotIn:
@@ -38,12 +34,7 @@ func alwaysTrue(n Node) bool {
 func alwaysFalse(n Node) bool {
 	switch n.Op {
 	case OpAnd:
-		for _, k := range n.Kids {
-			if alwaysFalse(k) {
-				return true
-			}
-		}
-		return false
+		return slices.ContainsFunc(n.Kids, alwaysFalse)
 	case OpOr:
 		for _, k := range n.Kids {
 			if !alwaysFalse(k) {
@@ -69,12 +60,7 @@ func hasZero(n Node) bool {
 	if n.Op == opZero {
 		return true
 	}
-	for _, k := range n.Kids {
-		if hasZero(k) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(n.Kids, hasZero)
 }
 
 func errZeroPredicate(entity string) error {

@@ -170,8 +170,7 @@ func TestUpRollsBack(t *testing.T) {
 	if msg := err.Error(); !strings.HasPrefix(msg, "migrate: 0002_bad.sql: statement 2 of 2: ") || !strings.HasSuffix(msg, "; the file was rolled back") {
 		t.Errorf("error %q", msg)
 	}
-	var se *sqlitedriver.Error
-	if !errors.As(err, &se) {
+	if _, ok := errors.AsType[*sqlitedriver.Error](err); !ok {
 		t.Errorf("error %#v does not wrap the driver's", err)
 	}
 	if hasTable(t, db, "a") {
@@ -667,6 +666,9 @@ func TestHistoryTableSQLite(t *testing.T) {
 			typ += " PRIMARY KEY"
 		}
 		got = append(got, name+" "+typ)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
 	}
 	want := []string{
 		"version integer PRIMARY KEY",

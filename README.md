@@ -57,10 +57,17 @@ func (User) Fields() []schema.Field {
 ```
 
 `go tool velox-gen ./schema` writes the struct `gen.User` and its column handles
-`gen.Users`. A wrong column or value type does not compile:
+`gen.Users`. `velox.Connect` opens the database, through a
+`database/sql` driver your module imports (here `_ "modernc.org/sqlite"`). A wrong
+column or value type does not compile:
 
 ```go
-db := velox.Open(velox.SQLite, sqlDB)
+db, err := velox.Connect("sqlite", "app.db?_pragma=foreign_keys(1)")
+if err != nil {
+	return err
+}
+defer db.Close()
+
 U := gen.Users
 
 ada := gen.User{Name: "Ada", Email: "ada@example.com", Age: 36}
@@ -93,6 +100,10 @@ the others.
 cd examples
 go run ./start
 ```
+
+To set up the pool yourself, or to wrap it, open it and pass it to `velox.Open`,
+which leaves closing it to you. On PostgreSQL, `veloxpgx.Open` takes a pgx pool and
+is faster.
 
 ## Migrations
 

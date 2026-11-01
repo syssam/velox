@@ -30,8 +30,7 @@ func connectError(t *testing.T) error {
 	cctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_, err := pgconn.Connect(cctx, "host=/nonexistent-velox-dir user=u dbname=db sslmode=disable")
-	var ce *pgconn.ConnectError
-	if !errors.As(err, &ce) {
+	if _, ok := errors.AsType[*pgconn.ConnectError](err); !ok {
 		t.Fatalf("connecting to a missing socket returned %T %v, want a *pgconn.ConnectError", err, err)
 	}
 	return fmt.Errorf("acquire: %w", err)

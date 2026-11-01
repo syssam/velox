@@ -1044,7 +1044,7 @@ func (p *predParser) name(parts []predName) string {
 // reservedWords are PostgreSQL's keywords that a name must be quoted to be.
 var reservedWords = func() map[string]bool {
 	m := map[string]bool{}
-	for _, w := range strings.Fields(`all analyse analyze and any array as asc asymmetric authorization binary both case cast
+	for w := range strings.FieldsSeq(`all analyse analyze and any array as asc asymmetric authorization binary both case cast
 		check collate collation column concurrently constraint create cross current_catalog current_date current_role
 		current_schema current_time current_timestamp current_user default deferrable desc distinct do else end except
 		false fetch for foreign freeze from full grant group having ilike in initially inner intersect into is isnull

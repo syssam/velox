@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"maps"
 	"reflect"
 	"testing"
 
@@ -322,9 +323,7 @@ func TestTxSpanRoute(t *testing.T) {
 			"velox.tx.read_only": attribute.BoolValue(false),
 			"velox.tx.retried":   attribute.BoolValue(false),
 		}
-		for k, v := range want {
-			full[k] = v
-		}
+		maps.Copy(full, want)
 		got := map[attribute.Key]attribute.Value{}
 		for _, kv := range dps[0].Attributes.ToSlice() {
 			got[kv.Key] = kv.Value

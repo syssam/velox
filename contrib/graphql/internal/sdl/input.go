@@ -291,8 +291,8 @@ func (g *graph) edgeInputs(o *object, i int, create bool) ([]edgeInput, error) {
 	var out []edgeInput
 	add := func(name, typ, goName string, kind InputKind) {
 		out = append(out, edgeInput{
-			gqlField: gqlField{name: name, typ: typ, dirs: inputDirs(dirs, typ), where: where},
-			goField:  InputField{Name: name, GoName: goName, Type: typ, Kind: kind, Field: -1, Edge: i, Target: t.name, Required: strings.HasSuffix(typ, "!")},
+			name: name, typ: typ, dirs: inputDirs(dirs, typ), where: where,
+			goField: InputField{Name: name, GoName: goName, Type: typ, Kind: kind, Field: -1, Edge: i, Target: t.name, Required: strings.HasSuffix(typ, "!")},
 		})
 	}
 	edgeID := func(typ string) { add(name+"ID", typ, goEdge+"ID", InputEdgeID) }

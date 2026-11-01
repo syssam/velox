@@ -17,7 +17,7 @@ func TestCoreLinksNoDriver(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v: %s", err, out)
 	}
-	for _, p := range strings.Fields(string(out)) {
+	for p := range strings.FieldsSeq(string(out)) {
 		for _, driver := range []string{"github.com/jackc/", "github.com/go-sql-driver/", "modernc.org/"} {
 			if strings.HasPrefix(p, driver) {
 				t.Errorf("velox links %s", p)

@@ -380,6 +380,9 @@ func rebuildG(t *testing.T, db *sql.DB, edit func(string) string) {
 		}
 		indexes = append(indexes, s)
 	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
 	if err := rows.Close(); err != nil {
 		t.Fatal(err)
 	}

@@ -5,9 +5,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"math"
+	"net/url"
 	"slices"
+	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -40,6 +44,12 @@ type DB struct {
 	// txRoot is, in a transaction, its frame: the identity the mark on its
 	// fn's ctx carries, which its savepoints share. Nil elsewhere.
 	txRoot *txFrame
+	// pool is the *sql.DB of Open and Connect; nil on any other DB. owned says
+	// Connect opened it, so that Close closes it. A field naming *sql.DB would
+	// put database/sql's types in the export data of every package that uses a
+	// DB, 30% more for an entity's package: see TestGenericTypesCompileSmall.
+	pool  io.Closer
+	owned bool
 }
 
 // Open is velox.Open's DB, opts given as a slice.
@@ -47,7 +57,84 @@ func Open(d Dialect, db *sql.DB, opts []Option) DB {
 	if !validDialect(d) {
 		panic(fmt.Sprintf("velox: Open: unknown %v; use velox.Postgres, velox.MySQL or velox.SQLite", d))
 	}
-	return newDB(d, conn.NewSQL(db), opts)
+	e := newDB(d, conn.NewSQL(db), opts)
+	e.pool = db
+	return e
+}
+
+// Connect is velox.Connect's DB, opts given as a slice.
+func Connect(driver, dsn string, opts []Option) (DB, error) {
+	d, ok := driverDialect(driver)
+	if !ok {
+		return DB{}, fmt.Errorf("velox: Connect: no dialect for driver %q; use velox.Open with the *sql.DB it opens", driver)
+	}
+	if d == MySQL {
+		if err := checkMySQLDSN(dsn); err != nil {
+			return DB{}, err
+		}
+	}
+	db, err := sql.Open(driver, dsn)
+	if err != nil {
+		return DB{}, fmt.Errorf("velox: Connect: %w", err)
+	}
+	if d == SQLite {
+		db.SetMaxOpenConns(1)
+	}
+	e := Open(d, db, opts)
+	e.owned = true
+	return e, nil
+}
+
+// driverDialect is the dialect of a database/sql driver's usual name.
+func driverDialect(driver string) (Dialect, bool) {
+	switch driver {
+	case "postgres", "pgx":
+		return Postgres, true
+	case "mysql":
+		return MySQL, true
+	case "sqlite", "sqlite3":
+		return SQLite, true
+	}
+	return 0, false
+}
+
+// checkMySQLDSN refuses a DSN without the two parameters velox relies on. Its
+// errors do not quote the DSN, which holds a password.
+func checkMySQLDSN(dsn string) error {
+	// As the driver reads it: the parameters follow the last '/', since the
+	// password may hold a '/' or a '?'.
+	_, query, _ := strings.Cut(dsn[strings.LastIndexByte(dsn, '/')+1:], "?")
+	values, err := url.ParseQuery(query)
+	if err != nil {
+		return errors.New("velox: Connect: the DSN's parameters do not parse")
+	}
+	for _, name := range []string{"parseTime", "clientFoundRows"} {
+		if on, err := strconv.ParseBool(values.Get(name)); err != nil || !on {
+			return fmt.Errorf("velox: Connect: a MySQL DSN needs %s=true", name)
+		}
+	}
+	return nil
+}
+
+// Pool is velox.Pool. Like the field, it is not a method of DB, for the export
+// data's sake.
+func Pool(db *DB) *sql.DB {
+	if db.InTx {
+		return nil
+	}
+	p, _ := db.pool.(*sql.DB)
+	return p
+}
+
+// Close is velox.DB.Close.
+func (db *DB) Close() error {
+	switch {
+	case db.InTx:
+		return errors.New("velox: Close: called on a transaction's DB")
+	case !db.owned:
+		return nil
+	}
+	return db.pool.Close()
 }
 
 // OpenConn is velox.OpenConn's DB.
@@ -464,8 +551,8 @@ func (db *DB) execute(ctx context.Context, st *Statement, t Target, read func(Ro
 		last = db.exec(ctx, st, t, read, res)
 		return last
 	}
-	for i := len(db.Cfg.Arounds) - 1; i >= 0; i-- {
-		a, inner := db.Cfg.Arounds[i], next
+	for _, v := range slices.Backward(db.Cfg.Arounds) {
+		a, inner := v, next
 		next = func(ctx context.Context) error { return a(ctx, st, inner) }
 	}
 	if err := next(ctx); err != nil {

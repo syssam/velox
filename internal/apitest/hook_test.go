@@ -87,8 +87,7 @@ func TestHookSetIsValidated(t *testing.T) {
 	db := openFake(velox.Postgres, &fakeconn.Exec{Affected: 1})
 	tctx := velox.WithTenant(ctx, int64(7))
 	_, err := db.Update[fixture.DAuthor]().Set(fixture.DAuthors.Name.Set("ok")).Where(fixture.DAuthors.ID.EQ(1)).Exec(context.WithValue(tctx, fixture.BlankName{}, true))
-	var ve *velox.ValidationError
-	if !errors.As(err, &ve) {
+	if _, ok := errors.AsType[*velox.ValidationError](err); !ok {
 		t.Fatalf("got %v", err)
 	}
 	_, err = db.Update[fixture.DAuthor]().Set(fixture.DAuthors.Name.Set("ok")).Where(fixture.DAuthors.ID.EQ(1)).Exec(context.WithValue(tctx, fixture.TouchCreated{}, true))

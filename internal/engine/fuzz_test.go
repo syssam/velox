@@ -65,7 +65,7 @@ func placeholders(d velox.Dialect, sql string) int {
 		q = '`'
 	}
 	n, quoted := 0, false
-	for i := 0; i < len(sql); i++ {
+	for i := range len(sql) {
 		c := sql[i]
 		switch {
 		case c == q:

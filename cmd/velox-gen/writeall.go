@@ -88,8 +88,8 @@ func writeAll(dir string, files map[string][]byte, remove []string) error {
 				left = append(left, t)
 			}
 		}
-		for i := len(done) - 1; i >= 0; i-- {
-			s := done[i]
+		for _, s := range slices.Backward(done) {
+
 			if s.aside == "" {
 				if rerr := os.Remove(s.target); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
 					left = append(left, s.target)
@@ -98,11 +98,11 @@ func writeAll(dir string, files map[string][]byte, remove []string) error {
 				left = append(left, s.target+" (what it held is in "+s.aside+")")
 			}
 		}
-		for i := len(unmake) - 1; i >= 0; i-- {
-			left = append(left, unmake[i]()...)
+		for _, u := range slices.Backward(unmake) {
+			left = append(left, u()...)
 		}
-		for i := len(gone) - 1; i >= 0; i-- {
-			s := gone[i]
+		for _, s := range slices.Backward(gone) {
+
 			if rerr := renameFile(s.aside, s.target); rerr != nil {
 				left = append(left, s.target+" (what it held is in "+s.aside+")")
 			}

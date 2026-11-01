@@ -396,8 +396,8 @@ func TestRenderUnits(t *testing.T) {
 				for i, st := range s.Statements {
 					if s.Kind == migrate.ScriptOnline {
 						first := i == 0 || st.Unit != s.Statements[i-1].Unit
-						if want := 0; i > 0 {
-							want = s.Statements[i-1].Unit
+						if i > 0 {
+							want := s.Statements[i-1].Unit
 							if first {
 								want++
 							}
@@ -648,6 +648,9 @@ func describe(t *testing.T, db *sql.DB) []string {
 				}
 			}
 			out = append(out, row)
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
 		}
 		return out
 	}

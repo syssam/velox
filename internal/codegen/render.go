@@ -69,7 +69,7 @@ func (w *writer) p(format string, args ...any) {
 
 // doc writes text as a doc comment at the current indentation.
 func (w *writer) doc(text string) {
-	for _, l := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
+	for l := range strings.SplitSeq(strings.TrimRight(text, "\n"), "\n") {
 		w.p("//%s", strings.TrimRight(" "+l, " "))
 	}
 }

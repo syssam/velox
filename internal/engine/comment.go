@@ -184,7 +184,7 @@ func encode(s string) string { return string(appendEncoded(nil, s)) }
 
 func appendEncoded(b []byte, s string) []byte {
 	const hex = "0123456789ABCDEF"
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		switch ch := s[i]; {
 		case 'A' <= ch && ch <= 'Z', 'a' <= ch && ch <= 'z', '0' <= ch && ch <= '9',
 			ch == '-', ch == '.', ch == '_', ch == '~':

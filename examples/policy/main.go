@@ -5,7 +5,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"embed"
 	"errors"
 	"fmt"
@@ -45,20 +44,18 @@ func run(ctx context.Context, w io.Writer) error {
 		return err
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
-	sqlDB, err := sql.Open("sqlite", filepath.Join(dir, "policy.db")+"?_pragma=foreign_keys(1)")
+	db, err := velox.Connect("sqlite", filepath.Join(dir, "policy.db")+"?_pragma=foreign_keys(1)")
 	if err != nil {
 		return err
 	}
-	defer func() { _ = sqlDB.Close() }()
-	sqlDB.SetMaxOpenConns(1) // statements and savepoints run on one connection
+	defer func() { _ = db.Close() }()
 	sub, err := fs.Sub(migrations, "migrations")
 	if err != nil {
 		return err
 	}
-	if _, err := migrate.Up(ctx, sqlDB, sub); err != nil {
+	if _, err := migrate.Up(ctx, velox.Pool(db), sub); err != nil {
 		return err
 	}
-	db := velox.Open(velox.SQLite, sqlDB)
 	D, C := gen.Docs, gen.Comments
 	say := func(format string, args ...any) { _, _ = fmt.Fprintf(w, format+"\n", args...) }
 
@@ -131,8 +128,7 @@ func run(ctx context.Context, w io.Writer) error {
 	// An error from a policy function denies the statement: a *PolicyError
 	// that matches ErrDenied.
 	_, err = db.Query[gen.Doc]().Count(ctx)
-	var pe *velox.PolicyError
-	if errors.As(err, &pe) {
+	if pe, ok := errors.AsType[*velox.PolicyError](err); ok {
 		say("no user: ErrDenied=%t, entity %s, op %s, reason %q", errors.Is(err, velox.ErrDenied), pe.Entity, pe.Op, pe.Err)
 	}
 	err = db.Insert(&gen.Doc{Owner: "alice", Title: "Forged"}).Exec(bob)

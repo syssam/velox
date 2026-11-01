@@ -5,7 +5,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"embed"
 	"errors"
 	"fmt"
@@ -72,25 +71,23 @@ func run(ctx context.Context, w io.Writer) error {
 		return err
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
-	sqlDB, err := sql.Open("sqlite", filepath.Join(dir, "tx.db"))
+	db, err := velox.Connect("sqlite", filepath.Join(dir, "tx.db"), velox.WithDeadlines(velox.Deadlines{
+		Statement: 2 * time.Second, MaxStatement: 10 * time.Second,
+		Tx: 5 * time.Second, MaxTx: 30 * time.Second,
+	}))
 	if err != nil {
 		return err
 	}
-	defer func() { _ = sqlDB.Close() }()
-	sqlDB.SetMaxOpenConns(1) // statements and savepoints run on one connection
+	defer func() { _ = db.Close() }()
 	sub, err := fs.Sub(migrations, "migrations")
 	if err != nil {
 		return err
 	}
-	if _, err := migrate.Up(ctx, sqlDB, sub); err != nil {
+	if _, err := migrate.Up(ctx, velox.Pool(db), sub); err != nil {
 		return err
 	}
 	// Every statement and transaction gets a deadline when its context has
 	// none, and none may run longer than the maximum.
-	db := velox.Open(velox.SQLite, sqlDB, velox.WithDeadlines(velox.Deadlines{
-		Statement: 2 * time.Second, MaxStatement: 10 * time.Second,
-		Tx: 5 * time.Second, MaxTx: 30 * time.Second,
-	}))
 	say := func(format string, args ...any) { _, _ = fmt.Fprintf(w, format+"\n", args...) }
 	balances := func() string {
 		as, err := db.Query[gen.Account]().OrderBy(gen.Accounts.Name.Asc()).Limit(10).All(ctx)

@@ -523,8 +523,7 @@ func FuzzDiff(f *testing.F) {
 			}
 			cs, err := migrate.Diff(from, to, migrate.DiffOptions{})
 			if err != nil {
-				var me *migrate.Error
-				if !errors.As(err, &me) {
+				if _, ok := errors.AsType[*migrate.Error](err); !ok {
 					fail("Diff returned %T: %v; want a *migrate.Error", err, err)
 				}
 				continue

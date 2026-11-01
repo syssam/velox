@@ -295,7 +295,7 @@ func dropIntroducer(introducer, v string, binary bool) bool {
 
 // asciiOnly reports whether every byte of s is below 0x80.
 func asciiOnly(s string) bool {
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		if s[i] >= 0x80 {
 			return false
 		}

@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync/atomic"
 )
 
@@ -51,8 +52,8 @@ func (db *DB) txAround(ctx context.Context, info *TxInfo, attempts func(context.
 		returned = true
 		return last
 	}
-	for i := len(db.Cfg.TxArounds) - 1; i >= 0; i-- {
-		h, inner := db.Cfg.TxArounds[i], next
+	for _, v := range slices.Backward(db.Cfg.TxArounds) {
+		h, inner := v, next
 		next = func(ctx context.Context) error { return h(ctx, info, inner) }
 	}
 	if err := next(ctx); err != nil {

@@ -12,7 +12,14 @@
 //	go tool velox-gen ./schema
 //	go tool velox-gen -check ./schema
 //
-// Queries and writes use the generated entities and handles:
+// Connect opens a database, through a database/sql driver the application
+// imports. Queries and writes use the generated entities and handles:
+//
+//	db, err := velox.Connect("sqlite", "app.db?_pragma=foreign_keys(1)")
+//	if err != nil {
+//		return err
+//	}
+//	defer db.Close()
 //
 //	users, err := db.Query[gen.User]().Where(gen.Users.Name.EQ("ada")).Limit(10).All(ctx)
 //

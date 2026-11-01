@@ -147,7 +147,7 @@ func wordByte(c byte) bool {
 // plainName reports whether name needs no quotes: lower-case letters, digits
 // and _, not starting with a digit.
 func plainName(name string) bool {
-	for i := 0; i < len(name); i++ {
+	for i := range len(name) {
 		c := name[i]
 		ok := c == '_' || c >= 'a' && c <= 'z' || i > 0 && c >= '0' && c <= '9'
 		if !ok {

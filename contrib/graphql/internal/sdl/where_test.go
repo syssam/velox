@@ -247,7 +247,7 @@ func TestWhereCarriesDirectives(t *testing.T) {
 			t.Fatalf("predicates %v\n%s", got, sdl)
 		}
 		for _, f := range got {
-			name := strings.SplitN(f, ":", 2)[0]
+			name, _, _ := strings.Cut(f, ":")
 			if d := dirsOf(s, "UserWhereInput", name); !slices.Equal(d, []string{"@admin"}) {
 				t.Errorf("%s: %v, want [@admin]\n%s", name, d, sdl)
 			}

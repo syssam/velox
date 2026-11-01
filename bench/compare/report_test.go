@@ -17,7 +17,7 @@ func fixtureReport(t *testing.T, s summary) string {
 func TestReportShowsTimedOutGate(t *testing.T) {
 	rep := fixtureReport(t, fixtureSummary(t))
 	var timed, other int
-	for _, line := range strings.Split(rep, "\n") {
+	for line := range strings.SplitSeq(rep, "\n") {
 		switch {
 		case strings.Contains(line, "build-ent-n100-r1"):
 			timed++
@@ -38,13 +38,13 @@ func TestReportShowsTimedOutGate(t *testing.T) {
 
 // section is the report from heading to the next "## " heading.
 func section(rep, heading string) string {
-	i := strings.Index(rep, heading)
-	if i < 0 {
+	_, after, ok := strings.Cut(rep, heading)
+	if !ok {
 		return ""
 	}
-	rest := rep[i+len(heading):]
-	if j := strings.Index(rest, "\n## "); j >= 0 {
-		return rest[:j]
+	rest := after
+	if before, _, ok := strings.Cut(rest, "\n## "); ok {
+		return before
 	}
 	return rest
 }

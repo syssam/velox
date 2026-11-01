@@ -237,8 +237,8 @@ func sqliteError(err error) (int, string, bool) {
 
 func sqliteKind(code int, msg string) (ConstraintKind, string) {
 	subject := ""
-	if i := strings.LastIndex(msg, "failed: "); i >= 0 {
-		subject = msg[i+len("failed: "):]
+	if _, after, ok := strings.CutLast(msg, "failed: "); ok {
+		subject = after
 		if j := strings.LastIndex(subject, " ("); j >= 0 {
 			subject = subject[:j]
 		}

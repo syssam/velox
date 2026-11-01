@@ -80,8 +80,8 @@ func holdsRefs(t reflect.Type) bool {
 	case reflect.Array:
 		return t.Len() > 0 && holdsRefs(t.Elem())
 	case reflect.Struct:
-		for i := range t.NumField() {
-			if f := t.Field(i); f.IsExported() && holdsRefs(f.Type) {
+		for f := range t.Fields() {
+			if f.IsExported() && holdsRefs(f.Type) {
 				return true
 			}
 		}

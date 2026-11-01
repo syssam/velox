@@ -1390,7 +1390,7 @@ func TestColumnsGQL(t *testing.T) {
 			var cases []string
 			for _, c := range strings.Split(src, "case ")[1:] {
 				list, _, _ := strings.Cut(c, ":")
-				for _, q := range strings.Split(list, ", ") {
+				for q := range strings.SplitSeq(list, ", ") {
 					v, err := strconv.Unquote(q)
 					if err != nil {
 						t.Fatalf("%s: %s: a case %q", label, name, q)

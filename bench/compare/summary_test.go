@@ -323,7 +323,7 @@ func TestSummarizeCompleteness(t *testing.T) {
 	p := filepath.Join(dir, "raw", "bench-sqlite-veloxe-1.txt")
 	b, _ := os.ReadFile(p)
 	var kept []string
-	for _, l := range strings.Split(string(b), "\n") {
+	for l := range strings.SplitSeq(string(b), "\n") {
 		if !strings.HasPrefix(l, "BenchmarkCount-") {
 			kept = append(kept, l)
 		}

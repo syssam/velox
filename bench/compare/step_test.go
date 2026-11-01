@@ -148,7 +148,7 @@ func TestStepCancel(t *testing.T) {
 	defer cancel()
 	go func() {
 		// Cancel when the pid file appears, or after 2s, whichever is first.
-		for i := 0; i < 200; i++ {
+		for range 200 {
 			if raw, err := os.ReadFile(pidFile); err == nil && strings.HasSuffix(string(raw), "\n") {
 				break
 			}

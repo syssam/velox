@@ -32,3 +32,4 @@ contributor needs to know.
 | [0022](0022-group-by.md) | Grouped aggregates take `handle.Key()`, a generic method, since an ordinary method or a phantom field costs every entity package; a group list obeys `Unbounded` and the row cap; NULL keys are nil, NULL sums 0, and an empty group has no average, least or greatest. |
 | [0023](0023-module-path.md) | The module is `github.com/syssam/velox`; the earlier project is veloxe, and its tags are never reused |
 | [0024](0024-public-surface.md) | The public API is pinned by a snapshot; `migrate.Change` is opaque; `internal/engine` exports only what crosses it |
+| [0025](0025-connect.md) | `velox.Connect` opens a database in one call; `DB.Close` closes only what it opened; `velox.Pool` is the `*sql.DB` under it |

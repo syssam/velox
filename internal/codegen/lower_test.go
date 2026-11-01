@@ -565,8 +565,7 @@ func TestLowerCollisions(t *testing.T) {
 			if err == nil {
 				t.Fatal("no error")
 			}
-			var e *Error
-			if !errors.As(err, &e) {
+			if _, ok := errors.AsType[*Error](err); !ok {
 				t.Fatalf("%T %v is not an *Error", err, err)
 			}
 			for _, w := range c.want {

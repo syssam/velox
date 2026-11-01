@@ -26,7 +26,7 @@ func TestReviveConfigsAgree(t *testing.T) {
 		t.Fatal(".golangci.yml has no revive settings")
 	}
 	var fromYML []string
-	for _, l := range strings.Split(rest, "\n") {
+	for l := range strings.SplitSeq(rest, "\n") {
 		l = strings.TrimSpace(l)
 		switch {
 		case strings.HasPrefix(l, "- name: "):
@@ -45,7 +45,7 @@ func TestReviveConfigsAgree(t *testing.T) {
 	}
 	rule := regexp.MustCompile(`^\[rule\.([a-z-]+)\]$`)
 	var fromTOML []string
-	for _, l := range strings.Split(string(toml), "\n") {
+	for l := range strings.SplitSeq(string(toml), "\n") {
 		l = strings.TrimSpace(l)
 		if m := rule.FindStringSubmatch(l); m != nil {
 			fromTOML = append(fromTOML, m[1])

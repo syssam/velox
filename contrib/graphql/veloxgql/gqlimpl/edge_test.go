@@ -423,7 +423,7 @@ func TestEdgeConnectionBatches(t *testing.T) {
 	xs := ownersPage(t, ctx, db, db.Query[owner](), gqlimpl.Args{})
 	log.take("owners")
 	ectx := field(t, ctx, "owners", "edges", "node", "children")
-	args := gqlimpl.Args{First: intp(2)}
+	args := gqlimpl.Args{First: new(2)}
 	var loads, counts []string
 	var rows []*child
 	for _, x := range xs {
@@ -475,9 +475,9 @@ func TestEdgeConnectionBackwardAndAfter(t *testing.T) {
 		name string
 		args gqlimpl.Args
 	}{
-		{"last", gqlimpl.Args{Last: intp(2)}},
-		{"after", gqlimpl.Args{First: intp(2), After: wire(t, first.Cursors[0])}},
-		{"before", gqlimpl.Args{Last: intp(1), Before: wire(t, first.Cursors[2])}},
+		{"last", gqlimpl.Args{Last: new(2)}},
+		{"after", gqlimpl.Args{First: new(2), After: wire(t, first.Cursors[0])}},
+		{"before", gqlimpl.Args{Last: new(1), Before: wire(t, first.Cursors[2])}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			ctx := operation(t, db, childrenQuery)
@@ -506,7 +506,7 @@ func TestEdgeConnectionBackwardAndAfter(t *testing.T) {
 // Of.
 func TestEdgeConnectionAlone(t *testing.T) {
 	db, _, log := edgeDB(t)
-	args := gqlimpl.Args{First: intp(2)}
+	args := gqlimpl.Args{First: new(2)}
 	want, wn := ownPage(t, db, &owner{ID: 1}, db.Query[child](), args, titleOrder())
 	op := operation(t, db, childrenQuery)
 	grouped := ownersPage(t, op, db, db.Query[owner](), gqlimpl.Args{})[0]
@@ -544,7 +544,7 @@ func TestEdgeAliases(t *testing.T) {
 	xs := ownersPage(t, ctx, db, db.Query[owner](), gqlimpl.Args{})
 	actx := field(t, ctx, "owners", "edges", "node", "a")
 	bctx := field(t, ctx, "owners", "edges", "node", "b")
-	aq, aargs := db.Query[child](), gqlimpl.Args{First: intp(1)}
+	aq, aargs := db.Query[child](), gqlimpl.Args{First: new(1)}
 	bq, bargs := db.Query[child]().Where(children.Title.EQ("b")), gqlimpl.Args{}
 	log.take("")
 	var sql []string
@@ -641,8 +641,8 @@ func TestEdgeFromAppField(t *testing.T) {
 			args  gqlimpl.Args
 			order []gqlimpl.OrderTerm[child]
 		}{
-			{"first 1 by title", db.Query[child](), gqlimpl.Args{First: intp(1)}, titleOrder()},
-			{"title d, first 3", db.Query[child]().Where(children.Title.EQ("d")), gqlimpl.Args{First: intp(3)}, nil},
+			{"first 1 by title", db.Query[child](), gqlimpl.Args{First: new(1)}, titleOrder()},
+			{"title d, first 3", db.Query[child]().Where(children.Title.EQ("d")), gqlimpl.Args{First: new(3)}, nil},
 		} {
 			got, n := childPage(t, nctx, db, x, c.q, c.args, c.order)
 			want, wn := ownPage(t, db, x, c.q, c.args, c.order)
@@ -716,7 +716,7 @@ func TestEdgePerRowArguments(t *testing.T) {
 	xs := ownersPage(t, ctx, db, db.Query[owner](), gqlimpl.Args{})
 	ectx := field(t, ctx, "owners", "edges", "node", "children")
 	for _, x := range xs {
-		q, args := db.Query[child]().Where(children.Title.NEQ(x.Name)), gqlimpl.Args{First: intp(int(x.ID))}
+		q, args := db.Query[child]().Where(children.Title.NEQ(x.Name)), gqlimpl.Args{First: new(int(x.ID))}
 		got, n := childPage(t, ectx, db, x, q, args, titleOrder(), x.Name)
 		want, wn := ownPage(t, db, x, q, args, titleOrder())
 		samePage(t, x.Name, got, want)
@@ -912,7 +912,7 @@ func TestBatchRace(t *testing.T) {
 		}
 	}
 	ctx := operation(t, db, childrenQuery)
-	xs := ownersPage(t, ctx, db, db.Query[owner]().Where(owners.ID.GTE(101)), gqlimpl.Args{First: intp(50)})
+	xs := ownersPage(t, ctx, db, db.Query[owner]().Where(owners.ID.GTE(101)), gqlimpl.Args{First: new(50)})
 	if len(xs) != 50 {
 		t.Fatalf("%d owners", len(xs))
 	}
@@ -925,7 +925,7 @@ func TestBatchRace(t *testing.T) {
 	for i, x := range xs {
 		wg.Go(func() {
 			<-start
-			c, err := gqlimpl.NewConnection(ectx, db.Query[child](), "Child", gqlimpl.Args{First: intp(1)}, nil, childKey())
+			c, err := gqlimpl.NewConnection(ectx, db.Query[child](), "Child", gqlimpl.Args{First: new(1)}, nil, childKey())
 			if err != nil {
 				t.Error(err)
 				return

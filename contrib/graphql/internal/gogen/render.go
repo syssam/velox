@@ -139,7 +139,7 @@ func (f *file) p(format string, args ...any) {
 func (f *file) doc(indent, text string) {
 	width := 80 - 4*len(indent) - len("// ")
 	line := ""
-	for _, w := range strings.Fields(text) {
+	for w := range strings.FieldsSeq(text) {
 		if line != "" && len(line)+1+len(w) > width {
 			f.p("%s// %s", indent, line)
 			line = ""

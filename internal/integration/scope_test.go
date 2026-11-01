@@ -27,7 +27,7 @@ type seedTicket struct {
 	parent       *int64
 }
 
-func ptr(v int64) *int64 { return &v }
+func ptr(v int64) *int64 { return new(v) }
 
 // seedTickets are two tenants' tickets, each owned by ann or bob. Ticket 5
 // names org 2's invoice 5 and bob's ticket 3 as its parent; invoice 0 does not

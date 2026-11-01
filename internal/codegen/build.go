@@ -151,7 +151,7 @@ func (b *builder) entities(m *loadjson.Model) {
 			copy(e.Fields[1:id+1], e.Fields[:id])
 			e.Fields[0] = f
 		} else {
-			auto := &Field{Field: loadjson.Field{Name: "id", Type: "int64"}, GoName: "ID", Column: "id", AutoID: true}
+			auto := &Field{Name: "id", Type: "int64", GoName: "ID", Column: "id", AutoID: true}
 			e.Fields = append([]*Field{auto}, e.Fields...)
 		}
 		b.g.Entities = append(b.g.Entities, e)

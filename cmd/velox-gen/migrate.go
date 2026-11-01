@@ -141,8 +141,7 @@ func (c *migrateCmd) abs(dir string) string {
 // to -dir: a *SumError's, and the Pos of an *Error that ReadDir or LintFile
 // gives.
 func (c *migrateCmd) inDir(err error) error {
-	var se *migrate.SumError
-	if errors.As(err, &se) {
+	if se, ok := errors.AsType[*migrate.SumError](err); ok {
 		return &migrate.SumError{Path: c.path(se.Path)}
 	}
 	var me *migrate.Error

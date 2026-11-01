@@ -17,8 +17,7 @@ func ExampleConstraintError() {
 		Err:        errors.New("duplicate key"),
 	})
 
-	var ce *veloxtype.ConstraintError
-	if errors.As(err, &ce) {
+	if ce, ok := errors.AsType[*veloxtype.ConstraintError](err); ok {
 		fmt.Println(ce.Kind, ce.Constraint)
 	}
 	// Output: unique invoices_number_key
@@ -41,8 +40,7 @@ func ExampleValidationError() {
 	tooLong := errors.New("too long")
 	err := fmt.Errorf("save: %w", &veloxtype.ValidationError{Entity: "gen.User", Field: "Name", Err: tooLong})
 
-	var ve *veloxtype.ValidationError
-	if errors.As(err, &ve) {
+	if ve, ok := errors.AsType[*veloxtype.ValidationError](err); ok {
 		fmt.Println(ve.Field, errors.Is(err, tooLong))
 	}
 	// Output: Name true

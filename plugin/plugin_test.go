@@ -17,7 +17,7 @@ func TestPluginPackageImportsNothing(t *testing.T) {
 		t.Fatalf("go list: %v\n%s", err, out)
 	}
 	var extra []string
-	for _, p := range strings.Fields(string(out)) {
+	for p := range strings.FieldsSeq(string(out)) {
 		if p != "github.com/syssam/velox/plugin" {
 			extra = append(extra, p)
 		}

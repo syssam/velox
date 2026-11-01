@@ -67,7 +67,7 @@ func ParseAllow(s string) ([]Allow, error) {
 		return nil, nil
 	}
 	var out []Allow
-	for _, item := range strings.Split(s, ",") {
+	for item := range strings.SplitSeq(s, ",") {
 		item = strings.TrimSpace(item)
 		code, target, hasTarget := strings.Cut(item, "=")
 		code, target = strings.TrimSpace(code), strings.TrimSpace(target)

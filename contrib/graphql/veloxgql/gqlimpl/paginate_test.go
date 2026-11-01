@@ -143,8 +143,6 @@ func ids(rows []*person) []int64 {
 	return out
 }
 
-func intp(n int) *int { return &n }
-
 // TestPaginate is Review Focus 2: under each order, paging forward and
 // backward from every cursor gives the rows in order with no duplicate and
 // no gap, the right hasNextPage and hasPreviousPage, and start and end
@@ -202,30 +200,30 @@ func TestPaginate(t *testing.T) {
 					t.Errorf("%s: %v next %v prev %v, want %v next %v prev %v", what, got, p.Info.HasNextPage, p.Info.HasPreviousPage, want, next, prev)
 				}
 			}
-			all := page(gqlimpl.Args{First: intp(10)})
+			all := page(gqlimpl.Args{First: new(10)})
 			check("first 10", all, c.want, false, false)
-			check("first 11", page(gqlimpl.Args{First: intp(11)}), c.want, false, false)
-			check("first 0", page(gqlimpl.Args{First: intp(0)}), []int64{}, true, false)
-			check("first 3", page(gqlimpl.Args{First: intp(3)}), c.want[:3], true, false)
-			check("last 3", page(gqlimpl.Args{Last: intp(3)}), c.want[7:], false, true)
-			check("last 10", page(gqlimpl.Args{Last: intp(10)}), c.want, false, false)
-			check("last 0", page(gqlimpl.Args{Last: intp(0)}), []int64{}, false, true)
+			check("first 11", page(gqlimpl.Args{First: new(11)}), c.want, false, false)
+			check("first 0", page(gqlimpl.Args{First: new(0)}), []int64{}, true, false)
+			check("first 3", page(gqlimpl.Args{First: new(3)}), c.want[:3], true, false)
+			check("last 3", page(gqlimpl.Args{Last: new(3)}), c.want[7:], false, true)
+			check("last 10", page(gqlimpl.Args{Last: new(10)}), c.want, false, false)
+			check("last 0", page(gqlimpl.Args{Last: new(0)}), []int64{}, false, true)
 
 			for i := range c.want {
 				cur := wire(t, all.Cursors[i])
 				// first 3 after each cursor.
 				end := min(i+4, len(c.want))
-				check("first 3 after "+names[c.want[i]], page(gqlimpl.Args{First: intp(3), After: cur}), c.want[i+1:end], end < len(c.want), false)
+				check("first 3 after "+names[c.want[i]], page(gqlimpl.Args{First: new(3), After: cur}), c.want[i+1:end], end < len(c.want), false)
 				// last 3 before each cursor: last 2 before the first row is
 				// empty, with no page before it.
 				start := max(i-3, 0)
-				check("last 3 before "+names[c.want[i]], page(gqlimpl.Args{Last: intp(3), Before: cur}), c.want[start:i], false, start > 0)
-				check("last 2 before", page(gqlimpl.Args{Last: intp(2), Before: cur}), c.want[max(i-2, 0):i], false, i > 2)
+				check("last 3 before "+names[c.want[i]], page(gqlimpl.Args{Last: new(3), Before: cur}), c.want[start:i], false, start > 0)
+				check("last 2 before", page(gqlimpl.Args{Last: new(2), Before: cur}), c.want[max(i-2, 0):i], false, i > 2)
 			}
 
 			// Walking the pages forward, then backward, gives every row once.
 			var walk []int64
-			args := gqlimpl.Args{First: intp(3)}
+			args := gqlimpl.Args{First: new(3)}
 			for {
 				p := page(args)
 				walk = append(walk, ids(p.Rows)...)
@@ -238,7 +236,7 @@ func TestPaginate(t *testing.T) {
 				t.Errorf("forward walk %v, want %v", walk, c.want)
 			}
 			walk = nil
-			args = gqlimpl.Args{Last: intp(4)}
+			args = gqlimpl.Args{Last: new(4)}
 			for {
 				p := page(args)
 				walk = append(ids(p.Rows), walk...)
@@ -273,7 +271,7 @@ func TestPaginateDefaultPage(t *testing.T) {
 	if err != nil || !slices.Equal(ids(p.Rows), []int64{4, 5, 6, 7}) || !p.Info.HasPreviousPage || p.Info.HasNextPage {
 		t.Fatalf("before 8: %v %+v, want 4 to 7 and a previous page", err, p)
 	}
-	if _, err := gqlimpl.Paginate(ctx, db.Query[person](), "Person", gqlimpl.Args{First: intp(5)}, nil, personKey()); !errors.Is(err, veloxgql.ErrPageTooLarge) {
+	if _, err := gqlimpl.Paginate(ctx, db.Query[person](), "Person", gqlimpl.Args{First: new(5)}, nil, personKey()); !errors.Is(err, veloxgql.ErrPageTooLarge) {
 		t.Errorf("first 5 over MaxPage 4: %v, want ErrPageTooLarge", err)
 	}
 }
@@ -283,7 +281,7 @@ func TestPaginateRefuses(t *testing.T) {
 	ctx := context.Background()
 	db, st := peopleDB(t)
 	name := []gqlimpl.OrderTerm[person]{nameTerm(veloxgql.OrderDirectionAsc)}
-	all, err := gqlimpl.Paginate(ctx, db.Query[person](), "Person", gqlimpl.Args{First: intp(10)}, name, personKey())
+	all, err := gqlimpl.Paginate(ctx, db.Query[person](), "Person", gqlimpl.Args{First: new(10)}, name, personKey())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -298,14 +296,14 @@ func TestPaginateRefuses(t *testing.T) {
 		order []gqlimpl.OrderTerm[person]
 		want  []error
 	}{
-		{"first and last", gqlimpl.Args{First: intp(1), Last: intp(1)}, name, []error{veloxgql.ErrBadPagination}},
-		{"first 101", gqlimpl.Args{First: intp(101)}, name, []error{veloxgql.ErrPageTooLarge}},
-		{"last 101", gqlimpl.Args{Last: intp(101)}, name, []error{veloxgql.ErrPageTooLarge}},
-		{"first -1", gqlimpl.Args{First: intp(-1)}, name, []error{veloxgql.ErrBadPagination}},
-		{"last -1", gqlimpl.Args{Last: intp(-1)}, name, []error{veloxgql.ErrBadPagination}},
+		{"first and last", gqlimpl.Args{First: new(1), Last: new(1)}, name, []error{veloxgql.ErrBadPagination}},
+		{"first 101", gqlimpl.Args{First: new(101)}, name, []error{veloxgql.ErrPageTooLarge}},
+		{"last 101", gqlimpl.Args{Last: new(101)}, name, []error{veloxgql.ErrPageTooLarge}},
+		{"first -1", gqlimpl.Args{First: new(-1)}, name, []error{veloxgql.ErrBadPagination}},
+		{"last -1", gqlimpl.Args{Last: new(-1)}, name, []error{veloxgql.ErrBadPagination}},
 		{"after and before", gqlimpl.Args{After: byName, Before: byName}, name, []error{veloxgql.ErrBadPagination}},
-		{"first and before", gqlimpl.Args{First: intp(1), Before: byName}, name, []error{veloxgql.ErrBadPagination}},
-		{"last and after", gqlimpl.Args{Last: intp(1), After: byName}, name, []error{veloxgql.ErrBadPagination}},
+		{"first and before", gqlimpl.Args{First: new(1), Before: byName}, name, []error{veloxgql.ErrBadPagination}},
+		{"last and after", gqlimpl.Args{Last: new(1), After: byName}, name, []error{veloxgql.ErrBadPagination}},
 		{"name cursor under age", gqlimpl.Args{After: byName}, []gqlimpl.OrderTerm[person]{ageTerm(veloxgql.OrderDirectionAsc)}, []error{veloxgql.ErrBadCursor}},
 		{"name ASC cursor under name DESC", gqlimpl.Args{Before: byName}, []gqlimpl.OrderTerm[person]{nameTerm(veloxgql.OrderDirectionDesc)}, []error{veloxgql.ErrBadCursor}},
 		{"name cursor under the key", gqlimpl.Args{After: byName}, nil, []error{veloxgql.ErrBadCursor}},
@@ -328,7 +326,7 @@ func TestPaginateRefuses(t *testing.T) {
 		}
 	}
 	// The zero direction is ASC, as the SDL's default.
-	p, err := gqlimpl.Paginate(ctx, db.Query[person](), "Person", gqlimpl.Args{First: intp(2)}, []gqlimpl.OrderTerm[person]{nameTerm("")}, personKey())
+	p, err := gqlimpl.Paginate(ctx, db.Query[person](), "Person", gqlimpl.Args{First: new(2)}, []gqlimpl.OrderTerm[person]{nameTerm("")}, personKey())
 	if err != nil || !slices.Equal(ids(p.Rows), []int64{2, 4}) || p.Cursors[0].Terms[0].Direction != veloxgql.OrderDirectionAsc {
 		t.Errorf("the zero direction: %v %+v", err, p)
 	}
@@ -340,7 +338,7 @@ func TestConnectionIsLazy(t *testing.T) {
 	ctx := context.Background()
 	db, st := peopleDB(t)
 	q := db.Query[person]().Where(people.Name.NEQ("b"))
-	c, err := gqlimpl.NewConnection(ctx, q, "Person", gqlimpl.Args{First: intp(2)}, nil, personKey())
+	c, err := gqlimpl.NewConnection(ctx, q, "Person", gqlimpl.Args{First: new(2)}, nil, personKey())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -406,7 +404,7 @@ func TestPaginateUnderTheRowCap(t *testing.T) {
 	if _, err := db.Query[person]().Unbounded().All(ctx); !errors.Is(err, velox.ErrTooManyRows) {
 		t.Fatalf("the cap: %v, want ErrTooManyRows", err)
 	}
-	for name, args := range map[string]gqlimpl.Args{"the default page": {}, "first 100": {First: intp(100)}, "last 100": {Last: intp(100)}} {
+	for name, args := range map[string]gqlimpl.Args{"the default page": {}, "first 100": {First: new(100)}, "last 100": {Last: new(100)}} {
 		p, err := gqlimpl.Paginate(ctx, db.Query[person](), "Person", args, nil, personKey())
 		if err != nil {
 			t.Errorf("%s under WithMaxRows(100): %v", name, err)
@@ -471,7 +469,7 @@ func TestConnectionWithoutExtension(t *testing.T) {
 	if err != nil || len(p.Rows) != 100 || !p.Info.HasNextPage {
 		t.Fatalf("NewConnection under context.Background(): %v, %d rows, %+v; want 100 and a next page", err, len(p.Rows), p.Info)
 	}
-	if _, err := gqlimpl.NewConnection(ctx, db.Query[person](), "Person", gqlimpl.Args{First: intp(101)}, nil, personKey()); !errors.Is(err, veloxgql.ErrPageTooLarge) {
+	if _, err := gqlimpl.NewConnection(ctx, db.Query[person](), "Person", gqlimpl.Args{First: new(101)}, nil, personKey()); !errors.Is(err, veloxgql.ErrPageTooLarge) {
 		t.Errorf("first 101 under context.Background(): %v, want ErrPageTooLarge", err)
 	}
 
@@ -483,7 +481,7 @@ func TestPaginateClearsOffset(t *testing.T) {
 	db, _ := peopleDB(t)
 	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
 	q := db.Query[person]().Limit(1).Offset(3)
-	c, err := gqlimpl.NewConnection(ctx, q, "Person", gqlimpl.Args{First: intp(2)}, nil, personKey())
+	c, err := gqlimpl.NewConnection(ctx, q, "Person", gqlimpl.Args{First: new(2)}, nil, personKey())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -504,7 +502,7 @@ func TestConnectionRefusesOrderedQuery(t *testing.T) {
 	db, st := peopleDB(t)
 	ctx := veloxgql.NewExtension(db).NewContext(context.Background())
 	q := db.Query[person]().OrderBy(people.Age.Asc())
-	c, err := gqlimpl.NewConnection(ctx, q, "Person", gqlimpl.Args{First: intp(2)}, nil, personKey())
+	c, err := gqlimpl.NewConnection(ctx, q, "Person", gqlimpl.Args{First: new(2)}, nil, personKey())
 	want := "veloxgql: PersonsConnectionOf: the base query has an OrderBy; the connection orders by its orderBy argument"
 	if c != nil || err == nil || err.Error() != want {
 		t.Fatalf("%v %v, want no connection and %q", c, err, want)

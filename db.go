@@ -12,7 +12,7 @@ import (
 // that does: generic methods cannot be in an interface, and one concrete type
 // means every function taking a *DB works in a transaction unchanged.
 //
-// A DB from Open, OpenConn or OpenShards is safe for concurrent use by multiple
+// A DB from Connect, Open, OpenConn or OpenShards is safe for concurrent use by multiple
 // goroutines. The *DB that Tx gives its fn is not: see Tx.
 type DB struct {
 	// e is the DB, without what is generic. It is the only field: a transaction
@@ -22,6 +22,48 @@ type DB struct {
 
 // DB is the size of its engine.DB, which a *DB is cast from.
 var _ [unsafe.Sizeof(DB{}) - unsafe.Sizeof(engine.DB{})]struct{} = [0]struct{}{}
+
+// Connect opens a database and returns a DB on it. Close it when done. The
+// usual way to start:
+//
+//	db, err := velox.Connect("sqlite", "app.db?_pragma=foreign_keys(1)")
+//	if err != nil {
+//		return err
+//	}
+//	defer db.Close()
+//
+// driver is a database/sql driver's name, which the application imports as
+// always: "postgres" or "pgx", "mysql", "sqlite" or "sqlite3". Any other name
+// returns an error; use Open for it. Like sql.Open, Connect does not reach the
+// database, so a wrong address fails on the first statement.
+//
+// A MySQL dsn must set parseTime=true and clientFoundRows=true, for the reasons
+// Open gives; Connect returns an error when it does not. On SQLite, the pool
+// has one connection, since each connection to ":memory:" is its own database
+// and SQLite has one writer. Raise it with velox.Pool(db).SetMaxOpenConns on a file
+// that takes concurrent reads. Foreign keys are enforced only when the dsn asks,
+// as Open says. For PostgreSQL, veloxpgx.Open is faster.
+func Connect(driver, dsn string, opts ...Option) (*DB, error) {
+	e, err := engine.Connect(driver, dsn, opts)
+	if err != nil {
+		return nil, err
+	}
+	return &DB{e: e}, nil
+}
+
+// Pool returns the *sql.DB under db, a DB from Connect or Open, for its pool
+// settings and for what takes a *sql.DB, such as migrate.Up. It returns nil for a
+// DB from OpenConn or OpenShards, and for a transaction's DB, whose statements
+// must not leave the transaction.
+//
+// It is a function, not a method: a method of DB mentioning *sql.DB would make
+// every package that uses a DB larger to compile.
+func Pool(db *DB) *sql.DB { return engine.Pool(&db.e) }
+
+// Close closes the pool of a DB from Connect. It does nothing for any other DB,
+// whose pool belongs to whoever opened it. On a transaction's DB it returns an
+// error.
+func (db *DB) Close() error { return db.e.Close() }
 
 // Open returns a DB that runs statements through db, a *sql.DB the
 // application opened with a driver for dialect d. For PostgreSQL, veloxpgx.Open
@@ -33,7 +75,8 @@ var _ [unsafe.Sizeof(DB{}) - unsafe.Sizeof(engine.DB{})]struct{} = [0]struct{}{}
 // not change, which Save relies on. For SQLite, foreign keys are enforced
 // only when the DSN asks for it (modernc.org/sqlite:
 // _pragma=foreign_keys(1)). Open panics on a d that is not Postgres, MySQL or
-// SQLite.
+// SQLite. Connect does the opening too, for an application that does not need a
+// *sql.DB of its own.
 func Open(d Dialect, db *sql.DB, opts ...Option) *DB { return &DB{e: engine.Open(d, db, opts)} }
 
 // OpenConn returns a DB of dialect d whose primary is c. veloxpgx.Open is this

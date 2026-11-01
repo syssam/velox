@@ -171,7 +171,7 @@ func (o orm) entity(i, n int) string {
 	d := o.dsl
 	var b strings.Builder
 	b.WriteString("package schema\n\nimport (\n")
-	for _, imp := range strings.Split(d.Imports, "\n") {
+	for imp := range strings.SplitSeq(d.Imports, "\n") {
 		fmt.Fprintf(&b, "\t%s\n", imp)
 	}
 	if d.IndexType != "" && i > 0 {

@@ -29,8 +29,7 @@ func dirtyOf(t *testing.T, err error) *migrate.DirtyError {
 
 // mysqlNumber is the MySQL error number in err, or 0.
 func mysqlNumber(err error) uint16 {
-	var me *mysql.MySQLError
-	if errors.As(err, &me) {
+	if me, ok := errors.AsType[*mysql.MySQLError](err); ok {
 		return me.Number
 	}
 	return 0
@@ -373,6 +372,9 @@ func TestUpMySQLLockWaitTimeout(t *testing.T) {
 			t.Fatal(err)
 		}
 		got = append(got, n)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
 	}
 	_ = rows.Close()
 	if fmt.Sprint(got) != "[5 77 2]" {

@@ -24,9 +24,9 @@ func readPredicates(t *testing.T, path string) []predicateCase {
 		t.Fatal(err)
 	}
 	var out []predicateCase
-	for _, block := range strings.Split(strings.TrimSpace(string(b)), "\n\n") {
+	for block := range strings.SplitSeq(strings.TrimSpace(string(b)), "\n\n") {
 		var c predicateCase
-		for _, l := range strings.Split(block, "\n") {
+		for l := range strings.SplitSeq(block, "\n") {
 			key, val, _ := strings.Cut(l, ":")
 			val = strings.TrimPrefix(val, " ")
 			switch key {

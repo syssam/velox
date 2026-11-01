@@ -2,7 +2,6 @@ package velox_test
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 
@@ -38,15 +37,26 @@ CREATE INDEX "items_invoice_id" ON "items" ("invoice_id");`
 // exampleDB opens an in-memory SQLite database with testmodel's invoices
 // and items tables. An application's tables come from its migrations.
 func exampleDB() *velox.DB {
-	sqlDB, err := sql.Open("sqlite", "file::memory:")
+	db, err := velox.Connect("sqlite", "file::memory:")
 	if err != nil {
 		panic(err)
 	}
-	sqlDB.SetMaxOpenConns(1) // one in-memory database, one connection
-	if _, err := sqlDB.Exec(exampleDDL); err != nil {
+	if _, err := velox.Pool(db).Exec(exampleDDL); err != nil {
 		panic(err)
 	}
-	return velox.Open(velox.SQLite, sqlDB)
+	return db
+}
+
+// Connect opens the database; Close closes it. velox.Pool is the *sql.DB under it,
+// for pool settings and for what takes one, such as migrate.Up.
+func ExampleConnect() {
+	db, err := velox.Connect("sqlite", ":memory:")
+	if err != nil {
+		panic(err)
+	}
+	defer func() { _ = db.Close() }()
+	fmt.Println(velox.Pool(db).Stats().MaxOpenConnections)
+	// Output: 1
 }
 
 // A query is a value: build it with Where, OrderBy and Limit, then run it

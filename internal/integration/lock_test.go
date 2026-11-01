@@ -232,8 +232,7 @@ func wantLockFailure(t *testing.T, tg target, err error) {
 	if !errors.Is(err, velox.ErrLocked) {
 		t.Errorf("NoWait: %v does not match ErrLocked", err)
 	}
-	var ce *velox.ConstraintError
-	if errors.As(err, &ce) {
+	if _, ok := errors.AsType[*velox.ConstraintError](err); ok {
 		t.Errorf("NoWait's failure is a constraint error: %v", err)
 	}
 }

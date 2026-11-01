@@ -107,9 +107,7 @@ func (w *personWhere) Pred(ctx context.Context) (velox.Pred[person], error) {
 
 func isA() velox.Pred[person] { return people.Name.EQ("a") }
 
-func strp(s string) *string { return &s }
-func i64p(n int64) *int64   { return &n }
-func boolp(b bool) *bool    { return &b }
+func i64p(n int64) *int64 { return new(n) }
 
 func personID64(id int64) string { return veloxgql.EncodeID("Person", id) }
 
@@ -149,22 +147,22 @@ func TestWhereOps(t *testing.T) {
 		w    *personWhere
 		want []int64
 	}{
-		{"ID", &personWhere{ID: strp(personID64(3))}, []int64{3}},
-		{"IDNEQ", &personWhere{IDNEQ: strp(personID64(3))}, except(3)},
+		{"ID", &personWhere{ID: new(personID64(3))}, []int64{3}},
+		{"IDNEQ", &personWhere{IDNEQ: new(personID64(3))}, except(3)},
 		{"IDIn", &personWhere{IDIn: []string{personID64(3), personID64(5)}}, []int64{3, 5}},
 		{"IDNotIn", &personWhere{IDNotIn: []string{personID64(3), personID64(5)}}, except(3, 5)},
-		{"Name", &personWhere{Name: strp("b")}, []int64{3, 6, 8}},
-		{"NameNEQ", &personWhere{NameNEQ: strp("b")}, except(3, 6, 8)},
+		{"Name", &personWhere{Name: new("b")}, []int64{3, 6, 8}},
+		{"NameNEQ", &personWhere{NameNEQ: new("b")}, except(3, 6, 8)},
 		{"NameIn", &personWhere{NameIn: []string{"a", "f"}}, []int64{2, 4, 10}},
 		{"NameNotIn", &personWhere{NameNotIn: []string{"a", "f"}}, except(2, 4, 10)},
-		{"NameGT", &personWhere{NameGT: strp("d")}, []int64{7, 10}},
-		{"NameContains", &personWhere{NameContains: strp("e")}, []int64{7}},
-		{"NameHasPrefix", &personWhere{NameHasPrefix: strp("d")}, []int64{5, 9}},
-		{"NameHasSuffix", &personWhere{NameHasSuffix: strp("c")}, []int64{1}},
+		{"NameGT", &personWhere{NameGT: new("d")}, []int64{7, 10}},
+		{"NameContains", &personWhere{NameContains: new("e")}, []int64{7}},
+		{"NameHasPrefix", &personWhere{NameHasPrefix: new("d")}, []int64{5, 9}},
+		{"NameHasSuffix", &personWhere{NameHasSuffix: new("c")}, []int64{1}},
 		// LIKE's wildcards are the client's text, not patterns.
-		{"NameContains %", &personWhere{NameContains: strp("%")}, nil},
-		{"NameHasPrefix _", &personWhere{NameHasPrefix: strp("_")}, nil},
-		{"Label", &personWhere{Label: strp("d")}, []int64{5, 9}},
+		{"NameContains %", &personWhere{NameContains: new("%")}, nil},
+		{"NameHasPrefix _", &personWhere{NameHasPrefix: new("_")}, nil},
+		{"Label", &personWhere{Label: new("d")}, []int64{5, 9}},
 		{"LabelNotIn", &personWhere{LabelNotIn: []string{"b", "d"}}, except(3, 5, 6, 8, 9)},
 		{"Age", &personWhere{Age: i64p(97)}, []int64{3}},
 		{"AgeNEQ", &personWhere{AgeNEQ: i64p(97)}, except(3)},
@@ -178,10 +176,10 @@ func TestWhereOps(t *testing.T) {
 		{"NameIn []", &personWhere{NameIn: []string{}}, nil},
 		{"NameNotIn []", &personWhere{NameNotIn: []string{}}, all},
 		{"IDIn []", &personWhere{IDIn: []string{}}, nil},
-		{"Is true", &personWhere{IsA: boolp(true)}, []int64{2, 4}},
-		{"Is false", &personWhere{IsA: boolp(false)}, except(2, 4)},
+		{"Is true", &personWhere{IsA: new(true)}, []int64{2, 4}},
+		{"Is false", &personWhere{IsA: new(false)}, except(2, 4)},
 		// Every predicate given holds.
-		{"several", &personWhere{NameIn: []string{"b", "d"}, AgeLT: i64p(95), IDNEQ: strp(personID64(8))}, []int64{6, 9}},
+		{"several", &personWhere{NameIn: []string{"b", "d"}, AgeLT: i64p(95), IDNEQ: new(personID64(8))}, []int64{6, 9}},
 	} {
 		if got := where(t, db, c.w); !slices.Equal(got, c.want) {
 			t.Errorf("%s: %v, want %v", c.name, got, c.want)
@@ -200,12 +198,12 @@ func TestWhereLogic(t *testing.T) {
 	}{
 		{"nil", nil, all},
 		{"empty", &personWhere{}, all},
-		{"and", &personWhere{And: []*personWhere{{Name: strp("b")}, {AgeGT: i64p(93)}}}, []int64{3, 6}},
-		{"or", &personWhere{Or: []*personWhere{{Name: strp("a")}, {Name: strp("f")}}}, []int64{2, 4, 10}},
-		{"or of one", &personWhere{Or: []*personWhere{{Name: strp("a")}}}, []int64{2, 4}},
-		{"not", &personWhere{Not: &personWhere{Name: strp("b")}}, except(3, 6, 8)},
+		{"and", &personWhere{And: []*personWhere{{Name: new("b")}, {AgeGT: i64p(93)}}}, []int64{3, 6}},
+		{"or", &personWhere{Or: []*personWhere{{Name: new("a")}, {Name: new("f")}}}, []int64{2, 4, 10}},
+		{"or of one", &personWhere{Or: []*personWhere{{Name: new("a")}}}, []int64{2, 4}},
+		{"not", &personWhere{Not: &personWhere{Name: new("b")}}, except(3, 6, 8)},
 		{"nested", &personWhere{Not: &personWhere{Or: []*personWhere{
-			{Name: strp("a")},
+			{Name: new("a")},
 			{And: []*personWhere{{NameIn: []string{"b", "d"}}, {AgeLT: i64p(93)}}},
 		}}}, []int64{1, 3, 5, 6, 7, 10}},
 		{"fields and logic", &personWhere{NameIn: []string{"a", "b"}, Or: []*personWhere{{Age: i64p(98)}, {Age: i64p(92)}}}, []int64{2, 8}},
@@ -215,10 +213,10 @@ func TestWhereLogic(t *testing.T) {
 		// An empty input holds for every row: so not of it for none, and an
 		// or with it for every row.
 		{"not {}", &personWhere{Not: &personWhere{}}, nil},
-		{"or with {}", &personWhere{Or: []*personWhere{{}, {Name: strp("a")}}}, all},
-		{"and with {}", &personWhere{And: []*personWhere{{}, {Name: strp("a")}}}, []int64{2, 4}},
+		{"or with {}", &personWhere{Or: []*personWhere{{}, {Name: new("a")}}}, all},
+		{"and with {}", &personWhere{And: []*personWhere{{}, {Name: new("a")}}}, []int64{2, 4}},
 		// A nil entry, which gqlgen never gives, is an empty input.
-		{"or with nil", &personWhere{Or: []*personWhere{nil, {Name: strp("a")}}}, all},
+		{"or with nil", &personWhere{Or: []*personWhere{nil, {Name: new("a")}}}, all},
 	} {
 		if got := where(t, db, c.w); !slices.Equal(got, c.want) {
 			t.Errorf("%s: %v, want %v", c.name, got, c.want)
@@ -236,7 +234,7 @@ func nest(w *personWhere, n int, kind string) *personWhere {
 		case "and":
 			w = &personWhere{And: []*personWhere{w}}
 		default:
-			w = &personWhere{Or: []*personWhere{{Name: strp("x")}, w}}
+			w = &personWhere{Or: []*personWhere{{Name: new("x")}, w}}
 		}
 	}
 	return w
@@ -254,11 +252,11 @@ func TestWhereDepthAndWidth(t *testing.T) {
 		if kind == "not" {
 			want = except(2, 4) // five nots
 		}
-		if got := where(t, db, nest(&personWhere{Name: strp("a")}, veloxgql.DefaultLimits().MaxFilterDepth, kind)); !slices.Equal(got, want) {
+		if got := where(t, db, nest(&personWhere{Name: new("a")}, veloxgql.DefaultLimits().MaxFilterDepth, kind)); !slices.Equal(got, want) {
 			t.Errorf("%s at depth 5: %v, want %v", kind, got, want)
 		}
 		st.take()
-		_, err := nest(&personWhere{Name: strp("a")}, veloxgql.DefaultLimits().MaxFilterDepth+1, kind).Pred(ctx)
+		_, err := nest(&personWhere{Name: new("a")}, veloxgql.DefaultLimits().MaxFilterDepth+1, kind).Pred(ctx)
 		if !errors.Is(err, veloxgql.ErrFilterTooDeep) || !strings.HasPrefix(err.Error(), "veloxgql: PersonWhereInput") {
 			t.Errorf("%s at depth 6: %v, want ErrFilterTooDeep", kind, err)
 		}
@@ -269,7 +267,7 @@ func TestWhereDepthAndWidth(t *testing.T) {
 	list := func(n int) []*personWhere {
 		ws := make([]*personWhere, n)
 		for i := range ws {
-			ws[i] = &personWhere{Name: strp("a")}
+			ws[i] = &personWhere{Name: new("a")}
 		}
 		return ws
 	}
@@ -308,9 +306,9 @@ func TestWhereIDs(t *testing.T) {
 		"IDIn":          {IDIn: []string{personID64(1), post}},
 		"IDNotIn":       {IDNotIn: []string{post}},
 		"IDGT":          {IDGT: &post},
-		"nested":        {Or: []*personWhere{{Name: strp("a")}, {ID: &post}}},
+		"nested":        {Or: []*personWhere{{Name: new("a")}, {ID: &post}}},
 		"under a not":   {Not: &personWhere{IDIn: []string{post}}},
-		"after a field": {Name: strp("a"), IDNotIn: []string{personID64(2), post}},
+		"after a field": {Name: new("a"), IDNotIn: []string{personID64(2), post}},
 	} {
 		_, err := w.Pred(ctx)
 		if !errors.Is(err, veloxgql.ErrWrongIDType) {
@@ -325,7 +323,7 @@ func TestWhereIDs(t *testing.T) {
 		"ID":     {ID: &bad},
 		"IDIn":   {IDIn: []string{bad}},
 		"IDGT":   {IDGT: &bad},
-		"string": {ID: strp(veloxgql.EncodeID("Person", "x"))},
+		"string": {ID: new(veloxgql.EncodeID("Person", "x"))},
 	} {
 		if _, err := w.Pred(ctx); !errors.Is(err, veloxgql.ErrBadID) {
 			t.Errorf("%s: %v, want ErrBadID", name, err)
@@ -340,7 +338,7 @@ func TestWhereIDs(t *testing.T) {
 // idIn, a list given with no ID, selects no row, as an empty In does.
 func TestWhereKeyOps(t *testing.T) {
 	db, _ := peopleDB(t)
-	if got := where(t, db, &personWhere{IDGT: strp(personID64(7))}); !slices.Equal(got, []int64{8, 9, 10}) {
+	if got := where(t, db, &personWhere{IDGT: new(personID64(7))}); !slices.Equal(got, []int64{8, 9, 10}) {
 		t.Errorf("idGT 7: %v, want [8 9 10]", got)
 	}
 	if got := where(t, db, &personWhere{IDIn: []string{}}); len(got) != 0 {
@@ -519,7 +517,7 @@ func TestWhereErrorsNameTheField(t *testing.T) {
 	}{
 		{&personWhere{ID: &post}, "veloxgql: PersonWhereInput.id: Person ID: ID of another type"},
 		{&personWhere{Or: []*personWhere{{}, {IDNotIn: []string{post}}}}, "veloxgql: PersonWhereInput.or[1]: PersonWhereInput.idNotIn: Person ID: ID of another type"},
-		{&personWhere{Not: &personWhere{And: []*personWhere{{IDNEQ: strp("x")}}}}, "veloxgql: PersonWhereInput.not: PersonWhereInput.and[0]: PersonWhereInput.idNEQ: Person ID: malformed ID: not canonical base64url without padding"},
+		{&personWhere{Not: &personWhere{And: []*personWhere{{IDNEQ: new("x")}}}}, "veloxgql: PersonWhereInput.not: PersonWhereInput.and[0]: PersonWhereInput.idNEQ: Person ID: malformed ID: not canonical base64url without padding"},
 		{nest(&personWhere{}, veloxgql.DefaultLimits().MaxFilterDepth+1, "not"), "veloxgql: PersonWhereInput.not: PersonWhereInput.not: PersonWhereInput.not: PersonWhereInput.not: PersonWhereInput.not: PersonWhereInput.not: PersonWhereInput: filter is nested too deep: it is nested 6 deep, and the most is 5"},
 	} {
 		if _, err := c.w.Pred(ctx); err == nil || err.Error() != c.want {

@@ -14,8 +14,7 @@ import (
 
 func schemaErr(t *testing.T, err error, parts ...string) {
 	t.Helper()
-	var se *velox.SchemaError
-	if !errors.As(err, &se) {
+	if _, ok := errors.AsType[*velox.SchemaError](err); !ok {
 		t.Fatalf("got %v, want a *SchemaError", err)
 	}
 	for _, p := range parts {

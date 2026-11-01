@@ -130,7 +130,7 @@ func PeakMB(file string) (float64, error) {
 		return 0, fmt.Errorf("no linker measurements: %w", err)
 	}
 	var peak int64
-	for _, line := range strings.Fields(string(b)) {
+	for line := range strings.FieldsSeq(string(b)) {
 		if v, err := strconv.ParseInt(line, 10, 64); err == nil && v > peak {
 			peak = v
 		}

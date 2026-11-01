@@ -214,6 +214,9 @@ func TestUpPostgresQuotedSchema(t *testing.T) {
 				}
 				tables = append(tables, n)
 			}
+			if err := rows.Err(); err != nil {
+				t.Fatal(err)
+			}
 			_ = rows.Close()
 			if want := []string{"a", "b", "c", "velox_migrations"}; !slices.Equal(tables, want) {
 				t.Errorf("tables of %s: %v; want %v", c.schema, tables, want)

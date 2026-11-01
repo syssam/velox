@@ -364,7 +364,7 @@ func pgUnheld(method, option string, opclass, collat, notDistinct bool, keys, at
 		has = append(has, "the "+method+" method")
 	}
 	var desc, nullsFirst, nullsLast bool
-	for _, f := range strings.Fields(option) {
+	for f := range strings.FieldsSeq(option) {
 		o, err := strconv.Atoi(f)
 		if err != nil {
 			return nil, err

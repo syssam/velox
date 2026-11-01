@@ -35,7 +35,7 @@ func sameName(a, b string) bool {
 	if len(a) != len(b) {
 		return false
 	}
-	for i := 0; i < len(a); i++ {
+	for i := range len(a) {
 		x, y := a[i], b[i]
 		if 'A' <= x && x <= 'Z' {
 			x += 'a' - 'A'
@@ -508,12 +508,7 @@ func (p *ctParser) definition() bool {
 // columnKeyword reports whether t starts a column constraint, so ends the
 // column's type.
 func columnKeyword(t sqlTok) bool {
-	for _, w := range []string{"CONSTRAINT", "PRIMARY", "NOT", "NULL", "UNIQUE", "CHECK", "DEFAULT", "COLLATE", "REFERENCES", "GENERATED", "AS"} {
-		if t.word(w) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc([]string{"CONSTRAINT", "PRIMARY", "NOT", "NULL", "UNIQUE", "CHECK", "DEFAULT", "COLLATE", "REFERENCES", "GENERATED", "AS"}, t.word)
 }
 
 // conflict takes an ON CONFLICT clause, when there is one.

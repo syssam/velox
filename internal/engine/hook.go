@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"unsafe"
 )
 
@@ -156,8 +157,8 @@ func Mutate(ctx context.Context, db *DB, in *EntityInfo, mu *MutationState, core
 		mu.Core = core(ctx, mu)
 		return mu.Core
 	}
-	for i := len(InfoHooks(in)) - 1; i >= 0; i-- {
-		next = InfoHooks(in)[i](next)
+	for _, h := range slices.Backward(InfoHooks(in)) {
+		next = h(next)
 	}
 	err := next(ctx, mu)
 	switch {

@@ -189,8 +189,8 @@ func goKindOf(gf *Field) string {
 
 // cutLast splits s around the last sep; before is "" when there is none.
 func cutLast(s, sep string) (before, after string) {
-	if i := strings.LastIndex(s, sep); i >= 0 {
-		return s[:i], s[i+len(sep):]
+	if before, after, ok := strings.CutLast(s, sep); ok {
+		return before, after
 	}
 	return "", s
 }

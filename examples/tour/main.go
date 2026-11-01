@@ -5,7 +5,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"embed"
 	"errors"
 	"fmt"
@@ -53,28 +52,26 @@ func run(ctx context.Context, w io.Writer) error {
 		return err
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
-	sqlDB, err := sql.Open("sqlite", filepath.Join(dir, "tour.db")+"?_pragma=foreign_keys(1)")
-	if err != nil {
-		return err
-	}
-	defer func() { _ = sqlDB.Close() }()
-	sqlDB.SetMaxOpenConns(1) // statements and savepoints run on one connection
-	sub, err := fs.Sub(migrations, "migrations")
-	if err != nil {
-		return err
-	}
-	if _, err := migrate.Up(ctx, sqlDB, sub); err != nil {
-		return err
-	}
-
-	// Every statement gets a deadline when its context has none, and no
-	// statement or transaction may run longer than the maximum (step 9).
-	db := velox.Open(velox.SQLite, sqlDB, velox.WithDeadlines(velox.Deadlines{
+	db, err := velox.Connect("sqlite", filepath.Join(dir, "tour.db")+"?_pragma=foreign_keys(1)", velox.WithDeadlines(velox.Deadlines{
 		Statement:    2 * time.Second,
 		MaxStatement: 10 * time.Second,
 		Tx:           5 * time.Second,
 		MaxTx:        30 * time.Second,
 	}))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = db.Close() }()
+	sub, err := fs.Sub(migrations, "migrations")
+	if err != nil {
+		return err
+	}
+	if _, err := migrate.Up(ctx, velox.Pool(db), sub); err != nil {
+		return err
+	}
+
+	// Every statement gets a deadline when its context has none, and no
+	// statement or transaction may run longer than the maximum (step 9).
 	I, L := gen.Invoices, gen.Lines
 	say := func(format string, args ...any) { _, _ = fmt.Fprintf(w, format+"\n", args...) }
 

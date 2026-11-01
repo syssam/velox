@@ -235,6 +235,7 @@ func (d DeleteQuery[E]) All[_ Lazy[E]]() DeleteQuery[E]
 func (d DeleteQuery[E]) Exec[_ Lazy[E]](ctx context.Context) (int64, error)
 func (d DeleteQuery[E]) SQL[_ Lazy[E]](ctx context.Context) (string, []any, error)
 func (d DeleteQuery[E]) Where[_ Lazy[E]](ps ...Pred[E]) DeleteQuery[E]
+func (db *DB) Close() error
 func (db *DB) Delete[E any, PE Entity[E]]() DeleteQuery[E]
 func (db *DB) Dialect() Dialect
 func (db *DB) Exec(ctx context.Context, reason, query string, args ...any) (int64, error)
@@ -317,6 +318,7 @@ func BindPolicy[E any](p Policy[E]) BoundPolicy
 func CheckEntity[E any, PE Entity[E]]() error
 func CheckRelation[E, T any](r Rel[E, T]) error
 func ColumnEQ(column int, v any) Predicate
+func Connect(driver, dsn string, opts ...Option) (*DB, error)
 func CountBy[E, K any](ctx context.Context, q Query[E], key GroupKey[E, K]) ([]Group[K, int64], error)
 func CountEach[E, T any](ctx context.Context, q Query[T], r Rel[E, T], owners []*E) ([]int64, error)
 func Deny(reason string) error
@@ -340,6 +342,7 @@ func OpenShards(d Dialect, shards map[string]Shard, opts ...Option) *DB
 func Or[E any](ps ...Pred[E]) Pred[E]
 func PinUntil(ctx context.Context, t time.Time)
 func PinnedUntil(ctx context.Context) time.Time
+func Pool(db *DB) *sql.DB
 func RowScopeFromContext(ctx context.Context) RowScope
 func SQLConn(db *sql.DB) Conn
 func SumBy[E, K, V any](ctx context.Context, q Query[E], key GroupKey[E, K], c NumberCol[E, V]) ([]Group[K, V], error)

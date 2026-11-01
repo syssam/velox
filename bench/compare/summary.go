@@ -192,7 +192,7 @@ func readEnv(results string) *runEnv {
 	if err != nil {
 		return nil
 	}
-	for _, line := range strings.Split(string(b), "\n") {
+	for line := range strings.SplitSeq(string(b), "\n") {
 		if v, ok := strings.CutPrefix(strings.TrimRight(line, "\r"), "GOFLAGS="); ok {
 			return &runEnv{GoFlags: v, NumCPU: runtime.NumCPU()}
 		}
@@ -237,7 +237,7 @@ func readFile(path string) string {
 
 // parseCPUInfo is the first model name of a /proc/cpuinfo.
 func parseCPUInfo(s string) string {
-	for _, line := range strings.Split(s, "\n") {
+	for line := range strings.SplitSeq(s, "\n") {
 		if k, v, ok := strings.Cut(line, ":"); ok && strings.TrimSpace(k) == "model name" {
 			return strings.TrimSpace(v)
 		}
@@ -247,7 +247,7 @@ func parseCPUInfo(s string) string {
 
 // parseMemInfo is the MemTotal of a /proc/meminfo, in GiB.
 func parseMemInfo(s string) float64 {
-	for _, line := range strings.Split(s, "\n") {
+	for line := range strings.SplitSeq(s, "\n") {
 		if k, v, ok := strings.Cut(line, ":"); ok && k == "MemTotal" {
 			if f := strings.Fields(v); len(f) > 0 {
 				if kb, err := strconv.ParseFloat(f[0], 64); err == nil {

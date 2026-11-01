@@ -118,8 +118,7 @@ func TestRequiredEdge(t *testing.T) {
 	})
 	t.Run("a column that cannot be NULL", func(t *testing.T) {
 		err := velox.CheckEntity[rbad]()
-		var se *velox.SchemaError
-		if !errors.As(err, &se) {
+		if _, ok := errors.AsType[*velox.SchemaError](err); !ok {
 			t.Fatalf("got %v", err)
 		}
 	})

@@ -175,11 +175,11 @@ func mergeProfiles(rs []io.Reader) (map[string]pkgCov, error) {
 	}
 	cov := map[string]pkgCov{}
 	for key, b := range blocks {
-		i := strings.LastIndexByte(key, ':')
-		if i < 0 {
+		before, _, ok := strings.CutLast(key, ":")
+		if !ok {
 			return nil, fmt.Errorf("malformed block %q", key)
 		}
-		pkg := path.Dir(key[:i])
+		pkg := path.Dir(before)
 		c := cov[pkg]
 		c.total += b.stmts
 		if b.covered {

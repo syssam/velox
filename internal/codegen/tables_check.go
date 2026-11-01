@@ -291,7 +291,7 @@ func decimalType(d velox.Dialect, typ string) (p, s int, unsigned, ok bool) {
 	if d == velox.Postgres {
 		return p, s, false, rest == "" && p >= 1 && p <= 1000
 	}
-	for _, w := range strings.Fields(rest) {
+	for w := range strings.FieldsSeq(rest) {
 		switch w {
 		case "unsigned", "zerofill":
 			unsigned = true

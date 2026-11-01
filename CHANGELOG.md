@@ -29,6 +29,9 @@ This summarizes what a user of the tree before the hardening work must know.
 - `velox.CountBy`, `SumBy`, `AvgBy`, `MinBy` and `MaxBy`: one-key `GROUP BY`, typed and
   scoped as `Sum` is, with a column handle's `Key` method and `Group[K, V]` results.
   `Statement.GroupBy` holds the key. See decision 0022.
+- `velox.Connect(driver, dsn, opts...)` opens a database and returns a `*DB`, and
+  `DB.Close` closes what Connect opened. `velox.Pool` returns the `*sql.DB` under a DB.
+  `velox.Open` stays, for a pool the application opens itself. See decision 0025.
 - `veloxtype`: the plain data types, such as `Result`, `ConstraintError` and `ColumnDesc`,
   with real documentation. `velox.Result` and the rest are aliases of them, and code
   that uses them does not change.

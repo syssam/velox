@@ -202,8 +202,8 @@ func holdsInterface(t reflect.Type) bool {
 	case reflect.Array:
 		return holdsInterface(t.Elem())
 	case reflect.Struct:
-		for i := range t.NumField() {
-			if holdsInterface(t.Field(i).Type) {
+		for field := range t.Fields() {
+			if holdsInterface(field.Type) {
 				return true
 			}
 		}

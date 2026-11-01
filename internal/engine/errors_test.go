@@ -35,8 +35,7 @@ func TestSchemaErrorNamesEntityAndField(t *testing.T) {
 			t.Errorf("got %q, want %q", got, c.want)
 		}
 	}
-	var se *SchemaError
-	if !errors.As(error(cases[0].err), &se) {
+	if _, ok := errors.AsType[*SchemaError](error(cases[0].err)); !ok {
 		t.Error("errors.As does not find *SchemaError")
 	}
 }

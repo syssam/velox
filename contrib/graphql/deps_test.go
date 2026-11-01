@@ -18,7 +18,7 @@ func TestAnnotationsImportOnlySchema(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v: %s", err, out)
 	}
-	for _, p := range strings.Fields(string(out)) {
+	for p := range strings.FieldsSeq(string(out)) {
 		std := !strings.Contains(strings.Split(p, "/")[0], ".")
 		if !std && p != "github.com/syssam/velox/schema" {
 			t.Errorf("the annotations package imports %s", p)
@@ -28,7 +28,7 @@ func TestAnnotationsImportOnlySchema(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v: %s", err, out)
 	}
-	for _, p := range strings.Fields(string(out)) {
+	for p := range strings.FieldsSeq(string(out)) {
 		std := !strings.Contains(strings.Split(p, "/")[0], ".")
 		if !std && p != "github.com/syssam/velox/contrib/graphql" && !isSchema(p) {
 			t.Errorf("the annotations package depends on %s", p)

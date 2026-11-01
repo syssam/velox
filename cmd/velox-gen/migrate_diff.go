@@ -287,8 +287,7 @@ func renameOptions(snap *migrate.Schema, renames []rename) (migrate.DiffOptions,
 // relMigrate shows the schema positions of a planning error relative to
 // dir: an *Error's Pos, and each finding's of a *BlockedError.
 func relMigrate(dir string, err error) error {
-	var be *migrate.BlockedError
-	if errors.As(err, &be) {
+	if be, ok := errors.AsType[*migrate.BlockedError](err); ok {
 		c := &migrate.BlockedError{Findings: slices.Clone(be.Findings)}
 		for i := range c.Findings {
 			if c.Findings[i].Pos != "" {

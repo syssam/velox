@@ -41,15 +41,16 @@ func (r *renderer) addValues(i int, c alterEnum, added []string) {
 		ref = f
 	}
 	for _, v := range added {
-		s := "ALTER TYPE " + r.table(ref) + " ADD VALUE IF NOT EXISTS " + ddl.Literal(r.d, v)
+		var s strings.Builder
+		s.WriteString("ALTER TYPE " + r.table(ref) + " ADD VALUE IF NOT EXISTS " + ddl.Literal(r.d, v))
 		at := slices.Index(c.To.Values, v)
 		for _, w := range c.To.Values[at+1:] {
 			if slices.Contains(c.From.Values, w) {
-				s += " BEFORE " + ddl.Literal(r.d, w)
+				s.WriteString(" BEFORE " + ddl.Literal(r.d, w))
 				break
 			}
 		}
-		r.enum = append(r.enum, Statement{SQL: s, Change: i, Unit: len(r.enum), Review: r.review([]int{i}, nil)})
+		r.enum = append(r.enum, Statement{SQL: s.String(), Change: i, Unit: len(r.enum), Review: r.review([]int{i}, nil)})
 	}
 }
 

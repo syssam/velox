@@ -227,7 +227,7 @@ func execFile(t *testing.T, d velox.Dialect, dsn, path string) {
 		t.Fatal(err)
 	}
 	defer func() { _ = db.Close() }()
-	for _, stmt := range strings.Split(readFile(t, path), ";\n") {
+	for stmt := range strings.SplitSeq(readFile(t, path), ";\n") {
 		if strings.TrimSpace(stmt) == "" {
 			continue
 		}

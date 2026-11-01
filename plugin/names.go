@@ -62,7 +62,7 @@ func Snake(s string) string {
 		j int
 		b strings.Builder
 	)
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		r := rune(s[i])
 		if i > 0 && i < len(s)-1 && unicode.IsUpper(r) {
 			if unicode.IsLower(rune(s[i-1])) ||

@@ -634,3 +634,32 @@ func TestAroundDeadlineCoversReadingTheRows(t *testing.T) {
 		}
 	}, deadline)
 }
+
+// TestConnect opens each server by its driver's name, as an application does.
+func TestConnect(t *testing.T) {
+	for _, c := range []struct{ driver, env string }{
+		{"pgx", "VELOX_TEST_POSTGRES"},
+		{"mysql", "VELOX_TEST_MYSQL"},
+	} {
+		t.Run(c.driver, func(t *testing.T) {
+			dsn := os.Getenv(c.env)
+			if dsn == "" {
+				t.Skip(c.env + " is not set")
+			}
+			db, err := velox.Connect(c.driver, dsn)
+			if err != nil {
+				t.Fatal(err)
+			}
+			pool := velox.Pool(db)
+			if err := pool.PingContext(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			if err := db.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if err := pool.PingContext(context.Background()); err == nil {
+				t.Error("the pool is open after Close")
+			}
+		})
+	}
+}

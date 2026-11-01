@@ -426,8 +426,8 @@ func (r *renderer) goType(f *file, e *plugin.Entity, fd *plugin.Field, typ strin
 	if err != nil {
 		return "", err
 	}
-	for i := len(edits) - 1; i >= 0; i-- {
-		typ = typ[:edits[i].from] + edits[i].text + typ[edits[i].to:]
+	for _, edit := range slices.Backward(edits) {
+		typ = typ[:edit.from] + edit.text + typ[edit.to:]
 	}
 	return typ, nil
 }

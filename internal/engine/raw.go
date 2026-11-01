@@ -55,9 +55,8 @@ func resultColumns(r Rows) ([]string, error) {
 	if c, ok := r.(*countedRows); ok {
 		r = c.Rows
 	}
-	switch r := r.(type) {
-	case interface{ Columns() ([]string, error) }:
-		return r.Columns()
+	if c, ok := r.(interface{ Columns() ([]string, error) }); ok {
+		return c.Columns()
 	}
 	if m := reflect.ValueOf(r).MethodByName("FieldDescriptions"); m.IsValid() && m.Type().NumIn() == 0 && m.Type().NumOut() == 1 {
 		fds := m.Call(nil)[0]

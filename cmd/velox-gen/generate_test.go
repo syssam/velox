@@ -60,9 +60,7 @@ func genModuleWith(t *testing.T, extra map[string]string, mk func(*testing.T, ma
 		t.Skip("builds a module")
 	}
 	files := map[string]string{"schema/user.go": genUserSchema, "schema/tag.go": genTagSchema}
-	for k, v := range extra {
-		files[k] = v
-	}
+	maps.Copy(files, extra)
 	return mk(t, files)
 }
 

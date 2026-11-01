@@ -731,7 +731,7 @@ func (s *entState) checks(e *Entity, col int, f *Field, o *OutField, where strin
 			s.fail(where, "unknown check %s", c.Kind)
 		}
 	}
-	for j := 0; j < f.Validators; j++ {
+	for j := range f.Validators {
 		v := base(f)
 		if v == "" {
 			s.fail(where, "Validate is not allowed on a field of type %s", f.Type)
@@ -859,7 +859,7 @@ func (l *lowerer) through(s *entState, e, t *Entity, ed *Edge) string {
 		}
 		for i, ent := range []*Entity{owner, target} {
 			id := ent.Fields[0]
-			f := &Field{Field: loadjson.Field{Name: cols[i], Type: id.Type, GoType: id.GoType}, GoName: plugin.GoName(cols[i]), Column: cols[i]}
+			f := &Field{Name: cols[i], Type: id.Type, GoType: id.GoType, GoName: plugin.GoName(cols[i]), Column: cols[i]}
 			js.out.Fields = append(js.out.Fields, js.field(nil, i, f))
 		}
 		// Errors name the assoc edge, whichever of the pair makes the entity first.

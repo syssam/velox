@@ -90,7 +90,7 @@ func (r *queryResolver) PublishedPosts(ctx context.Context, after *veloxgql.Curs
 // reads, so a page that selects initials reads every column.
 func (r *userResolver) Initials(ctx context.Context, obj *gen.User) (string, error) {
 	var b strings.Builder
-	for _, w := range strings.Fields(obj.Name) {
+	for w := range strings.FieldsSeq(obj.Name) {
 		first, _ := utf8.DecodeRuneInString(w)
 		b.WriteRune(unicode.ToUpper(first))
 	}
