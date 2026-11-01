@@ -406,7 +406,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	entity, op, writable, count, exists, agg, group, lock, wait, inTx := st.Entity, st.Op, st.Writable, st.Count, st.Exists, st.Aggregate, st.GroupBy, st.Lock, st.LockWait, st.InTx
 	// velox's own marks, which no hook can set: a hook that replaces the
 	// whole struct (*st = Statement{…}) zeroes them, and they are restored.
-	bidi, pin := stmtBidi(st), stmtPin(st)
+	bidi, pin, iter := stmtBidi(st), stmtPin(st), st.iter
 	// each is the Each the hooks get, a copy of velox's (was) when there are
 	// hooks: a hook may not replace it or change it.
 	each := st.Each
@@ -418,6 +418,7 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 	}
 	setStmtBidi(st, bidi)
 	setStmtPin(st, pin)
+	st.iter = iter
 	if st.Op != op {
 		return fmt.Errorf("velox: %s: a Rewrite hook changed the statement's kind", entity.Name)
 	}
@@ -477,6 +478,11 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 		}
 		if err := checkBidiRewrite(st, bidi); err != nil {
 			return err
+		}
+		if cf := st.Conflict; cf != nil {
+			if err := refuseBidiUpsert(st.Entity, cf); err != nil {
+				return err
+			}
 		}
 		if cf := st.Conflict; cf != nil && len(cf.Where) > 0 {
 			switch {
@@ -602,7 +608,19 @@ func (db *DB) capLimit(st *Statement) {
 	}
 }
 
-// exec sends a rendered statement to t, the connection the route stage
+// exec is send, and marks a transaction the server has rolled back.
+func (db *DB) exec(ctx context.Context, st *Statement, t Target, read func(Rows) error, res *execResult) error {
+	if waitsForIter(db) {
+		return stmtErr(st, errIterConn)
+	}
+	err := db.send(ctx, st, t, read, res)
+	if err != nil && db.D == MySQL && db.txRoot != nil {
+		db.noteServerRollback(ctx, err)
+	}
+	return err
+}
+
+// send sends a rendered statement to t, the connection the route stage
 // chose, reads its rows with read and closes them; with a nil read it sends a
 // statement that returns no rows and fills *res. Either way it sets
 // st.Result, and records where it ran in st.ran. Errors from the database,
@@ -614,7 +632,7 @@ func (db *DB) capLimit(st *Statement) {
 // put in back-off. read runs again from the start, as it does when an Around
 // hook retries. Once Iter has handed the caller a row, the replica's error is
 // returned and only the back-off happens. Neither happens once ctx has ended.
-func (db *DB) exec(ctx context.Context, st *Statement, t Target, read func(Rows) error, res *execResult) error {
+func (db *DB) send(ctx context.Context, st *Statement, t Target, read func(Rows) error, res *execResult) error {
 	st.Result = Result{Affected: -1}
 	if err := checkParams(db.D, st); err != nil {
 		return err
@@ -642,9 +660,10 @@ func (db *DB) exec(ctx context.Context, st *Statement, t Target, read func(Rows)
 		return nil
 	}
 	r, err := t.Ex.Query(ctx, st.SQL, st.Args)
-	if !st.Op.Reads() {
+	if !st.Op.Reads() || (db.InTx && st.Op == OpRawQuery) {
 		// As for exec: a write that reached the database pins, whatever
 		// came back. A write is not failed over, so it is sent only here.
+		// Raw SQL in a transaction may be a write, as velox cannot tell.
 		db.wrote(ctx)
 	}
 	if err != nil {
@@ -664,7 +683,7 @@ func (db *DB) exec(ctx context.Context, st *Statement, t Target, read func(Rows)
 		counted = &countedRows{Rows: r, Left: n, Capped: n > 0}
 		r = counted
 	}
-	rerr, rowsErr := readRows(r, read)
+	rerr, rowsErr := readHeld(db, st, r, read)
 	// The rows error counts for failover only when read returned nil: a
 	// broken connection ends the rows with Next false, so read finishes
 	// cleanly, while pgx also reports read's own scan error through

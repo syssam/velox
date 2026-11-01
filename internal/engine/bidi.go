@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"unsafe"
 )
 
@@ -292,6 +293,18 @@ func refuseBidiInsert(in *EntityInfo, p unsafe.Pointer, many bool) error {
 		return fmt.Errorf("velox: %s: InsertAll cannot set the key of the bidirectional edge %s; insert the rows, then Save each key", in.Name, keys[0].Edge)
 	}
 	return fmt.Errorf("velox: %s: an upsert cannot set the key of the bidirectional edge %s; insert the row, then Save the key", in.Name, keys[0].Edge)
+}
+
+// refuseBidiUpsert refuses an upsert whose update branch writes a bidirectional
+// key: the database writes one row's, and the old partner would keep pointing
+// at it, whatever the inserted row holds.
+func refuseBidiUpsert(in *EntityInfo, cf *ConflictClause) error {
+	for _, bk := range in.bidiKeys {
+		if slices.Contains(cf.Update, bk.Col) {
+			return fmt.Errorf("velox: %s: an upsert cannot update the key of the bidirectional edge %s; Save the key, which re-points both rows", in.Name, bk.Edge)
+		}
+	}
+	return nil
 }
 
 // RefuseBidiRows refuses an InsertAll of the n rows of in, size bytes apart

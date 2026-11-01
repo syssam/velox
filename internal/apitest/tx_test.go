@@ -586,8 +586,8 @@ func TestFailedSavepointRollbackAbortsTheTx(t *testing.T) {
 }
 
 // TestNestedTxReleaseFails: when a savepoint's RELEASE fails, the nested Tx
-// returns that error and does not roll back to the savepoint. velox goes on,
-// and sends COMMIT when the enclosing fn returns nil.
+// rolls back to the savepoint and returns the error. velox goes on, and sends
+// COMMIT, without the nested work, when the enclosing fn returns nil.
 func TestNestedTxReleaseFails(t *testing.T) {
 	// BEGIN consumes nothing: SAVEPOINT, the UPDATE, then RELEASE.
 	e := &fakeconn.Exec{Errs: []error{nil, nil, errors.New("release failed")}}
@@ -603,8 +603,76 @@ func TestNestedTxReleaseFails(t *testing.T) {
 	if nested == nil || nested.Error() != "velox: release savepoint: release failed" {
 		t.Errorf("nested Tx: %v, want velox: release savepoint: release failed", nested)
 	}
-	want := []string{"BEGIN", "SAVEPOINT velox_1", touchSQL, "RELEASE SAVEPOINT velox_1", "COMMIT"}
+	want := []string{"BEGIN", "SAVEPOINT velox_1", touchSQL, "RELEASE SAVEPOINT velox_1",
+		"ROLLBACK TO SAVEPOINT velox_1", "RELEASE SAVEPOINT velox_1", "COMMIT"}
 	if !reflect.DeepEqual(e.Log, want) {
 		t.Errorf("\n got %q\nwant %q", e.Log, want)
+	}
+}
+
+// TestNestedTxReleaseAndRollbackFail: when the rollback that follows a failed
+// RELEASE fails too, the nested work may be in the transaction, which then
+// cannot commit, whatever the outer fn returns.
+func TestNestedTxReleaseAndRollbackFail(t *testing.T) {
+	release, undo := errors.New("release failed"), errors.New("rollback failed")
+	e := &fakeconn.Exec{Errs: []error{nil, nil, release, undo}}
+	db := openFake(velox.Postgres, e)
+	var nested, after error
+	err := db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		nested = tx.Tx(ctx, touch)
+		after = touch(ctx, tx)
+		return nil
+	})
+	if !errors.Is(nested, release) || !errors.Is(nested, undo) {
+		t.Errorf("nested Tx: %v", nested)
+	}
+	if !errors.Is(after, undo) {
+		t.Errorf("a statement after: %v", after)
+	}
+	if !errors.Is(err, undo) {
+		t.Errorf("outer Tx: %v", err)
+	}
+	notCommitted(t, e)
+}
+
+// TestNestedTxCanceledBeforeReleaseDoesNotCommit: on a real database, a nested
+// Tx whose context ends before RELEASE returns an error, and its row must not
+// commit when the outer fn logs the error and returns nil.
+func TestNestedTxCanceledBeforeReleaseDoesNotCommit(t *testing.T) {
+	raw, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = raw.Close() }()
+	raw.SetMaxOpenConns(1)
+	if _, err := raw.Exec("CREATE TABLE t (id integer PRIMARY KEY)"); err != nil {
+		t.Fatal(err)
+	}
+	db := velox.Open(velox.SQLite, raw)
+	var nested error
+	err = db.Tx(ctx, func(ctx context.Context, tx *velox.DB) error {
+		sub, cancel := context.WithCancel(ctx)
+		defer cancel()
+		nested = tx.Tx(sub, func(ctx context.Context, tx *velox.DB) error {
+			if _, err := tx.Exec(ctx, "test", "INSERT INTO t (id) VALUES (1)"); err != nil {
+				return err
+			}
+			cancel()
+			return nil
+		})
+		return nil
+	})
+	if err != nil {
+		t.Errorf("outer Tx: %v", err)
+	}
+	if !errors.Is(nested, context.Canceled) {
+		t.Errorf("nested Tx: %v", nested)
+	}
+	var n int
+	if err := raw.QueryRow("SELECT COUNT(*) FROM t").Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Errorf("a nested Tx that returned %v committed %d rows", nested, n)
 	}
 }

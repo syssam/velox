@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -35,17 +36,23 @@ type txOptions struct {
 type TxOption struct{ apply func(*txOptions) }
 
 // TxIsolation sets the transaction's isolation level; the default is the
-// database's.
+// database's. SQLite's transactions are serializable: LevelSerializable is
+// accepted, and any other level fails Tx as "velox: begin: …".
 func TxIsolation(level sql.IsolationLevel) TxOption {
 	return TxOption{func(o *txOptions) { o.Isolation = level }}
 }
 
-// TxReadOnly starts a read-only transaction.
+// TxReadOnly starts a read-only transaction. On SQLite it runs under PRAGMA
+// query_only, on the transaction's connection, which can write again once the
+// transaction has ended, however it ended; a write in it fails.
 func TxReadOnly() TxOption { return TxOption{func(o *txOptions) { o.ReadOnly = true }} }
 
 // TxRetrySerializable runs the transaction again, up to n more times, when it
 // fails on a serialization failure or a deadlock: PostgreSQL 40001 and 40P01,
 // MySQL 1213 and 1205, SQLite BUSY and LOCKED. fn must be safe to run again.
+// Each retry waits first, a random time from 5 ms that grows to at most a
+// second; the transaction's deadline or ctx's end stops the wait, and the
+// retry.
 func TxRetrySerializable(n int) TxOption { return TxOption{func(o *txOptions) { o.Retries = n }} }
 
 // TxRetries returns the n of the last TxRetrySerializable in opts, or 0 when
@@ -200,6 +207,11 @@ func applyTxOption(opt TxOption, o *txOptions) { opt.apply(o) }
 // is rolled back, never committed; its error matches ErrTimeout when velox's
 // deadline passed, and context.DeadlineExceeded or context.Canceled otherwise.
 //
+// On MySQL, a deadlock (1213) rolls the whole transaction back, as does a lock
+// wait timeout (1205) under innodb_rollback_on_timeout, which velox asks the
+// server after one. Should fn swallow the error, its later statements fail
+// unsent and its nil returns the error: nothing runs outside the transaction.
+//
 // A rollback velox sends after fn fails, or once ctx has ended, is bounded to
 // 5 seconds; database/sql's Tx.Rollback takes no context, so on a DB from Open
 // that bound covers a savepoint's ROLLBACK TO only.
@@ -215,10 +227,11 @@ func applyTxOption(opt TxOption, o *txOptions) { opt.apply(o) }
 //
 // Inside a transaction, Tx makes a savepoint instead, so an error in a nested
 // fn rolls back only that fn's work. When releasing the savepoint fails, the
-// nested Tx returns that error and does not roll back to the savepoint.
-// Whether the enclosing transaction can still commit is the database's call:
-// PostgreSQL aborts it, so the outer COMMIT fails. A nested Tx (a savepoint)
-// takes no options and returns an error when given any, and passes fn the ctx
+// nested Tx rolls back to the savepoint, on a context without ctx's
+// cancellation, and returns the error, so an error always means the nested
+// work is undone. When that rollback fails too, or a rollback after fn's error
+// does, the transaction is broken: its statements fail, and the outer fn's nil
+// rolls it back with an error. A nested Tx (a savepoint) takes no options and returns an error when given any, and passes fn the ctx
 // it is given, marked as the transaction's.
 //
 // tx is valid only inside fn: after Tx returns, statements on it fail (or, for
@@ -299,10 +312,51 @@ func (db *DB) attempts(ctx, tctx context.Context, fn func(context.Context, *DB) 
 		if err == nil || attempt > o.Retries || !retryable(err) || ctx.Err() != nil || tctx.Err() != nil {
 			return err
 		}
+		if !retryWait(ctx, tctx, retryDelay(attempt)) {
+			if cause != nil && timedOut(tctx) {
+				err = errors.Join(timeoutError("transaction"), err)
+			}
+			return err
+		}
 		if info != nil {
 			info.Retries = append(info.Retries, TxRetry{Err: err, At: time.Now()})
 		}
 	}
+}
+
+// retryBase and retryMax bound the wait before a transaction's retry: the
+// first is at most retryBase, each later at most twice the one before, none
+// more than retryMax. Vars, so that a test can change them.
+var (
+	retryBase = 10 * time.Millisecond
+	retryMax  = time.Second
+)
+
+// retryWait waits before a retry. A var, so that a test can record it.
+var retryWait = waitRetry
+
+// retryDelay is the wait after the given failed attempt, from 1: half its
+// ceiling and a random part, so that transactions that deadlocked together do
+// not retry together.
+func retryDelay(attempt int) time.Duration {
+	ceiling := retryMax
+	if c := retryBase << min(attempt-1, 30); c > 0 && c < ceiling {
+		ceiling = c
+	}
+	return ceiling/2 + rand.N(ceiling/2+1)
+}
+
+// waitRetry waits d, and reports false when ctx or tctx ends first.
+func waitRetry(ctx, tctx context.Context, d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-t.C:
+		return true
+	case <-ctx.Done():
+	case <-tctx.Done():
+	}
+	return false
 }
 
 // transaction runs fn once in a new transaction, and records how it ended in
@@ -337,6 +391,10 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 		if db.Rt.One == nil {
 			txShard = sh
 		}
+	}
+	if waitsForIter(db) {
+		endTx(info, TxError)
+		return false, fmt.Errorf("velox: transaction: %w", errIterConn)
 	}
 	ex, ctl, err := primary.Begin(ctx, sql.TxOptions{Isolation: o.Isolation, ReadOnly: o.ReadOnly})
 	if err != nil {
@@ -414,8 +472,9 @@ func (db *DB) transaction(ctx context.Context, fn func(context.Context, *DB) err
 // names a shard other than the transaction's, or one that is not a shard, is
 // refused before SAVEPOINT, as a statement's is; one that names none passes.
 //
-// A rollback of the savepoint that fails, after fn's error or its panic,
-// breaks the transaction: see txFrame.broken.
+// A RELEASE that fails rolls back to the savepoint, as fn's error does. A
+// rollback of the savepoint that fails, after any of them or fn's panic, breaks
+// the transaction: see txFrame.broken.
 //
 // The savepoints of a transaction are named velox_1, velox_2, and so on, in
 // the order they are made, and no name is used twice: MySQL replaces a
@@ -464,7 +523,15 @@ func (db *DB) savepoint(ctx context.Context, fn func(context.Context, *DB) error
 	}
 	finished = true
 	if _, err := db.Ex.Exec(sctx, "RELEASE SAVEPOINT "+name, nil); err != nil {
-		return savepointErr(sctx, "release savepoint", err)
+		// The nested Tx fails, so its work must not commit with the
+		// transaction: undo it, or break the transaction when that fails too.
+		err = savepointErr(sctx, "release savepoint", err)
+		rerr := db.undoSavepoint(ctx, name)
+		db.breakOn(rerr)
+		if rerr != nil && !ended(rerr) && !db.pastTxDeadline() {
+			return errors.Join(err, fmt.Errorf("velox: rollback to savepoint: %w", rerr))
+		}
+		return err
 	}
 	return nil
 }
@@ -478,6 +545,39 @@ func (db *DB) breakOn(err error) {
 	if err != nil && db.txRoot.broken == nil && !db.pastTxDeadline() {
 		db.txRoot.broken = fmt.Errorf("a savepoint did not roll back, so the transaction can only roll back: %w", err)
 	}
+}
+
+// noteServerRollback breaks db's transaction when err, a statement's on MySQL,
+// says the server rolled all of it back. The connection is then in autocommit:
+// a statement after an fn that swallowed err would commit on its own, and the
+// COMMIT would succeed with nothing to commit. A deadlock (1213) always does
+// that; a lock wait timeout (1205) only under innodb_rollback_on_timeout.
+func (db *DB) noteServerRollback(ctx context.Context, err error) {
+	if db.txRoot.broken != nil {
+		return
+	}
+	n, _, ok := mysqlError(err)
+	if ok && (n == 1213 || n == 1205 && db.rollsBackOnTimeout(ctx)) {
+		db.txRoot.broken = fmt.Errorf("the database rolled the transaction back, so it can only roll back: %w", err)
+	}
+}
+
+// rollsBackOnTimeout asks the server, on the transaction's connection, whether
+// a lock wait timeout rolls the transaction back. No answer counts as yes: a
+// transaction wrongly refused fails, and one wrongly trusted loses its writes.
+func (db *DB) rollsBackOnTimeout(ctx context.Context) bool {
+	qctx, cancel := rollbackContext(ctx, db.txDeadline)
+	defer cancel()
+	r, err := db.Ex.Query(qctx, "SELECT @@innodb_rollback_on_timeout", nil)
+	if err != nil {
+		return true
+	}
+	defer r.Close()
+	var on int64
+	if !r.Next() || r.Scan(&on) != nil {
+		return true
+	}
+	return on != 0
 }
 
 // undoSavepoint is rollbackSavepoint on rollbackContext, bounded by the
@@ -529,8 +629,9 @@ func (c *txCtx) String() string { return fmt.Sprint(c.Context) + ".WithTx" }
 // root), once the transaction has committed or rolled back.
 //
 // broken is set, on the root, once a savepoint's ROLLBACK TO or its RELEASE
-// has failed: the savepoint's work may still be in the transaction. From then
-// on the transaction does not commit, and its statements and nested Tx fail
+// has failed, as the savepoint's work may still be in the transaction, or once
+// the server has rolled it back (noteServerRollback). From then on the
+// transaction does not commit, and its statements and nested Tx fail
 // with broken before anything is sent. A savepoint that encloses the broken
 // one and whose fn then returns nil still sends its RELEASE, which the
 // transaction's rollback undoes with the rest. Like the rest of tx, it is

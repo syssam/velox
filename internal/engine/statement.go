@@ -126,6 +126,9 @@ type Statement struct {
 	// handed is set once Iter has handed the caller a row: a broken
 	// connection is then not failed over, as the read cannot start again.
 	handed bool
+	// iter says Iter runs the statement: its rows are open while the caller's
+	// loop body runs.
+	iter bool
 	// upsertPolicy is set by the scope when it added the policy's conditions to
 	// the upsert's update branch: an upsert that then affected fewer rows than it
 	// sent met a row the policy hides.
@@ -196,6 +199,9 @@ func stmtHanded(st *Statement) bool { return st.handed }
 
 // SetStmtHanded records that Iter has handed the caller a row of st.
 func SetStmtHanded(st *Statement) { st.handed = true }
+
+// SetStmtIter records that Iter runs st.
+func SetStmtIter(st *Statement) { st.iter = true }
 
 func stmtUpsertPolicy(st *Statement) bool { return st.upsertPolicy }
 

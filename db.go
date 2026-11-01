@@ -39,10 +39,14 @@ var _ [unsafe.Sizeof(DB{}) - unsafe.Sizeof(engine.DB{})]struct{} = [0]struct{}{}
 //
 // A MySQL dsn must set parseTime=true and clientFoundRows=true, for the reasons
 // Open gives; Connect returns an error when it does not. On SQLite, the pool
-// has one connection, since each connection to ":memory:" is its own database
-// and SQLite has one writer. Raise it with velox.Pool(db).SetMaxOpenConns on a file
-// that takes concurrent reads. Foreign keys are enforced only when the dsn asks,
-// as Open says. For PostgreSQL, veloxpgx.Open is faster.
+// has one connection, on a file too: each connection to ":memory:" is its own
+// database, and SQLite has one writer, so that on several connections concurrent
+// writes fail with SQLITE_BUSY rather than take turns. With one, they take
+// turns, and a statement in the body of a loop over Iter, which holds the
+// connection, fails (see Query.Iter). Raise it with
+// velox.Pool(db).SetMaxOpenConns on a file that takes concurrent reads, with a
+// busy_timeout in the dsn. Foreign keys are enforced only when the dsn asks, as
+// Open says. For PostgreSQL, veloxpgx.Open is faster.
 func Connect(driver, dsn string, opts ...Option) (*DB, error) {
 	e, err := engine.Connect(driver, dsn, opts)
 	if err != nil {
@@ -150,6 +154,11 @@ func (db *DB) Dialect() Dialect { return db.e.D }
 // is rolled back, never committed; its error matches ErrTimeout when velox's
 // deadline passed, and context.DeadlineExceeded or context.Canceled otherwise.
 //
+// On MySQL, a deadlock (1213) rolls the whole transaction back, as does a lock
+// wait timeout (1205) under innodb_rollback_on_timeout, which velox asks the
+// server after one. Should fn swallow the error, its later statements fail
+// unsent and its nil returns the error: nothing runs outside the transaction.
+//
 // A rollback velox sends after fn fails, or once ctx has ended, is bounded to
 // 5 seconds; database/sql's Tx.Rollback takes no context, so on a DB from Open
 // that bound covers a savepoint's ROLLBACK TO only.
@@ -165,10 +174,11 @@ func (db *DB) Dialect() Dialect { return db.e.D }
 //
 // Inside a transaction, Tx makes a savepoint instead, so an error in a nested
 // fn rolls back only that fn's work. When releasing the savepoint fails, the
-// nested Tx returns that error and does not roll back to the savepoint.
-// Whether the enclosing transaction can still commit is the database's call:
-// PostgreSQL aborts it, so the outer COMMIT fails. A nested Tx (a savepoint)
-// takes no options and returns an error when given any, and passes fn the ctx
+// nested Tx rolls back to the savepoint, on a context without ctx's
+// cancellation, and returns the error, so an error always means the nested
+// work is undone. When that rollback fails too, or a rollback after fn's error
+// does, the transaction is broken: its statements fail, and the outer fn's nil
+// rolls it back with an error. A nested Tx (a savepoint) takes no options and returns an error when given any, and passes fn the ctx
 // it is given, marked as the transaction's.
 //
 // tx is valid only inside fn: after Tx returns, statements on it fail (or, for

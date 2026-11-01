@@ -136,7 +136,7 @@ func TestMarshal(t *testing.T) {
 
 func TestMarshalSchemaDefault(t *testing.T) {
 	u := marshal(t, User{}, Post{}).Schemas[1]
-	want := map[string]string{field.Postgres: "now()", field.MySQL: "CURRENT_TIMESTAMP(6)", field.SQLite: "CURRENT_TIMESTAMP"}
+	want := map[string]string{field.Postgres: "now()", field.MySQL: "CURRENT_TIMESTAMP(6)", field.SQLite: "(strftime('%Y-%m-%d %H:%M:%f000000+00:00','now'))"}
 	if got := u.Fields[0].SchemaDefault; !reflect.DeepEqual(got, want) {
 		t.Fatalf("created_at: %v", got)
 	}

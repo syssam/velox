@@ -36,6 +36,11 @@ func AddAfter(st *Statement, in *EntityInfo, after unsafe.Pointer) error {
 		if sliceOrMap(col.Type) {
 			return fmt.Errorf("velox: %s: After cannot page over the column %s, which can be NULL", in.Name, col.Name)
 		}
+		// A row this query returns holds the zero value of a column it did not
+		// select, which the comparison would page from.
+		if st.Columns != nil && !slices.Contains(st.Columns, o.Column) {
+			return fmt.Errorf("velox: %s: After needs the order column %s selected; add it to Columns", in.Name, col.Name)
+		}
 		ordered[o.Column] = true
 	}
 	covers := func(cols []int) bool {

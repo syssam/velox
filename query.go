@@ -219,11 +219,12 @@ func (q Query[E]) Omit[_ Lazy[E]](cs ...Column[E]) Query[E] {
 // when rows are added between pages, and costs the same on every page. The
 // query's OrderBy must include every column of the primary key or of a
 // unique index, and no column that can be NULL or that is encoded (a json
-// field). x must be a row a query returned: its values carry the columns'
-// stored precision, which a value made in memory (a time with nanoseconds in
-// a column that keeps microseconds) may not, and the comparison would then
-// skip or repeat a row. Count applies
-// After's condition too.
+// field). With Columns or Omit, the query must select every column of its
+// OrderBy, or it fails: a row without one holds its zero value there. x must
+// be a row a query returned: its values carry the columns' stored precision,
+// which a value made in memory (a time with nanoseconds in a column that keeps
+// microseconds) may not, and the comparison would then skip or repeat a row.
+// Count applies After's condition too.
 func (q Query[E]) After[_ Lazy[E]](x *E) Query[E] {
 	if x == nil {
 		if q.err == nil && q.meta.err == nil {
@@ -458,6 +459,14 @@ func yieldRow[E any](yield func(E, error) bool, e E, timed bool, body *time.Dura
 // WithDeadlines' Statement and MaxStatement bound the loop body too, and no
 // query can lift them: a long export needs a DB opened without MaxStatement,
 // or a context whose deadline is within it.
+//
+// On a pool of one connection, as Connect gives on SQLite, the loop holds that
+// connection. A statement or a Tx on the DB in the body of the loop fails rather
+// than wait for the loop that waits for it. Read the rows with All first, or run
+// both in a Tx, whose statements share its connection. A statement on another
+// goroutine waits for the loop to end, and is not refused; so one the body
+// starts on a goroutine and waits for hangs until a deadline ends it, as does a
+// body driven by iter.Pull.
 func (q Query[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error] {
 	return func(yield func(E, error) bool) {
 		var zero E
@@ -478,6 +487,7 @@ func (q Query[E]) Iter[_ Lazy[E]](ctx context.Context) iter.Seq2[E, error] {
 			yield(zero, err)
 			return
 		}
+		engine.SetStmtIter(&st)
 		var stopped bool
 		if q.db.e.Hooked() {
 			it := &iterRun[E]{st: st, m: q.meta, yield: yield, timed: len(q.db.e.Cfg.Arounds) > 0}

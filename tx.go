@@ -22,15 +22,21 @@ func TxTimeout(d time.Duration) TxOption { return engine.TxTimeout(d) }
 type TxOption = engine.TxOption
 
 // TxIsolation sets the transaction's isolation level; the default is the
-// database's.
+// database's. SQLite's transactions are serializable: LevelSerializable is
+// accepted, and any other level fails Tx as "velox: begin: …".
 func TxIsolation(level sql.IsolationLevel) TxOption { return engine.TxIsolation(level) }
 
-// TxReadOnly starts a read-only transaction.
+// TxReadOnly starts a read-only transaction. On SQLite it runs under PRAGMA
+// query_only, on the transaction's connection, which can write again once the
+// transaction has ended, however it ended; a write in it fails.
 func TxReadOnly() TxOption { return engine.TxReadOnly() }
 
 // TxRetrySerializable runs the transaction again, up to n more times, when it
 // fails on a serialization failure or a deadlock: PostgreSQL 40001 and 40P01,
 // MySQL 1213 and 1205, SQLite BUSY and LOCKED. fn must be safe to run again.
+// Each retry waits first, a random time from 5 ms that grows to at most a
+// second; the transaction's deadline or ctx's end stops the wait, and the
+// retry.
 func TxRetrySerializable(n int) TxOption { return engine.TxRetrySerializable(n) }
 
 // TxRetries returns the n of the last TxRetrySerializable in opts, or 0 when

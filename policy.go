@@ -30,8 +30,10 @@ import (
 // A policy function decides from ctx and, for Insert, the row; it does not
 // query. A rule that must see other rows, such as that an inserted comment's
 // parent is one the caller may read, is a hook (Hooks): it queries through
-// Mutation.DB, in the write's transaction, and returns the error that refuses
-// the write. This is ent's split: privacy rules decide, hooks query.
+// Mutation.DB, on the write's DB, and returns the error that refuses the write.
+// Inside db.Tx that is the transaction; outside it the hook's statements stand
+// alone (see Mutation.DB). This is ent's split: privacy rules decide, hooks
+// query.
 type Policy[E any] struct {
 	// Read is ANDed into every SELECT, Count, With load and Has/HasWhere
 	// subquery on the entity, into every UPDATE, DELETE and Save, and into
@@ -103,10 +105,14 @@ func (m *Mutation[E]) Rows[_ Lazy[E]]() []*E {
 }
 
 // DB returns the DB the write runs on: the transaction's, inside db.Tx, or
-// else the database's. A hook that reads or writes other rows uses it, so
-// that its work commits or rolls back with the write:
+// else the database's. A hook that reads or writes other rows uses it:
 //
 //	err := m.DB().Insert(&audit).Exec(ctx)
+//
+// Inside db.Tx, the hook's work commits or rolls back with the write. Outside
+// it there is no transaction to share: each statement commits alone, so an
+// audit row survives a write that then fails, and a write that must be atomic
+// with its hook's work runs in db.Tx.
 //
 // It is set only for the writes of entities that have hooks, which are the
 // only ones that see a Mutation.

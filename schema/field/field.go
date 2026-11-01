@@ -94,7 +94,9 @@ func (c common[B]) SchemaType(m map[string]string) B {
 // SQL written as the database prints it, such as {field.Postgres: "now()"}.
 // velox's inserts write every column, so it serves rows written outside
 // velox and existing rows when the column is added. The keys are Postgres,
-// MySQL and SQLite; any other, or an empty value, is a misuse.
+// MySQL and SQLite; any other, or an empty value, is a misuse. A time's default
+// on SQLite must write velox's form, not CURRENT_TIMESTAMP's: see the velox
+// package's SQLite section.
 func (c common[B]) SchemaDefault(m map[string]string) B {
 	for _, k := range slices.Sorted(maps.Keys(m)) {
 		switch {
