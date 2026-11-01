@@ -312,19 +312,32 @@ func (db *DB) attempts(ctx, tctx context.Context, fn func(context.Context, *DB) 
 		if err != nil && cause != nil && timedOut(tctx) && !is(err, ErrTimeout) {
 			err = errors.Join(timeoutError("transaction"), err)
 		}
-		if err == nil || attempt > o.Retries || !retryable(err) || ctx.Err() != nil || tctx.Err() != nil {
+		if err == nil || attempt > o.Retries || !retryable(err) {
 			return err
 		}
-		if !retryWait(ctx, tctx, retryDelay(attempt)) {
-			if cause != nil && timedOut(tctx) {
-				err = errors.Join(timeoutError("transaction"), err)
-			}
-			return err
+		if ctx.Err() != nil || tctx.Err() != nil || !retryWait(ctx, tctx, retryDelay(attempt)) {
+			return retryEnded(ctx, tctx, cause, err)
 		}
 		if info != nil {
 			info.Retries = append(info.Retries, TxRetry{Err: err, At: time.Now()})
 		}
 	}
+}
+
+// retryEnded is the error of a transaction whose ctx or tctx ended before the
+// retry of err, the last attempt's failure, which it shows: as Tx documents, it
+// matches why they ended, ErrTimeout when that is velox's deadline.
+func retryEnded(ctx, tctx context.Context, cause, err error) error {
+	switch {
+	case cause != nil && timedOut(tctx):
+		if is(err, ErrTimeout) {
+			return err
+		}
+		return errors.Join(timeoutError("transaction"), err)
+	case ctx.Err() != nil:
+		return errors.Join(fmt.Errorf("velox: transaction: %w", ctxErr(ctx)), err)
+	}
+	return errors.Join(fmt.Errorf("velox: transaction: %w", ctxErr(tctx)), err)
 }
 
 // retryBase and retryMax bound the wait before a transaction's retry: the

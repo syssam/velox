@@ -55,7 +55,8 @@ at the call to a silent outcome.
   entity with a hook a BEGIN and a COMMIT.
 - **Retry backoff.** `TxRetrySerializable` waits before each retry: half of a
   ceiling that doubles from 10 ms to 1 s, plus a random part up to the other half.
-  ctx and the deadline end the wait, and velox's deadline still reports ErrTimeout.
+  ctx and the deadline end the wait. The error then matches why, ErrTimeout for
+  velox's deadline and the context's error otherwise, and the last attempt's cause.
 - **MySQL's rollback.** A deadlock (1213) rolls the transaction back and leaves the
   connection in autocommit, so a swallowed one would commit later statements alone.
   1213 breaks the transaction. A lock wait timeout (1205) rolls back only its
@@ -98,6 +99,6 @@ BEGIN.
   `TestMutationDBAtomicOnlyInTx`, `TestRetryBacksOff`,
   `TestMySQLDeadlockBreaksTheTransaction`, `TestMySQLLockTimeout`,
   `TestBrokenTransactionSendsNothing`, `TestSQLiteServerRollbackBreaksTheTransaction`,
-  `TestSQLiteProbe`.
+  `TestSQLiteProbe`, `TestRetryEndedMatchesTheContext`.
 - `TestMySQLDeadlockSwallowedDoesNotCommit` runs only against a real MySQL
   (`VELOX_TEST_MYSQL`).
