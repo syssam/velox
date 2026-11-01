@@ -23,13 +23,32 @@ import (
 // asks whether that row is the tenant's, with one SELECT per column on the
 // write's connection, and fails unsent with ErrTenantRef if not, whether the row
 // is another tenant's or is not there. It covers Insert, InsertAll, Update, Save
-// and upserts, with the values hooks left, and the join rows of a many-to-many
-// edge, which have no tenant of their own and so need WithTenant or
-// WithAllTenants like any scoped write. It does not make the reference safe by
+// and upserts, with the values hooks left. That is one more round trip per column
+// on every such write, in its transaction if it has one; Around hooks do not see it,
+// and nothing turns it off under a tenant. It does not make the reference safe by
 // itself: a target deleted after the check is the database foreign key's to
 // refuse, and a composite foreign key, (org_id, project_id) to (org_id, id), is
 // the stronger guarantee, as it also holds for writes that do not go through
-// velox. WithAllTenants sends no check, and a delete of a join row checks nothing.
+// velox. WithAllTenants sends no check. A row may name a key its own insert sets,
+// unless it is an upsert, which may not insert it: there it is refused.
+//
+// The join rows of a many-to-many edge have no tenant of their own, and are scoped
+// through the TenantRefs velox-gen writes for each tenant-scoped side. Under a tenant,
+// a read of one (Count, Exists, the aggregates and Iter too), its update and its delete
+// hold, per side, fk IN (SELECT key FROM target WHERE tenant = ?), so a link that
+// crosses tenants is hidden from both; with neither a tenant nor WithAllTenants they
+// fail with ErrNoTenant, as its writes do. With and Has pay nothing for it: what they
+// read is scoped already. Of, LoadEach and CountEach pay on a target with no tenant, as
+// the owners are the caller's. The tenant converts to the kind each TenantRef states,
+// so "2" does not serve an integer column; a named id of that kind passes, as the
+// column's own type is not known there: on a join row a UserID serves an OrgID column
+// of the same kind. Deleting a shared row with no tenant removes only the tenant's links
+// to it: another tenant's stay, and the database's foreign key fails the delete.
+//
+// An entity with no tenant column that is no join entity is not scoped by any of this,
+// though its rows may name, or be reachable only through, tenant rows: every tenant
+// reads and changes all of them. Give it a tenant column, or a policy. A hand-written
+// join entity without TenantRefs is not scoped either.
 func WithTenant(ctx context.Context, id any) context.Context { return engine.WithTenant(ctx, id) }
 
 // WithAllTenants returns ctx unscoped: statements on a tenant-scoped entity

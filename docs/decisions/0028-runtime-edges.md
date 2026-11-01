@@ -116,20 +116,51 @@ at the call to a silent outcome.
   distinct values, in the pipeline's send on the write's connection, after hooks. A row
   of another tenant and no row get one error, `ErrTenantRef` in a `ConstraintError`, so
   that there is no oracle; the write is not sent. `WithAllTenants` skips it. A row may
-  name a key its own insert sets. Arithmetic on such a column under a tenant is refused:
-  its value is not known. A join entity has no tenant column, so its write now reads
-  the tenant itself, and fails with `ErrNoTenant` with none. A Rewrite that moves the
-  statement to another schema moves the check of a reference in the entity's own
-  schema with it (`TestTenantRefFollowsARewrite`); one in a named other schema stays.
+  name a key its own insert sets, unless it is an upsert, which may not insert it, and
+  whose key may be another tenant's (`TestTenantRefSelfExcuseOnlyWhenInserted`), so a
+  new row naming itself in an upsert is refused. Arithmetic on such a column under a
+  tenant is refused: its value is not known. A Rewrite that moves the statement to another
+  schema moves the check of a reference in the entity's own schema with it
+  (`TestTenantRefFollowsARewrite`); one in a named other schema stays. A join entity has
+  no tenant column, so its write reads the tenant itself, converted as a scoped entity's
+  is, to the reflect kind each TenantRef states (`TenantKind`, a plain string), and fails
+  with `ErrNoTenant` with none. This is not fully sound: a named id of that kind passes, as
+  the column's own type is not known there, so on a join row a UserID serves an OrgID
+  column of the same kind. Its value is compared as the column's kind, so nothing is left
+  to the database's coercion.
 
   This is a check, not a constraint. What it does not do: a target deleted after it,
   which is the database foreign key's job; a composite foreign key is the stronger
-  guarantee. Deleting a join row is neither scoped nor checked. Around hooks do not see
-  its SELECT, and one that changes Args or the context passes it. It ignores the
+  guarantee. Around hooks do not see its SELECT, one round trip per foreign key column a
+  write sets, which nothing turns off under a tenant, and one that changes Args or the
+  context passes it. A Rewrite that moves the table moves neither it nor a join row's
+  condition, which name the target's table. It ignores the
   target's Read policy. Under snapshot isolation it may refuse a target committed after
   the snapshot, and MySQL's case-insensitive string keys and a deferred key to a row
   inserted later may refuse falsely, all failing closed. A DoNothing upsert is checked
   too. A non-join entity with no tenant may still name a tenant-scoped row.
+- **A join row's boundary.** `Query[ProjectLabel]` returned another tenant's links, with
+  or without a tenant, `Delete` removed them and `Update` rewrote them onto the caller's
+  rows. A join entity with TenantRefs is now scoped through them. Under a tenant a read,
+  an update and a delete hold `fk IN (SELECT key FROM target WHERE tenant = ?)` per side,
+  in the schema a Rewrite moved it to, added after the hooks, in Count, Exists, the
+  aggregates and Iter too. With no tenant they fail with `ErrNoTenant`; `WithAllTenants`
+  adds nothing. A link that crosses tenants, written before the check or under
+  `WithAllTenants`, is hidden from both sides. With's read of the join rows, and its
+  LimitEach, pays nothing, as its owners were read under the scope and its targets get
+  it; it still needs a tenant. Has is bound to rows that are scoped. Of, LoadEach and
+  CountEach take the caller's owners: on a target with no tenant, where nothing else
+  stands between a tenant and another's links, the owner side is conditioned, and on a
+  scoped target they pay nothing, as what they return is the tenant's. GraphQL's link and
+  unlink go through the public API and pay. An upsert that updates a join row must name
+  every side in its conflict columns (on MySQL, every unique key must hold them), or it
+  fails with `ErrTenantUpsert`.
+
+  **Not covered:** a join entity without TenantRefs, such as one written by hand. A
+  non-join entity with no tenant column is not scoped, even when each of its rows is
+  reachable only through a tenant's (a log with a foreign key to a project): every tenant
+  reads and changes all of it. It needs a tenant column or a policy. Raw SQL is the
+  caller's.
 
 ## Consequences
 
@@ -144,9 +175,12 @@ BEGIN, and so does a raw statement in one. A MySQL migration that runs DDL throu
 `tx.Exec` now fails, where it committed part way.
 
 A write under a tenant costs one SELECT per foreign key it sets to a tenant-scoped
-row, and generated code is version 7: rerun `velox-gen`. Writing a join row with no
-tenant now fails with `ErrNoTenant`: an application that links across tenants says
-`WithAllTenants`.
+row, and generated code is version 7: rerun `velox-gen`, as a TenantRef without a
+`TenantKind` fails when the entity loads. Reading, updating or deleting a join row with no
+tenant, as writing one, now fails with `ErrNoTenant`: an application that crosses tenants
+says `WithAllTenants`. Deleting a shared row with no tenant of its own, under a tenant,
+removes that tenant's links only: another's stay, and the database's foreign key fails
+the delete where there is one.
 
 ## Evidence
 
@@ -169,7 +203,10 @@ tenant now fails with `ErrNoTenant`: an application that links across tenants sa
   `TestRawSQLCannotEndTheTransaction`, `TestSQLiteRawTextEndingTheTransaction`,
   `TestMySQLDDLInATransaction`, `TestTenantRefRefusesAnotherTenantsRow`,
   `TestTenantRefAllowsTheTenantsOwn`, `TestTenantRefBypass`, `TestTenantRefStatement`,
-  `TestTenantRefJoinRows`, `TestCheckRefsCostsNothingUnset`, `TestLowerTenantRefs`.
+  `TestTenantRefJoinRows`, `TestCheckRefsCostsNothingUnset`, `TestLowerTenantRefs`,
+  `TestTenantRefSelfExcuseOnlyWhenInserted`, `TestTenantRefJoinTenantKind`,
+  `TestTenantKind`, `TestTenantRefJoinStatements`, `TestJoinRowsAreScoped`,
+  `TestJoinLoadsPayNothing`, `TestJoinOwnersGivenAreScoped`.
 - `TestMySQLDeadlockSwallowedDoesNotCommit` and
   `TestMySQLDeadlockRetriedByAHookDoesNotCommit` run only against a real MySQL
   (`VELOX_TEST_MYSQL`).

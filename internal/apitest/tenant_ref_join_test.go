@@ -3,9 +3,13 @@ package apitest
 import (
 	"context"
 	"errors"
+	"fmt"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/fakeconn"
 )
 
 // A join entity as velox-gen writes it, between tickets and invoices: no tenant of its
@@ -113,9 +117,147 @@ func TestTenantRefJoinRows(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	t.Run("a delete is not scoped, nor checked", func(t *testing.T) {
-		if n, err := db.Delete[refLink]().Where(refLinks.TicketID.EQ(2)).Exec(t1); err != nil || n != 1 {
+	t.Run("a delete reaches the tenant's rows", func(t *testing.T) {
+		if n, err := db.Delete[refLink]().Where(refLinks.TicketID.EQ(2)).Exec(t1); err != nil || n != 0 {
 			t.Errorf("%d, %v", n, err)
 		}
+		if n, err := db.Delete[refLink]().Where(refLinks.TicketID.EQ(2)).Exec(velox.WithAllTenants(bg, "the migration")); err != nil || n != 1 {
+			t.Errorf("WithAllTenants: %d, %v", n, err)
+		}
+	})
+}
+
+// TestTenantRefJoinStatements: what the scope adds to a join entity's statements: one
+// condition for each side, in the schema a Rewrite moved it to, in the shape cached for
+// any tenant; and the conflict columns of an upsert that updates hold each side.
+func TestTenantRefJoinStatements(t *testing.T) {
+	const scoped = `"ticket_id" IN (SELECT "id" FROM "tickets" WHERE "org_id" = $%d) AND "invoice_id" IN (SELECT "id" FROM "invoices" WHERE "org_id" = $%d)`
+	t.Run("every kind", func(t *testing.T) {
+		db := openFake(velox.Postgres, &fakeconn.Exec{Affected: 1})
+		for _, id := range []int64{7, 8} { // the second from the cached shape
+			text, args, err := db.Delete[refLink]().Where(refLinks.TicketID.EQ(1)).SQL(tenant(id))
+			if want := fmt.Sprintf(`DELETE FROM "ref_links" WHERE "ticket_id" = $1 AND `+scoped, 2, 3); err != nil || text != want {
+				t.Errorf("Delete: %s, %v, want %s", text, err, want)
+			}
+			if !reflect.DeepEqual(args, []any{int64(1), id, id}) {
+				t.Errorf("Delete: %v", args)
+			}
+		}
+		text, args, err := db.Query[refLink]().Limit(5).SQL(tenant(7))
+		if want := fmt.Sprintf(`SELECT "ticket_id", "invoice_id" FROM "ref_links" WHERE `+scoped+` LIMIT $3`, 1, 2); err != nil || text != want {
+			t.Errorf("Query: %s, %v, want %s", text, err, want)
+		}
+		if !reflect.DeepEqual(args, []any{int64(7), int64(7), 5}) {
+			t.Errorf("Query: %v", args)
+		}
+		text, _, err = db.Update[refLink]().Set(refLinks.InvoiceID.Set(1)).Where(refLinks.TicketID.EQ(1)).SQL(tenant(7))
+		if want := fmt.Sprintf(`UPDATE "ref_links" SET "invoice_id" = $1 WHERE "ticket_id" = $2 AND `+scoped, 3, 4); err != nil || text != want {
+			t.Errorf("Update: %s, %v, want %s", text, err, want)
+		}
+	})
+	t.Run("a Rewrite that moves the schema moves them", func(t *testing.T) {
+		db := openFake(velox.Postgres, &fakeconn.Exec{}, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+			in := *st.Entity
+			in.Schema = "t7"
+			st.Entity = &in
+			return nil
+		}))
+		text, _, err := db.Delete[refLink]().Where(refLinks.TicketID.EQ(1)).SQL(tenant(7))
+		want := `DELETE FROM "t7"."ref_links" WHERE "ticket_id" = $1 AND "ticket_id" IN (SELECT "id" FROM "t7"."tickets" WHERE "org_id" = $2) AND "invoice_id" IN (SELECT "id" FROM "t7"."invoices" WHERE "org_id" = $3)`
+		if err != nil || text != want {
+			t.Errorf("%s, %v, want %s", text, err, want)
+		}
+	})
+	t.Run("a Rewrite cannot unmark a statement", func(t *testing.T) {
+		db := openFake(velox.Postgres, &fakeconn.Exec{}, velox.WithRewrite(func(_ context.Context, st *velox.Statement) error {
+			*st = velox.Statement{Op: st.Op, Entity: st.Entity, Limit: st.Limit, Where: st.Where}
+			return nil
+		}))
+		text, _, err := db.Query[refLink]().Limit(5).SQL(tenant(7))
+		if err != nil || !strings.Contains(text, "IN (SELECT") {
+			t.Errorf("%s, %v", text, err)
+		}
+	})
+	t.Run("an upsert that updates", func(t *testing.T) {
+		for _, d := range []velox.Dialect{velox.Postgres, velox.SQLite} {
+			db := openFake(d, &fakeconn.Exec{Affected: 1, Answer: passRefs})
+			one := db.Insert(&refLink{1, 1}).OnConflict(refLinks.TicketID).Update(refLinks.InvoiceID)
+			if err := one.Exec(tenant(int64(7))); !errors.Is(err, velox.ErrTenantUpsert) {
+				t.Errorf("%v: one side: %v", d, err)
+			}
+			both := db.Insert(&refLink{1, 1}).OnConflict(refLinks.TicketID, refLinks.InvoiceID).Update(refLinks.InvoiceID)
+			if err := both.Exec(tenant(int64(7))); err != nil {
+				t.Errorf("%v: both: %v", d, err)
+			}
+			if err := one.Exec(velox.WithAllTenants(context.Background(), "the migration")); err != nil {
+				t.Errorf("%v: WithAllTenants: %v", d, err)
+			}
+		}
+		db := openFake(velox.MySQL, &fakeconn.Exec{Affected: 1, Answer: passRefs})
+		if err := db.Insert(&refLink{1, 1}).OnConflict(refLinks.TicketID).Update(refLinks.InvoiceID).Exec(tenant(int64(7))); err != nil {
+			t.Errorf("MySQL, whose primary key holds both: %v", err)
+		}
+		bad := openFake(velox.MySQL, &fakeconn.Exec{Affected: 1, Answer: passRefs})
+		if err := bad.Insert(&refHalf{1, 1}).OnConflict(refHalves.B).Update(refHalves.B).Exec(tenant(int64(7))); !errors.Is(err, velox.ErrTenantUpsert) {
+			t.Errorf("MySQL, an unique index of one side: %v", err)
+		}
+		if err := bad.Insert(&refWide{1, 1}).OnConflict(refWides.B).Update(refWides.B).Exec(tenant(int64(7))); !errors.Is(err, velox.ErrTenantUpsert) {
+			t.Errorf("MySQL, a primary key of one side: %v", err)
+		}
+	})
+}
+
+// refHalf is a join entity with a unique index of one side; refWide one whose primary
+// key holds one side.
+type (
+	refHalf struct{ A, B int64 }
+	refWide struct{ A, B int64 }
+)
+
+var (
+	refHalves = struct {
+		B velox.NumberCol[refHalf, int64]
+	}{velox.NumberCol[refHalf, int64]{I: 1}}
+	refWides = struct {
+		B velox.NumberCol[refWide, int64]
+	}{velox.NumberCol[refWide, int64]{I: 1}}
+	refHalfM velox.MetaOnce[refHalf]
+	refWideM velox.MetaOnce[refWide]
+)
+
+func refPairDesc[E any](pk []int, indexes []velox.IndexInfo, addr func(*E, int) any) velox.Desc[E] {
+	return velox.Desc[E]{
+		Table:      "ref_pairs",
+		Columns:    []velox.ColumnDesc{{Field: "A", Name: "a"}, {Field: "B", Name: "b"}},
+		PrimaryKey: pk,
+		Indexes:    indexes,
+		Tenant:     -1,
+		TenantRefs: []velox.TenantRef{
+			{Column: 0, Table: "tickets", Key: "id", Tenant: "org_id", TenantKind: "int64"},
+			{Column: 1, Table: "invoices", Key: "id", Tenant: "org_id", TenantKind: "int64"},
+		},
+		Addr: addr,
+	}
+}
+
+func (*refHalf) VeloxMeta() *velox.Meta[refHalf] {
+	return refHalfM.Load(func() velox.Desc[refHalf] {
+		return refPairDesc([]int{0, 1}, []velox.IndexInfo{{Columns: []int{0}, Unique: true}}, func(x *refHalf, i int) any {
+			if i == 0 {
+				return &x.A
+			}
+			return &x.B
+		})
+	})
+}
+
+func (*refWide) VeloxMeta() *velox.Meta[refWide] {
+	return refWideM.Load(func() velox.Desc[refWide] {
+		return refPairDesc([]int{0}, nil, func(x *refWide, i int) any {
+			if i == 0 {
+				return &x.A
+			}
+			return &x.B
+		})
 	})
 }

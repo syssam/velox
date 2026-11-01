@@ -177,6 +177,10 @@ func (db *DB) Dialect() Dialect { return db.e.D }
 //
 // WithTxAround's hooks wrap the whole call: every attempt and the commit.
 //
+// A write under a tenant that sets a foreign key to a tenant-scoped row first sends
+// one SELECT per such column in the transaction, a round trip each that Around hooks
+// do not see: see WithTenant.
+//
 // On a DB with replicas the transaction runs on the primary. On a DB opened
 // with OpenShards it runs on the primary of the shard ctx names, as a
 // statement's context names one; when ctx names none, Tx fails with

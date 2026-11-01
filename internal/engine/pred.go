@@ -31,25 +31,28 @@ const (
 	OpExists  // col is the relation index, v its RelRef, or its link once resolved, kids the target's conditions
 	OpInvalid // v is the error
 	OpThrough // col is the target's column, v the join *EntityInfo, w the join's column equal to it, kids the join's conditions
+	// OpTenantRef is the scope's, on an entity's rows: col is an index into its
+	// TenantRefs, whose column holds a key of a row of tenant v. No hook can make it.
+	OpTenantRef
 )
 
 // Node is a condition, typed by nothing: the generic API wraps it.
 type Node struct {
 	Op   op
-	Deep bool // an OpExists is among the kids, at any depth; set by group
+	Deep bool // an OpExists or OpThrough is among the kids, at any depth; set by group
 	Col  int32
 	V, W any
 	Kids []Node
 }
 
 // Group is the And, Or or Not (o) of kids. It marks the node deep when an
-// EXISTS is among the kids, at any depth: the scope and ResolveNode skip a
-// node that is not. And, Or, Not and every And or Or velox makes are made by
+// EXISTS or a Through is among the kids, at any depth: the scope and ResolveNode
+// skip a node that is not. And, Or, Not and every And or Or velox makes are made by
 // it, and node is unexported, so a Rewrite hook's conditions are too.
 func Group(o op, kids []Node) Node {
 	n := Node{Op: o, Kids: kids}
 	for _, k := range kids {
-		if k.Op == OpExists || k.Deep {
+		if k.Op == OpExists || k.Op == OpThrough || k.Deep {
 			n.Deep = true
 			break
 		}

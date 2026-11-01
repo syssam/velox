@@ -116,7 +116,7 @@ func kindType(kind string) reflect.Type {
 // join entity has no tenant of its own for the scope to read: its write needs what
 // its targets' statements need, a tenant or WithAllTenants. An Add or Sub on a
 // reference is refused under a tenant, as the value it makes cannot be checked.
-func scopeRefs(ctx context.Context, st *Statement) error {
+func (db *DB) scopeRefs(ctx context.Context, st *Statement) error {
 	in := st.Entity
 	if in.Tenant < 0 {
 		id, all := TenantFrom(ctx)
@@ -128,6 +128,11 @@ func scopeRefs(ctx context.Context, st *Statement) error {
 			return fmt.Errorf("velox: %s: %w", in.Name, ErrNoTenant)
 		}
 		st.Tenant = id
+		if cf := st.Conflict; cf != nil && !cf.DoNothing && len(cf.Update) > 0 {
+			if err := db.checkJoinUpsert(in, cf); err != nil {
+				return err
+			}
+		}
 	}
 	if st.Tenant == nil {
 		return nil
@@ -174,15 +179,7 @@ func (db *DB) checkRefs(ctx context.Context, st *Statement, t Target) error {
 		w.str("SELECT ")
 		w.ident(r.Key)
 		w.str(" FROM ")
-		schema := r.Schema
-		if r.sameSchema {
-			schema = in.Schema
-		}
-		if schema != "" {
-			w.ident(schema)
-			w.str(".")
-		}
-		w.ident(r.Table)
+		w.refTable(in, r)
 		w.str(" WHERE ")
 		w.ident(r.Key)
 		w.str(" IN (")
@@ -213,6 +210,33 @@ func (db *DB) checkRefs(ctx context.Context, st *Statement, t Target) error {
 		}
 	}
 	return nil
+}
+
+// refTable writes the table of r, a TenantRef of entity in: one in in's schema is in
+// the schema a Rewrite moved in to, as one schema to a tenant does.
+func (w *writer) refTable(in *EntityInfo, r *tenantRef) {
+	schema := r.Schema
+	if r.sameSchema {
+		schema = in.Schema
+	}
+	if schema != "" {
+		w.ident(schema)
+		w.str(".")
+	}
+	w.ident(r.Table)
+}
+
+// refIn writes, after a column, IN the keys of r's table that are tenant id's.
+func (w *writer) refIn(in *EntityInfo, r *tenantRef, id any) {
+	w.str(" IN (SELECT ")
+	w.ident(r.Key)
+	w.str(" FROM ")
+	w.refTable(in, r)
+	w.str(" WHERE ")
+	w.ident(r.Tenant)
+	w.str(" = ")
+	w.arg(id)
+	w.str(")")
 }
 
 // refValues is what st sets r's column to, without NULL, each value once. An insert's

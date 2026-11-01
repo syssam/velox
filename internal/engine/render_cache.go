@@ -160,7 +160,7 @@ func eachKey(k []byte, c *EachClause) []byte {
 	if c == nil {
 		return append(k, 0)
 	}
-	k = append(k, 1, bit(c.Limit > 0))
+	k = append(k, 1, bit(c.Limit > 0), bit(c.ownerRef != nil))
 	k = binary.AppendUvarint(k, uint64(c.Column))
 	k = binary.AppendUvarint(k, uint64(len(c.Keys)))
 	if j := c.Join; j != nil {

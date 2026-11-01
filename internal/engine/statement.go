@@ -38,6 +38,10 @@ type EachClause struct {
 	// Limit is the most rows per owner, in the statement's OrderBy; 0 is no
 	// limit, and is always 0 on a Count.
 	Limit int
+	// ownerRef is set by the scope on a read for owners the caller gave: the Join's
+	// TenantRef of its owner column, whose rows must be ownerTenant's.
+	ownerRef    *tenantRef
+	ownerTenant any
 }
 
 // keyed reports whether, on entity in, c reads rows by in's one-column
@@ -129,6 +133,9 @@ type Statement struct {
 	// iter says Iter runs the statement: its rows are open while the caller's
 	// loop body runs.
 	iter bool
+	// loaded says a With load runs it, for owners read under this statement's scope:
+	// its join rows need no condition of their own, though they need a tenant.
+	loaded bool
 	// upsertPolicy is set by the scope when it added the policy's conditions to
 	// the upsert's update branch: an upsert that then affected fewer rows than it
 	// sent met a row the policy hides.

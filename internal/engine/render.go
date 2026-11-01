@@ -396,6 +396,11 @@ func (w *writer) eachKeys(c *EachClause, key func()) {
 		w.arg(k)
 	}
 	w.str(")")
+	if c.ownerRef != nil {
+		w.str(" AND ")
+		key()
+		w.refIn(c.Join, c.ownerRef, c.ownerTenant)
+	}
 }
 
 // pairUnique reports whether no two of j's rows can hold one pair of values
@@ -546,6 +551,10 @@ func (w *writer) pred(n Node) {
 		w.exists(n)
 	case OpThrough:
 		w.through(n)
+	case OpTenantRef:
+		r := &w.in.refs[n.Col]
+		w.predCol(int32(r.Column))
+		w.refIn(w.in, r, n.V)
 	default:
 		w.fail(fmt.Errorf("velox: %s: a condition of unknown kind %d", w.in.Name, n.Op))
 	}

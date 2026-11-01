@@ -201,9 +201,10 @@ func postsOf(in, order string) string {
 
 // tagsOf is the windowed load of the name of the tags of posts, through the
 // join table, in key order; in is the posts' placeholders. Its arguments
-// are the posts' keys and the most of each, MaxPage + 1.
+// are the posts' keys, the tenant, which keeps a target with no tenant from
+// showing another's links, and the most of each, MaxPage + 1.
 func tagsOf(in string) string {
-	return `SELECT "id", "name", "vx_owner" FROM (SELECT "tags"."id", "tags"."name", "vx_j"."post_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."post_id" ORDER BY "tags"."id") AS "vx_rn" FROM "tags" JOIN "post_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."post_id" IN (` + in + `)) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn"`
+	return `SELECT "id", "name", "vx_owner" FROM (SELECT "tags"."id", "tags"."name", "vx_j"."post_id" AS "vx_owner", ROW_NUMBER() OVER (PARTITION BY "vx_j"."post_id" ORDER BY "tags"."id") AS "vx_rn" FROM "tags" JOIN "post_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."post_id" IN (` + in + `) AND "vx_j"."post_id" IN (SELECT "id" FROM "posts" WHERE "org_id" = ?)) AS "vx" WHERE "vx_rn" <= ? ORDER BY "vx_rn"`
 }
 
 // TestNode looks up one node of each type by its global ID: one query on its
@@ -374,7 +375,7 @@ func nestedStmts(n int, userKeys, postKeys string) []string {
 		fmt.Sprintf(`%s ORDER BY "name", "id" LIMIT ? [%d]`, users, n+1),
 		fmt.Sprintf(`%s [%s 1 2]`, postsOf(marks(userKeys), `"title", "id"`), userKeys),
 		fmt.Sprintf(`SELECT "author_id", COUNT(*) FROM "posts" WHERE "author_id" IN (%s) AND "org_id" = ? GROUP BY "author_id" [%s 1]`, marks(userKeys), userKeys),
-		fmt.Sprintf(`%s [%s 101]`, tagsOf(marks(postKeys)), postKeys),
+		fmt.Sprintf(`%s [%s 1 101]`, tagsOf(marks(postKeys)), postKeys),
 	}
 }
 
@@ -502,7 +503,7 @@ func TestBatchInMutation(t *testing.T) {
 			users + ` WHERE "id" IN (?) LIMIT ? [1 1]`,
 			postsOf("?", `"id"`) + ` [1 1 101]`,
 			`SELECT "author_id", COUNT(*) FROM "posts" WHERE "author_id" IN (?) AND "org_id" = ? GROUP BY "author_id" [1 1]`,
-			`SELECT "vx_j"."post_id", COUNT(*) FROM "tags" JOIN "post_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."post_id" IN (?, ?, ?) GROUP BY "vx_j"."post_id" [1 2 6]`,
+			`SELECT "vx_j"."post_id", COUNT(*) FROM "tags" JOIN "post_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."post_id" IN (?, ?, ?) AND "vx_j"."post_id" IN (SELECT "id" FROM "posts" WHERE "org_id" = ?) GROUP BY "vx_j"."post_id" [1 2 6 1]`,
 		},
 	})
 }
@@ -682,7 +683,7 @@ func TestRequestCost(t *testing.T) {
 		stmts: []string{
 			users + ` ORDER BY "id" LIMIT ? [6]`,
 			postsOf("?, ?, ?", `"id"`) + ` [1 2 3 1 6]`,
-			`SELECT "vx_j"."post_id", COUNT(*) FROM "tags" JOIN "post_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."post_id" IN (?, ?, ?, ?) GROUP BY "vx_j"."post_id" [1 2 3 4]`,
+			`SELECT "vx_j"."post_id", COUNT(*) FROM "tags" JOIN "post_tags" AS "vx_j" ON "vx_j"."tag_id" = "tags"."id" WHERE "vx_j"."post_id" IN (?, ?, ?, ?) AND "vx_j"."post_id" IN (SELECT "id" FROM "posts" WHERE "org_id" = ?) GROUP BY "vx_j"."post_id" [1 2 3 4 1]`,
 		},
 	})
 	post := func(query string) string {
@@ -894,7 +895,7 @@ func TestCreatePost(t *testing.T) {
 			// The selection, of the returned row alone: the author, and the
 			// tags' count, through the join table.
 			users + ` WHERE "id" IN (?) LIMIT ? [2 1]`,
-			`SELECT COUNT(*) FROM "tags" WHERE EXISTS (SELECT 1 FROM "post_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "post_id" IN (?)) [6]`,
+			`SELECT COUNT(*) FROM "tags" WHERE EXISTS (SELECT 1 FROM "post_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "post_id" IN (?) AND "post_id" IN (SELECT "id" FROM "posts" WHERE "org_id" = ?)) [6 1]`,
 		},
 	})
 }
@@ -912,10 +913,10 @@ func TestUpdatePost(t *testing.T) {
 			`UPDATE "posts" SET "published_at" = ? WHERE "id" = ? AND "org_id" = ? [<nil> 1 1]`,
 			// The tags to remove the caller may read, then their join rows.
 			`SELECT "id" FROM "tags" WHERE "id" IN (?) LIMIT ? [1 1]`,
-			`DELETE FROM "post_tags" WHERE "post_id" = ? AND "tag_id" IN (?) [1 1]`,
+			`DELETE FROM "post_tags" WHERE "post_id" = ? AND "tag_id" IN (?) AND "post_id" IN (SELECT "id" FROM "posts" WHERE "org_id" = ?) [1 1 1]`,
 			// The row read back, as written, and the selection's tags.
 			selPosts + ` WHERE "id" = ? AND "org_id" = ? LIMIT ? [1 1 2]`,
-			tags + ` WHERE EXISTS (SELECT 1 FROM "post_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "post_id" IN (?)) ORDER BY "id" LIMIT ? [1 101]`,
+			tags + ` WHERE EXISTS (SELECT 1 FROM "post_tags" AS "vx1" WHERE "vx1"."tag_id" = "tags"."id" AND "post_id" IN (?) AND "post_id" IN (SELECT "id" FROM "posts" WHERE "org_id" = ?)) ORDER BY "id" LIMIT ? [1 1 101]`,
 		},
 	})
 	s.do(t, request{
@@ -928,8 +929,8 @@ func TestUpdatePost(t *testing.T) {
 
 // TestUnlinkOtherTenant: the label go is linked to acme's post 1 and to
 // globex's post 5. Acme's removePostIDs and clearPosts unlink only the posts
-// acme may read: the join rows, which are not tenant-scoped, are deleted
-// only for the posts the tenant scope selects, and globex's link stays.
+// acme may read: the join rows are scoped through their posts, and globex's
+// link stays.
 func TestUnlinkOtherTenant(t *testing.T) {
 	s := newServer(t)
 	s.do(t, request{
@@ -951,9 +952,9 @@ func TestUnlinkOtherTenant(t *testing.T) {
 			`SELECT 1 FROM "tags" WHERE "id" = ? LIMIT ? [1 1]`,
 			// The label's join rows a page at a time, the posts of them
 			// acme may read, and only their join rows.
-			`SELECT "post_id", "tag_id" FROM "post_tags" WHERE "tag_id" = ? ORDER BY "tag_id", "post_id" LIMIT ? [1 100]`,
-			`SELECT "id" FROM "posts" WHERE "id" IN (?, ?) AND "org_id" = ? LIMIT ? [1 5 1 2]`,
-			`DELETE FROM "post_tags" WHERE "tag_id" = ? AND "post_id" IN (?) [1 1]`,
+			`SELECT "post_id", "tag_id" FROM "post_tags" WHERE "tag_id" = ? AND "post_id" IN (SELECT "id" FROM "posts" WHERE "org_id" = ?) ORDER BY "tag_id", "post_id" LIMIT ? [1 1 100]`,
+			`SELECT "id" FROM "posts" WHERE "id" IN (?) AND "org_id" = ? LIMIT ? [1 1 1]`,
+			`DELETE FROM "post_tags" WHERE "tag_id" = ? AND "post_id" IN (?) AND "post_id" IN (SELECT "id" FROM "posts" WHERE "org_id" = ?) [1 1 1]`,
 			selTags + ` WHERE "id" = ? LIMIT ? [1 2]`,
 		},
 	})
@@ -963,7 +964,7 @@ func TestUnlinkOtherTenant(t *testing.T) {
 		want:  `{"data": {"node": {"tags": {"edges": [{"node": {"name": "go"}}]}}}}`,
 		stmts: []string{
 			posts + ` WHERE "id" = ? AND "org_id" = ? LIMIT ? [5 2 2]`,
-			tagsOf("?") + ` [5 101]`,
+			tagsOf("?") + ` [5 2 101]`,
 		},
 	})
 	s.do(t, request{
@@ -972,14 +973,14 @@ func TestUnlinkOtherTenant(t *testing.T) {
 		want:  `{"data": {"node": {"tags": {"edges": [{"node": {"name": "graphql"}}]}}}}`,
 		stmts: []string{
 			posts + ` WHERE "id" = ? AND "org_id" = ? LIMIT ? [1 1 2]`,
-			tagsOf("?") + ` [1 101]`,
+			tagsOf("?") + ` [1 1 101]`,
 		},
 	})
 }
 
 // TestDeleteOtherTenant: acme cannot delete globex's post 5, which it cannot
 // see: NOT_FOUND, as for a post that does not exist, and the post keeps its
-// join row, which is not tenant-scoped.
+// join row.
 func TestDeleteOtherTenant(t *testing.T) {
 	s := newServer(t)
 	s.do(t, request{
@@ -995,7 +996,7 @@ func TestDeleteOtherTenant(t *testing.T) {
 		want:  `{"data": {"node": {"title": "Globex plans", "tags": {"edges": [{"node": {"name": "go"}}]}}}}`,
 		stmts: []string{
 			posts + ` WHERE "id" = ? AND "org_id" = ? LIMIT ? [5 2 2]`,
-			tagsOf("?") + ` [5 101]`,
+			tagsOf("?") + ` [5 2 101]`,
 		},
 	})
 }
@@ -1010,7 +1011,7 @@ func TestDeletePost(t *testing.T) {
 		want:  `{"data": {"deletePost": "` + post1 + `"}}`,
 		stmts: []string{
 			`SELECT 1 FROM "posts" WHERE "id" = ? AND "org_id" = ? LIMIT ? [1 1 1]`,
-			`DELETE FROM "post_tags" WHERE "post_id" = ? [1]`,
+			`DELETE FROM "post_tags" WHERE "post_id" = ? AND "post_id" IN (SELECT "id" FROM "posts" WHERE "org_id" = ?) [1 1]`,
 			`DELETE FROM "posts" WHERE "id" = ? AND "org_id" = ? [1 1]`,
 		},
 	})

@@ -700,7 +700,7 @@ func byChunks(n, per int, read func(lo, hi int) error) error {
 // ec's Limit. When ec has a Join, cols is nil and fetchPart returns each
 // row's owner key too, read from the join entity.
 func fetchPart(ctx context.Context, db *DB, pin Target, t *EntityInfo, cols []int, sp LoadSpec, order []OrderTerm, keys []any, maxRows int, ec *EachClause) (any, []any, error) {
-	st := Statement{Op: OpSelect, Entity: t, Unbounded: true, MaxRows: maxRows, InTx: db.InTx, OrderBy: order}
+	st := Statement{Op: OpSelect, Entity: t, Unbounded: true, MaxRows: maxRows, InTx: db.InTx, OrderBy: order, loaded: true}
 	if ec != nil {
 		each := *ec
 		each.Keys = keys
