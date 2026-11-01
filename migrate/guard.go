@@ -69,33 +69,18 @@ type rebuildSeen struct {
 	notes []note
 }
 
-// guardRebuilds is the guard of f, on SQLite when f has a rebuild: a CREATE
-// TABLE of ddl.Rebuild(t) with an ALTER TABLE that renames it to t.
+// guardRebuilds is the guard of f, on SQLite when f has a rebuild.
 func (s *session) guardRebuilds(f File) *rebuildGuard {
 	if s.d != velox.SQLite {
 		return nil
 	}
-	tables := map[TableRef]TableRef{} // a rebuild's new table: the table
-	for _, q := range f.Statements {
-		l := &fileLinter{d: s.d, ws: lex(s.d, q)}
-		if t, ok := l.rebuildTarget(); ok {
-			tables[TableRef{Schema: t.Schema, Name: ddl.Rebuild(t.Name)}] = t
-		}
-	}
-	if len(tables) == 0 {
+	rebuilds := fileRebuilds(s.d, f)
+	if len(rebuilds) == 0 {
 		return nil
 	}
 	g := &rebuildGuard{s: s, f: f, starts: map[int]TableRef{}}
-	for i, q := range f.Statements {
-		l := &fileLinter{d: s.d, ws: lex(s.d, q)}
-		if l.upper(0) != "CREATE" || l.upper(1) != "TABLE" {
-			continue
-		}
-		if ref, _, ok := l.tableRef(l.skip(2, "IF", "NOT", "EXISTS")); ok {
-			if t, ok := tables[ref]; ok {
-				g.starts[i] = t
-			}
-		}
+	for _, r := range rebuilds {
+		g.starts[r.start] = r.table
 	}
 	return g
 }
@@ -211,21 +196,90 @@ func (l *fileLinter) tableRef(i int) (TableRef, int, bool) {
 	return TableRef{Schema: first, Name: l.ws[i+2].text}, i + 3, true
 }
 
-// rebuildTarget reads the last step of a table's rebuild, ALTER TABLE
-// <ddl.Rebuild(t)> RENAME TO t, and is t, with the schema the statement gives.
-func (l *fileLinter) rebuildTarget() (TableRef, bool) {
-	if l.upper(0) != "ALTER" || l.upper(1) != "TABLE" {
+// A rebuildOf is one table's rebuild in a file: tmp, made by statement start,
+// takes the place of table.
+type rebuildOf struct {
+	tmp, table TableRef
+	start      int
+}
+
+// foldRef is a SQLite table's name as it compares: without main, in lower case.
+func foldRef(ref TableRef) string {
+	if strings.EqualFold(ref.Schema, "main") {
+		ref.Schema = ""
+	}
+	return strings.ToLower(ref.String())
+}
+
+// fileRebuilds is f's rebuilds, by their statements, so that they survive a hand
+// edit: a CREATE TABLE of tmp with an ALTER TABLE tmp RENAME TO t, where tmp is
+// ddl.Rebuild(t) or the file has DROP TABLE t.
+func fileRebuilds(d velox.Dialect, f File) []rebuildOf {
+	created, dropped := map[string]int{}, map[string]bool{}
+	for i, q := range f.Statements {
+		l := &fileLinter{d: d, ws: lex(d, q)}
+		if ref, ok := l.createdTable(); ok {
+			created[foldRef(ref)] = i
+		}
+		for _, ref := range l.droppedTables() {
+			dropped[foldRef(ref)] = true
+		}
+	}
+	var out []rebuildOf
+	for _, q := range f.Statements {
+		l := &fileLinter{d: d, ws: lex(d, q)}
+		tmp, to, ok := l.renamedTo()
+		if !ok {
+			continue
+		}
+		t := TableRef{Schema: tmp.Schema, Name: to.Name}
+		start, made := created[foldRef(tmp)]
+		if made && (tmp.Name == ddl.Rebuild(to.Name) || dropped[foldRef(t)]) {
+			out = append(out, rebuildOf{tmp: tmp, table: t, start: start})
+		}
+	}
+	return out
+}
+
+// createdTable reads CREATE TABLE t.
+func (l *fileLinter) createdTable() (TableRef, bool) {
+	if l.upper(0) != "CREATE" || l.upper(1) != "TABLE" {
 		return TableRef{}, false
+	}
+	ref, _, ok := l.tableRef(l.skip(2, "IF", "NOT", "EXISTS"))
+	return ref, ok
+}
+
+// droppedTables reads DROP TABLE t[, …].
+func (l *fileLinter) droppedTables() []TableRef {
+	if l.upper(0) != "DROP" || l.upper(1) != "TABLE" {
+		return nil
+	}
+	var out []TableRef
+	for i := l.skip(2, "IF", "EXISTS"); ; {
+		ref, j, ok := l.tableRef(i)
+		if !ok {
+			return out
+		}
+		out = append(out, ref)
+		if !l.punct(j, ",") {
+			return out
+		}
+		i = j + 1
+	}
+}
+
+// renamedTo reads ALTER TABLE tmp RENAME TO t, t with no schema.
+func (l *fileLinter) renamedTo() (tmp, to TableRef, ok bool) {
+	if l.upper(0) != "ALTER" || l.upper(1) != "TABLE" {
+		return TableRef{}, TableRef{}, false
 	}
 	tmp, i, ok := l.tableRef(2)
 	if !ok || l.upper(i) != "RENAME" || l.upper(i+1) != "TO" {
-		return TableRef{}, false
+		return TableRef{}, TableRef{}, false
 	}
-	to, _, ok := l.tableRef(i + 2)
-	if !ok || to.Schema != "" || tmp.Name != ddl.Rebuild(to.Name) {
-		return TableRef{}, false
-	}
-	return TableRef{Schema: tmp.Schema, Name: to.Name}, true
+	to, _, ok = l.tableRef(i + 2)
+	return tmp, to, ok && to.Schema == ""
 }
 
 // checkModify refuses f's statements from index from on when a MODIFY or

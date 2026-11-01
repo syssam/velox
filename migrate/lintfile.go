@@ -33,7 +33,15 @@ import (
 // only if it can leave a row out: WHERE true, WHERE 1 and WHERE 1 = 1 are
 // none. A DELETE or UPDATE may follow a WITH clause; MySQL's multi-table
 // DELETE t1, t2 FROM … (aliases read as their tables) and UPDATE t1, t2
-// SET … name each table. PostgreSQL's ABORT counts as ROLLBACK.
+// SET … name each table. The DELETE and UPDATE statements in a WITH clause's
+// bodies count like any other, and a MERGE counts by its WHEN clauses, whatever
+// its ON says: THEN DELETE as delete-rows, THEN UPDATE as update-rows. SQLite's
+// UPDATE OR <action> names the table after the action. PostgreSQL's ABORT counts
+// as ROLLBACK.
+//
+// A SQLite file that rebuilds a table (CREATE TABLE of ddl.Rebuild(t), or of a
+// name the file renames to t and with DROP TABLE t) without -- velox:foreign-keys
+// off is refused too: its DROP TABLE deletes the children's rows.
 //
 // A target is "<table>" or "<schema>.<table>", and a column's adds
 // ".<column>": a quoted name as written, an unquoted one folded to lower
@@ -45,11 +53,17 @@ func LintFile(d velox.Dialect, f File) ([]Finding, error) {
 	var out []Finding
 	inTx := d == velox.SQLite || d == velox.Postgres && !f.Directives.NoTransaction
 	rebuilt := map[string]bool{} // the tables a rebuild of f drops and makes again
-	if f.generated {
-		for _, sql := range f.Statements {
-			l := &fileLinter{d: d, ws: lex(d, sql)}
-			if t, ok := l.rebuildTarget(); ok {
-				rebuilt[t.String()] = true
+	if d == velox.SQLite {
+		for _, r := range fileRebuilds(d, f) {
+			if f.generated {
+				rebuilt[r.table.String()] = true
+			}
+			if !f.Directives.ForeignKeysOff {
+				pos := f.Path
+				if r.start < len(f.lines) {
+					pos += ":" + strconv.Itoa(f.lines[r.start])
+				}
+				errs = append(errs, &Error{Code: "file", Pos: pos, Reason: fmt.Sprintf("the rebuild of %s has no -- velox:foreign-keys off; its DROP TABLE deletes the rows of the tables that reference it", r.table)})
 			}
 		}
 	}
@@ -314,6 +328,7 @@ func (l *fileLinter) classify() {
 	b := 0
 	if l.upper(0) == "WITH" {
 		b = l.afterWith()
+		l.withBodies(b)
 	}
 	switch l.upper(b) {
 	case "DROP":
@@ -358,6 +373,9 @@ func (l *fileLinter) classify() {
 		for slices.Contains([]string{"LOW_PRIORITY", "IGNORE"}, l.upper(i)) {
 			i++
 		}
+		if l.upper(i) == "OR" { // SQLite's UPDATE OR REPLACE t
+			i += 2
+		}
 		// UPDATE t [alias] [JOIN …], or MySQL's UPDATE t1 [a1], t2 [a2] SET ….
 		for j := i; ; {
 			j = l.skip(j, "ONLY")
@@ -377,9 +395,43 @@ func (l *fileLinter) classify() {
 			}
 			j = k + 1
 		}
+	case "MERGE":
+		n, _ := l.name(l.skip(l.skip(b+1, "INTO"), "ONLY"))
+		if n == "" {
+			return
+		}
+		if l.has("THEN", "DELETE") {
+			l.add("delete-rows", n, "merges into %s, and can delete any row its ON matches")
+		}
+		if l.has("THEN", "UPDATE") {
+			l.add("update-rows", n, "merges into %s, and can update any row its ON matches")
+		}
 	case "ALTER":
 		if b == 0 && l.upper(1) == "TABLE" {
 			l.alterTable()
+		}
+	}
+}
+
+// withBodies adds the findings of the bodies of the WITH clause that ends at
+// word b: each "AS [[NOT] MATERIALIZED] (…)" outside parentheses.
+func (l *fileLinter) withBodies(b int) {
+	for i, depth := 0, 0; i < b; i++ {
+		switch {
+		case l.punct(i, "("):
+			depth++
+		case l.punct(i, ")"):
+			depth--
+		case depth == 0 && l.upper(i) == "AS":
+			open := l.skip(l.skip(i+1, "NOT"), "MATERIALIZED")
+			end := l.closes(open)
+			if !l.punct(open, "(") || end < 0 {
+				continue
+			}
+			body := &fileLinter{d: l.d, ws: l.ws[open+1 : end], pos: l.pos, change: l.change}
+			body.classify()
+			l.out = append(l.out, body.out...)
+			i = end
 		}
 	}
 }
