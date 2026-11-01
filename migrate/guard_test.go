@@ -88,13 +88,14 @@ func TestUpRefusesRebuildLoss(t *testing.T) {
 		text   string // what the CREATE text holds and the rebuild loses
 		says   []string
 		target string
+		also   string // another target the rebuild's loss needs
 	}{
 		{name: "expression index", hand: []string{"CREATE UNIQUE INDEX t_lower ON t (lower(s))"}, object: "t_lower", says: []string{"t.t_lower", "over an expression"}, target: "t.t_lower"},
 		{name: "index DESC", hand: []string{"CREATE INDEX t_desc ON t (s DESC)"}, says: []string{"t.t_desc", "DESC"}, target: "t.t_desc"},
 		{name: "trigger", hand: []string{"CREATE TRIGGER t_ai AFTER INSERT ON t BEGIN UPDATE o SET s = 'x'; END"}, object: "t_ai", says: []string{"t.t_ai", "trigger"}, target: "t.t_ai"},
 		{name: "collation", hand: []string{"ALTER TABLE t ADD COLUMN c text COLLATE NOCASE"}, text: "NOCASE", says: []string{"t.c", "COLLATE NOCASE"}, target: "t.c"},
 		{name: "generated", hand: []string{"ALTER TABLE t ADD COLUMN g integer GENERATED ALWAYS AS (n + 1) VIRTUAL"}, text: "GENERATED", says: []string{"t.g", "generated"}, target: "t.g"},
-		{name: "foreign key", hand: []string{"ALTER TABLE t ADD COLUMN f integer REFERENCES o (id) ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED"}, text: "CASCADE", says: []string{"ON UPDATE CASCADE", "DEFERRABLE"}, target: "t"},
+		{name: "foreign key", hand: []string{"ALTER TABLE t ADD COLUMN f integer REFERENCES o (id) ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED"}, text: "CASCADE", says: []string{"ON UPDATE CASCADE", "DEFERRABLE"}, target: "t", also: "t.f"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			db, fsys := guarded(t, migrate.PlanOptions{}, c.hand...)
@@ -112,7 +113,11 @@ func TestUpRefusesRebuildLoss(t *testing.T) {
 			}
 
 			// The directive, written by hand or by -allow, lets it through.
-			db, fsys = guarded(t, migrate.PlanOptions{Allow: []migrate.Allow{{Code: "unmodeled-loss", Target: c.target}}}, c.hand...)
+			allow := []migrate.Allow{{Code: "unmodeled-loss", Target: c.target}}
+			if c.also != "" {
+				allow = append(allow, migrate.Allow{Code: "unmodeled-loss", Target: c.also})
+			}
+			db, fsys = guarded(t, migrate.PlanOptions{Allow: allow}, c.hand...)
 			if !strings.Contains(string(fsys["0002_rebuild.sql"].Data), "-- velox:allow unmodeled-loss "+c.target+"\n") {
 				t.Errorf("no directive:\n%s", fsys["0002_rebuild.sql"].Data)
 			}
@@ -174,7 +179,7 @@ func TestUpRebuildDropColumnCovers(t *testing.T) {
 	mustExec(t, db, "ALTER TABLE t ADD COLUMN c text COLLATE NOCASE")
 	fsys := extend(t, base, d, files("0002_rebuild.sql", `-- velox:foreign-keys off
 -- velox:allow drop-column t.c
-CREATE TABLE "velox_new_t" ("id" integer NOT NULL PRIMARY KEY, "n" integer, "s" text, "o" integer);
+CREATE TABLE "velox_new_t" ("id" integer NOT NULL PRIMARY KEY, "n" integer NOT NULL, "s" text, "o" integer);
 INSERT INTO "velox_new_t" ("id", "n", "s", "o") SELECT "id", "n", "s", "o" FROM "t";
 DROP TABLE "t";
 ALTER TABLE "velox_new_t" RENAME TO "t";

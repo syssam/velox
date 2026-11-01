@@ -60,7 +60,7 @@ func TestLintFile(t *testing.T) {
 		// A WITH clause comes before the statement.
 		{velox.Postgres, "WITH old AS (SELECT id FROM users WHERE age > 9) DELETE FROM users;", []found{{"delete-rows", "users", "0002_x.sql:1"}}},
 		{velox.Postgres, "WITH RECURSIVE a(x) AS (SELECT 1), b AS MATERIALIZED (SELECT 2) UPDATE users SET n = 1;", []found{{"update-rows", "users", "0002_x.sql:1"}}},
-		{velox.Postgres, "WITH a AS (DELETE FROM logs) DELETE FROM users WHERE id = 1;", nil},
+		{velox.Postgres, "WITH a AS (DELETE FROM logs) DELETE FROM users WHERE id = 1;", []found{{"delete-rows", "logs", "0002_x.sql:1"}}},
 		{velox.Postgres, "WITH a AS (SELECT 1) SELECT * FROM a;", nil},
 		// MySQL's multi-table forms name their tables before FROM, or before SET.
 		{velox.MySQL, "DELETE u FROM users u JOIN orgs o ON o.id = u.org_id;", []found{{"delete-rows", "users", "0002_x.sql:1"}}},
@@ -96,6 +96,22 @@ func TestLintFile(t *testing.T) {
 		{velox.Postgres, "DELETE FROM users WHERE a = b;", nil},
 		{velox.Postgres, "DELETE FROM users WHERE x = 'true';", nil},
 		{velox.Postgres, "UPDATE users SET a = 1 WHERE 1 = 1 AND EXISTS (SELECT 1 FROM z);", nil},
+		// A data-modifying WITH clause, at any depth; a read and a bounded write are none.
+		{velox.Postgres, "WITH d AS (DELETE FROM users RETURNING id) SELECT 1;", []found{{"delete-rows", "users", "0002_x.sql:1"}}},
+		{velox.Postgres, "WITH d AS NOT MATERIALIZED (UPDATE users SET a = 1 RETURNING id) SELECT * FROM d;", []found{{"update-rows", "users", "0002_x.sql:1"}}},
+		{velox.Postgres, "WITH a AS (SELECT 1), d AS (DELETE FROM users RETURNING id), e AS (DELETE FROM logs RETURNING id) INSERT INTO z SELECT id FROM d;", []found{{"delete-rows", "users", "0002_x.sql:1"}, {"delete-rows", "logs", "0002_x.sql:1"}}},
+		{velox.Postgres, "WITH d AS (WITH e AS (DELETE FROM users RETURNING id) SELECT id FROM e) SELECT 1;", []found{{"delete-rows", "users", "0002_x.sql:1"}}},
+		{velox.Postgres, "WITH d AS (DELETE FROM users WHERE id = 1 RETURNING id) SELECT 1;", nil},
+		{velox.Postgres, "WITH d AS (SELECT 1) SELECT * FROM d;", nil},
+		{velox.Postgres, "WITH d AS (DELETE FROM a RETURNING id) DELETE FROM b;", []found{{"delete-rows", "a", "0002_x.sql:1"}, {"delete-rows", "b", "0002_x.sql:1"}}},
+		// MERGE says what it can do to its target.
+		{velox.Postgres, "MERGE INTO users u USING s ON u.id = s.id WHEN MATCHED THEN DELETE;", []found{{"delete-rows", "users", "0002_x.sql:1"}}},
+		{velox.Postgres, "MERGE INTO ONLY users u USING s ON u.id = s.id WHEN MATCHED AND s.x THEN UPDATE SET a = 1 WHEN NOT MATCHED THEN INSERT VALUES (1);", []found{{"update-rows", "users", "0002_x.sql:1"}}},
+		{velox.Postgres, "MERGE INTO users u USING s ON u.id = s.id WHEN NOT MATCHED THEN INSERT VALUES (1);", nil},
+		{velox.Postgres, "WITH x AS (SELECT 1) MERGE INTO users u USING x ON true WHEN MATCHED THEN DELETE WHEN NOT MATCHED BY SOURCE THEN UPDATE SET a = 1;", []found{{"delete-rows", "users", "0002_x.sql:1"}, {"update-rows", "users", "0002_x.sql:1"}}},
+		// SQLite's conflict clause is not the table.
+		{velox.SQLite, "UPDATE OR REPLACE users SET a = 1;", []found{{"update-rows", "users", "0002_x.sql:1"}}},
+		{velox.SQLite, "UPDATE OR IGNORE users SET a = 1 WHERE id = 2;", nil},
 	} {
 		got, err := lintFile(t, c.d, c.src)
 		if err != nil {
@@ -131,7 +147,8 @@ func TestLintFile(t *testing.T) {
 	if err != nil || len(got) != 1 || got[0].Code != "drop-table" || got[0].Target != "users" {
 		t.Errorf("generated: %v %v", got, err)
 	}
-	got, err = lintFile(t, velox.SQLite, generated+`CREATE TABLE "velox_new_t" (x integer);
+	got, err = lintFile(t, velox.SQLite, generated+`-- velox:foreign-keys off
+CREATE TABLE "velox_new_t" (x integer);
 DROP TABLE "t";
 ALTER TABLE "velox_new_t" RENAME TO "t";
 DROP TABLE "other";
@@ -139,7 +156,8 @@ DROP TABLE "other";
 	if err != nil || len(got) != 1 || got[0].Target != "other" {
 		t.Errorf("generated rebuild: %v %v", got, err)
 	}
-	got, err = lintFile(t, velox.SQLite, `CREATE TABLE "velox_new_t" (x integer);
+	got, err = lintFile(t, velox.SQLite, `-- velox:foreign-keys off
+CREATE TABLE "velox_new_t" (x integer);
 DROP TABLE "t";
 ALTER TABLE "velox_new_t" RENAME TO "t";
 `)
@@ -250,5 +268,31 @@ func TestLintFileSavepoint(t *testing.T) {
 		if _, err := lintFile(t, d, "ROLLBACK WORK;\n"); err == nil {
 			t.Errorf("%v: ROLLBACK WORK not refused", d)
 		}
+	}
+}
+
+// TestLintFileRebuildWithoutForeignKeysOff: a rebuild in a file that does not
+// turn foreign keys off, whose DROP TABLE would delete the children's rows, is
+// LintFile's refusal; generated files have the directive.
+func TestLintFileRebuildWithoutForeignKeysOff(t *testing.T) {
+	rebuild := `CREATE TABLE "velox_new_t" (a integer);
+INSERT INTO "velox_new_t" (a) SELECT a FROM t;
+DROP TABLE t;
+ALTER TABLE "velox_new_t" RENAME TO t;
+`
+	_, err := lintFile(t, velox.SQLite, rebuild)
+	var e *migrate.Error
+	if !errors.As(err, &e) || e.Code != "file" || !strings.Contains(err.Error(), "foreign-keys off") || !strings.Contains(e.Pos, "0002_x.sql:1") {
+		t.Errorf("no directive: %v", err)
+	}
+	if _, err := lintFile(t, velox.SQLite, "-- velox:foreign-keys off\n"+rebuild); err != nil {
+		t.Errorf("with the directive: %v", err)
+	}
+	// Under another temporary name too.
+	if _, err := lintFile(t, velox.SQLite, "CREATE TABLE tmp (a integer);\nINSERT INTO tmp SELECT * FROM t;\nDROP TABLE t;\nALTER TABLE tmp RENAME TO t;\n"); err == nil {
+		t.Error("another name: no refusal")
+	}
+	if _, err := lintFile(t, velox.SQLite, "ALTER TABLE a RENAME TO b;\n"); err != nil {
+		t.Errorf("a plain rename: %v", err)
 	}
 }

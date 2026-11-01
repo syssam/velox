@@ -804,7 +804,7 @@ func TestMigrateApplyRefusesRebuildLoss(t *testing.T) {
 	if err := db.QueryRow("SELECT sql FROM sqlite_schema WHERE name = 'users'").Scan(&create); err != nil {
 		t.Fatal(err)
 	}
-	rebuild := strings.Replace(create, `"users"`, `"velox_new_users"`, 1) + ";\nDROP TABLE \"users\";\nALTER TABLE \"velox_new_users\" RENAME TO \"users\";\n"
+	rebuild := strings.Replace(create, `"users"`, `"velox_new_users"`, 1) + ";\nINSERT INTO \"velox_new_users\" SELECT * FROM \"users\";\nDROP TABLE \"users\";\nALTER TABLE \"velox_new_users\" RENAME TO \"users\";\n"
 	file := filepath.Join(mig, "0002_rebuild.sql")
 	write := func(head string) {
 		t.Helper()

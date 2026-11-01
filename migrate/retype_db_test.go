@@ -18,6 +18,11 @@ func TestPostgresNarrowingFailsOnLongRow(t *testing.T) {
 		{"character varying(10)", "character(5)"},
 		{"text[]", "character varying(5)[]"},
 		{"bit(10)", "bit(5)"},
+		{"text", "bpchar(5)"},
+		{"text", "pg_catalog.varchar(5)"},
+		{"text", "pg_catalog.bit(5)"},
+		{"text", "bit(5)"},
+		{"text", "varbit(5)"},
 	} {
 		t.Run(c.from+" to "+c.to, func(t *testing.T) {
 			db, _ := freshDB(t, d)
@@ -60,5 +65,29 @@ func TestPostgresRetypeKeepsCastWithoutAssignment(t *testing.T) {
 	var b, n string
 	if err := db.QueryRow(`SELECT c, b, n FROM t`).Scan(&c, &b, &n); err != nil || c != 42 || b != "abc" || n != "7" {
 		t.Errorf("c, b, n = %d, %q, %q, %v", c, b, n, err)
+	}
+}
+
+// TestPostgresBitFromString: a string reaches a bit type through varbit, so a
+// value of another length fails where a cast to bit(3) would cut it to 101, and
+// one that fits runs. A varbit target takes a shorter one.
+func TestPostgresBitFromString(t *testing.T) {
+	d := velox.Postgres
+	col := func(typ string) migrate.Column { return migrate.Column{Name: "c", Type: typ, Nullable: true} }
+	for _, to := range []string{"bit(3)", "pg_catalog.bit(3)", "bit varying(3)"} {
+		db, _ := freshDB(t, d)
+		fsys := dirOf(t, d, step{to: oneTable(d, col("text")), name: "base"})
+		mustUp(t, db, fsys)
+		mustExec(t, db, `INSERT INTO t (id, c) VALUES (1, '10101')`)
+		long := extend(t, fsys, d, step{to: oneTable(d, col(to)), name: "narrow", opts: allowAll("alter-type")})
+		if _, err := migrate.Up(context.Background(), db, long); err == nil {
+			t.Errorf("%s: Up cut the row\n%s", to, sqlFiles(long))
+		}
+		mustExec(t, db, `UPDATE t SET c = '101'`)
+		mustUp(t, db, long)
+		var c string
+		if err := db.QueryRow(`SELECT c::text FROM t`).Scan(&c); err != nil || c != "101" {
+			t.Errorf("%s: c = %q, %v", to, c, err)
+		}
 	}
 }

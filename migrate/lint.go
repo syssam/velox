@@ -60,7 +60,8 @@ var destructive = []string{
 
 // ParseAllow reads the items of the -allow flag, joined by commas, each a
 // destructive code and optionally "=" and the target it covers:
-// "drop-column=users.name,drop-table". An empty s, or one of white space,
+// "drop-column=users.name,drop-table". A comma inside parentheses is the
+// target's, as in "unmodeled-loss=t.(a, b)". An empty s, or one of white space,
 // allows nothing: nil and no error. In a list, an empty item, an empty
 // target, or a code that is not destructive is an *Error with Code "allow".
 func ParseAllow(s string) ([]Allow, error) {
@@ -68,7 +69,7 @@ func ParseAllow(s string) ([]Allow, error) {
 		return nil, nil
 	}
 	var out []Allow
-	for item := range strings.SplitSeq(s, ",") {
+	for _, item := range allowItems(s) {
 		item = strings.TrimSpace(item)
 		code, target, hasTarget := strings.Cut(item, "=")
 		code, target = strings.TrimSpace(code), strings.TrimSpace(target)
@@ -83,6 +84,26 @@ func ParseAllow(s string) ([]Allow, error) {
 		out = append(out, Allow{Code: code, Target: target})
 	}
 	return out, nil
+}
+
+// allowItems is s cut at each comma outside parentheses.
+func allowItems(s string) []string {
+	var out []string
+	from, depth := 0, 0
+	for i, c := range s {
+		switch c {
+		case '(':
+			depth++
+		case ')':
+			depth = max(depth-1, 0)
+		case ',':
+			if depth == 0 {
+				out = append(out, s[from:i])
+				from = i + 1
+			}
+		}
+	}
+	return append(out, s[from:])
 }
 
 // Blocked is the destructive findings that no allowance covers, in order. An
@@ -462,7 +483,48 @@ func (l *linter) alterType(i int, c alterColumn, target string) {
 		l.add(i, "widen-type", class, target, c.To.Pos, "widens column %s from %s to %s%s", target, from, to, more)
 		return
 	}
-	l.add(i, "alter-type", Destructive, target, c.To.Pos, "changes column %s from %s to %s, which can fail or change values", target, from, to)
+	l.add(i, "alter-type", Destructive, target, c.To.Pos, "changes column %s from %s to %s, which can fail or change values%s", target, from, to, l.castWarning(from, to))
+}
+
+// castWarning is what a finding adds about the cast of a PostgreSQL type change
+// the renderer cannot keep from cutting a value: a number to bit keeps its low
+// bits, and a target velox cannot classify, a domain above all, is cast
+// explicitly, which cuts where an assignment would fail.
+func (l *linter) castWarning(from, to string) string {
+	if l.d != velox.Postgres {
+		return ""
+	}
+	t := pgTypeOf(to)
+	switch {
+	case t.bits && t.limited && pgInteger(from):
+		return "; a number cast to " + to + " keeps only its low bits, as 12::bit(3) is 100"
+	case !t.known && !l.enumNamed(t.base):
+		return "; velox cannot classify the type " + to + ", and a cast to it may truncate what does not fit"
+	}
+	return ""
+}
+
+// enumNamed reports whether typ is the type of an enum type the plan or from
+// names.
+func (l *linter) enumNamed(typ string) bool {
+	named := func(ref TableRef) bool { return enumTypeName(ref) == typ }
+	has := func(s *Schema) bool {
+		return s != nil && slices.ContainsFunc(s.Enums, func(e Enum) bool { return named(e.ref()) })
+	}
+	if has(l.from) || has(l.to) {
+		return true
+	}
+	return slices.ContainsFunc(l.cs, func(c Change) bool {
+		switch c := c.(type) {
+		case createEnum:
+			return named(c.Enum.ref())
+		case alterEnum:
+			return named(c.To.ref())
+		case renameEnum:
+			return named(c.To)
+		}
+		return false
+	})
 }
 
 // How enum values are kept: a PostgreSQL enum type keeps their order, a MySQL

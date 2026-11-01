@@ -29,6 +29,9 @@ type session struct {
 	db       string        // MySQL: DATABASE() at open
 	schema   string        // PostgreSQL: current_schema() at open
 	sqlMode  string        // MySQL: @@SESSION.sql_mode
+	wasMode  string        // MySQL: what strict found, when it changed it
+	modeSet  bool          // MySQL: strict changed it
+	later    []File        // the files to run after the one running
 	lockWait int64         // MySQL: @@SESSION.lock_wait_timeout when the run began
 	wait     time.Duration // SQLite: how long BEGIN IMMEDIATE waits, and busy_timeout
 	busyWas  int64         // SQLite: the connection's busy_timeout before open set it
@@ -280,6 +283,32 @@ func (s *session) check(ctx context.Context) error {
 		return notAnswering(s.d, err)
 	}
 	return checkVersion(s.d, version)
+}
+
+// strict adds STRICT_ALL_TABLES to the session's sql_mode on MySQL, where it is
+// missing: without it an ALTER cuts a string, turns a NULL into 0 or ”, or empties
+// an enum value, and reports success. It stays on through reset, between files, and
+// no server setting changes.
+func (s *session) strict(ctx context.Context) error {
+	if s.d != velox.MySQL || slices.Contains(strings.Split(strings.ToUpper(s.sqlMode), ","), "STRICT_ALL_TABLES") {
+		return nil
+	}
+	was := s.sqlMode
+	if _, err := s.conn.ExecContext(ctx, `SET SESSION sql_mode = CONCAT_WS(',', NULLIF(@@SESSION.sql_mode, ''), 'STRICT_ALL_TABLES')`); err != nil {
+		return wrap(ctx, "turning on strict mode", err)
+	}
+	if err := s.conn.QueryRowContext(ctx, "SELECT @@SESSION.sql_mode").Scan(&s.sqlMode); err != nil {
+		return wrap(ctx, "reading sql_mode", err)
+	}
+	s.wasMode, s.modeSet = was, true
+	return nil
+}
+
+// unstrict gives the connection back its sql_mode.
+func (s *session) unstrict(ctx context.Context) {
+	if s.modeSet {
+		s.undo(ctx, "SET SESSION sql_mode = '"+s.wasMode+"'")
+	}
 }
 
 // checkModes refuses, on MySQL, a session whose sql_mode would read one of

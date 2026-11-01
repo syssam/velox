@@ -624,6 +624,8 @@ func (r *myReader) keys(mt *myTable) error {
 	for _, fk := range fks {
 		if u := updates[fk.Name]; u != "NO ACTION" && u != "RESTRICT" {
 			r.note(mt, fk.Name, "the foreign key has ON UPDATE "+u+", which the model cannot hold; it is compared without")
+			r.notes[len(r.notes)-1].keeps = []keep{{"ON UPDATE " + u, []string{"UPDATE"}}}
+			r.notes[len(r.notes)-1].constraint = true
 		}
 		mt.t.ForeignKeys = append(mt.t.ForeignKeys, *fk)
 	}
@@ -647,6 +649,8 @@ func (r *myReader) checks(mt *myTable) error {
 		}
 		if enforced != "YES" {
 			r.note(mt, name, "the check is NOT ENFORCED, which the model cannot hold: the rows are not checked")
+			r.notes[len(r.notes)-1].keeps = []keep{{"NOT ENFORCED", []string{"ENFORCED"}}}
+			r.notes[len(r.notes)-1].constraint = true
 		}
 		expr := unescapeMySQL(clause)
 		if col, values, ok := parseEnumCheck(velox.MySQL, expr, mt.t.Columns); ok {

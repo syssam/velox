@@ -200,7 +200,8 @@ func (r *renderer) pgChange(i int, c Change) (pgParts, error) {
 			r.addValues(i, c, added)
 			return pgParts{}, nil
 		}
-		return pgParts{stmts: r.swapEnum(c.To)}, nil
+		stmts, err := r.swapEnum(c.To)
+		return pgParts{stmts: stmts}, err
 	case dropEnum:
 		return pgParts{stmts: []string{"DROP TYPE " + r.table(c.Enum.ref())}}, nil
 	}
@@ -380,39 +381,113 @@ func (r *renderer) serialSequence(c alterColumn) (string, bool) {
 // or "" where the cast would hide a loss. An explicit cast to a string or bit
 // type of limited length cuts what does not fit, silently, where the
 // assignment cast it leaves to fails on it: a row over the length stops the
-// file. The other types read the same either way, or have no assignment
-// cast, as text to integer has not, and keep USING.
+// file. A string reaches a bit type by no assignment cast, so it is cast to
+// varbit, which has no limit, and assigned from there. The other types read the
+// same either way, or have no assignment cast, as text to integer has not, and
+// keep USING; Lint's finding says so of those that may still cut.
 func pgUsing(col, from, to string) string {
+	t, f := pgTypeOf(to), pgTypeOf(from)
+	if t.limited && (!t.array || f.array) {
+		switch {
+		case !t.bits, f.bits:
+			return ""
+		case f.text && f.array:
+			return " USING " + col + "::varbit[]"
+		case f.text:
+			return " USING " + col + "::varbit"
+		}
+	}
 	if strings.HasPrefix(to, `"`) {
 		return " USING " + col + "::text::" + to
-	}
-	if pgLimited(from, to) {
-		return ""
 	}
 	return " USING " + col + "::" + to
 }
 
-// pgLimited reports whether to is a string or bit type of limited length
-// that from reaches by an assignment cast: any type, to a string; a bit
-// string, to a bit string; never a scalar to an array. Bare character and bit
-// are of length 1; bare character varying and bit varying have no limit.
-func pgLimited(from, to string) bool {
-	base, array := strings.CutSuffix(to, "[]")
-	fromBase, fromArray := strings.CutSuffix(from, "[]")
-	if array && !fromArray {
-		return false
+// A pgType is what pgTypeOf reads of a type as written.
+type pgType struct {
+	base    string // the type without its array suffix, as written
+	array   bool
+	known   bool // a type of PostgreSQL's own that velox reads
+	text    bool // a string type
+	bits    bool // a bit string type
+	limited bool // a string or bit string type of limited length
+}
+
+// pgStrings and pgBits are the spellings of the string and bit string types,
+// each with whether the bare spelling, with no length, is limited: bare
+// character and bit are of length 1; bare character varying, varchar, bpchar
+// and bit varying have no limit.
+var (
+	pgStrings = map[string]bool{
+		"text": false, "character varying": false, "varchar": false, "char varying": false, "national character varying": false,
+		"national char varying": false, "nchar varying": false, "bpchar": false,
+		"character": true, "char": true, "nchar": true, "national character": true, "national char": true,
 	}
-	word, _, sized := strings.Cut(base, "(")
-	bits := func(t string) bool { return strings.HasPrefix(t, "bit") || strings.HasPrefix(t, "varbit") }
-	switch word {
-	case "character", "char":
+	pgBits = map[string]bool{"bit": true, "bit varying": false, "varbit": false}
+)
+
+// pgOthers are the first words of the other types of PostgreSQL's own, which
+// hold no value a cast to them could cut without "can fail or change values"
+// having said so.
+var pgOthers = []string{
+	"smallint", "integer", "int", "bigint", "int2", "int4", "int8", "smallserial", "serial", "bigserial", "serial2", "serial4", "serial8",
+	"numeric", "decimal", "real", "double", "float", "float4", "float8", "money", "boolean", "bool", "bytea",
+	"date", "time", "timetz", "timestamp", "timestamptz", "interval", "uuid", "json", "jsonb", "xml",
+	"inet", "cidr", "macaddr", "macaddr8", "point", "line", "lseg", "box", "path", "polygon", "circle",
+	"tsvector", "tsquery", "pg_lsn", "oid",
+}
+
+// pgTypeOf reads the type t, in any spelling: pg_catalog's, in double quotes,
+// in any case, with a length and with array brackets. "char" in double quotes
+// or of pg_catalog is PostgreSQL's one-byte type, which no spelling here is.
+func pgTypeOf(t string) pgType {
+	var out pgType
+	base := strings.TrimSpace(t)
+	for {
+		b, ok := strings.CutSuffix(base, "[]")
+		if !ok {
+			break
+		}
+		base, out.array = strings.TrimSpace(b), true
+	}
+	out.base = base
+	word, quoted := strings.ToLower(base), false
+	for _, p := range []string{"pg_catalog.", `"pg_catalog".`} {
+		if w, ok := strings.CutPrefix(word, p); ok {
+			word, quoted = w, true
+		}
+	}
+	if strings.HasPrefix(word, `"`) {
+		end := strings.IndexByte(word[1:], '"')
+		if end < 0 {
+			return out
+		}
+		word, quoted = word[1:end+1]+word[end+2:], true
+	}
+	word, _, sized := strings.Cut(word, "(")
+	word = strings.TrimSpace(word)
+	if quoted && word == "char" {
+		return out
+	}
+	if bare, ok := pgStrings[word]; ok {
+		out.known, out.text, out.limited = true, true, word != "text" && (sized || bare)
+		return out
+	}
+	if bare, ok := pgBits[word]; ok {
+		out.known, out.bits, out.limited = true, true, sized || bare
+		return out
+	}
+	first, _, _ := strings.Cut(word, " ")
+	out.known = slices.Contains(pgOthers, first)
+	return out
+}
+
+// pgInteger reports whether t is an integer type, of which a cast to bit keeps
+// the low bits.
+func pgInteger(t string) bool {
+	switch word, _, _ := strings.Cut(strings.ToLower(strings.TrimSpace(t)), " "); word {
+	case "smallint", "integer", "int", "bigint", "int2", "int4", "int8":
 		return true
-	case "character varying", "varchar":
-		return sized
-	case "bit":
-		return bits(fromBase)
-	case "bit varying", "varbit":
-		return sized && bits(fromBase)
 	}
 	return false
 }
@@ -617,7 +692,13 @@ func (r *renderer) postgresScripts(main Script, opts RenderOptions) []Script {
 				fs = append(fs, f)
 			}
 		}
-		return allowed(fs, opts.Allow)
+		allow := allowed(fs, opts.Allow)
+		for _, a := range opts.Allow {
+			if a.Code == lossCode { // no plan finds it; Up reads it
+				allow = append(allow, a)
+			}
+		}
+		return allow
 	}
 	var out []Script
 	if len(r.enum) > 0 {

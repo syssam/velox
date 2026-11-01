@@ -107,7 +107,7 @@ func ParseFile(d velox.Dialect, path string, data []byte) (File, error) {
 		}
 		malformed := func(how string) error { return refuse(p.Line, "malformed directive %q: %s", p.Directive, how) }
 		switch word {
-		case "no-transaction", "foreign-keys", "lock-timeout", "allow", "unit":
+		case "no-transaction", "foreign-keys", "lock-timeout", "allow", "drops", "unit":
 		default:
 			return File{}, refuse(p.Line, "unknown directive %q", word)
 		}
@@ -115,7 +115,7 @@ func ParseFile(d velox.Dialect, path string, data []byte) (File, error) {
 			if len(f.Statements) > 0 {
 				return File{}, refuse(p.Line, "%s comes after a statement; only unit can", word)
 			}
-			if word != "allow" && seen[word] {
+			if word != "allow" && word != "drops" && seen[word] {
 				return File{}, refuse(p.Line, "%s is given twice", word)
 			}
 			seen[word] = true
@@ -165,6 +165,15 @@ func ParseFile(d velox.Dialect, path string, data []byte) (File, error) {
 				return File{}, malformed("write allow <code> [<target>]")
 			}
 			dd.Allow = append(dd.Allow, Allow{Code: code, Target: target})
+		case "drops":
+			target, ok := dropsTarget(p.Directive)
+			switch {
+			case !ok:
+				return File{}, malformed("write drops <target>")
+			case d != velox.SQLite:
+				return File{}, refuse(p.Line, "drops is SQLite's only")
+			}
+			dd.Drops = append(dd.Drops, target)
 		case "unit":
 			if len(fields) != 1 {
 				return File{}, malformed("unit takes no argument")
@@ -200,6 +209,17 @@ func allowParts(directive string) (code, target string, ok bool) {
 		}
 	}
 	return code, rest, !strings.ContainsFunc(rest, unicode.IsSpace)
+}
+
+// dropsTarget reads a drops directive's target, as an allow directive's.
+func dropsTarget(directive string) (string, bool) {
+	rest := strings.TrimSpace(strings.TrimPrefix(directive, "drops"))
+	if strings.HasPrefix(rest, `"`) {
+		if t, err := strconv.Unquote(rest); err == nil {
+			return t, true
+		}
+	}
+	return rest, rest != "" && !strings.ContainsFunc(rest, unicode.IsSpace)
 }
 
 // allowTarget is target as an allow directive writes it: as it is when it is

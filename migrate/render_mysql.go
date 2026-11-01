@@ -192,6 +192,10 @@ func (r *renderer) mysqlChange(i int, c Change) (table string, phase int, action
 	case setTableComment:
 		return r.table(c.Table), phaseColumn, "COMMENT = " + ddl.Literal(velox.MySQL, c.To), nil, nil
 	case setTableCollation:
+		if !strings.HasPrefix(c.To, "utf8mb4_") {
+			return "", 0, "", nil, &Error{Object: c.Table.String(), Code: "render",
+				Reason: fmt.Sprintf("the collation %q is not one of utf8mb4, the character set the plan converts to, so CONVERT TO would fail every time the file ran; use a utf8mb4 collation, or convert the table by hand and write a baseline", c.To)}
+		}
 		return r.table(c.Table), phaseColumn, "CONVERT TO CHARACTER SET utf8mb4 COLLATE " + c.To, nil, nil
 	}
 	return "", 0, "", nil, r.refuse(i, fmt.Sprintf("MySQL has no %s", c.Kind()))
@@ -256,8 +260,9 @@ func (r *renderer) mysqlCreate(t *Table) string {
 	if collation == "" {
 		collation = "utf8mb4_bin"
 	}
+	charset, _, _ := strings.Cut(collation, "_") // a collation names its character set
 	s := "CREATE TABLE " + r.table(t.Ref()) + " (\n  " + strings.Join(defs, ",\n  ") +
-		"\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=" + collation
+		"\n) ENGINE=InnoDB DEFAULT CHARSET=" + charset + " COLLATE=" + collation
 	if t.Comment != "" {
 		s += " COMMENT=" + ddl.Literal(velox.MySQL, t.Comment)
 	}

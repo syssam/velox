@@ -76,12 +76,14 @@
 //     to resume runs in a transaction or has versions above the
 //     directory's last file beside it, or the version Resolve was given is
 //     not dirty or not in the history.
-//   - "unmodeled": Up found that a file would destroy what the model cannot
-//     hold: a generated SQLite rebuild of a table with a trigger, an expression
-//     index, a collation and the like, or that a view names, or a MySQL
-//     MODIFY or CHANGE COLUMN that does not write a column's ON UPDATE or
-//     collation. It names each, and a directive -- velox:allow unmodeled-loss
-//     accepts the loss.
+//   - "unmodeled": Up found that a file would lose what the database holds
+//     and its change list does not say: a SQLite rebuild of a table with a column
+//     its INSERT does not copy, a check, a trigger and the like, or that a view
+//     uses; a SQLite DROP TABLE of a table an unaccounted one references; a MySQL
+//     MODIFY, CHANGE or CONVERT TO, or a PostgreSQL ALTER COLUMN TYPE, that does
+//     not write what the model cannot hold of a column; a foreign key added again
+//     without it; or a statement it cannot read on such a table. It names each,
+//     and a directive -- velox:allow unmodeled-loss accepts the loss.
 //   - "resolution": Resolve was given neither ResolveApplied nor
 //     ResolveUndone.
 //   - "drift": Verify was given a database that is not empty, or the

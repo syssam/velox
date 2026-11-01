@@ -804,7 +804,7 @@ type ColumnRef struct { Table TableRef Column string }
 type Config struct { Dialect velox.Dialect Table string LockTimeout time.Duration }
 type DiffOptions struct { RenameTables map[TableRef]TableRef RenameColumns map[ColumnRef]string }
 type Dir struct { Config Config Files []File Snapshot *Schema }
-type Directives struct { NoTransaction bool ForeignKeysOff bool LockTimeout time.Duration LockTimeoutSet bool Allow []Allow }
+type Directives struct { NoTransaction bool ForeignKeysOff bool LockTimeout time.Duration LockTimeoutSet bool Allow []Allow Drops []string }
 type DirtyError struct { Version uint64 Path string Statement, Statements int Err error }
 type DriftReport struct { Changes []Change Warnings []Warning }
 type Enum struct { Schema string Name string Values []string Pos string }

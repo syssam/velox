@@ -2,6 +2,8 @@
 -- velox:foreign-keys off
 -- velox:allow drop-enum-value posts.posts_status_check
 -- velox:allow drop-enum-value users.users_status_check
+-- velox:drops posts.posts_status_check
+-- velox:drops users.users_status_check
 
 -- review: sqlite-rebuild: drops check posts_status_check, adds check posts_status_check; SQLite rebuilds table posts: it copies every row into a new table; drop-enum-value: removes 'banned' from check posts.posts_status_check; rows that hold it fail or change; add-check: adds check posts.posts_status_check; it fails if any row breaks it
 CREATE TABLE "velox_new_posts" (

@@ -12,6 +12,7 @@ import (
 var (
 	ApplyChanges = applyChanges
 	Clone        = (*Schema).clone
+	PgUsing      = pgUsing
 )
 
 // WriteScript is writeScript, for the goldens.

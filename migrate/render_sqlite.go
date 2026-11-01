@@ -160,8 +160,9 @@ func (r *renderer) sqliteChange(i int, c Change) error {
 
 // rebuild writes the rebuild of the table from names k and the plan names
 // ref, as change i: a new table of to's definition, the rows copied into
-// it, the AUTOINCREMENT counter kept, the old table dropped, the new one
-// renamed, and its indexes made.
+// it with their rowids, the AUTOINCREMENT counter kept, the old table dropped,
+// the new one renamed, and its indexes made. What the plan takes away of the
+// table is added to r.drops, for Up, which compares the table before and after.
 func (r *renderer) rebuild(i int, k, ref TableRef) error {
 	t, err := r.toTable(i, ref)
 	if err != nil {
@@ -194,6 +195,7 @@ func (r *renderer) rebuild(i int, k, ref TableRef) error {
 		default:
 			folded = append(folded, j)
 		}
+		r.dropsOf(c, ref, renamed)
 	}
 	ft := r.from.table(k)
 	var cols, src []string
@@ -212,6 +214,9 @@ func (r *renderer) rebuild(i int, k, ref TableRef) error {
 	}
 	tmp := TableRef{Schema: ref.Schema, Name: ddl.Rebuild(ref.Name)}
 	r.out = append(r.out, Statement{SQL: r.sqliteCreate(tmp, t), Change: i, Review: r.review(folded, &ref)})
+	if id := rowidName(ft, t); id != "" && len(cols) > 0 {
+		cols, src = append([]string{id}, cols...), append([]string{id}, src...)
+	}
 	if len(cols) > 0 {
 		r.emit(fmt.Sprintf("INSERT INTO %s (%s) SELECT %s FROM %s", r.table(tmp), strings.Join(cols, ", "), strings.Join(src, ", "), r.table(ref)), i)
 	}
@@ -228,6 +233,73 @@ func (r *renderer) rebuild(i int, k, ref TableRef) error {
 		}
 	}
 	return nil
+}
+
+// rowidName is the name that reads the rowid of the rebuild of ft into t, one
+// neither has as a column; "" when t's key is its rowid, an INTEGER PRIMARY KEY,
+// whose copy carries it, or every name is taken. External-content FTS5, and
+// anything else that holds a rowid, depends on it.
+func rowidName(ft, t *Table) string {
+	if len(t.PrimaryKey) == 1 {
+		if c := t.column(t.PrimaryKey[0]); c != nil && strings.EqualFold(c.Type, "integer") {
+			return ""
+		}
+	}
+	taken := func(s *Table, name string) bool {
+		return s != nil && slices.ContainsFunc(s.Columns, func(c Column) bool { return strings.EqualFold(c.Name, name) })
+	}
+	for _, name := range [...]string{"rowid", "_rowid_", "oid"} {
+		if !taken(ft, name) && !taken(t, name) {
+			return name
+		}
+	}
+	return ""
+}
+
+// dropsOf adds to r.drops what change c takes away of the table the rebuild
+// names ref, under the names Up reads after the rename: renamed holds a column's
+// old name by its new one.
+func (r *renderer) dropsOf(c Change, ref TableRef, renamed map[string]string) {
+	cols := func(names []string) []string {
+		out := slices.Clone(names)
+		for i, n := range out {
+			for to, from := range renamed {
+				if from == n {
+					out[i] = to
+				}
+			}
+		}
+		return out
+	}
+	switch c := c.(type) {
+	case alterColumn:
+		col := colTarget(ref, c.To.Name)
+		add := func(on bool, attr string) {
+			if on {
+				r.drops = append(r.drops, col+":"+attr)
+			}
+		}
+		add(c.What&columnType != 0, "type")
+		add(c.What&columnNullable != 0 && !c.From.Nullable, "not-null")
+		add(c.What&columnDefault != 0 && c.From.Default != "", "default")
+		add(c.What&columnIdentity != 0 && c.From.Identity, "identity")
+	case dropForeignKey:
+		fk := c.ForeignKey
+		fk.Columns = cols(fk.Columns)
+		r.drops = append(r.drops, keyObject(ref, fk))
+	case dropCheck:
+		ck := c.Check
+		for to, from := range renamed {
+			ck.Expr = renameIdent(r.d, ck.Expr, from, to)
+		}
+		r.drops = append(r.drops, checkObject(ref, ck))
+	case dropIndex:
+		if tableUnique(c.Index) {
+			ix := c.Index
+			ix.Columns = cols(ix.Columns)
+			r.drops = append(r.drops, indexObject(ref, ix))
+		}
+	}
 }
 
 // autoIncrement reports whether t's key is one identity column, which
