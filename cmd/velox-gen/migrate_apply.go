@@ -116,9 +116,9 @@ func (c *dbCmd) connect(dir string, env []string, staleCode int, existing bool) 
 
 // given reports whether the command line set the flag name: 0 is a version,
 // so a version flag's value cannot say.
-func given(fs *flag.FlagSet, name string) bool {
+func given(flags *flag.FlagSet, name string) bool {
 	set := false
-	fs.Visit(func(f *flag.Flag) { set = set || f.Name == name })
+	flags.Visit(func(f *flag.Flag) { set = set || f.Name == name })
 	return set
 }
 

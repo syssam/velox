@@ -76,7 +76,8 @@ func LintFile(d velox.Dialect, f File) ([]Finding, error) {
 		}
 		l.classify()
 		for _, fd := range l.out {
-			if !f.generated || fd.Code != "alter-type" && !(fd.Code == "drop-table" && rebuilt[fd.Target]) {
+			rendered := fd.Code == "alter-type" || fd.Code == "drop-table" && rebuilt[fd.Target]
+			if !f.generated || !rendered {
 				out = append(out, fd)
 			}
 		}

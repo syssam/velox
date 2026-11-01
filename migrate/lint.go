@@ -669,7 +669,7 @@ func sqliteAffinity(typ string) string {
 		return "TEXT"
 	case has("BLOB") || t == "":
 		return "BLOB"
-	case has("REAL", "FLOA", "DOUB"):
+	case has("REAL", "FLOA", "DOUB"): //nolint:misspell // SQLite's rule is these substrings
 		return "REAL"
 	}
 	return "NUMERIC"

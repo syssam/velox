@@ -402,10 +402,7 @@ func pgLimited(from, to string) bool {
 	if array && !fromArray {
 		return false
 	}
-	word, sized := base, false
-	if i := strings.IndexByte(base, '('); i >= 0 {
-		word, sized = base[:i], true
-	}
+	word, _, sized := strings.Cut(base, "(")
 	bits := func(t string) bool { return strings.HasPrefix(t, "bit") || strings.HasPrefix(t, "varbit") }
 	switch word {
 	case "character", "char":
