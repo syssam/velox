@@ -118,7 +118,7 @@ func TestAnnotationMisuse(t *testing.T) {
 			author := edge("author", plugin.M2O, "User")
 			author.Required = true
 			post.Edges = []*plugin.Edge{author}
-			post.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate()))
+			post.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate))
 			renderErr(t, model(post, target), "schema Post, edge author", "required", "createPost")
 			// The user may leave it to a hook.
 			author.Annotations = ann(t, graphql.Skip(graphql.SkipMutationCreateInput))
@@ -131,7 +131,7 @@ func TestAnnotationMisuse(t *testing.T) {
 		profile := edge("profile", plugin.O2O, "Profile")
 		profile.Required, profile.Field, profile.FieldOn = true, "user_id", "Profile"
 		user.Edges = []*plugin.Edge{profile}
-		user.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate()))
+		user.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate))
 		target := entity("Profile", field("user_id", "int64"))
 		target.Annotations = ann(t, graphql.Skip())
 		s, _ := load(t, model(target, user))
@@ -146,13 +146,13 @@ func TestAnnotationMisuse(t *testing.T) {
 	t.Run("a key the caller supplies", func(t *testing.T) {
 		code := entity("Country", field("name", "string"))
 		code.Fields[0] = &plugin.Field{Name: "id", GoName: "ID", Type: "string"}
-		code.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate()))
+		code.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate))
 		renderErr(t, model(code), "schema Country", "create", "supplied by the caller", "v1")
 		code.Fields[0].HasDefault = true
 		load(t, model(code))
 		// Update and delete need no new key.
 		code.Fields[0].HasDefault = false
-		code.Annotations = ann(t, graphql.Mutations(graphql.MutationUpdate(), graphql.MutationDelete()))
+		code.Annotations = ann(t, graphql.Mutations(graphql.MutationUpdate, graphql.MutationDelete))
 		load(t, model(code))
 	})
 
@@ -166,7 +166,7 @@ func TestAnnotationMisuse(t *testing.T) {
 	})
 
 	t.Run("update or delete without an ID", func(t *testing.T) {
-		for _, k := range []graphql.MutationKind{graphql.MutationUpdate(), graphql.MutationDelete()} {
+		for _, k := range []graphql.MutationKind{graphql.MutationUpdate, graphql.MutationDelete} {
 			like := &plugin.Entity{Name: "Like", Tenant: -1, PrimaryKey: []int{0, 1},
 				Fields: []*plugin.Field{field("a", "string"), field("b", "string")}}
 			like.Annotations = ann(t, graphql.Mutations(k))

@@ -68,7 +68,7 @@ func (Post) Edges() []schema.Edge {
 func (Post) Annotations() []schema.Annotation {
 	return []schema.Annotation{
 		graphql.QueryField("posts"),
-		graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate(), graphql.MutationDelete()),
+		graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate, graphql.MutationDelete),
 	}
 }
 
@@ -108,7 +108,7 @@ func (Category) Edges() []schema.Edge {
 }
 
 func (Category) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate())}
+	return []schema.Annotation{graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
 }
 
 type Secret struct{ schema.Schema }
@@ -327,7 +327,7 @@ func (Event) Edges() []schema.Edge {
 }
 
 func (Event) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.QueryField("events"), graphql.Mutations(graphql.MutationCreate())}
+	return []schema.Annotation{graphql.QueryField("events"), graphql.Mutations(graphql.MutationCreate)}
 }
 
 // Owner's key is of a type from a package named ids, as Nodes's parameter

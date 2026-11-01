@@ -55,12 +55,12 @@ func WithCallerSkip(pkgPath ...string) Option { return engine.WithCallerSkip(pkg
 func WithSQLComment(app string, tags ...string) Option { return engine.WithSQLComment(app, tags...) }
 
 // Option configures a DB's pipeline. The With functions make them; the zero
-// Option is not valid, and Open, OpenConn and OpenShards panic on it.
+// Option is not valid, and Connect, Open, OpenConn and OpenShards panic on it.
 type Option = engine.Option
 
 // WithRewrite adds a rewrite hook. Rewrite hooks run in the order given. A
 // nil hook panics.
-func WithRewrite(r Rewrite) Option { return engine.WithRewrite(r) }
+func WithRewrite(r Rewrite) Option { return engine.WithRewrite(engine.Rewrite(r)) }
 
 // WithMaxLimit refuses, with ErrLimitTooLarge, a query whose Limit is over n.
 // n must be at least 2, the limit One uses; a smaller n panics.
@@ -81,7 +81,7 @@ func WithMaxRows(n int) Option { return engine.WithMaxRows(n) }
 
 // WithAround adds an around hook. The first one given is the outermost. A nil
 // hook panics.
-func WithAround(a Around) Option { return engine.WithAround(a) }
+func WithAround(a Around) Option { return engine.WithAround(engine.Around(a)) }
 
 // Deadlines are the time limits velox gives statements and transactions.
 type Deadlines = veloxtype.Deadlines
@@ -111,7 +111,7 @@ func WithDeadlines(d Deadlines) Option { return engine.WithDeadlines(d) }
 // EXISTS, but a hook that moves tables cannot reach it. With a table per
 // tenant, avoid Has and HasWhere, or load the relation with With, which goes
 // through the hooks.
-type Rewrite = engine.Rewrite
+type Rewrite func(ctx context.Context, st *Statement) error
 
 // Around is a hook that wraps a statement's execution. next runs the
 // statement and reads all its rows, so the hook wraps everything from sending
@@ -134,7 +134,7 @@ type Rewrite = engine.Rewrite
 // With Iter the caller's loop body runs inside the hooks, so a hook that
 // recovers a panic and returns normally makes Go report that a range function
 // recovered a loop body panic: let panics through.
-type Around = engine.Around
+type Around func(ctx context.Context, st *Statement, next func(context.Context) error) error
 
 // Tag is a string a context carries to every statement run with it.
 type Tag = veloxtype.Tag

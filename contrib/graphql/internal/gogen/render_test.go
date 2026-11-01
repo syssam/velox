@@ -760,7 +760,7 @@ func TestConnectionOfEveryNode(t *testing.T) {
 func mutationsModel(t *testing.T) *plugin.Model {
 	t.Helper()
 	m := typesModel(t)
-	b, err := json.Marshal(graphql.Mutations(graphql.MutationCreate()))
+	b, err := json.Marshal(graphql.Mutations(graphql.MutationCreate))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -885,7 +885,7 @@ func mutationDecls(t *testing.T, files map[string]string) (map[string]*ast.Struc
 func updateOnlyModel(t *testing.T) *plugin.Model {
 	t.Helper()
 	m := typesModel(t)
-	b, err := json.Marshal(graphql.Mutations(graphql.MutationUpdate()))
+	b, err := json.Marshal(graphql.Mutations(graphql.MutationUpdate))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1496,7 +1496,7 @@ func TestM2MWithoutInverse(t *testing.T) {
 func deleteOnlyModel(t *testing.T) *plugin.Model {
 	t.Helper()
 	m := typesModel(t)
-	b, err := json.Marshal(graphql.Mutations(graphql.MutationDelete()))
+	b, err := json.Marshal(graphql.Mutations(graphql.MutationDelete))
 	if err != nil {
 		t.Fatal(err)
 	}

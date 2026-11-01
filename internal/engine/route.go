@@ -88,7 +88,7 @@ type Shard struct {
 // f is called concurrently, from the goroutine of every statement, so it must
 // be safe for that, and fast: a map lookup or a hash, not a query.
 //
-// It is required with OpenShards; given to Open or OpenConn, it panics there.
+// It is required with OpenShards; given to Connect, Open or OpenConn, it panics there.
 // A nil f panics. WithShard names a statement's shard from its context instead.
 func WithShardFor(f func(ctx context.Context, tenant any) (string, error)) Option {
 	if f == nil {

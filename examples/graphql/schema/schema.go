@@ -43,7 +43,7 @@ func (User) Edges() []schema.Edge {
 
 // Annotations names the root query field.
 func (User) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.QueryField("users"), graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate())}
+	return []schema.Annotation{graphql.QueryField("users"), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
 }
 
 // Post belongs to an organization, the tenant, and to its author.
@@ -79,7 +79,7 @@ func (Post) Annotations() []schema.Annotation {
 	return []schema.Annotation{
 		graphql.QueryField("posts"),
 		graphql.MultiOrder(),
-		graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate(), graphql.MutationDelete()),
+		graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate, graphql.MutationDelete),
 	}
 }
 
@@ -105,5 +105,5 @@ func (Tag) Edges() []schema.Edge {
 
 // Annotations names the GraphQL type and the root query field.
 func (Tag) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.Type("Label"), graphql.QueryField("labels"), graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate())}
+	return []schema.Annotation{graphql.Type("Label"), graphql.QueryField("labels"), graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
 }

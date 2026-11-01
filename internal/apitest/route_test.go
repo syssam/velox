@@ -324,7 +324,7 @@ func TestRoutingMisconfigurationPanics(t *testing.T) {
 		}, "OpenShards: a shard's name must not be empty"},
 		"WithReplicas given to OpenShards": {func() {
 			velox.OpenShards(velox.Postgres, map[string]velox.Shard{"eu": {Primary: fake()}}, shardFor, velox.WithReplicas(fake()))
-		}, "OpenShards: WithReplicas is for Open and OpenConn"},
+		}, "OpenShards: WithReplicas is for Connect, Open and OpenConn"},
 		"WithShardFor given to Open": {func() {
 			velox.Open(velox.SQLite, sqlDB, shardFor)
 		}, "WithShardFor is for OpenShards"},

@@ -28,7 +28,7 @@ type config struct {
 }
 
 // Option configures a DB's pipeline. The With functions make them; the zero
-// Option is not valid, and Open, OpenConn and OpenShards panic on it.
+// Option is not valid, and Connect, Open, OpenConn and OpenShards panic on it.
 type Option struct{ apply func(*config) }
 
 // WithRewrite adds a rewrite hook. Rewrite hooks run in the order given. A

@@ -85,6 +85,22 @@ func TestAPILinesSeeThroughAliases(t *testing.T) {
 	}
 }
 
+// TestAPILinesSeePromotedMethods pins the other thing it rests on: the methods
+// most of the schema DSL gets from a type it embeds that is not exported, and
+// what an alias of a non-struct is.
+func TestAPILinesSeePromotedMethods(t *testing.T) {
+	has := func(dir, want string) {
+		t.Helper()
+		if !slices.ContainsFunc(apiLines(t, dir), func(l string) bool { return strings.HasPrefix(l, want) }) {
+			t.Errorf("%s: no line starts %q", dir, want)
+		}
+	}
+	has("schema/field", "StringBuilder embeds common[*StringBuilder]")
+	has("schema/field", "promoted func (c common[B]) Optional() B")
+	has("schema/field", "promoted func (t typed[B, V]) Default(v V) B")
+	has("schema", "Annotation is interface")
+}
+
 // apiLines is the sorted exported API of the package in dir.
 func apiLines(t *testing.T, dir string) []string {
 	t.Helper()
@@ -107,7 +123,12 @@ func apiLines(t *testing.T, dir string) []string {
 		}
 	}
 	if len(engine) > 0 {
-		lines = append(lines, engineMembers(t, engine)...)
+		lines = append(lines, membersIn(t, "internal/engine", engine)...)
+	}
+	files := parseDir(t, fset, dir)
+	lines = append(lines, promotedLines(fset, files)...)
+	if names := descAliases(files); len(names) > 0 {
+		lines = append(lines, membersIn(t, "schema/internal/desc", names)...)
 	}
 	slices.Sort(lines)
 	return slices.Compact(lines)
@@ -259,12 +280,96 @@ func engineAliases(d *ast.GenDecl) []string {
 	return names
 }
 
-// engineMembers is the exported fields and methods of the named engine types.
-func engineMembers(t *testing.T, names map[string]bool) []string {
+// descAliases is the names files declare as aliases of a type of schema/internal/desc.
+func descAliases(files []*ast.File) map[string]bool {
+	names := map[string]bool{}
+	for _, f := range files {
+		for _, d := range f.Decls {
+			g, ok := d.(*ast.GenDecl)
+			if !ok {
+				continue
+			}
+			for _, s := range g.Specs {
+				if ts, ok := s.(*ast.TypeSpec); ok && ts.Assign.IsValid() && ts.Name.IsExported() && aliasedPackage(ts.Type) == "desc" {
+					names[ts.Name.Name] = true
+				}
+			}
+		}
+	}
+	return names
+}
+
+// promotedLines is what an exported struct gets from a type of its package that
+// it embeds and that is not exported, which go doc shows as its own: "T embeds
+// base[*T]" for each embedding, and the exported methods of base, at any depth.
+func promotedLines(fset *token.FileSet, files []*ast.File) []string {
+	specs := map[string]*ast.StructType{}
+	var methods []*ast.FuncDecl
+	for _, f := range files {
+		for _, d := range f.Decls {
+			switch d := d.(type) {
+			case *ast.FuncDecl:
+				if d.Recv != nil && d.Name.IsExported() {
+					methods = append(methods, d)
+				}
+			case *ast.GenDecl:
+				for _, s := range d.Specs {
+					if ts, ok := s.(*ast.TypeSpec); ok {
+						if st, ok := ts.Type.(*ast.StructType); ok {
+							specs[ts.Name.Name] = st
+						}
+					}
+				}
+			}
+		}
+	}
+	var lines []string
+	bases := map[string]bool{}
+	var embed func(owner string, st *ast.StructType)
+	embed = func(owner string, st *ast.StructType) {
+		for _, fl := range st.Fields.List {
+			if len(fl.Names) > 0 || exportedEmbedded(fl.Type) {
+				continue
+			}
+			lines = append(lines, owner+" embeds "+source(fset, fl.Type))
+			x := fl.Type
+			if s, ok := x.(*ast.StarExpr); ok {
+				x = s.X
+			}
+			switch i := x.(type) {
+			case *ast.IndexExpr:
+				x = i.X
+			case *ast.IndexListExpr:
+				x = i.X
+			}
+			if id, ok := x.(*ast.Ident); ok && !bases[id.Name] && specs[id.Name] != nil {
+				bases[id.Name] = true
+				embed(id.Name, specs[id.Name])
+			}
+		}
+	}
+	for name, st := range specs {
+		if ast.IsExported(name) {
+			embed(name, st)
+		}
+	}
+	for _, m := range methods {
+		if bases[receiver(m)] {
+			bare := *m
+			bare.Body, bare.Doc = nil, nil
+			lines = append(lines, "promoted "+source(fset, &bare))
+		}
+	}
+	return lines
+}
+
+// membersIn is the exported fields and methods of the named types of the package
+// in dir, or, for a type that is not a struct, what it is.
+func membersIn(t *testing.T, dir string, names map[string]bool) []string {
 	t.Helper()
 	fset := token.NewFileSet()
 	var lines []string
-	for _, f := range parseDir(t, fset, "internal/engine") {
+	for _, f := range parseDir(t, fset, dir) {
 		for _, d := range f.Decls {
 			switch d := d.(type) {
 			case *ast.FuncDecl:
@@ -279,6 +384,7 @@ func engineMembers(t *testing.T, names map[string]bool) []string {
 					}
 					st, ok := ts.Type.(*ast.StructType)
 					if !ok {
+						lines = append(lines, ts.Name.Name+" is "+source(fset, ts.Type))
 						continue
 					}
 					for _, fl := range st.Fields.List {

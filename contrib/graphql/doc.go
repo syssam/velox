@@ -36,9 +36,9 @@
 //		return []schema.Annotation{
 //			graphql.QueryField("users"),
 //			graphql.Mutations(
-//				graphql.MutationCreate(),
-//				graphql.MutationUpdate(),
-//				graphql.MutationDelete(),
+//				graphql.MutationCreate,
+//				graphql.MutationUpdate,
+//				graphql.MutationDelete,
 //			),
 //			graphql.MultiOrder(),
 //		}
@@ -186,9 +186,9 @@
 //
 // # Mutations
 //
-// For an entity with graphql.MutationCreate(), its file also has Create<T>Input
+// For an entity with graphql.MutationCreate, its file also has Create<T>Input
 // and Create<T>(ctx, input), which createX's resolver returns; with
-// graphql.MutationUpdate(), Update<T>Input and Update<T>(ctx, id, input), which
+// graphql.MutationUpdate, Update<T>Input and Update<T>(ctx, id, input), which
 // updateX's resolver returns. In an update input a field not given is left as
 // it is, clear<Field> sets a nullable one to NULL, and an edge is cleared, then
 // its remove<Edge>IDs removed, then its add<Edge>IDs added; a field given with
@@ -255,7 +255,7 @@
 // the row before it wrote it. A mutation that takes the row out of what the
 // caller may read still returns it. This is a contract, and will not change.
 //
-// With graphql.MutationDelete(), Delete<T>(ctx, id) deletes the row and every
+// With graphql.MutationDelete, Delete<T>(ctx, id) deletes the row and every
 // join row that holds its key, of its own many-to-many edges, and returns the
 // ID encoded again from the key; deleteX's resolver returns it. velox-gen's own
 // migrations give a join table's foreign keys ON DELETE CASCADE, as ent's do,

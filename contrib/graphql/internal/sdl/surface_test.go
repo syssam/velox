@@ -38,7 +38,7 @@ func TestNodeKeyTypes(t *testing.T) {
 	if def := sch.Types["Clock"]; len(def.Interfaces) != 0 || typeOf(sch, "Clock", "id") != "Float!" || goField(sch, "Clock", "id") != "" {
 		t.Errorf("a float key:\n%s", sdl)
 	}
-	clock.Annotations = ann(t, graphql.Mutations(graphql.MutationDelete()))
+	clock.Annotations = ann(t, graphql.Mutations(graphql.MutationDelete))
 	renderErr(t, model(clock), "schema Clock", "delete", "of type float64, which an ID does not hold")
 }
 

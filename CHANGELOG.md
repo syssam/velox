@@ -40,6 +40,11 @@ This summarizes what a user of the tree before the hardening work must know.
 
 - The module is `github.com/syssam/velox` (decision 0023). The project that had this
   path is now veloxe.
+- `graphql.MutationCreate`, `MutationUpdate` and `MutationDelete` are constants, not
+  functions, like the other annotation values: drop the parentheses.
+- `velox.Around` and `velox.Rewrite` are types of the root package, so that `go doc`
+  shows their signatures. Code that passes a function to `WithAround` or `WithRewrite`
+  does not change.
 - `dbtype` is `veloxtype`, and velox-graphql's Go files are `<label>_gql.go`: an entity
   named Android, Windows or Test can now have a GraphQL type.
 - `migrate.Change` is opaque: read a change through `Kind`, `Target` and `String`. The

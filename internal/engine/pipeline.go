@@ -163,7 +163,7 @@ func dialectExecutor(d Dialect, ex executor) executor {
 func newDB(d Dialect, ex executor, opts []Option) DB {
 	cfg := newConfig(opts)
 	if cfg.ShardFor != nil {
-		panic("velox: WithShardFor is for OpenShards; Open and OpenConn open a DB on one shard")
+		panic("velox: WithShardFor is for OpenShards; Connect, Open and OpenConn open a DB on one shard")
 	}
 	if len(cfg.Replicas) > 0 {
 		return DB{D: d, Rt: newRouter(d, ex, cfg.Replicas), Cfg: cfg}
@@ -184,7 +184,7 @@ func OpenShards(d Dialect, shards map[string]Shard, opts []Option) DB {
 		panic("velox: OpenShards: WithShardFor is required, to find a statement's shard from its tenant")
 	}
 	if len(cfg.Replicas) > 0 {
-		panic("velox: OpenShards: WithReplicas is for Open and OpenConn; give each Shard its Replicas")
+		panic("velox: OpenShards: WithReplicas is for Connect, Open and OpenConn; give each Shard its Replicas")
 	}
 	rt := &router{Shards: make(map[string]*shardConn, len(shards)), ShardFor: cfg.ShardFor}
 	for _, name := range slices.Sorted(maps.Keys(shards)) {

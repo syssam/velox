@@ -69,7 +69,7 @@ func (Writer) Edges() []schema.Edge {
 }
 
 func (Writer) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate(), graphql.MutationDelete())}
+	return []schema.Annotation{graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate, graphql.MutationDelete)}
 }
 
 type Article struct{ schema.Schema }
@@ -86,7 +86,7 @@ func (Article) Edges() []schema.Edge {
 }
 
 func (Article) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate(), graphql.MutationDelete())}
+	return []schema.Annotation{graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate, graphql.MutationDelete)}
 }
 
 type Circle struct{ schema.Schema }
@@ -98,7 +98,7 @@ func (Circle) Edges() []schema.Edge {
 }
 
 func (Circle) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate(), graphql.MutationDelete())}
+	return []schema.Annotation{graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate, graphql.MutationDelete)}
 }
 
 type Profile struct{ schema.Schema }
@@ -115,7 +115,7 @@ func (Profile) Edges() []schema.Edge {
 }
 
 func (Profile) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.Mutations(graphql.MutationCreate())}
+	return []schema.Annotation{graphql.Mutations(graphql.MutationCreate)}
 }
 
 type Folder struct{ schema.Schema }
@@ -130,7 +130,7 @@ func (Folder) Edges() []schema.Edge {
 }
 
 func (Folder) Annotations() []schema.Annotation {
-	return []schema.Annotation{graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate())}
+	return []schema.Annotation{graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate)}
 }
 `
 

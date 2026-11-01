@@ -227,19 +227,17 @@ func QueryField(name string) Annotation { return Annotation{QueryField: name} }
 // create and update.
 func Mutations(kinds ...MutationKind) Annotation {
 	if len(kinds) == 0 {
-		kinds = []MutationKind{MutationCreate(), MutationUpdate()}
+		kinds = []MutationKind{MutationCreate, MutationUpdate}
 	}
 	return Annotation{Mutations: slices.Clone(kinds)}
 }
 
-// MutationCreate is the create mutation.
-func MutationCreate() MutationKind { return "create" }
-
-// MutationUpdate is the update mutation.
-func MutationUpdate() MutationKind { return "update" }
-
-// MutationDelete is the delete mutation.
-func MutationDelete() MutationKind { return "delete" }
+// The kinds of mutation.
+const (
+	MutationCreate MutationKind = "create"
+	MutationUpdate MutationKind = "update"
+	MutationDelete MutationKind = "delete"
+)
 
 // MultiOrder lets the entity's connection order by a list of fields.
 func MultiOrder() Annotation { return Annotation{MultiOrder: true} }

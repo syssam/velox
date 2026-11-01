@@ -376,7 +376,7 @@ func WithTxAround(h TxAround) Option
 func WithoutPolicy(ctx context.Context, reason string) context.Context
 func WithoutTx(ctx context.Context) context.Context
 type Aggregate = veloxtype.Aggregate
-type Around = engine.Around
+type Around func(ctx context.Context, st *Statement, next func(context.Context) error) error
 type AssignOp = veloxtype.AssignOp
 type Assignment = veloxtype.Assignment
 type BoundHooks = engine.BoundHooks
@@ -434,7 +434,7 @@ type Query[E any] struct { }
 type RawQuery[E any] struct { }
 type Rel[E, T any] struct { I int32 }
 type Result = veloxtype.Result
-type Rewrite = engine.Rewrite
+type Rewrite func(ctx context.Context, st *Statement) error
 type Route = veloxtype.Route
 type RowScope = veloxtype.RowScope
 type SaveQuery[E any] struct { }
@@ -544,6 +544,7 @@ func Conn(pool *pgxpool.Pool) velox.Conn
 func Open(pool *pgxpool.Pool, opts ...velox.Option) *velox.DB
 
 package schema
+Annotation is interface{ Name() string }
 func (*CheckAnnotation) Name() string
 func (*CommentAnnotation) Name() string
 func (*TableAnnotation) Name() string
@@ -609,6 +610,21 @@ type InverseBuilder struct { }
 type StorageOption func(*desc.Edge)
 
 package schema/field
+BoolBuilder embeds common[*BoolBuilder]
+BoolBuilder embeds typed[*BoolBuilder, bool]
+BytesBuilder embeds common[*BytesBuilder]
+BytesBuilder embeds typed[*BytesBuilder, []byte]
+EnumBuilder embeds common[*EnumBuilder]
+EnumOfBuilder embeds common[*EnumOfBuilder[T]]
+JSONBuilder embeds common[*JSONBuilder]
+NumberBuilder embeds common[*NumberBuilder[T]]
+NumberBuilder embeds typed[*NumberBuilder[T], T]
+OtherBuilder embeds common[*OtherBuilder]
+StringBuilder embeds common[*StringBuilder]
+StringBuilder embeds typed[*StringBuilder, string]
+TimeBuilder embeds common[*TimeBuilder]
+UUIDBuilder embeds common[*UUIDBuilder]
+UUIDOfBuilder embeds common[*UUIDOfBuilder[T]]
 const MySQL
 const Postgres
 const SQLite
@@ -668,6 +684,24 @@ func Uint16(name string) *NumberBuilder[uint16]
 func Uint32(name string) *NumberBuilder[uint32]
 func Uint64(name string) *NumberBuilder[uint64]
 func Uint8(name string) *NumberBuilder[uint8]
+promoted func (c common[B]) Annotations(as ...schema.Annotation) B
+promoted func (c common[B]) Comment(s string) B
+promoted func (c common[B]) Descriptor() *desc.Field
+promoted func (c common[B]) Immutable() B
+promoted func (c common[B]) Nillable() B
+promoted func (c common[B]) Optional() B
+promoted func (c common[B]) SchemaDefault(m map[string]string) B
+promoted func (c common[B]) SchemaType(m map[string]string) B
+promoted func (c common[B]) Sensitive() B
+promoted func (c common[B]) StorageKey(s string) B
+promoted func (c common[B]) StructTag(s string) B
+promoted func (c common[B]) Tenant() B
+promoted func (c common[B]) Unique() B
+promoted func (t typed[B, V]) Default(v V) B
+promoted func (t typed[B, V]) DefaultFunc(fn any) B
+promoted func (t typed[B, V]) GoType(typ any) B
+promoted func (t typed[B, V]) UpdateDefault(fn any) B
+promoted func (t typed[B, V]) Validate(fn func(V) error) B
 type BoolBuilder struct { }
 type BytesBuilder struct { }
 type EnumBuilder struct { }
@@ -826,6 +860,9 @@ type Response struct { Protocol int Files []File Warnings []string Error string 
 type Supports struct { Protocol, Model int }
 
 package contrib/graphql
+const MutationCreate MutationKind
+const MutationDelete MutationKind
+const MutationUpdate MutationKind
 const OpContains
 const OpEQ WhereOp
 const OpGT
@@ -860,9 +897,6 @@ func Directives(ds ...Directive) Annotation
 func EnumValues(m map[string]string) Annotation
 func FieldName(name string) Annotation
 func MultiOrder() Annotation
-func MutationCreate() MutationKind
-func MutationDelete() MutationKind
-func MutationUpdate() MutationKind
 func Mutations(kinds ...MutationKind) Annotation
 func OrderField(name string) Annotation
 func OrderUnguarded() Annotation

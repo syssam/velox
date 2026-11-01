@@ -36,7 +36,7 @@ func blogInputs(t *testing.T) *plugin.Model {
 	bestFriend := &plugin.Field{Name: "user_best_friend", GoName: "UserBestFriend", Type: "int64", Nullable: true, Optional: true, Implicit: "best_friend"}
 	user := entity("User", name, nickname, role, created, updated, editedBy, touched, org, secret, handle, views, notes, hidden, createOnly, skipped, bestFriend)
 	user.Tenant = 8 // org_id
-	user.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate(), graphql.MutationDelete()))
+	user.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate, graphql.MutationDelete))
 	posts := edge("posts", plugin.O2M, "Post")
 	posts.Field, posts.FieldOn = "author_id", "Post"
 	groups := edge("groups", plugin.M2M, "Group")
@@ -56,7 +56,7 @@ func blogInputs(t *testing.T) *plugin.Model {
 	creator := edge("creator", plugin.M2O, "User")
 	creator.Immutable = true
 	post.Edges = []*plugin.Edge{author, creator}
-	post.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate()))
+	post.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate))
 
 	like := &plugin.Entity{
 		Name: "Like", Tenant: -1, PrimaryKey: []int{0, 1},
@@ -65,7 +65,7 @@ func blogInputs(t *testing.T) *plugin.Model {
 	lu := edge("user", plugin.M2O, "User")
 	lu.Required, lu.Field, lu.FieldOn = true, "user_id", "Like"
 	like.Edges = []*plugin.Edge{lu}
-	like.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate()))
+	like.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate))
 
 	m := model(entity("Group"), like, post, entity("Profile"), user)
 	m.Enums = []*plugin.Enum{{Type: "UserRole", Values: []string{"admin", "viewer"}}}
@@ -146,7 +146,7 @@ func TestInputs(t *testing.T) {
 	t.Run("no update fields", func(t *testing.T) {
 		msg := &plugin.Field{Name: "msg", GoName: "Msg", Type: "string", Immutable: true}
 		log := entity("Log", msg)
-		log.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate(), graphql.MutationDelete()))
+		log.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate, graphql.MutationDelete))
 		s, sdl := load(t, model(log))
 		if s.Types["UpdateLogInput"] != nil || typeOf(s, "Mutation", "updateLog") != "" {
 			t.Errorf("an update:\n%s", sdl)
@@ -160,7 +160,7 @@ func TestInputs(t *testing.T) {
 		// An input type cannot be empty, and createX takes its input.
 		u := entity("User", field("org_id", "int64"))
 		u.Tenant = 1
-		u.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate()))
+		u.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate))
 		renderErr(t, model(u), "schema User", "create input", "no fields")
 	})
 
@@ -179,7 +179,7 @@ func TestInputs(t *testing.T) {
 		by := &plugin.Field{Name: "edited_by", GoName: "EditedBy", Type: "string", Nullable: true, Optional: true, UpdateDefault: true}
 		by.Annotations = ann(t, graphql.CreateInput(true))
 		u := entity("User", by)
-		u.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate()))
+		u.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate))
 		s, _ := load(t, model(u))
 		if got := fieldsOf(s, "CreateUserInput"); !slices.Equal(got, []string{"editedBy: String"}) {
 			t.Errorf("CreateUserInput: %v", got)
@@ -205,7 +205,7 @@ func TestInputs(t *testing.T) {
 				by := &plugin.Field{Name: "edited_by", GoName: "EditedBy", Type: "string", Nullable: c.nullable, Optional: c.nullable, UpdateDefault: true}
 				by.Annotations = ann(t, c.ann...)
 				u := entity("Post", field("title", "string"), by)
-				u.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate()))
+				u.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate))
 				s, sdl := load(t, model(u))
 				if got := fieldsOf(s, "CreatePostInput"); !slices.Equal(got, c.create) {
 					t.Errorf("CreatePostInput:\n got %v\nwant %v\n%s", got, c.create, sdl)
@@ -236,7 +236,7 @@ func TestEdgeInputsFollowTheKey(t *testing.T) {
 		posts.Field, posts.FieldOn = "author_id", "Post"
 		user.Edges = []*plugin.Edge{posts}
 		for _, e := range []*plugin.Entity{post, user} {
-			e.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate()))
+			e.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate))
 		}
 		return model(post, user)
 	}
@@ -295,7 +295,7 @@ func TestEdgeInputsFollowTheKey(t *testing.T) {
 		pe.Field, pe.FieldOn = "user_id", "Profile"
 		pe.Required = required
 		user.Edges = []*plugin.Edge{pe}
-		user.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate()))
+		user.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate))
 		return model(profile, user)
 	}
 	for _, c := range []struct {
@@ -353,7 +353,7 @@ func TestEdgeInputsFollowTheKey(t *testing.T) {
 		parent := edge("parent", plugin.M2O, "Category")
 		parent.Field, parent.FieldOn, parent.Ref, parent.Inverse = "category_children", "Category", "children", true
 		cat.Edges = []*plugin.Edge{ch, parent}
-		cat.Annotations = ann(t, graphql.Mutations(graphql.MutationUpdate()))
+		cat.Annotations = ann(t, graphql.Mutations(graphql.MutationUpdate))
 		s, sdl = load(t, model(cat))
 		if got, want := fieldsOf(s, "UpdateCategoryInput"), []string{"addChildIDs: [ID!]", "removeChildIDs: [ID!]", "clearChildren: Boolean", "parentID: ID", "clearParent: Boolean"}; !slices.Equal(got, want) {
 			t.Errorf("UpdateCategoryInput:\n got %v\nwant %v\n%s", got, want, sdl)
@@ -369,7 +369,7 @@ func TestInputsOptionalAndNullable(t *testing.T) {
 	bio := &plugin.Field{Name: "bio", GoName: "Bio", Type: "string", Nullable: true, Pointer: true}
 	doc := &plugin.Field{Name: "doc", GoName: "Doc", Type: "json", Nullable: true, Optional: true}
 	u := entity("User", field("name", "string"), motto, bio, doc)
-	u.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate()))
+	u.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate))
 	s, sdl := load(t, model(u))
 	for typ, want := range map[string][]string{
 		"CreateUserInput": {"name: String!", "motto: String", "bio: String", "doc: JSON"},
@@ -393,7 +393,7 @@ func TestInputsCarryDirectives(t *testing.T) {
 	title.Annotations = ann(t, audit)
 	plain := field("plain", "string")
 	user := entity("User", name, title, plain)
-	user.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate()))
+	user.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate))
 	groups := edge("groups", plugin.M2M, "Group")
 	groups.Annotations = ann(t, admin)
 	best := edge("best", plugin.M2O, "User")
@@ -453,7 +453,7 @@ func TestNoDeprecatedOnRequiredInput(t *testing.T) {
 	author.Required, author.Field, author.FieldOn = true, "author_id", "Post"
 	author.Annotations = ann(t, graphql.Directives(dep))
 	post.Edges = []*plugin.Edge{author}
-	post.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate()))
+	post.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate))
 	s, sdl := load(t, model(post, entity("User")), appDirectives)
 	for _, c := range []struct {
 		typ, field string
@@ -479,10 +479,10 @@ func TestNoDeprecatedOnRequiredInput(t *testing.T) {
 // gives addPersonIDs and AddPersonIDs.
 func TestEdgeInputsSingular(t *testing.T) {
 	team := entity("Team")
-	team.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate()))
+	team.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate))
 	team.Edges = []*plugin.Edge{edge("people", plugin.M2M, "Person")}
 	club := entity("Club")
-	club.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate()))
+	club.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate))
 	members := edge("members", plugin.M2M, "Person")
 	members.Annotations = ann(t, graphql.FieldName("people"))
 	club.Edges = []*plugin.Edge{members}
@@ -527,6 +527,6 @@ func folder(t *testing.T) *plugin.Entity {
 	prev := edge("prev", plugin.O2O, "Folder")
 	prev.Field, prev.FieldOn, prev.Ref, prev.Inverse, prev.Required, prev.OwnsKey = "folder_next", "Folder", "next", true, true, true
 	f.Edges = []*plugin.Edge{ch, parent, nx, prev}
-	f.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate(), graphql.MutationUpdate()))
+	f.Annotations = ann(t, graphql.Mutations(graphql.MutationCreate, graphql.MutationUpdate))
 	return f
 }

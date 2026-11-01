@@ -61,8 +61,8 @@ func Connect(driver, dsn string, opts ...Option) (*DB, error) {
 func Pool(db *DB) *sql.DB { return engine.Pool(&db.e) }
 
 // Close closes the pool of a DB from Connect. It does nothing for any other DB,
-// whose pool belongs to whoever opened it. On a transaction's DB it returns an
-// error.
+// whose pool belongs to whoever opened it, as do the Conns of WithReplicas. On a
+// transaction's DB it returns an error.
 func (db *DB) Close() error { return db.e.Close() }
 
 // Open returns a DB that runs statements through db, a *sql.DB the

@@ -18,11 +18,11 @@ func (g *graph) mutationsOf(o *object) error {
 	var create, update, del bool
 	for _, k := range o.ann.Mutations {
 		switch k {
-		case graphql.MutationCreate():
+		case graphql.MutationCreate:
 			create = true
-		case graphql.MutationUpdate():
+		case graphql.MutationUpdate:
 			update = true
-		case graphql.MutationDelete():
+		case graphql.MutationDelete:
 			del = true
 		default:
 			return fmt.Errorf("%s: graphql.Mutations: %q is not a mutation; the mutations are create, update and delete", where, string(k))
