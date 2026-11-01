@@ -42,6 +42,62 @@ func TestNormalizeType(t *testing.T) {
 	}
 }
 
+// TestNormalizeTypeOneForm: what a schema states and what the server reports read
+// as one form, on every dialect.
+func TestNormalizeTypeOneForm(t *testing.T) {
+	for _, c := range []struct {
+		d        velox.Dialect
+		stated   string
+		reported string
+	}{
+		{velox.Postgres, "timestamp", "timestamp without time zone"},
+		{velox.Postgres, "TIMESTAMP(6)", "timestamp(6) without time zone"},
+		{velox.Postgres, "timestamp[]", "timestamp without time zone[]"},
+		{velox.Postgres, "timestamp(3)[]", "timestamp(3) without time zone[]"},
+		{velox.Postgres, "timestamptz", "timestamp with time zone"},
+		{velox.Postgres, "timestamptz(3)", "timestamp(3) with time zone"},
+		{velox.Postgres, "time", "time without time zone"},
+		{velox.Postgres, "time(3)", "time(3) without time zone"},
+		{velox.Postgres, "timetz", "time with time zone"},
+		{velox.Postgres, "timetz(3)", "time(3) with time zone"},
+		{velox.Postgres, "int2", "smallint"},
+		{velox.Postgres, "float4", "real"},
+		{velox.Postgres, "float", "double precision"},
+		{velox.Postgres, "varbit(4)", "bit varying(4)"},
+		{velox.Postgres, "char", "character(1)"},
+		{velox.Postgres, "char(3)", "character(3)"},
+		{velox.Postgres, "numeric(10, 2)", "numeric(10,2)"},
+		{velox.Postgres, "varchar(5)[]", "character varying(5)[]"},
+		{velox.MySQL, "integer", "int"},
+		{velox.MySQL, "INTEGER(11) UNSIGNED", "int unsigned"},
+		{velox.MySQL, "numeric(12,4)", "decimal(12,4)"},
+		{velox.MySQL, "dec(4,1)", "decimal(4,1)"},
+		{velox.MySQL, "decimal", "decimal(10,0)"},
+		{velox.MySQL, "bool", "tinyint(1)"},
+		{velox.MySQL, "boolean", "tinyint(1)"},
+		{velox.MySQL, "real", "double"},
+		{velox.MySQL, "double precision", "double"},
+		{velox.MySQL, "character varying(9)", "varchar(9)"},
+		{velox.MySQL, "character(2)", "char(2)"},
+		{velox.MySQL, "char", "char(1)"},
+		{velox.MySQL, "binary", "binary(1)"},
+		{velox.MySQL, "timestamp(0)", "timestamp"},
+		{velox.MySQL, "datetime(0)", "datetime"},
+		{velox.MySQL, "time(0)", "time"},
+		{velox.MySQL, "timestamp(6)", "timestamp(6)"},
+		{velox.MySQL, "time", "time"},
+		{velox.SQLite, "TIMESTAMP", "timestamp"},
+		{velox.SQLite, "Varchar( 10 )", "varchar(10)"},
+	} {
+		if got := NormalizeType(c.d, c.stated); got != c.reported {
+			t.Errorf("%v: NormalizeType(%q) = %q, want %q", c.d, c.stated, got, c.reported)
+		}
+		if got := NormalizeType(c.d, c.reported); got != c.reported {
+			t.Errorf("%v: the server's %q reads as %q", c.d, c.reported, got)
+		}
+	}
+}
+
 func TestStringType(t *testing.T) {
 	for _, c := range []struct {
 		d    velox.Dialect

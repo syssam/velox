@@ -95,31 +95,7 @@ func mysqlStatedType(raw string) string {
 	if values, ok := ddl.ParseMySQLEnum(t); ok {
 		return ddl.MySQLEnum(values)
 	}
-	word, rest := t, ""
-	if i := strings.IndexAny(t, "( "); i >= 0 {
-		word, rest = t[:i], t[i:]
-	}
-	switch word {
-	case "integer":
-		word = "int"
-	case "numeric", "dec", "fixed":
-		word = "decimal"
-	case "bool", "boolean":
-		return "tinyint(1)"
-	case "real":
-		word = "double"
-	case "double":
-		rest = strings.TrimPrefix(rest, " precision")
-	}
-	if rest == "" {
-		switch word {
-		case "decimal":
-			rest = "(10,0)"
-		case "char", "binary", "bit":
-			rest = "(1)"
-		}
-	}
-	return word + rest
+	return t
 }
 
 // statedChanges is what stated changes of live, spellings of one value apart, as

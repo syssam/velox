@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/syssam/velox"
+	"github.com/syssam/velox/internal/ddl"
 	"github.com/syssam/velox/migrate"
 	"github.com/syssam/velox/schema"
 	"github.com/syssam/velox/schema/edge"
@@ -1486,6 +1487,7 @@ func TestTablesDecimalTypes(t *testing.T) {
 			if d == velox.Postgres {
 				typ = c.pg
 			}
+			typ = ddl.NormalizeType(d, typ)
 			want := "its Default " + strconv.FormatFloat(c.v, 'f', -1, 64) + " does not fit " + typ + ","
 			if c.neg {
 				want = "its Default " + strconv.FormatFloat(c.v, 'f', -1, 64) + " is negative, but its column " + typ + " is unsigned"
