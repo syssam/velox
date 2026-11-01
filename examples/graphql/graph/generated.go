@@ -789,7 +789,7 @@ type Post implements Node {
   status: PostStatus!
   views: Int!
   publishedAt: Time
-  author: User! @goField(name: "AuthorGQL")
+  author: User @goField(name: "AuthorGQL")
   tags(after: Cursor, first: Int, before: Cursor, last: Int, orderBy: LabelOrder, where: LabelWhereInput): LabelConnection! @goField(name: "TagsGQL")
 }
 
@@ -2468,9 +2468,9 @@ func (ec *executionContext) _Post_author(ctx context.Context, field graphql.Coll
 			return obj.AuthorGQL(ctx)
 		},
 		nil,
-		ec.marshalNUser2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUser,
+		ec.marshalOUser2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUser,
 		true,
-		true,
+		false,
 	)
 }
 
@@ -6797,16 +6797,13 @@ func (ec *executionContext) _Post(ctx context.Context, sel ast.SelectionSet, obj
 		case "author":
 			field := field
 
-			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
 				defer func() {
 					if r := recover(); r != nil {
 						ec.Error(ctx, ec.Recover(ctx, r))
 					}
 				}()
 				res = ec._Post_author(ctx, field, obj)
-				if res == graphql.Null {
-					atomic.AddUint32(&fs.Invalids, 1)
-				}
 				return res
 			}
 
@@ -9177,6 +9174,13 @@ func (ec *executionContext) marshalOTime2ᚖtimeᚐTime(ctx context.Context, sel
 	_ = ctx
 	res := veloxgql.MarshalTime(*v)
 	return res
+}
+
+func (ec *executionContext) marshalOUser2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUser(ctx context.Context, sel ast.SelectionSet, v *gen.User) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._User(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalOUserOrder2ᚖgithubᚗcomᚋsyssamᚋveloxᚋexamplesᚋgraphqlᚋgenᚐUserOrder(ctx context.Context, v any) (*gen.UserOrder, error) {

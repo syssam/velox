@@ -919,7 +919,7 @@ const CodeInternal
 const CodeNotFound
 const CodeTooCostly
 const CodeUnauthenticated
-const GeneratedCodeIsVersion3
+const GeneratedCodeIsVersion4
 const OrderDirectionAsc OrderDirection
 const OrderDirectionDesc OrderDirection
 func (*Extension) ExtensionName() string

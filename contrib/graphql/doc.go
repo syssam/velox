@@ -161,7 +161,7 @@
 //
 // They use the runtime package veloxgql, and its package gqlimpl for what
 // only generated code calls; every file carries
-// "const _ = veloxgql.GeneratedCodeIsVersion3", so that generated code and
+// "const _ = veloxgql.GeneratedCodeIsVersion4", so that generated code and
 // the module fail to compile together when they disagree. A connection is
 // keyset-paged by its cursors, and runs its page query and its COUNT only
 // when gqlgen asks for edges or pageInfo, and for totalCount; see "Loading"
@@ -189,7 +189,10 @@
 // For an entity with graphql.MutationCreate, its file also has Create<T>Input
 // and Create<T>(ctx, input), which createX's resolver returns; with
 // graphql.MutationUpdate, Update<T>Input and Update<T>(ctx, id, input), which
-// updateX's resolver returns. In an update input a field not given is left as
+// updateX's resolver returns. A create input that gives a field with a Default
+// its zero value ("" or the zero time) is refused with BAD_USER_INPUT, since an
+// insert would store the Default in its place; an update stores it. In an update
+// input a field not given is left as
 // it is, clear<Field> sets a nullable one to NULL, and an edge is cleared, then
 // its remove<Edge>IDs removed, then its add<Edge>IDs added; a field given with
 // its clear, or an ID both to add and to remove, is refused with

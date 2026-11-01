@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 
 	"github.com/syssam/velox"
 	"github.com/syssam/velox/contrib/graphql/internal/english"
@@ -254,6 +255,17 @@ func NotFound(at, typ string) error {
 // mutation's transaction, it rolls the write back.
 func CountUnknown(at string) error {
 	return fmt.Errorf("veloxgql: %s: row count unknown", at)
+}
+
+// NotZero refuses v, what the input field at gives a field that has a Default,
+// when it is the field's zero value: an insert would store the Default in its
+// place, as it does for a field left out. The client gets BAD_USER_INPUT. For
+// generated code.
+func NotZero[V any](at string, v V) error {
+	if reflect.ValueOf(&v).Elem().IsZero() {
+		return InputErrorf("%s: invalid value: the empty value cannot be stored on create, where it means the field's default; leave the field out, or set it with an update", at)
+	}
+	return nil
 }
 
 // WriteError is err from a write of entity (the name velox reports, as
