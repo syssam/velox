@@ -223,10 +223,12 @@ import (
 )
 
 type served struct {
-	t  *testing.T
-	db *sql.DB
-	do func(query string) string
+	t      *testing.T
+	db     *sql.DB
+	doVars func(query string, vars map[string]any) string
 }
+
+func (s served) do(query string) string { return s.doVars(query, nil) }
 
 func serve(t *testing.T) served {
 	t.Helper()
@@ -257,9 +259,9 @@ func serve(t *testing.T) served {
 	srv.SetErrorPresenter(veloxgql.ErrorPresenter(func(_ context, err error) { t.Logf("internal: %v", err) }))
 	srv.AddTransport(transport.POST{})
 	srv.Use(extension.Introspection{})
-	do := func(query string) string {
+	do := func(query string, vars map[string]any) string {
 		t.Helper()
-		b, err := json.Marshal(map[string]string{"query": query})
+		b, err := json.Marshal(map[string]any{"query": query, "variables": vars})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -369,6 +371,34 @@ func TestEmptyJSONLiteral(t *testing.T) {
 	}
 }
 
+// TestExplicitNullRefused: a create that gives a Nillable field with a Default
+// null is refused, not silently given the Default, literal or variable; left out,
+// it has the Default; an update stores NULL by clear<Field>.
+func TestExplicitNullRefused(t *testing.T) {
+	s := serve(t)
+	const q = 'mutation ($i: CreateThingInput!) { createThing(input: $i) { n } }'
+	const qn = 'mutation ($n: Int) { createThing(input: {b: "", j: [], n: $n}) { n } }'
+	for name, got := range map[string]string{
+		"literal":         s.do('mutation { createThing(input: {b: "", j: [], n: null}) { n } }'),
+		"whole variable":  s.doVars(q, map[string]any{"i": map[string]any{"b": "", "j": []any{}, "n": nil}}),
+		"one variable":    s.doVars(qn, map[string]any{"n": nil}),
+	} {
+		if !strings.Contains(got, "BAD_USER_INPUT") || !strings.Contains(got, "CreateThingInput.n: invalid value: null") {
+			t.Errorf("%s: %s", name, got)
+		}
+	}
+	if n := s.count("things"); n != 0 {
+		t.Errorf("%d rows after the refusals", n)
+	}
+	s.want("left out", 'mutation { createThing(input: {b: "", j: []}) { n } }', '{"data":{"createThing":{"n":7}}}')
+	if got := s.doVars(qn, nil); got != '{"data":{"createThing":{"n":7}}}' {
+		t.Errorf("a variable left out: %s", got)
+	}
+	s.want("given", 'mutation { createThing(input: {b: "", j: [], n: 3}) { n } }', '{"data":{"createThing":{"n":3}}}')
+	id := veloxgql.EncodeID("Thing", 1)
+	s.want("clear", fmt.Sprintf("mutation { updateThing(id: %q, input: {clearN: true}) { n } }", id), '{"data":{"updateThing":{"n":null}}}')
+}
+
 // TestOrEmptyMatchesNone: or: [] matches no row, as titleIn: [] would.
 func TestOrEmptyMatchesNone(t *testing.T) {
 	s := serve(t)
@@ -424,7 +454,7 @@ func TestLimitsServed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go test: %v\n%s", err, out)
 	}
-	for _, name := range []string{"TestRequiredEdgeHidden", "TestTenantKeyFilled", "TestExplicitZeroRefused", "TestOrEmptyMatchesNone", "TestIntrospectionTypeNames", "TestEmptyBytes", "TestEmptyJSONLiteral"} {
+	for _, name := range []string{"TestRequiredEdgeHidden", "TestTenantKeyFilled", "TestExplicitZeroRefused", "TestOrEmptyMatchesNone", "TestIntrospectionTypeNames", "TestEmptyBytes", "TestEmptyJSONLiteral", "TestExplicitNullRefused"} {
 		if !strings.Contains(out, "--- PASS: "+name+" ") {
 			t.Errorf("no PASS of %s in\n%s", name, out)
 		}

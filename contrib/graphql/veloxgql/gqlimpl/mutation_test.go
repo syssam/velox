@@ -961,3 +961,11 @@ func TestFromJSON(t *testing.T) {
 		t.Errorf("%q names a Go type", err)
 	}
 }
+
+// TestNotNullOutsideAField: outside a gqlgen field no null can be read, and none is
+// refused. TestExplicitNullRefused (cmd/velox-graphql) serves the rest.
+func TestNotNullOutsideAField(t *testing.T) {
+	if err := gqlimpl.NotNull(context.Background(), "In.n", "input", "n"); err != nil {
+		t.Error(err)
+	}
+}

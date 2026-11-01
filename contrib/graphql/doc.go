@@ -191,8 +191,10 @@
 // graphql.MutationUpdate, Update<T>Input and Update<T>(ctx, id, input), which
 // updateX's resolver returns. A create input that gives a field with a Default
 // its zero value ("" or the zero time) is refused with BAD_USER_INPUT, since an
-// insert would store the Default in its place; an update stores it. In an update
-// input a field not given is left as
+// insert would store the Default in its place; an update stores it. So is a null
+// given to a Nillable field with a Default, literal or variable, on the create<T>
+// field: leave it out for the Default, or clear it with an update, as an insert
+// does not store NULL there. In an update input a field not given is left as
 // it is, clear<Field> sets a nullable one to NULL, and an edge is cleared, then
 // its remove<Edge>IDs removed, then its add<Edge>IDs added; a field given with
 // its clear, or an ID both to add and to remove, is refused with
@@ -432,7 +434,10 @@
 // or a list of objects, so first: 0 and an alias still count, and the default
 // allows at most 1000 statements. An input object argument, as a where, adds its
 // size at each use: one for each object and value in it, read from the variables,
-// so one variable reused counts each time.
+// so one variable reused counts each time. On a mutation, an input object adds a
+// statement for the row it reads back, two for a non-empty <edge>IDs, add<Edge>IDs
+// or remove<Edge>IDs, one for an <edge>ID and three for a clear<Edge>: true, a page
+// of links, which a longer edge repeats.
 //
 // Every alias counts, and so does every branch of a fragment (an upper bound),
 // except a selection that @skip(if: true) or @include(if: false) leaves out,
