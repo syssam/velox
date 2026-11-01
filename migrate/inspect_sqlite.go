@@ -127,6 +127,9 @@ func (r *liteReader) table(lt *liteTable) error {
 	} else if len(lt.ct.options) > 0 {
 		lt.says = append(lt.says, "the table is "+strings.Join(lt.ct.options, ", ")+", which the model cannot hold; it is compared without")
 	}
+	if lt.ct.keyDesc {
+		lt.says = append(lt.says, "the primary key is DESC, which the model cannot hold, and INTEGER PRIMARY KEY DESC is no rowid alias, so a rebuild renumbers its rowids; it is compared without")
+	}
 	if lt.ct.onConflict {
 		lt.says = append(lt.says, "a constraint has ON CONFLICT, which the model cannot hold; it is compared without")
 	}

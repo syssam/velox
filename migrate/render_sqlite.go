@@ -286,7 +286,21 @@ func (r *renderer) dropsOf(c Change, ref TableRef, renamed map[string]string) {
 	case dropForeignKey:
 		fk := c.ForeignKey
 		fk.Columns = cols(fk.Columns)
-		r.drops = append(r.drops, keyObject(ref, fk))
+		object := keyObject(ref, fk)
+		var added []Change
+		for _, o := range r.cs {
+			if a, ok := o.(addForeignKey); ok && r.l.canon(a.Table) == r.l.canon(c.Table) {
+				added = append(added, o)
+			}
+		}
+		to := addedKey(added, fk)
+		if to == nil {
+			r.drops = append(r.drops, object)
+			return
+		}
+		for _, attr := range keyChanges(*to, fk) {
+			r.drops = append(r.drops, object+":"+attr)
+		}
 	case dropCheck:
 		ck := c.Check
 		for to, from := range renamed {

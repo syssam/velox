@@ -70,7 +70,7 @@ type Directives struct {
 	LockTimeout    time.Duration // 0: the Config's, or off in a PostgreSQL no-transaction file
 	LockTimeoutSet bool          // the file gave lock-timeout, 0 included
 	Allow          []Allow
-	Drops          []string // SQLite: what a rebuild of the file takes away on purpose, by the guard's names
+	Drops          []string // what the file changes on purpose of what the database holds, by the guard's names
 }
 
 // Render writes the scripts that make changes, the output of Diff from from

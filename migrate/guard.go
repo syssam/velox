@@ -67,6 +67,13 @@ type rebuildGuard struct {
 	rebuilt map[string]bool    // the tables f rebuilds, by foldRef
 	gone    map[string]bool    // the tables f rebuilds or drops, by foldRef
 	seen    []rebuildSeen
+	uses    []droppedUses
+}
+
+// droppedUses is what used a table the file drops and does not rebuild, when it did.
+type droppedUses struct {
+	table TableRef
+	deps  []dependent
 }
 
 // rebuildSeen is a rebuilt table's notes and definition as the rebuild found
@@ -117,21 +124,31 @@ func (g *rebuildGuard) before(ctx context.Context, i int) error {
 		if err := g.children(ctx, ref); err != nil {
 			return err
 		}
+		if g.rebuilt[foldRef(ref)] {
+			continue
+		}
+		deps, err := g.s.dependents(ctx, ref)
+		if err != nil {
+			return fmt.Errorf("reading what uses %s: %w", ref, err)
+		}
+		if len(deps) > 0 {
+			g.uses = append(g.uses, droppedUses{ref, deps})
+		}
 	}
 	r, ok := g.starts[i]
 	if !ok {
 		return nil
 	}
 	s, t := g.s, r.table
-	lines, err := s.dependents(ctx, t)
+	deps, err := s.dependents(ctx, t)
 	if err != nil {
 		return fmt.Errorf("reading what uses %s: %w", t, err)
 	}
-	if len(lines) > 0 {
+	if len(deps) > 0 {
 		var b strings.Builder
 		b.WriteString("its rebuild cannot run while another object uses it; nothing was changed:")
-		for _, l := range lines {
-			b.WriteString("\n  " + l)
+		for _, d := range deps {
+			b.WriteString("\n  " + d.line(t))
 		}
 		b.WriteString("\n  SQLite's RENAME fails on them. Add DROP VIEW above the rebuild in the file and CREATE VIEW after it, then run velox-gen migrate hash; a trigger, which a file cannot hold, is dropped by hand before applying and made again after")
 		return &Error{Code: "unmodeled", Pos: g.f.Path, Object: t.String(), Reason: b.String()}
@@ -232,6 +249,9 @@ func (g *rebuildGuard) after(ctx context.Context) error {
 	if g == nil {
 		return nil
 	}
+	if err := g.brokenUses(ctx); err != nil {
+		return err
+	}
 	for _, seen := range g.seen {
 		schema, now, err := inspectSQLite(ctx, g.s.conn, []TableRef{seen.table})
 		if err != nil {
@@ -270,6 +290,45 @@ func (g *rebuildGuard) after(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// brokenUses refuses a file that leaves a view, or another table's trigger, naming a
+// table it dropped: that trigger's INSERT then fails, and so does the next rebuild of
+// any table. One the file dropped too, or whose table it made again, is no loss.
+func (g *rebuildGuard) brokenUses(ctx context.Context) error {
+	var lines, targets []string
+	object := ""
+	for _, u := range g.uses {
+		schema := ddl.Ident(velox.SQLite, cmp.Or(u.table.Schema, "main")) + ".sqlite_schema"
+		has := func(typ, name string) (bool, error) {
+			var n int
+			err := g.s.conn.QueryRowContext(ctx, `SELECT count(*) FROM `+schema+` WHERE type = ? AND name = ? COLLATE NOCASE`, typ, name).Scan(&n)
+			return n > 0, err
+		}
+		again, err := has("table", u.table.Name)
+		if err != nil {
+			return fmt.Errorf("reading what is left of %s: %w", u.table, err)
+		}
+		if again {
+			continue
+		}
+		for _, d := range u.deps {
+			there, err := has(d.kind, d.name)
+			if err != nil {
+				return fmt.Errorf("reading what is left of %s: %w", u.table, err)
+			}
+			if there && !lossAllowed(g.f, d.name) {
+				object = cmp.Or(object, u.table.String())
+				lines = append(lines, d.line(u.table)+", and fails once it is gone")
+				targets = append(targets, d.name)
+			}
+		}
+	}
+	if len(lines) == 0 {
+		return nil
+	}
+	return lossError(g.f, object, "its DROP TABLE leaves what uses it broken", lines, targets,
+		"to keep it, add DROP VIEW to the file; a trigger, which a file cannot hold, is dropped by hand before applying")
 }
 
 // A rowCopy is what a rebuild's INSERT reads of the old table: every name of its
@@ -433,12 +492,24 @@ func (g *rebuildGuard) rebuildLoss(seen rebuildSeen, c rowCopy, now Table, lost 
 				object(indexObject(t, ch.Index), "the index")
 			}
 		case dropForeignKey:
+			fk := ch.ForeignKey
 			again := slices.ContainsFunc(changes, func(o Change) bool {
 				a, ok := o.(addForeignKey)
-				return ok && sameForeignKey(a.ForeignKey, ch.ForeignKey)
+				return ok && sameForeignKey(a.ForeignKey, fk)
 			})
-			if !again && !over(ch.ForeignKey.Columns) {
-				object(keyObject(t, ch.ForeignKey), "the foreign key")
+			if again || over(fk.Columns) {
+				continue
+			}
+			key := keyObject(t, fk)
+			to := addedKey(changes, fk)
+			if to == nil {
+				object(key, "the foreign key")
+				continue
+			}
+			for _, attr := range keyChanges(*to, fk) {
+				if !lossAllowed(g.f, key+":"+attr) && !lossAllowed(g.f, key) {
+					lost(key+":"+attr, key+": the key's "+attr+" is in the database as it was, and its rebuild changes it")
+				}
 			}
 		case dropCheck:
 			if !over(nil, ch.Check.Expr) {
@@ -458,6 +529,40 @@ func (g *rebuildGuard) rebuildLoss(seen rebuildSeen, c rowCopy, now Table, lost 
 		}
 	}
 	return nil
+}
+
+// addedKey is the foreign key changes add in the place of fk, the same by its name
+// or else its columns; nil when none is.
+func addedKey(changes []Change, fk ForeignKey) *ForeignKey {
+	var byCols *ForeignKey
+	for _, o := range changes {
+		a, ok := o.(addForeignKey)
+		if !ok {
+			continue
+		}
+		if fk.Name != "" && a.ForeignKey.Name == fk.Name {
+			return &a.ForeignKey
+		}
+		if slices.Equal(a.ForeignKey.Columns, fk.Columns) && byCols == nil {
+			byCols = &a.ForeignKey
+		}
+	}
+	return byCols
+}
+
+// keyChanges is what a differs in from b, by the names a velox:drops line gives them.
+func keyChanges(a, b ForeignKey) []string {
+	var out []string
+	if !slices.Equal(a.Columns, b.Columns) {
+		out = append(out, "columns")
+	}
+	if a.RefTable != b.RefTable || !slices.Equal(a.RefColumns, b.RefColumns) {
+		out = append(out, "references")
+	}
+	if a.OnDelete != b.OnDelete {
+		out = append(out, "on-delete")
+	}
+	return out
 }
 
 // renameColumnIn renames the column of t, and what names it there.
@@ -490,13 +595,19 @@ func renameColumnIn(t *Table, from, to string) {
 	}
 }
 
-// dependents is a line for each view, and each trigger of another table, of t's
-// database that uses t, which SQLite's RENAME fails on once t is dropped. SQLite
-// says which itself: in a savepoint, a rename of t rewrites its uses, and only
-// them, not a column of another table or an alias that has its name. When that
-// rename fails, on a view broken already, the text is read, which errs on the
-// safe side.
-func (s *session) dependents(ctx context.Context, t TableRef) ([]string, error) {
+// A dependent is a view or trigger that uses a table.
+type dependent struct{ kind, name string }
+
+func (d dependent) line(t TableRef) string {
+	return fmt.Sprintf("the %s %s names %s", d.kind, d.name, t)
+}
+
+// dependents is each view, and each trigger of another table, of t's database that
+// uses t, which SQLite's RENAME fails on once t is dropped. SQLite says which itself:
+// in a savepoint, a rename of t rewrites its uses, and only them, not a column of
+// another table or an alias that has its name. When that rename fails, on a view
+// broken already, the text is read, which errs on the safe side.
+func (s *session) dependents(ctx context.Context, t TableRef) ([]dependent, error) {
 	db := cmp.Or(t.Schema, "main")
 	schema := ddl.Ident(velox.SQLite, db) + ".sqlite_schema"
 	var has int
@@ -525,7 +636,7 @@ func (s *session) dependents(ctx context.Context, t TableRef) ([]string, error) 
 			return slices.ContainsFunc(lex(velox.SQLite, text), func(w word) bool { return strings.EqualFold(w.text, t.Name) })
 		}
 	}
-	var lines []string
+	var deps []dependent
 	err = eachRow(ctx, s.conn, q, nil, func(rows *sql.Rows) error {
 		var typ, name, table, text string
 		if err := rows.Scan(&typ, &name, &table, &text); err != nil {
@@ -535,11 +646,11 @@ func (s *session) dependents(ctx context.Context, t TableRef) ([]string, error) 
 			return nil // it goes with the table: a note
 		}
 		if used(text) {
-			lines = append(lines, fmt.Sprintf("the %s %s names %s", typ, name, t))
+			deps = append(deps, dependent{typ, name})
 		}
 		return nil
 	})
-	return lines, err
+	return deps, err
 }
 
 // tableRef reads a table's name at word i, with its schema when it has one,

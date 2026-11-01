@@ -18,6 +18,7 @@ type sqliteCreateTable struct {
 	collations    map[string]string // a column's COLLATE, by column
 	options       []string          // WITHOUT ROWID, STRICT
 	onConflict    bool              // a constraint has an ON CONFLICT clause
+	keyDesc       bool              // the primary key is DESC: no rowid alias, when on the column
 }
 
 // textKey is a foreign key as the CREATE TABLE text gives it: its
@@ -259,6 +260,7 @@ type ctParser struct {
 	ct       sqliteCreateTable
 	cols     []string          // the declared columns, in order
 	autoinc  bool              // names read AUTOINCREMENT
+	desc     bool              // names read DESC
 	checks   []textCheck       // made texts once every column is declared
 	defaults map[string][2]int // a column's DEFAULT, as tokens from and to
 }
@@ -352,7 +354,11 @@ func (p *ctParser) names() ([]string, bool) {
 				return nil, false
 			}
 		}
-		p.word("ASC", "DESC")
+		if p.word("DESC") {
+			p.desc = true
+		} else {
+			p.word("ASC")
+		}
 		if p.word("AUTOINCREMENT") {
 			p.autoinc = true
 		}
@@ -453,7 +459,11 @@ func (p *ctParser) definition() bool {
 			if !p.word("KEY") {
 				return false
 			}
-			p.word("ASC", "DESC")
+			if p.word("DESC") {
+				p.ct.keyDesc = true
+			} else {
+				p.word("ASC")
+			}
 			if !p.conflict() {
 				return false
 			}
@@ -556,11 +566,12 @@ func (p *ctParser) tableConstraint() bool {
 		if !p.word("KEY") {
 			return false
 		}
-		p.autoinc = false
+		p.autoinc, p.desc = false, false
 		cols, ok := p.names()
 		if !ok {
 			return false
 		}
+		p.ct.keyDesc = p.ct.keyDesc || p.desc
 		if p.autoinc {
 			// SQLite refuses AUTOINCREMENT but on one INTEGER column.
 			p.ct.autoincrement = len(cols) == 1
