@@ -239,6 +239,9 @@ func normalize(m *loadjson.Model) {
 			if len(f.Default) > 0 && !f.Nillable && f.Type != "string" && f.Type != "enum" {
 				f.Default = nil
 			}
+			if f.Unique && f.Optional {
+				f.Nillable = true // unset rows must not all hold the zero value
+			}
 			if f.Optional && !f.Nillable && len(f.Default) == 0 && (f.Type == "enum" || f.Type == "bytes" || f.Type == "time") {
 				f.Nillable = true
 			}
@@ -253,6 +256,15 @@ func normalize(m *loadjson.Model) {
 			}
 		}
 		s.Indexes = kept
+		for _, ix := range kept { // a unique index of one column holds it as Unique does
+			if ix.Unique && len(ix.Fields) == 1 {
+				for _, f := range s.Fields {
+					if f.Name == ix.Fields[0] && f.Optional {
+						f.Nillable = true
+					}
+				}
+			}
+		}
 		for i, f := range s.Fields {
 			f.Position.Index = i
 		}
