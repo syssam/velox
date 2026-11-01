@@ -193,7 +193,7 @@ func TestSQLOfASplitInsertAll(t *testing.T) {
 		inTx = append(inTx, st.InTx)
 		return nil
 	}
-	e := &fakeconn.Exec{Affected: 1}
+	e := &fakeconn.Exec{Answer: passRefs, Affected: 1}
 	db := openFake(velox.SQLite, e, velox.WithRewrite(see))
 	const per = 32766 / 7 // SQLite's parameters, over the columns but the generated key
 	tks := make([]testmodel.Ticket, per+1)
@@ -210,7 +210,7 @@ func TestSQLOfASplitInsertAll(t *testing.T) {
 	if err := db.InsertAll(tks).Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if len(e.Log) < 2 || e.Log[0] != "BEGIN" || e.Log[1] != text {
+	if len(e.Log) < 3 || e.Log[0] != "BEGIN" || e.Log[2] != text {
 		t.Errorf("the first statement sent is not SQL(ctx)'s")
 	}
 	if len(inTx) == 0 || !inTx[0] {

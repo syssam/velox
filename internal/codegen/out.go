@@ -37,9 +37,10 @@ type OutEntity struct {
 	PrimaryKey                               []int
 	Tenant                                   int // -1 none
 	Indexes                                  []OutIndex
-	Join                                     bool   // a many-to-many join entity
-	Bidi                                     bool   // the join entity of a bidirectional self edge: its Desc says Bidi
-	Comment                                  string // the Comment annotation's text, "" when none
+	TenantRefs                               []OutTenantRef // the foreign keys a write under a tenant checks, by column
+	Join                                     bool           // a many-to-many join entity
+	Bidi                                     bool           // the join entity of a bidirectional self edge: its Desc says Bidi
+	Comment                                  string         // the Comment annotation's text, "" when none
 	Bound                                    Bound
 
 	// Imports are the import paths this entity's file needs besides velox and
@@ -53,6 +54,12 @@ type OutEntity struct {
 
 	CheckCode  string // the cases of Check's switch on the column, "" when none
 	CheckSetup string // statements run once inside Desc before the literal (regexps, validator funcs, descriptor reads), "" when none
+}
+
+// OutTenantRef is velox.TenantRef: a foreign key to a tenant-scoped entity.
+type OutTenantRef struct {
+	Column                     int
+	Schema, Table, Key, Tenant string
 }
 
 // OutField is a column of an entity.
@@ -96,4 +103,4 @@ type OutEnum struct {
 
 // GeneratedCodeVersion is the version of the code velox-gen writes: the N of
 // the velox.GeneratedCodeIsVersionN guard in every generated file.
-const GeneratedCodeVersion = 6
+const GeneratedCodeVersion = 7

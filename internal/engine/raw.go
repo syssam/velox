@@ -185,7 +185,7 @@ func skipComment(d Dialect, q string) string {
 // that ends the transaction and begins another cannot be told.
 func (db *DB) noteRawEnd(ctx context.Context, st *Statement) error {
 	if db.txRoot.broken != nil || !db.sqliteRolledBack(ctx) {
-		return nil
+		return nil //nolint:nilerr // already broken: the Tx reports that, not this statement
 	}
 	db.txRoot.broken = fmt.Errorf("raw SQL ended the transaction, so it can only roll back: %w", ErrTxControl)
 	return stmtErr(st, db.txRoot.broken)

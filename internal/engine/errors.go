@@ -48,6 +48,12 @@ var (
 	// ErrTenantImmutable is returned by an update when it assigns another
 	// tenant to the tenant column.
 	ErrTenantImmutable = errors.New("tenant column cannot change")
+	// ErrTenantRef is returned by an insert or update under a tenant that sets a
+	// foreign key to a row that is not the tenant's: it does not exist, or it is
+	// another tenant's, which the error does not tell apart. It is the Err of a
+	// *ConstraintError of kind ConstraintForeignKey, and nothing was written. An
+	// update that does arithmetic on such a key fails with it too.
+	ErrTenantRef = errors.New("no such row in this tenant")
 	// ErrTenantUpsert is returned by an upsert that updates, when the update
 	// could change another tenant's row.
 	ErrTenantUpsert = errors.New("upsert could cross tenants")

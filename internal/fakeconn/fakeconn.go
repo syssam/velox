@@ -25,9 +25,12 @@ type Exec struct {
 	// Cols are the column names every query's rows report, which Raw reads.
 	Cols    []string
 	Results [][][]any // the rows of successive queries; Rows once they run out
-	SQL     string
-	Args    []any
-	Calls   int
+	// Answer, when set, gives the rows of a query it reports true for, ahead of
+	// Results.
+	Answer func(sql string, args []any) ([][]any, bool)
+	SQL    string
+	Args   []any
+	Calls  int
 	// Closed counts the rows values returned by query that have been closed.
 	Closed int
 	// Scanned counts the rows scanned, across queries.
@@ -129,7 +132,14 @@ func (e *Exec) Query(ctx context.Context, sql string, args []any) (conn.Rows, er
 		return nil, err
 	}
 	data := e.Rows
-	if len(e.Results) > 0 {
+	answered := false
+	if e.Answer != nil {
+		var rows [][]any
+		if rows, answered = e.Answer(sql, args); answered {
+			data = rows
+		}
+	}
+	if !answered && len(e.Results) > 0 {
 		data, e.Results = e.Results[0], e.Results[1:]
 	}
 	rerr := e.RowsErr

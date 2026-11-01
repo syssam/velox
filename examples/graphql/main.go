@@ -230,7 +230,8 @@ func seed(ctx context.Context, db *velox.DB) error {
 		return err
 	}
 	links := []gen.PostTag{{PostID: 1, TagID: 1}, {PostID: 1, TagID: 3}, {PostID: 3, TagID: 2}, {PostID: 5, TagID: 1}}
-	if err := db.InsertAll(links).Exec(ctx); err != nil {
+	// A join row's foreign keys are checked against a tenant; these span the orgs.
+	if err := db.InsertAll(links).Exec(velox.WithAllTenants(ctx, "the seed links every org's posts")); err != nil {
 		return err
 	}
 	return nil

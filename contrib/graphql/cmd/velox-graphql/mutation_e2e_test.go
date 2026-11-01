@@ -884,8 +884,9 @@ func TestEdgeScope(t *testing.T) {
 
 		// On delete: tenant 8's writer is NOT_FOUND, and its join rows,
 		// which no tenant scopes, are all still there.
-		insert(t, e.ctx, e.db, &gen.WriterCircle{WriterID: other.ID, CircleID: visible.ID})
-		insert(t, e.ctx, e.db, &gen.WriterCircle{WriterID: other.ID, CircleID: hidden.ID})
+		// other is tenant 8's, whom a join row's foreign key is checked against.
+		insert(t, velox.WithTenant(e.ctx, int64(8)), e.db, &gen.WriterCircle{WriterID: other.ID, CircleID: visible.ID})
+		insert(t, velox.WithTenant(e.ctx, int64(8)), e.db, &gen.WriterCircle{WriterID: other.ID, CircleID: hidden.ID})
 		e.reset()
 		_, err = gen.DeleteWriter(e.ctx, writerID(other.ID))
 		if code(err) != veloxgql.CodeNotFound || err.Error() != "veloxgql: deleteWriter: no Writer has this ID" {
@@ -1877,7 +1878,9 @@ func TestUnlinkScope(t *testing.T) {
 			t.Helper()
 			return count(t, e.ctx, e.db.Query[gen.WriterCircle]().Where(gen.WriterCircles.WriterID.EQ(w), gen.WriterCircles.CircleID.EQ(c))) == 1
 		}
-		link := func(w, c int64) { t.Helper(); insert(t, e.ctx, e.db, &gen.WriterCircle{WriterID: w, CircleID: c}) }
+		// As the tenant of the writer, whom a join row's foreign key is checked against.
+		linkIn := func(ctx context.Context, w, c int64) { t.Helper(); insert(t, ctx, e.db, &gen.WriterCircle{WriterID: w, CircleID: c}) }
+		link := func(w, c int64) { t.Helper(); linkIn(e.ctx, w, c) }
 
 		// From the shared circle: tenant 8's writer keeps its link.
 		c := &gen.Circle{Name: "c"}
@@ -1886,7 +1889,7 @@ func TestUnlinkScope(t *testing.T) {
 		insert(t, e.ctx, e.db, mine)
 		insert(t, ctx8, e.db, other)
 		link(mine.ID, c.ID)
-		link(other.ID, c.ID)
+		linkIn(ctx8, other.ID, c.ID)
 		if _, err := gen.UpdateCircle(e.ctx, circleID(c.ID), gen.UpdateCircleInput{RemoveWriterIDs: []string{writerID(other.ID), writerID(mine.ID)}}); err != nil {
 			t.Fatal(err)
 		}
@@ -1932,7 +1935,7 @@ func TestUnlinkScope(t *testing.T) {
 				in = ctx8
 			}
 			insert(t, in, e.db, w)
-			link(w.ID, big.ID)
+			linkIn(in, w.ID, big.ID)
 		}
 		if _, err := gen.UpdateCircle(paged, circleID(big.ID), gen.UpdateCircleInput{ClearWriters: true}); err != nil {
 			t.Fatal(err)

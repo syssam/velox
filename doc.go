@@ -120,7 +120,10 @@
 // join row fails when either row is there already;
 // OnConflict(...).DoNothing() is the idempotent insert.
 //
-// The tenant scope and the entity's policy apply to writes as to reads.
+// The tenant scope and the entity's policy apply to writes as to reads. A
+// write under a tenant that sets a foreign key to a tenant-scoped row first
+// checks that the row is the tenant's, and fails with ErrTenantRef: see
+// WithTenant.
 //
 // # JSON fields
 //
@@ -263,9 +266,10 @@
 // velox-gen and its plugins write code that uses part of this package, and
 // nothing else should: Desc, ColumnDesc, EdgeDesc, EdgeTo, EdgeBidi,
 // EdgeThrough, Meta, MetaOnce, BindPolicy, BindHooks, BoundPolicy,
-// BoundHooks, Lazy, Validate, ValidateSet and GeneratedCodeIsVersion6. Each
+// BoundHooks, TenantRef, Lazy, Validate, ValidateSet and
+// GeneratedCodeIsVersion7. Each
 // says "For generated code." in its documentation. They are not part of
-// velox's API: they change only when GeneratedCodeIsVersion6 is replaced by
+// velox's API: they change only when GeneratedCodeIsVersion7 is replaced by
 // the next version, which is outside semantic versioning. Run velox-gen
 // again after you update velox; code generated for another version fails to
 // compile.
@@ -273,11 +277,11 @@ package velox
 
 //go:generate go run ./internal/cmd/handlegen
 
-// GeneratedCodeIsVersion6 is referenced by every file velox-gen writes from a
+// GeneratedCodeIsVersion7 is referenced by every file velox-gen writes from a
 // schema package, so that generated code and this library fail to compile
 // together when they disagree. For generated code. It is replaced by
-// GeneratedCodeIsVersion7 when generated code must change.
-const GeneratedCodeIsVersion6 = true
+// GeneratedCodeIsVersion8 when generated code must change.
+const GeneratedCodeIsVersion7 = true
 
 // Lazy is the constraint of the type parameter that every method of a generic
 // velox type carries, and that callers never write. For generated code. A

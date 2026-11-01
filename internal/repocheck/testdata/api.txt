@@ -68,6 +68,11 @@ Statement.Tx *TxInfo
 Statement.Unbounded bool
 Statement.Where []Predicate
 Statement.Writable bool
+TenantRef.Column int
+TenantRef.Key string
+TenantRef.Schema string
+TenantRef.Table string
+TenantRef.Tenant string
 const AggregateAvg
 const AggregateMax
 const AggregateMin
@@ -79,7 +84,7 @@ const ConstraintCheck
 const ConstraintForeignKey
 const ConstraintNotNull
 const ConstraintUnique
-const GeneratedCodeIsVersion6
+const GeneratedCodeIsVersion7
 const LockForShare
 const LockForUpdate
 const LockNoWait
@@ -393,7 +398,7 @@ type ConstraintKind = veloxtype.ConstraintKind
 type DB struct { }
 type Deadlines = veloxtype.Deadlines
 type DeleteQuery[E any] struct { }
-type Desc[E any] struct { Table string Schema string Columns []ColumnDesc PrimaryKey []int Tenant int Bidi bool Indexes []IndexInfo Edges []EdgeDesc Addr func(x *E, i int) any EdgeAddr func(x *E, i int) any Check func(col int, v any) error Policy func() BoundPolicy Hooks func() BoundHooks }
+type Desc[E any] struct { Table string Schema string Columns []ColumnDesc PrimaryKey []int Tenant int Bidi bool Indexes []IndexInfo TenantRefs []TenantRef Edges []EdgeDesc Addr func(x *E, i int) any EdgeAddr func(x *E, i int) any Check func(col int, v any) error Policy func() BoundPolicy Hooks func() BoundHooks }
 type Dialect = veloxtype.Dialect
 type EachClause = engine.EachClause
 type EdgeDesc = engine.EdgeDesc
@@ -444,6 +449,7 @@ type Shard = engine.Shard
 type Statement = engine.Statement
 type StringCol[E any, V ~string] struct { I int32 }
 type Tag = veloxtype.Tag
+type TenantRef = engine.TenantRef
 type TxAround = veloxtype.TxAround
 type TxInfo = veloxtype.TxInfo
 type TxOption = engine.TxOption
@@ -465,6 +471,7 @@ var ErrOutsideTx
 var ErrPolicyUpsert
 var ErrTenantImmutable
 var ErrTenantMismatch
+var ErrTenantRef
 var ErrTenantUpsert
 var ErrTimeout
 var ErrTooManyRows

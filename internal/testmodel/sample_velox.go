@@ -10,7 +10,7 @@ import (
 	"github.com/syssam/velox/internal/testmodel/kind"
 )
 
-const _ = velox.GeneratedCodeIsVersion6
+const _ = velox.GeneratedCodeIsVersion7
 
 // Sample is the entity of schema Sample.
 type Sample struct {

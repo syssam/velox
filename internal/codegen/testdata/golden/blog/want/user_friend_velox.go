@@ -8,7 +8,7 @@ import (
 	"github.com/syssam/velox"
 )
 
-const _ = velox.GeneratedCodeIsVersion6
+const _ = velox.GeneratedCodeIsVersion7
 
 // UserFriend is the join entity of table user_friends.
 type UserFriend struct {
@@ -40,6 +40,10 @@ func userFriendDesc() velox.Desc[UserFriend] {
 		PrimaryKey: []int{0, 1},
 		Tenant:     -1,
 		Bidi:       true,
+		TenantRefs: []velox.TenantRef{
+			{Column: 0, Table: "users", Key: "id", Tenant: "org_id"},
+			{Column: 1, Table: "users", Key: "id", Tenant: "org_id"},
+		},
 		Addr: func(x *UserFriend, i int) any {
 			switch i {
 			case 0:

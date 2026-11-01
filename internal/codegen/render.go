@@ -300,6 +300,17 @@ func entityDesc(w *writer, e *OutEntity) {
 		}
 		w.p("},")
 	}
+	if len(e.TenantRefs) > 0 {
+		w.p("TenantRefs: []velox.TenantRef{")
+		for _, r := range e.TenantRefs {
+			schema := ""
+			if r.Schema != "" {
+				schema = "Schema: " + strconv.Quote(r.Schema) + ", "
+			}
+			w.p("{Column: %d, %sTable: %q, Key: %q, Tenant: %q},", r.Column, schema, r.Table, r.Key, r.Tenant)
+		}
+		w.p("},")
+	}
 	if len(e.Rels) > 0 {
 		w.p("Edges: []velox.EdgeDesc{")
 		for _, r := range e.Rels {

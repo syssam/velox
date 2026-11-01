@@ -812,6 +812,11 @@ func (l *lowerer) relations() {
 					s.fail(where, "the foreign key field %q is not a field", ed.Field)
 					continue
 				}
+				if ownFK(ed) {
+					l.tenantRef(s.out, ownerCol, t)
+				} else {
+					l.tenantRef(l.state[t.Name].out, targetCol, e)
+				}
 				r.Desc = fmt.Sprintf("velox.EdgeTo[%s](%q, %d, %d)", t.Name, ed.GoName, ownerCol, targetCol)
 				if ed.Rel.Kind == "O2O" && ed.Bidi {
 					// Both rows hold the key: the core writes the partner's.
@@ -821,6 +826,25 @@ func (l *lowerer) relations() {
 			s.out.Rels = append(s.out.Rels, r)
 		}
 	}
+}
+
+// tenantRef records that column col of out, a tenant-scoped entity or a join entity,
+// is a foreign key to the first field of to, when to is tenant-scoped. The two sides
+// of an edge record one column once.
+func (l *lowerer) tenantRef(out *OutEntity, col int, to *Entity) {
+	if to.Tenant == "" || out.Tenant < 0 && !out.Join {
+		return
+	}
+	i := slices.IndexFunc(out.TenantRefs, func(r OutTenantRef) bool { return r.Column >= col })
+	if i >= 0 && out.TenantRefs[i].Column == col {
+		return
+	}
+	r := OutTenantRef{Column: col, Schema: to.TableSchema, Table: to.Table, Key: to.Fields[0].Column, Tenant: to.Fields[fieldIndex(to, to.Tenant)].Column}
+	if i < 0 {
+		out.TenantRefs = append(out.TenantRefs, r)
+		return
+	}
+	out.TenantRefs = slices.Insert(out.TenantRefs, i, r)
 }
 
 // through writes the expression of the many-to-many edge ed of e, making its
@@ -882,6 +906,8 @@ func (l *lowerer) through(s *entState, e, t *Entity, ed *Edge) string {
 	if jo < 0 || jt < 0 {
 		jo, jt = 0, 1 // reported above
 	}
+	l.tenantRef(j.ent, jo, e)
+	l.tenantRef(j.ent, jt, t)
 	return fmt.Sprintf("velox.EdgeThrough[%s, %s](%q, 0, %d, %d, 0)", j.ent.Name, t.Name, ed.GoName, jo, jt)
 }
 

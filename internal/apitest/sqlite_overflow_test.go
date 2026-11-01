@@ -21,7 +21,7 @@ func TestSQLiteArithmeticOverflowFails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer raw.Close()
+	defer func() { _ = raw.Close() }()
 	raw.SetMaxOpenConns(1)
 	if _, err := raw.Exec(`CREATE TABLE items (id integer PRIMARY KEY, invoice_id integer NOT NULL, sku text NOT NULL, qty integer NOT NULL);
 		INSERT INTO items VALUES (1, 1, 'top', 9223372036854775807), (2, 1, 'bottom', -9223372036854775808), (3, 1, 'mid', 5)`); err != nil {

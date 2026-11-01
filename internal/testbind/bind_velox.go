@@ -12,7 +12,7 @@ import (
 	"github.com/syssam/velox/internal/testbind/bindtype"
 )
 
-const _ = velox.GeneratedCodeIsVersion6
+const _ = velox.GeneratedCodeIsVersion7
 
 // Bind is the entity of schema Bind.
 type Bind struct {

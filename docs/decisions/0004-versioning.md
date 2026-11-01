@@ -34,7 +34,7 @@ for it. A migration directory written by an older velox stays readable.
 
 ## Evidence
 
-- `GeneratedCodeIsVersion6` (doc.go) and `GeneratedCodeIsVersion5`
+- `GeneratedCodeIsVersion7` (doc.go) and `GeneratedCodeIsVersion5`
   (contrib/graphql/veloxgql/doc.go); each doc names its replacement.
 - `TestVersions` (plugin/main_test.go:47), `TestRunChecksLiterals`
   (plugin/main_test.go), and velox-gen's refusal in cmd/velox-gen/plugin.go.

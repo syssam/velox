@@ -34,11 +34,15 @@ type Desc[E any] struct {
 	// extra fields (an edge schema's rows get no such clause); velox's
 	// GraphQL mutations add DoNothing, so they behave as ent's do. For
 	// generated code.
-	Bidi     bool
-	Indexes  []IndexInfo
-	Edges    []EdgeDesc            // in the order of the generated relation handles
-	Addr     func(x *E, i int) any // &x.<field of column i>
-	EdgeAddr func(x *E, i int) any // &x.<field of edge i>: a *One[T] or *Many[T]
+	Bidi    bool
+	Indexes []IndexInfo
+	// TenantRefs are the columns a write under a tenant checks against it: see
+	// TenantRef. They hold the target's names as strings, never its metadata, so
+	// that the entity does not link its target. For generated code.
+	TenantRefs []TenantRef
+	Edges      []EdgeDesc            // in the order of the generated relation handles
+	Addr       func(x *E, i int) any // &x.<field of column i>
+	EdgeAddr   func(x *E, i int) any // &x.<field of edge i>: a *One[T] or *Many[T]
 
 	// Check runs the validators of column col on its value v, and is nil
 	// when no column has any. For a pointer field, v is the value the
@@ -72,6 +76,18 @@ type Desc[E any] struct {
 	Hooks  func() BoundHooks
 }
 
+// TenantRef says that Column, a foreign key, refers to Key of Schema.Table, which
+// is tenant-scoped by its column Tenant. For generated code.
+//
+// velox-gen writes one for a column of a tenant-scoped entity whose edge's target
+// is tenant-scoped, and for each side of a many-to-many edge's join entity whose
+// target is. On an insert, upsert, update or Save under WithTenant that sets the
+// column to a non-NULL value, velox first sends one SELECT Key FROM Table WHERE Key
+// IN (…) AND Tenant = ?, for the distinct values, after the hooks and on the
+// statement's transaction or connection, and fails with ErrTenantRef unless each
+// is the tenant's. WithAllTenants skips it. Around hooks do not see it.
+type TenantRef = engine.TenantRef
+
 // Load returns the entity's Meta, building it from desc the first time. A
 // panic in desc, or in the Desc's Policy or Hooks, becomes the Meta's
 // *SchemaError.
@@ -88,7 +104,7 @@ func (o *MetaOnce[E]) Load[_ Lazy[E]](desc func() Desc[E]) *Meta[E] {
 		info, err := engine.BuildDesc(x, unsafe.Pointer(x), func() engine.DescView {
 			d = desc()
 			v := engine.DescView{D: &engine.DescFields{Table: d.Table, Schema: d.Schema, Columns: d.Columns, PrimaryKey: d.PrimaryKey,
-				Tenant: d.Tenant, Bidi: d.Bidi, Indexes: d.Indexes, Relations: d.Edges, Check: d.Check,
+				Tenant: d.Tenant, Bidi: d.Bidi, Indexes: d.Indexes, TenantRefs: d.TenantRefs, Relations: d.Edges, Check: d.Check,
 				Policy: d.Policy != nil, Hooks: d.Hooks != nil}}
 			if a := d.Addr; a != nil {
 				v.Addr = func(i int) any { return a(x, i) }
@@ -187,11 +203,13 @@ func EdgeBidi[T any, PT Entity[T]](name string, keyCol, idCol int) EdgeDesc {
 // they hold, and Has is an EXISTS on J holding an EXISTS on T. T's tenant and
 // Read policy apply, as they do to any relation's target. J can have neither
 // a tenant column nor a Read policy: the relation is refused when it
-// resolves. Join rows are therefore not tenant-scoped, and velox does not
-// check that a link's two endpoints are rows the caller may see or change:
-// an application that writes links checks both endpoints itself, in J's
-// Policy (Insert, and Write for updates and deletes) or in a hook on J. When J
-// is the join entity of a bidirectional edge (Desc.Bidi), its Policy cannot
+// resolves. Join rows are therefore not tenant-scoped. An insert or update of
+// one under a tenant checks that each endpoint with a Desc.TenantRefs entry is
+// the tenant's (ErrTenantRef), and with no tenant fails with ErrNoTenant; a
+// delete of one checks nothing. velox does not check that an endpoint is a row
+// the caller may see or change: an application that writes links, or deletes
+// them, checks both endpoints itself, in J's Policy (Insert, and Write for
+// updates and deletes) or in a hook on J. When J is the join entity of a bidirectional edge (Desc.Bidi), its Policy cannot
 // have Write either, since a condition would delete one row of a link: check
 // deletes in a hook on J.
 func EdgeThrough[J, T any, PJ Entity[J], PT Entity[T]](name string, ownerCol, joinOwner, joinTarget, targetCol int) EdgeDesc {
