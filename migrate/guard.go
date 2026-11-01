@@ -322,7 +322,7 @@ func (l *fileLinter) insertInto(tmp TableRef, c *rowCopy) {
 		i = end + 1
 	}
 	depth := 0
-	for ; i < len(l.ws) && !(depth == 0 && l.upper(i) == "SELECT"); i++ {
+	for ; i < len(l.ws) && (depth != 0 || l.upper(i) != "SELECT"); i++ {
 		if l.punct(i, "(") {
 			depth++
 		} else if l.punct(i, ")") {

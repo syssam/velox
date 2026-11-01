@@ -167,8 +167,7 @@ func TestMySQLUpIsStrict(t *testing.T) {
 			nonStrict(t, db)
 			fsys = extend(t, fsys, d, step{to: oneTable(d, migrate.Column{Name: "c", Type: c.to, Nullable: c.nullable && !c.narrow}), name: "narrow", opts: allowAll(c.allow)})
 			_, err := migrate.Up(context.Background(), db, fsys)
-			var de *migrate.DirtyError
-			if !errors.As(err, &de) {
+			if _, ok := errors.AsType[*migrate.DirtyError](err); !ok {
 				t.Fatalf("Up: %v\n%s", err, sqlFiles(fsys))
 			}
 			var after sql.NullString

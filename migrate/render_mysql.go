@@ -260,8 +260,9 @@ func (r *renderer) mysqlCreate(t *Table) string {
 	if collation == "" {
 		collation = "utf8mb4_bin"
 	}
+	charset, _, _ := strings.Cut(collation, "_") // a collation names its character set
 	s := "CREATE TABLE " + r.table(t.Ref()) + " (\n  " + strings.Join(defs, ",\n  ") +
-		"\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=" + collation
+		"\n) ENGINE=InnoDB DEFAULT CHARSET=" + charset + " COLLATE=" + collation
 	if t.Comment != "" {
 		s += " COMMENT=" + ddl.Literal(velox.MySQL, t.Comment)
 	}

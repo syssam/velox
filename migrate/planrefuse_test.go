@@ -145,3 +145,13 @@ func TestRenderRefusesForeignCollation(t *testing.T) {
 		t.Errorf("a utf8mb4 collation: %v", err)
 	}
 }
+
+// TestMySQLCreateNamesTheCollationsCharset: CREATE TABLE of a collation of
+// another character set, as a baseline can hold, is not refused by MySQL.
+func TestMySQLCreateNamesTheCollationsCharset(t *testing.T) {
+	d := velox.MySQL
+	db, _ := freshDB(t, d)
+	s := oneTable(d, migrate.Column{Name: "c", Type: "varchar(10)", Nullable: true})
+	s.Tables[0].Collation = "latin1_bin"
+	mustUp(t, db, dirOf(t, d, step{to: s, name: "base"}))
+}
