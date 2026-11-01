@@ -540,8 +540,32 @@ func (w *recreates) remade(st *tableState, ref TableRef, name string, stated ind
 		if w.quiet && slices.Contains(modelAttrs, attr) {
 			continue
 		}
-		w.lost(ref, []string{object}, object+":"+attr, object+":"+attr+": "+lines[attr])
+		w.attrLost(ref, object, attr, lines[attr], shapeValue(was, attr), func(want string) bool {
+			if attr == "where" && was.where != "" && want != "" {
+				same, _ := samePredicateIn(w.s.d, was.where, want, st.enums)
+				return same
+			}
+			return strings.EqualFold(shapeValue(was, attr), want)
+		})
 	}
+}
+
+// shapeValue is the attribute attr of an index as a velox:drops line records it, for
+// what a model's index holds.
+func shapeValue(s indexShape, attr string) string {
+	switch attr {
+	case "unique":
+		return strconv.FormatBool(s.unique)
+	case "columns":
+		names := make([]string, len(s.keys))
+		for i, k := range s.keys {
+			names[i] = k.name
+		}
+		return strings.Join(names, ",")
+	case "where":
+		return s.where
+	}
+	return ""
 }
 
 // shrunk records each multi-column index of st the drop of the column col leaves

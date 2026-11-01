@@ -1,7 +1,7 @@
 -- script: main
 -- velox:foreign-keys off
 -- velox:allow alter-type users.logins
--- velox:drops users.logins:type
+-- velox:drops users.logins:type=integer
 
 -- review: alter-type: changes column users.logins from integer to real, which can fail or change values; sqlite-rebuild: changes the type of column users.logins; SQLite rebuilds table users: it copies every row into a new table
 CREATE TABLE "velox_new_users" (

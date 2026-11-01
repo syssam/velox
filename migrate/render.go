@@ -171,8 +171,9 @@ func (r *renderer) dropLines() []string {
 				if !ok || a.Index.Constraint || a.Index.Name != d.Index.Name || r.l.canon(a.Table) != r.l.canon(d.Table) {
 					continue
 				}
-				for attr := range shapeDiffers(r.d, enumCasts(r.to), modelShape(d.Index), modelShape(a.Index)) {
-					r.drops = append(r.drops, colTarget(a.Table, a.Index.Name)+":"+attr)
+				was := modelShape(d.Index)
+				for attr := range shapeDiffers(r.d, enumCasts(r.to), was, modelShape(a.Index)) {
+					r.drops = append(r.drops, colTarget(a.Table, a.Index.Name)+":"+attr+"="+shapeValue(was, attr))
 				}
 			}
 		}

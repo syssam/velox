@@ -1,7 +1,7 @@
 -- script: main
 -- velox:lock-timeout 5s
--- velox:drops accounts.org_id:type
--- velox:drops orgs.id:type
+-- velox:drops accounts.org_id:type=int
+-- velox:drops orgs.id:type=int
 
 ALTER TABLE `users` DROP FOREIGN KEY `users_orgs_users`;
 ALTER TABLE `posts` DROP FOREIGN KEY `posts_users_posts`;

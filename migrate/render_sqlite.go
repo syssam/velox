@@ -279,9 +279,9 @@ func (r *renderer) dropsOf(c Change, ref TableRef, renamed map[string]string) {
 				r.drops = append(r.drops, col+":"+attr)
 			}
 		}
-		add(c.What&columnType != 0, "type")
+		add(c.What&columnType != 0, "type="+c.From.Type)
 		add(c.What&columnNullable != 0 && !c.From.Nullable, "not-null")
-		add(c.What&columnDefault != 0 && c.From.Default != "", "default")
+		add(c.What&columnDefault != 0 && c.From.Default != "", "default="+c.From.Default)
 		add(c.What&columnIdentity != 0 && c.From.Identity, "identity")
 	case dropForeignKey:
 		fk := c.ForeignKey

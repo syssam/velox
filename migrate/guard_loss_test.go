@@ -143,7 +143,7 @@ func TestUpRebuildPlannedDropsPass(t *testing.T) {
 	}
 	db, fsys := setup(t)
 	data := string(fsys["0002_rebuild.sql"].Data)
-	for _, want := range []string{"-- velox:drops t.t_n\n", "-- velox:drops t.t_o\n", `-- velox:drops t.(s)` + "\n", "-- velox:drops t.s:default\n", "-- velox:drops t.n:not-null\n"} {
+	for _, want := range []string{"-- velox:drops t.t_n\n", "-- velox:drops t.t_o\n", `-- velox:drops t.(s)` + "\n", "-- velox:drops t.s:default='x'\n", "-- velox:drops t.n:not-null\n"} {
 		if !strings.Contains(data, want) {
 			t.Errorf("no %q:\n%s", want, data)
 		}
@@ -151,7 +151,7 @@ func TestUpRebuildPlannedDropsPass(t *testing.T) {
 	mustUp(t, db, fsys)
 	guardedRow(t, db)
 
-	for _, gone := range []string{"t.t_n", "t.t_o", "t.(s)", "t.s:default", "t.n:not-null"} {
+	for _, gone := range []string{"t.t_n", "t.t_o", "t.(s)", "t.s:default='x'", "t.n:not-null"} {
 		db, fsys := setup(t)
 		fsys = rewrite(t, fsys, "0002_rebuild.sql", func(s string) string { return strings.Replace(s, "-- velox:drops "+gone+"\n", "", 1) })
 		_, err := migrate.Up(context.Background(), db, fsys)

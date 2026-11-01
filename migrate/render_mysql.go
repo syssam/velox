@@ -214,7 +214,7 @@ func (r *renderer) mysqlAlterColumn(c alterColumn) string {
 		}
 	}
 	for _, attr := range columnAttrs(c.What) {
-		r.drops = append(r.drops, colTarget(c.Table, c.To.Name)+":"+attr)
+		r.drops = append(r.drops, colTarget(c.Table, c.To.Name)+":"+attr+"="+columnValue(c.From, attr))
 	}
 	return "MODIFY COLUMN " + r.mysqlColumn(c.To)
 }

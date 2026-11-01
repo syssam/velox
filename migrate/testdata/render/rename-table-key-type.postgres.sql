@@ -1,5 +1,7 @@
 -- script: main
 -- velox:lock-timeout 5s
+-- velox:drops accounts.org_id:type=integer
+-- velox:drops orgs.id:type=integer
 
 ALTER TABLE "users" DROP CONSTRAINT "users_orgs_users";
 -- review: rename-table: renames table users to accounts; code that uses the old name breaks while old and new versions run together

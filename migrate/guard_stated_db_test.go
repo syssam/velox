@@ -112,7 +112,7 @@ func TestMySQLModifyComparesEveryAttribute(t *testing.T) {
 		base := migrate.Column{Name: "c", Type: "varchar(10)", Nullable: true, Default: "'a'", Comment: "one"}
 		to := migrate.Column{Name: "c", Type: "varchar(20)", Comment: "two", Default: "'b'"}
 		db, fsys := planned(t, d, base, to, allowAll("set-not-null"))
-		for _, want := range []string{"t.c:type", "t.c:not-null", "t.c:default", "t.c:comment"} {
+		for _, want := range []string{"t.c:type=varchar(10)", "t.c:not-null=nullable", "t.c:default='a'", "t.c:comment=one"} {
 			if !strings.Contains(string(fsys["0002_change.sql"].Data), "-- velox:drops "+want+"\n") {
 				t.Errorf("the file does not drop %s:\n%s", want, fsys["0002_change.sql"].Data)
 			}
@@ -132,6 +132,109 @@ func TestMySQLModifyComparesEveryAttribute(t *testing.T) {
 		db, fsys = planned(t, d, flag, migrate.Column{Name: "c", Type: "tinyint(1)", Default: "1", Comment: "x"}, migrate.PlanOptions{})
 		mustUp(t, db, fsys)
 	})
+}
+
+// TestPlanLineExpectsAValue: a plan's attribute line records what the plan believes
+// the attribute is. A hand numeric(12,4) under a plan of int to bigint would become an
+// integer, printed as a widening, with Up nil and no drift after; varchar(500) under
+// varchar(50) to varchar(100) would shrink. Up names both and changes nothing, and a
+// line with no value, written by hand, accepts it.
+func TestPlanLineExpectsAValue(t *testing.T) {
+	for _, d := range []velox.Dialect{velox.MySQL, velox.Postgres} {
+		t.Run(d.String(), func(t *testing.T) {
+			num, str := "decimal(12,4)", "varchar(500)"
+			if d == velox.Postgres {
+				num, str = "numeric(12,4)", "character varying(500)"
+			}
+			nullable := func(typ string) migrate.Column { return migrate.Column{Name: "c", Type: typ, Nullable: true} }
+			small, wide := "int", "bigint"
+			if d == velox.Postgres {
+				small = "integer"
+			}
+			db, fsys := planned(t, d, nullable(small), nullable(wide), migrate.PlanOptions{},
+				"ALTER TABLE t "+retype(d, num), "INSERT INTO t (id, c) VALUES (1, 12.3456)")
+			if text := string(fsys["0002_change.sql"].Data); !strings.Contains(text, "-- velox:drops t.c:type="+small+"\n") {
+				t.Errorf("the file:\n%s", text)
+			}
+			refused(t, db, fsys, "t.c:type", small, num, "expects")
+			if got := oneValue(t, db, "SELECT c FROM t"); got != "12.3456" {
+				t.Errorf("the value after the refusal: %s", got)
+			}
+			accepted := rewrite(t, fsys, "0002_change.sql", func(s string) string {
+				return strings.Replace(s, "-- velox:drops t.c:type="+small+"\n", "-- velox:drops t.c:type\n", 1)
+			})
+			mustUp(t, db, accepted)
+
+			db, fsys = planned(t, d, nullable("varchar(50)"), nullable("varchar(100)"), migrate.PlanOptions{}, "ALTER TABLE t "+retype(d, "varchar(500)"))
+			refused(t, db, fsys, "t.c:type", str, "expects")
+			if got := oneValue(t, db, columnTypeQuery(d)); !strings.Contains(got, "500") {
+				t.Errorf("the type after the refusal: %s", got)
+			}
+
+			// What the plan expects passes, and a column already there is no loss.
+			db, fsys = planned(t, d, nullable("varchar(50)"), nullable("varchar(100)"), migrate.PlanOptions{})
+			mustUp(t, db, fsys)
+			db, fsys = planned(t, d, nullable("varchar(50)"), nullable("varchar(100)"), migrate.PlanOptions{}, "ALTER TABLE t "+retype(d, "varchar(100)"))
+			mustUp(t, db, fsys)
+		})
+	}
+	t.Run("sqlite", func(t *testing.T) {
+		d := velox.SQLite
+		base := migrate.Column{Name: "c", Type: "integer", Nullable: true}
+		to := migrate.Column{Name: "c", Type: "text", Nullable: true}
+		db, _ := freshDB(t, d)
+		fsys := dirOf(t, d, step{to: oneTable(d, base), name: "base"})
+		mustUp(t, db, fsys)
+		mustExec(t, db, "DROP TABLE t")
+		mustExec(t, db, "CREATE TABLE t (id integer NOT NULL PRIMARY KEY, c numeric)")
+		fsys = extend(t, fsys, d, step{to: oneTable(d, to), name: "change", opts: allowAll("alter-type")})
+		refused(t, db, fsys, "t.c:type", "numeric", "integer")
+	})
+	t.Run("a default and a comment", func(t *testing.T) {
+		d := velox.MySQL
+		base := migrate.Column{Name: "c", Type: "varchar(10)", Nullable: true, Default: "'a'", Comment: "one"}
+		to := migrate.Column{Name: "c", Type: "varchar(10)", Nullable: true, Default: "'a'", Comment: "two"}
+		db, fsys := planned(t, d, base, to, migrate.PlanOptions{}, "ALTER TABLE t MODIFY c varchar(10) NULL DEFAULT 'a' COMMENT 'by hand'")
+		refused(t, db, fsys, "t.c:comment", "one", "by hand")
+		if text := string(fsys["0002_change.sql"].Data); !strings.Contains(text, `-- velox:drops t.c:comment=one`) {
+			t.Errorf("the file:\n%s", text)
+		}
+		// White space in a value round-trips.
+		to.Comment, base.Comment = "two words", "one word"
+		db, fsys = planned(t, d, base, to, migrate.PlanOptions{})
+		mustUp(t, db, fsys)
+	})
+	t.Run("an index", func(t *testing.T) {
+		d := velox.MySQL
+		col := func(name string) migrate.Column { return migrate.Column{Name: name, Type: "int", Nullable: true} }
+		schema := func(cols ...string) *migrate.Schema {
+			s := oneTable(d, col("a"), col("b"), col("h"))
+			s.Tables[0].Indexes = []migrate.Index{{Name: "t_x", Columns: cols}}
+			return s
+		}
+		db, _ := freshDB(t, d)
+		fsys := dirOf(t, d, step{to: schema("a"), name: "base"})
+		mustUp(t, db, fsys)
+		mustExec(t, db, "ALTER TABLE t DROP INDEX t_x, ADD INDEX t_x (a, h)")
+		fsys = extend(t, fsys, d, step{to: schema("a", "b"), name: "change"})
+		refused(t, db, fsys, "t.t_x:columns", "expects", "a, h")
+	})
+}
+
+// retype is the action that makes the column c the type typ, by hand.
+func retype(d velox.Dialect, typ string) string {
+	if d == velox.Postgres {
+		return "ALTER COLUMN c TYPE " + typ
+	}
+	return "MODIFY c " + typ + " NULL"
+}
+
+// columnTypeQuery reads the type of t.c.
+func columnTypeQuery(d velox.Dialect) string {
+	if d == velox.Postgres {
+		return "SELECT character_maximum_length FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 't' AND column_name = 'c'"
+	}
+	return "SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 't' AND COLUMN_NAME = 'c'"
 }
 
 // TestMySQLModifyReadsDefaultSpellings: a statement's default spelled otherwise than
@@ -197,11 +300,16 @@ func TestPostgresRetypeReadsTheDefault(t *testing.T) {
 		t.Errorf("the default a retype leaves: %s", got)
 	}
 
-	// The statement says the type, and its default is the file's to accept.
+	// The plan's line expects the snapshot's default; a line with no value is the
+	// file's to accept whatever is there.
 	db, fsys = planned(t, d, col("integer", "1"), col("bigint", "2"), migrate.PlanOptions{}, "ALTER TABLE t ALTER COLUMN c SET DEFAULT 42")
-	if !strings.Contains(string(fsys["0002_change.sql"].Data), "-- velox:drops t.c:default\n") {
+	if !strings.Contains(string(fsys["0002_change.sql"].Data), "-- velox:drops t.c:default=1\n") {
 		t.Errorf("the file:\n%s", fsys["0002_change.sql"].Data)
 	}
+	refused(t, db, fsys, "t.c:default", "expects 1", "holds 42")
+	fsys = rewrite(t, fsys, "0002_change.sql", func(s string) string {
+		return strings.Replace(s, "-- velox:drops t.c:default=1\n", "-- velox:drops t.c:default\n", 1)
+	})
 	mustUp(t, db, fsys)
 }
 

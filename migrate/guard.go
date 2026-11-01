@@ -460,10 +460,14 @@ func (g *rebuildGuard) rebuildLoss(seen rebuildSeen, c rowCopy, now Table, lost 
 	if err != nil {
 		return err
 	}
-	attr := func(col, name, what string) {
-		object := colTarget(t, col)
-		if !lossAllowed(g.f, object+":"+name) && !lossAllowed(g.f, object) {
+	attr := func(col Column, name, what string) {
+		object := colTarget(t, col.Name)
+		switch want, ok := expected(g.f, object+":"+name); {
+		case lossAllowed(g.f, object+":"+name) || lossAllowed(g.f, object):
+		case !ok:
 			lost(object+":"+name, object+": "+what)
+		case !sameColumnValue(velox.SQLite, col, name, want):
+			lost(object+":"+name, object+":"+name+": the plan expects "+orNone(want)+", and the database holds "+orNone(columnValue(col, name)))
 		}
 	}
 	object := func(object, what string) {
@@ -476,16 +480,16 @@ func (g *rebuildGuard) rebuildLoss(seen rebuildSeen, c rowCopy, now Table, lost 
 		case alterColumn:
 			from, to := ch.From, ch.To
 			if ch.What&columnType != 0 {
-				attr(to.Name, "type", "the column is "+from.Type+", and its rebuild makes it "+to.Type)
+				attr(from, "type", "the column is "+from.Type+", and its rebuild makes it "+to.Type)
 			}
 			if ch.What&columnNullable != 0 && !from.Nullable {
-				attr(to.Name, "not-null", "the column is NOT NULL, and its rebuild makes it nullable")
+				attr(from, "not-null", "the column is NOT NULL, and its rebuild makes it nullable")
 			}
 			if ch.What&columnDefault != 0 && from.Default != "" {
-				attr(to.Name, "default", "the column has the default "+from.Default+", and its rebuild does not keep it")
+				attr(from, "default", "the column has the default "+from.Default+", and its rebuild does not keep it")
 			}
 			if ch.What&columnIdentity != 0 && from.Identity {
-				attr(to.Name, "identity", "the column is AUTOINCREMENT, and its rebuild does not keep it")
+				attr(from, "identity", "the column is AUTOINCREMENT, and its rebuild does not keep it")
 			}
 		case dropIndex:
 			if !over(ch.Index.Columns, ch.Index.Where) {
@@ -525,7 +529,7 @@ func (g *rebuildGuard) rebuildLoss(seen rebuildSeen, c rowCopy, now Table, lost 
 			continue
 		}
 		if same, _ := cmpr.same(col.Default, u.Default); !same {
-			attr(col.Name, "default", "the column has the default "+col.Default+", and its rebuild does not keep it")
+			attr(col, "default", "the column has the default "+col.Default+", and its rebuild does not keep it")
 		}
 	}
 	return nil

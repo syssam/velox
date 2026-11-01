@@ -1,5 +1,7 @@
 -- script: main
 -- velox:lock-timeout 5s
+-- velox:drops orgs.id:type=integer
+-- velox:drops users.org_id:type=integer
 
 ALTER TABLE "users" DROP CONSTRAINT "users_orgs_users";
 -- review: widen-type: widens column orgs.id from integer to bigint; the table is rewritten under an exclusive lock

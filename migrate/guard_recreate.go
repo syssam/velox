@@ -242,14 +242,7 @@ func (w *recreates) inspect(refs []TableRef) (*Schema, []note, error) {
 // already does.
 func (w *recreates) lost(ref TableRef, objects []string, target, line string) {
 	for _, o := range append(objects, target) {
-		spelled := []string{o}
-		// A plan's name has the schema or not, as its table does.
-		if ref.Schema == "" && w.s.home() != "" {
-			spelled = append(spelled, w.s.home()+"."+o)
-		} else if bare, ok := strings.CutPrefix(o, ref.Schema+"."); ok {
-			spelled = append(spelled, bare)
-		}
-		for _, n := range spelled {
+		for _, n := range w.spellings(ref, o) {
 			if lossAllowed(w.f, n) || lossAllowed(w.file, n) {
 				return
 			}
@@ -485,7 +478,7 @@ func (w *recreates) replaces(l *fileLinter, st *tableState, ref TableRef, origin
 	if w.s.d == velox.MySQL {
 		w.mysqlReplaced(l, st, ref, origin, name, i, end)
 	} else {
-		w.pgRetyped(l, st, ref, origin, name)
+		w.pgRetyped(l, st, ref, origin, name, i, end)
 	}
 	return nil
 }
