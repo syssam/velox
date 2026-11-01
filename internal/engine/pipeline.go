@@ -478,6 +478,11 @@ func (db *DB) prepare(ctx context.Context, st *Statement) error {
 		if err := checkBidiRewrite(st, bidi); err != nil {
 			return err
 		}
+		if cf := st.Conflict; cf != nil {
+			if err := refuseBidiUpsert(st.Entity, cf); err != nil {
+				return err
+			}
+		}
 		if cf := st.Conflict; cf != nil && len(cf.Where) > 0 {
 			switch {
 			case db.D == MySQL:

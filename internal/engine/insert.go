@@ -16,8 +16,8 @@ var MaxParams = map[Dialect]int{Postgres: 65535, MySQL: 65535, SQLite: 32766}
 // a unique key, one that updates an Immutable column, one that updates on
 // the join entity of a bidirectional edge, and an upsert of the row at one
 // (nil for InsertAll, whose prepareMany refuses it) that sets the key of a
-// bidirectional one-to-one edge. It is not generic, so that every entity's
-// InsertQuery does not compile it.
+// bidirectional one-to-one edge, and one whose update branch writes such a key.
+// It is not generic, so that every entity's InsertQuery does not compile it.
 func CheckConflict(in *EntityInfo, cf *ConflictClause, one unsafe.Pointer) error {
 	if len(cf.Columns) == 0 {
 		return fmt.Errorf("velox: %s: an upsert needs OnConflict with the columns of a unique key", in.Name)
@@ -26,6 +26,9 @@ func CheckConflict(in *EntityInfo, cf *ConflictClause, one unsafe.Pointer) error
 		if err := refuseBidiInsert(in, one, false); err != nil {
 			return err
 		}
+	}
+	if err := refuseBidiUpsert(in, cf); err != nil {
+		return err
 	}
 	if len(cf.Update) > 0 && in.bidi {
 		return errBidiUpdate(in)
