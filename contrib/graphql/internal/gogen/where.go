@@ -86,6 +86,15 @@ func (r *renderer) predCall(f *file, t *sdl.Type, w sdl.WhereField) (string, err
 	}
 	fd := e.Fields[w.Field]
 	op := e.Handles + "." + fd.GoName + "." + pm.method
+	if w.Edge >= 0 {
+		// A foreign key: its target's Read policy holds of it, as it does of the edge.
+		ed := e.Edges[w.Edge]
+		helper := map[int]string{takesValue: "FK", takesList: "FKList", takesBool: "FKIsNull"}[pm.takes]
+		if w.Op == graphql.OpNotNil {
+			helper = "FKNotNull"
+		}
+		op = fmt.Sprintf("%s.%s[%s](%s, %s.%s.Has)", impl, helper, ed.Target, op, e.Handles, ed.GoName)
+	}
 	if pm.takes == takesBool {
 		return fmt.Sprintf("%s.Is(f, %s, %s)", impl, field, op), nil
 	}

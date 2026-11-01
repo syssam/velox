@@ -14,7 +14,7 @@ import (
 	"github.com/syssam/velox/contrib/graphql/veloxgql/gqlimpl"
 )
 
-const _ = veloxgql.GeneratedCodeIsVersion5
+const _ = veloxgql.GeneratedCodeIsVersion6
 
 // IsNode marks Post as a GraphQL Node: gqlgen binds the interface Node to
 // veloxgql.Noder.
@@ -365,10 +365,10 @@ func (w *PostWhereInput) Pred(ctx context.Context) (velox.Pred[Post], error) {
 	gqlimpl.ID(f, "idGTE", w.IDGTE, "Post", Posts.ID.GTE)
 	gqlimpl.ID(f, "idLT", w.IDLT, "Post", Posts.ID.LT)
 	gqlimpl.ID(f, "idLTE", w.IDLTE, "Post", Posts.ID.LTE)
-	gqlimpl.ID(f, "authorID", w.AuthorID, "User", Posts.AuthorID.EQ)
-	gqlimpl.ID(f, "authorIDNEQ", w.AuthorIDNEQ, "User", Posts.AuthorID.NEQ)
-	gqlimpl.IDList(f, "authorIDIn", w.AuthorIDIn, "User", Posts.AuthorID.In)
-	gqlimpl.IDList(f, "authorIDNotIn", w.AuthorIDNotIn, "User", Posts.AuthorID.NotIn)
+	gqlimpl.ID(f, "authorID", w.AuthorID, "User", gqlimpl.FK[User](Posts.AuthorID.EQ, Posts.Author.Has))
+	gqlimpl.ID(f, "authorIDNEQ", w.AuthorIDNEQ, "User", gqlimpl.FK[User](Posts.AuthorID.NEQ, Posts.Author.Has))
+	gqlimpl.IDList(f, "authorIDIn", w.AuthorIDIn, "User", gqlimpl.FKList[User](Posts.AuthorID.In, Posts.Author.Has))
+	gqlimpl.IDList(f, "authorIDNotIn", w.AuthorIDNotIn, "User", gqlimpl.FKList[User](Posts.AuthorID.NotIn, Posts.Author.Has))
 	gqlimpl.Value(f, "title", w.Title, Posts.Title.EQ)
 	gqlimpl.Value(f, "titleNEQ", w.TitleNEQ, Posts.Title.NEQ)
 	gqlimpl.List(f, "titleIn", w.TitleIn, Posts.Title.In)
@@ -597,6 +597,11 @@ func UpdatePost(ctx context.Context, id string, input UpdatePostInput) (*Post, e
 	}
 	if input.PublishedAt != nil && input.ClearPublishedAt {
 		return nil, gqlimpl.InputErrorf("UpdatePostInput: publishedAt and clearPublishedAt together")
+	}
+	if input.PublishedAt == nil && !input.ClearPublishedAt {
+		if err = gqlimpl.NullClears(ctx, "UpdatePostInput.publishedAt", "input", "publishedAt", "clearPublishedAt"); err != nil {
+			return nil, err
+		}
 	}
 	if err = gqlimpl.Disjoint("UpdatePostInput", "addTagIDs", "removeTagIDs", k6, k7); err != nil {
 		return nil, err

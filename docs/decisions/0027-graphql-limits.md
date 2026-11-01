@@ -132,7 +132,7 @@ change. Two edges bound to one foreign key are refused (rule 55).
 
 ## Consequences
 
-- `GeneratedCodeIsVersion5`: `Create<T>` calls `gqlimpl.NotZero` and `gqlimpl.NotNull`, and
+- `GeneratedCodeIsVersion6`: `Create<T>` calls `gqlimpl.NotZero` and `gqlimpl.NotNull`, and
   a `Bytes!` binds to a getter.
 - Clients of a Required edge see `T` where they saw `T!`.
 - GraphiQL's query grows with the where inputs, at about 1400 per rich entity; past 700

@@ -502,8 +502,8 @@ func TestGoTypes(t *testing.T) {
 		` gqlimpl.Value(f, "atLT", w.AtLT, Events.At.LT) `,
 		` gqlimpl.Is(f, "atIsNil", w.AtIsNil, Events.At.IsNull) `,
 		` gqlimpl.Value(f, "refNEQ", w.RefNEQ, Events.Ref.NEQ) `,
-		` gqlimpl.IDAs(f, "ownerID", w.OwnerID, "Owner", gqlimpl.AsInt[idspkg.UserID, int64], Events.OwnerID.EQ) `,
-		` gqlimpl.IDListAs(f, "ownerIDNotIn", w.OwnerIDNotIn, "Owner", gqlimpl.AsInt[idspkg.UserID, int64], Events.OwnerID.NotIn) `,
+		` gqlimpl.IDAs(f, "ownerID", w.OwnerID, "Owner", gqlimpl.AsInt[idspkg.UserID, int64], gqlimpl.FK[Owner](Events.OwnerID.EQ, Events.Owner.Has)) `,
+		` gqlimpl.IDListAs(f, "ownerIDNotIn", w.OwnerIDNotIn, "Owner", gqlimpl.AsInt[idspkg.UserID, int64], gqlimpl.FKList[Owner](Events.OwnerID.NotIn, Events.Owner.Has)) `,
 		` gqlimpl.Is(f, "hasOwner", w.HasOwner, Events.Owner.Has) `,
 		` gqlimpl.HasWith(f, "hasOwnerWith", w.HasOwnerWith, Events.Owner.HasWhere) `,
 	} {
@@ -689,7 +689,7 @@ func TestGeneratedFilesCarryTheGuard(t *testing.T) {
 			t.Fatalf("%s: no files", label)
 		}
 		for name, src := range files {
-			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion5\n"); n != 1 {
+			if n := strings.Count(src, "const _ = veloxgql.GeneratedCodeIsVersion6\n"); n != 1 {
 				t.Errorf("%s: %s has the guard %d times, want once", label, name, n)
 			}
 			if !strings.Contains(src, `"github.com/syssam/velox/contrib/graphql/veloxgql"`) {

@@ -832,6 +832,12 @@ func (r *renderer) writeUpdate(f *file, t *sdl.Type, in string) error {
 		f.p("\tif input.%s != nil && input.%s {", fs[other].GoName, fi.GoName)
 		f.p("\t\treturn nil, %s.InputErrorf(%q)", impl, fmt.Sprintf("%s: %s and %s together", in, fs[other].Name, fi.Name))
 		f.p("\t}")
+		// The input's nil pointer leaves the column, and null means to clear it.
+		f.p("\tif input.%s == nil && !input.%s {", fs[other].GoName, fi.GoName)
+		f.p("\t\tif err = %s.NullClears(ctx, %s, %q, %q, %q); err != nil {", impl, at(fs[other]), "input", fs[other].Name, fi.Name)
+		f.p("\t\t\treturn nil, err")
+		f.p("\t\t}")
+		f.p("\t}")
 	}
 
 	// The setters of the fields, whose validators run before any statement:
