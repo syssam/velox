@@ -2,6 +2,7 @@ package veloxgql
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/99designs/gqlgen/graphql/errcode"
@@ -356,11 +357,12 @@ func (m *merger) sig(f *ast.Field) int {
 	if s, ok := m.fieldSigs[f]; ok {
 		return s
 	}
-	key := f.Name
+	var key strings.Builder
+	key.WriteString(f.Name)
 	for _, a := range f.Arguments {
-		key += " " + a.Name + ":" + a.Value.String()
+		key.WriteString(" " + a.Name + ":" + a.Value.String())
 	}
-	s := m.number(key)
+	s := m.number(key.String())
 	if m.fieldSigs == nil {
 		m.fieldSigs = map[*ast.Field]int{}
 	}

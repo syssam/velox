@@ -289,15 +289,15 @@ func NotNull(ctx context.Context, at, arg, name string) error {
 
 // NullClears refuses a null the client gave the input field name, of the argument
 // arg of the running field, on an update: an update's nil pointer leaves the field
-// as it is, and a client that says null means to clear it, which clear, the input's
-// other field, does. The client gets BAD_USER_INPUT, naming at and clear. Called
+// as it is, and a client that says null means to clear it, which clearField, the input's
+// other field, does. The client gets BAD_USER_INPUT, naming at and clearField. Called
 // outside a gqlgen field, or from a field whose argument has another name, it finds
 // no null and refuses nothing. For generated code.
-func NullClears(ctx context.Context, at, arg, name, clear string) error {
+func NullClears(ctx context.Context, at, arg, name, clearField string) error {
 	if !nullGiven(ctx, arg, name) {
 		return nil
 	}
-	return InputErrorf("%s: invalid value: null would leave it as it is; give %s: true to clear it, or leave the field out", at, clear)
+	return InputErrorf("%s: invalid value: null would leave it as it is; give %s: true to clear it, or leave the field out", at, clearField)
 }
 
 // nullGiven reports whether the running field's argument arg gives name as null.
@@ -379,7 +379,8 @@ func WriteError(err error, input, entity string, name func(goField string) strin
 // float64. A key that no field of a struct has is refused, as json.Unmarshal would
 // drop it, and so is a null where the type holds none, a string in a []string as much
 // as a field of a struct, as it would store the zero value. A type with its own
-// UnmarshalJSON decides for itself.
+// UnmarshalJSON decides for itself. Reading a row back into an any is velox's scan,
+// which gives a float64.
 func FromJSON[T any](at string, j veloxgql.JSON) (T, error) {
 	var t, zero T
 	dec := json.NewDecoder(bytes.NewReader(j))

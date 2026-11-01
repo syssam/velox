@@ -87,8 +87,9 @@ import (
 //
 // Before gqlgen parses a request, whose validation is quadratic in the fields
 // that share a response name, the extension parses it and refuses one over
-// MaxTokens or MaxFields, on every transport. That is a second parse, which a
-// query cache of gqlgen's does not spare. Use it before
+// MaxTokens, MaxFields, MaxFragments, MaxDepth, MaxNameBytes or MaxLiteralBytes, or
+// whose variables are over MaxDepth or MaxVariableNodes, on every transport. That is a
+// second parse, which a query cache of gqlgen's does not spare. Use it before
 // extension.AutomaticPersistedQuery, so that the cache never stores a refused
 // query.
 //
@@ -96,8 +97,8 @@ import (
 // when WithTxOptions asks for velox.TxRetrySerializable: Validate refuses
 // it, naming the limit or the option.
 //
-// The extension mutates the operation's parameters, to refuse a document over
-// MaxTokens or MaxFields; the operation's context, to refuse a request over
+// The extension mutates the operation's parameters, to refuse a document or variables
+// over those; the operation's context, to refuse a request over
 // MaxCost; intercepts the operation, to put the DB and the limits in
 // its context, which the executable schema runs in; the response, because a
 // mutation's resolvers run while gqlgen makes its response (inside the

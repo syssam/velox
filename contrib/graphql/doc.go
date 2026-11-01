@@ -195,7 +195,10 @@
 // given to a Nillable field with a Default, literal or variable, on the create<T>
 // field: leave it out for the Default, or clear it with an update, as an insert
 // does not store NULL there. In an update input a field not given is left as
-// it is, clear<Field> sets a nullable one to NULL, and an edge is cleared, then
+// it is, clear<Field> sets a nullable one to NULL, and a null given to a field or an
+// edge with a clear input is refused with BAD_USER_INPUT, naming that input, as it would
+// leave the old value; a Required field has none, and its null is a field not given.
+// An edge is cleared, then
 // its remove<Edge>IDs removed, then its add<Edge>IDs added; a field given with
 // its clear, or an ID both to add and to remove, is refused with
 // BAD_USER_INPUT; an ID to remove that the edge does not lead to is ignored,
@@ -420,7 +423,7 @@
 //
 // The limits above each bound one argument. Connections nested in
 // connections multiply, and aliases repeat a field, so a server also limits
-// the cost of the whole request: veloxgql.Limits.MaxCost, 100000 by default.
+// the cost of the whole request: veloxgql.Limits.MaxCost, 150000 by default.
 // veloxgql.Cost computes it, and the Extension refuses a request over it,
 // before any resolver runs, with veloxgql.ErrTooCostly (the code
 // COST_LIMIT_EXCEEDED, veloxgql.CodeTooCostly) and no statement.
@@ -432,7 +435,7 @@
 // with no multiplier, as a batch reads all its parents in one statement. Those
 // are a root field, a connection, its totalCount and any other field of an object
 // or a list of objects, so first: 0 and an alias still count, and the default
-// allows at most 1000 statements. An input object argument, as a where, adds its
+// allows at most 1500 statements. An input object argument, as a where, adds its
 // size at each use: one for each object and value in it, read from the variables,
 // so one variable reused counts each time. On a mutation, an input object adds a
 // statement for the row it reads back, two for a non-empty <edge>IDs, add<Edge>IDs
@@ -449,8 +452,8 @@
 // so huge arguments cannot wrap the cost, and a named fragment is costed once for
 // each page size it is spread under. Two levels of full connection pages cost
 // about 20000 and pass the default; three do not. A list edge costs MaxList (1000)
-// for each parent, so posts(first: 100) { edges { node { likes { id } } } } costs
-// 100402 and is refused by default: raise MaxCost, or lower MaxList. gqlgen's
+// for each parent, so a: likes { id } b: likes { id } under posts(first: 100) cost
+// 200602 and are refused by default: raise MaxCost, or lower MaxList. gqlgen's
 // extension.FixedComplexityLimit counts fields, not rows, and is not needed
 // with it.
 //
@@ -479,11 +482,18 @@
 // and validation is quadratic in the fields that share a response name: 12 KB of
 // a: id a: name took 3.49 GB and returned 250 MB of errors. So before gqlgen parses
 // a request, on every transport, the Extension parses it, a second parse that a
-// query cache of gqlgen's does not spare, and refuses one over Limits.MaxTokens, 15000 by default, or over
-// Limits.MaxFields, 2000 by default, with BAD_USER_INPUT. MaxFields also bounds the
-// pairs of fields under one response name, at 5 times it, the fragments spread where
-// they are, so that any request validation sees allocates under 50 MB. GraphiQL's
-// query is far under each limit.
+// query cache of gqlgen's does not spare, and checks all of it and its variables that a
+// later stage grows with, refusing one over any limit with BAD_USER_INPUT:
+// Limits.MaxTokens, 15000 by default; MaxFields, 2000, of fields, spreads and inline
+// fragments; MaxFragments, 500; MaxDepth, 64, of selections, values and types;
+// MaxNameBytes, 128, or the schema's longest; MaxLiteralBytes, 64 KiB; and
+// MaxVariableNodes, 25000. MaxFields also bounds the pairs of fields under one response
+// name, the fragments spread where they are, at 5 times it for pairs that differ and 200
+// times for pairs that agree. In TestRequestBounded's shapes, validation allocates under 40 MB through
+// veloxgql.Setup, which also stops at MaxErrors errors and shows no suggestions, and
+// what runs after it answers to the cost: 290 MB is the most a request allocates at the
+// default MaxCost, on the example. GraphiQL's query is far under each limit.
+// docs/decisions/0027-graphql-limits.md has the measurements.
 //
 // # gqlgen.yml
 //

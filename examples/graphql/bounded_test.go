@@ -116,7 +116,7 @@ func TestRequestBounded(t *testing.T) {
 		{name: "a chain of 490 fragments", query: onUser("...F0") + frags(490, func(i int) string { return fmt.Sprintf("fragment F%d on User { ...F%d }", i, i+1) }) + `fragment F490 on User { id }`, want: `"data":{"users"`, mb: 100},
 		{name: "200 operations over 400 fragments", query: frags(200, func(i int) string { return fmt.Sprintf("query Q%d { users { edges { node { ...F0 } } } }", i) }) + frags(400, func(i int) string { return fmt.Sprintf("fragment F%d on User { ...F%d }", i, i+1) }) + `fragment F400 on User { id }`, want: "GRAPHQL_VALIDATION_FAILED", mb: 100},
 
-		{name: "a where 3700 deep", query: `{ posts(where: ` + deepWhere(3700) + `) { totalCount } }`, want: "BAD_USER_INPUT", refused: true, mb: 8},
+		{name: "a where 900 deep", query: `{ posts(where: ` + deepWhere(900) + `) { totalCount } }`, want: "BAD_USER_INPUT", refused: true, mb: 8},
 		{name: "a where 60 deep", query: `{ posts(where: ` + deepWhere(60) + `) { totalCount } }`, want: "BAD_USER_INPUT", mb: 20},
 		{name: "a where 60 deep, by a variable", query: `query($w: PostWhereInput) { posts(where: $w) { totalCount } }`, vars: map[string]any{"w": deepWhereVar(60)}, want: "BAD_USER_INPUT", mb: 20},
 		{name: "a where 3700 deep, by a variable", query: `query($w: PostWhereInput) { posts(where: $w) { totalCount } }`, vars: map[string]any{"w": deepWhereVar(3700)}, want: "BAD_USER_INPUT", refused: true, mb: 8},

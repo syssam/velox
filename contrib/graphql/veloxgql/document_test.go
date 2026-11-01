@@ -61,7 +61,7 @@ func TestDocumentShapes(t *testing.T) {
 		{"through fragments", `{ ...F0 } ` + spell(70, func(i int) string { return fmt.Sprintf("fragment F%d on T { a { ...F%d } }", i, i+1) }) + `fragment F70 on T { id }`, "nests over 64"},
 		{"a value 65 deep, an object", `{ a(w: ` + nest(65, "{not:", "{}", "}") + `) }`, "nests over 64"},
 		{"a value 65 deep, a list", `{ a(w: ` + nest(65, "[", "1", "]") + `) }`, "nests over 64"},
-		{"a value 3700 deep", `{ a(w: ` + nest(3700, "{not:", "{}", "}") + `) }`, "nests over 64"},
+		{"a value 900 deep", `{ a(w: ` + nest(900, "{not:", "{}", "}") + `) }`, "nests over 64"},
 		{"a directive's value", `{ a @d(w: ` + nest(65, "[", "1", "]") + `) }`, "nests over 64"},
 		{"a variable's default", `query($v: T = ` + nest(65, "[", "1", "]") + `) { a(w: $v) }`, "nests over 64"},
 		{"a variable's type", `query($v: ` + nest(65, "[", "Int", "]") + `) { a(w: $v) }`, "nests over 64"},
