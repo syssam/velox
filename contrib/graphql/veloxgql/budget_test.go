@@ -227,6 +227,30 @@ func TestTimeout(t *testing.T) {
 	}
 }
 
+// TestTimeoutIsNotTooManyErrors: at the deadline every field running fails at once, which
+// is over MaxErrors; the client is told of the Timeout. Under -race on a real query it
+// answered 100 internal errors and ErrTooManyErrors.
+func TestTimeoutIsNotTooManyErrors(t *testing.T) {
+	db, _ := handlerDB(t)
+	logged := atomic.Int64{}
+	srv := handler.New(testSchemaOf(budgetSDL, map[string]resolver{"fail": func(ctx context.Context, _ map[string]any) (any, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}}))
+	h := veloxgql.Setup(srv, db, veloxgql.WithLimits(veloxgql.Limits{Timeout: 50 * time.Millisecond, MaxErrors: 3}))
+	srv.SetErrorPresenter(veloxgql.ErrorPresenter(func(context.Context, error) { logged.Add(1) }))
+	srv.AddTransport(transport.POST{})
+	const want = `{"errors":[{"message":"request timed out: it ran over 50ms","extensions":{"code":"TIMEOUT"}}],"data":null}`
+	for range 20 {
+		if got := post(t, context.Background(), h, aliases(200, "fail")); got != want {
+			t.Fatalf("%.300s", got)
+		}
+	}
+	if n := logged.Load(); n != 0 {
+		t.Errorf("%d cancelled fields logged as internal errors", n)
+	}
+}
+
 // TestSubscriptionHasNoTimeout: Limits.Timeout leaves a subscription's context alone.
 func TestSubscriptionHasNoTimeout(t *testing.T) {
 	db, _ := handlerDB(t)

@@ -434,7 +434,13 @@ func (*Extension) InterceptField(ctx context.Context, next graphql.Resolver) (an
 	}
 	v, err := next(ctx)
 	if err != nil {
-		r.fieldError()
+		// A field that failed as its context ended is the Timeout's, not an error of
+		// its own: at the deadline they all fail, before the Timeout's own callback runs.
+		if ctx.Err() != nil {
+			r.expired(ctx)
+		} else {
+			r.fieldError()
+		}
 		return v, err
 	}
 	r.count(v)

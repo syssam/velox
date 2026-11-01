@@ -212,7 +212,7 @@ type wsLimitConn struct {
 func (c *wsLimitConn) Read(p []byte) (int, error) {
 	n, err := c.Conn.Read(p)
 	if !c.read(p[:n]) {
-		_ = c.Conn.Close()
+		_ = c.Close()
 		return 0, errWebsocketTooLarge
 	}
 	return n, err

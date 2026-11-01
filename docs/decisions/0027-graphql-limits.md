@@ -140,7 +140,7 @@ schema and SQLite; an attack on the left went to at most 1.6 GB before.
 
 Those last but two are the worst a default server was measured to allow one request, and what a
 server open to strangers sizes itself for: real work, under the cost and the bytes. They
-are `TestResponseAtItsLimit`, which asserts 500 MB and 700 MB. The earlier claim, that
+are `TestResponseAtItsLimit`, whose budgets of 800 MB and 1000 MB leave room for `-race`. The earlier claim, that
 286 MB was the most, was false, as it was only what cost sees. Rows being read when the limit
 is passed are read before they are counted, so a server with many connections reads more
 of them than SQLite's one at a time: at most one for each aliased connection, 270 MB in

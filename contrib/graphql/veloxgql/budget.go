@@ -73,6 +73,9 @@ func (r *response) fieldError() {
 
 // admit reports whether a response keeps one more error.
 func (r *response) admit() bool {
+	if why := r.why.Load(); why != 0 && why != stopErrors {
+		return false // replaced whole, and what its stop cancelled is no internal error
+	}
 	if r.presented.Add(1) > int64(r.limits.MaxErrors) {
 		r.stop(stopErrors)
 		return false
@@ -133,7 +136,7 @@ func valueBytes(v any) int64 {
 // quotedLen is the bytes of s as gqlgen quotes it, past the quotes.
 func quotedLen(s string) int64 {
 	n := int64(len(s))
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		switch c := s[i]; {
 		case c == '"' || c == '\\' || c == '\t' || c == '\n' || c == '\r':
 			n++
